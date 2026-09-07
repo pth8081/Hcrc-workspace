@@ -3039,7 +3039,6 @@
       <button type="button" data-op="setUniformSubTab" data-arg0="STORE" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
       <button type="button" data-op="setUniformSubTab" data-arg0="STOCK" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
       <button type="button" data-op="setUniformSubTab" data-arg0="DASHBOARD" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
-      <button type="button" data-op="setUniformSubTab" data-arg0="EMPLOYEES" id="btnUniformSubEmployees" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍💼 Quản Lý Nhân Viên Siêu Thị</button>
     </div>
 
     <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
@@ -3427,67 +3426,6 @@
       </div>
     </div>
 
-    <!-- Sub-tab: Quản Lý Nhân Viên Siêu Thị (mục 4b kế hoạch) — CHỈ dành cho HO (uniformManage/admin,
-         canManageUniform()) dùng để tạo/khoá tài khoản nhân viên CHO các siêu thị. Form rút gọn có ĐÚNG 1
-         ô chọn quyền — dropdown "Nhóm Quyền" bắt buộc chọn 1 nhóm phân quyền có scope==='STORE' (xem
-         populateUniformEmployeeGroupOptions()); server luôn tự ép posType='STORE' và re-validate lại
-         group.scope==='STORE' trước khi gán (xem routes/uniformEmployees.js), không tin bất kỳ field
-         perms nào từ client (form này không gửi field đó). Nhóm loại scope STORE chỉ có thể được tạo/gắn
-         cờ bởi 1 Admin thật (cả mục "Hệ Thống" > "Nhóm Phân Quyền" đều yêu cầu perms.admin — xem comment
-         "cả 4 mục con đều yêu cầu admin" gần dòng ~565 và `if (tabName === 'system' && currentUser.perms.admin)`
-         ở switchTab()), nên đây là ranh giới tin cậy ở cấp Admin tự chịu trách nhiệm gắn cờ đúng, không
-         phải lỗ hổng cho người chỉ có uniformManage. Khoá 1 CHIỀU (không có nút Mở Khoá) — mở lại phải
-         qua màn Người Dùng đầy đủ của Admin. -->
-    <div id="uniformSubEmployees" class="hidden space-y-4">
-      <div class="bg-white p-4 rounded border space-y-3">
-        <h4 class="font-bold text-sm text-gray-800">➕ Tạo Tài Khoản Nhân Viên Siêu Thị</h4>
-        <form data-op-submit="submitUniformEmployeeCreate" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input id="ueUsername" placeholder="Tên đăng nhập" class="border p-1.5 rounded text-xs" required>
-          <input id="uePassword" type="password" placeholder="Mật khẩu" class="border p-1.5 rounded text-xs" required>
-          <input id="ueFullName" placeholder="Họ và Tên" class="border p-1.5 rounded text-xs" required>
-          <input id="ueEmail" type="email" placeholder="Email" class="border p-1.5 rounded text-xs" required>
-          <input id="uePhone" type="tel" placeholder="Số điện thoại" class="border p-1.5 rounded text-xs" required>
-          <select id="ueStore" class="border p-1.5 rounded text-xs bg-white" required>
-            <option value="">-- Chọn Siêu Thị --</option>
-          </select>
-          <select id="ueJobTitle" class="border p-1.5 rounded text-xs bg-white">
-            <option value="">-- Chưa gán chức danh --</option>
-          </select>
-          <select id="ueGroupId" class="border p-1.5 rounded text-xs bg-white" required>
-            <option value="">-- Chọn Nhóm Quyền --</option>
-          </select>
-          <div class="md:col-span-3">
-            <button type="submit" class="bg-teal-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-700">💾 Tạo Tài Khoản</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="bg-white p-4 rounded border space-y-3">
-        <div class="flex items-center justify-between gap-2 flex-wrap">
-          <h4 class="font-bold text-sm text-gray-800">📋 Danh Sách Nhân Viên Siêu Thị</h4>
-          <div class="flex items-center gap-3 flex-wrap">
-            <input id="ueSearchInput" data-op-input="renderUniformEmployeesList" placeholder="Tìm theo tên/username/siêu thị..." class="border p-1.5 rounded text-xs">
-            <label class="flex items-center gap-1 text-xs text-gray-600">
-              <input type="checkbox" id="ueShowInactive" data-op-change="renderUniformEmployeesList"> Hiện cả tài khoản đã khoá
-            </label>
-          </div>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full border-collapse text-xs">
-            <thead><tr class="bg-gray-100 text-left">
-              <th class="border p-1.5">Tên đăng nhập</th>
-              <th class="border p-1.5">Họ và Tên</th>
-              <th class="border p-1.5">Siêu Thị</th>
-              <th class="border p-1.5">Chức Danh</th>
-              <th class="border p-1.5">Nhóm Quyền</th>
-              <th class="border p-1.5">Trạng Thái</th>
-              <th class="border p-1.5 w-20">Thao Tác</th>
-            </tr></thead>
-            <tbody id="ueEmployeesTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- Màn hình MODULE GIẤY PHÉP (Hành Chính) — phân quyền hoàn toàn NGAY TRONG module (licenseCreate/
@@ -4350,12 +4288,9 @@
 
       <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
         <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🏪 Danh Sách Chức Danh (Siêu Thị)</h3>
-        <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ VÀ form rút gọn "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục). Tick "Khoá tự tạo" cho chức danh nào KHÔNG được phép tự tạo qua form rút gọn (VD "Giám Đốc Siêu Thị" — chỉ Admin gán qua màn Người Dùng đầy đủ).</p>
+        <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ.</p>
         <form data-op-submit="saveStoreJobTitle" class="flex gap-2 items-center flex-wrap">
           <input id="txtStoreJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <label class="flex items-center gap-1 text-[11px] text-gray-600 whitespace-nowrap">
-            <input type="checkbox" id="chkStoreJobTitleRestricted"> Khoá tự tạo
-          </label>
           <button type="submit" class="bg-fuchsia-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-800">Thêm</button>
         </form>
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
@@ -4508,11 +4443,6 @@
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mô Tả</label>
             <input id="gGroupDesc" placeholder="Mô tả ngắn về nhóm quyền này..." class="w-full border p-1.5 rounded text-xs">
-          </div>
-          <div class="md:col-span-2">
-            <label class="flex items-center gap-1 text-xs text-gray-600">
-              <input type="checkbox" id="gGroupStoreScope"> 🏪 Chỉ dùng cho Siêu Thị (hiện trong form "Quản Lý Nhân Viên Siêu Thị" ở Đồng Phục)
-            </label>
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">👥 Thành Viên Nhóm (thêm/bớt nhiều người cùng lúc, giống quản lý nhóm AD)</label>

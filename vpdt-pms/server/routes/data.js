@@ -236,9 +236,8 @@ function sanitizeExternalApiKeys(list, isAdmin) {
 }
 
 // isCurrentlyAdmin()/isCurrentlyAdminOrUniformManage(): chuyển sang lib/adminAuth.js (dùng chung với
-// routes/adminCatalog.js, routes/storeCatalogImport.js, routes/uniformEmployees.js) — xem chú thích đầy
-// đủ ở đó. Re-fetch fresh từ DB (không tin JWT cache), khớp đúng cách routes/workflow.js,
-// routes/create.js, routes/records.js đã làm.
+// routes/adminCatalog.js, routes/storeCatalogImport.js) — xem chú thích đầy đủ ở đó. Re-fetch fresh từ
+// DB (không tin JWT cache), khớp đúng cách routes/workflow.js, routes/create.js, routes/records.js đã làm.
 
 // Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> quyền hiệu lực thực tế —
 // khớp Y HỆT mergePerms() ở public/index.html (2 cài đặt độc lập, client không import chung được với

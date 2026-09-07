@@ -76,7 +76,7 @@ function renderPermGroupsList() {
     const memberCount = DB.users.filter(u => (u.groupIds || []).includes(g.id)).length;
     return `
     <tr class="border-b hover:bg-gray-50">
-      <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}${g.scope === 'STORE' ? '<span class="inline-block bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 py-0.5 rounded ml-1">🏪 Siêu Thị</span>' : ''}</td>
+      <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}</td>
       <td class="border p-2 text-gray-600">${escapeHtml(g.description || '-')}</td>
       <td class="border p-2 text-center">${memberCount}</td>
       <td class="border p-2 text-center">
@@ -106,7 +106,6 @@ function startCreateGroup() {
   toggleUserPermFormMode('GROUP');
   document.getElementById('gGroupName').value = '';
   document.getElementById('gGroupDesc').value = '';
-  document.getElementById('gGroupStoreScope').checked = false;
   renderGroupMembersPicker([]);
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -118,7 +117,6 @@ function editPermGroup(id) {
   toggleUserPermFormMode('GROUP');
   document.getElementById('gGroupName').value = group.name;
   document.getElementById('gGroupDesc').value = group.description || '';
-  document.getElementById('gGroupStoreScope').checked = group.scope === 'STORE';
   populatePermsForm(group.perms);
   const currentMembers = DB.users.filter(u => (u.groupIds || []).includes(id)).map(u => u.username);
   renderGroupMembersPicker(currentMembers);
@@ -135,11 +133,13 @@ async function savePermGroup(e) {
   const name = document.getElementById('gGroupName').value.trim();
   if (!name) return alert('Vui lòng nhập Tên Nhóm Phân Quyền!');
   const perms = collectPermsFromForm();
-  const storeScope = document.getElementById('gGroupStoreScope').checked;
   const selectedMembers = new Set([...document.querySelectorAll('input.group-member-toggle:checked')].map(cb => cb.value));
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
 
+  // group.scope (VD 'STORE') — field cũ chỉ phục vụ sub-tab "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục,
+  // đã gỡ hẳn, xem VERSION.md); form này không còn đọc/ghi field đó nữa — nhóm cũ nào đã có sẵn giá trị
+  // này (dữ liệu lịch sử) vẫn giữ nguyên, chỉ đơn giản không hiển thị/chỉnh sửa được ở đây nữa.
   let group;
   if (editingGroupId) {
     group = DB.permGroups.find(g => g.id === editingGroupId);
@@ -147,14 +147,12 @@ async function savePermGroup(e) {
     group.name = name;
     group.description = document.getElementById('gGroupDesc').value.trim();
     group.perms = perms;
-    group.scope = storeScope ? 'STORE' : undefined;
   } else {
     group = {
       id: 'grp_' + Date.now(),
       name,
       description: document.getElementById('gGroupDesc').value.trim(),
-      perms,
-      scope: storeScope ? 'STORE' : undefined
+      perms
     };
     DB.permGroups.push(group);
   }

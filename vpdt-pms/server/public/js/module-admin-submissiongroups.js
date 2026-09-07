@@ -83,7 +83,6 @@ function cancelPermFormEdit() {
   editingGroupId = null;
   toggleUserPermFormMode('USER');
   resetUserForm();
-  document.getElementById('gGroupStoreScope').checked = false;
 }
 
 // Đọc + xác thực phần DỮ LIỆU CHUNG của form Người dùng (dùng cho cả sửa người có sẵn, lưu ngay 1

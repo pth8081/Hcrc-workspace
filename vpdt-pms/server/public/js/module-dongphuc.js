@@ -37,17 +37,12 @@ function setUniformSubTab(subTab) {
   const canSeeStore = canStore || canApprove;
   if (subTab === 'PERIODS' && !canSeePeriods) subTab = canSeeStore ? 'STORE' : 'STOCK';
   if (subTab === 'STORE' && !canSeeStore) subTab = canSeePeriods ? 'PERIODS' : 'STOCK';
-  // EMPLOYEES (mục 4b) — CHỈ dành cho HO (canHc), không có nhánh dự phòng nào khác (khác PERIODS/STORE
-  // ở trên vốn còn approver-only truy cập được) — không đủ quyền thì rơi về STOCK (mở cho mọi người
-  // trong module, xem canAccessUniformModule()).
-  if (subTab === 'EMPLOYEES' && !canHc) subTab = 'STOCK';
   activeUniformSubTab = subTab;
 
   document.getElementById('uniformSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
   document.getElementById('uniformSubStore').classList.toggle('hidden', subTab !== 'STORE');
   document.getElementById('uniformSubStock').classList.toggle('hidden', subTab !== 'STOCK');
   document.getElementById('uniformSubDashboard').classList.toggle('hidden', subTab !== 'DASHBOARD');
-  document.getElementById('uniformSubEmployees').classList.toggle('hidden', subTab !== 'EMPLOYEES');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -55,10 +50,6 @@ function setUniformSubTab(subTab) {
   document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canSeeStore ? '' : ' hidden');
   document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
   document.getElementById('btnUniformSubDashboard').className = subTab === 'DASHBOARD' ? activeCls : inactiveCls;
-  // "Quản Lý Nhân Viên Siêu Thị" (mục 4b) — CHỈ dành cho HO (canHc, gate y hệt sub-tab PERIODS hiện
-  // tại) — KHÔNG mở thêm cho uniformStoreManage/canApprove (họ tự có màn "Xác Nhận/Cấp Phát" riêng đúng
-  // phạm vi siêu thị mình, không cần/không nên tạo tài khoản cho siêu thị khác).
-  document.getElementById('btnUniformSubEmployees').className = (subTab === 'EMPLOYEES' ? activeCls : inactiveCls) + (canHc ? '' : ' hidden');
 
   if (subTab === 'PERIODS') {
     renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList();
@@ -73,131 +64,6 @@ function setUniformSubTab(subTab) {
   }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
   if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
-  if (subTab === 'EMPLOYEES') { resetUniformEmployeeCreateForm(); renderUniformEmployeesList(); }
-}
-
-// ============ Quản Lý Nhân Viên Siêu Thị (mục 4b) — HO (uniformManage/admin) tạo/khoá tài khoản nhân
-// viên CHO các siêu thị, đi qua route riêng POST/PATCH /api/uniform/employees (routes/uniformEmployees.js
-// — KHÔNG qua POST /api/data/users vì route đó khoá cứng isCurrentlyAdmin() thật, uniformManage không đủ
-// quyền). Form rút gọn KHÔNG có ô chọn Vị Trí (ngầm định STORE) — nhưng có ĐÚNG 1 ô chọn quyền: dropdown
-// "Nhóm Quyền" (ueGroupId), bắt buộc chọn 1 trong các nhóm phân quyền scope==='STORE' (xem
-// populateUniformEmployeeGroupOptions()). Server luôn ép posType:'STORE' và re-validate lại group.scope
-// trước khi gán perms — client không gửi field perms nào cả. ============
-function populateUniformEmployeeGroupOptions() {
-  const sel = document.getElementById('ueGroupId');
-  if (!sel) return;
-  const storeGroups = (DB.permGroups || []).filter(g => g.scope === 'STORE');
-  sel.innerHTML = '<option value="">-- Chọn Nhóm Quyền --</option>' +
-    storeGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
-  // Pre-chọn nhóm mặc định (nếu có) hoặc nhóm đầu tiên, để giảm thao tác — admin vẫn đổi được.
-  if (storeGroups.some(g => g.id === 'grp_store_default')) sel.value = 'grp_store_default';
-  else if (storeGroups.length) sel.value = storeGroups[0].id;
-}
-
-function resetUniformEmployeeCreateForm() {
-  const form = document.querySelector('#uniformSubEmployees form');
-  if (form) form.reset();
-  const storeSel = document.getElementById('ueStore');
-  if (storeSel) {
-    storeSel.innerHTML = '<option value="">-- Chọn Siêu Thị --</option>' +
-      (DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  }
-  const jobTitleSel = document.getElementById('ueJobTitle');
-  if (jobTitleSel) {
-    // Chức danh bị đánh dấu "Khoá tự tạo" (restrictedFromSelfService) KHÔNG hiện ở đây — hạn chế đó chỉ
-    // áp dụng cho đúng form rút gọn này (form Người Dùng đầy đủ của Admin vẫn chọn được mọi chức danh).
-    const options = (DB.storeJobTitles || []).filter(t => !t.restrictedFromSelfService);
-    jobTitleSel.innerHTML = '<option value="">-- Chưa gán chức danh --</option>' +
-      options.map(t => `<option value="${escapeHtml(t.label)}">${escapeHtml(t.label)}</option>`).join('');
-  }
-  populateUniformEmployeeGroupOptions();
-}
-
-async function submitUniformEmployeeCreate(e) {
-  e.preventDefault();
-  const groupId = document.getElementById('ueGroupId').value;
-  if (!groupId) return alert('Vui lòng chọn Nhóm Quyền!');
-  const payload = {
-    username: document.getElementById('ueUsername').value.trim(),
-    password: document.getElementById('uePassword').value,
-    fullName: document.getElementById('ueFullName').value.trim(),
-    email: document.getElementById('ueEmail').value.trim(),
-    phone: document.getElementById('uePhone').value.trim(),
-    dept: document.getElementById('ueStore').value,
-    jobTitle: document.getElementById('ueJobTitle').value,
-    groupId
-  };
-  try {
-    const res = await fetch('/api/uniform/employees', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
-    DB.users.push(body.user);
-    logSystemAction('USER_MGM', 'CREATE_UNIFORM_EMPLOYEE', `Tạo tài khoản nhân viên siêu thị [${body.user.username}] (${body.user.dept})`, 'SUCCESS', body.user.username);
-    alert(`✅ Đã tạo tài khoản "${body.user.username}" cho siêu thị "${body.user.dept}"!`);
-    resetUniformEmployeeCreateForm();
-    renderUniformEmployeesList();
-  } catch (err) {
-    alert(`⛔ Lỗi tạo tài khoản: ${err.message}`);
-  }
-}
-
-function renderUniformEmployeesList() {
-  const tbody = document.getElementById('ueEmployeesTableBody');
-  if (!tbody) return;
-  const showInactive = !!document.getElementById('ueShowInactive')?.checked;
-  const query = (document.getElementById('ueSearchInput')?.value || '').trim().toLowerCase();
-  let rows = (DB.users || []).filter(u => u.posType === 'STORE');
-  if (!showInactive) rows = rows.filter(u => u.active !== false);
-  if (query) {
-    rows = rows.filter(u =>
-      (u.name || '').toLowerCase().includes(query) ||
-      (u.username || '').toLowerCase().includes(query) ||
-      (u.dept || '').toLowerCase().includes(query)
-    );
-  }
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-400 italic p-3">Không có nhân viên siêu thị nào khớp.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = rows.map(u => {
-    const group = (DB.permGroups || []).find(g => g.id === (u.groupIds || [])[0]);
-    return `
-    <tr class="${u.active === false ? 'opacity-50' : ''}">
-      <td class="border p-1.5">${escapeHtml(u.username)}</td>
-      <td class="border p-1.5">${escapeHtml(u.name || '')}</td>
-      <td class="border p-1.5">${escapeHtml(u.dept || '')}</td>
-      <td class="border p-1.5">${escapeHtml(u.jobTitle || '—')}</td>
-      <td class="border p-1.5">${escapeHtml(group ? group.name : '—')}</td>
-      <td class="border p-1.5">${u.active === false ? '<span class="text-red-600 font-semibold">🔒 Đã khoá</span>' : '<span class="text-emerald-600 font-semibold">✅ Hoạt động</span>'}</td>
-      <td class="border p-1.5 text-center">
-        ${u.active === false ? '' : `<button type="button" data-op="lockUniformEmployeeAction" data-arg0="${u.id}" class="text-red-500 font-bold hover:underline">🔒 Khoá</button>`}
-      </td>
-    </tr>
-  `;
-  }).join('');
-}
-
-// Khoá 1 CHIỀU (route server chỉ nhận active:false, xem PATCH /api/uniform/employees/:id/active) — mở
-// khoá lại phải qua màn Người Dùng đầy đủ của Admin (toggleUserActive()), đúng xác nhận của người dùng.
-async function lockUniformEmployeeAction(id) {
-  const u = DB.users.find(x => x.id === id);
-  if (!u) return;
-  if (!confirm(`Khoá tài khoản "${u.username}" (${u.name})?\n\nSau khi khoá, người này sẽ KHÔNG đăng nhập được nữa. Muốn mở khoá lại phải nhờ Admin thực hiện ở màn Người Dùng (Hệ Thống → Quản Trị).`)) return;
-  try {
-    const res = await fetch(`/api/uniform/employees/${id}/active`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: false })
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
-    const idx = DB.users.findIndex(x => x.id === id);
-    if (idx !== -1) DB.users[idx] = body.user;
-    logSystemAction('USER_MGM', 'DEACTIVATE_UNIFORM_EMPLOYEE', `Khoá nhân viên siêu thị [${u.username}]`, 'SUCCESS', u.username);
-    renderUniformEmployeesList();
-  } catch (err) {
-    alert(`⛔ Lỗi khoá tài khoản: ${err.message}`);
-  }
 }
 
 // Mã SKU (Phase 2) — sinh 1 LẦN lúc Giám Đốc Siêu Thị xác nhận nhận LẦN ĐẦU 1 (mặt hàng,size), lưu

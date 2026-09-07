@@ -72,10 +72,9 @@ const DEFAULTS = {
   // mô hình depts/cats ở trên).
   jobTitles: ['Nhân viên', 'Chuyên viên', 'Trưởng phòng', 'Phó phòng', 'Giám đốc', 'Phó giám đốc', 'Tổng Giám Đốc', 'Chủ Tịch'],
   // Danh sách chức danh RIÊNG cho nhân viên SIÊU THỊ (posType==='STORE') — TÁCH khỏi jobTitles ở trên
-  // (khối Văn Phòng/HO) vì cần thêm cờ restrictedFromSelfService (VD "Giám Đốc Siêu Thị" — không được
-  // phép tự tạo qua form rút gọn "Quản Lý Nhân Viên Siêu Thị" ở module Đồng Phục, chỉ Admin gán qua màn
-  // Người Dùng đầy đủ). Dạng {label, restrictedFromSelfService}[] (khác jobTitles là mảng chuỗi phẳng)
-  // để admin tự đánh dấu, không hardcode so khớp chuỗi — cùng tinh thần vppExcludeGroups ở dưới.
+  // (khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType STORE ở form Người Dùng đầy đủ.
+  // Dạng {label}[] (khác jobTitles là mảng chuỗi phẳng) — trước đây còn cờ restrictedFromSelfService
+  // (dùng riêng cho sub-tab "Quản Lý Nhân Viên Siêu Thị" ở Đồng Phục, đã gỡ hẳn cùng sub-tab đó).
   storeJobTitles: [],
   // Loại đào tạo (module con "Truyền Thông Nội Bộ" > Đào tạo, tạm thời) — phân loại Kho Tài Liệu và Lớp
   // Học, cùng cơ chế mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, không có tra cứu phụ thuộc).
@@ -262,15 +261,12 @@ const DEFAULTS = {
     // "DAU_TU" đã bị xoá hoàn toàn khỏi module Tổng Hợp — không còn subType này nữa.
   },
 
-  permGroups: [
-    {
-      id: 'grp_store_default',
-      name: 'Nhân Viên Siêu Thị (Mặc Định)',
-      description: 'Nhóm quyền mặc định cho tài khoản nhân viên siêu thị tạo qua sub-tab "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục) — không có quyền đặc biệt nào ngoài quyền truy cập cơ bản mặc định của mọi tài khoản, chỉ dùng để phân loại/gán mặc định.',
-      perms: {},
-      scope: 'STORE'
-    }
-  ],
+  // Trước đây seed sẵn 1 nhóm "grp_store_default" (scope==='STORE') dùng riêng cho sub-tab "Quản Lý
+  // Nhân Viên Siêu Thị" (Đồng Phục) — đã gỡ hẳn cùng sub-tab đó (xem VERSION.md), field `scope` trên
+  // Nhóm Phân Quyền không còn nơi nào đọc nữa nên không seed nhóm này nữa. DB thật đã seed nhóm này
+  // trước đây (qua migrateDefaultStorePermGroup(), cũng đã gỡ ở seedDefaults.js) vẫn giữ nguyên nhóm đó
+  // như 1 nhóm phân quyền bình thường — không xoá dữ liệu cũ, chỉ không tạo mới nữa.
+  permGroups: [],
 
   // "Nhóm Quyền Đặc Biệt" (khối 17 cây phân quyền) — DẠNG CŨ: mỗi nhóm mang 1 danh sách chức danh, user
   // phải được gán thủ công vào 0..N nhóm (field user.vppExcludeGroupIds) mới bị loại. GIỮ NGUYÊN key này

@@ -1,8 +1,91 @@
 # Phiên bản hiện tại
 
-**10.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**10.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Hành Chính > Đồng Phục: gỡ bỏ hẳn sub-tab "Quản Lý Nhân Viên Siêu Thị" (2026-09-07)
+
+**Yêu cầu gốc**: "Bạn kiểm tra và gỡ bỏ toàn bộ sub tab quản lý nhân viên siêu thị trong tab đồng phục
+thuộc module hành chính nhé, gỡ và làm sạch ứng dụng nhé."
+
+**Kiểm tra trước khi xoá (đúng quy trình đã dùng cho các lần gỡ bỏ tính năng trước)**: sub-tab
+"🧑‍💼 Quản Lý Nhân Viên Siêu Thị" (`#uniformSubEmployees`, PR #185, đợt "Bảo mật tài khoản khoá +
+Sửa/Import danh mục + Sub-tab Quản Lý Nhân Viên Siêu Thị") KHÔNG phải 1 roster nhẹ tách riêng — nó tạo/
+khoá **tài khoản đăng nhập THẬT** (username/mật khẩu/permGroup) ghi thẳng vào `DB.users` (cùng bảng với
+màn "Người Dùng" đầy đủ của Admin), qua route riêng `routes/uniformEmployees.js`
+(`POST/PATCH /api/uniform/employees`, gate `uniformManage`/`admin`, luôn ép `posType:'STORE'` + re-
+validate `permGroup.scope==='STORE'` phía server, không tin field `perms` từ client). Vì vậy đã kiểm tra
+kỹ 2 điều trước khi xoá:
+1. **Dropdown "Cấp Đồng Phục Cho Nhân Viên"** (`renderUniformIssueEmployeeOptions()`) đọc THẲNG
+   `DB.users` lọc theo `dept`/`posType!=='HO'`/`active` — KHÔNG phụ thuộc riêng vào tài khoản được tạo
+   qua sub-tab này, nên xoá sub-tab KHÔNG làm gãy luồng cấp phát đồng phục.
+2. Đường thay thế để tạo tài khoản `posType:'STORE'` **đã có sẵn và không đổi**: màn "Người Dùng" đầy đủ
+   của Admin (`Hệ Thống > Quản Trị`, `module-admin-userstaging.js`) đã hỗ trợ Vị Trí Siêu Thị/chức danh
+   Siêu Thị từ trước, không đi qua route bị xoá. Tài khoản nhân viên siêu thị ĐÃ được tạo qua sub-tab
+   trước đây (dữ liệu thật trong `DB.users`, nếu có) **hoàn toàn không bị đụng tới** — chỉ UI/route TẠO
+   MỚI/KHOÁ qua đường tắt này bị gỡ, không xoá bản ghi nào.
+
+Kết luận: an toàn để gỡ hẳn (không phải dữ liệu tài khoản thật bị mất, không có tính năng nào khác của
+Đồng Phục phụ thuộc vào route/hàm riêng của sub-tab này).
+
+**Đã gỡ**:
+- `public/index.html`: nút chuyển sub-tab `btnUniformSubEmployees` + toàn bộ section
+  `#uniformSubEmployees` (form "Tạo Tài Khoản Nhân Viên Siêu Thị" + bảng "Danh Sách Nhân Viên Siêu Thị").
+- `public/js/module-dongphuc.js`: nhánh `EMPLOYEES` trong `setUniformSubTab()` + 5 hàm dùng riêng
+  (`populateUniformEmployeeGroupOptions`/`resetUniformEmployeeCreateForm`/`submitUniformEmployeeCreate`/
+  `renderUniformEmployeesList`/`lockUniformEmployeeAction`).
+- `routes/uniformEmployees.js`: **xoá cả file** (2 route `POST /employees`, `PATCH /employees/:id/active`
+  — không route nào khác dùng file này); gỡ mount `app.use('/api/uniform', ...)` khỏi `server.js`.
+- **Dọn theo (làm sạch, đúng yêu cầu "gỡ và làm sạch")** — mọi phần scaffolding chỉ tồn tại để phục vụ
+  RIÊNG sub-tab này, xác nhận không nơi nào khác đọc:
+  - Cờ `restrictedFromSelfService` trên `DB.storeJobTitles[]` (checkbox "Khoá tự tạo" ở màn Quản Trị >
+    Danh Mục) — gỡ checkbox + hàm `toggleStoreJobTitleRestricted()`/`...FromCheckbox()`
+    (`module-admin.js`), giữ nguyên danh mục `storeJobTitles` (vẫn dùng cho field Chức Danh của user
+    `posType==='STORE'` ở màn Người Dùng đầy đủ).
+  - Field `scope` (`'STORE'`) trên Nhóm Phân Quyền — checkbox "🏪 Chỉ dùng cho Siêu Thị"
+    (`#gGroupStoreScope`) + badge hiển thị trong bảng Nhóm Phân Quyền (`module-admin-permgroups.js`,
+    `index.html`) — không nơi nào khác đọc field này sau khi sub-tab bị gỡ.
+  - Seed mặc định `grp_store_default` (permGroups) trong `defaults.js` (đặt lại `permGroups: []`) +
+    hàm migration `migrateDefaultStorePermGroup()` trong `seedDefaults.js` (chạy mỗi lần khởi động, seed
+    nhóm này vào DB thật đang chạy production nếu chưa có) — gỡ hẳn cả seed lẫn migration; **DB thật nào
+    đã từng chạy migration này trước đây vẫn giữ nguyên nhóm `grp_store_default` đã seed** (không xoá dữ
+    liệu cũ), chỉ không seed thêm/mới nữa.
+  - `MODULE_FN_GROUP` (`core.js`, bảng tra cứu lazy-load theo tên hàm cho `ensureFnReady()`) — gỡ 7 entry
+    của các hàm vừa xoá.
+  - Comment tham chiếu rải rác (`routes/data.js`, `lib/adminAuth.js`) cập nhật lại danh sách route dùng
+    chung `isCurrentlyAdminOrUniformManage()` (route `uniformEmployees.js` không còn tồn tại).
+- **`tests/test-catalog-rename-uniform-employees.js` → đổi tên thành
+  `tests/test-catalog-rename-locked-accounts.js`** (nội dung còn lại chỉ còn 3/4 yêu cầu gốc — khoá tài
+  khoản/pending-approval warning/rename danh mục — không còn liên quan gì tới Nhân Viên Siêu Thị nữa):
+  gỡ toàn bộ nhóm kịch bản (4a)-(4c) (submitUniformEmployeeCreate/lockUniformEmployeeAction/
+  renderUniformEmployeesList) + seed dữ liệu chỉ phục vụ nhóm đó (`store_emp1`/`store_emp2`,
+  `DB.permGroups` scope STORE, `DB.storeJobTitles` có cờ `restrictedFromSelfService`). 20/20 kịch bản
+  còn lại PASS.
+- `tests/test-uniform.js`/`tests/test-uniform-phase2.js`: không có kịch bản nào test sub-tab bị xoá (2
+  file này chỉ test Kỳ Cấp Phát/Xác Nhận-Cấp Phát/Kho/Tổng Quan/Điều Chuyển — không đụng tới) — chạy lại
+  xác nhận vẫn PASS toàn bộ: 34/34 (`test-uniform.js`) + 20/20 (`test-uniform-phase2.js`), không cần sửa.
+
+Xác minh: `node -c` sạch trên mọi file server đã sửa; kiểm tra div-balance/duplicate-id trên
+`index.html` không đổi so với baseline (đúng 6 lệch sẵn có do quy ước đếm thô gặp chuỗi JS lồng trong
+template, không phải lỗi mới). Demo Playwright thật (tái dùng khuôn `tests/testHarness.js` — không có SQL
+Server thật trong sandbox lần này nên dùng lại đúng cơ chế static-serve + mock API dispatcher của bộ test,
+KHÔNG phải demo qua DB thật): đăng nhập Hành Chính (uniformManage) — tab-strip Đồng Phục CHỈ còn 4 nút
+(Kỳ Cấp Phát/Xác Nhận-Cấp Phát/Kho/Tổng Quan), không còn nút/section Nhân Viên Siêu Thị nào trong DOM;
+đăng nhập Giám Đốc Siêu Thị — màn "Xác Nhận/Cấp Phát" (form Cấp Đồng Phục Cho Nhân Viên, bảng Đang Giữ,
+Báo Hỏng/Hủy, Thu Hồi, Điều Chuyển Kho) vẫn render đầy đủ, không lỗi console mới — ảnh chụp lưu ở
+`server/demo-screenshots/uniform-remove-employee-subtab/`. Chạy lại bộ hồi quy đầy đủ (`tests/test-*.js`)
+— PASS toàn bộ trừ đúng 2 lỗi known-flaky quen thuộc không liên quan thay đổi này
+(`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`, timeout hạ tầng test).
+
+**Deploy-impact:** KHÔNG đổi `sql/schema.sql`, KHÔNG thêm/đổi biến môi trường, KHÔNG thêm/đổi
+`dependencies` trong `package.json` — chỉ copy code + `pm2 restart`. Lưu ý 1 điểm khác thường: gỡ hẳn
+`migrateDefaultStorePermGroup()` (chạy mỗi lần khởi động trước đây) nghĩa là **từ lần restart tới, DB thật
+sẽ KHÔNG còn tự seed nhóm phân quyền "Nhân Viên Siêu Thị (Mặc Định)" nữa nếu chưa từng có** — DB nào ĐÃ
+từng chạy migration này ở các lần khởi động trước (rất có thể — migration này đã tồn tại từ PR #189) thì
+nhóm `grp_store_default` đã sẵn có trong DB đó và **không bị xoá**, chỉ đơn giản không còn checkbox/badge
+"Chỉ dùng cho Siêu Thị" nào để xem/sửa field `scope` của nó nữa (nhóm vẫn hoạt động bình thường như 1
+Nhóm Phân Quyền thường, thành viên nhóm hiện có — nếu có — không bị ảnh hưởng).
 
 ## Vận Hành > Siêu Thị > Thực Hiện: cập nhật tiến độ liên tục không ép đổi trạng thái + làm rõ trạng thái "đầu mục lớn" tự hoàn thành theo việc con (2026-09-07)
 

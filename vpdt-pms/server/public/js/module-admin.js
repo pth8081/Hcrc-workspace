@@ -233,20 +233,20 @@ async function renameJobTitle(name) {
   if (ok) { renderJobTitleList(); populateDropdowns(); }
 }
 
-// ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label, restrictedFromSelfService}[] (mục
-// 4a) — TÁCH khỏi DB.jobTitles (Khối Văn Phòng/HO) vì cần thêm cờ "Không dùng được cho tự tạo tài
-// khoản" (VD "Giám Đốc Siêu Thị"), dùng cho form rút gọn "Quản Lý Nhân Viên Siêu Thị" (Đồng Phục). =====
+// ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label}[] (mục 4a) — TÁCH khỏi DB.jobTitles
+// (Khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType==='STORE' ở form Người Dùng đầy đủ.
+// Trước đây còn cờ restrictedFromSelfService (khoá 1 chức danh khỏi form rút gọn "Quản Lý Nhân Viên Siêu
+// Thị" ở Đồng Phục) — cờ này đã bị xoá cùng sub-tab đó (gỡ hẳn, xem VERSION.md); danh mục chỉ còn 1 field
+// {label}. =====
 function saveStoreJobTitle(e) {
   e.preventDefault();
   const label = document.getElementById('txtStoreJobTitleName').value.trim();
   if (!label) return;
   if (DB.storeJobTitles.some(t => t.label === label)) return alert('Chức danh đã tồn tại!');
-  const restricted = document.getElementById('chkStoreJobTitleRestricted').checked;
-  DB.storeJobTitles.push({ label, restrictedFromSelfService: restricted });
+  DB.storeJobTitles.push({ label });
   syncStorage('storeJobTitles');
   logSystemAction('USER_MGM', 'ADD_STORE_JOB_TITLE', `Thêm chức danh siêu thị mới [${label}]`, 'SUCCESS', label);
   document.getElementById('txtStoreJobTitleName').value = '';
-  document.getElementById('chkStoreJobTitleRestricted').checked = false;
   renderStoreJobTitleList();
   populateDropdowns();
 }
@@ -260,19 +260,6 @@ function deleteStoreJobTitle(label) {
   populateDropdowns();
 }
 
-function toggleStoreJobTitleRestricted(label, checked) {
-  const entry = DB.storeJobTitles.find(t => t.label === label);
-  if (!entry) return;
-  entry.restrictedFromSelfService = checked;
-  syncStorage('storeJobTitles');
-  logSystemAction('USER_MGM', 'UPDATE_STORE_JOB_TITLE', `Đổi cờ "Không dùng được cho tự tạo tài khoản" của chức danh siêu thị [${label}] = ${checked}`, 'SUCCESS', label);
-}
-// CSP: onchange checkbox chỉ truyền được phần tử qua data-arg-el (không có slot "this.checked" — xem
-// cspReadArgSlot), nên tách riêng wrapper đọc .checked từ phần tử rồi mới gọi hàm lõi ở trên.
-function toggleStoreJobTitleRestrictedFromCheckbox(label, checkboxEl) {
-  toggleStoreJobTitleRestricted(label, checkboxEl.checked);
-}
-
 async function renameStoreJobTitle(label) {
   const ok = await renameCatalogEntryClient('storeJobTitles', label, 'Danh Sách Chức Danh (Siêu Thị)');
   if (ok) { renderStoreJobTitleList(); populateDropdowns(); }
@@ -284,10 +271,6 @@ function renderStoreJobTitleList() {
   ul.innerHTML = (DB.storeJobTitles || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t.label)}</span>
-      <label class="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap" title="Chức danh này sẽ KHÔNG hiện trong form tự tạo tài khoản ở sub-tab Quản Lý Nhân Viên Siêu Thị (Đồng Phục)">
-        <input type="checkbox" ${t.restrictedFromSelfService ? 'checked' : ''} data-op-change="toggleStoreJobTitleRestrictedFromCheckbox" data-arg0="${escapeHtml(t.label)}" data-arg-el="1">
-        Khoá tự tạo
-      </label>
       <button data-op="renameStoreJobTitle" data-arg0="${escapeHtml(t.label)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteStoreJobTitle" data-arg0="${escapeHtml(t.label)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
