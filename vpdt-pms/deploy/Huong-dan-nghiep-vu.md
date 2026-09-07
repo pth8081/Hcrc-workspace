@@ -222,7 +222,14 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
 
 - **Đăng Ký Xe** — đăng ký sử dụng xe công ty, qua quy trình duyệt theo phòng
   ban. Danh sách "Mục Đích Sử Dụng" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu
-  (từ v12.0).
+  (từ v12.0). 3 sub-tab: **🚗 Đăng Ký Xe** (tạo/xử lý phiếu), **🗓️ Lịch Xe**
+  (mới từ v12.1 — lưới CHỈ XEM lịch trống/bận từng lái xe theo ngày, giống hệt
+  lưới Lịch Họp: cột = lái xe, hàng = khung giờ 30 phút 07:00-19:00, ô đỏ = lái
+  xe đó đang có phiếu chưa bị từ chối/huỷ trùng khung giờ (kể cả đang chờ duyệt
+  hoặc đang chờ bổ sung), ô trắng = trống, bấm ô đỏ xem nhanh thông tin phiếu —
+  **không** đặt/kéo-chọn lịch trực tiếp từ đây, biển số/lái xe cụ thể vẫn do
+  Phòng Hành Chính phân công khi xử lý duyệt như trước), **🧑‍✈️ Lái Xe** (lái
+  xe tự xác nhận chuyến được phân công).
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát

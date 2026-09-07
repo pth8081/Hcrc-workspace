@@ -1044,6 +1044,19 @@ cầu:
 3. **`server/package.json` đổi `dependencies`** — cần chạy lại `npm install`
    trong thư mục `server/` trước khi restart, nếu không server có thể báo lỗi
    "Cannot find module" ngay khi khởi động.
+4. **`server/public/tailwind.css` đổi** — file này là CSS đã build sẵn
+   (`npm run build:css`, đọc `tailwind.config.js` + `tailwind-input.css`,
+   xem `package.json` script `build:css`), **KHÔNG** tự sinh lúc chạy server
+   và **KHÔNG** đổi theo mỗi lần đổi `index.html`/JS. Nếu bản cập nhật có kèm
+   class Tailwind mới (giao diện/tab mới, đổi màu…) mà `public/tailwind.css`
+   không đổi theo (hoặc bạn tự copy đè `index.html`/`public/js/*.js` mà quên
+   copy `public/tailwind.css` mới), phần giao diện dùng class mới đó sẽ
+   **không có style** dù code JS/HTML hoàn toàn đúng (đã gặp thực tế ở v12.1 —
+   xem `VERSION.md`: 2 nút sub-tab "Đăng Ký Xe"/"Lái Xe" hiện chữ trắng trên
+   nền trong suốt vì thiếu đúng rule này). Luôn copy đúng file
+   `public/tailwind.css` đã build kèm theo code mới, hoặc chạy lại
+   `npm run build:css` ngay trên server production trước khi restart — chỉ
+   `pm2 restart` không đủ để khắc phục lỗi thiếu style loại này.
 
 **Quy trình cập nhật đầy đủ, an toàn cho mọi trường hợp:**
 

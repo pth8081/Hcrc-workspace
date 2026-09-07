@@ -124,10 +124,12 @@ function setCarSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   activeCarSubTab = subTab;
   document.getElementById('carSubReg').classList.toggle('hidden', subTab !== 'REG');
+  document.getElementById('carSubCalendar').classList.toggle('hidden', subTab !== 'CALENDAR');
   document.getElementById('carSubDriver').classList.toggle('hidden', subTab !== 'DRIVER');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnCarSubReg').className = subTab === 'REG' ? activeCls : inactiveCls;
+  document.getElementById('btnCarSubCalendar').className = subTab === 'CALENDAR' ? activeCls : inactiveCls;
   document.getElementById('btnCarSubDriver').className = subTab === 'DRIVER' ? activeCls : inactiveCls;
   if (subTab === 'REG') {
     renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');
@@ -135,7 +137,95 @@ function setCarSubTab(subTab) {
     document.getElementById('carCode').value = generateCarCode();
     if (!carRoutePoints.length) resetCarRoutePoints(); else renderCarRoutePoints();
   }
+  if (subTab === 'CALENDAR') renderCarScheduleCalendar();
   if (subTab === 'DRIVER') renderCarDriverTab();
+}
+
+// ============ Sub-tab "Lịch Xe" — lưới CHỈ XEM lịch trống/bận của lái xe (giống Lịch Họp ở
+// module-phonghop.js, nhưng KHÔNG có tương tác đặt lịch/kéo chọn — phương án đã xác nhận với người
+// dùng: đây chỉ là màn xem, biển số/lái xe cụ thể vẫn do Phòng Hành Chính phân công khi xử lý duyệt). ============
+
+// Khung giờ 07:00 - 19:00, mỗi ô 30 phút — BẢN SAO của generateMeetingTimeSlots() (module-phonghop.js):
+// nhóm tải module "dangkyxe" KHÔNG có dependency lên nhóm "phonghop" (xem MODULE_LOAD_GROUPS ở
+// public/js/core.js) nên vào thẳng tab Đăng Ký Xe (không qua tab Phòng Họp trước) sẽ không có sẵn hàm
+// generateMeetingTimeSlots() — tách riêng 1 bản cho module Xe để không phụ thuộc thứ tự nạp module.
+function generateCarTimeSlots() {
+  const slots = [];
+  for (let h = 7; h < 19; h++) {
+    slots.push(`${String(h).padStart(2, '0')}:00`);
+    slots.push(`${String(h).padStart(2, '0')}:30`);
+  }
+  return slots;
+}
+
+function renderCarScheduleCalendar() {
+  const dateInput = document.getElementById('carCalDate');
+  if (!dateInput) return;
+  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  const dateStr = dateInput.value;
+  const grid = document.getElementById('carCalendarGrid');
+  if (!grid) return;
+
+  // Cùng nguồn dữ liệu populateCarDriversDatalist() ở module-bienbanhop.js — KHÔNG tự tạo truy vấn lái
+  // xe mới, tránh 2 nơi định nghĩa "ai là lái xe" khác nhau.
+  const drivers = DB.users.filter(u => u.active !== false && u.isDriver);
+  const slots = generateCarTimeSlots();
+
+  let html = '<div class="overflow-x-auto"><table class="w-full border-collapse border text-xs bg-white">';
+  html += '<thead><tr class="bg-gray-100"><th class="border p-2 w-16">Giờ</th>' +
+    drivers.map(d => `<th class="border p-2">${escapeHtml(d.name)}</th>`).join('') + '</tr></thead><tbody>';
+
+  if (!drivers.length) {
+    html += `<tr><td colspan="${1 + drivers.length}" class="border p-3 text-center text-gray-500 italic">Chưa có lái xe nào được đánh dấu "Lái xe" trong Quản Lý Người Dùng.</td></tr>`;
+  } else {
+    slots.forEach(slot => {
+      const slotStart = new Date(`${dateStr}T${slot}:00`);
+      const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
+      html += `<tr><td class="border p-1 text-center text-gray-500 font-mono">${slot}</td>`;
+      drivers.forEach(d => {
+        // Cùng quy ước "đang chiếm chỗ" như findCarPlateConflict() ở lib/workflowEngine.js: mọi trạng
+        // thái TRỪ REJECTED/CANCELLED đều tính là bận (PENDING/APPROVED/DRAFT), không chỉ APPROVED — so
+        // sánh bằng Date đầy đủ (không chỉ giờ trong ngày) nên chuyến nhiều ngày tự động hiện đỏ ở MỌI
+        // ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu.
+        const booking = DB.carRegs.find(c => {
+          if (c.status === 'REJECTED' || c.status === 'CANCELLED') return false;
+          if (c.assignedDriverUsername !== d.username) return false;
+          const cStart = new Date(c.startTime);
+          const cEnd = new Date(c.endTime);
+          return slotStart < cEnd && cStart < slotEnd;
+        });
+        if (booking) {
+          html += `<td class="car-cal-cell border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" data-car-id="${booking.id}" title="${escapeHtml(booking.destination || booking.code || '')} — bấm để xem"></td>`;
+        } else {
+          html += `<td class="border p-1 h-6 text-center bg-white hover:bg-emerald-50"></td>`;
+        }
+      });
+      html += '</tr>';
+    });
+  }
+  html += '</tbody></table></div>';
+  grid.innerHTML = html;
+  wireCarCalendarClick(grid);
+}
+
+// Gắn sự kiện click 1 lần cho mỗi lần tạo mới #carCalendarGrid (giữ nguyên khi chỉ đổi ngày, chỉ
+// innerHTML bên trong đổi) — chỉ cần lắng nghe click ô đỏ để xem thông tin, KHÔNG cần mousedown/mouseover/
+// mouseup kiểu kéo-chọn như wireMeetingCalendarSelection() vì đây là lưới chỉ-xem.
+function wireCarCalendarClick(grid) {
+  if (grid._carCalWired) return;
+  grid._carCalWired = true;
+  grid.addEventListener('click', (e) => {
+    const cell = e.target.closest('.car-cal-cell');
+    if (!cell) return;
+    showCarScheduleSlotInfo(parseInt(cell.dataset.carId, 10));
+  });
+}
+
+function showCarScheduleSlotInfo(id) {
+  const c = DB.carRegs.find(x => x.id === id);
+  if (!c) return;
+  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', DRAFT: 'Cần bổ sung — chờ sửa lại' }[c.status] || c.status;
+  alert(`🚗 ${c.code}\nLái xe: ${c.assignedDriver || ''}\nBiển số: ${c.assignedPlate || '(chưa gán)'}\nĐiểm đến: ${c.destination || ''}\nThời gian: ${c.startTime} ➔ ${c.endTime}\nTrạng thái: ${statusLabel}`);
 }
 
 // ============ Lái Xe (tự xác nhận chuyến được phân công) ============

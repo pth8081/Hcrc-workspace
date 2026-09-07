@@ -1,8 +1,59 @@
 # Phiên bản hiện tại
 
-**12.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đăng Ký Xe: tab "🗓️ Lịch Xe" (chỉ xem lịch trống/bận lái xe) + fix lỗi tương phản chữ/nền (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Trong phần đăng ký xe thêm lịch phân công xe để có thể nhìn lịch
+trống của lái xe như lịch họp và trắng là trống và đỏ là đã có lịch đăng ký, bạn xem sub tab đăng ký xe,
+lái xe đang màu chữ và màu nên gây khó khăn cần xứ lại, thêm tab lịch xe giữa sub tab đăng ký xe và lái
+xe cũng cần điều chỉnh màu chữ và nên cho dễ nhìn nhé." Đã xác nhận với người dùng: **chỉ là màn XEM**,
+KHÔNG làm kéo-thả/bấm-để-đặt lịch trực tiếp từ lưới (biển số/lái xe cụ thể vẫn do Phòng Hành Chính phân
+công khi xử lý duyệt như hiện tại).
+
+**Root cause lỗi tương phản (đã fix TRƯỚC, làm nền tảng)**: `tailwind.config.js` `content` trước đây CHỈ
+quét `./public/index.html`, không quét `public/js/**/*.js` — class active-tab `bg-indigo-700 text-white`
+(2 nút sub-tab Đăng Ký Xe/Lái Xe, cả gõ cứng trong `index.html` lẫn set động ở `setCarSubTab()` trong
+`public/js/module-dangkyxe.js`) được thêm SAU lần `npm run build:css` gần nhất nên hoàn toàn không có rule
+biên dịch trong `public/tailwind.css` — sub-tab đang chọn hiển thị chữ trắng trên nền trong suốt, gần như
+không đọc được. Đã sửa: `content: ['./public/index.html', './public/js/**/*.js']` rồi `npm run
+build:css` lại — giữ nguyên màu đã chọn (`bg-indigo-700`/`text-white`, khớp khuôn active-tab
+`bg-emerald-700`/`text-white` của Lịch Họp), chỉ là build-pipeline fix, không đổi bảng màu. Đã grep trực
+tiếp `public/tailwind.css` sau build để xác nhận có đủ rule `.bg-indigo-700{...}`, `.bg-slate-200{...}`,
+`.text-slate-700{...}` (badge "Đã hủy chuyến" cũng bị lỗi tương tự) và mọi class lưới Lịch Xe mới
+(`.bg-red-500`, `.hover\:bg-red-600`, `.hover\:bg-emerald-50`, `.font-mono`).
+
+**Tab mới "🗓️ Lịch Xe"** (`#btnCarSubCalendar`, giữa "🚗 Đăng Ký Xe" và "🧑‍✈️ Lái Xe"): mirror đúng
+khuôn Lịch Họp (`renderMeetingCalendar()` ở `module-phonghop.js`) — bảng: cột = lái xe (`DB.users.filter(u
+=> u.active !== false && u.isDriver)`, CÙNG nguồn dữ liệu `populateCarDriversDatalist()` ở
+`module-bienbanhop.js`, không tạo truy vấn mới), hàng = khung giờ 30 phút 07:00-19:00
+(`generateCarTimeSlots()` — bản sao riêng của `generateMeetingTimeSlots()` vì nhóm tải module
+"dangkyxe" không phụ thuộc nhóm "phonghop", xem `MODULE_LOAD_GROUPS` ở `core.js`). Ô ĐỎ
+(`bg-red-500 hover:bg-red-600`) = có phiếu `carRegs` của đúng lái xe đó trùng khung giờ với trạng thái
+KHÁC `REJECTED`/`CANCELLED` (PENDING/APPROVED/DRAFT đều tính "đang bận" — cùng quy ước
+`findCarPlateConflict()` ở `lib/workflowEngine.js`); ô TRẮNG (`bg-white hover:bg-emerald-50`) = trống. Bấm
+ô đỏ hiện thông tin phiếu qua `alert()` (`showCarScheduleSlotInfo()`, mirror `showMeetingSlotInfo()`); bấm
+ô trắng KHÔNG làm gì (khác hẳn `quickBookMeetingSlot()` của Lịch Họp — đây là điểm khác biệt DUY NHẤT so
+với khuôn Lịch Họp, theo đúng phương án chỉ-xem người dùng đã chọn). Chuyến nhiều ngày (`startTime`/
+`endTime` khác ngày) tự động hiện đỏ ở MỌI ngày trong khoảng vì phép so khớp dùng `Date` đầy đủ (không chỉ
+giờ-trong-ngày) — không cần xử lý riêng.
+
+**Deploy-impact: CÓ THAO TÁC THỦ CÔNG** — `public/tailwind.css` là file tĩnh build sẵn (`npm run
+build:css`, KHÔNG tự sinh lúc chạy server), nên deploy đợt này **bắt buộc** copy file
+`public/tailwind.css` đã build lại (hoặc chạy `npm run build:css` ngay trên server production) — chỉ
+`pm2 restart` KHÔNG đủ, giao diện vẫn lỗi tương phản cũ nếu quên bước này. Không đổi `sql/schema.sql`,
+không thêm biến môi trường, không đổi `dependencies`.
+
+**Test**: mở rộng `tests/test-meeting-car.js` (đọc header file để biết cách hạ tầng test giả lập server
+thật) — thêm cụm "Lịch Xe" kiểm: PENDING/DRAFT tính là bận (ô đỏ), REJECTED/CANCELLED không tính (ô
+trắng), chuyến nhiều ngày hiện đỏ đúng ở cả ngày bắt đầu/GIỮA/kết thúc (không chỉ ngày bắt đầu) và trắng
+lại đúng ở 2 biên ngoài khoảng, bấm ô đỏ hiện alert() và KHÔNG chuyển sang tab/form Đăng Ký. Toàn bộ 75
+file `tests/test-*.js` chạy lại: chỉ còn đúng 3 FAIL tiền-lệ (không liên quan, do môi trường test không có
+SQL Server thật kết nối tới `localhost:1433` — `test-audit-fixes-batch1.js` 2 FAIL, cùng lỗi ở
+`test-audit-round2-cluster1.js` 1 FAIL — đã xác nhận bằng `git stash` giữ nguyên y hệt trước khi có thay
+đổi này), không có regression mới.
 
 ## Rà soát audit "trường nhiều lựa chọn không sửa thêm/bớt được" — 6 danh mục mới admin-editable (2026-09-07)
 

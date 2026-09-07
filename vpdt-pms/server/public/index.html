@@ -2731,6 +2731,7 @@
     <div id="hanhChinhTabBar_car" class="hidden flex gap-2 flex-wrap"></div>
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" data-op="setCarSubTab" data-arg0="REG" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
+      <button type="button" data-op="setCarSubTab" data-arg0="CALENDAR" id="btnCarSubCalendar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Xe</button>
       <button type="button" data-op="setCarSubTab" data-arg0="DRIVER" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
     </div>
 
@@ -2857,6 +2858,26 @@
       </div>
       <div id="paginationContainer_car"></div>
     </div>
+    </div>
+
+    <!-- Sub-tab: Lịch Xe — CHỈ XEM lịch trống/bận của từng lái xe (giống Lịch Họp), KHÔNG kéo/bấm đặt
+         lịch trực tiếp từ đây (phương án đã xác nhận với người dùng) — biển số/lái xe cụ thể vẫn do
+         Phòng Hành Chính phân công khi xử lý duyệt phiếu (xem submitCarReq() phía trên). Cột = lái xe
+         (DB.users có isDriver, cùng nguồn dữ liệu populateCarDriversDatalist() ở module-bienbanhop.js),
+         hàng = khung giờ 30 phút 07:00-19:00 (generateCarTimeSlots() ở module-dangkyxe.js). Ô đỏ = có
+         phiếu đăng ký xe PENDING/APPROVED/DRAFT (chưa REJECTED/CANCELLED) trùng khung giờ với lái xe đó —
+         chuyến nhiều ngày hiện đỏ ở MỌI ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu. -->
+    <div id="carSubCalendar" class="hidden space-y-3">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
+        <label class="font-semibold text-gray-600">Xem lịch ngày:</label>
+        <input id="carCalDate" type="date" data-op-change="renderCarScheduleCalendar" class="border p-1.5 rounded">
+        <span class="text-gray-500 italic">Chỉ xem — bấm ô đỏ để xem thông tin chuyến đang chiếm lịch của lái xe</span>
+        <div class="flex items-center gap-1.5 ml-auto">
+          <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống</span>
+          <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
+        </div>
+      </div>
+      <div id="carCalendarGrid"></div>
     </div>
 
     <!-- Sub-tab: Lái Xe (tự xác nhận chuyến được phân công — assignedDriverUsername === currentUser) -->

@@ -223,15 +223,18 @@ const adminUser = {
   // thiếu field này khiến loginAs() (gọi thẳng proceedAfterAuth()) bị chặn ở màn bắt buộc thiết lập TOTP.
   active: true, perms: { admin: true }, totpEnabled: true
 };
+// isDriver:true — đánh dấu để populateCarDriversDatalist() VÀ lưới "Lịch Xe" (renderCarScheduleCalendar(),
+// module-dangkyxe.js) đều lọc ra đúng 2 tài khoản này (khớp DB.users.filter(u => u.active !== false &&
+// u.isDriver) — cùng 1 nguồn dữ liệu duy nhất cho cả 2 nơi).
 const driverUser = {
   username: 'lx1', name: 'Nguyễn Văn Tài', dept: 'Phòng Hành Chính', role: 'STAFF',
   phone: '0966666666', email: 'lx1@company.com', jobTitle: 'Lái xe',
-  active: true, perms: {}
+  active: true, perms: {}, isDriver: true
 };
 const driverUser2 = {
   username: 'lx2', name: 'Trần Văn Lái', dept: 'Phòng Hành Chính', role: 'STAFF',
   phone: '0977777777', email: 'lx2@company.com', jobTitle: 'Lái xe',
-  active: true, perms: {}
+  active: true, perms: {}, isDriver: true
 };
 // carDispatch ("Người Điều Hành Xe", Phase 3) — 2 tài khoản đều là approver bước 1 hợp lệ ở đúng phòng
 // ban của phiếu họ sẽ duyệt (xem carDeptWorkflows trong seedDB bên dưới), CHỈ khác nhau ở carDispatch:
@@ -1197,6 +1200,143 @@ async function main() {
     'Fix 4 UI: người KHÔNG phải chủ chuyến và KHÔNG có carDispatch -> canCancelCarRegClient()/canDispatchCarClient() đều false',
     f9outsider.canCancel === false && f9outsider.canDispatch === false,
     JSON.stringify(f9outsider)
+  );
+
+  // ===================== "Lịch Xe" READ-ONLY CALENDAR (renderCarScheduleCalendar(), sub-tab CALENDAR,
+  // xem module-dangkyxe.js) — mirror khuôn Lịch Họp (renderMeetingCalendar()) nhưng KHÔNG có tương tác
+  // đặt lịch/kéo chọn (phương án chỉ-xem đã xác nhận với người dùng). IDs 900501-900505 và các ngày
+  // 2026-10-01..12 CHỈ dùng riêng cho cụm test này — không trùng bất kỳ id/ngày nào các test C*/D*/F*
+  // ở trên đã dùng (900001-900409, ngày 2026-09-01..24). =====================
+  const calPendingTrip = {
+    id: 900501, code: 'HCRC-DPH-CAL-PENDING', dept: 'Phòng Kinh Doanh', status: 'PENDING', currentStep: 1, history: [],
+    assignedDriverUsername: 'lx2', assignedDriver: 'Trần Văn Lái',
+    startTime: '2026-10-01T09:00', endTime: '2026-10-01T10:00', destination: 'HN → Test Lịch Xe (PENDING)'
+  };
+  const calDraftTrip = {
+    id: 900502, code: 'HCRC-DPH-CAL-DRAFT', dept: 'Phòng Kinh Doanh', status: 'DRAFT', currentStep: 1, history: [],
+    assignedDriverUsername: 'lx2', assignedDriver: 'Trần Văn Lái',
+    startTime: '2026-10-02T09:00', endTime: '2026-10-02T10:00', destination: 'HN → Test Lịch Xe (DRAFT)'
+  };
+  const calRejectedTrip = {
+    id: 900503, code: 'HCRC-DPH-CAL-REJECTED', dept: 'Phòng Kinh Doanh', status: 'REJECTED', currentStep: 1, history: [],
+    assignedDriverUsername: 'lx2', assignedDriver: 'Trần Văn Lái',
+    startTime: '2026-10-03T09:00', endTime: '2026-10-03T10:00', destination: 'HN → Test Lịch Xe (REJECTED)'
+  };
+  const calCancelledTrip = {
+    id: 900504, code: 'HCRC-DPH-CAL-CANCELLED', dept: 'Phòng Kinh Doanh', status: 'CANCELLED', currentStep: 1, history: [],
+    assignedDriverUsername: 'lx2', assignedDriver: 'Trần Văn Lái',
+    startTime: '2026-10-04T09:00', endTime: '2026-10-04T10:00', destination: 'HN → Test Lịch Xe (CANCELLED)'
+  };
+  // Chuyến dài ngày (2026-10-10 10:00 -> 2026-10-12 15:00) — phải hiện đỏ ở CẢ 3 ngày, kể cả ngày GIỮA
+  // (2026-10-11) không phải ngày bắt đầu/kết thúc — xác nhận overlap tính bằng Date đầy đủ chứ không chỉ
+  // giờ-trong-ngày.
+  const calMultiDayTrip = {
+    id: 900505, code: 'HCRC-DPH-CAL-MULTIDAY', dept: 'Phòng Kinh Doanh', status: 'APPROVED', currentStep: 1, history: [],
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài',
+    startTime: '2026-10-10T10:00', endTime: '2026-10-12T15:00', destination: 'HN → Đà Nẵng (công tác dài ngày)'
+  };
+  store.carRegs.push(calPendingTrip, calDraftTrip, calRejectedTrip, calCancelledTrip, calMultiDayTrip);
+  await page.evaluate((items) => { items.forEach((c) => DB.carRegs.push(c)); },
+    [calPendingTrip, calDraftTrip, calRejectedTrip, calCancelledTrip, calMultiDayTrip]);
+
+  // Helper trong trang: mở sub-tab Lịch Xe, render đúng 1 ngày, trả về trạng thái ô [driverUsername, slot].
+  const readCarCalCell = (dateStr, username, slot) => page.evaluate(({ dateStr, username, slot }) => {
+    switchTab('car');
+    setCarSubTab('CALENDAR');
+    document.getElementById('carCalDate').value = dateStr;
+    renderCarScheduleCalendar();
+    const drivers = DB.users.filter((u) => u.active !== false && u.isDriver);
+    const colIdx = drivers.findIndex((d) => d.username === username);
+    if (colIdx === -1) return { found: false, reason: 'driver not in calendar columns' };
+    const rowIdx = generateCarTimeSlots().indexOf(slot);
+    if (rowIdx === -1) return { found: false, reason: 'slot not found' };
+    const grid = document.getElementById('carCalendarGrid');
+    const row = grid.querySelectorAll('tbody tr')[rowIdx];
+    const cell = row.querySelectorAll('td')[1 + colIdx]; // cột 0 = Giờ
+    return {
+      found: true,
+      isRed: cell.classList.contains('bg-red-500'),
+      isWhite: cell.classList.contains('bg-white'),
+      carId: cell.dataset.carId || null
+    };
+  }, { dateStr, username, slot });
+
+  const calA = await readCarCalCell('2026-10-01', 'lx2', '09:00');
+  record(
+    'Lịch Xe: lái xe có phiếu PENDING trùng khung giờ hiện Ô ĐỎ (đang bận)',
+    calA.found && calA.isRed && Number(calA.carId) === calPendingTrip.id,
+    JSON.stringify(calA)
+  );
+  const calA2 = await readCarCalCell('2026-10-01', 'lx2', '08:00');
+  record(
+    'Lịch Xe: cùng ngày nhưng NGOÀI khung giờ có phiếu — ô trắng (còn trống)',
+    calA2.found && calA2.isWhite,
+    JSON.stringify(calA2)
+  );
+
+  const calB = await readCarCalCell('2026-10-02', 'lx2', '09:00');
+  record(
+    'Lịch Xe: phiếu DRAFT ("cần bổ sung — chờ sửa lại") cũng tính là đang bận — ô đỏ (khớp quy ước findCarPlateConflict())',
+    calB.found && calB.isRed && Number(calB.carId) === calDraftTrip.id,
+    JSON.stringify(calB)
+  );
+
+  const calC = await readCarCalCell('2026-10-03', 'lx2', '09:00');
+  record(
+    'Lịch Xe: phiếu REJECTED KHÔNG tính là đang bận — ô trắng',
+    calC.found && calC.isWhite,
+    JSON.stringify(calC)
+  );
+
+  const calD = await readCarCalCell('2026-10-04', 'lx2', '09:00');
+  record(
+    'Lịch Xe: phiếu CANCELLED KHÔNG tính là đang bận — ô trắng',
+    calD.found && calD.isWhite,
+    JSON.stringify(calD)
+  );
+
+  const calE1 = await readCarCalCell('2026-10-10', 'lx1', '12:00'); // ngày bắt đầu chuyến, sau giờ khởi hành 10:00
+  const calE2 = await readCarCalCell('2026-10-11', 'lx1', '12:00'); // ngày GIỮA — không phải ngày bắt đầu/kết thúc
+  const calE3 = await readCarCalCell('2026-10-12', 'lx1', '12:00'); // ngày kết thúc chuyến, trước giờ về 15:00
+  record(
+    'Lịch Xe: chuyến nhiều ngày hiện đỏ đúng ở ngày bắt đầu',
+    calE1.found && calE1.isRed && Number(calE1.carId) === calMultiDayTrip.id,
+    JSON.stringify(calE1)
+  );
+  record(
+    'Lịch Xe: chuyến nhiều ngày hiện đỏ ở ngày GIỮA (không phải ngày bắt đầu/kết thúc) — overlap tính đúng qua nhiều ngày',
+    calE2.found && calE2.isRed && Number(calE2.carId) === calMultiDayTrip.id,
+    JSON.stringify(calE2)
+  );
+  record(
+    'Lịch Xe: chuyến nhiều ngày hiện đỏ đúng ở ngày kết thúc',
+    calE3.found && calE3.isRed && Number(calE3.carId) === calMultiDayTrip.id,
+    JSON.stringify(calE3)
+  );
+
+  const calE0 = await readCarCalCell('2026-10-10', 'lx1', '07:00'); // trước giờ khởi hành (10:00) cùng ngày bắt đầu
+  const calE4 = await readCarCalCell('2026-10-12', 'lx1', '18:30'); // sau giờ về (15:00) cùng ngày kết thúc
+  record('Lịch Xe: trước giờ khởi hành của ngày đầu chuyến — ô trắng (đúng biên đầu khoảng)', calE0.found && calE0.isWhite, JSON.stringify(calE0));
+  record('Lịch Xe: sau giờ về của ngày cuối chuyến — ô trắng (đúng biên cuối khoảng)', calE4.found && calE4.isWhite, JSON.stringify(calE4));
+
+  // Bấm ô đỏ chỉ hiện thông tin qua alert() (showCarScheduleSlotInfo) — KHÔNG chuyển sang tab/form đăng ký
+  // (đúng phương án chỉ-xem đã xác nhận, khác hẳn quickBookMeetingSlot() của Lịch Họp).
+  const calClick = await page.evaluate((carId) => {
+    window.__alerts = [];
+    document.getElementById('carCalDate').value = '2026-10-01';
+    renderCarScheduleCalendar();
+    const cell = document.querySelector(`.car-cal-cell[data-car-id="${carId}"]`);
+    if (cell) cell.click();
+    return {
+      alerts: window.__alerts.slice(),
+      stillOnCalendarTab: !document.getElementById('carSubCalendar').classList.contains('hidden'),
+      stillOnRegTab: document.getElementById('carSubReg').classList.contains('hidden')
+    };
+  }, calPendingTrip.id);
+  record(
+    'Lịch Xe: bấm ô đỏ hiện thông tin phiếu qua alert(), vẫn ở lại tab Lịch Xe — không nhảy sang form Đăng Ký (khác Lịch Họp)',
+    calClick.alerts.some((a) => a.includes('HCRC-DPH-CAL-PENDING')) && calClick.stillOnCalendarTab && calClick.stillOnRegTab,
+    JSON.stringify(calClick)
   );
 
   await browser.close();
