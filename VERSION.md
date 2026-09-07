@@ -1,12 +1,41 @@
 # Phiên bản hiện tại
 
-**10.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Bản merge gần nhất vào `main` vẫn là **10.2** — **10.3**–**10.5** hiện mới chỉ nằm trên
-nhánh `claude/chao-ban-oo5ijl` (xem các mục ngay dưới), CHỜ người dùng xem demo trước khi merge vào
-`main` theo đúng yêu cầu của đợt này. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver
-3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+**10.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này — gộp cả **10.3**–**10.6** vào `main`
+1 lượt (bản merge trước đó vào `main` là **10.2**). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR`
+(không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## "Vị Trí Tham Gia Quy Trình" + bước duyệt "Theo vị trí" (POSITION mode) cho quy trình phê duyệt (2026-09-07)
+## Tạo 2 file hướng dẫn sống `deploy/Huong-dan-nghiep-vu.md` + `deploy/Huong-dan-trien-khai.md`, dời `HUONG_DAN_DEPLOY_UBUNTU.md` (2026-09-07)
+
+**Yêu cầu gốc**: theo quy ước mới ghi ở `CLAUDE.md` (2 file hướng dẫn sống trong `vpdt-pms/deploy/`,
+cập nhật liên tục theo từng thay đổi nghiệp vụ/triển khai từ nay về sau) — tạo phiên bản ĐẦU TIÊN của cả
+2 file.
+
+**`deploy/Huong-dan-trien-khai.md`** (triển khai) — KHÔNG viết lại từ đầu: dời nguyên nội dung đã có sẵn
+và chính xác ở `HUONG_DAN_DEPLOY_UBUNTU.md` (thư mục gốc, đã rà lại khớp đúng `ecosystem.config.js`/
+`.env.example`/`server.js` hiện tại) sang vị trí mới, giữ nguyên đánh số mục 0-16, chỉ thêm 1 Mục Lục có
+link neo + 1 mục "Xem thêm" trỏ chéo sang file nghiệp vụ ở cuối. `HUONG_DAN_DEPLOY_UBUNTU.md` ở thư mục
+gốc đổi thành 1 trang trỏ ngắn (KHÔNG xoá hẳn) — nhiều comment code (`server.js`/`ecosystem.config.js`/
+`routes/auth.js`/`routes/systemLog.js`/`scripts/copy-vendor-assets.js`/`lib/operationWorkItemStore.js`)
+vẫn tham chiếu tên file này theo đúng số mục, dời hẳn sẽ làm các tham chiếu đó trỏ vào file không tồn tại
+— KHÔNG sửa các file `.js` này (việc dời file/redirect đã đủ giữ đường dẫn hợp lệ, đây là đợt việc thuần
+tài liệu). `README.md`/`CLAUDE.md` (2 file Markdown, không phải code) đã cập nhật trỏ sang đường dẫn mới.
+
+**`deploy/Huong-dan-nghiep-vu.md`** (nghiệp vụ) — viết MỚI hoàn toàn, đọc code thật (`BUSINESS_MODULES`
+ở `core.js`, header từng `module-*.js`, `WF_MODULE_CONFIG`, `lib/externalAuth.js`, `lib/positionApprovers.js`,
+cây phân quyền ở `index.html`) thay vì suy đoán — 7 mục: Tổng quan; Mô hình quy trình phê duyệt chung
+(3 cách gán người duyệt Theo người/Theo phòng ban/Theo vị trí — tính năng v10.5, quyền `canBeApprover`,
+danh mục khối 17, Hộp Thư Phê Duyệt, 1 ví dụ cấu hình cụ thể + bảng tra lỗi thường gặp); Danh sách module
+nghiệp vụ theo 8 nhóm (Văn Phòng Điện Tử/Truyền Thông & Nhân Sự/Tài Chính/Hành Chính/Vận Hành/Hỗ Trợ IT/
+Báo Cáo Định Kỳ/Hệ Thống); Cấu hình Báo Cáo; API đối tác ngoài (ExtAuth, tóm tắt góc nhìn quản trị — có
+ghi chú đã có 1 đặc tả API riêng đầy đủ hơn cho đối tác từ 1 phiên trước); Cấu hình Email (SMTP + 🔔
+Thông Báo Email Phê Duyệt v10.2); Phân quyền (bảng 23 khối 0-22, `permGroups` overlay, quy trình cấp
+quyền nhân viên mới).
+
+Không đổi file `.js`/`.sql` nào (thuần tài liệu) — không cần thao tác gì thêm ngoài copy code + `pm2
+restart` theo quy trình thường ở `deploy/Huong-dan-trien-khai.md` mục 16.
+
+## Trước đó — "Vị Trí Tham Gia Quy Trình" + bước duyệt "Theo vị trí" (POSITION mode) cho quy trình phê duyệt (2026-09-07)
 
 **Yêu cầu gốc**: thêm 1 danh mục MỚI ở khối 17 "Nhóm Quyền Đặc Biệt" (Hệ Thống → Quản Trị → Phân Quyền)
 — "Vị Trí Tham Gia Quy Trình", mỗi mục là 1 CẶP (chức danh, phòng ban) admin tự dựng (vì `DB.jobTitles`

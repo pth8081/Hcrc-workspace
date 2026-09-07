@@ -23,7 +23,7 @@ server/
 └── .gitignore
 ```
 
-## Chạy nhanh (xem chi tiết trong HUONG_DAN_DEPLOY_UBUNTU.md)
+## Chạy nhanh (xem chi tiết trong deploy/Huong-dan-trien-khai.md)
 
 ```bash
 cd server
@@ -161,4 +161,5 @@ Tài khoản mặc định: `admin / 123456` (đổi mật khẩu ngay sau khi t
     đồng thời nút Từ chối giờ có hỏi lý do (trước đây từ chối ngay không lý
     do), nhất quán với 3 module còn lại.
 
-Xem đầy đủ hướng dẫn triển khai tại `HUONG_DAN_DEPLOY_UBUNTU.md`.
+Xem đầy đủ hướng dẫn triển khai tại `deploy/Huong-dan-trien-khai.md`, hướng dẫn
+nghiệp vụ/cấu hình tính năng tại `deploy/Huong-dan-nghiep-vu.md`.

@@ -48,10 +48,11 @@ Không giả định người dùng tự soát các file diff này — luôn li�
 minh trong phần tóm tắt, kể cả khi câu trả lời là "không cần làm gì thêm
 ngoài copy code".
 
-Quy trình cập nhật đầy đủ đã viết sẵn ở mục 16 `HUONG_DAN_DEPLOY_UBUNTU.md`
-(thư mục gốc, bản DUY NHẤT — đã gộp bản trùng lặp từng có trong `server/`) —
-trỏ người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ nêu phần khác biệt
-cụ thể của lần cập nhật đang báo cáo.
+Quy trình cập nhật đầy đủ đã viết sẵn ở mục 16 `deploy/Huong-dan-trien-khai.md`
+(bản DUY NHẤT, đã dời từ `HUONG_DAN_DEPLOY_UBUNTU.md` ở thư mục gốc — file gốc
+giờ chỉ còn là 1 trang trỏ ngắn, KHÔNG xoá hẳn để không phá đường dẫn cũ trong
+comment code) — trỏ người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ nêu
+phần khác biệt cụ thể của lần cập nhật đang báo cáo.
 
 ## Luôn tăng version khi merge vào main
 
