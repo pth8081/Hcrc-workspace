@@ -173,14 +173,22 @@ async function main() {
       assertIncludes(err, 'Không tìm thấy tài khoản nhân viên này', 'Phải báo lỗi không tìm thấy tài khoản');
     });
 
+    await run.run('Offboarding: thiếu Ngày nghỉ việc -> 400', async () => {
+      const err = await page.evaluate(async () => {
+        try { await callCreateAction('hrOffboardingRequests', { employeeUsername: 'nv.ketoan', checklistHandover: true, checklistBenefits: true }); return null; }
+        catch (e) { return e.message; }
+      });
+      assertIncludes(err, 'Ngày nghỉ việc', 'Phải chặn thiếu Ngày nghỉ việc');
+    });
+
     await run.run('Offboarding: chưa tích đủ 2 thủ tục bàn giao/chế độ -> 400 (chặn CẢ ở server, không chỉ client)', async () => {
       const err1 = await page.evaluate(async () => {
-        try { await callCreateAction('hrOffboardingRequests', { employeeUsername: 'nv.ketoan', checklistHandover: false, checklistBenefits: true }); return null; }
+        try { await callCreateAction('hrOffboardingRequests', { employeeUsername: 'nv.ketoan', lastWorkingDate: '2026-09-30', checklistHandover: false, checklistBenefits: true }); return null; }
         catch (e) { return e.message; }
       });
       assertIncludes(err1, 'thủ tục bàn giao', 'Phải chặn thiếu xác nhận bàn giao');
       const err2 = await page.evaluate(async () => {
-        try { await callCreateAction('hrOffboardingRequests', { employeeUsername: 'nv.ketoan', checklistHandover: true, checklistBenefits: false }); return null; }
+        try { await callCreateAction('hrOffboardingRequests', { employeeUsername: 'nv.ketoan', lastWorkingDate: '2026-09-30', checklistHandover: true, checklistBenefits: false }); return null; }
         catch (e) { return e.message; }
       });
       assertIncludes(err2, 'thủ tục chế độ', 'Phải chặn thiếu xác nhận chế độ');
@@ -188,10 +196,11 @@ async function main() {
 
     await run.run('Offboarding: đủ điều kiện -> tạo thành công, snapshot đúng tên/dept/chức danh/email từ DB.users TẠI THỜI ĐIỂM tạo', async () => {
       const item = await page.evaluate(async () => (await callCreateAction('hrOffboardingRequests', {
-        employeeUsername: 'nv.ketoan', checklistHandover: true, checklistBenefits: true, reason: 'Nghỉ việc theo nguyện vọng cá nhân'
+        employeeUsername: 'nv.ketoan', lastWorkingDate: '2026-09-30', checklistHandover: true, checklistBenefits: true, reason: 'Nghỉ việc theo nguyện vọng cá nhân'
       })).item);
       offboardId = item.id;
       assertEqual(item.status, 'PENDING_IT', 'Trạng thái khởi tạo phải là PENDING_IT');
+      assertEqual(item.lastWorkingDate, '2026-09-30', 'Phải lưu đúng Ngày nghỉ việc');
       assertEqual(item.linkedTicketId, null, 'Chưa gửi Hỗ Trợ IT thì linkedTicketId phải null');
       assertEqual(item.employeeName, EMP.name, 'Phải snapshot đúng tên nhân viên');
       assertEqual(item.employeeDept, EMP.dept, 'Phải snapshot đúng phòng ban nhân viên');

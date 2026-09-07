@@ -7117,6 +7117,10 @@
           <input id="hrOffbEmployeeUsername" type="hidden">
         </div>
         <div id="hrOffbEmployeeInfo" class="hidden bg-white border rounded p-2 text-xs text-gray-700 space-y-0.5"></div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Nghỉ Việc <span class="text-red-500">*</span></label>
+          <input id="hrOffbLastWorkingDate" type="date" data-op-change="updateHrOffboardingSubmitState" class="w-full border p-1.5 rounded text-xs" required>
+        </div>
         <div class="space-y-1.5">
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" id="hrOffbChecklistHandover" data-op-change="updateHrOffboardingSubmitState">

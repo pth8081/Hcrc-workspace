@@ -2463,6 +2463,14 @@ const CREATE_MODULE_CONFIGS = {
       payload.employeeJobTitle = employee.jobTitle || '';
       payload.employeeEmail = employee.email || '';
 
+      // Ngày nghỉ việc — bắt buộc, dùng để IT biết thời điểm cần khoá tài khoản (không nhất thiết trùng
+      // ngày gửi yêu cầu, HR có thể gửi sớm trước ngày nghỉ thật).
+      const lastWorkingDate = String(payload.lastWorkingDate || '').trim();
+      if (!lastWorkingDate || Number.isNaN(new Date(lastWorkingDate).getTime())) {
+        throw new CreateError(400, 'Vui lòng nhập Ngày nghỉ việc hợp lệ');
+      }
+      payload.lastWorkingDate = lastWorkingDate;
+
       // 2 hộp kiểm PHẢI được tick ở server (không chỉ chặn ở client) — đúng nguyên văn yêu cầu nghiệp
       // vụ: "sau khi đã tích chọn các yêu cầu như hoàn tất các thủ tục bàn giao, thủ tục chế độ sẽ ấn
       // gửi yêu cầu khóa tài khoản".

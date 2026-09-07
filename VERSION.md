@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**12.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Nhân Sự > Offboarding: thêm trường bắt buộc "Ngày Nghỉ Việc" (2026-09-07)
+
+Người dùng kiểm tra lại module Offboarding (mới build đợt trước) và phát hiện
+thiếu trường "Ngày nghỉ việc" — hồ sơ khoá tài khoản chưa có thông tin thời
+điểm nhân viên thực sự nghỉ (chỉ có ngày gửi yêu cầu, có thể gửi sớm trước
+ngày nghỉ thật).
+
+**Thay đổi**: thêm field mới `hrOffboardingRequests.lastWorkingDate` (bắt
+buộc, validate cả server lẫn client — `lib/createValidation.js` throw 400 nếu
+thiếu/không hợp lệ). Form Offboarding (`public/index.html`) thêm ô
+`#hrOffbLastWorkingDate` (date input, required) ngay sau khối thông tin nhân
+viên; nút "Gửi Yêu Cầu Khóa Tài Khoản" giờ chỉ sáng khi ĐỦ CẢ 3 điều kiện: đã
+chọn nhân viên + đã nhập Ngày Nghỉ Việc + tích đủ 2 checklist (trước đây chỉ
+2 điều kiện). Danh sách yêu cầu đã gửi hiển thị thêm "Ngày nghỉ việc: ..." bên
+cạnh tên người gửi.
+
+**Không đổi schema SQL** (JSON payload field, thuộc `dbo.Records`).
+
+Đã gửi demo 2 màn hình Onboarding/Offboarding cho người dùng xem trực quan
+(ảnh chụp qua Playwright, không phải sản phẩm cuối — dùng cùng cơ chế
+`testHarness.js` sẵn có).
 
 ## Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: làm rõ phê duyệt là TÙY CHỌN, IT tự quyết định (2026-09-07)
 

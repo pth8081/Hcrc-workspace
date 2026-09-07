@@ -222,7 +222,8 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
     đợi IT cấp mới, bắt buộc với nhân viên Siêu Thị**, SĐT, Ngày vào làm) rồi
     bấm "Gửi Yêu Cầu Cấp Tài Khoản".
   - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân viên,
-    tự động lấy phòng ban/chức danh/email từ hệ thống), tích đủ 2 xác nhận
+    tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày Nghỉ Việc
+    (bắt buộc, validate cả server — từ v12.7)**, tích đủ 2 xác nhận
     "Đã hoàn tất thủ tục bàn giao công việc/tài sản" + "Đã hoàn tất thủ tục
     chế độ (BHXH, lương, phép còn lại...)" rồi bấm "Gửi Yêu Cầu Khóa Tài
     Khoản" — 2 xác nhận này bắt buộc ở CẢ server, không chỉ ẩn nút ở giao diện.

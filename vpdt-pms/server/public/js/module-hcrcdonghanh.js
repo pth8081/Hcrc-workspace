@@ -946,18 +946,22 @@ function resolveHrOffboardingEmployeeInput(rawValue) {
 // (extraValidate) vẫn chặn lại y hệt, không tin riêng phía này.
 function updateHrOffboardingSubmitState() {
   const hasEmployee = !!document.getElementById('hrOffbEmployeeUsername').value;
+  const hasLastWorkingDate = !!document.getElementById('hrOffbLastWorkingDate').value;
   const handover = document.getElementById('hrOffbChecklistHandover').checked;
   const benefits = document.getElementById('hrOffbChecklistBenefits').checked;
   const btn = document.getElementById('btnSubmitHrOffboarding');
-  if (btn) btn.disabled = !(hasEmployee && handover && benefits);
+  if (btn) btn.disabled = !(hasEmployee && hasLastWorkingDate && handover && benefits);
 }
 
 async function submitHrOffboardingRequest(e) {
   e.preventDefault();
   const employeeUsername = document.getElementById('hrOffbEmployeeUsername').value;
   if (!employeeUsername) return alert('⛔ Vui lòng gõ tên/tài khoản rồi bấm chọn đúng 1 nhân viên trong gợi ý!');
+  const lastWorkingDate = document.getElementById('hrOffbLastWorkingDate').value;
+  if (!lastWorkingDate) return alert('⛔ Vui lòng nhập Ngày nghỉ việc!');
   const payload = {
     employeeUsername,
+    lastWorkingDate,
     checklistHandover: document.getElementById('hrOffbChecklistHandover').checked,
     checklistBenefits: document.getElementById('hrOffbChecklistBenefits').checked,
     reason: document.getElementById('hrOffbReason').value.trim()
@@ -1038,7 +1042,7 @@ function renderHrOffboardingList() {
           <span>${escapeHtml(q.employeeDept || '')}</span>
           <span>${escapeHtml(q.employeeJobTitle || '')}</span>
         </div>
-        <div class="text-xs text-gray-600 mt-1">Người gửi: ${escapeHtml(q.creatorName || q.creator || '')}${q.reason ? ` — Lý do: ${escapeHtml(q.reason)}` : ''}</div>
+        <div class="text-xs text-gray-600 mt-1">Người gửi: ${escapeHtml(q.creatorName || q.creator || '')} — Ngày nghỉ việc: <b>${escapeHtml(q.lastWorkingDate || '')}</b>${q.reason ? ` — Lý do: ${escapeHtml(q.reason)}` : ''}</div>
         ${ticketLine}
         ${resultBlock}
       </div>`;
