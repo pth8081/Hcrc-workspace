@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**12.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Hỗ Trợ IT > Hỗ Trợ Yêu Cầu: sửa tài liệu nghiệp vụ nói sai "không qua duyệt" (2026-09-07)
+
+**Không có thay đổi code.** Người dùng hỏi lại về việc "gửi phê duyệt quản lý
+trước khi IT tiếp tục xử lý" ticket Hỗ Trợ Yêu Cầu — kiểm tra thực tế xác nhận
+tính năng escalate/approve/deny **đã tồn tại và đã enforce đúng từ lâu**
+(commit `0122c41`, có test `test-it-support.js` xác nhận server chặn cứng
+`updateItTicketStatus()` bằng lỗi 409 khi `approvalStatus` là `PENDING`/
+`REJECTED`, độc lập với giao diện). Nguyên nhân gây hiểu lầm: `deploy/
+Huong-dan-nghiep-vu.md` mục 3.6 ghi sai là "không qua duyệt" — đã sửa lại
+đúng mô tả luồng gửi/duyệt/chặn xử lý thật đang chạy trong code.
 
 ## Hợp Đồng > "Loại Thanh Toán" (1 lần/định kỳ) + Tổng Hợp > Thanh Toán: sub-tab mới "🗂️ Quản Lý Thanh Toán" + duyệt theo phòng ban (2026-09-07)
 

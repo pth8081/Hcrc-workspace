@@ -593,10 +593,20 @@ với "Tổng Hợp"):
   phòng ban (dùng chung engine quy trình phòng ban ở mục 2), **Bán Buôn**
   theo 4 mức Margin/Chiết khấu cố định (không theo phòng ban).
 - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, mở cho toàn bộ nhân viên,
-  vòng đời đơn giản Chưa xử lý → Đang xử lý → Hoàn thành/Đã huỷ, không qua
-  duyệt. Danh sách "Danh Mục" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu — dropdown
-  lọc "Lọc Theo Danh Mục" (khối Tìm Kiếm & Lọc) nay luôn đồng bộ theo (từ v12.0,
-  trước đây lệch pha với danh mục thật admin đang cấu hình).
+  vòng đời Chưa xử lý → Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục"
+  admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu — dropdown lọc "Lọc Theo Danh Mục"
+  (khối Tìm Kiếm & Lọc) nay luôn đồng bộ theo (từ v12.0, trước đây lệch pha
+  với danh mục thật admin đang cấu hình).
+  - **Gửi phê duyệt quản lý trước khi tiếp tục xử lý**: khi 1 yêu cầu đang
+    "Đang xử lý", đội IT có thể bấm "📨 Gửi/Gửi Lại Phê Duyệt" — chọn 1 người
+    bất kỳ trong hệ thống (không giới hạn đúng quản lý trực tiếp theo Cơ Cấu
+    Tổ Chức) + nhập lý do — ticket chuyển trạng thái phê duyệt "⏳ Đang chờ
+    duyệt". Người được chọn xem được ticket này (dù không phải người tạo/IT)
+    và bấm Duyệt/Từ chối kèm ghi chú. **Trong lúc chờ hoặc bị từ chối, server
+    CHẶN CỨNG (lỗi 409) mọi thao tác "Cập nhật tiến độ"/đóng ticket** — đội IT
+    chỉ tiếp tục xử lý được sau khi quản lý đã Duyệt (gửi lại yêu cầu phê
+    duyệt khác nếu bị từ chối, hoặc huỷ hẳn ticket nếu không cần xử lý nữa).
+    Việc chặn này thực thi ở server, không chỉ ẩn nút giao diện.
 - **Gia Hạn Dịch Vụ CNTT** — module con chỉ đội IT thấy được, quản lý nội bộ
   danh mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
   phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng khuôn
