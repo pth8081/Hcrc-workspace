@@ -4451,6 +4451,119 @@ function markHrFeedbackRead(user, item) {
   return item;
 }
 
+// ===================== NHÂN SỰ > Onboarding / Offboarding =====================
+// Cầu nối THUẦN TUÝ vào hàng đợi "Hỗ Trợ Yêu Cầu" (itSupportTickets, module Hỗ Trợ IT) — QUYẾT ĐỊNH
+// PHẠM VI đã được người dùng xác nhận rõ: khi IT đánh dấu ticket "Hoàn thành" (DONE), hệ thống CHỈ ghi
+// lại đúng những gì IT báo cáo (resolutionNote) trở ngược về hồ sơ Onboarding/Offboarding đã sinh ra
+// ticket đó — KHÔNG BAO GIỜ đụng tới DB.users (không tự tạo/khoá tài khoản nào). IT vẫn tự tay tạo/khoá
+// email + AD ở NGOÀI hệ thống này như trước giờ; tính năng này chỉ là "yêu cầu có cấu trúc + theo dõi +
+// thông báo kết quả", không phải tự động hoá việc cấp/khoá tài khoản thật.
+//
+// Cùng khuôn startContractPayment()/startOfficePayment() ở trên (2 hàm ĐÓ build "bản nháp" record B từ
+// record A đang khoá, route rồi mới insert B ở NGOÀI transaction của A — xem routes/records.js): 2 hàm
+// dưới đây build "bản nháp" ticket TỪ hồ sơ Onboarding/Offboarding đang khoá, ĐỒNG THỜI gắn
+// item.linkedTicketId = ticketId (id ticket sẽ tạo, do ROUTE tự sinh trước bằng Date.now() và truyền
+// vào — không có cách nào biết id thật của bản ghi SẼ insert vào collection khác trước khi nó tồn tại,
+// nên phải tự sinh trước thay vì để createForCollection tự gán như các collection khác) NGAY TRONG
+// transaction khoá item — nếu sau đó việc insert ticket ở collection itSupportTickets thất bại (hiếm,
+// lỗi hạ tầng), item sẽ có linkedTicketId trỏ vào 1 ticket không tồn tại — CÙNG RỦI RO đã được chấp
+// nhận ở startContractPayment() (paymentStatus chuyển CHO_THANH_TOAN dù paymentRequests chưa chắc insert
+// xong), không phải lỗ hổng mới riêng ở đây.
+function canCreateHrOnboarding(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrOnboardingCreate);
+}
+function canCreateHrOffboarding(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrOffboardingCreate);
+}
+
+// Ai được bấm "Gửi Yêu Cầu" (tạo ticket thật) trên 1 hồ sơ Onboarding/Offboarding đã tồn tại — chính
+// người tạo, HOẶC nhanSuManage/admin (Nhân Sự nói chung có thể tiếp quản/gửi thay 1 hồ sơ đồng nghiệp
+// đã tạo, cùng tinh thần canManageHrFeedback() ở trên).
+function canManageHrLifecycleRequest(user, item) {
+  return !!(user?.perms?.admin || user?.perms?.nhanSuManage || item?.creator === user?.username);
+}
+
+function buildOnboardingItTicketDraft(user, item, ticketId) {
+  if (!canManageHrLifecycleRequest(user, item)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu này tới Hỗ Trợ IT');
+  if (item.linkedTicketId != null) throw new HttpError(409, 'Yêu cầu này đã được gửi tới Hỗ Trợ IT rồi');
+  if (item.status !== 'PENDING_IT') throw new HttpError(409, 'Yêu cầu này không còn ở trạng thái có thể gửi tới Hỗ Trợ IT');
+  const lines = [
+    `Mã nhân viên: ${item.employeeCode}`,
+    `Họ và tên: ${item.fullName}`,
+    `Vị trí: ${item.employeePosType === 'STORE' ? 'Siêu Thị' : 'HO (Văn phòng)'}`,
+    `Phòng ban/Siêu thị: ${item.employeeDept}`,
+    `Chức danh: ${item.employeeJobTitle}`,
+    `Số điện thoại: ${item.phone}`,
+    `Ngày vào làm việc: ${item.startDate}`,
+    item.email ? `Email: ${item.email}` : 'Email: (để trống — đề nghị IT cấp mới)',
+    item.note ? `Ghi chú: ${item.note}` : null
+  ].filter(Boolean);
+  item.linkedTicketId = ticketId;
+  return {
+    title: `[Onboarding] Cấp tài khoản cho ${item.fullName} (${item.employeeCode})`,
+    description: `Yêu cầu Onboarding từ Nhân Sự — đề nghị cấp tài khoản/hộp thư cho nhân viên mới:\n${lines.join('\n')}`,
+    category: 'ACCOUNT',
+    status: 'TODO', assignee: null, assigneeName: null, resolutionNote: '', comments: [],
+    approvalStatus: null, approvalApprover: null, approvalApproverName: null, approvalReason: '', approvalComment: '',
+    dept: user.dept, creator: user.username, creatorName: user.name,
+    sourceType: 'HR_ONBOARDING', sourceId: item.id
+  };
+}
+
+function buildOffboardingItTicketDraft(user, item, ticketId) {
+  if (!canManageHrLifecycleRequest(user, item)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu này tới Hỗ Trợ IT');
+  if (item.linkedTicketId != null) throw new HttpError(409, 'Yêu cầu này đã được gửi tới Hỗ Trợ IT rồi');
+  if (item.status !== 'PENDING_IT') throw new HttpError(409, 'Yêu cầu này không còn ở trạng thái có thể gửi tới Hỗ Trợ IT');
+  if (!item.checklistHandover || !item.checklistBenefits) {
+    throw new HttpError(409, 'Cần hoàn tất cả 2 thủ tục bàn giao/chế độ trước khi gửi yêu cầu khoá tài khoản');
+  }
+  const lines = [
+    `Mã nhân viên (tài khoản): ${item.employeeUsername}`,
+    `Họ và tên: ${item.employeeName}`,
+    `Phòng ban/Siêu thị: ${item.employeeDept}`,
+    `Chức danh: ${item.employeeJobTitle}`,
+    item.employeeEmail ? `Email: ${item.employeeEmail}` : null,
+    '✅ Đã hoàn tất thủ tục bàn giao công việc/tài sản',
+    '✅ Đã hoàn tất thủ tục chế độ (BHXH, lương, phép còn lại...)',
+    item.reason ? `Lý do/Ghi chú: ${item.reason}` : null
+  ].filter(Boolean);
+  item.linkedTicketId = ticketId;
+  return {
+    title: `[Offboarding] Khoá tài khoản cho ${item.employeeName} (${item.employeeUsername})`,
+    description: `Yêu cầu Offboarding từ Nhân Sự — đề nghị khoá tài khoản/hộp thư của nhân viên nghỉ việc:\n${lines.join('\n')}`,
+    category: 'ACCOUNT',
+    status: 'TODO', assignee: null, assigneeName: null, resolutionNote: '', comments: [],
+    approvalStatus: null, approvalApprover: null, approvalApproverName: null, approvalReason: '', approvalComment: '',
+    dept: user.dept, creator: user.username, creatorName: user.name,
+    sourceType: 'HR_OFFBOARDING', sourceId: item.id
+  };
+}
+
+// sourceType (itSupportTickets) -> collection hồ sơ Nhân Sự liên kết cần cập nhật ngược khi ticket
+// chuyển DONE — dùng ở routes/records.js (POST /itSupportTickets/:id/update-status).
+const HR_LIFECYCLE_TICKET_SOURCE_COLLECTION = {
+  HR_ONBOARDING: 'hrOnboardingRequests',
+  HR_OFFBOARDING: 'hrOffboardingRequests'
+};
+
+// Ghi lại kết quả IT báo cáo vào ĐÚNG hồ sơ Onboarding/Offboarding đã sinh ra ticket này, khi ticket vừa
+// chuyển DONE (gọi từ routes/records.js NGAY SAU updateItTicketStatus() thành công, xem chú thích ở
+// đó) — hàm THUẦN (không tự khoá/đọc DB gì), route tự khoá đúng collection theo
+// HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[ticket.sourceType] rồi truyền item vào đây. KHÔNG BAO GIỜ đụng
+// tới DB.users — xem chú thích đầu khối "NHÂN SỰ > Onboarding / Offboarding" ở trên, đây CHÍNH LÀ ranh
+// giới phạm vi đã được người dùng xác nhận. Tự bỏ qua (idempotent, không throw) nếu hồ sơ đã COMPLETED
+// từ trước — ticket chỉ chuyển DONE đúng 1 lần (updateItTicketStatus() chặn sửa tiếp sau DONE/CANCELLED)
+// nên nhánh này chỉ là lưới an toàn, không phải luồng thường gặp.
+function applyItTicketCompletionToLinkedHrRequest(user, item, ticket) {
+  if (item.status === 'COMPLETED') return item;
+  item.status = 'COMPLETED';
+  item.itResultNote = String(ticket.resolutionNote || '').trim();
+  item.itCompletedBy = user.username;
+  item.itCompletedByName = user.name;
+  item.itCompletedAt = nowVN();
+  return item;
+}
+
 // ===================== ĐỒNG PHỤC (module con của Hành Chính) =====================
 // Hành Chính (uniformManage) tạo "Kỳ Cấp Phát" (uniformPeriods, đi qua engine chung ở
 // lib/createValidation.js) phân bổ đồng phục xuống 1 hoặc nhiều siêu thị. Mỗi siêu thị có 1 Giám Đốc
@@ -5385,6 +5498,9 @@ module.exports = {
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead,
+  canCreateHrOnboarding, canCreateHrOffboarding, canManageHrLifecycleRequest,
+  buildOnboardingItTicketDraft, buildOffboardingItTicketDraft,
+  HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToLinkedHrRequest,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod,

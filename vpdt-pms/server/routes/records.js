@@ -2297,6 +2297,25 @@ router.post('/itSupportTickets/:id/update-status', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
       recordActions.updateItTicketStatus(freshUser, item, req.body));
+    // Ticket sinh ra từ Nhân Sự > Onboarding/Offboarding (sourceType, xem buildOnboardingItTicketDraft()/
+    // buildOffboardingItTicketDraft() ở lib/recordActions.js) vừa chuyển DONE -> ghi lại kết quả IT báo
+    // cáo (resolutionNote) ngược về ĐÚNG hồ sơ đã sinh ra ticket này. update-status chỉ chuyển DONE ĐÚNG
+    // 1 lần (chặn sửa tiếp sau DONE/CANCELLED, xem updateItTicketStatus()) nên nhánh này không chạy lặp.
+    // KHÔNG BAO GIỜ đụng tới DB.users ở đây — xem chú thích applyItTicketCompletionToLinkedHrRequest().
+    // Lỗi ở bước ghi ngược (hiếm — hồ sơ liên kết đã bị xoá...) KHÔNG làm hỏng việc IT vừa hoàn tất
+    // ticket (đã commit xong ở bước trên) — chỉ log lại để tra cứu sau, cùng tinh thần learnLicenseType()
+    // ở routes/create.js (tiện ích phụ không được phép làm hỏng thao tác chính đã thành công).
+    if (result.status === 'DONE' && result.sourceType && result.sourceId != null) {
+      const linkedCollection = recordActions.HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[result.sourceType];
+      if (linkedCollection) {
+        try {
+          await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
+            recordActions.applyItTicketCompletionToLinkedHrRequest(freshUser, item, result));
+        } catch (linkErr) {
+          console.error(`itSupportTickets/${itemId}/update-status: lỗi ghi ngược hồ sơ ${linkedCollection}/${result.sourceId}:`, linkErr.message);
+        }
+      }
+    }
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itSupportTickets/${req.params.id}/update-status`, err);
@@ -2398,6 +2417,53 @@ router.post('/hrFeedback/:id/mark-read', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrFeedback/${req.params.id}/mark-read`, err);
+  }
+});
+
+// ===================== NHÂN SỰ > Onboarding / Offboarding =====================
+// Hồ sơ được TẠO qua engine chung (POST /api/create/hrOnboardingRequests|hrOffboardingRequests, xem
+// lib/createValidation.js) ở trạng thái PENDING_IT nhưng CHƯA có ticket Hỗ Trợ IT nào — "Gửi Yêu Cầu"
+// ở đây mới thực sự sinh ra ticket (2 route dưới đây), cùng khuôn "khoá A -> build bản nháp B -> insert
+// B" như /contracts/:id/start-payment ở đầu file, chỉ khác 1 điểm: id của B (ticketId) phải tự sinh
+// TRƯỚC (Date.now()) rồi truyền vào cả 2 bước, vì A cần ghi lại linkedTicketId=ticketId NGAY TRONG lúc
+// khoá A (không có ticket thật nào tồn tại để lấy id lúc đó) — xem buildOnboardingItTicketDraft()/
+// buildOffboardingItTicketDraft() ở lib/recordActions.js.
+router.post('/hrOnboardingRequests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrOnboardingRequests'));
+router.post('/hrOffboardingRequests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrOffboardingRequests'));
+
+router.post('/hrOnboardingRequests/:id/submit-it-request', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const ticketId = Date.now();
+    let draft = null;
+    const result = await withLockedRecordForCollection('hrOnboardingRequests', itemId, (item) => {
+      draft = recordActions.buildOnboardingItTicketDraft(freshUser, item, ticketId);
+      return item;
+    });
+    const ticket = await createForCollection('itSupportTickets', () => ({ ...draft, id: ticketId }));
+    res.json({ ok: true, item: result, ticket });
+  } catch (err) {
+    handleError(res, `hrOnboardingRequests/${req.params.id}/submit-it-request`, err);
+  }
+});
+
+router.post('/hrOffboardingRequests/:id/submit-it-request', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const ticketId = Date.now();
+    let draft = null;
+    const result = await withLockedRecordForCollection('hrOffboardingRequests', itemId, (item) => {
+      draft = recordActions.buildOffboardingItTicketDraft(freshUser, item, ticketId);
+      return item;
+    });
+    const ticket = await createForCollection('itSupportTickets', () => ({ ...draft, id: ticketId }));
+    res.json({ ok: true, item: result, ticket });
+  } catch (err) {
+    handleError(res, `hrOffboardingRequests/${req.params.id}/submit-it-request`, err);
   }
 });
 

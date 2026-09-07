@@ -211,8 +211,34 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
       không đổi gì — vẫn có kết quả ngay như trước.
 - **Nhân Sự** — module con **Cơ Cấu Tổ Chức** (sơ đồ tổ chức theo quản lý trực
   tiếp + Cấu Hình KPI Theo Vị Trí: cấp nào đánh giá cấp nào, không cấu hình
-  tiêu chí) và tab **Quản Lý & Phản Hồi Ý Kiến** (phía Nhân Sự của "HCRC Đồng
-  Hành" ở trên).
+  tiêu chí), tab **Quản Lý & Phản Hồi Ý Kiến** (phía Nhân Sự của "HCRC Đồng
+  Hành" ở trên), và module con **Onboarding / Offboarding** (từ v12.3):
+  - **Onboarding** — khai báo nhân viên MỚI (mã nhân viên tự gõ, họ tên, Vị
+    Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh lấy từ danh mục hệ thống
+    — cùng cơ chế cascading như form Người Dùng đầy đủ, Email **để trống nếu
+    đợi IT cấp mới, bắt buộc với nhân viên Siêu Thị**, SĐT, Ngày vào làm) rồi
+    bấm "Gửi Yêu Cầu Cấp Tài Khoản".
+  - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân viên,
+    tự động lấy phòng ban/chức danh/email từ hệ thống), tích đủ 2 xác nhận
+    "Đã hoàn tất thủ tục bàn giao công việc/tài sản" + "Đã hoàn tất thủ tục
+    chế độ (BHXH, lương, phép còn lại...)" rồi bấm "Gửi Yêu Cầu Khóa Tài
+    Khoản" — 2 xác nhận này bắt buộc ở CẢ server, không chỉ ẩn nút ở giao diện.
+  - **Cơ chế liên kết Hỗ Trợ IT** — cả 2 luồng trên đều **tự động sinh 1 ticket
+    "Hỗ Trợ Yêu Cầu"** (module Hỗ Trợ IT, danh mục "🔑 Tài khoản / Đăng nhập")
+    để đội IT xử lý theo đúng quy trình sẵn có (Nhận xử lý → Hoàn thành).
+    **Quan trọng: IT vẫn tự tay tạo/khoá email + tài khoản AD hoàn toàn NGOÀI
+    hệ thống này như trước giờ** — khi IT đánh dấu ticket "Hoàn thành" kèm ghi
+    chú kết quả, hệ thống CHỈ ghi lại đúng ghi chú đó (+ ai xác nhận, lúc nào)
+    ngược về hồ sơ Onboarding/Offboarding đã gửi yêu cầu, để người gửi thấy
+    được kết quả ngay trong module Nhân Sự (không cần nhảy sang Hỗ Trợ IT) —
+    **không có bất kỳ thao tác tự động nào tạo mới/khoá tài khoản
+    `DB.users`**. Người gửi yêu cầu cũng chính là người tạo ticket nên tự xem
+    được tiến độ xử lý trực tiếp ở Hỗ Trợ IT > Hỗ Trợ Yêu Cầu.
+  - Quyền tạo TÁCH RIÊNG khỏi quyền quản lý module ("Nhân Sự", nhanSuManage):
+    2 cờ phẳng **"Tạo Yêu Cầu Onboarding"**/**"Tạo Yêu Cầu Offboarding"** (khối
+    21 cây phân quyền) — ai giữ **nhanSuManage** vẫn xem được TOÀN BỘ yêu cầu
+    (kể cả không tự tạo) để theo dõi tiến độ chung của cả công ty; còn lại chỉ
+    thấy đúng yêu cầu do CHÍNH MÌNH gửi (riêng tư, cùng khuôn HCRC Đồng Hành).
 
 ### 3.3. Tài Chính
 

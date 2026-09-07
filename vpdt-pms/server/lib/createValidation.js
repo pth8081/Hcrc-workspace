@@ -2349,6 +2349,126 @@ const CREATE_MODULE_CONFIGS = {
         action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
       }];
     }
+  },
+  // ===== NHÂN SỰ > Onboarding / Offboarding — tự động tạo ticket "Hỗ Trợ Yêu Cầu" (Hỗ Trợ IT) =====
+  // Cầu nối THUẦN TUÝ giữa Nhân Sự và Hỗ Trợ IT: KHÔNG tự tạo/khoá tài khoản DB.users nào — IT vẫn tự
+  // tay cấp/khoá email + AD ở NGOÀI hệ thống này như trước giờ, ticket sinh ra ở đây chỉ để IT nhận việc
+  // + theo dõi + ghi lại kết quả (xem buildOnboardingItTicketDraft()/buildOffboardingItTicketDraft()/
+  // applyItTicketCompletionToLinkedHrRequest() ở lib/recordActions.js — quyết định phạm vi đã được
+  // người dùng xác nhận rõ). Tên collection cố ý mang tiền tố "hr" — KHÔNG dùng bare "onboarding*"/
+  // "offboarding*" — để không đụng tên với onboardingPaths/onboardingProgress ("Đào Tạo Tân Binh", tính
+  // năng hoàn toàn khác, đã tồn tại từ trước — xem lib/recordStore.js MIGRATED_COLLECTIONS).
+  // forceOwnDept + getScope rỗng (cùng khuôn licenses/hrFeedback/itServiceRenewals ở trên): "dept" của
+  // bản ghi luôn là phòng ban của người TẠO YÊU CẦU (thường là Nhân Sự/quản lý trực tiếp), KHÁC hẳn
+  // employeeDept bên dưới (phòng ban/siêu thị của NHÂN VIÊN đang được onboard/offboard) — quyền thật
+  // nằm ở 2 cờ phẳng hrOnboardingCreate/hrOffboardingCreate (KHÔNG dùng chung nhanSuManage — 2 quyền
+  // TÁCH RIÊNG theo đúng quyết định người dùng đã xác nhận, seedDefaults.js migrateHrLifecyclePerms()
+  // seed sẵn cho ai đang có nhanSuManage để không ai bị mất quyền so với trước khi có tính năng này).
+  hrOnboardingRequests: {
+    dbKey: 'hrOnboardingRequests',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.hrOnboardingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo yêu cầu Onboarding');
+      }
+      if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
+      payload.employeeCode = String(payload.employeeCode).trim().slice(0, 50);
+      if (!payload.fullName || !String(payload.fullName).trim()) throw new CreateError(400, 'Vui lòng nhập Họ và Tên');
+      payload.fullName = String(payload.fullName).trim().slice(0, 200);
+
+      // posType/dept/jobTitle của NHÂN VIÊN MỚI — cùng cơ chế cascading HO/STORE đã dùng ở form Người
+      // Dùng đầy đủ (xem #uPosType/onUserPosTypeChange() ở public/index.html): posType quyết định dept
+      // tra theo DB.depts hay DB.stores, jobTitle tra theo DB.jobTitles (mảng chuỗi phẳng) hay
+      // DB.storeJobTitles (mảng {label}).
+      if (!['HO', 'STORE'].includes(payload.employeePosType)) throw new CreateError(400, 'Vui lòng chọn Vị Trí (HO/Siêu Thị) hợp lệ');
+      const employeeDept = String(payload.employeeDept || '').trim();
+      if (!employeeDept) throw new CreateError(400, payload.employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị' : 'Vui lòng chọn Phòng Ban');
+      const validDepts = payload.employeePosType === 'STORE' ? (appData?.stores || []) : (appData?.depts || []);
+      if (!validDepts.includes(employeeDept)) throw new CreateError(400, 'Phòng Ban/Siêu Thị không hợp lệ');
+      payload.employeeDept = employeeDept;
+
+      const employeeJobTitle = String(payload.employeeJobTitle || '').trim();
+      if (!employeeJobTitle) throw new CreateError(400, 'Vui lòng chọn Chức Danh');
+      const validJobTitles = payload.employeePosType === 'STORE'
+        ? (appData?.storeJobTitles || []).map(t => t.label)
+        : (appData?.jobTitles || []);
+      if (!validJobTitles.includes(employeeJobTitle)) throw new CreateError(400, 'Chức Danh không hợp lệ');
+      payload.employeeJobTitle = employeeJobTitle;
+
+      // Email — để trống hợp lệ NẾU đợi IT cấp mới (mặc định), NHƯNG bắt buộc với nhân viên Siêu Thị
+      // (đúng yêu cầu nghiệp vụ đã xác nhận: "đối với nhân viên siêu thị thì phải nhập email"). Có nhập
+      // (bất kể posType nào) thì vẫn kiểm khuôn tối thiểu.
+      const email = String(payload.email || '').trim();
+      if (!email && payload.employeePosType === 'STORE') {
+        throw new CreateError(400, 'Nhân viên Siêu Thị bắt buộc phải nhập Email (không được để IT tự cấp)');
+      }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CreateError(400, 'Email không đúng định dạng');
+      payload.email = email.slice(0, 200);
+
+      if (!payload.phone || !String(payload.phone).trim()) throw new CreateError(400, 'Vui lòng nhập Số Điện Thoại');
+      payload.phone = String(payload.phone).trim().slice(0, 30);
+      if (!payload.startDate) throw new CreateError(400, 'Vui lòng nhập Ngày Vào Làm Việc');
+      payload.startDate = String(payload.startDate).trim();
+      payload.note = payload.note ? String(payload.note).trim().slice(0, 1000) : '';
+
+      // status/linkedTicketId/kết quả IT PHẢI gán cứng ở server — request tự soạn không thể tự xưng đã
+      // gửi Hỗ Trợ IT hay đã hoàn tất ngay lúc tạo. Việc TẠO ticket thật diễn ra ở bước RIÊNG (nút "Gửi
+      // Yêu Cầu Cấp Tài Khoản" -> POST /api/records/hrOnboardingRequests/:id/submit-it-request, xem
+      // buildOnboardingItTicketDraft() ở lib/recordActions.js) — KHÔNG gộp vào lúc tạo hồ sơ này, để
+      // giữ đúng khuôn "khoá 1 bản ghi -> mới khoá/tạo bản ghi liên kết" như startContractPayment().
+      payload.status = 'PENDING_IT';
+      payload.linkedTicketId = null;
+      payload.itResultNote = '';
+      payload.itCompletedBy = null;
+      payload.itCompletedByName = null;
+      payload.itCompletedAt = null;
+    }
+  },
+  // "Offboarding" — KHÁC Onboarding ở trên: nhân viên đã có thật trong DB.users (employeeUsername phải
+  // khớp 1 tài khoản active) nên KHÔNG cần khai lại thông tin, chỉ cần chọn đúng người + xác nhận đã
+  // hoàn tất 2 thủ tục bàn giao/chế độ trước khi được phép gửi yêu cầu khoá tài khoản. Snapshot tên/
+  // phòng ban/chức danh NGAY LÚC TẠO (không đọc sống lại sau) — đúng khuôn periodName/periodEndTime của
+  // budgetEntries hay dept/jobTitle snapshot của uniformIssuances, tránh hồ sơ đổi nội dung âm thầm nếu
+  // nhân viên đó bị sửa thông tin ở nơi khác sau khi đã gửi yêu cầu offboarding.
+  hrOffboardingRequests: {
+    dbKey: 'hrOffboardingRequests',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.hrOffboardingCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo yêu cầu Offboarding');
+      }
+      const employeeUsername = String(payload.employeeUsername || '').trim();
+      if (!employeeUsername) throw new CreateError(400, 'Vui lòng chọn nhân viên (Mã nhân viên/Tên đăng nhập)');
+      const employee = (appData?.users || []).find(u => u.username === employeeUsername && u.active !== false);
+      if (!employee) throw new CreateError(400, 'Không tìm thấy tài khoản nhân viên này (hoặc đã bị khoá)');
+      payload.employeeUsername = employee.username;
+      // Snapshot — KHÔNG đọc sống lại DB.users sau thời điểm này (xem chú thích ở trên).
+      payload.employeeName = employee.name || '';
+      payload.employeeDept = employee.dept || '';
+      payload.employeeJobTitle = employee.jobTitle || '';
+      payload.employeeEmail = employee.email || '';
+
+      // 2 hộp kiểm PHẢI được tick ở server (không chỉ chặn ở client) — đúng nguyên văn yêu cầu nghiệp
+      // vụ: "sau khi đã tích chọn các yêu cầu như hoàn tất các thủ tục bàn giao, thủ tục chế độ sẽ ấn
+      // gửi yêu cầu khóa tài khoản".
+      if (payload.checklistHandover !== true) throw new CreateError(400, 'Vui lòng xác nhận đã hoàn tất thủ tục bàn giao công việc/tài sản');
+      if (payload.checklistBenefits !== true) throw new CreateError(400, 'Vui lòng xác nhận đã hoàn tất thủ tục chế độ (BHXH, lương, phép còn lại...)');
+      payload.checklistHandover = true;
+      payload.checklistBenefits = true;
+      payload.reason = payload.reason ? String(payload.reason).trim().slice(0, 1000) : '';
+
+      // status/linkedTicketId/kết quả IT PHẢI gán cứng ở server — cùng lý do hrOnboardingRequests ở trên.
+      payload.status = 'PENDING_IT';
+      payload.linkedTicketId = null;
+      payload.itResultNote = '';
+      payload.itCompletedBy = null;
+      payload.itCompletedByName = null;
+      payload.itCompletedAt = null;
+    }
   }
 };
 

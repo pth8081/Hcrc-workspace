@@ -734,3 +734,314 @@ async function submitHrFeedbackResponse(id) {
   updateHrFeedbackBadge();
 }
 
+// ==========================================
+// 🧑‍💼 NHÂN SỰ > Onboarding / Offboarding — cầu nối THUẦN TUÝ vào ticket "Hỗ Trợ Yêu Cầu" (Hỗ Trợ IT)
+// ==========================================
+// 1 module con (parent:'hr' ở BUSINESS_MODULES), 2 sub-tab nội bộ (setHrLifecycleSubTab), cùng khuôn
+// setOrgChartSubTab()/setVanHanhSubTab() ở trên/module-vanhanh.js. KHÔNG bao giờ tự tạo/khoá tài khoản
+// DB.users — chỉ tạo 1 bản ghi hrOnboardingRequests/hrOffboardingRequests rồi sinh 1 ticket
+// itSupportTickets liên kết (sourceType/sourceId, xem lib/recordActions.js
+// buildOnboardingItTicketDraft()/buildOffboardingItTicketDraft()) để đội IT xử lý thật NGOÀI hệ thống
+// này; khi IT đánh dấu ticket "Hoàn thành", server tự ghi ngược itResultNote/itCompletedBy/itCompletedAt
+// vào ĐÚNG bản ghi này (xem applyItTicketCompletionToLinkedHrRequest()) — người gửi cũng CHÍNH LÀ
+// creator của ticket nên tự thấy được tiến độ ngay trong Hỗ Trợ IT > Hỗ Trợ Yêu Cầu mà không cần thêm gì
+// ở đây, danh sách dưới đây chỉ để tiện theo dõi trực tiếp từ phía Nhân Sự.
+let activeHrLifecycleSubTab = 'ONBOARD';
+function setHrLifecycleSubTab(subTab) {
+  activeHrLifecycleSubTab = subTab;
+  document.getElementById('hrLifecycleOnboardView')?.classList.toggle('hidden', subTab !== 'ONBOARD');
+  document.getElementById('hrLifecycleOffboardView')?.classList.toggle('hidden', subTab !== 'OFFBOARD');
+  const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
+  const btnOn = document.getElementById('btnHrLifecycleSubOnboard');
+  const btnOff = document.getElementById('btnHrLifecycleSubOffboard');
+  if (btnOn) btnOn.className = subTab === 'ONBOARD' ? activeCls : inactiveCls;
+  if (btnOff) btnOff.className = subTab === 'OFFBOARD' ? activeCls : inactiveCls;
+  if (subTab === 'ONBOARD') {
+    populateHrOnboardingDeptDropdowns();
+    const posTypeSel = document.getElementById('hrOnbPosType');
+    if (posTypeSel && !posTypeSel.value) posTypeSel.value = 'HO';
+    onHrOnboardingPosTypeChange();
+    renderHrOnboardingList();
+  } else {
+    populateSystemUsersDatalist(); // module-bienbanhop.js (dep của cụm này) — nguồn gợi ý #systemUsersDatalist
+    renderHrOffboardingList();
+  }
+}
+
+// ----- ONBOARD -----
+// Cascading Vị Trí (HO/Siêu Thị) -> Phòng Ban/Siêu Thị -> Chức Danh — mirror ĐÚNG #uPosType/
+// onUserPosTypeChange()/populateUserJobTitleOptions() (form Người Dùng đầy đủ), vì nhân viên mới CHƯA
+// tồn tại trong DB.users nên không tra cứu được, phải khai lại từ ĐÚNG cùng 2 danh mục hệ thống
+// (DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles) để server chấp nhận (xem
+// lib/createValidation.js hrOnboardingRequests.extraValidate).
+function populateHrOnboardingDeptDropdowns() {
+  const deptSel = document.getElementById('hrOnbDept');
+  if (deptSel) deptSel.innerHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  const storeSel = document.getElementById('hrOnbStore');
+  if (storeSel) storeSel.innerHTML = (DB.stores || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+}
+function populateHrOnboardingJobTitleOptions(posType) {
+  const sel = document.getElementById('hrOnbJobTitle');
+  if (!sel) return;
+  const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+  sel.innerHTML = options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+}
+function onHrOnboardingPosTypeChange() {
+  const posType = document.getElementById('hrOnbPosType').value;
+  document.getElementById('hrOnbDeptWrap').classList.toggle('hidden', posType !== 'HO');
+  document.getElementById('hrOnbStoreWrap').classList.toggle('hidden', posType !== 'STORE');
+  populateHrOnboardingJobTitleOptions(posType);
+  // "Đối với nhân viên siêu thị thì phải nhập email" — đúng nguyên văn yêu cầu nghiệp vụ đã xác nhận,
+  // chặn NGAY ở đây (UX) VÀ chặn LẠI ở server (extraValidate, không tin riêng client).
+  const emailLabel = document.getElementById('hrOnbEmailLabel');
+  const emailInput = document.getElementById('hrOnbEmail');
+  if (posType === 'STORE') {
+    emailLabel.textContent = 'Email (bắt buộc — nhân viên Siêu Thị)';
+    emailInput.required = true;
+  } else {
+    emailLabel.textContent = 'Email (để trống nếu IT tự cấp)';
+    emailInput.required = false;
+  }
+}
+
+const HR_LIFECYCLE_REQUEST_STATUS_BADGES = {
+  PENDING_IT: '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🕒 Đang chờ IT xử lý</span>',
+  COMPLETED: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Hoàn tất</span>'
+};
+// Nhãn RIÊNG cho trạng thái ticket liên kết (itSupportTickets.status) — KHÔNG tái dùng
+// IT_TICKET_STATUS_BADGES (module-itsupport-price.js, cụm "itsupport-price") vì cụm đó KHÔNG chắc đã
+// được nạp khi đang ở module Nhân Sự (cụm "hcrcdonghanh" không phụ thuộc "itsupport-price") — trùng lặp
+// nhỏ này tránh 1 lỗi tham chiếu ẩn tuỳ theo người dùng đã từng mở tab Hỗ Trợ IT trong phiên hay chưa.
+const HR_LIFECYCLE_LINKED_TICKET_STATUS_LABELS = {
+  TODO: '🕒 IT chưa nhận xử lý', DOING: '🔧 IT đang xử lý', DONE: '✅ IT đã xác nhận hoàn thành', CANCELLED: '❌ Ticket đã bị hủy'
+};
+
+async function submitHrOnboardingRequest(e) {
+  e.preventDefault();
+  const posType = document.getElementById('hrOnbPosType').value;
+  const payload = {
+    employeeCode: document.getElementById('hrOnbEmployeeCode').value.trim(),
+    fullName: document.getElementById('hrOnbFullName').value.trim(),
+    employeePosType: posType,
+    employeeDept: posType === 'STORE' ? document.getElementById('hrOnbStore').value : document.getElementById('hrOnbDept').value,
+    employeeJobTitle: document.getElementById('hrOnbJobTitle').value,
+    email: document.getElementById('hrOnbEmail').value.trim(),
+    phone: document.getElementById('hrOnbPhone').value.trim(),
+    startDate: document.getElementById('hrOnbStartDate').value,
+    note: document.getElementById('hrOnbNote').value.trim()
+  };
+
+  let newItem;
+  try {
+    const result = await callCreateAction('hrOnboardingRequests', payload);
+    newItem = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  DB.hrOnboardingRequests = DB.hrOnboardingRequests || [];
+  DB.hrOnboardingRequests.unshift(newItem);
+
+  // Gửi ngay tới Hỗ Trợ IT (2 lệnh gọi tuần tự, xem chú thích ở routes/records.js
+  // POST /hrOnboardingRequests/:id/submit-it-request) — lỗi ở bước này KHÔNG mất hồ sơ vừa tạo (vẫn
+  // PENDING_IT, linkedTicketId=null), người dùng bấm "Gửi Lại" ở danh sách bên dưới để thử lại.
+  try {
+    const subResult = await callRecordAction('hrOnboardingRequests', newItem.id, 'submit-it-request', {});
+    const idx = DB.hrOnboardingRequests.findIndex(x => x.id === newItem.id);
+    if (idx !== -1) DB.hrOnboardingRequests[idx] = subResult.item;
+    DB.itSupportTickets = DB.itSupportTickets || [];
+    DB.itSupportTickets.unshift(subResult.ticket);
+    logSystemAction('HR', 'CREATE_HR_ONBOARDING', `Gửi yêu cầu Onboarding cho ${newItem.fullName} (${newItem.employeeCode}) tới Hỗ Trợ IT`, 'SUCCESS', String(newItem.id));
+    alert('✅ Đã gửi yêu cầu cấp tài khoản tới Hỗ Trợ IT!');
+  } catch (err) {
+    alert(`⚠️ Đã lưu hồ sơ Onboarding nhưng CHƯA gửi được tới Hỗ Trợ IT: ${err.message}\nBấm "📨 Gửi Lại Tới Hỗ Trợ IT" ở danh sách bên dưới để thử lại.`);
+  }
+
+  e.target.reset();
+  document.getElementById('hrOnbPosType').value = 'HO';
+  onHrOnboardingPosTypeChange();
+  renderHrOnboardingList();
+}
+
+async function retrySubmitHrOnboardingTicket(id) {
+  try {
+    const result = await callRecordAction('hrOnboardingRequests', id, 'submit-it-request', {});
+    const idx = DB.hrOnboardingRequests.findIndex(x => x.id === id);
+    if (idx !== -1) DB.hrOnboardingRequests[idx] = result.item;
+    DB.itSupportTickets = DB.itSupportTickets || [];
+    DB.itSupportTickets.unshift(result.ticket);
+    alert('✅ Đã gửi yêu cầu tới Hỗ Trợ IT!');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  renderHrOnboardingList();
+}
+
+// nhanSuManage/admin xem TOÀN BỘ yêu cầu (theo dõi cả module); còn lại chỉ thấy đúng yêu cầu CHÍNH MÌNH
+// đã gửi (server đã lọc sẵn 1 lớp qua filterHrOnboardingRequestsForUser(), đây lọc lại cho đúng "của tôi"
+// khi người xem KHÔNG có nhanSuManage — cùng khuôn renderHrFeedbackInbox() ở trên).
+function renderHrOnboardingList() {
+  const container = document.getElementById('hrOnboardingListContainer');
+  if (!container) return;
+  const canManageAll = !!(currentUser?.perms?.admin || currentUser?.perms?.nhanSuManage);
+  const visible = (DB.hrOnboardingRequests || [])
+    .filter(q => canManageAll || q.creator === currentUser?.username)
+    .sort((a, b) => b.id - a.id);
+
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có yêu cầu Onboarding nào.</div>`;
+    return;
+  }
+
+  container.innerHTML = visible.map(q => {
+    const ticket = q.linkedTicketId != null ? (DB.itSupportTickets || []).find(t => t.id === q.linkedTicketId) : null;
+    const ticketLine = q.linkedTicketId == null
+      ? `<div class="mt-1"><button type="button" data-op="retrySubmitHrOnboardingTicket" data-arg0="${q.id}" class="text-xs font-bold text-teal-700 hover:underline">📨 Gửi Lại Tới Hỗ Trợ IT</button></div>`
+      : `<div class="mt-1 text-xs text-gray-600">🎫 ${ticket ? (HR_LIFECYCLE_LINKED_TICKET_STATUS_LABELS[ticket.status] || escapeHtml(ticket.status)) : 'Đang tải trạng thái ticket...'}</div>`;
+    const resultBlock = q.status === 'COMPLETED' ? `
+      <div class="mt-2 pt-2 border-t bg-teal-50 -mx-3 -mb-3 p-3 rounded-b">
+        <div class="text-[11px] font-bold text-teal-800">💬 IT xác nhận hoàn thành bởi ${escapeHtml(q.itCompletedByName || '')} — ${escapeHtml(q.itCompletedAt || '')}</div>
+        <div class="text-xs text-gray-800 whitespace-pre-wrap mt-1">${escapeHtml(q.itResultNote || '(không có ghi chú)')}</div>
+      </div>` : '';
+    return `
+      <div class="bg-white rounded border p-3">
+        <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+          ${HR_LIFECYCLE_REQUEST_STATUS_BADGES[q.status] || escapeHtml(q.status)}
+          <span class="font-semibold text-gray-700">${escapeHtml(q.fullName)} (${escapeHtml(q.employeeCode)})</span>
+          <span>${escapeHtml(q.employeeDept || '')}</span>
+          <span>${escapeHtml(q.employeeJobTitle || '')}</span>
+        </div>
+        <div class="text-xs text-gray-600 mt-1">Người gửi: ${escapeHtml(q.creatorName || q.creator || '')} — Ngày vào làm: ${escapeHtml(q.startDate || '')}${q.email ? ` — Email: ${escapeHtml(q.email)}` : ''}</div>
+        ${ticketLine}
+        ${resultBlock}
+      </div>`;
+  }).join('');
+}
+
+// ----- OFFBOARD -----
+// Tra cứu nhân viên qua ô sdd dùng chung #systemUsersDatalist (Họ tên — Phòng ban (username), xem
+// populateSystemUsersDatalist() ở module-bienbanhop.js) — parse username từ nhãn đã chọn cùng khuôn
+// resolveTrainingInstructorInput() (module-internalcomms-daotao.js).
+function resolveHrOffboardingEmployeeInput(rawValue) {
+  const m = (rawValue || '').match(/^(.*) — .*\(([^()]+)\)$/);
+  const username = m ? m[2].trim() : '';
+  const employee = username ? (DB.users || []).find(u => u.username === username && u.active !== false) : null;
+  document.getElementById('hrOffbEmployeeUsername').value = employee ? employee.username : '';
+  const infoBox = document.getElementById('hrOffbEmployeeInfo');
+  if (employee) {
+    infoBox.classList.remove('hidden');
+    infoBox.innerHTML = `
+      <div><b>Họ tên:</b> ${escapeHtml(employee.name || '')}</div>
+      <div><b>Phòng ban/Siêu thị:</b> ${escapeHtml(employee.dept || '')}</div>
+      <div><b>Chức danh:</b> ${escapeHtml(employee.jobTitle || 'Chưa gán chức danh')}</div>
+      <div><b>Email:</b> ${escapeHtml(employee.email || '(chưa có)')}</div>`;
+  } else {
+    infoBox.classList.add('hidden');
+    infoBox.innerHTML = '';
+  }
+  updateHrOffboardingSubmitState();
+}
+
+// Nút gửi CHỈ mở khi ĐÃ chọn đúng 1 nhân viên có thật VÀ tích đủ 2 hộp kiểm — chặn client TRƯỚC, server
+// (extraValidate) vẫn chặn lại y hệt, không tin riêng phía này.
+function updateHrOffboardingSubmitState() {
+  const hasEmployee = !!document.getElementById('hrOffbEmployeeUsername').value;
+  const handover = document.getElementById('hrOffbChecklistHandover').checked;
+  const benefits = document.getElementById('hrOffbChecklistBenefits').checked;
+  const btn = document.getElementById('btnSubmitHrOffboarding');
+  if (btn) btn.disabled = !(hasEmployee && handover && benefits);
+}
+
+async function submitHrOffboardingRequest(e) {
+  e.preventDefault();
+  const employeeUsername = document.getElementById('hrOffbEmployeeUsername').value;
+  if (!employeeUsername) return alert('⛔ Vui lòng gõ tên/tài khoản rồi bấm chọn đúng 1 nhân viên trong gợi ý!');
+  const payload = {
+    employeeUsername,
+    checklistHandover: document.getElementById('hrOffbChecklistHandover').checked,
+    checklistBenefits: document.getElementById('hrOffbChecklistBenefits').checked,
+    reason: document.getElementById('hrOffbReason').value.trim()
+  };
+
+  let newItem;
+  try {
+    const result = await callCreateAction('hrOffboardingRequests', payload);
+    newItem = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  DB.hrOffboardingRequests = DB.hrOffboardingRequests || [];
+  DB.hrOffboardingRequests.unshift(newItem);
+
+  try {
+    const subResult = await callRecordAction('hrOffboardingRequests', newItem.id, 'submit-it-request', {});
+    const idx = DB.hrOffboardingRequests.findIndex(x => x.id === newItem.id);
+    if (idx !== -1) DB.hrOffboardingRequests[idx] = subResult.item;
+    DB.itSupportTickets = DB.itSupportTickets || [];
+    DB.itSupportTickets.unshift(subResult.ticket);
+    logSystemAction('HR', 'CREATE_HR_OFFBOARDING', `Gửi yêu cầu Offboarding cho ${newItem.employeeName} (${newItem.employeeUsername}) tới Hỗ Trợ IT`, 'SUCCESS', String(newItem.id));
+    alert('✅ Đã gửi yêu cầu khóa tài khoản tới Hỗ Trợ IT!');
+  } catch (err) {
+    alert(`⚠️ Đã lưu hồ sơ Offboarding nhưng CHƯA gửi được tới Hỗ Trợ IT: ${err.message}\nBấm "📨 Gửi Lại Tới Hỗ Trợ IT" ở danh sách bên dưới để thử lại.`);
+  }
+
+  e.target.reset();
+  document.getElementById('hrOffbEmployeeUsername').value = '';
+  document.getElementById('hrOffbEmployeeInfo').classList.add('hidden');
+  document.getElementById('hrOffbEmployeeInfo').innerHTML = '';
+  updateHrOffboardingSubmitState();
+  renderHrOffboardingList();
+}
+
+async function retrySubmitHrOffboardingTicket(id) {
+  try {
+    const result = await callRecordAction('hrOffboardingRequests', id, 'submit-it-request', {});
+    const idx = DB.hrOffboardingRequests.findIndex(x => x.id === id);
+    if (idx !== -1) DB.hrOffboardingRequests[idx] = result.item;
+    DB.itSupportTickets = DB.itSupportTickets || [];
+    DB.itSupportTickets.unshift(result.ticket);
+    alert('✅ Đã gửi yêu cầu tới Hỗ Trợ IT!');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  renderHrOffboardingList();
+}
+
+function renderHrOffboardingList() {
+  const container = document.getElementById('hrOffboardingListContainer');
+  if (!container) return;
+  const canManageAll = !!(currentUser?.perms?.admin || currentUser?.perms?.nhanSuManage);
+  const visible = (DB.hrOffboardingRequests || [])
+    .filter(q => canManageAll || q.creator === currentUser?.username)
+    .sort((a, b) => b.id - a.id);
+
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có yêu cầu Offboarding nào.</div>`;
+    return;
+  }
+
+  container.innerHTML = visible.map(q => {
+    const ticket = q.linkedTicketId != null ? (DB.itSupportTickets || []).find(t => t.id === q.linkedTicketId) : null;
+    const ticketLine = q.linkedTicketId == null
+      ? `<div class="mt-1"><button type="button" data-op="retrySubmitHrOffboardingTicket" data-arg0="${q.id}" class="text-xs font-bold text-amber-700 hover:underline">📨 Gửi Lại Tới Hỗ Trợ IT</button></div>`
+      : `<div class="mt-1 text-xs text-gray-600">🎫 ${ticket ? (HR_LIFECYCLE_LINKED_TICKET_STATUS_LABELS[ticket.status] || escapeHtml(ticket.status)) : 'Đang tải trạng thái ticket...'}</div>`;
+    const resultBlock = q.status === 'COMPLETED' ? `
+      <div class="mt-2 pt-2 border-t bg-amber-50 -mx-3 -mb-3 p-3 rounded-b">
+        <div class="text-[11px] font-bold text-amber-800">💬 IT xác nhận hoàn thành bởi ${escapeHtml(q.itCompletedByName || '')} — ${escapeHtml(q.itCompletedAt || '')}</div>
+        <div class="text-xs text-gray-800 whitespace-pre-wrap mt-1">${escapeHtml(q.itResultNote || '(không có ghi chú)')}</div>
+      </div>` : '';
+    return `
+      <div class="bg-white rounded border p-3">
+        <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+          ${HR_LIFECYCLE_REQUEST_STATUS_BADGES[q.status] || escapeHtml(q.status)}
+          <span class="font-semibold text-gray-700">${escapeHtml(q.employeeName)} (${escapeHtml(q.employeeUsername)})</span>
+          <span>${escapeHtml(q.employeeDept || '')}</span>
+          <span>${escapeHtml(q.employeeJobTitle || '')}</span>
+        </div>
+        <div class="text-xs text-gray-600 mt-1">Người gửi: ${escapeHtml(q.creatorName || q.creator || '')}${q.reason ? ` — Lý do: ${escapeHtml(q.reason)}` : ''}</div>
+        ${ticketLine}
+        ${resultBlock}
+      </div>`;
+  }).join('');
+}
+

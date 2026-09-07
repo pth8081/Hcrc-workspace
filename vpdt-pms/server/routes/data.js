@@ -25,6 +25,7 @@ const {
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
+  filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle
 } = require('../lib/recordViewScope');
@@ -608,6 +609,11 @@ router.get('/', async (req, res) => {
     // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)
     // — xem lib/recordViewScope.js canViewHrFeedback().
     if (data.hrFeedback) data.hrFeedback = filterHrFeedbackForUser(data.hrFeedback, req.freshUser);
+    // hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding/Offboarding): cùng phạm vi RIÊNG
+    // TƯ như hrFeedback ở trên — chỉ chính người tạo yêu cầu + nhanSuManage/admin đọc được, xem
+    // lib/recordViewScope.js canViewHrOnboardingRequest()/canViewHrOffboardingRequest().
+    if (data.hrOnboardingRequests) data.hrOnboardingRequests = filterHrOnboardingRequestsForUser(data.hrOnboardingRequests, req.freshUser);
+    if (data.hrOffboardingRequests) data.hrOffboardingRequests = filterHrOffboardingRequestsForUser(data.hrOffboardingRequests, req.freshUser);
     // careerPathConfirmations (Đào Tạo — mốc "Xác nhận hoàn thành cấp bậc" Lộ Trình Thăng Tiến): trước
     // đây KHÔNG lọc lại ở server, lộ mốc thăng tiến (username/dept/thời điểm) của MỌI nhân viên cho bất
     // kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai đoạn 4 (Thấp, không có điểm số/câu trả lời).

@@ -171,6 +171,8 @@ function collectPermsFromForm() {
     licenseView: document.getElementById('pLicenseView').checked,
     nhanSuManage: document.getElementById('pNhanSuManage').checked,
     orgChartManage: document.getElementById('pOrgChartManage').checked,
+    hrOnboardingCreate: document.getElementById('pHrOnboardingCreate').checked,
+    hrOffboardingCreate: document.getElementById('pHrOffboardingCreate').checked,
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
@@ -232,6 +234,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pLicenseView').checked = !!perms.licenseView;
   document.getElementById('pNhanSuManage').checked = !!perms.nhanSuManage;
   document.getElementById('pOrgChartManage').checked = !!perms.orgChartManage;
+  document.getElementById('pHrOnboardingCreate').checked = !!perms.hrOnboardingCreate;
+  document.getElementById('pHrOffboardingCreate').checked = !!perms.hrOffboardingCreate;
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;

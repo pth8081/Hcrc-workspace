@@ -745,6 +745,29 @@ function filterHrFeedbackForUser(items, user) {
   return (items || []).filter(q => canViewHrFeedback(user, q));
 }
 
+// hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding/Offboarding — cầu nối vào ticket Hỗ
+// Trợ IT, xem lib/createValidation.js): cùng phạm vi RIÊNG TƯ như canViewHrFeedback() ở trên — chỉ
+// nhanSuManage/admin (Nhân Sự quản lý toàn bộ luồng) và chính người tạo yêu cầu mới xem được. Tiến độ
+// xử lý của IT (status/resolutionNote) đã tự thấy được qua chính ticket itSupportTickets liên kết (xem
+// canViewItSupportTicket() ở trên — creator của ticket cũng chính là creator ở đây), đây chỉ thêm 1 lớp
+// xem trực tiếp từ phía module Nhân Sự cho tiện theo dõi mà không cần nhảy sang Hỗ Trợ IT.
+function canViewHrOnboardingRequest(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.nhanSuManage) return true;
+  return item.creator === user.username;
+}
+function filterHrOnboardingRequestsForUser(items, user) {
+  return (items || []).filter(q => canViewHrOnboardingRequest(user, q));
+}
+function canViewHrOffboardingRequest(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.nhanSuManage) return true;
+  return item.creator === user.username;
+}
+function filterHrOffboardingRequestsForUser(items, user) {
+  return (items || []).filter(q => canViewHrOffboardingRequest(user, q));
+}
+
 // careerPathConfirmations (Đào Tạo — mốc "Xác nhận hoàn thành cấp bậc" của Lộ Trình Thăng Tiến): trước
 // đây KHÔNG được lọc lại ở server (chỉ ẩn ở client), để lộ toàn bộ mốc thăng tiến của MỌI nhân viên
 // (username/dept/thời điểm xác nhận từng cấp) cho bất kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai
@@ -822,6 +845,8 @@ module.exports = {
   canViewOnboardingProgress, filterOnboardingProgressForUser,
   canViewLicense, filterLicensesForUser,
   canViewHrFeedback, filterHrFeedbackForUser,
+  canViewHrOnboardingRequest, filterHrOnboardingRequestsForUser,
+  canViewHrOffboardingRequest, filterHrOffboardingRequestsForUser,
   canViewCareerPathConfirmation, filterCareerPathConfirmationsForUser,
   // itServiceRenewals: 2 hàm này ĐÃ được định nghĩa ở trên nhưng trước đây BỊ BỎ SÓT khỏi khối export
   // này — hậu quả kép: (1) routes/data.js không lọc được collection này ở GET /api/data (lộ toàn bộ

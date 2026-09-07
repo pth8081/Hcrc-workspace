@@ -1,8 +1,98 @@
 # Phiên bản hiện tại
 
-**12.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Nhân Sự > Onboarding / Offboarding — tự động tạo ticket Hỗ Trợ IT (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Trong nhân sự thêm hai tab onboarding và
+offboarding. Với tab onboarding cho phép nhân sự tạo yêu cầu onboarding cập
+nhân thông tin nhân su với các thông khai báo như mã nhân viên, họ và tên,
+email (để trống nếu do IT cấp account, đối với nhân viên siêu thì phải nhập
+email), số điện thoại, phòng ban (lấy từ hệ thống), chức danh (lấy từ hệ
+thống), ngày vào làm việc sau khi nhập xong thông tin ấn gửi yêu cầu cấp tài
+khoản thì sẽ tự động tạo request trên hỗ trợ yêu cầu trong module hỗ trợ IT để
+IT xử lý yêu cầu, IT sau khi thực hiện sẽ xác nhận hoàn thành và cập nhật các
+thông tin trả lại. Tương tự module offboarding khi có nhân sự nghỉ việc sẽ tạo
+yêu cầu offboarding với form nhập thông tin mã nhân viên để tự động lấy thông
+tin của nhân viên từ hệ thống, sau khi đã tích chọn các yêu cầu như hoàn tất
+các thủ tục bàn giao, thủ tục chế độ sẽ ấn gửi yêu cầu khóa tài khoản thì sẽ tự
+động tạo request trên hỗ trợ yêu cầu bên trong module hỗ trợ IT để IT xử lý
+khóa tài khoản và xác nhận trả lại thông tin cho người yêu cầu".
+
+**Quyết định phạm vi đã xác nhận với người dùng (điểm cốt lõi)**: khi IT đánh
+dấu ticket "Hoàn thành", hệ thống **CHỈ ghi lại ghi chú kết quả IT báo cáo**
+(resolutionNote) ngược về hồ sơ Onboarding/Offboarding đã gửi yêu cầu —
+**KHÔNG BAO GIỜ tự tạo/khoá tài khoản `DB.users`**. IT vẫn tự tay cấp/khoá
+email + AD hoàn toàn NGOÀI hệ thống này như trước giờ; tính năng này thuần tuý
+là cầu nối "yêu cầu có cấu trúc + theo dõi tiến độ + thông báo kết quả" vào
+hàng đợi ticket Hỗ Trợ IT sẵn có, không phải tự động hoá việc cấp/khoá tài
+khoản thật.
+
+**Module mới**: `hrLifecycle` (nhãn "Onboarding / Offboarding", `parent:'hr'`
+ở `BUSINESS_MODULES`) — 1 nav entry, 2 sub-tab nội bộ (`setHrLifecycleSubTab`)
+mirror đúng khuôn "1 module, nhiều sub-tab" của `vanHanh`/`itSupport`, dùng
+chung cụm module `hcrcdonghanh` (đã nạp sẵn cho "Nhân Sự"/"Cơ Cấu Tổ Chức").
+
+- **Onboarding** (`hrOnboardingRequests`) — khai báo nhân viên MỚI (chưa có
+  tài khoản, không tra cứu được): mã nhân viên (gõ tự do), họ tên, Vị Trí
+  HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh (cascading mirror ĐÚNG
+  `#uPosType`/`onUserPosTypeChange()` ở form Người Dùng đầy đủ, tra theo
+  `DB.depts`/`DB.stores`/`DB.jobTitles`/`DB.storeJobTitles`), Email (**để
+  trống hợp lệ nếu đợi IT cấp mới, BẮT BUỘC với nhân viên Siêu Thị** — chặn cả
+  server, không chỉ client), SĐT, Ngày vào làm.
+- **Offboarding** (`hrOffboardingRequests`) — nhân viên ĐÃ có tài khoản: tra
+  cứu qua ô tìm-kiếm-gõ-chọn dùng chung `#systemUsersDatalist` (widget `sdd*`,
+  KHÔNG dùng `<datalist>` native — đúng quy ước `CLAUDE.md`), snapshot NGAY
+  LÚC TẠO tên/phòng ban/chức danh/email (không đọc sống lại sau) + 2 hộp kiểm
+  bắt buộc "Đã hoàn tất thủ tục bàn giao công việc/tài sản"/"Đã hoàn tất thủ
+  tục chế độ (BHXH, lương, phép còn lại...)" — **chặn ở CẢ server**, không chỉ
+  disable nút ở client.
+- **Cầu nối ticket** — "Gửi Yêu Cầu Cấp Tài Khoản"/"Gửi Yêu Cầu Khóa Tài
+  Khoản" gọi `POST /api/records/hrOnboardingRequests|hrOffboardingRequests/:id/
+  submit-it-request` (mirror ĐÚNG khuôn `startContractPayment()`/
+  `startOfficePayment()`: khoá hồ sơ nguồn, build bản nháp ticket, insert vào
+  `itSupportTickets` với `category:'ACCOUNT'`, `sourceType:'HR_ONBOARDING'`
+  hoặc `'HR_OFFBOARDING'`, `sourceId` trỏ về hồ sơ nguồn — 2 field `sourceType`/
+  `sourceId` MỚI thêm vào `itSupportTickets`, lần đầu tiên ticket được tạo tự
+  động từ module khác). `creator` của ticket = người gửi yêu cầu -> tự xem
+  được tiến độ ngay ở Hỗ Trợ IT > Hỗ Trợ Yêu Cầu mà không cần chia sẻ quyền gì
+  thêm (đúng phạm vi xem sẵn có `canViewItSupportTicket()`).
+- **Ghi ngược khi IT hoàn thành** — route `POST /api/records/itSupportTickets/
+  :id/update-status` (chuyển `DONE`) giờ kèm bước phụ: nếu ticket có
+  `sourceType`/`sourceId`, khoá + cập nhật hồ sơ Onboarding/Offboarding liên
+  kết (`status:'COMPLETED'`, `itResultNote`, `itCompletedBy`, `itCompletedAt`)
+  — lỗi ở bước phụ này (hồ sơ liên kết đã bị xoá...) không làm hỏng việc IT
+  vừa hoàn tất ticket, chỉ log lại.
+- **Quyền tạo TÁCH RIÊNG** khỏi `nhanSuManage`: 2 cờ phẳng MỚI
+  `hrOnboardingCreate`/`hrOffboardingCreate` (khối 21 cây phân quyền) — seed
+  1 lần lúc khởi động (`seedDefaults.js migrateHrLifecyclePerms()`, đánh dấu
+  idempotent qua key `hrLifecyclePermsSeeded`) cấp sẵn cho mọi user/permGroup
+  ĐANG có `nhanSuManage` để không ai mất quyền so với trước; admin tự thu
+  hẹp/mở rộng lại sau. `nhanSuManage`/admin luôn xem được TOÀN BỘ yêu cầu
+  (theo dõi tiến độ chung); còn lại chỉ thấy đúng yêu cầu do CHÍNH MÌNH gửi
+  (riêng tư, cùng khuôn `hrFeedback`/"HCRC Đồng Hành" — xem
+  `canViewHrOnboardingRequest()`/`canViewHrOffboardingRequest()` ở
+  `lib/recordViewScope.js`). IT xử lý ticket không cần quyền mới nào, tái
+  dùng nguyên `itManage`/`canManageItSupport()`.
+- **Đặt tên collection**: cố ý dùng tiền tố `hr` (`hrOnboardingRequests`/
+  `hrOffboardingRequests`) — KHÔNG dùng bare `onboarding*`/`offboarding*` vì hệ
+  thống đã có sẵn `onboardingPaths`/`onboardingProgress` ("Đào Tạo Tân Binh",
+  tính năng hoàn toàn khác — xác nhận qua `tests/test-onboarding.js` chạy lại
+  đầy đủ 27/27 kịch bản, không bị ảnh hưởng gì).
+- **Deploy-impact**: KHÔNG cần chạy lại `sql/schema.sql` (2 collection mới
+  dùng chung bảng `dbo.Records` sẵn có, chỉ thêm tên vào
+  `MIGRATED_COLLECTIONS`) — chỉ cần copy code + `pm2 restart`. Không thêm biến
+  môi trường/dependency nào mới.
+- Test mới `tests/test-hr-lifecycle.js` (mirror thật `lib/createValidation.js`/
+  `lib/recordActions.js`/`lib/recordViewScope.js` qua `tests/testHarness.js`,
+  không tự đoán lại luật) — phủ đủ: gác quyền tạo (403), validate STORE bắt
+  buộc email (400), tạo ticket liên kết đúng `category`/`sourceType`/
+  `sourceId`, chặn gửi trùng ticket (409), view-scope riêng tư (chỉ creator +
+  nhanSuManage), IT hoàn thành ghi ngược đúng field và **không đụng
+  `DB.users`**, cùng gác quyền/validate tương tự phía Offboarding + UI wiring
+  (sub-tab, danh sách hiện đúng hồ sơ).
 
 ## Đào Tạo > Ngân Hàng Câu Hỏi: thêm câu hỏi "Nghị Luận"/"Kéo Thả Hình" + luồng chấm tay nghị luận (2026-09-07)
 
