@@ -75,7 +75,7 @@ function countDeptWorkflowPending(records, wfConfigFor, user, statusField) {
   return (records || []).filter(rec => {
     if (rec[f] !== 'PENDING') return false;
     const wfConfig = wfConfigFor(rec) || {};
-    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[rec.currentStep] || []) : [];
+    const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, rec.currentStep);
     return canApproveStep(user, currentStepApprovers, rec.history, rec.currentStep);
   }).length;
 }

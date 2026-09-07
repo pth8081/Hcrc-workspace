@@ -14,6 +14,7 @@ function renderItPriceTierWorkflowTab(container) {
   // khi container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()), thay vì dựng checkbox
   // ngay trong lúc build chuỗi HTML như trước.
   const wfPickersToRender = [];
+  const wfPositionPickersToRender = [];
   container.innerHTML = modConfig.fixedTiers.map(tier => {
     const savedConfig = tierWfMap[tier.key] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const pendingKey = `TIER_${tier.key}`;
@@ -21,23 +22,45 @@ function renderItPriceTierWorkflowTab(container) {
     const effectiveWfId = isPending ? pendingWfTemplate[pendingKey] : savedConfig.workflowId;
     const selectedWf = DB.workflows.find(w => w.id === effectiveWfId) || DB.workflows[0];
     const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
+    const effectiveApproverMode = isPending ? {} : (savedConfig.approverMode || {});
+    const effectiveApproversByPosition = isPending ? {} : (savedConfig.approversByPosition || {});
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
+      const stepKey = `${tier.key}_${step.order}`;
+      // "Theo vị trí" — cùng cơ chế renderWorkflowTab() (module-ngansach.js), xem chú thích đầy đủ ở đó.
+      const isPositionMode = effectiveApproverMode[step.order] === 'POSITION';
+
       const currentApproversRaw = effectiveApprovers[step.order] || [];
       const currentApprovers = Array.isArray(currentApproversRaw) ? currentApproversRaw : (currentApproversRaw ? [currentApproversRaw] : []);
       const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-      const stepKey = `${tier.key}_${step.order}`;
       const pickerId = `wfTierApproverPicker_${stepKey}`;
       wfPickersToRender.push({ pickerId, candidates, currentApprovers, tierKey: tier.key, stepOrder: step.order });
 
       const emptyHint = candidates.length === 0
         ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>` : '';
 
+      const currentPositions = effectiveApproversByPosition[step.order] || [];
+      const positionPickerId = `wfPositionPicker_${stepKey}`;
+      const positionPreviewId = `wfPositionPreview_${stepKey}`;
+      wfPositionPickersToRender.push({ positionPickerId, positionPreviewId, currentPositions });
+
       return `
-        <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
-          <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div id="${pickerId}"></div>
-          ${emptyHint}
+        <div class="bg-gray-100 p-2 rounded text-xs space-y-1.5 border">
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
+            <label class="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 cursor-pointer whitespace-nowrap" title="Bật để duyệt viên được tính THEO VỊ TRÍ (chức danh + phòng ban) thay vì chọn tay từng người">
+              <input type="checkbox" id="wfPosModeToggle_${stepKey}" data-op-change="onWfStepApproverModeToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPositionMode ? 'checked' : ''}>
+              🧭 Theo vị trí
+            </label>
+          </div>
+          <div id="wfPeopleBlock_${stepKey}" class="${isPositionMode ? 'hidden' : ''} space-y-1">
+            <div id="${pickerId}"></div>
+            ${emptyHint}
+          </div>
+          <div id="wfPositionBlock_${stepKey}" class="${isPositionMode ? '' : 'hidden'} space-y-1">
+            <div id="${positionPickerId}"></div>
+            <div id="${positionPreviewId}"></div>
+          </div>
         </div>
       `;
     }).join('');
@@ -69,6 +92,18 @@ function renderItPriceTierWorkflowTab(container) {
   wfPickersToRender.forEach(({ pickerId, candidates, currentApprovers, tierKey, stepOrder }) => {
     renderPeopleMultiSelect(pickerId, candidates, currentApprovers, '', { 'data-tier': tierKey, 'data-step': stepOrder });
   });
+  // Widget "Theo vị trí" — cùng lý do trên, xem chú thích đầy đủ ở renderWorkflowTab() (module-ngansach.js).
+  wfPositionPickersToRender.forEach(({ positionPickerId, positionPreviewId, currentPositions }) => {
+    renderMultiSelectDropdown(positionPickerId, wfPositionPairCatalogItems(), currentPositions.map(encodeWfPositionPair), {
+      placeholder: '🔍 Tìm "Chức danh — Phòng ban"...',
+      emptyText: 'Chưa chọn vị trí nào cho bước này.',
+      resolveMissingLabel: (value) => { const p = decodeWfPositionPair(value); return p ? wfPositionPairLabel(p) : value; },
+      onChange: (values) => {
+        const previewEl = document.getElementById(positionPreviewId);
+        if (previewEl) previewEl.innerHTML = renderWfPositionPreviewHTML(values.map(decodeWfPositionPair).filter(Boolean));
+      }
+    });
+  });
 
   renderWorkflowTemplatesTable();
 }
@@ -79,6 +114,23 @@ function onItPriceTierWorkflowTemplateChange(tierKey) {
   if (!sel) return;
   pendingWfTemplate[`TIER_${tierKey}`] = sel.value;
   renderWorkflowTab();
+}
+
+// Đọc approverMode/approversByPosition từng bước từ DOM — DÙNG CHUNG cho collectDeptWorkflowConfig()
+// (dept-based, bên dưới) lẫn collectItPriceTierWorkflowConfig() (tier-based, ngay dưới đây):
+// stepKeyFn(step) phải trả về ĐÚNG stepKey đã dùng lúc render (khớp id wfPosModeToggle_<stepKey>/
+// wfPositionPicker_<stepKey>, xem renderWorkflowTab()/renderItPriceTierWorkflowTab()). Vắng checkbox
+// toggle trên DOM (bước không tồn tại/chưa render) coi là 'PEOPLE' mặc định — an toàn, giữ hành vi cũ.
+function collectWfStepModesAndPositions(selectedWf, stepKeyFn) {
+  const approverMode = {};
+  const approversByPosition = {};
+  (selectedWf?.steps || []).forEach(step => {
+    const stepKey = stepKeyFn(step);
+    const toggle = document.getElementById(`wfPosModeToggle_${stepKey}`);
+    approverMode[step.order] = (toggle && toggle.checked) ? 'POSITION' : 'PEOPLE';
+    approversByPosition[step.order] = getMultiSelectValues(`wfPositionPicker_${stepKey}`).map(decodeWfPositionPair).filter(Boolean);
+  });
+  return { approverMode, approversByPosition };
 }
 
 // Đọc mẫu quy trình + người duyệt từng bước đang chọn trên DOM cho 1 tier — mirror collectDeptWorkflowConfig()
@@ -97,8 +149,15 @@ function collectItPriceTierWorkflowConfig(tierKey) {
   });
 
   const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
-  const emptySteps = selectedWf ? selectedWf.steps.filter(s => !(approversObj[s.order] && approversObj[s.order].length > 0)) : [];
-  return { config: { workflowId: selectedWfId, approvers: approversObj }, emptySteps };
+  const { approverMode, approversByPosition } = collectWfStepModesAndPositions(selectedWf, step => `${tierKey}_${step.order}`);
+  // "Chưa có người duyệt" CHỈ cảnh báo cho bước PEOPLE — bước "Theo vị trí" có thể hợp lệ dù
+  // approversObj rỗng (không dùng field đó ở bước này) và dù approversByPosition rỗng NGAY LÚC LƯU
+  // (admin có thể cấu hình vị trí trước khi có ai giữ đúng vị trí đó — cùng triết lý
+  // renderWfPositionPreviewHTML() phân biệt "chưa cấu hình" với "đã cấu hình nhưng chưa ai giữ").
+  const emptySteps = selectedWf
+    ? selectedWf.steps.filter(s => approverMode[s.order] !== 'POSITION' && !(approversObj[s.order] && approversObj[s.order].length > 0))
+    : [];
+  return { config: { workflowId: selectedWfId, approvers: approversObj, approverMode, approversByPosition }, emptySteps };
 }
 
 // Lưu cấu hình quy trình cho 1 tier — mirror saveDeptWorkflowConfig(). KHÔNG cần "Lưu Cấu Hình Tất Cả"
@@ -146,8 +205,12 @@ function collectDeptWorkflowConfig(dept) {
   });
 
   const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
-  const emptySteps = selectedWf ? selectedWf.steps.filter(s => !(approversObj[s.order] && approversObj[s.order].length > 0)) : [];
-  return { config: { workflowId: selectedWfId, approvers: approversObj }, emptySteps };
+  const { approverMode, approversByPosition } = collectWfStepModesAndPositions(selectedWf, step => `${deptKey}_${step.order}`);
+  // "Chưa có người duyệt" CHỈ cảnh báo cho bước PEOPLE — xem chú thích đầy đủ ở collectItPriceTierWorkflowConfig().
+  const emptySteps = selectedWf
+    ? selectedWf.steps.filter(s => approverMode[s.order] !== 'POSITION' && !(approversObj[s.order] && approversObj[s.order].length > 0))
+    : [];
+  return { config: { workflowId: selectedWfId, approvers: approversObj, approverMode, approversByPosition }, emptySteps };
 }
 
 // Ghi 1 cấu hình phòng ban đã đọc được (từ collectDeptWorkflowConfig()) vào đúng chỗ trong DB theo

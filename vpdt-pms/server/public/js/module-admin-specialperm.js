@@ -1,8 +1,11 @@
 // ==========================================
-// KHỐI 17 — "NHÓM QUYỀN ĐẶC BIỆT": 2 cấu hình tách biệt hoàn toàn, cùng đặt chung 1 khối cây quyền vì
-// đều là cấu hình "đặc biệt" ngoài khuôn permission thường (checkbox on/off theo user), và CÙNG 1 KHUÔN
-// UI: 1 CÀI ĐẶT CHUNG toàn hệ thống (không gắn user nào) là 1 mảng chuỗi phẳng, chỉnh qua ô tìm-kiếm-
-// chọn (sdd) + nút "Thêm" + danh sách chip xoá được + 1 nút "Lưu":
+// KHỐI 17 — "NHÓM QUYỀN ĐẶC BIỆT": 3 cấu hình tách biệt hoàn toàn, cùng đặt chung 1 khối cây quyền vì
+// đều là cấu hình "đặc biệt" ngoài khuôn permission thường (checkbox on/off theo user). CÙNG 1 KHUÔN UI
+// (đợt nâng cấp lên widget "chọn nhiều thật" — xem renderMultiSelectDropdown() ở core.js): 1 CÀI ĐẶT
+// CHUNG toàn hệ thống (không gắn user nào), chỉnh trực tiếp qua 1 ô tìm-kiếm-chọn-nhiều-thật DUY NHẤT
+// (gõ tìm, bấm chọn, hiện ngay dạng chip xoá được TRONG CÙNG 1 Ô) + 1 nút "Lưu" — THAY cho khuôn cũ (ô
+// tìm-kiếm-chọn-1 (sdd) + nút "Thêm" riêng + danh sách chip riêng bên dưới), vẫn giữ 1 nút "Lưu" duy nhất
+// cho từng danh mục:
 // 1) workflowParticipatingDepts — lọc bớt danh sách phòng ban hiển thị ở màn "Quy Trình & Phê Duyệt"
 //    (renderWorkflowTab()).
 // 2) vppExcludedJobTitles — danh sách CHỨC DANH không được cấp Văn Phòng Phẩm; user có jobTitle HIỆN
@@ -16,66 +19,63 @@
 //    (xem migrateVppExcludedJobTitles() ở seedDefaults.js) — key AppData "vppExcludeGroups" + field
 //    user.vppExcludeGroupIds vẫn còn nguyên trong CSDL (không xoá) nhưng KHÔNG còn được đọc/ghi ở đâu
 //    trong code mới, chỉ còn là dữ liệu tồn đọng vô hại.
+// 3) workflowParticipatingPositions (MỚI) — danh mục CẶP (jobTitle, dept) admin tự dựng thủ công, nguồn
+//    chọn cho bước duyệt "Theo vị trí" (POSITION mode) ở màn "Quy Trình & Phê Duyệt" (xem
+//    module-ngansach.js renderWorkflowTab()/module-itsupport-tier.js renderItPriceTierWorkflowTab()) —
+//    ĐỘC LẬP hoàn toàn khỏi DB.users thật đang có (cùng tinh thần 2 danh mục kia, admin có thể cấu hình
+//    trước cả khi có ai giữ đúng cặp đó). "items" của ô chọn nhiều là TÍCH CHÉO (cross-product) toàn bộ
+//    DB.jobTitles × DB.depts — thay vì bắt admin tự dựng từng cặp qua 2 dropdown rời rồi bấm "Thêm" (vốn
+//    thao tác nhiều bước hơn), gõ tìm trực tiếp "Trưởng phòng IT" là ra ngay đúng 1 dòng "Trưởng phòng —
+//    IT" để chọn — cùng 1 thao tác gõ-tìm-chọn như 2 danh mục kia, không cần dựng UI 2-dropdown-rời riêng
+//    cho mỗi cặp. Nhãn hiển thị "<jobTitle> — <dept>" suy ra TỪ chính cặp (không lưu field label riêng,
+//    tránh lệch nếu 1 trong 2 tên gốc đổi chữ về sau).
 // ==========================================
+
+// Mã hoá 1 cặp {jobTitle,dept} thành 1 chuỗi "value" DUY NHẤT cho renderMultiSelectDropdown() (widget
+// làm việc với value chuỗi phẳng, không biết object lồng) — ký tự phân cách 0x1F (Unit Separator, ASCII
+// điều khiển) gần như không bao giờ xuất hiện trong chức danh/tên phòng ban người dùng gõ tay, nên an
+// toàn ghép/tách lại mà không cần thêm bước escape nào.
+const WF_POSITION_PAIR_SEP = '\u001F';
+function encodeWfPositionPair(pair) {
+  return `${pair.jobTitle}${WF_POSITION_PAIR_SEP}${pair.dept}`;
+}
+function decodeWfPositionPair(value) {
+  const idx = String(value == null ? '' : value).indexOf(WF_POSITION_PAIR_SEP);
+  if (idx < 0) return null;
+  return { jobTitle: value.slice(0, idx), dept: value.slice(idx + 1) };
+}
+function wfPositionPairLabel(pair) {
+  return `${pair.jobTitle} — ${pair.dept}`;
+}
 
 function getWorkflowParticipatingDepts() {
   return (DB.workflowParticipatingDepts && DB.workflowParticipatingDepts.length) ? DB.workflowParticipatingDepts : DB.depts;
 }
 
-// Draft chỉnh sửa trực tiếp trong cây quyền (thêm/bớt qua nút, chưa ghi DB.workflowParticipatingDepts
-// thật) — chỉ ghi thật xuống khi bấm "Lưu", cùng khuôn vppExcludedJobTitlesDraft ngay bên dưới, tránh
-// hẳn tình huống nhiều lượt thêm liên tiếp bắn nhiều request riêng rồi rollback đè lên nhau.
-let workflowParticipatingDeptsDraft = null;
-
-function renderWorkflowParticipatingDeptsChecklist() {
-  const picker = document.getElementById('workflowParticipatingDeptPicker');
-  const datalist = document.getElementById('workflowParticipatingDeptDatalist');
-  const list = document.getElementById('workflowParticipatingDeptsList');
-  if (!picker || !list) return;
-  if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
-  const remaining = DB.depts.filter(d => d && !workflowParticipatingDeptsDraft.includes(d));
-  if (datalist) sddSetOptions('workflowParticipatingDeptDatalist', remaining);
-  picker.value = '';
-  picker.placeholder = remaining.length ? '🔍 Tìm phòng ban...' : 'Đã thêm hết phòng ban';
-  picker.disabled = !remaining.length;
-  list.innerHTML = workflowParticipatingDeptsDraft.length
-    ? workflowParticipatingDeptsDraft.map(d => `
-      <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2.5 pr-1 py-1 text-xs text-gray-700">
-        ${escapeHtml(d)}
-        <button type="button" data-op="removeWorkflowParticipatingDept" data-arg0="${escapeHtml(d)}" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ đơn vị này">✕</button>
-      </span>
-    `).join('')
-    : '<span class="text-[11px] text-gray-400 italic">Chưa thêm đơn vị nào — để trống thì màn Quy Trình & Phê Duyệt hiện đầy đủ mọi phòng ban.</span>';
+// Danh mục "Vị Trí Tham Gia Quy Trình" (mảng {jobTitle,dept}) — nguồn cho ô chọn "Theo vị trí" ở màn
+// Quy Trình & Phê Duyệt (module-ngansach.js/module-itsupport-tier.js).
+function getWorkflowParticipatingPositions() {
+  return DB.workflowParticipatingPositions || [];
 }
 
-function addWorkflowParticipatingDept() {
-  const picker = document.getElementById('workflowParticipatingDeptPicker');
-  const dept = (picker?.value || '').trim();
-  if (!dept) return;
-  if (!DB.depts.includes(dept)) return alert('Không tìm thấy phòng ban này — vui lòng chọn đúng từ danh sách gợi ý.');
-  if (!workflowParticipatingDeptsDraft) workflowParticipatingDeptsDraft = [...(DB.workflowParticipatingDepts || [])];
-  if (!workflowParticipatingDeptsDraft.includes(dept)) workflowParticipatingDeptsDraft.push(dept);
-  renderWorkflowParticipatingDeptsChecklist();
-}
-
-function removeWorkflowParticipatingDept(dept) {
-  if (!workflowParticipatingDeptsDraft) return;
-  workflowParticipatingDeptsDraft = workflowParticipatingDeptsDraft.filter(d => d !== dept);
-  renderWorkflowParticipatingDeptsChecklist();
+// ============ Đơn Vị Tham Gia Quy Trình (workflowParticipatingDepts) ============
+function renderWorkflowParticipatingDeptsWidget() {
+  renderMultiSelectDropdown('workflowParticipatingDeptsMultiSelect', DB.depts, DB.workflowParticipatingDepts || [], {
+    placeholder: '🔍 Tìm phòng ban để thêm...',
+    emptyText: 'Chưa thêm đơn vị nào — để trống thì màn Quy Trình & Phê Duyệt hiện đầy đủ mọi phòng ban.'
+  });
 }
 
 async function saveWorkflowParticipatingDepts() {
-  const next = [...(workflowParticipatingDeptsDraft || [])];
+  const next = getMultiSelectValues('workflowParticipatingDeptsMultiSelect');
   const snapshot = [...(DB.workflowParticipatingDepts || [])];
   DB.workflowParticipatingDepts = next;
   const saved = await syncStorage('workflowParticipatingDepts');
   if (!saved) {
     DB.workflowParticipatingDepts = snapshot;
-    workflowParticipatingDeptsDraft = [...snapshot];
-    renderWorkflowParticipatingDeptsChecklist();
+    renderWorkflowParticipatingDeptsWidget();
     return;
   }
-  workflowParticipatingDeptsDraft = [...next];
   logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPTS', `Cập nhật danh sách phòng ban tham gia quy trình (${next.length} phòng)`, 'SUCCESS');
   alert('✅ Đã lưu Đơn Vị Tham Gia Quy Trình.');
 }
@@ -150,60 +150,98 @@ function isUserVppExcluded(user) {
   return !!(user?.jobTitle && (DB.vppExcludedJobTitles || []).includes(user.jobTitle));
 }
 
-// Draft chỉnh sửa trực tiếp trong cây quyền — chỉ ghi thật xuống DB.vppExcludedJobTitles khi bấm "Lưu",
-// cùng khuôn workflowParticipatingDeptsDraft ở trên (tránh spam request khi đang thêm/bớt liên tục).
-let vppExcludedJobTitlesDraft = null;
-
-function renderVppExcludedJobTitlesChecklist() {
-  const picker = document.getElementById('vppExcludedJobTitlePicker');
-  const datalist = document.getElementById('vppExcludedJobTitleDatalist');
-  const list = document.getElementById('vppExcludedJobTitlesList');
-  if (!picker || !list) return;
-  if (!vppExcludedJobTitlesDraft) vppExcludedJobTitlesDraft = [...(DB.vppExcludedJobTitles || [])];
-  const remaining = DB.jobTitles.filter(t => t && !vppExcludedJobTitlesDraft.includes(t));
-  if (datalist) sddSetOptions('vppExcludedJobTitleDatalist', remaining);
-  picker.value = '';
-  picker.placeholder = remaining.length ? '🔍 Tìm chức danh...' : 'Đã thêm hết chức danh';
-  picker.disabled = !remaining.length;
-  list.innerHTML = vppExcludedJobTitlesDraft.length
-    ? vppExcludedJobTitlesDraft.map(t => `
-      <span class="inline-flex items-center gap-1 bg-white border rounded-full pl-2.5 pr-1 py-1 text-xs text-gray-700">
-        ${escapeHtml(t)}
-        <button type="button" data-op="removeVppExcludedJobTitle" data-arg0="${escapeHtml(t)}" class="text-gray-400 hover:text-red-600 font-bold px-1" title="Bỏ chức danh này">✕</button>
-      </span>
-    `).join('')
-    : '<span class="text-[11px] text-gray-400 italic">Chưa thêm chức danh nào — để trống thì mọi chức danh đều được cấp Văn Phòng Phẩm bình thường.</span>';
-}
-
-function addVppExcludedJobTitle() {
-  const picker = document.getElementById('vppExcludedJobTitlePicker');
-  const title = (picker?.value || '').trim();
-  if (!title) return;
-  if (!DB.jobTitles.includes(title)) return alert('Không tìm thấy chức danh này — vui lòng chọn đúng từ danh sách gợi ý.');
-  if (!vppExcludedJobTitlesDraft) vppExcludedJobTitlesDraft = [...(DB.vppExcludedJobTitles || [])];
-  if (!vppExcludedJobTitlesDraft.includes(title)) vppExcludedJobTitlesDraft.push(title);
-  renderVppExcludedJobTitlesChecklist();
-}
-
-function removeVppExcludedJobTitle(title) {
-  if (!vppExcludedJobTitlesDraft) return;
-  vppExcludedJobTitlesDraft = vppExcludedJobTitlesDraft.filter(t => t !== title);
-  renderVppExcludedJobTitlesChecklist();
+function renderVppExcludedJobTitlesWidget() {
+  renderMultiSelectDropdown('vppExcludedJobTitlesMultiSelect', DB.jobTitles, DB.vppExcludedJobTitles || [], {
+    placeholder: '🔍 Tìm chức danh để thêm...',
+    emptyText: 'Chưa thêm chức danh nào — để trống thì mọi chức danh đều được cấp Văn Phòng Phẩm bình thường.'
+  });
 }
 
 async function saveVppExcludedJobTitles() {
-  const next = [...(vppExcludedJobTitlesDraft || [])];
+  const next = getMultiSelectValues('vppExcludedJobTitlesMultiSelect');
   const snapshot = [...(DB.vppExcludedJobTitles || [])];
   DB.vppExcludedJobTitles = next;
   const saved = await syncStorage('vppExcludedJobTitles');
   if (!saved) {
     DB.vppExcludedJobTitles = snapshot;
-    vppExcludedJobTitlesDraft = [...snapshot];
-    renderVppExcludedJobTitlesChecklist();
+    renderVppExcludedJobTitlesWidget();
     return;
   }
-  vppExcludedJobTitlesDraft = [...next];
   logSystemAction('USER_MGM', 'SAVE_VPP_EXCLUDED_JOB_TITLES', `Cập nhật danh sách Nhóm Không Cấp Văn Phòng Phẩm (${next.length} chức danh)`, 'SUCCESS');
   alert('✅ Đã lưu danh sách chức danh.');
+}
+
+// ============ Vị Trí Tham Gia Quy Trình (workflowParticipatingPositions, MỚI) ============
+// "items" của ô chọn nhiều = TÍCH CHÉO DB.jobTitles × DB.depts (mỗi tổ hợp 1 dòng "<jobTitle> — <dept>"),
+// value mã hoá qua encodeWfPositionPair() — gõ tìm ra ngay đúng tổ hợp cần chọn, không cần dựng UI
+// 2-dropdown-rời để "lắp ráp" từng cặp.
+function wfPositionPairCatalogItems() {
+  const items = [];
+  (DB.jobTitles || []).forEach(jt => {
+    (DB.depts || []).forEach(d => {
+      const pair = { jobTitle: jt, dept: d };
+      items.push({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) });
+    });
+  });
+  return items;
+}
+
+function renderWorkflowParticipatingPositionsWidget() {
+  const initialSelected = (DB.workflowParticipatingPositions || []).map(encodeWfPositionPair);
+  renderMultiSelectDropdown('workflowParticipatingPositionsMultiSelect', wfPositionPairCatalogItems(), initialSelected, {
+    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
+    emptyText: 'Chưa thêm vị trí nào — bước duyệt "Theo vị trí" sẽ không có vị trí nào để chọn cho tới khi thêm ở đây.'
+  });
+}
+
+async function saveWorkflowParticipatingPositions() {
+  const next = getMultiSelectValues('workflowParticipatingPositionsMultiSelect')
+    .map(decodeWfPositionPair)
+    .filter(Boolean);
+  const snapshot = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
+  DB.workflowParticipatingPositions = next;
+  const saved = await syncStorage('workflowParticipatingPositions');
+  if (!saved) {
+    DB.workflowParticipatingPositions = snapshot;
+    renderWorkflowParticipatingPositionsWidget();
+    return;
+  }
+  logSystemAction('USER_MGM', 'SAVE_WORKFLOW_POSITIONS', `Cập nhật danh mục Vị Trí Tham Gia Quy Trình (${next.length} vị trí)`, 'SUCCESS');
+  alert('✅ Đã lưu danh mục Vị Trí Tham Gia Quy Trình.');
+}
+
+// ============ Xem trước người THẬT khớp 1 bước "Theo vị trí" (dùng ở màn Quy Trình & Phê Duyệt) ============
+// Mirror ĐÚNG điều kiện lib/positionApprovers.js (server): active !== false, canBeApprover||admin, khớp
+// ĐÚNG 1 trong các cặp (jobTitle,dept) đã chọn cho bước này — CHỈ để xem trước (UX), server luôn tự
+// resolve lại độc lập lúc duyệt/lúc tạo hồ sơ (snapshot), không tin kết quả này.
+// 3 TRẠNG THÁI — PHẢI phân biệt rõ, cùng tinh thần resolveKpiEvaluatorForUser() (module-hcrcdonghanh.js,
+// "Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí"):
+//   - 'NOT_CONFIGURED'      : bước CHƯA chọn vị trí nào.
+//   - 'CONFIGURED_EMPTY'    : đã chọn >=1 vị trí, nhưng hiện KHÔNG ai (active + canBeApprover) khớp đúng.
+//   - 'CONFIGURED_RESOLVED' : tra ra được người thật (users[] không rỗng).
+function previewWfPositionApprovers(positionPairs) {
+  const pairs = (positionPairs || []).filter(p => p && p.jobTitle && p.dept);
+  if (!pairs.length) return { state: 'NOT_CONFIGURED', users: [] };
+  const usernames = resolvePositionApproverUsernamesClient(pairs);
+  const users = usernames.map(u => (DB.users || []).find(x => x.username === u)).filter(Boolean);
+  return { state: users.length ? 'CONFIGURED_RESOLVED' : 'CONFIGURED_EMPTY', users };
+}
+
+function renderWfPositionPreviewHTML(positionPairs) {
+  const result = previewWfPositionApprovers(positionPairs);
+  if (result.state === 'NOT_CONFIGURED') {
+    return '<div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Chưa chọn vị trí nào cho bước này — chọn ít nhất 1 vị trí ở ô trên.</div>';
+  }
+  if (result.state === 'CONFIGURED_EMPTY') {
+    return '<div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Đã cấu hình vị trí, nhưng hiện CHƯA có ai vừa giữ đúng vị trí này VỪA có quyền "Người duyệt".</div>';
+  }
+  return `
+    <div class="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+      ✅ Hiện có ${result.users.length} người sẽ duyệt bước này:
+      <ul class="mt-1 space-y-0.5">
+        ${result.users.map(u => `<li>👤 ${escapeHtml(u.name)} <span class="text-gray-400">(${escapeHtml(u.username)})</span></li>`).join('')}
+      </ul>
+    </div>
+  `;
 }
 

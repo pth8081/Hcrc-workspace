@@ -86,15 +86,32 @@ function resolveSubmissionWorkflow(sub, appData) {
   const baseWf = (appData.workflows || []).find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
   const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
   const approvers = {};
-  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+  baseWf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(baseConfig, s.order, appData.users); });
   return { steps, approvers };
 }
 
+// resolveStepApproverUsernames() (lib/positionApprovers.js) — ĐIỂM TRA CỨU DUY NHẤT cho approvers[stepOrder]
+// của 1 bước, xử lý cả bước "Theo vị trí" (approverMode[stepOrder]==='POSITION', tính ĐỘNG từ
+// approversByPosition[stepOrder] + DB.users hiện tại) lẫn bước PEOPLE thường (đọc thẳng
+// approvers[stepOrder], hành vi CŨ 100%). Tách file riêng (không định nghĩa thẳng ở đây) vì
+// lib/createValidation.js (2 module snapshot lúc tạo — Văn Bản Trình/Phê Duyệt HĐ) cũng cần gọi hàm
+// NÀY, mà file này (workflowEngine.js) đã require('./createValidation') sẵn — require ngược lại sẽ tạo
+// vòng lặp, xem chú thích đầu file lib/positionApprovers.js.
+const { resolveStepApproverUsernames } = require('./positionApprovers');
+
 // Quy đổi { workflowId, approvers } (Doc/CarReg/Office, tra cứu qua DB.workflows) sang cùng dạng
 // { steps, approvers } phẳng mà Submission đã dùng sẵn — để phần xử lý chuyển bước dùng chung 1 mã.
+// approvers[s.order] giờ tra qua resolveStepApproverUsernames() (KHÔNG đọc thẳng wfConfig.approvers[s.order]
+// nữa) — đây là điểm TRUNG TÂM DUY NHẤT mọi module (trừ 2 module snapshot ở lib/createValidation.js) đi
+// qua trước khi tới canApproveStep(), nên bước "Theo vị trí" tự động có hiệu lực ở TẤT CẢ các module gọi
+// hàm này (docs/carRegs/officeReqs/vppRegistrations/contractsSignedFile/itPriceApprovals(RETAIL+WHOLESALE)/
+// budgetEntries/operationOrders(STORE+HO)/operationStoreOpeningEstimate/operationRepairEstimate) mà
+// KHÔNG cần sửa riêng từng module.
 function flatWorkflowConfigToSteps(wfConfig, appData) {
   const wf = (appData.workflows || []).find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
-  return { steps: wf.steps, approvers: wfConfig?.approvers || {} };
+  const approvers = {};
+  wf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(wfConfig, s.order, appData.users); });
+  return { steps: wf.steps, approvers };
 }
 
 // ===== Hỗ Trợ IT — Phê Duyệt Giá: cấu hình duyệt theo phòng ban × LOẠI GIÁ (RETAIL/WHOLESALE) =====
@@ -682,6 +699,8 @@ module.exports = {
   applyWorkflowAction,
   canApproveStep,
   isStepApprovalComplete,
+  resolveStepApproverUsernames,
+  flatWorkflowConfigToSteps,
   resolveSubmissionWorkflow,
   resolveContractApprovalWorkflow,
   resolveContractManageWorkflow,

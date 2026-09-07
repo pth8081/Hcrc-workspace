@@ -109,7 +109,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // vppExcludedJobTitles) vẫn giữ trong danh sách này để nếu có nơi nào lỡ còn ghi tới thì vẫn bị chặn
   // đúng như trước — không phải vì còn được code mới dùng tới (xem migrateVppExcludedJobTitles() ở
   // seedDefaults.js).
-  'vppExcludeGroups', 'vppExcludedJobTitles', 'workflowParticipatingDepts',
+  // workflowParticipatingPositions ("Vị Trí Tham Gia Quy Trình", cùng khối 17 — xem defaults.js): danh
+  // mục cặp (jobTitle,dept) độc lập dùng cho bước duyệt "Theo vị trí" — cùng độ mở với 2 key ngay trên.
+  'vppExcludeGroups', 'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',

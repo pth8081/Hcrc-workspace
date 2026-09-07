@@ -5055,32 +5055,26 @@
           <div class="p-3 pt-0 space-y-4">
             <div class="border-b pb-3">
               <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Chọn phòng ban từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
-              <div class="flex gap-2 items-center mb-2">
-                <input id="workflowParticipatingDeptPicker" data-sdd-list="workflowParticipatingDeptDatalist" placeholder="🔍 Tìm phòng ban..." autocomplete="off"
-                  data-op-enterkey="addWorkflowParticipatingDept"
-                  class="flex-1 border p-1.5 rounded bg-white text-xs">
-                <div id="workflowParticipatingDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
-                <button type="button" data-op="addWorkflowParticipatingDept" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Đơn Vị</button>
-              </div>
-              <div id="workflowParticipatingDeptsList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
+              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban ngay trong ô bên dưới để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Chọn xong thì bấm "Lưu" 1 lần.</p>
+              <div id="workflowParticipatingDeptsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
               <div class="flex justify-end mt-2">
                 <button type="button" data-op="saveWorkflowParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
               </div>
             </div>
-            <div>
+            <div class="border-b pb-3">
               <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Chọn chức danh từ ô bên dưới rồi bấm "Thêm" để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Thêm/bớt xong thì bấm "Lưu" 1 lần.</p>
-              <div class="flex gap-2 items-center mb-2">
-                <input id="vppExcludedJobTitlePicker" data-sdd-list="vppExcludedJobTitleDatalist" placeholder="🔍 Tìm chức danh..." autocomplete="off"
-                  data-op-enterkey="addVppExcludedJobTitle"
-                  class="flex-1 border p-1.5 rounded bg-white text-xs">
-                <div id="vppExcludedJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
-                <button type="button" data-op="addVppExcludedJobTitle" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">➕ Thêm Chức Danh</button>
-              </div>
-              <div id="vppExcludedJobTitlesList" class="flex flex-wrap gap-1.5 min-h-[2rem] border rounded p-2 bg-gray-50"></div>
+              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều chức danh ngay trong ô bên dưới để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Chọn xong thì bấm "Lưu" 1 lần.</p>
+              <div id="vppExcludedJobTitlesMultiSelect" class="border rounded p-2 bg-gray-50"></div>
               <div class="flex justify-end mt-2">
                 <button type="button" data-op="saveVppExcludedJobTitles" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Chức Danh</button>
+              </div>
+            </div>
+            <div>
+              <h5 class="font-bold text-gray-700 text-xs mb-1">🧭 Vị Trí Tham Gia Quy Trình</h5>
+              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm theo "Chức danh — Phòng ban" (VD "Trưởng phòng IT") rồi bấm chọn 1 hoặc nhiều vị trí ngay trong ô bên dưới — đây là danh mục CẶP (chức danh, phòng ban) độc lập, dùng làm nguồn chọn cho bước duyệt "Theo vị trí" ở màn "Hệ Thống → Quy Trình & Phê Duyệt" (thay vì chọn tay từng người cụ thể, hệ thống tự tra ai hiện đang giữ đúng vị trí này VÀ có quyền "Người duyệt" mỗi khi cần duyệt). Có thể cấu hình trước cả khi chưa có ai giữ đúng vị trí đó. Chọn xong thì bấm "Lưu" 1 lần.</p>
+              <div id="workflowParticipatingPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <div class="flex justify-end mt-2">
+                <button type="button" data-op="saveWorkflowParticipatingPositions" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Vị Trí Tham Gia Quy Trình</button>
               </div>
             </div>
           </div>

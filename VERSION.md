@@ -1,10 +1,69 @@
 # Phiên bản hiện tại
 
-**10.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Bản merge gần nhất vào `main` vẫn là **10.2** — **10.3**/**10.4** hiện mới chỉ nằm trên
-nhánh `claude/chao-ban-oo5ijl` (xem 2 mục ngay dưới), CHỜ người dùng xem demo trước khi merge vào
+**10.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Bản merge gần nhất vào `main` vẫn là **10.2** — **10.3**–**10.5** hiện mới chỉ nằm trên
+nhánh `claude/chao-ban-oo5ijl` (xem các mục ngay dưới), CHỜ người dùng xem demo trước khi merge vào
 `main` theo đúng yêu cầu của đợt này. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver
 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## "Vị Trí Tham Gia Quy Trình" + bước duyệt "Theo vị trí" (POSITION mode) cho quy trình phê duyệt (2026-09-07)
+
+**Yêu cầu gốc**: thêm 1 danh mục MỚI ở khối 17 "Nhóm Quyền Đặc Biệt" (Hệ Thống → Quản Trị → Phân Quyền)
+— "Vị Trí Tham Gia Quy Trình", mỗi mục là 1 CẶP (chức danh, phòng ban) admin tự dựng (vì `DB.jobTitles`
+vốn generic/không phân biệt phòng ban — "Trưởng phòng" không tự phân biệt được "Trưởng phòng IT" với
+"Trưởng phòng Nhân Sự"). Đồng thời nâng CẢ 3 danh mục khối 17 (2 danh mục cũ + danh mục mới) lên 1 ô
+"chọn nhiều thật" DUY NHẤT (gõ tìm, bấm chọn, chip xoá được TRONG CÙNG 1 Ô) — thay khuôn cũ input+
+datalist+nút "Thêm"+chip rời. Và ở TỪNG BƯỚC của quy trình phê duyệt theo phòng ban/tier (16 màn cấu
+hình `WF_MODULE_CONFIG`), thêm 1 toggle "🧭 Theo vị trí" (mặc định TẮT, không đổi hành vi cấu hình cũ
+nào) — bật lên thì bước đó chọn (các) vị trí thay vì chọn tay người duyệt cụ thể, hệ thống tự tra
+NGƯỜI THẬT hiện giữ đúng vị trí đó **VÀ** có quyền "Người duyệt" (`canBeApprover`) mỗi lần cần duyệt.
+
+**Điểm bảo mật cốt lõi** (đã chốt: *"nếu ko chọn 'Theo vị trí' thì vẫn mặc định chọn người phê duyệt
+thông thường và lưu ý vẫn phải phân quyền người phê duyệt thì mới được duyệt"*): khớp đúng vị trí CHỈ
+LÀ ĐIỀU KIỆN LỌC BỚT — không thay thế được quyền `canBeApprover`. Đây là điểm KHÁC với chế độ PEOPLE
+(chọn tay) hiện có: PEOPLE mode không re-check `canBeApprover` tại thời điểm duyệt (hành vi CŨ, giữ
+nguyên, ngoài phạm vi đợt này) — chế độ POSITION MỚI luôn tính lại động (hoặc tại thời điểm snapshot),
+nên luôn phản ánh đúng `canBeApprover` hiện tại.
+
+**Server** — điểm tra cứu TRUNG TÂM DUY NHẤT `resolveStepApproverUsernames()`/`resolvePositionApprovers()`
+(file mới `lib/positionApprovers.js`, tách riêng để tránh vòng lặp require giữa `lib/workflowEngine.js`
+và `lib/createValidation.js`) — cắm vào `flatWorkflowConfigToSteps()` (`lib/workflowEngine.js`, dùng bởi
+12/16 `WF_MODULE_CONFIG` không snapshot: DOC/CAR/OFFICE_BUY/OFFICE_FIX/VPP/CONTRACT_MANAGE/ITPRICE/
+BUDGET/OPERATION_ORDER_STORE/OPERATION_ORDER_HO/OPERATION_STORE_OPEN_ESTIMATE/OPERATION_REPAIR_ESTIMATE)
+và vào `buildEffectiveSubmissionWorkflowServer()`/`buildEffectiveContractApprovalWorkflowServer()`
+(`lib/createValidation.js`, 2 module SNAPSHOT effectiveApprovers ngay lúc TẠO — SUBMISSION/
+CONTRACT_APPROVAL, resolve POSITION mode NGAY LÚC ĐÓ). **2 ngoại lệ đã xác nhận rõ bằng test**:
+`OPERATION_STORE_OPEN`/`OPERATION_REPAIR` (operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows)
+KHÔNG còn `MODULE_CONFIGS` tương ứng nữa (phê duyệt 2 luồng "Siêu Thị" đã dừng hẳn từ 1 đợt trước — status
+đi thẳng APPROVED lúc tạo) — "Theo vị trí" cấu hình được ở 2 màn admin đó nhưng không có đường duyệt
+sống nào tiêu thụ, không phải lỗi của đợt này.
+
+Dữ liệu: `defaults.js` thêm `workflowParticipatingPositions` (mảng `{jobTitle,dept}`, gate ghi
+`ADMIN_ONLY_KEYS` giống hệt `workflowParticipatingDepts`/`vppExcludedJobTitles`, `routes/data.js`). Mỗi
+cấu hình quy trình phòng ban/tier thêm 2 field mới **additive**: `approverMode: {stepOrder: 'PEOPLE'|
+'POSITION'}` (vắng = `'PEOPLE'`, y hệt cũ) và `approversByPosition: {stepOrder: [{jobTitle,dept}]}` —
+`approvers[stepOrder]` giữ nguyên schema cũ, chỉ bị bỏ qua khi bước đó ở POSITION mode.
+
+**Client** — widget dùng chung MỚI `renderMultiSelectDropdown()`/`getMultiSelectValues()` (`core.js`,
+factor từ `renderPeopleMultiSelect()` sẵn có, generic cho nhãn/giá trị chuỗi bất kỳ) dùng cho cả 3 danh
+mục khối 17 (`module-admin-specialperm.js`) LẪN ô chọn vị trí ở từng bước quy trình
+(`module-ngansach.js`/`module-itsupport-tier.js`) — "items" của ô Vị Trí là tích chéo `DB.jobTitles` ×
+`DB.depts`, gõ "Trưởng phòng IT" ra ngay đúng 1 dòng "Trưởng phòng — IT" để chọn. Bước "Theo vị trí" hiện
+preview 3 TRẠNG THÁI — mirror UX đã dùng ở "Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí" (v10.3): chưa chọn vị
+trí / đã chọn nhưng chưa ai giữ (thiếu `canBeApprover` hoặc chưa tuyển) / đã tra ra người thật. Mirror
+CLIENT của điểm tra cứu trung tâm: `resolveEffectiveStepApprovers()` (`core.js`) — thay thế MỌI nơi trước
+đây đọc thẳng `wfConfig.approvers[step]` (~20 điểm rải khắp `core-approvalhub.js`/`core-dashboard.js`/
+9 module) để nút "Duyệt" hiện đúng cho approver theo vị trí, không chỉ server mới biết.
+
+Kiểm thử: `tests/test-workflow-participating-positions.js` (CRUD danh mục + gate ghi, chạy router thật
+`routes/data.js`), `tests/test-workflow-position-approvers.js` (15 kịch bản — `resolvePositionApprovers()`
+thuần, `flatWorkflowConfigToSteps()`/`applyWorkflowAction()` THẬT qua 3 module dbKey khác nhau, snapshot
+lúc tạo submissions/contracts, regression PEOPLE mode, và xác nhận bằng code đúng 12 khoá `MODULE_CONFIGS`
+sống). Sửa 2 bộ test cũ (`test-admin-users-permgroups.js`/`test-vpp.js`) theo đúng widget mới (không còn
+khuôn input+datalist+nút "Thêm" cũ). Demo Playwright thật:
+`demo-screenshots/workflow-position-approvers/` (không commit) — 3 danh mục khối 17 nâng cấp + sống sót
+qua tải lại trang thật, 3 trạng thái preview "Theo vị trí", và phê duyệt THẬT: người đúng vị trí + có
+`canBeApprover` duyệt được, người đúng vị trí nhưng THIẾU `canBeApprover` bị SERVER từ chối (403).
 
 ## Hộp Thư Phê Duyệt tự làm mới — không cần bấm F5 (2026-09-06)
 

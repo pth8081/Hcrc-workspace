@@ -301,7 +301,7 @@ async function submitVppRegDraftAction(regId, fromForm) {
       renderVppRegistrations();
 
       const wfConfig = DB.vppDeptWorkflows[updatedReg.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-      const approvers = wfConfig.approvers?.[1] || [];
+      const approvers = resolveEffectiveStepApprovers(wfConfig, 1);
       if (approvers.length) {
         notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', updatedReg.code, approvers,
           `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bạn phê duyệt`,
@@ -357,7 +357,7 @@ function renderVppRegistrations() {
 
   tbody.innerHTML = page.map(r => {
     const wfConfig = DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const currentStepApprovers = wfConfig.approvers?.[r.currentStep] || [];
+    const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, r.currentStep);
     const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
     const isOwnDraft = r.status === 'DRAFT' && r.creator === currentUser.username;
 
@@ -458,7 +458,7 @@ function openVppRegModal(regId) {
   `).join('');
   document.getElementById('vppRegModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
-  const currentStepApprovers = wfConfig.approvers?.[r.currentStep] || [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, r.currentStep);
   const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
   const actionBtns = document.getElementById('vppRegModalActionBtns');
   if (canApprove) {

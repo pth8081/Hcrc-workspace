@@ -415,21 +415,25 @@ async function main() {
   record('VPP-exclude: dept headcount counts BOTH users before any job title is excluded',
     v9headcountBefore === 2, `headcount=${v9headcountBefore}`);
 
-  // Admin (khối 17 cây phân quyền) adds "Bảo vệ" to the flat exclusion list via the EXACT
-  // add/save flow the UI wires up (mirrors "Đơn Vị Tham Gia Quy Trình" — searchable picker + "Lưu").
+  // Admin (khối 17 cây phân quyền) adds "Bảo vệ" to the flat exclusion list via the EXACT ô
+  // chọn-nhiều-thật (renderMultiSelectDropdown(), core.js) the real UI wires up — gõ tìm, bấm chọn
+  // đúng 1 gợi ý đang hiển thị (KHÔNG còn picker+datalist+nút "Thêm" riêng như trước).
   await loginAs(page, managerUser);
   const v9admin = await page.evaluate(async () => {
     window.__alerts = [];
     switchTab('system'); setSystemSubTab('ADMIN');
-    vppExcludedJobTitlesDraft = [];
-    renderVppExcludedJobTitlesChecklist();
-    document.getElementById('vppExcludedJobTitlePicker').value = 'Bảo vệ';
-    addVppExcludedJobTitle();
+    renderVppExcludedJobTitlesWidget();
+    const container = document.getElementById('vppExcludedJobTitlesMultiSelect');
+    const search = container.querySelector('[data-pms-search]');
+    search.value = 'Bảo vệ';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    const match = [...container.querySelectorAll('[data-pms-dropdown] div[data-op="gmsAdd"]')].find((el) => el.textContent.trim() === 'Bảo vệ');
+    if (match) match.click();
     await saveVppExcludedJobTitles();
-    return { alerts: window.__alerts.slice(), draftAfterSave: [...vppExcludedJobTitlesDraft], dbAfterSave: [...DB.vppExcludedJobTitles] };
+    return { alerts: window.__alerts.slice(), selectedAfterSave: getMultiSelectValues('vppExcludedJobTitlesMultiSelect'), dbAfterSave: [...DB.vppExcludedJobTitles] };
   });
-  record('VPP-exclude: admin adds "Bảo vệ" to the flat list and Lưu persists it (DB + draft in sync)',
-    v9admin.dbAfterSave.includes('Bảo vệ') && v9admin.draftAfterSave.includes('Bảo vệ') &&
+  record('VPP-exclude: admin adds "Bảo vệ" to the flat list and Lưu persists it (DB + widget selection in sync)',
+    v9admin.dbAfterSave.includes('Bảo vệ') && v9admin.selectedAfterSave.includes('Bảo vệ') &&
     v9admin.alerts.some((a) => a.includes('Đã lưu')),
     JSON.stringify(v9admin)
   );
@@ -493,8 +497,11 @@ async function main() {
   await loginAs(page, managerUser);
   const v9removed = await page.evaluate(async () => {
     window.__alerts = [];
-    renderVppExcludedJobTitlesChecklist();
-    removeVppExcludedJobTitle('Bảo vệ');
+    renderVppExcludedJobTitlesWidget();
+    // Bấm nút "×" trên đúng chip "Bảo vệ" (gmsRemove) — mirror thao tác chuột thật, không gọi thẳng hàm nội bộ.
+    const chipRemoveBtn = [...document.querySelectorAll('#vppExcludedJobTitlesMultiSelect [data-pms-chips] button[data-op="gmsRemove"]')]
+      .find((btn) => btn.getAttribute('data-arg1') === 'Bảo vệ');
+    if (chipRemoveBtn) chipRemoveBtn.click();
     await saveVppExcludedJobTitles();
     return { dbAfterSave: [...DB.vppExcludedJobTitles] };
   });

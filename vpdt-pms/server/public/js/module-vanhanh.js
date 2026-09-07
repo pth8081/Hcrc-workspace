@@ -726,7 +726,7 @@ async function submitOperationRepair(e) {
 function notifyOperationApprovalNeeded(kind, item) {
   const meta = OPERATION_KIND_META[kind];
   const wfConfig = meta.resolveWfConfigForItem(item);
-  const approvers = wfConfig?.approvers?.[1] || [];
+  const approvers = resolveEffectiveStepApprovers(wfConfig, 1);
   if (approvers.length) {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVAL_NEEDED', item.code, approvers,
       `[VPDT] ${meta.subLabel} ${item.code} cần bạn phê duyệt`,
@@ -827,7 +827,7 @@ function renderOperationRepairList() { renderOperationList('operationRepairs'); 
 
 function buildOperationRowHTML(kind, o) {
   const wfConfig = OPERATION_KIND_META[kind].resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const currentStepApprovers = wfConfig.approvers?.[o.currentStep] || [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
 
   let primaryBtnHTML;
@@ -1035,7 +1035,7 @@ function openOperationProcessModal(kind, id) {
   document.getElementById('operationProcessModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
   const wfConfig = meta.resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const currentStepApprovers = wfConfig.approvers?.[o.currentStep] || [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
   const controls = document.getElementById('operationProcessModalControls');
   if (canApprove) {
@@ -1305,7 +1305,7 @@ function openOperationEstimateModal(kind, id) {
   const controls = document.getElementById('operationEstimateModalControls');
   const wfMap = operationEstimateWfMap(kind);
   const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const currentStepApprovers = wfConfig.approvers?.[o.estimateCurrentStep] || [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.estimateCurrentStep);
   const canApprove = (o.estimateStatus === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.estimateHistory, o.estimateCurrentStep);
 
   if (editable) {

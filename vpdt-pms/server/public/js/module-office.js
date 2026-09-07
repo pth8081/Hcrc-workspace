@@ -124,7 +124,7 @@ async function submitOfficeReq(e) {
   logSystemAction('OFFICE', 'CREATE_OFFICE_REQ', `Tạo đề xuất văn phòng [${code} - ${title}]`, 'SUCCESS', code);
 
   const newOffWfMap = getOfficeWorkflowMap(activeOfficeSubTab);
-  const newOffApprovers = newOffWfMap[dept]?.approvers?.[1] || [];
+  const newOffApprovers = resolveEffectiveStepApprovers(newOffWfMap[dept], 1);
   if (newOffApprovers.length) {
     notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', code, newOffApprovers,
       `[VPDT] Đề xuất văn phòng ${code} cần bạn phê duyệt`,
@@ -201,7 +201,7 @@ function renderOfficeReqs() {
     const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
-    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[o.currentStep] || []) : [];
+    const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
     const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
 
     let statusBadge = '';
@@ -365,7 +365,7 @@ function openOfficeProcessModal(officeId) {
   `).join('');
   document.getElementById('officeModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[o.currentStep] || []) : [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
 
   const actionBtns = document.getElementById('officeModalActionBtns');

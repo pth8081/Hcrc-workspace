@@ -367,7 +367,7 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
   const wfConfig = DB.deptWorkflows[doc.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[doc.currentStep] || []) : [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, doc.currentStep);
   const canApprove = (doc.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, doc.history, doc.currentStep);
 
   let progressBadge = '';
@@ -564,7 +564,7 @@ async function uploadDoc(e) {
   logSystemAction('DOC', 'UPLOAD_DOC', `Tải lên tài liệu ${mode === 'UPDATE' ? 'phiên bản mới' : 'mới'} [${code} - ${title}]`, 'SUCCESS', code);
 
   const newDocWfConfig = DB.deptWorkflows[dept];
-  const newDocApprovers = newDocWfConfig?.approvers?.[1] || [];
+  const newDocApprovers = resolveEffectiveStepApprovers(newDocWfConfig, 1);
   if (newDocApprovers.length) {
     notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', code, newDocApprovers,
       `[VPDT] Tài liệu ${code} cần bạn phê duyệt`,

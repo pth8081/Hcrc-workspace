@@ -339,7 +339,7 @@ async function submitCurrentBudgetEntry(kind) {
       // PLAN vẫn giữ nguyên hành vi cũ).
       if (isActual) return;
       const wfConfig = DB.budgetDeptWorkflows[updated.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-      const approvers = wfConfig.approvers?.[1] || [];
+      const approvers = resolveEffectiveStepApprovers(wfConfig, 1);
       if (approvers.length) {
         notifyUsersByEmail('BUDGET', 'NOTIFY_APPROVAL_NEEDED', updated.code, approvers,
           `[VPDT] Ngân sách ${updated.code} cần bạn phê duyệt`,
@@ -394,7 +394,7 @@ function renderBudgetEntryList(kind) {
 
   tbody.innerHTML = visible.map(e => {
     const wfConfig = DB.budgetDeptWorkflows[e.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const currentStepApprovers = wfConfig.approvers?.[e.currentStep] || [];
+    const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, e.currentStep);
     const canApprove = (e.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, e.history, e.currentStep);
     const isOwnDeptDraft = e.status === 'DRAFT' && e.dept === currentUser.dept;
 
@@ -1220,7 +1220,7 @@ function openBudgetProcessModal(entryId) {
   `).join('');
   document.getElementById('budgetProcessModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
-  const currentStepApprovers = wfConfig.approvers?.[item.currentStep] || [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, item.currentStep);
   const canApprove = (item.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, item.history, item.currentStep);
   const controls = document.getElementById('budgetProcessModalControls');
   if (canApprove) {
@@ -1435,6 +1435,7 @@ function renderWorkflowTab() {
   // rỗng cho mỗi bước, gom (containerId, candidates, currentApprovers, dept, step.order) vào mảng này,
   // rồi render widget thật SAU KHI container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()).
   const wfPickersToRender = [];
+  const wfPositionPickersToRender = [];
   container.innerHTML = getWorkflowParticipatingDepts().map(dept => {
     const savedConfig = modConfig.priceTypeNested
       ? (resolveItPriceDeptWorkflowConfigClient(dept, activeWfSubmissionType) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } })
@@ -1443,10 +1444,20 @@ function renderWorkflowTab() {
     const effectiveWfId = isPending ? pendingWfTemplate[dept] : savedConfig.workflowId;
     const selectedWf = DB.workflows.find(w => w.id === effectiveWfId) || DB.workflows[0];
     // Vừa đổi mẫu (chưa lưu) → bắt đầu từ approvers RỖNG để buộc gán lại đúng cấu trúc bước mới,
-    // tránh trường hợp giữ nhầm approvers của mẫu cũ (số bước/ý nghĩa từng bước có thể khác hẳn).
+    // tránh trường hợp giữ nhầm approvers của mẫu cũ (số bước/ý nghĩa từng bước có thể khác hẳn) — cùng
+    // lý do coi mọi bước là chế độ PEOPLE mặc định (approverMode/approversByPosition cũng của mẫu CŨ).
     const effectiveApprovers = isPending ? {} : (savedConfig.approvers || {});
+    const effectiveApproverMode = isPending ? {} : (savedConfig.approverMode || {});
+    const effectiveApproversByPosition = isPending ? {} : (savedConfig.approversByPosition || {});
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
+      const stepKey = `${dept.replace(/\s+/g, '_')}_${step.order}`;
+      // "Theo vị trí" (POSITION mode, mặc định OFF = 'PEOPLE' — hành vi CŨ 100% cho mọi cấu hình chưa
+      // từng bật tính năng này). CẢ 2 khối (người cụ thể + vị trí) LUÔN được khởi tạo/render đầy đủ bên
+      // dưới bất kể mode hiện tại — bật/tắt checkbox chỉ ẩn/hiện khối tương ứng (onWfStepApproverModeToggle()),
+      // KHÔNG render lại toàn bộ tab, để không mất lựa chọn dở dang của các bước KHÁC khi đổi mode 1 bước.
+      const isPositionMode = effectiveApproverMode[step.order] === 'POSITION';
+
       const currentApproversRaw = effectiveApprovers[step.order] || [];
       const currentApprovers = Array.isArray(currentApproversRaw) ? currentApproversRaw : (currentApproversRaw ? [currentApproversRaw] : []);
       // canBeApprover là cờ CHUNG toàn công ty (không theo phòng ban) nên danh sách ứng viên dồn cả công
@@ -1455,18 +1466,34 @@ function renderWorkflowTab() {
       // mục "Ô tìm-kiếm-gõ-chọn") nên không cần tách nữa — label của widget đã hiện kèm phòng ban
       // (`${tên} (${username}) - ${phòng ban}`) để admin vẫn phân biệt được cùng phòng hay khác phòng.
       const candidates = getApproverCandidateUsers(currentApprovers).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
-      const stepKey = `${dept.replace(/\s+/g, '_')}_${step.order}`;
       const pickerId = `wfApproverPicker_${stepKey}`;
       wfPickersToRender.push({ pickerId, candidates, currentApprovers, dept, stepOrder: step.order });
 
       const emptyHint = candidates.length === 0
         ? `<div class="text-[11px] text-gray-400 italic">Chưa có ai được cấp quyền "Người duyệt" — vào Module Quản trị (khối 12) để cấp trước.</div>` : '';
 
+      const currentPositions = effectiveApproversByPosition[step.order] || [];
+      const positionPickerId = `wfPositionPicker_${stepKey}`;
+      const positionPreviewId = `wfPositionPreview_${stepKey}`;
+      wfPositionPickersToRender.push({ positionPickerId, positionPreviewId, currentPositions });
+
       return `
-        <div class="bg-gray-100 p-2 rounded text-xs space-y-1 border">
-          <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
-          <div id="${pickerId}"></div>
-          ${emptyHint}
+        <div class="bg-gray-100 p-2 rounded text-xs space-y-1.5 border">
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
+            <label class="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 cursor-pointer whitespace-nowrap" title="Bật để duyệt viên được tính THEO VỊ TRÍ (chức danh + phòng ban) thay vì chọn tay từng người">
+              <input type="checkbox" id="wfPosModeToggle_${stepKey}" data-op-change="onWfStepApproverModeToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPositionMode ? 'checked' : ''}>
+              🧭 Theo vị trí
+            </label>
+          </div>
+          <div id="wfPeopleBlock_${stepKey}" class="${isPositionMode ? 'hidden' : ''} space-y-1">
+            <div id="${pickerId}"></div>
+            ${emptyHint}
+          </div>
+          <div id="wfPositionBlock_${stepKey}" class="${isPositionMode ? '' : 'hidden'} space-y-1">
+            <div id="${positionPickerId}"></div>
+            <div id="${positionPreviewId}"></div>
+          </div>
         </div>
       `;
     }).join('');
@@ -1499,7 +1526,32 @@ function renderWorkflowTab() {
   wfPickersToRender.forEach(({ pickerId, candidates, currentApprovers, dept, stepOrder }) => {
     renderPeopleMultiSelect(pickerId, candidates, currentApprovers, '', { 'data-dept': dept, 'data-step': stepOrder });
   });
+  // Widget "Theo vị trí" — cùng lý do trên (container chỉ có mặt sau innerHTML). onChange cập nhật lại
+  // preview 3 trạng thái NGAY khi admin đổi lựa chọn (renderMultiSelectDropdown() tự gọi onChange 1 lần
+  // lúc khởi tạo luôn — không cần vẽ preview lần đầu riêng).
+  wfPositionPickersToRender.forEach(({ positionPickerId, positionPreviewId, currentPositions }) => {
+    renderMultiSelectDropdown(positionPickerId, wfPositionPairCatalogItems(), currentPositions.map(encodeWfPositionPair), {
+      placeholder: '🔍 Tìm "Chức danh — Phòng ban"...',
+      emptyText: 'Chưa chọn vị trí nào cho bước này.',
+      resolveMissingLabel: (value) => { const p = decodeWfPositionPair(value); return p ? wfPositionPairLabel(p) : value; },
+      onChange: (values) => {
+        const previewEl = document.getElementById(positionPreviewId);
+        if (previewEl) previewEl.innerHTML = renderWfPositionPreviewHTML(values.map(decodeWfPositionPair).filter(Boolean));
+      }
+    });
+  });
 
   renderWorkflowTemplatesTable();
+}
+
+// Bật/tắt "Theo vị trí" cho 1 bước — CHỈ ẩn/hiện khối tương ứng (khối kia LUÔN đã render + giữ nguyên
+// giá trị đang chọn dở), KHÔNG render lại toàn bộ tab — tránh mất lựa chọn dở dang của các bước/phòng
+// ban KHÁC đang hiện trên cùng màn hình. Dùng CHUNG cho cả renderWorkflowTab() (module-ngansach.js) lẫn
+// renderItPriceTierWorkflowTab() (module-itsupport-tier.js) — cùng quy ước đặt id
+// wfPeopleBlock_<stepKey>/wfPositionBlock_<stepKey> ở cả 2 nơi.
+function onWfStepApproverModeToggle(stepKey, checkboxEl) {
+  const isPosition = !!checkboxEl.checked;
+  document.getElementById(`wfPeopleBlock_${stepKey}`)?.classList.toggle('hidden', isPosition);
+  document.getElementById(`wfPositionBlock_${stepKey}`)?.classList.toggle('hidden', !isPosition);
 }
 

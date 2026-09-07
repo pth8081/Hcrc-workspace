@@ -118,7 +118,10 @@ async function doSubmitSubmissionReq(e) {
   DB.submissions.unshift(newSub);
   logSystemAction('SUBMISSION', 'CREATE_SUBMISSION', `Tạo tờ trình mới [${code} - ${title}]`, 'SUCCESS', code);
 
-  const newSubApprovers = effectiveWf.approvers?.[1] || [];
+  // Dùng newSub.effectiveApprovers (đã được SERVER xác minh + resolve — kể cả bước "Theo vị trí" —
+  // trả về trong bản ghi vừa tạo), KHÔNG dùng effectiveWf cục bộ (có thể lệch nếu bước 1 ở chế độ
+  // "Theo vị trí": client không tính ra username cụ thể nào) — cùng lý do opinionRequestees ngay dưới.
+  const newSubApprovers = newSub.effectiveApprovers?.[1] || [];
   if (newSubApprovers.length) {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', code, newSubApprovers,
       `[VPDT] Tờ trình ${code} cần bạn phê duyệt`,
@@ -417,7 +420,7 @@ function renderSubmissionReqs() {
     const resolvedWf = resolveSubmissionWorkflow(sub);
     const wf = { steps: resolvedWf.steps };
 
-    const currentStepApprovers = resolvedWf.approvers ? (resolvedWf.approvers[sub.currentStep] || []) : [];
+    const currentStepApprovers = resolveEffectiveStepApprovers(resolvedWf, sub.currentStep);
     const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
 
     let progressBadge = '';
@@ -640,7 +643,7 @@ function openProcessSubmissionModal(subId) {
   renderSubModalOpinions(sub);
   renderSubModalOpinionWarning(sub, wfConfig);
 
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[sub.currentStep] || []) : [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, sub.currentStep);
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
   // Lớp Bộ phận Trợ Lý/Thư Ký (luôn ngay TRƯỚC TGD) có thêm lựa chọn "Thay thế toàn bộ tờ trình" khi
   // ấn Yêu Cầu Bổ Sung — xem openTroLyThuKyBoSungChoice()/lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
@@ -1200,7 +1203,10 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
 
   const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
   const approvers = {};
-  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+  // resolveEffectiveStepApprovers() — chỉ để XEM TRƯỚC đúng người "Theo vị trí" hiện đang khớp (nếu
+  // bước gốc theo phòng ban dùng chế độ đó); giá trị THẬT vẫn do server tự dựng lại lúc Trình (xem
+  // buildEffectiveSubmissionWorkflowServer ở lib/createValidation.js).
+  baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(baseConfig, s.order); });
 
   const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const opinionRequestees = [];

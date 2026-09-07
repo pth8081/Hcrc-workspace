@@ -48,7 +48,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); workflowParticipatingDeptsDraft = null; renderWorkflowParticipatingDeptsChecklist(); vppExcludedJobTitlesDraft = null; renderVppExcludedJobTitlesChecklist(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); renderWorkflowParticipatingDeptsWidget(); renderVppExcludedJobTitlesWidget(); renderWorkflowParticipatingPositionsWidget(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList();
     setAdminSubTab(activeAdminSubTab);
     positionAdminSubTabBar();
   }

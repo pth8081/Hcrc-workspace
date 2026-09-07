@@ -71,7 +71,7 @@ async function submitCarReq(e) {
   logSystemAction('CAR', 'CREATE_CAR_REG', `Tạo phiếu đăng ký xe [${code} - ${destination}]`, 'SUCCESS', code);
 
   const newCarWfConfig = DB.carDeptWorkflows[dept];
-  const newCarApprovers = newCarWfConfig?.approvers?.[1] || [];
+  const newCarApprovers = resolveEffectiveStepApprovers(newCarWfConfig, 1);
   if (newCarApprovers.length) {
     notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', code, newCarApprovers,
       `[VPDT] Đăng ký xe ${code} cần bạn phê duyệt`,
@@ -312,7 +312,7 @@ function renderCarRegs() {
     const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
 
-    const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[c.currentStep] || []) : [];
+    const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
     const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);
 
     let statusBadge = '';
@@ -455,7 +455,7 @@ function openCarProcessModal(carId) {
   `).join('');
   document.getElementById('carModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[c.currentStep] || []) : [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
   const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);
 
   const actionBtns = document.getElementById('carModalActionBtns');

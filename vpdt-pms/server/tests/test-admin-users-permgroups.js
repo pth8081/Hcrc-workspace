@@ -481,84 +481,102 @@ async function scenario(name, fn) {
 
   // ==========================================================================
   // (e) Khối 17 "Nhóm Quyền Đặc Biệt": picker phòng ban tham gia quy trình + picker chức danh không
-  //     được cấp VPP giờ CÙNG 1 khuôn — mảng chuỗi phẳng, input tìm kiếm (list+datalist) + chip xoá
-  //     được, thay vì <select>/lưới checkbox cứng — chọn đúng giá trị gợi ý thì thêm được, gõ tự do sai
-  //     thì báo lỗi và KHÔNG thêm.
+  //     được cấp VPP giờ CÙNG 1 khuôn — ô chọn-nhiều-thật (renderMultiSelectDropdown(), core.js: gõ
+  //     tìm, bấm chọn 1 gợi ý ĐANG HIỂN THỊ trong dropdown, hiện ngay dạng chip xoá được TRONG CÙNG 1
+  //     Ô) — THAY cho <select>/lưới checkbox cứng LẪN khuôn cũ picker+datalist+nút "Thêm" riêng. Vì chỉ
+  //     có thể bấm chọn 1 dòng ĐÃ ĐƯỢC RENDER (khớp đúng candidates còn lại), gõ 1 chuỗi không khớp gì
+  //     đơn giản là KHÔNG CÓ dòng nào để bấm (dropdown hiện "Không tìm thấy.") — không còn khái niệm
+  //     "gõ tự do rồi bị chặn báo lỗi" như khuôn input+datalist+nút "Thêm" cũ nữa.
   // ==========================================================================
-  await scenario('(e) Đơn Vị Tham Gia Quy Trình: searchable input+datalist thêm/chặn đúng', async () => {
+  await scenario('(e) Đơn Vị Tham Gia Quy Trình: ô chọn-nhiều-thật thêm/lọc đúng', async () => {
     const r = await page.evaluate(() => {
       switchTab('system'); setSystemSubTab('ADMIN');
-      workflowParticipatingDeptsDraft = [];
-      renderWorkflowParticipatingDeptsChecklist();
-      const picker = document.getElementById('workflowParticipatingDeptPicker');
-      const datalistBefore = (document.getElementById('workflowParticipatingDeptDatalist')._sddItems || []).map(o => o.value);
+      renderWorkflowParticipatingDeptsWidget();
+      const containerId = 'workflowParticipatingDeptsMultiSelect';
+      const container = document.getElementById(containerId);
+      const search = container.querySelector('[data-pms-search]');
+      function typeQuery(q) {
+        search.value = q;
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      function clickMatch(exactLabel) {
+        const dd = container.querySelector('[data-pms-dropdown]');
+        const match = [...dd.querySelectorAll('div[data-op="gmsAdd"]')].find(el => el.textContent.trim() === exactLabel);
+        if (!match) return false;
+        match.click();
+        return true;
+      }
+      const itemsBefore = container._gmsItems.map(o => o.value);
 
-      // Chọn đúng 1 phòng ban có trong datalist gợi ý.
-      picker.value = 'Kinh Doanh';
-      addWorkflowParticipatingDept();
-      // textContent (không phải innerText) — khối này nằm trong <details> chưa mở (không có "open"),
-      // innerText trả rỗng cho nội dung đang display:none dù DOM vẫn có; textContent đọc đúng bất kể ẩn/hiện.
-      const afterAddList = document.getElementById('workflowParticipatingDeptsList').textContent;
-      const datalistAfterAdd = (document.getElementById('workflowParticipatingDeptDatalist')._sddItems || []).map(o => o.value);
+      // Gõ tìm rồi bấm ĐÚNG 1 gợi ý đang hiển thị -> thêm được vào chip.
+      typeQuery('Kinh Doanh');
+      const pickedRealMatch = clickMatch('Kinh Doanh');
+      const selectedAfterAdd = getMultiSelectValues(containerId);
 
-      // Gõ tự do 1 giá trị không tồn tại -> phải bị chặn, không thêm vào danh sách.
-      window.__alerts.length = 0;
-      picker.value = 'Phòng Không Tồn Tại';
-      addWorkflowParticipatingDept();
+      // Gõ tìm 1 chuỗi KHÔNG khớp phòng ban nào -> dropdown không có dòng nào để bấm (không thêm được).
+      typeQuery('Phòng Không Tồn Tại');
+      const noMatchDropdownText = container.querySelector('[data-pms-dropdown]').textContent;
+      const pickedFakeMatch = clickMatch('Phòng Không Tồn Tại');
 
       return {
-        datalistBefore,
-        addedToChipList: /Kinh Doanh/.test(afterAddList),
-        removedFromRemainingDatalist: !datalistAfterAdd.includes('Kinh Doanh'),
-        invalidAlerts: window.__alerts.slice(),
-        draftAfterInvalid: [...workflowParticipatingDeptsDraft],
+        itemsBefore,
+        pickedRealMatch,
+        selectedAfterAdd,
+        noMatchDropdownText,
+        pickedFakeMatch,
+        selectedAfterFakeAttempt: getMultiSelectValues(containerId),
       };
     });
-    record('(e) picker gõ tìm là input+dropdown tự dựng (sddSetOptions), không phải <select> cứng',
-      r.datalistBefore.length === 3 && r.datalistBefore.includes('Kinh Doanh'), JSON.stringify(r.datalistBefore));
-    record('(e) chọn đúng phòng ban từ gợi ý -> thêm được vào danh sách chip',
-      r.addedToChipList, JSON.stringify(r));
-    record('(e) phòng ban vừa thêm biến mất khỏi datalist còn lại (không gợi ý trùng)',
-      r.removedFromRemainingDatalist, JSON.stringify(r));
-    record('(e) gõ tự do giá trị không có trong danh sách phòng ban -> báo lỗi, KHÔNG thêm',
-      r.invalidAlerts.length === 1 && !r.draftAfterInvalid.includes('Phòng Không Tồn Tại'), JSON.stringify(r));
+    record('(e) items nguồn của ô chọn-nhiều-thật là ĐÚNG DB.depts (3 phòng ban)',
+      r.itemsBefore.length === 3 && r.itemsBefore.includes('Kinh Doanh'), JSON.stringify(r.itemsBefore));
+    record('(e) gõ tìm rồi bấm đúng 1 gợi ý đang hiển thị -> thêm được vào danh sách chọn',
+      r.pickedRealMatch === true && r.selectedAfterAdd.includes('Kinh Doanh'), JSON.stringify(r));
+    record('(e) gõ 1 chuỗi không khớp phòng ban nào -> dropdown hiện "Không tìm thấy", không có dòng nào để bấm, không thêm được gì',
+      r.noMatchDropdownText.includes('Không tìm thấy') && r.pickedFakeMatch === false &&
+      JSON.stringify(r.selectedAfterFakeAttempt) === JSON.stringify(r.selectedAfterAdd),
+      JSON.stringify(r));
   });
 
-  await scenario('(e) Nhóm Không Cấp Văn Phòng Phẩm: searchable input+datalist thêm/chặn đúng (mảng phẳng)', async () => {
+  await scenario('(e) Nhóm Không Cấp Văn Phòng Phẩm: ô chọn-nhiều-thật thêm/lọc đúng (mảng phẳng)', async () => {
     const r = await page.evaluate(() => {
       switchTab('system'); setSystemSubTab('ADMIN');
-      vppExcludedJobTitlesDraft = [];
-      renderVppExcludedJobTitlesChecklist();
-      const picker = document.getElementById('vppExcludedJobTitlePicker');
-      const datalistBefore = (document.getElementById('vppExcludedJobTitleDatalist')._sddItems || []).map(o => o.value);
+      renderVppExcludedJobTitlesWidget();
+      const containerId = 'vppExcludedJobTitlesMultiSelect';
+      const container = document.getElementById(containerId);
+      const search = container.querySelector('[data-pms-search]');
+      function typeQuery(q) {
+        search.value = q;
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      function clickMatch(exactLabel) {
+        const dd = container.querySelector('[data-pms-dropdown]');
+        const match = [...dd.querySelectorAll('div[data-op="gmsAdd"]')].find(el => el.textContent.trim() === exactLabel);
+        if (!match) return false;
+        match.click();
+        return true;
+      }
+      const itemsBefore = container._gmsItems.map(o => o.value);
 
-      // Chọn đúng 1 chức danh có trong datalist gợi ý.
-      picker.value = 'Nhân viên';
-      addVppExcludedJobTitle();
-      const afterAddList = document.getElementById('vppExcludedJobTitlesList').textContent;
-      const datalistAfterAdd = (document.getElementById('vppExcludedJobTitleDatalist')._sddItems || []).map(o => o.value);
+      typeQuery('Nhân viên');
+      const pickedRealMatch = clickMatch('Nhân viên');
+      const selectedAfterAdd = getMultiSelectValues(containerId);
 
-      // Gõ tự do 1 giá trị không tồn tại -> phải bị chặn, không thêm vào danh sách.
-      window.__alerts.length = 0;
-      picker.value = 'Chức Danh Bịa Đặt';
-      addVppExcludedJobTitle();
+      typeQuery('Chức Danh Bịa Đặt');
+      const noMatchDropdownText = container.querySelector('[data-pms-dropdown]').textContent;
+      const pickedFakeMatch = clickMatch('Chức Danh Bịa Đặt');
 
       return {
-        datalistBefore,
-        addedChip: /Nhân viên/.test(afterAddList),
-        removedFromRemainingDatalist: !datalistAfterAdd.includes('Nhân viên'),
-        invalidAlerts: window.__alerts.slice(),
-        draftAfterInvalid: [...vppExcludedJobTitlesDraft],
+        itemsBefore, pickedRealMatch, selectedAfterAdd, noMatchDropdownText, pickedFakeMatch,
+        selectedAfterFakeAttempt: getMultiSelectValues(containerId),
       };
     });
-    record('(e) datalist chức danh liệt kê đúng DB.jobTitles',
-      JSON.stringify(r.datalistBefore.slice().sort()) === JSON.stringify(['Nhân viên', 'Trưởng phòng'].sort()), JSON.stringify(r.datalistBefore));
-    record('(e) chọn đúng chức danh từ gợi ý -> thêm được vào danh sách chip',
-      r.addedChip, JSON.stringify(r));
-    record('(e) chức danh vừa thêm biến mất khỏi datalist còn lại (không gợi ý trùng)',
-      r.removedFromRemainingDatalist, JSON.stringify(r));
-    record('(e) gõ tự do chức danh không tồn tại -> báo lỗi, KHÔNG thêm',
-      r.invalidAlerts.length === 1 && !r.draftAfterInvalid.includes('Chức Danh Bịa Đặt') && r.draftAfterInvalid.includes('Nhân viên'),
+    record('(e) items nguồn của ô chọn-nhiều-thật là ĐÚNG DB.jobTitles',
+      JSON.stringify(r.itemsBefore.slice().sort()) === JSON.stringify(['Nhân viên', 'Trưởng phòng'].sort()), JSON.stringify(r.itemsBefore));
+    record('(e) gõ tìm rồi bấm đúng 1 gợi ý đang hiển thị -> thêm được vào danh sách chọn',
+      r.pickedRealMatch === true && r.selectedAfterAdd.includes('Nhân viên'), JSON.stringify(r));
+    record('(e) gõ chức danh không tồn tại -> dropdown hiện "Không tìm thấy", không thêm được gì',
+      r.noMatchDropdownText.includes('Không tìm thấy') && r.pickedFakeMatch === false &&
+      JSON.stringify(r.selectedAfterFakeAttempt) === JSON.stringify(r.selectedAfterAdd),
       JSON.stringify(r));
   });
 

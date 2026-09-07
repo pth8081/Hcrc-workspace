@@ -374,7 +374,7 @@ async function submitItPriceApproval(e) {
   // mục B, xem resolveItPriceWorkflowConfigForItemClient()). Không còn nhánh autoApproved — xem
   // itPriceApprovals.extraValidate ở lib/createValidation.js).
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(newItem);
-  const firstStepApprovers = wfConfig?.approvers?.[1] || [];
+  const firstStepApprovers = resolveEffectiveStepApprovers(wfConfig, 1);
   if (firstStepApprovers.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
       `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
@@ -469,7 +469,7 @@ function itPriceStatusBadge(p) {
   if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ bổ sung</span>`;
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
   return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
 }
 
@@ -1019,7 +1019,7 @@ function renderItPriceModalControls(p) {
   const wrap = document.getElementById('itPriceModalControls');
   const blocked = itPriceHasUnresolvedInfoRequest(p);
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[p.currentStep] || []) : [];
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
   const canApprove = p.status === 'PENDING' && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
   const emergencyPending = p.emergencyRejectStatus === 'PENDING';
   const canApply = p.status === 'APPROVED' && !p.applied && canManageItSupportClient(currentUser);

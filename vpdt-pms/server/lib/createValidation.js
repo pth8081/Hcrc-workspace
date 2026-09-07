@@ -11,6 +11,14 @@ const { HttpError: CreateError } = require('./httpErrors');
 // vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
+// resolveStepApproverUsernames() — điểm tra cứu DUY NHẤT cho approvers[stepOrder] của 1 bước (xử lý cả
+// bước "Theo vị trí"/POSITION mode) — dùng ở buildEffectiveSubmissionWorkflowServer()/
+// buildEffectiveContractApprovalWorkflowServer() bên dưới (2 module SNAPSHOT effectiveApprovers ngay
+// lúc TẠO hồ sơ, nên phải resolve POSITION mode NGAY TẠI ĐÂY — không có cơ hội tra lại động sau này như
+// các module khác đi qua lib/workflowEngine.js flatWorkflowConfigToSteps()). File thuần, không phụ
+// thuộc gì khác — an toàn require thẳng, xem chú thích đầu file lib/positionApprovers.js để biết lý do
+// KHÔNG require thẳng lib/workflowEngine.js ở đây (vòng lặp require).
+const { resolveStepApproverUsernames } = require('./positionApprovers');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -209,7 +217,11 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
 
   const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
   const approvers = {};
-  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+  // resolveStepApproverUsernames() thay vì đọc thẳng baseConfig.approvers[s.order] — resolve bước
+  // "Theo vị trí" (POSITION mode) NGAY LÚC DỰNG SNAPSHOT này (effectiveApprovers sẽ đông cứng usernames
+  // cụ thể từ đây trở đi, không tra lại động sau này được nữa — khớp đúng cách snapshot vốn hoạt động
+  // với PEOPLE mode, xem lib/positionApprovers.js).
+  baseWf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(baseConfig, s.order, appData.users); });
 
   const groups = migrateSubmissionApprovalGroupKeys(appData.submissionApprovalGroups || {});
   // Sắp lại ĐÚNG thứ tự chuẩn SUBMISSION_APPROVAL_LAYERS (Đồng trình -> Đồng cấp -> ... -> TGĐ) — trước
@@ -309,7 +321,9 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
 
   const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
   const approvers = {};
-  baseWf.steps.forEach(s => { approvers[s.order] = baseConfig.approvers?.[s.order] || []; });
+  // resolveStepApproverUsernames() — cùng lý do buildEffectiveSubmissionWorkflowServer() ở trên (resolve
+  // POSITION mode ngay lúc dựng snapshot, effectiveApprovers đông cứng từ đây).
+  baseWf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(baseConfig, s.order, appData.users); });
 
   const groups = appData.contractApprovalGroups || {};
   // Cùng lỗi/cùng cách sửa với buildEffectiveSubmissionWorkflowServer() ở trên — sắp lại đúng thứ tự

@@ -61,7 +61,7 @@ function getMyPendingApprovals(user) {
       if (rec[f.status] !== 'PENDING') return;
       const wfConfig = wfConfigFor(rec) || {};
       const step = rec[f.currentStep];
-      const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[step] || []) : [];
+      const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, step);
       if (!canApproveStep(user, currentStepApprovers, rec[f.history], step)) return;
       items.push({
         type: cfg.type, typeLabel: cfg.typeLabel,
@@ -344,7 +344,7 @@ function findPendingApprovalsForUsername(username) {
       if (rec[f.status] !== 'PENDING') return;
       const wfConfig = wfConfigFor(rec) || {};
       const step = rec[f.currentStep];
-      const currentStepApprovers = normalizeApproversList(wfConfig.approvers ? wfConfig.approvers[step] : null);
+      const currentStepApprovers = normalizeApproversList(resolveEffectiveStepApprovers(wfConfig, step));
       if (!currentStepApprovers.includes(username)) return;
       results.push({
         typeLabel: cfg.typeLabel, code: cfg.codeOf(rec), title: cfg.titleOf(rec),

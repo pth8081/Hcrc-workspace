@@ -300,6 +300,24 @@ const DEFAULTS = {
   // cấu hình) = giữ nguyên hành vi cũ, hiện đủ toàn bộ DB.depts (xem getWorkflowParticipatingDepts()).
   workflowParticipatingDepts: [],
 
+  // "Vị Trí Tham Gia Quy Trình" (khối 17 cây phân quyền, cùng nhóm với workflowParticipatingDepts/
+  // vppExcludedJobTitles ở trên) — danh mục CẶP (jobTitle, dept) admin tự dựng thủ công (ĐỘC LẬP hoàn
+  // toàn khỏi dữ liệu user thật đang có, cùng tinh thần 2 danh mục kia — admin có thể cấu hình trước cả
+  // khi có ai thật sự giữ đúng cặp đó), dùng làm nguồn CHỌN cho bước duyệt "Theo vị trí" (POSITION mode)
+  // ở màn "Quy Trình & Phê Duyệt" (renderWorkflowTab()/renderItPriceTierWorkflowTab(), public/js/
+  // module-ngansach.js + module-itsupport-tier.js) — mỗi phần tử { jobTitle, dept }, nhãn hiển thị suy
+  // ra ỔN ĐỊNH là "<jobTitle> — <dept>" (không lưu field label riêng, tránh lệch nếu 1 trong 2 tên gốc
+  // đổi chữ). LÝ DO cần CẶP thay vì chỉ jobTitle phẳng: DB.jobTitles vốn generic/không phân biệt phòng
+  // ban ("Trưởng phòng" dùng chung cho mọi phòng), không thể tự phân biệt "Trưởng phòng IT" với "Trưởng
+  // phòng Nhân Sự" nếu chỉ chọn 1 chức danh suông — admin PHẢI ghép thêm đúng phòng ban mới ra được 1
+  // "vị trí" cụ thể. Việc tra CỨU NGƯỢC (bước duyệt "Theo vị trí" trỏ tới đúng cặp nào -> ai hiện đang
+  // giữ đúng cặp đó VÀ có quyền canBeApprover) nằm ở lib/positionApprovers.js (server, ĐIỂM DUY NHẤT) +
+  // resolveEffectiveStepApprovers() (client, public/js/core.js, mirror y hệt) — KHÔNG lưu username nào ở
+  // đây, cùng triết lý kpiEvaluatorConfig ở trên (nhân sự đổi/nghỉ việc không cần sửa lại danh mục này).
+  // Gate ghi: ADMIN_ONLY_KEYS (routes/data.js), cùng độ mở với workflowParticipatingDepts/
+  // vppExcludedJobTitles (chỉ sửa được ở màn Phân Quyền, admin).
+  workflowParticipatingPositions: [],
+
   // "File Giá Mẫu" (Phê Duyệt Giá, Hỗ Trợ IT) — 1 hoặc nhiều bảng giá chuẩn admin nạp sẵn, dùng làm căn
   // cứ đối chiếu tự động mỗi khi ai đó tải lên bảng giá đề xuất: khớp ĐÚNG mã hàng + giá cũ đề xuất khớp
   // giá mẫu -> tự động bỏ qua bước duyệt phòng ban (xem lib/priceFileParser.js matchAgainstMaster() +
