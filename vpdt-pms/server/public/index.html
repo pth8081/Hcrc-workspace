@@ -6590,6 +6590,18 @@
           <p id="owiPeriodEmptyNote" class="hidden text-[11px] text-red-500 italic mt-1">Chưa có Kỳ Thực Hiện nào đang "Đang thực hiện" — vui lòng tạo/bắt đầu 1 kỳ trước khi thêm công việc gốc.</p>
         </div>
         <div><label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label><input id="owiDeadline" type="date" class="w-full border p-1.5 rounded"></div>
+        <!-- VHST-4: Ngày bắt đầu + Tần suất cập nhật tiến độ — CHỈ áp dụng công việc LÁ (không có việc
+             con), ẩn/hiện qua owiScheduleFieldWrap/owiScheduleFieldNote — xem openOperationWorkItemFormModal()
+             (module-vanhanh.js) và resolveOperationWorkItemScheduleFields() (lib/recordActions.js). -->
+        <div id="owiScheduleFieldWrap" class="space-y-3">
+          <div><label class="block font-semibold text-gray-600 mb-1">Ngày Bắt Đầu</label><input id="owiStartDate" type="date" class="w-full border p-1.5 rounded"></div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tần Suất Cập Nhật Tiến Độ (số ngày)</label>
+            <input id="owiProgressUpdateFrequencyDays" type="number" min="1" step="1" placeholder="VD: 3" class="w-full border p-1.5 rounded">
+            <p class="text-[11px] text-gray-400 italic mt-1">Hệ thống sẽ cảnh báo nếu quá X ngày chưa có cập nhật tiến độ mới, tính từ ngày bắt đầu hoặc lần cập nhật gần nhất.</p>
+          </div>
+        </div>
+        <p id="owiScheduleFieldNote" class="hidden text-[11px] text-gray-400 italic">Công việc có việc con không đặt được Ngày bắt đầu/Tần suất cập nhật tiến độ (chỉ áp dụng công việc lá).</p>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Nghiệm Thu</label>
           <div class="flex items-center gap-3 flex-wrap">

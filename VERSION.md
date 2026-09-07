@@ -1,8 +1,80 @@
 # Phiên bản hiện tại
 
-**11.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > 🏬 Siêu Thị > Thực Hiện: "Ngày bắt đầu" + "Tần suất cập nhật tiến độ" (cảnh báo THỤ ĐỘNG quá hạn cập nhật, không cron job) (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Phần thực hiện công việc khi tạo thêm ngày bắt đầu, có thể đặt tần
+suất yêu cầu thời gian cập nhật tiến đố (tần suất setup theo ngày và theo đầu mục công việc con hoặc công
+việc lớn mà không có công việc con bên trong)".
+
+**Thiết kế đã triển khai** (item thứ 4/7 trong loạt việc Vận Hành > Siêu Thị đang làm — KHÁC hẳn VHST-6
+sẽ làm sau, VHST-6 là "quá hạn deadline/hoàn thành" cho tab Báo Cáo, còn task này CHỈ là "quá hạn cập
+nhật tiến độ", tính-lúc-đọc, KHÔNG dựng cron job/job nhắc chủ động):
+- Thêm 2 field mới, optional, trên mỗi `operationWorkItems` — **`startDate`** (ngày bắt đầu, `"YYYY-MM-DD"`)
+  và **`progressUpdateFrequencyDays`** (số nguyên dương, số ngày giữa 2 lần cập nhật tiến độ) — **CHỈ áp
+  dụng công việc LÁ** (không có việc con — đầu mục tổ chức có con thì server từ chối thẳng 400 nếu cố gán,
+  qua `resolveOperationWorkItemScheduleFields()` mới, `lib/recordActions.js`, gọi từ cả
+  `createOperationWorkItem()` lẫn `editOperationWorkItem()`). `editOperationWorkItem()` nhận thêm tham số
+  `hasChildren` (route `POST /operationWorkItems/:id/edit` tự đối chiếu `parentWorkItemId` toàn bộ work
+  item cùng nguồn) — nếu item VỪA có thêm con (không còn là lá) mà không gửi lại 2 field này thì tự động
+  DỌN SẠCH về `null`, không cần nhánh dọn dẹp riêng.
+- **Cảnh báo "quá hạn cập nhật tiến độ"** — hàm thuần `computeOperationWorkItemProgressUpdateOverdueDays(item, hasChildren)`
+  (2 bản mirror độc lập: `lib/recordActions.js` server-side + `public/js/module-vanhanh.js` client-side,
+  cùng khuôn `computeOperationWorkItemExpectedAcceptanceDate()` có sẵn) — TÁI SỬ DỤNG đúng dữ liệu
+  "📜 Lịch Sử" (`item.history`, action `STATUS_*` do `updateOperationWorkItemProgress()` ghi mỗi lần bấm
+  "🔄 Cập Nhật Tiến Độ"/"✅ Hoàn Thành"), KHÔNG dựng bảng/field lưu vết mới:
+  - Không cảnh báo nếu: có việc con, đã "Đã nghiệm thu" (`DA_NGHIEM_THU`), chưa cấu hình `startDate`/
+    `progressUpdateFrequencyDays`, hoặc `startDate` còn ở TƯƠNG LAI (chưa tới ngày bắt đầu).
+  - Ngược lại: lấy mốc = lần cập nhật tiến độ GẦN NHẤT trong `history` (action `STATUS_*`), hoặc `startDate`
+    nếu CHƯA TỪNG cập nhật lần nào — số ngày trôi qua từ mốc đó tới hôm nay ≥ `progressUpdateFrequencyDays`
+    thì "quá hạn", hiện badge đỏ "⚠️ Quá hạn cập nhật tiến độ — X ngày" ngay dưới tên công việc (dùng chung
+    1 chỗ `nameCell` trong `buildOperationWorkItemRow()` nên tự động hiện ở CẢ 2 tab Thực Hiện lẫn Nghiệm
+    Thu, không cần lặp code).
+  - Ví dụ đã test: `startDate` 10 ngày trước, `progressUpdateFrequencyDays=3`, CHƯA từng cập nhật tiến độ
+    (chỉ có entry `CREATED`) → quá hạn ~10 ngày (tính từ `startDate`). `startDate` 30 ngày trước nhưng lần
+    cập nhật GẦN NHẤT chỉ 8 ngày trước, `progressUpdateFrequencyDays=3` → quá hạn ~8 ngày (tính từ lần cập
+    nhật gần nhất, KHÔNG phải `startDate`).
+- **UI**: modal Thêm/Sửa Công Việc (`operationWorkItemFormModal`, `public/index.html`) thêm 2 ô "Ngày Bắt
+  Đầu" (`owiStartDate`) + "Tần Suất Cập Nhật Tiến Độ (số ngày)" (`owiProgressUpdateFrequencyDays`, kèm ghi
+  chú giải thích cơ chế cảnh báo) trong `#owiScheduleFieldWrap` — TẠO MỚI luôn hiện (công việc vừa tạo
+  chưa thể có con); SỬA thì ẨN + hiện ghi chú thay thế (`#owiScheduleFieldNote`) nếu công việc ĐANG có con
+  (`openOperationWorkItemFormModal()` tự đối chiếu `DB.operationWorkItems`, mirror đúng luật server).
+
+**Đã sửa**:
+- `lib/recordActions.js` — thêm `parseISODateOnly()`, `resolveOperationWorkItemScheduleFields()`,
+  `computeOperationWorkItemProgressUpdateOverdueDays()`; tích hợp vào `createOperationWorkItem()`
+  (`hasChildren` luôn `false`) và `editOperationWorkItem()` (nhận thêm tham số `hasChildren`); export cả 2
+  hàm mới cho test.
+- `routes/records.js` — `POST /operationWorkItems/:id/edit` tự tính `hasChildren` (đối chiếu
+  `getWorkItemsBySource()`) trước khi gọi `editOperationWorkItem()`.
+- `public/js/module-vanhanh.js` — thêm bản mirror client-side `parseISODateOnly()`/
+  `computeOperationWorkItemProgressUpdateOverdueDays()`; `buildOperationWorkItemRow()` hiện badge quá hạn
+  ở `nameCell` dùng chung; `openOperationWorkItemFormModal()`/`submitOperationWorkItemForm()` đọc/ghi 2
+  field mới, ẩn/hiện ô theo `hasChildren` của item đang sửa.
+- `public/index.html` — thêm `#owiScheduleFieldWrap` (2 input `owiStartDate`/`owiProgressUpdateFrequencyDays`
+  + ghi chú) và `#owiScheduleFieldNote` trong modal `operationWorkItemFormModal`.
+
+**Kiểm thử**: file mới `tests/test-operation-workitem-progress-frequency.js` (20 kịch bản THUẦN, không cần
+Playwright/SQL Server — `resolveOperationWorkItemScheduleFields()`/tích hợp create-edit/5 kịch bản tính
+quá hạn theo đúng yêu cầu: chưa từng cập nhật + quá hạn, vừa cập nhật (chưa quá hạn), cập nhật đã lâu (quá
+hạn), không cấu hình frequency (không bao giờ cảnh báo), `startDate` tương lai (không bao giờ cảnh báo)) —
+20/20 pass. Mở rộng `tests/test-operation-store-lifecycle.js` thêm 5 kịch bản tích hợp qua route/UI thật
+(tạo việc lá với 2 field mới, sửa việc CÓ CON bị 400, badge hiện/biến mất đúng qua UI thật, ẩn/hiện ô form
+đúng theo `hasChildren`) — cũng sửa `tests/testHarness.js` (mock route `operationWorkItems:edit` thiếu
+tham số `hasChildren`, mirror đúng route thật). Chạy toàn bộ `tests/test-*.js` (70 file, 68 file 100% pass)
+— 0 lỗi mới so với baseline, chỉ còn đúng 3 kịch bản lỗi phụ thuộc SQL Server thật đã biết từ trước (2 file:
+`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`).
+
+**Deploy-impact**: KHÔNG có gì ngoài copy code + `pm2 restart` — `startDate`/`progressUpdateFrequencyDays`
+chỉ là 2 field JSON thêm vào `Payload` (`dbo.OperationWorkItems`, vốn đã là JSON tự do — CHỈ `Status`/
+`ParentWorkItemId`/`SourceType`/`SourceId` là cột SQL thật, xem `lib/operationWorkItemStore.js`), KHÔNG đổi
+`schema.sql`, không thêm biến môi trường, không đổi `dependencies`. Không có cron job/job nhắc mới (đúng
+quyết định thiết kế đã chốt) — cảnh báo hoàn toàn tính-lúc-render ở client, không có tác vụ nền nào chạy
+thêm trên server. Công việc CŨ (chưa có `startDate`/`progressUpdateFrequencyDays`) tự hiểu ngầm là chưa
+cấu hình — không bao giờ hiện badge cảnh báo, tương thích ngược hoàn toàn.
 
 ## Vận Hành > 🏬 Siêu Thị: Danh Mục Đầu Tư 2 cấp (danh mục lớn + danh mục con, tiền tự roll-up) (2026-09-07)
 

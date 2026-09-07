@@ -257,9 +257,13 @@ function createDispatcher(state) {
   // editOperationWorkItem() nhận thêm users (resolve assignedTo[]) + sourceRecord (Overhaul quyền: toàn
   // quyền quản lý hồ sơ, KHÔNG còn mở rộng theo "Người Phụ Trách" nữa) — mirror ĐÚNG route thật
   // (routes/records.js POST /operationWorkItems/:id/edit, tự tra sourceRecord qua item.sourceType/sourceId).
+  // hasChildren (VHST-4, Ngày bắt đầu/Tần suất cập nhật tiến độ — CHỈ việc LÁ) — mirror ĐÚNG route thật
+  // (routes/records.js POST /operationWorkItems/:id/edit, tự đối chiếu parentWorkItemId của toàn bộ
+  // work item cùng nguồn với item.id).
   actionHandlers['operationWorkItems:edit'] = (u, item, body) => {
     const sourceRecord = sourceRecordForWorkItem(item);
-    return recordActions.editOperationWorkItem(u, item, body || {}, state.users, sourceRecord);
+    const hasChildren = state.operationWorkItems.some(w => w.parentWorkItemId === item.id);
+    return recordActions.editOperationWorkItem(u, item, body || {}, state.users, sourceRecord, hasChildren);
   };
   // operationStoreOpenings/operationRepairs:update ĐÃ BỊ XOÁ khỏi đây cùng
   // editOperationStoreOpeningDraft()/editOperationRepairDraft() (lib/recordActions.js) — cơ chế "Sửa &

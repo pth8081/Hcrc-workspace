@@ -698,6 +698,86 @@ function resolveOperationAcceptanceConfig(payload) {
   return { acceptanceMode: 'IMMEDIATE', acceptanceDelayDays: null };
 }
 
+// Parse chuỗi "YYYY-MM-DD" (giá trị <input type="date"> gửi lên) thành Date ở NỬA ĐÊM GIỜ ĐỊA PHƯƠNG —
+// KHÔNG dùng thẳng new Date("YYYY-MM-DD") (parse theo UTC, có thể lệch 1 ngày tuỳ múi giờ server). Bản
+// sao server-side của parseISODateOnly() ở public/js/module-vanhanh.js (LƯU Ý BẢO TRÌ, 2 bản độc lập).
+function parseISODateOnly(str) {
+  if (!str || typeof str !== 'string') return null;
+  const m = str.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Ngày bắt đầu + Tần suất cập nhật tiến độ (item con yêu cầu "tạo thêm ngày bắt đầu, có thể đặt tần suất
+// yêu cầu cập nhật tiến độ") — CHỈ áp dụng công việc LÁ (không có việc con, mirror đúng bất biến "chỉ
+// việc lá cập nhật tiến độ" đã có sẵn ở updateOperationWorkItemProgress()/acceptOperationWorkItem() phía
+// trên) — đầu mục tổ chức (có con) tự cascade trạng thái theo con, không có khái niệm "tiến độ" riêng để
+// nhắc. hasChildren do CALLER tự tính (route đối chiếu parentWorkItemId của toàn bộ work item cùng
+// nguồn, xem routes/records.js — cùng cách tính hasChildren dùng ở buildOperationWorkItemRows() client)
+// — createOperationWorkItem() LUÔN gọi với false (item vừa tạo chưa thể có con); editOperationWorkItem()
+// gọi với hasChildren THẬT của item đang sửa.
+// CỐ Ý: khi hasChildren=true, throw 400 nếu payload có gửi giá trị (đề phòng client cố tình vượt qua UI
+// đã ẩn field) — còn khi KHÔNG gửi gì (payload rỗng, đúng hành vi UI ẩn field) thì trả về {null, null},
+// khiến editOperationWorkItem() TỰ ĐỘNG dọn sạch 2 field này nếu item vừa có thêm con (không còn là lá
+// nữa) — không cần thêm nhánh dọn dẹp riêng ở nơi khác.
+function resolveOperationWorkItemScheduleFields(payload, hasChildren) {
+  const rawStartDate = payload?.startDate;
+  const rawFreq = payload?.progressUpdateFrequencyDays;
+  const hasStartDate = rawStartDate != null && rawStartDate !== '';
+  const hasFreq = rawFreq != null && rawFreq !== '';
+  if ((hasStartDate || hasFreq) && hasChildren) {
+    throw new HttpError(400, 'Công việc có việc con (đầu mục tổ chức) không thể đặt Ngày bắt đầu/Tần suất cập nhật tiến độ — chỉ áp dụng cho công việc lá.');
+  }
+  let startDate = null;
+  if (hasStartDate) {
+    if (!parseISODateOnly(rawStartDate)) throw new HttpError(400, 'Ngày bắt đầu không hợp lệ');
+    startDate = String(rawStartDate);
+  }
+  let progressUpdateFrequencyDays = null;
+  if (hasFreq) {
+    const n = Number(rawFreq);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+      throw new HttpError(400, 'Tần suất cập nhật tiến độ phải là số nguyên dương (số ngày)');
+    }
+    progressUpdateFrequencyDays = n;
+  }
+  return { startDate, progressUpdateFrequencyDays };
+}
+
+// Cảnh báo THỤ ĐỘNG "cần cập nhật tiến độ" — tính-lúc-đọc, KHÔNG cron job/không job nhắc chủ động (đúng
+// quyết định thiết kế đã chốt, mirror cách làm "Dự Kiến Nghiệm Thu" ở computeOperationWorkItemExpectedAcceptanceDate()
+// ngay dưới — CHỈ để hiển thị badge, không tự động đổi trạng thái/gửi email). Tái sử dụng ĐÚNG cơ chế
+// item.history đã có sẵn từ "📜 Lịch Sử" (action bắt đầu 'STATUS_' do updateOperationWorkItemProgress()
+// ghi mỗi lần bấm "🔄 Cập Nhật Tiến Độ"/"✅ Hoàn Thành") làm nguồn "lần cập nhật tiến độ gần nhất" — KHÔNG
+// dựng bảng/field lưu vết mới. Trả về SỐ NGÀY đã trễ (>= progressUpdateFrequencyDays) nếu đang quá hạn,
+// null nếu không (chưa cấu hình startDate/progressUpdateFrequencyDays, chưa tới ngày bắt đầu, đã nghiệm
+// thu xong DA_NGHIEM_THU, có việc con, hoặc còn trong hạn). Bản sao server-side của
+// computeOperationWorkItemProgressUpdateOverdueDays() ở public/js/module-vanhanh.js (LƯU Ý BẢO TRÌ, 2
+// bản độc lập, phải sửa đồng thời).
+function computeOperationWorkItemProgressUpdateOverdueDays(item, hasChildren) {
+  if (hasChildren) return null;
+  if (!item || item.status === 'DA_NGHIEM_THU') return null;
+  const freq = Number(item.progressUpdateFrequencyDays);
+  if (!Number.isFinite(freq) || freq <= 0) return null;
+  const start = parseISODateOnly(item.startDate);
+  if (!start) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (start.getTime() > today.getTime()) return null; // chưa tới ngày bắt đầu
+  // Lần cập nhật tiến độ gần nhất trong history (action STATUS_*) — chưa có lần nào thì lấy startDate
+  // làm mốc gốc (đúng yêu cầu "chưa từng cập nhật thì cũng tính hạn từ ngày bắt đầu").
+  let lastUpdate = null;
+  for (const h of (item.history || [])) {
+    if (!h || typeof h.action !== 'string' || !h.action.startsWith('STATUS_') || !h.time) continue;
+    const t = parseVNDateTime(h.time);
+    if (t && (!lastUpdate || t.getTime() > lastUpdate.getTime())) lastUpdate = t;
+  }
+  const baseline = lastUpdate ? new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate()) : start;
+  const elapsedDays = Math.floor((today.getTime() - baseline.getTime()) / 86400000);
+  return elapsedDays >= freq ? elapsedDays : null;
+}
+
 // sourceRecord = hồ sơ operationStoreOpenings/operationRepairs đã đọc sẵn (route tự tra trước khi gọi)
 // — dự toán PHẢI đã duyệt xong mới cho tạo cây Thực hiện, khớp đúng yêu cầu nghiệp vụ "sau khi giai
 // đoạn lập dự toán hoàn thành thì giai đoạn thực hiện mới mở khoá".
@@ -748,12 +828,16 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   const { usernames: assignedTo, names: assignedToName } = resolveOperationAssignedTo(payload?.assignedTo, users);
   const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
   const acceptorUser = resolveOperationAcceptorUsername(payload?.acceptorUsername, users);
+  // Ngày bắt đầu + Tần suất cập nhật tiến độ — CHỈ việc LÁ, luôn gọi hasChildren=false vì công việc VỪA
+  // tạo chưa thể có con nào (xem resolveOperationWorkItemScheduleFields() ở trên).
+  const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, false);
   return {
     id: Date.now(),
     parentWorkItemId,
     periodId, periodName,
     title,
     description: String(payload?.description || '').trim(),
+    startDate, progressUpdateFrequencyDays,
     // Mảng NHIỀU người phụ trách (Mục E, trước đây 1 string|null) — assignedToName lưu-cứng-lúc-ghi
     // (snapshot tên hiển thị, không derive lúc render), cùng thứ tự với assignedTo.
     assignedTo, assignedToName,
@@ -935,7 +1019,10 @@ function deleteOperationWorkItem(user, item, descendantIds, sourceRecord) {
 // kỳ đã lập lúc tạo, muốn đổi thì xoá tạo lại như hiện tại.
 // sourceRecord = hồ sơ gốc đã đọc sẵn (route tự tra qua item.sourceType/sourceId trước khi gọi).
 // users = TOÀN BỘ tài khoản hệ thống — dùng để resolve assignedTo[] (Mục E).
-function editOperationWorkItem(user, item, payload, users, sourceRecord) {
+// hasChildren = route tự tính (đối chiếu parentWorkItemId của toàn bộ work item cùng nguồn với item.id)
+// — dùng cho resolveOperationWorkItemScheduleFields() (Ngày bắt đầu/Tần suất cập nhật tiến độ, CHỈ việc
+// LÁ, xem chú thích đầy đủ ở đó).
+function editOperationWorkItem(user, item, payload, users, sourceRecord, hasChildren) {
   assertCanManageOperationRecord(user, sourceRecord, item.sourceType, 'Bạn không có quyền sửa công việc này');
   if (item.status === 'DA_NGHIEM_THU') {
     throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa lại');
@@ -954,6 +1041,8 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord) {
   item.deadline = payload?.deadline || '';
   const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
   item.acceptanceMode = acceptanceMode; item.acceptanceDelayDays = acceptanceDelayDays;
+  const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, hasChildren);
+  item.startDate = startDate; item.progressUpdateFrequencyDays = progressUpdateFrequencyDays;
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
   return item;
@@ -5072,5 +5161,7 @@ module.exports = {
   // canManageOperationRecord (re-export nguyên hàm từ lib/createValidation.js, tiện cho test/route gọi
   // qua đúng 1 module thay vì phải biết nó định nghĩa ở đâu) + bản throw HttpError sẵn.
   canManageOperationRecord, assertCanManageOperationRecord,
-  computeOperationWorkItemExpectedAcceptanceDate
+  computeOperationWorkItemExpectedAcceptanceDate,
+  // Ngày bắt đầu + Tần suất cập nhật tiến độ (VHST-4) — export cho test.
+  resolveOperationWorkItemScheduleFields, computeOperationWorkItemProgressUpdateOverdueDays
 };

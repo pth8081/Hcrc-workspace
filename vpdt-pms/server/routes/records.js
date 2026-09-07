@@ -1959,7 +1959,11 @@ router.post('/operationWorkItems/:id/edit', async (req, res) => {
     const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedWorkItemById(itemId, async (item) => {
       const sourceRecord = await getOperationWorkItemSourceRecord(item);
-      return recordActions.editOperationWorkItem(freshUser, item, req.body || {}, users, sourceRecord);
+      // hasChildren — cần cho editOperationWorkItem() đối chiếu Ngày bắt đầu/Tần suất cập nhật tiến độ
+      // (VHST-4, CHỈ việc LÁ), cùng cách tính hasChildren dùng ở buildOperationWorkItemRows() client.
+      const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
+      const hasChildren = all.some(w => w.parentWorkItemId === item.id);
+      return recordActions.editOperationWorkItem(freshUser, item, req.body || {}, users, sourceRecord, hasChildren);
     });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/edit`, err); }

@@ -1691,6 +1691,140 @@ async function main() {
       }, dRecordId);
       assertEqual(result.useConfirmStatus, 'CONFIRMED', 'MANAGE_ALL (operationRecordManageAll, KHÔNG phải creator, KHÔNG admin) phải Xác Nhận Đưa Vào Sử Dụng được — toàn quyền MỌI hồ sơ');
     });
+
+    // ===== VHST-4: "Ngày bắt đầu" + "Tần suất cập nhật tiến độ" — CHỈ việc LÁ, cảnh báo quá hạn hiện ở
+    // dòng cây công việc (buildOperationWorkItemRow(), qua UI THẬT, không gọi thẳng hàm JS) — logic tính
+    // toán thuần đã test đủ 5 kịch bản ở tests/test-operation-workitem-progress-frequency.js, phần dưới
+    // đây CHỈ test tích hợp qua route thật (validate leaf-only) + hiển thị UI thật. Dùng hồ sơ RIÊNG
+    // (fRecordId) để không đụng tới trạng thái các hồ sơ trên (nhiều hồ sơ đã DONG_HO_SO/CONFIRMED). =====
+    let fRecordId = null, fLeafId = null;
+    await run.run('VHST-4: chuẩn bị hồ sơ RIÊNG + Danh mục đầu tư (fRecordId) cho test Ngày bắt đầu/Tần suất', async () => {
+      await loginAs(page, CREATOR);
+      fRecordId = await page.evaluate(async () => {
+        const res = await callCreateAction('operationStoreOpenings', {
+          storeName: 'Siêu thị Test VHST-4 Tần Suất', address: 'F', area: 10,
+          approvedBudget: 10000000, expectedOpenDate: '', personInCharge: '', note: ''
+        });
+        DB.operationStoreOpenings.push(res.item);
+        return res.item.id;
+      });
+      assert(fRecordId, 'Phải tạo được hồ sơ RIÊNG cho VHST-4');
+      await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', { items: [{ content: 'Hạng mục F', amount: 1000000, description: '', note: '' }] });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+      }, fRecordId);
+    });
+
+    await run.run('VHST-4: tạo công việc LÁ (gốc, không có con) với Ngày bắt đầu + Tần suất cập nhật tiến độ qua route thật -> lưu đúng', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null,
+          title: 'Việc lá test tần suất', startDate: '2026-08-01', progressUpdateFrequencyDays: 3
+        });
+        DB.operationWorkItems.push(res.item);
+        return res.item;
+      }, fRecordId);
+      fLeafId = result.id;
+      assert(fLeafId, 'Phải tạo được công việc lá');
+      assertEqual(result.startDate, '2026-08-01', 'startDate phải lưu đúng qua route thật');
+      assertEqual(result.progressUpdateFrequencyDays, 3, 'progressUpdateFrequencyDays phải lưu đúng qua route thật');
+    });
+
+    await run.run('VHST-4: thêm 1 việc CON dưới fLeafId (khiến nó không còn là lá) — Sửa fLeafId cố gán lại Ngày bắt đầu bị từ chối (400) qua route thật', async () => {
+      await loginAs(page, EXECUTOR);
+      const childId = await page.evaluate(async ({ id, parentId }) => {
+        const res = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: parentId, title: 'Việc con của việc lá cũ'
+        });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, { id: fRecordId, parentId: fLeafId });
+      assert(childId, 'Phải tạo được việc con');
+
+      const blocked = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationWorkItems', id, 'edit', { title: 'Việc lá cũ (giờ đã có con)', startDate: '2026-09-01', progressUpdateFrequencyDays: 5 });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, fLeafId);
+      assert(!blocked.ok, 'Phải bị chặn 400 vì công việc đã có con (không còn là lá)');
+      assertIncludes(blocked.message, 'công việc lá', 'Thông báo lỗi phải nêu rõ chỉ áp dụng công việc lá');
+
+      // Dọn dẹp: xoá việc con vừa tạo để không ảnh hưởng các test khác đọc lại fRecordId.
+      await page.evaluate(async (id) => {
+        await callRecordAction('operationWorkItems', id, 'delete', {});
+        DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id);
+      }, childId);
+    });
+
+    await run.run('VHST-4: UI thật — dòng công việc lá QUÁ HẠN cập nhật tiến độ (startDate đã qua lâu, chưa từng "🔄 Cập Nhật Tiến Độ") hiện badge cảnh báo; sau khi cập nhật tiến độ thì badge biến mất', async () => {
+      await loginAs(page, EXECUTOR);
+      // Sửa lại fLeafId (giờ đã lại là lá, không con) về startDate rất xa trong quá khứ để chắc chắn quá hạn.
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'edit', { title: 'Việc lá test tần suất', startDate: '2020-01-01', progressUpdateFrequencyDays: 3 });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === r.item.id); DB.operationWorkItems[idx] = r.item;
+      }, fLeafId);
+
+      const beforeHtml = await page.evaluate(({ kind, id, leafId }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Việc lá test tần suất'));
+        const html = row ? row.innerHTML : null;
+        closeOperationWorkItemModal();
+        return html;
+      }, { kind: 'operationStoreOpenings', id: fRecordId, leafId: fLeafId });
+      assert(beforeHtml !== null, 'Phải tìm thấy dòng công việc lá test tần suất');
+      assertIncludes(beforeHtml, 'Quá hạn cập nhật tiến độ', 'Dòng công việc phải hiện badge cảnh báo quá hạn cập nhật tiến độ');
+
+      // Bấm "🔄 Cập Nhật Tiến Độ" qua route thật (mirror UI) -> history có entry STATUS_* mới -> hết quá hạn.
+      await page.evaluate(async (id) => {
+        const r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN', note: 'Vừa cập nhật (test VHST-4)' });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === id); DB.operationWorkItems[idx] = r.item;
+      }, fLeafId);
+
+      const afterHtml = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Việc lá test tần suất'));
+        const html = row ? row.innerHTML : null;
+        closeOperationWorkItemModal();
+        return html;
+      }, { kind: 'operationStoreOpenings', id: fRecordId });
+      assert(afterHtml !== null, 'Phải vẫn tìm thấy dòng công việc lá sau khi cập nhật tiến độ');
+      assert(!afterHtml.includes('Quá hạn cập nhật tiến độ'), 'Sau khi vừa "🔄 Cập Nhật Tiến Độ", badge cảnh báo phải BIẾN MẤT (không còn quá hạn)');
+    });
+
+    await run.run('VHST-4: Modal Thêm/Sửa Công Việc — ô Ngày bắt đầu/Tần suất ẨN khi sửa công việc CÓ CON, HIỆN khi sửa công việc LÁ', async () => {
+      await loginAs(page, EXECUTOR);
+      const childId = await page.evaluate(async ({ id, parentId }) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: parentId, title: 'Việc con test modal' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, { id: fRecordId, parentId: fLeafId });
+
+      const result = await page.evaluate(({ kind, id, parentId, leafChildId }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        // fLeafId giờ có con (leafChildId) -> Sửa fLeafId phải ẨN ô lịch/tần suất.
+        openOperationWorkItemEditModal(parentId);
+        const parentWrapHidden = document.getElementById('owiScheduleFieldWrap').classList.contains('hidden');
+        const parentNoteShown = !document.getElementById('owiScheduleFieldNote').classList.contains('hidden');
+        closeOperationWorkItemFormModal();
+        // leafChildId KHÔNG có con -> Sửa nó phải HIỆN ô lịch/tần suất.
+        openOperationWorkItemEditModal(leafChildId);
+        const childWrapHidden = document.getElementById('owiScheduleFieldWrap').classList.contains('hidden');
+        closeOperationWorkItemFormModal();
+        closeOperationWorkItemModal();
+        return { parentWrapHidden, parentNoteShown, childWrapHidden };
+      }, { kind: 'operationStoreOpenings', id: fRecordId, parentId: fLeafId, leafChildId: childId });
+      assert(result.parentWrapHidden, 'Sửa công việc ĐÃ CÓ CON phải ẨN ô Ngày bắt đầu/Tần suất');
+      assert(result.parentNoteShown, 'Sửa công việc ĐÃ CÓ CON phải hiện ghi chú giải thích vì sao ẩn');
+      assert(!result.childWrapHidden, 'Sửa công việc LÁ (không con) phải HIỆN ô Ngày bắt đầu/Tần suất');
+
+      // Dọn dẹp.
+      await page.evaluate(async (id) => {
+        await callRecordAction('operationWorkItems', id, 'delete', {});
+        DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id);
+      }, childId);
+    });
   } finally {
     await browser.close();
     server.close();

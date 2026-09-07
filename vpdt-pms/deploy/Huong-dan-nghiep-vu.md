@@ -367,6 +367,33 @@ với "Tổng Hợp"):
     - Hồ sơ CŨ (lập trước v11.4) mặc định toàn bộ hạng mục là danh mục lớn,
       không cần thao tác gì thêm — vẫn dùng được bình thường, chỉ khi cần mới
       thêm danh mục con vào hạng mục có sẵn.
+  - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập nhật
+    (từ v11.5)**: form Thêm/Sửa công việc (cây Thực Hiện) nay có thêm 2 ô tuỳ
+    chọn — **"Ngày Bắt Đầu"** (ngày dự kiến bắt đầu thi công) và **"Tần Suất
+    Cập Nhật Tiến Độ (số ngày)"** — **CHỈ áp dụng công việc LÁ** (không có
+    việc con — đầu mục lớn ẩn hẳn 2 ô này, hiện ghi chú giải thích thay vào
+    đó, vì đầu mục lớn tự cascade trạng thái theo con, không có "tiến độ"
+    riêng để theo dõi).
+    - **Cơ chế cảnh báo** (hoàn toàn THỤ ĐỘNG — tính lại mỗi lần tải trang,
+      KHÔNG có job/cron chạy nền, KHÔNG gửi email/thông báo chủ động): nếu đã
+      qua "Ngày Bắt Đầu", công việc CHƯA "Đã nghiệm thu", và có cấu hình "Tần
+      Suất Cập Nhật Tiến Độ" — hệ thống tính số ngày kể từ **lần bấm "🔄 Cập
+      Nhật Tiến Độ" gần nhất** (đọc từ đúng "📜 Lịch Sử" đã có sẵn từ v10.9,
+      không cần thao tác gì thêm để bật) — nếu CHƯA TỪNG cập nhật lần nào thì
+      tính từ chính "Ngày Bắt Đầu". Số ngày trôi qua ≥ Tần Suất đã đặt thì
+      hiện badge đỏ **"⚠️ Quá hạn cập nhật tiến độ — X ngày"** ngay dưới tên
+      công việc, ở CẢ 2 tab Thực Hiện lẫn Nghiệm Thu.
+    - VD: đặt Tần Suất = 3 ngày, việc đã bắt đầu 10 ngày trước nhưng CHƯA bấm
+      "🔄 Cập Nhật Tiến Độ" lần nào → badge hiện ngay "Quá hạn — 10 ngày". Bấm
+      "🔄 Cập Nhật Tiến Độ" 1 lần → badge biến mất ngay, đếm lại từ 0.
+    - Không đặt "Tần Suất Cập Nhật Tiến Độ" (để trống) thì KHÔNG BAO GIỜ hiện
+      badge cảnh báo cho công việc đó — 2 field này hoàn toàn tuỳ chọn, công
+      việc CŨ (lập trước v11.5) không có sẵn 2 field này nên mặc định không
+      cảnh báo, không cần cấu hình lại gì nếu không cần tính năng này.
+    - **Lưu ý phân biệt**: đây CHỈ là cảnh báo "quá hạn cập nhật tiến độ" (bao
+      lâu chưa có ai báo cáo tình hình) — KHÁC với badge "⚠️ Quá hạn" ở cột
+      "Dự Kiến Nghiệm Thu" (tab Nghiệm Thu, có từ trước) vốn là cảnh báo "quá
+      hạn NGHIỆM THU" (đã tới ngày dự kiến nghiệm thu mà chưa ai chốt xong).
 
 ### 3.6. Hỗ Trợ IT
 

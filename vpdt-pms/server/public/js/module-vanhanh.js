@@ -1828,10 +1828,50 @@ function computeOperationWorkItemExpectedAcceptanceDate(w) {
   return base;
 }
 
+// Parse "YYYY-MM-DD" (<input type="date">) thành Date NỬA ĐÊM GIỜ ĐỊA PHƯƠNG — bản sao client-side của
+// parseISODateOnly() ở lib/recordActions.js (LƯU Ý BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời).
+function parseISODateOnly(str) {
+  if (!str || typeof str !== 'string') return null;
+  const m = str.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Cảnh báo THỤ ĐỘNG "quá hạn cập nhật tiến độ" (VHST-4: "có thể đặt tần suất yêu cầu cập nhật tiến độ") —
+// tính-lúc-render, KHÔNG cron job/không nhắc chủ động — bản sao client-side của
+// computeOperationWorkItemProgressUpdateOverdueDays() ở lib/recordActions.js (LƯU Ý BẢO TRÌ, 2 bản độc
+// lập, phải sửa đồng thời). Trả về SỐ NGÀY đã trễ nếu quá hạn, null nếu không.
+function computeOperationWorkItemProgressUpdateOverdueDays(w, hasChildren) {
+  if (hasChildren) return null;
+  if (!w || w.status === 'DA_NGHIEM_THU') return null;
+  const freq = Number(w.progressUpdateFrequencyDays);
+  if (!Number.isFinite(freq) || freq <= 0) return null;
+  const start = parseISODateOnly(w.startDate);
+  if (!start) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (start.getTime() > today.getTime()) return null;
+  let lastUpdate = null;
+  for (const h of (w.history || [])) {
+    if (!h || typeof h.action !== 'string' || !h.action.startsWith('STATUS_') || !h.time) continue;
+    const t = parseVNDateTime(h.time);
+    if (t && (!lastUpdate || t.getTime() > lastUpdate.getTime())) lastUpdate = t;
+  }
+  const baseline = lastUpdate ? new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate()) : start;
+  const elapsedDays = Math.floor((today.getTime() - baseline.getTime()) / 86400000);
+  return elapsedDays >= freq ? elapsedDays : null;
+}
+
 function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems) {
   const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
   const periodLabel = (depth === 0 && w.periodName) ? `<div class="text-[10px] text-indigo-500">📅 ${escapeHtml(w.periodName)}</div>` : '';
-  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}</td>`;
+  // VHST-4: badge "quá hạn cập nhật tiến độ" — dựng ở nameCell (dùng CHUNG cả EXECUTION lẫn ACCEPTANCE
+  // mode bên dưới) nên hiện đúng "mọi nơi công việc này được hiển thị" mà không cần lặp lại logic.
+  const progressOverdueDays = computeOperationWorkItemProgressUpdateOverdueDays(w, hasChildren);
+  const progressOverdueBadge = progressOverdueDays != null
+    ? `<div class="mt-0.5"><span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px]">⚠️ Quá hạn cập nhật tiến độ — ${progressOverdueDays} ngày</span></div>` : '';
+  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}${progressOverdueBadge}</td>`;
   // Nhiều người phụ trách (Mục E) — nối tên bằng dấu phẩy.
   const assigneeNames = Array.isArray(w.assignedToName) ? w.assignedToName.filter(Boolean) : (w.assignedToName ? [w.assignedToName] : []);
   const assigneeCell = `<td class="border p-2">${escapeHtml(assigneeNames.join(', ') || 'Chưa gán')}</td>`;
@@ -1989,6 +2029,15 @@ function openOperationWorkItemFormModal(parentWorkItemId, editItem) {
   // "Kỳ Thực Hiện" (Tạo Kỳ) đã BỎ HẲN khỏi Lập công việc (yêu cầu người dùng) — ô chọn kỳ luôn ẩn,
   // không còn gửi periodId khi tạo mới (xem submitOperationWorkItemForm()).
   document.getElementById('owiPeriodFieldWrap').classList.add('hidden');
+  // VHST-4: Ngày bắt đầu + Tần suất cập nhật tiến độ — CHỈ áp dụng công việc LÁ (mirror server
+  // resolveOperationWorkItemScheduleFields()). Khi TẠO MỚI, công việc chưa thể có con nên luôn cho nhập;
+  // khi SỬA, ẩn hẳn + xoá giá trị nếu editItem hiện ĐÃ có con (đúng khuôn hasChildren dùng ở
+  // buildOperationWorkItemRows()) — tránh gửi lên field mà server chắc chắn từ chối (400).
+  const editHasChildren = editItem ? (DB.operationWorkItems || []).some(x => x.parentWorkItemId === editItem.id) : false;
+  document.getElementById('owiScheduleFieldWrap').classList.toggle('hidden', editHasChildren);
+  document.getElementById('owiScheduleFieldNote').classList.toggle('hidden', !editHasChildren);
+  document.getElementById('owiStartDate').value = editHasChildren ? '' : (editItem?.startDate || '');
+  document.getElementById('owiProgressUpdateFrequencyDays').value = editHasChildren ? '' : (editItem?.progressUpdateFrequencyDays || '');
   // Mục D: prefill Nghiệm thu ngay/sau N ngày từ editItem (mặc định IMMEDIATE khi tạo mới).
   const isDelayed = editItem?.acceptanceMode === 'DELAYED';
   document.querySelector(`input[name="owiAcceptanceMode"][value="${isDelayed ? 'DELAYED' : 'IMMEDIATE'}"]`).checked = true;
@@ -2035,9 +2084,18 @@ async function submitOperationWorkItemForm(e) {
   if (acceptanceMode === 'DELAYED' && (!acceptanceDelayDays || acceptanceDelayDays <= 0)) {
     return alert('Vui lòng nhập số ngày nghiệm thu hợp lệ (số nguyên dương)');
   }
+  // VHST-4: Ngày bắt đầu + Tần suất cập nhật tiến độ — khi ô đang ẨN (công việc có con, xem
+  // openOperationWorkItemFormModal()) 2 input này rỗng sẵn nên gửi lên null, đúng hành vi "không áp
+  // dụng đầu mục tổ chức" (server resolveOperationWorkItemScheduleFields() cũng tự chấp nhận rỗng).
+  const startDate = document.getElementById('owiStartDate').value || null;
+  const progressUpdateFrequencyDaysRaw = document.getElementById('owiProgressUpdateFrequencyDays').value;
+  const progressUpdateFrequencyDays = progressUpdateFrequencyDaysRaw ? Number(progressUpdateFrequencyDaysRaw) : null;
+  if (progressUpdateFrequencyDaysRaw && (!Number.isInteger(progressUpdateFrequencyDays) || progressUpdateFrequencyDays <= 0)) {
+    return alert('Vui lòng nhập Tần suất cập nhật tiến độ hợp lệ (số nguyên dương, đơn vị ngày)');
+  }
 
   if (currentEditWorkItemId != null) {
-    const payload = { title, description, assignedTo, acceptorUsername, acceptorName, deadline, acceptanceMode, acceptanceDelayDays };
+    const payload = { title, description, assignedTo, acceptorUsername, acceptorName, deadline, acceptanceMode, acceptanceDelayDays, startDate, progressUpdateFrequencyDays };
     let updated;
     try {
       const result = await callRecordAction('operationWorkItems', currentEditWorkItemId, 'edit', payload);
@@ -2058,7 +2116,8 @@ async function submitOperationWorkItemForm(e) {
     sourceType: operationSourceType(currentWorkItemModalKind),
     sourceId: currentWorkItemModalRecordId,
     parentWorkItemId: currentWorkItemFormParentId,
-    title, description, assignedTo, acceptorUsername, acceptorName, deadline, acceptanceMode, acceptanceDelayDays
+    title, description, assignedTo, acceptorUsername, acceptorName, deadline, acceptanceMode, acceptanceDelayDays,
+    startDate, progressUpdateFrequencyDays
   };
   let newItem;
   try {
