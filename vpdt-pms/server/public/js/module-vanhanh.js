@@ -1754,26 +1754,34 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     if (canManageExecution && w.status !== 'DA_NGHIEM_THU') {
       actionHTML += `<button type="button" data-op="openOperationWorkItemFormModal" data-parent-id="${w.id}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
     }
-    if (w.status !== 'DA_NGHIEM_THU') {
-      if (!hasChildren) {
-        // Correction 3: MỌI công việc lá (cv con lẫn cv gốc không có con, ở MỌI cấp trong cây) đều có
-        // nút "🔄 Cập Nhật Tiến Độ" — mirror #taskProgressModal của module Công Việc công ty (dropdown
-        // trạng thái + ghi chú tuỳ chọn, xem openOperationWorkItemProgressModal()) — thay 2 nút nhỏ rời
-        // rạc "▶ Bắt Đầu"/"📤 Nộp Nghiệm Thu" trước đây. Giữ THÊM 1 nút tắt "✅ Hoàn Thành" khi đang
-        // DANG_THUC_HIEN, đúng yêu cầu "có nút cập nhật cv VÀ hoàn thành giống module cv".
-        if (canManageExecution || isOwner) {
-          if (w.status === 'DANG_NGHIEM_THU') {
-            actionHTML += `<span class="text-xs text-gray-400 italic">Đang chờ nghiệm thu</span>`;
-          } else {
-            actionHTML += `<button type="button" data-op="openOperationWorkItemProgressModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 mr-1">🔄 Cập Nhật Tiến Độ</button>`;
-            if (w.status === 'DANG_THUC_HIEN') {
-              actionHTML += `<button type="button" data-op="updateOperationWorkItemProgressAction" data-id="${w.id}" data-status="DANG_NGHIEM_THU" class="text-xs px-2 py-0.5 bg-amber-600 text-white rounded font-bold hover:bg-amber-700">✅ Hoàn Thành</button>`;
-            }
+    if (!hasChildren) {
+      // Correction 3: MỌI công việc lá (cv con lẫn cv gốc không có con, ở MỌI cấp trong cây) đều có
+      // nút "🔄 Cập Nhật Tiến Độ" — mirror #taskProgressModal của module Công Việc công ty (dropdown
+      // trạng thái + ghi chú tuỳ chọn, xem openOperationWorkItemProgressModal()) — thay 2 nút nhỏ rời
+      // rạc "▶ Bắt Đầu"/"📤 Nộp Nghiệm Thu" trước đây. Giữ THÊM 1 nút tắt "✅ Hoàn Thành" khi đang
+      // DANG_THUC_HIEN, đúng yêu cầu "có nút cập nhật cv VÀ hoàn thành giống module cv".
+      if (w.status !== 'DA_NGHIEM_THU' && (canManageExecution || isOwner)) {
+        if (w.status === 'DANG_NGHIEM_THU') {
+          actionHTML += `<span class="text-xs text-gray-400 italic">Đang chờ nghiệm thu</span>`;
+        } else {
+          actionHTML += `<button type="button" data-op="openOperationWorkItemProgressModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 mr-1">🔄 Cập Nhật Tiến Độ</button>`;
+          if (w.status === 'DANG_THUC_HIEN') {
+            actionHTML += `<button type="button" data-op="updateOperationWorkItemProgressAction" data-id="${w.id}" data-status="DANG_NGHIEM_THU" class="text-xs px-2 py-0.5 bg-amber-600 text-white rounded font-bold hover:bg-amber-700">✅ Hoàn Thành</button>`;
           }
         }
-      } else if (canManageExecution) {
-        actionHTML += `<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>`;
       }
+    } else if (canManageExecution) {
+      // Việc CHA (có con) không bao giờ tự tay bấm Hoàn Thành được — trạng thái LUÔN cascade tự động
+      // theo con (computeParentWorkItemStatus/syncOperationWorkItemAncestors, mirror 409 chặn ở
+      // updateOperationWorkItemProgress()). Trước đây LUÔN hiện đúng 1 câu "Tự cập nhật theo việc con"
+      // dù cha đã tự hoàn thành xong hay chưa — không phân biệt được, giống như nút không bao giờ hiện.
+      // Nay tách rõ 2 trạng thái: CÒN việc con chưa xong -> vẫn câu nhắc cũ (ẩn hẳn, không có gì bấm);
+      // TẤT CẢ việc con đã nghiệm thu xong (cha đã tự cascade DA_NGHIEM_THU) -> hiện rõ đã hoàn thành,
+      // đúng yêu cầu "sau khi tất cả cv con hoàn thành thì mục lớn mới hiện hoàn thành" (tự động, không
+      // cần bấm gì thêm vì server luôn từ chối 409 thao tác tay trên việc cha có con).
+      actionHTML += w.status === 'DA_NGHIEM_THU'
+        ? `<span class="text-xs text-green-600 italic font-bold">✅ Đã tự động hoàn thành (theo việc con)</span>`
+        : `<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>`;
     }
     return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
   }
@@ -1804,7 +1812,12 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   // click tay trực tiếp trên việc cha).
   if (hasChildren) {
     if (canManageAcceptance || isDesignatedAcceptor) {
-      actionHTML = '<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>';
+      // Cùng đợt sửa với EXECUTION-mode ở trên: phân biệt "còn con chưa nghiệm thu xong" (câu nhắc cũ)
+      // với "cha đã tự cascade DA_NGHIEM_THU vì TẤT CẢ con đã nghiệm thu xong" (hiện rõ đã hoàn thành) —
+      // trước đây LUÔN hiện đúng 1 câu bất kể cha đã tự hoàn thành hay chưa.
+      actionHTML = w.status === 'DA_NGHIEM_THU'
+        ? '<span class="text-xs text-green-600 italic font-bold">✅ Đã tự động hoàn thành nghiệm thu (theo việc con)</span>'
+        : '<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>';
     }
   } else if ((canManageAcceptance || isDesignatedAcceptor) && w.status === 'DANG_NGHIEM_THU') {
     actionHTML = `<button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="ACCEPT" class="text-xs px-2 py-0.5 bg-green-600 text-white rounded font-bold hover:bg-green-700 mr-1">✅ Nghiệm Thu</button>
@@ -2002,17 +2015,32 @@ async function updateOperationWorkItemProgressAction(id, newStatus, note) {
 }
 
 // --- Modal "🔄 Cập Nhật Tiến Độ" công việc Vận Hành (Correction 3, mirror #taskProgressModal) ---
+// Đợt sửa "cập nhật tiến độ liên tục, không ép đổi trạng thái" (mirror ĐÚNG openTaskProgressModal() của
+// module Công Việc, xem module-congviec.js): khi đang DANG_THUC_HIEN, dropdown giờ có 2 lựa chọn — "vẫn
+// đang thực hiện, chỉ ghi thêm ghi chú tiến độ" (tự lặp lại DANG_THUC_HIEN, bắt buộc nhập ghi chú, KHÔNG
+// đổi trạng thái) HOẶC "Hoàn thành — Nộp nghiệm thu" (đổi hẳn sang DANG_NGHIEM_THU) — người dùng CHỦ
+// ĐỘNG chọn, không còn bị ép chọn ngay "hoàn thành" mỗi lần chỉ muốn ghi tiến độ. Khớp server mirror ở
+// updateOperationWorkItemProgress() (lib/recordActions.js, allowedNext.DANG_THUC_HIEN nay có cả chính nó).
 let currentOwiProgressItemId = null;
-const OPERATION_WORK_ITEM_NEXT_STATUS_LABEL = { DANG_THUC_HIEN: 'Đang thực hiện', DANG_NGHIEM_THU: 'Hoàn thành — Nộp nghiệm thu' };
 function openOperationWorkItemProgressModal(id) {
   const w = DB.operationWorkItems.find(x => x.id === id);
   if (!w) return;
   currentOwiProgressItemId = id;
   document.getElementById('owiProgressInfo').innerText = `${w.title} — Trạng thái hiện tại: ${w.status === 'CHUA_BAT_DAU' ? 'Chưa bắt đầu' : w.status === 'DANG_THUC_HIEN' ? 'Đang thực hiện' : w.status}`;
-  const allowedNext = { CHUA_BAT_DAU: ['DANG_THUC_HIEN'], DANG_THUC_HIEN: ['DANG_NGHIEM_THU'] };
-  const options = allowedNext[w.status] || [];
+  let nextOptions;
+  if (w.status === 'CHUA_BAT_DAU') {
+    nextOptions = [{ value: 'DANG_THUC_HIEN', label: '🔵 Bắt đầu thực hiện', requireNote: false }];
+  } else if (w.status === 'DANG_THUC_HIEN') {
+    nextOptions = [
+      { value: 'DANG_THUC_HIEN', label: '🔵 Vẫn đang thực hiện (cập nhật ghi chú tiến độ)', requireNote: true },
+      { value: 'DANG_NGHIEM_THU', label: '✅ Hoàn thành — Nộp nghiệm thu', requireNote: false }
+    ];
+  } else {
+    nextOptions = [];
+  }
   const select = document.getElementById('owiProgressNewStatus');
-  select.innerHTML = options.map(s => `<option value="${s}">${OPERATION_WORK_ITEM_NEXT_STATUS_LABEL[s] || s}</option>`).join('') || '<option value="">— Không còn bước tiếp theo —</option>';
+  select.innerHTML = nextOptions.map(o => `<option value="${o.value}" data-require-note="${o.requireNote ? '1' : ''}">${o.label}</option>`).join('')
+    || '<option value="">— Không còn bước tiếp theo —</option>';
   document.getElementById('owiProgressNote').value = '';
   document.getElementById('operationWorkItemProgressModal').classList.remove('hidden');
 }
@@ -2022,9 +2050,14 @@ function closeOperationWorkItemProgressModal() {
 }
 async function confirmOperationWorkItemProgress() {
   const id = currentOwiProgressItemId;
-  const newStatus = document.getElementById('owiProgressNewStatus').value;
+  const select = document.getElementById('owiProgressNewStatus');
+  const newStatus = select.value;
   if (!id || !newStatus) return alert('Không còn bước cập nhật nào tiếp theo cho công việc này.');
   const note = document.getElementById('owiProgressNote').value.trim();
+  const requireNote = select.selectedOptions[0]?.dataset.requireNote === '1';
+  if (requireNote && !note) {
+    return alert('⛔ Vui lòng nhập ghi chú tiến độ trước khi cập nhật!');
+  }
   await updateOperationWorkItemProgressAction(id, newStatus, note);
   closeOperationWorkItemProgressModal();
 }

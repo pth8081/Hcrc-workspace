@@ -529,10 +529,135 @@ async function main() {
       assert(result.completedAt, 'completedAt phải tự set');
     });
 
+    // ===== Đợt sửa "cập nhật tiến độ liên tục, không ép đổi trạng thái" (mirror ĐÚNG
+    // TASK_STATUS_TRANSITIONS/openTaskProgressModal() của module Công Việc — DOING: ['DOING', 'DONE']):
+    // trước đây modal "🔄 Cập Nhật Tiến Độ" ở DANG_THUC_HIEN CHỈ có 1 lựa chọn duy nhất là
+    // DANG_NGHIEM_THU ("Hoàn thành — Nộp nghiệm thu") — mỗi lần chỉ muốn ghi 1 dòng tiến độ (VD "đã xong
+    // 30%") ĐỀU bị ép chọn luôn hoàn thành, không có cách ghi tiến độ mà GIỮ NGUYÊN trạng thái. Nay thêm
+    // lựa chọn tự lặp lại DANG_THUC_HIEN (bắt buộc ghi chú), gọi được NHIỀU LẦN liên tiếp không đổi
+    // trạng thái — chỉ khi CHỦ ĐỘNG chọn "Hoàn thành" mới thực sự đổi, đúng yêu cầu người dùng. =====
+    let progressLeafId = null;
+    await run.run('Tạo 1 việc lá riêng + chuyển DANG_THUC_HIEN để test "cập nhật tiến độ liên tục"', async () => {
+      await loginAs(page, EXECUTOR);
+      progressLeafId = await page.evaluate(async ({ id, pid }) => {
+        const res = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null,
+          title: 'Việc lá test cập nhật tiến độ liên tục', periodId: pid
+        });
+        DB.operationWorkItems.push(res.item);
+        const r = await callRecordAction('operationWorkItems', res.item.id, 'progress', { status: 'DANG_THUC_HIEN' });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === res.item.id);
+        DB.operationWorkItems[idx] = r.item;
+        return res.item.id;
+      }, { id: recordId, pid: periodId });
+      assert(progressLeafId, 'Phải tạo được việc lá test riêng');
+    });
+
+    await run.run('DANG_THUC_HIEN: modal "Cập Nhật Tiến Độ" có ĐÚNG 2 lựa chọn (tự lặp lại bắt buộc ghi chú + Hoàn thành không bắt buộc), cập nhật NHIỀU LẦN liên tiếp KHÔNG đổi trạng thái, chỉ đổi khi chủ động chọn Hoàn thành', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(async ({ kind, id, leafId }) => {
+        const findRow = () => [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Việc lá test cập nhật tiến độ liên tục'));
+        window.__alerts = [];
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        findRow().querySelector('[data-op="openOperationWorkItemProgressModal"]').click();
+        const statusOptions = [...document.getElementById('owiProgressNewStatus').options].map(o => o.value);
+        const requireNoteFlags = [...document.getElementById('owiProgressNewStatus').options].map(o => o.dataset.requireNote === '1');
+
+        // 1) Chọn tự lặp lại nhưng BỎ TRỐNG ghi chú -> phải bị chặn, modal vẫn mở, trạng thái không đổi.
+        document.getElementById('owiProgressNewStatus').value = 'DANG_THUC_HIEN';
+        document.getElementById('owiProgressNote').value = '';
+        document.getElementById('operationWorkItemProgressModal').querySelector('[data-op="confirmOperationWorkItemProgress"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        const alertsAfterEmptyNote = window.__alerts.slice();
+        const modalStillOpenAfterEmptyNote = !document.getElementById('operationWorkItemProgressModal').classList.contains('hidden');
+        const statusAfterEmptyNoteAttempt = DB.operationWorkItems.find(w => w.id === leafId).status;
+
+        // 2) Lần 1: nhập ghi chú, chọn tự lặp lại -> status GIỮ NGUYÊN, thêm 1 dòng history.
+        document.getElementById('owiProgressNote').value = 'Đã hoàn thành 30% (test UI)';
+        document.getElementById('operationWorkItemProgressModal').querySelector('[data-op="confirmOperationWorkItemProgress"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        const itemAfterFirst = { ...DB.operationWorkItems.find(w => w.id === leafId) };
+        itemAfterFirst.historyLen = itemAfterFirst.history.length;
+        itemAfterFirst.lastNote = itemAfterFirst.history[itemAfterFirst.history.length - 1]?.note;
+
+        // 3) Lần 2: mở lại modal, tự lặp lại LẦN NỮA với ghi chú khác -> vẫn GIỮ NGUYÊN trạng thái.
+        findRow().querySelector('[data-op="openOperationWorkItemProgressModal"]').click();
+        document.getElementById('owiProgressNewStatus').value = 'DANG_THUC_HIEN';
+        document.getElementById('owiProgressNote').value = 'Đã hoàn thành 60% (test UI, lần 2)';
+        document.getElementById('operationWorkItemProgressModal').querySelector('[data-op="confirmOperationWorkItemProgress"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        const itemAfterSecond = { ...DB.operationWorkItems.find(w => w.id === leafId) };
+        itemAfterSecond.historyLen = itemAfterSecond.history.length;
+        itemAfterSecond.lastNote = itemAfterSecond.history[itemAfterSecond.history.length - 1]?.note;
+
+        // 4) Cuối cùng: chủ động chọn "Hoàn thành — Nộp nghiệm thu" -> ĐỔI hẳn trạng thái.
+        findRow().querySelector('[data-op="openOperationWorkItemProgressModal"]').click();
+        document.getElementById('owiProgressNewStatus').value = 'DANG_NGHIEM_THU';
+        document.getElementById('owiProgressNote').value = '';
+        document.getElementById('operationWorkItemProgressModal').querySelector('[data-op="confirmOperationWorkItemProgress"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        const itemAfterComplete = DB.operationWorkItems.find(w => w.id === leafId);
+
+        closeOperationWorkItemModal();
+        return {
+          statusOptions, requireNoteFlags, alertsAfterEmptyNote, modalStillOpenAfterEmptyNote, statusAfterEmptyNoteAttempt,
+          itemAfterFirst, itemAfterSecond,
+          statusAfterComplete: itemAfterComplete.status, completedAtAfterComplete: itemAfterComplete.completedAt
+        };
+      }, { kind: 'operationStoreOpenings', id: recordId, leafId: progressLeafId });
+
+      assertEqual(result.statusOptions.length, 2, 'DANG_THUC_HIEN phải có ĐÚNG 2 lựa chọn (tự lặp lại + Hoàn thành), giống DOING của module Công Việc (TASK_STATUS_TRANSITIONS.DOING)');
+      assertEqual(result.statusOptions[0], 'DANG_THUC_HIEN', 'Lựa chọn đầu phải là tự lặp lại (cập nhật ghi chú tiến độ, KHÔNG đổi trạng thái)');
+      assertEqual(result.statusOptions[1], 'DANG_NGHIEM_THU', 'Lựa chọn thứ 2 phải là Hoàn thành — Nộp nghiệm thu');
+      assert(result.requireNoteFlags[0], 'Lựa chọn tự lặp lại phải bắt buộc nhập ghi chú (mirror requireNote:true của Task)');
+      assert(!result.requireNoteFlags[1], 'Lựa chọn Hoàn thành KHÔNG bắt buộc ghi chú (mirror Task)');
+
+      assert(result.modalStillOpenAfterEmptyNote, 'Modal phải VẪN MỞ khi bỏ trống ghi chú bắt buộc (chưa submit được)');
+      assert(result.alertsAfterEmptyNote.some(a => a.includes('ghi chú tiến độ')), 'Phải cảnh báo yêu cầu nhập ghi chú tiến độ khi chọn tự lặp lại mà bỏ trống');
+      assertEqual(result.statusAfterEmptyNoteAttempt, 'DANG_THUC_HIEN', 'Trạng thái KHÔNG được đổi khi bị chặn thiếu ghi chú');
+
+      assertEqual(result.itemAfterFirst.status, 'DANG_THUC_HIEN', 'Sau lần cập nhật tiến độ ĐẦU TIÊN, trạng thái phải GIỮ NGUYÊN Đang thực hiện — không còn bị ép đổi trạng thái mỗi lần cập nhật');
+      assertEqual(result.itemAfterFirst.lastNote, 'Đã hoàn thành 30% (test UI)', 'Ghi chú tiến độ lần 1 phải được lưu vào history');
+
+      assertEqual(result.itemAfterSecond.status, 'DANG_THUC_HIEN', 'Sau lần cập nhật tiến độ THỨ HAI (liên tiếp), trạng thái vẫn GIỮ NGUYÊN — xác nhận cập nhật ĐƯỢC NHIỀU LẦN cho đến khi thực sự hoàn thành, đúng yêu cầu người dùng');
+      assertEqual(result.itemAfterSecond.lastNote, 'Đã hoàn thành 60% (test UI, lần 2)', 'Ghi chú tiến độ lần 2 phải là dòng MỚI (không ghi đè lần 1)');
+      assert(result.itemAfterSecond.historyLen > result.itemAfterFirst.historyLen, 'Mỗi lần cập nhật tiến độ phải ghi thêm đúng 1 dòng history mới');
+
+      assertEqual(result.statusAfterComplete, 'DANG_NGHIEM_THU', 'Chỉ khi CHỦ ĐỘNG chọn "Hoàn thành — Nộp nghiệm thu" thì trạng thái mới thực sự đổi (tách bạch cập nhật tiến độ khỏi đổi trạng thái, mirror module Công Việc)');
+      assert(result.completedAtAfterComplete, 'completedAt phải tự set khi thực sự chuyển Hoàn thành');
+    });
+
+    let progressOnlyServerLeafId = null;
+    await run.run('Server: allowedNext DANG_THUC_HIEN cho phép tự lặp lại chính nó (progress-only) qua callRecordAction trực tiếp, không chỉ qua UI', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(async ({ id, pid }) => {
+        const res = await callRecordCreate('operationWorkItems', {
+          sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null,
+          title: 'Việc lá test progress-only server', periodId: pid
+        });
+        DB.operationWorkItems.push(res.item);
+        await callRecordAction('operationWorkItems', res.item.id, 'progress', { status: 'DANG_THUC_HIEN' });
+        const r1 = await callRecordAction('operationWorkItems', res.item.id, 'progress', { status: 'DANG_THUC_HIEN', note: 'Ghi chú tiến độ 1' });
+        const r2 = await callRecordAction('operationWorkItems', res.item.id, 'progress', { status: 'DANG_THUC_HIEN', note: 'Ghi chú tiến độ 2' });
+        return { id: res.item.id, status1: r1.item.status, status2: r2.item.status, historyLen: r2.item.history.length };
+      }, { id: recordId, pid: periodId });
+      progressOnlyServerLeafId = result.id;
+      assertEqual(result.status1, 'DANG_THUC_HIEN', 'Server phải chấp nhận tự lặp lại DANG_THUC_HIEN -> DANG_THUC_HIEN (progress-only)');
+      assertEqual(result.status2, 'DANG_THUC_HIEN', 'Gọi tiếp lần 2 vẫn phải chấp nhận, trạng thái vẫn giữ nguyên');
+      assert(result.historyLen >= 3, 'Mỗi lần gọi progress-only phải ghi thêm 1 dòng history (CREATED + STATUS_DANG_THUC_HIEN x2)');
+    });
+
     await run.run('Correction 3: dọn việc lá test UI (xoá) — không ảnh hưởng cascade của rootWorkItemId (child1/child2) ở các bước sau', async () => {
       await loginAs(page, EXECUTOR);
-      await page.evaluate((id) => { DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id); }, uiTestLeafId);
-      await page.evaluate(async (id) => { await callRecordAction('operationWorkItems', id, 'delete', {}); }, uiTestLeafId);
+      // Dọn cả 3 việc lá test riêng ở trên (uiTestLeafId, progressLeafId, progressOnlyServerLeafId) —
+      // KHÔNG được để sót vì gate "Đưa vào sử dụng" (Phần B bên dưới) đòi TOÀN BỘ cây của recordId đã
+      // "Đã nghiệm thu" (DA_NGHIEM_THU) — 3 việc lá này chỉ dừng ở DANG_NGHIEM_THU/DANG_THUC_HIEN, chưa
+      // ai nghiệm thu, sẽ chặn nhầm gate đó nếu còn tồn tại trong cây.
+      const cleanupIds = [uiTestLeafId, progressLeafId, progressOnlyServerLeafId].filter(id => id != null);
+      await page.evaluate((ids) => { DB.operationWorkItems = DB.operationWorkItems.filter(w => !ids.includes(w.id)); }, cleanupIds);
+      for (const id of cleanupIds) {
+        await page.evaluate(async (id) => { await callRecordAction('operationWorkItems', id, 'delete', {}); }, id);
+      }
     });
 
     // ===== 7) Chặn cập nhật trực tiếp việc CÓ CON =====
@@ -988,6 +1113,25 @@ async function main() {
       assertEqual(await statusOf(itemB), 'DANG_THUC_HIEN', 'B phải vẫn DANG_THUC_HIEN vì C2 chưa xong (không được nhảy sớm)');
     });
 
+    // ===== Đợt sửa Part B (gating hiển thị "Hoàn thành" cho việc CHA): xác nhận dòng việc CHA (B, còn
+    // con C2 dở) ở CẢ 2 chế độ EXECUTION/ACCEPTANCE vẫn hiện đúng thông báo "Tự cập nhật theo việc con"
+    // (CHƯA hoàn thành) — không lẫn với thông báo "Đã tự động hoàn thành" chỉ dành cho lúc TẤT CẢ con đã
+    // xong. Đây là bằng chứng UI đúng "đầu mục lớn còn việc con thì CHƯA thấy hoàn thành". =====
+    await run.run('Part B: dòng việc CHA (B, còn C2 dở) ở EXECUTION mode hiện "Tự cập nhật theo việc con" (chưa hoàn thành), KHÔNG có nút Cập Nhật Tiến Độ/Hoàn Thành', async () => {
+      await loginAs(page, EXECUTOR);
+      const html = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('B - con A, cha C1/C2'));
+        const actionsHtml = row ? row.querySelector('td:last-child').innerHTML : null;
+        closeOperationWorkItemModal();
+        return actionsHtml;
+      }, { kind: 'operationStoreOpenings', id: cascadeRecordId });
+      assert(html !== null, 'Phải tìm thấy dòng B trong bảng Thực hiện');
+      assert(!html.includes('openOperationWorkItemProgressModal'), 'B (có con) KHÔNG được có nút Cập Nhật Tiến Độ dù đang xem ở EXECUTION mode');
+      assertIncludes(html, 'Tự cập nhật theo việc con', 'B còn C2 dở phải hiện "Tự cập nhật theo việc con" (CHƯA hoàn thành)');
+      assert(!html.includes('Đã tự động hoàn thành'), 'B CHƯA được hiện thông báo "Đã tự động hoàn thành" khi còn con (C2) chưa xong');
+    });
+
     await run.run('Correction 1: hoàn thành nốt C2 — B TỰ ĐỘNG "hoàn thành" (DANG_NGHIEM_THU), completedAt tự set — ĐÚNG "cv con hoàn thành sẽ tự động hoàn thành cv cha"', async () => {
       await loginAs(page, EXECUTOR);
       await progressLeaf(itemC2, 'DANG_NGHIEM_THU');
@@ -995,6 +1139,20 @@ async function main() {
       assertEqual(b.status, 'DANG_NGHIEM_THU', 'B phải TỰ ĐỘNG chuyển "Đang nghiệm thu" (= hoàn thành) khi CẢ 2 con (C1, C2) đều đã hoàn thành');
       assert(b.completedAt, 'B (cascade tự động) cũng phải tự set completedAt như 1 việc lá tự nộp nghiệm thu');
       assertEqual(await statusOf(itemA), 'DANG_THUC_HIEN', 'A (ông) chỉ mới có 1/2 con trực tiếp (B) hoàn thành — B2 còn dở — CHƯA được cascade tiếp lên A');
+    });
+
+    await run.run('Part B: B đã cascade DANG_NGHIEM_THU (hoàn thành THỰC HIỆN) nhưng CHƯA "Đã nghiệm thu" — tab Nghiệm Thu vẫn hiện "Tự cập nhật theo việc con" (CHƯA hiện thông báo đã hoàn thành nghiệm thu)', async () => {
+      await loginAs(page, ACCEPTOR);
+      const html = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'ACCEPTANCE');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('B - con A, cha C1/C2'));
+        const actionsHtml = row ? row.querySelector('td:last-child').innerHTML : null;
+        closeOperationWorkItemModal();
+        return actionsHtml;
+      }, { kind: 'operationStoreOpenings', id: cascadeRecordId });
+      assert(html !== null, 'Phải tìm thấy dòng B trong bảng Nghiệm Thu');
+      assertIncludes(html, 'Tự cập nhật theo việc con', 'B mới "hoàn thành thực hiện" (DANG_NGHIEM_THU), CHƯA "Đã nghiệm thu" -> tab Nghiệm Thu vẫn hiện thông báo tự cập nhật (CHƯA hoàn thành nghiệm thu)');
+      assert(!html.includes('Đã tự động hoàn thành'), 'CHƯA được hiện "Đã tự động hoàn thành nghiệm thu" vì B chưa DA_NGHIEM_THU');
     });
 
     await run.run('Correction 1: hoàn thành B2 (con trực tiếp còn lại của A) — A (ông, cách 2 cấp) TỰ ĐỘNG "hoàn thành" — xác nhận đệ quy đúng 3 cấp', async () => {
@@ -1031,6 +1189,47 @@ async function main() {
       }, itemC2);
       assertEqual(await statusOf(itemB), 'DA_NGHIEM_THU', 'B phải TỰ ĐỘNG "Đã nghiệm thu" khi CẢ C1 lẫn C2 đều đã được nghiệm thu — bỏ qua bước nghiệm thu riêng cho B');
       assertEqual(await statusOf(itemA), 'DANG_NGHIEM_THU', 'A vẫn "Đang nghiệm thu" — B2 (con trực tiếp còn lại) chưa được nghiệm thu, CHƯA cascade tiếp lên A');
+    });
+
+    // ===== Part B (đúng yêu cầu người dùng): "đầu mục lớn có con — sau khi TẤT CẢ con hoàn thành thì
+    // mục lớn MỚI hiện hoàn thành". B giờ đã tự cascade DA_NGHIEM_THU (TẤT CẢ con — C1, C2 — đã nghiệm
+    // thu xong) — dòng B ở CẢ 2 chế độ giờ phải hiện RÕ đã hoàn thành (khác thông báo "chưa hoàn thành"
+    // vẫn dùng khi còn con dở, xem 2 test Part B ở trên) — hoàn toàn TỰ ĐỘNG, không cần/không thể bấm gì
+    // (server luôn 409 thao tác tay trên việc cha có con, xem "Fix 1" test ở dưới) — KHÔNG có nút nào cho
+    // phép bấm tay việc B dù đã "hoàn thành" thật. =====
+    await run.run('Part B: B đã cascade DA_NGHIEM_THU (TẤT CẢ con đã nghiệm thu xong) — dòng B ở CẢ EXECUTION lẫn ACCEPTANCE mode giờ hiện RÕ "Đã tự động hoàn thành", vẫn KHÔNG có nút bấm tay nào', async () => {
+      await loginAs(page, ACCEPTOR);
+      const htmlAcceptance = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'ACCEPTANCE');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('B - con A, cha C1/C2'));
+        const actionsHtml = row ? row.querySelector('td:last-child').innerHTML : null;
+        closeOperationWorkItemModal();
+        return actionsHtml;
+      }, { kind: 'operationStoreOpenings', id: cascadeRecordId });
+      assert(htmlAcceptance !== null, 'Phải tìm thấy dòng B trong bảng Nghiệm Thu');
+      assert(!htmlAcceptance.includes('openOperationAcceptanceActionModal'), 'B (có con, dù đã Đã nghiệm thu) vẫn KHÔNG được có nút Nghiệm Thu/Bổ Sung bấm tay');
+      assertIncludes(htmlAcceptance, 'Đã tự động hoàn thành', 'B đã DA_NGHIEM_THU (mọi con xong) -> tab Nghiệm Thu phải hiện rõ đã hoàn thành, khác câu "Tự cập nhật theo việc con" lúc còn dở');
+
+      await loginAs(page, EXECUTOR);
+      const htmlExecution = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('B - con A, cha C1/C2'));
+        const actionsHtml = row ? row.querySelector('td:last-child').innerHTML : null;
+        closeOperationWorkItemModal();
+        return actionsHtml;
+      }, { kind: 'operationStoreOpenings', id: cascadeRecordId });
+      assert(htmlExecution !== null, 'Phải tìm thấy dòng B trong bảng Thực hiện');
+      assert(!htmlExecution.includes('openOperationWorkItemProgressModal'), 'B (có con, đã Đã nghiệm thu) vẫn KHÔNG được có nút Cập Nhật Tiến Độ');
+      assertIncludes(htmlExecution, 'Đã tự động hoàn thành', 'Tab Thực hiện cũng phải hiện rõ B đã hoàn thành (trước đây KHÔNG hiện gì cả khi DA_NGHIEM_THU, dễ hiểu lầm chưa xong)');
+
+      // Server vẫn 409 nếu cố nghiệm thu tay B dù đã "Đã nghiệm thu" xong — xác nhận UI không hiện nút
+      // gì mà server lại chấp nhận (tránh lệch client/server), và server cũng không chấp nhận nghiệm thu
+      // lại 1 việc ĐÃ nghiệm thu xong (status !== DANG_NGHIEM_THU).
+      const serverResult = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Cố nghiệm thu tay' }); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, itemB);
+      assert(!serverResult.ok, 'Server vẫn phải chặn nghiệm thu tay việc B (có con) dù đã Đã nghiệm thu tự động — khớp UI không hiện nút nào');
     });
 
     await run.run('Correction 1: nghiệm thu nốt B2 — A (ông) TỰ ĐỘNG "nghiệm thu xong" — xác nhận đệ quy auto-nghiệm-thu đúng 3 cấp, rồi gate "Đưa vào sử dụng" MỞ KHOÁ', async () => {

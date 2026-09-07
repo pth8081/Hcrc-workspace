@@ -733,9 +733,14 @@ function updateOperationWorkItemProgress(user, item, children, newStatus, note) 
   if (item.status === 'DA_NGHIEM_THU') {
     throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa lại');
   }
+  // Mirror ĐÚNG TASK_STATUS_TRANSITIONS (module Công Việc, xem updateTaskStatusAction()): DANG_THUC_HIEN
+  // được PHÉP tự lặp lại chính nó — "cập nhật tiến độ" (chỉ ghi thêm 1 dòng history + ghi chú, KHÔNG đổi
+  // status) không còn bắt ép phải chọn luôn DANG_NGHIEM_THU mới lưu được, đúng yêu cầu "cập nhật liên
+  // tục cho đến khi hoàn thành thì mới đổi trạng thái" giống module Công Việc. CHUA_BAT_DAU KHÔNG tự lặp
+  // (giống TODO của Task — chưa bắt đầu thì chưa có gì để ghi tiến độ).
   const allowedNext = {
     CHUA_BAT_DAU: ['DANG_THUC_HIEN'],
-    DANG_THUC_HIEN: ['DANG_NGHIEM_THU']
+    DANG_THUC_HIEN: ['DANG_THUC_HIEN', 'DANG_NGHIEM_THU']
   };
   if (!(allowedNext[item.status] || []).includes(newStatus)) {
     throw new HttpError(409, `Không thể chuyển trạng thái từ "${item.status}" sang "${newStatus}"`);

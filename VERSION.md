@@ -1,11 +1,53 @@
 # Phiên bản hiện tại
 
-**10.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này — gộp cả **10.3**–**10.6** vào `main`
-1 lượt (bản merge trước đó vào `main` là **10.2**). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR`
-(không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+**10.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
+`MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## Tạo 2 file hướng dẫn sống `deploy/Huong-dan-nghiep-vu.md` + `deploy/Huong-dan-trien-khai.md`, dời `HUONG_DAN_DEPLOY_UBUNTU.md` (2026-09-07)
+## Vận Hành > Siêu Thị > Thực Hiện: cập nhật tiến độ liên tục không ép đổi trạng thái + làm rõ trạng thái "đầu mục lớn" tự hoàn thành theo việc con (2026-09-07)
+
+**Yêu cầu gốc**: "kiểm tra Thực hiện trong siêu thị, muốn cập nhật công việc liên tục cho đến khi hoàn
+thành thì mới đổi trạng thái giống công việc trong module điều hành. Nếu đầu mục lớn mà có việc còn thì
+sau khi tất cả cv con hoàn thành thì mục lớn mới hiện và ấn hoàn thành được, các mục khác ko đổi."
+
+**Phần A (gap THẬT — đã sửa)**: modal "🔄 Cập Nhật Tiến Độ" của `operationWorkItems` (Vận Hành > 🏬 Siêu
+Thị > Thực Hiện) khi đang `DANG_THUC_HIEN` trước đây CHỈ có ĐÚNG 1 lựa chọn duy nhất —
+`DANG_NGHIEM_THU` ("Hoàn thành — Nộp nghiệm thu") — khác hẳn modal "Cập Nhật Tiến Độ" của module Công
+Việc công ty (`#taskProgressModal`, `TASK_STATUS_TRANSITIONS.DOING = ['DOING', 'DONE']`) vốn cho phép
+DOING tự lặp lại chính nó (chỉ ghi thêm ghi chú tiến độ, KHÔNG đổi trạng thái). Hệ quả: mỗi lần chỉ
+muốn ghi 1 dòng tiến độ (VD "đã xong 30%") đều bị ép chọn luôn "hoàn thành", không có cách ghi tiến độ
+mà giữ nguyên trạng thái — đúng gap người dùng mô tả. Đã sửa mirror ĐÚNG mẫu Task:
+- `lib/recordActions.js` `updateOperationWorkItemProgress()`: `allowedNext.DANG_THUC_HIEN` nay là
+  `['DANG_THUC_HIEN', 'DANG_NGHIEM_THU']` (trước chỉ `['DANG_NGHIEM_THU']`) — tự lặp lại chính nó hợp lệ.
+- `public/js/module-vanhanh.js` `openOperationWorkItemProgressModal()`/`confirmOperationWorkItemProgress()`:
+  dropdown ở `DANG_THUC_HIEN` nay có 2 lựa chọn — "Vẫn đang thực hiện (cập nhật ghi chú tiến độ)" (tự lặp
+  lại, BẮT BUỘC ghi chú) và "Hoàn thành — Nộp nghiệm thu" (đổi hẳn trạng thái, không bắt buộc ghi chú) —
+  người dùng CHỦ ĐỘNG chọn, gọi được nhiều lần liên tiếp không đổi trạng thái, chỉ đổi khi thực sự chọn
+  Hoàn thành. Nút tắt "✅ Hoàn Thành" (ngoài modal) và `CHUA_BAT_DAU` (chỉ 1 lựa chọn "Bắt đầu thực
+  hiện", không tự lặp — mirror TODO của Task) giữ nguyên không đổi.
+
+**Phần B (đã ĐÚNG từ trước — không phải bug, chỉ làm rõ UI)**: kiểm tra kỹ `lib/recordActions.js`
+(`updateOperationWorkItemProgress()`/`acceptOperationWorkItem()`) + `routes/records.js`
+(`syncOperationWorkItemAncestors()`, đệ quy lên hết các cấp cha) xác nhận: 1 việc CÓ CON không bao giờ
+được cập nhật/nghiệm thu BẰNG TAY (chặn 409 tuyệt đối, KHÔNG điều kiện theo trạng thái con) — trạng thái
+việc cha LUÔN được tính lại và cập nhật TỰ ĐỘNG (`computeParentWorkItemStatus()`) ngay khi có con đổi
+trạng thái, cascade đệ quy đúng qua mọi cấp (đã có test `test-operation-store-lifecycle.js` xác nhận
+cascade 3 cấp hoạt động đúng từ trước). Vì vậy yêu cầu "sau khi tất cả cv con hoàn thành thì mục lớn mới
+hiện hoàn thành" ĐÃ được thoả mãn — nhưng HOÀN TOÀN TỰ ĐỘNG (không cần/không thể bấm gì, đưa 1 nút bấm
+"Hoàn Thành" cho việc cha sẽ mâu thuẫn với chặn 409 tuyệt đối này và gây lệch client/server). Cái THIẾU
+chỉ là UI: dòng việc CHA (có con) trước đây LUÔN hiện đúng 1 câu "Tự cập nhật theo việc con" — kể cả khi
+cha ĐÃ TỰ hoàn thành xong (dễ hiểu lầm "chưa xong gì"). Đã sửa `buildOperationWorkItemRow()` (cả
+EXECUTION lẫn ACCEPTANCE mode, `module-vanhanh.js`) để phân biệt rõ 2 trạng thái: còn con dở → vẫn câu cũ;
+TẤT CẢ con đã xong (cha tự cascade `DA_NGHIEM_THU`) → hiện rõ "✅ Đã tự động hoàn thành (theo việc con)"
+— vẫn không có nút bấm nào (khớp đúng chặn 409 server).
+
+Không đổi field/bảng SQL, không thêm API route mới — chỉ sửa logic hiển thị + nới đúng 1 transition tự
+lặp lại ở `allowedNext`. Kiểm thử: mở rộng `test-operation-store-lifecycle.js` (thêm ~10 kịch bản: dropdown
+2 lựa chọn + bắt buộc ghi chú + cập nhật liên tục 2 lần không đổi trạng thái + progress-only qua server
+trực tiếp + UI hiện đúng "chưa hoàn thành"/"đã tự động hoàn thành" ở cả 2 chế độ), 73/73 kịch bản file này
+PASS; chạy lại toàn bộ 69 file `test-*.js`, không phát sinh lỗi mới so với baseline.
+
+## Trước đó — Tạo 2 file hướng dẫn sống `deploy/Huong-dan-nghiep-vu.md` + `deploy/Huong-dan-trien-khai.md`, dời `HUONG_DAN_DEPLOY_UBUNTU.md` (2026-09-07)
 
 **Yêu cầu gốc**: theo quy ước mới ghi ở `CLAUDE.md` (2 file hướng dẫn sống trong `vpdt-pms/deploy/`,
 cập nhật liên tục theo từng thay đổi nghiệp vụ/triển khai từ nay về sau) — tạo phiên bản ĐẦU TIÊN của cả

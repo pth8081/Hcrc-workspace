@@ -254,6 +254,22 @@ với "Tổng Hợp"):
   thẳng trạng thái đã duyệt ngay lúc tạo; màn cấu hình quy trình duyệt phòng
   ban cho 2 luồng này vẫn còn ở Hệ Thống → Quy Trình & Phê Duyệt nhưng không
   có đường xử lý nào thực sự tiêu thụ cấu hình đó nữa.
+  - **Cây công việc Thực hiện/Nghiệm thu, cập nhật tiến độ (từ v10.7)**: mỗi
+    công việc LÁ (không có việc con) có nút "🔄 Cập Nhật Tiến Độ" mirror ĐÚNG
+    UX modal "Cập Nhật Tiến Độ" của module Công Việc công ty — khi đang "Đang
+    thực hiện", dropdown có 2 lựa chọn: "Vẫn đang thực hiện" (chỉ ghi thêm 1
+    dòng ghi chú tiến độ, BẮT BUỘC nhập ghi chú, KHÔNG đổi trạng thái — gọi
+    được nhiều lần liên tiếp) hoặc "Hoàn thành — Nộp nghiệm thu" (đổi hẳn sang
+    "Đang nghiệm thu"). Chỉ khi CHỦ ĐỘNG chọn vế sau trạng thái mới thực sự
+    đổi — không còn bị ép chọn "hoàn thành" mỗi lần chỉ muốn ghi tiến độ.
+  - **Công việc CÓ việc con** (đầu mục lớn) không bao giờ tự tay cập nhật/
+    nghiệm thu được (server luôn từ chối) — trạng thái LUÔN tính lại và
+    chuyển TỰ ĐỘNG theo con: khi tất cả con đã "hoàn thành" cha tự chuyển
+    "Đang nghiệm thu", khi tất cả con đã "Đã nghiệm thu" cha tự chuyển "Đã
+    nghiệm thu" — đúng nhiều cấp (cháu → con → cha → ông...). Dòng của đầu
+    mục lớn hiện "Tự cập nhật theo việc con" khi còn con dở, và đổi thành
+    "✅ Đã tự động hoàn thành (theo việc con)" ngay khi tự hoàn thành xong —
+    hoàn toàn tự động, không có/không cần nút bấm tay nào cho đầu mục lớn.
 
 ### 3.6. Hỗ Trợ IT
 
