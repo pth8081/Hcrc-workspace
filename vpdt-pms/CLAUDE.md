@@ -1,5 +1,21 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## 2 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
+
+Có 2 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:
+- **`Huong-dan-nghiep-vu.md`** — mô tả nghiệp vụ + hướng dẫn sử dụng/cấu hình
+  các tính năng nghiệp vụ, API, báo cáo của ứng dụng.
+- **`Huong-dan-trien-khai.md`** — hướng dẫn triển khai ứng dụng lên hệ thống
+  production (server thật, SQL Server, PM2/systemd, tài khoản hệ thống...).
+
+**Quy ước bắt buộc từ nay về sau**: bất kỳ lần nào hoàn thành một thay đổi có
+liên quan tới **nghiệp vụ** (module mới, luồng phê duyệt mới, cấu hình API/
+báo cáo mới...) → cập nhật vào `Huong-dan-nghiep-vu.md`. Bất kỳ lần nào có
+thay đổi liên quan tới **triển khai/hạ tầng** (biến môi trường mới, bước cài
+đặt mới, thay đổi cách chạy production...) → cập nhật vào
+`Huong-dan-trien-khai.md`. Không bỏ qua bước này chỉ vì thay đổi nhỏ — giữ 2
+file này luôn phản ánh đúng trạng thái hiện tại của ứng dụng.
+
 ## Repo GitHub đã đổi tên (không phải chuyển repo khác)
 
 `git push` tới remote cũ (`github.com/pth8081/vpdt-dms`) có thể trả về thông
