@@ -627,6 +627,28 @@ async function main() {
       assert(result.completedAtAfterComplete, 'completedAt phải tự set khi thực sự chuyển Hoàn thành');
     });
 
+    // ===== Bug thật phát hiện lúc audit Nghiệm Thu (đợt sau cb5e2b4): 2 dòng ghi chú "cập nhật tiến độ
+    // liên tục" vừa ghi ở test ngay trên (30%/60%) KHÔNG CÓ NƠI NÀO hiển thị lại trước bản sửa này — cả
+    // tính năng "cập nhật tiến độ liên tục" mới thêm ở cb5e2b4 thực chất vô nghĩa nếu không ai đọc lại
+    // được ghi chú đã ghi. Xác nhận nút "📜" (EXECUTION) hiện đúng CẢ 2 dòng ghi chú theo đúng thứ tự. =====
+    await run.run('Fix: nút "📜" (EXECUTION) mở lịch sử hiện đủ CẢ 2 dòng ghi chú tiến độ liên tục (30%/60%) vừa ghi ở test ngay trên', async () => {
+      await loginAs(page, EXECUTOR);
+      const result = await page.evaluate(({ kind, id, leafId }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.querySelector(`[data-id="${leafId}"][data-op="openOperationWorkItemHistoryModal"]`));
+        const hasButton = !!row;
+        openOperationWorkItemHistoryModal(leafId);
+        const bodyHtml = document.getElementById('operationWorkItemHistoryModalBody').innerHTML;
+        closeOperationWorkItemHistoryModal();
+        closeOperationWorkItemModal();
+        return { hasButton, bodyHtml };
+      }, { kind: 'operationStoreOpenings', id: recordId, leafId: progressLeafId });
+      assert(result.hasButton, 'Dòng công việc (EXECUTION) phải có nút "📜" xem lịch sử');
+      assertIncludes(result.bodyHtml, 'Đã hoàn thành 30% (test UI)', 'Bảng lịch sử phải hiện đúng ghi chú tiến độ lần 1 — TRƯỚC BẢN SỬA các ghi chú "cập nhật liên tục" này không nơi nào đọc lại được');
+      assertIncludes(result.bodyHtml, 'Đã hoàn thành 60% (test UI, lần 2)', 'Bảng lịch sử phải hiện đúng ghi chú tiến độ lần 2 (dòng riêng, không ghi đè lần 1)');
+      assertIncludes(result.bodyHtml, 'STATUS_DANG_THUC_HIEN', 'Bảng lịch sử phải hiện đúng tên hành động ghi trong history (mirror nguyên văn h.action như module Công Việc)');
+    });
+
     let progressOnlyServerLeafId = null;
     await run.run('Server: allowedNext DANG_THUC_HIEN cho phép tự lặp lại chính nó (progress-only) qua callRecordAction trực tiếp, không chỉ qua UI', async () => {
       await loginAs(page, EXECUTOR);
@@ -762,6 +784,33 @@ async function main() {
       }, child1Id);
       assert(!result.ok, 'Phải bị chặn khi không nhập lý do');
       assertIncludes(result.message, 'lý do', 'Thông báo lỗi phải nêu rõ cần lý do');
+    });
+
+    // ===== 13b) Bug thật phát hiện lúc audit Nghiệm Thu (đợt sau cb5e2b4): item.history (ghi chú "cập
+    // nhật tiến độ liên tục" của EXECUTION + lý do bắt buộc của "🔄 Bổ Sung"/"✅ Nghiệm Thu" ACCEPTANCE)
+    // được ghi vào DB nhưng KHÔNG CÓ NƠI NÀO đọc lại được trong UI — khác hẳn module Công Việc
+    // (module-congviec.js, bảng lịch sử #taskDetailContent) là bản mirror gốc. Đã thêm nút "📜" (mở
+    // operationWorkItemHistoryModal, xem module-vanhanh.js) hiện ở MỌI dòng cả 2 mode — test dưới đây xác
+    // nhận bấm nút này lên ĐÚNG việc con 1 (vừa REQUEST_INFO ở test 12) hiện đúng lý do đã ghi.
+    await run.run('Fix: nút "📜" (ACCEPTANCE) mở lịch sử hiện đúng REQUEST_INFO + lý do vừa ghi ở test 12 — trước bản sửa KHÔNG có nơi nào xem lại được', async () => {
+      await loginAs(page, ACCEPTOR);
+      const result = await page.evaluate(({ kind, id, leafId }) => {
+        openOperationWorkItemModal(kind, id, 'ACCEPTANCE');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.querySelector(`[data-id="${leafId}"][data-op="openOperationWorkItemHistoryModal"]`));
+        const hasButton = !!row;
+        openOperationWorkItemHistoryModal(leafId);
+        const bodyHtml = document.getElementById('operationWorkItemHistoryModalBody').innerHTML;
+        const modalVisible = !document.getElementById('operationWorkItemHistoryModal').classList.contains('hidden');
+        closeOperationWorkItemHistoryModal();
+        const modalHiddenAfterClose = document.getElementById('operationWorkItemHistoryModal').classList.contains('hidden');
+        closeOperationWorkItemModal();
+        return { hasButton, bodyHtml, modalVisible, modalHiddenAfterClose };
+      }, { kind: 'operationStoreOpenings', id: recordId, leafId: child1Id });
+      assert(result.hasButton, 'Dòng công việc (ACCEPTANCE) phải có nút "📜" xem lịch sử (data-op="openOperationWorkItemHistoryModal")');
+      assert(result.modalVisible, 'Modal lịch sử phải hiện ra sau khi bấm nút');
+      assertIncludes(result.bodyHtml, 'REQUEST_INFO', 'Bảng lịch sử phải hiện đúng hành động REQUEST_INFO đã ghi ở test 12');
+      assertIncludes(result.bodyHtml, 'Chưa đúng màu sơn, làm lại', 'Bảng lịch sử phải hiện đúng lý do đã nhập lúc Bổ Sung — TRƯỚC BẢN SỬA lý do bắt buộc nhập này biến mất vĩnh viễn, không nơi nào đọc lại được');
+      assert(result.modalHiddenAfterClose, 'Modal lịch sử phải ẩn lại sau khi đóng');
     });
 
     // ===== 14) Người không có quyền VÀ không phải người được chỉ định bị chặn nghiệm thu =====

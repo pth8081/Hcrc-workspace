@@ -1,8 +1,53 @@
 # Phiên bản hiện tại
 
-**10.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**10.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > Siêu Thị > Nghiệm Thu: audit theo yêu cầu người dùng — 1 lỗi thật phát hiện + sửa (2026-09-07)
+
+**Yêu cầu gốc**: "Bạn kiểm tra module Nghiệm thu trong siêu thị luôn nhé" — audit sub-tab Nghiệm Thu
+(`operationWorkItems` mode ACCEPTANCE), cùng tinh thần vừa audit/sửa xong sub-tab Thực Hiện (v10.7,
+commit `cb5e2b4`).
+
+**Đã kiểm tra kỹ, xác nhận ĐÚNG thiết kế (không phải bug)**:
+- **"🔄 Bổ Sung" đã LÀ đúng dạng "self-loop" cần có** — không cần mirror thêm transition tự lặp lại kiểu
+  Task/Thực Hiện: `acceptOperationWorkItem()` (`lib/recordActions.js`) đã có 2 hành động độc lập —
+  `ACCEPT` (chốt, đổi `DA_NGHIEM_THU`) và `REQUEST_INFO` (chỉ ghi lý do vào `history`, GIỮ NGUYÊN
+  `DANG_NGHIEM_THU`, bấm được nhiều lần) — đúng bản chất "duyệt hồ sơ" (2 kết cục: đạt/chưa đạt), khác
+  Thực Hiện là 1 tác vụ đang chạy dở cần ghi tiến độ liên tục. KHÔNG ép symmetry giả tạo với Thực Hiện.
+- **Chặn 409 việc CÓ CON** (`acceptOperationWorkItem()`) đã có, khớp đúng `updateOperationWorkItemProgress()`
+  — re-xác nhận qua test `test-operation-store-lifecycle.js` (test "Fix 1") vẫn PASS.
+- Phân quyền (`operationAcceptanceManage`/`acceptorUsername`), bắt buộc lý do, chặn nghiệm thu 2 lần
+  (status phải đúng `DANG_NGHIEM_THU`) — đều đã đúng, có test xác nhận từ trước.
+- `lib/createValidation.js` KHÔNG có entry `operationWorkItems` (route custom hẳn, không qua khung
+  validate chung) — state machine (`CHUA_BAT_DAU`/`DANG_THUC_HIEN`/`DANG_NGHIEM_THU`/`DA_NGHIEM_THU`)
+  nhất quán giữa create/progress/accept/cascade, không có enum lệch ở đâu khác.
+- Nghiệm Thu KHÔNG có luồng đính kèm minh chứng/tệp — đúng phạm vi tính năng hiện tại, không phải nửa
+  vời/quên nối dây.
+
+**1 lỗi THẬT phát hiện — đã sửa**: `item.history` của `operationWorkItems` (ghi chú "cập nhật tiến độ
+liên tục" của Thực Hiện thêm ở v10.7 + lý do BẮT BUỘC nhập lúc "🔄 Bổ Sung"/"✅ Nghiệm Thu") được ghi vào
+DB nhưng **KHÔNG CÓ MÀN NÀO đọc lại được** — khác hẳn module Công Việc (`module-congviec.js`, bảng lịch
+sử trong `#taskDetailContent`) là bản mirror gốc của tính năng "cập nhật tiến độ liên tục". Hệ quả thực
+tế: người nghiệm thu gõ lý do "🔄 Bổ Sung" (bắt buộc nhập) xong là **mất hẳn**, không ai — kể cả chính họ
+— đọc lại được nữa; tương tự ghi chú tiến độ 30%/60%... của Thực Hiện. Tính năng "cập nhật tiến độ liên
+tục" mới thêm ở v10.7 vì vậy gần như vô nghĩa nếu không có nơi xem lại.
+
+**Đã sửa**: thêm nút "📜" ở MỌI dòng công việc (cả Thực Hiện lẫn Nghiệm Thu, mọi cấp) mở modal
+`operationWorkItemHistoryModal` mới — bảng lịch sử đầy đủ (Hành động/Người thực hiện/Thời gian/Ghi chú),
+mirror ĐÚNG khuôn bảng lịch sử của module Công Việc (`module-congviec.js` dòng ~924/~1142).
+`public/js/module-vanhanh.js`: `openOperationWorkItemHistoryModal()`/`closeOperationWorkItemHistoryModal()`
++ nút trong `buildOperationWorkItemRow()` (cả 2 nhánh EXECUTION/ACCEPTANCE). `public/index.html`: modal
+mới. Không đổi schema/API route nào — dữ liệu `history` đã có sẵn từ trước, chỉ thêm màn đọc lại.
+
+Kiểm thử: thêm 2 kịch bản UI thật (Playwright) vào `test-operation-store-lifecycle.js` (73 -> 75 kịch
+bản) — 1 xác nhận nút "📜" (ACCEPTANCE) hiện đúng REQUEST_INFO + lý do vừa ghi, 1 xác nhận nút "📜"
+(EXECUTION) hiện đủ cả 2 dòng ghi chú tiến độ liên tục — 75/75 kịch bản file này PASS; chạy lại toàn bộ
+69 file `test-*.js`,
+không phát sinh lỗi mới so với baseline (`git stash`). Screenshot Playwright thật minh hoạ modal lịch sử
+lưu ở `server/demo-screenshots/operation-acceptance-audit/` (gitignored, không gửi đi đâu — không có
+yêu cầu demo).
 
 ## Hành Chính > Đồng Phục: gỡ bỏ hẳn sub-tab "Quản Lý Nhân Viên Siêu Thị" (2026-09-07)
 

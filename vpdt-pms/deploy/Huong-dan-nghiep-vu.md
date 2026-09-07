@@ -270,6 +270,20 @@ với "Tổng Hợp"):
     mục lớn hiện "Tự cập nhật theo việc con" khi còn con dở, và đổi thành
     "✅ Đã tự động hoàn thành (theo việc con)" ngay khi tự hoàn thành xong —
     hoàn toàn tự động, không có/không cần nút bấm tay nào cho đầu mục lớn.
+  - **Nghiệm thu — "🔄 Bổ Sung" (từ v10.9)**: người nghiệm thu (toàn quyền
+    hoặc đúng người được CHỈ ĐỊNH nghiệm thu việc đó) có 2 lựa chọn khi công
+    việc lá đang "Đang nghiệm thu": "✅ Nghiệm Thu" (chốt xong, đổi trạng thái
+    "Đã nghiệm thu") hoặc "🔄 Bổ Sung" (chỉ ghi lý do cần sửa/bổ sung, công
+    việc GIỮ NGUYÊN "Đang nghiệm thu" — có thể bấm nhiều lần, không ép phải
+    chốt Nghiệm Thu/Từ Chối ngay).
+  - **"📜 Xem Lịch Sử" (từ v10.9)**: mỗi dòng công việc (cả Thực Hiện lẫn
+    Nghiệm Thu, mọi cấp) có nút "📜" mở bảng lịch sử đầy đủ (hành động/người
+    thực hiện/thời gian/ghi chú) — mirror bảng lịch sử của module Công Việc.
+    **Sửa 1 lỗi thật phát hiện qua audit**: trước v10.9, mọi ghi chú "cập
+    nhật tiến độ liên tục" (Thực Hiện) và lý do bắt buộc nhập lúc "🔄 Bổ Sung"/
+    "✅ Nghiệm Thu" (Nghiệm Thu) được lưu vào hệ thống nhưng KHÔNG có màn nào
+    hiển thị lại được — người phụ trách/người nghiệm thu gõ lý do xong là mất
+    hẳn, không ai đọc lại được. Nút "📜" khắc phục đúng lỗ hổng này.
 
 ### 3.6. Hỗ Trợ IT
 

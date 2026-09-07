@@ -1783,6 +1783,15 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
         ? `<span class="text-xs text-green-600 italic font-bold">✅ Đã tự động hoàn thành (theo việc con)</span>`
         : `<span class="text-xs text-gray-400 italic">Tự cập nhật theo việc con</span>`;
     }
+    // Bug thật phát hiện lúc audit Nghiệm Thu (đợt sau cb5e2b4): TOÀN BỘ ghi chú "cập nhật tiến độ liên
+    // tục" (w.history — STATUS_.../ACCEPTED/REQUEST_INFO, kể cả note bắt buộc nhập lúc "🔄 Bổ Sung") được
+    // ghi vào DB nhưng KHÔNG CÓ NƠI NÀO hiển thị lại — khác hẳn module Công Việc (module-congviec.js
+    // historyRows, dòng ~924/~1142) là bản mirror gốc của tính năng này. Vậy tính năng "cập nhật tiến độ
+    // liên tục" vừa thêm ở cb5e2b4 thực chất vô nghĩa (ghi rồi không ai đọc lại được) và "🔄 Bổ Sung" bên
+    // ACCEPTANCE nửa vời (lý do bắt buộc nhập nhưng người phụ trách không bao giờ thấy). Thêm nút "📜"
+    // mirror ĐÚNG bảng lịch sử của Task (xem openOperationWorkItemHistoryModal() ngay dưới) — hiện ở MỌI
+    // dòng (cả có/không con, cả 2 mode) vì ai mở được cây công việc này đều đã có quyền xem hồ sơ.
+    actionHTML += ` <button type="button" data-op="openOperationWorkItemHistoryModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200" title="Xem lịch sử ghi chú/xử lý">📜</button>`;
     return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
   }
 
@@ -1823,7 +1832,35 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     actionHTML = `<button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="ACCEPT" class="text-xs px-2 py-0.5 bg-green-600 text-white rounded font-bold hover:bg-green-700 mr-1">✅ Nghiệm Thu</button>
       <button type="button" data-op="openOperationAcceptanceActionModal" data-id="${w.id}" data-action="REQUEST_INFO" class="text-xs px-2 py-0.5 bg-amber-500 text-white rounded font-bold hover:bg-amber-600">🔄 Bổ Sung</button>`;
   }
+  // Cùng bug/cùng nút "📜" với nhánh EXECUTION ở trên — xem chú thích đầy đủ tại đó. Riêng ACCEPTANCE:
+  // đây là NƠI DUY NHẤT xem lại được lý do "🔄 Bổ Sung" đã yêu cầu (item.acceptanceNote/history) — trước
+  // bản sửa này, lý do bắt buộc nhập ở modal operationAcceptanceActionModal biến mất ngay sau khi lưu.
+  actionHTML += ` <button type="button" data-op="openOperationWorkItemHistoryModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200" title="Xem lịch sử ghi chú/xử lý">📜</button>`;
   return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${statusCell}${expectedAcceptanceCell}${acceptorCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
+}
+
+// --- Modal "📜 Lịch Sử" 1 công việc Vận Hành — mirror ĐÚNG bảng lịch sử của module Công Việc
+// (module-congviec.js, cột Hành động/Người thực hiện/Thời gian/Ghi chú) — item.history đã ghi đủ mọi mốc
+// (CREATED/EDITED/STATUS_.../ACCEPTED/REQUEST_INFO, kể cả entry "system" lúc cascade tự động ở
+// syncOperationWorkItemAncestors()) nhưng trước bản sửa này KHÔNG có nơi nào đọc lại được — xem chú thích
+// đầy đủ ở buildOperationWorkItemRow() (nhánh EXECUTION) phía trên.
+function openOperationWorkItemHistoryModal(id) {
+  const w = (DB.operationWorkItems || []).find(x => x.id === id);
+  if (!w) return;
+  document.getElementById('operationWorkItemHistoryModalTitle').innerText = `📜 Lịch sử: ${w.title}`;
+  const rows = (w.history || []).map(h => `
+    <tr>
+      <td class="border p-1.5">${escapeHtml(h.action)}</td>
+      <td class="border p-1.5">${escapeHtml(h.byName || h.by || '')}</td>
+      <td class="border p-1.5">${escapeHtml(h.time || '')}</td>
+      <td class="border p-1.5">${escapeHtml(h.note || '')}</td>
+    </tr>
+  `).join('') || `<tr><td colspan="4" class="border p-2 text-center text-gray-400 italic">Chưa có lịch sử xử lý</td></tr>`;
+  document.getElementById('operationWorkItemHistoryModalBody').innerHTML = rows;
+  document.getElementById('operationWorkItemHistoryModal').classList.remove('hidden');
+}
+function closeOperationWorkItemHistoryModal() {
+  document.getElementById('operationWorkItemHistoryModal').classList.add('hidden');
 }
 
 // --- Form thêm/sửa công việc (gốc hoặc con) --- editItem (tuỳ chọn) = công việc đang sửa, xem
@@ -2440,6 +2477,9 @@ const OP_CLICK_ACTIONS = {
   openOperationAcceptanceActionModal: el => openOperationAcceptanceActionModal(Number(el.dataset.id), el.dataset.action),
   closeOperationAcceptanceActionModal: () => closeOperationAcceptanceActionModal(),
   confirmOperationAcceptanceAction: () => confirmOperationAcceptanceAction(),
+  // Bug thật phát hiện lúc audit Nghiệm Thu — xem chú thích đầy đủ ở buildOperationWorkItemRow().
+  openOperationWorkItemHistoryModal: el => openOperationWorkItemHistoryModal(Number(el.dataset.id)),
+  closeOperationWorkItemHistoryModal: () => closeOperationWorkItemHistoryModal(),
   closeOperationOrderReceiptActionModal: () => closeOperationOrderReceiptActionModal(),
   confirmOperationOrderReceiptAction: () => confirmOperationOrderReceiptAction(),
   setOperationOrderSubTab: el => setOperationOrderSubTab(el.dataset.tab),
@@ -2522,5 +2562,5 @@ function bindOperationDelegation(rootId) {
     if (fn) fn(e);
   });
 }
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal'].forEach(bindOperationDelegation);
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal'].forEach(bindOperationDelegation);
 

@@ -6629,6 +6629,25 @@
     </div>
   </div>
 
+  <!-- Modal "📜 Lịch Sử" 1 công việc Vận Hành — mirror bảng lịch sử #taskDetailModal (module Công Việc),
+       xem openOperationWorkItemHistoryModal() (module-vanhanh.js). Bug thật phát hiện lúc audit Nghiệm
+       Thu: item.history (ghi chú "cập nhật tiến độ liên tục" + lý do "🔄 Bổ Sung") trước đây KHÔNG có nơi
+       hiển thị lại. -->
+  <div id="operationWorkItemHistoryModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+      <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+        <h3 id="operationWorkItemHistoryModalTitle" class="font-bold text-base text-gray-800"></h3>
+        <button data-op="closeOperationWorkItemHistoryModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4">
+        <table class="w-full border-collapse border text-[11px]">
+          <thead><tr class="bg-gray-100"><th class="border p-1.5">Hành động</th><th class="border p-1.5">Người thực hiện</th><th class="border p-1.5">Thời gian</th><th class="border p-1.5">Ghi chú</th></tr></thead>
+          <tbody id="operationWorkItemHistoryModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal "📥 Nhập Hàng"/"🚫 Hủy Nhập" cho operationOrders (đợt "Báo Cáo + Nhập Hàng") — dùng chung cho
        cả 2 hành động, cùng khuôn #operationAcceptanceActionModal ngay trên (opReceiptReasonWrap chỉ ẩn
        khi Nhập Hàng — không bắt buộc lý do, xem openOperationOrderReceiptActionModal() ở module-vanhanh.js). -->
