@@ -503,6 +503,17 @@ function cancelOperationOrderReceipt(user, item, payload, appData) {
 // đúng quyền operationStoreOpenCreate/operationRepairCreate — xem chú thích đầy đủ ở hàm đó
 // (lib/createValidation.js). Quyền RIÊNG operationEstimateCreate trước đây đã RÚT GỌN, gộp vào luật
 // "toàn quyền quản lý hồ sơ" chung (Mục "Overhaul quyền Vận Hành > Siêu Thị").
+//
+// Mục "Danh mục đầu tư 2 cấp" (yêu cầu người dùng: "tạo được nhiều danh mục con trong 1 danh mục lớn,
+// tiền tổng cộng tại danh mục lớn") — thêm field `parentId` (optional) trên mỗi hạng mục, trỏ tới `id`
+// hạng mục KHÁC trong CÙNG estimateItems[]: parentId rỗng/null = "danh mục lớn" (gốc); parentId = id
+// 1 danh mục lớn khác = "danh mục con" của danh mục đó. CHỈ 2 CẤP (đã xác nhận người dùng) — 1 danh mục
+// con KHÔNG được làm cha của danh mục khác, chặn ở validate bên dưới (409/400 rõ ràng, không âm thầm sửa).
+// Roll-up: danh mục lớn có >=1 con thì amount CỦA CHÍNH NÓ luôn bị GHI ĐÈ = tổng amount các con (bỏ qua
+// giá trị amount client gửi cho chính nó — nhất quán, tránh lệch giữa số hiển thị và số lưu); danh mục
+// lớn KHÔNG có con nào thì amount vẫn nhập tay trực tiếp như trước (không đổi hành vi cũ). Tổng
+// estimateTotalAmount = tổng CHỈ các danh mục lớn (gốc, parentId rỗng) — KHÔNG cộng thêm con lần 2 (con
+// đã nằm trong roll-up của cha rồi, cộng thêm sẽ tính đúp).
 function submitOperationEstimate(user, item, payload, sourceType) {
   if (!canManageOperationRecord(user, item, sourceType)) {
     throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư cho hồ sơ này');
@@ -514,17 +525,66 @@ function submitOperationEstimate(user, item, payload, sourceType) {
   const existingIds = new Set((item.estimateItems || []).map(it => it.id).filter(Boolean));
   let nextId = Date.now();
   const genId = () => { while (existingIds.has(nextId)) nextId += 1; existingIds.add(nextId); return nextId++; };
-  const validItems = rawItems.map((it) => {
+  // idMap: id CLIENT gửi lên (có thể là id thật giữ nguyên, hoặc id tạm client tự gán cho dòng mới thêm
+  // trong lần sửa này — xem addOperationEstimateItemRow() ở module-vanhanh.js) -> id THẬT sau khi server
+  // xử lý xong — dùng để đối chiếu lại parentId ở bước 2 (parentId client gửi luôn là id-theo-client của
+  // dòng cha, kể cả khi dòng cha đó CŨNG là dòng mới thêm trong CÙNG lần lưu này).
+  const idMap = new Map();
+  const prelim = rawItems.map((it) => {
     const content = String(it?.content ?? it?.name ?? '').trim();
+    if (!content) return null;
     const amount = Math.max(0, Number(it?.amount) || 0);
     const rawId = Number(it?.id);
     const id = (Number.isFinite(rawId) && existingIds.has(rawId)) ? rawId : genId();
-    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim() };
-  }).filter((it) => it.content);
+    if (Number.isFinite(rawId)) idMap.set(rawId, id);
+    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim(), rawParentId: it?.parentId };
+  }).filter(Boolean);
+
+  // Bước 2: đối chiếu parentId qua idMap. Cha KHÔNG còn tồn tại trong lần lưu này (bị xoá nội dung/xoá
+  // dòng ngay trong lần sửa hiện tại) -> coi con cũng "mất theo cha" (bỏ hẳn khỏi kết quả, KHÔNG âm thầm
+  // thăng thành danh mục lớn — dễ gây lệch ngân sách không ai để ý) — mirror đúng quy ước cascade xoá cha
+  // kéo theo con đã có sẵn ở deleteOperationWorkItem() (cây Công việc, cùng file) cho nhất quán.
+  let resolved = prelim.map((it) => {
+    let parentId = null;
+    let orphaned = false;
+    if (it.rawParentId !== undefined && it.rawParentId !== null && it.rawParentId !== '') {
+      const rawParentNum = Number(it.rawParentId);
+      if (Number.isFinite(rawParentNum) && idMap.has(rawParentNum)) parentId = idMap.get(rawParentNum);
+      else orphaned = true;
+    }
+    return { id: it.id, content: it.content, description: it.description, amount: it.amount, note: it.note, parentId, orphaned };
+  });
+  resolved = resolved.filter((it) => !it.orphaned).map(({ orphaned, ...rest }) => rest);
+
+  // Chặn lồng quá 1 cấp: 1 danh mục con (đã có parentId) không được làm cha của hạng mục khác — LỖI rõ
+  // ràng (400), khác nhánh mồ côi ở trên (đây là client cố tình gửi cấu trúc sai, không phải hệ quả bình
+  // thường của sửa/xoá) — chỉ hỗ trợ đúng 2 cấp (danh mục lớn + danh mục con), đã xác nhận người dùng.
+  const byId = new Map(resolved.map((it) => [it.id, it]));
+  for (const it of resolved) {
+    if (it.parentId == null) continue;
+    if (it.parentId === it.id) throw new HttpError(400, `Hạng mục "${it.content}" không thể là danh mục con của chính nó`);
+    const parent = byId.get(it.parentId);
+    if (parent && parent.parentId != null) {
+      throw new HttpError(400, `"${parent.content}" đã là danh mục con — chỉ hỗ trợ tối đa 2 cấp (danh mục lớn + danh mục con), không lồng thêm được nữa`);
+    }
+  }
+
+  // Roll-up: danh mục lớn (parentId rỗng) có >=1 con -> amount tự tính = tổng amount các con, GHI ĐÈ giá
+  // trị client gửi cho chính nó (không cho nhập tay khi đã có con — xem renderOperationEstimateItemsTable()
+  // ở module-vanhanh.js, input Chi Phí bị disable/ẩn cho đúng trường hợp này).
+  resolved.forEach((it) => {
+    if (it.parentId != null) return;
+    const children = resolved.filter((c) => c.parentId === it.id);
+    if (children.length) it.amount = children.reduce((sum, c) => sum + c.amount, 0);
+  });
+
+  const validItems = resolved;
   if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Nội dung)');
 
   item.estimateItems = validItems;
-  item.estimateTotalAmount = validItems.reduce((sum, it) => sum + it.amount, 0);
+  // Tổng CHỈ cộng danh mục LỚN (parentId rỗng) — con đã nằm trong roll-up của cha ở trên, cộng thêm sẽ
+  // tính đúp (yêu cầu người dùng: "tiền sẽ tổng cộng tại danh mục lớn để tính tổng tiền danh mục đầu tư").
+  item.estimateTotalAmount = validItems.filter((it) => it.parentId == null).reduce((sum, it) => sum + it.amount, 0);
   item.estimateHistory = item.estimateHistory || [];
   // Mục H: không còn khái niệm "gửi duyệt" — lưu là APPROVED luôn, không có bước chờ ai duyệt.
   item.estimateHistory.push({ step: 0, approver: user.name, username: user.username, action: 'SAVED', comment: '', time: nowVN() });

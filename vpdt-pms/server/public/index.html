@@ -6512,6 +6512,11 @@
         </div>
         <div id="operationEstimateItemsEditControls" class="flex justify-between items-center flex-wrap gap-2">
           <div class="flex items-center flex-wrap gap-2">
+            <!-- Mục "Danh mục đầu tư 2 cấp": chọn trước dòng mới thêm là danh mục lớn hay danh mục con
+                 của danh mục lớn nào — xem populateEstimateNewItemParentSelect()/addOperationEstimateItemRow()
+                 ở module-vanhanh.js. Native <select> thường (KHÔNG phải ô tìm-kiếm-gõ-chọn), không thuộc
+                 diện phải đổi sang widget sdd* (xem CLAUDE.md). -->
+            <select id="selEstimateNewItemParent" class="border rounded px-2 py-1 text-xs max-w-[220px]"></select>
             <button type="button" data-op="addOperationEstimateItemRow" class="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Hạng Mục</button>
             <a href="/api/operation/estimate-import-template" class="text-cyan-700 font-bold hover:underline text-xs">⬇️ Tải Mẫu Excel</a>
             <button type="button" data-op="exportOperationEstimateItems" class="bg-gray-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-gray-700">📤 Xuất Excel</button>

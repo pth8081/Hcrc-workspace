@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**11.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > 🏬 Siêu Thị: Danh Mục Đầu Tư 2 cấp (danh mục lớn + danh mục con, tiền tự roll-up) (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Yêu cầu trong phần danh mục đầu tư có thể tạo được nhiều danh mục
+con trong một danh mục lớn và tiền sẽ tổng cộng tại danh mục lớn để tính tổng tiền danh mục đầu tư." Đã
+xác nhận với người dùng: **chỉ hỗ trợ đúng 2 cấp** (danh mục lớn + danh mục con), không lồng sâu hơn.
+
+**Thiết kế đã triển khai**: thêm field `parentId` (optional) trên mỗi hạng mục `estimateItems[]` (bảng
+Danh Mục Đầu Tư của hồ sơ Mở Mới/Sửa Chữa) — trỏ tới `id` 1 hạng mục KHÁC trong CÙNG mảng:
+- `parentId` rỗng/null = **danh mục lớn** (gốc).
+- `parentId` = id 1 danh mục lớn khác = **danh mục con** của danh mục đó.
+- **Chỉ 2 cấp**: 1 danh mục con KHÔNG được làm cha của hạng mục khác — chặn ở server
+  (`submitOperationEstimate()`, throw 400 rõ ràng) VÀ ở UI (dropdown chọn cha khi thêm dòng mới chỉ liệt
+  kê danh mục LỚN hiện có, không cho chọn danh mục con làm cha).
+- **Roll-up**: danh mục lớn có ≥1 con thì `amount` CỦA CHÍNH NÓ **luôn tự tính = tổng amount các con**,
+  GHI ĐÈ mọi giá trị client gửi cho chính nó (input Chi Phí bị khoá/ẩn ở UI khi đã có con, hiện thay bằng
+  số roll-up kèm ghi chú "🔢 Tự động tính từ N danh mục con"). Danh mục lớn KHÔNG có con nào thì hành vi
+  **y hệt trước đây** — `amount` nhập tay trực tiếp, không đổi gì.
+- **Tổng `estimateTotalAmount`** = CHỈ cộng các danh mục LỚN (`parentId` rỗng) — con đã nằm trong roll-up
+  của cha, KHÔNG cộng thêm lần 2 (tránh tính đúp). Ví dụ đã test: danh mục lớn "Nội thất" có 2 con "Kệ
+  trưng bày" 20tr + "Quầy thu ngân" 15tr (roll-up "Nội thất" = 35tr) + danh mục lớn "Sơn tường" không con
+  5tr → tổng = 35tr + 5tr = **40tr** (không phải 70tr nếu cộng đúp con).
+- **Xoá cha có con — quyết định CASCADE** (xoá cha kéo theo xoá luôn con), mirror ĐÚNG quy ước đã có sẵn
+  của cây Công việc (`deleteOperationWorkItem()` trả `[item.id, ...descendantIds]` — xoá cha xoá cả cây
+  con), chọn cascade thay vì chặn xoá để nhất quán 1 quy ước xuyên suốt module Vận Hành > Siêu Thị.
+  `removeOperationEstimateItemRow()` (client) cascade xoá con cùng lúc xoá cha; server (`submitOperationEstimate()`)
+  còn có thêm lớp phòng thủ: nếu con gửi lên với `parentId` trỏ tới 1 cha KHÔNG còn trong lần lưu (đã bị
+  xoá cascade phía client) thì con đó bị BỎ HẲN, không lỗi, không âm thầm thăng thành danh mục lớn.
+- Danh Mục Đầu Tư (`estimateItems[]`) và cây Công việc Thực hiện (`operationWorkItems`) VẪN là 2 khái niệm
+  ĐỘC LẬP như trước — task này chỉ thêm cấu trúc cha/con NỘI BỘ trong `estimateItems[]`, không đụng gì tới
+  liên kết 2 khái niệm đó (giữ nguyên quyết định thiết kế cũ, xem `routes/records.js`).
+
+**Đã sửa**:
+- `lib/recordActions.js` — viết lại `submitOperationEstimate()`: thêm bước resolve `parentId` qua `idMap`
+  (id client gửi — có thể là id thật giữ nguyên hoặc id TẠM số âm client tự gán cho dòng mới thêm trong
+  CÙNG lần lưu — map sang id THẬT server sinh), validate chặn lồng >1 cấp + tự tham chiếu chính mình, cascade
+  bỏ con mồ côi (cha đã bị xoá cùng lần lưu), roll-up `amount` danh mục lớn có con, tổng `estimateTotalAmount`
+  chỉ cộng danh mục lớn.
+- `public/js/module-vanhanh.js` — `operationEstimateItems[]` mỗi dòng nay LUÔN có `id` ngay từ lúc thêm
+  (id TẠM số âm cho dòng mới, xem `nextEstimateTempId()`) + field `parentId`; thêm
+  `operationEstimateEffectiveAmount()` (mirror CHÍNH XÁC roll-up server), `populateEstimateNewItemParentSelect()`
+  (dropdown chọn cha), `renderOperationEstimateItemRow()` (dùng LẠI đúng quy ước thụt lề/tree-line
+  `↳` của `buildOperationWorkItemRow()` — cây Công việc — cho nhất quán hiển thị); `removeOperationEstimateItemRow()`
+  cascade xoá con; `recalcOperationEstimateItemsTotal()`/`exportOperationEstimateItems()` đổi sang tính
+  theo `operationEstimateEffectiveAmount()` + chỉ cộng danh mục lớn. Dọn 1 chú thích cũ trỏ tới hàm
+  `syncOperationEstimateWorkItems()` không có thật trong code (sai sót từ trước, không liên quan thay đổi
+  này).
+- `public/index.html` — thêm `<select id="selEstimateNewItemParent">` (dropdown "đây là danh mục lớn mới"
+  / "đây là danh mục con của...") cạnh nút "➕ Thêm Hạng Mục" trong modal Danh Mục Đầu Tư.
+
+**Kiểm thử**: `tests/test-operation-danhmuc-dautu-units.js` thêm 7 kịch bản mới (Mục 6): roll-up 2 con,
+parentId map đúng id thật, danh mục lớn không con không đổi hành vi, tổng không cộng đúp, chặn lồng >1
+cấp (400), chặn tự tham chiếu chính mình (400), cascade bỏ con mồ côi khi cha bị xoá cùng lần lưu — 49/49
+kịch bản pass (42 cũ + 7 mới). Chạy toàn bộ `tests/test-*.js` (69 file) — 0 lỗi mới so với baseline (chỉ
+còn đúng các lỗi phụ thuộc SQL Server thật đã biết từ trước).
+
+**Deploy-impact**: KHÔNG có gì ngoài copy code + `pm2 restart` — `parentId` chỉ là 1 field JSON thêm vào
+bên trong `estimateItems[]` (vốn đã là JSON tự do trên bản ghi `operationStoreOpenings`/`operationRepairs`,
+không có cột riêng trong `schema.sql`), không đổi `schema.sql`, không thêm biến môi trường, không đổi
+`dependencies`. Hồ sơ CŨ (chưa có `parentId` trên hạng mục nào) tự hiểu ngầm là toàn bộ danh mục lớn —
+tương thích ngược hoàn toàn, không cần migration dữ liệu.
 
 ## Vận Hành > 🏬 Siêu Thị: Overhaul quyền quản lý hồ sơ Mở Mới/Sửa Chữa (2026-09-07)
 

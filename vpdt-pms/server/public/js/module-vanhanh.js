@@ -1200,7 +1200,14 @@ function renderOperationEstimateList() {
 
 // --- Bảng hạng mục "Danh mục đầu tư" biên tập được (copy khuôn operationOrderItems). Cấu trúc MỚI
 // (Mục F) {content, description, amount, note} — bỏ ĐVT/Số lượng/Đơn giá, "Chi Phí" nhập trực tiếp
-// thay vì tự tính qty×unitPrice. ---
+// thay vì tự tính qty×unitPrice.
+// Mục "Danh mục đầu tư 2 cấp" — thêm `parentId` (mirror lib/recordActions.js submitOperationEstimate()):
+// rỗng/null = "danh mục lớn" (gốc); = id 1 danh mục lớn khác trong CÙNG mảng = "danh mục con" của nó.
+// CHỈ 2 CẤP — UI chỉ cho chọn danh mục LỚN làm cha (xem populateEstimateNewItemParentSelect()), server
+// vẫn tự chặn lại lần nữa (không tin riêng UI). Mỗi dòng LUÔN có `id` ngay từ lúc thêm (kể cả dòng mới,
+// tạm dùng số ÂM — xem nextEstimateTempId()) để dòng con thêm SAU vẫn tham chiếu đúng dòng cha mới thêm
+// TRƯỚC đó dù cả 2 đều chưa lưu — server đối chiếu lại đúng id thật qua idMap lúc lưu (KHÔNG liên quan gì
+// đến id cây Công việc, xem chú thích quyết định thiết kế ở routes/records.js). ---
 let operationEstimateItems = [];
 let currentEstimateKind = null;
 let currentEstimateRecordId = null;
@@ -1208,28 +1215,57 @@ let currentEstimateBudget = 0;
 // null = hồ sơ CŨ chưa có approvedBudget (xem openOperationEstimateModal()) — recalcOperationEstimateItemsTotal()
 // hiện "(chưa nhập)" thay vì 0/NaN cho trường hợp này.
 let currentEstimateBudgetMissing = false;
+// Bộ đếm id TẠM (số âm, không đụng id thật luôn dương do genId() ở server sinh) — chỉ cần DUY NHẤT
+// trong phạm vi 1 lần mở modal/1 lần lưu, reset lại mỗi lần openOperationEstimateModal() cho gọn.
+let estimateTempIdCounter = -1;
+function nextEstimateTempId() { return estimateTempIdCounter--; }
 
-function addOperationEstimateItemRow() {
-  // id để trống (server tự gán id ổn định mới lúc lưu, xem submitOperationEstimate() ở
-  // lib/recordActions.js) — chỉ dòng ĐÃ có id (tải từ o.estimateItems, xem openOperationEstimateModal())
-  // mới giữ nguyên id cũ, để server nhận diện đúng "hạng mục không đổi" khi đồng bộ cây công việc.
-  operationEstimateItems.push({ content: '', description: '', amount: 0, note: '' });
+function addOperationEstimateItemRow(parentId) {
+  operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: parentId || null });
   renderOperationEstimateItemsTable(true);
 }
+// Xoá 1 dòng: dòng LÀ danh mục lớn (không có parentId) -> cascade xoá LUÔN toàn bộ danh mục con của nó
+// (mirror đúng quy ước cascade xoá cha kéo theo con đã có sẵn ở deleteOperationWorkItem(), cây Công việc,
+// lib/recordActions.js — chọn cascade thay vì chặn xoá cho nhất quán 1 quy ước xuyên suốt module này).
+// Dòng LÀ danh mục con thì xoá đúng 1 dòng đó, không ảnh hưởng gì khác.
 function removeOperationEstimateItemRow(idx) {
-  operationEstimateItems.splice(idx, 1);
+  const it = operationEstimateItems[idx];
+  if (!it) return;
+  if (it.parentId == null) {
+    operationEstimateItems = operationEstimateItems.filter(x => x.id !== it.id && x.parentId !== it.id);
+  } else {
+    operationEstimateItems.splice(idx, 1);
+  }
   renderOperationEstimateItemsTable(true);
 }
 function updateOperationEstimateItemField(idx, field, value) {
-  if (!operationEstimateItems[idx]) return;
-  if (field === 'amount') operationEstimateItems[idx][field] = Number(String(value || '').replace(/\D/g, '')) || 0;
-  else operationEstimateItems[idx][field] = value;
+  const it = operationEstimateItems[idx];
+  if (!it) return;
+  // Chặn sửa tay "amount" của danh mục lớn ĐANG có con — số này server luôn ghi đè = tổng con, sửa tay ở
+  // đây chỉ gây lệch số hiển thị tạm thời (input tương ứng đã bị ẩn/khoá ở renderOperationEstimateItemsTable()
+  // rồi, đây là lớp chặn phòng thủ thứ 2 — cùng lý do "không tin riêng UI" như phía server).
+  if (field === 'amount' && it.parentId == null && operationEstimateItems.some(c => c.parentId === it.id)) return;
+  if (field === 'amount') it[field] = Number(String(value || '').replace(/\D/g, '')) || 0;
+  else it[field] = value;
   recalcOperationEstimateItemsTotal();
 }
+// Chi phí HIỆU LỰC của 1 hạng mục — danh mục lớn có >=1 con thì = tổng amount các con (chỉ tính con có
+// Nội dung, khớp đúng validItems ở server sẽ bỏ dòng trống); còn lại (danh mục lớn không con / danh mục
+// con) thì = amount tự nhập, mirror CHÍNH XÁC roll-up ở submitOperationEstimate() (lib/recordActions.js).
+function operationEstimateEffectiveAmount(it) {
+  if (it.parentId != null) return it.amount || 0;
+  const children = operationEstimateItems.filter(c => c.parentId === it.id && (c.content || '').trim());
+  if (!children.length) return it.amount || 0;
+  return children.reduce((sum, c) => sum + (c.amount || 0), 0);
+}
 // "Chi Phí Còn Lại" (hiển thị LIVE, KHÔNG chặn submit — số âm hiển thị đỏ để cảnh báo trực quan, server
-// KHÔNG chặn vượt ngân sách) — cập nhật lại mỗi khi hàm này chạy, tức mọi thêm/sửa/xoá dòng.
+// KHÔNG chặn vượt ngân sách) — cập nhật lại mỗi khi hàm này chạy, tức mọi thêm/sửa/xoá dòng. CHỈ cộng
+// danh mục LỚN (parentId rỗng) — con đã nằm trong roll-up của cha ở operationEstimateEffectiveAmount(),
+// cộng thêm sẽ tính đúp (mirror estimateTotalAmount ở server).
 function recalcOperationEstimateItemsTotal() {
-  const total = operationEstimateItems.filter(it => (it.content || '').trim()).reduce((sum, it) => sum + (it.amount || 0), 0);
+  const total = operationEstimateItems
+    .filter(it => (it.content || '').trim() && it.parentId == null)
+    .reduce((sum, it) => sum + operationEstimateEffectiveAmount(it), 0);
   const totalEl = document.getElementById('operationEstimateItemsTotalDisplay');
   if (totalEl) totalEl.innerText = total.toLocaleString('vi-VN');
   const remainingEl = document.getElementById('operationEstimateRemainingBudgetDisplay');
@@ -1245,32 +1281,58 @@ function recalcOperationEstimateItemsTotal() {
   }
   return total;
 }
+// Dropdown "đây là danh mục con của [chọn danh mục lớn]" cạnh nút "➕ Thêm Hạng Mục" — chỉ liệt kê danh
+// mục LỚN hiện có (parentId rỗng, có Nội dung) làm cha, đúng luật "chỉ 2 cấp" (con không được làm cha).
+function populateEstimateNewItemParentSelect() {
+  const sel = document.getElementById('selEstimateNewItemParent');
+  if (!sel) return;
+  const prevValue = sel.value;
+  const topItems = operationEstimateItems.filter(it => it.parentId == null && (it.content || '').trim());
+  sel.innerHTML = `<option value="">— Không, đây là danh mục lớn —</option>` +
+    topItems.map(it => `<option value="${it.id}">${escapeHtml(it.content)}</option>`).join('');
+  if (topItems.some(it => String(it.id) === prevValue)) sel.value = prevValue;
+}
+// depth 0 = danh mục lớn (mirror indent buildOperationWorkItemRow(): depth*4 khoảng trắng + "↳ " nếu > 0,
+// dùng LẠI đúng quy ước hiển thị cây đã có sẵn cho cây Công việc, không bày ra kiểu hiển thị mới).
+function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
+  const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
+  const hasChildren = depth === 0 && operationEstimateItems.some(c => c.parentId === it.id && (c.content || '').trim());
+  const effectiveAmount = operationEstimateEffectiveAmount(it);
+  const amountCell = (!editable)
+    ? `<td class="border p-1 text-right font-semibold">${effectiveAmount.toLocaleString('vi-VN')}</td>`
+    : hasChildren
+      ? `<td class="border p-1 text-right text-gray-500 italic bg-gray-50">${effectiveAmount.toLocaleString('vi-VN')}<div class="text-[10px] font-normal">🔢 Tự động tính từ ${operationEstimateItems.filter(c => c.parentId === it.id && (c.content || '').trim()).length} danh mục con</div></td>`
+      : `<td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.amount)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="amount" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>`;
+  const contentCell = editable
+    ? `<td class="border p-1">${indent}<input value="${escapeHtml(it.content)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="content" class="w-auto border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung" style="width:calc(100% - ${depth * 32 + 4}px)"></td>`
+    : `<td class="border p-1">${indent}${escapeHtml(it.content)}</td>`;
+  const descCell = editable
+    ? `<td class="border p-1"><input value="${escapeHtml(it.description || '')}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="description" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mô tả"></td>`
+    : `<td class="border p-1">${escapeHtml(it.description || '')}</td>`;
+  const noteCell = editable
+    ? `<td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Lưu ý"></td>`
+    : `<td class="border p-1">${escapeHtml(it.note || '')}</td>`;
+  const actionCell = editable
+    ? `<td class="border p-1 text-center whitespace-nowrap"><button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng${depth === 0 ? ' (xoá cả danh mục con nếu có)' : ''}">✕</button></td>`
+    : `<td class="border p-1"></td>`;
+  const sttCell = `<td class="border p-1 text-center">${depth === 0 ? (Number.isInteger(sttNo) ? sttNo : '') : ''}</td>`;
+  return `<tr>${sttCell}${contentCell}${descCell}${amountCell}${noteCell}${actionCell}</tr>`;
+}
 function renderOperationEstimateItemsTable(editable) {
   const tbody = document.getElementById('operationEstimateItemsTableBody');
   if (!tbody) return;
-  if (!editable) {
-    tbody.innerHTML = operationEstimateItems.map((it, idx) => `
-      <tr>
-        <td class="border p-1 text-center">${idx + 1}</td>
-        <td class="border p-1">${escapeHtml(it.content)}</td>
-        <td class="border p-1">${escapeHtml(it.description || '')}</td>
-        <td class="border p-1 text-right font-semibold">${(it.amount || 0).toLocaleString('vi-VN')}</td>
-        <td class="border p-1">${escapeHtml(it.note || '')}</td>
-        <td class="border p-1"></td>
-      </tr>`).join('') || `<tr><td colspan="6" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
-    recalcOperationEstimateItemsTotal();
-    return;
-  }
-  tbody.innerHTML = operationEstimateItems.map((it, idx) => `
-    <tr>
-      <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.content)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="content" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.description || '')}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="description" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mô tả"></td>
-      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.amount)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="amount" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Lưu ý"></td>
-      <td class="border p-1 text-center"><button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
-    </tr>
-  `).join('');
+  const topItems = operationEstimateItems.filter(it => it.parentId == null);
+  const rowsHtml = [];
+  topItems.forEach((top, sttNo) => {
+    const topIdx = operationEstimateItems.indexOf(top);
+    rowsHtml.push(renderOperationEstimateItemRow(top, topIdx, 0, editable, sttNo + 1));
+    operationEstimateItems.filter(c => c.parentId === top.id).forEach((child) => {
+      const childIdx = operationEstimateItems.indexOf(child);
+      rowsHtml.push(renderOperationEstimateItemRow(child, childIdx, 1, editable, null));
+    });
+  });
+  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="6" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
+  populateEstimateNewItemParentSelect();
   recalcOperationEstimateItemsTotal();
 }
 
@@ -1290,16 +1352,21 @@ function openOperationEstimateModal(kind, id) {
   currentEstimateBudget = currentEstimateBudgetMissing ? 0 : (Number(o.approvedBudget) || 0);
 
   // Tương thích ngược: hồ sơ cũ lưu field "name" (trước Mục F), fallback content: it.content ?? it.name.
-  // Giữ nguyên `id` (nếu có — hồ sơ cũ trước khi có id thì không, server tự gán id mới lúc lưu tiếp) để
-  // route estimate/submit đối chiếu đúng hạng mục nào giữ nguyên/hạng mục nào mới/bị xoá khi đồng bộ
-  // sang cây công việc Thực hiện (xem syncOperationEstimateWorkItems() ở routes/records.js).
+  // Giữ nguyên `id` (nếu có — hồ sơ cũ trước khi có id thì không, tự gán id TẠM ở đây, server sẽ gán id
+  // thật mới lúc lưu) để route estimate/submit đối chiếu đúng hạng mục nào giữ nguyên/hạng mục nào mới —
+  // KHÔNG liên quan gì tới cây công việc Thực hiện (2 khái niệm ĐỘC LẬP, quyết định thiết kế, xem chú
+  // thích đầy đủ ở routes/records.js ngay trước 2 route estimate/submit). `parentId` (Mục "Danh mục đầu
+  // tư 2 cấp") giữ nguyên nếu hồ sơ đã có, mặc định null (danh mục lớn) cho hồ sơ cũ chưa có field này.
+  // Reset bộ đếm id TẠM mỗi lần mở modal — không cần liên tục qua nhiều lần mở, chỉ cần DUY NHẤT trong
+  // phạm vi 1 lần sửa/lưu (xem nextEstimateTempId()).
+  estimateTempIdCounter = -1;
   operationEstimateItems = (o.estimateItems && o.estimateItems.length)
-    ? o.estimateItems.map(it => ({ id: it.id, content: it.content ?? it.name ?? '', description: it.description || '', amount: it.amount || 0, note: it.note || '' }))
+    ? o.estimateItems.map(it => ({ id: it.id != null ? it.id : nextEstimateTempId(), content: it.content ?? it.name ?? '', description: it.description || '', amount: it.amount || 0, note: it.note || '', parentId: it.parentId ?? null }))
     : [];
   // "Danh mục đầu tư lập xong có thể sửa để thêm bớt công việc" — APPROVED KHÔNG còn là ngõ cụt, vẫn sửa
   // được như DRAFT (server submitOperationEstimate() đã nhận lại từ APPROVED, xem lib/recordActions.js).
   const editable = (o.estimateStatus === 'DRAFT' || !o.estimateStatus || o.estimateStatus === 'APPROVED') && canCreateOperationEstimateClient(currentUser, kind, o);
-  if (editable && operationEstimateItems.length === 0) operationEstimateItems.push({ content: '', description: '', amount: 0, note: '' });
+  if (editable && operationEstimateItems.length === 0) operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: null });
   document.getElementById('operationEstimateItemsEditControls').classList.toggle('hidden', !editable);
   renderOperationEstimateItemsTable(editable);
 
@@ -1384,14 +1451,22 @@ async function submitOperationEstimateForApproval() {
 // downloadXlsxFromServer()/POST /api/admin/export-xlsx có sẵn cho XUẤT; NHẬP đọc qua
 // routes/operationImport.js (server parse, trả JSON) rồi GỘP vào operationEstimateItems đang sửa —
 // người dùng vẫn phải bấm "💾 Lưu Danh Mục Đầu Tư" như thêm tay, KHÔNG tự ghi thẳng. ----------
+// Export dùng operationEstimateEffectiveAmount() (KHÔNG phải it.amount thẳng) — danh mục lớn có con thì
+// it.amount không tự đồng bộ realtime lúc gõ (chỉ hiển thị ở UI qua hàm này), xuất Excel phải khớp đúng
+// số roll-up đang hiển thị, không xuất nhầm 0/giá trị cũ. Thêm cột "Danh Mục Cha" để không mất thông tin
+// cấu trúc 2 cấp khi xuất ra (import lại vẫn nạp phẳng — chưa hỗ trợ đọc lại cột này, chỉ để tham khảo).
 async function exportOperationEstimateItems() {
   const validItems = operationEstimateItems.filter(it => (it.content || '').trim());
   if (!validItems.length) return alert('Chưa có hạng mục hợp lệ nào để xuất.');
   const columns = [
-    { header: 'Nội Dung', key: 'content', width: 30 }, { header: 'Mô Tả', key: 'description', width: 26 },
+    { header: 'Nội Dung', key: 'content', width: 30 }, { header: 'Danh Mục Cha', key: 'parentLabel', width: 22 },
+    { header: 'Mô Tả', key: 'description', width: 26 },
     { header: 'Chi Phí (VNĐ)', key: 'amount', width: 18 }, { header: 'Lưu Ý', key: 'note', width: 22 }
   ];
-  const rows = validItems.map(it => ({ content: it.content, description: it.description || '', amount: it.amount || 0, note: it.note || '' }));
+  const rows = validItems.map(it => {
+    const parent = it.parentId != null ? operationEstimateItems.find(p => p.id === it.parentId) : null;
+    return { content: it.content, parentLabel: parent ? parent.content : '', description: it.description || '', amount: operationEstimateEffectiveAmount(it), note: it.note || '' };
+  });
   await downloadXlsxFromServer('Danh_Muc_Dau_Tu.xlsx', 'Danh Mục Đầu Tư', columns, rows);
 }
 async function onOperationEstimateImportFileChange(event) {
@@ -1406,9 +1481,11 @@ async function onOperationEstimateImportFileChange(event) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     // Gộp thêm vào cuối bảng đang sửa (không thay thế) — người dùng tự xoá dòng trống mẫu/dòng thừa
-    // trước khi bấm Lưu, cùng UX addOperationEstimateItemRow() đã quen thuộc.
+    // trước khi bấm Lưu, cùng UX addOperationEstimateItemRow() đã quen thuộc. Import chưa hỗ trợ đọc cột
+    // "Danh Mục Cha" (Mục "Danh mục đầu tư 2 cấp") — mọi dòng nhập từ Excel LUÔN vào làm danh mục lớn mới
+    // (parentId null, kèm id TẠM để dòng con thêm tay SAU đó có thể chọn làm cha qua dropdown).
     operationEstimateItems = operationEstimateItems.filter(it => (it.content || '').trim());
-    operationEstimateItems.push(...data.items);
+    operationEstimateItems.push(...data.items.map(it => ({ ...it, id: nextEstimateTempId(), parentId: null })));
     renderOperationEstimateItemsTable(true);
     statusEl.innerText = `✅ Đã đọc "${data.fileName}": thêm ${data.items.length} hạng mục — kiểm tra lại rồi bấm Lưu Danh Mục Đầu Tư.`;
   } catch (err) {
@@ -2476,7 +2553,12 @@ const OP_CLICK_ACTIONS = {
   closeOperationProcessModal: () => closeOperationProcessModal(),
   confirmProcessOperation: el => confirmProcessOperation(el.dataset.action),
   closeOperationEstimateModal: () => closeOperationEstimateModal(),
-  addOperationEstimateItemRow: () => addOperationEstimateItemRow(),
+  // Mục "Danh mục đầu tư 2 cấp" — đọc dropdown "đây là danh mục con của..." (selEstimateNewItemParent,
+  // xem populateEstimateNewItemParentSelect()) để biết dòng mới thêm là danh mục lớn hay con của ai.
+  addOperationEstimateItemRow: () => {
+    const sel = document.getElementById('selEstimateNewItemParent');
+    addOperationEstimateItemRow(sel && sel.value ? Number(sel.value) : null);
+  },
   removeOperationEstimateItemRow: el => removeOperationEstimateItemRow(Number(el.dataset.idx)),
   openOperationEstimateModal: el => openOperationEstimateModal(el.dataset.kind, Number(el.dataset.id)),
   submitOperationEstimateForApproval: () => submitOperationEstimateForApproval(),

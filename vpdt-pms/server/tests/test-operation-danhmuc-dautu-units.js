@@ -13,6 +13,10 @@
 //      operationStoreOpenings/operationRepairs còn qua phê duyệt đầy đủ, TRƯỚC khi Mục H bỏ hẳn phê
 //      duyệt — b89d46e 2026-09-01 tới 60c473b 2026-09-04) sang APPROVED, KHÔNG đụng tới hồ sơ đã đúng
 //      hoặc tới estimateStatus (Danh mục đầu tư — DRAFT ở field NÀY vẫn là trạng thái hợp lệ đang dùng).
+//   6. Mục "Danh mục đầu tư 2 cấp" (parentId trên estimateItems[]) — danh mục lớn có con thì amount tự
+//      roll-up = tổng con (ghi đè số client gửi cho chính nó); tổng estimateTotalAmount chỉ cộng danh mục
+//      lớn (không cộng đúp con); danh mục lớn không con hành vi y hệt trước; chặn lồng quá 1 cấp (400);
+//      con mồ côi (cha đã bị xoá cascade trong CÙNG lần lưu) bị bỏ hẳn, không lỗi/không thăng cấp.
 //
 // Chạy: node server/tests/test-operation-danhmuc-dautu-units.js
 const assert = require('assert');
@@ -208,6 +212,82 @@ test('submitOperationEstimate: đang REJECTED (dữ liệu cũ trước Mục H)
 test('submitOperationEstimate: thiếu quyền operationEstimateCreate -> 403', () => {
   const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
   assert.throws(() => recordActions.submitOperationEstimate({ username: 'x', perms: {} }, item, { items: [{ content: 'A', amount: 100 }] }), /không có quyền/);
+});
+
+// ===================== 2a) Mục "Danh mục đầu tư 2 cấp" — parentId + roll-up (yêu cầu người dùng: "tạo
+//    được nhiều danh mục con trong 1 danh mục lớn, tiền tổng cộng tại danh mục lớn để tính tổng tiền
+//    danh mục đầu tư") — worked example dùng xuyên suốt: 1 danh mục lớn "Nội thất" (id tạm -1) có 2 danh
+//    mục con "Kệ trưng bày" 20tr + "Quầy thu ngân" 15tr = 35tr; 1 danh mục lớn khác "Sơn tường" KHÔNG có
+//    con, tự nhập tay 5tr -> tổng Danh Mục Đầu Tư kỳ vọng = 35 + 5 = 40tr (KHÔNG phải 35+20+15+5=70tr,
+//    tức KHÔNG được cộng đúp con vào tổng cùng lúc với cha đã roll-up). =====================
+function submitEstimateParentChildFixture() {
+  const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
+  // parentId dùng id TẠM âm giống client thật gửi lên (xem nextEstimateTempId() ở module-vanhanh.js) —
+  // "Nội thất" tự thêm amount=999999 để xác nhận server GHI ĐÈ (bỏ qua số client gửi cho cha có con).
+  return recordActions.submitOperationEstimate(ESTIMATOR, item, {
+    items: [
+      { id: -1, content: 'Nội thất', amount: 999999 },
+      { id: -2, content: 'Kệ trưng bày', amount: 20000000, parentId: -1 },
+      { id: -3, content: 'Quầy thu ngân', amount: 15000000, parentId: -1 },
+      { id: -4, content: 'Sơn tường', amount: 5000000 }
+    ]
+  });
+}
+test('submitOperationEstimate 2 cấp: danh mục lớn có 2 con -> amount CỦA CHÍNH NÓ tự tính = tổng 2 con (35tr), bỏ qua số client gửi', () => {
+  const result = submitEstimateParentChildFixture();
+  const noiThat = result.estimateItems.find(it => it.content === 'Nội thất');
+  assert.strictEqual(noiThat.parentId, null, 'Danh mục lớn phải có parentId null');
+  assert.strictEqual(noiThat.amount, 35000000, 'amount phải là tổng 2 con (20tr+15tr), KHÔNG phải 999999 client gửi');
+});
+test('submitOperationEstimate 2 cấp: 2 danh mục con giữ đúng amount tự nhập + parentId trỏ đúng về id THẬT của cha (không phải id tạm -1 client gửi)', () => {
+  const result = submitEstimateParentChildFixture();
+  const noiThat = result.estimateItems.find(it => it.content === 'Nội thất');
+  const ke = result.estimateItems.find(it => it.content === 'Kệ trưng bày');
+  const quay = result.estimateItems.find(it => it.content === 'Quầy thu ngân');
+  assert.strictEqual(ke.amount, 20000000);
+  assert.strictEqual(quay.amount, 15000000);
+  assert.strictEqual(ke.parentId, noiThat.id, 'parentId của con phải trỏ đúng id THẬT (server sinh) của cha, không còn là id tạm -1');
+  assert.strictEqual(quay.parentId, noiThat.id);
+  assert.notStrictEqual(noiThat.id, -1, 'id thật của cha phải được server sinh mới, khác id tạm client gửi');
+});
+test('submitOperationEstimate 2 cấp: danh mục lớn KHÔNG có con -> hành vi y hệt trước đây, amount = số tự nhập', () => {
+  const result = submitEstimateParentChildFixture();
+  const son = result.estimateItems.find(it => it.content === 'Sơn tường');
+  assert.strictEqual(son.parentId, null);
+  assert.strictEqual(son.amount, 5000000, 'Danh mục lớn không con vẫn amount nhập tay trực tiếp, không đổi hành vi cũ');
+});
+test('submitOperationEstimate 2 cấp: tổng estimateTotalAmount = CHỈ cộng danh mục lớn (35tr Nội thất đã roll-up + 5tr Sơn tường) = 40tr — KHÔNG cộng đúp 2 con của Nội thất vào tổng', () => {
+  const result = submitEstimateParentChildFixture();
+  assert.strictEqual(result.estimateTotalAmount, 40000000, `Tổng phải = 40tr (35tr Nội thất roll-up + 5tr Sơn tường), không phải 70tr nếu cộng đúp con — thực tế: ${result.estimateTotalAmount}`);
+});
+test('submitOperationEstimate 2 cấp: lồng quá 1 cấp (con của con) -> throw 400 rõ ràng, KHÔNG âm thầm chấp nhận', () => {
+  const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
+  assert.throws(() => recordActions.submitOperationEstimate(ESTIMATOR, item, {
+    items: [
+      { id: -1, content: 'Cấp 1 (danh mục lớn)', amount: 0 },
+      { id: -2, content: 'Cấp 2 (danh mục con)', amount: 100, parentId: -1 },
+      { id: -3, content: 'Cấp 3 (cháu — KHÔNG được phép)', amount: 50, parentId: -2 }
+    ]
+  }), /chỉ hỗ trợ tối đa 2 cấp/, 'Phải chặn rõ ràng khi cố lồng quá 1 cấp (danh mục con không được làm cha)');
+});
+test('submitOperationEstimate 2 cấp: tự làm cha của chính mình -> throw 400', () => {
+  const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
+  assert.throws(() => recordActions.submitOperationEstimate(ESTIMATOR, item, {
+    items: [{ id: 7, content: 'Tự tham chiếu chính mình', amount: 100, parentId: 7 }]
+  }), /không thể là danh mục con của chính nó/);
+});
+test('submitOperationEstimate 2 cấp — quy ước XOÁ CHA CASCADE XOÁ LUÔN CON (mirror deleteOperationWorkItem()): con gửi lên với parentId trỏ tới 1 cha KHÔNG còn trong lần lưu này (client đã xoá cả dòng cha, đúng UX removeOperationEstimateItemRow() cascade) -> con đó bị BỎ HẲN (không lỗi, không âm thầm thăng thành danh mục lớn)', () => {
+  const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
+  const result = recordActions.submitOperationEstimate(ESTIMATOR, item, {
+    items: [
+      { id: -1, content: 'Danh mục còn lại', amount: 1000 },
+      // "Con mồ côi": cha id=-99 KHÔNG có mặt trong items gửi lên (đã bị xoá cascade phía client)
+      { id: -2, content: 'Con mồ côi (cha đã bị xoá)', amount: 999999, parentId: -99 }
+    ]
+  });
+  assert.strictEqual(result.estimateItems.length, 1, 'Con mồ côi phải bị loại hẳn khỏi kết quả, không giữ lại dưới bất kỳ hình thức nào');
+  assert.strictEqual(result.estimateItems[0].content, 'Danh mục còn lại');
+  assert.strictEqual(result.estimateTotalAmount, 1000, 'Tổng không được cộng nhầm 999999 của con mồ côi đã bị loại');
 });
 
 // ===================== 2b) Correction 2 — "Ngân Sách Phê Duyệt" (approvedBudget): field RIÊNG, bắt

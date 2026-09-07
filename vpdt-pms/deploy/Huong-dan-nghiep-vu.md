@@ -341,6 +341,32 @@ với "Tổng Hợp"):
       quản lý hồ sơ (creator hoặc giữ "Quản Lý Hồ Sơ Siêu Thị") giờ CŨNG cập
       nhật/nghiệm thu được trên hồ sơ mình quản lý, thêm vào (không thay thế)
       quyền của người được gán/chỉ định.
+  - **Danh Mục Đầu Tư 2 cấp — danh mục lớn + danh mục con (từ v11.4)**: bảng
+    hạng mục Danh Mục Đầu Tư (giai đoạn Dự toán) nay hỗ trợ **đúng 2 cấp** —
+    1 "danh mục lớn" có thể chứa nhiều "danh mục con" bên trong (KHÔNG lồng
+    sâu hơn 2 cấp). Khi thêm hạng mục mới ("➕ Thêm Hạng Mục"), chọn ở dropdown
+    cạnh nút: "— Không, đây là danh mục lớn —" (mặc định) hoặc tên 1 danh mục
+    lớn có sẵn để thêm hạng mục mới làm **con** của danh mục đó — dropdown chỉ
+    liệt kê danh mục LỚN (danh mục con không được chọn làm cha, đúng luật chỉ
+    2 cấp). Bảng hiển thị hạng mục con thụt lề "↳" dưới đúng hạng mục lớn của
+    nó (mirror quy ước hiển thị cây của bảng Công việc Thực hiện/Nghiệm thu).
+    - **Tiền tự cộng dồn lên danh mục lớn**: danh mục lớn có ≥1 con thì cột
+      "Chi Phí" của chính nó KHÔNG còn nhập tay được nữa — tự động = **tổng
+      Chi Phí của toàn bộ con** (hiện chữ xám "🔢 Tự động tính từ N danh mục
+      con"). Danh mục lớn KHÔNG có con nào thì vẫn nhập tay bình thường như
+      trước, không đổi gì.
+    - **Tổng Danh Mục Đầu Tư** (dùng để tính "Ngân sách còn lại") chỉ cộng
+      các danh mục LỚN — con đã nằm trong số tự cộng của cha rồi nên KHÔNG bị
+      cộng đúp. VD: danh mục lớn "Nội thất" có 2 con 20 triệu + 15 triệu (tự
+      cộng = 35 triệu) và danh mục lớn "Sơn tường" không con 5 triệu → Tổng
+      Danh Mục Đầu Tư = 35 + 5 = **40 triệu** (không phải 70 triệu).
+    - **Xoá danh mục lớn đang có con**: bấm "✕" xoá danh mục lớn sẽ **xoá
+      cùng toàn bộ danh mục con của nó** (cascade, mirror đúng quy ước xoá đầu
+      mục lớn trong cây Công việc Thực hiện) — không có bước xác nhận riêng,
+      cần cẩn thận trước khi bấm xoá 1 danh mục lớn đang có con bên trong.
+    - Hồ sơ CŨ (lập trước v11.4) mặc định toàn bộ hạng mục là danh mục lớn,
+      không cần thao tác gì thêm — vẫn dùng được bình thường, chỉ khi cần mới
+      thêm danh mục con vào hạng mục có sẵn.
 
 ### 3.6. Hỗ Trợ IT
 
