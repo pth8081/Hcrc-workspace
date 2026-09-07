@@ -82,8 +82,20 @@ function createMockState(seed) {
     tasks: [],
     budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetDeptWorkflows: {},
     licenses: [], licenseTypes: [],
-    itServiceRenewals: [],
+    itServiceRenewals: [], itRenewalCategories: [],
     hrFeedback: [],
+    // hrFeedbackCategories: "Chủ Đề" của hrFeedback.category (CORE_FIELD_MANIFEST.HR_FEEDBACK, optionsKey) —
+    // TRƯỚC ĐÂY <option> gõ cứng nên mock không cần seed gì, giờ đổ động từ đây (populateDropdowns() ->
+    // populateHrFeedbackCategorySelect()) nên PHẢI seed đủ else các test set `.value = 'BENEFITS'`/... sẽ
+    // không khớp <option> nào (select rỗng), cùng đúng 4 giá trị mặc định ở defaults.js.
+    hrFeedbackCategories: [
+      { key: 'OTHER', label: '❓ Khác' }, { key: 'BENEFITS', label: '🎁 Chế độ / Phúc lợi' },
+      { key: 'POLICY', label: '📋 Chính sách / Quy định' }, { key: 'SALARY', label: '💰 Lương / Thưởng' }
+    ],
+    // submissionPriorities/carPurposes/meetingRooms: 3 danh mục còn lại của đợt audit "form-fields-6" —
+    // không module nào trong 3 module test dùng testHarness.js (Đồng Phục/Hỗ Trợ IT/Báo Cáo Định Kỳ)
+    // chạm tới field liên quan, seed rỗng cho an toàn (khớp lý do "phần không dùng" ở đầu hàm).
+    submissionPriorities: [], carPurposes: [], meetingRooms: [],
     operationOrders: [], operationOrderStoreTierWorkflows: {}, operationOrderHOTierWorkflows: {},
     operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
     operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
@@ -108,6 +120,9 @@ function buildAppDataForCreate(moduleKey, state) {
     // itTicketCategories: nguồn hợp lệ cho itSupportTickets.category (CORE_FIELD_MANIFEST.IT_TICKET,
     // optionsKey) — xem itSupportTickets.extraValidate ở lib/createValidation.js.
     itTicketCategories: state.itTicketCategories,
+    // hrFeedbackCategories: nguồn hợp lệ cho hrFeedback.category (CORE_FIELD_MANIFEST.HR_FEEDBACK,
+    // optionsKey, đợt audit "form-fields-6") — xem hrFeedback.extraValidate ở lib/createValidation.js.
+    hrFeedbackCategories: state.hrFeedbackCategories,
     // Vận Hành > Siêu Thị > Danh mục đầu tư — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map
     // này qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
     operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,

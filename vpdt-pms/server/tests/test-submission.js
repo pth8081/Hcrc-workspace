@@ -234,6 +234,14 @@ async function main() {
         jobTitles: ['Trưởng Phòng', 'Nhân Viên'],
         deptAbbrs: {}, docCatAbbrs: {},
         submissionTypes: [{ key: 'HANH_CHINH', label: 'Hành chính' }],
+        // submissionPriorities: đợt audit "form-fields-6" chuyển "Độ Khẩn" từ <option> gõ cứng sang
+        // DB.submissionPriorities — seed đúng khuôn defaults.js để fillBaseSubmissionForm() bên dưới gán
+        // được '.value' như trước (select rỗng sẽ không nhận giá trị không khớp option nào).
+        submissionPriorities: [
+          { key: 'Bình thường', label: 'Bình thường' },
+          { key: 'Gấp', label: '🔥 Gấp' },
+          { key: 'Thượng khẩn', label: '⚡ Thượng khẩn' }
+        ],
         contractTypes: [], carTypes: [],
         workflows: [], deptWorkflows: {},
         submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {},

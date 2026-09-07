@@ -13,10 +13,22 @@
 // Nhân Sự trả lời, tắt đi khi nhân viên mở xem — xem respondToHrFeedback()/markHrFeedbackRead() ở
 // lib/recordActions.js.
 
-const HR_FEEDBACK_CATEGORY_LABELS = {
+// Nhãn GỐC (defaults.js) — chỉ dùng làm fallback trong getHrFeedbackCategoryLabel() khi key không
+// (còn) có trong DB.hrFeedbackCategories (VD dữ liệu cũ trước khi seed defaults.js chạy) — cùng khuôn
+// IT_TICKET_CATEGORY_LABELS_DEFAULT/getItTicketCategoryLabel() ở core.js (đợt audit "form-fields-6":
+// danh mục này TRƯỚC ĐÂY là hằng số HR_FEEDBACK_CATEGORY_LABELS cố định ngay tại đây, giờ admin tự
+// thêm/bớt/đổi nhãn được qua DB.hrFeedbackCategories, xem CORE_FIELD_MANIFEST.HR_FEEDBACK).
+const HR_FEEDBACK_CATEGORY_LABELS_DEFAULT = {
   BENEFITS: '🎁 Chế độ / Phúc lợi', POLICY: '📋 Chính sách / Quy định',
   SALARY: '💰 Lương / Thưởng', OTHER: '❓ Khác'
 };
+// Nhãn hiển thị hiện tại (đổi theo admin) của 1 category HCRC Đồng Hành — fallback về nhãn gốc ở trên
+// nếu key không còn trong DB.hrFeedbackCategories.
+function getHrFeedbackCategoryLabel(key) {
+  const found = (DB.hrFeedbackCategories || []).find(c => c.key === key);
+  if (found) return found.label;
+  return HR_FEEDBACK_CATEGORY_LABELS_DEFAULT[key] || key;
+}
 const HR_FEEDBACK_STATUS_BADGES = {
   PENDING: '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🕒 Chờ phản hồi</span>',
   ANSWERED: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phản hồi</span>'
@@ -77,7 +89,7 @@ function renderHrFeedbackInbox() {
       <div id="hrFeedbackInboxItem_${q.id}" data-op="openHrFeedbackAnswer" data-arg0="${q.id}" class="bg-white rounded border p-3 ${unread ? 'border-teal-500 ring-1 ring-teal-300 cursor-pointer' : ''}">
         <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
           ${HR_FEEDBACK_STATUS_BADGES[q.status] || escapeHtml(q.status)}
-          <span>${HR_FEEDBACK_CATEGORY_LABELS[q.category] || escapeHtml(q.category)}</span>
+          <span>${escapeHtml(getHrFeedbackCategoryLabel(q.category))}</span>
           <span>${escapeHtml(q.createdAt || '')}</span>
           ${unread ? '<span class="px-2 py-0.5 bg-teal-600 text-white rounded font-bold">🔔 Phản hồi mới — bấm để xem</span>' : ''}
         </div>
@@ -690,7 +702,7 @@ function renderHrFeedbackManage() {
       <div class="bg-white rounded border p-3">
         <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
           ${HR_FEEDBACK_STATUS_BADGES[q.status] || escapeHtml(q.status)}
-          <span>${HR_FEEDBACK_CATEGORY_LABELS[q.category] || escapeHtml(q.category)}</span>
+          <span>${escapeHtml(getHrFeedbackCategoryLabel(q.category))}</span>
           <span class="font-semibold text-gray-700">${escapeHtml(q.creatorName || q.creator || '')}</span>
           <span>${escapeHtml(q.dept || '')}</span>
           <span>${escapeHtml(q.createdAt || '')}</span>

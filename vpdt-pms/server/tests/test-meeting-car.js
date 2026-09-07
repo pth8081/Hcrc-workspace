@@ -256,6 +256,19 @@ const seedDB = {
   jobTitles: ['Nhân viên', 'Quản lý phòng họp', 'Admin'],
   submissionTypes: [], contractTypes: [],
   carTypes: ['Xe 4 chỗ', 'Xe 7 chỗ', 'Xe 16 chỗ'],
+  // carPurposes/meetingRooms: đợt audit "form-fields-6" chuyển 2 danh sách này từ hằng số/hardcode
+  // <option> sang dữ liệu DB.* — mock seed đúng khuôn defaults.js để không đổi hành vi các test bên dưới.
+  carPurposes: [
+    { key: 'Công tác', label: 'Công tác (đính kèm QĐ, KH)' },
+    { key: 'Vận chuyển tài sản/hàng hóa', label: 'Vận chuyển tài sản/hàng hóa (đính kèm DS, KH)' },
+    { key: 'Ngoại giao, đưa đón khách', label: 'Ngoại giao, đưa đón khách (đính kèm KH)' },
+    { key: 'Khác', label: 'Khác (đính kèm KH)' }
+  ],
+  meetingRooms: [
+    { id: 1, name: 'Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)', short: 'Phòng A (50 người)' },
+    { id: 2, name: 'Phòng Họp Nhỏ B (Tầng 2 - Sức chứa 15 người)', short: 'Phòng B (15 người)' },
+    { id: 3, name: 'Phòng Hội Thảo Trực Tuyến C (Tầng 5)', short: 'Phòng C (Online)' }
+  ],
   users: [bookerUser, roomManagerUser, adminUser, driverUser, driverUser2, noDispatchApproverUser, dispatchApproverUser],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
   carRegs: [], workflows: [],
@@ -313,7 +326,7 @@ async function main() {
     setMeetingSubTab('CALENDAR');
     document.getElementById('meetingCalDate').value = '2026-09-01';
     renderMeetingCalendar();
-    const roomIdx = MEETING_ROOMS.findIndex((r) => r.name === room);
+    const roomIdx = DB.meetingRooms.findIndex((r) => r.name === room);
     // Mô phỏng kéo chuột/Shift+bấm chọn liên tiếp 07:00 -> 08:30 (3 ô 30 phút = slot 0..2) trong đúng 1 cột phòng.
     finalizeMeetingSlotSelection(roomIdx, 0, 2);
     const prefilledStart = document.getElementById('meetingStartTime').value;

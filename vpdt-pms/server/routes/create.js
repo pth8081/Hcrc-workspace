@@ -39,6 +39,27 @@ async function learnLicenseType(rawType) {
   }
 }
 
+// Đợt audit "form-fields-6" — cùng khuôn learnLicenseType() ở trên, áp dụng cho "Loại Dịch Vụ" của
+// Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT (appData.itRenewalCategories, TRƯỚC ĐÂY free-text + gợi ý cố định
+// IT_RENEWAL_CATEGORY_SUGGESTIONS ở client, giờ danh mục admin-editable + tự học server-side).
+const IT_RENEWAL_CATEGORIES_MAX = 500; // trần an toàn, cùng lý do LICENSE_TYPES_MAX ở trên.
+
+async function learnItRenewalCategory(rawCategory) {
+  const category = String(rawCategory || '').trim();
+  if (!category) return;
+  try {
+    await withLockedAppDataValue('itRenewalCategories', (current) => {
+      const list = Array.isArray(current) ? current : [];
+      if (list.includes(category) || list.length >= IT_RENEWAL_CATEGORIES_MAX) return list;
+      return [...list, category];
+    });
+  } catch (err) {
+    // Không bao giờ để việc cập nhật danh mục GỢI Ý làm hỏng lượt tạo dịch vụ đã thành công — cùng lý
+    // do learnLicenseType() ở trên.
+    console.error('Không thể bổ sung loại dịch vụ vào danh mục itRenewalCategories:', err.message);
+  }
+}
+
 // POST /api/create/:module  (module: submissions|contracts|meetings|carRegs|officeReqs|docs)
 router.post('/:module', async (req, res) => {
   const { module: moduleKey } = req.params;
@@ -141,6 +162,8 @@ router.post('/:module', async (req, res) => {
 
     // Tự học loại giấy phép mới vào danh mục gợi ý — xem learnLicenseType() ở đầu file.
     if (moduleKey === 'licenses') await learnLicenseType(record.licenseType);
+    // Tự học "Loại Dịch Vụ" mới vào danh mục gợi ý — xem learnItRenewalCategory() ở đầu file.
+    if (moduleKey === 'itServiceRenewals') await learnItRenewalCategory(record.category);
 
     res.json({ ok: true, item: record });
   } catch (err) {

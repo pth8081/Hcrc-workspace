@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**11.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Rà soát audit "trường nhiều lựa chọn không sửa thêm/bớt được" — 6 danh mục mới admin-editable (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Rà soát lại tất cả biểu mẫu chỗ trường nào có nhiều lựa chọn thì
+cho phép chỉnh sửa thêm, bớt lựa chọn trong trường này giúp mình nhé, hiện tại có một vài trường nhiều
+lựa chọn mà ko sửa thêm bớt thông tin, bạn rà soát kỹ nhe". Một đợt research read-only trước đó đã xác
+định đúng 6 trường/module cụ thể còn gõ cứng danh sách lựa chọn — đợt này triển khai admin-editable cho
+cả 6, theo đúng khuôn mẫu đã có sẵn trong hệ thống (contractTypes/carTypes/itTicketCategories/licenseTypes).
+
+**6 danh mục MỚI (tất cả đều `ADMIN_ONLY_KEYS`, `routes/data.js` — chỉ Quản Trị Viên ghi được)**:
+
+1. **`DB.meetingRooms`** (Đặt Phòng Họp) — trước đây `const MEETING_ROOMS` gõ cứng 3 phòng ngay trong
+   `public/js/core.js`. Nay admin thêm/xoá phòng họp tại chính module Đặt Phòng Họp (tab "📝 Đăng Ký" —
+   khối "🗂️ Danh Mục Phòng Họp", cùng khuôn "Danh Mục Đồng Phục"). `<select id="meetingRoom">` + lưới
+   Lịch Họp đều đọc `DB.meetingRooms` thay vì hằng số. Không có validate server (không đổi — trước đây
+   cũng chưa có).
+2. **`DB.carPurposes`** (Đăng Ký Xe — "Mục Đích Sử Dụng") — `{key,label}[]` (cùng khuôn
+   `itTicketCategories`), `key` giữ đúng giá trị hiện có (`Công tác`/`Vận chuyển tài sản/hàng hóa`/
+   `Ngoại giao, đưa đón khách`/`Khác`), `label` giữ nguyên phần ghi chú "(đính kèm...)". Sửa qua màn
+   Biểu Mẫu (`CORE_FIELD_MANIFEST.CAR.carPurpose`, `optionsKey`). Không có validate server (không đổi).
+3. **`DB.submissionPriorities`** (Tờ Trình — "Độ Khẩn") — cùng khuôn trên (`{key,label}[]`, key giữ
+   nguyên `Bình thường`/`Gấp`/`Thượng khẩn`, label giữ icon 🔥/⚡). Sửa qua Biểu Mẫu
+   (`CORE_FIELD_MANIFEST.SUBMISSION.subPriority`). Không có validate server (không đổi).
+4. **`DB.hrFeedbackCategories`** (HCRC Đồng Hành — "Chủ Đề") — cùng khuôn `itTicketCategories`, giữ
+   nguyên đúng 4 key (`OTHER`/`BENEFITS`/`POLICY`/`SALARY`). **CÓ sửa server**:
+   `lib/createValidation.js` `hrFeedback.extraValidate` trước đây dùng `Set` cố định 4 giá trị — nay đọc
+   `appData.hrFeedbackCategories` (fallback về đúng 4 giá trị gốc nếu appData chưa có, cùng khuôn
+   `itSupportTickets.extraValidate`), nếu không admin thêm 1 chủ đề mới sẽ bị server âm thầm ép về
+   `OTHER`. Đã gỡ hằng số trùng `HR_FEEDBACK_CATEGORY_LABELS` ở `module-hcrcdonghanh.js`, thay bằng
+   `getHrFeedbackCategoryLabel()` đọc từ `DB.hrFeedbackCategories` (fallback nhãn gốc).
+5. **Đồng bộ dropdown lọc IT Ticket** — `#filterCategoryItTicket` (Hỗ Trợ IT > Hỗ Trợ Yêu Cầu, khối Tìm
+   Kiếm & Lọc) trước đây vẫn gõ cứng 5 `<option>` gốc dù `#itTicketCategory` (form tạo) đã đổ động từ
+   `DB.itTicketCategories` từ lâu — 2 nơi lệch nhau mỗi khi admin sửa danh mục. Thêm
+   `populateItTicketCategoryFilterSelect()`, gọi cùng lúc với `populateItTicketCategorySelect()` trong
+   `populateDropdowns()` — không phải danh mục MỚI, chỉ là vá lệch pha giữa 2 dropdown cùng nguồn.
+6. **`DB.itRenewalCategories`** (Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT — "Loại Dịch Vụ") — trước đây free-text
+   + gợi ý tự học cố định (`IT_RENEWAL_CATEGORY_SUGGESTIONS`). Nay danh mục admin-editable (flat array,
+   cùng khuôn `licenseTypes`): panel CRUD ngay trong tab Gia Hạn Dịch Vụ (chỉ Admin thấy, khối "📜 Quản
+   Lý Danh Mục 'Loại Dịch Vụ'"), **VÀ** tự học server-side (`learnItRenewalCategory()`,
+   `routes/create.js`, CHỈ THÊM không ghi đè — cùng khuôn `learnLicenseType()`). Ô nhập vẫn giữ nguyên
+   cơ chế gợi ý tự dựng `sdd*` (KHÔNG dùng `<datalist>` native, theo quy ước `CLAUDE.md`). Đã seed sẵn
+   đúng 6 giá trị gợi ý gốc; nếu hệ thống ĐÃ có bản ghi `itServiceRenewals` thật trước khi nâng cấp,
+   `seedDefaults.js` (`migrateItRenewalCategories()`) tự quét bổ sung mọi giá trị `.category` khác đang
+   có vào danh mục — không mồ côi giá trị nào.
+
+**Zero behavior change tới khi admin chủ động sửa**: cả 6 danh mục seed đúng 1:1 giá trị/thứ tự đang gõ
+cứng hôm nay (`defaults.js`) — không có bản ghi/hành vi nào đổi cho tới khi admin thật sự thêm/bớt/đổi
+nhãn ở 1 trong các màn quản lý trên.
+
+**Deploy-impact: KHÔNG** — 6 danh mục mới đều là AppData JSON (tự seed vào `dbo.AppData` lúc khởi động
+qua `seedDefaults.js`, không đụng `sql/schema.sql`), không thêm biến môi trường (`.env.example`), không
+đổi `dependencies` (`package.json`). Chỉ copy code + `pm2 restart`.
+
+**Test**: `tests/test-form-fields-6-catalogs.js` (mới, 13 kịch bản — 5 danh mục admin-only-write 403/200,
+`hrFeedback` chấp nhận category mới/từ chối category đã xoá/fallback đúng khi appData rỗng,
+`itRenewalCategories` tự học CHỈ THÊM không ghi đè/không thêm trùng/chặn người không có `itManage`) +
+1 kịch bản mới trong `tests/test-it-support.js` (đồng bộ dropdown lọc IT Ticket qua đúng đường admin thật
+dùng — `saveCoreFieldOptionsList()`) + cập nhật seed `tests/test-meeting-car.js`/`test-submission.js`/
+`testHarness.js` cho khớp shape mới. Full regression 75 file `tests/test-*.js`: 73/75 xanh, 2 lỗi còn
+lại (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`) là lỗi kết nối SQL Server
+(`localhost:1433`) CÓ SẴN TỪ TRƯỚC (đã xác nhận qua `git stash` baseline y hệt, không liên quan đợt này).
 
 ## Điều Hành > 📅 Báo Cáo Định Kỳ > Tổng Hợp: bộ lọc "Đối Chiếu Theo Công Việc" + Giấy Phép: sắp phiên bản mới nhất lên trước (2026-09-07)
 

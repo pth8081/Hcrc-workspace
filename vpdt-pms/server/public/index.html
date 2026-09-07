@@ -686,11 +686,9 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Độ Khẩn</label>
-            <select id="subPriority" class="w-full border p-1.5 rounded bg-white font-bold text-rose-600">
-              <option value="Bình thường">Bình thường</option>
-              <option value="Gấp">🔥 Gấp</option>
-              <option value="Thượng khẩn">⚡ Thượng khẩn</option>
-            </select>
+            <!-- Đổ động từ DB.submissionPriorities (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, xem
+                 CORE_FIELD_MANIFEST.SUBMISSION optionsKey) — populateSubmissionPrioritySelect(). -->
+            <select id="subPriority" class="w-full border p-1.5 rounded bg-white font-bold text-rose-600"></select>
           </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tờ Trình</label>
@@ -1055,6 +1053,28 @@
     </div>
 
     <div id="meetingRegisterTabContent" class="space-y-6">
+      <!-- Danh Mục Phòng Họp (chỉ Admin, đợt audit "form-fields-6") — cùng khuôn "Danh Mục Đồng Phục"
+           (uniformCatalogAdminForm) — xem renderMeetingRoomCatalogList()/saveMeetingRoomCatalogItem()/
+           deleteMeetingRoomCatalogItem() ở module-phonghop.js. -->
+      <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">🗂️ Danh Mục Phòng Họp</h3>
+          <span class="text-xs text-gray-500">Quản Trị Viên thêm/bớt phòng họp — dùng chung cho ô Chọn Phòng Họp bên dưới và lưới Lịch Họp.</span>
+        </div>
+        <div id="meetingRoomCatalogAdminForm" class="hidden grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Phòng Họp Đầy Đủ</label>
+            <input id="meetingRoomCatalogName" placeholder="VD: Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Gọn (cột trên Lịch Họp)</label>
+            <input id="meetingRoomCatalogShort" placeholder="VD: Phòng A (50 người)" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <button type="button" data-op="saveMeetingRoomCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+        </div>
+        <div id="meetingRoomCatalogListWrap" class="space-y-1.5"></div>
+      </div>
+
       <form data-op-submit="submitMeetingReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -2543,12 +2563,9 @@
         <p class="text-[11px] text-gray-500 italic">Thắc mắc về chế độ, chính sách, lương thưởng hoặc quy định công ty — chỉ bạn và bộ phận Nhân Sự đọc được nội dung này. Nhân Sự sẽ phản hồi ngay tại đây (bạn nhận thông báo trên nhãn "🤝 HCRC Đồng Hành").</p>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Chủ Đề (tuỳ chọn)</label>
-          <select id="hrFeedbackCategory" class="w-full md:w-64 border p-1.5 rounded bg-white">
-            <option value="OTHER">❓ Khác</option>
-            <option value="BENEFITS">🎁 Chế độ / Phúc lợi</option>
-            <option value="POLICY">📋 Chính sách / Quy định</option>
-            <option value="SALARY">💰 Lương / Thưởng</option>
-          </select>
+          <!-- Đổ động từ DB.hrFeedbackCategories (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, xem
+               CORE_FIELD_MANIFEST.HR_FEEDBACK optionsKey) — populateHrFeedbackCategorySelect(). -->
+          <select id="hrFeedbackCategory" class="w-full md:w-64 border p-1.5 rounded bg-white"></select>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Nội Dung Câu Hỏi</label>
@@ -2751,12 +2768,9 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mục Đích Sử Dụng</label>
-            <select id="carPurpose" class="w-full border p-1.5 rounded bg-white" required>
-              <option value="Công tác">Công tác (đính kèm QĐ, KH)</option>
-              <option value="Vận chuyển tài sản/hàng hóa">Vận chuyển tài sản/hàng hóa (đính kèm DS, KH)</option>
-              <option value="Ngoại giao, đưa đón khách">Ngoại giao, đưa đón khách (đính kèm KH)</option>
-              <option value="Khác">Khác (đính kèm KH)</option>
-            </select>
+            <!-- Đổ động từ DB.carPurposes (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, xem
+                 CORE_FIELD_MANIFEST.CAR optionsKey) — populateCarPurposeSelect(). -->
+            <select id="carPurpose" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Số KM Dự Kiến (2 chiều)</label>
@@ -5570,14 +5584,10 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Danh Mục</label>
-            <select id="filterCategoryItTicket" data-op-change="onItTicketFilterChange" class="w-full border p-2 rounded text-sm bg-white">
-              <option value="">-- Tất cả danh mục --</option>
-              <option value="HARDWARE">🖥️ Phần cứng</option>
-              <option value="SOFTWARE">💿 Phần mềm</option>
-              <option value="NETWORK">🌐 Mạng / Internet</option>
-              <option value="ACCOUNT">🔑 Tài khoản / Đăng nhập</option>
-              <option value="OTHER">❓ Khác</option>
-            </select>
+            <!-- Đổ động từ DB.itTicketCategories (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu) — TRƯỚC
+                 ĐÂY vẫn gõ cứng 5 <option> gốc trong khi #itTicketCategory (form tạo mới) đã đổ động từ
+                 lâu, khiến 2 nơi lệch nhau (đợt audit "form-fields-6") — xem populateItTicketCategoryFilterSelect(). -->
+            <select id="filterCategoryItTicket" data-op-change="onItTicketFilterChange" class="w-full border p-2 rounded text-sm bg-white"></select>
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
@@ -5647,6 +5657,21 @@
             <button type="submit" class="bg-sky-700 text-white px-5 py-2 rounded font-bold hover:bg-sky-800 transition">Thêm vào danh mục</button>
           </div>
         </form>
+      </div>
+
+      <!-- Danh Mục "Loại Dịch Vụ" (chỉ Admin, đợt audit "form-fields-6") — cùng khuôn "Quản Lý Danh Mục
+           Các Loại Giấy Phép" (licenseTypes ở màn Quản Lý Danh Mục) — xem
+           renderItRenewalCategoryList()/saveItRenewalCategory()/deleteItRenewalCategory() bên dưới. -->
+      <div id="itRenewalCategoryAdminBox" class="hidden bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục "Loại Dịch Vụ"</h3>
+        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Loại dịch vụ" ở form thêm dịch vụ phía trên — tự học thêm khi ai gõ loại mới, ở đây chỉ để thêm/dọn/xoá bớt.</p>
+        <form data-op-submit="saveItRenewalCategory" class="flex gap-2">
+          <input id="txtItRenewalCategoryName" placeholder="Tên loại dịch vụ mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="itRenewalCategoryList" class="divide-y text-xs"></ul>
+        </div>
       </div>
 
       <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">

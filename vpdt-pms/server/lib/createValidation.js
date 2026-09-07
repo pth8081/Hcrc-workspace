@@ -1470,11 +1470,18 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true, // không có khái niệm chọn phòng ban (luôn là phòng ban của chính người hỏi)
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload) => {
+    extraValidate: (payload, existingCollection, user, appData) => {
       if (!payload.question || !String(payload.question).trim()) throw new CreateError(400, 'Vui lòng nhập nội dung câu hỏi');
       payload.question = String(payload.question).trim().slice(0, 5000);
-      const allowedCategories = new Set(['BENEFITS', 'POLICY', 'SALARY', 'OTHER']);
-      payload.category = allowedCategories.has(payload.category) ? payload.category : 'OTHER';
+      // Danh Mục — nguồn hợp lệ giờ đọc từ appData.hrFeedbackCategories (CORE_FIELD_MANIFEST.HR_FEEDBACK,
+      // optionsKey, admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu — đợt audit "form-fields-6" supersede quyết
+      // định trước đây "gắn trực tiếp phân loại nội bộ, không phải danh sách tự do"), cùng khuôn
+      // itSupportTickets.extraValidate ở trên — KHÔNG còn Set cố định 4 giá trị, nhưng vẫn fallback về
+      // đúng 4 giá trị gốc nếu appData chưa có (dữ liệu cũ trước khi seed defaults.js chạy).
+      const categoryList = (appData?.hrFeedbackCategories && appData.hrFeedbackCategories.length)
+        ? appData.hrFeedbackCategories
+        : [{ key: 'BENEFITS' }, { key: 'POLICY' }, { key: 'SALARY' }, { key: 'OTHER' }];
+      payload.category = categoryList.some(c => c.key === payload.category) ? payload.category : 'OTHER';
       // Thời điểm gửi do SERVER gán (không tin client) — khác itSupportTickets ở trên vốn nhận
       // createdAt từ payload; đây là bản ghi 2 phía (nhân viên hỏi/Nhân Sự đáp) nên mốc thời gian
       // phải là mốc server ghi nhận thật.

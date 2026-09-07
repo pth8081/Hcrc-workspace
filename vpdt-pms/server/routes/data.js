@@ -85,6 +85,12 @@ const ADMIN_ONLY_KEYS = new Set([
   // cùng lý do contractTypes/carTypes ở trên: từ khi cho sửa danh sách lựa chọn qua màn Biểu Mẫu (chỉ
   // Admin), ghi trực tiếp POST /api/data/itTicketCategories phải khoá lại đúng độ mở của màn đó.
   'itTicketCategories',
+  // submissionPriorities/carPurposes/hrFeedbackCategories/meetingRooms/itRenewalCategories: đợt audit
+  // "form-fields-6" — 5 danh mục MỚI cùng khuôn contractTypes/carTypes/itTicketCategories ở trên, mỗi
+  // danh mục chỉ có màn sửa dành cho Admin (Biểu Mẫu với 3 cái optionsKey đầu, chính module Đặt Phòng
+  // Họp/Gia Hạn Dịch Vụ CNTT với 2 cái sau) — ghi trực tiếp POST /api/data/<key> phải khoá lại đúng độ
+  // mở đó, không mở cho mọi tài khoản đã đăng nhập.
+  'submissionPriorities', 'carPurposes', 'hrFeedbackCategories', 'meetingRooms', 'itRenewalCategories',
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
   'contractExpiryDeptContacts',

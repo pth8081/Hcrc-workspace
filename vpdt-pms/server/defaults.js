@@ -151,6 +151,62 @@ const DEFAULTS = {
     { key: 'OTHER', label: '❓ Khác' }
   ],
 
+  // Rà soát "trường nhiều lựa chọn không sửa thêm/bớt được" (đợt audit form-fields-6): 5 danh mục dưới
+  // đây TRƯỚC ĐÂY gõ cứng thẳng <option>/const trong client, giờ chuyển thành dữ liệu admin tự thêm/bớt,
+  // cùng khuôn contractTypes/carTypes/itTicketCategories ở trên — GIỮ NGUYÊN đúng giá trị/key hiện có để
+  // không đổi hành vi cho dữ liệu cũ (zero behavior change tới khi admin chủ động sửa danh mục).
+
+  // "Độ Khẩn" (Tờ Trình, CORE_FIELD_MANIFEST.SUBMISSION.subPriority) — {key,label}[] + optionsIsKeyLabel:true
+  // (cùng khuôn subType ngay phía trên, KHÔNG phải flat array): key GIỮ NGUYÊN đúng giá trị đang gửi lên
+  // (payload.priority, xem module-vanbantrinh.js) để không đổi giá trị lưu của bản ghi mới ngay cả khi
+  // admin đổi nhãn hiển thị (label) sau này — label giữ nguyên icon 🔥/⚡ đang hiện trên dropdown hôm nay.
+  submissionPriorities: [
+    { key: 'Bình thường', label: 'Bình thường' },
+    { key: 'Gấp', label: '🔥 Gấp' },
+    { key: 'Thượng khẩn', label: '⚡ Thượng khẩn' }
+  ],
+
+  // "Mục Đích Sử Dụng" (Đăng Ký Xe, CORE_FIELD_MANIFEST.CAR.carPurpose) — cùng khuôn submissionPriorities
+  // ở trên ({key,label}[] + optionsIsKeyLabel:true): key GIỮ NGUYÊN đúng giá trị value hiện có của mỗi
+  // <option> (payload.purpose), label giữ nguyên phần ghi chú "(đính kèm...)" đang hiển thị kèm theo.
+  carPurposes: [
+    { key: 'Công tác', label: 'Công tác (đính kèm QĐ, KH)' },
+    { key: 'Vận chuyển tài sản/hàng hóa', label: 'Vận chuyển tài sản/hàng hóa (đính kèm DS, KH)' },
+    { key: 'Ngoại giao, đưa đón khách', label: 'Ngoại giao, đưa đón khách (đính kèm KH)' },
+    { key: 'Khác', label: 'Khác (đính kèm KH)' }
+  ],
+
+  // "Chủ Đề" (HCRC Đồng Hành — hrFeedback.category, CORE_FIELD_MANIFEST.HR_FEEDBACK.hrFeedbackCategory) —
+  // cùng khuôn itTicketCategories ở trên: KHÁC danh sách nhãn hiển thị thuần, key ở đây quyết định trực
+  // tiếp giá trị hợp lệ server chấp nhận (xem lib/createValidation.js hrFeedback.extraValidate, ĐỌC từ
+  // appData.hrFeedbackCategories thay vì Set cố định như trước) — GIỮ NGUYÊN đúng 4 key hiện có
+  // (OTHER/BENEFITS/POLICY/SALARY) để không mồ côi q.category đã lưu trên các câu hỏi cũ.
+  hrFeedbackCategories: [
+    { key: 'OTHER', label: '❓ Khác' },
+    { key: 'BENEFITS', label: '🎁 Chế độ / Phúc lợi' },
+    { key: 'POLICY', label: '📋 Chính sách / Quy định' },
+    { key: 'SALARY', label: '💰 Lương / Thưởng' }
+  ],
+
+  // Danh sách "Phòng Họp" (module Đặt Phòng Họp) — TRƯỚC ĐÂY gõ cứng const MEETING_ROOMS trong
+  // public/js/core.js (dùng chung cho <select> đăng ký lẫn lưới Lịch Họp), giờ chuyển thành dữ liệu để
+  // Admin tự thêm/bớt tại chính module Đặt Phòng Họp (xem renderMeetingRoomCatalogList() ở
+  // module-phonghop.js). "short" dùng làm tiêu đề cột gọn trên lưới Lịch Họp — GIỮ NGUYÊN đúng 3 phòng
+  // + tên/short hiện có.
+  meetingRooms: [
+    { id: 1, name: 'Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)', short: 'Phòng A (50 người)' },
+    { id: 2, name: 'Phòng Họp Nhỏ B (Tầng 2 - Sức chứa 15 người)', short: 'Phòng B (15 người)' },
+    { id: 3, name: 'Phòng Hội Thảo Trực Tuyến C (Tầng 5)', short: 'Phòng C (Online)' }
+  ],
+
+  // "Loại Dịch Vụ" (Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT, itServiceRenewals.category) — TRƯỚC ĐÂY free-text
+  // + gợi ý tự học cố định (IT_RENEWAL_CATEGORY_SUGGESTIONS, module-itsupport-renewal.js), giờ chuyển
+  // hẳn thành danh mục admin-editable (flat array, cùng khuôn licenseTypes — TỰ HỌC thêm khi ai gõ loại
+  // mới, xem learnItRenewalCategory() ở routes/create.js). Giữ nguyên đúng 6 giá trị gợi ý gốc; nếu hệ
+  // thống ĐÃ có bản ghi itServiceRenewals thật trước khi nâng cấp, seedDefaults.js tự quét bổ sung thêm
+  // các giá trị khác đang có (xem migrateItRenewalCategories()) để không mồ côi giá trị nào.
+  itRenewalCategories: ['Phần mềm/Bản quyền', 'Đường truyền Internet', 'Tên miền', 'Chứng chỉ SSL', 'Hosting', 'Khác'],
+
   // Danh Mục Đồng Phục — mỗi mục = 1 loại đồng phục + các size khả dụng của loại đó. Trước đây Hành
   // Chính gõ tay tên/size tự do khi phân bổ (uniformPeriods.allocations[].items), dễ sai lệch chính tả
   // (khoá tồn kho ghép chuỗi "tên|||size" — gõ khác 1 ký tự là tính thành 1 dòng tồn kho khác hẳn).

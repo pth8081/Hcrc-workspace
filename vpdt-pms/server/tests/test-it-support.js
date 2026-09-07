@@ -871,6 +871,27 @@ async function main() {
       assertEqual(created.item.extraFiles.length, 0, 'Không chọn tệp nào thì extraFiles phải là mảng rỗng');
       assertEqual(created.wrapHidden, true, 'Khối "Tài liệu bổ sung liên quan" phải ẨN trong modal khi không có tệp nào');
     });
+
+    // Đợt audit "form-fields-6" — dropdown "Lọc Theo Danh Mục" (#filterCategoryItTicket) trước đây gõ
+    // cứng 5 <option> gốc, lệch với #itTicketCategory (form tạo) mỗi khi admin thêm/bớt/đổi nhãn danh
+    // mục ở màn Biểu Mẫu. Kiểm tra ĐÚNG đường admin thật sự dùng (saveCoreFieldOptionsList(), gọi từ
+    // module-formbuilder-nav.js addCustomField() khi sửa trường mặc định "Danh Mục") để xác nhận CẢ 2
+    // dropdown cùng đồng bộ ngay sau khi lưu, không cần tải lại trang.
+    await run.run('Đồng bộ dropdown: admin thêm 1 Danh Mục IT Ticket mới ở màn Biểu Mẫu -> cả form tạo LẪN dropdown Lọc Theo Danh Mục đều thấy ngay', async () => {
+      await loginAs(page, ADMIN);
+      const result = await page.evaluate(() => {
+        switchTab('itSupport'); setItSupportSubTab('TICKET');
+        const fieldDef = CORE_FIELD_MANIFEST.IT_TICKET.find(f => f.id === 'itTicketCategory');
+        const currentLabels = getCoreFieldOptionsList(fieldDef);
+        saveCoreFieldOptionsList(fieldDef, [...currentLabels, '🧪 Thử Nghiệm Mới']);
+        const createFormOptions = Array.from(document.getElementById('itTicketCategory').options).map(o => o.textContent);
+        const filterOptions = Array.from(document.getElementById('filterCategoryItTicket').options).map(o => o.textContent);
+        return { createFormOptions, filterOptions, dbCount: DB.itTicketCategories.length };
+      });
+      assertIncludes(result.createFormOptions, '🧪 Thử Nghiệm Mới', 'Form tạo ticket (#itTicketCategory) phải thấy danh mục mới ngay');
+      assertIncludes(result.filterOptions, '🧪 Thử Nghiệm Mới', 'Dropdown Lọc Theo Danh Mục (#filterCategoryItTicket) phải đồng bộ theo, không còn gõ cứng 5 <option> gốc');
+      assertEqual(result.dbCount, 6, 'DB.itTicketCategories phải có đúng 6 phần tử sau khi thêm (5 gốc + 1 mới)');
+    });
   } finally {
     await browser.close();
     server.close();

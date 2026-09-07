@@ -5,7 +5,13 @@
 // dashboard/hiệu lực/nhắc email như Giấy Phép nhưng bỏ hẳn phần status/lifecycleStatus/version (xem
 // lib/createValidation.js itServiceRenewals.extraValidate).
 // ==========================================
-const IT_RENEWAL_CATEGORY_SUGGESTIONS = ['Phần mềm/Bản quyền', 'Đường truyền Internet', 'Tên miền', 'Chứng chỉ SSL', 'Hosting', 'Khác'];
+// IT_RENEWAL_CATEGORY_SUGGESTIONS: TRƯỚC ĐÂY hằng số cố định gõ cứng ngay tại đây (gợi ý tự học kết hợp
+// mọi giá trị đã có sẵn trên bản ghi), đợt audit "form-fields-6" chuyển hẳn thành danh mục admin-editable
+// DB.itRenewalCategories (cùng khuôn licenseTypes — ADMIN_ONLY_KEYS + tự học thêm khi ai gõ loại mới,
+// xem defaults.js + renderItRenewalCategoryList()/saveItRenewalCategory()/deleteItRenewalCategory() bên
+// dưới + learnItRenewalCategory() ở routes/create.js). Không xoá hẳn khỏi renderItServiceRenewals() việc
+// gộp thêm mọi giá trị ĐANG dùng trên bản ghi (dù không/không còn trong danh mục) — phòng trường hợp
+// admin lỡ xoá 1 danh mục đang được gán cho bản ghi cũ, dropdown lọc vẫn hiện đúng để lọc lại được.
 
 // Tình trạng hiệu lực — cùng khuôn computeLicenseLifecycleState() nhưng không có RENEWING/REVOKED (module
 // này không có khái niệm thu hồi/đánh dấu đang gia hạn, chỉ có ngày hết hạn).
@@ -44,11 +50,48 @@ function onItServiceRenewalFilterChange() {
   renderItServiceRenewals();
 }
 
+// ============ Danh Mục "Loại Dịch Vụ" (chỉ Admin — đợt audit "form-fields-6") ============
+// Cùng khuôn saveLicenseType()/deleteLicenseType()/renderLicenseTypeList() (module-tailieu.js): flat
+// array chuỗi phẳng, thêm/xoá tại chỗ — server tự học thêm giá trị mới mỗi khi tạo dịch vụ (xem
+// learnItRenewalCategory() ở routes/create.js), ở đây chỉ để Admin chủ động thêm trước/dọn bớt.
+function renderItRenewalCategoryList() {
+  const box = document.getElementById('itRenewalCategoryAdminBox');
+  const ul = document.getElementById('itRenewalCategoryList');
+  if (!ul) return;
+  const canEdit = !!currentUser.perms?.admin;
+  if (box) box.classList.toggle('hidden', !canEdit);
+  ul.innerHTML = (DB.itRenewalCategories || []).map(c => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(c)}</span>
+      <button data-op="deleteItRenewalCategory" data-arg0="${escapeHtml(c)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+function saveItRenewalCategory(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtItRenewalCategoryName').value.trim();
+  if (!name) return;
+  if ((DB.itRenewalCategories || []).includes(name)) return alert('Loại dịch vụ đã tồn tại!');
+  DB.itRenewalCategories = [...(DB.itRenewalCategories || []), name];
+  syncStorage('itRenewalCategories');
+  logSystemAction('IT_SUPPORT', 'ADD_IT_RENEWAL_CATEGORY', `Thêm loại dịch vụ Gia Hạn CNTT mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtItRenewalCategoryName').value = '';
+  renderItServiceRenewals();
+}
+function deleteItRenewalCategory(name) {
+  if (!confirm(`Xóa loại dịch vụ "${name}" khỏi danh mục?`)) return;
+  DB.itRenewalCategories = (DB.itRenewalCategories || []).filter(c => c !== name);
+  syncStorage('itRenewalCategories');
+  logSystemAction('IT_SUPPORT', 'DELETE_IT_RENEWAL_CATEGORY', `Xóa loại dịch vụ Gia Hạn CNTT [${name}]`, 'SUCCESS', name);
+  renderItServiceRenewals();
+}
+
 function renderItServiceRenewals() {
   const tbody = document.getElementById('itRenewalTableBody');
   if (!tbody) return;
 
-  const categories = Array.from(new Set([...IT_RENEWAL_CATEGORY_SUGGESTIONS, ...DB.itServiceRenewals.map(x => x.category).filter(Boolean)]));
+  renderItRenewalCategoryList();
+  const categories = Array.from(new Set([...(DB.itRenewalCategories || []), ...DB.itServiceRenewals.map(x => x.category).filter(Boolean)]));
   sddSetOptions('itRenewalCategoryDatalist', categories);
   sddSetOptions('itRenewalEditCategoryDatalist', categories);
   const categorySelect = document.getElementById('filterItRenewalCategory');

@@ -25,6 +25,7 @@ async function seedDefaults() {
   // với "đã tồn tại nhưng rỗng" (admin xoá hết/chưa cấu hình gì thật) nếu chạy sau. Xem chi tiết ở
   // migrateVppExcludedJobTitles() bên dưới.
   await migrateVppExcludedJobTitles(pool);
+  await migrateItRenewalCategories(pool);
   for (const key of Object.keys(DEFAULTS)) {
     const existing = await pool.request()
       .input('k', sql.NVarChar(100), key)
@@ -147,6 +148,30 @@ async function migrateVppExcludedJobTitles(pool) {
   )];
   await setAppDataValue('vppExcludedJobTitles', unioned);
   console.log(`   ↳ Di trú "Nhóm Không Cấp Văn Phòng Phẩm" (vppExcludeGroups -> vppExcludedJobTitles, ${unioned.length} chức danh).`);
+}
+
+// Đợt audit "form-fields-6" — danh mục "Loại Dịch Vụ" (Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT) TRƯỚC ĐÂY
+// free-text + gợi ý cố định (IT_RENEWAL_CATEGORY_SUGGESTIONS ở client), giờ chuyển hẳn thành
+// appData.itRenewalCategories (admin-editable, cùng khuôn licenseTypes). PHẢI chạy TRƯỚC vòng lặp seed
+// DEFAULTS chính (cùng lý do migrateVppExcludedJobTitles() ở trên) để tự phân biệt được "key chưa từng
+// tồn tại" (cần quét bổ sung giá trị cũ) với "đã tồn tại" (admin đã lưu qua UI mới, không đụng vào).
+// Nếu hệ thống ĐÃ có bản ghi itServiceRenewals thật trước khi nâng cấp (category tự do, có thể KHÁC 6
+// giá trị gợi ý gốc) — quét toàn bộ giá trị .category ĐANG có, gộp thêm vào cuối danh mục mặc định để
+// không mồ côi giá trị nào (không có bản ghi nào coi là "danh mục không nhận diện được" sau nâng cấp).
+async function migrateItRenewalCategories(pool) {
+  const existing = await pool.request()
+    .input('k', sql.NVarChar(100), 'itRenewalCategories')
+    .query('SELECT 1 FROM dbo.AppData WHERE DataKey = @k');
+  if (existing.recordset.length > 0) return; // đã seed/di trú rồi (kể cả admin đã lưu qua UI mới)
+
+  const renewals = await getAllRecords('itServiceRenewals');
+  const seeded = DEFAULTS.itRenewalCategories || [];
+  const extra = [...new Set(renewals.map(r => String(r?.category || '').trim()).filter(Boolean))]
+    .filter(c => !seeded.includes(c));
+  await setAppDataValue('itRenewalCategories', [...seeded, ...extra]);
+  if (extra.length) {
+    console.log(`   ↳ Danh mục "Loại Dịch Vụ" Gia Hạn CNTT: bổ sung ${extra.length} giá trị đã tồn tại trên bản ghi cũ (${extra.join(', ')}).`);
+  }
 }
 
 // Ngân Sách "Thực Hiện" (entryKind==='ACTUAL') không còn qua bước phê duyệt Trưởng phòng nữa — chỉ

@@ -169,8 +169,9 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
   (Cập nhật giữ mã, Nhập mới tạo mã khác); có luồng phê duyệt theo phòng ban.
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
-  chung một khuôn) — admin tự thêm/bớt loại tờ trình ở màn Biểu Mẫu. Có bản
-  xem trước quy trình duyệt ngay trước khi gửi.
+  chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
+  (Bình thường/Gấp/Thượng khẩn, từ v12.0) ở màn Biểu Mẫu. Có bản xem trước quy
+  trình duyệt ngay trước khi gửi.
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
@@ -183,7 +184,8 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
   lớp học, liên kết LMS bên dưới), 💼 Tuyển Dụng (đăng tin + nhân viên giới
   thiệu ứng viên), 💬 Góc Chia Sẻ, 🤝 HCRC Đồng Hành (hỏi & đáp riêng tư 1-1
   với Nhân Sự — nhân viên gửi câu hỏi về chế độ/quy định, Nhân Sự trả lời,
-  1 hỏi–1 đáp không trao đổi nhiều lượt). Bình luận/thả tim/ghi nhận đã xem mở
+  1 hỏi–1 đáp không trao đổi nhiều lượt; danh sách "Chủ Đề" admin tự thêm/bớt/
+  đổi nhãn ở màn Biểu Mẫu, từ v12.0). Bình luận/thả tim/ghi nhận đã xem mở
   cho mọi người; chỉ việc **đăng bài** mới cần quyền riêng theo từng loại.
   - **Đào Tạo (LMS)** — Lớp Học (tạo/danh sách/ghi kết quả) + Đăng Ký Của Tôi +
     Kho Tài Liệu + Lộ Trình Thăng Tiến (danh sách lớp bắt buộc, chỉ xác nhận
@@ -218,11 +220,15 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
 
 ### 3.4. Hành Chính
 
-- **Đăng Ký Xe** — đăng ký sử dụng xe công ty, qua quy trình duyệt theo phòng ban.
+- **Đăng Ký Xe** — đăng ký sử dụng xe công ty, qua quy trình duyệt theo phòng
+  ban. Danh sách "Mục Đích Sử Dụng" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu
+  (từ v12.0).
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
-  hiện xung đột.
+  hiện xung đột. Danh mục phòng họp (tên đầy đủ + tên gọn hiện trên lưới Lịch
+  Họp) admin tự thêm/xoá ngay tại khối "🗂️ Danh Mục Phòng Họp" trong tab
+  "📝 Đăng Ký" của module (từ v12.0, trước đây cố định 3 phòng).
 - **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
   hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban mặc định** = số nhân
   sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số
@@ -497,11 +503,15 @@ với "Tổng Hợp"):
   theo 4 mức Margin/Chiết khấu cố định (không theo phòng ban).
 - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, mở cho toàn bộ nhân viên,
   vòng đời đơn giản Chưa xử lý → Đang xử lý → Hoàn thành/Đã huỷ, không qua
-  duyệt.
+  duyệt. Danh sách "Danh Mục" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu — dropdown
+  lọc "Lọc Theo Danh Mục" (khối Tìm Kiếm & Lọc) nay luôn đồng bộ theo (từ v12.0,
+  trước đây lệch pha với danh mục thật admin đang cấu hình).
 - **Gia Hạn Dịch Vụ CNTT** — module con chỉ đội IT thấy được, quản lý nội bộ
   danh mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
   phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng khuôn
-  Giấy Phép.
+  Giấy Phép. "Loại Dịch Vụ" giờ là danh mục admin-editable (khối "📜 Quản Lý
+  Danh Mục 'Loại Dịch Vụ'" ngay trong tab, từ v12.0) — vẫn tự học thêm khi ai
+  gõ loại mới lúc thêm dịch vụ, cùng khuôn danh mục "Các Loại Giấy Phép".
 
 ### 3.7. Báo Cáo Định Kỳ
 

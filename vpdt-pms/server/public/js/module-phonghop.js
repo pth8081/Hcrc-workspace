@@ -42,7 +42,61 @@ function setMeetingSubTab(subTab) {
   if (btnCalendar) btnCalendar.className = subTab === 'CALENDAR' ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('meetingRegisterTabContent').classList.toggle('hidden', subTab !== 'REGISTER');
   document.getElementById('meetingCalendarTabContent').classList.toggle('hidden', subTab !== 'CALENDAR');
+  if (subTab === 'REGISTER') renderMeetingRoomCatalogList();
   if (subTab === 'CALENDAR') renderMeetingCalendar();
+}
+
+// ============ Danh Mục Phòng Họp (chỉ Admin — đợt audit "form-fields-6") ============
+// Cùng khuôn renderUniformCatalogList()/saveUniformCatalogItem()/deleteUniformCatalogItem()
+// (module-dongphuc.js): thêm/xoá 1 phần tử (mảng { id, name, short }), không có sửa tại chỗ — admin xoá
+// rồi thêm lại nếu cần đổi tên. TRƯỚC ĐÂY const MEETING_ROOMS gõ cứng, giờ DB.meetingRooms (ADMIN_ONLY_KEYS).
+function renderMeetingRoomCatalogList() {
+  const wrap = document.getElementById('meetingRoomCatalogListWrap');
+  const form = document.getElementById('meetingRoomCatalogAdminForm');
+  if (!wrap) return;
+  const canEdit = !!currentUser.perms?.admin;
+  if (form) form.classList.toggle('hidden', !canEdit);
+  const rooms = DB.meetingRooms || [];
+  if (!rooms.length) {
+    wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có phòng họp nào trong danh mục.</div>`;
+    return;
+  }
+  wrap.innerHTML = rooms.map(r => `
+    <div class="bg-white p-2.5 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div>
+        <span class="font-bold text-slate-800 text-xs">${escapeHtml(r.name)}</span>
+        <div class="text-[11px] text-gray-500 mt-0.5">Tên gọn: ${escapeHtml(r.short)}</div>
+      </div>
+      ${canEdit ? `<button type="button" data-op="deleteMeetingRoomCatalogItem" data-arg0="${r.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function saveMeetingRoomCatalogItem() {
+  const name = document.getElementById('meetingRoomCatalogName').value.trim();
+  const short = document.getElementById('meetingRoomCatalogShort').value.trim();
+  if (!name) return alert('Vui lòng nhập tên phòng họp!');
+  if (!short) return alert('Vui lòng nhập tên gọn (dùng làm tiêu đề cột trên Lịch Họp)!');
+  if ((DB.meetingRooms || []).some(r => r.name === name)) return alert('Phòng họp này đã có trong danh mục!');
+  const nextId = (Math.max(0, ...(DB.meetingRooms || []).map(r => r.id)) || 0) + 1;
+  DB.meetingRooms = [...(DB.meetingRooms || []), { id: nextId, name, short }];
+  syncStorage('meetingRooms');
+  logSystemAction('MEETING', 'ADD_MEETING_ROOM', `Thêm phòng họp vào Danh Mục Phòng Họp [${name}]`, 'SUCCESS', name);
+  document.getElementById('meetingRoomCatalogName').value = '';
+  document.getElementById('meetingRoomCatalogShort').value = '';
+  renderMeetingRoomCatalogList();
+  populateDropdowns();
+}
+
+function deleteMeetingRoomCatalogItem(id) {
+  const item = (DB.meetingRooms || []).find(r => r.id === id);
+  if (!item) return;
+  if (!confirm(`Xóa phòng họp "${item.name}" khỏi Danh Mục Phòng Họp? Các lịch đã đặt trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được phòng này cho lịch mới.`)) return;
+  DB.meetingRooms = (DB.meetingRooms || []).filter(r => r.id !== id);
+  syncStorage('meetingRooms');
+  logSystemAction('MEETING', 'DELETE_MEETING_ROOM', `Xóa phòng họp khỏi Danh Mục Phòng Họp [${item.name}]`, 'SUCCESS', item.name);
+  renderMeetingRoomCatalogList();
+  populateDropdowns();
 }
 
 // Lưới xem nhanh phòng trống/bận theo ngày — bấm đơn 1 ô: ô trắng đặt nhanh 1 tiếng, ô đỏ xem thông
@@ -74,13 +128,13 @@ function renderMeetingCalendar() {
 
   let html = '<div class="overflow-x-auto"><table class="w-full border-collapse border text-xs bg-white select-none">';
   html += '<thead><tr class="bg-gray-100"><th class="border p-2 w-16">Giờ</th>' +
-    MEETING_ROOMS.map(r => `<th class="border p-2">${escapeHtml(r.short)}</th>`).join('') + '</tr></thead><tbody>';
+    (DB.meetingRooms || []).map(r => `<th class="border p-2">${escapeHtml(r.short)}</th>`).join('') + '</tr></thead><tbody>';
 
   slots.forEach((slot, rowIdx) => {
     const slotStart = new Date(`${dateStr}T${slot}:00`);
     const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
     html += `<tr><td class="border p-1 text-center text-gray-500 font-mono">${slot}</td>`;
-    MEETING_ROOMS.forEach((r, ridx) => {
+    (DB.meetingRooms || []).forEach((r, ridx) => {
       const booking = DB.meetings.find(m => {
         if (m.status === 'CANCELLED') return false;
         if (m.room !== r.name) return false;
@@ -190,7 +244,7 @@ function showMeetingSlotInfo(id) {
 // Bấm 1 ô trống trên lưới -> chuyển sang tab Đăng Ký, đổ sẵn phòng/ngày/giờ (mặc định 1 tiếng),
 // người dùng vẫn xem/sửa lại trước khi gửi — không tự động đặt lịch ngay.
 function quickBookMeetingSlot(roomIdx, dateStr, slot) {
-  const room = MEETING_ROOMS[roomIdx];
+  const room = (DB.meetingRooms || [])[roomIdx];
   if (!room) return;
   setMeetingSubTab('REGISTER');
   document.getElementById('meetingRoom').value = room.name;
@@ -204,7 +258,7 @@ function quickBookMeetingSlot(roomIdx, dateStr, slot) {
 // Chọn nhiều ô liên tiếp trong cùng 1 cột phòng (kéo chuột hoặc Shift+bấm) -> chuyển sang tab Đăng Ký,
 // đổ sẵn phòng/ngày + khoảng giờ đúng bằng khoảng đã chọn (không cố định 1 tiếng như bấm đơn).
 function finalizeMeetingSlotSelection(roomIdx, rowA, rowB) {
-  const room = MEETING_ROOMS[roomIdx];
+  const room = (DB.meetingRooms || [])[roomIdx];
   if (!room) return;
   const lo = Math.min(rowA, rowB);
   const hi = Math.max(rowA, rowB);
