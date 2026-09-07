@@ -193,15 +193,18 @@ async function main() {
   await run.run('operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows KHÔNG có MODULE_CONFIGS tương ứng — "Theo vị trí" cấu hình được ở admin nhưng KHÔNG có đường duyệt thật nào tiêu thụ (đã dừng hẳn từ 1 đợt trước, không phải lỗi của đợt này)', () => {
     assert(!('operationStoreOpenings' in MODULE_CONFIGS), 'operationStoreOpenings không được có trong MODULE_CONFIGS (đã dừng phê duyệt)');
     assert(!('operationRepairs' in MODULE_CONFIGS), 'operationRepairs không được có trong MODULE_CONFIGS (đã dừng phê duyệt)');
-    // Các dbKey CÒN LẠI đều CÓ mặt — xác nhận 12 MODULE_CONFIGS thật sự phủ đúng 14/16 WF_MODULE_CONFIG
+    // Các dbKey CÒN LẠI đều CÓ mặt — xác nhận 13 MODULE_CONFIGS thật sự phủ đúng 14/16 WF_MODULE_CONFIG
     // (OFFICE_BUY/OFFICE_FIX dùng chung 'officeReqs'; OPERATION_ORDER_STORE/OPERATION_ORDER_HO dùng
-    // chung 'operationOrders').
+    // chung 'operationOrders') + 'paymentRequests' MỚI ("Chuyển Xác Nhận Thanh Toán" giờ đi qua quy trình
+    // duyệt theo bước/phòng ban, thay cho quyền phẳng canManagePaymentRequests() cũ — xem
+    // lib/workflowEngine.js MODULE_CONFIGS.paymentRequests).
     const expectedKeys = [
       'docs', 'submissions', 'carRegs', 'officeReqs', 'vppRegistrations', 'contracts', 'contractsSignedFile',
-      'itPriceApprovals', 'budgetEntries', 'operationOrders', 'operationStoreOpeningEstimate', 'operationRepairEstimate'
+      'itPriceApprovals', 'budgetEntries', 'operationOrders', 'operationStoreOpeningEstimate', 'operationRepairEstimate',
+      'paymentRequests'
     ];
     expectedKeys.forEach(k => assert(k in MODULE_CONFIGS, `MODULE_CONFIGS phải có key "${k}"`));
-    assertEqual(Object.keys(MODULE_CONFIGS).length, expectedKeys.length, 'MODULE_CONFIGS phải có đúng 12 khoá (đúng số đã liệt kê, không thừa/thiếu)');
+    assertEqual(Object.keys(MODULE_CONFIGS).length, expectedKeys.length, 'MODULE_CONFIGS phải có đúng 13 khoá (đúng số đã liệt kê, không thừa/thiếu)');
   });
 
   run.summary();

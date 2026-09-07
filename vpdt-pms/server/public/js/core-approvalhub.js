@@ -224,13 +224,26 @@ function getMyPendingApprovals(user) {
     });
   }
 
+  // Thanh Toán — PENDING GIỜ đi qua quy trình duyệt theo bước/phòng ban (paymentDeptWorkflows), khớp
+  // đúng addDeptWorkflowItems() như 5 module ở trên (không còn quyền phẳng canManagePaymentRequestsClient()
+  // cho hành động Duyệt nữa) — NEED_INFO vẫn GIỮ NGUYÊN quyền phẳng cũ (chưa đổi, xem
+  // lib/recordActions.js requestPaymentInfo(), quyết định đã chốt với người dùng: chỉ APPROVE đi qua
+  // engine mới, NEED_INFO vẫn ngoài engine như trước).
+  addDeptWorkflowItems(
+    (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING'),
+    pr => resolvePaymentApprovalWorkflow(pr),
+    {
+      type: 'payment', typeLabel: '💰 Thanh toán', codeOf: r => r.sourceCode || String(r.id), titleOf: r => r.title,
+      actionsOf: r => [{ label: '✅ Xác nhận', fn: 'approvePaymentRequestAction', args: [r.id], primary: true }]
+    }
+  );
   if (canManagePaymentRequestsClient(user)) {
-    (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO').forEach(pr => {
+    (DB.paymentRequests || []).filter(pr => pr.status === 'NEED_INFO').forEach(pr => {
       items.push({
         type: 'payment', typeLabel: '💰 Thanh toán', code: pr.sourceCode || String(pr.id), title: pr.title,
         dept: pr.dept, stepLabel: '', createdAt: pr.createdAt,
-        statusBadge: pr.status === 'NEED_INFO' ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
-        actions: [{ label: '✅ Xác nhận', fn: 'approvePaymentRequestAction', args: [pr.id], primary: true }]
+        statusBadge: approvalHubNeedInfoBadge(),
+        actions: [{ label: '✏️ Sửa & Gửi Lại', fn: 'openEditPaymentRequest', args: [pr.id], primary: true }]
       });
     });
   }

@@ -329,6 +329,13 @@ async function submitContractReq(e) {
   const { selectedLayerKeys, selectedLayerMembers } = isSignedImport ? { selectedLayerKeys: [], selectedLayerMembers: {} } : readSelectedContractLayers();
   const approvalLevel = isSignedImport ? null : (document.getElementById('contractApprovalLevel').value || 'KHAC');
 
+  // Loại Thanh Toán ("Thanh toán 1 lần"/"Thanh toán định kỳ") — chi phối nút "🧾 Lập Thanh Toán" ở tab
+  // Quản Lý HĐ có LẶP LẠI được sau khi hoàn tất hay không (xem canManageContractPaymentClient()/
+  // startContractPaymentAction() bên dưới, lib/recordActions.js startContractPayment()). Không đọc/gửi
+  // ở luồng "Nhập Hợp Đồng Đã Ký" (server luôn ép về mặc định 'ONE_TIME' cho luồng đó, không có ý nghĩa
+  // gì với hồ sơ coi như đã thanh toán từ trước).
+  const paymentType = document.getElementById('contractPaymentType')?.value === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
+
   const contractPayload = {
     code, dept, custodianDept, type, title, partner, amount, startDate, endDate, content,
     customData,
@@ -340,6 +347,7 @@ async function submitContractReq(e) {
     isAddendum,
     rootContractId: isAddendum ? rootContractId : null,
     paymentInstallments: isSignedImport ? [] : collectContractInstallments(),
+    paymentType,
     isSignedImport,
     approvalLevel,
     selectedApprovalLayers: selectedLayerKeys,
@@ -416,6 +424,8 @@ function openEditContract(contractId) {
   document.getElementById('contractTitle').value = c.title;
   document.getElementById('contractPartner').value = c.partner;
   document.getElementById('contractAmount').value = formatMoneyDisplay(c.amount);
+  const paymentTypeSel = document.getElementById('contractPaymentType');
+  if (paymentTypeSel) paymentTypeSel.value = c.paymentType === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
   document.getElementById('contractStartDate').value = c.startDate;
   document.getElementById('contractEndDate').value = c.endDate;
   document.getElementById('contractContent').value = c.content;
@@ -476,11 +486,12 @@ async function updateContractReq(e) {
   const newFile = fileInput.files[0];
 
   // Ghi nhận các trường thực sự thay đổi để đưa vào Nhật ký hệ thống (audit trail).
+  const paymentType = document.getElementById('contractPaymentType')?.value === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
   const fieldLabels = {
     dept: 'Phòng Ban', custodianDept: 'Đơn Vị Tiếp Nhận Theo Dõi & Thanh Toán', type: 'Loại Pháp Lý', title: 'Tên Hợp Đồng', partner: 'Đối Tác',
-    amount: 'Giá Trị', startDate: 'Ngày Hiệu Lực', endDate: 'Ngày Hết Hạn', content: 'Nội Dung'
+    amount: 'Giá Trị', startDate: 'Ngày Hiệu Lực', endDate: 'Ngày Hết Hạn', content: 'Nội Dung', paymentType: 'Loại Thanh Toán'
   };
-  const newValues = { dept, custodianDept, type, title, partner, amount, startDate, endDate, content };
+  const newValues = { dept, custodianDept, type, title, partner, amount, startDate, endDate, content, paymentType };
   const changes = [];
   for (const key in fieldLabels) {
     if (String(c[key]) !== String(newValues[key])) {
@@ -719,7 +730,8 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   // chuyển sang thanh toán dù có phát sinh riêng.
   let paymentCell = '';
   if (activeContractSubTab === 'MANAGE') {
-    paymentCell = `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`;
+    const paymentTypeNote = c.paymentType === 'PERIODIC' ? '<div class="text-[10px] text-purple-700 mt-0.5">🔁 Định kỳ</div>' : '';
+    paymentCell = `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${paymentTypeNote}${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`;
   }
 
   // Nhãn "Tài liệu ký" đổi thành "...Phụ Lục Hợp Đồng Đã Ký" khi thao tác trên phụ lục, cho rõ ràng —
@@ -759,8 +771,15 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     secondaryOptions.push({ value: 'rejectSigned', label: `❌ Từ Chối ${signedDocNoun}` });
     secondaryOptions.push({ value: 'requestSignedChanges', label: `🔄 Bổ Sung ${signedDocNoun}` });
   }
-  if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && c.paymentStatus === 'CHUA_THANH_TOAN' && canManageContractPaymentClient(currentUser, c)) {
-    secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
+  // "🧾 Lập Thanh Toán" — mở khi CHUA_THANH_TOAN (chu kỳ đầu, hoặc "Thanh toán 1 lần" duy nhất) HOẶC khi
+  // hợp đồng "Thanh toán định kỳ" đã HOÀN TẤT 1 chu kỳ (DA_THANH_TOAN — xem confirmPaymentInstallment()/
+  // routes/records.js ghi ngược CHUA_THANH_TOAN cho paymentType PERIODIC) để bắt đầu chu kỳ MỚI. VẪN ẩn
+  // khi đang CHO_THANH_TOAN (1 chu kỳ dở dang) cho CẢ 2 loại — không cho mở đồng thời 2 chu kỳ, khớp
+  // đúng gate ở startContractPayment() (lib/recordActions.js).
+  const canStartPaymentCycle = c.paymentStatus === 'CHUA_THANH_TOAN'
+    || (c.paymentType === 'PERIODIC' && c.paymentStatus === 'DA_THANH_TOAN');
+  if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && canStartPaymentCycle && canManageContractPaymentClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'startPayment', label: '🧾 Lập Thanh Toán' });
   }
   if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
 
@@ -1114,13 +1133,19 @@ async function submitSignedUpload() {
   }
 }
 
+// Bấm "🧾 Lập Thanh Toán" giờ KHÔNG còn tạo thẳng đề nghị PENDING nữa — server (startContractPayment(),
+// lib/recordActions.js) trả về đề nghị ở trạng thái DRAFT (số tiền từng đợt CHƯA bắt buộc), điều hướng
+// người dùng sang sub-tab "🗂️ Quản Lý Thanh Toán" (module Tổng Hợp > Thanh Toán) để tự lập/sửa các đợt
+// rồi mới "Chuyển Xác Nhận Thanh Toán" — khớp đúng luồng nghiệp vụ mới, khác hẳn "Xác Nhận Đề Nghị Thanh
+// Toán" (đó là bước duyệt SAU KHI đã gửi). pendingManagePaymentFocusId (core.js) ghi lại id đề nghị vừa
+// tạo để renderPaymentManageTab() tự mở sẵn đúng dòng này ngay khi vào tab.
 function startContractPaymentAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
   showConfirmModal({
-    title: 'Chuyển sang thanh toán',
-    bodyHTML: `Chuyển hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) sang trạng thái "Chờ thanh toán"?`,
-    confirmLabel: 'Chuyển Thanh Toán',
+    title: 'Lập thanh toán',
+    bodyHTML: `Chuyển hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) sang trạng thái "Chờ thanh toán" và lập đề nghị thanh toán?`,
+    confirmLabel: 'Lập Thanh Toán',
     onConfirm: async () => {
       let updated, paymentRequest;
       try {
@@ -1133,8 +1158,12 @@ function startContractPaymentAction(id) {
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
       if (paymentRequest) DB.paymentRequests.unshift(paymentRequest);
-      logSystemAction('CONTRACT', 'START_CONTRACT_PAYMENT', `Chuyển hợp đồng [${updated.code}] sang chờ thanh toán`, 'SUCCESS', updated.code);
+      logSystemAction('CONTRACT', 'START_CONTRACT_PAYMENT', `Chuyển hợp đồng [${updated.code}] sang chờ thanh toán (lập đề nghị nháp)`, 'SUCCESS', updated.code);
       renderContracts();
+      pendingManagePaymentFocusId = paymentRequest ? paymentRequest.id : null;
+      switchTab('office');
+      setOfficeSubTab('PAYMENT');
+      setPaymentSubTab('MANAGE');
     }
   });
 }

@@ -50,6 +50,7 @@ async function seedDefaults() {
   await migrateStuckOperationApprovalStatuses();
   await migrateApprovedOperationOrdersToAwaitingReceipt();
   await migrateOperationOrdersDefaultLocationType();
+  await migratePaymentRequestsMissingCurrentStep();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
 }
 
@@ -381,6 +382,32 @@ async function migrateOperationOrdersDefaultLocationType() {
   }
 }
 
+// paymentRequests — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đổi hẳn từ quyền phẳng
+// canManagePaymentRequests() sang quy trình duyệt THEO BƯỚC/PHÒNG BAN (paymentDeptWorkflows, xem
+// lib/workflowEngine.js MODULE_CONFIGS.paymentRequests + applyWorkflowAction()) — engine này đọc
+// item.currentStep để tra approvers[currentStep], mà MỌI đề nghị PENDING TẠO TRƯỚC đợt này (tạo thủ
+// công/CÓ NGUỒN qua nút "Chuyển Sang Thanh Toán" cũ) đều KHÔNG có field currentStep/history (chỉ mới bắt
+// đầu gán từ đợt này, xem createValidation.js/lib/recordActions.js) -> approvers?.[undefined] luôn rỗng,
+// kẹt vĩnh viễn (chỉ admin duyệt được, không ai khác). Gán currentStep=1/history=[] cho MỌI đề nghị còn
+// thiếu field này (không phân biệt status — APPROVED/PAID không đọc currentStep nữa nhưng gán thêm cho
+// sạch dữ liệu, vô hại). Idempotent — chạy mỗi lần khởi động, chỉ còn tác dụng khi thực sự còn bản ghi
+// thiếu field (rất hiếm sau lần chạy đầu).
+async function migratePaymentRequestsMissingCurrentStep() {
+  const records = await getAllRecords('paymentRequests');
+  const missing = records.filter(r => typeof r.currentStep !== 'number');
+  for (const rec of missing) {
+    await withLockedRecordById('paymentRequests', rec.id, (item) => {
+      if (typeof item.currentStep === 'number') return item; // đã đổi bởi request khác giữa lúc đọc và khoá
+      item.currentStep = 1;
+      item.history = item.history || [];
+      return item;
+    });
+  }
+  if (missing.length) {
+    console.log(`   ↳ Đã gán mặc định currentStep=1 cho ${missing.length} đề nghị thanh toán (paymentRequests) tạo trước khi có quy trình duyệt theo bước/phòng ban.`);
+  }
+}
+
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
 // nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
 function nowVNForMigration() {
@@ -394,5 +421,5 @@ function nowVNForMigration() {
 // bộ test hồi quy MỚI của đợt "Tách Đơn Hàng Siêu Thị/HO" (cùng lý do, cùng khuôn mock recordStore).
 module.exports = {
   seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
-  migrateOperationOrdersDefaultLocationType
+  migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep
 };

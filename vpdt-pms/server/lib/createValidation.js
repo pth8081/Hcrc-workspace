@@ -545,6 +545,11 @@ const CREATE_MODULE_CONFIGS = {
       // của chính nó) — hồ sơ nhập lại (đã ký sẵn ngoài hệ thống) coi như đã thanh toán từ trước, chỉ hồ
       // sơ đi qua đúng luồng Phê Duyệt -> Quản Lý HĐ mới bắt đầu ở trạng thái chưa thanh toán.
       payload.paymentStatus = isSignedImport ? 'DA_THANH_TOAN' : 'CHUA_THANH_TOAN';
+      // Loại Thanh Toán — "Thanh toán 1 lần" (mặc định, tương thích ngược 100% với hồ sơ cũ chưa từng có
+      // field này) hoặc "Thanh toán định kỳ" (cho phép "Lập Thanh Toán" LẶP LẠI mỗi khi 1 chu kỳ hoàn tất
+      // — xem startContractPayment()/confirmPaymentInstallment() ở lib/recordActions.js). Gán cứng ở
+      // server (không tin giá trị lạ client gửi) — bất kỳ giá trị nào khác 'PERIODIC' đều coi là ONE_TIME.
+      payload.paymentType = payload.paymentType === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
     }
   },
   meetings: {
@@ -1097,6 +1102,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.sourceId = null;
       payload.sourceCode = null;
       payload.status = 'PENDING';
+      // currentStep/history — bắt buộc để đề nghị tạo thủ công đi qua ĐÚNG được quy trình duyệt theo
+      // bước/phòng ban MỚI (paymentDeptWorkflows, xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests)
+      // thay cho quyền phẳng cũ. Đề nghị tạo thủ công KHÔNG có khái niệm NHÁP (đi thẳng vào PENDING) nên
+      // gán ngay từ lúc tạo, khác đề nghị có nguồn Hợp đồng đi qua DRAFT trước (xem startContractPayment()).
+      payload.currentStep = 1;
+      payload.history = [];
       const installments = Array.isArray(payload.installments) ? payload.installments : [];
       if (!installments.length) throw new CreateError(400, 'Cần ít nhất 1 đợt thanh toán');
       payload.installments = installments.map(it => ({

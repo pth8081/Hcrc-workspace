@@ -448,6 +448,13 @@ const DEFAULTS = {
   contractApprovalGroups: {},
   contractManageDeptWorkflows: DEFAULT_MAP,
 
+  // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (đề nghị PENDING) giờ đi qua quy trình duyệt THEO PHÒNG
+  // BAN (cùng khuôn contractManageDeptWorkflows/budgetDeptWorkflows ở trên), thay cho quyền phẳng
+  // paymentManage/admin trước đây — xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests. Rỗng mặc
+  // định (chưa cấu hình dept nào -> chỉ admin duyệt được, khớp hành vi mọi module chưa cấu hình khác ở
+  // trên) — admin cấu hình ở tab "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán".
+  paymentDeptWorkflows: {},
+
   // Nhân Sự > Cơ Cấu Tổ Chức > "🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí" — ĐÍNH CHÍNH sau demo bản đầu
   // (bản đầu SAI: hiểu nhầm thành danh sách tiêu chí KPI theo vị trí — đã bỏ hoàn toàn, không lưu tiêu
   // chí/trọng số nào ở đây). Yêu cầu THẬT: cấu hình 1 LẦN "vị trí X (phòng ban Y hoặc mọi phòng ban) do

@@ -69,8 +69,11 @@ chung 1 khuôn quy trình phê duyệt theo phòng ban/tier (`WF_MODULE_CONFIG` 
 Liệu, Văn Bản Trình (theo từng loại tờ trình), Đăng Ký Xe, Mua Sắm/Sửa Chữa Văn
 Phòng, Văn Phòng Phẩm, Hợp Đồng (2 quy trình tách riêng: Phê Duyệt gốc và Quản
 Lý HĐ/tài liệu ký), Hỗ Trợ IT (Phê Duyệt Giá bán lẻ theo phòng ban + bán buôn
-theo 4 mức Margin/Chiết khấu cố định), Ngân Sách, và các luồng Vận Hành (Mở
-Mới/Sửa Chữa Siêu Thị, Đặt Hàng theo mức giá trị đơn hàng).
+theo 4 mức Margin/Chiết khấu cố định), Ngân Sách, **Thanh Toán** ("Chuyển Xác
+Nhận Thanh Toán", mới từ v12.4 — xem 3.3), và các luồng Vận Hành (Mở Mới/Sửa
+Chữa Siêu Thị, Đặt Hàng theo mức giá trị đơn hàng). Riêng Thanh Toán **không**
+có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì dùng "Yêu Cầu Bổ
+Sung" (kênh riêng, không đổi).
 
 Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 Quy Trình & Phê
 Duyệt** — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier cấu
@@ -247,12 +250,50 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
   Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
   tự động ở trạng thái đã duyệt ngay, không qua hàng chờ). Có thể khai Đợt
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
+  - **Loại Thanh Toán** (từ v12.4, chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh
+    Đợt Thanh Toán): **"Thanh toán 1 lần"** (mặc định, tương thích ngược 100%
+    với hồ sơ cũ) hoặc **"Thanh toán định kỳ"**. Khi Tài liệu ký đã duyệt xong,
+    nút **"🧾 Lập Thanh Toán"** (đổi tên từ "Chuyển Sang Thanh Toán") mở ra;
+    bấm xong hợp đồng chuyển "Chờ thanh toán" và tự điều hướng sang sub-tab
+    **"🗂️ Quản Lý Thanh Toán"** (Tổng Hợp > Thanh Toán) để lập/gửi duyệt. Với
+    hợp đồng **"Thanh toán 1 lần"**: sau khi 1 đề nghị hoàn tất (PAID), nút
+    "🧾 Lập Thanh Toán" **không** mở lại nữa (khoá cứng, như trước). Với hợp
+    đồng **"Thanh toán định kỳ"**: sau khi 1 đợt/chu kỳ PAID, hệ thống tự trả
+    hợp đồng về "Chưa thanh toán" và nút mở lại ngay để bắt đầu chu kỳ mới (VD
+    năm sau) — nhưng **không** cho mở 2 chu kỳ song song (đang "Chờ thanh
+    toán" thì chưa lập thêm được).
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
   - **Thanh Toán** — tổng hợp đề nghị thanh toán tự sinh từ Hợp Đồng/Mua
-    Bán/Sửa Chữa/Đầu Tư (nút "Chuyển Sang Thanh Toán") hoặc tạo thủ công. Vòng
-    đời: Chờ xử lý (sửa được) → [Cần bổ sung thông tin (sửa được)] → Đã duyệt
-    (xác nhận từng đợt) → Đã thanh toán (khoá cứng, không sửa được nữa).
+    Bán/Sửa Chữa (nút "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán") hoặc tạo
+    thủ công. **3 sub-tab** (từ v12.4, thêm 1 sub-tab mới ở giữa):
+    - **"➕ Tạo Mới"** — tạo thủ công/có nguồn (không đổi).
+    - **"🗂️ Quản Lý Thanh Toán"** (MỚI) — nơi lập/sửa các **đợt thanh toán**
+      của đề nghị đang **NHÁP** (`DRAFT`, chỉ phát sinh từ nút "🧾 Lập Thanh
+      Toán" ở Hợp Đồng — đề nghị tạo thủ công/CÓ NGUỒN từ chính tab này vẫn đi
+      thẳng "Chờ duyệt" như trước, không qua NHÁP). Khi còn NHÁP, **số tiền
+      từng đợt KHÔNG bắt buộc** — có thể bấm **"💾 Lưu"** để giữ nguyên NHÁP,
+      chỉnh sửa dần. Chỉ khi bấm **"📨 Chuyển Xác Nhận Thanh Toán"** (NHÁP →
+      Chờ duyệt) thì **MỌI đợt mới bắt buộc phải có số tiền > 0** — thiếu đợt
+      nào bị chặn ngay (báo rõ đợt số mấy), cả ở giao diện lẫn server. Sub-tab
+      này cũng hiện **cảnh báo hạn thanh toán** theo từng đợt (🔴 quá hạn / 🟡
+      sắp đến hạn ≤ 3 ngày, tính từ "Ngày đến hạn" của đợt) và theo dõi trạng
+      thái các đề nghị Chờ duyệt/Đã duyệt cho tới khi hoàn tất — đọc CHUNG 1
+      danh sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi trạng thái ở
+      đó tự hiện ngay ở đây, không cần đồng bộ gì thêm.
+    - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — GIỜ chỉ còn là hàng chờ **duyệt
+      theo bước/phòng ban** (như 12 module duyệt khác, admin cấu hình người
+      duyệt ở "⚙️ Quản Trị" > "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") +
+      xác nhận PAID từng đợt — thay hẳn quyền phẳng "Quản lý Thanh Toán" cũ
+      (chỉ còn dùng cho Sửa/Yêu Cầu Bổ Sung/Xoá, không còn dùng để Duyệt).
+      Không có nút Từ Chối ở bước này (chỉ có Duyệt) — cần yêu cầu sửa lại thì
+      dùng "📝 Yêu Cầu Bổ Sung" như trước (đưa về "Cần bổ sung", không đổi).
+    Vòng đời đầy đủ: **[NHÁP `DRAFT`, chỉ nút "🧾 Lập Thanh Toán"]** → Chờ
+    duyệt (sửa được, qua duyệt theo bước/phòng ban) → [Cần bổ sung thông tin
+    (sửa được)] → Đã duyệt (xác nhận từng đợt) → Đã thanh toán (khoá cứng).
+    PAID ghi ngược đúng theo loại hợp đồng (xem "Loại Thanh Toán" ở trên) —
+    officeReqs (Mua Bán/Sửa Chữa) không có khái niệm định kỳ, luôn khoá cứng
+    "Đã thanh toán" như trước.
   - **Ngân Sách** — 3 sub-tab dùng chung 1 collection, tham số hoá theo loại
     bản ghi: **Ngân Sách Phê Duyệt** (bản kế hoạch, qua Trưởng phòng duyệt),
     **Ngân Sách Thực Hiện** (bản thực chi, KHÔNG qua bước duyệt — "Gửi" đi

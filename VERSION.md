@@ -1,8 +1,75 @@
 # Phiên bản hiện tại
 
-**12.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Hợp Đồng > "Loại Thanh Toán" (1 lần/định kỳ) + Tổng Hợp > Thanh Toán: sub-tab mới "🗂️ Quản Lý Thanh Toán" + duyệt theo phòng ban (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn, rút gọn)**: thêm trường "Loại thanh toán"
+("Thanh toán 1 lần"/"Thanh toán định kỳ") ở Hợp Đồng; khi hợp đồng đủ điều
+kiện, nút chuyển thanh toán đổi thành "Lập Thanh Toán" — lập được LIÊN TỤC với
+hợp đồng định kỳ (mỗi lần hoàn tất lại mở ra chu kỳ mới, VD năm sau), còn "1
+lần" thì sau khi hoàn thành sẽ khoá hẳn; bấm "Lập Thanh Toán" nhảy sang sub-tab
+mới "Quản Lý Thanh Toán" (trong tab Thanh Toán của module Tổng Hợp) để tạo các
+đợt thanh toán, **số tiền không bắt buộc nhập khi mới lưu, chỉ bắt buộc khi
+"Chuyển Xác Nhận Thanh Toán"** (điểm người dùng chốt lại, sửa đề xuất ban đầu),
+đợt thanh toán có cảnh báo hạn; bước "Chuyển Xác Nhận Thanh Toán" cần phê duyệt
+theo phòng ban (trước đây chỉ 1 quyền phẳng "Quản lý Thanh Toán").
+
+**Thay đổi dữ liệu** (đều là payload JSON/AppData — không đổi schema SQL):
+- `contracts.paymentType`: `'ONE_TIME'` (mặc định, tương thích ngược hồ sơ cũ)
+  hoặc `'PERIODIC'`.
+- `paymentRequests.status` có thêm giá trị **`DRAFT`** (trước `PENDING`) — CHỈ
+  phát sinh từ nút "🧾 Lập Thanh Toán" ở Hợp Đồng (đường tạo thủ công/CÓ NGUỒN
+  từ module Thanh Toán vẫn đi thẳng `PENDING` như cũ, không đổi). `paymentRequests`
+  có thêm `currentStep`/`history` (khởi tạo lúc gửi duyệt, hoặc lúc tạo với 2
+  đường không qua NHÁP) để đi qua quy trình duyệt theo bước MỚI.
+- AppData thêm `paymentDeptWorkflows` (cấu hình người duyệt theo phòng ban cho
+  bước "Chuyển Xác Nhận Thanh Toán", admin cấu hình ở "Quy Trình & Phê Duyệt" >
+  "💰 QT Thanh Toán" — trống mặc định, chỉ Admin duyệt được cho tới khi cấu
+  hình, giống mọi module chưa cấu hình khác).
+
+**Server**: `lib/recordActions.js` — `startContractPayment()` đổi gate
+(`CHUA_THANH_TOAN` HOẶC `PERIODIC` + `DA_THANH_TOAN`; vẫn chặn khi đang
+`CHO_THANH_TOAN`, không cho song song 2 chu kỳ) và tạo `DRAFT` thay vì `PENDING`
+khi gọi KHÔNG kèm overrides (route "🧾 Lập Thanh Toán"); route `from-source`
+(kế toán tự tạo có nguồn) và `startOfficePayment()` (Mua Bán/Sửa Chữa) truyền
+`overrides.createAsPending:true` — **giữ nguyên PENDING ngay như cũ, không qua
+DRAFT** (module Mua Bán/Sửa Chữa hoàn toàn không đổi hành vi). `editPaymentRequest()`
+nới lỏng bắt buộc số tiền > 0 khi còn `DRAFT`; hàm mới `submitPaymentRequest()`
+(DRAFT → PENDING) là nơi DUY NHẤT bắt buộc mọi đợt có số tiền > 0, khởi tạo
+`currentStep:1/history:[]`. `confirmPaymentInstallment()`/route
+`confirm-installment` ghi ngược `paymentStatus` theo ĐÚNG `paymentType` (PERIODIC
+→ `CHUA_THANH_TOAN` mở chu kỳ mới; ONE_TIME/officeReqs → `DA_THANH_TOAN` như
+cũ). `lib/workflowEngine.js` thêm `MODULE_CONFIGS.paymentRequests` (`disallowReject`
+— chỉ Duyệt, không Từ Chối qua engine) thay cho quyền phẳng
+`canManagePaymentRequests()` cũ khi Duyệt; hàm cũ `approvePaymentRequest()` +
+route bespoke `POST /api/records/paymentRequests/:id/approve` đã **gỡ hẳn**,
+thay bằng route generic `POST /api/workflow/paymentRequests/:id/approve`.
+`computePaymentInstallmentDeadlineStatus()` (mới, thuần, không lưu field) tính
+cảnh báo hạn từng đợt. Migration 1 lần lúc khởi động
+(`migratePaymentRequestsMissingCurrentStep()`) gán `currentStep:1` cho đề nghị
+CŨ chưa có field này (nếu không sẽ kẹt duyệt vì thiếu bước).
+
+**Client**: nút Hợp Đồng đổi tên "🧾 Lập Thanh Toán", điều hướng thẳng sang
+sub-tab "Quản Lý Thanh Toán" sau khi tạo. Tab Thanh Toán từ 2 lên **3 sub-tab**
+("➕ Tạo Mới" / **"🗂️ Quản Lý Thanh Toán"** MỚI / "✅ Xác Nhận Đề Nghị Thanh
+Toán" — giờ thuần là hàng chờ duyệt + xác nhận PAID). `canAccessPaymentModule()`
+mở rộng thêm cho người ĐANG là approver ở `paymentDeptWorkflows` hoặc đã tự tạo
+đề nghị của chính mình (custodian hợp đồng không nhất thiết có quyền phẳng
+"Quản lý Thanh Toán").
+
+**Kiểm thử**: mở rộng `tests/test-payment.js` (46 kịch bản) phủ đủ DRAFT/submit-
+blocked-then-success/dept-approval/ONE_TIME khoá cứng/PERIODIC lặp lại 2 chu
+kỳ; `tests/test-contract.js`/`tests/test-office-budget.js` xác nhận KHÔNG hồi
+quy (module Mua Bán/Sửa Chữa hoàn toàn không đổi); cập nhật 2 test cũ bị ảnh
+hưởng bởi việc gỡ route bespoke (`test-audit-round2-cluster6.js`) và số khoá
+`MODULE_CONFIGS` tăng 12→13 (`test-workflow-position-approvers.js`). Full suite
+78 file — 0 hồi quy mới (2 lỗi kết nối SQL Server pre-existing không đổi).
+
+**Deploy-impact**: không đổi `schema.sql`/`.env.example`/`package.json`
+dependencies — chỉ payload JSON/AppData mới, copy code + `pm2 restart` là đủ.
 
 ## Nhân Sự > Onboarding / Offboarding — tự động tạo ticket Hỗ Trợ IT (2026-09-07)
 

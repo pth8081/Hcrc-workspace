@@ -401,6 +401,19 @@ const MODULE_CONFIGS = {
     historyField: 'estimateHistory',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationRepairEstimateDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
+  },
+  // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED, đề nghị chung cho CẢ Hợp đồng/Mua
+  // Bán/Sửa Chữa/thủ công, xem lib/recordActions.js submitPaymentRequest()) giờ đi qua quy trình duyệt
+  // THEO BƯỚC/PHÒNG BAN (paymentDeptWorkflows, không snapshot — tra cấu hình admin MỚI NHẤT mỗi lần
+  // duyệt, cùng khuôn contractsSignedFile/Xe/Mua Bán/VPP ở trên), thay cho quyền phẳng
+  // canManagePaymentRequests() (admin||paymentManage) trước đây. Chỉ Duyệt (APPROVE) đi qua engine này —
+  // KHÔNG wire REJECT (disallowReject: true, xem applyWorkflowAction() bên dưới): paymentRequests không
+  // có khái niệm REJECTED, chỉ có NEED_INFO (giữ nguyên NGOÀI engine này — requestPaymentInfo() ở
+  // lib/recordActions.js, KHÔNG đổi) — quyết định đã chốt với người dùng.
+  paymentRequests: {
+    dbKey: 'paymentRequests',
+    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.paymentDeptWorkflows?.[item.dept], appData),
+    disallowReject: true
   }
 };
 
@@ -577,6 +590,11 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   }
 
   if (action !== 'APPROVE' && action !== 'REJECT') throw new WorkflowError(400, `Hành động không hợp lệ: ${action}`);
+  // paymentRequests (và bất kỳ module ẢO nào sau này khai disallowReject) — CHỈ hỗ trợ Duyệt, không có
+  // khái niệm Từ chối hẳn qua engine này (xem chú thích ở MODULE_CONFIGS.paymentRequests phía trên).
+  if (action === 'REJECT' && config.disallowReject) {
+    throw new WorkflowError(400, 'Module này không hỗ trợ từ chối qua bước duyệt này');
+  }
   if (action === 'REJECT' && !comment) throw new WorkflowError(400, 'Vui lòng nhập lý do từ chối');
   if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
     throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');
@@ -707,6 +725,16 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   if (moduleKey === 'operationOrders') {
     item.status = 'AWAITING_RECEIPT';
     item.approvedAt = new Date().toISOString();
+  }
+  // paymentRequests — giữ lại đúng 3 field approvedBy/approvedByName/approvedAt mà approvePaymentRequest()
+  // (quyền phẳng CŨ, đã bị xoá khỏi lib/recordActions.js) từng gán, vì client vẫn đọc lại chúng ở "Đã xử
+  // lý" của Hộp Thư Duyệt Tổng Hợp (core-approvalhub.js: pr.approvedBy === user.username). Trong chuỗi
+  // nhiều bước, đây là người duyệt bước CUỐI (người hoàn tất toàn bộ chuỗi) — cùng ý nghĩa "người duyệt
+  // xong" như các module 1 bước khác.
+  if (moduleKey === 'paymentRequests') {
+    item.approvedBy = user.username;
+    item.approvedByName = user.name;
+    item.approvedAt = nowVN();
   }
   return { item, transition: { type: 'COMPLETED' } };
 }

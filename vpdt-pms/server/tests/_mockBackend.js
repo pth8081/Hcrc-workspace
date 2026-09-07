@@ -136,7 +136,7 @@ function createMockApi(state) {
         const sourceModule = String((payload && payload.sourceModule) || '');
         const sourceId = Number(payload && payload.sourceId);
         if (!Number.isFinite(sourceId)) throw new HttpError(400, 'sourceId không hợp lệ');
-        const overrides = { title: payload && payload.title, installments: payload && payload.installments, skipManageGate: true };
+        const overrides = { title: payload && payload.title, installments: payload && payload.installments, skipManageGate: true, createAsPending: true };
         let draft, result;
         if (sourceModule === 'CONTRACT') {
           result = findOr404(state.collections.contracts, sourceId);
@@ -157,14 +157,16 @@ function createMockApi(state) {
         const item = findOr404(state.collections.paymentRequests, id);
         return { item: recordActions.editPaymentRequest(payload, user, item) };
       }
+      if (action === 'submit') {
+        const item = findOr404(state.collections.paymentRequests, id);
+        return { item: recordActions.submitPaymentRequest(user, item) };
+      }
       if (action === 'request-info') {
         const item = findOr404(state.collections.paymentRequests, id);
         return { item: recordActions.requestPaymentInfo(payload, user, item) };
       }
-      if (action === 'approve') {
-        const item = findOr404(state.collections.paymentRequests, id);
-        return { item: recordActions.approvePaymentRequest(user, item) };
-      }
+      // "approve" KHÔNG còn ở đây — đi qua /api/workflow/paymentRequests/:id/approve (handleWorkflow() ở
+      // trên, dùng chung applyWorkflowAction()), khớp routes/workflow.js thật (route bespoke cũ đã bị gỡ).
       if (action === 'delete') {
         const item = findOr404(state.collections.paymentRequests, id);
         recordActions.assertCanDeletePaymentRequest(user, item);
@@ -182,7 +184,12 @@ function createMockApi(state) {
         if (outcome.justCompleted && outcome.item.sourceModule && outcome.item.sourceId != null) {
           const sourceCollection = outcome.item.sourceModule === 'CONTRACT' ? state.collections.contracts : state.collections.officeReqs;
           const src = sourceCollection.find(x => x.id === outcome.item.sourceId);
-          if (src) src.paymentStatus = 'DA_THANH_TOAN';
+          // Khớp routes/records.js thật — Hợp đồng "Thanh toán định kỳ" trả về CHUA_THANH_TOAN thay vì
+          // DA_THANH_TOAN (mở lại chu kỳ mới), officeReqs (không có paymentType) luôn DA_THANH_TOAN.
+          if (src) {
+            src.paymentStatus = (outcome.item.sourceModule === 'CONTRACT' && src.paymentType === 'PERIODIC')
+              ? 'CHUA_THANH_TOAN' : 'DA_THANH_TOAN';
+          }
         }
         return { item: outcome.item, justCompleted: outcome.justCompleted };
       }

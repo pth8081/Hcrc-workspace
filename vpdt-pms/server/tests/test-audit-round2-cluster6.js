@@ -118,7 +118,16 @@ resetCollections();
 
 // ===================== Bản giả cho lib/appData + lib/recordStore + ../db =====================
 // Phải cắm TRƯỚC mọi require code thật bên dưới.
-const APP_DATA = { deptWorkflows: {}, submissionDeptWorkflows: {}, carDeptWorkflows: {}, officeDeptWorkflows: {} };
+// paymentDeptWorkflows['Kế Toán'] -> 'ketoan' — "Duyệt đề nghị thanh toán" (kịch bản 3 bên dưới) giờ đi
+// qua quy trình duyệt THEO BƯỚC/PHÒNG BAN (POST /api/workflow/paymentRequests/:id/approve, xem
+// lib/workflowEngine.js MODULE_CONFIGS.paymentRequests) thay cho route phẳng cũ POST
+// /api/records/paymentRequests/:id/approve (đã bị gỡ) — phải cấu hình ĐÚNG approver bước 1 cho dept của
+// ACCOUNTANT_REAUTH/ACCOUNTANT_NONE (cùng 'Kế Toán') thì mới duyệt được, khớp ĐÚNG cơ chế MỚI.
+const APP_DATA = {
+  deptWorkflows: {}, submissionDeptWorkflows: {}, carDeptWorkflows: {}, officeDeptWorkflows: {},
+  workflows: [{ id: 'WF_1STEP', name: '1 bước', steps: [{ order: 1, name: 'Duyệt' }] }],
+  paymentDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['ketoan', 'ketoan2'] } } }
+};
 stubModule('../lib/appData', {
   getAllAppData: async () => APP_DATA,
   // Trả về đúng KIỂU dữ liệu mà từng khoá cấu hình vốn có (mảng cho danh mục, object cho bản đồ quy
@@ -357,16 +366,20 @@ async function main() {
     requireAuth: (req, _res, next) => { req.freshUser = CURRENT_USER; req.allUsers = [CURRENT_USER]; next(); },
     blockIfMustChangePassword: (_req, _res, next) => next()
   });
-  const recordsRouter = require('../routes/records');
+  // POST /api/workflow/paymentRequests/:id/approve (routes/workflow.js) — route generic THẬT, dùng
+  // CHUNG engine phê duyệt theo bước/phòng ban với 12 module khác (lib/workflowEngine.js). Route phẳng
+  // cũ POST /api/records/paymentRequests/:id/approve (routes/records.js) đã bị gỡ hẳn.
+  const workflowRouter = require('../routes/workflow');
 
   const paymentApp = express();
   paymentApp.use(express.json());
-  paymentApp.use('/api/records', recordsRouter);
+  paymentApp.use('/api/workflow', workflowRouter);
 
   function seedPaymentRequest() {
     PAYMENT_REQUESTS.set(77, {
-      id: 77, code: 'TT-77', title: 'Thanh toán hợp đồng A', amount: 500000000,
-      status: 'PENDING', installments: [{ amount: 500000000, confirmed: false }]
+      id: 77, code: 'TT-77', title: 'Thanh toán hợp đồng A', amount: 500000000, dept: 'Kế Toán',
+      status: 'PENDING', currentStep: 1, history: [],
+      installments: [{ amount: 500000000, confirmed: false }]
     });
   }
 
@@ -377,7 +390,7 @@ async function main() {
     seedPaymentRequest();
     CURRENT_USER = ACCOUNTANT_REAUTH;
     await withServer(paymentApp, async (base) => {
-      const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
+      const res = await fetch(`${base}/api/workflow/paymentRequests/77/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
       });
       assert.strictEqual(res.status, 403, 'phải bị chặn khi chưa có phiếu xác thực lại');
@@ -390,10 +403,13 @@ async function main() {
 
   await run('[3] Có phiếu xác thực lại (issueApprovalGrant) -> duyệt được, đề nghị chuyển APPROVED', async () => {
     seedPaymentRequest();
+    // Đúng 1 mình 'ketoan' là approver bước 1 (KHÔNG kèm 'ketoan2') — 1 lượt duyệt của riêng người này
+    // phải đủ hoàn tất NGAY (isStepApprovalComplete() đòi ĐỦ HẾT approvers được liệt kê cùng bước).
+    APP_DATA.paymentDeptWorkflows['Kế Toán'].approvers[1] = ['ketoan'];
     CURRENT_USER = ACCOUNTANT_REAUTH;
     await approvalAuth.issueApprovalGrant(ACCOUNTANT_REAUTH.username);
     await withServer(paymentApp, async (base) => {
-      const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
+      const res = await fetch(`${base}/api/workflow/paymentRequests/77/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
       });
       assert.strictEqual(res.status, 200, 'có phiếu thì phải duyệt được');
@@ -405,9 +421,10 @@ async function main() {
 
   await run('[3] Phiếu dùng MỘT LẦN: lượt duyệt kế tiếp lại bị chặn (không tái sử dụng phiếu cũ)', async () => {
     seedPaymentRequest();
+    APP_DATA.paymentDeptWorkflows['Kế Toán'].approvers[1] = ['ketoan'];
     CURRENT_USER = ACCOUNTANT_REAUTH;
     await withServer(paymentApp, async (base) => {
-      const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
+      const res = await fetch(`${base}/api/workflow/paymentRequests/77/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
       });
       assert.strictEqual(res.status, 403, 'phiếu đã tiêu ở lượt trước, không được dùng lại');
@@ -417,9 +434,12 @@ async function main() {
 
   await run('[3] Không phiền người không bật xác thực lại: approverAuthLevel NONE vẫn duyệt bình thường', async () => {
     seedPaymentRequest();
+    // Đổi sang đúng 1 mình 'ketoan2' — cùng lý do ở kịch bản trên, chỉ người đang test mới cần đủ để
+    // hoàn tất bước duyệt.
+    APP_DATA.paymentDeptWorkflows['Kế Toán'].approvers[1] = ['ketoan2'];
     CURRENT_USER = ACCOUNTANT_NONE;
     await withServer(paymentApp, async (base) => {
-      const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
+      const res = await fetch(`${base}/api/workflow/paymentRequests/77/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
       });
       assert.strictEqual(res.status, 200, 'NONE thì không được đòi phiếu');
@@ -433,7 +453,7 @@ async function main() {
     await approvalAuth.issueApprovalGrant('nguoi_khac');
     CURRENT_USER = ACCOUNTANT_REAUTH;
     await withServer(paymentApp, async (base) => {
-      const res = await fetch(`${base}/api/records/paymentRequests/77/approve`, {
+      const res = await fetch(`${base}/api/workflow/paymentRequests/77/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
       });
       assert.strictEqual(res.status, 403);
@@ -457,7 +477,10 @@ async function main() {
     const body = html.slice(fnStart, fnStart + 1400);
     assert.ok(body.includes('withApprovalAuth('),
       'approvePaymentRequestAction() phải gọi withApprovalAuth() — nếu không, server sẽ luôn trả 403 khó hiểu');
-    assert.ok(body.indexOf('withApprovalAuth(') < body.indexOf("callRecordAction('paymentRequests'"),
+    // callRecordAction('paymentRequests'... đổi thành callWorkflowAction('paymentRequests'... — "Duyệt đề
+    // nghị thanh toán" giờ đi qua route generic /api/workflow/paymentRequests/:id/approve (xem
+    // lib/workflowEngine.js MODULE_CONFIGS.paymentRequests), route bespoke cũ đã bị gỡ.
+    assert.ok(body.indexOf('withApprovalAuth(') < body.indexOf("callWorkflowAction('paymentRequests'"),
       'phải xác thực lại TRƯỚC khi gọi API duyệt');
   });
 

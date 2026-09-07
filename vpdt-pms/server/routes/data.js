@@ -66,6 +66,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // mình làm approver.
   'itPriceTierWorkflows',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractManageDeptWorkflows',
+  // paymentDeptWorkflows: cấu hình người duyệt theo BƯỚC quy trình phòng ban cho đề nghị thanh toán
+  // (thay cho quyền phẳng paymentManage khi "Chuyển Xác Nhận Thanh Toán") — cùng lý do bảo mật với
+  // contractManageDeptWorkflows ở trên: không cho user thường tự ghi thẳng qua POST
+  // /api/data/paymentDeptWorkflows và tự phong mình làm approver bước duyệt thanh toán.
+  'paymentDeptWorkflows',
   // budgetDeptWorkflows: cấu hình Trưởng phòng duyệt ngân sách theo phòng ban (module Ngân Sách) —
   // cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên, chỉ sửa được ở màn Quy Trình & Phê Duyệt (admin).
   'budgetDeptWorkflows',

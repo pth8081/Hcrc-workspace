@@ -21,7 +21,7 @@ function nowVN() {
 // ===================== HỢP ĐỒNG (sửa) =====================
 // Khớp đúng danh sách field mà updateContractReq() ở index.html cho sửa — KHÔNG gồm code/creator/id
 // (không đổi được), KHÔNG gồm customData (form sửa hợp đồng không thu thập lại).
-const CONTRACT_EDITABLE_FIELDS = ['dept', 'custodianDept', 'type', 'title', 'partner', 'amount', 'startDate', 'endDate', 'content'];
+const CONTRACT_EDITABLE_FIELDS = ['dept', 'custodianDept', 'type', 'title', 'partner', 'amount', 'startDate', 'endDate', 'content', 'paymentType'];
 
 // hasAddenda: caller (routes/records.js) tự tra collection để biết hợp đồng gốc này đã có phụ lục
 // nào kế thừa dept của nó hay chưa — file này không tự đọc DB (giữ đúng nguyên tắc cũ, xem đầu file).
@@ -137,6 +137,12 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
     } else if (payload.amount !== undefined && newAmount !== contract.amount && (contract.paymentInstallments || []).length) {
       throw new HttpError(409, 'Giá trị hợp đồng thay đổi — vui lòng khai lại các đợt thanh toán cho khớp');
     }
+  }
+
+  // Loại Thanh Toán — cùng luật normalize như lúc TẠO (createValidation.js): giá trị lạ/thiếu luôn rơi
+  // về 'ONE_TIME', không tin nguyên văn client gửi.
+  if (payload.paymentType !== undefined) {
+    payload.paymentType = payload.paymentType === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
   }
 
   const endDateChanged = typeof payload.endDate === 'string' && contract.endDate !== payload.endDate;
@@ -1389,14 +1395,21 @@ function normalizePaymentInstallmentsOverride(raw) {
 // Chuyển hợp đồng sang "Chờ thanh toán" + trả về BẢN NHÁP đề nghị thanh toán (CHƯA lưu — route gọi
 // createForCollection('paymentRequests', ...) ngay sau khi mutatorFn này chạy xong, cùng khuôn với
 // assignMinutesTasks()/insertMinutesTasks() ở routes/records.js).
-// overrides (tuỳ chọn, {installments, title, skipManageGate}) — dùng khi kế toán tự khởi tạo đề nghị
-// thanh toán từ module Thanh Toán (xem POST /api/records/paymentRequests/from-source ở
-// routes/records.js), cho phép sửa lại đợt thanh toán/tên đề nghị tham khảo từ hợp đồng trước khi gửi.
-// skipManageGate=true bỏ qua canManageContractPayment() bên dưới — route from-source đã tự gác bằng
-// paymentManage RIÊNG (kế toán tạo đề nghị có nguồn không nhất thiết thuộc đơn vị custodian của hợp
-// đồng, khác hẳn nút "Chuyển Sang Thanh Toán" ngay trong module Hợp Đồng vẫn PHẢI đúng đơn vị custodian
-// — xem route đó vẫn gọi hàm này KHÔNG kèm overrides nên giữ nguyên gác cổng cũ). Các điều kiện còn lại
-// (đã có Tài liệu ký đã duyệt, chưa thanh toán) áp dụng như nhau cho CẢ 2 đường.
+// overrides (tuỳ chọn, {installments, title, skipManageGate, createAsPending}) — dùng khi kế toán tự
+// khởi tạo đề nghị thanh toán CÓ NGUỒN Hợp đồng từ module Thanh Toán (xem POST
+// /api/records/paymentRequests/from-source ở routes/records.js), cho phép sửa lại đợt thanh toán/tên
+// đề nghị tham khảo từ hợp đồng trước khi gửi. skipManageGate=true bỏ qua canManageContractPayment() bên
+// dưới — route from-source đã tự gác bằng paymentManage RIÊNG (kế toán tạo đề nghị có nguồn không nhất
+// thiết thuộc đơn vị custodian của hợp đồng, khác hẳn nút "🧾 Lập Thanh Toán" ngay trong module Hợp Đồng
+// vẫn PHẢI đúng đơn vị custodian). Các điều kiện còn lại (đã có Tài liệu ký đã duyệt, chưa thanh toán/đã
+// thanh toán xong với hợp đồng Định kỳ) áp dụng như nhau cho CẢ 2 đường.
+//
+// createAsPending=true — CHỈ route from-source dùng (giữ NGUYÊN hành vi cũ 100%: tạo THẲNG PENDING, mỗi
+// đợt bắt buộc có số tiền > 0 ngay từ khi tạo, qua normalizePaymentInstallmentsOverride() bên dưới).
+// Ngược lại (route "🧾 Lập Thanh Toán" trong module Hợp Đồng gọi hàm này KHÔNG kèm overrides) tạo đề
+// nghị ở trạng thái DRAFT (số tiền từng đợt CHƯA bắt buộc — chỉ bắt buộc khi bấm "Chuyển Xác Nhận Thanh
+// Toán", xem submitPaymentRequest() bên dưới), rồi điều hướng người dùng sang sub-tab "🗂️ Quản Lý Thanh
+// Toán" để tự lập/sửa các đợt thanh toán trước khi gửi duyệt.
 function startContractPayment(user, contract, overrides) {
   // Phụ lục có thể phát sinh thanh toán riêng (VD bổ sung khối lượng/giá trị) — chuyển sang thanh toán
   // độc lập với hợp đồng gốc, sourceId/sourceCode dưới đây luôn theo ĐÚNG bản ghi (gốc hay phụ lục)
@@ -1405,10 +1418,17 @@ function startContractPayment(user, contract, overrides) {
   if (!overrides?.skipManageGate && !canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
   if (!contract.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
   if (contract.signedFileStatus !== 'APPROVED') throw new HttpError(409, 'Tài liệu ký cần được phê duyệt trước khi chuyển sang thanh toán');
-  if (contract.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Hợp đồng không ở trạng thái chưa thanh toán');
+  // "Thanh toán định kỳ" — sau khi 1 chu kỳ đã HOÀN TẤT (DA_THANH_TOAN), cho phép bắt đầu chu kỳ MỚI
+  // (contract.paymentType === 'PERIODIC', xem confirmPaymentInstallment()/routes/records.js ghi ngược
+  // paymentStatus về CHUA_THANH_TOAN thay vì DA_THANH_TOAN như "Thanh toán 1 lần"). VẪN chặn cứng khi
+  // đang CHO_THANH_TOAN (1 chu kỳ đang dở dang) cho CẢ 2 loại — không cho mở đồng thời 2 chu kỳ.
+  const canStart = contract.paymentStatus === 'CHUA_THANH_TOAN'
+    || (contract.paymentType === 'PERIODIC' && contract.paymentStatus === 'DA_THANH_TOAN');
+  if (!canStart) throw new HttpError(409, 'Hợp đồng không ở trạng thái chưa thanh toán');
   contract.paymentStatus = 'CHO_THANH_TOAN';
   const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
   const installments = overrideInstallments || buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng');
+  const createAsPending = !!overrides?.createAsPending;
   return {
     sourceModule: 'CONTRACT', sourceId: contract.id, sourceCode: contract.code,
     // Đề nghị thanh toán mang dept của ĐƠN VỊ CUSTODIAN (đơn vị đang thao tác chuyển sang thanh toán,
@@ -1427,7 +1447,14 @@ function startContractPayment(user, contract, overrides) {
       ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - contract.amount) > 1
       : false,
     installments,
-    status: 'PENDING',
+    // createAsPending (route from-source, hành vi CŨ giữ nguyên): thẳng PENDING + currentStep/history
+    // khởi tạo ngay để đi qua ĐÚNG được quy trình duyệt theo bước MỚI (paymentDeptWorkflows, xem
+    // lib/workflowEngine.js) — nếu không mọi đề nghị tạo qua đường này sẽ kẹt vĩnh viễn (không approver
+    // nào tra được currentStep hợp lệ, trừ admin). Ngược lại (nút "🧾 Lập Thanh Toán"): DRAFT, currentStep
+    // 0/history rỗng CHỈ được gán THẬT lúc submitPaymentRequest() (DRAFT -> PENDING).
+    status: createAsPending ? 'PENDING' : 'DRAFT',
+    currentStep: createAsPending ? 1 : 0,
+    history: [],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
 }
@@ -1481,7 +1508,15 @@ function startOfficePayment(user, item, overrides) {
       ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - item.amount) > 1
       : false,
     installments,
+    // officeReqs (Mua Bán/Sửa Chữa) KHÔNG có khái niệm NHÁP/paymentType định kỳ (khác Hợp đồng) — LUÔN
+    // tạo thẳng PENDING như trước, hoàn toàn không đổi hành vi module này. currentStep/history khởi tạo
+    // ngay để đề nghị đi qua ĐÚNG được quy trình duyệt theo bước MỚI dùng CHUNG cho mọi nguồn
+    // (paymentDeptWorkflows, xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests) — thiếu 2 field
+    // này thì đề nghị sẽ kẹt vĩnh viễn ở PENDING (không approver nào tra được currentStep hợp lệ, trừ
+    // admin), dù bản thân officeReqs/MUA_BAN/SUA_CHUA không hề thay đổi gì.
     status: 'PENDING',
+    currentStep: 1,
+    history: [],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
 }
@@ -1501,19 +1536,33 @@ function canManagePaymentRequests(user) {
   return !!(user.perms?.admin || user.perms?.paymentManage);
 }
 
+// Người tạo (createdBy) SỬA được chính đề nghị của mình lúc còn NHÁP — cùng lý do người custodian bấm
+// "🧾 Lập Thanh Toán" ở module Hợp Đồng (canManageContractPayment(), theo contractCreate scope, KHÔNG
+// nhất thiết có paymentManage) vẫn cần tự lập/sửa các đợt thanh toán ở sub-tab "🗂️ Quản Lý Thanh Toán"
+// TRƯỚC KHI gửi cho kế toán/phòng ban duyệt — kế toán (paymentManage) vẫn sửa được MỌI đề nghị như cũ.
+function canEditPaymentRequest(user, pr) {
+  return canManagePaymentRequests(user) || pr.createdBy === user.username;
+}
+
 function editPaymentRequest(payload, user, pr) {
-  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền sửa đề nghị thanh toán');
-  if (pr.status !== 'PENDING' && pr.status !== 'NEED_INFO') throw new HttpError(409, 'Đề nghị thanh toán không còn ở trạng thái được sửa');
+  const isDraft = pr.status === 'DRAFT';
+  if (!(isDraft ? canEditPaymentRequest(user, pr) : canManagePaymentRequests(user))) {
+    throw new HttpError(403, 'Bạn không có quyền sửa đề nghị thanh toán');
+  }
+  if (!['PENDING', 'NEED_INFO', 'DRAFT'].includes(pr.status)) throw new HttpError(409, 'Đề nghị thanh toán không còn ở trạng thái được sửa');
   // Khớp đúng luật lúc TẠO (xem createValidation.js CREATE_MODULE_CONFIGS.paymentRequests) — "Cần ít
   // nhất 1 đợt thanh toán" chỉ được kiểm tra lúc tạo, chưa từng được kiểm tra lại lúc sửa: xoá hết các
   // đợt trong form Sửa rồi lưu để lại 1 đề nghị thanh toán installments=[] amount=0, không đợt nào để
   // xác nhận (confirmPaymentInstallment() không có gì lặp qua) -> đề nghị thanh toán kẹt vĩnh viễn ở
   // APPROVED, không bao giờ tự chuyển PAID được.
+  // Số tiền từng đợt CHỈ bắt buộc > 0 khi KHÔNG còn là NHÁP (PENDING/NEED_INFO) — đúng quyết định nghiệp
+  // vụ đã chốt: "Nhập và ấn lưu thì không cần nhập số tiền, nhưng khi chuyển xác nhận thanh toán cần nhập
+  // số tiền mới gửi được" — lúc còn DRAFT được LƯU với số tiền để trống (null), chỉ bắt buộc đủ số tiền
+  // tại đúng thời điểm bấm "Chuyển Xác Nhận Thanh Toán" (xem submitPaymentRequest() bên dưới).
   if (payload.installments !== undefined) {
     const installments = Array.isArray(payload.installments) ? payload.installments : [];
     if (!installments.length) throw new HttpError(400, 'Cần ít nhất 1 đợt thanh toán');
-    // Mỗi đợt phải dương — cùng lý do lúc TẠO (xem createValidation.js paymentRequests.extraValidate).
-    if (installments.some(it => !(Number(it?.amount) > 0))) {
+    if (!isDraft && installments.some(it => !(Number(it?.amount) > 0))) {
       throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
     }
   }
@@ -1527,11 +1576,20 @@ function editPaymentRequest(payload, user, pr) {
     if (!pr.title) throw new HttpError(400, 'Vui lòng nhập tiêu đề đề nghị thanh toán');
   }
   if (Array.isArray(pr.installments)) {
-    pr.installments = pr.installments.map(it => ({
-      description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
-      confirmed: false, confirmedAt: null, confirmedBy: null
-    }));
-    pr.amount = pr.installments.reduce((sum, it) => sum + it.amount, 0);
+    pr.installments = pr.installments.map(it => {
+      // DRAFT: số tiền để trống/không hợp lệ -> lưu null (rõ ràng "chưa nhập", KHÁC 0 đồng thật) — ép về
+      // 0 như trước sẽ không phân biệt được "chưa nhập" với "khai 0 đồng", làm sai lệch tổng hiển thị.
+      let amount;
+      if (isDraft) {
+        const raw = it?.amount;
+        const n = (raw === '' || raw === null || raw === undefined) ? NaN : Number(raw);
+        amount = Number.isFinite(n) ? n : null;
+      } else {
+        amount = Number(it?.amount) || 0;
+      }
+      return { description: (it?.description || '').trim(), amount, dueDate: it?.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null };
+    });
+    pr.amount = pr.installments.reduce((sum, it) => sum + (it.amount || 0), 0);
     // Đề nghị có nguồn (từ Hợp đồng/Mua Bán/Sửa Chữa) mang sẵn referenceAmount — sửa lại đợt ở đây cũng
     // phải tính lại cờ cảnh báo lệch giá trị nguồn, không chỉ lúc tạo (startContractPayment()/
     // startOfficePayment() ở trên) — nếu không, sửa xong tổng lệch xa hơn mà cờ cũ (đúng lúc tạo) vẫn
@@ -1540,7 +1598,35 @@ function editPaymentRequest(payload, user, pr) {
       pr.amountMismatchesSource = Math.abs(pr.amount - pr.referenceAmount) > 1;
     }
   }
+  // NHÁP lưu lại vẫn giữ nguyên NHÁP (nút "💾 Lưu" — chưa gửi duyệt); PENDING/NEED_INFO sửa xong luôn
+  // quay lại PENDING như hành vi cũ (NEED_INFO -> "Sửa & Gửi Lại" tự động gửi lại hàng chờ duyệt).
+  if (!isDraft) pr.status = 'PENDING';
+  return pr;
+}
+
+// Gửi đề nghị thanh toán còn NHÁP đi duyệt (DRAFT -> PENDING) — ĐÚNG thời điểm DUY NHẤT số tiền từng đợt
+// bị bắt buộc phải > 0 (quyết định nghiệp vụ đã chốt, xem editPaymentRequest() ở trên). Từ đây khởi tạo
+// currentStep/history để đề nghị đi vào ĐÚNG quy trình duyệt theo bước/phòng ban (paymentDeptWorkflows,
+// xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests) — không snapshot trước, luôn tra cấu hình
+// admin MỚI NHẤT mỗi lần duyệt (cùng khuôn contractsSignedFile/Xe/Mua Bán/VPP).
+function submitPaymentRequest(user, pr) {
+  if (!canEditPaymentRequest(user, pr)) throw new HttpError(403, 'Bạn không có quyền gửi duyệt đề nghị thanh toán này');
+  if (pr.status !== 'DRAFT') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái nháp, không thể chuyển xác nhận thanh toán');
+  if (!String(pr.title || '').trim()) throw new HttpError(400, 'Vui lòng nhập tiêu đề đề nghị thanh toán');
+  const installments = Array.isArray(pr.installments) ? pr.installments : [];
+  if (!installments.length) throw new HttpError(400, 'Cần ít nhất 1 đợt thanh toán trước khi chuyển xác nhận thanh toán');
+  const missingOrdinals = installments
+    .map((it, idx) => (Number(it?.amount) > 0 ? null : idx + 1))
+    .filter(n => n !== null);
+  if (missingOrdinals.length) {
+    throw new HttpError(400, `Vui lòng nhập số tiền lớn hơn 0 cho đợt thanh toán số: ${missingOrdinals.join(', ')} trước khi chuyển xác nhận thanh toán`);
+  }
   pr.status = 'PENDING';
+  pr.currentStep = 1;
+  pr.history = [];
+  pr.submittedBy = user.username;
+  pr.submittedByName = user.name;
+  pr.submittedAt = nowVN();
   return pr;
 }
 
@@ -1554,17 +1640,28 @@ function requestPaymentInfo(payload, user, pr) {
   return pr;
 }
 
-function approvePaymentRequest(user, pr) {
-  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền duyệt đề nghị thanh toán');
-  // NEED_INFO KHÔNG được duyệt trực tiếp — phải qua editPaymentRequest() (nút "Sửa & Gửi lại") để tự
-  // chuyển về PENDING trước, khớp đúng bước "phản hồi yêu cầu bổ sung" bắt buộc như Văn Bản Trình.
-  // Trước đây cho duyệt thẳng từ NEED_INFO khiến bước "Yêu cầu bổ sung" chỉ mang tính hình thức.
-  if (pr.status !== 'PENDING') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt');
-  pr.status = 'APPROVED';
-  pr.approvedBy = user.username;
-  pr.approvedByName = user.name;
-  pr.approvedAt = nowVN();
-  return pr;
+// approvePaymentRequest() (quyền phẳng canManagePaymentRequests(), KHÔNG phân biệt bước/phòng ban) ĐÃ BỊ
+// XOÁ — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) giờ đi qua quy trình duyệt THEO BƯỚC/PHÒNG
+// BAN dùng chung engine (POST /api/workflow/paymentRequests/:id/approve, xem lib/workflowEngine.js
+// MODULE_CONFIGS.paymentRequests + applyWorkflowAction()) — khớp đúng yêu cầu nghiệp vụ "chuyển xác nhận
+// thanh toán cần có phê duyệt theo phòng". Route phẳng cũ POST /api/records/paymentRequests/:id/approve
+// đã bị gỡ (xem routes/records.js) — không còn nơi nào khác gọi hàm cũ này.
+
+// Trạng thái cảnh báo hạn thanh toán của 1 ĐỢT trong đề nghị thanh toán — thuần, không ghi gì, chỉ dùng
+// để hiển thị badge + đếm cảnh báo ("cảnh báo thời hạn thanh toán theo đợt" người dùng yêu cầu). Cùng
+// khuôn computeOperationWorkItemDeadlineStatus() ở trên (tính lại NGAY LÚC ĐỌC, không lưu field riêng
+// trên installment) — mirror y hệt ở module-thanhtoan.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên).
+function computePaymentInstallmentDeadlineStatus(installment) {
+  if (!installment) return 'KHONG_CO_HAN';
+  if (installment.confirmed) return 'DA_THANH_TOAN';
+  const due = parseISODateOnly(installment.dueDate);
+  if (!due) return 'KHONG_CO_HAN';
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (diffDays < 0) return 'QUA_HAN';
+  if (diffDays <= 3) return 'SAP_DEN_HAN'; // còn tối đa 3 ngày (kể cả hôm nay) — cảnh báo sớm
+  return 'DUNG_HAN';
 }
 
 // Xác nhận đã thanh toán 1 đợt — đủ hết các đợt (không còn đợt nào chưa confirmed) thì tự chuyển PAID
@@ -5466,8 +5563,8 @@ module.exports = {
   editSubmissionDraft, submitSubmissionDraft,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
-  canManagePaymentRequests, editPaymentRequest, requestPaymentInfo, approvePaymentRequest,
-  confirmPaymentInstallment, assertCanDeletePaymentRequest,
+  canManagePaymentRequests, canEditPaymentRequest, editPaymentRequest, submitPaymentRequest, requestPaymentInfo,
+  confirmPaymentInstallment, assertCanDeletePaymentRequest, computePaymentInstallmentDeadlineStatus,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,

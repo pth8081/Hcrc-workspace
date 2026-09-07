@@ -23,6 +23,11 @@ const WF_MODULE_CONFIG = {
   // bước duyệt "Tài liệu ký" ở sub-tab "Quản Lý HĐ" — độc lập hoàn toàn, không liên quan CONTRACT_APPROVAL.
   CONTRACT_APPROVAL: { dbKey: 'contractApprovalDeptWorkflows', label: 'Hợp đồng - Phê duyệt', title: '📄 Cấu Hình Quy Trình GỐC Phê Duyệt Hợp Đồng Theo Phòng Ban' },
   CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' },
+  // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt theo bước/
+  // phòng ban (paymentDeptWorkflows) — cùng khuôn đơn giản CONTRACT_MANAGE/BUDGET ở trên (không snapshot,
+  // không "types" lồng), thay cho quyền phẳng paymentManage/admin cũ. Xem lib/workflowEngine.js
+  // MODULE_CONFIGS.paymentRequests.
+  PAYMENT: { dbKey: 'paymentDeptWorkflows', label: 'Thanh Toán', title: '💰 Cấu Hình Quy Trình Phê Duyệt Đề Nghị Thanh Toán Theo Phòng Ban' },
   // "Hỗ Trợ IT" > "Phê Duyệt Giá" — cấu hình LỒNG theo LOẠI GIÁ (RETAIL/WHOLESALE) rồi mới tới phòng ban,
   // NGƯỢC THỨ TỰ với Văn bản trình (hasTypes thường: {loại: {phòng ban: config}}) — ở đây là {phòng ban:
   // {loại: config}} (khớp defaults.js/lib/workflowEngine.js::resolveItPriceDeptWorkflowConfig(), vì

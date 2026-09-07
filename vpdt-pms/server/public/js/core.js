@@ -289,7 +289,7 @@ const DB = {
   // Hỗ Trợ IT, xem lib/createValidation.js. RIÊNG TƯ cùng khuôn hrFeedback ở trên.
   hrOnboardingRequests: [], hrOffboardingRequests: [],
   sensitiveKeywords: [],
-  paymentRequests: [],
+  paymentRequests: [], paymentDeptWorkflows: {},
   formTemplates: {},
   permGroups: [],
   vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [],
@@ -1106,6 +1106,12 @@ let expandedDocFamilies = new Set();
 let expandedLicenseFamilies = new Set();
 let activeContractSubTab = 'APPROVAL';
 let activePaymentSubTab = 'APPROVE';
+// id đề nghị thanh toán NHÁP vừa tạo qua "🧾 Lập Thanh Toán" (module-hopdong.js startContractPaymentAction())
+// — module-thanhtoan.js renderPaymentManageTab() đọc + TỰ XOÁ (đặt lại null) ngay sau khi mở sẵn đúng
+// dòng này, để lần vào tab "🗂️ Quản Lý Thanh Toán" SAU đó (không phải vừa điều hướng từ Hợp Đồng) không
+// bị "dính" mở lại đề nghị cũ. Khai ở core.js (luôn nạp trước) vì được GÁN từ module-hopdong.js ngay
+// TRƯỚC khi switchTab('office') lazy-load xong cụm module-thanhtoan.js.
+let pendingManagePaymentFocusId = null;
 let expandedContractFamilies = new Set();
 let currentProcessingSubId = null;
 let currentProcessingCarId = null;
@@ -2050,6 +2056,28 @@ function resolveContractManageWorkflow(contract) {
   return { steps: baseWf.steps, approvers };
 }
 
+// Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt theo bước/phòng
+// ban (paymentDeptWorkflows) — mirror ĐÚNG resolveWfConfig của MODULE_CONFIGS.paymentRequests ở
+// lib/workflowEngine.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên), cùng khuôn resolveContractManageWorkflow()
+// ngay trên (không snapshot, luôn tra cấu hình admin MỚI NHẤT theo pr.dept mỗi lần cần).
+function resolvePaymentApprovalWorkflow(pr) {
+  const wfConfig = DB.paymentDeptWorkflows?.[pr.dept];
+  const baseWf = DB.workflows.find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const approvers = {};
+  baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(wfConfig, s.order); });
+  return { steps: baseWf.steps, approvers };
+}
+// Người dùng có được duyệt ĐÚNG bước hiện tại của 1 đề nghị thanh toán PENDING hay không — dùng để
+// gate nút "✅ Xác nhận" ở renderPaymentRequests()/getMyPendingApprovals() (KHÔNG còn dùng flat
+// canManagePaymentRequestsClient() cho hành động Duyệt nữa, chỉ còn dùng flat cho Sửa/Yêu Cầu Bổ
+// Sung/Xoá — những hành động vẫn giữ nguyên quyền phẳng theo quyết định đã chốt).
+function canApprovePaymentRequestStepClient(user, pr) {
+  if (pr.status !== 'PENDING') return false;
+  const { approvers } = resolvePaymentApprovalWorkflow(pr);
+  const step = pr.currentStep || 1;
+  return canApproveStep(user, approvers?.[step], pr.history, step);
+}
+
 // Dựng quy trình HIỆU LỰC cho 1 hợp đồng/phụ lục MỚI (lúc tạo) — cùng khuôn buildEffectiveSubmissionWorkflow()
 // nhưng dùng CONTRACT_APPROVAL_LAYERS/DB.contractApprovalGroups/DB.contractApprovalDeptWorkflows riêng,
 // và KHÔNG có nhánh không-chặn (cả 4 lớp đều blocking, không có opinionRequestees).
@@ -2749,6 +2777,7 @@ async function initDatabase(loggingInUser) {
     DB.internalNewsCategories = data.internalNewsCategories || [];
     DB.internalShareCategories = data.internalShareCategories || [];
     DB.paymentRequests = data.paymentRequests || [];
+    DB.paymentDeptWorkflows = data.paymentDeptWorkflows || {};
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.permGroups = data.permGroups || [];
@@ -5735,9 +5764,21 @@ function _dispatchTabRender(tabName) {
 }
 
 // Quyền vào sub-tab "💰 Thanh Toán" của Tổng Hợp — khác hẳn canAccessOfficeSubTab() (không có khái
-// niệm officeBuy/Fix/Invest), chỉ cần paymentManage/admin.
+// niệm officeBuy/Fix/Invest). paymentManage/admin luôn vào được (kế toán, quản lý toàn bộ). MỞ RỘNG
+// thêm 2 trường hợp (đợt "Quản Lý Thanh Toán" — sub-tab NHÁP/theo dõi mới, khớp lib/workflowEngine.js
+// MODULE_CONFIGS.paymentRequests): (1) người ĐANG là approver ở BẤT KỲ bước/phòng ban nào của
+// paymentDeptWorkflows (cùng khuôn isApproverInWorkflowMap() đã dùng cho carRegs/officeReqs — người
+// duyệt bước phòng ban cần vào được tab "✅ Xác Nhận Đề Nghị Thanh Toán" dù không có paymentManage);
+// (2) người ĐÃ tự tạo ít nhất 1 đề nghị thanh toán (createdBy === username — custodian hợp đồng bấm
+// "🧾 Lập Thanh Toán" ở module Hợp Đồng, canManageContractPayment() theo contractCreate scope, KHÔNG
+// nhất thiết có paymentManage, nhưng vẫn cần vào "🗂️ Quản Lý Thanh Toán" để tự lập/sửa đợt & gửi duyệt
+// đề nghị của chính mình). KHÔNG mở toàn bộ module cho MỌI người dùng như scopeHasAny(contractCreate)
+// (scope đó luôn true do "phòng ban của chính mình" mặc định — quá rộng cho 1 module động tới tiền).
 function canAccessPaymentModule(user) {
-  return !!(user?.perms?.admin || user?.perms?.paymentManage);
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.paymentManage) return true;
+  if (isApproverInWorkflowMap(DB.paymentDeptWorkflows, user.username)) return true;
+  return (DB.paymentRequests || []).some(pr => pr.createdBy === user.username);
 }
 
 // canManagePaymentRequestsClient() - CHUYEN tu module-thanhtoan.js sang day (Ha tang: nap module theo

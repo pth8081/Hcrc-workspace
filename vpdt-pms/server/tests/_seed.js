@@ -119,6 +119,15 @@ function buildAppData() {
     // minh đúng THỨ TỰ/ĐÚNG NGƯỜI từng bước, không dùng chung 1 người (che mất lỗi thứ tự nếu có).
     contractApprovalGroups: { GD_PGD: ['gd1'], PTGD: ['ptgd1'], TRO_LY_THU_KY: ['tls1'], TGD: ['tgd1'] },
     contractManageDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
+    // paymentDeptWorkflows — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt
+    // theo bước/phòng ban (xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests), THAY cho quyền
+    // phẳng paymentManage cũ. 'Phòng Kinh Doanh' (custodian mặc định của các hợp đồng test) do tp_kd
+    // duyệt (cùng người duyệt "Quản Lý HĐ"/Ngân Sách/Mua Bán của phòng này — WF_1STEP_KD); 'Phòng Kế
+    // Toán' do CHÍNH ketoan1 duyệt (đề nghị tạo thủ công/CÓ NGUỒN từ module Thanh Toán mang dept này).
+    paymentDeptWorkflows: {
+      'Phòng Kinh Doanh': WF_1STEP_KD,
+      'Phòng Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['ketoan1'] } }
+    },
     meetingAttendeeTemplates: []
   };
 }

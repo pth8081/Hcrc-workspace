@@ -14,10 +14,6 @@ const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../l
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
 const { sanitizeInternalPostCommentsForUser, canViewInternalPost } = require('../lib/recordViewScope');
-// "Phiếu xác thực lại trước khi Duyệt" (approverAuthLevel) — cùng cơ chế routes/workflow.js và
-// routes/trash.js dùng, xem assertApprovalReauth() bên dưới.
-const { consumeApprovalGrant } = require('../lib/approvalAuth');
-
 router.use(requireAuth, blockIfMustChangePassword);
 
 // requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện tại từ DB (kể cả trạng thái active) và gắn
@@ -154,10 +150,15 @@ router.post('/paymentRequests/from-source', async (req, res) => {
     const sourceModule = String(req.body?.sourceModule || '');
     const sourceId = Number(req.body?.sourceId);
     if (!Number.isFinite(sourceId)) return res.status(400).json({ error: 'sourceId không hợp lệ' });
+    // createAsPending: true — route NÀY vẫn giữ NGUYÊN hành vi cũ 100% (tạo THẲNG PENDING, số tiền từng
+    // đợt bắt buộc > 0 ngay lúc tạo qua normalizePaymentInstallmentsOverride() ở lib/recordActions.js) —
+    // KHÁC nút "🧾 Lập Thanh Toán" ngay trong module Hợp Đồng (gọi startContractPayment() KHÔNG kèm
+    // overrides, tạo DRAFT). startOfficePayment() bỏ qua cờ này (officeReqs luôn PENDING, không đổi).
     const overrides = {
       title: req.body?.title,
       installments: req.body?.installments,
-      skipManageGate: true
+      skipManageGate: true,
+      createAsPending: true
     };
 
     let draft = null;
@@ -198,31 +199,20 @@ async function withPaymentAction(req, res, action, mutator) {
 router.post('/paymentRequests/:id/edit', (req, res) =>
   withPaymentAction(req, res, 'edit', recordActions.editPaymentRequest));
 
+// "Chuyển Xác Nhận Thanh Toán" (DRAFT -> PENDING) — ĐÚNG thời điểm số tiền từng đợt bị bắt buộc > 0 (xem
+// submitPaymentRequest() ở lib/recordActions.js). "Duyệt đề nghị" (PENDING -> APPROVED) KHÔNG còn route
+// riêng ở đây nữa — đã chuyển hẳn sang generic POST /api/workflow/paymentRequests/:id/approve (xem
+// routes/workflow.js + lib/workflowEngine.js MODULE_CONFIGS.paymentRequests), theo ĐÚNG quy trình duyệt
+// theo bước/phòng ban thay cho quyền phẳng canManagePaymentRequests() cũ. Route bespoke cũ
+// POST /paymentRequests/:id/approve (+ hàm recordActions.approvePaymentRequest() nó gọi) đã bị GỠ HẲN —
+// route generic ở routes/workflow.js đã tự có lớp xác thực lại (mật khẩu/OTP/PIN theo
+// perms.approverAuthLevel) cho MỌI module trong MODULE_CONFIGS, bao gồm paymentRequests, nên không mất
+// lớp bảo vệ này khi gỡ route cũ.
+router.post('/paymentRequests/:id/submit', (req, res) =>
+  withPaymentAction(req, res, 'submit', (payload, user, item) => recordActions.submitPaymentRequest(user, item)));
+
 router.post('/paymentRequests/:id/request-info', (req, res) =>
   withPaymentAction(req, res, 'request-info', recordActions.requestPaymentInfo));
-
-// Xác thực lại (mật khẩu/OTP/PIN/vân tay theo perms.approverAuthLevel) TRƯỚC KHI duyệt đề nghị thanh
-// toán — sao y nguyên khuôn routes/workflow.js (~APPROVAL_REAUTH_MODULES/consumeApprovalGrant): cùng
-// điều kiện (level !== 'NONE'), cùng mã lỗi 403, cùng thông báo.
-//
-// LỖ HỔNG ĐƯỢC VÁ: cả 9 module duyệt khác (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng/VPP/Hợp Đồng/Tài liệu ký/
-// bảng giá IT/Ngân Sách) đều đi qua routes/workflow.js nên được lớp này bảo vệ, riêng Duyệt đề nghị
-// thanh toán — hành động ĐỘNG TỚI TIỀN trực tiếp nhất trong hệ thống — lại có route riêng ở đây và chỉ
-// kiểm canManagePaymentRequests(), tức là người dùng cấu hình "phải xác thực lại khi duyệt" vẫn bị bỏ
-// qua đúng ở chỗ cần nhất. Trả về true nếu đã gửi response lỗi (caller dừng lại).
-async function rejectIfMissingApprovalGrant(req, res) {
-  const level = req.freshUser?.perms?.approverAuthLevel || 'NONE';
-  if (level !== 'NONE' && !(await consumeApprovalGrant(req.freshUser.username))) {
-    res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN) trước khi duyệt' });
-    return true;
-  }
-  return false;
-}
-
-router.post('/paymentRequests/:id/approve', async (req, res) => {
-  if (await rejectIfMissingApprovalGrant(req, res)) return;
-  return withPaymentAction(req, res, 'approve', (payload, user, item) => recordActions.approvePaymentRequest(user, item));
-});
 
 // Đề nghị thanh toán tới APPROVED thì bản ghi nguồn (Hợp đồng/officeReqs) đã bị startContractPayment()/
 // tương đương chuyển sang paymentStatus=CHO_THANH_TOAN (xem confirm-installment ở dưới, ghi ngược
@@ -270,7 +260,13 @@ router.post('/paymentRequests/:id/confirm-installment', async (req, res) => {
     if (justCompleted && result.sourceModule && result.sourceId != null) {
       const sourceCollection = result.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
       await withLockedRecordForCollection(sourceCollection, result.sourceId, (item) => {
-        item.paymentStatus = 'DA_THANH_TOAN';
+        // Hợp đồng "Thanh toán định kỳ" (paymentType === 'PERIODIC') — 1 chu kỳ hoàn tất KHÔNG khoá cứng
+        // "Đã thanh toán" như "Thanh toán 1 lần" nữa, mà TRẢ VỀ "Chưa thanh toán" để mở lại nút "🧾 Lập
+        // Thanh Toán" cho chu kỳ MỚI (khớp yêu cầu nghiệp vụ "năm sau lại thanh toán"). officeReqs KHÔNG
+        // có field paymentType (module Mua Bán/Sửa Chữa không có khái niệm định kỳ) -> luôn rơi vào
+        // nhánh else như hành vi gốc, hoàn toàn không đổi.
+        item.paymentStatus = (sourceCollection === 'contracts' && item.paymentType === 'PERIODIC')
+          ? 'CHUA_THANH_TOAN' : 'DA_THANH_TOAN';
         return item;
       }).catch(() => {}); // nguồn có thể đã bị xoá — không chặn việc đề nghị thanh toán đã PAID hợp lệ
     }
