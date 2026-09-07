@@ -268,7 +268,7 @@ function renderTrainingLms() {
   else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
   else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
   else if (activeTrainingLmsTab === 'ONBOARDING') renderOnboardingLms();
-  else if (activeTrainingLmsTab === 'TESTS') renderTrainingTests();
+  else if (activeTrainingLmsTab === 'TESTS') { renderTrainingTests(); renderTrainingEssayGradingQueue(); }
 }
 
 // ---------- LỚP HỌC ----------
@@ -1575,14 +1575,19 @@ async function confirmTrainingRosterAdd() {
 }
 
 // ---------- NGÂN HÀNG CÂU HỎI (bài test tạo độc lập, gán vào lớp khi Tạo Lớp Học Mới) ----------
-let tbQuestions = []; // [{ text, type: 'SINGLE'|'MULTI', points, options: [{text, correct}] }]
+// Đợt 10 — 4 loại câu hỏi: SINGLE (1 đáp án đúng)/MULTI (nhiều đáp án đúng, options[].text) — KHÔNG đổi
+// gì; ESSAY (nghị luận — không có options, chỉ points, chấm tay sau khi nộp — xem "📝 Chấm Nghị Luận" bên
+// dưới); IMAGE_DRAG_DROP (kéo thả hình — options[].imageUrl BẮT BUỘC, text chỉ còn là chú thích tuỳ
+// chọn, ngữ nghĩa chấm điểm giống MULTI). tbQuestions options LUÔN có sẵn field imageUrl (rỗng nếu
+// không dùng) để 1 khuôn dữ liệu chung dùng được cho cả 4 loại, không cần đổi field theo type.
+let tbQuestions = []; // [{ text, type, points, imageUrl, options: [{text, correct, imageUrl}] }]
 
 function tbAddQuestion() {
-  tbQuestions.push({ text: '', type: 'SINGLE', points: 1, imageUrl: '', options: [{ text: '', correct: false }, { text: '', correct: false }] });
+  tbQuestions.push({ text: '', type: 'SINGLE', points: 1, imageUrl: '', options: [{ text: '', correct: false, imageUrl: '' }, { text: '', correct: false, imageUrl: '' }] });
   renderTestBuilderQuestions();
 }
 function tbRemoveQuestion(qi) { tbQuestions.splice(qi, 1); renderTestBuilderQuestions(); }
-function tbAddOption(qi) { tbQuestions[qi].options.push({ text: '', correct: false }); renderTestBuilderQuestions(); }
+function tbAddOption(qi) { tbQuestions[qi].options.push({ text: '', correct: false, imageUrl: '' }); renderTestBuilderQuestions(); }
 function tbRemoveOption(qi, oi) { tbQuestions[qi].options.splice(oi, 1); renderTestBuilderQuestions(); }
 function tbUpdateQuestionField(qi, field, value) { tbQuestions[qi][field] = value; renderTestBuilderQuestions(); }
 // 3 hàm dưới đây KHÔNG gọi renderTestBuilderQuestions() (khác tbUpdateQuestionField() ở trên) — cố ý,
@@ -1625,6 +1630,61 @@ function tbRemoveQuestionImage(qi) {
   renderTestBuilderQuestions();
 }
 
+// Ảnh TỪNG ĐÁP ÁN (chỉ dùng cho loại IMAGE_DRAG_DROP, Đợt 10) — cùng khuôn tbQuestionImageFileChange()
+// ở trên (uploadFileToServer() + moduleKey 'trainingTestImage', server tự xác minh lại imageUrl trước
+// khi lưu), khác ở chỗ ảnh gắn vào ĐÚNG 1 đáp án (tbQuestions[qi].options[oi].imageUrl) thay vì cả câu.
+async function tbOptionImageFileChange(qi, oi, inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById(`tbOptImgStatus_${qi}_${oi}`);
+  if (statusEl) statusEl.innerText = '⏳ Đang tải...';
+  try {
+    const uploaded = await uploadFileToServer(file, 'trainingTestImage');
+    tbQuestions[qi].options[oi].imageUrl = uploaded.fileUrl;
+  } catch (err) {
+    alert(`⛔ Tải ảnh đáp án thất bại: ${err.message}`);
+  }
+  inputEl.value = '';
+  renderTestBuilderQuestions();
+}
+function tbRemoveOptionImage(qi, oi) {
+  tbQuestions[qi].options[oi].imageUrl = '';
+  renderTestBuilderQuestions();
+}
+
+// Khối HTML phần "đáp án" của 1 câu hỏi — tách riêng theo type vì ESSAY không có đáp án nào để hiển thị,
+// IMAGE_DRAG_DROP cần ô tải ảnh PER OPTION thay vì chỉ ô nhập text (SINGLE/MULTI giữ NGUYÊN VẸN UI cũ).
+function tbRenderQuestionOptionsHTML(q, qi) {
+  if (q.type === 'ESSAY') {
+    return `<p class="text-gray-400 italic text-xs">✍️ Câu hỏi Nghị Luận — không có đáp án lựa chọn, người làm bài tự viết câu trả lời. Trainer chấm điểm tay sau khi nộp bài (mục "📝 Cần Chấm Nghị Luận" bên dưới) — điểm tối đa của câu là ô "Điểm" ở trên.</p>`;
+  }
+  if (q.type === 'IMAGE_DRAG_DROP') {
+    return `
+      <p class="text-gray-400 italic text-xs mb-1">🖼️ Kéo Thả Hình — mỗi đáp án BẮT BUỘC 1 ảnh riêng, chọn (các) ảnh đúng bằng ô tick bên trái.</p>
+      ${q.options.map((o, oi) => `
+        <div class="flex items-center gap-2">
+          <input type="checkbox" ${o.correct ? 'checked' : ''} data-op-change="tbToggleCorrect" data-arg0="${qi}" data-arg1="${oi}" data-arg-el="2" title="Đáp án đúng">
+          ${o.imageUrl
+            ? `<img src="${escapeHtml(o.imageUrl)}" class="h-12 w-12 object-cover rounded border bg-white" alt="Ảnh đáp án">
+               <button type="button" data-op="tbRemoveOptionImage" data-arg0="${qi}" data-arg1="${oi}" class="text-red-500 text-xs hover:underline">Xoá Ảnh</button>`
+            : `<input type="file" accept=".jpg,.jpeg,.png,.webp" data-op-change="tbOptionImageFileChange" data-arg0="${qi}" data-arg1="${oi}" data-arg-el="2" class="text-xs">
+               <span id="tbOptImgStatus_${qi}_${oi}" class="text-[11px] text-gray-400 italic">Ảnh (bắt buộc)</span>`}
+          <input value="${escapeHtml(o.text)}" data-op-input="tbSetOptionText" data-arg0="${qi}" data-arg1="${oi}" data-arg-value="2" placeholder="Chú thích (tuỳ chọn)" class="flex-1 min-w-[100px] border p-1 rounded text-xs">
+          <button type="button" data-op="tbRemoveOption" data-arg0="${qi}" data-arg1="${oi}" class="text-red-400 text-xs hover:underline">&times;</button>
+        </div>`).join('')}
+      <button type="button" data-op="tbAddOption" data-arg0="${qi}" class="text-indigo-600 text-xs font-bold hover:underline">+ Thêm Đáp Án (Ảnh)</button>`;
+  }
+  // SINGLE/MULTI — GIỮ NGUYÊN VẸN UI gốc (không đổi 1 dòng nào so với trước Đợt 10).
+  return `
+    ${q.options.map((o, oi) => `
+      <div class="flex items-center gap-2">
+        <input type="checkbox" ${o.correct ? 'checked' : ''} data-op-change="tbToggleCorrect" data-arg0="${qi}" data-arg1="${oi}" data-arg-el="2" title="Đáp án đúng">
+        <input value="${escapeHtml(o.text)}" data-op-input="tbSetOptionText" data-arg0="${qi}" data-arg1="${oi}" data-arg-value="2" placeholder="Đáp án ${oi + 1}" class="flex-1 border p-1 rounded text-xs">
+        <button type="button" data-op="tbRemoveOption" data-arg0="${qi}" data-arg1="${oi}" class="text-red-400 text-xs hover:underline">&times;</button>
+      </div>`).join('')}
+    <button type="button" data-op="tbAddOption" data-arg0="${qi}" class="text-indigo-600 text-xs font-bold hover:underline">+ Thêm Đáp Án</button>`;
+}
+
 function renderTestBuilderQuestions() {
   const wrap = document.getElementById('tbQuestionsContainer');
   if (!wrap) return;
@@ -1640,6 +1700,8 @@ function renderTestBuilderQuestions() {
         <select data-op-change="tbUpdateQuestionField" data-arg0="${qi}" data-arg1="type" data-arg-value="2" class="border p-1.5 rounded text-xs bg-white">
           <option value="SINGLE" ${q.type === 'SINGLE' ? 'selected' : ''}>1 đáp án đúng</option>
           <option value="MULTI" ${q.type === 'MULTI' ? 'selected' : ''}>Nhiều đáp án đúng</option>
+          <option value="ESSAY" ${q.type === 'ESSAY' ? 'selected' : ''}>Nghị Luận (tự viết)</option>
+          <option value="IMAGE_DRAG_DROP" ${q.type === 'IMAGE_DRAG_DROP' ? 'selected' : ''}>Kéo Thả Hình</option>
         </select>
         <input type="number" min="1" value="${q.points}" data-op-input="tbSetQuestionPoints" data-arg0="${qi}" data-arg-value="1" title="Điểm câu này" class="w-16 border p-1.5 rounded text-xs">
         <button type="button" data-op="tbRemoveQuestion" data-arg0="${qi}" class="text-red-500 font-bold text-xs hover:underline">Xoá Câu</button>
@@ -1656,13 +1718,7 @@ function renderTestBuilderQuestions() {
              </div>`}
       </div>
       <div class="space-y-1 pl-4">
-        ${q.options.map((o, oi) => `
-          <div class="flex items-center gap-2">
-            <input type="checkbox" ${o.correct ? 'checked' : ''} data-op-change="tbToggleCorrect" data-arg0="${qi}" data-arg1="${oi}" data-arg-el="2" title="Đáp án đúng">
-            <input value="${escapeHtml(o.text)}" data-op-input="tbSetOptionText" data-arg0="${qi}" data-arg1="${oi}" data-arg-value="2" placeholder="Đáp án ${oi + 1}" class="flex-1 border p-1 rounded text-xs">
-            <button type="button" data-op="tbRemoveOption" data-arg0="${qi}" data-arg1="${oi}" class="text-red-400 text-xs hover:underline">&times;</button>
-          </div>`).join('')}
-        <button type="button" data-op="tbAddOption" data-arg0="${qi}" class="text-indigo-600 text-xs font-bold hover:underline">+ Thêm Đáp Án</button>
+        ${tbRenderQuestionOptionsHTML(q, qi)}
       </div>
     </div>`).join('');
 }
@@ -1673,9 +1729,18 @@ async function submitTrainingTest(e) {
   const title = document.getElementById('ttTitle').value.trim();
   if (!title) return alert('Vui lòng nhập tên bài test!');
   if (!tbQuestions.length) return alert('Vui lòng thêm ít nhất 1 câu hỏi!');
+  // Đợt 10 — validate theo ĐÚNG type: ESSAY không có đáp án nào để kiểm; IMAGE_DRAG_DROP đếm đáp án theo
+  // "đã có ảnh" thay vì "đã có text" (text chỉ là chú thích tuỳ chọn); SINGLE/MULTI GIỮ NGUYÊN VẸN.
   for (let i = 0; i < tbQuestions.length; i++) {
     const q = tbQuestions[i];
     if (!q.text.trim()) return alert(`Câu hỏi số ${i + 1} thiếu nội dung!`);
+    if (q.type === 'ESSAY') continue;
+    if (q.type === 'IMAGE_DRAG_DROP') {
+      const filledImg = q.options.filter(o => o.imageUrl);
+      if (filledImg.length < 2) return alert(`Câu hỏi số ${i + 1} cần ít nhất 2 đáp án (ảnh)!`);
+      if (!filledImg.some(o => o.correct)) return alert(`Câu hỏi số ${i + 1} chưa chọn đáp án đúng!`);
+      continue;
+    }
     const filled = q.options.filter(o => o.text.trim());
     if (filled.length < 2) return alert(`Câu hỏi số ${i + 1} cần ít nhất 2 đáp án!`);
     if (!filled.some(o => o.correct)) return alert(`Câu hỏi số ${i + 1} chưa chọn đáp án đúng!`);
@@ -1685,10 +1750,13 @@ async function submitTrainingTest(e) {
     category: document.getElementById('ttCategory').value,
     passScore: document.getElementById('ttPassScore').value,
     questions: tbQuestions.map(q => {
-      const filled = q.options.filter(o => o.text.trim());
+      if (q.type === 'ESSAY') {
+        return { text: q.text.trim(), type: q.type, points: q.points, imageUrl: q.imageUrl || '', options: [], correctOptionIds: [] };
+      }
+      const filled = q.type === 'IMAGE_DRAG_DROP' ? q.options.filter(o => o.imageUrl) : q.options.filter(o => o.text.trim());
       return {
         text: q.text.trim(), type: q.type, points: q.points, imageUrl: q.imageUrl || '',
-        options: filled.map(o => ({ text: o.text.trim() })),
+        options: filled.map(o => q.type === 'IMAGE_DRAG_DROP' ? { text: o.text.trim(), imageUrl: o.imageUrl } : { text: o.text.trim() }),
         correctOptionIds: filled.map((o, idx) => o.correct ? idx + 1 : null).filter(x => x != null)
       };
     })
@@ -1726,11 +1794,16 @@ function renderTrainingTests() {
     // Xuất Excel (mirror khuôn cột của template Nhập Từ Excel — xem exportTrainingTestQuestionsExcel())
     // — CHỈ trainingManage/admin (đáp án đúng chỉ họ thấy, xem sanitizeTrainingTestsForUser() server).
     const exportHTML = canManage ? `<button data-op="exportTrainingTestQuestionsExcel" data-arg0="${t.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 ml-2">📤 Xuất Excel</button>` : '';
+    // Đợt 10 — nhắc trainingManage/giảng viên biết trước bài test này CẦN chấm tay (khác hẳn mọi bài test
+    // trước đây, luôn có kết quả ngay khi nộp) — chỉ hiển thị, KHÔNG đổi gì hành vi tạo/chấm.
+    const hasEssay = (t.questions || []).some(q => q.type === 'ESSAY');
+    const essayBadgeHTML = hasEssay ? `<div class="text-amber-600 font-semibold mt-0.5">📝 Có câu Nghị Luận — cần chấm tay sau khi học viên nộp bài</div>` : '';
     return `<div class="border rounded p-3 bg-white text-xs">
       <div class="flex justify-between items-start gap-2">
         <div>
           <div class="font-bold text-gray-800">${escapeHtml(t.title)}</div>
           <div class="text-gray-500 mt-0.5">${t.questions.length} câu hỏi · ${totalPoints} điểm${t.category ? ' · ' + escapeHtml(t.category) : ''}${t.passScore != null ? ` · Gợi ý đạt ${t.passScore}%` : ''}</div>
+          ${essayBadgeHTML}
         </div>
         <div class="flex-shrink-0 text-right">${exportHTML}${delHTML}</div>
       </div>
@@ -1891,6 +1964,103 @@ function deleteTrainingTest(id) {
   }).catch(err => alert(`⛔ ${err.message}`));
 }
 
+// ---------- 📝 CHẤM NGHỊ LUẬN (Đợt 10) ----------
+// Danh sách bài làm đang gradingStatus 'PENDING_ESSAY_GRADING' (câu hỏi ESSAY chưa được chấm tay, xem
+// gradeTrainingTestSubmission()/gradeTrainingTestEssayAnswers(), lib/recordActions.js) mà NGƯỜI DÙNG
+// HIỆN TẠI có quyền chấm — dùng ĐÚNG canManageTrainingClassLocal() (không phải canManageTrainingLocal()
+// hẹp hơn) để giảng viên (trainingInstruct) được gán riêng cho lớp đó cũng thấy/chấm được bài của lớp
+// mình, CÙNG quyền với setTrainingRegistrationResult()/bulkRegisterTrainingClass() ở server — KHÔNG hẹp
+// hơn/khác quyền với server (gradeTrainingTestEssayAnswers() gác đúng bằng canManageTrainingClass()).
+// DB.trainingTestSubmissions đã được server lọc sẵn theo filterTrainingTestSubmissionsForUser() (chỉ
+// trả về bài của lớp mình quản lý/chính mình/trainingManage-admin) nên KHÔNG lộ bài của lớp người khác dù
+// client có lỡ tính sai canManageTrainingClassLocal() ở đây.
+function renderTrainingEssayGradingQueue() {
+  const section = document.getElementById('trainingEssayGradingSection');
+  const container = document.getElementById('trainingEssayGradingContainer');
+  if (!section || !container) return;
+  const canSeeSection = canManageTrainingLocal(currentUser) || !!currentUser.perms?.trainingInstruct;
+  section.classList.toggle('hidden', !canSeeSection);
+  if (!canSeeSection) return;
+  const pending = (DB.trainingTestSubmissions || []).filter(s => {
+    if (s.gradingStatus !== 'PENDING_ESSAY_GRADING') return false;
+    const cls = DB.trainingClasses.find(c => c.id === s.classId);
+    return canManageTrainingClassLocal(currentUser, cls);
+  }).sort((a, b) => a.id - b.id);
+  if (!pending.length) {
+    container.innerHTML = `<p class="text-gray-400 italic text-xs">Không có bài nào đang chờ chấm nghị luận.</p>`;
+    return;
+  }
+  container.innerHTML = pending.map(s => {
+    const essayCount = (s.answers || []).filter(a => a.essayText !== undefined).length;
+    return `<div class="border border-amber-300 rounded p-2 bg-amber-50 flex flex-wrap justify-between items-center gap-2 text-xs">
+      <div>
+        <div class="font-bold text-gray-800">${escapeHtml(s.name)} — ${escapeHtml(s.testTitle)}</div>
+        <div class="text-gray-500">Lớp: ${escapeHtml(s.className)} · Nộp lúc ${escapeHtml(s.submittedAt)} · ${essayCount} câu nghị luận cần chấm</div>
+      </div>
+      <button type="button" data-op="openGradeEssayModal" data-arg0="${s.id}" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-bold flex-shrink-0">📝 Chấm Bài</button>
+    </div>`;
+  }).join('');
+}
+
+let geSubmissionId = null;
+function openGradeEssayModal(subId) {
+  const sub = DB.trainingTestSubmissions.find(s => s.id === subId);
+  if (!sub) return alert('Không tìm thấy bài làm này.');
+  const test = DB.trainingTests.find(t => t.id === sub.testId);
+  if (!test) return alert('Không tìm thấy bài test tương ứng.');
+  geSubmissionId = subId;
+  const essayQuestions = (test.questions || []).filter(q => q.type === 'ESSAY');
+  document.getElementById('geModalTitle').innerText = `📝 Chấm Nghị Luận — ${sub.name}`;
+  document.getElementById('geModalSubtitle').innerText = `${test.title} · Lớp ${sub.className}`;
+  document.getElementById('geQuestionsContainer').innerHTML = essayQuestions.map(q => {
+    const ans = (sub.answers || []).find(a => a.questionId === q.id) || {};
+    return `<div class="border rounded p-2 space-y-1 bg-gray-50">
+      <div class="font-semibold text-gray-800 text-xs">${escapeHtml(q.text)} <span class="text-gray-400 font-normal">(tối đa ${q.points} điểm)</span></div>
+      <div class="bg-white border rounded p-2 text-xs whitespace-pre-wrap">${escapeHtml(ans.essayText || '') || '<span class="text-gray-400 italic">(không trả lời)</span>'}</div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-semibold text-gray-600">Điểm chấm:</label>
+        <input type="number" min="0" max="${q.points}" step="0.5" id="geScore_${q.id}" value="${ans.essayPointsAwarded != null ? ans.essayPointsAwarded : ''}" class="w-20 border p-1 rounded text-xs">
+        <span class="text-gray-400 text-xs">/ ${q.points}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('gradeEssayModal').classList.remove('hidden');
+}
+function closeGradeEssayModal() {
+  document.getElementById('gradeEssayModal').classList.add('hidden');
+  geSubmissionId = null;
+}
+async function submitGradeEssay() {
+  const sub = DB.trainingTestSubmissions.find(s => s.id === geSubmissionId);
+  if (!sub) return;
+  const test = DB.trainingTests.find(t => t.id === sub.testId);
+  const essayQuestions = (test?.questions || []).filter(q => q.type === 'ESSAY');
+  const essayGrades = [];
+  for (const q of essayQuestions) {
+    const el = document.getElementById(`geScore_${q.id}`);
+    const val = Number(el?.value);
+    if (!el || el.value === '' || !Number.isFinite(val) || val < 0 || val > q.points) {
+      return alert(`Vui lòng nhập điểm hợp lệ (0-${q.points}) cho câu "${q.text}"`);
+    }
+    essayGrades.push({ questionId: q.id, pointsAwarded: val });
+  }
+  let result;
+  try {
+    // action chứa "/" — callRecordAction() build thẳng /api/records/trainingClasses/:classId/${action},
+    // khớp ĐÚNG route POST .../submissions/:submissionId/grade-essay (routes/records.js).
+    result = await callRecordAction('trainingClasses', sub.classId, `submissions/${sub.id}/grade-essay`, { essayGrades });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const subIdx = DB.trainingTestSubmissions.findIndex(s => s.id === result.submission.id);
+  if (subIdx !== -1) DB.trainingTestSubmissions[subIdx] = result.submission;
+  const regIdx = DB.trainingRegistrations.findIndex(r => r.id === result.registration.id);
+  if (regIdx !== -1) DB.trainingRegistrations[regIdx] = result.registration;
+  logSystemAction('INTERNAL', 'GRADE_TRAINING_TEST_ESSAY', `Chấm nghị luận bài làm [${sub.name} — ${sub.testTitle}]`, 'SUCCESS');
+  alert(`✅ Đã chấm xong!\n\nĐiểm cuối: ${result.submission.score}/${result.submission.totalPoints} (${result.submission.percentage}%)\nKết quả: ${result.submission.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+  closeGradeEssayModal();
+  renderTrainingEssayGradingQueue();
+  renderTrainingMyRegs();
+}
+
 // ---------- ĐĂNG KÝ CỦA TÔI ----------
 function renderTrainingMyRegs() {
   const tbody = document.getElementById('trainingMyRegsTableBody');
@@ -1904,11 +2074,17 @@ function renderTrainingMyRegs() {
   const now = new Date();
   tbody.innerHTML = pageItems.map(r => {
     const cls = DB.trainingClasses.find(c => c.id === r.classId);
+    // Đợt 10 — bài test có câu hỏi Nghị Luận (ESSAY) khiến reg.result CÒN Ở "REGISTERED" ngay cả SAU KHI
+    // đã nộp bài (xem gradeTrainingTestSubmission()/routes/records.js submit-test — CHỈ ghi kết quả ngay
+    // khi gradingStatus 'COMPLETE') — mySubmission/pendingEssay ở đây là lớp phủ hiển thị RIÊNG cho đúng
+    // tình huống này, KHÔNG đụng gì tới getTrainingRegDisplayStatus()/testHTML gốc khi không rơi vào đây.
+    const mySubmission = cls ? (DB.trainingTestSubmissions || []).find(s => s.classId === cls.id && s.username === currentUser.username) : null;
+    const pendingEssay = !!(mySubmission && mySubmission.gradingStatus === 'PENDING_ESSAY_GRADING' && r.result === 'REGISTERED');
     // Đợt 3: badge dùng lớp phủ Chờ/Đang học/Hoàn thành (getTrainingRegDisplayStatus()) thay cho suy
     // trực tiếp từ result — KHÔNG đổi ý nghĩa result gốc, chỉ đổi CÁCH HIỂN THỊ (xem baseline).
-    const disp = getTrainingRegDisplayStatus(r, cls);
-    const badgeCls = disp.key === 'DONE' ? (r.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : 'text-indigo-600';
-    const badgeIcon = disp.key === 'DONE' ? (r.result === 'PASSED' ? '✅' : '❌') : disp.key === 'WAITING' ? '⏳' : '📌';
+    const disp = pendingEssay ? { key: 'PENDING_ESSAY', label: 'Chờ chấm nghị luận' } : getTrainingRegDisplayStatus(r, cls);
+    const badgeCls = pendingEssay ? 'text-amber-600' : (disp.key === 'DONE' ? (r.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : 'text-indigo-600');
+    const badgeIcon = pendingEssay ? '⏳' : (disp.key === 'DONE' ? (r.result === 'PASSED' ? '✅' : '❌') : disp.key === 'WAITING' ? '⏳' : '📌');
     const badge = `<span class="${badgeCls} font-bold">${badgeIcon} ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}${disp.key === 'DONE' && r.score != null ? ` — ${r.score} điểm` : ''}</span>`;
     // Đợt 9 — yêu cầu huỷ giờ phải chờ trainingManage/admin duyệt (xem cancelTrainingRegistration(),
     // lib/recordActions.js) — học viên chỉ gửi được 1 yêu cầu, không huỷ lại được lần 2 khi đang chờ.
@@ -1925,7 +2101,12 @@ function renderTrainingMyRegs() {
     // giảng viên bấm "Kết Thúc Lớp".
     let testHTML = '';
     if (cls && r.result === 'REGISTERED') {
-      if (cls.mode === 'OFFLINE') {
+      if (mySubmission) {
+        // Đợt 10 — đã nộp bài rồi (bài test có câu Nghị Luận) nhưng reg.result CHƯA chuyển PASSED/FAILED
+        // (chờ chấm tay, xem pendingEssay ở trên) — KHÔNG được hiện lại nút "Vào Làm Bài Test" (server dù
+        // sao cũng chặn nộp lần 2, nhưng để nút đó hiện ra là gây hiểu lầm đã có thể làm lại).
+        testHTML += `<div class="text-xs text-amber-600 mt-1">⏳ Đã nộp bài — kết quả sẽ có sau khi giảng viên chấm xong phần nghị luận</div>`;
+      } else if (cls.mode === 'OFFLINE') {
         testHTML += `<button data-op="openTrainingJoinClassModal" data-arg0="${r.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📍 Vào Lớp Học</button>`;
         if (cls.testId != null) {
           testHTML += getTrainingClassSessionState(cls) === 'ENDED'
@@ -2162,7 +2343,11 @@ function ttTakeExit() {
 function ttTakeRenderQuestion() {
   const q = ttTakeQuestions[ttTakeIndex];
   const total = ttTakeQuestions.length;
-  document.getElementById('ttTakeQuestionCounter').innerText = `Câu ${ttTakeIndex + 1} / ${total}${q.type === 'MULTI' ? ' — có thể chọn nhiều đáp án' : ''}`;
+  // Đợt 10 — gợi ý "có thể chọn nhiều đáp án" áp dụng CẢ cho IMAGE_DRAG_DROP (ngữ nghĩa chấm điểm giống
+  // MULTI, xem gradeTrainingTestSubmission()), ESSAY không có gợi ý này (không có đáp án lựa chọn nào).
+  const multiHint = (q.type === 'MULTI' || q.type === 'IMAGE_DRAG_DROP') ? ' — có thể chọn nhiều đáp án'
+    : q.type === 'ESSAY' ? ' — câu hỏi nghị luận, tự viết câu trả lời' : '';
+  document.getElementById('ttTakeQuestionCounter').innerText = `Câu ${ttTakeIndex + 1} / ${total}${multiHint}`;
   document.getElementById('ttTakeQuestionText').innerText = q.text;
   // Ảnh minh hoạ câu hỏi (tuỳ chọn) — không đổi layout của câu hỏi không có ảnh (wrap ẩn hẳn, không
   // chiếm chỗ) khi q.imageUrl rỗng.
@@ -2177,13 +2362,20 @@ function ttTakeRenderQuestion() {
     }
   }
   document.getElementById('ttTakeProgressBar').style.width = `${Math.round((ttTakeIndex / total) * 100)}%`;
-  const selected = ttTakeAnswers[q.id] || [];
-  const inputType = q.type === 'MULTI' ? 'checkbox' : 'radio';
-  document.getElementById('ttTakeOptionsContainer').innerHTML = q.options.map(o => `
-    <label class="flex items-center gap-2 border rounded p-2 hover:bg-gray-50 cursor-pointer">
-      <input type="${inputType}" name="ttTakeOpt" value="${o.id}" ${selected.includes(o.id) ? 'checked' : ''} data-op-change="ttTakeToggleOptionFromCheckbox" data-arg0="${o.id}" data-arg-el="1">
-      <span class="text-sm">${escapeHtml(o.text)}</span>
-    </label>`).join('');
+
+  if (q.type === 'ESSAY') {
+    ttTakeRenderEssayAnswer(q);
+  } else if (q.type === 'IMAGE_DRAG_DROP') {
+    ttTakeRenderImageDragDropAnswer(q);
+  } else {
+    const selected = ttTakeAnswers[q.id] || [];
+    const inputType = q.type === 'MULTI' ? 'checkbox' : 'radio';
+    document.getElementById('ttTakeOptionsContainer').innerHTML = q.options.map(o => `
+      <label class="flex items-center gap-2 border rounded p-2 hover:bg-gray-50 cursor-pointer">
+        <input type="${inputType}" name="ttTakeOpt" value="${o.id}" ${selected.includes(o.id) ? 'checked' : ''} data-op-change="ttTakeToggleOptionFromCheckbox" data-arg0="${o.id}" data-arg-el="1">
+        <span class="text-sm">${escapeHtml(o.text)}</span>
+      </label>`).join('');
+  }
   document.getElementById('ttTakeNextBtn').innerText = ttTakeIndex === total - 1 ? '✅ Nộp Bài' : 'Câu Tiếp Theo →';
 
   ttTakeSecondsLeft = ttTakeSecondsPerQuestion;
@@ -2217,6 +2409,101 @@ function ttTakeToggleOptionFromCheckbox(optId, checkboxEl) {
   ttTakeSelectOption(optId, checkboxEl.checked);
 }
 
+// ---------- ESSAY (nghị luận, Đợt 10) — textarea tự viết, KHÔNG có đáp án lựa chọn ----------
+// ttTakeAnswers[q.id] cho loại này là { essayText } (khác mảng [optionId] của mọi loại khác) — thống
+// nhất ở CHỖ ttTakeSubmit() phân biệt theo q.type khi gom payload gửi lên (xem hàm đó).
+function ttTakeRenderEssayAnswer(q) {
+  const val = (ttTakeAnswers[q.id] && ttTakeAnswers[q.id].essayText) || '';
+  document.getElementById('ttTakeOptionsContainer').innerHTML = `
+    <textarea rows="7" placeholder="Nhập câu trả lời của bạn..." data-op-input="ttTakeSetEssayText" data-arg-value="0" class="w-full border rounded p-2 text-sm">${escapeHtml(val)}</textarea>`;
+}
+function ttTakeSetEssayText(value) {
+  const q = ttTakeQuestions[ttTakeIndex];
+  ttTakeAnswers[q.id] = { essayText: value };
+}
+
+// ---------- IMAGE_DRAG_DROP (kéo thả hình, Đợt 10) ----------
+// Dùng HTML5 Drag-and-Drop API thuần (mirror module-baocaodinhky-trinhchieu.js — draggable=true +
+// dragstart/dragover/dragleave/drop, KHÔNG thư viện ngoài) NHƯNG BẮT BUỘC có đường BẤM/CHẠM tương đương
+// (native DnD KHÔNG hoạt động trên trình duyệt di động — học viên có thể làm bài bằng điện thoại) — cả 2
+// đường (kéo-thả VÀ bấm chọn) đều gọi CHUNG 1 hàm lõi (ttTakeToggleImageDragOption()), cùng ghi vào
+// ttTakeAnswers[q.id] (mảng optionId, ĐÚNG khuôn selectedOptionIds như MULTI/SINGLE) — server chấm điểm
+// (gradeTrainingTestSubmission()) không cần biết/quan tâm câu trả lời đến từ đường nào.
+function ttTakeRenderImageDragDropAnswer(q) {
+  const container = document.getElementById('ttTakeOptionsContainer');
+  const selected = new Set(ttTakeAnswers[q.id] || []);
+  container.innerHTML = `
+    <p class="text-[11px] text-gray-400 mb-2">🖐️ Kéo ảnh đáp án đúng vào khung bên dưới — hoặc chỉ cần BẤM vào ảnh để chọn/bỏ chọn (dùng được cả trên điện thoại).</p>
+    <div id="ttTakeDragPool" class="grid grid-cols-3 gap-2 mb-3"></div>
+    <div id="ttTakeDragDropZone" class="border-2 border-dashed border-indigo-300 rounded p-3 min-h-[70px] bg-indigo-50">
+      <p class="text-[11px] font-semibold text-indigo-700 mb-1">Đáp án đã chọn:</p>
+      <div id="ttTakeDragSelectedTray" class="flex flex-wrap gap-2"></div>
+    </div>`;
+  const pool = document.getElementById('ttTakeDragPool');
+  const dropZone = document.getElementById('ttTakeDragDropZone');
+
+  q.options.forEach(o => {
+    const card = document.createElement('div');
+    card.className = 'border rounded p-1 text-center bg-white cursor-pointer select-none' + (selected.has(o.id) ? ' ring-2 ring-emerald-500' : ' hover:ring-2 hover:ring-indigo-300');
+    card.draggable = true;
+    const img = document.createElement('img');
+    img.src = o.imageUrl;
+    img.alt = o.text || 'Đáp án';
+    img.className = 'max-h-20 max-w-full object-contain mx-auto pointer-events-none';
+    card.appendChild(img);
+    if (o.text) {
+      const cap = document.createElement('div');
+      cap.className = 'text-[10px] text-gray-500 mt-0.5';
+      cap.textContent = o.text;
+      card.appendChild(cap);
+    }
+    card.addEventListener('click', () => ttTakeToggleImageDragOption(o.id));
+    card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(o.id)); });
+    pool.appendChild(card);
+  });
+
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('bg-indigo-100'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('bg-indigo-100'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('bg-indigo-100');
+    const optId = Number(e.dataTransfer.getData('text/plain'));
+    if (Number.isFinite(optId)) ttTakeToggleImageDragOption(optId, true /* add-only — kéo-thả LẠI 1 ảnh đã chọn không bỏ chọn nó */);
+  });
+
+  const tray = document.getElementById('ttTakeDragSelectedTray');
+  const chosen = q.options.filter(o => selected.has(o.id));
+  if (!chosen.length) {
+    tray.innerHTML = `<span class="text-[11px] text-gray-400 italic">Chưa chọn đáp án nào</span>`;
+  } else {
+    tray.innerHTML = '';
+    chosen.forEach(o => {
+      const chip = document.createElement('span');
+      chip.className = 'inline-flex items-center gap-1 bg-emerald-50 border border-emerald-300 rounded-full pl-1 pr-2 py-0.5 text-[11px] cursor-pointer';
+      chip.title = 'Bấm để bỏ chọn';
+      const img = document.createElement('img');
+      img.src = o.imageUrl;
+      img.className = 'h-6 w-6 object-cover rounded-full';
+      chip.appendChild(img);
+      chip.appendChild(document.createTextNode(o.text || `Đáp án ${o.id}`));
+      chip.addEventListener('click', () => ttTakeToggleImageDragOption(o.id));
+      tray.appendChild(chip);
+    });
+  }
+}
+// addOnly=true (kéo-thả vào khung) chỉ THÊM vào lựa chọn, không bỏ chọn — bấm (click) trên ảnh (addOnly
+// mặc định undefined) mới toggle qua-lại, khớp đúng tinh thần "kéo vào = chọn, bấm lại (trên thẻ đã chọn
+// trong khay) = bỏ chọn" thay vì kéo nhầm 2 lần lại tự bỏ chọn mất đáp án vừa chọn.
+function ttTakeToggleImageDragOption(optId, addOnly) {
+  const q = ttTakeQuestions[ttTakeIndex];
+  const cur = new Set(ttTakeAnswers[q.id] || []);
+  if (addOnly) cur.add(optId);
+  else if (cur.has(optId)) cur.delete(optId);
+  else cur.add(optId);
+  ttTakeAnswers[q.id] = [...cur];
+  ttTakeRenderImageDragDropAnswer(q);
+}
+
 async function ttTakeGoNext() {
   clearInterval(ttTakeTimerHandle);
   if (ttTakeIndex < ttTakeQuestions.length - 1) {
@@ -2228,7 +2515,11 @@ async function ttTakeGoNext() {
 }
 
 async function ttTakeSubmit() {
-  const answers = ttTakeQuestions.map(q => ({ questionId: q.id, selectedOptionIds: ttTakeAnswers[q.id] || [] }));
+  // Đợt 10 — ESSAY gửi { questionId, essayText } thay vì { questionId, selectedOptionIds } (server phân
+  // biệt theo ĐÚNG q.type đã lưu của test, xem gradeTrainingTestSubmission()/lib/recordActions.js).
+  const answers = ttTakeQuestions.map(q => q.type === 'ESSAY'
+    ? { questionId: q.id, essayText: (ttTakeAnswers[q.id] && ttTakeAnswers[q.id].essayText) || '' }
+    : { questionId: q.id, selectedOptionIds: ttTakeAnswers[q.id] || [] });
   let result;
   try {
     result = await callRecordAction('trainingClasses', ttTakeClassId, 'submit-test', { answers });
@@ -2242,7 +2533,16 @@ async function ttTakeSubmit() {
   else DB.trainingRegistrations.unshift(result.registration);
   logSystemAction('INTERNAL', 'SUBMIT_TRAINING_TEST', `Nộp bài test lớp [${result.registration.classCode}]`, 'SUCCESS', result.registration.classCode);
   const sub = result.submission;
-  alert(`✅ Đã nộp bài!\n\nĐiểm: ${sub.score}/${sub.totalPoints} (${sub.percentage}%)\nKết quả: ${sub.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+  DB.trainingTestSubmissions = DB.trainingTestSubmissions || [];
+  const subIdx = DB.trainingTestSubmissions.findIndex(s => s.id === sub.id);
+  if (subIdx !== -1) DB.trainingTestSubmissions[subIdx] = sub; else DB.trainingTestSubmissions.push(sub);
+  // Đợt 10 — bài test có câu Nghị Luận chưa chấm (gradingStatus 'PENDING_ESSAY_GRADING'): Đạt/Không Đạt
+  // CHƯA CÓ, không được nói dối là đã có kết quả — báo rõ đang chờ giảng viên chấm tay phần này.
+  if (sub.gradingStatus === 'PENDING_ESSAY_GRADING') {
+    alert('✅ Đã nộp bài!\n\n⏳ Đang chờ chấm câu nghị luận — kết quả Đạt/Không Đạt sẽ có sau khi giảng viên chấm xong phần này.');
+  } else {
+    alert(`✅ Đã nộp bài!\n\nĐiểm: ${sub.score}/${sub.totalPoints} (${sub.percentage}%)\nKết quả: ${sub.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+  }
   renderTrainingMyRegs();
   renderTrainingClasses();
 }

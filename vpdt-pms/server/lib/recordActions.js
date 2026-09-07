@@ -3614,37 +3614,60 @@ function endOfflineTrainingClass(user, cls) {
   return cls;
 }
 
+// Ngưỡng đạt/không đạt lấy từ ĐIỂM ĐẠT của LỚP HỌC (cls.passScore, lập lúc tạo lớp) — KHÔNG đọc lại
+// trainingTests.passScore (bài test cũng có field passScore nhưng CHỈ để autofill gợi ý ở client lúc
+// chọn test, xem createValidation.js). Giữ fallback 60 cho dữ liệu lớp cũ trước khi có ràng buộc bắt
+// buộc nhập Điểm Đạt khi gán test. Dùng chung cho cả chấm tự động 100% (gradeTrainingTestSubmission())
+// lẫn lúc chốt điểm sau khi chấm tay xong phần nghị luận (gradeTrainingTestEssayAnswers()).
+function resolveTrainingTestPassThreshold(classPassScore) {
+  return Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
+}
+
 // Chấm điểm bài test tự động — chốt lại HOÀN TOÀN ở server theo đúng đáp án đúng đã lưu của test
 // (test.questions[].correctOptionIds, xem lib/createValidation.js), KHÔNG tin điểm/kết quả đúng-sai
 // client tự tính gửi kèm, chỉ nhận rawAnswers (câu nào chọn đáp án nào). Đúng 1 câu hỏi = tập hợp đáp án
-// chọn khớp CHÍNH XÁC tập hợp đáp án đúng (không thừa, không thiếu) — áp dụng cho cả loại 1 đáp án lẫn
-// nhiều đáp án, chấm dứt khoát đúng/sai từng câu, không chấm điểm từng phần.
+// chọn khớp CHÍNH XÁC tập hợp đáp án đúng (không thừa, không thiếu) — áp dụng cho CẢ loại 1 đáp án, nhiều
+// đáp án LẪN kéo thả hình (IMAGE_DRAG_DROP, Đợt 10 — options là ảnh thay vì text nhưng vẫn so theo id hệt
+// nhau, không cần nhánh riêng), chấm dứt khoát đúng/sai từng câu, không chấm điểm từng phần.
+//
+// ESSAY (nghị luận, Đợt 10) — KHÔNG có correctOptionIds để máy so, chỉ lưu lại essayText người làm bài tự
+// viết, essayPointsAwarded để null (CHỜ chấm tay, xem gradeTrainingTestEssayAnswers()). Hễ bài test có
+// ÍT NHẤT 1 câu ESSAY thì "score/percentage/passed" TRẢ VỀ Ở ĐÂY CHỈ LÀ TẠM (điểm phần tự động chấm
+// được, CHƯA cộng phần nghị luận) — gradingStatus 'PENDING_ESSAY_GRADING' báo cho route submit-test biết
+// KHÔNG được gọi applyAutoGradedTestResult() ngay (Đạt/Không Đạt phải chờ chấm nghị luận xong mới chốt).
+// Bài test KHÔNG có câu ESSAY nào thì hành vi giữ NGUYÊN 100% như trước Đợt 10 (gradingStatus 'COMPLETE',
+// percentage/passed chốt ngay) — không có gì thay đổi cho mọi bài test đã tồn tại trước tính năng này.
 function gradeTrainingTestSubmission(rawAnswers, test, classPassScore) {
   const answersByQ = new Map();
   (Array.isArray(rawAnswers) ? rawAnswers : []).forEach(a => {
     const qId = Number(a?.questionId);
-    if (Number.isFinite(qId)) answersByQ.set(qId, Array.isArray(a?.selectedOptionIds) ? a.selectedOptionIds.map(Number) : []);
+    if (Number.isFinite(qId)) answersByQ.set(qId, a);
   });
 
-  let score = 0;
+  let score = 0; // CHỈ điểm của các câu máy chấm được (mọi câu trừ ESSAY)
   let totalPoints = 0;
+  let hasEssay = false;
   const answers = test.questions.map(q => {
     totalPoints += q.points;
-    const selected = [...new Set(answersByQ.get(q.id) || [])];
+    const raw = answersByQ.get(q.id);
+    if (q.type === 'ESSAY') {
+      hasEssay = true;
+      const essayText = String(raw?.essayText || '').trim();
+      return { questionId: q.id, essayText, essayPointsAwarded: null };
+    }
+    const selected = [...new Set(Array.isArray(raw?.selectedOptionIds) ? raw.selectedOptionIds.map(Number) : [])];
     const correctSet = new Set(q.correctOptionIds);
     const isCorrect = selected.length === correctSet.size && selected.every(id => correctSet.has(id));
     if (isCorrect) score += q.points;
     return { questionId: q.id, selectedOptionIds: selected, isCorrect };
   });
 
+  if (hasEssay) {
+    return { answers, score, totalPoints, percentage: null, passed: null, gradingStatus: 'PENDING_ESSAY_GRADING' };
+  }
   const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
-  // Ngưỡng đạt/không đạt lấy từ ĐIỂM ĐẠT của LỚP HỌC (cls.passScore, lập lúc tạo lớp) — KHÔNG đọc lại
-  // trainingTests.passScore (bài test cũng có field passScore nhưng CHỈ để autofill gợi ý ở client lúc
-  // chọn test, xem createValidation.js). Giữ fallback 60 cho dữ liệu lớp cũ trước khi có ràng buộc bắt
-  // buộc nhập Điểm Đạt khi gán test.
-  const threshold = Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
-  const passed = percentage >= threshold;
-  return { answers, score, totalPoints, percentage, passed };
+  const passed = percentage >= resolveTrainingTestPassThreshold(classPassScore);
+  return { answers, score, totalPoints, percentage, passed, gradingStatus: 'COMPLETE' };
 }
 
 // ===== GIỚI HẠN THỜI GIAN LÀM BÀI TEST (cls.testSecondsPerQuestion) =====
@@ -3707,17 +3730,84 @@ function evaluateTrainingTestTiming(reg, cls, test) {
 // REGISTERED — chặn ghi đè 1 kết quả đã có sẵn (vd đã được người tạo lớp ghi tay trước đó, hoặc đã nộp
 // bài test này rồi — dù route gọi hàm này đã tự kiểm tra 1 lượt nộp/lớp ở lớp khoá riêng, kiểm tra lại
 // lần nữa ngay tại đây cho chắc, đúng nguyên tắc "không tin, kiểm tra lại" của mọi mutator ghi đè state).
-function applyAutoGradedTestResult(reg, graded) {
+// opts.gradedByEssay ({username,name}, tuỳ chọn) — Đợt 10: khi hàm này được gọi từ
+// gradeTrainingTestEssayAnswers() (sau khi hoàn tất chấm tay phần nghị luận, cộng dồn với điểm phần tự
+// động chấm lúc nộp bài), ghi rõ TÊN NGƯỜI đã chấm phần nghị luận vào resultBy/resultByName + đổi câu
+// resultNote cho đúng thực tế thay vì nói "tự động chấm" cho 1 kết quả có phần con người tham gia. Không
+// truyền opts (luồng chấm tự động 100% cũ, KHÔNG có câu ESSAY nào) thì hành vi giữ NGUYÊN 100% như trước.
+function applyAutoGradedTestResult(reg, graded, opts) {
   if (reg.result !== 'REGISTERED') {
     throw new HttpError(409, 'Đăng ký này đã có kết quả từ trước, không thể ghi đè bằng kết quả bài test');
   }
   reg.result = graded.passed ? 'PASSED' : 'FAILED';
   reg.score = graded.percentage;
-  reg.resultNote = `Tự động chấm từ bài test (${graded.score}/${graded.totalPoints} điểm)`;
-  reg.resultBy = null;
-  reg.resultByName = 'Hệ thống (tự động chấm bài test)';
+  const grader = opts?.gradedByEssay;
+  reg.resultNote = grader
+    ? `Tự động chấm phần trắc nghiệm + chấm tay phần nghị luận (${graded.score}/${graded.totalPoints} điểm)`
+    : `Tự động chấm từ bài test (${graded.score}/${graded.totalPoints} điểm)`;
+  reg.resultBy = grader ? grader.username : null;
+  reg.resultByName = grader ? `${grader.name} (đã chấm phần nghị luận)` : 'Hệ thống (tự động chấm bài test)';
   reg.resultAt = nowVN();
   return reg;
+}
+
+// ===== CHẤM TAY PHẦN NGHỊ LUẬN (ESSAY, Đợt 10) =====
+// Bài test có ≥1 câu ESSAY thì gradeTrainingTestSubmission() (lúc nộp bài) KHÔNG chốt được Đạt/Không Đạt
+// ngay (gradingStatus 'PENDING_ESSAY_GRADING', xem hàm đó) — hàm này là ĐIỂM DUY NHẤT hoàn tất phần còn
+// lại: chấm điểm TỪNG câu nghị luận (0 <= điểm <= q.points), cộng dồn với điểm phần trắc nghiệm ĐÃ chấm
+// tự động lúc nộp (sub.score, giữ nguyên không đổi), chốt lại percentage/passed rồi trả về CHÍNH sub đã
+// cập nhật (route gọi tiếp applyAutoGradedTestResult() lên registration tương ứng, y hệt luồng chấm tự
+// động 100%, KHÔNG viết lại quy tắc đạt/rớt lần 2 ở đây).
+//
+// KHÁC HẲN setTrainingRegistrationResult() — hàm đó CHẶN CỨNG mọi ghi đè tay khi cls.testId != null (Đợt
+// 8, đọc chú thích ở đó) vì đó là "chấm tay tuỳ ý thay cho cả bài test". Hàm NÀY không phải vậy: nó chỉ
+// "hoàn tất đúng phần máy không chấm được" của 1 bài làm ĐÃ qua chấm tự động phần trắc nghiệm — không mở
+// lại được đường tắt nào khác, không cho sửa điểm 1 bài ĐÃ ở gradingStatus 'COMPLETE'.
+//
+// Gác quyền bằng canManageTrainingClass() (không phải canManageTraining hẹp hơn) — CÙNG mức quyền với
+// mọi hành động chấm/quản lý theo-từng-lớp khác trong file này (setTrainingRegistrationResult(),
+// bulkRegisterTrainingClass()...): trainingManage/admin chấm được MỌI lớp, giảng viên được gán riêng
+// (trainingInstruct) chấm được ĐÚNG lớp mình phụ trách — canManageTraining(user) LUÔN kéo theo
+// canManageTrainingClass(user, cls) đúng (tập quyền RỘNG HƠN, không phải hẹp hơn hay khác quyền).
+function gradeTrainingTestEssayAnswers(user, sub, test, cls, rawEssayGrades) {
+  if (!canManageTrainingClass(user, cls)) {
+    throw new HttpError(403, 'Bạn không có quyền chấm bài nghị luận của lớp học này');
+  }
+  if (sub.gradingStatus !== 'PENDING_ESSAY_GRADING') {
+    throw new HttpError(409, 'Bài làm này không ở trạng thái chờ chấm nghị luận');
+  }
+  const essayQuestions = (test?.questions || []).filter(q => q.type === 'ESSAY');
+  if (!essayQuestions.length) {
+    throw new HttpError(409, 'Bài test này không có câu hỏi nghị luận nào cần chấm');
+  }
+  const gradesByQ = new Map();
+  (Array.isArray(rawEssayGrades) ? rawEssayGrades : []).forEach(g => {
+    const qId = Number(g?.questionId);
+    if (Number.isFinite(qId)) gradesByQ.set(qId, g?.pointsAwarded);
+  });
+  // Bắt buộc chấm ĐỦ mọi câu nghị luận trong CÙNG 1 lượt (không cho chấm dở dang rồi chốt điểm giữa
+  // chừng) — kiểm tra đủ TRƯỚC khi ghi bất kỳ điểm nào, tránh cộng dồn nửa vời nếu 1 câu sau đó lỗi.
+  const essayScoreByQ = new Map();
+  for (const q of essayQuestions) {
+    const awarded = Number(gradesByQ.get(q.id));
+    if (!Number.isFinite(awarded) || awarded < 0 || awarded > q.points) {
+      throw new HttpError(400, `Điểm chấm cho câu nghị luận "${q.text}" không hợp lệ (0-${q.points})`);
+    }
+    essayScoreByQ.set(q.id, awarded);
+  }
+  const essayScore = [...essayScoreByQ.values()].reduce((s, v) => s + v, 0);
+
+  sub.answers = (sub.answers || []).map(a => essayScoreByQ.has(a.questionId)
+    ? { ...a, essayPointsAwarded: essayScoreByQ.get(a.questionId) }
+    : a);
+  sub.score = (Number(sub.score) || 0) + essayScore;
+  sub.percentage = sub.totalPoints > 0 ? Math.round((sub.score / sub.totalPoints) * 100) : 0;
+  sub.passed = sub.percentage >= resolveTrainingTestPassThreshold(cls?.passScore);
+  sub.gradingStatus = 'COMPLETE';
+  sub.essayGradedBy = user.username;
+  sub.essayGradedByName = user.name;
+  sub.essayGradedAt = nowVN();
+  return sub;
 }
 
 // Xác nhận 1 nhân viên đã hoàn thành 1 CẤP BẬC của lộ trình thăng tiến (Đợt 7 — path.stages, thứ tự
@@ -5285,7 +5375,7 @@ module.exports = {
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
   isTrainingVideoProgressComplete, isTrainingPdfProgressComplete, computeTrainingDocumentProgressUpdate,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
-  gradeTrainingTestSubmission, applyAutoGradedTestResult,
+  gradeTrainingTestSubmission, applyAutoGradedTestResult, gradeTrainingTestEssayAnswers,
   startTrainingTestAttempt, evaluateTrainingTestTiming,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,

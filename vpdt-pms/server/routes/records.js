@@ -1213,6 +1213,13 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
         username: freshUser.username, name: freshUser.name, dept: freshUser.dept,
         answers: graded.answers, score: graded.score, totalPoints: graded.totalPoints,
         percentage: graded.percentage, passed: graded.passed,
+        // gradingStatus (Đợt 10 — câu hỏi Nghị Luận/ESSAY): 'COMPLETE' behaves y hệt trước Đợt 10 (không
+        // có câu ESSAY nào — percentage/passed đã chốt ngay ở trên). 'PENDING_ESSAY_GRADING' nghĩa là bài
+        // test có ≥1 câu ESSAY CHƯA được chấm tay — percentage/passed ở trên đang là null, KHÔNG được gọi
+        // applyAutoGradedTestResult() ngay bên dưới (xem nhánh if), phải chờ
+        // POST .../submissions/:id/grade-essay (recordActions.gradeTrainingTestEssayAnswers()) chốt lại.
+        gradingStatus: graded.gradingStatus,
+        essayGradedBy: null, essayGradedByName: null, essayGradedAt: null,
         startedAt: timing?.startedAt || null,
         elapsedSeconds: timing ? timing.elapsedSeconds : null,
         timeLimitSeconds: timing ? timing.limitSeconds : null,
@@ -1220,14 +1227,60 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
         submittedAt: new Date().toLocaleString('vi-VN')
       };
       const insertedSubmission = await insertRecord('trainingTestSubmissions', submission);
-      const updatedReg = await withLockedRecordForCollection('trainingRegistrations', reg.id, (item) =>
-        recordActions.applyAutoGradedTestResult(item, graded));
+      // Đợt 10 — CHỈ ghi kết quả Đạt/Không Đạt của LỚP HỌC ngay khi bài test KHÔNG có câu Nghị Luận nào
+      // (gradingStatus 'COMPLETE', hành vi giữ NGUYÊN 100% như trước tính năng này). Có câu Nghị Luận thì
+      // đăng ký (reg) GIỮ NGUYÊN 'REGISTERED' — chưa có kết quả — cho tới khi chấm tay xong (xem route
+      // .../submissions/:id/grade-essay bên dưới, gọi applyAutoGradedTestResult() lúc đó).
+      const updatedReg = graded.gradingStatus === 'COMPLETE'
+        ? await withLockedRecordForCollection('trainingRegistrations', reg.id, (item) =>
+            recordActions.applyAutoGradedTestResult(item, graded))
+        : reg;
 
       return { submission: insertedSubmission, registration: updatedReg };
     });
     res.json({ ok: true, ...result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/submit-test`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:classId/submissions/:submissionId/grade-essay — Đợt 10: chấm tay
+// PHẦN NGHỊ LUẬN (câu hỏi type ESSAY) của 1 bài đã nộp đang gradingStatus 'PENDING_ESSAY_GRADING' (xem
+// gradeTrainingTestSubmission()/gradeTrainingTestEssayAnswers(), lib/recordActions.js). Khoá theo
+// submissionId TRONG SUỐT lúc đọc-chấm-ghi (cùng nguyên tắc submit-test ở trên) — chặn race 2 giảng viên
+// chấm cùng 1 bài cùng lúc. Body: { essayGrades: [{questionId, pointsAwarded}] } — PHẢI có đủ điểm cho
+// MỌI câu ESSAY của bài test trong CÙNG 1 lượt gọi (không cho chấm dở dang, xem hàm mutator).
+router.post('/trainingClasses/:classId/submissions/:submissionId/grade-essay', async (req, res) => {
+  const classId = Number(req.params.classId);
+  const submissionId = Number(req.params.submissionId);
+  if (!Number.isFinite(classId) || !Number.isFinite(submissionId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withAppLock(`training_test_essay_grade:${submissionId}`, async () => {
+      const classes = await getAllForCollection('trainingClasses');
+      const cls = classes.find(c => c.id === classId);
+      if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học');
+
+      const tests = await getAllForCollection('trainingTests');
+      const test = tests.find(t => t.id === cls.testId);
+      if (!test) throw new HttpError(404, 'Không tìm thấy bài test được gán cho lớp học này');
+
+      const updatedSubmission = await withLockedRecordForCollection('trainingTestSubmissions', submissionId, (sub) => {
+        if (sub.classId !== classId) throw new HttpError(404, 'Bài làm này không thuộc lớp học đang thao tác');
+        return recordActions.gradeTrainingTestEssayAnswers(freshUser, sub, test, cls, req.body?.essayGrades);
+      });
+
+      const regs = await getAllForCollection('trainingRegistrations');
+      const reg = regs.find(r => r.classId === classId && r.creator === updatedSubmission.username && r.result !== 'CANCELLED');
+      if (!reg) throw new HttpError(404, 'Không tìm thấy đăng ký tương ứng để ghi kết quả cuối cùng');
+      const updatedReg = await withLockedRecordForCollection('trainingRegistrations', reg.id, (item) =>
+        recordActions.applyAutoGradedTestResult(item, updatedSubmission, { gradedByEssay: { username: freshUser.username, name: freshUser.name } }));
+
+      return { submission: updatedSubmission, registration: updatedReg };
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.classId}/submissions/${req.params.submissionId}/grade-essay`, err);
   }
 });
 

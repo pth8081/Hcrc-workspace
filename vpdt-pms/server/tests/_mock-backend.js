@@ -424,10 +424,34 @@ function __mockValidateTrainingTestCreate(payload, user) {
   if (!payload.title || !String(payload.title).trim()) throw __mockHttpError(400, 'Thiếu tên bài test');
   const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
   if (!rawQuestions.length) throw __mockHttpError(400, 'Bài test cần ít nhất 1 câu hỏi');
+  // Đợt 10 — 4 loại câu hỏi (mirrors createValidation.js trainingTests.extraValidate): SINGLE/MULTI GIỮ
+  // NGUYÊN VẸN; ESSAY (nghị luận, không có options); IMAGE_DRAG_DROP (mỗi đáp án BẮT BUỘC 1 ảnh riêng,
+  // chấm điểm như MULTI).
   const questions = rawQuestions.map((q, i) => {
     const text = String(q?.text || '').trim();
     if (!text) throw __mockHttpError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
-    const type = q?.type === 'MULTI' ? 'MULTI' : 'SINGLE';
+    const type = ['MULTI', 'ESSAY', 'IMAGE_DRAG_DROP'].includes(q?.type) ? q.type : 'SINGLE';
+    const points = Number(q?.points) > 0 ? Number(q.points) : 1;
+    const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
+    if (imageUrl && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) throw __mockHttpError(400, `Ảnh câu hỏi số ${i + 1} không hợp lệ`);
+
+    if (type === 'ESSAY') {
+      return { id: i + 1, text, type, options: [], correctOptionIds: [], points, imageUrl };
+    }
+    if (type === 'IMAGE_DRAG_DROP') {
+      const optionsRaw = Array.isArray(q?.options) ? q.options : [];
+      const dragOptions = optionsRaw
+        .map((o) => ({ text: String(o?.text || '').trim(), imageUrl: String(o?.imageUrl || '').trim() }))
+        .filter((o) => o.imageUrl);
+      if (dragOptions.length < 2) throw __mockHttpError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án (ảnh)`);
+      dragOptions.forEach((o) => { if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(o.imageUrl)) throw __mockHttpError(400, `Ảnh đáp án của câu hỏi số ${i + 1} không hợp lệ`); });
+      const options = dragOptions.map((o, oi) => ({ id: oi + 1, text: o.text, imageUrl: o.imageUrl }));
+      const correctOptionIds = Array.isArray(q?.correctOptionIds)
+        ? [...new Set(q.correctOptionIds.map(Number))].filter((id) => options.some((o) => o.id === id)) : [];
+      if (!correctOptionIds.length) throw __mockHttpError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
+      return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
+    }
+    // SINGLE/MULTI — GIỮ NGUYÊN VẸN logic gốc.
     const optionTexts = Array.isArray(q?.options) ? q.options.map((o) => String(o?.text ?? o ?? '').trim()).filter(Boolean) : [];
     if (optionTexts.length < 2) throw __mockHttpError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án`);
     const options = optionTexts.map((t, oi) => ({ id: oi + 1, text: t }));
@@ -435,12 +459,6 @@ function __mockValidateTrainingTestCreate(payload, user) {
       ? [...new Set(q.correctOptionIds.map(Number))].filter((id) => options.some((o) => o.id === id)) : [];
     if (!correctOptionIds.length) throw __mockHttpError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
     if (type === 'SINGLE' && correctOptionIds.length > 1) throw __mockHttpError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
-    const points = Number(q?.points) > 0 ? Number(q.points) : 1;
-    // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi) — mirrors createValidation.js assertUploadedFileUrl():
-    // chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh ra (mock /api/upload cũng
-    // trả đúng khuôn này, xem __mockOkRes({ fileUrl: ... }) ở dưới).
-    const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
-    if (imageUrl && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) throw __mockHttpError(400, `Ảnh câu hỏi số ${i + 1} không hợp lệ`);
     return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
   });
   payload.title = String(payload.title).trim();
@@ -500,24 +518,38 @@ function __mockBulkRegister(payload, user, cls) {
   return { added, skipped };
 }
 
+function __mockResolveTestPassThreshold(classPassScore) {
+  return Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
+}
+// Đợt 10 — mirrors gradeTrainingTestSubmission() ở lib/recordActions.js: câu ESSAY KHÔNG được máy chấm
+// (essayText lưu lại, essayPointsAwarded null, KHÔNG cộng điểm), bài có ≥1 câu ESSAY -> gradingStatus
+// 'PENDING_ESSAY_GRADING' (percentage/passed CHƯA chốt) — bài KHÔNG có câu ESSAY nào -> gradingStatus
+// 'COMPLETE' y hệt hành vi cũ (regression, KHÔNG đổi gì). IMAGE_DRAG_DROP không cần nhánh riêng — chấm
+// y hệt MULTI (so id, không quan tâm option là text hay ảnh).
 function __mockGradeSubmission(rawAnswers, test, classPassScore) {
   const answersByQ = new Map();
   (Array.isArray(rawAnswers) ? rawAnswers : []).forEach((a) => {
     const qId = Number(a?.questionId);
-    if (Number.isFinite(qId)) answersByQ.set(qId, Array.isArray(a?.selectedOptionIds) ? a.selectedOptionIds.map(Number) : []);
+    if (Number.isFinite(qId)) answersByQ.set(qId, a);
   });
-  let score = 0, totalPoints = 0;
-  test.questions.forEach((q) => {
+  let score = 0, totalPoints = 0, hasEssay = false;
+  const answers = test.questions.map((q) => {
     totalPoints += q.points;
-    const selected = [...new Set(answersByQ.get(q.id) || [])];
+    const raw = answersByQ.get(q.id);
+    if (q.type === 'ESSAY') {
+      hasEssay = true;
+      return { questionId: q.id, essayText: String(raw?.essayText || '').trim(), essayPointsAwarded: null };
+    }
+    const selected = [...new Set(Array.isArray(raw?.selectedOptionIds) ? raw.selectedOptionIds.map(Number) : [])];
     const correctSet = new Set(q.correctOptionIds);
     const isCorrect = selected.length === correctSet.size && selected.every((id) => correctSet.has(id));
     if (isCorrect) score += q.points;
+    return { questionId: q.id, selectedOptionIds: selected, isCorrect };
   });
+  if (hasEssay) return { answers, score, totalPoints, percentage: null, passed: null, gradingStatus: 'PENDING_ESSAY_GRADING' };
   const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
-  const threshold = Number.isFinite(Number(classPassScore)) && Number(classPassScore) > 0 ? Number(classPassScore) : 60;
-  const passed = percentage >= threshold;
-  return { score, totalPoints, percentage, passed };
+  const passed = percentage >= __mockResolveTestPassThreshold(classPassScore);
+  return { answers, score, totalPoints, percentage, passed, gradingStatus: 'COMPLETE' };
 }
 // mirrors startTrainingTestAttempt() ở lib/recordActions.js (qua route .../start-test).
 function __mockStartTest(user, cls) {
@@ -535,6 +567,11 @@ function __mockSubmitTest(payload, user, cls) {
   if (cls.testId == null) throw __mockHttpError(400, 'Lớp học chưa được gán bài test');
   const test = DB.trainingTests.find((t) => t.id === cls.testId);
   if (!test) throw __mockHttpError(404, 'Không tìm thấy bài test');
+  // mirrors routes/records.js submit-test: chặn nộp lần 2 (mỗi người 1 lần/lớp) — kiểm tra TRƯỚC khi
+  // đọc reg, vì Đợt 10 (bài có câu ESSAY) khiến reg.result CÒN 'REGISTERED' NGAY CẢ SAU KHI đã nộp.
+  if (DB.trainingTestSubmissions.some((s) => s.classId === cls.id && s.username === user.username)) {
+    throw __mockHttpError(409, 'Bạn đã làm bài test của lớp học này rồi — mỗi người chỉ được làm 1 lần duy nhất');
+  }
   const reg = DB.trainingRegistrations.find((r) => r.classId === cls.id && r.creator === user.username && r.result === 'REGISTERED');
   if (!reg) throw __mockHttpError(409, 'Bạn chưa đăng ký lớp học này hoặc đã có kết quả');
   // Đợt 9 — mirrors gác "học xong mới thi" ở routes/records.js submit-test: OFFLINE chờ
@@ -549,12 +586,56 @@ function __mockSubmitTest(payload, user, cls) {
     }
   }
   const graded = __mockGradeSubmission(payload.answers, test, cls.passScore);
+  const submission = {
+    id: __mockGenId(), testId: test.id, testTitle: test.title,
+    classId: cls.id, className: cls.title, classCode: cls.code,
+    username: user.username, name: user.name, dept: user.dept,
+    answers: graded.answers, score: graded.score, totalPoints: graded.totalPoints,
+    percentage: graded.percentage, passed: graded.passed, gradingStatus: graded.gradingStatus,
+    essayGradedBy: null, essayGradedByName: null, essayGradedAt: null,
+    submittedAt: new Date().toLocaleString('vi-VN')
+  };
   const regClone = JSON.parse(JSON.stringify(reg));
-  regClone.result = graded.passed ? 'PASSED' : 'FAILED';
-  regClone.score = graded.percentage;
-  regClone.resultNote = `Tự động chấm từ bài test (${graded.score}/${graded.totalPoints} điểm)`;
-  regClone.resultBy = null; regClone.resultByName = 'Hệ thống (tự động chấm bài test)'; regClone.resultAt = new Date().toLocaleString('vi-VN');
-  return { registration: regClone, submission: { score: graded.score, totalPoints: graded.totalPoints, percentage: graded.percentage, passed: graded.passed } };
+  // Đợt 10 — CHỈ ghi kết quả lớp học NGAY khi gradingStatus 'COMPLETE' (không có câu ESSAY nào, y hệt
+  // hành vi cũ). Có câu ESSAY thì reg GIỮ NGUYÊN 'REGISTERED' cho tới khi chấm tay xong (mirrors
+  // routes/records.js).
+  if (graded.gradingStatus === 'COMPLETE') {
+    regClone.result = graded.passed ? 'PASSED' : 'FAILED';
+    regClone.score = graded.percentage;
+    regClone.resultNote = `Tự động chấm từ bài test (${graded.score}/${graded.totalPoints} điểm)`;
+    regClone.resultBy = null; regClone.resultByName = 'Hệ thống (tự động chấm bài test)'; regClone.resultAt = new Date().toLocaleString('vi-VN');
+  }
+  return { registration: regClone, submission };
+}
+
+// Đợt 10 — mirrors gradeTrainingTestEssayAnswers() ở lib/recordActions.js: chấm tay PHẦN NGHỊ LUẬN của
+// 1 bài đang PENDING_ESSAY_GRADING, cộng dồn với điểm tự động chấm sẵn (sub.score), chốt lại
+// percentage/passed/gradingStatus. Gác quyền bằng __mockCanManageTrainingClass() (mirrors
+// canManageTrainingClass() thật) — CÙNG mức quyền với __mockSetResult()/__mockBulkRegister().
+function __mockGradeEssayAnswers(user, sub, test, cls, rawEssayGrades) {
+  if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền chấm bài nghị luận của lớp học này');
+  if (sub.gradingStatus !== 'PENDING_ESSAY_GRADING') throw __mockHttpError(409, 'Bài làm này không ở trạng thái chờ chấm nghị luận');
+  const essayQuestions = (test?.questions || []).filter((q) => q.type === 'ESSAY');
+  if (!essayQuestions.length) throw __mockHttpError(409, 'Bài test này không có câu hỏi nghị luận nào cần chấm');
+  const gradesByQ = new Map();
+  (Array.isArray(rawEssayGrades) ? rawEssayGrades : []).forEach((g) => {
+    const qId = Number(g?.questionId);
+    if (Number.isFinite(qId)) gradesByQ.set(qId, g?.pointsAwarded);
+  });
+  const essayScoreByQ = new Map();
+  for (const q of essayQuestions) {
+    const awarded = Number(gradesByQ.get(q.id));
+    if (!Number.isFinite(awarded) || awarded < 0 || awarded > q.points) throw __mockHttpError(400, `Điểm chấm cho câu nghị luận "${q.text}" không hợp lệ (0-${q.points})`);
+    essayScoreByQ.set(q.id, awarded);
+  }
+  const essayScore = [...essayScoreByQ.values()].reduce((s, v) => s + v, 0);
+  sub.answers = (sub.answers || []).map((a) => (essayScoreByQ.has(a.questionId) ? { ...a, essayPointsAwarded: essayScoreByQ.get(a.questionId) } : a));
+  sub.score = (Number(sub.score) || 0) + essayScore;
+  sub.percentage = sub.totalPoints > 0 ? Math.round((sub.score / sub.totalPoints) * 100) : 0;
+  sub.passed = sub.percentage >= __mockResolveTestPassThreshold(cls?.passScore);
+  sub.gradingStatus = 'COMPLETE';
+  sub.essayGradedBy = user.username; sub.essayGradedByName = user.name; sub.essayGradedAt = new Date().toLocaleString('vi-VN');
+  return sub;
 }
 
 function __mockSetResult(payload, user, reg, cls) {
@@ -990,6 +1071,26 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     // mirrors route .../start-test ở routes/records.js: ghi mốc bắt đầu làm bài lên đúng dòng đăng ký
     // của người đang làm, CHỈ ghi lần đầu (mở lại đề không làm mới mốc).
     if (action === 'start-test') return __mockStartTest(user, cls);
+    // Đợt 10 — mirrors POST .../submissions/:submissionId/grade-essay ở routes/records.js: tìm đúng bản
+    // ghi nộp bài + đăng ký tương ứng, mutate trực tiếp (giữ nguyên reference trong DB.*, khác kiểu
+    // clone-rồi-Object.assign của edit/start-session/end-session ở trên vì recordActions thật cũng mutate
+    // trực tiếp record được truyền vào, không tạo bản mới).
+    const essayMatch = action.match(/^submissions\/(\d+)\/grade-essay$/);
+    if (essayMatch) {
+      const sub = DB.trainingTestSubmissions.find((s) => s.id === Number(essayMatch[1]));
+      if (!sub) throw __mockHttpError(404, 'Không tìm thấy bài làm này');
+      if (sub.classId !== cls.id) throw __mockHttpError(404, 'Bài làm này không thuộc lớp học đang thao tác');
+      const test = DB.trainingTests.find((t) => t.id === cls.testId);
+      if (!test) throw __mockHttpError(404, 'Không tìm thấy bài test được gán cho lớp học này');
+      __mockGradeEssayAnswers(user, sub, test, cls, payload?.essayGrades);
+      const reg = DB.trainingRegistrations.find((r) => r.classId === cls.id && r.creator === sub.username && r.result !== 'CANCELLED');
+      if (!reg) throw __mockHttpError(404, 'Không tìm thấy đăng ký tương ứng để ghi kết quả cuối cùng');
+      reg.result = sub.passed ? 'PASSED' : 'FAILED';
+      reg.score = sub.percentage;
+      reg.resultNote = `Tự động chấm phần trắc nghiệm + chấm tay phần nghị luận (${sub.score}/${sub.totalPoints} điểm)`;
+      reg.resultBy = user.username; reg.resultByName = `${user.name} (đã chấm phần nghị luận)`; reg.resultAt = new Date().toLocaleString('vi-VN');
+      return { submission: sub, registration: reg };
+    }
     // edit/start-session/end-session (Đợt 3) MUTATE cls — clone trước để khớp đúng ngữ nghĩa
     // withLockedRecordForCollection() thật (chỉ ghi lại khi mutator KHÔNG throw, xem lib/recordStore.js).
     if (action === 'edit') { const clone = JSON.parse(JSON.stringify(cls)); const r = __mockEditTrainingClass(payload, user, clone); Object.assign(cls, r); return cls; }

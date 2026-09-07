@@ -1670,10 +1670,55 @@ const CREATE_MODULE_CONFIGS = {
       const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
       if (!rawQuestions.length) throw new CreateError(400, 'Bài test cần ít nhất 1 câu hỏi');
       if (rawQuestions.length > 100) throw new CreateError(400, 'Bài test tối đa 100 câu hỏi');
+      // 4 loại câu hỏi (Đợt 10 — "Nghị Luận"/"Kéo Thả Hình"): SINGLE (1 đáp án đúng)/MULTI (nhiều đáp án
+      // đúng) GIỮ NGUYÊN VẸN logic gốc bên dưới, không đổi gì. ESSAY (nghị luận, tự viết, chấm tay — xem
+      // gradeTrainingTestEssayAnswers()/gradingStatus ở lib/recordActions.js) và IMAGE_DRAG_DROP (kéo thả
+      // hình, mỗi đáp án là 1 ẢNH thay vì chỉ text, chấm tự động y hệt MULTI) là 2 NHÁNH RIÊNG, tách hẳn
+      // khỏi nhánh SINGLE/MULTI để không ảnh hưởng hành vi cũ.
       const questions = rawQuestions.map((q, i) => {
         const text = String(q?.text || '').trim();
         if (!text) throw new CreateError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
-        const type = q?.type === 'MULTI' ? 'MULTI' : 'SINGLE';
+        const type = ['MULTI', 'ESSAY', 'IMAGE_DRAG_DROP'].includes(q?.type) ? q.type : 'SINGLE';
+        const points = Number(q?.points) > 0 ? Number(q.points) : 1;
+        // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi — VD hình sơ đồ/biểu mẫu cần nhận diện) — CÙNG lỗ hổng
+        // stored-XSS scheme "javascript:" như mọi field URL tệp khác trong file này nếu KHÔNG xác minh:
+        // trainingManage tự soạn payload gọi thẳng route tạo có thể gài imageUrl bất kỳ, hiển thị lại
+        // thành <img src="..."> ở màn Test Builder/lúc học viên làm bài (ttTakeRenderQuestion(), client).
+        // assertUploadedFileUrl() chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh
+        // ra, KHÔNG chấp nhận URL ngoài hệ thống hay scheme javascript:/data: — mirror y hệt cách mọi
+        // field file khác (fileUrl của trainingDocuments, licenses...) đã được vá ở đầu file này.
+        const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
+        assertUploadedFileUrl(imageUrl, `Ảnh câu hỏi số ${i + 1}`);
+
+        // ESSAY (nghị luận) — người trả lời tự viết câu trả lời (essayText, lưu ở trainingTestSubmissions
+        // lúc nộp, KHÔNG lưu ở đây), không có "đáp án đúng" máy chấm được nên KHÔNG có options/
+        // correctOptionIds — bỏ qua HẲN 2 ràng buộc "≥2 đáp án"/"phải chọn đáp án đúng" của nhánh dưới.
+        if (type === 'ESSAY') {
+          return { id: i + 1, text, type, options: [], correctOptionIds: [], points, imageUrl };
+        }
+
+        // IMAGE_DRAG_DROP (kéo thả hình) — mỗi đáp án BẮT BUỘC có ảnh riêng (options[].imageUrl, khác hẳn
+        // imageUrl ở trên chỉ là ảnh minh hoạ ĐỀ BÀI), text chỉ còn là chú thích tuỳ chọn. Ngữ nghĩa chấm
+        // điểm giống HỆT MULTI (khớp CHÍNH XÁC tập hợp, cho phép 1+ đáp án đúng) —
+        // gradeTrainingTestSubmission() không cần đổi gì cho loại này (chỉ so id, không quan tâm option là
+        // text hay ảnh).
+        if (type === 'IMAGE_DRAG_DROP') {
+          const optionsRaw = Array.isArray(q?.options) ? q.options : [];
+          const dragOptions = optionsRaw
+            .map(o => ({ text: String(o?.text || '').trim(), imageUrl: String(o?.imageUrl || '').trim() }))
+            .filter(o => o.imageUrl);
+          if (dragOptions.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án (ảnh)`);
+          if (dragOptions.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
+          dragOptions.forEach((o, oi) => assertUploadedFileUrl(o.imageUrl, `Ảnh đáp án số ${oi + 1} của câu hỏi số ${i + 1}`));
+          const options = dragOptions.map((o, oi) => ({ id: oi + 1, text: o.text, imageUrl: o.imageUrl }));
+          const correctOptionIds = Array.isArray(q?.correctOptionIds)
+            ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
+            : [];
+          if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
+          return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
+        }
+
+        // SINGLE/MULTI — GIỮ NGUYÊN VẸN logic gốc (không đổi 1 dòng nào so với trước Đợt 10).
         const optionTexts = Array.isArray(q?.options) ? q.options.map(o => String(o?.text ?? o ?? '').trim()).filter(Boolean) : [];
         if (optionTexts.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án`);
         if (optionTexts.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
@@ -1685,16 +1730,6 @@ const CREATE_MODULE_CONFIGS = {
         if (type === 'SINGLE' && correctOptionIds.length > 1) {
           throw new CreateError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
         }
-        const points = Number(q?.points) > 0 ? Number(q.points) : 1;
-        // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi — VD hình sơ đồ/biểu mẫu cần nhận diện) — CÙNG lỗ hổng
-        // stored-XSS scheme "javascript:" như mọi field URL tệp khác trong file này nếu KHÔNG xác minh:
-        // trainingManage tự soạn payload gọi thẳng route tạo có thể gài imageUrl bất kỳ, hiển thị lại
-        // thành <img src="..."> ở màn Test Builder/lúc học viên làm bài (ttTakeRenderQuestion(), client).
-        // assertUploadedFileUrl() chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh
-        // ra, KHÔNG chấp nhận URL ngoài hệ thống hay scheme javascript:/data: — mirror y hệt cách mọi
-        // field file khác (fileUrl của trainingDocuments, licenses...) đã được vá ở đầu file này.
-        const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
-        assertUploadedFileUrl(imageUrl, `Ảnh câu hỏi số ${i + 1}`);
         return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
       });
       payload.title = String(payload.title).trim();

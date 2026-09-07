@@ -6707,9 +6707,10 @@ bindCspDelegation('meetingSection');
 bindCspDelegation('vppSection');
 bindCspDelegation('vppRegModal');
 // Đào Tạo (LMS) — 9 sub-tab (Dashboard/Lớp Học/Chương Trình/Kế Hoạch/Đăng Ký Của Tôi/Kho Tài Liệu/Lộ
-// Trình/Đào Tạo Tân Binh/Ngân Hàng Câu Hỏi) render hết trong #internalTrainingLmsSection — nhưng 6 modal
-// xử lý riêng (Kết Quả Lớp Học, Danh Sách Học Viên, Sửa Lớp Học, Làm Bài Test, Mã QR, Vào Lớp Học) đều
-// sống NGOÀI section (giống Xe/Vận Hành) nên mỗi modal cần thêm 1 gốc riêng — 7 gốc tổng cộng.
+// Trình/Đào Tạo Tân Binh/Ngân Hàng Câu Hỏi) render hết trong #internalTrainingLmsSection — nhưng 7 modal
+// xử lý riêng (Kết Quả Lớp Học, Danh Sách Học Viên, Sửa Lớp Học, Làm Bài Test, Mã QR, Vào Lớp Học, Chấm
+// Nghị Luận — Đợt 10) đều sống NGOÀI section (giống Xe/Vận Hành) nên mỗi modal cần thêm 1 gốc riêng — 8
+// gốc tổng cộng.
 bindCspDelegation('internalTrainingLmsSection');
 bindCspDelegation('trainingResultsModal');
 bindCspDelegation('trainingRosterModal');
@@ -6717,6 +6718,7 @@ bindCspDelegation('trainingEditClassModal');
 bindCspDelegation('trainingTakeTestModal');
 bindCspDelegation('trainingClassQrModal');
 bindCspDelegation('trainingJoinClassModal');
+bindCspDelegation('gradeEssayModal');
 // Ngân Sách — 3 sub-tab (Phê Duyệt/Thực Hiện/Tổng Hợp) + danh sách bản ngân sách đều render trong
 // #budgetSection — nhưng modal "⚙️ Quản Lý Kỳ & Mẫu" (#budgetPeriodTemplateModal, CRUD kỳ ngân sách +
 // mẫu cột) và modal Xử Lý/Xem Chi Tiết (#budgetProcessModal, nút Duyệt/Từ Chối/Yêu Cầu Bổ Sung) đều

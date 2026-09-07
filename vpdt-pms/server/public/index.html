@@ -2148,6 +2148,15 @@
           <button type="button" id="ttImportConfirmBtn" data-op="confirmTrainingTestImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Nạp Các Câu Hỏi Hợp Lệ Vào Danh Sách</button>
         </div>
 
+        <!-- Đợt 10 — câu hỏi Nghị Luận (ESSAY) cần chấm tay sau khi học viên nộp bài (xem
+             gradeTrainingTestSubmission()/gradeTrainingTestEssayAnswers(), lib/recordActions.js). Chỉ
+             hiện với ai có khả năng chấm ÍT NHẤT 1 lớp (trainingManage/admin hoặc trainingInstruct) — xem
+             renderTrainingEssayGradingQueue(). -->
+        <div id="trainingEssayGradingSection" class="hidden space-y-2 bg-white p-3 rounded border">
+          <h3 class="font-bold text-gray-800">📝 Cần Chấm Nghị Luận</h3>
+          <div id="trainingEssayGradingContainer" class="space-y-2"></div>
+        </div>
+
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">🧪 Danh Sách Bài Test</h3>
           <div id="trainingTestsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
@@ -2459,6 +2468,26 @@
         </div>
         <div class="p-4 border-t flex justify-end">
           <button type="button" id="ttTakeNextBtn" data-op="ttTakeGoNext" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded font-bold text-sm">Câu Tiếp Theo →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal "📝 Chấm Nghị Luận" (Đợt 10) — chấm điểm TỪNG câu ESSAY của 1 bài đã nộp đang chờ chấm
+         (gradingStatus 'PENDING_ESSAY_GRADING'), mở từ renderTrainingEssayGradingQueue() ở
+         module-internalcomms-daotao.js. Nộp xong (submitGradeEssay()) gọi
+         POST .../submissions/:id/grade-essay (routes/records.js), chốt lại điểm/Đạt-Không Đạt của lớp. -->
+    <div id="gradeEssayModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-xl w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b sticky top-0 bg-white">
+          <h3 id="geModalTitle" class="font-bold text-gray-800">📝 Chấm Nghị Luận</h3>
+          <p id="geModalSubtitle" class="text-xs text-gray-500"></p>
+        </div>
+        <div class="p-4 space-y-3">
+          <div id="geQuestionsContainer" class="space-y-2"></div>
+        </div>
+        <div class="p-4 border-t flex justify-end gap-2">
+          <button type="button" data-op="closeGradeEssayModal" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm font-bold">Đóng</button>
+          <button type="button" data-op="submitGradeEssay" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded font-bold text-sm">✅ Lưu Điểm &amp; Chốt Kết Quả</button>
         </div>
       </div>
     </div>

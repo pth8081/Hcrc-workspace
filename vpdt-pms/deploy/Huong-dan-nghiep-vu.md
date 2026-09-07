@@ -192,6 +192,23 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
     hoàn thành khi đã Đạt hết) + Ngân Hàng Câu Hỏi. 2 mức quyền: quản lý toàn
     quyền (tạo lớp/tài liệu/bài test/lộ trình) và giảng viên (chỉ quản lý
     roster/kết quả đúng lớp được gán).
+    - **Ngân Hàng Câu Hỏi — 4 loại câu hỏi** (từ v12.2): 1 đáp án đúng
+      (SINGLE), nhiều đáp án đúng (MULTI — cả 2 loại này hỗ trợ 1 ảnh minh
+      hoạ đề bài tuỳ chọn, KHÔNG phải "loại câu hỏi hình ảnh" riêng), **Nghị
+      Luận** (ESSAY — người làm bài tự viết câu trả lời, không có đáp án lựa
+      chọn, trainer chấm tay), **Kéo Thả Hình** (IMAGE_DRAG_DROP — mỗi đáp án
+      là 1 ẢNH riêng thay vì text, kéo-thả hoặc bấm chọn để trả lời, chấm tự
+      động y hệt loại nhiều đáp án đúng). Excel Nhập/Xuất hàng loạt CHỈ hỗ
+      trợ 2 loại SINGLE/MULTI như trước — 2 loại mới chỉ tạo được qua giao
+      diện Test Builder.
+    - **Chấm tay câu Nghị Luận**: bài test có ÍT NHẤT 1 câu Nghị Luận thì
+      Đạt/Không Đạt **KHÔNG có ngay khi học viên nộp bài** — hệ thống tự
+      chấm trước phần trắc nghiệm/kéo-thả, học viên thấy "⏳ Chờ chấm nghị
+      luận" cho tới khi giảng viên/Nhân Sự phụ trách đào tạo vào mục
+      **"📝 Cần Chấm Nghị Luận"** (trong sub-tab Ngân Hàng Câu Hỏi) chấm
+      điểm từng câu — lúc đó điểm mới cộng dồn và Đạt/Không Đạt mới chốt
+      (so với Điểm Đạt của lớp). Bài test không có câu Nghị Luận nào thì
+      không đổi gì — vẫn có kết quả ngay như trước.
 - **Nhân Sự** — module con **Cơ Cấu Tổ Chức** (sơ đồ tổ chức theo quản lý trực
   tiếp + Cấu Hình KPI Theo Vị Trí: cấp nào đánh giá cấp nào, không cấu hình
   tiêu chí) và tab **Quản Lý & Phản Hồi Ý Kiến** (phía Nhân Sự của "HCRC Đồng

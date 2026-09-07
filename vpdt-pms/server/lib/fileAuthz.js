@@ -160,8 +160,11 @@ async function findOwningRecord(fileUrl) {
   if (opRepair) return { operationRepair: true, item: opRepair };
   // trainingTests: tra theo ĐÚNG câu hỏi chứa fileUrl (1 bài test có thể có nhiều ảnh câu hỏi khác nhau)
   // — trả kèm câu hỏi khớp để dùng chung nếu cần, dù authorizeFileAccess() bên dưới hiện chỉ cần "item"
-  // (cả bài test) cho canViewTrainingTestQuestionImage().
-  const test = (trainingTests || []).find(t => (t.questions || []).some(q => q.imageUrl === fileUrl));
+  // (cả bài test) cho canViewTrainingTestQuestionImage(). Đợt 10 — loại IMAGE_DRAG_DROP (kéo thả hình)
+  // thêm 1 nguồn ảnh MỚI: q.options[].imageUrl (ảnh của TỪNG đáp án, khác q.imageUrl chỉ là ảnh minh hoạ
+  // đề bài) — thiếu nhánh này thì ảnh đáp án rơi thẳng vào FAIL-OPEN như chú thích ở trên đã cảnh báo.
+  const test = (trainingTests || []).find(t => (t.questions || []).some(q =>
+    q.imageUrl === fileUrl || (q.options || []).some(o => o.imageUrl === fileUrl)));
   if (test) return { trainingTestQuestion: true, item: test };
   return null;
 }

@@ -1,8 +1,71 @@
 # Phiên bản hiện tại
 
-**12.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đào Tạo > Ngân Hàng Câu Hỏi: thêm câu hỏi "Nghị Luận"/"Kéo Thả Hình" + luồng chấm tay nghị luận (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Trong sub tab ngân hàng câu hỏi của tab đào tạo cho phép tôi tạo
+thêm dạng câu hỏi trả lời nghị luận, yêu cầu người trả lời tự viết và dạng câu hỏi hình kéo thả khi trả
+lời thay vì opption chọn: tóm lại sẽ có 4 loại câu hỏi..." Đã xác nhận với người dùng phương án LỚN HƠN
+cho chấm nghị luận: xây dựng luồng CHẤM TAY thật (không phải "nghị luận = 0 điểm chỉ để tham khảo") —
+người dùng chấp nhận đánh đổi: bài test có câu Nghị Luận sẽ KHÔNG có kết quả Đạt/Không Đạt ngay khi nộp,
+chỉ có SAU KHI giảng viên chấm xong phần nghị luận.
+
+**4 loại câu hỏi** (field `type` trên `trainingTests.questions[]`, mở rộng tại chỗ, không thêm field
+discriminator riêng): `SINGLE`/`MULTI` **GIỮ NGUYÊN VẸN** (không đổi 1 dòng validate/chấm điểm nào) +
+2 loại MỚI:
+- **`ESSAY`** (Nghị Luận) — không có `options`/`correctOptionIds`, chỉ giữ `points` (điểm tối đa, trainer
+  tự chấm). Test-taking hiện `<textarea>`, câu trả lời gửi lên dạng `{questionId, essayText}` (khác
+  `{questionId, selectedOptionIds}` của các loại còn lại — mảng `answers` khi nộp bài giờ có 2 "hình
+  dạng" tuỳ theo loại câu hỏi tương ứng).
+- **`IMAGE_DRAG_DROP`** (Kéo Thả Hình) — TÁI SỬ DỤNG `options[]`/`correctOptionIds` (chấm điểm giống HỆT
+  `MULTI`, khớp CHÍNH XÁC tập hợp, cho phép 1+ đáp án đúng — `gradeTrainingTestSubmission()` không đổi gì
+  cho loại này) nhưng mỗi `option` giờ có thêm `imageUrl` BẮT BUỘC (ảnh riêng của từng đáp án — khác hẳn
+  `imageUrl` ở cấp CÂU HỎI vốn chỉ là ảnh minh hoạ đề bài, đã có từ trước). Giao diện làm bài dùng HTML5
+  Drag-and-Drop API thuần (mirror `module-baocaodinhky-trinhchieu.js`, không thư viện ngoài) + BẮT BUỘC
+  đường bấm-chọn tương đương (native DnD không chạy trên trình duyệt di động) — cả 2 đường ghi vào CÙNG 1
+  state (`ttTakeAnswers`).
+- **Excel import/export**: CHỈ hỗ trợ SINGLE/MULTI như trước (`lib/trainingTestImport.js` không đổi) —
+  ESSAY/IMAGE_DRAG_DROP CHƯA hỗ trợ nhập từ Excel, chỉ tạo được qua giao diện Test Builder (quyết định có
+  chủ đích, nêu rõ để không ai ngỡ ngàng khi thấy Excel không nhận 2 loại mới).
+
+**Luồng chấm tay Nghị Luận** — field mới `gradingStatus` trên `trainingTestSubmissions`
+(`'COMPLETE'` | `'PENDING_ESSAY_GRADING'`):
+- Bài test **KHÔNG có câu ESSAY nào** → hành vi 100% NHƯ CŨ (`gradingStatus:'COMPLETE'`, Đạt/Không Đạt
+  chốt ngay khi nộp) — **không có gì thay đổi** cho mọi bài test đã tồn tại trước tính năng này.
+- Bài test có ÍT NHẤT 1 câu ESSAY → `gradeTrainingTestSubmission()` (lib/recordActions.js) chỉ chấm được
+  phần trắc nghiệm/kéo-thả (essay: lưu `essayText`, `essayPointsAwarded:null`), trả về
+  `gradingStatus:'PENDING_ESSAY_GRADING'`, `percentage`/`passed` còn `null` — route submit-test
+  (`routes/records.js`) THEO ĐÓ không gọi `applyAutoGradedTestResult()` ngay, đăng ký (`trainingRegistrations`)
+  GIỮ NGUYÊN `'REGISTERED'` (chưa có Đạt/Không Đạt).
+- Hàm MỚI `gradeTrainingTestEssayAnswers(user, sub, test, cls, essayGrades)` (lib/recordActions.js) —
+  route MỚI `POST /api/records/trainingClasses/:classId/submissions/:submissionId/grade-essay` — chấm
+  từng câu ESSAY (0 ≤ điểm ≤ `points` của câu, bắt buộc chấm ĐỦ mọi câu ESSAY trong 1 lượt), cộng dồn với
+  điểm tự động đã chấm lúc nộp, chốt lại `percentage`/`passed`/`gradingStatus:'COMPLETE'`, rồi gọi LẠI
+  đúng `applyAutoGradedTestResult()` (y hệt luồng tự động 100%, không viết lại quy tắc đạt/rớt lần 2) để
+  ghi Đạt/Không Đạt cuối cùng vào đăng ký. Gác quyền bằng `canManageTrainingClass()` (trainingManage/admin
+  MỌI lớp, giảng viên `trainingInstruct` được gán riêng chỉ chấm ĐÚNG lớp mình phụ trách) — **KHÔNG đụng
+  tới** guard chặn chấm tay ở `setTrainingRegistrationResult()` (Đợt 8, chặn "lớp đã gán test thì không
+  chấm tay tuỳ ý") — đây là 1 hành động MỚI, hẹp, riêng biệt ("hoàn tất đúng phần máy không chấm được"),
+  không mở lại đường tắt chấm tay chung nào.
+- Giao diện: mục MỚI "📝 Cần Chấm Nghị Luận" trong sub-tab Ngân Hàng Câu Hỏi (danh sách bài đang chờ +
+  modal chấm điểm từng câu), màn "Đăng Ký Của Tôi" của học viên hiện "⏳ Chờ chấm nghị luận" thay vì giả
+  vờ đã có kết quả, Test Builder có thêm 2 lựa chọn loại câu hỏi + UI tương ứng (ẩn hẳn đáp án cho ESSAY,
+  ô tải ảnh riêng từng đáp án cho IMAGE_DRAG_DROP).
+
+**Ví dụ đã kiểm thử** (test `tests/test-training-essay-dragdrop-ui.js`): bài test 1 SINGLE (2đ) + 1
+IMAGE_DRAG_DROP (3đ) + 1 ESSAY (5đ, tổng 10đ), lớp passScore 70% → nv1 nộp bài đúng phần trắc nghiệm/kéo-
+thả (5/10 điểm tạm) → `gradingStatus:'PENDING_ESSAY_GRADING'`, đăng ký còn `REGISTERED` → giảng viên A
+(phụ trách lớp) chấm 4/5 điểm nghị luận → điểm cuối 9/10 = 90% → **ĐẠT** (≥70%), `gradingStatus:'COMPLETE'`.
+Giảng viên KHÁC (không phụ trách lớp) bị từ chối 403; chấm điểm vượt quá tối đa bị từ chối 400; chấm lại
+1 bài đã COMPLETE bị từ chối 409.
+
+**Deploy-impact**: KHÔNG đổi `schema.sql` (trainingTestSubmissions vẫn 1 dòng JSON trong `dbo.Records`,
+chỉ thêm field JSON mới `gradingStatus`/`essayGradedBy`/`essayGradedByName`/`essayGradedAt`, và câu hỏi
+options thêm field JSON tuỳ chọn `imageUrl`) — KHÔNG đổi `.env.example`, KHÔNG thêm dependency mới. Chỉ
+cần copy code + `pm2 restart`.
 
 ## Đăng Ký Xe: tab "🗓️ Lịch Xe" (chỉ xem lịch trống/bận lái xe) + fix lỗi tương phản chữ/nền (2026-09-07)
 
