@@ -1,11 +1,49 @@
 # Phiên bản hiện tại
 
-**10.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Bản merge gần nhất vào `main` vẫn là **10.2** — **10.3** hiện mới chỉ nằm trên nhánh
-`claude/chao-ban-oo5ijl` (xem mục "Nhân Sự > Cơ Cấu Tổ Chức: 🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị
-Trí..." ngay dưới), CHỜ người dùng xem demo trước khi merge vào `main` theo đúng yêu cầu của đợt này.
-Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc
-đánh version trong `CLAUDE.md`.
+**10.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Bản merge gần nhất vào `main` vẫn là **10.2** — **10.3**/**10.4** hiện mới chỉ nằm trên
+nhánh `claude/chao-ban-oo5ijl` (xem 2 mục ngay dưới), CHỜ người dùng xem demo trước khi merge vào
+`main` theo đúng yêu cầu của đợt này. Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver
+3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Hộp Thư Phê Duyệt tự làm mới — không cần bấm F5 (2026-09-06)
+
+**Yêu cầu gốc** (nguyên văn): *"Bạn kiểm tra xem có vấn đề gì về refresh trang khi tôi đang ở trong một
+trang mà người gửi phê duyệt thao tác xong tôi phải ấn refresh mới thấy hiện để tôi phê duyệt, tôi
+muốn tôi ko phải làm gì nó cũng sẽ hiên ra trạng thái luôn"*. Trước đây `DB.*` (client) chỉ tải MỘT LẦN
+lúc đăng nhập (`initDatabase()`) — hồ sơ mới người khác gửi cần mình duyệt không tự xuất hiện cho tới
+khi F5.
+
+**Không dùng WebSocket/SSE** — server chạy PM2 `exec_mode:'cluster'` nhiều tiến trình độc lập, stateless
+theo từng request (không sticky session), 1 kết nối WS/SSE giữ trong bộ nhớ đúng 1 tiến trình sẽ bỏ sót
+client rơi vào tiến trình khác. Dùng polling ngắn (20s) — hoạt động đúng bất kể tiến trình nào trả lời,
+không cần hạ tầng mới (không thêm dependency nào).
+
+**Server**: `lib/approvalAggregator.js` (mới) — `computeMyPendingApprovalKeys(user, appData)`, hàm THUẦN
+mirror lại `getMyPendingApprovals()` (client, `public/js/core-approvalhub.js`) cho ĐỦ cả 19 nguồn hồ sơ
+(9+ module dept-workflow qua `lib/workflowEngine.js` MODULE_CONFIGS + `canApproveStep()` — ĐÚNG hàm
+đang gác lượt duyệt/từ chối thật, không suy diễn lại — cộng thêm 6 module/nhánh quyền phẳng: Phòng Họp,
+Góc Chia Sẻ + bình luận gắn cờ, Giấy Phép, Thanh Toán, "Từ chối khẩn cấp" Duyệt Giá, "Chờ Nhập Hàng" Vận
+Hành Đơn Hàng). Trả về mảng KHOÁ đã sắp xếp/không trùng (không phải chỉ 1 con số đếm — 1 hồ sơ xử lý
+xong đúng lúc 1 hồ sơ khác phát sinh có thể giữ nguyên đếm nhưng đổi hẳn nội dung). Endpoint mới
+`GET /api/approvals/pending-signature` (`routes/approvals.js`, `requireAuth`) tái dùng nguyên 2 lớp
+cache 3s sẵn có (`lib/appData.js`/`lib/recordStore.js`) — không thêm tầng cache mới.
+
+**Client**: `startApprovalPolling()` (`public/js/core.js`, mô phỏng đúng khuôn `startSessionKeepAlive()`
+sẵn có) — mỗi 20s (`APPROVAL_POLL_INTERVAL_MS`) gọi endpoint trên, so khoá (không so đếm) với lượt poll
+trước; nếu đổi: cập nhật NGAY nhãn đếm nav "Phê Duyệt (N)" (lấy thẳng từ kết quả poll, không đợi tải lại
+DB); nếu KHÔNG có modal nào đang mở (`isAnyModalOpen()`, quy ước `[id$="Modal"]` sẵn có toàn hệ thống)
+mới tải lại toàn bộ `DB.*` (`initDatabase()`) rồi vẽ lại Hộp Thư Phê Duyệt nếu đang đứng đúng màn đó —
+tránh giật dữ liệu khỏi tay người dùng đang thao tác dở ở màn khác. Bắt đầu ở `finishLogin()`, dừng ở
+`logout()` — cùng vòng đời `startSessionKeepAlive()`. **Phạm vi đợt này CHỈ Hộp Thư Phê Duyệt + nhãn đếm
+nav** — sub-tab "Phê duyệt" riêng của từng module (Tài liệu/Văn bản trình/Đăng ký xe/...) CHƯA tự làm
+mới, để lại làm đợt sau nếu cần (mỗi module có hàm render/bộ lọc riêng, tự động hoá cả 9+ module rủi ro
+cao hơn lợi ích so với phạm vi người dùng đã nêu).
+
+Kiểm thử: `tests/test-approval-polling.js` (mới, 10 kịch bản, Node thuần — gọi trực tiếp
+`computeMyPendingApprovalKeys()` phủ đủ 19 nguồn + gọi thật `GET /api/approvals/pending-signature` qua
+router express thật, giả lập tầng lưu trữ) + demo 2 phiên trình duyệt thật (Playwright, xem
+`demo-screenshots/approval-live-update/`, không commit — chỉ trên máy chạy demo).
 
 ## Nhân Sự > Cơ Cấu Tổ Chức: "🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí" — tự động tra ra AI đánh giá vị trí nào, không chọn tay người quản lý trên từng nhân viên (2026-09-06)
 

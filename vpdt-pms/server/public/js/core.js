@@ -4961,6 +4961,7 @@ function finishLogin(user) {
   populateDropdowns();
   switchTab('dashboard');
   startSessionKeepAlive();
+  startApprovalPolling();
   openTakeTestFromQueryParam();
   applyPwaShortcutParam();
 }
@@ -5020,10 +5021,132 @@ function stopSessionKeepAlive() {
   }
 }
 
+// ==========================================================================
+// TỰ LÀM MỚI "HỘP THƯ PHÊ DUYỆT" — không cần bấm F5. Yêu cầu người dùng nguyên văn: "khi tôi đang ở
+// trong một trang mà người gửi phê duyệt thao tác xong tôi phải ấn refresh mới thấy hiện để tôi phê
+// duyệt, tôi muốn tôi ko phải làm gì nó cũng sẽ hiên ra trạng thái luôn". initDatabase() (ngay trên) chỉ
+// tải DB.* MỘT LẦN lúc đăng nhập/khôi phục phiên — sau đó DB chỉ đổi qua CHÍNH thao tác ghi của người
+// dùng hiện tại (syncStorage()) hoặc F5 toàn trang, không có cách nào khác để biết có hồ sơ MỚI cần
+// mình duyệt do NGƯỜI KHÁC vừa gửi trong lúc mình đang đứng nguyên 1 màn hình không thao tác gì.
+//
+// KHÔNG dùng WebSocket/SSE — server chạy PM2 cluster mode nhiều tiến trình độc lập, stateless theo
+// từng request (không sticky session, xem HUONG_DAN_DEPLOY_UBUNTU.md mục 16) — 1 kết nối WS/SSE giữ
+// trong bộ nhớ của ĐÚNG 1 tiến trình sẽ lặng lẽ bỏ sót client mà request sau rơi vào tiến trình khác.
+// Cùng khuôn startSessionKeepAlive() ở trên: poll NHẸ (GET /api/approvals/pending-signature —
+// lib/approvalAggregator.js ở server, KHÔNG phải GET /api/data đầy đủ ~20 collection) mỗi
+// APPROVAL_POLL_INTERVAL_MS, chỉ trả về DANH SÁCH KHOÁ hồ sơ đang chờ ĐÚNG mình duyệt ngay lúc này.
+//
+// So sánh KHOÁ (không so ĐẾM): 1 hồ sơ vừa được xử lý xong đúng lúc 1 hồ sơ khác mới phát sinh trong
+// CÙNG 1 nhịp poll có thể giữ NGUYÊN số lượng nhưng đổi hẳn NỘI DUNG — chỉ so đếm sẽ bỏ sót đúng trường
+// hợp này.
+let approvalPollTimer = null;
+// 2 chữ ký RIÊNG — GỘP LẠI thành 1 biến sẽ tái tạo đúng lỗi đã bắt được lúc kiểm thử (demo 2 phiên trình
+// duyệt thật): nếu chỉ có 1 biến, 1 nhịp poll bị modal chặn (bước b) vẫn cập nhật nhãn NGAY (bước a) và
+// coi như đã "thấy" chữ ký mới đó — nhịp poll KẾ TIẾP dù modal đã đóng, so sánh thấy chữ ký KHÔNG đổi
+// (đúng chữ ký của nhịp trước) nên thoát sớm luôn ở dòng so sánh đầu tiên, KHÔNG BAO GIỜ còn cơ hội chạy
+// initDatabase()+render nữa cho tới khi có hồ sơ mới PHÁT SINH TIẾP — danh sách/Hub kẹt vĩnh viễn ở dữ
+// liệu cũ dù nhãn đếm đã đúng. Tách 2 mốc: lastSeenApprovalSignature (đã HIỂN THỊ ở nhãn hay chưa, luôn
+// cập nhật mỗi khi đổi, bất kể modal) và lastAppliedApprovalSignature (đã THỰC SỰ nạp lại DB.*/vẽ lại
+// Hub cho đúng chữ ký này hay chưa, CHỈ cập nhật sau khi initDatabase()+render chạy xong) — nhịp poll
+// nào cũng thử lại bước (c) nếu 2 mốc này còn lệch nhau, không phụ thuộc gì vào việc nhãn đã đổi từ bao
+// giờ.
+let lastSeenApprovalSignature = null; // null = chưa poll lần nào
+let lastAppliedApprovalSignature = null; // null = chưa từng initDatabase() lại cho lượt polling nào
+const APPROVAL_POLL_INTERVAL_MS = 20 * 1000;
+
+function startApprovalPolling() {
+  stopApprovalPolling();
+  lastSeenApprovalSignature = null;
+  lastAppliedApprovalSignature = null;
+  approvalPollTimer = setInterval(runApprovalPollTick, APPROVAL_POLL_INTERVAL_MS);
+}
+function stopApprovalPolling() {
+  if (approvalPollTimer) {
+    clearInterval(approvalPollTimer);
+    approvalPollTimer = null;
+  }
+}
+
+// Modal đang mở hay không — dùng lại ĐÚNG quy ước đã có sẵn của toàn hệ thống thay vì bày thêm 1 class
+// "modal" mới chỉ để phục vụ hàm này: mọi modal trong index.html là 1 phần tử id KẾT THÚC bằng "Modal",
+// mặc định luôn mang class "hidden" lúc đóng (khớp CLAUDE.md — searchable picker/mọi #xxxModal khác đều
+// theo đúng khuôn này, không có ngoại lệ nào trong 52 modal hiện có thiếu class "hidden" lúc đóng).
+function isAnyModalOpen() {
+  return !!document.querySelector('[id$="Modal"]:not(.hidden)');
+}
+
+async function runApprovalPollTick() {
+  // Đăng xuất giữa chừng nhưng timer chưa kịp dừng (an toàn kép, logout() đã tự stopApprovalPolling()
+  // ngay lập tức nên đây gần như không bao giờ xảy ra) — bỏ qua lượt này thay vì gọi API bằng phiên rỗng.
+  if (!currentUser) return;
+  let keys;
+  try {
+    const res = await fetch('/api/approvals/pending-signature');
+    // 401 (hết phiên) — startSessionKeepAlive() đã lo việc PHÁT HIỆN hết phiên + đăng xuất (ping riêng,
+    // cùng nhịp độc lập); ở đây chỉ lặng lẽ bỏ qua lượt này, không tự ý gọi handleSessionExpired() 2 nơi.
+    if (!res.ok) return;
+    const data = await res.json();
+    keys = Array.isArray(data.keys) ? data.keys : [];
+  } catch (e) {
+    return; // mất mạng tạm thời — bỏ qua, thử lại ở lượt poll kế tiếp (cùng cách startSessionKeepAlive() xử lý)
+  }
+
+  const signature = keys.join('|');
+
+  // (a) Cập nhật NGAY nhãn số đếm trên nav — CỐ TÌNH lấy số từ CHÍNH kết quả poll (keys.length, server đã
+  // tính đúng bằng computeMyPendingApprovalKeys()) thay vì gọi lại updateApprovalHubBadge() (hàm đó tự
+  // tính lại từ DB.* Ở CLIENT, mà DB chưa kịp tải lại ở bước này nên sẽ vẫn ra số CŨ) — nhờ vậy đúng yêu
+  // cầu "không phải làm gì nó cũng hiện trạng thái luôn": số đếm đổi NGAY trong nhịp poll này, kể cả khi
+  // bước (c) bên dưới bị hoãn vì đang có modal mở. Không đụng gì tới 2 nhãn phụ (Góc Chia Sẻ/HR Feedback)
+  // ở đây — 2 nhãn đó nằm ngoài phạm vi endpoint polling này, sẽ tự đúng lại ở bước (c) khi DB tải lại.
+  // CHỈ set khi chữ ký thực sự đổi so với lần THẤY gần nhất — tránh ghi lại DOM mỗi 20s vô ích khi không
+  // có gì thay đổi (nhánh phổ biến nhất).
+  if (signature !== lastSeenApprovalSignature) {
+    lastSeenApprovalSignature = signature;
+    const hubLabel = document.getElementById('approvalHubNavLabel');
+    if (hubLabel && currentUser && canAccessApprovalHub(currentUser)) {
+      hubLabel.innerText = keys.length > 0 ? `Phê Duyệt (${keys.length})` : 'Phê Duyệt';
+    }
+  }
+
+  // Đã nạp lại DB.*/vẽ lại Hub cho ĐÚNG chữ ký này rồi (bước (c) từng chạy xong ở 1 lượt poll trước) ->
+  // không còn gì mới để đồng bộ, dừng ở đây. SO VỚI lastAppliedApprovalSignature (KHÔNG PHẢI
+  // lastSeenApprovalSignature) — 1 lượt poll bị modal chặn ở bước (b) chỉ cập nhật lastSeenApprovalSignature
+  // (bước a) chứ không cập nhật biến này, nên lượt poll KẾ TIẾP (dù chữ ký không đổi thêm nữa) vẫn còn
+  // biết là "còn nợ 1 lượt initDatabase()+render" và sẽ thử lại ngay khi hết modal — xem chú thích khai
+  // báo lastSeenApprovalSignature/lastAppliedApprovalSignature ở trên để biết lỗi cụ thể đã bắt được nếu
+  // gộp chung 1 biến (demo 2 phiên trình duyệt thật).
+  if (signature === lastAppliedApprovalSignature) return;
+
+  // (b) KHÔNG giật dữ liệu ra khỏi tay người dùng đang thao tác dở — còn bất kỳ modal nào đang mở (kể cả
+  // modal KHÔNG liên quan tới phê duyệt, vd đang xem/sửa 1 hồ sơ khác) thì hoãn bước (c) NẶNG hơn ở dưới
+  // sang lượt poll kế tiếp (lastAppliedApprovalSignature CHƯA cập nhật -> lượt kế tiếp sẽ thử lại). Nhãn
+  // ở bước (a) vẫn đã đúng ngay, chỉ nội dung/danh sách là tạm chưa cập nhật.
+  if (isAnyModalOpen()) return;
+
+  // (c) Tải lại toàn bộ DB.* rồi vẽ lại đúng những gì đang HIỂN THỊ và AN TOÀN để vẽ lại: luôn làm mới
+  // lại đầy đủ mọi nhãn nav (updateApprovalHubBadge(), gồm cả 2 nhãn phụ ở trên) + vẽ lại bảng Hộp Thư
+  // Phê Duyệt NẾU người dùng đang đứng đúng màn đó. CỐ TÌNH CHƯA mở rộng sang tự vẽ lại sub-tab "Phê
+  // duyệt" riêng của 9 module khác (Tài liệu/Văn bản trình/Đăng ký xe/...) ở đợt này — mỗi module có hàm
+  // render + bộ lọc riêng, tự động đoán "đang đứng đúng sub-tab nào, lọc gì" cho cả 9 module rủi ro cao
+  // hơn lợi ích so với phạm vi người dùng đã nêu rõ (Hộp Thư Phê Duyệt + số đếm nav) — để lại làm đợt
+  // sau nếu người dùng cần thêm.
+  try {
+    await initDatabase(currentUser);
+  } catch (e) {
+    console.error('runApprovalPollTick: initDatabase() thất bại, giữ nguyên dữ liệu cũ tới lượt poll kế tiếp', e);
+    return; // KHÔNG cập nhật lastAppliedApprovalSignature — lượt poll kế tiếp sẽ tự thử lại.
+  }
+  lastAppliedApprovalSignature = signature;
+  updateApprovalHubBadge();
+  if (!document.getElementById('approvalHubSection').classList.contains('hidden')) renderApprovalHub();
+}
+
 // Đăng xuất phía server (xoá cookie phiên) — chạy song song (fire-and-forget), không chặn việc dọn
 // UI ngay lập tức, vì nhiều nơi gọi logout() đồng bộ (vd. switchTab() khi currentUser rỗng).
 function logout() {
   stopSessionKeepAlive();
+  stopApprovalPolling();
   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   currentUser = null;
   dataReady = false;

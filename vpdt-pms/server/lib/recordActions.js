@@ -4968,6 +4968,12 @@ module.exports = {
   // nữa (migrateStuckOperationApprovalStatuses() ở seedDefaults.js quét sạch bản ghi cũ mỗi lúc khởi
   // động) nên cơ chế "Sửa & Gửi Lại Bổ Sung" không còn đường gọi tới, xoá cùng route ở routes/records.js.
   editOperationOrderDraft, submitOperationOrderDraft,
+  // isApproverForOperationOrderReceipt: trước đây KHÔNG export (chỉ receiveOperationOrderGoods()/
+  // cancelOperationOrderReceipt() ở NGAY TRÊN dùng nội bộ) — giờ export thêm cho
+  // lib/approvalAggregator.js dùng lại NGUYÊN hàm này (thay vì chép lại lần thứ 2 cùng 1 logic quyền)
+  // khi tính mục "operationOrderReceipt" của computeMyPendingApprovalKeys(), mirror ĐÚNG quần thể được
+  // phép bấm "Nhập Hàng"/"Hủy Nhập" thật — xem chú thích đầy đủ tại định nghĩa hàm này ở trên.
+  isApproverForOperationOrderReceipt,
   receiveOperationOrderGoods, cancelOperationOrderReceipt,
   // parseVNDateTime — export thêm cho seedDefaults.js dùng ở migrateApprovedOperationOrdersToAwaitingReceipt()
   // (đọc lại thời điểm APPROVED cuối cùng từ history[] cho hồ sơ operationOrders cũ) — tránh chép lại
