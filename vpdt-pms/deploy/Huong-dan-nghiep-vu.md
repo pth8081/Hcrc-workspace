@@ -394,6 +394,44 @@ với "Tổng Hợp"):
       lâu chưa có ai báo cáo tình hình) — KHÁC với badge "⚠️ Quá hạn" ở cột
       "Dự Kiến Nghiệm Thu" (tab Nghiệm Thu, có từ trước) vốn là cảnh báo "quá
       hạn NGHIỆM THU" (đã tới ngày dự kiến nghiệm thu mà chưa ai chốt xong).
+  - **"🔗 Liên Kết" công việc — phụ thuộc kiểu quản lý dự án (từ v11.6)**: mỗi
+    công việc **LÁ** (không có việc con — cùng khái niệm "công việc lá" dùng
+    cho "Ngày Bắt Đầu"/"Tần Suất Cập Nhật Tiến Độ" ở trên) trong cây Thực Hiện
+    nay có thêm nút **"🔗 Liên kết"**. Bấm vào mở hộp chọn nhiều (checkbox) liệt
+    kê các công việc LÁ KHÁC trong CÙNG hồ sơ (loại sẵn chính nó và mọi lựa
+    chọn sẽ tạo vòng lặp phụ thuộc) — chọn 1 hoặc nhiều công việc mà công việc
+    đang mở **PHỤ THUỘC** vào (gọi là "công việc liên kết").
+    - **Luật chặn "Bắt đầu"**: công việc có liên kết phụ thuộc **CHƯA thể bấm
+      "Bắt đầu thực hiện"** (chuyển từ "Chưa bắt đầu" sang "Đang thực hiện")
+      cho tới khi **TẤT CẢ** công việc liên kết đã đạt trạng thái **"Đã nghiệm
+      thu"**. Dòng công việc bị chặn hiện rõ **"⛔ Chưa thể bắt đầu — đang chờ:
+      [tên các công việc liên kết chưa xong]"** thay cho nút "🔄 Cập Nhật Tiến
+      Độ" — hết chặn ngay khi công việc liên kết cuối cùng được nghiệm thu
+      xong, không cần thao tác gì thêm. Chặn CHỈ áp dụng đúng bước "bắt đầu"
+      (Chưa bắt đầu → Đang thực hiện) — công việc đã bắt đầu thành công 1 lần
+      rồi thì các lần cập nhật tiến độ/nộp nghiệm thu tiếp theo không bị soi
+      lại dù liên kết đổi sau đó.
+    - Dòng công việc có liên kết luôn hiện nhãn nhỏ **"🔗 Phụ thuộc: [tên các
+      công việc liên kết]"** ngay dưới tên, ở CẢ 2 tab Thực Hiện lẫn Nghiệm Thu
+      (mirror đúng chỗ hiện badge "Quá hạn cập nhật tiến độ").
+    - **Chặn vòng lặp phụ thuộc**: không cho lưu nếu tạo thành vòng lặp (trực
+      tiếp A↔B hoặc dài hơn A→B→C→A) — hộp chọn tự LỌC SẴN các công việc sẽ
+      gây vòng lặp (không hiện trong danh sách để chọn); nếu lọt qua thì server
+      vẫn từ chối (400). Tự liên kết chính mình cũng bị từ chối (thông báo
+      riêng, rõ ràng hơn thông báo vòng lặp chung).
+    - Chỉ liên kết được tới công việc **LÁ trong CÙNG hồ sơ** — công việc có
+      con (đầu mục lớn) hoặc thuộc hồ sơ khác đều bị từ chối (400). Chỉ **người
+      quản lý hồ sơ** (mirror đúng quyền Sửa công việc) mới đặt/sửa được liên
+      kết; công việc **đã "Đã nghiệm thu"** thì không sửa liên kết được nữa.
+    - **Xoá 1 công việc mà công việc khác đang phụ thuộc** → hệ thống tự động
+      dọn sạch tham chiếu đó khỏi danh sách liên kết của các công việc còn lại
+      (không để lại liên kết "chết"). **Công việc lá đang có liên kết, sau đó
+      có thêm việc con** (không còn là lá) → lần sửa liên kết kế tiếp tự động
+      dọn sạch liên kết cũ về rỗng (cùng cơ chế "tự dọn sạch" đã dùng cho "Ngày
+      Bắt Đầu"/"Tần Suất Cập Nhật Tiến Độ").
+    - VD đã test: công việc A liên kết phụ thuộc công việc B → A bị chặn "Bắt
+      đầu" trong khi B còn "Đang thực hiện"/"Đang nghiệm thu" → sau khi B được
+      nghiệm thu xong ("Đã nghiệm thu"), A bấm "Bắt đầu" thành công bình thường.
 
 ### 3.6. Hỗ Trợ IT
 

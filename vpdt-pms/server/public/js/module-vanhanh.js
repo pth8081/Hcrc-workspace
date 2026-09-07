@@ -1807,7 +1807,10 @@ function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecu
   let html = '';
   children.forEach(w => {
     const hasChildren = items.some(x => x.parentWorkItemId === w.id);
-    html += buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems);
+    // items (VHST-5) — truyền thêm toàn bộ danh sách công việc cùng hồ sơ để buildOperationWorkItemRow()
+    // tự tra tên/trạng thái các công việc trong w.dependsOnWorkItemIds[] (hiện "🔗 Phụ thuộc: ..." + chặn
+    // nút "🔄 Cập Nhật Tiến Độ" khi còn công việc liên kết chưa nghiệm thu xong).
+    html += buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items);
     html += buildOperationWorkItemRows(items, w.id, depth + 1, mode, canManageExecution, canManageAcceptance, canEditWorkItems);
   });
   return html;
@@ -1863,7 +1866,7 @@ function computeOperationWorkItemProgressUpdateOverdueDays(w, hasChildren) {
   return elapsedDays >= freq ? elapsedDays : null;
 }
 
-function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems) {
+function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecution, canManageAcceptance, canEditWorkItems, items) {
   const indent = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '↳ ' : '');
   const periodLabel = (depth === 0 && w.periodName) ? `<div class="text-[10px] text-indigo-500">📅 ${escapeHtml(w.periodName)}</div>` : '';
   // VHST-4: badge "quá hạn cập nhật tiến độ" — dựng ở nameCell (dùng CHUNG cả EXECUTION lẫn ACCEPTANCE
@@ -1871,7 +1874,15 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   const progressOverdueDays = computeOperationWorkItemProgressUpdateOverdueDays(w, hasChildren);
   const progressOverdueBadge = progressOverdueDays != null
     ? `<div class="mt-0.5"><span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px]">⚠️ Quá hạn cập nhật tiến độ — ${progressOverdueDays} ngày</span></div>` : '';
-  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}${progressOverdueBadge}</td>`;
+  // VHST-5: "🔗 Phụ thuộc: ..." — CHỈ hiện cho công việc LÁ (mirror progressOverdueBadge/badge quá hạn ở
+  // trên, dependsOnWorkItemIds cũng CHỈ áp dụng công việc lá — item vừa có thêm con thì field này coi như
+  // "không còn hiệu lực" dù dữ liệu thô có thể còn sót giá trị CŨ chưa được dọn tới lần sửa/liên kết kế
+  // tiếp, xem chú thích lazy-cleanup ở resolveOperationWorkItemDependencyIds(), lib/recordActions.js).
+  const dependsOnIds = (!hasChildren && Array.isArray(w.dependsOnWorkItemIds)) ? w.dependsOnWorkItemIds : [];
+  const dependencyNames = dependsOnIds.map(id => (items || []).find(x => x.id === id)?.title).filter(Boolean);
+  const dependencyLabel = dependencyNames.length
+    ? `<div class="mt-0.5 text-[10px] text-purple-600">🔗 Phụ thuộc: ${escapeHtml(dependencyNames.join(', '))}</div>` : '';
+  const nameCell = `<td class="border p-2">${indent}${escapeHtml(w.title)}${periodLabel}${w.description ? `<div class="text-[10px] text-gray-400">${escapeHtml(w.description)}</div>` : ''}${progressOverdueBadge}${dependencyLabel}</td>`;
   // Nhiều người phụ trách (Mục E) — nối tên bằng dấu phẩy.
   const assigneeNames = Array.isArray(w.assignedToName) ? w.assignedToName.filter(Boolean) : (w.assignedToName ? [w.assignedToName] : []);
   const assigneeCell = `<td class="border p-2">${escapeHtml(assigneeNames.join(', ') || 'Chưa gán')}</td>`;
@@ -1892,6 +1903,13 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     if (canManageExecution && w.status !== 'DA_NGHIEM_THU') {
       actionHTML += `<button type="button" data-op="openOperationWorkItemFormModal" data-parent-id="${w.id}" class="text-xs px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300 mr-1" title="Thêm việc con">➕ Con</button>`;
     }
+    // VHST-5: "🔗 Liên kết" — CHỈ công việc LÁ (mirror gate dependsOnWorkItemIds server-side, cùng bất
+    // biến "chỉ áp dụng công việc lá" đã dùng cho Ngày bắt đầu/Tần suất), gate quyền canEditWorkItems
+    // (mirror ĐÚNG lib/recordActions.js setOperationWorkItemDependencies() — assertCanManageOperationRecord(),
+    // KHÔNG mở cho assignedTo/isOwner).
+    if (canEditWorkItems && !hasChildren && w.status !== 'DA_NGHIEM_THU') {
+      actionHTML += `<button type="button" data-op="openOperationWorkItemDependencyModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-bold hover:bg-purple-200 mr-1" title="Liên kết công việc phụ thuộc">🔗 Liên kết</button>`;
+    }
     if (!hasChildren) {
       // Correction 3: MỌI công việc lá (cv con lẫn cv gốc không có con, ở MỌI cấp trong cây) đều có
       // nút "🔄 Cập Nhật Tiến Độ" — mirror #taskProgressModal của module Công Việc công ty (dropdown
@@ -1899,8 +1917,19 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
       // rạc "▶ Bắt Đầu"/"📤 Nộp Nghiệm Thu" trước đây. Giữ THÊM 1 nút tắt "✅ Hoàn Thành" khi đang
       // DANG_THUC_HIEN, đúng yêu cầu "có nút cập nhật cv VÀ hoàn thành giống module cv".
       if (w.status !== 'DA_NGHIEM_THU' && (canManageExecution || isOwner)) {
+        // VHST-5: cổng chặn "🔗 Liên kết" — công việc CHƯA bắt đầu (CHUA_BAT_DAU) còn công việc liên kết
+        // (dependsOnWorkItemIds[]) CHƯA nghiệm thu xong (DA_NGHIEM_THU) thì chưa cho bấm "🔄 Cập Nhật
+        // Tiến Độ" (đây chính là nút "Bắt Đầu" của công việc, xem openOperationWorkItemProgressModal() —
+        // CHUA_BAT_DAU chỉ có đúng 1 lựa chọn "Bắt đầu thực hiện"). Đây CHỈ là UX MIRROR — server
+        // (updateOperationWorkItemProgress()) mới THẬT SỰ chặn (400), phòng trường hợp danh sách hiển thị
+        // ở client bị lệch dữ liệu (VD: 2 tab cùng mở, 1 tab vừa nghiệm thu xong việc liên kết).
+        const blockingDeps = w.status === 'CHUA_BAT_DAU' && Array.isArray(w.dependsOnWorkItemIds) && w.dependsOnWorkItemIds.length
+          ? w.dependsOnWorkItemIds.map(id => (items || []).find(x => x.id === id)).filter(dep => dep && dep.status !== 'DA_NGHIEM_THU')
+          : [];
         if (w.status === 'DANG_NGHIEM_THU') {
           actionHTML += `<span class="text-xs text-gray-400 italic">Đang chờ nghiệm thu</span>`;
+        } else if (blockingDeps.length) {
+          actionHTML += `<div class="text-[10px] text-red-600 font-bold">⛔ Chưa thể bắt đầu — đang chờ: ${escapeHtml(blockingDeps.map(d => d.title).join(', '))}</div>`;
         } else {
           actionHTML += `<button type="button" data-op="openOperationWorkItemProgressModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 mr-1">🔄 Cập Nhật Tiến Độ</button>`;
           if (w.status === 'DANG_THUC_HIEN') {
@@ -1999,6 +2028,75 @@ function openOperationWorkItemHistoryModal(id) {
 }
 function closeOperationWorkItemHistoryModal() {
   document.getElementById('operationWorkItemHistoryModal').classList.add('hidden');
+}
+
+// --- Modal "🔗 Liên kết" công việc (VHST-5) — chọn NHIỀU công việc LÁ KHÁC cùng hồ sơ mà công việc đang
+// mở PHỤ THUỘC vào ("công việc liên kết" trong yêu cầu người dùng — công việc liên kết phải "kết thúc"
+// (Đã nghiệm thu) thì công việc này mới bắt đầu được, xem gate ở buildOperationWorkItemRow()/server
+// updateOperationWorkItemProgress()). Danh sách chọn LỌC SẴN client-side (UX, không bắt buộc — server vẫn
+// validate lại 400 nếu lọt): loại chính nó, loại công việc CÓ CON (không phải lá), loại công việc mà chọn
+// vào sẽ tạo vòng lặp phụ thuộc (item đang mở nằm trong chuỗi dependsOnWorkItemIds của ứng viên đó).
+let currentOwiDependencyItemId = null;
+// Dò "chọn ứng viên X sẽ tạo vòng lặp" — mirror ĐÚNG thuật toán assertNoOperationWorkItemDependencyCycle()
+// (lib/recordActions.js): nếu từ X đi theo dependsOnWorkItemIds hiện có mà quay lại đúng itemId đang mở
+// thì X không hợp lệ (item đang mở đã (gián tiếp) phụ thuộc X từ trước — chọn X phụ thuộc ngược lại nữa
+// là vòng lặp).
+function operationWorkItemWouldCycle(itemId, candidateId, items) {
+  const byId = new Map(items.map(w => [w.id, w]));
+  const visited = new Set();
+  const stack = [candidateId];
+  let steps = 0;
+  while (stack.length && steps < 2000) {
+    const cur = stack.pop();
+    steps++;
+    if (cur === itemId) return true;
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    for (const next of (byId.get(cur)?.dependsOnWorkItemIds || [])) stack.push(next);
+  }
+  return false;
+}
+function openOperationWorkItemDependencyModal(id) {
+  const w = (DB.operationWorkItems || []).find(x => x.id === id);
+  if (!w) return;
+  currentOwiDependencyItemId = id;
+  const items = getOperationWorkItemsForRecord(currentWorkItemModalKind, currentWorkItemModalRecordId);
+  const selected = new Set(Array.isArray(w.dependsOnWorkItemIds) ? w.dependsOnWorkItemIds : []);
+  const candidates = items.filter(x => {
+    if (x.id === id) return false;
+    if (items.some(y => y.parentWorkItemId === x.id)) return false; // chỉ chọn công việc LÁ
+    if (!selected.has(x.id) && operationWorkItemWouldCycle(id, x.id, items)) return false; // sẽ tạo vòng lặp
+    return true;
+  });
+  document.getElementById('owiDependencyModalInfo').innerText = `Công việc: ${w.title}`;
+  document.getElementById('owiDependencyList').innerHTML = candidates.length
+    ? candidates.map(x => `
+        <label class="flex items-center gap-2 py-1 border-b last:border-0">
+          <input type="checkbox" class="owi-dependency-cb" value="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
+          <span>${escapeHtml(x.title)} <span class="text-gray-400">(${OPERATION_WORK_ITEM_STATUS_LABELS[x.status] || x.status})</span></span>
+        </label>
+      `).join('')
+    : `<p class="text-gray-400 italic">Không có công việc lá nào khác trong hồ sơ này để liên kết.</p>`;
+  document.getElementById('operationWorkItemDependencyModal').classList.remove('hidden');
+}
+function closeOperationWorkItemDependencyModal() {
+  document.getElementById('operationWorkItemDependencyModal').classList.add('hidden');
+  currentOwiDependencyItemId = null;
+}
+async function submitOperationWorkItemDependencies() {
+  const id = currentOwiDependencyItemId;
+  if (!id) return;
+  const dependsOnWorkItemIds = [...document.querySelectorAll('.owi-dependency-cb:checked')].map(cb => Number(cb.value));
+  let result;
+  try {
+    result = await callRecordAction('operationWorkItems', id, 'dependencies', { dependsOnWorkItemIds });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.operationWorkItems.findIndex(w => w.id === id);
+  if (idx !== -1) DB.operationWorkItems[idx] = result.item;
+  closeOperationWorkItemDependencyModal();
+  renderOperationWorkItemModalBody();
+  renderOperationExecutionList();
+  renderOperationAcceptanceList();
 }
 
 // --- Form thêm/sửa công việc (gốc hoặc con) --- editItem (tuỳ chọn) = công việc đang sửa, xem
@@ -2642,6 +2740,10 @@ const OP_CLICK_ACTIONS = {
   // Bug thật phát hiện lúc audit Nghiệm Thu — xem chú thích đầy đủ ở buildOperationWorkItemRow().
   openOperationWorkItemHistoryModal: el => openOperationWorkItemHistoryModal(Number(el.dataset.id)),
   closeOperationWorkItemHistoryModal: () => closeOperationWorkItemHistoryModal(),
+  // VHST-5: "🔗 Liên kết" công việc — xem openOperationWorkItemDependencyModal()/submitOperationWorkItemDependencies().
+  openOperationWorkItemDependencyModal: el => openOperationWorkItemDependencyModal(Number(el.dataset.id)),
+  closeOperationWorkItemDependencyModal: () => closeOperationWorkItemDependencyModal(),
+  submitOperationWorkItemDependencies: () => submitOperationWorkItemDependencies(),
   closeOperationOrderReceiptActionModal: () => closeOperationOrderReceiptActionModal(),
   confirmOperationOrderReceiptAction: () => confirmOperationOrderReceiptAction(),
   setOperationOrderSubTab: el => setOperationOrderSubTab(el.dataset.tab),

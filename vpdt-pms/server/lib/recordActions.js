@@ -745,6 +745,80 @@ function resolveOperationWorkItemScheduleFields(payload, hasChildren) {
   return { startDate, progressUpdateFrequencyDays };
 }
 
+// VHST-5: "🔗 Liên kết" công việc (dependsOnWorkItemIds) — mirror ĐÚNG khuôn
+// resolveOperationWorkItemScheduleFields() ngay trên (CHỈ áp dụng công việc LÁ, hasChildren=true mà
+// payload có gửi mảng thì từ chối 400; hasChildren=true mà KHÔNG gửi gì thì trả về [] — tự "dọn sạch" ở
+// lần sửa/liên kết KẾ TIẾP sau khi item vừa có thêm con, CÙNG cơ chế lazy-cleanup đã dùng cho
+// startDate/progressUpdateFrequencyDays, KHÔNG cascade chủ động ngay lúc thêm con — xem chú thích đầy đủ
+// ở createOperationWorkItem() child-add route, routes/records.js).
+// itemsForSource = TOÀN BỘ work item khác cùng sourceType/sourceId (route tự lọc sẵn, giống
+// siblingsAndDescendants) — dùng để: (1) đối chiếu từng id liên kết PHẢI tồn tại trong CHÍNH hồ sơ này
+// (id không tìm thấy = coi như liên kết chéo hồ sơ / id giả, cùng cách từ chối "invalid item id" các nơi
+// khác trong module này — KHÔNG cần chặn riêng "khác hồ sơ" vì itemsForSource vốn đã lọc đúng 1 hồ sơ);
+// (2) mỗi công việc liên kết ĐẾN cũng phải là công việc LÁ (không có con) — cùng bất biến "chỉ liên kết
+// giữa các công việc lá thật sự", đầu mục tổ chức tự cascade trạng thái theo con, không phải 1 "việc" độc
+// lập có thể "kết thúc" theo nghĩa nghiệm thu tay; (3) dò vòng lặp phụ thuộc (assertNoOperationWorkItemDependencyCycle()).
+// selfId = id của item ĐANG sửa (null khi TẠO MỚI — item vừa tạo chưa thể xuất hiện trong dependsOnWorkItemIds
+// của ai, và cũng không thể tự liên kết chính nó vì id chưa tồn tại lúc payload được soạn) — dùng để chặn
+// tự liên kết chính mình (thông báo RIÊNG, rõ ràng hơn dựa vào assertNoOperationWorkItemDependencyCycle()
+// vốn cũng bắt được trường hợp này nhưng thông báo chung chung "tạo vòng lặp").
+function resolveOperationWorkItemDependencyIds(payload, hasChildren, itemsForSource, selfId) {
+  const raw = payload?.dependsOnWorkItemIds;
+  const hasRaw = Array.isArray(raw) && raw.length > 0;
+  if (hasRaw && hasChildren) {
+    throw new HttpError(400, 'Công việc có việc con (đầu mục tổ chức) không thể liên kết phụ thuộc công việc khác — chỉ áp dụng cho công việc lá.');
+  }
+  if (!hasRaw) return [];
+  const items = itemsForSource || [];
+  const ids = [];
+  const seen = new Set();
+  for (const v of raw) {
+    const id = Number(v);
+    if (!Number.isFinite(id)) throw new HttpError(400, 'Danh sách công việc liên kết không hợp lệ');
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (selfId != null && id === selfId) {
+      throw new HttpError(400, 'Công việc không thể liên kết phụ thuộc vào chính nó');
+    }
+    const target = items.find(w => w.id === id);
+    if (!target) throw new HttpError(400, 'Không tìm thấy công việc liên kết trong hồ sơ này');
+    if (items.some(w => w.parentWorkItemId === id)) {
+      throw new HttpError(400, `Công việc liên kết "${target.title}" đang có việc con — chỉ liên kết được tới công việc lá`);
+    }
+    ids.push(id);
+  }
+  if (selfId != null) assertNoOperationWorkItemDependencyCycle(items, selfId, ids);
+  return ids;
+}
+
+// Dò vòng lặp phụ thuộc khi lưu dependsOnWorkItemIds — mirror ĐÚNG thuật toán assertNoManagerCycle()
+// (lib/recordViewScope.js, dùng cho quan hệ quản lý trực tiếp cơ cấu tổ chức): duyệt theo cạnh từ node
+// đang xét, nếu đi lại tới đúng node ban đầu thì có vòng lặp. KHÁC managerUsername (mỗi người CHỈ 1 quản
+// lý trực tiếp -> duyệt bằng vòng lặp "cur = cur.manager" đơn giản): 1 work item có thể liên kết NHIỀU
+// công việc cùng lúc (dependsOnWorkItemIds là mảng) nên phải duyệt DFS qua ngăn xếp (stack), không phải
+// 1 chuỗi đơn.
+// itemId = id item đang sửa (đã CHẮC CHẮN != null, xem điều kiện gọi ở resolveOperationWorkItemDependencyIds()
+// ngay trên — TẠO MỚI luôn selfId=null nên không gọi vào đây, đúng vì item mới không thể nằm trong bất kỳ
+// chuỗi phụ thuộc cũ nào). dependsOnWorkItemIds = mảng id ĐANG ĐỀ XUẤT lưu cho itemId (item.id CHƯA được
+// cập nhật trong itemsForSource lúc gọi hàm này nên phải override thủ công qua edgesOf()).
+function assertNoOperationWorkItemDependencyCycle(itemsForSource, itemId, dependsOnWorkItemIds) {
+  const byId = new Map((itemsForSource || []).map(w => [w.id, w]));
+  const edgesOf = (id) => id === itemId ? dependsOnWorkItemIds : (byId.get(id)?.dependsOnWorkItemIds || []);
+  const visited = new Set();
+  const stack = [...dependsOnWorkItemIds];
+  let steps = 0;
+  while (stack.length && steps < 2000) {
+    const cur = stack.pop();
+    steps++;
+    if (cur === itemId) {
+      throw new HttpError(400, 'Liên kết công việc tạo thành vòng lặp phụ thuộc — vui lòng kiểm tra lại');
+    }
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    for (const next of edgesOf(cur)) stack.push(next);
+  }
+}
+
 // Cảnh báo THỤ ĐỘNG "cần cập nhật tiến độ" — tính-lúc-đọc, KHÔNG cron job/không job nhắc chủ động (đúng
 // quyết định thiết kế đã chốt, mirror cách làm "Dự Kiến Nghiệm Thu" ở computeOperationWorkItemExpectedAcceptanceDate()
 // ngay dưới — CHỈ để hiển thị badge, không tự động đổi trạng thái/gửi email). Tái sử dụng ĐÚNG cơ chế
@@ -831,6 +905,9 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   // Ngày bắt đầu + Tần suất cập nhật tiến độ — CHỈ việc LÁ, luôn gọi hasChildren=false vì công việc VỪA
   // tạo chưa thể có con nào (xem resolveOperationWorkItemScheduleFields() ở trên).
   const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, false);
+  // VHST-5: "🔗 Liên kết" — CHỈ việc LÁ (cùng lý do hasChildren=false luôn đúng lúc TẠO MỚI ở trên).
+  // selfId=null (item chưa có id) — xem chú thích đầy đủ ở resolveOperationWorkItemDependencyIds().
+  const dependsOnWorkItemIds = resolveOperationWorkItemDependencyIds(payload, false, siblingsAndDescendants, null);
   return {
     id: Date.now(),
     parentWorkItemId,
@@ -838,6 +915,7 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     title,
     description: String(payload?.description || '').trim(),
     startDate, progressUpdateFrequencyDays,
+    dependsOnWorkItemIds,
     // Mảng NHIỀU người phụ trách (Mục E, trước đây 1 string|null) — assignedToName lưu-cứng-lúc-ghi
     // (snapshot tên hiển thị, không derive lúc render), cùng thứ tự với assignedTo.
     assignedTo, assignedToName,
@@ -868,7 +946,10 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
 // quyền quản lý hồ sơ" (canManageOperationRecord(), nay thay cho admin/operationExecutionManage cũ) —
 // KHÔNG đổi cơ chế assignedTo[] chính (isOwner) theo đúng yêu cầu "GIỮ NGUYÊN người thực hiện/nghiệm
 // thu chỉ thao tác đúng việc được giao", chỉ đổi flag nào thoả override.
-function updateOperationWorkItemProgress(user, item, children, newStatus, note, sourceRecord) {
+// itemsForSource (VHST-5, route tự truyền — TOÀN BỘ work item cùng sourceType/sourceId, giống
+// siblingsAndDescendants) — dùng để tra trạng thái từng công việc trong dependsOnWorkItemIds[] lúc cổng
+// chặn "🔗 Liên kết" (xem khối kiểm tra ngay dưới allowedNext).
+function updateOperationWorkItemProgress(user, item, children, newStatus, note, sourceRecord, itemsForSource) {
   // Toàn quyền quản lý hồ sơ (admin/operationRecordManageAll/creator+operationStoreOpenCreate|
   // operationRepairCreate) xử lý được mọi việc; ngoài ra CHỈ đúng người phụ trách (item.assignedTo[],
   // Mục E — nay có thể NHIỀU người) mới cập nhật được việc của chính mình — trước đây field này chỉ
@@ -894,6 +975,25 @@ function updateOperationWorkItemProgress(user, item, children, newStatus, note, 
   };
   if (!(allowedNext[item.status] || []).includes(newStatus)) {
     throw new HttpError(409, `Không thể chuyển trạng thái từ "${item.status}" sang "${newStatus}"`);
+  }
+  // VHST-5: "🔗 Liên kết" — công việc có dependsOnWorkItemIds[] (công việc CẦN liên kết đến, tức "công
+  // việc liên kết" trong yêu cầu người dùng: "khi công việc liên kết đến các công việc khác kết thúc thì
+  // các công việc khác mới có thể bắt đầu") CHƯA thể chuyển CHUA_BAT_DAU -> DANG_THUC_HIEN nếu còn BẤT KỲ
+  // công việc nào trong danh sách liên kết chưa DA_NGHIEM_THU. CHỈ chặn đúng bước "bắt đầu" (CHUA_BAT_DAU
+  // -> DANG_THUC_HIEN) — lần lặp lại DANG_THUC_HIEN (cập nhật ghi chú tiến độ)/chuyển DANG_NGHIEM_THU
+  // KHÔNG cần soi lại (đã qua được "bắt đầu" 1 lần rồi thì không cần chặn lần nữa dù liên kết đổi sau đó —
+  // không nằm trong yêu cầu, giữ scope tối thiểu đúng câu "chưa kết thúc thì không thể bắt đầu"). Id liên
+  // kết KHÔNG còn tồn tại (đã bị xoá — lẽ ra đã được dọn ở deleteOperationWorkItem() route, xem
+  // cleanupOperationWorkItemDependenciesOnDelete() routes/records.js, còn sót lại là trường hợp hiếm) tự
+  // bỏ qua (không chặn) thay vì coi là "chưa xong" — an toàn hơn là khoá cứng vĩnh viễn vì 1 tham chiếu
+  // đã chết.
+  if (newStatus === 'DANG_THUC_HIEN' && item.status === 'CHUA_BAT_DAU' && Array.isArray(item.dependsOnWorkItemIds) && item.dependsOnWorkItemIds.length) {
+    const byId = new Map((itemsForSource || []).map(w => [w.id, w]));
+    const blocking = item.dependsOnWorkItemIds.map(id => byId.get(id)).filter(dep => dep && dep.status !== 'DA_NGHIEM_THU');
+    if (blocking.length) {
+      const names = blocking.map(d => d.title).join(', ');
+      throw new HttpError(400, `Chưa thể bắt đầu công việc này — đang chờ hoàn thành nghiệm thu công việc liên kết: ${names}`);
+    }
   }
   item.status = newStatus;
   // Mục D: mốc để tính "Dự Kiến Nghiệm Thu" (completedAt, IMMEDIATE thì đúng ngày này; DELAYED thì +
@@ -1045,6 +1145,26 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord, hasChil
   item.startDate = startDate; item.progressUpdateFrequencyDays = progressUpdateFrequencyDays;
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
+  return item;
+}
+
+// VHST-5: "🔗 Liên kết" công việc — route sub-endpoint RIÊNG (POST /operationWorkItems/:id/dependencies,
+// KHÔNG gộp vào editOperationWorkItem() ở trên) để modal "🔗 Liên kết" chỉ cần gửi đúng 1 field
+// dependsOnWorkItemIds, không phải resend toàn bộ title/mô tả/người phụ trách/... như editOperationWorkItem()
+// yêu cầu (mirror CÁCH TÁCH route riêng đã dùng cho /progress, /accept — mỗi route chỉ đổi ĐÚNG phần dữ
+// liệu của thao tác đó). Quyền: mirror editOperationWorkItem() — CHỈ "toàn quyền quản lý hồ sơ"
+// (assertCanManageOperationRecord()) — liên kết phụ thuộc là cấu hình CẤU TRÚC công việc (giống Sửa),
+// KHÔNG mở cho assignedTo/isOwner (khác updateOperationWorkItemProgress/acceptOperationWorkItem — 2 thao
+// tác đó là "làm việc", còn liên kết là "thiết lập luật chơi" cho công việc).
+// itemsForSource/hasChildren — route tự tính, CÙNG khuôn tham số editOperationWorkItem() ở trên.
+function setOperationWorkItemDependencies(user, item, payload, itemsForSource, hasChildren, sourceRecord) {
+  assertCanManageOperationRecord(user, sourceRecord, item.sourceType, 'Bạn không có quyền liên kết công việc này');
+  if (item.status === 'DA_NGHIEM_THU') {
+    throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa liên kết');
+  }
+  item.dependsOnWorkItemIds = resolveOperationWorkItemDependencyIds(payload, hasChildren, itemsForSource, item.id);
+  item.history = item.history || [];
+  item.history.push({ action: 'DEPENDENCIES_EDITED', by: user.username, byName: user.name, time: nowVN() });
   return item;
 }
 
@@ -5163,5 +5283,7 @@ module.exports = {
   canManageOperationRecord, assertCanManageOperationRecord,
   computeOperationWorkItemExpectedAcceptanceDate,
   // Ngày bắt đầu + Tần suất cập nhật tiến độ (VHST-4) — export cho test.
-  resolveOperationWorkItemScheduleFields, computeOperationWorkItemProgressUpdateOverdueDays
+  resolveOperationWorkItemScheduleFields, computeOperationWorkItemProgressUpdateOverdueDays,
+  // "🔗 Liên kết" công việc (VHST-5) — export cho test + routes/records.js.
+  resolveOperationWorkItemDependencyIds, assertNoOperationWorkItemDependencyCycle, setOperationWorkItemDependencies
 };

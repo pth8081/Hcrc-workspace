@@ -1,8 +1,87 @@
 # Phiên bản hiện tại
 
-**11.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > 🏬 Siêu Thị > Thực Hiện: "🔗 Liên Kết" công việc — phụ thuộc kiểu quản lý dự án (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Có phần liên kết công việc trên từng công việc con hoặc công việc lớn
+không có công việc con, ý tương là tại mỗi công việc sẽ có nút thao tác liên kết, khi chọn thao tác liên kết
+sẽ mở ra các đầu mục cv cần liên kêt và có thể chọn nhiều đầu mục công viêc. Viêc liên kêt đam bảo khi công
+việc liên kết đến các công việc khác kêt thuc thì các công việc khác mới có thể bát đầu công viêc, nếu công
+việc liên kết chưa kết thúc thì không thể thự hiện bắt đầu công việc được (giống quản lý dự án)".
+
+**Thiết kế đã triển khai** (item thứ 5/7 trong loạt việc Vận Hành > Siêu Thị đang làm, nối tiếp VHST-4 ở
+mục ngay dưới — cùng khái niệm "công việc lá" và cùng khuôn "tự dọn sạch field khi item không còn là lá"):
+- Thêm 1 field mới, optional, trên mỗi `operationWorkItems` — **`dependsOnWorkItemIds`** (mảng id các công
+  việc mà item này PHỤ THUỘC vào — "công việc liên kết") — **CHỈ áp dụng công việc LÁ**, cả ở item ĐANG sửa
+  lẫn từng item được TRỎ TỚI (không liên kết được tới đầu mục có con). `resolveOperationWorkItemDependencyIds()`
+  mới (`lib/recordActions.js`, mirror khuôn `resolveOperationWorkItemScheduleFields()` của VHST-4) validate:
+  mỗi id phải tồn tại trong CHÍNH hồ sơ (`itemsForSource`, nên tự động chặn liên kết chéo hồ sơ — id lạ =
+  "không tìm thấy"), phải trỏ tới đúng công việc LÁ, không tự liên kết chính mình, và **dò vòng lặp phụ
+  thuộc** qua `assertNoOperationWorkItemDependencyCycle()` mới (mirror thuật toán `assertNoManagerCycle()`
+  có sẵn ở `lib/recordViewScope.js` cho quan hệ quản lý trực tiếp — khác ở chỗ 1 work item có thể phụ thuộc
+  NHIỀU công việc cùng lúc nên duyệt DFS qua ngăn xếp thay vì 1 chuỗi đơn).
+- **Cổng chặn "Bắt đầu"** — `updateOperationWorkItemProgress()` (`lib/recordActions.js`) nhận thêm tham số
+  `itemsForSource`, chặn (400) đúng bước "Chưa bắt đầu → Đang thực hiện" nếu còn BẤT KỲ công việc trong
+  `dependsOnWorkItemIds[]` chưa đạt `DA_NGHIEM_THU` (thông báo nêu rõ tên từng công việc còn chặn) — CHỈ
+  chặn bước "bắt đầu", không soi lại các bước sau (lặp lại "Đang thực hiện"/nộp nghiệm thu) dù liên kết đổi
+  sau đó. Id liên kết không còn tồn tại (đã bị xoá) tự bỏ qua, không chặn cứng.
+- Route sub-endpoint RIÊNG **`POST /operationWorkItems/:id/dependencies`** (mirror `/progress`, `/accept` —
+  mỗi route chỉ đổi đúng phần dữ liệu của thao tác đó) gọi `setOperationWorkItemDependencies()` mới — quyền
+  CHỈ người quản lý hồ sơ (mirror `editOperationWorkItem()`), chặn sửa liên kết khi item đã `DA_NGHIEM_THU`.
+- **Dọn dẹp dữ liệu** (2 quyết định thiết kế):
+  - **Xoá 1 (nhánh) công việc** → `cleanupOperationWorkItemDependenciesOnDelete()` mới (`routes/records.js`)
+    tự động dọn sạch id vừa xoá khỏi `dependsOnWorkItemIds[]` của MỌI công việc khác còn lại cùng hồ sơ có
+    tham chiếu tới — chủ động ngay lúc xoá (KHÁC lazy-cleanup ở dưới), tránh để lại liên kết "chết".
+  - **Công việc lá đang có liên kết, sau đó có thêm việc con** (không còn là lá) → mirror ĐÚNG khuôn "tự dọn
+    sạch" đã dùng cho `startDate`/`progressUpdateFrequencyDays` (VHST-4): KHÔNG cascade chủ động ngay lúc
+    thêm con, mà tự dọn về `[]` ở lần gọi `/dependencies` KẾ TIẾP không gửi lại field này — nhất quán với
+    tiền lệ đã có, và vô hại vì `updateOperationWorkItemProgress()` đã chặn thao tác tay trên công việc có
+    con TRƯỚC KHI chạm tới cổng chặn liên kết.
+- **UI** (`public/js/module-vanhanh.js` + `public/index.html`): nút mới **"🔗 Liên kết"** trên mỗi dòng công
+  việc LÁ (tab Thực Hiện) mở modal `operationWorkItemDependencyModal` — checkbox nhiều lựa chọn liệt kê các
+  công việc LÁ KHÁC cùng hồ sơ, tự LỌC SẴN client-side loại chính nó + mọi lựa chọn sẽ tạo vòng lặp (không
+  bắt buộc, server vẫn validate lại). Dòng công việc có liên kết hiện nhãn **"🔗 Phụ thuộc: [tên các công
+  việc]"**; nút "🔄 Cập Nhật Tiến Độ" bị thay bằng cảnh báo **"⛔ Chưa thể bắt đầu — đang chờ: [tên các công
+  việc chưa xong]"** khi còn bị chặn (UX mirror — server mới là nơi thực sự chặn).
+
+**Đã sửa**:
+- `lib/recordActions.js` — thêm `resolveOperationWorkItemDependencyIds()`, `assertNoOperationWorkItemDependencyCycle()`,
+  `setOperationWorkItemDependencies()`; tích hợp vào `createOperationWorkItem()` (`hasChildren` luôn `false`)
+  và cổng chặn mới trong `updateOperationWorkItemProgress()` (nhận thêm tham số `itemsForSource`); export cả
+  3 hàm mới cho test.
+- `routes/records.js` — route mới `POST /operationWorkItems/:id/dependencies`; `POST .../progress` truyền
+  thêm `itemsForSource`; thêm `cleanupOperationWorkItemDependenciesOnDelete()`, gọi ngay sau
+  `deleteWorkItemsByIds()` ở route `/delete`.
+- `public/js/module-vanhanh.js` — nút "🔗 Liên kết" + nhãn "🔗 Phụ thuộc" trong `buildOperationWorkItemRow()`
+  (nhận thêm tham số `items`); cổng chặn UX trên nút "🔄 Cập Nhật Tiến Độ"; modal mới
+  `openOperationWorkItemDependencyModal()`/`closeOperationWorkItemDependencyModal()`/
+  `submitOperationWorkItemDependencies()` + hàm phụ `operationWorkItemWouldCycle()` (lọc client-side).
+- `public/index.html` — modal mới `#operationWorkItemDependencyModal`.
+- `tests/testHarness.js` — mock route `operationWorkItems:progress` truyền thêm `itemsForSource`; mock route
+  mới `operationWorkItems:dependencies`; route `/delete` cascade-clean `dependsOnWorkItemIds` (mirror route
+  thật).
+
+**Kiểm thử**: file mới `tests/test-operation-workitem-dependencies.js` (23 kịch bản THUẦN, không cần
+Playwright/SQL Server — validate id/leaf-only/tự liên kết/vòng lặp trực tiếp+dài, tích hợp create/set, cổng
+chặn `updateOperationWorkItemProgress()` đủ các nhánh: chặn khi còn liên kết dở, cho qua khi đã nghiệm thu
+xong, nhiều liên kết còn 1 cái dở vẫn chặn đúng tên, không liên kết thì không chặn, id chết tự bỏ qua, không
+soi lại khi lặp lại "Đang thực hiện") — 23/23 pass. Mở rộng `tests/test-operation-store-lifecycle.js` thêm
+10 kịch bản tích hợp qua route/UI thật (liên kết A→B qua route thật + chặn 400 + UI hiện đúng nhãn/cảnh báo,
+B nghiệm thu xong thì A bắt đầu được, vòng lặp trực tiếp bị chặn, tự liên kết chính mình bị chặn, liên kết
+chéo hồ sơ bị chặn, đặt liên kết trên công việc có con bị chặn, xoá công việc bị phụ thuộc tự dọn tham chiếu,
+leaf→non-leaf tự dọn liên kết) — 10/10 pass (tổng file lifecycle: 100/100). Chạy toàn bộ `tests/test-*.js`
+(71 file kể cả file mới) — 0 lỗi mới so với baseline (đã tự xác nhận lại baseline bằng `git stash`, KHÔNG
+chỉ tin theo ghi chú cũ): chỉ còn đúng **2** kịch bản lỗi phụ thuộc SQL Server thật đã biết từ trước
+(`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`).
+
+**Deploy-impact**: KHÔNG có gì ngoài copy code + `pm2 restart` — `dependsOnWorkItemIds` chỉ là 1 field JSON
+thêm vào `Payload` (`dbo.OperationWorkItems`, vốn đã là JSON tự do — CHỈ `Status`/`ParentWorkItemId`/
+`SourceType`/`SourceId` là cột SQL thật, xem `lib/operationWorkItemStore.js`), KHÔNG đổi `schema.sql`, không
+thêm biến môi trường, không đổi `dependencies`. Công việc CŨ (chưa có `dependsOnWorkItemIds`) tự hiểu ngầm
+là chưa liên kết gì — không bao giờ bị chặn, tương thích ngược hoàn toàn.
 
 ## Vận Hành > 🏬 Siêu Thị > Thực Hiện: "Ngày bắt đầu" + "Tần suất cập nhật tiến độ" (cảnh báo THỤ ĐỘNG quá hạn cập nhật, không cron job) (2026-09-07)
 

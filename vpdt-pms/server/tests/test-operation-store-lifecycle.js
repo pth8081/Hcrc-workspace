@@ -1825,6 +1825,212 @@ async function main() {
         DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id);
       }, childId);
     });
+
+    // ===== VHST-5: "🔗 Liên kết" công việc (dependsOnWorkItemIds) — công việc A liên kết ("phụ thuộc")
+    // tới công việc B thì A chỉ "Bắt đầu" (CHUA_BAT_DAU -> DANG_THUC_HIEN) được khi B đã "Đã nghiệm thu"
+    // (DA_NGHIEM_THU). Logic thuần (resolveOperationWorkItemDependencyIds/assertNoOperationWorkItemDependencyCycle/
+    // setOperationWorkItemDependencies/cổng chặn ở updateOperationWorkItemProgress) đã test đủ ở
+    // tests/test-operation-workitem-dependencies.js — phần dưới đây CHỈ test TÍCH HỢP qua route thật + UI
+    // thật. Dùng hồ sơ RIÊNG (gRecordId) để không đụng trạng thái các hồ sơ khác. =====
+    let gRecordId = null, gItemAId = null, gItemBId = null;
+    await run.run('VHST-5: chuẩn bị hồ sơ RIÊNG (gRecordId) + 2 công việc lá A (sẽ phụ thuộc), B (nền tảng)', async () => {
+      await loginAs(page, CREATOR);
+      gRecordId = await page.evaluate(async () => {
+        const res = await callCreateAction('operationStoreOpenings', {
+          storeName: 'Siêu thị Test VHST-5 Liên Kết', address: 'G', area: 10,
+          approvedBudget: 10000000, expectedOpenDate: '', personInCharge: '', note: ''
+        });
+        DB.operationStoreOpenings.push(res.item);
+        return res.item.id;
+      });
+      assert(gRecordId, 'Phải tạo được hồ sơ RIÊNG cho VHST-5');
+      await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', { items: [{ content: 'Hạng mục G', amount: 1000000, description: '', note: '' }] });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+      }, gRecordId);
+
+      await loginAs(page, EXECUTOR);
+      gItemAId = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Công việc A (phụ thuộc B)' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, gRecordId);
+      gItemBId = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Công việc B (nền tảng)' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, gRecordId);
+      assert(gItemAId && gItemBId, 'Phải tạo được 2 công việc lá A, B');
+    });
+
+    await run.run('VHST-5: liên kết A phụ thuộc B qua route thật (/dependencies) -> lưu đúng; A chưa thể "Bắt đầu" khi B chưa nghiệm thu xong (400)', async () => {
+      const linked = await page.evaluate(async ({ aId, bId }) => {
+        const res = await callRecordAction('operationWorkItems', aId, 'dependencies', { dependsOnWorkItemIds: [bId] });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === aId); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, { aId: gItemAId, bId: gItemBId });
+      assertEqual(JSON.stringify(linked.dependsOnWorkItemIds), JSON.stringify([gItemBId]), 'A phải lưu đúng dependsOnWorkItemIds = [B]');
+
+      const blocked = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN', note: '' });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, gItemAId);
+      assert(!blocked.ok, 'A phải bị chặn "Bắt đầu" (400) vì B (công việc liên kết) chưa nghiệm thu xong');
+      assertIncludes(blocked.message, 'Công việc B (nền tảng)', 'Thông báo lỗi phải nêu rõ tên công việc liên kết còn chặn');
+    });
+
+    await run.run('VHST-5: UI thật — dòng công việc A hiện nút "🔗 Liên kết" + nhãn "🔗 Phụ thuộc: ..." + cảnh báo "⛔ Chưa thể bắt đầu" thay cho nút "🔄 Cập Nhật Tiến Độ"', async () => {
+      const html = await page.evaluate(({ kind, id }) => {
+        openOperationWorkItemModal(kind, id, 'EXECUTION');
+        const row = [...document.querySelectorAll('#operationWorkItemTableBody tr')].find(tr => tr.textContent.includes('Công việc A (phụ thuộc B)'));
+        const out = row ? row.innerHTML : null;
+        closeOperationWorkItemModal();
+        return out;
+      }, { kind: 'operationStoreOpenings', id: gRecordId });
+      assert(html !== null, 'Phải tìm thấy dòng công việc A');
+      assertIncludes(html, '🔗 Liên kết', 'Dòng công việc A (lá) phải có nút "🔗 Liên kết"');
+      assertIncludes(html, '🔗 Phụ thuộc', 'Dòng công việc A phải hiện nhãn phụ thuộc');
+      assertIncludes(html, 'Công việc B (nền tảng)', 'Nhãn phụ thuộc phải nêu tên B');
+      assertIncludes(html, 'Chưa thể bắt đầu', 'Phải hiện cảnh báo chặn bắt đầu thay vì nút Cập Nhật Tiến Độ');
+    });
+
+    // Cố ý test VÒNG LẶP TRƯỚC khi đưa B lên DA_NGHIEM_THU (bước ngay dưới) — sau khi B đã "Đã nghiệm thu"
+    // thì setOperationWorkItemDependencies() tự chặn (409, "đã nghiệm thu xong") MỌI thay đổi liên kết
+    // trên B trước khi kịp chạm tới bước dò vòng lặp, không còn quan sát được lỗi 400 "vòng lặp" nữa.
+    await run.run('VHST-5: vòng lặp phụ thuộc trực tiếp (B cố liên kết ngược lại phụ thuộc A, trong khi A đã phụ thuộc B) bị từ chối (400)', async () => {
+      const blocked = await page.evaluate(async ({ bId, aId }) => {
+        try {
+          await callRecordAction('operationWorkItems', bId, 'dependencies', { dependsOnWorkItemIds: [aId] });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, { bId: gItemBId, aId: gItemAId });
+      assert(!blocked.ok, 'B liên kết ngược lại phụ thuộc A (A đã phụ thuộc B) phải bị từ chối — vòng lặp');
+      assertIncludes(blocked.message, 'vòng lặp', 'Thông báo lỗi phải nêu rõ vòng lặp phụ thuộc');
+    });
+
+    await run.run('VHST-5: đưa B tới "Đã nghiệm thu" (DA_NGHIEM_THU) -> A CÓ THỂ "Bắt đầu" bình thường (không còn bị chặn)', async () => {
+      await page.evaluate(async (id) => {
+        await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN', note: '' });
+        await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_NGHIEM_THU', note: '' });
+        const res = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu (test VHST-5)' });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === id); DB.operationWorkItems[idx] = res.item;
+      }, gItemBId);
+
+      const unblocked = await page.evaluate(async (id) => {
+        try {
+          const res = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN', note: '' });
+          const idx = DB.operationWorkItems.findIndex(w => w.id === id); DB.operationWorkItems[idx] = res.item;
+          return { ok: true, status: res.item.status };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, gItemAId);
+      assert(unblocked.ok, `A phải "Bắt đầu" được sau khi B đã nghiệm thu xong, lỗi: ${unblocked.message || ''}`);
+      assertEqual(unblocked.status, 'DANG_THUC_HIEN', 'A phải chuyển đúng sang DANG_THUC_HIEN');
+    });
+
+    await run.run('VHST-5: tự liên kết chính mình bị từ chối (400)', async () => {
+      const blocked = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationWorkItems', id, 'dependencies', { dependsOnWorkItemIds: [id] });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, gItemAId);
+      assert(!blocked.ok, 'Tự liên kết chính mình phải bị từ chối');
+      assertIncludes(blocked.message, 'chính nó', 'Thông báo lỗi phải nêu rõ không thể tự liên kết chính mình');
+    });
+
+    await run.run('VHST-5: liên kết CHÉO hồ sơ khác (id công việc thuộc hồ sơ fRecordId) bị từ chối (400, coi như id không hợp lệ)', async () => {
+      const blocked = await page.evaluate(async ({ aId, foreignId }) => {
+        try {
+          await callRecordAction('operationWorkItems', aId, 'dependencies', { dependsOnWorkItemIds: [foreignId] });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, { aId: gItemAId, foreignId: fLeafId });
+      assert(!blocked.ok, 'Liên kết tới công việc thuộc hồ sơ KHÁC (fLeafId thuộc fRecordId) phải bị từ chối');
+      assertIncludes(blocked.message, 'Không tìm thấy', 'Thông báo lỗi phải nêu rõ không tìm thấy công việc liên kết trong hồ sơ này');
+    });
+
+    let gItemCId = null;
+    await run.run('VHST-5: đặt liên kết trên công việc CÓ CON (không phải lá) bị từ chối (400)', async () => {
+      gItemCId = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Công việc C (sẽ có con)' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, gRecordId);
+      const childOfCId = await page.evaluate(async ({ id, parentId }) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: parentId, title: 'Con của C' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, { id: gRecordId, parentId: gItemCId });
+      assert(childOfCId, 'Phải tạo được con của C');
+
+      const blocked = await page.evaluate(async ({ cId, bId }) => {
+        try {
+          await callRecordAction('operationWorkItems', cId, 'dependencies', { dependsOnWorkItemIds: [bId] });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, { cId: gItemCId, bId: gItemBId });
+      assert(!blocked.ok, 'C có con (không phải lá) phải bị từ chối đặt liên kết');
+      assertIncludes(blocked.message, 'công việc lá', 'Thông báo lỗi phải nêu rõ chỉ áp dụng công việc lá');
+    });
+
+    await run.run('VHST-5: xoá công việc mà công việc KHÁC đang phụ thuộc -> tự động dọn sạch dependsOnWorkItemIds ở công việc còn lại', async () => {
+      const [dId, eId] = await page.evaluate(async (id) => {
+        const d = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Công việc D (phụ thuộc E)' });
+        const e = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Công việc E (sẽ bị xoá)' });
+        DB.operationWorkItems.push(d.item, e.item);
+        return [d.item.id, e.item.id];
+      }, gRecordId);
+
+      const dLinked = await page.evaluate(async ({ dId, eId }) => {
+        const res = await callRecordAction('operationWorkItems', dId, 'dependencies', { dependsOnWorkItemIds: [eId] });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === dId); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, { dId, eId });
+      assertEqual(JSON.stringify(dLinked.dependsOnWorkItemIds), JSON.stringify([eId]), 'D phải lưu đúng liên kết phụ thuộc E trước khi xoá E');
+
+      await page.evaluate(async (id) => {
+        await callRecordAction('operationWorkItems', id, 'delete', {});
+        DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id);
+      }, eId);
+
+      // Tải lại toàn bộ DB từ server (loginAs() gọi initDatabase() thật) để đọc đúng dữ liệu D SAU cascade
+      // cleanup phía server (route /delete không trả lại item D trong response, chỉ {ok:true}).
+      await loginAs(page, EXECUTOR);
+      const dAfterFresh = await page.evaluate((id) => (DB.operationWorkItems || []).find(w => w.id === id), dId);
+      assert(dAfterFresh, 'Phải vẫn tìm thấy D sau khi xoá E');
+      assertEqual(JSON.stringify(dAfterFresh.dependsOnWorkItemIds), '[]', 'D phải tự động dọn sạch dependsOnWorkItemIds (hết tham chiếu tới E đã xoá)');
+    });
+
+    await run.run('VHST-5: công việc lá ĐÃ có liên kết, sau đó có thêm việc con (không còn là lá) -> gọi lại /dependencies không gửi gì -> tự động dọn sạch dependsOnWorkItemIds về []', async () => {
+      const fId = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Công việc F (sẽ có con sau)' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, gRecordId);
+
+      const fLinked = await page.evaluate(async ({ fId, bId }) => {
+        const res = await callRecordAction('operationWorkItems', fId, 'dependencies', { dependsOnWorkItemIds: [bId] });
+        const idx = DB.operationWorkItems.findIndex(w => w.id === fId); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, { fId, bId: gItemBId });
+      assertEqual(JSON.stringify(fLinked.dependsOnWorkItemIds), JSON.stringify([gItemBId]), 'F phải lưu đúng liên kết trước khi có con');
+
+      const fChildId = await page.evaluate(async ({ id, parentId }) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: parentId, title: 'Con của F' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, { id: gRecordId, parentId: fId });
+      assert(fChildId, 'Phải tạo được con của F');
+
+      const fCleared = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationWorkItems', id, 'dependencies', {});
+        const idx = DB.operationWorkItems.findIndex(w => w.id === id); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, fId);
+      assertEqual(JSON.stringify(fCleared.dependsOnWorkItemIds), '[]', 'F không còn là lá -> gọi lại /dependencies không gửi gì phải tự dọn sạch dependsOnWorkItemIds về []');
+    });
   } finally {
     await browser.close();
     server.close();

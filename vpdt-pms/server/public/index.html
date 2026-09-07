@@ -6700,6 +6700,28 @@
     </div>
   </div>
 
+  <!-- Modal "🔗 Liên kết" công việc (VHST-5) — chọn nhiều công việc LÁ khác cùng hồ sơ mà công việc đang
+       mở PHỤ THUỘC vào ("công việc liên kết" phải "Đã nghiệm thu" xong thì công việc này mới bắt đầu
+       được) — xem openOperationWorkItemDependencyModal() (module-vanhanh.js) và
+       setOperationWorkItemDependencies() (lib/recordActions.js). -->
+  <div id="operationWorkItemDependencyModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+      <div class="flex justify-between items-center bg-purple-700 text-white p-4">
+        <h3 class="font-bold text-base flex items-center gap-2">🔗 Liên Kết Công Việc Phụ Thuộc</h3>
+        <button data-op="closeOperationWorkItemDependencyModal" class="text-purple-200 hover:text-white font-bold text-xl px-2">✕</button>
+      </div>
+      <div class="p-4 space-y-3 text-xs">
+        <div id="owiDependencyModalInfo" class="text-gray-500 italic"></div>
+        <p class="text-[11px] text-gray-500">Chọn các công việc mà công việc này PHỤ THUỘC vào — chỉ khi TẤT CẢ công việc được chọn đã "Đã nghiệm thu" thì công việc này mới có thể "Bắt đầu thực hiện".</p>
+        <div id="owiDependencyList" class="border rounded p-2 max-h-64 overflow-y-auto"></div>
+      </div>
+      <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
+        <button data-op="closeOperationWorkItemDependencyModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Huỷ</button>
+        <button data-op="submitOperationWorkItemDependencies" class="bg-purple-600 text-white px-5 py-1.5 rounded font-bold hover:bg-purple-700">💾 Lưu Liên Kết</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal xử lý/duyệt dùng CHUNG cho cả 3 luồng Vận Hành (kind = operationOrders/operationStoreOpenings/
        operationRepairs) — cùng khuôn #budgetProcessModal/#officeProcessModal. -->
   <div id="operationProcessModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

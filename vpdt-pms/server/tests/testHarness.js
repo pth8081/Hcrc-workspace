@@ -236,9 +236,20 @@ function createDispatcher(state) {
   actionHandlers['operationWorkItems:progress'] = (u, item, body) => {
     const children = state.operationWorkItems.filter(w => w.parentWorkItemId === item.id);
     const sourceRecord = sourceRecordForWorkItem(item);
-    const updated = recordActions.updateOperationWorkItemProgress(u, item, children, body && body.status, body && body.note, sourceRecord);
+    // VHST-5: itemsForSource (toàn bộ work item cùng sourceType/sourceId) — mirror route thật (routes/
+    // records.js POST /operationWorkItems/:id/progress truyền "all") cho cổng chặn "🔗 Liên kết" ở
+    // updateOperationWorkItemProgress().
+    const itemsForSource = state.operationWorkItems.filter(w => w.sourceType === item.sourceType && w.sourceId === item.sourceId);
+    const updated = recordActions.updateOperationWorkItemProgress(u, item, children, body && body.status, body && body.note, sourceRecord, itemsForSource);
     syncOperationWorkItemAncestorsInState(state, updated.parentWorkItemId);
     return updated;
+  };
+  // VHST-5: "🔗 Liên kết" — mirror ĐÚNG route thật (routes/records.js POST /operationWorkItems/:id/dependencies).
+  actionHandlers['operationWorkItems:dependencies'] = (u, item, body) => {
+    const sourceRecord = sourceRecordForWorkItem(item);
+    const itemsForSource = state.operationWorkItems.filter(w => w.sourceType === item.sourceType && w.sourceId === item.sourceId);
+    const hasChildren = state.operationWorkItems.some(w => w.parentWorkItemId === item.id);
+    return recordActions.setOperationWorkItemDependencies(u, item, body || {}, itemsForSource, hasChildren, sourceRecord);
   };
   actionHandlers['operationWorkItems:accept'] = (u, item, body) => {
     const children = state.operationWorkItems.filter(w => w.parentWorkItemId === item.id);
@@ -497,6 +508,11 @@ function createDispatcher(state) {
         }
         const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecordForWorkItem(item));
         state.operationWorkItems = state.operationWorkItems.filter(w => !idsToDelete.includes(w.id));
+        // VHST-5: dọn sạch dependsOnWorkItemIds[] ở các công việc KHÁC còn lại có trỏ tới (nhánh) vừa xoá
+        // — mirror ĐÚNG cleanupOperationWorkItemDependenciesOnDelete() (routes/records.js).
+        const deletedSet = new Set(idsToDelete);
+        state.operationWorkItems.filter(w => Array.isArray(w.dependsOnWorkItemIds) && w.dependsOnWorkItemIds.some(x => deletedSet.has(x)))
+          .forEach(w => { w.dependsOnWorkItemIds = w.dependsOnWorkItemIds.filter(x => !deletedSet.has(x)); });
         syncOperationWorkItemAncestorsInState(state, item.parentWorkItemId);
         return { status: 200, body: { ok: true } };
       }

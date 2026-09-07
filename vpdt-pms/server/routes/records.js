@@ -1859,6 +1859,26 @@ async function syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sour
   }
 }
 
+// VHST-5: khi xoá 1 (nhánh) công việc, dọn sạch id đã xoá khỏi dependsOnWorkItemIds[] của MỌI công việc
+// KHÁC còn lại cùng hồ sơ có tham chiếu tới — tránh để lại tham chiếu "chết" (dù updateOperationWorkItemProgress()
+// đã tự bỏ qua id không tìm thấy khi kiểm tra cổng chặn, xem chú thích ở đó, nhưng dữ liệu vẫn nên sạch —
+// "🔗 Phụ thuộc: ..." hiển thị ở dòng công việc mà lỡ trỏ tới việc đã xoá sẽ trông như lỗi dữ liệu).
+// deletedIds = TOÀN BỘ id vừa xoá (item gốc + toàn bộ con cháu, xem deleteWorkItemsByIds() ở route
+// /delete ngay dưới) — sourceType/sourceId của item vừa xoá (cả nhánh xoá luôn CÙNG 1 hồ sơ, kế thừa từ
+// cha, xem createOperationWorkItem()).
+async function cleanupOperationWorkItemDependenciesOnDelete(deletedIds, sourceType, sourceId) {
+  if (!deletedIds || !deletedIds.length) return;
+  const deletedSet = new Set(deletedIds);
+  const remaining = await getWorkItemsBySource(sourceType, sourceId);
+  const affected = remaining.filter(w => Array.isArray(w.dependsOnWorkItemIds) && w.dependsOnWorkItemIds.some(id => deletedSet.has(id)));
+  for (const w of affected) {
+    await withLockedWorkItemById(w.id, (item) => {
+      item.dependsOnWorkItemIds = (item.dependsOnWorkItemIds || []).filter(id => !deletedSet.has(id));
+      return item;
+    });
+  }
+}
+
 function collectOperationWorkItemDescendantIds(all, rootId) {
   const result = [];
   const queue = all.filter(w => w.parentWorkItemId === rootId).map(w => w.id);
@@ -1940,7 +1960,10 @@ router.post('/operationWorkItems/:id/progress', async (req, res) => {
       // sourceRecord CHỈ dùng cho nhánh override "toàn quyền quản lý hồ sơ" — cơ chế chính assignedTo[]
       // (isOwner) không đổi, xem lib/recordActions.js updateOperationWorkItemProgress().
       const sourceRecord = await getOperationWorkItemSourceRecord(item);
-      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus, note, sourceRecord);
+      // VHST-5: truyền "all" (toàn bộ work item cùng hồ sơ, vừa đọc ở trên) làm itemsForSource cho cổng
+      // chặn "🔗 Liên kết" (updateOperationWorkItemProgress() tự tra trạng thái từng công việc trong
+      // item.dependsOnWorkItemIds[] qua tham số này).
+      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus, note, sourceRecord, all);
     });
     await syncOperationWorkItemAncestors(result.parentWorkItemId, sourceType, sourceId);
     res.json({ ok: true, item: result });
@@ -1967,6 +1990,27 @@ router.post('/operationWorkItems/:id/edit', async (req, res) => {
     });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/edit`, err); }
+});
+
+// POST /api/records/operationWorkItems/:id/dependencies — VHST-5: "🔗 Liên kết" công việc (chọn nhiều
+// công việc LÁ khác cùng hồ sơ mà item này PHỤ THUỘC vào — dependsOnWorkItemIds) — route sub-endpoint
+// RIÊNG (mirror /edit, /progress, /accept — mỗi route chỉ đổi đúng phần dữ liệu của thao tác đó), xem
+// lib/recordActions.js setOperationWorkItemDependencies().
+router.post('/operationWorkItems/:id/dependencies', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedWorkItemById(itemId, async (item) => {
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      // itemsForSource/hasChildren — CÙNG cách tính dùng ở route /edit ngay trên (toàn bộ work item cùng
+      // sourceType/sourceId, đối chiếu parentWorkItemId để biết item đang sửa có con hay không).
+      const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
+      const hasChildren = all.some(w => w.parentWorkItemId === item.id);
+      return recordActions.setOperationWorkItemDependencies(freshUser, item, req.body || {}, all, hasChildren, sourceRecord);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/dependencies`, err); }
 });
 
 router.post('/operationWorkItems/:id/accept', async (req, res) => {
@@ -2003,6 +2047,8 @@ router.post('/operationWorkItems/:id/delete', async (req, res) => {
     // 1 câu DELETE...WHERE Id IN (...) duy nhất (atomic) thay vì vòng lặp nhiều câu DELETE riêng lẻ —
     // xem giải thích đầy đủ ở deleteWorkItemsByIds() (lib/operationWorkItemStore.js).
     await deleteWorkItemsByIds(idsToDelete);
+    // VHST-5: dọn sạch dependsOnWorkItemIds[] ở các công việc KHÁC còn lại có trỏ tới (nhánh) vừa xoá.
+    await cleanupOperationWorkItemDependenciesOnDelete(idsToDelete, item.sourceType, item.sourceId);
     await syncOperationWorkItemAncestors(item.parentWorkItemId, item.sourceType, item.sourceId);
     res.json({ ok: true });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/delete`, err); }
