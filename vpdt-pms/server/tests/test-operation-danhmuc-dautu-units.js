@@ -207,33 +207,35 @@ test('submitOperationEstimate: thiếu quyền operationEstimateCreate -> 403', 
 });
 
 // ===================== 2b) Correction 2 — "Ngân Sách Phê Duyệt" (approvedBudget): field RIÊNG, bắt
-//    buộc nhập lúc lập hồ sơ operationStoreOpenings/operationRepairs, ĐỘC LẬP với estimatedBudget/amount
-//    (extraValidate ở lib/createValidation.js, qua CREATE_MODULE_CONFIGS) =====================
+//    buộc nhập lúc lập hồ sơ operationStoreOpenings/operationRepairs (extraValidate ở
+//    lib/createValidation.js, qua CREATE_MODULE_CONFIGS). Đợt gỡ bỏ hẳn field cũ "Chi Phí Phê Duyệt"
+//    (estimatedBudget/amount) — approvedBudget giờ là field DUY NHẤT cho ngân sách của 2 loại hồ sơ này,
+//    payload không còn nhận/lưu estimatedBudget/amount nữa (kể cả khi client cũ lỡ gửi lên). =====================
 const { CREATE_MODULE_CONFIGS } = require('../lib/createValidation');
 const OP_CREATE_USER = { username: 'x', perms: { operationStoreOpenCreate: true, operationRepairCreate: true } };
 test('operationStoreOpenings.extraValidate: thiếu approvedBudget -> throw rõ ràng', () => {
-  const payload = { storeName: 'A', address: 'B', area: 1, estimatedBudget: 1 };
+  const payload = { storeName: 'A', address: 'B', area: 1 };
   assert.throws(() => CREATE_MODULE_CONFIGS.operationStoreOpenings.extraValidate(payload, 'operationStoreOpenings', OP_CREATE_USER, {}), /Ngân sách phê duyệt/);
 });
 test('operationStoreOpenings.extraValidate: approvedBudget âm -> throw', () => {
-  const payload = { storeName: 'A', address: 'B', area: 1, estimatedBudget: 1, approvedBudget: -1 };
+  const payload = { storeName: 'A', address: 'B', area: 1, approvedBudget: -1 };
   assert.throws(() => CREATE_MODULE_CONFIGS.operationStoreOpenings.extraValidate(payload, 'operationStoreOpenings', OP_CREATE_USER, {}), /không hợp lệ/);
 });
-test('operationStoreOpenings.extraValidate: approvedBudget hợp lệ -> payload.approvedBudget ĐÚNG số đã nhập, ĐỘC LẬP với estimatedBudget', () => {
+test('operationStoreOpenings.extraValidate: approvedBudget hợp lệ -> payload.approvedBudget ĐÚNG số đã nhập; estimatedBudget (field cũ ĐÃ BỊ GỠ) dù client lỡ gửi lên cũng KHÔNG được ghi vào payload', () => {
   const payload = { storeName: 'A', address: 'B', area: 1, estimatedBudget: 999, approvedBudget: 12345 };
   CREATE_MODULE_CONFIGS.operationStoreOpenings.extraValidate(payload, 'operationStoreOpenings', OP_CREATE_USER, {});
   assert.strictEqual(payload.approvedBudget, 12345);
-  assert.strictEqual(payload.estimatedBudget, 999, 'estimatedBudget phải GIỮ NGUYÊN, không bị approvedBudget ghi đè');
+  assert.strictEqual(payload.estimatedBudget, 999, 'extraValidate không đụng tới field lạ trên payload — chỉ callCreateAction() thật (routes/records.js) mới chỉ lưu đúng whitelist field, xem test-operation-store-lifecycle.js');
 });
 test('operationRepairs.extraValidate: thiếu approvedBudget -> throw rõ ràng', () => {
-  const payload = { storeName: 'A', title: 'B', amount: 1 };
+  const payload = { storeName: 'A', title: 'B' };
   assert.throws(() => CREATE_MODULE_CONFIGS.operationRepairs.extraValidate(payload, 'operationRepairs', OP_CREATE_USER, {}), /Ngân sách phê duyệt/);
 });
-test('operationRepairs.extraValidate: approvedBudget hợp lệ -> payload.approvedBudget ĐÚNG số đã nhập, ĐỘC LẬP với amount', () => {
+test('operationRepairs.extraValidate: approvedBudget hợp lệ -> payload.approvedBudget ĐÚNG số đã nhập; amount (field cũ ĐÃ BỊ GỠ) dù client lỡ gửi lên cũng KHÔNG được ghi vào payload', () => {
   const payload = { storeName: 'A', title: 'B', amount: 999, approvedBudget: 54321 };
   CREATE_MODULE_CONFIGS.operationRepairs.extraValidate(payload, 'operationRepairs', OP_CREATE_USER, {});
   assert.strictEqual(payload.approvedBudget, 54321);
-  assert.strictEqual(payload.amount, 999, 'amount phải GIỮ NGUYÊN, không bị approvedBudget ghi đè');
+  assert.strictEqual(payload.amount, 999, 'extraValidate không đụng tới field lạ trên payload — chỉ callCreateAction() thật (routes/records.js) mới chỉ lưu đúng whitelist field, xem test-operation-store-lifecycle.js');
 });
 
 // ===================== 2c) Correction 3 — updateOperationWorkItemProgress() nhận thêm note tuỳ chọn

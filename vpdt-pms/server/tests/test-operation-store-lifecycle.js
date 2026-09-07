@@ -70,7 +70,7 @@ async function main() {
       const result = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
           storeName: 'Siêu thị Test Quận 9', address: '123 Đường Test', area: 200,
-          estimatedBudget: 100000000, approvedBudget: 150000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          approvedBudget: 150000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item;
@@ -82,10 +82,10 @@ async function main() {
       assertEqual(result.estimateItems.length, 0, 'estimateItems phải rỗng lúc mới tạo');
       assertEqual(result.personInCharge, PERSON_IN_CHARGE.username, 'personInCharge phải lưu đúng username đã resolve');
       assertEqual(result.personInChargeName, PERSON_IN_CHARGE.name, 'personInChargeName phải snapshot đúng tên hiển thị');
-      // Correction 2 — "Ngân Sách Phê Duyệt": field RIÊNG, ĐỘC LẬP với estimatedBudget ("Chi Phí Phê
-      // Duyệt"), bắt buộc nhập lúc lập hồ sơ.
-      assertEqual(result.approvedBudget, 150000000, 'approvedBudget phải lưu đúng giá trị nhập lúc lập hồ sơ, KHÔNG lấy từ estimatedBudget');
-      assertEqual(result.estimatedBudget, 100000000, 'estimatedBudget ("Chi Phí Phê Duyệt") phải GIỮ NGUYÊN ý nghĩa cũ, không bị ghi đè bởi approvedBudget');
+      // Correction 2 — "Ngân Sách Phê Duyệt": bắt buộc nhập lúc lập hồ sơ. Đợt gỡ bỏ hẳn field cũ
+      // "Chi Phí Phê Duyệt" (estimatedBudget) — approvedBudget giờ là field DUY NHẤT cho ngân sách của
+      // hồ sơ này, không còn field song song nào khác nữa.
+      assertEqual(result.approvedBudget, 150000000, 'approvedBudget phải lưu đúng giá trị nhập lúc lập hồ sơ');
     });
 
     // ===== 1a-bis) Correction 2: thiếu approvedBudget lúc lập hồ sơ -> 400 =====
@@ -94,7 +94,7 @@ async function main() {
       const result = await page.evaluate(async () => {
         try {
           await callCreateAction('operationStoreOpenings', {
-            storeName: 'Siêu thị thiếu ngân sách', address: 'X', area: 1, estimatedBudget: 1, expectedOpenDate: '', personInCharge: '', note: ''
+            storeName: 'Siêu thị thiếu ngân sách', address: 'X', area: 1, expectedOpenDate: '', personInCharge: '', note: ''
           });
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
@@ -108,7 +108,7 @@ async function main() {
       const result = await page.evaluate(async () => {
         try {
           await callCreateAction('operationStoreOpenings', {
-            storeName: 'Siêu thị ngân sách âm', address: 'X', area: 1, estimatedBudget: 1, approvedBudget: -5, expectedOpenDate: '', personInCharge: '', note: ''
+            storeName: 'Siêu thị ngân sách âm', address: 'X', area: 1, approvedBudget: -5, expectedOpenDate: '', personInCharge: '', note: ''
           });
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
@@ -123,7 +123,7 @@ async function main() {
       const result = await page.evaluate(async () => {
         try {
           await callCreateAction('operationStoreOpenings', {
-            storeName: 'Siêu thị lỗi', address: 'X', area: 1, estimatedBudget: 1, approvedBudget: 1, expectedOpenDate: '', personInCharge: 'khong_ton_tai', note: ''
+            storeName: 'Siêu thị lỗi', address: 'X', area: 1, approvedBudget: 1, expectedOpenDate: '', personInCharge: 'khong_ton_tai', note: ''
           });
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
@@ -137,7 +137,7 @@ async function main() {
       await loginAs(page, CREATOR);
       const result = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationRepairs', {
-          storeName: 'Siêu thị Sửa Chữa Test', title: 'Sửa hệ thống điện', amount: 20000000, approvedBudget: 25000000,
+          storeName: 'Siêu thị Sửa Chữa Test', title: 'Sửa hệ thống điện', approvedBudget: 25000000,
           supplier: 'Công ty Điện X', personInCharge: picUsername, description: 'Hư hỏng hệ thống điện khu kho'
         });
         DB.operationRepairs.push(res.item);
@@ -148,7 +148,8 @@ async function main() {
       assertEqual(result.status, 'APPROVED', 'Mục H: hồ sơ sửa chữa cũng tự APPROVED ngay lúc tạo');
       assertEqual(result.personInCharge, PERSON_IN_CHARGE.username, 'personInCharge (field mới) phải lưu đúng username');
       assertEqual(result.personInChargeName, PERSON_IN_CHARGE.name, 'personInChargeName phải snapshot đúng tên');
-      assertEqual(result.approvedBudget, 25000000, 'approvedBudget phải lưu đúng, ĐỘC LẬP với amount');
+      // Đợt gỡ bỏ hẳn field cũ "Chi Phí Phê Duyệt" (amount) — approvedBudget giờ là field DUY NHẤT.
+      assertEqual(result.approvedBudget, 25000000, 'approvedBudget phải lưu đúng');
     });
 
     // ===== 1d) Đợt "xoá hẳn Bổ Sung Vận Hành > Siêu Thị" — KHÔNG còn đường nào ra được modal "Sửa & Gửi
@@ -978,7 +979,7 @@ async function main() {
       await loginAs(page, CREATOR);
       const newRepairId = await page.evaluate(async () => {
         const newRepair = await callCreateAction('operationRepairs', {
-          storeName: 'Siêu thị Sửa Chữa Khác', title: 'Việc khác', amount: 1000000, approvedBudget: 1000000,
+          storeName: 'Siêu thị Sửa Chữa Khác', title: 'Việc khác', approvedBudget: 1000000,
           supplier: '', personInCharge: 'vh_creator', description: ''
         });
         DB.operationRepairs.push(newRepair.item);
@@ -1113,7 +1114,7 @@ async function main() {
       cascadeRecordId = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
           storeName: 'Siêu thị Test Cascade 3 Cấp', address: 'Cascade', area: 10,
-          estimatedBudget: 1, approvedBudget: 1, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          approvedBudget: 1, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item.id;
@@ -1328,7 +1329,7 @@ async function main() {
       await loginAs(page, CREATOR);
       const newId = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
-          storeName: 'Siêu thị Test Vòng Đời', address: 'Y', area: 10, estimatedBudget: 5000000, approvedBudget: 5000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          storeName: 'Siêu thị Test Vòng Đời', address: 'Y', area: 10, approvedBudget: 5000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item.id;
@@ -1398,7 +1399,7 @@ async function main() {
       await loginAs(page, CREATOR);
       resaveRecordId = await page.evaluate(async (picUsername) => {
         const res = await callCreateAction('operationStoreOpenings', {
-          storeName: 'Siêu thị Test Sửa Danh Mục', address: 'Z', area: 10, estimatedBudget: 999999999, approvedBudget: 100000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
+          storeName: 'Siêu thị Test Sửa Danh Mục', address: 'Z', area: 10, approvedBudget: 100000000, expectedOpenDate: '', personInCharge: picUsername, note: ''
         });
         DB.operationStoreOpenings.push(res.item);
         return res.item.id;
@@ -1431,7 +1432,7 @@ async function main() {
       assertEqual(secondSave.estimateTotalAmount, 15000000, 'Tổng phải tính lại đúng theo danh sách MỚI (10tr + 5tr)');
     });
 
-    await run.run('Cột "Ngân sách phê duyệt"/"Ngân sách còn lại" ở bảng Danh mục đầu tư đọc từ field approvedBudget RIÊNG (Correction 2, KHÔNG phải estimatedBudget)', async () => {
+    await run.run('Cột "Ngân sách phê duyệt"/"Ngân sách còn lại" ở bảng Danh mục đầu tư đọc đúng từ field approvedBudget (field DUY NHẤT cho ngân sách kể từ đợt gỡ bỏ hẳn "Chi Phí Phê Duyệt")', async () => {
       await loginAs(page, ESTIMATOR);
       await page.evaluate(() => {
         switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('ESTIMATE');
@@ -1440,13 +1441,12 @@ async function main() {
         const o = DB.operationStoreOpenings.find(x => x.id === id);
         const tr = [...document.querySelectorAll('#operationEstimateTableBody tr')].find(r => r.textContent.includes('Siêu thị Test Sửa Danh Mục'));
         const cells = tr ? [...tr.querySelectorAll('td')].map(td => td.textContent.trim()) : null;
-        return { cells, approvedBudget: o.approvedBudget, estimatedBudget: o.estimatedBudget, estimateTotalAmount: o.estimateTotalAmount };
+        return { cells, approvedBudget: o.approvedBudget, estimateTotalAmount: o.estimateTotalAmount };
       }, resaveRecordId);
       assert(row.cells, 'Phải tìm thấy đúng dòng của hồ sơ trong bảng Danh mục đầu tư');
       // cells: [Mã, Loại, Tên, Phòng ban, Ngân Sách Phê Duyệt, Tổng Danh Mục Đầu Tư, Ngân Sách Còn Lại, Trạng thái, Thao tác]
       assertEqual(row.approvedBudget, 100000000, 'approvedBudget phải giữ đúng giá trị nhập lúc tạo');
-      assertEqual(row.estimatedBudget, 999999999, 'estimatedBudget phải KHÁC approvedBudget (xác nhận 2 field độc lập trong seed test)');
-      assertIncludes(row.cells[4], '100.000.000', 'Cột Ngân Sách Phê Duyệt phải hiện đúng approvedBudget (100tr), KHÔNG phải estimatedBudget (999.999.999)');
+      assertIncludes(row.cells[4], '100.000.000', 'Cột Ngân Sách Phê Duyệt phải hiện đúng approvedBudget (100tr)');
       assertIncludes(row.cells[5], '15.000.000', 'Cột Tổng Danh Mục Đầu Tư phải hiện đúng estimateTotalAmount MỚI sau khi sửa (15tr)');
       const expectedRemaining = row.approvedBudget - row.estimateTotalAmount;
       assertIncludes(row.cells[6], expectedRemaining.toLocaleString('vi-VN'), 'Cột Ngân Sách Còn Lại phải = Ngân sách phê duyệt (approvedBudget) − Tổng danh mục đầu tư');

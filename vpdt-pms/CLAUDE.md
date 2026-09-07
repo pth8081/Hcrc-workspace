@@ -1,5 +1,16 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## Quy trình làm việc chuẩn: phân tích → xác nhận → làm + merge luôn, không chờ demo
+
+Từ nay, với các yêu cầu nghiệp vụ/tính năng: nghiên cứu + phân tích sâu, đưa
+phương án cho người dùng xác nhận trước — nhưng SAU KHI người dùng xác nhận
+phương án thì cứ triển khai và merge vào main luôn, KHÔNG cần đợi demo trước.
+Người dùng tự deploy lên server thật và sẽ báo lại nếu cần chỉnh sửa gì thêm.
+Chỉ làm demo khi người dùng chủ động yêu cầu ("demo cho tôi xem") — không phải
+mặc định cho mọi việc nữa. Vẫn giữ nguyên các quy tắc khác (verify kỹ qua git
+fetch/log trước khi báo cáo, chạy full regression, báo deploy-impact rõ ràng,
+bump version + cập nhật VERSION.md mỗi lần merge).
+
 ## 2 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
 
 Có 2 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:

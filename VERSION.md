@@ -1,8 +1,51 @@
 # Phiên bản hiện tại
 
-**11.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > Siêu Thị (Mở Mới/Sửa Chữa): gỡ bỏ hẳn field "Chi Phí Phê Duyệt" (2026-09-07)
+
+**Yêu cầu người dùng**: form lập hồ sơ Mở Mới và Sửa Chữa siêu thị đang có 2 field ngân sách song song
+gây nhầm lẫn — "Chi Phí Phê Duyệt (VNĐ)" (tuỳ chọn, thật ra không dùng cho tính toán gì trong hệ thống)
+và "Ngân Sách Phê Duyệt — Danh Mục Đầu Tư (VNĐ)" (bắt buộc, dùng để tính "Ngân sách còn lại" ở Danh mục
+đầu tư). Yêu cầu **gỡ bỏ hẳn** field "Chi Phí Phê Duyệt", chỉ giữ lại "Ngân Sách Phê Duyệt".
+
+**Đã rà soát TOÀN BỘ codebase trước khi xoá** (client + server) để xác nhận không còn nơi nào khác đọc/
+hiển thị/tính tổng 2 field cũ (`operationStoreOpenings.estimatedBudget`, `operationRepairs.amount`) —
+phát hiện ngoài 2 input form còn có: cột hiển thị ở bảng danh sách Mở Mới/Sửa Chữa, dòng hiển thị ở modal
+xem chi tiết, và khai báo field trong `CORE_FIELD_MANIFEST` (màn admin "Biểu Mẫu" tuỳ biến nhãn/bắt buộc
+theo field) — xử lý đồng bộ cả 4 điểm, không để sót tham chiếu treo (dangling reference) nào.
+
+**Đã sửa**:
+- `lib/createValidation.js` — bỏ 2 dòng gán `payload.estimatedBudget`/`payload.amount` khỏi
+  `extraValidate` của `operationStoreOpenings`/`operationRepairs` (field không còn được server chủ động
+  ghi vào hồ sơ mới nữa; `payload.approvedBudget` — bắt buộc nhập, validate không đổi — vẫn là field
+  DUY NHẤT cho ngân sách của 2 loại hồ sơ này).
+- `public/index.html` — gỡ hẳn 2 `<input>`+`<label>` "Chi Phí Phê Duyệt (VNĐ)" (`#vsoBudget`,
+  `#vrAmount`) khỏi form Mở Mới/Sửa Chữa; đổi tiêu đề cột bảng danh sách từ "Chi Phí Phê Duyệt (& Ngày
+  Khai Trương)" sang "Ngân Sách Phê Duyệt (& Ngày Khai Trương)".
+- `public/js/module-vanhanh.js` — bỏ đọc `#vsoBudget`/`#vrAmount` lúc submit form; cột hiển thị ở bảng
+  danh sách + dòng hiển thị ở modal chi tiết đổi từ đọc `estimatedBudget`/`amount` sang đọc
+  `approvedBudget` (field còn lại duy nhất), theo đúng khuôn "(chưa nhập)" cho hồ sơ cũ thiếu
+  `approvedBudget` đã dùng ở bảng Danh mục đầu tư.
+- `public/js/core.js` — bỏ 2 dòng khai `vsoBudget`/`vrAmount` khỏi `CORE_FIELD_MANIFEST` (màn admin
+  Biểu Mẫu không còn liệt kê field đã bị xoá khỏi form thật nữa).
+
+**Không di trú dữ liệu cũ**: đúng kỷ luật additive/non-destructive đã dùng xuyên suốt — hồ sơ CŨ đã lỡ
+lưu `estimatedBudget`/`amount` trước đợt này GIỮ NGUYÊN trong bản ghi (không xoá field khỏi dữ liệu đã
+lưu), chỉ đơn giản không còn nơi nào trong code ghi/đọc/hiển thị field đó nữa.
+
+**Kiểm thử**: cập nhật `tests/test-operation-danhmuc-dautu-units.js` (2 test `extraValidate` xác nhận
+`approvedBudget` vẫn bắt buộc/validate đúng, field cũ dù client lỡ gửi lên cũng không còn được server chủ
+động ghi) + `tests/test-operation-store-lifecycle.js` (bỏ `estimatedBudget`/`amount` khỏi các payload tạo
+hồ sơ mô phỏng form thật, viết lại 1 test đã lỗi thời do dựa vào 2 field độc lập). Chạy toàn bộ
+`tests/test-*.js` (69 file) — 0 lỗi mới so với baseline (chỉ còn đúng các lỗi phụ thuộc SQL Server thật
+đã biết từ trước, không chạy được trong môi trường CI/sandbox).
+
+**Deploy-impact**: KHÔNG có gì ngoài copy code + `pm2 restart` — không đổi `schema.sql` (field vốn chỉ
+nằm trong payload JSON của bản ghi, không phải cột SQL riêng), không thêm biến môi trường, không đổi
+`dependencies`.
 
 ## Vận Hành > Đặt Hàng Tại HO: đồng bộ biên giới 2 mức duyệt theo quy ước vừa sửa ở STORE (2026-09-07)
 

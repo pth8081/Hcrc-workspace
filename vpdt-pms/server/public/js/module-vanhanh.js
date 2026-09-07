@@ -628,9 +628,9 @@ async function submitOperationStoreOpening(e) {
   const storeName = document.getElementById('vsoStoreName').value.trim();
   const address = document.getElementById('vsoAddress').value.trim();
   const area = Number(document.getElementById('vsoArea').value) || 0;
-  const estimatedBudget = getMoneyValue(document.getElementById('vsoBudget'));
-  // "Ngân Sách Phê Duyệt" (Danh Mục Đầu Tư) — field RIÊNG với estimatedBudget ở trên (đợt sửa theo phản
-  // hồi người dùng), xem chú thích đầy đủ ở lib/createValidation.js extraValidate operationStoreOpenings.
+  // "Ngân Sách Phê Duyệt" (Danh Mục Đầu Tư) — field DUY NHẤT còn lại cho ngân sách hồ sơ (đợt gỡ bỏ hẳn
+  // field cũ "Chi Phí Phê Duyệt"), xem chú thích đầy đủ ở lib/createValidation.js extraValidate
+  // operationStoreOpenings.
   const approvedBudget = getMoneyValue(document.getElementById('vsoApprovedBudget'));
   const expectedOpenDate = document.getElementById('vsoOpenDate').value;
   // Người Phụ Trách: gửi USERNAME đã resolve qua picker sdd* (không phải text hiển thị) — server tự tra
@@ -651,7 +651,7 @@ async function submitOperationStoreOpening(e) {
     } catch (err) { return alert(`⛔ ${err.message}`); }
   }
 
-  const payload = { code, storeName, address, area, estimatedBudget, approvedBudget, expectedOpenDate, personInCharge, note, fileUrl, fileName, fileType };
+  const payload = { code, storeName, address, area, approvedBudget, expectedOpenDate, personInCharge, note, fileUrl, fileName, fileType };
   let newItem;
   try {
     const result = await callCreateAction('operationStoreOpenings', payload);
@@ -681,8 +681,8 @@ async function submitOperationRepair(e) {
   const code = document.getElementById('vrCode').value.trim();
   const storeName = document.getElementById('vrStoreName').value.trim();
   const title = document.getElementById('vrTitle').value.trim();
-  const amount = getMoneyValue(document.getElementById('vrAmount'));
-  // "Ngân Sách Phê Duyệt" (Danh Mục Đầu Tư) — field RIÊNG với amount ở trên, cùng lý do vsoApprovedBudget.
+  // "Ngân Sách Phê Duyệt" (Danh Mục Đầu Tư) — field DUY NHẤT còn lại cho ngân sách hồ sơ (đợt gỡ bỏ hẳn
+  // field cũ "Chi Phí Phê Duyệt"), cùng lý do vsoApprovedBudget.
   const approvedBudget = getMoneyValue(document.getElementById('vrApprovedBudget'));
   const supplier = document.getElementById('vrSupplier').value.trim();
   // Người Phụ Trách — field MỚI hoàn toàn cho operationRepairs, cùng picker sdd* vừa thêm cho
@@ -703,7 +703,7 @@ async function submitOperationRepair(e) {
     } catch (err) { return alert(`⛔ ${err.message}`); }
   }
 
-  const payload = { code, storeName, title, amount, approvedBudget, supplier, personInCharge, description, fileUrl, fileName, fileType };
+  const payload = { code, storeName, title, approvedBudget, supplier, personInCharge, description, fileUrl, fileName, fileType };
   let newItem;
   try {
     const result = await callCreateAction('operationRepairs', payload);
@@ -872,7 +872,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2 font-mono font-bold text-emerald-800">${escapeHtml(o.code)}</td>
       <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.address || '')}</div></td>
-      <td class="border p-2"><div class="font-bold text-rose-600">${(o.estimatedBudget || 0).toLocaleString('vi-VN')} VNĐ</div><div class="text-xs text-gray-500">${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div></td>
+      <td class="border p-2"><div class="font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div><div class="text-xs text-gray-500">${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div></td>
       <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}</td>
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
     </tr>`;
@@ -881,7 +881,7 @@ function buildOperationRowHTML(kind, o) {
     <td class="border p-2 font-mono font-bold text-amber-800">${escapeHtml(o.code)}</td>
     <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
     <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.title)}</div></td>
-    <td class="border p-2 font-bold text-rose-600">${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</td>
+    <td class="border p-2 font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</td>
     <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}</td>
     <td class="border p-2 text-center space-x-1">${actionCell}</td>
   </tr>`;
@@ -980,7 +980,6 @@ function buildOperationDetailsHTML(kind, o) {
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div><b>Địa điểm dự kiến:</b> ${escapeHtml(o.address || 'N/A')}</div>
         <div><b>Diện tích dự kiến:</b> ${(o.area || 0).toLocaleString('vi-VN')} m²</div>
-        <div><b>Chi Phí Phê Duyệt:</b> ${(o.estimatedBudget || 0).toLocaleString('vi-VN')} VNĐ</div>
         <div><b>Ngân Sách Phê Duyệt (Danh Mục Đầu Tư):</b> ${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div>
         <div><b>Ngày dự kiến khai trương:</b> ${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div>
         <div><b>Người phụ trách:</b> ${escapeHtml(o.personInChargeName || o.personInCharge || 'N/A')}</div>
@@ -991,7 +990,6 @@ function buildOperationDetailsHTML(kind, o) {
   return `
     <div class="grid grid-cols-2 gap-2 text-xs">
       <div><b>Nhà cung cấp/Đơn vị thi công:</b> ${escapeHtml(o.supplier || 'N/A')}</div>
-      <div><b>Chi Phí Phê Duyệt:</b> ${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
       <div><b>Ngân Sách Phê Duyệt (Danh Mục Đầu Tư):</b> ${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div>
       <div><b>Người phụ trách:</b> ${escapeHtml(o.personInChargeName || o.personInCharge || 'N/A')}</div>
       <div class="col-span-2"><b>Mô tả hiện trạng &amp; lý do:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.description || '')}</p></div>

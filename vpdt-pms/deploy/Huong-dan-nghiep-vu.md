@@ -295,6 +295,17 @@ với "Tổng Hợp"):
     "✅ Nghiệm Thu" (Nghiệm Thu) được lưu vào hệ thống nhưng KHÔNG có màn nào
     hiển thị lại được — người phụ trách/người nghiệm thu gõ lý do xong là mất
     hẳn, không ai đọc lại được. Nút "📜" khắc phục đúng lỗ hổng này.
+  - **Gỡ bỏ hẳn field "Chi Phí Phê Duyệt" (từ v11.2)**: form lập hồ sơ Mở Mới
+    và Sửa Chữa trước đây có 2 field ngân sách song song dễ gây nhầm lẫn —
+    "Chi Phí Phê Duyệt" (tuỳ chọn, không dùng cho tính toán gì) và "Ngân Sách
+    Phê Duyệt — Danh Mục Đầu Tư" (bắt buộc, dùng để tính "Ngân sách còn lại"
+    ở Danh mục đầu tư). Đã gỡ hẳn field "Chi Phí Phê Duyệt" khỏi cả 2 form —
+    giờ chỉ còn đúng 1 field ngân sách DUY NHẤT ("Ngân Sách Phê Duyệt — Danh
+    Mục Đầu Tư", vẫn bắt buộc nhập). Cột hiển thị tương ứng ở bảng danh sách
+    Mở Mới/Sửa Chữa và modal xem chi tiết cũng đổi sang đọc field còn lại
+    này. Hồ sơ CŨ đã lỡ lưu "Chi Phí Phê Duyệt" trước đợt này KHÔNG bị xoá dữ
+    liệu (field cũ vẫn còn nguyên trong bản ghi, chỉ không còn nơi nào ghi/
+    đọc/hiển thị nó nữa).
 
 ### 3.6. Hỗ Trợ IT
 
