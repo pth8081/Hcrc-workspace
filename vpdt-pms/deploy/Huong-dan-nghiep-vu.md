@@ -247,11 +247,15 @@ với "Tổng Hợp"):
   riêng hoàn toàn: **Đặt Hàng Tại Siêu Thị** 3 mức **≤ 10 triệu / > 10 triệu
   và ≤ 100 triệu / > 100 triệu** (đổi từ v11.0 theo yêu cầu người dùng — mốc
   đúng bằng rơi vào mức THẤP hơn, VD đúng 10.000.000đ tính là "≤ 10 triệu");
-  **Đặt Hàng Tại HO** chỉ 2 mức **< 100 triệu / ≥ 100 triệu** (KHÔNG đổi, mốc
-  đúng bằng vẫn rơi vào mức CAO hơn). Mức tính từ `MAX(amount, "Tổng Giá Trị
-  Thanh Toán (VNĐ)")` — số lớn hơn giữa tổng hạng mục hệ thống tự tính và số
-  người dùng tự gõ/đọc từ PDF phiếu đặt hàng NCC, để field tự gõ không thể
-  khai thấp hơn nhằm né bớt lớp duyệt.
+  **Đặt Hàng Tại HO** 2 mức **≤ 100 triệu / > 100 triệu** (đổi từ v11.1 —
+  audit theo yêu cầu người dùng phát hiện HO đang dùng CÙNG 1 lớp lỗi quy ước
+  biên giới vừa sửa ở STORE, nay đồng bộ cùng quy ước: mốc đúng bằng
+  100.000.000đ rơi vào mức THẤP hơn "≤ 100 triệu", KHÔNG còn "< 100 triệu /
+  ≥ 100 triệu" như trước — giá trị mốc 100 triệu KHÔNG đổi, chỉ đổi mốc đúng
+  bằng thuộc mức nào). Mức tính từ `MAX(amount, "Tổng Giá Trị Thanh Toán
+  (VNĐ)")` — số lớn hơn giữa tổng hạng mục hệ thống tự tính và số người dùng
+  tự gõ/đọc từ PDF phiếu đặt hàng NCC, để field tự gõ không thể khai thấp hơn
+  nhằm né bớt lớp duyệt (áp dụng chung cho cả STORE lẫn HO).
 - **Mở Mới / Sửa Chữa Siêu Thị** — pipeline 4 giai đoạn **Dự toán → Thực hiện
   → Nghiệm thu → Báo cáo**: lập danh mục đầu tư dự toán (được duyệt mới mở
   khoá Thực hiện) → lập/theo dõi cây công việc thực hiện thực tế (độc lập,

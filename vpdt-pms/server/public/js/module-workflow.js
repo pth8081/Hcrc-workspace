@@ -71,8 +71,8 @@ const WF_MODULE_CONFIG = {
     pureTier: true,
     tierDbKeyForWholesale: 'operationOrderHOTierWorkflows',
     fixedTiers: [
-      { key: 'LT100M', label: '< 100 triệu' },
-      { key: 'GTE100M', label: '>= 100 triệu' }
+      { key: 'LT100M', label: '≤ 100 triệu' },
+      { key: 'GTE100M', label: '> 100 triệu' }
     ],
     label: 'Vận Hành - Đặt Hàng Tại HO', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại HO Theo Mức Giá Trị'
   },

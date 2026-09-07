@@ -5,16 +5,22 @@
 // Hàng Tại Siêu Thị" (STORE, 3 mức) và "Đặt Hàng Tại HO" (HO, 2 mức) — xem lib/workflowEngine.js
 // computeOperationOrderTier()/computeOperationOrderAmount()/resolveOperationOrderWorkflow().
 //
-// Đợt sau (yêu cầu người dùng "3 mức <=10tr, >10-100tr, >100tr"): đổi biên giới CHỈ CHO STORE — mốc đúng
-// bằng giờ rơi vào mức THẤP HƠN (maxInclusive + "<="), NGƯỢC với quy ước "<" cũ (mốc đúng bằng từng rơi
-// vào mức CAO hơn). HO KHÔNG đổi (người dùng chỉ nói "chỗ đặt hàng siêu thị"), vẫn giữ maxExclusive + "<".
+// Đợt 2 (yêu cầu người dùng "3 mức <=10tr, >10-100tr, >100tr"): đổi biên giới CHO STORE — mốc đúng bằng
+// giờ rơi vào mức THẤP HƠN (maxInclusive + "<="), NGƯỢC với quy ước "<" cũ (mốc đúng bằng từng rơi vào
+// mức CAO hơn). Lúc đó HO KHÔNG đổi (người dùng chỉ nói "chỗ đặt hàng siêu thị"), vẫn giữ maxExclusive +
+// "<".
+//
+// Đợt 3 (yêu cầu người dùng "kiểm tra module đặt hàng HO luôn"): audit lại HO phát hiện CÙNG 1 lớp lỗi
+// quy ước biên giới vừa sửa ở STORE (mốc đúng bằng 100 triệu bị đẩy LÊN mức GTE100M thay vì ở lại LT100M)
+// — không phải quyết định giá trị nghiệp vụ mới, giá trị mốc 100 triệu KHÔNG đổi — nay đồng bộ HO theo
+// ĐÚNG quy ước maxInclusive + "<=" giống STORE, 2 mảng tier từ nay dùng CHUNG 1 quy ước.
 // Tier key (LT10M/FROM10M_TO100M/GTE100M/LT100M) KHÔNG đổi — tier không lưu field riêng trên item (luôn
 // tính lại từ amount mỗi lần), nên đổi biên giới KHÔNG cần di trú dữ liệu/cấu hình approver theo tier cũ.
 //
 // Phủ:
 //   1. computeOperationOrderTier() bắt đúng biên giới ở CẢ 2 phía đúng mốc 10.000.000 và 100.000.000:
-//      - STORE (mới): mốc đúng bằng rơi vào mức THẤP HƠN — "≤ 10 triệu"/"> 10 - ≤ 100 triệu"/"> 100 triệu".
-//      - HO (không đổi): mốc đúng bằng vẫn rơi vào mức CAO HƠN — "< 100 triệu"/">= 100 triệu".
+//      - STORE: mốc đúng bằng rơi vào mức THẤP HƠN — "≤ 10 triệu"/"> 10 - ≤ 100 triệu"/"> 100 triệu".
+//      - HO: mốc đúng bằng CŨNG rơi vào mức THẤP HƠN — "≤ 100 triệu"/"> 100 triệu" (đồng bộ đợt 3).
 //   2. computeOperationOrderAmount() lấy MAX(amount, paymentTotalAmount) — paymentTotalAmount (field
 //      "Tổng Giá Trị Thanh Toán (VNĐ)" người dùng tự gõ trên form/đọc từ PDF) chỉ được phép đẩy tier LÊN
 //      cao hơn (VD gồm VAT/phụ phí), KHÔNG được phép kéo tier XUỐNG thấp hơn mức mà amount (server tự
@@ -79,11 +85,11 @@ test('computeOperationOrderTier(STORE): giá trị 0/rất nhỏ vẫn rơi đú
   assert.strictEqual(computeOperationOrderTier('STORE', 0), 'LT10M');
   assert.strictEqual(computeOperationOrderTier('STORE', 1), 'LT10M');
 });
-test('computeOperationOrderTier(HO): biên giới 100.000.000 — đúng mốc rơi vào mức CAO (chỉ 2 mức, không có mức 10 triệu)', () => {
+test('computeOperationOrderTier(HO): biên giới 100.000.000 — đúng mốc phải rơi vào mức THẤP (LT100M, đồng bộ quy ước với STORE — đợt 3 audit)', () => {
   assert.strictEqual(computeOperationOrderTier('HO', 9999999), 'LT100M', 'HO không có mức 10 triệu — vẫn là LT100M');
-  assert.strictEqual(computeOperationOrderTier('HO', 99999999), 'LT100M', '99.999.999 phải là LT100M (< 100 triệu)');
-  assert.strictEqual(computeOperationOrderTier('HO', 100000000), 'GTE100M', 'ĐÚNG 100.000.000 phải rơi vào mức CAO (>= 100 triệu)');
-  assert.strictEqual(computeOperationOrderTier('HO', 100000001), 'GTE100M');
+  assert.strictEqual(computeOperationOrderTier('HO', 99999999), 'LT100M', '99.999.999 phải là LT100M (≤ 100 triệu)');
+  assert.strictEqual(computeOperationOrderTier('HO', 100000000), 'LT100M', 'ĐÚNG 100.000.000 phải rơi vào mức THẤP (≤ 100 triệu), theo yêu cầu người dùng đồng bộ quy ước với STORE');
+  assert.strictEqual(computeOperationOrderTier('HO', 100000001), 'GTE100M', '100.000.001 (> 100 triệu) phải là mức cao');
 });
 test('computeOperationOrderTier(): locationType lạ/thiếu (fallback) coi như HO, KHÔNG throw', () => {
   assert.strictEqual(computeOperationOrderTier(undefined, 50000000), 'LT100M');
@@ -213,12 +219,21 @@ test('Tamper HO: amount thật 200 triệu (GTE100M) + paymentTotalAmount giả 
   );
 });
 // Kiểm tra biên giới CHÍNH XÁC quanh mốc tier khi dùng max(): amount ngay dưới mốc + paymentTotalAmount ngay trên mốc -> phải nhảy tier theo paymentTotalAmount (đúng hướng ĐẨY LÊN hợp lệ), và ngược lại (paymentTotalAmount thấp không kéo xuống).
-test('Biên giới HO đúng mốc 100 triệu qua max(): amount=99.999.999 (LT100M) + paymentTotalAmount=100.000.000 (đúng mốc, GTE100M) -> phải là GTE100M', () => {
+test('Biên giới HO đúng mốc 100 triệu qua max(): amount=99.999.999 (LT100M) + paymentTotalAmount=100.000.000 (đúng mốc) -> phải là LT100M (≤100tr, đồng bộ quy ước với STORE)', () => {
   const item = freshOrder({ orderLocationType: 'HO', amount: 99999999, paymentTotalAmount: 100000000 });
+  assert.strictEqual(computeOperationOrderAmount(item), 100000000);
+  assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'LT100M');
+});
+test('Biên giới HO 100.000.001 qua max(): amount=1 + paymentTotalAmount=100.000.001 -> phải là GTE100M (>100tr)', () => {
+  const item = freshOrder({ orderLocationType: 'HO', amount: 1, paymentTotalAmount: 100000001 });
   assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'GTE100M');
 });
-test('Biên giới HO đúng mốc 100 triệu qua max(): amount=100.000.000 (đúng mốc, GTE100M) + paymentTotalAmount=1 (giả thấp) -> vẫn phải là GTE100M (không kéo xuống LT100M)', () => {
+test('Biên giới HO đúng mốc 100 triệu qua max(): amount=100.000.000 (đúng mốc, LT100M) + paymentTotalAmount=1 (giả thấp) -> vẫn phải là LT100M (paymentTotalAmount thấp không đẩy tier lên)', () => {
   const item = freshOrder({ orderLocationType: 'HO', amount: 100000000, paymentTotalAmount: 1 });
+  assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'LT100M');
+});
+test('Tamper HO: paymentTotalAmount giả mạo THẤP KHÔNG né được tier cao ngay SÁT mốc mới (amount=100.000.001, paymentTotalAmount=1) -> vẫn phải GTE100M', () => {
+  const item = freshOrder({ orderLocationType: 'HO', amount: 100000001, paymentTotalAmount: 1 });
   assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'GTE100M');
 });
 

@@ -1,8 +1,50 @@
 # Phiên bản hiện tại
 
-**11.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > Đặt Hàng Tại HO: đồng bộ biên giới 2 mức duyệt theo quy ước vừa sửa ở STORE (2026-09-07)
+
+**Yêu cầu gốc**: sau đợt audit/sửa "Đặt Hàng Tại Siêu Thị" (v11.0, xem mục ngay dưới đây), người dùng yêu
+cầu "bạn kiểm tra module đặt hàng HO luôn nhé".
+
+**Đã kiểm tra trạng thái hiện tại trước khi sửa** — đọc trực tiếp `computeOperationOrderTier()` ở
+`lib/workflowEngine.js`:
+- **Phát hiện 1 lỗi thật**: `OPERATION_ORDER_HO_TIERS` vẫn dùng quy ước cũ `maxExclusive` + so sánh `<`
+  (mốc đúng bằng rơi vào mức CAO HƠN) — ĐÚNG CÙNG 1 lớp lỗi quy ước biên giới vừa xác nhận sai và sửa ở
+  STORE (v11.0): đơn HO đúng bằng 100.000.000đ trước đây bị đẩy lên mức `GTE100M` (`>= 100 triệu`) thay vì
+  ở lại mức thấp hơn `LT100M`. Đây KHÔNG phải quyết định giá trị nghiệp vụ mới (mốc 100 triệu KHÔNG đổi,
+  vẫn đúng 2 mức) — chỉ là cùng 1 bug quy ước inclusive/exclusive vừa fix ở module song song.
+- Đã xác nhận LẠI mọi điểm khác đều ĐÚNG, không có lỗi: `computeOperationOrderAmount() = MAX(amount,
+  paymentTotalAmount)` áp dụng đồng nhất cho cả STORE/HO (dùng chung 1 hàm, không có nhánh riêng theo
+  `orderLocationType`); "Tổng Giá Trị Thanh Toán (VNĐ)" là field lái mức duyệt cho cả 2; `status:'PENDING',
+  currentStep:1, history:[]` gán cứng đồng nhất ở `lib/createValidation.js` (không có nhánh HO/STORE
+  riêng); `canViewOperationOrder()` (`lib/recordViewScope.js`) tra `resolveWfConfig` dùng chung, không lệch
+  cho HO. Không phát hiện lỗi HO-riêng nào khác ngoài quy ước biên giới nói trên.
+
+**Đã sửa**: `OPERATION_ORDER_HO_TIERS` ở `lib/workflowEngine.js` (nguồn xác thực server) + bản mirror
+`public/js/core.js` (hiển thị client) + label dropdown cấu hình admin ở `public/js/module-workflow.js`
+(`WF_MODULE_CONFIG.OPERATION_ORDER_HO.fixedTiers`) đổi từ field `maxExclusive`/so sánh `<` sang
+`maxInclusive`/so sánh `<=` — khớp 100% quy ước hiện dùng cho STORE (`computeOperationOrderTier()` gộp lại
+dùng chung 1 nhánh code cho cả 2, không còn xử lý riêng):
+- `LT100M`: **≤ 100.000.000đ** (trước: < 100.000.000đ)
+- `GTE100M`: **> 100.000.000đ** (trước: >= 100.000.000đ)
+
+**Không cần di trú dữ liệu**: cùng lý do đã nêu ở đợt STORE — tier không lưu field riêng trên bản ghi,
+luôn tính lại từ `amount` hiện có; tier KEY (`LT100M`/`GTE100M`) không đổi tên nên cấu hình approver-theo-
+mức admin đã lưu (`operationOrderHOTierWorkflows`) vẫn khớp nguyên.
+
+**Kiểm thử**: mở rộng `tests/test-operation-order-location-tiers.js` (file vừa mở rộng cho đợt STORE) —
+cập nhật lại các test biên giới HO cũ theo quy ước mới + thêm test mốc đúng bằng 100.000.000 (→ `LT100M`)/
+100.000.001 (→ `GTE100M`) qua cả `computeOperationOrderTier()` trực tiếp lẫn qua `max(amount,
+paymentTotalAmount)`, cùng 1 test tamper (`paymentTotalAmount` giả thấp sát mốc mới không né được tier
+cao). 35/35 kịch bản PASS. Toàn bộ 69 file `tests/test-*.js`: 67 PASS, 2 FAIL — đúng 2 lỗi SQL Server
+pre-existing (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`, môi trường sandbox không có
+SQL Server thật), khớp baseline, không có regression mới.
+
+**Deploy impact**: KHÔNG cần thao tác gì ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không
+thêm biến môi trường, không thêm dependency, không có migrate dữ liệu 1 lần nào.
 
 ## Vận Hành > Đặt Hàng Siêu Thị: đổi biên giới 3 mức duyệt theo yêu cầu người dùng (2026-09-07)
 
