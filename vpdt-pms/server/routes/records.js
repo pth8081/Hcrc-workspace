@@ -1479,8 +1479,9 @@ router.post('/reportPeriods/:id/merge', async (req, res) => {
 });
 
 // POST /api/records/reportPeriods/:id/mergeByTasks — CÁCH THỨ 2 để dựng bản tổng hợp của kỳ, tự động
-// từ module Công Việc (DB.tasks) thay vì các reportEntries do từng phòng gửi — không cần body, mọi
-// logic lọc phạm vi/thời gian nằm ở lib/recordActions.js (mergeReportPeriodByTasks).
+// từ module Công Việc (DB.tasks) thay vì các reportEntries do từng phòng gửi — body optional
+// { status?, fromDate?, toDate? } lọc thêm/ghi đè mốc thời gian, mọi logic lọc phạm vi/thời gian nằm ở
+// lib/recordActions.js (mergeReportPeriodByTasks).
 router.post('/reportPeriods/:id/mergeByTasks', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -1490,7 +1491,7 @@ router.post('/reportPeriods/:id/mergeByTasks', async (req, res) => {
     const allPeriods = await getAllForCollection('reportPeriods');
     let boundaryGapWarning = null;
     const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) => {
-      const { period, warning } = recordActions.mergeReportPeriodByTasks(freshUser, item, tasks, users, allPeriods);
+      const { period, warning } = recordActions.mergeReportPeriodByTasks(freshUser, item, tasks, users, allPeriods, req.body);
       boundaryGapWarning = warning;
       return period;
     });

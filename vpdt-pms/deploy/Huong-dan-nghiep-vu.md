@@ -235,7 +235,9 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
 - **Giấy Phép** — hồ sơ pháp lý (giấy phép kinh doanh, chứng chỉ...), phân
   quyền hoàn toàn riêng ngay trong module (tạo/duyệt/xem tách biệt), không đi
   qua quy trình duyệt theo phòng ban ở mục 2. Có theo dõi hiệu lực + nhắc hết
-  hạn qua email.
+  hạn qua email. Danh sách các phiên bản gia hạn của cùng 1 giấy phép (cả ở
+  bảng con khi mở rộng 1 hồ sơ lẫn màn "Chi Tiết Giấy Phép") hiện **mới nhất
+  lên trước** (từ v11.9).
 
 ### 3.5. Vận Hành
 
@@ -510,6 +512,20 @@ file PDF đã có sẵn. **Lưu ý phân biệt**: đây là 1 quy trình nghi�
 (nhân viên chủ động nộp theo kỳ) — khác hẳn module **Báo Cáo** (mục 4), vốn chỉ
 là màn tổng hợp/giám sát số liệu đọc từ các module khác, không có luồng nghiệp
 vụ riêng của nó.
+
+Ngoài bản tổng hợp CHÍNH THỨC (chọn+sắp+merge báo cáo con nhân viên tự nộp) còn
+có box riêng **"🗂️ Đối Chiếu Theo Công Việc"** (sub-tab Tổng Hợp) — tự sinh 1
+bản đối chiếu CHỈ XEM từ công việc thật ghi nhận trong module Công Việc
+(`DB.tasks`), TÁCH RIÊNG hoàn toàn, không publish/không ảnh hưởng bản chính
+thức. Mặc định gồm mọi việc trong phạm vi phòng ban của kỳ, mốc thời gian tự
+suy ra từ chuỗi kỳ báo cáo (kỳ CLOSED liền trước → hạn chót kỳ này). Từ v11.9
+có thêm bộ lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng đang
+xem):
+- **Trạng thái**: Chưa bắt đầu/Đang thực hiện/Đã hoàn thành, hoặc **Quá hạn**
+  (nhóm phái sinh — lọc theo cờ quá hạn module tự tính, không phải 1 trạng
+  thái lưu trong dữ liệu).
+- **Từ ngày/Đến ngày**: GHI ĐÈ mốc bắt đầu/kết thúc tự suy ra ở trên (không
+  phải lọc thêm) — để trống cả 2 thì hành vi y hệt trước đây.
 
 ### 3.8. Hệ Thống / Quản Trị
 

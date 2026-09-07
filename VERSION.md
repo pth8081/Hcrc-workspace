@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**11.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Điều Hành > 📅 Báo Cáo Định Kỳ > Tổng Hợp: bộ lọc "Đối Chiếu Theo Công Việc" + Giấy Phép: sắp phiên bản mới nhất lên trước (2026-09-07)
+
+2 thay đổi nhỏ, KHÔNG đụng schema/API mới, gộp chung 1 đợt:
+
+**1. Bộ lọc cho "🗂️ Đối Chiếu Theo Công Việc"** (Điều Hành > 📅 Báo Cáo Định Kỳ > sub-tab Tổng Hợp,
+box "🗂️ Đối chiếu với công việc thật (DB.tasks)") — trước đây bấm nút này luôn tổng hợp TOÀN BỘ công
+việc trong phạm vi kỳ, không lọc được gì thêm. Nay có thêm 3 control (chỉ có tác dụng NGAY LẦN BẤM NÚT
+— sinh lại từ đầu, KHÔNG live-filter bảng đang hiển thị):
+- **Trạng thái** (`#prTaskFilterStatus`): để trống (mặc định, giữ nguyên hành vi cũ)/Chưa bắt đầu
+  (`TODO`)/Đang thực hiện (`DOING`)/Đã hoàn thành (`DONE`)/**Quá hạn** (`OVERDUE` — nhóm PHÁI SINH,
+  không phải 1 giá trị status thật: lọc theo đúng cờ "quá hạn" module này đã tự tính cho từng việc
+  mở, sau khi đã xác định việc đó CÓ được tính vào kỳ hay không — 1 việc TODO/DOING lọt vào tổng hợp
+  của kỳ gần như luôn được tính "quá hạn" vì hạn chót của nó đã <= mốc cuối kỳ).
+- **Từ ngày/Đến ngày** (`#prTaskFilterFromDate`/`#prTaskFilterToDate`): GHI ĐÈ mốc bắt đầu/kết thúc mà
+  trước đây LUÔN tự suy ra từ chuỗi kỳ báo cáo (kỳ CLOSED liền trước -> hạn chót kỳ này). Để trống cả
+  2 = hành vi y hệt trước đây (mốc tự suy ra, có cảnh báo "khoảng trống ranh giới" nếu kỳ liền trước
+  chưa đóng). Điền 1 trong 2 (hoặc cả 2) = GHI ĐÈ đúng mốc đó (không phải lọc AND thêm), vẫn giữ
+  nguyên 2 kiểu ngưỡng khác nhau cho việc ĐÃ XONG (theo thời điểm hoàn thành, có cận dưới+trên) và
+  việc CÒN MỞ (theo hạn chót, chỉ có cận trên) — và bỏ cảnh báo ranh giới (chỉ có ý nghĩa khi mốc tự
+  suy ra, không còn ý nghĩa khi người dùng tự chọn khoảng tuỳ ý).
+- `mergeReportPeriodByTasks(user, period, tasks, users, allPeriods, filters)` (`lib/recordActions.js`)
+  thêm tham số thứ 6 `filters` (optional, mặc định không đổi hành vi cũ nếu bỏ trống/không truyền —
+  callback cũ vẫn chạy nguyên). `POST /api/records/reportPeriods/:id/mergeByTasks` (`routes/records.js`)
+  nay đọc `req.body` làm `filters` (trước đây route này không đọc body gì cả).
+
+**2. Giấy Phép — sắp phiên bản mới nhất lên trước** (`public/js/module-tailieu.js`) — trước đây danh
+sách các phiên bản gia hạn (cả ở bảng con khi bấm mở rộng 1 hồ sơ, lẫn bảng "Chi Tiết Giấy Phép") hiện
+theo thứ tự CŨ nhất trước (v1 -> v2 -> v3...), phải cuộn xuống mới thấy bản mới nhất. Nay cả 2 nơi đều
+sắp MỚI NHẤT lên trước (DESC theo `issueDate`, `versionNumber` làm tiêu chí phụ) — thuần sửa THỨ TỰ
+hiển thị phía client, KHÔNG đụng gì tới `getLicenseFamily()` (vẫn giữ nguyên thứ tự tăng dần cũ vì
+`family[0]`/`family[length-1]` còn được dùng nơi khác để xác định hồ sơ gốc/phiên bản mới nhất).
+
+**Deploy-impact: KHÔNG** — không đổi `schema.sql`, không thêm biến môi trường (`.env.example`), không
+đổi `dependencies` (`package.json`). Chỉ copy code + `pm2 restart`.
+
+**Test**: `tests/test-report-period-by-tasks-filters.js` (mới, 8 kịch bản thuần Node gọi thẳng
+`mergeReportPeriodByTasks()` — status thường/OVERDUE phái sinh/ghi đè fromDate/ghi đè toDate/kết hợp/
+phạm vi rỗng báo lỗi 400) + `tests/test-periodic-report.js` (4 kịch bản UI mới qua browser thật, dùng
+đúng 3 control DOM) + `tests/test-license.js` (1 kịch bản mới xác nhận thứ tự DESC ở cả 2 nơi hiển
+thị) + `tests/testHarness.js` (mock dispatcher thread `body` vào `mergeReportPeriodByTasks()`). Full
+regression 74 file `tests/test-*.js`: 72/74 xanh, 2 lỗi còn lại (`test-audit-fixes-batch1.js`,
+`test-audit-round2-cluster1.js`) là lỗi kết nối SQL Server (`localhost:1433`) CÓ SẴN TỪ TRƯỚC (đã xác
+nhận qua `git stash` baseline y hệt, không liên quan đợt này).
 
 ## Vận Hành > 🏬 Siêu Thị > Báo Cáo: "📋 Tổng Quan Toàn Bộ Công Việc" + Xuất Excel (2026-09-07)
 

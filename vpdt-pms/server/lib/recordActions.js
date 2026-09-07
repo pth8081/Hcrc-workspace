@@ -3018,15 +3018,27 @@ const TASK_STATUS_LABELS = { TODO: 'Chưa bắt đầu', DOING: 'Đang thực hi
 // ĐÃ XONG chỉ tính nếu hoàn thành (history STATUS_DONE gần nhất) rơi vào khoảng này; việc CÒN MỞ
 // (TODO/DOING) chỉ tính nếu hạn chót không vượt quá hạn chót kỳ này (việc hạn xa hơn thuộc kỳ sau).
 // tasks/users/allPeriods: CALLER tự đọc rồi truyền vào (không tự đọc DB), giữ đúng nguyên tắc chung.
-function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
+//
+// filters (optional, từ bộ lọc UI ở #prSubAggregate): { status?, fromDate?, toDate? }.
+// - status: 'TODO'|'DOING'|'DONE' lọc đúng bằng raw.status; 'OVERDUE' là nhóm PHÁI SINH (không phải
+//   1 giá trị status thật) nên phải lọc SAU khi đã tính cờ quá hạn của từng việc (xem isOverdue() bên
+//   dưới), không lọc theo raw.status như 3 giá trị kia. Để trống/không truyền = không lọc trạng thái
+//   (giữ đúng hành vi cũ, chỉ luôn loại CANCELLED).
+// - fromDate/toDate ('YYYY-MM-DD', từ <input type=date>): GHI ĐÈ startBoundary/endBoundary tự suy ra
+//   ở trên (không phải lọc AND thêm) — vẫn giữ nguyên 2 kiểu ngưỡng khác nhau cho việc ĐÃ XONG (theo
+//   thời điểm hoàn thành) và việc CÒN MỞ (theo hạn chót), chỉ khác là mốc do người dùng tự chọn thay vì
+//   tự suy ra từ chuỗi kỳ báo cáo. Có ghi đè thì bỏ cảnh báo "khoảng trống ranh giới" (chỉ có ý nghĩa
+//   khi mốc tự suy ra từ chuỗi kỳ đóng, không còn ý nghĩa khi người dùng tự chọn khoảng tuỳ ý). Không
+//   truyền gì (mặc định) = hành vi y hệt trước đây, không đổi với các nơi gọi cũ.
+function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods, filters) {
   if (!canAggregateReports(user)) {
     throw new HttpError(403, 'Bạn không có quyền tổng hợp Báo Cáo Định Kỳ');
   }
   if (!isReportPeriodClosed(period)) {
     throw new HttpError(409, 'Kỳ báo cáo chưa kết thúc — chưa thể tổng hợp');
   }
-  const endBoundary = new Date(period.endTime);
-  if (isNaN(endBoundary.getTime())) throw new HttpError(400, 'Kỳ báo cáo thiếu hạn chót hợp lệ');
+  const autoEndBoundary = new Date(period.endTime);
+  if (isNaN(autoEndBoundary.getTime())) throw new HttpError(400, 'Kỳ báo cáo thiếu hạn chót hợp lệ');
 
   let startBoundary = null;
   // immediatePrior: kỳ gần nhất kết thúc TRƯỚC kỳ này, KHÔNG lọc theo status (khác startBoundary ở
@@ -3036,12 +3048,26 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
   (allPeriods || []).forEach((p) => {
     if (p.id === period.id || !p.endTime) return;
     const t = new Date(p.endTime);
-    if (isNaN(t.getTime()) || t >= endBoundary) return;
+    if (isNaN(t.getTime()) || t >= autoEndBoundary) return;
     if (!immediatePrior || t > immediatePrior.time) immediatePrior = { period: p, time: t };
     if (p.status !== 'CLOSED') return;
     if (!startBoundary || t > startBoundary) startBoundary = t;
   });
-  const boundaryGapWarning = (immediatePrior && (!startBoundary || immediatePrior.time.getTime() !== startBoundary.getTime()))
+
+  // Ghi đè mốc tự suy ra ở trên nếu người dùng có chọn fromDate/toDate — toDate lấy hết ngày (23:59:59)
+  // để không loại việc xảy ra/hết hạn ngay trong ngày đó, fromDate lấy đầu ngày (00:00:00) cùng lý do.
+  const hasBoundaryOverride = !!(filters && (filters.fromDate || filters.toDate));
+  let endBoundary = autoEndBoundary;
+  if (filters && filters.toDate) {
+    const d = new Date(`${filters.toDate}T23:59:59.999`);
+    if (!isNaN(d.getTime())) endBoundary = d;
+  }
+  if (filters && filters.fromDate) {
+    const d = new Date(`${filters.fromDate}T00:00:00.000`);
+    if (!isNaN(d.getTime())) startBoundary = d;
+  }
+
+  const boundaryGapWarning = (!hasBoundaryOverride && immediatePrior && (!startBoundary || immediatePrior.time.getTime() !== startBoundary.getTime()))
     ? `Kỳ báo cáo liền trước ("${immediatePrior.period.name || immediatePrior.period.id}") chưa ở trạng thái Đã đóng — phạm vi tổng hợp có thể bỏ sót hoặc trùng công việc quanh ranh giới 2 kỳ.`
     : null;
 
@@ -3061,12 +3087,16 @@ function mergeReportPeriodByTasks(user, period, tasks, users, allPeriods) {
   const byDept = new Map(); // dept -> Map(username -> { name, tasks: [] })
   (tasks || []).forEach((raw) => {
     if (raw.status === 'CANCELLED') return;
+    // Lọc trạng thái thường (không áp dụng cho 'OVERDUE' — nhóm phái sinh, lọc riêng bên dưới sau khi
+    // đã tính cờ quá hạn thật của từng việc, vì 1 việc TODO/DOING quá hạn vẫn có raw.status !== 'OVERDUE').
+    if (filters?.status && filters.status !== 'OVERDUE' && raw.status !== filters.status) return;
     const assignee = usersByUsername.get(raw.assignedTo);
     const dept = assignee?.dept;
     if (!dept || !inScope(dept)) return;
 
     const t = { ...raw };
     t._deadlineDate = t.deadline ? new Date(t.deadline) : null;
+    if (filters?.status === 'OVERDUE' && !isOverdue(t)) return;
     if (t.status === 'DONE') {
       const doneEntry = [...(t.history || [])].reverse().find(h => h.action === 'STATUS_DONE');
       const doneAt = doneEntry ? parseVNDateTime(doneEntry.time) : null;

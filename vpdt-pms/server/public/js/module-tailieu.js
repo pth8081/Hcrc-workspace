@@ -768,7 +768,10 @@ function renderLicenses() {
   }
 
   tbody.innerHTML = pageItems.map(item => {
-    const versions = getLicenseFamily(item.id).filter(l => l.id !== item.id);
+    // Danh sách các phiên bản gia hạn hiện dưới hàng gốc — sắp MỚI NHẤT lên trước (khác thứ tự tăng
+    // dần của getLicenseFamily(), vốn phải giữ nguyên vì family[0]/family[length-1] còn dùng nơi khác).
+    const versions = getLicenseFamily(item.id).filter(l => l.id !== item.id)
+      .sort((a, b) => new Date(b.issueDate) - new Date(a.issueDate) || (b.versionNumber || 1) - (a.versionNumber || 1));
     const isExpanded = expandedLicenseFamilies.has(item.id);
     const rootRowHTML = buildLicenseRowHTML(item, { versionCount: versions.length, isExpanded, canApprove });
     const childRowsHTML = isExpanded ? versions.map(v => buildLicenseRowHTML(v, { isChild: true, canApprove })).join('') : '';
@@ -1020,7 +1023,11 @@ function viewLicenseDetails(anyId) {
   const family = getLicenseFamily(anyId);
   const root = family[0];
 
-  const rowsHTML = family.map(v => {
+  // Bảng chi tiết hiện MỚI NHẤT lên trước — dùng bản sao đã sắp lại, KHÔNG đổi thứ tự tăng dần của
+  // family gốc (root = family[0] ở trên vẫn cần thứ tự cũ).
+  const rowsHTML = family.slice()
+    .sort((a, b) => new Date(b.issueDate) - new Date(a.issueDate) || (b.versionNumber || 1) - (a.versionNumber || 1))
+    .map(v => {
     const finalApproval = [...(v.history || [])].reverse().find(h => h.action === 'APPROVED');
     let approverHTML;
     if (finalApproval) {

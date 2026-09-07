@@ -422,6 +422,37 @@ async function main() {
       assert(result.pendingVersions >= 1, 'Phải còn ít nhất 1 version đang PENDING để thẻ có ý nghĩa (v3 vừa tạo ở bước 9)');
     });
 
+    // ===== 15) Sắp xếp phiên bản MỚI NHẤT lên trước — cả bảng con (renderLicenses()) lẫn bảng chi tiết
+    // (viewLicenseDetails()) — dùng lại đúng gia đình giấy phép của firstLicenseId đã dựng ở bước 7+9:
+    // v1 (issueDate 1/1/2026) -> v2 "GPKD-001/2026-B" (issueDate 1/1/2027, REJECTED) -> v3
+    // "GPKD-001/2026-D" (issueDate 1/8/2027, PENDING) — issueDate và versionNumber cùng tăng dần nên
+    // sắp DESC theo issueDate cũng đồng thời là DESC theo versionNumber (v3 > v2 > v1). =====
+    await run.run('Sắp xếp phiên bản MỚI NHẤT lên trước (renderLicenses() bảng con + viewLicenseDetails() bảng chi tiết)', async () => {
+      const result = await page.evaluate((id) => {
+        switchTab('license');
+        if (!expandedLicenseFamilies.has(id)) toggleLicenseFamily(id); else renderLicenses();
+        const tbodyHTML = document.getElementById('licenseTableBody').innerHTML;
+        viewLicenseDetails(id);
+        const detailHTML = document.getElementById('licenseDetailBody').innerHTML;
+        return { tbodyHTML, detailHTML };
+      }, firstLicenseId);
+
+      // renderLicenses(): bảng con (versions, KHÔNG gồm hàng gốc v1) phải hiện v3 trước v2.
+      const idxD = result.tbodyHTML.indexOf('GPKD-001/2026-D');
+      const idxB = result.tbodyHTML.indexOf('GPKD-001/2026-B');
+      assert(idxD !== -1 && idxB !== -1, 'renderLicenses(): bảng đã mở rộng phải hiện đủ 2 phiên bản con (v2, v3)');
+      assert(idxD < idxB, 'renderLicenses(): phiên bản mới hơn (v3, issueDate 1/8/2027) phải hiện TRƯỚC phiên bản cũ hơn (v2, issueDate 1/1/2027)');
+
+      // viewLicenseDetails(): bảng chi tiết gồm CẢ v1 gốc, phải hiện v3 -> v2 -> v1. Tìm v1 bằng hậu tố
+      // "<" (mở thẻ <br> ngay sau licenseNumber trong template) để KHÔNG khớp nhầm vào chuỗi "GPKD-001/
+      // 2026-B"/"GPKD-001/2026-D" (2 chuỗi này có "GPKD-001/2026" làm tiền tố chung với v1).
+      const idxDetailD = result.detailHTML.indexOf('GPKD-001/2026-D');
+      const idxDetailB = result.detailHTML.indexOf('GPKD-001/2026-B');
+      const idxDetailA = result.detailHTML.indexOf('GPKD-001/2026<');
+      assert(idxDetailD !== -1 && idxDetailB !== -1 && idxDetailA !== -1, 'viewLicenseDetails(): bảng chi tiết phải hiện đủ 3 phiên bản (v1 gốc + v2 + v3)');
+      assert(idxDetailD < idxDetailB && idxDetailB < idxDetailA, 'viewLicenseDetails(): phải sắp MỚI NHẤT lên trước (v3 > v2 > v1 theo issueDate), root=family[0] không còn quyết định thứ tự hiển thị');
+    });
+
   } finally {
     run.summary();
     await browser.close();

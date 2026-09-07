@@ -338,6 +338,74 @@ async function main() {
       assertEqual(result.alerts.length, 0, 'Xuất Excel thành công không được có alert lỗi nào');
     });
 
+    // ===== 9b) Bộ lọc "Trạng thái" + "Từ ngày/Đến ngày" ở box Đối Chiếu Theo Công Việc — chỉ có tác
+    // dụng NGAY LẦN BẤM NÚT (không live-filter), đọc đúng 3 control #prTaskFilterStatus/
+    // #prTaskFilterFromDate/#prTaskFilterToDate rồi truyền vào mergeReportPeriodByTasks() qua body POST
+    // /mergeByTasks (xem lib/recordActions.js). 2 công việc nguồn: 9001 DONE (hoàn thành 1/1/2025),
+    // 9002 DOING (hạn now+10 ngày — LƯU Ý: đã "quá hạn" theo đúng định nghĩa isOverdue() của module này
+    // vì hạn < endBoundary kỳ hiện tại, dù còn nguyên vẹn trong tương lai thật). =====
+    await run.run('Bộ lọc Trạng thái: status=DONE chỉ trả về việc đã hoàn thành', async () => {
+      const result = await page.evaluate(async (pId) => {
+        window.__resetCapture();
+        prAggCurrentPeriodId = pId;
+        document.getElementById('prTaskFilterStatus').value = 'DONE';
+        document.getElementById('prTaskFilterFromDate').value = '';
+        document.getElementById('prTaskFilterToDate').value = '';
+        await mergeReportPeriodByTasksAction();
+        const p = DB.reportPeriods.find(x => x.id === pId);
+        const tasksSlide = p.taskCompilation.slides.find(s => s.kind === 'TASKS');
+        return { alerts: window.__alerts, items: tasksSlide ? tasksSlide.items : null };
+      }, periodId);
+      assertEqual(result.items.length, 1, 'Lọc status=DONE phải chỉ còn đúng 1 việc');
+      assertIncludes(result.items[0].content, 'Chuẩn bị báo giá', 'Phải đúng việc DONE (Chuẩn bị báo giá)');
+      assertEqual(result.alerts.length, 0, 'Lọc thành công không alert lỗi gì');
+    });
+
+    await run.run('Bộ lọc Trạng thái: status=OVERDUE (nhóm phái sinh) chỉ trả về việc còn mở đã quá hạn', async () => {
+      const result = await page.evaluate(async (pId) => {
+        window.__resetCapture();
+        document.getElementById('prTaskFilterStatus').value = 'OVERDUE';
+        await mergeReportPeriodByTasksAction();
+        const p = DB.reportPeriods.find(x => x.id === pId);
+        const tasksSlide = p.taskCompilation.slides.find(s => s.kind === 'TASKS');
+        return { alerts: window.__alerts, items: tasksSlide ? tasksSlide.items : null };
+      }, periodId);
+      assertEqual(result.items.length, 1, 'Lọc status=OVERDUE phải chỉ còn đúng 1 việc (9002 DOING, quá hạn so với endBoundary của kỳ)');
+      assertIncludes(result.items[0].content, 'Theo dõi công nợ', 'Phải đúng việc DOING quá hạn (Theo dõi công nợ)');
+      assertEqual(result.alerts.length, 0, 'Lọc thành công không alert lỗi gì');
+    });
+
+    await run.run('Bộ lọc Từ ngày: ghi đè startBoundary loại việc DONE hoàn thành trước mốc, giữ nguyên việc còn mở', async () => {
+      const result = await page.evaluate(async (pId) => {
+        window.__resetCapture();
+        document.getElementById('prTaskFilterStatus').value = '';
+        document.getElementById('prTaskFilterFromDate').value = '2026-01-01'; // sau 1/1/2025 (ngày hoàn thành việc 9001), trước "hôm nay" thật
+        document.getElementById('prTaskFilterToDate').value = '';
+        await mergeReportPeriodByTasksAction();
+        const p = DB.reportPeriods.find(x => x.id === pId);
+        const tasksSlide = p.taskCompilation.slides.find(s => s.kind === 'TASKS');
+        return { alerts: window.__alerts, items: tasksSlide ? tasksSlide.items : null };
+      }, periodId);
+      assertEqual(result.items.length, 1, 'Từ ngày ghi đè phải loại việc DONE hoàn thành trước mốc mới, chỉ còn việc mở');
+      assertIncludes(result.items[0].content, 'Theo dõi công nợ', 'Việc còn lại phải là việc DOING (không có cận dưới)');
+      assertEqual(result.alerts.length, 0, 'Ghi đè mốc hợp lệ không alert lỗi gì (cảnh báo ranh giới cũng bị bỏ vì đã override)');
+    });
+
+    await run.run('Bỏ hết bộ lọc: quay lại đúng hành vi mặc định (2 việc, không đổi so với trước khi có bộ lọc)', async () => {
+      const result = await page.evaluate(async (pId) => {
+        window.__resetCapture();
+        document.getElementById('prTaskFilterStatus').value = '';
+        document.getElementById('prTaskFilterFromDate').value = '';
+        document.getElementById('prTaskFilterToDate').value = '';
+        await mergeReportPeriodByTasksAction();
+        const p = DB.reportPeriods.find(x => x.id === pId);
+        const tasksSlide = p.taskCompilation.slides.find(s => s.kind === 'TASKS');
+        return { alerts: window.__alerts, items: tasksSlide ? tasksSlide.items : null };
+      }, periodId);
+      assertEqual(result.items.length, 2, 'Để trống bộ lọc phải quay lại đúng 2 việc như hành vi mặc định cũ');
+      assertEqual(result.alerts.length, 0, 'Không alert gì (không có cảnh báo ranh giới vì kỳ đầu tiên, không có kỳ liền trước)');
+    });
+
     // ===== 10) Xuất PDF/Excel khi CHƯA từng bấm "Đối Chiếu Theo Công Việc" — phải báo rõ, không crash =====
     await run.run('Xuất PDF/Excel "Tổng Hợp Theo Công Việc": báo lỗi rõ ràng nếu chưa đối chiếu lần nào (kỳ khác, taskCompilation null)', async () => {
       const result = await page.evaluate(async () => {

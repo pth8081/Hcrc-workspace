@@ -244,9 +244,17 @@ async function mergeReportPeriodByTasksAction() {
   if (!prAggCurrentPeriodId) return;
   const period = DB.reportPeriods.find(p => p.id === prAggCurrentPeriodId);
   if (!period) return;
+  // Bộ lọc chỉ có tác dụng ngay lần bấm nút này (sinh lại toàn bộ taskCompilation), KHÔNG lọc trực
+  // tiếp trên bảng đang hiển thị — để trống thì server giữ nguyên hành vi mặc định (xem
+  // mergeReportPeriodByTasks() ở lib/recordActions.js).
+  const filters = {
+    status: document.getElementById('prTaskFilterStatus').value || null,
+    fromDate: document.getElementById('prTaskFilterFromDate').value || null,
+    toDate: document.getElementById('prTaskFilterToDate').value || null
+  };
   let result;
   try {
-    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'mergeByTasks', {});
+    result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'mergeByTasks', filters);
   } catch (err) { return alert(`⛔ ${err.message}`); }
   const updated = result.item;
   const idx = DB.reportPeriods.findIndex(p => p.id === updated.id);
