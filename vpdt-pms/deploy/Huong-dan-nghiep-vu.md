@@ -306,6 +306,41 @@ với "Tổng Hợp"):
     này. Hồ sơ CŨ đã lỡ lưu "Chi Phí Phê Duyệt" trước đợt này KHÔNG bị xoá dữ
     liệu (field cũ vẫn còn nguyên trong bản ghi, chỉ không còn nơi nào ghi/
     đọc/hiển thị nó nữa).
+  - **Quyền quản lý — Overhaul theo "người quản lý dự án" (từ v11.3)**: mô
+    hình quyền cũ dùng 4 checkbox TÁCH RIÊNG cho từng giai đoạn (Lập Dự Toán/
+    Quản Lý Công Việc Thực Hiện/Nghiệm Thu Công Việc/Xác Nhận Đưa Vào Sử
+    Dụng) — bất kỳ ai giữ 1 trong 4 quyền này đều "toàn quyền" ở đúng giai
+    đoạn đó trên **MỌI** hồ sơ, không phân biệt ai lập hồ sơ. Đã đổi theo yêu
+    cầu người dùng: chỉ **người quản lý dự án** (= người tạo hồ sơ) mới toàn
+    quyền tạo/sửa/xoá đầu mục công việc lớn/con + quản lý Danh Mục Đầu Tư +
+    Bắt Đầu Kỳ Thực Hiện + Xác Nhận Đưa Vào Sử Dụng, và **CHỈ trên hồ sơ do
+    CHÍNH mình tạo**:
+    - 2 quyền **"🏬 Tạo Đề Xuất Mở Mới Siêu Thị"**/**"🔧 Tạo Đề Xuất Sửa Chữa
+      Siêu Thị"** (cây phân quyền, khối 22 "Vận Hành") GIỮ NGUYÊN tên nhưng
+      MỞ RỘNG ý nghĩa: người giữ quyền này nay toàn quyền quản lý cả vòng đời
+      hồ sơ họ tạo (không chỉ riêng bước tạo mới như trước) — nhưng KHÔNG
+      động được tới hồ sơ của người khác tạo, dù cùng giữ quyền này.
+    - Quyền **MỚI "🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt
+      Người Tạo)"** (`operationRecordManageAll`) — dành cho vai trò cần quản
+      lý xuyên hồ sơ (VD trưởng phòng Vận Hành theo dõi mọi dự án của cả
+      phòng): toàn quyền như trên nhưng trên **MỌI** hồ sơ, bất kể ai tạo.
+    - 4 checkbox cũ ("Lập/Gửi Duyệt Dự Toán", "Quản Lý Công Việc Thực Hiện",
+      "Nghiệm Thu Công Việc", "Xác Nhận Đưa Vào Sử Dụng") **đã gỡ khỏi cây
+      phân quyền** — không còn cấp/sửa được qua UI nữa. Tài khoản đang lưu
+      sẵn 4 quyền này trong dữ liệu (nếu có) sẽ **KHÔNG còn hiệu lực** — admin
+      cần rà soát và cấp bù `operationRecordManageAll` thủ công cho người
+      thực sự cần quyền quản lý xuyên hồ sơ.
+    - **"Người Phụ Trách" (personInCharge)** của hồ sơ — trước đây tự động
+      có quyền SỬA công việc dù không giữ quyền quản lý nào; nay **KHÔNG còn**
+      tự động cấp quyền nữa (field vẫn hiển thị bình thường, chỉ mang tính
+      thông tin "ai phụ trách hồ sơ này", không còn ý nghĩa phân quyền).
+    - **KHÔNG đổi**: người thực hiện (được gán ở "Người Phụ Trách" của TỪNG
+      công việc, có thể nhiều người) vẫn tự cập nhật tiến độ đúng việc của
+      mình; người nghiệm thu được CHỈ ĐỊNH riêng cho từng việc vẫn tự nghiệm
+      thu đúng việc đó — không cần bất kỳ quyền quản lý nào ở trên. Người
+      quản lý hồ sơ (creator hoặc giữ "Quản Lý Hồ Sơ Siêu Thị") giờ CŨNG cập
+      nhật/nghiệm thu được trên hồ sơ mình quản lý, thêm vào (không thay thế)
+      quyền của người được gán/chỉ định.
 
 ### 3.6. Hỗ Trợ IT
 

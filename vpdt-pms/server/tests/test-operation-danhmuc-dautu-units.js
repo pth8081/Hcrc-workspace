@@ -172,7 +172,11 @@ test('computeOperationRecordStageStatus: cha đã cascade "hoàn thành" (DANG_N
 });
 
 // ===================== 2) submitOperationEstimate =====================
-const ESTIMATOR = { username: 'est1', name: 'Người Lập', perms: { operationEstimateCreate: true } };
+// Overhaul quyền Vận Hành > Siêu Thị: operationEstimateCreate đã RÚT GỌN, gộp vào luật "toàn quyền quản
+// lý hồ sơ" — dùng operationRecordManageAll ở đây (toàn quyền MỌI hồ sơ, không cần item.creator khớp)
+// để giữ nguyên phạm vi test này (cấu trúc/id hạng mục, không phải quyền theo creator — xem
+// tests/test-operation-store-lifecycle.js cho phần test quyền creator-scoped đầy đủ của đợt overhaul này).
+const ESTIMATOR = { username: 'est1', name: 'Người Lập', perms: { operationRecordManageAll: true } };
 test('submitOperationEstimate: lần lưu đầu (DRAFT) -> APPROVED, mỗi hạng mục được gán id', () => {
   const item = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
   const result = recordActions.submitOperationEstimate(ESTIMATOR, item, { items: [{ content: 'A', amount: 100 }, { content: 'B', amount: 200 }] });
@@ -240,15 +244,19 @@ test('operationRepairs.extraValidate: approvedBudget hợp lệ -> payload.appro
 
 // ===================== 2c) Correction 3 — updateOperationWorkItemProgress() nhận thêm note tuỳ chọn
 //    (mirror #taskProgressModal — "Ghi chú tiến độ") =====================
+// Overhaul quyền Vận Hành > Siêu Thị: override "toàn quyền" của updateOperationWorkItemProgress() nay
+// đi qua canManageOperationRecord() (admin/operationRecordManageAll/creator-scoped) thay vì
+// operationExecutionManage — operationRecordManageAll ở đây bỏ qua luôn nhu cầu truyền sourceRecord
+// (tham số cuối, không truyền ở đây = undefined, vẫn hợp lệ vì override bypass trước khi đọc tới nó).
 test('updateOperationWorkItemProgress: có note -> ghi vào history entry mới nhất', () => {
-  const user = { username: 'u1', name: 'User 1', perms: { operationExecutionManage: true } };
+  const user = { username: 'u1', name: 'User 1', perms: { operationRecordManageAll: true } };
   const item = { status: 'CHUA_BAT_DAU', history: [] };
   const result = recordActions.updateOperationWorkItemProgress(user, item, [], 'DANG_THUC_HIEN', 'Đã bắt đầu khảo sát hiện trường');
   const last = result.history[result.history.length - 1];
   assert.strictEqual(last.note, 'Đã bắt đầu khảo sát hiện trường');
 });
 test('updateOperationWorkItemProgress: không có note -> history entry KHÔNG có field note (không ghi rác chuỗi rỗng)', () => {
-  const user = { username: 'u1', name: 'User 1', perms: { operationExecutionManage: true } };
+  const user = { username: 'u1', name: 'User 1', perms: { operationRecordManageAll: true } };
   const item = { status: 'CHUA_BAT_DAU', history: [] };
   const result = recordActions.updateOperationWorkItemProgress(user, item, [], 'DANG_THUC_HIEN');
   const last = result.history[result.history.length - 1];

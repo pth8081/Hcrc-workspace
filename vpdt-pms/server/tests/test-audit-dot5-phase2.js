@@ -91,7 +91,11 @@ await run.run('assertNoManagerCycle(): vòng lặp gián tiếp nhiều cấp ->
 });
 
 // ===== 3) deleteOperationWorkItem() chặn xoá việc đã "Đã nghiệm thu" =====
-const EXEC_USER = { username: 'qlvh', perms: { operationExecutionManage: true } };
+// Overhaul quyền Vận Hành > Siêu Thị: operationExecutionManage đã RÚT GỌN — dùng operationRecordManageAll
+// (toàn quyền MỌI hồ sơ, không cần sourceRecord/creator khớp) để giữ nguyên phạm vi test này (chặn theo
+// trạng thái công việc, không phải theo quyền — xem tests/test-operation-store-lifecycle.js cho phần
+// test quyền creator-scoped đầy đủ của đợt overhaul này).
+const EXEC_USER = { username: 'qlvh', perms: { operationRecordManageAll: true } };
 
 await run.run('deleteOperationWorkItem(): công việc CHUA_BAT_DAU -> xoá được bình thường', () => {
   const item = { id: 10, status: 'CHUA_BAT_DAU' };
@@ -108,7 +112,7 @@ await run.run('deleteOperationWorkItem(): công việc DA_NGHIEM_THU -> bị ch�
 await run.run('createOperationWorkItem(): hồ sơ đã useConfirmStatus=CONFIRMED -> chặn tạo công việc mới', () => {
   const sourceRecord = { id: 1, estimateStatus: 'APPROVED', useConfirmStatus: 'CONFIRMED' };
   assertThrows(
-    () => createOperationWorkItem(EXEC_USER, { title: 'Việc mới' }, sourceRecord, [], []),
+    () => createOperationWorkItem(EXEC_USER, { title: 'Việc mới' }, sourceRecord, [], [], undefined, 'OPERATION_STORE_OPENING'),
     'phải chặn tạo công việc mới khi hồ sơ đã xác nhận đưa vào sử dụng'
   );
 });
@@ -116,7 +120,7 @@ await run.run('createOperationWorkItem(): hồ sơ đã useConfirmStatus=CONFIRM
 await run.run('createOperationWorkItem(): hồ sơ chưa xác nhận đưa vào sử dụng -> tạo bình thường', () => {
   const sourceRecord = { id: 1, estimateStatus: 'APPROVED', useConfirmStatus: null };
   const periods = [{ id: 99, name: 'Kỳ 1', status: 'DANG_THUC_HIEN' }];
-  const item = createOperationWorkItem(EXEC_USER, { title: 'Việc mới', periodId: 99 }, sourceRecord, [], periods);
+  const item = createOperationWorkItem(EXEC_USER, { title: 'Việc mới', periodId: 99 }, sourceRecord, [], periods, undefined, 'OPERATION_STORE_OPENING');
   assertEqual(item.title, 'Việc mới');
 });
 

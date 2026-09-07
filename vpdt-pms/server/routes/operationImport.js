@@ -69,9 +69,18 @@ function parseUploadedFile(req, res, onOk) {
   });
 }
 
-// GET /api/operation/estimate-import-template — mẫu Excel Danh Mục Đầu Tư (operationEstimateCreate).
+// Không có sourceId cụ thể ở 4 route dưới đây (tải mẫu/đọc preview file, CHƯA ghi gì vào 1 hồ sơ nào cả
+// — client vẫn phải gọi lại đúng API ghi thật sau đó, xem chú thích đầu file) nên KHÔNG đối chiếu được
+// creator theo đúng hồ sơ — chỉ chặn "chắc chắn không thể" (không giữ BẤT KỲ quyền quản lý hồ sơ nào cả),
+// còn creator-scoping thật sự do route ghi thật (submitOperationEstimate()/createOperationWorkItem())
+// tự đối chiếu lại theo canManageOperationRecord(), đúng nguyên tắc "không tin lớp kiểm tra ở đây là đủ".
+function hasAnyOperationRecordManagePerm(user) {
+  return !!(user?.perms?.admin || user?.perms?.operationRecordManageAll || user?.perms?.operationStoreOpenCreate || user?.perms?.operationRepairCreate);
+}
+
+// GET /api/operation/estimate-import-template — mẫu Excel Danh Mục Đầu Tư.
 router.get('/estimate-import-template', async (req, res) => {
-  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.operationEstimateCreate) {
+  if (!hasAnyOperationRecordManagePerm(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền lập danh mục đầu tư' });
   }
   try {
@@ -89,7 +98,7 @@ router.get('/estimate-import-template', async (req, res) => {
 // POST /api/operation/estimate-parse-import — đọc file Danh Mục Đầu Tư đã điền, trả preview để client
 // gộp vào bảng hạng mục đang sửa rồi vẫn bấm "Lưu Danh Mục Đầu Tư" như bình thường.
 router.post('/estimate-parse-import', uploadRateLimiter, (req, res) => {
-  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.operationEstimateCreate) {
+  if (!hasAnyOperationRecordManagePerm(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền lập danh mục đầu tư' });
   }
   parseUploadedFile(req, res, async (buffer, resp) => {
@@ -98,9 +107,9 @@ router.post('/estimate-parse-import', uploadRateLimiter, (req, res) => {
   });
 });
 
-// GET /api/operation/workitem-import-template — mẫu Excel Danh Sách Công Việc (operationExecutionManage).
+// GET /api/operation/workitem-import-template — mẫu Excel Danh Sách Công Việc.
 router.get('/workitem-import-template', async (req, res) => {
-  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.operationExecutionManage) {
+  if (!hasAnyOperationRecordManagePerm(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền quản lý công việc Thực hiện' });
   }
   try {
@@ -119,7 +128,7 @@ router.get('/workitem-import-template', async (req, res) => {
 // chú thích parseOperationWorkItemImportXlsx()), trả preview để client lần lượt tạo qua
 // POST /api/records/operationWorkItems như thêm tay.
 router.post('/workitem-parse-import', uploadRateLimiter, (req, res) => {
-  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.operationExecutionManage) {
+  if (!hasAnyOperationRecordManagePerm(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền quản lý công việc Thực hiện' });
   }
   parseUploadedFile(req, res, async (buffer, resp) => {

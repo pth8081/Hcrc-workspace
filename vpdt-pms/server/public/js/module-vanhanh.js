@@ -1129,14 +1129,29 @@ async function processOperation(actionType) {
 
 // ==========================================
 // VẬN HÀNH > "SIÊU THỊ" > DỰ TOÁN — estimateItems[]/estimateStatus nested TRÊN chính bản ghi
-// operationStoreOpenings/operationRepairs (không phải collection riêng), quyền operationEstimateCreate.
+// operationStoreOpenings/operationRepairs (không phải collection riêng), quyền: toàn quyền quản lý hồ sơ.
 // Duyệt/Từ chối/Bổ sung đi qua route generic /api/workflow/<ESTIMATE_MODULE_KEY>/:id/:action.
 // ==========================================
 const OPERATION_ESTIMATE_MODULE_KEY = { operationStoreOpenings: 'operationStoreOpeningEstimate', operationRepairs: 'operationRepairEstimate' };
 function operationEstimateWfMap(kind) {
   return kind === 'operationStoreOpenings' ? (DB.operationStoreOpenEstimateDeptWorkflows || {}) : (DB.operationRepairEstimateDeptWorkflows || {});
 }
-function canCreateOperationEstimateClient(user) { return !!(user?.perms?.admin || user?.perms?.operationEstimateCreate); }
+// Overhaul quyền Vận Hành > Siêu Thị — mirror ĐÚNG lib/createValidation.js canManageOperationRecord():
+// admin/operationRecordManageAll toàn quyền MỌI hồ sơ; operationStoreOpenCreate/operationRepairCreate
+// (đúng theo kind — dùng thẳng OPERATION_KIND_META[kind].permCreate, KHỎI cần map lại lần 2) CHỈ toàn
+// quyền trên hồ sơ CHÍNH mình tạo (sourceRecord.creator === user.username). 4 quyền tách riêng cũ
+// (operationEstimateCreate/operationExecutionManage/operationAcceptanceManage/operationUseConfirm) đã
+// RÚT GỌN — không còn hàm/gate riêng nào cho từng giai đoạn nữa, TẤT CẢ đi qua ĐÚNG 1 hàm này.
+function canManageOperationRecordClient(user, kind, sourceRecord) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
+  if (!sourceRecord || !user.username || sourceRecord.creator !== user.username) return false;
+  const flag = OPERATION_KIND_META[kind]?.permCreate;
+  return !!(flag && user.perms?.[flag]);
+}
+// Giữ tên cũ (ít điểm gọi cần sửa) — nay CẦN thêm kind/sourceRecord vì quyền không còn "phẳng" (không
+// còn chỉ phụ thuộc 1 checkbox riêng của user, mà phụ thuộc CẢ creator của từng hồ sơ).
+function canCreateOperationEstimateClient(user, kind, sourceRecord) { return canManageOperationRecordClient(user, kind, sourceRecord); }
 
 function operationEstimateStatusBadge(o) {
   const status = o.estimateStatus || 'DRAFT';
@@ -1283,7 +1298,7 @@ function openOperationEstimateModal(kind, id) {
     : [];
   // "Danh mục đầu tư lập xong có thể sửa để thêm bớt công việc" — APPROVED KHÔNG còn là ngõ cụt, vẫn sửa
   // được như DRAFT (server submitOperationEstimate() đã nhận lại từ APPROVED, xem lib/recordActions.js).
-  const editable = (o.estimateStatus === 'DRAFT' || !o.estimateStatus || o.estimateStatus === 'APPROVED') && canCreateOperationEstimateClient(currentUser);
+  const editable = (o.estimateStatus === 'DRAFT' || !o.estimateStatus || o.estimateStatus === 'APPROVED') && canCreateOperationEstimateClient(currentUser, kind, o);
   if (editable && operationEstimateItems.length === 0) operationEstimateItems.push({ content: '', description: '', amount: 0, note: '' });
   document.getElementById('operationEstimateItemsEditControls').classList.toggle('hidden', !editable);
   renderOperationEstimateItemsTable(editable);
@@ -1326,7 +1341,7 @@ function openOperationEstimateModal(kind, id) {
           <button data-op="confirmProcessOperationEstimate" data-action="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
         </div>
       </div>`;
-  } else if (o.estimateStatus === 'REJECTED' && canCreateOperationEstimateClient(currentUser)) {
+  } else if (o.estimateStatus === 'REJECTED' && canCreateOperationEstimateClient(currentUser, kind, o)) {
     // Nhánh này chỉ còn khả năng xảy ra với hồ sơ CŨ (trước Mục H) từng bị Từ chối — hồ sơ MỚI từ giờ
     // không còn ai duyệt/từ chối nữa (đi thẳng DRAFT -> APPROVED, xem submitOperationEstimate()), giữ lại
     // lối quay lại DRAFT này chỉ để xử lý nốt dữ liệu cũ còn tồn REJECTED.
@@ -1345,10 +1360,11 @@ function closeOperationEstimateModal() {
 }
 
 async function submitOperationEstimateForApproval() {
-  if (!canCreateOperationEstimateClient(currentUser)) return alert('⛔ Bạn không có quyền lập danh mục đầu tư!');
+  const kind = currentEstimateKind, id = currentEstimateRecordId;
+  const sourceRecord = OPERATION_KIND_META[kind]?.list().find(x => x.id === id);
+  if (!canCreateOperationEstimateClient(currentUser, kind, sourceRecord)) return alert('⛔ Bạn không có quyền lập danh mục đầu tư!');
   const validItems = operationEstimateItems.filter(it => (it.content || '').trim());
   if (!validItems.length) return alert('Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Nội Dung)!');
-  const kind = currentEstimateKind, id = currentEstimateRecordId;
   let result;
   try {
     result = await callRecordAction(kind, id, 'estimate/submit', { items: validItems });
@@ -1405,8 +1421,9 @@ async function onOperationEstimateImportFileChange(event) {
 // Lập lại dự toán sau khi bị Từ chối (REJECTED -> DRAFT) — khớp resetOperationEstimateToDraft() ở
 // lib/recordActions.js (audit Đợt 5, Giai đoạn 4, đã xác nhận với người dùng cần thêm lối quay lại).
 async function resetOperationEstimateToDraft() {
-  if (!canCreateOperationEstimateClient(currentUser)) return alert('⛔ Bạn không có quyền lập dự toán!');
   const kind = currentEstimateKind, id = currentEstimateRecordId;
+  const sourceRecord = OPERATION_KIND_META[kind]?.list().find(x => x.id === id);
+  if (!canCreateOperationEstimateClient(currentUser, kind, sourceRecord)) return alert('⛔ Bạn không có quyền lập dự toán!');
   let result;
   try {
     result = await callRecordAction(kind, id, 'estimate/reset', {});
@@ -1492,7 +1509,7 @@ async function processOperationEstimate(actionType) {
 
 // ==========================================
 // VẬN HÀNH > "SIÊU THỊ" > THỰC HIỆN + NGHIỆM THU — cây công việc đa cấp dbo.OperationWorkItems
-// (lib/operationWorkItemStore.js), quyền operationExecutionManage/operationAcceptanceManage. Chỉ mở
+// (lib/operationWorkItemStore.js), quyền: toàn quyền quản lý hồ sơ (canManageOperationRecordClient()). Chỉ mở
 // khoá khi estimateStatus === 'APPROVED' (đúng yêu cầu "sau khi giai đoạn dự toán hoàn thành").
 // ==========================================
 function operationSourceType(kind) { return kind === 'operationStoreOpenings' ? 'OPERATION_STORE_OPENING' : 'OPERATION_REPAIR'; }
@@ -1626,14 +1643,20 @@ function renderOperationWorkItemModalBody() {
   const kind = currentWorkItemModalKind, id = currentWorkItemModalRecordId, mode = currentWorkItemModalMode;
   if (!kind) return;
   const items = getOperationWorkItemsForRecord(kind, id);
-  const canManageExecution = !!(currentUser.perms?.admin || currentUser.perms?.operationExecutionManage);
-  const canManageAcceptance = !!(currentUser.perms?.admin || currentUser.perms?.operationAcceptanceManage);
   const sourceRecord = OPERATION_KIND_META[kind].list().find(x => x.id === id);
-  // Mục E: quyền SỬA công việc mở rộng cho "Người Phụ Trách" hồ sơ gốc — mirror ĐÚNG
-  // assertCanManageOperationWorkItem() ở server. CHỈ gate nút "✏️ Sửa" (buildOperationWorkItemRow()) —
-  // KHÔNG mở "➕ Con"/"➕ Thêm Công Việc Gốc" (vẫn canManageExecution riêng, đúng phạm vi đã chốt).
-  const isPersonInCharge = !!(currentUser.username && sourceRecord?.personInCharge && currentUser.username === sourceRecord.personInCharge);
-  const canEditWorkItems = canManageExecution || isPersonInCharge;
+  // Overhaul quyền Vận Hành > Siêu Thị: 4 quyền tách riêng cũ (operationEstimateCreate/
+  // operationExecutionManage/operationAcceptanceManage/operationUseConfirm) + nhánh "Người Phụ Trách
+  // (personInCharge) hồ sơ cũng sửa được" ĐỀU đã RÚT GỌN — giờ CHỈ MỘT gate "toàn quyền quản lý hồ sơ"
+  // (canManageOperationRecordClient(), mirror ĐÚNG lib/createValidation.js canManageOperationRecord())
+  // cho MỌI thao tác quản lý (tạo/sửa/xoá công việc, Xác Nhận Đưa Vào Sử Dụng...) — giữ 2 biến tên cũ
+  // (canManageExecution/canManageAcceptance) để đỡ phải sửa lại toàn bộ buildOperationWorkItemRow(s)()
+  // bên dưới, nay LUÔN cùng giá trị vì không còn tách theo giai đoạn nữa.
+  const canManage = canManageOperationRecordClient(currentUser, kind, sourceRecord);
+  const canManageExecution = canManage;
+  const canManageAcceptance = canManage;
+  // "✏️ Sửa" công việc — Mục 4 (RÚT GỌN): personInCharge KHÔNG còn tự động có quyền sửa nữa, CHỈ
+  // canManage (đúng "còn những người khác chỉ có quyền thực hiện thao tác").
+  const canEditWorkItems = canManage;
 
   // "Kỳ Thực Hiện" (Tạo Kỳ) đã BỎ HẲN khỏi màn Thực hiện/Lập công việc (yêu cầu người dùng) — box này
   // luôn ẩn từ nay, giữ lại phần tử DOM/lib/routes phía server chỉ để hồ sơ CŨ còn periodId/periodName
@@ -1656,9 +1679,9 @@ function renderOperationWorkItemModalBody() {
 
   // Xác Nhận Đưa Vào Sử Dụng — mốc CẤP HỒ SƠ, tách khỏi "Đã nghiệm thu" từng việc/cây việc, xem
   // lib/recordActions.js confirmOperationUse(). Chỉ hiện ở tab Nghiệm thu, khi TOÀN BỘ cây công việc đã
-  // "Đã nghiệm thu" — quyền RIÊNG (operationUseConfirm), không dùng chung operationAcceptanceManage.
+  // "Đã nghiệm thu" — quyền RIÊNG (operationUseConfirm) đã RÚT GỌN, nay dùng CHUNG canManage.
   const useConfirmBox = document.getElementById('operationUseConfirmBox');
-  const canConfirmUse = !!(currentUser.perms?.admin || currentUser.perms?.operationUseConfirm);
+  const canConfirmUse = canManage;
   const allDone = items.length > 0 && items.every(w => w.status === 'DA_NGHIEM_THU');
   if (mode === 'ACCEPTANCE' && sourceRecord?.useConfirmStatus === 'CONFIRMED') {
     useConfirmBox.innerHTML = `<div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded p-2">✅ Đã đưa vào sử dụng — xác nhận bởi ${escapeHtml(sourceRecord.useConfirmByName || '')} lúc ${sourceRecord.useConfirmAt || ''}</div>`;
@@ -1865,14 +1888,14 @@ function closeOperationWorkItemHistoryModal() {
 // editOperationWorkItem() ở server — CHỈ sửa được title/mô tả/người phụ trách/người nghiệm thu chỉ
 // định/hạn, KHÔNG sửa được kỳ/vị trí trong cây/trạng thái (ẩn hẳn ô chọn Kỳ Thực Hiện khi đang sửa).
 function openOperationWorkItemFormModal(parentWorkItemId, editItem) {
-  const canManageExecution = !!(currentUser.perms?.admin || currentUser.perms?.operationExecutionManage);
-  // Mục E: SỬA (editItem tồn tại) mở thêm cho "Người Phụ Trách" hồ sơ gốc — TẠO (gốc/con) vẫn CHỈ
-  // canManageExecution, đúng phạm vi hẹp đã chốt (mirror assertCanManageOperationWorkItem() ở server).
+  // Mục 4 (RÚT GỌN): "Người Phụ Trách" (personInCharge) KHÔNG còn tự động có quyền sửa nữa — cả SỬA lẫn
+  // TẠO (gốc/con) giờ dùng ĐÚNG 1 gate "toàn quyền quản lý hồ sơ" (mirror server
+  // assertCanManageOperationRecord()/editOperationWorkItem()).
+  const sourceRecord = OPERATION_KIND_META[currentWorkItemModalKind]?.list().find(x => x.id === currentWorkItemModalRecordId);
+  const canManage = canManageOperationRecordClient(currentUser, currentWorkItemModalKind, sourceRecord);
   if (editItem) {
-    const sourceRecord = OPERATION_KIND_META[currentWorkItemModalKind]?.list().find(x => x.id === currentWorkItemModalRecordId);
-    const isPersonInCharge = !!(currentUser.username && sourceRecord?.personInCharge && currentUser.username === sourceRecord.personInCharge);
-    if (!canManageExecution && !isPersonInCharge) return alert('⛔ Bạn không có quyền sửa công việc này!');
-  } else if (!canManageExecution) {
+    if (!canManage) return alert('⛔ Bạn không có quyền sửa công việc này!');
+  } else if (!canManage) {
     return alert('⛔ Bạn không có quyền tạo công việc Thực hiện!');
   }
   currentWorkItemFormParentId = parentWorkItemId;

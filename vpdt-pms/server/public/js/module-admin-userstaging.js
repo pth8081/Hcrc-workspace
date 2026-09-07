@@ -189,10 +189,7 @@ function resetUserForm() {
   document.getElementById('pOperationOrderCreate').checked = !!defaults.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!defaults.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!defaults.operationRepairCreate;
-  document.getElementById('pOperationEstimateCreate').checked = !!defaults.operationEstimateCreate;
-  document.getElementById('pOperationExecutionManage').checked = !!defaults.operationExecutionManage;
-  document.getElementById('pOperationAcceptanceManage').checked = !!defaults.operationAcceptanceManage;
-  document.getElementById('pOperationUseConfirm').checked = !!defaults.operationUseConfirm;
+  document.getElementById('pOperationRecordManageAll').checked = !!defaults.operationRecordManageAll;
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',

@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -498,9 +498,14 @@ function cancelOperationOrderReceipt(user, item, payload, appData) {
 // ứng (quyết định thiết kế: Danh mục đầu tư và cây Công việc là 2 khái niệm ĐỘC LẬP, xem chú thích đầy
 // đủ ở routes/records.js ngay trước 2 route estimate/submit) — id ở đây chỉ để có 1 khoá ổn định cho
 // tương lai (đối chiếu import/export, tránh phải so khớp theo nội dung chuỗi dễ trùng/dễ lệch).
-function submitOperationEstimate(user, item, payload) {
-  if (!user.perms?.admin && !user.perms?.operationEstimateCreate) {
-    throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư');
+// sourceType: 'OPERATION_STORE_OPENING' | 'OPERATION_REPAIR' — route gọi tự truyền đúng theo collection
+// đang xử lý (operationStoreOpenings/operationRepairs), dùng để canManageOperationRecord() đối chiếu
+// đúng quyền operationStoreOpenCreate/operationRepairCreate — xem chú thích đầy đủ ở hàm đó
+// (lib/createValidation.js). Quyền RIÊNG operationEstimateCreate trước đây đã RÚT GỌN, gộp vào luật
+// "toàn quyền quản lý hồ sơ" chung (Mục "Overhaul quyền Vận Hành > Siêu Thị").
+function submitOperationEstimate(user, item, payload, sourceType) {
+  if (!canManageOperationRecord(user, item, sourceType)) {
+    throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư cho hồ sơ này');
   }
   if (item.estimateStatus !== 'DRAFT' && item.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Danh mục đầu tư của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đang chờ lập lại sau khi bị từ chối)');
@@ -534,9 +539,9 @@ function submitOperationEstimate(user, item, payload) {
 // submitOperationEstimate() (người lập dự toán, không phải người duyệt). Giữ nguyên estimateItems cũ
 // làm điểm bắt đầu chỉnh sửa (submitOperationEstimate() sau đó GHI ĐÈ toàn bộ items theo payload mới
 // nên giữ hay xoá không ảnh hưởng kết quả cuối, chỉ tiện cho người dùng không phải nhập lại từ đầu).
-function resetOperationEstimateToDraft(user, item) {
-  if (!user.perms?.admin && !user.perms?.operationEstimateCreate) {
-    throw new HttpError(403, 'Bạn không có quyền lập dự toán');
+function resetOperationEstimateToDraft(user, item, sourceType) {
+  if (!canManageOperationRecord(user, item, sourceType)) {
+    throw new HttpError(403, 'Bạn không có quyền lập dự toán cho hồ sơ này');
   }
   if (item.estimateStatus !== 'REJECTED') {
     throw new HttpError(409, 'Chỉ lập lại được dự toán đang ở trạng thái "Đã từ chối"');
@@ -555,27 +560,20 @@ function resetOperationEstimateToDraft(user, item) {
 const OPERATION_WORK_ITEM_SOURCE_TYPES = new Set(['OPERATION_STORE_OPENING', 'OPERATION_REPAIR']);
 const OPERATION_WORK_ITEM_STATUSES = ['CHUA_BAT_DAU', 'DANG_THUC_HIEN', 'DANG_NGHIEM_THU', 'DA_NGHIEM_THU'];
 
-function assertCanManageOperationExecution(user) {
-  if (!user.perms?.admin && !user.perms?.operationExecutionManage) {
-    throw new HttpError(403, 'Bạn không có quyền quản lý công việc Thực hiện');
+// Quyền "quản lý toàn diện" 1 hồ sơ Vận Hành > Siêu Thị (tạo/sửa/xoá đầu mục công việc lớn/con, Danh
+// mục đầu tư, Kỳ Thực Hiện, Xác Nhận Đưa Vào Sử Dụng...) — MỘT gate DUY NHẤT dùng khắp file này, thay
+// cho 3 hàm tách rời trước đây (assertCanManageOperationExecution/assertCanManageOperationAcceptance/
+// assertCanManageOperationWorkItem, nay đã RÚT GỌN cùng 4 quyền operationEstimateCreate/
+// operationExecutionManage/operationAcceptanceManage/operationUseConfirm — không còn admin gán riêng
+// được nữa) — xem chú thích ĐẦY ĐỦ luật mới tại canManageOperationRecord() (lib/createValidation.js).
+// Mục 4 (RÚT GỌN personInCharge khỏi vai trò cấp quyền): "Người Phụ Trách" hồ sơ KHÔNG còn tự động có
+// quyền sửa công việc chỉ vì được gán personInCharge nữa — đúng yêu cầu người dùng "còn những người
+// khác chỉ có quyền thực hiện thao tác" (field personInCharge VẪN giữ nguyên trên dữ liệu, chỉ để
+// hiển thị/thông tin — xem chú thích ở createValidation.js resolveOperationPersonInChargeUsername()).
+function assertCanManageOperationRecord(user, sourceRecord, sourceType, message) {
+  if (!canManageOperationRecord(user, sourceRecord, sourceType)) {
+    throw new HttpError(403, message || 'Bạn không có quyền quản lý hồ sơ này');
   }
-}
-function assertCanManageOperationAcceptance(user) {
-  if (!user.perms?.admin && !user.perms?.operationAcceptanceManage) {
-    throw new HttpError(403, 'Bạn không có quyền nghiệm thu công việc');
-  }
-}
-// Quyền SỬA công việc (Mục E) — MỞ RỘNG hơn assertCanManageOperationExecution() ở trên: ngoài
-// admin/operationExecutionManage, "Người Phụ Trách" (personInCharge) của CHÍNH hồ sơ gốc
-// (operationStoreOpenings/operationRepairs, đã đổi sang account picker thật ở Mục C) cũng sửa được
-// công việc thuộc hồ sơ đó — KHÔNG áp dụng cho hồ sơ CŨ còn personInCharge dạng tên tự do (username
-// picker chưa từng gán, so sánh không khớp — hệ quả chấp nhận được, không throw lỗi, chỉ không match).
-// CHỈ mở rộng quyền SỬA — create/delete work item + quản lý Kỳ vẫn dùng nguyên
-// assertCanManageOperationExecution(), đúng phạm vi đã chốt.
-function assertCanManageOperationWorkItem(user, sourceRecord) {
-  if (user.perms?.admin || user.perms?.operationExecutionManage) return;
-  if (user.username && sourceRecord?.personInCharge && user.username === sourceRecord.personInCharge) return;
-  throw new HttpError(403, 'Bạn không có quyền sửa công việc này');
 }
 
 // Nhiều "assignedTo" (Mục E) — mảng string[]|null (trước đây chỉ 1 string|null). 2 helper NHỎ dùng
@@ -646,8 +644,11 @@ function resolveOperationAcceptanceConfig(payload) {
 // periodsForSource = TOÀN BỘ operationExecutionPeriods đúng sourceType/sourceId này (route tự lọc sẵn
 // trước khi gọi, giống siblingsAndDescendants) — dùng để validate periodId công việc GỐC.
 // users = TOÀN BỘ tài khoản hệ thống (route tự truyền sẵn, req.allUsers) — dùng để resolve assignedTo[].
-function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource, users) {
-  assertCanManageOperationExecution(user);
+// sourceType = 'OPERATION_STORE_OPENING' | 'OPERATION_REPAIR' (route đã biết sẵn từ payload đã validate)
+// — dùng cho assertCanManageOperationRecord() VÀ gán thẳng lên work item mới (thay cho đọc lại
+// sourceRecord.__workItemSourceType — field tạm ĐÃ BỎ, tránh gắn field nội bộ lên sourceRecord).
+function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource, users, sourceType) {
+  assertCanManageOperationRecord(user, sourceRecord, sourceType, 'Bạn không có quyền tạo công việc Thực hiện cho hồ sơ này');
   if (sourceRecord.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Dự toán của hồ sơ này chưa được phê duyệt xong, chưa thể tạo công việc Thực hiện');
   }
@@ -709,7 +710,7 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     acceptedBy: null, acceptedByName: null, acceptanceNote: null,
     history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
-    sourceType: sourceRecord.__workItemSourceType, sourceCode: sourceRecord.code
+    sourceType, sourceCode: sourceRecord.code
   };
 }
 
@@ -719,12 +720,17 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
 // note (tuỳ chọn) — Correction 3 (đợt sửa theo phản hồi người dùng): modal "Cập Nhật Tiến Độ" của công
 // việc Vận Hành giờ mirror UI/UX modal #taskProgressModal của module Công Việc công ty (progressNote) —
 // ghi lại ngay trong history entry, KHÔNG có field riêng trên item (chỉ để lưu vết, không ảnh hưởng logic).
-function updateOperationWorkItemProgress(user, item, children, newStatus, note) {
-  // "Toàn quyền" (admin/operationExecutionManage) xử lý được mọi việc; ngoài ra CHỈ đúng người phụ
-  // trách (item.assignedTo[], Mục E — nay có thể NHIỀU người) mới cập nhật được việc của chính mình —
-  // trước đây field này chỉ mang tính hiển thị, không chặn quyền.
+// sourceRecord (route tự tra theo item.sourceType/sourceId trước khi gọi) — CHỈ dùng cho override "toàn
+// quyền quản lý hồ sơ" (canManageOperationRecord(), nay thay cho admin/operationExecutionManage cũ) —
+// KHÔNG đổi cơ chế assignedTo[] chính (isOwner) theo đúng yêu cầu "GIỮ NGUYÊN người thực hiện/nghiệm
+// thu chỉ thao tác đúng việc được giao", chỉ đổi flag nào thoả override.
+function updateOperationWorkItemProgress(user, item, children, newStatus, note, sourceRecord) {
+  // Toàn quyền quản lý hồ sơ (admin/operationRecordManageAll/creator+operationStoreOpenCreate|
+  // operationRepairCreate) xử lý được mọi việc; ngoài ra CHỈ đúng người phụ trách (item.assignedTo[],
+  // Mục E — nay có thể NHIỀU người) mới cập nhật được việc của chính mình — trước đây field này chỉ
+  // mang tính hiển thị, không chặn quyền.
   const isOwner = isWorkItemAssignee(item, user.username);
-  if (!user.perms?.admin && !user.perms?.operationExecutionManage && !isOwner) {
+  if (!canManageOperationRecord(user, sourceRecord, item.sourceType) && !isOwner) {
     throw new HttpError(403, 'Bạn không có quyền cập nhật công việc này');
   }
   if (children.length) {
@@ -758,12 +764,15 @@ function updateOperationWorkItemProgress(user, item, children, newStatus, note) 
 
 // action: 'ACCEPT' (Nghiệm thu — đổi trạng thái) | 'REQUEST_INFO' (Bổ sung — chỉ ghi lý do, KHÔNG đổi
 // trạng thái, đúng yêu cầu "ấn bổ sung thì công việc vẫn ở trạng thái đang nghiệm thu").
-function acceptOperationWorkItem(user, item, children, { action, reason }) {
-  // "Toàn quyền" (admin/operationAcceptanceManage) nghiệm thu được mọi việc; ngoài ra CHỈ đúng người
-  // được CHỈ ĐỊNH nghiệm thu (item.acceptorUsername) mới nghiệm thu/bổ sung được việc đó. Việc chưa
-  // chỉ định người nghiệm thu (acceptorUsername null) chỉ toàn quyền mới xử lý được.
+// sourceRecord (route tự tra theo item.sourceType/sourceId trước khi gọi) — CHỈ dùng cho override "toàn
+// quyền quản lý hồ sơ" (canManageOperationRecord(), nay thay cho admin/operationAcceptanceManage cũ) —
+// KHÔNG đổi cơ chế acceptorUsername chính (isOwner), chỉ đổi flag nào thoả override.
+function acceptOperationWorkItem(user, item, children, { action, reason }, sourceRecord) {
+  // Toàn quyền quản lý hồ sơ nghiệm thu được mọi việc; ngoài ra CHỈ đúng người được CHỈ ĐỊNH nghiệm thu
+  // (item.acceptorUsername) mới nghiệm thu/bổ sung được việc đó. Việc chưa chỉ định người nghiệm thu
+  // (acceptorUsername null) chỉ toàn quyền mới xử lý được.
   const isOwner = !!(user.username && item.acceptorUsername && user.username === item.acceptorUsername);
-  if (!user.perms?.admin && !user.perms?.operationAcceptanceManage && !isOwner) {
+  if (!canManageOperationRecord(user, sourceRecord, item.sourceType) && !isOwner) {
     throw new HttpError(403, 'Bạn không có quyền nghiệm thu công việc này');
   }
   // Việc có con (không phải lá) không được nghiệm thu trực tiếp bằng tay — chỉ tự động cập nhật khi
@@ -832,8 +841,10 @@ function computeOperationWorkItemExpectedAcceptanceDate(item) {
 // Bắt Đầu Kỳ Thực Hiện — CHUA_BAT_DAU -> DANG_THUC_HIEN. Chỉ sau khi bắt đầu, kỳ mới được chọn để tạo
 // công việc GỐC (xem createOperationWorkItem() bên dưới) — đúng yêu cầu "kỳ chưa bắt đầu thì chưa lấy
 // để tạo công việc được". Không có trạng thái đóng/kết thúc (không nằm trong yêu cầu, giữ scope tối thiểu).
-function startOperationExecutionPeriod(user, period) {
-  assertCanManageOperationExecution(user);
+// sourceRecord (route tự tra theo period.sourceType/sourceId trước khi gọi) — dùng cho
+// assertCanManageOperationRecord(), period.sourceType tự làm sourceType (đã lưu sẵn lúc tạo Kỳ).
+function startOperationExecutionPeriod(user, period, sourceRecord) {
+  assertCanManageOperationRecord(user, sourceRecord, period.sourceType, 'Bạn không có quyền bắt đầu Kỳ Thực Hiện của hồ sơ này');
   if (period.status !== 'CHUA_BAT_DAU') {
     throw new HttpError(409, 'Kỳ Thực Hiện này đã được bắt đầu trước đó');
   }
@@ -844,25 +855,28 @@ function startOperationExecutionPeriod(user, period) {
   return period;
 }
 
-function deleteOperationWorkItem(user, item, descendantIds) {
-  assertCanManageOperationExecution(user);
+// sourceRecord (route tự tra theo item.sourceType/sourceId trước khi gọi) — dùng cho
+// assertCanManageOperationRecord(), item.sourceType tự làm sourceType.
+function deleteOperationWorkItem(user, item, descendantIds, sourceRecord) {
+  assertCanManageOperationRecord(user, sourceRecord, item.sourceType, 'Bạn không có quyền xoá công việc này');
   if (item.status === 'DA_NGHIEM_THU') {
     throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể xoá');
   }
   return [item.id, ...descendantIds];
 }
 
-// Sửa thông tin công việc — "toàn quyền" Thực hiện HOẶC "Người Phụ Trách" hồ sơ gốc (Mục E, xem
-// assertCanManageOperationWorkItem() ở trên) — KHÔNG mở cho người phụ trách/người nghiệm thu chỉ định
-// CỦA CHÍNH CÔNG VIỆC (khác updateOperationWorkItemProgress/acceptOperationWorkItem, 2 khái niệm khác
-// nhau: "Người Phụ Trách" ở đây là của HỒ SƠ, không phải assignedTo của việc). KHÔNG cho sửa
-// periodId/parentWorkItemId/status/completedAt (completedAt chỉ server tự set lúc chuyển
-// DANG_NGHIEM_THU, xem updateOperationWorkItemProgress()) — giữ toàn vẹn cây + kỳ đã lập lúc tạo, muốn
-// đổi thì xoá tạo lại như hiện tại.
+// Sửa thông tin công việc — CHỈ "toàn quyền quản lý hồ sơ" (canManageOperationRecord()) mới sửa được
+// (Mục 4 — RÚT GỌN: "Người Phụ Trách" personInCharge của hồ sơ gốc KHÔNG còn tự động có quyền sửa nữa,
+// đúng yêu cầu người dùng "còn những người khác chỉ có quyền thực hiện thao tác" — field personInCharge
+// vẫn giữ nguyên trên dữ liệu, chỉ còn ý nghĩa hiển thị/thông tin). KHÔNG mở cho người phụ trách/người
+// nghiệm thu chỉ định CỦA CHÍNH CÔNG VIỆC (khác updateOperationWorkItemProgress/acceptOperationWorkItem,
+// 2 khái niệm khác nhau). KHÔNG cho sửa periodId/parentWorkItemId/status/completedAt (completedAt chỉ
+// server tự set lúc chuyển DANG_NGHIEM_THU, xem updateOperationWorkItemProgress()) — giữ toàn vẹn cây +
+// kỳ đã lập lúc tạo, muốn đổi thì xoá tạo lại như hiện tại.
 // sourceRecord = hồ sơ gốc đã đọc sẵn (route tự tra qua item.sourceType/sourceId trước khi gọi).
 // users = TOÀN BỘ tài khoản hệ thống — dùng để resolve assignedTo[] (Mục E).
 function editOperationWorkItem(user, item, payload, users, sourceRecord) {
-  assertCanManageOperationWorkItem(user, sourceRecord);
+  assertCanManageOperationRecord(user, sourceRecord, item.sourceType, 'Bạn không có quyền sửa công việc này');
   if (item.status === 'DA_NGHIEM_THU') {
     throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể sửa lại');
   }
@@ -886,11 +900,13 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord) {
 }
 
 // Xác Nhận Đưa Vào Sử Dụng — mốc CẤP HỒ SƠ, tách khỏi "Đã nghiệm thu" từng công việc/cây công việc.
-// Quyền RIÊNG (operationUseConfirm), KHÔNG dùng chung operationAcceptanceManage — chỉ mở khi TOÀN BỘ
-// cây công việc của hồ sơ đã "Đã nghiệm thu", là hành động chốt dự án 1 lần, không thể huỷ/lặp lại.
-function confirmOperationUse(user, sourceRecord, allWorkItemsForSource) {
-  if (!user.perms?.admin && !user.perms?.operationUseConfirm) {
-    throw new HttpError(403, 'Bạn không có quyền xác nhận đưa vào sử dụng');
+// Quyền RIÊNG (operationUseConfirm) trước đây ĐÃ RÚT GỌN, gộp vào luật "toàn quyền quản lý hồ sơ"
+// chung (canManageOperationRecord()) — chỉ mở khi TOÀN BỘ cây công việc của hồ sơ đã "Đã nghiệm thu",
+// là hành động chốt dự án 1 lần, không thể huỷ/lặp lại. sourceType: route tự truyền theo collection
+// đang xử lý (operationStoreOpenings/operationRepairs).
+function confirmOperationUse(user, sourceRecord, allWorkItemsForSource, sourceType) {
+  if (!canManageOperationRecord(user, sourceRecord, sourceType)) {
+    throw new HttpError(403, 'Bạn không có quyền xác nhận đưa vào sử dụng cho hồ sơ này');
   }
   if (sourceRecord.useConfirmStatus === 'CONFIRMED') {
     throw new HttpError(409, 'Hồ sơ này đã được xác nhận đưa vào sử dụng trước đó');
@@ -4991,6 +5007,10 @@ module.exports = {
   computeOperationRecordStageStatus, OPERATION_STAGE_LABELS,
   // Mục E — export cho lib/recordViewScope.js (hasOwnWorkItemInSource()) + test.
   workItemAssignees, isWorkItemAssignee, resolveOperationAssignedTo,
-  resolveOperationAcceptanceConfig, assertCanManageOperationWorkItem,
+  resolveOperationAcceptanceConfig,
+  // Overhaul quyền Vận Hành > Siêu Thị: gate DUY NHẤT dùng chung mọi nơi trong file này — export lại
+  // canManageOperationRecord (re-export nguyên hàm từ lib/createValidation.js, tiện cho test/route gọi
+  // qua đúng 1 module thay vì phải biết nó định nghĩa ở đâu) + bản throw HttpError sẵn.
+  canManageOperationRecord, assertCanManageOperationRecord,
   computeOperationWorkItemExpectedAcceptanceDate
 };

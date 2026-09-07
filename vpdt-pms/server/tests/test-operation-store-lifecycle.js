@@ -11,9 +11,22 @@
 //   thái, completedAt tự set lúc chuyển "Đang nghiệm thu" — Mục D) -> cha tự cập nhật khi mọi con đã
 //   nghiệm thu (recordActions.computeParentWorkItemStatus).
 //
-// Mục C: "Người Phụ Trách" hồ sơ (personInCharge) giờ là tài khoản hệ thống THẬT (không còn tên tự do)
-// — mở quyền SỬA công việc (không tạo/xoá) cho đúng người này dù không có operationExecutionManage
-// (Mục E, assertCanManageOperationWorkItem()).
+// Mục C: "Người Phụ Trách" hồ sơ (personInCharge) là tài khoản hệ thống THẬT (không còn tên tự do) —
+// chỉ còn ý nghĩa HIỂN THỊ/THÔNG TIN từ đợt Overhaul quyền Vận Hành > Siêu Thị dưới đây — KHÔNG còn tự
+// động cấp quyền sửa công việc nữa (xem "Phần A" + "Phần D" bên dưới, test rejected rõ ràng).
+//
+// ===== OVERHAUL QUYỀN VẬN HÀNH > SIÊU THỊ (đợt này) =====
+// 4 quyền tách riêng cũ operationEstimateCreate/operationExecutionManage/operationAcceptanceManage/
+// operationUseConfirm đã RÚT GỌN — không còn là checkbox admin gán riêng được nữa, KHÔNG xuất hiện
+// trong bất kỳ object perms nào ở file test này nữa (dù có gán, server sẽ bỏ qua hoàn toàn — chỉ còn 2
+// đường cấp "toàn quyền quản lý hồ sơ" thật sự):
+//   1) operationStoreOpenCreate/operationRepairCreate (GIỮ TÊN, MỞ RỘNG ý nghĩa): toàn quyền quản lý hồ
+//      sơ CHÍNH mình tạo (sourceRecord.creator === user.username) — CREATOR dưới đây đóng vai trò này.
+//   2) operationRecordManageAll (quyền MỚI): toàn quyền quản lý MỌI hồ sơ, không phân biệt người tạo —
+//      ESTIMATOR/EXECUTOR/ACCEPTOR/USE_CONFIRMER dưới đây ĐỔI SANG quyền này (giữ nguyên vai trò "toàn
+//      quyền" xuyên suốt các test lifecycle cũ, chỉ đổi flag cấp quyền, KHÔNG đổi hành vi kỳ vọng).
+// "Phần D" cuối file test riêng hành vi creator-scoped MỚI (tạo bởi CREATOR chỉ toàn quyền trên hồ sơ
+// của CHÍNH mình, 403 trên hồ sơ người khác tạo, operationRecordManageAll toàn quyền bất kể ai tạo).
 //
 // Chạy: node server/tests/test-operation-store-lifecycle.js
 const {
@@ -25,23 +38,35 @@ const PORT = 8986;
 
 // ===================== Seed dữ liệu =====================
 const CREATOR = { username: 'vh_creator', name: 'Người Tạo Hồ Sơ', dept: 'Vận Hành', perms: { operationStoreOpenCreate: true, operationRepairCreate: true }, active: true };
-const ESTIMATOR = { username: 'vh_estimator', name: 'Người Lập Danh Mục Đầu Tư', dept: 'Vận Hành', perms: { operationEstimateCreate: true }, active: true };
-const EXECUTOR = { username: 'vh_executor', name: 'Người Thực Hiện', dept: 'Vận Hành', perms: { operationExecutionManage: true }, active: true };
-const ACCEPTOR = { username: 'vh_acceptor', name: 'Người Nghiệm Thu', dept: 'Vận Hành', perms: { operationAcceptanceManage: true }, active: true };
+// ESTIMATOR/EXECUTOR/ACCEPTOR/USE_CONFIRMER: "toàn quyền" xuyên suốt các test lifecycle cũ bên dưới —
+// nay cấp qua operationRecordManageAll (quyền MỚI, toàn quyền MỌI hồ sơ) thay cho 4 quyền tách riêng cũ
+// đã RÚT GỌN, xem chú thích OVERHAUL ở trên.
+const ESTIMATOR = { username: 'vh_estimator', name: 'Người Lập Danh Mục Đầu Tư', dept: 'Vận Hành', perms: { operationRecordManageAll: true }, active: true };
+const EXECUTOR = { username: 'vh_executor', name: 'Người Thực Hiện', dept: 'Vận Hành', perms: { operationRecordManageAll: true }, active: true };
+const ACCEPTOR = { username: 'vh_acceptor', name: 'Người Nghiệm Thu', dept: 'Vận Hành', perms: { operationRecordManageAll: true }, active: true };
 const NOPERM = { username: 'vh_noperm', name: 'Người Không Quyền', dept: 'Vận Hành', perms: {}, active: true };
 const WORKER = { username: 'vh_worker', name: 'Kỹ Thuật Viên A', dept: 'Vận Hành', perms: {}, active: true };
 const WORKER2 = { username: 'vh_worker2', name: 'Kỹ Thuật Viên B', dept: 'Vận Hành', perms: {}, active: true };
 const DESIGNATED_ACCEPTOR = { username: 'vh_designated_acceptor', name: 'Người Được Chỉ Định Nghiệm Thu', dept: 'Vận Hành', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Vận Hành', perms: { admin: true }, active: true, totpEnabled: true };
-const USE_CONFIRMER = { username: 'vh_use_confirmer', name: 'Người Xác Nhận Đưa Vào Sử Dụng', dept: 'Vận Hành', perms: { operationUseConfirm: true }, active: true };
-// Mục C/E: "Người Phụ Trách" hồ sơ — tài khoản THẬT, KHÔNG có operationExecutionManage — chỉ được mở
-// quyền SỬA công việc thuộc ĐÚNG hồ sơ mà họ là personInCharge (không tạo/xoá được).
+const USE_CONFIRMER = { username: 'vh_use_confirmer', name: 'Người Xác Nhận Đưa Vào Sử Dụng', dept: 'Vận Hành', perms: { operationRecordManageAll: true }, active: true };
+// Mục C (đợt cũ) + Mục 4 (đợt Overhaul quyền — RÚT GỌN): "Người Phụ Trách" hồ sơ — tài khoản THẬT,
+// KHÔNG giữ bất kỳ quyền quản lý hồ sơ nào (không phải creator, không operationRecordManageAll) — CHỈ
+// còn ý nghĩa hiển thị/thông tin, KHÔNG còn tự động cấp quyền sửa công việc nữa (xem "Phần A" bên dưới —
+// hành vi NGƯỢC LẠI hoàn toàn so với đợt trước: nay PHẢI bị 403).
 const PERSON_IN_CHARGE = { username: 'vh_pic', name: 'Trưởng Dự Án Phụ Trách', dept: 'Vận Hành', perms: {}, active: true };
 const INACTIVE_USER = { username: 'vh_inactive', name: 'Tài Khoản Đã Khoá', dept: 'Vận Hành', perms: {}, active: false };
+// Phần D (Overhaul quyền): CREATOR2 tạo hồ sơ RIÊNG để test creator-scoping thật (CREATOR không phải
+// creator của hồ sơ này phải bị 403; operationRecordManageAll vẫn toàn quyền dù không phải creator).
+const CREATOR2 = { username: 'vh_creator2', name: 'Người Tạo Hồ Sơ Khác', dept: 'Vận Hành', perms: { operationStoreOpenCreate: true, operationRepairCreate: true }, active: true };
+// MANAGE_ALL: CHỈ giữ operationRecordManageAll (không admin, không phải creator của bất kỳ hồ sơ nào) —
+// dùng riêng cho Phần D để tách bạch rõ ràng khỏi vai trò "toàn quyền" cũ (ESTIMATOR/EXECUTOR/...) vốn
+// đã dùng xuyên suốt phần đầu file, tránh nhầm lẫn ai đang test cái gì.
+const MANAGE_ALL = { username: 'vh_manage_all', name: 'Người Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền)', dept: 'Vận Hành', perms: { operationRecordManageAll: true }, active: true };
 
 const state = createMockState({
   depts: ['Vận Hành', 'Ban Giám Đốc'],
-  users: [CREATOR, ESTIMATOR, EXECUTOR, ACCEPTOR, NOPERM, WORKER, WORKER2, DESIGNATED_ACCEPTOR, ADMIN, USE_CONFIRMER, PERSON_IN_CHARGE, INACTIVE_USER]
+  users: [CREATOR, ESTIMATOR, EXECUTOR, ACCEPTOR, NOPERM, WORKER, WORKER2, DESIGNATED_ACCEPTOR, ADMIN, USE_CONFIRMER, PERSON_IN_CHARGE, INACTIVE_USER, CREATOR2, MANAGE_ALL]
 });
 
 async function loginAs(page, user) {
@@ -239,8 +264,8 @@ async function main() {
       assertIncludes(result.message, 'chưa được phê duyệt', 'Thông báo lỗi phải nêu rõ lý do (message kỹ thuật giữ nguyên)');
     });
 
-    // ===== 3) Người không có operationEstimateCreate không lập được Danh mục đầu tư =====
-    await run.run('Người không có operationEstimateCreate bị chặn khi lưu Danh mục đầu tư', async () => {
+    // ===== 3) Người không có operationRecordManageAll không lập được Danh mục đầu tư =====
+    await run.run('Người không có operationRecordManageAll bị chặn khi lưu Danh mục đầu tư', async () => {
       await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
@@ -250,12 +275,12 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, recordId);
-      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationEstimateCreate');
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationRecordManageAll');
       assertIncludes(result.message, 'quyền', 'Thông báo lỗi phải nêu thiếu quyền');
     });
 
     // ===== 4) Lập & lưu Danh mục đầu tư (Mục F cấu trúc mới + Mục H auto-APPROVED) =====
-    await run.run('operationEstimateCreate lưu Danh mục đầu tư — cấu trúc {content,description,amount,note}, tự APPROVED NGAY (Mục H, không PENDING)', async () => {
+    await run.run('operationRecordManageAll lưu Danh mục đầu tư — cấu trúc {content,description,amount,note}, tự APPROVED NGAY (Mục H, không PENDING)', async () => {
       await loginAs(page, ESTIMATOR);
       const result = await page.evaluate(async (id) => {
         const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', {
@@ -299,7 +324,7 @@ async function main() {
     });
 
     // ===== 5) Kỳ Thực Hiện — Mục B: giờ KHÔNG BẮT BUỘC =====
-    await run.run('Người không có operationExecutionManage bị chặn tạo Kỳ Thực Hiện', async () => {
+    await run.run('Người không có operationRecordManageAll bị chặn tạo Kỳ Thực Hiện', async () => {
       await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
@@ -307,7 +332,7 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, recordId);
-      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationExecutionManage');
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationRecordManageAll');
       assertIncludes(result.message, 'quyền', 'Thông báo lỗi phải nêu thiếu quyền');
     });
 
@@ -332,7 +357,7 @@ async function main() {
       await page.evaluate(async (id) => { await callRecordAction('operationWorkItems', id, 'delete', {}); }, result.id);
     });
 
-    await run.run('operationExecutionManage tạo Kỳ Thực Hiện — mặc định trạng thái CHUA_BAT_DAU', async () => {
+    await run.run('operationRecordManageAll tạo Kỳ Thực Hiện — mặc định trạng thái CHUA_BAT_DAU', async () => {
       await loginAs(page, EXECUTOR);
       const result = await page.evaluate(async (id) => {
         const res = await callCreateAction('operationExecutionPeriods', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, name: 'Đợt 1 - Thi công nội thất' });
@@ -358,7 +383,7 @@ async function main() {
       assertIncludes(result.message, 'chưa bắt đầu', 'Thông báo lỗi phải nêu rõ kỳ chưa bắt đầu');
     });
 
-    await run.run('Người không có operationExecutionManage bị chặn Bắt Đầu Kỳ', async () => {
+    await run.run('Người không có operationRecordManageAll bị chặn Bắt Đầu Kỳ', async () => {
       await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
@@ -366,10 +391,10 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, periodId);
-      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationExecutionManage');
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationRecordManageAll');
     });
 
-    await run.run('operationExecutionManage bắt đầu Kỳ Thực Hiện — chuyển DANG_THUC_HIEN', async () => {
+    await run.run('operationRecordManageAll bắt đầu Kỳ Thực Hiện — chuyển DANG_THUC_HIEN', async () => {
       await loginAs(page, EXECUTOR);
       const result = await page.evaluate(async (id) => {
         const res = await callRecordAction('operationExecutionPeriods', id, 'start', {});
@@ -483,10 +508,10 @@ async function main() {
         return actionsHtml;
       }, { kind: 'operationStoreOpenings', id: recordId, leafId: uiTestLeafId });
       assert(html !== null, 'Phải tìm thấy dòng của việc lá test UI trong bảng');
-      assert(!html.includes('openOperationWorkItemProgressModal'), 'NOPERM (không phải assignee, không có operationExecutionManage) KHÔNG được thấy nút Cập Nhật Tiến Độ');
+      assert(!html.includes('openOperationWorkItemProgressModal'), 'NOPERM (không phải assignee, không có operationRecordManageAll) KHÔNG được thấy nút Cập Nhật Tiến Độ');
     });
 
-    await run.run('Correction 3: WORKER (assignee, KHÔNG operationExecutionManage) thấy đúng nút "🔄 Cập Nhật Tiến Độ", dùng modal chuyển CHUA_BAT_DAU -> DANG_THUC_HIEN kèm ghi chú (mirror #taskProgressModal)', async () => {
+    await run.run('Correction 3: WORKER (assignee, KHÔNG operationRecordManageAll) thấy đúng nút "🔄 Cập Nhật Tiến Độ", dùng modal chuyển CHUA_BAT_DAU -> DANG_THUC_HIEN kèm ghi chú (mirror #taskProgressModal)', async () => {
       await loginAs(page, WORKER);
       const result = await page.evaluate(async ({ kind, id, leafId }) => {
         openOperationWorkItemModal(kind, id, 'EXECUTION');
@@ -697,7 +722,7 @@ async function main() {
     });
 
     // ===== 8) Người không có quyền VÀ không nằm trong assignedTo[] bị chặn cập nhật =====
-    await run.run('Người không có operationExecutionManage và KHÔNG nằm trong assignedTo[] bị chặn cập nhật tiến độ', async () => {
+    await run.run('Người không có operationRecordManageAll và KHÔNG nằm trong assignedTo[] bị chặn cập nhật tiến độ', async () => {
       await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
@@ -705,11 +730,11 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, child1Id);
-      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationExecutionManage và không thuộc assignedTo[]');
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationRecordManageAll và không thuộc assignedTo[]');
     });
 
     // ===== 9) Mục E: CẢ 2 người trong assignedTo[] đều tự cập nhật được (không cần quyền rộng) =====
-    await run.run('WORKER (1 trong 2 người assignedTo[], không có operationExecutionManage) tự cập nhật ĐÚNG việc mình phụ trách', async () => {
+    await run.run('WORKER (1 trong 2 người assignedTo[], không có operationRecordManageAll) tự cập nhật ĐÚNG việc mình phụ trách', async () => {
       await loginAs(page, WORKER);
       const result = await page.evaluate(async (id) => {
         const r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' });
@@ -745,7 +770,7 @@ async function main() {
     });
 
     // ===== 11) Toàn quyền (EXECUTOR) vẫn cập nhật được MỌI việc =====
-    await run.run('Toàn quyền (operationExecutionManage) vẫn cập nhật được mọi việc — đưa việc con 2 lên Đang nghiệm thu', async () => {
+    await run.run('Toàn quyền (operationRecordManageAll) vẫn cập nhật được mọi việc — đưa việc con 2 lên Đang nghiệm thu', async () => {
       await loginAs(page, EXECUTOR);
       const result = await page.evaluate(async (id) => {
         let r = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' });
@@ -815,7 +840,7 @@ async function main() {
     });
 
     // ===== 14) Người không có quyền VÀ không phải người được chỉ định bị chặn nghiệm thu =====
-    await run.run('Người không có operationAcceptanceManage và KHÔNG phải người được chỉ định bị chặn nghiệm thu', async () => {
+    await run.run('Người không có operationRecordManageAll và KHÔNG phải người được chỉ định bị chặn nghiệm thu', async () => {
       await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
@@ -823,11 +848,11 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, child1Id);
-      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationAcceptanceManage và không phải người được chỉ định');
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationRecordManageAll và không phải người được chỉ định');
     });
 
     // ===== 15) Người được CHỈ ĐỊNH (không có quyền rộng) nghiệm thu ĐÚNG việc của mình =====
-    await run.run('DESIGNATED_ACCEPTOR (acceptorUsername, không có operationAcceptanceManage) nghiệm thu ĐÚNG việc được chỉ định — cha CHƯA tự chuyển vì còn con 2 dở', async () => {
+    await run.run('DESIGNATED_ACCEPTOR (acceptorUsername, không có operationRecordManageAll) nghiệm thu ĐÚNG việc được chỉ định — cha CHƯA tự chuyển vì còn con 2 dở', async () => {
       await loginAs(page, DESIGNATED_ACCEPTOR);
       const result = await page.evaluate(async ({ c1, rootId }) => {
         const r = await callRecordAction('operationWorkItems', c1, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
@@ -894,7 +919,7 @@ async function main() {
     });
 
     // ===== 17) Toàn quyền (ACCEPTOR) nghiệm thu nốt việc con 2 — cha TỰ ĐỘNG chuyển Đã nghiệm thu =====
-    await run.run('Toàn quyền (operationAcceptanceManage) nghiệm thu nốt việc con 2 — cha tự động cập nhật Đã nghiệm thu (hết việc con dở)', async () => {
+    await run.run('Toàn quyền (operationRecordManageAll) nghiệm thu nốt việc con 2 — cha tự động cập nhật Đã nghiệm thu (hết việc con dở)', async () => {
       await loginAs(page, ACCEPTOR);
       const result = await page.evaluate(async ({ c2, rootId }) => {
         const r = await callRecordAction('operationWorkItems', c2, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu' });
@@ -908,9 +933,14 @@ async function main() {
       assertEqual(result.root.status, 'DA_NGHIEM_THU', 'Việc cha phải TỰ ĐỘNG chuyển Đã nghiệm thu khi hết việc con dở');
     });
 
-    // ===== Phần A: Quyền SỬA công việc theo "Người Phụ Trách" hồ sơ gốc (Mục E) =====
+    // ===== Phần A: Quyền SỬA công việc — Overhaul quyền Vận Hành > Siêu Thị, Mục 4 =====
+    // TRƯỚC đợt Overhaul: "Người Phụ Trách" (personInCharge) hồ sơ gốc tự động có quyền SỬA công việc dù
+    // không có quyền quản lý rộng — hành vi này đã RÚT GỌN theo yêu cầu người dùng ("còn những người khác
+    // chỉ có quyền thực hiện thao tác"). Test dưới đây xác nhận NGƯỢC LẠI hoàn toàn: personInCharge một
+    // mình (không phải creator, không operationRecordManageAll) giờ PHẢI bị 403 — đúng mục tiêu bắt buộc
+    // của đợt overhaul này (xem thêm "Phần D" cuối file cho toàn bộ ma trận creator-scoped/manageAll).
     let editItemId = null;
-    await run.run('EXECUTOR tạo việc gốc mới để test Sửa + quyền theo Người Phụ Trách + Xác nhận đưa vào sử dụng', async () => {
+    await run.run('EXECUTOR (operationRecordManageAll) tạo việc gốc mới để test Sửa + Xác nhận đưa vào sử dụng', async () => {
       await loginAs(page, EXECUTOR);
       const result = await page.evaluate(async ({ id, pid }) => {
         const res = await callRecordCreate('operationWorkItems', {
@@ -925,7 +955,7 @@ async function main() {
       assert(editItemId, 'Phải tạo được việc gốc mới');
     });
 
-    await run.run('Người không có operationExecutionManage VÀ không phải personInCharge hồ sơ bị chặn Sửa công việc', async () => {
+    await run.run('Người không giữ quyền quản lý hồ sơ nào (NOPERM) bị chặn Sửa công việc', async () => {
       await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
@@ -933,23 +963,32 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, editItemId);
-      assert(!result.ok, 'Phải bị chặn vì không có quyền operationExecutionManage và không phải personInCharge');
+      assert(!result.ok, 'Phải bị chặn vì không giữ quyền quản lý hồ sơ nào (không phải creator, không operationRecordManageAll)');
     });
 
-    await run.run('Mục E: PERSON_IN_CHARGE (personInCharge của hồ sơ, KHÔNG có operationExecutionManage) SỬA được công việc thuộc ĐÚNG hồ sơ đó', async () => {
+    // ===== Điểm THAY ĐỔI HÀNH VI cốt lõi của đợt Overhaul quyền (Mục 4) =====
+    await run.run('Overhaul quyền (Mục 4): PERSON_IN_CHARGE (personInCharge của hồ sơ, KHÔNG phải creator, KHÔNG operationRecordManageAll) NAY BỊ CHẶN sửa công việc — trước đây (đợt cũ) hành vi này THÀNH CÔNG, giờ phải 403 đúng yêu cầu "còn những người khác chỉ có quyền thực hiện thao tác"', async () => {
       await loginAs(page, PERSON_IN_CHARGE);
       const result = await page.evaluate(async (id) => {
-        const r = await callRecordAction('operationWorkItems', id, 'edit', {
-          title: 'Việc gốc sửa bởi Người Phụ Trách', description: 'Sửa bởi PIC', assignedTo: [], deadline: ''
-        });
-        const idx = DB.operationWorkItems.findIndex(x => x.id === id);
-        DB.operationWorkItems[idx] = r.item;
-        return r.item;
+        try {
+          await callRecordAction('operationWorkItems', id, 'edit', {
+            title: 'Việc gốc sửa bởi Người Phụ Trách', description: 'Sửa bởi PIC', assignedTo: [], deadline: ''
+          });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
       }, editItemId);
-      assertEqual(result.title, 'Việc gốc sửa bởi Người Phụ Trách', 'PERSON_IN_CHARGE phải sửa được title dù không có operationExecutionManage');
+      assert(!result.ok, 'PERSON_IN_CHARGE KHÔNG còn được sửa công việc chỉ vì được gán personInCharge — quyền này đã RÚT GỌN (đợt Overhaul quyền Vận Hành > Siêu Thị)');
+      assertIncludes(result.message, 'quyền', 'Thông báo lỗi phải nêu thiếu quyền');
+      // Xác nhận field personInCharge/personInChargeName VẪN còn trên hồ sơ (chỉ còn ý nghĩa hiển thị) —
+      // không bị xoá khỏi data model, chỉ không còn cấp quyền.
+      const stillHasField = await page.evaluate((id) => {
+        const o = DB.operationStoreOpenings.find(x => x.id === id);
+        return { personInCharge: o.personInCharge, personInChargeName: o.personInChargeName };
+      }, recordId);
+      assertEqual(stillHasField.personInCharge, PERSON_IN_CHARGE.username, 'field personInCharge phải VẪN còn nguyên trên hồ sơ (chỉ RÚT GỌN vai trò cấp quyền, KHÔNG xoá field)');
     });
 
-    await run.run('Mục E: PERSON_IN_CHARGE KHÔNG tạo được công việc (chỉ mở quyền SỬA, không mở tạo/xoá)', async () => {
+    await run.run('PERSON_IN_CHARGE vẫn KHÔNG tạo được công việc (chưa từng có quyền này)', async () => {
       await loginAs(page, PERSON_IN_CHARGE);
       const result = await page.evaluate(async (id) => {
         try {
@@ -957,10 +996,10 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, recordId);
-      assert(!result.ok, 'PERSON_IN_CHARGE KHÔNG được tạo công việc mới (đúng phạm vi hẹp đã chốt)');
+      assert(!result.ok, 'PERSON_IN_CHARGE KHÔNG được tạo công việc mới');
     });
 
-    await run.run('Mục E: PERSON_IN_CHARGE KHÔNG xoá được công việc (chỉ mở quyền SỬA, không mở tạo/xoá)', async () => {
+    await run.run('PERSON_IN_CHARGE vẫn KHÔNG xoá được công việc (chưa từng có quyền này)', async () => {
       await loginAs(page, PERSON_IN_CHARGE);
       const result = await page.evaluate(async (id) => {
         try {
@@ -968,47 +1007,7 @@ async function main() {
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, editItemId);
-      assert(!result.ok, 'PERSON_IN_CHARGE KHÔNG được xoá công việc (đúng phạm vi hẹp đã chốt)');
-    });
-
-    await run.run('Mục E: PERSON_IN_CHARGE KHÔNG sửa được công việc thuộc hồ sơ KHÁC (nơi họ không phải personInCharge)', async () => {
-      // Tạo 1 hồ sơ sửa chữa + việc gốc RIÊNG với personInCharge khác (CREATOR không phải PERSON_IN_CHARGE
-      // của hồ sơ này) để xác nhận phạm vi quyền CHỈ đúng 1 hồ sơ, không lan sang hồ sơ khác.
-      // repairRecordId (hồ sơ sửa chữa) CŨNG có personInCharge = PERSON_IN_CHARGE ở seed test 1c — đổi
-      // sang 1 hồ sơ MỚI có personInCharge KHÁC (CREATOR) để test đúng phạm vi cách ly.
-      await loginAs(page, CREATOR);
-      const newRepairId = await page.evaluate(async () => {
-        const newRepair = await callCreateAction('operationRepairs', {
-          storeName: 'Siêu thị Sửa Chữa Khác', title: 'Việc khác', approvedBudget: 1000000,
-          supplier: '', personInCharge: 'vh_creator', description: ''
-        });
-        DB.operationRepairs.push(newRepair.item);
-        return newRepair.item.id;
-      });
-      await loginAs(page, ESTIMATOR);
-      await page.evaluate(async (id) => {
-        // Mục H: estimate/submit tự đưa estimateStatus thẳng APPROVED (không cần ai duyệt thêm) — cập
-        // nhật lại đúng bản ghi trả về, không cần can thiệp thủ công.
-        const estRes = await callRecordAction('operationRepairs', id, 'estimate/submit', { items: [{ content: 'X', amount: 100, description: '', note: '' }] });
-        const estIdx = DB.operationRepairs.findIndex(x => x.id === id);
-        DB.operationRepairs[estIdx] = estRes.item;
-      }, newRepairId);
-      await loginAs(page, EXECUTOR);
-      const otherWorkItemId = await page.evaluate(async (id) => {
-        const wi = await callRecordCreate('operationWorkItems', {
-          sourceType: 'OPERATION_REPAIR', sourceId: id, parentWorkItemId: null, title: 'Việc hồ sơ khác'
-        });
-        DB.operationWorkItems.push(wi.item);
-        return wi.item.id;
-      }, newRepairId);
-      await loginAs(page, PERSON_IN_CHARGE);
-      const result = await page.evaluate(async (id) => {
-        try {
-          await callRecordAction('operationWorkItems', id, 'edit', { title: 'PIC cố sửa việc hồ sơ khác' });
-          return { ok: true };
-        } catch (err) { return { ok: false, message: err.message }; }
-      }, otherWorkItemId);
-      assert(!result.ok, 'PERSON_IN_CHARGE KHÔNG được sửa công việc của hồ sơ mà họ KHÔNG phải personInCharge');
+      assert(!result.ok, 'PERSON_IN_CHARGE KHÔNG được xoá công việc');
     });
 
     await run.run('EXECUTOR (toàn quyền) Sửa công việc — cập nhật title/mô tả/assignedTo[]/người nghiệm thu/hạn/acceptanceMode, KHÔNG đổi periodId/status', async () => {
@@ -1048,15 +1047,20 @@ async function main() {
       assert(!result.ok, 'Phải bị chặn vì việc gốc test Sửa vẫn còn CHUA_BAT_DAU');
     });
 
-    await run.run('Người không có operationUseConfirm bị chặn Xác nhận đưa vào sử dụng (dù có operationExecutionManage)', async () => {
-      await loginAs(page, EXECUTOR);
+    // Overhaul quyền: operationUseConfirm đã RÚT GỌN, gộp vào "toàn quyền quản lý hồ sơ" chung — dùng
+    // NOPERM (không giữ bất kỳ quyền quản lý hồ sơ nào, không phải creator của recordId) để test ĐÚNG
+    // nhánh 403 THIẾU QUYỀN (tách bạch khỏi test ngay trên vốn thực ra chặn bởi 409 "còn việc chưa nghiệm
+    // thu xong" — EXECUTOR nay giữ operationRecordManageAll nên KHÔNG còn bị chặn vì thiếu quyền nữa).
+    await run.run('Người không giữ quyền quản lý hồ sơ nào (NOPERM) bị chặn Xác nhận đưa vào sử dụng (403 thiếu quyền, không phải 409 do việc chưa xong)', async () => {
+      await loginAs(page, NOPERM);
       const result = await page.evaluate(async (id) => {
         try {
           await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
           return { ok: true };
         } catch (err) { return { ok: false, message: err.message }; }
       }, recordId);
-      assert(!result.ok, 'Phải bị chặn vì thiếu quyền operationUseConfirm riêng');
+      assert(!result.ok, 'Phải bị chặn vì thiếu quyền quản lý hồ sơ');
+      assertIncludes(result.message, 'quyền', 'Thông báo lỗi phải nêu rõ thiếu quyền (403), không phải lý do việc chưa xong (409)');
     });
 
     await run.run('Hoàn tất việc gốc test Sửa (Bắt Đầu -> Nộp Nghiệm Thu -> Nghiệm Thu) để đủ điều kiện xác nhận', async () => {
@@ -1079,7 +1083,7 @@ async function main() {
       assertEqual(result.status, 'DA_NGHIEM_THU', 'Việc gốc test Sửa phải chuyển Đã nghiệm thu');
     });
 
-    await run.run('USE_CONFIRMER (quyền operationUseConfirm riêng, KHÔNG phải toàn quyền) Xác nhận đưa vào sử dụng thành công khi toàn bộ cây đã nghiệm thu', async () => {
+    await run.run('USE_CONFIRMER (quyền operationRecordManageAll riêng, KHÔNG phải toàn quyền) Xác nhận đưa vào sử dụng thành công khi toàn bộ cây đã nghiệm thu', async () => {
       await loginAs(page, USE_CONFIRMER);
       const result = await page.evaluate(async (id) => {
         const r = await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
@@ -1483,6 +1487,209 @@ async function main() {
       }, legacyId);
       assertIncludes(modalRemainingText, 'chưa nhập', 'Modal Danh Mục Đầu Tư phải nêu rõ "chưa nhập Ngân sách phê duyệt" cho hồ sơ cũ, không hiện 0 hay số âm suy ra từ estimatedBudget');
       await page.evaluate((id) => { DB.operationStoreOpenings = DB.operationStoreOpenings.filter(x => x.id !== id); }, legacyId);
+    });
+
+    // ===== Phần D: Overhaul quyền Vận Hành > Siêu Thị — ma trận đầy đủ creator-scoped + operationRecordManageAll =====
+    // Luật MỚI (đã xác nhận với người dùng): 2 quyền CŨ operationStoreOpenCreate/operationRepairCreate
+    // (GIỮ TÊN) nay là "toàn quyền quản lý hồ sơ do CHÍNH mình tạo" (sourceRecord.creator === user); 1
+    // quyền MỚI operationRecordManageAll là "toàn quyền MỌI hồ sơ, không phân biệt người tạo". Dưới đây
+    // dùng hồ sơ RIÊNG (dRecordId), tách biệt hoàn toàn khỏi mọi hồ sơ ở các Phần trên, để test rõ ràng:
+    //   - CREATOR2 (tạo dRecordId): toàn quyền trên hồ sơ CỦA MÌNH — tạo/sửa/xoá việc, Danh mục đầu tư,
+    //     Kỳ Thực Hiện, Xác Nhận Đưa Vào Sử Dụng, + override cập nhật tiến độ/nghiệm thu.
+    //   - CREATOR (giữ operationStoreOpenCreate NHƯNG KHÔNG phải creator của dRecordId): bị 403 ở MỌI
+    //     hành động quản lý trên dRecordId — đúng "chỉ toàn quyền trên hồ sơ do mình tạo".
+    //   - MANAGE_ALL (CHỈ operationRecordManageAll, không phải creator, không admin): toàn quyền như
+    //     creator thật trên dRecordId dù không phải người tạo.
+    //   - ADMIN: luôn toàn quyền (smoke test 1 hành động).
+    let dRecordId = null, dWorkItemId = null, dWorkItem2Id = null, dPeriodId = null;
+
+    await run.run('Phần D: CREATOR2 tạo hồ sơ Mở mới RIÊNG (dRecordId) + Danh mục đầu tư — creator ghi đúng CREATOR2', async () => {
+      await loginAs(page, CREATOR2);
+      dRecordId = await page.evaluate(async () => {
+        const res = await callCreateAction('operationStoreOpenings', {
+          storeName: 'Siêu thị Test Overhaul Quyền D', address: 'D', area: 10,
+          approvedBudget: 50000000, expectedOpenDate: '', personInCharge: '', note: ''
+        });
+        DB.operationStoreOpenings.push(res.item);
+        return res.item.id;
+      });
+      assert(dRecordId, 'Phải tạo được hồ sơ RIÊNG cho Phần D');
+      const creatorField = await page.evaluate((id) => DB.operationStoreOpenings.find(x => x.id === id)?.creator, dRecordId);
+      assertEqual(creatorField, CREATOR2.username, 'creator phải ghi đúng CREATOR2 — nền tảng của toàn bộ test creator-scoped bên dưới');
+
+      const submitRes = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'estimate/submit', { items: [{ content: 'Hạng mục D', amount: 1000000, description: '', note: '' }] });
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+        return res.item;
+      }, dRecordId);
+      assertEqual(submitRes.estimateStatus, 'APPROVED', 'CREATOR2 (creator) phải LẬP ĐƯỢC Danh mục đầu tư trên chính hồ sơ mình tạo (rule 1)');
+    });
+
+    await run.run('Phần D: CREATOR (giữ operationStoreOpenCreate NHƯNG KHÔNG phải creator dRecordId) bị 403 khi lập lại Danh mục đầu tư', async () => {
+      await loginAs(page, CREATOR);
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('operationStoreOpenings', id, 'estimate/submit', { items: [{ content: 'Hạng mục lạ', amount: 1, description: '', note: '' }] });
+          return { ok: true };
+        } catch (err) { return { ok: false, message: err.message }; }
+      }, dRecordId);
+      assert(!result.ok, 'CREATOR giữ operationStoreOpenCreate nhưng KHÔNG phải creator của dRecordId -> PHẢI bị 403 (đúng "chỉ toàn quyền trên hồ sơ do mình tạo")');
+    });
+
+    await run.run('Phần D: CREATOR (khác creator) bị 403 khi tạo Kỳ Thực Hiện trên dRecordId; CREATOR2 (creator) tạo được', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callCreateAction('operationExecutionPeriods', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, name: 'Đợt D' }); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dRecordId);
+      assert(!blocked.ok, 'CREATOR (khác creator) phải bị 403 khi tạo Kỳ Thực Hiện trên hồ sơ của CREATOR2');
+
+      await loginAs(page, CREATOR2);
+      const created = await page.evaluate(async (id) => {
+        const res = await callCreateAction('operationExecutionPeriods', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, name: 'Đợt D' });
+        DB.operationExecutionPeriods.push(res.item);
+        return res.item;
+      }, dRecordId);
+      dPeriodId = created.id;
+      assertEqual(created.status, 'CHUA_BAT_DAU', 'CREATOR2 (creator) phải TẠO ĐƯỢC Kỳ Thực Hiện trên chính hồ sơ mình tạo');
+    });
+
+    await run.run('Phần D: CREATOR (khác creator) bị 403 khi Bắt Đầu Kỳ; CREATOR2 (creator) Bắt Đầu Kỳ thành công', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationExecutionPeriods', id, 'start', {}); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dPeriodId);
+      assert(!blocked.ok, 'CREATOR (khác creator) phải bị 403 khi Bắt Đầu Kỳ của hồ sơ CREATOR2');
+
+      await loginAs(page, CREATOR2);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationExecutionPeriods', id, 'start', {});
+        const idx = DB.operationExecutionPeriods.findIndex(x => x.id === id); DB.operationExecutionPeriods[idx] = res.item;
+        return res.item;
+      }, dPeriodId);
+      assertEqual(result.status, 'DANG_THUC_HIEN', 'CREATOR2 (creator) phải Bắt Đầu Kỳ thành công trên chính hồ sơ mình tạo');
+    });
+
+    await run.run('Phần D: CREATOR (khác creator) bị 403 khi tạo công việc gốc; CREATOR2 (creator) tạo được', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'CREATOR cố tạo việc trộm' }); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dRecordId);
+      assert(!blocked.ok, 'CREATOR (khác creator) phải bị 403 khi tạo công việc trên hồ sơ CREATOR2');
+
+      await loginAs(page, CREATOR2);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Việc gốc D (CREATOR2)' });
+        DB.operationWorkItems.push(res.item);
+        return res.item;
+      }, dRecordId);
+      dWorkItemId = result.id;
+      assert(dWorkItemId, 'CREATOR2 (creator) phải tạo được công việc gốc trên chính hồ sơ mình tạo');
+    });
+
+    await run.run('Phần D: CREATOR (khác creator) bị 403 khi Sửa công việc; MANAGE_ALL (không phải creator, không admin) Sửa được — chứng minh operationRecordManageAll toàn quyền MỌI hồ sơ', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationWorkItems', id, 'edit', { title: 'CREATOR cố sửa trộm' }); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dWorkItemId);
+      assert(!blocked.ok, 'CREATOR (khác creator, KHÔNG có operationRecordManageAll) phải bị 403 khi sửa công việc của hồ sơ CREATOR2');
+
+      await loginAs(page, MANAGE_ALL);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationWorkItems', id, 'edit', { title: 'Việc gốc D — sửa bởi MANAGE_ALL', assignedTo: [], deadline: '' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, dWorkItemId);
+      assertEqual(result.title, 'Việc gốc D — sửa bởi MANAGE_ALL', 'MANAGE_ALL (operationRecordManageAll, KHÔNG phải creator, KHÔNG admin) phải sửa được công việc của BẤT KỲ hồ sơ nào');
+    });
+
+    await run.run('Phần D (override tiến độ): CREATOR (khác creator, không phải assignee) bị 403 khi cập nhật tiến độ; CREATOR2 (creator, override) cập nhật được dù KHÔNG nằm trong assignedTo[]', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' }); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dWorkItemId);
+      assert(!blocked.ok, 'CREATOR (khác creator, không phải assignee) phải bị 403 cập nhật tiến độ việc của hồ sơ CREATOR2');
+
+      await loginAs(page, CREATOR2);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_THUC_HIEN' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, dWorkItemId);
+      assertEqual(result.status, 'DANG_THUC_HIEN', 'CREATOR2 (creator, KHÔNG nằm trong assignedTo[]) phải cập nhật được tiến độ — override "toàn quyền quản lý hồ sơ" của chính mình, đúng rule 5 (ngoài assignedTo[]/acceptorUsername, creator/manageAll CŨNG thao tác được)');
+    });
+
+    await run.run('Phần D (override tiến độ): MANAGE_ALL cũng cập nhật được tiến độ (Nộp Nghiệm Thu) dù không phải creator, không phải assignee', async () => {
+      await loginAs(page, MANAGE_ALL);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationWorkItems', id, 'progress', { status: 'DANG_NGHIEM_THU' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, dWorkItemId);
+      assertEqual(result.status, 'DANG_NGHIEM_THU', 'MANAGE_ALL (operationRecordManageAll) phải cập nhật được tiến độ MỌI việc (override), dù không phải creator/assignee');
+    });
+
+    await run.run('Phần D (override nghiệm thu): CREATOR (khác creator) bị 403 khi nghiệm thu; MANAGE_ALL nghiệm thu được dù không phải creator, không phải acceptorUsername chỉ định', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'CREATOR cố nghiệm thu trộm' }); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dWorkItemId);
+      assert(!blocked.ok, 'CREATOR (khác creator, không phải acceptorUsername chỉ định) phải bị 403 khi nghiệm thu việc của hồ sơ CREATOR2');
+
+      await loginAs(page, MANAGE_ALL);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationWorkItems', id, 'accept', { action: 'ACCEPT', reason: 'Đạt yêu cầu (MANAGE_ALL override)' });
+        const idx = DB.operationWorkItems.findIndex(x => x.id === id); DB.operationWorkItems[idx] = res.item;
+        return res.item;
+      }, dWorkItemId);
+      assertEqual(result.status, 'DA_NGHIEM_THU', 'MANAGE_ALL phải nghiệm thu được (override) dù không phải creator, không phải acceptorUsername chỉ định — rule 5');
+    });
+
+    await run.run('Phần D (xoá): CREATOR2 tạo việc gốc THỨ 2 (dWorkItem2Id) — CREATOR (khác creator) bị 403 khi xoá; ADMIN xoá được (toàn quyền tuyệt đối, smoke test)', async () => {
+      await loginAs(page, CREATOR2);
+      dWorkItem2Id = await page.evaluate(async (id) => {
+        const res = await callRecordCreate('operationWorkItems', { sourceType: 'OPERATION_STORE_OPENING', sourceId: id, parentWorkItemId: null, title: 'Việc gốc D thứ 2 (để test xoá)' });
+        DB.operationWorkItems.push(res.item);
+        return res.item.id;
+      }, dRecordId);
+      assert(dWorkItem2Id, 'Phải tạo được việc gốc thứ 2');
+
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationWorkItems', id, 'delete', {}); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dWorkItem2Id);
+      assert(!blocked.ok, 'CREATOR (khác creator) phải bị 403 khi xoá công việc của hồ sơ CREATOR2');
+
+      await loginAs(page, ADMIN);
+      await page.evaluate(async (id) => {
+        await callRecordAction('operationWorkItems', id, 'delete', {});
+        DB.operationWorkItems = DB.operationWorkItems.filter(w => w.id !== id);
+      }, dWorkItem2Id);
+      const stillThere = await page.evaluate((id) => (DB.operationWorkItems || []).some(w => w.id === id), dWorkItem2Id);
+      assert(!stillThere, 'ADMIN phải xoá được công việc của BẤT KỲ hồ sơ nào (toàn quyền tuyệt đối, không đổi bởi đợt overhaul này)');
+    });
+
+    await run.run('Phần D (Xác Nhận Đưa Vào Sử Dụng): CREATOR (khác creator) bị 403; MANAGE_ALL xác nhận được dù không phải creator, không admin', async () => {
+      await loginAs(page, CREATOR);
+      const blocked = await page.evaluate(async (id) => {
+        try { await callRecordAction('operationStoreOpenings', id, 'confirm-use', {}); return { ok: true }; }
+        catch (err) { return { ok: false, message: err.message }; }
+      }, dRecordId);
+      assert(!blocked.ok, 'CREATOR (khác creator) phải bị 403 khi Xác Nhận Đưa Vào Sử Dụng hồ sơ CREATOR2');
+
+      await loginAs(page, MANAGE_ALL);
+      const result = await page.evaluate(async (id) => {
+        const res = await callRecordAction('operationStoreOpenings', id, 'confirm-use', {});
+        const idx = DB.operationStoreOpenings.findIndex(x => x.id === id); DB.operationStoreOpenings[idx] = res.item;
+        return res.item;
+      }, dRecordId);
+      assertEqual(result.useConfirmStatus, 'CONFIRMED', 'MANAGE_ALL (operationRecordManageAll, KHÔNG phải creator, KHÔNG admin) phải Xác Nhận Đưa Vào Sử Dụng được — toàn quyền MỌI hồ sơ');
     });
   } finally {
     await browser.close();

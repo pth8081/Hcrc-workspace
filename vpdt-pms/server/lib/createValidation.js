@@ -888,14 +888,17 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
-      if (!user.perms?.admin && !user.perms?.operationExecutionManage) {
-        throw new CreateError(403, 'Bạn không có quyền tạo Kỳ Thực Hiện');
-      }
       const sourceType = payload.sourceType === 'OPERATION_REPAIR' ? 'OPERATION_REPAIR' : 'OPERATION_STORE_OPENING';
       const sourceId = Number(payload.sourceId);
       const sourceList = sourceType === 'OPERATION_REPAIR' ? appData?.operationRepairs : appData?.operationStoreOpenings;
       const sourceRecord = (sourceList || []).find(r => r.id === sourceId);
       if (!sourceRecord) throw new CreateError(404, 'Không tìm thấy hồ sơ Mở mới/Sửa chữa tương ứng');
+      // Quyền tạo Kỳ Thực Hiện — nay đi theo luật "toàn quyền quản lý hồ sơ" DUY NHẤT (xem
+      // canManageOperationRecord() ngay trên), thay cho quyền operationExecutionManage riêng (đã RÚT
+      // GỌN, không còn admin gán được nữa).
+      if (!canManageOperationRecord(user, sourceRecord, sourceType)) {
+        throw new CreateError(403, 'Bạn không có quyền tạo Kỳ Thực Hiện cho hồ sơ này');
+      }
       if (sourceRecord.estimateStatus !== 'APPROVED') {
         throw new CreateError(409, 'Dự toán của hồ sơ này chưa duyệt xong, chưa thể tạo Kỳ Thực Hiện');
       }
@@ -2553,6 +2556,40 @@ function resolveOperationPersonInChargeUsername(rawUsername, users) {
   return found;
 }
 
+// Vận Hành > 🏬 Siêu Thị — helper DUY NHẤT dùng CHUNG cho MỌI thao tác "quản lý toàn diện" 1 hồ sơ
+// operationStoreOpenings/operationRepairs (tạo/sửa/xoá đầu mục công việc lớn/con, Danh mục đầu tư, Kỳ
+// Thực Hiện, Xác Nhận Đưa Vào Sử Dụng...) — thay thế 4 quyền TÁCH RIÊNG trước đây (operationEstimateCreate/
+// operationExecutionManage/operationAcceptanceManage/operationUseConfirm, nay đã RÚT GỌN, không còn là
+// checkbox admin gán được nữa) cùng nhánh "personInCharge cũng sửa được" (đã RÚT GỌN, xem
+// lib/recordActions.js editOperationWorkItem()). Luật MỚI, nguyên văn yêu cầu người dùng đã xác nhận:
+// "Chỉ người quản lý dự án, người tạo hồ sơ mới được phép tạo, sửa đầu mục công việc lớn, đầu mục công
+// việc con... chỉ cần quyền quản lý mở mới, quản lý sửa chữa, ai có 2 quyền này thì toàn quyền xử lý
+// trên hồ sơ do mình thực hiện tạo mở mới hoặc sửa chữa, còn những người khác chỉ có quyền thực hiện
+// thao tác. Thêm 1 quyền quản lý hồ sơ siêu thị sẽ có quyền cập nhật tất cả thông tin kể cả không phải
+// hồ sơ do mình tạo ra":
+//   - admin: LUÔN toàn quyền (bất biến chung toàn hệ thống).
+//   - operationRecordManageAll: toàn quyền trên MỌI hồ sơ operationStoreOpenings/operationRepairs, bất
+//     kể ai là người tạo — quyền MỚI hoàn toàn, đáp ứng đúng câu cuối yêu cầu trên.
+//   - operationStoreOpenCreate/operationRepairCreate (đúng theo sourceType của hồ sơ): 2 quyền CŨ được
+//     GIỮ TÊN nhưng MỞ RỘNG ý nghĩa — không còn chỉ là "quyền tạo mới hồ sơ" mà là "quyền quản lý toàn
+//     diện hồ sơ do CHÍNH mình tạo" (sourceRecord.creator === user.username) — người có quyền nhưng
+//     KHÔNG PHẢI creator của hồ sơ đang xét thì KHÔNG được toàn quyền trên hồ sơ đó.
+//   - Không thoả điều kiện nào ở trên -> false. Người thực hiện (assignedTo[])/người nghiệm thu chỉ định
+//     (acceptorUsername) VẪN thao tác được ĐÚNG việc của mình — đó là 1 nhánh RIÊNG, KHÔNG đi qua helper
+//     này (xem updateOperationWorkItemProgress()/acceptOperationWorkItem() ở lib/recordActions.js).
+// sourceType: 'OPERATION_STORE_OPENING' | 'OPERATION_REPAIR' — LUÔN truyền TƯỜNG MINH từ caller (route
+// luôn đã biết rõ đang xử lý collection nào) — KHÔNG suy luận ngược từ sourceRecord (2 collection không
+// có field nào phân biệt đáng tin cậy) và KHÔNG gắn field tạm lên sourceRecord để tự suy luận (rủi ro rò
+// rỉ field nội bộ vào bản ghi lúc lưu qua withLockedRecordForCollection() — object trả về từ mutatorFn ở
+// đó được ghi THẲNG xuống DB).
+function canManageOperationRecord(user, sourceRecord, sourceType) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
+  if (!sourceRecord || !user.username || sourceRecord.creator !== user.username) return false;
+  const flag = sourceType === 'OPERATION_REPAIR' ? 'operationRepairCreate' : 'operationStoreOpenCreate';
+  return !!user.perms?.[flag];
+}
+
 // Danh Sách Được Mời (inviteList, Đợt 3) — chỉ chuẩn hoá thành mảng username duy nhất, không bắt buộc
 // từng username phải là tài khoản có thật (nhập sai chỉ khiến người đó không tự đăng ký được, không
 // gây lỗi dữ liệu gì) — dùng chung cho tạo lớp lẫn sửa lớp giống resolveTrainingInstructorUsername ở trên.
@@ -2654,6 +2691,7 @@ module.exports = {
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,
   resolveOperationPersonInChargeUsername,
+  canManageOperationRecord,
   normalizeTrainingPlanFields,
   normalizeOnboardingPathFields
 };

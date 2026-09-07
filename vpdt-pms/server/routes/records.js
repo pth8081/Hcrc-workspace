@@ -1792,7 +1792,7 @@ router.post('/operationStoreOpenings/:id/estimate/submit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body));
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_STORE_OPENING'));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/submit`, err); }
 });
@@ -1801,7 +1801,7 @@ router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body));
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_REPAIR'));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/submit`, err); }
 });
@@ -1813,7 +1813,7 @@ router.post('/operationStoreOpenings/:id/estimate/reset', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.resetOperationEstimateToDraft(freshUser, item));
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.resetOperationEstimateToDraft(freshUser, item, 'OPERATION_STORE_OPENING'));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/reset`, err); }
 });
@@ -1822,7 +1822,7 @@ router.post('/operationRepairs/:id/estimate/reset', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.resetOperationEstimateToDraft(freshUser, item));
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.resetOperationEstimateToDraft(freshUser, item, 'OPERATION_REPAIR'));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/reset`, err); }
 });
@@ -1870,6 +1870,17 @@ function collectOperationWorkItemDescendantIds(all, rootId) {
   return result;
 }
 
+// Tra hồ sơ gốc (operationStoreOpenings/operationRepairs) đúng 1 work item — dùng CHUNG cho mọi route
+// thao tác trên work item (edit/progress/accept/delete) cần đối chiếu "toàn quyền quản lý hồ sơ"
+// (recordActions.assertCanManageOperationRecord()/canManageOperationRecord() — creator +
+// operationStoreOpenCreate/operationRepairCreate, hoặc operationRecordManageAll/admin). KHÔNG cache —
+// creator không đổi nhưng operationRecordManageAll/quyền người gọi có thể vừa đổi qua route sửa quyền.
+async function getOperationWorkItemSourceRecord(item) {
+  const sourceCollection = item.sourceType === 'OPERATION_REPAIR' ? 'operationRepairs' : 'operationStoreOpenings';
+  const sourceRecords = await getAllForCollection(sourceCollection);
+  return sourceRecords.find(r => r.id === item.sourceId);
+}
+
 router.post('/operationWorkItems', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
@@ -1881,14 +1892,13 @@ router.post('/operationWorkItems', async (req, res) => {
     const sourceRecords = await getAllForCollection(sourceCollection);
     const sourceRecord = sourceRecords.find(r => r.id === srcId);
     if (!sourceRecord) return res.status(404).json({ error: 'Không tìm thấy hồ sơ nguồn' });
-    sourceRecord.__workItemSourceType = sourceType;
 
     const siblings = await getWorkItemsBySource(sourceType, srcId);
     // Kỳ Thực Hiện đúng hồ sơ này — createOperationWorkItem() tự validate periodId (công việc gốc bắt
     // buộc chọn đúng kỳ đang "Đang thực hiện"), xem lib/createValidation.js operationExecutionPeriods.
     const allPeriods = await getAllForCollection('operationExecutionPeriods');
     const periodsForSource = allPeriods.filter(p => p.sourceType === sourceType && p.sourceId === srcId);
-    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource, users);
+    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource, users, sourceType);
     newItem.sourceType = sourceType;
     newItem.sourceId = srcId;
     await insertWorkItem(newItem);
@@ -1903,9 +1913,15 @@ router.post('/operationExecutionPeriods/:id/start', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationExecutionPeriods', itemId, (item) =>
-      recordActions.startOperationExecutionPeriod(freshUser, item)
-    );
+    // Cần đọc sẵn hồ sơ gốc (operationStoreOpenings/operationRepairs) để đối chiếu quyền "toàn quyền
+    // quản lý hồ sơ" (assertCanManageOperationRecord() — creator + operationStoreOpenCreate/
+    // operationRepairCreate, hoặc operationRecordManageAll/admin) — Kỳ Thực Hiện cũng có sẵn
+    // sourceType/sourceId nên dùng lại ĐÚNG getOperationWorkItemSourceRecord() (tên hàm chung, không chỉ
+    // riêng work item) thay vì lặp lại logic tra collection lần thứ 2.
+    const result = await withLockedRecordForCollection('operationExecutionPeriods', itemId, async (item) => {
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      return recordActions.startOperationExecutionPeriod(freshUser, item, sourceRecord);
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationExecutionPeriods/${req.params.id}/start`, err); }
 });
@@ -1921,7 +1937,10 @@ router.post('/operationWorkItems/:id/progress', async (req, res) => {
       sourceType = item.sourceType; sourceId = item.sourceId;
       const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
       const children = all.filter(w => w.parentWorkItemId === item.id);
-      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus, note);
+      // sourceRecord CHỈ dùng cho nhánh override "toàn quyền quản lý hồ sơ" — cơ chế chính assignedTo[]
+      // (isOwner) không đổi, xem lib/recordActions.js updateOperationWorkItemProgress().
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      return recordActions.updateOperationWorkItemProgress(freshUser, item, children, newStatus, note, sourceRecord);
     });
     await syncOperationWorkItemAncestors(result.parentWorkItemId, sourceType, sourceId);
     res.json({ ok: true, item: result });
@@ -1930,18 +1949,16 @@ router.post('/operationWorkItems/:id/progress', async (req, res) => {
 
 // POST /api/records/operationWorkItems/:id/edit — sửa thông tin công việc (title/mô tả/người phụ
 // trách[]/người nghiệm thu chỉ định/hạn/nghiệm thu ngay-sau N ngày) — xem lib/recordActions.js
-// editOperationWorkItem(). Mục E: quyền sửa mở rộng theo "Người Phụ Trách" hồ sơ gốc (không chỉ
-// operationExecutionManage) — cần load thêm sourceRecord (mirror route create ở trên, KHÔNG cache vì
-// personInCharge có thể vừa đổi qua route update hồ sơ) để editOperationWorkItem() tự đối chiếu.
+// editOperationWorkItem(). Quyền sửa nay CHỈ theo "toàn quyền quản lý hồ sơ" (đã RÚT GỌN "Người Phụ
+// Trách" khỏi vai trò cấp quyền) — cần load sourceRecord (KHÔNG cache vì quyền/creator có thể vừa đổi)
+// để editOperationWorkItem() tự đối chiếu.
 router.post('/operationWorkItems/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedWorkItemById(itemId, async (item) => {
-      const sourceCollection = item.sourceType === 'OPERATION_STORE_OPENING' ? 'operationStoreOpenings' : 'operationRepairs';
-      const sourceRecords = await getAllForCollection(sourceCollection);
-      const sourceRecord = sourceRecords.find(r => r.id === item.sourceId);
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
       return recordActions.editOperationWorkItem(freshUser, item, req.body || {}, users, sourceRecord);
     });
     res.json({ ok: true, item: result });
@@ -1958,7 +1975,10 @@ router.post('/operationWorkItems/:id/accept', async (req, res) => {
       sourceType = item.sourceType; sourceId = item.sourceId; parentWorkItemId = item.parentWorkItemId;
       const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
       const children = all.filter(w => w.parentWorkItemId === item.id);
-      return recordActions.acceptOperationWorkItem(freshUser, item, children, req.body || {});
+      // sourceRecord CHỈ dùng cho nhánh override "toàn quyền quản lý hồ sơ" — cơ chế chính
+      // acceptorUsername (isOwner) không đổi, xem lib/recordActions.js acceptOperationWorkItem().
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      return recordActions.acceptOperationWorkItem(freshUser, item, children, req.body || {}, sourceRecord);
     });
     await syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sourceId);
     res.json({ ok: true, item: result });
@@ -1974,7 +1994,8 @@ router.post('/operationWorkItems/:id/delete', async (req, res) => {
     const item = all.find(w => w.id === itemId);
     if (!item) return res.status(404).json({ error: 'Không tìm thấy công việc' });
     const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
-    const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds);
+    const sourceRecord = await getOperationWorkItemSourceRecord(item);
+    const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecord);
     // 1 câu DELETE...WHERE Id IN (...) duy nhất (atomic) thay vì vòng lặp nhiều câu DELETE riêng lẻ —
     // xem giải thích đầy đủ ở deleteWorkItemsByIds() (lib/operationWorkItemStore.js).
     await deleteWorkItemsByIds(idsToDelete);
@@ -1993,7 +2014,7 @@ router.post('/operationStoreOpenings/:id/confirm-use', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, async (item) => {
       const workItems = await getWorkItemsBySource('OPERATION_STORE_OPENING', itemId);
-      return recordActions.confirmOperationUse(freshUser, item, workItems);
+      return recordActions.confirmOperationUse(freshUser, item, workItems, 'OPERATION_STORE_OPENING');
     });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/confirm-use`, err); }
@@ -2006,7 +2027,7 @@ router.post('/operationRepairs/:id/confirm-use', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('operationRepairs', itemId, async (item) => {
       const workItems = await getWorkItemsBySource('OPERATION_REPAIR', itemId);
-      return recordActions.confirmOperationUse(freshUser, item, workItems);
+      return recordActions.confirmOperationUse(freshUser, item, workItems, 'OPERATION_REPAIR');
     });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/confirm-use`, err); }

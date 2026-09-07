@@ -1,8 +1,99 @@
 # Phiên bản hiện tại
 
-**11.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > 🏬 Siêu Thị: Overhaul quyền quản lý hồ sơ Mở Mới/Sửa Chữa (2026-09-07)
+
+**Yêu cầu người dùng (nguyên văn)**: "Chỉ người quản lý dự án, người tạo hồ sơ mới được phép tạo, sửa
+đầu mục công việc lớn, đầu mục công việc con, người thực hiện và người nghiệm thu chỉ thực hiện thao tác
+cập nhật công việc, nghiệm thu công việc, không thể chỉnh sửa, thêm bớt công việc... chỉ cần quyền quản
+lý mở mới, quản lý sửa chữa, ai có hai quyền này thì toàn quyền xử lý trên hồ sơ do mình thực hiện tạo mở
+mới hoặc sửa chữa, còn những người khác chỉ có quyền thực hiện thao tác. Thêm một quyền quản lý hồ sơ
+siêu thị sẽ có quyền cập nhật tất cả thông tin kể cả không phải hồ sơ do mình tạo ra."
+
+**Luật MỚI đã triển khai** (áp dụng cho `operationStoreOpenings`/`operationRepairs`/
+`operationWorkItems`/`operationExecutionPeriods`):
+1. `operationStoreOpenCreate`/`operationRepairCreate` (2 quyền CŨ, GIỮ TÊN) — MỞ RỘNG ý nghĩa: người giữ
+   quyền này (hoặc `admin`) nay có **toàn quyền quản lý** (tạo/sửa/xoá công việc mọi cấp, quản lý Danh
+   Mục Đầu Tư, Bắt Đầu Kỳ Thực Hiện, Xác Nhận Đưa Vào Sử Dụng) — nhưng **CHỈ trên hồ sơ do CHÍNH mình
+   tạo** (`sourceRecord.creator === user.username`).
+2. `operationRecordManageAll` (quyền MỚI hoàn toàn) — toàn quyền như trên nhưng trên **MỌI** hồ sơ, không
+   phân biệt người tạo.
+3. **Rút gọn** 4 quyền tách riêng cũ `operationEstimateCreate`/`operationExecutionManage`/
+   `operationAcceptanceManage`/`operationUseConfirm` — không còn là checkbox admin gán riêng được nữa,
+   logic gate của cả 4 gộp vào luật 1+2 ở trên qua 1 hàm DUY NHẤT `canManageOperationRecord()`
+   (`lib/createValidation.js`).
+4. **Rút gọn vai trò cấp quyền của `personInCharge`** — trước đây "Người Phụ Trách" hồ sơ tự động có
+   quyền SỬA công việc dù không giữ quyền quản lý nào; nay KHÔNG còn nữa, đúng "còn những người khác chỉ
+   có quyền thực hiện thao tác". Field `personInCharge`/`personInChargeName` VẪN giữ nguyên trên dữ liệu
+   (chỉ còn ý nghĩa hiển thị/thông tin — vẫn dùng ở form + hiển thị chi tiết hồ sơ, KHÔNG xoá khỏi model).
+5. **KHÔNG đổi** cơ chế người thực hiện (`assignedTo[]`)/người nghiệm thu chỉ định (`acceptorUsername`) —
+   vẫn tự cập nhật/nghiệm thu ĐÚNG việc của mình như cũ. Duy nhất thay đổi: "toàn quyền override" (trước
+   đây `admin`/`operationExecutionManage`/`operationAcceptanceManage`) nay là `admin`/
+   `operationRecordManageAll`/creator-scoped (luật 1) — người quản lý hồ sơ (creator hoặc
+   `operationRecordManageAll`) giờ CŨNG cập nhật/nghiệm thu được trên hồ sơ của mình, ngoài đúng người
+   được gán/chỉ định.
+
+**Đã sửa**:
+- `lib/createValidation.js` — thêm `canManageOperationRecord(user, sourceRecord, sourceType)` (helper
+  DUY NHẤT, export dùng chung), sửa gate tạo `operationExecutionPeriods` (trước dùng
+  `operationExecutionManage`, nay dùng helper trên).
+- `lib/recordActions.js` — `submitOperationEstimate()`/`resetOperationEstimateToDraft()`/
+  `createOperationWorkItem()`/`deleteOperationWorkItem()`/`startOperationExecutionPeriod()`/
+  `editOperationWorkItem()`/`confirmOperationUse()` đều gate qua helper trên (nhận thêm tham số
+  `sourceType`/`sourceRecord` tường minh khi cần); `updateOperationWorkItemProgress()`/
+  `acceptOperationWorkItem()` nhận thêm `sourceRecord` CHỈ cho nhánh override, KHÔNG đổi nhánh chính
+  `assignedTo[]`/`acceptorUsername`. Xoá 3 hàm assert tách rời cũ
+  (`assertCanManageOperationExecution`/`assertCanManageOperationAcceptance`/
+  `assertCanManageOperationWorkItem`), thay bằng `assertCanManageOperationRecord()`.
+- `routes/records.js` — mọi route liên quan tự tra/truyền `sourceType`/`sourceRecord` tường minh (thêm
+  helper `getOperationWorkItemSourceRecord()` dùng chung cho progress/edit/accept/delete); route tạo
+  công việc bỏ field tạm `sourceRecord.__workItemSourceType` (rủi ro rò rỉ vào bản ghi lưu DB), dùng
+  tham số `sourceType` tường minh thay thế.
+- `routes/operationImport.js` — 4 gate tải mẫu/đọc preview Excel (Danh Mục Đầu Tư/Danh Sách Công Việc)
+  đổi sang "giữ BẤT KỲ quyền quản lý hồ sơ nào" (`admin`/`operationRecordManageAll`/
+  `operationStoreOpenCreate`/`operationRepairCreate`) — route ghi thật (`submitOperationEstimate()`/
+  `createOperationWorkItem()`) vẫn tự đối chiếu lại đúng creator, đây chỉ là lớp chặn sơ bộ.
+- `public/index.html` — cây phân quyền admin: xoá 4 checkbox `pOperationEstimateCreate`/
+  `pOperationExecutionManage`/`pOperationAcceptanceManage`/`pOperationUseConfirm`; thêm checkbox
+  `pOperationRecordManageAll` ("🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt Người Tạo)"); đổi
+  nhãn 2 checkbox `pOperationStoreOpenCreate`/`pOperationRepairCreate` thêm hậu tố "(+ Toàn Quyền Trên Hồ
+  Sơ Của Mình)".
+- `public/js/module-admin-permtree.js` — `collectPermsFromForm()`/`populatePermsForm()` đổi theo đúng 4
+  checkbox xoá + 1 checkbox mới ở trên.
+- `public/js/module-admin-userstaging.js` — bỏ đọc 4 checkbox cũ, đọc thêm `pOperationRecordManageAll`
+  lúc `resetUserForm()`.
+- `public/js/core.js` — `canAccessOperationModule()`/`canAccessOperationSubTab()` đổi gate theo luật mới
+  (thêm helper `hasAnyOperationRecordManagePermClient()` cho gate CẤP TAB, chưa biết hồ sơ cụ thể).
+- `public/js/module-vanhanh.js` — thêm `canManageOperationRecordClient(user, kind, sourceRecord)` (mirror
+  client của `canManageOperationRecord()`), thay TOÀN BỘ các gate nút bấm cũ (estimate/execution/
+  acceptance/use-confirm tách rời + nhánh `personInCharge` sửa việc) bằng gate DUY NHẤT này.
+
+**Migration — KHÔNG tự động cấp `operationRecordManageAll`**: bất kỳ tài khoản nào hiện đang giữ CHỈ 1
+trong 4 quyền đã rút gọn (`operationEstimateCreate`/`operationExecutionManage`/`operationAcceptanceManage`/
+`operationUseConfirm` = `true`) mà KHÔNG có `operationStoreOpenCreate`/`operationRepairCreate`/`admin` sẽ
+MẤT quyền quản lý trên hồ sơ không phải do mình tạo ngay khi deploy bản này — đây là siết chặt CHỦ Ý theo
+đúng yêu cầu người dùng, KHÔNG viết migration tự động cấp bù `operationRecordManageAll` (sẽ vô hiệu hoá
+mục đích siết chặt). Admin cần tự rà soát ai đang giữ các quyền cũ này (qua màn "Người Dùng" → cây phân
+quyền, hoặc trực tiếp trong dữ liệu `users` đã lưu — 4 field cũ vẫn còn trong dữ liệu JSON đã lưu, chỉ
+không còn hiệu lực gate nào) và cấp `operationRecordManageAll` thủ công cho người thực sự cần quyền quản
+lý xuyên hồ sơ sau khi deploy.
+
+**Kiểm thử**: `tests/test-operation-store-lifecycle.js` viết lại "Phần A" (personInCharge nay bị 403 thay
+vì thành công) + thêm "Phần D" (ma trận đầy đủ: creator tự quản lý được hồ sơ mình tạo, 403 trên hồ sơ
+người khác tạo dù giữ cùng quyền tạo, `operationRecordManageAll` toàn quyền mọi hồ sơ, `admin` luôn toàn
+quyền, override cập nhật tiến độ/nghiệm thu cho creator/manageAll, KHÔNG đổi nhánh `assignedTo[]`/
+`acceptorUsername`) — 85/85 kịch bản pass. `tests/testHarness.js` (mock route dùng chung nhiều bài test)
+cập nhật theo đúng chữ ký hàm mới. `tests/test-operation-danhmuc-dautu-units.js`/
+`tests/test-audit-dot5-phase2.js` cập nhật user giả lập theo quyền mới. Chạy toàn bộ `tests/test-*.js`
+(69 file) — 0 lỗi mới so với baseline (chỉ còn đúng các lỗi phụ thuộc SQL Server thật đã biết từ trước).
+
+**Deploy-impact**: KHÔNG có gì ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm biến
+môi trường, không đổi `dependencies`. **CẦN làm thêm 1 việc thủ công sau deploy**: rà soát tài khoản đang
+giữ 4 quyền cũ đã rút gọn (xem mục Migration ở trên) và cấp `operationRecordManageAll` cho người cần
+quyền quản lý xuyên hồ sơ.
 
 ## Vận Hành > Siêu Thị (Mở Mới/Sửa Chữa): gỡ bỏ hẳn field "Chi Phí Phê Duyệt" (2026-09-07)
 

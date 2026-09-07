@@ -174,10 +174,13 @@ function collectPermsFromForm() {
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
-    operationEstimateCreate: document.getElementById('pOperationEstimateCreate').checked,
-    operationExecutionManage: document.getElementById('pOperationExecutionManage').checked,
-    operationAcceptanceManage: document.getElementById('pOperationAcceptanceManage').checked,
-    operationUseConfirm: document.getElementById('pOperationUseConfirm').checked
+    // Overhaul quyền Vận Hành > Siêu Thị: 4 quyền tách riêng cũ (operationEstimateCreate/
+    // operationExecutionManage/operationAcceptanceManage/operationUseConfirm) đã RÚT GỌN, không còn là
+    // checkbox admin gán riêng được nữa — gộp vào luật "toàn quyền quản lý hồ sơ" của 2 quyền
+    // operationStoreOpenCreate/operationRepairCreate (đúng hồ sơ mình tạo) + quyền MỚI
+    // operationRecordManageAll (mọi hồ sơ, không phân biệt người tạo) — xem lib/createValidation.js
+    // canManageOperationRecord().
+    operationRecordManageAll: document.getElementById('pOperationRecordManageAll').checked
   };
 }
 
@@ -232,10 +235,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
-  document.getElementById('pOperationEstimateCreate').checked = !!perms.operationEstimateCreate;
-  document.getElementById('pOperationExecutionManage').checked = !!perms.operationExecutionManage;
-  document.getElementById('pOperationAcceptanceManage').checked = !!perms.operationAcceptanceManage;
-  document.getElementById('pOperationUseConfirm').checked = !!perms.operationUseConfirm;
+  document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;

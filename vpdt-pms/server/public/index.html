@@ -5101,25 +5101,16 @@
                 <input type="checkbox" id="pOperationOrderCreate"> 📦 Tạo/Gửi Đơn Hàng
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pOperationStoreOpenCreate"> 🏬 Tạo/Gửi Đề Xuất Mở Mới Siêu Thị
+                <input type="checkbox" id="pOperationStoreOpenCreate"> 🏬 Tạo Đề Xuất Mở Mới Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)
               </label>
               <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pOperationRepairCreate"> 🔧 Tạo/Gửi Đề Xuất Sửa Chữa Siêu Thị
+                <input type="checkbox" id="pOperationRepairCreate"> 🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)
               </label>
             </div>
-            <p class="text-[11px] text-gray-500 italic pt-1 border-t">Vòng đời "dự án nhỏ" trong tab 🏬 Siêu Thị (Mở mới/Sửa chữa) — 3 quyền TÁCH RIÊNG cho từng giai đoạn, dùng chung cho cả 2 luồng Mở mới lẫn Sửa chữa:</p>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">Vòng đời "dự án nhỏ" trong tab 🏬 Siêu Thị (Mở mới/Sửa chữa): người giữ 1 trong 2 quyền tạo ở trên là "quản lý dự án" — toàn quyền tạo/sửa/xoá đầu mục công việc lớn/con, Danh mục đầu tư, Kỳ Thực Hiện, Xác Nhận Đưa Vào Sử Dụng... nhưng CHỈ trên hồ sơ do CHÍNH mình tạo. Người thực hiện (được gán việc)/người nghiệm thu (được chỉ định) chỉ thao tác ĐÚNG việc của mình, không tạo/sửa/xoá được đầu mục công việc. Quyền dưới đây MỞ RỘNG toàn quyền đó ra MỌI hồ sơ, không phân biệt ai tạo:</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pOperationEstimateCreate"> 📊 Lập/Gửi Duyệt Dự Toán
-              </label>
-              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pOperationExecutionManage"> 🛠️ Quản Lý Công Việc Thực Hiện
-              </label>
-              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pOperationAcceptanceManage"> ✅ Nghiệm Thu Công Việc
-              </label>
               <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pOperationUseConfirm"> 🏁 Xác Nhận Đưa Vào Sử Dụng
+                <input type="checkbox" id="pOperationRecordManageAll"> 🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt Người Tạo)
               </label>
             </div>
           </div>
@@ -6379,7 +6370,7 @@
 
     <!-- ===== TAB 4: DỰ TOÁN — giai đoạn 1/3 của "dự án nhỏ" Siêu Thị. Gộp danh sách hồ sơ Mở mới/Sửa
          chữa (nested estimateItems[]/estimateStatus trên chính bản ghi, xem lib/workflowEngine.js
-         operationStoreOpeningEstimate/operationRepairEstimate) — quyền operationEstimateCreate. ===== -->
+         operationStoreOpeningEstimate/operationRepairEstimate) — quyền: toàn quyền quản lý hồ sơ (xem lib/createValidation.js canManageOperationRecord()). ===== -->
     <div id="opStoreEstimatePanel" class="hidden space-y-3">
       <div class="bg-gray-50 p-3 rounded border text-xs text-gray-600">📁 Sau khi hồ sơ Mở mới/Sửa chữa được tạo, nhập bảng hạng mục Danh mục đầu tư rồi bấm <b>Lưu</b> — hoàn tất ngay, không cần chờ ai duyệt.</div>
       <div class="overflow-x-auto">
@@ -6403,7 +6394,7 @@
     </div>
 
     <!-- ===== TAB 5: THỰC HIỆN — chỉ mở khoá khi estimateStatus === 'APPROVED', cây công việc đa cấp
-         dbo.OperationWorkItems (lib/operationWorkItemStore.js) — quyền operationExecutionManage. ===== -->
+         dbo.OperationWorkItems (lib/operationWorkItemStore.js) — quyền: toàn quyền quản lý hồ sơ (canManageOperationRecord()), + assignedTo[] tự cập nhật việc của mình. ===== -->
     <div id="opStoreExecutionPanel" class="hidden space-y-3">
       <div class="bg-gray-50 p-3 rounded border text-xs text-gray-600">🛠️ Chỉ hiển thị hồ sơ đã <b>lưu xong Danh mục đầu tư</b>. Tạo cây công việc từ mức lớn đến mức con — công việc lá mới cập nhật tiến độ trực tiếp được, công việc có con tự cập nhật theo con.</div>
       <div class="overflow-x-auto">
@@ -6424,7 +6415,7 @@
     </div>
 
     <!-- ===== TAB 6: NGHIỆM THU — cùng dữ liệu cây công việc với Thực hiện, thêm cột người nghiệm thu +
-         nút Nghiệm thu/Bổ sung — quyền operationAcceptanceManage. ===== -->
+         nút Nghiệm thu/Bổ sung — quyền: toàn quyền quản lý hồ sơ (canManageOperationRecord()), + acceptorUsername tự nghiệm thu việc của mình. ===== -->
     <div id="opStoreAcceptancePanel" class="hidden space-y-3">
       <div class="bg-gray-50 p-3 rounded border text-xs text-gray-600">✅ Danh sách công việc bên Thực hiện tạo sẽ tự xuất hiện ở đây. Chỉ nghiệm thu/bổ sung được công việc đang ở trạng thái "Đang nghiệm thu".</div>
       <div class="overflow-x-auto">
@@ -6544,8 +6535,8 @@
   </div>
 
   <!-- Modal cây công việc Thực hiện/Nghiệm thu (dùng CHUNG, tham số mode qua currentWorkItemModalMode) —
-       Thực hiện: tạo/cập nhật tiến độ (operationExecutionManage). Nghiệm thu: cùng cây, thêm 2 cột +
-       nút Nghiệm thu/Bổ sung (operationAcceptanceManage), gated theo status DANG_NGHIEM_THU. -->
+       Thực hiện: tạo/cập nhật tiến độ (toàn quyền quản lý hồ sơ). Nghiệm thu: cùng cây, thêm 2 cột +
+       nút Nghiệm thu/Bổ sung (toàn quyền quản lý hồ sơ), gated theo status DANG_NGHIEM_THU. -->
   <div id="operationWorkItemModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div class="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[92vh] overflow-y-auto">
       <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">

@@ -5796,12 +5796,20 @@ function isWorkItemAssignee(w, username) {
 // bằng đúng 1 quyền tạo tương ứng — xem canCreateOperationOrderClient()/
 // canCreateOperationStoreOpeningClient()/canCreateOperationRepairClient() bên dưới, và
 // canAccessOperationSubTab() cho việc chuyển tab con.
+// Overhaul quyền Vận Hành > Siêu Thị — "giữ BẤT KỲ quyền quản lý hồ sơ nào" (dùng cho gate CẤP TAB, khi
+// chưa biết đang xem hồ sơ CỤ THỂ nào — canManageOperationRecordClient() ở module-vanhanh.js mới lọc
+// chính xác theo TỪNG hồ sơ/creator). Định nghĩa ở ĐÂY (core.js), KHÔNG ở module-vanhanh.js, vì
+// canAccessOperationSubTab() gọi hàm này ngay lúc đăng nhập — TRƯỚC KHI module-vanhanh.js (nạp lười khi
+// vào tab) kịp tải, xem chú thích activeOperationStoreSubTab bên dưới.
+function hasAnyOperationRecordManagePermClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.operationRecordManageAll || user?.perms?.operationStoreOpenCreate || user?.perms?.operationRepairCreate);
+}
 function canAccessOperationModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'vanHanh')) return false;
   if (user.perms?.operationOrderCreate || user.perms?.operationStoreOpenCreate || user.perms?.operationRepairCreate
-    || user.perms?.operationEstimateCreate || user.perms?.operationExecutionManage || user.perms?.operationAcceptanceManage) return true;
+    || user.perms?.operationRecordManageAll) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ
@@ -5816,14 +5824,20 @@ function canAccessOperationSubTab(user, kind) {
   if (kind === 'ORDER') return !!user.perms?.operationOrderCreate;
   if (kind === 'STORE_OPEN') return !!user.perms?.operationStoreOpenCreate;
   if (kind === 'REPAIR') return !!user.perms?.operationRepairCreate;
-  if (kind === 'ESTIMATE') return !!user.perms?.operationEstimateCreate;
-  // EXECUTION/ACCEPTANCE: "toàn quyền" (operationExecutionManage/operationAcceptanceManage) thấy hết;
-  // NGOÀI RA người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không có quyền rộng) cũng
-  // cần thấy tab để còn thao tác đúng việc của mình (xem updateOperationWorkItemProgress/
-  // acceptOperationWorkItem ở lib/recordActions.js — server đã chặn/nới quyền tương ứng).
-  if (kind === 'EXECUTION') return !!user.perms?.operationExecutionManage
+  // ESTIMATE/EXECUTION/ACCEPTANCE: 4 quyền tách riêng cũ (operationEstimateCreate/operationExecutionManage/
+  // operationAcceptanceManage/operationUseConfirm) đã RÚT GỌN — gộp vào luật "toàn quyền quản lý hồ sơ"
+  // chung, xem canManageOperationRecordClient() (module-vanhanh.js). Ở CẤP TAB (chưa biết đang xem hồ sơ
+  // nào) chỉ cần giữ BẤT KỲ quyền quản lý hồ sơ nào (operationStoreOpenCreate/operationRepairCreate/
+  // operationRecordManageAll/admin) là đủ hiện tab — canManageOperationRecordClient() lọc lại chính xác
+  // theo TỪNG hồ sơ (đúng creator) khi render nút thao tác thật bên trong tab.
+  if (kind === 'ESTIMATE') return hasAnyOperationRecordManagePermClient(user);
+  // EXECUTION/ACCEPTANCE: "toàn quyền quản lý hồ sơ" thấy hết; NGOÀI RA người được gán/chỉ định trực
+  // tiếp trên ít nhất 1 công việc (dù không có quyền rộng) cũng cần thấy tab để còn thao tác đúng việc
+  // của mình (xem updateOperationWorkItemProgress/acceptOperationWorkItem ở lib/recordActions.js —
+  // server đã chặn/nới quyền tương ứng, KHÔNG đổi bởi đợt overhaul quyền này).
+  if (kind === 'EXECUTION') return hasAnyOperationRecordManagePermClient(user)
     || (DB.operationWorkItems || []).some(w => isWorkItemAssignee(w, user.username) || workItemAssignees(w).some(u => isManagerOf(user.username, u, DB.users)));
-  if (kind === 'ACCEPTANCE') return !!user.perms?.operationAcceptanceManage
+  if (kind === 'ACCEPTANCE') return hasAnyOperationRecordManagePermClient(user)
     || (DB.operationWorkItems || []).some(w => w.acceptorUsername === user.username || isManagerOf(user.username, w.acceptorUsername, DB.users));
   // 'STORE'/'REPORT': tab cha "Siêu Thị" — hiện khi có BẤT KỲ quyền nào trong 5 giai đoạn con.
   if (kind === 'STORE' || kind === 'REPORT') {
