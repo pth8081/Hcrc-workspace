@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**10.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**11.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Vận Hành > Đặt Hàng Siêu Thị: đổi biên giới 3 mức duyệt theo yêu cầu người dùng (2026-09-07)
+
+**Yêu cầu gốc**: "Bạn xem giúp mình chỗ đặt hàng siêu thị... 1. Quy trình thay đổi chút là 3 mức sẽ là
+<=10tr, >10tr và <=100tr, >100tr... 2. Quy trình tự động áp dụng theo các bước kiểm tra với trường Tổng
+giá trị thanh toán (VNĐ) để làm điều kiện ai là người phê duyệt".
+
+**Đã kiểm tra trạng thái hiện tại trước khi sửa**:
+- Đặt Hàng Tại Siêu Thị (`operationOrders`, `orderLocationType='STORE'`) **ĐÃ SẴN đúng 3 mức** — không
+  phải thêm/bớt mức. Biên giới CŨ dùng quy ước "<" (mốc đúng bằng rơi vào mức CAO HƠN): `< 10 triệu` /
+  `10 triệu - dưới 100 triệu` / `>= 100 triệu` — nghĩa là đúng 10.000.000đ hay đúng 100.000.000đ trước
+  đây bị đẩy lên mức TRÊN, ngược với "≤" người dùng vừa yêu cầu.
+- "Tổng Giá Trị Thanh Toán (VNĐ)" (input `voPaymentTotalAmount` → field `paymentTotalAmount`) **ĐÃ ĐÚNG
+  là field lái mức duyệt từ trước** (qua `computeOperationOrderAmount() = MAX(amount, paymentTotalAmount)`
+  ở `lib/workflowEngine.js`, vá tier-spoofing từ đợt trước) — phần 2 yêu cầu của người dùng là "xác nhận
+  đúng", không phải lỗi cần sửa. Đã viết thêm 3 test dùng thẳng `applyWorkflowAction()` thật (không mock)
+  đổi CHỈ field này qua từng mốc 10tr/100tr để xác nhận tập approver hợp lệ đổi theo đúng field đó.
+
+**Đã sửa — CHỈ đổi biên giới STORE (không đụng HO, người dùng không yêu cầu)**: `OPERATION_ORDER_STORE_TIERS`
+ở `lib/workflowEngine.js` (nguồn xác thực server) + bản mirror `public/js/core.js` (hiển thị client) + label
+dropdown cấu hình admin ở `public/js/module-workflow.js` (`WF_MODULE_CONFIG.OPERATION_ORDER_STORE.fixedTiers`)
+đổi từ field `maxExclusive`/so sánh `<` sang `maxInclusive`/so sánh `<=`:
+- `LT10M`: **≤ 10.000.000đ** (trước: < 10.000.000đ)
+- `FROM10M_TO100M`: **> 10.000.000đ và ≤ 100.000.000đ** (trước: 10tr - dưới 100tr)
+- `GTE100M`: **> 100.000.000đ** (trước: >= 100.000.000đ)
+
+Đặt Hàng Tại HO giữ nguyên 2 mức `< 100 triệu` / `>= 100 triệu` (KHÔNG đổi).
+
+**Không cần di trú dữ liệu**: tier KHÔNG lưu thành field riêng trên bản ghi `operationOrders` — luôn được
+server tự tính lại từ `amount`/`orderLocationType` hiện có mỗi lần cần tra quy trình. Tier KEY (`LT10M`/
+`FROM10M_TO100M`/`GTE100M`) không đổi tên, nên cấu hình approver-theo-mức admin đã lưu trước đây ở
+`operationOrderStoreTierWorkflows` vẫn khớp nguyên — chỉ đổi hồ sơ nào rơi vào key nào (đúng mốc 10tr/100tr).
+Không có schema/AppData seed mới nào cần chạy.
+
+**Kiểm thử**: mở rộng `tests/test-operation-order-location-tiers.js` — 33/33 kịch bản PASS (cập nhật lại 2
+test biên giới cũ theo quy ước mới + thêm 9 test mới: 4 mốc chính xác qua `computeOperationOrderAmount()`
+thật, 1 test tamper sát mốc mới, 3 test xác nhận "Tổng Giá Trị Thanh Toán (VNĐ)" đổi CHỈ 1 field này qua
+`applyWorkflowAction()` thật đổi đúng tập approver). Toàn bộ 69 file `tests/test-*.js`: 67 PASS, 2 FAIL —
+đúng 2 lỗi SQL Server pre-existing (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js`, do môi
+trường sandbox không có SQL Server thật, xác nhận khớp baseline qua `git stash`), không có regression mới.
+
+**Deploy impact**: KHÔNG cần thao tác gì ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không
+thêm biến môi trường, không thêm dependency, không có migrate dữ liệu 1 lần nào (xem lý do "không cần di
+trú dữ liệu" ở trên).
 
 ## Vận Hành > Siêu Thị > Nghiệm Thu: audit theo yêu cầu người dùng — 1 lỗi thật phát hiện + sửa (2026-09-07)
 

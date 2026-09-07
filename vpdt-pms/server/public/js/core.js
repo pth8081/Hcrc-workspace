@@ -1873,10 +1873,12 @@ function itPriceTierLabel(tier) {
 // bên PHẢI sửa cả 2 bên (2 cài đặt độc lập, cùng lý do isApproverForDeptWorkflow()/canApproveStep() ở
 // đầu file). Mức chỉ dùng để HIỂN THỊ/ẨN-HIỆN nút ở client — server LUÔN tự tính lại, không tin giá trị
 // nào từ đây.
+// STORE dùng maxInclusive + "<=" (mốc đúng bằng rơi mức HIỆN TẠI); HO GIỮ NGUYÊN maxExclusive + "<" —
+// xem chú thích đầy đủ ở lib/workflowEngine.js (2 mảng, 2 quy ước biên giới khác nhau, không đổi HO).
 const OPERATION_ORDER_STORE_TIERS = [
-  { key: 'LT10M', label: '< 10 triệu', maxExclusive: 10000000 },
-  { key: 'FROM10M_TO100M', label: '10 triệu - dưới 100 triệu', maxExclusive: 100000000 },
-  { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
+  { key: 'LT10M', label: '≤ 10 triệu', maxInclusive: 10000000 },
+  { key: 'FROM10M_TO100M', label: '> 10 triệu - ≤ 100 triệu', maxInclusive: 100000000 },
+  { key: 'GTE100M', label: '> 100 triệu', maxInclusive: Infinity }
 ];
 const OPERATION_ORDER_HO_TIERS = [
   { key: 'LT100M', label: '< 100 triệu', maxExclusive: 100000000 },
@@ -1890,9 +1892,12 @@ function computeOperationOrderAmountClient(o) {
   return Math.max(amount, paymentTotal);
 }
 function computeOperationOrderTierClient(locationType, amount) {
-  const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
-  const found = tiers.find(t => amount < t.maxExclusive);
-  return (found || tiers[tiers.length - 1]).key;
+  if (locationType === 'STORE') {
+    const found = OPERATION_ORDER_STORE_TIERS.find(t => amount <= t.maxInclusive);
+    return (found || OPERATION_ORDER_STORE_TIERS[OPERATION_ORDER_STORE_TIERS.length - 1]).key;
+  }
+  const found = OPERATION_ORDER_HO_TIERS.find(t => amount < t.maxExclusive);
+  return (found || OPERATION_ORDER_HO_TIERS[OPERATION_ORDER_HO_TIERS.length - 1]).key;
 }
 function operationOrderTierLabel(locationType, tier) {
   const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;

@@ -61,9 +61,9 @@ const WF_MODULE_CONFIG = {
     pureTier: true,
     tierDbKeyForWholesale: 'operationOrderStoreTierWorkflows',
     fixedTiers: [
-      { key: 'LT10M', label: '< 10 triệu' },
-      { key: 'FROM10M_TO100M', label: '10 triệu - dưới 100 triệu' },
-      { key: 'GTE100M', label: '>= 100 triệu' }
+      { key: 'LT10M', label: '≤ 10 triệu' },
+      { key: 'FROM10M_TO100M', label: '> 10 triệu - ≤ 100 triệu' },
+      { key: 'GTE100M', label: '> 100 triệu' }
     ],
     label: 'Vận Hành - Đặt Hàng Tại Siêu Thị', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại Siêu Thị Theo Mức Giá Trị'
   },

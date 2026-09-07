@@ -163,14 +163,23 @@ const OFFICE_SUBTYPE_TO_DBKEY = {
 // item — tính trực tiếp từ orderLocationType + amount/paymentTotalAmount ĐANG CÓ trên item, đảm bảo luôn
 // khớp đúng dữ liệu hiện tại của hồ sơ, kể cả sau khi "Sửa & Gửi Lại" đổi lại amount).
 //
-// Biên giới mức (đã chốt với người dùng, dùng đúng chữ "<"/càng lớn càng nghiêm — mốc đúng bằng luôn rơi
-// vào mức CAO HƠN, khớp tinh thần "< 10 triệu"/"< 100 triệu" loại trừ đúng mốc đó):
-//   Siêu Thị (STORE): < 10.000.000đ | 10.000.000đ - dưới 100.000.000đ | >= 100.000.000đ (3 mức)
-//   HO:               < 100.000.000đ | >= 100.000.000đ (2 mức)
+// Biên giới mức — Siêu Thị (STORE) đổi lại theo yêu cầu người dùng (đợt "3 mức <=10tr/>10-100tr/>100tr",
+// SAU khi đã tách STORE/HO + vá lỗ hổng paymentTotalAmount ở computeOperationOrderAmount() bên trên):
+// mốc đúng bằng giờ rơi vào mức THẤP HƠN (khớp chữ "≤" người dùng dùng), NGƯỢC với quy ước "<" cũ (mốc
+// đúng bằng từng rơi vào mức CAO hơn) — dùng field maxInclusive (thay vì maxExclusive) + so sánh "<="
+// trong computeOperationOrderTier() bên dưới, CHỈ cho STORE. HO GIỮ NGUYÊN quy ước "<"/maxExclusive cũ
+// (người dùng không yêu cầu đổi HO, chỉ nói "chỗ đặt hàng siêu thị") — 2 mảng tier vì vậy có 2 quy ước
+// biên giới KHÁC NHAU, computeOperationOrderTier() xử lý riêng từng nhánh, không dùng chung 1 vòng lặp.
+// Tier KHÔNG lưu thành field riêng trên item (luôn tính lại từ amount hiện có mỗi lần cần) nên đổi biên
+// giới ở đây KHÔNG cần di trú dữ liệu cũ — cấu hình approver theo tier key (operationOrderStoreTierWork-
+// flows/operationOrderHOTierWorkflows) vẫn khớp nguyên vì KEY (LT10M/FROM10M_TO100M/GTE100M) không đổi,
+// chỉ đổi biên giới rơi vào key nào.
+//   Siêu Thị (STORE): <= 10.000.000đ | > 10.000.000đ và <= 100.000.000đ | > 100.000.000đ (3 mức)
+//   HO:               < 100.000.000đ | >= 100.000.000đ (2 mức, KHÔNG đổi)
 const OPERATION_ORDER_STORE_TIERS = [
-  { key: 'LT10M', label: '< 10 triệu', maxExclusive: 10000000 },
-  { key: 'FROM10M_TO100M', label: '10 triệu - dưới 100 triệu', maxExclusive: 100000000 },
-  { key: 'GTE100M', label: '>= 100 triệu', maxExclusive: Infinity }
+  { key: 'LT10M', label: '≤ 10 triệu', maxInclusive: 10000000 },
+  { key: 'FROM10M_TO100M', label: '> 10 triệu - ≤ 100 triệu', maxInclusive: 100000000 },
+  { key: 'GTE100M', label: '> 100 triệu', maxInclusive: Infinity }
 ];
 const OPERATION_ORDER_HO_TIERS = [
   { key: 'LT100M', label: '< 100 triệu', maxExclusive: 100000000 },
@@ -191,9 +200,14 @@ function computeOperationOrderAmount(item) {
   return Math.max(amount, paymentTotal);
 }
 function computeOperationOrderTier(locationType, amount) {
-  const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
-  const found = tiers.find(t => amount < t.maxExclusive);
-  return (found || tiers[tiers.length - 1]).key;
+  // STORE: maxInclusive + "<=" (mốc đúng bằng rơi vào mức HIỆN TẠI, không đẩy lên mức sau).
+  // HO (mặc định khi locationType lạ/thiếu): maxExclusive + "<" (giữ nguyên quy ước cũ, không đổi).
+  if (locationType === 'STORE') {
+    const found = OPERATION_ORDER_STORE_TIERS.find(t => amount <= t.maxInclusive);
+    return (found || OPERATION_ORDER_STORE_TIERS[OPERATION_ORDER_STORE_TIERS.length - 1]).key;
+  }
+  const found = OPERATION_ORDER_HO_TIERS.find(t => amount < t.maxExclusive);
+  return (found || OPERATION_ORDER_HO_TIERS[OPERATION_ORDER_HO_TIERS.length - 1]).key;
 }
 // item.orderLocationType: 'STORE'|'HO', bắt buộc từ lib/createValidation.js lúc tạo (client gửi đúng
 // giá trị theo sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" đang mở, KHÔNG có dropdown chọn tay —

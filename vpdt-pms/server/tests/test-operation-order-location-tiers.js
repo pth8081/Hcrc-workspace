@@ -5,18 +5,28 @@
 // Hàng Tại Siêu Thị" (STORE, 3 mức) và "Đặt Hàng Tại HO" (HO, 2 mức) — xem lib/workflowEngine.js
 // computeOperationOrderTier()/computeOperationOrderAmount()/resolveOperationOrderWorkflow().
 //
+// Đợt sau (yêu cầu người dùng "3 mức <=10tr, >10-100tr, >100tr"): đổi biên giới CHỈ CHO STORE — mốc đúng
+// bằng giờ rơi vào mức THẤP HƠN (maxInclusive + "<="), NGƯỢC với quy ước "<" cũ (mốc đúng bằng từng rơi
+// vào mức CAO hơn). HO KHÔNG đổi (người dùng chỉ nói "chỗ đặt hàng siêu thị"), vẫn giữ maxExclusive + "<".
+// Tier key (LT10M/FROM10M_TO100M/GTE100M/LT100M) KHÔNG đổi — tier không lưu field riêng trên item (luôn
+// tính lại từ amount mỗi lần), nên đổi biên giới KHÔNG cần di trú dữ liệu/cấu hình approver theo tier cũ.
+//
 // Phủ:
-//   1. computeOperationOrderTier() bắt đúng biên giới ở CẢ 2 phía đúng mốc 10.000.000 và 100.000.000
-//      (mốc đúng bằng luôn rơi vào mức CAO HƠN — "< 10 triệu"/"< 100 triệu" LOẠI TRỪ đúng mốc đó).
+//   1. computeOperationOrderTier() bắt đúng biên giới ở CẢ 2 phía đúng mốc 10.000.000 và 100.000.000:
+//      - STORE (mới): mốc đúng bằng rơi vào mức THẤP HƠN — "≤ 10 triệu"/"> 10 - ≤ 100 triệu"/"> 100 triệu".
+//      - HO (không đổi): mốc đúng bằng vẫn rơi vào mức CAO HƠN — "< 100 triệu"/">= 100 triệu".
 //   2. computeOperationOrderAmount() lấy MAX(amount, paymentTotalAmount) — paymentTotalAmount (field
-//      người dùng tự gõ trên form/đọc từ PDF) chỉ được phép đẩy tier LÊN cao hơn (VD gồm VAT/phụ phí),
-//      KHÔNG được phép kéo tier XUỐNG thấp hơn mức mà amount (server tự tính lại từ items, tamper-proof)
-//      thật sự yêu cầu — đây chính là hướng đã từng là lỗ hổng (đã vá).
+//      "Tổng Giá Trị Thanh Toán (VNĐ)" người dùng tự gõ trên form/đọc từ PDF) chỉ được phép đẩy tier LÊN
+//      cao hơn (VD gồm VAT/phụ phí), KHÔNG được phép kéo tier XUỐNG thấp hơn mức mà amount (server tự
+//      tính lại từ items, tamper-proof) thật sự yêu cầu — đây chính là hướng đã từng là lỗ hổng (đã vá),
+//      re-xác nhận VẪN đúng với biên giới MỚI của STORE.
 //   3. 2 quy trình Siêu Thị/HO ĐỘC LẬP HOÀN TOÀN: approver cấu hình cho 1 mức của Siêu Thị KHÔNG được
 //      quyền duyệt đơn HO (dù cùng mức giá trị tương đương), và ngược lại.
 //   4. Server LUÔN tự tính lại tier từ amount/orderLocationType hiện có trên item — 1 field lạ client tự
 //      gắn thêm vào (giả lập cố tình sửa tay ở DevTools) mô phỏng tier KHÁC hoàn toàn không hề được đọc
 //      tới, resolveOperationOrderWorkflow() vẫn tính đúng dựa trên amount thật.
+//   5. "Tổng Giá Trị Thanh Toán (VNĐ)" (paymentTotalAmount) THỰC SỰ là field lái tier khi nó là số lớn
+//      hơn amount — thay đổi CHỈ field này qua mốc 10tr/100tr (giữ nguyên amount) phải đổi tier tương ứng.
 //
 // Chạy: node server/tests/test-operation-order-location-tiers.js
 const assert = require('assert');
@@ -55,15 +65,15 @@ test('OPERATION_ORDER_STORE_TIERS/OPERATION_ORDER_HO_TIERS: đúng số lượng
   assert.strictEqual(OPERATION_ORDER_HO_TIERS.length, 2, 'HO phải có đúng 2 mức');
 });
 
-test('computeOperationOrderTier(STORE): biên giới 10.000.000 — đúng mốc rơi vào mức GIỮA (không phải mức thấp)', () => {
-  assert.strictEqual(computeOperationOrderTier('STORE', 9999999), 'LT10M', '9.999.999 phải là LT10M (< 10 triệu)');
-  assert.strictEqual(computeOperationOrderTier('STORE', 10000000), 'FROM10M_TO100M', 'ĐÚNG 10.000.000 phải rơi vào mức GIỮA (10tr-100tr), KHÔNG còn là "< 10 triệu"');
-  assert.strictEqual(computeOperationOrderTier('STORE', 10000001), 'FROM10M_TO100M', '10.000.001 phải là mức giữa');
+test('computeOperationOrderTier(STORE): biên giới 10.000.000 — đúng mốc (≤10tr) phải rơi vào mức THẤP NHẤT (LT10M)', () => {
+  assert.strictEqual(computeOperationOrderTier('STORE', 9999999), 'LT10M', '9.999.999 phải là LT10M (≤ 10 triệu)');
+  assert.strictEqual(computeOperationOrderTier('STORE', 10000000), 'LT10M', 'ĐÚNG 10.000.000 phải rơi vào mức THẤP NHẤT (≤ 10 triệu), theo yêu cầu người dùng "<=10tr"');
+  assert.strictEqual(computeOperationOrderTier('STORE', 10000001), 'FROM10M_TO100M', '10.000.001 (> 10 triệu) phải là mức giữa');
 });
-test('computeOperationOrderTier(STORE): biên giới 100.000.000 — đúng mốc rơi vào mức CAO NHẤT', () => {
-  assert.strictEqual(computeOperationOrderTier('STORE', 99999999), 'FROM10M_TO100M', '99.999.999 vẫn phải là mức giữa (< 100 triệu)');
-  assert.strictEqual(computeOperationOrderTier('STORE', 100000000), 'GTE100M', 'ĐÚNG 100.000.000 phải rơi vào mức CAO NHẤT (>= 100 triệu), KHÔNG còn là mức giữa');
-  assert.strictEqual(computeOperationOrderTier('STORE', 100000001), 'GTE100M', '100.000.001 phải là mức cao nhất');
+test('computeOperationOrderTier(STORE): biên giới 100.000.000 — đúng mốc (≤100tr) phải rơi vào mức GIỮA (FROM10M_TO100M)', () => {
+  assert.strictEqual(computeOperationOrderTier('STORE', 99999999), 'FROM10M_TO100M', '99.999.999 vẫn phải là mức giữa');
+  assert.strictEqual(computeOperationOrderTier('STORE', 100000000), 'FROM10M_TO100M', 'ĐÚNG 100.000.000 phải rơi vào mức GIỮA (≤ 100 triệu), theo yêu cầu người dùng "<=100tr"');
+  assert.strictEqual(computeOperationOrderTier('STORE', 100000001), 'GTE100M', '100.000.001 (> 100 triệu) phải là mức cao nhất');
 });
 test('computeOperationOrderTier(STORE): giá trị 0/rất nhỏ vẫn rơi đúng mức thấp nhất', () => {
   assert.strictEqual(computeOperationOrderTier('STORE', 0), 'LT10M');
@@ -210,6 +220,71 @@ test('Biên giới HO đúng mốc 100 triệu qua max(): amount=99.999.999 (LT1
 test('Biên giới HO đúng mốc 100 triệu qua max(): amount=100.000.000 (đúng mốc, GTE100M) + paymentTotalAmount=1 (giả thấp) -> vẫn phải là GTE100M (không kéo xuống LT100M)', () => {
   const item = freshOrder({ orderLocationType: 'HO', amount: 100000000, paymentTotalAmount: 1 });
   assert.strictEqual(computeOperationOrderTier('HO', computeOperationOrderAmount(item)), 'GTE100M');
+});
+
+// ===================== 4b) STORE — 4 mốc biên giới CHÍNH XÁC theo yêu cầu người dùng (đợt "3 mức
+// <=10tr/>10-100tr/>100tr") qua max(amount, paymentTotalAmount): 10.000.000 đúng mốc -> LT10M,
+// 10.000.001 -> FROM10M_TO100M, 100.000.000 đúng mốc -> FROM10M_TO100M, 100.000.001 -> GTE100M =====================
+test('STORE biên giới ĐÚNG 10.000.000 (qua max()): amount=9.999.999 + paymentTotalAmount=10.000.000 (đúng mốc) -> phải là LT10M (≤10tr)', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 9999999, paymentTotalAmount: 10000000 });
+  assert.strictEqual(computeOperationOrderAmount(item), 10000000);
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'LT10M');
+});
+test('STORE biên giới 10.000.001 (qua max()): amount=1 + paymentTotalAmount=10.000.001 -> phải là FROM10M_TO100M (>10tr)', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 1, paymentTotalAmount: 10000001 });
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'FROM10M_TO100M');
+});
+test('STORE biên giới ĐÚNG 100.000.000 (qua max()): amount=99.999.999 + paymentTotalAmount=100.000.000 (đúng mốc) -> phải là FROM10M_TO100M (≤100tr)', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 99999999, paymentTotalAmount: 100000000 });
+  assert.strictEqual(computeOperationOrderAmount(item), 100000000);
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'FROM10M_TO100M');
+});
+test('STORE biên giới 100.000.001 (qua max()): amount=1 + paymentTotalAmount=100.000.001 -> phải là GTE100M (>100tr)', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 1, paymentTotalAmount: 100000001 });
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'GTE100M');
+});
+test('STORE: paymentTotalAmount giả mạo THẤP KHÔNG né được tier cao ngay SÁT mốc mới (amount=100.000.001, paymentTotalAmount=1) -> vẫn phải GTE100M', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 100000001, paymentTotalAmount: 1 });
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'GTE100M');
+});
+
+// ===================== 4c) "Tổng Giá Trị Thanh Toán (VNĐ)" (paymentTotalAmount) THỰC SỰ là field lái
+// tier + quyền duyệt — thay đổi CHỈ field này (amount giữ nguyên thấp) qua từng mốc phải đổi hẳn tập
+// approver hợp lệ, chạy qua applyWorkflowAction() thật (không mock) =====================
+const TIER1_APPROVER = 'duyet.tier1', TIER2_APPROVER = 'duyet.tier2', TIER3_APPROVER = 'duyet.tier3';
+const appDataFieldDriven = {
+  workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  operationOrderStoreTierWorkflows: {
+    LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER1_APPROVER] } },
+    FROM10M_TO100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER2_APPROVER] } },
+    GTE100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER3_APPROVER] } }
+  },
+  operationOrderHOTierWorkflows: {}
+};
+test('"Tổng Giá Trị Thanh Toán (VNĐ)" là field lái tier: amount=1tr (thấp) + paymentTotalAmount=1tr (chưa vượt mốc nào) -> tier LT10M, chỉ TIER1_APPROVER duyệt được', () => {
+  const item = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 1000000 });
+  const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(TIER1_APPROVER), comment: '', appData: appDataFieldDriven });
+  assert.strictEqual(transition.type, 'COMPLETED');
+});
+test('Đổi CHỈ paymentTotalAmount (amount giữ nguyên 1tr) lên 50 triệu -> vượt mốc 10tr -> tier đổi sang FROM10M_TO100M -> TIER1_APPROVER bị chặn 403, TIER2_APPROVER duyệt được', () => {
+  const itemDenied = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 50000000 });
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item: itemDenied, action: 'APPROVE', user: makeUser(TIER1_APPROVER), comment: '', appData: appDataFieldDriven }),
+    403, 'Bạn không có quyền', 'paymentTotalAmount=50tr phải đẩy sang tier giữa, chặn approver tier thấp'
+  );
+  const itemAllowed = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 50000000 });
+  const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: itemAllowed, action: 'APPROVE', user: makeUser(TIER2_APPROVER), comment: '', appData: appDataFieldDriven });
+  assert.strictEqual(transition.type, 'COMPLETED', 'TIER2_APPROVER phải duyệt được đúng tier FROM10M_TO100M');
+});
+test('Đổi CHỈ paymentTotalAmount (amount giữ nguyên 1tr) lên 150 triệu -> vượt mốc 100tr -> tier đổi sang GTE100M -> TIER2_APPROVER bị chặn 403, TIER3_APPROVER duyệt được', () => {
+  const itemDenied = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 150000000 });
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item: itemDenied, action: 'APPROVE', user: makeUser(TIER2_APPROVER), comment: '', appData: appDataFieldDriven }),
+    403, 'Bạn không có quyền', 'paymentTotalAmount=150tr phải đẩy sang tier cao nhất, chặn approver tier giữa'
+  );
+  const itemAllowed = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 150000000 });
+  const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: itemAllowed, action: 'APPROVE', user: makeUser(TIER3_APPROVER), comment: '', appData: appDataFieldDriven });
+  assert.strictEqual(transition.type, 'COMPLETED', 'TIER3_APPROVER phải duyệt được đúng tier GTE100M');
 });
 
 // ===================== 5) migrateOperationOrdersDefaultLocationType() (seedDefaults.js) =====================
