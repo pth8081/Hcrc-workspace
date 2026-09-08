@@ -172,18 +172,32 @@ async function saveVppExcludedJobTitles() {
 }
 
 // ============ Vị Trí Tham Gia Quy Trình (workflowParticipatingPositions, MỚI) ============
-// "items" của ô chọn nhiều = TÍCH CHÉO DB.jobTitles × DB.depts (mỗi tổ hợp 1 dòng "<jobTitle> — <dept>"),
-// value mã hoá qua encodeWfPositionPair() — gõ tìm ra ngay đúng tổ hợp cần chọn, không cần dựng UI
-// 2-dropdown-rời để "lắp ráp" từng cặp.
+// "items" của Ô SỬA DANH MỤC (renderWorkflowParticipatingPositionsWidget() ngay dưới, khối 17) = TÍCH
+// CHÉO TOÀN BỘ DB.jobTitles × DB.depts (mỗi tổ hợp 1 dòng "<jobTitle> — <dept>") — đây là nơi admin
+// DỰNG danh mục nên luôn phải thấy MỌI tổ hợp có thể chọn, không được tự giới hạn theo chính danh mục
+// đang xây (nếu không sẽ không bao giờ thêm được cặp MỚI ngoài những gì đã chọn từ trước).
 function wfPositionPairCatalogItems() {
-  const items = [];
+  const pairs = [];
   (DB.jobTitles || []).forEach(jt => {
-    (DB.depts || []).forEach(d => {
-      const pair = { jobTitle: jt, dept: d };
-      items.push({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) });
-    });
+    (DB.depts || []).forEach(d => pairs.push({ jobTitle: jt, dept: d }));
   });
-  return items;
+  return pairs.map(pair => ({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) }));
+}
+
+// BUG THẬT đã sửa: ô "Theo vị trí" ở màn Quy Trình & Phê Duyệt (module-ngansach.js/
+// module-itsupport-tier.js renderXxxWorkflowTab()) trước đây gọi THẲNG wfPositionPairCatalogItems() ở
+// trên — tức luôn hiện TOÀN BỘ tổ hợp chức danh×phòng ban, bỏ qua hẳn danh mục
+// workflowParticipatingPositions mà admin đã cấu hình ở khối 17 (dù phần chú thích UI — xem
+// public/index.html khối 17 — nói rõ đây CHÍNH LÀ nguồn chọn cho "Theo vị trí"). Hàm RIÊNG này mới là
+// nguồn đúng cho ô chọn ở màn Quy Trình & Phê Duyệt: danh mục RỖNG (chưa cấu hình gì) vẫn hiện đủ toàn
+// bộ tổ hợp như hành vi cũ (không phá vỡ cấu hình đã có từ trước khi tính năng danh mục này ra đời,
+// cùng quy ước với getWorkflowParticipatingDepts() — sibling cùng khối 17); danh mục CÓ ít nhất 1 cặp
+// thì CHỈ hiện đúng các cặp đã thêm.
+function wfPositionPairPickerItems() {
+  const catalog = (DB.workflowParticipatingPositions && DB.workflowParticipatingPositions.length)
+    ? DB.workflowParticipatingPositions
+    : null;
+  return catalog ? catalog.map(pair => ({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) })) : wfPositionPairCatalogItems();
 }
 
 function renderWorkflowParticipatingPositionsWidget() {

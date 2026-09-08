@@ -1,8 +1,68 @@
 # Phiên bản hiện tại
 
-**14.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.2 (2026-09-08): 5 lỗi UI/nghiệp vụ phát hiện qua sử dụng thực tế (Nhóm Quyền Đặc Biệt,
+## timeout, tab phê duyệt/phân quyền, dashboard Vận Hành)
+
+Theo phản hồi trực tiếp của người dùng kèm 6 ảnh chụp màn hình thực tế, sau khi dùng hệ thống. 5 lỗi độc
+lập, mỗi lỗi 1 nguyên nhân gốc riêng — đã phân tích + sửa đúng gốc, không phải vá tạm:
+
+**1. "Theo vị trí" ở Quy Trình & Phê Duyệt vẫn chọn được vị trí ngoài danh sách đã cấu hình ở khối 17
+"Nhóm Quyền Đặc Biệt"**: ô chọn "Theo vị trí" (`module-ngansach.js`/`module-itsupport-tier.js`) trước
+đây gọi thẳng hàm liệt kê TOÀN BỘ tổ hợp chức danh×phòng ban
+(`wfPositionPairCatalogItems()` — hàm này đúng ra chỉ dành cho màn admin THÊM cặp mới ở khối 17, không
+phải cho ô chọn), bỏ qua hẳn danh mục `workflowParticipatingPositions` mà admin đã cấu hình giới hạn.
+Đã tách riêng hàm `wfPositionPairPickerItems()` mới (`module-admin-specialperm.js`) — chỉ hiện đúng các
+cặp đã thêm vào danh mục (danh mục rỗng vẫn hiện đủ toàn bộ như hành vi cũ, không phá cấu hình có từ
+trước), và đổi 2 điểm gọi ở `module-ngansach.js`/`module-itsupport-tier.js` sang dùng hàm picker này.
+
+**2. Danh mục "Vị Trí Tham Gia Quy Trình" (khối 17) biến mất sau khi lưu rồi đăng nhập lại**: lỗi thật —
+`initDatabase()` (`core.js`, hàm nạp lại toàn bộ `DB.*` từ `/api/data` mỗi lần tải trang/đăng nhập) chưa
+từng có dòng gán `DB.workflowParticipatingPositions = data.workflowParticipatingPositions`, dù thao tác
+lưu vẫn ghi đúng lên server (nên trong CÙNG phiên vẫn thấy đúng, đánh lừa cảm giác đã hoạt động). Đã bổ
+sung dòng gán còn thiếu.
+
+**3. Timeout phiên đăng nhập báo "lỗi kết nối" thay vì thông báo dễ hiểu**: các điểm bắt lỗi khi tải
+module CSP-lazy-load (`cspRunSeq()`/`cspDispatchOp()`/`bindCspDelegation()` trong `core.js`) trước đây
+luôn hiện chung 1 thông báo kỹ thuật, kể cả khi nguyên nhân thật là phiên đăng nhập đã hết hạn (401).
+Đã thêm hàm dùng chung `reportCspDispatchFailure()` — khi lỗi xảy ra, gọi thử `GET /api/auth/me`: nếu
+trả về 401 thì hiện đúng "⛔ Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại." và tự đưa về màn đăng
+nhập; các lỗi khác (mất mạng thật, lỗi tải file) vẫn giữ nguyên thông báo chung như cũ.
+
+**4. Bấm chuyển tab ở Quy Trình & Phê Duyệt (Bán Lẻ/Bán Buôn/...) không đổi màu nút**: lỗi trong
+`switchWfModule()` (`module-ngansach.js`) — code dựng lại id nút bằng cách bỏ dấu `_` đầu tiên trong
+tên module (VD `OFFICE_BUY` → `btnWfModOFFICEBUY`), nhưng id thật trên nút lại viết Titlecase (VD
+`btnWfModOfficeBuy`) — `getElementById()` phân biệt hoa/thường nên KHÔNG bao giờ khớp, mọi lần bấm đều
+im lặng không đổi màu nút nào. Đã sửa chọn thẳng qua `data-arg0` (vốn đã đúng giá trị module key trên
+mọi nút) thay vì dựng lại id bằng string.
+
+**5. Bấm thẻ lọc Dashboard ở Vận Hành (Đặt Hàng Siêu Thị/HO, Mở Mới, Sửa Chữa) không đổi màu/không lọc**
+(3 thẻ trạng thái ngoài thẻ "Tổng Số" mặc định): `module-vanhanh.js` dùng registry CSP riêng
+(`OP_CLICK_ACTIONS`), và 3 hàm lọc thẻ dashboard (`filterOperationOrderByCard`/
+`filterOperationStoreOpenByCard`/`filterOperationRepairByCard` — hạ tầng dùng chung ở `core.js` tự gắn
+`data-op` cho các thẻ này) chưa từng được khai báo trong registry riêng đó — cùng lớp lỗi đã ghi nhận
+nhiều lần trước đây trong file này (hàm dùng chung bị "bỏ sót đăng ký" ở registry riêng của module). Thẻ
+"Tổng Số" trông như vẫn hoạt động vì nó mặc định active sẵn từ lúc tải trang, không cần click — đúng
+triệu chứng người dùng mô tả. Đã bổ sung đủ 3 hàm vào registry.
+
+**Testing đã chạy**: viết mới `tests/test-bugfix-batch-nav-ui.js` (8/8 kịch bản — restriction picker,
+fallback danh mục rỗng, hàm editor giữ nguyên hành vi cũ, kiểm tra nguồn `initDatabase()` đã có dòng gán,
+`reportCspDispatchFailure()` với `/api/auth/me` trả 401 lẫn 200, `switchWfModule()` đổi đúng màu nút kể
+cả trường hợp case-mismatch, và click DOM thật vào thẻ dashboard Vận Hành xác nhận lọc + đổi màu đúng),
+cộng full regression suite toàn bộ `tests/test-*.js` (93 file, thêm 1 file mới so với 92 của v14.1) —
+**93/93 chạy, chỉ 2 lỗi ĐÃ BIẾT TỪ TRƯỚC** (`test-audit-fixes-batch1.js`,
+`test-audit-round2-cluster1.js` — phụ thuộc SQL Server thật đang không kết nối trong môi trường CI/
+sandbox, không liên quan gì tới thay đổi lần này, đã xác nhận nhiều lần trong các đợt merge trước).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới trong `.env.example`,
+KHÔNG đổi `dependencies` trong `package.json` — toàn bộ thay đổi chỉ là logic client-side JS (`core.js`,
+`module-admin-specialperm.js`, `module-itsupport-tier.js`, `module-ngansach.js`, `module-vanhanh.js`) +
+1 file test mới. Chỉ cần copy code + `pm2 restart`, không cần thao tác gì khác. Không thay đổi nghiệp
+vụ mới nào (chỉ sửa lỗi hành vi trên luồng đã có sẵn) nên không cần cập nhật
+`deploy/Huong-dan-nghiep-vu.md`.
 
 ## v14.1 (2026-09-08): Đồng Phục — điều chuyển 3 bước (xác nhận nhận hàng) + báo cáo multi-select siêu thị
 

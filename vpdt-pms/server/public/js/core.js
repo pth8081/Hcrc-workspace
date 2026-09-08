@@ -2814,6 +2814,12 @@ async function initDatabase(loggingInUser) {
     DB.vppExcludeGroups = data.vppExcludeGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
+    // BUG THẬT đã sửa: dòng này trước nay CHƯA từng được gán từ data (chỉ có nhánh khởi tạo lười "|| []"
+    // ngay tại chỗ đọc — xem getWorkflowParticipatingPositions() ở module-admin-specialperm.js), khiến
+    // danh mục "Vị Trí Tham Gia Quy Trình" (khối 17) LƯU ĐƯỢC lên server (saveWorkflowParticipatingPositions()
+    // tự gán DB.workflowParticipatingPositions ngay sau khi lưu — nên trong CÙNG phiên vẫn thấy đúng) nhưng
+    // biến mất ngay khi tải lại trang/đăng nhập lại vì initDatabase() không hề đọc lại field này từ /api/data.
+    DB.workflowParticipatingPositions = data.workflowParticipatingPositions || [];
     DB.pwaShortcutModules = data.pwaShortcutModules || [];
     // Sửa lỗi cũ: 2 dòng dưới đây trước nay CHƯA từng được gán từ data (chỉ có nhánh khởi tạo lười
     // "|| {}" ngay tại chỗ đọc — xem toggleUploadTypeExt()/renderUploadTypeConfig()), khiến màn "Quản
@@ -6619,6 +6625,23 @@ function cspCollectArgs(el, evt) {
 // giữa, ham cap nhat form se chay CHAM 1 nhip, và code doc sau đó thay DOM CHUA duoc cap nhat (bug thuc
 // su phat hien qua bo test hoi quy — xem VERSION.md). Vi vay: kiem tra typeof window[fnName] TRUOC, chi
 // rơi vao nhanh await ensureFnReady() (co doi 1 nhip) o CHINH XAC truong hop hiem — ham thuc su chua nap.
+// BUG THẬT đã sửa: cả 4 điểm bắt lỗi bên dưới (cspRunSeq() 2 nhánh, cspDispatchOp(), data-op-submit ở
+// bindCspDelegation()) trước đây LUÔN hiện "⛔ Không tải được phần chức năng cần thiết..." cho MỌI lỗi
+// bắt được — kể cả khi nguyên nhân thật sự là phiên đăng nhập đã hết hạn (token 401 giữa chừng lúc gọi
+// 1 hàm module đã nạp sẵn nhưng bên trong có await fetch API), khiến người dùng thấy thông báo sai be
+// bét không liên quan gì tới "tải module" và không biết phải làm gì ngoài F5 (mà F5 thì lại tự động
+// văng về màn đăng nhập — chỉ là qua đường vòng, không phải lỗi tải module thật). Hàm dùng chung này
+// hỏi lại /api/auth/me (ping NHẸ, giống hệt startSessionKeepAlive()) TRƯỚC khi báo lỗi — nếu xác nhận
+// đúng là hết phiên (401) thì gọi handleSessionExpired() (đăng xuất + alert "Hết phiên làm việc" đúng
+// thông báo người dùng yêu cầu), chỉ rơi về thông báo lỗi tải module chung khi KHÔNG phải hết phiên.
+async function reportCspDispatchFailure(context, fnName, err) {
+  console.error(context, fnName, err);
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) { handleSessionExpired(); return; }
+  } catch (e) { /* mất mạng — không xác minh được, rơi xuống thông báo chung bên dưới */ }
+  alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
+}
 function cspRunSeq(seqStr) {
   const parts = seqStr.split('|');
   let i = 0;
@@ -6636,10 +6659,7 @@ function cspRunSeq(seqStr) {
         // fn tra ve Promise (vd switchTab(), gio la ham bat dong bo) — buoc SAU trong chuoi co the phu
         // thuoc cum vua duoc fn nap xong, PHAI cho xong roi moi tiep tuc (khong thi tiep tuc ngay dong bo).
         if (result && typeof result.then === 'function') {
-          return result.then(runFromCurrentIndex, err => {
-            console.error('CSP dispatch (seq):', fnName, err);
-            alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
-          });
+          return result.then(runFromCurrentIndex, err => reportCspDispatchFailure('CSP dispatch (seq):', fnName, err));
         }
         continue;
       }
@@ -6650,10 +6670,7 @@ function cspRunSeq(seqStr) {
         const argStr = m[2];
         const args = argStr.length ? argStr.split(',').map(cspCoerceArg) : [];
         return fn2.apply(null, args);
-      }).then(runFromCurrentIndex, err => {
-        console.error('CSP dispatch (seq): không tải được mô-đun cho hàm', fnName, err);
-        alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
-      });
+      }).then(runFromCurrentIndex, err => reportCspDispatchFailure('CSP dispatch (seq): không tải được mô-đun cho hàm', fnName, err));
     }
   }
   return runFromCurrentIndex();
@@ -6670,10 +6687,7 @@ function cspDispatchOp(el, evt, attrName) {
     const fn2 = window[fnName];
     if (typeof fn2 !== 'function') { console.error('CSP dispatch: không tìm thấy hàm', fnName); return; }
     fn2.apply(null, args);
-  }).catch(err => {
-    console.error('CSP dispatch: không tải được mô-đun cho hàm', fnName, err);
-    alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
-  });
+  }).catch(err => reportCspDispatchFailure('CSP dispatch: không tải được mô-đun cho hàm', fnName, err));
 }
 // applyDataStyles(root) — thay cho thuộc tính HTML style="..." có nội dung ĐỘNG (màu/kích thước đổi
 // theo dữ liệu — mẫu màu trình chiếu Báo Cáo Định Kỳ, watermark Protected View...), vốn cũng bị CSP
@@ -6762,10 +6776,7 @@ function bindCspDelegation(rootId) {
     ensureFnReady(fnName).then(() => {
       const fn2 = window[fnName];
       if (typeof fn2 === 'function') fn2(e);
-    }).catch(err => {
-      console.error('CSP dispatch (submit): không tải được mô-đun cho hàm', fnName, err);
-      alert('⛔ Không tải được phần chức năng cần thiết. Vui lòng tải lại trang và thử lại.');
-    });
+    }).catch(err => reportCspDispatchFailure('CSP dispatch (submit): không tải được mô-đun cho hàm', fnName, err));
   });
 }
 // data-no-ctxmenu / data-op-enterkey — 2 delegation TOÀN TRANG (document, không theo từng root như

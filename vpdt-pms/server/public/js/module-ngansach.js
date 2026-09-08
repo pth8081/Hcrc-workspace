@@ -1335,9 +1335,14 @@ function switchWfModule(mod) {
   activeWfMod = mod;
   pendingWfTemplate = {}; // Đổi module = huỷ mọi lựa chọn mẫu quy trình đang preview dở của module trước
 
-  Object.keys(WF_MODULE_CONFIG).forEach(m => {
-    const btn = document.getElementById(`btnWfMod${m.replace('_', '')}`);
-    if (btn) btn.className = m === mod ? 'px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white' : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  // BUG THẬT đã sửa: trước đây dựng lại ID bằng `btnWfMod${m.replace('_', '')}` (chỉ bỏ ĐÚNG 1 dấu "_"
+  // đầu tiên, giữ nguyên hoa) rồi getElementById() — nhưng id thật trên các nút (xem #workflowSection ở
+  // public/index.html) lại viết kiểu Titlecase từng từ (vd "btnWfModOfficeBuy", "btnWfModContractApproval"),
+  // không khớp chuỗi dựng ra (vd "btnWfModOFFICEBUY") vì getElementById() phân biệt hoa/thường — KHÔNG
+  // nút nào từng khớp được, nên bấm đổi module không hề đổi màu nút nào để phân biệt đang ở tab nào. Sửa
+  // bằng cách chọn thẳng qua data-arg0 (đã sẵn đúng giá trị module key trên mọi nút) thay vì dựng lại id.
+  document.querySelectorAll('#workflowSection [data-op="switchWfModule"]').forEach(btn => {
+    btn.className = btn.dataset.arg0 === mod ? 'px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white' : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   });
 
   const lbl = document.getElementById('wfConfigTitle');
@@ -1542,7 +1547,7 @@ function renderWorkflowTab() {
   // preview 3 trạng thái NGAY khi admin đổi lựa chọn (renderMultiSelectDropdown() tự gọi onChange 1 lần
   // lúc khởi tạo luôn — không cần vẽ preview lần đầu riêng).
   wfPositionPickersToRender.forEach(({ positionPickerId, positionPreviewId, currentPositions }) => {
-    renderMultiSelectDropdown(positionPickerId, wfPositionPairCatalogItems(), currentPositions.map(encodeWfPositionPair), {
+    renderMultiSelectDropdown(positionPickerId, wfPositionPairPickerItems(), currentPositions.map(encodeWfPositionPair), {
       placeholder: '🔍 Tìm "Chức danh — Phòng ban"...',
       emptyText: 'Chưa chọn vị trí nào cho bước này.',
       resolveMissingLabel: (value) => { const p = decodeWfPositionPair(value); return p ? wfPositionPairLabel(p) : value; },

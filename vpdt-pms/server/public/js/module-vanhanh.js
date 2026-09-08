@@ -3238,7 +3238,19 @@ const OP_CLICK_ACTIONS = {
   // Nút "🔄 Nhập Lại Từ Đầu" (mở khoá field đọc từ PDF đơn hàng) — bị bỏ sót lúc thêm ở v13.5 (99896d5),
   // cùng lý do các entry phía trên: registry riêng của module này không tự tìm hàm theo window[fnName]
   // như bindCspDelegation() chung, khai báo tường minh ở đây thì nút mới thực sự phản hồi click.
-  resetOperationOrderPoLock: () => resetOperationOrderPoLock()
+  resetOperationOrderPoLock: () => resetOperationOrderPoLock(),
+  // BUG THẬT phát hiện qua phản hồi người dùng ("ấn lọc Dashboard không đổi màu hoặc không di chuyển
+  // như ở ô Tổng Số"): 3 thẻ dashboard (renderOperationList(), gọi buildDashboardCardsHTML() — hạ tầng
+  // DÙNG CHUNG ở core.js, tự gắn data-op="filterOperationXxxByCard" data-arg0="<status>") CHƯA TỪNG được
+  // khai báo ở registry riêng OP_CLICK_ACTIONS của module này — cùng lớp lỗi với handleActionCellDispatch/
+  // pmsAdd/pmsRemove/confirmAndResetForm/resetOperationOrderPoLock đã ghi chú phía trên. Bấm thẻ "Tổng
+  // Số" (mặc định statusFilter='' nên LUÔN hiện active sẵn ngay từ lúc tải trang, không cần click) trông
+  // như vẫn hoạt động, nhưng bấm bất kỳ thẻ nào khác (Đang Chờ Duyệt/Chờ Nhập Hàng/...) hoàn toàn im
+  // lặng không lọc/không đổi màu — đúng triệu chứng người dùng mô tả. Đọc "arg0" TRỰC TIẾP từ
+  // el.dataset (không qua cspReadArgSlot()) vì registry này không dùng cspCollectArgs() chung.
+  filterOperationOrderByCard: el => filterOperationOrderByCard(el.dataset.arg0),
+  filterOperationStoreOpenByCard: el => filterOperationStoreOpenByCard(el.dataset.arg0),
+  filterOperationRepairByCard: el => filterOperationRepairByCard(el.dataset.arg0)
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),

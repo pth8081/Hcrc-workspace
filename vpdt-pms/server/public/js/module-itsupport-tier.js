@@ -94,7 +94,7 @@ function renderItPriceTierWorkflowTab(container) {
   });
   // Widget "Theo vị trí" — cùng lý do trên, xem chú thích đầy đủ ở renderWorkflowTab() (module-ngansach.js).
   wfPositionPickersToRender.forEach(({ positionPickerId, positionPreviewId, currentPositions }) => {
-    renderMultiSelectDropdown(positionPickerId, wfPositionPairCatalogItems(), currentPositions.map(encodeWfPositionPair), {
+    renderMultiSelectDropdown(positionPickerId, wfPositionPairPickerItems(), currentPositions.map(encodeWfPositionPair), {
       placeholder: '🔍 Tìm "Chức danh — Phòng ban"...',
       emptyText: 'Chưa chọn vị trí nào cho bước này.',
       resolveMissingLabel: (value) => { const p = decodeWfPositionPair(value); return p ? wfPositionPairLabel(p) : value; },
