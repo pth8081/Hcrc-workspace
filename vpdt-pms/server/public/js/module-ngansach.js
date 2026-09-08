@@ -177,6 +177,15 @@ function onBudgetEntryPeriodChange(kind) {
   wrap.classList.remove('hidden');
 }
 
+// resetBudgetEntryFormPLAN()/resetBudgetEntryFormACTUAL() — nút "↺ Làm Mới" mỗi tab con (khớp mẫu
+// resetXxxForm dùng chung, xem CLAUDE.md/core.js confirmAndResetForm()). Không phải <form> thật (bảng
+// hạng mục dựng động theo mẫu cột của kỳ — "UI mẫu ngân sách CRUD cột") nên không gọi .reset() được —
+// tái dùng NGUYÊN onBudgetEntryPeriodChange(kind) đã có sẵn đủ logic: nạp lại ĐÚNG bản NHÁP đã lưu của
+// phòng ban cho kỳ đang chọn (nếu có) hoặc dựng lại đúng 1 dòng trống theo mẫu cột của kỳ (nếu chưa có
+// nháp nào) — hoàn tác MỌI chỉnh sửa CHƯA lưu trên bảng dòng, không đụng tới bản nháp đã lưu trên server.
+function resetBudgetEntryFormPLAN() { onBudgetEntryPeriodChange('PLAN'); }
+function resetBudgetEntryFormACTUAL() { onBudgetEntryPeriodChange('ACTUAL'); }
+
 function buildBudgetLinesTableHead(fields, readonly) {
   return `<tr>
     <th class="border p-1.5 text-center w-10">STT</th>

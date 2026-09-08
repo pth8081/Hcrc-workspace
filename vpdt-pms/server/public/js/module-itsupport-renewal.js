@@ -218,8 +218,23 @@ async function submitItServiceRenewal(e) {
   DB.itServiceRenewals.unshift(newItem);
   logSystemAction('IT_SERVICE_RENEWAL', 'CREATE_IT_RENEWAL', `Thêm dịch vụ CNTT cần theo dõi gia hạn [${name}]`, 'SUCCESS', name);
   alert('✅ Đã thêm dịch vụ vào danh mục theo dõi gia hạn!');
-  e.target.reset();
+  resetItRenewalForm();
   renderItServiceRenewals();
+}
+
+// resetItRenewalForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung) VÀ tái dùng lại cho đúng
+// phần dọn form sau khi thêm thành công ở trên (KHÔNG duplicate). itRenewalCategory là ô tìm-kiếm-gõ-
+// chọn tự học (sdd*, xem CLAUDE.md) nhưng KHÔNG có input ẩn riêng lưu giá trị đã chọn (khác các picker
+// người dùng khác trong hệ thống) — chính input.value LÀ giá trị thật, form.reset() gốc đã đủ xoá sạch.
+// Chỉ cần đóng tường minh dropdown gợi ý nếu lỡ đang mở (phòng trường hợp hiếm bấm "Làm Mới" ngay khi
+// dropdown còn hiện — bấm ra ngoài để đóng bình thường đã có sẵn ở document click listener của sdd*,
+// đây chỉ là chặn thêm cho chắc).
+function resetItRenewalForm() {
+  const formEl = document.getElementById('itRenewalCreateForm');
+  if (!formEl) return;
+  formEl.reset();
+  document.getElementById('itRenewalCategoryDatalist')?.classList.add('hidden');
+  clearSingleFileInput('itRenewalFile', 'itRenewalFileChip');
 }
 
 function downloadItServiceRenewalFile(id) {

@@ -93,13 +93,19 @@ async function parseItPriceFileForPreview(file) {
 }
 
 async function onItPriceFileChange(event) {
+  // Input này đã có data-op-change nghiệp vụ riêng (đọc/xem trước bảng giá) từ trước khi có mẫu chip
+  // "📎 tên file [✕]" dùng chung (xem onSingleFileChosen()/core.js) — 1 input CHỈ nhận 1 data-op-change
+  // duy nhất (bindCspDelegation() dùng addEventListener 'change' đơn, không phải mảng) nên KHÔNG thể gắn
+  // thêm data-op-change="onSingleFileChosen" song song ở HTML như các input file khác trong đợt UX này
+  // — gọi trực tiếp ngay đây để vẫn có chip, không đụng logic đọc file bên dưới.
+  onSingleFileChosen(event.target, 'itPriceFileChip');
   const file = event.target.files[0];
   itPricePendingFile = null;
   document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
   const statusEl = document.getElementById('itPriceFileStatus');
   if (!file) { statusEl.innerText = ''; return; }
   await parseItPriceFileForPreview(file);
-  if (!itPricePendingFile) event.target.value = '';
+  if (!itPricePendingFile) clearSingleFileInput('itPriceFileInput', 'itPriceFileChip'); // dọn luôn chip — khớp lý do ở module-vpp.js onVppCatalogFileChange().
 }
 
 // Đổi Mẫu Giá SAU KHI đã chọn sẵn 1 tệp bảng giá — đọc lại tệp đó (còn nguyên trong ô chọn file) để dò
@@ -382,7 +388,22 @@ async function submitItPriceApproval(e) {
   }
   alert('✅ Đã gửi đề xuất duyệt giá thành công!');
 
-  e.target.reset();
+  resetItPriceForm();
+  renderItPriceApprovals();
+}
+
+// resetItPriceForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung, xem CLAUDE.md/core.js
+// confirmAndResetForm()) VÀ tái dùng lại cho đúng phần dọn form sau khi gửi đề xuất thành công ở trên
+// (KHÔNG duplicate) — form.reset() gốc không tự sinh lại mã mới/tự set Phòng Ban/không tự xoá chip file
+// đơn+nhiều nên cần dọn thêm. LƯU Ý mức Margin/Chiết Khấu (itPriceTier, chỉ áp dụng Bán Buôn): "Làm Mới"
+// CHỈ xoá giá trị đã chọn của trường này về rỗng — KHÔNG tự chuyển sub-tab con Bán Lẻ/Bán Buôn
+// (activeItPriceSubTab) về mặc định, vì đó là trạng thái hiển thị CHUNG của cả danh sách đề xuất bên
+// dưới (setItPriceSubTab() tự lọc lại danh sách theo priceType), đổi ngầm khi bấm "Làm Mới" form sẽ gây
+// bất ngờ khó hiểu hơn là có ích. itPriceTierSelectWrap vẫn tự ẩn/hiện đúng theo sub-tab đang mở như cũ.
+function resetItPriceForm() {
+  const formEl = document.getElementById('itPriceCreateForm');
+  if (!formEl) return;
+  formEl.reset();
   itPricePendingFile = null;
   document.getElementById('itPriceFileStatus').innerText = '';
   document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
@@ -390,7 +411,8 @@ async function submitItPriceApproval(e) {
   document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
   document.getElementById('itPriceTier').value = '';
   renderItPriceMasterListSelect();
-  renderItPriceApprovals();
+  clearSingleFileInput('itPriceFileInput', 'itPriceFileChip');
+  clearMultiFileInput('itPriceExtraFiles', 'itPriceExtraFilesChip');
 }
 
 function onItPriceFilterChange() {
@@ -1349,9 +1371,18 @@ async function submitItTicket(e) {
   DB.itSupportTickets.unshift(newItem);
   logSystemAction('IT_SUPPORT', 'CREATE_IT_TICKET', `Tạo yêu cầu hỗ trợ IT [${code} - ${newItem.title}]`, 'SUCCESS', code);
   alert('✅ Đã gửi yêu cầu hỗ trợ IT thành công!');
-  e.target.reset();
-  document.getElementById('itTicketCode').value = generateItTicketCode();
+  resetItTicketForm();
   renderItTickets();
+}
+
+// resetItTicketForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung) VÀ tái dùng lại cho đúng
+// phần dọn form sau khi gửi thành công ở trên (KHÔNG duplicate) — form.reset() gốc không tự sinh lại mã
+// yêu cầu mới nên cần dọn thêm đúng 1 dòng.
+function resetItTicketForm() {
+  const formEl = document.getElementById('itTicketCreateForm');
+  if (!formEl) return;
+  formEl.reset();
+  document.getElementById('itTicketCode').value = generateItTicketCode();
 }
 
 function onItTicketFilterChange() {

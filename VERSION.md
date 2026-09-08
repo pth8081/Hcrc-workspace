@@ -1,8 +1,101 @@
 # Phiên bản hiện tại
 
-**13.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đợt D (UX rollout): nút "↺ Làm Mới" cho Thanh Toán/Hỗ Trợ IT (3 form)/VPP/Ngân Sách (2026-09-08)
+
+Tiếp nối Đợt A/B/C (xem 3 mục ngay dưới) — áp ĐÚNG mẫu tham chiếu đã dựng
+(`confirmAndResetForm()`/chip file ở `core.js`, KHÔNG sửa gì thêm ở đó) cho
+5 module còn lại của kế hoạch UX 5 đợt, hoàn tất toàn bộ kế hoạch.
+
+**Thanh Toán (`module-thanhtoan.js`)**: `#paymentCreateForm` —
+`resetPaymentCreateForm()` (mới) CHỈ gọi lại `cancelEditPaymentRequest()` có
+sẵn từ trước (không viết logic mới) — form KHÔNG có ô tải tệp, kèm trắng
+bảng động "Các Đợt Thanh Toán". Sub-tab "🗂️ Quản Lý Thanh Toán" (lập/sửa
+NHÁP đã tạo từ module khác — Hợp Đồng "🧾 Lập Thanh Toán" — hoặc tự lập trực
+tiếp, theo dõi hạn từng đợt tới khi PAID) CHỦ Ý nằm NGOÀI phạm vi đợt này:
+đây là UI sửa 1 bản ghi ĐÃ TỒN TẠI (gần giống modal sửa), không phải "tạo
+mới 1 lần" như các form còn lại trong 5 đợt UX này.
+
+**Hỗ Trợ IT — 3 form Tạo Mới:**
+- Phê Duyệt Giá (`#itPriceCreateForm`, `module-itsupport-price.js`) —
+  `resetItPriceForm()` (mới) + chip file đơn `itPriceFileInput` (bảng giá) +
+  chip file nhiều `itPriceExtraFiles` (tài liệu bổ sung). `itPriceFileInput`
+  ĐÃ có `data-op-change="onItPriceFileChange"` nghiệp vụ riêng (đọc/xem
+  trước bảng giá) TỪ TRƯỚC — 1 input chỉ nhận 1 `data-op-change` (không phải
+  mảng), nên KHÔNG gắn thêm `data-op-change="onSingleFileChosen"` song song
+  ở HTML được như các input file khác trong 5 đợt — gọi trực tiếp
+  `onSingleFileChosen()` NGAY trong `onItPriceFileChange()` thay vào đó
+  (cũng tiện sửa luôn 1 lỗ hổng nhỏ có sẵn: nhánh đọc file lỗi trước đây chỉ
+  xoá `input.value` chứ không xoá chip, để lại chip "ma" trỏ tới file không
+  còn tồn tại — nay dùng `clearSingleFileInput()` cho cả 2 chỗ). Mức Margin/
+  Chiết Khấu (`itPriceTier`, chỉ hiện ở sub-tab con Bán Buôn) CHỈ bị **xoá
+  giá trị đã chọn** khi "Làm Mới" — KHÔNG tự chuyển sub-tab con Bán Lẻ/Bán
+  Buôn (`activeItPriceSubTab`) về mặc định, vì đó là trạng thái hiển thị
+  CHUNG của cả danh sách đề xuất bên dưới (đổi ngầm khi bấm nút của riêng
+  form sẽ gây bất ngờ khó hiểu hơn là có ích).
+- Hỗ Trợ Yêu Cầu (`#itTicketCreateForm`) — `resetItTicketForm()` (mới), đơn
+  giản nhất trong 3 form (không ô tải tệp).
+- Gia Hạn Dịch Vụ CNTT (`#itRenewalCreateForm`, `module-itsupport-renewal.js`)
+  — `resetItRenewalForm()` (mới) + chip file đơn `itRenewalFile`. Ô tìm-
+  kiếm-gõ-chọn tự học `itRenewalCategory` (sdd\*) KHÔNG có input ẩn riêng lưu
+  giá trị đã chọn như các sdd khác trong hệ thống — chính `input.value` LÀ
+  giá trị thật nên `form.reset()` gốc đã đủ xoá sạch, chỉ cần đóng tường
+  minh dropdown gợi ý nếu lỡ đang mở.
+
+**VPP (`module-vpp.js`) — 2 "form" Tạo Mới, KHÔNG cái nào là `<form>` thật**
+(bảng chọn mặt hàng/bảng nhân sự theo phòng ban đều dựng tay bằng `<div>`,
+không `.reset()` được — `resetXxxForm()` phải tự set tay từng ô + gọi lại
+`render*()` để tính lại giá trị mặc định THẬT thay vì hardcode rỗng):
+- Đăng Ký (`#vppRegItemsWrap`) — `resetVppRegForm()` (mới). MỖI ô Số Lượng
+  đã có `value="..."` (thuộc tính HTML thật) đúng bằng số lượng đã LƯU NHÁP
+  (nếu đang sửa tiếp nháp cũ) hoặc rỗng (nếu chọn mới hoàn toàn) tại thời
+  điểm dựng bảng — gán lại `input.value = input.defaultValue` cho MỌI ô là
+  đủ "quay về mặc định thật" (mirror ý nghĩa `form.reset()` gốc), không xoá
+  mất bản nháp đã lưu trên server.
+- Kỳ Đăng Ký > Tạo Kỳ Đăng Ký Mới (`#vppNewPeriodFormWrap`) —
+  `resetVppNewPeriodForm()` (mới) + chip file đơn `vppCatalogFileInput`
+  (cùng cách xử lý `data-op-change` sẵn có như `itPriceFileInput` ở trên) +
+  tính LẠI bảng "Nhân Sự Theo Phòng Ban" theo số nhân sự THẬT đang hoạt động
+  (`renderVppDeptHeadcountTable()`), không giữ số đã sửa tay dở dang.
+
+**Ngân Sách (`module-ngansach.js`)** — 2 tab con "✅ Ngân Sách Phê Duyệt Đơn
+Vị"(PLAN)/"💳 Ngân Sách Thực Hiện"(ACTUAL) dùng CHUNG code (hậu tố
+`_PLAN`/`_ACTUAL`), bảng hạng mục dựng theo mẫu cột của kỳ ("UI mẫu ngân
+sách CRUD cột") KHÔNG phải `<form>` thật —
+`resetBudgetEntryFormPLAN()`/`resetBudgetEntryFormACTUAL()` (mới) CHỈ gọi
+lại `onBudgetEntryPeriodChange(kind)` có sẵn: nạp lại ĐÚNG bản NHÁP đã lưu
+trên server của phòng ban cho kỳ đang chọn (nếu có — hoàn tác MỌI sửa dở
+CHƯA lưu, giữ nguyên phần đã lưu) hoặc collapse về ĐÚNG 1 dòng trống theo
+mẫu (nếu CHƯA có nháp nào).
+
+**Bộ test**: mở rộng `server/tests/test-form-reset-file-remove.js` thêm 8
+kịch bản (Thanh Toán + Phê Duyệt Giá + Hỗ Trợ Yêu Cầu + Gia Hạn Dịch Vụ CNTT
++ VPP Đăng Ký + VPP Tạo Kỳ + Ngân Sách PLAN + Ngân Sách ACTUAL) — tổng
+29/29 kịch bản pass, bao gồm kiểm chứng chip file nhiều (`itPriceExtraFiles`,
+chọn 2 xoá 1 còn đúng 1), tier-select `itPriceTier` bị xoá đúng, collapse
+bảng động VPP/Ngân Sách, và 1 kịch bản Ngân Sách ACTUAL kiểm chứng riêng
+hành vi "hoàn tác sửa dở CHƯA lưu, giữ nguyên phần ĐÃ lưu nháp trên server"
+(khác PLAN — collapse về rỗng vì chưa có nháp nào). 2 route đọc/xem-trước-
+file-ngay-khi-chọn (`/api/it-price/parse-file`/`/api/vpp/parse-catalog`)
+không có trong hạ tầng mock backend dùng chung (`tests/_harness-contract.js`
+chỉ mô phỏng `/api/upload` + `/api/create|workflow|records`) nên bài test tự
+bọc thêm 2 route giả NGAY TRONG file test (không đụng hạ tầng dùng chung cho
+mọi bài test khác) — nội dung tệp không ảnh hưởng luật nghiệp vụ nào ở đây
+(đã có `test-it-support.js`/`test-vpp.js` với harness Express thật riêng
+kiểm chứng logic đọc file thật). Toàn bộ suite hồi quy hiện có (79 file
+`test-*.js`) chạy lại — không phát sinh lỗi mới ngoài 3 lỗi kết nối SQL
+Server thật đã biết từ trước ở đúng 2 file `test-audit-fixes-batch1.js`
+(2 lỗi)/`test-audit-round2-cluster1.js` (1 lỗi), xác nhận lại giống hệt
+baseline qua `git stash` (môi trường sandbox không có SQL Server thật).
+
+**Deploy-impact**: THUẦN client-side (`public/index.html` +
+`module-thanhtoan.js`/`module-itsupport-price.js`/`module-itsupport-renewal.js`/
+`module-vpp.js`/`module-ngansach.js`), không đổi `schema.sql`, không thêm
+biến môi trường, không đổi `dependencies` — chỉ cần copy code + `pm2 restart`
+(hoặc refresh trình duyệt nếu server không đổi).
 
 ## Đợt C (UX rollout): nút "↺ Làm Mới" cho Đào Tạo (7 form) + Tuyển Dụng/HCRC Đồng Hành/Nội Bộ (2026-09-08)
 

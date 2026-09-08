@@ -202,6 +202,22 @@ function filterVppRegItemsTable() {
   document.getElementById('vppRegItemsNoMatch').classList.toggle('hidden', visibleCount > 0 || rows.length === 0);
 }
 
+// resetVppRegForm() — nút "↺ Làm Mới" của bảng chọn mặt hàng & số lượng. KHÔNG phải <form> thật (chỉ là
+// 1 bảng cố định theo danh mục của kỳ, không có "thêm dòng" động như Mua Sắm/Sửa Chữa office) nên không
+// gọi .reset() được — mỗi <input type=number> số lượng đã có value="..." (thuộc tính HTML thật, không
+// chỉ property) đúng bằng số lượng đã lưu nháp (nếu có) tại thời điểm renderItemsTable(), nên gán lại
+// input.value = input.defaultValue cho MỌI ô là đủ "quay về trạng thái mặc định" y hệt ý nghĩa
+// form.reset() gốc — tự động lùi về ĐÚNG số lượng bản nháp đã lưu (nếu đang sửa tiếp nháp cũ) hoặc về 0
+// (nếu đang chọn mới hoàn toàn), không xoá mất bản nháp đã lưu trên server.
+function resetVppRegForm() {
+  const wrap = document.getElementById('vppRegItemsWrap');
+  if (!wrap) return;
+  wrap.querySelectorAll('#vppRegItemsTableBody input[type="number"]').forEach(inp => { inp.value = inp.defaultValue || ''; });
+  document.getElementById('vppRegItemSearch').value = '';
+  filterVppRegItemsTable();
+  updateVppRegTotalDisplay();
+}
+
 function collectVppRegFormItems(period) {
   return period.catalogItems
     .map((it, idx) => ({ name: it.name, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
@@ -554,6 +570,11 @@ async function processVppReg(actionType) {
 let vppPendingCatalog = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ bấm "Tạo Kỳ Đăng Ký"
 
 async function onVppCatalogFileChange(event) {
+  // Input này đã có data-op-change nghiệp vụ riêng (đọc/xem trước danh mục) từ trước khi có mẫu chip
+  // "📎 tên file [✕]" dùng chung (xem onSingleFileChosen()/core.js) — 1 input CHỈ nhận 1 data-op-change
+  // duy nhất nên gọi trực tiếp ngay đây thay vì gắn thêm ở HTML, khớp cách xử lý itPriceFileInput (xem
+  // module-itsupport-price.js onItPriceFileChange()).
+  onSingleFileChosen(event.target, 'vppCatalogFileChip');
   const file = event.target.files[0];
   vppPendingCatalog = null;
   document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
@@ -581,7 +602,7 @@ async function onVppCatalogFileChange(event) {
     document.getElementById('vppCatalogPreviewWrap').classList.remove('hidden');
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
-    event.target.value = '';
+    clearSingleFileInput('vppCatalogFileInput', 'vppCatalogFileChip'); // dọn luôn chip — tệp vừa chọn bị xoá value, chip cũ hiện sai nếu không xoá theo (khớp lý do clearSingleFileInput() cần gọi tường minh, xem core.js).
   }
 }
 
@@ -616,15 +637,23 @@ async function createVppPeriod() {
   logSystemAction('VPP', 'CREATE_VPP_PERIOD', `Tạo kỳ đăng ký Văn phòng phẩm [${newPeriod.name}]`, 'SUCCESS', newPeriod.code);
   alert('✅ Đã tạo kỳ đăng ký mới!');
 
+  resetVppNewPeriodForm();
+  renderVppPeriods();
+}
+
+// resetVppNewPeriodForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung) VÀ tái dùng lại cho đúng
+// phần dọn form sau khi tạo kỳ thành công ở trên (KHÔNG duplicate). Không phải <form> thật (cùng lý do
+// resetVppRegForm() ở trên — không có .reset() để gọi) nên set tay từng ô, GIỮ NGUYÊN mặc định
+// "100.000" của Ngân sách/người (khớp value="100.000" gõ cứng sẵn trong HTML — không phải rỗng).
+function resetVppNewPeriodForm() {
   document.getElementById('vppNewPeriodName').value = '';
   document.getElementById('vppNewPeriodStart').value = '';
   document.getElementById('vppNewPeriodEnd').value = '';
   document.getElementById('vppNewPeriodBudget').value = '100.000'; // mặc định ban đầu 100.000đ/người, admin vẫn sửa được ở lượt tạo kỳ tiếp theo
-  document.getElementById('vppCatalogFileInput').value = '';
   document.getElementById('vppCatalogPreviewWrap').classList.add('hidden');
   document.getElementById('vppCatalogStatus').innerText = '';
   vppPendingCatalog = null;
-  renderVppPeriods();
+  clearSingleFileInput('vppCatalogFileInput', 'vppCatalogFileChip');
   renderVppDeptHeadcountTable();
 }
 

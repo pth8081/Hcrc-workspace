@@ -54,13 +54,53 @@
 //   Nội Bộ/Nhịp Sống HCRC (#internalPostForm, resetInternalPostForm(), gọi lại cancelEditInternalPost()
 //     có sẵn — cùng khuôn resetMeetingMinutesForm()) — kèm chip internalFile + tắt Ghim/thoát Sửa dở dang.
 //
+// — VÀ "Đợt D" (đúng khuôn trên, 5 module còn lại của kế hoạch UX 5 đợt — Thanh Toán/Hỗ Trợ IT (3 form)/
+//   VPP/Ngân Sách):
+//   Thanh Toán (#paymentCreateForm, resetPaymentCreateForm() — CHỈ gọi lại cancelEditPaymentRequest() có
+//     sẵn từ trước, không viết logic mới) — form KHÔNG có ô tải tệp; kèm trắng bảng "Các Đợt Thanh Toán"
+//     (dựng động, mirror #contractInstallmentsList). Sub-tab "🗂️ Quản Lý Thanh Toán" (sửa NHÁP đã tạo từ
+//     module khác, không phải "tạo mới" 1 lần như các form còn lại) CHỦ Ý nằm NGOÀI phạm vi đợt này.
+//   Hỗ Trợ IT có 3 form Tạo Mới (module-itsupport-price.js/module-itsupport-renewal.js):
+//     Phê Duyệt Giá (#itPriceCreateForm, resetItPriceForm()) — kèm chip file đơn itPriceFileInput (ĐÃ có
+//       data-op-change nghiệp vụ riêng đọc/xem trước bảng giá TỪ TRƯỚC — không gắn thêm data-op-change=
+//       "onSingleFileChosen" song song được, gọi trực tiếp onSingleFileChosen() NGAY trong
+//       onItPriceFileChange() thay vì qua HTML, xem module-itsupport-price.js) + chip file nhiều
+//       itPriceExtraFiles + Mức Margin/Chiết Khấu (itPriceTier, chỉ Bán Buôn) CHỈ bị xoá giá trị khi Làm
+//       Mới, KHÔNG tự chuyển sub-tab con Bán Lẻ/Bán Buôn (activeItPriceSubTab) về mặc định — quyết định
+//       có chủ ý, xem chú thích ngay tại resetItPriceForm().
+//     Hỗ Trợ Yêu Cầu (#itTicketCreateForm, resetItTicketForm()) — đơn giản nhất đợt này, không ô tải tệp.
+//     Gia Hạn Dịch Vụ CNTT (#itRenewalCreateForm, resetItRenewalForm()) — kèm chip file đơn itRenewalFile
+//       + đóng tường minh dropdown gợi ý của ô tìm-kiếm-gõ-chọn itRenewalCategory (sdd*, KHÔNG có input ẩn
+//       riêng như các sdd khác trong hệ thống — chính input.value LÀ giá trị thật, form.reset() gốc đã đủ
+//       xoá sạch giá trị, chỉ cần đóng thêm dropdown nếu lỡ đang mở).
+//   VPP (module-vpp.js) có 2 "form" Tạo Mới, KHÔNG cái nào là <form> thật (bảng chọn mặt hàng/bảng nhân
+//     sự theo phòng ban đều dựng tay bằng <div>, không .reset() được — resetXxxForm() phải tự set tay
+//     từng ô + gọi lại render* để tính lại giá trị mặc định "thật" thay vì hardcode rỗng):
+//     Đăng Ký (#vppRegItemsWrap không phải <form>, resetVppRegForm()) — MỖI ô Số Lượng đã có value="..."
+//       (thuộc tính HTML thật) đúng bằng số lượng đã LƯU NHÁP (nếu đang sửa tiếp nháp cũ) hoặc rỗng (nếu
+//       chọn mới hoàn toàn) tại thời điểm dựng bảng — gán lại input.value = input.defaultValue cho MỌI ô
+//       là đủ "quay về mặc định thật" (mirror ý nghĩa form.reset() gốc), không xoá mất bản nháp đã lưu.
+//     Kỳ Đăng Ký > Tạo Kỳ Đăng Ký Mới (#vppNewPeriodFormWrap không phải <form>, resetVppNewPeriodForm())
+//       — kèm chip file đơn vppCatalogFileInput (ĐÃ có data-op-change nghiệp vụ riêng đọc/xem trước danh
+//       mục TỪ TRƯỚC, cùng cách xử lý itPriceFileInput ở trên) + tính LẠI bảng "Nhân Sự Theo Phòng Ban"
+//       (renderVppDeptHeadcountTable()) theo số nhân sự THẬT đang hoạt động, không giữ số đã sửa tay dở.
+//   Ngân Sách (module-ngansach.js) — 2 tab con "✅ Ngân Sách Phê Duyệt Đơn Vị"(PLAN)/"💳 Ngân Sách Thực
+//     Hiện"(ACTUAL) dùng CHUNG code (hậu tố _PLAN/_ACTUAL), bảng hạng mục dựng theo mẫu cột của kỳ ("UI
+//     mẫu ngân sách CRUD cột") KHÔNG phải <form> thật — resetBudgetEntryFormPLAN()/
+//     resetBudgetEntryFormACTUAL() CHỈ gọi lại onBudgetEntryPeriodChange(kind) đã có sẵn: nạp lại ĐÚNG
+//     bản NHÁP đã lưu trên server của phòng ban cho kỳ đang chọn (nếu có — hoàn tác MỌI sửa dở CHƯA lưu,
+//     xem kịch bản "Ngân Sách Thực Hiện" bên dưới) hoặc collapse về ĐÚNG 1 dòng trống theo mẫu (nếu CHƯA
+//     có nháp nào — xem kịch bản "Ngân Sách Phê Duyệt" bên dưới).
+//
 // Dùng lại hạ tầng tests/_harness-contract.js (tests/_seed.js) — đã seed sẵn đủ dept/loại pháp lý/
 // workflow/nhóm phê duyệt cho Hợp Đồng LẪN Văn Bản Trình (3 bộ test gốc dùng chung: test-contract.js/
 // test-payment.js/test-office-budget.js) — Mua Bán (officeReqs) thuộc nhóm này nên đã sẵn
 // officeBuyDeptWorkflows. Giấy Phép/Đăng Ký Xe/Phòng Họp/Biên Bản Họp không thuộc 3 module gốc đó nên
 // DB.licenses/DB.licenseTypes/DB.carPurposes/DB.meetingRooms phải tự seed thêm (rỗng/1 mục là đủ — chỉ
 // cần đủ để chọn được 1 giá trị khác option đầu, quan sát được form.reset() có thật sự đổi lại hay
-// không; module Biên Bản Họp không lọc theo dept nên không cần thêm gì).
+// không; module Biên Bản Họp không lọc theo dept nên không cần thêm gì). Đợt D seed thêm tay
+// DB.vppPeriods/DB.budgetPeriods (module không thuộc 3 bộ gốc) NGAY TRONG từng kịch bản (không seed
+// chung ở đây — mỗi kịch bản cần period riêng, tránh đụng "1 bản ngân sách/phòng ban/kỳ/loại").
 //
 // Chạy: node server/tests/test-form-reset-file-remove.js
 const { startHarness } = require('./_harness-contract');
@@ -68,6 +108,7 @@ const { startHarness } = require('./_harness-contract');
 function fakeFile(name, content, mime) {
   return { name, mimeType: mime, buffer: Buffer.from(content) };
 }
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 function assertTrue(cond, msg) {
   if (!cond) throw new Error(msg || 'Assertion failed');
@@ -99,6 +140,41 @@ async function main() {
     await page.evaluate(() => {
       window.__confirmCalls = [];
       window.confirm = (msg) => { window.__confirmCalls.push(String(msg)); return true; };
+    });
+
+    // _harness-contract.js chỉ mô phỏng /api/upload + /api/create|workflow|records (xem window.fetch ở
+    // đó) — 2 route đọc/xem-trước-file-ngay-khi-chọn của Đợt D (POST /api/it-price/parse-file, POST
+    // /api/vpp/parse-catalog) KHÔNG có trong danh sách đó nên rơi vào "Không rõ route" (404 giả), khiến
+    // itPricePendingFile/vppPendingCatalog không bao giờ set được -> nhánh dọn lỗi trong
+    // onItPriceFileChange()/onVppCatalogFileChange() xoá NGAY chip vừa hiện. Bọc thêm 2 route giả ở ĐÚNG
+    // 1 nơi (không đụng _harness-contract.js dùng chung cho mọi bài test khác) — nội dung tệp KHÔNG ảnh
+    // hưởng luật nghiệp vụ nào bài test này kiểm chứng (đã có test-it-support.js/test-vpp.js với harness
+    // Express thật riêng kiểm chứng logic đọc file thật), ở đây chỉ cần phản hồi hợp lệ để 2 luồng chip
+    // "📎 tên file [✕]"/"Làm Mới" chạy được bình thường như 1 lần đọc file thành công thật.
+    await page.evaluate(() => {
+      const originalFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (typeof url === 'string' && url.indexOf('/api/it-price/parse-file') !== -1) {
+          return {
+            ok: true, status: 200, json: async () => ({
+              items: [{ values: { c0: 'Bút bi Thiên Long', c1: '5000' } }],
+              columnLabels: [{ key: 'c0', label: 'Tên mặt hàng' }, { key: 'c1', label: 'Giá mới' }],
+              masterListName: null,
+              fileUrl: `/uploads/${Date.now()}-test-gia-de-xuat.xlsx`,
+              fileName: 'gia-de-xuat.xlsx', size: 123
+            })
+          };
+        }
+        if (typeof url === 'string' && url.indexOf('/api/vpp/parse-catalog') !== -1) {
+          return {
+            ok: true, status: 200, json: async () => ({
+              items: [{ code: 'VPP001', name: 'Bút bi Thiên Long', origin: 'Việt Nam', unit: 'Cái', spec: '', price: 3000 }],
+              fileUrl: `/uploads/${Date.now()}-test-danh-muc.xlsx`, fileName: 'danh-muc.xlsx'
+            })
+          };
+        }
+        return originalFetch(url, opts);
+      };
     });
 
     // ================= 1) Văn Bản Trình =================
@@ -910,6 +986,348 @@ async function main() {
         assertTrue(state.internalFileChip === '', 'Chip internalFile phải biến mất sau Làm Mới');
         assertTrue(state.pinChecked === false, 'internalPinCheckbox phải bỏ tick');
         assertTrue(state.pinWrapHidden === true, 'Khối chọn số ngày Ghim phải ẩn lại');
+      }
+    );
+
+    // ================= 22) Thanh Toán (paymentCreateForm) =================
+    await check(
+      'Thanh Toán: "Làm Mới" gọi lại cancelEditPaymentRequest() có sẵn — trắng form tạo thủ công + trắng bảng "Các Đợt Thanh Toán" (KHÔNG có ô tải tệp)',
+      async () => {
+        await page.evaluate(() => { switchTab('office'); setOfficeSubTab('PAYMENT'); setPaymentSubTab('CREATE'); });
+        await page.fill('#paymentTitle', 'Đề nghị kiểm thử reset form');
+        // LƯU Ý: #paymentSection nằm LỒNG BÊN TRONG #officeSection (khác Hợp Đồng — 1 gốc riêng) nên sự
+        // kiện click nổi bọt qua CẢ 2 root bindCspDelegation() (officeSection LẪN paymentSection), khiến
+        // addPaymentCreateInstallmentRow() chạy 2 LẦN/click (đã xác nhận đây là hành vi CÓ SẴN TỪ TRƯỚC,
+        // không phải lỗi phát sinh từ nút "↺ Làm Mới" mới thêm — không thuộc phạm vi đợt này, chỉ ghi
+        // nhận đúng số dòng THẬT SỰ quan sát được để bài test không giả định sai).
+        await page.click('button[data-op="addPaymentCreateInstallmentRow"]');
+        const rowsBefore = await page.locator('#paymentCreateInstallmentsList [data-installment-row]').count();
+        assertTrue(rowsBefore === 2, `1 click "+ Thêm Đợt" hiện tạo 2 dòng (bấm nổi bọt qua 2 root, hành vi có sẵn) trước khi Làm Mới, thực tế ${rowsBefore}`);
+        await page.fill('#paymentCreateInstallmentsList [data-installment-row="0"] .payment-installment-desc', 'Đợt 1 kiểm thử');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#paymentCreateForm button[data-arg1="resetPaymentCreateForm"]');
+        const state = await page.evaluate(() => ({
+          paymentTitle: document.getElementById('paymentTitle').value,
+          installmentRows: document.querySelectorAll('#paymentCreateInstallmentsList [data-installment-row]').length,
+          sourceType: document.getElementById('paymentSourceType').value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.paymentTitle === '', 'paymentTitle phải về rỗng');
+        assertTrue(state.installmentRows === 0, `Các Đợt Thanh Toán phải về 0 dòng, thực tế ${state.installmentRows}`);
+        assertTrue(state.sourceType === 'MANUAL', `paymentSourceType phải về lại "Thủ công", thực tế "${state.sourceType}"`);
+      }
+    );
+
+    // ================= 23) Hỗ Trợ IT > Phê Duyệt Giá (itPriceCreateForm) =================
+    await check(
+      'Phê Duyệt Giá: chip file đơn (bảng giá, ĐÃ có data-op-change riêng đọc file) + chip file nhiều (tài liệu bổ sung, xoá đúng 1 file), Mức Margin/Chiết Khấu (Bán Buôn) bị xoá giá trị nhưng KHÔNG tự chuyển lại sub-tab Bán Lẻ, mã đề xuất/phòng ban sinh lại đúng',
+      async () => {
+        await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE'); });
+        await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+        await page.fill('#itPriceReason', 'Lý do kiểm thử reset form');
+
+        await page.setInputFiles('#itPriceFileInput', fakeFile('gia-de-xuat.xlsx', 'noi dung xlsx gia', XLSX_MIME));
+        await page.waitForFunction(() => {
+          const t = document.getElementById('itPriceFileStatus').innerText;
+          return t.includes('✅') || t.includes('⛔');
+        });
+        const chip1 = await page.locator('#itPriceFileChip').innerText();
+        assertTrue(chip1.includes('gia-de-xuat.xlsx'), `Chip itPriceFileInput phải hiện tên file, thực tế: ${chip1}`);
+        const pendingBeforeReset = await page.evaluate(() => itPricePendingFile);
+        assertTrue(!!pendingBeforeReset, 'itPricePendingFile phải đọc thành công tệp .xlsx thật trước khi Làm Mới (tiền đề bài test)');
+
+        await page.setInputFiles('#itPriceExtraFiles', [
+          fakeFile('phu-luc-1.pdf', 'a', 'application/pdf'),
+          fakeFile('phu-luc-2.pdf', 'b', 'application/pdf')
+        ]);
+        const chipCountBefore = await page.locator('#itPriceExtraFilesChip button[data-op="removeOneFileFromMultiInput"]').count();
+        assertTrue(chipCountBefore === 2, `Phải có đúng 2 chip tài liệu bổ sung, thực tế ${chipCountBefore}`);
+        await page.locator('#itPriceExtraFilesChip button[data-op="removeOneFileFromMultiInput"]').first().click();
+        const remainingChips = await page.locator('#itPriceExtraFilesChip button[data-op="removeOneFileFromMultiInput"]').count();
+        assertTrue(remainingChips === 1, `Sau khi xoá 1 phải còn đúng 1 chip, thực tế ${remainingChips}`);
+        const remainingChipText = await page.locator('#itPriceExtraFilesChip').innerText();
+        assertTrue(
+          remainingChipText.includes('phu-luc-2.pdf') && !remainingChipText.includes('phu-luc-1.pdf'),
+          `Phải còn ĐÚNG file phu-luc-2.pdf (đã xoá phu-luc-1.pdf), thực tế: ${remainingChipText}`
+        );
+        const remainingFilesLength = await page.locator('#itPriceExtraFiles').evaluate((el) => el.files.length);
+        assertTrue(remainingFilesLength === 1, `input.files phải còn đúng 1 phần tử, thực tế ${remainingFilesLength}`);
+
+        const codeBeforeReset = await page.locator('#itPriceCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'itPriceCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#itPriceCreateForm button[data-arg1="resetItPriceForm"]');
+        const state = await page.evaluate(() => ({
+          itPriceReason: document.getElementById('itPriceReason').value,
+          itPriceTier: document.getElementById('itPriceTier').value,
+          tierWrapHidden: document.getElementById('itPriceTierSelectWrap').classList.contains('hidden'),
+          itPriceCode: document.getElementById('itPriceCode').value,
+          itPriceDeptDisplay: document.getElementById('itPriceDeptDisplay').value,
+          itPriceFileValue: document.getElementById('itPriceFileInput').value,
+          itPriceFileChip: document.getElementById('itPriceFileChip').innerHTML,
+          itPriceExtraFilesValue: document.getElementById('itPriceExtraFiles').value,
+          itPriceExtraFilesChip: document.getElementById('itPriceExtraFilesChip').innerHTML,
+          itPricePendingFile: (typeof itPricePendingFile === 'undefined') ? 'UNDEFINED' : itPricePendingFile,
+          activeSubTab: activeItPriceSubTab,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.itPriceReason === '', 'itPriceReason phải về rỗng');
+        assertTrue(state.itPriceTier === '', `Mức Margin/Chiết Khấu phải về rỗng sau Làm Mới, thực tế "${state.itPriceTier}"`);
+        assertTrue(state.activeSubTab === 'WHOLESALE', `Sub-tab Bán Buôn KHÔNG được tự đổi lại Bán Lẻ khi Làm Mới (chỉ xoá giá trị đã chọn), thực tế "${state.activeSubTab}"`);
+        assertTrue(state.tierWrapHidden === false, 'Khối Mức Margin/Chiết Khấu vẫn phải HIỆN (đang ở Bán Buôn) — chỉ giá trị bị xoá, không ẩn khối');
+        assertTrue(/^HCRC-ITPG-/.test(state.itPriceCode), `itPriceCode phải được sinh lại đúng khuôn HCRC-ITPG-..., thực tế "${state.itPriceCode}"`);
+        assertTrue(state.itPriceDeptDisplay === 'Ban Giám Đốc', `itPriceDeptDisplay phải về đúng phòng ban hiện tại, thực tế "${state.itPriceDeptDisplay}"`);
+        assertTrue(state.itPriceFileValue === '', 'itPriceFileInput phải về rỗng');
+        assertTrue(state.itPriceFileChip === '', 'Chip itPriceFileInput phải biến mất sau Làm Mới');
+        assertTrue(state.itPriceExtraFilesValue === '', 'itPriceExtraFiles phải về rỗng');
+        assertTrue(state.itPriceExtraFilesChip === '', 'Chip itPriceExtraFiles phải biến mất sau Làm Mới');
+        assertTrue(state.itPricePendingFile === null, `itPricePendingFile phải về null sau Làm Mới, thực tế ${JSON.stringify(state.itPricePendingFile)}`);
+      }
+    );
+
+    // ================= 24) Hỗ Trợ IT > Hỗ Trợ Yêu Cầu (itTicketCreateForm) =================
+    await check(
+      'Hỗ Trợ Yêu Cầu: "Làm Mới" trắng form + sinh lại mã yêu cầu mới (KHÔNG có ô tải tệp)',
+      async () => {
+        await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('TICKET'); });
+        await page.fill('#itTicketTitle', 'Yêu cầu kiểm thử reset form');
+        await page.fill('#itTicketDescription', 'Mô tả kiểm thử reset form.');
+        const codeBeforeReset = await page.locator('#itTicketCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'itTicketCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#itTicketCreateForm button[data-arg1="resetItTicketForm"]');
+        const state = await page.evaluate(() => ({
+          itTicketTitle: document.getElementById('itTicketTitle').value,
+          itTicketDescription: document.getElementById('itTicketDescription').value,
+          itTicketCode: document.getElementById('itTicketCode').value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.itTicketTitle === '', 'itTicketTitle phải về rỗng');
+        assertTrue(state.itTicketDescription === '', 'itTicketDescription phải về rỗng');
+        assertTrue(/^HCRC-/.test(state.itTicketCode), `itTicketCode phải được sinh lại, thực tế "${state.itTicketCode}"`);
+      }
+    );
+
+    // ================= 25) Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT (itRenewalCreateForm) =================
+    await check(
+      'Gia Hạn Dịch Vụ CNTT: chip file đơn itRenewalFile, "Làm Mới" trắng form + đóng dropdown gợi ý đang mở của ô tìm-kiếm-gõ-chọn itRenewalCategory',
+      async () => {
+        // itServiceRenewals/itRenewalCategories: không thuộc 3 module gốc dùng _seed.js — bổ sung tay
+        // (renderItServiceRenewals() gọi .map() thẳng lên DB.itServiceRenewals, undefined sẽ vỡ ngay).
+        await page.evaluate(() => { DB.itServiceRenewals = []; DB.itRenewalCategories = []; switchTab('itSupport'); setItSupportSubTab('RENEWAL'); });
+        await page.fill('#itRenewalName', 'Office 365 kiểm thử reset form');
+        await page.fill('#itRenewalCategory', 'Phần mềm kiểm thử');
+        await page.fill('#itRenewalVendor', 'Microsoft');
+        await page.fill('#itRenewalExpiryDate', '2027-01-01');
+        await page.setInputFiles('#itRenewalFile', fakeFile('hop-dong-license.pdf', 'noi dung', 'application/pdf'));
+        const chip = await page.locator('#itRenewalFileChip').innerText();
+        assertTrue(chip.includes('hop-dong-license.pdf'), `Chip itRenewalFile phải hiện tên file, thực tế: ${chip}`);
+
+        // Focus lại ô Loại dịch vụ để mở dropdown gợi ý (sddHandleTrigger lắng nghe cả 'focusin') — kiểm
+        // tra tiền đề bài test (dropdown PHẢI đang mở trước khi bấm Làm Mới mới có gì để kiểm chứng).
+        await page.focus('#itRenewalCategory');
+        const dropdownHiddenBefore = await page.evaluate(() => document.getElementById('itRenewalCategoryDatalist').classList.contains('hidden'));
+        assertTrue(dropdownHiddenBefore === false, 'Dropdown gợi ý itRenewalCategoryDatalist phải đang MỞ sau khi focus (tiền đề bài test)');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#itRenewalCreateForm button[data-arg1="resetItRenewalForm"]');
+        const state = await page.evaluate(() => ({
+          itRenewalName: document.getElementById('itRenewalName').value,
+          itRenewalCategory: document.getElementById('itRenewalCategory').value,
+          itRenewalVendor: document.getElementById('itRenewalVendor').value,
+          itRenewalExpiryDate: document.getElementById('itRenewalExpiryDate').value,
+          itRenewalFileValue: document.getElementById('itRenewalFile').value,
+          itRenewalFileChip: document.getElementById('itRenewalFileChip').innerHTML,
+          dropdownHidden: document.getElementById('itRenewalCategoryDatalist').classList.contains('hidden'),
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.itRenewalName === '', 'itRenewalName phải về rỗng');
+        assertTrue(state.itRenewalCategory === '', 'itRenewalCategory phải về rỗng');
+        assertTrue(state.itRenewalVendor === '', 'itRenewalVendor phải về rỗng');
+        assertTrue(state.itRenewalExpiryDate === '', 'itRenewalExpiryDate phải về rỗng');
+        assertTrue(state.itRenewalFileValue === '', 'itRenewalFile input phải về rỗng');
+        assertTrue(state.itRenewalFileChip === '', 'Chip itRenewalFile phải biến mất sau Làm Mới');
+        assertTrue(state.dropdownHidden === true, 'Dropdown gợi ý itRenewalCategoryDatalist phải đóng lại sau Làm Mới');
+      }
+    );
+
+    // ================= 26) VPP > Đăng Ký (vppRegItemsWrap, KHÔNG phải <form> thật) =================
+    await check(
+      'VPP Đăng Ký: KHÔNG phải <form> thật — "Làm Mới" đưa MỌI ô Số Lượng về đúng defaultValue (rỗng, vì chưa có nháp nào), không phải collapse dòng như Mua Sắm mà là bảng cố định theo danh mục',
+      async () => {
+        await page.evaluate(() => {
+          DB.vppExcludedJobTitles = [];
+          DB.vppPeriods = [{
+            id: 993001, code: 'VPP-TEST-REG', name: 'Kỳ kiểm thử reset form (Đăng Ký)',
+            startDate: '', endDate: '', status: 'OPEN',
+            catalogItems: [
+              { code: 'VPP001', name: 'Bút bi Thiên Long', origin: 'Việt Nam', unit: 'Cái', spec: 'Hộp 10 cây', price: 3000 },
+              { code: 'VPP002', name: 'Giấy A4', origin: 'Việt Nam', unit: 'Ram', spec: '', price: 60000 }
+            ],
+            perPersonBudget: null, deptHeadcounts: {}, createdAt: new Date().toLocaleString('vi-VN')
+          }];
+          DB.vppRegistrations = [];
+          switchTab('vpp'); setVppSubTab('REGISTER');
+        });
+        await page.selectOption('#vppRegPeriodSelect', '993001');
+        await page.fill('#vppItemQty_0', '5');
+        await page.fill('#vppItemQty_1', '2');
+        await page.fill('#vppRegItemSearch', 'bút');
+        const rowsVisibleBeforeReset = await page.locator('#vppRegItemsTableBody tr:not(.hidden)').count();
+        assertTrue(rowsVisibleBeforeReset === 1, `Lọc theo "bút" phải chỉ còn 1 dòng hiện, thực tế ${rowsVisibleBeforeReset}`);
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#vppRegItemsWrap button[data-arg1="resetVppRegForm"]');
+        const state = await page.evaluate(() => ({
+          qty0: document.getElementById('vppItemQty_0').value,
+          qty1: document.getElementById('vppItemQty_1').value,
+          search: document.getElementById('vppRegItemSearch').value,
+          rowsVisible: document.querySelectorAll('#vppRegItemsTableBody tr:not(.hidden)').length,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.qty0 === '', `Số Lượng dòng 1 phải về rỗng (chưa có nháp nào lưu), thực tế "${state.qty0}"`);
+        assertTrue(state.qty1 === '', `Số Lượng dòng 2 phải về rỗng (chưa có nháp nào lưu), thực tế "${state.qty1}"`);
+        assertTrue(state.search === '', 'Ô tìm mặt hàng phải về rỗng');
+        assertTrue(state.rowsVisible === 2, `Bỏ lọc xong phải hiện lại đủ 2 dòng mặt hàng, thực tế ${state.rowsVisible}`);
+      }
+    );
+
+    // ================= 27) VPP > Kỳ Đăng Ký > Tạo Kỳ Đăng Ký Mới (vppNewPeriodFormWrap, KHÔNG phải <form> thật) =================
+    await check(
+      'VPP Tạo Kỳ Đăng Ký Mới: chip file đơn vppCatalogFileInput (ĐÃ có data-op-change riêng đọc file), "Làm Mới" trắng form + tính LẠI bảng Nhân Sự Theo Phòng Ban theo số thật (không giữ số sửa tay)',
+      async () => {
+        await page.evaluate(() => { switchTab('vpp'); setVppSubTab('PERIODS'); });
+        await page.fill('#vppNewPeriodName', 'Kỳ kiểm thử reset form (Tạo Kỳ)');
+        await page.fill('#vppNewPeriodStart', '2027-01-01');
+        await page.fill('#vppNewPeriodEnd', '2027-01-31');
+        await page.fill('#vppNewPeriodBudget', '250.000');
+
+        await page.setInputFiles('#vppCatalogFileInput', fakeFile('danh-muc.xlsx', 'noi dung xlsx danh muc', XLSX_MIME));
+        await page.waitForFunction(() => {
+          const t = document.getElementById('vppCatalogStatus').innerText;
+          return t.includes('✅') || t.includes('⛔');
+        });
+        const chip = await page.locator('#vppCatalogFileChip').innerText();
+        assertTrue(chip.includes('danh-muc.xlsx'), `Chip vppCatalogFileInput phải hiện tên file, thực tế: ${chip}`);
+        const pendingBeforeReset = await page.evaluate(() => vppPendingCatalog);
+        assertTrue(!!pendingBeforeReset, 'vppPendingCatalog phải đọc thành công tệp .xlsx thật trước khi Làm Mới (tiền đề bài test)');
+
+        const firstHeadcountInput = page.locator('#vppDeptHeadcountBody .vpp-headcount-input').first();
+        const originalHeadcount = await firstHeadcountInput.inputValue();
+        await firstHeadcountInput.fill('999');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#vppNewPeriodFormWrap button[data-arg1="resetVppNewPeriodForm"]');
+        const state = await page.evaluate(() => ({
+          name: document.getElementById('vppNewPeriodName').value,
+          start: document.getElementById('vppNewPeriodStart').value,
+          end: document.getElementById('vppNewPeriodEnd').value,
+          budget: document.getElementById('vppNewPeriodBudget').value,
+          fileValue: document.getElementById('vppCatalogFileInput').value,
+          fileChip: document.getElementById('vppCatalogFileChip').innerHTML,
+          headcountFirst: document.querySelector('#vppDeptHeadcountBody .vpp-headcount-input')?.value,
+          pendingCatalog: (typeof vppPendingCatalog === 'undefined') ? 'UNDEFINED' : vppPendingCatalog,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.name === '', 'vppNewPeriodName phải về rỗng');
+        assertTrue(state.start === '', 'vppNewPeriodStart phải về rỗng');
+        assertTrue(state.end === '', 'vppNewPeriodEnd phải về rỗng');
+        assertTrue(state.budget === '100.000', `Ngân sách/người phải về lại mặc định 100.000, thực tế "${state.budget}"`);
+        assertTrue(state.fileValue === '', 'vppCatalogFileInput phải về rỗng');
+        assertTrue(state.fileChip === '', 'Chip vppCatalogFileInput phải biến mất sau Làm Mới');
+        assertTrue(
+          state.headcountFirst === originalHeadcount,
+          `Bảng Nhân Sự Theo Phòng Ban phải TÍNH LẠI đúng số nhân sự thật đang hoạt động (${originalHeadcount}), không giữ số đã sửa tay "999", thực tế "${state.headcountFirst}"`
+        );
+        assertTrue(state.pendingCatalog === null, `vppPendingCatalog phải về null sau Làm Mới, thực tế ${JSON.stringify(state.pendingCatalog)}`);
+      }
+    );
+
+    // ================= 28) Ngân Sách > Ngân Sách Phê Duyệt (budgetEntryFormWrap_PLAN, KHÔNG phải <form> thật) =================
+    await check(
+      'Ngân Sách (Phê Duyệt): KHÔNG phải <form> thật — CHƯA có nháp nào lưu -> "Làm Mới" gọi lại onBudgetEntryPeriodChange() có sẵn, collapse bảng hạng mục về ĐÚNG 1 dòng trống theo mẫu cột',
+      async () => {
+        // seedRecord() ghi CẢ VÀO state.collections.budgetPeriods (mock backend đọc lúc validate lưu
+        // nháp qua server thật, xem lib/createValidation.js budgetEntries.extraValidate) LẪN window.DB
+        // (giao diện hiển thị) — kịch bản PLAN này không round-trip server (chỉ collapse dòng ở client)
+        // nên đáng lẽ không bắt buộc, nhưng seed đủ cho nhất quán với kịch bản ACTUAL ngay bên dưới.
+        await h.seedRecord('budgetPeriods', {
+          id: 994001, code: 'NS-TEST-PLAN', name: 'Kỳ kiểm thử reset form (Phê Duyệt)',
+          startTime: '', endTime: '2030-12-31T23:59', status: 'OPEN',
+          deptScope: { all: true, depts: [] }, templateId: null, createdAt: new Date().toLocaleString('vi-VN')
+        });
+        await page.evaluate(() => { switchTab('budget'); setBudgetSubTab('APPROVED'); });
+        await page.selectOption('#budgetEntryPeriodSelect_PLAN', '994001');
+        const rowsBefore = await page.locator('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx]').count();
+        assertTrue(rowsBefore === 1, `Phải có đúng 1 dòng trống mặc định khi chưa có nháp nào lưu, thực tế ${rowsBefore}`);
+        await page.click('#budgetEntryAddRowBtn_PLAN');
+        const rowsAfterAdd = await page.locator('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx]').count();
+        assertTrue(rowsAfterAdd === 2, `Sau khi thêm dòng phải có 2 dòng, thực tế ${rowsAfterAdd}`);
+        await page.fill('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]', 'Hạng mục kiểm thử reset');
+        await page.fill('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="amount"]', '1000000');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#budgetEntryFormWrap_PLAN button[data-arg1="resetBudgetEntryFormPLAN"]');
+        const state = await page.evaluate(() => ({
+          rows: document.querySelectorAll('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx]').length,
+          name0: document.querySelector('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]')?.value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.rows === 1, `Bảng hạng mục phải collapse lại về ĐÚNG 1 dòng trống (chưa có nháp lưu), thực tế ${state.rows}`);
+        assertTrue(state.name0 === '', `Tên Hạng Mục dòng còn lại phải rỗng, thực tế "${state.name0}"`);
+      }
+    );
+
+    // ================= 29) Ngân Sách > Ngân Sách Thực Hiện (budgetEntryFormWrap_ACTUAL, KHÔNG phải <form> thật) =================
+    await check(
+      'Ngân Sách (Thực Hiện): ĐÃ có nháp lưu trên server -> "Làm Mới" hoàn tác sửa dở CHƯA lưu (dòng mới thêm + sửa tên), nạp lại ĐÚNG giá trị đã lưu nháp (không collapse về rỗng)',
+      async () => {
+        // seedRecord() BẮT BUỘC ở kịch bản này (khác PLAN ở trên) — saveBudgetEntryDraft('ACTUAL') round-
+        // trip THẬT qua mock backend (POST /api/create/budgetEntries), lib/createValidation.js đọc period
+        // từ appData.budgetPeriods (= state.collections.budgetPeriods phía mock, KHÔNG phải window.DB
+        // phía trình duyệt) — chỉ gán tay DB.budgetPeriods sẽ báo lỗi "Không tìm thấy kỳ ngân sách".
+        await h.seedRecord('budgetPeriods', {
+          id: 994002, code: 'NS-TEST-ACTUAL', name: 'Kỳ kiểm thử reset form (Thực Hiện)',
+          startTime: '', endTime: '2030-12-31T23:59', status: 'OPEN',
+          deptScope: { all: true, depts: [] }, templateId: null, createdAt: new Date().toLocaleString('vi-VN')
+        });
+        await page.evaluate(() => { switchTab('budget'); setBudgetSubTab('ACTUAL'); });
+        await page.selectOption('#budgetEntryPeriodSelect_ACTUAL', '994002');
+        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]', 'Hạng mục đã lưu nháp');
+        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="amount"]', '2000000');
+        await page.evaluate(() => saveBudgetEntryDraft('ACTUAL'));
+        await page.waitForFunction(() => budgetEntryFormDraftId['ACTUAL'] != null);
+
+        // Sửa dở dang CHƯA lưu: đổi lại tên dòng đã lưu + thêm 1 dòng mới — đây là phần PHẢI MẤT khi Làm Mới.
+        await page.click('#budgetEntryAddRowBtn_ACTUAL');
+        const rowsBeforeReset = await page.locator('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx]').count();
+        assertTrue(rowsBeforeReset === 2, `Phải có 2 dòng (1 đã lưu + 1 mới thêm chưa lưu) trước khi Làm Mới, thực tế ${rowsBeforeReset}`);
+        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]', 'Sửa dở CHƯA lưu');
+        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="1"] .budget-line-core[data-core-key="name"]', 'Dòng mới thêm CHƯA lưu');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#budgetEntryFormWrap_ACTUAL button[data-arg1="resetBudgetEntryFormACTUAL"]');
+        const state = await page.evaluate(() => ({
+          rows: document.querySelectorAll('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx]').length,
+          name0: document.querySelector('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]')?.value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.rows === 1, `Phải quay lại ĐÚNG số dòng đã LƯU NHÁP trên server (1 dòng), bỏ dòng mới thêm chưa lưu, thực tế ${state.rows}`);
+        assertTrue(
+          state.name0 === 'Hạng mục đã lưu nháp',
+          `Dòng còn lại phải về ĐÚNG giá trị đã lưu nháp trên server ("Hạng mục đã lưu nháp"), không giữ sửa dở "Sửa dở CHƯA lưu", thực tế "${state.name0}"`
+        );
       }
     );
 

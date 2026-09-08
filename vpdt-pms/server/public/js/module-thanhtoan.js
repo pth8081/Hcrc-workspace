@@ -205,6 +205,15 @@ async function submitManualPaymentRequest(e) {
   setPaymentSubTab('APPROVE');
 }
 
+// resetPaymentCreateForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung mọi form tạo mới, xem
+// CLAUDE.md/core.js confirmAndResetForm()) — tái dùng NGUYÊN cancelEditPaymentRequest() đã có sẵn đủ
+// logic dọn trạng thái JS (loại đề nghị về Thủ công, xoá các đợt thanh toán đã khai, nhãn nút gửi),
+// không viết lại. Bấm "Làm Mới" khi đang SỬA 1 đề nghị dở dang cũng huỷ luôn thao tác sửa đó — đúng ý
+// muốn "làm mới hẳn form", không phải chỉ xoá phần chưa lưu.
+function resetPaymentCreateForm() {
+  cancelEditPaymentRequest();
+}
+
 function cancelEditPaymentRequest() {
   editingPaymentRequestId = null;
   const form = document.getElementById('paymentCreateForm');
