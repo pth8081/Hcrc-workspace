@@ -209,6 +209,112 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   return contract;
 }
 
+// ===== Hợp đồng ĐÃ DUYỆT (APPROVED) — đổi Hình Thức Thanh Toán qua phê duyệt lại (yêu cầu mới) =====
+// editContract() ở trên chặn cứng MỌI sửa đổi khi approvalStatus === 'APPROVED' (kể cả admin) — 3 hàm
+// dưới đây mở 1 lối đi RIÊNG, hẹp: CHỈ đổi paymentType/paymentInstallments, phải qua phê duyệt lại bởi
+// ĐÚNG nhóm người duyệt "Tài liệu ký" (contractManageDeptWorkflows[dept] — module ảo contractsSignedFile
+// ở lib/workflowEngine.js, KHÁC hẳn nhóm duyệt hợp đồng gốc contractApprovalDeptWorkflows), theo xác
+// nhận của người dùng — không đụng tới CONTRACT_EDITABLE_FIELDS/editContract() nào khác.
+//
+// isApproverForContractManageWorkflow: mirror ĐÚNG isApproverForOperationOrderReceipt() ở trên (admin
+// hoặc có tên trong approvers của BẤT KỲ bước nào của quy trình) — TÁI SỬ DỤNG
+// MODULE_CONFIGS.contractsSignedFile.resolveWfConfig() (workflowEngine.js), không viết lại logic
+// duyệt-theo-phòng-ban từ đầu.
+function isApproverForContractManageWorkflow(user, contract, appData) {
+  if (user.perms?.admin) return true;
+  const { MODULE_CONFIGS } = require('./workflowEngine'); // require trễ — tránh vòng lặp (xem hàm mirror ở trên)
+  const { approvers } = MODULE_CONFIGS.contractsSignedFile.resolveWfConfig(contract, appData) || {};
+  return Object.values(approvers || {}).some(list => Array.isArray(list) ? list.includes(user.username) : list === user.username);
+}
+
+// Người tạo hợp đồng yêu cầu đổi Hình Thức Thanh Toán — CHỈ khi đã APPROVED (chưa APPROVED thì sửa
+// thẳng qua editContract() như cũ) VÀ CHƯA từng có paymentRequests nào tham chiếu hợp đồng này (đổi
+// hình thức sau khi đã có đề nghị thanh toán sẽ làm lệch số liệu đã đề nghị/đã duyệt thanh toán trước
+// đó). allPaymentRequests: caller (routes/records.js) tự đọc sẵn collection paymentRequests truyền vào
+// (file này không tự đọc DB, giữ đúng nguyên tắc ở đầu file).
+function requestContractPaymentTypeChange(user, contract, payload, appData, allPaymentRequests) {
+  if (contract.creator !== user.username) {
+    throw new HttpError(403, 'Bạn chỉ có thể yêu cầu đổi hình thức thanh toán cho hồ sơ hợp đồng do chính mình tạo!');
+  }
+  if (contract.approvalStatus !== 'APPROVED') {
+    throw new HttpError(409, 'Hợp đồng chưa được phê duyệt xong, vui lòng sửa trực tiếp thay vì yêu cầu đổi hình thức thanh toán');
+  }
+  if (contract.pendingPaymentTypeChange) {
+    throw new HttpError(409, 'Hợp đồng đang có 1 yêu cầu đổi hình thức thanh toán khác chờ duyệt');
+  }
+  const hasPaymentRequest = (allPaymentRequests || []).some(pr => pr.sourceModule === 'CONTRACT' && pr.sourceId === contract.id);
+  if (hasPaymentRequest) {
+    throw new HttpError(409, 'Hợp đồng đã có đề nghị thanh toán, không thể đổi hình thức thanh toán nữa');
+  }
+
+  // Cùng luật normalize/validate như editContract() ~144-146/120-139 ở trên — không tin nguyên văn
+  // client gửi, tổng các đợt vẫn phải khớp giá trị hợp đồng HIỆN TẠI (amount không đổi ở luồng này).
+  const newPaymentType = payload?.newPaymentType === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
+  const rawInstallments = Array.isArray(payload?.newPaymentInstallments) ? payload.newPaymentInstallments : [];
+  const newPaymentInstallments = rawInstallments.map(it => ({
+    description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || ''
+  }));
+  if (newPaymentInstallments.length) {
+    if (newPaymentInstallments.some(it => !(it.amount > 0))) {
+      throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+    }
+    const sum = newPaymentInstallments.reduce((s, it) => s + it.amount, 0);
+    if (Math.abs(sum - contract.amount) > 1) {
+      throw new HttpError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${contract.amount.toLocaleString('vi-VN')})`);
+    }
+  }
+
+  const reason = String(payload?.reason || '').trim().slice(0, 500);
+  contract.pendingPaymentTypeChange = {
+    newPaymentType, newPaymentInstallments,
+    requestedBy: user.username, requestedByName: user.name,
+    requestedAt: nowVN(), reason
+  };
+  return contract;
+}
+
+function approveContractPaymentTypeChange(user, contract, appData) {
+  if (!contract.pendingPaymentTypeChange) {
+    throw new HttpError(409, 'Hợp đồng này không có yêu cầu đổi hình thức thanh toán nào đang chờ duyệt');
+  }
+  if (!isApproverForContractManageWorkflow(user, contract, appData)) {
+    throw new HttpError(403, 'Bạn không có quyền duyệt đổi hình thức thanh toán cho hợp đồng này');
+  }
+  const req = contract.pendingPaymentTypeChange;
+  contract.paymentTypeChangeHistory = Array.isArray(contract.paymentTypeChangeHistory) ? contract.paymentTypeChangeHistory : [];
+  contract.paymentTypeChangeHistory.push({
+    requestedBy: req.requestedBy, requestedByName: req.requestedByName, requestedAt: req.requestedAt, reason: req.reason,
+    fromPaymentType: contract.paymentType, fromPaymentInstallments: contract.paymentInstallments || [],
+    toPaymentType: req.newPaymentType, toPaymentInstallments: req.newPaymentInstallments,
+    approvedBy: user.username, approvedByName: user.name, approvedAt: nowVN()
+  });
+  contract.paymentType = req.newPaymentType;
+  contract.paymentInstallments = req.newPaymentInstallments;
+  contract.pendingPaymentTypeChange = null;
+  return contract;
+}
+
+function rejectContractPaymentTypeChange(user, contract, payload, appData) {
+  if (!contract.pendingPaymentTypeChange) {
+    throw new HttpError(409, 'Hợp đồng này không có yêu cầu đổi hình thức thanh toán nào đang chờ duyệt');
+  }
+  if (!isApproverForContractManageWorkflow(user, contract, appData)) {
+    throw new HttpError(403, 'Bạn không có quyền từ chối yêu cầu đổi hình thức thanh toán cho hợp đồng này');
+  }
+  const reason = String(payload?.reason || '').trim().slice(0, 500);
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
+  const req = contract.pendingPaymentTypeChange;
+  contract.paymentTypeChangeHistory = Array.isArray(contract.paymentTypeChangeHistory) ? contract.paymentTypeChangeHistory : [];
+  contract.paymentTypeChangeHistory.push({
+    requestedBy: req.requestedBy, requestedByName: req.requestedByName, requestedAt: req.requestedAt, reason: req.reason,
+    fromPaymentType: contract.paymentType, fromPaymentInstallments: contract.paymentInstallments || [],
+    toPaymentType: req.newPaymentType, toPaymentInstallments: req.newPaymentInstallments,
+    rejectedBy: user.username, rejectedByName: user.name, rejectedAt: nowVN(), rejectReason: reason
+  });
+  contract.pendingPaymentTypeChange = null;
+  return contract;
+}
+
 // ===================== "BỔ SUNG" cho Tài Liệu / Đăng Ký Xe / Mua Bán-Sửa Chữa-Đầu Tư / Văn Bản Trình =====================
 // Khi người duyệt bước hiện tại bấm "Bổ Sung" (REQUEST_CHANGES — xem lib/workflowEngine.js
 // MODULE_CONFIGS), hồ sơ bị đưa về NHÁP (status/currentStep reset về 0). 4 cặp hàm dưới đây (theo
@@ -5100,8 +5206,30 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, al
     employeeUsername: employee.username, employeeName: employee.name,
     items,
     note: (payload?.note || '').trim().slice(0, 500),
-    createdAt: nowVN()
+    createdAt: nowVN(),
+    // ackStatus (mới): cấp phát xong KHÔNG còn coi là hoàn tất ngay — nhân viên phải tự bấm "Xác nhận đã
+    // nhận" (acknowledgeUniformIssuance() bên dưới). CHỈ là xác nhận đã nhận, KHÔNG chặn/ảnh hưởng tính
+    // tồn kho hay số đang giữ (computeUniformStock()/computeAllEmployeeUniformHoldings() không đổi, vẫn
+    // tính ngay lúc cấp phát như trước) — đây thuần là 1 bước xác nhận nghiệp vụ bổ sung.
+    ackStatus: 'PENDING_ACK', ackAt: null, ackByName: null
   };
+}
+
+// Nhân viên tự xác nhận ĐÃ NHẬN đúng phiếu cấp phát của MÌNH — xác thực lại quyền ở server (không tin
+// client, mirror style acceptTask() ~2545): chỉ đúng employeeUsername mới gọi được (403 nếu không phải
+// mình), chặn nếu đã ACKNOWLEDGED rồi (409). Không đổi gì khác của phiếu (items/tồn kho không phụ thuộc
+// bước này).
+function acknowledgeUniformIssuance(user, item) {
+  if (!item || item.employeeUsername !== user.username) {
+    throw new HttpError(403, 'Bạn chỉ xác nhận được phiếu cấp phát của chính mình');
+  }
+  if (item.ackStatus === 'ACKNOWLEDGED') {
+    throw new HttpError(409, 'Phiếu này đã được xác nhận trước đó');
+  }
+  item.ackStatus = 'ACKNOWLEDGED';
+  item.ackAt = nowVN();
+  item.ackByName = user.name;
+  return item;
 }
 
 // Xây (KHÔNG ghi) 1 bản ghi uniformStockAdjustments mới — báo Hỏng/Hủy trực tiếp từ tồn kho (source=
@@ -5701,7 +5829,8 @@ module.exports = {
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod,
   stripVietnameseDiacritics, abbreviateUniformItemName, computeNextUniformSkuSeq, generateUniformSkuCode, backfillUniformSkuCodes,
-  confirmUniformAllocation, buildUniformIssuance, buildUniformStockAdjustment,
+  requestContractPaymentTypeChange, approveContractPaymentTypeChange, rejectContractPaymentTypeChange,
+  confirmUniformAllocation, buildUniformIssuance, acknowledgeUniformIssuance, buildUniformStockAdjustment,
   canApproveUniformTransfer, buildUniformTransfer, approveUniformTransfer, rejectUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,

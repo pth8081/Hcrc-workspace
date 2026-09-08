@@ -76,6 +76,52 @@ async function withContractAction(req, res, action, mutator) {
 router.post('/contracts/:id/upload-signed', (req, res) =>
   withContractAction(req, res, 'upload-signed', recordActions.uploadContractSignedFile));
 
+// Đổi Hình Thức Thanh Toán sau khi hợp đồng đã APPROVED — qua phê duyệt lại bởi ĐÚNG nhóm người duyệt
+// "Tài liệu ký" (contractManageDeptWorkflows[dept], xem isApproverForContractManageWorkflow() ở
+// lib/recordActions.js). appData cần cho resolveContractManageWorkflow() (workflowEngine.js) tra cứu
+// approvers theo dept + danh sách paymentRequests để chặn nếu hợp đồng đã có đề nghị thanh toán.
+router.post('/contracts/:id/request-payment-type-change', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const [appData, allPaymentRequests] = await Promise.all([getAllAppData(), getAllForCollection('paymentRequests')]);
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
+      recordActions.requestContractPaymentTypeChange(freshUser, item, req.body, appData, allPaymentRequests));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/request-payment-type-change`, err);
+  }
+});
+
+router.post('/contracts/:id/approve-payment-type-change', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
+      recordActions.approveContractPaymentTypeChange(freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/approve-payment-type-change`, err);
+  }
+});
+
+router.post('/contracts/:id/reject-payment-type-change', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
+      recordActions.rejectContractPaymentTypeChange(freshUser, item, req.body, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/reject-payment-type-change`, err);
+  }
+});
+
 // "Chuyển Sang Thanh Toán" KHÔNG dùng withContractAction() thường — mutatorFn trả về BẢN NHÁP đề nghị
 // thanh toán (chưa lưu) thay vì bản ghi hợp đồng, PHẢI insert thêm vào collection paymentRequests
 // ngay sau khi khoá hợp đồng nhả ra (cùng khuôn insertMinutesTasks() ở /minutes/:id/assign-tasks bên
@@ -2579,6 +2625,22 @@ router.post('/uniformIssuances/create', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, 'uniformIssuances/create', err);
+  }
+});
+
+// Nhân viên tự xác nhận đã nhận đúng phiếu cấp phát CỦA MÌNH — khoá theo bản ghi phiếu (mirror
+// uniformPeriods/:id/approve ở trên). Quyền xác thực lại hoàn toàn ở server (acknowledgeUniformIssuance()),
+// không tin cờ hiện/ẩn nút ở client.
+router.post('/uniformIssuances/:id/acknowledge', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformIssuances', itemId, (item) =>
+      recordActions.acknowledgeUniformIssuance(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformIssuances/${req.params.id}/acknowledge`, err);
   }
 });
 

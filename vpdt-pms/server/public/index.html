@@ -3286,6 +3286,7 @@
               <th class="border p-2">Mặt Hàng</th>
               <th class="border p-2">Ngày Cấp</th>
               <th class="border p-2">Người Cấp</th>
+              <th class="border p-2 text-center">Xác Nhận Đã Nhận</th>
             </tr></thead>
             <tbody id="uniformIssuancesTableBody"></tbody>
           </table>
@@ -3302,6 +3303,7 @@
               <th class="border p-2">Mặt Hàng</th>
               <th class="border p-2">Size</th>
               <th class="border p-2 text-right">Đang Giữ</th>
+              <th class="border p-2 text-center">Xác Nhận Đã Nhận</th>
               <th class="border p-2 text-center">Thao Tác</th>
             </tr></thead>
             <tbody id="uniformHoldingsTableBody"></tbody>
@@ -3983,6 +3985,40 @@
         <button data-op="submitPaymentConfirmUpload" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Xác Nhận Thanh Toán</button>
       </div>
     </div>
+  </div>
+
+  <!-- Modal "✏️ Đổi Hình Thức Thanh Toán" (yêu cầu mới, hợp đồng ĐÃ APPROVED) — mirror nhẹ khối Loại
+       Thanh Toán/Các Đợt Thanh Toán ở form Sửa hợp đồng thường (#contractPaymentType/#contractInstallmentsList),
+       NHƯNG dùng ID riêng (cptc*) vì 2 khối không thể trùng id trong cùng 1 trang. Gửi đi KHÔNG áp dụng
+       ngay — tạo pendingPaymentTypeChange chờ đúng nhóm người duyệt "Tài liệu ký" (contractManageDeptWorkflows)
+       duyệt, xem openContractPaymentTypeChangeModal()/submitContractPaymentTypeChange() ở module-hopdong.js. -->
+  <div id="contractPaymentTypeChangeModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <form data-op-submit="submitContractPaymentTypeChange" class="bg-white rounded-lg p-5 w-full max-w-lg space-y-3 text-xs max-h-[90vh] overflow-y-auto">
+      <h3 class="font-bold text-gray-800 text-base">✏️ Đổi Hình Thức Thanh Toán</h3>
+      <p class="text-gray-500">Yêu cầu này cần được đúng nhóm người duyệt "Tài liệu ký" của phòng ban duyệt lại trước khi có hiệu lực — hình thức thanh toán hiện tại vẫn giữ nguyên cho tới khi được duyệt.</p>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Loại Thanh Toán</label>
+        <select id="cptcPaymentType" class="w-full border p-1.5 rounded bg-white font-semibold">
+          <option value="ONE_TIME">Thanh toán 1 lần</option>
+          <option value="PERIODIC">Thanh toán định kỳ</option>
+        </select>
+      </div>
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="block font-semibold text-gray-600">Các Đợt Thanh Toán (tuỳ chọn — để trống = 1 đợt toàn bộ giá trị)</label>
+          <button type="button" data-op="addCptcInstallmentRow" class="text-emerald-700 font-bold hover:underline">+ Thêm Đợt</button>
+        </div>
+        <div id="cptcInstallmentsList" class="space-y-2"></div>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Lý Do Đổi</label>
+        <textarea id="cptcReason" rows="2" class="w-full border p-1.5 rounded" placeholder="Không bắt buộc"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" data-op="closeContractPaymentTypeChangeModal" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+        <button type="submit" class="bg-teal-600 text-white px-4 py-1.5 rounded font-bold hover:bg-teal-700">Gửi Yêu Cầu</button>
+      </div>
+    </form>
   </div>
 
   <!-- Màn hình 4: Tab Quản Trị Hệ Thống & Phân Quyền -->
@@ -6281,6 +6317,11 @@
               <input type="file" id="voFile" data-op-change="handleOperationOrderPdfUpload" class="w-full border p-1.5 rounded bg-white">
               <div id="voFileChip" class="mt-1 flex flex-wrap gap-1"></div>
               <div id="voPdfParseStatus" class="hidden"></div>
+              <!-- Chỉ hiện SAU khi đọc PDF thành công (khoá field, xem applyOperationOrderPoLock() ở
+                   module-vanhanh.js) — xoá cờ khoá + tệp PDF đã chọn để chọn lại file khác/chuyển sang gõ
+                   tay tự do, KHÔNG mất phần đã nhập ở Tiêu Đề/Nhà Cung Cấp/Ghi Chú (khác "↺ Làm Mới" bên
+                   dưới, reset TOÀN BỘ form). -->
+              <button type="button" id="btnOperationOrderPoUnlock" data-op="resetOperationOrderPoLock" class="hidden mt-1 text-[11px] font-bold text-amber-700 hover:underline">🔄 Nhập Lại Từ Đầu (mở khoá, chọn file khác/gõ tay)</button>
             </div>
           </div>
           <div class="border-t pt-3">
@@ -8117,6 +8158,7 @@
       <button type="button" id="btnProfileSubPin" data-op="setProfileSubTab" data-arg0="PIN" class="hidden px-3 py-1.5 rounded font-bold">🔑 Đổi Mã PIN</button>
       <button type="button" id="btnProfileSubWebauthn" data-op="setProfileSubTab" data-arg0="WEBAUTHN" class="hidden px-3 py-1.5 rounded font-bold">🖐️ Vân Tay/Face ID</button>
       <button type="button" id="btnProfileSubTotp" data-op="setProfileSubTab" data-arg0="TOTP" class="hidden px-3 py-1.5 rounded font-bold">🔐 Xác Thực 2 Lớp</button>
+      <button type="button" id="btnProfileSubUniform" data-op="setProfileSubTab" data-arg0="UNIFORM" class="px-3 py-1.5 rounded font-bold">👕 Đồng Phục Của Tôi</button>
     </div>
 
     <div id="profileSubInfo" class="text-xs">
@@ -8234,6 +8276,19 @@
       </div>
       <div class="flex justify-end">
         <button type="button" data-op="removeMyTotp" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">🗑️ Gỡ Xác Thực 2 Lớp</button>
+      </div>
+    </div>
+
+    <!-- Đồng Phục Của Tôi (yêu cầu xác nhận đã nhận) — LUÔN hiện cho MỌI tài khoản (không kèm điều kiện
+         quyền uniformManage/uniformStoreManage như module "Đồng Phục" đầy đủ ở tab Hành Chính, module đó
+         KHÔNG mở sẵn cho nhân viên thường). Đặt ở Hồ Sơ Cá Nhân (đã mở sẵn cho mọi người) là chỗ ít xáo
+         trộn nhất — xem renderMyUniformIssuancesTable() ở module-dongphuc.js (nạp lười qua
+         loadModuleGroup('dongphuc') ở openProfileModal(), vì module này bình thường chỉ nạp khi vào
+         module Đồng Phục đầy đủ). -->
+    <div id="pfUniformSection" class="hidden space-y-2 text-xs">
+      <p class="text-[11px] text-gray-500">Các phiếu đồng phục đã được cấp cho bạn — bấm "Xác nhận đã nhận" sau khi thực nhận đầy đủ.</p>
+      <div id="pfUniformListWrap" class="space-y-2">
+        <p class="text-center text-gray-500 italic p-4">⏳ Đang tải...</p>
       </div>
     </div>
 

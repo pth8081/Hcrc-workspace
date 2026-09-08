@@ -109,18 +109,15 @@ function generateAddendumCode(rootContract) {
   return `${rootContract.code}-PLHD${String(seq).padStart(2, '0')}`;
 }
 
-// ============ MÃ TỰ SINH cho 7 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
+// ============ MÃ TỰ SINH cho 7+1 module trước đây phải gõ tay: Văn Bản Trình, Đăng Ký Xe, Mua Bán/Sửa
 // Chữa/Đầu Tư (dùng chung 1 form theo activeOfficeSubTab), Biên Bản Họp, Đặt Phòng Họp, Phê Duyệt Giá
-// IT, Ticket Hỗ Trợ IT. Định dạng HCRC-<viết tắt module>-<ngày tạo YYYYMMDD>-<số thứ tự 3 số>, số thứ
-// tự đánh RIÊNG theo từng ngày+module (không dùng chung 1 dãy số toàn hệ thống). Lấy số LỚN NHẤT từng
-// xuất hiện (không phải đếm số lượng còn lại) — cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh
-// trùng mã nếu 1 bản ghi ở giữa dãy số đã bị admin xóa trước đó (trước đây đếm-theo-số-lượng nên xóa 1
-// bản ghi giữa dãy 001/002/003 sẽ khiến bản ghi mới sinh lại đúng mã 003 đang tồn tại, bị chặn "Mã đã
-// tồn tại" — đúng lỗi người dùng báo lại).
-function todayCodeDatePart() {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-}
+// IT, Ticket Hỗ Trợ IT, VÀ Vận Hành > Đặt Hàng (generateOperationOrderCode(), module-vanhanh.js). Định
+// dạng THỐNG NHẤT với Hợp Đồng/Tài Liệu (generateContractCode()/generateDocCode() ở trên): HCRC-<mã
+// phòng>-<viết tắt module>-<số thứ tự>, KHÔNG còn phần ngày tạo — số thứ tự đánh RIÊNG theo từng cặp
+// (phòng ban, module), lấy số LỚN NHẤT từng xuất hiện của ĐÚNG prefix đó (không phải đếm số lượng còn
+// lại) — cùng nguyên lý computeNextDocSeq() ở trên, tránh sinh trùng mã nếu 1 bản ghi ở giữa dãy số đã
+// bị xóa trước đó. (Trước đây định dạng là HCRC-<module>-<ngày YYYYMMDD>-<số>, không có mã phòng, reset
+// số thứ tự theo từng ngày — đã đổi theo yêu cầu thống nhất định dạng toàn hệ thống.)
 function computeNextHcrcSeq(records, prefix) {
   const existing = records.filter(r => (r.code || '').startsWith(prefix));
   return existing.reduce((max, r) => {
@@ -128,22 +125,31 @@ function computeNextHcrcSeq(records, prefix) {
     return Number.isFinite(n) && n > max ? n : max;
   }, 0) + 1;
 }
-function generateHcrcCode(records, moduleAbbr) {
-  const prefix = `HCRC-${moduleAbbr}-${todayCodeDatePart()}-`;
+function generateHcrcCode(records, deptAbbr, moduleAbbr) {
+  const prefix = `HCRC-${deptAbbr}-${moduleAbbr}-`;
   const seq = computeNextHcrcSeq(records, prefix);
   return `${prefix}${String(seq).padStart(3, '0')}`;
 }
-function generateSubCode() { return generateHcrcCode(DB.submissions, 'VBT'); }
-function generateCarCode() { return generateHcrcCode(DB.carRegs, 'DKX'); }
-// Mua Bán/Sửa Chữa/Đầu Tư dùng CHUNG 1 form (activeOfficeSubTab quyết định), mỗi loại 1 viết tắt riêng.
+// Văn Bản Trình có thể trình THAY MẶT phòng ban khác (#subDept chọn tự do trong scope submissionCreate)
+// -> mã phòng LUÔN theo lựa chọn ĐANG CHỌN ở đó, KHÔNG dùng currentUser.dept.
+function generateSubCode() { return generateHcrcCode(DB.submissions, getDeptAbbr(document.getElementById('subDept').value), 'VBT'); }
+// Đăng Ký Xe cũng có #carDept chọn tự do (trong scope carCreate, KHÔNG forceOwnDept) — cùng lý do trên.
+function generateCarCode() { return generateHcrcCode(DB.carRegs, getDeptAbbr(document.getElementById('carDept').value), 'DKX'); }
+// Mua Bán/Sửa Chữa/Đầu Tư dùng CHUNG 1 form (activeOfficeSubTab quyết định), mỗi loại 1 viết tắt riêng —
+// officeReqs forceOwnDept: true (lib/createValidation.js), không có ô chọn phòng ban -> currentUser.dept.
 function generateOfficeCode() {
   const abbr = activeOfficeSubTab === 'SUA_CHUA' ? 'SC' : 'MB';
-  return generateHcrcCode(DB.officeReqs, abbr);
+  return generateHcrcCode(DB.officeReqs, getDeptAbbr(currentUser.dept), abbr);
 }
-function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, 'BBH'); }
-function generateMeetingCode() { return generateHcrcCode(DB.meetings, 'DPH'); }
-function generateItPriceCode() { return generateHcrcCode(DB.itPriceApprovals, 'ITPG'); }
-function generateItTicketCode() { return generateHcrcCode(DB.itSupportTickets, 'ITHT'); }
+// Biên Bản Họp KHÔNG có khái niệm phòng ban (kênh chung, không giới hạn theo phòng ban — không có ô
+// chọn trên form) -> currentUser.dept (phòng ban người lập biên bản).
+function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, getDeptAbbr(currentUser.dept), 'BBH'); }
+// Đặt Phòng Họp có #meetingDept chọn tự do (trong scope meetingBookScope) — cùng lý do subDept/carDept.
+function generateMeetingCode() { return generateHcrcCode(DB.meetings, getDeptAbbr(document.getElementById('meetingDept').value), 'DPH'); }
+// Phê Duyệt Giá IT forceOwnDept: true (chỉ hiện readonly #itPriceDeptDisplay = currentUser.dept).
+function generateItPriceCode() { return generateHcrcCode(DB.itPriceApprovals, getDeptAbbr(currentUser.dept), 'ITPG'); }
+// Ticket Hỗ Trợ IT forceOwnDept: true, không có ô chọn phòng ban nào trên form.
+function generateItTicketCode() { return generateHcrcCode(DB.itSupportTickets, getDeptAbbr(currentUser.dept), 'ITHT'); }
 
 // Số thứ tự TIẾP THEO cho Mã Quy Trình (WF<số>) — lấy số LỚN NHẤT từng xuất hiện (không phải đếm số
 // lượng còn lại), cùng nguyên lý computeNextDocSeq() ở trên — tránh sinh trùng mã nếu 1 mẫu quy trình
@@ -607,7 +613,7 @@ function onLicenseOpModeChange() {
     document.getElementById('licenseUpdateTarget').value = '';
     onLicenseUpdateTargetChange();
   } else {
-    document.getElementById('licenseCode').value = generateHcrcCode(DB.licenses, 'GP');
+    document.getElementById('licenseCode').value = generateHcrcCode(DB.licenses, getDeptAbbr(currentUser.dept), 'GP');
     document.getElementById('licenseCompanyName').value = '';
     document.getElementById('licenseLocationName').value = '';
     document.getElementById('licenseOperatingStatus').value = 'ACTIVE';
@@ -1129,7 +1135,7 @@ async function uploadLicense(e) {
     code = `${displayCode}-V${versionNumber}`;
     rootLicenseId = rootId;
   } else {
-    code = generateHcrcCode(DB.licenses, 'GP');
+    code = generateHcrcCode(DB.licenses, getDeptAbbr(currentUser.dept), 'GP');
     displayCode = code;
     versionNumber = 1;
     rootLicenseId = null;

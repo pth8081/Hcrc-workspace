@@ -8,6 +8,12 @@
 // LƯU Ý BẢO TRÌ: scopeAllows() PHẢI giữ giống hệt hàm cùng tên trong index.html (2 cài đặt độc lập,
 // xem lib/workflowEngine.js để biết lý do không import chung được).
 const { HttpError: CreateError } = require('./httpErrors');
+// CODE_SEQ_SUFFIX_RE/computeNextSeqForPrefix() — dùng lại ĐÚNG helper "tự sinh mã mới khi trùng"
+// (server tự retry) mà insertRecord() (lib/recordStore.js) dùng, để validateAndPrepareCreate() bên dưới
+// KHÔNG còn ném lỗi 409 ngay khi phát hiện trùng payload.code (đây mới là điểm chặn ĐẦU TIÊN gặp phải —
+// TRƯỚC CẢ khi tới insertRecord(), nên phải tự sửa ở đây thì retry mới thực sự có tác dụng cho các
+// module tạo qua routes/create.js). Không có vòng require ngược: recordStore.js không require file này.
+const { CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix } = require('./recordStore');
 // vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
@@ -766,6 +772,22 @@ const CREATE_MODULE_CONFIGS = {
         const d = new Date(payload.deliveryDate);
         payload.deliveryDate = Number.isNaN(d.getTime()) ? '' : d.toISOString();
       } else payload.deliveryDate = '';
+      // Chặn trùng Số Đơn NCC (poNumber) — TÁCH RIÊNG theo orderLocationType (1 STORE + 1 HO cùng số vẫn
+      // hợp lệ, vì 2 quy trình duyệt hoàn toàn độc lập theo mức giá trị riêng — xem
+      // resolveOperationOrderWorkflow() ở lib/workflowEngine.js). Bỏ qua khi poNumber rỗng (field tùy
+      // chọn, không phải đơn nào cũng đọc được từ PDF NCC). Loại trừ đơn đã REJECTED/RECEIPT_CANCELLED
+      // (2 trạng thái "không tính" — xem operationStatusBadge() ở module-vanhanh.js): đơn cũ đã huỷ/bị từ
+      // chối không còn giữ chỗ số đơn NCC đó nữa, đặt lại đúng số cũ ở đơn MỚI vẫn hợp lệ.
+      if (payload.poNumber) {
+        const dupe = (collection || []).some(o =>
+          o.orderLocationType === payload.orderLocationType &&
+          o.poNumber === payload.poNumber &&
+          o.status !== 'REJECTED' && o.status !== 'RECEIPT_CANCELLED'
+        );
+        if (dupe) {
+          throw new CreateError(409, `Số đơn NCC "${payload.poNumber}" đã tồn tại trong đơn hàng khác (cùng loại Siêu Thị/HO)`);
+        }
+      }
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
@@ -2700,10 +2722,28 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   }
 
   if (payload.code) {
-    const dup = (existingCollection || []).some(item => item.code === payload.code);
-    if (dup) throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
-    if ((trashedItems || []).some(t => t.code === payload.code)) {
-      throw new CreateError(409, `Mã "${payload.code}" đã từng được dùng cho 1 hồ sơ đã xoá — vui lòng chọn mã khác`);
+    const isDup = (code) => (existingCollection || []).some(item => item.code === code)
+      || (trashedItems || []).some(t => t.code === code);
+    if (isDup(payload.code)) {
+      // Trùng mã (kể cả trùng mã của 1 hồ sơ đã xoá) — TRƯỚC ĐÂY ném lỗi 409 ngay, bắt người dùng tự bấm
+      // lại. Mã được TÍNH Ở CLIENT trước khi gửi (generateHcrcCode()/generateDocCode()/... —
+      // module-tailieu.js) nên đây là điểm chặn ĐẦU TIÊN gặp trùng mã (TRƯỚC CẢ khi tới insertRecord() ở
+      // lib/recordStore.js, nơi có UNIQUE INDEX chặn race THẬT SỰ) — client stale hoặc 2 người tạo gần
+      // như đồng thời đều rơi vào đây trước. Tự thử sinh mã MỚI (cùng thuật toán "lấy số lớn nhất từng
+      // có +1" với insertRecord(), tính NGAY từ existingCollection/trashedItems đã có sẵn trong tay,
+      // không cần đọc DB thêm lần nào — dữ liệu này vốn đã được CALLER đọc mới nhất ngay trước khi gọi
+      // hàm này) — hết đường tự sửa (không có chữ số cuối để tăng) mới ném lỗi như cũ.
+      const m = CODE_SEQ_SUFFIX_RE.exec(String(payload.code));
+      if (!m) throw new CreateError(409, `Mã "${payload.code}" đã tồn tại`);
+      const [, prefix, digitsStr] = m;
+      // "Số lớn nhất từng có +1" tính trên CẢ live lẫn đã xoá -> luôn > mọi số đã từng thấy cho ĐÚNG
+      // prefix này, nên chuỗi pad ra chắc chắn khác mọi code hiện có cùng prefix (padStart không CẮT bớt
+      // chữ số, chỉ không thêm nếu số mới đã đủ/dài hơn độ rộng gốc) — không cần vòng lặp thử lại ở đây.
+      // Trường hợp cực hiếm còn sót (race thật giữa lúc tính và lúc ghi) do insertRecord() (lib/recordStore.js)
+      // tự lo tiếp, đọc lại real-time từ DB.
+      const combined = [...(existingCollection || []), ...(trashedItems || [])];
+      const nextSeq = computeNextSeqForPrefix(combined, prefix);
+      payload.code = prefix + String(nextSeq).padStart(digitsStr.length, '0');
     }
   }
 

@@ -358,7 +358,10 @@ async function submitCurrentBudgetEntry(kind) {
   });
 }
 
-function generateBudgetEntryCode() { return generateHcrcCode(DB.budgetEntries, 'NS'); }
+// budgetEntries forceOwnDept: true (lib/createValidation.js), không có ô chọn phòng ban riêng trên form
+// -> currentUser.dept (đồng bộ định dạng chung generateHcrcCode(records, deptAbbr, moduleAbbr), xem
+// module-tailieu.js).
+function generateBudgetEntryCode() { return generateHcrcCode(DB.budgetEntries, getDeptAbbr(currentUser.dept), 'NS'); }
 
 function budgetEntryStatusBadge(e) {
   if (e.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;

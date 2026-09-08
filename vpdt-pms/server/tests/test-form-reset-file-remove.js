@@ -244,7 +244,7 @@ async function main() {
         assertTrue(state.subDept === 'Phòng Kinh Doanh', `subDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.subDept}"`);
         assertTrue(state.subTitle === '', 'subTitle phải về rỗng');
         assertTrue(state.subContent === '', 'subContent phải về rỗng');
-        assertTrue(/^HCRC-VBT-/.test(state.subCode), `subCode phải được sinh lại đúng khuôn HCRC-VBT-..., thực tế "${state.subCode}"`);
+        assertTrue(/^HCRC-[^-]+-VBT-/.test(state.subCode), `subCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-VBT-..., thực tế "${state.subCode}"`);
         assertTrue(state.subFileValue === '', 'subFile input phải về rỗng');
         assertTrue(state.subFileChip === '', 'Chip subFile phải biến mất sau Làm Mới');
         assertTrue(state.subExtraFilesValue === '', 'subExtraFiles input phải về rỗng');
@@ -376,7 +376,7 @@ async function main() {
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
         assertTrue(state.licenseOpMode === 'NEW', `licenseOpMode phải về "NEW" sau Làm Mới, thực tế "${state.licenseOpMode}"`);
         assertTrue(state.licenseCompanyName === '', 'licenseCompanyName phải về rỗng');
-        assertTrue(/^HCRC-GP-/.test(state.licenseCode), `licenseCode phải được sinh lại đúng khuôn HCRC-GP-..., thực tế "${state.licenseCode}"`);
+        assertTrue(/^HCRC-[^-]+-GP-/.test(state.licenseCode), `licenseCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-GP-..., thực tế "${state.licenseCode}"`);
         assertTrue(state.licenseFileValue === '', 'licenseFile input phải về rỗng');
         assertTrue(state.licenseFileChip === '', 'Chip licenseFile phải biến mất sau Làm Mới');
       }
@@ -429,7 +429,7 @@ async function main() {
         assertTrue(state.carDept === 'Phòng Kinh Doanh', `carDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.carDept}"`);
         assertTrue(state.carPassengers === '', 'carPassengers phải về rỗng');
         assertTrue(state.carReason === '', 'carReason phải về rỗng');
-        assertTrue(/^HCRC-DKX-/.test(state.carCode), `carCode phải được sinh lại đúng khuôn HCRC-DKX-..., thực tế "${state.carCode}"`);
+        assertTrue(/^HCRC-[^-]+-DKX-/.test(state.carCode), `carCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-DKX-..., thực tế "${state.carCode}"`);
         assertTrue(state.routeInputsCount === 2, `Lộ Trình Di Chuyển phải về lại ĐÚNG 2 ô (không phải 3 ô vừa nhập, cũng không phải 0), thực tế ${state.routeInputsCount}`);
         assertTrue(state.routeInputValues.every(v => v === ''), `Cả 2 ô Lộ Trình phải trống sau Làm Mới, thực tế ${JSON.stringify(state.routeInputValues)}`);
         assertTrue(state.carDestination === '', 'carDestination (hidden, ghép từ Lộ Trình) phải trống sau Làm Mới');
@@ -469,7 +469,7 @@ async function main() {
         assertTrue(state.meetingDept === 'Phòng Kinh Doanh', `meetingDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.meetingDept}"`);
         assertTrue(state.meetingTitle === '', 'meetingTitle phải về rỗng');
         assertTrue(state.meetingAgenda === '', 'meetingAgenda phải về rỗng');
-        assertTrue(/^HCRC-DPH-/.test(state.meetingCode), `meetingCode phải được sinh lại đúng khuôn HCRC-DPH-..., thực tế "${state.meetingCode}"`);
+        assertTrue(/^HCRC-[^-]+-DPH-/.test(state.meetingCode), `meetingCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-DPH-..., thực tế "${state.meetingCode}"`);
       }
     );
 
@@ -517,7 +517,7 @@ async function main() {
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
         assertTrue(state.minutesTitle === '', 'minutesTitle phải về rỗng');
         assertTrue(state.minutesContent === '', 'minutesContent phải về rỗng');
-        assertTrue(/^HCRC-BBH-/.test(state.minutesCode), `minutesCode phải được sinh lại đúng khuôn HCRC-BBH-..., thực tế "${state.minutesCode}"`);
+        assertTrue(/^HCRC-[^-]+-BBH-/.test(state.minutesCode), `minutesCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-BBH-..., thực tế "${state.minutesCode}"`);
         assertTrue(state.attendeeRows === 0, `Bảng Thành Phần Tham Dự phải về ĐÚNG 0 dòng sau Làm Mới, thực tế ${state.attendeeRows}`);
         assertTrue(state.directiveRows === 0, `Bảng Ý Kiến Chỉ Đạo phải về ĐÚNG 0 dòng sau Làm Mới, thực tế ${state.directiveRows}`);
         assertTrue(state.submitBtnText === 'Lưu Biên Bản Họp', `Nút Lưu phải về lại nhãn gốc, thực tế "${state.submitBtnText}"`);
@@ -562,7 +562,7 @@ async function main() {
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
         assertTrue(state.offDept === 'Phòng Kinh Doanh', `offDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.offDept}"`);
         assertTrue(state.offTitle === '', 'offTitle phải về rỗng');
-        assertTrue(/^HCRC-MB-/.test(state.offCode), `offCode phải được sinh lại đúng khuôn HCRC-MB-... (Mua Bán), thực tế "${state.offCode}"`);
+        assertTrue(/^HCRC-[^-]+-MB-/.test(state.offCode), `offCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-MB-... (Mua Bán), thực tế "${state.offCode}"`);
         assertTrue(state.itemRows === 1, `Bảng Hạng Mục phải collapse về ĐÚNG 1 dòng trống sau Làm Mới, thực tế ${state.itemRows}`);
         assertTrue(state.itemRowName === '', `Dòng Hạng Mục còn lại phải trống (Tên Tài Sản), thực tế "${state.itemRowName}"`);
       }
@@ -1079,7 +1079,7 @@ async function main() {
         assertTrue(state.itPriceTier === '', `Mức Margin/Chiết Khấu phải về rỗng sau Làm Mới, thực tế "${state.itPriceTier}"`);
         assertTrue(state.activeSubTab === 'WHOLESALE', `Sub-tab Bán Buôn KHÔNG được tự đổi lại Bán Lẻ khi Làm Mới (chỉ xoá giá trị đã chọn), thực tế "${state.activeSubTab}"`);
         assertTrue(state.tierWrapHidden === false, 'Khối Mức Margin/Chiết Khấu vẫn phải HIỆN (đang ở Bán Buôn) — chỉ giá trị bị xoá, không ẩn khối');
-        assertTrue(/^HCRC-ITPG-/.test(state.itPriceCode), `itPriceCode phải được sinh lại đúng khuôn HCRC-ITPG-..., thực tế "${state.itPriceCode}"`);
+        assertTrue(/^HCRC-[^-]+-ITPG-/.test(state.itPriceCode), `itPriceCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-ITPG-..., thực tế "${state.itPriceCode}"`);
         assertTrue(state.itPriceDeptDisplay === 'Ban Giám Đốc', `itPriceDeptDisplay phải về đúng phòng ban hiện tại, thực tế "${state.itPriceDeptDisplay}"`);
         assertTrue(state.itPriceFileValue === '', 'itPriceFileInput phải về rỗng');
         assertTrue(state.itPriceFileChip === '', 'Chip itPriceFileInput phải biến mất sau Làm Mới');
@@ -1382,7 +1382,7 @@ async function main() {
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
         assertTrue(state.voTitle === '', 'voTitle phải về rỗng');
         assertTrue(state.voSupplier === '', 'voSupplier phải về rỗng');
-        assertTrue(/^HCRC-DH-/.test(state.voCode), `voCode phải được sinh lại đúng khuôn HCRC-DH-..., thực tế "${state.voCode}"`);
+        assertTrue(/^HCRC-[^-]+-DH-/.test(state.voCode), `voCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-DH-..., thực tế "${state.voCode}"`);
         assertTrue(state.voFileValue === '', 'voFile input phải về rỗng');
         assertTrue(state.voFileChip === '', 'Chip voFile phải biến mất sau Làm Mới');
         assertTrue(state.itemRows === 1, `Bảng hạng mục phải collapse về ĐÚNG 1 dòng trống, thực tế ${state.itemRows}`);
@@ -1436,7 +1436,7 @@ async function main() {
         assertTrue(state.vsoOpenDate === '', 'vsoOpenDate phải về rỗng');
         assertTrue(state.vsoPersonInChargeInput === '', 'vsoPersonInChargeInput phải về rỗng');
         assertTrue(state.vsoNote === '', 'vsoNote phải về rỗng');
-        assertTrue(/^HCRC-MMST-/.test(state.vsoCode), `vsoCode phải được sinh lại đúng khuôn HCRC-MMST-..., thực tế "${state.vsoCode}"`);
+        assertTrue(/^HCRC-[^-]+-MMST-/.test(state.vsoCode), `vsoCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-MMST-..., thực tế "${state.vsoCode}"`);
         assertTrue(state.vsoFileValue === '', 'vsoFile input phải về rỗng');
         assertTrue(state.vsoFileChip === '', 'Chip vsoFile phải biến mất sau Làm Mới');
       }
@@ -1484,7 +1484,7 @@ async function main() {
         assertTrue(state.vrSupplier === '', 'vrSupplier phải về rỗng');
         assertTrue(state.vrPersonInChargeInput === '', 'vrPersonInChargeInput phải về rỗng');
         assertTrue(state.vrDescription === '', 'vrDescription phải về rỗng');
-        assertTrue(/^HCRC-SCST-/.test(state.vrCode), `vrCode phải được sinh lại đúng khuôn HCRC-SCST-..., thực tế "${state.vrCode}"`);
+        assertTrue(/^HCRC-[^-]+-SCST-/.test(state.vrCode), `vrCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-SCST-..., thực tế "${state.vrCode}"`);
         assertTrue(state.vrFileValue === '', 'vrFile input phải về rỗng');
         assertTrue(state.vrFileChip === '', 'Chip vrFile phải biến mất sau Làm Mới');
       }

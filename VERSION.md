@@ -1,8 +1,59 @@
 # Phiên bản hiện tại
 
-**13.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v13.5 (2026-09-08): 4 yêu cầu nghiệp vụ — Đồng Phục xác nhận đã nhận, Hợp đồng đổi Hình Thức Thanh
+## Toán qua phê duyệt lại, Vận Hành chặn trùng Số Đơn NCC + khoá sửa sau import PDF, mã tự sinh thống
+## nhất định dạng + server tự retry khi trùng mã
+
+Gộp 4 yêu cầu nghiệp vụ độc lập thành 1 đợt merge (đã xác nhận thiết kế với người dùng trước khi triển
+khai):
+
+1. **Đồng Phục — bắt buộc nhân viên xác nhận đã nhận**: `uniformIssuances` có thêm field
+   `ackStatus` (`PENDING_ACK`/`ACKNOWLEDGED`) + `ackAt`/`ackByName`, mặc định `PENDING_ACK` khi cấp phát
+   (`buildUniformIssuance()`). Route mới `POST /api/records/uniformIssuances/:id/acknowledge` (hàm
+   `acknowledgeUniformIssuance()`, `lib/recordActions.js`) — chỉ đúng nhân viên nhận mới xác nhận được
+   (403 nếu không đúng, 409 nếu đã xác nhận rồi). Không đổi cách tính tồn kho/số đang giữ (vẫn tính ngay
+   lúc cấp phát). Badge "⏳ Chờ xác nhận"/"✅ Đã xác nhận" ở bảng "Lịch Sử Cấp Phát" và "Đang Giữ"
+   (module-dongphuc.js). Nhân viên thường (không có quyền `uniformManage`/`uniformStoreManage`) giờ xem
+   + xác nhận được CHÍNH phiếu của mình qua tab mới "👕 Đồng Phục Của Tôi" ở Hồ Sơ Cá Nhân (mở cho MỌI
+   tài khoản) — mở rộng `canViewUniformIssuance()` (`lib/recordViewScope.js`) cho phần lát cắt này.
+
+2. **Hợp đồng — đổi Hình Thức Thanh Toán sau khi đã APPROVED, qua phê duyệt lại**: chỉ người tạo hợp
+   đồng yêu cầu được, chỉ khi hợp đồng CHƯA có `paymentRequests` nào tham chiếu. Field mới
+   `pendingPaymentTypeChange` trên `contracts` (request KHÔNG áp dụng ngay); duyệt bởi ĐÚNG nhóm người
+   duyệt "Tài liệu ký" (`contractManageDeptWorkflows[dept]`, module ảo `contractsSignedFile`) hoặc admin
+   — 3 hàm mới `requestContractPaymentTypeChange()`/`approveContractPaymentTypeChange()`/
+   `rejectContractPaymentTypeChange()` (`lib/recordActions.js`) + 3 route mới
+   (`routes/records.js`: `/contracts/:id/request-payment-type-change`, `/approve-payment-type-change`,
+   `/reject-payment-type-change`). Duyệt xong áp `paymentType`/`paymentInstallments` mới + ghi
+   `contract.paymentTypeChangeHistory[]`. Nút "✏️ Đổi Hình Thức Thanh Toán" mới ở bảng Hợp Đồng
+   (module-hopdong.js), modal riêng `#contractPaymentTypeChangeModal`.
+
+3. **Vận Hành > Đặt Hàng — chặn trùng Số Đơn NCC + khoá sửa sau import PDF**: `operationOrders.extraValidate`
+   (`lib/createValidation.js`) chặn `poNumber` trùng TÁCH RIÊNG theo `orderLocationType` (STORE/HO độc
+   lập nhau), loại trừ đơn đã `REJECTED`/`RECEIPT_CANCELLED`. Client (module-vanhanh.js): sau khi đọc PDF
+   tự động điền form thành công, các field đọc được từ PDF (Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Mã
+   Trạm/Mã+MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục) tự khoá readonly (xám),
+   field không do PDF cung cấp (Ghi Chú, Tiêu Đề, Nhà Cung Cấp) vẫn sửa tự do — nút mới "🔄 Nhập Lại Từ
+   Đầu" mở khoá + xoá file PDF đã chọn (không mất phần đã gõ tay).
+
+4. **Mã tự sinh — đổi định dạng thống nhất + server tự retry khi trùng mã**: 8 module dùng chung
+   `generateHcrcCode()` (Văn Bản Trình/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Biên Bản Họp/Đặt Phòng
+   Họp/Phê Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, + Giấy Phép/Ngân Sách dùng chung hàm này)
+   đổi từ `HCRC-<module>-<ngày YYYYMMDD>-<số>` sang **`HCRC-<mã phòng>-<module>-<số thứ tự>`** (bỏ hẳn
+   phần ngày, số thứ tự tính theo TOÀN BỘ lịch sử của đúng prefix, không reset theo ngày) — khớp định
+   dạng Hợp Đồng/Tài Liệu đã có sẵn từ trước. `lib/recordStore.js` `insertRecord()` VÀ
+   `lib/createValidation.js` `validateAndPrepareCreate()` giờ TỰ ĐỘNG sinh lại mã mới (tối đa 5 lần, lấy
+   đúng số lớn nhất từng có +1 cho đúng prefix) khi phát hiện trùng `code`, thay vì ném lỗi 409 ngay cho
+   người dùng — áp dụng chung cho MỌI collection có unique-code-index (Hợp Đồng/Tài Liệu/Phụ Lục/Đồng
+   Phục... không chỉ 8 module trên).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (field mới chỉ nằm trong JSON `Payload`, không thêm cột
+SQL nào), KHÔNG đổi `.env.example` (không có biến môi trường mới), KHÔNG đổi `dependencies` trong
+`package.json` — chỉ copy code + `pm2 restart` như thường lệ.
 
 ## v13.4 (2026-09-08): Tổng Hợp > Thanh Toán — refinement toàn diện "Quản Lý Thanh Toán" + xác nhận
 ## thanh toán kèm bắt buộc tệp (theo TỪNG ĐỢT cho Định Kỳ, TOÀN BỘ 1 LẦN cho "1 lần")

@@ -140,16 +140,21 @@ run('Không truyền trashedItems (caller cũ) -> hành vi y hệt trước đâ
   assert.strictEqual(rec.code, 'TL-001');
 });
 
-run('Mã trùng với hồ sơ ĐANG SỐNG -> vẫn bị chặn như cũ (không đổi hành vi hiện có)', () => {
+// ĐỔI HÀNH VI có chủ đích (đợt "4 yêu cầu 1 khối", Yêu cầu 4 — server tự retry khi trùng mã): 2 kịch
+// bản dưới đây TRƯỚC ĐÂY ném lỗi 409 ngay khi phát hiện trùng mã (payload.code có chữ số ở cuối) — giờ
+// validateAndPrepareCreate() TỰ ĐỘNG sinh mã mới (số lớn nhất từng có, kể cả trong Thùng Rác, +1) thay
+// vì bắt người dùng tự bấm lại. Xem tests/test-code-autogen-retry.js để kiểm thử đầy đủ cơ chế này (kể
+// cả trường hợp KHÔNG có chữ số ở cuối vẫn ném 409 như cũ, không đoán mò).
+run('Mã trùng với hồ sơ ĐANG SỐNG -> TỰ ĐỘNG sinh mã mới (không ném lỗi, không tái dùng nguyên mã cũ)', () => {
   const existing = [{ id: 1, code: 'TL-002' }];
-  expectHttpError(() => validateAndPrepareCreate('docs', docPayload({ code: 'TL-002' }), UPLOADER, existing, APP_DATA_EMPTY),
-    409, 'đã tồn tại');
+  const rec = validateAndPrepareCreate('docs', docPayload({ code: 'TL-002' }), UPLOADER, existing, APP_DATA_EMPTY);
+  assert.strictEqual(rec.code, 'TL-003');
 });
 
-run('Mã trùng với hồ sơ ĐÃ XOÁ (Thùng Rác) -> bị chặn, không cho dùng lại', () => {
+run('Mã trùng với hồ sơ ĐÃ XOÁ (Thùng Rác) -> TỰ ĐỘNG sinh mã mới, không cho tái dùng nguyên mã đã xoá', () => {
   const trashedItems = [{ trashId: 9, collection: 'docs', originalId: 5, code: 'TL-003', item: { id: 5, code: 'TL-003' } }];
-  expectHttpError(() => validateAndPrepareCreate('docs', docPayload({ code: 'TL-003' }), UPLOADER, [], APP_DATA_EMPTY, trashedItems),
-    409, 'đã xoá');
+  const rec = validateAndPrepareCreate('docs', docPayload({ code: 'TL-003' }), UPLOADER, [], APP_DATA_EMPTY, trashedItems);
+  assert.strictEqual(rec.code, 'TL-004');
 });
 
 run('Mã hoàn toàn mới (không trùng sống lẫn Thùng Rác) -> qua bình thường', () => {

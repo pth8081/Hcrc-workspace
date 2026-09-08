@@ -266,6 +266,53 @@ function resolveVrPersonInChargeInput(rawValue) {
 // vạch/Thực nhận đọc được từ phiếu đặt hàng NCC (xem parsePoLinesToFields() bên dưới), TÙY CHỌN, không
 // bắt buộc nhập tay — người dùng vẫn thêm dòng/nhập tay bình thường như trước nếu không upload PDF.
 let operationOrderItems = [];
+// Khoá sửa sau khi import PDF (yêu cầu mới) — ngay sau khi handleOperationOrderPdfUpload() tự điền form
+// thành công, tránh gõ đè nhầm số liệu đã đọc đúng từ phiếu NCC. Mở lại qua nút "🔄 Nhập Lại Từ Đầu"
+// (resetOperationOrderPoLock(), chỉ xoá cờ khoá + tệp PDF, GIỮ các field khác đã gõ) hoặc "↺ Làm Mới"
+// toàn form (resetOperationOrderForm() đã có sẵn). Thuần UI convenience — server KHÔNG validate lại việc
+// field khoá có bị đổi hay không (extraValidate vẫn chạy y hệt như trước, lib/createValidation.js).
+let operationOrderPoLocked = false; // true nếu ÍT NHẤT 1 field đang khoá — chỉ dùng để hiện/ẩn nút mở khoá
+let operationOrderItemsLocked = false; // bảng hạng mục khoá RIÊNG (chỉ khi PDF thực sự đọc được ≥1 hạng mục)
+// Field đọc được từ PDF (poFillField()/poFillMoneyField() ở handleOperationOrderPdfUpload()) ánh xạ ->
+// đúng tên field trong kết quả parsePoLinesToFields() — KHÔNG gồm voTitle/voSupplier (chỉ điền 1 PHẦN,
+// có điều kiện — vẫn luôn sửa tự do) hay voNote (không do PDF cung cấp).
+const OPERATION_ORDER_PO_FIELD_TO_KEY = {
+  voPoNumber: 'poNumber', voOrderDate: 'orderDate', voDeliveryDate: 'deliveryDate',
+  voOrdererName: 'ordererName', voStationCode: 'stationCode', voSupplierCode: 'supplierCode',
+  voSupplierTaxCode: 'supplierTaxCode', voReceivingLocationCode: 'receivingLocationCode',
+  voReceivingLocationName: 'receivingLocationName', voDeliveryAddress: 'deliveryAddress',
+  voDiscountAmount: 'discountAmount', voVatAmount: 'vatAmount',
+  voAfterDiscountAmount: 'afterDiscountAmount', voPaymentTotalAmount: 'paymentTotalAmount'
+};
+// parsedFields: object trả về từ parsePoLinesToFields() vừa đọc được — CHỈ khoá ĐÚNG field nào PDF thực
+// sự đọc ra giá trị (khác rỗng); field PDF không có ở 1 phiếu cụ thể (VD thiếu "Ngày Giao") vẫn để
+// trống + sửa tự do được, không khoá nhầm 1 ô trống không ai điền nổi. Truyền falsy để MỞ khoá toàn bộ
+// (resetOperationOrderPoLock()/resetOperationOrderForm()).
+function applyOperationOrderPoLock(parsedFields) {
+  operationOrderPoLocked = !!parsedFields;
+  Object.entries(OPERATION_ORDER_PO_FIELD_TO_KEY).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const fieldLocked = !!(parsedFields && parsedFields[key]);
+    el.readOnly = fieldLocked;
+    el.classList.toggle('bg-gray-100', fieldLocked);
+    el.classList.toggle('cursor-not-allowed', fieldLocked);
+  });
+  operationOrderItemsLocked = !!(parsedFields && Array.isArray(parsedFields.items) && parsedFields.items.length > 0);
+  const addBtn = document.querySelector('[data-op="addOperationOrderItemRow"]');
+  if (addBtn) addBtn.classList.toggle('hidden', operationOrderItemsLocked);
+  const unlockBtn = document.getElementById('btnOperationOrderPoUnlock');
+  if (unlockBtn) unlockBtn.classList.toggle('hidden', !operationOrderPoLocked);
+  renderOperationOrderItemsTable();
+}
+// Nút nhỏ "🔄 Nhập Lại Từ Đầu" — chỉ xoá cờ khoá + tệp PDF đã chọn (KHÔNG reset toàn form như "↺ Làm
+// Mới"), cho phép chọn lại 1 file PDF khác hoặc chuyển sang gõ tay tự do mà không mất phần đã nhập ở
+// Tiêu Đề/Nhà Cung Cấp/Ghi Chú/hạng mục đã sửa tay thêm.
+function resetOperationOrderPoLock() {
+  clearSingleFileInput('voFile', 'voFileChip');
+  document.getElementById('voPdfParseStatus')?.classList.add('hidden');
+  applyOperationOrderPoLock(null);
+}
 function addOperationOrderItemRow() {
   operationOrderItems.push({ name: '', unit: '', qty: 0, unitPrice: 0, note: '', productCode: '', barcode: '', qtyReceived: null });
   renderOperationOrderItemsTable();
@@ -292,27 +339,35 @@ function recalcOperationOrderItemsTotal() {
 function renderOperationOrderItemsTable() {
   const tbody = document.getElementById('operationOrderItemsTableBody');
   if (!tbody) return;
+  // operationOrderItemsLocked (yêu cầu mới): TOÀN BỘ bảng hạng mục khoá lại khi PDF thực sự đọc được
+  // ≥1 hạng mục — "Thực nhận"/"Ghi chú" của từng dòng KHÔNG khoá (không do PDF cung cấp, xem
+  // parsePoLinesToFields()/OPERATION_ORDER_PO_FIELD_TO_KEY ở trên).
+  const lockAttr = operationOrderItemsLocked ? 'readonly' : '';
+  const lockCls = operationOrderItemsLocked ? 'bg-gray-100 cursor-not-allowed' : '';
   tbody.innerHTML = operationOrderItems.map((it, idx) => `
     <tr>
       <td class="border p-1 text-center">${idx + 1}</td>
-      <td class="border p-1"><input value="${escapeHtml(it.name)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="name" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Tên hàng"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.productCode || '')}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="productCode" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mã hàng"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.barcode || '')}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="barcode" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mã vạch"></td>
-      <td class="border p-1"><input value="${escapeHtml(it.unit)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unit" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Cái/Bộ..."></td>
-      <td class="border p-1"><input type="number" value="${it.qty || ''}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="qty" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.name)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="name" ${lockAttr} class="w-full border-0 p-0.5 text-xs focus:outline-none ${lockCls}" placeholder="Tên hàng"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.productCode || '')}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="productCode" ${lockAttr} class="w-full border-0 p-0.5 text-xs focus:outline-none ${lockCls}" placeholder="Mã hàng"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.barcode || '')}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="barcode" ${lockAttr} class="w-full border-0 p-0.5 text-xs focus:outline-none ${lockCls}" placeholder="Mã vạch"></td>
+      <td class="border p-1"><input value="${escapeHtml(it.unit)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unit" ${lockAttr} class="w-full border-0 p-0.5 text-xs focus:outline-none ${lockCls}" placeholder="Cái/Bộ..."></td>
+      <td class="border p-1"><input type="number" value="${it.qty || ''}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="qty" ${lockAttr} class="w-full border-0 p-0.5 text-xs focus:outline-none ${lockCls}"></td>
       <td class="border p-1"><input type="number" value="${it.qtyReceived ?? ''}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="qtyReceived" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Thực nhận"></td>
-      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unitPrice" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>
+      <td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.unitPrice)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="unitPrice" ${lockAttr} class="w-full border-0 p-0.5 text-xs focus:outline-none money-input ${lockCls}"></td>
       <td class="border p-1 text-right font-semibold" id="operationOrderItemAmount_${idx}">${((it.qty || 0) * (it.unitPrice || 0)).toLocaleString('vi-VN')}</td>
       <td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationOrderItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Ghi chú"></td>
-      <td class="border p-1 text-center"><button type="button" data-op="removeOperationOrderItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
+      <td class="border p-1 text-center">${operationOrderItemsLocked ? '' : `<button type="button" data-op="removeOperationOrderItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button>`}</td>
     </tr>
   `).join('');
   recalcOperationOrderItemsTotal();
 }
 
-function generateOperationOrderCode() { return generateHcrcCode(DB.operationOrders, OPERATION_KIND_META.operationOrders.codeAbbr); }
-function generateOperationStoreOpenCode() { return generateHcrcCode(DB.operationStoreOpenings, OPERATION_KIND_META.operationStoreOpenings.codeAbbr); }
-function generateOperationRepairCode() { return generateHcrcCode(DB.operationRepairs, OPERATION_KIND_META.operationRepairs.codeAbbr); }
+// generateHcrcCode() giờ cần thêm mã phòng (định dạng thống nhất HCRC-<mã phòng>-<abbr>-<số thứ tự>,
+// xem module-tailieu.js) — cả 3 module Vận Hành đều forceOwnDept: true (lib/createValidation.js), không
+// có ô chọn phòng ban riêng trên form -> luôn dùng currentUser.dept.
+function generateOperationOrderCode() { return generateHcrcCode(DB.operationOrders, getDeptAbbr(currentUser.dept), OPERATION_KIND_META.operationOrders.codeAbbr); }
+function generateOperationStoreOpenCode() { return generateHcrcCode(DB.operationStoreOpenings, getDeptAbbr(currentUser.dept), OPERATION_KIND_META.operationStoreOpenings.codeAbbr); }
+function generateOperationRepairCode() { return generateHcrcCode(DB.operationRepairs, getDeptAbbr(currentUser.dept), OPERATION_KIND_META.operationRepairs.codeAbbr); }
 
 // Đóng/mở khối "Chi Tiết Từ Phiếu Đặt Hàng" (#operationOrderPoDetailsBox) — mặc định MỞ (auto-fill điền
 // vào đây, người dùng cần thấy ngay để kiểm tra), bấm nút để thu gọn nếu không cần dùng tới các field
@@ -544,11 +599,14 @@ async function handleOperationOrderPdfUpload(event) {
 
     if (f.items.length > 0) {
       operationOrderItems = f.items;
-      renderOperationOrderItemsTable();
     }
+    // Khoá ĐÚNG các field vừa tự điền được giá trị (yêu cầu mới) — tránh gõ đè nhầm số liệu đã đọc đúng
+    // từ phiếu NCC. Gọi SAU CÙNG (applyOperationOrderPoLock() tự render lại bảng hạng mục) vì cần
+    // operationOrderItems đã gán xong ở trên.
+    applyOperationOrderPoLock(f);
 
     statusEl.className = 'text-xs mt-1 p-2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200';
-    statusEl.innerText = `✅ Đã tự điền form từ file PDF (${f.items.length} hạng mục) — vui lòng kiểm tra lại trước khi gửi phê duyệt.`;
+    statusEl.innerText = `✅ Đã tự điền form từ file PDF (${f.items.length} hạng mục) — các field vừa điền đã được khoá lại, bấm "🔄 Nhập Lại Từ Đầu" nếu cần chọn file khác/gõ tay. Vui lòng kiểm tra lại trước khi gửi phê duyệt.`;
   } catch (err) {
     statusEl.className = 'text-xs mt-1 p-2 rounded border bg-amber-50 text-amber-800 border-amber-200';
     statusEl.innerText = `⚠️ Không đọc được thông tin từ file, vui lòng nhập tay. (${err.message})`;
@@ -639,6 +697,9 @@ function resetOperationOrderForm() {
   if (poBox) poBox.classList.remove('hidden');
   const poToggleBtn = document.querySelector('[data-op="toggleOperationOrderPoDetailsBox"]');
   if (poToggleBtn) poToggleBtn.innerText = poToggleBtn.innerText.replace(/^[▾▸]/, '▾');
+  // Mở lại khoá đọc-từ-PDF (yêu cầu mới) — form.reset() ở trên KHÔNG tự gỡ thuộc tính readonly/class đã
+  // gán qua JS, phải tự làm tường minh (cùng lý do chip file voFile phải xoá tường minh ở trên).
+  applyOperationOrderPoLock(null);
 }
 
 async function submitOperationStoreOpening(e) {

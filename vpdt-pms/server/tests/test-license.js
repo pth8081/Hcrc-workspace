@@ -90,7 +90,7 @@ async function main() {
       assert(result.created && result.created.status === 'PENDING', 'Giấy phép mới phải ở trạng thái PENDING');
       assert(result.created && result.created.rootLicenseId === null, 'Giấy phép mới (nhập mới) phải có rootLicenseId = null');
       assert(result.created && result.created.versionNumber === 1, 'Giấy phép mới phải là versionNumber 1');
-      assert(/^HCRC-GP-/.test(result.created.code), `Mã phải tự sinh theo tiền tố HCRC-GP- (generateHcrcCode), thực tế: ${result.created.code}`);
+      assert(/^HCRC-[^-]+-GP-/.test(result.created.code), `Mã phải tự sinh theo khuôn HCRC-<mã phòng>-GP-... (generateHcrcCode), thực tế: ${result.created.code}`);
       assertEqual(result.created.creator, 'hc1', 'creator phải là người đang đăng nhập (server tự gán)');
       assert(result.licenseTypesLearned, 'Loại giấy phép mới gõ phải tự học thêm vào DB.licenseTypes');
     });
@@ -191,7 +191,7 @@ async function main() {
     let firstLicenseId;
     // ===== 5) Duyệt: licenseApprove duyệt giấy phép đầu tiên (hc1) =====
     await run.run('licenseApprove duyệt giấy phép PENDING thành APPROVED', async () => {
-      const before = await page.evaluate(() => DB.licenses.find(l => l.code && l.code.startsWith('HCRC-GP-') && l.creator === 'hc1'));
+      const before = await page.evaluate(() => DB.licenses.find(l => l.code && /^HCRC-[^-]+-GP-/.test(l.code) && l.creator === 'hc1'));
       firstLicenseId = before.id;
       const result = await page.evaluate(async (id) => {
         window.__resetCapture();

@@ -92,6 +92,31 @@ async function getAllRecords(collection) {
 // theo, VD "Violation of PRIMARY KEY constraint 'PK_Records'"): đụng PK_Records -> tự sinh Id khác rồi
 // thử lại ngay (không cần người dùng biết); đụng UX_Records_Collection_Code -> đúng là lỗi nghiệp vụ, giữ
 // nguyên thông báo cũ.
+// Tách "prefix" + số thứ tự Ở CUỐI CÙNG của 1 mã (VD "HCRC-HCM-VBT-003" -> prefix "HCRC-HCM-VBT-", số
+// "003") — khớp ĐÚNG chữ số cuối chuỗi (\d+$), không phải chữ số đầu tiên gặp được, vì prefix bản thân
+// có thể chứa chữ số (VD mã phòng ban). Bản ghi không có chữ số nào ở cuối code (không khớp regex, hiếm
+// — VD "WF" không đúng, dù thực ra WF luôn có số) -> null, xem retry ở insertRecord() bên dưới.
+const CODE_SEQ_SUFFIX_RE = /^(.*?)(\d+)$/;
+
+// Số thứ tự TIẾP THEO chưa từng dùng cho ĐÚNG prefix này trong `records` — lấy số LỚN NHẤT từng xuất
+// hiện (không phải đếm số lượng còn lại), CÙNG NGUYÊN LÝ computeNextDocSeq()/computeNextHcrcSeq() ở
+// public/js/module-tailieu.js (client, không import chung được — 2 cài đặt độc lập, sửa 1 bên phải sửa
+// cả 2 bên nếu đổi thuật toán) — bản SERVER dùng khi tự sinh lại mã MỚI sau khi đụng trùng Code thật ở
+// tầng CSDL (xem insertRecord() bên dưới).
+function computeNextSeqForPrefix(records, prefix) {
+  let maxSeq = 0;
+  for (const r of records || []) {
+    const code = String(r?.code || '');
+    if (!code.startsWith(prefix)) continue;
+    const n = parseInt(code.slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+  }
+  return maxSeq + 1;
+}
+
+// insertRecord() dùng chung cho MỌI collection có unique-code-index (không chỉ các collection gọi qua
+// createForCollection() — buildUniformIssuance()/buildUniformTransfer()... ở lib/recordActions.js cũng
+// gọi thẳng hàm này) — retry ở đây là fix TẦNG CHUNG, áp dụng tự nhiên cho mọi nơi.
 const INSERT_RECORD_MAX_ATTEMPTS = 5;
 async function insertRecord(collection, record) {
   const pool = await getPool();
@@ -111,12 +136,32 @@ async function insertRecord(collection, record) {
     } catch (err) {
       if (!isUniqueConstraintViolation(err)) throw err;
       const isIdCollision = String(err.message || '').includes('PK_Records');
-      if (!isIdCollision || attempt === INSERT_RECORD_MAX_ATTEMPTS) {
-        throw isIdCollision
-          ? new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.')
-          : new HttpError(409, `Mã "${record.code}" đã tồn tại`);
+      if (isIdCollision) {
+        if (attempt === INSERT_RECORD_MAX_ATTEMPTS) {
+          throw new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.');
+        }
+        record.id = Date.now() + Math.floor(Math.random() * 1000);
+        continue;
       }
-      record.id = Date.now() + Math.floor(Math.random() * 1000);
+      // Trùng Code thật (UX_Records_Collection_Code) — THAY VÌ ném lỗi ngay như trước, tự thử sinh mã
+      // MỚI cho record này rồi INSERT lại (tối đa hết vòng lặp attempt hiện tại, 5 lần) — "cố gắng tốt
+      // nhất" cho UX mượt hơn khi mã được TÍNH Ở CLIENT trước khi gửi (client stale, hoặc 2 người tạo
+      // gần như đồng thời). UNIQUE INDEX ở CSDL đã là lớp chặn chống race THẬT SỰ ở tầng thấp nhất rồi —
+      // retry ở đây KHÔNG phải cơ chế chống race chính, chỉ tự sửa cho người dùng khỏi phải tự bấm lại.
+      const m = CODE_SEQ_SUFFIX_RE.exec(String(record.code || ''));
+      if (!m) {
+        // Không có chữ số ở cuối để tự tăng -> không đoán mò, giữ nguyên hành vi cũ.
+        throw new HttpError(409, `Mã "${record.code}" đã tồn tại`);
+      }
+      if (attempt === INSERT_RECORD_MAX_ATTEMPTS) {
+        throw new HttpError(409, `Mã "${record.code}" đã tồn tại — đã thử tự động sinh mã mới nhưng vẫn trùng, vui lòng thử lại.`);
+      }
+      const [, prefix, digitsStr] = m;
+      // Đọc lại DANH SÁCH BẢN GHI HIỆN TẠI real-time (KHÔNG dùng getAllForCollectionCached()) — cần đúng
+      // trạng thái mới nhất ngay tại thời điểm retry để không tính lại đúng số đã trùng lần trước.
+      const existing = await getAllRecords(collection);
+      const nextSeq = computeNextSeqForPrefix(existing, prefix);
+      record.code = prefix + String(nextSeq).padStart(digitsStr.length, '0');
     }
   }
 }
@@ -771,6 +816,7 @@ async function deleteRecordForCollection(collection, id, checkFn, actor) {
 
 module.exports = {
   MIGRATED_COLLECTIONS,
+  CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
   getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,

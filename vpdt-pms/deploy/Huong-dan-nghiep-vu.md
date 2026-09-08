@@ -170,6 +170,17 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
 
 - **Tài Liệu** — quản lý văn bản nội bộ theo mã tự sinh + quản lý phiên bản
   (Cập nhật giữ mã, Nhập mới tạo mã khác); có luồng phê duyệt theo phòng ban.
+  - **Định dạng mã tự sinh (từ v13.5)** — Tài Liệu/Hợp Đồng đã dùng sẵn khuôn
+    `HCRC-<mã phòng>-<viết tắt phân loại>-<số thứ tự>` từ trước; 8 module còn
+    lại (Văn Bản Trình/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Biên Bản Họp/Đặt
+    Phòng Họp/Phê Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, cộng
+    thêm Giấy Phép/Ngân Sách) giờ ĐỔI SANG cùng khuôn này (trước đây là
+    `HCRC-<viết tắt module>-<ngày tạo>-<số>`, không có mã phòng, số thứ tự
+    reset mỗi ngày) — mã sinh TRƯỚC v13.5 giữ nguyên, không đổi lại hồi tố.
+    **Server giờ tự sinh lại mã mới khi phát hiện trùng** (tối đa vài lần thử,
+    lấy đúng số thứ tự lớn nhất từng có +1) thay vì báo lỗi "Mã đã tồn tại"
+    bắt người dùng tự bấm lại — áp dụng cho MỌI module có mã tự sinh, kể cả
+    khi 2 người tạo hồ sơ gần như cùng lúc.
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
@@ -263,6 +274,19 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
     hợp đồng về "Chưa thanh toán" và nút mở lại ngay để bắt đầu chu kỳ mới (VD
     năm sau) — nhưng **không** cho mở 2 chu kỳ song song (đang "Chờ thanh
     toán" thì chưa lập thêm được).
+  - **Đổi Hình Thức Thanh Toán sau khi ĐÃ DUYỆT xong (từ v13.5)** — trước đây
+    hợp đồng đã `APPROVED` khoá sửa hoàn toàn (kể cả Loại Thanh Toán/Đợt Thanh
+    Toán), muốn đổi phải huỷ tạo lại. Giờ người tạo hợp đồng bấm
+    **"✏️ Đổi Hình Thức Thanh Toán"** (chỉ hiện khi ĐÃ `APPROVED` VÀ hợp đồng
+    **chưa từng có đề nghị thanh toán nào** — đã có rồi thì bị chặn, tránh lệch
+    số liệu đã đề nghị/đã duyệt) — chọn lại Loại Thanh Toán + khai lại Đợt
+    Thanh Toán, gửi đi **KHÔNG áp dụng ngay**: hiện badge "⏳ Chờ duyệt đổi
+    hình thức thanh toán" cho tới khi ĐÚNG nhóm người duyệt **"Tài liệu ký"**
+    của phòng ban đó (Hệ Thống > Quy Trình & Phê Duyệt > "Hợp đồng - Quản Lý
+    HĐ") bấm Duyệt/Từ chối — cùng 1 nhóm người đã duyệt Tài liệu ký, không
+    phải nhóm duyệt hồ sơ gốc. Duyệt xong mới thật sự đổi
+    Loại/Đợt Thanh Toán + ghi lại lịch sử ai yêu cầu/ai duyệt/đổi từ gì sang
+    gì; Từ chối thì chỉ xoá yêu cầu, giữ nguyên hình thức cũ.
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
   - **Thanh Toán** — tổng hợp đề nghị thanh toán tự sinh từ Hợp Đồng/Mua
@@ -350,7 +374,20 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
 - **Đồng Phục** — 2 vai trò: Hành Chính tạo "kỳ cấp phát" phân bổ đồng phục
   xuống từng siêu thị, Giám Đốc Siêu Thị xác nhận đã nhận rồi cấp phát tiếp cho
   nhân viên. "Kho" không lưu bảng riêng — luôn tính động từ số đã phân bổ đã
-  xác nhận trừ đi số đã cấp phát cho nhân viên.
+  xác nhận trừ đi số đã cấp phát cho nhân viên. **Bắt buộc nhân viên xác nhận
+  đã nhận (từ v13.5)**: mỗi phiếu cấp phát (`uniformIssuances`) khởi tạo ở
+  trạng thái "⏳ Chờ xác nhận" (`ackStatus = PENDING_ACK`) — CHỈ đúng nhân viên
+  được cấp mới bấm "✅ Xác nhận đã nhận" được (server tự xác thực lại quyền,
+  không chặn được ai xác nhận thay ai), sau đó chuyển "✅ Đã xác nhận"
+  (`ackAt`/`ackByName` ghi lại). Đây thuần là bước xác nhận đã thực nhận —
+  KHÔNG ảnh hưởng gì tới tồn kho/số đang giữ (vẫn trừ ngay lúc cấp phát như
+  trước). Badge trạng thái hiện ở cả bảng "Lịch Sử Cấp Phát" (từng phiếu) và
+  "Đang Giữ" (gộp theo nhân viên×mặt hàng×size — hiện "còn N phiếu chưa xác
+  nhận" nếu gộp từ nhiều phiếu khác trạng thái). Nhân viên thường (không có
+  quyền Hành Chính/Giám Đốc Siêu Thị của module này) xem + xác nhận được CHÍNH
+  phiếu của mình qua mục mới **"👕 Đồng Phục Của Tôi"** trong "⚙️ Cá Nhân Hóa &
+  Cập Nhật Thông Tin" (Hồ Sơ Cá Nhân, mở cho mọi tài khoản) — bấm avatar/tên ở
+  góc màn hình để mở.
 - **Giấy Phép** — hồ sơ pháp lý (giấy phép kinh doanh, chứng chỉ...), phân
   quyền hoàn toàn riêng ngay trong module (tạo/duyệt/xem tách biệt), không đi
   qua quy trình duyệt theo phòng ban ở mục 2. Có theo dõi hiệu lực + nhắc hết
@@ -377,6 +414,20 @@ với "Tổng Hợp"):
   (VNĐ)")` — số lớn hơn giữa tổng hạng mục hệ thống tự tính và số người dùng
   tự gõ/đọc từ PDF phiếu đặt hàng NCC, để field tự gõ không thể khai thấp hơn
   nhằm né bớt lớp duyệt (áp dụng chung cho cả STORE lẫn HO).
+  - **Đọc PDF phiếu đặt hàng NCC tự động điền form** — chọn file PDF ở "File
+    Đơn Hàng" tự đọc và điền Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã
+    NCC/MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục
+    (chỉ áp dụng đúng 1 mẫu phiếu NCC hiện dùng). **Chặn trùng Số Đơn NCC (từ
+    v13.5)**: `poNumber` không được trùng với đơn khác **CÙNG LOẠI** (Siêu
+    Thị/HO tách riêng — 1 đơn STORE và 1 đơn HO vẫn được phép trùng số), trừ
+    đơn cũ đã **Từ chối**/**Đã hủy nhập** (2 trạng thái coi như "không tính").
+    **Khoá sửa sau khi đọc PDF thành công (từ v13.5)**: các field vừa tự điền
+    được từ PDF chuyển xám/không sửa được nữa (tránh gõ đè nhầm số liệu đã đọc
+    đúng) — Tiêu Đề/Nhà Cung Cấp/Ghi Chú (không do PDF cung cấp) vẫn luôn sửa
+    tự do. Bấm **"🔄 Nhập Lại Từ Đầu"** (chỉ hiện sau khi đã khoá) để mở khoá +
+    xoá file PDF đã chọn, chọn lại file khác hoặc chuyển hẳn sang gõ tay —
+    không mất phần Tiêu Đề/Nhà Cung Cấp/Ghi Chú đã nhập; nút "↺ Làm Mới" ở
+    cuối form vẫn xoá trắng toàn bộ như trước.
 - **Mở Mới / Sửa Chữa Siêu Thị** — pipeline 4 giai đoạn **Dự toán → Thực hiện
   → Nghiệm thu → Báo cáo**: lập danh mục đầu tư dự toán (được duyệt mới mở
   khoá Thực hiện) → lập/theo dõi cây công việc thực hiện thực tế (độc lập,

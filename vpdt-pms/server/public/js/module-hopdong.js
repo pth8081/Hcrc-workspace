@@ -281,6 +281,202 @@ function collectContractInstallments() {
   }));
 }
 
+// ===== "Đổi Hình Thức Thanh Toán" sau khi hợp đồng đã APPROVED (yêu cầu mới) — modal RIÊNG
+// (#contractPaymentTypeChangeModal), KHÔNG dùng chung #contractInstallmentsList (đang thuộc form Sửa,
+// 2 khối không thể trùng id) — mirror nhẹ CÙNG cơ chế %<->Số tiền ở trên nhưng đọc/ghi ID riêng "cptc*".
+// Giá Trị Hợp Đồng KHÔNG đổi ở luồng này (không có ô nhập amount) — luôn lấy thẳng contract.amount hiện
+// tại của hồ sơ đang mở (cptcContractId).
+let cptcContractId = null;
+
+function renderCptcInstallmentsList(installments, totalAmount) {
+  const container = document.getElementById('cptcInstallmentsList');
+  if (!container) return;
+  container.innerHTML = (installments || []).map((it, idx) => {
+    const amt = it.amount || 0;
+    const percentDisplay = (totalAmount > 0 && amt > 0) ? (Math.round((amt / totalAmount) * 10000) / 100) : '';
+    return `
+    <div class="flex gap-2 items-center" data-cptc-row="${idx}">
+      <input placeholder="Mô tả đợt (VD: Đợt 1 - tạm ứng 30%)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded cptc-desc">
+      <div class="flex items-center gap-0.5">
+        <input type="text" inputmode="decimal" placeholder="%" value="${percentDisplay}" data-op-input="onCptcInstallmentPercentInput" data-arg-el="0" title="Nhập % để tự tính Số tiền theo Giá Trị Hợp Đồng" class="w-16 border p-1.5 rounded text-right cptc-percent">
+        <span class="text-gray-500 text-xs">%</span>
+      </div>
+      <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(amt)}" data-op-input="onCptcInstallmentAmountInput" data-arg-el="0" class="w-40 border p-1.5 rounded cptc-amount money-input">
+      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded cptc-due">
+      <button type="button" data-op="removeCptcInstallmentRow" data-arg0="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
+    </div>
+  `;
+  }).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt" nếu cần.</p>';
+}
+
+function cptcTotalAmount() {
+  return DB.contracts.find(x => x.id === cptcContractId)?.amount || 0;
+}
+
+function onCptcInstallmentPercentInput() {
+  if (cptcTotalAmount() <= 0) return;
+  recalcCptcInstallmentAmountsFromPercent();
+}
+
+function onCptcInstallmentAmountInput(inputEl) {
+  const row = inputEl.closest('[data-cptc-row]');
+  if (!row) return;
+  const totalAmount = cptcTotalAmount();
+  const percentInput = row.querySelector('.cptc-percent');
+  if (!percentInput || totalAmount <= 0) return;
+  const amount = getMoneyValue(inputEl);
+  percentInput.value = amount > 0 ? (Math.round((amount / totalAmount) * 10000) / 100) : '';
+}
+
+// Cùng thuật toán làm tròn luỹ kế như recalcContractInstallmentAmountsFromPercent() ở trên.
+function recalcCptcInstallmentAmountsFromPercent() {
+  const totalAmount = cptcTotalAmount();
+  let cumulativePercent = 0;
+  let prevCumulativeAmount = 0;
+  document.querySelectorAll('#cptcInstallmentsList [data-cptc-row]').forEach(row => {
+    const percentInput = row.querySelector('.cptc-percent');
+    const amountInput = row.querySelector('.cptc-amount');
+    if (!percentInput || !amountInput) return;
+    const percent = parseFloat(percentInput.value.replace(',', '.')) || 0;
+    if (percent > 0) {
+      cumulativePercent += percent;
+      const cumulativeAmount = Math.round(totalAmount * cumulativePercent / 100);
+      amountInput.value = formatMoneyDisplay(cumulativeAmount - prevCumulativeAmount);
+      prevCumulativeAmount = cumulativeAmount;
+    }
+  });
+}
+
+function addCptcInstallmentRow() {
+  const current = collectCptcInstallments();
+  current.push({ description: '', amount: '', dueDate: '' });
+  renderCptcInstallmentsList(current, cptcTotalAmount());
+}
+
+function removeCptcInstallmentRow(idx) {
+  const current = collectCptcInstallments();
+  current.splice(idx, 1);
+  renderCptcInstallmentsList(current, cptcTotalAmount());
+}
+
+function collectCptcInstallments() {
+  return [...document.querySelectorAll('#cptcInstallmentsList [data-cptc-row]')].map(row => ({
+    description: row.querySelector('.cptc-desc').value.trim(),
+    amount: getMoneyValue(row.querySelector('.cptc-amount')),
+    dueDate: row.querySelector('.cptc-due').value
+  }));
+}
+
+function openContractPaymentTypeChangeModal(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c) return;
+  if (c.creator !== currentUser.username) return alert('Chỉ người tạo hợp đồng mới yêu cầu đổi hình thức thanh toán được!');
+  if (c.approvalStatus !== 'APPROVED') return alert('Hợp đồng chưa được phê duyệt xong, vui lòng dùng nút "✏️ Sửa" thay vì đổi hình thức thanh toán.');
+  if (c.pendingPaymentTypeChange) return alert('Hợp đồng đang có 1 yêu cầu đổi hình thức thanh toán khác chờ duyệt.');
+  cptcContractId = id;
+  document.getElementById('cptcPaymentType').value = c.paymentType === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
+  document.getElementById('cptcReason').value = '';
+  renderCptcInstallmentsList(c.paymentInstallments || [], c.amount || 0);
+  document.getElementById('contractPaymentTypeChangeModal').classList.remove('hidden');
+}
+
+function closeContractPaymentTypeChangeModal() {
+  document.getElementById('contractPaymentTypeChangeModal').classList.add('hidden');
+  cptcContractId = null;
+}
+
+async function submitContractPaymentTypeChange(e) {
+  e.preventDefault();
+  const c = DB.contracts.find(x => x.id === cptcContractId);
+  if (!c) return;
+  const payload = {
+    newPaymentType: document.getElementById('cptcPaymentType').value === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME',
+    newPaymentInstallments: collectCptcInstallments(),
+    reason: document.getElementById('cptcReason').value.trim()
+  };
+  let updated;
+  try {
+    const res = await fetch(`/api/records/contracts/${c.id}/request-payment-type-change`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    updated = body.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.contracts.findIndex(x => x.id === updated.id);
+  if (idx !== -1) DB.contracts[idx] = updated;
+  logSystemAction('CONTRACT', 'REQUEST_PAYMENT_TYPE_CHANGE', `Yêu cầu đổi hình thức thanh toán hợp đồng [${updated.code}]`, 'SUCCESS', updated.code);
+  alert('✅ Đã gửi yêu cầu đổi hình thức thanh toán, đang chờ duyệt!');
+  closeContractPaymentTypeChangeModal();
+  renderContracts();
+}
+
+// Chỉ đúng người có tên trong contractManageDeptWorkflows[dept] (hoặc admin) — mirror chính xác
+// isApproverForContractManageWorkflow() ở lib/recordActions.js, TÁI SỬ DỤNG resolveContractManageWorkflow()
+// đã có sẵn ở core.js (cùng dữ liệu DB.contractManageDeptWorkflows dùng cho Duyệt/Từ chối Tài liệu ký).
+function isApproverForContractManageWorkflowClient(user, contract) {
+  if (user?.perms?.admin) return true;
+  const { approvers } = resolveContractManageWorkflow(contract);
+  return Object.values(approvers || {}).some(list => (Array.isArray(list) ? list : [list]).includes(user.username));
+}
+
+async function callContractPaymentTypeChangeAction(id, action, payload) {
+  const res = await fetch(`/api/records/contracts/${id}/${action}-payment-type-change`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {})
+  });
+  if (res.status === 401) { handleSessionExpired(); throw new Error('Phiên đăng nhập đã hết hạn'); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body;
+}
+
+function approveContractPaymentTypeChangeAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c || !c.pendingPaymentTypeChange) return;
+  const newLabel = c.pendingPaymentTypeChange.newPaymentType === 'PERIODIC' ? 'Thanh toán định kỳ' : 'Thanh toán 1 lần';
+  showConfirmModal({
+    title: 'Duyệt đổi hình thức thanh toán',
+    bodyHTML: `Duyệt yêu cầu đổi hình thức thanh toán của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) sang "<b>${newLabel}</b>"?`,
+    confirmLabel: 'Duyệt',
+    onConfirm: async () => {
+      let result;
+      try { result = await callContractPaymentTypeChangeAction(id, 'approve', {}); }
+      catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'APPROVE_PAYMENT_TYPE_CHANGE', `Duyệt đổi hình thức thanh toán hợp đồng [${updated.code}]`, 'SUCCESS', updated.code);
+      alert('✅ Đã duyệt đổi hình thức thanh toán!');
+      renderContracts();
+    }
+  });
+}
+
+function rejectContractPaymentTypeChangeAction(id) {
+  const c = DB.contracts.find(x => x.id === id);
+  if (!c || !c.pendingPaymentTypeChange) return;
+  const reason = prompt('Nhập lý do từ chối yêu cầu đổi hình thức thanh toán:');
+  if (reason === null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do từ chối!');
+  showConfirmModal({
+    title: 'Từ chối đổi hình thức thanh toán',
+    bodyHTML: `Từ chối yêu cầu đổi hình thức thanh toán của hợp đồng "<b>${escapeHtml(c.title)}</b>"?<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(reason.trim())}</span>`,
+    confirmLabel: 'Từ Chối',
+    onConfirm: async () => {
+      let result;
+      try { result = await callContractPaymentTypeChangeAction(id, 'reject', { reason: reason.trim() }); }
+      catch (err) { return alert(`⛔ ${err.message}`); }
+      const updated = result.item;
+      const idx = DB.contracts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.contracts[idx] = updated;
+      logSystemAction('CONTRACT', 'REJECT_PAYMENT_TYPE_CHANGE', `Từ chối đổi hình thức thanh toán hợp đồng [${updated.code}] - Lý do: ${reason.trim()}`, 'WARNING', updated.code);
+      alert('❌ Đã từ chối yêu cầu đổi hình thức thanh toán!');
+      renderContracts();
+    }
+  });
+}
+
 async function submitContractReq(e) {
   e.preventDefault();
   if (editingContractId !== null) return updateContractReq(e);
@@ -759,7 +955,10 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   let paymentCell = '';
   if (activeContractSubTab === 'MANAGE') {
     const paymentTypeNote = c.paymentType === 'PERIODIC' ? '<div class="text-[10px] text-purple-700 mt-0.5">🔁 Định kỳ</div>' : '';
-    paymentCell = `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${paymentTypeNote}${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`;
+    // Yêu cầu đổi Hình Thức Thanh Toán đang chờ duyệt (mới) — đặt cạnh trạng thái Tài liệu ký cho tự
+    // nhiên, vì cùng 1 nhóm người duyệt (contractManageDeptWorkflows[dept]).
+    const pendingChangeNote = c.pendingPaymentTypeChange ? '<div class="text-[10px] text-amber-700 mt-0.5 font-bold">⏳ Chờ duyệt đổi hình thức thanh toán</div>' : '';
+    paymentCell = `<td class="border p-2"><span class="px-2 py-0.5 rounded font-bold text-xs ${CONTRACT_PAYMENT_BADGE_CLS[c.paymentStatus] || ''}">${CONTRACT_PAYMENT_LABELS[c.paymentStatus] || '-'}</span>${paymentTypeNote}${pendingChangeNote}${SIGNED_FILE_STATUS_NOTE[c.signedFileStatus] || ''}</td>`;
   }
 
   // Nhãn "Tài liệu ký" đổi thành "...Phụ Lục Hợp Đồng Đã Ký" khi thao tác trên phụ lục, cho rõ ràng —
@@ -798,6 +997,16 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     secondaryOptions.push({ value: 'approveSigned', label: `✅ Duyệt ${signedDocNoun}` });
     secondaryOptions.push({ value: 'rejectSigned', label: `❌ Từ Chối ${signedDocNoun}` });
     secondaryOptions.push({ value: 'requestSignedChanges', label: `🔄 Bổ Sung ${signedDocNoun}` });
+  }
+  // Đổi Hình Thức Thanh Toán (yêu cầu mới) — chỉ người tạo, chỉ khi ĐÃ APPROVED và chưa có yêu cầu nào
+  // khác đang chờ (server validate lại toàn bộ, đây chỉ là gate hiện/ẩn nút). Duyệt/Từ chối yêu cầu này
+  // dành cho ĐÚNG nhóm người duyệt "Tài liệu ký" (contractManageDeptWorkflows[dept])/admin.
+  if (c.approvalStatus === 'APPROVED' && !c.pendingPaymentTypeChange && c.creator === currentUser.username) {
+    secondaryOptions.push({ value: 'changePaymentType', label: '✏️ Đổi Hình Thức Thanh Toán' });
+  }
+  if (c.pendingPaymentTypeChange && isApproverForContractManageWorkflowClient(currentUser, c)) {
+    secondaryOptions.push({ value: 'approvePaymentTypeChange', label: '✅ Duyệt Đổi HTTT' });
+    secondaryOptions.push({ value: 'rejectPaymentTypeChange', label: '❌ Từ Chối Đổi HTTT' });
   }
   // "🧾 Lập Thanh Toán" — mở khi CHUA_THANH_TOAN (chu kỳ đầu, hoặc "Thanh toán 1 lần" duy nhất) HOẶC khi
   // hợp đồng "Thanh toán định kỳ" đã HOÀN TẤT 1 chu kỳ (DA_THANH_TOAN — xem confirmPaymentInstallment()/
@@ -853,6 +1062,9 @@ function runContractAction(id, action) {
     case 'approveSigned': approveContractSignedFileAction(id); break;
     case 'rejectSigned': rejectContractSignedFileAction(id); break;
     case 'requestSignedChanges': requestContractSignedFileChangesAction(id); break;
+    case 'changePaymentType': openContractPaymentTypeChangeModal(id); break;
+    case 'approvePaymentTypeChange': approveContractPaymentTypeChangeAction(id); break;
+    case 'rejectPaymentTypeChange': rejectContractPaymentTypeChangeAction(id); break;
     case 'startPayment': startContractPaymentAction(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);

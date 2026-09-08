@@ -662,10 +662,14 @@ function filterUniformPeriodsForUser(items, user) {
 }
 
 // uniformIssuances: Hành Chính xem hết (theo dõi SL thực tế đã cấp toàn công ty); Giám Đốc Siêu Thị chỉ
-// xem đúng lịch sử cấp phát của siêu thị mình.
+// xem đúng lịch sử cấp phát của siêu thị mình. THÊM (yêu cầu xác nhận đã nhận): BẤT KỲ nhân viên nào
+// cũng xem được ĐÚNG các phiếu của CHÍNH MÌNH (employeeUsername === user.username), dù không có quyền
+// uniformManage/uniformStoreManage — trước đây nhân viên thường không có lát cắt xem nào ở đây, không
+// thể tự xác nhận đã nhận (xem tab "Đồng Phục Của Tôi" ở Hồ Sơ Cá Nhân, public/index.html #profileModal).
 function canViewUniformIssuance(user, item) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.uniformManage) return true;
+  if (item.employeeUsername === user.username) return true;
   return !!(user.perms?.uniformStoreManage && item.dept === user.dept);
 }
 

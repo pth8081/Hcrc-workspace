@@ -617,12 +617,19 @@ async function submitUniformIssuance() {
   renderUniformStock();
 }
 
+// Badge trạng thái xác nhận đã nhận (yêu cầu mới) — dùng chung cho bảng lịch sử VÀ bảng đang giữ.
+function uniformAckBadgeHTML(item) {
+  return item.ackStatus === 'ACKNOWLEDGED'
+    ? `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 whitespace-nowrap">✅ Đã xác nhận</span>`
+    : `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap">⏳ Chờ xác nhận</span>`;
+}
+
 function renderUniformIssuancesTable() {
   const tbody = document.getElementById('uniformIssuancesTableBody');
   if (!tbody) return;
   const rows = DB.uniformIssuances.filter(x => x.dept === currentUser.dept);
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có phiếu cấp phát nào.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có phiếu cấp phát nào.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => `
@@ -632,25 +639,96 @@ function renderUniformIssuancesTable() {
       <td class="border p-2">${uniformItemsSummary(r.items)}</td>
       <td class="border p-2">${escapeHtml(r.createdAt || '')}</td>
       <td class="border p-2">${escapeHtml(r.creatorName || '')}</td>
+      <td class="border p-2 text-center">
+        ${uniformAckBadgeHTML(r)}
+        ${(currentUser.username === r.employeeUsername && r.ackStatus !== 'ACKNOWLEDGED')
+          ? `<button type="button" data-op="acknowledgeUniformIssuanceAction" data-arg0="${r.id}" class="block mx-auto mt-1 bg-teal-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">✅ Xác nhận đã nhận</button>`
+          : ''}
+      </td>
     </tr>
   `).join('');
+}
+
+// "Đồng Phục Của Tôi" (Hồ Sơ Cá Nhân, #pfUniformSection, xem core.js setProfileSubTab('UNIFORM')) —
+// LUÔN dùng được cho MỌI tài khoản (không cần uniformManage/uniformStoreManage): liệt kê chính DB.
+// uniformIssuances của mình (server đã tự lọc đúng phạm vi này ở canViewUniformIssuance(), xem
+// lib/recordViewScope.js) kèm badge + nút xác nhận cho TỪNG phiếu.
+function renderMyUniformIssuancesTable() {
+  const wrap = document.getElementById('pfUniformListWrap');
+  if (!wrap) return;
+  const rows = (DB.uniformIssuances || []).filter(r => r.employeeUsername === currentUser.username)
+    .sort((a, b) => (b.id || 0) - (a.id || 0));
+  if (!rows.length) {
+    wrap.innerHTML = '<p class="text-center text-gray-500 italic p-4">Bạn chưa được cấp phát đồng phục nào.</p>';
+    return;
+  }
+  wrap.innerHTML = rows.map(r => `
+    <div class="border rounded p-2 bg-gray-50">
+      <div class="flex justify-between items-start gap-2">
+        <div>
+          <div class="font-bold text-gray-800">${escapeHtml(r.code || `Phiếu #${r.id}`)}</div>
+          <div class="text-[11px] text-gray-500">${escapeHtml(r.createdAt || '')} — Cấp bởi ${escapeHtml(r.creatorName || '')}</div>
+        </div>
+        ${uniformAckBadgeHTML(r)}
+      </div>
+      <div class="mt-1 text-[11px] text-gray-700">${uniformItemsSummary(r.items)}</div>
+      ${r.ackStatus === 'ACKNOWLEDGED'
+        ? `<div class="text-[10px] text-emerald-700 mt-1">Đã xác nhận lúc ${escapeHtml(r.ackAt || '')}</div>`
+        : `<button type="button" data-op="acknowledgeUniformIssuanceAction" data-arg0="${r.id}" class="mt-2 bg-teal-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-teal-700">✅ Xác nhận đã nhận</button>`}
+    </div>
+  `).join('');
+}
+
+async function callAcknowledgeUniformIssuance(id) {
+  const res = await fetch(`/api/records/uniformIssuances/${id}/acknowledge`, { method: 'POST' });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+// Nhân viên tự xác nhận đã nhận đúng phiếu của mình — dùng chung cho cả 3 nơi hiện nút (bảng "Lịch sử
+// cấp phát", bảng "Đang giữ" gộp, và tab "Đồng Phục Của Tôi" ở Hồ Sơ Cá Nhân, xem core.js).
+async function acknowledgeUniformIssuanceAction(id) {
+  if (!confirm('Xác nhận đã nhận đầy đủ đồng phục theo phiếu này?')) return;
+  let updated;
+  try {
+    const result = await callAcknowledgeUniformIssuance(id);
+    updated = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.uniformIssuances.findIndex(x => x.id === updated.id);
+  if (idx >= 0) DB.uniformIssuances[idx] = updated; else DB.uniformIssuances.push(updated);
+  logSystemAction('UNIFORM', 'ACK_UNIFORM_ISSUANCE', `Xác nhận đã nhận đồng phục [${updated.code || updated.id}]`, 'SUCCESS', updated.code || '');
+  alert('✅ Đã xác nhận nhận đồng phục!');
+  renderUniformIssuancesTable();
+  renderUniformHoldingsTable();
+  if (typeof renderMyUniformIssuancesTable === 'function') renderMyUniformIssuancesTable();
 }
 
 // ============ Đồng Phục Nhân Viên Đang Giữ (thao tác nhanh Thu Hồi/Báo Hỏng/Báo Mất theo từng dòng) ====
 // Mirror computeAllEmployeeUniformHoldings() ở lib/recordActions.js — hệ thống chỉ track tổng số 1
 // (nhân viên × mặt hàng × size) đang giữ, KHÔNG track "phiếu nào cấp phần nào chưa bị thu hồi" — nên
 // gộp theo đúng 3 chiều này (không theo từng phiếu cấp riêng lẻ) là đúng khớp cách dữ liệu được tính.
+// issuanceIds (mới, yêu cầu xác nhận đã nhận): đi kèm mỗi dòng gộp là DANH SÁCH id các phiếu
+// uniformIssuances gốc đã đóng góp vào dòng này — dùng để tính badge ack tổng hợp + gộp xác nhận hàng
+// loạt (acknowledgeUniformHoldingRow() bên dưới). KHÔNG ảnh hưởng cách tính `held` (vẫn nguyên như cũ).
 function computeAllEmployeeUniformHoldingsClient(storeDept) {
   const held = new Map();
   const keyOf = (empUsername, name, size) => `${empUsername}|||${name}|||${size || ''}`;
   const bump = (empUsername, empName, name, size, delta) => {
     const key = keyOf(empUsername, name, size);
-    if (!held.has(key)) held.set(key, { employeeUsername: empUsername, employeeName: empName, name, size: size || '', held: 0 });
+    if (!held.has(key)) held.set(key, { employeeUsername: empUsername, employeeName: empName, name, size: size || '', held: 0, issuanceIds: [] });
     held.get(key).held += delta;
   };
   for (const issuance of DB.uniformIssuances) {
     if (issuance.dept !== storeDept) continue;
-    for (const it of (issuance.items || [])) bump(issuance.employeeUsername, issuance.employeeName, it.name, it.size, it.qty);
+    for (const it of (issuance.items || [])) {
+      bump(issuance.employeeUsername, issuance.employeeName, it.name, it.size, it.qty);
+      held.get(keyOf(issuance.employeeUsername, it.name, it.size)).issuanceIds.push(issuance.id);
+    }
   }
   for (const adj of (DB.uniformStockAdjustments || [])) {
     if (adj.dept !== storeDept || adj.source !== 'EMPLOYEE') continue;
@@ -659,28 +737,75 @@ function computeAllEmployeeUniformHoldingsClient(storeDept) {
   return Array.from(held.values()).filter(r => r.held > 0).sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'vi'));
 }
 
+// Badge ack tổng hợp cho 1 dòng gộp "Đang giữ" — liệt kê "còn N phiếu chưa xác nhận" nếu gộp từ nhiều
+// phiếu gốc có ackStatus khác nhau, hoặc "✅ Đã xác nhận" nếu TẤT CẢ phiếu góp vào dòng này đã ack.
+function uniformHoldingAckSummary(issuanceIds) {
+  const uniqueIds = Array.from(new Set(issuanceIds || []));
+  const issuances = uniqueIds.map(id => DB.uniformIssuances.find(x => x.id === id)).filter(Boolean);
+  const pending = issuances.filter(x => x.ackStatus !== 'ACKNOWLEDGED');
+  if (!issuances.length) return { html: '', pendingIds: [] };
+  if (!pending.length) {
+    return { html: `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 whitespace-nowrap">✅ Đã xác nhận</span>`, pendingIds: [] };
+  }
+  const label = pending.length === issuances.length
+    ? '⏳ Chờ xác nhận'
+    : `⏳ Còn ${pending.length}/${issuances.length} phiếu chưa xác nhận`;
+  return { html: `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap">${label}</span>`, pendingIds: pending.map(x => x.id) };
+}
+
 let uniformHoldingsCache = [];
 function renderUniformHoldingsTable() {
   const tbody = document.getElementById('uniformHoldingsTableBody');
   if (!tbody) return;
   uniformHoldingsCache = computeAllEmployeeUniformHoldingsClient(currentUser.dept);
   if (!uniformHoldingsCache.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Không có nhân viên nào đang giữ đồng phục.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không có nhân viên nào đang giữ đồng phục.</td></tr>`;
     return;
   }
-  tbody.innerHTML = uniformHoldingsCache.map((h, idx) => `
+  tbody.innerHTML = uniformHoldingsCache.map((h, idx) => {
+    const ack = uniformHoldingAckSummary(h.issuanceIds);
+    const showAckBtn = currentUser.username === h.employeeUsername && ack.pendingIds.length > 0;
+    return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2">${escapeHtml(h.employeeName)}</td>
       <td class="border p-2">${escapeHtml(h.name)}</td>
       <td class="border p-2">${escapeHtml(h.size || '—')}${uniformSkuFor(h.name, h.size) ? ` <span class="text-[10px] text-cyan-700 font-mono">(${escapeHtml(uniformSkuFor(h.name, h.size))})</span>` : ''}</td>
       <td class="border p-2 text-right font-bold">${h.held.toLocaleString('vi-VN')}</td>
+      <td class="border p-2 text-center">
+        ${ack.html}
+        ${showAckBtn ? `<button type="button" data-op="acknowledgeUniformHoldingRow" data-arg0="${idx}" class="block mx-auto mt-1 bg-teal-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">✅ Xác nhận đã nhận</button>` : ''}
+      </td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" data-op="openUniformHoldingActionModal" data-arg0="${idx}" data-arg1="TON" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">↩️ Thu Hồi</button>
         <button type="button" data-op="openUniformHoldingActionModal" data-arg0="${idx}" data-arg1="HONG" class="bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">🔴 Báo Hỏng</button>
         <button type="button" data-op="openUniformHoldingActionModal" data-arg0="${idx}" data-arg1="MAT" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">❓ Báo Mất</button>
       </td>
     </tr>
-  `).join('');
+  `; }).join('');
+}
+
+// Xác nhận GỘP toàn bộ các phiếu gốc còn PENDING_ACK đóng góp vào 1 dòng "Đang giữ" (gọi tuần tự từng
+// phiếu — số phiếu mỗi dòng luôn rất nhỏ trong thực tế, không cần bó gói API riêng).
+async function acknowledgeUniformHoldingRow(idx) {
+  const h = uniformHoldingsCache[idx];
+  if (!h) return;
+  const ack = uniformHoldingAckSummary(h.issuanceIds);
+  if (!ack.pendingIds.length) return;
+  if (!confirm(`Xác nhận đã nhận đầy đủ ${ack.pendingIds.length} phiếu "${h.name}"${h.size ? ` (size ${h.size})` : ''}?`)) return;
+  for (const id of ack.pendingIds) {
+    try {
+      const result = await callAcknowledgeUniformIssuance(id);
+      const i2 = DB.uniformIssuances.findIndex(x => x.id === result.item.id);
+      if (i2 >= 0) DB.uniformIssuances[i2] = result.item;
+    } catch (err) {
+      alert(`⛔ ${err.message}`);
+      break;
+    }
+  }
+  logSystemAction('UNIFORM', 'ACK_UNIFORM_ISSUANCE', `Xác nhận đã nhận gộp [${h.name}]`, 'SUCCESS', h.name);
+  renderUniformHoldingsTable();
+  renderUniformIssuancesTable();
+  if (typeof renderMyUniformIssuancesTable === 'function') renderMyUniformIssuancesTable();
 }
 
 function openUniformHoldingActionModal(idx, outcome) {
