@@ -67,6 +67,8 @@ function resetReportsFilters() {
   document.getElementById('reportsFromDate').value = '';
   document.getElementById('reportsToDate').value = '';
   document.getElementById('reportsDeptFilter').value = '';
+  reportsUniformCheckedStores = new Set(DB.stores || []); // Đồng Phục: về lại "chọn hết" (không giới hạn)
+  if (getActiveReportLeafKey() === 'uniform') renderUniformReportStoreCheckboxes();
   renderReports();
 }
 
@@ -188,6 +190,59 @@ function repopulateReportsDeptFilterOptions(key) {
   const label = key === 'uniform' ? '-- Tất cả siêu thị --' : '-- Tất cả phòng ban --';
   el.innerHTML = `<option value="">${label}</option>` + source.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   if (source.includes(prevValue)) el.value = prevValue; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
+
+  // Đồng Phục: thay bộ lọc 1-siêu-thị bằng chọn NHIỀU siêu thị (yêu cầu người dùng bổ sung — "cộng tổng
+  // tồn kho của MỘT NHÓM siêu thị (filter được chọn)") — ẩn hẳn select 1-lựa-chọn, hiện khối checkbox
+  // riêng (xem renderUniformReportStoreCheckboxes() ngay dưới). Các module khác GIỮ NGUYÊN #reportsDeptFilter.
+  const singleWrap = document.getElementById('reportsDeptFilterSingleWrap');
+  const multiWrap = document.getElementById('reportsUniformStoreMultiWrap');
+  const isUniform = key === 'uniform';
+  if (singleWrap) singleWrap.classList.toggle('hidden', isUniform);
+  if (multiWrap) multiWrap.classList.toggle('hidden', !isUniform);
+  if (isUniform) renderUniformReportStoreCheckboxes();
+}
+
+// Trạng thái chọn siêu thị cho báo cáo Đồng Phục — reset về "chọn hết" (= không giới hạn, giữ đúng hành
+// vi mặc định cũ) mỗi lần vào lại tab báo cáo này (xem repopulateReportsDeptFilterOptions() ở trên).
+let reportsUniformCheckedStores = new Set();
+
+function renderUniformReportStoreCheckboxes() {
+  const wrap = document.getElementById('reportsUniformStoreMultiList');
+  if (!wrap) return;
+  const stores = DB.stores || [];
+  reportsUniformCheckedStores = new Set(stores); // mặc định chọn hết = không giới hạn
+  wrap.innerHTML = stores.map(s => `
+    <label class="flex items-center gap-1.5 text-xs bg-white border rounded px-2 py-1 cursor-pointer">
+      <input type="checkbox" checked data-op-change="toggleUniformReportStoreFromCheckbox" data-arg0="${escapeHtml(s)}" data-arg-el="1" class="uniform-report-store-cb">
+      <span>${escapeHtml(s)}</span>
+    </label>
+  `).join('') || '<span class="text-xs text-gray-400 italic">Chưa có siêu thị nào trong Danh Mục Siêu Thị.</span>';
+}
+
+function toggleUniformReportStoreFromCheckbox(storeName, checkboxEl) {
+  if (checkboxEl.checked) reportsUniformCheckedStores.add(storeName);
+  else reportsUniformCheckedStores.delete(storeName);
+  renderReports();
+}
+
+function setAllUniformReportStores(checked) {
+  // data-arg0 luôn tới đây dạng CHUỖI "true"/"false" (cspCoerceArg() chỉ coerce chuỗi toàn số sang
+  // Number, không đụng "true"/"false") — so sánh tường minh, KHÔNG dùng `if (checked)` trực tiếp
+  // (chuỗi "false" vẫn truthy, sẽ luôn chạy nhánh "chọn hết" bất kể bấm nút nào — cùng lớp lỗi đã sửa
+  // ở setAllPermTreeNodes()).
+  const shouldCheck = checked === true || checked === 'true';
+  document.querySelectorAll('.uniform-report-store-cb').forEach(cb => { cb.checked = shouldCheck; });
+  reportsUniformCheckedStores = shouldCheck ? new Set(DB.stores || []) : new Set();
+  renderReports();
+}
+
+// null = không giới hạn (đã chọn HẾT, hoặc chưa từng bỏ chọn gì) — khớp hành vi mặc định trước đây (mọi
+// siêu thị). Mảng rỗng [] (đã bỏ chọn hết) là lựa chọn hợp lệ — báo cáo sẽ hiện "không có dữ liệu", KHÔNG
+// tự âm thầm coi là "không giới hạn" (tránh hiểu nhầm "bỏ chọn hết" = "xem hết").
+function getUniformReportSelectedStores() {
+  const all = DB.stores || [];
+  if (reportsUniformCheckedStores.size >= all.length) return null;
+  return Array.from(reportsUniformCheckedStores);
 }
 
 function renderReports() {
@@ -274,7 +329,12 @@ const REPORT_MODULE_CONFIGS = {
     // createdAt chung — kỳ cấp phát (uniformPeriods) chứa allocations[] lồng nhau nên không đưa vào
     // records chính, thay vào đó renderUniformReportExtra() bên dưới tự tính thêm số liệu phân bổ/tồn
     // kho (dùng chung logic computeUniformStockClient() ở phần module Đồng Phục phía trên).
-    getRecords: (dept, from, to) => DB.uniformIssuances.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    // Bỏ qua tham số `dept` (single-select #reportsDeptFilter, đã ẩn cho module này) — module Đồng Phục
+    // dùng riêng bộ lọc chọn NHIỀU siêu thị (getUniformReportSelectedStores(), null = không giới hạn).
+    getRecords: (dept, from, to) => {
+      const selected = getUniformReportSelectedStores();
+      return DB.uniformIssuances.filter(r => (!selected || selected.includes(r.dept)) && isInDateRange(r.createdAt, from, to));
+    },
     renderExtra: renderUniformReportExtra,
     extraRows: records => {
       const totalIssuedQty = records.reduce((sum, r) => sum + (r.items || []).reduce((s, it) => s + (it.qty || 0), 0), 0);

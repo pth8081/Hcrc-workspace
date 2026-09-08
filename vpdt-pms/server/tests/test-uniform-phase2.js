@@ -223,8 +223,9 @@ async function main() {
       assertIncludes(result.errorMsg, 'Bạn không có quyền duyệt', 'Server phải chặn Giám Đốc Siêu Thị tự duyệt điều chuyển của mình');
     });
 
-    // ===== 11) Điều Chuyển Kho — duyệt thành công, dời tồn kho ĐÚNG cả 2 siêu thị =====
-    await run.run('Điều Chuyển: APPROVER duyệt -> tồn kho A giảm 5, tồn kho B tăng 5', async () => {
+    // ===== 11) Điều Chuyển Kho — duyệt thành công: mô hình "hàng đang vận chuyển" — kho NGUỒN giảm
+    // NGAY, kho ĐÍCH CHƯA tăng cho tới khi Giám Đốc Siêu Thị đích tự xác nhận đã nhận (bước 11b) =====
+    await run.run('Điều Chuyển: APPROVER duyệt -> tồn kho A giảm 5 ngay, tồn kho B CHƯA đổi (đang vận chuyển)', async () => {
       // Đăng nhập APPROVER TRƯỚC khi tính "before" — GD_B (người đăng nhập ở bước trước) theo đúng
       // filterUniformPeriodsForUser() thật CHỈ thấy phân bổ của Siêu Thị B (đúng thiết kế "GD Siêu Thị
       // chỉ thấy siêu thị mình"), không tính được tồn kho Siêu Thị A — phải tính "before"/"after" bằng
@@ -240,17 +241,60 @@ async function main() {
         DB.uniformTransfers[idx] = r.item;
         return r.item;
       }, transferId);
-      assertEqual(result.status, 'APPROVED', 'Điều chuyển phải chuyển APPROVED sau khi duyệt');
+      assertEqual(result.status, 'APPROVED', 'Điều chuyển phải chuyển APPROVED sau khi duyệt (chưa phải RECEIVED)');
       const after = await page.evaluate(() => ({
         a: computeUniformStockClient('Siêu Thị A').get('Áo đồng phục nam|||L').stock,
         b: computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L').stock
       }));
-      assertEqual(after.a, before.a - 5, 'Tồn kho nguồn (A) phải giảm đúng 5');
-      assertEqual(after.b, before.b + 5, 'Tồn kho đích (B) phải tăng đúng 5');
+      assertEqual(after.a, before.a - 5, 'Tồn kho nguồn (A) phải giảm đúng 5 ngay lúc duyệt (hàng coi như đã xuất kho)');
+      assertEqual(after.b, before.b, 'Tồn kho đích (B) CHƯA đổi — chỉ tăng khi Giám Đốc Siêu Thị B tự xác nhận đã nhận');
     });
 
-    // ===== 12) Điều Chuyển Kho — duyệt lại 1 yêu cầu đã APPROVED bị chặn (terminal) =====
+    // ===== 11b) Điều Chuyển Kho — người KHÔNG phải Giám Đốc Siêu Thị đích không xác nhận nhận được =====
+    await run.run('Điều Chuyển: GD_A (không phải đích) không xác nhận nhận hàng được', async () => {
+      await loginAs(page, GD_A);
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('uniformTransfers', id, 'receive', {});
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      }, transferId);
+      assertIncludes(result.errorMsg, 'chỉ Giám Đốc Siêu Thị ĐÍCH mới xác nhận được', 'Server phải chặn người không phải GĐ ST đích xác nhận nhận hàng');
+    });
+
+    // ===== 11c) Điều Chuyển Kho — Giám Đốc Siêu Thị B (đích) xác nhận đã nhận -> tồn kho B mới thật sự tăng =====
+    await run.run('Điều Chuyển: GD_B xác nhận đã nhận -> tồn kho B tăng đúng 5', async () => {
+      await loginAs(page, GD_B);
+      const before = await page.evaluate(() => computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L').stock);
+      const result = await page.evaluate(async (id) => {
+        const r = await callRecordAction('uniformTransfers', id, 'receive', {});
+        const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+        DB.uniformTransfers[idx] = r.item;
+        return r.item;
+      }, transferId);
+      assertEqual(result.status, 'RECEIVED', 'Điều chuyển phải chuyển RECEIVED sau khi GĐ ST đích xác nhận');
+      const after = await page.evaluate(() => computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L').stock);
+      assertEqual(after, before + 5, 'Tồn kho đích (B) phải tăng đúng 5 SAU KHI xác nhận đã nhận');
+    });
+
+    // ===== 11d) Điều Chuyển Kho — xác nhận nhận lại lần 2 bị chặn (terminal) =====
+    await run.run('Điều Chuyển: GD_B xác nhận nhận lại lần 2 bị chặn', async () => {
+      const result = await page.evaluate(async (id) => {
+        try {
+          await callRecordAction('uniformTransfers', id, 'receive', {});
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      }, transferId);
+      assertIncludes(result.errorMsg, 'đã được xác nhận nhận hàng trước đó', 'Không được xác nhận nhận lại 1 yêu cầu đã RECEIVED');
+    });
+
+    // ===== 12) Điều Chuyển Kho — duyệt lại 1 yêu cầu đã APPROVED/RECEIVED bị chặn (terminal) =====
     await run.run('Điều Chuyển: duyệt lại yêu cầu đã APPROVED bị chặn', async () => {
+      await loginAs(page, APPROVER); // currentUser đang là GD_B (đích) từ bước xác nhận nhận hàng trước đó
       const result = await page.evaluate(async (id) => {
         try {
           await callRecordAction('uniformTransfers', id, 'approve', {});

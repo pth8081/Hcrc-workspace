@@ -4938,9 +4938,14 @@ function computeUniformStock(allPeriods, storeDept, allIssuances, allAdjustments
     for (const it of issuance.items || []) bump(it.name, it.size, 'issued', it.qty);
   }
   for (const t of allApprovedTransfers || []) {
-    if (t.status !== 'APPROVED') continue; // caller nên tự lọc trước, kiểm tra lại đây cho chắc
+    // Mô hình "hàng đang vận chuyển" (quyết định người dùng thực tế, thay thế mô hình cũ chuyển ngay lúc
+    // duyệt): APPROVED = Hành Chính đã duyệt, hàng đã XUẤT khỏi kho nguồn (transferOut tính ngay) nhưng
+    // CHƯA vào kho đích — kho đích chỉ tăng (transferIn) khi Giám Đốc Siêu Thị đích tự bấm "Xác nhận đã
+    // nhận hàng" (receiveUniformTransfer() bên dưới), status chuyển RECEIVED. Tránh đếm 2 lần ở cả 2 kho
+    // trong lúc hàng "trên đường đi", đúng thực tế vận hành (có thể thất lạc/sai lệch khi vận chuyển).
+    if (t.status !== 'APPROVED' && t.status !== 'RECEIVED') continue; // caller nên tự lọc trước, kiểm tra lại đây cho chắc
     if (t.sourceDept === storeDept) bump(t.itemName, t.size, 'transferOut', t.qty);
-    if (t.targetDept === storeDept) bump(t.itemName, t.size, 'transferIn', t.qty);
+    if (t.targetDept === storeDept && t.status === 'RECEIVED') bump(t.itemName, t.size, 'transferIn', t.qty);
   }
   for (const adj of allAdjustments || []) {
     if (adj.dept !== storeDept) continue;
@@ -5013,10 +5018,12 @@ function computeUniformStockBreakdown(allPeriods, storeDept, allIssuances, allAd
     }
   }
   for (const tr of allApprovedTransfers || []) {
-    if (tr.status !== 'APPROVED') continue;
-    const t = timeOf(tr.approvedAt);
-    if (tr.sourceDept === storeDept) events.push({ t, type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
-    if (tr.targetDept === storeDept) events.push({ t, type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
+    // Cùng mô hình "hàng đang vận chuyển" ở computeUniformStock() — TRANSFER_OUT phát ngay lúc duyệt
+    // (approvedAt), TRANSFER_IN chỉ phát khi đích đã xác nhận nhận (receivedAt), KHÔNG còn dùng chung
+    // approvedAt cho cả 2 phía như trước.
+    if (tr.status !== 'APPROVED' && tr.status !== 'RECEIVED') continue;
+    if (tr.sourceDept === storeDept) events.push({ t: timeOf(tr.approvedAt), type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
+    if (tr.targetDept === storeDept && tr.status === 'RECEIVED') events.push({ t: timeOf(tr.receivedAt), type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
   }
 
   events.sort((a, b) => a.t - b.t);
@@ -5315,18 +5322,32 @@ function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfSt
   return record;
 }
 
-// ===== Điều Chuyển Kho Giữa Các Siêu Thị (uniformTransfers, Phase 2) =====
+// ===== Điều Chuyển Kho Giữa Các Siêu Thị (uniformTransfers, Phase 2 + mô hình "hàng đang vận chuyển") =====
 // Giám Đốc Siêu Thị NGUỒN (canManageUniformStore) tự yêu cầu điều chuyển 1 mặt hàng+size sang 1 siêu
 // thị KHÁC — DÙNG CHUNG quyền duyệt uniformApprove với kỳ cấp phát (canApproveUniform() ở trên, đã xác
-// nhận với người dùng — KHÔNG tạo quyền riêng). PENDING_APPROVAL -> APPROVED (stock nguồn giảm/đích
-// tăng NGAY khi duyệt, xem computeUniformStock() tham số allApprovedTransfers) | REJECTED (TERMINAL,
-// cùng khuôn approveUniformPeriod()/rejectUniformPeriod() ở trên — kiểm tra lại status server-side ở
-// MỌI hành động, không chỉ chặn ở giao diện). routes/records.js chịu trách nhiệm khoá ĐỒNG THỜI 2 khoá
+// nhận với người dùng — KHÔNG tạo quyền riêng). Vòng đời 3 bước (quyết định người dùng thực tế, thay
+// thế mô hình cũ 2 bước "duyệt xong là xong"):
+//   PENDING_APPROVAL -> APPROVED (Hành Chính/uniformApprove duyệt — kho NGUỒN giảm NGAY, hàng coi như đã
+//                        xuất kho "đang vận chuyển"; kho ĐÍCH CHƯA tăng) -> RECEIVED (Giám Đốc Siêu Thị
+//                        ĐÍCH tự bấm "Xác nhận đã nhận hàng" — receiveUniformTransfer() bên dưới — kho
+//                        ĐÍCH mới tăng đúng lúc này)
+//   PENDING_APPROVAL -> REJECTED (TERMINAL, không đổi — HC từ chối trước khi hàng xuất kho)
+// APPROVED và RECEIVED đều là TERMINAL theo hướng riêng của chúng (không có "từ chối nhận hàng" — nếu
+// hàng thất lạc/sai lệch khi vận chuyển, xử lý thủ công qua báo Hỏng/Mất ở kho đích sau khi đã nhận,
+// giữ state machine đơn giản, đúng phạm vi yêu cầu). Kiểm tra lại status server-side ở MỌI hành động,
+// không chỉ chặn ở giao diện. routes/records.js chịu trách nhiệm khoá ĐỒNG THỜI 2 khoá
 // 'uniform_store:<sourceDept>' + 'uniform_store:<targetDept>' (thứ tự CỐ ĐỊNH, xem withAppLock() ở
-// lib/recordStore.js) lúc duyệt — 2 siêu thị cùng bị ảnh hưởng 1 lúc, khác các hành động khác của module
-// này (chỉ đụng 1 siêu thị/lần).
+// lib/recordStore.js) lúc DUYỆT (cả 2 siêu thị cùng liên quan tới việc kiểm tra tồn kho nguồn); lúc XÁC
+// NHẬN NHẬN chỉ cần khoá riêng 'uniform_store:<targetDept>' (chỉ kho đích thay đổi ở bước này).
 function canApproveUniformTransfer(user) {
   return canApproveUniform(user);
+}
+
+// Giám Đốc Siêu Thị ĐÍCH (canManageUniformStore, đúng user.dept === transfer.targetDept) — KHÔNG dùng
+// chung quyền duyệt (canApproveUniformTransfer) vì đây là hành động của bên NHẬN hàng, khác hẳn bên
+// DUYỆT yêu cầu (thường là Hành Chính, không thuộc bất kỳ siêu thị nào).
+function canConfirmUniformTransferReceipt(user, transfer) {
+  return !!(canManageUniformStore(user) && transfer && user.dept === transfer.targetDept);
 }
 
 // allPeriods/allIssuancesOfSourceStore/allAdjustmentsOfSourceStore/allApprovedTransfers: CỦA ĐÚNG siêu
@@ -5358,7 +5379,9 @@ function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceSto
     sourceDept, targetDept, itemName, size, qty, reason,
     status: 'PENDING_APPROVAL',
     requestedBy: user.username, requestedByName: user.name, requestedAt: nowVN(),
-    approvedBy: null, approvedByName: null, approvedAt: null, rejectReason: ''
+    approvedBy: null, approvedByName: null, approvedAt: null, rejectReason: '',
+    // Bước xác nhận nhận hàng (mô hình "hàng đang vận chuyển") — xem receiveUniformTransfer() bên dưới.
+    receivedBy: null, receivedByName: null, receivedAt: null
   };
 }
 
@@ -5389,6 +5412,30 @@ function rejectUniformTransfer(user, transfer, payload) {
   transfer.approvedByName = user.name;
   transfer.approvedAt = nowVN();
   transfer.rejectReason = String(payload?.reason || '').trim().slice(0, 500);
+  return transfer;
+}
+
+// Giám Đốc Siêu Thị ĐÍCH xác nhận ĐÃ NHẬN hàng — chỉ gọi được khi transfer đang ở APPROVED (đã duyệt,
+// đang "vận chuyển"), kho ĐÍCH mới thật sự tăng NGAY tại thời điểm gọi hàm này (xem computeUniformStock()/
+// computeUniformStockBreakdown() ở trên — chỉ tính transferIn khi status === 'RECEIVED'). KHÔNG cho gọi
+// lại lần 2 (409, TERMINAL cùng khuôn mọi state cuối khác trong module này).
+function receiveUniformTransfer(user, transfer) {
+  if (!canConfirmUniformTransferReceipt(user, transfer)) {
+    throw new HttpError(403, 'Bạn không có quyền xác nhận nhận hàng điều chuyển này (chỉ Giám Đốc Siêu Thị ĐÍCH mới xác nhận được)');
+  }
+  if (transfer.status === 'PENDING_APPROVAL') {
+    throw new HttpError(409, 'Yêu cầu điều chuyển này chưa được duyệt, chưa thể xác nhận nhận hàng');
+  }
+  if (transfer.status === 'REJECTED') {
+    throw new HttpError(409, 'Yêu cầu điều chuyển này đã bị từ chối, không có hàng để xác nhận nhận');
+  }
+  if (transfer.status !== 'APPROVED') {
+    throw new HttpError(409, 'Yêu cầu điều chuyển này đã được xác nhận nhận hàng trước đó');
+  }
+  transfer.status = 'RECEIVED';
+  transfer.receivedBy = user.username;
+  transfer.receivedByName = user.name;
+  transfer.receivedAt = nowVN();
   return transfer;
 }
 
@@ -5853,6 +5900,7 @@ module.exports = {
   requestContractPaymentTypeChange, approveContractPaymentTypeChange, rejectContractPaymentTypeChange,
   confirmUniformAllocation, buildUniformIssuance, acknowledgeUniformIssuance, buildUniformStockAdjustment,
   canApproveUniformTransfer, buildUniformTransfer, approveUniformTransfer, rejectUniformTransfer,
+  canConfirmUniformTransferReceipt, receiveUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,

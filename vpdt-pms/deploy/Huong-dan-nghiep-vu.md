@@ -388,6 +388,22 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
   phiếu của mình qua mục mới **"👕 Đồng Phục Của Tôi"** trong "⚙️ Cá Nhân Hóa &
   Cập Nhật Thông Tin" (Hồ Sơ Cá Nhân, mở cho mọi tài khoản) — bấm avatar/tên ở
   góc màn hình để mở.
+  **Điều chuyển giữa 2 siêu thị (từ v14.1) — mô hình "hàng đang vận
+  chuyển"**: Giám Đốc Siêu Thị A tạo yêu cầu điều chuyển → Hành Chính/người có
+  quyền duyệt (`uniformManage`) duyệt (`APPROVED`) → **tồn kho siêu thị A trừ
+  ngay lúc duyệt**, nhưng tồn kho siêu thị B **CHƯA cộng** — hàng coi như đang
+  trên đường đi, không thuộc kho bên nào cho tới khi xác nhận. Bắt buộc **đúng
+  Giám Đốc Siêu Thị ĐÍCH (B)** bấm "✅ Xác nhận đã nhận hàng" thì mới chuyển
+  sang `RECEIVED` và tồn kho B mới cộng thêm (server tự xác thực lại quyền
+  theo `user.dept === transfer.targetDept`, không ai xác nhận thay siêu thị
+  khác được). Trước v14.1, tồn kho B cộng ngay lúc duyệt — nay đổi hẳn sang mô
+  hình 3 bước để tránh sai lệch tồn kho khi hàng chưa thực sự tới nơi.
+  **Báo cáo Đồng Phục theo siêu thị (từ v14.1)**: bộ lọc siêu thị của riêng
+  báo cáo Đồng Phục đổi từ chọn 1 sang **chọn nhiều** (tick chọn một nhóm siêu
+  thị bất kỳ, có nút "Chọn Tất Cả"/"Bỏ Chọn Hết") — báo cáo hiện dòng "Tổng
+  Cộng (N siêu thị đã chọn)" cộng tồn kho của đúng nhóm đang chọn, và khi đang
+  lọc (chưa chọn hết) hiện thêm khối "Tổng Cộng TẤT CẢ Siêu Thị" để so sánh
+  ngay với tổng toàn hệ thống mà không cần bỏ chọn để xem lại.
 - **Giấy Phép** — hồ sơ pháp lý (giấy phép kinh doanh, chứng chỉ...), phân
   quyền hoàn toàn riêng ngay trong module (tạo/duyệt/xem tách biệt), không đi
   qua quy trình duyệt theo phòng ban ở mục 2. Có theo dõi hiệu lực + nhắc hết

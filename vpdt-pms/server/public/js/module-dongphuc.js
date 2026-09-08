@@ -60,7 +60,7 @@ function setUniformSubTab(subTab) {
   if (subTab === 'STORE') {
     renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable();
     renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable();
-    resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransfersTable();
+    resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransferReceiveQueue(); renderUniformTransfersTable();
   }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
   if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
@@ -1041,9 +1041,10 @@ function computeUniformStockClient(storeDept) {
     if (adj.outcome === 'MAT') bump(adj.itemName, adj.size, 'mat', adj.qty);
   }
   for (const t of (DB.uniformTransfers || [])) {
-    if (t.status !== 'APPROVED') continue;
+    // Mô hình "hàng đang vận chuyển" — xem giải thích đầy đủ ở computeUniformStock() bản server.
+    if (t.status !== 'APPROVED' && t.status !== 'RECEIVED') continue;
     if (t.sourceDept === storeDept) bump(t.itemName, t.size, 'transferOut', t.qty);
-    if (t.targetDept === storeDept) bump(t.itemName, t.size, 'transferIn', t.qty);
+    if (t.targetDept === storeDept && t.status === 'RECEIVED') bump(t.itemName, t.size, 'transferIn', t.qty);
   }
   for (const row of stock.values()) row.stock = row.allocated - (row.issued - row.recalled) - row.hong - row.huy - row.mat - row.transferOut + row.transferIn;
   return stock;
@@ -1088,10 +1089,9 @@ function computeUniformStockBreakdownClient(storeDept) {
     }
   }
   for (const tr of (DB.uniformTransfers || [])) {
-    if (tr.status !== 'APPROVED') continue;
-    const t = timeOf(tr.approvedAt);
-    if (tr.sourceDept === storeDept) events.push({ t, type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
-    if (tr.targetDept === storeDept) events.push({ t, type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
+    if (tr.status !== 'APPROVED' && tr.status !== 'RECEIVED') continue;
+    if (tr.sourceDept === storeDept) events.push({ t: timeOf(tr.approvedAt), type: 'TRANSFER_OUT', name: tr.itemName, size: tr.size, qty: tr.qty });
+    if (tr.targetDept === storeDept && tr.status === 'RECEIVED') events.push({ t: timeOf(tr.receivedAt), type: 'TRANSFER_IN', name: tr.itemName, size: tr.size, qty: tr.qty });
   }
 
   events.sort((a, b) => a.t - b.t);
@@ -1233,6 +1233,10 @@ function canViewUniformTransferClient(user, item) {
   if (user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformApprove) return true;
   return !!(user.perms?.uniformStoreManage && (item.sourceDept === user.dept || item.targetDept === user.dept));
 }
+// Mirror canConfirmUniformTransferReceipt() ở lib/recordActions.js — Giám Đốc Siêu Thị ĐÍCH.
+function canConfirmUniformTransferReceiptClient(user, item) {
+  return !!(canManageUniformStore(user) && item && user.dept === item.targetDept);
+}
 
 function resetUniformTransferForm() {
   const formWrap = document.getElementById('uniformTransferRequestForm');
@@ -1262,6 +1266,8 @@ function resetUniformTransferForm() {
 
   const approveWrap = document.getElementById('uniformTransferApprovalWrap');
   if (approveWrap) approveWrap.classList.toggle('hidden', !canApproveUniformClient(currentUser));
+  const receiveWrap = document.getElementById('uniformTransferReceiveWrap');
+  if (receiveWrap) receiveWrap.classList.toggle('hidden', !canManageUniformStore(currentUser));
 }
 
 async function callCreateUniformTransfer(payload) {
@@ -1309,7 +1315,8 @@ async function submitUniformTransfer() {
 }
 
 function uniformTransferStatusBadge(status) {
-  if (status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã duyệt</span>`;
+  if (status === 'RECEIVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã nhận hàng</span>`;
+  if (status === 'APPROVED') return `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[11px]">🚚 Đang vận chuyển</span>`;
   if (status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px]">⛔ Đã từ chối</span>`;
   return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">⏳ Chờ duyệt</span>`;
 }
@@ -1342,7 +1349,7 @@ function renderUniformTransferApprovalQueue() {
 function approveUniformTransferAction(id) {
   showConfirmModal({
     title: 'Duyệt Điều Chuyển Kho',
-    bodyHTML: 'Duyệt yêu cầu điều chuyển này? Tồn kho siêu thị nguồn sẽ giảm và siêu thị đích sẽ tăng ngay lập tức.',
+    bodyHTML: 'Duyệt yêu cầu điều chuyển này? Tồn kho siêu thị NGUỒN sẽ giảm ngay lập tức (hàng coi như đã xuất kho, đang vận chuyển). Tồn kho siêu thị ĐÍCH chỉ tăng SAU KHI Giám Đốc Siêu Thị đích tự xác nhận đã nhận hàng.',
     confirmLabel: 'Duyệt',
     onConfirm: async () => {
       let result;
@@ -1352,8 +1359,57 @@ function approveUniformTransferAction(id) {
       const idx = DB.uniformTransfers.findIndex(x => x.id === id);
       if (idx !== -1) DB.uniformTransfers[idx] = result.item;
       logSystemAction('UNIFORM', 'APPROVE_UNIFORM_TRANSFER', `Duyệt điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
-      alert('✅ Đã duyệt điều chuyển kho!');
+      alert('✅ Đã duyệt điều chuyển kho! Hàng đang vận chuyển, chờ siêu thị đích xác nhận đã nhận.');
       renderUniformTransferApprovalQueue();
+      renderUniformTransferReceiveQueue();
+      renderUniformTransfersTable();
+      renderUniformStock();
+      renderUniformIssueItems();
+    }
+  });
+}
+
+// Giám Đốc Siêu Thị ĐÍCH xác nhận đã nhận hàng — mô hình "hàng đang vận chuyển" (xem
+// receiveUniformTransfer() ở lib/recordActions.js): CHỈ đúng lúc bấm nút này kho đích mới thật sự tăng.
+function renderUniformTransferReceiveQueue() {
+  const wrap = document.getElementById('uniformTransferReceiveList');
+  const noNote = document.getElementById('uniformTransferNoReceiveNote');
+  const box = document.getElementById('uniformTransferReceiveWrap');
+  if (!wrap || !box) return;
+  const canManage = canManageUniformStore(currentUser);
+  box.classList.toggle('hidden', !canManage);
+  if (!canManage) return;
+  const pending = (DB.uniformTransfers || []).filter(t => t.status === 'APPROVED' && canConfirmUniformTransferReceiptClient(currentUser, t));
+  noNote.classList.toggle('hidden', pending.length > 0);
+  wrap.innerHTML = pending.map(t => `
+    <div class="bg-white p-3 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div class="text-xs">
+        <div class="font-bold text-orange-900">${escapeHtml(t.sourceDept)} → ${escapeHtml(t.targetDept)}</div>
+        <div class="text-gray-600">${formatUniformLabel(t.itemName, t.size, uniformSkuFor(t.itemName, t.size))}: ${t.qty} — ${escapeHtml(t.reason)}</div>
+        <div class="text-[11px] text-gray-400">Đã duyệt bởi ${escapeHtml(t.approvedByName || '')} lúc ${escapeHtml(t.approvedAt || '')}</div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" data-op="receiveUniformTransferAction" data-arg0="${t.id}" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">📦 Xác Nhận Đã Nhận</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function receiveUniformTransferAction(id) {
+  showConfirmModal({
+    title: 'Xác Nhận Đã Nhận Hàng Điều Chuyển',
+    bodyHTML: 'Xác nhận siêu thị bạn ĐÃ NHẬN ĐỦ lô hàng này? Tồn kho siêu thị bạn sẽ tăng NGAY sau khi xác nhận.',
+    confirmLabel: 'Xác Nhận Đã Nhận',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('uniformTransfers', id, 'receive', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformTransfers[idx] = result.item;
+      logSystemAction('UNIFORM', 'RECEIVE_UNIFORM_TRANSFER', `Xác nhận đã nhận điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
+      alert('✅ Đã xác nhận nhận hàng, tồn kho siêu thị bạn đã cập nhật!');
+      renderUniformTransferReceiveQueue();
       renderUniformTransfersTable();
       renderUniformStock();
       renderUniformIssueItems();
@@ -1403,7 +1459,8 @@ function renderUniformTransfersTable() {
   const uniformTransferDashCards = [
     { key: '', label: 'Tổng Yêu Cầu', count: scopedTransfers.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING_APPROVAL', label: 'Đang Chờ Duyệt', count: scopedTransfers.filter(t => t.status === 'PENDING_APPROVAL').length, colorClass: 'border-l-yellow-500' },
-    { key: 'APPROVED', label: 'Đã Duyệt', count: scopedTransfers.filter(t => t.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
+    { key: 'APPROVED', label: 'Đang Vận Chuyển', count: scopedTransfers.filter(t => t.status === 'APPROVED').length, colorClass: 'border-l-orange-500' },
+    { key: 'RECEIVED', label: 'Đã Nhận Hàng', count: scopedTransfers.filter(t => t.status === 'RECEIVED').length, colorClass: 'border-l-green-500' },
     { key: 'REJECTED', label: 'Từ Chối', count: scopedTransfers.filter(t => t.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
   ];
   const dashEl = document.getElementById('uniformTransferDashboardCards');
@@ -1411,7 +1468,7 @@ function renderUniformTransfersTable() {
 
   const rows = scopedTransfers.filter(t => !statusFilter || t.status === statusFilter);
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có yêu cầu điều chuyển nào.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có yêu cầu điều chuyển nào.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(t => `
@@ -1424,6 +1481,7 @@ function renderUniformTransfersTable() {
       <td class="border p-2">${uniformTransferStatusBadge(t.status)}${t.status === 'REJECTED' && t.rejectReason ? `<div class="text-[10px] text-red-600">${escapeHtml(t.rejectReason)}</div>` : ''}</td>
       <td class="border p-2">${escapeHtml(t.requestedByName || '')}</td>
       <td class="border p-2">${t.approvedByName ? `${escapeHtml(t.approvedByName)} — ${escapeHtml(t.approvedAt || '')}` : '—'}</td>
+      <td class="border p-2">${t.receivedByName ? `${escapeHtml(t.receivedByName)} — ${escapeHtml(t.receivedAt || '')}` : '—'}</td>
     </tr>
   `).join('');
 }

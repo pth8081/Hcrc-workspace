@@ -3443,6 +3443,15 @@
           <div id="uniformTransferNoPendingNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có yêu cầu điều chuyển nào đang chờ duyệt.</div>
         </div>
 
+        <!-- Giám Đốc Siêu Thị ĐÍCH xác nhận đã nhận hàng — mô hình "hàng đang vận chuyển" (xem
+             receiveUniformTransfer() ở lib/recordActions.js): kho đích chỉ tăng SAU khi bấm xác nhận ở
+             đây, KHÔNG tăng ngay lúc Hành Chính duyệt như kho nguồn. -->
+        <div id="uniformTransferReceiveWrap" class="hidden space-y-2">
+          <h4 class="font-bold text-sm text-orange-900">📦 Chờ Xác Nhận Nhận Hàng (Siêu Thị Của Bạn)</h4>
+          <div id="uniformTransferReceiveList" class="space-y-2"></div>
+          <div id="uniformTransferNoReceiveNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có lô hàng nào đang chờ siêu thị bạn xác nhận nhận.</div>
+        </div>
+
         <div class="space-y-2">
           <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
           <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
@@ -3450,7 +3459,8 @@
             <select id="filterStatusUniformTransfer" data-op-change="renderUniformTransfersTable" class="border p-2 rounded text-sm bg-white">
               <option value="">-- Tất cả trạng thái --</option>
               <option value="PENDING_APPROVAL">⏳ Chờ duyệt</option>
-              <option value="APPROVED">✅ Đã duyệt</option>
+              <option value="APPROVED">🚚 Đang vận chuyển</option>
+              <option value="RECEIVED">✅ Đã nhận hàng</option>
               <option value="REJECTED">❌ Từ chối</option>
             </select>
           </div>
@@ -3465,6 +3475,7 @@
                 <th class="border p-2">Trạng Thái</th>
                 <th class="border p-2">Người Yêu Cầu</th>
                 <th class="border p-2">Người Duyệt</th>
+                <th class="border p-2">Người Nhận</th>
               </tr></thead>
               <tbody id="uniformTransfersTableBody"></tbody>
             </table>
@@ -5530,7 +5541,7 @@
           <label class="block font-semibold text-gray-600 mb-1">Đến Ngày</label>
           <input id="reportsToDate" type="date" data-op-change="renderReports" class="w-full border p-1.5 rounded bg-white">
         </div>
-        <div>
+        <div id="reportsDeptFilterSingleWrap">
           <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
           <select id="reportsDeptFilter" data-op-change="renderReports" class="w-full border p-1.5 rounded bg-white font-semibold">
             <option value="">-- Tất cả phòng ban --</option>
@@ -5539,6 +5550,20 @@
         <div class="flex items-end">
           <button data-op="resetReportsFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
         </div>
+      </div>
+
+      <!-- Đồng Phục: bộ lọc chọn NHIỀU siêu thị (thay cho select 1-lựa-chọn ở trên, tự ẩn/hiện qua
+           repopulateReportsDeptFilterOptions() ở module-baocaoquantri.js) — "nhóm siêu thị" = các ô đang
+           tick, dùng để cộng tổng tồn kho theo nhóm (xem renderUniformReportExtra()). -->
+      <div id="reportsUniformStoreMultiWrap" class="hidden bg-white p-3 rounded border text-xs space-y-2">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <label class="font-semibold text-gray-600">Nhóm Siêu Thị (tick để lọc — mặc định chọn hết)</label>
+          <div class="flex gap-2">
+            <button type="button" data-op="setAllUniformReportStores" data-arg0="true" class="bg-sky-100 text-sky-700 px-2 py-1 rounded font-bold hover:bg-sky-200">Chọn Tất Cả</button>
+            <button type="button" data-op="setAllUniformReportStores" data-arg0="false" class="bg-gray-100 text-gray-700 px-2 py-1 rounded font-bold hover:bg-gray-200">Bỏ Chọn Hết</button>
+          </div>
+        </div>
+        <div id="reportsUniformStoreMultiList" class="flex flex-wrap gap-2"></div>
       </div>
     </div>
 

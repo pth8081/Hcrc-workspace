@@ -1,8 +1,63 @@
 # Phiên bản hiện tại
 
-**14.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.1 (2026-09-08): Đồng Phục — điều chuyển 3 bước (xác nhận nhận hàng) + báo cáo multi-select siêu thị
+
+Theo phản hồi trực tiếp của người dùng sau bản v14.0 (v14.0 từng báo "điều chuyển kho chỉ 2 bước, tồn
+kho cả 2 bên cập nhật ngay lúc duyệt, KHÔNG có bước siêu thị đích tự xác nhận" — người dùng yêu cầu bổ
+sung ngay). 3 yêu cầu, đã phân tích + xin xác nhận phương án qua `AskUserQuestion` trước khi làm (người
+dùng chọn cả 2 phương án khuyến nghị):
+
+**1. Điều chuyển kho Đồng Phục — đổi sang mô hình "hàng đang vận chuyển" (3 bước)**: trước đây duyệt
+xong (`APPROVED`) là tồn kho CẢ 2 siêu thị cập nhật ngay. Nay: Hành Chính/`uniformApprove` duyệt →
+**tồn kho siêu thị NGUỒN trừ ngay** (giữ nguyên hành vi cũ), nhưng **tồn kho siêu thị ĐÍCH chưa cộng** —
+trạng thái chuyển thành "🚚 Đang vận chuyển", hàng coi như chưa thuộc kho bên nào. Bắt buộc **đúng Giám
+Đốc Siêu Thị ĐÍCH** bấm "✅ Xác nhận đã nhận hàng" (route mới `POST /uniformTransfers/:id/receive`,
+server tự khoá quyền theo `user.dept === transfer.targetDept`, không xác nhận thay siêu thị khác được)
+thì mới chuyển `RECEIVED` và tồn kho đích mới cộng thêm. `computeUniformStock()`/
+`computeUniformStockBreakdown()` (cả server `lib/recordActions.js` lẫn mirror client
+`module-dongphuc.js`) đổi điều kiện: `transferOut` tính khi trạng thái APPROVED-hoặc-RECEIVED (trừ ngay
+lúc duyệt), `transferIn` CHỈ tính khi RECEIVED (cộng đúng lúc xác nhận). UI: badge trạng thái mới, hàng
+đợi "Chờ Xác Nhận Nhận Hàng" riêng cho Giám Đốc Siêu Thị đích, cột "Người Nhận" trong bảng lịch sử.
+
+**2. Đánh giá đào tạo tân binh giai đoạn 3 — kiểm tra lại phạm vi theo đúng siêu thị**: rà soát
+`evaluateOnboardingStage3()`/`canEvaluateOnboardingStage3()` (`lib/recordActions.js`) — xác nhận đã
+đúng thiết kế từ trước, KHÔNG cần sửa gì: server đã khoá cứng chỉ Giám Đốc của ĐÚNG siêu thị nhân viên
+tân binh đó (`user.dept === onboarding.storeDept` + quyền `onboardingEvaluate`) mới đánh giá được giai
+đoạn 3, không ai đánh giá thay siêu thị khác. Báo lại minh bạch: không phải bỏ sót yêu cầu, mà thực tế
+đã đáp ứng sẵn.
+
+**3. Báo cáo Đồng Phục theo siêu thị — bộ lọc multi-select + tổng theo nhóm + tổng toàn hệ thống**: bộ
+lọc siêu thị của riêng tab báo cáo Đồng Phục (`module-baocaoquantri.js`) đổi từ `<select>` chọn 1 sang
+**tick chọn nhiều** (thêm nút "Chọn Tất Cả"/"Bỏ Chọn Hết") — không tạo entity "nhóm siêu thị" lưu trữ
+riêng, "nhóm" đơn giản là tập siêu thị đang được tick trong bộ lọc (theo đúng phương án người dùng chọn).
+Báo cáo (`module-baocaoquantri-preview.js`) hiện dòng "Tổng Cộng (N siêu thị đã chọn)" cộng tồn kho của
+đúng nhóm đang lọc, và khi đang lọc (chưa chọn hết) hiện thêm khối "Tổng Cộng TẤT CẢ Siêu Thị" để so
+sánh ngay với tổng toàn hệ thống mà không cần bỏ lọc.
+
+**Phát hiện + sửa 1 lỗi thật trong lúc viết test cho mục 3** (bắt được TRƯỚC khi merge, không phải lỗi
+đã lên production): `setAllUniformReportStores(checked)` — cùng lớp lỗi đã ghi nhận trước đây với
+`setAllPermTreeNodes()` (chuỗi HTML `data-arg0="false"` qua `cspCoerceArg()` giữ nguyên dạng STRING
+không rỗng nên luôn truthy) — khiến bấm "Bỏ Chọn Hết" không hề bỏ chọn gì. Đã sửa bằng so sánh tường
+minh `checked === true || checked === 'true'`, và test Playwright mới viết cho đúng tính năng này là
+thứ bắt được lỗi.
+
+**Testing đã chạy**: `node tests/test-uniform.js` (34/34), `node tests/test-uniform-phase2.js` (23/23,
+viết lại 1 kịch bản cũ theo đúng mô hình 3 bước mới + thêm kịch bản happy-path xác nhận nhận hàng),
+`node tests/test-uniform-scenario-roleplay.js` (15/15, thêm bước xác nhận thật qua click DOM),
+`node tests/test-reports.js` (13/13, thêm 3 kịch bản mới cho multi-select + tổng nhóm + tổng toàn hệ
+thống, bắt được lỗi ở trên), và full regression suite toàn bộ `tests/test-*.js` (92 file) — **92/92
+chạy, chỉ 2 lỗi ĐÃ BIẾT TỪ TRƯỚC** (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — phụ
+thuộc SQL Server thật đang không kết nối trong môi trường CI/sandbox, không liên quan gì tới thay đổi
+lần này, đã xác nhận nhiều lần trong các đợt merge trước).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (mọi field mới — `receivedBy`/`receivedByName`/
+`receivedAt` trên `uniformTransfers` — là field JSON trong blob hiện có), KHÔNG thêm biến môi trường mới
+trong `.env.example`, KHÔNG đổi `dependencies` trong `package.json`. Chỉ đổi logic + UI + file test — chỉ
+cần copy code + `pm2 restart`, không cần thao tác gì khác.
 
 ## v14.0 (2026-09-08): Test role-play Đồng Phục + Đào Tạo end-to-end, sửa lỗi thật uniformApprove
 ## view-scope

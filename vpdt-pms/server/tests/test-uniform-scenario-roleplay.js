@@ -10,11 +10,12 @@
 //      quyền đặc biệt nào, đúng luồng tự phục vụ thật của hệ thống).
 //   6) GD_A tạo yêu cầu điều chuyển kho từ Siêu Thị A sang Siêu Thị B.
 //   7) HC (Quản lý Hành Chính) xác nhận (duyệt) điều chuyển kho — ĐÚNG người duyệt thật trong hệ thống
-//      (không phải Giám Đốc Siêu Thị B, xem lib/recordActions.js canApproveUniformTransfer()).
-//   8) Xác nhận tồn kho Siêu Thị B tự động tăng NGAY khi HC duyệt — hệ thống KHÔNG có bước "Giám Đốc
-//      Siêu Thị B xác nhận nhận hàng nhập kho" riêng (đã khảo sát kỹ routes/records.js + recordActions.js:
-//      approveUniformTransfer() tự chuyển tồn kho ngay lúc duyệt, không có route/action nào khác cho
-//      siêu thị đích) — ghi nhận đúng cơ chế thật thay vì đoán ra 1 bước không tồn tại.
+//      (không phải Giám Đốc Siêu Thị B, xem lib/recordActions.js canApproveUniformTransfer()). Mô hình
+//      "hàng đang vận chuyển": kho Siêu Thị A (nguồn) giảm NGAY lúc HC duyệt, kho Siêu Thị B (đích) CHƯA
+//      tăng.
+//   8) Giám Đốc Siêu Thị B (đích) tự bấm "Xác nhận đã nhận" (receiveUniformTransfer()) — CHỈ lúc này kho
+//      Siêu Thị B mới thật sự tăng. Bổ sung theo yêu cầu người dùng sau đợt test lần đầu (trước đó hệ
+//      thống chuyển tồn kho ngay lúc HC duyệt, không có bước GĐ ST đích xác nhận riêng).
 //
 // Xen kẽ các bước trên là các phép thử BẢO MẬT/PHÂN QUYỀN (đúng yêu cầu "không có lỗ hổng bảo mật"):
 //   - Nhân viên không có quyền không tạo được kỳ cấp phát.
@@ -234,21 +235,38 @@ async function main() {
       await page.evaluate(() => window.__confirmPending());
       await page.waitForTimeout(150);
       const status = await page.evaluate((id) => DB.uniformTransfers.find(x => x.id === id).status, transferId);
-      assertEqual(status, 'APPROVED', 'Điều chuyển phải chuyển APPROVED sau khi HC bấm Duyệt');
+      assertEqual(status, 'APPROVED', 'Điều chuyển phải chuyển APPROVED sau khi HC bấm Duyệt (chưa RECEIVED)');
 
-      // ===== 8) Xác nhận tồn kho Siêu Thị B tự động tăng NGAY, KHÔNG cần Giám Đốc Siêu Thị B làm
-      // thêm bất kỳ thao tác "xác nhận nhận hàng" nào — hệ thống không có bước đó (đã khảo sát kỹ,
-      // xem chú thích đầu file). "Hàng tự nhập kho" đúng theo nghĩa đen. =====
+      // ===== 8) Mô hình "hàng đang vận chuyển" (theo yêu cầu người dùng bổ sung sau đó): kho Siêu Thị A
+      // (nguồn) giảm NGAY khi HC duyệt, nhưng kho Siêu Thị B (đích) CHƯA tăng — chỉ tăng khi Giám Đốc
+      // Siêu Thị B tự bấm "Xác nhận đã nhận" (kiểm tra ở bước 9 bên dưới). =====
       const after = await page.evaluate(() => ({
         a: computeUniformStockClient('Siêu Thị A').get('Áo đồng phục nam|||L').stock,
-        b: computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L').stock
+        b: computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L')?.stock || 0
       }));
       assertEqual(after.a, before.a - 5, 'Tồn kho Siêu Thị A (nguồn) phải giảm đúng 5 ngay khi HC duyệt');
-      assertEqual(after.b, before.b + 5, 'Tồn kho Siêu Thị B (đích) phải tự động tăng đúng 5 NGAY khi HC duyệt — không cần GĐ Siêu Thị B thao tác gì thêm');
+      assertEqual(after.b, before.b, 'Tồn kho Siêu Thị B (đích) CHƯA tăng ngay khi HC duyệt — chỉ tăng sau khi GĐ Siêu Thị B tự xác nhận đã nhận');
+    });
+
+    // ===== 9) Giám Đốc Siêu Thị B tự xác nhận ĐÃ NHẬN hàng điều chuyển (bấm nút thật) -> kho B mới thật sự tăng =====
+    await run.run('8) Giám Đốc Siêu Thị B xác nhận ĐÃ NHẬN hàng điều chuyển -> nhập kho ST B (bấm THẬT)', async () => {
+      await loginAs(page, GD_B);
+      await page.evaluate(() => { switchTab('uniform'); setUniformSubTab('STORE'); });
+      const before = await page.evaluate(() => computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L')?.stock || 0);
+      await page.click(`button[data-op="receiveUniformTransferAction"][data-arg0="${transferId}"]`);
+      await page.evaluate(() => window.__confirmPending());
+      await page.waitForTimeout(150);
+      const result = await page.evaluate((id) => {
+        const t = DB.uniformTransfers.find(x => x.id === id);
+        return { status: t.status, stockB: computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L').stock };
+      }, transferId);
+      assertEqual(result.status, 'RECEIVED', 'Điều chuyển phải chuyển RECEIVED sau khi GĐ ST B xác nhận đã nhận');
+      assertEqual(result.stockB, before + 5, 'Tồn kho Siêu Thị B (đích) phải tăng đúng 5 SAU KHI GĐ ST B tự xác nhận đã nhận');
     });
 
     // ===== 11) Bảo mật GET /api/data: mỗi vai trò chỉ thấy đúng phạm vi Đồng Phục của mình =====
     await run.run('Bảo mật: HC (uniformManage) thấy TOÀN BỘ kỳ cấp phát/cấp phát/điều chuyển qua GET /api/data', async () => {
+      await loginAs(page, HC); // currentUser đang là GD_B (đích) từ bước xác nhận nhận hàng trước đó
       const result = await page.evaluate(async (id) => {
         const res = await fetch('/api/data');
         const data = await res.json();

@@ -204,8 +204,11 @@ function renderOfficeReportExtra(records) {
 // computeUniformStockClient() với màn hình module Đồng Phục để khỏi lệch logic.
 function renderUniformReportExtra(records) {
   const totalIssuedQty = records.reduce((sum, r) => sum + (r.items || []).reduce((s, it) => s + (it.qty || 0), 0), 0);
-  const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
-  const storeDepts = deptFilter ? [deptFilter] : [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
+  // Nhóm siêu thị đang chọn (bộ lọc chọn NHIỀU siêu thị — xem module-baocaoquantri.js
+  // getUniformReportSelectedStores()) — null = không giới hạn (mặc định, giữ đúng hành vi cũ: suy ra từ
+  // các siêu thị THỰC SỰ có allocations, tránh dòng trống cho siêu thị chưa từng cấp phát gì).
+  const selectedStores = typeof getUniformReportSelectedStores === 'function' ? getUniformReportSelectedStores() : null;
+  const storeDepts = selectedStores || [...new Set((DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept)))].sort();
 
   const stockRows = [];
   for (const dept of storeDepts) {
@@ -214,6 +217,20 @@ function renderUniformReportExtra(records) {
   }
   const totalAllocatedQty = stockRows.reduce((s, r) => s + r.allocated, 0);
   const totalStockQty = stockRows.reduce((s, r) => s + r.stock, 0);
+
+  // Tổng cộng TOÀN BỘ siêu thị (KHÔNG phụ thuộc bộ lọc đang chọn) — yêu cầu người dùng bổ sung: "cộng
+  // tổng tồn kho của TẤT CẢ các siêu thị" luôn hiện song song với tổng của nhóm đang lọc.
+  const allStoreDepts = [...new Set([...(DB.stores || []), ...(DB.uniformPeriods || []).flatMap(p => (p.allocations || []).map(a => a.dept))])];
+  const allStockRows = [];
+  for (const dept of allStoreDepts) {
+    const stock = computeUniformStockClient(dept);
+    for (const row of stock.values()) allStockRows.push(row);
+  }
+  const grandAllocatedQty = allStockRows.reduce((s, r) => s + r.allocated, 0);
+  const grandIssuedQty = allStockRows.reduce((s, r) => s + r.issued, 0);
+  const grandStockQty = allStockRows.reduce((s, r) => s + r.stock, 0);
+  const isFiltered = !!selectedStores; // đang giới hạn theo 1 nhóm con (khác "tất cả")
+  const selectedIssuedQty = stockRows.reduce((s, r) => s + r.issued, 0);
 
   // Chi tiết theo NHÂN VIÊN (Phase 2) — nhân viên nào nhận mặt hàng/size/mã SKU nào, lọc theo ĐÚNG
   // records đã qua getRecords() (đã áp bộ lọc siêu thị + khoảng ngày ở trên) — không tính lại từ đầu.
@@ -239,9 +256,30 @@ function renderUniformReportExtra(records) {
         </div>
         <div class="bg-amber-50 border border-amber-200 rounded p-3">
           <div class="font-bold text-amber-700">${totalStockQty.toLocaleString('vi-VN')}</div>
-          <div class="text-[11px] text-gray-500 mt-1">Tổng tồn kho hiện tại</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng tồn kho hiện tại${isFiltered ? ' (nhóm đã chọn)' : ''}</div>
         </div>
       </div>
+
+      ${isFiltered ? `
+      <div class="bg-indigo-50 border border-indigo-200 rounded p-3">
+        <div class="text-[11px] font-bold text-indigo-800 mb-2">🏬 Tổng Cộng TẤT CẢ Siêu Thị (không phụ thuộc bộ lọc đang chọn)</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+          <div class="bg-white border border-indigo-100 rounded p-2">
+            <div class="font-bold text-sky-700">${grandAllocatedQty.toLocaleString('vi-VN')}</div>
+            <div class="text-[11px] text-gray-500 mt-1">Tổng SL đã phân bổ (mọi siêu thị)</div>
+          </div>
+          <div class="bg-white border border-indigo-100 rounded p-2">
+            <div class="font-bold text-emerald-700">${grandIssuedQty.toLocaleString('vi-VN')}</div>
+            <div class="text-[11px] text-gray-500 mt-1">Tổng SL đã cấp cho nhân viên (mọi siêu thị)</div>
+          </div>
+          <div class="bg-white border border-indigo-100 rounded p-2">
+            <div class="font-bold text-amber-700">${grandStockQty.toLocaleString('vi-VN')}</div>
+            <div class="text-[11px] text-gray-500 mt-1">Tổng tồn kho (mọi siêu thị)</div>
+          </div>
+        </div>
+      </div>
+      ` : ''}
+
       <div class="overflow-x-auto">
         <table class="w-full border-collapse text-xs">
           <thead><tr class="bg-gray-100 text-left">
@@ -262,8 +300,18 @@ function renderUniformReportExtra(records) {
                 <td class="border p-2 text-right">${r.issued.toLocaleString('vi-VN')}</td>
                 <td class="border p-2 text-right font-bold ${r.stock <= 0 ? 'text-red-600' : 'text-green-700'}">${r.stock.toLocaleString('vi-VN')}</td>
               </tr>
-            `).join('') : `<tr><td colspan="6" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu tồn kho.</td></tr>`}
+            `).join('') : `<tr><td colspan="6" class="text-center p-4 text-gray-500 italic">Chưa có dữ liệu tồn kho${isFiltered ? ' cho nhóm siêu thị đã chọn' : ''}.</td></tr>`}
           </tbody>
+          ${stockRows.length ? `
+          <tfoot>
+            <tr class="bg-gray-50 font-bold">
+              <td class="border p-2" colspan="3">Tổng Cộng (${storeDepts.length} siêu thị đã chọn)</td>
+              <td class="border p-2 text-right">${totalAllocatedQty.toLocaleString('vi-VN')}</td>
+              <td class="border p-2 text-right">${selectedIssuedQty.toLocaleString('vi-VN')}</td>
+              <td class="border p-2 text-right ${totalStockQty <= 0 ? 'text-red-600' : 'text-green-700'}">${totalStockQty.toLocaleString('vi-VN')}</td>
+            </tr>
+          </tfoot>
+          ` : ''}
         </table>
       </div>
 

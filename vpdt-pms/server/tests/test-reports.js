@@ -195,6 +195,65 @@ async function main() {
       assertEqual(rowFor('Dự toán Văn phòng - Mua sắm (VNĐ)').value, 20000000, 'exported Mua sắm dự toán mismatch');
     });
 
+    // ===== Đồng Phục: bộ lọc chọn NHIỀU siêu thị + dòng "Tổng Cộng (đã chọn)" + khối "Tổng Cộng TẤT
+    // CẢ Siêu Thị" — seed riêng ở CUỐI file (chạy sau mọi assertion Tổng Hợp/Excel ở trên, tránh ảnh
+    // hưởng ngược các phép tính tổng hợp đã kiểm tra xong).
+    await page.evaluate(() => {
+      Object.assign(DB, {
+        stores: ['Siêu Thị A', 'Siêu Thị B'],
+        uniformPeriods: [{
+          id: 1, name: 'Đợt 1', approvalStatus: 'APPROVED',
+          allocations: [
+            { id: 11, dept: 'Siêu Thị A', status: 'CONFIRMED', items: [{ name: 'Áo đồng phục nam', size: 'L', qty: 20 }] },
+            { id: 12, dept: 'Siêu Thị B', status: 'CONFIRMED', items: [{ name: 'Áo đồng phục nam', size: 'L', qty: 15 }] }
+          ]
+        }],
+        uniformIssuances: [
+          { id: 21, dept: 'Siêu Thị A', employeeName: 'NV A', createdAt: '2026-03-01T09:00:00', items: [{ name: 'Áo đồng phục nam', size: 'L', qty: 5 }] },
+          { id: 22, dept: 'Siêu Thị B', employeeName: 'NV B', createdAt: '2026-03-01T09:00:00', items: [{ name: 'Áo đồng phục nam', size: 'L', qty: 3 }] }
+        ],
+        uniformStockAdjustments: [], uniformTransfers: []
+      });
+      selectReportsNavL1('hanhchinh');
+      selectReportsNavL2('uniform');
+    });
+
+    await run('Đồng Phục: mặc định (chọn hết) hiện đúng tồn kho từng siêu thị + dòng Tổng Cộng (đã chọn)', async () => {
+      const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
+      assert(html.includes('Siêu Thị A') && html.includes('Siêu Thị B'), 'phải hiện cả 2 siêu thị có allocation');
+      assert(!html.includes('Tổng Cộng TẤT CẢ Siêu Thị'), 'mặc định chọn hết KHÔNG cần hiện khối tổng-tất-cả riêng (đã trùng với đã chọn)');
+      const footerText = await page.evaluate(() => document.querySelector('#reportsContent tfoot')?.textContent || '');
+      assert(footerText.includes('2 siêu thị đã chọn'), `dòng Tổng Cộng phải ghi đúng số siêu thị đã chọn, got: ${footerText}`);
+      assert(footerText.includes('35') && footerText.includes('8') && footerText.includes('27'), `dòng Tổng Cộng phải đúng 35 đã nhận / 8 đã cấp / 27 tồn, got: ${footerText}`);
+    });
+
+    await run('Đồng Phục: bỏ chọn Siêu Thị B (bấm checkbox thật) -> bảng chỉ còn A, khối Tổng-Tất-Cả xuất hiện đúng số', async () => {
+      await page.click('input.uniform-report-store-cb[data-arg0="Siêu Thị B"]');
+      await page.waitForTimeout(80);
+      const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
+      assert(html.includes('Siêu Thị A'), 'vẫn phải hiện Siêu Thị A (còn được chọn)');
+      const stockTableHTML = await page.evaluate(() => document.querySelectorAll('#reportsContent table')[0]?.innerHTML || '');
+      assert(!stockTableHTML.includes('Siêu Thị B'), 'bảng tồn kho KHÔNG được còn dòng Siêu Thị B sau khi bỏ chọn');
+      const footerText = await page.evaluate(() => document.querySelector('#reportsContent tfoot')?.textContent || '');
+      assert(footerText.includes('1 siêu thị đã chọn'), `dòng Tổng Cộng phải còn đúng 1 siêu thị, got: ${footerText}`);
+      assert(footerText.includes('20') && footerText.includes('5') && footerText.includes('15'), `dòng Tổng Cộng (chỉ A) phải đúng 20/5/15, got: ${footerText}`);
+      assert(html.includes('Tổng Cộng TẤT CẢ Siêu Thị'), 'đã lọc còn 1 siêu thị -> phải hiện khối Tổng Cộng TẤT CẢ Siêu Thị (bao gồm cả B)');
+      const grandBlockText = await page.evaluate(() => document.querySelector('#reportsContent .bg-indigo-50')?.textContent || '');
+      assert(grandBlockText.includes('35') && grandBlockText.includes('8') && grandBlockText.includes('27'), `khối Tổng Cộng TẤT CẢ phải đúng 35/8/27 (A+B gộp lại), got: ${grandBlockText}`);
+    });
+
+    await run('Đồng Phục: "Bỏ Chọn Hết" -> báo trống, "Chọn Tất Cả" khôi phục lại', async () => {
+      await page.click('button[data-op="setAllUniformReportStores"][data-arg0="false"]');
+      await page.waitForTimeout(80);
+      let html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
+      assert(html.includes('cho nhóm siêu thị đã chọn'), 'bỏ chọn hết phải báo rõ "không có dữ liệu cho nhóm đã chọn" (không tự coi là chọn hết)');
+
+      await page.click('button[data-op="setAllUniformReportStores"][data-arg0="true"]');
+      await page.waitForTimeout(80);
+      html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
+      assert(html.includes('Siêu Thị A') && html.includes('Siêu Thị B'), '"Chọn Tất Cả" phải khôi phục lại đủ dữ liệu như ban đầu');
+    });
+
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
   } finally {
     await teardown({ server, browser });

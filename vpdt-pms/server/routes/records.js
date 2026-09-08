@@ -2624,7 +2624,7 @@ router.post('/uniformIssuances/create', async (req, res) => {
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
-      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
+      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
       const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers);
       return insertRecord('uniformIssuances', record);
     });
@@ -2670,7 +2670,7 @@ router.post('/uniformStockAdjustments/create', async (req, res) => {
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
-      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
+      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
       const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers);
       return insertRecord('uniformStockAdjustments', record);
     });
@@ -2699,7 +2699,7 @@ router.post('/uniformTransfers/create', async (req, res) => {
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
-      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED');
+      const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
       const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers);
       return insertRecord('uniformTransfers', record);
     });
@@ -2758,7 +2758,7 @@ router.post('/uniformTransfers/:id/approve', async (req, res) => {
         ]);
         const sourceIssuances = allIssuances.filter(x => x.dept === transfer.sourceDept);
         const sourceAdjustments = allAdjustments.filter(x => x.dept === transfer.sourceDept);
-        const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' && t.id !== transfer.id);
+        const approvedTransfers = allTransfers.filter(t => (t.status === 'APPROVED' || t.status === 'RECEIVED') && t.id !== transfer.id);
         const sourceStock = recordActions.computeUniformStock(allPeriods, transfer.sourceDept, sourceIssuances, sourceAdjustments, approvedTransfers);
         return recordActions.approveUniformTransfer(freshUser, transfer, sourceStock);
       })
@@ -2766,6 +2766,30 @@ router.post('/uniformTransfers/:id/approve', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `uniformTransfers/${req.params.id}/approve`, err);
+  }
+});
+
+// Giám Đốc Siêu Thị ĐÍCH xác nhận đã nhận hàng (mô hình "hàng đang vận chuyển" — xem
+// receiveUniformTransfer() ở lib/recordActions.js) — CHỈ đụng kho ĐÍCH (kho nguồn đã trừ xong lúc
+// duyệt), nên chỉ cần khoá riêng 'uniform_store:<targetDept>', không cần khoá kép như /approve.
+router.post('/uniformTransfers/:id/receive', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const peekAll = await getAllForCollection('uniformTransfers');
+    const peek = peekAll.find(t => t.id === itemId);
+    if (!peek) return res.status(404).json({ error: 'Không tìm thấy yêu cầu điều chuyển này' });
+    if (!recordActions.canConfirmUniformTransferReceipt(freshUser, peek)) {
+      return res.status(403).json({ error: 'Bạn không có quyền xác nhận nhận hàng điều chuyển này (chỉ Giám Đốc Siêu Thị ĐÍCH mới xác nhận được)' });
+    }
+    const result = await withAppLock(`uniform_store:${peek.targetDept}`, () =>
+      withLockedRecordById('uniformTransfers', itemId, (transfer) =>
+        recordActions.receiveUniformTransfer(freshUser, transfer))
+    );
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformTransfers/${req.params.id}/receive`, err);
   }
 });
 

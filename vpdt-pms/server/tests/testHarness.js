@@ -395,7 +395,7 @@ function createDispatcher(state) {
         }
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
         const storeAdjustments = (state.uniformStockAdjustments || []).filter(x => x.dept === freshUser.dept);
-        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
         const record = recordActions.buildUniformIssuance(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, state.users, approvedTransfers);
         state.uniformIssuances.push(record);
         return { status: 200, body: { ok: true, item: record } };
@@ -407,7 +407,7 @@ function createDispatcher(state) {
         }
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
         const storeAdjustments = state.uniformStockAdjustments.filter(x => x.dept === freshUser.dept);
-        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
         const record = recordActions.buildUniformStockAdjustment(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, state.users, approvedTransfers);
         state.uniformStockAdjustments.push(record);
         return { status: 200, body: { ok: true, item: record } };
@@ -443,7 +443,7 @@ function createDispatcher(state) {
         }
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
         const storeAdjustments = state.uniformStockAdjustments.filter(x => x.dept === freshUser.dept);
-        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED');
+        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
         const record = recordActions.buildUniformTransfer(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, approvedTransfers);
         state.uniformTransfers.push(record);
         return { status: 200, body: { ok: true, item: record } };
@@ -461,9 +461,22 @@ function createDispatcher(state) {
         }
         const sourceIssuances = state.uniformIssuances.filter(x => x.dept === transfer.sourceDept);
         const sourceAdjustments = state.uniformStockAdjustments.filter(x => x.dept === transfer.sourceDept);
-        const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED' && t.id !== transfer.id);
+        const approvedTransfers = state.uniformTransfers.filter(t => (t.status === 'APPROVED' || t.status === 'RECEIVED') && t.id !== transfer.id);
         const sourceStock = recordActions.computeUniformStock(state.uniformPeriods, transfer.sourceDept, sourceIssuances, sourceAdjustments, approvedTransfers);
         const updated = recordActions.approveUniformTransfer(freshUser, transfer, sourceStock);
+        return { status: 200, body: { ok: true, item: updated } };
+      }
+
+      // Xác nhận đã nhận hàng (mô hình "hàng đang vận chuyển") — mirror routes/records.js
+      // /uniformTransfers/:id/receive.
+      if ((m = pathName.match(/^\/api\/records\/uniformTransfers\/(\d+)\/receive$/)) && method === 'POST') {
+        const id = Number(m[1]);
+        const transfer = state.uniformTransfers.find(t => t.id === id);
+        if (!transfer) return { status: 404, body: { error: 'Không tìm thấy yêu cầu điều chuyển này' } };
+        if (!recordActions.canConfirmUniformTransferReceipt(freshUser, transfer)) {
+          return { status: 403, body: { error: 'Bạn không có quyền xác nhận nhận hàng điều chuyển này (chỉ Giám Đốc Siêu Thị ĐÍCH mới xác nhận được)' } };
+        }
+        const updated = recordActions.receiveUniformTransfer(freshUser, transfer);
         return { status: 200, body: { ok: true, item: updated } };
       }
 
