@@ -1,8 +1,70 @@
 # Phiên bản hiện tại
 
-**13.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.0 (2026-09-08): Test role-play Đồng Phục + Đào Tạo end-to-end, sửa lỗi thật uniformApprove
+## view-scope
+
+Theo yêu cầu chủ động của người dùng: đóng vai nhiều nhân vật nghiệp vụ để test 2 luồng end-to-end,
+đảm bảo không lỗi nghiệp vụ/bảo mật/nút chức năng —
+(1) Đồng Phục: 2 giám đốc siêu thị + 1 nhân viên + 1 quản lý hành chính — tạo kỳ cấp phát → duyệt →
+xác nhận phân bổ → cấp phát cho nhân viên → nhân viên xác nhận nhận → điều chuyển kho A→B → duyệt điều
+chuyển; (2) Đào Tạo: quản lý đào tạo tạo kế hoạch → chương trình học → lớp học gắn CT học + tài liệu +
+câu hỏi → học viên đăng ký → học online → thi → có điểm.
+
+**Kết quả test — 2 luồng nghiệp vụ CHÍNH không phát hiện lỗi**: viết 2 file test role-play mới, dựng
+đủ vai trò, click DOM thật (không mock action trực tiếp) — `test-uniform-scenario-roleplay.js` (14/14
+kịch bản, gồm cả kiểm tra bảo mật: chặn tạo/xác nhận/điều chuyển sai quyền/sai siêu thị) và
+`test-training-scenario-roleplay.js` (13/13 kịch bản, gồm chặn nộp bài trước khi xem tài liệu, chặn
+đánh dấu-đã-xem hộ người khác, chặn nộp bài lần 2).
+
+**Phát hiện + sửa 1 lỗi bảo mật/logic thật trong lúc viết test** (không phải chỉ đọc code — lộ ra khi
+sửa lại `testHarness.js` cho lọc view-scope đúng như server thật, trước đó mock lộ toàn bộ dữ liệu che
+giấu lỗi này): `lib/recordViewScope.js` — `canViewUniformPeriod()`/`filterUniformPeriodsForUser()`
+thiếu nhánh `uniformApprove`. Người chỉ có quyền `uniformApprove` (không kèm `uniformManage`/
+`uniformStoreManage`) DUYỆT ĐƯỢC kỳ cấp phát qua action (`canApproveUniform()` đã cho phép), nhưng GET
+`/api/data` lại lọc sạch `uniformPeriods` khỏi họ — "duyệt được nhưng danh sách rỗng", không tự vào
+được để mà duyệt. Cùng lớp lỗi đã sửa cho `operationStoreOpenings`/`operationRepairs` ở v13.9. Đã thêm
+`uniformApprove` vào cả 2 hàm.
+
+**2 điểm minh bạch báo lại, không tự ý coi là lỗi**:
+- Bước "giám đốc siêu thị B xác nhận điều chuyển kho" trong yêu cầu gốc — kiểm tra code xác nhận luồng
+  Điều Chuyển Kho Đồng Phục là **2 bước, không phải 3**: khi Quản Lý Hành Chính (hoặc người có
+  `uniformApprove`) DUYỆT yêu cầu điều chuyển, tồn kho ở CẢ 2 siêu thị (nguồn giảm, đích tăng) được cập
+  nhật NGAY LẬP TỨC — không có route/action/UI riêng nào để "siêu thị đích tự xác nhận nhận hàng" sau
+  đó. Test đã xác nhận đúng: siêu thị B không cần (và không có nút) tự thao tác gì thêm, và số liệu tồn
+  kho cả 2 bên đúng ngay sau bước duyệt.
+- "Chương trình đào tạo tân binh sau khi thi xong, giám đốc ST của nhân viên đó vào đánh giá" — grep
+  toàn bộ server xác nhận **KHÔNG có** tính năng này trong module Đào Tạo (lớp/CT học chung). Có tồn tại
+  `evaluateOnboardingStage3()` nhưng thuộc module **Đào Tạo Tân Binh** hoàn toàn riêng (Onboarding),
+  không liên kết với luồng lớp/CT học/thi thông thường. Test đã dựng kịch bản xác nhận rõ: GĐ ST của
+  nhân viên không có bất kỳ quyền `trainingManage`/`trainingInstruct`/`onboardingEvaluate` nào, và server
+  chặn 400 (không im lặng 200) nếu thử gọi hành động đánh giá giả định. Chưa xây dựng tính năng mới này
+  — cần xác nhận thêm với người dùng nếu muốn bổ sung.
+
+**Sửa kèm 2 lớp lỗi test-authoring trong file test CŨ** (không phải lỗi sản phẩm — lộ ra vì
+`testHarness.js` giờ lọc view-scope đúng như thật):
+- `tests/test-uniform.js`: 2 kịch bản dựa trên giả định sai "nhân viên không quyền vẫn xem được tồn kho
+  view-only" — module Đồng Phục chỉ có 2 vai trò thật (Hành Chính, Giám Đốc Siêu Thị — xem
+  `deploy/Huong-dan-nghiep-vu.md`), không có tầng xem-only cho nhân viên thường. Đã viết lại đúng hành
+  vi thật (chặn hẳn vào module) và các lỗi cascading do đổi vai trò sau khi view-scope đã siết đúng
+  (dùng ID kỳ/phân bổ đã chụp sẵn lúc còn đủ quyền xem, thay vì tự tra cứu lại bằng vai trò không đủ
+  quyền).
+- `tests/test-uniform-phase2.js`: 1 kịch bản tính "tồn kho trước" bằng đúng vai trò đang đăng nhập từ
+  bước trước (không đủ quyền xem đúng siêu thị) thay vì vai trò APPROVER thật sự thực hiện duyệt.
+
+**Testing đã chạy**: `node tests/test-uniform.js` (34/34), `node tests/test-uniform-phase2.js` (20/20),
+`node tests/test-uniform-scenario-roleplay.js` (14/14 mới), `node tests/test-training-scenario-roleplay.js`
+(13/13 mới), và full regression suite toàn bộ `tests/test-*.js` (92 file) — **92/92 chạy, chỉ 2 lỗi ĐÃ
+BIẾT TỪ TRƯỚC** (`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — phụ thuộc SQL Server
+thật đang không kết nối trong môi trường CI/sandbox, không liên quan gì tới thay đổi lần này, đã xác
+nhận nhiều lần trong các đợt merge trước).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới trong `.env.example`,
+KHÔNG đổi `dependencies` trong `package.json`. Chỉ đổi logic thuần (`lib/recordViewScope.js`) + file
+test — chỉ cần copy code + `pm2 restart`, không cần thao tác gì khác.
 
 ## v13.9 (2026-09-08): Vận Hành > Siêu Thị — audit lần 4 (nghiệp vụ/trường/phân quyền, 3 agent song song),
 ## sửa 6/7 lỗi xác nhận
