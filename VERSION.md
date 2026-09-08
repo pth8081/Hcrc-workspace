@@ -1,8 +1,76 @@
 # Phiên bản hiện tại
 
-**12.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đợt A (UX rollout): nút "↺ Làm Mới" + chip "✕ Xoá file" trên 4 form tạo mới — mẫu tham chiếu (2026-09-08)
+
+Phàn nàn người dùng: đang nhập dở 1 form Tạo Mới, CHƯA gửi, muốn bỏ hết để
+nhập lại thông tin khác — không có nút "Hủy/Làm Mới" nào để trắng form, và
+tệp đã chọn ở ô upload không xoá được (chỉ chọn được tệp KHÁC đè lên, không
+về lại "chưa chọn file"). Audit xác nhận: 0/31 form Tạo Mới trên toàn hệ
+thống (~16 module) có 1 trong 2 tính năng này.
+
+**2 hạ tầng dùng chung mới, `server/public/js/core.js`** (đặt ngay trước
+`bindCspDelegation('userHeader')`, cạnh hạ tầng CSP `data-op`):
+- `confirmAndResetForm(formId, resetFnName)` — gắn qua
+  `data-op="confirmAndResetForm" data-arg0="<id form>"
+  data-arg1="<tên hàm resetXxxForm của module>"` trên nút "↺ Làm Mới". Chỉ
+  hỏi `confirm()` NẾU form đang có ít nhất 1 `<input>`/`<textarea>` khác giá
+  trị mặc định (bỏ qua `<select>` — `HTMLSelectElement` không có
+  `.defaultValue` thật, so sánh sẽ luôn sai lệch false-positive; bỏ qua ô
+  readonly/disabled — mã tự sinh, trường khoá theo chế độ). Xác nhận xong ->
+  gọi `window[resetFnName]()` (mỗi module tự viết `resetXxxForm()`, KHÔNG có
+  logic dùng chung nào khác vì mỗi form có state JS riêng: dòng động, panel
+  phê duyệt bổ sung, mã tự sinh, toggle Nhập Mới/Cập Nhật...).
+- Chip "📎 tên file [✕]": `onSingleFileChosen(inputEl, chipContainerId)` +
+  `clearSingleFileInput(inputId, chipContainerId)` cho input file đơn (gắn
+  qua `data-op-change="onSingleFileChosen" data-arg-el="0"
+  data-arg1="<id chip>"` ngay trên input); `onMultiFileChosen`/
+  `removeOneFileFromMultiInput`/`clearMultiFileInput` cho input `multiple`
+  (dùng `DataTransfer` để dựng lại `FileList` thiếu đúng 1 file bị xoá — API
+  gốc không cho xoá trực tiếp 1 phần tử khỏi `FileList`).
+
+**Áp dụng cho 4 form (Đợt A — mẫu tham chiếu cho Đợt B/C/D/E, ~27 form còn
+lại trên ~12 module)**:
+- Văn Bản Trình (`#submissionForm`) — `resetSubmissionForm()` (mới,
+  `module-vanbantrinh.js`, factor ra từ 3 dòng reset cũ viết thẳng ở cuối
+  `doSubmitSubmissionReq()` — giờ CẢ nút Làm Mới lẫn luồng trình thành công
+  đều gọi 1 hàm duy nhất). Chip cho `subFile` (đơn) + `subExtraFiles`
+  (multiple).
+- Hợp Đồng (`#contractForm`) — `resetContractForm()` (mới,
+  `module-hopdong.js`) — CỐ Ý viết RIÊNG, không refactor `cancelEditContract()`
+  (hàm đó dành cho thoát chế độ Sửa, gọi từ nhiều nơi khác, đã có test hồi
+  quy — đổi hành vi ở đó không cần thiết cho việc này) dù có phần trùng lặp;
+  tự lo cả trường hợp bấm "Làm Mới" khi đang Sửa dở (thoát Sửa ngay). Trắng
+  luôn "Các Đợt Thanh Toán" về 0 dòng. Chip cho `contractFile`.
+- Tài Liệu (`#docForm`) — `resetDocUploadForm()` (mới, `module-tailieu.js`),
+  factor từ luồng tải lên thành công. Đưa toggle Nhập Mới/Cập Nhật về lại
+  "Nhập Mới". Chip cho `docFile`.
+- Giấy Phép (`#licenseForm`) — `resetLicenseForm()` (mới, cùng file), cùng
+  khuôn Tài Liệu. Chip cho `licenseFile`.
+
+**Bug thật phát hiện qua bộ test mới trong lúc viết**: `renderMultiFileChips()`
+tham chiếu nhầm biến `chipContainerId` (không tồn tại trong scope hàm đó,
+tham số thực là `chipEl` — 1 phần tử DOM) khi dựng nút ✕ cho từng chip —
+khiến MỌI thao tác chọn ≥2 file vào ô `multiple` ném `ReferenceError` ngay
+trong `change` handler, chip không hiện. Sửa thành `chipEl.id`.
+
+**Bộ test mới**: `server/tests/test-form-reset-file-remove.js` (dùng lại hạ
+tầng `tests/_harness-contract.js`/`_seed.js`) — 5 kịch bản: chip file đơn +
+multi hiện/xoá đúng cho cả 4 form, "Làm Mới" trắng đúng mọi state JS riêng
+từng form (mã tự sinh, panel phê duyệt bổ sung Văn Bản Trình, Đợt Thanh Toán
+Hợp Đồng, toggle Nhập Mới/Cập Nhật Tài Liệu/Giấy Phép), và xác nhận
+`confirm()` chỉ được hỏi khi form thật sự có dữ liệu đã nhập (không hỏi vô ích
+lúc form đang trống). Toàn bộ suite hồi quy hiện có (79 file `test-*.js`)
+chạy lại — không phát sinh lỗi mới ngoài các lỗi kết nối SQL Server đã biết
+từ trước (môi trường sandbox không có SQL Server thật).
+
+**Deploy-impact**: THUẦN client-side (`public/index.html` + 3
+`public/js/*.js`), không đổi `schema.sql`, không thêm biến môi trường, không
+đổi `dependencies` — chỉ cần copy code + `pm2 restart` (hoặc refresh trình
+duyệt nếu server không đổi).
 
 ## Nhân Sự > Offboarding: thêm trường bắt buộc "Ngày Nghỉ Việc" (2026-09-07)
 

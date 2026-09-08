@@ -6759,6 +6759,112 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   cspDispatchOp(el, e, 'data-op-enterkey');
 });
+
+// ==========================================
+// "Làm Mới" (reset) form Tạo Mới + chip "✕ Xoá file" — hạ tầng DÙNG CHUNG cho MỌI form tạo-mới-hồ-sơ
+// (Đợt A: Văn Bản Trình/Hợp Đồng/Tài Liệu/Giấy Phép — mẫu tham chiếu cho các đợt sau áp dụng tiếp cho
+// ~12 module còn lại). Xuất phát từ phàn nàn người dùng: đang nhập dở 1 form tạo mới, CHƯA gửi, muốn bỏ
+// hết để nhập lại thông tin khác — không có nút "Hủy/Làm Mới" nào, và tệp đã chọn ở ô upload không xoá
+// được (chỉ có thể chọn tệp KHÁC đè lên, không về lại "chưa chọn file").
+//
+// `form.reset()` gốc CHƯA đủ cho các form nghiệp vụ ở đây: nó chỉ đưa input/select/textarea CÓ SẴN lúc
+// trang tải về .defaultValue — không tự re-sync mảng JS (đợt thanh toán Hợp Đồng), không tự dựng lại
+// panel phê duyệt bổ sung (checkbox render động theo Cấp Phê Duyệt), không tự bật lại "Nhập Mới" cho
+// toggle Nhập Mới/Cập Nhật (Tài Liệu/Giấy Phép). Vì vậy MỖI form cần 1 hàm resetXxxForm() riêng (viết ở
+// đúng file module-*.js của form đó — xem resetSubmissionForm()/resetContractForm()/
+// resetDocUploadForm()/resetLicenseForm()) tự gọi form.reset() RỒI dọn tiếp phần trạng thái JS riêng —
+// cùng khuôn 2 tiền lệ resetWorkflowForm() (module-itsupport-tier.js)/resetKpiConfigForm()
+// (module-hcrcdonghanh.js), vốn chỉ áp dụng cho form quản trị, giờ nhân rộng cho form nghiệp vụ tạo mới.
+//
+// confirmAndResetForm(formId, resetFnName) — gắn qua data-op="confirmAndResetForm" data-arg0="<id
+// form>" data-arg1="<tên hàm resetXxxForm của module>" trên nút "↺ Làm Mới" (theo ĐÚNG quy ước data-op/
+// data-argN sẵn có — không cần wiring JS riêng ở lúc module nạp, nút tĩnh có sẵn trong HTML tự động
+// nhận dispatch qua bindCspDelegation() của section chứa nó). Chỉ hỏi xác nhận (confirm(), cùng kiểu mọi
+// xác nhận xoá khác trong hệ thống) NẾU form đang có ít nhất 1 trường đã nhập khác giá trị mặc định —
+// tránh hỏi vô ích khi form đang trống (mới mở tab/mới gửi xong). Bỏ qua ô readonly/disabled (mã tự
+// sinh, trường bị khoá theo chế độ) khi xét "đã nhập" — các ô đó không phải do người dùng gõ.
+//
+// CHỈ xét <input>/<textarea> (bỏ qua <select>): HTMLSelectElement KHÔNG có thuộc tính `.defaultValue`
+// thật (khác input/textarea) — so sánh `.value !== .defaultValue` trên 1 select luôn ra `true` (so với
+// `undefined`) dù người dùng chưa đụng vào, khiến MỌI form (form nào cũng có ít nhất 1 select) bị coi
+// là "đã nhập" ngay cả khi vừa mở tab. Đánh đổi chấp nhận được: bỏ sót trường hợp hiếm người dùng CHỈ
+// đổi 1 lựa chọn <select> (không gõ chữ/chọn file gì) rồi bấm Làm Mới — không hỏi xác nhận — còn hơn hỏi
+// xác nhận SAI ngay cả khi form trống trơn.
+function confirmAndResetForm(formId, resetFnName) {
+  const formEl = document.getElementById(formId);
+  if (!formEl) return;
+  const isDirty = [...formEl.querySelectorAll('input, textarea')].some(el => {
+    if (el.disabled || el.readOnly) return false;
+    if (el.type === 'file') return !!(el.files && el.files.length);
+    if (el.type === 'checkbox' || el.type === 'radio') return el.checked !== el.defaultChecked;
+    return el.value !== el.defaultValue;
+  });
+  if (isDirty && !confirm('Xoá toàn bộ dữ liệu đã nhập trong form này để làm mới?')) return;
+  if (resetFnName && typeof window[resetFnName] === 'function') {
+    window[resetFnName]();
+  } else {
+    formEl.reset();
+  }
+  const firstField = formEl.querySelector(
+    'input:not([type=hidden]):not([readonly]):not([disabled]), select:not([disabled]), textarea:not([readonly]):not([disabled])'
+  );
+  if (firstField) firstField.focus();
+}
+
+// Chip "📎 <tên file> [✕]" cho input file ĐƠN (không multiple) — hiện ngay sau khi chọn tệp, cho phép
+// bỏ chọn TRƯỚC KHI gửi form (input.value = '' — trình duyệt cho phép xoá, không cho phép GÁN tệp mới
+// bằng JS nên không thể "khôi phục", đúng ý muốn xoá hẳn để chọn lại). Gắn qua data-op-change=
+// "onSingleFileChosen" data-arg-el="0" data-arg1="<id chip container>" ngay trên input, KHÔNG cần
+// addEventListener riêng lúc module nạp — input tĩnh có sẵn trong HTML dùng chung cơ chế data-op-change
+// của section chứa nó.
+function onSingleFileChosen(inputEl, chipContainerId) {
+  const chipEl = document.getElementById(chipContainerId);
+  if (!chipEl) return;
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) { chipEl.innerHTML = ''; return; }
+  chipEl.innerHTML = `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 ${escapeHtml(file.name)}<button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp đã chọn" data-op="clearSingleFileInput" data-arg0="${inputEl.id}" data-arg1="${chipContainerId}">✕</button></span>`;
+}
+// Xoá tệp đã chọn ở input file đơn — nút ✕ trong chip ở trên, VÀ dùng lại được từ resetXxxForm() của
+// từng module (form.reset() gốc TỰ xoá input.value nhưng KHÔNG tự bắn 'change' nên chip cũ vẫn hiện sai
+// nếu không gọi hàm này tường minh sau khi reset).
+function clearSingleFileInput(inputId, chipContainerId) {
+  const inputEl = document.getElementById(inputId);
+  if (inputEl) inputEl.value = '';
+  const chipEl = document.getElementById(chipContainerId);
+  if (chipEl) chipEl.innerHTML = '';
+}
+
+// Như trên nhưng cho input multiple (VD subExtraFiles/itPriceExtraFiles) — MỖI file 1 chip riêng, xoá
+// ĐÚNG 1 file khỏi danh sách đã chọn. FileList của <input type=file> là read-only, không xoá được 1
+// phần tử trực tiếp — dùng DataTransfer để dựng lại FileList mới thiếu đúng file bị xoá, gán ngược lại
+// inputEl.files (cách duy nhất JS được phép ghi vào input file, ngoại trừ gán rỗng để xoá toàn bộ).
+function onMultiFileChosen(inputEl, chipContainerId) {
+  const chipEl = document.getElementById(chipContainerId);
+  if (chipEl) renderMultiFileChips(inputEl, chipEl);
+}
+function renderMultiFileChips(inputEl, chipEl) {
+  const files = inputEl.files ? Array.from(inputEl.files) : [];
+  if (!files.length) { chipEl.innerHTML = ''; return; }
+  chipEl.innerHTML = files.map((f, idx) => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 ${escapeHtml(f.name)}<button type="button" class="text-red-600 font-bold hover:text-red-800" title="Xoá tệp này" data-op="removeOneFileFromMultiInput" data-arg0="${inputEl.id}" data-arg1="${chipEl.id}" data-arg2="${idx}">✕</button></span>`).join('');
+}
+function removeOneFileFromMultiInput(inputId, chipContainerId, idx) {
+  const inputEl = document.getElementById(inputId);
+  if (!inputEl) return;
+  const dt = new DataTransfer();
+  Array.from(inputEl.files || []).forEach((f, i) => { if (i !== Number(idx)) dt.items.add(f); });
+  inputEl.files = dt.files;
+  const chipEl = document.getElementById(chipContainerId);
+  if (chipEl) renderMultiFileChips(inputEl, chipEl);
+}
+// Xoá TOÀN BỘ danh sách file đã chọn ở input multiple — dùng từ resetXxxForm() (cùng lý do
+// clearSingleFileInput() ở trên: form.reset() không tự bắn 'change' nên chip cũ phải xoá tường minh).
+function clearMultiFileInput(inputId, chipContainerId) {
+  const inputEl = document.getElementById(inputId);
+  if (inputEl) inputEl.value = '';
+  const chipEl = document.getElementById(chipContainerId);
+  if (chipEl) chipEl.innerHTML = '';
+}
+
 bindCspDelegation('userHeader');
 // Hợp Đồng — mọi phần tử động (danh sách hợp đồng #contractTableBody, đợt thanh toán
 // #contractInstallmentsList, dropdown Phê Duyệt #contractApprovalDropdownPanel) đều render VÀO BÊN

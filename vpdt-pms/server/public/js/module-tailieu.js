@@ -572,10 +572,21 @@ async function uploadDoc(e) {
   }
 
   alert('✅ Tải lên và trình ký tài liệu thành công!');
-  document.getElementById('docForm').reset();
+  resetDocUploadForm();
+  renderDocs();
+}
+
+// resetDocUploadForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetDocUploadForm",
+// xem core.js) VÀ luồng tải lên thành công ở trên (trước đây 3 dòng reset viết thẳng tại chỗ gọi, factor
+// ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự đưa toggle "Loại thao tác" về "Nhập Mới" +
+// dựng lại đúng trạng thái ô liên quan (mã tự sinh, phiên bản v1.0, khoá/mở Phòng Ban-Phân Loại) — phải
+// gọi onDocOpModeChange() tường minh ngay sau, đúng khuôn xử lý mỗi lần đổi toggle này.
+function resetDocUploadForm() {
+  const formEl = document.getElementById('docForm');
+  if (formEl) formEl.reset();
   document.getElementById('docOpMode').value = 'NEW';
   onDocOpModeChange();
-  renderDocs();
+  clearSingleFileInput('docFile', 'docFileChip');
 }
 
 // ============ GIẤY PHÉP (Hành Chính) — phân quyền phẳng licenseCreate/licenseApprove/licenseView (KHÔNG
@@ -1182,10 +1193,19 @@ async function uploadLicense(e) {
   }
 
   alert('✅ Tải lên và trình duyệt giấy phép thành công!');
-  document.getElementById('licenseForm').reset();
+  resetLicenseForm();
+  renderLicenses();
+}
+
+// resetLicenseForm() — cùng khuôn resetDocUploadForm() ở trên: nút "↺ Làm Mới" (data-op=
+// "confirmAndResetForm" data-arg1="resetLicenseForm") VÀ luồng tải lên thành công ở trên đều gọi hàm
+// DUY NHẤT này.
+function resetLicenseForm() {
+  const formEl = document.getElementById('licenseForm');
+  if (formEl) formEl.reset();
   document.getElementById('licenseOpMode').value = 'NEW';
   onLicenseOpModeChange();
-  renderLicenses();
+  clearSingleFileInput('licenseFile', 'licenseFileChip');
 }
 
 // ============ Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) — cùng khuôn CRUD phẳng đơn giản với

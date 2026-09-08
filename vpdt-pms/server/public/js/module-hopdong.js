@@ -385,9 +385,37 @@ async function submitContractReq(e) {
       `${currentUser.name} vừa tạo hồ sơ hợp đồng "${title}" (${newContract.code}), đang chờ phê duyệt.`);
     alert('✅ Đã gửi hồ sơ hợp đồng, đang chờ phê duyệt!');
   }
-  e.target.reset();
-  onContractOpModeChange();
+  resetContractForm();
   renderContracts();
+}
+
+// resetContractForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetContractForm",
+// xem core.js) VÀ luồng tạo hồ sơ thành công ở trên (trước đây "e.target.reset(); onContractOpModeChange();"
+// viết thẳng tại chỗ gọi). CỐ Ý viết RIÊNG, không gọi lại/refactor cancelEditContract() dù có phần trùng
+// lặp: cancelEditContract() dành cho việc THOÁT chế độ Sửa (gọi từ setContractSubTab()/openEditContract()/
+// updateContractReq(), đã có test hồi quy) — đổi hành vi/tần suất gọi onContractOpModeChange() ở đó không
+// cần thiết cho việc này. Hàm này xử lý được cả trường hợp bấm "Làm Mới" khi đang SỬA dở (thoát Sửa
+// NGAY, không cần bấm "Huỷ Sửa" trước) bằng cách tự đưa mọi cờ liên quan chế độ Sửa về mặc định rồi gọi
+// onContractOpModeChange() — hàm ĐÃ tự lo mã tự sinh (refreshContractCodePreview()), panel phê duyệt bổ
+// sung, render lại trường bổ sung, VÀ trắng "Các Đợt Thanh Toán" về rỗng (renderContractInstallmentsList([])),
+// đúng NGUYÊN VẸN hành vi mỗi lần đổi "Loại Thao Tác"/mở tab mới — không cần viết lại logic riêng.
+function resetContractForm() {
+  editingContractId = null;
+  const formEl = document.getElementById('contractForm');
+  if (!formEl) return;
+  formEl.reset();
+  document.getElementById('contractDept').disabled = false;
+  document.getElementById('contractCustodianDept').disabled = false;
+  document.getElementById('contractType').disabled = false;
+  document.getElementById('contractPartner').readOnly = false;
+  document.getElementById('contractFile').required = true;
+  document.getElementById('contractFileEditHint').classList.add('hidden');
+  document.getElementById('contractSubmitBtn').innerText = 'Gửi phê duyệt';
+  document.getElementById('contractCancelEditBtn').classList.add('hidden');
+  const opModeSelect = document.getElementById('contractOpMode');
+  if (opModeSelect.options.length) opModeSelect.value = opModeSelect.options[0].value;
+  onContractOpModeChange();
+  clearSingleFileInput('contractFile', 'contractFileChip');
 }
 
 // Mở form hiện có ở chế độ SỬA, chỉ cho phép người đã tạo hồ sơ đó thực hiện.

@@ -136,10 +136,22 @@ async function doSubmitSubmissionReq(e) {
   }
 
   alert('✅ Trình văn bản / tờ trình thành công!');
-  e.target.reset();
+  resetSubmissionForm();
+  renderSubmissionReqs();
+}
+
+// resetSubmissionForm() — dùng CHUNG bởi nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetSubmissionForm", xem core.js) VÀ luồng trình thành công ở trên (trước đây 3 dòng này viết trực
+// tiếp ngay tại chỗ gọi — factor ra đây để chỉ 1 nơi giữ đúng logic "trắng form", tránh 2 nơi lệch nhau
+// dần theo thời gian). form.reset() gốc không tự sinh lại mã lẫn không tự dựng lại panel phê duyệt bổ
+// sung (render động theo Cấp Phê Duyệt đang chọn) — 2 việc đó phải làm tường minh ngay sau reset().
+function resetSubmissionForm() {
+  const formEl = document.getElementById('submissionForm');
+  if (formEl) formEl.reset();
   document.getElementById('subCode').value = generateSubCode();
   renderSubmissionApprovalLayerCheckboxes();
-  renderSubmissionReqs();
+  clearSingleFileInput('subFile', 'subFileChip');
+  clearMultiFileInput('subExtraFiles', 'subExtraFilesChip');
 }
 
 // Với mỗi lớp phê duyệt bổ sung, chỉ liệt kê ĐÚNG những người admin đã gán vào nhóm đó (màn "Quản Lý
