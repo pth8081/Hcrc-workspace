@@ -727,7 +727,11 @@ function parseISODateOnly(str) {
 // đã ẩn field) — còn khi KHÔNG gửi gì (payload rỗng, đúng hành vi UI ẩn field) thì trả về {null, null},
 // khiến editOperationWorkItem() TỰ ĐỘNG dọn sạch 2 field này nếu item vừa có thêm con (không còn là lá
 // nữa) — không cần thêm nhánh dọn dẹp riêng ở nơi khác.
-function resolveOperationWorkItemScheduleFields(payload, hasChildren) {
+// deadline (thêm sau, đợt sửa lỗi "ngày bắt đầu sau hạn"): giá trị "Hạn Hoàn Thành" ĐÃ resolve của CHÍNH
+// item đang tạo/sửa (CALLER tự truyền — createOperationWorkItem() dùng payload?.deadline, editOperationWorkItem()
+// dùng item.deadline vừa gán ngay TRƯỚC lời gọi hàm này) — chỉ so sánh khi CẢ 2 field đều có giá trị hợp
+// lệ, không chặn gì nếu 1 trong 2 rỗng (mirror đúng nguyên tắc "deadline hiện không bắt buộc" đã có sẵn).
+function resolveOperationWorkItemScheduleFields(payload, hasChildren, deadline) {
   const rawStartDate = payload?.startDate;
   const rawFreq = payload?.progressUpdateFrequencyDays;
   const hasStartDate = rawStartDate != null && rawStartDate !== '';
@@ -737,7 +741,12 @@ function resolveOperationWorkItemScheduleFields(payload, hasChildren) {
   }
   let startDate = null;
   if (hasStartDate) {
-    if (!parseISODateOnly(rawStartDate)) throw new HttpError(400, 'Ngày bắt đầu không hợp lệ');
+    const parsedStart = parseISODateOnly(rawStartDate);
+    if (!parsedStart) throw new HttpError(400, 'Ngày bắt đầu không hợp lệ');
+    const parsedDeadline = parseISODateOnly(deadline);
+    if (parsedDeadline && parsedStart.getTime() > parsedDeadline.getTime()) {
+      throw new HttpError(400, 'Ngày bắt đầu không được sau Hạn hoàn thành');
+    }
     startDate = String(rawStartDate);
   }
   let progressUpdateFrequencyDays = null;
@@ -936,7 +945,7 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   const acceptorUser = resolveOperationAcceptorUsername(payload?.acceptorUsername, users);
   // Ngày bắt đầu + Tần suất cập nhật tiến độ — CHỈ việc LÁ, luôn gọi hasChildren=false vì công việc VỪA
   // tạo chưa thể có con nào (xem resolveOperationWorkItemScheduleFields() ở trên).
-  const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, false);
+  const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, false, payload?.deadline || '');
   // VHST-5: "🔗 Liên kết" — CHỈ việc LÁ (cùng lý do hasChildren=false luôn đúng lúc TẠO MỚI ở trên).
   // selfId=null (item chưa có id) — xem chú thích đầy đủ ở resolveOperationWorkItemDependencyIds().
   const dependsOnWorkItemIds = resolveOperationWorkItemDependencyIds(payload, false, siblingsAndDescendants, null);
@@ -1173,7 +1182,7 @@ function editOperationWorkItem(user, item, payload, users, sourceRecord, hasChil
   item.deadline = payload?.deadline || '';
   const { acceptanceMode, acceptanceDelayDays } = resolveOperationAcceptanceConfig(payload);
   item.acceptanceMode = acceptanceMode; item.acceptanceDelayDays = acceptanceDelayDays;
-  const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, hasChildren);
+  const { startDate, progressUpdateFrequencyDays } = resolveOperationWorkItemScheduleFields(payload, hasChildren, item.deadline);
   item.startDate = startDate; item.progressUpdateFrequencyDays = progressUpdateFrequencyDays;
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });

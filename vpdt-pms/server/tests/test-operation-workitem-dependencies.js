@@ -13,9 +13,21 @@
 //   4. updateOperationWorkItemProgress() — cổng chặn "chưa thể bắt đầu (CHUA_BAT_DAU -> DANG_THUC_HIEN)
 //      khi còn công việc liên kết chưa DA_NGHIEM_THU", CHỈ áp dụng đúng bước "bắt đầu" (không chặn lặp lại
 //      DANG_THUC_HIEN/chuyển DANG_NGHIEM_THU sau khi đã bắt đầu được 1 lần).
+//   5. BUG THẬT phát hiện lúc kiểm tra lại (phản hồi người dùng — "🔗 Liên kết không dùng được"): mọi test
+//      Ở TRÊN chỉ gọi thẳng recordActions.js (đúng logic nghiệp vụ, không sai) nên KHÔNG hề bắt được bug
+//      thật — nút "🔗 Liên kết" trên mỗi dòng vẫn MỞ được modal (openOperationWorkItemDependencyModal()
+//      nằm trong operationWorkItemModal, đã bind), nhưng modal "operationWorkItemDependencyModal" (public/
+//      index.html) CHƯA TỪNG được đăng ký ở forEach(bindOperationDelegation) (module-vanhanh.js) từ lúc
+//      VHST-5 được thêm — 1 <div> ĐỘC LẬP cấp cao, không lồng trong root nào đã bind, nên "💾 Lưu Liên
+//      Kết"/"Huỷ"/"✕" bên TRONG modal hoàn toàn không phản hồi khi bấm (cùng lớp lỗi CSP-delegation với
+//      hrLifecycleSection ở Đợt E). Test 5a static-scan bên dưới là lưới an toàn RẺ (không cần Playwright)
+//      chặn tái diễn — coi tests/test-operation-vhst-uibugfix.js (Playwright, xác nhận qua DOM thật + ảnh
+//      chụp màn hình) là bằng chứng đầy đủ nhất cho bug lớp này.
 //
 // Chạy: node server/tests/test-operation-workitem-dependencies.js
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const recordActions = require('../lib/recordActions');
 const { HttpError } = require('../lib/httpErrors');
 
@@ -213,6 +225,22 @@ test('updateOperationWorkItemProgress(): ĐÃ ở DANG_THUC_HIEN (đã "bắt đ
   const item = makeItem({ status: 'DANG_THUC_HIEN', dependsOnWorkItemIds: [2] });
   const updated = recordActions.updateOperationWorkItemProgress(ADMIN_USER, item, [], 'DANG_THUC_HIEN', 'Cập nhật tiến độ', SOURCE_RECORD, [item, dep]);
   assert.strictEqual(updated.status, 'DANG_THUC_HIEN');
+});
+
+// ===== 5a) Lưới an toàn RẺ (static-scan, không cần Playwright) cho bug CSP-delegation đã tìm thấy =====
+test('module-vanhanh.js: "operationWorkItemDependencyModal" PHẢI có trong forEach(bindOperationDelegation(...)) (nếu không, mọi nút BÊN TRONG modal "🔗 Liên Kết" — Lưu/Huỷ/✕ — sẽ không phản hồi khi bấm)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'module-vanhanh.js'), 'utf8');
+  const m = src.match(/\[[^\]]*\]\.forEach\(bindOperationDelegation\)/);
+  assert(m, 'Phải tìm thấy dòng forEach(bindOperationDelegation) trong module-vanhanh.js');
+  assert(m[0].includes("'operationWorkItemDependencyModal'"), 'Danh sách bindOperationDelegation() phải bao gồm "operationWorkItemDependencyModal"');
+});
+
+test('public/index.html: modal "operationWorkItemDependencyModal" tồn tại và có đủ 3 nút cần delegation (✕/Huỷ/💾 Lưu Liên Kết)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const m = html.match(/<div id="operationWorkItemDependencyModal"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
+  assert(m, 'Phải tìm thấy modal operationWorkItemDependencyModal trong index.html');
+  assert(m[0].includes('data-op="closeOperationWorkItemDependencyModal"'), 'Phải có nút đóng modal (data-op)');
+  assert(m[0].includes('data-op="submitOperationWorkItemDependencies"'), 'Phải có nút "💾 Lưu Liên Kết" (data-op)');
 });
 
 console.log(`\n==== ${passed}/${passed + failed} scenario(s) passed${failed ? `, ${failed} FAILED` : ''} ====`);

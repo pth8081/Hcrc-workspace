@@ -6786,8 +6786,12 @@
             <!-- Mục "Danh mục đầu tư 2 cấp": chọn trước dòng mới thêm là danh mục lớn hay danh mục con
                  của danh mục lớn nào — xem populateEstimateNewItemParentSelect()/addOperationEstimateItemRow()
                  ở module-vanhanh.js. Native <select> thường (KHÔNG phải ô tìm-kiếm-gõ-chọn), không thuộc
-                 diện phải đổi sang widget sdd* (xem CLAUDE.md). -->
-            <select id="selEstimateNewItemParent" class="border rounded px-2 py-1 text-xs max-w-[220px]"></select>
+                 diện phải đổi sang widget sdd* (xem CLAUDE.md).
+                 Đợt sửa lỗi (phản hồi người dùng — "không biết tạo danh mục con ở đâu"): thêm nhãn rõ ràng
+                 NGAY TRƯỚC ô chọn (trước đây chỉ là 1 <select> trơn không nhãn, dễ bị tưởng nhầm là icon
+                 trang trí — chính là "mũi tên nhỏ không rõ nghĩa" người dùng phản ánh trong ảnh chụp). -->
+            <label class="text-xs font-semibold text-gray-600 whitespace-nowrap">Dòng mới thêm — thuộc danh mục lớn nào?</label>
+            <select id="selEstimateNewItemParent" class="border rounded px-2 py-1 text-xs max-w-[220px] font-semibold"></select>
             <button type="button" data-op="addOperationEstimateItemRow" class="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Hạng Mục</button>
             <a href="/api/operation/estimate-import-template" class="text-cyan-700 font-bold hover:underline text-xs">⬇️ Tải Mẫu Excel</a>
             <button type="button" data-op="exportOperationEstimateItems" class="bg-gray-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-gray-700">📤 Xuất Excel</button>
@@ -6813,8 +6817,11 @@
   <!-- Modal cây công việc Thực hiện/Nghiệm thu (dùng CHUNG, tham số mode qua currentWorkItemModalMode) —
        Thực hiện: tạo/cập nhật tiến độ (toàn quyền quản lý hồ sơ). Nghiệm thu: cùng cây, thêm 2 cột +
        nút Nghiệm thu/Bổ sung (toàn quyền quản lý hồ sơ), gated theo status DANG_NGHIEM_THU. -->
+  <!-- Đợt sửa lỗi (phản hồi người dùng): giảm bề rộng modal từ max-w-5xl -> max-w-4xl, khớp ĐÚNG bề rộng
+       modal "Danh Mục Đầu Tư" (operationEstimateModal) — người dùng phản ánh modal này "chiếm chiều ngang
+       màn hình quá lớn" so với Danh Mục Đầu Tư, dù nội dung/luồng nghiệp vụ giữ nguyên. -->
   <div id="operationWorkItemModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[92vh] overflow-y-auto">
+    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[92vh] overflow-y-auto">
       <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
         <div>
           <h3 id="operationWorkItemModalTitle" class="font-bold text-lg text-gray-800"></h3>
@@ -6860,10 +6867,12 @@
           <select id="owiPeriodSelect" class="w-full border p-1.5 rounded"></select>
           <p id="owiPeriodEmptyNote" class="hidden text-[11px] text-red-500 italic mt-1">Chưa có Kỳ Thực Hiện nào đang "Đang thực hiện" — vui lòng tạo/bắt đầu 1 kỳ trước khi thêm công việc gốc.</p>
         </div>
-        <div><label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label><input id="owiDeadline" type="date" class="w-full border p-1.5 rounded"></div>
         <!-- VHST-4: Ngày bắt đầu + Tần suất cập nhật tiến độ — CHỈ áp dụng công việc LÁ (không có việc
              con), ẩn/hiện qua owiScheduleFieldWrap/owiScheduleFieldNote — xem openOperationWorkItemFormModal()
-             (module-vanhanh.js) và resolveOperationWorkItemScheduleFields() (lib/recordActions.js). -->
+             (module-vanhanh.js) và resolveOperationWorkItemScheduleFields() (lib/recordActions.js).
+             Đợt sửa lỗi (phản hồi người dùng): "Ngày Bắt Đầu" đặt LÊN TRÊN "Hạn Hoàn Thành" (thứ tự nhập
+             hợp lý hơn — bắt đầu trước, hạn sau) + chặn Ngày Bắt Đầu sau Hạn (xem submitOperationWorkItemForm()
+             ở module-vanhanh.js + resolveOperationWorkItemScheduleFields() ở lib/recordActions.js). -->
         <div id="owiScheduleFieldWrap" class="space-y-3">
           <div><label class="block font-semibold text-gray-600 mb-1">Ngày Bắt Đầu</label><input id="owiStartDate" type="date" class="w-full border p-1.5 rounded"></div>
           <div>
@@ -6873,6 +6882,7 @@
           </div>
         </div>
         <p id="owiScheduleFieldNote" class="hidden text-[11px] text-gray-400 italic">Công việc có việc con không đặt được Ngày bắt đầu/Tần suất cập nhật tiến độ (chỉ áp dụng công việc lá).</p>
+        <div><label class="block font-semibold text-gray-600 mb-1">Hạn Hoàn Thành</label><input id="owiDeadline" type="date" class="w-full border p-1.5 rounded"></div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Nghiệm Thu</label>
           <div class="flex items-center gap-3 flex-wrap">

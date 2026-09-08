@@ -1,8 +1,94 @@
 # Phiên bản hiện tại
 
-**13.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## SỬA LỖI (2026-09-08): "Danh Mục Đầu Tư 2 cấp"/"Ngày bắt đầu"/"🔗 Liên kết" — 3 tính năng ĐÃ BÁO CÁO
+## HOÀN THÀNH VÀ ĐÃ TEST ở đợt trước KHÔNG hoạt động đúng trên app thật
+
+**Bối cảnh quan trọng**: 3 tính năng VHST-3 "Danh Mục Đầu Tư 2 cấp", VHST-4 "Ngày bắt đầu + tần suất cập
+nhật", VHST-5 "Liên kết công việc" đã được xây dựng, TEST BẰNG bộ `tests/testHarness.js` (backend MOCK
+trong bộ nhớ + Playwright) TRONG CÙNG phiên làm việc trước, báo cáo "hoàn thành, đã test" và merge vào
+main. **Người dùng test lại trên app thật (deploy thật) và phát hiện CẢ 3 đều không dùng được** — ảnh chụp
+màn hình cho thấy Danh Mục Đầu Tư không có cách nào tạo danh mục con, modal "Thực hiện" không có nút
+"🔗 Liên kết" nào và không thấy cột/field "Ngày bắt đầu" đâu cả. Bài học rút ra: bộ test cũ chỉ
+`assertEqual()` trên biến JS ẩn (state nội bộ), KHÔNG chụp ảnh màn hình thật để xác nhận NGƯỜI DÙNG THẬT
+nhìn thấy gì — nên không bắt được 2/3 bug thật sự nằm ở tầng DOM/client, dù logic nghiệp vụ phía server là
+đúng. Đợt sửa lỗi này dùng lại ĐÚNG hạ tầng đó nhưng có `page.screenshot()` + đọc lại DOM thật, xem
+`server/tests/test-operation-vhst-uibugfix.js` (mới) — **nói thẳng: báo cáo "hoàn thành và đã test" ở đợt
+trước cho 3 tính năng này là SAI**, dưới đây là root cause thật của từng lỗi.
+
+### 1) VHST-3 "Danh Mục Đầu Tư 2 cấp" — không tạo được danh mục con
+
+**Root cause thật**: dropdown "đây là danh mục con của..." (`#selEstimateNewItemParent`,
+`populateEstimateNewItemParentSelect()`) **có tồn tại** trong DOM (đúng như VHST-3 đã xây), nhưng CHỈ được
+refresh nội dung trong `renderOperationEstimateItemsTable()` (tức lúc thêm/xoá dòng hoặc mở lại modal) —
+**KHÔNG refresh khi người dùng gõ "Nội Dung"** cho dòng vừa thêm (`updateOperationEstimateItemField()`,
+bắt sự kiện gõ phím `input`, cố tình KHÔNG render lại cả bảng để không mất con trỏ chuột). Hệ quả: gõ xong
+tên danh mục lớn rồi bấm "➕ Thêm Hạng Mục" NGAY (thao tác tự nhiên nhất của người dùng) thì dropdown VẪN
+CHƯA kịp có tên vừa gõ làm lựa chọn cha — dòng mới luôn bị lưu thành 1 danh mục LỚN khác (không phải con)
+dù người dùng tưởng đã chọn đúng — đúng y hệt hiện tượng "2 dòng cùng cấp cộng phẳng" trong ảnh chụp người
+dùng gửi. Thêm vào đó, `<select>` này trước đây KHÔNG có nhãn (chỉ là 1 ô chọn trơn cạnh các nút) — đúng
+là "mũi tên nhỏ không rõ nghĩa" người dùng phản ánh, không phải lỗi hình dung của người dùng.
+
+**Fix**: (a) gọi `populateEstimateNewItemParentSelect()` ngay trong `updateOperationEstimateItemField()`
+khi field `content` đổi (không render lại cả bảng, chỉ refresh riêng dropdown); (b) thêm nhãn rõ ràng
+"Dòng mới thêm — thuộc danh mục lớn nào?" ngay trước `<select>`. Logic rollup (`operationEstimateEffectiveAmount()`,
+đã có sẵn từ VHST-3) không đổi gì — chỉ cần dropdown chọn ĐÚNG cha thì rollup vốn đã hoạt động đúng.
+
+### 2) VHST-4 "Ngày bắt đầu" — chọn được ngày sau Hạn Hoàn Thành + thứ tự field
+
+**Root cause thật**: `resolveOperationWorkItemScheduleFields()` (`lib/recordActions.js`, nguồn sự thật
+server) trước đây CHỈ validate ĐỊNH DẠNG `startDate` (đúng `YYYY-MM-DD`), **chưa từng đối chiếu với
+deadline** — không phải bug DOM, là thiếu 1 nhánh validate logic nghiệp vụ. Thứ tự field (Hạn đứng TRƯỚC
+Ngày Bắt Đầu trong form) là phản hồi UX, không phải bug.
+
+**Fix**: (a) `resolveOperationWorkItemScheduleFields()` nhận thêm tham số `deadline`, throw 400 "Ngày bắt
+đầu không được sau Hạn hoàn thành" nếu `startDate > deadline` (cả 2 có giá trị) — áp dụng CẢ tạo mới lẫn
+sửa (`createOperationWorkItem()`/`editOperationWorkItem()`); (b) mirror check này ở client
+(`submitOperationWorkItemForm()`, `module-vanhanh.js`) để phản hồi ngay trước khi gửi lên server; (c) đổi
+thứ tự field HTML: "Ngày Bắt Đầu" đặt LÊN TRÊN "Hạn Hoàn Thành" (`public/index.html`); (d) thu hẹp modal
+danh sách công việc "🔧 Thực hiện" (`operationWorkItemModal`) từ `max-w-5xl` xuống `max-w-4xl` — khớp
+đúng bề rộng modal "Danh Mục Đầu Tư" (`operationEstimateModal`) mà người dùng dùng làm chuẩn so sánh —
+và bọc các nút Thao Tác trong `flex flex-wrap` để không bị dồn tràn ngang khi cột hẹp lại.
+
+### 3) VHST-5 "🔗 Liên kết" — nút/modal không dùng được
+
+**Root cause thật — CÙNG LỚP LỖI với `hrLifecycleSection` đã phát hiện ở Đợt E ngay trước đó**: modal
+"🔗 Liên Kết Công Việc Phụ Thuộc" (`operationWorkItemDependencyModal`, `public/index.html`) là 1 `<div>`
+ĐỘC LẬP cấp cao (không lồng trong `operationWorkItemModal`), và **CHƯA TỪNG được đăng ký** ở
+`forEach(bindOperationDelegation)` (`module-vanhanh.js`) từ lúc VHST-5 được thêm. Nút "🔗 Liên kết" MỞ
+modal vẫn hoạt động (vì nằm trong `operationWorkItemModal` đã bind, click bubble lên đúng root) — nhưng
+mọi thao tác BÊN TRONG modal vừa mở ra (checkbox chọn công việc liên kết vẫn tick được vì là input thường,
+nhưng nút "💾 Lưu Liên Kết"/"Huỷ"/"✕" đều dùng `data-op`) **hoàn toàn không phản hồi khi bấm** — dữ liệu
+không bao giờ được lưu, modal không tự đóng. Đây là lý do người dùng thấy "hoàn toàn không dùng được" dù
+đọc code thì tưởng đã đủ.
+
+**Fix**: thêm `'operationWorkItemDependencyModal'` vào danh sách `forEach(bindOperationDelegation)` —
+ĐÚNG 1 dòng, không cần sửa gì thêm ở HTML/logic bên trong modal (vốn đã đúng). Xác nhận lại toàn bộ cổng
+chặn server-side VHST-5 (`resolveOperationWorkItemDependencyIds()`/`assertNoOperationWorkItemDependencyCycle()`/
+chặn "Bắt đầu" ở `updateOperationWorkItemProgress()`) **vẫn còn nguyên vẹn**, không bị 5 đợt UX rollout sau
+đó (Đợt A-E) làm hỏng — bộ test `tests/test-operation-workitem-dependencies.js` (thuần logic, không đổi)
+vẫn pass 100% trước và sau fix, đúng như kỳ vọng vì bug này CHỈ ở tầng delegation DOM, không ở logic.
+
+### Xác nhận trực quan (Playwright + `page.screenshot()`, KHÔNG chỉ assert biến JS)
+
+`server/tests/test-operation-vhst-uibugfix.js` (mới, 10/10 kịch bản pass) dựng lại ĐÚNG luồng thao tác
+người dùng thật: gõ tên danh mục → bấm thêm hạng mục (không có bước "thêm/xoá dòng khác" để né bug) →
+xác nhận dropdown/con/rollup đúng NGAY; submit ngày sai → xác nhận bị chặn + alert rõ ràng; bấm THẬT nút
+"🔗 Liên kết" → chọn checkbox → bấm THẬT nút "💾 Lưu Liên Kết" → xác nhận state server đổi đúng VÀ modal tự
+đóng (2 bằng chứng "nút không còn chết"). Ảnh chụp trước/sau xác nhận: dòng con giờ thụt lề "↳", ô Chi Phí
+danh mục lớn hiện "🔢 Tự động tính từ N danh mục con" (khoá tay, xám), Tổng Chi Phí không double-count;
+form Ngày Bắt Đầu/Hạn Hoàn Thành đã đổi thứ tự + modal "Thực hiện" hẹp lại rõ rệt; nút "🔗 Liên kết" hiện
+rõ ràng trên dòng lá, sau khi lưu hiện badge "🔗 Phụ thuộc: ..." + badge chặn "⛔ Chưa thể bắt đầu — đang
+chờ: ...".
+
+### Deploy-impact
+
+KHÔNG có thay đổi `server/sql/schema.sql`, KHÔNG có biến môi trường mới, KHÔNG có `dependencies` mới
+trong `package.json` — chỉ copy code (`lib/recordActions.js`, `public/js/module-vanhanh.js`,
+`public/index.html`) + `pm2 restart`, không cần thao tác thủ công nào khác.
 
 ## Đợt E (UX rollout — ĐỢT CUỐI/5): nút "↺ Làm Mới" cho Vận Hành Siêu Thị/Onboarding/Offboarding (2026-09-08)
 

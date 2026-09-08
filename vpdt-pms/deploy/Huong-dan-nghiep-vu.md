@@ -448,8 +448,19 @@ với "Tổng Hợp"):
     cạnh nút: "— Không, đây là danh mục lớn —" (mặc định) hoặc tên 1 danh mục
     lớn có sẵn để thêm hạng mục mới làm **con** của danh mục đó — dropdown chỉ
     liệt kê danh mục LỚN (danh mục con không được chọn làm cha, đúng luật chỉ
-    2 cấp). Bảng hiển thị hạng mục con thụt lề "↳" dưới đúng hạng mục lớn của
-    nó (mirror quy ước hiển thị cây của bảng Công việc Thực hiện/Nghiệm thu).
+    2 cấp), nay có nhãn rõ ràng **"Dòng mới thêm — thuộc danh mục lớn nào?"**
+    ngay trước ô chọn (từ v13.3 — trước đó ô chọn không có nhãn, dễ bị tưởng
+    nhầm là 1 icon trang trí). Bảng hiển thị hạng mục con thụt lề "↳" dưới
+    đúng hạng mục lớn của nó (mirror quy ước hiển thị cây của bảng Công việc
+    Thực hiện/Nghiệm thu).
+    - **SỬA LỖI (từ v13.3)**: trước v13.3, dropdown này KHÔNG cập nhật kịp
+      ngay sau khi gõ xong tên 1 danh mục lớn mới — phải thêm/xoá 1 dòng khác
+      (hoặc đóng-mở lại modal) thì tên vừa gõ mới xuất hiện trong dropdown để
+      chọn làm cha được, khiến thao tác tự nhiên "gõ tên xong bấm Thêm Hạng
+      Mục ngay" luôn tạo nhầm thành 1 danh mục lớn khác thay vì danh mục con.
+      Từ v13.3, dropdown cập nhật NGAY khi gõ xong tên — gõ tên danh mục lớn,
+      chọn nó ở dropdown, bấm "➕ Thêm Hạng Mục" là tạo đúng danh mục con ngay
+      lần đầu, không cần thao tác vòng qua bước khác.
     - **Tiền tự cộng dồn lên danh mục lớn**: danh mục lớn có ≥1 con thì cột
       "Chi Phí" của chính nó KHÔNG còn nhập tay được nữa — tự động = **tổng
       Chi Phí của toàn bộ con** (hiện chữ xám "🔢 Tự động tính từ N danh mục
@@ -469,11 +480,19 @@ với "Tổng Hợp"):
       thêm danh mục con vào hạng mục có sẵn.
   - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập nhật
     (từ v11.5)**: form Thêm/Sửa công việc (cây Thực Hiện) nay có thêm 2 ô tuỳ
-    chọn — **"Ngày Bắt Đầu"** (ngày dự kiến bắt đầu thi công) và **"Tần Suất
-    Cập Nhật Tiến Độ (số ngày)"** — **CHỈ áp dụng công việc LÁ** (không có
-    việc con — đầu mục lớn ẩn hẳn 2 ô này, hiện ghi chú giải thích thay vào
-    đó, vì đầu mục lớn tự cascade trạng thái theo con, không có "tiến độ"
-    riêng để theo dõi).
+    chọn — **"Ngày Bắt Đầu"** (ngày dự kiến bắt đầu thi công, đặt Ở TRÊN "Hạn
+    Hoàn Thành" trong form từ v13.3) và **"Tần Suất Cập Nhật Tiến Độ (số
+    ngày)"** — **CHỈ áp dụng công việc LÁ** (không có việc con — đầu mục lớn
+    ẩn hẳn 2 ô này, hiện ghi chú giải thích thay vào đó, vì đầu mục lớn tự
+    cascade trạng thái theo con, không có "tiến độ" riêng để theo dõi).
+    - **SỬA LỖI (từ v13.3) — chặn "Ngày Bắt Đầu" sau "Hạn Hoàn Thành"**: trước
+      v13.3, hệ thống KHÔNG chặn chọn "Ngày Bắt Đầu" muộn hơn "Hạn Hoàn
+      Thành" (VD đặt hạn 1/1/2026 nhưng ngày bắt đầu 1/6/2026) — lưu được
+      bình thường dù vô lý về mặt tiến độ. Từ v13.3, cả form (phản hồi ngay)
+      lẫn server (nguồn chặn thật) đều từ chối lưu nếu "Ngày Bắt Đầu" muộn
+      hơn "Hạn Hoàn Thành", hiện rõ thông báo lỗi để người dùng sửa lại. Modal
+      danh sách công việc "🔧 Thực hiện" cũng thu hẹp lại (bằng modal Danh
+      Mục Đầu Tư) theo phản hồi giao diện quá rộng.
     - **Cơ chế cảnh báo** (hoàn toàn THỤ ĐỘNG — tính lại mỗi lần tải trang,
       KHÔNG có job/cron chạy nền, KHÔNG gửi email/thông báo chủ động): nếu đã
       qua "Ngày Bắt Đầu", công việc CHƯA "Đã nghiệm thu", và có cấu hình "Tần
@@ -532,6 +551,15 @@ với "Tổng Hợp"):
     - VD đã test: công việc A liên kết phụ thuộc công việc B → A bị chặn "Bắt
       đầu" trong khi B còn "Đang thực hiện"/"Đang nghiệm thu" → sau khi B được
       nghiệm thu xong ("Đã nghiệm thu"), A bấm "Bắt đầu" thành công bình thường.
+    - **SỬA LỖI (từ v13.3)**: từ lúc ra mắt (v11.6) tới trước v13.3, hộp thoại
+      "🔗 Liên Kết Công Việc Phụ Thuộc" MỞ ra bình thường khi bấm nút, nhưng
+      nút **"💾 Lưu Liên Kết"/"Huỷ"/"✕"** BÊN TRONG hộp thoại đó hoàn toàn
+      KHÔNG phản hồi khi bấm (lỗi kỹ thuật thuần phía giao diện, không phải
+      do thao tác sai) — chọn xong công việc liên kết rồi bấm Lưu không có
+      tác dụng gì, phải đóng trang/tải lại mới thoát ra được. Đã sửa từ
+      v13.3 — Lưu/Huỷ/đóng hộp thoại hoạt động bình thường trở lại. Nếu đã
+      từng thử liên kết công việc trước v13.3 mà thấy "không lưu được gì",
+      xin thử lại sau khi đã cập nhật server lên v13.3 trở lên.
   - **Tách riêng cảnh báo "quá hạn chưa bắt đầu" / "quá hạn chưa hoàn thành"
     (từ v11.7)**: mỗi công việc trong cây Thực Hiện (gốc/con/lá, cả có con lẫn
     không) có thể đặt **"Hạn Hoàn Thành"** (field `deadline` đã có từ trước,

@@ -1284,6 +1284,16 @@ function updateOperationEstimateItemField(idx, field, value) {
   if (field === 'amount' && it.parentId == null && operationEstimateItems.some(c => c.parentId === it.id)) return;
   if (field === 'amount') it[field] = Number(String(value || '').replace(/\D/g, '')) || 0;
   else it[field] = value;
+  // BUG THẬT phát hiện lúc kiểm tra lại VHST-3 sau phản hồi người dùng ("không tạo được danh mục con"):
+  // populateEstimateNewItemParentSelect() trước đây CHỈ được gọi trong renderOperationEstimateItemsTable()
+  // (tức lúc thêm/xoá dòng hoặc mở lại modal) — KHÔNG gọi ở đây (input "content" gõ từng phím, cố tình
+  // KHÔNG render lại cả bảng để giữ nguyên con trỏ/focus, xem chú thích ngay trên). Hệ quả: gõ Nội Dung
+  // xong bấm "➕ Thêm Hạng Mục" NGAY (thao tác tự nhiên nhất) thì dropdown "đây là danh mục con của..."
+  // VẪN CHƯA kịp có dòng vừa gõ làm lựa chọn cha (chỉ patch xong ở LẦN thêm/xoá dòng KẾ TIẾP, quá trễ) —
+  // dòng mới luôn bị thêm thành danh mục LỚN (parentId=null) dù người dùng tưởng đã chọn được cha, đúng y
+  // hệt hiện tượng "2 dòng cùng cấp, Tổng Chi Phí cộng phẳng" trong ảnh chụp người dùng gửi. Chỉ cần
+  // refresh riêng dropdown (KHÔNG render lại toàn bảng) mỗi khi content đổi là đủ khớp lại đúng dữ liệu.
+  if (field === 'content') populateEstimateNewItemParentSelect();
   recalcOperationEstimateItemsTotal();
 }
 // Chi phí HIỆU LỰC của 1 hạng mục — danh mục lớn có >=1 con thì = tổng amount các con (chỉ tính con có
@@ -2050,7 +2060,11 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // mirror ĐÚNG bảng lịch sử của Task (xem openOperationWorkItemHistoryModal() ngay dưới) — hiện ở MỌI
     // dòng (cả có/không con, cả 2 mode) vì ai mở được cây công việc này đều đã có quyền xem hồ sơ.
     actionHTML += ` <button type="button" data-op="openOperationWorkItemHistoryModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200" title="Xem lịch sử ghi chú/xử lý">📜</button>`;
-    return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
+    // Đợt sửa lỗi (phản hồi người dùng, modal thu hẹp còn max-w-4xl): bọc actionHTML trong 1 hàng flex
+    // wrap — trước đây các nút chỉ nối chuỗi trần (inline, mr-1) trong 1 <td>, dễ bị dồn cứng 1 hàng dài
+    // tràn ngang (khó thấy hết nút, đặc biệt "🔗 Liên kết" — nút thứ 3/5) khi cột "Thao Tác" hẹp lại. flex
+    // flex-wrap cho phép các nút tự xuống hàng gọn gàng thay vì bị cắt/phải cuộn ngang mới thấy hết.
+    return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${deadlineCell}${statusCell}<td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-center gap-1">${actionHTML}</div></td></tr>`;
   }
 
   // ACCEPTANCE mode
@@ -2094,7 +2108,8 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   // đây là NƠI DUY NHẤT xem lại được lý do "🔄 Bổ Sung" đã yêu cầu (item.acceptanceNote/history) — trước
   // bản sửa này, lý do bắt buộc nhập ở modal operationAcceptanceActionModal biến mất ngay sau khi lưu.
   actionHTML += ` <button type="button" data-op="openOperationWorkItemHistoryModal" data-id="${w.id}" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200" title="Xem lịch sử ghi chú/xử lý">📜</button>`;
-  return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${statusCell}${expectedAcceptanceCell}${acceptorCell}<td class="border p-2 text-center">${actionHTML}</td></tr>`;
+  // Cùng lý do wrap flex flex-wrap ở nhánh EXECUTION phía trên.
+  return `<tr class="hover:bg-gray-50 border-b">${nameCell}${assigneeCell}${statusCell}${expectedAcceptanceCell}${acceptorCell}<td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-center gap-1">${actionHTML}</div></td></tr>`;
 }
 
 // --- Modal "📜 Lịch Sử" 1 công việc Vận Hành — mirror ĐÚNG bảng lịch sử của module Công Việc
@@ -2281,6 +2296,12 @@ async function submitOperationWorkItemForm(e) {
   const progressUpdateFrequencyDays = progressUpdateFrequencyDaysRaw ? Number(progressUpdateFrequencyDaysRaw) : null;
   if (progressUpdateFrequencyDaysRaw && (!Number.isInteger(progressUpdateFrequencyDays) || progressUpdateFrequencyDays <= 0)) {
     return alert('Vui lòng nhập Tần suất cập nhật tiến độ hợp lệ (số nguyên dương, đơn vị ngày)');
+  }
+  // Chặn "Ngày bắt đầu" sau "Hạn Hoàn Thành" — feedback NGAY phía client, nguồn sự thật thật vẫn là
+  // resolveOperationWorkItemScheduleFields() (lib/recordActions.js), chỉ so sánh khi CẢ 2 field đều có
+  // giá trị (mirror đúng nguyên tắc "deadline hiện không bắt buộc").
+  if (startDate && deadline && startDate > deadline) {
+    return alert('⛔ Ngày bắt đầu không được sau Hạn hoàn thành. Vui lòng kiểm tra lại.');
   }
 
   if (currentEditWorkItemId != null) {
@@ -3122,5 +3143,14 @@ function bindOperationDelegation(rootId) {
     if (fn) fn(e);
   });
 }
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal'].forEach(bindOperationDelegation);
+// BUG THẬT phát hiện lúc kiểm tra lại VHST-5 sau phản hồi người dùng ("🔗 Liên kết" không dùng được):
+// 'operationWorkItemDependencyModal' (modal "🔗 Liên Kết Công Việc Phụ Thuộc" — public/index.html) CHƯA
+// TỪNG được đăng ký ở forEach(bindOperationDelegation) này từ lúc VHST-5 được thêm — modal này là 1 <div>
+// ĐỘC LẬP cấp cao (không lồng trong operationWorkItemModal), nên click "💾 Lưu Liên Kết"/"Huỷ"/"✕" bên
+// trong nó KHÔNG bubble tới bất kỳ root đã bind nào — hoàn toàn không phản hồi (nút mở modal
+// "openOperationWorkItemDependencyModal" vẫn chạy được vì nằm TRONG operationWorkItemModal đã bind, nên
+// modal vẫn mở ra bình thường — chỉ các thao tác BÊN TRONG modal mới bị "chết"). Cùng lớp lỗi với
+// hrLifecycleSection (CSP-delegation) đã phát hiện ở Đợt E — xem chú thích ở đó. Thêm modal này vào danh
+// sách là fix DUY NHẤT cần thiết, không cần đổi gì ở HTML/logic khác.
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal'].forEach(bindOperationDelegation);
 

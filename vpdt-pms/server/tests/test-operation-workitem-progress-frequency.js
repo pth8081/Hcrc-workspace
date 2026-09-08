@@ -76,6 +76,34 @@ test('resolveOperationWorkItemScheduleFields(): hasChildren=true + payload KHÔN
   assert.strictEqual(r.progressUpdateFrequencyDays, null);
 });
 
+// ===== 1b) BUG THẬT phát hiện lúc kiểm tra lại (phản hồi người dùng): "Ngày bắt đầu" trước đây KHÔNG hề
+// bị chặn khi chọn SAU "Hạn Hoàn Thành" — resolveOperationWorkItemScheduleFields() chỉ validate ĐỊNH DẠNG
+// startDate, chưa từng đối chiếu với deadline. Thêm tham số thứ 3 `deadline` (CALLER tự truyền — mirror
+// đúng cách createOperationWorkItem()/editOperationWorkItem() gọi thật, xem 2 test tích hợp bên dưới).
+test('resolveOperationWorkItemScheduleFields(): startDate SAU deadline -> từ chối (400)', () => {
+  assertThrowsHttp(() => recordActions.resolveOperationWorkItemScheduleFields({ startDate: '2026-06-01' }, false, '2026-01-01'), 400, 'Ngày bắt đầu không được sau Hạn hoàn thành');
+});
+
+test('resolveOperationWorkItemScheduleFields(): startDate ĐÚNG BẰNG deadline -> hợp lệ (không chặn, chỉ chặn SAU)', () => {
+  const r = recordActions.resolveOperationWorkItemScheduleFields({ startDate: '2026-01-01' }, false, '2026-01-01');
+  assert.strictEqual(r.startDate, '2026-01-01');
+});
+
+test('resolveOperationWorkItemScheduleFields(): startDate TRƯỚC deadline -> hợp lệ', () => {
+  const r = recordActions.resolveOperationWorkItemScheduleFields({ startDate: '2026-01-01' }, false, '2026-06-01');
+  assert.strictEqual(r.startDate, '2026-01-01');
+});
+
+test('resolveOperationWorkItemScheduleFields(): deadline rỗng/không gửi -> không chặn gì (deadline hiện không bắt buộc)', () => {
+  const r = recordActions.resolveOperationWorkItemScheduleFields({ startDate: '2026-06-01' }, false, '');
+  assert.strictEqual(r.startDate, '2026-06-01');
+});
+
+test('resolveOperationWorkItemScheduleFields(): không gửi startDate -> không so sánh gì với deadline dù deadline có giá trị (không throw)', () => {
+  const r = recordActions.resolveOperationWorkItemScheduleFields({}, false, '2026-01-01');
+  assert.strictEqual(r.startDate, null);
+});
+
 // ===== 2) Tích hợp createOperationWorkItem()/editOperationWorkItem() =====
 const ADMIN_USER = { username: 'admin', name: 'Admin', perms: { admin: true } };
 const SOURCE_RECORD = { id: 1, creator: 'someone_else', estimateStatus: 'APPROVED', useConfirmStatus: null, code: 'MM-TEST' };
@@ -121,6 +149,30 @@ test('editOperationWorkItem(): item ĐÃ có startDate/frequency từ lúc còn 
   );
   assert.strictEqual(updated.startDate, null, 'startDate phải tự dọn sạch khi item không còn là lá');
   assert.strictEqual(updated.progressUpdateFrequencyDays, null, 'progressUpdateFrequencyDays phải tự dọn sạch khi item không còn là lá');
+});
+
+// ===== 2b) BUG THẬT (phản hồi người dùng) tích hợp qua createOperationWorkItem()/editOperationWorkItem() =====
+test('createOperationWorkItem(): startDate SAU deadline -> từ chối (400), KHÔNG tạo được công việc', () => {
+  assertThrowsHttp(() => recordActions.createOperationWorkItem(
+    ADMIN_USER, { title: 'Việc ngày bắt đầu sai', deadline: '2026-01-01', startDate: '2026-06-01' },
+    SOURCE_RECORD, [], [], [], 'OPERATION_STORE_OPENING'
+  ), 400, 'Ngày bắt đầu không được sau Hạn hoàn thành');
+});
+
+test('createOperationWorkItem(): startDate TRƯỚC deadline -> tạo được bình thường', () => {
+  const item = recordActions.createOperationWorkItem(
+    ADMIN_USER, { title: 'Việc ngày bắt đầu đúng', deadline: '2026-06-01', startDate: '2026-01-01' },
+    SOURCE_RECORD, [], [], [], 'OPERATION_STORE_OPENING'
+  );
+  assert.strictEqual(item.startDate, '2026-01-01');
+  assert.strictEqual(item.deadline, '2026-06-01');
+});
+
+test('editOperationWorkItem(): sửa deadline về TRƯỚC startDate hiện có -> từ chối (400), giữ nguyên startDate cũ (không ghi đè dở dang)', () => {
+  const item = { id: 4, sourceType: 'OPERATION_STORE_OPENING', status: 'CHUA_BAT_DAU', history: [], startDate: '2026-06-01', deadline: '2026-08-01' };
+  assertThrowsHttp(() => recordActions.editOperationWorkItem(
+    ADMIN_USER, item, { title: 'Việc sửa hạn sớm hơn ngày bắt đầu', deadline: '2026-01-01', startDate: '2026-06-01' }, [], SOURCE_RECORD, false
+  ), 400, 'Ngày bắt đầu không được sau Hạn hoàn thành');
 });
 
 // ===== 3) computeOperationWorkItemProgressUpdateOverdueDays() =====
