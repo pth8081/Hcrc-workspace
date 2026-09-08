@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**14.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.3 (2026-09-08): Nhân Sự > Onboarding/Offboarding — làm lại hoàn toàn theo mô hình quy trình có
+## checklist theo giai đoạn (theo tài liệu thiết kế người dùng cung cấp)
+
+Người dùng gửi 1 tài liệu thiết kế đầy đủ ("Module Onboarding & Offboarding") và yêu cầu xây lại 2 tab
+này trong module Nhân Sự, gỡ hẳn bản cũ, tự merge không cần hỏi lại. Tài liệu gốc mô tả 1 hệ thống
+KPI/DWH-BRGMART riêng với 5 bảng SQL chuẩn hoá (HR_Process/HR_TaskTemplate/HR_ProcessTask/
+HR_ProcessAttachment/HR_ProcessLog) — đã chuyển đổi sang ĐÚNG kiến trúc JSON-blob-trên-SQL-Server hiện
+có của app này (không có bảng SQL riêng nào trong ~700 tính năng trước đó dùng mô hình chuẩn hoá kiểu
+đó), giữ nguyên tinh thần nghiệp vụ của tài liệu.
+
+**Kiến trúc mới**: gỡ HẲN bản v1 (2 collection `hrOnboardingRequests`/`hrOffboardingRequests`, mô hình
+"1 yêu cầu = 1 ticket Hỗ Trợ IT cấp/khoá tài khoản"), thay bằng 1 collection DUY NHẤT `hrProcesses` (mỗi
+bản ghi tự chứa `tasks[]`/`attachments[]`/`history[]`, checklist tự sinh SNAPSHOT vào ngay lúc tạo thay
+vì đọc sống từ bảng con) + 1 danh mục admin-config `hrTaskTemplates` (checklist chuẩn theo
+giai đoạn/nhãn trách nhiệm/số ngày lệch/bắt buộc hay không). Chi tiết nghiệp vụ đầy đủ đã cập nhật vào
+`deploy/Huong-dan-nghiep-vu.md`.
+
+**Những gì giữ/đổi so với thiết kế gốc**:
+- Giữ nguyên: 4 giai đoạn Onboarding / 5 giai đoạn Offboarding, tự sinh checklist theo `DueDaysOffset`
+  từ mốc (Ngày vào làm/Ngày nghỉ việc), tự động tính lại giai đoạn hiện tại + tự chuyển "Hoàn tất" khi
+  mọi việc bắt buộc xong, tích hợp Hỗ Trợ IT (đổi "1 yêu cầu = 1 ticket" sang "1 task nhãn IT = 1 ticket
+  tuỳ chọn", vẫn giữ nguyên tắc "IT vẫn tự tay cấp/khoá tài khoản NGOÀI hệ thống này" của bản v1).
+- CHỦ Ý bỏ qua (đã ghi rõ trong code, không phải quên): mô hình Position/PositionAssignment "seat-based"
+  với người kế nhiệm (mục 4.2 tài liệu gốc) — hệ thống này không có khái niệm "vị trí" độc lập khỏi
+  User, thay bằng 1 cờ thông tin đơn giản `isManagerialPosition` (chỉ để hiển thị, không có luồng bàn
+  giao kế nhiệm nào). Cũng CHỦ Ý không xây dashboard Báo Cáo riêng (mục 8 tài liệu gốc) để giới hạn phạm
+  vi thay đổi lần này (đúng yêu cầu "đảm bảo ko ảnh hưởng module khác").
+- Phân quyền làm lại từ 2 cờ phẳng cũ ("Tạo Yêu Cầu Onboarding"/"Tạo Yêu Cầu Offboarding") thành 4 cờ:
+  `hrOnboardingManage`/`hrOffboardingManage` (tạo + quản lý quy trình), `hrTaskTemplateManage` (chỉ sửa
+  danh mục checklist chuẩn — TÁCH RIÊNG khỏi quyền quản lý quy trình), `hrViewAll` (chỉ xem, không thao
+  tác) — có migration 1 lần tự động giữ nguyên quyền truy cập cho người dùng hiện có (ai đang có 2 cờ cũ
+  được cấp lại đúng cờ quản lý tương ứng, ai có `nhanSuManage` được cấp thêm cả 2 cờ còn lại).
+
+**Sửa 2 lỗi thật phát hiện trong lúc viết code (không phải bỏ sót từ tài liệu gốc — lỗi thao tác dữ
+liệu qua data-op mới viết)**: 2 điểm dựng HTML động trong `module-hrlifecycle.js` (nút "Giao lại việc"
+và ô chọn tệp đính kèm) gán trùng chỉ số tham số giữa `data-arg-el`/`data-argN`, khiến cơ chế dispatch
+CSP-safe (`cspCollectArgs()`) âm thầm mất tham số thứ 2 — phát hiện + sửa TRƯỚC khi viết xong test, không
+lọt ra ngoài.
+
+**Test**: viết lại hoàn toàn `tests/test-hr-lifecycle.js` cho mô hình v2 (24 kịch bản: tạo quy trình +
+validate, auto-generate checklist đúng dueDate/department, gác quyền theo nhãn phòng ban VÀ theo quản lý
+quy trình (2 lớp độc lập), giao lại việc, tích hợp Hỗ Trợ IT (tạo/chặn trùng/ghi ngược kết quả không đụng
+`DB.users`), tự động hoàn tất quy trình, huỷ quy trình, view-scope server-side, sửa danh mục checklist
+mẫu qua đúng gate quyền, wiring UI); phát hiện + sửa `tests/testHarness.js` (mock backend dùng chung cho
+`test-uniform.js`/`test-it-support.js`/`test-periodic-report.js` vẫn tham chiếu các hàm ĐÃ BỊ XOÁ của bản
+v1 — nếu không sửa sẽ làm VỠ TOÀN BỘ 3 bộ test đó, không chỉ riêng HR); cập nhật 2 kịch bản cũ trong
+`tests/test-form-reset-file-remove.js` (form id/hành vi nút gửi đã đổi hẳn); xoá
+`tests/demo-hr-lifecycle-screenshot.js` (ảnh demo tham chiếu UI cũ, không còn giá trị). Full regression
+suite toàn bộ `tests/test-*.js` (93 file) — **91/93 chạy, chỉ 2 lỗi ĐÃ BIẾT TỪ TRƯỚC**
+(`test-audit-fixes-batch1.js`, `test-audit-round2-cluster1.js` — phụ thuộc SQL Server thật đang không kết
+nối trong môi trường CI/sandbox, không liên quan gì tới thay đổi lần này, đã xác nhận nhiều lần trong các
+đợt merge trước).
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql`, KHÔNG thêm biến môi trường mới trong `.env.example`,
+KHÔNG đổi `dependencies` trong `package.json`. Có 1 file cron job mới
+(`jobs/hrTaskOverdueReminder.js`, nhắc email việc quá hạn/sắp tới hạn qua email hệ thống có sẵn — dùng
+lại nguyên `lib/mailer.js`, không cần cấu hình gì thêm) tự chạy mỗi 24h giống các job nhắc hạn khác đã
+có, và 1 migration 1 lần tự động chạy khi server khởi động (`migrateHrLifecycleV2Perms()` ở
+`seedDefaults.js`, giữ quyền truy cập cho user hiện có — không cần thao tác thủ công). Chỉ cần copy code
++ `pm2 restart`, không cần thao tác gì khác.
 
 ## v14.2 (2026-09-08): 5 lỗi UI/nghiệp vụ phát hiện qua sử dụng thực tế (Nhóm Quyền Đặc Biệt,
 ## timeout, tab phê duyệt/phân quyền, dashboard Vận Hành)
