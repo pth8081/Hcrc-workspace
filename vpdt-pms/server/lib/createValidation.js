@@ -1101,6 +1101,10 @@ const CREATE_MODULE_CONFIGS = {
       payload.sourceModule = 'MANUAL';
       payload.sourceId = null;
       payload.sourceCode = null;
+      // Tạo thủ công KHÔNG có khái niệm paymentType (không gắn nguồn Hợp đồng) -> sourcePaymentType luôn
+      // null, đi theo chế độ xác nhận TỪNG ĐỢT như mọi nguồn không phải ONE_TIME (xem
+      // confirmPaymentInstallment()/confirmPaymentRequestLumpSum() ở lib/recordActions.js).
+      payload.sourcePaymentType = null;
       payload.status = 'PENDING';
       // currentStep/history — bắt buộc để đề nghị tạo thủ công đi qua ĐÚNG được quy trình duyệt theo
       // bước/phòng ban MỚI (paymentDeptWorkflows, xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests)
@@ -1112,7 +1116,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!installments.length) throw new CreateError(400, 'Cần ít nhất 1 đợt thanh toán');
       payload.installments = installments.map(it => ({
         description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
-        confirmed: false, confirmedAt: null, confirmedBy: null
+        confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
       }));
       // Mỗi đợt phải dương — không chỉ ràng buộc tổng (xem cùng lý do ở contracts.extraValidate).
       if (payload.installments.some(it => !(it.amount > 0))) {

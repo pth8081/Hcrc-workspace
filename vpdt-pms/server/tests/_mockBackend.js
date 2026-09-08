@@ -178,9 +178,11 @@ function createMockApi(state) {
         }
         return { ok: true };
       }
-      if (action === 'confirm-installment') {
+      if (action === 'confirm-installment' || action === 'confirm-lump-sum') {
         const item = findOr404(state.collections.paymentRequests, id);
-        const outcome = recordActions.confirmPaymentInstallment(payload, user, item);
+        const outcome = action === 'confirm-installment'
+          ? recordActions.confirmPaymentInstallment(payload, user, item)
+          : recordActions.confirmPaymentRequestLumpSum(payload, user, item);
         if (outcome.justCompleted && outcome.item.sourceModule && outcome.item.sourceId != null) {
           const sourceCollection = outcome.item.sourceModule === 'CONTRACT' ? state.collections.contracts : state.collections.officeReqs;
           const src = sourceCollection.find(x => x.id === outcome.item.sourceId);

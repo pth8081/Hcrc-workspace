@@ -1381,7 +1381,10 @@ function uploadContractSignedFile(payload, user, contract) {
 function buildPaymentInstallments(sourceInstallments, totalAmount, fallbackDesc) {
   const list = Array.isArray(sourceInstallments) ? sourceInstallments : [];
   const base = list.length ? list : [{ description: fallbackDesc, amount: totalAmount, dueDate: '' }];
-  return base.map(it => ({ description: it.description || fallbackDesc, amount: it.amount || 0, dueDate: it.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null }));
+  // confirmFileUrl/confirmFileName/confirmFileType — tệp "đề nghị thanh toán đã phê duyệt" đính kèm lúc
+  // xác nhận TỪNG ĐỢT (confirmPaymentInstallment() bên dưới, CHỈ áp dụng cho đề nghị KHÔNG phải "Thanh
+  // toán 1 lần" — xem sourcePaymentType) — khởi tạo null, chỉ được gán lúc xác nhận đợt đó.
+  return base.map(it => ({ description: it.description || fallbackDesc, amount: it.amount || 0, dueDate: it.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null }));
 }
 
 // Kế toán có thể SỬA LẠI các đợt thanh toán đề xuất (lấy tham khảo từ Hợp đồng/Mua Bán/Sửa Chữa/Đầu
@@ -1393,7 +1396,7 @@ function normalizePaymentInstallmentsOverride(raw) {
   if (!Array.isArray(raw) || !raw.length) return null;
   const installments = raw.map(it => ({
     description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
-    confirmed: false, confirmedAt: null, confirmedBy: null
+    confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
   }));
   if (installments.some(it => !(it.amount > 0))) {
     throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
@@ -1456,6 +1459,12 @@ function startContractPayment(user, contract, overrides) {
       ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - contract.amount) > 1
       : false,
     installments,
+    // sourcePaymentType — CHỤP LẠI đúng lúc tạo (contract.paymentType || null) chế độ xác nhận thanh toán
+    // của đề nghị này: 'ONE_TIME' -> xác nhận TOÀN BỘ 1 lần (lump-sum, xem confirmPaymentRequestLumpSum()),
+    // 'PERIODIC'/null (hợp đồng cũ chưa từng có paymentType) -> xác nhận TỪNG ĐỢT (confirmPaymentInstallment()).
+    // CHỤP LẠI (không tra contract.paymentType lại mỗi lần) để nếu hợp đồng đổi paymentType SAU KHI đề
+    // nghị đã tạo thì đề nghị ĐANG CHỜ XỬ LÝ không bị đổi luật xác nhận giữa chừng.
+    sourcePaymentType: contract.paymentType || null,
     // createAsPending (route from-source, hành vi CŨ giữ nguyên): thẳng PENDING + currentStep/history
     // khởi tạo ngay để đi qua ĐÚNG được quy trình duyệt theo bước MỚI (paymentDeptWorkflows, xem
     // lib/workflowEngine.js) — nếu không mọi đề nghị tạo qua đường này sẽ kẹt vĩnh viễn (không approver
@@ -1517,6 +1526,10 @@ function startOfficePayment(user, item, overrides) {
       ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - item.amount) > 1
       : false,
     installments,
+    // officeReqs KHÔNG có khái niệm paymentType (Mua Bán/Sửa Chữa/Đầu Tư không có "1 lần"/"định kỳ") ->
+    // sourcePaymentType luôn null, đề nghị đi theo ĐÚNG chế độ xác nhận TỪNG ĐỢT như trước (an toàn/tương
+    // thích ngược — xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum() ở dưới).
+    sourcePaymentType: null,
     // officeReqs (Mua Bán/Sửa Chữa) KHÔNG có khái niệm NHÁP/paymentType định kỳ (khác Hợp đồng) — LUÔN
     // tạo thẳng PENDING như trước, hoàn toàn không đổi hành vi module này. currentStep/history khởi tạo
     // ngay để đề nghị đi qua ĐÚNG được quy trình duyệt theo bước MỚI dùng CHUNG cho mọi nguồn
@@ -1596,7 +1609,7 @@ function editPaymentRequest(payload, user, pr) {
       } else {
         amount = Number(it?.amount) || 0;
       }
-      return { description: (it?.description || '').trim(), amount, dueDate: it?.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null };
+      return { description: (it?.description || '').trim(), amount, dueDate: it?.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null };
     });
     pr.amount = pr.installments.reduce((sum, it) => sum + (it.amount || 0), 0);
     // Đề nghị có nguồn (từ Hợp đồng/Mua Bán/Sửa Chữa) mang sẵn referenceAmount — sửa lại đợt ở đây cũng
@@ -1673,18 +1686,63 @@ function computePaymentInstallmentDeadlineStatus(installment) {
   return 'DUNG_HAN';
 }
 
+// Trạng thái TỔNG HỢP ("tổng đợt") của CẢ đề nghị thanh toán — thuần, tính lại NGAY LÚC ĐỌC từ trạng thái
+// từng đợt (computePaymentInstallmentDeadlineStatus() ở trên), dùng cho badge tổng + gộp vào cảnh báo
+// tổng hợp ở "🗂️ Quản Lý Thanh Toán"/"✅ Xác Nhận Đề Nghị Thanh Toán" (yêu cầu nghiệp vụ #1 + #5: theo dõi
+// "tổng đợt" quá hạn/đang thanh toán/đã thanh toán). Mirror y hệt ở module-thanhtoan.js (LƯU Ý BẢO TRÌ:
+// sửa 1 bên phải sửa cả 2 bên).
+//   'DA_THANH_TOAN' — pr.status === 'PAID' (đã xong toàn bộ, kể cả lump-sum ONE_TIME).
+//   'QUA_HAN' — còn ít nhất 1 đợt CHƯA xác nhận đã quá hạn.
+//   'DANG_THANH_TOAN' — còn đợt chưa xác nhận nhưng chưa đợt nào quá hạn (đang chờ xử lý bình thường).
+function computePaymentRequestOverallStatus(pr) {
+  if (!pr) return 'DANG_THANH_TOAN';
+  if (pr.status === 'PAID') return 'DA_THANH_TOAN';
+  const installments = Array.isArray(pr.installments) ? pr.installments : [];
+  const hasOverdue = installments.some(it => computePaymentInstallmentDeadlineStatus(it) === 'QUA_HAN');
+  return hasOverdue ? 'QUA_HAN' : 'DANG_THANH_TOAN';
+}
+
+// Đếm số đợt quá hạn/sắp đến hạn của 1 đề nghị — dùng cho cảnh báo "N đợt quá hạn/sắp đến hạn" theo TỪNG
+// đợt lẫn TỔNG đợt (yêu cầu nghiệp vụ #5). Đợt đã confirmed không tính (computePaymentInstallmentDeadlineStatus
+// trả DA_THANH_TOAN cho đợt đó, không rơi vào 2 nhánh đếm bên dưới).
+function countPaymentInstallmentWarnings(pr) {
+  const installments = Array.isArray(pr?.installments) ? pr.installments : [];
+  let overdueCount = 0, nearDueCount = 0;
+  installments.forEach(it => {
+    const s = computePaymentInstallmentDeadlineStatus(it);
+    if (s === 'QUA_HAN') overdueCount++;
+    else if (s === 'SAP_DEN_HAN') nearDueCount++;
+  });
+  return { overdueCount, nearDueCount };
+}
+
 // Xác nhận đã thanh toán 1 đợt — đủ hết các đợt (không còn đợt nào chưa confirmed) thì tự chuyển PAID
 // ("thanh toán thành công", khớp yêu cầu). Trả về cờ justCompleted để route biết có cần ghi ngược
 // paymentStatus về bản ghi nguồn hay không.
+// CHỈ áp dụng cho đề nghị KHÔNG phải "Thanh toán 1 lần" (pr.sourcePaymentType !== 'ONE_TIME' — Thanh toán
+// định kỳ/thủ công/nguồn không có khái niệm paymentType) — đề nghị ONE_TIME phải xác nhận TOÀN BỘ 1 lần
+// qua confirmPaymentRequestLumpSum() bên dưới, KHÔNG được xác nhận nhỏ giọt từng đợt (yêu cầu nghiệp vụ
+// #7 "không được phép ấn xác nhận trên tổng đợt" — vế ngược lại, "1 lần" KHÔNG được xác nhận theo đợt).
+// Bắt buộc kèm tệp "đề nghị thanh toán đã phê duyệt" (fileUrl/fileName, yêu cầu nghiệp vụ #2/#4 — tính
+// năng MỚI, trước đây xác nhận không đòi hỏi tệp gì).
 function confirmPaymentInstallment(payload, user, pr) {
   if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
   if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
+  if (pr.sourcePaymentType === 'ONE_TIME') {
+    throw new HttpError(409, 'Đề nghị thanh toán "1 lần" — vui lòng xác nhận toàn bộ đề nghị (không xác nhận theo từng đợt)');
+  }
   const idx = Number(payload?.index);
   if (!Array.isArray(pr.installments) || !pr.installments[idx]) throw new HttpError(400, 'Đợt thanh toán không hợp lệ');
   if (pr.installments[idx].confirmed) throw new HttpError(409, 'Đợt thanh toán này đã được xác nhận trước đó');
+  const { fileName, fileUrl, fileType } = payload || {};
+  if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp đề nghị thanh toán đã phê duyệt');
+  assertUploadedFileUrl(fileUrl, 'Tệp đề nghị thanh toán đã phê duyệt');
   pr.installments[idx].confirmed = true;
   pr.installments[idx].confirmedBy = user.username;
   pr.installments[idx].confirmedAt = nowVN();
+  pr.installments[idx].confirmFileUrl = fileUrl;
+  pr.installments[idx].confirmFileName = fileName;
+  pr.installments[idx].confirmFileType = fileType || null;
 
   const justCompleted = pr.installments.every(it => it.confirmed);
   if (justCompleted) {
@@ -1692,6 +1750,37 @@ function confirmPaymentInstallment(payload, user, pr) {
     pr.paidAt = nowVN();
   }
   return { item: pr, justCompleted };
+}
+
+// Xác nhận thanh toán TOÀN BỘ 1 LẦN (lump-sum) — CHỈ dành cho đề nghị "Thanh toán 1 lần" nguồn Hợp đồng
+// (pr.sourcePaymentType === 'ONE_TIME', xem startContractPayment()) — kèm 1 tệp "đề nghị thanh toán đã
+// phê duyệt" DUY NHẤT cho cả đề nghị (khác confirmPaymentInstallment() ở trên, mỗi đợt 1 tệp riêng).
+// Đánh dấu confirmed=true/confirmFileUrl/confirmFileName TRÊN TỪNG ĐỢT luôn (để badge từng đợt vẫn nhất
+// quán "đã thanh toán" dù người dùng chỉ thao tác 1 lần duy nhất, khớp yêu cầu nghiệp vụ #3 "theo dõi các
+// trạng thái thanh toán vẫn là theo đợt"), rồi chuyển thẳng PAID — trả về justCompleted=true LUÔN (route
+// dùng cờ này để biết có cần ghi ngược paymentStatus về bản ghi nguồn hay không, cùng khuôn
+// confirmPaymentInstallment()).
+function confirmPaymentRequestLumpSum(payload, user, pr) {
+  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
+  if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
+  if (pr.sourcePaymentType !== 'ONE_TIME') {
+    throw new HttpError(409, 'Chỉ đề nghị thanh toán "1 lần" mới được xác nhận toàn bộ 1 lần — đề nghị này phải xác nhận theo từng đợt');
+  }
+  const { fileName, fileUrl, fileType } = payload || {};
+  if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp đề nghị thanh toán đã phê duyệt');
+  assertUploadedFileUrl(fileUrl, 'Tệp đề nghị thanh toán đã phê duyệt');
+  const now = nowVN();
+  pr.lumpConfirmFileUrl = fileUrl;
+  pr.lumpConfirmFileName = fileName;
+  pr.lumpConfirmFileType = fileType || null;
+  pr.installments = (Array.isArray(pr.installments) ? pr.installments : []).map(it => ({
+    ...it,
+    confirmed: true, confirmedBy: user.username, confirmedAt: now,
+    confirmFileUrl: fileUrl, confirmFileName: fileName, confirmFileType: fileType || null
+  }));
+  pr.status = 'PAID';
+  pr.paidAt = now;
+  return { item: pr, justCompleted: true };
 }
 
 // Xoá đề nghị thanh toán giờ là "quyền tối cao" — chỉ Admin, không còn qua paymentManage (kế toán vẫn
@@ -5573,7 +5662,8 @@ module.exports = {
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
   canManagePaymentRequests, canEditPaymentRequest, editPaymentRequest, submitPaymentRequest, requestPaymentInfo,
-  confirmPaymentInstallment, assertCanDeletePaymentRequest, computePaymentInstallmentDeadlineStatus,
+  confirmPaymentInstallment, confirmPaymentRequestLumpSum, assertCanDeletePaymentRequest, computePaymentInstallmentDeadlineStatus,
+  computePaymentRequestOverallStatus, countPaymentInstallmentWarnings,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,

@@ -8,9 +8,23 @@
 // sau khi PAID. Vẫn giữ nguyên các kịch bản gốc (tạo thủ công/CÓ NGUỒN từ module Thanh Toán, NEED_INFO,
 // xoá PAID bị chặn) — CHỈ đổi người duyệt (tp_kd/ketoan1 theo dept, không còn "bất kỳ ai có paymentManage")
 // và các bước liên quan tới nút "🧾 Lập Thanh Toán" (nay tạo DRAFT).
+//
+// ĐỢT MỚI (v13.4 — refinement toàn diện): "Quản Lý Thanh Toán" KHÔNG còn ẩn đề nghị PAID (bug cũ — biến
+// mất sau khi xác nhận hoàn tất), pr.sourcePaymentType chụp lại contract.paymentType lúc tạo đề nghị
+// (quyết định chế độ xác nhận CỐ ĐỊNH cho đề nghị đó): 'ONE_TIME' (Hợp đồng "Thanh toán 1 lần") -> xác
+// nhận TOÀN BỘ 1 LẦN (confirmPaymentRequestLumpSum(), route .../confirm-lump-sum) kèm 1 tệp "đề nghị
+// thanh toán đã phê duyệt" DUY NHẤT, KHÔNG được xác nhận nhỏ giọt từng đợt (confirm-installment tự chặn
+// 409); 'PERIODIC'/null (Hợp đồng "Thanh toán định kỳ"/thủ công/nguồn officeReqs không có paymentType) ->
+// xác nhận TỪNG ĐỢT như cũ nhưng giờ BẮT BUỘC kèm tệp riêng mỗi đợt, KHÔNG có lối tắt xác nhận toàn bộ
+// (confirm-lump-sum tự chặn 409). Badge trạng thái tổng hợp "tổng đợt" (computePaymentRequestOverallStatus())
+// + cảnh báo số đợt quá hạn/sắp đến hạn (countPaymentInstallmentWarnings()) cũng được kiểm ở đây.
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { startHarness } = require('./_harness-contract');
+const recordActions = require('../lib/recordActions');
+const recordViewScope = require('../lib/recordViewScope');
 
 let pass = 0, fail = 0;
 function check(name, cond, detail) {
@@ -77,9 +91,27 @@ async function run() {
       return pr ? {
         status: pr.status, installments: pr.installments, amount: pr.amount, dept: pr.dept,
         sourceModule: pr.sourceModule, sourceId: pr.sourceId, sourceCode: pr.sourceCode,
-        currentStep: pr.currentStep, history: pr.history, approvedBy: pr.approvedBy
+        currentStep: pr.currentStep, history: pr.history, approvedBy: pr.approvedBy,
+        sourcePaymentType: pr.sourcePaymentType, lumpConfirmFileUrl: pr.lumpConfirmFileUrl, lumpConfirmFileName: pr.lumpConfirmFileName
       } : null;
     }, id);
+  }
+  // Mở modal "✅ Xác Nhận Thanh Toán" ĐÚNG đợt (index) rồi chọn tệp thật + bấm xác nhận — khớp luồng UI
+  // THẬT (openPaymentConfirmModal()/submitPaymentConfirmUpload() ở module-thanhtoan.js), KHÔNG gọi thẳng
+  // callRecordAction() để bài test cũng phủ luôn UI (nút mở modal, input file, nút xác nhận trong modal).
+  async function confirmInstallmentWithFile(id, index, filePath) {
+    await page.evaluate((args) => confirmPaymentInstallmentAction(args.id, args.index), { id, index });
+    await page.setInputFiles('#paymentConfirmFile', filePath);
+    await page.evaluate(() => submitPaymentConfirmUpload());
+    await page.waitForTimeout(250);
+  }
+  // Cùng khuôn confirmInstallmentWithFile() ở trên nhưng cho nút "💰 Xác Nhận Toàn Bộ" (lump-sum, CHỈ đề
+  // nghị sourcePaymentType === 'ONE_TIME').
+  async function confirmLumpSumWithFile(id, filePath) {
+    await page.evaluate((prId) => confirmPaymentRequestLumpSumAction(prId), id);
+    await page.setInputFiles('#paymentConfirmFile', filePath);
+    await page.evaluate(() => submitPaymentConfirmUpload());
+    await page.waitForTimeout(250);
   }
   // Đọc TOÀN BỘ hàng đang mở nháp trong "🗂️ Quản Lý Thanh Toán" (id do server sinh, test không biết
   // trước) — dùng ngay sau khi vừa "🧾 Lập Thanh Toán" (điều hướng tự động mở sẵn đúng dòng NHÁP đó).
@@ -89,6 +121,15 @@ async function run() {
       return pr ? { id: pr.id, status: pr.status, installments: pr.installments, sourceModule: pr.sourceModule, sourceId: pr.sourceId } : null;
     });
   }
+
+  const assetDir = path.join(__dirname, '.tmp-assets');
+  fs.mkdirSync(assetDir, { recursive: true });
+  const paymentConfirmFile1 = path.join(assetDir, 'payment-confirm-1.pdf');
+  fs.writeFileSync(paymentConfirmFile1, '%PDF-1.4 fake payment confirm file 1');
+  const paymentConfirmFile2 = path.join(assetDir, 'payment-confirm-2.pdf');
+  fs.writeFileSync(paymentConfirmFile2, '%PDF-1.4 fake payment confirm file 2');
+  const paymentLumpFile = path.join(assetDir, 'payment-confirm-lump.pdf');
+  fs.writeFileSync(paymentLumpFile, '%PDF-1.4 fake payment confirm lump file');
 
   try {
     // ============ Chuẩn bị: 2 hợp đồng "Thanh toán 1 lần" (A, B) + 1 hợp đồng "Thanh toán định kỳ"
@@ -105,7 +146,13 @@ async function run() {
     const officeC = makeReadyOfficeReq({ id: 900003, code: 'HCRC-MB-TEST-900', title: 'Mua sắm nguồn C (tạo đề nghị từ module Thanh Toán)', amount: 45000000 });
     const contractD = makeReadyContract({
       id: 900004, code: 'HCRC-KD-KTE-902', title: 'Hợp đồng nguồn D (Thanh toán định kỳ)', amount: 50000000,
-      paymentType: 'PERIODIC', paymentInstallments: []
+      paymentType: 'PERIODIC',
+      // 2 đợt (khác Kịch bản gốc chỉ 1 đợt mặc định) — để kiểm đúng "xác nhận TỪNG ĐỢT tới khi đủ hết mới
+      // tự hoàn thành" (yêu cầu nghiệp vụ #4/#7) thay vì 1 đợt duy nhất coi như xong ngay lần xác nhận đầu.
+      paymentInstallments: [
+        { description: 'Đợt 1 - chu kỳ 1', amount: 30000000, dueDate: '2026-03-01' },
+        { description: 'Đợt 2 - chu kỳ 1', amount: 20000000, dueDate: '2026-05-01' }
+      ]
     });
     await seedRecord('contracts', contractA);
     await seedRecord('contracts', contractB);
@@ -206,28 +253,45 @@ async function run() {
     check('Đề nghị đã APPROVED -> Sửa bị server từ chối ("không còn ở trạng thái được sửa")', editBlockedAlerts.some((a) => a.includes('không còn ở trạng thái được sửa')), editBlockedAlerts);
     await page.evaluate(() => cancelEditPaymentRequest());
 
-    // ============ Kịch bản 6: Xác nhận từng đợt (ketoan1, flat paymentManage — KHÔNG đổi) — đợt 1 xong
-    // CHƯA đủ để chuyển PAID; xác nhận trùng 1 đợt đã xác nhận bị chặn; đủ CẢ 2 đợt mới chuyển PAID +
-    // ghi ngược nguồn ĐÚNG theo paymentType ONE_TIME (DA_THANH_TOAN, khoá cứng) ============
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), prAId);
-    await confirmPending();
-    let prAfterFirstConfirm = await readPr(prAId);
-    check('Xác nhận xong đợt 1/2 -> đề nghị VẪN ở APPROVED (chưa đủ hết các đợt)', prAfterFirstConfirm.status === 'APPROVED' && prAfterFirstConfirm.installments[0].confirmed === true && prAfterFirstConfirm.installments[1].confirmed === false, prAfterFirstConfirm);
-    const contractStillWaiting = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractA.id);
-    check('Hợp đồng nguồn CHƯA ghi "Đã thanh toán" khi mới xong 1/2 đợt', contractStillWaiting === 'CHO_THANH_TOAN', contractStillWaiting);
+    // ============ Kịch bản 6 (ĐỔI HẲN, v13.4 — WORKED EXAMPLE ONE_TIME): đề nghị nguồn Hợp đồng "Thanh
+    // toán 1 lần" (contractA, sourcePaymentType === 'ONE_TIME') KHÔNG được xác nhận nhỏ giọt từng đợt nữa
+    // — chỉ xác nhận TOÀN BỘ 1 LẦN (lump-sum) kèm 1 tệp "đề nghị thanh toán đã phê duyệt" DUY NHẤT, nhưng
+    // badge từng đợt vẫn hiển thị đủ (yêu cầu nghiệp vụ #3) ============
+    const prABeforeConfirm = await readPr(prAId);
+    check('Đề nghị nguồn Hợp đồng "Thanh toán 1 lần" -> sourcePaymentType chụp đúng "ONE_TIME"', prABeforeConfirm.sourcePaymentType === 'ONE_TIME', prABeforeConfirm.sourcePaymentType);
 
-    await clearAlerts();
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), prAId);
-    await confirmPending();
-    const dupConfirmAlerts = await alerts();
-    check('Xác nhận LẶP LẠI đúng đợt đã xác nhận -> bị chặn ("đã được xác nhận trước đó")', dupConfirmAlerts.some((a) => a.includes('đã được xác nhận trước đó')), dupConfirmAlerts);
+    // Xác nhận TỪNG ĐỢT trên đề nghị ONE_TIME -> phải bị chặn NGAY (409, KHÔNG có gì được xác nhận) — cả
+    // qua route thật (bỏ qua UI, giả lập DevTools/API trực tiếp) lẫn chưa hề đổi trạng thái đề nghị.
+    const perInstallmentBlockedOnOneTime = await page.evaluate(async (id) => {
+      try { await callRecordAction('paymentRequests', id, 'confirm-installment', { index: 0, fileName: 'x.pdf', fileType: 'application/pdf', fileUrl: '/uploads/test/x.pdf' }); return { ok: true }; }
+      catch (err) { return { ok: false, message: err.message }; }
+    }, prAId);
+    check('Đề nghị ONE_TIME — xác nhận TỪNG ĐỢT (confirm-installment) bị chặn 409 ("không xác nhận theo từng đợt")', !perInstallmentBlockedOnOneTime.ok && perInstallmentBlockedOnOneTime.message.includes('không xác nhận theo từng đợt'), perInstallmentBlockedOnOneTime);
+    const prAStillUnconfirmed = await readPr(prAId);
+    check('Sau khi bị chặn -> CẢ 2 đợt vẫn CHƯA xác nhận, đề nghị vẫn APPROVED', prAStillUnconfirmed.status === 'APPROVED' && prAStillUnconfirmed.installments.every((it) => !it.confirmed), prAStillUnconfirmed);
 
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 1), prAId);
-    await confirmPending();
-    const prAfterAllConfirmed = await readPr(prAId);
-    const contractAfterAllConfirmed = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractA.id);
-    check('Xác nhận đủ CẢ 2 đợt -> đề nghị tự chuyển PAID', prAfterAllConfirmed.status === 'PAID', prAfterAllConfirmed.status);
-    check('"Thanh toán 1 lần" (ONE_TIME) — đủ hết các đợt -> GHI NGƯỢC paymentStatus = "Đã thanh toán" (DA_THANH_TOAN, khoá cứng vĩnh viễn) về đúng hợp đồng nguồn', contractAfterAllConfirmed === 'DA_THANH_TOAN', contractAfterAllConfirmed);
+    // Xác nhận lump-sum nhưng THIẾU tệp -> server chặn 400 (gọi thẳng route, bỏ qua UI chọn tệp).
+    const lumpMissingFile = await page.evaluate(async (id) => {
+      try { await callRecordAction('paymentRequests', id, 'confirm-lump-sum', {}); return { ok: true }; }
+      catch (err) { return { ok: false, message: err.message }; }
+    }, prAId);
+    check('Xác nhận lump-sum THIẾU tệp -> server chặn 400 ("Thiếu tệp đề nghị thanh toán đã phê duyệt")', !lumpMissingFile.ok && lumpMissingFile.message.includes('Thiếu tệp'), lumpMissingFile);
+
+    // Xác nhận lump-sum ĐÚNG luồng UI thật: mở modal "💰 Xác Nhận Toàn Bộ" -> chọn tệp -> bấm xác nhận.
+    await confirmLumpSumWithFile(prAId, paymentLumpFile);
+    const prAfterLumpConfirm = await readPr(prAId);
+    const contractAfterLumpConfirm = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractA.id);
+    check('Xác nhận lump-sum thành công -> đề nghị chuyển PAID NGAY (1 lần duy nhất, không cần lặp)', prAfterLumpConfirm.status === 'PAID', prAfterLumpConfirm.status);
+    check('Lump-sum đánh dấu confirmed=true trên CẢ 2 đợt (yêu cầu nghiệp vụ #3 — badge từng đợt vẫn theo dõi đủ dù xác nhận 1 lần)', prAfterLumpConfirm.installments.every((it) => it.confirmed === true && !!it.confirmFileUrl), prAfterLumpConfirm.installments);
+    check('lumpConfirmFileUrl/lumpConfirmFileName được lưu trên đề nghị', !!prAfterLumpConfirm.lumpConfirmFileUrl && prAfterLumpConfirm.lumpConfirmFileName === 'payment-confirm-lump.pdf', prAfterLumpConfirm);
+    check('"Thanh toán 1 lần" (ONE_TIME) — lump-sum xong -> GHI NGƯỢC paymentStatus = "Đã thanh toán" (DA_THANH_TOAN, khoá cứng vĩnh viễn) về đúng hợp đồng nguồn', contractAfterLumpConfirm === 'DA_THANH_TOAN', contractAfterLumpConfirm);
+
+    // Xác nhận lump-sum LẶP LẠI trên đề nghị đã PAID -> bị chặn (đề nghị "chưa được duyệt hoặc đã hoàn tất").
+    const lumpRepeatBlocked = await page.evaluate(async (id) => {
+      try { await callRecordAction('paymentRequests', id, 'confirm-lump-sum', { fileName: 'y.pdf', fileType: 'application/pdf', fileUrl: '/uploads/test/y.pdf' }); return { ok: true }; }
+      catch (err) { return { ok: false, message: err.message }; }
+    }, prAId);
+    check('Xác nhận lump-sum LẶP LẠI trên đề nghị đã PAID -> bị chặn', !lumpRepeatBlocked.ok, lumpRepeatBlocked);
 
     // ============ Kịch bản 7: Hợp đồng "Thanh toán 1 lần" đã PAID -> nút "🧾 Lập Thanh Toán" KHÔNG BAO
     // GIỜ mở lại (gate client ẩn nút LẪN server 409 nếu cố gọi thẳng) ============
@@ -264,8 +328,9 @@ async function run() {
     }, contractD.id);
     check('Hợp đồng ĐỊNH KỲ đang CHO_THANH_TOAN (chu kỳ dở dang) -> "🧾 Lập Thanh Toán" lần 2 bị chặn 409 (không cho song song 2 chu kỳ)', !midFlightBlocked.ok && midFlightBlocked.message.includes('chưa thanh toán'), midFlightBlocked);
 
-    // Đề nghị chu kỳ 1 đã có amount hợp lệ sẵn (mặc định 1 đợt = toàn bộ giá trị hợp đồng, contractD
-    // không khai riêng đợt nào) -> gửi duyệt thẳng, không cần sửa gì thêm.
+    // Đề nghị chu kỳ 1 mang ĐÚNG 2 đợt đã khai của contractD (30tr + 20tr) -> amount đã hợp lệ sẵn, gửi
+    // duyệt thẳng, không cần sửa gì thêm.
+    check('Chu kỳ 1 (định kỳ) mang ĐÚNG 2 đợt đã khai của hợp đồng nguồn', cycle1.installments.length === 2, cycle1.installments);
     await page.evaluate((id) => submitPaymentRequestAction(id), cycle1.id);
     await confirmPending();
     const cycle1AfterSubmit = await readPr(cycle1.id);
@@ -277,14 +342,38 @@ async function run() {
     await confirmPending();
     const cycle1Approved = await readPr(cycle1.id);
     check('Chu kỳ 1 (định kỳ) -> tp_kd duyệt theo phòng ban thành công (APPROVED)', cycle1Approved.status === 'APPROVED', cycle1Approved.status);
+    check('Chu kỳ 1 (định kỳ) -> sourcePaymentType chụp đúng "PERIODIC"', cycle1Approved.sourcePaymentType === 'PERIODIC', cycle1Approved.sourcePaymentType);
 
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), cycle1.id);
-    await confirmPending();
+
+    // Xác nhận TOÀN BỘ 1 lần (lump-sum) trên đề nghị PERIODIC -> phải bị chặn 409 (lối tắt CHỈ dành cho
+    // ONE_TIME, yêu cầu nghiệp vụ #7 "không được phép ấn xác nhận trên tổng đợt").
+    const lumpBlockedOnPeriodic = await page.evaluate(async (id) => {
+      try { await callRecordAction('paymentRequests', id, 'confirm-lump-sum', { fileName: 'z.pdf', fileType: 'application/pdf', fileUrl: '/uploads/test/z.pdf' }); return { ok: true }; }
+      catch (err) { return { ok: false, message: err.message }; }
+    }, cycle1.id);
+    check('Đề nghị PERIODIC — xác nhận TOÀN BỘ 1 lần (confirm-lump-sum) bị chặn 409 ("chỉ đề nghị thanh toán 1 lần")', !lumpBlockedOnPeriodic.ok && lumpBlockedOnPeriodic.message.includes('1 lần'), lumpBlockedOnPeriodic);
+
+    // Xác nhận đợt 1 nhưng THIẾU tệp -> server chặn 400 (gọi thẳng route, bỏ qua UI chọn tệp).
+    const installmentMissingFile = await page.evaluate(async (id) => {
+      try { await callRecordAction('paymentRequests', id, 'confirm-installment', { index: 0 }); return { ok: true }; }
+      catch (err) { return { ok: false, message: err.message }; }
+    }, cycle1.id);
+    check('Xác nhận đợt 1 THIẾU tệp -> server chặn 400 ("Thiếu tệp đề nghị thanh toán đã phê duyệt")', !installmentMissingFile.ok && installmentMissingFile.message.includes('Thiếu tệp'), installmentMissingFile);
+
+    // Xác nhận đợt 1/2 ĐÚNG luồng UI thật (modal + tệp thật) -> CHƯA đủ để chuyển PAID.
+    await confirmInstallmentWithFile(cycle1.id, 0, paymentConfirmFile1);
+    const cycle1AfterFirstInstallment = await readPr(cycle1.id);
+    check('Xác nhận xong đợt 1/2 (kèm tệp) -> đề nghị VẪN APPROVED (chưa đủ hết các đợt)', cycle1AfterFirstInstallment.status === 'APPROVED' && cycle1AfterFirstInstallment.installments[0].confirmed === true && cycle1AfterFirstInstallment.installments[0].confirmFileName === 'payment-confirm-1.pdf' && cycle1AfterFirstInstallment.installments[1].confirmed === false, cycle1AfterFirstInstallment);
+    const contractDStillWaiting = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
+    check('Hợp đồng nguồn (PERIODIC) CHƯA ghi lại trạng thái khi mới xong 1/2 đợt', contractDStillWaiting === 'CHO_THANH_TOAN', contractDStillWaiting);
+
+    // Xác nhận đợt 2/2 ĐÚNG luồng UI thật -> đủ hết -> tự chuyển PAID + ghi ngược CHUA_THANH_TOAN.
+    await confirmInstallmentWithFile(cycle1.id, 1, paymentConfirmFile2);
     const cycle1Paid = await readPr(cycle1.id);
     const contractDAfterCycle1 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
-    check('Chu kỳ 1 (định kỳ) -> xác nhận đủ đợt -> đề nghị chuyển PAID', cycle1Paid.status === 'PAID', cycle1Paid.status);
+    check('Xác nhận đủ CẢ 2 đợt (mỗi đợt kèm tệp riêng) -> đề nghị tự chuyển PAID', cycle1Paid.status === 'PAID' && cycle1Paid.installments[1].confirmFileName === 'payment-confirm-2.pdf', cycle1Paid);
     check('"Thanh toán định kỳ" (PERIODIC) — chu kỳ hoàn tất -> paymentStatus TRẢ VỀ "Chưa thanh toán" (CHUA_THANH_TOAN, KHÁC hẳn ONE_TIME) để mở lại chu kỳ mới', contractDAfterCycle1 === 'CHUA_THANH_TOAN', contractDAfterCycle1);
 
     await loginAs('kd1');
@@ -400,11 +489,15 @@ async function run() {
     await confirmPending();
     const officePrApproved = await readPr(afterFromSourceOffice.pr.id);
     check('tp_kd (approver bước 1 dept "Phòng Kinh Doanh") duyệt được đề nghị nguồn Mua Bán — cùng ĐÚNG 1 quy trình paymentDeptWorkflows chung với Hợp Đồng', officePrApproved.status === 'APPROVED', officePrApproved.status);
+    check('officeReqs (Mua Bán) KHÔNG có paymentType -> sourcePaymentType luôn null (đi theo chế độ xác nhận TỪNG ĐỢT, KHÔNG có lối tắt lump-sum)', officePrApproved.sourcePaymentType === null || officePrApproved.sourcePaymentType === undefined, officePrApproved.sourcePaymentType);
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), afterFromSourceOffice.pr.id);
-    await confirmPending();
+    // officeReqs cũng đi qua ĐÚNG 1 cơ chế confirmPaymentInstallment() dùng chung (bắt buộc tệp riêng, xem
+    // yêu cầu nghiệp vụ #2/#4) — module Mua Bán/Sửa Chữa hoàn toàn KHÔNG có nhánh xử lý riêng nào khác.
+    await confirmInstallmentWithFile(afterFromSourceOffice.pr.id, 0, paymentConfirmFile1);
+    const officePrPaid = await readPr(afterFromSourceOffice.pr.id);
     const officeAfterPaid = await page.evaluate((id) => DB.officeReqs.find((o) => o.id === id).paymentStatus, officeC.id);
+    check('officeReqs (Mua Bán) — xác nhận từng đợt kèm tệp -> đề nghị chuyển PAID, đợt lưu đúng tệp đã upload', officePrPaid.status === 'PAID' && officePrPaid.installments[0].confirmFileName === 'payment-confirm-1.pdf', officePrPaid);
     check('officeReqs (Mua Bán) — KHÔNG có paymentType/khái niệm định kỳ nào -> đủ hết đợt vẫn ghi ngược DA_THANH_TOAN như trước (module Mua Bán/Sửa Chữa hoàn toàn không đổi)', officeAfterPaid === 'DA_THANH_TOAN', officeAfterPaid);
 
     // ============ Kịch bản 14: "Yêu Cầu Bổ Sung" đưa đề nghị về NEED_INFO, Sửa & Gửi Lại đưa về PENDING
@@ -423,6 +516,74 @@ async function run() {
     await page.waitForTimeout(200);
     const prBBackToPending = await readPr(prBId);
     check('Sửa & Gửi Lại từ NEED_INFO -> quay lại PENDING (mở lại luồng xác nhận)', prBBackToPending.status === 'PENDING', prBBackToPending.status);
+
+    // ============ Kịch bản 15 (v13.4, yêu cầu nghiệp vụ #1): "Quản Lý Thanh Toán" KHÔNG còn ẩn đề nghị
+    // PAID nữa — cả prAId (ONE_TIME, lump-sum, PAID ở Kịch bản 6) lẫn cycle1 (PERIODIC, PAID ở Kịch bản
+    // 8) vẫn hiển thị đầy đủ kèm badge trạng thái tổng hợp "✅ Tổng đợt: Đã thanh toán" ============
+    await page.evaluate(() => { managePaymentFilterSource = ''; });
+    await goToPaymentManage();
+    const manageTabState = await page.evaluate(() => {
+      const html = document.getElementById('paymentManageList').innerHTML;
+      return {
+        htmlIncludesTitleA: html.includes('Hợp đồng nguồn A'),
+        htmlIncludesTitleD: html.includes('Hợp đồng nguồn D'),
+        overallPaidBadgeCount: (html.match(/Tổng đợt: Đã thanh toán/g) || []).length
+      };
+    });
+    check('"Quản Lý Thanh Toán" — đề nghị ONE_TIME đã PAID (đề nghị A) vẫn hiển thị (KHÔNG biến mất)', manageTabState.htmlIncludesTitleA, manageTabState);
+    check('"Quản Lý Thanh Toán" — đề nghị PERIODIC đã PAID (chu kỳ 1, đề nghị D) vẫn hiển thị (KHÔNG biến mất)', manageTabState.htmlIncludesTitleD, manageTabState);
+    check('"Quản Lý Thanh Toán" — badge trạng thái tổng hợp "✅ Tổng đợt: Đã thanh toán" hiện đúng cho CẢ 2 đề nghị đã PAID', manageTabState.overallPaidBadgeCount >= 2, manageTabState);
+
+    // Cùng dữ liệu vẫn hiện đúng ở "✅ Xác Nhận Đề Nghị Thanh Toán" (sub-tab kia, đọc CHUNG DB.paymentRequests).
+    await goToPaymentApprove();
+    await page.evaluate(() => { document.getElementById('filterStatusPayment').value = 'PAID'; onPaymentFilterChange(); });
+    const approveTabPaidRows = await page.evaluate(() => document.getElementById('paymentTableBody').innerText);
+    check('"✅ Xác Nhận Đề Nghị Thanh Toán" lọc theo PAID -> vẫn liệt kê đủ cả 2 đề nghị (A và chu kỳ 1 của D)', approveTabPaidRows.includes('Hợp đồng nguồn A') && approveTabPaidRows.includes('Hợp đồng nguồn D'), approveTabPaidRows);
+    await page.evaluate(() => { document.getElementById('filterStatusPayment').value = ''; onPaymentFilterChange(); });
+
+    // ============ Kịch bản 16 (yêu cầu nghiệp vụ #5 — kiểm ĐƠN VỊ, không qua trình duyệt): trạng thái
+    // tổng hợp "tổng đợt" + đếm cảnh báo quá hạn/sắp đến hạn tính đúng từ hỗn hợp đợt on-time/quá
+    // hạn/sắp đến hạn/đã xác nhận ============
+    (function testOverallStatusAndWarnings() {
+      const today = new Date();
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      const daysFromNow = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return fmt(d); };
+      const mixedPr = {
+        status: 'APPROVED',
+        installments: [
+          { confirmed: true, dueDate: daysFromNow(-10) }, // đã thanh toán -> không tính cảnh báo dù quá hạn
+          { confirmed: false, dueDate: daysFromNow(-3) }, // quá hạn
+          { confirmed: false, dueDate: daysFromNow(2) }, // sắp đến hạn (<=3 ngày)
+          { confirmed: false, dueDate: daysFromNow(30) } // bình thường
+        ]
+      };
+      check('computePaymentRequestOverallStatus() — còn đợt quá hạn CHƯA xác nhận -> "QUA_HAN"', recordActions.computePaymentRequestOverallStatus(mixedPr) === 'QUA_HAN', recordActions.computePaymentRequestOverallStatus(mixedPr));
+      const warnCounts = recordActions.countPaymentInstallmentWarnings(mixedPr);
+      check('countPaymentInstallmentWarnings() — đếm đúng 1 quá hạn + 1 sắp đến hạn (đợt đã xác nhận/bình thường không tính)', warnCounts.overdueCount === 1 && warnCounts.nearDueCount === 1, warnCounts);
+
+      const allOnTimePr = { status: 'APPROVED', installments: [{ confirmed: false, dueDate: daysFromNow(30) }] };
+      check('computePaymentRequestOverallStatus() — không đợt nào quá hạn -> "DANG_THANH_TOAN"', recordActions.computePaymentRequestOverallStatus(allOnTimePr) === 'DANG_THANH_TOAN', recordActions.computePaymentRequestOverallStatus(allOnTimePr));
+
+      const paidPr = { status: 'PAID', installments: [{ confirmed: true, dueDate: daysFromNow(-10) }] };
+      check('computePaymentRequestOverallStatus() — pr.status PAID -> LUÔN "DA_THANH_TOAN" bất kể hạn từng đợt', recordActions.computePaymentRequestOverallStatus(paidPr) === 'DA_THANH_TOAN', recordActions.computePaymentRequestOverallStatus(paidPr));
+    })();
+
+    // ============ Kịch bản 17 (yêu cầu nghiệp vụ #6 "vẫn theo quy tắc phòng nào được nhìn phòng đó" —
+    // kiểm ĐƠN VỊ trực tiếp lib/recordViewScope.js, cùng khuôn tests/test-audit-fixes-batch1.js): dept-
+    // scope KHÔNG bị nới/lỏng bởi bất kỳ thay đổi nào của đợt này (sourcePaymentType/lump-sum/tệp mới) ===
+    (function testDeptScopePreserved() {
+      const paymentManageUser = { username: 'ketoan1', dept: 'Phòng Kế Toán', perms: { paymentManage: true } };
+      const adminUser = { username: 'admin', dept: 'Phòng Kế Toán', perms: { admin: true } };
+      const plainKdUser = { username: 'kd1', dept: 'Phòng Kinh Doanh', perms: {} };
+      const plainKtUser = { username: 'kt1', dept: 'Phòng Kế Toán', perms: {} };
+      const prKinhDoanh = { dept: 'Phòng Kinh Doanh', sourcePaymentType: 'ONE_TIME' };
+      const prKeToan = { dept: 'Phòng Kế Toán', sourcePaymentType: null };
+      check('paymentManage/admin -> nhìn được MỌI phòng ban (không đổi bởi sourcePaymentType/tệp mới)', recordViewScope.canViewPaymentRequest(paymentManageUser, prKinhDoanh) === true && recordViewScope.canViewPaymentRequest(adminUser, prKinhDoanh) === true, null);
+      check('Người dùng thường CÙNG phòng ban -> nhìn được', recordViewScope.canViewPaymentRequest(plainKtUser, prKeToan) === true, null);
+      check('Người dùng thường KHÁC phòng ban -> KHÔNG nhìn được (dept-scope vẫn nguyên vẹn)', recordViewScope.canViewPaymentRequest(plainKdUser, prKeToan) === false, null);
+      const filtered = recordViewScope.filterPaymentRequestsForUser([prKinhDoanh, prKeToan], plainKdUser);
+      check('filterPaymentRequestsForUser() — người "Phòng Kinh Doanh" chỉ thấy đúng 1/2 đề nghị (của phòng mình)', filtered.length === 1 && filtered[0] === prKinhDoanh, filtered);
+    })();
 
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {

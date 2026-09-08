@@ -1,8 +1,90 @@
 # Phiên bản hiện tại
 
-**13.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v13.4 (2026-09-08): Tổng Hợp > Thanh Toán — refinement toàn diện "Quản Lý Thanh Toán" + xác nhận
+## thanh toán kèm bắt buộc tệp (theo TỪNG ĐỢT cho Định Kỳ, TOÀN BỘ 1 LẦN cho "1 lần")
+
+Refinement lớn cho module Thanh Toán đã xây ở v12.4 (xem mục lịch sử bên dưới), giải quyết 7 điểm yêu
+cầu nghiệp vụ do người dùng nêu, quan trọng nhất là 1 BUG THẬT (điểm #1: đề nghị "biến mất" khỏi "Quản Lý
+Thanh Toán" sau khi thanh toán xong) + 1 TÍNH NĂNG MỚI (điểm #2/#3/#4: bắt buộc kèm tệp "đề nghị thanh
+toán đã phê duyệt" khi xác nhận, KHÔNG hề có ở đợt trước).
+
+### 1) `paymentRequests.sourcePaymentType` — chốt CHẾ ĐỘ xác nhận NGAY LÚC TẠO đề nghị
+
+Trường MỚI, gán 1 lần lúc tạo đề nghị (`startContractPayment()`/`startOfficePayment()`,
+`lib/recordActions.js`), KHÔNG đổi lại sau đó dù hợp đồng nguồn có đổi `paymentType`:
+- Nguồn Hợp đồng: `sourcePaymentType = contract.paymentType || null` (`'ONE_TIME'`/`'PERIODIC'`/`null`
+  cho hồ sơ cũ chưa từng có field này).
+- Nguồn `officeReqs` (Mua Bán/Sửa Chữa/Đầu Tư, không có khái niệm `paymentType`) và đề nghị tạo THỦ CÔNG:
+  luôn `null` — an toàn, tương thích ngược, đi theo đúng chế độ TỪNG ĐỢT như trước giờ.
+
+`'ONE_TIME'` → xác nhận TOÀN BỘ 1 LẦN (lump-sum, MỤC 3 dưới đây), KHÔNG được xác nhận nhỏ giọt từng đợt.
+`'PERIODIC'`/`null` → xác nhận TỪNG ĐỢT như cũ (MỤC 2), KHÔNG có lối tắt "xác nhận toàn bộ".
+
+### 2) Xác nhận TỪNG ĐỢT (`confirmPaymentInstallment()`) — giờ BẮT BUỘC kèm tệp
+
+Trước đây xác nhận 1 đợt không đòi hỏi tệp gì. Giờ payload bắt buộc `fileUrl`/`fileName` ("đề nghị thanh
+toán đã phê duyệt" — tái dùng đúng `assertUploadedFileUrl()`/`uploadFileToServer()` như mọi field tệp
+khác trong hệ thống), lưu vào field MỚI trên từng `installment`: `confirmFileUrl`/`confirmFileName`/
+`confirmFileType`. Hàm này giờ CHẶN 409 nếu `pr.sourcePaymentType === 'ONE_TIME'` ("vui lòng xác nhận
+toàn bộ đề nghị"). Route `POST /api/records/paymentRequests/:id/confirm-installment` không đổi tên,
+chỉ tăng validate.
+
+### 3) Xác nhận TOÀN BỘ 1 LẦN — hàm/route MỚI `confirmPaymentRequestLumpSum()` /
+### `POST /api/records/paymentRequests/:id/confirm-lump-sum`
+
+CHỈ dùng được khi `pr.sourcePaymentType === 'ONE_TIME'` (chặn 409 ngược lại). Bắt buộc 1 tệp DUY NHẤT
+cho CẢ đề nghị, lưu vào field MỚI trên `paymentRequests`: `lumpConfirmFileUrl`/`lumpConfirmFileName`/
+`lumpConfirmFileType`. Đánh dấu `confirmed=true` + gắn ĐÚNG tệp đó lên TẤT CẢ các `installments` (để badge
+theo dõi từng đợt vẫn đầy đủ dù người dùng chỉ thao tác 1 lần, đúng yêu cầu "theo dõi trạng thái vẫn theo
+đợt"), chuyển thẳng `status = 'PAID'`. Route dùng CHUNG hàm `withPaymentConfirmAction()` (`routes/
+records.js`, tách ra từ khối ghi-ngược-nguồn cũ) với route confirm-installment — ghi ngược
+`paymentStatus` về bản ghi nguồn giống hệt cơ chế cũ (`DA_THANH_TOAN` khoá cứng cho ONE_TIME,
+`CHUA_THANH_TOAN` mở lại chu kỳ mới cho Hợp đồng Định Kỳ — nhánh này thực tế không bao giờ chạy cho
+lump-sum vì lump-sum chỉ tồn tại khi `sourcePaymentType === 'ONE_TIME'`).
+
+### 4) `computePaymentRequestOverallStatus()`/`countPaymentInstallmentWarnings()` — trạng thái + cảnh
+### báo "TỔNG ĐỢT" (hàm thuần MỚI, `lib/recordActions.js` + mirror client `module-thanhtoan.js`)
+
+`computePaymentRequestOverallStatus(pr)` trả `'QUA_HAN'|'DANG_THANH_TOAN'|'DA_THANH_TOAN'` (PAID luôn
+`DA_THANH_TOAN`; còn lại `QUA_HAN` nếu có ít nhất 1 đợt CHƯA xác nhận đã quá hạn). Tái dùng NGUYÊN
+`computePaymentInstallmentDeadlineStatus()` đã có sẵn từ v12.4 (4 trạng thái `QUA_HAN`/`SAP_DEN_HAN`
+"sắp đến hạn — còn ≤3 ngày"/`DUNG_HAN`/`KHONG_CO_HAN` — tầng "sắp đến hạn" ĐÃ CÓ SẴN, không cần thêm mới).
+`countPaymentInstallmentWarnings(pr)` đếm `{overdueCount, nearDueCount}` dùng cho cảnh báo tổng hợp "N đợt
+quá hạn/sắp đến hạn" ở cả "🗂️ Quản Lý Thanh Toán" lẫn "✅ Xác Nhận Đề Nghị Thanh Toán".
+
+### 5) FIX BUG NGHIỆP VỤ: "🗂️ Quản Lý Thanh Toán" không còn ẩn đề nghị đã `PAID`
+
+**Trước đây**: `renderPaymentManageTab()` lọc `['DRAFT', 'PENDING', 'APPROVED']` — đề nghị chuyển `PAID`
+biến mất khỏi tab này ngay lập tức, người tạo hết theo dõi được. **Sau khi sửa**: lọc thêm `'PAID'`, kèm
+badge trạng thái tổng hợp (mục 4) + badge "✅ Đã thanh toán" trên từng đợt + link "📎 Xem tệp" xem lại
+đúng tệp đã dùng để xác nhận (per-installment lẫn lump-sum) — không cần chuyển sang sub-tab "✅ Xác Nhận
+Đề Nghị Thanh Toán" mới xem lại được. Tab "✅ Xác Nhận Đề Nghị Thanh Toán" (đọc CHUNG `DB.paymentRequests`)
+vốn đã hiển thị PAID đúng từ trước, không đổi.
+
+### 6) Dept-scope (`canViewPaymentRequest`, `lib/recordViewScope.js`) — GIỮ NGUYÊN, có test hồi quy riêng
+
+Không đổi 1 dòng nào — `paymentManage`/admin thấy toàn bộ, người thường chỉ thấy đúng phòng ban mình.
+Thêm test đơn vị trực tiếp (`tests/test-payment.js`, Kịch bản 17) xác nhận rõ ràng không bị nới/lỏng bởi
+đợt refinement này.
+
+### Giao diện: modal MỚI `paymentConfirmModal` (`public/index.html` + `module-thanhtoan.js`)
+
+Dùng CHUNG cho cả 2 luồng (khác nhau ở tiêu đề/nội dung, cùng khuôn `signedUploadModal` đã có) — nút
+"Xác nhận" (per-installment, PERIODIC) mở modal với `index` cụ thể, nút "💰 Xác Nhận Toàn Bộ" (lump-sum,
+ONE_TIME — CHỈ hiện khi `sourcePaymentType === 'ONE_TIME'`) mở modal với `index = null`. Đăng ký qua
+`bindCspDelegation('paymentConfirmModal')` như mọi modal khác trong hệ thống (module Thanh Toán dùng cơ
+chế `data-op`/`window[fnName]` dùng chung, KHÔNG có registry riêng như `module-vanhanh.js` — không có gì
+cần đăng ký thêm ngoài `MODULE_FN_GROUP` ở `core.js`, đã bổ sung đủ 12 identifier mới).
+
+### Deploy-impact
+
+KHÔNG đổi `server/sql/schema.sql` (các field mới đều là field JSON tự do trong payload, không phải cột
+SQL riêng). KHÔNG thêm biến môi trường mới, KHÔNG thêm `dependencies` mới trong `package.json`. Chỉ cần
+copy code + `pm2 restart` như thường lệ.
 
 ## SỬA LỖI (2026-09-08): "Danh Mục Đầu Tư 2 cấp"/"Ngày bắt đầu"/"🔗 Liên kết" — 3 tính năng ĐÃ BÁO CÁO
 ## HOÀN THÀNH VÀ ĐÃ TEST ở đợt trước KHÔNG hoạt động đúng trên app thật

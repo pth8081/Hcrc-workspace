@@ -1295,6 +1295,7 @@ const UPLOAD_MODULE_LIST = [
   { key: 'minutes', label: '📝 Biên Bản Họp' },
   { key: 'office', label: '🛒 Văn Phòng Tổng Hợp' },
   { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
+  { key: 'payment', label: '💳 Thanh Toán (Tệp đề nghị đã phê duyệt)' },
   // extUniverse riêng (ảnh, không phải .pdf/.docx/.xlsx) — mọi module KHÔNG có field này dùng mặc định
   // chung UPLOAD_EXT_UNIVERSE (giữ nguyên hành vi 8 module ở trên).
   { key: 'trainingTestImage', label: '🧪 Ngân Hàng Câu Hỏi (Ảnh Minh Hoạ)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE }

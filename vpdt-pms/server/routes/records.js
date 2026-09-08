@@ -242,18 +242,22 @@ router.post('/paymentRequests/:id/delete', async (req, res) => {
   }
 });
 
-// Xác nhận từng đợt — đủ hết các đợt thì tự chuyển PAID VÀ ghi ngược paymentStatus = DA_THANH_TOAN về
-// đúng bản ghi nguồn (Hợp đồng/officeReqs), khớp yêu cầu "trả lại Đã thanh toán cho các module nguồn".
-// Khoá TUẦN TỰ 2 collection (paymentRequests trước, bản ghi nguồn sau) trong CÙNG 1 request — không
-// tách 2 lượt gọi để tránh trường hợp PAID rồi nhưng quên/lỗi bước ghi ngược.
-router.post('/paymentRequests/:id/confirm-installment', async (req, res) => {
+// Xác nhận thanh toán (TỪNG ĐỢT — confirm-installment, hoặc TOÀN BỘ 1 LẦN — confirm-lump-sum, xem
+// lib/recordActions.js confirmPaymentInstallment()/confirmPaymentRequestLumpSum()) — đủ hết các đợt (hay
+// xác nhận lump-sum) thì tự chuyển PAID VÀ ghi ngược paymentStatus = DA_THANH_TOAN (hoặc CHUA_THANH_TOAN
+// nếu nguồn là Hợp đồng "Thanh toán định kỳ") về đúng bản ghi nguồn (Hợp đồng/officeReqs), khớp yêu cầu
+// "trả lại Đã thanh toán cho các module nguồn". Khoá TUẦN TỰ 2 collection (paymentRequests trước, bản ghi
+// nguồn sau) trong CÙNG 1 request — không tách 2 lượt gọi để tránh trường hợp PAID rồi nhưng quên/lỗi
+// bước ghi ngược. 2 route dùng CHUNG đúng 1 khối logic ghi ngược này (chỉ khác mutatorFn) — tách hàm dùng
+// chung bên dưới thay vì chép lại y hệt 2 lần.
+async function withPaymentConfirmAction(req, res, action, mutatorFn) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     let justCompleted = false;
     const result = await withLockedRecordForCollection('paymentRequests', itemId, (item) => {
-      const outcome = recordActions.confirmPaymentInstallment(req.body, freshUser, item);
+      const outcome = mutatorFn(req.body, freshUser, item);
       justCompleted = outcome.justCompleted;
       return outcome.item;
     });
@@ -264,7 +268,8 @@ router.post('/paymentRequests/:id/confirm-installment', async (req, res) => {
         // "Đã thanh toán" như "Thanh toán 1 lần" nữa, mà TRẢ VỀ "Chưa thanh toán" để mở lại nút "🧾 Lập
         // Thanh Toán" cho chu kỳ MỚI (khớp yêu cầu nghiệp vụ "năm sau lại thanh toán"). officeReqs KHÔNG
         // có field paymentType (module Mua Bán/Sửa Chữa không có khái niệm định kỳ) -> luôn rơi vào
-        // nhánh else như hành vi gốc, hoàn toàn không đổi.
+        // nhánh else như hành vi gốc, hoàn toàn không đổi. Đề nghị lump-sum (ONE_TIME) luôn rơi vào
+        // nhánh else (paymentType luôn khác 'PERIODIC') -> luôn DA_THANH_TOAN, khớp đúng "1 lần" khoá cứng.
         item.paymentStatus = (sourceCollection === 'contracts' && item.paymentType === 'PERIODIC')
           ? 'CHUA_THANH_TOAN' : 'DA_THANH_TOAN';
         return item;
@@ -272,9 +277,19 @@ router.post('/paymentRequests/:id/confirm-installment', async (req, res) => {
     }
     res.json({ ok: true, item: result, justCompleted });
   } catch (err) {
-    handleError(res, `paymentRequests/${req.params.id}/confirm-installment`, err);
+    handleError(res, `paymentRequests/${req.params.id}/${action}`, err);
   }
-});
+}
+
+router.post('/paymentRequests/:id/confirm-installment', (req, res) =>
+  withPaymentConfirmAction(req, res, 'confirm-installment', recordActions.confirmPaymentInstallment));
+
+// "💰 Xác nhận thanh toán (toàn bộ)" — CHỈ dùng cho đề nghị nguồn Hợp đồng "Thanh toán 1 lần"
+// (pr.sourcePaymentType === 'ONE_TIME', xem confirmPaymentRequestLumpSum() ở lib/recordActions.js — hàm
+// đó TỰ chặn 409 nếu gọi nhầm trên đề nghị "Thanh toán định kỳ"/thủ công/nguồn khác, đây KHÔNG phải lớp
+// gác cổng DUY NHẤT, chỉ là route mirror đúng khuôn confirm-installment ở trên).
+router.post('/paymentRequests/:id/confirm-lump-sum', (req, res) =>
+  withPaymentConfirmAction(req, res, 'confirm-lump-sum', recordActions.confirmPaymentRequestLumpSum));
 
 // Lập/sửa biên bản họp KHÔNG còn tự suy ra Công việc ngay khi lưu nữa — Công việc chỉ được tạo khi
 // người dùng chủ động bấm "Giao việc" (xem POST /minutes/:id/assign-tasks bên dưới), sau đó biên bản

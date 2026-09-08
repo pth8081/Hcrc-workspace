@@ -269,7 +269,7 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
     Bán/Sửa Chữa (nút "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán") hoặc tạo
     thủ công. **3 sub-tab** (từ v12.4, thêm 1 sub-tab mới ở giữa):
     - **"➕ Tạo Mới"** — tạo thủ công/có nguồn (không đổi).
-    - **"🗂️ Quản Lý Thanh Toán"** (MỚI) — nơi lập/sửa các **đợt thanh toán**
+    - **"🗂️ Quản Lý Thanh Toán"** — nơi lập/sửa các **đợt thanh toán**
       của đề nghị đang **NHÁP** (`DRAFT`, chỉ phát sinh từ nút "🧾 Lập Thanh
       Toán" ở Hợp Đồng — đề nghị tạo thủ công/CÓ NGUỒN từ chính tab này vẫn đi
       thẳng "Chờ duyệt" như trước, không qua NHÁP). Khi còn NHÁP, **số tiền
@@ -278,23 +278,44 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
       Chờ duyệt) thì **MỌI đợt mới bắt buộc phải có số tiền > 0** — thiếu đợt
       nào bị chặn ngay (báo rõ đợt số mấy), cả ở giao diện lẫn server. Sub-tab
       này cũng hiện **cảnh báo hạn thanh toán** theo từng đợt (🔴 quá hạn / 🟡
-      sắp đến hạn ≤ 3 ngày, tính từ "Ngày đến hạn" của đợt) và theo dõi trạng
-      thái các đề nghị Chờ duyệt/Đã duyệt cho tới khi hoàn tất — đọc CHUNG 1
-      danh sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi trạng thái ở
-      đó tự hiện ngay ở đây, không cần đồng bộ gì thêm.
-    - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — GIỜ chỉ còn là hàng chờ **duyệt
-      theo bước/phòng ban** (như 12 module duyệt khác, admin cấu hình người
-      duyệt ở "⚙️ Quản Trị" > "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") +
-      xác nhận PAID từng đợt — thay hẳn quyền phẳng "Quản lý Thanh Toán" cũ
-      (chỉ còn dùng cho Sửa/Yêu Cầu Bổ Sung/Xoá, không còn dùng để Duyệt).
-      Không có nút Từ Chối ở bước này (chỉ có Duyệt) — cần yêu cầu sửa lại thì
-      dùng "📝 Yêu Cầu Bổ Sung" như trước (đưa về "Cần bổ sung", không đổi).
+      sắp đến hạn ≤ 3 ngày, tính từ "Ngày đến hạn" của đợt) VÀ badge trạng
+      thái tổng hợp "tổng đợt" (🔴 Quá hạn / 🟡 Đang thanh toán / ✅ Đã thanh
+      toán, từ v13.4) theo dõi các đề nghị **cho tới khi HOÀN TẤT** (từ v13.4 —
+      đề nghị `PAID` **không còn biến mất** khỏi sub-tab này như trước, vẫn
+      hiện đầy đủ kèm link "📎 Xem tệp" xem lại tệp đã dùng để xác nhận) — đọc
+      CHUNG 1 danh sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi trạng
+      thái ở đó tự hiện ngay ở đây, không cần đồng bộ gì thêm.
+    - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — hàng chờ **duyệt theo bước/phòng
+      ban** (như 12 module duyệt khác, admin cấu hình người duyệt ở "⚙️ Quản
+      Trị" > "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") + xác nhận PAID —
+      thay hẳn quyền phẳng "Quản lý Thanh Toán" cũ (chỉ còn dùng cho Sửa/Yêu
+      Cầu Bổ Sung/Xoá, không còn dùng để Duyệt). Không có nút Từ Chối ở bước
+      này (chỉ có Duyệt) — cần yêu cầu sửa lại thì dùng "📝 Yêu Cầu Bổ Sung"
+      như trước (đưa về "Cần bổ sung", không đổi).
+      **Xác nhận thanh toán (từ v13.4, kèm bắt buộc tệp "đề nghị thanh toán đã
+      phê duyệt" — trước đây KHÔNG đòi hỏi tệp gì) có 2 CHẾ ĐỘ tuỳ loại hợp
+      đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo đề nghị (đổi "Loại Thanh Toán" của
+      hợp đồng SAU KHI đề nghị đã tạo không ảnh hưởng đề nghị đang chờ xử
+      lý):**
+      - Hợp đồng **"Thanh toán 1 lần"** (và MỌI đề nghị nguồn Hợp đồng loại
+        này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 tệp DUY NHẤT cho CẢ đề nghị,
+        1 lần bấm chuyển thẳng "Đã thanh toán" cho TẤT CẢ các đợt cùng lúc.
+        Badge từng đợt **vẫn hiển thị đủ** để theo dõi (quá hạn/sắp đến
+        hạn/đã thanh toán) nhưng **không** có nút xác nhận riêng cho từng đợt
+        (chỉ để xem, không thao tác được).
+      - Hợp đồng **"Thanh toán định kỳ"**, đề nghị tạo THỦ CÔNG, và đề nghị
+        nguồn Mua Bán/Sửa Chữa/Đầu Tư (không có khái niệm "1 lần"): nút
+        **"Xác nhận"** riêng cho TỪNG ĐỢT — mỗi lần xác nhận 1 đợt phải kèm 1
+        tệp riêng, lặp lại cho tới khi xác nhận HẾT mọi đợt thì đề nghị **tự
+        động** chuyển "Đã thanh toán" — **không có** nút xác nhận toàn bộ 1
+        lần cho loại này (đúng yêu cầu "không được phép ấn xác nhận trên tổng
+        đợt").
     Vòng đời đầy đủ: **[NHÁP `DRAFT`, chỉ nút "🧾 Lập Thanh Toán"]** → Chờ
     duyệt (sửa được, qua duyệt theo bước/phòng ban) → [Cần bổ sung thông tin
-    (sửa được)] → Đã duyệt (xác nhận từng đợt) → Đã thanh toán (khoá cứng).
-    PAID ghi ngược đúng theo loại hợp đồng (xem "Loại Thanh Toán" ở trên) —
-    officeReqs (Mua Bán/Sửa Chữa) không có khái niệm định kỳ, luôn khoá cứng
-    "Đã thanh toán" như trước.
+    (sửa được)] → Đã duyệt (xác nhận — toàn bộ 1 lần hoặc từng đợt, tuỳ loại
+    ở trên) → Đã thanh toán (khoá cứng). PAID ghi ngược đúng theo loại hợp
+    đồng (xem "Loại Thanh Toán" ở trên) — officeReqs (Mua Bán/Sửa Chữa) không
+    có khái niệm định kỳ, luôn khoá cứng "Đã thanh toán" như trước.
   - **Ngân Sách** — 3 sub-tab dùng chung 1 collection, tham số hoá theo loại
     bản ghi: **Ngân Sách Phê Duyệt** (bản kế hoạch, qua Trưởng phòng duyệt),
     **Ngân Sách Thực Hiện** (bản thực chi, KHÔNG qua bước duyệt — "Gửi" đi
