@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**12.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**12.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đợt B (UX rollout): nút "↺ Làm Mới" cho 4 form tạo mới tiếp theo (2026-09-08)
+
+Tiếp nối Đợt A (v12.8, xem mục ngay dưới) — áp ĐÚNG mẫu tham chiếu đã dựng
+(hạ tầng `confirmAndResetForm()`/chip file ở `core.js`, KHÔNG sửa gì thêm ở
+đó) cho 4 form tạo mới tiếp theo. Khác Đợt A, cả 4 form đợt này đều KHÔNG có
+ô tải tệp nào trên form Tạo Mới (chỉ ở màn xử lý duyệt/module khác không
+thuộc phạm vi đợt này) nên không có chip file nào cần wiring — chỉ có nút
+"↺ Làm Mới" + `resetXxxForm()` riêng từng module.
+
+- Đăng Ký Xe (`#carForm`) — `resetCarRegForm()` (mới, `module-dangkyxe.js`,
+  factor từ luồng gửi phiếu thành công). Ngoài `form.reset()` + sinh lại mã,
+  còn phải trắng tường minh "Lộ Trình Di Chuyển" (mảng JS `carRoutePoints`,
+  không phải input thường) về lại đúng 2 điểm rỗng qua `resetCarRoutePoints()`
+  có sẵn.
+- Phòng Họp (`#meetingForm`) — `resetMeetingReqForm()` (mới,
+  `module-phonghop.js`), form đơn giản nhất đợt này: chỉ `form.reset()` +
+  sinh lại mã, không có state JS riêng nào khác cần dọn.
+- Biên Bản Họp (`#minutesForm`) — `resetMeetingMinutesForm()` (mới,
+  `module-bienbanhop.js`) — GỌI LẠI THẲNG `cancelEditMeetingMinutes()` có sẵn
+  (khác Hợp Đồng ở Đợt A: hàm cancel-edit ở đây đã làm ĐÚNG NGUYÊN VẸN mọi
+  bước 1 lần "Làm Mới" cần — thoát Sửa dở nếu có, trắng bảng "Thành Phần Tham
+  Dự"/"Ý Kiến Chỉ Đạo" về 0 dòng, trắng trường bổ sung, đưa nút Lưu/nút Huỷ
+  Sửa về lại trạng thái gốc — không có bước nào khác biệt cần viết riêng).
+- Mua Bán/Sửa Chữa/Đầu Tư (`#officeForm`) — `resetOfficeReqForm()` (mới,
+  `module-office.js`), factor từ luồng gửi đề xuất thành công. Khi đang ở
+  phân hệ Mua Sắm (`activeOfficeSubTab === 'MUA_BAN'`), collapse bảng "Danh
+  Sách Hạng Mục Đề Nghị Mua Sắm" (mảng JS `officeItems`) về ĐÚNG 1 dòng trống
+  (`officeItems = []; addOfficeItemRow();`, đúng idiom cũ) — không phải 0
+  dòng.
+
+**Bộ test**: mở rộng `server/tests/test-form-reset-file-remove.js` (hạ tầng
+`_harness-contract.js`/`_seed.js` có sẵn) thêm 4 kịch bản cho 4 form trên —
+tổng 9/9 kịch bản pass. Toàn bộ suite hồi quy hiện có (79 file `test-*.js`)
+chạy lại — không phát sinh lỗi mới ngoài các lỗi kết nối SQL Server thật đã
+biết từ trước (môi trường sandbox không có SQL Server thật).
+
+**Deploy-impact**: THUẦN client-side (`public/index.html` + 4
+`public/js/module-*.js`), không đổi `schema.sql`, không thêm biến môi
+trường, không đổi `dependencies` — chỉ cần copy code + `pm2 restart` (hoặc
+refresh trình duyệt nếu server không đổi).
 
 ## Đợt A (UX rollout): nút "↺ Làm Mới" + chip "✕ Xoá file" trên 4 form tạo mới — mẫu tham chiếu (2026-09-08)
 

@@ -341,9 +341,18 @@ async function submitMeetingReq(e) {
   }
 
   alert('✅ Đã gửi đăng ký lịch phòng họp thành công!');
-  e.target.reset();
-  document.getElementById('meetingCode').value = generateMeetingCode();
+  resetMeetingReqForm();
   renderMeetings();
+}
+
+// resetMeetingReqForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetMeetingReqForm",
+// xem core.js) VÀ luồng gửi đăng ký thành công ở trên (trước đây 2 dòng reset viết thẳng tại chỗ gọi,
+// factor ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự sinh lại mã — phải gọi
+// generateMeetingCode() tường minh ngay sau reset(). Không có ô tải tệp nào ở form này.
+function resetMeetingReqForm() {
+  const formEl = document.getElementById('meetingForm');
+  if (formEl) formEl.reset();
+  document.getElementById('meetingCode').value = generateMeetingCode();
 }
 
 function onMeetingFilterChange() {

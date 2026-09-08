@@ -79,10 +79,20 @@ async function submitCarReq(e) {
   }
 
   alert('✅ Đã gửi phiếu đăng ký xe thành công!');
-  e.target.reset();
+  resetCarRegForm();
+  renderCarRegs();
+}
+
+// resetCarRegForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetCarRegForm", xem
+// core.js) VÀ luồng gửi phiếu thành công ở trên (trước đây 3 dòng reset viết thẳng tại chỗ gọi, factor
+// ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự sinh lại mã lẫn không tự trắng "Lộ Trình Di
+// Chuyển" (mảng JS carRoutePoints, không phải input thường nên form.reset() không đụng tới) — phải gọi
+// resetCarRoutePoints() + sinh lại mã tường minh ngay sau reset(). Không có ô tải tệp nào ở form này.
+function resetCarRegForm() {
+  const formEl = document.getElementById('carForm');
+  if (formEl) formEl.reset();
   resetCarRoutePoints();
   document.getElementById('carCode').value = generateCarCode();
-  renderCarRegs();
 }
 
 // ============ Lộ Trình Di Chuyển nhiều điểm (thay 1 ô text tự do) ============

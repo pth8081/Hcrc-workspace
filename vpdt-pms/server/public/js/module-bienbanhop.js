@@ -649,12 +649,7 @@ async function submitMeetingMinutes(e) {
   DB.meetingMinutes.unshift(newMinutes);
   logSystemAction('MINUTES', 'CREATE_MINUTES', `Lập biên bản họp [${code} - ${title}]`, 'SUCCESS', code);
   alert('✅ Đã lưu biên bản họp thành công! Vui lòng nhập nội dung email để thông báo người tham dự (hoặc bấm Hủy nếu không cần gửi).');
-  e.target.reset();
-  document.getElementById('minutesCode').value = generateMinutesCode();
-  minutesDirectives = [];
-  minutesAttendeesRows = [];
-  renderMinutesDirectivesTable();
-  renderAttendeesTable();
+  resetMeetingMinutesForm();
   renderMeetingMinutes();
 
   const attendeeRecipients = validAttendees
@@ -710,6 +705,18 @@ function openEditMeetingMinutes(id) {
   document.getElementById('minutesSubmitBtn').innerText = '💾 Cập Nhật Biên Bản';
   document.getElementById('minutesCancelEditBtn').classList.remove('hidden');
   document.getElementById('minutesForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// resetMeetingMinutesForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetMeetingMinutesForm", xem core.js) VÀ luồng lưu biên bản thành công ở trên (trước đây các dòng
+// reset viết thẳng tại chỗ gọi, factor ra đây tránh 2 nơi lệch nhau). Hành vi cần có GIỐNG HỆT
+// cancelEditMeetingMinutes() ở dưới (thoát Sửa dở dang nếu có + trắng toàn bộ form kể cả bảng Thành
+// Phần Tham Dự/Ý Kiến Chỉ Đạo/trường bổ sung/nút Lưu-Huỷ Sửa) — gọi lại thẳng hàm đó thay vì chép lại
+// logic (KHÁC resetContractForm()/cancelEditContract() ở module-hopdong.js: 2 hàm đó có bước KHÁC nhau
+// nên phải viết riêng — ở đây không có bước nào khác biệt nên dùng lại được nguyên vẹn). Không có ô tải
+// tệp nào ở form này.
+function resetMeetingMinutesForm() {
+  cancelEditMeetingMinutes();
 }
 
 function cancelEditMeetingMinutes() {

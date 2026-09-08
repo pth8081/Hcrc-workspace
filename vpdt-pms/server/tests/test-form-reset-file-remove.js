@@ -5,16 +5,30 @@
 //   - onSingleFileChosen()/clearSingleFileInput() (input file đơn) + onMultiFileChosen()/
 //     removeOneFileFromMultiInput()/clearMultiFileInput() (input file multiple): chip "📎 tên file [✕]"
 //     cho phép bỏ chọn tệp TRƯỚC KHI gửi form.
-// — áp dụng cho 4 form tạo mới (mẫu tham chiếu cho 4 đợt sau, ~12 module còn lại):
+// — áp dụng cho 4 form tạo mới ở "Đợt A" (mẫu tham chiếu):
 //   Văn Bản Trình (#submissionForm, resetSubmissionForm() — module-vanbantrinh.js)
 //   Hợp Đồng (#contractForm, resetContractForm() — module-hopdong.js)
 //   Tài Liệu (#docForm, resetDocUploadForm() — module-tailieu.js)
 //   Giấy Phép (#licenseForm, resetLicenseForm() — module-tailieu.js)
+// — VÀ "Đợt B" (đúng khuôn trên, 4 module tiếp theo, KHÔNG form nào trong 4 form này có ô tải tệp):
+//   Đăng Ký Xe (#carForm, resetCarRegForm() — module-dangkyxe.js) — kèm trắng "Lộ Trình Di Chuyển"
+//     (mảng JS carRoutePoints, không phải input thường).
+//   Phòng Họp (#meetingForm, resetMeetingReqForm() — module-phonghop.js) — form đơn giản nhất đợt này.
+//   Biên Bản Họp (#minutesForm, resetMeetingMinutesForm() — module-bienbanhop.js, gọi lại
+//     cancelEditMeetingMinutes() có sẵn) — kèm trắng bảng "Thành Phần Tham Dự"/"Ý Kiến Chỉ Đạo" (mảng JS
+//     minutesAttendeesRows/minutesDirectives) VỀ 0 DÒNG (đúng hành vi cancelEditMeetingMinutes()/luồng
+//     lưu thành công đã có TỪ TRƯỚC — khác officeItems bên dưới collapse về 1 dòng, không phải 0).
+//   Mua Bán/Sửa Chữa/Đầu Tư (#officeForm, resetOfficeReqForm() — module-office.js) — kèm collapse bảng
+//     "Danh Sách Hạng Mục Đề Nghị Mua Sắm" (mảng JS officeItems) về ĐÚNG 1 dòng trống khi đang ở phân hệ
+//     Mua Sắm (officeItems = []; addOfficeItemRow();), đúng hành vi cũ.
 //
 // Dùng lại hạ tầng tests/_harness-contract.js (tests/_seed.js) — đã seed sẵn đủ dept/loại pháp lý/
 // workflow/nhóm phê duyệt cho Hợp Đồng LẪN Văn Bản Trình (3 bộ test gốc dùng chung: test-contract.js/
-// test-payment.js/test-office-budget.js). Giấy Phép không thuộc 3 module gốc đó nên DB.licenses/
-// DB.licenseTypes phải tự seed thêm (rỗng là đủ — module này không lọc theo dept).
+// test-payment.js/test-office-budget.js) — Mua Bán (officeReqs) thuộc nhóm này nên đã sẵn
+// officeBuyDeptWorkflows. Giấy Phép/Đăng Ký Xe/Phòng Họp/Biên Bản Họp không thuộc 3 module gốc đó nên
+// DB.licenses/DB.licenseTypes/DB.carPurposes/DB.meetingRooms phải tự seed thêm (rỗng/1 mục là đủ — chỉ
+// cần đủ để chọn được 1 giá trị khác option đầu, quan sát được form.reset() có thật sự đổi lại hay
+// không; module Biên Bản Họp không lọc theo dept nên không cần thêm gì).
 //
 // Chạy: node server/tests/test-form-reset-file-remove.js
 const { startHarness } = require('./_harness-contract');
@@ -260,7 +274,193 @@ async function main() {
       }
     );
 
-    // ================= 5) confirmAndResetForm(): KHÔNG hỏi xác nhận khi form đang trống =================
+    // ================= 5) Đăng Ký Xe =================
+    await check(
+      'Đăng Ký Xe: "Làm Mới" trắng form (dept không có option rỗng -> reset về ĐÚNG option đầu) + trắng lại Lộ Trình Di Chuyển về đúng 2 điểm rỗng + sinh lại mã',
+      async () => {
+        await page.evaluate(() => {
+          DB.carPurposes = [{ key: 'CT', label: 'Công tác' }];
+          switchTab('car');
+        });
+        await page.selectOption('#carDept', 'Phòng Kế Toán');
+        await page.selectOption('#carType', '5 chỗ');
+        await page.fill('#carPassengers', '02 - Kiểm thử A, Kiểm thử B');
+        await page.fill('#carDirectUser', 'Người Trực Tiếp Kiểm Thử');
+        await page.fill('#carDirectUserPhone', '0900000099');
+        await page.selectOption('#carPurpose', 'CT');
+        await page.fill('#carKm', '150');
+        await page.fill('#carStartTime', '2026-09-10T08:00');
+        await page.fill('#carEndTime', '2026-09-10T17:00');
+        await page.fill('#carReason', 'Nội dung kiểm thử reset form.');
+
+        // Lộ Trình Di Chuyển mặc định đã có sẵn 2 ô rỗng (Điểm xuất phát + 1 điểm đến, xem
+        // resetCarRoutePoints() gọi từ setCarSubTab() lúc mở tab) — thêm 1 điểm nữa rồi điền cả 3.
+        await page.click('button[data-op="addCarRoutePoint"]');
+        const routeInputsBefore = await page.locator('#carRoutePointsWrap input').count();
+        assertTrue(routeInputsBefore === 3, `Phải có 3 ô Lộ Trình sau khi bấm "+ Thêm Điểm", thực tế ${routeInputsBefore}`);
+        await page.locator('#carRoutePointsWrap input').nth(0).fill('Hội An');
+        await page.locator('#carRoutePointsWrap input').nth(1).fill('Đà Nẵng');
+        await page.locator('#carRoutePointsWrap input').nth(2).fill('Huế');
+
+        const codeBeforeReset = await page.locator('#carCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'carCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#carForm button[data-arg1="resetCarRegForm"]');
+        const state = await page.evaluate(() => ({
+          carDept: document.getElementById('carDept').value,
+          carPassengers: document.getElementById('carPassengers').value,
+          carReason: document.getElementById('carReason').value,
+          carCode: document.getElementById('carCode').value,
+          carDestination: document.getElementById('carDestination').value,
+          routeInputsCount: document.querySelectorAll('#carRoutePointsWrap input').length,
+          routeInputValues: Array.from(document.querySelectorAll('#carRoutePointsWrap input')).map(el => el.value),
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.carDept === 'Phòng Kinh Doanh', `carDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.carDept}"`);
+        assertTrue(state.carPassengers === '', 'carPassengers phải về rỗng');
+        assertTrue(state.carReason === '', 'carReason phải về rỗng');
+        assertTrue(/^HCRC-DKX-/.test(state.carCode), `carCode phải được sinh lại đúng khuôn HCRC-DKX-..., thực tế "${state.carCode}"`);
+        assertTrue(state.routeInputsCount === 2, `Lộ Trình Di Chuyển phải về lại ĐÚNG 2 ô (không phải 3 ô vừa nhập, cũng không phải 0), thực tế ${state.routeInputsCount}`);
+        assertTrue(state.routeInputValues.every(v => v === ''), `Cả 2 ô Lộ Trình phải trống sau Làm Mới, thực tế ${JSON.stringify(state.routeInputValues)}`);
+        assertTrue(state.carDestination === '', 'carDestination (hidden, ghép từ Lộ Trình) phải trống sau Làm Mới');
+      }
+    );
+
+    // ================= 6) Phòng Họp =================
+    await check(
+      'Phòng Họp: form đơn giản nhất đợt này (không có ô tải tệp/mảng JS riêng) — "Làm Mới" trắng form + sinh lại mã',
+      async () => {
+        await page.evaluate(() => {
+          DB.meetingRooms = [{ id: 1, name: 'Phòng Họp A', short: 'A' }];
+          switchTab('meeting');
+        });
+        await page.selectOption('#meetingDept', 'Phòng Kế Toán');
+        await page.selectOption('#meetingRoom', 'Phòng Họp A');
+        await page.fill('#meetingTitle', 'Họp kiểm thử reset form');
+        await page.fill('#meetingAttendees', '10');
+        await page.fill('#meetingStartTime', '2026-09-10T08:00');
+        await page.fill('#meetingEndTime', '2026-09-10T09:00');
+        await page.fill('#meetingEquipment', 'Máy chiếu');
+        await page.fill('#meetingAgenda', 'Nội dung kiểm thử reset form.');
+
+        const codeBeforeReset = await page.locator('#meetingCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'meetingCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#meetingForm button[data-arg1="resetMeetingReqForm"]');
+        const state = await page.evaluate(() => ({
+          meetingDept: document.getElementById('meetingDept').value,
+          meetingTitle: document.getElementById('meetingTitle').value,
+          meetingAgenda: document.getElementById('meetingAgenda').value,
+          meetingCode: document.getElementById('meetingCode').value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.meetingDept === 'Phòng Kinh Doanh', `meetingDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.meetingDept}"`);
+        assertTrue(state.meetingTitle === '', 'meetingTitle phải về rỗng');
+        assertTrue(state.meetingAgenda === '', 'meetingAgenda phải về rỗng');
+        assertTrue(/^HCRC-DPH-/.test(state.meetingCode), `meetingCode phải được sinh lại đúng khuôn HCRC-DPH-..., thực tế "${state.meetingCode}"`);
+      }
+    );
+
+    // ================= 7) Biên Bản Họp =================
+    await check(
+      'Biên Bản Họp: "Làm Mới" trắng form + trắng bảng Thành Phần Tham Dự/Ý Kiến Chỉ Đạo về ĐÚNG 0 dòng (đúng hành vi cancelEditMeetingMinutes()/luồng lưu thành công đã có) + sinh lại mã + đưa nút Lưu về lại nhãn gốc',
+      async () => {
+        await page.evaluate(() => switchTab('minutes'));
+        await page.fill('#minutesTitle', 'Họp kiểm thử reset form');
+        await page.fill('#minutesTime', '2026-09-10T09:00');
+        await page.fill('#minutesLocation', 'Phòng họp A');
+        await page.fill('#minutesChair', 'Nguyễn Văn Chủ Trì');
+        await page.fill('#minutesSecretary', 'Trần Thị Thư Ký');
+        await page.fill('#minutesContent', 'Nội dung kiểm thử reset form.');
+
+        // Bảng Thành Phần Tham Dự KHÔNG có sẵn dòng nào khi vừa mở tab (khác officeItems của Mua Sắm) —
+        // tự bấm "Thêm Người Tham Dự" trước khi điền.
+        await page.click('button[data-op="addAttendeeRow"]');
+        await page.click('button[data-op="addAttendeeRow"]');
+        const attendeeRowsBefore = await page.locator('#minutesAttendeesTableBody tr').count();
+        assertTrue(attendeeRowsBefore === 2, `Phải có 2 dòng Thành Phần Tham Dự trước khi Làm Mới, thực tế ${attendeeRowsBefore}`);
+        await page.locator('#minutesAttendeesTableBody input[data-arg1="name"]').nth(0).fill('Người Tham Dự A');
+        await page.locator('#minutesAttendeesTableBody input[data-arg1="name"]').nth(1).fill('Người Tham Dự B');
+
+        await page.click('button[data-op="addMinutesDirectiveRow"]');
+        const directiveRowsBefore = await page.locator('#minutesDirectivesTableBody tr').count();
+        assertTrue(directiveRowsBefore === 1, `Phải có 1 dòng Ý Kiến Chỉ Đạo trước khi Làm Mới, thực tế ${directiveRowsBefore}`);
+        await page.locator('#minutesDirectivesTableBody input[data-arg1="content"]').nth(0).fill('Nội dung chỉ đạo kiểm thử');
+
+        const codeBeforeReset = await page.locator('#minutesCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'minutesCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#minutesForm button[data-arg1="resetMeetingMinutesForm"]');
+        const state = await page.evaluate(() => ({
+          minutesTitle: document.getElementById('minutesTitle').value,
+          minutesContent: document.getElementById('minutesContent').value,
+          minutesCode: document.getElementById('minutesCode').value,
+          attendeeRows: document.querySelectorAll('#minutesAttendeesTableBody tr').length,
+          directiveRows: document.querySelectorAll('#minutesDirectivesTableBody tr').length,
+          submitBtnText: document.getElementById('minutesSubmitBtn').innerText,
+          cancelBtnHidden: document.getElementById('minutesCancelEditBtn').classList.contains('hidden'),
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.minutesTitle === '', 'minutesTitle phải về rỗng');
+        assertTrue(state.minutesContent === '', 'minutesContent phải về rỗng');
+        assertTrue(/^HCRC-BBH-/.test(state.minutesCode), `minutesCode phải được sinh lại đúng khuôn HCRC-BBH-..., thực tế "${state.minutesCode}"`);
+        assertTrue(state.attendeeRows === 0, `Bảng Thành Phần Tham Dự phải về ĐÚNG 0 dòng sau Làm Mới, thực tế ${state.attendeeRows}`);
+        assertTrue(state.directiveRows === 0, `Bảng Ý Kiến Chỉ Đạo phải về ĐÚNG 0 dòng sau Làm Mới, thực tế ${state.directiveRows}`);
+        assertTrue(state.submitBtnText === 'Lưu Biên Bản Họp', `Nút Lưu phải về lại nhãn gốc, thực tế "${state.submitBtnText}"`);
+        assertTrue(state.cancelBtnHidden === true, 'Nút "Huỷ Sửa" phải ẩn sau Làm Mới');
+      }
+    );
+
+    // ================= 8) Mua Bán/Sửa Chữa/Đầu Tư (officeReqs, phân hệ Mua Sắm) =================
+    await check(
+      'Mua Bán (Mua Sắm): "Làm Mới" trắng form + collapse bảng "Danh Sách Hạng Mục Đề Nghị Mua Sắm" về ĐÚNG 1 dòng trống (không phải 0, không phải còn nguyên 2 dòng) + sinh lại mã',
+      async () => {
+        await page.evaluate(() => switchTab('office')); // activeOfficeSubTab mặc định = 'MUA_BAN'
+        await page.selectOption('#offDept', 'Phòng Kế Toán');
+        await page.fill('#offTitle', 'Mua sắm kiểm thử reset form');
+        await page.fill('#offReason', 'Lý do kiểm thử reset form.');
+
+        // setOfficeSubTab() đã tự thêm sẵn ĐÚNG 1 dòng trống khi vừa mở phân hệ Mua Sắm (officeItems
+        // rỗng lúc đó) — điền dòng đó rồi thêm 1 dòng nữa để có 2 dòng trước khi Làm Mới.
+        const rowsInitial = await page.locator('#officeItemsTableBody tr').count();
+        assertTrue(rowsInitial === 1, `Phải có sẵn ĐÚNG 1 dòng Hạng Mục khi vừa mở phân hệ Mua Sắm, thực tế ${rowsInitial}`);
+        await page.locator('#officeItemsTableBody input[data-arg1="name"]').nth(0).fill('Bàn làm việc');
+        await page.locator('#officeItemsTableBody input[data-arg1="qty"]').nth(0).fill('5');
+        await page.click('button[data-op="addOfficeItemRow"]');
+        await page.locator('#officeItemsTableBody input[data-arg1="name"]').nth(1).fill('Ghế xoay');
+        await page.locator('#officeItemsTableBody input[data-arg1="qty"]').nth(1).fill('5');
+        const rowsBeforeReset = await page.locator('#officeItemsTableBody tr').count();
+        assertTrue(rowsBeforeReset === 2, `Phải có 2 dòng Hạng Mục trước khi Làm Mới, thực tế ${rowsBeforeReset}`);
+
+        const codeBeforeReset = await page.locator('#offCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'offCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#officeForm button[data-arg1="resetOfficeReqForm"]');
+        const state = await page.evaluate(() => ({
+          offDept: document.getElementById('offDept').value,
+          offTitle: document.getElementById('offTitle').value,
+          offCode: document.getElementById('offCode').value,
+          itemRows: document.querySelectorAll('#officeItemsTableBody tr').length,
+          itemRowName: document.querySelector('#officeItemsTableBody input[data-arg1="name"]')?.value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.offDept === 'Phòng Kinh Doanh', `offDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.offDept}"`);
+        assertTrue(state.offTitle === '', 'offTitle phải về rỗng');
+        assertTrue(/^HCRC-MB-/.test(state.offCode), `offCode phải được sinh lại đúng khuôn HCRC-MB-... (Mua Bán), thực tế "${state.offCode}"`);
+        assertTrue(state.itemRows === 1, `Bảng Hạng Mục phải collapse về ĐÚNG 1 dòng trống sau Làm Mới, thực tế ${state.itemRows}`);
+        assertTrue(state.itemRowName === '', `Dòng Hạng Mục còn lại phải trống (Tên Tài Sản), thực tế "${state.itemRowName}"`);
+      }
+    );
+
+    // ================= 9) confirmAndResetForm(): KHÔNG hỏi xác nhận khi form đang trống =================
     await check('confirmAndResetForm(): KHÔNG hỏi xác nhận khi form đang trống (vừa mở tab, chưa nhập gì)', async () => {
       await page.evaluate(() => { switchTab('license'); window.__confirmCalls = []; });
       await page.click('#licenseForm button[data-arg1="resetLicenseForm"]');

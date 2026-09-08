@@ -132,13 +132,25 @@ async function submitOfficeReq(e) {
   }
 
   alert('✅ Đã gửi đề xuất văn phòng thành công!');
-  e.target.reset();
+  resetOfficeReqForm();
+  renderOfficeReqs();
+}
+
+// resetOfficeReqForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetOfficeReqForm",
+// xem core.js) VÀ luồng gửi đề xuất thành công ở trên (trước đây các dòng reset viết thẳng tại chỗ gọi,
+// factor ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự sinh lại mã lẫn không tự trắng bảng
+// "Danh Sách Hạng Mục Đề Nghị Mua Sắm" (mảng JS officeItems, không phải input thường) — CHỈ áp dụng khi
+// đang ở phân hệ Mua Sắm (activeOfficeSubTab === 'MUA_BAN', đúng điều kiện isMuaSam ở submitOfficeReq()
+// phía trên): collapse về lại ĐÚNG 1 dòng trống (officeItems = []; addOfficeItemRow();), không phải 0
+// dòng — khớp NGUYÊN VẸN hành vi cũ mỗi lần gửi thành công.
+function resetOfficeReqForm() {
+  const formEl = document.getElementById('officeForm');
+  if (formEl) formEl.reset();
   document.getElementById('offCode').value = generateOfficeCode();
-  if (isMuaSam) {
+  if (activeOfficeSubTab === 'MUA_BAN') {
     officeItems = [];
     addOfficeItemRow();
   }
-  renderOfficeReqs();
 }
 
 function onOfficeFilterChange() {
