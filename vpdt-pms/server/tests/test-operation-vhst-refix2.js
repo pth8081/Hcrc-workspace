@@ -153,18 +153,26 @@ async function main() {
       assert(info.hasMaxWLg, 'Form "Thêm/Sửa Công Việc" phải giữ max-w-lg (gọn, hẹp hơn Danh Mục Đầu Tư max-w-4xl)');
     });
 
-    await run.run('MỤC 2 (DOM thật): chọn Ngày Bắt Đầu SAU Hạn Hoàn Thành -> vẫn bị chặn client-side ngay khi submit (alert rõ ràng), KHÔNG tạo được', async () => {
+    // Đợt sửa lỗi lần 3 (sau file này): syncOwiDateBounds() (module-vanhanh.js) nay set min/max HTML5
+    // NGAY khi 1 trong 2 ô đổi giá trị — điền Hạn Hoàn Thành TRƯỚC (như dòng dưới) khiến Ngày Bắt Đầu nhận
+    // max=2026-01-01 NGAY LẬP TỨC, nên điền 2026-06-01 sau đó khiến input tự validity.rangeOverflow=true và
+    // trình duyệt tự chặn requestSubmit() TRƯỚC KHI 'submit' event (và alert() JS bên trong) kịp chạy —
+    // KHÔNG phải regression, đây là lớp chặn MẠNH HƠN (chặn ngay lúc chọn, không đợi bấm Lưu mới báo lỗi)
+    // thay thế cho alert()-only trước đây. Xem test-operation-vhst-uibugfix.js (cùng đợt) để xem đầy đủ 3
+    // lớp chặn (real-time native + defense-in-depth alert() khi giá trị lọt qua native validation).
+    await run.run('MỤC 2 (DOM thật): chọn Ngày Bắt Đầu SAU Hạn Hoàn Thành -> vẫn bị chặn (nay chặn NGAY lúc chọn qua native rangeOverflow, mạnh hơn alert()-only cũ), KHÔNG tạo được', async () => {
       await page.evaluate(() => { window.__resetCapture(); });
       await page.fill('#owiTitle', 'Làm nội thất refix2');
       await page.fill('#owiDeadline', '2026-01-01');
       await page.fill('#owiStartDate', '2026-06-01');
       await page.screenshot({ path: path.join(SHOTS_DIR, '02b-ngay-bat-dau-sau-han-bi-chan.png') });
       const result = await page.evaluate(async () => {
+        const rangeOverflow = document.getElementById('owiStartDate').validity.rangeOverflow;
         document.querySelector('#operationWorkItemFormModal form').requestSubmit();
         await new Promise(r => setTimeout(r, 200));
-        return { alerts: window.__alerts.slice(), itemCount: DB.operationWorkItems.length };
+        return { alerts: window.__alerts.slice(), itemCount: DB.operationWorkItems.length, rangeOverflow };
       });
-      assert(result.alerts.some(a => a.includes('Ngày bắt đầu') && a.includes('Hạn hoàn thành')), 'Vẫn phải chặn rõ ràng bằng alert');
+      assert(result.rangeOverflow || result.alerts.some(a => a.includes('Ngày bắt đầu') && a.includes('Hạn hoàn thành')), 'Phải chặn bằng 1 trong 2 lớp: native rangeOverflow (real-time, nay là lớp chính) HOẶC alert() JS (dự phòng)');
       assertEqual(result.itemCount, 0, 'KHÔNG được tạo công việc khi ngày bắt đầu sau hạn');
       // Server-side (không tin riêng client) — gọi thẳng action với ngày sai để xác nhận HttpError 400.
       const serverBlocked = await page.evaluate(async (id) => {

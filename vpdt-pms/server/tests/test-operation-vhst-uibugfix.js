@@ -120,6 +120,37 @@ async function main() {
       await page.waitForTimeout(80);
       const total = await page.evaluate(() => document.getElementById('operationEstimateItemsTotalDisplay').innerText);
       assertEqual(total, '2.500.000.000', 'Tổng Chi Phí phải = 2.000.000.000 (rollup Nội thất) + 500.000.000 (Thiết bị)');
+    });
+
+    // Phản hồi người dùng (lần 3, ảnh 1): "không chọn được dòng thuộc danh mục nào -> đề xuất tạo danh mục
+    // con giống như Thực hiện đang làm cho dễ dàng" — dropdown "Dòng mới thêm..." (cơ chế VHST-3 cũ, đã xác
+    // nhận hoạt động đúng ở 3 kịch bản trên) vẫn giữ nguyên, nhưng khó dùng/dễ bỏ sót theo phản hồi thực tế
+    // — kịch bản dưới xác nhận lối đi MỚI: bấm thẳng "+ Con" NGAY TRÊN dòng cha muốn thêm con (mirror nút
+    // "➕ Con" của cây Công việc Thực hiện), không cần qua dropdown riêng.
+    await run.run('VHST-3-v2 (DOM thật, nút "+ Con"): bấm "+ Con" trên dòng "Thiết bị" (dòng lớn thứ 2, idx=2) -> dòng mới PHẢI là con của "Thiết bị" (không phải "Nội thất")', async () => {
+      const addChildBtnExistsOnDepth0 = await page.evaluate(() => !!document.querySelector('button[data-op="addOperationEstimateChildRow"][data-idx="2"]'));
+      assert(addChildBtnExistsOnDepth0, 'Dòng "Thiết bị" (depth=0, idx=2) phải có nút "+ Con"');
+      const addChildBtnMissingOnDepth1 = await page.evaluate(() => !document.querySelector('button[data-op="addOperationEstimateChildRow"][data-idx="1"]'));
+      assert(addChildBtnMissingOnDepth1, 'Dòng "Bàn ghế" (depth=1, đã là con) KHÔNG được có nút "+ Con" (chỉ áp dụng danh mục lớn — bất biến 2 CẤP)');
+      await page.click('button[data-op="addOperationEstimateChildRow"][data-idx="2"]');
+      await page.waitForTimeout(80);
+      await page.fill('#operationEstimateItemsTableBody tr:nth-child(4) input[data-field="content"]', 'Kệ hàng');
+      await page.fill('#operationEstimateItemsTableBody tr:nth-child(4) input[data-field="amount"]', '300000000');
+      await page.waitForTimeout(80);
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'vhst3v2-addchild-button.png') });
+      const check = await page.evaluate(() => ({
+        newItemParentId: operationEstimateItems[3].parentId,
+        thietBiId: operationEstimateItems[2].id,
+        row4Text: document.querySelector('#operationEstimateItemsTableBody tr:nth-child(4)').innerText,
+        totalDisplay: document.getElementById('operationEstimateItemsTotalDisplay').innerText
+      }));
+      assertEqual(check.newItemParentId, check.thietBiId, 'Dòng "Kệ hàng" phải có parentId = id "Thiết bị" — bấm "+ Con" đúng trên dòng nào thì con thuộc dòng đó, KHÔNG cần chọn qua dropdown riêng');
+      assert(check.row4Text.includes('↳'), 'Dòng con mới (qua nút "+ Con") phải hiển thị ký hiệu thụt lề "↳" giống hệt con tạo qua dropdown cũ');
+      // "Thiết bị" VỪA có con ("Kệ hàng") -> operationEstimateEffectiveAmount() bỏ qua amount TỰ NHẬP
+      // (500.000.000) của chính "Thiết bị", chỉ tính rollup = tổng amount các con (300.000.000) — mirror
+      // ĐÚNG hành vi đã xác nhận ở "Nội thất"/"Bàn ghế" phía trên (2.000.000.000 = tự nhập của "Bàn ghế",
+      // KHÔNG cộng thêm amount cũ của "Nội thất" trước khi có con).
+      assertEqual(check.totalDisplay, '2.300.000.000', 'Tổng Chi Phí phải = 2.000.000.000 (rollup Nội thất, từ Bàn ghế) + 300.000.000 (rollup Thiết bị, từ Kệ hàng — amount tự nhập 500tr của Thiết bị bị bỏ qua vì đã có con) = 2.300.000.000');
       await page.evaluate(async () => { await submitOperationEstimateForApproval(); });
       await page.evaluate(() => { document.getElementById('operationEstimateModal').classList.add('hidden'); });
     });
@@ -138,12 +169,56 @@ async function main() {
       assert(startIdx < deadlineIdx, `"Ngày Bắt Đầu" (vị trí ${startIdx}) phải đứng TRƯỚC "Hạn Hoàn Thành" (vị trí ${deadlineIdx})`);
     });
 
-    await run.run('VHST-4 (DOM thật): submit với Ngày Bắt Đầu SAU Hạn Hoàn Thành -> bị chặn client-side (alert rõ ràng), KHÔNG tạo công việc', async () => {
+    // Phản hồi người dùng (lần 3, ảnh 2+3): trước đây CHỈ chặn LÚC BẤM LƯU (alert() sau khi submit) — lịch
+    // chọn ngày vẫn cho chọn tự do bất kỳ ngày nào tới lúc đó. Nay syncOwiDateBounds() set min/max HTML5
+    // NGAY khi 1 trong 2 ô đổi giá trị (data-op-change, xem public/index.html #owiStartDate/#owiDeadline) —
+    // kịch bản dưới xác nhận CẢ 2 lớp chặn: (a) real-time — điền Hạn Hoàn Thành xong thì Ngày Bắt Đầu PHẢI
+    // có max=đúng giá trị đó NGAY (không cần đợi submit); (b) defense-in-depth — nếu vẫn có giá trị vượt
+    // ngưỡng lọt vào (VD gán thẳng qua JS, bỏ qua UI) thì trình duyệt tự chặn requestSubmit() bằng validation
+    // NATIVE (rangeOverflow, không cần đợi alert() JS của submitOperationWorkItemForm() — hàm đó vẫn giữ
+    // NGUYÊN làm lớp chặn thứ 3 phòng khi browser không hỗ trợ input[type=date] đúng chuẩn).
+    await run.run('VHST-4 (DOM thật, real-time): điền Hạn Hoàn Thành xong -> Ngày Bắt Đầu PHẢI có max = đúng giá trị đó NGAY (không cần bấm Lưu)', async () => {
       await page.evaluate(() => { window.__resetCapture(); });
       await page.fill('#owiTitle', 'Làm nội thất');
+      const maxBefore = await page.evaluate(() => document.getElementById('owiStartDate').max);
+      assertEqual(maxBefore, '', 'Trước khi điền Hạn Hoàn Thành, Ngày Bắt Đầu chưa có giới hạn max nào');
       await page.fill('#owiDeadline', '2026-01-01');
+      const maxAfter = await page.evaluate(() => document.getElementById('owiStartDate').max);
+      assertEqual(maxAfter, '2026-01-01', 'Ngay khi đổi Hạn Hoàn Thành, Ngày Bắt Đầu phải nhận max mới NGAY LẬP TỨC (real-time, không đợi submit)');
+    });
+
+    await run.run('VHST-4 (DOM thật): submit với Ngày Bắt Đầu SAU Hạn Hoàn Thành (vượt max HTML5) -> trình duyệt tự chặn requestSubmit() (rangeOverflow), KHÔNG tạo công việc, form vẫn mở', async () => {
       await page.fill('#owiStartDate', '2026-06-01');
       await page.screenshot({ path: path.join(SHOTS_DIR, 'vhst4-bad-dates.png') });
+      const result = await page.evaluate(async () => {
+        const startEl = document.getElementById('owiStartDate');
+        const overflow = startEl.validity.rangeOverflow;
+        document.querySelector('#operationWorkItemFormModal form').requestSubmit();
+        await new Promise(r => setTimeout(r, 200));
+        return {
+          rangeOverflow: overflow,
+          itemCount: DB.operationWorkItems.length,
+          formHidden: document.getElementById('operationWorkItemFormModal').classList.contains('hidden')
+        };
+      });
+      assert(result.rangeOverflow, 'input[type=date] Ngày Bắt Đầu phải tự báo rangeOverflow=true khi giá trị vượt max (bằng chứng browser đã áp dụng đúng giới hạn real-time)');
+      assertEqual(result.itemCount, 0, 'KHÔNG được tạo công việc khi ngày bắt đầu sau hạn (native validation chặn requestSubmit() trước khi JS submit handler chạy)');
+      assert(!result.formHidden, 'Form phải VẪN MỞ (không đóng) để người dùng sửa lại');
+    });
+
+    await run.run('VHST-4 (defense-in-depth): nếu giá trị vượt ngưỡng LỌT vào bằng cách gán thẳng .value qua JS (bỏ qua constraint UI) -> submitOperationWorkItemForm() vẫn tự chặn bằng alert() (lớp chặn dự phòng thứ 3, KHÔNG bị fix real-time thay thế)', async () => {
+      await page.evaluate(() => { window.__resetCapture(); });
+      await page.evaluate(() => {
+        // Mô phỏng giá trị "lọt" qua constraint UI (VD: trình duyệt cũ không hỗ trợ, hoặc gán trực tiếp
+        // qua devtools) — xoá CẢ 2 chiều ràng buộc HTML5 (max của Ngày Bắt Đầu LẪN min của Hạn Hoàn Thành,
+        // vì syncOwiDateBounds() đặt ràng buộc 2 CHIỀU đối xứng — chỉ xoá 1 chiều thì chiều kia vẫn tự
+        // chặn native, không thật sự kiểm tra được lớp chặn JS độc lập bên dưới) rồi gán .value bằng JS
+        // thuần (KHÔNG dispatch change event) để xác nhận lớp chặn thứ 3 (alert() JS trong
+        // submitOperationWorkItemForm()) vẫn còn nguyên, không bị fix real-time xoá mất.
+        document.getElementById('owiStartDate').removeAttribute('max');
+        document.getElementById('owiDeadline').removeAttribute('min');
+        document.getElementById('owiStartDate').value = '2026-06-01';
+      });
       const result = await page.evaluate(async () => {
         document.querySelector('#operationWorkItemFormModal form').requestSubmit();
         await new Promise(r => setTimeout(r, 200));
@@ -153,9 +228,9 @@ async function main() {
           formHidden: document.getElementById('operationWorkItemFormModal').classList.contains('hidden')
         };
       });
-      assert(result.alerts.some(a => a.includes('Ngày bắt đầu') && a.includes('Hạn hoàn thành')), `Phải có alert chặn rõ ràng (thực tế: ${JSON.stringify(result.alerts)})`);
-      assertEqual(result.itemCount, 0, 'KHÔNG được tạo công việc khi ngày bắt đầu sau hạn');
-      assert(!result.formHidden, 'Form phải VẪN MỞ (không đóng) để người dùng sửa lại');
+      assert(result.alerts.some(a => a.includes('Ngày bắt đầu') && a.includes('Hạn hoàn thành')), `Lớp chặn dự phòng (alert() JS) phải vẫn hoạt động khi giá trị lọt qua native validation (thực tế: ${JSON.stringify(result.alerts)})`);
+      assertEqual(result.itemCount, 0, 'KHÔNG được tạo công việc dù giá trị lọt qua native validation');
+      assert(!result.formHidden, 'Form phải VẪN MỞ để người dùng sửa lại');
     });
 
     let rootWorkItemId = null;
@@ -174,6 +249,28 @@ async function main() {
       await page.screenshot({ path: path.join(SHOTS_DIR, 'vhst4-workitem-created.png'), fullPage: true });
     });
 
+    // Phản hồi người dùng (lần 3, ảnh 3): "công việc con vẫn chọn được ngày hoàn thành trước ngày thực
+    // hiện" — openOperationWorkItemFormModal(parentWorkItemId, editItem) dùng CHUNG 1 form/CHUNG
+    // syncOwiDateBounds() bất kể tạo việc GỐC hay việc CON (không có nhánh riêng theo parentWorkItemId ở
+    // logic ngày tháng) nên fix ở trên áp dụng ĐÚNG cho cả 2 trường hợp — xác nhận riêng bằng kịch bản mở
+    // form qua nút "➕ Con" (không phải "➕ Thêm Công Việc Gốc") để chắc chắn không có đường vòng nào bỏ sót.
+    await run.run('VHST-4 (DOM thật, CÔNG VIỆC CON): mở form qua "➕ Con" -> Ngày Bắt Đầu/Hạn Hoàn Thành PHẢI có cùng cơ chế chặn real-time như công việc gốc', async () => {
+      await page.evaluate(() => { window.__resetCapture(); });
+      await page.click(`button[data-op="openOperationWorkItemFormModal"][data-parent-id="${rootWorkItemId}"]`);
+      await page.waitForTimeout(80);
+      const maxBefore = await page.evaluate(() => document.getElementById('owiStartDate').max);
+      assertEqual(maxBefore, '', 'Form việc CON mới mở (chưa điền gì) chưa có giới hạn max nào');
+      await page.fill('#owiTitle', 'Lắp bóng đèn');
+      await page.fill('#owiDeadline', '2025-12-20');
+      const maxAfter = await page.evaluate(() => document.getElementById('owiStartDate').max);
+      assertEqual(maxAfter, '2025-12-20', 'Form việc CON: Ngày Bắt Đầu phải nhận max real-time giống hệt form việc gốc');
+      await page.fill('#owiStartDate', '2026-01-15');
+      const overflow = await page.evaluate(() => document.getElementById('owiStartDate').validity.rangeOverflow);
+      assert(overflow, 'Form việc CON: input Ngày Bắt Đầu phải tự báo rangeOverflow khi chọn ngày sau Hạn Hoàn Thành');
+      await page.screenshot({ path: path.join(SHOTS_DIR, 'vhst4-child-workitem-dates.png') });
+      await page.evaluate(() => { closeOperationWorkItemFormModal(); });
+    });
+
     // ===================== 3) VHST-5: "🔗 Liên kết" — nút hiện + modal dùng được thật =====================
     let otherWorkItemId = null;
     await run.run('VHST-5 setup: tạo thêm 1 công việc gốc khác để liên kết tới', async () => {
@@ -188,8 +285,16 @@ async function main() {
       await page.evaluate(() => { renderOperationWorkItemModalBody(); });
       await page.waitForTimeout(80);
       await page.screenshot({ path: path.join(SHOTS_DIR, 'vhst5-list-with-button.png'), fullPage: true });
-      const hasButton = await page.evaluate((rid) => !!document.querySelector(`button[data-op="openOperationWorkItemDependencyModal"][data-id="${rid}"]`), rootWorkItemId);
-      assert(hasButton, 'Nút "🔗 Liên kết" phải hiện trên dòng công việc LÁ');
+      const btn = await page.evaluate((rid) => {
+        const el = document.querySelector(`button[data-op="openOperationWorkItemDependencyModal"][data-id="${rid}"]`);
+        return el ? { exists: true, className: el.className } : { exists: false };
+      }, rootWorkItemId);
+      assert(btn.exists, 'Nút "🔗 Liên kết" phải hiện trên dòng công việc LÁ');
+      // Phản hồi người dùng (lần 3, ảnh 4): nút trước đây màu nhạt (bg-purple-100) dễ bị bỏ sót giữa nhiều
+      // nút khác cùng dòng — nay phải màu đậm (bg-purple-600 text-white) để nổi bật ngang "🔄 Cập Nhật Tiến Độ".
+      assert(btn.className.includes('bg-purple-600') && btn.className.includes('text-white'), `Nút "🔗 Liên kết" phải dùng màu đậm nổi bật (bg-purple-600 text-white), thực tế class: ${btn.className}`);
+      const hintVisible = await page.evaluate(() => !document.getElementById('operationWorkItemDependencyHintBox').classList.contains('hidden'));
+      assert(hintVisible, 'Hộp gợi ý "💡 Muốn 1 công việc chỉ được thực hiện SAU khi..." phải hiện ở tab Thực hiện (canEditWorkItems=true) để người dùng biết nút "🔗 Liên kết" tồn tại và dùng để làm gì');
     });
 
     await run.run('VHST-5 (DOM thật, bấm THẬT): mở modal Liên kết, chọn "Lắp điện", bấm "💾 Lưu Liên Kết" -> PHẢI lưu đúng + modal PHẢI tự đóng (trước fix: cả 2 đều KHÔNG xảy ra)', async () => {

@@ -1322,6 +1322,17 @@ function addOperationEstimateItemRow(parentId) {
   operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: parentId || null });
   renderOperationEstimateItemsTable(true);
 }
+// "Thêm Danh Mục Con" — phản hồi người dùng (lần 3): mirror ĐÚNG nút "➕ Con" của cây Công việc Thực hiện
+// ("để xuất tạo danh mục con giống như thực hiện đang làm cho dễ dàng") — bấm ngay trên dòng CHA muốn
+// thêm con, tạo thẳng 1 dòng con NGAY DƯỚI nó, không cần qua dropdown "Dòng mới thêm..." riêng (dễ bỏ
+// sót/không rõ đang chọn cho dòng nào) hay đợi gõ xong rồi mới đổi cột "Cha" của chính dòng đó (2 cơ chế
+// cũ vẫn giữ nguyên, không xoá — đây chỉ thêm 1 lối đi trực quan hơn làm mặc định).
+function addOperationEstimateChildRow(parentIdx) {
+  const parent = operationEstimateItems[parentIdx];
+  if (!parent) return;
+  operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: parent.id });
+  renderOperationEstimateItemsTable(true);
+}
 // Xoá 1 dòng: dòng LÀ danh mục lớn (không có parentId) -> cascade xoá LUÔN toàn bộ danh mục con của nó
 // (mirror đúng quy ước cascade xoá cha kéo theo con đã có sẵn ở deleteOperationWorkItem(), cây Công việc,
 // lib/recordActions.js — chọn cascade thay vì chặn xoá cho nhất quán 1 quy ước xuyên suốt module này).
@@ -1469,8 +1480,11 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
   const noteCell = editable
     ? `<td class="border p-1"><input value="${escapeHtml(it.note)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="note" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Lưu ý"></td>`
     : `<td class="border p-1">${escapeHtml(it.note || '')}</td>`;
+  const addChildBtn = depth === 0
+    ? `<button type="button" data-op="addOperationEstimateChildRow" data-idx="${idx}" class="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200 mr-1" title="Thêm danh mục con">+ Con</button>`
+    : '';
   const actionCell = editable
-    ? `<td class="border p-1 text-center whitespace-nowrap"><button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng${depth === 0 ? ' (xoá cả danh mục con nếu có)' : ''}">✕</button></td>`
+    ? `<td class="border p-1 text-center whitespace-nowrap">${addChildBtn}<button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng${depth === 0 ? ' (xoá cả danh mục con nếu có)' : ''}">✕</button></td>`
     : `<td class="border p-1"></td>`;
   const sttCell = `<td class="border p-1 text-center">${depth === 0 ? (Number.isInteger(sttNo) ? sttNo : '') : ''}</td>`;
   return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${actionCell}</tr>`;
@@ -1950,6 +1964,14 @@ function renderOperationWorkItemModalBody() {
     useConfirmBox.innerHTML = '';
   }
 
+  // Phản hồi người dùng (lần 3): "🔗 Liên kết" đã hoạt động đúng (nút + modal, xem
+  // openOperationWorkItemDependencyModal()) nhưng dễ bị bỏ sót giữa nhiều nút khác trên cùng 1 dòng, đặc
+  // biệt khi hồ sơ chỉ có 1-2 công việc và người dùng không để ý dòng nào là "công việc lá" mới có nút này
+  // (công việc CÓ con không có, xem gate !hasChildren ở buildOperationWorkItemRow()). Thêm hộp gợi ý cố
+  // định phía trên bảng (chỉ hiện ở tab Thực hiện, nơi tạo liên kết) thay vì chỉ trông chờ người dùng tự
+  // nhận ra nút nhỏ màu tím giữa hàng nút.
+  document.getElementById('operationWorkItemDependencyHintBox').classList.toggle('hidden', mode !== 'EXECUTION' || !canEditWorkItems);
+
   const head = document.getElementById('operationWorkItemTableHead');
   // Mục D: thêm cột "Dự Kiến Nghiệm Thu" ở chế độ ACCEPTANCE (giữa Trạng Thái và Người Nghiệm Thu) —
   // colspan fallback đổi 5 -> 6 cho nhánh này.
@@ -2119,7 +2141,10 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     // (mirror ĐÚNG lib/recordActions.js setOperationWorkItemDependencies() — assertCanManageOperationRecord(),
     // KHÔNG mở cho assignedTo/isOwner).
     if (canEditWorkItems && !hasChildren && w.status !== 'DA_NGHIEM_THU') {
-      actionHTML += `<button type="button" data-op="openOperationWorkItemDependencyModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-bold hover:bg-purple-200 mr-1" title="Liên kết công việc phụ thuộc">🔗 Liên kết</button>`;
+      // Phản hồi người dùng (lần 3): đổi từ màu nhạt (bg-purple-100, dễ nhầm là nút đã bị vô hiệu hoá/mờ)
+      // sang màu đậm (bg-purple-600 text-white) — cùng mức nổi bật với "🔄 Cập Nhật Tiến Độ" (bg-blue-600)
+      // thay vì lẫn vào các nút xám nhạt khác trên cùng dòng.
+      actionHTML += `<button type="button" data-op="openOperationWorkItemDependencyModal" data-id="${w.id}" class="text-xs px-2 py-0.5 bg-purple-600 text-white rounded font-bold hover:bg-purple-700 mr-1" title="Liên kết công việc phụ thuộc">🔗 Liên kết</button>`;
     }
     if (!hasChildren) {
       // Correction 3: MỌI công việc lá (cv con lẫn cv gốc không có con, ở MỌI cấp trong cây) đều có
@@ -2357,6 +2382,11 @@ function openOperationWorkItemFormModal(parentWorkItemId, editItem) {
   document.querySelector(`input[name="owiAcceptanceMode"][value="${isDelayed ? 'DELAYED' : 'IMMEDIATE'}"]`).checked = true;
   document.getElementById('owiAcceptanceDelayDays').value = isDelayed ? (editItem?.acceptanceDelayDays || '') : '';
   onOwiAcceptanceModeChange();
+  // Phản hồi người dùng (lần 3): alert() ở submitOperationWorkItemForm() chỉ chặn LÚC BẤM LƯU, lịch chọn
+  // ngày (input type=date) vẫn cho chọn tự do bất kỳ ngày nào tới lúc đó — set min/max NGAY khi mở modal
+  // (khớp giá trị hiện có) + mỗi khi 1 trong 2 ô đổi (xem syncOwiDateBounds()/OP_CHANGE_ACTIONS) để trình
+  // duyệt tự làm mờ/chặn chọn ngày không hợp lệ NGAY TRONG lịch, không phải đợi tới lúc Lưu mới báo lỗi.
+  syncOwiDateBounds();
   document.getElementById('operationWorkItemFormModal').classList.remove('hidden');
 }
 // Toggle hiện/ẩn ô số ngày theo lựa chọn radio "Nghiệm thu ngay"/"Nghiệm thu sau N ngày" (Mục D).
@@ -2364,6 +2394,16 @@ function onOwiAcceptanceModeChange() {
   const isDelayed = document.querySelector('input[name="owiAcceptanceMode"]:checked')?.value === 'DELAYED';
   document.getElementById('owiAcceptanceDelayDays').classList.toggle('hidden', !isDelayed);
   document.getElementById('owiAcceptanceDelayDaysLabel').classList.toggle('hidden', !isDelayed);
+}
+// Chặn NGAY LÚC CHỌN (không chỉ báo lỗi sau khi bấm Lưu) — xem chú thích ở lời gọi trong
+// openOperationWorkItemFormModal() và ở OP_CHANGE_ACTIONS. Set min/max HTML5 mỗi khi 1 trong 2 ô đổi giá
+// trị: Hạn Hoàn Thành không cho chọn TRƯỚC Ngày Bắt Đầu hiện có, và ngược lại.
+function syncOwiDateBounds() {
+  const startEl = document.getElementById('owiStartDate');
+  const deadlineEl = document.getElementById('owiDeadline');
+  if (!startEl || !deadlineEl) return;
+  deadlineEl.min = startEl.value || '';
+  startEl.max = deadlineEl.value || '';
 }
 function closeOperationWorkItemFormModal() {
   document.getElementById('operationWorkItemFormModal').classList.add('hidden');
@@ -3130,6 +3170,7 @@ const OP_CLICK_ACTIONS = {
     addOperationEstimateItemRow(sel && sel.value ? Number(sel.value) : null);
   },
   removeOperationEstimateItemRow: el => removeOperationEstimateItemRow(Number(el.dataset.idx)),
+  addOperationEstimateChildRow: el => addOperationEstimateChildRow(Number(el.dataset.idx)),
   openOperationEstimateModal: el => openOperationEstimateModal(el.dataset.kind, Number(el.dataset.id)),
   submitOperationEstimateForApproval: () => submitOperationEstimateForApproval(),
   confirmProcessOperationEstimate: el => confirmProcessOperationEstimate(el.dataset.action),
@@ -3190,6 +3231,7 @@ const OP_CHANGE_ACTIONS = {
   resolveVsoPersonInChargeInput: el => resolveVsoPersonInChargeInput(el.value),
   resolveVrPersonInChargeInput: el => resolveVrPersonInChargeInput(el.value),
   onOwiAcceptanceModeChange: () => onOwiAcceptanceModeChange(),
+  syncOwiDateBounds: () => syncOwiDateBounds(),
   onOperationEstimateImportFileChange: (el, e) => onOperationEstimateImportFileChange(e),
   onOperationWorkItemImportFileChange: (el, e) => onOperationWorkItemImportFileChange(e),
   handleOperationOrderPdfUpload: (el, e) => handleOperationOrderPdfUpload(e),

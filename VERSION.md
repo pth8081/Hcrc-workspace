@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**13.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v13.8 (2026-09-08): Vận Hành > Siêu Thị — sửa lỗi LẦN THỨ 3, root cause THẬT KHÁC 2 đợt trước (UX
+## discoverability + real-time date blocking, không phải lỗi chức năng như đã tưởng)
+
+Người dùng báo cáo LẦN THỨ BA cùng khu vực Vận Hành > Siêu Thị vẫn lỗi dù v13.6 đã "xác nhận sửa xong bằng
+Playwright thật". Sau khi loại trừ nguyên nhân "chưa deploy code mới" (người dùng xác nhận đã deploy), yêu
+cầu người dùng gửi ảnh chụp màn hình thật thay vì tiếp tục đoán — đối chiếu trực tiếp 4 ảnh chụp với code
+hiện tại phát hiện: khác với 2 đợt trước (đều là lỗi CHỨC NĂNG thật — nút chết do CSP-delegation, logic
+sai), lần này là **2 lỗ hổng THIẾT KẾ/UX** (code chạy đúng theo tiêu chí hẹp đã test trước đó, nhưng không
+đúng ý người dùng thật sự cần) — bài học: khi cùng 1 khu vực bị báo lỗi ≥3 lần dù đã verify kỹ, đừng lặp
+lại cách test cũ, phải đối chiếu bằng chứng thật (ảnh chụp) từng điểm một.
+
+1. **Danh Mục Đầu Tư — "không chọn được dòng thuộc danh mục nào"**: code (cột "Cha" mỗi dòng, thêm ở
+   v13.6) THẬT SỰ hoạt động đúng — nhưng cơ chế dropdown/cột "Cha" không trực quan, người dùng không nhận
+   ra. Yêu cầu cụ thể: "đề xuất tạo danh mục con giống như Thực hiện đang làm cho dễ dàng" — mirror ĐÚNG
+   nút "➕ Con" đã quen thuộc của cây Công việc Thực hiện. Thêm nút **"+ Con"** trên MỖI dòng danh mục lớn
+   (`addOperationEstimateChildRow()`, `module-vanhanh.js`) — bấm thẳng trên dòng cha muốn thêm con, tạo
+   ngay 1 dòng con bên dưới, không cần qua dropdown/cột riêng (2 cơ chế cũ VẪN GIỮ NGUYÊN làm lối đi phụ).
+2. **Ngày bắt đầu công việc (cả gốc lẫn con) — "chọn được ngày hoàn thành trước ngày bắt đầu"**: trước đây
+   CHỈ chặn LÚC BẤM LƯU (`alert()` trong `submitOperationWorkItemForm()`) — lịch chọn ngày (`input
+   type=date`) vẫn cho chọn tự do bất kỳ giá trị nào cho tới lúc đó, đúng như người dùng phản ánh "vẫn chọn
+   được". Yêu cầu thật sự: chặn NGAY LÚC CHỌN. Thêm `syncOwiDateBounds()` — set thuộc tính HTML5
+   `min`/`max` (Hạn Hoàn Thành không cho chọn TRƯỚC Ngày Bắt Đầu hiện có, và ngược lại) NGAY khi mở modal
+   VÀ mỗi khi 1 trong 2 ô đổi giá trị (`data-op-change` mới trên `#owiStartDate`/`#owiDeadline`,
+   `public/index.html`) — trình duyệt tự làm mờ/chặn chọn ngày không hợp lệ NGAY TRONG lịch. `alert()` JS
+   cũ GIỮ NGUYÊN làm lớp chặn dự phòng thứ 2 (phòng trường hợp giá trị lọt qua constraint UI, VD trình
+   duyệt cũ hoặc thao tác bất thường) — không xoá, không thay thế, chỉ bổ sung.
+3. **"🔗 Liên kết" — "không có chỗ nào ấn"**: xác nhận qua test Playwright thật (bấm click thật, không
+   mock) rằng nút VÀ modal đều hoạt động đúng hoàn toàn (đã fix CSP-delegation ở v13.6) — không phải lỗi
+   chức năng. Nguyên nhân thật: nút màu quá nhạt (`bg-purple-100`, dễ nhìn như bị vô hiệu hoá) và bị chen
+   giữa 4-5 nút khác cùng 1 ô (Sửa/+Con/Cập Nhật Tiến Độ/📜) trên dòng công việc lá, dễ bị bỏ sót — đúng
+   lớp lỗi "discoverability" như mục 1. Đổi màu đậm nổi bật (`bg-purple-600 text-white`, cùng mức với "🔄
+   Cập Nhật Tiến Độ") + thêm hộp gợi ý cố định phía trên bảng công việc (chỉ hiện ở tab Thực hiện, nơi tạo
+   liên kết): "💡 Muốn 1 công việc chỉ được thực hiện SAU khi công việc khác xong? Bấm nút 🔗 Liên Kết..."
+
+Chạy lại toàn bộ 86 file `tests/test-*.js` — 84 pass, đúng 2 lỗi pre-existing (thiếu SQL Server thật trong
+sandbox, không liên quan thay đổi này, đã xác nhận lại từ v13.7). Bổ sung/viết mới test Playwright thật cho
+cả 3 mục (`tests/test-operation-vhst-uibugfix.js` — nút "+ Con", 2 lớp chặn ngày real-time + defense-in-
+depth cho cả công việc gốc lẫn con, badge/màu nút Liên kết + hộp gợi ý; cập nhật `tests/test-operation-vhst-
+refix2.js` cho hành vi chặn ngày mới — native `rangeOverflow` chặn `requestSubmit()` sớm hơn alert() JS
+cũ, không phải regression).
 
 ## v13.7 (2026-09-08): Rà soát chủ động v13.1→v13.6 — phát hiện + sửa 2 lỗi CSP-delegation mới (modal
 ## Đổi Hình Thức Thanh Toán hợp đồng gây reload/văng đăng nhập; nút "Nhập Lại Từ Đầu" Vận Hành > Đặt Hàng)
