@@ -533,6 +533,16 @@ với "Tổng Hợp"):
       Từ v13.3, dropdown cập nhật NGAY khi gõ xong tên — gõ tên danh mục lớn,
       chọn nó ở dropdown, bấm "➕ Thêm Hạng Mục" là tạo đúng danh mục con ngay
       lần đầu, không cần thao tác vòng qua bước khác.
+    - **Cột "Cha" ở MỖI DÒNG — đổi/gán cha bất kỳ lúc nào (từ v13.6)**: dropdown
+      "Dòng mới thêm — thuộc danh mục lớn nào?" ở trên CHỈ áp dụng cho dòng
+      SẮP thêm — nếu đã bấm "➕ Thêm Hạng Mục" tạo sẵn nhiều dòng trống RỒI MỚI
+      gõ Nội Dung từng dòng (không đụng dropdown đó lúc thêm), trước v13.6
+      KHÔNG có cách nào biến 1 dòng ĐÃ CÓ SẴN thành danh mục con — phải xoá rồi
+      thêm lại đúng thứ tự. Từ v13.6, mỗi dòng trong bảng có thêm 1 cột **"Cha"**
+      riêng — chọn tên 1 danh mục lớn khác ở đây là gán/đổi cha cho ĐÚNG dòng
+      đó NGAY LẬP TỨC, không cần xoá/thêm lại, áp dụng cho cả dòng vừa tạo lẫn
+      dòng đã có sẵn từ trước. Danh mục ĐANG có con thì cột "Cha" tự hiện dấu
+      "—" (không chọn được) — giữ đúng luật chỉ 2 cấp, không lồng sâu hơn.
     - **Tiền tự cộng dồn lên danh mục lớn**: danh mục lớn có ≥1 con thì cột
       "Chi Phí" của chính nó KHÔNG còn nhập tay được nữa — tự động = **tổng
       Chi Phí của toàn bộ con** (hiện chữ xám "🔢 Tự động tính từ N danh mục
@@ -701,16 +711,22 @@ với "Tổng Hợp"):
   - **Phê duyệt là TÙY CHỌN theo từng ticket, do IT tự quyết định** — mặc
     định mọi ticket xử lý bình thường không cần qua duyệt. Chỉ khi đội IT
     thấy ticket nào đó cần xác nhận từ quản lý (VD yêu cầu nhạy cảm) thì mới
-    chủ động gửi; không phải điều kiện bắt buộc áp lên toàn bộ module. Khi 1
-    yêu cầu đang "Đang xử lý", đội IT có thể bấm "📨 Gửi/Gửi Lại Phê Duyệt" — chọn 1 người
-    bất kỳ trong hệ thống (không giới hạn đúng quản lý trực tiếp theo Cơ Cấu
-    Tổ Chức) + nhập lý do — ticket chuyển trạng thái phê duyệt "⏳ Đang chờ
-    duyệt". Người được chọn xem được ticket này (dù không phải người tạo/IT)
-    và bấm Duyệt/Từ chối kèm ghi chú. **Trong lúc chờ hoặc bị từ chối, server
-    CHẶN CỨNG (lỗi 409) mọi thao tác "Cập nhật tiến độ"/đóng ticket** — đội IT
-    chỉ tiếp tục xử lý được sau khi quản lý đã Duyệt (gửi lại yêu cầu phê
-    duyệt khác nếu bị từ chối, hoặc huỷ hẳn ticket nếu không cần xử lý nữa).
-    Việc chặn này thực thi ở server, không chỉ ẩn nút giao diện.
+    chủ động gửi; không phải điều kiện bắt buộc áp lên toàn bộ module. **Từ
+    v13.6, gửi được nút "📨 Gửi/Gửi Lại Yêu Cầu Phê Duyệt" ngay từ khi ticket
+    còn "Chưa xử lý" (TODO — chưa ai bấm "🎯 Nhận Xử Lý")**, không cần đợi đã
+    nhận việc mới gửi được như trước v13.6 — đúng nghiệp vụ "xin ý kiến quản
+    lý TRƯỚC KHI bắt đầu xử lý": IT nhận được 1 ticket cần duyệt ngân sách/xin
+    phép trước, gửi yêu cầu phê duyệt NGAY, chờ quản lý duyệt rồi mới bấm
+    "🎯 Nhận Xử Lý" bắt đầu xử lý. Chọn 1 người bất kỳ trong hệ thống (không
+    giới hạn đúng quản lý trực tiếp theo Cơ Cấu Tổ Chức) + nhập lý do — ticket
+    chuyển trạng thái phê duyệt "⏳ Đang chờ duyệt" (trạng thái xử lý TODO/DOING
+    của ticket KHÔNG đổi khi gửi phê duyệt). Người được chọn xem được ticket
+    này (dù không phải người tạo/IT) và bấm Duyệt/Từ chối kèm ghi chú. **Trong
+    lúc chờ hoặc bị từ chối, server CHẶN CỨNG (lỗi 409) cả "🎯 Nhận Xử Lý" (nếu
+    ticket còn TODO) lẫn "Cập nhật tiến độ"/đóng ticket (nếu đã DOING)** — đội
+    IT chỉ nhận việc/tiếp tục xử lý được sau khi quản lý đã Duyệt (gửi lại yêu
+    cầu phê duyệt khác nếu bị từ chối, hoặc huỷ hẳn ticket nếu không cần xử lý
+    nữa). Việc chặn này thực thi ở server, không chỉ ẩn nút giao diện.
 - **Gia Hạn Dịch Vụ CNTT** — module con chỉ đội IT thấy được, quản lý nội bộ
   danh mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
   phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng khuôn

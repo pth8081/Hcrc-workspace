@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**13.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v13.6 (2026-09-08): Vận Hành > Siêu Thị — sửa lỗi LẦN THỨ 2 (Danh Mục Đầu Tư vẫn không tạo được danh
+## mục con) + Hỗ Trợ IT thiếu nút "Chuyển Phê Duyệt" trước khi nhận việc
+
+Người dùng báo cáo LẦN THỨ HAI đúng 3 lỗi Vận Hành > Siêu Thị đã "xác nhận sửa xong bằng Playwright thật"
+ở đợt trước (v13.3, commit `960c5de`) nhưng SAU KHI DEPLOY THẬT vẫn còn nguyên. Điều tra lại từ đầu (không
+tin báo cáo cũ) xác nhận: 2/3 mục ĐÃ ĐÚNG THẬT SỰ ở code hiện tại (không phải lỗi deploy của người dùng —
+test Playwright thật thao tác qua DOM/click thật xác nhận lại toàn bộ, có ảnh chụp trước/sau), còn 1 mục
+có LỖ HỔNG THẬT SỰ KHÁC (không phải cùng lỗi đợt 1) mà bộ test đợt 1 không bắt được vì chỉ test đúng 1
+thao tác "may mắn khớp". Đồng thời phát hiện thêm 1 lỗi nghiệp vụ thứ 4 ở Hỗ Trợ IT.
+
+1. **Danh Mục Đầu Tư — vẫn "chưa tạo được danh mục con" (nguyên nhân THẬT KHÁC đợt 1)**: đợt 1 chỉ sửa
+   đúng 1 tình huống hẹp (gõ Nội Dung RỒI MỚI chọn dropdown cha RỒI MỚI bấm "➕ Thêm Hạng Mục"). Thao tác
+   tự nhiên hơn của người dùng thật — bấm "➕ Thêm Hạng Mục" vài lần tạo sẵn NHIỀU DÒNG TRỐNG rồi mới gõ Nội
+   Dung từng dòng (không đụng dropdown cha lúc thêm) — hoàn toàn KHÔNG có cách nào biến 1 dòng ĐÃ CÓ SẴN
+   thành danh mục con: dropdown "Dòng mới thêm — thuộc danh mục lớn nào?" chỉ áp dụng cho dòng SẮP thêm,
+   không sửa lại được dòng đã tồn tại. Fix: thêm cột **"Cha"** ở MỖI DÒNG của bảng (không chỉ dòng sắp
+   thêm) — đổi/gán cha cho 1 dòng bất kỳ lúc nào qua `changeOperationEstimateItemParent()`
+   (`module-vanhanh.js`), tự refresh danh sách lựa chọn ngay khi gõ Nội Dung (mirror đúng fix đợt 1 nhưng
+   áp dụng cho CẢ cột Cha của từng dòng, không chỉ dropdown chung). Danh mục ĐANG có con thì cột Cha tự ẩn
+   (hiện "—") — không cho lồng quá 2 cấp. Server (`submitOperationEstimate()`, `lib/recordActions.js`)
+   KHÔNG đổi — đã hỗ trợ sẵn mọi thứ tự gán cha từ đợt 1, tổng chi phí danh mục cha vẫn luôn = tổng con
+   (rollup), không có gì cần sửa ở tầng lưu trữ.
+
+2. **Ngày bắt đầu + thứ tự field + UI gọn (VHST-4)**: XÁC NHẬN LẠI đã đúng từ đợt 1, không sửa gì thêm —
+   chặn Ngày Bắt Đầu sau Hạn Hoàn Thành hoạt động cả client (`submitOperationWorkItemForm()`) lẫn server
+   (`resolveOperationWorkItemScheduleFields()`), field "Ngày Bắt Đầu" đã nằm TRÊN "Hạn Hoàn Thành", modal
+   "Thêm/Sửa Công Việc" (`operationWorkItemFormModal`) đã `max-w-lg` (hẹp hơn cả Danh Mục Đầu Tư
+   `max-w-4xl`) — xác nhận lại bằng Playwright thật + ảnh chụp, không phát hiện lỗi mới.
+
+3. **"🔗 Liên kết" công việc (VHST-5)**: XÁC NHẬN LẠI đã đúng từ đợt 1, không sửa gì thêm — modal
+   `operationWorkItemDependencyModal` vẫn đăng ký đầy đủ ở `bindOperationDelegation()`, nút "💾 Lưu Liên
+   Kết" hoạt động, chặn "Bắt đầu" khi công việc phụ thuộc chưa nghiệm thu xong (cả UI badge lẫn server).
+
+4. **Hỗ Trợ IT — thiếu nút "Chuyển Phê Duyệt" TRƯỚC khi nhận việc**: `escalateItTicket()`
+   (`lib/recordActions.js`) + điều kiện hiện nút ở client (`module-itsupport-price.js`) TRƯỚC ĐÂY chỉ cho
+   gửi yêu cầu phê duyệt khi ticket đã `DOING` (tức phải "🎯 Nhận Xử Lý" trước) — đúng như người dùng phản
+   ánh ("trước khi tôi nhận việc tôi không có thông tin để chuyển cho người phê duyệt"), sai với nghiệp vụ
+   thật (xin ý kiến quản lý TRƯỚC KHI bắt đầu xử lý, không phải sau). Fix: nới điều kiện gửi phê duyệt sang
+   cả `TODO` (chưa nhận việc) lẫn `DOING` (giữ nguyên hành vi cũ), ở CẢ client lẫn server. `claimItTicket()`
+   thêm chặn nhận việc khi đang có 1 yêu cầu phê duyệt `PENDING`/`REJECTED` (mirror đúng chặn đã có ở
+   `updateItTicketStatus()`) — đảm bảo đúng thứ tự "xin phê duyệt xong mới được bắt đầu xử lý".
+
+Xác nhận qua Playwright thật (`page.click()`/`page.fill()` qua DOM thật, KHÔNG gọi tắt `page.evaluate()`
+để né UI) — `tests/test-operation-vhst-refix2.js` mới, 12/12 pass, kèm ảnh chụp trước/sau cho cả 4 mục. Bộ
+regression đầy đủ 86 file test, không phát sinh regression mới. Bump 13.5 → 13.6. Không đổi
+`schema.sql`/`.env.example`/dependencies.
 
 ## v13.5 (2026-09-08): 4 yêu cầu nghiệp vụ — Đồng Phục xác nhận đã nhận, Hợp đồng đổi Hình Thức Thanh
 ## Toán qua phê duyệt lại, Vận Hành chặn trùng Số Đơn NCC + khoá sửa sau import PDF, mã tự sinh thống

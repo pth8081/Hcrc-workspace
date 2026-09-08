@@ -6831,6 +6831,12 @@
             <thead>
               <tr class="bg-gray-100 text-left text-gray-700">
                 <th class="border p-1.5 w-8">STT</th>
+                <!-- Cột "Cha" — gán/đổi cha CHO DÒNG ĐÃ CÓ SẴN bất kỳ lúc nào (đợt sửa lỗi lần 2, xem
+                     changeOperationEstimateItemParent() ở module-vanhanh.js) — trước đây chỉ chọn được cha
+                     TRƯỚC lúc thêm dòng mới (dropdown "Dòng mới thêm..." bên dưới bảng), thao tác tự nhiên
+                     nhất (thêm sẵn nhiều dòng trống rồi gõ Nội Dung từng dòng) không có cách nào tạo được
+                     danh mục con. -->
+                <th class="border p-1.5 w-28">Cha</th>
                 <th class="border p-1.5">Nội Dung</th>
                 <th class="border p-1.5">Mô Tả</th>
                 <th class="border p-1.5 w-32">Chi Phí (VNĐ)</th>

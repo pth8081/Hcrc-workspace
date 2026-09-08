@@ -4611,6 +4611,14 @@ const IT_TICKET_STATUSES = new Set(['TODO', 'DOING', 'DONE', 'CANCELLED']);
 function claimItTicket(user, ticket) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý yêu cầu hỗ trợ IT');
   if (ticket.status !== 'TODO') throw new HttpError(409, 'Yêu cầu này đã có người nhận xử lý hoặc đã đóng');
+  // Lần sửa lỗi 2 (phản hồi người dùng — "trước khi nhận việc không có cách nào gửi phê duyệt trước"):
+  // nếu đã có 1 yêu cầu phê duyệt được gửi TRƯỚC KHI nhận việc (xem escalateItTicket() bên dưới, giờ cho
+  // gửi cả lúc còn TODO) mà đang PENDING/REJECTED, chặn nhận việc cho tới khi được duyệt/gửi lại thành
+  // công — đúng nghiệp vụ "xin phê duyệt trước khi bắt đầu xử lý", mirror ĐÚNG chặn đã có ở
+  // updateItTicketStatus() cho bước cập nhật tiến độ.
+  if (ticket.approvalStatus === 'PENDING' || ticket.approvalStatus === 'REJECTED') {
+    throw new HttpError(409, 'Đang chờ hoặc chưa được phê duyệt — gửi lại yêu cầu phê duyệt hoặc chờ phê duyệt xong trước khi nhận việc');
+  }
   ticket.assignee = user.username;
   ticket.assigneeName = user.name;
   ticket.status = 'DOING';
@@ -4649,14 +4657,20 @@ function addItTicketComment(user, ticket, payload) {
   return ticket;
 }
 
-// Leo thang phê duyệt (tuỳ chọn) — đội Hỗ Trợ IT đang xử lý (DOING) 1 ticket có thể chủ động xin ý
-// kiến/phê duyệt của 1 người có trách nhiệm CỤ THỂ (không nhất thiết thuộc đội IT, vd trưởng phòng liên
-// quan) TRƯỚC KHI tiếp tục xử lý — người được hỏi chỉ xem/duyệt được ĐÚNG ticket đó (canViewItSupportTicket
-// ở lib/recordViewScope.js), không mở cả danh sách. approvalStatus tách biệt hoàn toàn khỏi status
-// (TODO/DOING/DONE/CANCELLED): PENDING/REJECTED chặn updateItTicketStatus() ở trên cho tới khi được duyệt.
+// Leo thang phê duyệt (tuỳ chọn) — đội Hỗ Trợ IT có thể chủ động xin ý kiến/phê duyệt của 1 người có
+// trách nhiệm CỤ THỂ (không nhất thiết thuộc đội IT, vd trưởng phòng liên quan) TRƯỚC KHI tiếp tục xử lý
+// — người được hỏi chỉ xem/duyệt được ĐÚNG ticket đó (canViewItSupportTicket ở lib/recordViewScope.js),
+// không mở cả danh sách. approvalStatus tách biệt hoàn toàn khỏi status (TODO/DOING/DONE/CANCELLED):
+// PENDING/REJECTED chặn updateItTicketStatus()/claimItTicket() ở trên cho tới khi được duyệt.
+// Lần sửa lỗi 2 (phản hồi người dùng — "trước khi tôi nhận việc tôi không có thông tin để chuyển cho
+// người phê duyệt thực hiện phê duyệt trước khi tôi làm tiếp"): TRƯỚC ĐÂY chỉ gửi được yêu cầu phê duyệt
+// SAU KHI đã claim (status DOING) — đúng như người dùng phản ánh, sai với nghiệp vụ thật ("xin phê duyệt
+// TRƯỚC khi bắt đầu xử lý", không phải sau). Nới điều kiện: cho gửi phê duyệt NGAY khi ticket còn TODO
+// (chưa ai nhận) hoặc đã DOING (đã nhận, giữ nguyên hành vi cũ) — chỉ chặn khi ticket đã kết thúc
+// (DONE/CANCELLED, không còn ý nghĩa xin phê duyệt tiếp tục xử lý gì nữa).
 function escalateItTicket(user, ticket, payload, usersList) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu phê duyệt ở đây');
-  if (ticket.status !== 'DOING') throw new HttpError(409, 'Chỉ gửi được yêu cầu phê duyệt khi yêu cầu đang được xử lý');
+  if (ticket.status !== 'TODO' && ticket.status !== 'DOING') throw new HttpError(409, 'Yêu cầu này đã kết thúc, không thể gửi yêu cầu phê duyệt');
   if (ticket.approvalStatus === 'PENDING') throw new HttpError(409, 'Đã có 1 yêu cầu phê duyệt đang chờ xử lý');
   const reason = (payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do cần phê duyệt');

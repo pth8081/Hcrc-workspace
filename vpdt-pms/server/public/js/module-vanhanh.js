@@ -1354,7 +1354,20 @@ function updateOperationEstimateItemField(idx, field, value) {
   // dòng mới luôn bị thêm thành danh mục LỚN (parentId=null) dù người dùng tưởng đã chọn được cha, đúng y
   // hệt hiện tượng "2 dòng cùng cấp, Tổng Chi Phí cộng phẳng" trong ảnh chụp người dùng gửi. Chỉ cần
   // refresh riêng dropdown (KHÔNG render lại toàn bảng) mỗi khi content đổi là đủ khớp lại đúng dữ liệu.
-  if (field === 'content') populateEstimateNewItemParentSelect();
+  // field==='content': refresh CẢ 2 nơi liệt kê "danh mục lớn hiện có" — dropdown DUY NHẤT cho dòng SẮP
+  // thêm (populateEstimateNewItemParentSelect(), như cũ) VÀ cột "Cha" ở MỖI DÒNG ĐÃ RENDER (mới thêm ở
+  // đợt sửa lỗi lần 2 — nếu không refresh, <select> ở cột Cha của các dòng khác vẫn giữ NGUYÊN danh sách
+  // lúc bảng được render lần cuối, tức KHÔNG có dòng vừa gõ xong làm lựa chọn, dù người dùng vừa gõ xong).
+  // KHÔNG render lại cả bảng (giữ nguyên lý do render riêng populateEstimateNewItemParentSelect()) — chỉ
+  // cập nhật lại <option> bên trong từng <select> đã có sẵn, không đụng tới input đang được gõ.
+  if (field === 'content') {
+    populateEstimateNewItemParentSelect();
+    document.querySelectorAll('#operationEstimateItemsTableBody select[data-op-change="changeOperationEstimateItemParent"]').forEach((sel) => {
+      const rowIdx = Number(sel.dataset.idx);
+      const rowItem = operationEstimateItems[rowIdx];
+      if (rowItem) sel.innerHTML = buildEligibleParentOptionsFor(rowItem);
+    });
+  }
   recalcOperationEstimateItemsTotal();
 }
 // Chi phí HIỆU LỰC của 1 hạng mục — danh mục lớn có >=1 con thì = tổng amount các con (chỉ tính con có
@@ -1400,6 +1413,37 @@ function populateEstimateNewItemParentSelect() {
     topItems.map(it => `<option value="${it.id}">${escapeHtml(it.content)}</option>`).join('');
   if (topItems.some(it => String(it.id) === prevValue)) sel.value = prevValue;
 }
+// BUG THẬT phát hiện lúc kiểm tra lại LẦN THỨ 2 sau phản hồi người dùng ("vẫn chưa tạo được danh mục
+// con" dù đợt trước đã sửa timing dropdown): trước đây CHỈ có đúng 1 cách gán cha — chọn TRƯỚC ở dropdown
+// "Dòng mới thêm — thuộc danh mục lớn nào?" RỒI MỚI bấm "➕ Thêm Hạng Mục". Thao tác tự nhiên nhất của
+// người dùng thật (bấm "➕ Thêm Hạng Mục" nhiều lần để tạo sẵn vài dòng trống RỒI MỚI gõ Nội Dung từng
+// dòng — không hề đụng tới dropdown đó lúc thêm) khiến MỌI dòng luôn là danh mục lớn (parentId=null) —
+// KHÔNG có cách nào đổi 1 dòng ĐÃ CÓ SẴN thành danh mục con sau khi đã gõ xong nội dung. Fix: thêm 1 cột
+// "Cha" NGAY TRÊN MỖI DÒNG (không chỉ ở dòng sắp thêm) — cho phép gán/đổi cha bất kỳ lúc nào qua
+// changeOperationEstimateItemParent() bên dưới, không bắt buộc phải làm đúng thứ tự chọn-trước-rồi-thêm.
+function buildEligibleParentOptionsFor(it) {
+  const topItems = operationEstimateItems.filter(x => x.parentId == null && x.id !== it.id && (x.content || '').trim());
+  return [`<option value="">— Danh mục lớn —</option>`]
+    .concat(topItems.map(x => `<option value="${x.id}"${it.parentId === x.id ? ' selected' : ''}>${escapeHtml(x.content)}</option>`))
+    .join('');
+}
+// Đổi cha của 1 DÒNG ĐÃ CÓ SẴN (gọi từ <select> ở cột "Cha" của MỖI dòng, xem OP_CHANGE_ACTIONS) — server
+// vẫn tự chặn lại lần nữa lúc lưu (không tin riêng UI, xem submitOperationEstimate() ở lib/recordActions.js).
+function changeOperationEstimateItemParent(idx, value) {
+  const it = operationEstimateItems[idx];
+  if (!it) return;
+  const newParentId = value ? Number(value) : null;
+  if (newParentId === it.id) return; // phòng thủ — UI không liệt kê chính nó trong danh sách chọn
+  // Luật "CHỈ 2 CẤP": 1 danh mục ĐANG có con không được trở thành con của danh mục khác (select cho dòng
+  // này đã bị ẩn ở renderOperationEstimateItemRow() — đây là lớp chặn phòng thủ thứ 2).
+  if (newParentId != null && operationEstimateItems.some(c => c.parentId === it.id)) return;
+  if (newParentId != null) {
+    const parent = operationEstimateItems.find(p => p.id === newParentId);
+    if (!parent || parent.parentId != null) return; // cha phải là 1 danh mục LỚN đang tồn tại
+  }
+  it.parentId = newParentId;
+  renderOperationEstimateItemsTable(true);
+}
 // depth 0 = danh mục lớn (mirror indent buildOperationWorkItemRow(): depth*4 khoảng trắng + "↳ " nếu > 0,
 // dùng LẠI đúng quy ước hiển thị cây đã có sẵn cho cây Công việc, không bày ra kiểu hiển thị mới).
 function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
@@ -1411,6 +1455,11 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
     : hasChildren
       ? `<td class="border p-1 text-right text-gray-500 italic bg-gray-50">${effectiveAmount.toLocaleString('vi-VN')}<div class="text-[10px] font-normal">🔢 Tự động tính từ ${operationEstimateItems.filter(c => c.parentId === it.id && (c.content || '').trim()).length} danh mục con</div></td>`
       : `<td class="border p-1"><input type="text" inputmode="numeric" value="${formatMoneyDisplay(it.amount)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="amount" class="w-full border-0 p-0.5 text-xs focus:outline-none money-input"></td>`;
+  const parentCell = editable
+    ? (hasChildren
+        ? `<td class="border p-1 text-center text-[10px] text-gray-400 italic" title="Danh mục đang có con, không thể trở thành con của danh mục khác">—</td>`
+        : `<td class="border p-1"><select data-op-change="changeOperationEstimateItemParent" data-idx="${idx}" class="w-full border-0 p-0.5 text-[10px] bg-white focus:outline-none">${buildEligibleParentOptionsFor(it)}</select></td>`)
+    : `<td class="border p-1 text-[10px] text-gray-500">${it.parentId != null ? 'Danh mục con' : ''}</td>`;
   const contentCell = editable
     ? `<td class="border p-1">${indent}<input value="${escapeHtml(it.content)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="content" class="w-auto border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung" style="width:calc(100% - ${depth * 32 + 4}px)"></td>`
     : `<td class="border p-1">${indent}${escapeHtml(it.content)}</td>`;
@@ -1424,7 +1473,7 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
     ? `<td class="border p-1 text-center whitespace-nowrap"><button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng${depth === 0 ? ' (xoá cả danh mục con nếu có)' : ''}">✕</button></td>`
     : `<td class="border p-1"></td>`;
   const sttCell = `<td class="border p-1 text-center">${depth === 0 ? (Number.isInteger(sttNo) ? sttNo : '') : ''}</td>`;
-  return `<tr>${sttCell}${contentCell}${descCell}${amountCell}${noteCell}${actionCell}</tr>`;
+  return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${actionCell}</tr>`;
 }
 function renderOperationEstimateItemsTable(editable) {
   const tbody = document.getElementById('operationEstimateItemsTableBody');
@@ -1439,7 +1488,7 @@ function renderOperationEstimateItemsTable(editable) {
       rowsHtml.push(renderOperationEstimateItemRow(child, childIdx, 1, editable, null));
     });
   });
-  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="6" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
+  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
   populateEstimateNewItemParentSelect();
   recalcOperationEstimateItemsTotal();
 }
@@ -3157,7 +3206,11 @@ const OP_CHANGE_ACTIONS = {
   // (vsoFile/vrFile) — nhưng cơ chế đó chỉ hiểu bởi cspDispatchOp() (bindCspDelegation() dùng chung),
   // KHÔNG phải OP_CHANGE_ACTIONS riêng của module này, nên phải khai tường minh: đọc "arg1" TRỰC TIẾP từ
   // el.dataset (không qua cspReadArgSlot()) vì el chính là input file cần truyền (data-arg-el="0").
-  onSingleFileChosen: el => onSingleFileChosen(el, el.dataset.arg1)
+  onSingleFileChosen: el => onSingleFileChosen(el, el.dataset.arg1),
+  // Cột "Cha" ở MỖI dòng bảng Danh Mục Đầu Tư (đợt sửa lỗi lần 2 — xem chú thích đầy đủ ở
+  // changeOperationEstimateItemParent()) — cho phép gán/đổi cha CHO DÒNG ĐÃ CÓ SẴN, không bắt buộc phải
+  // chọn cha TRƯỚC lúc thêm dòng mới như cơ chế cũ (selEstimateNewItemParent) vẫn còn giữ song song.
+  changeOperationEstimateItemParent: el => changeOperationEstimateItemParent(Number(el.dataset.idx), el.value)
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),

@@ -1439,10 +1439,12 @@ function renderItTickets() {
           const secondaryOptions = [];
           // "Gửi Phê Duyệt" ngay ở nút thao tác (yêu cầu người dùng) — mirror ĐÚNG điều kiện hiện nút
           // "📨 Gửi/Gửi Lại Yêu Cầu Phê Duyệt" bên trong modal (renderItTicketModal()): chỉ đội IT
-          // (canManageItSupportClient), đang xử lý (status DOING), và KHÔNG đang có 1 yêu cầu phê duyệt
-          // nào chờ xử lý (approvalStatus PENDING — REJECTED vẫn cho gửi LẠI). Bấm vào mở thẳng modal +
-          // hiện luôn form gửi phê duyệt (openItTicketEscalateForm()), không phải tự tìm nút bên trong.
-          if (canManageItSupportClient(currentUser) && t.status === 'DOING' && t.approvalStatus !== 'PENDING') {
+          // (canManageItSupportClient), ticket CHƯA kết thúc (TODO hoặc DOING — lần sửa lỗi 2: TRƯỚC ĐÂY
+          // chỉ cho DOING, tức phải nhận việc rồi mới gửi được, sai với nghiệp vụ "xin phê duyệt TRƯỚC khi
+          // bắt đầu xử lý" — xem escalateItTicket() ở lib/recordActions.js), và KHÔNG đang có 1 yêu cầu
+          // phê duyệt nào chờ xử lý (approvalStatus PENDING — REJECTED vẫn cho gửi LẠI). Bấm vào mở thẳng
+          // modal + hiện luôn form gửi phê duyệt (openItTicketEscalateForm()), không phải tự tìm nút bên trong.
+          if (canManageItSupportClient(currentUser) && (t.status === 'TODO' || t.status === 'DOING') && t.approvalStatus !== 'PENDING') {
             secondaryOptions.push({ value: 'escalate', label: t.approvalStatus === 'REJECTED' ? '📨 Gửi Lại Phê Duyệt' : '📨 Gửi Phê Duyệt' });
           }
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
@@ -1531,16 +1533,21 @@ function renderItTicketModal() {
       </div>`;
   }
 
-  if (canManage && t.status === 'TODO') {
+  // "🎯 Nhận Xử Lý" — CHẶN khi đang chờ/bị từ chối phê duyệt (lần sửa lỗi 2: giờ có thể xin phê duyệt
+  // NGAY từ lúc TODO, xem khối "📨 Gửi Yêu Cầu Phê Duyệt" bên dưới — mirror ĐÚNG chặn server ở
+  // claimItTicket(), đây chỉ là UI phản ánh đúng trạng thái).
+  if (canManage && t.status === 'TODO' && !awaitingApproval && !blockedByRejection) {
     controlsHTML += `<button type="button" data-op="claimItTicketAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700 mr-2">🎯 Nhận Xử Lý</button>`;
   }
 
-  if (canManage && t.status === 'DOING') {
-    // Đang chờ duyệt hoặc vừa bị từ chối — CHƯA cho phép đóng yêu cầu (Hoàn thành/Hủy qua nút dưới),
-    // đúng yêu cầu "sau khi nhận phê duyệt thì IT mới tiếp tục xử lý" (server chặn lại ở
-    // updateItTicketStatus(), đây chỉ là UI phản ánh đúng trạng thái).
+  // "📨 Gửi Yêu Cầu Phê Duyệt" — lần sửa lỗi 2 (phản hồi người dùng): TRƯỚC ĐÂY chỉ hiện khi ticket đã
+  // DOING (tức phải "🎯 Nhận Xử Lý" trước), khiến IT không có cách nào xin phê duyệt TRƯỚC khi bắt đầu xử
+  // lý — sai với đúng nghiệp vụ (xin ý kiến quản lý TRƯỚC KHI làm tiếp, không phải sau khi đã nhận việc).
+  // Nới sang cả TODO (chưa nhận việc) lẫn DOING (đã nhận, giữ nguyên hành vi cũ) — mirror ĐÚNG điều kiện
+  // server ở escalateItTicket() (lib/recordActions.js).
+  if (canManage && (t.status === 'TODO' || t.status === 'DOING')) {
     if (awaitingApproval) {
-      controlsHTML += `<div class="bg-amber-50 text-amber-800 text-xs p-2 rounded border border-amber-200 mb-2">⏳ Đang chờ <b>${escapeHtml(t.approvalApproverName)}</b> phê duyệt trước khi tiếp tục xử lý.<br>Lý do đã gửi: "${escapeHtml(t.approvalReason)}"</div>`;
+      controlsHTML += `<div class="bg-amber-50 text-amber-800 text-xs p-2 rounded border border-amber-200 mb-2">⏳ Đang chờ <b>${escapeHtml(t.approvalApproverName)}</b> phê duyệt trước khi ${t.status === 'TODO' ? 'nhận việc/' : ''}tiếp tục xử lý.<br>Lý do đã gửi: "${escapeHtml(t.approvalReason)}"</div>`;
     } else {
       if (blockedByRejection) {
         controlsHTML += `<div class="bg-red-50 text-red-700 text-xs p-2 rounded border border-red-200 mb-2">❌ <b>${escapeHtml(t.approvalApproverName)}</b> đã từ chối yêu cầu phê duyệt${t.approvalComment ? `: "${escapeHtml(t.approvalComment)}"` : '.'}<br>Gửi lại yêu cầu tới người khác hoặc hủy yêu cầu hỗ trợ này.</div>`;
@@ -1561,21 +1568,22 @@ function renderItTicketModal() {
             </div>
           </div>`;
       }
-      // Bị từ chối thì KHÔNG cho đóng yêu cầu qua đây nữa (phải gửi lại phê duyệt và được duyệt, hoặc
-      // dùng nút "Hủy Yêu Cầu" riêng bên dưới).
-      if (!blockedByRejection) {
-        controlsHTML += `
-          <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
-            <h4 class="font-bold text-sky-900">🔧 Cập Nhật Xử Lý</h4>
-            <select id="itTicketUpdateStatus" class="w-full border p-1.5 rounded bg-white text-xs">
-              <option value="DONE">✅ Hoàn thành</option>
-              <option value="CANCELLED">❌ Hủy yêu cầu</option>
-            </select>
-            <textarea id="itTicketUpdateNote" placeholder="Ghi chú xử lý (VD: đã thay ổ cứng, đã cấp lại mật khẩu...)" class="w-full border p-1.5 rounded h-16 text-xs">${escapeHtml(t.resolutionNote || '')}</textarea>
-            <button type="button" data-op="updateItTicketStatusAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
-          </div>`;
-      }
     }
+  }
+
+  // "🔧 Cập Nhật Xử Lý" — CHỈ khi đã nhận việc (DOING) + không đang chờ/bị từ chối phê duyệt, GIỮ NGUYÊN
+  // hành vi cũ (tách khỏi khối phê duyệt ở trên vì khối đó giờ dùng chung cho cả TODO).
+  if (canManage && t.status === 'DOING' && !awaitingApproval && !blockedByRejection) {
+    controlsHTML += `
+      <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
+        <h4 class="font-bold text-sky-900">🔧 Cập Nhật Xử Lý</h4>
+        <select id="itTicketUpdateStatus" class="w-full border p-1.5 rounded bg-white text-xs">
+          <option value="DONE">✅ Hoàn thành</option>
+          <option value="CANCELLED">❌ Hủy yêu cầu</option>
+        </select>
+        <textarea id="itTicketUpdateNote" placeholder="Ghi chú xử lý (VD: đã thay ổ cứng, đã cấp lại mật khẩu...)" class="w-full border p-1.5 rounded h-16 text-xs">${escapeHtml(t.resolutionNote || '')}</textarea>
+        <button type="button" data-op="updateItTicketStatusAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">💾 Cập Nhật</button>
+      </div>`;
   }
   if ((canManage || isCreator) && (t.status === 'TODO' || t.status === 'DOING')) {
     controlsHTML += `<button type="button" data-op="cancelItTicketAction" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Hủy Yêu Cầu</button>`;
