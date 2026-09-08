@@ -1,8 +1,125 @@
 # Phiên bản hiện tại
 
-**13.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đợt E (UX rollout — ĐỢT CUỐI/5): nút "↺ Làm Mới" cho Vận Hành Siêu Thị/Onboarding/Offboarding (2026-09-08)
+
+Tiếp nối Đợt A/B/C/D (xem các mục ngay dưới) — áp ĐÚNG mẫu tham chiếu đã dựng
+(`confirmAndResetForm()`/chip file ở `core.js`, KHÔNG sửa gì thêm ở đó) cho
+5 form Tạo Mới còn lại (Vận Hành Siêu Thị 3 form + Onboarding/Offboarding 2
+form), **HOÀN TẤT toàn bộ kế hoạch UX 5 đợt**.
+
+**Vận Hành (`module-vanhanh.js`) — 3 form Tạo Mới (`vanHanhSection`):**
+- Đặt Hàng HO/Siêu Thị (`#operationOrderForm`) — `resetOperationOrderForm()`
+  (mới): mã đơn tự sinh lại, bảng hạng mục (`operationOrderItems`) collapse
+  về ĐÚNG 1 dòng trống, chip file `voFile` (input NÀY đã có
+  `data-op-change="handleOperationOrderPdfUpload"` nghiệp vụ riêng đọc PDF
+  tự điền form — gọi `onSingleFileChosen()` NGAY trong handler đó, cùng cách
+  làm `itPriceFileInput` ở Đợt D), và mở lại khối "Chi Tiết Từ Phiếu Đặt
+  Hàng" về đúng trạng thái mặc định (mở) nếu người dùng lỡ thu gọn.
+- Mở Mới Siêu Thị (`#operationStoreOpenForm`) — `resetOperationStoreOpenForm()`
+  (mới) + chip file đơn `vsoFile`. Field ngân sách DUY NHẤT còn lại
+  "Ngân Sách Phê Duyệt — Danh Mục Đầu Tư" (`vsoApprovedBudget`, đổi tên/gộp
+  từ field "Chi Phí Phê Duyệt" cũ đã bỏ ở VHST-1) được `form.reset()` xoá
+  sạch bình thường.
+- Sửa Chữa Siêu Thị (`#operationRepairForm`) — `resetOperationRepairForm()`
+  (mới) + chip file đơn `vrFile`, cùng field ngân sách `vrApprovedBudget`
+  như trên.
+- **Khối "Danh Mục Đầu Tư" 2 cấp (VHST-3)**: xác nhận đây là 1 TAB CON RIÊNG
+  (`opStoreEstimatePanel`, sub-tab "📁 Danh mục đầu tư") — chỉ thao tác được
+  trên hồ sơ ĐÃ TỒN TẠI (chọn từ danh sách "Mã Hồ Sơ" đã tạo), KHÔNG nhúng
+  trong 2 form Tạo Mới ở trên — nên nằm NGOÀI phạm vi đợt UX "form tạo mới
+  chưa lưu" này, không cần reset.
+- **Phát hiện + vá 1 lỗi có sẵn (KHÔNG do đợt này gây ra)**: module Vận Hành
+  dùng riêng `bindOperationDelegation()`/`OP_CLICK_ACTIONS`/`OP_CHANGE_ACTIONS`
+  (không phải `bindCspDelegation()` dùng chung ở mọi module khác) — 2 hạ
+  tầng dùng chung `confirmAndResetForm()`/`onSingleFileChosen()` (core.js)
+  phải khai báo tường minh thêm ở 2 registry này (cùng khuôn `pmsAdd`/
+  `pmsRemove` đã có sẵn), nếu không nút "Làm Mới" lẫn nút chọn file mới sẽ
+  IM LẶNG không hoạt động trong module này.
+
+**Nhân Sự > Onboarding/Offboarding (`module-hcrcdonghanh.js`) — 2 form Tạo Mới (`hrLifecycleSection`):**
+- Onboarding (thêm `id="hrOnboardingForm"`, trước đây chỉ có
+  `data-op-submit`) — `resetHrOnboardingForm()` (mới): `form.reset()` +
+  đưa Vị Trí về lại `HO` + gọi lại `onHrOnboardingPosTypeChange()` có sẵn để
+  re-populate ĐÚNG dropdown Chức Danh theo HO (không sót option Siêu Thị vừa
+  chọn) + ẩn/hiện lại đúng khối Phòng Ban/Siêu Thị + trả Email về lại
+  KHÔNG bắt buộc.
+- Offboarding (thêm `id="hrOffboardingForm"`) — `resetHrOffboardingForm()`
+  (mới): `form.reset()` xoá sạch input/ngày/2 checkbox, dọn thêm tường minh
+  hidden `hrOffbEmployeeUsername` + ẩn lại info-box `#hrOffbEmployeeInfo` (2
+  phần `form.reset()` gốc không tự đụng tới vì được gán bằng JS), rồi gọi
+  lại `updateHrOffboardingSubmitState()` có sẵn để khoá lại nút gửi (JS
+  không tự bắn sự kiện `change` nên state nút không tự re-compute nếu không
+  gọi tường minh).
+- **Phát hiện + vá 1 LỖI THẬT NGHIÊM TRỌNG có sẵn (KHÔNG do đợt UX này gây
+  ra)**: `#hrLifecycleSection` (module Onboarding/Offboarding, dựng ở commit
+  `2278c17`) chưa BAO GIỜ được gọi `bindCspDelegation()` — nghĩa là TOÀN BỘ
+  `data-op`/`data-op-change`/`data-op-input`/`data-op-submit` bên trong (2
+  nút chuyển sub-tab, cascading Vị Trí→Phòng Ban/Chức Danh, sdd-picker nhân
+  viên Offboarding, 2 checkbox bắt buộc, VÀ CẢ 2 NÚT "GỬI YÊU CẦU" CHÍNH)
+  hoàn toàn IM LẶNG không chạy từ lúc module này ra mắt cho tới nay — phát
+  hiện tình cờ lúc viết test cho nút "Làm Mới" (click không phản ứng gì).
+  Vá bằng đúng 1 dòng `bindCspDelegation('hrLifecycleSection');` (core.js,
+  cùng chỗ với `orgChartSection` — module con khác của Nhân Sự). **Đây là
+  bug thật cần deploy gấp** — không liên quan gì tới "Làm Mới", nhưng phải
+  sửa cùng lúc vì phát hiện ngay tại đây.
+- **Gia Hạn CNTT (`itServiceRenewals`)**: đã xác nhận ĐÂY LÀ ĐÚNG form
+  `#itRenewalCreateForm` (`module-itsupport-renewal.js`) đã hoàn tất ở Đợt D
+  — KHÔNG có form "Gia Hạn CNTT" nào khác trong hệ thống, bỏ qua không lặp
+  lại việc đã làm.
+
+**Gap-fill Biểu Mẫu (`core.js`)**: thêm `id` cho `hrOnboardingForm`/
+`hrOffboardingForm` (cần cho `confirmAndResetForm()`) khiến audit toàn app ở
+`test-forms-batch4.js` (đếm MỌI `<form id=... data-op-submit=...>` thật) lần
+đầu phát hiện 2 form này CHƯA có `coreKey` trong `CORE_FIELD_MANIFEST`/
+`FORM_TABS` (trước đây không có `id` nên "vô hình" với audit đó, module
+Biểu Mẫu quản trị chưa từng tuỳ biến được nhãn/bắt buộc cho 2 form này) — bổ
+sung `HR_ONBOARDING`/`HR_OFFBOARDING` (nhóm mới `HR_LIFECYCLE`) theo đúng
+khuôn có sẵn, loại trừ `hrOnbEmail` (nhãn/bắt buộc bị
+`onHrOnboardingPosTypeChange()` tự ghi đè, cùng lý do `tcDocumentIds`) và 2
+checkbox `hrOffbChecklistHandover`/`hrOffbChecklistBenefits` (`<label>` bọc
+trực tiếp input, cùng lý do `tdMandatory`).
+
+**Bộ test**: mở rộng `server/tests/test-form-reset-file-remove.js` thêm 5
+kịch bản (3 form Vận Hành + Onboarding + Offboarding) — tổng 34/34 kịch bản
+pass, bao gồm kiểm chứng riêng hành vi cascading picker Onboarding (chọn
+Siêu Thị → Làm Mới → về đúng HO, dropdown Chức Danh re-populate lại đúng,
+không sót option Siêu Thị) và sdd-picker + 2 checkbox Offboarding (chọn nhân
+viên + tích đủ 2 checkbox → nút gửi mở ra → Làm Mới → sdd-picker/ngày/
+checkbox/nút gửi đều về lại trạng thái khoá ban đầu). Toàn bộ suite hồi quy
+hiện có (79 file `test-*.js`) chạy lại — không phát sinh lỗi mới ngoài 3 lỗi
+kết nối SQL Server thật đã biết từ trước ở đúng 2 file
+`test-audit-fixes-batch1.js` (2 lỗi)/`test-audit-round2-cluster1.js` (1
+lỗi), xác nhận lại giống hệt baseline qua `git stash` (môi trường sandbox
+không có SQL Server thật).
+
+**Tổng kết toàn bộ kế hoạch UX 5 đợt (A→B→C→D→E)** — đếm lại CHÍNH XÁC qua
+`grep 'data-op="confirmAndResetForm"' public/index.html` (32 nút "↺ Làm Mới"
+thật, không phỏng đoán): **32 form Tạo Mới** trên **18 khu vực nghiệp vụ**
+(Văn Bản Trình/Hợp Đồng/Tài Liệu/Giấy Phép/Đăng Ký Xe/Phòng Họp/Biên Bản Họp/
+Văn Phòng(Mua Bán+Sửa Chữa+Đầu Tư)/Đào Tạo(7 form)/Tuyển Dụng(2)/HCRC Đồng
+Hành/Nhịp Sống Nội Bộ/Thanh Toán/Hỗ Trợ IT(3)/VPP(2)/Ngân Sách(2) — 16 khu
+vực đã có từ Đợt A-D — cộng thêm Vận Hành(3)/Onboarding-Offboarding(2) mới ở
+Đợt E = 18) đã có nút "↺ Làm Mới" + chip "✕ Xoá file" (khi có ô tải tệp).
+Lưu ý: Đào Tạo/Tuyển Dụng/Nhịp Sống Nội Bộ về mặt điều hướng đều là sub-tab
+CÙNG 1 module top-level `internal` (Truyền Thông Nội Bộ, xem `BUSINESS_MODULES`)
+— đếm tách theo khu vực nghiệp vụ/nhóm form ở đây (đúng cách người dùng vẫn
+gọi tên), không theo đúng cấp bậc `parent`/top-level kỹ thuật. Ngoại lệ CHỦ Ý
+nằm ngoài phạm vi (không phải bỏ sót): sub-tab "🗂️ Quản Lý Thanh Toán" (Đợt D
+— UI sửa 1 bản ghi ĐÃ TỒN TẠI) và khối "Danh Mục Đầu Tư" của Vận Hành (Đợt E
+— cùng lý do, chỉ thao tác được trên hồ sơ đã tạo).
+
+**Deploy-impact**: THUẦN client-side (`public/index.html` +
+`module-vanhanh.js`/`module-hcrcdonghanh.js`/`core.js`), không đổi
+`schema.sql`, không thêm biến môi trường, không đổi `dependencies` — chỉ
+cần copy code + `pm2 restart` (hoặc refresh trình duyệt nếu server không
+đổi). **Lưu ý riêng đợt này**: thay đổi ở `core.js` (thêm
+`bindCspDelegation('hrLifecycleSection')`) khắc phục 1 bug khiến TOÀN BỘ
+module Onboarding/Offboarding không hoạt động — nên ưu tiên deploy sớm, độc
+lập với phần "Làm Mới" nếu cần tách riêng.
 
 ## Đợt D (UX rollout): nút "↺ Làm Mới" cho Thanh Toán/Hỗ Trợ IT (3 form)/VPP/Ngân Sách (2026-09-08)
 

@@ -846,6 +846,32 @@ const CORE_FIELD_MANIFEST = {
     { id: 'teTestSecondsPerQuestion', label: 'Số Giây / Câu Hỏi', required: false },
     { id: 'teDocumentIds', label: 'Giáo Trình (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)', required: false },
     { id: 'teDescription', label: 'Mô Tả / Nội Dung', required: false }
+  ],
+  // Đợt E (UX rollout — nút "↺ Làm Mới") — gap-fill phát hiện qua chính audit toàn app ở
+  // tests/test-forms-batch4.js (đếm <form id=... data-op-submit=...>): Onboarding/Offboarding vốn dĩ
+  // KHÔNG có id trên <form> (chỉ dùng data-op-submit) nên chưa từng lọt vào audit đó — thêm id để gắn
+  // được nút "Làm Mới" (confirmAndResetForm() cần formId) mới lộ ra 2 form này thật sự chưa có coreKey.
+  // hrOnbEmail KHÔNG đưa vào — nhãn LẪN thuộc tính required bị onHrOnboardingPosTypeChange() TỰ ĐỘNG ghi
+  // đè theo #hrOnbPosType (HO/Siêu Thị) mỗi lần đổi Vị Trí, cùng lý do tcDocumentIds/tdFile ở trên (đưa
+  // vào sẽ bị hàm đó ghi đè lại ngay, tùy biến admin không có tác dụng thật).
+  HR_ONBOARDING: [
+    { id: 'hrOnbEmployeeCode', label: 'Mã Nhân Viên', required: true },
+    { id: 'hrOnbFullName', label: 'Họ và Tên', required: true },
+    { id: 'hrOnbPosType', label: 'Vị Trí', required: false },
+    { id: 'hrOnbDept', label: 'Phòng Ban', required: false },
+    { id: 'hrOnbStore', label: 'Siêu Thị', required: false },
+    { id: 'hrOnbJobTitle', label: 'Chức Danh', required: false },
+    { id: 'hrOnbPhone', label: 'Số Điện Thoại', required: true },
+    { id: 'hrOnbStartDate', label: 'Ngày Vào Làm Việc', required: true },
+    { id: 'hrOnbNote', label: 'Ghi Chú Thêm Cho IT (tuỳ chọn)', required: false }
+  ],
+  // hrOffbChecklistHandover/hrOffbChecklistBenefits KHÔNG đưa vào — <label> BỌC TRỰC TIẾP input (checkbox
+  // nằm NGAY trong <label>, không phải 1 <label> đứng riêng trước input), cùng lý do tdMandatory ở trên:
+  // applyCoreFieldCustomizations() ghi labelEl.innerHTML sẽ XOÁ MẤT checkbox khỏi DOM.
+  HR_OFFBOARDING: [
+    { id: 'hrOffbEmployeeInput', label: 'Mã Nhân Viên / Tên Đăng Nhập', required: false },
+    { id: 'hrOffbLastWorkingDate', label: 'Ngày Nghỉ Việc', required: true },
+    { id: 'hrOffbReason', label: 'Lý Do / Ghi Chú (tuỳ chọn)', required: false }
   ]
 };
 
@@ -912,7 +938,10 @@ const FORM_TABS = [
   { key: 'ONBOARDING_ASSIGN', coreKey: 'ONBOARDING_ASSIGN', group: 'TRAINING', label: 'Đào Tạo Tân Binh - Phân Công', icon: '📋', short: 'Tân Binh - Phân Công' },
   // Gap-fill phát hiện qua audit toàn app (đếm lại 25 <form data-op-submit> thật trong file — xem chú
   // thích tại CORE_FIELD_MANIFEST.TRAINING_CLASS_EDIT).
-  { key: 'TRAINING_CLASS_EDIT', coreKey: 'TRAINING_CLASS_EDIT', group: 'TRAINING', label: 'Đào Tạo - Sửa Lớp Học', icon: '✏️', short: 'ĐT - Sửa Lớp Học' }
+  { key: 'TRAINING_CLASS_EDIT', coreKey: 'TRAINING_CLASS_EDIT', group: 'TRAINING', label: 'Đào Tạo - Sửa Lớp Học', icon: '✏️', short: 'ĐT - Sửa Lớp Học' },
+  // Đợt E — gap-fill Onboarding/Offboarding, xem chú thích đầy đủ tại CORE_FIELD_MANIFEST.HR_ONBOARDING.
+  { key: 'HR_ONBOARDING', coreKey: 'HR_ONBOARDING', group: 'HR_LIFECYCLE', label: 'Onboarding / Offboarding - Onboarding', icon: '🆕', short: 'Onboarding' },
+  { key: 'HR_OFFBOARDING', coreKey: 'HR_OFFBOARDING', group: 'HR_LIFECYCLE', label: 'Onboarding / Offboarding - Offboarding', icon: '🚪', short: 'Offboarding' }
 ];
 
 // Nhóm module CẤP 1 cho thanh tab Biểu Mẫu (mirror WF_MODULE_CONFIG/renderWfSubmissionTypeTabs bên màn
@@ -943,7 +972,8 @@ const FORM_GROUPS = [
   { key: 'OPERATION', label: 'Vận Hành', icon: '🛠️' },
   { key: 'TRAINING', label: 'Đào Tạo', icon: '🎓' },
   { key: 'RECRUITMENT', label: 'Tuyển Dụng', icon: '💼' },
-  { key: 'HR_FEEDBACK', label: 'HCRC Đồng Hành', icon: '🤝' }
+  { key: 'HR_FEEDBACK', label: 'HCRC Đồng Hành', icon: '🤝' },
+  { key: 'HR_LIFECYCLE', label: 'Onboarding / Offboarding', icon: '🆕' }
 ];
 
 function getFormTabsInGroup(groupKey) {
@@ -6922,6 +6952,14 @@ bindCspDelegation('hrSection');
 bindCspDelegation('orgChartSection');
 bindCspDelegation('orgChartManagerModal');
 bindCspDelegation('orgChartKpiModal');
+// Onboarding / Offboarding — module con riêng của Nhân Sự (#hrLifecycleSection, TÁCH khỏi #hrSection,
+// cùng lý do #orgChartSection ở trên) — BỊ THIẾU gốc riêng từ lúc dựng module này (commit 2278c17),
+// khiến MỌI data-op/data-op-change/data-op-input/data-op-submit bên trong (2 sub-tab Onboarding/
+// Offboarding, cascading Vị Trí->Phòng Ban/Siêu Thị->Chức Danh, sdd-picker nhân viên Offboarding, 2
+// checkbox bắt buộc, và chính 2 nút "Gửi Yêu Cầu") hoàn toàn IM LẶNG không chạy — phát hiện lúc viết
+// test cho nút "↺ Làm Mới" (đợt E), vá tại đây (không phải lỗi do đợt UX này gây ra, đã tồn tại từ
+// trước — không có modal nào sống ngoài section nên chỉ cần đúng 1 gốc).
+bindCspDelegation('hrLifecycleSection');
 
 // Báo Cáo (#reportsSection) — thanh bộ lọc tĩnh + #reportsNavL1Bar/#reportsNavL2Bar + #reportsContent
 // (renderReports()/renderModuleReport()/renderReportsSummary()...) đều nằm CHUNG trong #reportsSection

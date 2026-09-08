@@ -6260,6 +6260,7 @@
                    và điền toàn bộ field bên dưới (xem handleOperationOrderPdfUpload() ở module-vanhanh.js)
                    — người dùng vẫn phải tự bấm "Gửi phê duyệt" sau khi kiểm tra lại, KHÔNG tự gửi. -->
               <input type="file" id="voFile" data-op-change="handleOperationOrderPdfUpload" class="w-full border p-1.5 rounded bg-white">
+              <div id="voFileChip" class="mt-1 flex flex-wrap gap-1"></div>
               <div id="voPdfParseStatus" class="hidden"></div>
             </div>
           </div>
@@ -6310,7 +6311,10 @@
             </div>
           </div>
           <div><label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label><textarea id="voNote" class="w-full border p-1.5 rounded h-16" placeholder="Ghi chú thêm (nếu có)..."></textarea></div>
-          <div class="flex justify-end"><button type="submit" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="operationOrderForm" data-arg1="resetOperationOrderForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button>
+          </div>
         </form>
       </div>
 
@@ -6451,10 +6455,13 @@
             <div><label class="block font-semibold text-gray-600 mb-1">Ngân Sách Phê Duyệt — Danh Mục Đầu Tư (VNĐ)</label><input id="vsoApprovedBudget" type="text" inputmode="numeric" placeholder="0" class="w-full border p-1.5 rounded money-input" required></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Ngày Dự Kiến Khai Trương</label><input id="vsoOpenDate" type="date" class="w-full border p-1.5 rounded"></div>
             <div class="relative"><label class="block font-semibold text-gray-600 mb-1">Người Phụ Trách</label><input id="vsoPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveVsoPersonInChargeInput" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded"><input type="hidden" id="vsoPersonInChargeUsername"></div>
-            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (khảo sát/phương án kinh doanh...)</label><input type="file" id="vsoFile" class="w-full border p-1.5 rounded bg-white"></div>
+            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (khảo sát/phương án kinh doanh...)</label><input type="file" id="vsoFile" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="vsoFileChip" class="w-full border p-1.5 rounded bg-white"><div id="vsoFileChip" class="mt-1 flex flex-wrap gap-1"></div></div>
             <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label><textarea id="vsoNote" class="w-full border p-1.5 rounded h-16" placeholder="Ghi chú thêm (nếu có)..."></textarea></div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">💾 Lưu Hồ Sơ</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="operationStoreOpenForm" data-arg1="resetOperationStoreOpenForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">💾 Lưu Hồ Sơ</button>
+          </div>
         </form>
       </div>
 
@@ -6513,9 +6520,12 @@
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Nhà Cung Cấp / Đơn Vị Thi Công</label><input id="vrSupplier" placeholder="Công ty thi công/sửa chữa..." class="w-full border p-1.5 rounded"></div>
             <div class="relative"><label class="block font-semibold text-gray-600 mb-1">Người Phụ Trách</label><input id="vrPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveVrPersonInChargeInput" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded"><input type="hidden" id="vrPersonInChargeUsername"></div>
             <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Mô Tả Chi Tiết Hiện Trạng &amp; Lý Do Sửa Chữa</label><textarea id="vrDescription" class="w-full border p-1.5 rounded h-16" placeholder="Mô tả hiện trạng hư hỏng, lý do cần sửa chữa..."></textarea></div>
-            <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (hình ảnh hiện trạng/báo giá...)</label><input type="file" id="vrFile" class="w-full border p-1.5 rounded bg-white"></div>
+            <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (hình ảnh hiện trạng/báo giá...)</label><input type="file" id="vrFile" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="vrFileChip" class="w-full border p-1.5 rounded bg-white"><div id="vrFileChip" class="mt-1 flex flex-wrap gap-1"></div></div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">💾 Lưu Hồ Sơ</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="operationRepairForm" data-arg1="resetOperationRepairForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">💾 Lưu Hồ Sơ</button>
+          </div>
         </form>
       </div>
 
@@ -7107,7 +7117,7 @@
          field đều gõ/chọn tay (mã NV tự do, dept/jobTitle lấy từ danh mục hệ thống). Cascading HO/Siêu
          Thị mirror ĐÚNG #uPosType/onUserPosTypeChange() ở form Người Dùng đầy đủ. -->
     <div id="hrLifecycleOnboardView" class="space-y-4">
-      <form data-op-submit="submitHrOnboardingRequest" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <form id="hrOnboardingForm" data-op-submit="submitHrOnboardingRequest" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
         <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🆕 Yêu Cầu Onboarding — Cấp Tài Khoản Nhân Viên Mới</h3>
         <p class="text-xs text-teal-800">Khai báo thông tin nhân viên mới rồi bấm "Gửi Yêu Cầu Cấp Tài Khoản" — hệ thống tự tạo 1 yêu cầu trong Hỗ Trợ IT để đội IT cấp email/tài khoản. IT xử lý xong sẽ xác nhận hoàn thành, kết quả hiện lại ngay ở danh sách bên dưới.</p>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -7155,7 +7165,8 @@
           <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi chú thêm cho IT (tuỳ chọn)</label>
           <textarea id="hrOnbNote" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: cần cấp thêm phần mềm/thiết bị gì đặc biệt..."></textarea>
         </div>
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="hrOnboardingForm" data-arg1="resetHrOnboardingForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="submit" class="bg-teal-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-800">📨 Gửi Yêu Cầu Cấp Tài Khoản</button>
         </div>
       </form>
@@ -7171,7 +7182,7 @@
          buộc phải tick TRƯỚC KHI nút gửi mở ra (chặn cả 2 phía client lẫn server, xem
          extraValidate() ở lib/createValidation.js). -->
     <div id="hrLifecycleOffboardView" class="hidden space-y-4">
-      <form data-op-submit="submitHrOffboardingRequest" class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+      <form id="hrOffboardingForm" data-op-submit="submitHrOffboardingRequest" class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
         <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">🚪 Yêu Cầu Offboarding — Khoá Tài Khoản Nhân Viên Nghỉ Việc</h3>
         <p class="text-xs text-amber-800">Gõ tên hoặc mã nhân viên (tên đăng nhập) để tự động lấy thông tin từ hệ thống, tích đủ 2 thủ tục bên dưới rồi bấm "Gửi Yêu Cầu Khóa Tài Khoản".</p>
         <div>
@@ -7198,7 +7209,8 @@
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lý do / Ghi chú (tuỳ chọn)</label>
           <textarea id="hrOffbReason" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: nghỉ việc từ ngày..."></textarea>
         </div>
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="hrOffboardingForm" data-arg1="resetHrOffboardingForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="submit" id="btnSubmitHrOffboarding" disabled class="bg-amber-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-800 disabled:opacity-40 disabled:cursor-not-allowed">🔒 Gửi Yêu Cầu Khóa Tài Khoản</button>
         </div>
       </form>

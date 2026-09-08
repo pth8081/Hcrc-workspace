@@ -864,10 +864,20 @@ async function submitHrOnboardingRequest(e) {
     alert(`⚠️ Đã lưu hồ sơ Onboarding nhưng CHƯA gửi được tới Hỗ Trợ IT: ${err.message}\nBấm "📨 Gửi Lại Tới Hỗ Trợ IT" ở danh sách bên dưới để thử lại.`);
   }
 
-  e.target.reset();
+  resetHrOnboardingForm();
+  renderHrOnboardingList();
+}
+
+// resetHrOnboardingForm() — form.reset() tự đưa Vị Trí về lại option đầu (HO) nhưng KHÔNG tự re-populate
+// dropdown Chức Danh (populateHrOnboardingJobTitleOptions() đổ theo posType, không phải option tĩnh) lẫn
+// không tự bật/ẩn lại đúng khối Phòng Ban/Siêu Thị — gọi lại onHrOnboardingPosTypeChange() để dựng đúng
+// trạng thái cascading như lúc mới mở tab (KHÔNG để sót option Siêu Thị cũ nếu người dùng vừa chọn STORE).
+function resetHrOnboardingForm() {
+  const formEl = document.getElementById('hrOnboardingForm');
+  if (!formEl) return;
+  formEl.reset();
   document.getElementById('hrOnbPosType').value = 'HO';
   onHrOnboardingPosTypeChange();
-  renderHrOnboardingList();
 }
 
 async function retrySubmitHrOnboardingTicket(id) {
@@ -996,12 +1006,22 @@ async function submitHrOffboardingRequest(e) {
     alert(`⚠️ Đã lưu hồ sơ Offboarding nhưng CHƯA gửi được tới Hỗ Trợ IT: ${err.message}\nBấm "📨 Gửi Lại Tới Hỗ Trợ IT" ở danh sách bên dưới để thử lại.`);
   }
 
-  e.target.reset();
+  resetHrOffboardingForm();
+  renderHrOffboardingList();
+}
+
+// resetHrOffboardingForm() — form.reset() tự xoá input text hiển thị/ngày/2 checkbox lẫn hidden username
+// về mặc định (đều KHÔNG có attribute value=/checked= sẵn trong HTML), nhưng KHÔNG tự ẩn lại info-box đã
+// render JS (#hrOffbEmployeeInfo) — dọn tường minh rồi gọi lại updateHrOffboardingSubmitState() để khoá
+// lại nút gửi (form.reset() không tự bắn 'change' nên state nút không tự re-compute).
+function resetHrOffboardingForm() {
+  const formEl = document.getElementById('hrOffboardingForm');
+  if (!formEl) return;
+  formEl.reset();
   document.getElementById('hrOffbEmployeeUsername').value = '';
   document.getElementById('hrOffbEmployeeInfo').classList.add('hidden');
   document.getElementById('hrOffbEmployeeInfo').innerHTML = '';
   updateHrOffboardingSubmitState();
-  renderHrOffboardingList();
 }
 
 async function retrySubmitHrOffboardingTicket(id) {

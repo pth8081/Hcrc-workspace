@@ -1331,6 +1331,305 @@ async function main() {
       }
     );
 
+    // ================= 30) Vận Hành > Đặt Hàng HO/Siêu Thị (operationOrderForm) =================
+    await check(
+      'Vận Hành > Đặt Hàng: chip file đơn voFile (ĐÃ có data-op-change riêng đọc PDF tự điền form), "Làm Mới" trắng form + collapse bảng hạng mục về ĐÚNG 1 dòng trống + mở lại khối "Chi Tiết Từ Phiếu Đặt Hàng" + sinh lại mã đơn hàng mới',
+      async () => {
+        // operationOrders/operationStoreOpenings/operationRepairs: không thuộc 3 module gốc dùng
+        // _seed.js — bổ sung tay (renderOperationList() gọi .filter() thẳng lên DB.operation*, undefined
+        // sẽ vỡ ngay khi switchTab('vanHanh') tự render danh sách).
+        await page.evaluate(() => {
+          DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
+          switchTab('vanHanh');
+        });
+        await page.fill('#voTitle', 'Đặt hàng kiểm thử reset form');
+        await page.fill('#voSupplier', 'Công ty TNHH Kiểm Thử');
+        // Tệp KHÔNG phải PDF -> handleOperationOrderPdfUpload() chỉ đính kèm (gọi onSingleFileChosen()
+        // hiện chip), KHÔNG tự đọc/điền form (nhánh đọc PDF thật đã có bộ test riêng
+        // demo-operation-order-pdf-autofill.js, không lặp lại ở đây).
+        await page.setInputFiles('#voFile', fakeFile('bao-gia.jpg', 'noi dung anh', 'image/jpeg'));
+        const chip = await page.locator('#voFileChip').innerText();
+        assertTrue(chip.includes('bao-gia.jpg'), `Chip voFile phải hiện tên file, thực tế: ${chip}`);
+
+        // Thêm 2 dòng hạng mục (đã có sẵn 1 dòng mặc định khi vừa mở tab) -> 3 dòng, điền tên dòng đầu.
+        await page.click('button[data-op="addOperationOrderItemRow"]');
+        await page.click('button[data-op="addOperationOrderItemRow"]');
+        const rowsBefore = await page.locator('#operationOrderItemsTableBody tr').count();
+        assertTrue(rowsBefore === 3, `Phải có 3 dòng hạng mục trước khi Làm Mới, thực tế ${rowsBefore}`);
+        await page.fill('#operationOrderItemsTableBody tr:nth-child(1) input[data-field="name"]', 'Bút bi kiểm thử');
+
+        // Thu gọn khối "Chi Tiết Từ Phiếu Đặt Hàng" -> phải tự MỞ LẠI sau Làm Mới (mặc định mở).
+        await page.click('button[data-op="toggleOperationOrderPoDetailsBox"]');
+        const collapsedBeforeReset = await page.evaluate(() => document.getElementById('operationOrderPoDetailsBox').classList.contains('hidden'));
+        assertTrue(collapsedBeforeReset === true, 'Khối Chi Tiết Từ Phiếu Đặt Hàng phải đang THU GỌN (tiền đề bài test)');
+
+        const codeBeforeReset = await page.locator('#voCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'voCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#operationOrderForm button[data-arg1="resetOperationOrderForm"]');
+        const state = await page.evaluate(() => ({
+          voTitle: document.getElementById('voTitle').value,
+          voSupplier: document.getElementById('voSupplier').value,
+          voCode: document.getElementById('voCode').value,
+          voFileValue: document.getElementById('voFile').value,
+          voFileChip: document.getElementById('voFileChip').innerHTML,
+          itemRows: document.querySelectorAll('#operationOrderItemsTableBody tr').length,
+          itemName0: document.querySelector('#operationOrderItemsTableBody tr td input[data-field="name"]')?.value,
+          poBoxHidden: document.getElementById('operationOrderPoDetailsBox').classList.contains('hidden'),
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.voTitle === '', 'voTitle phải về rỗng');
+        assertTrue(state.voSupplier === '', 'voSupplier phải về rỗng');
+        assertTrue(/^HCRC-DH-/.test(state.voCode), `voCode phải được sinh lại đúng khuôn HCRC-DH-..., thực tế "${state.voCode}"`);
+        assertTrue(state.voFileValue === '', 'voFile input phải về rỗng');
+        assertTrue(state.voFileChip === '', 'Chip voFile phải biến mất sau Làm Mới');
+        assertTrue(state.itemRows === 1, `Bảng hạng mục phải collapse về ĐÚNG 1 dòng trống, thực tế ${state.itemRows}`);
+        assertTrue(state.itemName0 === '', `Tên hàng dòng còn lại phải rỗng, thực tế "${state.itemName0}"`);
+        assertTrue(state.poBoxHidden === false, 'Khối Chi Tiết Từ Phiếu Đặt Hàng phải MỞ LẠI (trạng thái mặc định) sau Làm Mới');
+      }
+    );
+
+    // ================= 31) Vận Hành > Siêu Thị > Mở Mới (operationStoreOpenForm) =================
+    await check(
+      'Vận Hành > Mở Mới Siêu Thị: chip file đơn vsoFile, "Làm Mới" trắng form (kể cả field "Ngân Sách Phê Duyệt — Danh Mục Đầu Tư" — ĐÃ đổi tên/chỉ còn 1 field ngân sách duy nhất từ VHST-1) + sinh lại mã đề xuất mới',
+      async () => {
+        await page.evaluate(() => {
+          DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
+          switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('OPEN');
+        });
+        await page.fill('#vsoStoreName', 'Siêu thị kiểm thử reset form');
+        await page.fill('#vsoAddress', '123 Đường Kiểm Thử, Quận 1');
+        await page.fill('#vsoArea', '500');
+        await page.fill('#vsoApprovedBudget', '5000000000');
+        await page.fill('#vsoOpenDate', '2027-01-01');
+        await page.fill('#vsoPersonInChargeInput', 'Người phụ trách kiểm thử');
+        await page.fill('#vsoNote', 'Ghi chú kiểm thử reset form.');
+        await page.setInputFiles('#vsoFile', fakeFile('khao-sat.pdf', 'noi dung', 'application/pdf'));
+        const chip = await page.locator('#vsoFileChip').innerText();
+        assertTrue(chip.includes('khao-sat.pdf'), `Chip vsoFile phải hiện tên file, thực tế: ${chip}`);
+
+        const codeBeforeReset = await page.locator('#vsoCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'vsoCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#operationStoreOpenForm button[data-arg1="resetOperationStoreOpenForm"]');
+        const state = await page.evaluate(() => ({
+          vsoStoreName: document.getElementById('vsoStoreName').value,
+          vsoAddress: document.getElementById('vsoAddress').value,
+          vsoArea: document.getElementById('vsoArea').value,
+          vsoApprovedBudget: document.getElementById('vsoApprovedBudget').value,
+          vsoOpenDate: document.getElementById('vsoOpenDate').value,
+          vsoPersonInChargeInput: document.getElementById('vsoPersonInChargeInput').value,
+          vsoNote: document.getElementById('vsoNote').value,
+          vsoCode: document.getElementById('vsoCode').value,
+          vsoFileValue: document.getElementById('vsoFile').value,
+          vsoFileChip: document.getElementById('vsoFileChip').innerHTML,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.vsoStoreName === '', 'vsoStoreName phải về rỗng');
+        assertTrue(state.vsoAddress === '', 'vsoAddress phải về rỗng');
+        assertTrue(state.vsoArea === '', 'vsoArea phải về rỗng');
+        assertTrue(state.vsoApprovedBudget === '', `Ngân Sách Phê Duyệt — Danh Mục Đầu Tư phải về rỗng, thực tế "${state.vsoApprovedBudget}"`);
+        assertTrue(state.vsoOpenDate === '', 'vsoOpenDate phải về rỗng');
+        assertTrue(state.vsoPersonInChargeInput === '', 'vsoPersonInChargeInput phải về rỗng');
+        assertTrue(state.vsoNote === '', 'vsoNote phải về rỗng');
+        assertTrue(/^HCRC-MMST-/.test(state.vsoCode), `vsoCode phải được sinh lại đúng khuôn HCRC-MMST-..., thực tế "${state.vsoCode}"`);
+        assertTrue(state.vsoFileValue === '', 'vsoFile input phải về rỗng');
+        assertTrue(state.vsoFileChip === '', 'Chip vsoFile phải biến mất sau Làm Mới');
+      }
+    );
+
+    // ================= 32) Vận Hành > Siêu Thị > Sửa Chữa (operationRepairForm) =================
+    await check(
+      'Vận Hành > Sửa Chữa Siêu Thị: chip file đơn vrFile, "Làm Mới" trắng form (kể cả field "Ngân Sách Phê Duyệt — Danh Mục Đầu Tư") + sinh lại mã đề xuất mới',
+      async () => {
+        await page.evaluate(() => {
+          DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
+          switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('REPAIR');
+        });
+        await page.fill('#vrStoreName', 'Siêu thị cần sửa kiểm thử');
+        await page.fill('#vrTitle', 'Sửa hệ thống điện kiểm thử reset form');
+        await page.fill('#vrApprovedBudget', '20000000');
+        await page.fill('#vrSupplier', 'Công ty thi công kiểm thử');
+        await page.fill('#vrPersonInChargeInput', 'Người phụ trách kiểm thử');
+        await page.fill('#vrDescription', 'Mô tả kiểm thử reset form.');
+        await page.setInputFiles('#vrFile', fakeFile('hien-trang.jpg', 'noi dung anh', 'image/jpeg'));
+        const chip = await page.locator('#vrFileChip').innerText();
+        assertTrue(chip.includes('hien-trang.jpg'), `Chip vrFile phải hiện tên file, thực tế: ${chip}`);
+
+        const codeBeforeReset = await page.locator('#vrCode').inputValue();
+        assertTrue(codeBeforeReset !== '', 'vrCode phải tự sinh sẵn khi vừa mở tab');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#operationRepairForm button[data-arg1="resetOperationRepairForm"]');
+        const state = await page.evaluate(() => ({
+          vrStoreName: document.getElementById('vrStoreName').value,
+          vrTitle: document.getElementById('vrTitle').value,
+          vrApprovedBudget: document.getElementById('vrApprovedBudget').value,
+          vrSupplier: document.getElementById('vrSupplier').value,
+          vrPersonInChargeInput: document.getElementById('vrPersonInChargeInput').value,
+          vrDescription: document.getElementById('vrDescription').value,
+          vrCode: document.getElementById('vrCode').value,
+          vrFileValue: document.getElementById('vrFile').value,
+          vrFileChip: document.getElementById('vrFileChip').innerHTML,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.vrStoreName === '', 'vrStoreName phải về rỗng');
+        assertTrue(state.vrTitle === '', 'vrTitle phải về rỗng');
+        assertTrue(state.vrApprovedBudget === '', `Ngân Sách Phê Duyệt — Danh Mục Đầu Tư phải về rỗng, thực tế "${state.vrApprovedBudget}"`);
+        assertTrue(state.vrSupplier === '', 'vrSupplier phải về rỗng');
+        assertTrue(state.vrPersonInChargeInput === '', 'vrPersonInChargeInput phải về rỗng');
+        assertTrue(state.vrDescription === '', 'vrDescription phải về rỗng');
+        assertTrue(/^HCRC-SCST-/.test(state.vrCode), `vrCode phải được sinh lại đúng khuôn HCRC-SCST-..., thực tế "${state.vrCode}"`);
+        assertTrue(state.vrFileValue === '', 'vrFile input phải về rỗng');
+        assertTrue(state.vrFileChip === '', 'Chip vrFile phải biến mất sau Làm Mới');
+      }
+    );
+
+    // ================= 33) Nhân Sự > Onboarding/Offboarding > Onboarding (hrOnboardingForm) =================
+    await check(
+      'Nhân Sự > Onboarding: "Làm Mới" đưa cascading picker Vị Trí về ĐÚNG mặc định HO (dropdown Chức Danh re-populate lại đúng danh mục HO, KHÔNG còn sót option Siêu Thị vừa chọn) + trắng toàn bộ form',
+      async () => {
+        // hrOnboardingRequests: không thuộc 3 module gốc — bổ sung tay. DB.stores/DB.storeJobTitles seed
+        // thêm nội dung THẤY ĐƯỢC để phân biệt rõ với DB.jobTitles (HO) khi kiểm tra cascading.
+        await page.evaluate(() => {
+          DB.hrOnboardingRequests = [];
+          DB.stores = ['Siêu Thị Quận 7'];
+          DB.storeJobTitles = [{ label: 'Nhân viên bán hàng' }, { label: 'Quản lý ca' }];
+          switchTab('hrLifecycle');
+        });
+
+        const initialState = await page.evaluate(() => ({
+          posType: document.getElementById('hrOnbPosType').value,
+          deptWrapHidden: document.getElementById('hrOnbDeptWrap').classList.contains('hidden'),
+          storeWrapHidden: document.getElementById('hrOnbStoreWrap').classList.contains('hidden'),
+          jobTitleOptions: Array.from(document.getElementById('hrOnbJobTitle').options).map(o => o.value)
+        }));
+        assertTrue(initialState.posType === 'HO', `Vị Trí mặc định phải là HO khi vừa mở tab, thực tế "${initialState.posType}"`);
+        assertTrue(initialState.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN khi đang ở HO (tiền đề bài test)');
+        assertTrue(initialState.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN khi đang ở HO (tiền đề bài test)');
+        assertTrue(!initialState.jobTitleOptions.includes('Nhân viên bán hàng'), 'Chức Danh lúc đầu (HO) KHÔNG được có option Siêu Thị (tiền đề bài test)');
+
+        // Chuyển sang Siêu Thị -> cascading phải đổi đúng: ẩn Phòng Ban, hiện Siêu Thị, Chức Danh đổi
+        // sang danh mục Siêu Thị, Email chuyển bắt buộc.
+        await page.selectOption('#hrOnbPosType', 'STORE');
+        const storeState = await page.evaluate(() => ({
+          deptWrapHidden: document.getElementById('hrOnbDeptWrap').classList.contains('hidden'),
+          storeWrapHidden: document.getElementById('hrOnbStoreWrap').classList.contains('hidden'),
+          jobTitleOptions: Array.from(document.getElementById('hrOnbJobTitle').options).map(o => o.value),
+          emailRequired: document.getElementById('hrOnbEmail').required
+        }));
+        assertTrue(storeState.deptWrapHidden === true, 'Khối Phòng Ban phải ẨN khi đang ở Siêu Thị (tiền đề bài test)');
+        assertTrue(storeState.storeWrapHidden === false, 'Khối Siêu Thị phải HIỆN khi đang ở Siêu Thị (tiền đề bài test)');
+        assertTrue(storeState.jobTitleOptions.includes('Nhân viên bán hàng') && storeState.jobTitleOptions.includes('Quản lý ca'), `Chức Danh phải đổi sang danh mục Siêu Thị, thực tế ${JSON.stringify(storeState.jobTitleOptions)}`);
+        assertTrue(storeState.emailRequired === true, 'Email phải chuyển bắt buộc khi đang ở Siêu Thị (tiền đề bài test)');
+
+        await page.fill('#hrOnbEmployeeCode', 'NV9999');
+        await page.fill('#hrOnbFullName', 'Nguyễn Văn Kiểm Thử');
+        await page.selectOption('#hrOnbStore', 'Siêu Thị Quận 7');
+        await page.selectOption('#hrOnbJobTitle', 'Nhân viên bán hàng');
+        await page.fill('#hrOnbEmail', 'test@company.com');
+        await page.fill('#hrOnbPhone', '0912345678');
+        await page.fill('#hrOnbStartDate', '2026-10-01');
+        await page.fill('#hrOnbNote', 'Ghi chú kiểm thử reset form.');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#hrOnboardingForm button[data-arg1="resetHrOnboardingForm"]');
+        const state = await page.evaluate(() => ({
+          posType: document.getElementById('hrOnbPosType').value,
+          deptWrapHidden: document.getElementById('hrOnbDeptWrap').classList.contains('hidden'),
+          storeWrapHidden: document.getElementById('hrOnbStoreWrap').classList.contains('hidden'),
+          jobTitleOptions: Array.from(document.getElementById('hrOnbJobTitle').options).map(o => o.value),
+          emailRequired: document.getElementById('hrOnbEmail').required,
+          employeeCode: document.getElementById('hrOnbEmployeeCode').value,
+          fullName: document.getElementById('hrOnbFullName').value,
+          email: document.getElementById('hrOnbEmail').value,
+          phone: document.getElementById('hrOnbPhone').value,
+          startDate: document.getElementById('hrOnbStartDate').value,
+          note: document.getElementById('hrOnbNote').value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.posType === 'HO', `Vị Trí phải về ĐÚNG mặc định HO sau Làm Mới, thực tế "${state.posType}"`);
+        assertTrue(state.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN lại sau Làm Mới (đã về HO)');
+        assertTrue(state.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN lại sau Làm Mới (đã về HO), KHÔNG được kẹt lại ở trạng thái Siêu Thị vừa chọn');
+        assertTrue(!state.jobTitleOptions.includes('Nhân viên bán hàng'), `Chức Danh phải re-populate lại ĐÚNG danh mục HO (không còn sót option Siêu Thị "Nhân viên bán hàng"), thực tế ${JSON.stringify(state.jobTitleOptions)}`);
+        assertTrue(state.emailRequired === false, 'Email phải hết bắt buộc sau khi về lại HO');
+        assertTrue(state.employeeCode === '', 'hrOnbEmployeeCode phải về rỗng');
+        assertTrue(state.fullName === '', 'hrOnbFullName phải về rỗng');
+        assertTrue(state.email === '', 'hrOnbEmail phải về rỗng');
+        assertTrue(state.phone === '', 'hrOnbPhone phải về rỗng');
+        assertTrue(state.startDate === '', 'hrOnbStartDate phải về rỗng');
+        assertTrue(state.note === '', 'hrOnbNote phải về rỗng');
+      }
+    );
+
+    // ================= 34) Nhân Sự > Onboarding/Offboarding > Offboarding (hrOffboardingForm) =================
+    await check(
+      'Nhân Sự > Offboarding: chọn nhân viên qua sdd-picker + tích đủ 2 checkbox -> nút gửi MỞ ra, "Làm Mới" xoá sạch sdd-picker (hidden username + info-box) + ngày nghỉ việc + bỏ tick 2 checkbox + khoá lại nút gửi (updateHrOffboardingSubmitState() re-compute, KHÔNG dựa vào form.reset() tự bắn change)',
+      async () => {
+        await page.evaluate(() => {
+          DB.hrOffboardingRequests = [];
+          switchTab('hrLifecycle');
+        });
+        await page.click('#btnHrLifecycleSubOffboard');
+
+        // Chọn nhân viên qua sdd-picker — gọi thẳng resolveHrOffboardingEmployeeInput() với nhãn ĐÚNG
+        // khuôn "Tên — Phòng ban (username)" (cùng khuôn resolveTrainingInstructorInput() ở
+        // test-internal-training.js), khớp đúng user 'admin' đã seed sẵn ở tests/_seed.js.
+        await page.evaluate(() => {
+          document.getElementById('hrOffbEmployeeInput').value = 'Quản Trị Viên — Ban Giám Đốc (admin)';
+          resolveHrOffboardingEmployeeInput(document.getElementById('hrOffbEmployeeInput').value);
+        });
+        const pickedState = await page.evaluate(() => ({
+          username: document.getElementById('hrOffbEmployeeUsername').value,
+          infoHidden: document.getElementById('hrOffbEmployeeInfo').classList.contains('hidden'),
+          infoText: document.getElementById('hrOffbEmployeeInfo').innerText,
+          btnDisabled: document.getElementById('btnSubmitHrOffboarding').disabled
+        }));
+        assertTrue(pickedState.username === 'admin', `Phải khớp đúng username 'admin' (tiền đề bài test), thực tế "${pickedState.username}"`);
+        assertTrue(pickedState.infoHidden === false, 'Info-box nhân viên phải HIỆN sau khi chọn đúng (tiền đề bài test)');
+        assertTrue(pickedState.infoText.includes('Quản Trị Viên'), `Info-box phải hiện đúng tên nhân viên, thực tế: ${pickedState.infoText}`);
+        assertTrue(pickedState.btnDisabled === true, 'Nút gửi vẫn phải KHOÁ (chưa đủ ngày nghỉ việc/2 checkbox) — tiền đề bài test');
+
+        await page.fill('#hrOffbLastWorkingDate', '2026-12-31');
+        await page.check('#hrOffbChecklistHandover');
+        await page.check('#hrOffbChecklistBenefits');
+        await page.fill('#hrOffbReason', 'Lý do kiểm thử reset form.');
+        const readyState = await page.evaluate(() => document.getElementById('btnSubmitHrOffboarding').disabled);
+        assertTrue(readyState === false, 'Nút gửi phải MỞ RA khi đã đủ nhân viên + ngày nghỉ việc + tích đủ 2 checkbox (tiền đề bài test)');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#hrOffboardingForm button[data-arg1="resetHrOffboardingForm"]');
+        const state = await page.evaluate(() => ({
+          employeeInput: document.getElementById('hrOffbEmployeeInput').value,
+          employeeUsername: document.getElementById('hrOffbEmployeeUsername').value,
+          infoHidden: document.getElementById('hrOffbEmployeeInfo').classList.contains('hidden'),
+          infoHtml: document.getElementById('hrOffbEmployeeInfo').innerHTML,
+          lastWorkingDate: document.getElementById('hrOffbLastWorkingDate').value,
+          handoverChecked: document.getElementById('hrOffbChecklistHandover').checked,
+          benefitsChecked: document.getElementById('hrOffbChecklistBenefits').checked,
+          reason: document.getElementById('hrOffbReason').value,
+          btnDisabled: document.getElementById('btnSubmitHrOffboarding').disabled,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.employeeInput === '', 'hrOffbEmployeeInput phải về rỗng');
+        assertTrue(state.employeeUsername === '', 'hrOffbEmployeeUsername (hidden) phải về rỗng');
+        assertTrue(state.infoHidden === true, 'Info-box nhân viên phải ẨN lại sau Làm Mới');
+        assertTrue(state.infoHtml === '', 'Info-box nhân viên phải trắng nội dung sau Làm Mới');
+        assertTrue(state.lastWorkingDate === '', 'hrOffbLastWorkingDate phải về rỗng');
+        assertTrue(state.handoverChecked === false, 'Checkbox Bàn Giao phải bỏ tick');
+        assertTrue(state.benefitsChecked === false, 'Checkbox Chế Độ phải bỏ tick');
+        assertTrue(state.reason === '', 'hrOffbReason phải về rỗng');
+        assertTrue(state.btnDisabled === true, 'Nút gửi phải KHOÁ LẠI sau Làm Mới (updateHrOffboardingSubmitState() re-compute)');
+      }
+    );
+
   } finally {
     const total = results.length;
     const passed = results.filter((r) => r.ok).length;

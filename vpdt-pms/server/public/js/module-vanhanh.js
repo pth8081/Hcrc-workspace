@@ -494,6 +494,10 @@ function poFillMoneyField(id, value) {
 // khác (ảnh báo giá/hợp đồng scan...) giữ nguyên hành vi CŨ (chỉ đính kèm, không tự đọc) vì đây là
 // hành vi MỚI HOÀN TOÀN, không có gì để tự đọc từ ảnh/docx.
 async function handleOperationOrderPdfUpload(event) {
+  // Chip "📎 tên file [✕]" dùng chung (xem onSingleFileChosen()/core.js) — voFile ĐÃ có data-op-change
+  // riêng cho nghiệp vụ đọc PDF nên gọi thẳng hàm chip ở đây thay vì gắn thêm data-op-change="onSingleFileChosen"
+  // song song trên HTML (1 input chỉ nhận 1 data-op-change) — cùng khuôn onItPriceFileChange() (module-itsupport-price.js).
+  onSingleFileChosen(event.target, 'voFileChip');
   const file = event.target.files && event.target.files[0];
   const statusEl = document.getElementById('voPdfParseStatus');
   if (!statusEl) return;
@@ -614,11 +618,27 @@ async function submitOperationOrder(e) {
   notifyOperationApprovalNeeded('operationOrders', newItem);
 
   alert('✅ Đã gửi đơn hàng thành công!');
-  e.target.reset();
+  resetOperationOrderForm();
+  renderOperationOrderList();
+}
+
+// resetOperationOrderForm() — dọn form + trạng thái JS riêng: mã tự sinh mới, bảng hạng mục về đúng 1
+// dòng trống (operationOrderItems[]), ẩn lại khối trạng thái đọc PDF, thu gọn về đúng trạng thái MỞ mặc
+// định của "Chi Tiết Từ Phiếu Đặt Hàng" (đúng như lúc mới mở tab), xoá chip file voFile (form.reset()
+// không tự bắn 'change' nên chip cũ phải xoá tường minh, xem clearSingleFileInput()/core.js).
+function resetOperationOrderForm() {
+  const formEl = document.getElementById('operationOrderForm');
+  if (!formEl) return;
+  formEl.reset();
   document.getElementById('voCode').value = generateOperationOrderCode();
   operationOrderItems = [];
   addOperationOrderItemRow();
-  renderOperationOrderList();
+  clearSingleFileInput('voFile', 'voFileChip');
+  document.getElementById('voPdfParseStatus').classList.add('hidden');
+  const poBox = document.getElementById('operationOrderPoDetailsBox');
+  if (poBox) poBox.classList.remove('hidden');
+  const poToggleBtn = document.querySelector('[data-op="toggleOperationOrderPoDetailsBox"]');
+  if (poToggleBtn) poToggleBtn.innerText = poToggleBtn.innerText.replace(/^[▾▸]/, '▾');
 }
 
 async function submitOperationStoreOpening(e) {
@@ -666,13 +686,22 @@ async function submitOperationStoreOpening(e) {
   // riêng, vẫn giữ nguyên quy trình duyệt cũ).
 
   alert('✅ Đã lưu đề xuất mở mới siêu thị thành công!');
-  e.target.reset();
-  document.getElementById('vsoCode').value = generateOperationStoreOpenCode();
+  resetOperationStoreOpenForm();
   renderOperationList('operationStoreOpenings');
   // Mục G: tự động chuyển sang tab "Danh mục đầu tư" + mở modal ngay cho hồ sơ vừa tạo, để người lập
   // tiếp tục nhập chi phí luôn mà không phải tự tìm lại hồ sơ ở tab khác.
   setOperationStoreSubTab('ESTIMATE');
   openOperationEstimateModal('operationStoreOpenings', newItem.id);
+}
+
+// resetOperationStoreOpenForm() — form.reset() tự xoá input text/hidden (vsoPersonInChargeUsername) về
+// '' đúng ý, chỉ cần bổ sung mã tự sinh mới + chip file vsoFile (xem lý do chung ở resetOperationOrderForm()).
+function resetOperationStoreOpenForm() {
+  const formEl = document.getElementById('operationStoreOpenForm');
+  if (!formEl) return;
+  formEl.reset();
+  document.getElementById('vsoCode').value = generateOperationStoreOpenCode();
+  clearSingleFileInput('vsoFile', 'vsoFileChip');
 }
 
 async function submitOperationRepair(e) {
@@ -715,12 +744,20 @@ async function submitOperationRepair(e) {
   // Mục H — cùng lý do đã bỏ notifyOperationApprovalNeeded() ở submitOperationStoreOpening() trên.
 
   alert('✅ Đã lưu đề xuất sửa chữa siêu thị thành công!');
-  e.target.reset();
-  document.getElementById('vrCode').value = generateOperationRepairCode();
+  resetOperationRepairForm();
   renderOperationList('operationRepairs');
   // Mục G — cùng lý do đã thêm ở submitOperationStoreOpening() trên.
   setOperationStoreSubTab('ESTIMATE');
   openOperationEstimateModal('operationRepairs', newItem.id);
+}
+
+// resetOperationRepairForm() — cùng lý do resetOperationStoreOpenForm() ở trên.
+function resetOperationRepairForm() {
+  const formEl = document.getElementById('operationRepairForm');
+  if (!formEl) return;
+  formEl.reset();
+  document.getElementById('vrCode').value = generateOperationRepairCode();
+  clearSingleFileInput('vrFile', 'vrFileChip');
 }
 
 function notifyOperationApprovalNeeded(kind, item) {
@@ -3000,7 +3037,13 @@ const OP_CLICK_ACTIONS = {
   // định) nên PHẢI khai báo tường minh 2 handler pmsAdd/pmsRemove ở đây, nếu không nút chọn/bỏ chọn
   // người phụ trách trong picker sẽ IM LẶNG không hoạt động.
   pmsAdd: el => pmsAdd(el.dataset.arg0, el.dataset.arg1),
-  pmsRemove: el => pmsRemove(el.dataset.arg0, el.dataset.arg1)
+  pmsRemove: el => pmsRemove(el.dataset.arg0, el.dataset.arg1),
+  // Đợt E (UX rollout — nút "↺ Làm Mới"/chip "✕ Xoá file" cho 3 form Tạo Mới của module này) — cùng lý
+  // do pmsAdd/pmsRemove ở trên: 2 hạ tầng dùng chung ở core.js (confirmAndResetForm()/clearSingleFileInput(),
+  // vốn giả định bindCspDelegation() dùng chung window[fnName]) PHẢI khai báo tường minh ở đây, nếu
+  // không nút "Làm Mới" lẫn nút "✕" trong chip file sẽ IM LẶNG không hoạt động trong module Vận Hành.
+  confirmAndResetForm: el => confirmAndResetForm(el.dataset.arg0, el.dataset.arg1),
+  clearSingleFileInput: el => clearSingleFileInput(el.dataset.arg0, el.dataset.arg1)
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -3026,7 +3069,13 @@ const OP_CHANGE_ACTIONS = {
   // cspDispatchOp() (core.js) tự đọc data-arg-el/data-arg1/data-arg2 để dựng lại đúng thứ tự tham số.
   // cspCoerceArg() (core.js) — ép id về Number (giống hệt cspReadArgSlot() ở đường dispatch chung),
   // KHÔNG được để nguyên chuỗi: mọi hàm điều phối phía dưới đều so sánh id bằng "===" với x.id (number).
-  handleActionCellDispatch: el => handleActionCellDispatch(el, el.dataset.arg1, cspCoerceArg(el.dataset.arg2))
+  handleActionCellDispatch: el => handleActionCellDispatch(el, el.dataset.arg1, cspCoerceArg(el.dataset.arg2)),
+  // Đợt E — cùng lý do confirmAndResetForm/clearSingleFileInput ở OP_CLICK_ACTIONS trên: onSingleFileChosen()
+  // (core.js) gắn qua data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="<chip>" ở HTML
+  // (vsoFile/vrFile) — nhưng cơ chế đó chỉ hiểu bởi cspDispatchOp() (bindCspDelegation() dùng chung),
+  // KHÔNG phải OP_CHANGE_ACTIONS riêng của module này, nên phải khai tường minh: đọc "arg1" TRỰC TIẾP từ
+  // el.dataset (không qua cspReadArgSlot()) vì el chính là input file cần truyền (data-arg-el="0").
+  onSingleFileChosen: el => onSingleFileChosen(el, el.dataset.arg1)
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
