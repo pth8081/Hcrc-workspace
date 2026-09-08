@@ -650,7 +650,11 @@ function filterTasksForUser(tasks, user, appData) {
 // họ, không cần thấy số lượng phân bổ của siêu thị khác). Kỳ không còn phần tử nào khớp thì ẩn hẳn.
 function canViewUniformPeriod(user, item) {
   if (!user) return false;
-  return !!(user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformStoreManage);
+  // uniformApprove: người CHỈ có quyền duyệt (không kèm uniformManage/uniformStoreManage) — thiếu nhánh
+  // này khiến canApproveUniform() (lib/recordActions.js, admin||uniformApprove||uniformManage) cho họ
+  // duyệt được kỳ cấp phát, nhưng GET /api/data lại lọc sạch uniformPeriods nên họ không thấy bất kỳ kỳ
+  // nào để mà duyệt — "duyệt được nhưng danh sách rỗng", cùng lớp lỗi đã sửa ở canViewOperationStoreOpening().
+  return !!(user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformStoreManage || user.perms?.uniformApprove);
 }
 
 // approvalStatus (Phase 2): kỳ CHƯA được duyệt (PENDING_APPROVAL) hoặc đã REJECTED thì Giám Đốc Siêu
@@ -659,7 +663,10 @@ function canViewUniformPeriod(user, item) {
 // Kỳ tạo TRƯỚC Phase 2 (không có field approvalStatus) coi như đã được chấp nhận — vẫn hiện như cũ.
 function filterUniformPeriodsForUser(items, user) {
   if (!user) return [];
-  if (user.perms?.admin || user.perms?.uniformManage) return items || [];
+  // uniformApprove: cùng lý do ở canViewUniformPeriod() ngay trên — người CHỈ duyệt (không tạo/quản lý
+  // kỳ) vẫn cần thấy TOÀN BỘ kỳ (kể cả PENDING_APPROVAL, kể cả allocations của MỌI siêu thị) để duyệt
+  // được, không bị cắt xén như Giám Đốc Siêu Thị (uniformStoreManage) ở nhánh dưới.
+  if (user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformApprove) return items || [];
   if (!user.perms?.uniformStoreManage) return [];
   return (items || [])
     .filter(p => !p.approvalStatus || p.approvalStatus === 'APPROVED')

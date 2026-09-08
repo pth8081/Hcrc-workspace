@@ -28,7 +28,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
-const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser } = require('../lib/recordViewScope');
+const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -168,6 +168,11 @@ function buildActionHandlers(state) {
     'uniformPeriods:approve': (u, item) => recordActions.approveUniformPeriod(u, item),
     'uniformPeriods:reject': (u, item, body) => recordActions.rejectUniformPeriod(u, item, body),
     'uniformTransfers:reject': (u, item, body) => recordActions.rejectUniformTransfer(u, item, body),
+    // Nhân viên tự xác nhận đã nhận đồng phục — mirror ĐÚNG routes/records.js POST
+    // /uniformIssuances/:id/acknowledge, thiếu entry này khiến mock trả 400 "Mock chưa hỗ trợ hành động"
+    // cho MỌI test có bước "nhân viên xác nhận nhận đồng phục" (phát hiện khi viết kịch bản đóng vai HC/
+    // GD ST/NV end-to-end).
+    'uniformIssuances:acknowledge': (u, item) => recordActions.acknowledgeUniformIssuance(u, item),
 
     // ===== HỖ TRỢ IT — Phê Duyệt Giá =====
     'itPriceApprovals:apply': (u, item) => recordActions.applyPriceApproval(u, item),
@@ -339,6 +344,15 @@ function createDispatcher(state) {
       // canViewOperationStoreOpening()/canViewOperationRepair() chỉ check admin (đã fix trong đợt này).
       data.operationStoreOpenings = filterOperationStoreOpeningsForUser(state.operationStoreOpenings, viewer, data);
       data.operationRepairs = filterOperationRepairsForUser(state.operationRepairs, viewer, data);
+      // Đồng Phục — mirror ĐÚNG bước lọc thật routes/data.js (filterUniformPeriodsForUser/
+      // filterUniformIssuancesForUser/filterUniformStockAdjustmentsForUser/filterUniformTransfersForUser),
+      // cùng lý do các collection ở trên: trước đây mock trả nguyên state không lọc, khiến test đóng vai
+      // (HC/GD ST/nhân viên) không thể phát hiện thật sự có bị lộ dữ liệu ngoài phạm vi phòng ban/siêu thị
+      // qua GET /api/data hay không.
+      data.uniformPeriods = filterUniformPeriodsForUser(state.uniformPeriods, viewer);
+      data.uniformIssuances = filterUniformIssuancesForUser(state.uniformIssuances, viewer);
+      data.uniformStockAdjustments = filterUniformStockAdjustmentsForUser(state.uniformStockAdjustments, viewer);
+      data.uniformTransfers = filterUniformTransfersForUser(state.uniformTransfers, viewer);
     }
     return data;
   }

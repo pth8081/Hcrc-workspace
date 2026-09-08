@@ -225,11 +225,15 @@ async function main() {
 
     // ===== 11) Điều Chuyển Kho — duyệt thành công, dời tồn kho ĐÚNG cả 2 siêu thị =====
     await run.run('Điều Chuyển: APPROVER duyệt -> tồn kho A giảm 5, tồn kho B tăng 5', async () => {
+      // Đăng nhập APPROVER TRƯỚC khi tính "before" — GD_B (người đăng nhập ở bước trước) theo đúng
+      // filterUniformPeriodsForUser() thật CHỈ thấy phân bổ của Siêu Thị B (đúng thiết kế "GD Siêu Thị
+      // chỉ thấy siêu thị mình"), không tính được tồn kho Siêu Thị A — phải tính "before"/"after" bằng
+      // CÙNG 1 người có đủ tầm nhìn (APPROVER: uniformApprove thấy toàn bộ) để so sánh cho đúng.
+      await loginAs(page, APPROVER);
       const before = await page.evaluate(() => ({
         a: computeUniformStockClient('Siêu Thị A').get('Áo đồng phục nam|||L').stock,
         b: computeUniformStockClient('Siêu Thị B').get('Áo đồng phục nam|||L').stock
       }));
-      await loginAs(page, APPROVER);
       const result = await page.evaluate(async (id) => {
         const r = await callRecordAction('uniformTransfers', id, 'approve', {});
         const idx = DB.uniformTransfers.findIndex(x => x.id === id);

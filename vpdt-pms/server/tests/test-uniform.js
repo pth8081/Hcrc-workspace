@@ -51,6 +51,12 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { browser, page } = await launchPage(PORT, state);
   const run = createRunner();
+  // Chụp lại id kỳ "Đợt hè 2026" + id phân bổ Siêu Thị Hội An NGAY lúc tạo (đăng nhập HC, thấy hết) — 1
+  // số kịch bản bên dưới cần gọi confirm-allocation/reject/approve khi ĐANG đăng nhập vai trò KHÔNG đủ
+  // quyền xem kỳ này qua GET /api/data thật (GD Siêu Thị không thấy kỳ PENDING_APPROVAL, người không có
+  // quyền nào không thấy kỳ nào cả — đúng filterUniformPeriodsForUser() thật) — không thể
+  // DB.uniformPeriods.find(...) lại SAU KHI đã đổi vai trò, phải dùng id đã chụp sẵn từ trước.
+  let summerPeriodId, summerAllocHoiAnId, summerAllocDaNangId;
 
   try {
     // ===== 1) Happy path: Hành Chính tạo kỳ cấp phát cho 2 siêu thị =====
@@ -78,9 +84,15 @@ async function main() {
           found: !!p,
           allocCount: p ? p.allocations.length : 0,
           statuses: p ? p.allocations.map(a => a.status) : [],
-          hoiAnQty: p ? p.allocations.find(a => a.dept === 'Siêu Thị Hội An').items[0].qty : null
+          hoiAnQty: p ? p.allocations.find(a => a.dept === 'Siêu Thị Hội An').items[0].qty : null,
+          periodId: p ? p.id : null,
+          allocHoiAnId: p ? p.allocations.find(a => a.dept === 'Siêu Thị Hội An').id : null,
+          allocDaNangId: p ? p.allocations.find(a => a.dept === 'Siêu Thị Đà Nẵng').id : null
         };
       });
+      summerPeriodId = result.periodId;
+      summerAllocHoiAnId = result.allocHoiAnId;
+      summerAllocDaNangId = result.allocDaNangId;
       assert(result.found, 'Kỳ cấp phát vừa tạo phải xuất hiện trong DB.uniformPeriods');
       assertEqual(result.allocCount, 2, 'Phải có đúng 2 dòng phân bổ (2 siêu thị)');
       assert(result.statuses.every(s => s === 'PENDING_CONFIRM'), `Mọi phân bổ mới tạo phải ở trạng thái PENDING_CONFIRM, thực tế: ${result.statuses}`);
@@ -124,18 +136,19 @@ async function main() {
     // ===== 3b) Phase 2: kỳ mới tạo mặc định PENDING_APPROVAL, chặn xác nhận cho tới khi được duyệt =====
     await run.run('Phase 2: kỳ chưa được duyệt (PENDING_APPROVAL) thì Giám Đốc Siêu Thị chưa xác nhận được', async () => {
       await loginAs(page, GD_HOIAN);
-      const result = await page.evaluate(async () => {
+      // Sau khi HC tạo kỳ (PENDING_APPROVAL), GD_HOIAN (uniformStoreManage) chưa được view-scope cho
+      // xem các kỳ PENDING_APPROVAL (đúng luật thật) nên không thể tự DB.uniformPeriods.find(...) —
+      // phải dùng ID đã capture lúc còn là HC.
+      const result = await page.evaluate(async ({ periodId, allocId }) => {
         window.__resetCapture();
-        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
-        const alloc = p.allocations.find(a => a.dept === 'Siêu Thị Hội An');
         try {
-          await callRecordAction('uniformPeriods', p.id, 'confirm-allocation', { allocationId: alloc.id });
-          return { errorMsg: null, approvalStatus: p.approvalStatus };
+          await callRecordAction('uniformPeriods', periodId, 'confirm-allocation', { allocationId: allocId });
+          return { errorMsg: null };
         } catch (err) {
-          return { errorMsg: err.message, approvalStatus: p.approvalStatus };
+          return { errorMsg: err.message };
         }
-      });
-      assertEqual(result.approvalStatus, 'PENDING_APPROVAL', 'Kỳ mới tạo phải mặc định PENDING_APPROVAL');
+      }, { periodId: summerPeriodId, allocId: summerAllocHoiAnId });
+      assert(summerPeriodId, 'Phải capture được periodId từ bước tạo kỳ trước đó');
       assertIncludes(result.errorMsg, 'chưa được duyệt', 'Server phải chặn xác nhận khi kỳ chưa được duyệt');
     });
 
@@ -159,16 +172,17 @@ async function main() {
     // ===== 3c-2) Người hoàn toàn không có quyền (không admin/uniformManage/uniformApprove) vẫn bị chặn =====
     await run.run('Người không có quyền nào thì không duyệt được kỳ cấp phát', async () => {
       await loginAs(page, EMP_NOPERM);
-      const result = await page.evaluate(async () => {
+      // EMP_NOPERM không có bất kỳ quyền uniform nào nên view-scope thật sự trả về DB.uniformPeriods
+      // rỗng — phải dùng ID đã capture lúc còn là HC, không thể tự DB.uniformPeriods.find(...).
+      const result = await page.evaluate(async (periodId) => {
         window.__resetCapture();
-        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
         try {
-          await callRecordAction('uniformPeriods', p.id, 'reject', { reason: 'test' });
+          await callRecordAction('uniformPeriods', periodId, 'reject', { reason: 'test' });
           return { errorMsg: null };
         } catch (err) {
           return { errorMsg: err.message };
         }
-      });
+      }, summerPeriodId);
       assertIncludes(result.errorMsg, 'Bạn không có quyền duyệt', 'Server phải chặn người không có quyền duyệt kỳ cấp phát');
     });
 
@@ -241,14 +255,14 @@ async function main() {
     // ===== 5) Nhân viên (không có uniformStoreManage) không xác nhận được phân bổ =====
     await run.run('Permission: nhân viên không có uniformStoreManage bị chặn khi xác nhận phân bổ', async () => {
       await loginAs(page, NV_HOIAN);
-      const result = await page.evaluate(async () => {
+      // NV_HOIAN không có uniformStoreManage nên view-scope thật sự trả về DB.uniformPeriods rỗng —
+      // phải dùng id đã capture lúc còn là HC, không thể tự DB.uniformPeriods.find(...).
+      const result = await page.evaluate(async ({ periodId, allocId }) => {
         switchTab('uniform');
-        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
-        const alloc = p.allocations.find(a => a.dept === 'Siêu Thị Đà Nẵng'); // vẫn đang PENDING_CONFIRM
-        confirmUniformAllocationAction(p.id, alloc.id);
+        confirmUniformAllocationAction(periodId, allocId); // vẫn đang PENDING_CONFIRM
         await window.__confirmPending();
         return { alerts: window.__alerts };
-      });
+      }, { periodId: summerPeriodId, allocId: summerAllocDaNangId });
       assertIncludes(result.alerts, 'Bạn không có quyền xác nhận nhận đồng phục', 'Server phải chặn người không có quyền uniformStoreManage');
     });
 
@@ -314,22 +328,29 @@ async function main() {
       assertEqual(result.issuanceCount, 1, 'Không được tạo thêm phiếu cấp phát nào khi vượt tồn kho');
     });
 
-    // ===== 9) Kho: người không có quyền quản lý chỉ được XEM, không vào được Kỳ Cấp Phát/Xác Nhận =====
-    await run.run('Kho: nhân viên không có quyền chỉ xem tồn kho (view-only), không vào được tab quản lý', async () => {
+    // ===== 9) Kho: người không có quyền quản lý không vào được module Đồng Phục — chỉ đúng 2 vai trò
+    // (Hành Chính/Giám Đốc Siêu Thị) theo thiết kế hiện tại, KHÔNG có tầng "view-only" riêng cho nhân
+    // viên thường (xem deploy/Huong-dan-nghiep-vu.md mục Đồng Phục: "2 vai trò"). canAccessUniformModule()
+    // (public/js/core.js) đòi 1 trong 3 quyền uniformManage/uniformStoreManage/uniformApprove — nhân
+    // viên perms:{} không có quyền nào trong đó nên KHÔNG vào được module, và GET /api/data thật
+    // (filterUniformPeriodsForUser()) cũng trả về [] cho họ — 2 lớp chặn khớp nhau, không có khoảng hở.
+    // (Assertion cũ ở đây từng kỳ vọng nhân viên vẫn tính được tồn kho — đó là kỳ vọng SAI so với thiết
+    // kế thật, chỉ "pass" trước đây vì tests/testHarness.js chưa mô phỏng đúng bước lọc quyền xem thật
+    // của server cho Đồng Phục — nay đã bổ sung đúng bước lọc đó, xem buildDataPayload().)
+    await run.run('Kho: nhân viên không có quyền không vào được module Đồng Phục (không có tầng "view-only")', async () => {
       await loginAs(page, NV_HOIAN);
       const result = await page.evaluate(() => {
-        switchTab('uniform');
-        setUniformSubTab('PERIODS'); // không có uniformManage/uniformStoreManage -> phải tự chuyển về STOCK
-        const subTabAfterPeriods = activeUniformSubTab;
-        setUniformSubTab('STORE'); // không có uniformStoreManage -> cũng phải tự chuyển về STOCK
-        const subTabAfterStore = activeUniformSubTab;
-        const stock = computeUniformStockClient('Siêu Thị Hội An');
-        const row = stock.get('Áo đồng phục nam|||L');
-        return { subTabAfterPeriods, subTabAfterStore, stockLeft: row.stock };
+        const canAccess = canAccessUniformModule(currentUser);
+        // KHÔNG dùng computeUniformStockClient() ở đây — nhân viên vẫn hợp lệ thấy ĐÚNG phiếu cấp phát
+        // CỦA CHÍNH MÌNH qua canViewUniformIssuance() (để tự xác nhận đã nhận, thiết kế CÓ CHỦ Ý — xem
+        // "👕 Đồng Phục Của Tôi"), nên DB.uniformIssuances không rỗng cho họ và hàm tính tồn kho vẫn trả
+        // về 1 dòng (chỉ là số liệu sai lệch vì thiếu allocated) — kiểm tra thẳng nguồn phân bổ
+        // (uniformPeriods, KHÔNG có ngoại lệ "thấy phiếu của mình" nào) mới đúng, không mập mờ.
+        const periodCount = DB.uniformPeriods.length;
+        return { canAccess, periodCount };
       });
-      assertEqual(result.subTabAfterPeriods, 'STOCK', 'Không có quyền uniformManage thì không được ở lại tab Kỳ Cấp Phát');
-      assertEqual(result.subTabAfterStore, 'STOCK', 'Không có quyền uniformStoreManage thì không được ở lại tab Xác Nhận/Cấp Phát');
-      assertEqual(result.stockLeft, 15, 'Nhân viên vẫn phải xem được đúng số tồn kho hiện tại của siêu thị mình (15)');
+      assert(!result.canAccess, 'canAccessUniformModule() phải từ chối nhân viên không có uniformManage/uniformStoreManage/uniformApprove');
+      assertEqual(result.periodCount, 0, 'GET /api/data thật cũng phải lọc sạch uniformPeriods cho người không có quyền -> không có nguồn nào để tính tồn kho thật');
     });
 
     // ===== 10) Báo Hỏng từ kho (happy path) — allocated=20, issued=5, stock=15 trước khi báo hỏng =====
@@ -510,9 +531,13 @@ async function main() {
       assertIncludes(result.errorMsg, 'Bạn không có quyền thao tác này', 'Chỉ Giám Đốc Siêu Thị (uniformStoreManage) mới thao tác được, kể cả Hành Chính (uniformManage) cũng không được');
     });
 
-    // ===== 20) Kho: view-only vẫn thấy đúng số Hỏng/Hủy/Tồn cuối cùng =====
-    await run.run('Kho: view-only thấy đúng số Hỏng/Hủy/Tồn sau toàn bộ thao tác', async () => {
-      await loginAs(page, NV_HOIAN);
+    // ===== 20) Kho: Giám Đốc Siêu Thị thấy đúng số Hỏng/Hủy/Tồn cuối cùng sau toàn bộ thao tác — đổi
+    // người xem từ NV_HOIAN (không quyền) sang GD_HOIAN vì module Đồng Phục KHÔNG có tầng "view-only"
+    // cho nhân viên thường (xem chú thích ở kịch bản mục 9 ngay trên) — NV_HOIAN không có cách nào tính
+    // được số này trong hệ thống thật, giữ đúng ý kiểm tra "số cộng dồn cuối cùng đúng" bằng người THẬT
+    // có quyền xem (GD_HOIAN, uniformStoreManage, đúng siêu thị) thay vì đổi hẳn ý nghĩa bài test. =====
+    await run.run('Kho: Giám Đốc Siêu Thị thấy đúng số Hỏng/Hủy/Tồn sau toàn bộ thao tác', async () => {
+      await loginAs(page, GD_HOIAN);
       const result = await page.evaluate(() => {
         const stock = computeUniformStockClient('Siêu Thị Hội An');
         const row = stock.get('Áo đồng phục nam|||L');
