@@ -1,8 +1,95 @@
 # Phiên bản hiện tại
 
-**12.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## Đợt C (UX rollout): nút "↺ Làm Mới" cho Đào Tạo (7 form) + Tuyển Dụng/HCRC Đồng Hành/Nội Bộ (2026-09-08)
+
+Tiếp nối Đợt A/B (xem 2 mục ngay dưới) — áp ĐÚNG mẫu tham chiếu đã dựng
+(`confirmAndResetForm()`/chip file ở `core.js`, KHÔNG sửa gì thêm ở đó, trừ 1
+điểm chi tiết nêu ở cuối mục này) cho toàn bộ form tạo mới còn lại của Đào
+Tạo + 3 module còn lại của Truyền Thông Nội Bộ.
+
+**Đào Tạo (`module-internalcomms-daotao.js`) — 7 form, nhiều hơn ước tính
+ban đầu ~5** (đọc lại code thật xác nhận `careerPathForm`/`onboardingPathForm`
+cũng là form Tạo Mới riêng, module này đã phình to sau đợt "4 loại câu hỏi +
+chấm tay Nghị Luận"):
+- Lớp Học (`#trainingClassForm`) — `resetTrainingClassForm()` (mới). Ngoài
+  `form.reset()`, trắng Danh Sách Được Mời (`tcInviteListStaged`) + phần Nhập
+  Từ Excel đang xem trước dở (`tcInviteFilePreviewItems`/ô trạng thái/nút) +
+  gọi lại `onTrainingClassModeChange()` để đưa Kiểu Lớp Học về Online (ẩn lại
+  Giảng Viên/Địa Điểm).
+- Chương Trình (`#trainingCourseForm`) — `resetTrainingCourseForm()` (mới),
+  đơn giản nhất đợt này.
+- Kế Hoạch Đào Tạo (`#trainingPlanForm`) — `resetTrainingPlanForm()` (mới),
+  gọi lại thẳng `cancelEditTrainingPlan()` có sẵn (cùng khuôn
+  `resetMeetingMinutesForm()` Đợt B).
+- Kho Tài Liệu (`#trainingDocForm`) — `resetTrainingDocForm()` (mới) + chip
+  file `tdFile` (bắt buộc). Gọi lại `onTrainingDocTypeChange()` để đưa Loại
+  Tài Liệu (Video/Hình Ảnh) về lại "Tài Liệu" mặc định đúng ẩn/hiện+required.
+- Lộ Trình Thăng Tiến (`#careerPathForm`) — `resetCareerPathForm()` **ĐÃ CÓ
+  SẴN TỪ TRƯỚC** lúc bắt đầu Đợt C (được viết đúng khuôn ngay từ đầu, chỉ
+  thiếu nút gọi tới) — collapse "Các Cấp Bậc" về ĐÚNG 1 hàng trống.
+- Đào Tạo Tân Binh > Quản Lý Lộ Trình (`#onboardingPathForm`) —
+  `resetOnboardingPathForm()` (mới), gọi lại thẳng
+  `cancelEditOnboardingPath()` có sẵn.
+- Ngân Hàng Câu Hỏi (`#trainingTestForm`) — `resetTrainingTestForm()` (mới).
+  Trắng HẲN danh sách câu hỏi đang xây dở (`tbQuestions`) về **ĐÚNG 0 câu**
+  — đây LÀ trạng thái mặc định thật của form (giống hệt lúc mới vào tab),
+  KHÔNG PHẢI 1 câu SINGLE 2-đáp-án-rỗng như phỏng đoán ban đầu: luồng tạo bài
+  test thành công TỪ TRƯỚC đã luôn `tbQuestions = []` chứ không thêm lại 1
+  câu mặc định — chỉ refactor logic có sẵn đó vào hàm dùng chung. Ảnh minh
+  hoạ câu hỏi/đáp án (loại IMAGE_DRAG_DROP) tải lên NGAY khi chọn file
+  (`tbQuestionImageFileChange()`/`tbOptionImageFileChange()`, lưu thẳng URL
+  vào state) — **KHÔNG áp khuôn chip file cấp-form được** (đây là upload
+  ngay-khi-chọn theo từng dòng động, khác hẳn 1 input file cấp-form cố định)
+  nên cố ý để nguyên, không ép vào khuôn `onSingleFileChosen`/`onMultiFileChosen`.
+
+**Tuyển Dụng (`module-internalcomms-nhipsong.js`) — 2 form:**
+- Tin Tuyển Dụng (`#recruitmentJobForm`) — `resetRecruitmentJobForm()` (mới)
+  + chip ảnh `rjBannerFile` (tuỳ chọn).
+- Giới Thiệu Ứng Viên (`#recruitmentReferForm`, modal) —
+  `resetRecruitmentReferForm()` (mới) + chip `rrCvFile` (bắt buộc). Form này
+  có `#rrJobId` là hidden input NẰM TRONG chính form (khác mọi
+  `editingXxxId` khác trong hệ thống, luôn là biến JS NGOÀI form) — đã đánh
+  dấu `readonly` ở HTML để `confirmAndResetForm()` không tính nhầm là "đã
+  nhập" ngay khi vừa mở modal, và `resetRecruitmentReferForm()` tự đọc/khôi
+  phục lại giá trị này sau `form.reset()` để "↺ Làm Mới" giữa lúc điền dở
+  không làm mất ngữ cảnh "đang giới thiệu ứng viên cho tin nào".
+
+**HCRC Đồng Hành (`module-hcrcdonghanh.js`)**: `#hrFeedbackForm` —
+`resetHrFeedbackForm()` (mới), form đơn giản, không có ô tải tệp.
+
+**Nội Bộ/Nhịp Sống HCRC (`module-internalcomms-nhipsong.js`)**:
+`#internalPostForm` — `resetInternalPostForm()` (mới), gọi lại thẳng
+`cancelEditInternalPost()` có sẵn (cùng khuôn `resetMeetingMinutesForm()`) +
+chip file `internalFile` (tuỳ chọn).
+
+**Phát hiện phụ (không thuộc phạm vi sửa của đợt này)**: viết bài test lộ ra
+1 bug CÓ SẴN TỪ TRƯỚC, không liên quan gì tới Đợt C — `#careerPathForm` nằm
+LỒNG trong CẢ `#internalTrainingLmsSection` LẪN `#internalSection`, cả 2 đều
+tự `bindCspDelegation()` riêng (core.js) nên 1 click chuột trong khu vực này
+bị CẢ 2 tầng bắt (event bubble qua đúng 2 root), khiến 1 số thao tác click
+(nút `+ Thêm Cấp Bậc`...) bị gọi hàm xử lý 2 LẦN thay vì 1. Nút "↺ Làm Mới"
+mới thêm ở đợt này AN TOÀN trước bug này (mọi `resetXxxForm()` đều idempotent
+— gọi 2 lần vẫn ra đúng 1 kết quả) nên không cần sửa gì để đợt này hoạt động
+đúng, nhưng đây là 1 bug thật đáng sửa riêng (phạm vi rộng hơn nhiều — mọi
+`data-op` click bên trong `internalTrainingLmsSection` đều bị ảnh hưởng) —
+để lại cho 1 đợt riêng, không gộp vào đây.
+
+**Bộ test**: mở rộng `server/tests/test-form-reset-file-remove.js` thêm 12
+kịch bản (Đào Tạo 7 + Tuyển Dụng 2 + 1 kịch bản "không hỏi xác nhận khi vừa
+mở modal" + HCRC Đồng Hành + Nội Bộ) — tổng 21/21 kịch bản pass. Toàn bộ
+suite hồi quy hiện có (79 file `test-*.js`) chạy lại — không phát sinh lỗi
+mới ngoài các lỗi kết nối SQL Server thật đã biết từ trước (môi trường
+sandbox không có SQL Server thật).
+
+**Deploy-impact**: THUẦN client-side (`public/index.html` +
+`module-internalcomms-daotao.js`/`module-internalcomms-nhipsong.js`/
+`module-hcrcdonghanh.js`), không đổi `schema.sql`, không thêm biến môi
+trường, không đổi `dependencies` — chỉ cần copy code + `pm2 restart` (hoặc
+refresh trình duyệt nếu server không đổi).
 
 ## Đợt B (UX rollout): nút "↺ Làm Mới" cho 4 form tạo mới tiếp theo (2026-09-08)
 

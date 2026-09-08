@@ -21,6 +21,38 @@
 //   Mua Bán/Sửa Chữa/Đầu Tư (#officeForm, resetOfficeReqForm() — module-office.js) — kèm collapse bảng
 //     "Danh Sách Hạng Mục Đề Nghị Mua Sắm" (mảng JS officeItems) về ĐÚNG 1 dòng trống khi đang ở phân hệ
 //     Mua Sắm (officeItems = []; addOfficeItemRow();), đúng hành vi cũ.
+// — VÀ "Đợt C" (đúng khuôn trên, module Đào Tạo + 3 module Truyền Thông Nội Bộ còn lại — module-
+//   internalcomms-daotao.js/module-internalcomms-nhipsong.js/module-hcrcdonghanh.js):
+//   Đào Tạo có 7 form Tạo Mới (nhiều hơn ước tính ban đầu ~5 — đọc lại code thật xác nhận cả
+//   careerPathForm/onboardingPathForm cũng là form Tạo Mới riêng, không chỉ 5 form ban đầu):
+//     Lớp Học (#trainingClassForm, resetTrainingClassForm()) — kèm trắng Danh Sách Được Mời
+//       (tcInviteListStaged) + phần Nhập Từ Excel đang xem trước dở (tcInviteFilePreviewItems) + đưa
+//       Kiểu Lớp Học về lại Online (ẩn Giảng Viên/Địa Điểm, xem onTrainingClassModeChange()).
+//     Chương Trình (#trainingCourseForm, resetTrainingCourseForm()) — đơn giản nhất đợt này.
+//     Kế Hoạch Đào Tạo (#trainingPlanForm, resetTrainingPlanForm(), gọi lại cancelEditTrainingPlan() có
+//       sẵn — cùng khuôn resetMeetingMinutesForm() Đợt B).
+//     Kho Tài Liệu (#trainingDocForm, resetTrainingDocForm()) — kèm chip file tdFile + đưa Loại Tài Liệu
+//       (Video/Hình Ảnh) về lại "Tài Liệu" mặc định (onTrainingDocTypeChange()).
+//     Lộ Trình Thăng Tiến (#careerPathForm, resetCareerPathForm() — hàm này ĐÃ CÓ SẴN TỪ TRƯỚC lúc bắt
+//       đầu Đợt C, chỉ thiếu nút gọi tới) — kèm collapse "Các Cấp Bậc" về ĐÚNG 1 hàng trống.
+//     Đào Tạo Tân Binh > Quản Lý Lộ Trình (#onboardingPathForm, resetOnboardingPathForm(), gọi lại
+//       cancelEditOnboardingPath() có sẵn).
+//     Ngân Hàng Câu Hỏi (#trainingTestForm, resetTrainingTestForm()) — trắng HẲN danh sách câu hỏi
+//       (tbQuestions) về ĐÚNG 0 câu — đây LÀ trạng thái mặc định thật của form (giống hệt lúc mới vào
+//       tab, KHÔNG PHẢI 1 câu SINGLE 2-đáp-án-rỗng như phỏng đoán ban đầu — luồng tạo bài test thành công
+//       TỪ TRƯỚC đã luôn set tbQuestions = [] chứ không thêm lại 1 câu mặc định, xem submitTrainingTest()
+//       trước khi refactor). Ảnh minh hoạ câu hỏi/đáp án (IMAGE_DRAG_DROP) tải lên NGAY khi chọn file
+//       (tbQuestionImageFileChange()/tbOptionImageFileChange(), lưu thẳng URL vào tbQuestions[].imageUrl)
+//       — KHÔNG áp khuôn chip file cấp-form (onSingleFileChosen()/onMultiFileChosen()) vào đây được, nên
+//       không có chip nào để kiểm ở đây; xoá câu hỏi khỏi tbQuestions khi Làm Mới đã tự dọn sạch ảnh gắn.
+//   Tuyển Dụng có 2 form: Tin Tuyển Dụng (#recruitmentJobForm, resetRecruitmentJobForm() — chip
+//     rjBannerFile) và Giới Thiệu Ứng Viên (#recruitmentReferForm, resetRecruitmentReferForm() — modal,
+//     chip rrCvFile) — form SAU có 1 hidden input #rrJobId NẰM TRONG form (khác mọi editingXxxId khác
+//     trong hệ thống luôn là biến JS NGOÀI form) nên phải tự khôi phục giá trị này sau form.reset() (đã
+//     đánh dấu readonly ở HTML để confirmAndResetForm() không tính nhầm là "đã nhập" ngay khi vừa mở modal).
+//   HCRC Đồng Hành (#hrFeedbackForm, resetHrFeedbackForm()) — form đơn giản, không có ô tải tệp.
+//   Nội Bộ/Nhịp Sống HCRC (#internalPostForm, resetInternalPostForm(), gọi lại cancelEditInternalPost()
+//     có sẵn — cùng khuôn resetMeetingMinutesForm()) — kèm chip internalFile + tắt Ghim/thoát Sửa dở dang.
 //
 // Dùng lại hạ tầng tests/_harness-contract.js (tests/_seed.js) — đã seed sẵn đủ dept/loại pháp lý/
 // workflow/nhóm phê duyệt cho Hợp Đồng LẪN Văn Bản Trình (3 bộ test gốc dùng chung: test-contract.js/
@@ -467,6 +499,419 @@ async function main() {
       const confirmCount = await page.evaluate(() => window.__confirmCalls.length);
       assertTrue(confirmCount === 0, `KHÔNG được hỏi xác nhận khi form đang trống, thực tế đã hỏi ${confirmCount} lần`);
     });
+
+    // ============ Đợt C: Đào Tạo (7 form) + Tuyển Dụng (2 form) + HCRC Đồng Hành + Nội Bộ ============
+    // Fixture dùng chung cho các kịch bản Đào Tạo bên dưới — trainingCategories/trainingCourses rỗng ở
+    // _seed.js (không thuộc 3 module gốc).
+    await page.evaluate(() => {
+      DB.trainingCategories = ['Nghiệp Vụ'];
+      DB.trainingCourses = [{ id: 501, name: 'Khóa Kiểm Thử', category: 'Nghiệp Vụ' }];
+    });
+
+    // ================= 10) Đào Tạo > Lớp Học =================
+    await check(
+      'Đào Tạo > Lớp Học: "Làm Mới" trắng form (Offline->Online, ẩn lại Giảng Viên/Địa Điểm) + trắng Danh Sách Được Mời (tcInviteListStaged) + trắng phần Nhập Từ Excel đang xem trước dở',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+        await page.fill('#tcTitle', 'Lớp kiểm thử reset form');
+        await page.selectOption('#tcMode', 'OFFLINE');
+        await page.evaluate(() => onTrainingClassModeChange());
+        await page.fill('#tcInstructor', 'Giảng Viên Kiểm Thử');
+        await page.fill('#tcLocation', 'Phòng A');
+        await page.fill('#tcStart', '2026-01-01T08:00');
+        await page.fill('#tcDescription', 'Nội dung kiểm thử reset form.');
+        await page.evaluate(() => {
+          document.getElementById('tcInstructorUsername').value = 'gv1';
+          tcInviteListStaged.push({ username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc' });
+          renderTrainingInviteListStagedList();
+          // Giả lập phần Nhập Từ Excel đang xem trước dở (không cần thật sự upload/parse Excel để kiểm
+          // resetTrainingClassForm() có dọn sạch đúng các phần tử này hay không).
+          tcInviteFilePreviewItems = [{ username: 'nv1', name: 'X', status: 'OK' }];
+          document.getElementById('tcInviteFileStatus').innerText = 'Đã tìm thấy 1 người hợp lệ.';
+          document.getElementById('tcInviteFilePreviewWrap').classList.remove('hidden');
+          document.getElementById('tcInviteFileAddBtn').classList.remove('hidden');
+        });
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#trainingClassForm button[data-arg1="resetTrainingClassForm"]');
+        const state = await page.evaluate(() => ({
+          tcTitle: document.getElementById('tcTitle').value,
+          tcMode: document.getElementById('tcMode').value,
+          tcInstructorFieldHidden: document.getElementById('tcInstructorFieldWrap').classList.contains('hidden'),
+          tcLocationFieldHidden: document.getElementById('tcLocationFieldWrap').classList.contains('hidden'),
+          tcInstructorUsername: document.getElementById('tcInstructorUsername').value,
+          inviteStagedCount: tcInviteListStaged.length,
+          inviteStagedListText: document.getElementById('tcInviteListStagedList').innerText,
+          previewItemsCount: tcInviteFilePreviewItems.length,
+          inviteFileInputValue: document.getElementById('tcInviteFileInput').value,
+          inviteFileStatus: document.getElementById('tcInviteFileStatus').innerText,
+          previewWrapHidden: document.getElementById('tcInviteFilePreviewWrap').classList.contains('hidden'),
+          addBtnHidden: document.getElementById('tcInviteFileAddBtn').classList.contains('hidden'),
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.tcTitle === '', 'tcTitle phải về rỗng');
+        assertTrue(state.tcMode === 'ONLINE', `tcMode phải về lại "ONLINE" (mặc định), thực tế "${state.tcMode}"`);
+        assertTrue(state.tcInstructorFieldHidden === true, 'Ô Giảng Viên phải ẩn lại (Online)');
+        assertTrue(state.tcLocationFieldHidden === true, 'Ô Địa Điểm phải ẩn lại (Online)');
+        assertTrue(state.tcInstructorUsername === '', 'tcInstructorUsername (hidden) phải về rỗng');
+        assertTrue(state.inviteStagedCount === 0, `Danh Sách Được Mời phải về 0 người, thực tế ${state.inviteStagedCount}`);
+        assertTrue(state.inviteStagedListText.includes('Chưa mời ai'), 'Danh Sách Được Mời phải hiện lại thông báo mặc định');
+        assertTrue(state.previewItemsCount === 0, `Phần xem trước Nhập Từ Excel phải về 0 dòng, thực tế ${state.previewItemsCount}`);
+        assertTrue(state.inviteFileInputValue === '', 'tcInviteFileInput phải về rỗng');
+        assertTrue(state.inviteFileStatus === '', 'tcInviteFileStatus phải về rỗng');
+        assertTrue(state.previewWrapHidden === true, 'tcInviteFilePreviewWrap phải ẩn lại');
+        assertTrue(state.addBtnHidden === true, 'tcInviteFileAddBtn phải ẩn lại');
+      }
+    );
+
+    // ================= 11) Đào Tạo > Chương Trình =================
+    await check('Đào Tạo > Chương Trình: form đơn giản nhất đợt này — "Làm Mới" trắng form', async () => {
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('COURSES'); });
+      await page.fill('#tccName', 'Chương trình kiểm thử reset form');
+      await page.fill('#tccDescription', 'Mô tả kiểm thử reset form.');
+
+      await page.evaluate(() => { window.__confirmCalls = []; });
+      await page.click('#trainingCourseForm button[data-arg1="resetTrainingCourseForm"]');
+      const state = await page.evaluate(() => ({
+        tccName: document.getElementById('tccName').value,
+        tccDescription: document.getElementById('tccDescription').value,
+        confirmCalls: window.__confirmCalls.length
+      }));
+      assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+      assertTrue(state.tccName === '', 'tccName phải về rỗng');
+      assertTrue(state.tccDescription === '', 'tccDescription phải về rỗng');
+    });
+
+    // ================= 12) Đào Tạo > Kế Hoạch Đào Tạo =================
+    await check(
+      'Đào Tạo > Kế Hoạch: "Làm Mới" trắng form + thoát Sửa dở dang (nhãn/nút về lại mặc định, gọi lại cancelEditTrainingPlan() có sẵn)',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('PLANS'); });
+        await page.fill('#tpMonth', '2026-05');
+        await page.fill('#tpAudience', 'Nhân viên mới');
+        await page.fill('#tpPlannedClasses', '3');
+        // Giả lập đang giữa chừng Sửa 1 kế hoạch có sẵn (openEditTrainingPlan()).
+        await page.evaluate(() => {
+          editingTrainingPlanId = 999;
+          document.getElementById('tpCancelEditBtn').classList.remove('hidden');
+          document.getElementById('tpSubmitBtn').innerText = 'Lưu Thay Đổi';
+          document.getElementById('trainingPlanFormTitle').innerText = 'Sửa Kế Hoạch — Tháng test';
+        });
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#trainingPlanForm button[data-arg1="resetTrainingPlanForm"]');
+        const state = await page.evaluate(() => ({
+          tpMonth: document.getElementById('tpMonth').value,
+          tpAudience: document.getElementById('tpAudience').value,
+          editingId: editingTrainingPlanId,
+          cancelBtnHidden: document.getElementById('tpCancelEditBtn').classList.contains('hidden'),
+          submitBtnText: document.getElementById('tpSubmitBtn').innerText,
+          formTitle: document.getElementById('trainingPlanFormTitle').innerText,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.tpMonth === '', 'tpMonth phải về rỗng');
+        assertTrue(state.tpAudience === '', 'tpAudience phải về rỗng');
+        assertTrue(state.editingId === null, 'editingTrainingPlanId phải về null (thoát Sửa dở dang)');
+        assertTrue(state.cancelBtnHidden === true, 'Nút "Hủy Sửa" phải ẩn lại');
+        assertTrue(state.submitBtnText === 'Lập Kế Hoạch', `Nút Lưu phải về lại nhãn gốc, thực tế "${state.submitBtnText}"`);
+        assertTrue(state.formTitle === '➕ Lập Kế Hoạch Đào Tạo Mới', `Tiêu đề form phải về lại mặc định, thực tế "${state.formTitle}"`);
+      }
+    );
+
+    // ================= 13) Đào Tạo > Kho Tài Liệu =================
+    await check(
+      'Đào Tạo > Kho Tài Liệu: chip file tdFile, "Làm Mới" trắng form + đưa Loại Tài Liệu (Video->Tài Liệu) về lại đúng ẩn/hiện + required',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('DOCS'); });
+        await page.fill('#tdTitle', 'Tài liệu kiểm thử reset form');
+        await page.setInputFiles('#tdFile', fakeFile('tai-lieu-dt.pdf', 'noi dung', 'application/pdf'));
+        const chip = await page.locator('#tdFileChip').innerText();
+        assertTrue(chip.includes('tai-lieu-dt.pdf'), `Chip tdFile phải hiện tên file, thực tế: ${chip}`);
+
+        await page.selectOption('#tdDocType', 'VIDEO');
+        await page.evaluate(() => onTrainingDocTypeChange());
+        await page.fill('#tdVideoUrl', 'https://www.youtube.com/watch?v=abc123');
+        await page.check('#tdMandatory');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#trainingDocForm button[data-arg1="resetTrainingDocForm"]');
+        const state = await page.evaluate(() => ({
+          tdTitle: document.getElementById('tdTitle').value,
+          tdDocType: document.getElementById('tdDocType').value,
+          tdFileFieldHidden: document.getElementById('tdFileField').classList.contains('hidden'),
+          tdVideoFieldHidden: document.getElementById('tdVideoField').classList.contains('hidden'),
+          tdFileRequired: document.getElementById('tdFile').required,
+          tdMandatory: document.getElementById('tdMandatory').checked,
+          tdFileValue: document.getElementById('tdFile').value,
+          tdFileChip: document.getElementById('tdFileChip').innerHTML,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.tdTitle === '', 'tdTitle phải về rỗng');
+        assertTrue(state.tdDocType === 'DOCUMENT', `tdDocType phải về lại "DOCUMENT" (mặc định), thực tế "${state.tdDocType}"`);
+        assertTrue(state.tdFileFieldHidden === false, 'Ô Tệp Tài Liệu phải hiện lại');
+        assertTrue(state.tdVideoFieldHidden === true, 'Ô Link Video phải ẩn lại');
+        assertTrue(state.tdFileRequired === true, 'tdFile phải required lại (loại DOCUMENT)');
+        assertTrue(state.tdMandatory === false, 'tdMandatory phải bỏ tick');
+        assertTrue(state.tdFileValue === '', 'tdFile input phải về rỗng');
+        assertTrue(state.tdFileChip === '', 'Chip tdFile phải biến mất sau Làm Mới');
+      }
+    );
+
+    // ================= 14) Đào Tạo > Lộ Trình Thăng Tiến =================
+    await check(
+      'Đào Tạo > Lộ Trình Thăng Tiến: "Làm Mới" trắng form + collapse "Các Cấp Bậc" về ĐÚNG 1 hàng trống (resetCareerPathForm() đã có sẵn TỪ TRƯỚC, chỉ thêm nút gọi tới)',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('PATHS'); });
+        await page.fill('#cpName', 'Lộ trình kiểm thử reset form');
+        await page.fill('#cpTargetTitle', 'Trưởng nhóm kiểm thử');
+        const rowsInitial = await page.locator('#cpStageBuilderContainer .cp-stage-row').count();
+        assertTrue(rowsInitial === 1, `Phải có sẵn ĐÚNG 1 hàng Cấp Bậc khi vừa mở tab, thực tế ${rowsInitial}`);
+        await page.locator('.cp-stage-name-input').nth(0).fill('Cấp 1 kiểm thử');
+        await page.selectOption('.cp-stage-course-select', '501');
+        // Gọi thẳng addCpStageRow() qua JS thay vì click nút "+ Thêm Cấp Bậc" trên UI: #careerPathForm
+        // nằm LỒNG trong CẢ #internalTrainingLmsSection LẪN #internalSection — cả 2 đều tự
+        // bindCspDelegation() riêng (xem core.js) nên 1 click chuột thật ở đây bị DỊCH VỤ CẢ 2 tầng bắt
+        // (event bubble qua đúng 2 root), gọi addCpStageRow() 2 LẦN thay vì 1 (bug CÓ SẴN TỪ TRƯỚC, không
+        // liên quan gì tới Đợt C — addCpStageRow() không idempotent nên lộ ra, KHÁC nút "↺ Làm Mới" ngay
+        // dưới đây vẫn an toàn dù bị dispatch 2 lần vì resetCareerPathForm() collapse về ĐÚNG 1 hàng bất
+        // kể gọi mấy lần, xem chú thích cuối bài test này). Gọi thẳng hàm ở đây để bài test không phụ
+        // thuộc bug KHÔNG THUỘC PHẠM VI Đợt C đó.
+        await page.evaluate(() => addCpStageRow());
+        const rowsBeforeReset = await page.locator('#cpStageBuilderContainer .cp-stage-row').count();
+        assertTrue(rowsBeforeReset === 2, `Phải có 2 hàng Cấp Bậc trước khi Làm Mới, thực tế ${rowsBeforeReset}`);
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#careerPathForm button[data-arg1="resetCareerPathForm"]');
+        const state = await page.evaluate(() => ({
+          cpName: document.getElementById('cpName').value,
+          rows: document.querySelectorAll('#cpStageBuilderContainer .cp-stage-row').length,
+          rowNameValue: document.querySelector('.cp-stage-name-input')?.value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.cpName === '', 'cpName phải về rỗng');
+        assertTrue(state.rows === 1, `Các Cấp Bậc phải collapse về ĐÚNG 1 hàng trống sau Làm Mới, thực tế ${state.rows}`);
+        assertTrue(state.rowNameValue === '', `Hàng còn lại phải trống (tên cấp bậc), thực tế "${state.rowNameValue}"`);
+      }
+    );
+
+    // ================= 15) Đào Tạo Tân Binh > Quản Lý Lộ Trình =================
+    await check(
+      'Đào Tạo Tân Binh > Quản Lý Lộ Trình: "Làm Mới" trắng form + thoát Sửa dở dang (gọi lại cancelEditOnboardingPath() có sẵn)',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('ONBOARDING'); });
+        await page.fill('#opName', 'Lộ trình tân binh kiểm thử');
+        await page.selectOption('#opStage1RequiredCourseIds', ['501']);
+        await page.selectOption('#opStage2RequiredCourseIds', ['501']);
+        await page.fill('#opStage3Criteria', 'Tiêu chí kiểm thử.');
+        await page.evaluate(() => {
+          editingOnboardingPathId = 999;
+          document.getElementById('opCancelEditBtn').classList.remove('hidden');
+          document.getElementById('opSubmitBtn').innerText = 'Lưu Thay Đổi';
+        });
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#onboardingPathForm button[data-arg1="resetOnboardingPathForm"]');
+        const state = await page.evaluate(() => ({
+          opName: document.getElementById('opName').value,
+          stage1Selected: [...document.getElementById('opStage1RequiredCourseIds').selectedOptions].length,
+          stage2Selected: [...document.getElementById('opStage2RequiredCourseIds').selectedOptions].length,
+          opStage3Criteria: document.getElementById('opStage3Criteria').value,
+          editingId: editingOnboardingPathId,
+          cancelBtnHidden: document.getElementById('opCancelEditBtn').classList.contains('hidden'),
+          submitBtnText: document.getElementById('opSubmitBtn').innerText,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.opName === '', 'opName phải về rỗng');
+        assertTrue(state.stage1Selected === 0, 'opStage1RequiredCourseIds phải không còn lựa chọn nào');
+        assertTrue(state.stage2Selected === 0, 'opStage2RequiredCourseIds phải không còn lựa chọn nào');
+        assertTrue(state.opStage3Criteria === '', 'opStage3Criteria phải về rỗng');
+        assertTrue(state.editingId === null, 'editingOnboardingPathId phải về null (thoát Sửa dở dang)');
+        assertTrue(state.cancelBtnHidden === true, 'Nút "Hủy Sửa" phải ẩn lại');
+        assertTrue(state.submitBtnText === 'Tạo Lộ Trình', `Nút Lưu phải về lại nhãn gốc, thực tế "${state.submitBtnText}"`);
+      }
+    );
+
+    // ================= 16) Đào Tạo > Ngân Hàng Câu Hỏi =================
+    await check(
+      'Ngân Hàng Câu Hỏi: "Làm Mới" trắng form (tiêu đề/loại/điểm) + trắng HẲN danh sách câu hỏi đang xây dở về ĐÚNG 0 câu — đây LÀ trạng thái mặc định thật của form (không phải 1 câu SINGLE mặc định)',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('TESTS'); });
+        await page.fill('#ttTitle', 'Bài test kiểm thử reset form');
+        await page.fill('#ttPassScore', '70');
+        // Dựng thẳng 1 câu hỏi MULTI + 3 đáp án + 1 ảnh minh hoạ (đã có imageUrl) qua state JS trực tiếp —
+        // cùng khuôn tests/test-training-question-images-ui.js, không cần thật sự lặp lại thao tác click
+        // "+ Thêm Câu Hỏi"/"+ Thêm Đáp Án" qua UI.
+        await page.evaluate(() => {
+          tbQuestions = [{
+            text: 'Câu hỏi kiểm thử reset form', type: 'MULTI', points: 2, imageUrl: '/uploads/fake-question-image.png',
+            options: [
+              { text: 'Đáp án 1', correct: true, imageUrl: '' },
+              { text: 'Đáp án 2', correct: true, imageUrl: '' },
+              { text: 'Đáp án 3', correct: false, imageUrl: '' }
+            ]
+          }];
+          renderTestBuilderQuestions();
+        });
+        const questionBlocksBefore = await page.locator('#tbQuestionsContainer > div').count();
+        assertTrue(questionBlocksBefore === 1, `Phải có 1 câu hỏi đang xây dở trước khi Làm Mới, thực tế ${questionBlocksBefore}`);
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#trainingTestForm button[data-arg1="resetTrainingTestForm"]');
+        const state = await page.evaluate(() => ({
+          ttTitle: document.getElementById('ttTitle').value,
+          ttPassScore: document.getElementById('ttPassScore').value,
+          tbQuestionsLength: tbQuestions.length,
+          containerText: document.getElementById('tbQuestionsContainer').innerText,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.ttTitle === '', 'ttTitle phải về rỗng');
+        assertTrue(state.ttPassScore === '', 'ttPassScore phải về rỗng');
+        assertTrue(state.tbQuestionsLength === 0, `tbQuestions phải về ĐÚNG 0 câu (đúng trạng thái mặc định thật của form), thực tế ${state.tbQuestionsLength}`);
+        assertTrue(state.containerText.includes('Chưa có câu hỏi nào'), `Phải hiện lại thông báo "Chưa có câu hỏi nào", thực tế: ${state.containerText}`);
+      }
+    );
+
+    // ================= 17) Tuyển Dụng > Tin Tuyển Dụng =================
+    await check(
+      'Tuyển Dụng > Tin Tuyển Dụng: chip ảnh banner rjBannerFile, "Làm Mới" trắng form',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS'); });
+        await page.fill('#rjTitle', 'Vị trí kiểm thử reset form');
+        await page.fill('#rjContactInfo', '0900000000');
+        await page.fill('#rjDescription', 'Mô tả kiểm thử reset form.');
+        await page.setInputFiles('#rjBannerFile', fakeFile('banner.png', 'noi dung', 'image/png'));
+        const chip = await page.locator('#rjBannerFileChip').innerText();
+        assertTrue(chip.includes('banner.png'), `Chip rjBannerFile phải hiện tên file, thực tế: ${chip}`);
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#recruitmentJobForm button[data-arg1="resetRecruitmentJobForm"]');
+        const state = await page.evaluate(() => ({
+          rjTitle: document.getElementById('rjTitle').value,
+          rjDescription: document.getElementById('rjDescription').value,
+          rjBannerFileValue: document.getElementById('rjBannerFile').value,
+          rjBannerFileChip: document.getElementById('rjBannerFileChip').innerHTML,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.rjTitle === '', 'rjTitle phải về rỗng');
+        assertTrue(state.rjDescription === '', 'rjDescription phải về rỗng');
+        assertTrue(state.rjBannerFileValue === '', 'rjBannerFile input phải về rỗng');
+        assertTrue(state.rjBannerFileChip === '', 'Chip rjBannerFile phải biến mất sau Làm Mới');
+      }
+    );
+
+    // ================= 18) Tuyển Dụng > Giới Thiệu Ứng Viên (modal) =================
+    await check(
+      'Tuyển Dụng > Giới Thiệu Ứng Viên (modal): chip CV rrCvFile, "Làm Mới" trắng form NHƯNG GIỮ NGUYÊN #rrJobId (ngữ cảnh "đang giới thiệu cho tin nào", hidden input NẰM TRONG form — khác mọi editingXxxId khác)',
+      async () => {
+        await page.evaluate(() => {
+          DB.recruitmentJobs = [{ id: 777, title: 'Vị trí kiểm thử modal', status: 'OPEN', slots: 0 }];
+          switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS');
+          openRecruitmentReferModal(777);
+        });
+        await page.fill('#rrCandidateName', 'Ứng viên kiểm thử');
+        await page.fill('#rrCandidatePhone', '0911111111');
+        await page.fill('#rrCandidateNote', 'Ghi chú kiểm thử reset form.');
+        await page.setInputFiles('#rrCvFile', fakeFile('cv-kiem-thu.pdf', 'noi dung', 'application/pdf'));
+        const chip = await page.locator('#rrCvFileChip').innerText();
+        assertTrue(chip.includes('cv-kiem-thu.pdf'), `Chip rrCvFile phải hiện tên file, thực tế: ${chip}`);
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#recruitmentReferForm button[data-arg1="resetRecruitmentReferForm"]');
+        const state = await page.evaluate(() => ({
+          rrCandidateName: document.getElementById('rrCandidateName').value,
+          rrCandidateNote: document.getElementById('rrCandidateNote').value,
+          rrCvFileValue: document.getElementById('rrCvFile').value,
+          rrCvFileChip: document.getElementById('rrCvFileChip').innerHTML,
+          rrJobId: document.getElementById('rrJobId').value,
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.rrCandidateName === '', 'rrCandidateName phải về rỗng');
+        assertTrue(state.rrCandidateNote === '', 'rrCandidateNote phải về rỗng');
+        assertTrue(state.rrCvFileValue === '', 'rrCvFile input phải về rỗng');
+        assertTrue(state.rrCvFileChip === '', 'Chip rrCvFile phải biến mất sau Làm Mới');
+        assertTrue(state.rrJobId === '777', `#rrJobId PHẢI được giữ nguyên (777) sau Làm Mới (không phải mất ngữ cảnh), thực tế "${state.rrJobId}"`);
+      }
+    );
+
+    // ============ 19) recruitmentReferForm: KHÔNG hỏi xác nhận ngay khi vừa mở modal ============
+    // #rrJobId đã đánh dấu readonly để confirmAndResetForm() không tính nhầm là "đã nhập" chỉ vì modal
+    // vừa mở (giá trị luôn khác rỗng ngay từ lúc mở, khác defaultValue rỗng của hidden input tĩnh).
+    await check('recruitmentReferForm: KHÔNG hỏi xác nhận ngay khi vừa mở modal (readonly #rrJobId không tính là "đã nhập")', async () => {
+      await page.evaluate(() => {
+        DB.recruitmentJobs = [{ id: 778, title: 'Vị trí kiểm thử modal 2', status: 'OPEN', slots: 0 }];
+        switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS');
+        openRecruitmentReferModal(778);
+        window.__confirmCalls = [];
+      });
+      await page.click('#recruitmentReferForm button[data-arg1="resetRecruitmentReferForm"]');
+      const confirmCount = await page.evaluate(() => window.__confirmCalls.length);
+      assertTrue(confirmCount === 0, `KHÔNG được hỏi xác nhận ngay khi vừa mở modal, thực tế đã hỏi ${confirmCount} lần`);
+      // Đóng modal lại — để mở (fixed inset-0, phủ kín màn hình) sẽ chặn MỌI click chuột thật của
+      // Playwright ở các bài test SAU trong cùng phiên trình duyệt này.
+      await page.evaluate(() => closeRecruitmentReferModal());
+    });
+
+    // ================= 20) HCRC Đồng Hành =================
+    await check('HCRC Đồng Hành: "Làm Mới" trắng form gửi câu hỏi tới Nhân Sự (form đơn giản, không có ô tải tệp)', async () => {
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('QNA'); });
+      await page.fill('#hrFeedbackQuestion', 'Câu hỏi kiểm thử reset form.');
+
+      await page.evaluate(() => { window.__confirmCalls = []; });
+      await page.click('#hrFeedbackForm button[data-arg1="resetHrFeedbackForm"]');
+      const state = await page.evaluate(() => ({
+        hrFeedbackQuestion: document.getElementById('hrFeedbackQuestion').value,
+        confirmCalls: window.__confirmCalls.length
+      }));
+      assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+      assertTrue(state.hrFeedbackQuestion === '', 'hrFeedbackQuestion phải về rỗng');
+    });
+
+    // ================= 21) Nội Bộ > Nhịp Sống HCRC (internalPostForm) =================
+    await check(
+      'Nhịp Sống HCRC (Nội Bộ): chip file đính kèm internalFile, "Làm Mới" trắng form + tắt Ghim bài (gọi lại cancelEditInternalPost() có sẵn)',
+      async () => {
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); });
+        await page.fill('#internalTitle', 'Tin kiểm thử reset form');
+        await page.selectOption('#internalPostCategory', 'THI_DUA');
+        await page.fill('#internalContent', 'Nội dung kiểm thử reset form.');
+        await page.setInputFiles('#internalFile', fakeFile('dinh-kem.pdf', 'noi dung', 'application/pdf'));
+        const chip = await page.locator('#internalFileChip').innerText();
+        assertTrue(chip.includes('dinh-kem.pdf'), `Chip internalFile phải hiện tên file, thực tế: ${chip}`);
+        await page.check('#internalPinCheckbox');
+        await page.evaluate(() => toggleInternalPinDurationWrap(document.getElementById('internalPinCheckbox')));
+        const pinWrapHiddenBefore = await page.evaluate(() => document.getElementById('internalPinDurationWrap').classList.contains('hidden'));
+        assertTrue(pinWrapHiddenBefore === false, 'Khối chọn số ngày Ghim phải hiện ra sau khi tick (tiền đề bài test)');
+
+        await page.evaluate(() => { window.__confirmCalls = []; });
+        await page.click('#internalPostForm button[data-arg1="resetInternalPostForm"]');
+        const state = await page.evaluate(() => ({
+          internalTitle: document.getElementById('internalTitle').value,
+          internalPostCategory: document.getElementById('internalPostCategory').value,
+          internalContent: document.getElementById('internalContent').value,
+          internalFileValue: document.getElementById('internalFile').value,
+          internalFileChip: document.getElementById('internalFileChip').innerHTML,
+          pinChecked: document.getElementById('internalPinCheckbox').checked,
+          pinWrapHidden: document.getElementById('internalPinDurationWrap').classList.contains('hidden'),
+          confirmCalls: window.__confirmCalls.length
+        }));
+        assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
+        assertTrue(state.internalTitle === '', 'internalTitle phải về rỗng');
+        assertTrue(state.internalPostCategory === '', `internalPostCategory phải về rỗng, thực tế "${state.internalPostCategory}"`);
+        assertTrue(state.internalContent === '', 'internalContent phải về rỗng');
+        assertTrue(state.internalFileValue === '', 'internalFile input phải về rỗng');
+        assertTrue(state.internalFileChip === '', 'Chip internalFile phải biến mất sau Làm Mới');
+        assertTrue(state.pinChecked === false, 'internalPinCheckbox phải bỏ tick');
+        assertTrue(state.pinWrapHidden === true, 'Khối chọn số ngày Ghim phải ẩn lại');
+      }
+    );
 
   } finally {
     const total = results.length;

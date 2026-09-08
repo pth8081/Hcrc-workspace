@@ -1742,7 +1742,10 @@
               <div id="tcInviteListStagedList" class="border rounded p-2 min-h-[2.5rem] flex flex-wrap gap-1.5 bg-white"></div>
             </div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lớp Học</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="trainingClassForm" data-arg1="resetTrainingClassForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lớp Học</button>
+          </div>
         </form>
         <p id="trainingClassNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo lớp học — chỉ có thể xem và đăng ký.</p>
         <!-- Đợt 9 — yêu cầu huỷ đăng ký đang chờ duyệt (CHỈ trainingManage/admin thấy, KHÔNG mở cho
@@ -1787,7 +1790,10 @@
               <textarea id="tccDescription" class="w-full border p-1.5 rounded h-16"></textarea>
             </div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Chương Trình</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="trainingCourseForm" data-arg1="resetTrainingCourseForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Chương Trình</button>
+          </div>
         </form>
         <p id="trainingCourseNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền quản lý danh mục chương trình — chỉ có thể xem/chọn khi tạo lớp học hoặc tài liệu.</p>
         <div class="space-y-3">
@@ -1843,6 +1849,7 @@
           </div>
           <div class="flex justify-end gap-2">
             <button type="button" id="tpCancelEditBtn" data-op="cancelEditTrainingPlan" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
+            <button type="button" data-op="confirmAndResetForm" data-arg0="trainingPlanForm" data-arg1="resetTrainingPlanForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" id="tpSubmitBtn" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Lập Kế Hoạch</button>
           </div>
         </form>
@@ -1956,7 +1963,8 @@
             </div>
             <div class="md:col-span-3" id="tdFileField">
               <label id="tdFileLabel" class="block font-semibold text-gray-600 mb-1">Tệp Tài Liệu</label>
-              <input id="tdFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white" required>
+              <input id="tdFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="tdFileChip" class="w-full border p-1.5 rounded bg-white" required>
+              <div id="tdFileChip" class="mt-1"></div>
             </div>
             <div class="md:col-span-3 hidden" id="tdVideoField">
               <label class="block font-semibold text-gray-600 mb-1">Link Video Youtube</label>
@@ -1967,7 +1975,10 @@
               <textarea id="tdDescription" class="w-full border p-1.5 rounded h-16"></textarea>
             </div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Thêm Vào Kho</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="trainingDocForm" data-arg1="resetTrainingDocForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Thêm Vào Kho</button>
+          </div>
         </form>
         <p id="trainingDocNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền thêm tài liệu vào kho — chỉ có thể xem/tải.</p>
         <div>
@@ -2008,7 +2019,10 @@
             </div>
             <div id="cpStageBuilderContainer" class="space-y-2"></div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="careerPathForm" data-arg1="resetCareerPathForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button>
+          </div>
         </form>
         <p id="careerPathNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo lộ trình thăng tiến — chỉ có thể xem tiến độ của mình.</p>
         <div class="space-y-3">
@@ -2053,6 +2067,7 @@
             <p class="text-[11px] text-gray-500 italic">Nhân viên hoàn thành Giai đoạn 1/2 bằng cách tự đăng ký + học các lớp thuộc đúng chương trình được chọn ở tab "Lớp Học" (lớp PHẢI gán bài test — chỉ tính Đạt khi tự làm bài, không chấm tay được). % hoàn thành tự động cập nhật; Nhân Sự bấm "Xác Nhận" từng giai đoạn khi đã đủ.</p>
             <div class="flex justify-end gap-2">
               <button type="button" id="opCancelEditBtn" data-op="cancelEditOnboardingPath" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
+              <button type="button" data-op="confirmAndResetForm" data-arg0="onboardingPathForm" data-arg1="resetOnboardingPathForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
               <button type="submit" id="opSubmitBtn" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button>
             </div>
           </form>
@@ -2134,7 +2149,10 @@
             <div id="tbQuestionsContainer" class="space-y-2"></div>
             <button type="button" data-op="tbAddQuestion" class="mt-2 bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-xs font-bold">+ Thêm Câu Hỏi</button>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Bài Test</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="trainingTestForm" data-arg1="resetTrainingTestForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Bài Test</button>
+          </div>
         </form>
         <p id="trainingTestNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo bài test.</p>
 
@@ -2231,7 +2249,8 @@
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Ảnh/Banner Tin Tuyển Dụng (tuỳ chọn)</label>
-              <input id="rjBannerFile" type="file" accept="image/*" class="w-full border p-1.5 rounded bg-white">
+              <input id="rjBannerFile" type="file" accept="image/*" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="rjBannerFileChip" class="w-full border p-1.5 rounded bg-white">
+              <div id="rjBannerFileChip" class="mt-1"></div>
             </div>
             <div class="md:col-span-3">
               <label class="block font-semibold text-gray-600 mb-1">Mô Tả Công Việc</label>
@@ -2242,7 +2261,10 @@
               <textarea id="rjRequirements" class="w-full border p-1.5 rounded h-16"></textarea>
             </div>
           </div>
-          <div class="flex justify-end"><button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Đăng Tin</button></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="recruitmentJobForm" data-arg1="resetRecruitmentJobForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Đăng Tin</button>
+          </div>
         </form>
         <p id="recruitmentJobNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng tin tuyển dụng — mọi người đều xem được tin và giới thiệu ứng viên bên dưới.</p>
         <div class="space-y-3">
@@ -2567,7 +2589,14 @@
           <button data-op="closeRecruitmentReferModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
         </div>
         <form id="recruitmentReferForm" data-op-submit="submitRecruitmentReferral" class="p-4 space-y-3 text-xs">
-          <input type="hidden" id="rrJobId">
+          <!-- readonly (dù type=hidden vô hiệu hoá edit UI vốn không tồn tại) — CHỈ để confirmAndResetForm()
+               (core.js) bỏ qua ô này khi xét "form đã có dữ liệu đã nhập chưa": ô này LUÔN có giá trị ngay
+               khi modal vừa mở (openRecruitmentReferModal() gán trước khi hiện modal), khác defaultValue
+               rỗng của input hidden tĩnh -> nếu không loại trừ, mọi lần bấm "↺ Làm Mới" đều bị coi là "form
+               đang có dữ liệu" dù người dùng CHƯA gõ gì, cứ hỏi xác nhận vô ích. resetRecruitmentReferForm()
+               vẫn phải tự khôi phục lại giá trị này sau form.reset() (readonly KHÔNG chặn form.reset() ghi
+               đè, chỉ chặn gõ tay) — xem module-internalcomms-nhipsong.js. -->
+          <input type="hidden" id="rrJobId" readonly>
           <p class="text-gray-600">Vị trí: <span id="rrJobTitleLabel" class="font-bold text-gray-800"></span></p>
           <p class="text-gray-500 italic">Người giới thiệu: <span id="rrReferrerLabel" class="font-semibold"></span> (tự động ghi nhận, không thể đổi)</p>
           <div>
@@ -2586,7 +2615,8 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">CV Ứng Viên</label>
-            <input id="rrCvFile" type="file" accept=".pdf,.docx" class="w-full border p-1.5 rounded bg-white" required>
+            <input id="rrCvFile" type="file" accept=".pdf,.docx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="rrCvFileChip" class="w-full border p-1.5 rounded bg-white" required>
+            <div id="rrCvFileChip" class="mt-1"></div>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Ghi Chú Thêm (tuỳ chọn)</label>
@@ -2594,6 +2624,7 @@
           </div>
           <div class="flex justify-end gap-2 pt-2 border-t">
             <button type="button" data-op="closeRecruitmentReferModal" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ</button>
+            <button type="button" data-op="confirmAndResetForm" data-arg0="recruitmentReferForm" data-arg1="resetRecruitmentReferForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi Giới Thiệu</button>
           </div>
         </form>
@@ -2618,7 +2649,8 @@
           <label class="block font-semibold text-gray-600 mb-1">Nội Dung Câu Hỏi</label>
           <textarea id="hrFeedbackQuestion" class="w-full border p-1.5 rounded h-24" placeholder="Nhập câu hỏi của bạn..." required></textarea>
         </div>
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="hrFeedbackForm" data-arg1="resetHrFeedbackForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="submit" class="bg-teal-700 text-white px-5 py-2 rounded font-bold hover:bg-teal-800">Gửi Câu Hỏi</button>
         </div>
       </form>
@@ -2690,7 +2722,8 @@
       </div>
       <div>
         <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tuỳ chọn)</label>
-        <input id="internalFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white">
+        <input id="internalFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="internalFileChip" class="w-full border p-1.5 rounded bg-white">
+        <div id="internalFileChip" class="mt-1"></div>
       </div>
       <!-- Ghim lên trang chủ (Đợt E) — chỉ hiện cho Tin tức/Đào tạo/Khen thưởng, chỉ người có quyền
            internalPostApprove/admin mới thấy (toggle ẩn/hiện ở setInternalSubTab()/finishLogin()).
@@ -2728,6 +2761,7 @@
            đang Sửa 1 bài Nháp/Yêu cầu bổ sung có sẵn (editInternalPostUI()). -->
       <div class="flex justify-end gap-2">
         <button type="button" id="internalCancelEditBtn" data-op="cancelEditInternalPost" class="hidden px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ Sửa</button>
+        <button type="button" data-op="confirmAndResetForm" data-arg0="internalPostForm" data-arg1="resetInternalPostForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
         <button type="submit" id="internalDraftBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">📝 Lưu Nháp</button>
         <button type="submit" id="internalSubmitBtn" class="bg-fuchsia-600 text-white px-5 py-2 rounded font-bold hover:bg-fuchsia-700">Đăng Tin</button>
       </div>

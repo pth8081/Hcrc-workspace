@@ -58,8 +58,15 @@ async function submitHrFeedbackQuestion(e) {
   DB.hrFeedback.unshift(newItem);
   logSystemAction('HR', 'CREATE_HR_FEEDBACK', `Gửi câu hỏi HCRC Đồng Hành tới Nhân Sự`, 'SUCCESS', String(newItem.id));
   alert('✅ Đã gửi câu hỏi tới bộ phận Nhân Sự!');
-  e.target.reset();
+  resetHrFeedbackForm();
   renderHrFeedbackInbox();
+}
+// resetHrFeedbackForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetHrFeedbackForm", xem core.js) VÀ luồng gửi câu hỏi thành công ở trên. Form đơn giản nhất đợt
+// này: không có trạng thái JS nào khác ngoài chính form.reset(), không có ô tải tệp.
+function resetHrFeedbackForm() {
+  const formEl = document.getElementById('hrFeedbackForm');
+  if (formEl) formEl.reset();
 }
 
 // Hộp thư của CHÍNH mình — server đã lọc sẵn 1 lớp (filterHrFeedbackForUser, lib/recordViewScope.js)

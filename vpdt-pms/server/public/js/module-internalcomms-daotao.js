@@ -399,12 +399,29 @@ async function submitTrainingClass(e) {
   DB.trainingClasses.unshift(newClass);
   logSystemAction('INTERNAL', 'CREATE_TRAINING_CLASS', `Tạo lớp học đào tạo [${newClass.code} - ${newClass.title}]`, 'SUCCESS', newClass.code);
   alert('✅ Đã tạo lớp học thành công!');
-  e.target.reset();
+  resetTrainingClassForm();
+  renderTrainingLms();
+}
+
+// resetTrainingClassForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetTrainingClassForm", xem core.js) VÀ luồng tạo lớp thành công ở trên (factor ra đây tránh 2 nơi
+// lệch nhau, cùng tinh thần resetMeetingMinutesForm()/module-bienbanhop.js). Ngoài form.reset() còn phải
+// trắng: ô ẩn tcInstructorUsername (form.reset() không đụng input hidden theo giá trị JS gán), danh sách
+// Được Mời đang xây dở (tcInviteListStaged) + phần Nhập Từ Excel đang xem trước dở
+// (tcInviteFilePreviewItems, cùng khuôn dọn dẹp openEditTrainingClass() làm cho form Sửa "te*"), và
+// đồng bộ lại ẩn/hiện Giảng Viên/Địa Điểm theo đúng #tcMode mặc định (Online) sau khi reset.
+function resetTrainingClassForm() {
+  const formEl = document.getElementById('trainingClassForm');
+  if (formEl) formEl.reset();
   document.getElementById('tcInstructorUsername').value = '';
   tcInviteListStaged = [];
   renderTrainingInviteListStagedList();
+  tcInviteFilePreviewItems = [];
+  document.getElementById('tcInviteFileInput').value = '';
+  document.getElementById('tcInviteFileStatus').innerText = '';
+  document.getElementById('tcInviteFilePreviewWrap').classList.add('hidden');
+  document.getElementById('tcInviteFileAddBtn').classList.add('hidden');
   onTrainingClassModeChange();
-  renderTrainingLms();
 }
 
 // Dashboard tổng quan Đào Tạo (sub-tab DASHBOARD) — tính trực tiếp từ DB.trainingClasses/
@@ -832,8 +849,14 @@ async function submitTrainingCourse(e) {
   DB.trainingCourses.unshift(newCourse);
   logSystemAction('INTERNAL', 'CREATE_TRAINING_COURSE', `Tạo chương trình đào tạo [${newCourse.name}]`, 'SUCCESS', newCourse.code);
   alert('✅ Đã tạo chương trình thành công!');
-  e.target.reset();
+  resetTrainingCourseForm();
   renderTrainingLms();
+}
+// resetTrainingCourseForm() — nút "↺ Làm Mới" + luồng tạo chương trình thành công ở trên. Form đơn giản
+// nhất đợt này: không có trạng thái JS nào khác ngoài chính form.reset().
+function resetTrainingCourseForm() {
+  const formEl = document.getElementById('trainingCourseForm');
+  if (formEl) formEl.reset();
 }
 
 function renderTrainingCourses() {
@@ -906,6 +929,13 @@ function cancelEditTrainingPlan() {
   document.getElementById('tpSubmitBtn').innerText = 'Lập Kế Hoạch';
   document.getElementById('trainingPlanFormTitle').innerText = '➕ Lập Kế Hoạch Đào Tạo Mới';
   document.getElementById('trainingPlanForm').reset();
+}
+// resetTrainingPlanForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetTrainingPlanForm", xem core.js). Hành vi cần có GIỐNG HỆT cancelEditTrainingPlan() ở trên (thoát
+// Sửa dở dang nếu có + trắng toàn bộ form) — gọi lại thẳng hàm đó, cùng khuôn resetMeetingMinutesForm()/
+// module-bienbanhop.js. Không có ô tải tệp nào ở form này.
+function resetTrainingPlanForm() {
+  cancelEditTrainingPlan();
 }
 function openEditTrainingPlan(id) {
   const plan = DB.trainingPlans.find(p => p.id === id);
@@ -1769,13 +1799,28 @@ async function submitTrainingTest(e) {
   DB.trainingTests.unshift(newTest);
   logSystemAction('INTERNAL', 'CREATE_TRAINING_TEST', `Tạo bài test đào tạo [${newTest.title}]`, 'SUCCESS');
   alert('✅ Đã tạo bài test thành công!');
-  document.getElementById('ttTitle').value = '';
-  document.getElementById('ttCategory').value = '';
-  document.getElementById('ttPassScore').value = '';
-  tbQuestions = [];
-  renderTestBuilderQuestions();
+  resetTrainingTestForm();
   renderTrainingTests();
   populateTrainingClassMultiSelects();
+}
+
+// resetTrainingTestForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetTrainingTestForm", xem core.js) VÀ luồng tạo bài test thành công ở trên. Trắng danh sách câu hỏi
+// đang xây dở (tbQuestions — mảng JS, KHÔNG phải control trong <form> nên form.reset() không đụng tới)
+// TRƯỚC khi form.reset(), vì renderTestBuilderQuestions() xoá sạch các input/select ĐỘNG của từng câu hỏi
+// khỏi DOM — gọi form.reset() sau khi các control động đó đã bị gỡ tránh mọi rắc rối thứ tự. Trạng thái
+// "trắng" của form này đúng là 0 câu hỏi (danh sách rỗng, hiện dòng "Chưa có câu hỏi nào") — KHÔNG phải 1
+// câu hỏi mặc định — y hệt trạng thái ban đầu khi mới vào tab (tbQuestions chỉ có phần tử khi người dùng tự
+// bấm "+ Thêm Câu Hỏi", xem tbAddQuestion()). Không có ô tải tệp cấp-form nào ở đây (ảnh minh hoạ câu hỏi/
+// đáp án tải lên NGAY khi chọn qua tbQuestionImageFileChange()/tbOptionImageFileChange(), lưu thẳng URL
+// vào tbQuestions[].imageUrl — khác hẳn cơ chế input file cấp-form onSingleFileChosen()/onMultiFileChosen()
+// dùng cho các form khác, nên KHÔNG áp khuôn chip đó vào đây được — xoá câu hỏi khỏi tbQuestions ở trên đã
+// tự dọn sạch mọi ảnh đã gắn của câu hỏi đó).
+function resetTrainingTestForm() {
+  tbQuestions = [];
+  renderTestBuilderQuestions();
+  const formEl = document.getElementById('trainingTestForm');
+  if (formEl) formEl.reset();
 }
 
 function renderTrainingTests() {
@@ -2606,9 +2651,18 @@ async function submitTrainingDocument(e) {
   DB.trainingDocuments.unshift(newDoc);
   logSystemAction('INTERNAL', 'CREATE_TRAINING_DOC', `Thêm tài liệu đào tạo [${newDoc.title}]`, 'SUCCESS', newDoc.code);
   alert('✅ Đã thêm tài liệu vào kho thành công!');
-  e.target.reset();
-  onTrainingDocTypeChange();
+  resetTrainingDocForm();
   renderTrainingLms();
+}
+// resetTrainingDocForm() — nút "↺ Làm Mới" + luồng thêm tài liệu thành công ở trên. onTrainingDocTypeChange()
+// đồng bộ lại ẩn/hiện+required của ô Tệp/Video theo ĐÚNG #tdDocType sau khi form.reset() đưa select này về
+// lại lựa chọn mặc định (DOCUMENT); clearSingleFileInput() xoá chip "📎 tên file" đang hiện (nếu có, form.reset()
+// không tự bắn 'change' nên chip cũ không tự xoá — xem core.js).
+function resetTrainingDocForm() {
+  const formEl = document.getElementById('trainingDocForm');
+  if (formEl) formEl.reset();
+  onTrainingDocTypeChange();
+  clearSingleFileInput('tdFile', 'tdFileChip');
 }
 
 // Youtube embed URL (Đợt 4) — chấp nhận cả 2 dạng phổ biến (youtube.com/watch?v=... và youtu.be/...),
@@ -3153,7 +3207,7 @@ async function submitOnboardingPath(e) {
       DB.onboardingPaths.unshift(result.item);
       logSystemAction('INTERNAL', 'CREATE_ONBOARDING_PATH', `Tạo lộ trình đào tạo tân binh [${result.item.name}]`, 'SUCCESS');
       alert('✅ Đã tạo lộ trình đào tạo tân binh thành công!');
-      e.target.reset();
+      resetOnboardingPathForm();
     }
   } catch (err) { return alert(`⛔ ${err.message}`); }
   renderOnboardingLms();
@@ -3177,6 +3231,13 @@ function cancelEditOnboardingPath() {
   document.getElementById('onboardingPathForm').reset();
   document.getElementById('opSubmitBtn').innerText = 'Tạo Lộ Trình';
   document.getElementById('opCancelEditBtn').classList.add('hidden');
+}
+// resetOnboardingPathForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetOnboardingPathForm", xem core.js) VÀ luồng tạo lộ trình thành công ở trên. Hành vi cần có GIỐNG HỆT
+// cancelEditOnboardingPath() ở trên (thoát Sửa dở dang nếu có + trắng form) — gọi lại thẳng hàm đó, cùng
+// khuôn resetMeetingMinutesForm()/module-bienbanhop.js. Không có ô tải tệp nào ở form này.
+function resetOnboardingPathForm() {
+  cancelEditOnboardingPath();
 }
 function deleteOnboardingPath(id) {
   if (!confirm('Xóa lộ trình đào tạo tân binh này? Các phân công đã có cho nhân viên vẫn giữ nguyên dữ liệu (không bị xoá theo).')) return;

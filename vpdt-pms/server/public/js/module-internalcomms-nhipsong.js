@@ -258,7 +258,7 @@ async function submitInternalPost(e) {
   } else {
     alert('✅ Đã đăng bài thành công!');
   }
-  e.target.reset();
+  resetInternalPostForm();
   renderInternalPosts();
 }
 
@@ -321,6 +321,17 @@ function cancelEditInternalPost() {
   document.getElementById('internalPostForm').reset();
   document.getElementById('internalCancelEditBtn').classList.add('hidden');
   setInternalSubTab(activeInternalSubTab); // khôi phục tiêu đề/nhãn nút mặc định của tab hiện tại
+}
+// resetInternalPostForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetInternalPostForm", xem core.js) VÀ luồng đăng bài MỚI thành công ở trên (nhánh Sửa đã gọi thẳng
+// cancelEditInternalPost() sẵn — xem submitInternalPost()). Hành vi cần GIỐNG HỆT "Huỷ Sửa" (thoát Sửa dở
+// dang nếu có + trắng form + setInternalSubTab() tự đặt lại Ghim/Gửi lại email về mặc định của tab hiện
+// tại, xem setInternalSubTab()) — gọi lại thẳng cancelEditInternalPost(), cùng khuôn
+// resetMeetingMinutesForm()/module-bienbanhop.js — CHỈ thêm bước xoá chip file đính kèm (form.reset()
+// không tự bắn 'change' nên chip cũ không tự xoá, xem core.js).
+function resetInternalPostForm() {
+  cancelEditInternalPost();
+  clearSingleFileInput('internalFile', 'internalFileChip');
 }
 
 // Wrapper cho CSP: checkbox "Ghim bài" đọc this.checked (không có data-arg-checked trong
@@ -515,9 +526,16 @@ async function submitRecruitmentJob(e) {
   DB.recruitmentJobs.unshift(newJob);
   logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_JOB', `Đăng tin tuyển dụng [${newJob.title}]`, 'SUCCESS');
   alert('✅ Đã đăng tin tuyển dụng thành công!');
-  e.target.reset();
+  resetRecruitmentJobForm();
   resetListPage('recruitmentJobs');
   renderRecruitmentJobs();
+}
+// resetRecruitmentJobForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetRecruitmentJobForm", xem core.js) VÀ luồng đăng tin thành công ở trên.
+function resetRecruitmentJobForm() {
+  const formEl = document.getElementById('recruitmentJobForm');
+  if (formEl) formEl.reset();
+  clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
 }
 
 // Đợt (Tháng) không phải danh mục cố định (mỗi tin tự nhập <input type=month>, xem rjMonth) — dropdown
@@ -625,7 +643,7 @@ function deleteRecruitmentJob(id) {
 function openRecruitmentReferModal(jobId) {
   const job = (DB.recruitmentJobs || []).find(j => j.id === jobId);
   if (!job) return;
-  document.getElementById('recruitmentReferForm').reset();
+  resetRecruitmentReferForm();
   document.getElementById('rrJobId').value = jobId;
   document.getElementById('rrJobTitleLabel').innerText = job.title;
   document.getElementById('rrReferrerLabel').innerText = currentUser.name;
@@ -634,6 +652,21 @@ function openRecruitmentReferModal(jobId) {
 
 function closeRecruitmentReferModal() {
   document.getElementById('recruitmentReferModal').classList.add('hidden');
+}
+// resetRecruitmentReferForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
+// "resetRecruitmentReferForm", xem core.js) VÀ mỗi lần mở modal ở trên (form luôn trắng lại khi mở cho 1
+// tin tuyển dụng mới — factor ra đây tránh 2 nơi lệch nhau). #rrJobId là hidden input NẰM TRONG chính form
+// này (khác mọi form khác trong hệ thống — editingXxxId luôn là biến JS ngoài form) nên form.reset() cũng
+// xoá theo — PHẢI tự khôi phục lại giá trị đó (đọc trước, gán lại sau) để "↺ Làm Mới" giữa lúc đang điền
+// dở KHÔNG làm mất luôn ngữ cảnh "đang giới thiệu ứng viên cho tin nào" (submit sau đó sẽ gửi jobId rỗng
+// nếu không khôi phục). Ô này cũng đã đánh dấu readonly ở HTML để confirmAndResetForm() không tính nhầm
+// là "đã có dữ liệu" chỉ vì modal đang mở (giá trị luôn khác rỗng ngay từ lúc mở, xem index.html).
+function resetRecruitmentReferForm() {
+  const jobId = document.getElementById('rrJobId').value;
+  const formEl = document.getElementById('recruitmentReferForm');
+  if (formEl) formEl.reset();
+  document.getElementById('rrJobId').value = jobId;
+  clearSingleFileInput('rrCvFile', 'rrCvFileChip');
 }
 
 async function submitRecruitmentReferral(e) {
