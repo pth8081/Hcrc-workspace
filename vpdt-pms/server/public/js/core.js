@@ -7248,6 +7248,10 @@ bindCspDelegation('officeSection');
 bindCspDelegation('officeProcessModal');
 bindCspDelegation('signedUploadModal');
 bindCspDelegation('paymentConfirmModal');
+// Modal "Đổi Hình Thức Thanh Toán" hợp đồng (v13.5, 99896d5) — bị bỏ sót lúc thêm, khiến submit form
+// không được preventDefault(), trình duyệt tự submit mặc định -> reload toàn trang, văng người dùng về
+// màn đăng nhập (phát hiện qua audit rà soát v13.1-13.6, xem báo cáo audit).
+bindCspDelegation('contractPaymentTypeChangeModal');
 
 // ==========================================
 // Ô TÌM-KIẾM-DÙNG-CHUNG (thay <input list="..."> + <datalist> NATIVE) — datalist gốc của trình duyệt

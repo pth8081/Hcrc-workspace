@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**13.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v13.7 (2026-09-08): Rà soát chủ động v13.1→v13.6 — phát hiện + sửa 2 lỗi CSP-delegation mới (modal
+## Đổi Hình Thức Thanh Toán hợp đồng gây reload/văng đăng nhập; nút "Nhập Lại Từ Đầu" Vận Hành > Đặt Hàng)
+
+Người dùng chủ động yêu cầu rà soát lại toàn bộ v13.1→v13.6 xem có phần nào làm còn sai/thiếu so với yêu
+cầu gốc không (sau 2 lần liên tiếp phát hiện tính năng "đã xác nhận xong bằng ảnh chụp" vẫn lỗi khi deploy
+thật). Chạy 3 agent audit song song, chỉ điều tra + tự thao tác Playwright thật (click DOM thật), không
+sửa gì cho tới khi có kết luận rõ ràng:
+
+- **v13.1/v13.2 (đợt "Làm Mới"/xoá file cho 12 form tạo mới)**: **SẠCH** — không phát hiện lỗi nào, có tự
+  test Playwright thật (ảnh chụp) trên 3 form rủi ro cao nhất.
+- **v13.4 (Tổng Hợp > Thanh Toán, 7 điểm yêu cầu gốc)**: **SẠCH** — cả 7 điểm PASS, tự click DOM thật xác
+  nhận toàn bộ luồng ONE_TIME/PERIODIC + CSP-delegation.
+- **v13.5 (4 yêu cầu Đồng Phục/Hợp đồng/Đặt hàng/Mã tự sinh)**: phát hiện **2 lỗi thật**, cùng lớp bug
+  CSP-delegation (root/modal chưa đăng ký `bindCspDelegation()`/registry riêng của Vận Hành) đã gặp 2 lần
+  trước trong session này:
+  1. **Nghiêm trọng**: modal `#contractPaymentTypeChangeModal` (Hợp Đồng > "Đổi Hình Thức Thanh Toán")
+     chưa từng được `bindCspDelegation()` → bấm "Gửi Yêu Cầu" bị trình duyệt submit form mặc định (không
+     `preventDefault()`) → **reload toàn trang, văng người dùng về màn đăng nhập**, mất hết state đang
+     nhập. Fix: thêm `bindCspDelegation('contractPaymentTypeChangeModal');` (`public/js/core.js`).
+  2. Nút "🔄 Nhập Lại Từ Đầu" (Vận Hành > Đặt Hàng, mở khoá field đọc từ PDF) hoàn toàn không phản hồi
+     click — `resetOperationOrderPoLock()` bị bỏ sót khỏi registry riêng `OP_CLICK_ACTIONS` của module Vận
+     Hành. Fix: thêm entry `resetOperationOrderPoLock: () => resetOperationOrderPoLock()` vào
+     `OP_CLICK_ACTIONS` (`public/js/module-vanhanh.js`).
+  - Cả 2 điểm còn lại của v13.5 (chặn trùng Số Đơn NCC tách STORE/HO, mã tự sinh `HCRC-<phòng>-<module>-
+    <số>` + server tự retry khi trùng) đều PASS, không cần sửa.
+  - Cả 2 fix đã tự xác nhận lại qua click DOM thật (không còn reload trang; nút mở khoá hoạt động đúng)
+    trước khi merge.
+- **v13.3/v13.6 (VHST lần 2)**: không audit lại lần này — vừa được tự tay kiểm chứng lại bằng ảnh chụp
+  thật ở chính v13.6 ngay trước đó.
+
+Chạy lại toàn bộ 86 file `tests/test-*.js` sau 2 fix — 84 pass, đúng 2 lỗi pre-existing (thiếu SQL Server
+thật trong sandbox, không liên quan thay đổi này).
 
 ## v13.6 (2026-09-08): Vận Hành > Siêu Thị — sửa lỗi LẦN THỨ 2 (Danh Mục Đầu Tư vẫn không tạo được danh
 ## mục con) + Hỗ Trợ IT thiếu nút "Chuyển Phê Duyệt" trước khi nhận việc

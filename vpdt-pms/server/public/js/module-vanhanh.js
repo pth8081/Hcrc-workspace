@@ -3174,7 +3174,11 @@ const OP_CLICK_ACTIONS = {
   // vốn giả định bindCspDelegation() dùng chung window[fnName]) PHẢI khai báo tường minh ở đây, nếu
   // không nút "Làm Mới" lẫn nút "✕" trong chip file sẽ IM LẶNG không hoạt động trong module Vận Hành.
   confirmAndResetForm: el => confirmAndResetForm(el.dataset.arg0, el.dataset.arg1),
-  clearSingleFileInput: el => clearSingleFileInput(el.dataset.arg0, el.dataset.arg1)
+  clearSingleFileInput: el => clearSingleFileInput(el.dataset.arg0, el.dataset.arg1),
+  // Nút "🔄 Nhập Lại Từ Đầu" (mở khoá field đọc từ PDF đơn hàng) — bị bỏ sót lúc thêm ở v13.5 (99896d5),
+  // cùng lý do các entry phía trên: registry riêng của module này không tự tìm hàm theo window[fnName]
+  // như bindCspDelegation() chung, khai báo tường minh ở đây thì nút mới thực sự phản hồi click.
+  resetOperationOrderPoLock: () => resetOperationOrderPoLock()
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
