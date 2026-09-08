@@ -510,7 +510,12 @@ function hasOwnWorkItemInSource(user, sourceType, sourceId, appData) {
 }
 function canViewOperationStoreOpening(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  // Audit nghiệp vụ (đợt 4): canManageOperationRecord() (lib/recordActions.js, dùng cho MỌI thao tác
+  // sửa/xoá/xác nhận hồ sơ này) coi admin/operationRecordManageAll NGANG HÀNG toàn quyền — nhưng ở đây
+  // trước đây CHỈ check admin, khiến người chỉ có operationRecordManageAll (không phải admin) quản lý/sửa/
+  // xoá được hồ sơ khác phòng ban qua gọi action thẳng nhưng GET /api/data lại không liệt kê hồ sơ đó cho
+  // họ (quyền "mù" — có nhưng không thấy trên UI bình thường, phải biết trước id).
+  if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
   // KHÔNG còn nhánh "đang là approver hồ sơ chính" — MODULE_CONFIGS.operationStoreOpenings đã bị xoá
@@ -527,7 +532,8 @@ function filterOperationStoreOpeningsForUser(items, user, appData) {
 }
 function canViewOperationRepair(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  // Audit nghiệp vụ (đợt 4) — cùng lý do đã thêm ở canViewOperationStoreOpening() ngay trên.
+  if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
   // Cùng lý do ở canViewOperationStoreOpening() bên trên — bỏ nhánh approver hồ sơ chính, giữ nguyên

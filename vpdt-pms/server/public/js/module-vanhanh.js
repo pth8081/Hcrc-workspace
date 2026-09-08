@@ -562,6 +562,20 @@ async function handleOperationOrderPdfUpload(event) {
   statusEl.innerText = '⏳ Đang đọc thông tin từ file PDF để tự điền form...';
   statusEl.classList.remove('hidden');
 
+  // Audit nghiệp vụ (đợt 4): chọn PDF MỚI trong khi dữ liệu PDF TRƯỚC còn đang khoá (operationOrderPoLocked)
+  // — xoá sạch giá trị + mở khoá TRƯỚC khi điền dữ liệu MỚI. Trước đây poFillField()/poFillMoneyField()
+  // chỉ ghi đè khi phiếu MỚI có giá trị (khác rỗng), nên field nào phiếu MỚI KHÔNG đọc được (VD thiếu
+  // "Ngày Giao") vẫn giữ nguyên giá trị của phiếu CŨ nhưng lại chuyển sang MỞ KHOÁ (applyOperationOrderPoLock()
+  // tự mở khoá field không có trong parsedFields mới) — dễ lẫn dữ liệu giữa 2 nhà cung cấp khác nhau nếu
+  // người dùng chọn thẳng file khác thay vì bấm "🔄 Nhập Lại Từ Đầu" trước (thao tác tự nhiên hơn). Không
+  // đụng operationOrderPoLocked=false (lần đầu chọn PDF, chưa có gì để xoá) hay các field KHÔNG do PDF
+  // khoá (Tiêu Đề/Nhà Cung Cấp/Ghi Chú — người dùng có thể đã tự gõ, không nên mất).
+  if (operationOrderPoLocked) {
+    Object.keys(OPERATION_ORDER_PO_FIELD_TO_KEY).forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    operationOrderItems = [];
+    applyOperationOrderPoLock(null);
+  }
+
   try {
     // pdfjsLib giờ nạp LƯỜI qua ensurePdfJsReady() (core.js, Task hiệu năng) — trước đây nạp sẵn tĩnh lúc
     // mở trang nên chỉ cần chờ; giờ gọi thẳng, tự tải lần đầu cần dùng (có cache, gọi nhiều lần không
@@ -2485,6 +2499,11 @@ async function submitOperationWorkItemForm(e) {
     newItem = result.item;
   } catch (err) { return alert(`⛔ ${err.message}`); }
   DB.operationWorkItems.push(newItem);
+  // Audit nghiệp vụ (đợt 4): mirror ĐÚNG fix server (routes/records.js POST /operationWorkItems) — thêm
+  // việc con mới vào 1 cha đang "Đang nghiệm thu" trước đây làm cha "kẹt" sai trạng thái vì không có nơi
+  // nào tính lại cascade sau khi TẠO (chỉ /progress và /accept mới gọi). No-op nếu vừa tạo việc GỐC
+  // (parentWorkItemId null).
+  syncOperationWorkItemAncestorsClient(newItem.parentWorkItemId);
   closeOperationWorkItemFormModal();
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();

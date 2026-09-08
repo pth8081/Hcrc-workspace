@@ -2033,6 +2033,12 @@ router.post('/operationWorkItems', async (req, res) => {
     newItem.sourceType = sourceType;
     newItem.sourceId = srcId;
     await insertWorkItem(newItem);
+    // Audit nghiệp vụ (đợt 4): thêm việc CON mới vào 1 cha đang "Đang nghiệm thu" (cha CHƯA
+    // DA_NGHIEM_THU nên createOperationWorkItem() vẫn cho phép, xem chú thích ở đó) làm cha bị "kẹt" sai
+    // trạng thái — trước đây CHỈ /progress và /accept mới gọi syncOperationWorkItemAncestors(), route tạo
+    // mới này thì không, nên cha không được tính lại dù tập hợp con vừa đổi. Gọi lại ngay sau khi tạo,
+    // giống hệt 2 route kia — nếu không có cha (newItem.parentWorkItemId null) hàm tự no-op ở vòng lặp đầu.
+    await syncOperationWorkItemAncestors(newItem.parentWorkItemId, sourceType, srcId);
     res.json({ ok: true, item: newItem });
   } catch (err) { handleError(res, 'operationWorkItems', err); }
 });

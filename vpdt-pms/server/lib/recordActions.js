@@ -645,7 +645,14 @@ function submitOperationEstimate(user, item, payload, sourceType) {
   const prelim = rawItems.map((it) => {
     const content = String(it?.content ?? it?.name ?? '').trim();
     if (!content) return null;
-    const amount = Math.max(0, Number(it?.amount) || 0);
+    // Audit nghiệp vụ (đợt 4): trước đây Math.max(0, ...) ÂM THẦM gán số âm về 0 — không báo gì cho người
+    // dùng biết dữ liệu đã bị sửa lại (khác hẳn operationOrders.items — throw 400 rõ ràng ngay, xem
+    // extraValidate operationOrders ở lib/createValidation.js). Chặn tường minh thay vì tự sửa hộ.
+    const rawAmount = Number(it?.amount);
+    if (Number.isFinite(rawAmount) && rawAmount < 0) {
+      throw new HttpError(400, `Chi phí hạng mục "${content}" không được là số âm`);
+    }
+    const amount = Number.isFinite(rawAmount) ? rawAmount : 0;
     const rawId = Number(it?.id);
     const id = (Number.isFinite(rawId) && existingIds.has(rawId)) ? rawId : genId();
     if (Number.isFinite(rawId)) idMap.set(rawId, id);

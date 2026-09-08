@@ -834,6 +834,17 @@ const CREATE_MODULE_CONFIGS = {
       if (payload.expectedOpenDate) {
         const d = new Date(payload.expectedOpenDate);
         if (Number.isNaN(d.getTime())) throw new CreateError(400, 'Ngày dự kiến khai trương không hợp lệ');
+        // Audit nghiệp vụ (đợt 4): trước đây chỉ kiểm tra ĐỊNH DẠNG, không đối chiếu với ngày hiện tại —
+        // chọn được ngày dự kiến khai trương trong QUÁ KHỨ. Field này CHỈ set 1 LẦN lúc TẠO hồ sơ (không
+        // có route/action nào sửa lại sau khi tạo — hồ sơ vào thẳng APPROVED ngay, xem payload.status ngay
+        // dưới), nên so với "hôm nay" tại đây an toàn, không chặn nhầm việc sửa hồ sơ đã có ngày khai
+        // trương thuộc quá khứ hợp lệ (không có đường sửa nào cả). So sánh CHỈ theo ngày (bỏ giờ/phút) để
+        // không chặn nhầm chọn ĐÚNG hôm nay do lệch múi giờ trình duyệt/server.
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const chosenDay = new Date(d); chosenDay.setHours(0, 0, 0, 0);
+        if (chosenDay.getTime() < today.getTime()) {
+          throw new CreateError(400, 'Ngày dự kiến khai trương không được chọn trong quá khứ');
+        }
         payload.expectedOpenDate = d.toISOString();
       } else {
         payload.expectedOpenDate = '';

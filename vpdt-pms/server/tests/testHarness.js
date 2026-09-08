@@ -28,7 +28,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
-const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser } = require('../lib/recordViewScope');
+const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -333,6 +333,12 @@ function createDispatcher(state) {
       // reportPeriods: ẩn compilation/taskCompilation khỏi người không đủ quyền — cùng lý do hrFeedback ở
       // trên, tái hiện đúng bước lọc thật của server (routes/data.js) thay vì tự đoán lại luật.
       data.reportPeriods = sanitizeReportPeriodsForUser(state.reportPeriods, viewer);
+      // operationStoreOpenings/operationRepairs: audit đợt 4 (fix mục 7) — mirror ĐÚNG bước lọc thật
+      // routes/data.js (filterOperationStoreOpeningsForUser/filterOperationRepairsForUser), không tự
+      // đoán lại luật. Trước đây mock trả nguyên state không lọc, khiến test không thể phát hiện lỗ hổng
+      // canViewOperationStoreOpening()/canViewOperationRepair() chỉ check admin (đã fix trong đợt này).
+      data.operationStoreOpenings = filterOperationStoreOpeningsForUser(state.operationStoreOpenings, viewer, data);
+      data.operationRepairs = filterOperationRepairsForUser(state.operationRepairs, viewer, data);
     }
     return data;
   }
@@ -516,6 +522,10 @@ function createDispatcher(state) {
         newItem.sourceType = sourceType;
         newItem.sourceId = srcId;
         state.operationWorkItems.push(newItem);
+        // Audit nghiệp vụ (đợt 4): mirror ĐÚNG fix routes/records.js POST /operationWorkItems — tính lại
+        // cascade cha ngay sau khi tạo (trước đây chỉ /progress và /accept mới gọi, khiến cha "kẹt" sai
+        // trạng thái khi thêm con mới lúc cha đang DANG_NGHIEM_THU).
+        syncOperationWorkItemAncestorsInState(state, newItem.parentWorkItemId);
         return { status: 200, body: { ok: true, item: newItem } };
       }
 

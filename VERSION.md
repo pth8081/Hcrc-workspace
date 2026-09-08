@@ -1,8 +1,87 @@
 # Phiên bản hiện tại
 
-**13.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**13.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v13.9 (2026-09-08): Vận Hành > Siêu Thị — audit lần 4 (nghiệp vụ/trường/phân quyền, 3 agent song song),
+## sửa 6/7 lỗi xác nhận
+
+Theo yêu cầu chủ động của người dùng ("audit kỹ một lần nữa toàn bộ chức năng trong siêu thị... xem có lỗi
+gì về nghiệp vụ, các trường, phân quyền không") — chạy 3 agent audit song song (nghiệp vụ/trường-validate/
+phân quyền), mỗi agent tự xác nhận phát hiện bằng script Playwright/testHarness THẬT (không chỉ đọc code),
+gộp được 7 phát hiện. Người dùng xác nhận "Sửa tất cả 7 mục". Đã sửa **6/7**, 1 mục **cân nhắc kỹ rồi
+KHÔNG sửa** (giải thích rõ lý do bên dưới) — minh bạch báo lại thay vì âm thầm bỏ qua hay âm thầm giữ.
+
+**Đã sửa (6 mục):**
+1. **Cây công việc — trạng thái cha "kẹt sai" khi thêm con mới lúc cha đang "Đang nghiệm thu"**: route tạo
+   việc con mới (`POST /api/records/operationWorkItems`, `routes/records.js`) và
+   `submitOperationWorkItemForm()` (client) trước đây KHÔNG gọi lại `syncOperationWorkItemAncestors()`/
+   `syncOperationWorkItemAncestorsClient()` sau khi tạo (chỉ gọi sau `/progress` và `/accept`) — nếu cha đã
+   tự cascade "Đang nghiệm thu" (toàn bộ con cũ đã nộp nghiệm thu) rồi có người thêm 1 con MỚI "Chưa bắt
+   đầu" vào đúng cha đó (server không chặn việc này), cha vẫn hiển thị sai "Đang nghiệm thu" dù thực tế còn
+   việc dở dang — đánh lừa người xem ở Quản Lý Công Việc/Nghiệm Thu/Báo Cáo. Đã thêm lệnh gọi cascade-sync
+   ngay sau khi tạo việc con mới (cả server lẫn client lẫn mock test harness).
+2. **Đơn Hàng — đọc lại PDF thứ 2 để lại dữ liệu SÓT từ PDF thứ 1**: `handleOperationOrderPdfUpload()`
+   không xoá field/khoá cũ trước khi đọc PDF mới — field nào PDF #2 không đọc ra được sẽ giữ nguyên giá trị
+   cũ từ PDF #1 NHƯNG chuyển sang trạng thái KHÔNG khoá (readOnly=false), trông y hệt field người tự gõ,
+   không còn dấu hiệu là dữ liệu sót — dễ nộp đơn hàng lẫn dữ liệu giữa 2 phiếu NCC khác nhau. Đã thêm bước
+   reset toàn bộ field/`operationOrderItems` về rỗng trước khi đọc PDF mới.
+4. **Ngày dự kiến khai trương/sửa chữa — chọn được ngày trong QUÁ KHỨ**: `operationStoreOpenings`/
+   `operationRepairs` trước đây không validate `expectedOpenDate` — vẫn tạo được hồ sơ với ngày dự kiến đã
+   qua. Đã thêm chặn 400 rõ ràng ở `lib/createValidation.js` (so sánh theo ngày, không theo giờ, tránh false-
+   positive múi giờ) khi ngày chọn nhỏ hơn hôm nay.
+6. **Danh Mục Đầu Tư — nhập số tiền ÂM bị âm thầm gán về 0**: `submitOperationEstimate()`
+   (`lib/recordActions.js`) trước đây `Math.max(0, amount)` — nếu người dùng gõ nhầm số âm, hệ thống tự
+   sửa thành 0 mà không báo, dữ liệu dự toán sai lệch không ai biết. Đã đổi thành throw lỗi 400 rõ ràng yêu
+   cầu nhập lại, không tự ý sửa dữ liệu người dùng nhập.
+7. **Phân quyền xem hồ sơ (GET /api/data) không khớp phân quyền thao tác**: người có
+   `operationRecordManageAll` (không phải admin, khác phòng ban) — quyền vốn cho phép họ TOÀN QUYỀN thao
+   tác (sửa/xoá việc, duyệt dự toán...) trên MỌI hồ sơ `operationStoreOpenings`/`operationRepairs` qua
+   `canManageOperationRecord()` — nhưng `canViewOperationStoreOpening()`/`canViewOperationRepair()`
+   (`lib/recordViewScope.js`, quyết định hồ sơ nào lộ ra qua GET /api/data) trước đây CHỈ check `admin`,
+   không check quyền này — khiến người có quyền thao tác đầy đủ lại KHÔNG THẤY hồ sơ trong danh sách để mà
+   thao tác (phải tự dò link/ID mới vào được, UX gãy, chỉ khác phòng ban mà thao tác vẫn đúng). Đã thêm
+   check `operationRecordManageAll` vào cả 2 hàm, khớp đúng quyền thao tác đã có (không nới quyền, chỉ hết
+   lệch giữa "xem được" và "thao tác được"). Chỉ áp dụng cho 2 collection này — `operationOrders` dùng mô
+   hình quyền HOÀN TOÀN khác (`operationOrderCreate` + duyệt theo phòng ban qua workflow riêng), không liên
+   quan `operationRecordManageAll` nên KHÔNG đổi.
+
+**KHÔNG sửa (1 mục, có cân nhắc):**
+5. **Nhãn "Người Phụ Trách" dễ hiểu nhầm là được cấp quyền thao tác**: agent phát hiện field "Người Phụ
+   Trách" ở cấp HỒ SƠ (`vsoPersonInChargeInput`/`vrPersonInChargeInput`) chỉ là text tự do lưu thông tin,
+   KHÔNG cấp quyền thao tác gì (quyền thật do `canManageOperationRecord()` quyết định) — dễ khiến người
+   nhập hiểu nhầm rằng điền tên vào đó là gán quyền. Đây là vấn đề CHỮ NGHĨA/UX, không phải lỗi logic — đã
+   sửa nhãn rõ hơn: "Người Phụ Trách Hồ Sơ (chỉ để lưu thông tin, không cấp quyền thao tác)" (áp dụng cả 2
+   loại hồ sơ), và làm rõ tương phản với "Người Phụ Trách Công Việc Này" ở cấp việc (field này MỚI thật sự
+   liên quan quyền thao tác việc đó).
+
+**Đã cân nhắc kỹ rồi CHỦ ĐỘNG KHÔNG sửa (1 mục — báo cáo minh bạch, không âm thầm bỏ qua):**
+3. **`operationExecutionPeriods` ("Kỳ Thực Hiện") — UI đã gỡ nút tạo mới nhưng route server vẫn tạo được**:
+   agent phát hiện UI không còn đường nào gọi tạo Kỳ Thực Hiện mới (đã gỡ theo yêu cầu trước), nhưng route
+   `POST /api/create/operationExecutionPeriods` + `POST .../start` vẫn hoạt động đầy đủ nếu gọi trực tiếp
+   (không phải lỗ hổng bảo mật — vẫn đòi đúng quyền `canManageOperationRecord()` + dự toán đã duyệt, chỉ là
+   "vẫn tạo được nếu biết gọi thẳng API"). Ban đầu đã thử chặn hẳn (throw 410) nhưng phát hiện: (a) code
+   hiện tại có comment tường minh nói rõ ý đồ THIẾT KẾ là "GIỮ NGUYÊN để hồ sơ CŨ vẫn hiển thị đúng"
+   — chặn hẳn đi ngược ý đồ đã xác nhận trước đây; (b) sẽ phá vỡ 1 khối test hồi quy hợp lệ đang PASS
+   (`tests/test-operation-store-lifecycle.js`, mục "Kỳ Thực Hiện — giờ KHÔNG BẮT BUỘC", có case tên thẳng
+   "operationRecordManageAll tạo Kỳ Thực Hiện — mặc định CHUA_BAT_DAU" xác nhận tạo vẫn phải hoạt động).
+   Đây không phải lỗ hổng an ninh (vẫn cần đúng quyền thật) mà là "route legacy còn sống nhưng không còn
+   route UI dẫn tới" — quyết định GIỮ NGUYÊN như thiết kế gốc, không sửa. Có test riêng
+   (`tests/test-operation-execperiod-still-creatable.js`) xác nhận + ghi lại rõ hiện trạng này cho lần audit
+   sau.
+
+Viết mới `tests/test-operation-vhst-audit4-fixes.js` (9 scenario, xác nhận đủ 4/6 mục sửa có logic
+kiểm-thử-được bằng test tự động — mục 2/5 là UI/reset-state không có assert logic riêng ngoài đọc code).
+Chạy lại toàn bộ 91 file `tests/test-*.js` — 88 pass, đúng 2 lỗi pre-existing (thiếu SQL Server thật trong
+sandbox, xác nhận lại KHÔNG liên quan gì thay đổi đợt này bằng cách `git stash` chạy lại trên code CŨ vẫn
+lỗi y hệt). Xoá `tests/test-operation-vhst-audit3-stale-parent-status.js` — kịch bản audit lần 3 viết ra để
+XÁC NHẬN lỗi #1 tồn tại (assert đúng hành vi SAI), nay lỗi đã sửa nên kịch bản đó tự nhiên fail đúng — đã
+có `test-operation-vhst-audit4-fixes.js` thay thế với assert đúng hành vi ĐÃ SỬA, không cần giữ 2 bản.
+
+Deploy-impact: **không đổi** `schema.sql`/`.env.example`/`dependencies` — chỉ copy code (`lib/
+createValidation.js`, `lib/recordActions.js`, `lib/recordViewScope.js`, `public/index.html`, `public/js/
+module-vanhanh.js`, `routes/records.js`) + `pm2 restart`.
 
 ## v13.8 (2026-09-08): Vận Hành > Siêu Thị — sửa lỗi LẦN THỨ 3, root cause THẬT KHÁC 2 đợt trước (UX
 ## discoverability + real-time date blocking, không phải lỗi chức năng như đã tưởng)
