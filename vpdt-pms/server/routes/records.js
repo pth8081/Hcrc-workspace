@@ -2360,20 +2360,21 @@ router.post('/itSupportTickets/:id/update-status', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
       recordActions.updateItTicketStatus(freshUser, item, req.body));
-    // Ticket sinh ra từ Nhân Sự > Onboarding/Offboarding (sourceType, xem buildOnboardingItTicketDraft()/
-    // buildOffboardingItTicketDraft() ở lib/recordActions.js) vừa chuyển DONE -> ghi lại kết quả IT báo
-    // cáo (resolutionNote) ngược về ĐÚNG hồ sơ đã sinh ra ticket này. update-status chỉ chuyển DONE ĐÚNG
-    // 1 lần (chặn sửa tiếp sau DONE/CANCELLED, xem updateItTicketStatus()) nên nhánh này không chạy lặp.
-    // KHÔNG BAO GIỜ đụng tới DB.users ở đây — xem chú thích applyItTicketCompletionToLinkedHrRequest().
-    // Lỗi ở bước ghi ngược (hiếm — hồ sơ liên kết đã bị xoá...) KHÔNG làm hỏng việc IT vừa hoàn tất
-    // ticket (đã commit xong ở bước trên) — chỉ log lại để tra cứu sau, cùng tinh thần learnLicenseType()
-    // ở routes/create.js (tiện ích phụ không được phép làm hỏng thao tác chính đã thành công).
+    // Ticket sinh ra từ 1 task nhãn IT trong quy trình Nhân Sự > Onboarding/Offboarding (sourceType, xem
+    // createItTicketForHrTask() ở lib/recordActions.js) vừa chuyển DONE -> ghi lại kết quả IT báo cáo
+    // (resolutionNote) ngược về ĐÚNG task (qua sourceTaskId) đã sinh ra ticket này. update-status chỉ
+    // chuyển DONE ĐÚNG 1 lần (chặn sửa tiếp sau DONE/CANCELLED, xem updateItTicketStatus()) nên nhánh
+    // này không chạy lặp. KHÔNG BAO GIỜ đụng tới DB.users ở đây — xem chú thích
+    // applyItTicketCompletionToHrProcessTask(). Lỗi ở bước ghi ngược (hiếm — hồ sơ liên kết đã bị xoá...)
+    // KHÔNG làm hỏng việc IT vừa hoàn tất ticket (đã commit xong ở bước trên) — chỉ log lại để tra cứu
+    // sau, cùng tinh thần learnLicenseType() ở routes/create.js (tiện ích phụ không được phép làm hỏng
+    // thao tác chính đã thành công).
     if (result.status === 'DONE' && result.sourceType && result.sourceId != null) {
       const linkedCollection = recordActions.HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[result.sourceType];
       if (linkedCollection) {
         try {
           await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
-            recordActions.applyItTicketCompletionToLinkedHrRequest(freshUser, item, result));
+            recordActions.applyItTicketCompletionToHrProcessTask(freshUser, item, result));
         } catch (linkErr) {
           console.error(`itSupportTickets/${itemId}/update-status: lỗi ghi ngược hồ sơ ${linkedCollection}/${result.sourceId}:`, linkErr.message);
         }
@@ -2483,50 +2484,98 @@ router.post('/hrFeedback/:id/mark-read', async (req, res) => {
   }
 });
 
-// ===================== NHÂN SỰ > Onboarding / Offboarding =====================
-// Hồ sơ được TẠO qua engine chung (POST /api/create/hrOnboardingRequests|hrOffboardingRequests, xem
-// lib/createValidation.js) ở trạng thái PENDING_IT nhưng CHƯA có ticket Hỗ Trợ IT nào — "Gửi Yêu Cầu"
-// ở đây mới thực sự sinh ra ticket (2 route dưới đây), cùng khuôn "khoá A -> build bản nháp B -> insert
-// B" như /contracts/:id/start-payment ở đầu file, chỉ khác 1 điểm: id của B (ticketId) phải tự sinh
-// TRƯỚC (Date.now()) rồi truyền vào cả 2 bước, vì A cần ghi lại linkedTicketId=ticketId NGAY TRONG lúc
-// khoá A (không có ticket thật nào tồn tại để lấy id lúc đó) — xem buildOnboardingItTicketDraft()/
-// buildOffboardingItTicketDraft() ở lib/recordActions.js.
-router.post('/hrOnboardingRequests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrOnboardingRequests'));
-router.post('/hrOffboardingRequests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrOffboardingRequests'));
+// ===================== NHÂN SỰ > Onboarding / Offboarding (v2 — checklist theo giai đoạn) =====================
+// Quy trình được TẠO qua engine chung (POST /api/create/hrProcesses, xem lib/createValidation.js) với
+// tasks[] đã tự sinh sẵn — mọi thao tác VẬN HÀNH sau đó (hoàn thành/bỏ qua/giao lại task, huỷ quy
+// trình, đính kèm file, tạo ticket IT cho 1 task) là các route dưới đây, đều khoá record qua
+// withLockedRecordForCollection() rồi gọi đúng hàm tương ứng ở lib/recordActions.js.
+router.post('/hrProcesses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrProcesses'));
 
-router.post('/hrOnboardingRequests/:id/submit-it-request', async (req, res) => {
+router.post('/hrProcesses/:id/complete-task', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const ticketId = Date.now();
-    let draft = null;
-    const result = await withLockedRecordForCollection('hrOnboardingRequests', itemId, (item) => {
-      draft = recordActions.buildOnboardingItTicketDraft(freshUser, item, ticketId);
-      return item;
-    });
-    const ticket = await createForCollection('itSupportTickets', () => ({ ...draft, id: ticketId }));
-    res.json({ ok: true, item: result, ticket });
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.completeHrTask(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
   } catch (err) {
-    handleError(res, `hrOnboardingRequests/${req.params.id}/submit-it-request`, err);
+    handleError(res, `hrProcesses/${req.params.id}/complete-task`, err);
   }
 });
 
-router.post('/hrOffboardingRequests/:id/submit-it-request', async (req, res) => {
+router.post('/hrProcesses/:id/skip-task', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.skipHrTask(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/skip-task`, err);
+  }
+});
+
+// reassignHrTask() cần usersList để xác thực assignedToUsername thực sự tồn tại/còn active — cùng khuôn
+// escalateItTicket() ở trên.
+router.post('/hrProcesses/:id/reassign-task', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.reassignHrTask(freshUser, item, req.body, users));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/reassign-task`, err);
+  }
+});
+
+router.post('/hrProcesses/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.cancelHrProcess(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/cancel`, err);
+  }
+});
+
+router.post('/hrProcesses/:id/attachments', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.addHrProcessAttachment(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/attachments`, err);
+  }
+});
+
+// Tạo ticket Hỗ Trợ IT cho 1 task nhãn IT — cùng khuôn "khoá A -> build bản nháp B -> insert B" như
+// /contracts/:id/start-payment ở đầu file: id của B (ticketId) phải tự sinh TRƯỚC (Date.now()) rồi
+// truyền vào cả 2 bước, vì A cần ghi lại task.linkedTicketId=ticketId NGAY TRONG lúc khoá A.
+router.post('/hrProcesses/:id/create-it-ticket', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const ticketId = Date.now();
     let draft = null;
-    const result = await withLockedRecordForCollection('hrOffboardingRequests', itemId, (item) => {
-      draft = recordActions.buildOffboardingItTicketDraft(freshUser, item, ticketId);
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) => {
+      draft = recordActions.createItTicketForHrTask(freshUser, item, req.body, ticketId);
       return item;
     });
     const ticket = await createForCollection('itSupportTickets', () => ({ ...draft, id: ticketId }));
     res.json({ ok: true, item: result, ticket });
   } catch (err) {
-    handleError(res, `hrOffboardingRequests/${req.params.id}/submit-it-request`, err);
+    handleError(res, `hrProcesses/${req.params.id}/create-it-ticket`, err);
   }
 });
 

@@ -378,6 +378,17 @@ function validateRequiredCustomData(customData, formTemplates, modKey) {
   }
 }
 
+// Nhân Sự > Onboarding/Offboarding (v2) — thứ tự giai đoạn chuẩn theo mục 3.4 tài liệu thiết kế gốc.
+// Dùng ở CẢ createValidation.js (gán stage ban đầu khi tạo) LẪN recordActions.js
+// (computeHrProcessProgress() — tính lại stage/status sau mỗi lần task đổi trạng thái) — export ở cuối
+// file để recordActions.js require lại, KHÔNG định nghĩa trùng 2 nơi (khác iOS_TICKET_STATUS_BADGES ở
+// client, nơi trùng lặp có lý do load-order riêng).
+const HR_ONBOARDING_STAGES = ['PRE_BOARDING', 'FIRST_DAY', 'TRAINING', 'PROBATION_REVIEW'];
+const HR_OFFBOARDING_STAGES = ['NOTICE', 'HANDOVER', 'ASSET_REVOKE', 'SETTLEMENT', 'EXIT_INTERVIEW'];
+// Nhãn TRÁCH NHIỆM cố định cho từng việc trong checklist (mục 3.2 "Department" của HR_TaskTemplate) —
+// KHÔNG phải phòng ban thật trong DB.depts, xem canActOnHrTask() ở lib/recordActions.js.
+const HR_TASK_DEPARTMENTS = ['HR', 'IT', 'ADMIN', 'FINANCE', 'MANAGER'];
+
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
 // field ghi người tạo, và kiểm tra bổ sung riêng (nếu có) — phần logic chung (xác minh dept, chặn mã
 // trùng, gán người tạo) nằm ở validateAndPrepareCreate() bên dưới, dùng chung cho mọi module.
@@ -2398,132 +2409,170 @@ const CREATE_MODULE_CONFIGS = {
       }];
     }
   },
-  // ===== NHÂN SỰ > Onboarding / Offboarding — tự động tạo ticket "Hỗ Trợ Yêu Cầu" (Hỗ Trợ IT) =====
-  // Cầu nối THUẦN TUÝ giữa Nhân Sự và Hỗ Trợ IT: KHÔNG tự tạo/khoá tài khoản DB.users nào — IT vẫn tự
-  // tay cấp/khoá email + AD ở NGOÀI hệ thống này như trước giờ, ticket sinh ra ở đây chỉ để IT nhận việc
-  // + theo dõi + ghi lại kết quả (xem buildOnboardingItTicketDraft()/buildOffboardingItTicketDraft()/
-  // applyItTicketCompletionToLinkedHrRequest() ở lib/recordActions.js — quyết định phạm vi đã được
-  // người dùng xác nhận rõ). Tên collection cố ý mang tiền tố "hr" — KHÔNG dùng bare "onboarding*"/
-  // "offboarding*" — để không đụng tên với onboardingPaths/onboardingProgress ("Đào Tạo Tân Binh", tính
-  // năng hoàn toàn khác, đã tồn tại từ trước — xem lib/recordStore.js MIGRATED_COLLECTIONS).
-  // forceOwnDept + getScope rỗng (cùng khuôn licenses/hrFeedback/itServiceRenewals ở trên): "dept" của
-  // bản ghi luôn là phòng ban của người TẠO YÊU CẦU (thường là Nhân Sự/quản lý trực tiếp), KHÁC hẳn
-  // employeeDept bên dưới (phòng ban/siêu thị của NHÂN VIÊN đang được onboard/offboard) — quyền thật
-  // nằm ở 2 cờ phẳng hrOnboardingCreate/hrOffboardingCreate (KHÔNG dùng chung nhanSuManage — 2 quyền
-  // TÁCH RIÊNG theo đúng quyết định người dùng đã xác nhận, seedDefaults.js migrateHrLifecyclePerms()
-  // seed sẵn cho ai đang có nhanSuManage để không ai bị mất quyền so với trước khi có tính năng này).
-  hrOnboardingRequests: {
-    dbKey: 'hrOnboardingRequests',
+  // ===== NHÂN SỰ > Onboarding / Offboarding (v2 — checklist theo giai đoạn, thay hẳn cho mô hình "1
+  // yêu cầu = 1 ticket IT" cũ ở trên) =====
+  // Thiết kế theo tài liệu "Module Nhân Sự: Onboarding & Offboarding" người dùng cung cấp, chuyển từ mô
+  // hình bảng SQL riêng (HR_Process/HR_TaskTemplate/HR_ProcessTask/HR_ProcessAttachment/HR_ProcessLog)
+  // sang ĐÚNG khuôn JSON-blob hiện có của hệ thống (1 collection `hrProcesses`, mỗi bản ghi TỰ CHỨA
+  // mảng tasks[]/attachments[]/history[] thay vì 4 bảng riêng nối bằng khoá ngoại — không cần
+  // sql/schema.sql mới). Mô hình Position/PositionAssignment "seat-based" trong tài liệu gốc thuộc 1 hệ
+  // thống KPI/DWH-BRGMART KHÁC, không tồn tại ở đây — "vị trí" ở hệ thống này tái dùng ĐÚNG bộ 3 trường
+  // cascading HO/STORE (posType/dept-hoặc-store/jobTitle) đã dùng cho form Người Dùng.
+  //
+  // 1 quy trình (ONBOARDING/OFFBOARDING) khi TẠO sẽ tự sinh sẵn tasks[] từ danh mục checklist chuẩn
+  // DB.hrTaskTemplates (đang IsActive, đúng processType, xem tính DueDate ở dưới) — ĐÚNG tinh thần mục
+  // 4.1 tài liệu gốc, chỉ khác là snapshot NGAY VÀO record thay vì bảng con riêng. Tiến độ/giai đoạn
+  // hiện tại được TÍNH LẠI tự động sau mỗi lần task đổi trạng thái (xem computeHrProcessProgress() ở
+  // lib/recordActions.js) — KHÔNG có action "chuyển giai đoạn" thủ công riêng như mục 4 tài liệu gốc,
+  // giảm 1 nguồn lỗi (giai đoạn luôn phản ánh đúng tiến độ task thật, không thể lệch tay).
+  //
+  // "Department" của từng task (HR/IT/ADMIN/FINANCE/MANAGER) là NHÃN TRÁCH NHIỆM cố định theo tài liệu
+  // gốc — KHÔNG phải phòng ban thật trong DB.depts — ai được thao tác task theo từng nhãn xem
+  // canActOnHrTask() (lib/recordActions.js): HR/ADMIN -> hrOnboardingManage|hrOffboardingManage (theo
+  // đúng processType), IT -> itManage, FINANCE -> paymentManage, MANAGER -> đúng người được chọn làm
+  // "Quản lý trực tiếp" (directManagerUsername) lúc tạo quy trình — hoặc bất kỳ ai được GIAO RIÊNG qua
+  // assignedToUsername (ưu tiên cao nhất, ghi đè nhãn phòng ban).
+  //
+  // Tích hợp Hỗ Trợ IT (giữ lại tinh thần "cầu nối THUẦN TUÝ" của bản v1 ở trên — KHÔNG bao giờ tự động
+  // tạo/khoá DB.users) chuyển từ "1 yêu cầu = 1 ticket" sang "1 task IT = 1 ticket tuỳ chọn": xem
+  // createItTicketForHrTask()/applyItTicketCompletionToHrProcessTask() ở lib/recordActions.js.
+  hrProcesses: {
+    dbKey: 'hrProcesses',
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
-      if (!user.perms?.admin && !user.perms?.hrOnboardingCreate) {
-        throw new CreateError(403, 'Bạn không có quyền tạo yêu cầu Onboarding');
+      const processType = String(payload.processType || '').trim();
+      if (!['ONBOARDING', 'OFFBOARDING'].includes(processType)) throw new CreateError(400, 'Loại quy trình không hợp lệ');
+      payload.processType = processType;
+      const manageFlag = processType === 'ONBOARDING' ? 'hrOnboardingManage' : 'hrOffboardingManage';
+      if (!user.perms?.admin && !user.perms?.[manageFlag]) {
+        throw new CreateError(403, `Bạn không có quyền tạo quy trình ${processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'}`);
       }
-      if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
-      payload.employeeCode = String(payload.employeeCode).trim().slice(0, 50);
-      if (!payload.fullName || !String(payload.fullName).trim()) throw new CreateError(400, 'Vui lòng nhập Họ và Tên');
-      payload.fullName = String(payload.fullName).trim().slice(0, 200);
 
-      // posType/dept/jobTitle của NHÂN VIÊN MỚI — cùng cơ chế cascading HO/STORE đã dùng ở form Người
-      // Dùng đầy đủ (xem #uPosType/onUserPosTypeChange() ở public/index.html): posType quyết định dept
-      // tra theo DB.depts hay DB.stores, jobTitle tra theo DB.jobTitles (mảng chuỗi phẳng) hay
-      // DB.storeJobTitles (mảng {label}).
-      if (!['HO', 'STORE'].includes(payload.employeePosType)) throw new CreateError(400, 'Vui lòng chọn Vị Trí (HO/Siêu Thị) hợp lệ');
-      const employeeDept = String(payload.employeeDept || '').trim();
-      if (!employeeDept) throw new CreateError(400, payload.employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị' : 'Vui lòng chọn Phòng Ban');
-      const validDepts = payload.employeePosType === 'STORE' ? (appData?.stores || []) : (appData?.depts || []);
-      if (!validDepts.includes(employeeDept)) throw new CreateError(400, 'Phòng Ban/Siêu Thị không hợp lệ');
-      payload.employeeDept = employeeDept;
+      let anchorDate;
+      if (processType === 'ONBOARDING') {
+        if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
+        payload.employeeCode = String(payload.employeeCode).trim().slice(0, 50);
+        if (!payload.fullName || !String(payload.fullName).trim()) throw new CreateError(400, 'Vui lòng nhập Họ và Tên');
+        payload.fullName = String(payload.fullName).trim().slice(0, 200);
 
-      const employeeJobTitle = String(payload.employeeJobTitle || '').trim();
-      if (!employeeJobTitle) throw new CreateError(400, 'Vui lòng chọn Chức Danh');
-      const validJobTitles = payload.employeePosType === 'STORE'
-        ? (appData?.storeJobTitles || []).map(t => t.label)
-        : (appData?.jobTitles || []);
-      if (!validJobTitles.includes(employeeJobTitle)) throw new CreateError(400, 'Chức Danh không hợp lệ');
-      payload.employeeJobTitle = employeeJobTitle;
+        // posType/dept/jobTitle của NHÂN VIÊN MỚI — cùng cơ chế cascading HO/STORE đã dùng ở form Người
+        // Dùng đầy đủ (xem #uPosType/onUserPosTypeChange() ở public/index.html): posType quyết định dept
+        // tra theo DB.depts hay DB.stores, jobTitle tra theo DB.jobTitles (mảng chuỗi phẳng) hay
+        // DB.storeJobTitles (mảng {label}).
+        if (!['HO', 'STORE'].includes(payload.employeePosType)) throw new CreateError(400, 'Vui lòng chọn Vị Trí (HO/Siêu Thị) hợp lệ');
+        const employeeDept = String(payload.employeeDept || '').trim();
+        if (!employeeDept) throw new CreateError(400, payload.employeePosType === 'STORE' ? 'Vui lòng chọn Siêu Thị' : 'Vui lòng chọn Phòng Ban');
+        const validDepts = payload.employeePosType === 'STORE' ? (appData?.stores || []) : (appData?.depts || []);
+        if (!validDepts.includes(employeeDept)) throw new CreateError(400, 'Phòng Ban/Siêu Thị không hợp lệ');
+        payload.employeeDept = employeeDept;
 
-      // Email — để trống hợp lệ NẾU đợi IT cấp mới (mặc định), NHƯNG bắt buộc với nhân viên Siêu Thị
-      // (đúng yêu cầu nghiệp vụ đã xác nhận: "đối với nhân viên siêu thị thì phải nhập email"). Có nhập
-      // (bất kể posType nào) thì vẫn kiểm khuôn tối thiểu.
-      const email = String(payload.email || '').trim();
-      if (!email && payload.employeePosType === 'STORE') {
-        throw new CreateError(400, 'Nhân viên Siêu Thị bắt buộc phải nhập Email (không được để IT tự cấp)');
+        const employeeJobTitle = String(payload.employeeJobTitle || '').trim();
+        if (!employeeJobTitle) throw new CreateError(400, 'Vui lòng chọn Chức Danh');
+        const validJobTitles = payload.employeePosType === 'STORE'
+          ? (appData?.storeJobTitles || []).map(t => t.label)
+          : (appData?.jobTitles || []);
+        if (!validJobTitles.includes(employeeJobTitle)) throw new CreateError(400, 'Chức Danh không hợp lệ');
+        payload.employeeJobTitle = employeeJobTitle;
+
+        // Email — để trống hợp lệ NẾU đợi IT cấp mới (mặc định), NHƯNG bắt buộc với nhân viên Siêu Thị
+        // (đúng yêu cầu nghiệp vụ đã xác nhận trước đây: "đối với nhân viên siêu thị thì phải nhập email").
+        const email = String(payload.email || '').trim();
+        if (!email && payload.employeePosType === 'STORE') {
+          throw new CreateError(400, 'Nhân viên Siêu Thị bắt buộc phải nhập Email (không được để IT tự cấp)');
+        }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CreateError(400, 'Email không đúng định dạng');
+        payload.email = email.slice(0, 200);
+
+        if (!payload.phone || !String(payload.phone).trim()) throw new CreateError(400, 'Vui lòng nhập Số Điện Thoại');
+        payload.phone = String(payload.phone).trim().slice(0, 30);
+        if (!payload.startDate || Number.isNaN(new Date(payload.startDate).getTime())) throw new CreateError(400, 'Vui lòng nhập Ngày Vào Làm Việc hợp lệ');
+        payload.startDate = String(payload.startDate).trim();
+        anchorDate = payload.startDate;
+        // Ước tính ngày kết thúc thử việc mặc định (tối đa 60 ngày theo Bộ luật Lao động cho vị trí
+        // chuyên môn — xem mục 10 tài liệu gốc: CẦN HR/pháp chế rà soát lại theo từng loại vị trí, đây
+        // chỉ là mốc HIỂN THỊ tham khảo, không phải ràng buộc cứng).
+        payload.targetEndDate = new Date(new Date(anchorDate).getTime() + 60 * 86400000).toISOString().slice(0, 10);
+        payload.lastWorkingDate = null;
+        payload.employeeUsername = null;
+        payload.isManagerialPosition = false;
+        payload.successorUsername = null; payload.successorName = null;
+      } else {
+        // OFFBOARDING — nhân viên đã có thật trong DB.users, snapshot NGAY LÚC TẠO (không đọc sống lại
+        // sau) — đúng khuôn periodName/periodEndTime của budgetEntries hay dept/jobTitle snapshot của
+        // uniformIssuances.
+        const employeeUsername = String(payload.employeeUsername || '').trim();
+        if (!employeeUsername) throw new CreateError(400, 'Vui lòng chọn nhân viên (Mã nhân viên/Tên đăng nhập)');
+        const employee = (appData?.users || []).find(u => u.username === employeeUsername && u.active !== false);
+        if (!employee) throw new CreateError(400, 'Không tìm thấy tài khoản nhân viên này (hoặc đã bị khoá)');
+        payload.employeeUsername = employee.username;
+        payload.fullName = employee.name || '';
+        payload.employeeDept = employee.dept || '';
+        payload.employeeJobTitle = employee.jobTitle || '';
+        payload.email = employee.email || '';
+        payload.employeePosType = null; payload.employeeCode = null;
+
+        const lastWorkingDate = String(payload.lastWorkingDate || '').trim();
+        if (!lastWorkingDate || Number.isNaN(new Date(lastWorkingDate).getTime())) {
+          throw new CreateError(400, 'Vui lòng nhập Ngày nghỉ việc hợp lệ');
+        }
+        payload.lastWorkingDate = lastWorkingDate;
+        anchorDate = lastWorkingDate;
+        payload.targetEndDate = lastWorkingDate;
+        payload.startDate = null;
+        payload.isManagerialPosition = payload.isManagerialPosition === true;
+        payload.successorUsername = null; payload.successorName = null; // chọn người kế nhiệm ở bước Bàn giao, không phải lúc tạo
       }
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CreateError(400, 'Email không đúng định dạng');
-      payload.email = email.slice(0, 200);
 
-      if (!payload.phone || !String(payload.phone).trim()) throw new CreateError(400, 'Vui lòng nhập Số Điện Thoại');
-      payload.phone = String(payload.phone).trim().slice(0, 30);
-      if (!payload.startDate) throw new CreateError(400, 'Vui lòng nhập Ngày Vào Làm Việc');
-      payload.startDate = String(payload.startDate).trim();
+      // Quản lý trực tiếp (tuỳ chọn cả 2 loại) — chủ nhân của các task nhãn "MANAGER" (xem canActOnHrTask()
+      // ở lib/recordActions.js). Không bắt buộc: nếu để trống, task MANAGER chỉ hrOnboardingManage/
+      // hrOffboardingManage/hrViewAll/admin mới thao tác được.
+      const directManagerUsername = String(payload.directManagerUsername || '').trim();
+      if (directManagerUsername) {
+        const mgr = (appData?.users || []).find(u => u.username === directManagerUsername && u.active !== false);
+        if (!mgr) throw new CreateError(400, 'Không tìm thấy tài khoản Quản lý trực tiếp này (hoặc đã bị khoá)');
+        payload.directManagerUsername = mgr.username;
+        payload.directManagerName = mgr.name || '';
+      } else {
+        payload.directManagerUsername = null; payload.directManagerName = null;
+      }
+
       payload.note = payload.note ? String(payload.note).trim().slice(0, 1000) : '';
-
-      // status/linkedTicketId/kết quả IT PHẢI gán cứng ở server — request tự soạn không thể tự xưng đã
-      // gửi Hỗ Trợ IT hay đã hoàn tất ngay lúc tạo. Việc TẠO ticket thật diễn ra ở bước RIÊNG (nút "Gửi
-      // Yêu Cầu Cấp Tài Khoản" -> POST /api/records/hrOnboardingRequests/:id/submit-it-request, xem
-      // buildOnboardingItTicketDraft() ở lib/recordActions.js) — KHÔNG gộp vào lúc tạo hồ sơ này, để
-      // giữ đúng khuôn "khoá 1 bản ghi -> mới khoá/tạo bản ghi liên kết" như startContractPayment().
-      payload.status = 'PENDING_IT';
-      payload.linkedTicketId = null;
-      payload.itResultNote = '';
-      payload.itCompletedBy = null;
-      payload.itCompletedByName = null;
-      payload.itCompletedAt = null;
-    }
-  },
-  // "Offboarding" — KHÁC Onboarding ở trên: nhân viên đã có thật trong DB.users (employeeUsername phải
-  // khớp 1 tài khoản active) nên KHÔNG cần khai lại thông tin, chỉ cần chọn đúng người + xác nhận đã
-  // hoàn tất 2 thủ tục bàn giao/chế độ trước khi được phép gửi yêu cầu khoá tài khoản. Snapshot tên/
-  // phòng ban/chức danh NGAY LÚC TẠO (không đọc sống lại sau) — đúng khuôn periodName/periodEndTime của
-  // budgetEntries hay dept/jobTitle snapshot của uniformIssuances, tránh hồ sơ đổi nội dung âm thầm nếu
-  // nhân viên đó bị sửa thông tin ở nơi khác sau khi đã gửi yêu cầu offboarding.
-  hrOffboardingRequests: {
-    dbKey: 'hrOffboardingRequests',
-    forceOwnDept: true,
-    getScope: () => ({}),
-    creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user, appData) => {
-      if (!user.perms?.admin && !user.perms?.hrOffboardingCreate) {
-        throw new CreateError(403, 'Bạn không có quyền tạo yêu cầu Offboarding');
-      }
-      const employeeUsername = String(payload.employeeUsername || '').trim();
-      if (!employeeUsername) throw new CreateError(400, 'Vui lòng chọn nhân viên (Mã nhân viên/Tên đăng nhập)');
-      const employee = (appData?.users || []).find(u => u.username === employeeUsername && u.active !== false);
-      if (!employee) throw new CreateError(400, 'Không tìm thấy tài khoản nhân viên này (hoặc đã bị khoá)');
-      payload.employeeUsername = employee.username;
-      // Snapshot — KHÔNG đọc sống lại DB.users sau thời điểm này (xem chú thích ở trên).
-      payload.employeeName = employee.name || '';
-      payload.employeeDept = employee.dept || '';
-      payload.employeeJobTitle = employee.jobTitle || '';
-      payload.employeeEmail = employee.email || '';
-
-      // Ngày nghỉ việc — bắt buộc, dùng để IT biết thời điểm cần khoá tài khoản (không nhất thiết trùng
-      // ngày gửi yêu cầu, HR có thể gửi sớm trước ngày nghỉ thật).
-      const lastWorkingDate = String(payload.lastWorkingDate || '').trim();
-      if (!lastWorkingDate || Number.isNaN(new Date(lastWorkingDate).getTime())) {
-        throw new CreateError(400, 'Vui lòng nhập Ngày nghỉ việc hợp lệ');
-      }
-      payload.lastWorkingDate = lastWorkingDate;
-
-      // 2 hộp kiểm PHẢI được tick ở server (không chỉ chặn ở client) — đúng nguyên văn yêu cầu nghiệp
-      // vụ: "sau khi đã tích chọn các yêu cầu như hoàn tất các thủ tục bàn giao, thủ tục chế độ sẽ ấn
-      // gửi yêu cầu khóa tài khoản".
-      if (payload.checklistHandover !== true) throw new CreateError(400, 'Vui lòng xác nhận đã hoàn tất thủ tục bàn giao công việc/tài sản');
-      if (payload.checklistBenefits !== true) throw new CreateError(400, 'Vui lòng xác nhận đã hoàn tất thủ tục chế độ (BHXH, lương, phép còn lại...)');
-      payload.checklistHandover = true;
-      payload.checklistBenefits = true;
       payload.reason = payload.reason ? String(payload.reason).trim().slice(0, 1000) : '';
 
-      // status/linkedTicketId/kết quả IT PHẢI gán cứng ở server — cùng lý do hrOnboardingRequests ở trên.
-      payload.status = 'PENDING_IT';
-      payload.linkedTicketId = null;
-      payload.itResultNote = '';
-      payload.itCompletedBy = null;
-      payload.itCompletedByName = null;
-      payload.itCompletedAt = null;
+      // Tự sinh tasks[] từ danh mục checklist chuẩn ĐANG BẬT (IsActive) đúng processType — mục 4.1 tài
+      // liệu gốc: DueDate = DATEADD(DAY, DueDaysOffset, AnchorDate). Danh mục RỖNG (admin lỡ tắt hết)
+      // vẫn cho tạo quy trình (tasks=[]) thay vì chặn cứng — quy trình sẽ tự COMPLETED ngay vì không có
+      // task bắt buộc nào còn dở (xem computeHrProcessProgress()).
+      const templates = (appData?.hrTaskTemplates || [])
+        .filter(t => t && t.processType === processType && t.isActive !== false)
+        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      const anchorTime = new Date(anchorDate).getTime();
+      payload.tasks = templates.map((t, idx) => ({
+        taskId: idx + 1,
+        templateId: t.id,
+        taskName: String(t.taskName || '').slice(0, 200),
+        department: t.department,
+        stage: t.stage,
+        isRequired: t.isRequired !== false,
+        dueDate: new Date(anchorTime + (Number(t.dueDaysOffset) || 0) * 86400000).toISOString().slice(0, 10),
+        status: 'PENDING',
+        assignedToUsername: null, assignedToName: null,
+        note: '', completedBy: null, completedByName: null, completedAt: null,
+        linkedTicketId: null
+      }));
+
+      const stages = processType === 'ONBOARDING' ? HR_ONBOARDING_STAGES : HR_OFFBOARDING_STAGES;
+      payload.stage = stages[0];
+      payload.status = 'IN_PROGRESS';
+      payload.cancelReason = '';
+      payload.actualEndDate = null;
+      payload.attachments = [];
+      payload.history = [{
+        action: 'CREATED', detail: `Tạo quy trình ${processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'} (${payload.tasks.length} việc cần làm)`,
+        actionBy: user.username, actionByName: user.name, actionAt: new Date().toLocaleString('vi-VN')
+      }];
     }
   }
 };
@@ -2929,5 +2978,6 @@ module.exports = {
   resolveOperationPersonInChargeUsername,
   canManageOperationRecord,
   normalizeTrainingPlanFields,
-  normalizeOnboardingPathFields
+  normalizeOnboardingPathFields,
+  HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, HR_TASK_DEPARTMENTS
 };

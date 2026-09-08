@@ -25,7 +25,7 @@ const {
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
-  filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser,
+  filterHrProcessesForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle
 } = require('../lib/recordViewScope');
@@ -197,6 +197,14 @@ const NON_ADMIN_GATED_KEYS = new Map([
   ['kpiEvaluatorConfig', {
     allow: (perms) => !!(perms?.admin || perms?.orgChartManage || perms?.nhanSuManage),
     error: 'Chỉ người có quyền Cơ Cấu Tổ Chức/Nhân Sự mới được sửa cấu hình cấp đánh giá KPI theo vị trí'
+  }],
+  // hrTaskTemplates: danh mục checklist chuẩn Onboarding/Offboarding (Nhân Sự) — sửa được ở màn quản trị
+  // riêng (module-hrlifecycle.js), lưu nguyên khối (không qua CRUD record thường) cùng khuôn
+  // meetingAttendeeTemplates/kpiEvaluatorConfig ở trên — KHÔNG dùng ADMIN_ONLY_KEYS vì
+  // hrTaskTemplateManage (không phải chỉ admin) cũng được sửa danh mục này.
+  ['hrTaskTemplates', {
+    allow: (perms) => !!(perms?.admin || perms?.hrTaskTemplateManage),
+    error: 'Chỉ người có quyền Quản Lý Checklist Mẫu (Nhân Sự) mới được sửa danh mục này'
   }]
 ]);
 
@@ -614,11 +622,10 @@ router.get('/', async (req, res) => {
     // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)
     // — xem lib/recordViewScope.js canViewHrFeedback().
     if (data.hrFeedback) data.hrFeedback = filterHrFeedbackForUser(data.hrFeedback, req.freshUser);
-    // hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding/Offboarding): cùng phạm vi RIÊNG
-    // TƯ như hrFeedback ở trên — chỉ chính người tạo yêu cầu + nhanSuManage/admin đọc được, xem
-    // lib/recordViewScope.js canViewHrOnboardingRequest()/canViewHrOffboardingRequest().
-    if (data.hrOnboardingRequests) data.hrOnboardingRequests = filterHrOnboardingRequestsForUser(data.hrOnboardingRequests, req.freshUser);
-    if (data.hrOffboardingRequests) data.hrOffboardingRequests = filterHrOffboardingRequestsForUser(data.hrOffboardingRequests, req.freshUser);
+    // hrProcesses (Nhân Sự > Onboarding/Offboarding v2 — checklist theo giai đoạn): nhiều bên liên quan
+    // cùng theo dõi (HR, IT, Tài chính, Quản lý trực tiếp, người được giao việc riêng) — xem
+    // lib/recordViewScope.js canViewHrProcess().
+    if (data.hrProcesses) data.hrProcesses = filterHrProcessesForUser(data.hrProcesses, req.freshUser);
     // careerPathConfirmations (Đào Tạo — mốc "Xác nhận hoàn thành cấp bậc" Lộ Trình Thăng Tiến): trước
     // đây KHÔNG lọc lại ở server, lộ mốc thăng tiến (username/dept/thời điểm) của MỌI nhân viên cho bất
     // kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai đoạn 4 (Thấp, không có điểm số/câu trả lời).

@@ -226,34 +226,69 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
 - **Nhân Sự** — module con **Cơ Cấu Tổ Chức** (sơ đồ tổ chức theo quản lý trực
   tiếp + Cấu Hình KPI Theo Vị Trí: cấp nào đánh giá cấp nào, không cấu hình
   tiêu chí), tab **Quản Lý & Phản Hồi Ý Kiến** (phía Nhân Sự của "HCRC Đồng
-  Hành" ở trên), và module con **Onboarding / Offboarding** (từ v12.3):
-  - **Onboarding** — khai báo nhân viên MỚI (mã nhân viên tự gõ, họ tên, Vị
-    Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh lấy từ danh mục hệ thống
-    — cùng cơ chế cascading như form Người Dùng đầy đủ, Email **để trống nếu
-    đợi IT cấp mới, bắt buộc với nhân viên Siêu Thị**, SĐT, Ngày vào làm) rồi
-    bấm "Gửi Yêu Cầu Cấp Tài Khoản".
-  - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân viên,
-    tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày Nghỉ Việc
-    (bắt buộc, validate cả server — từ v12.7)**, tích đủ 2 xác nhận
-    "Đã hoàn tất thủ tục bàn giao công việc/tài sản" + "Đã hoàn tất thủ tục
-    chế độ (BHXH, lương, phép còn lại...)" rồi bấm "Gửi Yêu Cầu Khóa Tài
-    Khoản" — 2 xác nhận này bắt buộc ở CẢ server, không chỉ ẩn nút ở giao diện.
-  - **Cơ chế liên kết Hỗ Trợ IT** — cả 2 luồng trên đều **tự động sinh 1 ticket
-    "Hỗ Trợ Yêu Cầu"** (module Hỗ Trợ IT, danh mục "🔑 Tài khoản / Đăng nhập")
-    để đội IT xử lý theo đúng quy trình sẵn có (Nhận xử lý → Hoàn thành).
-    **Quan trọng: IT vẫn tự tay tạo/khoá email + tài khoản AD hoàn toàn NGOÀI
-    hệ thống này như trước giờ** — khi IT đánh dấu ticket "Hoàn thành" kèm ghi
-    chú kết quả, hệ thống CHỈ ghi lại đúng ghi chú đó (+ ai xác nhận, lúc nào)
-    ngược về hồ sơ Onboarding/Offboarding đã gửi yêu cầu, để người gửi thấy
-    được kết quả ngay trong module Nhân Sự (không cần nhảy sang Hỗ Trợ IT) —
-    **không có bất kỳ thao tác tự động nào tạo mới/khoá tài khoản
-    `DB.users`**. Người gửi yêu cầu cũng chính là người tạo ticket nên tự xem
-    được tiến độ xử lý trực tiếp ở Hỗ Trợ IT > Hỗ Trợ Yêu Cầu.
-  - Quyền tạo TÁCH RIÊNG khỏi quyền quản lý module ("Nhân Sự", nhanSuManage):
-    2 cờ phẳng **"Tạo Yêu Cầu Onboarding"**/**"Tạo Yêu Cầu Offboarding"** (khối
-    21 cây phân quyền) — ai giữ **nhanSuManage** vẫn xem được TOÀN BỘ yêu cầu
-    (kể cả không tự tạo) để theo dõi tiến độ chung của cả công ty; còn lại chỉ
-    thấy đúng yêu cầu do CHÍNH MÌNH gửi (riêng tư, cùng khuôn HCRC Đồng Hành).
+  Hành" ở trên), và module con **Onboarding / Offboarding**:
+  - **Từ v14.3 — làm lại hoàn toàn theo mô hình quy trình có checklist theo
+    giai đoạn** (thay hẳn bản v12.3-v12.7 "1 yêu cầu = 1 ticket Hỗ Trợ IT cấp/
+    khoá tài khoản" cũ). Tạo quy trình:
+    - **Onboarding** — khai báo nhân viên MỚI (mã nhân viên tự gõ, họ tên, Vị
+      Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh lấy từ danh mục hệ
+      thống — cùng cơ chế cascading như form Người Dùng đầy đủ, Email **để
+      trống nếu chưa cấp, bắt buộc với nhân viên Siêu Thị**, SĐT, Ngày vào làm,
+      Quản lý trực tiếp tuỳ chọn) rồi bấm "Tạo Quy Trình".
+    - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân
+      viên, tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày
+      Nghỉ Việc (bắt buộc, validate cả server)**, tuỳ chọn tick "đang giữ vị
+      trí quản lý" + chọn Quản lý trực tiếp, rồi bấm "Tạo Quy Trình". **Không
+      còn 2 checkbox xác nhận thủ tục bàn giao/chế độ trước khi tạo** — các
+      việc cần làm này giờ nằm trong checklist tự sinh SAU khi tạo (xem dưới).
+    - Ngay khi tạo, hệ thống **tự sinh sẵn checklist các việc cần làm** từ
+      danh mục chuẩn (Quản Lý > Checklist Mẫu), phân theo **giai đoạn**
+      (Onboarding: Chuẩn bị trước ngày đi làm → Ngày đầu tiên → Tuần/Tháng đầu
+      → Kết thúc thử việc; Offboarding: Thông báo nghỉ việc → Bàn giao công
+      việc → Thu hồi tài sản & quyền truy cập → Quyết toán tài chính → Sau khi
+      nghỉ) và **nhãn trách nhiệm** (Nhân Sự/IT/Hành Chính/Tài Chính/Quản lý
+      trực tiếp — không phải phòng ban thật, chỉ quyết định AI được thao tác
+      việc đó, ưu tiên giao riêng cho 1 người cụ thể nếu có). Hạn từng việc
+      = ngày mốc (Ngày vào làm/Ngày nghỉ việc) + số ngày lệch cấu hình sẵn
+      trong danh mục.
+    - Trong màn **Chi Tiết Quy Trình**: đánh dấu **Hoàn thành**/**Bỏ qua**
+      từng việc (bỏ qua việc bắt buộc chỉ người quản lý quy trình mới làm
+      được, phải nhập lý do), **Giao lại** việc cho người khác, đính kèm tài
+      liệu, xem lịch sử. Quy trình **tự động chuyển "Hoàn tất"** ngay khi mọi
+      việc bắt buộc ở mọi giai đoạn đã xong/bỏ qua — không có nút "chuyển giai
+      đoạn" thủ công, giai đoạn hiện tại luôn phản ánh đúng tiến độ thật. Có
+      thể **Huỷ quy trình** (bắt buộc lý do) khi đang thực hiện.
+  - **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không
+    bắt buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh
+    mục "🔑 Tài khoản / Đăng nhập") để đội IT xử lý theo đúng quy trình sẵn có
+    (Nhận xử lý → Hoàn thành). **Quan trọng: IT vẫn tự tay tạo/khoá email +
+    tài khoản AD hoàn toàn NGOÀI hệ thống này như trước giờ** — khi IT đánh
+    dấu ticket "Hoàn thành" kèm ghi chú kết quả, hệ thống CHỈ ghi lại đúng
+    việc đã sinh ra ticket đó chuyển "Hoàn thành" (+ ghi chú/ai xác nhận, lúc
+    nào) — **không có bất kỳ thao tác tự động nào tạo mới/khoá tài khoản
+    `DB.users`**, và các việc KHÁC trong cùng quy trình không bị ảnh hưởng.
+  - **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang
+    được giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm),
+    gộp cả Onboarding lẫn Offboarding, để không phải mở từng quy trình lần
+    lượt.
+  - **Checklist Mẫu** (sub-view chỉ hiện với quyền **"📋 Quản Lý Checklist
+    Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn: tên
+    việc, giai đoạn, nhãn trách nhiệm, số ngày lệch so với mốc, có bắt buộc
+    hay không. Đổi danh mục **không ảnh hưởng ngược** các quy trình đã tạo
+    trước đó (checklist đã snapshot vào từng quy trình lúc tạo).
+  - **Phân quyền** (khối 21 cây phân quyền) — 4 cờ phẳng thay cho 2 cờ
+    "Tạo Yêu Cầu Onboarding"/"Tạo Yêu Cầu Offboarding" cũ: **"🆕 Quản Lý
+    Onboarding"**/**"🚪 Quản Lý Offboarding"** (tạo + quản lý quy trình đúng
+    loại — bỏ qua việc bắt buộc, giao lại việc, huỷ quy trình, đính kèm tài
+    liệu), **"📋 Quản Lý Checklist Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự
+    động có quyền tạo/quản lý quy trình), **"👁️ Xem Toàn Bộ Quy Trình"** (chỉ
+    xem để theo dõi tiến độ chung, KHÔNG thao tác được). Người tạo/quản lý
+    trực tiếp/được giao riêng 1 việc luôn xem được đúng quy trình liên quan
+    dù không có cờ nào ở trên (riêng tư theo từng quy trình, cùng khuôn HCRC
+    Đồng Hành). Có migration 1 lần tự động: ai đang có "Tạo Yêu Cầu
+    Onboarding/Offboarding" cũ được cấp lại đúng cờ quản lý tương ứng, ai có
+    **nhanSuManage** được cấp thêm cả "Quản Lý Checklist Mẫu" + "Xem Toàn Bộ
+    Quy Trình" — không ai bị mất quyền truy cập sau khi nâng cấp.
 
 ### 3.3. Tài Chính
 

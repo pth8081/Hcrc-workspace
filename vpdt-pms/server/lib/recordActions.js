@@ -9,7 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -4773,116 +4773,211 @@ function markHrFeedbackRead(user, item) {
   return item;
 }
 
-// ===================== NHÂN SỰ > Onboarding / Offboarding =====================
-// Cầu nối THUẦN TUÝ vào hàng đợi "Hỗ Trợ Yêu Cầu" (itSupportTickets, module Hỗ Trợ IT) — QUYẾT ĐỊNH
-// PHẠM VI đã được người dùng xác nhận rõ: khi IT đánh dấu ticket "Hoàn thành" (DONE), hệ thống CHỈ ghi
-// lại đúng những gì IT báo cáo (resolutionNote) trở ngược về hồ sơ Onboarding/Offboarding đã sinh ra
-// ticket đó — KHÔNG BAO GIỜ đụng tới DB.users (không tự tạo/khoá tài khoản nào). IT vẫn tự tay tạo/khoá
-// email + AD ở NGOÀI hệ thống này như trước giờ; tính năng này chỉ là "yêu cầu có cấu trúc + theo dõi +
-// thông báo kết quả", không phải tự động hoá việc cấp/khoá tài khoản thật.
+// ===================== NHÂN SỰ > Onboarding / Offboarding (v2 — checklist theo giai đoạn) =====================
+// Xem chú thích thiết kế đầy đủ ở lib/createValidation.js (hrProcesses.extraValidate) — đây là các hành
+// động vận hành SAU khi 1 quy trình đã được tạo (tasks[] đã sinh sẵn từ DB.hrTaskTemplates).
 //
-// Cùng khuôn startContractPayment()/startOfficePayment() ở trên (2 hàm ĐÓ build "bản nháp" record B từ
-// record A đang khoá, route rồi mới insert B ở NGOÀI transaction của A — xem routes/records.js): 2 hàm
-// dưới đây build "bản nháp" ticket TỪ hồ sơ Onboarding/Offboarding đang khoá, ĐỒNG THỜI gắn
-// item.linkedTicketId = ticketId (id ticket sẽ tạo, do ROUTE tự sinh trước bằng Date.now() và truyền
-// vào — không có cách nào biết id thật của bản ghi SẼ insert vào collection khác trước khi nó tồn tại,
-// nên phải tự sinh trước thay vì để createForCollection tự gán như các collection khác) NGAY TRONG
-// transaction khoá item — nếu sau đó việc insert ticket ở collection itSupportTickets thất bại (hiếm,
-// lỗi hạ tầng), item sẽ có linkedTicketId trỏ vào 1 ticket không tồn tại — CÙNG RỦI RO đã được chấp
-// nhận ở startContractPayment() (paymentStatus chuyển CHO_THANH_TOAN dù paymentRequests chưa chắc insert
-// xong), không phải lỗ hổng mới riêng ở đây.
-function canCreateHrOnboarding(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrOnboardingCreate);
-}
-function canCreateHrOffboarding(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrOffboardingCreate);
-}
-
-// Ai được bấm "Gửi Yêu Cầu" (tạo ticket thật) trên 1 hồ sơ Onboarding/Offboarding đã tồn tại — chính
-// người tạo, HOẶC nhanSuManage/admin (Nhân Sự nói chung có thể tiếp quản/gửi thay 1 hồ sơ đồng nghiệp
-// đã tạo, cùng tinh thần canManageHrFeedback() ở trên).
-function canManageHrLifecycleRequest(user, item) {
-  return !!(user?.perms?.admin || user?.perms?.nhanSuManage || item?.creator === user?.username);
-}
-
-function buildOnboardingItTicketDraft(user, item, ticketId) {
-  if (!canManageHrLifecycleRequest(user, item)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu này tới Hỗ Trợ IT');
-  if (item.linkedTicketId != null) throw new HttpError(409, 'Yêu cầu này đã được gửi tới Hỗ Trợ IT rồi');
-  if (item.status !== 'PENDING_IT') throw new HttpError(409, 'Yêu cầu này không còn ở trạng thái có thể gửi tới Hỗ Trợ IT');
-  const lines = [
-    `Mã nhân viên: ${item.employeeCode}`,
-    `Họ và tên: ${item.fullName}`,
-    `Vị trí: ${item.employeePosType === 'STORE' ? 'Siêu Thị' : 'HO (Văn phòng)'}`,
-    `Phòng ban/Siêu thị: ${item.employeeDept}`,
-    `Chức danh: ${item.employeeJobTitle}`,
-    `Số điện thoại: ${item.phone}`,
-    `Ngày vào làm việc: ${item.startDate}`,
-    item.email ? `Email: ${item.email}` : 'Email: (để trống — đề nghị IT cấp mới)',
-    item.note ? `Ghi chú: ${item.note}` : null
-  ].filter(Boolean);
-  item.linkedTicketId = ticketId;
-  return {
-    title: `[Onboarding] Cấp tài khoản cho ${item.fullName} (${item.employeeCode})`,
-    description: `Yêu cầu Onboarding từ Nhân Sự — đề nghị cấp tài khoản/hộp thư cho nhân viên mới:\n${lines.join('\n')}`,
-    category: 'ACCOUNT',
-    status: 'TODO', assignee: null, assigneeName: null, resolutionNote: '', comments: [],
-    approvalStatus: null, approvalApprover: null, approvalApproverName: null, approvalReason: '', approvalComment: '',
-    dept: user.dept, creator: user.username, creatorName: user.name,
-    sourceType: 'HR_ONBOARDING', sourceId: item.id
-  };
-}
-
-function buildOffboardingItTicketDraft(user, item, ticketId) {
-  if (!canManageHrLifecycleRequest(user, item)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu này tới Hỗ Trợ IT');
-  if (item.linkedTicketId != null) throw new HttpError(409, 'Yêu cầu này đã được gửi tới Hỗ Trợ IT rồi');
-  if (item.status !== 'PENDING_IT') throw new HttpError(409, 'Yêu cầu này không còn ở trạng thái có thể gửi tới Hỗ Trợ IT');
-  if (!item.checklistHandover || !item.checklistBenefits) {
-    throw new HttpError(409, 'Cần hoàn tất cả 2 thủ tục bàn giao/chế độ trước khi gửi yêu cầu khoá tài khoản');
+// "Department" của từng task (HR/IT/ADMIN/FINANCE/MANAGER) là nhãn TRÁCH NHIỆM cố định, KHÔNG phải
+// phòng ban thật — canActOnHrTask() dưới đây là điểm tra cứu DUY NHẤT "ai được thao tác task này":
+// - Task đã GIAO RIÊNG (assignedToUsername khác null) -> CHỈ đúng người đó (hoặc hrViewAll/admin).
+// - HR/ADMIN (chưa giao riêng) -> hrOnboardingManage (nếu ONBOARDING) / hrOffboardingManage (nếu
+//   OFFBOARDING) — ADMIN dùng chung quyền với HR vì hệ thống này không có 1 quyền "hành chính" tổng quát
+//   riêng biệt để tách 2 nhãn này.
+// - IT (chưa giao riêng) -> itManage (Hỗ Trợ IT quản lý mọi tài khoản/thiết bị, đúng đối tượng chịu
+//   trách nhiệm nhãn IT trong checklist).
+// - FINANCE (chưa giao riêng) -> paymentManage (đúng quyền đã dùng cho toàn bộ luồng Thanh Toán).
+// - MANAGER (chưa giao riêng) -> đúng username đã chọn làm "Quản lý trực tiếp" (directManagerUsername)
+//   lúc tạo quy trình — nếu không chọn ai, chỉ hrOnboardingManage/hrOffboardingManage/hrViewAll/admin
+//   thao tác được (không để task MANAGER kẹt vĩnh viễn không ai làm được).
+function canActOnHrTask(user, item, task) {
+  if (!user || !task) return false;
+  if (user.perms?.admin || user.perms?.hrViewAll) return true;
+  if (task.assignedToUsername) return task.assignedToUsername === user.username;
+  switch (task.department) {
+    case 'HR':
+    case 'ADMIN':
+      return !!(item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
+    case 'IT': return !!user.perms?.itManage;
+    case 'FINANCE': return !!user.perms?.paymentManage;
+    case 'MANAGER': return !!(item.directManagerUsername && item.directManagerUsername === user.username);
+    default: return false;
   }
+}
+
+// Quyền cấp QUY TRÌNH (không phải từng task riêng): tạo, huỷ, giao lại task, đính kèm file, tạo ticket
+// IT cho task — người tạo quy trình, hoặc hrOnboardingManage/hrOffboardingManage đúng processType, hoặc
+// hrViewAll/admin.
+function canCreateHrProcess(user, processType) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
+}
+function canManageHrProcess(user, item) {
+  if (!user || !item) return false;
+  if (user.perms?.admin || user.perms?.hrViewAll) return true;
+  if (item.creator === user.username) return true;
+  return !!(item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
+}
+
+// Tính lại stage hiện tại + tự động COMPLETED quy trình khi mọi task BẮT BUỘC (isRequired) ở TẤT CẢ
+// giai đoạn đã DONE/SKIPPED — gọi lại SAU MỌI thao tác đổi trạng thái task (complete/skip/ticket hoàn
+// tất), KHÔNG có action "chuyển giai đoạn" thủ công riêng (xem chú thích lib/createValidation.js).
+function computeHrProcessProgress(item) {
+  const stages = item.processType === 'ONBOARDING' ? HR_ONBOARDING_STAGES : HR_OFFBOARDING_STAGES;
+  let currentStage = stages[stages.length - 1];
+  let allRequiredDone = true;
+  for (const s of stages) {
+    const stageTasks = (item.tasks || []).filter(t => t.stage === s);
+    const stageDone = stageTasks.filter(t => t.isRequired).every(t => t.status === 'DONE' || t.status === 'SKIPPED');
+    if (!stageDone) { currentStage = s; allRequiredDone = false; break; }
+  }
+  item.stage = currentStage;
+  if (allRequiredDone && item.status === 'IN_PROGRESS') {
+    item.status = 'COMPLETED';
+    item.actualEndDate = nowVN();
+    item.history.push({
+      action: 'COMPLETED', detail: 'Toàn bộ việc bắt buộc trong checklist đã hoàn tất — quy trình tự động chuyển Hoàn tất',
+      actionBy: 'system', actionByName: 'Hệ Thống (Tự Động)', actionAt: nowVN()
+    });
+  }
+  return { done: (item.tasks || []).filter(t => t.status === 'DONE' || t.status === 'SKIPPED').length, total: (item.tasks || []).length };
+}
+
+function findHrTask(item, taskId) {
+  const task = (item.tasks || []).find(t => t.taskId === Number(taskId));
+  if (!task) throw new HttpError(404, 'Không tìm thấy việc cần làm này trong quy trình');
+  return task;
+}
+
+function completeHrTask(user, item, body) {
+  const task = findHrTask(item, body?.taskId);
+  if (task.status === 'DONE') throw new HttpError(409, 'Việc này đã được đánh dấu hoàn thành rồi');
+  if (task.status === 'SKIPPED') throw new HttpError(409, 'Việc này đã bị bỏ qua, không thể đánh dấu hoàn thành');
+  if (!canActOnHrTask(user, item, task)) throw new HttpError(403, 'Bạn không có quyền hoàn thành việc này');
+  task.status = 'DONE';
+  task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
+  if (body?.note) task.note = String(body.note).trim().slice(0, 500);
+  item.history.push({ action: 'TASK_COMPLETED', detail: `Hoàn thành: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  computeHrProcessProgress(item);
+  return item;
+}
+
+function skipHrTask(user, item, body) {
+  const task = findHrTask(item, body?.taskId);
+  if (task.status === 'DONE' || task.status === 'SKIPPED') throw new HttpError(409, 'Việc này đã được xử lý rồi, không thể bỏ qua');
+  // Việc BẮT BUỘC chỉ người quản lý quy trình (không phải người phụ trách cá nhân) mới được chủ động
+  // bỏ qua — tránh 1 cá nhân tự ý bỏ qua bước bắt buộc của chính mình mà không ai xác nhận.
+  if (task.isRequired && !canManageHrProcess(user, item)) {
+    throw new HttpError(403, 'Chỉ người quản lý quy trình (Nhân Sự phụ trách) mới được bỏ qua việc bắt buộc');
+  }
+  if (!canActOnHrTask(user, item, task)) throw new HttpError(403, 'Bạn không có quyền bỏ qua việc này');
+  const reason = String(body?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do bỏ qua');
+  task.status = 'SKIPPED';
+  task.note = reason.slice(0, 500);
+  task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
+  item.history.push({ action: 'TASK_SKIPPED', detail: `Bỏ qua: ${task.taskName} — Lý do: ${task.note}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  computeHrProcessProgress(item);
+  return item;
+}
+
+function reassignHrTask(user, item, body, usersList) {
+  if (!canManageHrProcess(user, item)) throw new HttpError(403, 'Bạn không có quyền giao việc trong quy trình này');
+  const task = findHrTask(item, body?.taskId);
+  const username = String(body?.assignedToUsername || '').trim();
+  if (!username) {
+    task.assignedToUsername = null; task.assignedToName = null;
+  } else {
+    const person = (usersList || []).find(u => u.username === username && u.active !== false);
+    if (!person) throw new HttpError(400, 'Không tìm thấy người này (hoặc tài khoản đã bị khoá)');
+    task.assignedToUsername = person.username; task.assignedToName = person.name || person.username;
+  }
+  item.history.push({
+    action: 'TASK_REASSIGNED',
+    detail: `Giao việc "${task.taskName}" cho ${task.assignedToName || '(bỏ giao — theo nhãn ' + task.department + ')'}`,
+    actionBy: user.username, actionByName: user.name, actionAt: nowVN()
+  });
+  return item;
+}
+
+function cancelHrProcess(user, item, body) {
+  if (!canManageHrProcess(user, item)) throw new HttpError(403, 'Bạn không có quyền huỷ quy trình này');
+  if (item.status !== 'IN_PROGRESS') throw new HttpError(409, 'Quy trình không còn ở trạng thái đang thực hiện');
+  const reason = String(body?.reason || '').trim();
+  if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do huỷ');
+  item.status = 'CANCELLED';
+  item.cancelReason = reason.slice(0, 500);
+  item.history.push({ action: 'CANCELLED', detail: `Huỷ quy trình — Lý do: ${item.cancelReason}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  return item;
+}
+
+function addHrProcessAttachment(user, item, body) {
+  const involved = canManageHrProcess(user, item) || (item.tasks || []).some(t => t.assignedToUsername === user.username) || (item.tasks || []).some(t => canActOnHrTask(user, item, t));
+  if (!involved) throw new HttpError(403, 'Bạn không có quyền đính kèm tài liệu vào quy trình này');
+  const fileUrl = String(body?.fileUrl || '').trim();
+  const fileName = String(body?.fileName || '').trim();
+  if (!fileUrl || !fileName) throw new HttpError(400, 'Thiếu thông tin tệp đính kèm');
+  item.attachments = item.attachments || [];
+  item.attachments.push({
+    fileUrl: fileUrl.slice(0, 500), fileName: fileName.slice(0, 255), fileType: String(body?.fileType || '').slice(0, 100),
+    uploadedBy: user.username, uploadedByName: user.name, uploadedAt: nowVN()
+  });
+  item.history.push({ action: 'ATTACHMENT_ADDED', detail: `Đính kèm tài liệu: ${fileName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  return item;
+}
+
+// Tạo ticket "Hỗ Trợ Yêu Cầu" (Hỗ Trợ IT) TỪ 1 task nhãn IT cụ thể — giữ nguyên tinh thần "cầu nối
+// THUẦN TUÝ" của bản v1 (KHÔNG bao giờ tự tạo/khoá DB.users), chỉ khác 1 task IT có thể (không bắt
+// buộc) sinh 1 ticket để đội IT nhận việc + theo dõi + báo cáo kết quả có cấu trúc, thay vì "1 yêu cầu =
+// 1 ticket" cứng nhắc như trước. sourceId trỏ ĐÚNG process (để withLockedRecordForCollection khoá được),
+// taskId cần khoá lại RIÊNG được lưu thêm ở sourceTaskId trên chính ticket — xem
+// applyItTicketCompletionToHrProcessTask() bên dưới.
+function createItTicketForHrTask(user, item, body, ticketId) {
+  const task = findHrTask(item, body?.taskId);
+  if (task.department !== 'IT') throw new HttpError(400, 'Chỉ việc thuộc nhãn Hỗ Trợ IT mới tạo được ticket');
+  if (task.linkedTicketId != null) throw new HttpError(409, 'Việc này đã có ticket Hỗ Trợ IT liên kết rồi');
+  if (!canActOnHrTask(user, item, task)) throw new HttpError(403, 'Bạn không có quyền tạo ticket cho việc này');
+  const employeeLabel = item.processType === 'ONBOARDING'
+    ? `${item.fullName} (${item.employeeCode})` : `${item.fullName} (${item.employeeUsername})`;
   const lines = [
-    `Mã nhân viên (tài khoản): ${item.employeeUsername}`,
-    `Họ và tên: ${item.employeeName}`,
-    `Phòng ban/Siêu thị: ${item.employeeDept}`,
-    `Chức danh: ${item.employeeJobTitle}`,
-    item.employeeEmail ? `Email: ${item.employeeEmail}` : null,
-    '✅ Đã hoàn tất thủ tục bàn giao công việc/tài sản',
-    '✅ Đã hoàn tất thủ tục chế độ (BHXH, lương, phép còn lại...)',
-    item.reason ? `Lý do/Ghi chú: ${item.reason}` : null
+    `Quy trình: ${item.processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'} — ${employeeLabel}`,
+    `Phòng ban/Siêu thị: ${item.employeeDept || ''}`,
+    item.employeeJobTitle ? `Chức danh: ${item.employeeJobTitle}` : null,
+    item.email ? `Email: ${item.email}` : null,
+    task.note ? `Ghi chú: ${task.note}` : null
   ].filter(Boolean);
-  item.linkedTicketId = ticketId;
+  task.linkedTicketId = ticketId;
+  item.history.push({ action: 'IT_TICKET_CREATED', detail: `Tạo ticket Hỗ Trợ IT cho việc: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
   return {
-    title: `[Offboarding] Khoá tài khoản cho ${item.employeeName} (${item.employeeUsername})`,
-    description: `Yêu cầu Offboarding từ Nhân Sự — đề nghị khoá tài khoản/hộp thư của nhân viên nghỉ việc:\n${lines.join('\n')}`,
+    title: `[${item.processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'}] ${task.taskName} — ${employeeLabel}`,
+    description: `${task.taskName}\n${lines.join('\n')}`,
     category: 'ACCOUNT',
     status: 'TODO', assignee: null, assigneeName: null, resolutionNote: '', comments: [],
     approvalStatus: null, approvalApprover: null, approvalApproverName: null, approvalReason: '', approvalComment: '',
     dept: user.dept, creator: user.username, creatorName: user.name,
-    sourceType: 'HR_OFFBOARDING', sourceId: item.id
+    sourceType: 'HR_PROCESS_TASK', sourceId: item.id, sourceTaskId: task.taskId
   };
 }
 
 // sourceType (itSupportTickets) -> collection hồ sơ Nhân Sự liên kết cần cập nhật ngược khi ticket
 // chuyển DONE — dùng ở routes/records.js (POST /itSupportTickets/:id/update-status).
 const HR_LIFECYCLE_TICKET_SOURCE_COLLECTION = {
-  HR_ONBOARDING: 'hrOnboardingRequests',
-  HR_OFFBOARDING: 'hrOffboardingRequests'
+  HR_PROCESS_TASK: 'hrProcesses'
 };
 
-// Ghi lại kết quả IT báo cáo vào ĐÚNG hồ sơ Onboarding/Offboarding đã sinh ra ticket này, khi ticket vừa
-// chuyển DONE (gọi từ routes/records.js NGAY SAU updateItTicketStatus() thành công, xem chú thích ở
-// đó) — hàm THUẦN (không tự khoá/đọc DB gì), route tự khoá đúng collection theo
-// HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[ticket.sourceType] rồi truyền item vào đây. KHÔNG BAO GIỜ đụng
-// tới DB.users — xem chú thích đầu khối "NHÂN SỰ > Onboarding / Offboarding" ở trên, đây CHÍNH LÀ ranh
-// giới phạm vi đã được người dùng xác nhận. Tự bỏ qua (idempotent, không throw) nếu hồ sơ đã COMPLETED
-// từ trước — ticket chỉ chuyển DONE đúng 1 lần (updateItTicketStatus() chặn sửa tiếp sau DONE/CANCELLED)
-// nên nhánh này chỉ là lưới an toàn, không phải luồng thường gặp.
-function applyItTicketCompletionToLinkedHrRequest(user, item, ticket) {
-  if (item.status === 'COMPLETED') return item;
-  item.status = 'COMPLETED';
-  item.itResultNote = String(ticket.resolutionNote || '').trim();
-  item.itCompletedBy = user.username;
-  item.itCompletedByName = user.name;
-  item.itCompletedAt = nowVN();
+// Ghi lại kết quả IT báo cáo vào ĐÚNG task đã sinh ra ticket này, khi ticket vừa chuyển DONE (gọi từ
+// routes/records.js NGAY SAU updateItTicketStatus() thành công) — hàm THUẦN, route tự khoá đúng
+// collection theo HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[ticket.sourceType] rồi truyền item (cả quy
+// trình) vào đây, tự tìm đúng task qua ticket.sourceTaskId. Tự bỏ qua (idempotent) nếu không còn tìm
+// thấy task hoặc task đã DONE — ticket chỉ chuyển DONE đúng 1 lần nên nhánh này chỉ là lưới an toàn.
+function applyItTicketCompletionToHrProcessTask(user, item, ticket) {
+  const task = (item.tasks || []).find(t => t.taskId === ticket.sourceTaskId);
+  if (!task || task.status === 'DONE' || task.status === 'SKIPPED') return item;
+  task.status = 'DONE';
+  task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
+  if (ticket.resolutionNote) task.note = String(ticket.resolutionNote).trim().slice(0, 500);
+  item.history.push({ action: 'IT_TICKET_COMPLETED', detail: `Hỗ Trợ IT xác nhận hoàn thành: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  computeHrProcessProgress(item);
   return item;
 }
 
@@ -5890,9 +5985,9 @@ module.exports = {
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead,
-  canCreateHrOnboarding, canCreateHrOffboarding, canManageHrLifecycleRequest,
-  buildOnboardingItTicketDraft, buildOffboardingItTicketDraft,
-  HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToLinkedHrRequest,
+  canActOnHrTask, canCreateHrProcess, canManageHrProcess, computeHrProcessProgress,
+  completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment,
+  createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod,

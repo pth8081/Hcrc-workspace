@@ -23,7 +23,7 @@
 // (chi con admin.js), "admin-permtree", "admin-permgroups" (con lai 3 file), "internalcomms-daotao"
 // — cac module vanHanh/Dong Phuc/HCRC Dong Hanh/Nhat Ky He Thong/Bao Cao Quan Tri hoan toan HET phai
 // nap ca cum admin-permgroups (315KB/82KB gzip) VA cum Dao Tao (205KB) kem theo nua.
-const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]}};
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]}};
 
 // MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
 // duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
@@ -33,7 +33,7 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
 // bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["hcrcdonghanh"],"hrLifecycle":["hcrcdonghanh"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["hcrcdonghanh"],"hrLifecycle":["hrlifecycle"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
@@ -285,9 +285,9 @@ const DB = {
   recruitmentJobs: [], recruitmentReferrals: [],
   // hrFeedback (Nhân Sự — "HCRC Đồng Hành"): câu hỏi RIÊNG TƯ của nhân viên + phản hồi của Nhân Sự.
   hrFeedback: [],
-  // hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding/Offboarding): cầu nối vào ticket
-  // Hỗ Trợ IT, xem lib/createValidation.js. RIÊNG TƯ cùng khuôn hrFeedback ở trên.
-  hrOnboardingRequests: [], hrOffboardingRequests: [],
+  // hrProcesses (Nhân Sự > Onboarding/Offboarding v2 — checklist theo giai đoạn), hrTaskTemplates (danh
+  // mục checklist chuẩn, admin-config) — xem lib/createValidation.js.
+  hrProcesses: [], hrTaskTemplates: [],
   sensitiveKeywords: [],
   paymentRequests: [], paymentDeptWorkflows: {},
   formTemplates: {},
@@ -847,31 +847,24 @@ const CORE_FIELD_MANIFEST = {
     { id: 'teDocumentIds', label: 'Giáo Trình (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều)', required: false },
     { id: 'teDescription', label: 'Mô Tả / Nội Dung', required: false }
   ],
-  // Đợt E (UX rollout — nút "↺ Làm Mới") — gap-fill phát hiện qua chính audit toàn app ở
-  // tests/test-forms-batch4.js (đếm <form id=... data-op-submit=...>): Onboarding/Offboarding vốn dĩ
-  // KHÔNG có id trên <form> (chỉ dùng data-op-submit) nên chưa từng lọt vào audit đó — thêm id để gắn
-  // được nút "Làm Mới" (confirmAndResetForm() cần formId) mới lộ ra 2 form này thật sự chưa có coreKey.
-  // hrOnbEmail KHÔNG đưa vào — nhãn LẪN thuộc tính required bị onHrOnboardingPosTypeChange() TỰ ĐỘNG ghi
-  // đè theo #hrOnbPosType (HO/Siêu Thị) mỗi lần đổi Vị Trí, cùng lý do tcDocumentIds/tdFile ở trên (đưa
-  // vào sẽ bị hàm đó ghi đè lại ngay, tùy biến admin không có tác dụng thật).
+  // Nhân Sự > Onboarding/Offboarding v2 (checklist theo giai đoạn, thay hẳn bản v1 hrOnb*/hrOffb* cũ) —
+  // xem module-hrlifecycle.js. hrpOnbEmail KHÔNG đưa vào cùng lý do bản cũ (nhãn/required bị
+  // onHrpOnboardingPosTypeChange() tự ghi đè theo Vị Trí).
   HR_ONBOARDING: [
-    { id: 'hrOnbEmployeeCode', label: 'Mã Nhân Viên', required: true },
-    { id: 'hrOnbFullName', label: 'Họ và Tên', required: true },
-    { id: 'hrOnbPosType', label: 'Vị Trí', required: false },
-    { id: 'hrOnbDept', label: 'Phòng Ban', required: false },
-    { id: 'hrOnbStore', label: 'Siêu Thị', required: false },
-    { id: 'hrOnbJobTitle', label: 'Chức Danh', required: false },
-    { id: 'hrOnbPhone', label: 'Số Điện Thoại', required: true },
-    { id: 'hrOnbStartDate', label: 'Ngày Vào Làm Việc', required: true },
-    { id: 'hrOnbNote', label: 'Ghi Chú Thêm Cho IT (tuỳ chọn)', required: false }
+    { id: 'hrpOnbEmployeeCode', label: 'Mã Nhân Viên', required: true },
+    { id: 'hrpOnbFullName', label: 'Họ và Tên', required: true },
+    { id: 'hrpOnbPosType', label: 'Vị Trí', required: false },
+    { id: 'hrpOnbDept', label: 'Phòng Ban', required: false },
+    { id: 'hrpOnbStore', label: 'Siêu Thị', required: false },
+    { id: 'hrpOnbJobTitle', label: 'Chức Danh', required: false },
+    { id: 'hrpOnbPhone', label: 'Số Điện Thoại', required: true },
+    { id: 'hrpOnbStartDate', label: 'Ngày Vào Làm Việc', required: true },
+    { id: 'hrpOnbNote', label: 'Ghi Chú Thêm (tuỳ chọn)', required: false }
   ],
-  // hrOffbChecklistHandover/hrOffbChecklistBenefits KHÔNG đưa vào — <label> BỌC TRỰC TIẾP input (checkbox
-  // nằm NGAY trong <label>, không phải 1 <label> đứng riêng trước input), cùng lý do tdMandatory ở trên:
-  // applyCoreFieldCustomizations() ghi labelEl.innerHTML sẽ XOÁ MẤT checkbox khỏi DOM.
   HR_OFFBOARDING: [
-    { id: 'hrOffbEmployeeInput', label: 'Mã Nhân Viên / Tên Đăng Nhập', required: false },
-    { id: 'hrOffbLastWorkingDate', label: 'Ngày Nghỉ Việc', required: true },
-    { id: 'hrOffbReason', label: 'Lý Do / Ghi Chú (tuỳ chọn)', required: false }
+    { id: 'hrpOffbEmployeeInput', label: 'Mã Nhân Viên / Tên Đăng Nhập', required: false },
+    { id: 'hrpOffbLastWorkingDate', label: 'Ngày Nghỉ Việc', required: true },
+    { id: 'hrpOffbReason', label: 'Lý Do / Ghi Chú (tuỳ chọn)', required: false }
   ]
 };
 
@@ -1573,14 +1566,12 @@ const BUSINESS_MODULES = [
   // nhanSuManage (khối 21, giữ nguyên 2 quyền cũ từng gác chung 1 tab trước đợt tách) — KHÔNG khai
   // vào MODULE_TAB_MAP vì module chỉ có đúng 1 tab, đúng khuôn "hr" ở trên.
   { key: 'orgChart', label: 'Cơ Cấu Tổ Chức', parent: 'hr' },
-  // "Onboarding / Offboarding" — module con THẬT SỰ đầu tiên nối vào chỗ trống đã chừa sẵn ở trên (xem
-  // git log "thêm tab con Cơ Cấu Tổ Chức"). 1 module con DUY NHẤT (không tách 2 module riêng) mang 2
-  // sub-tab nội bộ (setHrLifecycleSubTab('ONBOARD'|'OFFBOARD'), xem module-hcrcdonghanh.js) — đúng khuôn
-  // "1 nav entry, nhiều sub-tab nội bộ" đã dùng cho vanHanh (ORDERS/STORE)/itSupport (PRICE/TICKET), vì
-  // 2 luồng dùng CHUNG logic tra cứu nhân viên/tạo ticket Hỗ Trợ IT (không tách quyền theo sub-tab).
-  // Quyền thật là 2 cờ PHẲNG TÁCH RIÊNG hrOnboardingCreate/hrOffboardingCreate (KHÔNG dùng chung
-  // nhanSuManage — quyết định người dùng đã xác nhận: "ai được TẠO yêu cầu" khác với "ai quản lý cả
-  // module Nhân Sự"), cộng thêm nhanSuManage/admin luôn xem được toàn bộ để theo dõi tiến độ — xem
+  // "Onboarding / Offboarding" v2 — module con nối vào chỗ trống đã chừa sẵn ở trên (xem git log "thêm
+  // tab con Cơ Cấu Tổ Chức"). Thay hẳn bản v1 (2 sub-tab tạo yêu cầu cấp/khoá tài khoản qua Hỗ Trợ IT,
+  // dùng 2 cờ hrOnboardingCreate/hrOffboardingCreate) bằng mô hình quy trình có checklist theo giai đoạn
+  // (module-hrlifecycle.js, DB.hrProcesses/DB.hrTaskTemplates) — 3 sub-view nội bộ (setHrLifecycleView(),
+  // KHÔNG còn setHrLifecycleSubTab() cũ): Danh Sách Quy Trình, Việc Của Tôi, Checklist Mẫu. Quyền thật là
+  // 4 cờ hrOnboardingManage/hrOffboardingManage/hrTaskTemplateManage/hrViewAll (khối 21) — xem
   // canAccessHrLifecycleModule().
   { key: 'hrLifecycle', label: 'Onboarding / Offboarding', parent: 'hr' },
   // "Vận Hành" — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu với officeReqs của "Tổng
@@ -2927,11 +2918,14 @@ async function initDatabase(loggingInUser) {
     // "form-fields-6").
     DB.hrFeedbackCategories = data.hrFeedbackCategories || [];
 
-    // hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding/Offboarding): server đã lọc sẵn
-    // theo quyền xem (chính người tạo hoặc nhanSuManage/admin) — xem
-    // filterHrOnboardingRequestsForUser()/filterHrOffboardingRequestsForUser() ở lib/recordViewScope.js.
-    DB.hrOnboardingRequests = data.hrOnboardingRequests || [];
-    DB.hrOffboardingRequests = data.hrOffboardingRequests || [];
+    // hrProcesses (Nhân Sự > Onboarding/Offboarding v2 — checklist theo giai đoạn): server đã lọc sẵn
+    // theo quyền xem (creator/directManager/hrOnboardingManage|hrOffboardingManage/hrViewAll/admin/task
+    // đang được giao) — xem filterHrProcessesForUser() ở lib/recordViewScope.js.
+    DB.hrProcesses = data.hrProcesses || [];
+    // hrTaskTemplates: danh mục checklist chuẩn (Onboarding/Offboarding) — chỉ sửa được ở màn quản trị
+    // riêng (hrTaskTemplateManage/admin), đọc được bởi mọi người đã đăng nhập (giống các danh mục tham
+    // chiếu khác như jobTitles/carTypes).
+    DB.hrTaskTemplates = data.hrTaskTemplates || [];
 
     DB._versions = data._versions || {};
 
@@ -5806,7 +5800,12 @@ function _dispatchTabRender(tabName) {
   // (cùng khuôn setBudgetSubTab(activeBudgetSubTab)/setVanHanhSubTab(activeVanHanhSubTab) ở trên) thay vì
   // luôn bật lại về "Sơ Đồ Tổ Chức" mỗi lần rời rồi quay lại module con này.
   if (tabName === 'orgChart') { setOrgChartSubTab(activeOrgChartSubTab); }
-  if (tabName === 'hrLifecycle') { setHrLifecycleSubTab(activeHrLifecycleSubTab); }
+  if (tabName === 'hrLifecycle') {
+    document.getElementById('btnHrpViewTemplates').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrTaskTemplateManage));
+    document.getElementById('btnHrpCreateOnboarding').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
+    document.getElementById('btnHrpCreateOffboarding').classList.toggle('hidden', !canManageHrLifecycleClient('OFFBOARDING'));
+    setHrLifecycleView(activeHrLifecycleView);
+  }
 }
 
 // Quyền vào sub-tab "💰 Thanh Toán" của Tổng Hợp — khác hẳn canAccessOfficeSubTab() (không có khái
@@ -5894,16 +5893,21 @@ function canAccessOrgChartModule(user) {
   if (!hasModuleAccess(user, 'orgChart')) return false;
   return !!(user.perms?.orgChartManage || user.perms?.nhanSuManage);
 }
-// Onboarding / Offboarding — module con của "Nhân Sự" (parent:'hr' ở BUSINESS_MODULES), cùng khuôn
-// canAccessOrgChartModule() ở trên. Quyền vào: hrOnboardingCreate HOẶC hrOffboardingCreate (đủ tạo 1
-// trong 2 loại yêu cầu là vào được module, sub-tab còn lại tự ẩn nút "Gửi Yêu Cầu" nếu thiếu quyền
-// tương ứng — xem setHrLifecycleSubTab()) HOẶC nhanSuManage (Nhân Sự quản lý module luôn xem được toàn
-// bộ để theo dõi tiến độ dù không tự tạo yêu cầu).
+// Onboarding / Offboarding v2 — module con của "Nhân Sự" (parent:'hr' ở BUSINESS_MODULES), cùng khuôn
+// canAccessOrgChartModule() ở trên. Quyền vào: bất kỳ quyền nào có thể liên quan tới module (tạo/quản lý
+// quy trình, xem toàn bộ, hoặc là vai trò dept-category IT/Tài chính có thể được giao task) HOẶC đang có
+// ít nhất 1 quy trình mà user này là người tạo/quản lý trực tiếp/được giao 1 task riêng — bao quát cả
+// trường hợp 1 người CHỈ được giao đúng 1 task cụ thể (VD Trưởng phòng làm "Quản lý trực tiếp" cho 1
+// nhân viên) dù không có bất kỳ quyền phẳng nào ở trên.
 function canAccessHrLifecycleModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'hrLifecycle')) return false;
-  return !!(user.perms?.hrOnboardingCreate || user.perms?.hrOffboardingCreate || user.perms?.nhanSuManage);
+  if (user.perms?.hrOnboardingManage || user.perms?.hrOffboardingManage || user.perms?.hrViewAll ||
+      user.perms?.itManage || user.perms?.paymentManage || user.perms?.nhanSuManage) return true;
+  return (DB.hrProcesses || []).some(p =>
+    p.creator === user.username || p.directManagerUsername === user.username ||
+    (p.tasks || []).some(t => t.assignedToUsername === user.username));
 }
 
 // isManagerOf()/workItemAssignees()/isWorkItemAssignee() — CHUYỂN từ module-hcrcdonghanh.js sang đây

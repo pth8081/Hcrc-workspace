@@ -26,7 +26,7 @@ async function seedDefaults() {
   // migrateVppExcludedJobTitles() bên dưới.
   await migrateVppExcludedJobTitles(pool);
   await migrateItRenewalCategories(pool);
-  await migrateHrLifecyclePerms(pool);
+  await migrateHrLifecycleV2Perms(pool);
   for (const key of Object.keys(DEFAULTS)) {
     const existing = await pool.request()
       .input('k', sql.NVarChar(100), key)
@@ -176,43 +176,48 @@ async function migrateItRenewalCategories(pool) {
   }
 }
 
-// hrOnboardingCreate/hrOffboardingCreate (Nhân Sự > Onboarding/Offboarding, khối 21 cây phân quyền) là
-// 2 quyền phẳng MỚI hoàn toàn tách biệt khỏi nhanSuManage (KHÔNG tái dùng chung — đúng quyết định người
-// dùng đã xác nhận: 2 quyền TẠO yêu cầu tách riêng khỏi quyền quản lý module Nhân Sự nói chung) — di trú
-// 1 LẦN DUY NHẤT lúc ra mắt tính năng: cấp sẵn 2 quyền này cho mọi user/permGroup ĐANG có
-// nhanSuManage=true, để không ai bị MẤT quyền so với trước khi tính năng ra đời (họ đã và đang quản lý
-// Nhân Sự thì mặc nhiên được tạo yêu cầu Onboarding/Offboarding). Admin có thể tự thu hẹp/mở rộng lại
-// sau (bỏ tick riêng cho từng người/nhóm) — di trú CHỈ chạy ĐÚNG 1 LẦN (đánh dấu bằng key marker
-// "hrLifecyclePermsSeeded" trong dbo.AppData, kiểm tra tồn tại thẳng bằng SQL cùng khuôn
-// migrateVppExcludedJobTitles()/migrateItRenewalCategories() ở trên) để lần khởi động SAU không ghi đè
-// lại quyết định thu hẹp/mở rộng của admin.
-async function migrateHrLifecyclePerms(pool) {
+// hrOnboardingManage/hrOffboardingManage/hrTaskTemplateManage/hrViewAll (Nhân Sự > Onboarding/Offboarding
+// v2 — checklist theo giai đoạn, khối 21 cây phân quyền) THAY HẲN cho hrOnboardingCreate/
+// hrOffboardingCreate (bản v1, đã gỡ cùng đợt thay thế 2 tab cũ) — di trú 1 LẦN DUY NHẤT lúc ra mắt bản
+// v2: cấp sẵn 4 quyền mới này cho mọi user/permGroup ĐANG có hrOnboardingCreate/hrOffboardingCreate
+// (bản cũ) HOẶC nhanSuManage=true, để không ai bị MẤT quyền so với trước. Admin có thể tự thu hẹp/mở
+// rộng lại sau — di trú CHỈ chạy ĐÚNG 1 LẦN (marker "hrLifecycleV2PermsSeeded", cùng khuôn
+// migrateVppExcludedJobTitles()/migrateItRenewalCategories() ở trên).
+async function migrateHrLifecycleV2Perms(pool) {
   const existing = await pool.request()
-    .input('k', sql.NVarChar(100), 'hrLifecyclePermsSeeded')
+    .input('k', sql.NVarChar(100), 'hrLifecycleV2PermsSeeded')
     .query('SELECT 1 FROM dbo.AppData WHERE DataKey = @k');
   if (existing.recordset.length > 0) return; // đã di trú rồi, không chạy lại
 
+  const grantFor = (p) => {
+    let changed = 0;
+    if (p.hrOnboardingCreate || p.nhanSuManage) { if (!p.hrOnboardingManage) { p.hrOnboardingManage = true; changed++; } }
+    if (p.hrOffboardingCreate || p.nhanSuManage) { if (!p.hrOffboardingManage) { p.hrOffboardingManage = true; changed++; } }
+    if (p.nhanSuManage) {
+      if (!p.hrTaskTemplateManage) { p.hrTaskTemplateManage = true; changed++; }
+      if (!p.hrViewAll) { p.hrViewAll = true; changed++; }
+    }
+    return changed;
+  };
   let changedUsers = 0, changedGroups = 0;
   await withLockedAppDataValue('permGroups', (list) => {
     const arr = Array.isArray(list) ? list : [];
     for (const g of arr) {
-      if (!g?.perms?.nhanSuManage) continue;
-      if (!g.perms.hrOnboardingCreate) { g.perms.hrOnboardingCreate = true; changedGroups++; }
-      if (!g.perms.hrOffboardingCreate) { g.perms.hrOffboardingCreate = true; changedGroups++; }
+      if (!g?.perms) continue;
+      if (grantFor(g.perms) > 0) changedGroups++;
     }
     return arr;
   });
   await withLockedAppDataValue('users', (list) => {
     const arr = Array.isArray(list) ? list : [];
     for (const u of arr) {
-      if (!u?.perms?.nhanSuManage) continue;
-      if (!u.perms.hrOnboardingCreate) { u.perms.hrOnboardingCreate = true; changedUsers++; }
-      if (!u.perms.hrOffboardingCreate) { u.perms.hrOffboardingCreate = true; changedUsers++; }
+      if (!u?.perms) continue;
+      if (grantFor(u.perms) > 0) changedUsers++;
     }
     return arr;
   });
-  await setAppDataValue('hrLifecyclePermsSeeded', true);
-  console.log(`   ↳ Cấp sẵn quyền hrOnboardingCreate/hrOffboardingCreate cho ${changedGroups} nhóm phân quyền + ${changedUsers} tài khoản đang có nhanSuManage.`);
+  await setAppDataValue('hrLifecycleV2PermsSeeded', true);
+  console.log(`   ↳ Cấp sẵn quyền hrOnboardingManage/hrOffboardingManage/hrTaskTemplateManage/hrViewAll cho ${changedGroups} nhóm phân quyền + ${changedUsers} tài khoản (kế thừa từ hrOnboardingCreate/hrOffboardingCreate/nhanSuManage).`);
 }
 
 // Ngân Sách "Thực Hiện" (entryKind==='ACTUAL') không còn qua bước phê duyệt Trưởng phòng nữa — chỉ

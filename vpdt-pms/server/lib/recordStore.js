@@ -57,11 +57,11 @@ const { HttpError } = require('./httpErrors');
 // Cùng khuôn trainingTestSubmissions (không có createValidation.js riêng — route tự quản lý upsert theo
 // khoá tự nhiên docId+username thay vì qua validateAndPrepareCreate(), vì đây không phải "tạo 1 hồ sơ độc
 // lập theo lựa chọn người dùng" mà là 1 dòng trạng thái server tự cập nhật liên tục).
-// hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding / Offboarding — xem
-// lib/createValidation.js) — cố ý đặt tiền tố "hr" (KHÔNG dùng bare "onboarding*"/"offboarding*") để
-// không đụng tên với onboardingPaths/onboardingProgress ("Đào Tạo Tân Binh", hoàn toàn khác nghiệp vụ,
-// đã có sẵn trong danh sách này từ trước).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress', 'hrOnboardingRequests', 'hrOffboardingRequests']);
+// hrProcesses (Nhân Sự > Onboarding / Offboarding v2 — checklist theo giai đoạn, xem
+// lib/createValidation.js) — cố ý đặt tiền tố "hr" (KHÔNG dùng bare "process*") để không đụng tên với
+// onboardingPaths/onboardingProgress ("Đào Tạo Tân Binh", hoàn toàn khác nghiệp vụ, đã có sẵn trong danh
+// sách này từ trước). Thay hẳn cho hrOnboardingRequests/hrOffboardingRequests (bản v1, đã gỡ).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress', 'hrProcesses']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

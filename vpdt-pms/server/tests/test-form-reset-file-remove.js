@@ -1490,67 +1490,72 @@ async function main() {
       }
     );
 
-    // ================= 33) Nhân Sự > Onboarding/Offboarding > Onboarding (hrOnboardingForm) =================
+    // ================= 33) Nhân Sự > Onboarding/Offboarding v2 > Onboarding (hrpOnboardingForm) =================
+    // Bản v1 (hrOnboardingForm/hrOnbXxx, 2 sub-tab hrOnboardingRequests/hrOffboardingRequests) đã bị GỠ
+    // HẲN, thay bằng mô hình quy trình có checklist (module-hrlifecycle.js, DB.hrProcesses/
+    // DB.hrTaskTemplates) — form Tạo Mới đổi tên hrpOnboardingForm/hrpOnbXxx, chỉ hiện sau khi bấm
+    // "+ Tạo Onboarding" (showHrCreateForm('ONBOARDING'), #btnHrpCreateOnboarding).
     await check(
       'Nhân Sự > Onboarding: "Làm Mới" đưa cascading picker Vị Trí về ĐÚNG mặc định HO (dropdown Chức Danh re-populate lại đúng danh mục HO, KHÔNG còn sót option Siêu Thị vừa chọn) + trắng toàn bộ form',
       async () => {
-        // hrOnboardingRequests: không thuộc 3 module gốc — bổ sung tay. DB.stores/DB.storeJobTitles seed
-        // thêm nội dung THẤY ĐƯỢC để phân biệt rõ với DB.jobTitles (HO) khi kiểm tra cascading.
+        // hrProcesses/hrTaskTemplates: không thuộc 3 module gốc — bổ sung tay. DB.stores/DB.storeJobTitles
+        // seed thêm nội dung THẤY ĐƯỢC để phân biệt rõ với DB.jobTitles (HO) khi kiểm tra cascading.
         await page.evaluate(() => {
-          DB.hrOnboardingRequests = [];
+          DB.hrProcesses = []; DB.hrTaskTemplates = [];
           DB.stores = ['Siêu Thị Quận 7'];
           DB.storeJobTitles = [{ label: 'Nhân viên bán hàng' }, { label: 'Quản lý ca' }];
           switchTab('hrLifecycle');
         });
+        await page.click('#btnHrpCreateOnboarding');
 
         const initialState = await page.evaluate(() => ({
-          posType: document.getElementById('hrOnbPosType').value,
-          deptWrapHidden: document.getElementById('hrOnbDeptWrap').classList.contains('hidden'),
-          storeWrapHidden: document.getElementById('hrOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: Array.from(document.getElementById('hrOnbJobTitle').options).map(o => o.value)
+          posType: document.getElementById('hrpOnbPosType').value,
+          deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
+          storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
+          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value)
         }));
-        assertTrue(initialState.posType === 'HO', `Vị Trí mặc định phải là HO khi vừa mở tab, thực tế "${initialState.posType}"`);
+        assertTrue(initialState.posType === 'HO', `Vị Trí mặc định phải là HO khi vừa mở form, thực tế "${initialState.posType}"`);
         assertTrue(initialState.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN khi đang ở HO (tiền đề bài test)');
         assertTrue(initialState.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN khi đang ở HO (tiền đề bài test)');
         assertTrue(!initialState.jobTitleOptions.includes('Nhân viên bán hàng'), 'Chức Danh lúc đầu (HO) KHÔNG được có option Siêu Thị (tiền đề bài test)');
 
         // Chuyển sang Siêu Thị -> cascading phải đổi đúng: ẩn Phòng Ban, hiện Siêu Thị, Chức Danh đổi
         // sang danh mục Siêu Thị, Email chuyển bắt buộc.
-        await page.selectOption('#hrOnbPosType', 'STORE');
+        await page.selectOption('#hrpOnbPosType', 'STORE');
         const storeState = await page.evaluate(() => ({
-          deptWrapHidden: document.getElementById('hrOnbDeptWrap').classList.contains('hidden'),
-          storeWrapHidden: document.getElementById('hrOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: Array.from(document.getElementById('hrOnbJobTitle').options).map(o => o.value),
-          emailRequired: document.getElementById('hrOnbEmail').required
+          deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
+          storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
+          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value),
+          emailRequired: document.getElementById('hrpOnbEmail').required
         }));
         assertTrue(storeState.deptWrapHidden === true, 'Khối Phòng Ban phải ẨN khi đang ở Siêu Thị (tiền đề bài test)');
         assertTrue(storeState.storeWrapHidden === false, 'Khối Siêu Thị phải HIỆN khi đang ở Siêu Thị (tiền đề bài test)');
         assertTrue(storeState.jobTitleOptions.includes('Nhân viên bán hàng') && storeState.jobTitleOptions.includes('Quản lý ca'), `Chức Danh phải đổi sang danh mục Siêu Thị, thực tế ${JSON.stringify(storeState.jobTitleOptions)}`);
         assertTrue(storeState.emailRequired === true, 'Email phải chuyển bắt buộc khi đang ở Siêu Thị (tiền đề bài test)');
 
-        await page.fill('#hrOnbEmployeeCode', 'NV9999');
-        await page.fill('#hrOnbFullName', 'Nguyễn Văn Kiểm Thử');
-        await page.selectOption('#hrOnbStore', 'Siêu Thị Quận 7');
-        await page.selectOption('#hrOnbJobTitle', 'Nhân viên bán hàng');
-        await page.fill('#hrOnbEmail', 'test@company.com');
-        await page.fill('#hrOnbPhone', '0912345678');
-        await page.fill('#hrOnbStartDate', '2026-10-01');
-        await page.fill('#hrOnbNote', 'Ghi chú kiểm thử reset form.');
+        await page.fill('#hrpOnbEmployeeCode', 'NV9999');
+        await page.fill('#hrpOnbFullName', 'Nguyễn Văn Kiểm Thử');
+        await page.selectOption('#hrpOnbStore', 'Siêu Thị Quận 7');
+        await page.selectOption('#hrpOnbJobTitle', 'Nhân viên bán hàng');
+        await page.fill('#hrpOnbEmail', 'test@company.com');
+        await page.fill('#hrpOnbPhone', '0912345678');
+        await page.fill('#hrpOnbStartDate', '2026-10-01');
+        await page.fill('#hrpOnbNote', 'Ghi chú kiểm thử reset form.');
 
         await page.evaluate(() => { window.__confirmCalls = []; });
-        await page.click('#hrOnboardingForm button[data-arg1="resetHrOnboardingForm"]');
+        await page.click('#hrpOnboardingForm button[data-arg1="resetHrpOnboardingForm"]');
         const state = await page.evaluate(() => ({
-          posType: document.getElementById('hrOnbPosType').value,
-          deptWrapHidden: document.getElementById('hrOnbDeptWrap').classList.contains('hidden'),
-          storeWrapHidden: document.getElementById('hrOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: Array.from(document.getElementById('hrOnbJobTitle').options).map(o => o.value),
-          emailRequired: document.getElementById('hrOnbEmail').required,
-          employeeCode: document.getElementById('hrOnbEmployeeCode').value,
-          fullName: document.getElementById('hrOnbFullName').value,
-          email: document.getElementById('hrOnbEmail').value,
-          phone: document.getElementById('hrOnbPhone').value,
-          startDate: document.getElementById('hrOnbStartDate').value,
-          note: document.getElementById('hrOnbNote').value,
+          posType: document.getElementById('hrpOnbPosType').value,
+          deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
+          storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
+          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value),
+          emailRequired: document.getElementById('hrpOnbEmail').required,
+          employeeCode: document.getElementById('hrpOnbEmployeeCode').value,
+          fullName: document.getElementById('hrpOnbFullName').value,
+          email: document.getElementById('hrpOnbEmail').value,
+          phone: document.getElementById('hrpOnbPhone').value,
+          startDate: document.getElementById('hrpOnbStartDate').value,
+          note: document.getElementById('hrpOnbNote').value,
           confirmCalls: window.__confirmCalls.length
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
@@ -1559,74 +1564,77 @@ async function main() {
         assertTrue(state.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN lại sau Làm Mới (đã về HO), KHÔNG được kẹt lại ở trạng thái Siêu Thị vừa chọn');
         assertTrue(!state.jobTitleOptions.includes('Nhân viên bán hàng'), `Chức Danh phải re-populate lại ĐÚNG danh mục HO (không còn sót option Siêu Thị "Nhân viên bán hàng"), thực tế ${JSON.stringify(state.jobTitleOptions)}`);
         assertTrue(state.emailRequired === false, 'Email phải hết bắt buộc sau khi về lại HO');
-        assertTrue(state.employeeCode === '', 'hrOnbEmployeeCode phải về rỗng');
-        assertTrue(state.fullName === '', 'hrOnbFullName phải về rỗng');
-        assertTrue(state.email === '', 'hrOnbEmail phải về rỗng');
-        assertTrue(state.phone === '', 'hrOnbPhone phải về rỗng');
-        assertTrue(state.startDate === '', 'hrOnbStartDate phải về rỗng');
-        assertTrue(state.note === '', 'hrOnbNote phải về rỗng');
+        assertTrue(state.employeeCode === '', 'hrpOnbEmployeeCode phải về rỗng');
+        assertTrue(state.fullName === '', 'hrpOnbFullName phải về rỗng');
+        assertTrue(state.email === '', 'hrpOnbEmail phải về rỗng');
+        assertTrue(state.phone === '', 'hrpOnbPhone phải về rỗng');
+        assertTrue(state.startDate === '', 'hrpOnbStartDate phải về rỗng');
+        assertTrue(state.note === '', 'hrpOnbNote phải về rỗng');
       }
     );
 
-    // ================= 34) Nhân Sự > Onboarding/Offboarding > Offboarding (hrOffboardingForm) =================
+    // ================= 34) Nhân Sự > Onboarding/Offboarding v2 > Offboarding (hrpOffboardingForm) =================
+    // Bản v1 bắt buộc tích đủ 2 checkbox thủ tục bàn giao/chế độ trước khi mở nút gửi — bản v2 KHÔNG còn
+    // 2 checkbox đó (checklist các việc cần làm giờ tự sinh SAU khi tạo quy trình, không phải điều kiện
+    // TRƯỚC khi tạo) — nút gửi chỉ còn phụ thuộc đã chọn đúng nhân viên + nhập Ngày Nghỉ Việc
+    // (updateHrpOffboardingSubmitState()).
     await check(
-      'Nhân Sự > Offboarding: chọn nhân viên qua sdd-picker + tích đủ 2 checkbox -> nút gửi MỞ ra, "Làm Mới" xoá sạch sdd-picker (hidden username + info-box) + ngày nghỉ việc + bỏ tick 2 checkbox + khoá lại nút gửi (updateHrOffboardingSubmitState() re-compute, KHÔNG dựa vào form.reset() tự bắn change)',
+      'Nhân Sự > Offboarding: chọn nhân viên qua sdd-picker + nhập Ngày Nghỉ Việc -> nút gửi MỞ ra, "Làm Mới" xoá sạch sdd-picker (hidden username + info-box) + ngày nghỉ việc + Quản lý trực tiếp + khoá lại nút gửi (updateHrpOffboardingSubmitState() re-compute, KHÔNG dựa vào form.reset() tự bắn change)',
       async () => {
         await page.evaluate(() => {
-          DB.hrOffboardingRequests = [];
+          DB.hrProcesses = []; DB.hrTaskTemplates = [];
           switchTab('hrLifecycle');
         });
-        await page.click('#btnHrLifecycleSubOffboard');
+        await page.click('#btnHrpCreateOffboarding');
 
-        // Chọn nhân viên qua sdd-picker — gọi thẳng resolveHrOffboardingEmployeeInput() với nhãn ĐÚNG
+        // Chọn nhân viên qua sdd-picker — gọi thẳng resolveHrpOffboardingEmployeeInput() với nhãn ĐÚNG
         // khuôn "Tên — Phòng ban (username)" (cùng khuôn resolveTrainingInstructorInput() ở
         // test-internal-training.js), khớp đúng user 'admin' đã seed sẵn ở tests/_seed.js.
         await page.evaluate(() => {
-          document.getElementById('hrOffbEmployeeInput').value = 'Quản Trị Viên — Ban Giám Đốc (admin)';
-          resolveHrOffboardingEmployeeInput(document.getElementById('hrOffbEmployeeInput').value);
+          document.getElementById('hrpOffbEmployeeInput').value = 'Quản Trị Viên — Ban Giám Đốc (admin)';
+          resolveHrpOffboardingEmployeeInput(document.getElementById('hrpOffbEmployeeInput').value);
         });
         const pickedState = await page.evaluate(() => ({
-          username: document.getElementById('hrOffbEmployeeUsername').value,
-          infoHidden: document.getElementById('hrOffbEmployeeInfo').classList.contains('hidden'),
-          infoText: document.getElementById('hrOffbEmployeeInfo').innerText,
-          btnDisabled: document.getElementById('btnSubmitHrOffboarding').disabled
+          username: document.getElementById('hrpOffbEmployeeUsername').value,
+          infoHidden: document.getElementById('hrpOffbEmployeeInfo').classList.contains('hidden'),
+          infoText: document.getElementById('hrpOffbEmployeeInfo').innerText,
+          btnDisabled: document.getElementById('btnSubmitHrpOffboarding').disabled
         }));
         assertTrue(pickedState.username === 'admin', `Phải khớp đúng username 'admin' (tiền đề bài test), thực tế "${pickedState.username}"`);
         assertTrue(pickedState.infoHidden === false, 'Info-box nhân viên phải HIỆN sau khi chọn đúng (tiền đề bài test)');
         assertTrue(pickedState.infoText.includes('Quản Trị Viên'), `Info-box phải hiện đúng tên nhân viên, thực tế: ${pickedState.infoText}`);
-        assertTrue(pickedState.btnDisabled === true, 'Nút gửi vẫn phải KHOÁ (chưa đủ ngày nghỉ việc/2 checkbox) — tiền đề bài test');
+        assertTrue(pickedState.btnDisabled === true, 'Nút gửi vẫn phải KHOÁ (chưa nhập Ngày Nghỉ Việc) — tiền đề bài test');
 
-        await page.fill('#hrOffbLastWorkingDate', '2026-12-31');
-        await page.check('#hrOffbChecklistHandover');
-        await page.check('#hrOffbChecklistBenefits');
-        await page.fill('#hrOffbReason', 'Lý do kiểm thử reset form.');
-        const readyState = await page.evaluate(() => document.getElementById('btnSubmitHrOffboarding').disabled);
-        assertTrue(readyState === false, 'Nút gửi phải MỞ RA khi đã đủ nhân viên + ngày nghỉ việc + tích đủ 2 checkbox (tiền đề bài test)');
+        await page.fill('#hrpOffbLastWorkingDate', '2026-12-31');
+        await page.check('#hrpOffbIsManagerial');
+        await page.fill('#hrpOffbReason', 'Lý do kiểm thử reset form.');
+        const readyState = await page.evaluate(() => document.getElementById('btnSubmitHrpOffboarding').disabled);
+        assertTrue(readyState === false, 'Nút gửi phải MỞ RA khi đã đủ nhân viên + ngày nghỉ việc (tiền đề bài test)');
 
         await page.evaluate(() => { window.__confirmCalls = []; });
-        await page.click('#hrOffboardingForm button[data-arg1="resetHrOffboardingForm"]');
+        await page.click('#hrpOffboardingForm button[data-arg1="resetHrpOffboardingForm"]');
         const state = await page.evaluate(() => ({
-          employeeInput: document.getElementById('hrOffbEmployeeInput').value,
-          employeeUsername: document.getElementById('hrOffbEmployeeUsername').value,
-          infoHidden: document.getElementById('hrOffbEmployeeInfo').classList.contains('hidden'),
-          infoHtml: document.getElementById('hrOffbEmployeeInfo').innerHTML,
-          lastWorkingDate: document.getElementById('hrOffbLastWorkingDate').value,
-          handoverChecked: document.getElementById('hrOffbChecklistHandover').checked,
-          benefitsChecked: document.getElementById('hrOffbChecklistBenefits').checked,
-          reason: document.getElementById('hrOffbReason').value,
-          btnDisabled: document.getElementById('btnSubmitHrOffboarding').disabled,
+          employeeInput: document.getElementById('hrpOffbEmployeeInput').value,
+          employeeUsername: document.getElementById('hrpOffbEmployeeUsername').value,
+          infoHidden: document.getElementById('hrpOffbEmployeeInfo').classList.contains('hidden'),
+          infoHtml: document.getElementById('hrpOffbEmployeeInfo').innerHTML,
+          lastWorkingDate: document.getElementById('hrpOffbLastWorkingDate').value,
+          isManagerialChecked: document.getElementById('hrpOffbIsManagerial').checked,
+          directManagerUsername: document.getElementById('hrpOffbDirectManagerUsername').value,
+          reason: document.getElementById('hrpOffbReason').value,
+          btnDisabled: document.getElementById('btnSubmitHrpOffboarding').disabled,
           confirmCalls: window.__confirmCalls.length
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
-        assertTrue(state.employeeInput === '', 'hrOffbEmployeeInput phải về rỗng');
-        assertTrue(state.employeeUsername === '', 'hrOffbEmployeeUsername (hidden) phải về rỗng');
+        assertTrue(state.employeeInput === '', 'hrpOffbEmployeeInput phải về rỗng');
+        assertTrue(state.employeeUsername === '', 'hrpOffbEmployeeUsername (hidden) phải về rỗng');
         assertTrue(state.infoHidden === true, 'Info-box nhân viên phải ẨN lại sau Làm Mới');
         assertTrue(state.infoHtml === '', 'Info-box nhân viên phải trắng nội dung sau Làm Mới');
-        assertTrue(state.lastWorkingDate === '', 'hrOffbLastWorkingDate phải về rỗng');
-        assertTrue(state.handoverChecked === false, 'Checkbox Bàn Giao phải bỏ tick');
-        assertTrue(state.benefitsChecked === false, 'Checkbox Chế Độ phải bỏ tick');
-        assertTrue(state.reason === '', 'hrOffbReason phải về rỗng');
-        assertTrue(state.btnDisabled === true, 'Nút gửi phải KHOÁ LẠI sau Làm Mới (updateHrOffboardingSubmitState() re-compute)');
+        assertTrue(state.lastWorkingDate === '', 'hrpOffbLastWorkingDate phải về rỗng');
+        assertTrue(state.isManagerialChecked === false, 'Checkbox "đang giữ vị trí quản lý" phải bỏ tick');
+        assertTrue(state.directManagerUsername === '', 'hrpOffbDirectManagerUsername (hidden) phải về rỗng');
+        assertTrue(state.reason === '', 'hrpOffbReason phải về rỗng');
+        assertTrue(state.btnDisabled === true, 'Nút gửi phải KHOÁ LẠI sau Làm Mới (updateHrpOffboardingSubmitState() re-compute)');
       }
     );
 

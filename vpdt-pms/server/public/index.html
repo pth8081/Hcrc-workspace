@@ -5310,7 +5310,7 @@
             <span id="permTreeBadge_hr" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến (và xem toàn bộ tiến độ Onboarding/Offboarding của mọi người), "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức, "Tạo Yêu Cầu Onboarding/Offboarding" cho module con "Onboarding / Offboarding" (giữ quyền nào cũng vào được module tương ứng, xem thêm được phần khác nếu có nhiều quyền). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến, "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức, 4 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding/Offboarding" để tạo/quản lý đúng loại quy trình, "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Xem Toàn Bộ" để xem mọi quy trình dù không quản lý — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pNhanSuManage"> 🤝 Quản lý Nhân Sự (quản lý &amp; phản hồi ý kiến)
             </label>
@@ -5318,10 +5318,16 @@
               <input type="checkbox" id="pOrgChartManage"> 🌳 Quản Lý Cơ Cấu Tổ Chức
             </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pHrOnboardingCreate"> 🆕 Tạo Yêu Cầu Onboarding
+              <input type="checkbox" id="pHrOnboardingManage"> 🆕 Quản Lý Onboarding
             </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pHrOffboardingCreate"> 🚪 Tạo Yêu Cầu Offboarding
+              <input type="checkbox" id="pHrOffboardingManage"> 🚪 Quản Lý Offboarding
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrTaskTemplateManage"> 📋 Quản Lý Checklist Mẫu (Onboarding/Offboarding)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrViewAll"> 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding
             </label>
           </div>
         </details>
@@ -7204,123 +7210,175 @@
     </div>
   </div>
 
-  <!-- Màn hình MODULE "Onboarding / Offboarding" — module con của Nhân Sự (parent:'hr' ở
-       BUSINESS_MODULES), 2 sub-tab nội bộ dùng CHUNG 1 module (đúng khuôn vanHanh ORDERS/STORE, itSupport
-       PRICE/TICKET) — xem setHrLifecycleSubTab() (module-hcrcdonghanh.js). Gửi yêu cầu ở đây KHÔNG tự tạo/
-       khoá tài khoản DB.users nào — chỉ tự động sinh 1 ticket "Hỗ Trợ Yêu Cầu" (Hỗ Trợ IT, category "🔑 Tài
-       khoản / Đăng nhập") để đội IT xử lý thật NGOÀI hệ thống này rồi xác nhận hoàn thành ngược lại đây. -->
+  <!-- Màn hình MODULE "Onboarding / Offboarding" v2 — module con của Nhân Sự (parent:'hr' ở
+       BUSINESS_MODULES), xem module-hrlifecycle.js. Thay hẳn bản v1 (2 sub-tab tạo yêu cầu cấp/khoá tài
+       khoản qua Hỗ Trợ IT) bằng mô hình quy trình có checklist theo giai đoạn: 1 collection DB.hrProcesses
+       (mỗi bản ghi tự chứa tasks[]/attachments[]/history[], checklist tự sinh từ danh mục admin-config
+       DB.hrTaskTemplates lúc tạo — xem lib/createValidation.js/lib/recordActions.js), 3 sub-view nội bộ
+       (setHrLifecycleView()): Danh Sách Quy Trình (kèm form tạo Onboarding/Offboarding thu gọn), Việc Của
+       Tôi (mọi task PENDING/OVERDUE được gán cho user hiện tại), Checklist Mẫu (chỉ hrTaskTemplateManage/
+       admin). Modal "Chi Tiết Quy Trình" (#hrpDetailModal) sống NGAY TRONG section (không cần gốc CSP
+       riêng — xem bindCspDelegation('hrLifecycleSection') ở core.js). Vẫn tích hợp Hỗ Trợ IT: mỗi việc
+       thuộc phòng IT có thể tạo 1 ticket riêng (không phải 1-request-1-ticket như bản v1). -->
   <div id="hrLifecycleSection" class="hidden space-y-4">
     <div class="flex flex-wrap items-center gap-2">
-      <button type="button" id="btnHrLifecycleSubOnboard" data-op="setHrLifecycleSubTab" data-arg0="ONBOARD" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🆕 Onboarding</button>
-      <button type="button" id="btnHrLifecycleSubOffboard" data-op="setHrLifecycleSubTab" data-arg0="OFFBOARD" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🚪 Offboarding</button>
+      <button type="button" id="btnHrpViewList" data-op="setHrLifecycleView" data-arg0="LIST" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📋 Danh Sách Quy Trình</button>
+      <button type="button" id="btnHrpViewMyTasks" data-op="setHrLifecycleView" data-arg0="MYTASKS" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">✅ Việc Của Tôi</button>
+      <button type="button" id="btnHrpViewTemplates" data-op="setHrLifecycleView" data-arg0="TEMPLATES" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🗂️ Checklist Mẫu</button>
     </div>
 
-    <!-- ONBOARD — form khai báo nhân viên mới, chưa tồn tại trong DB.users nên KHÔNG tra cứu được, mọi
-         field đều gõ/chọn tay (mã NV tự do, dept/jobTitle lấy từ danh mục hệ thống). Cascading HO/Siêu
-         Thị mirror ĐÚNG #uPosType/onUserPosTypeChange() ở form Người Dùng đầy đủ. -->
-    <div id="hrLifecycleOnboardView" class="space-y-4">
-      <form id="hrOnboardingForm" data-op-submit="submitHrOnboardingRequest" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
-        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🆕 Yêu Cầu Onboarding — Cấp Tài Khoản Nhân Viên Mới</h3>
-        <p class="text-xs text-teal-800">Khai báo thông tin nhân viên mới rồi bấm "Gửi Yêu Cầu Cấp Tài Khoản" — hệ thống tự tạo 1 yêu cầu trong Hỗ Trợ IT để đội IT cấp email/tài khoản. IT xử lý xong sẽ xác nhận hoàn thành, kết quả hiện lại ngay ở danh sách bên dưới.</p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Nhân Viên</label>
-            <input id="hrOnbEmployeeCode" placeholder="VD: NV0012" class="w-full border p-1.5 rounded text-xs" required>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
-            <input id="hrOnbFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
-            <select id="hrOnbPosType" data-op-change="onHrOnboardingPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white">
-              <option value="HO">HO (Văn phòng)</option>
-              <option value="STORE">Siêu Thị</option>
-            </select>
-          </div>
-          <div id="hrOnbDeptWrap">
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
-            <select id="hrOnbDept" class="w-full border p-1.5 rounded text-xs bg-white"></select>
-          </div>
-          <div id="hrOnbStoreWrap" class="hidden">
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
-            <select id="hrOnbStore" class="w-full border p-1.5 rounded text-xs bg-white"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
-            <select id="hrOnbJobTitle" class="w-full border p-1.5 rounded text-xs bg-white"></select>
-          </div>
-          <div>
-            <label id="hrOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu IT tự cấp)</label>
-            <input id="hrOnbEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
-            <input id="hrOnbPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
-            <input id="hrOnbStartDate" type="date" class="w-full border p-1.5 rounded text-xs" required>
-          </div>
+    <!-- Danh Sách Quy Trình -->
+    <div id="hrpViewList" class="space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <select data-op-change="setHrpListFilterType" data-arg-value="0" class="border p-1.5 rounded text-xs bg-white">
+            <option value="ALL">-- Tất cả loại --</option>
+            <option value="ONBOARDING">🆕 Onboarding</option>
+            <option value="OFFBOARDING">🚪 Offboarding</option>
+          </select>
+          <select data-op-change="setHrpListFilterStatus" data-arg-value="0" class="border p-1.5 rounded text-xs bg-white">
+            <option value="ALL">-- Tất cả trạng thái --</option>
+            <option value="IN_PROGRESS">🔄 Đang thực hiện</option>
+            <option value="COMPLETED">✅ Hoàn tất</option>
+            <option value="CANCELLED">❌ Đã huỷ</option>
+          </select>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi chú thêm cho IT (tuỳ chọn)</label>
-          <textarea id="hrOnbNote" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: cần cấp thêm phần mềm/thiết bị gì đặc biệt..."></textarea>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="btnHrpCreateOnboarding" data-op="showHrCreateForm" data-arg0="ONBOARDING" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">+ Tạo Onboarding</button>
+          <button type="button" id="btnHrpCreateOffboarding" data-op="showHrCreateForm" data-arg0="OFFBOARDING" class="bg-amber-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-800">+ Tạo Offboarding</button>
         </div>
-        <div class="flex justify-end gap-2">
-          <button type="button" data-op="confirmAndResetForm" data-arg0="hrOnboardingForm" data-arg1="resetHrOnboardingForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
-          <button type="submit" class="bg-teal-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-800">📨 Gửi Yêu Cầu Cấp Tài Khoản</button>
-        </div>
-      </form>
-
-      <div class="space-y-2">
-        <h4 class="font-bold text-sm text-gray-700">📋 Yêu Cầu Đã Gửi</h4>
-        <div id="hrOnboardingListContainer" class="space-y-2"></div>
       </div>
+
+      <!-- Form tạo Onboarding — chưa tồn tại trong DB.users nên KHÔNG tra cứu được, mọi field đều gõ/chọn
+           tay (mã NV tự do, dept/jobTitle lấy từ danh mục hệ thống). Cascading HO/Siêu Thị mirror ĐÚNG
+           #uPosType/onUserPosTypeChange() ở form Người Dùng đầy đủ. -->
+      <div id="hrpCreateOnboardWrap" class="hidden">
+        <form id="hrpOnboardingForm" data-op-submit="submitHrpOnboarding" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🆕 Tạo Quy Trình Onboarding</h3>
+            <button type="button" data-op="hideHrCreateForms" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+          </div>
+          <p class="text-xs text-teal-800">Khai báo thông tin nhân viên mới — hệ thống tự sinh checklist các việc cần làm theo từng giai đoạn (Chuẩn bị trước ngày đi làm → Ngày đầu tiên → Tuần/Tháng đầu → Kết thúc thử việc).</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Nhân Viên</label>
+              <input id="hrpOnbEmployeeCode" placeholder="VD: NV0012" class="w-full border p-1.5 rounded text-xs" required>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
+              <input id="hrpOnbFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
+              <select id="hrpOnbPosType" data-op-change="onHrpOnboardingPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="HO">HO (Văn phòng)</option>
+                <option value="STORE">Siêu Thị</option>
+              </select>
+            </div>
+            <div id="hrpOnbDeptWrap">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
+              <select id="hrpOnbDept" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+            </div>
+            <div id="hrpOnbStoreWrap" class="hidden">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
+              <select id="hrpOnbStore" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
+              <select id="hrpOnbJobTitle" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+            </div>
+            <div>
+              <label id="hrpOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu chưa cấp)</label>
+              <input id="hrpOnbEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
+              <input id="hrpOnbPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
+              <input id="hrpOnbStartDate" type="date" class="w-full border p-1.5 rounded text-xs" required>
+            </div>
+            <div class="relative">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Quản Lý Trực Tiếp (tuỳ chọn)</label>
+              <input id="hrpOnbDirectManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpOnbDirectManagerInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
+              <input id="hrpOnbDirectManagerUsername" type="hidden">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi chú thêm (tuỳ chọn)</label>
+            <textarea id="hrpOnbNote" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: cần cấp thêm phần mềm/thiết bị gì đặc biệt..."></textarea>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="hrpOnboardingForm" data-arg1="resetHrpOnboardingForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-teal-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-teal-800">📨 Tạo Quy Trình</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Form tạo Offboarding — nhân viên ĐÃ có tài khoản thật, tra cứu bằng ô tìm-kiếm-gõ-chọn dùng
+           chung #systemUsersDatalist (widget sdd*, xem CLAUDE.md — KHÔNG dùng <datalist> native). -->
+      <div id="hrpCreateOffboardWrap" class="hidden">
+        <form id="hrpOffboardingForm" data-op-submit="submitHrpOffboarding" class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">🚪 Tạo Quy Trình Offboarding</h3>
+            <button type="button" data-op="hideHrCreateForms" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+          </div>
+          <p class="text-xs text-amber-800">Gõ tên hoặc mã nhân viên (tài khoản hệ thống) để tự động lấy thông tin — hệ thống tự sinh checklist các việc cần làm (Thông báo nghỉ việc → Bàn giao công việc → Thu hồi tài sản & quyền truy cập → Quyết toán tài chính → Sau khi nghỉ).</p>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Nhân Viên Nghỉ Việc <span class="text-red-500">*</span></label>
+            <input id="hrpOffbEmployeeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpOffboardingEmployeeInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
+            <input id="hrpOffbEmployeeUsername" type="hidden">
+          </div>
+          <div id="hrpOffbEmployeeInfo" class="hidden bg-white border rounded p-2 text-xs text-gray-700 space-y-0.5"></div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Nghỉ Việc <span class="text-red-500">*</span></label>
+            <input id="hrpOffbLastWorkingDate" type="date" data-op-change="updateHrpOffboardingSubmitState" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div class="relative">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Quản Lý Trực Tiếp (tuỳ chọn)</label>
+            <input id="hrpOffbDirectManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpOffbDirectManagerInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
+            <input id="hrpOffbDirectManagerUsername" type="hidden">
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="hrpOffbIsManagerial">
+            <span class="text-xs text-gray-800">Nhân viên nghỉ việc đang giữ vị trí quản lý (cần bàn giao đội nhóm)</span>
+          </label>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lý do / Ghi chú (tuỳ chọn)</label>
+            <textarea id="hrpOffbReason" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: nghỉ việc từ ngày..."></textarea>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="hrpOffboardingForm" data-arg1="resetHrpOffboardingForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" id="btnSubmitHrpOffboarding" disabled class="bg-amber-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-800 disabled:opacity-40 disabled:cursor-not-allowed">🔒 Tạo Quy Trình</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="hrpListContainer" class="space-y-2"></div>
     </div>
 
-    <!-- OFFBOARD — nhân viên ĐÃ có tài khoản thật, tra cứu bằng ô tìm-kiếm-gõ-chọn dùng chung
-         #systemUsersDatalist (widget sdd*, xem CLAUDE.md — KHÔNG dùng <datalist> native). 2 hộp kiểm bắt
-         buộc phải tick TRƯỚC KHI nút gửi mở ra (chặn cả 2 phía client lẫn server, xem
-         extraValidate() ở lib/createValidation.js). -->
-    <div id="hrLifecycleOffboardView" class="hidden space-y-4">
-      <form id="hrOffboardingForm" data-op-submit="submitHrOffboardingRequest" class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
-        <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">🚪 Yêu Cầu Offboarding — Khoá Tài Khoản Nhân Viên Nghỉ Việc</h3>
-        <p class="text-xs text-amber-800">Gõ tên hoặc mã nhân viên (tên đăng nhập) để tự động lấy thông tin từ hệ thống, tích đủ 2 thủ tục bên dưới rồi bấm "Gửi Yêu Cầu Khóa Tài Khoản".</p>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Nhân Viên / Tên Đăng Nhập</label>
-          <input id="hrOffbEmployeeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrOffboardingEmployeeInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
-          <input id="hrOffbEmployeeUsername" type="hidden">
-        </div>
-        <div id="hrOffbEmployeeInfo" class="hidden bg-white border rounded p-2 text-xs text-gray-700 space-y-0.5"></div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Nghỉ Việc <span class="text-red-500">*</span></label>
-          <input id="hrOffbLastWorkingDate" type="date" data-op-change="updateHrOffboardingSubmitState" class="w-full border p-1.5 rounded text-xs" required>
-        </div>
-        <div class="space-y-1.5">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="hrOffbChecklistHandover" data-op-change="updateHrOffboardingSubmitState">
-            <span class="text-xs text-gray-800">Đã hoàn tất thủ tục bàn giao công việc/tài sản</span>
-          </label>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="hrOffbChecklistBenefits" data-op-change="updateHrOffboardingSubmitState">
-            <span class="text-xs text-gray-800">Đã hoàn tất thủ tục chế độ (BHXH, lương, phép còn lại...)</span>
-          </label>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Lý do / Ghi chú (tuỳ chọn)</label>
-          <textarea id="hrOffbReason" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: nghỉ việc từ ngày..."></textarea>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button type="button" data-op="confirmAndResetForm" data-arg0="hrOffboardingForm" data-arg1="resetHrOffboardingForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
-          <button type="submit" id="btnSubmitHrOffboarding" disabled class="bg-amber-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-800 disabled:opacity-40 disabled:cursor-not-allowed">🔒 Gửi Yêu Cầu Khóa Tài Khoản</button>
-        </div>
-      </form>
+    <!-- Việc Của Tôi -->
+    <div id="hrpViewMyTasks" class="hidden space-y-2">
+      <div id="hrpMyTasksContainer" class="space-y-2"></div>
+    </div>
 
-      <div class="space-y-2">
-        <h4 class="font-bold text-sm text-gray-700">📋 Yêu Cầu Đã Gửi</h4>
-        <div id="hrOffboardingListContainer" class="space-y-2"></div>
+    <!-- Checklist Mẫu — chỉ hrTaskTemplateManage/admin (nút nav tự ẩn/hiện ở switchTab(), xem core.js) -->
+    <div id="hrpViewTemplates" class="hidden space-y-2">
+      <div id="hrpTemplateAdminContainer" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- Modal "Chi Tiết Quy Trình" Onboarding/Offboarding — sống NGAY TRONG #hrLifecycleSection (không có
+       modal nào khác của module này sống ngoài section nên chỉ cần đúng 1 gốc CSP, xem
+       bindCspDelegation('hrLifecycleSection') ở core.js). -->
+  <div id="hrpDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">Chi Tiết Quy Trình</h3>
+        <button type="button" data-op="closeHrProcessDetail" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
       </div>
+      <div id="hrpDetailBody"></div>
     </div>
   </div>
 

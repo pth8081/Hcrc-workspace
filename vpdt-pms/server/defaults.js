@@ -188,6 +188,44 @@ const DEFAULTS = {
     { key: 'SALARY', label: '💰 Lương / Thưởng' }
   ],
 
+  // Nhân Sự > Onboarding/Offboarding — danh mục checklist chuẩn (mục 3.5 tài liệu thiết kế gốc): mỗi
+  // quy trình mới tạo (hrProcesses, xem lib/createValidation.js) tự sinh tasks[] từ đúng các dòng đang
+  // IsActive khớp processType tại đây. Admin tự thêm/sửa/xoá không cần sửa code (chỉ hrTaskTemplateManage,
+  // xem module-hrlifecycle.js) — đây chỉ là khung khởi tạo lần đầu, KHÔNG khoá cứng. dueDaysOffset tính
+  // theo AnchorDate = startDate (Onboarding) hoặc lastWorkingDate (Offboarding). department là NHÃN
+  // TRÁCH NHIỆM cố định (HR/IT/ADMIN/FINANCE/MANAGER — xem canActOnHrTask() ở lib/recordActions.js),
+  // KHÔNG phải phòng ban thật trong `depts`.
+  hrTaskTemplates: [
+    { id: 1, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Gửi thư mời nhận việc & hợp đồng lao động', department: 'HR', dueDaysOffset: -7, isRequired: true, displayOrder: 1, isActive: true },
+    { id: 2, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Thu thập hồ sơ (CCCD, bằng cấp, sơ yếu lý lịch)', department: 'HR', dueDaysOffset: -5, isRequired: true, displayOrder: 2, isActive: true },
+    { id: 3, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Tạo mã nhân viên & gán vị trí', department: 'HR', dueDaysOffset: -3, isRequired: true, displayOrder: 3, isActive: true },
+    { id: 4, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Tạo email công ty & tài khoản VPDT', department: 'IT', dueDaysOffset: -3, isRequired: true, displayOrder: 4, isActive: true },
+    { id: 5, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Chuẩn bị máy tính, phần mềm cần thiết', department: 'IT', dueDaysOffset: -2, isRequired: true, displayOrder: 5, isActive: true },
+    { id: 6, processType: 'ONBOARDING', stage: 'PRE_BOARDING', taskName: 'Chuẩn bị chỗ ngồi, thẻ ra vào', department: 'ADMIN', dueDaysOffset: -1, isRequired: true, displayOrder: 6, isActive: true },
+    { id: 7, processType: 'ONBOARDING', stage: 'FIRST_DAY', taskName: 'Đón tiếp, ký hợp đồng chính thức', department: 'HR', dueDaysOffset: 0, isRequired: true, displayOrder: 7, isActive: true },
+    { id: 8, processType: 'ONBOARDING', stage: 'FIRST_DAY', taskName: 'Phổ biến nội quy, chính sách công ty', department: 'HR', dueDaysOffset: 0, isRequired: true, displayOrder: 8, isActive: true },
+    { id: 9, processType: 'ONBOARDING', stage: 'FIRST_DAY', taskName: 'Bàn giao thiết bị, hướng dẫn đăng nhập hệ thống', department: 'IT', dueDaysOffset: 0, isRequired: true, displayOrder: 9, isActive: true },
+    { id: 10, processType: 'ONBOARDING', stage: 'FIRST_DAY', taskName: 'Giới thiệu với team, giao tài liệu công việc', department: 'MANAGER', dueDaysOffset: 0, isRequired: true, displayOrder: 10, isActive: true },
+    { id: 11, processType: 'ONBOARDING', stage: 'TRAINING', taskName: 'Check-in 7 ngày', department: 'MANAGER', dueDaysOffset: 7, isRequired: false, displayOrder: 11, isActive: true },
+    { id: 12, processType: 'ONBOARDING', stage: 'TRAINING', taskName: 'Check-in 14 ngày', department: 'MANAGER', dueDaysOffset: 14, isRequired: false, displayOrder: 12, isActive: true },
+    { id: 13, processType: 'ONBOARDING', stage: 'TRAINING', taskName: 'Check-in 30 ngày', department: 'MANAGER', dueDaysOffset: 30, isRequired: false, displayOrder: 13, isActive: true },
+    { id: 14, processType: 'ONBOARDING', stage: 'PROBATION_REVIEW', taskName: 'Đánh giá kết quả thử việc', department: 'MANAGER', dueDaysOffset: 58, isRequired: true, displayOrder: 14, isActive: true },
+    { id: 15, processType: 'ONBOARDING', stage: 'PROBATION_REVIEW', taskName: 'Ra quyết định: ký chính thức/gia hạn/chấm dứt', department: 'HR', dueDaysOffset: 60, isRequired: true, displayOrder: 15, isActive: true },
+    { id: 16, processType: 'OFFBOARDING', stage: 'NOTICE', taskName: 'Phê duyệt đơn xin nghỉ việc', department: 'MANAGER', dueDaysOffset: -14, isRequired: true, displayOrder: 1, isActive: true },
+    { id: 17, processType: 'OFFBOARDING', stage: 'NOTICE', taskName: 'Ghi nhận ngày nghỉ chính thức, khởi tạo checklist', department: 'HR', dueDaysOffset: -14, isRequired: true, displayOrder: 2, isActive: true },
+    { id: 18, processType: 'OFFBOARDING', stage: 'HANDOVER', taskName: 'Lập biên bản bàn giao công việc', department: 'MANAGER', dueDaysOffset: -5, isRequired: true, displayOrder: 3, isActive: true },
+    { id: 19, processType: 'OFFBOARDING', stage: 'HANDOVER', taskName: 'Xác nhận đã nhận bàn giao đầy đủ', department: 'MANAGER', dueDaysOffset: -3, isRequired: true, displayOrder: 4, isActive: true },
+    { id: 20, processType: 'OFFBOARDING', stage: 'HANDOVER', taskName: '[Nếu là quản lý] Chuyển giao vị trí cho người kế nhiệm', department: 'HR', dueDaysOffset: -3, isRequired: false, displayOrder: 5, isActive: true },
+    { id: 21, processType: 'OFFBOARDING', stage: 'ASSET_REVOKE', taskName: 'Vô hiệu hóa tài khoản email/VPDT/hệ thống nội bộ', department: 'IT', dueDaysOffset: 0, isRequired: true, displayOrder: 6, isActive: true },
+    { id: 22, processType: 'OFFBOARDING', stage: 'ASSET_REVOKE', taskName: 'Thu hồi laptop/PC, điện thoại công ty', department: 'IT', dueDaysOffset: 0, isRequired: true, displayOrder: 7, isActive: true },
+    { id: 23, processType: 'OFFBOARDING', stage: 'ASSET_REVOKE', taskName: 'Backup dữ liệu công việc trước khi xóa tài khoản', department: 'IT', dueDaysOffset: -1, isRequired: true, displayOrder: 8, isActive: true },
+    { id: 24, processType: 'OFFBOARDING', stage: 'ASSET_REVOKE', taskName: 'Thu hồi thẻ nhân viên, chìa khóa, tài sản khác', department: 'ADMIN', dueDaysOffset: 0, isRequired: true, displayOrder: 9, isActive: true },
+    { id: 25, processType: 'OFFBOARDING', stage: 'SETTLEMENT', taskName: 'Tính lương, phép năm chưa nghỉ, khấu trừ (nếu có)', department: 'FINANCE', dueDaysOffset: 2, isRequired: true, displayOrder: 10, isActive: true },
+    { id: 26, processType: 'OFFBOARDING', stage: 'SETTLEMENT', taskName: 'Chốt sổ BHXH, báo giảm lao động', department: 'FINANCE', dueDaysOffset: 5, isRequired: true, displayOrder: 11, isActive: true },
+    { id: 27, processType: 'OFFBOARDING', stage: 'SETTLEMENT', taskName: 'Ra Quyết định thôi việc, xác nhận thời gian công tác', department: 'HR', dueDaysOffset: 3, isRequired: true, displayOrder: 12, isActive: true },
+    { id: 28, processType: 'OFFBOARDING', stage: 'EXIT_INTERVIEW', taskName: 'Thực hiện phỏng vấn thôi việc', department: 'HR', dueDaysOffset: 1, isRequired: false, displayOrder: 13, isActive: true }
+  ],
+
   // Danh sách "Phòng Họp" (module Đặt Phòng Họp) — TRƯỚC ĐÂY gõ cứng const MEETING_ROOMS trong
   // public/js/core.js (dùng chung cho <select> đăng ký lẫn lưới Lịch Họp), giờ chuyển thành dữ liệu để
   // Admin tự thêm/bớt tại chính module Đặt Phòng Họp (xem renderMeetingRoomCatalogList() ở

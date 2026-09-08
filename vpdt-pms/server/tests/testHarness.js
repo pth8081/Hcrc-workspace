@@ -28,7 +28,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const { CREATE_MODULE_CONFIGS, validateAndPrepareCreate } = require('../lib/createValidation');
 const { MODULE_CONFIGS: WF_MODULE_CONFIGS, applyWorkflowAction } = require('../lib/workflowEngine');
-const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrOnboardingRequestsForUser, filterHrOffboardingRequestsForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
+const { filterHrFeedbackForUser, sanitizeReportPeriodsForUser, filterHrProcessesForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser, filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser } = require('../lib/recordViewScope');
 
 const WF_ACTION_MAP = { approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES' };
 
@@ -100,10 +100,9 @@ function createMockState(seed) {
     operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
     operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
     operationWorkItems: [], operationExecutionPeriods: [],
-    // hrOnboardingRequests/hrOffboardingRequests (Nhân Sự > Onboarding/Offboarding) + storeJobTitles
-    // (nguồn tra cứu employeeJobTitle khi employeePosType==='STORE') — xem
-    // lib/createValidation.js/lib/recordActions.js.
-    hrOnboardingRequests: [], hrOffboardingRequests: [], storeJobTitles: []
+    // hrProcesses/hrTaskTemplates (Nhân Sự > Onboarding/Offboarding v2) + storeJobTitles (nguồn tra cứu
+    // employeeJobTitle khi employeePosType==='STORE') — xem lib/createValidation.js/lib/recordActions.js.
+    hrProcesses: [], hrTaskTemplates: [], storeJobTitles: []
   }, seed || {});
 }
 
@@ -141,13 +140,17 @@ function buildAppDataForCreate(moduleKey, state) {
     operationOrderHOTierWorkflows: state.operationOrderHOTierWorkflows,
     // users — operationStoreOpenings/operationRepairs.extraValidate() cần để resolve "Người Phụ Trách"
     // qua resolveOperationPersonInChargeUsername() (Mục C); cũng chính là nguồn tra cứu
-    // hrOffboardingRequests.extraValidate() dùng để xác thực employeeUsername (Nhân Sự > Offboarding).
+    // hrProcesses.extraValidate() dùng để xác thực employeeUsername (Nhân Sự > Offboarding v2) VÀ
+    // directManagerUsername (cả 2 loại quy trình).
     users: state.users,
-    // depts/jobTitles/storeJobTitles — hrOnboardingRequests.extraValidate() (Nhân Sự > Onboarding) cần
-    // để kiểm tra employeeDept/employeeJobTitle hợp lệ theo đúng cascading HO/Siêu Thị (mirror
+    // depts/jobTitles/storeJobTitles — hrProcesses.extraValidate() (Nhân Sự > Onboarding v2) cần để
+    // kiểm tra employeeDept/employeeJobTitle hợp lệ theo đúng cascading HO/Siêu Thị (mirror
     // routes/create.js: getAllAppData() thật LUÔN có sẵn mọi key AppData, ở đây liệt kê tường minh những
     // gì module cần).
-    depts: state.depts, jobTitles: state.jobTitles, storeJobTitles: state.storeJobTitles
+    depts: state.depts, jobTitles: state.jobTitles, storeJobTitles: state.storeJobTitles,
+    // hrTaskTemplates — hrProcesses.extraValidate() cần để tự sinh tasks[] từ danh mục checklist chuẩn
+    // ĐANG BẬT đúng processType lúc tạo quy trình (xem lib/createValidation.js).
+    hrTaskTemplates: state.hrTaskTemplates
   };
   if (moduleKey === 'reportEntries') base.reportPeriods = state.reportPeriods;
   // operationExecutionPeriods — extraValidate() cần tra cứu chéo hồ sơ nguồn (operationStoreOpenings/
@@ -229,7 +232,17 @@ function buildActionHandlers(state) {
     // routes/records.js POST /operationOrders/:id/receive-goods|cancel-receipt, gọi thẳng hàm thật ở
     // lib/recordActions.js (không tự đoán lại logic quyền/trạng thái nguồn) =====
     'operationOrders:receive-goods': (u, item) => recordActions.receiveOperationOrderGoods(u, item, buildAppDataForCreate('operationOrders', state)),
-    'operationOrders:cancel-receipt': (u, item, body) => recordActions.cancelOperationOrderReceipt(u, item, body, buildAppDataForCreate('operationOrders', state))
+    'operationOrders:cancel-receipt': (u, item, body) => recordActions.cancelOperationOrderReceipt(u, item, body, buildAppDataForCreate('operationOrders', state)),
+
+    // ===== NHÂN SỰ — Onboarding/Offboarding v2 (checklist theo giai đoạn) — mirror ĐÚNG
+    // routes/records.js POST /hrProcesses/:id/complete-task|skip-task|reassign-task|cancel|attachments.
+    // "create-it-ticket" KHÔNG nằm ở đây (xem nhánh riêng bên dưới trong dispatch chính) vì response cần
+    // kèm thêm "ticket" vừa tạo, khác mọi action khác chỉ trả về đúng 1 "item".
+    'hrProcesses:complete-task': (u, item, body) => recordActions.completeHrTask(u, item, body),
+    'hrProcesses:skip-task': (u, item, body) => recordActions.skipHrTask(u, item, body),
+    'hrProcesses:reassign-task': (u, item, body) => recordActions.reassignHrTask(u, item, body, state.users),
+    'hrProcesses:cancel': (u, item, body) => recordActions.cancelHrProcess(u, item, body),
+    'hrProcesses:attachments': (u, item, body) => recordActions.addHrProcessAttachment(u, item, body)
   };
 }
 
@@ -331,10 +344,9 @@ function createDispatcher(state) {
     const viewer = (state.users || []).find(u => u.username === username);
     if (viewer) {
       data.hrFeedback = filterHrFeedbackForUser(state.hrFeedback, viewer);
-      // hrOnboardingRequests/hrOffboardingRequests: cùng phạm vi riêng tư như hrFeedback ở trên — xem
-      // lib/recordViewScope.js canViewHrOnboardingRequest()/canViewHrOffboardingRequest().
-      data.hrOnboardingRequests = filterHrOnboardingRequestsForUser(state.hrOnboardingRequests, viewer);
-      data.hrOffboardingRequests = filterHrOffboardingRequestsForUser(state.hrOffboardingRequests, viewer);
+      // hrProcesses (Onboarding/Offboarding v2): cùng phạm vi riêng tư như hrFeedback ở trên — xem
+      // lib/recordViewScope.js canViewHrProcess().
+      data.hrProcesses = filterHrProcessesForUser(state.hrProcesses, viewer);
       // reportPeriods: ẩn compilation/taskCompilation khỏi người không đủ quyền — cùng lý do hrFeedback ở
       // trên, tái hiện đúng bước lọc thật của server (routes/data.js) thay vì tự đoán lại luật.
       data.reportPeriods = sanitizeReportPeriodsForUser(state.reportPeriods, viewer);
@@ -491,6 +503,17 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/hrTaskTemplates — mirror ĐÚNG gate NON_ADMIN_GATED_KEYS['hrTaskTemplates'] ở
+      // routes/data.js (admin || hrTaskTemplateManage) — cùng lý do KHÔNG mô phỏng toàn bộ generic
+      // POST /api/data/:key như nhánh uniformCatalog ở trên.
+      if (pathName === '/api/data/hrTaskTemplates' && method === 'POST') {
+        if (!(freshUser.perms?.admin || freshUser.perms?.hrTaskTemplateManage)) {
+          return { status: 403, body: { error: 'Chỉ người có quyền Quản Lý Checklist Mẫu (Nhân Sự) mới được sửa danh mục này' } };
+        }
+        state.hrTaskTemplates = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/workflow/:module/:id/:action — mirror routes/workflow.js's generic dept-workflow
       // approve/reject route (dùng chung lib/workflowEngine.js's MODULE_CONFIGS + applyWorkflowAction()
       // thật, KHÔNG tự đoán lại logic duyệt). Cần cho các module bỏ auto-approve (vd itPriceApprovals
@@ -583,20 +606,18 @@ function createDispatcher(state) {
         return { status: 200, body: { ok: true } };
       }
 
-      // NHÂN SỰ > Onboarding/Offboarding — "Gửi Yêu Cầu" sinh 1 ticket itSupportTickets liên kết, mirror
-      // ĐÚNG routes/records.js POST /hrOnboardingRequests|hrOffboardingRequests/:id/submit-it-request:
-      // build bản nháp qua đúng hàm thật (mutates item.linkedTicketId ngay trong lúc build), rồi push
-      // ticket thật vào state.itSupportTickets — TÁCH KHỎI actionHandlers chung bên dưới vì response cần
-      // kèm thêm "ticket" vừa tạo (khác mọi action khác chỉ trả về đúng 1 "item").
-      if ((m = pathName.match(/^\/api\/records\/(hrOnboardingRequests|hrOffboardingRequests)\/(\d+)\/submit-it-request$/)) && method === 'POST') {
-        const moduleKey = m[1];
+      // NHÂN SỰ > Onboarding/Offboarding v2 — "Tạo Ticket IT" cho 1 task nhãn IT cụ thể trong 1 quy
+      // trình, mirror ĐÚNG routes/records.js POST /hrProcesses/:id/create-it-ticket: build bản nháp qua
+      // đúng hàm thật (mutates task.linkedTicketId ngay trong lúc build), rồi push ticket thật vào
+      // state.itSupportTickets — TÁCH KHỎI actionHandlers chung ở trên vì response cần kèm thêm "ticket"
+      // vừa tạo (khác mọi action khác chỉ trả về đúng 1 "item").
+      if ((m = pathName.match(/^\/api\/records\/(hrProcesses)\/(\d+)\/create-it-ticket$/)) && method === 'POST') {
         const id = Number(m[2]);
-        const list = state[moduleKey] || [];
+        const list = state.hrProcesses || [];
         const idx = list.findIndex(x => x.id === id);
         if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
         const ticketId = Date.now() + Math.floor(Math.random() * 100000);
-        const builder = moduleKey === 'hrOnboardingRequests' ? recordActions.buildOnboardingItTicketDraft : recordActions.buildOffboardingItTicketDraft;
-        const draft = builder(freshUser, list[idx], ticketId); // mutates list[idx].linkedTicketId = ticketId
+        const draft = recordActions.createItTicketForHrTask(freshUser, list[idx], body, ticketId); // mutates task.linkedTicketId = ticketId
         const ticket = Object.assign({}, draft, { id: ticketId });
         state.itSupportTickets = state.itSupportTickets || [];
         state.itSupportTickets.push(ticket);
@@ -628,16 +649,18 @@ function createDispatcher(state) {
         if (!handler) return { status: 400, body: { error: `Mock chưa hỗ trợ hành động: ${moduleKey}/${action}` } };
         const updated = await handler(freshUser, list[idx], body);
         list[idx] = updated;
-        // Ticket sinh ra từ Onboarding/Offboarding vừa chuyển DONE -> ghi ngược kết quả IT báo cáo vào
-        // ĐÚNG hồ sơ đã sinh ra ticket này — mirror ĐÚNG routes/records.js POST
-        // /itSupportTickets/:id/update-status (đoạn gọi applyItTicketCompletionToLinkedHrRequest() NGAY
-        // SAU updateItTicketStatus() thành công). KHÔNG BAO GIỜ đụng tới state.users ở đây.
+        // Ticket sinh ra từ 1 task Onboarding/Offboarding (v2, xem hrProcesses:create-it-ticket) vừa
+        // chuyển DONE -> ghi ngược kết quả IT báo cáo vào ĐÚNG task đã sinh ra ticket này (dùng
+        // sourceTaskId để phân biệt task nào trong process, vì 1 process có thể có NHIỀU ticket) — mirror
+        // ĐÚNG routes/records.js POST /itSupportTickets/:id/update-status (đoạn gọi
+        // applyItTicketCompletionToHrProcessTask() NGAY SAU updateItTicketStatus() thành công). KHÔNG BAO
+        // GIỜ đụng tới state.users ở đây.
         if (moduleKey === 'itSupportTickets' && action === 'update-status' && updated.status === 'DONE' && updated.sourceType && updated.sourceId != null) {
           const linkedCollection = recordActions.HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[updated.sourceType];
           if (linkedCollection) {
             const linkedList = state[linkedCollection] || [];
             const linkedIdx = linkedList.findIndex(x => x.id === updated.sourceId);
-            if (linkedIdx !== -1) linkedList[linkedIdx] = recordActions.applyItTicketCompletionToLinkedHrRequest(freshUser, linkedList[linkedIdx], updated);
+            if (linkedIdx !== -1) linkedList[linkedIdx] = recordActions.applyItTicketCompletionToHrProcessTask(freshUser, linkedList[linkedIdx], updated);
           }
         }
         return { status: 200, body: { ok: true, item: updated } };
