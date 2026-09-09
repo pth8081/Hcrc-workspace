@@ -504,6 +504,7 @@ const DEFAULTS = {
   // KHÔNG tự ý POST /api/data/orgChartVersions (xem NON_ADMIN_GATED_KEYS, routes/data.js, chỉ để phòng
   // thủ, không phải đường ghi chính thức). Đọc mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage/admin.
   orgChartVersions: [],
+  employeeProfiles: [],
 
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY

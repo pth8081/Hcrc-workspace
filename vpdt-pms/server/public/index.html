@@ -220,6 +220,7 @@
           <button id="btnHrFeedbackNav" data-op-seq="closeHrDropdown()|switchTab(hr)" class="hidden sidebar-subitem">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</button>
           <button id="btnOrgChartNav" data-op-seq="closeHrDropdown()|switchTab(orgChart)" class="hidden sidebar-subitem">🌳 Cơ Cấu Tổ Chức</button>
           <button id="btnHrLifecycleNav" data-op-seq="closeHrDropdown()|switchTab(hrLifecycle)" class="hidden sidebar-subitem">🧑‍💼 Onboarding / Offboarding</button>
+          <button id="btnHrProfileNav" data-op-seq="closeHrDropdown()|switchTab(hrProfile)" class="hidden sidebar-subitem">🪪 Hồ Sơ Nhân Sự</button>
         </div>
       </div>
       <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
@@ -5332,6 +5333,13 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrViewAll"> 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding
             </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">2 quyền dưới đây cho module con "Hồ Sơ Nhân Sự" — mọi tài khoản mặc định tự xem được hồ sơ CHÍNH MÌNH; "Xem Hồ Sơ Cấp Dưới" chỉ mở thêm chế độ xem GIỚI HẠN (không thấy CCCD/tài khoản ngân hàng/BHXH/mã số thuế/người phụ thuộc) cho quản lý trực tiếp; "Quản Lý Hồ Sơ Nhân Sự" (HR) mới xem/sửa được ĐẦY ĐỦ hồ sơ bất kỳ ai + liên kết tài khoản VPDT + đổi trạng thái Nghỉ dài hạn.</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrProfileView"> 👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới (quản lý trực tiếp)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrProfileManage"> 🗂️ Quản Lý Hồ Sơ Nhân Sự (HR — xem/sửa đầy đủ, liên kết tài khoản)
+            </label>
           </div>
         </details>
 
@@ -7394,6 +7402,77 @@
         <button type="button" data-op="closeHrProcessDetail" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
       </div>
       <div id="hrpDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Hồ Sơ Nhân Sự — module con MỚI của Nhân Sự (Đợt 1/4 module Nhân Sự, xem lib/employeeProfile.js
+       phía server). 2 view nội bộ (setHrProfileView(), module-hrprofile.js): "Hồ Sơ Của Tôi" (self-
+       service, mở cho MỌI người — xem canAccessHrProfileModule() ở core.js) và "Quản Lý Hồ Sơ" (chỉ HR/
+       admin, nút bị ẩn nếu không có hrProfileManage — quyền thật đã enforce server-side, ẩn nút chỉ để
+       gọn UI). Nội dung 2 view + modal chi tiết render ĐỘNG bằng JS (module-hrprofile.js) vào các
+       container rỗng bên dưới, không hardcode field ở đây — field Hồ Sơ nhiều (địa chỉ/CCCD/ngân hàng/
+       BHXH/người phụ thuộc/học vấn...) và hiển thị khác nhau tuỳ vai trò xem (đầy đủ/giới hạn), hardcode
+       sẵn ở HTML sẽ phải trùng lặp 2-3 lần. -->
+  <div id="hrProfileSection" class="hidden space-y-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" id="btnHrpfViewMe" data-op="setHrProfileView" data-arg0="ME" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🪪 Hồ Sơ Của Tôi</button>
+      <button type="button" id="btnHrpfViewManage" data-op="setHrProfileView" data-arg0="MANAGE" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">📋 Quản Lý Hồ Sơ</button>
+    </div>
+
+    <!-- Hồ Sơ Của Tôi -->
+    <div id="hrpfViewMe" class="space-y-3">
+      <div id="hrpfMeNotFound" class="hidden bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded p-3"></div>
+      <div id="hrpfMeContainer" class="hidden bg-white border rounded-lg p-4 space-y-4"></div>
+
+      <!-- Chỉ hiện với quyền hrProfileView (quản lý trực tiếp) — KHÔNG hiện cho hrProfileManage/admin (đã
+           có màn "Quản Lý Hồ Sơ" đầy đủ hơn) lẫn nhân viên thường (không có quyền tra cứu người khác) —
+           xem toggle trong renderHrProfileModule() (module-hrprofile.js). -->
+      <div id="hrpfSubordinateSearchWrap" class="hidden pt-2 border-t mt-2">
+        <p class="text-xs font-semibold text-gray-600 mb-1">🔍 Xem Hồ Sơ Nhân Viên (Quản Lý Trực Tiếp)</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="hrpfSubordinateInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfSubordinateInput" placeholder="Gõ tên/tài khoản nhân viên..." class="border p-1.5 rounded text-xs w-72 bg-white">
+          <input type="hidden" id="hrpfSubordinateUsername">
+          <button type="button" data-op="viewHrpfSubordinateProfile" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">Xem</button>
+        </div>
+        <div id="hrpfSubordinateResult" class="hidden mt-2 bg-white border rounded-lg p-4"></div>
+      </div>
+    </div>
+
+    <!-- Quản Lý Hồ Sơ (HR/admin) -->
+    <div id="hrpfViewManage" class="hidden space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <input id="hrpfManageSearch" data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Tìm theo Mã NV / Họ tên / Tài khoản..." class="border p-1.5 rounded text-xs w-72 bg-white">
+      </div>
+      <div class="overflow-x-auto bg-white border rounded-lg">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-2 text-left">Mã NV</th>
+              <th class="p-2 text-left">Họ Tên</th>
+              <th class="p-2 text-left">Phòng Ban / Chức Danh</th>
+              <th class="p-2 text-left">Tài Khoản VPDT</th>
+              <th class="p-2 text-left">Trạng Thái</th>
+              <th class="p-2 text-left">Cập Nhật</th>
+              <th class="p-2 text-left">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="hrpfManageTableBody"></tbody>
+        </table>
+        <p id="hrpfManageEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có hồ sơ nào.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "Hồ Sơ Nhân Sự" — HR/admin xem/sửa chi tiết 1 hồ sơ bất kỳ (mở từ #hrpfViewManage). Sống
+       NGOÀI #hrProfileSection trong DOM (là anh em) — cần gốc CSP riêng, xem bindCspDelegation() ở
+       core.js (đúng bài học đã rút ra từ bug hrpDetailModal ở trên). -->
+  <div id="hrpfDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">Hồ Sơ Nhân Sự</h3>
+        <button type="button" data-op="closeHrpfDetailModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <div id="hrpfDetailBody"></div>
     </div>
   </div>
 

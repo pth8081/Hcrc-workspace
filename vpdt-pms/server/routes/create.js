@@ -7,6 +7,7 @@ const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
+const employeeProfile = require('../lib/employeeProfile');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -164,6 +165,13 @@ router.post('/:module', async (req, res) => {
     if (moduleKey === 'licenses') await learnLicenseType(record.licenseType);
     // Tự học "Loại Dịch Vụ" mới vào danh mục gợi ý — xem learnItRenewalCategory() ở đầu file.
     if (moduleKey === 'itServiceRenewals') await learnItRenewalCategory(record.category);
+    // Onboarding mới tạo (giai đoạn PRE_BOARDING) -> tự khởi tạo hồ sơ nhân sự DRAFT khoá theo
+    // employeeCode (chưa có username lúc này — xem đầu file lib/employeeProfile.js). Offboarding KHÔNG
+    // cần hook ở đây vì hồ sơ chắc chắn đã tồn tại từ Onboarding trước đó.
+    if (moduleKey === 'hrProcesses' && record.processType === 'ONBOARDING') {
+      await withLockedAppDataValue('employeeProfiles', (list) =>
+        employeeProfile.ensureDraftProfile(list, record.employeeCode, record.id, freshUser.username));
+    }
 
     res.json({ ok: true, item: record });
   } catch (err) {

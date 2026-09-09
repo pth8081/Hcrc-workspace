@@ -6,6 +6,7 @@ const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
+const employeeProfile = require('../lib/employeeProfile');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
@@ -2373,8 +2374,9 @@ router.post('/itSupportTickets/:id/update-status', async (req, res) => {
       const linkedCollection = recordActions.HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[result.sourceType];
       if (linkedCollection) {
         try {
-          await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
+          const linkedItem = await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
             recordActions.applyItTicketCompletionToHrProcessTask(freshUser, item, result));
+          await syncEmployeeProfileOnHrCompletion(linkedItem, `itSupportTickets/${itemId}/update-status`);
         } catch (linkErr) {
           console.error(`itSupportTickets/${itemId}/update-status: lỗi ghi ngược hồ sơ ${linkedCollection}/${result.sourceId}:`, linkErr.message);
         }
@@ -2489,6 +2491,25 @@ router.post('/hrFeedback/:id/mark-read', async (req, res) => {
 // tasks[] đã tự sinh sẵn — mọi thao tác VẬN HÀNH sau đó (hoàn thành/bỏ qua/giao lại task, huỷ quy
 // trình, đính kèm file, tạo ticket IT cho 1 task) là các route dưới đây, đều khoá record qua
 // withLockedRecordForCollection() rồi gọi đúng hàm tương ứng ở lib/recordActions.js.
+
+// Hồ Sơ Nhân Sự (Phần C, đợt 1/4 module Nhân Sự) — computeHrProcessProgress() ở lib/recordActions.js tự
+// chuyển item.status='COMPLETED' + push đúng 1 dòng history {action:'COMPLETED'} NGAY LÚC transition (từ
+// bất kỳ đường nào dẫn tới đó: complete-task/skip-task/IT-ticket-hoàn-tất) — nên "dòng history cuối cùng
+// là COMPLETED" là tín hiệu đáng tin để biết ĐÚNG LƯỢT GỌI NÀY vừa hoàn tất quy trình (không phải quy
+// trình đã COMPLETED từ trước). Đây là 1 ghi có tác dụng phụ CHÉO COLLECTION (hrProcesses ->
+// employeeProfiles, 2 khoá AppData/Records khác nhau, không atomic được với nhau) — cùng tinh thần
+// learnLicenseType() ở routes/create.js: lỗi ở bước phụ này KHÔNG được phép làm hỏng thao tác chính đã
+// commit xong, chỉ log lại để tra cứu sau.
+async function syncEmployeeProfileOnHrCompletion(hrProcessItem, routeLabel) {
+  const last = (hrProcessItem.history || [])[hrProcessItem.history.length - 1];
+  if (!last || last.action !== 'COMPLETED') return;
+  try {
+    await withLockedAppDataValue('employeeProfiles', (list) => employeeProfile.applyProcessCompletion(list, hrProcessItem));
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi cập nhật trạng thái Hồ Sơ Nhân Sự khi hoàn tất quy trình:`, err.message);
+  }
+}
+
 router.post('/hrProcesses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrProcesses'));
 
 router.post('/hrProcesses/:id/complete-task', async (req, res) => {
@@ -2498,6 +2519,7 @@ router.post('/hrProcesses/:id/complete-task', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
       recordActions.completeHrTask(freshUser, item, req.body));
+    await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/complete-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/complete-task`, err);
@@ -2511,6 +2533,7 @@ router.post('/hrProcesses/:id/skip-task', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
       recordActions.skipHrTask(freshUser, item, req.body));
+    await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/skip-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/skip-task`, err);

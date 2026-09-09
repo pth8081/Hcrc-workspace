@@ -176,6 +176,8 @@ function collectPermsFromForm() {
     hrOffboardingManage: document.getElementById('pHrOffboardingManage').checked,
     hrTaskTemplateManage: document.getElementById('pHrTaskTemplateManage').checked,
     hrViewAll: document.getElementById('pHrViewAll').checked,
+    hrProfileView: document.getElementById('pHrProfileView').checked,
+    hrProfileManage: document.getElementById('pHrProfileManage').checked,
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
@@ -242,6 +244,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pHrOffboardingManage').checked = !!perms.hrOffboardingManage;
   document.getElementById('pHrTaskTemplateManage').checked = !!perms.hrTaskTemplateManage;
   document.getElementById('pHrViewAll').checked = !!perms.hrViewAll;
+  document.getElementById('pHrProfileView').checked = !!perms.hrProfileView;
+  document.getElementById('pHrProfileManage').checked = !!perms.hrProfileManage;
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
