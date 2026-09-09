@@ -7346,6 +7346,12 @@ bindCspDelegation('hrpDetailModal');
 // cùng lý do orgChart/hrLifecycle ở trên) — gốc CSP RIÊNG ngay từ đầu (rút kinh nghiệm đúng lỗi vừa vá ở
 // hrLifecycleSection: 1 gốc thiếu là mọi thao tác trong toàn bộ section im lặng không chạy).
 bindCspDelegation('hrProfileSection');
+// #hrpfDetailModal/#hrpfCreateModal/#hrpfImportModal sống NGOÀI #hrProfileSection trong DOM (anh em, không
+// phải con) — ĐÚNG lỗi "1 gốc thiếu là mọi thao tác im lặng không chạy" nói ở comment trên lại xảy ra
+// (hrpfDetailModal bị bỏ sót từ trước, phát hiện + vá lại ở đây cùng lúc thêm 2 modal tạo/nhập Excel mới).
+bindCspDelegation('hrpfDetailModal');
+bindCspDelegation('hrpfCreateModal');
+bindCspDelegation('hrpfImportModal');
 bindCspDelegation('hrContractSection');
 bindCspDelegation('hrContractCreateModal');
 bindCspDelegation('hrContractDetailModal');

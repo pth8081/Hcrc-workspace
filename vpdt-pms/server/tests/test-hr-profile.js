@@ -23,6 +23,14 @@
 //        1 username, hoặc hồ sơ đã có username rồi liên kết lại).
 //     8. GET /by-username/:username — CÙNG quyền/hành vi như /by-code (chỉ khác điểm tra cứu) — dùng cho
 //        quản lý trực tiếp không có hrProfileManage (không gọi được GET / để tự tra employeeCode).
+//     8b. POST / — tạo tay hồ sơ MỚI cho nhân viên cũ (chưa qua Onboarding): chỉ hrProfileManage/admin;
+//        status luôn ACTIVE ngay; trùng employeeCode/username bị chặn; username không phải tài khoản đang
+//        hoạt động bị chặn.
+//     8c. POST /bulk-import — nhập hàng loạt (atomic, 1 giao dịch): dòng hợp lệ tạo được, dòng employeeCode
+//        trùng (với dữ liệu đã có HOẶC trùng ngay trong payload) bị skip kèm lý do, không làm hỏng các
+//        dòng hợp lệ khác.
+//     8d. GET /import-template, POST /parse-import (upload xlsx thật), GET /export-xlsx — quyền
+//        hrProfileManage/admin; parse-import đọc đúng file mẫu (đã điền) trả về preview đúng cờ valid.
 //
 //   PHẦN B (gọi thẳng các hàm THẬT trong lib/employeeProfile.js qua require()):
 //     9. ensureDraftProfile(): tạo DRAFT mới, idempotent (gọi lại không tạo trùng).
@@ -83,6 +91,7 @@ const express = require('express');
 const { createRunner, assertEqual, assertIncludes } = require('./testHarness');
 const employeeProfileRoutes = require('../routes/employeeProfile');
 const employeeProfile = require('../lib/employeeProfile');
+const employeeProfileImport = require('../lib/employeeProfileImport');
 
 function startApp() {
   const app = express();
@@ -102,6 +111,19 @@ async function api(method, urlPath, body, asUser) {
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
+  let payload = null;
+  try { payload = await res.json(); } catch (e) { payload = null; }
+  return { status: res.status, body: payload };
+}
+
+// Upload thật 1 buffer .xlsx (multipart/form-data) — dùng cho POST /parse-import. Cùng cách dùng
+// FormData/Blob gốc của Node (>=18) như test-payment.js dùng Playwright cho file thật, chỉ khác đây là
+// gọi thẳng fetch không qua trình duyệt.
+async function apiUpload(urlPath, buffer, fileName, asUser) {
+  if (asUser) CURRENT_USERNAME = asUser.username;
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName);
+  const res = await fetch(`http://127.0.0.1:${PORT}${urlPath}`, { method: 'POST', body: form });
   let payload = null;
   try { payload = await res.json(); } catch (e) { payload = null; }
   return { status: res.status, body: payload };
@@ -223,6 +245,84 @@ async function main() {
       assertEqual(outsider.status, 404, 'Người không liên quan vẫn bị 404 qua đường tra cứu này');
       const notFound = await api('GET', '/api/hr-profile/by-username/khong-ton-tai', undefined, HR_MGR);
       assertEqual(notFound.status, 404, 'username không liên kết hồ sơ nào -> 404');
+    });
+
+    await run.run('POST / — tạo tay hồ sơ mới (nhân viên cũ chưa qua Onboarding), chỉ HR/admin', async () => {
+      resetAppData();
+      const deniedMgr = await api('POST', '/api/hr-profile', { employeeCode: 'NV900' }, DIRECT_MGR);
+      assertEqual(deniedMgr.status, 403, 'Quản lý trực tiếp không được tạo tay hồ sơ');
+
+      const ok = await api('POST', '/api/hr-profile', { employeeCode: 'NV900', dateOfBirth: '1990-01-01', gender: 'Nam' }, HR_MGR);
+      assertEqual(ok.status, 200, 'HR tạo hồ sơ mới phải thành công');
+      assertEqual(ok.body.profile.status, 'ACTIVE', 'Hồ sơ tạo tay phải ở trạng thái ACTIVE ngay (không qua DRAFT)');
+      assertEqual(ok.body.profile.dateOfBirth, '1990-01-01', 'Phải lưu đúng field cá nhân gửi kèm lúc tạo');
+
+      const dupCode = await api('POST', '/api/hr-profile', { employeeCode: 'NV900' }, HR_MGR);
+      assertEqual(dupCode.status, 400, 'Trùng employeeCode phải bị chặn');
+
+      const badUsername = await api('POST', '/api/hr-profile', { employeeCode: 'NV901', username: 'khong-ton-tai' }, HR_MGR);
+      assertEqual(badUsername.status, 400, 'username không phải tài khoản đang hoạt động phải bị chặn');
+
+      const withUsername = await api('POST', '/api/hr-profile', { employeeCode: 'NV902', username: 'nv2' }, HR_MGR);
+      assertEqual(withUsername.status, 200, 'Liên kết luôn tài khoản VPDT hợp lệ ngay lúc tạo phải thành công');
+      assertEqual(withUsername.body.profile.username, 'nv2', 'Phải lưu đúng username liên kết');
+
+      const dupUsername = await api('POST', '/api/hr-profile', { employeeCode: 'NV903', username: 'nv2' }, HR_MGR);
+      assertEqual(dupUsername.status, 400, 'username đã liên kết hồ sơ khác phải bị chặn');
+    });
+
+    await run.run('POST /bulk-import — atomic: dòng hợp lệ tạo được, dòng trùng bị skip kèm lý do', async () => {
+      resetAppData();
+      APP_DATA.employeeProfiles.push(employeeProfile.defaultProfile('NV800')); // đã tồn tại sẵn
+
+      const denied = await api('POST', '/api/hr-profile/bulk-import', { items: [{ employeeCode: 'NV810' }] }, DIRECT_MGR);
+      assertEqual(denied.status, 403, 'Quản lý trực tiếp không được nhập hàng loạt');
+
+      const res = await api('POST', '/api/hr-profile/bulk-import', {
+        items: [
+          { employeeCode: 'NV810', dateOfBirth: '1992-02-02' },
+          { employeeCode: 'NV800' }, // trùng với hồ sơ đã có sẵn -> skip
+          { employeeCode: 'NV811' },
+          { employeeCode: 'NV811' } // trùng NGAY trong payload -> skip
+        ]
+      }, HR_MGR);
+      assertEqual(res.status, 200, 'Bulk-import phải trả 200 dù có dòng skip (không throw cả batch)');
+      assertEqual(res.body.created.length, 2, 'Phải tạo đúng 2 hồ sơ hợp lệ (NV810, NV811 dòng đầu)');
+      assertEqual(res.body.skipped.length, 2, 'Phải skip đúng 2 dòng (trùng dữ liệu cũ + trùng trong payload)');
+      const listAfter = await api('GET', '/api/hr-profile', undefined, HR_MGR);
+      assertEqual(listAfter.body.profiles.length, 3, 'Tổng số hồ sơ phải là 3 (1 cũ + 2 mới tạo, KHÔNG có bản ghi vênh từ dòng lỗi)');
+    });
+
+    await run.run('GET /import-template, POST /parse-import (file thật), GET /export-xlsx', async () => {
+      resetAppData();
+      const deniedTemplate = await api('GET', '/api/hr-profile/import-template', undefined, DIRECT_MGR);
+      assertEqual(deniedTemplate.status, 403, 'Quản lý trực tiếp không tải được mẫu Excel');
+
+      // Sinh file mẫu THẬT (đúng hàm server dùng để cấp cho HR tải), rồi upload lại NGUYÊN VẸN để parse —
+      // xác nhận vòng tròn tải-mẫu -> điền -> upload đọc lại đúng cột/đúng dòng ví dụ có sẵn trong mẫu.
+      const wb = await employeeProfileImport.buildImportTemplateWorkbook();
+      const buffer = await wb.xlsx.writeBuffer();
+
+      const deniedParse = await apiUpload('/api/hr-profile/parse-import', buffer, 'mau.xlsx', DIRECT_MGR);
+      assertEqual(deniedParse.status, 403, 'Quản lý trực tiếp không parse-import được');
+
+      const parsed = await apiUpload('/api/hr-profile/parse-import', buffer, 'mau.xlsx', HR_MGR);
+      assertEqual(parsed.status, 200, 'Parse file mẫu (đã có sẵn 1 dòng ví dụ) phải thành công');
+      assertEqual(parsed.body.items.length, 1, 'Mẫu có đúng 1 dòng ví dụ');
+      assertEqual(parsed.body.items[0].employeeCode, 'NV1001', 'Phải đọc đúng Mã Nhân Viên từ dòng ví dụ trong mẫu');
+      assertEqual(parsed.body.items[0].valid, true, 'Dòng ví dụ trong mẫu (employeeCode chưa tồn tại) phải hợp lệ');
+
+      APP_DATA.employeeProfiles.push(employeeProfile.defaultProfile('NV1001'));
+      const parsedAfterDup = await apiUpload('/api/hr-profile/parse-import', buffer, 'mau.xlsx', HR_MGR);
+      assertEqual(parsedAfterDup.body.items[0].valid, false, 'Sau khi NV1001 đã có hồ sơ, dòng ví dụ (cùng mã) phải báo KHÔNG hợp lệ');
+
+      const okTemplate = await api('GET', '/api/hr-profile/import-template', undefined, HR_MGR);
+      assertEqual(okTemplate.status, 200, 'HR phải tải được mẫu Excel');
+
+      const deniedExport = await api('GET', '/api/hr-profile/export-xlsx', undefined, DIRECT_MGR);
+      assertEqual(deniedExport.status, 403, 'Quản lý trực tiếp không xuất được Excel');
+      const okExport = await api('GET', '/api/hr-profile/export-xlsx', undefined, HR_MGR);
+      assertEqual(okExport.status, 200, 'HR phải xuất được Excel toàn bộ danh sách hồ sơ');
     });
 
   } finally {

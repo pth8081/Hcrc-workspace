@@ -252,6 +252,104 @@ async function confirmHrpfLinkAccount() {
   }
 }
 
+// ===================== Tạo Hồ Sơ Nhân Sự Mới (thủ công, cho nhân viên CŨ chưa qua Onboarding) =====================
+function openHrpfCreateModal() {
+  document.getElementById('hrpfCreateModal').querySelectorAll('input, select').forEach(el => { el.value = ''; });
+  document.getElementById('hrpfCreateModal').classList.remove('hidden');
+}
+function closeHrpfCreateModal() {
+  document.getElementById('hrpfCreateModal').classList.add('hidden');
+}
+// Cùng khuôn resolveHrpfLinkAccountInput() ở trên — dùng chung #systemUsersDatalist.
+function resolveHrpfCreateUsernameInput(rawValue) {
+  const m = (rawValue || '').match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('hrpfCF_username').value = m ? m[2].trim() : '';
+}
+async function submitHrpfCreateProfile() {
+  const val = (id) => document.getElementById(id)?.value || null;
+  const employeeCode = (val('hrpfCF_employeeCode') || '').trim();
+  if (!employeeCode) return alert('⛔ Vui lòng nhập Mã Nhân Viên.');
+  const payload = {
+    employeeCode, username: val('hrpfCF_username'),
+    dateOfBirth: val('hrpfCF_dateOfBirth'), gender: val('hrpfCF_gender'),
+    nationalId: val('hrpfCF_nationalId'), permanentAddress: val('hrpfCF_permanentAddress'),
+    currentAddress: val('hrpfCF_currentAddress'), personalEmail: val('hrpfCF_personalEmail'),
+    emergencyContactName: val('hrpfCF_emergencyContactName'), emergencyContactPhone: val('hrpfCF_emergencyContactPhone'),
+    emergencyContactRelationship: val('hrpfCF_emergencyContactRelationship'),
+    bankAccountNo: val('hrpfCF_bankAccountNo'), bankName: val('hrpfCF_bankName'),
+    socialInsuranceNo: val('hrpfCF_socialInsuranceNo'), taxCode: val('hrpfCF_taxCode')
+  };
+  try {
+    await hrProfileApiCall('POST', '/api/hr-profile', payload);
+    alert('✅ Đã tạo Hồ Sơ Nhân Sự mới.');
+    closeHrpfCreateModal();
+    loadHrProfileManageList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+// ===================== Nhập Hồ Sơ Nhân Sự Từ Excel (hàng loạt) =====================
+let hrpfImportPreviewItems = [];
+function openHrpfImportModal() {
+  hrpfImportPreviewItems = [];
+  document.getElementById('hrpfImportFileInput').value = '';
+  document.getElementById('hrpfImportStatus').innerText = '';
+  document.getElementById('hrpfImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrpfImportConfirmBtn').classList.add('hidden');
+  document.getElementById('hrpfImportModal').classList.remove('hidden');
+}
+function closeHrpfImportModal() {
+  document.getElementById('hrpfImportModal').classList.add('hidden');
+}
+async function onHrpfImportFileChange(event) {
+  const file = event.target.files[0];
+  hrpfImportPreviewItems = [];
+  document.getElementById('hrpfImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrpfImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('hrpfImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/hr-profile/parse-import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    hrpfImportPreviewItems = data.items;
+    const validCount = data.items.filter(it => it.valid).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ.`;
+    document.getElementById('hrpfImportPreviewBody').innerHTML = data.items.map(it => `<tr>
+      <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
+      <td class="p-1">${escapeHtml(it.username || '')}</td>
+      <td class="p-1">${escapeHtml(it.dateOfBirth || '')}</td>
+      <td class="p-1">${escapeHtml(it.gender || '')}</td>
+      <td class="p-1">${it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`}</td>
+    </tr>`).join('');
+    document.getElementById('hrpfImportPreviewWrap').classList.remove('hidden');
+    if (validCount > 0) document.getElementById('hrpfImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+async function confirmHrpfImport() {
+  const validItems = hrpfImportPreviewItems.filter(it => it.valid);
+  if (!validItems.length) return alert('Không có dòng hợp lệ nào để nhập.');
+  try {
+    const data = await hrProfileApiCall('POST', '/api/hr-profile/bulk-import', { items: validItems });
+    let msg = `✅ Đã nhập ${data.created.length}/${validItems.length} hồ sơ.`;
+    if (data.skipped.length) {
+      msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
+    }
+    alert(msg);
+    closeHrpfImportModal();
+    loadHrProfileManageList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
 // ===================== Render form dùng chung (ME / MANAGE) =====================
 // scope 'ME': chính chủ tự sửa — chỉ SELF_EDITABLE_FIELDS (xem lib/employeeProfile.js), không đổi được
 // nationalId/socialInsuranceNo/taxCode/status/username.

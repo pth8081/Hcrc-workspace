@@ -7449,6 +7449,11 @@
     <div id="hrpfViewManage" class="hidden space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <input id="hrpfManageSearch" data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Tìm theo Mã NV / Họ tên / Tài khoản..." class="border p-1.5 rounded text-xs w-72 bg-white">
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-op="openHrpfCreateModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">➕ Tạo Hồ Sơ Mới</button>
+          <button type="button" data-op="openHrpfImportModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">📤 Nhập Excel</button>
+          <a href="/api/hr-profile/export-xlsx" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700 inline-block">📊 Xuất Excel</a>
+        </div>
       </div>
       <div class="overflow-x-auto bg-white border rounded-lg">
         <table class="w-full text-xs">
@@ -8026,6 +8031,87 @@
         <button type="button" data-op="closeHrpfDetailModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
       </div>
       <div id="hrpfDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal "Tạo Hồ Sơ Nhân Sự Mới" — HR nhập tay cho nhân viên CŨ đã đang làm việc thật, chỉ chưa có hồ
+       sơ trong hệ thống vì chưa từng qua quy trình Onboarding (xem lib/employeeProfile.js::createManualProfile()).
+       Mặc định tạo status ACTIVE luôn, KHÔNG qua DRAFT. Người phụ thuộc/học vấn bổ sung SAU qua "Chi tiết"
+       (mở lại #hrpfDetailModal) — không nhồi vào form tạo nhanh này cho gọn. -->
+  <div id="hrpfCreateModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">➕ Tạo Hồ Sơ Nhân Sự Mới</h3>
+        <button type="button" data-op="closeHrpfCreateModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+        ℹ️ Dùng cho nhân viên CŨ đã đang làm việc, chưa có hồ sơ trong hệ thống (chưa qua Onboarding). Hồ sơ tạo ra sẽ ở trạng thái "Đang làm việc" ngay.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã Nhân Viên <span class="text-red-500">*</span></label>
+          <input id="hrpfCF_employeeCode" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Liên Kết Tài Khoản VPDT (tuỳ chọn)</label>
+          <input id="hrpfCF_usernameInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfCreateUsernameInput" placeholder="Gõ tên/tài khoản..." class="w-full border p-1.5 rounded text-sm">
+          <input type="hidden" id="hrpfCF_username"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày sinh</label>
+          <input type="date" id="hrpfCF_dateOfBirth" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Giới tính</label>
+          <select id="hrpfCF_gender" class="w-full border p-1.5 rounded text-sm bg-white">
+            <option value="">-- Chọn --</option>
+            <option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option>
+          </select></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>
+          <input id="hrpfCF_nationalId" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ thường trú</label>
+          <input id="hrpfCF_permanentAddress" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ hiện tại</label>
+          <input id="hrpfCF_currentAddress" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Email cá nhân</label>
+          <input id="hrpfCF_personalEmail" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Người liên hệ khẩn cấp</label>
+          <input id="hrpfCF_emergencyContactName" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">SĐT liên hệ khẩn cấp</label>
+          <input id="hrpfCF_emergencyContactPhone" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Quan hệ</label>
+          <input id="hrpfCF_emergencyContactRelationship" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số tài khoản ngân hàng</label>
+          <input id="hrpfCF_bankAccountNo" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngân hàng</label>
+          <input id="hrpfCF_bankName" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số Sổ BHXH</label>
+          <input id="hrpfCF_socialInsuranceNo" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>
+          <input id="hrpfCF_taxCode" class="w-full border p-1.5 rounded text-sm"></div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4 pt-3 border-t">
+        <button type="button" data-op="closeHrpfCreateModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Hủy</button>
+        <button type="button" data-op="submitHrpfCreateProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Tạo Hồ Sơ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "Nhập Hồ Sơ Nhân Sự Từ Excel" — mẫu tải + upload/xem trước/xác nhận, cùng khuôn Nhập Kế Hoạch
+       Đào Tạo (module-internalcomms-daotao.js) nhưng CONFIRM là 1 request atomic duy nhất
+       (POST /api/hr-profile/bulk-import) thay vì N lần gọi tạo riêng lẻ. -->
+  <div id="hrpfImportModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">📤 Nhập Hồ Sơ Nhân Sự Từ Excel</h3>
+        <button type="button" data-op="closeHrpfImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 mb-2">
+        <a href="/api/hr-profile/import-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+        <input id="hrpfImportFileInput" type="file" accept=".xlsx,.xls" data-op-change="onHrpfImportFileChange" data-arg-event="0" class="text-xs">
+      </div>
+      <p id="hrpfImportStatus" class="text-xs text-gray-500 mb-2"></p>
+      <div id="hrpfImportPreviewWrap" class="hidden border rounded max-h-72 overflow-y-auto mb-2">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-100 text-left sticky top-0"><tr>
+            <th class="p-1">Mã NV</th><th class="p-1">Tài Khoản</th><th class="p-1">Ngày Sinh</th><th class="p-1">Giới Tính</th><th class="p-1">Trạng Thái</th>
+          </tr></thead>
+          <tbody id="hrpfImportPreviewBody"></tbody>
+        </table>
+      </div>
+      <button type="button" id="hrpfImportConfirmBtn" data-op="confirmHrpfImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Xác Nhận Nhập Các Dòng Hợp Lệ</button>
     </div>
   </div>
 

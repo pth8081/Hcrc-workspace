@@ -734,6 +734,13 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
 - **Không đổi trạng thái tay được** DRAFT/Đã nghỉ việc — 2 trạng thái này chỉ
   do hệ thống tự đặt theo Onboarding/Offboarding, tránh HR lỡ tay đóng nhầm hồ
   sơ người đang thực sự làm việc.
+- **Nhân viên cũ chưa qua Onboarding**: HR/admin ở "Quản Lý Hồ Sơ" có thêm
+  **"➕ Tạo Hồ Sơ Mới"** (nhập tay 1 hồ sơ, tuỳ chọn liên kết ngay tài khoản
+  VPDT, tạo thẳng trạng thái Đang làm việc — không qua Nháp) và **"📤 Nhập
+  Excel"** (tải mẫu → điền → xem trước → xác nhận nhập hàng loạt, dòng lỗi bị
+  bỏ qua không ảnh hưởng dòng hợp lệ khác; chưa hỗ trợ nhập Người phụ thuộc/
+  Học vấn qua Excel, bổ sung sau ở Chi tiết từng hồ sơ) cùng **"📊 Xuất Excel"**
+  (xuất toàn bộ danh sách).
 
 #### 4.5.4. Hợp Đồng Lao Động
 

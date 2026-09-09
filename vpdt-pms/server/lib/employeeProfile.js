@@ -107,6 +107,35 @@ function applyProcessCompletion(list, hrProcessItem) {
   return arr;
 }
 
+// HR/admin tạo tay 1 hồ sơ MỚI cho nhân viên đã có sẵn (đã đang làm việc thật, chỉ chưa có hồ sơ trong hệ
+// thống vì chưa từng qua quy trình Onboarding) — KHÁC ensureDraftProfile() (chỉ tạo DRAFT rỗng lúc bắt đầu
+// Onboarding cho nhân viên MỚI). Mặc định status ACTIVE luôn (không qua DRAFT) vì đây là hồ sơ hồi tố cho
+// người đang làm việc, không có quy trình Onboarding nào sẽ "hoàn tất" để tự chuyển ACTIVE giúp.
+// username tuỳ chọn — HR có thể tạo hồ sơ trước rồi liên kết tài khoản VPDT sau (linkAccount()) như luồng
+// Onboarding, hoặc liên kết luôn nếu đã biết đúng tài khoản; caller (route) chịu trách nhiệm xác nhận
+// username thật sự là 1 tài khoản VPDT đang hoạt động TRƯỚC khi gọi hàm này (cùng cách /link-account làm).
+function createManualProfile(list, payload, actorUsername) {
+  const arr = list || [];
+  const employeeCode = String(payload?.employeeCode || '').trim();
+  if (!employeeCode) throw new HttpError(400, 'Vui lòng nhập Mã Nhân Viên');
+  if (employeeCode.length > 50) throw new HttpError(400, 'Mã Nhân Viên quá dài (tối đa 50 ký tự)');
+  if (findProfile(arr, employeeCode)) {
+    throw new HttpError(400, `Mã Nhân Viên "${employeeCode}" đã có hồ sơ — vui lòng vào "Chi tiết" để sửa thay vì tạo mới`);
+  }
+  const username = payload?.username ? String(payload.username).trim() : null;
+  if (username && findProfileByUsername(arr, username)) {
+    throw new HttpError(400, 'Tài khoản VPDT này đã được liên kết với 1 hồ sơ nhân sự khác');
+  }
+  const profile = defaultProfile(employeeCode);
+  profile.status = 'ACTIVE';
+  profile.username = username;
+  profile.createdBy = actorUsername || 'system';
+  profile.updatedBy = actorUsername || 'system';
+  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername);
+  arr.push(profile);
+  return profile;
+}
+
 function canViewFullProfile(user, profile) {
   return !!(user?.perms?.admin || user?.perms?.hrProfileManage || (profile.username && user.username === profile.username));
 }
@@ -224,7 +253,7 @@ function assertValidManualStatusTransition(currentStatus, nextStatus) {
 
 module.exports = {
   STATUSES, SENSITIVE_FIELDS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS,
-  findProfile, findProfileByUsername, defaultProfile, ensureDraftProfile, linkAccount, applyProcessCompletion,
+  findProfile, findProfileByUsername, defaultProfile, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
   applyProfileEdit, assertValidManualStatusTransition
 };

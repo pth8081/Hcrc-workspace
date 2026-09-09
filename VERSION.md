@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**15.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.4 (2026-09-09): Hồ Sơ Nhân Sự — tạo hồ sơ mới thủ công cho nhân viên cũ + Nhập/Xuất Excel hàng loạt
+
+Người dùng cần bổ sung hồ sơ cho những nhân viên đang làm việc từ trước, chưa từng qua quy trình
+Onboarding (nên hệ thống chưa có hồ sơ nào cho họ trong `employeeProfiles`) — thêm 2 lối nhập liệu mới
+vào màn "🗂️ Quản Lý Hồ Sơ" (module Hồ Sơ Nhân Sự), cạnh luồng Onboarding tự động sẵn có.
+
+**1. "➕ Tạo Hồ Sơ Mới" (thủ công, từng hồ sơ)**: modal nhập Mã Nhân Viên + tuỳ chọn liên kết ngay 1 tài
+khoản VPDT đang hoạt động + các trường cá nhân (ngày sinh, CCCD, địa chỉ, liên hệ khẩn cấp, ngân hàng,
+BHXH, mã số thuế). Hồ sơ tạo ra ở trạng thái `ACTIVE` NGAY (không qua `DRAFT` như luồng Onboarding, vì
+đây là hồi tố cho người đã đang làm việc thật, không có quy trình nào "hoàn tất" để tự chuyển trạng
+thái). Chặn trùng Mã Nhân Viên và trùng liên kết tài khoản VPDT.
+
+**2. "📤 Nhập Excel" (hàng loạt)**: tải mẫu → điền → upload → xem trước (đối chiếu ngay trùng Mã NV/tài
+khoản với dữ liệu thật) → xác nhận nhập. Xác nhận là 1 giao dịch khoá DUY NHẤT (atomic, không phải N
+lần gọi tạo riêng lẻ) — dòng lỗi bị bỏ qua kèm lý do, không ảnh hưởng các dòng hợp lệ khác trong cùng
+lượt. Chưa hỗ trợ nhập "Người phụ thuộc"/"Học vấn" qua Excel (bổ sung sau qua Chi tiết từng hồ sơ).
+
+**3. "📊 Xuất Excel"**: xuất toàn bộ danh sách hồ sơ hiện có (đủ trường, kèm họ tên/phòng ban/chức danh
+tra chéo từ tài khoản VPDT đã liên kết).
+
+Sửa `lib/employeeProfile.js` (`createManualProfile()` mới), `lib/employeeProfileImport.js` (file mới —
+build mẫu/parse file upload/xuất Excel, dùng `lib/xlsxSafeRead.js` để đọc file người dùng gửi lên, cùng
+quy ước bảo mật với các bộ nhập Excel khác trong hệ thống), `routes/employeeProfile.js` (5 route mới:
+`POST /`, `GET /import-template`, `POST /parse-import`, `POST /bulk-import`, `GET /export-xlsx`),
+`public/index.html` + `public/js/module-hrprofile.js` (2 modal mới + nút trong "Quản Lý Hồ Sơ").
+
+**Nhân tiện phát hiện + vá 1 lỗi tồn tại từ trước (không liên quan việc đang làm)**: modal
+`#hrpfDetailModal` (Chi tiết 1 hồ sơ trong "Quản Lý Hồ Sơ") chưa từng được đăng ký qua
+`bindCspDelegation()` ở `core.js` — toàn bộ nút bên trong modal đó (Lưu, Liên Kết Tài Khoản VPDT, Chuyển
+trạng thái...) đã im lặng không hoạt động từ khi module này ra đời. Đã đăng ký lại đúng cách cùng lúc
+đăng ký 2 modal mới thêm lần này.
+
+Verify: mở rộng `tests/test-hr-profile.js` thêm 4 kịch bản mới (16/16 pass), chạy toàn bộ 95 file
+`tests/test-*.js` — chỉ 2 lỗi liên quan `localhost:1433` (SQL Server không chạy được trong môi trường
+build hiện tại, không liên quan thay đổi lần này).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v15.3 (2026-09-09): Đảo ngược logic đính kèm "Hồ Sơ Đề Nghị Thanh Toán" trong module Thanh Toán — bắt buộc lúc TẠO, không còn bắt buộc lúc XÁC NHẬN
 
