@@ -603,6 +603,227 @@ async function scenario(name, fn) {
       r.renderFnExists === false && r.currentEditingFnExists === false, JSON.stringify(r));
   });
 
+  // ==========================================================================
+  // (g) "+ Thêm Vào Danh Sách" (addUserToStagingList()) báo thành công rõ ràng — BUG THẬT đã sửa: trước
+  //     đây hàm này KHÔNG hề alert gì cả, chỉ âm thầm resetUserForm() (xoá trắng form vừa điền) rồi
+  //     cuộn xuống — người dùng thực tế báo "bấm không thêm được vào danh sách" vì không có xác nhận gì,
+  //     dù thực ra ĐÃ thêm thành công vào pendingNewUsers (không tự phát hiện được nếu không cuộn xuống
+  //     đúng lúc). Test bằng CLICK THẬT vào #btnAddToStagingList (qua cspDispatchOp() thật, không gọi
+  //     thẳng hàm) để bắt đúng cùng đường người dùng thật đi qua.
+  // ==========================================================================
+  await scenario('(g) "+ Thêm Vào Danh Sách" báo thành công rõ ràng + thêm đúng vào hàng chờ', async () => {
+    const r = await page.evaluate(() => {
+      resetUserForm();
+      document.getElementById('uUsername').value = 'nv.staging';
+      document.getElementById('uPassword').value = 'Passw0rd!23';
+      document.getElementById('uFullName').value = 'Nhân Viên Hàng Chờ';
+      document.getElementById('uEmail').value = 'staging@hcrc.local';
+      document.getElementById('uPhone').value = '0944444444';
+      document.getElementById('uDept').value = 'Kế Toán';
+      window.__alerts.length = 0;
+      const pendingBefore = pendingNewUsers.length;
+      document.getElementById('btnAddToStagingList').click(); // click thật, đi qua cspDispatchOp() thật
+      return {
+        alerts: window.__alerts.slice(),
+        pendingGrew: pendingNewUsers.length === pendingBefore + 1,
+        formCleared: document.getElementById('uUsername').value === '',
+        pendingSectionVisible: !document.getElementById('pendingNewUsersSection').classList.contains('hidden'),
+      };
+    });
+    record('(g) có đúng 1 alert xác nhận (chứa "✅" và "Đã thêm")',
+      r.alerts.length === 1 && /✅/.test(r.alerts[0]) && /Đã thêm/.test(r.alerts[0]), JSON.stringify(r));
+    record('(g) đã thêm đúng vào pendingNewUsers + form được dọn + khối hàng chờ hiện ra',
+      r.pendingGrew && r.formCleared && r.pendingSectionVisible, JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (h) resetUserForm() (dùng khi bắt đầu TẠO người dùng mới, kể cả sau khi "Hủy" sửa 1 người) KHÔNG
+  //     còn để sót quyền Nhân Sự (11 checkbox pHr*, thêm ở các đợt "Nhân Sự Đợt 1-4") từ lần sửa/xem
+  //     TRƯỚC ĐÓ dính sang người dùng MỚI — BUG THẬT đã sửa: trước đây collectPermsFromForm()/
+  //     populatePermsForm() đọc/ghi đủ 11 field pHr* nhưng resetUserForm() KHÔNG hề đụng tới, nên tạo
+  //     người dùng mới ngay sau khi sửa 1 người có quyền Nhân Sự sẽ ÂM THẦM gán luôn quyền đó (permission
+  //     leak) cho người mới dù admin không hề tick — xác minh lại đúng chuỗi editUser() -> resetUserForm()
+  //     -> buildNewUserFromState() như tình huống thực tế (mở sửa 1 người trong phiên, rồi tạo người mới
+  //     ngay sau đó không tải lại trang).
+  // ==========================================================================
+  await scenario('(h) resetUserForm() không để lộ quyền Nhân Sự từ người vừa sửa trước đó sang người dùng mới', async () => {
+    const r = await page.evaluate(() => {
+      const hrUser = {
+        id: 9001, username: 'hr.manager.test', name: 'HR Test', email: 'hrtest@hcrc.local', phone: '0955555555',
+        posType: 'HO', dept: 'Kế Toán', jobTitle: 'Trưởng phòng', groupIds: [], permOverrides: null,
+        perms: { ...defaultNewUserPerms(), hrProfileManage: true, hrContractManage: true, hrAttendanceManage: true, hrLeaveApprove: true },
+      };
+      DB.users.push(hrUser);
+
+      editUser(hrUser.id);
+      const checkedWhileEditingHrUser = {
+        hrProfileManage: document.getElementById('pHrProfileManage').checked,
+        hrContractManage: document.getElementById('pHrContractManage').checked,
+        hrAttendanceManage: document.getElementById('pHrAttendanceManage').checked,
+        hrLeaveApprove: document.getElementById('pHrLeaveApprove').checked,
+      };
+
+      resetUserForm(); // bắt đầu tạo NGƯỜI DÙNG MỚI ngay sau đó, không tải lại trang
+      const checkedAfterReset = {
+        hrProfileManage: document.getElementById('pHrProfileManage').checked,
+        hrContractManage: document.getElementById('pHrContractManage').checked,
+        hrAttendanceManage: document.getElementById('pHrAttendanceManage').checked,
+        hrLeaveApprove: document.getElementById('pHrLeaveApprove').checked,
+      };
+
+      document.getElementById('uUsername').value = 'nv.moi.khong.hr';
+      document.getElementById('uPassword').value = 'Passw0rd!23';
+      document.getElementById('uFullName').value = 'Nhân Viên Mới Không HR';
+      document.getElementById('uEmail').value = 'moikhonghr@hcrc.local';
+      document.getElementById('uPhone').value = '0966666666';
+      document.getElementById('uDept').value = 'Kế Toán';
+      const state = readUserFormState();
+      const newUser = buildNewUserFromState(state);
+
+      DB.users = DB.users.filter(u => u.id !== hrUser.id); // dọn lại DB.users cho các scenario sau
+
+      return {
+        checkedWhileEditingHrUser,
+        checkedAfterReset,
+        newUserPerms: newUser ? {
+          hrProfileManage: newUser.perms.hrProfileManage, hrContractManage: newUser.perms.hrContractManage,
+          hrAttendanceManage: newUser.perms.hrAttendanceManage, hrLeaveApprove: newUser.perms.hrLeaveApprove,
+        } : null,
+      };
+    });
+    record('(h) editUser() tick đúng 4 quyền Nhân Sự của người ĐANG sửa (đúng, không phải bug)',
+      r.checkedWhileEditingHrUser.hrProfileManage && r.checkedWhileEditingHrUser.hrContractManage
+      && r.checkedWhileEditingHrUser.hrAttendanceManage && r.checkedWhileEditingHrUser.hrLeaveApprove,
+      JSON.stringify(r.checkedWhileEditingHrUser));
+    record('(h) resetUserForm() gỡ hết 4 quyền Nhân Sự đó (không còn dính lại trên form)',
+      !r.checkedAfterReset.hrProfileManage && !r.checkedAfterReset.hrContractManage
+      && !r.checkedAfterReset.hrAttendanceManage && !r.checkedAfterReset.hrLeaveApprove,
+      JSON.stringify(r.checkedAfterReset));
+    record('(h) người dùng MỚI tạo ra không hề có quyền Nhân Sự nào (không bị leak)',
+      r.newUserPerms && !r.newUserPerms.hrProfileManage && !r.newUserPerms.hrContractManage
+      && !r.newUserPerms.hrAttendanceManage && !r.newUserPerms.hrLeaveApprove,
+      JSON.stringify(r.newUserPerms));
+  });
+
+  // ==========================================================================
+  // (i)+(j) 409 "vừa bị người khác thay đổi" ở "users" — cơ chế tự động refetch + áp lại + thử lưu lại 1
+  //     lần (retryUsersSaveAfterConflict()/syncStorageOnce(), core.js). "Server" giả lập ngay trong
+  //     window.fetch để kiểm soát chính xác kịch bản 2 người viết đồng thời — mirror kịch bản
+  //     setAppDataValueIfVersionMatches() thật (routes/data.js): So đúng version If-Match, 409 nếu lệch.
+  // ==========================================================================
+  await scenario('(i) 409 do hoạt động KHÔNG liên quan (không đụng đúng bản ghi đang sửa) -> tự lưu lại thành công, không mất thay đổi của ai', async () => {
+    const r = await page.evaluate(async () => {
+      let serverUsers = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 8001, username: 'nv.editor.409', name: 'Người Được Sửa', email: 'ed409@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true },
+        { id: 8002, username: 'nv.bystander.409', name: 'Người Không Liên Quan', email: 'by409@hcrc.local', phone: '092', posType: 'HO', dept: 'Kinh Doanh', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true },
+      ];
+      let serverVersion = 5000;
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/users' && method === 'GET') {
+          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          const ifMatch = opts.headers['If-Match'];
+          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
+            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
+          }
+          serverUsers = JSON.parse(opts.body);
+          serverVersion++;
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      DB.users = JSON.parse(JSON.stringify(serverUsers));
+      DB._versions.users = String(serverVersion);
+
+      // Hoạt động KHÁC (không qua form Người Dùng) ghi "users" — đổi bystander, bump version, KHÔNG
+      // đụng gì tới "editor" (record Client A sắp sửa).
+      serverUsers = serverUsers.map(u => u.id === 8002 ? { ...u, phone: '099-tu-doi-noi-khac' } : u);
+      serverVersion++;
+
+      editUser(8001);
+      document.getElementById('uPhone').value = '091-SO-MOI-CUA-A';
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault(){} });
+
+      const result = {
+        alerts: window.__alerts.slice(),
+        editorPhoneOnClient: DB.users.find(u => u.id === 8001)?.phone,
+        bystanderPhonePreserved: DB.users.find(u => u.id === 8002)?.phone,
+        clientVersionSynced: DB._versions.users === String(serverVersion),
+      };
+      window.fetch = savedFetch;
+      DB.users = DB.users.filter(u => u.id !== 8001 && u.id !== 8002); // dọn lại cho scenario sau
+      return result;
+    });
+    record('(i) không có alert lỗi/409 nào (chỉ có alert "Đã lưu" bình thường) — retry diễn ra êm',
+      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)),
+      JSON.stringify(r));
+    record('(i) thay đổi CỦA MÌNH (editor) được lưu thành công sau khi tự retry',
+      r.editorPhoneOnClient === '091-SO-MOI-CUA-A', JSON.stringify(r));
+    record('(i) thay đổi CỦA NGƯỜI KHÁC (bystander, không liên quan) KHÔNG bị ghi đè mất',
+      r.bystanderPhonePreserved === '099-tu-doi-noi-khac', JSON.stringify(r));
+    record('(i) DB._versions.users được đồng bộ đúng version mới nhất sau retry',
+      r.clientVersionSynced, JSON.stringify(r));
+  });
+
+  await scenario('(j) 409 do CHÍNH bản ghi đang sửa bị đổi ở nơi khác (conflict thật) -> KHÔNG tự ý ghi đè, báo đúng nguyên nhân', async () => {
+    const r = await page.evaluate(async () => {
+      let serverUsers = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 8003, username: 'nv.editor.409b', name: 'Người Được Sửa 2', email: 'ed409b@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true },
+      ];
+      let serverVersion = 6000;
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/users' && method === 'GET') {
+          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          const ifMatch = opts.headers['If-Match'];
+          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
+            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
+          }
+          serverUsers = JSON.parse(opts.body);
+          serverVersion++;
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      DB.users = JSON.parse(JSON.stringify(serverUsers));
+      DB._versions.users = String(serverVersion);
+
+      // Người khác đổi ĐÚNG bản ghi Client A sắp sửa (conflict thật).
+      serverUsers = serverUsers.map(u => u.id === 8003 ? { ...u, name: 'Đã Bị Đổi Tên Ở Nơi Khác' } : u);
+      serverVersion++;
+
+      editUser(8003);
+      document.getElementById('uPhone').value = '091-CLIENT-A-MUON-LUU';
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault(){} });
+
+      const result = {
+        alerts: window.__alerts.slice(),
+        serverName: serverUsers.find(u => u.id === 8003)?.name,
+        serverPhone: serverUsers.find(u => u.id === 8003)?.phone,
+      };
+      window.fetch = savedFetch;
+      DB.users = DB.users.filter(u => u.id !== 8003); // dọn lại
+      return result;
+    });
+    record('(j) báo đúng 1 alert "conflict thật" (nêu rõ khả năng cao là hoạt động khác, không phải lỗi hệ thống chung chung)',
+      r.alerts.length === 1 && r.alerts[0].includes('⚠️') && r.alerts[0].includes('vừa bị thay đổi ở nơi khác'),
+      JSON.stringify(r));
+    record('(j) KHÔNG tự ý ghi đè lên server — tên/số điện thoại trên server vẫn giữ nguyên của người khác vừa đổi',
+      r.serverName === 'Đã Bị Đổi Tên Ở Nơi Khác' && r.serverPhone === '091', JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 

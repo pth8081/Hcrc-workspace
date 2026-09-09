@@ -185,7 +185,7 @@ async function savePermGroup(e) {
   });
 
   const savedGroups = await syncStorage('permGroups');
-  const savedUsers = membersUpdated > 0 ? await syncStorage('users') : true;
+  const savedUsers = membersUpdated > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
   if (!savedGroups || !savedUsers) {
     DB.permGroups = permGroupsSnapshot;
     DB.users = usersSnapshot;
@@ -223,7 +223,7 @@ async function deletePermGroup(id) {
   DB.permGroups = DB.permGroups.filter(g => g.id !== id);
 
   const savedGroups = await syncStorage('permGroups');
-  const savedUsers = memberCount > 0 ? await syncStorage('users') : true;
+  const savedUsers = memberCount > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
   if (!savedGroups || !savedUsers) {
     DB.permGroups = permGroupsSnapshot;
     DB.users = usersSnapshot;

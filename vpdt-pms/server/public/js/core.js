@@ -2645,6 +2645,20 @@ function defaultNewUserPerms() {
     itPriceProposeCreate: false, itManage: false, itPriceEmergencyRejectApprove: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
+    licenseCreate: false, licenseApprove: false, licenseView: false,
+    nhanSuManage: false, orgChartManage: false, kpiFlowConfigManage: false,
+    // Bổ sung đủ 11 quyền Nhân Sự (Đợt 1-4: Hồ Sơ/Hợp Đồng/Công & Phép/Onboarding-Offboarding) — trước
+    // đây object này DỪNG Ở approverAuthLevel, thiếu hẳn các field bên dưới (dù
+    // collectPermsFromForm()/populatePermsForm() đã đọc/ghi đủ từ lâu) — không tự gây lỗi ngay tại đây
+    // (`!!undefined` vẫn ra false, nơi gọi resetUserForm() vẫn reset đúng SAU KHI đã bổ sung dòng gọi
+    // tương ứng, xem module-admin-userstaging.js) nhưng khai thiếu field khiến object này GÂY HIỂU NHẦM
+    // là "đây là toàn bộ shape perms mặc định" trong khi thực ra thiếu 11 field — khai đủ ở đây để
+    // đúng là nguồn "sự thật" duy nhất cho 1 user/nhóm mới hoàn toàn không có quyền gì.
+    hrOnboardingManage: false, hrOffboardingManage: false, hrTaskTemplateManage: false, hrViewAll: false,
+    hrProfileView: false, hrProfileManage: false, hrContractManage: false,
+    hrAttendanceManage: false, hrLeaveApprove: false, hrShiftRosterManage: false, hrShiftSwapApprove: false,
+    operationOrderCreate: false, operationStoreOpenCreate: false, operationRepairCreate: false,
+    operationRecordManageAll: false,
     approverAuthLevel: 'NONE'
   };
 }
@@ -3240,7 +3254,116 @@ const syncStorageQueues = {};
 // vẫn có thể xảy ra bình thường khi 2 tab/thiết bị admin cùng tự động di trú gần như đồng thời lúc mới
 // đăng nhập (mỗi tab có DB._versions riêng); do di trú là thao tác idempotent, tab thua cuộc không mất
 // gì cả — dữ liệu đã migrate đúng vẫn đang nằm trên server (do tab kia vừa ghi), im lặng bỏ qua là đủ.
-function syncStorageOnce(key, silent) {
+// ==========================================
+// 409 "vừa bị người khác thay đổi" ở collection "users" — BUG THẬT (hay gặp, người dùng báo "critical"):
+// DB._versions.users là 1 token version DUY NHẤT cho TOÀN BỘ mảng users (dbo.AppData lưu mỗi collection
+// 1 dòng, version = cột UpdatedAt của đúng dòng đó — xem sql/schema.sql/lib/appData.js), nhưng RẤT
+// NHIỀU luồng nghiệp vụ KHÔNG liên quan gì tới màn "Người Dùng & Phân Quyền" cũng ghi vào ĐÚNG
+// collection này như tác dụng phụ (mỗi lần ghi đều bump UpdatedAt = version mới, khiến version admin
+// đang cầm trên form trở thành CŨ): tự đổi mật khẩu/hồ sơ cá nhân (PATCH /api/auth/me, routes/auth.js),
+// đăng ký/xoá thiết bị WebAuthn, bật/tắt TOTP, cổng xác thực ngoài (routes/externalAuthVerify.js), đồng
+// bộ username Quản Lý Trực Tiếp khi áp Cơ Cấu Tổ Chức (routes/orgChart.js
+// applyManagerUsernameUpdates()/POST recompute-manager-usernames), gate Offboarding thiếu người kế
+// nhiệm (routes/records.js syncManagerUsernameOnSuccessorAssigned()), đổi tên danh mục phòng ban kéo
+// theo cascade user.dept (lib/catalogRename.js), lưu Nhóm Phân Quyền (đồng bộ users theo nhóm, xem
+// usersVersion ở routes/data.js — nhánh này ĐÃ được vá riêng ở trên bằng cách cập nhật lại
+// DB._versions.users ngay từ response). Một admin mở sẵn màn Người Dùng trong lúc CÓ BẤT KỲ hoạt động
+// nào kể trên xảy ra ở nơi khác (rất bình thường trong 1 tổ chức đang hoạt động, không cần ai khác
+// cũng đang mở màn Người Dùng) sẽ bị 409 dù KHÔNG hề có ai thực sự đụng vào ĐÚNG bản ghi họ đang sửa —
+// trước đây chỉ báo "vui lòng tải lại trang", mất trắng nội dung admin đang gõ dở.
+//
+// Sửa (KHÔNG đổi mô hình lưu trữ — 1 version dùng chung cho cả collection là việc quá lớn để đổi an
+// toàn ngay bây giờ): khi 409 xảy ra ở "users", tự động (1) tải lại "users" mới nhất + version mới qua
+// GET /api/data/users (nay trả kèm version qua header ETag, xem routes/data.js), (2) so sánh ĐÚNG các
+// bản ghi mình vừa đụng vào (thêm/sửa/xoá) giữa bản đã đọc TRƯỚC khi sửa (usersBaseline — mỗi nơi gọi
+// syncStorage('users', {usersBaseline}) đã tự chụp sẵn snapshot này để phục hồi khi lưu thất bại, tận
+// dụng lại luôn) và bản MỚI NHẤT từ server — nếu TRÙNG KHỚP (nghĩa là ai đó đổi collection nhưng KHÔNG
+// đụng đúng bản ghi này) thì áp lại đúng phần thêm/sửa/xoá của admin lên bản mới rồi thử lưu lại ĐÚNG 1
+// LẦN (không lặp vô hạn — nếu vẫn 409 sau khi đã thử lại 1 lần thì rơi về hành vi cũ). Nếu bản ghi admin
+// đang sửa THẬT SỰ bị đổi ở nơi khác (trùng ĐÚNG bản ghi) thì mới là conflict thật — báo rõ khả năng cao
+// là do 1 hoạt động khác (không phải "ai đó đang cạnh tranh sửa cùng 1 người dùng"), đề nghị tải lại.
+
+// So sánh sâu 2 giá trị JSON (object/array/scalar), KHÔNG phụ thuộc thứ tự field như JSON.stringify() —
+// dùng để phân biệt "bản ghi NÀY thực sự đổi nội dung" khỏi "chỉ đổi vị trí field do server/client dựng
+// lại object theo thứ tự khác nhau" (dễ gây báo conflict giả nếu so sánh chuỗi thô).
+function deepEqualJson(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    return a.every((v, i) => deepEqualJson(v, b[i]));
+  }
+  const keysA = Object.keys(a), keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every(k => Object.prototype.hasOwnProperty.call(b, k) && deepEqualJson(a[k], b[k]));
+}
+
+// So khớp theo "id" giữa bản ĐÃ ĐỌC trước khi sửa (baseline) và bản admin MUỐN lưu (desired, chính là
+// DB.users tại thời điểm gọi) -> phân loại thêm mới/sửa/xoá — CHỈ dựa trên id, không quan tâm field nào
+// đổi (đơn vị "1 thay đổi" ở màn Người Dùng luôn là NGUYÊN 1 bản ghi, khớp đúng cách saveUser() ghi đè
+// cả object user chứ không sửa từng field rời).
+function diffUsersForConflictRetry(baseline, desired) {
+  const baseById = new Map((baseline || []).map(u => [u.id, u]));
+  const desiredById = new Map((desired || []).map(u => [u.id, u]));
+  const added = (desired || []).filter(u => !baseById.has(u.id));
+  const removedIds = [...baseById.keys()].filter(id => !desiredById.has(id));
+  const modified = (desired || []).filter(u => baseById.has(u.id) && !deepEqualJson(u, baseById.get(u.id)));
+  return { added, removedIds, modified };
+}
+
+// Thực hiện đúng bước (1)+(2) mô tả ở khối chú thích trên — trả {retried:true, merged, freshVersion}
+// nếu áp lại thành công (gọi nơi dùng tự lưu lại), {retried:false, genuineConflict:true} nếu bản ghi
+// admin đang sửa thật sự bị đổi/trùng username với người MỚI ai đó vừa tạo, hoặc {retried:false} đơn
+// thuần nếu không tải lại được (mất mạng...) -> nơi gọi rơi về thông báo 409 mặc định như cũ.
+async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
+  const { added, removedIds, modified } = diffUsersForConflictRetry(usersBaseline, desiredUsers);
+  const touchedIds = new Set([...removedIds, ...modified.map(u => u.id)]);
+  // Không có gì để áp lại (lý thuyết không nên xảy ra — 409 nghĩa là mình VỪA gửi 1 thay đổi nào đó).
+  if (touchedIds.size === 0 && added.length === 0) return { retried: false };
+
+  let res;
+  try {
+    res = await fetch('/api/data/users');
+  } catch (e) {
+    return { retried: false }; // mất mạng lúc tải lại — rơi về thông báo 409 mặc định
+  }
+  if (!res.ok) return { retried: false };
+  const freshVersion = res.headers.get('ETag');
+  const freshUsers = await res.json().catch(() => null);
+  if (!freshVersion || !Array.isArray(freshUsers)) return { retried: false };
+
+  const freshById = new Map(freshUsers.map(u => [u.id, u]));
+  const baseById = new Map(usersBaseline.map(u => [u.id, u]));
+
+  // Conflict THẬT: đúng bản ghi mình vừa sửa/xoá đã khác so với lúc mình đọc trước khi sửa (ai đó khác
+  // đổi/xoá ĐÚNG người này) — không tự ý chọn "ai thắng", rơi về báo lỗi cho admin tự quyết định.
+  for (const id of touchedIds) {
+    if (!deepEqualJson(freshById.get(id) || null, baseById.get(id) || null)) {
+      return { retried: false, genuineConflict: true };
+    }
+  }
+  // Trùng username với người MỚI ai đó vừa tạo ở nơi khác cũng là conflict thật (2 người cùng đăng ký 1
+  // username gần như đồng thời) — chỉ cần kiểm cho bản ghi MỚI THÊM (added), bản sửa/xoá đã kiểm ở trên.
+  for (const u of added) {
+    if (freshUsers.some(x => x.username === u.username && x.id !== u.id)) {
+      return { retried: false, genuineConflict: true };
+    }
+  }
+
+  // Không đụng đúng bản ghi nào của mình -> áp lại đúng phần thêm/sửa/xoá lên bản MỚI NHẤT từ server
+  // (giữ nguyên mọi thay đổi KHÔNG LIÊN QUAN mà nơi khác vừa ghi, VD username khác vừa đổi mật khẩu).
+  const removedSet = new Set(removedIds);
+  const modifiedById = new Map(modified.map(u => [u.id, u]));
+  const merged = freshUsers
+    .filter(u => !removedSet.has(u.id))
+    .map(u => modifiedById.has(u.id) ? modifiedById.get(u.id) : u)
+    .concat(added);
+
+  return { retried: true, merged, freshVersion };
+}
+
+async function syncStorageOnce(key, silent, usersBaseline) {
   // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
   // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
   // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
@@ -3268,14 +3391,37 @@ function syncStorageOnce(key, silent) {
   // dưới KHÔNG THỂ chờ rồi kiểm tra kết quả thật, chỉ có thể "bắn và quên" — hiện luôn alert "Đã lưu
   // thành công"/tự render lại danh sách như đã lưu xong NGAY LẬP TỨC, dù server sau đó có thể từ chối
   // (409 xung đột, hoặc 400 "không thể xoá admin cuối cùng").
-  return fetch(`/api/data/${key}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload)
-  }).then(async res => {
+  try {
+    const res = await fetch(`/api/data/${key}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
     if (res.status === 401) { handleSessionExpired(); return false; }
     if (res.status === 409) {
       const body = await res.json().catch(() => ({}));
+
+      // "users": trước khi báo lỗi/đề nghị tải lại trang NGAY (mất nội dung admin đang gõ dở), thử tự
+      // áp lại đúng phần mình vừa thêm/sửa/xoá lên bản mới nhất rồi lưu lại 1 lần — xem giải thích đầy
+      // đủ ở khối chú thích trên đầu file (retryUsersSaveAfterConflict()). silent=true (lưu ngầm tự
+      // động, không phải admin chủ động bấm nút) KHÔNG áp dụng nhánh này — giữ nguyên "im lặng bỏ qua"
+      // như trước, không nên tự ý ghi thêm 1 lượt nữa mà người dùng không biết.
+      if (key === 'users' && usersBaseline && !silent) {
+        const retryResult = await retryUsersSaveAfterConflict(usersBaseline, DB.users);
+        if (retryResult.retried) {
+          DB.users = retryResult.merged;
+          DB._versions.users = retryResult.freshVersion;
+          // usersBaseline=null ở lượt gọi lại -> KHÔNG retry thêm lần 2 nếu vẫn tiếp tục 409 (rất hiếm,
+          // nghĩa là "users" đang bị ghi liên tục dồn dập) — đúng 1 lần thử lại như đã hứa ở comment trên.
+          return syncStorageOnce(key, silent, null);
+        }
+        if (retryResult.genuineConflict) {
+          alert('⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác (1 admin khác, hoặc chính người đó vừa tự đổi mật khẩu/thiết bị đăng nhập) — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.');
+          return false;
+        }
+        // retried=false && !genuineConflict (VD mất mạng lúc tải lại bản mới) -> rơi xuống thông báo mặc định bên dưới.
+      }
+
       if (silent) { console.warn(`Bỏ qua lưu ngầm "${key}" — đã bị nơi khác ghi trước:`, body.error); return false; }
       alert(`⚠️ ${body.error || `Dữ liệu "${key}" vừa bị người khác thay đổi — vui lòng tải lại trang.`}`);
       return false;
@@ -3292,24 +3438,31 @@ function syncStorageOnce(key, silent) {
     // 409 giả do chính lượt lưu permGroups này gây ra (chứ không phải ai khác thực sự đổi "users").
     if (body.usersVersion) DB._versions.users = body.usersVersion;
     return true;
-  }).catch(e => {
+  } catch (e) {
     console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);
     if (silent) return false;
     alert(`⛔ Lỗi lưu dữ liệu "${key}" lên máy chủ: ` + e.message);
     return false;
-  });
+  }
 }
 
 // Trả về Promise<boolean> (đã lưu thành công hay chưa) — chỉ để tiện await ở các thao tác cần biết
 // chắc chắn đã lưu xong mới báo thành công/cập nhật giao diện (VD saveUser()/deleteUser()); các chỗ
 // gọi "bắn và quên" khác trong file này không cần quan tâm giá trị trả về, vẫn hoạt động như cũ.
+// opts.usersBaseline (chỉ có ý nghĩa khi key === 'users'): bản chụp DB.users TRƯỚC khi sửa — mỗi nơi
+// gọi (saveUser()/deleteUser()/toggleUserActive()/commitPendingNewUsers()/importUsersExcel()/
+// savePermGroup()/deletePermGroup()) vốn ĐÃ tự chụp snapshot này để phục hồi khi lưu thất bại, nay
+// truyền thêm vào đây để syncStorageOnce() dùng cho cơ chế "refetch + áp lại + thử lưu lại 1 lần" khi
+// gặp 409 (xem retryUsersSaveAfterConflict() ngay phía trên syncStorageOnce()). Không truyền = giữ
+// nguyên hành vi cũ (báo lỗi + đề nghị tải lại trang ngay khi 409), dùng cho các key khác/silent.
 function syncStorage(key, opts) {
   const silent = !!opts?.silent;
+  const usersBaseline = opts?.usersBaseline || null;
   try {
     const previous = syncStorageQueues[key] || Promise.resolve();
     // .then(fn, fn): chạy lượt kế tiếp dù lượt trước lỗi/bị 409 — 1 lần lỗi không được phép chặn mãi
     // mãi các lượt lưu sau của cùng key.
-    const next = previous.then(() => syncStorageOnce(key, silent), () => syncStorageOnce(key, silent));
+    const next = previous.then(() => syncStorageOnce(key, silent, usersBaseline), () => syncStorageOnce(key, silent, usersBaseline));
     syncStorageQueues[key] = next;
     return next;
   } catch (e) {

@@ -149,6 +149,26 @@ async function main() {
       });
       assert(second.officeBuy.includes('bg-blue-600'), 'Chuyển sang OFFICE_BUY (id dựng từ "OFFICE_BUY".replace là case-mismatch trước đây) phải đổi màu active đúng');
       assert(!second.submission.includes('bg-blue-600'), 'Nút SUBMISSION cũ phải mất màu active khi đã chuyển đi');
+
+      // Người dùng thực tế báo riêng tab "QT Thanh Toán" (PAYMENT) không bấm được/không đổi panel —
+      // id nút này ("btnWfModPAYMENT") tình cờ VẪN khớp cách dựng chuỗi CŨ (mod không có dấu "_" nên
+      // .replace('_','') là no-op, và PAYMENT vốn đã viết hoa toàn bộ) nên KHÔNG bị lộ bởi lỗi case-
+      // mismatch chung ở trên — cần tự kiểm riêng để chắc chắn không có lỗi nào khác (VD renderWorkflowTab()
+      // ném lỗi riêng cho đúng module PAYMENT) khiến việc chuyển tab bị nuốt lặng lẽ.
+      const paymentSwitch = await page.evaluate(() => {
+        DB.paymentDeptWorkflows = DB.paymentDeptWorkflows || {};
+        switchWfModule('PAYMENT');
+        return {
+          payment: document.getElementById('btnWfModPAYMENT').className,
+          officeBuy: document.getElementById('btnWfModOfficeBuy').className,
+          activeMod: activeWfMod,
+          title: document.getElementById('wfConfigTitle')?.innerText,
+        };
+      });
+      assertEqual(paymentSwitch.activeMod, 'PAYMENT', 'Bấm "QT Thanh Toán" phải thực sự chuyển activeWfMod sang PAYMENT (không bị nuốt lặng lẽ)');
+      assert(paymentSwitch.payment.includes('bg-blue-600'), 'Nút "QT Thanh Toán" phải đổi màu active khi được chọn');
+      assert(!paymentSwitch.officeBuy.includes('bg-blue-600'), 'Nút OFFICE_BUY cũ phải mất màu active khi đã chuyển sang PAYMENT');
+      assert(/Thanh Toán/.test(paymentSwitch.title || ''), 'Tiêu đề panel phải đổi đúng sang cấu hình Thanh Toán (panel THẬT SỰ đã chuyển, không phải chỉ đổi màu nút)');
     });
 
     // ===== Bug 4: dashboard filter card ở Vận Hành > Đơn Hàng không đổi màu/không lọc =====

@@ -12,6 +12,15 @@ function addUserToStagingList() {
   const newUser = buildNewUserFromState(state);
   if (!newUser) return;
   pendingNewUsers.push(newUser);
+  // BUG THẬT đã sửa: hàm này KHÔNG hề báo thành công (khác MỌI thao tác lưu khác trong cùng file —
+  // saveUser()/deleteUser()/toggleUserActive()/commitPendingNewUsers() đều alert "✅ ..." sau khi xong)
+  // — chỉ âm thầm resetUserForm() (XOÁ TRẮNG toàn bộ form admin vừa điền) rồi cuộn xuống 1 bảng nhỏ bên
+  // dưới. Từ góc nhìn admin, bấm "+ Thêm Vào Danh Sách" xong thấy form MÌNH VỪA ĐIỀN biến mất trắng
+  // trơn mà KHÔNG có bất kỳ xác nhận nào — đúng cảm giác "bấm không ăn thua gì"/"không thêm được vào
+  // danh sách" như người dùng phản ánh, dù thực ra ĐÃ thêm thành công vào pendingNewUsers. Thêm 1 alert
+  // xác nhận rõ ràng, nêu tên người vừa thêm + tổng số đang chờ, khớp đúng quy ước UX của mọi nút lưu
+  // khác trong màn này.
+  alert(`✅ Đã thêm "${newUser.username}" vào danh sách chờ lưu (hiện có ${pendingNewUsers.length} người). Điền tiếp người khác hoặc bấm "Lưu Tất Cả Danh Sách" khi xong.`);
   resetUserForm();
   renderPendingNewUsersList();
   document.getElementById('pendingNewUsersSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -98,7 +107,7 @@ async function commitPendingNewUsers() {
   // NGUYÊN mảng). Người dùng tưởng đã lưu xong, mất trắng danh sách chờ không phục hồi được.
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   DB.users.push(...pendingNewUsers);
-  const saved = await syncStorage('users');
+  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
   if (!saved) {
     DB.users = usersSnapshot;
     return;
@@ -184,6 +193,28 @@ function resetUserForm() {
   document.getElementById('pLicenseCreate').checked = !!defaults.licenseCreate;
   document.getElementById('pLicenseApprove').checked = !!defaults.licenseApprove;
   document.getElementById('pLicenseView').checked = !!defaults.licenseView;
+  // BUG THẬT đã sửa (phát hiện qua báo lỗi "tạo user mới bị dính quyền lạ"): 11 checkbox Nhân Sự thêm ở
+  // các đợt "Nhân Sự Đợt 1-4" (Hồ Sơ/Hợp Đồng/Công & Phép/Onboarding-Offboarding) CHƯA TỪNG được thêm
+  // vào đây — trong khi collectPermsFromForm()/populatePermsForm() (module-admin-permtree.js) đã đọc/
+  // ghi đủ cả 11 field này từ lâu. Hậu quả: editUser() tick đúng các ô này theo user ĐANG SỬA (đúng),
+  // nhưng sau khi "Hủy"/lưu xong quay lại tạo NGƯỜI DÙNG MỚI (resetUserForm()), các ô này VẪN GIỮ
+  // NGUYÊN trạng thái tick của lần sửa TRƯỚC ĐÓ (không có dòng nào ở đây đụng tới, khác MỌI checkbox
+  // quyền khác trong hàm này) — người dùng MỚI tạo ra ÂM THẦM thừa hưởng quyền Nhân Sự (xem hồ sơ/hợp
+  // đồng/lương/chấm công cấp dưới...) của bất kỳ ai admin vừa xem/sửa trước đó trong CÙNG phiên, dù
+  // admin không hề tick các ô này cho người mới — đã xác minh lại bằng kịch bản thực tế (sửa 1 user có
+  // hrProfileManage/hrContractManage/hrAttendanceManage=true, rồi tạo user mới ngay sau đó KHÔNG đụng
+  // tới các ô này -> user mới vẫn được gán permOverrides y hệt 3 quyền đó).
+  document.getElementById('pHrOnboardingManage').checked = !!defaults.hrOnboardingManage;
+  document.getElementById('pHrOffboardingManage').checked = !!defaults.hrOffboardingManage;
+  document.getElementById('pHrTaskTemplateManage').checked = !!defaults.hrTaskTemplateManage;
+  document.getElementById('pHrViewAll').checked = !!defaults.hrViewAll;
+  document.getElementById('pHrProfileView').checked = !!defaults.hrProfileView;
+  document.getElementById('pHrProfileManage').checked = !!defaults.hrProfileManage;
+  document.getElementById('pHrContractManage').checked = !!defaults.hrContractManage;
+  document.getElementById('pHrAttendanceManage').checked = !!defaults.hrAttendanceManage;
+  document.getElementById('pHrLeaveApprove').checked = !!defaults.hrLeaveApprove;
+  document.getElementById('pHrShiftRosterManage').checked = !!defaults.hrShiftRosterManage;
+  document.getElementById('pHrShiftSwapApprove').checked = !!defaults.hrShiftSwapApprove;
   document.getElementById('pNhanSuManage').checked = !!defaults.nhanSuManage;
   document.getElementById('pOrgChartManage').checked = !!defaults.orgChartManage;
   document.getElementById('pKpiFlowConfigManage').checked = !!defaults.kpiFlowConfigManage;
@@ -283,7 +314,7 @@ async function deleteUser(id) {
   if (!confirm(`Bạn có chắc chắn muốn xóa người dùng "${u.username}" (${u.name})?`)) return;
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   DB.users = DB.users.filter(item => item.id !== id);
-  const saved = await syncStorage('users');
+  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
   if (!saved) {
     DB.users = usersSnapshot;
     renderUsers();
@@ -328,8 +359,11 @@ async function toggleUserActive(id) {
   // nhận đã khoá/mở khóa thành công dù trạng thái tài khoản thực tế KHÔNG đổi — khớp đúng khuôn
   // deleteUser() ở trên (đảo lại DB.users nếu lưu thất bại, chỉ ghi log khi saved === true).
   const prevActive = u.active;
+  // usersSnapshot (toàn mảng, không chỉ prevActive) — cần cho cơ chế "refetch + áp lại + thử lưu lại 1
+  // lần" khi 409 (xem retryUsersSaveAfterConflict() ở core.js), không chỉ để phục hồi u.active như trước.
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   u.active = willActivate;
-  const saved = await syncStorage('users');
+  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
   if (!saved) {
     u.active = prevActive;
     renderUsers();
@@ -490,7 +524,7 @@ async function importUsersExcel(evt) {
       count++;
     }
   });
-  const saved = await syncStorage('users');
+  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
   if (!saved) {
     DB.users = usersSnapshot;
     return;

@@ -702,13 +702,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/data/:key  → trả về 1 collection cụ thể (ít dùng, tiện cho debug)
+// GET /api/data/:key  → trả về 1 collection cụ thể (ít dùng, tiện cho debug — NHƯNG cũng là điểm
+// client dùng để "tải lại users mới nhất" khi retry sau 409, xem retryUsersSaveAfterConflict() ở
+// core.js) — trả kèm version qua header ETag (đọc bằng getAppDataValueWithVersion() thay vì
+// getAppDataValue() cũ, cùng cột UpdatedAt sẵn có, không cần đổi gì ở CSDL) để nơi gọi biết chính xác
+// đang cầm bản ứng với version nào mà gửi lại đúng If-Match cho lượt lưu tiếp theo.
 router.get('/:key', async (req, res) => {
   const { key } = req.params;
   if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
 
   try {
-    const value = await getAppDataValue(key);
+    const { value, version } = await getAppDataValueWithVersion(key);
+    if (version) res.set('ETag', version);
     if (value === null) return res.json(DEFAULTS[key]);
     if (key === 'users') return res.json(sanitizeUsersPermsForViewer(stripPasswords(value), req.freshUser?.username, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));

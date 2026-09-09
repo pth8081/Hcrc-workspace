@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**15.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.1 (2026-09-09): Fix 3 lỗi phát hiện qua sử dụng thực tế (màn Người Dùng + xác nhận lại Quy Trình & Phê Duyệt)
+
+Người dùng báo qua 4 ảnh chụp production 4 lỗi nghi vấn. Kiểm tra kỹ từng cái: 1 lỗi thật cần sửa
+(gồm 3 phần), 2 lỗi còn lại hoá ra ĐÃ được sửa sẵn ở 1 commit trước đó (`677e863`, đã lên `main`) —
+server thực tế người dùng đang chạy chỉ là bản build cũ hơn commit đó, redeploy `main` hiện tại là đủ,
+không cần sửa gì thêm cho 2 lỗi này.
+
+**1. Màn "Người Dùng" — lỗi 409 "vừa bị người khác thay đổi" xảy ra thường xuyên (đã xác nhận là lỗi
+thật, mức độ cao)**: collection `users` dùng CHUNG 1 version token cho toàn bộ dữ liệu — rất nhiều thao
+tác không liên quan (đổi mật khẩu của bất kỳ ai, đăng ký vân tay/TOTP, đồng bộ Quản Lý Trực Tiếp từ Cơ
+Cấu Tổ Chức, gán người kế nhiệm Offboarding, đổi tên phòng ban...) đều làm bump version này — admin mở
+màn Người Dùng một lúc rất dễ dính 409 dù không ai đụng đúng bản ghi họ đang sửa. Thêm cơ chế tự động:
+khi gặp 409 ở thao tác lưu `users`, tự tải lại bản mới nhất, áp lại ĐÚNG thay đổi của admin lên bản mới
+đó, thử lưu lại đúng 1 lần — chỉ báo lỗi (như cũ) nếu vẫn xung đột thật (ai đó vừa sửa ĐÚNG bản ghi admin
+đang sửa) hoặc lỗi mạng khi tải lại. (`deepEqualJson()`/`diffUsersForConflictRetry()`/
+`retryUsersSaveAfterConflict()` + `syncStorageOnce()`/`syncStorage()` mới trong `core.js`; `GET
+/api/data/:key` trả kèm version qua header `ETag` để nơi gọi biết chính xác bản vừa tải; threading
+`usersBaseline` qua mọi điểm lưu `users` trong `module-admin-userstaging.js`/`module-admin-permgroups.js`/
+`module-admin-submissiongroups.js`.)
+
+**2. "+ Thêm Vào Danh Sách" (tạo nhiều user rồi lưu 1 lần) không hề báo thành công** — bấm xong form biến
+mất trắng trơn không có xác nhận nào, đúng cảm giác "không thêm được" dù thực ra đã thêm vào hàng chờ.
+Thêm 1 alert xác nhận rõ tên người vừa thêm + tổng số đang chờ, khớp quy ước của mọi nút lưu khác trong
+màn này.
+
+**3. Rò rỉ quyền Nhân Sự sang user mới tạo (lỗi tự phát hiện thêm khi rà soát, không phải lỗi người dùng
+báo)**: 11 checkbox quyền Nhân Sự thêm ở 4 đợt "Nhân Sự Đợt 1-4" chưa từng được đưa vào danh sách mặc
+định/reset của form tạo user — sửa 1 user có quyền Nhân Sự xong tạo user mới ngay trong cùng phiên (không
+tải lại trang) sẽ khiến user mới âm thầm thừa hưởng các quyền đó dù admin không hề tick. Đã bổ sung đủ 11
+field vào `defaultNewUserPerms()`/`resetUserForm()`.
+
+**Đã xác nhận KHÔNG cần sửa gì thêm** (đã sửa sẵn ở commit `677e863`, chỉ cần redeploy `main` hiện tại):
+- Tab "Quy Trình & Phê Duyệt" không đổi màu khi chuyển tab / tab "QT Thanh Toán" không chọn được được —
+  đã sửa ở `switchWfModule()` (`module-ngansach.js`).
+- Danh mục "Vị Trí Tham Gia Quy Trình" (mục 17) không lọc đúng vào ô "Theo vị trí" khi cấu hình bước phê
+  duyệt — đã sửa ở `wfPositionPairPickerItems()` (`module-admin-specialperm.js`).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v15.0 (2026-09-09): Nhân Sự — vá 2 lỗ hổng còn lại của Cơ Cấu Tổ Chức/Onboarding-Offboarding (Đợt 4/4)
 

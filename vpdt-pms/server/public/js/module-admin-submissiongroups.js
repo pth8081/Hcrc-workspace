@@ -205,7 +205,7 @@ async function saveUser(e) {
   // chối sau đó (409 xung đột phiên bản, hoặc 400 "hệ thống sẽ không còn admin nào") người dùng đã
   // thấy thông báo thành công + giao diện coi như đã lưu xong, chỉ có thêm 1 alert lỗi hiện SAU đó gây
   // rối chứ không sửa lại được ấn tượng sai ban đầu.
-  const saved = await syncStorage('users');
+  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
   if (!saved) {
     DB.users = usersSnapshot;
     renderUsers();
