@@ -1,8 +1,58 @@
 # Phiên bản hiện tại
 
-**15.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.5 (2026-09-09): Thanh Toán định kỳ — mỗi đợt tự đi hết quy trình riêng (tách bản ghi)
+
+Người dùng chỉ ra: sau v15.3 (đảo ngược logic đính kèm), đề nghị thanh toán "Thanh toán định kỳ" vẫn gộp
+CHUNG mọi đợt vào 1 bản ghi — muốn đính kèm/gửi duyệt/xác nhận theo TỪNG đợt độc lập (đợt nào xong đợt
+đó), không phải chờ đủ hồ sơ mọi đợt mới gửi được. "Thanh toán 1 lần" (Hợp đồng `ONE_TIME`) giữ nguyên
+hoàn toàn — vẫn 1 bộ hồ sơ chung, xác nhận lump-sum như cũ.
+
+**Phương án đã chốt (AskUserQuestion)**: thay vì lồng trạng thái riêng cho từng đợt vào TRONG 1 bản ghi
+`paymentRequests` (đòi hỏi sửa `lib/workflowEngine.js` — hạ tầng duyệt dùng CHUNG cho ~15 module khác,
+quá rủi ro), mỗi đợt của nguồn "Thanh toán định kỳ"/officeReqs/tạo thủ công nhiều đợt được TÁCH thành 1
+bản ghi `paymentRequests` TOP-LEVEL riêng (đúng 1 đợt/bản ghi), cùng chia sẻ `cycleGroupId` (UUID sinh
+lúc tách) + `cycleIndex`/`cycleTotal` để nhóm hiển thị — mỗi bản ghi tự đi qua NGUYÊN VẸN, không sửa gì,
+đúng luồng DRAFT (đính kèm hồ sơ riêng) → `submitPaymentRequest()` (gửi duyệt riêng) → duyệt theo
+phòng/`workflowEngine.js` (dùng chung, không đổi) → `confirmPaymentInstallment()` (xác nhận riêng, luôn ở
+index 0 vì mỗi bản ghi chỉ còn 1 đợt) — tái dùng 100% code đã có.
+
+**Sửa lỗi ghi ngược sớm (phát hiện khi thiết kế)**: nguồn (Hợp đồng/officeReqs) trước đây được ghi ngược
+`paymentStatus` ngay khi 1 bản ghi/đợt vừa PAID — với mô hình tách, điều đó sẽ ghi ngược SAI khi các đợt
+anh em cùng lô vẫn còn dang dở. Thêm `isCycleGroupFullyResolved(pr, allPaymentRequests)`
+(`lib/recordActions.js`) — chỉ coi 1 lô là "đã xong" khi KHÔNG còn bản ghi nào khác cùng `cycleGroupId`
+mà chưa `PAID` — gác cả 2 nơi ghi ngược: xác nhận đợt cuối (`withPaymentConfirmAction()`,
+`routes/records.js`) VÀ xoá bản ghi cuối cùng còn dang dở (`/paymentRequests/:id/delete`). Bản sao
+client-side `isCycleGroupFullyResolvedClient()` (`module-thanhtoan.js`) gác y hệt cho phần đồng bộ cục bộ
+(không đợi tải lại trang mới thấy đúng trạng thái).
+
+Sửa `lib/recordActions.js` (`splitPaymentDraftsByInstallment()` mới, `startContractPayment()`/
+`startOfficePayment()` tách nhánh ONE_TIME (giữ nguyên) khỏi nhánh còn lại (tách bản ghi),
+`isCycleGroupFullyResolved()` mới, `editPaymentRequest()` thêm guard chặn sửa bản ghi đã tách thành
+nhiều hơn 1 đợt), `routes/records.js` (`createPaymentRequestsFromDraft()` loop-create khi draft là mảng,
+3 route tạo trả thêm field `paymentRequests` (mảng), gác ghi ngược bằng `isCycleGroupFullyResolved()`),
+`public/js/module-hopdong.js` (`startContractPaymentAction()`/`startOfficePaymentAction()` xử lý mảng
+`paymentRequests` thay vì 1 bản ghi), `public/js/module-thanhtoan.js` (`submitManualPaymentRequest()`
+loop-create khi tạo thủ công >1 đợt với `cycleGroupId` sinh ở client, `applyPaymentConfirmResult()`/
+`deletePaymentRequestAction()` gác ghi ngược cục bộ, badge "🔗 Đợt X/Y" mới trong 2 màn danh sách).
+
+Verify: viết lại các kịch bản "Thanh toán định kỳ" trong `tests/test-payment.js` theo mô hình tách bản
+ghi (87/87 pass, gồm cả kịch bản xoá 1 đợt còn dang dở khi các đợt khác đã PAID hết), cập nhật
+`tests/test-contract.js` (46/46 pass — hợp đồng tạo qua form mặc định `ONE_TIME` nên không đổi hành vi),
+`tests/test-office-budget.js` không cần sửa (62/62 pass — officeReqs vốn không có khái niệm ONE_TIME, chỉ
+thêm field mới không phá vỡ gì), `tests/_mockBackend.js` (mô phỏng đúng behavior server thật cho cả 3
+route tạo + 2 route ghi ngược), `tests/demo-payment-tracking.js` cập nhật theo luồng tách (chạy thành
+công). Chạy toàn bộ 95 file `tests/test-*.js` — chỉ 2 lỗi liên quan `localhost:1433` (SQL Server không
+chạy được trong môi trường build hiện tại, không liên quan thay đổi lần này).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`. Lưu
+ý nghiệp vụ: các đề nghị thanh toán định kỳ ĐANG DỞ DANG từ trước khi deploy (nếu có, gộp nhiều đợt
+trong 1 bản ghi) KHÔNG bị migrate tự động — vẫn hoạt động bình thường theo hành vi cũ (không có
+`cycleGroupId` nên coi như đã "resolved", không bị chặn ghi ngược); chỉ các đề nghị được TẠO MỚI sau khi
+deploy mới áp dụng cơ chế tách theo đợt.
 
 ## v15.4 (2026-09-09): Hồ Sơ Nhân Sự — tạo hồ sơ mới thủ công cho nhân viên cũ + Nhập/Xuất Excel hàng loạt
 
