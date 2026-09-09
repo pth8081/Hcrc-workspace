@@ -8,6 +8,7 @@
 // khác nhau nên không gộp vào 1 engine chung được: Hợp đồng chỉ theo "người tạo hoặc admin"; Biên bản
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
+const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
@@ -1569,7 +1570,7 @@ function startContractPayment(user, contract, overrides) {
   contract.paymentStatus = 'CHO_THANH_TOAN';
   const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
   const installments = overrideInstallments || buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng');
-  return {
+  const base = {
     sourceModule: 'CONTRACT', sourceId: contract.id, sourceCode: contract.code,
     // Đề nghị thanh toán mang dept của ĐƠN VỊ CUSTODIAN (đơn vị đang thao tác chuyển sang thanh toán,
     // đã xác thực qua canManageContractPayment() ở trên) — không phải contract.dept gốc, để kế toán
@@ -1577,36 +1578,82 @@ function startContractPayment(user, contract, overrides) {
     // hồ sơ cũ trước khi có custodianDept (xem giải thích ở canManageContractPayment()).
     dept: contract.custodianDept || contract.dept,
     title: (overrides?.title && String(overrides.title).trim()) || contract.title,
-    // amount đi theo TỔNG các đợt thực tế gửi lên khi có override (khớp luật tạo thủ công) — không
-    // còn khoá cứng contract.amount, vì override cho phép kế toán khai lại khác giá trị tham khảo gốc.
-    // Vẫn CHO PHÉP lệch (không chặn) nhưng phải cảnh báo rõ cho người duyệt — xem amountMismatchesSource
-    // bên dưới, giữ nguyên referenceAmount (giá trị hợp đồng gốc) để client tự so sánh/hiển thị.
-    amount: overrideInstallments ? installments.reduce((s, it) => s + (it.amount || 0), 0) : contract.amount,
-    referenceAmount: contract.amount,
-    amountMismatchesSource: overrideInstallments
-      ? Math.abs(installments.reduce((s, it) => s + (it.amount || 0), 0) - contract.amount) > 1
-      : false,
-    installments,
-    // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) — đính kèm khi còn NHÁP (editPaymentRequest()), bắt buộc
-    // >=1 tệp lúc "Chuyển Xác Nhận Thanh Toán" (submitPaymentRequest()) — xem normalizePaymentRequestFiles().
-    requestFiles: normalizePaymentRequestFiles(overrides?.requestFiles),
     // sourcePaymentType — CHỤP LẠI đúng lúc tạo (contract.paymentType || null) chế độ xác nhận thanh toán
     // của đề nghị này: 'ONE_TIME' -> xác nhận TOÀN BỘ 1 lần (lump-sum, xem confirmPaymentRequestLumpSum()),
-    // 'PERIODIC'/null (hợp đồng cũ chưa từng có paymentType) -> xác nhận TỪNG ĐỢT (confirmPaymentInstallment()).
+    // 'PERIODIC'/null (hợp đồng cũ chưa từng có paymentType) -> mỗi đợt tự đi hết quy trình riêng (splitPaymentDraftsByInstallment()).
     // CHỤP LẠI (không tra contract.paymentType lại mỗi lần) để nếu hợp đồng đổi paymentType SAU KHI đề
     // nghị đã tạo thì đề nghị ĐANG CHỜ XỬ LÝ không bị đổi luật xác nhận giữa chừng.
     sourcePaymentType: contract.paymentType || null,
-    // LUÔN tạo NHÁP (currentStep/history chỉ khởi tạo THẬT lúc submitPaymentRequest(), DRAFT -> PENDING) —
-    // TRƯỚC ĐÂY route "kế toán tự tạo có nguồn" (từ module Thanh Toán) dùng overrides.createAsPending để
-    // tạo THẲNG PENDING (bỏ qua bước đính kèm Hồ Sơ Đề Nghị Thanh Toán); giờ BỎ HẲN nhánh đó — mọi đề nghị
-    // (bất kể nguồn) đều đi qua CHUNG 1 cổng "🗂️ Quản Lý Thanh Toán": đính kèm Hồ Sơ Đề Nghị Thanh Toán rồi
-    // mới "Chuyển Xác Nhận Thanh Toán" được (quyết định nghiệp vụ MỚI, thay thế yêu cầu tệp ở bước xác
-    // nhận cuối trước đây).
-    status: 'DRAFT',
-    currentStep: 0,
-    history: [],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
+  // "Thanh toán 1 lần" (ONE_TIME) — GIỮ NGUYÊN 100% hành vi cũ: 1 bản ghi duy nhất, 1 bộ "Hồ Sơ Đề Nghị
+  // Thanh Toán" chung, xác nhận lump-sum 1 lần cho toàn bộ các đợt (xem confirmPaymentRequestLumpSum()).
+  if (base.sourcePaymentType === 'ONE_TIME') {
+    return {
+      ...base,
+      // amount đi theo TỔNG các đợt thực tế gửi lên khi có override (khớp luật tạo thủ công) — không
+      // còn khoá cứng contract.amount, vì override cho phép kế toán khai lại khác giá trị tham khảo gốc.
+      // Vẫn CHO PHÉP lệch (không chặn) nhưng phải cảnh báo rõ cho người duyệt — xem amountMismatchesSource
+      // bên dưới, giữ nguyên referenceAmount (giá trị hợp đồng gốc) để client tự so sánh/hiển thị.
+      amount: overrideInstallments ? installments.reduce((s, it) => s + (it.amount || 0), 0) : contract.amount,
+      referenceAmount: contract.amount,
+      amountMismatchesSource: overrideInstallments
+        ? Math.abs(installments.reduce((s, it) => s + (it.amount || 0), 0) - contract.amount) > 1
+        : false,
+      installments,
+      // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) — đính kèm khi còn NHÁP (editPaymentRequest()), bắt buộc
+      // >=1 tệp lúc "Chuyển Xác Nhận Thanh Toán" (submitPaymentRequest()) — xem normalizePaymentRequestFiles().
+      requestFiles: normalizePaymentRequestFiles(overrides?.requestFiles),
+      cycleGroupId: null, cycleIndex: null, cycleTotal: null,
+      // LUÔN tạo NHÁP (currentStep/history chỉ khởi tạo THẬT lúc submitPaymentRequest(), DRAFT -> PENDING).
+      status: 'DRAFT', currentStep: 0, history: []
+    };
+  }
+  // Thanh toán định kỳ/hợp đồng cũ chưa có paymentType — MỖI ĐỢT tự đi hết quy trình riêng (đính kèm hồ
+  // sơ riêng, gửi duyệt riêng, xác nhận riêng) — xem splitPaymentDraftsByInstallment() bên dưới.
+  return splitPaymentDraftsByInstallment(base, installments);
+}
+
+// "Mỗi đợt tự đi hết quy trình riêng" (quyết định nghiệp vụ MỚI, xác nhận với người dùng qua
+// AskUserQuestion) — tách MỖI đợt thanh toán thành 1 bản ghi paymentRequests TOP-LEVEL riêng biệt, thay
+// vì lồng trạng thái riêng cho từng đợt bên trong 1 bản ghi (phương án đó đòi hỏi sửa lib/workflowEngine.js
+// — hạ tầng dùng CHUNG cho rất nhiều module khác, quá rủi ro). Mỗi bản ghi tách ra đi qua NGUYÊN VẸN,
+// KHÔNG sửa gì, luồng DRAFT (đính kèm "Hồ Sơ Đề Nghị Thanh Toán" riêng) -> submitPaymentRequest() (gửi
+// duyệt riêng) -> duyệt theo phòng (workflowEngine, cùng dept nên cấu hình duyệt giống hệt nhau giữa các
+// đợt) -> confirmPaymentInstallment() (xác nhận riêng) — 100% tái dùng code đã có, không sửa gì thêm.
+// cycleGroupId (chung 1 UUID cho cả lô)/cycleIndex (1-based)/cycleTotal (N) — dùng để hiển thị "Đợt X/Y"
+// gộp nhóm ở client, và để isCycleGroupFullyResolved() bên dưới biết khi nào CẢ lô đã xong (chỉ lúc đó
+// mới được ghi ngược paymentStatus về bản ghi nguồn — xem routes/records.js).
+function splitPaymentDraftsByInstallment(base, installments) {
+  const cycleGroupId = randomUUID();
+  const cycleTotal = installments.length;
+  return installments.map((inst, i) => ({
+    ...base,
+    amount: inst.amount || 0,
+    // referenceAmount/amountMismatchesSource (so tổng các đợt với giá trị nguồn) không còn ý nghĩa khi
+    // MỖI đợt là 1 bản ghi riêng biệt (không có "tổng các đợt" để so nữa) — bỏ, không phải thiếu sót.
+    referenceAmount: null,
+    amountMismatchesSource: false,
+    installments: [inst],
+    // Mỗi đợt tự đính kèm "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG (yêu cầu nghiệp vụ chính của thay đổi này) —
+    // luôn khởi tạo rỗng, KHÔNG kế thừa overrides?.requestFiles (nếu có, đó là bộ tệp CHUNG cho cả lô cũ,
+    // không còn khớp mô hình mới).
+    requestFiles: [],
+    cycleGroupId, cycleIndex: i + 1, cycleTotal,
+    status: 'DRAFT', currentStep: 0, history: []
+  }));
+}
+
+// Cả lô ("chu kỳ") thanh toán đã HOÀN TẤT (mọi bản ghi cùng cycleGroupId đều PAID) hay chưa — dùng để gác
+// việc ghi ngược paymentStatus về bản ghi nguồn (Hợp đồng/officeReqs) khi 1 đợt trong lô vừa PAID/bị xoá
+// (xem routes/records.js) — KHÔNG được ghi ngược ngay khi mới 1 đợt xong trong khi các đợt anh em (sibling)
+// khác của CÙNG lô vẫn còn dang dở, nếu không nguồn sẽ bị đánh dấu "đã xong"/"mở lại chu kỳ mới" sớm.
+// pr không có cycleGroupId (ONE_TIME, hoặc thủ công không qua nguồn) -> luôn coi là đã hoàn tất (hành vi
+// cũ, mỗi bản ghi tự đứng riêng, không có khái niệm lô).
+function isCycleGroupFullyResolved(pr, allPaymentRequests) {
+  if (!pr?.cycleGroupId) return true;
+  const list = Array.isArray(allPaymentRequests) ? allPaymentRequests : [];
+  return !list.some(other => other.id !== pr.id && other.cycleGroupId === pr.cycleGroupId && other.status !== 'PAID');
 }
 
 // Upload "Tài liệu ký" + bấm nút "Thanh toán" cho officeReqs (Mua Bán/Sửa Chữa/Đầu Tư, module "Tổng
@@ -1648,30 +1695,17 @@ function startOfficePayment(user, item, overrides) {
   item.paymentStatus = 'CHO_THANH_TOAN';
   const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
   const installments = overrideInstallments || buildPaymentInstallments(null, item.amount, 'Thanh toán toàn bộ giá trị đề xuất');
-  return {
+  const base = {
     sourceModule: item.subType, sourceId: item.id, sourceCode: item.code,
     dept: item.dept,
     title: (overrides?.title && String(overrides.title).trim()) || item.title,
-    amount: overrideInstallments ? installments.reduce((s, it) => s + (it.amount || 0), 0) : item.amount,
-    referenceAmount: item.amount,
-    amountMismatchesSource: overrideInstallments
-      ? Math.abs(installments.reduce((s, it) => s + (it.amount || 0), 0) - item.amount) > 1
-      : false,
-    installments,
-    requestFiles: normalizePaymentRequestFiles(overrides?.requestFiles),
     // officeReqs KHÔNG có khái niệm paymentType (Mua Bán/Sửa Chữa/Đầu Tư không có "1 lần"/"định kỳ") ->
-    // sourcePaymentType luôn null, đề nghị đi theo ĐÚNG chế độ xác nhận TỪNG ĐỢT như trước (an toàn/tương
-    // thích ngược — xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum() ở dưới).
+    // sourcePaymentType luôn null -> LUÔN tách mỗi đợt thành 1 quy trình riêng như "Thanh toán định kỳ"
+    // (xem splitPaymentDraftsByInstallment() ở trên) — officeReqs chưa từng có khái niệm ONE_TIME.
     sourcePaymentType: null,
-    // LUÔN tạo NHÁP — TRƯỚC ĐÂY officeReqs (Mua Bán/Sửa Chữa/Đầu Tư) tạo THẲNG PENDING (khác Hợp đồng),
-    // giờ đổi THỐNG NHẤT với mọi nguồn khác: phải qua "🗂️ Quản Lý Thanh Toán" đính kèm "Hồ Sơ Đề Nghị
-    // Thanh Toán" (multi-file) rồi mới "Chuyển Xác Nhận Thanh Toán" được (quyết định nghiệp vụ MỚI).
-    // currentStep/history chỉ khởi tạo THẬT lúc submitPaymentRequest() (DRAFT -> PENDING).
-    status: 'DRAFT',
-    currentStep: 0,
-    history: [],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
+  return splitPaymentDraftsByInstallment(base, installments);
 }
 
 // ===================== THANH TOÁN (module "Tổng Hợp" > "Thanh toán") =====================
@@ -1717,6 +1751,12 @@ function editPaymentRequest(payload, user, pr) {
     if (!installments.length) throw new HttpError(400, 'Cần ít nhất 1 đợt thanh toán');
     if (!isDraft && installments.some(it => !(Number(it?.amount) > 0))) {
       throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
+    }
+    // Đề nghị đã bị TÁCH theo lô (pr.cycleGroupId, xem splitPaymentDraftsByInstallment()) — mỗi bản ghi
+    // ĐÚNG 1 đợt, tự đi hết quy trình riêng. Không cho sửa thành nhiều/không đợt, phá vỡ bất biến "1 bản
+    // ghi = 1 đợt" mà isCycleGroupFullyResolved() và toàn bộ luồng xác nhận riêng dựa vào.
+    if (pr.cycleGroupId && installments.length !== 1) {
+      throw new HttpError(400, 'Đề nghị thanh toán theo đợt (đã tách riêng) chỉ có đúng 1 đợt thanh toán, không thể thêm/bớt đợt ở đây');
     }
   }
   for (const field of PAYMENT_EDITABLE_FIELDS) {
@@ -6027,7 +6067,7 @@ module.exports = {
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
   canManagePaymentRequests, canEditPaymentRequest, editPaymentRequest, submitPaymentRequest, requestPaymentInfo,
   confirmPaymentInstallment, confirmPaymentRequestLumpSum, assertCanDeletePaymentRequest, computePaymentInstallmentDeadlineStatus,
-  computePaymentRequestOverallStatus, countPaymentInstallmentWarnings,
+  computePaymentRequestOverallStatus, countPaymentInstallmentWarnings, isCycleGroupFullyResolved,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,

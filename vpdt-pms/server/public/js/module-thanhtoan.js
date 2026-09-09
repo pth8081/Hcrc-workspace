@@ -192,21 +192,40 @@ async function submitManualPaymentRequest(e) {
     }
   }
 
-  let newPr;
+  let newPrs = [];
   let updatedSourceItem = null;
   try {
     if (sourceType === 'MANUAL') {
-      const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles });
-      newPr = result.item;
+      // "Mỗi đợt tự đi hết quy trình riêng" — tạo thủ công CŨNG áp dụng: >1 đợt thì tách thành N lượt gọi
+      // /api/create/paymentRequests riêng (server chỉ tạo 1 bản ghi/lượt, xem lib/createValidation.js),
+      // mỗi bản ghi đúng 1 đợt, chung 1 cycleGroupId sinh ngay ở CLIENT (server không tự sinh cho đường
+      // tạo thủ công — khớp validateAndPrepareCreate() cho phép field lạ đi qua nguyên vẹn). Chỉ 1 đợt thì
+      // giữ nguyên hành vi cũ (1 bản ghi, không cycleGroupId, giữ requestFiles đã tải sẵn nếu có).
+      if (installments.length > 1) {
+        const cycleGroupId = crypto.randomUUID();
+        for (let i = 0; i < installments.length; i++) {
+          const result = await callCreateAction('paymentRequests', {
+            dept, title, installments: [installments[i]], requestFiles: [],
+            cycleGroupId, cycleIndex: i + 1, cycleTotal: installments.length
+          });
+          newPrs.push(result.item);
+        }
+        if (requestFiles.length) {
+          alert('ℹ️ Đề nghị thanh toán theo đợt: mỗi đợt cần đính kèm "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG — tệp vừa chọn chưa được gắn vào đợt nào, vui lòng đính kèm cho từng đợt ở "🗂️ Quản Lý Thanh Toán".');
+        }
+      } else {
+        const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles });
+        newPrs = [result.item];
+      }
     } else {
       const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments, requestFiles });
-      newPr = result.paymentRequest;
+      newPrs = result.paymentRequests || (result.paymentRequest ? [result.paymentRequest] : []);
       updatedSourceItem = result.item;
     }
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
-  DB.paymentRequests.unshift(newPr);
+  newPrs.slice().reverse().forEach(pr => DB.paymentRequests.unshift(pr));
   if (updatedSourceItem) {
     const coll = sourceType === 'CONTRACT' ? DB.contracts : DB.officeReqs;
     const idx = coll.findIndex(x => x.id === updatedSourceItem.id);
@@ -214,10 +233,11 @@ async function submitManualPaymentRequest(e) {
     renderContracts();
     renderOfficeReqs();
   }
-  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Lập nháp đề nghị thanh toán ${sourceType === 'MANUAL' ? 'thủ công' : `từ nguồn [${PAYMENT_SOURCE_LABELS[sourceType] || sourceType}]`} [${title}]`, 'SUCCESS', String(newPr.id));
+  const firstPr = newPrs[0];
+  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Lập nháp ${newPrs.length > 1 ? newPrs.length + ' đề nghị thanh toán theo đợt' : 'đề nghị thanh toán'} ${sourceType === 'MANUAL' ? 'thủ công' : `từ nguồn [${PAYMENT_SOURCE_LABELS[sourceType] || sourceType}]`} [${title}]`, 'SUCCESS', String(firstPr.id));
   alert('✅ Đã lập đề nghị thanh toán (nháp) — vào "🗂️ Quản Lý Thanh Toán" để đính kèm đủ Hồ Sơ Đề Nghị Thanh Toán rồi "Chuyển Xác Nhận Thanh Toán".');
   cancelEditPaymentRequest();
-  managePaymentExpandedId = newPr.id;
+  managePaymentExpandedId = firstPr.id;
   setPaymentSubTab('MANAGE');
 }
 
@@ -302,6 +322,15 @@ const PAYMENT_INSTALLMENT_DEADLINE_BADGE = {
   QUA_HAN: '<span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px]">🔴 Quá hạn</span>',
   SAP_DEN_HAN: '<span class="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">🟡 Sắp đến hạn</span>'
 };
+// "Mỗi đợt tự đi hết quy trình riêng" — pr.cycleGroupId/cycleIndex/cycleTotal (splitPaymentDraftsByInstallment(),
+// lib/recordActions.js) đánh dấu đề nghị này là 1 trong N bản ghi TÁCH RIÊNG của cùng 1 lô/chu kỳ thanh
+// toán — hiện badge "Đợt X/Y" để người dùng biết đây chỉ là 1 phần của cả lô (các đợt khác đi qua quy
+// trình duyệt/xác nhận HOÀN TOÀN riêng, có thể đang ở trạng thái khác nhau).
+function paymentCycleBadgeHTML(pr) {
+  if (!pr?.cycleGroupId || !pr.cycleTotal || pr.cycleTotal <= 1) return '';
+  return `<span class="inline-block px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[10px]">🔗 Đợt ${pr.cycleIndex}/${pr.cycleTotal}</span>`;
+}
+
 function paymentInstallmentDeadlineBadge(installment) {
   if (installment?.confirmed) return '<span class="inline-block px-1.5 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[10px]">✅ Đã thanh toán</span>';
   return PAYMENT_INSTALLMENT_DEADLINE_BADGE[computePaymentInstallmentDeadlineStatusClient(installment)] || '';
@@ -543,7 +572,7 @@ function renderPaymentManageTab() {
       <div class="bg-white p-3 rounded border space-y-2">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <div class="font-bold text-gray-800">${PAYMENT_SOURCE_LABELS[pr.sourceModule] || pr.sourceModule}${pr.sourceCode ? ` — <span class="font-mono text-xs">${escapeHtml(pr.sourceCode)}</span>` : ''}</div>
+            <div class="font-bold text-gray-800">${PAYMENT_SOURCE_LABELS[pr.sourceModule] || pr.sourceModule}${pr.sourceCode ? ` — <span class="font-mono text-xs">${escapeHtml(pr.sourceCode)}</span>` : ''} ${paymentCycleBadgeHTML(pr)}</div>
             <div class="text-sm text-gray-700">${escapeHtml(pr.title)}</div>
             <div class="text-xs text-gray-500">Phòng ban: ${escapeHtml(pr.dept)} | Tổng hiện tại: ${totalAmount.toLocaleString('vi-VN')} VNĐ</div>
             ${paymentWarningCountsHTML(pr)}
@@ -637,7 +666,7 @@ function renderPaymentRequests() {
     `).join('');
     return `
       <tr class="hover:bg-gray-50 border-b align-top">
-        <td class="border p-2 font-bold">${PAYMENT_SOURCE_LABELS[pr.sourceModule] || pr.sourceModule}${pr.sourceCode ? `<div class="text-[10px] text-gray-500 font-normal font-mono">${escapeHtml(pr.sourceCode)}</div>` : ''}</td>
+        <td class="border p-2 font-bold">${PAYMENT_SOURCE_LABELS[pr.sourceModule] || pr.sourceModule}${pr.sourceCode ? `<div class="text-[10px] text-gray-500 font-normal font-mono">${escapeHtml(pr.sourceCode)}</div>` : ''}${pr.cycleGroupId ? `<div class="mt-1">${paymentCycleBadgeHTML(pr)}</div>` : ''}</td>
         <td class="border p-2">${escapeHtml(pr.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(pr.title)}</span></td>
         <td class="border p-2">
           <div class="font-bold text-purple-700">${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ</div>
@@ -737,9 +766,20 @@ function deletePaymentRequestAction(id) {
       try {
         await callRecordAction('paymentRequests', id, 'delete', {});
       } catch (err) { return alert(`⛔ ${err.message}`); }
+      // v15.5 — đồng bộ cục bộ ĐÚNG như routes/records.js vừa ghi: chỉ trả nguồn (Hợp đồng/officeReqs) về
+      // CHUA_THANH_TOAN khi CẢ LÔ (mọi bản ghi cùng cycleGroupId) đã PAID hết (isCycleGroupFullyResolvedClient()) —
+      // không phải cứ xoá 1 bản ghi/đợt là revert ngay, trong khi đợt anh em khác vẫn còn dang dở.
+      if (pr.sourceModule && pr.sourceId != null && isCycleGroupFullyResolvedClient(pr)) {
+        const coll = pr.sourceModule === 'CONTRACT' ? DB.contracts : DB.officeReqs;
+        const src = coll.find(x => x.id === pr.sourceId);
+        if (src && src.paymentStatus === 'CHO_THANH_TOAN') src.paymentStatus = 'CHUA_THANH_TOAN';
+      }
       DB.paymentRequests = DB.paymentRequests.filter(x => x.id !== id);
       logSystemAction('OFFICE', 'DELETE_PAYMENT_REQUEST', `Xoá đề nghị thanh toán [${pr.title}]`, 'SUCCESS', String(id));
       renderPaymentRequests();
+      renderPaymentManageTab();
+      if (activeContractSubTab) renderContracts();
+      if (activeOfficeSubTab && activeOfficeSubTab !== 'PAYMENT') renderOfficeReqs();
     }
   });
 }
@@ -792,21 +832,35 @@ function confirmPaymentRequestLumpSumAction(id) {
 // Đủ hết các đợt (hoặc xác nhận lump-sum) thì server tự chuyển PAID (justCompleted=true) và đã ghi ngược
 // paymentStatus vào bản ghi nguồn; client chỉ cần đồng bộ lại cục bộ để UI cập nhật ngay, không cần tải
 // lại trang. Dùng chung cho cả 2 đường xác nhận (từng đợt/toàn bộ) ở trên.
+// v15.5 — bản sao client-side của isCycleGroupFullyResolved() (lib/recordActions.js, LƯU Ý BẢO TRÌ: sửa
+// 1 bên phải sửa cả 2 bên): đề nghị đã TÁCH theo lô (cycleGroupId) chỉ coi là "cả lô đã xong" khi KHÔNG
+// còn bản ghi anh em nào (cùng cycleGroupId) chưa PAID — dùng để đồng bộ cục bộ paymentStatus của nguồn
+// (Hợp đồng/officeReqs) ĐÚNG như server vừa ghi (routes/records.js), không phải luôn ghi ngay khi CHỈ 1
+// bản ghi/đợt vừa xong.
+function isCycleGroupFullyResolvedClient(pr) {
+  if (!pr?.cycleGroupId) return true;
+  return !(DB.paymentRequests || []).some(other => other.id !== pr.id && other.cycleGroupId === pr.cycleGroupId && other.status !== 'PAID');
+}
+
 function applyPaymentConfirmResult(updated, justCompleted, logDetail) {
   const idx = DB.paymentRequests.findIndex(x => x.id === updated.id);
   if (idx !== -1) DB.paymentRequests[idx] = updated;
   logSystemAction('OFFICE', 'CONFIRM_PAYMENT_INSTALLMENT', logDetail, 'SUCCESS', String(updated.id));
   if (justCompleted) {
-    if (updated.sourceModule === 'CONTRACT') {
-      const c = DB.contracts.find(x => x.id === updated.sourceId);
-      // Khớp ĐÚNG logic ghi ngược ở routes/records.js: hợp đồng "Thanh toán định kỳ" (PERIODIC) trả
-      // về CHUA_THANH_TOAN (mở lại chu kỳ mới) thay vì DA_THANH_TOAN (khoá cứng) như "Thanh toán 1
-      // lần" — trước đây (chưa có paymentType) luôn cứng DA_THANH_TOAN, giờ phải tính theo ĐÚNG loại
-      // hợp đồng để đồng bộ cục bộ khớp với server, không cần tải lại trang mới thấy đúng.
-      if (c) c.paymentStatus = c.paymentType === 'PERIODIC' ? 'CHUA_THANH_TOAN' : 'DA_THANH_TOAN';
-    } else if (updated.sourceId != null) {
-      const o = DB.officeReqs.find(x => x.id === updated.sourceId);
-      if (o) o.paymentStatus = 'DA_THANH_TOAN';
+    // Chỉ đồng bộ cục bộ paymentStatus của nguồn khi CẢ LÔ đã PAID hết (isCycleGroupFullyResolvedClient())
+    // — đề nghị ONE_TIME/thủ công (không cycleGroupId) luôn coi là đã hoàn tất, hành vi cũ không đổi.
+    if (isCycleGroupFullyResolvedClient(updated)) {
+      if (updated.sourceModule === 'CONTRACT') {
+        const c = DB.contracts.find(x => x.id === updated.sourceId);
+        // Khớp ĐÚNG logic ghi ngược ở routes/records.js: hợp đồng "Thanh toán định kỳ" (PERIODIC) trả
+        // về CHUA_THANH_TOAN (mở lại chu kỳ mới) thay vì DA_THANH_TOAN (khoá cứng) như "Thanh toán 1
+        // lần" — trước đây (chưa có paymentType) luôn cứng DA_THANH_TOAN, giờ phải tính theo ĐÚNG loại
+        // hợp đồng để đồng bộ cục bộ khớp với server, không cần tải lại trang mới thấy đúng.
+        if (c) c.paymentStatus = c.paymentType === 'PERIODIC' ? 'CHUA_THANH_TOAN' : 'DA_THANH_TOAN';
+      } else if (updated.sourceId != null) {
+        const o = DB.officeReqs.find(x => x.id === updated.sourceId);
+        if (o) o.paymentStatus = 'DA_THANH_TOAN';
+      }
     }
     alert('✅ Thanh toán thành công! Đề nghị đã hoàn tất tất cả các đợt.');
   }

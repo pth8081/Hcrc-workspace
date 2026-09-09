@@ -125,6 +125,20 @@ router.post('/contracts/:id/reject-payment-type-change', async (req, res) => {
   }
 });
 
+// "Mỗi đợt tự đi hết quy trình riêng" (Thanh toán định kỳ/officeReqs/thủ công) — startContractPayment()/
+// startOfficePayment() giờ có thể trả về 1 MẢNG bản ghi nháp (mỗi đợt 1 bản ghi riêng, cùng cycleGroupId,
+// xem lib/recordActions.js splitPaymentDraftsByInstallment()) thay vì 1 object đơn (chỉ còn ONE_TIME giữ
+// nguyên object đơn) — hàm dùng chung dưới đây tạo đủ N bản ghi, "id: Date.now() + i" tránh trùng id khi
+// tạo nhiều bản ghi trong CÙNG 1 millisecond.
+async function createPaymentRequestsFromDraft(draft) {
+  const drafts = Array.isArray(draft) ? draft : [draft];
+  const created = [];
+  for (let i = 0; i < drafts.length; i++) {
+    created.push(await createForCollection('paymentRequests', () => ({ ...drafts[i], id: Date.now() + i })));
+  }
+  return created;
+}
+
 // "Chuyển Sang Thanh Toán" KHÔNG dùng withContractAction() thường — mutatorFn trả về BẢN NHÁP đề nghị
 // thanh toán (chưa lưu) thay vì bản ghi hợp đồng, PHẢI insert thêm vào collection paymentRequests
 // ngay sau khi khoá hợp đồng nhả ra (cùng khuôn insertMinutesTasks() ở /minutes/:id/assign-tasks bên
@@ -140,8 +154,8 @@ router.post('/contracts/:id/start-payment', async (req, res) => {
       draft = recordActions.startContractPayment(freshUser, item);
       return item;
     });
-    const paymentRequest = await createForCollection('paymentRequests', () => ({ ...draft, id: Date.now() }));
-    res.json({ ok: true, item: result, paymentRequest });
+    const paymentRequests = await createPaymentRequestsFromDraft(draft);
+    res.json({ ok: true, item: result, paymentRequest: paymentRequests[0], paymentRequests });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/start-payment`, err);
   }
@@ -175,8 +189,8 @@ router.post('/officeReqs/:id/start-payment', async (req, res) => {
       draft = recordActions.startOfficePayment(freshUser, item);
       return item;
     });
-    const paymentRequest = await createForCollection('paymentRequests', () => ({ ...draft, id: Date.now() }));
-    res.json({ ok: true, item: result, paymentRequest });
+    const paymentRequests = await createPaymentRequestsFromDraft(draft);
+    res.json({ ok: true, item: result, paymentRequest: paymentRequests[0], paymentRequests });
   } catch (err) {
     handleError(res, `officeReqs/${req.params.id}/start-payment`, err);
   }
@@ -225,8 +239,8 @@ router.post('/paymentRequests/from-source', async (req, res) => {
     } else {
       return res.status(400).json({ error: 'Loại đề nghị không hợp lệ' });
     }
-    const paymentRequest = await createForCollection('paymentRequests', () => ({ ...draft, id: Date.now() }));
-    res.json({ ok: true, item: result, paymentRequest });
+    const paymentRequests = await createPaymentRequestsFromDraft(draft);
+    res.json({ ok: true, item: result, paymentRequest: paymentRequests[0], paymentRequests });
   } catch (err) {
     handleError(res, 'paymentRequests/from-source', err);
   }
@@ -279,11 +293,17 @@ router.post('/paymentRequests/:id/delete', async (req, res) => {
       deletedPr = item;
     }, { username: freshUser.username, name: freshUser.name });
     if (deletedPr && deletedPr.sourceModule && deletedPr.sourceId != null) {
-      const sourceCollection = deletedPr.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
-      await withLockedRecordForCollection(sourceCollection, deletedPr.sourceId, (item) => {
-        if (item.paymentStatus === 'CHO_THANH_TOAN') item.paymentStatus = 'CHUA_THANH_TOAN';
-        return item;
-      }).catch(() => {}); // nguồn có thể đã bị xoá — không chặn việc xoá đề nghị thanh toán hợp lệ
+      // Đề nghị đã bị TÁCH theo lô (cycleGroupId) — chỉ trả nguồn về CHUA_THANH_TOAN khi CẢ lô đã hoàn tất
+      // (không còn đợt anh em nào dang dở), tránh mở lại nguồn quá sớm trong khi các đợt khác của CÙNG chu
+      // kỳ vẫn đang chờ duyệt/xác nhận (xem isCycleGroupFullyResolved() ở lib/recordActions.js).
+      const allPrs = await getAllForCollection('paymentRequests');
+      if (recordActions.isCycleGroupFullyResolved(deletedPr, allPrs)) {
+        const sourceCollection = deletedPr.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
+        await withLockedRecordForCollection(sourceCollection, deletedPr.sourceId, (item) => {
+          if (item.paymentStatus === 'CHO_THANH_TOAN') item.paymentStatus = 'CHUA_THANH_TOAN';
+          return item;
+        }).catch(() => {}); // nguồn có thể đã bị xoá — không chặn việc xoá đề nghị thanh toán hợp lệ
+      }
     }
     res.json({ ok: true });
   } catch (err) {
@@ -310,7 +330,13 @@ async function withPaymentConfirmAction(req, res, action, mutatorFn) {
       justCompleted = outcome.justCompleted;
       return outcome.item;
     });
-    if (justCompleted && result.sourceModule && result.sourceId != null) {
+    // Đề nghị đã bị TÁCH theo lô (cycleGroupId) — CHỈ 1 đợt vừa PAID xong, KHÔNG có nghĩa cả chu kỳ đã
+    // xong (các đợt anh em khác cùng cycleGroupId có thể còn đang DRAFT/PENDING/APPROVED) — ghi ngược
+    // paymentStatus về nguồn CHỈ khi isCycleGroupFullyResolved() xác nhận không còn đợt nào dang dở (đề
+    // nghị ONE_TIME/thủ công không có cycleGroupId luôn coi là đã hoàn tất, giữ nguyên hành vi cũ).
+    const cycleResolved = justCompleted && (await getAllForCollection('paymentRequests').then(
+      list => recordActions.isCycleGroupFullyResolved(result, list)));
+    if (cycleResolved && result.sourceModule && result.sourceId != null) {
       const sourceCollection = result.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
       await withLockedRecordForCollection(sourceCollection, result.sourceId, (item) => {
         // Hợp đồng "Thanh toán định kỳ" (paymentType === 'PERIODIC') — 1 chu kỳ hoàn tất KHÔNG khoá cứng

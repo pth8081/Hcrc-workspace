@@ -1387,20 +1387,24 @@ function startContractPaymentAction(id) {
     bodyHTML: `Chuyển hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) sang trạng thái "Chờ thanh toán" và lập đề nghị thanh toán?`,
     confirmLabel: 'Lập Thanh Toán',
     onConfirm: async () => {
-      let updated, paymentRequest;
+      // "Thanh toán định kỳ"/hợp đồng cũ chưa có paymentType — server (splitPaymentDraftsByInstallment(),
+      // lib/recordActions.js) giờ trả về NHIỀU bản ghi nháp (1 bản ghi/đợt, cùng cycleGroupId) thay vì 1
+      // — "Thanh toán 1 lần" vẫn CHỈ 1 bản ghi như cũ. result.paymentRequests LUÔN là mảng (kể cả 1 phần
+      // tử), paymentRequest (số ít) giữ để tương thích ngược chỗ nào còn đọc field cũ.
+      let updated, paymentRequests;
       try {
         const result = await callRecordAction('contracts', id, 'start-payment', {});
         updated = result.item;
-        paymentRequest = result.paymentRequest;
+        paymentRequests = result.paymentRequests || (result.paymentRequest ? [result.paymentRequest] : []);
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
       const idx = DB.contracts.findIndex(x => x.id === id);
       if (idx !== -1) DB.contracts[idx] = updated;
-      if (paymentRequest) DB.paymentRequests.unshift(paymentRequest);
-      logSystemAction('CONTRACT', 'START_CONTRACT_PAYMENT', `Chuyển hợp đồng [${updated.code}] sang chờ thanh toán (lập đề nghị nháp)`, 'SUCCESS', updated.code);
+      paymentRequests.slice().reverse().forEach(pr => DB.paymentRequests.unshift(pr));
+      logSystemAction('CONTRACT', 'START_CONTRACT_PAYMENT', `Chuyển hợp đồng [${updated.code}] sang chờ thanh toán (lập ${paymentRequests.length > 1 ? paymentRequests.length + ' đề nghị nháp theo đợt' : 'đề nghị nháp'})`, 'SUCCESS', updated.code);
       renderContracts();
-      pendingManagePaymentFocusId = paymentRequest ? paymentRequest.id : null;
+      pendingManagePaymentFocusId = paymentRequests[0] ? paymentRequests[0].id : null;
       switchTab('office');
       setOfficeSubTab('PAYMENT');
       setPaymentSubTab('MANAGE');
@@ -1416,23 +1420,26 @@ function startOfficePaymentAction(id) {
     bodyHTML: `Chuyển đề xuất "<b>${escapeHtml(o.title)}</b>" (${escapeHtml(o.code)}) sang trạng thái "Chờ thanh toán"?`,
     confirmLabel: 'Chuyển Thanh Toán',
     onConfirm: async () => {
-      let updated, paymentRequest;
+      // officeReqs KHÔNG có khái niệm ONE_TIME — startOfficePayment() LUÔN tách mỗi đợt thành 1 bản ghi
+      // nháp riêng (splitPaymentDraftsByInstallment(), cùng cycleGroupId) — xem chú thích tương tự ở
+      // startContractPaymentAction() phía trên.
+      let updated, paymentRequests;
       try {
         const result = await callRecordAction('officeReqs', id, 'start-payment', {});
         updated = result.item;
-        paymentRequest = result.paymentRequest;
+        paymentRequests = result.paymentRequests || (result.paymentRequest ? [result.paymentRequest] : []);
       } catch (err) {
         return alert(`⛔ ${err.message}`);
       }
       const idx = DB.officeReqs.findIndex(x => x.id === id);
       if (idx !== -1) DB.officeReqs[idx] = updated;
-      if (paymentRequest) DB.paymentRequests.unshift(paymentRequest);
-      logSystemAction('OFFICE', 'START_OFFICE_PAYMENT', `Chuyển đề xuất [${updated.code}] sang chờ thanh toán (lập đề nghị nháp)`, 'SUCCESS', updated.code);
+      paymentRequests.slice().reverse().forEach(pr => DB.paymentRequests.unshift(pr));
+      logSystemAction('OFFICE', 'START_OFFICE_PAYMENT', `Chuyển đề xuất [${updated.code}] sang chờ thanh toán (lập ${paymentRequests.length > 1 ? paymentRequests.length + ' đề nghị nháp theo đợt' : 'đề nghị nháp'})`, 'SUCCESS', updated.code);
       renderOfficeReqs();
       // startOfficePayment() giờ LUÔN tạo NHÁP (khớp đúng Hợp đồng ở trên) — điều hướng sang "🗂️ Quản Lý
       // Thanh Toán" để đính kèm "Hồ Sơ Đề Nghị Thanh Toán" rồi "Chuyển Xác Nhận Thanh Toán", thay vì nằm
       // im trong danh sách officeReqs (TRƯỚC ĐÂY đi thẳng PENDING nên không cần điều hướng).
-      pendingManagePaymentFocusId = paymentRequest ? paymentRequest.id : null;
+      pendingManagePaymentFocusId = paymentRequests[0] ? paymentRequests[0].id : null;
       switchTab('office');
       setOfficeSubTab('PAYMENT');
       setPaymentSubTab('MANAGE');

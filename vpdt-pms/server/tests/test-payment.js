@@ -102,6 +102,17 @@ async function run() {
       return pr ? { id: pr.id, status: pr.status, installments: pr.installments, sourceModule: pr.sourceModule, sourceId: pr.sourceId } : null;
     });
   }
+  // v15.5 — "mỗi đợt tự đi hết quy trình riêng": tìm TOÀN BỘ bản ghi paymentRequests tách ra từ 1 nguồn
+  // (khớp splitPaymentDraftsByInstallment(), lib/recordActions.js) — KHÔNG dựa vào vị trí trong mảng
+  // (DB.paymentRequests[0]/[1]) vì đơn hàng có thể thay đổi theo thời gian tạo, chỉ lọc theo sourceModule/
+  // sourceId (an toàn hơn cho các bước sau khi CẢ 2 record cùng nguồn còn tồn tại song song).
+  async function readPrsBySource(sourceModule, sourceId) {
+    return page.evaluate(({ sourceModule, sourceId }) =>
+      DB.paymentRequests.filter((p) => p.sourceModule === sourceModule && p.sourceId === sourceId).map((pr) => ({
+        id: pr.id, status: pr.status, installments: pr.installments, dept: pr.dept, amount: pr.amount,
+        cycleGroupId: pr.cycleGroupId, cycleIndex: pr.cycleIndex, cycleTotal: pr.cycleTotal, sourcePaymentType: pr.sourcePaymentType
+      })), { sourceModule, sourceId });
+  }
 
   const assetDir = path.join(__dirname, '.tmp-assets');
   fs.mkdirSync(assetDir, { recursive: true });
@@ -293,13 +304,21 @@ async function run() {
     }, contractA.id);
     check('Gọi thẳng lại start-payment cho hợp đồng ONE_TIME đã PAID -> server chặn 409', !oneTimeReopenBlocked.ok && oneTimeReopenBlocked.message.includes('chưa thanh toán'), oneTimeReopenBlocked);
 
-    // ============ Kịch bản 8 (hợp đồng "Thanh toán định kỳ"): chu kỳ 1 hoàn tất -> paymentStatus TRẢ VỀ
-    // "Chưa thanh toán" -> "🧾 Lập Thanh Toán" mở lại -> chu kỳ 2 bắt đầu thành công ============
+    // ============ Kịch bản 8 (v15.5 — "mỗi đợt tự đi hết quy trình riêng"): hợp đồng "Thanh toán định kỳ"
+    // -> "🧾 Lập Thanh Toán" giờ TÁCH mỗi đợt thành 1 bản ghi paymentRequests RIÊNG (cùng cycleGroupId),
+    // mỗi bản ghi tự đính kèm hồ sơ/gửi duyệt/xác nhận ĐỘC LẬP — nguồn CHỈ ghi ngược paymentStatus khi CẢ
+    // lô đã PAID hết (isCycleGroupFullyResolved(), lib/recordActions.js), KHÔNG phải ngay khi đợt đầu xong
+    // ============
     await loginAs('kd1');
     await page.evaluate((id) => startContractPaymentAction(id), contractD.id);
     await confirmPending();
-    const cycle1 = await readLatestPr();
-    check('Hợp đồng ĐỊNH KỲ (D) — "🧾 Lập Thanh Toán" chu kỳ 1 -> tạo đề nghị NHÁP thành công', cycle1.status === 'DRAFT' && cycle1.sourceModule === 'CONTRACT' && cycle1.sourceId === contractD.id, cycle1);
+    const d1Records = await readPrsBySource('CONTRACT', contractD.id);
+    check('Hợp đồng ĐỊNH KỲ (D) — "🧾 Lập Thanh Toán" TÁCH thành đúng 2 bản ghi NHÁP riêng (1 bản ghi/đợt)', d1Records.length === 2 && d1Records.every((p) => p.status === 'DRAFT'), d1Records);
+    const d1Inst1 = d1Records.find((p) => p.installments[0].amount === 30000000);
+    const d1Inst2 = d1Records.find((p) => p.installments[0].amount === 20000000);
+    check('Cả 2 bản ghi tách ra đều chỉ mang ĐÚNG 1 đợt, chung 1 cycleGroupId, cycleTotal=2, cycleIndex phân biệt 1/2', !!d1Inst1 && !!d1Inst2 && d1Inst1.installments.length === 1 && d1Inst2.installments.length === 1 && d1Inst1.cycleGroupId === d1Inst2.cycleGroupId && !!d1Inst1.cycleGroupId && d1Inst1.cycleTotal === 2 && d1Inst2.cycleTotal === 2 && d1Inst1.cycleIndex === 1 && d1Inst2.cycleIndex === 2, { d1Inst1, d1Inst2 });
+    const contractDAfterStart = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
+    check('Hợp đồng ĐỊNH KỲ chuyển CHO_THANH_TOAN ngay sau khi tách 2 đợt', contractDAfterStart === 'CHO_THANH_TOAN', contractDAfterStart);
 
     const midFlightBlocked = await page.evaluate(async (id) => {
       try { await callRecordAction('contracts', id, 'start-payment', {}); return { ok: true }; }
@@ -307,62 +326,137 @@ async function run() {
     }, contractD.id);
     check('Hợp đồng ĐỊNH KỲ đang CHO_THANH_TOAN (chu kỳ dở dang) -> "🧾 Lập Thanh Toán" lần 2 bị chặn 409 (không cho song song 2 chu kỳ)', !midFlightBlocked.ok && midFlightBlocked.message.includes('chưa thanh toán'), midFlightBlocked);
 
-    check('Chu kỳ 1 (định kỳ) mang ĐÚNG 2 đợt đã khai của hợp đồng nguồn', cycle1.installments.length === 2, cycle1.installments);
-    await attachRequestFilesInManage(cycle1.id, [requestFile1]);
-    await page.evaluate((id) => submitPaymentRequestAction(id), cycle1.id);
+    // editPaymentRequest() guard MỚI — bản ghi đã tách (cycleGroupId) chỉ được ĐÚNG 1 đợt, không thêm/bớt.
+    const splitEditGuardBlocked = await page.evaluate(async (id) => {
+      try {
+        await callRecordAction('paymentRequests', id, 'edit', { installments: [{ description: 'Đợt A', amount: 10000, dueDate: '' }, { description: 'Đợt B', amount: 10000, dueDate: '' }] });
+        return { ok: true };
+      } catch (err) { return { ok: false, message: err.message }; }
+    }, d1Inst1.id);
+    check('Bản ghi đã TÁCH theo lô -> sửa thành 2 đợt bị server chặn 400 ("chỉ có đúng 1 đợt thanh toán")', !splitEditGuardBlocked.ok && splitEditGuardBlocked.message.includes('1 đợt'), splitEditGuardBlocked);
+
+    // ---- Đợt 1/2: đính kèm hồ sơ RIÊNG, gửi duyệt RIÊNG, xác nhận RIÊNG ----
+    await attachRequestFilesInManage(d1Inst1.id, [requestFile1]);
+    await page.evaluate((id) => submitPaymentRequestAction(id), d1Inst1.id);
     await confirmPending();
     await page.waitForTimeout(200);
-    const cycle1AfterSubmit = await readPr(cycle1.id);
-    check('Chu kỳ 1 (định kỳ), sau khi đính kèm Hồ Sơ Đề Nghị Thanh Toán -> "Chuyển Xác Nhận Thanh Toán" thành công (PENDING)', cycle1AfterSubmit.status === 'PENDING', cycle1AfterSubmit.status);
+    const d1Inst1AfterSubmit = await readPr(d1Inst1.id);
+    check('Đợt 1/2 (định kỳ), sau khi đính kèm Hồ Sơ Đề Nghị Thanh Toán RIÊNG -> "Chuyển Xác Nhận Thanh Toán" thành công (PENDING)', d1Inst1AfterSubmit.status === 'PENDING', d1Inst1AfterSubmit.status);
+    check('Đợt 2/2 KHÔNG bị ảnh hưởng bởi việc gửi đợt 1 -> vẫn DRAFT, KHÔNG kế thừa tệp của đợt 1', (await readPr(d1Inst2.id)).status === 'DRAFT' && (await readPr(d1Inst2.id)).requestFiles.length === 0, await readPr(d1Inst2.id));
 
     await loginAs('tp_kd');
     await goToPaymentApprove();
-    await page.evaluate((id) => approvePaymentRequestAction(id), cycle1.id);
+    await page.evaluate((id) => approvePaymentRequestAction(id), d1Inst1.id);
     await confirmPending();
-    const cycle1Approved = await readPr(cycle1.id);
-    check('Chu kỳ 1 (định kỳ) -> tp_kd duyệt theo phòng ban thành công (APPROVED)', cycle1Approved.status === 'APPROVED', cycle1Approved.status);
-    check('Chu kỳ 1 (định kỳ) -> sourcePaymentType chụp đúng "PERIODIC"', cycle1Approved.sourcePaymentType === 'PERIODIC', cycle1Approved.sourcePaymentType);
+    const d1Inst1Approved = await readPr(d1Inst1.id);
+    check('Đợt 1/2 (định kỳ) -> tp_kd duyệt theo phòng ban thành công (APPROVED)', d1Inst1Approved.status === 'APPROVED', d1Inst1Approved.status);
+    check('Đợt 1/2 (định kỳ) -> sourcePaymentType chụp đúng "PERIODIC"', d1Inst1Approved.sourcePaymentType === 'PERIODIC', d1Inst1Approved.sourcePaymentType);
 
     await loginAs('ketoan1');
     await goToPaymentApprove();
-
     const lumpBlockedOnPeriodic = await page.evaluate(async (id) => {
       try { await callRecordAction('paymentRequests', id, 'confirm-lump-sum', {}); return { ok: true }; }
       catch (err) { return { ok: false, message: err.message }; }
-    }, cycle1.id);
+    }, d1Inst1.id);
     check('Đề nghị PERIODIC — xác nhận TOÀN BỘ 1 lần (confirm-lump-sum) bị chặn 409 ("chỉ đề nghị thanh toán 1 lần")', !lumpBlockedOnPeriodic.ok && lumpBlockedOnPeriodic.message.includes('1 lần'), lumpBlockedOnPeriodic);
 
-    // Xác nhận đợt 1/2 ĐÚNG luồng UI thật (không cần tệp nữa) -> CHƯA đủ để chuyển PAID.
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), cycle1.id);
+    // Xác nhận đợt 1/2 (index 0 — mỗi bản ghi tách ra CHỈ có đúng 1 đợt tại index 0) -> đợt này PAID, NHƯNG
+    // đợt 2/2 (record khác) vẫn DRAFT -> nguồn PHẢI CHỜ, không ghi ngược sớm (đúng lỗi v15.3 cần fix).
+    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), d1Inst1.id);
     await confirmPending();
     await page.waitForTimeout(150);
-    const cycle1AfterFirstInstallment = await readPr(cycle1.id);
-    check('Xác nhận xong đợt 1/2 (không cần tệp) -> đề nghị VẪN APPROVED (chưa đủ hết các đợt)', cycle1AfterFirstInstallment.status === 'APPROVED' && cycle1AfterFirstInstallment.installments[0].confirmed === true && cycle1AfterFirstInstallment.installments[1].confirmed === false, cycle1AfterFirstInstallment);
-    const contractDStillWaiting = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
-    check('Hợp đồng nguồn (PERIODIC) CHƯA ghi lại trạng thái khi mới xong 1/2 đợt', contractDStillWaiting === 'CHO_THANH_TOAN', contractDStillWaiting);
+    const d1Inst1Paid = await readPr(d1Inst1.id);
+    check('Xác nhận xong đợt 1/2 -> BẢN GHI đợt 1 tự chuyển PAID', d1Inst1Paid.status === 'PAID', d1Inst1Paid.status);
+    const contractDWhileD2Draft = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
+    check('v15.5 FIX QUAN TRỌNG: đợt 1 PAID nhưng đợt 2 (cùng lô) VẪN DRAFT -> hợp đồng nguồn CHƯA bị ghi ngược trạng thái (còn CHO_THANH_TOAN)', contractDWhileD2Draft === 'CHO_THANH_TOAN', contractDWhileD2Draft);
 
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 1), cycle1.id);
+    // ---- Đợt 2/2: đi hết quy trình riêng của NÓ (hồ sơ khác, độc lập hoàn toàn với đợt 1) ----
+    await attachRequestFilesInManage(d1Inst2.id, [requestFile2]);
+    await page.evaluate((id) => submitPaymentRequestAction(id), d1Inst2.id);
+    await confirmPending();
+    await page.waitForTimeout(200);
+    check('Đợt 2/2 (định kỳ), tự đi qua "Chuyển Xác Nhận Thanh Toán" ĐỘC LẬP -> PENDING', (await readPr(d1Inst2.id)).status === 'PENDING', (await readPr(d1Inst2.id)).status);
+    await loginAs('tp_kd');
+    await goToPaymentApprove();
+    await page.evaluate((id) => approvePaymentRequestAction(id), d1Inst2.id);
+    await confirmPending();
+    check('Đợt 2/2 -> tp_kd duyệt ĐỘC LẬP thành công (APPROVED)', (await readPr(d1Inst2.id)).status === 'APPROVED', (await readPr(d1Inst2.id)).status);
+    await loginAs('ketoan1');
+    await goToPaymentApprove();
+    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), d1Inst2.id);
     await confirmPending();
     await page.waitForTimeout(150);
-    const cycle1Paid = await readPr(cycle1.id);
+    const d1Inst2Paid = await readPr(d1Inst2.id);
     const contractDAfterCycle1 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
-    check('Xác nhận đủ CẢ 2 đợt -> đề nghị tự chuyển PAID', cycle1Paid.status === 'PAID', cycle1Paid);
-    check('"Thanh toán định kỳ" (PERIODIC) — chu kỳ hoàn tất -> paymentStatus TRẢ VỀ "Chưa thanh toán" (CHUA_THANH_TOAN, KHÁC hẳn ONE_TIME) để mở lại chu kỳ mới', contractDAfterCycle1 === 'CHUA_THANH_TOAN', contractDAfterCycle1);
+    check('Xác nhận xong đợt 2/2 -> bản ghi đợt 2 chuyển PAID', d1Inst2Paid.status === 'PAID', d1Inst2Paid.status);
+    check('"Thanh toán định kỳ" (PERIODIC) — CẢ LÔ (2/2 đợt) đã PAID -> paymentStatus MỚI TRẢ VỀ "Chưa thanh toán" (CHUA_THANH_TOAN) để mở lại chu kỳ mới', contractDAfterCycle1 === 'CHUA_THANH_TOAN', contractDAfterCycle1);
 
+    // ============ Kịch bản 8b (v15.5): chu kỳ 2 bắt đầu -> cũng tách 2 đợt riêng; xoá 1 đợt CÒN DANG DỞ
+    // trong khi đợt kia đã PAID -> lô coi như hoàn tất -> nguồn ĐƯỢC ghi ngược (isCycleGroupFullyResolved
+    // ở CẢ route xoá, không chỉ route xác nhận) ============
     await loginAs('kd1');
     const canStartCycle2 = await page.evaluate((id) => {
       const c = DB.contracts.find((x) => x.id === id);
       return c.paymentStatus === 'CHUA_THANH_TOAN' || (c.paymentType === 'PERIODIC' && c.paymentStatus === 'DA_THANH_TOAN');
     }, contractD.id);
-    check('Hợp đồng ĐỊNH KỲ sau chu kỳ 1 -> gate "🧾 Lập Thanh Toán" (client) mở lại TRUE (khác hẳn ONE_TIME ở Kịch bản 7)', canStartCycle2 === true, canStartCycle2);
+    check('Hợp đồng ĐỊNH KỲ sau chu kỳ 1 (cả lô đã PAID) -> gate "🧾 Lập Thanh Toán" (client) mở lại TRUE (khác hẳn ONE_TIME ở Kịch bản 7)', canStartCycle2 === true, canStartCycle2);
 
     const prCountBeforeCycle2 = await page.evaluate(() => DB.paymentRequests.length);
     await page.evaluate((id) => startContractPaymentAction(id), contractD.id);
     await confirmPending();
-    const cycle2 = await readLatestPr();
+    const d2Records = (await readPrsBySource('CONTRACT', contractD.id)).filter((p) => p.status === 'DRAFT');
     const contractDDuringCycle2 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
-    check('Chu kỳ 2 (định kỳ) -> "🧾 Lập Thanh Toán" tạo được đề nghị NHÁP MỚI (khác id chu kỳ 1), hợp đồng quay lại CHO_THANH_TOAN', cycle2.status === 'DRAFT' && cycle2.id !== cycle1.id && contractDDuringCycle2 === 'CHO_THANH_TOAN', { cycle1Id: cycle1.id, cycle2, contractDDuringCycle2 });
-    check('Số đề nghị thanh toán tăng thêm đúng 1 (chu kỳ 2 mới, KHÔNG tái sử dụng đề nghị chu kỳ 1 đã PAID)', (await page.evaluate(() => DB.paymentRequests.length)) === prCountBeforeCycle2 + 1, prCountBeforeCycle2);
+    check('Chu kỳ 2 (định kỳ) -> "🧾 Lập Thanh Toán" tách đúng 2 bản ghi NHÁP MỚI, hợp đồng quay lại CHO_THANH_TOAN', d2Records.length === 2 && contractDDuringCycle2 === 'CHO_THANH_TOAN', { d2Records, contractDDuringCycle2 });
+    check('Số đề nghị thanh toán tăng thêm đúng 2 (chu kỳ 2 mới tách 2 bản ghi, KHÔNG tái sử dụng bản ghi chu kỳ 1 đã PAID)', (await page.evaluate(() => DB.paymentRequests.length)) === prCountBeforeCycle2 + 2, prCountBeforeCycle2);
+    const d2Inst1 = d2Records.find((p) => p.installments[0].amount === 30000000);
+    const d2Inst2 = d2Records.find((p) => p.installments[0].amount === 20000000);
+
+    // Đưa đợt 1/2 của chu kỳ 2 tới PAID (đi tắt qua callRecordAction để bài test gọn — luồng thao tác UI
+    // thật đã được kiểm đầy đủ ở chu kỳ 1 phía trên).
+    await attachRequestFilesInManage(d2Inst1.id, [requestFile1]);
+    await page.evaluate((id) => submitPaymentRequestAction(id), d2Inst1.id);
+    await confirmPending();
+    await page.waitForTimeout(150);
+    await loginAs('tp_kd');
+    await goToPaymentApprove();
+    await page.evaluate((id) => approvePaymentRequestAction(id), d2Inst1.id);
+    await confirmPending();
+    await loginAs('ketoan1');
+    await goToPaymentApprove();
+    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), d2Inst1.id);
+    await confirmPending();
+    await page.waitForTimeout(150);
+    check('Chu kỳ 2 — đợt 1/2 PAID, đợt 2/2 còn DRAFT -> hợp đồng nguồn VẪN CHO_THANH_TOAN (chưa ghi ngược)', (await readPr(d2Inst1.id)).status === 'PAID' && (await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id)) === 'CHO_THANH_TOAN', await readPr(d2Inst1.id));
+
+    // Xoá đợt 2/2 (còn DRAFT, chưa xác nhận đợt nào -> Admin xoá được) -> lô coi như HOÀN TẤT (không còn
+    // bản ghi nào khác cùng cycleGroupId chưa PAID) -> route xoá PHẢI ghi ngược nguồn (fix isCycleGroupFullyResolved
+    // ở CẢ 2 nơi: xác nhận VÀ xoá, không chỉ 1 chỗ).
+    await loginAs('admin');
+    await goToPaymentApprove();
+    await page.evaluate((id) => deletePaymentRequestAction(id), d2Inst2.id);
+    await confirmPending();
+    await page.waitForTimeout(150);
+    const d2Inst2StillExists = await page.evaluate((id) => DB.paymentRequests.some((x) => x.id === id), d2Inst2.id);
+    const contractDAfterDeleteLastSibling = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
+    check('Xoá đợt 2/2 (bản ghi cuối cùng còn dang dở của lô) -> xoá thành công', !d2Inst2StillExists, d2Inst2StillExists);
+    check('v15.5 FIX: xoá bản ghi CUỐI CÙNG còn dang dở của lô (siblings khác đã PAID hết) -> nguồn ĐƯỢC ghi ngược CHUA_THANH_TOAN (mở lại được, không kẹt CHO_THANH_TOAN vĩnh viễn)', contractDAfterDeleteLastSibling === 'CHUA_THANH_TOAN', contractDAfterDeleteLastSibling);
+
+    // Đối chứng: xoá 1 đợt khi đợt anh em KHÁC còn dang dở (chưa PAID) -> KHÔNG được ghi ngược (test dùng
+    // trực tiếp recordActions.isCycleGroupFullyResolved(), thuần không qua UI, cho gọn).
+    (function testCycleGroupFullyResolvedGating() {
+      const groupId = 'test-cycle-group-1';
+      const siblingStillDraft = [
+        { id: 1, cycleGroupId: groupId, status: 'PAID' },
+        { id: 2, cycleGroupId: groupId, status: 'DRAFT' }
+      ];
+      check('isCycleGroupFullyResolved() — còn 1 sibling chưa PAID -> false (chưa ghi ngược)', recordActions.isCycleGroupFullyResolved(siblingStillDraft[0], siblingStillDraft) === false, siblingStillDraft);
+      const allPaid = [
+        { id: 1, cycleGroupId: groupId, status: 'PAID' },
+        { id: 2, cycleGroupId: groupId, status: 'PAID' }
+      ];
+      check('isCycleGroupFullyResolved() — mọi sibling đều PAID -> true (được ghi ngược)', recordActions.isCycleGroupFullyResolved(allPaid[0], allPaid) === true, allPaid);
+      check('isCycleGroupFullyResolved() — không có cycleGroupId (ONE_TIME/thủ công) -> luôn true (hành vi cũ, không đổi)', recordActions.isCycleGroupFullyResolved({ id: 1, cycleGroupId: null, status: 'APPROVED' }, []) === true, null);
+    })();
 
     // ============ Kịch bản 9: Validation — Tạo đề nghị thủ công thiếu đợt thanh toán / đợt = 0 đều
     // bị chặn (LUÔN tạo NHÁP giờ áp dụng chung cho cả đường thủ công — nhưng bước validate installments
@@ -413,6 +507,34 @@ async function run() {
     await confirmPending();
     const manualPrApproved = await readPr(manualPr.id);
     check('ketoan1 (approver bước 1 dept "Phòng Kế Toán") duyệt được đề nghị thủ công của chính mình', manualPrApproved.status === 'APPROVED' && manualPrApproved.approvedBy === 'ketoan1', manualPrApproved);
+
+    // ============ Kịch bản 10b (v15.5): Tạo thủ công VỚI >1 đợt -> client TỰ TÁCH thành N bản ghi riêng
+    // (mỗi bản ghi 1 đợt, chung cycleGroupId sinh ở client) — mirror ĐÚNG hành vi của nguồn Hợp đồng định
+    // kỳ/officeReqs, áp dụng luôn cho đường tạo thủ công ============
+    await goToPaymentCreate();
+    await page.selectOption('#paymentSourceType', 'MANUAL');
+    await page.selectOption('#paymentDept', 'Phòng Kế Toán');
+    await page.fill('#paymentTitle', 'Đề nghị thủ công nhiều đợt (tự tách)');
+    await page.evaluate(() => addPaymentCreateInstallmentRow());
+    await page.evaluate(() => addPaymentCreateInstallmentRow());
+    const manualRows = page.locator('#paymentCreateInstallmentsList [data-installment-row]');
+    await manualRows.nth(0).locator('.payment-installment-desc').fill('Đợt 1 - thủ công tách');
+    await manualRows.nth(0).locator('.payment-installment-amount').fill('10.000.000');
+    await manualRows.nth(1).locator('.payment-installment-desc').fill('Đợt 2 - thủ công tách');
+    await manualRows.nth(1).locator('.payment-installment-amount').fill('15.000.000');
+    const prCountBeforeMultiManual = await page.evaluate(() => DB.paymentRequests.length);
+    await clearAlerts();
+    await page.evaluate(() => submitManualPaymentRequest({ preventDefault() {} }));
+    await page.waitForTimeout(400);
+    const multiManualPrs = await page.evaluate(() => DB.paymentRequests.filter((p) => p.title === 'Đề nghị thủ công nhiều đợt (tự tách)').map((p) => ({ id: p.id, status: p.status, installments: p.installments, cycleGroupId: p.cycleGroupId, cycleIndex: p.cycleIndex, cycleTotal: p.cycleTotal })));
+    check('Tạo thủ công 2 đợt -> TÁCH thành đúng 2 bản ghi NHÁP riêng, chung cycleGroupId, cycleTotal=2', multiManualPrs.length === 2 && multiManualPrs.every((p) => p.status === 'DRAFT' && p.installments.length === 1) && multiManualPrs[0].cycleGroupId === multiManualPrs[1].cycleGroupId && !!multiManualPrs[0].cycleGroupId, multiManualPrs);
+    check('Số đề nghị thanh toán tăng thêm đúng 2 (không phải 1)', (await page.evaluate(() => DB.paymentRequests.length)) === prCountBeforeMultiManual + 2, prCountBeforeMultiManual);
+
+    // Badge "Đợt X/Y" (paymentCycleBadgeHTML(), module-thanhtoan.js) hiện đúng ở "🗂️ Quản Lý Thanh Toán"
+    // cho các bản ghi đã tách (cycleTotal > 1) — không hiện cho bản ghi đơn lẻ (manualPr ở Kịch bản 10).
+    await goToPaymentManage();
+    const cycleBadgeHTML = await page.evaluate(() => document.getElementById('paymentManageList').innerHTML);
+    check('"🗂️ Quản Lý Thanh Toán" hiện badge "🔗 Đợt 1/2"/"🔗 Đợt 2/2" cho các bản ghi vừa tách', cycleBadgeHTML.includes('Đợt 1/2') && cycleBadgeHTML.includes('Đợt 2/2'), cycleBadgeHTML.includes('Đợt 1/2') && cycleBadgeHTML.includes('Đợt 2/2'));
 
     // ============ Kịch bản 11: Đề nghị đã PAID -> khoá cứng, kể cả Admin cũng KHÔNG xoá được ============
     await loginAs('admin');

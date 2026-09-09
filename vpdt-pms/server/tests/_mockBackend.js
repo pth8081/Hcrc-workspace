@@ -40,6 +40,18 @@ function createMockApi(state) {
     return u;
   }
 
+  // v15.5 — startContractPayment()/startOfficePayment() có thể trả về 1 MẢNG bản ghi nháp (mỗi đợt 1 bản
+  // ghi riêng, xem splitPaymentDraftsByInstallment() ở lib/recordActions.js) thay vì 1 object đơn — khớp
+  // createPaymentRequestsFromDraft() ở routes/records.js thật.
+  function createPaymentRequestsFromDraft(draft) {
+    const drafts = Array.isArray(draft) ? draft : [draft];
+    return drafts.map(d => {
+      const paymentRequest = Object.assign({}, d, { id: Date.now() });
+      state.collections.paymentRequests.unshift(paymentRequest);
+      return paymentRequest;
+    });
+  }
+
   // ===== POST /api/create/:module =====
   function handleCreate(moduleKey, payload, user) {
     const config = CREATE_MODULE_CONFIGS[moduleKey];
@@ -98,9 +110,8 @@ function createMockApi(state) {
       }
       if (action === 'start-payment') {
         const draft = recordActions.startContractPayment(user, item);
-        const paymentRequest = Object.assign({}, draft, { id: Date.now() });
-        state.collections.paymentRequests.unshift(paymentRequest);
-        return { item, paymentRequest };
+        const paymentRequests = createPaymentRequestsFromDraft(draft);
+        return { item, paymentRequest: paymentRequests[0], paymentRequests };
       }
       if (action === 'delete') {
         state.collections.contracts = state.collections.contracts.filter(c => c.id !== id);
@@ -118,9 +129,8 @@ function createMockApi(state) {
       }
       if (action === 'start-payment') {
         const draft = recordActions.startOfficePayment(user, item);
-        const paymentRequest = Object.assign({}, draft, { id: Date.now() });
-        state.collections.paymentRequests.unshift(paymentRequest);
-        return { item, paymentRequest };
+        const paymentRequests = createPaymentRequestsFromDraft(draft);
+        return { item, paymentRequest: paymentRequests[0], paymentRequests };
       }
       // "Bổ Sung": sửa lại NHÁP (sau REQUEST_CHANGES) + gửi lại — xem lib/recordActions.js
       // editOfficeReqDraft()/submitOfficeReqDraft(), khớp POST /api/records/officeReqs/:id/update|submit
@@ -147,9 +157,8 @@ function createMockApi(state) {
         } else {
           throw new HttpError(400, 'Loại đề nghị không hợp lệ');
         }
-        const paymentRequest = Object.assign({}, draft, { id: Date.now() });
-        state.collections.paymentRequests.unshift(paymentRequest);
-        return { item: result, paymentRequest };
+        const paymentRequests = createPaymentRequestsFromDraft(draft);
+        return { item: result, paymentRequest: paymentRequests[0], paymentRequests };
       }
 
       const id = Number(idOrAction);
@@ -171,7 +180,9 @@ function createMockApi(state) {
         const item = findOr404(state.collections.paymentRequests, id);
         recordActions.assertCanDeletePaymentRequest(user, item);
         state.collections.paymentRequests = state.collections.paymentRequests.filter(x => x.id !== id);
-        if (item.sourceModule && item.sourceId != null) {
+        // v15.5 — đề nghị đã TÁCH theo lô (cycleGroupId) chỉ được ghi ngược nguồn khi CẢ lô đã PAID hết
+        // (isCycleGroupFullyResolved(), lib/recordActions.js), khớp routes/records.js thật.
+        if (item.sourceModule && item.sourceId != null && recordActions.isCycleGroupFullyResolved(item, state.collections.paymentRequests)) {
           const sourceCollection = item.sourceModule === 'CONTRACT' ? state.collections.contracts : state.collections.officeReqs;
           const src = sourceCollection.find(x => x.id === item.sourceId);
           if (src && src.paymentStatus === 'CHO_THANH_TOAN') src.paymentStatus = 'CHUA_THANH_TOAN';
@@ -183,7 +194,10 @@ function createMockApi(state) {
         const outcome = action === 'confirm-installment'
           ? recordActions.confirmPaymentInstallment(payload, user, item)
           : recordActions.confirmPaymentRequestLumpSum(payload, user, item);
-        if (outcome.justCompleted && outcome.item.sourceModule && outcome.item.sourceId != null) {
+        // v15.5 — chỉ ghi ngược nguồn khi CẢ lô (mọi bản ghi cùng cycleGroupId) đã PAID hết, KHÔNG phải
+        // ngay khi 1 bản ghi/đợt vừa xong (khớp withPaymentConfirmAction() ở routes/records.js thật).
+        const cycleResolved = outcome.justCompleted && recordActions.isCycleGroupFullyResolved(outcome.item, state.collections.paymentRequests);
+        if (cycleResolved && outcome.item.sourceModule && outcome.item.sourceId != null) {
           const sourceCollection = outcome.item.sourceModule === 'CONTRACT' ? state.collections.contracts : state.collections.officeReqs;
           const src = sourceCollection.find(x => x.id === outcome.item.sourceId);
           // Khớp routes/records.js thật — Hợp đồng "Thanh toán định kỳ" trả về CHUA_THANH_TOAN thay vì

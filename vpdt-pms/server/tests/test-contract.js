@@ -323,6 +323,11 @@ async function run() {
     const paymentReqCountBefore = await page.evaluate(() => DB.paymentRequests.length);
     await page.evaluate((id) => startContractPaymentAction(id), contract1.id);
     await confirmPending();
+    // Hợp đồng tạo qua form thật mặc định "Thanh toán 1 lần" (ONE_TIME, xem #contractPaymentType) trừ khi
+    // người dùng đổi — contract1 ở đây KHÔNG đổi, nên vẫn giữ NGUYÊN hành vi cũ 100% (1 bản ghi gộp cả 2
+    // đợt, KHÔNG tách — splitPaymentDraftsByInstallment() ở lib/recordActions.js chỉ tách khi
+    // sourcePaymentType !== 'ONE_TIME', xem test-payment.js Kịch bản 8 cho luồng "Thanh toán định kỳ"
+    // TÁCH thật sự).
     const afterPaymentStart = await page.evaluate((id) => {
       const c = DB.contracts.find((x) => x.id === id);
       return { paymentStatus: c.paymentStatus, paymentRequestsLen: DB.paymentRequests.length, latest: DB.paymentRequests[0] };

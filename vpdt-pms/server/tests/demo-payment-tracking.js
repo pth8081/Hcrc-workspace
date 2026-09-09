@@ -66,6 +66,13 @@ async function main() {
   async function readLatestPr() {
     return page.evaluate(() => { const pr = DB.paymentRequests[0]; return pr ? { id: pr.id } : null; });
   }
+  // v15.5 — "mỗi đợt tự đi hết quy trình riêng": nguồn PERIODIC tách thành N bản ghi RIÊNG (splitPaymentDraftsByInstallment(),
+  // lib/recordActions.js) — dùng hàm này thay readLatestPr() khi nguồn có >1 đợt (Beta).
+  async function readPrsBySource(sourceModule, sourceId) {
+    return page.evaluate(({ sourceModule, sourceId }) =>
+      DB.paymentRequests.filter((p) => p.sourceModule === sourceModule && p.sourceId === sourceId)
+        .map((p) => ({ id: p.id, amount: p.installments[0].amount })), { sourceModule, sourceId });
+  }
   async function attachRequestFileInManage(id) {
     await page.evaluate((prId) => openPaymentManageEdit(prId), id);
     await page.waitForTimeout(80);
@@ -115,19 +122,31 @@ async function main() {
     await page.evaluate((id) => approvePaymentRequestAction(id), alphaPr.id);
     await h.confirmPending();
 
-    // ---- Beta: tương tự, để APPROVED rồi xác nhận SẴN đợt 1 (đợt quá hạn) để "Quản Lý Thanh Toán" có
-    // đủ sắc thái: 1 đợt đã xác nhận + 1 đợt còn chờ ----
+    // ---- Beta (PERIODIC): "🧾 Lập Thanh Toán" giờ TÁCH mỗi đợt thành 1 bản ghi RIÊNG (v15.5, xem
+    // splitPaymentDraftsByInstallment() ở lib/recordActions.js) — đưa CẢ 2 bản ghi tới APPROVED, rồi xác
+    // nhận SẴN đợt 1 (đợt quá hạn, PAID) để "Quản Lý Thanh Toán" có đủ sắc thái: 1 bản ghi đã PAID + 1 bản
+    // ghi còn APPROVED chờ xác nhận ----
     await loginAs('kd1');
     await page.evaluate(() => { switchTab('contract'); setContractSubTab('MANAGE'); });
     await page.evaluate((id) => startContractPaymentAction(id), contractBeta.id);
     await h.confirmPending();
-    const betaPr = await readLatestPr();
-    await attachRequestFileInManage(betaPr.id);
-    await page.evaluate((id) => submitPaymentRequestAction(id), betaPr.id);
-    await h.confirmPending();
+    const betaRecords = await readPrsBySource('CONTRACT', contractBeta.id);
+    const betaPr1 = betaRecords.find((p) => p.amount === 30000000); // Đợt 1 - chu kỳ 1 (quá hạn)
+    const betaPr2 = betaRecords.find((p) => p.amount === 20000000); // Đợt 2 - chu kỳ 1
+    for (const pr of [betaPr1, betaPr2]) {
+      await attachRequestFileInManage(pr.id);
+      await page.evaluate((id) => submitPaymentRequestAction(id), pr.id);
+      await h.confirmPending();
+    }
     await loginAs('tp_kd');
     await goToPaymentApprove();
-    await page.evaluate((id) => approvePaymentRequestAction(id), betaPr.id);
+    for (const pr of [betaPr1, betaPr2]) {
+      await page.evaluate((id) => approvePaymentRequestAction(id), pr.id);
+      await h.confirmPending();
+    }
+    await loginAs('ketoan1');
+    await goToPaymentApprove();
+    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), betaPr1.id); // xác nhận sẵn đợt 1
     await h.confirmPending();
 
     // ---- Gamma: đi hết luồng tới PAID (lump-sum) để chứng minh "Quản Lý Thanh Toán" vẫn hiển thị PAID ----
@@ -182,9 +201,10 @@ async function main() {
     await page.locator('#paymentApproveWrap').screenshot({ path: path.join(OUT_DIR, '02-xac-nhan-de-nghi-thanh-toan-tong-quan.png') });
     console.log('Đã lưu 02-xac-nhan-de-nghi-thanh-toan-tong-quan.png');
 
-    // ===== Ảnh 3: Modal xác nhận TỪNG ĐỢT (PERIODIC, Beta — đợt 2 còn lại) — không còn yêu cầu tệp
-    // (Hồ Sơ Đề Nghị Thanh Toán giờ đính kèm lúc TẠO, không phải lúc xác nhận) =====
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 1), betaPr.id);
+    // ===== Ảnh 3: Modal xác nhận TỪNG ĐỢT (PERIODIC, Beta — bản ghi đợt 2 còn lại, TỰ đi hết quy trình
+    // RIÊNG nên chỉ có đúng 1 đợt tại index 0) — không còn yêu cầu tệp (Hồ Sơ Đề Nghị Thanh Toán giờ đính
+    // kèm lúc TẠO, không phải lúc xác nhận) =====
+    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), betaPr2.id);
     await page.waitForSelector('#genericConfirmModal:not(.hidden)');
     await page.locator('#genericConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '03-modal-xac-nhan-tung-dot-dinh-ky.png') });
     console.log('Đã lưu 03-modal-xac-nhan-tung-dot-dinh-ky.png');
@@ -197,10 +217,10 @@ async function main() {
     console.log('Đã lưu 04-modal-xac-nhan-toan-bo-mot-lan.png');
     await page.evaluate(() => closeGenericConfirmModal());
 
-    // ===== Ảnh 5 (bằng chứng khép vòng): xác nhận THẬT đợt 2 của Beta (đủ hết 2 đợt) -> tự chuyển PAID,
-    // rồi chụp lại "Quản Lý Thanh Toán" lần nữa để thấy Beta giờ cũng "✅ Đã thanh toán" mà KHÔNG biến mất
-    // khỏi danh sách =====
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 1), betaPr.id);
+    // ===== Ảnh 5 (bằng chứng khép vòng): xác nhận THẬT bản ghi đợt 2 của Beta (cả 2 bản ghi tách ra đều
+    // PAID) -> CẢ LÔ hoàn tất, rồi chụp lại "Quản Lý Thanh Toán" lần nữa để thấy Beta giờ cũng "✅ Đã
+    // thanh toán" mà KHÔNG biến mất khỏi danh sách =====
+    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), betaPr2.id);
     await h.confirmPending();
     await page.waitForTimeout(300);
     await goToPaymentManage();
