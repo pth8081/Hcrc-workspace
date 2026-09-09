@@ -40,6 +40,8 @@ const downloadRoutes = require('./routes/download');
 const trashRoutes = require('./routes/trash');
 const externalAuthAdminRoutes = require('./routes/externalAuthAdmin');
 const externalAuthVerifyRoutes = require('./routes/externalAuthVerify');
+const attendanceClockAdminRoutes = require('./routes/attendanceClockAdmin');
+const attendanceClockPunchRoutes = require('./routes/attendanceClockPunch');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -165,6 +167,12 @@ app.use('/api/admin/external-api-keys', externalAuthAdminRoutes);
 // (header Authorization), xem routes/externalAuthVerify.js. Vẫn nằm dưới globalApiRateLimiter (mount ở
 // '/api' phía trên) + có rate-limit + khoá tài khoản riêng của chính route đó.
 app.use('/api/external', externalAuthVerifyRoutes);
+// /api/admin/attendance-clock-api-keys + /api/attendance: Công & Phép (Nhân Sự, Đợt 3/4) — cùng khuôn 2
+// route ExtAuth ngay trên nhưng key RIÊNG cho máy chấm công vật lý (xem routes/attendanceClockAdmin.js
+// đầu file cho lý do tách khỏi externalApiKeys). /api/attendance KHÔNG mount requireAuth — caller là
+// máy chấm công, tự xác thực bằng API key trong header Authorization.
+app.use('/api/admin/attendance-clock-api-keys', attendanceClockAdminRoutes);
+app.use('/api/attendance', attendanceClockPunchRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);

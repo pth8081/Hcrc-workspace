@@ -2621,6 +2621,133 @@ const CREATE_MODULE_CONFIGS = {
         detail: 'Tạo tay bởi Nhân Sự (ngoài luồng Onboarding tự động)'
       }];
     }
+  },
+  // ===== NHÂN SỰ > Công & Phép (Đợt 3/4 module Nhân Sự, Phần E tài liệu thiết kế gốc) =====
+  // Xem lib/attendance.js đầu file cho toàn bộ các điều chỉnh so với tài liệu gốc.
+  //
+  // attendanceRecords: đa số bản ghi HỆ THỐNG tự tạo/cập nhật qua POST /api/attendance/clock-punch
+  // (routes/attendanceClockPunch.js, máy chấm công vật lý) hoặc qua duyệt đơn nghỉ phép (routes/records.js
+  // syncLeaveApprovalToAttendance()) — KHÔNG đi qua đường tạo chung này. Entry dưới đây chỉ phục vụ HR bổ
+  // sung TAY 1 bản ghi công thiếu (máy chấm công lỗi/nhân viên quên quẹt thẻ).
+  attendanceRecords: {
+    dbKey: 'attendanceRecords',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      const attendance = require('./attendance');
+      if (!user.perms?.admin && !user.perms?.hrAttendanceManage) throw new CreateError(403, 'Bạn không có quyền bổ sung bản ghi công tay');
+      const employeeCode = String(payload.employeeCode || '').trim();
+      if (!employeeCode) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
+      const info = attendance.resolveWorkModelForEmployeeCode(employeeCode, appData);
+      if (!info) throw new CreateError(400, 'Không xác định được mô hình chấm công của nhân viên này (hồ sơ chưa liên kết tài khoản/chưa có quy trình Onboarding gốc)');
+      if ((collection || []).some(r => r.employeeCode === employeeCode && r.workDate === payload.workDate)) {
+        throw new CreateError(409, 'Ngày này đã có bản ghi công cho nhân viên — vui lòng sửa bản ghi hiện có thay vì tạo mới');
+      }
+      const base = attendance.defaultAttendanceRecord(employeeCode, String(payload.workDate || '').trim(), info.workModel);
+      if (Number.isNaN(new Date(base.workDate).getTime())) throw new CreateError(400, 'Ngày làm việc không hợp lệ');
+      Object.assign(payload, base);
+      const patch = attendance.assertValidManualAttendanceEdit({ recordType: payload.recordTypeInput, checkInTime: payload.checkInTimeInput, checkOutTime: payload.checkOutTimeInput, note: payload.noteInput });
+      Object.assign(payload, patch);
+      if (payload.checkInTime && payload.checkOutTime && payload.checkInTime !== payload.checkOutTime) {
+        payload.hoursWorked = Math.round(((new Date(payload.checkOutTime) - new Date(payload.checkInTime)) / 3600000) * 100) / 100;
+      }
+      delete payload.recordTypeInput; delete payload.checkInTimeInput; delete payload.checkOutTimeInput; delete payload.noteInput;
+    }
+  },
+  // leaveBalances: HỆ THỐNG tự tạo (pro-rated) lúc HR_Process (ONBOARDING) Stage=COMPLETED (xem
+  // routes/records.js syncLeaveBalanceOnOnboardingCompletion()). Entry dưới đây chỉ phục vụ HR tạo/sửa
+  // TAY (nhân viên cũ chưa có dữ liệu, điều chỉnh số ngày phép theo quyết định riêng của công ty).
+  leaveBalances: {
+    dbKey: 'leaveBalances',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.hrAttendanceManage) throw new CreateError(403, 'Bạn không có quyền tạo/sửa phép năm');
+      const employeeCode = String(payload.employeeCode || '').trim();
+      if (!employeeCode) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
+      const year = Number(payload.year);
+      if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new CreateError(400, 'Năm không hợp lệ');
+      if ((collection || []).some(b => b.employeeCode === employeeCode && b.year === year)) {
+        throw new CreateError(409, `Nhân viên này đã có bảng phép năm ${year} — vui lòng sửa bản ghi hiện có`);
+      }
+      const totalDays = Number(payload.totalDays);
+      if (!Number.isFinite(totalDays) || totalDays < 0 || totalDays > 60) throw new CreateError(400, 'Tổng số ngày phép không hợp lệ');
+      payload.employeeCode = employeeCode; payload.year = year; payload.totalDays = totalDays; payload.usedDays = 0;
+    }
+  },
+  // leaveRequests: nhân viên tự nộp đơn xin nghỉ phép cho CHÍNH MÌNH (employeeCode suy ra từ tài khoản
+  // đăng nhập qua employeeProfiles.username, KHÔNG cho tự chọn employeeCode khác — tránh nộp hộ người
+  // khác qua sửa payload thô). forceOwnDept + getScope rỗng (không có khái niệm phòng ban ở đây).
+  leaveRequests: {
+    dbKey: 'leaveRequests',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      const attendance = require('./attendance');
+      const { findProfileByUsername } = require('./employeeProfile');
+      const profile = findProfileByUsername(appData.employeeProfiles, user.username);
+      if (!profile || profile.status !== 'ACTIVE') throw new CreateError(400, 'Không tìm thấy hồ sơ nhân sự đang hoạt động liên kết với tài khoản của bạn — vui lòng liên hệ HR');
+      const info = attendance.resolveWorkModelForEmployeeCode(profile.employeeCode, appData);
+      if (!info) throw new CreateError(400, 'Không xác định được mô hình chấm công áp dụng cho bạn — vui lòng liên hệ HR');
+      const valid = attendance.assertValidLeaveRequest(payload);
+      if (valid.leaveType === 'ANNUAL') {
+        const year = new Date(valid.fromDate).getFullYear();
+        const balance = (appData.leaveBalances || []).find(b => b.employeeCode === profile.employeeCode && b.year === year);
+        const remaining = balance ? (balance.totalDays - balance.usedDays) : 0;
+        if (remaining < valid.daysCount) {
+          throw new CreateError(400, `Số ngày phép năm ${year} còn lại (${remaining}) không đủ cho đơn ${valid.daysCount} ngày này`);
+        }
+      }
+      const pendingOverlap = (collection || []).some(r => r.employeeCode === profile.employeeCode && r.status === 'PENDING'
+        && !(valid.toDate < r.fromDate || valid.fromDate > r.toDate));
+      if (pendingOverlap) throw new CreateError(409, 'Bạn đã có 1 đơn nghỉ phép khác đang chờ duyệt trùng khoảng ngày này');
+      payload.employeeCode = profile.employeeCode;
+      payload.leaveType = valid.leaveType; payload.fromDate = valid.fromDate; payload.toDate = valid.toDate;
+      payload.daysCount = valid.daysCount; payload.reason = valid.reason; payload.workModel = info.workModel;
+      payload.status = 'PENDING';
+      payload.approverUsername = null; payload.approverName = null; payload.decidedAt = null; payload.rejectReason = null;
+      payload.affectedRosterIds = [];
+    }
+  },
+  // shiftRoster: Quản Lý Siêu Thị/HR lập lịch phân ca cho nhân viên mô hình SHIFT_BASED — KHÔNG có bước
+  // phê duyệt (thao tác quản lý trực tiếp, giống lịch làm việc nội bộ).
+  shiftRoster: {
+    dbKey: 'shiftRoster',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'createdBy', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      const attendance = require('./attendance');
+      if (!user.perms?.admin && !user.perms?.hrShiftRosterManage && !user.perms?.hrAttendanceManage) {
+        throw new CreateError(403, 'Bạn không có quyền lập lịch phân ca');
+      }
+      const valid = attendance.assertValidRosterAssignment(payload);
+      attendance.assertNoRosterConflict(collection, valid.employeeCode, valid.workDate, null);
+      Object.assign(payload, valid, { status: 'SCHEDULED' });
+      delete payload.creatorName;
+    }
+  },
+  // shiftSwapRequests: nhân viên SHIFT_BASED xin đổi ca của chính mình cho người khác — đổi 1 CHIỀU
+  // (xem lib/attendance.js mục 4 đầu file).
+  shiftSwapRequests: {
+    dbKey: 'shiftSwapRequests',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      const attendance = require('./attendance');
+      const { findProfileByUsername } = require('./employeeProfile');
+      const profile = findProfileByUsername(appData.employeeProfiles, user.username);
+      if (!profile || profile.status !== 'ACTIVE') throw new CreateError(400, 'Không tìm thấy hồ sơ nhân sự đang hoạt động liên kết với tài khoản của bạn');
+      const built = attendance.defaultShiftSwapRequest(payload, profile.employeeCode);
+      const roster = (appData.shiftRoster || []).find(r => r.id === built.requesterRosterId);
+      if (!roster || roster.employeeCode !== profile.employeeCode) throw new CreateError(404, 'Không tìm thấy ca làm việc của bạn cần đổi');
+      if (roster.status === 'CANCELLED') throw new CreateError(400, 'Ca làm việc này đã bị huỷ, không thể xin đổi');
+      Object.assign(payload, built);
+    }
   }
 };
 

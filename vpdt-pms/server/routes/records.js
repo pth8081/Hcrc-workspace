@@ -8,6 +8,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const employeeProfile = require('../lib/employeeProfile');
 const laborContract = require('../lib/laborContract');
+const attendance = require('../lib/attendance');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
@@ -2572,6 +2573,89 @@ async function syncLaborContractOnHrProcessCompletion(hrProcessItem, routeLabel)
   }
 }
 
+// Công & Phép (Đợt 3/4 module Nhân Sự — xem lib/attendance.js đầu file cho toàn bộ các điều chỉnh so
+// với tài liệu gốc). ONBOARDING Stage=COMPLETED -> tạo LeaveBalance năm hiện tại (pro-rated theo
+// startDate) cho employeeCode này — idempotent (ensureLeaveBalanceForYear không tạo trùng).
+async function syncLeaveBalanceOnOnboardingCompletion(hrProcessItem, routeLabel) {
+  if (hrProcessItem.processType !== 'ONBOARDING') return;
+  const last = (hrProcessItem.history || [])[hrProcessItem.history.length - 1];
+  if (!last || last.action !== 'COMPLETED') return;
+  try {
+    const year = new Date().getFullYear();
+    await withLockedAppDataValue('leaveBalances', (list) => {
+      const { list: updated } = attendance.ensureLeaveBalanceForYear(list, hrProcessItem.employeeCode, hrProcessItem.startDate, year);
+      return updated;
+    });
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi tạo Phép Năm khi Onboarding hoàn tất:`, err.message);
+  }
+}
+
+// Task SETTLEMENT "Tính lương, phép năm chưa nghỉ..." (templateId=25, defaults.js hrTaskTemplates)
+// hoàn thành -> TÍNH VÀ GHI LẠI số tiền quy đổi phép chưa nghỉ tham khảo (KHÔNG tạo đề nghị thanh toán
+// thật — hệ thống chưa có module Lương, xem ghi chú mục 5 đầu lib/attendance.js) lên chính task đó để
+// HR đọc.
+async function syncLeavePayoutInfoOnSettlementTask(hrProcessItem, taskId, routeLabel) {
+  if (hrProcessItem.processType !== 'OFFBOARDING') return;
+  const task = (hrProcessItem.tasks || []).find(t => t.taskId === Number(taskId));
+  if (!task || task.status !== 'DONE' || task.templateId !== 25) return;
+  try {
+    const profileList = (await getAppDataValue('employeeProfiles')) || [];
+    const profile = employeeProfile.findProfileByUsername(profileList, hrProcessItem.employeeUsername);
+    if (!profile) return;
+    const contractList = await getAllForCollection('laborContracts');
+    const activeContract = laborContract.findActiveContractByEmployeeCode(contractList, profile.employeeCode);
+    const usersList = (await getAppDataValue('users')) || [];
+    const hrProcessesList = await getAllForCollection('hrProcesses');
+    const info = attendance.resolveWorkModelForEmployeeCode(profile.employeeCode, { employeeProfiles: profileList, users: usersList, hrProcesses: hrProcessesList });
+    const year = new Date(hrProcessItem.lastWorkingDate || Date.now()).getFullYear();
+    const balanceList = await getAllForCollection('leaveBalances');
+    const balance = balanceList.find(b => b.employeeCode === profile.employeeCode && b.year === year);
+    const remainingDays = balance ? Math.max(0, balance.totalDays - balance.usedDays) : 0;
+    const payout = attendance.computeLeavePayoutInfo(activeContract?.baseSalary, remainingDays, info?.workModel);
+    await withLockedRecordForCollection('hrProcesses', hrProcessItem.id, (item) => {
+      const t = (item.tasks || []).find(x => x.taskId === Number(taskId));
+      if (t) t.leavePayoutInfo = payout;
+      return item;
+    });
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi tính tiền phép năm chưa nghỉ khi Offboarding:`, err.message);
+  }
+}
+
+// OFFBOARDING hoàn tất -> huỷ mọi đơn nghỉ phép PENDING + mọi dòng phân ca (ShiftRoster) SAU
+// lastWorkingDate của nhân viên này (Phần F tài liệu thiết kế: khoá đơn nghỉ mới, cảnh báo Quản Lý Siêu
+// Thị roster tương lai bị huỷ — ở đây chỉ tự huỷ dữ liệu, cảnh báo hiển thị phía client khi Quản Lý Siêu
+// Thị mở màn Lịch Phân Ca thấy dòng bị huỷ ghi rõ lý do).
+async function syncOffboardingToAttendanceAndLeave(hrProcessItem, routeLabel) {
+  if (hrProcessItem.processType !== 'OFFBOARDING') return;
+  const last = (hrProcessItem.history || [])[hrProcessItem.history.length - 1];
+  if (!last || last.action !== 'COMPLETED') return;
+  try {
+    const profileList = (await getAppDataValue('employeeProfiles')) || [];
+    const profile = employeeProfile.findProfileByUsername(profileList, hrProcessItem.employeeUsername);
+    if (!profile) return;
+    const leaveList = await getAllForCollection('leaveRequests');
+    const updatedLeave = attendance.cancelPendingLeaveRequestsAfterOffboarding(leaveList, profile.employeeCode);
+    for (const r of updatedLeave) {
+      const before = leaveList.find(x => x.id === r.id);
+      if (before && before.status !== r.status) {
+        await withLockedRecordForCollection('leaveRequests', r.id, () => r);
+      }
+    }
+    const rosterList = await getAllForCollection('shiftRoster');
+    const updatedRoster = attendance.cancelFutureRosterAfterOffboarding(rosterList, profile.employeeCode, hrProcessItem.lastWorkingDate || new Date().toISOString().slice(0, 10));
+    for (const r of updatedRoster) {
+      const before = rosterList.find(x => x.id === r.id);
+      if (before && before.status !== r.status) {
+        await withLockedRecordForCollection('shiftRoster', r.id, () => r);
+      }
+    }
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi huỷ đơn nghỉ phép/lịch phân ca khi Offboarding hoàn tất:`, err.message);
+  }
+}
+
 router.post('/hrProcesses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrProcesses'));
 
 router.post('/hrProcesses/:id/complete-task', async (req, res) => {
@@ -2584,6 +2668,9 @@ router.post('/hrProcesses/:id/complete-task', async (req, res) => {
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/complete-task`);
     await syncLaborContractOnHrTaskEvent(result, req.body?.taskId, freshUser, `hrProcesses/${itemId}/complete-task`);
     await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/complete-task`);
+    await syncLeaveBalanceOnOnboardingCompletion(result, `hrProcesses/${itemId}/complete-task`);
+    await syncLeavePayoutInfoOnSettlementTask(result, req.body?.taskId, `hrProcesses/${itemId}/complete-task`);
+    await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/complete-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/complete-task`, err);
@@ -2599,6 +2686,7 @@ router.post('/hrProcesses/:id/skip-task', async (req, res) => {
       recordActions.skipHrTask(freshUser, item, req.body));
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/skip-task`);
     await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/skip-task`);
+    await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/skip-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/skip-task`, err);
@@ -3119,6 +3207,205 @@ router.post('/laborContracts/:id/status', async (req, res) => {
 });
 
 router.post('/laborContracts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'laborContracts'));
+
+// ===================== NHÂN SỰ > Công & Phép (Đợt 3/4 — xem lib/attendance.js) =====================
+
+// leaveRequests: nhân viên tự huỷ đơn PENDING/APPROVED-chưa-tới-ngày của CHÍNH MÌNH.
+router.post('/leaveRequests/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const profileList = (await getAppDataValue('employeeProfiles')) || [];
+    const profile = employeeProfile.findProfileByUsername(profileList, freshUser.username);
+    const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
+      if (!profile || item.employeeCode !== profile.employeeCode) throw new HttpError(403, 'Bạn chỉ được huỷ đơn nghỉ phép của chính mình');
+      return attendance.applyCancelLeaveRequest(item, freshUser.username);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `leaveRequests/${req.params.id}/cancel`, err);
+  }
+});
+
+function assertLeaveApprover(freshUser, employeeUsername, allUsers) {
+  if (!attendance.canApproveLeaveRequest(freshUser, allUsers, employeeUsername)) {
+    throw new HttpError(403, 'Bạn không có quyền duyệt đơn nghỉ phép này');
+  }
+}
+
+router.post('/leaveRequests/:id/approve', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const profileList = (await getAppDataValue('employeeProfiles')) || [];
+    let affectedRosterIds = [];
+    const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
+      const empUsername = employeeProfile.findProfile(profileList, item.employeeCode)?.username;
+      assertLeaveApprover(freshUser, empUsername, users);
+      const rosterListForCheck = []; // affectedRosterIds tính lại đầy đủ ngay dưới bằng dữ liệu thật
+      const { updated } = attendance.applyApproveLeaveRequest(item, freshUser.username, freshUser.name, rosterListForCheck);
+      return updated;
+    });
+    if (result.workModel === 'SHIFT_BASED') {
+      const rosterList = await getAllForCollection('shiftRoster');
+      affectedRosterIds = rosterList.filter(r => r.employeeCode === result.employeeCode && r.status !== 'CANCELLED'
+        && r.workDate >= result.fromDate && r.workDate <= result.toDate).map(r => r.id);
+      if (affectedRosterIds.length) {
+        await withLockedRecordForCollection('leaveRequests', itemId, (item) => { item.affectedRosterIds = affectedRosterIds; return item; });
+        result.affectedRosterIds = affectedRosterIds;
+      }
+    }
+    // Trừ LeaveBalance (chỉ ANNUAL) + ghi AttendanceRecords LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho từng
+    // ngày trong khoảng nghỉ — xem lib/attendance.js buildLeaveAttendanceRecords()/deductLeaveBalance().
+    // BUG THẬT vừa sửa: leaveBalances là collection dbo.Records (MIGRATED_COLLECTIONS, xem
+    // lib/recordStore.js), KHÔNG PHẢI dbo.AppData — dòng cũ gọi withLockedAppDataValue('leaveBalances', ...)
+    // đọc/ghi nhầm bảng dbo.AppData (key "leaveBalances" không hề tồn tại ở đó), khiến MỌI lượt duyệt đơn
+    // phép năm ANNUAL ném lỗi "Key không tồn tại trong AppData" ngay tại đây — phép năm KHÔNG BAO GIỜ
+    // được trừ dù response vẫn báo lỗi 500 sau khi đơn đã chuyển APPROVED (do dòng cập nhật item.status
+    // ở withLockedRecordForCollection('leaveRequests', ...) phía trên ĐÃ commit xong trước khi chạy tới
+    // đây) — phát hiện khi viết test hồi quy (tests/test-attendance-leave.js). Sửa đúng bằng
+    // withLockedRecordForCollection('leaveBalances', id, ...), cùng khuôn leaveBalances/:id/adjust ở dưới.
+    if (result.leaveType === 'ANNUAL') {
+      const year = new Date(result.fromDate).getFullYear();
+      const balanceList = await getAllForCollection('leaveBalances');
+      const balance = balanceList.find(b => b.employeeCode === result.employeeCode && b.year === year);
+      if (balance) {
+        await withLockedRecordForCollection('leaveBalances', balance.id, (item) => attendance.deductLeaveBalance(item, result.daysCount));
+      }
+    }
+    const attendanceList = await getAllForCollection('attendanceRecords');
+    const toApply = attendance.buildLeaveAttendanceRecords(result, attendanceList);
+    for (const { record, isNew } of toApply) {
+      if (isNew) await createForCollection('attendanceRecords', () => record);
+      else await withLockedRecordForCollection('attendanceRecords', record.id, () => record);
+    }
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `leaveRequests/${req.params.id}/approve`, err);
+  }
+});
+
+router.post('/leaveRequests/:id/reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const profileList = (await getAppDataValue('employeeProfiles')) || [];
+    const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
+      const empUsername = employeeProfile.findProfile(profileList, item.employeeCode)?.username;
+      assertLeaveApprover(freshUser, empUsername, users);
+      return attendance.applyRejectLeaveRequest(item, freshUser.username, freshUser.name, req.body?.reason);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `leaveRequests/${req.params.id}/reject`, err);
+  }
+});
+
+// attendanceRecords: HR sửa tay 1 bản ghi công (máy chấm công lỗi/thiếu quẹt thẻ).
+router.post('/attendanceRecords/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    if (!freshUser.perms?.admin && !freshUser.perms?.hrAttendanceManage) throw new HttpError(403, 'Bạn không có quyền sửa bản ghi chấm công');
+    const result = await withLockedRecordForCollection('attendanceRecords', itemId, (item) =>
+      attendance.applyManualAttendanceEdit(item, req.body, freshUser.username));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `attendanceRecords/${req.params.id}/edit`, err);
+  }
+});
+router.post('/attendanceRecords/:id/delete', (req, res) => deleteAdminOnly(req, res, 'attendanceRecords'));
+
+// leaveBalances: HR điều chỉnh tay (carry-over, quyết định riêng của công ty).
+router.post('/leaveBalances/:id/adjust', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    if (!freshUser.perms?.admin && !freshUser.perms?.hrAttendanceManage) throw new HttpError(403, 'Bạn không có quyền điều chỉnh phép năm');
+    const totalDays = Number(req.body?.totalDays);
+    if (!Number.isFinite(totalDays) || totalDays < 0 || totalDays > 60) throw new HttpError(400, 'Tổng số ngày phép không hợp lệ');
+    const result = await withLockedRecordForCollection('leaveBalances', itemId, (item) => {
+      item.totalDays = totalDays;
+      item.updatedAt = new Date().toLocaleString('vi-VN');
+      return item;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `leaveBalances/${req.params.id}/adjust`, err);
+  }
+});
+router.post('/leaveBalances/:id/delete', (req, res) => deleteAdminOnly(req, res, 'leaveBalances'));
+
+// shiftRoster: Quản Lý Siêu Thị/HR huỷ 1 dòng phân ca.
+router.post('/shiftRoster/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('shiftRoster', itemId, (item) => {
+      if (!freshUser.perms?.admin && !freshUser.perms?.hrAttendanceManage
+        && !(freshUser.perms?.hrShiftRosterManage && item.storeCode === freshUser.dept)) {
+        throw new HttpError(403, 'Bạn không có quyền huỷ lịch phân ca này');
+      }
+      return attendance.applyCancelRoster(item, freshUser.username);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `shiftRoster/${req.params.id}/cancel`, err);
+  }
+});
+router.post('/shiftRoster/:id/delete', (req, res) => deleteAdminOnly(req, res, 'shiftRoster'));
+
+// shiftSwapRequests: Quản Lý Siêu Thị (đúng siêu thị của ca liên quan) hoặc HR duyệt/từ chối đổi ca.
+function assertShiftSwapApprover(freshUser, roster) {
+  const allowed = freshUser.perms?.admin || freshUser.perms?.hrAttendanceManage
+    || (freshUser.perms?.hrShiftSwapApprove && roster && roster.storeCode === freshUser.dept);
+  if (!allowed) throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu đổi ca này');
+}
+
+router.post('/shiftSwapRequests/:id/approve', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const rosterList = await getAllForCollection('shiftRoster');
+    let updatedRosterId = null, updatedRosterPatch = null;
+    const result = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
+      const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
+      assertShiftSwapApprover(freshUser, targetRoster);
+      const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(item, targetRoster, freshUser.username, freshUser.name);
+      updatedRosterId = updatedRoster.id; updatedRosterPatch = updatedRoster;
+      return updatedSwap;
+    });
+    if (updatedRosterId) await withLockedRecordForCollection('shiftRoster', updatedRosterId, () => updatedRosterPatch);
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `shiftSwapRequests/${req.params.id}/approve`, err);
+  }
+});
+
+router.post('/shiftSwapRequests/:id/reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const rosterList = await getAllForCollection('shiftRoster');
+    const result = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
+      const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
+      assertShiftSwapApprover(freshUser, targetRoster);
+      return attendance.applyRejectShiftSwap(item, freshUser.username, freshUser.name);
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `shiftSwapRequests/${req.params.id}/reject`, err);
+  }
+});
+router.post('/shiftSwapRequests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'shiftSwapRequests'));
 
 module.exports = router;
 // Export riêng cho test (tests/test-operation-danhmuc-dautu-units.js) — xác nhận route xoá

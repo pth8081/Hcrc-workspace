@@ -222,6 +222,7 @@
           <button id="btnHrLifecycleNav" data-op-seq="closeHrDropdown()|switchTab(hrLifecycle)" class="hidden sidebar-subitem">🧑‍💼 Onboarding / Offboarding</button>
           <button id="btnHrProfileNav" data-op-seq="closeHrDropdown()|switchTab(hrProfile)" class="hidden sidebar-subitem">🪪 Hồ Sơ Nhân Sự</button>
           <button id="btnHrContractNav" data-op-seq="closeHrDropdown()|switchTab(hrContract)" class="hidden sidebar-subitem">📝 Hợp Đồng Lao Động</button>
+          <button id="btnHrAttendanceNav" data-op-seq="closeHrDropdown()|switchTab(hrAttendance)" class="hidden sidebar-subitem">⏱️ Công &amp; Phép</button>
         </div>
       </div>
       <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
@@ -5345,6 +5346,19 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrContractManage"> 📝 Quản Lý Hợp Đồng Lao Động (HR)
             </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">4 quyền dưới đây cho module con "Công & Phép" — chấm công chỉ đến từ máy chấm công vật lý + HR sửa tay (không có nút tự bấm trong app); "Quản Lý Chấm Công (HR)" toàn quyền sửa tay chấm công/phép năm + cấu hình giờ hành chính/ngày lễ/API key máy chấm công; "Duyệt Đơn Nghỉ Phép" phải CÓ quyền này VÀ đúng là quản lý trực tiếp mới duyệt được (không tự động theo managerUsername); 2 quyền Siêu Thị theo ĐÚNG siêu thị của người đó (cùng khuôn Đồng Phục — uniformStoreManage).</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrAttendanceManage"> ⏱️ Quản Lý Chấm Công & Phép Năm (HR)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrLeaveApprove"> ✅ Duyệt Đơn Nghỉ Phép (quản lý trực tiếp)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrShiftRosterManage"> 📅 Lập Lịch Phân Ca (Quản Lý Siêu Thị)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrShiftSwapApprove"> 🔁 Duyệt Đổi Ca (Quản Lý Siêu Thị)
+            </label>
           </div>
         </details>
 
@@ -7509,6 +7523,245 @@
     </div>
   </div>
 
+  <!-- "Công & Phép" (Đợt 3/4 module Nhân Sự, Phần E tài liệu thiết kế gốc) — xem lib/attendance.js đầu
+       file phía server cho toàn bộ điều chỉnh so với tài liệu gốc. MỞ CHO MỌI NGƯỜI có quyền vào module
+       "hr" (canAccessHrAttendanceModule(), KHÁC hrContract) — khối "Của Tôi" ai cũng thấy, 3 khối còn lại
+       tự ẩn/hiện theo đúng quyền hrLeaveApprove/hrShiftRosterManage+hrShiftSwapApprove/hrAttendanceManage,
+       xem renderHrAttendanceModule() (module-conghop.js). -->
+  <div id="hrAttendanceSection" class="hidden space-y-4">
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex flex-wrap gap-2 mb-4 border-b pb-2">
+        <button type="button" data-op="setHrAttendanceView" data-arg0="SELF" id="btnHacViewSelf" class="px-3 py-1.5 rounded text-xs font-bold">🙋 Của Tôi</button>
+        <button type="button" data-op="setHrAttendanceView" data-arg0="APPROVE" id="btnHacViewApprove" class="hidden px-3 py-1.5 rounded text-xs font-bold">✅ Duyệt Nghỉ Phép</button>
+        <button type="button" data-op="setHrAttendanceView" data-arg0="ROSTER" id="btnHacViewRoster" class="hidden px-3 py-1.5 rounded text-xs font-bold">📅 Phân Ca Siêu Thị</button>
+        <button type="button" data-op="setHrAttendanceView" data-arg0="MANAGE" id="btnHacViewManage" class="hidden px-3 py-1.5 rounded text-xs font-bold">🛠️ Quản Lý &amp; Cấu Hình</button>
+      </div>
+
+      <!-- ===== "Của Tôi" — mở cho MỌI người có module "hr" ===== -->
+      <div id="hacViewSelf" class="space-y-4">
+        <div id="hacSelfNoProfile" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+          ℹ️ Tài khoản của bạn chưa liên kết hồ sơ nhân sự nào — vui lòng liên hệ Nhân Sự để được hỗ trợ liên kết.
+        </div>
+        <div id="hacSelfBody" class="hidden space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="bg-teal-50 border border-teal-200 rounded p-3">
+              <div class="text-[11px] text-teal-700 font-semibold">Mô Hình Chấm Công</div>
+              <div id="hacSelfWorkModel" class="text-sm font-bold text-teal-900 mt-1">—</div>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded p-3">
+              <div class="text-[11px] text-blue-700 font-semibold">Phép Năm Còn Lại (năm nay)</div>
+              <div id="hacSelfLeaveBalance" class="text-sm font-bold text-blue-900 mt-1">—</div>
+            </div>
+            <div class="bg-gray-50 border rounded p-3 flex items-center justify-end">
+              <button type="button" data-op="openHacLeaveRequestModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">📝 Nộp Đơn Nghỉ Phép</button>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="font-bold text-sm text-gray-800 mb-2">⏱️ Chấm Công Của Tôi (30 ngày gần nhất)</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead><tr class="border-b bg-gray-50">
+                  <th class="p-2 text-left">Ngày</th><th class="p-2 text-left">Loại</th><th class="p-2 text-left">Giờ Vào</th>
+                  <th class="p-2 text-left">Giờ Ra</th><th class="p-2 text-left">Số Giờ</th><th class="p-2 text-left">Ghi Chú</th>
+                </tr></thead>
+                <tbody id="hacSelfAttendanceBody"></tbody>
+              </table>
+              <p id="hacSelfAttendanceEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có dữ liệu chấm công.</p>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="font-bold text-sm text-gray-800 mb-2">📋 Đơn Nghỉ Phép Của Tôi</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead><tr class="border-b bg-gray-50">
+                  <th class="p-2 text-left">Loại</th><th class="p-2 text-left">Từ Ngày</th><th class="p-2 text-left">Đến Ngày</th>
+                  <th class="p-2 text-left">Số Ngày</th><th class="p-2 text-left">Trạng Thái</th><th class="p-2 text-left">Thao Tác</th>
+                </tr></thead>
+                <tbody id="hacSelfLeaveRequestBody"></tbody>
+              </table>
+              <p id="hacSelfLeaveRequestEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có đơn nghỉ phép nào.</p>
+            </div>
+          </div>
+
+          <div id="hacSelfRosterWrap" class="hidden">
+            <h3 class="font-bold text-sm text-gray-800 mb-2">📅 Lịch Phân Ca Của Tôi (14 ngày tới)</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead><tr class="border-b bg-gray-50">
+                  <th class="p-2 text-left">Ngày</th><th class="p-2 text-left">Ca</th><th class="p-2 text-left">Giờ</th>
+                  <th class="p-2 text-left">Siêu Thị</th><th class="p-2 text-left">Trạng Thái</th><th class="p-2 text-left">Thao Tác</th>
+                </tr></thead>
+                <tbody id="hacSelfRosterBody"></tbody>
+              </table>
+              <p id="hacSelfRosterEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có lịch phân ca.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== "Duyệt Nghỉ Phép" — quản lý trực tiếp có quyền hrLeaveApprove (+ HR/admin) ===== -->
+      <div id="hacViewApprove" class="hidden space-y-3">
+        <h3 class="font-bold text-sm text-gray-800">✅ Đơn Nghỉ Phép Chờ Duyệt (nhân viên thuộc quyền quản lý)</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Mã NV</th><th class="p-2 text-left">Loại</th><th class="p-2 text-left">Từ Ngày</th>
+              <th class="p-2 text-left">Đến Ngày</th><th class="p-2 text-left">Số Ngày</th><th class="p-2 text-left">Lý Do</th><th class="p-2 text-left">Thao Tác</th>
+            </tr></thead>
+            <tbody id="hacApproveLeaveBody"></tbody>
+          </table>
+          <p id="hacApproveLeaveEmpty" class="hidden text-center text-gray-400 text-xs py-4">Không có đơn nào đang chờ bạn duyệt.</p>
+        </div>
+      </div>
+
+      <!-- ===== "Phân Ca Siêu Thị" — hrShiftRosterManage (phân ca) / hrShiftSwapApprove (duyệt đổi ca) ===== -->
+      <div id="hacViewRoster" class="hidden space-y-4">
+        <div id="hacRosterManageWrap" class="hidden space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="font-bold text-sm text-gray-800">📅 Lịch Phân Ca Siêu Thị</h3>
+            <button type="button" data-op="openHacRosterModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">➕ Phân Ca Mới</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead><tr class="border-b bg-gray-50">
+                <th class="p-2 text-left">Mã NV</th><th class="p-2 text-left">Ngày</th><th class="p-2 text-left">Ca</th>
+                <th class="p-2 text-left">Siêu Thị</th><th class="p-2 text-left">Trạng Thái</th><th class="p-2 text-left">Thao Tác</th>
+              </tr></thead>
+              <tbody id="hacRosterBody"></tbody>
+            </table>
+            <p id="hacRosterEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có lịch phân ca nào.</p>
+          </div>
+        </div>
+
+        <div id="hacSwapApproveWrap" class="hidden space-y-2 pt-2 border-t">
+          <h3 class="font-bold text-sm text-gray-800">🔄 Yêu Cầu Đổi Ca Chờ Duyệt</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead><tr class="border-b bg-gray-50">
+                <th class="p-2 text-left">Người Xin Đổi</th><th class="p-2 text-left">Ca Cần Đổi</th><th class="p-2 text-left">Người Nhận Ca</th>
+                <th class="p-2 text-left">Lý Do</th><th class="p-2 text-left">Thao Tác</th>
+              </tr></thead>
+              <tbody id="hacSwapBody"></tbody>
+            </table>
+            <p id="hacSwapEmpty" class="hidden text-center text-gray-400 text-xs py-4">Không có yêu cầu đổi ca nào đang chờ duyệt.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== "Quản Lý & Cấu Hình" — hrAttendanceManage (HR/admin) ===== -->
+      <div id="hacViewManage" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="font-bold text-sm text-gray-800">🕐 Chấm Công Toàn Công Ty</h3>
+          <div class="flex gap-2">
+            <input type="text" id="hacMgrFilterEmployeeCode" data-op-input="renderHacManageAttendanceTable" placeholder="🔍 Lọc theo Mã Nhân Viên..." class="border rounded px-2 py-1 text-xs">
+            <button type="button" data-op="openHacManualAttendanceModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">➕ Bổ Sung Bản Ghi Công</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Mã NV</th><th class="p-2 text-left">Ngày</th><th class="p-2 text-left">Loại</th>
+              <th class="p-2 text-left">Giờ Vào</th><th class="p-2 text-left">Giờ Ra</th><th class="p-2 text-left">Số Giờ</th>
+              <th class="p-2 text-left">Cờ</th><th class="p-2 text-left">Thao Tác</th>
+            </tr></thead>
+            <tbody id="hacMgrAttendanceBody"></tbody>
+          </table>
+          <p id="hacMgrAttendanceEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có dữ liệu.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
+          <h3 class="font-bold text-sm text-gray-800">🌴 Phép Năm Nhân Viên</h3>
+          <button type="button" data-op="openHacLeaveBalanceModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">➕ Tạo/Sửa Phép Năm</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Mã NV</th><th class="p-2 text-left">Năm</th><th class="p-2 text-left">Tổng Ngày</th>
+              <th class="p-2 text-left">Đã Dùng</th><th class="p-2 text-left">Còn Lại</th><th class="p-2 text-left">Thao Tác</th>
+            </tr></thead>
+            <tbody id="hacMgrLeaveBalanceBody"></tbody>
+          </table>
+          <p id="hacMgrLeaveBalanceEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có dữ liệu.</p>
+        </div>
+
+        <div class="pt-2 border-t">
+          <h3 class="font-bold text-sm text-gray-800 mb-2">⚙️ Cấu Hình Giờ Hành Chính (Văn Phòng)</h3>
+          <form data-op-submit="submitHacHoConfig" class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end bg-gray-50 p-3 rounded">
+            <div><label class="block text-[11px] font-semibold text-gray-600 mb-1">Giờ vào</label><input type="time" id="hacCfgStartTime" class="w-full border p-1.5 rounded text-xs"></div>
+            <div><label class="block text-[11px] font-semibold text-gray-600 mb-1">Giờ ra</label><input type="time" id="hacCfgEndTime" class="w-full border p-1.5 rounded text-xs"></div>
+            <div><label class="block text-[11px] font-semibold text-gray-600 mb-1">Nghỉ trưa (phút)</label><input type="number" id="hacCfgBreakMinutes" min="0" class="w-full border p-1.5 rounded text-xs"></div>
+            <div><label class="block text-[11px] font-semibold text-gray-600 mb-1">Trễ được phép (phút)</label><input type="number" id="hacCfgLateGrace" min="0" class="w-full border p-1.5 rounded text-xs"></div>
+            <button type="submit" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700 h-fit">💾 Lưu</button>
+          </form>
+        </div>
+
+        <div class="pt-2 border-t">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h3 class="font-bold text-sm text-gray-800">📅 Ngày Lễ / Nghỉ Cố Định</h3>
+            <button type="button" data-op="openHacHolidayModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Ngày Lễ</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead><tr class="border-b bg-gray-50"><th class="p-2 text-left">Ngày</th><th class="p-2 text-left">Tên</th><th class="p-2 text-left">Thao Tác</th></tr></thead>
+              <tbody id="hacHolidayBody"></tbody>
+            </table>
+            <p id="hacHolidayEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có ngày lễ nào.</p>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h3 class="font-bold text-sm text-gray-800">🕒 Mẫu Ca Làm Việc (Siêu Thị)</h3>
+            <button type="button" data-op="openHacShiftTemplateModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Mẫu Ca</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead><tr class="border-b bg-gray-50">
+                <th class="p-2 text-left">Mã Ca</th><th class="p-2 text-left">Tên Ca</th><th class="p-2 text-left">Giờ</th>
+                <th class="p-2 text-left">Số Giờ Chuẩn</th><th class="p-2 text-left">Trạng Thái</th><th class="p-2 text-left">Thao Tác</th>
+              </tr></thead>
+              <tbody id="hacShiftTemplateBody"></tbody>
+            </table>
+            <p id="hacShiftTemplateEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có mẫu ca nào.</p>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t">
+          <h3 class="font-bold text-sm text-gray-800 mb-2">🔑 API Key Máy Chấm Công</h3>
+          <p class="text-[11px] text-gray-500 mb-2">Máy chấm công vật lý/hệ thống trung gian gọi <code class="bg-white px-1 rounded border">POST /api/attendance/clock-punch</code> kèm header <code class="bg-white px-1 rounded border">Authorization: Bearer &lt;API key&gt;</code>, body <code class="bg-white px-1 rounded border">{"employeeCode","timestamp"}</code> (dùng key RIÊNG, KHÔNG dùng chung API Xác Thực Ngoài ở Hệ Thống).</p>
+          <form data-op-submit="createAttendanceClockApiKeyAction" class="flex flex-wrap items-end gap-2 bg-gray-50 p-3 rounded mb-2">
+            <div class="flex-1 min-w-[200px]">
+              <label class="block font-semibold text-gray-600 mb-1 text-[11px]">Tên / Mô tả máy chấm công</label>
+              <input id="hacClockKeyName" placeholder="VD: Máy chấm công Siêu thị Q1" class="w-full border p-1.5 rounded text-xs" required>
+            </div>
+            <div class="flex-1 min-w-[220px]">
+              <label class="block font-semibold text-gray-600 mb-1 text-[11px]">IP cho phép (để trống = mọi IP)</label>
+              <textarea id="hacClockKeyAllowedIps" rows="1" placeholder="VD: 203.0.113.10, 203.0.113.0/24" class="w-full border p-1.5 rounded text-xs"></textarea>
+            </div>
+            <button type="submit" class="bg-cyan-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-cyan-800">➕ Tạo API Key</button>
+          </form>
+          <div id="hacClockKeyRevealBox" class="hidden bg-amber-50 border-2 border-amber-400 rounded p-3 space-y-2 mb-2">
+            <p class="text-xs font-bold text-amber-900">⚠️ Đây là API key THẬT — chỉ hiển thị ĐÚNG 1 LẦN DUY NHẤT ngay bây giờ. Hãy sao chép và lưu lại an toàn ngay.</p>
+            <div class="flex items-center gap-2">
+              <code id="hacClockKeyRevealValue" class="flex-1 bg-white border rounded px-2 py-1.5 text-xs break-all select-all"></code>
+              <button type="button" data-op="copyAttendanceClockApiKeyReveal" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700 whitespace-nowrap">📋 Sao chép</button>
+            </div>
+            <button type="button" data-op="closeHacClockKeyRevealBox" class="text-xs text-gray-600 underline">Tôi đã lưu lại, đóng hộp này</button>
+          </div>
+          <table class="w-full border-collapse text-xs bg-white rounded border">
+            <thead><tr class="border-b text-left text-gray-500">
+              <th class="py-1.5 px-2">Tên</th><th class="py-1.5 px-2">Key (tiền tố)</th><th class="py-1.5 px-2">IP cho phép</th><th class="py-1.5 px-2">Trạng Thái</th>
+              <th class="py-1.5 px-2">Dùng Lần Cuối</th><th class="py-1.5 px-2">Thao Tác</th>
+            </tr></thead>
+            <tbody id="hacClockKeyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal tạo hợp đồng lao động TAY (trường hợp ngoại lệ, đa số bản ghi hệ thống tự tạo qua hook
        Onboarding) — sống NGOÀI #hrContractSection, gốc CSP riêng (xem bindCspDelegation() ở core.js). -->
   <div id="hrContractCreateModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
@@ -7562,6 +7815,216 @@
         <button type="button" data-op="closeHrContractDetailModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
       </div>
       <div id="hrcDetailBody" class="text-xs space-y-3"></div>
+    </div>
+  </div>
+
+  <!-- Modal "Nộp Đơn Nghỉ Phép" (tự phục vụ) — sống NGOÀI #hrAttendanceSection, gốc CSP riêng (xem
+       bindCspDelegation() ở core.js). -->
+  <div id="hacLeaveRequestModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">📝 Nộp Đơn Nghỉ Phép</h3>
+        <button type="button" data-op="closeHacLeaveRequestModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacLeaveRequestForm" data-op-submit="submitHacLeaveRequest" class="space-y-2 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Loại Nghỉ Phép <span class="text-red-500">*</span></label>
+          <select id="hacLrType" required class="w-full border p-1.5 rounded bg-white">
+            <option value="ANNUAL">Phép năm</option>
+            <option value="UNPAID">Nghỉ không lương</option>
+            <option value="SICK">Nghỉ ốm</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block font-semibold text-gray-600 mb-1">Từ Ngày <span class="text-red-500">*</span></label><input type="date" id="hacLrFromDate" required class="w-full border p-1.5 rounded"></div>
+          <div><label class="block font-semibold text-gray-600 mb-1">Đến Ngày <span class="text-red-500">*</span></label><input type="date" id="hacLrToDate" required class="w-full border p-1.5 rounded"></div>
+        </div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Lý Do</label><textarea id="hacLrReason" rows="2" class="w-full border p-1.5 rounded"></textarea></div>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Gửi Đơn</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Xin Đổi Ca" (tự phục vụ, chỉ SHIFT_BASED) -->
+  <div id="hacSwapRequestModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">🔄 Xin Đổi Ca</h3>
+        <button type="button" data-op="closeHacSwapRequestModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacSwapRequestForm" data-op-submit="submitHacSwapRequest" class="space-y-2 text-xs">
+        <input type="hidden" id="hacSwapRosterId">
+        <p id="hacSwapRosterInfo" class="bg-gray-50 border rounded p-2 text-gray-700"></p>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên Nhận Ca Thay <span class="text-red-500">*</span></label>
+          <input type="text" id="hacSwapTargetEmployeeCode" required class="w-full border p-1.5 rounded">
+        </div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Lý Do</label><textarea id="hacSwapReason" rows="2" class="w-full border p-1.5 rounded"></textarea></div>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Gửi Yêu Cầu</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Phân Ca Mới" (Quản Lý Siêu Thị/HR — hrShiftRosterManage) -->
+  <div id="hacRosterModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">➕ Phân Ca Mới</h3>
+        <button type="button" data-op="closeHacRosterModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacRosterForm" data-op-submit="submitHacRoster" class="space-y-2 text-xs">
+        <div><label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên <span class="text-red-500">*</span></label><input type="text" id="hacRosterEmployeeCode" required class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ngày Làm Việc <span class="text-red-500">*</span></label><input type="date" id="hacRosterWorkDate" required class="w-full border p-1.5 rounded"></div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Ca Làm Việc <span class="text-red-500">*</span></label>
+          <select id="hacRosterShiftTemplateId" required class="w-full border p-1.5 rounded bg-white"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Siêu Thị <span class="text-red-500">*</span></label>
+          <input type="text" id="hacRosterStoreCode" required data-sdd-list="hacRosterStoreDatalist" autocomplete="off" class="w-full border p-1.5 rounded">
+          <div id="hacRosterStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Bổ Sung Bản Ghi Công" (HR — hrAttendanceManage, trường hợp máy chấm công lỗi/thiếu quẹt) -->
+  <div id="hacManualAttendanceModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">➕ Bổ Sung Bản Ghi Công</h3>
+        <button type="button" data-op="closeHacManualAttendanceModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacManualAttendanceForm" data-op-submit="submitHacManualAttendance" class="space-y-2 text-xs">
+        <div><label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên <span class="text-red-500">*</span></label><input type="text" id="hacManAttEmployeeCode" required class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ngày <span class="text-red-500">*</span></label><input type="date" id="hacManAttWorkDate" required class="w-full border p-1.5 rounded"></div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Loại Bản Ghi</label>
+          <select id="hacManAttRecordType" class="w-full border p-1.5 rounded bg-white">
+            <option value="WORK">Đi làm</option>
+            <option value="LEAVE_PAID">Nghỉ phép năm</option>
+            <option value="LEAVE_UNPAID">Nghỉ không lương</option>
+            <option value="SICK_LEAVE">Nghỉ ốm</option>
+            <option value="BUSINESS_TRIP">Công tác</option>
+            <option value="OVERTIME">Tăng ca</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block font-semibold text-gray-600 mb-1">Giờ Vào</label><input type="datetime-local" id="hacManAttCheckIn" class="w-full border p-1.5 rounded"></div>
+          <div><label class="block font-semibold text-gray-600 mb-1">Giờ Ra</label><input type="datetime-local" id="hacManAttCheckOut" class="w-full border p-1.5 rounded"></div>
+        </div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label><textarea id="hacManAttNote" rows="2" class="w-full border p-1.5 rounded"></textarea></div>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Chi Tiết Bản Ghi Công" — HR sửa tay 1 bản ghi công đã có (khác modal tạo mới ở trên) -->
+  <div id="hacEditAttendanceModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">✏️ Sửa Bản Ghi Công</h3>
+        <button type="button" data-op="closeHacEditAttendanceModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacEditAttendanceForm" data-op-submit="submitHacEditAttendance" class="space-y-2 text-xs">
+        <input type="hidden" id="hacEditAttId">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Loại Bản Ghi</label>
+          <select id="hacEditAttRecordType" class="w-full border p-1.5 rounded bg-white">
+            <option value="WORK">Đi làm</option>
+            <option value="LEAVE_PAID">Nghỉ phép năm</option>
+            <option value="LEAVE_UNPAID">Nghỉ không lương</option>
+            <option value="SICK_LEAVE">Nghỉ ốm</option>
+            <option value="BUSINESS_TRIP">Công tác</option>
+            <option value="OVERTIME">Tăng ca</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block font-semibold text-gray-600 mb-1">Giờ Vào</label><input type="datetime-local" id="hacEditAttCheckIn" class="w-full border p-1.5 rounded"></div>
+          <div><label class="block font-semibold text-gray-600 mb-1">Giờ Ra</label><input type="datetime-local" id="hacEditAttCheckOut" class="w-full border p-1.5 rounded"></div>
+        </div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label><textarea id="hacEditAttNote" rows="2" class="w-full border p-1.5 rounded"></textarea></div>
+        <div class="flex gap-2">
+          <button type="submit" class="flex-1 bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+          <button type="button" data-op="deleteHacAttendanceRecord" class="bg-gray-200 text-gray-700 px-3 py-2 rounded font-semibold hover:bg-gray-300">🗑️ Xoá</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Tạo/Sửa Phép Năm" (HR — hrAttendanceManage) -->
+  <div id="hacLeaveBalanceModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">🌴 Tạo/Sửa Phép Năm</h3>
+        <button type="button" data-op="closeHacLeaveBalanceModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacLeaveBalanceForm" data-op-submit="submitHacLeaveBalance" class="space-y-2 text-xs">
+        <div><label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên <span class="text-red-500">*</span></label><input type="text" id="hacLbEmployeeCode" required class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Năm <span class="text-red-500">*</span></label><input type="number" id="hacLbYear" required min="2020" max="2100" class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Tổng Số Ngày Phép <span class="text-red-500">*</span></label><input type="number" id="hacLbTotalDays" required min="0" max="60" step="0.5" class="w-full border p-1.5 rounded"></div>
+        <p class="text-gray-400">Nếu nhân viên đã có bảng phép năm này rồi, hệ thống sẽ báo lỗi — vào bảng "Phép Năm Nhân Viên" để điều chỉnh số ngày đã có thay vì tạo lại.</p>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Điều Chỉnh Phép Năm" (HR sửa tay bảng phép năm ĐÃ CÓ — khác modal tạo mới ở trên) -->
+  <div id="hacAdjustLeaveBalanceModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">✏️ Điều Chỉnh Phép Năm</h3>
+        <button type="button" data-op="closeHacAdjustLeaveBalanceModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacAdjustLeaveBalanceForm" data-op-submit="submitHacAdjustLeaveBalance" class="space-y-2 text-xs">
+        <input type="hidden" id="hacAdjLbId">
+        <div><label class="block font-semibold text-gray-600 mb-1">Tổng Số Ngày Phép</label><input type="number" id="hacAdjLbTotalDays" min="0" max="60" step="0.5" class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Số Ngày Đã Dùng</label><input type="number" id="hacAdjLbUsedDays" min="0" step="0.5" class="w-full border p-1.5 rounded"></div>
+        <div class="flex gap-2">
+          <button type="submit" class="flex-1 bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+          <button type="button" data-op="deleteHacLeaveBalance" class="bg-gray-200 text-gray-700 px-3 py-2 rounded font-semibold hover:bg-gray-300">🗑️ Xoá</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Thêm Ngày Lễ" (HR — hrAttendanceManage) -->
+  <div id="hacHolidayModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">📅 Thêm Ngày Lễ</h3>
+        <button type="button" data-op="closeHacHolidayModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacHolidayForm" data-op-submit="submitHacHoliday" class="space-y-2 text-xs">
+        <div><label class="block font-semibold text-gray-600 mb-1">Ngày <span class="text-red-500">*</span></label><input type="date" id="hacHolidayDate" required class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Tên Ngày Lễ <span class="text-red-500">*</span></label><input type="text" id="hacHolidayName" required class="w-full border p-1.5 rounded"></div>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal "Thêm Mẫu Ca" (HR — hrAttendanceManage) -->
+  <div id="hacShiftTemplateModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">🕒 Thêm Mẫu Ca Làm Việc</h3>
+        <button type="button" data-op="closeHacShiftTemplateModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <form id="hacShiftTemplateForm" data-op-submit="submitHacShiftTemplate" class="space-y-2 text-xs">
+        <div><label class="block font-semibold text-gray-600 mb-1">Mã Ca <span class="text-red-500">*</span></label><input type="text" id="hacStShiftCode" required placeholder="VD: CA1" class="w-full border p-1.5 rounded"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Tên Ca <span class="text-red-500">*</span></label><input type="text" id="hacStShiftName" required placeholder="VD: Ca sáng" class="w-full border p-1.5 rounded"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block font-semibold text-gray-600 mb-1">Giờ bắt đầu <span class="text-red-500">*</span></label><input type="time" id="hacStStartTime" required class="w-full border p-1.5 rounded"></div>
+          <div><label class="block font-semibold text-gray-600 mb-1">Giờ kết thúc <span class="text-red-500">*</span></label><input type="time" id="hacStEndTime" required class="w-full border p-1.5 rounded"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block font-semibold text-gray-600 mb-1">Nghỉ giữa ca (phút)</label><input type="number" id="hacStBreakMinutes" min="0" value="0" class="w-full border p-1.5 rounded"></div>
+          <div><label class="block font-semibold text-gray-600 mb-1">Số Giờ Chuẩn <span class="text-red-500">*</span></label><input type="number" id="hacStStandardHours" required min="0" max="24" step="0.5" class="w-full border p-1.5 rounded"></div>
+        </div>
+        <label class="flex items-center gap-2"><input type="checkbox" id="hacStIsNightShift"><span>Ca đêm</span></label>
+        <button type="submit" class="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700">Lưu</button>
+      </form>
     </div>
   </div>
 

@@ -831,6 +831,94 @@ function filterPaymentRequestsForUser(items, user) {
   return (items || []).filter(pr => canViewPaymentRequest(user, pr));
 }
 
+// laborContracts (Nhân Sự > Hợp Đồng Lao Động, Đợt 2/4): PHÁT HIỆN khi làm Đợt 3 — collection này CHƯA
+// TỪNG được lọc lại ở GET /api/data (cùng lớp lỗ hổng đã vá cho itServiceRenewals/paymentRequests ở
+// trên), nghĩa là BẤT KỲ tài khoản đã đăng nhập nào (kể cả không có hrContractManage) gọi thẳng API đều
+// đọc được TOÀN BỘ hợp đồng lao động của MỌI nhân viên (lương cơ bản, loại hợp đồng, ngày hết hạn...) dù
+// giao diện chỉ mở module này cho hrContractManage/admin (canAccessHrContractModule() ở core.js). Vá
+// ngay tại đây — cùng khuôn itServiceRenewals: quyền PHẲNG, không có nhánh "chính chủ tự xem" (Phần D
+// tài liệu thiết kế đã xác nhận đợt đó KHÔNG làm tầng tự xem cho nhân viên).
+function canViewLaborContract(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrContractManage);
+}
+function filterLaborContractsForUser(items, user) {
+  return canViewLaborContract(user) ? (items || []) : [];
+}
+
+// ===== Công & Phép (Nhân Sự, Đợt 3/4 — Phần E tài liệu thiết kế, xem lib/attendance.js) =====
+// attendanceRecords/leaveBalances: dữ liệu cá nhân (giờ chấm công, số ngày phép còn lại) — chính chủ
+// (qua employeeProfiles.username liên kết) + quản lý trực tiếp (isManagerOf) + hrAttendanceManage/admin.
+function resolveEmployeeUsername(employeeCode, employeeProfiles) {
+  const profile = (employeeProfiles || []).find(p => p.employeeCode === employeeCode);
+  return profile?.username || null;
+}
+function canViewEmployeeAttendanceRecord(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  const empUsername = resolveEmployeeUsername(item.employeeCode, appData?.employeeProfiles);
+  if (!empUsername) return false;
+  if (empUsername === user.username) return true;
+  return isManagerOf(user.username, empUsername, appData?.users);
+}
+function filterAttendanceRecordsForUser(items, user, appData) {
+  return (items || []).filter(r => canViewEmployeeAttendanceRecord(user, r, appData));
+}
+function canViewLeaveBalance(user, item, appData) {
+  return canViewEmployeeAttendanceRecord(user, item, appData);
+}
+function filterLeaveBalancesForUser(items, user, appData) {
+  return (items || []).filter(b => canViewLeaveBalance(user, b, appData));
+}
+
+// leaveRequests: chính chủ + quản lý trực tiếp CHỈ khi có hrLeaveApprove (không phải mọi quản lý đều
+// tự động thấy đơn nghỉ phép cấp dưới — Phần G tài liệu thiết kế: "hrLeaveApprove: Quản lý duyệt đơn
+// nghỉ phép cấp dưới", tức đây là 1 quyền phải cấp riêng, không suy ra tự động từ managerUsername) +
+// hrAttendanceManage/admin.
+function canViewLeaveRequest(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  const empUsername = resolveEmployeeUsername(item.employeeCode, appData?.employeeProfiles);
+  if (!empUsername) return false;
+  if (empUsername === user.username) return true;
+  return !!(user.perms?.hrLeaveApprove && isManagerOf(user.username, empUsername, appData?.users));
+}
+function filterLeaveRequestsForUser(items, user, appData) {
+  return (items || []).filter(r => canViewLeaveRequest(user, r, appData));
+}
+
+// shiftRoster (Siêu Thị — lịch phân ca): Quản Lý Siêu Thị (hrShiftRosterManage) chỉ thấy ĐÚNG siêu thị
+// mình (item.storeCode === user.dept — cùng khuôn uniformStoreManage ở trên), nhân viên tự xem lịch của
+// mình, hrAttendanceManage/admin xem hết.
+function canViewShiftRoster(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  if (user.perms?.hrShiftRosterManage && item.storeCode === user.dept) return true;
+  const empUsername = resolveEmployeeUsername(item.employeeCode, appData?.employeeProfiles);
+  return !!(empUsername && empUsername === user.username);
+}
+function filterShiftRosterForUser(items, user, appData) {
+  return (items || []).filter(r => canViewShiftRoster(user, r, appData));
+}
+
+// shiftSwapRequests: 2 bên liên quan (người xin đổi/người nhận ca) + Quản Lý Siêu Thị ĐÚNG siêu thị của
+// dòng roster liên quan (tra qua appData.shiftRoster, vì bản thân yêu cầu đổi ca không lưu storeCode
+// trực tiếp) + hrShiftSwapApprove nói chung + hrAttendanceManage/admin.
+function canViewShiftSwapRequest(user, item, appData) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  const requesterUsername = resolveEmployeeUsername(item.requesterEmployeeCode, appData?.employeeProfiles);
+  const targetUsername = resolveEmployeeUsername(item.targetEmployeeCode, appData?.employeeProfiles);
+  if (requesterUsername === user.username || targetUsername === user.username) return true;
+  if (user.perms?.hrShiftSwapApprove) {
+    const roster = (appData?.shiftRoster || []).find(r => r.id === item.requesterRosterId);
+    if (roster && roster.storeCode === user.dept) return true;
+  }
+  return false;
+}
+function filterShiftSwapRequestsForUser(items, user, appData) {
+  return (items || []).filter(s => canViewShiftSwapRequest(user, s, appData));
+}
+
 module.exports = {
   isManagerOf, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
@@ -870,6 +958,12 @@ module.exports = {
   // canViewItServiceRenewal nhận về `undefined` nên MỌI lượt tải file đều ném TypeError.
   canViewItServiceRenewal, filterItServiceRenewalsForUser,
   canViewPaymentRequest, filterPaymentRequestsForUser,
+  canViewLaborContract, filterLaborContractsForUser,
+  canViewEmployeeAttendanceRecord, filterAttendanceRecordsForUser,
+  canViewLeaveBalance, filterLeaveBalancesForUser,
+  canViewLeaveRequest, filterLeaveRequestsForUser,
+  canViewShiftRoster, filterShiftRosterForUser,
+  canViewShiftSwapRequest, filterShiftSwapRequestsForUser,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile
 };

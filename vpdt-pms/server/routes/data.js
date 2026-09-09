@@ -15,6 +15,7 @@ const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
+const { findProfileByUsername } = require('../lib/employeeProfile');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
@@ -27,7 +28,9 @@ const {
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
-  computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle
+  computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle,
+  filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
+  filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser
 } = require('../lib/recordViewScope');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
@@ -166,7 +169,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // này chỉ còn là đường lùi ghi thô admin-only (khớp tiền lệ itPriceMasterLists/emailConfig). READ qua
   // GET /api/data bị ẩn HOÀN TOÀN với non-admin (không riêng lọc field bí mật) — xem
   // sanitizeExternalApiKeys() bên dưới.
-  'externalApiKeys'
+  // attendanceClockApiKeys: cùng khuôn externalApiKeys ngay trên — key RIÊNG cho máy chấm công vật lý
+  // (Công & Phép, xem lib/attendance.js), quản lý qua routes/attendanceClockAdmin.js. Ẩn hoàn toàn với
+  // non-admin qua GET /api/data — xem sanitizeAttendanceClockApiKeys() bên dưới.
+  'externalApiKeys', 'attendanceClockApiKeys'
 ]);
 
 // Các collection KHÔNG phải admin-only nhưng cũng KHÔNG mở cho mọi tài khoản đã đăng nhập — mỗi key ở
@@ -205,6 +211,22 @@ const NON_ADMIN_GATED_KEYS = new Map([
   ['hrTaskTemplates', {
     allow: (perms) => !!(perms?.admin || perms?.hrTaskTemplateManage),
     error: 'Chỉ người có quyền Quản Lý Checklist Mẫu (Nhân Sự) mới được sửa danh mục này'
+  }],
+  // shiftTemplates/publicHolidays/attendanceHoConfig: 3 danh mục cấu hình của Công & Phép (Phần E, xem
+  // lib/attendance.js) — sửa được ở màn "Công & Phép > Cấu Hình" bởi HR (hrAttendanceManage) hoặc riêng
+  // shiftTemplates còn mở thêm cho Quản Lý Siêu Thị (hrShiftRosterManage, cần chọn ca khi lập lịch phân
+  // ca — không cần sửa được publicHolidays/attendanceHoConfig vì 2 cấu hình đó áp dụng TOÀN CÔNG TY).
+  ['shiftTemplates', {
+    allow: (perms) => !!(perms?.admin || perms?.hrAttendanceManage || perms?.hrShiftRosterManage),
+    error: 'Chỉ người có quyền Quản Lý Chấm Công/Lịch Phân Ca mới được sửa danh mục ca làm việc'
+  }],
+  ['publicHolidays', {
+    allow: (perms) => !!(perms?.admin || perms?.hrAttendanceManage),
+    error: 'Chỉ người có quyền Quản Lý Chấm Công (Nhân Sự) mới được sửa danh mục ngày lễ'
+  }],
+  ['attendanceHoConfig', {
+    allow: (perms) => !!(perms?.admin || perms?.hrAttendanceManage),
+    error: 'Chỉ người có quyền Quản Lý Chấm Công (Nhân Sự) mới được sửa cấu hình giờ hành chính'
   }]
 ]);
 
@@ -250,6 +272,11 @@ function sanitizeEmailConfig(emailConfig) {
 // ngoài tồn tại. Với admin, vẫn không bao giờ trả keyHash (bcrypt) ra ngoài — màn quản lý (xem
 // routes/externalAuthAdmin.js) chỉ cần keyPrefix để nhận diện, không cần giá trị hash cho bất kỳ mục
 // đích hiển thị nào.
+function sanitizeAttendanceClockApiKeys(list, isAdmin) {
+  if (!isAdmin || !Array.isArray(list)) return [];
+  return list.map(({ keyHash, ...rest }) => rest);
+}
+
 function sanitizeExternalApiKeys(list, isAdmin) {
   if (!isAdmin || !Array.isArray(list)) return [];
   return list.map(({ keyHash, ...rest }) => rest);
@@ -497,6 +524,7 @@ router.get('/', async (req, res) => {
     }
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
+    if (data.attendanceClockApiKeys) data.attendanceClockApiKeys = sanitizeAttendanceClockApiKeys(data.attendanceClockApiKeys, !!req.freshUser?.perms?.admin);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
     // submissions) không còn trong dbo.AppData — nguồn riêng từ bảng của chúng. Không có
     // _versions.<key> tương ứng cho các key này (không còn khái niệm "version" AppData) — an toàn vì
@@ -630,6 +658,33 @@ router.get('/', async (req, res) => {
     // đây KHÔNG lọc lại ở server, lộ mốc thăng tiến (username/dept/thời điểm) của MỌI nhân viên cho bất
     // kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai đoạn 4 (Thấp, không có điểm số/câu trả lời).
     if (data.careerPathConfirmations) data.careerPathConfirmations = filterCareerPathConfirmationsForUser(data.careerPathConfirmations, req.freshUser);
+    // laborContracts (Nhân Sự > Hợp Đồng Lao Động, Đợt 2/4): PHÁT HIỆN khi làm Đợt 3 (Công & Phép) —
+    // collection này CHƯA TỪNG được lọc lại ở đây, lộ lương cơ bản/loại hợp đồng/ngày hết hạn của MỌI
+    // nhân viên cho bất kỳ ai gọi thẳng GET /api/data dù giao diện chỉ mở module cho hrContractManage/
+    // admin — xem lib/recordViewScope.js canViewLaborContract().
+    if (data.laborContracts) data.laborContracts = filterLaborContractsForUser(data.laborContracts, req.freshUser);
+    // Nhân Sự > Công & Phép (Đợt 3/4, Phần E — xem lib/attendance.js): attendanceRecords/leaveBalances/
+    // leaveRequests là dữ liệu cá nhân (giờ chấm công, số ngày phép, lý do nghỉ) — lọc NGAY từ đầu, không
+    // để lộ theo kiểu 15 collection ở trên từng bị bỏ sót. shiftRoster/shiftSwapRequests theo phạm vi
+    // Siêu Thị — xem lib/recordViewScope.js.
+    if (data.attendanceRecords) data.attendanceRecords = filterAttendanceRecordsForUser(data.attendanceRecords, req.freshUser, data);
+    if (data.leaveBalances) data.leaveBalances = filterLeaveBalancesForUser(data.leaveBalances, req.freshUser, data);
+    if (data.leaveRequests) data.leaveRequests = filterLeaveRequestsForUser(data.leaveRequests, req.freshUser, data);
+    if (data.shiftRoster) data.shiftRoster = filterShiftRosterForUser(data.shiftRoster, req.freshUser, data);
+    if (data.shiftSwapRequests) data.shiftSwapRequests = filterShiftSwapRequestsForUser(data.shiftSwapRequests, req.freshUser, data);
+    // employeeProfiles: PHÁT HIỆN khi làm Công & Phép (Đợt 3/4) — collection này CHƯA TỪNG được lọc/ẩn ở
+    // đây, lộ NGUYÊN VẸN hồ sơ nhân sự đầy đủ (có thể gồm CCCD/người phụ thuộc/học vấn, xem
+    // lib/employeeProfile.js) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — dù màn "Hồ Sơ
+    // Nhân Sự" vẫn hoạt động đúng (luôn gọi route riêng /api/hr-profile/* có strip field theo vai trò,
+    // không hề đọc DB.employeeProfiles ở client). Việc CẦN duy nhất từ client cho module Công & Phép mới
+    // là employeeCode của CHÍNH người xem (phân biệt "Của Tôi" khỏi dữ liệu người khác xem được qua vai
+    // trò quản lý) — trả đúng 1 field nhỏ đó (myEmployeeCode) thay vì cả mảng, rồi bỏ hẳn field gốc khỏi
+    // response chung (cùng tinh thần systemLogs đã bỏ khỏi đây trước đó).
+    if (data.employeeProfiles) {
+      const myProfile = findProfileByUsername(data.employeeProfiles, req.freshUser?.username);
+      data.myEmployeeCode = myProfile ? myProfile.employeeCode : null;
+      delete data.employeeProfiles;
+    }
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
@@ -658,6 +713,11 @@ router.get('/:key', async (req, res) => {
     if (key === 'users') return res.json(sanitizeUsersPermsForViewer(stripPasswords(value), req.freshUser?.username, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
+    if (key === 'attendanceClockApiKeys') return res.json(sanitizeAttendanceClockApiKeys(value, !!req.freshUser?.perms?.admin));
+    // employeeProfiles: cùng lý do vừa vá ở GET /api/data chung ở trên — hồ sơ nhân sự đầy đủ chỉ nên
+    // lộ qua route riêng có strip field theo vai trò (/api/hr-profile/*), route debug chung này không có
+    // cơ chế đó nên chặn hẳn thay vì trả nguyên mảng.
+    if (key === 'employeeProfiles') return res.status(403).json({ error: 'Vui lòng dùng /api/hr-profile/* để đọc hồ sơ nhân sự (đã lọc theo quyền xem)' });
     res.json(value);
   } catch (err) {
     sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');

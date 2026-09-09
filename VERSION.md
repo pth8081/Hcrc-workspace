@@ -1,8 +1,57 @@
 # Phiên bản hiện tại
 
-**14.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.9 (2026-09-09): Nhân Sự — thêm module Công & Phép (Đợt 3/4)
+
+Đợt 3 trong kế hoạch 4 đợt triển khai module Nhân Sự (Hồ Sơ [xong] → Hợp Đồng Lao Động [xong] →
+**Công & Phép** → vá lại các phần A/B còn thiếu). 2 mô hình chấm công xác định tự động theo Vị Trí
+(HO/Siêu Thị) của nhân viên: **Giờ Hành Chính** (so 1 khung giờ chuẩn công ty) và **Theo Ca** (so ca cụ
+thể trong Lịch Phân Ca). Mở cho MỌI người đăng nhập (khối "Của Tôi") vì ai cũng cần tự xem chấm công/
+phép năm/nộp đơn nghỉ phép; các khối quản lý bên trong tự ẩn/hiện theo quyền.
+
+**Chấm công CHỈ đến từ máy chấm công vật lý** (`POST /api/attendance/clock-punch`, xác thực bằng API
+key RIÊNG `attendanceClockApiKeys` — KHÔNG dùng chung API Xác Thực Ngoài, tách riêng để giảm phạm vi
+ảnh hưởng nếu 1 trong 2 loại key bị lộ) — **không có nút Check-in/Check-out thủ công trong app**, giữ
+đúng 1 nguồn dữ liệu chính; HR sửa/bổ sung tay khi máy lỗi.
+
+**Đơn nghỉ phép**: nhân viên tự nộp, quản lý trực tiếp (qua đúng cây Quản Lý Trực Tiếp, quyền
+`hrLeaveApprove`) hoặc HR duyệt; duyệt xong tự trừ phép năm (`lib/attendance.js::deductLeaveBalance()`)
+và tự sinh bản ghi chấm công loại nghỉ phép cho từng ngày trong khoảng nghỉ. **Lịch Phân Ca + Xin Đổi
+Ca** (Siêu Thị): Quản Lý Siêu Thị lập lịch (`hrShiftRosterManage`), nhân viên xin đổi 1 chiều, Quản Lý
+Siêu Thị đúng siêu thị đó hoặc HR duyệt (`hrShiftSwapApprove`). Offboarding tự tính số tiền quy đổi
+phép chưa nghỉ tham khảo (đơn giá ngày công × số ngày còn lại, chỉ hiển thị tham khảo).
+
+**2 lỗi phát hiện và sửa luôn trong đợt này** (không phải tính năng mới, nhưng ảnh hưởng hành vi hiện
+có nên nêu rõ ở đây):
+- **`employeeProfiles` bị lộ nguyên mảng qua `GET /api/data`** từ Đợt 1 (Hồ Sơ Nhân Sự) — chưa từng lọc
+  theo quyền xem, khác hẳn `laborContracts` đã lọc đúng ở Đợt 2. Đã vá: `GET /api/data` giờ chỉ trả về
+  `myEmployeeCode` (mã nhân viên của chính người gọi, phục vụ đúng nhu cầu "tự xem chấm công của mình"),
+  `GET /api/data/employeeProfiles` trả 403 kèm hướng dẫn dùng đúng API đã lọc quyền (`/api/hr-profile/*`).
+- **Duyệt đơn nghỉ phép năm KHÔNG trừ được phép năm** (crash âm thầm) — code dùng nhầm
+  `withLockedAppDataValue('leaveBalances', ...)` (chỉ dành cho `dbo.AppData`) trên `leaveBalances`, một
+  collection `dbo.Records` (`MIGRATED_COLLECTIONS`) — ném lỗi "Key không tồn tại trong AppData", khiến
+  đơn vẫn được đánh dấu APPROVED nhưng phép năm không bị trừ (lỗi toàn vẹn dữ liệu thật, phát hiện qua
+  viết test hồi quy `tests/test-attendance-leave.js`). Đã sửa dùng đúng
+  `withLockedRecordForCollection('leaveBalances', ...)`.
+
+Ngoài ra phát hiện thêm 1 hồi quy Đợt 2 không liên quan Công & Phép: `DB.laborContracts` chưa từng được
+nạp vào state client (`initDatabase()`) — đã bổ sung cùng đợt này.
+
+**Cấu hình HR** (`hrAttendanceManage`): Giờ Hành Chính, Ngày Lễ/Nghỉ Cố Định, Mẫu Ca Làm Việc. Client:
+sub-module mới "Công & Phép" (con của "Nhân Sự", `public/js/module-conghop.js`), 4 sub-tab (Của Tôi/
+Duyệt Nghỉ Phép/Phân Ca Siêu Thị/Quản Lý & Cấu Hình). 4 quyền mới vào cây phân quyền: `hrAttendanceManage`,
+`hrLeaveApprove`, `hrShiftRosterManage`, `hrShiftSwapApprove`.
+
+**Không làm ở đợt này** (đã cân nhắc, khớp header `lib/attendance.js`): đổi ca 1 chiều (không hoán đổi
+chéo 2 dòng); số tiền quy đổi phép chưa nghỉ chỉ tham khảo, chưa nối vào 1 module Lương thật; không tự
+động sinh lịch phân ca tuần đầu từ checklist Onboarding.
+
+Deploy-impact: không đổi `schema.sql`/`dependencies` — chỉ copy code + `pm2 restart`. Thêm 1 biến môi
+trường MỚI TÙY CHỌN `ATTENDANCE_CLOCK_RATE_LIMIT_MAX` (mặc định 2000 nếu bỏ trống — chỉ cần chỉnh nếu
+lượng máy chấm công vật lý đẩy dữ liệu vượt ngưỡng mặc định trong 15 phút, xem `.env.example`).
 
 ## v14.8 (2026-09-09): Nhân Sự — thêm module Hợp Đồng Lao Động (Đợt 2/4)
 

@@ -132,6 +132,17 @@ router.post('/:module', async (req, res) => {
       appData.operationStoreOpenings = await getAllForCollection('operationStoreOpenings');
       appData.operationRepairs = await getAllForCollection('operationRepairs');
     }
+    // Công & Phép (Đợt 3/4 module Nhân Sự, xem lib/attendance.js): attendanceRecords/leaveRequests cần
+    // tra cứu chéo hrProcesses (dự phòng suy WorkModel khi hồ sơ CHƯA liên kết tài khoản, xem
+    // resolveWorkModelForEmployeeCode()); leaveRequests còn cần leaveBalances (kiểm tra đủ ngày phép còn
+    // lại); shiftSwapRequests cần shiftRoster (đúng ca xin đổi có phải của người nộp đơn không) — 3
+    // collection này KHÔNG có trong appData mặc định vì đều là dbo.Records (MIGRATED_COLLECTIONS) chứ
+    // không phải AppData thường, cùng lý do các nhánh cross-lookup khác ở trên.
+    if (moduleKey === 'attendanceRecords' || moduleKey === 'leaveRequests') {
+      appData.hrProcesses = await getAllForCollection('hrProcesses');
+    }
+    if (moduleKey === 'leaveRequests') appData.leaveBalances = await getAllForCollection('leaveBalances');
+    if (moduleKey === 'shiftSwapRequests') appData.shiftRoster = await getAllForCollection('shiftRoster');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     // Đọc Thùng Rác của ĐÚNG collection này trước khi tạo — validateAndPrepareCreate() dùng để chặn

@@ -506,6 +506,31 @@ const DEFAULTS = {
   orgChartVersions: [],
   employeeProfiles: [],
 
+  // Nhân Sự > Công & Phép (Phần E tài liệu thiết kế, Đợt 3/4) — xem lib/attendance.js đầu file giải
+  // thích các điều chỉnh so với tài liệu gốc. 3 collection nhỏ dưới đây là AppData thường (không tăng
+  // trưởng theo thời gian, khác 5 collection dbo.Records attendanceRecords/shiftRoster/
+  // shiftSwapRequests/leaveBalances/leaveRequests — xem lib/recordStore.js MIGRATED_COLLECTIONS).
+  // shiftTemplates: danh mục ca làm việc Siêu Thị {id, shiftCode, shiftName, startTime, endTime,
+  // breakMinutes, isNightShift, standardHours, isActive} — quản lý qua màn Công & Phép (hrShiftRosterManage/
+  // hrAttendanceManage/admin, xem NON_ADMIN_GATED_KEYS routes/data.js).
+  shiftTemplates: [],
+  // publicHolidays: danh sách ngày lễ {date:'YYYY-MM-DD', name} dùng tính IsHolidayWork (cả 2 mô hình
+  // chấm công) — cùng gate hrAttendanceManage/admin.
+  publicHolidays: [],
+  // attendanceHoConfig: 1 object cấu hình DUY NHẤT giờ hành chính áp dụng chung cho toàn bộ nhân viên
+  // mô hình HO (posType='HO') — startTime/endTime dạng "HH:mm", lateGraceMinutes = số phút trễ được
+  // châm chước trước khi tính IsLate=true.
+  attendanceHoConfig: { startTime: '08:00', endTime: '17:00', breakMinutes: 60, standardHoursPerDay: 8, lateGraceMinutes: 0 },
+  // attendanceClockApiKeys: API key CẤP RIÊNG cho máy chấm công vật lý/hệ thống trung gian đẩy dữ liệu
+  // qua POST /api/attendance/clock-punch (routes/attendanceClockPunch.js) — TÁCH KHỎI externalApiKeys
+  // (dùng cho tích hợp xác thực tài khoản, routes/externalAuthVerify.js) dù dùng chung hạ tầng
+  // sinh/hash/so khớp key + chặn IP theo dải (lib/externalAuth.js) — tách riêng để giảm phạm vi ảnh
+  // hưởng nếu 1 trong 2 loại key bị lộ (máy chấm công thường đặt vật lý ở nơi công cộng hơn, rủi ro lộ
+  // khác hẳn 1 tích hợp backend-to-backend). Quản lý qua routes/attendanceClockAdmin.js (mirror hệt
+  // routes/externalAuthAdmin.js). ẨN HOÀN TOÀN với non-admin qua GET /api/data (xem
+  // sanitizeAttendanceClockApiKeys() routes/data.js) — cùng khuôn externalApiKeys.
+  attendanceClockApiKeys: [],
+
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY
   // (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính

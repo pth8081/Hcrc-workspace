@@ -753,7 +753,77 @@ xem hợp đồng của chính mình ở đợt này.
   hiện hành trước khi cứng hoá — xem mục 4.5.2, chỉ là mốc HIỂN THỊ tham
   khảo, không phải ràng buộc validate).
 
-#### 4.5.5. Quản Lý & Phản Hồi Ý Kiến
+#### 4.5.5. Công & Phép
+
+**Nhân Sự → Công & Phép** — **vai trò**: chấm công (qua máy chấm công vật lý)
++ quản lý phép năm + lịch phân ca/đổi ca cho nhân viên Siêu Thị. **Mở cho MỌI
+người** đã đăng nhập (khối "Của Tôi" — khác hẳn Hợp Đồng Lao Động ở mục 4.5.4,
+HR-only) vì ai cũng cần tự xem chấm công/phép năm/nộp đơn nghỉ phép của chính
+mình; các khối quản lý bên trong (Duyệt Nghỉ Phép/Phân Ca Siêu Thị/Quản Lý &
+Cấu Hình) tự ẩn/hiện theo đúng quyền.
+
+- **2 mô hình chấm công, xác định tự động theo Vị Trí (HO/Siêu Thị) của nhân
+  viên** (trường có sẵn trên hồ sơ Người Dùng, không thêm cấu hình mới):
+  **Giờ Hành Chính** (nhân viên Văn Phòng — so với 1 khung giờ chuẩn công ty
+  duy nhất, ví dụ 08:00-17:00) và **Theo Ca** (nhân viên Siêu Thị — so với ca
+  cụ thể đã được phân trong **Lịch Phân Ca**, xem bên dưới).
+- **Chấm công CHỈ đến từ máy chấm công vật lý/hệ thống trung gian** đẩy dữ
+  liệu qua API riêng (xem "API Máy Chấm Công" bên dưới) — **không có nút
+  Check-in/Check-out thủ công trong app**, giữ đúng 1 nguồn dữ liệu chính.
+  Mỗi lượt quẹt tự ghi nhận giờ vào (lượt đầu trong ngày) và giờ ra (lượt
+  cuối), tự đánh dấu **đi muộn/về sớm/tăng ca ngày lễ/tăng ca cuối tuần**
+  theo cấu hình. HR sửa/bổ sung tay ở **"Quản Lý & Cấu Hình"** khi máy chấm
+  công lỗi/nhân viên quên quẹt thẻ.
+- **Đơn nghỉ phép** (Phép năm / Nghỉ không lương / Nghỉ ốm) — nhân viên tự nộp
+  cho CHÍNH MÌNH (chọn loại, từ ngày, đến ngày, lý do), nghỉ phép năm bị chặn
+  ngay lúc nộp nếu vượt quá số ngày còn lại. Quản lý trực tiếp (cần thêm quyền
+  **"✅ Duyệt Nghỉ Phép"**, không tự động có chỉ vì là quản lý) hoặc HR duyệt/
+  từ chối; đơn được duyệt **tự động trừ phép năm** (chỉ loại Phép năm) và
+  **tự sinh bản ghi chấm công loại nghỉ phép** cho từng ngày trong khoảng nghỉ
+  (không ghi đè nếu ngày đó đã có loại nghỉ khác). Nhân viên tự huỷ được đơn
+  đang chờ duyệt hoặc đã duyệt nhưng chưa tới ngày nghỉ.
+- **Phép năm** — số ngày chuẩn 12 ngày/năm (+ 1 ngày mỗi 5 năm thâm niên),
+  tính theo tỷ lệ số tháng còn lại nếu vào làm giữa năm; HR **tạo/điều chỉnh
+  tay** ở "Quản Lý & Cấu Hình" (carry-over, quyết định riêng của công ty).
+  Khi Offboarding hoàn tất, hệ thống tự tính **số tiền quy đổi phép chưa nghỉ
+  tham khảo** (đơn giá ngày công × số ngày còn lại) gắn vào đúng việc "Tính
+  lương, phép năm chưa nghỉ, khấu trừ" trong checklist (mục 4.5.2) — **chỉ
+  hiển thị tham khảo**, không tạo đề nghị thanh toán thật (hệ thống chưa có
+  module Lương).
+- **Lịch Phân Ca** (chỉ áp dụng Siêu Thị) — Quản Lý Siêu Thị (quyền **"📅 Quản
+  Lý Lịch Phân Ca"**) hoặc HR lập lịch (chọn nhân viên, ngày, ca theo **Mẫu Ca
+  Làm Việc** đã cấu hình sẵn, siêu thị), chặn phân trùng ngày cho cùng 1 nhân
+  viên; huỷ được 1 dòng đã phân. **Xin Đổi Ca** — nhân viên tự xin đổi 1 ca
+  của mình cho người khác (đổi **1 CHIỀU**: ca chuyển hẳn sang người nhận,
+  không hoán đổi 2 chiều — 2 người muốn hoán đổi cho nhau thì mỗi người tự
+  nộp 1 đơn xin đổi đúng ca của mình), Quản Lý Siêu Thị đúng siêu thị đó (quyền
+  **"🔄 Duyệt Đổi Ca"**, tách riêng khỏi quyền lập lịch — 1 người có thể chỉ có
+  1 trong 2) hoặc HR duyệt.
+- **API Máy Chấm Công** (`POST /api/attendance/clock-punch`, xác thực bằng
+  **API key RIÊNG** cấp ở "Quản Lý & Cấu Hình" — **KHÔNG dùng chung** API Xác
+  Thực Ngoài ở Hệ Thống, mục 7.9 — tách riêng để giảm phạm vi ảnh hưởng nếu 1
+  trong 2 loại key bị lộ, máy chấm công vật lý thường đặt ở nơi công cộng hơn):
+  body `{"employeeCode","timestamp"}`, định danh nhân viên bằng **Mã Nhân
+  Viên** (khớp Hồ Sơ Nhân Sự). Quản lý key (tạo/thu hồi/giới hạn IP nguồn)
+  cùng khuôn API Xác Thực Ngoài, chỉ admin thấy được key thật (chỉ hiện đúng 1
+  lần lúc tạo).
+- **Cấu Hình** (HR, quyền **"🕐 Quản Lý Chấm Công"**) — Giờ Hành Chính (giờ
+  vào/ra chuẩn công ty, thời gian trễ được phép), **Ngày Lễ/Nghỉ Cố Định**
+  (loại trừ khỏi tính đi muộn/tính tăng ca ngày lễ), **Mẫu Ca Làm Việc** (mã
+  ca, tên, giờ bắt đầu/kết thúc, số giờ chuẩn — dùng chung cho mọi siêu thị).
+- **Phân quyền** (khối cây phân quyền Nhân Sự): **"🕐 Quản Lý Chấm Công"**
+  (HR, toàn quyền — chấm công/phép năm/cấu hình toàn công ty), **"✅ Duyệt
+  Nghỉ Phép"** (quản lý trực tiếp — CHỈ duyệt được đơn của nhân viên thực sự
+  thuộc quyền quản lý, xác định qua đúng cây Quản Lý Trực Tiếp ở mục 4.5.1),
+  **"📅 Quản Lý Lịch Phân Ca"** + **"🔄 Duyệt Đổi Ca"** (Quản Lý Siêu Thị —
+  giới hạn đúng siêu thị của mình, 2 cờ độc lập).
+- **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): không có nút chấm
+  công thủ công trong app (chỉ máy vật lý + HR sửa tay); đổi ca 1 chiều (không
+  hoán đổi chéo 2 dòng); số tiền quy đổi phép chưa nghỉ chỉ tham khảo, chưa
+  nối vào 1 module Lương thật; không tự động sinh lịch phân ca tuần đầu từ
+  checklist Onboarding — Quản Lý Siêu Thị/HR tự lập lịch thủ công.
+
+#### 4.5.6. Quản Lý & Phản Hồi Ý Kiến
 
 Phía Nhân Sự của **🤝 HCRC Đồng Hành** (mục 4.1) — **vai trò**: nơi Nhân Sự
 trả lời câu hỏi nhân viên gửi qua HCRC Đồng Hành, đúng khuôn **1 hỏi–1 đáp**
