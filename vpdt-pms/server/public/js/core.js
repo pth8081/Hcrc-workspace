@@ -6982,9 +6982,14 @@ bindCspDelegation('orgChartDiffModal');
 // khiến MỌI data-op/data-op-change/data-op-input/data-op-submit bên trong (2 sub-tab Onboarding/
 // Offboarding, cascading Vị Trí->Phòng Ban/Siêu Thị->Chức Danh, sdd-picker nhân viên Offboarding, 2
 // checkbox bắt buộc, và chính 2 nút "Gửi Yêu Cầu") hoàn toàn IM LẶNG không chạy — phát hiện lúc viết
-// test cho nút "↺ Làm Mới" (đợt E), vá tại đây (không phải lỗi do đợt UX này gây ra, đã tồn tại từ
-// trước — không có modal nào sống ngoài section nên chỉ cần đúng 1 gốc).
+// test cho nút "↺ Làm Mới" (đợt E), vá tại đây.
 bindCspDelegation('hrLifecycleSection');
+// #hrpDetailModal ("Chi Tiết Quy Trình") thực ra SỐNG NGOÀI #hrLifecycleSection trong DOM (là anh em,
+// không phải con — xem index.html, div hrLifecycleSection đóng trước khi hrpDetailModal mở), nên gốc
+// CSP ở trên không bắt được click bên trong modal này (nút ✕ đóng, Hoàn thành/Bỏ qua/Tạo Ticket IT
+// từng việc, Huỷ Quy Trình... im lặng không chạy, không có lỗi console) — cần thêm gốc riêng, giống
+// hệt orgChartNodeModal/carProcessModal/vppRegModal ở trên/dưới.
+bindCspDelegation('hrpDetailModal');
 
 // Báo Cáo (#reportsSection) — thanh bộ lọc tĩnh + #reportsNavL1Bar/#reportsNavL2Bar + #reportsContent
 // (renderReports()/renderModuleReport()/renderReportsSummary()...) đều nằm CHUNG trong #reportsSection

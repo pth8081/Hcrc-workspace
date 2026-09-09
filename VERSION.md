@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**14.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.6 (2026-09-09): Fix Onboarding/Offboarding — modal "Chi Tiết Quy Trình" hoàn toàn không bấm được
+
+Người dùng báo lỗi kèm ảnh chụp: mở modal "Chi Tiết Quy Trình" (Nhân Sự > Onboarding/Offboarding) thì
+KHÔNG đóng được (nút ✕), KHÔNG bấm được bất kỳ thao tác nào bên trong (Hoàn thành/Bỏ qua từng việc, Tạo
+Ticket IT, Huỷ Quy Trình...) — hoàn toàn im lặng, không có lỗi console.
+
+**Nguyên nhân**: `#hrpDetailModal` thực tế SỐNG NGOÀI `#hrLifecycleSection` trong DOM (`index.html` —
+div `hrLifecycleSection` đóng ở dòng 7385, modal mở ở dòng 7390, là 2 anh em chứ không phải cha-con) —
+nhưng cơ chế CSP click-delegation (`bindCspDelegation()`, thay cho `onclick=` inline vì chính sách CSP)
+chỉ đăng ký 1 gốc duy nhất `#hrLifecycleSection` (`public/js/core.js`). Do listener chỉ bắt click bubble
+lên trong đúng gốc đã đăng ký, mọi `data-op`/`data-op-change` bên trong modal (nằm ngoài gốc đó) không
+bao giờ được xử lý — đúng bug có sẵn từ lúc dựng module này (không phải do đợt sửa gần đây gây ra), chỉ
+là chưa ai bấm mở modal để phát hiện. So sánh với các module khác có modal sống ngoài section tương tự
+(`orgChartNodeModal`, `carProcessModal`, `vppRegModal`...) đều có dòng `bindCspDelegation()` riêng — module
+Onboarding/Offboarding bị thiếu đúng dòng này.
+
+**Fix**: thêm `bindCspDelegation('hrpDetailModal');` ngay sau `bindCspDelegation('hrLifecycleSection');`
+ở `public/js/core.js` (~dòng 6987) — cùng khuôn với các modal khác, không đổi markup/layout.
+
+Việc thuần client-side JS — không đổi `schema.sql`/`.env.example`/`dependencies`, chỉ cần copy code +
+`pm2 restart` (hoặc với PM2+Nginx: copy code + `pm2 restart`, không cần đổi cấu hình Nginx).
 
 ## v14.5 (2026-09-09): Tách hướng dẫn triển khai thành 2 bản (PM2-only / PM2+Nginx) + viết lại toàn bộ
 ## `Huong-dan-nghiep-vu.md` theo trình tự logic mới, bổ sung nội dung còn thiếu
