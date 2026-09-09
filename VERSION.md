@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**15.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.7 (2026-09-09): Cache-busting mạnh hơn — index.html "no-store" + banner client tự phát hiện bản mới
+
+Người dùng phản hồi: nhiều lần deploy bản mới lên server thật, nhưng trình duyệt bình thường lẫn app PWA
+"Cài vào màn hình" trên mobile vẫn không thấy tính năng/lỗi đã fix — chỉ hết khi vào cửa sổ ẩn danh. Kèm
+theo đó là 1 ảnh chụp màn hình xác nhận server thật đang chạy **v15.1**, một bản rất cũ so với `main`
+(15.6 lúc đó) — tức cơ chế cache-busting hiện có (mỗi file `/js/*.js` được nạp kèm query string
+`?v=<version>`, đổi version là đổi URL, trình duyệt tự tải bản mới — xem `renderIndexHtml()` ở
+`server.js`) đã KHÔNG hoạt động đúng cho người dùng này dù server đã deploy bản mới thật.
+
+**Chẩn đoán gốc rễ**: cơ chế trên phụ thuộc HOÀN TOÀN vào việc `index.html` (nơi "công bố" query string
+mới) được trình duyệt tải lại mỗi lần — trước đây `index.html` gửi `Cache-Control: no-cache`, tưởng là
+"không cache" nhưng thực chất vẫn CHO PHÉP trình duyệt lưu bản cache, chỉ bắt buộc "hỏi lại server trước
+khi dùng" (revalidate qua ETag). Bước hỏi-lại đó có thể bị 1 lớp trung gian bỏ qua (app PWA "Cài vào màn
+hình" trên mobile ưu tiên mở thẳng bản đã cache thay vì luôn ra mạng kiểm tra trước khi hiển thị) — người
+dùng khi đó kẹt mãi ở `index.html` CŨ (kéo theo mọi `/js/*.js` cũ theo query string cũ) mà không có tín
+hiệu gì báo cho biết, chỉ hết khi ẩn danh (không có cache cũ để dùng lại).
+
+**Xử lý 2 lớp**:
+1. `server.js` (`sendIndexHtml()`) — đổi `Cache-Control` từ `no-cache` sang `no-store` (cấm lưu cache
+   hoàn toàn, không phụ thuộc lớp nào phía dưới có tuân thủ đúng cơ chế revalidate hay không). File này
+   nhỏ, chi phí luôn tải mới không đáng kể so với rủi ro kẹt code cũ vĩnh viễn.
+2. Lớp phát hiện ĐỘC LẬP thứ 2 ở client (phòng khi lớp 1 vẫn bị 1 tầng nào đó — proxy lạ, trình duyệt cũ
+   — bỏ qua): `checkForAppUpdate()` mới (`public/js/core.js`) — kiểm tra định kỳ (15 phút/lần) + NGAY khi
+   app quay lại foreground (`visibilitychange`, đúng lúc hay gặp "bản cũ" nhất trên PWA mobile — mở lại
+   app từ icon màn hình sau vài ngày để nền) — so `window.__ASSET_VERSION__` (bản đã tải lúc mở trang)
+   với version thật từ `GET /api/health` (không cache). Lệch version thì hiện banner cố định đầu trang
+   "🔄 Đã có phiên bản mới của hệ thống" (`#appUpdateBanner`, `public/index.html`) — đã chốt với người
+   dùng (AskUserQuestion): **KHÔNG tự động reload** (tránh mất dữ liệu người dùng đang nhập dở giữa
+   chừng) — 2 nút "Tải Lại Ngay" (reload thật) và "✕ Để sau" (ẩn banner, không hiện lại cho ĐÚNG bản đã
+   dismiss — bản mới hơn nữa vẫn hiện lại bình thường).
+
+Verify: viết `tests/test-app-update-banner.js` (6/6 pass — banner ẩn mặc định, hiện đúng khi lệch version,
+ẩn khi trùng version, dismiss đúng 1 bản không nuốt vĩnh viễn các bản sau, nút "Tải Lại Ngay" reload thật
+không lỗi JS). Chạy toàn bộ 96 file `tests/test-*.js` — chỉ 2 lỗi `localhost:1433` (SQL Server không chạy
+được trong môi trường build, baseline đã biết trước, không liên quan). Cũng kiểm tra template Nginx trong
+`deploy/Huong-dan-trien-khai-PM2-Nginx.md` — xác nhận block `location /` là proxy_pass thuần, KHÔNG có
+`Cache-Control`/`expires` riêng đè lên response của Node, nên không phải nguyên nhân (không cần sửa gì ở
+đó).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`. Lưu
+ý quan trọng: người dùng đang chạy bản CŨ (như v15.1 trong phản hồi) cần deploy đúng cách 1 lần để bản mới
+NÀY (chứa lớp phát hiện banner) thật sự chạy — sau đó, các lần deploy TIẾP THEO mới được banner tự báo
+nếu lại xảy ra tình trạng cache cứng đầu tương tự.
 
 ## v15.6 (2026-09-09): Vận Hành Siêu Thị — bỏ dropdown thừa "Dòng mới thêm..." ở Danh Mục Đầu Tư
 
