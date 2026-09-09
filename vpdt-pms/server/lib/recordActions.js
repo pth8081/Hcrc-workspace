@@ -1507,14 +1507,30 @@ function buildPaymentInstallments(sourceInstallments, totalAmount, fallbackDesc)
 // createValidation.js (tạo thủ công) để 2 đường tạo đề nghị thanh toán không lệch luật nhau.
 function normalizePaymentInstallmentsOverride(raw) {
   if (!Array.isArray(raw) || !raw.length) return null;
-  const installments = raw.map(it => ({
-    description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
-    confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
-  }));
-  if (installments.some(it => !(it.amount > 0))) {
-    throw new HttpError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
-  }
-  return installments;
+  // Đề nghị thanh toán giờ LUÔN được tạo ở trạng thái NHÁP (xem startContractPayment()/startOfficePayment()
+  // bên dưới) nên số tiền từng đợt CHƯA bắt buộc ngay lúc tạo — chỉ bắt buộc > 0 đúng lúc "Chuyển Xác Nhận
+  // Thanh Toán" (xem submitPaymentRequest()), cùng khuôn nhánh NHÁP của editPaymentRequest().
+  return raw.map(it => {
+    const rawAmount = it?.amount;
+    const n = (rawAmount === '' || rawAmount === null || rawAmount === undefined) ? NaN : Number(rawAmount);
+    return {
+      description: (it?.description || '').trim(), amount: Number.isFinite(n) ? n : null, dueDate: it?.dueDate || '',
+      confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
+    };
+  });
+}
+
+// "Hồ Sơ Đề Nghị Thanh Toán" — multi-file đính kèm NGAY LÚC TẠO/LẬP đợt thanh toán (mọi nguồn: Hợp đồng/
+// Mua Bán/Sửa Chữa/thủ công/kế toán tự tạo có nguồn), bắt buộc >=1 tệp trước khi "Chuyển Xác Nhận Thanh
+// Toán" (submitPaymentRequest() bên dưới) — ĐẢO NGƯỢC lại so với thiết kế cũ (trước đây bắt buộc tệp ở
+// bước xác nhận CUỐI, xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum(), giờ 2 hàm đó KHÔNG
+// còn đòi hỏi tệp gì nữa — quyết định nghiệp vụ mới, người dùng yêu cầu).
+function normalizePaymentRequestFiles(raw) {
+  const list = Array.isArray(raw) ? raw.slice(0, 20) : [];
+  assertUploadedFileUrlList(list, 'Hồ sơ đề nghị thanh toán');
+  return list
+    .filter(f => f && typeof f === 'object' && f.fileUrl && f.fileName)
+    .map(f => ({ fileUrl: String(f.fileUrl), fileName: String(f.fileName).slice(0, 200), fileType: f.fileType ? String(f.fileType).slice(0, 100) : null }));
 }
 
 // Chuyển hợp đồng sang "Chờ thanh toán" + trả về BẢN NHÁP đề nghị thanh toán (CHƯA lưu — route gọi
@@ -1553,7 +1569,6 @@ function startContractPayment(user, contract, overrides) {
   contract.paymentStatus = 'CHO_THANH_TOAN';
   const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
   const installments = overrideInstallments || buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng');
-  const createAsPending = !!overrides?.createAsPending;
   return {
     sourceModule: 'CONTRACT', sourceId: contract.id, sourceCode: contract.code,
     // Đề nghị thanh toán mang dept của ĐƠN VỊ CUSTODIAN (đơn vị đang thao tác chuyển sang thanh toán,
@@ -1566,25 +1581,29 @@ function startContractPayment(user, contract, overrides) {
     // còn khoá cứng contract.amount, vì override cho phép kế toán khai lại khác giá trị tham khảo gốc.
     // Vẫn CHO PHÉP lệch (không chặn) nhưng phải cảnh báo rõ cho người duyệt — xem amountMismatchesSource
     // bên dưới, giữ nguyên referenceAmount (giá trị hợp đồng gốc) để client tự so sánh/hiển thị.
-    amount: overrideInstallments ? installments.reduce((s, it) => s + it.amount, 0) : contract.amount,
+    amount: overrideInstallments ? installments.reduce((s, it) => s + (it.amount || 0), 0) : contract.amount,
     referenceAmount: contract.amount,
     amountMismatchesSource: overrideInstallments
-      ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - contract.amount) > 1
+      ? Math.abs(installments.reduce((s, it) => s + (it.amount || 0), 0) - contract.amount) > 1
       : false,
     installments,
+    // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) — đính kèm khi còn NHÁP (editPaymentRequest()), bắt buộc
+    // >=1 tệp lúc "Chuyển Xác Nhận Thanh Toán" (submitPaymentRequest()) — xem normalizePaymentRequestFiles().
+    requestFiles: normalizePaymentRequestFiles(overrides?.requestFiles),
     // sourcePaymentType — CHỤP LẠI đúng lúc tạo (contract.paymentType || null) chế độ xác nhận thanh toán
     // của đề nghị này: 'ONE_TIME' -> xác nhận TOÀN BỘ 1 lần (lump-sum, xem confirmPaymentRequestLumpSum()),
     // 'PERIODIC'/null (hợp đồng cũ chưa từng có paymentType) -> xác nhận TỪNG ĐỢT (confirmPaymentInstallment()).
     // CHỤP LẠI (không tra contract.paymentType lại mỗi lần) để nếu hợp đồng đổi paymentType SAU KHI đề
     // nghị đã tạo thì đề nghị ĐANG CHỜ XỬ LÝ không bị đổi luật xác nhận giữa chừng.
     sourcePaymentType: contract.paymentType || null,
-    // createAsPending (route from-source, hành vi CŨ giữ nguyên): thẳng PENDING + currentStep/history
-    // khởi tạo ngay để đi qua ĐÚNG được quy trình duyệt theo bước MỚI (paymentDeptWorkflows, xem
-    // lib/workflowEngine.js) — nếu không mọi đề nghị tạo qua đường này sẽ kẹt vĩnh viễn (không approver
-    // nào tra được currentStep hợp lệ, trừ admin). Ngược lại (nút "🧾 Lập Thanh Toán"): DRAFT, currentStep
-    // 0/history rỗng CHỈ được gán THẬT lúc submitPaymentRequest() (DRAFT -> PENDING).
-    status: createAsPending ? 'PENDING' : 'DRAFT',
-    currentStep: createAsPending ? 1 : 0,
+    // LUÔN tạo NHÁP (currentStep/history chỉ khởi tạo THẬT lúc submitPaymentRequest(), DRAFT -> PENDING) —
+    // TRƯỚC ĐÂY route "kế toán tự tạo có nguồn" (từ module Thanh Toán) dùng overrides.createAsPending để
+    // tạo THẲNG PENDING (bỏ qua bước đính kèm Hồ Sơ Đề Nghị Thanh Toán); giờ BỎ HẲN nhánh đó — mọi đề nghị
+    // (bất kể nguồn) đều đi qua CHUNG 1 cổng "🗂️ Quản Lý Thanh Toán": đính kèm Hồ Sơ Đề Nghị Thanh Toán rồi
+    // mới "Chuyển Xác Nhận Thanh Toán" được (quyết định nghiệp vụ MỚI, thay thế yêu cầu tệp ở bước xác
+    // nhận cuối trước đây).
+    status: 'DRAFT',
+    currentStep: 0,
     history: [],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
@@ -1633,24 +1652,23 @@ function startOfficePayment(user, item, overrides) {
     sourceModule: item.subType, sourceId: item.id, sourceCode: item.code,
     dept: item.dept,
     title: (overrides?.title && String(overrides.title).trim()) || item.title,
-    amount: overrideInstallments ? installments.reduce((s, it) => s + it.amount, 0) : item.amount,
+    amount: overrideInstallments ? installments.reduce((s, it) => s + (it.amount || 0), 0) : item.amount,
     referenceAmount: item.amount,
     amountMismatchesSource: overrideInstallments
-      ? Math.abs(installments.reduce((s, it) => s + it.amount, 0) - item.amount) > 1
+      ? Math.abs(installments.reduce((s, it) => s + (it.amount || 0), 0) - item.amount) > 1
       : false,
     installments,
+    requestFiles: normalizePaymentRequestFiles(overrides?.requestFiles),
     // officeReqs KHÔNG có khái niệm paymentType (Mua Bán/Sửa Chữa/Đầu Tư không có "1 lần"/"định kỳ") ->
     // sourcePaymentType luôn null, đề nghị đi theo ĐÚNG chế độ xác nhận TỪNG ĐỢT như trước (an toàn/tương
     // thích ngược — xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum() ở dưới).
     sourcePaymentType: null,
-    // officeReqs (Mua Bán/Sửa Chữa) KHÔNG có khái niệm NHÁP/paymentType định kỳ (khác Hợp đồng) — LUÔN
-    // tạo thẳng PENDING như trước, hoàn toàn không đổi hành vi module này. currentStep/history khởi tạo
-    // ngay để đề nghị đi qua ĐÚNG được quy trình duyệt theo bước MỚI dùng CHUNG cho mọi nguồn
-    // (paymentDeptWorkflows, xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests) — thiếu 2 field
-    // này thì đề nghị sẽ kẹt vĩnh viễn ở PENDING (không approver nào tra được currentStep hợp lệ, trừ
-    // admin), dù bản thân officeReqs/MUA_BAN/SUA_CHUA không hề thay đổi gì.
-    status: 'PENDING',
-    currentStep: 1,
+    // LUÔN tạo NHÁP — TRƯỚC ĐÂY officeReqs (Mua Bán/Sửa Chữa/Đầu Tư) tạo THẲNG PENDING (khác Hợp đồng),
+    // giờ đổi THỐNG NHẤT với mọi nguồn khác: phải qua "🗂️ Quản Lý Thanh Toán" đính kèm "Hồ Sơ Đề Nghị
+    // Thanh Toán" (multi-file) rồi mới "Chuyển Xác Nhận Thanh Toán" được (quyết định nghiệp vụ MỚI).
+    // currentStep/history chỉ khởi tạo THẬT lúc submitPaymentRequest() (DRAFT -> PENDING).
+    status: 'DRAFT',
+    currentStep: 0,
     history: [],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
@@ -1704,6 +1722,11 @@ function editPaymentRequest(payload, user, pr) {
   for (const field of PAYMENT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) pr[field] = payload[field];
   }
+  // requestFiles ("Hồ Sơ Đề Nghị Thanh Toán") cần chuẩn hoá/kiểm tra URL riêng (assertUploadedFileUrlList)
+  // nên KHÔNG gán thẳng qua vòng lặp PAYMENT_EDITABLE_FIELDS ở trên như title/dept/installments.
+  if (payload.requestFiles !== undefined) {
+    pr.requestFiles = normalizePaymentRequestFiles(payload.requestFiles);
+  }
   // Khớp đúng ràng buộc lúc TẠO (createValidation.js paymentRequests.extraValidate) — sửa xoá trắng
   // tiêu đề trước đây không bị chặn, để lại hồ sơ khó nhận diện trong danh sách chờ duyệt.
   if (payload.title !== undefined) {
@@ -1755,6 +1778,13 @@ function submitPaymentRequest(user, pr) {
     .filter(n => n !== null);
   if (missingOrdinals.length) {
     throw new HttpError(400, `Vui lòng nhập số tiền lớn hơn 0 cho đợt thanh toán số: ${missingOrdinals.join(', ')} trước khi chuyển xác nhận thanh toán`);
+  }
+  // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file, đính kèm qua editPaymentRequest() lúc còn NHÁP) — bắt buộc
+  // >=1 tệp trước khi gửi đi, khớp yêu cầu nghiệp vụ MỚI (đảo ngược so với thiết kế cũ — trước đây bắt
+  // buộc tệp ở bước xác nhận CUỐI, xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum()).
+  const requestFiles = Array.isArray(pr.requestFiles) ? pr.requestFiles : [];
+  if (!requestFiles.length) {
+    throw new HttpError(400, 'Vui lòng đính kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" (có thể chọn nhiều tệp) trước khi chuyển xác nhận thanh toán');
   }
   pr.status = 'PENDING';
   pr.currentStep = 1;
@@ -1836,8 +1866,9 @@ function countPaymentInstallmentWarnings(pr) {
 // định kỳ/thủ công/nguồn không có khái niệm paymentType) — đề nghị ONE_TIME phải xác nhận TOÀN BỘ 1 lần
 // qua confirmPaymentRequestLumpSum() bên dưới, KHÔNG được xác nhận nhỏ giọt từng đợt (yêu cầu nghiệp vụ
 // #7 "không được phép ấn xác nhận trên tổng đợt" — vế ngược lại, "1 lần" KHÔNG được xác nhận theo đợt).
-// Bắt buộc kèm tệp "đề nghị thanh toán đã phê duyệt" (fileUrl/fileName, yêu cầu nghiệp vụ #2/#4 — tính
-// năng MỚI, trước đây xác nhận không đòi hỏi tệp gì).
+// KHÔNG còn bắt buộc kèm tệp nữa — "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) giờ đã bắt buộc đính kèm NGAY
+// LÚC TẠO/GỬI đề nghị (xem submitPaymentRequest()), bước xác nhận này chỉ còn là bấm xác nhận đơn thuần
+// (ĐẢO NGƯỢC lại thiết kế cũ — trước đây chính bước này mới bắt buộc upload tệp).
 function confirmPaymentInstallment(payload, user, pr) {
   if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
   if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
@@ -1847,15 +1878,9 @@ function confirmPaymentInstallment(payload, user, pr) {
   const idx = Number(payload?.index);
   if (!Array.isArray(pr.installments) || !pr.installments[idx]) throw new HttpError(400, 'Đợt thanh toán không hợp lệ');
   if (pr.installments[idx].confirmed) throw new HttpError(409, 'Đợt thanh toán này đã được xác nhận trước đó');
-  const { fileName, fileUrl, fileType } = payload || {};
-  if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp đề nghị thanh toán đã phê duyệt');
-  assertUploadedFileUrl(fileUrl, 'Tệp đề nghị thanh toán đã phê duyệt');
   pr.installments[idx].confirmed = true;
   pr.installments[idx].confirmedBy = user.username;
   pr.installments[idx].confirmedAt = nowVN();
-  pr.installments[idx].confirmFileUrl = fileUrl;
-  pr.installments[idx].confirmFileName = fileName;
-  pr.installments[idx].confirmFileType = fileType || null;
 
   const justCompleted = pr.installments.every(it => it.confirmed);
   if (justCompleted) {
@@ -1879,17 +1904,9 @@ function confirmPaymentRequestLumpSum(payload, user, pr) {
   if (pr.sourcePaymentType !== 'ONE_TIME') {
     throw new HttpError(409, 'Chỉ đề nghị thanh toán "1 lần" mới được xác nhận toàn bộ 1 lần — đề nghị này phải xác nhận theo từng đợt');
   }
-  const { fileName, fileUrl, fileType } = payload || {};
-  if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp đề nghị thanh toán đã phê duyệt');
-  assertUploadedFileUrl(fileUrl, 'Tệp đề nghị thanh toán đã phê duyệt');
   const now = nowVN();
-  pr.lumpConfirmFileUrl = fileUrl;
-  pr.lumpConfirmFileName = fileName;
-  pr.lumpConfirmFileType = fileType || null;
   pr.installments = (Array.isArray(pr.installments) ? pr.installments : []).map(it => ({
-    ...it,
-    confirmed: true, confirmedBy: user.username, confirmedAt: now,
-    confirmFileUrl: fileUrl, confirmFileName: fileName, confirmFileType: fileType || null
+    ...it, confirmed: true, confirmedBy: user.username, confirmedAt: now
   }));
   pr.status = 'PAID';
   pr.paidAt = now;

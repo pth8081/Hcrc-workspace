@@ -199,15 +199,15 @@ router.post('/paymentRequests/from-source', async (req, res) => {
     const sourceModule = String(req.body?.sourceModule || '');
     const sourceId = Number(req.body?.sourceId);
     if (!Number.isFinite(sourceId)) return res.status(400).json({ error: 'sourceId không hợp lệ' });
-    // createAsPending: true — route NÀY vẫn giữ NGUYÊN hành vi cũ 100% (tạo THẲNG PENDING, số tiền từng
-    // đợt bắt buộc > 0 ngay lúc tạo qua normalizePaymentInstallmentsOverride() ở lib/recordActions.js) —
-    // KHÁC nút "🧾 Lập Thanh Toán" ngay trong module Hợp Đồng (gọi startContractPayment() KHÔNG kèm
-    // overrides, tạo DRAFT). startOfficePayment() bỏ qua cờ này (officeReqs luôn PENDING, không đổi).
+    // LUÔN tạo NHÁP (xem startContractPayment()/startOfficePayment() ở lib/recordActions.js) — TRƯỚC ĐÂY
+    // route này dùng overrides.createAsPending để tạo THẲNG PENDING, giờ BỎ HẲN: kế toán tự tạo đề nghị
+    // có nguồn từ module Thanh Toán cũng phải qua "🗂️ Quản Lý Thanh Toán" đính kèm "Hồ Sơ Đề Nghị Thanh
+    // Toán" (multi-file) rồi mới "Chuyển Xác Nhận Thanh Toán" được, cùng luật với mọi nguồn khác.
     const overrides = {
       title: req.body?.title,
       installments: req.body?.installments,
-      skipManageGate: true,
-      createAsPending: true
+      requestFiles: req.body?.requestFiles,
+      skipManageGate: true
     };
 
     let draft = null;

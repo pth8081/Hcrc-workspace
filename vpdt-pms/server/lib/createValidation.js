@@ -1149,24 +1149,36 @@ const CREATE_MODULE_CONFIGS = {
       // null, đi theo chế độ xác nhận TỪNG ĐỢT như mọi nguồn không phải ONE_TIME (xem
       // confirmPaymentInstallment()/confirmPaymentRequestLumpSum() ở lib/recordActions.js).
       payload.sourcePaymentType = null;
-      payload.status = 'PENDING';
-      // currentStep/history — bắt buộc để đề nghị tạo thủ công đi qua ĐÚNG được quy trình duyệt theo
-      // bước/phòng ban MỚI (paymentDeptWorkflows, xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests)
-      // thay cho quyền phẳng cũ. Đề nghị tạo thủ công KHÔNG có khái niệm NHÁP (đi thẳng vào PENDING) nên
-      // gán ngay từ lúc tạo, khác đề nghị có nguồn Hợp đồng đi qua DRAFT trước (xem startContractPayment()).
-      payload.currentStep = 1;
+      // LUÔN tạo NHÁP — TRƯỚC ĐÂY đề nghị tạo thủ công đi thẳng PENDING (không có khái niệm NHÁP), giờ
+      // đổi THỐNG NHẤT với mọi nguồn khác (Hợp đồng/Mua Bán/Sửa Chữa): phải đính kèm "Hồ Sơ Đề Nghị Thanh
+      // Toán" (multi-file, xem requestFiles bên dưới) rồi mới "Chuyển Xác Nhận Thanh Toán" được — currentStep/
+      // history chỉ khởi tạo THẬT lúc submitPaymentRequest() (DRAFT -> PENDING), khớp đúng đề nghị có nguồn.
+      payload.status = 'DRAFT';
+      payload.currentStep = 0;
       payload.history = [];
       const installments = Array.isArray(payload.installments) ? payload.installments : [];
       if (!installments.length) throw new CreateError(400, 'Cần ít nhất 1 đợt thanh toán');
-      payload.installments = installments.map(it => ({
-        description: (it?.description || '').trim(), amount: Number(it?.amount) || 0, dueDate: it?.dueDate || '',
-        confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
-      }));
-      // Mỗi đợt phải dương — không chỉ ràng buộc tổng (xem cùng lý do ở contracts.extraValidate).
-      if (payload.installments.some(it => !(it.amount > 0))) {
-        throw new CreateError(400, 'Mỗi đợt thanh toán phải có số tiền lớn hơn 0');
-      }
-      payload.amount = payload.installments.reduce((sum, it) => sum + it.amount, 0);
+      // Số tiền từng đợt CHƯA bắt buộc > 0 ngay lúc tạo NHÁP (chỉ bắt buộc lúc "Chuyển Xác Nhận Thanh
+      // Toán", xem submitPaymentRequest() ở lib/recordActions.js) — khớp đúng luật NHÁP của đề nghị có
+      // nguồn Hợp đồng/Mua Bán/Sửa Chữa (editPaymentRequest() nhánh NHÁP).
+      payload.installments = installments.map(it => {
+        const rawAmount = it?.amount;
+        const n = (rawAmount === '' || rawAmount === null || rawAmount === undefined) ? NaN : Number(rawAmount);
+        return {
+          description: (it?.description || '').trim(), amount: Number.isFinite(n) ? n : null, dueDate: it?.dueDate || '',
+          confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
+        };
+      });
+      payload.amount = payload.installments.reduce((sum, it) => sum + (it.amount || 0), 0);
+      // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) — TUỲ CHỌN ngay lúc tạo (có thể đính kèm sau qua sửa NHÁP
+      // ở "🗂️ Quản Lý Thanh Toán"), nhưng BẮT BUỘC >=1 tệp trước khi "Chuyển Xác Nhận Thanh Toán" (xem
+      // submitPaymentRequest() ở lib/recordActions.js) — quyết định nghiệp vụ MỚI, đảo ngược thiết kế cũ
+      // (trước đây bắt buộc tệp ở bước xác nhận CUỐI).
+      const requestFiles = Array.isArray(payload.requestFiles) ? payload.requestFiles.slice(0, 20) : [];
+      assertUploadedFileUrlList(requestFiles, 'Hồ sơ đề nghị thanh toán');
+      payload.requestFiles = requestFiles
+        .filter(f => f && typeof f === 'object' && f.fileUrl && f.fileName)
+        .map(f => ({ fileUrl: String(f.fileUrl), fileName: String(f.fileName).slice(0, 200), fileType: f.fileType ? String(f.fileType).slice(0, 100) : null }));
     }
   },
   // Văn phòng phẩm — "kỳ đăng ký": KHÔNG có khái niệm phòng ban để chọn (dùng chung toàn công ty),

@@ -1427,8 +1427,15 @@ function startOfficePaymentAction(id) {
       const idx = DB.officeReqs.findIndex(x => x.id === id);
       if (idx !== -1) DB.officeReqs[idx] = updated;
       if (paymentRequest) DB.paymentRequests.unshift(paymentRequest);
-      logSystemAction('OFFICE', 'START_OFFICE_PAYMENT', `Chuyển đề xuất [${updated.code}] sang chờ thanh toán`, 'SUCCESS', updated.code);
+      logSystemAction('OFFICE', 'START_OFFICE_PAYMENT', `Chuyển đề xuất [${updated.code}] sang chờ thanh toán (lập đề nghị nháp)`, 'SUCCESS', updated.code);
       renderOfficeReqs();
+      // startOfficePayment() giờ LUÔN tạo NHÁP (khớp đúng Hợp đồng ở trên) — điều hướng sang "🗂️ Quản Lý
+      // Thanh Toán" để đính kèm "Hồ Sơ Đề Nghị Thanh Toán" rồi "Chuyển Xác Nhận Thanh Toán", thay vì nằm
+      // im trong danh sách officeReqs (TRƯỚC ĐÂY đi thẳng PENDING nên không cần điều hướng).
+      pendingManagePaymentFocusId = paymentRequest ? paymentRequest.id : null;
+      switchTab('office');
+      setOfficeSubTab('PAYMENT');
+      setPaymentSubTab('MANAGE');
     }
   });
 }

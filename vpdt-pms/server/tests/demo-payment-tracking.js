@@ -1,10 +1,11 @@
 // server/tests/demo-payment-tracking.js
 //
 // DEMO thật (không phải bộ hồi quy tự động — tests/test-payment.js đã phủ đủ luật nghiệp vụ) cho refinement
-// module Thanh Toán (v13.4): "Quản Lý Thanh Toán" giữ lại đề nghị PAID (không còn biến mất), badge trạng
-// thái tổng hợp "tổng đợt" + cảnh báo quá hạn/sắp đến hạn, xác nhận TỪNG ĐỢT kèm bắt buộc tệp (Hợp đồng
-// "Thanh toán định kỳ"/thủ công/nguồn officeReqs), xác nhận TOÀN BỘ 1 LẦN (lump-sum, Hợp đồng "Thanh
-// toán 1 lần") kèm 1 tệp duy nhất.
+// module Thanh Toán (v13.4, cập nhật theo logic đảo ngược yêu cầu đính kèm tệp — xem tests/test-payment.js):
+// "Quản Lý Thanh Toán" giữ lại đề nghị PAID (không còn biến mất), badge trạng thái tổng hợp "tổng đợt" +
+// cảnh báo quá hạn/sắp đến hạn. "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) giờ BẮT BUỘC đính kèm lúc TẠO/NHÁP
+// (trước "Chuyển Xác Nhận Thanh Toán", DRAFT -> PENDING) — xác nhận TỪNG ĐỢT/TOÀN BỘ 1 LẦN không còn yêu
+// cầu tệp gì nữa.
 //
 // Dùng ĐÚNG hạ tầng test-payment.js đã dùng (tests/_harness-contract.js — Chromium thật mở public/
 // index.html thật + toàn bộ public/js/*.js thật, chỉ tầng mạng là mock backend tái sử dụng NGUYÊN VẸN
@@ -49,10 +50,8 @@ async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const assetDir = path.join(__dirname, '.tmp-assets');
   fs.mkdirSync(assetDir, { recursive: true });
-  const confirmFile = path.join(assetDir, 'demo-payment-confirm.pdf');
-  fs.writeFileSync(confirmFile, '%PDF-1.4 demo payment confirm file');
-  const lumpFile = path.join(assetDir, 'demo-payment-lump.pdf');
-  fs.writeFileSync(lumpFile, '%PDF-1.4 demo payment lump-sum confirm file');
+  const requestFile = path.join(assetDir, 'demo-payment-request.pdf');
+  fs.writeFileSync(requestFile, '%PDF-1.4 demo Ho So De Nghi Thanh Toan');
 
   const h = await startHarness();
   const { page, loginAs, seedRecord, stop } = h;
@@ -66,6 +65,11 @@ async function main() {
   }
   async function readLatestPr() {
     return page.evaluate(() => { const pr = DB.paymentRequests[0]; return pr ? { id: pr.id } : null; });
+  }
+  async function attachRequestFileInManage(id) {
+    await page.evaluate((prId) => openPaymentManageEdit(prId), id);
+    await page.waitForTimeout(80);
+    await page.setInputFiles(`#paymentManageRequestFilesInput_${id}`, [requestFile]);
   }
 
   try {
@@ -103,6 +107,7 @@ async function main() {
     await page.evaluate((id) => startContractPaymentAction(id), contractAlpha.id);
     await h.confirmPending();
     const alphaPr = await readLatestPr();
+    await attachRequestFileInManage(alphaPr.id);
     await page.evaluate((id) => submitPaymentRequestAction(id), alphaPr.id);
     await h.confirmPending();
     await loginAs('tp_kd');
@@ -117,6 +122,7 @@ async function main() {
     await page.evaluate((id) => startContractPaymentAction(id), contractBeta.id);
     await h.confirmPending();
     const betaPr = await readLatestPr();
+    await attachRequestFileInManage(betaPr.id);
     await page.evaluate((id) => submitPaymentRequestAction(id), betaPr.id);
     await h.confirmPending();
     await loginAs('tp_kd');
@@ -130,6 +136,7 @@ async function main() {
     await page.evaluate((id) => startContractPaymentAction(id), contractGamma.id);
     await h.confirmPending();
     const gammaPr = await readLatestPr();
+    await attachRequestFileInManage(gammaPr.id);
     await page.evaluate((id) => submitPaymentRequestAction(id), gammaPr.id);
     await h.confirmPending();
     await loginAs('tp_kd');
@@ -139,11 +146,11 @@ async function main() {
     await loginAs('ketoan1');
     await goToPaymentApprove();
     await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), gammaPr.id);
-    await page.setInputFiles('#paymentConfirmFile', lumpFile);
-    await page.evaluate(() => submitPaymentConfirmUpload());
+    await h.confirmPending();
     await page.waitForTimeout(300);
 
-    // ---- Delta: 1 đề nghị thủ công đứng ở PENDING (chờ duyệt) để thêm sắc thái trạng thái ----
+    // ---- Delta: 1 đề nghị thủ công đứng ở PENDING (chờ duyệt) để thêm sắc thái trạng thái — đính kèm
+    // "Hồ Sơ Đề Nghị Thanh Toán" NGAY LÚC TẠO rồi "Chuyển Xác Nhận Thanh Toán" để lên PENDING ----
     await page.evaluate(() => { switchTab('office'); setOfficeSubTab('PAYMENT'); setPaymentSubTab('CREATE'); });
     await page.selectOption('#paymentSourceType', 'MANUAL');
     await page.selectOption('#paymentDept', 'Phòng Kế Toán');
@@ -152,7 +159,12 @@ async function main() {
     const row = page.locator('#paymentCreateInstallmentsList [data-installment-row]').first();
     await row.locator('.payment-installment-desc').fill('Thanh toán toàn bộ');
     await row.locator('.payment-installment-amount').fill('15.000.000');
+    await page.setInputFiles('#paymentCreateRequestFiles', [requestFile]);
     await page.evaluate(() => submitManualPaymentRequest({ preventDefault() {} }));
+    await page.waitForTimeout(300);
+    const deltaPr = await readLatestPr();
+    await page.evaluate((id) => submitPaymentRequestAction(id), deltaPr.id);
+    await h.confirmPending();
     await page.waitForTimeout(300);
 
     // ===== Ảnh 1: "🗂️ Quản Lý Thanh Toán" — tổng quan nhiều trạng thái (APPROVED có cảnh báo quá
@@ -170,28 +182,26 @@ async function main() {
     await page.locator('#paymentApproveWrap').screenshot({ path: path.join(OUT_DIR, '02-xac-nhan-de-nghi-thanh-toan-tong-quan.png') });
     console.log('Đã lưu 02-xac-nhan-de-nghi-thanh-toan-tong-quan.png');
 
-    // ===== Ảnh 3: Modal xác nhận TỪNG ĐỢT (PERIODIC, Beta — đợt 2 còn lại) kèm tệp đã chọn =====
+    // ===== Ảnh 3: Modal xác nhận TỪNG ĐỢT (PERIODIC, Beta — đợt 2 còn lại) — không còn yêu cầu tệp
+    // (Hồ Sơ Đề Nghị Thanh Toán giờ đính kèm lúc TẠO, không phải lúc xác nhận) =====
     await page.evaluate((id) => confirmPaymentInstallmentAction(id, 1), betaPr.id);
-    await page.waitForSelector('#paymentConfirmModal:not(.hidden)');
-    await page.setInputFiles('#paymentConfirmFile', confirmFile);
-    await page.locator('#paymentConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '03-modal-xac-nhan-tung-dot-dinh-ky.png') });
+    await page.waitForSelector('#genericConfirmModal:not(.hidden)');
+    await page.locator('#genericConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '03-modal-xac-nhan-tung-dot-dinh-ky.png') });
     console.log('Đã lưu 03-modal-xac-nhan-tung-dot-dinh-ky.png');
-    await page.evaluate(() => closePaymentConfirmModal());
+    await page.evaluate(() => closeGenericConfirmModal());
 
-    // ===== Ảnh 4: Modal xác nhận TOÀN BỘ 1 LẦN (ONE_TIME, Alpha) kèm tệp đã chọn =====
+    // ===== Ảnh 4: Modal xác nhận TOÀN BỘ 1 LẦN (ONE_TIME, Alpha) — không còn yêu cầu tệp =====
     await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), alphaPr.id);
-    await page.waitForSelector('#paymentConfirmModal:not(.hidden)');
-    await page.setInputFiles('#paymentConfirmFile', lumpFile);
-    await page.locator('#paymentConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '04-modal-xac-nhan-toan-bo-mot-lan.png') });
+    await page.waitForSelector('#genericConfirmModal:not(.hidden)');
+    await page.locator('#genericConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '04-modal-xac-nhan-toan-bo-mot-lan.png') });
     console.log('Đã lưu 04-modal-xac-nhan-toan-bo-mot-lan.png');
-    await page.evaluate(() => closePaymentConfirmModal());
+    await page.evaluate(() => closeGenericConfirmModal());
 
     // ===== Ảnh 5 (bằng chứng khép vòng): xác nhận THẬT đợt 2 của Beta (đủ hết 2 đợt) -> tự chuyển PAID,
     // rồi chụp lại "Quản Lý Thanh Toán" lần nữa để thấy Beta giờ cũng "✅ Đã thanh toán" mà KHÔNG biến mất
     // khỏi danh sách =====
     await page.evaluate((id) => confirmPaymentInstallmentAction(id, 1), betaPr.id);
-    await page.setInputFiles('#paymentConfirmFile', confirmFile);
-    await page.evaluate(() => submitPaymentConfirmUpload());
+    await h.confirmPending();
     await page.waitForTimeout(300);
     await goToPaymentManage();
     await page.waitForSelector('#paymentManageList');

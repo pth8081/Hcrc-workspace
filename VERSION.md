@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**15.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.3 (2026-09-09): Đảo ngược logic đính kèm "Hồ Sơ Đề Nghị Thanh Toán" trong module Thanh Toán — bắt buộc lúc TẠO, không còn bắt buộc lúc XÁC NHẬN
+
+Người dùng chỉ ra module Thanh Toán đang làm NGƯỢC yêu cầu ban đầu: tệp đính kèm ("Hồ Sơ Đề Nghị Thanh
+Toán") đang bị bắt buộc ở bước "✅ Xác Nhận Đề Nghị Thanh Toán" (kế toán xác nhận đã chi), trong khi lẽ
+ra phải bắt buộc NGAY LÚC LẬP đề nghị thanh toán (trước khi chuyển sang chờ xác nhận).
+
+**Thay đổi cốt lõi**: thêm field `requestFiles` (mảng nhiều tệp) mới trên `paymentRequests`, đính kèm ở
+bước tạo/nháp (`DRAFT`). Cả 4 đường tạo đề nghị (Hợp đồng "🧾 Lập Thanh Toán", officeReqs "Chuyển Sang
+Thanh Toán", tạo có nguồn từ module Thanh Toán, tạo thủ công) giờ LUÔN tạo `DRAFT` trước (trước đây 3/4
+đường tạo thẳng `PENDING`, không đi qua bước nháp). Bước "Chuyển Xác Nhận Thanh Toán" (`DRAFT` ->
+`PENDING`) giờ CHẶN nếu `requestFiles` rỗng (validate cả client lẫn server). Ngược lại, bước xác nhận đã
+chi (`confirmPaymentInstallmentAction`/`confirmPaymentRequestLumpSumAction`, tại "✅ Xác Nhận Đề Nghị
+Thanh Toán") không còn yêu cầu tệp gì nữa — chỉ còn xác nhận qua modal thông thường.
+
+Sửa `lib/recordActions.js` (`normalizePaymentRequestFiles()` mới, `startContractPayment()`/
+`startOfficePayment()` bỏ nhánh `createAsPending`, `submitPaymentRequest()` thêm check bắt buộc
+`requestFiles`, `confirmPaymentInstallment()`/`confirmPaymentRequestLumpSum()` bỏ hết logic tệp cũ),
+`lib/createValidation.js` (tạo thủ công mặc định `DRAFT` thay vì `PENDING`), `routes/records.js` (route
+from-source bỏ `createAsPending: true`), `public/index.html` (bỏ modal `#paymentConfirmModal` cũ, thêm
+field multi-file ở form tạo), `public/js/module-thanhtoan.js` (viết lại toàn bộ luồng tạo/sửa/xác nhận).
+
+Verify: viết lại hoàn toàn `tests/test-payment.js` (73/73 pass) phủ cả 4 đường tạo qua đúng luồng mới,
+xác nhận `tests/test-office-budget.js` (62/62 pass) không bị ảnh hưởng, cập nhật `tests/demo-payment-tracking.js`
+theo luồng mới (chạy thành công), chạy toàn bộ 95 file `tests/test-*.js` — chỉ 2 lỗi liên quan
+`localhost:1433` (SQL Server không chạy được trong môi trường build hiện tại, không liên quan thay đổi
+lần này, các module khác không đụng tới).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`. Các
+đề nghị thanh toán CŨ đang ở trạng thái `PENDING` trở lên (đã qua bước gửi trước khi có field này) vẫn
+hoạt động bình thường — `requestFiles` chỉ bắt buộc cho đề nghị MỚI TẠO SAU khi deploy, không hồi tố.
 
 ## v15.2 (2026-09-09): Fix user tạo qua import Excel không Sửa/Khoá/Xoá được (lỗi tiền tồn, không phải do các bản vá gần đây)
 

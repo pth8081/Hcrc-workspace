@@ -136,7 +136,7 @@ function createMockApi(state) {
         const sourceModule = String((payload && payload.sourceModule) || '');
         const sourceId = Number(payload && payload.sourceId);
         if (!Number.isFinite(sourceId)) throw new HttpError(400, 'sourceId không hợp lệ');
-        const overrides = { title: payload && payload.title, installments: payload && payload.installments, skipManageGate: true, createAsPending: true };
+        const overrides = { title: payload && payload.title, installments: payload && payload.installments, requestFiles: payload && payload.requestFiles, skipManageGate: true };
         let draft, result;
         if (sourceModule === 'CONTRACT') {
           result = findOr404(state.collections.contracts, sourceId);

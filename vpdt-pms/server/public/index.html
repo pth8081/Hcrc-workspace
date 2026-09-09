@@ -3915,9 +3915,15 @@
             <div id="paymentCreateInstallmentsList" class="space-y-2" data-op-input="updatePaymentCreateInstallmentsSummary"></div>
             <div id="paymentCreateInstallmentsSummary" class="mt-2 text-[11px]"></div>
           </div>
+          <div id="paymentCreateRequestFilesWrap" class="border-t pt-3">
+            <label class="block font-semibold text-gray-600 mb-1">📎 Hồ Sơ Đề Nghị Thanh Toán (có thể chọn nhiều tệp)</label>
+            <input id="paymentCreateRequestFiles" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="paymentCreateRequestFilesChips" class="w-full border p-1.5 rounded bg-white">
+            <div id="paymentCreateRequestFilesChips" class="flex flex-wrap gap-1 mt-1"></div>
+            <p class="text-gray-400 mt-1 text-[11px]">Tuỳ chọn ngay lúc tạo — có thể đính kèm sau ở "🗂️ Quản Lý Thanh Toán", nhưng BẮT BUỘC có ít nhất 1 tệp trước khi "Chuyển Xác Nhận Thanh Toán".</p>
+          </div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="paymentCreateForm" data-arg1="resetPaymentCreateForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
-            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Lập Đề Nghị (Nháp)</button>
           </div>
         </form>
       </div>
@@ -3978,25 +3984,6 @@
       <div class="flex justify-end gap-2 pt-1">
         <button data-op="closeSignedUploadModal" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
         <button data-op="submitSignedUpload" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Tải Lên</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal "✅ Xác Nhận Thanh Toán" — dùng CHUNG cho xác nhận TỪNG ĐỢT (Thanh toán định kỳ/thủ công/
-       nguồn không có paymentType) và xác nhận TOÀN BỘ 1 LẦN (Thanh toán 1 lần, ONE_TIME) — bắt buộc kèm
-       tệp "đề nghị thanh toán đã phê duyệt" (xem openPaymentConfirmModal()/submitPaymentConfirmUpload()
-       ở module-thanhtoan.js), cùng khuôn signedUploadModal ở trên. -->
-  <div id="paymentConfirmModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
-      <h3 id="paymentConfirmModalTitle" class="font-bold text-gray-800">✅ Xác Nhận Thanh Toán</h3>
-      <p id="paymentConfirmModalSub" class="text-xs text-gray-500"></p>
-      <div>
-        <label class="block font-semibold text-gray-600 mb-1 text-xs">Tệp Đề Nghị Thanh Toán Đã Phê Duyệt (bắt buộc)</label>
-        <input id="paymentConfirmFile" type="file" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 bg-white rounded text-xs">
-      </div>
-      <div class="flex justify-end gap-2 pt-1">
-        <button data-op="closePaymentConfirmModal" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
-        <button data-op="submitPaymentConfirmUpload" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Xác Nhận Thanh Toán</button>
       </div>
     </div>
   </div>

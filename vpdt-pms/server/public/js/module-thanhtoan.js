@@ -1,7 +1,8 @@
 // ==========================================
 // MODULE CON "THANH TOÁN" (module "Tổng Hợp") — tổng hợp đề nghị thanh toán tự sinh từ Hợp đồng/Mua
-// Bán/Sửa Chữa/Đầu Tư (bấm "Chuyển Sang Thanh Toán") lẫn tạo thủ công. Vòng đời PENDING (sửa được) ->
-// [NEED_INFO (sửa được)] -> APPROVED (xác nhận từng đợt) -> PAID (khoá cứng) — xem lib/recordActions.js.
+// Bán/Sửa Chữa/Đầu Tư (bấm "Chuyển Sang Thanh Toán") lẫn tạo thủ công. Vòng đời DRAFT (lập/đính kèm Hồ
+// Sơ Đề Nghị Thanh Toán) -> PENDING (sửa được) -> [NEED_INFO (sửa được)] -> APPROVED (xác nhận từng đợt,
+// không còn cần tệp) -> PAID (khoá cứng) — xem lib/recordActions.js.
 // ==========================================
 let editingPaymentRequestId = null;
 // Đề nghị (DRAFT) đang mở sẵn khối sửa đợt thanh toán inline ở sub-tab "🗂️ Quản Lý Thanh Toán" — chỉ 1
@@ -9,10 +10,6 @@ let editingPaymentRequestId = null;
 let managePaymentExpandedId = null;
 // Lọc "🗂️ Quản Lý Thanh Toán" theo hồ sơ nguồn (mã hợp đồng/Mua Bán/Sửa Chữa) — '' = tất cả.
 let managePaymentFilterSource = '';
-// Đích đang mở của modal "✅ Xác Nhận Thanh Toán" (paymentConfirmModal, xem openPaymentConfirmModal() bên
-// dưới) — { prId, index } với index=null nghĩa là xác nhận TOÀN BỘ 1 lần (lump-sum, ONE_TIME), index là
-// số nghĩa là xác nhận TỪNG ĐỢT (confirm-installment, PERIODIC/thủ công/nguồn không có paymentType).
-let paymentConfirmTarget = null;
 
 // canManagePaymentRequestsClient() da chuyen sang core.js (Ha tang: nap module theo cum, dot 7) -
 // getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI switchTab().
@@ -181,14 +178,28 @@ async function submitManualPaymentRequest(e) {
     return;
   }
 
+  // "Hồ Sơ Đề Nghị Thanh Toán" — TUỲ CHỌN ngay lúc tạo (có thể đính kèm sau ở "🗂️ Quản Lý Thanh Toán"),
+  // upload ngay nếu người dùng đã chọn tệp trong form tạo.
+  const createFilesInput = document.getElementById('paymentCreateRequestFiles');
+  const chosenCreateFiles = createFilesInput && createFilesInput.files ? Array.from(createFilesInput.files) : [];
+  let requestFiles = [];
+  if (chosenCreateFiles.length) {
+    try {
+      const uploaded = await Promise.all(chosenCreateFiles.map(f => uploadFileToServer(f, 'payment')));
+      requestFiles = uploaded.map(u => ({ fileUrl: u.fileUrl, fileName: u.fileName, fileType: u.fileType }));
+    } catch (err) {
+      return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+    }
+  }
+
   let newPr;
   let updatedSourceItem = null;
   try {
     if (sourceType === 'MANUAL') {
-      const result = await callCreateAction('paymentRequests', { dept, title, installments });
+      const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles });
       newPr = result.item;
     } else {
-      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments });
+      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments, requestFiles });
       newPr = result.paymentRequest;
       updatedSourceItem = result.item;
     }
@@ -203,10 +214,11 @@ async function submitManualPaymentRequest(e) {
     renderContracts();
     renderOfficeReqs();
   }
-  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Tạo đề nghị thanh toán ${sourceType === 'MANUAL' ? 'thủ công' : `từ nguồn [${PAYMENT_SOURCE_LABELS[sourceType] || sourceType}]`} [${title}]`, 'SUCCESS', String(newPr.id));
-  alert('✅ Đã tạo đề nghị thanh toán!');
+  logSystemAction('OFFICE', 'CREATE_PAYMENT_REQUEST', `Lập nháp đề nghị thanh toán ${sourceType === 'MANUAL' ? 'thủ công' : `từ nguồn [${PAYMENT_SOURCE_LABELS[sourceType] || sourceType}]`} [${title}]`, 'SUCCESS', String(newPr.id));
+  alert('✅ Đã lập đề nghị thanh toán (nháp) — vào "🗂️ Quản Lý Thanh Toán" để đính kèm đủ Hồ Sơ Đề Nghị Thanh Toán rồi "Chuyển Xác Nhận Thanh Toán".');
   cancelEditPaymentRequest();
-  setPaymentSubTab('APPROVE');
+  managePaymentExpandedId = newPr.id;
+  setPaymentSubTab('MANAGE');
 }
 
 // resetPaymentCreateForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung mọi form tạo mới, xem
@@ -225,7 +237,9 @@ function cancelEditPaymentRequest() {
   document.getElementById('paymentSourceTypeWrap').classList.remove('hidden');
   document.getElementById('paymentSourceType').value = 'MANUAL';
   onPaymentSourceTypeChange();
-  form.querySelector('button[type="submit"]').innerText = 'Gửi phê duyệt';
+  document.getElementById('paymentCreateRequestFilesWrap').classList.remove('hidden');
+  clearMultiFileInput('paymentCreateRequestFiles', 'paymentCreateRequestFilesChips');
+  form.querySelector('button[type="submit"]').innerText = 'Lập Đề Nghị (Nháp)';
 }
 
 function openEditPaymentRequest(id) {
@@ -239,6 +253,10 @@ function openEditPaymentRequest(id) {
   document.getElementById('paymentSourceTypeWrap').classList.add('hidden');
   document.getElementById('paymentSourceRecordWrap').classList.add('hidden');
   document.getElementById('paymentSourceRecord').required = false; // ẩn hẳn ở chế độ sửa — xem chú thích required trong onPaymentSourceTypeChange()
+  // "Hồ Sơ Đề Nghị Thanh Toán" chỉ đính kèm được lúc TẠO hoặc ở "🗂️ Quản Lý Thanh Toán" (còn NHÁP) —
+  // form Sửa này chỉ đổi title/dept/installments (editPaymentRequest() không nhận requestFiles từ đây),
+  // ẩn hẳn để không gây hiểu nhầm chọn tệp ở đây rồi mất vì không được gửi đi.
+  document.getElementById('paymentCreateRequestFilesWrap').classList.add('hidden');
   document.getElementById('paymentDeptWrap').classList.remove('hidden');
   document.getElementById('paymentDept').value = pr.dept;
   document.getElementById('paymentTitle').value = pr.title;
@@ -380,16 +398,35 @@ function closePaymentManageEdit() {
   renderPaymentManageTab();
 }
 
+// Đọc tệp MỚI vừa chọn ở input "Hồ Sơ Đề Nghị Thanh Toán" của 1 đề nghị (nếu có), upload lên server rồi
+// GỘP với danh sách đã có sẵn (pr.requestFiles) — KHÔNG cho gỡ tệp đã đính kèm trước đó ở đây (chỉ thêm
+// mới), giữ đơn giản đúng nhu cầu "đính kèm nhiều tệp trước khi gửi". Input có thể không tồn tại trong
+// DOM nếu khối sửa NHÁP đang đóng (managePaymentExpandedId khác id) — khi đó trả nguyên requestFiles cũ.
+async function collectAndUploadPaymentManageRequestFiles(id) {
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  const existing = (pr && Array.isArray(pr.requestFiles)) ? pr.requestFiles : [];
+  const input = document.getElementById(`paymentManageRequestFilesInput_${id}`);
+  const newFiles = input && input.files ? Array.from(input.files) : [];
+  if (!newFiles.length) return existing;
+  const uploaded = await Promise.all(newFiles.map(f => uploadFileToServer(f, 'payment')));
+  return existing.concat(uploaded.map(u => ({ fileUrl: u.fileUrl, fileName: u.fileName, fileType: u.fileType })));
+}
+
 // "💾 Lưu" — LƯU đợt thanh toán đang lập/sửa, GIỮ NGUYÊN trạng thái NHÁP (số tiền để trống vẫn lưu được
-// — quyết định nghiệp vụ đã chốt: chỉ bắt buộc số tiền lúc "Chuyển Xác Nhận Thanh Toán").
+// — quyết định nghiệp vụ đã chốt: chỉ bắt buộc số tiền lúc "Chuyển Xác Nhận Thanh Toán"). Kèm luôn upload
+// + gộp "Hồ Sơ Đề Nghị Thanh Toán" mới chọn (nếu có) — không bắt buộc lúc Lưu, chỉ bắt buộc lúc Gửi.
 async function savePaymentManageDraft(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
   const installments = collectPaymentManageInstallments(id);
   if (!installments.length) return alert('⛔ Vui lòng thêm ít nhất 1 đợt thanh toán!');
+  let requestFiles;
+  try {
+    requestFiles = await collectAndUploadPaymentManageRequestFiles(id);
+  } catch (err) { return alert(`⛔ Tải tệp lên thất bại: ${err.message}`); }
   let updated;
   try {
-    const result = await callRecordAction('paymentRequests', id, 'edit', { installments });
+    const result = await callRecordAction('paymentRequests', id, 'edit', { installments, requestFiles });
     updated = result.item;
   } catch (err) { return alert(`⛔ ${err.message}`); }
   const idx = DB.paymentRequests.findIndex(x => x.id === id);
@@ -423,12 +460,25 @@ function submitPaymentRequestAction(id) {
     bodyHTML: `Chuyển đề nghị "<b>${escapeHtml(pr.title)}</b>" sang chờ duyệt theo phòng ban?${warnHTML}`,
     confirmLabel: 'Chuyển Xác Nhận',
     onConfirm: async () => {
-      // Đang sửa dở -> lưu lại đúng nội dung mới nhất trước khi gửi, tránh gửi đi bản CŨ trên DB (client
-      // đã kiểm tra bằng đúng "installments" ở trên rồi, chỉ còn đồng bộ lại server).
-      if (managePaymentExpandedId === id) {
-        try {
-          await callRecordAction('paymentRequests', id, 'edit', { installments });
-        } catch (err) { return alert(`⛔ ${err.message}`); }
+      // Upload + gộp "Hồ Sơ Đề Nghị Thanh Toán" mới chọn (nếu có) TRƯỚC — bắt buộc >=1 tệp mới cho gửi
+      // (mirror đúng luật server ở submitPaymentRequest(), lib/recordActions.js).
+      let requestFiles;
+      try {
+        requestFiles = await collectAndUploadPaymentManageRequestFiles(id);
+      } catch (err) { return alert(`⛔ Tải tệp lên thất bại: ${err.message}`); }
+      // Đang sửa dở -> LUÔN lưu lại đúng nội dung mới nhất (installments + requestFiles) TRƯỚC, kể cả
+      // khi sắp bị chặn ở bước kiểm tra requestFiles ngay bên dưới — nếu không, người dùng gõ đủ số tiền
+      // xong bấm gửi mà quên đính kèm tệp sẽ bị MẤT TRẮNG các đợt vừa sửa (chỉ hiện lỗi, không lưu gì).
+      let afterEdit;
+      try {
+        const editResult = await callRecordAction('paymentRequests', id, 'edit', { installments, requestFiles });
+        afterEdit = editResult.item;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const editIdx = DB.paymentRequests.findIndex(x => x.id === id);
+      if (editIdx !== -1) DB.paymentRequests[editIdx] = afterEdit;
+      if (!requestFiles.length) {
+        renderPaymentManageTab();
+        return alert('⛔ Vui lòng đính kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" trước khi chuyển xác nhận thanh toán!');
       }
       let updated;
       try {
@@ -484,6 +534,11 @@ function renderPaymentManageTab() {
         📎 Tệp đề nghị thanh toán đã phê duyệt (toàn bộ):
         <button type="button" data-op="viewPaymentConfirmFile" data-arg0="${pr.id}" class="text-cyan-600 hover:underline">${escapeHtml(pr.lumpConfirmFileName || 'Xem tệp')}</button>
       </div>` : '';
+    // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) đã đính kèm — hiện cả 2 chế độ (đang sửa NHÁP lẫn chỉ xem),
+    // luôn liệt kê để người tạo/kế toán thấy đã có gì trước khi "Chuyển Xác Nhận Thanh Toán".
+    const requestFilesListHTML = (pr.requestFiles || []).length
+      ? `<div class="flex flex-wrap gap-1 mt-1">${pr.requestFiles.map(f => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]"><button type="button" data-op="viewPaymentRequestFile" data-arg0="${pr.id}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-700 hover:underline">📎 ${escapeHtml(f.fileName)}</button></span>`).join('')}</div>`
+      : '<p class="text-gray-400 italic text-[11px] mt-1">Chưa đính kèm tệp nào.</p>';
     return `
       <div class="bg-white p-3 rounded border space-y-2">
         <div class="flex items-start justify-between gap-3">
@@ -505,6 +560,12 @@ function renderPaymentManageTab() {
               <button type="button" data-op="addPaymentManageInstallmentRow" data-arg0="${pr.id}" class="text-amber-600 font-bold hover:underline text-xs">+ Thêm Đợt</button>
             </div>
             <div id="paymentManageInstallmentsList_${pr.id}" class="space-y-2"></div>
+            <div class="border-t pt-2">
+              <label class="font-semibold text-gray-600 text-xs">📎 Hồ Sơ Đề Nghị Thanh Toán (có thể chọn nhiều tệp — bắt buộc ít nhất 1 tệp trước khi Chuyển Xác Nhận Thanh Toán)</label>
+              ${requestFilesListHTML}
+              <input id="paymentManageRequestFilesInput_${pr.id}" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="paymentManageRequestFilesChips_${pr.id}" class="w-full border p-1.5 rounded bg-white mt-1 text-xs">
+              <div id="paymentManageRequestFilesChips_${pr.id}" class="flex flex-wrap gap-1 mt-1"></div>
+            </div>
             <div class="flex justify-end gap-2 pt-1">
               <button type="button" data-op="closePaymentManageEdit" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Đóng</button>
               <button type="button" data-op="savePaymentManageDraft" data-arg0="${pr.id}" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Lưu</button>
@@ -512,11 +573,11 @@ function renderPaymentManageTab() {
             </div>
           </div>
         ` : `
-          <div class="border-t pt-2">${readOnlyRows}${lumpFileRow}</div>
+          <div class="border-t pt-2">${readOnlyRows}${lumpFileRow}<div class="mt-1"><span class="text-[11px] font-semibold text-gray-600">📎 Hồ Sơ Đề Nghị Thanh Toán:</span>${requestFilesListHTML}</div></div>
           <div class="flex justify-end gap-2 pt-1">
             <button type="button" data-op="openPaymentManageEdit" data-arg0="${pr.id}" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✏️ Lập / Sửa Đợt Thanh Toán</button>
           </div>
-        `) : `<div class="border-t pt-2">${readOnlyRows}${lumpFileRow}</div>`}
+        `) : `<div class="border-t pt-2">${readOnlyRows}${lumpFileRow}<div class="mt-1"><span class="text-[11px] font-semibold text-gray-600">📎 Hồ Sơ Đề Nghị Thanh Toán:</span>${requestFilesListHTML}</div></div>`}
       </div>
     `;
   }).join('');
@@ -560,8 +621,12 @@ function renderPaymentRequests() {
     // có nút "Xác nhận" riêng cho từng đợt (xác nhận TOÀN BỘ 1 lần, xem nút "💰 Xác Nhận Toàn Bộ" bên dưới
     // — confirmPaymentInstallment() ở server CŨNG tự chặn 409 nếu cố gọi thẳng route, đây không phải lớp
     // gác duy nhất). PERIODIC/thủ công/nguồn không có paymentType (sourcePaymentType !== 'ONE_TIME') vẫn
-    // xác nhận TỪNG ĐỢT như cũ, giờ kèm bắt buộc upload tệp (openPaymentConfirmModal()).
+    // xác nhận TỪNG ĐỢT như cũ — không còn bắt buộc upload tệp ở đây nữa (xem chú thích đầu khối
+    // "✅ Xác Nhận Thanh Toán" — "Hồ Sơ Đề Nghị Thanh Toán" đã bắt buộc đính kèm từ lúc gửi).
     const isOneTime = pr.sourcePaymentType === 'ONE_TIME';
+    const requestFilesHTMLApprove = (pr.requestFiles || []).length
+      ? `<div class="flex flex-wrap gap-1 mt-1">${pr.requestFiles.map(f => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-1.5 py-0.5 text-[10px]"><button type="button" data-op="viewPaymentRequestFile" data-arg0="${pr.id}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-700 hover:underline">📎 ${escapeHtml(f.fileName)}</button></span>`).join('')}</div>`
+      : '';
     const installmentsHTML = (pr.installments || []).map((it, idx) => `
       <div class="flex items-center justify-between gap-2 text-[11px] ${it.confirmed ? 'text-green-700' : 'text-gray-600'}">
         <span>${it.confirmed ? '✅' : '⬜'} ${escapeHtml(it.description || '')} — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ
@@ -579,6 +644,7 @@ function renderPaymentRequests() {
           ${pr.amountMismatchesSource ? `<div class="mt-0.5 text-[11px] font-bold text-red-600">⚠️ Lệch giá trị nguồn (${(pr.referenceAmount || 0).toLocaleString('vi-VN')} VNĐ)</div>` : ''}
           <div class="mt-1 space-y-0.5">${installmentsHTML}</div>
           ${pr.lumpConfirmFileUrl ? `<div class="text-[11px] mt-1">📎 <button type="button" data-op="viewPaymentConfirmFile" data-arg0="${pr.id}" class="text-cyan-600 hover:underline">${escapeHtml(pr.lumpConfirmFileName || 'Tệp đề nghị thanh toán đã phê duyệt')}</button></div>` : ''}
+          ${requestFilesHTMLApprove}
           ${paymentWarningCountsHTML(pr)}
         </td>
         <td class="border p-2">
@@ -678,17 +744,30 @@ function deletePaymentRequestAction(id) {
   });
 }
 
-// ========== "✅ Xác Nhận Thanh Toán" (kèm bắt buộc tệp "đề nghị thanh toán đã phê duyệt", yêu cầu nghiệp
-// vụ #2/#4 — TRƯỚC ĐÂY xác nhận không đòi hỏi tệp gì) — dùng CHUNG 1 modal (paymentConfirmModal) cho cả
-// xác nhận TỪNG ĐỢT (confirmPaymentInstallmentAction(), PERIODIC/thủ công/nguồn không có paymentType) và
-// xác nhận TOÀN BỘ 1 LẦN (confirmPaymentRequestLumpSumAction(), CHỈ nguồn Hợp đồng "Thanh toán 1 lần",
-// ONE_TIME) — cùng khuôn openSignedUploadModal()/submitSignedUpload() ở module-hopdong.js. ==========
+// ========== "✅ Xác Nhận Thanh Toán" — KHÔNG còn bắt buộc upload tệp ở bước này nữa (ĐẢO NGƯỢC lại thiết
+// kế cũ): "Hồ Sơ Đề Nghị Thanh Toán" giờ đã bắt buộc đính kèm NGAY LÚC TẠO/GỬI (xem "🗂️ Quản Lý Thanh
+// Toán"/submitPaymentRequestAction()), nên bước xác nhận này chỉ còn là 1 xác nhận đơn thuần qua
+// showConfirmModal() — dùng CHUNG applyPaymentConfirmResult() cho cả xác nhận TỪNG ĐỢT
+// (confirmPaymentInstallmentAction()) và TOÀN BỘ 1 LẦN (confirmPaymentRequestLumpSumAction(), CHỈ nguồn
+// Hợp đồng "Thanh toán 1 lần", ONE_TIME). ==========
 function confirmPaymentInstallmentAction(id, index) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
   const it = pr.installments[index];
   if (!it) return;
-  openPaymentConfirmModal(id, index, `Xác nhận đợt "${it.description || ''}" (${(it.amount || 0).toLocaleString('vi-VN')} VNĐ)`);
+  showConfirmModal({
+    title: 'Xác nhận thanh toán đợt',
+    bodyHTML: `Xác nhận đã thanh toán đợt "<b>${escapeHtml(it.description || '')}</b>" (${(it.amount || 0).toLocaleString('vi-VN')} VNĐ)?`,
+    confirmLabel: 'Xác Nhận',
+    onConfirm: async () => {
+      let updated, justCompleted;
+      try {
+        const result = await callRecordAction('paymentRequests', id, 'confirm-installment', { index });
+        updated = result.item; justCompleted = result.justCompleted;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      applyPaymentConfirmResult(updated, justCompleted, `Xác nhận thanh toán đợt [${it.description || ''}] cho [${updated.title}]`);
+    }
+  });
 }
 // "💰 Xác Nhận Toàn Bộ" — CHỈ hiện/gọi được cho đề nghị sourcePaymentType === 'ONE_TIME' (xem gate ở
 // renderPaymentRequests()) — server (confirmPaymentRequestLumpSum(), lib/recordActions.js) TỰ chặn 409
@@ -696,54 +775,27 @@ function confirmPaymentInstallmentAction(id, index) {
 function confirmPaymentRequestLumpSumAction(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
-  openPaymentConfirmModal(id, null, `Xác nhận TOÀN BỘ đề nghị "${pr.title}" (${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ) — áp dụng cho tất cả các đợt`);
-}
-function openPaymentConfirmModal(prId, index, subText) {
-  paymentConfirmTarget = { prId, index };
-  document.getElementById('paymentConfirmModalTitle').innerText = index == null ? '💰 Xác Nhận Thanh Toán (Toàn Bộ)' : '✅ Xác Nhận Thanh Toán Đợt';
-  document.getElementById('paymentConfirmModalSub').innerText = subText || '';
-  document.getElementById('paymentConfirmFile').value = '';
-  const allowed = (DB.uploadFileTypeConfig || {}).payment;
-  if (Array.isArray(allowed) && allowed.length) document.getElementById('paymentConfirmFile').setAttribute('accept', allowed.join(','));
-  document.getElementById('paymentConfirmModal').classList.remove('hidden');
-}
-function closePaymentConfirmModal() {
-  paymentConfirmTarget = null;
-  document.getElementById('paymentConfirmModal').classList.add('hidden');
+  showConfirmModal({
+    title: 'Xác nhận thanh toán (toàn bộ)',
+    bodyHTML: `Xác nhận TOÀN BỘ đề nghị "<b>${escapeHtml(pr.title)}</b>" (${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ) đã thanh toán — áp dụng cho tất cả các đợt?`,
+    confirmLabel: 'Xác Nhận',
+    onConfirm: async () => {
+      let updated, justCompleted;
+      try {
+        const result = await callRecordAction('paymentRequests', id, 'confirm-lump-sum', {});
+        updated = result.item; justCompleted = result.justCompleted;
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      applyPaymentConfirmResult(updated, justCompleted, `Xác nhận thanh toán TOÀN BỘ [${updated.title}]`);
+    }
+  });
 }
 // Đủ hết các đợt (hoặc xác nhận lump-sum) thì server tự chuyển PAID (justCompleted=true) và đã ghi ngược
 // paymentStatus vào bản ghi nguồn; client chỉ cần đồng bộ lại cục bộ để UI cập nhật ngay, không cần tải
-// lại trang.
-async function submitPaymentConfirmUpload() {
-  if (!paymentConfirmTarget) return;
-  const { prId, index } = paymentConfirmTarget;
-  const pr = DB.paymentRequests.find(x => x.id === prId);
-  if (!pr) return;
-  const file = document.getElementById('paymentConfirmFile').files[0];
-  if (!file) return alert('⛔ Vui lòng chọn tệp đề nghị thanh toán đã phê duyệt!');
-
-  let uploaded;
-  try {
-    uploaded = await uploadFileToServer(file, 'payment');
-  } catch (err) {
-    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
-  }
-
-  const isLumpSum = index == null;
-  let updated, justCompleted;
-  try {
-    const result = await callRecordAction('paymentRequests', prId, isLumpSum ? 'confirm-lump-sum' : 'confirm-installment',
-      isLumpSum ? { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl }
-        : { index, fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl });
-    updated = result.item;
-    justCompleted = result.justCompleted;
-  } catch (err) { return alert(`⛔ ${err.message}`); }
-
-  const idx = DB.paymentRequests.findIndex(x => x.id === prId);
+// lại trang. Dùng chung cho cả 2 đường xác nhận (từng đợt/toàn bộ) ở trên.
+function applyPaymentConfirmResult(updated, justCompleted, logDetail) {
+  const idx = DB.paymentRequests.findIndex(x => x.id === updated.id);
   if (idx !== -1) DB.paymentRequests[idx] = updated;
-  const logDetail = isLumpSum ? `Xác nhận thanh toán TOÀN BỘ [${updated.title}]` : `Xác nhận thanh toán đợt [${(pr.installments[index] || {}).description}] cho [${updated.title}]`;
   logSystemAction('OFFICE', 'CONFIRM_PAYMENT_INSTALLMENT', logDetail, 'SUCCESS', String(updated.id));
-  closePaymentConfirmModal();
   if (justCompleted) {
     if (updated.sourceModule === 'CONTRACT') {
       const c = DB.contracts.find(x => x.id === updated.sourceId);
@@ -764,10 +816,11 @@ async function submitPaymentConfirmUpload() {
   if (activeOfficeSubTab && activeOfficeSubTab !== 'PAYMENT') renderOfficeReqs();
 }
 
-// Xem tệp "đề nghị thanh toán đã phê duyệt" đã đính kèm lúc xác nhận — index=null (hoặc bỏ trống, đúng
-// khuôn data-arg0 duy nhất không kèm data-arg1) nghĩa là tệp lump-sum (toàn bộ đề nghị), index là số
-// nghĩa là tệp của ĐÚNG đợt đó. Dùng chung openFileProtectedView() (watermark như mọi tệp khác trong hệ
-// thống, xem viewContractSignedFile()).
+// Xem tệp "đề nghị thanh toán đã phê duyệt" đính kèm lúc xác nhận CŨ (dữ liệu lịch sử trước bản vá này —
+// bước xác nhận không còn bắt buộc/tạo tệp mới nữa, xem applyPaymentConfirmResult() ở trên) — GIỮ LẠI để
+// vẫn xem được tệp cũ trên các đề nghị đã PAID trước đây. index=null (hoặc bỏ trống, đúng khuôn data-arg0
+// duy nhất không kèm data-arg1) nghĩa là tệp lump-sum (toàn bộ đề nghị), index là số nghĩa là tệp của
+// ĐÚNG đợt đó.
 function viewPaymentConfirmFile(prId, index) {
   const pr = DB.paymentRequests.find(x => x.id === prId);
   if (!pr) return;
@@ -782,6 +835,15 @@ function viewPaymentConfirmFile(prId, index) {
   }
   if (!fileUrl) return;
   openFileProtectedView({ title, sub: `Phòng ban: ${pr.dept}`, fileSrc: fileUrl, fileType, fileName });
+}
+
+// Xem 1 tệp trong "Hồ Sơ Đề Nghị Thanh Toán" (multi-file, đính kèm NGAY LÚC TẠO/GỬI — xem
+// normalizePaymentRequestFiles() ở lib/recordActions.js) — nhận thẳng fileUrl/fileName/fileType qua
+// data-arg (không tra lại theo index như viewPaymentConfirmFile() vì đây là mảng phẳng không đợt).
+function viewPaymentRequestFile(prId, fileUrl, fileName, fileType) {
+  const pr = DB.paymentRequests.find(x => x.id === prId);
+  if (!pr || !fileUrl) return;
+  openFileProtectedView({ title: `📎 Hồ Sơ Đề Nghị Thanh Toán — ${escapeHtml(fileName || '')} (${escapeHtml(pr.title)})`, sub: `Phòng ban: ${pr.dept}`, fileSrc: fileUrl, fileType, fileName });
 }
 
 // Xem đầy đủ TOÀN BỘ thông tin đã nhập của hồ sơ hợp đồng (khác với viewContract() ở dưới, vốn chỉ
