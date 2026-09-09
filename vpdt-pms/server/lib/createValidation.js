@@ -2574,6 +2574,53 @@ const CREATE_MODULE_CONFIGS = {
         actionBy: user.username, actionByName: user.name, actionAt: new Date().toLocaleString('vi-VN')
       }];
     }
+  },
+  // ===== NHÂN SỰ > Hợp Đồng Lao Động (Đợt 2/4 module Nhân Sự, Phần D tài liệu thiết kế gốc) =====
+  // Đa số bản ghi collection này được HỆ THỐNG tự tạo qua các hook Onboarding/Offboarding (xem
+  // lib/laborContract.js + routes/records.js::syncLaborContractOnHrTaskEvent()), KHÔNG đi qua đường tạo
+  // chung này. Entry dưới đây chỉ phục vụ HR tạo TAY 1 hợp đồng (trường hợp ngoại lệ: nhân viên cũ chưa
+  // có dữ liệu trong hệ thống, hợp đồng phát sinh ngoài luồng Onboarding chuẩn...) — KHÔNG có bước phê
+  // duyệt nào (khác hẳn module "Hợp Đồng" mua bán/nhà cung cấp ở dbKey 'contracts' phía trên — đã xác
+  // nhận với người dùng đây là 2 khái niệm hoàn toàn tách biệt, không dùng chung bất kỳ hạ tầng nào).
+  laborContracts: {
+    dbKey: 'laborContracts',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      const { canManageContracts, CONTRACT_TYPES, generateContractCode } = require('./laborContract');
+      if (!canManageContracts(user)) throw new CreateError(403, 'Bạn không có quyền tạo/quản lý hợp đồng lao động');
+      if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
+      payload.employeeCode = String(payload.employeeCode).trim().slice(0, 50);
+      if (!CONTRACT_TYPES.has(payload.contractType)) throw new CreateError(400, 'Vui lòng chọn Loại hợp đồng hợp lệ');
+      if (!payload.startDate || Number.isNaN(new Date(payload.startDate).getTime())) throw new CreateError(400, 'Vui lòng nhập Ngày hiệu lực hợp lệ');
+      payload.startDate = String(payload.startDate).trim();
+      if (payload.contractType === 'INDEFINITE') {
+        payload.endDate = null;
+      } else {
+        if (!payload.endDate || Number.isNaN(new Date(payload.endDate).getTime())) throw new CreateError(400, 'Vui lòng nhập Ngày hết hạn hợp lệ (chỉ hợp đồng Vô thời hạn mới bỏ trống được)');
+        payload.endDate = String(payload.endDate).trim();
+        if (payload.startDate > payload.endDate) throw new CreateError(400, 'Ngày hiệu lực phải trước ngày hết hạn');
+      }
+      const salary = payload.baseSalary === '' || payload.baseSalary == null ? null : Number(payload.baseSalary);
+      if (salary !== null && (!Number.isFinite(salary) || salary < 0)) throw new CreateError(400, 'Lương cơ bản không hợp lệ');
+      payload.baseSalary = salary;
+      payload.dept = payload.dept ? String(payload.dept).trim().slice(0, 100) : null;
+      payload.hrProcessId = null; // tạo tay ngoài luồng Onboarding -> không gắn với quy trình nào
+      payload.renewalIndex = payload.contractType === 'PROBATION' ? 0 : (Number(payload.renewalIndex) || 1);
+      payload.code = generateContractCode(collection || [], payload.employeeCode);
+      payload.status = 'DRAFT';
+      payload.terminationDate = null; payload.terminationReason = null;
+      payload.fileUrl = payload.fileUrl ? String(payload.fileUrl).trim().slice(0, 300) : null;
+      if (payload.fileUrl) assertUploadedFileUrl(payload.fileUrl, 'Tệp hợp đồng');
+      payload.fileName = payload.fileUrl ? String(payload.fileName || '').trim().slice(0, 200) : null;
+      payload.amendments = [];
+      payload.notifiedThresholds = [];
+      payload.history = [{
+        action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN'),
+        detail: 'Tạo tay bởi Nhân Sự (ngoài luồng Onboarding tự động)'
+      }];
+    }
   }
 };
 

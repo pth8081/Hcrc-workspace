@@ -178,6 +178,7 @@ function collectPermsFromForm() {
     hrViewAll: document.getElementById('pHrViewAll').checked,
     hrProfileView: document.getElementById('pHrProfileView').checked,
     hrProfileManage: document.getElementById('pHrProfileManage').checked,
+    hrContractManage: document.getElementById('pHrContractManage').checked,
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
@@ -246,6 +247,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pHrViewAll').checked = !!perms.hrViewAll;
   document.getElementById('pHrProfileView').checked = !!perms.hrProfileView;
   document.getElementById('pHrProfileManage').checked = !!perms.hrProfileManage;
+  document.getElementById('pHrContractManage').checked = !!perms.hrContractManage;
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;

@@ -43,6 +43,7 @@ const externalAuthVerifyRoutes = require('./routes/externalAuthVerify');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
+const { checkLaborContractExpiryReminders } = require('./jobs/laborContractExpiryReminder');
 const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalReminder');
 const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
@@ -341,6 +342,8 @@ async function start() {
       setInterval(checkItServiceRenewalReminders, 24 * 60 * 60 * 1000);
       checkHrTaskOverdueReminders();
       setInterval(checkHrTaskOverdueReminders, 24 * 60 * 60 * 1000);
+      checkLaborContractExpiryReminders();
+      setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Giám sát ổ đĩa: chạy dày hơn 3 job nhắc hạn ở trên (mỗi giờ thay vì mỗi 24h) vì dung lượng đĩa
       // có thể tăng nhanh bất thường (VD bị lạm dụng tải file dồn dập) — bản thân job có cơ chế
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.

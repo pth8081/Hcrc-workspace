@@ -685,7 +685,75 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   KHÔNG thao tác được). Người tạo/quản lý trực tiếp/được giao riêng 1 việc
   luôn xem được đúng quy trình liên quan dù không có cờ nào ở trên.
 
-#### 4.5.3. Quản Lý & Phản Hồi Ý Kiến
+#### 4.5.3. Hồ Sơ Nhân Sự
+
+**Nhân Sự → Hồ Sơ Nhân Sự** — **vai trò**: lưu thông tin cá nhân/nhạy cảm của
+từng nhân viên (CCCD, tài khoản ngân hàng, số BHXH, mã số thuế, người phụ
+thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (Người Dùng) vì
+đây là dữ liệu nặng/nhạy cảm không cần tải mỗi lần đăng nhập.
+
+- Hồ sơ **tự sinh bản Nháp** ngay khi tạo 1 quy trình Onboarding (khoá theo Mã
+  Nhân Viên — lúc này nhân viên CHƯA có tài khoản VPDT), rồi **tự chuyển Đang
+  làm việc/Đã nghỉ việc** khi Onboarding/Offboarding tương ứng hoàn tất.
+- HR/admin (**"🗂️ Quản Lý Hồ Sơ Nhân Sự"**) **liên kết** hồ sơ với 1 tài khoản
+  VPDT thật (thường ngay sau khi IT hoàn thành việc "Tạo tài khoản VPDT" ở
+  Onboarding) — trước khi liên kết, hồ sơ chỉ HR mới tra cứu được.
+- **3 tầng xem**: chính chủ (đã liên kết) và HR/admin xem/sửa đủ mọi trường;
+  quản lý trực tiếp (**"👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới"**, đi ngược cây Quản Lý
+  Trực Tiếp — mục 4.5.1) chỉ xem bản đã ẩn CCCD/tài khoản ngân hàng/BHXH/mã số
+  thuế/người phụ thuộc/học vấn; người không liên quan không tra được (kể cả
+  báo lỗi cũng không phân biệt "không tồn tại" hay "không có quyền", tránh dò
+  mã nhân viên).
+- Mọi nhân viên đã đăng nhập đều **tự xem/sửa được hồ sơ CHÍNH MÌNH** (mục
+  **"Hồ Sơ Của Tôi"**) — không cần quyền gì thêm; **"Quản Lý Hồ Sơ"** (danh
+  sách toàn bộ, sửa mọi trường, đổi trạng thái tay Đang làm việc ↔ Nghỉ dài
+  hạn) chỉ HR/admin thấy.
+- **Không đổi trạng thái tay được** DRAFT/Đã nghỉ việc — 2 trạng thái này chỉ
+  do hệ thống tự đặt theo Onboarding/Offboarding, tránh HR lỡ tay đóng nhầm hồ
+  sơ người đang thực sự làm việc.
+
+#### 4.5.4. Hợp Đồng Lao Động
+
+**Nhân Sự → Hợp Đồng Lao Động** — **vai trò**: theo dõi vòng đời hợp đồng lao
+động (Thử việc → Xác định thời hạn → Vô thời hạn) của từng nhân viên. **KHÁC
+HẲN** module "Hợp Đồng" ở mục 4.3 (hợp đồng mua bán/nhà cung cấp) — 2 khái
+niệm hoàn toàn tách biệt, không chung dữ liệu/màn hình. Module này **HR-only**
+(quyền **"📝 Quản Lý Hợp Đồng Lao Động"**/admin) — chưa có tầng nhân viên tự
+xem hợp đồng của chính mình ở đợt này.
+
+- **Đa số hợp đồng do hệ thống TỰ TẠO** theo đúng 3 mốc trong checklist
+  Onboarding (mục 4.5.2), HR không cần tạo tay:
+  - Việc **"Gửi thư mời nhận việc & hợp đồng lao động"** hoàn thành → tự tạo
+    hợp đồng **Thử việc**, trạng thái **Nháp**.
+  - Việc **"Đón tiếp, ký hợp đồng chính thức"** (ngày đầu tiên đi làm) hoàn
+    thành → tự **kích hoạt** hợp đồng thử việc (Nháp → Đang hiệu lực).
+  - Việc **"Ra quyết định: ký chính thức/gia hạn/chấm dứt"** (cuối kỳ thử
+    việc) hoàn thành → HR bắt buộc chọn kèm quyết định **"Ký hợp đồng chính
+    thức"** (đóng hợp đồng thử việc, tự tạo hợp đồng Xác định thời hạn mới ở
+    trạng thái Nháp — HR vào hoàn thiện lương/ngày hết hạn rồi kích hoạt) hoặc
+    **"Chấm dứt sau thử việc"** (đóng hẳn, không tạo hợp đồng mới).
+  - Quy trình **Offboarding hoàn tất** → tự đóng (Đã chấm dứt) hợp đồng đang
+    hiệu lực của nhân viên đó.
+- **Gia hạn hợp đồng Xác định thời hạn về sau** (không còn gắn với 1 việc
+  Onboarding cụ thể nữa) là thao tác **tay** của HR ở màn Hợp Đồng Lao Động —
+  quá **2 lần gia hạn liên tiếp bắt buộc chuyển Vô thời hạn** theo luật.
+- **Tạo tay** chỉ dùng cho trường hợp ngoại lệ (nhân viên cũ chưa có dữ liệu
+  trong hệ thống, hợp đồng phát sinh ngoài luồng Onboarding chuẩn).
+- Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
+  hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
+  hạn số lần, giữ nguyên lịch sử.
+- **Cảnh báo hết hạn tự động** (job chạy mỗi 24h, ngưỡng 60/45/30 ngày trước
+  hạn): gửi email tới HR **CỘNG** quản lý trực tiếp của nhân viên đó, nhắc gia
+  hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục sử dụng lao
+  động — không gửi trùng lặp cho cùng 1 ngưỡng.
+- **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có tầng nhân
+  viên tự xem hợp đồng lao động của chính mình; thời hạn thử việc theo từng
+  loại vị trí (chuyên môn/kỹ thuật/mùa vụ) vẫn dùng chung 1 mốc ước tính 60
+  ngày (tài liệu thiết kế gốc ghi rõ cần HR/pháp chế rà soát lại theo luật
+  hiện hành trước khi cứng hoá — xem mục 4.5.2, chỉ là mốc HIỂN THỊ tham
+  khảo, không phải ràng buộc validate).
+
+#### 4.5.5. Quản Lý & Phản Hồi Ý Kiến
 
 Phía Nhân Sự của **🤝 HCRC Đồng Hành** (mục 4.1) — **vai trò**: nơi Nhân Sự
 trả lời câu hỏi nhân viên gửi qua HCRC Đồng Hành, đúng khuôn **1 hỏi–1 đáp**

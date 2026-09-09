@@ -4854,6 +4854,17 @@ function completeHrTask(user, item, body) {
   if (task.status === 'DONE') throw new HttpError(409, 'Việc này đã được đánh dấu hoàn thành rồi');
   if (task.status === 'SKIPPED') throw new HttpError(409, 'Việc này đã bị bỏ qua, không thể đánh dấu hoàn thành');
   if (!canActOnHrTask(user, item, task)) throw new HttpError(403, 'Bạn không có quyền hoàn thành việc này');
+  // templateId=15 ("Ra quyết định: ký chính thức/gia hạn/chấm dứt", PROBATION_REVIEW) — bắt buộc kèm
+  // quyết định hợp lệ NGAY LÚC hoàn thành, vì đây chính là hành động kích hoạt lib/laborContract.js xử
+  // lý Hợp Đồng Lao Động kế tiếp (xem routes/records.js::syncLaborContractOnHrTaskEvent()) — validate ở
+  // ĐÂY (cùng khoá, trước khi DONE) để không lỡ đánh dấu xong việc với 1 quyết định rác/thiếu.
+  if (task.templateId === 15) {
+    const { POST_PROBATION_DECISIONS } = require('./laborContract');
+    if (!POST_PROBATION_DECISIONS.has(body?.decision)) {
+      throw new HttpError(400, 'Vui lòng chọn quyết định hợp lệ: "Ký hợp đồng chính thức" hoặc "Chấm dứt sau thử việc"');
+    }
+    task.decision = body.decision;
+  }
   task.status = 'DONE';
   task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
   if (body?.note) task.note = String(body.note).trim().slice(0, 500);

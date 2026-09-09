@@ -7,6 +7,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const employeeProfile = require('../lib/employeeProfile');
+const laborContract = require('../lib/laborContract');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
@@ -2510,6 +2511,67 @@ async function syncEmployeeProfileOnHrCompletion(hrProcessItem, routeLabel) {
   }
 }
 
+// Hợp Đồng Lao Động (Đợt 2/4 module Nhân Sự — xem lib/laborContract.js đầu file cho toàn bộ luật vòng
+// đời) — 3 mốc TRONG checklist ONBOARDING tự động tạo/kích hoạt/đóng hợp đồng, gọi NGAY SAU khi
+// complete-task/skip-task đã khoá + ghi xong hrProcesses. Cùng tinh thần syncEmployeeProfileOnHrCompletion
+// ở trên: đây là ghi có tác dụng phụ CHÉO COLLECTION (hrProcesses -> laborContracts, khác khoá, không
+// atomic được với nhau) — lỗi ở bước phụ này KHÔNG được phép làm hỏng thao tác chính đã commit xong (task
+// đã DONE/quyết định đã ghi), chỉ log lại để tra cứu sau. Validate body.decision hợp lệ đã xảy ra TRƯỚC,
+// trong CÙNG khoá với việc đánh dấu task DONE (xem recordActions.completeHrTask()) — ở đây chỉ đọc lại
+// task.decision đã được ghi, không validate lại.
+async function syncLaborContractOnHrTaskEvent(hrProcessItem, taskId, actorUser, routeLabel) {
+  if (hrProcessItem.processType !== 'ONBOARDING') return;
+  const task = (hrProcessItem.tasks || []).find(t => t.taskId === Number(taskId));
+  if (!task || task.status !== 'DONE' || ![1, 7, 15].includes(task.templateId)) return;
+  try {
+    if (task.templateId === 1) {
+      const list = await getAllForCollection('laborContracts');
+      const draft = laborContract.buildProbationDraftPayload(hrProcessItem, list);
+      if (draft) await createForCollection('laborContracts', () => draft);
+    } else if (task.templateId === 7) {
+      const list = await getAllForCollection('laborContracts');
+      const contract = laborContract.findLatestContractForProcess(list, hrProcessItem.id);
+      if (contract) {
+        await withLockedRecordForCollection('laborContracts', contract.id, (item) => laborContract.applyActivateProbation(item, hrProcessItem));
+      }
+    } else if (task.templateId === 15 && task.decision) {
+      const list = await getAllForCollection('laborContracts');
+      const contract = laborContract.findLatestContractForProcess(list, hrProcessItem.id);
+      if (!contract) return;
+      let nextPayload = null;
+      await withLockedRecordForCollection('laborContracts', contract.id, (item) => {
+        const result = laborContract.applyPostProbationDecision(item, task.decision, list, actorUser?.username);
+        nextPayload = result.nextContractPayload;
+        return result.closedContract;
+      });
+      if (nextPayload) await createForCollection('laborContracts', () => nextPayload);
+    }
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi đồng bộ Hợp Đồng Lao Động:`, err.message);
+  }
+}
+
+// OFFBOARDING hoàn tất (COMPLETED, cùng tín hiệu "dòng history cuối là COMPLETED" như
+// syncEmployeeProfileOnHrCompletion) -> đóng hợp đồng đang ACTIVE của nhân viên này (nếu có). Tra theo
+// employeeProfiles để đổi employeeUsername (duy nhất OFFBOARDING có) sang employeeCode (khoá thật của
+// laborContracts) — tái dùng employeeProfile.findProfileByUsername() đã xây ở Đợt 1.
+async function syncLaborContractOnHrProcessCompletion(hrProcessItem, routeLabel) {
+  if (hrProcessItem.processType !== 'OFFBOARDING') return;
+  const last = (hrProcessItem.history || [])[hrProcessItem.history.length - 1];
+  if (!last || last.action !== 'COMPLETED') return;
+  try {
+    const profileList = (await getAppDataValue('employeeProfiles')) || [];
+    const profile = employeeProfile.findProfileByUsername(profileList, hrProcessItem.employeeUsername);
+    if (!profile) return;
+    const list = await getAllForCollection('laborContracts');
+    const contract = laborContract.findActiveContractByEmployeeCode(list, profile.employeeCode);
+    if (!contract) return;
+    await withLockedRecordForCollection('laborContracts', contract.id, (item) => laborContract.applyOffboardingTermination(item, hrProcessItem));
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi cập nhật Hợp Đồng Lao Động khi Offboarding hoàn tất:`, err.message);
+  }
+}
+
 router.post('/hrProcesses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrProcesses'));
 
 router.post('/hrProcesses/:id/complete-task', async (req, res) => {
@@ -2520,6 +2582,8 @@ router.post('/hrProcesses/:id/complete-task', async (req, res) => {
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
       recordActions.completeHrTask(freshUser, item, req.body));
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/complete-task`);
+    await syncLaborContractOnHrTaskEvent(result, req.body?.taskId, freshUser, `hrProcesses/${itemId}/complete-task`);
+    await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/complete-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/complete-task`, err);
@@ -2534,6 +2598,7 @@ router.post('/hrProcesses/:id/skip-task', async (req, res) => {
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
       recordActions.skipHrTask(freshUser, item, req.body));
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/skip-task`);
+    await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/skip-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/skip-task`, err);
@@ -2961,6 +3026,99 @@ router.post('/itServiceRenewals/:id/renew', async (req, res) => {
     handleError(res, `itServiceRenewals/${req.params.id}/renew`, err);
   }
 });
+
+// ===================== NHÂN SỰ > Hợp Đồng Lao Động (thao tác tay của HR) =====================
+// Đa số bản ghi được HỆ THỐNG tự tạo/đóng qua sync*() ở trên — các route dưới đây phục vụ HR thao tác
+// TAY: sửa field (điền lương/ngày hết hạn cho bản nháp tự tạo sau quyết định "Ký chính thức"), kích
+// hoạt, bổ sung phụ lục/thay đổi, đóng tay, xoá (admin-only, cùng khuôn deleteAdminOnly() ở trên).
+function assertContractManage(freshUser) {
+  if (!laborContract.canManageContracts(freshUser)) throw new HttpError(403, 'Bạn không có quyền quản lý Hợp Đồng Lao Động');
+}
+
+router.post('/laborContracts/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+      laborContract.applyManualEdit(item, req.body, freshUser.username);
+      return item;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `laborContracts/${req.params.id}/edit`, err);
+  }
+});
+
+router.post('/laborContracts/:id/activate', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) =>
+      laborContract.applyActivateManual(item, freshUser.username));
+    // Đóng hợp đồng ACTIVE KHÁC (nếu có, VD hợp đồng tạo tay hoàn toàn ngoài luồng Onboarding) của CÙNG
+    // nhân viên thành SUPERSEDED — đảm bảo bất biến "chỉ 1 hợp đồng ACTIVE/nhân viên" cho cron cảnh báo
+    // hết hạn (jobs/laborContractExpiryReminder.js) không bị nhầm lẫn nhiều hợp đồng active cùng lúc.
+    const allContracts = await getAllForCollection('laborContracts');
+    const otherActive = allContracts.find(c => c.id !== itemId && c.employeeCode === result.employeeCode && c.status === 'ACTIVE');
+    if (otherActive) {
+      await withLockedRecordForCollection('laborContracts', otherActive.id, (item) => {
+        item.status = 'SUPERSEDED';
+        item.history.push({ action: 'SUPERSEDED', by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN'), detail: `Tự đóng do hợp đồng ${result.code} được kích hoạt` });
+        item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
+        return item;
+      });
+    }
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `laborContracts/${req.params.id}/activate`, err);
+  }
+});
+
+router.post('/laborContracts/:id/add-amendment', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    let amendment = null;
+    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+      amendment = laborContract.addAmendment(item, req.body, freshUser.username, freshUser.name);
+      return item;
+    });
+    res.json({ ok: true, item: result, amendment });
+  } catch (err) {
+    handleError(res, `laborContracts/${req.params.id}/add-amendment`, err);
+  }
+});
+
+router.post('/laborContracts/:id/status', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+      laborContract.assertValidManualStatusTransition(item.status, req.body?.status);
+      item.status = req.body.status;
+      if (req.body.status === 'TERMINATED') {
+        item.terminationDate = req.body.terminationDate || new Date().toISOString().slice(0, 10);
+        item.terminationReason = req.body.terminationReason ? String(req.body.terminationReason).trim().slice(0, 300) : null;
+      }
+      item.history.push({ action: req.body.status, by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN'), detail: `Chuyển tay sang trạng thái ${req.body.status}` });
+      item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
+      return item;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `laborContracts/${req.params.id}/status`, err);
+  }
+});
+
+router.post('/laborContracts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'laborContracts'));
 
 module.exports = router;
 // Export riêng cho test (tests/test-operation-danhmuc-dautu-units.js) — xác nhận route xoá

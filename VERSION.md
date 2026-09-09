@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**14.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.8 (2026-09-09): Nhân Sự — thêm module Hợp Đồng Lao Động (Đợt 2/4)
+
+Đợt 2 trong kế hoạch 4 đợt triển khai module Nhân Sự (Hồ Sơ [đã xong] → **Hợp Đồng Lao Động** → Công &
+Phép → vá lại các phần A/B còn thiếu). Kiến trúc đã trao đổi và xác nhận với người dùng trước khi code
+(4 quyết định): `dbo.Records`-backed (không phải AppData array thuần), không có bước phê duyệt nội bộ
+(khác hẳn module "Hợp Đồng" mua bán/nhà cung cấp — 2 khái niệm hoàn toàn tách biệt, không dùng chung hạ
+tầng), cron cảnh báo hết hạn làm luôn đợt này (không đợi "Giai đoạn 5" theo lộ trình gốc), hook Onboarding
+tự tạo hợp đồng ở trạng thái Nháp rồi HR hoàn thiện/kích hoạt sau.
+
+**Data model** (`lib/laborContract.js`, collection `dbo.Records` mới `laborContracts`): mỗi hợp đồng có
+`contractType` (Thử việc/Xác định thời hạn/Vô thời hạn), `renewalIndex` (đếm số lần gia hạn — quá 2 lần
+gia hạn Xác định thời hạn liên tiếp bắt buộc chuyển Vô thời hạn theo luật), `status`
+(Nháp/Đang hiệu lực/Hết hạn/Đã chấm dứt/Đã thay thế), `amendments[]` (lịch sử thay đổi lương/vị trí...),
+`notifiedThresholds[]` (cho cron cảnh báo hết hạn).
+
+**Vòng đời tự động qua 3 mốc trong checklist Onboarding** (`routes/records.js::syncLaborContractOnHrTaskEvent()`,
+hook vào đúng `hrTaskTemplates` đã có sẵn, không thêm task mới): việc "Gửi thư mời nhận việc & hợp đồng
+lao động" hoàn thành → tạo hợp đồng Thử việc Nháp; việc "Đón tiếp, ký hợp đồng chính thức" hoàn thành →
+kích hoạt (Nháp → Đang hiệu lực); việc "Ra quyết định: ký chính thức/gia hạn/chấm dứt" hoàn thành kèm
+quyết định (validate ngay trong `lib/recordActions.js::completeHrTask()`, cùng khoá với việc đánh dấu
+xong task) → hoặc đóng Thử việc + tự tạo hợp đồng Xác định thời hạn Nháp kế tiếp, hoặc chấm dứt hẳn.
+Offboarding hoàn tất (`syncLaborContractOnHrProcessCompletion()`) → tự đóng hợp đồng đang hiệu lực.
+
+**Cron cảnh báo hết hạn** (`jobs/laborContractExpiryReminder.js`, nhân bản khuôn
+`jobs/licenseExpiryReminder.js`, ngưỡng mặc định 60/45/30 ngày): gửi email tới HR (`hrContractManage`)
+CỘNG quản lý trực tiếp của nhân viên (tra qua `employeeProfiles` → `user.managerUsername`).
+
+**Client**: sub-module mới "Hợp Đồng Lao Động" (con của "Nhân Sự") — HR-only (`hrContractManage`/admin,
+KHÔNG có tầng nhân viên tự xem hợp đồng của mình ở đợt này) — danh sách + lọc theo mã NV/trạng thái, tạo
+tay (trường hợp ngoại lệ ngoài luồng Onboarding), chi tiết (hoàn thiện lương/ngày hết hạn cho bản nháp,
+kích hoạt, bổ sung thay đổi, đóng tay, xoá admin-only). Đi qua engine CHUNG (`POST /api/create/laborContracts`,
+`POST /api/records/laborContracts/:id/<action>`) — KHÁC hẳn Hồ Sơ Nhân Sự (router riêng) vì không cần
+strip field theo vai trò người xem. Thêm quyền mới `hrContractManage` vào cây phân quyền (khối 21).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v14.7 (2026-09-09): Nhân Sự — thêm module Hồ Sơ Nhân Sự (Đợt 1/4)
 
