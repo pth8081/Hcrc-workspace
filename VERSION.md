@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**14.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.5 (2026-09-09): Tách hướng dẫn triển khai thành 2 bản (PM2-only / PM2+Nginx) + viết lại toàn bộ
+## `Huong-dan-nghiep-vu.md` theo trình tự logic mới, bổ sung nội dung còn thiếu
+
+Người dùng yêu cầu 3 việc: (1) viết lại hướng dẫn triển khai PM2-only (mạng nội bộ, không HTTPS); (2)
+viết lại hướng dẫn triển khai PM2+Nginx (production, HTTPS/reverse-proxy); (3) rà soát + viết lại toàn bộ
+`deploy/Huong-dan-nghiep-vu.md`, sắp xếp theo đúng trình tự logic, nhấn mạnh vai trò từng module/tab/sub-tab.
+
+**Tách tài liệu triển khai**: xoá `deploy/Huong-dan-trien-khai.md` (bản gộp cũ, 1132 dòng), thay bằng 2
+file độc lập — `Huong-dan-trien-khai-PM2.md` (chạy thẳng `http://<ip>:3000` qua PM2, không Nginx, dùng cho
+mạng nội bộ/VPN — `COOKIE_SECURE=false`, không cần `TRUST_PROXY`, ghi rõ WebAuthn/PWA không hoạt động vì
+thiếu HTTPS) và `Huong-dan-trien-khai-PM2-Nginx.md` (PM2 + Nginx reverse proxy + HTTPS + fail2ban, khuyến
+nghị production/public Internet — `TRUST_PROXY=1` bắt buộc, `COOKIE_SECURE=true`). Cả 2 dùng chung mục
+0-10 (Node.js/SQL Server/tạo thư mục/DB/test SQL/`.env`/SMTP/chạy thử/service account/PM2+systemd), chỉ
+khác từ phần Nginx trở đi. Cập nhật theo: `HUONG_DAN_DEPLOY_UBUNTU.md` (trỏ tới cả 2 file), `README.md`
+(2 chỗ), `CLAUDE.md` (mục "3 file hướng dẫn" + quy ước cập nhật cả 2 file khi thay đổi áp dụng chung).
+
+**Viết lại `Huong-dan-nghiep-vu.md`** (949 dòng, từ 1034 dòng cũ) — cấu trúc mới theo tần suất/vai trò sử
+dụng thay vì theo tên phòng ban: mục 2 "Nền Tảng Dùng Chung" (Dashboard/Hộp Thư Phê Duyệt/Bảo Mật Thiết
+Bị-2FA/PWA — trước đây rải rác, giờ gom lên đầu vì mọi tài khoản đều chạm mỗi ngày); mục 4 chia 6 nhóm
+module theo mức độ dùng (4.1 Văn Bản & Tác Nghiệp Hằng Ngày, 4.2 Yêu Cầu Hành Chính Tự Phục Vụ, 4.3 Tài
+Chính & Hợp Đồng, 4.4 Vận Hành/Siêu Thị, 4.5 Nhân Sự — gộp cả Cơ Cấu Tổ Chức+KPI đã thêm trước đó, 4.6
+Báo Cáo Định Kỳ); mục 7 gộp toàn bộ màn admin-only (Quy Trình & Phê Duyệt/Danh Mục/Biểu Mẫu/Quản Lý Tệp
+File/Thùng Rác/Log/Người Dùng/Email/ExtAuth) thành 7.1-7.9. Mỗi module/tab/sub-tab đều có câu mở đầu nêu
+rõ **vai trò** (dùng để làm gì, ai dùng) theo đúng yêu cầu người dùng.
+
+**Sửa 1 mâu thuẫn nội tại tự phát hiện khi rà soát** (không phải người dùng báo): bản cũ vừa nói giai
+đoạn Dự toán (Vận Hành > Siêu Thị) có luồng phê duyệt gating Thực hiện, vừa nói "các luồng này không còn
+qua phê duyệt nữa" — xác nhận qua grep code (`estimateStatus`, `lib/workflowEngine.js`/`recordActions.js`)
+là luồng duyệt Dự toán vẫn đang chạy thật — đã sửa lại đúng: bản thân hồ sơ Mở Mới/Sửa Chữa không cần
+duyệt để tồn tại, nhưng Dự toán bên trong hồ sơ đó vẫn phải qua đúng 1 vòng duyệt mới mở khoá Thực hiện.
+
+**Nội dung mới bổ sung** (trước đây chưa có trong tài liệu dù đã có trong code): Biểu Mẫu (7.3), Quản Lý
+Tệp File (7.4), Thùng Rác (7.5), tạo người dùng hàng loạt (7.7), nút "🖨️ Tạo Báo Cáo Theo Yêu Cầu" (mục
+5), Onboarding/Offboarding (4.5.2), Dashboard tuỳ chỉnh + WebAuthn/2FA + PWA (mục 2), mở rộng Log (7.6).
+
+Việc thuần tài liệu — **không đổi code, không đổi `schema.sql`/`.env.example`/`dependencies`**, không cần
+thao tác gì ngoài `git pull` (hoặc copy 4 file `.md` đã đổi) trên máy chủ khi cần tham khảo tài liệu mới.
 
 ## v14.4 (2026-09-09): Nhân Sự > Cơ Cấu Tổ Chức — làm lại hoàn toàn thành cây CÓ VERSIONING +
 ## Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí (theo 2 tài liệu thiết kế người dùng cung cấp)

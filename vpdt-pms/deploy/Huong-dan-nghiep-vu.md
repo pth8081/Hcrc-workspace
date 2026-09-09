@@ -11,15 +11,21 @@ mới...) đều phải cập nhật vào file này.
 > [`Huong-dan-trien-khai-PM2-Nginx.md`](./Huong-dan-trien-khai-PM2-Nginx.md)
 > (PM2 + Nginx + HTTPS, khuyến nghị production) — không lặp lại ở đây.
 
+**Cách đọc tài liệu này**: được sắp theo đúng trình tự 1 nhân viên mới sẽ gặp
+hệ thống — dùng chung trước (mục 1-3), rồi tới từng nhóm module theo tần suất
+dùng (mục 4: hằng ngày → tự phục vụ → tài chính → vận hành → nhân sự → báo cáo
+định kỳ), cuối cùng là các màn chỉ admin cần (mục 5-7). Mỗi module/tab/sub-tab
+đều có ghi rõ **vai trò** (dùng để làm gì, ai dùng) ngay ở câu mở đầu.
+
 ### Mục lục
 
 - [1. Tổng quan](#1-tổng-quan)
-- [2. Mô hình quy trình phê duyệt chung](#2-mô-hình-quy-trình-phê-duyệt-chung)
-- [3. Danh sách module nghiệp vụ theo nhóm](#3-danh-sách-module-nghiệp-vụ-theo-nhóm)
-- [4. Cấu hình Báo Cáo (Reports module)](#4-cấu-hình-báo-cáo-reports-module)
-- [5. API cho đối tác bên ngoài (ExtAuth)](#5-api-cho-đối-tác-bên-ngoài-extauth)
-- [6. Cấu hình Email thông báo](#6-cấu-hình-email-thông-báo)
-- [7. Phân quyền (permission model)](#7-phân-quyền-permission-model)
+- [2. Nền Tảng Dùng Chung (Mọi Người, Mọi Ngày)](#2-nền-tảng-dùng-chung-mọi-người-mọi-ngày)
+- [3. Mô hình quy trình phê duyệt chung](#3-mô-hình-quy-trình-phê-duyệt-chung)
+- [4. Danh sách module nghiệp vụ theo nhóm](#4-danh-sách-module-nghiệp-vụ-theo-nhóm)
+- [5. Báo Cáo (Reports — dashboard tổng hợp)](#5-báo-cáo-reports--dashboard-tổng-hợp)
+- [6. Phân quyền (permission model)](#6-phân-quyền-permission-model)
+- [7. Hệ Thống / Quản Trị](#7-hệ-thống--quản-trị)
 
 ---
 
@@ -56,16 +62,86 @@ song an toàn.
 [SQL Server] — dbo.AppData (cấu hình) + dbo.SystemLogs/Tasks/Records (hồ sơ nghiệp vụ)
 ```
 
-Ai dùng gì: **mọi nhân viên** — Tài Liệu, Văn Bản Trình, Công Việc, Truyền
-Thông Nội Bộ, Hỗ Trợ IT (ticket), đăng ký Xe/Phòng Họp/VPP đều mở sẵn (có thể
-admin tắt riêng từng module qua "0. Quyền Truy Cập Module"). **Trưởng
-phòng/người được gán quyền duyệt** — xử lý hồ sơ chờ duyệt của phòng/bước mình
-phụ trách qua Hộp Thư Phê Duyệt (mục 2). **Admin/Quản trị** — toàn bộ mục 2-7
-dưới đây.
+**Ai dùng gì**:
+- **Mọi nhân viên** — Trang chủ, Hộp Thư Phê Duyệt, Hồ Sơ Cá Nhân/Bảo Mật
+  Thiết Bị (mục 2) đều mở sẵn cho mọi tài khoản; Tài Liệu, Văn Bản Trình, Công
+  Việc, Truyền Thông Nội Bộ, Hỗ Trợ IT (ticket), đăng ký Xe/Phòng Họp/VPP cũng
+  mở sẵn (admin có thể tắt riêng từng module qua "0. Quyền Truy Cập Module",
+  mục 6).
+- **Trưởng phòng/người được gán quyền duyệt** — xử lý hồ sơ chờ duyệt của
+  phòng/bước mình phụ trách qua Hộp Thư Phê Duyệt (mục 2), theo cơ chế chung ở
+  mục 3.
+- **Admin/Quản trị** — toàn bộ mục 6 và 7 dưới đây, cộng phần cấu hình quy
+  trình duyệt ở mục 3.
 
 ---
 
-## 2. Mô hình quy trình phê duyệt chung
+## 2. Nền Tảng Dùng Chung (Mọi Người, Mọi Ngày)
+
+4 mục dưới đây không phải "module nghiệp vụ" theo nghĩa tạo/duyệt hồ sơ — đây
+là lớp hạ tầng mọi tài khoản đều chạm vào mỗi lần đăng nhập, nên đặt lên đầu
+thay vì rải rác theo tên phòng ban như các module nghiệp vụ ở mục 4.
+
+### 2.1. Trang chủ (Dashboard)
+
+Màn hình đầu tiên sau khi đăng nhập — **vai trò**: cho biết ngay "có việc gì
+đang chờ mình" mà không cần tự đi tìm ở từng module. Mỗi thẻ số liệu (VD "N hồ
+sơ Tài Liệu chờ duyệt") chỉ hiện nếu người dùng có quyền liên quan **và** đang
+thực sự có việc chờ (đếm bằng 0 thì thẻ tự ẩn) — dashboard tự cá nhân hoá theo
+đúng quyền của từng người, không phải 1 màn tĩnh giống nhau cho mọi người.
+Nút **"⚙️ Tuỳ chỉnh"** mở hộp cho tự ẩn/hiện từng thẻ theo ý thích riêng — lựa
+chọn này lưu vào hồ sơ người dùng trên server (không phải chỉ lưu tạm trên máy)
+nên đăng nhập ở máy khác vẫn giữ đúng tuỳ chỉnh đã chọn. Có thêm 1 khối tin tức
+nổi bật (Nhịp Sống HCRC/Đào tạo...) nếu tài khoản có quyền vào Truyền Thông Nội
+Bộ (mục 4.1).
+
+### 2.2. Hộp Thư Phê Duyệt (✅ Phê Duyệt)
+
+**Vai trò**: 1 nơi DUY NHẤT gom mọi hồ sơ đang chờ đúng người dùng hiện tại
+duyệt, từ toàn bộ module có luồng phê duyệt — không phải chuyển qua từng
+module để dò tìm hồ sơ cần xử lý. Đây là màn dùng hằng ngày của bất kỳ ai giữ
+quyền "Người duyệt" (`canBeApprover`) ở bất kỳ module nào. Cơ chế hoạt động đầy
+đủ (tự làm mới định kỳ, duyệt tại Hub tương đương duyệt tại module gốc...)
+trình bày chi tiết ở mục 3.4 — mục này chỉ nêu **vai trò**: đây là nơi làm việc
+chính của "người duyệt", còn mục 3 là cách admin *cấu hình* ai được vào vai đó.
+
+### 2.3. Hồ Sơ Cá Nhân & Bảo Mật Thiết Bị (2FA)
+
+Bấm avatar/tên ở góc màn hình mở **"⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin"** —
+nơi mỗi người tự quản lý thông tin và cách đăng nhập của chính mình:
+
+- **🖐️ Đăng Nhập/Xác Thực Bằng Vân Tay, Face ID (WebAuthn)** — mỗi người tự
+  đăng ký thiết bị của mình (phải đăng nhập bằng mật khẩu ít nhất 1 lần trước).
+  Sau khi đăng ký, có thể đăng nhập bằng vân tay/Face ID thay vì gõ mật khẩu,
+  và admin có thể đặt mức xác thực khi Duyệt của người này thành "Yêu cầu vân
+  tay/Face ID" (mục 3.1 nói về các chế độ gán người duyệt; mức xác thực khi
+  Duyệt là 1 lớp khác, cấu hình ở khối "9. Người Duyệt" cây phân quyền — mục
+  6). **Cần máy chủ chạy HTTPS thật** — không dùng được nếu server chỉ chạy
+  `http://` LAN thường (xem `Huong-dan-trien-khai-PM2.md`).
+- **TOTP (mã 6 số dùng app xác thực)** — **bắt buộc tự động** với mọi tài
+  khoản có quyền `admin` (màn hình thiết lập hiện ra ngay, không thể bỏ qua ở
+  lần đăng nhập đầu chưa có TOTP); tài khoản thường không bị bắt buộc.
+- **Admin quản lý hộ người khác** (ở form Sửa Người Dùng): xem/thu hồi thiết bị
+  vân tay đã đăng ký của bất kỳ ai (VD nhân viên mất điện thoại), và xem/thu
+  hồi TOTP của các tài khoản **admin khác** — không có thao tác "bắt buộc bật
+  TOTP" cho 1 tài khoản thường bất kỳ, quy tắc bắt buộc chỉ áp dụng tự động cho
+  `admin`.
+
+### 2.4. Cài Đặt Ứng Dụng (PWA)
+
+Cùng trong "⚙️ Cá Nhân Hóa", mục **"📲 Cài Đặt Ứng Dụng"** cho phép "cài" HCRC
+Workspace như 1 ứng dụng riêng trên điện thoại/máy tính (icon riêng, mở không
+qua trình duyệt) — **vai trò**: tiện truy cập nhanh, không phải để dùng
+offline. Trên Android/Chrome, cài xong có thể nhấn giữ icon để mở nhanh thẳng
+vào 1 trong tối đa **4 module** — admin chọn đúng 4 module nào hiện ở đây tại
+"Hệ Thống → Quản Trị → Quản Lý Danh Mục → 📲 Phím Tắt PWA" (mục 7). iPhone/iPad
+(Safari) cài thủ công qua Share → "Thêm vào MH chính" và không hỗ trợ phím tắt
+(giới hạn của Apple). Cũng cần HTTPS thật để hoạt động đúng chuẩn trên điện
+thoại thật.
+
+---
+
+## 3. Mô hình quy trình phê duyệt chung
 
 Đây là cơ chế **cross-cutting** quan trọng nhất hệ thống — hơn 15 module dùng
 chung 1 khuôn quy trình phê duyệt theo phòng ban/tier (`WF_MODULE_CONFIG` ở
@@ -74,43 +150,43 @@ Liệu, Văn Bản Trình (theo từng loại tờ trình), Đăng Ký Xe, Mua S
 Phòng, Văn Phòng Phẩm, Hợp Đồng (2 quy trình tách riêng: Phê Duyệt gốc và Quản
 Lý HĐ/tài liệu ký), Hỗ Trợ IT (Phê Duyệt Giá bán lẻ theo phòng ban + bán buôn
 theo 4 mức Margin/Chiết khấu cố định), Ngân Sách, **Thanh Toán** ("Chuyển Xác
-Nhận Thanh Toán", mới từ v12.4 — xem 3.3), và các luồng Vận Hành (Mở Mới/Sửa
-Chữa Siêu Thị, Đặt Hàng theo mức giá trị đơn hàng). Riêng Thanh Toán **không**
-có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì dùng "Yêu Cầu Bổ
-Sung" (kênh riêng, không đổi).
+Nhận Thanh Toán"), và các luồng Vận Hành (Mở Mới/Sửa Chữa Siêu Thị — riêng bước
+Dự toán, xem mục 4.4; Đặt Hàng theo mức giá trị đơn hàng). Riêng Thanh Toán
+**không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì dùng
+"Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
 
 Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 Quy Trình & Phê
-Duyệt** — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier cấu
-hình độc lập.
+Duyệt** (mục 7) — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier
+cấu hình độc lập.
 
-### 2.1. 3 cách gán người duyệt cho 1 bước
+### 3.1. 3 cách gán người duyệt cho 1 bước
 
 Mỗi bước duyệt (của mỗi phòng ban/tier) chọn đúng 1 trong 3 chế độ:
 
 | Chế độ | Cách hoạt động | Ghi chú |
 |---|---|---|
 | **Theo người** (PEOPLE — mặc định) | Admin chọn tay 1 hoặc nhiều người cụ thể làm người duyệt bước đó | Không tự tái kiểm tra quyền "Người duyệt" tại thời điểm duyệt — người đã được thêm vẫn duyệt được kể cả nếu sau đó bị rút quyền (hành vi cũ, giữ nguyên) |
-| **Theo phòng ban** | Toàn bộ người có quyền "Người duyệt" (xem 2.2) đang thuộc phòng ban cấu hình cho bước đó | Dùng cho các bước kiểu "ai trong phòng X có quyền duyệt cũng duyệt được" |
-| **Theo vị trí** (POSITION — mới từ v10.5) | Bật toggle "🧭 Theo vị trí" ở bước đó, chọn 1 hoặc nhiều **vị trí** (cặp chức danh + phòng ban, xem 2.3) thay vì chọn tay người cụ thể | Hệ thống **tự tra động** người thật đang giữ đúng vị trí đó mỗi lần cần duyệt — luôn phản ánh đúng ai đang giữ chức vụ hiện tại, không cần admin sửa lại khi nhân sự đổi vị trí |
+| **Theo phòng ban** | Toàn bộ người có quyền "Người duyệt" (xem 3.2) đang thuộc phòng ban cấu hình cho bước đó | Dùng cho các bước kiểu "ai trong phòng X có quyền duyệt cũng duyệt được" |
+| **Theo vị trí** (POSITION) | Bật toggle "🧭 Theo vị trí" ở bước đó, chọn 1 hoặc nhiều **vị trí** (cặp chức danh + phòng ban, xem 3.3) thay vì chọn tay người cụ thể | Hệ thống **tự tra động** người thật đang giữ đúng vị trí đó mỗi lần cần duyệt — luôn phản ánh đúng ai đang giữ chức vụ hiện tại, không cần admin sửa lại khi nhân sự đổi vị trí |
 
 **Điểm bảo mật cốt lõi của chế độ Theo vị trí**: khớp đúng vị trí **chỉ là
 điều kiện lọc bớt** — người đó vẫn phải có quyền "Người duyệt" (`canBeApprover`,
-xem 2.2) mới thực sự duyệt được. Nếu **không** bật "Theo vị trí", bước đó vẫn
+xem 3.2) mới thực sự duyệt được. Nếu **không** bật "Theo vị trí", bước đó vẫn
 dùng chế độ Theo người/Theo phòng ban như trước — không có gì thay đổi, và vẫn
 luôn cần quyền "Người duyệt" mới duyệt được (trừ chế độ Theo người, vốn không
 tái kiểm tra quyền này như đã nêu ở bảng trên).
 
-### 2.2. Quyền "Người duyệt" (`canBeApprover`)
+### 3.2. Quyền "Người duyệt" (`canBeApprover`)
 
 Đây là 1 checkbox trong cây phân quyền của từng người dùng (khối "1. Hệ Thống
 & Chung") — **điều kiện cần** để 1 người thực sự duyệt được hồ sơ (ở chế độ
-Theo phòng ban/Theo vị trí — chế độ Theo người không tái kiểm tra, xem 2.1).
+Theo phòng ban/Theo vị trí — chế độ Theo người không tái kiểm tra, xem 3.1).
 Một người có tên/vị trí đúng như cấu hình bước duyệt nhưng **chưa được cấp**
 quyền này thì vẫn không duyệt được gì — đây là lỗi cấu hình thường gặp nhất:
 "đã chọn đúng vị trí ở Quy Trình & Phê Duyệt nhưng người đó vẫn không thấy nút
 Duyệt" → kiểm tra lại quyền "Người duyệt" của người đó trước.
 
-### 2.3. Danh mục "Nhóm Quyền Đặc Biệt" (mục 17 cây phân quyền)
+### 3.3. Danh mục "Nhóm Quyền Đặc Biệt" (mục 17 cây phân quyền)
 
 Tại **Hệ Thống → Quản Trị → Phân Quyền → khối 17 "Nhóm Quyền Đặc Biệt"** có 3
 danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá được ngay trong ô):
@@ -120,26 +196,31 @@ danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá �
    mọi phòng ban như mặc định).
 2. **Chức danh bị loại khỏi VPP** (`vppExcludedJobTitles`) — chức danh không
    được cấp Văn Phòng Phẩm (không tính vào đầu người/ngân sách VPP của phòng).
-3. **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`, mới từ
-   v10.5) — danh mục các **cặp (chức danh, phòng ban)** admin tự dựng, vì chức
-   danh trong hệ thống vốn generic (VD "Trưởng phòng" không tự phân biệt được
-   "Trưởng phòng IT" với "Trưởng phòng Nhân Sự") — mỗi cặp là 1 "vị trí" độc
-   lập, dùng làm nguồn chọn cho bước duyệt "Theo vị trí" (2.1). Có thể khai
-   báo trước cả khi chưa có ai thực sự giữ đúng vị trí đó.
+3. **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`) — danh
+   mục các **cặp (chức danh, phòng ban)** admin tự dựng, vì chức danh trong hệ
+   thống vốn generic (VD "Trưởng phòng" không tự phân biệt được "Trưởng phòng
+   IT" với "Trưởng phòng Nhân Sự") — mỗi cặp là 1 "vị trí" độc lập, dùng làm
+   nguồn chọn cho bước duyệt "Theo vị trí" (3.1). Có thể khai báo trước cả khi
+   chưa có ai thực sự giữ đúng vị trí đó.
 
-### 2.4. Hộp Thư Phê Duyệt (Approval Hub)
+> Đây là danh mục "Theo vị trí" đơn giản, dùng riêng cho việc **gán bước
+> duyệt**. Nhân Sự cũng có 1 khái niệm "vị trí" khác, đầy đủ hơn (cây tổ chức
+> có thứ bậc, xem mục 4.5) dùng để tự động tính Quản Lý Trực Tiếp + luồng đánh
+> giá KPI — 2 khái niệm **không dùng chung dữ liệu**, chỉ giống nhau về ý
+> tưởng "chức danh + phòng ban = 1 vị trí".
 
-**Hệ Thống → ✅ Phê Duyệt** — hộp thư tổng hợp **1 nơi duy nhất** cho mọi hồ sơ
-đang chờ đúng người dùng hiện tại duyệt, gom từ toàn bộ module có luồng phê
-duyệt (không phải chuyển qua từng module để tìm hồ sơ cần xử lý). Từ v10.4 tự
-làm mới định kỳ (polling nhẹ, không cần bấm F5, không dùng WebSocket) — hồ sơ
-mới cần duyệt hiện lên gần như ngay lập tức. Nút Duyệt/Từ chối ở đây gọi thẳng
-lại đúng hàm xử lý gốc của module đó — duyệt ở Hub và duyệt tại màn module gốc
-là **hoàn toàn tương đương**, không có rủi ro lệch hành vi (email thông báo,
-chuyển bước, tự tạo Công việc liên quan... vẫn chạy đầy đủ như duyệt tại module
-gốc).
+### 3.4. Hộp Thư Phê Duyệt (Approval Hub) — cơ chế đầy đủ
 
-### 2.5. Ví dụ cấu hình cụ thể
+**Hệ Thống → ✅ Phê Duyệt** (vai trò tóm tắt ở mục 2.2) — hộp thư tổng hợp
+**1 nơi duy nhất** cho mọi hồ sơ đang chờ đúng người dùng hiện tại duyệt, gom
+từ toàn bộ module có luồng phê duyệt. Tự làm mới định kỳ (polling nhẹ, không
+cần bấm F5, không dùng WebSocket) — hồ sơ mới cần duyệt hiện lên gần như ngay
+lập tức. Nút Duyệt/Từ chối ở đây gọi thẳng lại đúng hàm xử lý gốc của module
+đó — duyệt ở Hub và duyệt tại màn module gốc là **hoàn toàn tương đương**,
+không có rủi ro lệch hành vi (email thông báo, chuyển bước, tự tạo Công việc
+liên quan... vẫn chạy đầy đủ như duyệt tại module gốc).
+
+### 3.5. Ví dụ cấu hình cụ thể
 
 **Yêu cầu**: "Trưởng phòng Pháp Chế duyệt bước 2 của quy trình Hợp Đồng."
 
@@ -151,74 +232,72 @@ gốc).
    đúng bước 2 của quy trình, bật toggle **"🧭 Theo vị trí"**, chọn vị trí vừa
    thêm ở bước 1, bấm **Lưu**.
 3. Xác nhận người thật đang giữ chức danh "Trưởng phòng" tại phòng "Pháp Chế"
-   đã được cấp quyền **"Người duyệt"** (`canBeApprover`, xem 2.2) ở form Sửa
+   đã được cấp quyền **"Người duyệt"** (`canBeApprover`, xem 3.2) ở form Sửa
    Người Dùng của họ — nếu chưa, họ sẽ khớp đúng vị trí nhưng vẫn không duyệt
-   được (xem cảnh báo ở 2.2).
+   được (xem cảnh báo ở 3.2).
 4. Kiểm tra lại: màn cấu hình bước duyệt sẽ hiện ngay bản xem trước "đã tra ra
    người thật" nếu đúng người đang giữ vị trí này có sẵn quyền Người duyệt.
 
 **Bảng tra nhanh khi hồ sơ "không ai duyệt được"**: bước đang ở chế độ nào
 (Theo người/Theo phòng ban/Theo vị trí) → nếu Theo vị trí: đã có ai thật sự
 giữ đúng vị trí đó chưa (form Sửa Người Dùng có ô Chức danh + Phòng ban) → nếu
-có người giữ vị trí: người đó đã có quyền "Người duyệt" chưa (2.2) → nếu Theo
+có người giữ vị trí: người đó đã có quyền "Người duyệt" chưa (3.2) → nếu Theo
 phòng ban: có ai trong phòng đó có quyền "Người duyệt" chưa.
 
 ---
 
-## 3. Danh sách module nghiệp vụ theo nhóm
+## 4. Danh sách module nghiệp vụ theo nhóm
 
 Danh sách module thật (nguồn: `BUSINESS_MODULES` ở `public/js/core.js`) —
-nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng thứ tự sidebar.
+nhóm lại theo **tần suất/vai trò sử dụng** (ai chạm vào module này thường
+xuyên, không theo tên phòng ban) để đọc từ trên xuống đúng theo mức độ quan
+trọng với 1 nhân viên bình thường — không nhất thiết trùng thứ tự sidebar.
 
-### 3.1. Văn Phòng Điện Tử
+### 4.1. Văn Bản & Tác Nghiệp Hằng Ngày
+
+Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
 
 - **Tài Liệu** — quản lý văn bản nội bộ theo mã tự sinh + quản lý phiên bản
   (Cập nhật giữ mã, Nhập mới tạo mã khác); có luồng phê duyệt theo phòng ban.
-  - **Định dạng mã tự sinh (từ v13.5)** — Tài Liệu/Hợp Đồng đã dùng sẵn khuôn
-    `HCRC-<mã phòng>-<viết tắt phân loại>-<số thứ tự>` từ trước; 8 module còn
-    lại (Văn Bản Trình/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Biên Bản Họp/Đặt
-    Phòng Họp/Phê Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, cộng
-    thêm Giấy Phép/Ngân Sách) giờ ĐỔI SANG cùng khuôn này (trước đây là
-    `HCRC-<viết tắt module>-<ngày tạo>-<số>`, không có mã phòng, số thứ tự
-    reset mỗi ngày) — mã sinh TRƯỚC v13.5 giữ nguyên, không đổi lại hồi tố.
-    **Server giờ tự sinh lại mã mới khi phát hiện trùng** (tối đa vài lần thử,
-    lấy đúng số thứ tự lớn nhất từng có +1) thay vì báo lỗi "Mã đã tồn tại"
-    bắt người dùng tự bấm lại — áp dụng cho MỌI module có mã tự sinh, kể cả
-    khi 2 người tạo hồ sơ gần như cùng lúc.
+  - **Định dạng mã tự sinh** — Tài Liệu/Hợp Đồng và 8 module khác (Văn Bản
+    Trình/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Biên Bản Họp/Đặt Phòng Họp/Phê
+    Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, cộng thêm Giấy Phép/
+    Ngân Sách) dùng chung 1 khuôn `HCRC-<mã phòng>-<viết tắt phân loại>-<số
+    thứ tự>`. **Server tự sinh lại mã mới khi phát hiện trùng** (tối đa vài
+    lần thử, lấy đúng số thứ tự lớn nhất từng có +1) thay vì báo lỗi "Mã đã
+    tồn tại" bắt người dùng tự bấm lại — áp dụng cho MỌI module có mã tự sinh,
+    kể cả khi 2 người tạo hồ sơ gần như cùng lúc.
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
-  (Bình thường/Gấp/Thượng khẩn, từ v12.0) ở màn Biểu Mẫu. Có bản xem trước quy
+  (Bình thường/Gấp/Thượng khẩn) ở màn Biểu Mẫu (mục 7.3). Có bản xem trước quy
   trình duyệt ngay trước khi gửi.
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
   tự điền thông tin cơ bản.
-
-### 3.2. Truyền Thông & Nhân Sự Nội Bộ
-
 - **Truyền Thông Nội Bộ** — 5 sub-tab dùng chung 1 collection bài đăng, phân
   biệt bằng loại: 📰 Nhịp Sống HCRC (tin tức công ty), 🎓 Đào Tạo (thông báo
   lớp học, liên kết LMS bên dưới), 💼 Tuyển Dụng (đăng tin + nhân viên giới
   thiệu ứng viên), 💬 Góc Chia Sẻ, 🤝 HCRC Đồng Hành (hỏi & đáp riêng tư 1-1
-  với Nhân Sự — nhân viên gửi câu hỏi về chế độ/quy định, Nhân Sự trả lời,
-  1 hỏi–1 đáp không trao đổi nhiều lượt; danh sách "Chủ Đề" admin tự thêm/bớt/
-  đổi nhãn ở màn Biểu Mẫu, từ v12.0). Bình luận/thả tim/ghi nhận đã xem mở
-  cho mọi người; chỉ việc **đăng bài** mới cần quyền riêng theo từng loại.
+  với Nhân Sự — nhân viên gửi câu hỏi về chế độ/quy định, phía Nhân Sự trả lời
+  qua "Quản Lý & Phản Hồi Ý Kiến", xem mục 4.5; 1 hỏi–1 đáp không trao đổi
+  nhiều lượt; danh sách "Chủ Đề" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu).
+  Bình luận/thả tim/ghi nhận đã xem mở cho mọi người; chỉ việc **đăng bài**
+  mới cần quyền riêng theo từng loại.
   - **Đào Tạo (LMS)** — Lớp Học (tạo/danh sách/ghi kết quả) + Đăng Ký Của Tôi +
     Kho Tài Liệu + Lộ Trình Thăng Tiến (danh sách lớp bắt buộc, chỉ xác nhận
     hoàn thành khi đã Đạt hết) + Ngân Hàng Câu Hỏi. 2 mức quyền: quản lý toàn
     quyền (tạo lớp/tài liệu/bài test/lộ trình) và giảng viên (chỉ quản lý
     roster/kết quả đúng lớp được gán).
-    - **Ngân Hàng Câu Hỏi — 4 loại câu hỏi** (từ v12.2): 1 đáp án đúng
-      (SINGLE), nhiều đáp án đúng (MULTI — cả 2 loại này hỗ trợ 1 ảnh minh
-      hoạ đề bài tuỳ chọn, KHÔNG phải "loại câu hỏi hình ảnh" riêng), **Nghị
-      Luận** (ESSAY — người làm bài tự viết câu trả lời, không có đáp án lựa
-      chọn, trainer chấm tay), **Kéo Thả Hình** (IMAGE_DRAG_DROP — mỗi đáp án
-      là 1 ẢNH riêng thay vì text, kéo-thả hoặc bấm chọn để trả lời, chấm tự
-      động y hệt loại nhiều đáp án đúng). Excel Nhập/Xuất hàng loạt CHỈ hỗ
-      trợ 2 loại SINGLE/MULTI như trước — 2 loại mới chỉ tạo được qua giao
-      diện Test Builder.
+    - **Ngân Hàng Câu Hỏi — 4 loại câu hỏi**: 1 đáp án đúng (SINGLE), nhiều
+      đáp án đúng (MULTI — cả 2 loại này hỗ trợ 1 ảnh minh hoạ đề bài tuỳ
+      chọn, KHÔNG phải "loại câu hỏi hình ảnh" riêng), **Nghị Luận** (ESSAY —
+      người làm bài tự viết câu trả lời, không có đáp án lựa chọn, trainer
+      chấm tay), **Kéo Thả Hình** (IMAGE_DRAG_DROP — mỗi đáp án là 1 ẢNH
+      riêng thay vì text, kéo-thả hoặc bấm chọn để trả lời, chấm tự động y hệt
+      loại nhiều đáp án đúng). Excel Nhập/Xuất hàng loạt CHỈ hỗ trợ 2 loại
+      SINGLE/MULTI — 2 loại mới chỉ tạo được qua giao diện Test Builder.
     - **Chấm tay câu Nghị Luận**: bài test có ÍT NHẤT 1 câu Nghị Luận thì
       Đạt/Không Đạt **KHÔNG có ngay khi học viên nộp bài** — hệ thống tự
       chấm trước phần trắc nghiệm/kéo-thả, học viên thấy "⏳ Chờ chấm nghị
@@ -227,159 +306,162 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
       điểm từng câu — lúc đó điểm mới cộng dồn và Đạt/Không Đạt mới chốt
       (so với Điểm Đạt của lớp). Bài test không có câu Nghị Luận nào thì
       không đổi gì — vẫn có kết quả ngay như trước.
-- **Nhân Sự** — module con **Cơ Cấu Tổ Chức** (làm lại hoàn toàn từ v14.4 —
-  xem mục riêng ngay dưới đây, thay hẳn bản cũ "sơ đồ suy từ quản lý trực
-  tiếp + cấu hình KPI theo dept×chức danh"), tab **Quản Lý & Phản Hồi Ý Kiến**
-  (phía Nhân Sự của "HCRC Đồng Hành" ở trên), và module con **Onboarding /
-  Offboarding**:
-  - **Từ v14.3 — làm lại hoàn toàn theo mô hình quy trình có checklist theo
-    giai đoạn** (thay hẳn bản v12.3-v12.7 "1 yêu cầu = 1 ticket Hỗ Trợ IT cấp/
-    khoá tài khoản" cũ). Tạo quy trình:
-    - **Onboarding** — khai báo nhân viên MỚI (mã nhân viên tự gõ, họ tên, Vị
-      Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh lấy từ danh mục hệ
-      thống — cùng cơ chế cascading như form Người Dùng đầy đủ, Email **để
-      trống nếu chưa cấp, bắt buộc với nhân viên Siêu Thị**, SĐT, Ngày vào làm,
-      Quản lý trực tiếp tuỳ chọn) rồi bấm "Tạo Quy Trình".
-    - **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân
-      viên, tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày
-      Nghỉ Việc (bắt buộc, validate cả server)**, tuỳ chọn tick "đang giữ vị
-      trí quản lý" + chọn Quản lý trực tiếp, rồi bấm "Tạo Quy Trình". **Không
-      còn 2 checkbox xác nhận thủ tục bàn giao/chế độ trước khi tạo** — các
-      việc cần làm này giờ nằm trong checklist tự sinh SAU khi tạo (xem dưới).
-    - Ngay khi tạo, hệ thống **tự sinh sẵn checklist các việc cần làm** từ
-      danh mục chuẩn (Quản Lý > Checklist Mẫu), phân theo **giai đoạn**
-      (Onboarding: Chuẩn bị trước ngày đi làm → Ngày đầu tiên → Tuần/Tháng đầu
-      → Kết thúc thử việc; Offboarding: Thông báo nghỉ việc → Bàn giao công
-      việc → Thu hồi tài sản & quyền truy cập → Quyết toán tài chính → Sau khi
-      nghỉ) và **nhãn trách nhiệm** (Nhân Sự/IT/Hành Chính/Tài Chính/Quản lý
-      trực tiếp — không phải phòng ban thật, chỉ quyết định AI được thao tác
-      việc đó, ưu tiên giao riêng cho 1 người cụ thể nếu có). Hạn từng việc
-      = ngày mốc (Ngày vào làm/Ngày nghỉ việc) + số ngày lệch cấu hình sẵn
-      trong danh mục.
-    - Trong màn **Chi Tiết Quy Trình**: đánh dấu **Hoàn thành**/**Bỏ qua**
-      từng việc (bỏ qua việc bắt buộc chỉ người quản lý quy trình mới làm
-      được, phải nhập lý do), **Giao lại** việc cho người khác, đính kèm tài
-      liệu, xem lịch sử. Quy trình **tự động chuyển "Hoàn tất"** ngay khi mọi
-      việc bắt buộc ở mọi giai đoạn đã xong/bỏ qua — không có nút "chuyển giai
-      đoạn" thủ công, giai đoạn hiện tại luôn phản ánh đúng tiến độ thật. Có
-      thể **Huỷ quy trình** (bắt buộc lý do) khi đang thực hiện.
-  - **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không
-    bắt buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh
-    mục "🔑 Tài khoản / Đăng nhập") để đội IT xử lý theo đúng quy trình sẵn có
-    (Nhận xử lý → Hoàn thành). **Quan trọng: IT vẫn tự tay tạo/khoá email +
-    tài khoản AD hoàn toàn NGOÀI hệ thống này như trước giờ** — khi IT đánh
-    dấu ticket "Hoàn thành" kèm ghi chú kết quả, hệ thống CHỈ ghi lại đúng
-    việc đã sinh ra ticket đó chuyển "Hoàn thành" (+ ghi chú/ai xác nhận, lúc
-    nào) — **không có bất kỳ thao tác tự động nào tạo mới/khoá tài khoản
-    `DB.users`**, và các việc KHÁC trong cùng quy trình không bị ảnh hưởng.
-  - **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang
-    được giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm),
-    gộp cả Onboarding lẫn Offboarding, để không phải mở từng quy trình lần
-    lượt.
-  - **Checklist Mẫu** (sub-view chỉ hiện với quyền **"📋 Quản Lý Checklist
-    Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn: tên
-    việc, giai đoạn, nhãn trách nhiệm, số ngày lệch so với mốc, có bắt buộc
-    hay không. Đổi danh mục **không ảnh hưởng ngược** các quy trình đã tạo
-    trước đó (checklist đã snapshot vào từng quy trình lúc tạo).
-  - **Phân quyền** (khối 21 cây phân quyền) — 4 cờ phẳng thay cho 2 cờ
-    "Tạo Yêu Cầu Onboarding"/"Tạo Yêu Cầu Offboarding" cũ: **"🆕 Quản Lý
-    Onboarding"**/**"🚪 Quản Lý Offboarding"** (tạo + quản lý quy trình đúng
-    loại — bỏ qua việc bắt buộc, giao lại việc, huỷ quy trình, đính kèm tài
-    liệu), **"📋 Quản Lý Checklist Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự
-    động có quyền tạo/quản lý quy trình), **"👁️ Xem Toàn Bộ Quy Trình"** (chỉ
-    xem để theo dõi tiến độ chung, KHÔNG thao tác được). Người tạo/quản lý
-    trực tiếp/được giao riêng 1 việc luôn xem được đúng quy trình liên quan
-    dù không có cờ nào ở trên (riêng tư theo từng quy trình, cùng khuôn HCRC
-    Đồng Hành). Có migration 1 lần tự động: ai đang có "Tạo Yêu Cầu
-    Onboarding/Offboarding" cũ được cấp lại đúng cờ quản lý tương ứng, ai có
-    **nhanSuManage** được cấp thêm cả "Quản Lý Checklist Mẫu" + "Xem Toàn Bộ
-    Quy Trình" — không ai bị mất quyền truy cập sau khi nâng cấp.
 
-### 3.3. Tài Chính
+### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
+
+Nhóm module nhân viên **tự tạo yêu cầu cho chính mình** (đăng ký xe, đặt
+phòng, xin cấp phát...) — khác nhóm 4.1 ở chỗ đây không phải công việc chuyên
+môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều đặn.
+
+- **Đăng Ký Xe** — đăng ký sử dụng xe công ty, qua quy trình duyệt theo phòng
+  ban. Danh sách "Mục Đích Sử Dụng" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu.
+  3 sub-tab: **🚗 Đăng Ký Xe** (tạo/xử lý phiếu), **🗓️ Lịch Xe** (lưới CHỈ XEM
+  lịch trống/bận từng lái xe theo ngày, giống hệt lưới Lịch Họp: cột = lái xe,
+  hàng = khung giờ 30 phút 07:00-19:00, ô đỏ = lái xe đó đang có phiếu chưa bị
+  từ chối/huỷ trùng khung giờ, ô trắng = trống, bấm ô đỏ xem nhanh thông tin
+  phiếu — **không** đặt/kéo-chọn lịch trực tiếp từ đây, biển số/lái xe cụ thể
+  vẫn do Phòng Hành Chính phân công khi xử lý duyệt), **🧑‍✈️ Lái Xe** (lái xe
+  tự xác nhận chuyến được phân công).
+- **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
+  đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
+  nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
+  hiện xung đột. Danh mục phòng họp (tên đầy đủ + tên gọn hiện trên lưới Lịch
+  Họp) admin tự thêm/xoá ngay tại khối "🗂️ Danh Mục Phòng Họp" trong tab
+  "📝 Đăng Ký" của module.
+- **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
+  hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban mặc định** = số nhân
+  sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số
+  nhân sự gợi ý này). Chức danh nằm trong danh mục "Chức danh bị loại khỏi
+  VPP" (3.3) không được tính vào đầu người/không đăng ký được.
+- **Đồng Phục** — 2 vai trò: Hành Chính tạo "kỳ cấp phát" phân bổ đồng phục
+  xuống từng siêu thị, Giám Đốc Siêu Thị xác nhận đã nhận rồi cấp phát tiếp cho
+  nhân viên. "Kho" không lưu bảng riêng — luôn tính động từ số đã phân bổ đã
+  xác nhận trừ đi số đã cấp phát cho nhân viên. **Bắt buộc nhân viên xác nhận
+  đã nhận**: mỗi phiếu cấp phát (`uniformIssuances`) khởi tạo ở trạng thái "⏳
+  Chờ xác nhận" (`ackStatus = PENDING_ACK`) — CHỈ đúng nhân viên được cấp mới
+  bấm "✅ Xác nhận đã nhận" được (server tự xác thực lại quyền, không chặn
+  được ai xác nhận thay ai), sau đó chuyển "✅ Đã xác nhận" (`ackAt`/`ackByName`
+  ghi lại). Đây thuần là bước xác nhận đã thực nhận — KHÔNG ảnh hưởng gì tới
+  tồn kho/số đang giữ (vẫn trừ ngay lúc cấp phát). Badge trạng thái hiện ở cả
+  bảng "Lịch Sử Cấp Phát" (từng phiếu) và "Đang Giữ" (gộp theo nhân viên×mặt
+  hàng×size). Nhân viên thường xem + xác nhận được CHÍNH phiếu của mình qua
+  mục **"👕 Đồng Phục Của Tôi"** trong "⚙️ Cá Nhân Hóa" (mục 2.3).
+  **Điều chuyển giữa 2 siêu thị — mô hình "hàng đang vận chuyển"**: Giám Đốc
+  Siêu Thị A tạo yêu cầu điều chuyển → Hành Chính/người có quyền duyệt
+  (`uniformManage`) duyệt (`APPROVED`) → **tồn kho siêu thị A trừ ngay lúc
+  duyệt**, nhưng tồn kho siêu thị B **CHƯA cộng** — hàng coi như đang trên
+  đường đi, không thuộc kho bên nào cho tới khi xác nhận. Bắt buộc **đúng
+  Giám Đốc Siêu Thị ĐÍCH (B)** bấm "✅ Xác nhận đã nhận hàng" thì mới chuyển
+  sang `RECEIVED` và tồn kho B mới cộng thêm (server tự xác thực lại quyền
+  theo `user.dept === transfer.targetDept`, không ai xác nhận thay siêu thị
+  khác được).
+  **Báo cáo Đồng Phục theo siêu thị**: bộ lọc siêu thị của riêng báo cáo Đồng
+  Phục là **chọn nhiều** (tick chọn một nhóm siêu thị bất kỳ, có nút "Chọn Tất
+  Cả"/"Bỏ Chọn Hết") — báo cáo hiện dòng "Tổng Cộng (N siêu thị đã chọn)" cộng
+  tồn kho của đúng nhóm đang chọn, và khi đang lọc hiện thêm khối "Tổng Cộng
+  TẤT CẢ Siêu Thị" để so sánh ngay với tổng toàn hệ thống.
+- **Giấy Phép** — hồ sơ pháp lý (giấy phép kinh doanh, chứng chỉ...), phân
+  quyền hoàn toàn riêng ngay trong module (tạo/duyệt/xem tách biệt), không đi
+  qua quy trình duyệt theo phòng ban ở mục 3. Có theo dõi hiệu lực + nhắc hết
+  hạn qua email. Danh sách các phiên bản gia hạn của cùng 1 giấy phép (cả ở
+  bảng con khi mở rộng 1 hồ sơ lẫn màn "Chi Tiết Giấy Phép") hiện **mới nhất
+  lên trước**.
+- **Hỗ Trợ IT** — module 3 sub-tab, mỗi tab phục vụ 1 nhóm người khác nhau
+  dù cùng nằm 1 chỗ:
+  - **🏷️ Phê Duyệt Giá** — dành cho người tạo/duyệt giá bán mặt hàng siêu thị
+    (thực chất là 1 luồng tài chính, xem thêm mục 4.3): **Bán Lẻ** theo phòng
+    ban (dùng chung engine quy trình phòng ban ở mục 3), **Bán Buôn** theo 4
+    mức Margin/Chiết khấu cố định (không theo phòng ban).
+  - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, **mở cho toàn bộ nhân
+    viên** (đúng vai trò "tự phục vụ" của cả mục này), vòng đời Chưa xử lý →
+    Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục" admin tự thêm/bớt/đổi
+    nhãn ở màn Biểu Mẫu. **Phê duyệt là TÙY CHỌN theo từng ticket, do IT tự
+    quyết định** — mặc định mọi ticket xử lý bình thường không cần qua duyệt.
+    Gửi được nút "📨 Gửi/Gửi Lại Yêu Cầu Phê Duyệt" ngay từ khi ticket còn
+    "Chưa xử lý" (chưa ai bấm "🎯 Nhận Xử Lý") — đúng nghiệp vụ "xin ý kiến
+    quản lý TRƯỚC KHI bắt đầu xử lý". Chọn 1 người bất kỳ trong hệ thống
+    (không giới hạn đúng quản lý trực tiếp theo Cơ Cấu Tổ Chức) + nhập lý do —
+    ticket chuyển trạng thái phê duyệt "⏳ Đang chờ duyệt" (trạng thái xử lý
+    TODO/DOING của ticket KHÔNG đổi khi gửi phê duyệt). **Trong lúc chờ hoặc
+    bị từ chối, server CHẶN CỨNG (lỗi 409) cả "🎯 Nhận Xử Lý" lẫn "Cập nhật
+    tiến độ"/đóng ticket** — đội IT chỉ nhận việc/tiếp tục xử lý được sau khi
+    quản lý đã Duyệt.
+  - **🔔 Gia Hạn Dịch Vụ CNTT** — chỉ đội IT thấy được, quản lý nội bộ danh
+    mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
+    phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng
+    khuôn Giấy Phép. "Loại Dịch Vụ" là danh mục admin-editable, vẫn tự học
+    thêm khi ai gõ loại mới lúc thêm dịch vụ.
+
+### 4.3. Tài Chính & Hợp Đồng
+
+Nhóm module người TẠO hồ sơ (thường là phòng chuyên môn) và người DUYỆT
+(thường là Kế Toán/Ban Giám Đốc) cùng dùng — trọng tâm là dòng tiền/pháp lý,
+khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính riêng.
 
 - **Hợp Đồng** — 2 sub-tab: **Phê Duyệt** (tạo mới hồ sơ gốc HOẶC phụ lục, cả
   hai đều qua hàng chờ duyệt trừ khi người tạo có quyền tự duyệt) và **Quản Lý
   Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
   tự động ở trạng thái đã duyệt ngay, không qua hàng chờ). Có thể khai Đợt
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
-  - **Loại Thanh Toán** (từ v12.4, chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh
-    Đợt Thanh Toán): **"Thanh toán 1 lần"** (mặc định, tương thích ngược 100%
-    với hồ sơ cũ) hoặc **"Thanh toán định kỳ"**. Khi Tài liệu ký đã duyệt xong,
-    nút **"🧾 Lập Thanh Toán"** (đổi tên từ "Chuyển Sang Thanh Toán") mở ra;
-    bấm xong hợp đồng chuyển "Chờ thanh toán" và tự điều hướng sang sub-tab
-    **"🗂️ Quản Lý Thanh Toán"** (Tổng Hợp > Thanh Toán) để lập/gửi duyệt. Với
-    hợp đồng **"Thanh toán 1 lần"**: sau khi 1 đề nghị hoàn tất (PAID), nút
-    "🧾 Lập Thanh Toán" **không** mở lại nữa (khoá cứng, như trước). Với hợp
-    đồng **"Thanh toán định kỳ"**: sau khi 1 đợt/chu kỳ PAID, hệ thống tự trả
-    hợp đồng về "Chưa thanh toán" và nút mở lại ngay để bắt đầu chu kỳ mới (VD
-    năm sau) — nhưng **không** cho mở 2 chu kỳ song song (đang "Chờ thanh
-    toán" thì chưa lập thêm được).
-  - **Đổi Hình Thức Thanh Toán sau khi ĐÃ DUYỆT xong (từ v13.5)** — trước đây
-    hợp đồng đã `APPROVED` khoá sửa hoàn toàn (kể cả Loại Thanh Toán/Đợt Thanh
-    Toán), muốn đổi phải huỷ tạo lại. Giờ người tạo hợp đồng bấm
-    **"✏️ Đổi Hình Thức Thanh Toán"** (chỉ hiện khi ĐÃ `APPROVED` VÀ hợp đồng
-    **chưa từng có đề nghị thanh toán nào** — đã có rồi thì bị chặn, tránh lệch
-    số liệu đã đề nghị/đã duyệt) — chọn lại Loại Thanh Toán + khai lại Đợt
-    Thanh Toán, gửi đi **KHÔNG áp dụng ngay**: hiện badge "⏳ Chờ duyệt đổi
-    hình thức thanh toán" cho tới khi ĐÚNG nhóm người duyệt **"Tài liệu ký"**
-    của phòng ban đó (Hệ Thống > Quy Trình & Phê Duyệt > "Hợp đồng - Quản Lý
-    HĐ") bấm Duyệt/Từ chối — cùng 1 nhóm người đã duyệt Tài liệu ký, không
-    phải nhóm duyệt hồ sơ gốc. Duyệt xong mới thật sự đổi
-    Loại/Đợt Thanh Toán + ghi lại lịch sử ai yêu cầu/ai duyệt/đổi từ gì sang
-    gì; Từ chối thì chỉ xoá yêu cầu, giữ nguyên hình thức cũ.
+  - **Loại Thanh Toán** (chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh Đợt Thanh
+    Toán): **"Thanh toán 1 lần"** (mặc định) hoặc **"Thanh toán định kỳ"**.
+    Khi Tài liệu ký đã duyệt xong, nút **"🧾 Lập Thanh Toán"** mở ra; bấm xong
+    hợp đồng chuyển "Chờ thanh toán" và tự điều hướng sang sub-tab **"🗂️ Quản
+    Lý Thanh Toán"** (Tổng Hợp > Thanh Toán). Với hợp đồng **"Thanh toán 1
+    lần"**: sau khi 1 đề nghị hoàn tất (PAID), nút "🧾 Lập Thanh Toán" **không**
+    mở lại nữa (khoá cứng). Với hợp đồng **"Thanh toán định kỳ"**: sau khi 1
+    đợt/chu kỳ PAID, hệ thống tự trả hợp đồng về "Chưa thanh toán" và nút mở
+    lại ngay để bắt đầu chu kỳ mới — nhưng **không** cho mở 2 chu kỳ song
+    song.
+  - **Đổi Hình Thức Thanh Toán sau khi ĐÃ DUYỆT xong** — người tạo hợp đồng
+    bấm **"✏️ Đổi Hình Thức Thanh Toán"** (chỉ hiện khi ĐÃ `APPROVED` VÀ hợp
+    đồng **chưa từng có đề nghị thanh toán nào**) — chọn lại Loại Thanh Toán +
+    khai lại Đợt Thanh Toán, gửi đi **KHÔNG áp dụng ngay**: hiện badge "⏳ Chờ
+    duyệt đổi hình thức thanh toán" cho tới khi ĐÚNG nhóm người duyệt "Tài
+    liệu ký" của phòng ban đó (Hệ Thống > Quy Trình & Phê Duyệt > "Hợp đồng -
+    Quản Lý HĐ") bấm Duyệt/Từ chối. Duyệt xong mới thật sự đổi Loại/Đợt Thanh
+    Toán + ghi lại lịch sử ai yêu cầu/ai duyệt/đổi từ gì sang gì; Từ chối thì
+    chỉ xoá yêu cầu, giữ nguyên hình thức cũ.
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
   - **Thanh Toán** — tổng hợp đề nghị thanh toán tự sinh từ Hợp Đồng/Mua
     Bán/Sửa Chữa (nút "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán") hoặc tạo
-    thủ công. **3 sub-tab** (từ v12.4, thêm 1 sub-tab mới ở giữa):
-    - **"➕ Tạo Mới"** — tạo thủ công/có nguồn (không đổi).
-    - **"🗂️ Quản Lý Thanh Toán"** — nơi lập/sửa các **đợt thanh toán**
-      của đề nghị đang **NHÁP** (`DRAFT`, chỉ phát sinh từ nút "🧾 Lập Thanh
-      Toán" ở Hợp Đồng — đề nghị tạo thủ công/CÓ NGUỒN từ chính tab này vẫn đi
-      thẳng "Chờ duyệt" như trước, không qua NHÁP). Khi còn NHÁP, **số tiền
-      từng đợt KHÔNG bắt buộc** — có thể bấm **"💾 Lưu"** để giữ nguyên NHÁP,
-      chỉnh sửa dần. Chỉ khi bấm **"📨 Chuyển Xác Nhận Thanh Toán"** (NHÁP →
-      Chờ duyệt) thì **MỌI đợt mới bắt buộc phải có số tiền > 0** — thiếu đợt
-      nào bị chặn ngay (báo rõ đợt số mấy), cả ở giao diện lẫn server. Sub-tab
-      này cũng hiện **cảnh báo hạn thanh toán** theo từng đợt (🔴 quá hạn / 🟡
-      sắp đến hạn ≤ 3 ngày, tính từ "Ngày đến hạn" của đợt) VÀ badge trạng
-      thái tổng hợp "tổng đợt" (🔴 Quá hạn / 🟡 Đang thanh toán / ✅ Đã thanh
-      toán, từ v13.4) theo dõi các đề nghị **cho tới khi HOÀN TẤT** (từ v13.4 —
-      đề nghị `PAID` **không còn biến mất** khỏi sub-tab này như trước, vẫn
-      hiện đầy đủ kèm link "📎 Xem tệp" xem lại tệp đã dùng để xác nhận) — đọc
-      CHUNG 1 danh sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi trạng
-      thái ở đó tự hiện ngay ở đây, không cần đồng bộ gì thêm.
+    thủ công. **3 sub-tab**:
+    - **"➕ Tạo Mới"** — tạo thủ công/có nguồn.
+    - **"🗂️ Quản Lý Thanh Toán"** — nơi lập/sửa các **đợt thanh toán** của đề
+      nghị đang **NHÁP** (`DRAFT`, chỉ phát sinh từ nút "🧾 Lập Thanh Toán" ở
+      Hợp Đồng — đề nghị tạo thủ công/CÓ NGUỒN đi thẳng "Chờ duyệt" như
+      trước). Khi còn NHÁP, **số tiền từng đợt KHÔNG bắt buộc** — có thể bấm
+      **"💾 Lưu"** để giữ nguyên NHÁP, chỉnh sửa dần. Chỉ khi bấm **"📨 Chuyển
+      Xác Nhận Thanh Toán"** (NHÁP → Chờ duyệt) thì **MỌI đợt mới bắt buộc
+      phải có số tiền > 0** — thiếu đợt nào bị chặn ngay, cả ở giao diện lẫn
+      server. Sub-tab này cũng hiện **cảnh báo hạn thanh toán** theo từng đợt
+      (🔴 quá hạn / 🟡 sắp đến hạn ≤ 3 ngày) VÀ badge trạng thái tổng hợp "tổng
+      đợt" (🔴 Quá hạn / 🟡 Đang thanh toán / ✅ Đã thanh toán) theo dõi các đề
+      nghị **cho tới khi HOÀN TẤT** (đề nghị `PAID` không biến mất khỏi
+      sub-tab này, vẫn hiện đầy đủ kèm link "📎 Xem tệp") — đọc CHUNG 1 danh
+      sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi trạng thái tự hiện
+      ngay ở đây.
     - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — hàng chờ **duyệt theo bước/phòng
-      ban** (như 12 module duyệt khác, admin cấu hình người duyệt ở "⚙️ Quản
-      Trị" > "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") + xác nhận PAID —
-      thay hẳn quyền phẳng "Quản lý Thanh Toán" cũ (chỉ còn dùng cho Sửa/Yêu
-      Cầu Bổ Sung/Xoá, không còn dùng để Duyệt). Không có nút Từ Chối ở bước
-      này (chỉ có Duyệt) — cần yêu cầu sửa lại thì dùng "📝 Yêu Cầu Bổ Sung"
-      như trước (đưa về "Cần bổ sung", không đổi).
-      **Xác nhận thanh toán (từ v13.4, kèm bắt buộc tệp "đề nghị thanh toán đã
-      phê duyệt" — trước đây KHÔNG đòi hỏi tệp gì) có 2 CHẾ ĐỘ tuỳ loại hợp
-      đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo đề nghị (đổi "Loại Thanh Toán" của
-      hợp đồng SAU KHI đề nghị đã tạo không ảnh hưởng đề nghị đang chờ xử
-      lý):**
+      ban** (như các module duyệt khác, admin cấu hình người duyệt ở "⚙️ Quản
+      Trị" > "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") + xác nhận PAID.
+      Không có nút Từ Chối ở bước này (chỉ có Duyệt) — cần yêu cầu sửa lại
+      thì dùng "📝 Yêu Cầu Bổ Sung" (đưa về "Cần bổ sung").
+      **Xác nhận thanh toán** (bắt buộc kèm tệp "đề nghị thanh toán đã phê
+      duyệt") có 2 CHẾ ĐỘ tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo
+      đề nghị:
       - Hợp đồng **"Thanh toán 1 lần"** (và MỌI đề nghị nguồn Hợp đồng loại
         này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 tệp DUY NHẤT cho CẢ đề nghị,
         1 lần bấm chuyển thẳng "Đã thanh toán" cho TẤT CẢ các đợt cùng lúc.
-        Badge từng đợt **vẫn hiển thị đủ** để theo dõi (quá hạn/sắp đến
-        hạn/đã thanh toán) nhưng **không** có nút xác nhận riêng cho từng đợt
-        (chỉ để xem, không thao tác được).
       - Hợp đồng **"Thanh toán định kỳ"**, đề nghị tạo THỦ CÔNG, và đề nghị
-        nguồn Mua Bán/Sửa Chữa/Đầu Tư (không có khái niệm "1 lần"): nút
-        **"Xác nhận"** riêng cho TỪNG ĐỢT — mỗi lần xác nhận 1 đợt phải kèm 1
-        tệp riêng, lặp lại cho tới khi xác nhận HẾT mọi đợt thì đề nghị **tự
-        động** chuyển "Đã thanh toán" — **không có** nút xác nhận toàn bộ 1
-        lần cho loại này (đúng yêu cầu "không được phép ấn xác nhận trên tổng
-        đợt").
-    Vòng đời đầy đủ: **[NHÁP `DRAFT`, chỉ nút "🧾 Lập Thanh Toán"]** → Chờ
-    duyệt (sửa được, qua duyệt theo bước/phòng ban) → [Cần bổ sung thông tin
-    (sửa được)] → Đã duyệt (xác nhận — toàn bộ 1 lần hoặc từng đợt, tuỳ loại
-    ở trên) → Đã thanh toán (khoá cứng). PAID ghi ngược đúng theo loại hợp
-    đồng (xem "Loại Thanh Toán" ở trên) — officeReqs (Mua Bán/Sửa Chữa) không
-    có khái niệm định kỳ, luôn khoá cứng "Đã thanh toán" như trước.
+        nguồn Mua Bán/Sửa Chữa/Đầu Tư: nút **"Xác nhận"** riêng cho TỪNG ĐỢT
+        — mỗi lần xác nhận 1 đợt phải kèm 1 tệp riêng, lặp lại cho tới khi
+        xác nhận HẾT mọi đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
+    Vòng đời đầy đủ: **[NHÁP `DRAFT`]** → Chờ duyệt (sửa được, qua duyệt theo
+    bước/phòng ban) → [Cần bổ sung thông tin (sửa được)] → Đã duyệt (xác nhận
+    — toàn bộ 1 lần hoặc từng đợt, tuỳ loại ở trên) → Đã thanh toán (khoá
+    cứng). officeReqs (Mua Bán/Sửa Chữa) không có khái niệm định kỳ, luôn
+    khoá cứng "Đã thanh toán".
   - **Ngân Sách** — 3 sub-tab dùng chung 1 collection, tham số hoá theo loại
     bản ghi: **Ngân Sách Phê Duyệt** (bản kế hoạch, qua Trưởng phòng duyệt),
     **Ngân Sách Thực Hiện** (bản thực chi, KHÔNG qua bước duyệt — "Gửi" đi
@@ -388,415 +470,240 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
     quyền: chỉ xem phòng mình / xem mọi phòng ban / xem thêm khối "Toàn Công
     Ty").
 
-### 3.4. Hành Chính
+### 4.4. Vận Hành (Siêu Thị)
 
-- **Đăng Ký Xe** — đăng ký sử dụng xe công ty, qua quy trình duyệt theo phòng
-  ban. Danh sách "Mục Đích Sử Dụng" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu
-  (từ v12.0). 3 sub-tab: **🚗 Đăng Ký Xe** (tạo/xử lý phiếu), **🗓️ Lịch Xe**
-  (mới từ v12.1 — lưới CHỈ XEM lịch trống/bận từng lái xe theo ngày, giống hệt
-  lưới Lịch Họp: cột = lái xe, hàng = khung giờ 30 phút 07:00-19:00, ô đỏ = lái
-  xe đó đang có phiếu chưa bị từ chối/huỷ trùng khung giờ (kể cả đang chờ duyệt
-  hoặc đang chờ bổ sung), ô trắng = trống, bấm ô đỏ xem nhanh thông tin phiếu —
-  **không** đặt/kéo-chọn lịch trực tiếp từ đây, biển số/lái xe cụ thể vẫn do
-  Phòng Hành Chính phân công khi xử lý duyệt như trước), **🧑‍✈️ Lái Xe** (lái
-  xe tự xác nhận chuyến được phân công).
-- **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
-  đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
-  nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
-  hiện xung đột. Danh mục phòng họp (tên đầy đủ + tên gọn hiện trên lưới Lịch
-  Họp) admin tự thêm/xoá ngay tại khối "🗂️ Danh Mục Phòng Họp" trong tab
-  "📝 Đăng Ký" của module (từ v12.0, trước đây cố định 3 phòng).
-- **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
-  hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban mặc định** = số nhân
-  sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số
-  nhân sự gợi ý này). Chức danh nằm trong danh mục "Chức danh bị loại khỏi
-  VPP" (2.3) không được tính vào đầu người/không đăng ký được.
-- **Đồng Phục** — 2 vai trò: Hành Chính tạo "kỳ cấp phát" phân bổ đồng phục
-  xuống từng siêu thị, Giám Đốc Siêu Thị xác nhận đã nhận rồi cấp phát tiếp cho
-  nhân viên. "Kho" không lưu bảng riêng — luôn tính động từ số đã phân bổ đã
-  xác nhận trừ đi số đã cấp phát cho nhân viên. **Bắt buộc nhân viên xác nhận
-  đã nhận (từ v13.5)**: mỗi phiếu cấp phát (`uniformIssuances`) khởi tạo ở
-  trạng thái "⏳ Chờ xác nhận" (`ackStatus = PENDING_ACK`) — CHỈ đúng nhân viên
-  được cấp mới bấm "✅ Xác nhận đã nhận" được (server tự xác thực lại quyền,
-  không chặn được ai xác nhận thay ai), sau đó chuyển "✅ Đã xác nhận"
-  (`ackAt`/`ackByName` ghi lại). Đây thuần là bước xác nhận đã thực nhận —
-  KHÔNG ảnh hưởng gì tới tồn kho/số đang giữ (vẫn trừ ngay lúc cấp phát như
-  trước). Badge trạng thái hiện ở cả bảng "Lịch Sử Cấp Phát" (từng phiếu) và
-  "Đang Giữ" (gộp theo nhân viên×mặt hàng×size — hiện "còn N phiếu chưa xác
-  nhận" nếu gộp từ nhiều phiếu khác trạng thái). Nhân viên thường (không có
-  quyền Hành Chính/Giám Đốc Siêu Thị của module này) xem + xác nhận được CHÍNH
-  phiếu của mình qua mục mới **"👕 Đồng Phục Của Tôi"** trong "⚙️ Cá Nhân Hóa &
-  Cập Nhật Thông Tin" (Hồ Sơ Cá Nhân, mở cho mọi tài khoản) — bấm avatar/tên ở
-  góc màn hình để mở.
-  **Điều chuyển giữa 2 siêu thị (từ v14.1) — mô hình "hàng đang vận
-  chuyển"**: Giám Đốc Siêu Thị A tạo yêu cầu điều chuyển → Hành Chính/người có
-  quyền duyệt (`uniformManage`) duyệt (`APPROVED`) → **tồn kho siêu thị A trừ
-  ngay lúc duyệt**, nhưng tồn kho siêu thị B **CHƯA cộng** — hàng coi như đang
-  trên đường đi, không thuộc kho bên nào cho tới khi xác nhận. Bắt buộc **đúng
-  Giám Đốc Siêu Thị ĐÍCH (B)** bấm "✅ Xác nhận đã nhận hàng" thì mới chuyển
-  sang `RECEIVED` và tồn kho B mới cộng thêm (server tự xác thực lại quyền
-  theo `user.dept === transfer.targetDept`, không ai xác nhận thay siêu thị
-  khác được). Trước v14.1, tồn kho B cộng ngay lúc duyệt — nay đổi hẳn sang mô
-  hình 3 bước để tránh sai lệch tồn kho khi hàng chưa thực sự tới nơi.
-  **Báo cáo Đồng Phục theo siêu thị (từ v14.1)**: bộ lọc siêu thị của riêng
-  báo cáo Đồng Phục đổi từ chọn 1 sang **chọn nhiều** (tick chọn một nhóm siêu
-  thị bất kỳ, có nút "Chọn Tất Cả"/"Bỏ Chọn Hết") — báo cáo hiện dòng "Tổng
-  Cộng (N siêu thị đã chọn)" cộng tồn kho của đúng nhóm đang chọn, và khi đang
-  lọc (chưa chọn hết) hiện thêm khối "Tổng Cộng TẤT CẢ Siêu Thị" để so sánh
-  ngay với tổng toàn hệ thống mà không cần bỏ chọn để xem lại.
-- **Giấy Phép** — hồ sơ pháp lý (giấy phép kinh doanh, chứng chỉ...), phân
-  quyền hoàn toàn riêng ngay trong module (tạo/duyệt/xem tách biệt), không đi
-  qua quy trình duyệt theo phòng ban ở mục 2. Có theo dõi hiệu lực + nhắc hết
-  hạn qua email. Danh sách các phiên bản gia hạn của cùng 1 giấy phép (cả ở
-  bảng con khi mở rộng 1 hồ sơ lẫn màn "Chi Tiết Giấy Phép") hiện **mới nhất
-  lên trước** (từ v11.9).
-
-### 3.5. Vận Hành
-
-Module top-level mới, **3 luồng độc lập hoàn toàn** về dữ liệu (không chung gì
-với "Tổng Hợp"):
+Module top-level riêng, **3 luồng độc lập hoàn toàn** về dữ liệu (không chung
+gì với "Tổng Hợp" ở mục 4.3), phục vụ đội Vận Hành quản lý mạng lưới siêu thị —
+đây là module lớn/phức tạp nhất hệ thống nên trình bày riêng thay vì gộp
+chung nhóm khác.
 
 - **Đơn Hàng** (Đặt Hàng Tại Siêu Thị / Đặt Hàng Tại HO) — duyệt theo **mức
   giá trị đơn hàng** (tier cố định), không theo phòng ban, 2 quy trình tách
   riêng hoàn toàn: **Đặt Hàng Tại Siêu Thị** 3 mức **≤ 10 triệu / > 10 triệu
-  và ≤ 100 triệu / > 100 triệu** (đổi từ v11.0 theo yêu cầu người dùng — mốc
-  đúng bằng rơi vào mức THẤP hơn, VD đúng 10.000.000đ tính là "≤ 10 triệu");
-  **Đặt Hàng Tại HO** 2 mức **≤ 100 triệu / > 100 triệu** (đổi từ v11.1 —
-  audit theo yêu cầu người dùng phát hiện HO đang dùng CÙNG 1 lớp lỗi quy ước
-  biên giới vừa sửa ở STORE, nay đồng bộ cùng quy ước: mốc đúng bằng
-  100.000.000đ rơi vào mức THẤP hơn "≤ 100 triệu", KHÔNG còn "< 100 triệu /
-  ≥ 100 triệu" như trước — giá trị mốc 100 triệu KHÔNG đổi, chỉ đổi mốc đúng
-  bằng thuộc mức nào). Mức tính từ `MAX(amount, "Tổng Giá Trị Thanh Toán
-  (VNĐ)")` — số lớn hơn giữa tổng hạng mục hệ thống tự tính và số người dùng
-  tự gõ/đọc từ PDF phiếu đặt hàng NCC, để field tự gõ không thể khai thấp hơn
-  nhằm né bớt lớp duyệt (áp dụng chung cho cả STORE lẫn HO).
+  và ≤ 100 triệu / > 100 triệu** (mốc đúng bằng rơi vào mức THẤP hơn, VD đúng
+  10.000.000đ tính là "≤ 10 triệu"); **Đặt Hàng Tại HO** 2 mức **≤ 100 triệu /
+  > 100 triệu** (cùng quy ước mốc đúng bằng thuộc mức thấp hơn). Mức tính từ
+  `MAX(amount, "Tổng Giá Trị Thanh Toán (VNĐ)")` — số lớn hơn giữa tổng hạng
+  mục hệ thống tự tính và số người dùng tự gõ/đọc từ PDF phiếu đặt hàng NCC,
+  để field tự gõ không thể khai thấp hơn nhằm né bớt lớp duyệt.
   - **Đọc PDF phiếu đặt hàng NCC tự động điền form** — chọn file PDF ở "File
     Đơn Hàng" tự đọc và điền Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã
     NCC/MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục
-    (chỉ áp dụng đúng 1 mẫu phiếu NCC hiện dùng). **Chặn trùng Số Đơn NCC (từ
-    v13.5)**: `poNumber` không được trùng với đơn khác **CÙNG LOẠI** (Siêu
-    Thị/HO tách riêng — 1 đơn STORE và 1 đơn HO vẫn được phép trùng số), trừ
-    đơn cũ đã **Từ chối**/**Đã hủy nhập** (2 trạng thái coi như "không tính").
-    **Khoá sửa sau khi đọc PDF thành công (từ v13.5)**: các field vừa tự điền
-    được từ PDF chuyển xám/không sửa được nữa (tránh gõ đè nhầm số liệu đã đọc
-    đúng) — Tiêu Đề/Nhà Cung Cấp/Ghi Chú (không do PDF cung cấp) vẫn luôn sửa
-    tự do. Bấm **"🔄 Nhập Lại Từ Đầu"** (chỉ hiện sau khi đã khoá) để mở khoá +
-    xoá file PDF đã chọn, chọn lại file khác hoặc chuyển hẳn sang gõ tay —
-    không mất phần Tiêu Đề/Nhà Cung Cấp/Ghi Chú đã nhập; nút "↺ Làm Mới" ở
-    cuối form vẫn xoá trắng toàn bộ như trước.
+    (chỉ áp dụng đúng 1 mẫu phiếu NCC hiện dùng). **Chặn trùng Số Đơn NCC**:
+    `poNumber` không được trùng với đơn khác **CÙNG LOẠI** (Siêu Thị/HO tách
+    riêng), trừ đơn cũ đã **Từ chối**/**Đã hủy nhập**. **Khoá sửa sau khi đọc
+    PDF thành công**: các field vừa tự điền được từ PDF chuyển xám/không sửa
+    được nữa (tránh gõ đè nhầm) — Tiêu Đề/Nhà Cung Cấp/Ghi Chú vẫn luôn sửa tự
+    do. Bấm **"🔄 Nhập Lại Từ Đầu"** để mở khoá + xoá file PDF đã chọn.
 - **Mở Mới / Sửa Chữa Siêu Thị** — pipeline 4 giai đoạn **Dự toán → Thực hiện
-  → Nghiệm thu → Báo cáo**: lập danh mục đầu tư dự toán (được duyệt mới mở
-  khoá Thực hiện) → lập/theo dõi cây công việc thực hiện thực tế (độc lập,
-  không tự đồng bộ theo danh mục dự toán) → nghiệm thu khi toàn bộ công việc
-  đã xong (ngay hoặc sau N ngày) → báo cáo tổng kết. **Lưu ý**: 2 luồng này
-  hiện KHÔNG còn qua bước phê duyệt nữa (đã dừng từ 1 đợt trước) — hồ sơ đi
-  thẳng trạng thái đã duyệt ngay lúc tạo; màn cấu hình quy trình duyệt phòng
-  ban cho 2 luồng này vẫn còn ở Hệ Thống → Quy Trình & Phê Duyệt nhưng không
-  có đường xử lý nào thực sự tiêu thụ cấu hình đó nữa.
-  - **Cây công việc Thực hiện/Nghiệm thu, cập nhật tiến độ (từ v10.7)**: mỗi
-    công việc LÁ (không có việc con) có nút "🔄 Cập Nhật Tiến Độ" mirror ĐÚNG
-    UX modal "Cập Nhật Tiến Độ" của module Công Việc công ty — khi đang "Đang
-    thực hiện", dropdown có 2 lựa chọn: "Vẫn đang thực hiện" (chỉ ghi thêm 1
-    dòng ghi chú tiến độ, BẮT BUỘC nhập ghi chú, KHÔNG đổi trạng thái — gọi
-    được nhiều lần liên tiếp) hoặc "Hoàn thành — Nộp nghiệm thu" (đổi hẳn sang
+  → Nghiệm thu → Báo cáo**:
+  - **Hồ sơ Mở Mới/Sửa Chữa (bản thân bản ghi)** — đi thẳng trạng thái đã
+    duyệt ngay lúc tạo, **không** qua bước phê duyệt riêng cho chính bản ghi.
+  - **Giai đoạn Dự toán, riêng bước NÀY vẫn có luồng phê duyệt thật** — lập
+    danh mục đầu tư dự toán rồi gửi duyệt theo phòng ban (`estimateStatus`:
+    Nháp → Chờ duyệt → Đã duyệt/Từ chối, cấu hình người duyệt tại Hệ Thống →
+    Quy Trình & Phê Duyệt như các luồng khác ở mục 3) — **duyệt Dự toán xong
+    mới mở khoá được giai đoạn Thực hiện**. Đừng nhầm với ý "cả hồ sơ không
+    qua duyệt" ở trên — 2 việc tách biệt: **hồ sơ** không cần ai duyệt để tồn
+    tại, nhưng **Dự toán bên trong hồ sơ đó** vẫn phải qua đúng 1 vòng duyệt
+    mới cho phép làm tiếp.
+  - Sau khi Dự toán được duyệt: lập/theo dõi cây công việc thực hiện thực tế
+    (độc lập, không tự đồng bộ theo danh mục dự toán) → nghiệm thu khi toàn
+    bộ công việc đã xong (ngay hoặc sau N ngày) → báo cáo tổng kết.
+  - **Cây công việc Thực hiện/Nghiệm thu, cập nhật tiến độ**: mỗi công việc
+    LÁ (không có việc con) có nút "🔄 Cập Nhật Tiến Độ" mirror ĐÚNG UX modal
+    "Cập Nhật Tiến Độ" của module Công Việc công ty — khi đang "Đang thực
+    hiện", dropdown có 2 lựa chọn: "Vẫn đang thực hiện" (chỉ ghi thêm 1 dòng
+    ghi chú tiến độ, BẮT BUỘC nhập ghi chú, KHÔNG đổi trạng thái — gọi được
+    nhiều lần liên tiếp) hoặc "Hoàn thành — Nộp nghiệm thu" (đổi hẳn sang
     "Đang nghiệm thu"). Chỉ khi CHỦ ĐỘNG chọn vế sau trạng thái mới thực sự
-    đổi — không còn bị ép chọn "hoàn thành" mỗi lần chỉ muốn ghi tiến độ.
+    đổi.
   - **Công việc CÓ việc con** (đầu mục lớn) không bao giờ tự tay cập nhật/
-    nghiệm thu được (server luôn từ chối) — trạng thái LUÔN tính lại và
-    chuyển TỰ ĐỘNG theo con: khi tất cả con đã "hoàn thành" cha tự chuyển
-    "Đang nghiệm thu", khi tất cả con đã "Đã nghiệm thu" cha tự chuyển "Đã
-    nghiệm thu" — đúng nhiều cấp (cháu → con → cha → ông...). Dòng của đầu
-    mục lớn hiện "Tự cập nhật theo việc con" khi còn con dở, và đổi thành
-    "✅ Đã tự động hoàn thành (theo việc con)" ngay khi tự hoàn thành xong —
-    hoàn toàn tự động, không có/không cần nút bấm tay nào cho đầu mục lớn.
-  - **Nghiệm thu — "🔄 Bổ Sung" (từ v10.9)**: người nghiệm thu (toàn quyền
-    hoặc đúng người được CHỈ ĐỊNH nghiệm thu việc đó) có 2 lựa chọn khi công
-    việc lá đang "Đang nghiệm thu": "✅ Nghiệm Thu" (chốt xong, đổi trạng thái
-    "Đã nghiệm thu") hoặc "🔄 Bổ Sung" (chỉ ghi lý do cần sửa/bổ sung, công
-    việc GIỮ NGUYÊN "Đang nghiệm thu" — có thể bấm nhiều lần, không ép phải
-    chốt Nghiệm Thu/Từ Chối ngay).
-  - **"📜 Xem Lịch Sử" (từ v10.9)**: mỗi dòng công việc (cả Thực Hiện lẫn
-    Nghiệm Thu, mọi cấp) có nút "📜" mở bảng lịch sử đầy đủ (hành động/người
-    thực hiện/thời gian/ghi chú) — mirror bảng lịch sử của module Công Việc.
-    **Sửa 1 lỗi thật phát hiện qua audit**: trước v10.9, mọi ghi chú "cập
-    nhật tiến độ liên tục" (Thực Hiện) và lý do bắt buộc nhập lúc "🔄 Bổ Sung"/
-    "✅ Nghiệm Thu" (Nghiệm Thu) được lưu vào hệ thống nhưng KHÔNG có màn nào
-    hiển thị lại được — người phụ trách/người nghiệm thu gõ lý do xong là mất
-    hẳn, không ai đọc lại được. Nút "📜" khắc phục đúng lỗ hổng này.
-  - **Gỡ bỏ hẳn field "Chi Phí Phê Duyệt" (từ v11.2)**: form lập hồ sơ Mở Mới
-    và Sửa Chữa trước đây có 2 field ngân sách song song dễ gây nhầm lẫn —
-    "Chi Phí Phê Duyệt" (tuỳ chọn, không dùng cho tính toán gì) và "Ngân Sách
-    Phê Duyệt — Danh Mục Đầu Tư" (bắt buộc, dùng để tính "Ngân sách còn lại"
-    ở Danh mục đầu tư). Đã gỡ hẳn field "Chi Phí Phê Duyệt" khỏi cả 2 form —
-    giờ chỉ còn đúng 1 field ngân sách DUY NHẤT ("Ngân Sách Phê Duyệt — Danh
-    Mục Đầu Tư", vẫn bắt buộc nhập). Cột hiển thị tương ứng ở bảng danh sách
-    Mở Mới/Sửa Chữa và modal xem chi tiết cũng đổi sang đọc field còn lại
-    này. Hồ sơ CŨ đã lỡ lưu "Chi Phí Phê Duyệt" trước đợt này KHÔNG bị xoá dữ
-    liệu (field cũ vẫn còn nguyên trong bản ghi, chỉ không còn nơi nào ghi/
-    đọc/hiển thị nó nữa).
-  - **Quyền quản lý — Overhaul theo "người quản lý dự án" (từ v11.3)**: mô
-    hình quyền cũ dùng 4 checkbox TÁCH RIÊNG cho từng giai đoạn (Lập Dự Toán/
-    Quản Lý Công Việc Thực Hiện/Nghiệm Thu Công Việc/Xác Nhận Đưa Vào Sử
-    Dụng) — bất kỳ ai giữ 1 trong 4 quyền này đều "toàn quyền" ở đúng giai
-    đoạn đó trên **MỌI** hồ sơ, không phân biệt ai lập hồ sơ. Đã đổi theo yêu
-    cầu người dùng: chỉ **người quản lý dự án** (= người tạo hồ sơ) mới toàn
-    quyền tạo/sửa/xoá đầu mục công việc lớn/con + quản lý Danh Mục Đầu Tư +
-    Bắt Đầu Kỳ Thực Hiện + Xác Nhận Đưa Vào Sử Dụng, và **CHỈ trên hồ sơ do
-    CHÍNH mình tạo**:
-    - 2 quyền **"🏬 Tạo Đề Xuất Mở Mới Siêu Thị"**/**"🔧 Tạo Đề Xuất Sửa Chữa
-      Siêu Thị"** (cây phân quyền, khối 22 "Vận Hành") GIỮ NGUYÊN tên nhưng
-      MỞ RỘNG ý nghĩa: người giữ quyền này nay toàn quyền quản lý cả vòng đời
-      hồ sơ họ tạo (không chỉ riêng bước tạo mới như trước) — nhưng KHÔNG
-      động được tới hồ sơ của người khác tạo, dù cùng giữ quyền này.
-    - Quyền **MỚI "🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt
-      Người Tạo)"** (`operationRecordManageAll`) — dành cho vai trò cần quản
-      lý xuyên hồ sơ (VD trưởng phòng Vận Hành theo dõi mọi dự án của cả
-      phòng): toàn quyền như trên nhưng trên **MỌI** hồ sơ, bất kể ai tạo.
-    - 4 checkbox cũ ("Lập/Gửi Duyệt Dự Toán", "Quản Lý Công Việc Thực Hiện",
-      "Nghiệm Thu Công Việc", "Xác Nhận Đưa Vào Sử Dụng") **đã gỡ khỏi cây
-      phân quyền** — không còn cấp/sửa được qua UI nữa. Tài khoản đang lưu
-      sẵn 4 quyền này trong dữ liệu (nếu có) sẽ **KHÔNG còn hiệu lực** — admin
-      cần rà soát và cấp bù `operationRecordManageAll` thủ công cho người
-      thực sự cần quyền quản lý xuyên hồ sơ.
-    - **"Người Phụ Trách" (personInCharge)** của hồ sơ — trước đây tự động
-      có quyền SỬA công việc dù không giữ quyền quản lý nào; nay **KHÔNG còn**
-      tự động cấp quyền nữa (field vẫn hiển thị bình thường, chỉ mang tính
-      thông tin "ai phụ trách hồ sơ này", không còn ý nghĩa phân quyền).
-    - **KHÔNG đổi**: người thực hiện (được gán ở "Người Phụ Trách" của TỪNG
-      công việc, có thể nhiều người) vẫn tự cập nhật tiến độ đúng việc của
-      mình; người nghiệm thu được CHỈ ĐỊNH riêng cho từng việc vẫn tự nghiệm
-      thu đúng việc đó — không cần bất kỳ quyền quản lý nào ở trên. Người
-      quản lý hồ sơ (creator hoặc giữ "Quản Lý Hồ Sơ Siêu Thị") giờ CŨNG cập
-      nhật/nghiệm thu được trên hồ sơ mình quản lý, thêm vào (không thay thế)
-      quyền của người được gán/chỉ định.
-  - **Danh Mục Đầu Tư 2 cấp — danh mục lớn + danh mục con (từ v11.4)**: bảng
-    hạng mục Danh Mục Đầu Tư (giai đoạn Dự toán) nay hỗ trợ **đúng 2 cấp** —
-    1 "danh mục lớn" có thể chứa nhiều "danh mục con" bên trong (KHÔNG lồng
-    sâu hơn 2 cấp). Khi thêm hạng mục mới ("➕ Thêm Hạng Mục"), chọn ở dropdown
-    cạnh nút: "— Không, đây là danh mục lớn —" (mặc định) hoặc tên 1 danh mục
-    lớn có sẵn để thêm hạng mục mới làm **con** của danh mục đó — dropdown chỉ
-    liệt kê danh mục LỚN (danh mục con không được chọn làm cha, đúng luật chỉ
-    2 cấp), nay có nhãn rõ ràng **"Dòng mới thêm — thuộc danh mục lớn nào?"**
-    ngay trước ô chọn (từ v13.3 — trước đó ô chọn không có nhãn, dễ bị tưởng
-    nhầm là 1 icon trang trí). Bảng hiển thị hạng mục con thụt lề "↳" dưới
-    đúng hạng mục lớn của nó (mirror quy ước hiển thị cây của bảng Công việc
-    Thực hiện/Nghiệm thu).
-    - **SỬA LỖI (từ v13.3)**: trước v13.3, dropdown này KHÔNG cập nhật kịp
-      ngay sau khi gõ xong tên 1 danh mục lớn mới — phải thêm/xoá 1 dòng khác
-      (hoặc đóng-mở lại modal) thì tên vừa gõ mới xuất hiện trong dropdown để
-      chọn làm cha được, khiến thao tác tự nhiên "gõ tên xong bấm Thêm Hạng
-      Mục ngay" luôn tạo nhầm thành 1 danh mục lớn khác thay vì danh mục con.
-      Từ v13.3, dropdown cập nhật NGAY khi gõ xong tên — gõ tên danh mục lớn,
-      chọn nó ở dropdown, bấm "➕ Thêm Hạng Mục" là tạo đúng danh mục con ngay
-      lần đầu, không cần thao tác vòng qua bước khác.
-    - **Cột "Cha" ở MỖI DÒNG — đổi/gán cha bất kỳ lúc nào (từ v13.6)**: dropdown
-      "Dòng mới thêm — thuộc danh mục lớn nào?" ở trên CHỈ áp dụng cho dòng
-      SẮP thêm — nếu đã bấm "➕ Thêm Hạng Mục" tạo sẵn nhiều dòng trống RỒI MỚI
-      gõ Nội Dung từng dòng (không đụng dropdown đó lúc thêm), trước v13.6
-      KHÔNG có cách nào biến 1 dòng ĐÃ CÓ SẴN thành danh mục con — phải xoá rồi
-      thêm lại đúng thứ tự. Từ v13.6, mỗi dòng trong bảng có thêm 1 cột **"Cha"**
-      riêng — chọn tên 1 danh mục lớn khác ở đây là gán/đổi cha cho ĐÚNG dòng
-      đó NGAY LẬP TỨC, không cần xoá/thêm lại, áp dụng cho cả dòng vừa tạo lẫn
-      dòng đã có sẵn từ trước. Danh mục ĐANG có con thì cột "Cha" tự hiện dấu
-      "—" (không chọn được) — giữ đúng luật chỉ 2 cấp, không lồng sâu hơn.
-    - **Tiền tự cộng dồn lên danh mục lớn**: danh mục lớn có ≥1 con thì cột
-      "Chi Phí" của chính nó KHÔNG còn nhập tay được nữa — tự động = **tổng
-      Chi Phí của toàn bộ con** (hiện chữ xám "🔢 Tự động tính từ N danh mục
-      con"). Danh mục lớn KHÔNG có con nào thì vẫn nhập tay bình thường như
-      trước, không đổi gì.
-    - **Tổng Danh Mục Đầu Tư** (dùng để tính "Ngân sách còn lại") chỉ cộng
-      các danh mục LỚN — con đã nằm trong số tự cộng của cha rồi nên KHÔNG bị
-      cộng đúp. VD: danh mục lớn "Nội thất" có 2 con 20 triệu + 15 triệu (tự
-      cộng = 35 triệu) và danh mục lớn "Sơn tường" không con 5 triệu → Tổng
-      Danh Mục Đầu Tư = 35 + 5 = **40 triệu** (không phải 70 triệu).
-    - **Xoá danh mục lớn đang có con**: bấm "✕" xoá danh mục lớn sẽ **xoá
-      cùng toàn bộ danh mục con của nó** (cascade, mirror đúng quy ước xoá đầu
-      mục lớn trong cây Công việc Thực hiện) — không có bước xác nhận riêng,
-      cần cẩn thận trước khi bấm xoá 1 danh mục lớn đang có con bên trong.
-    - Hồ sơ CŨ (lập trước v11.4) mặc định toàn bộ hạng mục là danh mục lớn,
-      không cần thao tác gì thêm — vẫn dùng được bình thường, chỉ khi cần mới
-      thêm danh mục con vào hạng mục có sẵn.
-  - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập nhật
-    (từ v11.5)**: form Thêm/Sửa công việc (cây Thực Hiện) nay có thêm 2 ô tuỳ
-    chọn — **"Ngày Bắt Đầu"** (ngày dự kiến bắt đầu thi công, đặt Ở TRÊN "Hạn
-    Hoàn Thành" trong form từ v13.3) và **"Tần Suất Cập Nhật Tiến Độ (số
-    ngày)"** — **CHỈ áp dụng công việc LÁ** (không có việc con — đầu mục lớn
-    ẩn hẳn 2 ô này, hiện ghi chú giải thích thay vào đó, vì đầu mục lớn tự
-    cascade trạng thái theo con, không có "tiến độ" riêng để theo dõi).
-    - **SỬA LỖI (từ v13.3) — chặn "Ngày Bắt Đầu" sau "Hạn Hoàn Thành"**: trước
-      v13.3, hệ thống KHÔNG chặn chọn "Ngày Bắt Đầu" muộn hơn "Hạn Hoàn
-      Thành" (VD đặt hạn 1/1/2026 nhưng ngày bắt đầu 1/6/2026) — lưu được
-      bình thường dù vô lý về mặt tiến độ. Từ v13.3, cả form (phản hồi ngay)
-      lẫn server (nguồn chặn thật) đều từ chối lưu nếu "Ngày Bắt Đầu" muộn
-      hơn "Hạn Hoàn Thành", hiện rõ thông báo lỗi để người dùng sửa lại. Modal
-      danh sách công việc "🔧 Thực hiện" cũng thu hẹp lại (bằng modal Danh
-      Mục Đầu Tư) theo phản hồi giao diện quá rộng.
-    - **Cơ chế cảnh báo** (hoàn toàn THỤ ĐỘNG — tính lại mỗi lần tải trang,
-      KHÔNG có job/cron chạy nền, KHÔNG gửi email/thông báo chủ động): nếu đã
-      qua "Ngày Bắt Đầu", công việc CHƯA "Đã nghiệm thu", và có cấu hình "Tần
-      Suất Cập Nhật Tiến Độ" — hệ thống tính số ngày kể từ **lần bấm "🔄 Cập
-      Nhật Tiến Độ" gần nhất** (đọc từ đúng "📜 Lịch Sử" đã có sẵn từ v10.9,
-      không cần thao tác gì thêm để bật) — nếu CHƯA TỪNG cập nhật lần nào thì
-      tính từ chính "Ngày Bắt Đầu". Số ngày trôi qua ≥ Tần Suất đã đặt thì
-      hiện badge đỏ **"⚠️ Quá hạn cập nhật tiến độ — X ngày"** ngay dưới tên
-      công việc, ở CẢ 2 tab Thực Hiện lẫn Nghiệm Thu.
-    - VD: đặt Tần Suất = 3 ngày, việc đã bắt đầu 10 ngày trước nhưng CHƯA bấm
-      "🔄 Cập Nhật Tiến Độ" lần nào → badge hiện ngay "Quá hạn — 10 ngày". Bấm
-      "🔄 Cập Nhật Tiến Độ" 1 lần → badge biến mất ngay, đếm lại từ 0.
-    - Không đặt "Tần Suất Cập Nhật Tiến Độ" (để trống) thì KHÔNG BAO GIỜ hiện
-      badge cảnh báo cho công việc đó — 2 field này hoàn toàn tuỳ chọn, công
-      việc CŨ (lập trước v11.5) không có sẵn 2 field này nên mặc định không
-      cảnh báo, không cần cấu hình lại gì nếu không cần tính năng này.
-    - **Lưu ý phân biệt**: đây CHỈ là cảnh báo "quá hạn cập nhật tiến độ" (bao
-      lâu chưa có ai báo cáo tình hình) — KHÁC với badge "⚠️ Quá hạn" ở cột
-      "Dự Kiến Nghiệm Thu" (tab Nghiệm Thu, có từ trước) vốn là cảnh báo "quá
-      hạn NGHIỆM THU" (đã tới ngày dự kiến nghiệm thu mà chưa ai chốt xong).
-  - **"🔗 Liên Kết" công việc — phụ thuộc kiểu quản lý dự án (từ v11.6)**: mỗi
-    công việc **LÁ** (không có việc con — cùng khái niệm "công việc lá" dùng
-    cho "Ngày Bắt Đầu"/"Tần Suất Cập Nhật Tiến Độ" ở trên) trong cây Thực Hiện
-    nay có thêm nút **"🔗 Liên kết"**. Bấm vào mở hộp chọn nhiều (checkbox) liệt
-    kê các công việc LÁ KHÁC trong CÙNG hồ sơ (loại sẵn chính nó và mọi lựa
-    chọn sẽ tạo vòng lặp phụ thuộc) — chọn 1 hoặc nhiều công việc mà công việc
-    đang mở **PHỤ THUỘC** vào (gọi là "công việc liên kết").
-    - **Luật chặn "Bắt đầu"**: công việc có liên kết phụ thuộc **CHƯA thể bấm
-      "Bắt đầu thực hiện"** (chuyển từ "Chưa bắt đầu" sang "Đang thực hiện")
-      cho tới khi **TẤT CẢ** công việc liên kết đã đạt trạng thái **"Đã nghiệm
-      thu"**. Dòng công việc bị chặn hiện rõ **"⛔ Chưa thể bắt đầu — đang chờ:
-      [tên các công việc liên kết chưa xong]"** thay cho nút "🔄 Cập Nhật Tiến
-      Độ" — hết chặn ngay khi công việc liên kết cuối cùng được nghiệm thu
-      xong, không cần thao tác gì thêm. Chặn CHỈ áp dụng đúng bước "bắt đầu"
-      (Chưa bắt đầu → Đang thực hiện) — công việc đã bắt đầu thành công 1 lần
-      rồi thì các lần cập nhật tiến độ/nộp nghiệm thu tiếp theo không bị soi
-      lại dù liên kết đổi sau đó.
-    - Dòng công việc có liên kết luôn hiện nhãn nhỏ **"🔗 Phụ thuộc: [tên các
-      công việc liên kết]"** ngay dưới tên, ở CẢ 2 tab Thực Hiện lẫn Nghiệm Thu
-      (mirror đúng chỗ hiện badge "Quá hạn cập nhật tiến độ").
-    - **Chặn vòng lặp phụ thuộc**: không cho lưu nếu tạo thành vòng lặp (trực
-      tiếp A↔B hoặc dài hơn A→B→C→A) — hộp chọn tự LỌC SẴN các công việc sẽ
-      gây vòng lặp (không hiện trong danh sách để chọn); nếu lọt qua thì server
-      vẫn từ chối (400). Tự liên kết chính mình cũng bị từ chối (thông báo
-      riêng, rõ ràng hơn thông báo vòng lặp chung).
-    - Chỉ liên kết được tới công việc **LÁ trong CÙNG hồ sơ** — công việc có
-      con (đầu mục lớn) hoặc thuộc hồ sơ khác đều bị từ chối (400). Chỉ **người
-      quản lý hồ sơ** (mirror đúng quyền Sửa công việc) mới đặt/sửa được liên
-      kết; công việc **đã "Đã nghiệm thu"** thì không sửa liên kết được nữa.
-    - **Xoá 1 công việc mà công việc khác đang phụ thuộc** → hệ thống tự động
-      dọn sạch tham chiếu đó khỏi danh sách liên kết của các công việc còn lại
-      (không để lại liên kết "chết"). **Công việc lá đang có liên kết, sau đó
-      có thêm việc con** (không còn là lá) → lần sửa liên kết kế tiếp tự động
-      dọn sạch liên kết cũ về rỗng (cùng cơ chế "tự dọn sạch" đã dùng cho "Ngày
-      Bắt Đầu"/"Tần Suất Cập Nhật Tiến Độ").
-    - VD đã test: công việc A liên kết phụ thuộc công việc B → A bị chặn "Bắt
-      đầu" trong khi B còn "Đang thực hiện"/"Đang nghiệm thu" → sau khi B được
-      nghiệm thu xong ("Đã nghiệm thu"), A bấm "Bắt đầu" thành công bình thường.
-    - **SỬA LỖI (từ v13.3)**: từ lúc ra mắt (v11.6) tới trước v13.3, hộp thoại
-      "🔗 Liên Kết Công Việc Phụ Thuộc" MỞ ra bình thường khi bấm nút, nhưng
-      nút **"💾 Lưu Liên Kết"/"Huỷ"/"✕"** BÊN TRONG hộp thoại đó hoàn toàn
-      KHÔNG phản hồi khi bấm (lỗi kỹ thuật thuần phía giao diện, không phải
-      do thao tác sai) — chọn xong công việc liên kết rồi bấm Lưu không có
-      tác dụng gì, phải đóng trang/tải lại mới thoát ra được. Đã sửa từ
-      v13.3 — Lưu/Huỷ/đóng hộp thoại hoạt động bình thường trở lại. Nếu đã
-      từng thử liên kết công việc trước v13.3 mà thấy "không lưu được gì",
-      xin thử lại sau khi đã cập nhật server lên v13.3 trở lên.
-  - **Tách riêng cảnh báo "quá hạn chưa bắt đầu" / "quá hạn chưa hoàn thành"
-    (từ v11.7)**: mỗi công việc trong cây Thực Hiện (gốc/con/lá, cả có con lẫn
-    không) có thể đặt **"Hạn Hoàn Thành"** (field `deadline` đã có từ trước,
-    không phải field mới) khi Thêm/Sửa công việc. Trước bản này, quá hạn được
-    tính gộp chung 1 trạng thái "Chậm tiến độ" ở tab Báo Cáo, còn 2 tab Thực
-    Hiện/Nghiệm Thu không hiện dấu hiệu quá hạn nào — nay tách rõ **2 trạng
-    thái riêng biệt**, hiện đồng bộ ở CẢ 3 nơi (dùng đúng 1 hàm tính, không
-    lệch nhau):
-    - **🔴 "Quá hạn — Chưa bắt đầu"**: đã qua Hạn Hoàn Thành mà công việc vẫn
-      còn "Chưa bắt đầu".
-    - **🟠 "Quá hạn — Chưa hoàn thành"**: đã qua Hạn Hoàn Thành mà công việc
-      đã "Đang thực hiện" hoặc "Đang nghiệm thu" nhưng CHƯA đạt "Đã nghiệm
-      thu" (chưa thật sự "kết thúc").
-    - Công việc đã **"Đã nghiệm thu"** thì KHÔNG BAO GIỜ bị gắn cờ quá hạn dù
-      Hạn Hoàn Thành đã qua rất lâu — đã xong thì hết cảnh báo. Công việc
-      KHÔNG đặt Hạn Hoàn Thành thì cũng KHÔNG BAO GIỜ bị gắn cờ (không có hạn
-      để so sánh) — tương thích ngược hoàn toàn với công việc CŨ chưa từng
-      đặt hạn.
-    - **Tab Báo Cáo** (tab con "📊 Báo Cáo" trong Siêu Thị): thêm khối **"📊
-      Thống Kê Quá Hạn Theo Công Việc"** — 4 ô đếm tổng số công việc theo 4
-      trạng thái (Quá hạn chưa bắt đầu/Quá hạn chưa hoàn thành/Đúng tiến
-      độ/Hoàn thành), TÍNH TRÊN đúng tập hồ sơ đang lọc — cùng bên dưới là 2
-      bảng **cảnh báo** liệt kê TỪNG công việc cụ thể đang quá hạn (mã hồ sơ,
-      tên công việc, hạn, số ngày đã quá hạn), tách riêng theo 2 trạng thái
-      trên. Bảng tổng hợp cấp HỒ SƠ có sẵn (cột "Tiến Độ": Đúng tiến độ/Chậm
-      tiến độ/Đã hoàn thành) vẫn giữ nguyên, không đổi cách hiển thị.
-    - **2 tab Thực Hiện/Nghiệm Thu** (danh sách hồ sơ, trước khi mở vào từng
-      cây công việc): thêm cột **"Quá Hạn"** — hiện "🔴 N chưa bắt đầu"/"🟠 N
-      chưa hoàn thành" (hoặc "-" nếu hồ sơ không có công việc nào quá hạn).
-    - **Trong cây công việc** (sau khi bấm "🛠️ Quản Lý Công Việc"/"✅ Nghiệm
-      Thu"): mỗi dòng công việc quá hạn hiện thêm badge màu ngay dưới tên —
-      CÙNG chỗ badge "⚠️ Quá hạn cập nhật tiến độ" (mục ngay trên, khái niệm
-      KHÁC — đó là quá hạn BÁO CÁO tiến độ theo tần suất, đây là quá hạn HOÀN
-      THÀNH theo Hạn Hoàn Thành) — 1 công việc có thể hiện CẢ HAI badge cùng
-      lúc nếu dính cả 2 cảnh báo.
-  - **"📋 Tổng Quan Toàn Bộ Công Việc" + Xuất Excel (từ v11.8, item cuối 7/7
-    trong loạt cải tiến Vận Hành > Siêu Thị đợt này)**: tab con "📊 Báo Cáo"
-    có thêm 1 bảng MỚI **liệt kê TỪNG công việc** (không rollup theo hồ sơ như
-    bảng "Tổng Hợp Theo Hồ Sơ" có sẵn bên dưới) — MỖI dòng = 1 công việc (gốc
-    lẫn con) của **TẤT CẢ** hồ sơ Mở Mới/Sửa Chữa đang hiển thị, kèm đủ: Mã Hồ
-    Sơ, Tên Hồ Sơ, Tên Công Việc, Người Thực Hiện, Người Nghiệm Thu, **Trạng
-    Thái Công Việc** (Chưa bắt đầu/Đang thực hiện/Đang nghiệm thu — tức "chờ
-    nghiệm thu"/Đã nghiệm thu), **Trạng Thái Hạn** (Quá hạn — Chưa bắt đầu/Quá
-    hạn — Chưa hoàn thành/Đúng tiến độ/Hoàn thành, dùng ĐÚNG 1 hàm tính đã có
-    ở mục ngay trên — không lệch nhau giữa các khối trong tab Báo Cáo), Ngày
-    Bắt Đầu, Hạn Chót, Ngày Nghiệm Thu (đọc từ mốc "📜 Lịch Sử" hành động
-    "ACCEPTED" gần nhất — bản thân công việc không lưu riêng field ngày này).
-    - **2 filter riêng** cho bảng này (Trạng Thái Công Việc/Trạng Thái Hạn) —
-      áp dụng SAU 3 filter cấp hồ sơ có sẵn (Loại Hồ Sơ/Tiến Độ/Từ Khóa) —
-      thu hẹp ĐỒNG THỜI cả bảng đang xem lẫn file xuất Excel (đúng 1 nguồn dữ
-      liệu cho cả 2, không lệch nhau).
-    - Nút **"📥 Xuất Excel"** ngay trên bảng — xuất ĐÚNG bảng đang xem (áp dụng
-      MỌI filter hiện tại, cả 3 filter cấp hồ sơ lẫn 2 filter cấp công việc)
-      ra file `Tong_Quan_Cong_Viec_Van_Hanh.xlsx`, đủ 10 cột như trên — dùng
-      để xem tổng thể ngoại tuyến hoặc lọc/sắp xếp tiếp trong Excel.
+    nghiệm thu được (server luôn từ chối) — trạng thái LUÔN tính lại tự động
+    theo con: khi tất cả con đã "hoàn thành" cha tự chuyển "Đang nghiệm thu",
+    khi tất cả con đã "Đã nghiệm thu" cha tự chuyển "Đã nghiệm thu" — đúng
+    nhiều cấp (cháu → con → cha → ông...).
+  - **Nghiệm thu — "🔄 Bổ Sung"**: người nghiệm thu (toàn quyền hoặc đúng
+    người được CHỈ ĐỊNH nghiệm thu việc đó) có 2 lựa chọn khi công việc lá
+    đang "Đang nghiệm thu": "✅ Nghiệm Thu" (chốt xong) hoặc "🔄 Bổ Sung" (chỉ
+    ghi lý do cần sửa/bổ sung, giữ nguyên "Đang nghiệm thu" — có thể bấm nhiều
+    lần).
+  - **"📜 Xem Lịch Sử"**: mỗi dòng công việc (cả Thực Hiện lẫn Nghiệm Thu, mọi
+    cấp) có nút mở bảng lịch sử đầy đủ (hành động/người thực hiện/thời gian/
+    ghi chú) — mirror bảng lịch sử của module Công Việc.
+  - **Quyền quản lý — theo "người quản lý dự án"**: chỉ **người quản lý dự
+    án** (= người tạo hồ sơ) mới toàn quyền tạo/sửa/xoá đầu mục công việc lớn/
+    con + quản lý Danh Mục Đầu Tư + Bắt Đầu Kỳ Thực Hiện + Xác Nhận Đưa Vào Sử
+    Dụng, và **CHỈ trên hồ sơ do CHÍNH mình tạo**. 2 quyền **"🏬 Tạo Đề Xuất Mở
+    Mới Siêu Thị"**/**"🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị"** (cây phân quyền,
+    khối 22 "Vận Hành") cấp quyền quản lý trên hồ sơ TỰ TẠO. Quyền
+    **"🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt Người Tạo)"**
+    (`operationRecordManageAll`) dành cho vai trò cần quản lý xuyên hồ sơ (VD
+    trưởng phòng Vận Hành theo dõi mọi dự án của cả phòng): toàn quyền như
+    trên nhưng trên **MỌI** hồ sơ. Người thực hiện (được gán "Người Phụ Trách"
+    của TỪNG công việc) vẫn tự cập nhật tiến độ đúng việc của mình; người
+    nghiệm thu được CHỈ ĐỊNH riêng cho từng việc vẫn tự nghiệm thu đúng việc
+    đó — không cần bất kỳ quyền quản lý nào ở trên.
+  - **Danh Mục Đầu Tư 2 cấp**: bảng hạng mục Danh Mục Đầu Tư (giai đoạn Dự
+    toán) hỗ trợ **đúng 2 cấp** — 1 "danh mục lớn" có thể chứa nhiều "danh mục
+    con" bên trong (KHÔNG lồng sâu hơn 2 cấp). Mỗi dòng có cột **"Cha"** riêng
+    để đổi/gán cha bất kỳ lúc nào. Danh mục lớn có ≥1 con thì cột "Chi Phí"
+    của chính nó tự động = **tổng Chi Phí của toàn bộ con**. **Tổng Danh Mục
+    Đầu Tư** (dùng để tính "Ngân sách còn lại") chỉ cộng các danh mục LỚN —
+    con đã nằm trong số tự cộng của cha rồi nên KHÔNG bị cộng đúp. Xoá 1 danh
+    mục lớn đang có con sẽ **xoá cùng toàn bộ con của nó** (cascade).
+  - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập
+    nhật**: form Thêm/Sửa công việc (cây Thực Hiện) có 2 ô tuỳ chọn — **"Ngày
+    Bắt Đầu"** và **"Tần Suất Cập Nhật Tiến Độ (số ngày)"** — CHỈ áp dụng công
+    việc LÁ. Cơ chế cảnh báo hoàn toàn THỤ ĐỘNG (tính lại mỗi lần tải trang,
+    KHÔNG có job/cron, KHÔNG gửi email chủ động): nếu đã qua "Ngày Bắt Đầu",
+    công việc CHƯA "Đã nghiệm thu", và số ngày kể từ lần cập nhật tiến độ gần
+    nhất ≥ Tần Suất đã đặt → hiện badge đỏ **"⚠️ Quá hạn cập nhật tiến độ — X
+    ngày"**. Không đặt Tần Suất thì KHÔNG BAO GIỜ hiện badge này.
+  - **"🔗 Liên Kết" công việc — phụ thuộc kiểu quản lý dự án**: mỗi công việc
+    LÁ có nút **"🔗 Liên kết"** để chọn 1 hoặc nhiều công việc LÁ KHÁC trong
+    CÙNG hồ sơ mà nó **PHỤ THUỘC** vào. Công việc có liên kết phụ thuộc **CHƯA
+    thể bấm "Bắt đầu thực hiện"** cho tới khi **TẤT CẢ** công việc liên kết đã
+    "Đã nghiệm thu" — hết chặn ngay khi liên kết cuối cùng xong, không cần
+    thao tác gì thêm. Chặn vòng lặp phụ thuộc (trực tiếp hoặc dài hơn), chỉ
+    liên kết được công việc LÁ trong CÙNG hồ sơ, chỉ người quản lý hồ sơ đặt/
+    sửa được liên kết.
+  - **2 loại cảnh báo quá hạn tách riêng**: **🔴 "Quá hạn — Chưa bắt đầu"**
+    (đã qua Hạn Hoàn Thành mà vẫn "Chưa bắt đầu") và **🟠 "Quá hạn — Chưa hoàn
+    thành"** (đã qua Hạn Hoàn Thành mà chưa "Đã nghiệm thu") — hiện đồng bộ ở
+    tab Báo Cáo (khối "📊 Thống Kê Quá Hạn Theo Công Việc"), 2 tab Thực Hiện/
+    Nghiệm Thu (cột "Quá Hạn"), và trong cây công việc (badge dưới tên). Công
+    việc đã "Đã nghiệm thu" hoặc chưa đặt Hạn Hoàn Thành thì không bao giờ bị
+    gắn cờ.
+  - **"📋 Tổng Quan Toàn Bộ Công Việc" + Xuất Excel**: tab con "📊 Báo Cáo" có
+    1 bảng **liệt kê TỪNG công việc** (không rollup theo hồ sơ) của **TẤT CẢ**
+    hồ sơ đang hiển thị, kèm đủ Mã/Tên Hồ Sơ, Tên Công Việc, Người Thực Hiện/
+    Nghiệm Thu, Trạng Thái Công Việc, Trạng Thái Hạn, Ngày Bắt Đầu/Hạn Chót/
+    Ngày Nghiệm Thu — có 2 filter riêng (Trạng Thái Công Việc/Trạng Thái Hạn)
+    và nút **"📥 Xuất Excel"** xuất đúng bảng đang xem (áp dụng mọi filter).
 
-### 3.6. Hỗ Trợ IT
+### 4.5. Nhân Sự
 
-- **🏷️ Phê Duyệt Giá** — duyệt giá bán mặt hàng siêu thị: **Bán Lẻ** theo
-  phòng ban (dùng chung engine quy trình phòng ban ở mục 2), **Bán Buôn**
-  theo 4 mức Margin/Chiết khấu cố định (không theo phòng ban).
-- **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, mở cho toàn bộ nhân viên,
-  vòng đời Chưa xử lý → Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục"
-  admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu — dropdown lọc "Lọc Theo Danh Mục"
-  (khối Tìm Kiếm & Lọc) nay luôn đồng bộ theo (từ v12.0, trước đây lệch pha
-  với danh mục thật admin đang cấu hình).
-  - **Phê duyệt là TÙY CHỌN theo từng ticket, do IT tự quyết định** — mặc
-    định mọi ticket xử lý bình thường không cần qua duyệt. Chỉ khi đội IT
-    thấy ticket nào đó cần xác nhận từ quản lý (VD yêu cầu nhạy cảm) thì mới
-    chủ động gửi; không phải điều kiện bắt buộc áp lên toàn bộ module. **Từ
-    v13.6, gửi được nút "📨 Gửi/Gửi Lại Yêu Cầu Phê Duyệt" ngay từ khi ticket
-    còn "Chưa xử lý" (TODO — chưa ai bấm "🎯 Nhận Xử Lý")**, không cần đợi đã
-    nhận việc mới gửi được như trước v13.6 — đúng nghiệp vụ "xin ý kiến quản
-    lý TRƯỚC KHI bắt đầu xử lý": IT nhận được 1 ticket cần duyệt ngân sách/xin
-    phép trước, gửi yêu cầu phê duyệt NGAY, chờ quản lý duyệt rồi mới bấm
-    "🎯 Nhận Xử Lý" bắt đầu xử lý. Chọn 1 người bất kỳ trong hệ thống (không
-    giới hạn đúng quản lý trực tiếp theo Cơ Cấu Tổ Chức) + nhập lý do — ticket
-    chuyển trạng thái phê duyệt "⏳ Đang chờ duyệt" (trạng thái xử lý TODO/DOING
-    của ticket KHÔNG đổi khi gửi phê duyệt). Người được chọn xem được ticket
-    này (dù không phải người tạo/IT) và bấm Duyệt/Từ chối kèm ghi chú. **Trong
-    lúc chờ hoặc bị từ chối, server CHẶN CỨNG (lỗi 409) cả "🎯 Nhận Xử Lý" (nếu
-    ticket còn TODO) lẫn "Cập nhật tiến độ"/đóng ticket (nếu đã DOING)** — đội
-    IT chỉ nhận việc/tiếp tục xử lý được sau khi quản lý đã Duyệt (gửi lại yêu
-    cầu phê duyệt khác nếu bị từ chối, hoặc huỷ hẳn ticket nếu không cần xử lý
-    nữa). Việc chặn này thực thi ở server, không chỉ ẩn nút giao diện.
-- **Gia Hạn Dịch Vụ CNTT** — module con chỉ đội IT thấy được, quản lý nội bộ
-  danh mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
-  phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng khuôn
-  Giấy Phép. "Loại Dịch Vụ" giờ là danh mục admin-editable (khối "📜 Quản Lý
-  Danh Mục 'Loại Dịch Vụ'" ngay trong tab, từ v12.0) — vẫn tự học thêm khi ai
-  gõ loại mới lúc thêm dịch vụ, cùng khuôn danh mục "Các Loại Giấy Phép".
+Nhóm module đội Nhân Sự quản lý + toàn công ty tương tác gián tiếp (cơ cấu tổ
+chức ảnh hưởng tới ai duyệt gì ở các module khác, KPI, onboarding/offboarding
+nhân sự mới/nghỉ việc).
 
-### 3.7. Báo Cáo Định Kỳ
+#### 4.5.1. Cơ Cấu Tổ Chức (Versioned) & Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí
+
+**Nhân Sự → Cơ Cấu Tổ Chức** — **vai trò**: đây là "bộ não" phía sau xác định
+ai là quản lý trực tiếp của ai, và ai đánh giá KPI cho ai — hầu hết nhân viên
+không thao tác trực tiếp ở đây, nhưng kết quả của nó ảnh hưởng ngầm tới nhiều
+module khác (Quản Lý Trực Tiếp dùng ở nhiều luồng duyệt, người đánh giá KPI).
+Là 1 cây tổ chức **CÓ PHIÊN BẢN** (mỗi lần sửa cơ cấu là 1 bản nháp riêng,
+không ảnh hưởng ngay tới hệ thống đang chạy) và **luồng đánh giá KPI cấu hình
+theo đúng vị trí trong cây**.
+
+- **Vòng đời 1 phiên bản cây**: **Nháp (DRAFT)** — sửa thoải mái, chưa ảnh
+  hưởng gì tới hệ thống → **Đang áp dụng (APPLIED)** — luôn đúng 1 bản duy
+  nhất tại một thời điểm, bấm "Áp dụng" sẽ tự chuyển bản đang áp dụng trước đó
+  (nếu có) sang → **Lưu trữ (ARCHIVED)** — chỉ xem, so sánh, không sửa được
+  nữa. Muốn sửa tiếp cây đang chạy → bấm "Tạo bản nháp mới" (nhân bản từ bản
+  đang áp dụng), sửa xong thì "Kiểm tra hợp lệ" rồi "Áp dụng".
+- **Cây gồm 3 loại node**: **Công ty** (gốc, duy nhất), **Phòng Ban** (tên tự
+  gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
+  làm căn cứ so khớp — không bắt buộc), **Vị Trí** (chức danh — tên hiển thị
+  tự ghép "<Chức danh> <Tên phòng ban chứa nó>", trừ vị trí đánh dấu "không
+  thuộc phòng ban nào" như Tổng Giám Đốc thì chỉ hiện đúng chức danh).
+- **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
+  Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
+  hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức
+  danh của 1 nhân viên ở màn Người Dùng là đủ để họ "chuyển vị trí" trong cây.
+- **Quản Lý Trực Tiếp tự động cập nhật khi Áp Dụng 1 phiên bản** — ngay khi
+  bấm "Áp dụng", hệ thống tự tính lại `managerUsername` cho từng nhân viên
+  (= ai đang giữ vị trí CHA của vị trí họ đang giữ), CHỈ khi tra ra được ĐÚNG
+  1 người; trường hợp vị trí cha chưa ai giữ hoặc có nhiều hơn 1 người cùng
+  giữ thì **giữ nguyên** Quản Lý Trực Tiếp cũ và liệt kê rõ trong màn "Kết Quả
+  Áp Dụng" để admin xử lý thủ công (KHÔNG suy đoán bừa).
+- **Xoá 1 node bị chặn nếu còn người đang giữ** — phải chuyển nhân viên đó
+  sang vị trí/phòng ban khác trước.
+- **"Kiểm tra hợp lệ"** trước khi áp dụng, phát hiện: node cha không tồn tại;
+  vị trí bị xoá khỏi bản nháp nhưng bản đang áp dụng vẫn còn người giữ; nhiều
+  hơn 1 node "Trưởng phòng" cùng phòng ban đều có người giữ.
+- **Cấu Hình Luồng Đánh Giá KPI** (sub-tab riêng, quyền `orgChartManage` HOẶC
+  quyền `kpiFlowConfigManage` — tách riêng để giao được cho người chỉ tinh
+  chỉnh luồng KPI mà không có quyền sửa cây tổ chức): mỗi khi Áp Dụng 1 phiên
+  bản, hệ thống **tự sinh quan hệ "vị trí cha đánh giá vị trí con"** cho mọi
+  cặp Vị Trí-Vị Trí kề nhau (chỉ điền chỗ trống). Có thể **thêm quan hệ thủ
+  công** ngoài cây báo cáo hành chính và **xoá bất kỳ quan hệ nào**. Tra cứu
+  nhanh "ai đang đánh giá KPI cho 1 nhân viên" qua ô tìm kiếm ngay trong màn
+  này.
+- **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa dựng bảng
+  lịch sử "ai giữ vị trí nào từ ngày nào"; danh sách Phòng Ban toàn hệ thống
+  (`DB.depts`) chưa gắn động theo cây; chưa có cảnh báo tự động khi Offboarding
+  1 người đang là người đánh giá KPI của vị trí khác.
+
+#### 4.5.2. Onboarding / Offboarding
+
+Mô hình quy trình có checklist theo giai đoạn (thay hẳn bản cũ "1 yêu cầu = 1
+ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
+
+- **Onboarding** — khai báo nhân viên MỚI (mã nhân viên tự gõ, họ tên, Vị
+  Trí HO/Siêu Thị → Phòng Ban/Siêu Thị + Chức Danh lấy từ danh mục hệ
+  thống, Email **để trống nếu chưa cấp, bắt buộc với nhân viên Siêu Thị**,
+  SĐT, Ngày vào làm, Quản lý trực tiếp tuỳ chọn) rồi bấm "Tạo Quy Trình".
+- **Offboarding** — tra cứu nhân viên ĐÃ CÓ tài khoản (gõ tên/mã nhân viên,
+  tự động lấy phòng ban/chức danh/email từ hệ thống), nhập **Ngày Nghỉ Việc
+  (bắt buộc, validate cả server)**, tuỳ chọn tick "đang giữ vị trí quản lý" +
+  chọn Quản lý trực tiếp, rồi bấm "Tạo Quy Trình".
+- Ngay khi tạo, hệ thống **tự sinh sẵn checklist các việc cần làm** từ danh
+  mục chuẩn (Quản Lý > Checklist Mẫu), phân theo **giai đoạn** (Onboarding:
+  Chuẩn bị trước ngày đi làm → Ngày đầu tiên → Tuần/Tháng đầu → Kết thúc thử
+  việc; Offboarding: Thông báo nghỉ việc → Bàn giao công việc → Thu hồi tài
+  sản & quyền truy cập → Quyết toán tài chính → Sau khi nghỉ) và **nhãn trách
+  nhiệm** (Nhân Sự/IT/Hành Chính/Tài Chính/Quản lý trực tiếp — chỉ quyết định
+  AI được thao tác việc đó, không phải phòng ban thật). Hạn từng việc = ngày
+  mốc + số ngày lệch cấu hình sẵn trong danh mục.
+- Trong màn **Chi Tiết Quy Trình**: đánh dấu **Hoàn thành**/**Bỏ qua** từng
+  việc (bỏ qua việc bắt buộc chỉ người quản lý quy trình mới làm được, phải
+  nhập lý do), **Giao lại** việc cho người khác, đính kèm tài liệu, xem lịch
+  sử. Quy trình **tự động chuyển "Hoàn tất"** ngay khi mọi việc bắt buộc ở mọi
+  giai đoạn đã xong/bỏ qua — không có nút "chuyển giai đoạn" thủ công. Có thể
+  **Huỷ quy trình** (bắt buộc lý do) khi đang thực hiện.
+- **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không bắt
+  buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh mục
+  "🔑 Tài khoản / Đăng nhập", mục 4.2) để đội IT xử lý theo đúng quy trình sẵn
+  có. **IT vẫn tự tay tạo/khoá email + tài khoản AD hoàn toàn NGOÀI hệ thống
+  này** — khi IT đánh dấu ticket "Hoàn thành" kèm ghi chú, hệ thống CHỈ ghi
+  lại đúng việc đã sinh ra ticket đó chuyển "Hoàn thành" — **không có bất kỳ
+  thao tác tự động nào tạo mới/khoá tài khoản `DB.users`**.
+- **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang được
+  giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm), gộp cả
+  Onboarding lẫn Offboarding.
+- **Checklist Mẫu** (sub-view chỉ hiện với quyền **"📋 Quản Lý Checklist
+  Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn. Đổi
+  danh mục **không ảnh hưởng ngược** các quy trình đã tạo trước đó (checklist
+  đã snapshot vào từng quy trình lúc tạo).
+- **Phân quyền** (khối 21 cây phân quyền) — 4 cờ phẳng: **"🆕 Quản Lý
+  Onboarding"**/**"🚪 Quản Lý Offboarding"** (tạo + quản lý quy trình đúng
+  loại), **"📋 Quản Lý Checklist Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự động
+  có quyền tạo/quản lý quy trình), **"👁️ Xem Toàn Bộ Quy Trình"** (chỉ xem,
+  KHÔNG thao tác được). Người tạo/quản lý trực tiếp/được giao riêng 1 việc
+  luôn xem được đúng quy trình liên quan dù không có cờ nào ở trên.
+
+#### 4.5.3. Quản Lý & Phản Hồi Ý Kiến
+
+Phía Nhân Sự của **🤝 HCRC Đồng Hành** (mục 4.1) — **vai trò**: nơi Nhân Sự
+trả lời câu hỏi nhân viên gửi qua HCRC Đồng Hành, đúng khuôn **1 hỏi–1 đáp**
+(không phải khung chat trao đổi nhiều lượt như hỗ trợ khách hàng thông thường
+— gửi 1 câu hỏi, nhận đúng 1 câu trả lời, hết). Câu hỏi được phân loại theo
+danh mục **"Chủ Đề"** (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, mục 7.3) để
+Nhân Sự lọc/phân công dễ hơn khi có nhiều câu hỏi. Thông báo có câu hỏi mới chỉ
+qua **cờ chưa đọc** ngay trong giao diện (không gửi email) — thiết kế có chủ
+đích vì đây là kênh nội bộ tần suất thấp, không cần thêm 1 lớp email dễ bị bỏ
+quên/spam như các luồng phê duyệt khác.
+
+### 4.6. Báo Cáo Định Kỳ
 
 Nhân viên nộp báo cáo (thường theo tuần) → người có quyền tổng hợp chọn + sắp
 thứ tự + merge các báo cáo con → sửa tự do → phát hành (trình chiếu toàn màn
 hình hoặc xuất PDF). Có 2 hình thức nhập: nhập trực tiếp trên form, hoặc ghép
 file PDF đã có sẵn. **Lưu ý phân biệt**: đây là 1 quy trình nghiệp vụ chủ động
-(nhân viên chủ động nộp theo kỳ) — khác hẳn module **Báo Cáo** (mục 4), vốn chỉ
+(nhân viên chủ động nộp theo kỳ) — khác hẳn module **Báo Cáo** (mục 5), vốn chỉ
 là màn tổng hợp/giám sát số liệu đọc từ các module khác, không có luồng nghiệp
 vụ riêng của nó.
 
@@ -805,44 +712,41 @@ có box riêng **"🗂️ Đối Chiếu Theo Công Việc"** (sub-tab Tổng H�
 bản đối chiếu CHỈ XEM từ công việc thật ghi nhận trong module Công Việc
 (`DB.tasks`), TÁCH RIÊNG hoàn toàn, không publish/không ảnh hưởng bản chính
 thức. Mặc định gồm mọi việc trong phạm vi phòng ban của kỳ, mốc thời gian tự
-suy ra từ chuỗi kỳ báo cáo (kỳ CLOSED liền trước → hạn chót kỳ này). Từ v11.9
-có thêm bộ lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng đang
-xem):
+suy ra từ chuỗi kỳ báo cáo (kỳ CLOSED liền trước → hạn chót kỳ này). Có thêm bộ
+lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng đang xem):
 - **Trạng thái**: Chưa bắt đầu/Đang thực hiện/Đã hoàn thành, hoặc **Quá hạn**
   (nhóm phái sinh — lọc theo cờ quá hạn module tự tính, không phải 1 trạng
   thái lưu trong dữ liệu).
 - **Từ ngày/Đến ngày**: GHI ĐÈ mốc bắt đầu/kết thúc tự suy ra ở trên (không
   phải lọc thêm) — để trống cả 2 thì hành vi y hệt trước đây.
 
-### 3.8. Hệ Thống / Quản Trị
-
-Nhóm màn cấu hình dùng cho admin — không phải "module nghiệp vụ" theo nghĩa có
-luồng tạo/duyệt hồ sơ riêng, nhưng là nơi cấu hình mọi module ở trên: 🔄 Quy
-Trình & Phê Duyệt (mục 2), ✅ Phê Duyệt/Hộp Thư tổng hợp (2.4), 📊 Báo Cáo Quản
-Trị (mục 4), Cấu Hình Email (mục 6), Phân Quyền (mục 7), Quản Lý Danh Mục
-(phòng ban, chức danh, loại tờ trình, loại hợp đồng, loại giấy phép, siêu
-thị...), API đối tác ngoài (mục 5).
-
 ---
 
-## 4. Cấu hình Báo Cáo (Reports module)
+## 5. Báo Cáo (Reports — dashboard tổng hợp)
 
 Module **📊 Báo Cáo** (`reports`) là màn **tổng hợp/giám sát số liệu**, đọc dữ
 liệu từ khoảng hơn 10 module nghiệp vụ khác — bản thân nó không tạo/lưu hồ sơ
-riêng nào.
+riêng nào (khác hẳn Báo Cáo Định Kỳ ở mục 4.6, vốn là 1 quy trình nghiệp vụ
+chủ động thật sự).
 
 - **Thống kê chung theo module** — với 4 module có luồng phê duyệt nhiều bước
   (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng): tổng số hồ sơ, phân theo trạng
   thái/phòng ban, và **thời gian xử lý trung bình** mỗi bước + mỗi hồ sơ hoàn
   tất (tính từ lịch sử xử lý của hồ sơ) — dùng để đánh giá quy trình duyệt có
   đang chậm ở bước nào.
-- **Tra cứu chi tiết + chọn cột + xuất Excel** — bên dưới khối thống kê, mỗi
-  module có 1 bảng lọc đa chiều theo **từng trường thực tế có trong dữ liệu**
-  (tự suy ra từ chính bản ghi, không cần khai báo cứng danh sách trường cho
-  từng module) — cho phép tự chọn cột muốn hiển thị/xuất, thứ tự cột giữ theo
-  lựa chọn của người dùng, rồi xuất ra Excel. Trường lạ (không có nhãn tiếng
-  Việt định sẵn) vẫn hiển thị được — tự tách theo chữ hoa thành nhãn đọc được
-  thay vì làm hỏng cả bảng.
+- **🔍 2. Tra cứu chi tiết + chọn cột + xuất Excel** — bên dưới khối thống kê,
+  mỗi module có 1 bảng lọc đa chiều theo **từng trường thực tế có trong dữ
+  liệu** (tự suy ra từ chính bản ghi, không cần khai báo cứng danh sách trường
+  cho từng module) — cho phép tự chọn cột muốn hiển thị/xuất, thứ tự cột giữ
+  theo lựa chọn của người dùng, rồi xuất ra Excel. Trường lạ (không có nhãn
+  tiếng Việt định sẵn) vẫn hiển thị được — tự tách theo chữ hoa thành nhãn đọc
+  được thay vì làm hỏng cả bảng.
+- **🖨️ 1. Tạo Báo Cáo Theo Yêu Cầu** — dùng ĐÚNG bộ lọc/cột đang chọn ở mục
+  "Tra cứu chi tiết" phía trên (không phải khai báo lại từ đầu), bấm
+  **"👁️ Xem Trước & Xuất"** để xem 1 bản xem trước dạng văn bản ngay trong
+  trang, rồi có thể in trực tiếp (mở hộp thoại in thật của trình duyệt) hoặc
+  xuất lại ra Excel — tiện khi cần 1 bản in nhanh để nộp/lưu giấy mà không cần
+  mở lại Excel để tự định dạng.
 - **Tổng Hợp (dashboard toàn công ty)** — các thẻ tổng số liệu gộp toàn công
   ty, phân quyền xem theo module con (VD Ngân Sách: quyền `budgetAggregate`
   xem mọi phòng ban, `budgetManage` xem thêm khối "Toàn Công Ty").
@@ -853,7 +757,165 @@ thì tự thấy đúng phần báo cáo tương ứng của module đó khi có
 
 ---
 
-## 5. API cho đối tác bên ngoài (ExtAuth)
+## 6. Phân quyền (permission model)
+
+**Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**
+đánh số, mỗi khối là 1 nhóm quyền gấp gọn được (có badge tóm tắt "đã cấp
+X/Y" ngay trên tiêu đề):
+
+```
+0. Quyền Truy Cập Module        12. Văn Phòng Phẩm
+1. Hệ Thống & Chung              13. Báo Cáo Định Kỳ
+2. Tài Liệu                      14. Nhóm Phê Duyệt HĐ (Hợp Đồng)
+3. Văn Bản Trình                 15. Hỗ Trợ IT
+4. Hợp Đồng & Giấy Phép          16. Đồng Phục
+5. Phòng Họp                     17. Nhóm Quyền Đặc Biệt (mục 3.3)
+6. Đăng Ký Xe                    18. Ngân Sách
+7. Văn Phòng (Mua/Sửa)           19. Đào Tạo
+8. Truyền Thông Nội Bộ           20. Giấy Phép
+9. Biên Bản Họp & Công Việc      21. Nhân Sự
+10. Thanh Toán                   22. Vận Hành
+11. Nhóm Phê Duyệt Trình (Văn Bản Trình)
+```
+
+Mỗi checkbox 1 quyền cụ thể (đọc/tạo/sửa/duyệt/quản lý theo module) — nhiều
+quyền còn có thêm phạm vi **theo phòng ban** (tick "Tất cả" hoặc chỉ chọn vài
+phòng cụ thể). Khối "0. Quyền Truy Cập Module" quyết định người dùng có **vào
+được module** hay không trước tiên — không có quyền vào module thì các quyền
+chi tiết bên trong module đó (khối 2-22 tương ứng) vô nghĩa.
+
+**Nhóm quyền (`permGroups`)** — thay vì tick tay từng quyền cho từng người,
+admin có thể tạo 1 "nhóm phân quyền" mẫu (VD "Nhân viên phòng Kế Toán") gồm 1
+bộ quyền cố định, rồi gán nhiều người dùng vào nhóm đó — nhóm đóng vai trò
+**overlay cộng thêm**: quyền hiệu lực cuối cùng của 1 người = quyền cá nhân họ
+được cấp **HỢP** với quyền của mọi nhóm họ thuộc về (không phải thay thế) —
+sửa 1 nhóm là cập nhật quyền cho toàn bộ thành viên nhóm đó cùng lúc, tiện khi
+quản lý nhiều người cùng vai trò.
+
+**Cấp quyền cho 1 nhân viên mới** (quy trình thường dùng):
+
+1. Tạo tài khoản ở **Hệ Thống → Quản Trị → Người Dùng** (điền phòng ban, chức
+   danh — 2 trường này còn ảnh hưởng tới chế độ duyệt "Theo vị trí" ở mục
+   3.1). Có thể tạo NHIỀU tài khoản cùng lúc rồi lưu 1 lần — xem mục 7.
+2. Nếu công ty đã có sẵn 1 nhóm phân quyền phù hợp vai trò của họ → gán vào
+   nhóm đó ngay (mục "Nhóm phân quyền" ở form Sửa Người Dùng) — đủ dùng cho đa
+   số trường hợp, không cần tick tay.
+3. Cần quyền đặc thù riêng ngoài nhóm (VD được thêm quyền "Người duyệt" — mục
+   3.2, hoặc quyền quản lý 1 module cụ thể) → mở cây phân quyền cá nhân, tìm
+   đúng khối tương ứng (bảng số ở trên), tick thêm.
+4. Muốn người này **duyệt được** hồ sơ ở 1 bước cụ thể qua chế độ Theo phòng
+   ban/Theo vị trí → nhớ tick quyền **"Người duyệt"** (khối 1) — bước dễ quên
+   nhất, xem cảnh báo ở mục 3.2.
+
+---
+
+## 7. Hệ Thống / Quản Trị
+
+Nhóm màn cấu hình **chỉ admin dùng** — không phải "module nghiệp vụ" theo
+nghĩa có luồng tạo/duyệt hồ sơ riêng, mà là nơi cấu hình mọi module ở mục 4-6.
+
+### 7.1. Quy Trình & Phê Duyệt
+
+Xem đầy đủ ở mục 3 — đây chỉ là đường dẫn màn hình
+(**Hệ Thống → 🔄 Quy Trình & Phê Duyệt**), cấu hình người duyệt cho từng bước
+của hơn 15 module dùng chung engine phê duyệt.
+
+### 7.2. Quản Lý Danh Mục
+
+Nơi admin quản lý các danh mục "lõi" dùng chung toàn hệ thống: Phòng ban,
+Chức danh, Siêu thị, Loại Giấy Phép, Loại Dịch Vụ CNTT, **📲 Phím Tắt PWA**
+(chọn tối đa 4 module hiện nhanh khi cài ứng dụng lên màn hình chính, xem mục
+2.4)... Đa số danh mục **theo từng module riêng** (VD "Độ Khẩn" của Văn Bản
+Trình, "Mục Đích Sử Dụng" của Đăng Ký Xe, "Chủ Đề" của HCRC Đồng Hành) lại cấu
+hình ở màn Biểu Mẫu (mục 7.3) thay vì ở đây — 2 màn có vai trò khác nhau: mục
+này là danh mục LÕI dùng chéo nhiều module, Biểu Mẫu là tuỳ biến RIÊNG của
+từng form.
+
+### 7.3. Biểu Mẫu
+
+**📋 Biểu Mẫu** — vai trò: cho phép admin tự tuỳ biến field của gần như mọi
+form tạo hồ sơ trong hệ thống **mà không cần sửa code** — đổi nhãn hiển thị,
+đổi field nào bắt buộc, sửa danh sách lựa chọn (dropdown) của field, và **thêm
+hẳn field mới** vào form nếu công ty cần thu thập thêm thông tin riêng. Bao
+phủ 20 nhóm module (Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng, Tài Liệu,
+Biên Bản Họp, Đặt Phòng Họp, Truyền Thông Nội Bộ, Công Việc, VPP, Giấy Phép,
+Hỗ Trợ IT, Thanh Toán, Ngân Sách, Báo Cáo Định Kỳ, Đồng Phục, Vận Hành, Đào
+Tạo, Tuyển Dụng, HCRC Đồng Hành, Onboarding/Offboarding). Field tự thêm lưu
+trong `DB.formTemplates`, hiện thêm ngay dưới các field mặc định của đúng form
+đó — không ảnh hưởng hồ sơ cũ đã tạo trước khi thêm field.
+
+### 7.4. Quản Lý Tệp File
+
+**📎 Quản Lý Tệp File** — cấu hình 2 việc riêng theo TỪNG module có upload tệp:
+**loại tệp được phép** (mặc định `.pdf/.docx/.xlsx` cho 8 module — Tài Liệu,
+Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Đặt Phòng Họp, Biên Bản Họp, Tổng Hợp,
+Truyền Thông Nội Bộ; riêng ảnh minh hoạ câu hỏi Đào Tạo chỉ nhận định dạng
+ảnh) và **giới hạn dung lượng tối đa (MB)** riêng cho module đó — chỉ được
+SIẾT chặt hơn, không vượt quá giới hạn chung toàn hệ thống `UPLOAD_MAX_MB`
+(mặc định 20MB, cấu hình ở `.env`, xem `Huong-dan-trien-khai-PM2.md`/
+`Huong-dan-trien-khai-PM2-Nginx.md`).
+
+### 7.5. Thùng Rác
+
+**🗑️ Thùng Rác** — **chỉ admin** vào được (kiểm tra lại ở server, không chỉ
+ẩn nút giao diện). Gom hồ sơ đã xoá từ gần như mọi module nghiệp vụ (khoảng
+30 loại hồ sơ khác nhau) về 1 nơi để **khôi phục lại** nếu xoá nhầm, hoặc
+**xoá vĩnh viễn** (yêu cầu xác thực lại — mật khẩu/OTP/vân tay tuỳ mức cấu
+hình của admin đó) khi chắc chắn không cần nữa. Hồ sơ trong Thùng Rác **không
+tự động dọn theo thời gian** — nằm mãi ở đây cho tới khi có người chủ động
+khôi phục hoặc xoá vĩnh viễn.
+
+### 7.6. Nhật Ký Hệ Thống (Log)
+
+**📊 Log** — ghi lại mọi thao tác quan trọng (đăng nhập, tạo/sửa/xoá/duyệt hồ
+sơ...) kèm người thực hiện, thời gian, module, kết quả. **Chỉ admin xem
+được** và không giới hạn theo phòng ban (admin xem được nhật ký của TOÀN công
+ty, không chỉ phòng mình). Bộ lọc: Phân Hệ (module), Sự Kiện (loại thao tác),
+Trạng thái, và ô tìm nhanh theo từ khoá (khớp cả tên đăng nhập/địa chỉ IP/loại
+thao tác/mô tả). Hệ thống tự động **chỉ giữ lại 5.000 dòng gần nhất** — nhật
+ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay; mỗi lượt tải cũng chỉ trả
+tối đa 1.000 dòng/lần (dùng bộ lọc để thu hẹp thay vì tải hết).
+
+### 7.7. Người Dùng — tạo hàng loạt
+
+Ở màn **Người Dùng**, ngoài tạo từng tài khoản 1, admin có thể điền xong 1
+form rồi bấm thêm vào 1 **danh sách tạm** (chưa gửi lên server), lặp lại cho
+nhiều người, rồi bấm **"Lưu Tất Cả Danh Sách"** để tạo TẤT CẢ cùng 1 lúc —
+tiện khi nhận nhiều nhân viên mới cùng đợt (VD đầu năm học/mùa tuyển dụng) mà
+không phải chờ tạo xong người này mới sang người kế tiếp. Trước khi lưu, hệ
+thống tự kiểm tra trùng tên đăng nhập (cả trong danh sách tạm lẫn với tài
+khoản đã có) và báo rõ nếu có trùng; server sau đó tự băm mật khẩu và xác
+thực lại toàn bộ trước khi ghi.
+
+### 7.8. Cấu Hình Email
+
+**Hệ Thống → Quản Trị → Cấu Hình Email** — cấu hình **toàn bộ** trên web (Host/
+Port/Kiểu mã hoá/Email người gửi/Bật-tắt/Tài khoản đăng nhập SMTP), không cần
+sửa `.env` hay khởi động lại server cho các thay đổi này. Có 3 nút chọn nhanh
+kiểu mã hoá (Không mã hoá/TLS/SSL, tự đổi Port sang giá trị chuẩn tương ứng
+25/587/465) và nút "Gửi Thử" để xác minh cấu hình đúng trước khi Lưu. Mặc định
+hệ thống chỉ **mô phỏng** gửi email (ghi Nhật ký hệ thống, không gửi thật) cho
+tới khi nhập SMTP Server ở màn này.
+
+**🔔 Thông Báo Email Phê Duyệt** — cho phép admin **tắt riêng** từng loại
+email liên quan phê duyệt theo từng module, mà không đụng gì tới cấu hình SMTP
+ở trên. Lý do: nhiều người đã thấy hồ sơ chờ duyệt qua Hộp Thư Phê Duyệt (mục
+2.2) nên email "Cần phê duyệt" thường trùng lặp/gây spam, trong khi email "Kết
+quả duyệt" (gửi người trình, vốn không theo dõi Hộp Thư) vẫn cần thiết — 2
+nhóm sự kiện (family) tắt/bật **độc lập nhau**:
+
+- **Cần phê duyệt** (`approvalNeeded`) — email gửi người duyệt khi có hồ sơ
+  mới chờ xử lý. Mặc định **TẮT** cho module chưa từng cấu hình.
+- **Kết quả duyệt** (`result`) — email gửi người trình khi hồ sơ được
+  duyệt/từ chối. Mặc định **BẬT** cho module chưa từng cấu hình.
+
+Module nào chưa có điểm gọi email tương ứng trong code thì ô đó hiện disabled
+kèm ghi chú. **An toàn khi chưa cấu hình**: nếu admin chưa từng mở màn này để
+Lưu, hệ thống **fail-open** — email vẫn gửi như hành vi gốc; chỉ khi admin đã
+lưu rõ ràng giá trị tắt thì email mới thực sự bị chặn (vẫn ghi đầy đủ 1 dòng
+Nhật ký hệ thống, chỉ khác không tốn lượt gọi SMTP thật).
+
+### 7.9. API Đối Tác Ngoài (ExtAuth)
 
 `lib/externalAuth.js` + `routes/externalAuthAdmin.js` (quản lý key, admin-only,
 mount tại `/api/admin/external-api-keys`) + `routes/externalAuthVerify.js`
@@ -885,154 +947,3 @@ Giới hạn số lần gọi: `EXTERNAL_AUTH_RATE_LIMIT_MAX` trong `.env` (mặ
 > được soạn riêng cho đối tác trong 1 phiên làm việc trước (dạng Artifact) —
 > mục này chỉ tóm tắt góc nhìn cấu hình/quản trị, không lặp lại toàn bộ đặc tả
 > API ở đây.
-
----
-
-## 6. Cấu hình Email thông báo
-
-### 6.1. Cấu Hình Email (SMTP) — bắt buộc trước để gửi email thật
-
-**Hệ Thống → Quản Trị → Cấu Hình Email** — cấu hình **toàn bộ** trên web (Host/
-Port/Kiểu mã hoá/Email người gửi/Bật-tắt/Tài khoản đăng nhập SMTP), không cần
-sửa `.env` hay khởi động lại server cho các thay đổi này. Có 3 nút chọn nhanh
-kiểu mã hoá (Không mã hoá/TLS/SSL, tự đổi Port sang giá trị chuẩn tương ứng
-25/587/465) và nút "Gửi Thử" để xác minh cấu hình đúng trước khi Lưu. Mặc định
-hệ thống chỉ **mô phỏng** gửi email (ghi Nhật ký hệ thống, không gửi thật) cho
-tới khi nhập SMTP Server ở màn này.
-
-### 6.2. 🔔 Thông Báo Email Phê Duyệt — bật/tắt riêng theo module + loại sự kiện
-
-**Hệ Thống → Quản Trị → 🔔 Thông Báo Email Phê Duyệt** (từ v10.2) — cho phép
-admin **tắt riêng** từng loại email liên quan phê duyệt theo từng module, mà
-không đụng gì tới cấu hình SMTP ở 6.1. Lý do: nhiều người đã thấy hồ sơ chờ
-duyệt qua Hộp Thư Phê Duyệt (2.4) nên email "Cần phê duyệt" thường trùng
-lặp/gây spam, trong khi email "Kết quả duyệt" (gửi người trình, vốn không theo
-dõi Hộp Thư) vẫn cần thiết — 2 nhóm sự kiện (family) tắt/bật **độc lập nhau**:
-
-- **Cần phê duyệt** (`approvalNeeded`) — email gửi người duyệt khi có hồ sơ
-  mới chờ xử lý. Mặc định **TẮT** cho module chưa từng cấu hình.
-- **Kết quả duyệt** (`result`) — email gửi người trình khi hồ sơ được
-  duyệt/từ chối. Mặc định **BẬT** (giữ hành vi gốc trước khi có tính năng
-  này) cho module chưa từng cấu hình.
-
-Module nào chưa có điểm gọi email tương ứng trong code (VD Giấy Phép hiện
-không gửi email khi duyệt/từ chối) thì ô đó hiện disabled kèm ghi chú — tích
-vào cũng không có tác dụng vì chưa có email nào để tắt.
-
-**An toàn khi chưa cấu hình**: nếu admin chưa từng mở màn này để Lưu (CSDL
-mới, hoặc phiên chưa từng chỉnh), hệ thống **fail-open** — coi như chưa có ý
-định tắt gì, email vẫn gửi như hành vi gốc. Chỉ khi admin **đã lưu rõ ràng**
-giá trị tắt cho đúng module/loại sự kiện đó thì email mới thực sự bị chặn —
-email bị chặn vẫn ghi đầy đủ 1 dòng Nhật ký hệ thống như bình thường (chỉ khác
-không tốn lượt gọi SMTP thật), tránh mất dấu vết sự kiện đã xảy ra.
-
----
-
-## 7. Phân quyền (permission model)
-
-**Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**
-đánh số, mỗi khối là 1 nhóm quyền gấp gọn được (có badge tóm tắt "đã cấp
-X/Y" ngay trên tiêu đề):
-
-```
-0. Quyền Truy Cập Module        12. Văn Phòng Phẩm
-1. Hệ Thống & Chung              13. Báo Cáo Định Kỳ
-2. Tài Liệu                      14. Nhóm Phê Duyệt HĐ (Hợp Đồng)
-3. Văn Bản Trình                 15. Hỗ Trợ IT
-4. Hợp Đồng & Giấy Phép          16. Đồng Phục
-5. Phòng Họp                     17. Nhóm Quyền Đặc Biệt (mục 2.3)
-6. Đăng Ký Xe                    18. Ngân Sách
-7. Văn Phòng (Mua/Sửa)           19. Đào Tạo
-8. Truyền Thông Nội Bộ           20. Giấy Phép
-9. Biên Bản Họp & Công Việc      21. Nhân Sự
-10. Thanh Toán                   22. Vận Hành
-11. Nhóm Phê Duyệt Trình (Văn Bản Trình)
-```
-
-Mỗi checkbox 1 quyền cụ thể (đọc/tạo/sửa/duyệt/quản lý theo module) — nhiều
-quyền còn có thêm phạm vi **theo phòng ban** (tick "Tất cả" hoặc chỉ chọn vài
-phòng cụ thể). Khối "0. Quyền Truy Cập Module" quyết định người dùng có **vào
-được module** hay không trước tiên — không có quyền vào module thì các quyền
-chi tiết bên trong module đó (khối 2-22 tương ứng) vô nghĩa.
-
-**Nhóm quyền (`permGroups`)** — thay vì tick tay từng quyền cho từng người,
-admin có thể tạo 1 "nhóm phân quyền" mẫu (VD "Nhân viên phòng Kế Toán") gồm 1
-bộ quyền cố định, rồi gán nhiều người dùng vào nhóm đó — nhóm đóng vai trò
-**overlay cộng thêm**: quyền hiệu lực cuối cùng của 1 người = quyền cá nhân họ
-được cấp **HỢP** với quyền của mọi nhóm họ thuộc về (không phải thay thế) —
-sửa 1 nhóm là cập nhật quyền cho toàn bộ thành viên nhóm đó cùng lúc, tiện khi
-quản lý nhiều người cùng vai trò.
-
-**Cấp quyền cho 1 nhân viên mới** (quy trình thường dùng):
-
-1. Tạo tài khoản ở **Hệ Thống → Quản Trị → Người Dùng** (điền phòng ban, chức
-   danh — 2 trường này còn ảnh hưởng tới chế độ duyệt "Theo vị trí" ở mục 2.1).
-2. Nếu công ty đã có sẵn 1 nhóm phân quyền phù hợp vai trò của họ → gán vào
-   nhóm đó ngay (mục "Nhóm phân quyền" ở form Sửa Người Dùng) — đủ dùng cho đa
-   số trường hợp, không cần tick tay.
-3. Cần quyền đặc thù riêng ngoài nhóm (VD được thêm quyền "Người duyệt" — mục
-   2.2, hoặc quyền quản lý 1 module cụ thể) → mở cây phân quyền cá nhân, tìm
-   đúng khối tương ứng (bảng số ở trên), tick thêm.
-4. Muốn người này **duyệt được** hồ sơ ở 1 bước cụ thể qua chế độ Theo phòng
-   ban/Theo vị trí → nhớ tick quyền **"Người duyệt"** (khối 1) — bước dễ quên
-   nhất, xem cảnh báo ở mục 2.2.
-
-## 8. Cơ Cấu Tổ Chức (Versioned) & Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí
-
-**Nhân Sự → Cơ Cấu Tổ Chức** — làm lại hoàn toàn từ v14.4, thay thế bản cũ
-(sơ đồ suy ra thẳng từ `managerUsername` mỗi người + 1 bảng cấu hình KPI phẳng
-theo phòng ban×chức danh). Bản mới là 1 **cây tổ chức CÓ PHIÊN BẢN** (mỗi lần
-sửa cơ cấu là 1 bản nháp riêng, không ảnh hưởng ngay tới hệ thống đang chạy)
-và **luồng đánh giá KPI cấu hình theo đúng vị trí trong cây** (không còn map
-rời theo phòng ban×chức danh).
-
-- **Vòng đời 1 phiên bản cây**: **Nháp (DRAFT)** — sửa thoải mái, chưa ảnh
-  hưởng gì tới hệ thống → **Đang áp dụng (APPLIED)** — luôn đúng 1 bản duy
-  nhất tại một thời điểm, bấm "Áp dụng" sẽ tự chuyển bản đang áp dụng trước đó
-  (nếu có) sang → **Lưu trữ (ARCHIVED)** — chỉ xem, so sánh, không sửa được
-  nữa. Muốn sửa tiếp cây đang chạy → bấm "Tạo bản nháp mới" (nhân bản từ bản
-  đang áp dụng), sửa xong thì "Kiểm tra hợp lệ" rồi "Áp dụng".
-- **Cây gồm 3 loại node**: **Công ty** (gốc, duy nhất), **Phòng Ban** (tên tự
-  gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
-  làm căn cứ so khớp — không bắt buộc, node nhóm thuần tuý như "Khối Kinh
-  Doanh" không cần gắn), **Vị Trí** (chức danh — tên hiển thị tự ghép "<Chức
-  danh> <Tên phòng ban chứa nó>", trừ vị trí đánh dấu "không thuộc phòng ban
-  nào" như Tổng Giám Đốc thì chỉ hiện đúng chức danh).
-- **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
-  Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
-  hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức
-  danh của 1 nhân viên ở màn Người Dùng là đủ để họ "chuyển vị trí" trong cây
-  — không cần thao tác gì thêm ở Cơ Cấu Tổ Chức.
-- **Quản Lý Trực Tiếp tự động cập nhật khi Áp Dụng 1 phiên bản** — ngay khi
-  bấm "Áp dụng", hệ thống tự tính lại `managerUsername` cho từng nhân viên
-  (= ai đang giữ vị trí CHA của vị trí họ đang giữ), CHỈ khi tra ra được ĐÚNG
-  1 người; trường hợp vị trí cha chưa ai giữ hoặc có nhiều hơn 1 người cùng
-  giữ thì **giữ nguyên** Quản Lý Trực Tiếp cũ và liệt kê rõ trong màn "Kết Quả
-  Áp Dụng" để admin xử lý thủ công (KHÔNG suy đoán bừa). Trường "Quản Lý Trực
-  Tiếp" ở form Người Dùng vẫn còn — vẫn dùng để duyệt "Theo Quản Lý Trực
-  Tiếp" ở các module khác — nhưng từ nay chỉ nên sửa tay khi thật cần, vì lần
-  Áp Dụng cây tiếp theo có thể ghi đè lại theo cây.
-- **Xoá 1 node bị chặn nếu còn người đang giữ** (kể cả node con trong nhánh bị
-  xoá cùng lúc) — phải chuyển nhân viên đó sang vị trí/phòng ban khác trước.
-- **"Kiểm tra hợp lệ"** trước khi áp dụng, phát hiện: node cha không tồn tại;
-  vị trí bị xoá khỏi bản nháp nhưng bản đang áp dụng vẫn còn người giữ; nhiều
-  hơn 1 node "Trưởng phòng" cùng phòng ban đều có người giữ (dấu hiệu cây bị
-  cấu trúc sai).
-- **Cấu Hình Luồng Đánh Giá KPI** (sub-tab riêng, quyền `orgChartManage` HOẶC
-  quyền mới **`kpiFlowConfigManage`** — tách riêng để giao được cho người chỉ
-  tinh chỉnh luồng KPI mà không có quyền sửa cây tổ chức): mỗi khi Áp Dụng 1
-  phiên bản, hệ thống **tự sinh quan hệ "vị trí cha đánh giá vị trí con"** cho
-  mọi cặp Vị Trí-Vị Trí kề nhau trong cây (chỉ điền chỗ trống, không đụng vào
-  quan hệ đã có/đã sửa tay). Có thể **thêm quan hệ thủ công** ngoài cây báo
-  cáo hành chính (VD 1 vị trí được đánh giá bởi 1 vị trí ở nhánh khác, hoặc bỏ
-  qua 1 cấp) và **xoá bất kỳ quan hệ nào** (kể cả quan hệ tự sinh). Tra cứu
-  nhanh "ai đang đánh giá KPI cho 1 nhân viên" qua ô tìm kiếm ngay trong màn
-  này.
-- **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): (1) chưa dựng bảng
-  lịch sử "ai giữ vị trí nào từ ngày nào" — occupancy luôn tính theo trạng
-  thái HIỆN TẠI của Phòng Ban/Chức Danh trên hồ sơ, không tra được quá khứ;
-  (2) danh sách Phòng Ban toàn hệ thống (`DB.depts`) chưa gắn động theo cây —
-  các dropdown "Phòng Ban" ở module khác không tự đổi theo cơ cấu tổ chức;
-  (3) chưa có cảnh báo tự động khi Offboarding 1 người đang là người đánh giá
-  KPI của vị trí khác — admin tự kiểm tra qua màn Cấu Hình Luồng Đánh Giá KPI
-  trước khi hoàn tất Offboarding người giữ vị trí quản lý.
