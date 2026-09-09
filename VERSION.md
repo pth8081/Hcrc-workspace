@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**14.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.7 (2026-09-09): Nhân Sự — thêm module Hồ Sơ Nhân Sự (Đợt 1/4)
+
+Đợt đầu trong kế hoạch 4 đợt triển khai module Nhân Sự theo tài liệu thiết kế tổng thể do người dùng
+cung cấp (Hồ Sơ → Hợp Đồng Lao Động → Công & Phép → vá lại các phần A/B còn thiếu). Đợt này: **Hồ Sơ
+Nhân Sự**.
+
+**Data model** (`lib/employeeProfile.js`, collection AppData mới `employeeProfiles`): mỗi hồ sơ khoá
+theo `employeeCode` (KHÔNG khoá theo `username` — lúc tạo quy trình Onboarding nhân viên mới CHƯA có
+tài khoản VPDT, xem `lib/createValidation.js::hrProcesses.extraValidate`), tự động tạo bản DRAFT ngay
+khi 1 quy trình Onboarding được tạo (`routes/create.js`), tự chuyển ACTIVE/INACTIVE khi Onboarding/
+Offboarding hoàn tất (`routes/records.js` hook vào `complete-task`/`skip-task`/luồng Hỗ Trợ IT liên
+kết). HR/admin liên kết hồ sơ với 1 tài khoản VPDT thật qua thao tác `linkAccount()` (thường ngay sau
+khi IT hoàn thành task "Tạo tài khoản VPDT").
+
+**Riêng tư 3 tầng** (`getProfileForViewer()`): chính chủ (đã liên kết tài khoản) và HR/admin xem đủ mọi
+trường kể cả CCCD/tài khoản ngân hàng/số BHXH/mã số thuế/người phụ thuộc/học vấn; quản lý trực tiếp
+(quyền `hrProfileView` mới, đi ngược cây `managerUsername`) chỉ xem bản đã lược bỏ các trường nhạy cảm
+trên; người không liên quan nhận 404 (không phân biệt "không tồn tại" với "không có quyền", tránh dò
+quét mã nhân viên). Route riêng `/api/hr-profile/*` (`routes/employeeProfile.js`, KHÔNG qua
+`GET /api/data` chung) vì cần strip field theo từng vai trò người xem ngay tại server.
+
+**Client**: 2 màn trong sub-module mới "Hồ Sơ Nhân Sự" (con của "Nhân Sự", mở cho MỌI người đã đăng
+nhập — tự xem/sửa hồ sơ chính mình) — "Hồ Sơ Của Tôi" (tự phục vụ) và "Quản Lý Hồ Sơ" (HR/admin: danh
+sách, sửa toàn bộ trường, đổi trạng thái tay ACTIVE/ON_LEAVE, liên kết tài khoản VPDT), cộng 1 khối tra
+cứu nhỏ "Xem Hồ Sơ Nhân Viên" cho quản lý trực tiếp (tra theo username qua route riêng
+`/api/hr-profile/by-username/:username`, vì họ không có quyền gọi danh sách đầy đủ để tự tra mã nhân
+viên). Thêm 2 quyền mới `hrProfileView`/`hrProfileManage` vào cây phân quyền (khối 21).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v14.6 (2026-09-09): Fix Onboarding/Offboarding — modal "Chi Tiết Quy Trình" hoàn toàn không bấm được
 
