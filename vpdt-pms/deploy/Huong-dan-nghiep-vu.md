@@ -6,7 +6,10 @@ thay đổi nghiệp vụ nào (module mới, luồng phê duyệt mới, cấu 
 mới...) đều phải cập nhật vào file này.
 
 > Tài liệu triển khai (cài đặt server, SQL Server, PM2, Nginx...) nằm ở
-> [`Huong-dan-trien-khai.md`](./Huong-dan-trien-khai.md) — không lặp lại ở đây.
+> [`Huong-dan-trien-khai-PM2.md`](./Huong-dan-trien-khai-PM2.md) (chỉ PM2,
+> mạng nội bộ) hoặc
+> [`Huong-dan-trien-khai-PM2-Nginx.md`](./Huong-dan-trien-khai-PM2-Nginx.md)
+> (PM2 + Nginx + HTTPS, khuyến nghị production) — không lặp lại ở đây.
 
 ### Mục lục
 
@@ -29,7 +32,8 @@ hợp đồng/giấy phép, báo cáo công việc, tra cứu chính sách nhân
 quản lý dùng để cấu hình quy trình phê duyệt, phân quyền, báo cáo tổng hợp và
 theo dõi toàn bộ hoạt động qua Nhật ký hệ thống.
 
-**Kiến trúc tóm tắt** (chi tiết triển khai xem `Huong-dan-trien-khai.md`):
+**Kiến trúc tóm tắt** (chi tiết triển khai xem `Huong-dan-trien-khai-PM2.md`/
+`Huong-dan-trien-khai-PM2-Nginx.md`):
 backend Node.js/Express phục vụ luôn cả frontend tĩnh (`public/`, cùng
 domain — không cần cấu hình CORS trong vận hành thông thường), dữ liệu lưu SQL
 Server (SQL Server) — phần lớn dữ liệu cấu hình (người dùng, phân quyền, quy
@@ -875,7 +879,7 @@ key đúng gọi từ đâu cũng được; khai báo rồi thì request từ IP
 bị chặn (403) dù key đúng.
 
 Giới hạn số lần gọi: `EXTERNAL_AUTH_RATE_LIMIT_MAX` trong `.env` (mặc định
-300 lần/15 phút/IP) — xem `Huong-dan-trien-khai.md` để chỉnh khi cần.
+300 lần/15 phút/IP) — xem `Huong-dan-trien-khai-PM2-Nginx.md` để chỉnh khi cần.
 
 > Một tài liệu đặc tả API đầy đủ (định dạng request/response, mã lỗi...) đã
 > được soạn riêng cho đối tác trong 1 phiên làm việc trước (dạng Artifact) —

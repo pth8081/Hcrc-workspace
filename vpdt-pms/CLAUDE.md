@@ -11,21 +11,30 @@ mặc định cho mọi việc nữa. Vẫn giữ nguyên các quy tắc khác (
 fetch/log trước khi báo cáo, chạy full regression, báo deploy-impact rõ ràng,
 bump version + cập nhật VERSION.md mỗi lần merge).
 
-## 2 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
+## 3 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
 
-Có 2 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:
+Có 3 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:
 - **`Huong-dan-nghiep-vu.md`** — mô tả nghiệp vụ + hướng dẫn sử dụng/cấu hình
   các tính năng nghiệp vụ, API, báo cáo của ứng dụng.
-- **`Huong-dan-trien-khai.md`** — hướng dẫn triển khai ứng dụng lên hệ thống
-  production (server thật, SQL Server, PM2/systemd, tài khoản hệ thống...).
+- **`Huong-dan-trien-khai-PM2.md`** — hướng dẫn triển khai bằng PM2 THÔI,
+  không qua Nginx (phục vụ trực tiếp `http://<ip>:3000`, cho mạng nội bộ/VPN).
+- **`Huong-dan-trien-khai-PM2-Nginx.md`** — hướng dẫn triển khai đầy đủ, PM2 +
+  Nginx (reverse proxy + HTTPS + fail2ban), khuyến nghị cho production/public
+  ra Internet. 2 file triển khai dùng chung mục 1-10 (Node.js/SQL Server/PM2/
+  systemd), chỉ khác từ mục Nginx trở đi.
 
 **Quy ước bắt buộc từ nay về sau**: bất kỳ lần nào hoàn thành một thay đổi có
 liên quan tới **nghiệp vụ** (module mới, luồng phê duyệt mới, cấu hình API/
 báo cáo mới...) → cập nhật vào `Huong-dan-nghiep-vu.md`. Bất kỳ lần nào có
 thay đổi liên quan tới **triển khai/hạ tầng** (biến môi trường mới, bước cài
-đặt mới, thay đổi cách chạy production...) → cập nhật vào
-`Huong-dan-trien-khai.md`. Không bỏ qua bước này chỉ vì thay đổi nhỏ — giữ 2
-file này luôn phản ánh đúng trạng thái hiện tại của ứng dụng.
+đặt mới, thay đổi cách chạy production...) → cập nhật vào **CẢ 2 FILE** triển
+khai (`Huong-dan-trien-khai-PM2.md` VÀ `Huong-dan-trien-khai-PM2-Nginx.md`)
+nếu thay đổi đó áp dụng cho cả 2 track (đa số trường hợp — biến `.env` mới,
+gói npm mới, `schema.sql` mới đều áp dụng bất kể có Nginx hay không); chỉ cập
+nhật đúng 1 file nếu thay đổi CHỈ liên quan riêng tới track đó (VD nội dung
+Nginx/fail2ban/HTTPS chỉ có ở bản PM2+Nginx). Không bỏ qua bước này chỉ vì
+thay đổi nhỏ — giữ cả 3 file này luôn phản ánh đúng trạng thái hiện tại của
+ứng dụng.
 
 ## Repo GitHub đã đổi tên (không phải chuyển repo khác)
 
@@ -59,11 +68,13 @@ Không giả định người dùng tự soát các file diff này — luôn li�
 minh trong phần tóm tắt, kể cả khi câu trả lời là "không cần làm gì thêm
 ngoài copy code".
 
-Quy trình cập nhật đầy đủ đã viết sẵn ở mục 16 `deploy/Huong-dan-trien-khai.md`
-(bản DUY NHẤT, đã dời từ `HUONG_DAN_DEPLOY_UBUNTU.md` ở thư mục gốc — file gốc
-giờ chỉ còn là 1 trang trỏ ngắn, KHÔNG xoá hẳn để không phá đường dẫn cũ trong
-comment code) — trỏ người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ nêu
-phần khác biệt cụ thể của lần cập nhật đang báo cáo.
+Quy trình cập nhật đầy đủ đã viết sẵn ở mục tương ứng ("Cập nhật code sau này")
+trong CẢ 2 file `deploy/Huong-dan-trien-khai-PM2.md` và
+`deploy/Huong-dan-trien-khai-PM2-Nginx.md` (đã dời từ
+`HUONG_DAN_DEPLOY_UBUNTU.md` ở thư mục gốc — file gốc giờ chỉ còn là 1 trang
+trỏ ngắn, KHÔNG xoá hẳn để không phá đường dẫn cũ trong comment code) — trỏ
+người dùng tới đó thay vì lặp lại toàn bộ mỗi lần, chỉ nêu phần khác biệt cụ
+thể của lần cập nhật đang báo cáo.
 
 ## Luôn tăng version khi merge vào main
 
