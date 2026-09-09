@@ -9,17 +9,20 @@
 // (module-vanhanh.js) — file này bổ khuyết đúng lớp đó bằng Playwright thật (page.screenshot() + đọc lại
 // DOM/state qua page.evaluate(), KHÔNG chỉ tin assertEqual() trên biến JS).
 //
-//   1) VHST-3 "Danh Mục Đầu Tư 2 cấp": root cause THẬT — populateEstimateNewItemParentSelect() (dropdown
-//      "đây là danh mục con của...") trước đây CHỈ được refresh trong renderOperationEstimateItemsTable()
-//      (tức lúc thêm/xoá dòng hoặc mở lại modal) — KHÔNG refresh khi người dùng gõ "Nội Dung" cho dòng vừa
-//      thêm (updateOperationEstimateItemField(), input sự kiện 'input' từng phím, cố tình KHÔNG render lại
-//      cả bảng để giữ con trỏ). Hệ quả: gõ xong Nội Dung rồi bấm "➕ Thêm Hạng Mục" NGAY (thao tác tự
-//      nhiên nhất) thì dropdown vẫn CHƯA kịp có dòng vừa gõ làm lựa chọn cha — dòng mới luôn bị thêm thành
-//      danh mục LỚN (parentId=null) dù người dùng tưởng đã chọn được cha, đúng y hệt "2 dòng cùng cấp,
-//      Tổng Chi Phí cộng phẳng" trong ảnh chụp người dùng gửi. Fix: gọi populateEstimateNewItemParentSelect()
-//      ngay trong updateOperationEstimateItemField() khi field==='content' (không render lại cả bảng).
-//      Cũng thêm nhãn rõ ràng "Dòng mới thêm — thuộc danh mục lớn nào?" (trước đây <select> trơn không
-//      nhãn, người dùng phản ánh là "mũi tên nhỏ không rõ nghĩa").
+//   1) VHST-3 "Danh Mục Đầu Tư 2 cấp": root cause THẬT (lúc bug này còn tồn tại) — dropdown "Dòng mới
+//      thêm — thuộc danh mục lớn nào?" (nay đã BỎ HẲN, đợt sửa sau, xem #2 bên dưới) chỉ được refresh
+//      trong renderOperationEstimateItemsTable() (thêm/xoá dòng hoặc mở lại modal) — KHÔNG refresh khi
+//      người dùng gõ "Nội Dung" cho dòng vừa thêm. Fix gốc: gọi populateEstimateNewItemParentSelect()
+//      ngay trong updateOperationEstimateItemField() khi field==='content'. Cùng lúc đó,
+//      updateOperationEstimateItemField() cũng refresh CẢ cột "Cha" ở mỗi dòng (mirror timing y hệt) —
+//      cơ chế NÀY vẫn giữ nguyên (dropdown riêng bị bỏ, cột "Cha" per-row thì không), nên kịch bản test
+//      "gõ xong -> lựa chọn cha xuất hiện NGAY" bên dưới nay assert qua cột "Cha" thay vì dropdown cũ.
+//
+//   1b) Đợt sửa lỗi SAU (phản hồi người dùng, đợt bỏ dropdown): dropdown "Dòng mới thêm — thuộc danh mục
+//      lớn nào?" bị xác nhận là dư thừa so với 2 cơ chế còn lại — nút "+ Con" trên mỗi dòng danh mục lớn
+//      (addOperationEstimateChildRow(), tạo con ngay 1 thao tác) và cột "Cha" ở mỗi dòng đã có sẵn
+//      (changeOperationEstimateItemParent(), đổi cha bất kỳ lúc nào, kể cả dòng vừa gõ xong) — đã bỏ hẳn
+//      dropdown + label, chỉ giữ nút "➕ Thêm Hạng Mục" (luôn tạo dòng LÀM danh mục lớn, parentId=null).
 //
 //   2) VHST-4 "Ngày bắt đầu": 2 lỗi thật — (a) resolveOperationWorkItemScheduleFields() (lib/recordActions.js)
 //      trước đây CHỈ validate ĐỊNH DẠNG startDate, chưa từng đối chiếu với deadline -> chọn Ngày Bắt Đầu
@@ -83,21 +86,26 @@ async function main() {
     });
 
     // ===================== 1) VHST-3: Danh Mục Đầu Tư 2 cấp =====================
-    await run.run('VHST-3 (DOM thật): gõ Nội Dung dòng 1 xong -> dropdown cha PHẢI đã có dòng đó NGAY (không cần thêm/xoá dòng nào khác)', async () => {
+    // Đợt sửa lỗi sau (phản hồi người dùng): dropdown "Dòng mới thêm — thuộc danh mục lớn nào?" đã BỎ HẲN
+    // (dư thừa so với nút "+ Con" trên mỗi dòng + cột "Cha" ở mỗi dòng đã có sẵn) — 3 kịch bản dưới viết
+    // lại để dùng ĐÚNG 2 cơ chế còn lại, vẫn dựng ra CÙNG cấu trúc dữ liệu (idx 0=Nội thất, 1=Bàn ghế
+    // (con của Nội thất), 2=Thiết bị) để kịch bản VHST-3-v2 ngay sau (dùng nút "+ Con") không cần sửa gì.
+    await run.run('VHST-3 (DOM thật): gõ Nội Dung dòng 1 xong, thêm 1 dòng mới -> cột "Cha" của dòng mới PHẢI đã có "Nội thất" làm lựa chọn NGAY (không cần thêm/xoá dòng nào khác — xác nhận fix refresh real-time vẫn còn hiệu lực sau khi bỏ dropdown riêng)', async () => {
       await page.evaluate((id) => { openOperationEstimateModal('operationStoreOpenings', id); }, recordId);
       await page.waitForTimeout(100);
       await page.fill('#operationEstimateItemsTableBody tr:nth-child(1) input[data-field="content"]', 'Nội thất');
       await page.waitForTimeout(80);
-      const selOptions = await page.evaluate(() => [...document.getElementById('selEstimateNewItemParent').options].map(o => o.textContent));
-      assert(selOptions.includes('Nội thất'), `Dropdown cha phải có "Nội thất" ngay sau khi gõ xong (thực tế: ${JSON.stringify(selOptions)})`);
+      await page.click('button[data-op="addOperationEstimateItemRow"]');
+      await page.waitForTimeout(80);
+      const selOptions = await page.evaluate(() => [...document.querySelector('select[data-op-change="changeOperationEstimateItemParent"][data-idx="1"]').options].map(o => o.textContent));
+      assert(selOptions.includes('Nội thất'), `Cột "Cha" của dòng mới phải có "Nội thất" ngay sau khi gõ xong (thực tế: ${JSON.stringify(selOptions)})`);
     });
 
-    await run.run('VHST-3 (DOM thật): chọn "Nội thất" làm cha rồi bấm "➕ Thêm Hạng Mục" -> dòng mới PHẢI là con (parentId đúng), hiển thị THỤT LỀ + rollup Chi Phí', async () => {
-      await page.selectOption('#selEstimateNewItemParent', { label: 'Nội thất' });
-      await page.click('button[data-op="addOperationEstimateItemRow"]');
-      await page.waitForTimeout(100);
+    await run.run('VHST-3 (DOM thật, cột "Cha"): chọn "Nội thất" làm cha cho dòng 2 -> dòng đó PHẢI thành con (parentId đúng), hiển thị THỤT LỀ + rollup Chi Phí', async () => {
       await page.fill('#operationEstimateItemsTableBody tr:nth-child(2) input[data-field="content"]', 'Bàn ghế');
       await page.fill('#operationEstimateItemsTableBody tr:nth-child(2) input[data-field="amount"]', '2000000000');
+      await page.waitForTimeout(80);
+      await page.selectOption('select[data-op-change="changeOperationEstimateItemParent"][data-idx="1"]', { label: 'Nội thất' });
       await page.waitForTimeout(100);
       await page.screenshot({ path: path.join(SHOTS_DIR, 'vhst3-parent-child.png') });
       const check = await page.evaluate(() => ({
@@ -111,22 +119,25 @@ async function main() {
       assertEqual(check.totalDisplay, '2.000.000.000', 'Tổng Chi Phí phải = rollup của "Nội thất" (2 tỷ), KHÔNG cộng đúp');
     });
 
-    await run.run('VHST-3 (DOM thật): thêm 1 danh mục lớn KHÁC ("Thiết bị") -> Tổng Chi Phí = rollup(Nội thất) + Thiết bị, không double-count', async () => {
-      await page.selectOption('#selEstimateNewItemParent', { label: '— Không, đây là danh mục lớn —' });
+    await run.run('VHST-3 (DOM thật): bấm "➕ Thêm Hạng Mục" thêm 1 danh mục lớn KHÁC ("Thiết bị") -> dòng mới LUÔN là danh mục lớn (parentId=null, không cần chọn gì), Tổng Chi Phí = rollup(Nội thất) + Thiết bị, không double-count', async () => {
       await page.click('button[data-op="addOperationEstimateItemRow"]');
       await page.waitForTimeout(80);
       await page.fill('#operationEstimateItemsTableBody tr:nth-child(3) input[data-field="content"]', 'Thiết bị');
       await page.fill('#operationEstimateItemsTableBody tr:nth-child(3) input[data-field="amount"]', '500000000');
       await page.waitForTimeout(80);
-      const total = await page.evaluate(() => document.getElementById('operationEstimateItemsTotalDisplay').innerText);
-      assertEqual(total, '2.500.000.000', 'Tổng Chi Phí phải = 2.000.000.000 (rollup Nội thất) + 500.000.000 (Thiết bị)');
+      const check = await page.evaluate(() => ({
+        parentId: operationEstimateItems[2].parentId,
+        total: document.getElementById('operationEstimateItemsTotalDisplay').innerText
+      }));
+      assertEqual(check.parentId, null, 'Dòng "Thiết bị" thêm qua "➕ Thêm Hạng Mục" phải luôn là danh mục lớn (parentId=null)');
+      assertEqual(check.total, '2.500.000.000', 'Tổng Chi Phí phải = 2.000.000.000 (rollup Nội thất) + 500.000.000 (Thiết bị)');
     });
 
     // Phản hồi người dùng (lần 3, ảnh 1): "không chọn được dòng thuộc danh mục nào -> đề xuất tạo danh mục
-    // con giống như Thực hiện đang làm cho dễ dàng" — dropdown "Dòng mới thêm..." (cơ chế VHST-3 cũ, đã xác
-    // nhận hoạt động đúng ở 3 kịch bản trên) vẫn giữ nguyên, nhưng khó dùng/dễ bỏ sót theo phản hồi thực tế
-    // — kịch bản dưới xác nhận lối đi MỚI: bấm thẳng "+ Con" NGAY TRÊN dòng cha muốn thêm con (mirror nút
-    // "➕ Con" của cây Công việc Thực hiện), không cần qua dropdown riêng.
+    // con giống như Thực hiện đang làm cho dễ dàng" — dropdown "Dòng mới thêm..." (cơ chế VHST-3 cũ) khó
+    // dùng/dễ bỏ sót theo phản hồi thực tế, và SAU ĐÓ đã bỏ hẳn (xem #1b ở đầu file) — kịch bản dưới xác
+    // nhận lối đi hiện đang dùng: bấm thẳng "+ Con" NGAY TRÊN dòng cha muốn thêm con (mirror nút "➕ Con"
+    // của cây Công việc Thực hiện), không cần qua dropdown nào cả.
     await run.run('VHST-3-v2 (DOM thật, nút "+ Con"): bấm "+ Con" trên dòng "Thiết bị" (dòng lớn thứ 2, idx=2) -> dòng mới PHẢI là con của "Thiết bị" (không phải "Nội thất")', async () => {
       const addChildBtnExistsOnDepth0 = await page.evaluate(() => !!document.querySelector('button[data-op="addOperationEstimateChildRow"][data-idx="2"]'));
       assert(addChildBtnExistsOnDepth0, 'Dòng "Thiết bị" (depth=0, idx=2) phải có nút "+ Con"');
