@@ -53,6 +53,17 @@
     <span class="boot-splash-label">Đang tải HCRC Workspace…</span>
   </div>
 </div>
+<!-- Banner "có bản cập nhật mới" — ẩn mặc định, JS (checkForAppUpdate(), core.js) hiện khi phát hiện
+     version server (GET /api/health, không cache) khác window.__ASSET_VERSION__ (bản đã gắn lúc trang
+     này được tải). Đặt ở TOP LEVEL (ngoài mọi #...Section) vì phải hiện được bất kể người dùng đang ở
+     màn nào, kể cả trước khi đăng nhập. KHÔNG tự động reload (tránh mất dữ liệu đang nhập dở) — người
+     dùng tự bấm khi tiện, xem chú thích đầy đủ ở checkForAppUpdate(). z-[70] cao hơn mọi modal hiện có
+     (z-[60] là mức cao nhất) để luôn nổi lên trên cùng, kể cả khi đang mở modal. -->
+<div id="appUpdateBanner" class="hidden fixed top-0 inset-x-0 z-[70] bg-amber-500 text-white text-xs sm:text-sm px-3 py-2 flex items-center justify-center gap-3 shadow-md">
+  <span>🔄 Đã có phiên bản mới của hệ thống.</span>
+  <button type="button" id="appUpdateReloadBtn" class="bg-white text-amber-700 font-bold px-3 py-1 rounded hover:bg-amber-50">Tải Lại Ngay</button>
+  <button type="button" id="appUpdateDismissBtn" class="text-white/80 hover:text-white font-bold px-1" title="Để sau">✕</button>
+</div>
 <!-- Số phiên bản đang chạy trên server — lấy từ GET /api/health (xem server.js), không phải giá trị
      tĩnh ghi cứng ở đây, để luôn khớp đúng bản code server đang thực sự chạy. Dùng để xác nhận nhanh
      sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->

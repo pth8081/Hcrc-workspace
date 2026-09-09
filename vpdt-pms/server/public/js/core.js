@@ -3536,6 +3536,44 @@ function hideBootSplash() {
   } catch (e) { /* im lặng — chỉ là thông tin phụ, không ảnh hưởng gì tới việc dùng app */ }
 })();
 
+// Banner "có bản cập nhật mới" — phát hiện lệch version giữa window.__ASSET_VERSION__ (bản đã tải lúc mở
+// trang, gắn bởi renderIndexHtml() ở server.js) và version THẬT server đang chạy (GET /api/health, luôn
+// KHÔNG cache). Lý do cần lớp ĐỘC LẬP này dù đã có cơ chế cache-busting qua "?v=..." gắn vào URL
+// /js/*.js: cơ chế đó chỉ hoạt động đúng NẾU index.html thật sự được tải lại mỗi lần (server đã set
+// Cache-Control: no-store cho index.html) — nhưng 1 lớp trung gian nào đó có thể phá vỡ giả định này mà
+// ứng dụng không hề biết (trình duyệt mobile/app PWA "Cài vào màn hình" ưu tiên mở bản đã cache thay vì
+// luôn ra mạng kiểm tra trước, hoặc 1 proxy/CDN nào đó tự ý đè Cache-Control) — người dùng khi đó kẹt
+// mãi ở bản CŨ (cả HTML lẫn JS) mà không có tín hiệu gì báo cho biết. Banner này bù đắp đúng khoảng
+// trống đó: kiểm tra định kỳ + mỗi khi app quay lại foreground (đúng lúc hay gặp "bản cũ" nhất trên PWA
+// mobile — mở lại app từ icon màn hình sau vài ngày để nền) — KHÔNG tự động reload (tránh mất dữ liệu
+// người dùng đang nhập dở giữa chừng, đã xác nhận với người dùng), chỉ báo và để người dùng tự bấm khi
+// tiện.
+let appUpdateDismissedVersion = null; // version đã bị người dùng bấm "✕" — không báo lại CHO ĐÚNG bản này
+const APP_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+async function checkForAppUpdate() {
+  if (!window.__ASSET_VERSION__) return; // trang chưa gắn version (lỗi lạ) — bỏ qua, không báo nhầm
+  try {
+    const res = await fetch('/api/health');
+    const body = await res.json().catch(() => ({}));
+    if (!body.version || body.version === window.__ASSET_VERSION__) return;
+    if (body.version === appUpdateDismissedVersion) return;
+    document.getElementById('appUpdateBanner')?.classList.remove('hidden');
+  } catch (e) { /* mất mạng tạm thời — bỏ qua, thử lại ở lượt kiểm tra kế tiếp */ }
+}
+(function initAppUpdateWatcher() {
+  document.getElementById('appUpdateReloadBtn')?.addEventListener('click', () => location.reload());
+  document.getElementById('appUpdateDismissBtn')?.addEventListener('click', async () => {
+    document.getElementById('appUpdateBanner')?.classList.add('hidden');
+    try {
+      const res = await fetch('/api/health');
+      const body = await res.json().catch(() => ({}));
+      if (body.version) appUpdateDismissedVersion = body.version;
+    } catch (e) { /* bỏ qua — lần kiểm tra kế tiếp sẽ báo lại nếu vẫn lệch version */ }
+  });
+  setInterval(checkForAppUpdate, APP_UPDATE_CHECK_INTERVAL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForAppUpdate(); });
+})();
+
 // Gửi email THẬT qua backend (POST /api/send-email) nếu đã nhập SMTP Server ở màn Quản trị > Cấu
 // Hình Email — chạy song song (fire-and-forget đối với luồng đang gọi: KHÔNG chặn hay đổi
 // hành vi của thao tác đang thực hiện, vốn đã ghi log "đã thử gửi" + cập nhật UI ngay). Nhưng khác

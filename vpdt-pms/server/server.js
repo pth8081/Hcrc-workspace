@@ -307,7 +307,16 @@ function renderIndexHtml() {
 }
 
 function sendIndexHtml(req, res) {
-  res.set('Cache-Control', 'no-cache');
+  // "no-cache" (trước đây) vẫn CHO PHÉP trình duyệt lưu bản cache, chỉ bắt buộc "hỏi lại server trước
+  // khi dùng" — bước hỏi-lại đó phụ thuộc ETag/If-None-Match, có thể bị bỏ qua bởi 1 lớp trung gian nào
+  // đó (app PWA "Cài vào màn hình" ưu tiên mở thẳng bản cache thay vì luôn ra mạng, hoặc 1 proxy tự ý
+  // xử lý khác). "no-store" mạnh hơn — cấm lưu cache hoàn toàn, không phụ thuộc lớp nào phía dưới có
+  // tuân thủ đúng cơ chế revalidate hay không. Phản hồi người dùng (server thật ở v15.1 vẫn còn dính
+  // cache dù trình duyệt bình thường, chỉ hết khi vào ẩn danh) — file này nhỏ (~vài trăm KB), chi phí
+  // luôn tải mới không đáng kể so với rủi ro kẹt code cũ vĩnh viễn. Xem thêm checkForAppUpdate()
+  // (public/js/core.js) — lớp phát hiện ĐỘC LẬP thứ 2, không phụ thuộc header này có hoạt động đúng hay
+  // không.
+  res.set('Cache-Control', 'no-store');
   res.type('html').send(renderIndexHtml());
 }
 
