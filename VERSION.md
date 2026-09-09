@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**15.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.6 (2026-09-09): Vận Hành Siêu Thị — bỏ dropdown thừa "Dòng mới thêm..." ở Danh Mục Đầu Tư
+
+Người dùng phản hồi (qua ảnh chụp màn hình Danh Mục Đầu Tư của Vận Hành > Siêu Thị): sau các đợt sửa lỗi
+trước (VHST-3 + bản vá #723), bảng Danh Mục Đầu Tư đã có 2 cách gán cha khác — nút "➕ Con" ngay trên mỗi
+dòng danh mục lớn (tạo con ngay 1 thao tác) và cột "Cha" ở MỖI dòng đã có sẵn (đổi cha bất kỳ lúc nào,
+kể cả dòng vừa gõ xong) — nên dropdown "Dòng mới thêm — thuộc danh mục lớn nào?" cạnh nút "➕ Thêm Hạng
+Mục" (cơ chế gốc, thêm từ đợt VHST-3 đầu tiên) nay dư thừa, dễ gây rối vì có tới 3 cách làm cùng 1 việc.
+
+**Đã xác nhận qua thảo luận (AskUserQuestion)**: bỏ hẳn dropdown + label, chỉ giữ 2 cơ chế còn lại. Nhân
+tiện điều tra thêm 2 câu hỏi liên quan của người dùng ("cho sửa được Danh Mục Đầu Tư/Công việc thực hiện
+cả cha và con") — xác nhận cả 2 đã hoạt động sẵn trong code hiện tại (sửa Nội Dung/Mô Tả/Chi Phí/Lưu Ý +
+đổi cha bất kỳ lúc nào cho mọi dòng Danh Mục Đầu Tư còn DRAFT/APPROVED; nút "✏️ Sửa" hiện cho MỌI công
+việc — cả cha lẫn con — trừ khi đã "Đã nghiệm thu", đúng ý người dùng xác nhận khoá này nên giữ nguyên) —
+không cần sửa gì thêm ở 2 phần đó, chỉ còn nghi vấn server thật của người dùng đang chạy bản build cũ hơn
+(đang chờ người dùng xác nhận version + gửi ảnh cụ thể để đối chiếu, nếu có vấn đề thật sẽ xử lý đợt sau).
+
+Sửa `public/index.html` (bỏ `<select id="selEstimateNewItemParent">` + label cạnh nút "➕ Thêm Hạng
+Mục" trong `#operationEstimateItemsEditControls`) — `module-vanhanh.js` giữ nguyên, không cần sửa (hàm
+`populateEstimateNewItemParentSelect()` tự thành no-op khi không tìm thấy phần tử, các lời gọi khác không
+đụng gì thêm; nút "➕ Thêm Hạng Mục" (`addOperationEstimateItemRow`) nay luôn tạo dòng LÀM danh mục lớn
+mới — parentId=null — người dùng dùng "+ Con"/cột "Cha" để tổ chức lại nếu cần).
+
+Cập nhật `tests/test-operation-vhst-uibugfix.js` — 3 kịch bản VHST-3 phụ thuộc dropdown cũ viết lại dùng
+nút "➕ Thêm Hạng Mục" + cột "Cha" (vẫn dựng đúng cấu trúc dữ liệu cũ để kịch bản VHST-3-v2 phía sau —
+dùng nút "+ Con" — không cần sửa gì). Chạy riêng file: 14/14 kịch bản pass. Chạy toàn bộ 95 file
+`tests/test-*.js`: 92/95 pass — 2 lỗi `localhost:1433` (SQL Server không chạy được trong môi trường build,
+baseline đã biết trước, không liên quan) + 1 lỗi flaky race `/tmp` ở `test-audit-fixes-batch2-zipbomb.js`
+(chạy lại riêng: 22/22 pass, xác nhận không phải regression thật).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`. Đây
+là thay đổi UI thuần tuý (bỏ 1 control thừa), không ảnh hưởng dữ liệu đã lưu.
 
 ## v15.5 (2026-09-09): Thanh Toán định kỳ — mỗi đợt tự đi hết quy trình riêng (tách bản ghi)
 
