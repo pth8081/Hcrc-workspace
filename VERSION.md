@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**15.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.2 (2026-09-09): Fix user tạo qua import Excel không Sửa/Khoá/Xoá được (lỗi tiền tồn, không phải do các bản vá gần đây)
+
+Người dùng báo: những tài khoản tạo qua "Nhập Excel" ở màn Người Dùng bấm Sửa/Khoá/Xoá không phản hồi
+gì, trong khi user tạo tay vẫn thao tác bình thường. Xác nhận qua `git blame` đây là lỗi tồn tại từ
+commit `bb242aa8` (2026-09-04), không liên quan các bản vá 409/staging-add/rò rỉ quyền vừa merge
+(`2912a24`).
+
+**Nguyên nhân**: `importUsersExcel()` gán `id: Date.now() + Math.random()` (số thập phân) cho user mới
+tạo qua import, trong khi `buildNewUserFromState()` (tạo tay) dùng `Date.now() + index` (số nguyên).
+Các nút Sửa/Khoá/Xoá render qua `data-arg0="${u.id}"` rồi lấy lại giá trị qua `cspCoerceArg()` — hàm
+này CHỈ ép kiểu `Number` cho chuỗi toàn chữ số nguyên (regex `/^-?\d+$/`), chuỗi có dấu chấm thập phân
+bị giữ nguyên dạng STRING. Kết quả: so sánh `u.id === id` trong `editUser()`/`deleteUser()`/
+`toggleUserActive()` luôn lệch kiểu (Number vs String) → luôn `false` → nút bấm im lặng không làm gì,
+không báo lỗi.
+
+**Fix**: `importUsersExcel()` đổi sang `id: Date.now() + count` (số nguyên, cùng công thức
+`buildNewUserFromState()`). Thêm migration tự động 1 lần trong `initDatabase()`: phát hiện user có
+`id` không phải số nguyên (dữ liệu cũ đã bị lỗi từ trước) → tự sửa lại thành số nguyên chưa dùng, lưu
+lại lặng lẽ (`syncStorage('users', {silent:true})`) khi admin đăng nhập — không cần thao tác tay,
+không ảnh hưởng các tài khoản tạo tay vốn đã đúng.
+
+Verify: 4 kịch bản test mới trong `tests/test-admin-users-permgroups.js` — bấm THẬT vào nút (không gọi
+hàm trực tiếp) sau khi import Excel để tái hiện đúng đường đi qua `data-arg0`/`cspCoerceArg`, xác nhận
+FAIL trên code cũ (qua `git stash` tạm bỏ fix) và PASS trên code đã sửa.
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v15.1 (2026-09-09): Fix 3 lỗi phát hiện qua sử dụng thực tế (màn Người Dùng + xác nhận lại Quy Trình & Phê Duyệt)
 
