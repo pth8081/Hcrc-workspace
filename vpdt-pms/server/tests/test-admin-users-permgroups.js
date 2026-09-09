@@ -824,6 +824,98 @@ async function scenario(name, fn) {
       r.serverName === 'Đã Bị Đổi Tên Ở Nơi Khác' && r.serverPhone === '091', JSON.stringify(r));
   });
 
+  // ==========================================================================
+  // (k)/(l)/(m) BUG THẬT đã sửa: importUsersExcel() gán id kiểu SỐ THẬP PHÂN (`Date.now() +
+  //     Math.random()`) cho mỗi user import — khác hẳn MỌI đường tạo user khác trong hệ thống (số
+  //     NGUYÊN). cspCoerceArg() (core.js) chỉ ép chuỗi SỐ NGUYÊN (`/^-?\d+$/`) sang Number khi đọc
+  //     `data-arg0="${user.id}"` trên các nút Sửa/Khoá/Xoá (module-admin-userstaging.js renderUsers()) —
+  //     chuỗi có dấu chấm thập phân bị BỎ QUA, giữ STRING. So `u.id === id` giữa NUMBER thật và STRING
+  //     đọc từ nút luôn false (strict equality) -> cả 3 nút ÂM THẦM không làm gì cho BẤT KỲ user nào tạo
+  //     qua import Excel, đúng như người dùng phản ánh thực tế ("import Excel thì không thao tác/sửa/
+  //     khoá/xoá được, trong khi user cũ vẫn bình thường"). Đã sửa 2 phần: (1) importUsersExcel() đổi
+  //     sang id SỐ NGUYÊN cùng khuôn `Date.now() + count` như buildNewUserFromState(); (2)
+  //     initDatabase() (core.js) tự động sửa lại id cho user ĐÃ bị lỗi từ TRƯỚC khi bản vá này lên
+  //     (dữ liệu cũ trên server thật), lưu ngầm lại 1 lần khi admin đăng nhập.
+  // ==========================================================================
+  await scenario('(k) importUsersExcel() gán id SỐ NGUYÊN cho mọi user mới (không còn Math.random())', async () => {
+    const r = await page.evaluate(async () => {
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (url === '/api/admin/users/import-xlsx') {
+          return { ok: true, status: 200, json: async () => ({ rows: [
+            { username: 'nv.excel1', pass: 'Passw0rd!23', name: 'Excel Một', email: 'e1@hcrc.local', phone: '0966666661', dept: 'Kế Toán', jobTitle: 'Nhân viên' },
+            { username: 'nv.excel2', pass: 'Passw0rd!23', name: 'Excel Hai', email: 'e2@hcrc.local', phone: '0966666662', dept: 'Kế Toán', jobTitle: 'Nhân viên' },
+          ] }) };
+        }
+        return savedFetch(url, opts);
+      };
+      const usersBefore = DB.users.length;
+      await importUsersExcel({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      window.fetch = savedFetch;
+      const created = DB.users.filter(u => u.username === 'nv.excel1' || u.username === 'nv.excel2');
+      return {
+        countCreated: DB.users.length - usersBefore,
+        allIntegerIds: created.length === 2 && created.every(u => Number.isInteger(u.id)),
+        createdIds: created.map(u => u.id),
+      };
+    });
+    record('(k) tạo đủ 2 user + id của cả 2 đều là SỐ NGUYÊN (không còn số thập phân)',
+      r.countCreated === 2 && r.allIntegerIds, JSON.stringify(r));
+  });
+
+  await scenario('(l) CLICK THẬT vào nút Sửa/Khoá/Xoá cho user vừa import Excel -> hoạt động đúng (round-trip qua data-arg0/cspCoerceArg() thật)', async () => {
+    const r = await page.evaluate(async () => {
+      renderUsers();
+      const target = DB.users.find(u => u.username === 'nv.excel1');
+      const row = [...document.querySelectorAll('#userTableBody tr')].find(tr => tr.textContent.includes('nv.excel1'));
+      if (!row) return { error: 'row not found for nv.excel1' };
+      const btnSua = row.querySelector('[data-op="editUser"]');
+      if (!btnSua) return { error: 'btn Sửa not found' };
+      btnSua.click(); // click THẬT, đi qua cspDispatchOp() thật (không gọi editUser() trực tiếp)
+      const editIdAfterClick = document.getElementById('editUserId').value;
+      const formPopulated = document.getElementById('uUsername').value === 'nv.excel1';
+
+      resetUserForm();
+      const btnKhoa = row.querySelector('[data-op="toggleUserActive"]');
+      btnKhoa.click();
+      const activeAfterToggle = DB.users.find(u => u.id === target.id)?.active;
+
+      return { editIdAfterClick, formPopulated, activeAfterToggle, targetId: target.id };
+    });
+    record('(l) click nút Sửa thật -> form được điền đúng đúng thông tin user import Excel (editUser() không còn im lặng no-op)',
+      r.formPopulated && String(r.editIdAfterClick) === String(r.targetId), JSON.stringify(r));
+    record('(l) click nút Khoá thật -> user.active đổi đúng thành false (toggleUserActive() không còn im lặng no-op)',
+      r.activeAfterToggle === false, JSON.stringify(r));
+  });
+
+  await scenario('(m) initDatabase() tự động sửa lại id lỗi (số thập phân) của user import Excel TỪ TRƯỚC khi bản vá này lên (dữ liệu cũ trên server thật)', async () => {
+    const r = await page.evaluate(async () => {
+      const savedFetch = window.fetch;
+      const brokenId = 1700000000000.123456; // mô phỏng id lỗi (Date.now() + Math.random()) từ TRƯỚC khi vá
+      window.fetch = async (url, opts) => {
+        if (url === '/api/data' && (!opts || (opts.method || 'GET') === 'GET')) {
+          return { ok: true, status: 200, json: async () => ({
+            users: [
+              { id: 1, username: 'admin', name: 'Quản Trị Viên', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+              { id: brokenId, username: 'nv.excel.legacy', name: 'Legacy Excel User', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: {}, groupIds: [], permOverrides: null, active: true },
+            ],
+          }) };
+        }
+        if (url === '/api/data/users' && opts && opts.method === 'POST') {
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: '9999' }) };
+        }
+        return savedFetch(url, opts);
+      };
+      const adminForLogin = { id: 1, username: 'admin', perms: { admin: true } };
+      await initDatabase(adminForLogin);
+      window.fetch = savedFetch;
+      const fixed = DB.users.find(u => u.username === 'nv.excel.legacy');
+      return { fixedIdIsInteger: fixed ? Number.isInteger(fixed.id) : null, found: !!fixed };
+    });
+    record('(m) user có id lỗi (số thập phân) từ dữ liệu cũ được initDatabase() tự động sửa lại thành số nguyên',
+      r.found && r.fixedIdIsInteger === true, JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 

@@ -2874,16 +2874,37 @@ async function initDatabase(loggingInUser) {
     // groupId (1 nhóm duy nhất) -> groupIds (chọn được nhiều nhóm cùng lúc) — user cũ tạo trước tính
     // năng multi-select chỉ có field "groupId" đơn, quy đổi 1 LẦN ở đây thành mảng 1 phần tử để mọi nơi
     // khác trong code chỉ cần đọc "groupIds" là đủ (không phải rải fallback groupId||groupIds khắp nơi).
+    // BUG THẬT đã sửa (di trú 1 lần cho dữ liệu CŨ đã bị hỏng, xem module-admin-userstaging.js
+    // importUsersExcel() — nơi phát sinh lỗi này đã sửa riêng, đoạn này chỉ SỬA LẠI id của user ĐÃ TỪNG
+    // được tạo lỗi trước khi bản vá đó lên): id kiểu SỐ THẬP PHÂN (`Date.now() + Math.random()`, dấu
+    // chấm) không bao giờ khớp lại được qua `data-arg0="${user.id}"` → `cspCoerceArg()` (core.js, chỉ ép
+    // chuỗi SỐ NGUYÊN `/^-?\d+$/` sang Number, chuỗi có dấu chấm giữ nguyên dạng STRING) — khiến
+    // editUser(id)/deleteUser(id)/toggleUserActive(id) so `u.id === id` giữa NUMBER thật và STRING đọc
+    // từ nút luôn false, người dùng đó KHÔNG THỂ sửa/khoá/xoá qua UI (im lặng, không báo lỗi gì). Không
+    // có nơi nào khác trong hệ thống tham chiếu tới id số này làm khoá ngoại (mọi liên kết dữ liệu khác
+    // đều qua "username") nên đổi lại id là AN TOÀN, không mất liên kết gì.
+    const usedIds = new Set((data.users || []).filter(u => Number.isInteger(u.id)).map(u => u.id));
+    let nextFixedId = Date.now();
+    let idsFixed = false;
     DB.users = (data.users || []).map(u => {
       const { perms, changed } = migrateLegacyPerms(u.perms);
       if (changed) permsMigrated = true;
       const needsGroupIdsMigration = !u.groupIds && u.groupId;
       if (needsGroupIdsMigration) permsMigrated = true;
-      if (!changed && !needsGroupIdsMigration) return u;
-      return { ...u, ...(changed && { perms }), groupIds: u.groupIds || (u.groupId ? [u.groupId] : []) };
+      let fixedId;
+      if (!Number.isInteger(u.id)) {
+        while (usedIds.has(nextFixedId)) nextFixedId++;
+        fixedId = nextFixedId++;
+        usedIds.add(fixedId);
+        idsFixed = true;
+      }
+      if (!changed && !needsGroupIdsMigration && fixedId === undefined) return u;
+      return { ...u, ...(changed && { perms }), groupIds: u.groupIds || (u.groupId ? [u.groupId] : []), ...(fixedId !== undefined && { id: fixedId }) };
     });
-    if (permsMigrated && loggingInUser?.perms?.admin) {
-      console.log('ℹ️ Đã tự động chuyển đổi phân quyền người dùng sang mô hình theo phòng ban (module-level).');
+    const needsUsersResave = permsMigrated || idsFixed;
+    if (needsUsersResave && loggingInUser?.perms?.admin) {
+      if (permsMigrated) console.log('ℹ️ Đã tự động chuyển đổi phân quyền người dùng sang mô hình theo phòng ban (module-level).');
+      if (idsFixed) console.log('ℹ️ Đã tự động sửa id lỗi (số thập phân) của người dùng tạo qua import Excel trước đây — Sửa/Khoá/Xoá giờ hoạt động lại bình thường cho các tài khoản này.');
       // silent:true — đây là lưu NGẦM tự động, người dùng không hề bấm gì; nếu 2 tab/thiết bị admin
       // cùng đăng nhập gần như đồng thời thì tab thua cuộc gặp 409 là bình thường (tab kia đã lưu đúng
       // kết quả di trú rồi, không mất dữ liệu gì) — không được phép hiện alert chặn màn hình cho việc

@@ -514,10 +514,23 @@ async function importUsersExcel(evt) {
   // mảng, hoặc 409 xung đột version).
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   let count = 0;
+  // BUG THẬT đã sửa: id trước đây dùng `Date.now() + Math.random()` — ra 1 SỐ THẬP PHÂN (vd
+  // 1735000000000.4837), khác hẳn kiểu id nguyên dùng ở MỌI đường tạo user khác trong file này
+  // (`Date.now() + pendingNewUsers.length` ở buildNewUserFromState(), số NGUYÊN). Hậu quả: nút Sửa/Khoá/
+  // Xoá trên mỗi dòng gọi editUser(id)/deleteUser(id)/toggleUserActive(id) với `id` đọc từ
+  // `data-arg0="${user.id}"` qua cspCoerceArg() (core.js) — hàm này CHỈ ép chuỗi có dạng SỐ NGUYÊN
+  // (`/^-?\d+$/`) sang kiểu Number, chuỗi có dấu chấm thập phân (id của user import Excel) bị BỎ QUA,
+  // giữ nguyên dạng STRING. So sánh `u.id === id` trong editUser()/deleteUser()/toggleUserActive() giữa
+  // NUMBER (u.id thật) và STRING (id truyền vào) luôn cho kết quả false (strict equality, không ép kiểu)
+  // — cả 3 nút ÂM THẦM không làm gì (không lỗi, không thông báo) cho BẤT KỲ user nào tạo qua import Excel,
+  // trong khi user tạo qua form/staging (id nguyên) vẫn hoạt động bình thường — đúng triệu chứng người
+  // dùng phản ánh. Đổi sang cùng khuôn số NGUYÊN như mọi nơi khác (`Date.now() + count`, count là thứ tự
+  // dòng đã thêm thành công trong đợt import này, bắt đầu từ 0 — cùng cách buildNewUserFromState() dùng
+  // `pendingNewUsers.length`).
   rows.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
     if (!DB.users.some(u => u.username === username)) {
       DB.users.push({
-        id: Date.now() + Math.random(),
+        id: Date.now() + count,
         username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
         perms: defaultNewUserPerms()
       });
