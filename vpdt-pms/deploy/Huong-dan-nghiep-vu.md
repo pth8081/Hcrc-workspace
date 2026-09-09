@@ -223,10 +223,11 @@ nhóm lại theo nghiệp vụ để dễ tra cứu, không phản ánh đúng t
       điểm từng câu — lúc đó điểm mới cộng dồn và Đạt/Không Đạt mới chốt
       (so với Điểm Đạt của lớp). Bài test không có câu Nghị Luận nào thì
       không đổi gì — vẫn có kết quả ngay như trước.
-- **Nhân Sự** — module con **Cơ Cấu Tổ Chức** (sơ đồ tổ chức theo quản lý trực
-  tiếp + Cấu Hình KPI Theo Vị Trí: cấp nào đánh giá cấp nào, không cấu hình
-  tiêu chí), tab **Quản Lý & Phản Hồi Ý Kiến** (phía Nhân Sự của "HCRC Đồng
-  Hành" ở trên), và module con **Onboarding / Offboarding**:
+- **Nhân Sự** — module con **Cơ Cấu Tổ Chức** (làm lại hoàn toàn từ v14.4 —
+  xem mục riêng ngay dưới đây, thay hẳn bản cũ "sơ đồ suy từ quản lý trực
+  tiếp + cấu hình KPI theo dept×chức danh"), tab **Quản Lý & Phản Hồi Ý Kiến**
+  (phía Nhân Sự của "HCRC Đồng Hành" ở trên), và module con **Onboarding /
+  Offboarding**:
   - **Từ v14.3 — làm lại hoàn toàn theo mô hình quy trình có checklist theo
     giai đoạn** (thay hẳn bản v12.3-v12.7 "1 yêu cầu = 1 ticket Hỗ Trợ IT cấp/
     khoá tài khoản" cũ). Tạo quy trình:
@@ -971,3 +972,63 @@ quản lý nhiều người cùng vai trò.
 4. Muốn người này **duyệt được** hồ sơ ở 1 bước cụ thể qua chế độ Theo phòng
    ban/Theo vị trí → nhớ tick quyền **"Người duyệt"** (khối 1) — bước dễ quên
    nhất, xem cảnh báo ở mục 2.2.
+
+## 8. Cơ Cấu Tổ Chức (Versioned) & Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí
+
+**Nhân Sự → Cơ Cấu Tổ Chức** — làm lại hoàn toàn từ v14.4, thay thế bản cũ
+(sơ đồ suy ra thẳng từ `managerUsername` mỗi người + 1 bảng cấu hình KPI phẳng
+theo phòng ban×chức danh). Bản mới là 1 **cây tổ chức CÓ PHIÊN BẢN** (mỗi lần
+sửa cơ cấu là 1 bản nháp riêng, không ảnh hưởng ngay tới hệ thống đang chạy)
+và **luồng đánh giá KPI cấu hình theo đúng vị trí trong cây** (không còn map
+rời theo phòng ban×chức danh).
+
+- **Vòng đời 1 phiên bản cây**: **Nháp (DRAFT)** — sửa thoải mái, chưa ảnh
+  hưởng gì tới hệ thống → **Đang áp dụng (APPLIED)** — luôn đúng 1 bản duy
+  nhất tại một thời điểm, bấm "Áp dụng" sẽ tự chuyển bản đang áp dụng trước đó
+  (nếu có) sang → **Lưu trữ (ARCHIVED)** — chỉ xem, so sánh, không sửa được
+  nữa. Muốn sửa tiếp cây đang chạy → bấm "Tạo bản nháp mới" (nhân bản từ bản
+  đang áp dụng), sửa xong thì "Kiểm tra hợp lệ" rồi "Áp dụng".
+- **Cây gồm 3 loại node**: **Công ty** (gốc, duy nhất), **Phòng Ban** (tên tự
+  gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
+  làm căn cứ so khớp — không bắt buộc, node nhóm thuần tuý như "Khối Kinh
+  Doanh" không cần gắn), **Vị Trí** (chức danh — tên hiển thị tự ghép "<Chức
+  danh> <Tên phòng ban chứa nó>", trừ vị trí đánh dấu "không thuộc phòng ban
+  nào" như Tổng Giám Đốc thì chỉ hiện đúng chức danh).
+- **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
+  Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
+  hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức
+  danh của 1 nhân viên ở màn Người Dùng là đủ để họ "chuyển vị trí" trong cây
+  — không cần thao tác gì thêm ở Cơ Cấu Tổ Chức.
+- **Quản Lý Trực Tiếp tự động cập nhật khi Áp Dụng 1 phiên bản** — ngay khi
+  bấm "Áp dụng", hệ thống tự tính lại `managerUsername` cho từng nhân viên
+  (= ai đang giữ vị trí CHA của vị trí họ đang giữ), CHỈ khi tra ra được ĐÚNG
+  1 người; trường hợp vị trí cha chưa ai giữ hoặc có nhiều hơn 1 người cùng
+  giữ thì **giữ nguyên** Quản Lý Trực Tiếp cũ và liệt kê rõ trong màn "Kết Quả
+  Áp Dụng" để admin xử lý thủ công (KHÔNG suy đoán bừa). Trường "Quản Lý Trực
+  Tiếp" ở form Người Dùng vẫn còn — vẫn dùng để duyệt "Theo Quản Lý Trực
+  Tiếp" ở các module khác — nhưng từ nay chỉ nên sửa tay khi thật cần, vì lần
+  Áp Dụng cây tiếp theo có thể ghi đè lại theo cây.
+- **Xoá 1 node bị chặn nếu còn người đang giữ** (kể cả node con trong nhánh bị
+  xoá cùng lúc) — phải chuyển nhân viên đó sang vị trí/phòng ban khác trước.
+- **"Kiểm tra hợp lệ"** trước khi áp dụng, phát hiện: node cha không tồn tại;
+  vị trí bị xoá khỏi bản nháp nhưng bản đang áp dụng vẫn còn người giữ; nhiều
+  hơn 1 node "Trưởng phòng" cùng phòng ban đều có người giữ (dấu hiệu cây bị
+  cấu trúc sai).
+- **Cấu Hình Luồng Đánh Giá KPI** (sub-tab riêng, quyền `orgChartManage` HOẶC
+  quyền mới **`kpiFlowConfigManage`** — tách riêng để giao được cho người chỉ
+  tinh chỉnh luồng KPI mà không có quyền sửa cây tổ chức): mỗi khi Áp Dụng 1
+  phiên bản, hệ thống **tự sinh quan hệ "vị trí cha đánh giá vị trí con"** cho
+  mọi cặp Vị Trí-Vị Trí kề nhau trong cây (chỉ điền chỗ trống, không đụng vào
+  quan hệ đã có/đã sửa tay). Có thể **thêm quan hệ thủ công** ngoài cây báo
+  cáo hành chính (VD 1 vị trí được đánh giá bởi 1 vị trí ở nhánh khác, hoặc bỏ
+  qua 1 cấp) và **xoá bất kỳ quan hệ nào** (kể cả quan hệ tự sinh). Tra cứu
+  nhanh "ai đang đánh giá KPI cho 1 nhân viên" qua ô tìm kiếm ngay trong màn
+  này.
+- **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): (1) chưa dựng bảng
+  lịch sử "ai giữ vị trí nào từ ngày nào" — occupancy luôn tính theo trạng
+  thái HIỆN TẠI của Phòng Ban/Chức Danh trên hồ sơ, không tra được quá khứ;
+  (2) danh sách Phòng Ban toàn hệ thống (`DB.depts`) chưa gắn động theo cây —
+  các dropdown "Phòng Ban" ở module khác không tự đổi theo cơ cấu tổ chức;
+  (3) chưa có cảnh báo tự động khi Offboarding 1 người đang là người đánh giá
+  KPI của vị trí khác — admin tự kiểm tra qua màn Cấu Hình Luồng Đánh Giá KPI
+  trước khi hoàn tất Offboarding người giữ vị trí quản lý.

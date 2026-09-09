@@ -186,6 +186,7 @@ function resetUserForm() {
   document.getElementById('pLicenseView').checked = !!defaults.licenseView;
   document.getElementById('pNhanSuManage').checked = !!defaults.nhanSuManage;
   document.getElementById('pOrgChartManage').checked = !!defaults.orgChartManage;
+  document.getElementById('pKpiFlowConfigManage').checked = !!defaults.kpiFlowConfigManage;
   document.getElementById('pOperationOrderCreate').checked = !!defaults.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!defaults.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!defaults.operationRepairCreate;

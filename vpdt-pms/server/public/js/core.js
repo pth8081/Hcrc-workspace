@@ -23,7 +23,7 @@
 // (chi con admin.js), "admin-permtree", "admin-permgroups" (con lai 3 file), "internalcomms-daotao"
 // — cac module vanHanh/Dong Phuc/HCRC Dong Hanh/Nhat Ky He Thong/Bao Cao Quan Tri hoan toan HET phai
 // nap ca cum admin-permgroups (315KB/82KB gzip) VA cum Dao Tao (205KB) kem theo nua.
-const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]}};
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]}};
 
 // MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
 // duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
@@ -33,7 +33,7 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
 // bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["hcrcdonghanh"],"hrLifecycle":["hrlifecycle"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
@@ -5795,11 +5795,11 @@ function _dispatchTabRender(tabName) {
   if (tabName === 'budget') { setBudgetSubTab(activeBudgetSubTab); }
   if (tabName === 'vanHanh') { setVanHanhSubTab(activeVanHanhSubTab); }
   if (tabName === 'hr') { renderHrFeedbackManage(); }
-  // setOrgChartSubTab() (module-hcrcdonghanh.js, "🎯 Cấu Hình KPI Theo Vị Trí") tự gọi lại renderOrgChart()
-  // khi subTab==='TREE' — dùng hàm này thay vì gọi thẳng renderOrgChart() để giữ đúng sub-tab đang mở
-  // (cùng khuôn setBudgetSubTab(activeBudgetSubTab)/setVanHanhSubTab(activeVanHanhSubTab) ở trên) thay vì
-  // luôn bật lại về "Sơ Đồ Tổ Chức" mỗi lần rời rồi quay lại module con này.
-  if (tabName === 'orgChart') { setOrgChartSubTab(activeOrgChartSubTab); }
+  // renderOrgChartModule() (module-orgchart.js) tự tải lại danh sách version từ server rồi hiện đúng
+  // sub-tab đang mở (activeOrgChartSubTab) — cùng tinh thần setBudgetSubTab(activeBudgetSubTab)/
+  // setVanHanhSubTab(activeVanHanhSubTab) ở trên nhưng cần gọi API trước (dữ liệu cây không nằm sẵn
+  // trong DB.* như các module khác — xem lib/orgChart.js).
+  if (tabName === 'orgChart') { renderOrgChartModule(); }
   if (tabName === 'hrLifecycle') {
     document.getElementById('btnHrpViewTemplates').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrTaskTemplateManage));
     document.getElementById('btnHrpCreateOnboarding').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
@@ -5882,16 +5882,16 @@ function canAccessHrModule(user) {
   if (!hasModuleAccess(user, 'hr')) return false;
   return !!user.perms?.nhanSuManage;
 }
-// Cơ Cấu Tổ Chức — module con của "Nhân Sự" (parent:'hr' ở BUSINESS_MODULES) — hasModuleAccess() tự
+// Cơ Cấu Tổ Chức v2 — module con của "Nhân Sự" (parent:'hr' ở BUSINESS_MODULES) — hasModuleAccess() tự
 // khoá module con này nếu module cha "hr" bị tắt ở "0. Quyền Truy Cập Module", bất kể checkbox riêng
 // của "orgChart" đang bật hay tắt (xem chú thích hasModuleAccess()). Quyền vào: orgChartManage HOẶC
-// nhanSuManage — giữ nguyên 2 quyền cũ từng gác chung 1 tab con trước đợt tách (ai đang thấy được vẫn
-// thấy được y hệt, không siết/nới quyền của ai).
+// nhanSuManage HOẶC kpiFlowConfigManage (quyền MỚI, tách riêng cho Tab "Cấu Hình Đánh Giá KPI" theo
+// khuyến nghị tài liệu — 1 người có thể chỉ được giao tinh chỉnh luồng KPI, không cần sửa cây tổ chức).
 function canAccessOrgChartModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'orgChart')) return false;
-  return !!(user.perms?.orgChartManage || user.perms?.nhanSuManage);
+  return !!(user.perms?.orgChartManage || user.perms?.nhanSuManage || user.perms?.kpiFlowConfigManage);
 }
 // Onboarding / Offboarding v2 — module con của "Nhân Sự" (parent:'hr' ở BUSINESS_MODULES), cùng khuôn
 // canAccessOrgChartModule() ở trên. Quyền vào: bất kỳ quyền nào có thể liên quan tới module (tạo/quản lý
@@ -6969,14 +6969,14 @@ bindCspDelegation('budgetProcessModal');
 
 // Nhân Sự — #hrFeedbackManageContainer (renderHrFeedbackManage()) render TRONG #hrSection, 1 gốc là đủ.
 bindCspDelegation('hrSection');
-// Cơ Cấu Tổ Chức — module con riêng của Nhân Sự (#orgChartSection, TÁCH khỏi #hrSection — trước đây là
-// sub-tab "hrSubOrgChart" CÙNG 1 module 'hr', xem BUSINESS_MODULES parent:'hr') — modal "Đổi Quản Lý
-// Trực Tiếp" (#orgChartManagerModal) sống NGOÀI section (giống các modal khác) nên cần thêm 1 gốc
-// riêng. modal "🎯 KPI" (#orgChartKpiModal, "Cấu Hình KPI Theo Vị Trí") CŨNG sống ngoài section cùng lý
-// do — 3 gốc tổng cộng.
+// Cơ Cấu Tổ Chức v2 — module con riêng của Nhân Sự (#orgChartSection, parent:'hr' ở BUSINESS_MODULES).
+// 3 modal SỐNG NGOÀI section (giống các modal khác trong app) nên mỗi cái cần 1 gốc riêng: thêm/sửa
+// node (#orgChartNodeModal), kết quả sau khi Áp Dụng phiên bản (#orgChartApplyResultModal), so sánh 2
+// version (#orgChartDiffModal) — 4 gốc tổng cộng.
 bindCspDelegation('orgChartSection');
-bindCspDelegation('orgChartManagerModal');
-bindCspDelegation('orgChartKpiModal');
+bindCspDelegation('orgChartNodeModal');
+bindCspDelegation('orgChartApplyResultModal');
+bindCspDelegation('orgChartDiffModal');
 // Onboarding / Offboarding — module con riêng của Nhân Sự (#hrLifecycleSection, TÁCH khỏi #hrSection,
 // cùng lý do #orgChartSection ở trên) — BỊ THIẾU gốc riêng từ lúc dựng module này (commit 2278c17),
 // khiến MỌI data-op/data-op-change/data-op-input/data-op-submit bên trong (2 sub-tab Onboarding/

@@ -5310,12 +5310,15 @@
             <span id="permTreeBadge_hr" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến, "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức, 4 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding/Offboarding" để tạo/quản lý đúng loại quy trình, "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Xem Toàn Bộ" để xem mọi quy trình dù không quản lý — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến; "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức v2 (sửa cây/áp dụng phiên bản); "Cấu Hình Luồng Đánh Giá KPI" tách riêng cho việc tinh chỉnh luồng đánh giá (Tab "Cấu Hình Đánh Giá KPI") — có thể giao cho vai trò khác không cần đụng tới cây tổ chức; 4 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding/Offboarding" để tạo/quản lý đúng loại quy trình, "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Xem Toàn Bộ" để xem mọi quy trình dù không quản lý — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pNhanSuManage"> 🤝 Quản lý Nhân Sự (quản lý &amp; phản hồi ý kiến)
             </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pOrgChartManage"> 🌳 Quản Lý Cơ Cấu Tổ Chức
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKpiFlowConfigManage"> 🎯 Cấu Hình Luồng Đánh Giá KPI
             </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrOnboardingManage"> 🆕 Quản Lý Onboarding
@@ -7140,72 +7143,84 @@
     <div id="hrFeedbackManageContainer" class="space-y-3"></div>
   </div>
 
-  <!-- Màn hình MODULE CƠ CẤU TỔ CHỨC — module con của Nhân Sự (parent:'hr' ở BUSINESS_MODULES), TÁCH
-       RIÊNG khỏi #hrSection (trước đây là tab con "hrSubOrgChart" CÙNG 1 module 'hr' — xem git log "thêm
-       tab con Cơ Cấu Tổ Chức") để dropdown "Nhân Sự" có chỗ nối thêm module con thật sự khác sau này —
-       xem canAccessOrgChartModule()/renderOrgChart(). Xem được với nhanSuManage HOẶC orgChartManage; CHỈ
-       orgChartManage/admin mới đổi được quản lý trực tiếp (nút "Đổi quản lý" tự ẩn nếu không đủ quyền). -->
+  <!-- Màn hình MODULE CƠ CẤU TỔ CHỨC v2 — module con của Nhân Sự (parent:'hr' ở BUSINESS_MODULES).
+       Viết lại HOÀN TOÀN theo tài liệu "Cơ Cấu Tổ Chức (Versioned) & Cấu Hình Luồng Đánh Giá KPI Theo Vị
+       Trí" — thay bản v1 (cây suy ra trực tiếp từ user.managerUsername, sửa qua picker/Excel-import,
+       không có lịch sử) bằng cây CÓ VERSIONING thật (mỗi lần sửa tạo 1 bản nháp mới, áp dụng xong bản cũ
+       lưu trữ làm lịch sử) + Tab riêng cấu hình luồng đánh giá KPI theo TỪNG CẶP vị trí (không còn map
+       phẳng dept×jobTitle). Toàn bộ logic ở lib/orgChart.js + routes/orgChart.js (server) và
+       module-orgchart.js (client, module JS riêng — TÁCH khỏi module-hcrcdonghanh.js). Xem
+       canAccessOrgChartModule() (core.js): mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage/admin;
+       SỬA CÂY chỉ orgChartManage/admin, SỬA LUỒNG KPI thêm cả kpiFlowConfigManage. -->
   <div id="orgChartSection" class="hidden space-y-4">
-    <!-- Sub-tab strip: "Sơ Đồ Tổ Chức" (cây quản lý trực tiếp, sẵn có) / "Cấu Hình Cấp Đánh Giá KPI
-         Theo Vị Trí" MỚI — xem setOrgChartSubTab() (module-hcrcdonghanh.js). Cả 2 view mở cho mọi người
-         xem được module con này (canAccessOrgChartModule()); riêng thao tác SỬA (đổi quản lý / lưu-xoá
-         cấu hình cấp đánh giá) vẫn tự ẩn nút theo đúng quyền như trước, không đổi độ mở XEM của module. -->
-    <div class="flex flex-wrap items-center gap-2">
-      <button type="button" id="btnOrgChartSubTree" data-op="setOrgChartSubTab" data-arg0="TREE" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🌳 Sơ Đồ Tổ Chức</button>
-      <button type="button" id="btnOrgChartSubKpi" data-op="setOrgChartSubTab" data-arg0="KPI" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🎯 Cấu Hình Cấp Đánh Giá KPI</button>
+    <!-- Khởi tạo LẦN ĐẦU — chỉ hiện khi CHƯA có version nào (DB.orgChartVersions rỗng). -->
+    <div id="orgChartBootstrapWrap" class="hidden bg-amber-50 p-4 rounded border border-amber-200 space-y-2">
+      <h3 class="font-bold text-amber-900 text-base">🌱 Khởi Tạo Cơ Cấu Tổ Chức</h3>
+      <p class="text-xs text-amber-800">Chưa có phiên bản cơ cấu tổ chức nào — tạo bản nháp đầu tiên (chỉ có 1 node gốc "Công Ty"), sau đó dựng cây (Khối/Phòng/Vị Trí) rồi "Áp dụng" để chính thức đưa vào sử dụng.</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="orgChartBootstrapNameInput" placeholder="Tên phiên bản, VD: Cơ cấu tổ chức Q3/2026" class="border p-1.5 rounded text-xs flex-1 min-w-[220px]">
+        <button type="button" id="btnOrgChartBootstrap" data-op="bootstrapOrgChartClick" class="bg-amber-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-800">Khởi Tạo</button>
+      </div>
     </div>
 
-    <div id="orgChartTreeView" class="space-y-4">
-      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-2">
-        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🌳 Cơ Cấu Tổ Chức</h3>
-        <p class="text-xs text-teal-800">Cây quản lý trực tiếp của <b>toàn bộ nhân viên công ty</b> (mọi phòng ban) — dùng làm căn cứ để trưởng phòng xem được việc của nhân viên mình quản lý (Vận Hành, Công Việc). Có thể có nhiều gốc cây (nhân viên không có quản lý trực tiếp). Bấm "🎯 KPI" trên từng người để xem AI hiện đang đánh giá KPI cho người đó (tự động tra cứu theo Phòng Ban/Chức Danh).</p>
-        <div class="flex flex-wrap items-center gap-2 pt-1">
-          <button type="button" data-op="downloadOrgChartTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 transition">📄 Tải Mẫu (.xlsx) — chuẩn bị dữ liệu để nhập</button>
-          <button type="button" data-op="exportOrgChartExcel" class="bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-800 transition">📊 Xuất Excel — lưu hồ sơ cơ cấu hiện tại</button>
-          <label id="btnOrgChartImportExcel" class="hidden bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800 transition cursor-pointer">
-            📥 Nhập Từ Excel<input type="file" accept=".xlsx" data-op-change="importOrgChartExcel" data-arg-event="0" class="hidden">
-          </label>
+    <!-- Thanh chọn/quản lý version. -->
+    <div id="orgChartVersionBarWrap" class="hidden bg-teal-50 p-3 rounded border border-teal-200 space-y-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs font-semibold text-gray-600">Phiên bản:</label>
+        <select id="orgChartVersionSelect" data-op-change="onOrgChartVersionSelectChange" class="border p-1.5 rounded text-xs bg-white min-w-[260px]"></select>
+        <span id="orgChartVersionStatusBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full"></span>
+        <span class="flex-1"></span>
+        <button type="button" id="btnOrgChartCreateDraft" data-op="cloneOrgChartVersionClick" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">+ Tạo Bản Nháp Mới</button>
+        <button type="button" id="btnOrgChartRenameVersion" data-op="renameOrgChartVersionClick" class="hidden bg-gray-200 text-gray-700 px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-300">✏️ Đổi Tên</button>
+        <button type="button" id="btnOrgChartValidateVersion" data-op="validateOrgChartVersionClick" class="hidden bg-blue-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-blue-700">🔍 Kiểm Tra Hợp Lệ</button>
+        <button type="button" id="btnOrgChartApplyVersion" data-op="applyOrgChartVersionClick" class="hidden bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">✅ Áp Dụng Phiên Bản Này</button>
+        <button type="button" id="btnOrgChartCompareVersion" data-op="compareOrgChartVersionClick" class="hidden bg-indigo-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">🔀 So Sánh Với Bản Đang Áp Dụng</button>
+      </div>
+      <p id="orgChartVersionMeta" class="text-[11px] text-gray-500"></p>
+    </div>
+
+    <!-- Sub-tab: "Sơ Đồ Tổ Chức" (cây) / "Cấu Hình Đánh Giá KPI" (luồng theo cặp vị trí, chỉ thao tác
+         trên version đang APPLIED). -->
+    <div id="orgChartSubTabsWrap" class="hidden flex flex-wrap items-center gap-2">
+      <button type="button" id="btnOrgChartSubTree" data-op="setOrgChartSubTab" data-arg0="TREE" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🌳 Sơ Đồ Tổ Chức</button>
+      <button type="button" id="btnOrgChartSubKpi" data-op="setOrgChartSubTab" data-arg0="KPI" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🎯 Cấu Hình Đánh Giá KPI</button>
+    </div>
+
+    <div id="orgChartTreeView" class="hidden space-y-2">
+      <p class="text-[11px] text-gray-500 italic">Mỗi node "Vị Trí" là tổ hợp Chức Danh + Phòng Ban chứa nó (VD "Trưởng phòng CNTT" khác "Trưởng phòng Kế Toán" dù cùng chức danh). "Ai đang giữ vị trí này" tự tra theo đúng Phòng Ban + Chức Danh hiện tại của từng tài khoản — không cần gán tay. Chỉ sửa được cây khi đang xem 1 bản NHÁP.</p>
+      <div id="orgChartTreeContainer" class="bg-white border rounded p-3 space-y-1 text-sm"></div>
+    </div>
+
+    <div id="orgChartKpiView" class="hidden space-y-4">
+      <div class="bg-teal-50 p-3 rounded border border-teal-200 space-y-1">
+        <p class="text-xs text-teal-800">Mặc định mỗi vị trí quản lý (Trưởng phòng/Giám đốc/TGĐ...) TỰ ĐỘNG đánh giá KPI các vị trí cấp dưới trực tiếp trong cây (nhãn "Tự động"). Có thể thêm quan hệ đánh giá THỦ CÔNG (chéo phòng ban, bỏ qua 1 cấp, hoặc đánh giá ma trận — 1 vị trí có nhiều người đánh giá), hoặc gỡ bớt quan hệ tự động không phù hợp. Chỉ áp dụng cho phiên bản cây ĐANG ÁP DỤNG.</p>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-700">➕ Thêm Quan Hệ Đánh Giá Thủ Công</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí Đánh Giá (cấp trên)</label>
+            <select id="orgChartKpiEvaluatorSelect" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí Được Đánh Giá</label>
+            <select id="orgChartKpiEvaluateeSelect" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" id="btnAddOrgChartKpiFlow" data-op="addOrgChartKpiFlowClick" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm Quan Hệ</button>
         </div>
       </div>
-      <div id="orgChartContainer" class="bg-white border rounded p-4 space-y-1 text-sm"></div>
-    </div>
-
-    <!-- "🎯 Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí" — cấu hình 1 LẦN "vị trí X (phòng ban Y hoặc mọi
-         phòng ban) do CHỨC DANH NÀO đánh giá KPI" (DB.kpiEvaluatorConfig) — KHÔNG chọn tay người quản
-         lý/đánh giá trên từng tài khoản nhân viên (đúng phản hồi người dùng: làm vậy không khả thi vì
-         công ty đông người). Người đánh giá THẬT được tra cứu ĐỘNG theo chức danh + phòng ban tại thời
-         điểm xem, không lưu username cụ thể nào — xem renderKpiConfigTab()/resolveKpiEvaluatorForUser()
-         (module-hcrcdonghanh.js). KHÔNG liên quan tiêu chí/chấm điểm/duyệt KPI (phạm vi đợt này chỉ
-         dừng ở cấu hình "ai đánh giá ai theo vị trí" + tự động tra cứu). -->
-    <div id="orgChartKpiView" class="hidden space-y-4">
-      <div id="orgChartKpiFormAnchor" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
-        <h3 id="kpiConfigFormTitle" class="font-bold text-teal-900 text-base flex items-center gap-2">➕ Thêm Cấu Hình Mới</h3>
-        <p class="text-xs text-teal-800">Chọn Phòng Ban (hoặc "🌐 Áp dụng mọi phòng ban") + Vị Trí/Chức Danh CẦN ĐƯỢC đánh giá, rồi chọn Chức Danh của NGƯỜI ĐÁNH GIÁ (cùng phòng ban với nhân viên). Khi cấp/sửa tài khoản mang đúng Phòng Ban + Chức Danh này, hệ thống tự tra ra người hiện đang giữ chức danh đánh giá đó — không cần chọn tay người quản lý cho từng nhân viên.</p>
-        <fieldset id="kpiConfigFormFieldset" class="space-y-3">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
-              <select id="kpiConfigDeptSelect" class="w-full border p-1.5 rounded text-xs bg-white"></select>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí / Chức Danh (cần được đánh giá)</label>
-              <select id="kpiConfigJobTitleSelect" class="w-full border p-1.5 rounded text-xs bg-white"></select>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh Người Đánh Giá</label>
-              <select id="kpiConfigEvaluatorJobTitleSelect" class="w-full border p-1.5 rounded text-xs bg-white"></select>
-            </div>
-          </div>
-          <div class="flex justify-end gap-2 pt-1">
-            <button type="button" data-op="resetKpiConfigForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Làm mới form</button>
-            <button type="button" id="btnSaveKpiConfig" data-op="saveKpiEvaluatorConfig" class="px-3 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">💾 Lưu Cấu Hình</button>
-          </div>
-        </fieldset>
-      </div>
-
       <div class="space-y-2">
-        <h4 class="font-bold text-sm text-gray-700">📋 Đã Cấu Hình</h4>
-        <div id="kpiConfigListContainer" class="space-y-1.5"></div>
+        <h4 class="font-bold text-sm text-gray-700">📋 Luồng Đánh Giá Hiện Tại</h4>
+        <div id="orgChartKpiFlowContainer" class="space-y-1.5"></div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-700">🔍 Tra Cứu Người Đánh Giá Theo Nhân Viên</h4>
+        <div class="relative">
+          <input id="orgChartKpiLookupInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="onOrgChartKpiLookupInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tra cứu..." class="w-full border p-1.5 rounded text-xs">
+        </div>
+        <div id="orgChartKpiLookupResult" class="text-xs"></div>
       </div>
     </div>
   </div>
@@ -7382,43 +7397,84 @@
     </div>
   </div>
 
-  <!-- Modal "Đổi quản lý trực tiếp" — Cơ Cấu Tổ Chức, xem openOrgChartManagerPicker(). -->
-  <div id="orgChartManagerModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+  <!-- Modal Thêm/Sửa node cây tổ chức — dùng chung cho cả 2 loại (Phòng Ban/Vị Trí), field hiện/ẩn theo
+       nodeType đang chọn (chỉ chọn được khi THÊM mới — sửa giữ nguyên loại node). Xem
+       openOrgChartAddNodeModal()/openOrgChartEditNodeModal() (module-orgchart.js). -->
+  <div id="orgChartNodeModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
       <div class="p-4 border-b flex justify-between items-center">
-        <h3 class="font-bold text-base text-gray-800">✏️ Đổi Quản Lý Trực Tiếp</h3>
-        <button data-op="closeOrgChartManagerPicker" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <h3 id="orgChartNodeModalTitle" class="font-bold text-base text-gray-800">➕ Thêm Node</h3>
+        <button data-op="closeOrgChartNodeModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-3">
-        <p id="orgChartManagerModalSub" class="text-xs text-gray-500"></p>
-        <div class="relative">
-          <input id="orgChartManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" placeholder="Gõ tên/tài khoản để tìm..." class="w-full border p-2 rounded text-sm">
+        <p id="orgChartNodeModalParentInfo" class="text-xs text-gray-500"></p>
+        <div id="orgChartNodeTypeWrap">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Node</label>
+          <select id="orgChartNodeTypeSelect" data-op-change="onOrgChartNodeTypeChange" class="w-full border p-1.5 rounded text-sm bg-white">
+            <option value="DEPARTMENT">🏢 Phòng Ban / Khối</option>
+            <option value="POSITION">💺 Vị Trí</option>
+          </select>
         </div>
-        <button type="button" data-op="clearOrgChartManager" class="text-xs text-red-600 hover:underline">Bỏ quản lý trực tiếp (đưa lên gốc cây)</button>
+        <div id="orgChartNodeDeptFields" class="space-y-2">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Hiển Thị <span class="text-red-500">*</span></label>
+            <input id="orgChartNodeNameInput" placeholder="VD: Khối Kinh Doanh / Phòng CNTT" class="w-full border p-1.5 rounded text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Liên kết Phòng Ban thật (tuỳ chọn)</label>
+            <select id="orgChartNodeDeptRefSelect" class="w-full border p-1.5 rounded text-sm bg-white"></select>
+            <p class="text-[11px] text-gray-400 mt-1">Chỉ cần chọn nếu đây là phòng ban thật (dùng để tự tra "ai đang giữ vị trí" bên dưới) — bỏ trống nếu chỉ là node nhóm (VD "Khối Kinh Doanh").</p>
+          </div>
+        </div>
+        <div id="orgChartNodePositionFields" class="hidden space-y-2">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh <span class="text-red-500">*</span></label>
+            <input id="orgChartNodeJobTitleInput" data-sdd-list="orgChartJobTitleDatalist" autocomplete="off" placeholder="VD: Trưởng phòng, Nhân viên, Tổng Giám Đốc" class="w-full border p-1.5 rounded text-sm">
+            <div id="orgChartJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="orgChartNodeRequiresDeptCheckbox" checked>
+            <span class="text-xs text-gray-800">Thuộc 1 phòng ban cụ thể (bỏ tick cho vị trí toàn công ty như Tổng Giám Đốc)</span>
+          </label>
+        </div>
       </div>
       <div class="p-4 border-t flex justify-end gap-2">
-        <button data-op="closeOrgChartManagerPicker" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Hủy</button>
-        <button data-op="submitOrgChartManager" class="px-3 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu</button>
+        <button data-op="closeOrgChartNodeModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Hủy</button>
+        <button id="btnSaveOrgChartNode" data-op="saveOrgChartNodeClick" class="px-3 py-1.5 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Lưu</button>
       </div>
     </div>
   </div>
 
-  <!-- Modal "🎯 KPI" (chỉ đọc) trên từng node cây tổ chức — xem openOrgChartKpiModal()
-       (module-hcrcdonghanh.js). Hiện AI hiện đang đánh giá KPI cho người này, tự động tra cứu theo
-       dept+jobTitle hiện tại (resolveKpiEvaluatorForUser()), KHÔNG có đường sửa nào ở đây (sửa qua đúng
-       form "Cấu Hình Cấp Đánh Giá KPI"). -->
-  <div id="orgChartKpiModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+  <!-- Modal kết quả sau khi "Áp dụng phiên bản" — hiện danh sách nhân viên KHÔNG tự xác định được quản
+       lý trực tiếp mới (0 hoặc >1 người khớp vị trí cấp trên), cần admin kiểm tra tay. Xem
+       applyOrgChartVersionClick() (module-orgchart.js). -->
+  <div id="orgChartApplyResultModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
       <div class="p-4 border-b flex justify-between items-center">
-        <h3 id="orgChartKpiModalTitle" class="font-bold text-base text-gray-800">🎯 Cấp Đánh Giá KPI</h3>
-        <button data-op="closeOrgChartKpiModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <h3 class="font-bold text-base text-gray-800">✅ Đã Áp Dụng Phiên Bản</h3>
+        <button data-op="closeOrgChartApplyResultModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
       </div>
       <div class="p-4 space-y-2">
-        <p id="orgChartKpiModalSub" class="text-xs text-gray-500"></p>
-        <div id="orgChartKpiModalBody"></div>
+        <p id="orgChartApplyResultSummary" class="text-sm text-gray-700"></p>
+        <div id="orgChartApplyResultUnresolved" class="space-y-1"></div>
       </div>
       <div class="p-4 border-t flex justify-end">
-        <button data-op="closeOrgChartKpiModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Đóng</button>
+        <button data-op="closeOrgChartApplyResultModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal "So sánh với bản đang áp dụng" — chỉ đọc, xem diffVersions() (lib/orgChart.js) qua
+       compareOrgChartVersionClick() (module-orgchart.js). -->
+  <div id="orgChartDiffModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h3 class="font-bold text-base text-gray-800">🔀 So Sánh Với Bản Đang Áp Dụng</h3>
+        <button data-op="closeOrgChartDiffModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div id="orgChartDiffModalBody" class="p-4 space-y-3 text-sm"></div>
+      <div class="p-4 border-t flex justify-end">
+        <button data-op="closeOrgChartDiffModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Đóng</button>
       </div>
     </div>
   </div>

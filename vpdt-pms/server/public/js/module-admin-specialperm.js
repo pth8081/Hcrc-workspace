@@ -228,8 +228,8 @@ async function saveWorkflowParticipatingPositions() {
 // Mirror ĐÚNG điều kiện lib/positionApprovers.js (server): active !== false, canBeApprover||admin, khớp
 // ĐÚNG 1 trong các cặp (jobTitle,dept) đã chọn cho bước này — CHỈ để xem trước (UX), server luôn tự
 // resolve lại độc lập lúc duyệt/lúc tạo hồ sơ (snapshot), không tin kết quả này.
-// 3 TRẠNG THÁI — PHẢI phân biệt rõ, cùng tinh thần resolveKpiEvaluatorForUser() (module-hcrcdonghanh.js,
-// "Cấu Hình Cấp Đánh Giá KPI Theo Vị Trí"):
+// 3 TRẠNG THÁI — PHẢI phân biệt rõ, cùng tinh thần resolveKpiEvaluatorsForUser() (lib/orgChart.js,
+// "Cấu Hình Đánh Giá KPI Theo Vị Trí"):
 //   - 'NOT_CONFIGURED'      : bước CHƯA chọn vị trí nào.
 //   - 'CONFIGURED_EMPTY'    : đã chọn >=1 vị trí, nhưng hiện KHÔNG ai (active + canBeApprover) khớp đúng.
 //   - 'CONFIGURED_RESOLVED' : tra ra được người thật (users[] không rỗng).

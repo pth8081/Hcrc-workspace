@@ -171,6 +171,7 @@ function collectPermsFromForm() {
     licenseView: document.getElementById('pLicenseView').checked,
     nhanSuManage: document.getElementById('pNhanSuManage').checked,
     orgChartManage: document.getElementById('pOrgChartManage').checked,
+    kpiFlowConfigManage: document.getElementById('pKpiFlowConfigManage').checked,
     hrOnboardingManage: document.getElementById('pHrOnboardingManage').checked,
     hrOffboardingManage: document.getElementById('pHrOffboardingManage').checked,
     hrTaskTemplateManage: document.getElementById('pHrTaskTemplateManage').checked,
@@ -236,6 +237,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pLicenseView').checked = !!perms.licenseView;
   document.getElementById('pNhanSuManage').checked = !!perms.nhanSuManage;
   document.getElementById('pOrgChartManage').checked = !!perms.orgChartManage;
+  document.getElementById('pKpiFlowConfigManage').checked = !!perms.kpiFlowConfigManage;
   document.getElementById('pHrOnboardingManage').checked = !!perms.hrOnboardingManage;
   document.getElementById('pHrOffboardingManage').checked = !!perms.hrOffboardingManage;
   document.getElementById('pHrTaskTemplateManage').checked = !!perms.hrTaskTemplateManage;

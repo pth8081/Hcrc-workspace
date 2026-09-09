@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**14.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**14.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v14.4 (2026-09-09): Nhân Sự > Cơ Cấu Tổ Chức — làm lại hoàn toàn thành cây CÓ VERSIONING +
+## Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí (theo 2 tài liệu thiết kế người dùng cung cấp)
+
+Người dùng gửi 2 tài liệu thiết kế ("Công & Phép v2 — hộ siêu thị" và "Cơ Cấu Tổ Chức (Versioned) & Cấu
+Hình Luồng Đánh Giá KPI Theo Vị Trí") và yêu cầu bỏ hẳn tab Cơ Cấu Tổ Chức cũ, viết lại theo tài liệu
+mới. Sau khi trao đổi phạm vi qua 2 câu hỏi xác nhận: **chỉ làm phần Cơ Cấu Tổ Chức + KPI Flow đợt này**
+(phần Công & Phép v2 — Office Hours/Shift-based, ShiftTemplates/ShiftRoster — **HOÃN lại**, chưa động
+tới); và **"ai giữ 1 vị trí" suy ra ĐỘNG từ dept+jobTitle hiện tại của nhân viên** thay vì dựng mới 1
+bảng `PositionAssignments` có lịch sử gán người theo ngày (mô hình tài liệu gốc giả định đã có sẵn
+nhưng thực tế CHƯA TỪNG tồn tại trong code — dựng mới sẽ là 1 thay đổi kiến trúc quá lớn so với yêu cầu).
+
+**Gỡ HẲN bản v1** (`DB.kpiEvaluatorConfig` — map phẳng dept×jobTitle → chức danh người đánh giá, không
+lịch sử; cây tổ chức cũ chỉ là hiển thị suy từ `user.managerUsername`, sửa qua picker chọn tay + Excel
+import/export thủ công — `lib/orgChartImport.js` và 2 route liên quan đã xoá hoàn toàn) — thay bằng
+collection MỚI `DB.orgChartVersions` (mảng version cây, mỗi version tự chứa `nodes[]`/`kpiFlow[]`).
+
+**Vòng đời version**: Nháp (DRAFT, sửa thoải mái) → Đang áp dụng (APPLIED, đúng 1 bản/lúc, tự chuyển bản
+cũ sang lưu trữ) → Lưu trữ (ARCHIVED, chỉ xem/so sánh). Cây gồm 3 loại node (Công Ty/Phòng Ban/Vị Trí) —
+Vị Trí mang GUID `positionKey` ổn định qua các lần nhân bản version, để `kpiFlow` tham chiếu xuyên version
+không bị đứt. "Ai giữ 1 vị trí" tra ĐỘNG (không lưu riêng) bằng cách so khớp `user.dept`+`user.jobTitle`.
+
+**`user.managerUsername` trở thành materialized view** — mỗi lần bấm "Áp dụng" 1 version, hệ thống tự
+tính lại Quản Lý Trực Tiếp cho từng nhân viên (= ai giữ vị trí CHA trong cây, CHỈ khi tra ra đúng 1
+người; nếu 0 hoặc >1 người thì GIỮ NGUYÊN, liệt kê rõ trong "Kết Quả Áp Dụng" để admin xử lý tay — không
+suy đoán bừa). Nhờ vậy `isManagerOf()`/mọi module khác đang đọc thẳng `managerUsername` (Task/Vận Hành
+"trưởng phòng xem việc nhân viên", các lớp duyệt "Quản Lý Trực Tiếp") tiếp tục hoạt động không cần sửa.
+
+**Cấu Hình Luồng Đánh Giá KPI** (thay hẳn map phẳng dept×jobTitle cũ) — quyền mới **`kpiFlowConfigManage`**
+tách riêng khỏi `orgChartManage` (giao được cho người chỉ tinh chỉnh KPI, không có quyền sửa cây). Mỗi
+lần Áp Dụng, tự sinh quan hệ "vị trí cha đánh giá vị trí con" cho mọi cặp kề nhau (chỉ điền chỗ trống,
+không đụng dòng đã có/đã sửa tay); có thể thêm quan hệ thủ công (chéo phòng ban) và xoá bất kỳ dòng nào.
+
+**Files chính**: `lib/orgChart.js` (mới, engine thuần — version CRUD/validate/apply/kpiFlow),
+`routes/orgChart.js` (mới, `/api/org-chart/*`), `public/js/module-orgchart.js` (mới, thay ~537 dòng cũ
+đã gỡ khỏi `module-hcrcdonghanh.js`), `public/index.html` (viết lại toàn bộ `#orgChartSection`).
+
+**Bug thật bắt được lúc viết test hồi quy** (`tests/test-orgchart-v2.js`, thay hẳn 3 file test/demo v1 đã
+xoá): route `POST /api/org-chart/versions/:id/apply` khai báo `let appliedVersion;` BÊN TRONG khối `try`
+đầu tiên rồi dùng lại ở khối `try` thứ 2 và câu `res.json()` cuối hàm — ngoài phạm vi block-scope của
+`let`, gây `ReferenceError` crash 100% mọi lượt Áp Dụng. Đã sửa (khai báo ở scope hàm, trước khối `try`
+đầu) và xác nhận qua test — đây là lỗi tự phát hiện qua chạy test thật, không phải bỏ sót đã biết trước.
+
+**CHỦ Ý không làm ở đợt này** (đã ghi rõ trong code/tài liệu, không phải bỏ sót): (1) Công & Phép v2 —
+hoãn theo xác nhận của người dùng; (2) chưa dựng bảng lịch sử "ai giữ vị trí nào từ ngày nào" (occupancy
+luôn tính theo trạng thái HIỆN TẠI, không tra được quá khứ); (3) `DB.depts` chưa gắn động theo cây (các
+dropdown "Phòng Ban" module khác không đổi theo); (4) chưa có cảnh báo tự động khi Offboarding 1 người
+đang là người đánh giá KPI của vị trí khác.
+
+**Deploy-impact**: KHÔNG đổi `sql/schema.sql` (collection mới `orgChartVersions` chỉ là 1 key JSON-blob
+trong `dbo.AppData`, seed rỗng `[]` qua `defaults.js` như mọi collection admin-config khác), KHÔNG đổi
+`.env.example`, KHÔNG thêm `dependencies` mới trong `server/package.json`. Chỉ cần copy code +
+`pm2 restart` — không cần thao tác thủ công nào khác.
 
 ## v14.3 (2026-09-08): Nhân Sự > Onboarding/Offboarding — làm lại hoàn toàn theo mô hình quy trình có
 ## checklist theo giai đoạn (theo tài liệu thiết kế người dùng cung cấp)
