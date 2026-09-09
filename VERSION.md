@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**14.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.0 (2026-09-09): Nhân Sự — vá 2 lỗ hổng còn lại của Cơ Cấu Tổ Chức/Onboarding-Offboarding (Đợt 4/4)
+
+Đợt cuối trong kế hoạch 4 đợt triển khai module Nhân Sự (Hồ Sơ → Hợp Đồng Lao Động → Công & Phép → **vá
+lại các phần A/B còn thiếu**). Sau khi rà soát lại toàn bộ Phần A (Cơ Cấu Tổ Chức + KPI) và Phần B
+(Onboarding/Offboarding) trong tài liệu thiết kế gốc so với code thực tế, xác nhận ~90% đã có sẵn từ các
+đợt trước — chỉ còn đúng 2 lỗ hổng thật, cả 2 đều được vá trong đợt này.
+
+**1. Chặn Offboarding tự động "Hoàn Tất" khi thiếu người kế nhiệm** (đúng ý mục A.6 tài liệu thiết kế:
+"hệ thống phát hiện... cảnh báo HR chỉ định người tạm quyền trước khi hoàn tất Offboarding"):
+- `computeHrProcessProgress()` (`lib/recordActions.js`) — sau khi mọi việc bắt buộc đã xong/bỏ qua,
+  kiểm tra SỐNG (không dựa vào ô "đang giữ vị trí quản lý" HR tự tick lúc tạo, chỉ mang tính tham khảo):
+  nếu nhân viên đang Offboarding hiện vẫn là `managerUsername` của bất kỳ ai đang active, quy trình
+  **giữ nguyên "Đang thực hiện"** kèm cờ `item.pendingSuccessor = true` — không tự chuyển "Hoàn tất".
+- Action mới `assignHrSuccessor()` + route `POST /hrProcesses/:id/assign-successor` — HR chỉ định 1 tài
+  khoản đang active làm người kế nhiệm (không được là chính người sắp nghỉ việc); hệ thống **lập tức
+  chuyển `managerUsername`** của toàn bộ người đang báo cáo trực tiếp cho người sắp nghỉ việc sang người
+  kế nhiệm (`syncManagerUsernameOnSuccessorAssigned()`, cùng khuôn 2-bước-khoá-riêng như
+  `lib/orgChart.js`), ghi lịch sử `SUCCESSOR_ASSIGNED`, và tự chuyển "Hoàn tất" ngay nếu đó là điều kiện
+  cuối cùng còn thiếu. UI: khối cảnh báo + nút "Chỉ định người kế nhiệm" trong Chi Tiết Quy Trình
+  (`public/js/module-hrlifecycle.js`).
+
+**2. Đồng bộ lại `managerUsername` KHÔNG cần tạo bản nháp cây tổ chức mới** — trước đây `managerUsername`
+chỉ được tính lại khi Áp Dụng 1 phiên bản Cơ Cấu Tổ Chức; nếu HR chỉ đổi Phòng Ban/Chức Danh của 1 nhân
+viên ở màn "Sửa Người Dùng" (thăng chức/điều chuyển nhẹ, không đáng để tạo hẳn 1 phiên bản cây mới),
+`managerUsername` của người đó sẽ SAI cho tới lần Áp Dụng kế tiếp. Thêm route mới
+`POST /api/org-chart/recompute-manager-usernames` (`routes/orgChart.js`, tái dùng thẳng
+`computeManagerUsernameUpdates()`/`applyManagerUsernameUpdates()` sẵn có từ luồng Áp Dụng, KHÔNG cần
+validate/apply cả phiên bản) + nút mới **"🔄 Đồng Bộ Quản Lý Trực Tiếp"** ở thanh công cụ Cơ Cấu Tổ Chức
+(chỉ hiện khi có quyền `orgChartManage` và bản đang APPLIED).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v14.9 (2026-09-09): Nhân Sự — thêm module Công & Phép (Đợt 3/4)
 

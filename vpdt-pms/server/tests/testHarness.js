@@ -238,11 +238,18 @@ function buildActionHandlers(state) {
     // routes/records.js POST /hrProcesses/:id/complete-task|skip-task|reassign-task|cancel|attachments.
     // "create-it-ticket" KHÔNG nằm ở đây (xem nhánh riêng bên dưới trong dispatch chính) vì response cần
     // kèm thêm "ticket" vừa tạo, khác mọi action khác chỉ trả về đúng 1 "item".
-    'hrProcesses:complete-task': (u, item, body) => recordActions.completeHrTask(u, item, body),
-    'hrProcesses:skip-task': (u, item, body) => recordActions.skipHrTask(u, item, body),
+    // (Đợt 4 — vá gap #1 Phần B) complete-task/skip-task giờ nhận thêm state.users để cổng người-kế-
+    // nhiệm trong computeHrProcessProgress() hoạt động đúng trong test, cùng khuôn routes/records.js
+    // thật (getFreshUser() luôn kèm sẵn users). "assign-successor" mirror ĐÚNG route mới cùng tên —
+    // KHÔNG mô phỏng syncManagerUsernameOnSuccessorAssigned() ở đây (ghi vào state.users riêng, side
+    // effect ngoài "item" — test nào cần kiểm tra managerUsername transfer tự gọi thẳng
+    // recordActions.assignHrSuccessor() rồi áp dụng transfer thủ công, xem test-hr-lifecycle.js).
+    'hrProcesses:complete-task': (u, item, body) => recordActions.completeHrTask(u, item, body, state.users),
+    'hrProcesses:skip-task': (u, item, body) => recordActions.skipHrTask(u, item, body, state.users),
     'hrProcesses:reassign-task': (u, item, body) => recordActions.reassignHrTask(u, item, body, state.users),
     'hrProcesses:cancel': (u, item, body) => recordActions.cancelHrProcess(u, item, body),
-    'hrProcesses:attachments': (u, item, body) => recordActions.addHrProcessAttachment(u, item, body)
+    'hrProcesses:attachments': (u, item, body) => recordActions.addHrProcessAttachment(u, item, body),
+    'hrProcesses:assign-successor': (u, item, body) => recordActions.assignHrSuccessor(u, item, body, state.users)
   };
 }
 

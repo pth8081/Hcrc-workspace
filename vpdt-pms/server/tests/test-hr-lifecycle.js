@@ -38,6 +38,12 @@ const MANAGER1 = { username: 'mgr1', name: 'Trưởng Phòng Kế Toán', dept: 
 // Nhân viên ĐANG active — nguồn tra cứu cho Offboarding (employeeUsername).
 const EMP = { username: 'nv.ketoan', name: 'Nguyễn Văn Kế Toán', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', email: 'ketoan@company.com', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true, totpEnabled: true };
+// Đợt 4 (vá gap #1 Phần B, mục A.6 tài liệu thiết kế) — SUP_MGR đang là managerUsername của SUP_REPORT
+// (còn active) -> Offboarding của SUP_MGR phải bị chặn tự động Hoàn Tất cho tới khi chỉ định người kế
+// nhiệm. SUP_SUCCESSOR dùng làm người kế nhiệm hợp lệ.
+const SUP_MGR = { username: 'nv.suptruong', name: 'Nguyễn Văn Trưởng Nhóm', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên', email: 'suptruong@company.com', perms: {}, active: true };
+const SUP_REPORT = { username: 'nv.baocao', name: 'Trần Thị Báo Cáo', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', perms: {}, active: true, managerUsername: 'nv.suptruong' };
+const SUP_SUCCESSOR = { username: 'nv.kenhiem', name: 'Lê Văn Kế Nhiệm', dept: 'Phòng Kế Toán', jobTitle: 'Chuyên viên', perms: {}, active: true };
 
 // Danh mục checklist chuẩn tối giản — 1 việc/giai đoạn/loại, đủ để kiểm tra auto-generate + due-date +
 // department gating + auto-progress qua từng giai đoạn mà không cần chép lại nguyên 28 dòng defaults.js.
@@ -63,7 +69,7 @@ const state = createMockState({
   stores: ['Siêu Thị A'],
   jobTitles: ['Nhân viên', 'Chuyên viên'],
   storeJobTitles: [{ label: 'Nhân viên bán hàng' }],
-  users: [HR1, HR_NOPERM, HR_VIEWER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN],
+  users: [HR1, HR_NOPERM, HR_VIEWER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
   hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES]
 });
 
@@ -358,6 +364,101 @@ async function main() {
       assert(!seenByMgr, 'MANAGER1 không phải directManager/creator của hồ sơ Offboarding này -> không được thấy');
       const seenByMgrOwn = (resMgr.body.hrProcesses || []).some(q => q.id === onboardId);
       assert(seenByMgrOwn, 'MANAGER1 LÀ directManagerUsername của hồ sơ Onboarding onboardId -> phải được thấy');
+    });
+
+    // ===================== Đợt 4 (vá gap #1 Phần B, mục A.6 tài liệu thiết kế) — chặn Offboarding tự
+    // Hoàn Tất khi thiếu người kế nhiệm, cho quản lý còn người báo cáo trực tiếp =====================
+
+    let supOffboardId = null;
+    // callCreateAction/callRecordAction KHÔNG tự cập nhật cache window.DB phía client (chỉ trả thẳng
+    // {ok,item} từ server — DB chỉ được nạp lại mỗi khi loginAs()/proceedAfterAuth() chạy) -> lưu sẵn
+    // taskId từ ngay kết quả tạo mới, KHÔNG dò lại qua DB.hrProcesses.find() giữa các bước (sẽ undefined).
+    const supTaskId = {};
+
+    await run.run('Offboarding SUP_MGR (đang là managerUsername của SUP_REPORT) -> tạo thành công, chưa có người kế nhiệm', async () => {
+      const item = await page.evaluate(async () => (await callCreateAction('hrProcesses', {
+        processType: 'OFFBOARDING', employeeUsername: 'nv.suptruong', lastWorkingDate: '2026-10-15', reason: 'Chuyển công tác',
+        isManagerialPosition: true, directManagerUsername: 'mgr1'
+      })).item);
+      supOffboardId = item.id;
+      item.tasks.forEach(t => { supTaskId[t.taskName] = t.taskId; });
+      assertEqual(item.successorUsername, null, 'successorUsername phải rỗng lúc mới tạo (chọn ở bước Bàn Giao, không phải lúc tạo)');
+      assert(!item.pendingSuccessor, 'pendingSuccessor chưa được tính lúc mới tạo (computeHrProcessProgress() chỉ chạy sau mỗi lần đổi trạng thái task, không chạy lúc tạo) -> phải falsy, không phải true');
+    });
+
+    await run.run('Hoàn thành/bỏ qua HẾT task bắt buộc của Offboarding SUP_MGR -> KHÔNG tự chuyển COMPLETED vì còn thiếu người kế nhiệm (pendingSuccessor=true)', async () => {
+      // Task nhãn MANAGER chỉ canActOnHrTask được qua item.directManagerUsername === user.username ->
+      // dùng MANAGER1 (mgr1), đúng người đã chọn làm Quản lý trực tiếp lúc tạo quy trình ở trên. Dùng
+      // complete-task (chỉ cần canActOnHrTask) chứ không dùng skip-task (còn đòi canManageHrProcess,
+      // MANAGER1 không phải creator/hrOffboardingManage nên sẽ bị chặn ở lớp đó).
+      await loginAs(page, MANAGER1);
+      let item = await page.evaluate(async (args) => (await callRecordAction('hrProcesses', args.id, 'complete-task', {
+        taskId: args.taskId
+      })).item, { id: supOffboardId, taskId: supTaskId['Bàn giao công việc'] });
+      await loginAs(page, HR1);
+      item = await page.evaluate(async (args) => (await callRecordAction('hrProcesses', args.id, 'complete-task', {
+        taskId: args.taskId
+      })).item, { id: supOffboardId, taskId: supTaskId['Thông báo cho phòng ban'] });
+      await loginAs(page, IT1);
+      item = await page.evaluate(async (args) => (await callRecordAction('hrProcesses', args.id, 'complete-task', {
+        taskId: args.taskId
+      })).item, { id: supOffboardId, taskId: supTaskId['Thu hồi thiết bị + khoá tài khoản'] });
+      await loginAs(page, FIN1);
+      item = await page.evaluate(async (args) => (await callRecordAction('hrProcesses', args.id, 'complete-task', {
+        taskId: args.taskId
+      })).item, { id: supOffboardId, taskId: supTaskId['Quyết toán lương/BHXH'] });
+      await loginAs(page, HR1);
+      // "Phỏng vấn nghỉ việc" không isRequired -> KHÔNG cần xử lý để allRequiredDone=true.
+      assertEqual(item.status, 'IN_PROGRESS', 'KHÔNG được tự chuyển COMPLETED — SUP_MGR vẫn đang là managerUsername sống của SUP_REPORT, chưa có người kế nhiệm');
+      assertEqual(item.pendingSuccessor, true, 'pendingSuccessor phải true — đây chính là lý do duy nhất còn chặn Hoàn Tất');
+    });
+
+    await run.run('Chỉ định người kế nhiệm: người KHÔNG quản lý quy trình (không phải creator/hrOffboardingManage/admin/hrViewAll) -> 403', async () => {
+      // canManageHrProcess() coi hrViewAll ngang admin (bypass toàn bộ, xem chú thích ngay tại hàm đó) —
+      // HR_VIEWER KHÔNG dùng được để test 403 ở đây (sẽ thao tác được thật) -> dùng HR_NOPERM (perms
+      // rỗng, không phải creator của supOffboardId) để đúng nghĩa "không quản lý quy trình".
+      await loginAs(page, HR_NOPERM);
+      const err = await page.evaluate(async (id) => {
+        try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.kenhiem' }); return null; }
+        catch (e) { return e.message; }
+      }, supOffboardId);
+      assertIncludes(err, 'không có quyền chỉ định người kế nhiệm', 'Người không quản lý quy trình này (không phải creator/hrOffboardingManage/admin/hrViewAll) phải bị chặn');
+      await loginAs(page, HR1);
+    });
+
+    await run.run('Chỉ định người kế nhiệm: bỏ trống -> 400; chọn chính nhân viên đang nghỉ việc -> 400; tài khoản không tồn tại/đã khoá -> 400', async () => {
+      const errEmpty = await page.evaluate(async (id) => {
+        try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: '' }); return null; }
+        catch (e) { return e.message; }
+      }, supOffboardId);
+      assertIncludes(errEmpty, 'Vui lòng chọn người kế nhiệm', 'Phải bắt buộc chọn người kế nhiệm');
+      const errSelf = await page.evaluate(async (id) => {
+        try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.suptruong' }); return null; }
+        catch (e) { return e.message; }
+      }, supOffboardId);
+      assertIncludes(errSelf, 'không thể là chính nhân viên đang nghỉ việc', 'Không được chọn chính người đang Offboarding làm người kế nhiệm của mình');
+      const errBad = await page.evaluate(async (id) => {
+        try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'khong-ton-tai' }); return null; }
+        catch (e) { return e.message; }
+      }, supOffboardId);
+      assertIncludes(errBad, 'Không tìm thấy tài khoản người kế nhiệm này', 'Phải báo lỗi tài khoản người kế nhiệm không hợp lệ');
+    });
+
+    await run.run('Chỉ định người kế nhiệm hợp lệ (SUP_SUCCESSOR) -> ghi successorUsername/successorName + lịch sử, quy trình TỰ chuyển COMPLETED ngay (gate vừa được gỡ)', async () => {
+      const result = await page.evaluate(async (id) => await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.kenhiem' }), supOffboardId);
+      assertEqual(result.item.successorUsername, 'nv.kenhiem', 'successorUsername phải được ghi lại đúng');
+      assertEqual(result.item.successorName, SUP_SUCCESSOR.name, 'successorName phải khớp tên hiển thị');
+      assertEqual(result.item.pendingSuccessor, false, 'pendingSuccessor phải tắt ngay sau khi có người kế nhiệm');
+      assertEqual(result.item.status, 'COMPLETED', 'Toàn bộ task bắt buộc đã xong từ trước — chỉ còn thiếu bước này — phải TỰ chuyển COMPLETED ngay trong action assign-successor');
+      assert(result.item.history.some(h => h.action === 'SUCCESSOR_ASSIGNED' && h.detail.includes(SUP_SUCCESSOR.name)), 'Lịch sử phải ghi lại đúng sự kiện chỉ định người kế nhiệm kèm tên hiển thị');
+    });
+
+    await run.run('Chỉ định lại người kế nhiệm sau khi quy trình đã COMPLETED -> 409 (không còn ở trạng thái đang thực hiện)', async () => {
+      const err = await page.evaluate(async (id) => {
+        try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.kenhiem' }); return null; }
+        catch (e) { return e.message; }
+      }, supOffboardId);
+      assertIncludes(err, 'không còn ở trạng thái đang thực hiện', 'Không được chỉ định lại sau khi quy trình đã Hoàn Tất');
     });
 
     // ===================== CHECKLIST MẪU (hrTaskTemplateManage) =====================

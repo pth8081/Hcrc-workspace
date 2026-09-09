@@ -117,6 +117,9 @@ async function loadOrgChartCurrentVersion(id) {
   document.getElementById('btnOrgChartValidateVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartApplyVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartCompareVersion').classList.toggle('hidden', !(isArchived && _ocAppliedVersion));
+  // Đợt 4 (vá gap #2 Phần A/B) — chỉ hiện khi đang xem ĐÚNG version APPLIED (nút thao tác trên chính
+  // version đang xem, cùng logic isDraft/isArchived ở trên).
+  document.getElementById('btnOrgChartRecomputeManagerUsernames').classList.toggle('hidden', !(_ocCurrentVersion.status === 'APPLIED' && canManageTree));
   const metaEl = document.getElementById('orgChartVersionMeta');
   const parts = [];
   if (_ocCurrentVersion.effectiveDate) parts.push(`Áp dụng từ: ${escapeHtml(_ocCurrentVersion.effectiveDate)}`);
@@ -257,9 +260,22 @@ async function applyOrgChartVersionClick() {
   await renderOrgChartModule();
   openOrgChartApplyResultModal(result);
 }
-function openOrgChartApplyResultModal(result) {
+// Đợt 4 (vá gap #2 Phần A/B) — đồng bộ lại managerUsername theo ĐÚNG cây version đang APPLIED mà KHÔNG
+// cần tạo bản nháp + Áp dụng lại, dùng khi HR chỉ vừa đổi nhanh dept/jobTitle của 1-2 người (đề bạt
+// thay 1 vị trí quản lý vừa nghỉ...) ở màn Sửa Người Dùng — trước đây managerUsername CHỈ tự đồng bộ
+// lúc "Áp dụng phiên bản" (applyOrgChartVersionClick() ở trên), HR dễ quên phải tạo hẳn 1 version mới
+// chỉ để refresh lại. Tái dùng ĐÚNG modal kết quả (openOrgChartApplyResultModal()) qua tham số summaryText.
+async function recomputeManagerUsernamesClick() {
+  if (!confirm('Đồng bộ lại Quản Lý Trực Tiếp cho toàn bộ nhân viên theo đúng cây tổ chức đang áp dụng hiện tại?')) return;
+  let result;
+  try {
+    result = await orgChartApiCall('POST', '/api/org-chart/recompute-manager-usernames', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  openOrgChartApplyResultModal(result, 'Đã đồng bộ lại Quản Lý Trực Tiếp theo đúng cây tổ chức đang áp dụng.');
+}
+function openOrgChartApplyResultModal(result, summaryText) {
   document.getElementById('orgChartApplyResultSummary').innerText =
-    `Đã áp dụng phiên bản "${result.version.versionName}" — có hiệu lực từ ${result.version.effectiveDate}.`;
+    summaryText || `Đã áp dụng phiên bản "${result.version.versionName}" — có hiệu lực từ ${result.version.effectiveDate}.`;
   const unresolved = result.unresolvedManagerUsers || [];
   const listEl = document.getElementById('orgChartApplyResultUnresolved');
   if (!unresolved.length) {

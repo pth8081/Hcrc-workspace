@@ -210,6 +210,32 @@ router.post('/versions/:id/apply', async (req, res) => {
   res.json({ ok: true, version: appliedVersion, unresolvedManagerUsers: unresolved });
 });
 
+// POST /api/org-chart/recompute-manager-usernames — Đợt 4 (vá gap #2 Phần A/B): đồng bộ lại
+// managerUsername theo ĐÚNG cây version đang APPLIED mà KHÔNG cần tạo bản nháp mới rồi "Áp dụng" —
+// dùng khi HR chỉ vừa đổi nhanh dept/jobTitle của 1-2 người (đề bạt thay 1 vị trí quản lý vừa nghỉ...)
+// ở màn Sửa Người Dùng, việc trước đây CHỈ tự đồng bộ khi áp dụng version cây tổ chức mới (xem
+// computeManagerUsernameUpdates()/applyVersionInPlace() ở lib/orgChart.js) — HR dễ quên phải tạo hẳn 1
+// version mới chỉ để refresh managerUsername. Tái dùng ĐÚNG 2 hàm lõi ở trên, chỉ khác không kèm bước
+// validate+apply version.
+router.post('/recompute-manager-usernames', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    const list = (await getAppDataValue('orgChartVersions')) || [];
+    const applied = orgChart.getAppliedVersion(list);
+    if (!applied) return res.status(400).json({ error: 'Chưa có phiên bản Cơ Cấu Tổ Chức nào đang áp dụng' });
+    let unresolved = [];
+    await withLockedAppDataValue('users', (currentUsers) => {
+      const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(applied, currentUsers);
+      unresolved = u;
+      return orgChart.applyManagerUsernameUpdates(currentUsers, changes);
+    });
+    res.json({ ok: true, unresolvedManagerUsers: unresolved });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/recompute-manager-usernames', 'Không thể đồng bộ Quản Lý Trực Tiếp');
+  }
+});
+
 // GET /api/org-chart/kpi-flow — luồng đánh giá KPI của version đang APPLIED (kèm tên hiển thị + người
 // hiện đang giữ mỗi vị trí, để client vẽ ngay không cần tính lại).
 router.get('/kpi-flow', async (req, res) => {

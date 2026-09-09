@@ -619,6 +619,16 @@ theo đúng vị trí trong cây**.
   1 người; trường hợp vị trí cha chưa ai giữ hoặc có nhiều hơn 1 người cùng
   giữ thì **giữ nguyên** Quản Lý Trực Tiếp cũ và liệt kê rõ trong màn "Kết Quả
   Áp Dụng" để admin xử lý thủ công (KHÔNG suy đoán bừa).
+- **Nút "🔄 Đồng Bộ Quản Lý Trực Tiếp"** (thanh công cụ, chỉ hiện khi có
+  quyền `orgChartManage` VÀ bản đang APPLIED) — tính lại `managerUsername` cho
+  toàn bộ nhân viên theo ĐÚNG cây đang áp dụng hiện tại, **KHÔNG cần tạo bản
+  nháp mới rồi Áp dụng lại**. Dùng khi HR chỉ đổi Phòng Ban/Chức Danh của 1
+  nhân viên ở màn "Sửa Người Dùng" (thăng chức/điều chuyển nhẹ) — thao tác đó
+  không tự động chạy lại cơ chế tính `managerUsername` (chỉ chạy lúc "Áp
+  dụng" 1 phiên bản cây), nên vị trí họ vừa chuyển tới sẽ không có
+  `managerUsername` đúng cho tới khi bấm nút này. Cùng logic/cùng màn "Kết
+  Quả Áp Dụng" như khi Áp Dụng phiên bản (liệt kê rõ trường hợp không tra ra
+  đúng 1 người để admin xử lý thủ công).
 - **Xoá 1 node bị chặn nếu còn người đang giữ** — phải chuyển nhân viên đó
   sang vị trí/phòng ban khác trước.
 - **"Kiểm tra hợp lệ"** trước khi áp dụng, phát hiện: node cha không tồn tại;
@@ -664,6 +674,19 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   sử. Quy trình **tự động chuyển "Hoàn tất"** ngay khi mọi việc bắt buộc ở mọi
   giai đoạn đã xong/bỏ qua — không có nút "chuyển giai đoạn" thủ công. Có thể
   **Huỷ quy trình** (bắt buộc lý do) khi đang thực hiện.
+- **Chặn tự động Hoàn Tất nếu thiếu người kế nhiệm** (chỉ áp dụng Offboarding)
+  — ngay cả khi mọi việc bắt buộc đã xong, hệ thống **kiểm tra SỐNG**: nếu
+  nhân viên đang nghỉ việc hiện vẫn là "Quản lý trực tiếp" (`managerUsername`)
+  của bất kỳ ai đang active, quy trình **giữ nguyên "Đang thực hiện"** kèm
+  cảnh báo "Chờ chỉ định người kế nhiệm" — tránh để cả đội "mồ côi" quản lý.
+  HR bấm **"Chỉ định người kế nhiệm"** ngay trong Chi Tiết Quy Trình, chọn 1
+  tài khoản đang active (không phải chính người sắp nghỉ việc) — hệ thống
+  **lập tức chuyển `managerUsername` của toàn bộ người đang báo cáo trực
+  tiếp** cho người sắp nghỉ việc sang người kế nhiệm, ghi lịch sử, và nếu đó
+  là điều kiện cuối cùng còn thiếu thì quy trình **tự chuyển Hoàn Tất ngay**.
+  Việc kiểm tra dựa trên `managerUsername` SỐNG tại thời điểm đó (không dựa
+  vào ô "đang giữ vị trí quản lý" HR tự tick lúc tạo — ô đó chỉ mang tính
+  tham khảo, phòng trường hợp HR quên tick).
 - **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không bắt
   buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh mục
   "🔑 Tài khoản / Đăng nhập", mục 4.2) để đội IT xử lý theo đúng quy trình sẵn

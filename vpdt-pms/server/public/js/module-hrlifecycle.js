@@ -328,6 +328,29 @@ function renderHrProcessDetailBody(item) {
   const historyList = (item.history || []).slice().reverse().map(h =>
     `<div class="text-[11px] text-gray-500">${escapeHtml(h.actionAt)} — ${escapeHtml(h.actionByName)}: ${escapeHtml(h.detail)}</div>`).join('');
 
+  // Đợt 4 (vá gap #1 Phần B, mục A.6 tài liệu thiết kế) — Offboarding còn thiếu người kế nhiệm trong khi
+  // đang là quản lý trực tiếp của người khác: item.pendingSuccessor (tính SỐNG ở server, xem
+  // computeHrProcessProgress() lib/recordActions.js) = true nghĩa là quy trình ĐANG bị chặn tự động
+  // Hoàn Tất chỉ vì thiếu bước này. Hiện khối chỉ định người kế nhiệm cho MỌI Offboarding còn IN_PROGRESS
+  // chưa có successorUsername (không đợi tới lúc bị chặn mới cho chọn — đúng tinh thần "làm ở bước Bàn
+  // Giao" của tài liệu gốc), banner cảnh báo riêng khi thực sự đang bị chặn.
+  const successorBlock = item.processType === 'OFFBOARDING' && item.status === 'IN_PROGRESS' ? (
+    item.successorUsername
+      ? `<div class="text-xs bg-teal-50 border border-teal-200 rounded p-2 my-2">👤 Người kế nhiệm (nhận bàn giao Quản Lý Trực Tiếp): <b>${escapeHtml(item.successorName || item.successorUsername)}</b></div>`
+      : `<div class="bg-amber-50 border border-amber-200 rounded p-2 my-2">
+          ${item.pendingSuccessor ? '<p class="text-xs text-amber-800 font-bold mb-1">⚠️ Nhân viên này đang là Quản Lý Trực Tiếp của người khác — cần chỉ định người kế nhiệm trước khi quy trình có thể tự động chuyển Hoàn Tất.</p>' : '<p class="text-xs text-gray-600 mb-1">Nếu nhân viên này đang là Quản Lý Trực Tiếp của người khác, chỉ định người kế nhiệm ở đây (thường làm ở bước Bàn Giao):</p>'}
+          ${canManage ? `
+          <div class="flex gap-1">
+            <select id="hrpSuccessorSelect_${item.id}" class="flex-1 text-xs border rounded p-1">
+              <option value="">-- Chọn người kế nhiệm --</option>
+              ${(DB.users || []).filter(u => u.active !== false && u.username !== item.employeeUsername).sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(u =>
+                `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name || u.username)}</option>`).join('')}
+            </select>
+            <button type="button" data-op="hrpAssignSuccessor" data-arg0="${item.id}" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-semibold hover:bg-teal-700">Xác Nhận</button>
+          </div>` : ''}
+        </div>`
+  ) : '';
+
   document.getElementById('hrpDetailBody').innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
@@ -336,6 +359,7 @@ function renderHrProcessDetailBody(item) {
       </div>
       ${HR_PROCESS_STATUS_BADGES[item.status] || ''}
     </div>
+    ${successorBlock}
     <div class="flex flex-wrap items-center gap-1 my-3">${stepper}</div>
     <div class="overflow-x-auto bg-white rounded border mb-3">
       <table class="w-full text-xs">
@@ -387,6 +411,18 @@ async function hrpReassignTaskFromSelect(el, processId, taskId) {
   } catch (err) {
     alert(`⛔ ${err.message}`);
     renderHrProcessDetailBody(findHrProcessById(processId));
+  }
+}
+// Đợt 4 (vá gap #1 Phần B) — xem successorBlock ở renderHrProcessDetailBody().
+async function hrpAssignSuccessor(processId) {
+  const select = document.getElementById(`hrpSuccessorSelect_${processId}`);
+  const successorUsername = select ? select.value : '';
+  if (!successorUsername) return alert('⛔ Vui lòng chọn người kế nhiệm!');
+  try {
+    const result = await callRecordAction('hrProcesses', processId, 'assign-successor', { successorUsername });
+    hrpApplyProcessUpdate(result.item);
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
   }
 }
 async function hrpCancelProcess(processId) {

@@ -2360,24 +2360,27 @@ router.post('/itSupportTickets/:id/update-status', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
+    const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
       recordActions.updateItTicketStatus(freshUser, item, req.body));
     // Ticket sinh ra từ 1 task nhãn IT trong quy trình Nhân Sự > Onboarding/Offboarding (sourceType, xem
     // createItTicketForHrTask() ở lib/recordActions.js) vừa chuyển DONE -> ghi lại kết quả IT báo cáo
     // (resolutionNote) ngược về ĐÚNG task (qua sourceTaskId) đã sinh ra ticket này. update-status chỉ
     // chuyển DONE ĐÚNG 1 lần (chặn sửa tiếp sau DONE/CANCELLED, xem updateItTicketStatus()) nên nhánh
-    // này không chạy lặp. KHÔNG BAO GIỜ đụng tới DB.users ở đây — xem chú thích
-    // applyItTicketCompletionToHrProcessTask(). Lỗi ở bước ghi ngược (hiếm — hồ sơ liên kết đã bị xoá...)
-    // KHÔNG làm hỏng việc IT vừa hoàn tất ticket (đã commit xong ở bước trên) — chỉ log lại để tra cứu
-    // sau, cùng tinh thần learnLicenseType() ở routes/create.js (tiện ích phụ không được phép làm hỏng
-    // thao tác chính đã thành công).
+    // này không chạy lặp. KHÔNG BAO GIỜ GHI vào DB.users ở đây — chỉ ĐỌC (đã có sẵn `users` từ
+    // getFreshUser() ở trên, không thêm truy vấn nào) để cổng người-kế-nhiệm trong
+    // computeHrProcessProgress() (xem lib/recordActions.js) hoạt động đúng cả trên nhánh phụ này, phòng
+    // trường hợp chính task IT (VD "Vô hiệu hoá tài khoản") lại là task cuối cùng khiến Offboarding đủ
+    // điều kiện tự Hoàn Tất. Lỗi ở bước ghi ngược (hiếm — hồ sơ liên kết đã bị xoá...) KHÔNG làm hỏng
+    // việc IT vừa hoàn tất ticket (đã commit xong ở bước trên) — chỉ log lại để tra cứu sau, cùng tinh
+    // thần learnLicenseType() ở routes/create.js (tiện ích phụ không được phép làm hỏng thao tác chính
+    // đã thành công).
     if (result.status === 'DONE' && result.sourceType && result.sourceId != null) {
       const linkedCollection = recordActions.HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[result.sourceType];
       if (linkedCollection) {
         try {
           const linkedItem = await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
-            recordActions.applyItTicketCompletionToHrProcessTask(freshUser, item, result));
+            recordActions.applyItTicketCompletionToHrProcessTask(freshUser, item, result, users));
           await syncEmployeeProfileOnHrCompletion(linkedItem, `itSupportTickets/${itemId}/update-status`);
         } catch (linkErr) {
           console.error(`itSupportTickets/${itemId}/update-status: lỗi ghi ngược hồ sơ ${linkedCollection}/${result.sourceId}:`, linkErr.message);
@@ -2656,15 +2659,54 @@ async function syncOffboardingToAttendanceAndLeave(hrProcessItem, routeLabel) {
   }
 }
 
+// Đợt 4 (vá Phần B, mục A.6 tài liệu thiết kế) — vừa chỉ định người kế nhiệm xong (assignHrSuccessor())
+// -> chuyển NGAY managerUsername của mọi báo cáo trực tiếp hiện tại (managerUsername === employeeUsername
+// đang nghỉ việc) sang người kế nhiệm. 2 bước khoá riêng (hrProcesses rồi users) — cùng khuôn
+// lib/orgChart.js applyVersionInPlace()/computeManagerUsernameUpdates() ở routes/orgChart.js. KHÔNG tự
+// đổi dept/jobTitle người kế nhiệm — đó là quyết định đề bạt riêng của HR (Sửa Người Dùng + "Đồng Bộ
+// Quản Lý Trực Tiếp" ở Cơ Cấu Tổ Chức nếu người kế nhiệm cũng cần thay vị trí trong cây tổ chức).
+async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel) {
+  if (!hrProcessItem || hrProcessItem.processType !== 'OFFBOARDING' || !hrProcessItem.successorUsername) return;
+  try {
+    await withLockedAppDataValue('users', (list) => {
+      let changed = false;
+      const updated = (list || []).map(u => {
+        if (u.active !== false && u.managerUsername === hrProcessItem.employeeUsername) {
+          changed = true;
+          return { ...u, managerUsername: hrProcessItem.successorUsername };
+        }
+        return u;
+      });
+      return changed ? updated : list;
+    });
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi chuyển giao Quản Lý Trực Tiếp sang người kế nhiệm:`, err.message);
+  }
+}
+
+router.post('/hrProcesses/:id/assign-successor', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
+      recordActions.assignHrSuccessor(freshUser, item, req.body, users));
+    await syncManagerUsernameOnSuccessorAssigned(result, `hrProcesses/${itemId}/assign-successor`);
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/assign-successor`, err);
+  }
+});
+
 router.post('/hrProcesses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrProcesses'));
 
 router.post('/hrProcesses/:id/complete-task', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
+    const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
-      recordActions.completeHrTask(freshUser, item, req.body));
+      recordActions.completeHrTask(freshUser, item, req.body, users));
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/complete-task`);
     await syncLaborContractOnHrTaskEvent(result, req.body?.taskId, freshUser, `hrProcesses/${itemId}/complete-task`);
     await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/complete-task`);
@@ -2681,9 +2723,9 @@ router.post('/hrProcesses/:id/skip-task', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
+    const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
-      recordActions.skipHrTask(freshUser, item, req.body));
+      recordActions.skipHrTask(freshUser, item, req.body, users));
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/skip-task`);
     await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/skip-task`);
     await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/skip-task`);

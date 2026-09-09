@@ -4822,7 +4822,11 @@ function canManageHrProcess(user, item) {
 // Tính lại stage hiện tại + tự động COMPLETED quy trình khi mọi task BẮT BUỘC (isRequired) ở TẤT CẢ
 // giai đoạn đã DONE/SKIPPED — gọi lại SAU MỌI thao tác đổi trạng thái task (complete/skip/ticket hoàn
 // tất), KHÔNG có action "chuyển giai đoạn" thủ công riêng (xem chú thích lib/createValidation.js).
-function computeHrProcessProgress(item) {
+// Đợt 4 (vá Phần B) — `users` TUỲ CHỌN: 1 nhánh phụ cố ý không đọc DB.users
+// (applyItTicketCompletionToHrProcessTask(), xem chú thích ngay tại đó) nên gate người kế nhiệm dưới
+// đây chỉ áp dụng khi có `users` — đa số trường hợp thật đi qua complete-task/skip-task chính (luôn có
+// users) nên không đáng lo bỏ sót.
+function computeHrProcessProgress(item, users) {
   const stages = item.processType === 'ONBOARDING' ? HR_ONBOARDING_STAGES : HR_OFFBOARDING_STAGES;
   let currentStage = stages[stages.length - 1];
   let allRequiredDone = true;
@@ -4832,6 +4836,19 @@ function computeHrProcessProgress(item) {
     if (!stageDone) { currentStage = s; allRequiredDone = false; break; }
   }
   item.stage = currentStage;
+  // Mục A.6 tài liệu thiết kế: chặn Offboarding tự động Hoàn Tất nếu nhân viên đang là Quản Lý Trực
+  // Tiếp (managerUsername) của ai đó còn active mà CHƯA chỉ định người kế nhiệm — tránh để cả 1 đội
+  // "mồ côi" quản lý (xem assignHrSuccessor() ngay dưới). Kiểm tra SỐNG theo managerUsername hiện tại
+  // (không dựa vào cờ isManagerialPosition HR tự khai lúc tạo — cờ đó chỉ để hiển thị/tham khảo, phòng
+  // trường hợp HR quên tick).
+  item.pendingSuccessor = false;
+  if (allRequiredDone && item.processType === 'OFFBOARDING' && users && !item.successorUsername) {
+    const hasDirectReports = users.some(u => u.active !== false && u.username !== item.employeeUsername && u.managerUsername === item.employeeUsername);
+    if (hasDirectReports) {
+      item.pendingSuccessor = true;
+      allRequiredDone = false;
+    }
+  }
   if (allRequiredDone && item.status === 'IN_PROGRESS') {
     item.status = 'COMPLETED';
     item.actualEndDate = nowVN();
@@ -4849,7 +4866,7 @@ function findHrTask(item, taskId) {
   return task;
 }
 
-function completeHrTask(user, item, body) {
+function completeHrTask(user, item, body, users) {
   const task = findHrTask(item, body?.taskId);
   if (task.status === 'DONE') throw new HttpError(409, 'Việc này đã được đánh dấu hoàn thành rồi');
   if (task.status === 'SKIPPED') throw new HttpError(409, 'Việc này đã bị bỏ qua, không thể đánh dấu hoàn thành');
@@ -4869,11 +4886,11 @@ function completeHrTask(user, item, body) {
   task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
   if (body?.note) task.note = String(body.note).trim().slice(0, 500);
   item.history.push({ action: 'TASK_COMPLETED', detail: `Hoàn thành: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
-  computeHrProcessProgress(item);
+  computeHrProcessProgress(item, users);
   return item;
 }
 
-function skipHrTask(user, item, body) {
+function skipHrTask(user, item, body, users) {
   const task = findHrTask(item, body?.taskId);
   if (task.status === 'DONE' || task.status === 'SKIPPED') throw new HttpError(409, 'Việc này đã được xử lý rồi, không thể bỏ qua');
   // Việc BẮT BUỘC chỉ người quản lý quy trình (không phải người phụ trách cá nhân) mới được chủ động
@@ -4888,7 +4905,7 @@ function skipHrTask(user, item, body) {
   task.note = reason.slice(0, 500);
   task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
   item.history.push({ action: 'TASK_SKIPPED', detail: `Bỏ qua: ${task.taskName} — Lý do: ${task.note}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
-  computeHrProcessProgress(item);
+  computeHrProcessProgress(item, users);
   return item;
 }
 
@@ -4919,6 +4936,34 @@ function cancelHrProcess(user, item, body) {
   item.status = 'CANCELLED';
   item.cancelReason = reason.slice(0, 500);
   item.history.push({ action: 'CANCELLED', detail: `Huỷ quy trình — Lý do: ${item.cancelReason}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  return item;
+}
+
+// Đợt 4 (vá Phần B, mục A.6 tài liệu thiết kế) — chỉ định người kế nhiệm cho 1 quy trình Offboarding
+// đang giữ vị trí quản lý (còn người báo cáo trực tiếp, xem computeHrProcessProgress() ở trên). Field
+// successorUsername/successorName đã được scaffold sẵn từ createValidation.js (Đợt 2) nhưng chưa từng
+// có action nào ghi vào — đây là action đó. KHÔNG tự đổi dept/jobTitle của người kế nhiệm (đó là quyết
+// định đề bạt riêng của HR, làm ở màn Sửa Người Dùng + Đồng Bộ Quản Lý Trực Tiếp ở Cơ Cấu Tổ Chức nếu
+// cần) — action này CHỈ chuyển ngay managerUsername của các báo cáo trực tiếp hiện tại sang người kế
+// nhiệm (xem syncManagerUsernameOnSuccessorAssigned() ở routes/records.js, gọi NGAY SAU action này,
+// cùng khuôn 2-bước-khoá-riêng của lib/orgChart.js applyVersionInPlace()/computeManagerUsernameUpdates()).
+function assignHrSuccessor(user, item, body, usersList) {
+  if (!canManageHrProcess(user, item)) throw new HttpError(403, 'Bạn không có quyền chỉ định người kế nhiệm cho quy trình này');
+  if (item.processType !== 'OFFBOARDING') throw new HttpError(400, 'Chỉ áp dụng cho quy trình Offboarding');
+  if (item.status !== 'IN_PROGRESS') throw new HttpError(409, 'Quy trình không còn ở trạng thái đang thực hiện');
+  const successorUsername = String(body?.successorUsername || '').trim();
+  if (!successorUsername) throw new HttpError(400, 'Vui lòng chọn người kế nhiệm');
+  if (successorUsername === item.employeeUsername) throw new HttpError(400, 'Người kế nhiệm không thể là chính nhân viên đang nghỉ việc');
+  const successor = (usersList || []).find(u => u.username === successorUsername && u.active !== false);
+  if (!successor) throw new HttpError(400, 'Không tìm thấy tài khoản người kế nhiệm này (hoặc đã bị khoá)');
+  item.successorUsername = successor.username;
+  item.successorName = successor.name || successor.username;
+  item.history.push({
+    action: 'SUCCESSOR_ASSIGNED',
+    detail: `Chỉ định người kế nhiệm: ${item.successorName} (thay ${item.fullName || item.employeeUsername})`,
+    actionBy: user.username, actionByName: user.name, actionAt: nowVN()
+  });
+  computeHrProcessProgress(item, usersList);
   return item;
 }
 
@@ -4981,14 +5026,14 @@ const HR_LIFECYCLE_TICKET_SOURCE_COLLECTION = {
 // collection theo HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[ticket.sourceType] rồi truyền item (cả quy
 // trình) vào đây, tự tìm đúng task qua ticket.sourceTaskId. Tự bỏ qua (idempotent) nếu không còn tìm
 // thấy task hoặc task đã DONE — ticket chỉ chuyển DONE đúng 1 lần nên nhánh này chỉ là lưới an toàn.
-function applyItTicketCompletionToHrProcessTask(user, item, ticket) {
+function applyItTicketCompletionToHrProcessTask(user, item, ticket, users) {
   const task = (item.tasks || []).find(t => t.taskId === ticket.sourceTaskId);
   if (!task || task.status === 'DONE' || task.status === 'SKIPPED') return item;
   task.status = 'DONE';
   task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
   if (ticket.resolutionNote) task.note = String(ticket.resolutionNote).trim().slice(0, 500);
   item.history.push({ action: 'IT_TICKET_COMPLETED', detail: `Hỗ Trợ IT xác nhận hoàn thành: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
-  computeHrProcessProgress(item);
+  computeHrProcessProgress(item, users);
   return item;
 }
 
@@ -5997,7 +6042,7 @@ module.exports = {
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
   canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead,
   canActOnHrTask, canCreateHrProcess, canManageHrProcess, computeHrProcessProgress,
-  completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment,
+  completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment, assignHrSuccessor,
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
