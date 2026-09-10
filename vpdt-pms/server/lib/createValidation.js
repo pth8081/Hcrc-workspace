@@ -2802,6 +2802,23 @@ const CREATE_MODULE_CONFIGS = {
       Object.assign(payload, built);
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HAC_SWAP_REQUEST');
     }
+  },
+  // ===== NHÂN SỰ > Lương (Module Lương — điểm hội tụ dữ liệu, xem lib/payroll.js đầu file cho toàn bộ
+  // điều chỉnh so với tài liệu gốc) =====
+  // payrollPeriods: chỉ tạo "vỏ" kỳ lương ở đây (tên/tháng/năm) — payslips sinh ra qua action riêng
+  // "Tính Lương Tự Động" (POST /api/payroll/periods/:id/calculate, xem routes/payroll.js), KHÔNG qua
+  // đường tạo chung này (không có khái niệm "tạo tay 1 payslip từ đầu").
+  payrollPeriods: {
+    dbKey: 'payrollPeriods',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      const payroll = require('./payroll');
+      if (!payroll.canManagePayroll(user)) throw new CreateError(403, 'Bạn không có quyền tạo kỳ lương');
+      const valid = payroll.assertValidNewPeriod(payload, collection);
+      Object.assign(payload, payroll.defaultPeriod(valid, user.username, user.name));
+    }
   }
 };
 

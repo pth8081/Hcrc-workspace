@@ -30,8 +30,10 @@ const {
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle,
   filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
-  filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser
+  filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
+  filterPayrollPeriodsForUser, filterPayslipsForUser
 } = require('../lib/recordViewScope');
+const { filterNotificationsForUser } = require('../lib/notifications');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -177,7 +179,12 @@ const ADMIN_ONLY_KEYS = new Set([
   // attendanceClockApiKeys: cùng khuôn externalApiKeys ngay trên — key RIÊNG cho máy chấm công vật lý
   // (Công & Phép, xem lib/attendance.js), quản lý qua routes/attendanceClockAdmin.js. Ẩn hoàn toàn với
   // non-admin qua GET /api/data — xem sanitizeAttendanceClockApiKeys() bên dưới.
-  'externalApiKeys', 'attendanceClockApiKeys'
+  'externalApiKeys', 'attendanceClockApiKeys',
+  // payrollRateConfig: % BHXH/BHYT/BHTN, biểu thuế TNCN, trần đóng BHXH, ngày công chuẩn (Nhân Sự >
+  // Lương, xem lib/payroll.js) — sửa qua route RIÊNG PUT /api/payroll/rate-config (cho phép cả
+  // hrPayrollManage, không chỉ admin), route này chỉ còn là đường lùi ghi thô admin-only, chặn user
+  // thường tự đổi % bảo hiểm/thuế để lương tính sai.
+  'payrollRateConfig'
 ]);
 
 // Các collection KHÔNG phải admin-only nhưng cũng KHÔNG mở cho mọi tài khoản đã đăng nhập — mỗi key ở
@@ -704,6 +711,16 @@ router.get('/', async (req, res) => {
     if (data.leaveRequests) data.leaveRequests = filterLeaveRequestsForUser(data.leaveRequests, req.freshUser, data);
     if (data.shiftRoster) data.shiftRoster = filterShiftRosterForUser(data.shiftRoster, req.freshUser, data);
     if (data.shiftSwapRequests) data.shiftSwapRequests = filterShiftSwapRequestsForUser(data.shiftSwapRequests, req.freshUser, data);
+    // Nhân Sự > Lương (xem lib/payroll.js) — payslips ẨN HOÀN TOÀN qua GET /api/data với người không có
+    // hrPayrollManage/hrPayrollApprove/admin (kể cả chính chủ — họ dùng route riêng IDOR-safe
+    // /api/payroll/my-payslips*, xem routes/payroll.js), vì đây là dữ liệu nhạy cảm nhất hệ thống.
+    if (data.payrollPeriods) data.payrollPeriods = filterPayrollPeriodsForUser(data.payrollPeriods, req.freshUser);
+    if (data.payslips) data.payslips = filterPayslipsForUser(data.payslips, req.freshUser);
+    // notifications (thông báo trong app, dùng chung — xem lib/notifications.js): PHẢI lọc ngay từ khi
+    // thêm vào MIGRATED_COLLECTIONS, nếu không GET /api/data trả THẲNG thông báo của MỌI người dùng cho
+    // bất kỳ ai gọi (route chính thức để đọc thông báo là GET /api/notifications riêng — chuông ở
+    // header KHÔNG đọc DB.notifications qua đây, chỉ khai báo ở đây phòng nơi khác lỡ đọc nhầm).
+    if (data.notifications) data.notifications = filterNotificationsForUser(data.notifications, req.freshUser);
     // employeeProfiles: PHÁT HIỆN khi làm Công & Phép (Đợt 3/4) — collection này CHƯA TỪNG được lọc/ẩn ở
     // đây, lộ NGUYÊN VẸN hồ sơ nhân sự đầy đủ (có thể gồm CCCD/người phụ thuộc/học vấn, xem
     // lib/employeeProfile.js) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — dù màn "Hồ Sơ

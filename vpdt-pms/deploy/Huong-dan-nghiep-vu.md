@@ -908,9 +908,10 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   tay** ở "Quản Lý & Cấu Hình" (carry-over, quyết định riêng của công ty).
   Khi Offboarding hoàn tất, hệ thống tự tính **số tiền quy đổi phép chưa nghỉ
   tham khảo** (đơn giá ngày công × số ngày còn lại) gắn vào đúng việc "Tính
-  lương, phép năm chưa nghỉ, khấu trừ" trong checklist (mục 4.5.2) — **chỉ
-  hiển thị tham khảo**, không tạo đề nghị thanh toán thật (hệ thống chưa có
-  module Lương).
+  lương, phép năm chưa nghỉ, khấu trừ" trong checklist (mục 4.5.2), hiển thị
+  ngay trên dòng công việc đó — **chỉ tham khảo**, kế toán tự quyết định có
+  thêm vào phiếu lương kỳ cuối của nhân viên hay không (dòng "Thưởng khác" ở
+  module **Lương**, mục 4.5.8) chứ hệ thống không tự động ghi thẳng vào phiếu.
 - **Lịch Phân Ca** (chỉ áp dụng Siêu Thị) — Quản Lý Siêu Thị (quyền **"📅 Quản
   Lý Lịch Phân Ca"**) hoặc HR lập lịch (chọn nhân viên, ngày, ca theo **Mẫu Ca
   Làm Việc** đã cấu hình sẵn, siêu thị), chặn phân trùng ngày cho cùng 1 nhân
@@ -940,9 +941,8 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   giới hạn đúng siêu thị của mình, 2 cờ độc lập).
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): không có nút chấm
   công thủ công trong app (chỉ máy vật lý + HR sửa tay); đổi ca 1 chiều (không
-  hoán đổi chéo 2 dòng); số tiền quy đổi phép chưa nghỉ chỉ tham khảo, chưa
-  nối vào 1 module Lương thật; không tự động sinh lịch phân ca tuần đầu từ
-  checklist Onboarding — Quản Lý Siêu Thị/HR tự lập lịch thủ công.
+  hoán đổi chéo 2 dòng); không tự động sinh lịch phân ca tuần đầu từ checklist
+  Onboarding — Quản Lý Siêu Thị/HR tự lập lịch thủ công.
 
 #### 4.5.6. Quản Lý & Phản Hồi Ý Kiến
 
@@ -955,6 +955,61 @@ Nhân Sự lọc/phân công dễ hơn khi có nhiều câu hỏi. Thông báo c
 qua **cờ chưa đọc** ngay trong giao diện (không gửi email) — thiết kế có chủ
 đích vì đây là kênh nội bộ tần suất thấp, không cần thêm 1 lớp email dễ bị bỏ
 quên/spam như các luồng phê duyệt khác.
+
+#### 4.5.8. Lương
+
+**Nhân Sự → Lương** — **vai trò**: lập/tính/duyệt/công bố phiếu lương hàng
+tháng, tổng hợp từ Hợp Đồng Lao Động (lương cơ bản) + Công & Phép (làm thêm
+giờ, nghỉ không lương) + Hồ Sơ Nhân Sự (người phụ thuộc giảm trừ thuế). Mở cho
+**MỌI người** đã đăng nhập ở mức xem — mỗi nhân viên tự xem được phiếu lương
+CỦA CHÍNH MÌNH (tab "Phiếu Lương Của Tôi", không tắt được); khối "Quản Lý Kỳ
+Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
+
+- **3 tầng quyền TÁCH BIỆT** (nguyên tắc kiểm soát nội bộ kế toán — không ai
+  vừa lập vừa tự duyệt lương của chính đợt mình lập): **"💰 Lập/Tính Lương"**
+  (kế toán/HR — tạo kỳ, tính lương tự động, điều chỉnh tay từng dòng, gửi
+  duyệt), **"✅ Duyệt Lương"** (thường là Giám Đốc/Kế Toán Trưởng cấp cao hơn
+  — duyệt/từ chối/chốt kỳ/công bố), và quyền xem-của-mình mặc định BẬT cho
+  mọi tài khoản không tắt được.
+- **Vòng đời 1 kỳ lương**: **Nháp** (mới tạo, kế toán bấm "Tính Lương" để hệ
+  thống tự tính hàng loạt cho toàn bộ nhân viên đang hoạt động, rà soát/điều
+  chỉnh tay từng dòng nếu cần — VD thêm phụ cấp/thưởng/tạm ứng/phạt) →
+  **Chờ Duyệt** (gửi duyệt, không sửa tay được nữa) → **Đã Duyệt** hoặc bị
+  **Từ Chối** (quay lại Nháp, kèm lý do, sửa lại rồi gửi lại) → **Đã Chốt**
+  (khoá hoàn toàn, không sửa được nữa) → **Đã Công Bố** (nhân viên bắt đầu
+  xem được phiếu lương của mình + nhận **thông báo trong app**, xem chuông 🔔
+  ở góc màn hình — module dùng chung cho mọi thông báo hệ thống từ nay về
+  sau, không qua email). Có nút **"Mở Lại"** (bắt buộc nhập lý do) đưa kỳ đã
+  Chốt/Công Bố về Nháp để sửa sai sót phát hiện muộn.
+- **Các dòng tự động tính** (có dữ liệu nguồn thật trong hệ thống): Lương cơ
+  bản (theo Hợp Đồng Lao Động đang hiệu lực), Làm thêm giờ 150%/200%/300%
+  (theo bản ghi chấm công loại Tăng ca ngày thường/cuối tuần/lễ tết), Trừ
+  ngày nghỉ không lương, BHXH/BHYT/BHTN, Thuế TNCN (lũy tiến theo giảm trừ
+  bản thân + người phụ thuộc khai ở Hồ Sơ Nhân Sự). **Các dòng nhập tay** (kế
+  toán tự thêm lúc rà soát, vì công ty chưa xác nhận chính sách/hệ thống chưa
+  có dữ liệu nguồn để tự tính đúng): phụ cấp ăn trưa/điện thoại/chức vụ/ca
+  đêm/ngày lễ, thưởng KPI, thưởng khác, tạm ứng, phạt.
+- **⚠️ Cấu Hình Tỷ Lệ** (nút riêng trong màn Lương, quyền Lập/Tính hoặc Duyệt)
+  — %BHXH/BHYT/BHTN, biểu thuế TNCN 7 bậc, mức giảm trừ bản thân/người phụ
+  thuộc, số ngày công chuẩn HO/Siêu thị, hệ số tăng ca: **toàn bộ là số THAM
+  KHẢO admin phải tự xác nhận/sửa lại đúng số thật của công ty trước khi chạy
+  lương thật lần đầu** — đặc biệt **trần lương đóng BHXH** đang để mặc định
+  RẤT LỚN (coi như không giới hạn) vì đây là số thay đổi theo lương tối thiểu
+  vùng từng thời kỳ, không có cơ sở đoán đúng.
+- **Xuất phiếu lương PDF** — nhân viên tự xuất phiếu lương của mình (đã công
+  bố) ra file PDF ngay tại trình duyệt (không qua server), giữ lại làm hồ sơ
+  cá nhân.
+- **Liên kết Offboarding**: khi hoàn tất việc "Tính lương, phép năm chưa nghỉ"
+  trong checklist Offboarding (mục 4.5.2/4.5.5), số tiền quy đổi phép chưa
+  nghỉ hiện thị tham khảo ngay trên dòng công việc đó — kế toán tự thêm vào
+  phiếu lương kỳ cuối của nhân viên (dòng "Thưởng khác") nếu công ty quyết
+  định chi trả, hệ thống không tự động ghi thẳng vào phiếu lương.
+- **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có danh mục
+  thành phần lương admin tự thêm/bớt được (danh mục 17 mã hiện cố định trong
+  code, sửa được nhanh khi có yêu cầu thật); chưa tự tính phụ cấp ca đêm/thưởng
+  KPI (chưa có dữ liệu nguồn thật — cờ ca đêm/điểm KPI thật); chưa hỗ trợ tách
+  lương Gross/Net theo từng nhân viên (mặc định tính theo mô hình Gross — nhân
+  viên tự chịu BHXH/BHYT/BHTN/thuế trừ vào lương).
 
 ### 4.6. Báo Cáo Định Kỳ
 

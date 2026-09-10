@@ -61,8 +61,13 @@ const { HttpError } = require('./httpErrors');
 // lib/createValidation.js) — cố ý đặt tiền tố "hr" (KHÔNG dùng bare "process*") để không đụng tên với
 // onboardingPaths/onboardingProgress ("Đào Tạo Tân Binh", hoàn toàn khác nghiệp vụ, đã có sẵn trong danh
 // sách này từ trước). Thay hẳn cho hrOnboardingRequests/hrOffboardingRequests (bản v1, đã gỡ).
+// payrollPeriods/payslips (Nhân Sự > Lương, xem lib/payroll.js đầu file cho toàn bộ điều chỉnh so với
+// tài liệu gốc): tách RIÊNG 2 collection (period = sổ cái trạng thái/duyệt, payslip = 1 bản ghi/nhân
+// viên/kỳ) — cùng khuôn reportPeriods/reportEntries. notifications: thông báo trong app GENERIC (xem
+// lib/notifications.js) — hệ thống tự sinh liên tục (không qua createValidation.js), cùng khuôn
+// attendanceRecords (tăng trưởng theo thời gian, cần khoá optimistic theo bản ghi khi đánh dấu đã đọc).
 const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress', 'hrProcesses', 'laborContracts',
-  'attendanceRecords', 'shiftRoster', 'shiftSwapRequests', 'leaveBalances', 'leaveRequests']);
+  'attendanceRecords', 'shiftRoster', 'shiftSwapRequests', 'leaveBalances', 'leaveRequests', 'payrollPeriods', 'payslips', 'notifications']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

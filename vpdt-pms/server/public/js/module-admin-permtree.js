@@ -183,6 +183,8 @@ function collectPermsFromForm() {
     hrLeaveApprove: document.getElementById('pHrLeaveApprove').checked,
     hrShiftRosterManage: document.getElementById('pHrShiftRosterManage').checked,
     hrShiftSwapApprove: document.getElementById('pHrShiftSwapApprove').checked,
+    hrPayrollManage: document.getElementById('pHrPayrollManage').checked,
+    hrPayrollApprove: document.getElementById('pHrPayrollApprove').checked,
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
@@ -260,6 +262,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pHrLeaveApprove').checked = !!perms.hrLeaveApprove;
   document.getElementById('pHrShiftRosterManage').checked = !!perms.hrShiftRosterManage;
   document.getElementById('pHrShiftSwapApprove').checked = !!perms.hrShiftSwapApprove;
+  document.getElementById('pHrPayrollManage').checked = !!perms.hrPayrollManage;
+  document.getElementById('pHrPayrollApprove').checked = !!perms.hrPayrollApprove;
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;

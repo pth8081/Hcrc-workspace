@@ -553,6 +553,15 @@ const DEFAULTS = {
   // sanitizeAttendanceClockApiKeys() routes/data.js) — cùng khuôn externalApiKeys.
   attendanceClockApiKeys: [],
 
+  // Nhân Sự > Lương (xem lib/payroll.js đầu file) — % BHXH/BHYT/BHTN, biểu thuế TNCN, giảm trừ bản
+  // thân/người phụ thuộc, trần đóng BHXH, ngày công chuẩn HO/Siêu thị — CẤU HÌNH admin/hrPayrollManage
+  // sửa được (PUT /api/payroll/rate-config), KHÔNG hardcode trong code tính lương. Seed rỗng {} — server
+  // tự merge với payroll.defaultRateConfig() (giá trị tham khảo) khi đọc, nên KHÔNG cần khởi tạo đủ field
+  // ở đây (tránh 2 nơi phải đồng bộ khi thêm field cấu hình mới sau này).
+  payrollRateConfig: {},
+  // payrollPeriods/payslips: dbo.Records (MIGRATED_COLLECTIONS), KHÔNG cần seed ở đây — cùng khuôn
+  // laborContracts/attendanceRecords. notifications: cùng lý do.
+
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY
   // (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính

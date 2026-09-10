@@ -919,6 +919,22 @@ function filterShiftSwapRequestsForUser(items, user, appData) {
   return (items || []).filter(s => canViewShiftSwapRequest(user, s, appData));
 }
 
+// ===== Lương (Nhân Sự > Lương, xem lib/payroll.js) — quyền PHẲNG canViewAllPayroll (hrPayrollManage/
+// hrPayrollApprove/admin), KHÔNG có nhánh "chính chủ tự xem" ở đây — nhân viên tự xem lương của mình đi
+// qua route RIÊNG /api/payroll/my-payslips (routes/payroll.js, IDOR-safe), KHÔNG BAO GIỜ qua GET
+// /api/data chung. payslips ĐẶC BIỆT NHẠY CẢM (Mục 11 tài liệu gốc — "mức độ nghiêm ngặt cao nhất") nên
+// ẩn HOÀN TOÀN khỏi GET /api/data với người không có 1 trong 2 quyền quản lý/duyệt lương, kể cả chính
+// chủ (họ dùng route riêng ở trên, không phải route chung này).
+function canViewAllPayrollData(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove);
+}
+function filterPayrollPeriodsForUser(items, user) {
+  return canViewAllPayrollData(user) ? (items || []) : [];
+}
+function filterPayslipsForUser(items, user) {
+  return canViewAllPayrollData(user) ? (items || []) : [];
+}
+
 module.exports = {
   isManagerOf, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
@@ -964,6 +980,7 @@ module.exports = {
   canViewLeaveRequest, filterLeaveRequestsForUser,
   canViewShiftRoster, filterShiftRosterForUser,
   canViewShiftSwapRequest, filterShiftSwapRequestsForUser,
+  canViewAllPayrollData, filterPayrollPeriodsForUser, filterPayslipsForUser,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile
 };

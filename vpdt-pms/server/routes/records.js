@@ -2654,9 +2654,12 @@ async function syncLeaveBalanceOnOnboardingCompletion(hrProcessItem, routeLabel)
 }
 
 // Task SETTLEMENT "Tính lương, phép năm chưa nghỉ..." (templateId=25, defaults.js hrTaskTemplates)
-// hoàn thành -> TÍNH VÀ GHI LẠI số tiền quy đổi phép chưa nghỉ tham khảo (KHÔNG tạo đề nghị thanh toán
-// thật — hệ thống chưa có module Lương, xem ghi chú mục 5 đầu lib/attendance.js) lên chính task đó để
-// HR đọc.
+// hoàn thành -> TÍNH VÀ GHI LẠI số tiền quy đổi phép chưa nghỉ tham khảo lên chính task đó (hiển thị ở
+// UI Onboarding/Offboarding, xem module-hrlifecycle.js renderHrProcessDetail() dòng "💰 Quy đổi phép năm
+// chưa nghỉ"). KHÔNG tự động tạo dòng lương thật — kế toán chủ động thêm số này vào phiếu lương kỳ cuối
+// của nhân viên (component BONUS_OTHER, module Lương — lib/payroll.js) sau khi rà soát, vì: (1) kỳ lương
+// tháng nghỉ việc có thể chưa được HR tạo tại thời điểm Offboarding hoàn tất, và (2) việc có thực sự chi
+// trả khoản này hay không là quyết định của công ty/kế toán, không nên tự động ghi thẳng vào payslip.
 async function syncLeavePayoutInfoOnSettlementTask(hrProcessItem, taskId, routeLabel) {
   if (hrProcessItem.processType !== 'OFFBOARDING') return;
   const task = (hrProcessItem.tasks || []).find(t => t.taskId === Number(taskId));

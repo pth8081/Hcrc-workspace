@@ -234,6 +234,7 @@
           <button id="btnHrProfileNav" data-op-seq="closeHrDropdown()|switchTab(hrProfile)" class="hidden sidebar-subitem">🪪 Hồ Sơ Nhân Sự</button>
           <button id="btnHrContractNav" data-op-seq="closeHrDropdown()|switchTab(hrContract)" class="hidden sidebar-subitem">📝 Hợp Đồng Lao Động</button>
           <button id="btnHrAttendanceNav" data-op-seq="closeHrDropdown()|switchTab(hrAttendance)" class="hidden sidebar-subitem">⏱️ Công &amp; Phép</button>
+          <button id="btnHrPayrollNav" data-op-seq="closeHrDropdown()|switchTab(hrPayroll)" class="hidden sidebar-subitem">💰 Lương</button>
         </div>
       </div>
       <!-- Hỗ Trợ IT — cùng khuôn dropdown Hợp Đồng: mở cho toàn bộ nhân viên (giống Công Việc), 2
@@ -279,6 +280,16 @@
     </nav>
 
     <div class="p-3 border-t border-slate-700 space-y-2">
+      <!-- Chuông thông báo trong app — GENERIC (không riêng Lương), xem lib/notifications.js. Đặt cạnh
+           khối user-info (luôn hiển thị khi đã đăng nhập, không phụ thuộc đang ở tab nào) thay vì 1
+           thanh header riêng (app chưa có sẵn header ngang cho nội dung chính, chỉ có sidebar trái). -->
+      <div class="relative">
+        <button id="btnNotifBell" data-op="toggleNotifDropdown" class="w-full flex items-center gap-2 text-xs text-slate-300 hover:text-white px-1 py-1.5 rounded hover:bg-slate-800 sidebar-label">
+          <span class="relative">🔔<span id="notifUnreadBadge" class="hidden absolute -top-1.5 -right-2 bg-red-600 text-white text-[9px] rounded-full px-1 leading-tight">0</span></span>
+          <span class="flex-1 text-left">Thông báo</span>
+        </button>
+        <div id="notifDropdownPanel" class="hidden absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto bg-white text-slate-800 rounded shadow-lg border z-50 sidebar-label"></div>
+      </div>
       <div class="cursor-pointer group" data-op="openProfileModal" title="Bấm để cập nhật thông tin cá nhân & đổi mật khẩu">
         <span id="userInfo" class="font-bold text-white block text-xs group-hover:underline sidebar-label"></span>
         <span id="userPhoneInfo" class="text-[11px] text-slate-400 block sidebar-label"></span>
@@ -5455,6 +5466,13 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrShiftSwapApprove"> 🔁 Duyệt Đổi Ca (Quản Lý Siêu Thị)
             </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">3 quyền dưới đây cho module con "Lương" — "Xem Phiếu Lương Của Mình" mặc định BẬT cho mọi tài khoản (không tắt được, chỉ xem đúng phiếu lương của chính mình — chặn IDOR ở server); "Lập/Tính Lương" (kế toán/HR) tạo kỳ lương, tính lương tự động, điều chỉnh tay từng dòng, gửi duyệt; "Duyệt Lương" (tách biệt hoàn toàn với Lập/Tính, đúng nguyên tắc phân quyền kế toán — không ai vừa lập vừa tự duyệt được) phê duyệt/từ chối/chốt kỳ lương và phát hành phiếu lương cho nhân viên xem. Bảng lương/thuế/BHXH tham khảo hiện là SỐ MẶC ĐỊNH tạm — admin phải vào "Lương → Cấu Hình Tỷ Lệ" xác nhận/sửa lại đúng số thật trước khi chạy lương thật.</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrPayrollManage"> 💰 Lập/Tính Lương (Kế Toán/HR)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrPayrollApprove"> ✅ Duyệt Lương (tách biệt Lập/Tính)
+            </label>
           </div>
         </details>
 
@@ -7933,6 +7951,185 @@
             <tbody id="hacClockKeyBody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nhân Sự > Lương (Module Lương) — mở cho MỌI người (canAccessHrPayrollModule ở core.js), khối
+       "Quản Lý Kỳ Lương" tự ẩn nếu không có hrPayrollManage/hrPayrollApprove/admin. Xem module-luong.js +
+       lib/payroll.js. -->
+  <div id="hrPayrollSection" class="hidden space-y-4">
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex flex-wrap gap-2 mb-4 border-b pb-2">
+        <button type="button" data-op="setHrPayrollView" data-arg0="SELF" id="btnHrpViewSelf" class="px-3 py-1.5 rounded text-xs font-bold">🙋 Phiếu Lương Của Tôi</button>
+        <button type="button" data-op="setHrPayrollView" data-arg0="MANAGE" id="btnHrpViewManage" class="hidden px-3 py-1.5 rounded text-xs font-bold">🛠️ Quản Lý Kỳ Lương</button>
+      </div>
+
+      <!-- ===== "Phiếu Lương Của Tôi" — mọi người có module "hr" (hrPayrollView mặc định true) ===== -->
+      <div id="hrpViewSelf" class="space-y-3">
+        <p id="hrpSelfNoProfile" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+          ℹ️ Tài khoản của bạn chưa liên kết hồ sơ nhân sự nào — vui lòng liên hệ Nhân Sự để được hỗ trợ liên kết.
+        </p>
+        <p id="hrpSelfEmpty" class="hidden text-center text-gray-400 text-xs py-6">Chưa có phiếu lương nào được công bố.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Kỳ Lương</th><th class="p-2 text-right">Thực Lĩnh</th><th class="p-2 text-center">Đã Xem</th><th class="p-2"></th>
+            </tr></thead>
+            <tbody id="hrpSelfTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== "Quản Lý Kỳ Lương" — hrPayrollManage/hrPayrollApprove/admin ===== -->
+      <div id="hrpViewManage" class="hidden space-y-3">
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="btnHrpCreatePeriod" data-op="toggleHrpCreatePeriodForm" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Tạo Kỳ Lương</button>
+          <button type="button" id="btnHrpRateConfig" data-op="openHrpRateConfigModal" class="hidden bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">⚙️ Cấu Hình Lương</button>
+        </div>
+        <form id="hrpCreatePeriodForm" data-op-submit="submitHrpCreatePeriod" data-op-prevent-default="1" class="hidden bg-gray-50 border rounded p-3 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Tháng</label>
+            <select id="hrpNewMonth" class="w-full border rounded p-1.5 text-xs" required>
+              <option value="1">Tháng 1</option><option value="2">Tháng 2</option><option value="3">Tháng 3</option>
+              <option value="4">Tháng 4</option><option value="5">Tháng 5</option><option value="6">Tháng 6</option>
+              <option value="7">Tháng 7</option><option value="8">Tháng 8</option><option value="9">Tháng 9</option>
+              <option value="10">Tháng 10</option><option value="11">Tháng 11</option><option value="12">Tháng 12</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Năm</label>
+            <input id="hrpNewYear" type="number" min="2020" max="2100" class="w-full border rounded p-1.5 text-xs" required>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Tên Kỳ Lương (tuỳ chọn)</label>
+            <input id="hrpNewName" type="text" maxlength="100" placeholder="Để trống sẽ tự đặt 'Lương Tháng MM/YYYY'" class="w-full border rounded p-1.5 text-xs">
+          </div>
+          <div class="md:col-span-4">
+            <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Tạo Kỳ Lương</button>
+          </div>
+        </form>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Kỳ</th><th class="p-2 text-center">Trạng Thái</th><th class="p-2 text-right">Số NV</th>
+              <th class="p-2 text-right">Tổng Chi</th><th class="p-2"></th>
+            </tr></thead>
+            <tbody id="hrpPeriodsTableBody"></tbody>
+          </table>
+          <p id="hrpPeriodsEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có kỳ lương nào.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal xem chi tiết 1 kỳ lương (danh sách payslip, điều chỉnh, chuyển trạng thái) — HR/Kế Toán. -->
+  <div id="hrpPeriodDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-5">
+      <div class="flex justify-between items-start mb-3">
+        <h3 id="hrpPdTitle" class="text-base font-bold text-gray-800"></h3>
+        <button type="button" data-op="closeHrpPeriodDetailModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+      </div>
+      <div id="hrpPdStatusBadge" class="text-xs mb-3"></div>
+      <div class="flex flex-wrap gap-2 mb-3" id="hrpPdActions"></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="border-b bg-gray-50">
+            <th class="p-2 text-left">Mã NV</th><th class="p-2 text-right">Ngày Công</th><th class="p-2 text-right">Tổng Thu Nhập</th>
+            <th class="p-2 text-right">Tổng Khấu Trừ</th><th class="p-2 text-right">Thực Lĩnh</th><th class="p-2"></th>
+          </tr></thead>
+          <tbody id="hrpPdTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal điều chỉnh 1 dòng thành phần lương nhập tay (thưởng/phạt/tạm ứng/phụ cấp phát sinh). -->
+  <div id="hrpAdjustDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5">
+      <div class="flex justify-between items-start mb-3">
+        <h3 class="text-base font-bold text-gray-800">✏️ Điều Chỉnh Phiếu Lương — <span id="hrpAdjEmployeeCode"></span></h3>
+        <button type="button" data-op="closeHrpAdjustDetailModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+      </div>
+      <div id="hrpAdjExistingRows" class="mb-3 space-y-1"></div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end bg-gray-50 border rounded p-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Thành Phần</label>
+          <select id="hrpAdjComponent" class="w-full border rounded p-1.5 text-xs"></select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Số Tiền (0 = xoá dòng)</label>
+          <input id="hrpAdjAmount" type="number" step="1" class="w-full border rounded p-1.5 text-xs">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Ghi Chú</label>
+          <input id="hrpAdjNote" type="text" maxlength="300" class="w-full border rounded p-1.5 text-xs">
+        </div>
+        <div class="md:col-span-3">
+          <button type="button" data-op="submitHrpAdjustDetail" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">Lưu Điều Chỉnh</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal mở lại kỳ lương đã Chốt/Công Bố — bắt buộc nhập lý do (ghi log). -->
+  <div id="hrpReopenModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-5">
+      <h3 class="text-base font-bold text-gray-800 mb-3">🔓 Mở Lại Kỳ Lương</h3>
+      <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Kỳ lương sẽ trở về trạng thái Nháp, mọi bước duyệt/chốt/công bố trước đó bị huỷ (có ghi log).</p>
+      <label class="block text-[11px] font-semibold text-gray-600 mb-1">Lý do (bắt buộc)</label>
+      <textarea id="hrpReopenReason" rows="3" class="w-full border rounded p-1.5 text-xs mb-3"></textarea>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-op="closeHrpReopenModal" class="px-3 py-1.5 rounded text-xs border">Huỷ</button>
+        <button type="button" data-op="submitHrpReopen" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">Xác Nhận Mở Lại</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal xem chi tiết phiếu lương của CHÍNH MÌNH (tự xem, xuất PDF). -->
+  <div id="hrpPayslipViewModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5">
+      <div class="flex justify-between items-start mb-3">
+        <h3 id="hrpPvTitle" class="text-base font-bold text-gray-800"></h3>
+        <button type="button" data-op="closeHrpPayslipViewModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+      </div>
+      <div id="hrpPvContent"></div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" data-op="exportHrpPayslipPdf" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">📄 Tải PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal cấu hình % BHXH/BHYT/BHTN, biểu thuế TNCN, trần đóng BH, ngày công chuẩn — xem điều chỉnh
+       #4 lib/payroll.js. hrPayrollManage/admin sửa được (không chỉ admin). -->
+  <div id="hrpRateConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5">
+      <div class="flex justify-between items-start mb-3">
+        <h3 class="text-base font-bold text-gray-800">⚙️ Cấu Hình Lương</h3>
+        <button type="button" data-op="closeHrpRateConfigModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+        ⚠️ Số liệu mặc định chỉ mang tính THAM KHẢO — vui lòng xác nhận lại đúng quy định hiện hành (đặc biệt
+        <b>Trần đóng BHXH</b>, hiện KHÔNG có giá trị mặc định thật) trước khi chạy lương thật.
+      </p>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+        <div><label class="block font-semibold text-gray-600 mb-1">% BHXH</label><input id="hrpRcBhxhPercent" type="number" step="0.1" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">% BHYT</label><input id="hrpRcBhytPercent" type="number" step="0.1" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">% BHTN</label><input id="hrpRcBhtnPercent" type="number" step="0.1" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Trần đóng BHXH (đ)</label><input id="hrpRcBhxhCap" type="number" step="1000" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Giảm trừ bản thân (đ)</label><input id="hrpRcPersonalDeduction" type="number" step="1000" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Giảm trừ/người phụ thuộc (đ)</label><input id="hrpRcDependentDeduction" type="number" step="1000" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ngày công chuẩn HO</label><input id="hrpRcStandardWorkDaysHo" type="number" step="0.5" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Ngày công chuẩn Siêu Thị</label><input id="hrpRcStandardWorkDaysStore" type="number" step="0.5" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Giờ chuẩn/ngày</label><input id="hrpRcStandardHoursPerDay" type="number" step="0.5" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Hệ số OT thường</label><input id="hrpRcOtMultiplierNormal" type="number" step="0.1" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Hệ số OT cuối tuần</label><input id="hrpRcOtMultiplierWeekend" type="number" step="0.1" class="w-full border rounded p-1.5"></div>
+        <div><label class="block font-semibold text-gray-600 mb-1">Hệ số OT lễ/tết</label><input id="hrpRcOtMultiplierHoliday" type="number" step="0.1" class="w-full border rounded p-1.5"></div>
+      </div>
+      <p class="text-[11px] text-gray-500 mt-3">Biểu thuế TNCN 7 bậc dùng số liệu chuẩn theo Luật Thuế TNCN hiện hành — chưa hỗ trợ sửa qua giao diện ở bản này, cần đổi liên hệ đội kỹ thuật nếu biểu thuế thay đổi.</p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" data-op="closeHrpRateConfigModal" class="px-3 py-1.5 rounded text-xs border">Huỷ</button>
+        <button type="button" data-op="submitHrpRateConfig" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">Lưu Cấu Hình</button>
       </div>
     </div>
   </div>

@@ -334,7 +334,8 @@ function renderHrProcessDetailBody(item) {
         <td class="p-2">${HR_TASK_STATUS_BADGES[overdue ? 'OVERDUE' : t.status] || escapeHtml(t.status)}</td>
         <td class="p-2">${actions}</td>
       </tr>
-      ${t.note ? `<tr><td colspan="6" class="px-2 pb-2 text-[11px] text-gray-500 italic">Ghi chú: ${escapeHtml(t.note)}</td></tr>` : ''}`;
+      ${t.note ? `<tr><td colspan="6" class="px-2 pb-2 text-[11px] text-gray-500 italic">Ghi chú: ${escapeHtml(t.note)}</td></tr>` : ''}
+      ${t.leavePayoutInfo && t.leavePayoutInfo.amount > 0 ? `<tr><td colspan="6" class="px-2 pb-2 text-[11px] text-amber-700 italic">💰 Quy đổi phép năm chưa nghỉ (tham khảo): ${t.leavePayoutInfo.remainingDays} ngày × ${(t.leavePayoutInfo.dailyRate || 0).toLocaleString('vi-VN')}đ = <b>${t.leavePayoutInfo.amount.toLocaleString('vi-VN')}đ</b> — kế toán vào module Lương, thêm dòng "Thưởng khác" trên phiếu lương kỳ cuối của nhân viên này nếu công ty quyết định chi trả.</td></tr>` : ''}`;
   }).join('');
 
   const attachmentList = (item.attachments || []).length

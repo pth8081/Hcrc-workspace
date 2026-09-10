@@ -23,7 +23,7 @@
 // (chi con admin.js), "admin-permtree", "admin-permgroups" (con lai 3 file), "internalcomms-daotao"
 // — cac module vanHanh/Dong Phuc/HCRC Dong Hanh/Nhat Ky He Thong/Bao Cao Quan Tri hoan toan HET phai
 // nap ca cum admin-permgroups (315KB/82KB gzip) VA cum Dao Tao (205KB) kem theo nua.
-const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]}};
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]}};
 
 // MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
 // duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
@@ -33,7 +33,7 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
 // bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
@@ -1672,6 +1672,11 @@ const BUSINESS_MODULES = [
   // tự ẩn/hiện theo đúng quyền hrAttendanceManage/hrLeaveApprove/hrShiftRosterManage/hrShiftSwapApprove,
   // xem canAccessHrAttendanceModule().
   { key: 'hrAttendance', label: 'Công & Phép', parent: 'hr' },
+  // "Lương" — module con MỚI của "Nhân Sự" (Module Lương, xem lib/payroll.js đầu file phía server).
+  // MỞ CHO MỌI NGƯỜI (cùng khuôn hrProfile/hrAttendance) vì mọi nhân viên đều tự xem phiếu lương CỦA
+  // CHÍNH MÌNH — khối "Quản Lý Kỳ Lương" tự ẩn/hiện theo hrPayrollManage/hrPayrollApprove, xem
+  // canAccessHrPayrollModule().
+  { key: 'hrPayroll', label: 'Lương', parent: 'hr' },
   // "Vận Hành" — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu với officeReqs của "Tổng
   // Hợp"): quyền thật nằm ở operationOrderCreate/operationStoreOpenCreate/operationRepairCreate (khối
   // phân quyền riêng), đúng khuôn "Đồng Phục"/"Giấy Phép" — module không mở sẵn cho ai.
@@ -2659,6 +2664,12 @@ function defaultNewUserPerms() {
     hrAttendanceManage: false, hrLeaveApprove: false, hrShiftRosterManage: false, hrShiftSwapApprove: false,
     operationOrderCreate: false, operationStoreOpenCreate: false, operationRepairCreate: false,
     operationRecordManageAll: false,
+    // Nhân Sự > Lương (Module Lương, xem lib/payroll.js) — hrPayrollView MẶC ĐỊNH TRUE (mọi nhân viên
+    // đều tự xem được phiếu lương CỦA CHÍNH MÌNH khi đã công bố, qua route riêng IDOR-safe, KHÔNG phải
+    // quyền xem người khác) — TÁCH BIỆT hrPayrollManage (lập/tính/điều chỉnh) và hrPayrollApprove (duyệt
+    // cuối) theo đúng nguyên tắc kiểm soát nội bộ (segregation of duties) tài liệu gốc yêu cầu, KHÔNG để
+    // 1 quyền gộp chung 2 việc.
+    hrPayrollManage: false, hrPayrollApprove: false, hrPayrollView: true,
     approverAuthLevel: 'NONE'
   };
 }
@@ -5446,10 +5457,12 @@ function finishLogin(user) {
   document.getElementById('btnHrProfileNav').classList.toggle('hidden', !canAccessHrProfileModule(user));
   document.getElementById('btnHrContractNav').classList.toggle('hidden', !canAccessHrContractModule(user));
   document.getElementById('btnHrAttendanceNav').classList.toggle('hidden', !canAccessHrAttendanceModule(user));
+  document.getElementById('btnHrPayrollNav').classList.toggle('hidden', !canAccessHrPayrollModule(user));
   updateHrNavVisibility();
 
   populateDropdowns();
   switchTab('dashboard');
+  refreshNotifBadge();
   startSessionKeepAlive();
   startApprovalPolling();
   openTakeTestFromQueryParam();
@@ -6041,6 +6054,10 @@ async function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Công & Phép!');
     return;
   }
+  if (tabName === 'hrPayroll' && !canAccessHrPayrollModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Lương!');
+    return;
+  }
   if (tabName === 'budget' && !canAccessBudgetModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Ngân Sách!');
     return;
@@ -6087,6 +6104,7 @@ async function switchTab(tabName) {
   document.getElementById('hrProfileSection').classList.toggle('hidden', tabName !== 'hrProfile');
   document.getElementById('hrContractSection').classList.toggle('hidden', tabName !== 'hrContract');
   document.getElementById('hrAttendanceSection').classList.toggle('hidden', tabName !== 'hrAttendance');
+  document.getElementById('hrPayrollSection').classList.toggle('hidden', tabName !== 'hrPayroll');
 
   populateDropdowns();
   updateApprovalHubBadge();
@@ -6173,6 +6191,7 @@ function _dispatchTabRender(tabName) {
     setHrLifecycleView(activeHrLifecycleView);
   }
   if (tabName === 'hrProfile') { renderHrProfileModule(); }
+  if (tabName === 'hrPayroll') { renderHrPayrollModule(); }
   if (tabName === 'hrContract') { renderHrContractModule(); }
   if (tabName === 'hrAttendance') { renderHrAttendanceModule(); }
 }
@@ -6320,6 +6339,99 @@ function canAccessHrAttendanceModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   return hasModuleAccess(user, 'hrAttendance');
+}
+
+// Lương — cùng khuôn hrAttendance/hrProfile (mở cho MỌI nhân viên đã đăng nhập, không riêng
+// hrPayrollManage/hrPayrollApprove): tab "Phiếu Lương Của Tôi" tự xem CỦA CHÍNH MÌNH là quyền mặc định
+// (hrPayrollView:true, xem defaultNewUserPerms()) — khối "Quản Lý Kỳ Lương" bên trong tự ẩn/hiện theo
+// hrPayrollManage/hrPayrollApprove (xem module-luong.js), route server luôn chặn lại đúng theo quyền dù
+// client có lỡ hiện nhầm.
+function canAccessHrPayrollModule(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return hasModuleAccess(user, 'hrPayroll');
+}
+
+// ===== Chuông thông báo trong app (GENERIC — không riêng module Lương, xem lib/notifications.js) =====
+// Đặt ở core.js (KHÔNG phải module-luong.js, dù động lực xây ra đời từ Mục 8 tài liệu Payroll) vì
+// core.js luôn nạp sẵn cho MỌI trang (khác các module-*.js chỉ nạp lười theo tab đang mở, xem
+// MODULE_LOAD_GROUPS) — chuông phải hiển thị đúng số chưa đọc dù người dùng đang ở bất kỳ tab nào,
+// không riêng lúc mở tab Lương.
+async function toggleNotifDropdown(e) {
+  e.stopPropagation();
+  const panel = document.getElementById('notifDropdownPanel');
+  if (!panel) return;
+  const willOpen = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (willOpen) await loadAndRenderNotifDropdown();
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('notifDropdownPanel');
+  const btn = document.getElementById('btnNotifBell');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+function updateNotifBadge(unreadCount) {
+  const badge = document.getElementById('notifUnreadBadge');
+  if (!badge) return;
+  badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+  badge.classList.toggle('hidden', !unreadCount);
+}
+
+// Gọi lúc đăng nhập (chỉ để cập nhật số badge, KHÔNG mở dropdown) — xem loadInitialData()/tương đương.
+async function refreshNotifBadge() {
+  try {
+    const res = await fetch('/api/notifications', { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    updateNotifBadge(data.unreadCount || 0);
+  } catch (err) { console.error('Không tải được số thông báo chưa đọc:', err.message); }
+}
+
+async function loadAndRenderNotifDropdown() {
+  const panel = document.getElementById('notifDropdownPanel');
+  panel.innerHTML = '<div class="p-3 text-xs text-gray-400">Đang tải...</div>';
+  try {
+    const res = await fetch('/api/notifications', { credentials: 'include' });
+    if (!res.ok) throw new Error('Lỗi tải thông báo');
+    const data = await res.json();
+    updateNotifBadge(data.unreadCount || 0);
+    const list = data.notifications || [];
+    if (!list.length) {
+      panel.innerHTML = '<div class="p-3 text-xs text-gray-400">Chưa có thông báo nào.</div>';
+      return;
+    }
+    panel.innerHTML = `
+      <div class="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
+        <span class="font-semibold text-xs">Thông báo</span>
+        <button data-op="markAllNotifRead" class="text-[11px] text-blue-600 hover:underline">Đánh dấu tất cả đã đọc</button>
+      </div>
+      ${list.map(n => `
+        <div data-op="onClickNotifItem" data-arg0="${n.id}" class="px-3 py-2 border-b last:border-0 cursor-pointer hover:bg-gray-50 ${n.isRead ? 'opacity-60' : 'bg-blue-50'}">
+          <div class="text-xs font-semibold">${escapeHtml(n.title || '')}</div>
+          <div class="text-[11px] text-gray-600">${escapeHtml(n.message || '')}</div>
+          <div class="text-[10px] text-gray-400 mt-0.5">${escapeHtml(n.createdAt || '')}</div>
+        </div>
+      `).join('')}
+    `;
+  } catch (err) {
+    panel.innerHTML = '<div class="p-3 text-xs text-red-500">Không tải được thông báo.</div>';
+  }
+}
+
+async function onClickNotifItem(id) {
+  try {
+    await fetch(`/api/notifications/${id}/read`, { method: 'PATCH', credentials: 'include' });
+  } catch (err) { /* không chặn điều hướng nếu đánh dấu đã đọc lỗi */ }
+  await loadAndRenderNotifDropdown();
+}
+
+async function markAllNotifRead() {
+  try {
+    await fetch('/api/notifications/mark-all-read', { method: 'POST', credentials: 'include' });
+  } catch (err) { /* ignore */ }
+  await loadAndRenderNotifDropdown();
 }
 
 // isManagerOf()/workItemAssignees()/isWorkItemAssignee() — CHUYỂN từ module-hcrcdonghanh.js sang đây
@@ -7416,6 +7528,13 @@ bindCspDelegation('hrContractSection');
 bindCspDelegation('hrContractCreateModal');
 bindCspDelegation('hrContractDetailModal');
 bindCspDelegation('hrAttendanceSection');
+bindCspDelegation('notifDropdownPanel');
+bindCspDelegation('hrPayrollSection');
+bindCspDelegation('hrpPeriodDetailModal');
+bindCspDelegation('hrpAdjustDetailModal');
+bindCspDelegation('hrpRateConfigModal');
+bindCspDelegation('hrpReopenModal');
+bindCspDelegation('hrpPayslipViewModal');
 bindCspDelegation('hacLeaveRequestModal');
 bindCspDelegation('hacSwapRequestModal');
 bindCspDelegation('hacRosterModal');

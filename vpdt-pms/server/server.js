@@ -43,6 +43,8 @@ const externalAuthAdminRoutes = require('./routes/externalAuthAdmin');
 const externalAuthVerifyRoutes = require('./routes/externalAuthVerify');
 const attendanceClockAdminRoutes = require('./routes/attendanceClockAdmin');
 const attendanceClockPunchRoutes = require('./routes/attendanceClockPunch');
+const notificationsRoutes = require('./routes/notifications');
+const payrollRoutes = require('./routes/payroll');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -176,6 +178,9 @@ app.use('/api/external', externalAuthVerifyRoutes);
 // máy chấm công, tự xác thực bằng API key trong header Authorization.
 app.use('/api/admin/attendance-clock-api-keys', attendanceClockAdminRoutes);
 app.use('/api/attendance', attendanceClockPunchRoutes);
+// Nhân Sự > Lương (Module Lương) + Thông báo trong app dùng chung — xem lib/payroll.js/lib/notifications.js.
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/payroll', payrollRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);
