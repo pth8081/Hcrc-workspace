@@ -55,10 +55,63 @@ function hrcApplyUpdate(item) {
 }
 
 // ===== Tạo hợp đồng TAY (ngoại lệ — đa số bản ghi hệ thống tự tạo qua hook Onboarding) =====
+//
+// Mã Nhân Viên: MẶC ĐỊNH bắt buộc chọn từ Hồ Sơ Nhân Sự (đúng khuôn resolveUniformEmployeeInput() ở
+// module-dongphuc.js — ô tìm-chọn sdd*, khớp nhãn "Tên (Mã NV)" bằng regex, KHÔNG gõ tự do) để tránh gõ
+// sai mã — người dùng bấm tick "Không lấy từ hồ sơ" (#hrcNewUseExternalCode) mới chuyển sang ô nhập tay
+// tự do (nhân viên cũ/cộng tác viên chưa có hồ sơ trong hệ thống). Server (createValidation.js
+// laborContracts.extraValidate) validate lại y hệt — client chỉ chặn sớm cho gọn UX.
+//
+// Dữ liệu picker lấy qua route riêng GET /api/hr-profile/employee-directory (module-hrprofile.js KHÔNG
+// đảm bảo đã nạp cùng cụm module với module này — xem MODULE_LOAD_GROUPS ở core.js, "hopdonglaodong"
+// không phụ thuộc "hrprofile" — nên gọi fetch() thẳng tại đây, không dùng lại hrProfileApiCall()).
+let hrcEmployeeDirectoryCache = [];
+
+async function loadHrcEmployeeDirectory() {
+  try {
+    const res = await fetch('/api/hr-profile/employee-directory');
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Không tải được danh sách Hồ Sơ Nhân Sự');
+    hrcEmployeeDirectoryCache = json.directory || [];
+    sddSetOptions('hrcEmployeeDirectoryDatalist', hrcEmployeeDirectoryCache.map(p => `${p.fullName || '(chưa rõ tên)'} (${p.employeeCode})`));
+  } catch (err) {
+    hrcEmployeeDirectoryCache = [];
+    console.error('loadHrcEmployeeDirectory:', err.message);
+  }
+}
+
+// Khớp text đang gõ (định dạng "Tên (Mã NV)") với đúng 1 hồ sơ trong danh sách vừa nạp -> ghi Mã NV vào
+// input ẩn #hrcNewEmployeeCodeResolved; không khớp (gõ tự do/chưa chọn xong) thì để trống, submit sẽ
+// báo lỗi "chưa chọn nhân viên".
+function resolveHrcEmployeeCodeInput(rawValue) {
+  const m = (rawValue || '').match(/\(([^()]+)\)\s*$/);
+  const code = m ? m[1].trim() : '';
+  const found = hrcEmployeeDirectoryCache.some(p => p.employeeCode === code);
+  document.getElementById('hrcNewEmployeeCodeResolved').value = found ? code : '';
+}
+
+// Tick "Không lấy từ hồ sơ" -> ẩn ô tìm-chọn, hiện ô nhập tay tự do (và ngược lại) — xoá dữ liệu ở nhánh
+// vừa ẩn để tránh sót giá trị cũ từ lần chọn trước lọt vào submit.
+function onHrcUseExternalCodeChange(checkboxEl) {
+  const external = !!checkboxEl.checked;
+  document.getElementById('hrcNewEmployeePickerWrap').classList.toggle('hidden', external);
+  document.getElementById('hrcNewEmployeeCodeManual').classList.toggle('hidden', !external);
+  if (external) {
+    document.getElementById('hrcNewEmployeePickerInput').value = '';
+    document.getElementById('hrcNewEmployeeCodeResolved').value = '';
+  } else {
+    document.getElementById('hrcNewEmployeeCodeManual').value = '';
+  }
+}
+
 function openHrContractCreateModal() {
   document.getElementById('hrContractCreateForm').reset();
+  document.getElementById('hrcNewEmployeePickerWrap').classList.remove('hidden');
+  document.getElementById('hrcNewEmployeeCodeManual').classList.add('hidden');
   renderDynamicInputsForModule('LABOR_CONTRACT', 'dynamicFieldsContainer_LABOR_CONTRACT');
   document.getElementById('hrContractCreateModal').classList.remove('hidden');
+  loadHrcEmployeeDirectory();
 }
 function closeHrContractCreateModal() {
   document.getElementById('hrContractCreateModal').classList.add('hidden');
@@ -66,8 +119,16 @@ function closeHrContractCreateModal() {
 
 async function submitHrContractCreate(e) {
   e.preventDefault();
-  const employeeCode = document.getElementById('hrcNewEmployeeCode').value.trim();
-  if (!employeeCode) return alert('⛔ Vui lòng nhập Mã Nhân Viên.');
+  const useExternalCode = !!document.getElementById('hrcNewUseExternalCode').checked;
+  const employeeCode = (useExternalCode
+    ? document.getElementById('hrcNewEmployeeCodeManual').value
+    : document.getElementById('hrcNewEmployeeCodeResolved').value
+  ).trim();
+  if (!employeeCode) {
+    return alert(useExternalCode
+      ? '⛔ Vui lòng nhập Mã Nhân Viên.'
+      : '⛔ Vui lòng gõ và chọn đúng 1 nhân viên từ Hồ Sơ Nhân Sự (hoặc tick "Không lấy từ hồ sơ" để nhập mã ngoài hệ thống).');
+  }
   const contractType = document.getElementById('hrcNewContractType').value;
   const startDate = document.getElementById('hrcNewStartDate').value;
   if (!startDate) return alert('⛔ Vui lòng nhập Ngày hiệu lực.');
@@ -94,7 +155,7 @@ async function submitHrContractCreate(e) {
   }
 
   try {
-    const result = await callCreateAction('laborContracts', { employeeCode, contractType, startDate, endDate, baseSalary, fileUrl, fileName, customData });
+    const result = await callCreateAction('laborContracts', { employeeCode, useExternalCode, contractType, startDate, endDate, baseSalary, fileUrl, fileName, customData });
     hrcApplyUpdate(result.item);
     closeHrContractCreateModal();
     alert('✅ Đã tạo hợp đồng lao động.');

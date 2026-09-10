@@ -58,11 +58,14 @@ const HR_MGR = { username: 'hr1', name: 'Nhân Sự Trưởng', dept: 'Phòng Nh
 const DIRECT_MGR = { username: 'mgr1', name: 'Trưởng Phòng KD', dept: 'Phòng Kinh Doanh', perms: { hrProfileView: true }, active: true };
 const EMP1 = { username: 'emp1', name: 'Nhân Viên Một', dept: 'Phòng Kinh Doanh', managerUsername: 'mgr1', perms: {}, active: true };
 const OUTSIDER = { username: 'nv2', name: 'Người Ngoài Cuộc', dept: 'Kế Toán', managerUsername: null, perms: {}, active: true };
-let USERS = [ADMIN, HR_MGR, DIRECT_MGR, EMP1, OUTSIDER];
+// CHỈ hrContractManage (KHÔNG có hrProfileManage) — dùng để test GET /employee-directory mở quyền rộng hơn
+// GET / (module-hopdonglaodong.js cần tra được mã nhân viên dù không có hrProfileManage).
+const HR_CONTRACT_MGR = { username: 'hrc1', name: 'Phụ Trách Hợp Đồng LĐ', dept: 'Phòng Nhân Sự', perms: { hrContractManage: true }, active: true };
+let USERS = [ADMIN, HR_MGR, DIRECT_MGR, EMP1, OUTSIDER, HR_CONTRACT_MGR];
 
 let APP_DATA;
 function resetAppData() {
-  APP_DATA = { users: USERS, employeeProfiles: [] };
+  APP_DATA = { users: USERS, employeeProfiles: [], hrProcesses: [] };
 }
 resetAppData();
 
@@ -177,6 +180,30 @@ async function main() {
       assertEqual(deniedMgr.status, 403, 'Quản lý trực tiếp (chỉ hrProfileView) không được xem danh sách đầy đủ');
       const deniedEmp = await api('GET', '/api/hr-profile', undefined, EMP1);
       assertEqual(deniedEmp.status, 403, 'Nhân viên thường không được xem danh sách');
+    });
+
+    await run.run('GET /employee-directory — mở quyền RỘNG HƠN GET / (thêm hrContractManage), chỉ trả employeeCode+tên, loại INACTIVE', async () => {
+      resetAppData();
+      seedLinkedProfile({}); // NV001, liên kết emp1 -> tên tra qua DB.users
+      APP_DATA.hrProcesses.push({ id: 200, fullName: 'Nguyễn Văn Chưa Liên Kết' });
+      APP_DATA.employeeProfiles.push(Object.assign(employeeProfile.defaultProfile('NV002'), { status: 'ACTIVE', processId: 200 }));
+      APP_DATA.employeeProfiles.push(Object.assign(employeeProfile.defaultProfile('NV003'), { status: 'INACTIVE' }));
+      for (const u of [ADMIN, HR_MGR, HR_CONTRACT_MGR]) {
+        const ok = await api('GET', '/api/hr-profile/employee-directory', undefined, u);
+        assertEqual(ok.status, 200, `${u.username} (hrProfileManage hoặc hrContractManage) phải tra được`);
+        const codes = ok.body.directory.map(d => d.employeeCode);
+        assertEqual(codes.includes('NV001'), true, 'NV001 (ACTIVE) phải có trong danh sách');
+        assertEqual(codes.includes('NV002'), true, 'NV002 (ACTIVE) phải có trong danh sách');
+        assertEqual(codes.includes('NV003'), false, 'NV003 (INACTIVE) KHÔNG được có trong danh sách');
+        const nv001 = ok.body.directory.find(d => d.employeeCode === 'NV001');
+        assertEqual(nv001.fullName, 'Nhân Viên Một', 'NV001 tra tên qua username đã liên kết (DB.users)');
+        assertEqual('username' in nv001, false, 'Danh sách nhẹ KHÔNG được lộ username');
+        assertEqual('status' in nv001, false, 'Danh sách nhẹ KHÔNG được lộ status');
+        const nv002 = ok.body.directory.find(d => d.employeeCode === 'NV002');
+        assertEqual(nv002.fullName, 'Nguyễn Văn Chưa Liên Kết', 'NV002 (chưa liên kết) tra tên qua processId (DB.hrProcesses)');
+      }
+      const denied = await api('GET', '/api/hr-profile/employee-directory', undefined, EMP1);
+      assertEqual(denied.status, 403, 'Người không có hrProfileManage lẫn hrContractManage bị chặn');
     });
 
     await run.run('GET /by-code/:code — HR/admin xem đủ; quản lý trực tiếp xem giới hạn; người ngoài 404', async () => {

@@ -847,7 +847,11 @@ xem hợp đồng của chính mình ở đợt này.
   Onboarding cụ thể nữa) là thao tác **tay** của HR ở màn Hợp Đồng Lao Động —
   quá **2 lần gia hạn liên tiếp bắt buộc chuyển Vô thời hạn** theo luật.
 - **Tạo tay** chỉ dùng cho trường hợp ngoại lệ (nhân viên cũ chưa có dữ liệu
-  trong hệ thống, hợp đồng phát sinh ngoài luồng Onboarding chuẩn).
+  trong hệ thống, hợp đồng phát sinh ngoài luồng Onboarding chuẩn). **Mã Nhân
+  Viên MẶC ĐỊNH bắt buộc chọn từ Hồ Sơ Nhân Sự** (ô tìm-chọn, tránh gõ sai mã —
+  chặn cả ở server, không chỉ ở giao diện) — tick **"Không lấy từ hồ sơ (nhập
+  mã ngoài hệ thống)"** mới chuyển sang ô nhập tay tự do, dùng cho nhân viên
+  cũ/cộng tác viên chưa có hồ sơ trong hệ thống.
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
   hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
   hạn số lần, giữ nguyên lịch sử.

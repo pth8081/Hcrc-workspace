@@ -2626,9 +2626,20 @@ const CREATE_MODULE_CONFIGS = {
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
       const { canManageContracts, CONTRACT_TYPES, generateContractCode } = require('./laborContract');
+      const { findProfile } = require('./employeeProfile');
       if (!canManageContracts(user)) throw new CreateError(403, 'Bạn không có quyền tạo/quản lý hợp đồng lao động');
       if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
       payload.employeeCode = String(payload.employeeCode).trim().slice(0, 50);
+      // Mặc định (useExternalCode !== true): bắt buộc employeeCode phải tồn tại thật trong Hồ Sơ Nhân Sự
+      // (đã chọn qua picker "GET /api/hr-profile/employee-directory" ở client) — chặn gõ nhầm mã. Tick
+      // "Không lấy từ hồ sơ" ở form thì bỏ qua bước này (nhân viên cũ/cộng tác viên chưa có hồ sơ trong
+      // hệ thống, xem chú thích useExternalCode ở module-hopdonglaodong.js). Field này chỉ điều khiển
+      // validate, KHÔNG lưu vào bản ghi.
+      const useExternalCode = payload.useExternalCode === true || payload.useExternalCode === 'true';
+      if (!useExternalCode && !findProfile(appData?.employeeProfiles, payload.employeeCode)) {
+        throw new CreateError(400, 'Mã Nhân Viên không có trong Hồ Sơ Nhân Sự — tick "Không lấy từ hồ sơ (nhập mã ngoài hệ thống)" nếu muốn nhập mã không có trong hệ thống');
+      }
+      delete payload.useExternalCode;
       if (!CONTRACT_TYPES.has(payload.contractType)) throw new CreateError(400, 'Vui lòng chọn Loại hợp đồng hợp lệ');
       if (!payload.startDate || Number.isNaN(new Date(payload.startDate).getTime())) throw new CreateError(400, 'Vui lòng nhập Ngày hiệu lực hợp lệ');
       payload.startDate = String(payload.startDate).trim();

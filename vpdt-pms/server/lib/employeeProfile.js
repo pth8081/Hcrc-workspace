@@ -149,6 +149,20 @@ function canManageProfiles(user) {
   return !!(user?.perms?.admin || user?.perms?.hrProfileManage);
 }
 
+// Tra tên hiển thị cho 1 hồ sơ — employeeProfiles KHÔNG lưu fullName/dept/jobTitle (chỉ giữ employeeCode
+// + dữ liệu cá nhân nhạy cảm, xem đầu file), tra theo username đã liên kết (DB.users) hoặc theo processId
+// (DB.hrProcesses, snapshot lúc tạo Onboarding) — mirror ĐÚNG hrpfIdentitySnapshot() phía client
+// (module-hrprofile.js), dùng cho các route/module KHÁC cần hiển thị "Tên (Mã NV)" mà không tải cả object
+// profile đầy đủ (VD picker chọn nhân viên ở module Hợp Đồng Lao Động).
+function resolveProfileDisplayName(profile, users, hrProcesses) {
+  if (profile.username) {
+    const u = (users || []).find(x => x.username === profile.username);
+    if (u) return u.name || '';
+  }
+  const proc = (hrProcesses || []).find(p => p.id === profile.processId);
+  return proc?.fullName || '';
+}
+
 // Trả về đúng bản hồ sơ theo vai trò người xem — KHÔNG bao giờ trả nguyên object gốc cho vai trò
 // "quản lý trực tiếp xem giới hạn" (xem SENSITIVE_FIELDS ở trên).
 function getProfileForViewer(profile, viewer, allUsers) {
@@ -255,5 +269,5 @@ module.exports = {
   STATUSES, SENSITIVE_FIELDS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS,
   findProfile, findProfileByUsername, defaultProfile, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
-  applyProfileEdit, assertValidManualStatusTransition
+  applyProfileEdit, assertValidManualStatusTransition, resolveProfileDisplayName
 };

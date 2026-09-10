@@ -7947,8 +7947,20 @@
       </div>
       <form id="hrContractCreateForm" data-op-submit="submitHrContractCreate" class="space-y-2 text-xs">
         <div>
-          <label class="block font-semibold text-gray-600 mb-1">Mã Nhân Viên <span class="text-red-500">*</span></label>
-          <input type="text" id="hrcNewEmployeeCode" required class="w-full border p-1.5 rounded bg-white">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-gray-600">Mã Nhân Viên <span class="text-red-500">*</span></label>
+            <label class="flex items-center gap-1 text-[11px] text-gray-500 font-normal cursor-pointer">
+              <input type="checkbox" id="hrcNewUseExternalCode" data-op-change="onHrcUseExternalCodeChange" data-arg-el="0">
+              Không lấy từ hồ sơ (nhập mã ngoài hệ thống)
+            </label>
+          </div>
+          <div id="hrcNewEmployeePickerWrap">
+            <input type="text" id="hrcNewEmployeePickerInput" data-sdd-list="hrcEmployeeDirectoryDatalist" autocomplete="off" data-op-input="resolveHrcEmployeeCodeInput" data-arg-value="0" placeholder="Gõ tên/mã nhân viên để chọn từ Hồ Sơ Nhân Sự..." class="w-full border p-1.5 rounded bg-white">
+            <div id="hrcEmployeeDirectoryDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <input type="hidden" id="hrcNewEmployeeCodeResolved">
+          </div>
+          <input type="text" id="hrcNewEmployeeCodeManual" placeholder="Nhập Mã Nhân Viên" class="hidden w-full border p-1.5 rounded bg-white">
+          <p class="text-gray-400 mt-0.5">Mặc định chọn từ Hồ Sơ Nhân Sự để tránh gõ sai mã — tick ô trên nếu nhân viên chưa có hồ sơ trong hệ thống.</p>
         </div>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Loại Hợp Đồng <span class="text-red-500">*</span></label>

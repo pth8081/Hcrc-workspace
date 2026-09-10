@@ -186,9 +186,13 @@ async function partB() {
     },
     blockIfMustChangePassword: (req, res, next) => next()
   });
+  // NV4001 có sẵn hồ sơ (happy path chọn từ Hồ Sơ Nhân Sự đúng đường thật — xem
+  // lib/createValidation.js::laborContracts.extraValidate); NV4002/NV4003 KHÔNG có hồ sơ, dùng riêng cho
+  // 2 test employeeCode-phải-tồn-tại-trong-Hồ-Sơ (thêm useExternalCode: true khi bypass) ở dưới.
+  const EMPLOYEE_PROFILES = [{ employeeCode: 'NV4001', status: 'ACTIVE', username: null, processId: null }];
   stubModule('lib/appData', {
-    getAppDataValue: async (key) => (key === 'users' ? USERS : (key === 'employeeProfiles' ? [] : null)),
-    getAllAppData: async () => ({ users: USERS, employeeProfiles: [], depts: ['Nhân Sự', 'Kinh Doanh'], stores: [] }),
+    getAppDataValue: async (key) => (key === 'users' ? USERS : (key === 'employeeProfiles' ? EMPLOYEE_PROFILES : null)),
+    getAllAppData: async () => ({ users: USERS, employeeProfiles: EMPLOYEE_PROFILES, depts: ['Nhân Sự', 'Kinh Doanh'], stores: [] }),
     withLockedAppDataValue: async (key, fn) => fn(key === 'users' ? USERS : [])
   });
 
@@ -230,6 +234,19 @@ async function partB() {
     await test('POST /api/create/laborContracts — người không có hrContractManage bị chặn 403', async () => {
       const r = await call('emp1', 'POST', '/api/create/laborContracts', { employeeCode: 'NV4003', contractType: 'INDEFINITE', startDate: '2026-01-01' });
       assert.strictEqual(r.status, 403);
+    });
+
+    await test('POST /api/create/laborContracts — Mã Nhân Viên KHÔNG có trong Hồ Sơ Nhân Sự (không tick "Không lấy từ hồ sơ") bị chặn 400', async () => {
+      const r = await call('hr1', 'POST', '/api/create/laborContracts', { employeeCode: 'NV_NGOAI_HE_THONG', contractType: 'INDEFINITE', startDate: '2026-01-01' });
+      assert.strictEqual(r.status, 400);
+      assert.ok(/Hồ Sơ Nhân Sự/.test(r.json.error), JSON.stringify(r.json));
+    });
+
+    await test('POST /api/create/laborContracts — tick useExternalCode:true bỏ qua kiểm tra tồn tại trong Hồ Sơ Nhân Sự', async () => {
+      const r = await call('hr1', 'POST', '/api/create/laborContracts', { employeeCode: 'NV_NGOAI_HE_THONG', useExternalCode: true, contractType: 'INDEFINITE', startDate: '2026-01-01' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.item.employeeCode, 'NV_NGOAI_HE_THONG');
+      assert.strictEqual('useExternalCode' in r.json.item, false, 'useExternalCode chỉ điều khiển validate, không được lưu vào bản ghi');
     });
 
     await test('POST /api/records/laborContracts/:id/edit — HR sửa endDate/baseSalary', async () => {

@@ -15,6 +15,7 @@ const { sendCatchError } = require('../lib/errorResponse');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const employeeProfile = require('../lib/employeeProfile');
 const employeeProfileImport = require('../lib/employeeProfileImport');
+const { canManageContracts } = require('../lib/laborContract');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -95,6 +96,27 @@ router.get('/', async (req, res) => {
     const list = (await getAppDataValue('employeeProfiles')) || [];
     res.json({ profiles: list.map(stripForList) });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile'); }
+});
+
+// GET /api/hr-profile/employee-directory — danh sách CỰC nhẹ (chỉ employeeCode + tên hiển thị, KHÔNG
+// có field nhạy cảm/username/status) — dùng cho picker "chọn nhân viên theo Hồ Sơ" ở module KHÁC (VD
+// Hợp Đồng Lao Động, xem module-hopdonglaodong.js). Mở quyền RỘNG HƠN GET / (chỉ hrProfileManage) —
+// thêm cả hrContractManage vì 2 quyền này có thể gán cho người KHÁC nhau, người chỉ quản lý Hợp Đồng
+// Lao Động vẫn cần tra được mã nhân viên hợp lệ dù không có hrProfileManage. Loại "Đã nghỉ việc"
+// (INACTIVE) — tạo hợp đồng lao động mới cho người đã nghỉ là vô lý.
+router.get('/employee-directory', async (req, res) => {
+  try {
+    if (!employeeProfile.canManageProfiles(req.freshUser) && !canManageContracts(req.freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' });
+    }
+    const appData = await getAllAppData();
+    const list = (appData.employeeProfiles || []).filter(p => p.status !== 'INACTIVE');
+    const directory = list.map(p => ({
+      employeeCode: p.employeeCode,
+      fullName: employeeProfile.resolveProfileDisplayName(p, appData.users, appData.hrProcesses)
+    }));
+    res.json({ directory });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }
 });
 
 // GET /api/hr-profile/by-code/:employeeCode — HR/admin (đủ) hoặc quản lý trực tiếp (giới hạn, xem

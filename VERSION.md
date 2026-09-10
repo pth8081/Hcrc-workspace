@@ -1,8 +1,31 @@
 # Phiên bản hiện tại
 
-**16.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.1 (2026-09-10): Hợp Đồng Lao Động — Mã Nhân Viên chọn từ Hồ Sơ Nhân Sự + tick nhập mã ngoài hệ thống
+
+Người dùng yêu cầu: ở "Quản Lý Hợp Đồng" (Nhân Sự > Hợp Đồng Lao Động), form
+tạo hợp đồng tay cho phép **lấy Mã Nhân Viên từ Hồ Sơ Nhân Sự** thay vì gõ tay
+tự do như trước (dễ gõ sai mã, không đối chiếu gì với hồ sơ thật), kèm 1 tích
+chọn để bỏ qua bước này khi cần nhập mã ngoài hệ thống (nhân viên cũ/cộng tác
+viên chưa có hồ sơ).
+
+**Thay đổi**: form "➕ Tạo Hợp Đồng Lao Động" nay có ô tìm-chọn (mặc định)
+nguồn từ Hồ Sơ Nhân Sự (loại "Đã nghỉ việc") — chọn xong tự điền đúng mã;
+tick **"Không lấy từ hồ sơ (nhập mã ngoài hệ thống)"** thì chuyển sang ô nhập
+tay tự do như hành vi cũ. Chặn ở CẢ client lẫn server (`createValidation.js`)
+— không tick thì Mã Nhân Viên bắt buộc phải tồn tại thật trong Hồ Sơ Nhân Sự.
+
+**Kỹ thuật**: thêm route `GET /api/hr-profile/employee-directory` (danh sách
+nhẹ chỉ `employeeCode` + tên hiển thị, không có field nhạy cảm/username/
+status) — quyền **rộng hơn** `GET /api/hr-profile` hiện có (thêm cả
+`hrContractManage`, không chỉ `hrProfileManage`, vì 2 quyền này có thể gán
+cho người khác nhau).
+
+Không đổi `schema.sql`/`.env.example`/`dependencies` — thuần thêm 1 route nhẹ
++ sửa validate + sửa form HTML/JS, chỉ cần copy code + `pm2 restart`.
 
 ## v16.0 (2026-09-10): Nhân Sự — sửa lỗi liên kết tài khoản VPĐT + tách Xem/Sửa ở Quản Lý Hồ Sơ
 
