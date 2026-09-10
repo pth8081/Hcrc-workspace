@@ -1,8 +1,78 @@
 # Phiên bản hiện tại
 
-**16.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.6 (2026-09-10): Nhân Sự — "Chức Vụ" chọn từ Cơ Cấu Tổ Chức + "Lịch Sử Nhân Sự" xuyên suốt hồ sơ
+
+Yêu cầu người dùng: (1) hợp đồng lao động chỉ HR xem, không mở cho nhân viên
+tự xem (xác nhận giữ nguyên thiết kế hiện có); (2) muốn biết lịch sử tăng
+lương/đổi hợp đồng/thăng chức lưu ở đâu, và muốn xem gộp xuyên suốt hồ sơ
+nhân sự; (3) thêm trường "Chức Vụ" ngay trên Hồ Sơ Nhân Sự, chọn từ Cơ Cấu Tổ
+Chức (không gõ tay), liên kết tài khoản VPĐT chỉ còn vai trò mối liên hệ tra
+cứu chéo, không còn là nguồn xác định chức vụ/phòng ban.
+
+**Phát hiện qua rà soát code trước khi làm:** lịch sử hợp đồng đã có (nhiều
+bản ghi nối nhau qua trạng thái SUPERSEDED + Phụ Lục) nhưng **sửa tay trực
+tiếp trên hợp đồng không hề ghi lịch sử** — lỗ hổng thật; **lịch sử
+thăng chức/đổi chức vụ hoàn toàn không tồn tại** ở bất kỳ đâu trong hệ thống
+(chức danh chỉ nằm ở `DB.users`, bị ghi đè mỗi lần sửa, không lưu vết); Hồ Sơ
+Nhân Sự không hiển thị gì trong 2 mục trên.
+
+**Thiết kế đã chốt với người dùng (AskUserQuestion cho phần mơ hồ nhất —
+đồng bộ tài khoản khi đổi chức vụ):** khi Hồ Sơ Nhân Sự đã liên kết tài
+khoản VPĐT, HR đổi chức vụ trên Hồ Sơ → **tự động đồng bộ ghi đè** luôn
+Phòng Ban + Chức Danh của tài khoản đó (ảnh hưởng phân quyền/hiển thị theo
+phòng ban ở nhiều module khác — có chủ đích, người dùng đã xác nhận).
+
+**Thay đổi chính:**
+1. **`lib/laborContract.js`::`applyManualEdit()`** — sửa tay bất kỳ trường
+   nào trên hợp đồng (loại HĐ, ngày, lương, phòng ban, tệp) giờ tự ghi 1
+   dòng lịch sử `MANUAL_EDIT` (giá trị cũ → mới từng trường thực đổi, người
+   sửa, thời điểm); không ghi gì nếu không có trường nào thực sự đổi.
+2. **`lib/employeeProfile.js`::`applyPositionAssignment()`** (mới) — gán/đổi
+   "Chức Vụ" trên Hồ Sơ Nhân Sự bằng cách chọn 1 vị trí (POSITION node) từ
+   bản Cơ Cấu Tổ Chức đang áp dụng; tự suy ra Phòng Ban chuẩn từ node cha
+   gần nhất có `departmentRef` (trừ vị trí đánh dấu `requiresDept:false`,
+   VD Tổng Giám Đốc); mỗi lần gán ghi 1 dòng `positionHistory` (chức vụ cũ →
+   mới, ngày hiệu lực, người thao tác, ghi chú) — lần đầu = "chức vụ ban
+   đầu", các lần sau = lịch sử thăng chức/điều chuyển; chặn gán lại đúng
+   chức vụ hiện tại và chặn nếu vị trí chưa gắn đúng `departmentRef`.
+3. **`routes/employeeProfile.js`** — route mới `GET /position-options`
+   (liệt kê vị trí từ Cơ Cấu Tổ Chức cho picker), `POST
+   /by-code/:employeeCode/set-position` (gán chức vụ + đồng bộ `users` nếu
+   có liên kết tài khoản, dùng 2 lượt `withLockedAppDataValue` tuần tự —
+   `employeeProfiles` rồi `users`, mirror cách `lib/catalogRename.js` cascade
+   nhiều collection), `GET /by-code/:employeeCode/history` (gộp lịch sử chức
+   vụ + lịch sử hợp đồng + Phụ Lục hợp đồng theo thời gian). Route "Tạo Hồ
+   Sơ Mới" (`POST /`) nhận thêm `positionKey` tuỳ chọn để gán ngay lúc tạo.
+   **Quyền xem `/history` yêu cầu CẢ 2** `hrProfileManage` **VÀ**
+   `hrContractManage` (hoặc admin) — chặt hơn từng module riêng, vì dữ liệu
+   gộp có lương/hợp đồng (vốn chỉ người có quyền Hợp Đồng Lao Động được
+   xem).
+4. **Client** (`public/index.html`, `public/js/module-hrprofile.js`) —
+   picker "Chức Vụ" (widget `sdd*` tìm-kiếm-gõ-chọn, không dùng `<datalist>`
+   theo quy ước bắt buộc của repo) ở cả màn Tạo Hồ Sơ Mới lẫn Chi tiết hồ sơ
+   (nút "🏷️ Gán/Đổi Chức Vụ"); khối mới "Lịch Sử Nhân Sự" ở cuối Chi tiết
+   hồ sơ (chỉ hiện ở chế độ Quản Lý Hồ Sơ, tự ẩn nếu thiếu 1 trong 2 quyền).
+
+Viết mới `tests/test-hr-profile-position-history.js` (16 kịch bản) — xác
+nhận đầy đủ: gán chức vụ lần đầu/đổi chức vụ ghi đúng lịch sử, chặn gán lại
+chính nó, chặn thiếu `departmentRef`, `requiresDept:false` bỏ qua Phòng Ban,
+sửa tay hợp đồng ghi `MANUAL_EDIT` đúng diff, đồng bộ `users.dept`/`jobTitle`
+khi có liên kết tài khoản, quyền `/history` (403 nếu chỉ có 1 trong 2 quyền,
+200 nếu đủ cả 2/admin), `/history` trả đúng gộp cả 3 loại sự kiện.
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — chỉ sửa code
+server (`lib/laborContract.js`, `lib/employeeProfile.js`,
+`routes/employeeProfile.js`, `routes/records.js`) và client
+(`public/index.html`, `public/js/module-hrprofile.js`, `public/js/core.js`),
+chỉ cần copy code + `pm2 restart`.
+
+Full regression suite chạy lại sau khi merge: không phát sinh lỗi mới (toàn
+bộ `tests/test-*.js` pass, gồm 16/16 test file mới + 17/17
+`test-hr-profile.js` + 23/23 `test-labor-contract.js` chạy riêng trước đó).
 
 ## v16.5 (2026-09-10): Vận Hành Siêu Thị — "Người Phụ Trách" danh mục lớn (Danh Mục Đầu Tư)
 

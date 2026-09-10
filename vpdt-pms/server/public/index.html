@@ -39,6 +39,10 @@
      Cơ Cấu Tổ Chức — đợt 10 CSP). -->
 <div id="systemUsersDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 <div id="carDriversDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+<!-- hrpfPositionDatalist: ô tìm-kiếm-gõ-chọn "Chức Vụ" ở Hồ Sơ Nhân Sự (module-hrprofile.js) — danh
+     sách nạp từ GET /api/hr-profile/position-options (mọi node POSITION của bản Cơ Cấu Tổ Chức đang áp
+     dụng). Cùng lý do đặt NGAY DƯỚI <body> như 2 dropdown trên. -->
+<div id="hrpfPositionDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 <!-- Màn chờ NGẮN hiện NGAY LẬP TỨC bằng HTML thuần (không đợi JS chạy) mỗi khi mở/tải lại trang — tránh
      "chớp" ra hẳn màn hình Đăng Nhập (ô tên đăng nhập/mật khẩu trống trơn) trong lúc tryRestoreSession()
      còn đang xác nhận phiên đăng nhập cũ (nếu có) rồi tải dữ liệu (initDatabase(), có thể mất vài giây ở
@@ -8470,9 +8474,12 @@
       <div class="grid grid-cols-2 gap-3">
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã Nhân Viên <span class="text-red-500">*</span></label>
           <input id="hrpfCF_employeeCode" class="w-full border p-1.5 rounded text-sm"></div>
-        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Liên Kết Tài Khoản VPDT (tuỳ chọn)</label>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Liên Kết Tài Khoản VPDT (tuỳ chọn — chỉ để liên hệ đăng nhập/tra cứu chéo module)</label>
           <input id="hrpfCF_usernameInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfCreateUsernameInput" data-arg-value="0" placeholder="Gõ tên/tài khoản..." class="w-full border p-1.5 rounded text-sm">
           <input type="hidden" id="hrpfCF_username"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Chức Vụ Ban Đầu (tuỳ chọn — chọn từ Cơ Cấu Tổ Chức)</label>
+          <input id="hrpfCF_positionInput" data-sdd-list="hrpfPositionDatalist" autocomplete="off" data-op-input="resolveHrpfCreatePositionInput" data-arg-value="0" placeholder="Gõ tên chức vụ..." class="w-full border p-1.5 rounded text-sm">
+          <input type="hidden" id="hrpfCF_positionKey"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày sinh</label>
           <input type="date" id="hrpfCF_dateOfBirth" class="w-full border p-1.5 rounded text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Giới tính</label>

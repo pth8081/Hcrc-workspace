@@ -3236,7 +3236,7 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     assertContractManage(freshUser);
     const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
-      laborContract.applyManualEdit(item, req.body, freshUser.username);
+      laborContract.applyManualEdit(item, req.body, freshUser.username, freshUser.name);
       return item;
     });
     res.json({ ok: true, item: result });

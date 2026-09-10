@@ -202,32 +202,48 @@ function applyOffboardingTermination(contract, hrProcessItem) {
 // dưới, không cho ghi đè tự do qua đây).
 const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSalary', 'fileUrl', 'fileName', 'dept'];
 
-function applyManualEdit(contract, payload, actorUsername) {
+// Nhãn hiển thị cho từng field sửa tay — dùng để ghi dòng lịch sử "MANUAL_EDIT" bên dưới (VD HR tăng
+// lương trực tiếp trên hợp đồng đang hiệu lực thay vì tạo hẳn hợp đồng mới/thêm phụ lục — trước đây
+// hành động này KHÔNG để lại dấu vết gì trong history[], khiến "lịch sử tăng lương" biến mất hoàn toàn
+// nếu HR chọn sửa thẳng — xem yêu cầu "Lịch Sử Nhân Sự xuyên suốt" đã xác nhận với người dùng).
+const MANUAL_EDIT_FIELD_LABELS = {
+  contractType: 'Loại hợp đồng', startDate: 'Ngày hiệu lực', endDate: 'Ngày hết hạn',
+  baseSalary: 'Lương cơ bản', fileUrl: 'Tệp hợp đồng', fileName: 'Tên tệp', dept: 'Phòng ban'
+};
+function applyManualEdit(contract, payload, actorUsername, actorName) {
   const body = payload || {};
+  const changes = [];
   for (const field of MANUAL_EDITABLE_FIELDS) {
     if (!(field in body)) continue;
     const val = body[field];
+    let newVal;
     switch (field) {
       case 'contractType':
         if (!CONTRACT_TYPES.has(val)) throw new HttpError(400, 'Loại hợp đồng không hợp lệ');
-        contract.contractType = val;
+        newVal = val;
         break;
       case 'baseSalary': {
         const n = val === '' || val === null || val === undefined ? null : Number(val);
         if (n !== null && (!Number.isFinite(n) || n < 0)) throw new HttpError(400, 'Lương cơ bản không hợp lệ');
-        contract.baseSalary = n;
+        newVal = n;
         break;
       }
       case 'startDate': case 'endDate':
         if (val != null && val !== '' && isNaN(new Date(val).getTime())) throw new HttpError(400, 'Ngày không hợp lệ');
-        contract[field] = val || null;
+        newVal = val || null;
         break;
       default:
-        contract[field] = val == null ? null : String(val).trim().slice(0, 300);
+        newVal = val == null ? null : String(val).trim().slice(0, 300);
     }
+    if (contract[field] !== newVal) changes.push({ field, oldValue: contract[field], newValue: newVal });
+    contract[field] = newVal;
   }
   if (contract.startDate && contract.endDate && contract.contractType !== 'INDEFINITE' && contract.startDate > contract.endDate) {
     throw new HttpError(400, 'Ngày hiệu lực phải trước ngày hết hạn');
+  }
+  if (changes.length) {
+    const detail = changes.map(c => `${MANUAL_EDIT_FIELD_LABELS[c.field] || c.field}: "${c.oldValue ?? '(trống)'}" → "${c.newValue ?? '(trống)'}"`).join('; ');
+    contract.history.push({ action: 'MANUAL_EDIT', by: actorUsername, byName: actorName || actorUsername, time: nowVN(), detail });
   }
   contract.updatedAt = nowVN(); contract.updatedBy = actorUsername;
 }

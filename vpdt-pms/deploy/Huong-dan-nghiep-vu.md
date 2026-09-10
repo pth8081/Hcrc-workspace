@@ -833,6 +833,37 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   bỏ qua không ảnh hưởng dòng hợp lệ khác; chưa hỗ trợ nhập Người phụ thuộc/
   Học vấn qua Excel, bổ sung sau ở Chi tiết từng hồ sơ) cùng **"📊 Xuất Excel"**
   (xuất toàn bộ danh sách).
+- **Chức Vụ (chọn từ Cơ Cấu Tổ Chức)**: HR/admin gán/đổi "Chức Vụ" ngay trên
+  Hồ Sơ Nhân Sự (ở màn "➕ Tạo Hồ Sơ Mới" — tuỳ chọn — lẫn ở Chi tiết hồ sơ đã
+  có, nút **"🏷️ Gán/Đổi Chức Vụ"**) bằng cách **CHỌN từ bản Cơ Cấu Tổ Chức
+  đang áp dụng** (mục 4.x Cơ Cấu Tổ Chức — không gõ tay), tránh sai lệch giữa
+  chức danh ghi trên hồ sơ và vị trí thật trong cây tổ chức. Mỗi lần gán ghi
+  **1 dòng lịch sử** (chức vụ cũ → mới, ngày hiệu lực, người thao tác, ghi
+  chú) — lần gán ĐẦU TIÊN chính là "chức vụ ban đầu", các lần sau tự thành
+  **lịch sử thăng chức/điều chuyển**. Không cho gán lại đúng chức vụ hiện tại
+  (tránh spam lịch sử); chặn nếu vị trí chọn chưa gắn đúng Phòng Ban chuẩn
+  trong Cơ Cấu Tổ Chức (trừ các chức vụ không thuộc phòng ban nào, VD Tổng
+  Giám Đốc).
+  - **Nếu hồ sơ đã liên kết tài khoản VPDT, hệ thống TỰ ĐỒNG BỘ ghi đè luôn
+    Phòng Ban + Chức Danh của tài khoản đó** theo chức vụ vừa gán (đã xác
+    nhận với người dùng, có ảnh hưởng tới phân quyền/hiển thị theo phòng ban
+    ở nhiều module khác dùng `dept`/`jobTitle` của tài khoản — đây là hành vi
+    **có chủ đích**, không phải tác dụng phụ ngoài ý muốn).
+  - **Liên kết tài khoản VPDT giờ chỉ còn vai trò MỐI LIÊN HỆ** (để tra cứu
+    chéo/đăng nhập xem "Hồ Sơ Của Tôi"), KHÔNG còn là nguồn xác định chức
+    vụ/phòng ban nữa — nguồn xác định chức vụ/phòng ban chính thức từ nay là
+    Chức Vụ gán trên Hồ Sơ Nhân Sự (đồng bộ NGƯỢC xuống tài khoản, không phải
+    chiều ngược lại).
+- **Lịch Sử Nhân Sự** (khối cuối Chi tiết hồ sơ, chỉ hiện ở chế độ "Quản Lý
+  Hồ Sơ"): gộp hiển thị theo thời gian **cả 3 nguồn** — lịch sử chức vụ (mục
+  trên), lịch sử hợp đồng lao động (mục 4.5.4 bên dưới: tạo/kích hoạt/thay
+  hợp đồng mới/chấm dứt/sửa tay), và Phụ Lục hợp đồng (tăng lương, đổi vị
+  trí...) — xem đủ "ai tăng lương/thăng chức/đổi hợp đồng khi nào" mà không
+  phải mở nhiều màn khác nhau. **Yêu cầu CẢ 2 quyền** "🗂️ Quản Lý Hồ Sơ Nhân
+  Sự" **VÀ** "📝 Quản Lý Hợp Đồng Lao Động" (hoặc admin) — chặt hơn từng
+  module riêng lẻ, vì dữ liệu gộp có cả lương/hợp đồng (vốn chỉ người có
+  quyền Hợp Đồng Lao Động được xem) lẫn chức vụ; người chỉ có 1 trong 2
+  quyền sẽ không thấy khối này.
 
 #### 4.5.4. Hợp Đồng Lao Động
 
@@ -868,6 +899,12 @@ xem hợp đồng của chính mình ở đợt này.
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
   hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
   hạn số lần, giữ nguyên lịch sử.
+- **Sửa tay trực tiếp trên hợp đồng** (loại HĐ, ngày bắt đầu/hết hạn, lương cơ
+  bản, phòng ban, tệp đính kèm) giờ cũng **tự ghi 1 dòng lịch sử** (giá trị cũ
+  → mới từng trường thực sự đổi, người sửa, thời điểm) — trước đây chỉ các
+  hành động hệ thống (tạo/kích hoạt/thay hợp đồng mới/chấm dứt/thêm Phụ Lục)
+  mới ghi lịch sử, sửa tay không để lại dấu vết. Không ghi gì nếu submit mà
+  không có trường nào thực sự thay đổi giá trị.
 - **Cảnh báo hết hạn tự động** (job chạy mỗi 24h, mặc định ngưỡng 60/45/30
   ngày trước hạn — **admin tự sửa được danh sách ngưỡng** ở Hệ Thống > Quản
   Trị > Cấu Hình Email, mục 7.8, ô riêng cho Hợp Đồng Lao Động, tách biệt

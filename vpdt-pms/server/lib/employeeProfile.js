@@ -10,9 +10,16 @@
 //      request (requireAuth, xem lib/auth.js), nhồi thêm CCCD/BHXH/địa chỉ/người phụ thuộc vào đó sẽ làm
 //      nặng đường xử lý mọi request chứ không riêng màn Hồ Sơ. employeeProfiles chỉ tải khi thật sự mở
 //      màn Hồ Sơ.
-//   3. KHÔNG dựng bảng PositionAssignments có lịch sử ngày bắt đầu/kết thúc (cùng quyết định đã áp dụng
-//      cho Cơ Cấu Tổ Chức — xem lib/orgChart.js đầu file) — "vị trí đang gán" của 1 hồ sơ chỉ là snapshot
-//      tham chiếu (dept/jobTitle) tại thời điểm Onboarding hoàn tất, không cần tra lịch sử.
+//   3. [CẬP NHẬT — đợt "Chức Vụ + Lịch Sử Nhân Sự"] Vẫn KHÔNG dựng bảng PositionAssignments SQL riêng,
+//      nhưng KHÁC quyết định #3 gốc ở trên: hồ sơ giờ TỰ LƯU chức vụ hiện tại (positionKey/jobTitle/dept/
+//      positionLabel) + lịch sử đầy đủ các lần gán/đổi (positionHistory[]) — xem applyPositionAssignment()
+//      dưới đây. Chức vụ LUÔN chọn từ 1 node POSITION trong bản Cơ Cấu Tổ Chức đang ÁP DỤNG (không gõ tự
+//      do), đúng yêu cầu đã xác nhận: "chức vụ/phòng ban nên là lựa chọn từ Cơ Cấu Tổ Chức". Hồ Sơ Nhân
+//      Sự trở thành nguồn CHÍNH THỨC cho chức vụ/phòng ban (không còn suy từ DB.users/hrProcesses như
+//      trước) — nếu hồ sơ đã liên kết tài khoản (username), mỗi lần gán/đổi chức vụ sẽ ĐỒNG BỘ GHI ĐÈ
+//      luôn dept/jobTitle của TÀI KHOẢN đó (xem routes/employeeProfile.js::set-position — đã xác nhận với
+//      người dùng để Cơ Cấu Tổ Chức + phân quyền theo phòng ban ở các module khác luôn khớp đúng thực tế),
+//      liên kết tài khoản (`username`) từ nay CHỈ còn ý nghĩa "liên hệ đăng nhập/tra cứu chéo module".
 //   4. Riêng tư: CCCD/tài khoản ngân hàng/số BHXH/mã số thuế/người phụ thuộc là trường NHẠY CẢM — API
 //      trả về khác nhau theo vai trò gọi (xem getProfileForViewer() dưới đây), KHÔNG lọc ở client.
 //   5. KHOÁ THEO employeeCode, KHÔNG khoá theo username — lúc tạo quy trình ONBOARDING (giai đoạn
@@ -27,6 +34,9 @@ const { isManagerOf } = require('./recordViewScope');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
+}
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);
@@ -59,6 +69,11 @@ function defaultProfile(employeeCode) {
     bankAccountNo: null, bankName: null,
     socialInsuranceNo: null, taxCode: null,
     dependents: [], education: [],
+    // Chức vụ hiện tại — LUÔN chọn từ 1 node POSITION của bản Cơ Cấu Tổ Chức đang áp dụng (KHÔNG gõ tự
+    // do), xem applyPositionAssignment(). positionLabel là tên hiển thị đã ghép sẵn (VD "Trưởng Phòng
+    // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
+    positionKey: null, jobTitle: null, dept: null, positionLabel: null,
+    positionHistory: [],
     processId: null,
     createdAt: nowVN(), createdBy: 'system',
     updatedAt: nowVN(), updatedBy: 'system'
@@ -149,8 +164,46 @@ function canManageProfiles(user) {
   return !!(user?.perms?.admin || user?.perms?.hrProfileManage);
 }
 
-// Tra tên hiển thị cho 1 hồ sơ — employeeProfiles KHÔNG lưu fullName/dept/jobTitle (chỉ giữ employeeCode
-// + dữ liệu cá nhân nhạy cảm, xem đầu file), tra theo username đã liên kết (DB.users) hoặc theo processId
+// Gán/đổi chức vụ hiện tại của 1 hồ sơ — LUÔN chọn từ 1 node POSITION có thật trong bản Cơ Cấu Tổ Chức
+// ĐANG ÁP DỤNG (orgChartVersion, xem getAppliedVersion() ở lib/orgChart.js), không nhận chuỗi gõ tự do.
+// Mỗi lần gọi ghi thêm 1 dòng vào positionHistory[] (kể cả lần gán ĐẦU TIÊN — chính là mốc bắt đầu của
+// "lịch sử thăng chức/điều chuyển" mà người dùng yêu cầu theo dõi xuyên suốt hồ sơ). Trả về
+// { jobTitle, dept } (giá trị MỚI) để caller (route) biết cần đồng bộ gì sang DB.users nếu hồ sơ đã liên
+// kết tài khoản — hàm này CHỈ mutate profile, KHÔNG động vào users (route lo phần đó, khác collection).
+function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiveDate, actorUsername, actorName, note) {
+  const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart');
+  if (!orgChartVersion) throw new HttpError(400, 'Chưa có bản Cơ Cấu Tổ Chức nào được áp dụng — vào Cơ Cấu Tổ Chức tạo và áp dụng cây tổ chức trước khi gán chức vụ');
+  const node = (orgChartVersion.nodes || []).find(n => n.positionKey === positionKey && n.nodeType === 'POSITION');
+  if (!node) throw new HttpError(400, 'Không tìm thấy vị trí này trong bản Cơ Cấu Tổ Chức đang áp dụng (có thể đã bị xoá/đổi ở bản mới hơn)');
+  if (profile.positionKey === positionKey) throw new HttpError(400, 'Nhân viên đã ở đúng vị trí này rồi');
+  const label = buildNodeDisplayName(orgChartVersion, node);
+  const jobTitle = node.jobTitle;
+  let dept = null;
+  if (node.requiresDept !== false) {
+    const deptNode = findNearestDeptAncestor(orgChartVersion, node);
+    if (!deptNode?.departmentRef) {
+      throw new HttpError(400, `Vị trí "${label}" chưa gắn đúng Phòng Ban chuẩn (departmentRef) trong Cơ Cấu Tổ Chức — vào Cơ Cấu Tổ Chức gắn Phòng Ban cho node cha của vị trí này trước khi gán`);
+    }
+    dept = deptNode.departmentRef;
+  }
+  const nowStr = nowVN();
+  const entry = {
+    id: randomUUID(),
+    effectiveDate: effectiveDate || todayISO(),
+    oldPositionKey: profile.positionKey, oldJobTitle: profile.jobTitle, oldDept: profile.dept, oldPositionLabel: profile.positionLabel,
+    newPositionKey: positionKey, newJobTitle: jobTitle, newDept: dept, newPositionLabel: label,
+    changedBy: actorUsername, changedByName: actorName || actorUsername,
+    note: note ? String(note).trim().slice(0, 500) : null,
+    createdAt: nowStr
+  };
+  profile.positionHistory = [...(profile.positionHistory || []), entry];
+  profile.positionKey = positionKey; profile.jobTitle = jobTitle; profile.dept = dept; profile.positionLabel = label;
+  profile.updatedAt = nowStr; profile.updatedBy = actorUsername;
+  return { jobTitle, dept };
+}
+
+// Tra tên hiển thị cho 1 hồ sơ — employeeProfiles KHÔNG lưu fullName (chỉ giữ employeeCode + dữ liệu cá
+// nhân nhạy cảm + chức vụ, xem đầu file), tra theo username đã liên kết (DB.users) hoặc theo processId
 // (DB.hrProcesses, snapshot lúc tạo Onboarding) — mirror ĐÚNG hrpfIdentitySnapshot() phía client
 // (module-hrprofile.js), dùng cho các route/module KHÁC cần hiển thị "Tên (Mã NV)" mà không tải cả object
 // profile đầy đủ (VD picker chọn nhân viên ở module Hợp Đồng Lao Động).
@@ -269,5 +322,5 @@ module.exports = {
   STATUSES, SENSITIVE_FIELDS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS,
   findProfile, findProfileByUsername, defaultProfile, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
-  applyProfileEdit, assertValidManualStatusTransition, resolveProfileDisplayName
+  applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName
 };

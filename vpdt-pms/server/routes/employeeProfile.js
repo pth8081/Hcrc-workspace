@@ -10,12 +10,14 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
+const { getAllForCollection } = require('../lib/recordStore');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const employeeProfile = require('../lib/employeeProfile');
 const employeeProfileImport = require('../lib/employeeProfileImport');
 const { canManageContracts } = require('../lib/laborContract');
+const orgChart = require('../lib/orgChart');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -119,6 +121,98 @@ router.get('/employee-directory', async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }
 });
 
+// GET /api/hr-profile/position-options — danh sách phẳng mọi vị trí (node POSITION) của bản Cơ Cấu Tổ
+// Chức ĐANG ÁP DỤNG — dùng cho ô tìm-kiếm-gõ-chọn "Chức Vụ" ở Hồ Sơ Nhân Sự (module-hrprofile.js). Chỉ
+// HR/admin (canManageProfiles) — trùng quyền được phép gán chức vụ (POST .../set-position bên dưới).
+router.get('/position-options', requireProfileManage, async (req, res) => {
+  try {
+    const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
+    const applied = orgChart.getAppliedVersion(orgChartVersions);
+    if (!applied) return res.json({ positions: [] });
+    const positions = (applied.nodes || [])
+      .filter(n => n.nodeType === 'POSITION')
+      .map(n => ({ positionKey: n.positionKey, label: orgChart.buildNodeDisplayName(applied, n) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
+    res.json({ positions });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/position-options'); }
+});
+
+// POST /api/hr-profile/by-code/:employeeCode/set-position — HR/admin gán/đổi chức vụ, LUÔN chọn từ 1
+// node POSITION có thật trong bản Cơ Cấu Tổ Chức đang áp dụng (xem applyPositionAssignment()). Nếu hồ
+// sơ đã liên kết tài khoản VPDT, đồng bộ GHI ĐÈ luôn dept/jobTitle của tài khoản đó ngay sau khi ghi
+// xong hồ sơ (2 lệnh khoá TUẦN TỰ trên 2 collection khác nhau — employeeProfiles rồi users — không phải
+// 1 giao dịch chéo collection, cùng cách catalogRename.js xử lý cascade nhiều collection) — đã xác nhận
+// với người dùng: Hồ Sơ Nhân Sự là nguồn CHÍNH THỨC cho chức vụ/phòng ban, tài khoản chỉ còn ý nghĩa
+// liên hệ đăng nhập/tra cứu chéo module, nhưng CẦN khớp đúng để Cơ Cấu Tổ Chức + phân quyền theo phòng
+// ban ở các module khác không bị lệch.
+router.post('/by-code/:employeeCode/set-position', async (req, res) => {
+  try {
+    if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới gán chức vụ' });
+    const positionKey = String(req.body?.positionKey || '').trim();
+    if (!positionKey) return res.status(400).json({ error: 'Vui lòng chọn chức vụ từ Cơ Cấu Tổ Chức' });
+    const effectiveDate = req.body?.effectiveDate ? String(req.body.effectiveDate).trim() : null;
+    const note = req.body?.note;
+    const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
+    const applied = orgChart.getAppliedVersion(orgChartVersions);
+    let updated, syncTarget = null;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      const profile = employeeProfile.findProfile(list, req.params.employeeCode);
+      if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      const result = employeeProfile.applyPositionAssignment(profile, applied, positionKey, effectiveDate, req.freshUser.username, req.freshUser.name, note);
+      updated = profile;
+      if (profile.username) syncTarget = { username: profile.username, jobTitle: result.jobTitle, dept: result.dept };
+      return list;
+    });
+    if (syncTarget) {
+      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept } : u
+      ));
+    }
+    res.json({ ok: true, profile: updated });
+  } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/set-position`); }
+});
+
+// GET /api/hr-profile/by-code/:employeeCode/history — "Lịch Sử Nhân Sự" gộp xuyên suốt hồ sơ: chức vụ
+// (profile.positionHistory[]) + toàn bộ hợp đồng lao động của nhân viên này (mã hợp đồng ký MỚI/kích
+// hoạt/thay thế/chấm dứt từ laborContracts[].history[] + các dòng "Bổ Sung Phụ Lục" từ amendments[]) —
+// xem yêu cầu "muốn có lịch sử này xuyên suốt hồ sơ nhân sự" đã xác nhận với người dùng. Quyền: CẦN CẢ
+// hrProfileManage LẪN hrContractManage (hoặc admin) — cố ý CHẶT hơn từng route riêng lẻ ở trên, vì dữ
+// liệu hợp đồng gộp vào đây có LƯƠNG (trường vốn chỉ admin/hrContractManage được đọc, xem
+// canViewLaborContract() ở lib/recordViewScope.js) — không nới lỏng biên giới đó chỉ vì gộp chung 1 màn.
+router.get('/by-code/:employeeCode/history', async (req, res) => {
+  try {
+    const canFull = employeeProfile.canManageProfiles(req.freshUser) && canManageContracts(req.freshUser);
+    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc admin) để xem Lịch Sử Nhân Sự đầy đủ' });
+    const list = (await getAppDataValue('employeeProfiles')) || [];
+    const profile = employeeProfile.findProfile(list, req.params.employeeCode);
+    if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
+    const events = [];
+    for (const h of (profile.positionHistory || [])) {
+      events.push({
+        type: 'POSITION', time: h.createdAt, date: h.effectiveDate,
+        title: h.oldPositionLabel ? `Đổi chức vụ: "${h.oldPositionLabel}" → "${h.newPositionLabel}"` : `Bổ nhiệm chức vụ: "${h.newPositionLabel}"`,
+        detail: h.note || null, by: h.changedByName || h.changedBy
+      });
+    }
+    const contracts = (await getAllForCollection('laborContracts')).filter(c => c.employeeCode === profile.employeeCode);
+    for (const c of contracts) {
+      for (const h of (c.history || [])) {
+        events.push({ type: 'CONTRACT', time: h.time, date: (h.time || '').slice(0, 10), title: `Hợp đồng ${c.code}: ${h.detail || h.action}`, detail: null, by: h.byName || h.by });
+      }
+      for (const a of (c.amendments || [])) {
+        events.push({
+          type: 'CONTRACT_AMENDMENT', time: a.createdAt, date: a.effectiveDate,
+          title: `Hợp đồng ${c.code} — Phụ lục: ${a.amendmentType}`,
+          detail: [a.oldValue ? `Cũ: ${a.oldValue}` : null, a.newValue ? `Mới: ${a.newValue}` : null, a.note].filter(Boolean).join(' — ') || null,
+          by: a.createdByName || a.createdBy
+        });
+      }
+    }
+    events.sort((x, y) => (y.time || '').localeCompare(x.time || ''));
+    res.json({ events });
+  } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}/history`); }
+});
+
 // GET /api/hr-profile/by-code/:employeeCode — HR/admin (đủ) hoặc quản lý trực tiếp (giới hạn, xem
 // getProfileForViewer()). Không cho tra cứu tự do — trả 404 luôn nếu không đủ quyền (không phân biệt
 // "hồ sơ không tồn tại" với "không có quyền xem" để tránh dò quét employeeCode).
@@ -208,17 +302,30 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
 });
 
 // POST /api/hr-profile — HR/admin tạo tay 1 hồ sơ MỚI (nhân viên cũ đã đang làm việc, chưa từng qua
-// Onboarding nên chưa có hồ sơ) — xem lib/employeeProfile.js::createManualProfile().
+// Onboarding nên chưa có hồ sơ) — xem lib/employeeProfile.js::createManualProfile(). payload.positionKey
+// (tuỳ chọn) — chức vụ BAN ĐẦU chọn ngay từ Cơ Cấu Tổ Chức lúc tạo, áp dụng NGAY trong cùng giao dịch
+// (chính là lần đầu tiên của positionHistory[], không cần thao tác riêng "gán chức vụ" ngay sau đó).
 router.post('/', requireProfileManage, async (req, res) => {
   try {
     const username = req.body?.username ? String(req.body.username).trim() : null;
+    const positionKey = req.body?.positionKey ? String(req.body.positionKey).trim() : null;
     const appData = await getAllAppData();
     assertActiveAccountIfGiven(username, appData.users || []);
-    let created;
+    const applied = positionKey ? orgChart.getAppliedVersion((await getAppDataValue('orgChartVersions')) || []) : null;
+    let created, syncTarget = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username);
+      if (positionKey) {
+        const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
+        if (created.username) syncTarget = { username: created.username, jobTitle: result.jobTitle, dept: result.dept };
+      }
       return list;
     });
+    if (syncTarget) {
+      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept } : u
+      ));
+    }
     res.json({ ok: true, profile: created });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile'); }
 });
