@@ -1384,6 +1384,18 @@ function canManageOperationRecordClient(user, kind, sourceRecord) {
 // Giữ tên cũ (ít điểm gọi cần sửa) — nay CẦN thêm kind/sourceRecord vì quyền không còn "phẳng" (không
 // còn chỉ phụ thuộc 1 checkbox riêng của user, mà phụ thuộc CẢ creator của từng hồ sơ).
 function canCreateOperationEstimateClient(user, kind, sourceRecord) { return canManageOperationRecordClient(user, kind, sourceRecord); }
+// Mục "Người Phụ Trách danh mục lớn" — user có tên trong assignedToUsernames của bất kỳ danh mục LỚN
+// (parentId rỗng) nào trong estimateItems[] -> được sửa ĐÚNG phạm vi (mirror lib/recordViewScope.js
+// hasOwnEstimateCategoryInSource()). Không thay thế canCreateOperationEstimateClient() (toàn quyền hồ
+// sơ) — dùng RIÊNG để mở rộng "editable" ở openOperationEstimateModal() cho đúng người chỉ phụ trách 1
+// phần, không đụng các luật toàn quyền khác (canApprove/REJECTED reset...).
+function canOwnEstimateCategoryClient(user, sourceRecord) {
+  if (!user?.username) return false;
+  return (sourceRecord?.estimateItems || []).some(it => it.parentId == null && Array.isArray(it.assignedToUsernames) && it.assignedToUsernames.includes(user.username));
+}
+function canEditOperationEstimateClient(user, kind, sourceRecord) {
+  return canCreateOperationEstimateClient(user, kind, sourceRecord) || canOwnEstimateCategoryClient(user, sourceRecord);
+}
 
 function operationEstimateStatusBadge(o) {
   const status = o.estimateStatus || 'DRAFT';
@@ -1443,6 +1455,11 @@ function renderOperationEstimateList() {
 let operationEstimateItems = [];
 let currentEstimateKind = null;
 let currentEstimateRecordId = null;
+// true = currentUser đang mở modal với "toàn quyền quản lý hồ sơ" (canCreateOperationEstimateClient) —
+// false = đang mở với phạm vi hẹp hơn (chỉ phụ trách 1/nhiều danh mục lớn cụ thể, canOwnEstimateCategoryClient)
+// hoặc chỉ xem. Đặt lại mỗi lần openOperationEstimateModal(), đọc ở renderOperationEstimateItemRow() để
+// quyết định hiện ô chọn "Người Phụ Trách" dạng sửa được (multi-select) hay chỉ đọc (badge tên).
+let estimateIsFullManager = false;
 let currentEstimateBudget = 0;
 // null = hồ sơ CŨ chưa có approvedBudget (xem openOperationEstimateModal()) — recalcOperationEstimateItemsTotal()
 // hiện "(chưa nhập)" thay vì 0/NaN cho trường hợp này.
@@ -1617,11 +1634,25 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
   const addChildBtn = depth === 0
     ? `<button type="button" data-op="addOperationEstimateChildRow" data-idx="${idx}" class="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200 mr-1" title="Thêm danh mục con">+ Con</button>`
     : '';
+  // Mục "Người Phụ Trách": người CHỈ phụ trách 1 phần (editable=true nhưng estimateIsFullManager=false)
+  // KHÔNG được xoá chính danh mục lớn họ đang phụ trách (đã xác nhận người dùng) — chỉ toàn quyền hồ sơ
+  // mới xoá được danh mục LỚN; danh mục CON (depth>0) vẫn xoá được bình thường ở cả 2 vai trò.
+  const canDeleteThisRow = editable && (depth > 0 || estimateIsFullManager);
   const actionCell = editable
-    ? `<td class="border p-1 text-center whitespace-nowrap">${addChildBtn}<button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng${depth === 0 ? ' (xoá cả danh mục con nếu có)' : ''}">✕</button></td>`
+    ? `<td class="border p-1 text-center whitespace-nowrap">${addChildBtn}${canDeleteThisRow ? `<button type="button" data-op="removeOperationEstimateItemRow" data-idx="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng${depth === 0 ? ' (xoá cả danh mục con nếu có)' : ''}">✕</button>` : ''}</td>`
     : `<td class="border p-1"></td>`;
   const sttCell = `<td class="border p-1 text-center">${depth === 0 ? (Number.isInteger(sttNo) ? sttNo : '') : ''}</td>`;
-  return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${actionCell}</tr>`;
+  // Mục "Người Phụ Trách danh mục lớn" — CHỈ có ở depth 0. Toàn quyền hồ sơ + đang sửa (editable &&
+  // estimateIsFullManager): ô chọn nhiều người (renderPeopleMultiSelect(), populate SAU khi gán
+  // innerHTML — xem renderOperationEstimateItemsTable()). Còn lại (chỉ phụ trách 1 phần, hoặc chỉ xem):
+  // hiện dạng chữ thuần (không sửa được — chỉ toàn quyền hồ sơ mới đổi được người phụ trách, đã xác nhận
+  // người dùng).
+  const assigneeCell = depth !== 0
+    ? `<td class="border p-1"></td>`
+    : (editable && estimateIsFullManager
+      ? `<td class="border p-1"><div id="estimateAssigneePicker_${idx}" class="text-[10px]"></div></td>`
+      : `<td class="border p-1 text-[10px] text-gray-600">${(it.assignedToNames || []).map(escapeHtml).join(', ') || '<span class="text-gray-400 italic">Chưa gán</span>'}</td>`);
+  return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${assigneeCell}${actionCell}</tr>`;
 }
 function renderOperationEstimateItemsTable(editable) {
   const tbody = document.getElementById('operationEstimateItemsTableBody');
@@ -1636,7 +1667,17 @@ function renderOperationEstimateItemsTable(editable) {
       rowsHtml.push(renderOperationEstimateItemRow(child, childIdx, 1, editable, null));
     });
   });
-  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="7" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
+  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="8" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
+  // Populate ô chọn nhiều người "Người Phụ Trách" của MỖI danh mục lớn — SAU khi tbody.innerHTML đã gán
+  // xong (renderPeopleMultiSelect() cần container đã có mặt trong DOM, xem chú thích ở
+  // renderOperationEstimateItemRow() ngay trên). CHỈ chạy khi toàn quyền hồ sơ + đang sửa — người chỉ
+  // phụ trách 1 phần thấy đúng dạng chữ thuần (không có container picker nào để populate).
+  if (editable && estimateIsFullManager) {
+    topItems.forEach((top) => {
+      const topIdx = operationEstimateItems.indexOf(top);
+      renderPeopleMultiSelect(`estimateAssigneePicker_${topIdx}`, (typeof DB !== 'undefined' ? (DB.users || []) : []).filter(u => u.active !== false), top.assignedToUsernames || [], 'estimate-assignee', {});
+    });
+  }
   populateEstimateNewItemParentSelect();
   recalcOperationEstimateItemsTotal();
 }
@@ -1666,13 +1707,28 @@ function openOperationEstimateModal(kind, id) {
   // phạm vi 1 lần sửa/lưu (xem nextEstimateTempId()).
   estimateTempIdCounter = -1;
   operationEstimateItems = (o.estimateItems && o.estimateItems.length)
-    ? o.estimateItems.map(it => ({ id: it.id != null ? it.id : nextEstimateTempId(), content: it.content ?? it.name ?? '', description: it.description || '', amount: it.amount || 0, note: it.note || '', parentId: it.parentId ?? null }))
+    ? o.estimateItems.map(it => ({ id: it.id != null ? it.id : nextEstimateTempId(), content: it.content ?? it.name ?? '', description: it.description || '', amount: it.amount || 0, note: it.note || '', parentId: it.parentId ?? null, assignedToUsernames: it.assignedToUsernames || [], assignedToNames: it.assignedToNames || [] }))
     : [];
+  // Mục "Người Phụ Trách danh mục lớn" — toàn quyền hồ sơ (canCreateOperationEstimateClient) mới thấy/sửa
+  // TOÀN BỘ estimateItems; người CHỈ phụ trách 1 phần (canOwnEstimateCategoryClient, KHÔNG toàn quyền)
+  // chỉ được nạp ĐÚNG (các) danh mục lớn họ phụ trách + con của nó vào bộ nhớ — danh mục khác KHÔNG hề
+  // được tải vào trình duyệt (không chỉ ẩn UI, tránh rò rỉ dữ liệu danh mục người khác qua DevTools/Network
+  // tab). Khớp đúng phương án đã xác nhận với người dùng: "chỉ nhìn thấy danh mục đầu tư do mình phụ trách".
+  estimateIsFullManager = canCreateOperationEstimateClient(currentUser, kind, o);
+  const isOwnerScoped = !estimateIsFullManager && canOwnEstimateCategoryClient(currentUser, o);
+  if (isOwnerScoped) {
+    const ownedTopIds = new Set(operationEstimateItems.filter(it => it.parentId == null && it.assignedToUsernames.includes(currentUser.username)).map(it => it.id));
+    operationEstimateItems = operationEstimateItems.filter(it => it.parentId == null ? ownedTopIds.has(it.id) : ownedTopIds.has(it.parentId));
+  }
   // "Danh mục đầu tư lập xong có thể sửa để thêm bớt công việc" — APPROVED KHÔNG còn là ngõ cụt, vẫn sửa
   // được như DRAFT (server submitOperationEstimate() đã nhận lại từ APPROVED, xem lib/recordActions.js).
-  const editable = (o.estimateStatus === 'DRAFT' || !o.estimateStatus || o.estimateStatus === 'APPROVED') && canCreateOperationEstimateClient(currentUser, kind, o);
-  if (editable && operationEstimateItems.length === 0) operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: null });
+  const editable = (o.estimateStatus === 'DRAFT' || !o.estimateStatus || o.estimateStatus === 'APPROVED') && (estimateIsFullManager || isOwnerScoped);
+  // Chỉ toàn quyền hồ sơ mới được thêm danh mục LỚN mới (rỗng, chưa có Nội dung) — người chỉ phụ trách 1
+  // phần luôn có sẵn ít nhất 1 danh mục lớn (chính danh mục họ phụ trách, vừa lọc ở trên) nên không bao
+  // giờ rơi vào nhánh này.
+  if (editable && estimateIsFullManager && operationEstimateItems.length === 0) operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: null, assignedToUsernames: [], assignedToNames: [] });
   document.getElementById('operationEstimateItemsEditControls').classList.toggle('hidden', !editable);
+  document.getElementById('operationEstimateFullManagerOnlyControls').classList.toggle('hidden', !estimateIsFullManager);
   renderOperationEstimateItemsTable(editable);
 
   const historyHTML = (o.estimateHistory || []).map(h => `
@@ -1734,8 +1790,17 @@ function closeOperationEstimateModal() {
 async function submitOperationEstimateForApproval() {
   const kind = currentEstimateKind, id = currentEstimateRecordId;
   const sourceRecord = OPERATION_KIND_META[kind]?.list().find(x => x.id === id);
-  if (!canCreateOperationEstimateClient(currentUser, kind, sourceRecord)) return alert('⛔ Bạn không có quyền lập danh mục đầu tư!');
-  const validItems = operationEstimateItems.filter(it => (it.content || '').trim());
+  if (!canEditOperationEstimateClient(currentUser, kind, sourceRecord)) return alert('⛔ Bạn không có quyền lập danh mục đầu tư!');
+  // Người Phụ Trách danh mục lớn — CHỈ toàn quyền hồ sơ (estimateIsFullManager) mới đọc lại ô chọn nhiều
+  // người trên MỖI danh mục lớn để gửi kèm "assignedTo" (server lib/recordActions.js resolveOperationAssignedTo()
+  // đối chiếu lại users thật + ghi ra assignedToUsernames/Names). Người chỉ phụ trách 1 phần KHÔNG có ô
+  // này (xem renderOperationEstimateItemRow()) nên KHÔNG gửi field này — server tự giữ nguyên giá trị cũ.
+  const validItems = operationEstimateItems.filter(it => (it.content || '').trim()).map((it) => {
+    if (it.parentId != null || !estimateIsFullManager) return it;
+    const idx = operationEstimateItems.indexOf(it);
+    const assignedTo = [...document.querySelectorAll(`#estimateAssigneePicker_${idx} input.estimate-assignee:checked`)].map(cb => cb.value);
+    return { ...it, assignedTo };
+  });
   if (!validItems.length) return alert('Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Nội Dung)!');
   let result;
   try {

@@ -1963,8 +1963,8 @@ router.post('/operationStoreOpenings/:id/estimate/submit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_STORE_OPENING'));
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationStoreOpenings', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_STORE_OPENING', users));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationStoreOpenings/${req.params.id}/estimate/submit`, err); }
 });
@@ -1972,8 +1972,8 @@ router.post('/operationRepairs/:id/estimate/submit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_REPAIR'));
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('operationRepairs', itemId, (item) => recordActions.submitOperationEstimate(freshUser, item, req.body, 'OPERATION_REPAIR', users));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationRepairs/${req.params.id}/estimate/submit`, err); }
 });

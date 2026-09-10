@@ -627,15 +627,33 @@ function cancelOperationOrderReceipt(user, item, payload, appData) {
 // lớn KHÔNG có con nào thì amount vẫn nhập tay trực tiếp như trước (không đổi hành vi cũ). Tổng
 // estimateTotalAmount = tổng CHỈ các danh mục lớn (gốc, parentId rỗng) — KHÔNG cộng thêm con lần 2 (con
 // đã nằm trong roll-up của cha rồi, cộng thêm sẽ tính đúp).
-function submitOperationEstimate(user, item, payload, sourceType) {
-  if (!canManageOperationRecord(user, item, sourceType)) {
-    throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư cho hồ sơ này');
+// Mục "Người Phụ Trách danh mục lớn" — thêm field `assignedToUsernames`/`assignedToNames` (mảng, Đợt mới)
+// trên MỖI danh mục LỚN (parentId rỗng) — danh mục con KHÔNG có field này (thừa hưởng phạm vi theo cha).
+// Người có tên trong mảng này nhưng KHÔNG có "toàn quyền quản lý hồ sơ" (canManageOperationRecord()) vẫn
+// gọi được hàm này, nhưng CHỈ trong đúng phạm vi: sửa Nội dung/Mô tả/Ghi chú/Chi phí (nếu chưa có con) của
+// ĐÚNG (các) danh mục lớn họ phụ trách + toàn quyền thêm/sửa/xoá danh mục CON của nó — KHÔNG được xoá
+// chính danh mục lớn đó, KHÔNG được tự thêm danh mục lớn mới, KHÔNG được tự đổi assignedToUsernames (chỉ
+// người toàn quyền hồ sơ mới gán/đổi được — đã xác nhận người dùng, xem AskUserQuestion trong phiên làm
+// việc thêm tính năng này). Cài đặt: composed lại kết quả cuối = (các danh mục lớn NGOÀI phạm vi + toàn
+// bộ con của chúng, GIỮ NGUYÊN 100% không đụng) + (kết quả xử lý payload — CHỈ chấp nhận dòng nằm trong
+// phạm vi, ném 403 rõ ràng nếu payload cố đụng dòng ngoài phạm vi — không âm thầm bỏ qua, cùng triết lý
+// "không tin dữ liệu client" xuyên suốt file này).
+function submitOperationEstimate(user, item, payload, sourceType, users) {
+  const isFullManager = canManageOperationRecord(user, item, sourceType);
+  const existingItems = item.estimateItems || [];
+  let ownerTopIds = null; // null = toàn quyền (không giới hạn); Set = CHỈ được đụng đúng các id này (+ con của chúng)
+  if (!isFullManager) {
+    const owned = existingItems.filter(it => it.parentId == null && Array.isArray(it.assignedToUsernames) && it.assignedToUsernames.includes(user.username));
+    if (!owned.length) {
+      throw new HttpError(403, 'Bạn không có quyền lập danh mục đầu tư cho hồ sơ này');
+    }
+    ownerTopIds = new Set(owned.map(it => it.id));
   }
   if (item.estimateStatus !== 'DRAFT' && item.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Danh mục đầu tư của hồ sơ này không ở trạng thái cần lập/bổ sung (có thể đang chờ lập lại sau khi bị từ chối)');
   }
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
-  const existingIds = new Set((item.estimateItems || []).map(it => it.id).filter(Boolean));
+  const existingIds = new Set(existingItems.map(it => it.id).filter(Boolean));
   let nextId = Date.now();
   const genId = () => { while (existingIds.has(nextId)) nextId += 1; existingIds.add(nextId); return nextId++; };
   // idMap: id CLIENT gửi lên (có thể là id thật giữ nguyên, hoặc id tạm client tự gán cho dòng mới thêm
@@ -657,7 +675,7 @@ function submitOperationEstimate(user, item, payload, sourceType) {
     const rawId = Number(it?.id);
     const id = (Number.isFinite(rawId) && existingIds.has(rawId)) ? rawId : genId();
     if (Number.isFinite(rawId)) idMap.set(rawId, id);
-    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim(), rawParentId: it?.parentId };
+    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim(), rawParentId: it?.parentId, rawAssignedTo: it?.assignedTo };
   }).filter(Boolean);
 
   // Bước 2: đối chiếu parentId qua idMap. Cha KHÔNG còn tồn tại trong lần lưu này (bị xoá nội dung/xoá
@@ -672,9 +690,24 @@ function submitOperationEstimate(user, item, payload, sourceType) {
       if (Number.isFinite(rawParentNum) && idMap.has(rawParentNum)) parentId = idMap.get(rawParentNum);
       else orphaned = true;
     }
-    return { id: it.id, content: it.content, description: it.description, amount: it.amount, note: it.note, parentId, orphaned };
+    return { id: it.id, content: it.content, description: it.description, amount: it.amount, note: it.note, parentId, orphaned, rawAssignedTo: it.rawAssignedTo };
   });
   resolved = resolved.filter((it) => !it.orphaned).map(({ orphaned, ...rest }) => rest);
+
+  // Phạm vi phụ trách (ownerTopIds != null): mỗi dòng payload chỉ được là (a) ĐÚNG 1 trong các danh mục
+  // lớn họ phụ trách (id có sẵn trong ownerTopIds — KHÔNG được thêm danh mục lớn MỚI, id mới sinh không
+  // bao giờ nằm trong ownerTopIds), hoặc (b) danh mục con có parentId trỏ vào 1 trong các danh mục lớn đó
+  // (thêm/sửa/xoá tự do). Bất kỳ dòng nào khác (đụng danh mục lớn/con của người khác, hoặc tự thêm danh
+  // mục lớn mới) -> 403 rõ ràng ngay, không âm thầm bỏ qua.
+  if (ownerTopIds) {
+    for (const it of resolved) {
+      const isOwnedTop = it.parentId == null && ownerTopIds.has(it.id);
+      const isOwnedChild = it.parentId != null && ownerTopIds.has(it.parentId);
+      if (!isOwnedTop && !isOwnedChild) {
+        throw new HttpError(403, `Bạn không có quyền sửa hạng mục "${it.content}" (ngoài phạm vi danh mục lớn bạn đang phụ trách)`);
+      }
+    }
+  }
 
   // Chặn lồng quá 1 cấp: 1 danh mục con (đã có parentId) không được làm cha của hạng mục khác — LỖI rõ
   // ràng (400), khác nhánh mồ côi ở trên (đây là client cố tình gửi cấu trúc sai, không phải hệ quả bình
@@ -689,6 +722,26 @@ function submitOperationEstimate(user, item, payload, sourceType) {
     }
   }
 
+  // assignedToUsernames/assignedToNames — CHỈ danh mục LỚN (parentId rỗng) mới có. Người toàn quyền hồ sơ
+  // gán/đổi được qua payload (resolveOperationAssignedTo() đối chiếu users thật, throw 400 nếu username lạ
+  // — cùng khuôn "Người Phụ Trách Công Việc"). Người chỉ phụ trách 1 phần (ownerTopIds != null) KHÔNG được
+  // tự đổi field này — LUÔN ghi đè lại bằng giá trị hiện có trên hồ sơ, bỏ qua hoàn toàn giá trị payload
+  // gửi lên (không tin client, và đây là field họ không có quyền sửa theo đúng phương án đã xác nhận).
+  const existingById = new Map(existingItems.map((it) => [it.id, it]));
+  resolved.forEach((it) => {
+    if (it.parentId != null) return;
+    if (ownerTopIds) {
+      const existing = existingById.get(it.id);
+      it.assignedToUsernames = existing ? (existing.assignedToUsernames || []) : [];
+      it.assignedToNames = existing ? (existing.assignedToNames || []) : [];
+    } else {
+      const { usernames, names } = resolveOperationAssignedTo(it.rawAssignedTo, users);
+      it.assignedToUsernames = usernames;
+      it.assignedToNames = names;
+    }
+  });
+  resolved.forEach((it) => { delete it.rawAssignedTo; });
+
   // Roll-up: danh mục lớn (parentId rỗng) có >=1 con -> amount tự tính = tổng amount các con, GHI ĐÈ giá
   // trị client gửi cho chính nó (không cho nhập tay khi đã có con — xem renderOperationEstimateItemsTable()
   // ở module-vanhanh.js, input Chi Phí bị disable/ẩn cho đúng trường hợp này).
@@ -698,7 +751,12 @@ function submitOperationEstimate(user, item, payload, sourceType) {
     if (children.length) it.amount = children.reduce((sum, c) => sum + c.amount, 0);
   });
 
-  const validItems = resolved;
+  // Phạm vi phụ trách: hợp nhất lại — giữ NGUYÊN 100% các danh mục lớn NGOÀI phạm vi (+ con của chúng) từ
+  // dữ liệu đã lưu trước đó (client không hề gửi lại các dòng này — xem renderOperationEstimateItemsTable()
+  // ở module-vanhanh.js, chỉ tải đúng phạm vi của họ vào bộ nhớ), rồi nối với phần vừa xử lý trong phạm vi.
+  const validItems = ownerTopIds
+    ? [...existingItems.filter((it) => (it.parentId == null ? !ownerTopIds.has(it.id) : !ownerTopIds.has(it.parentId))), ...resolved]
+    : resolved;
   if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (có Nội dung)');
 
   item.estimateItems = validItems;

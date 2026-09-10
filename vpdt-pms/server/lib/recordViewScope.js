@@ -508,6 +508,13 @@ function hasOwnWorkItemInSource(user, sourceType, sourceId, appData) {
       || workItemAssignees(w).some(u => isManagerOf(user.username, u, appData?.users))
       || isManagerOf(user.username, w.acceptorUsername, appData?.users)));
 }
+// Mục "Người Phụ Trách danh mục lớn" — user có tên trong assignedToUsernames của bất kỳ danh mục LỚN nào
+// trong estimateItems[] của hồ sơ -> xem được cả hồ sơ (mirror đúng hasOwnWorkItemInSource() ngay trên,
+// nhưng estimateItems nằm NGAY TRÊN item đang xét, không cần dò collection riêng như operationWorkItems).
+function hasOwnEstimateCategoryInSource(user, item) {
+  if (!user?.username) return false;
+  return (item?.estimateItems || []).some(it => it.parentId == null && Array.isArray(it.assignedToUsernames) && it.assignedToUsernames.includes(user.username));
+}
 function canViewOperationStoreOpening(user, item, appData) {
   if (!user) return false;
   // Audit nghiệp vụ (đợt 4): canManageOperationRecord() (lib/recordActions.js, dùng cho MỌI thao tác
@@ -518,6 +525,7 @@ function canViewOperationStoreOpening(user, item, appData) {
   if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
+  if (hasOwnEstimateCategoryInSource(user, item)) return true;
   // KHÔNG còn nhánh "đang là approver hồ sơ chính" — MODULE_CONFIGS.operationStoreOpenings đã bị xoá
   // khỏi lib/workflowEngine.js (Mục H, 60c473b: hồ sơ này không bao giờ vào PENDING nữa nên không còn
   // ai là approver thật để mở rộng quyền xem). Dự toán vẫn chạy quy trình duyệt ĐỘC LẬP RIÊNG của nó
@@ -536,6 +544,7 @@ function canViewOperationRepair(user, item, appData) {
   if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
+  if (hasOwnEstimateCategoryInSource(user, item)) return true;
   // Cùng lý do ở canViewOperationStoreOpening() bên trên — bỏ nhánh approver hồ sơ chính, giữ nguyên
   // approver Dự toán (operationRepairEstimate, vẫn còn trong MODULE_CONFIGS).
   return isApproverForApproversMap(MODULE_CONFIGS.operationRepairEstimate.resolveWfConfig(item, appData).approvers, user.username);

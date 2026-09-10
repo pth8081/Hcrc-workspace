@@ -621,6 +621,19 @@ chung nhóm khác.
     Đầu Tư** (dùng để tính "Ngân sách còn lại") chỉ cộng các danh mục LỚN —
     con đã nằm trong số tự cộng của cha rồi nên KHÔNG bị cộng đúp. Xoá 1 danh
     mục lớn đang có con sẽ **xoá cùng toàn bộ con của nó** (cascade).
+  - **"Người Phụ Trách" danh mục lớn**: mỗi danh mục LỚN (không áp dụng danh
+    mục con) có thể gán **nhiều** "Người Phụ Trách" (chọn qua ô tìm-kiếm-gõ-
+    chọn nhiều người, chỉ người quản lý hồ sơ toàn quyền mới gán/đổi được).
+    Người phụ trách (dù không phải người tạo hồ sơ/không có quyền quản lý
+    hồ sơ nào khác) tự động: (1) **xem được cả hồ sơ** chứa danh mục lớn mình
+    phụ trách dù khác phòng ban/không phải approver; (2) trong bảng Danh Mục
+    Đầu Tư, chỉ nhìn thấy đúng danh mục lớn mình phụ trách + toàn bộ con của
+    nó (danh mục khác trong cùng hồ sơ bị ẩn khỏi họ); (3) sửa được nội dung/
+    mô tả/chi phí/ghi chú của chính danh mục lớn đó + toàn quyền thêm/sửa/xoá
+    danh mục con bên trong — **KHÔNG** xoá được chính danh mục lớn, **KHÔNG**
+    tự thêm danh mục lớn mới, **KHÔNG** tự đổi lại danh sách người phụ trách
+    (server bỏ qua thay đổi field này nếu người gửi không phải người quản lý
+    hồ sơ toàn quyền).
   - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập
     nhật**: form Thêm/Sửa công việc (cây Thực Hiện) có 2 ô tuỳ chọn — **"Ngày
     Bắt Đầu"** và **"Tần Suất Cập Nhật Tiến Độ (số ngày)"** — CHỈ áp dụng công

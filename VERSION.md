@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**16.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.5 (2026-09-10): Vận Hành Siêu Thị — "Người Phụ Trách" danh mục lớn (Danh Mục Đầu Tư)
+
+Yêu cầu người dùng: gán được "Người Phụ Trách" cho từng danh mục lớn trong
+bảng Danh Mục Đầu Tư (giai đoạn Dự toán) — người phụ trách tự sửa được danh
+mục lớn mình quản lý + toàn quyền thêm/sửa/xoá danh mục con của nó, và chỉ
+nhìn thấy đúng phạm vi mình phụ trách trong bảng, mà KHÔNG cần được cấp bất
+kỳ quyền quản lý hồ sơ nào khác.
+
+**Thiết kế đã chốt với người dùng (3 lựa chọn qua AskUserQuestion):**
+1. Người phụ trách xem được **cả hồ sơ** (không chỉ riêng bảng), nhưng bảng
+   Danh Mục Đầu Tư tự lọc chỉ hiện đúng danh mục lớn họ phụ trách + con của
+   nó — danh mục khác trong cùng hồ sơ bị ẩn khỏi họ.
+2. Họ **sửa được** (nội dung/mô tả/chi phí/ghi chú của chính danh mục lớn +
+   toàn quyền thêm/sửa/xoá con) nhưng **KHÔNG xoá được** chính danh mục lớn
+   và **KHÔNG tự thêm được** danh mục lớn mới.
+3. Một danh mục lớn gán được **nhiều** người phụ trách (mirror cơ chế multi-
+   assignee sẵn có của công việc).
+
+**Thay đổi server** (`lib/recordActions.js::submitOperationEstimate()`):
+khi người gọi KHÔNG phải người quản lý hồ sơ toàn quyền
+(`canManageOperationRecord()`), server chuyển sang chế độ merge theo phạm
+vi: xác định tập danh mục lớn họ được gán (`assignedToUsernames` chứa họ),
+chặn 403 rõ ràng nếu payload đụng tới bất kỳ dòng nào ngoài phạm vi đó (sửa
+danh mục lớn khác, tự thêm danh mục lớn mới, hoặc bỏ danh mục lớn của mình
+ra khỏi payload = coi như cố xoá), và **bỏ qua hoàn toàn** field
+`assignedTo` họ gửi kèm (giữ nguyên giá trị cũ — chỉ người quản lý hồ sơ
+toàn quyền mới đổi được danh sách người phụ trách). Đường đi của người quản
+lý hồ sơ toàn quyền giữ nguyên 100% hành vi cũ (full-replace).
+`lib/recordViewScope.js`: thêm `hasOwnEstimateCategoryInSource()`, mở rộng
+`canViewOperationStoreOpening`/`canViewOperationRepair` cho phép xem cả hồ
+sơ nếu có ít nhất 1 danh mục lớn được gán cho mình.
+
+**Thay đổi client** (`public/js/module-vanhanh.js`, `public/index.html`):
+thêm ô tìm-kiếm-chọn-nhiều "Người Phụ Trách" (dùng `renderPeopleMultiSelect()`
+có sẵn) cho từng danh mục lớn, chỉ hiện/sửa được bởi người quản lý hồ sơ
+toàn quyền; với người phụ trách (không toàn quyền), bảng tự lọc chỉ hiện
+đúng phạm vi mình, nút "+ Thêm Hạng Mục"/"Nhập Excel" (tạo danh mục lớn
+mới) bị ẩn, nút xoá bị ẩn ở hàng danh mục lớn (chỉ hiện ở hàng con).
+
+Viết mới `tests/test-operation-estimate-owner-scope.js` (11 kịch bản, test
+thuần không cần SQL Server) — xác nhận đầy đủ: gán/đọc assignedToUsernames
+đúng, validate username không tồn tại, mở rộng quyền xem hồ sơ, sửa/thêm
+đúng phạm vi thành công, chặn 403 khi đụng ngoài phạm vi/tự xoá/tự thêm
+danh mục lớn/tự đổi người phụ trách, chặn hoàn toàn người không phụ trách
+gì.
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — chỉ sửa code
+server (`lib/recordActions.js`, `lib/recordViewScope.js`, `routes/records.js`)
+và client (`public/js/module-vanhanh.js`, `public/index.html`), chỉ cần
+copy code + `pm2 restart`.
+
+Full regression suite chạy lại sau khi merge: không phát sinh lỗi mới — 3
+lỗi có sẵn từ trước vẫn còn (không liên quan, đã xác nhận lại bằng
+`git stash`): `test-approval-hub.js` (2 kịch bản về tính năng
+`operationOrderReceipt` không liên quan tới thay đổi này),
+`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js` (lỗi kết nối
+SQL Server tạm thời trong môi trường test — "Failed to connect to
+localhost:1433" — không phải lỗi logic).
 
 ## v16.4 (2026-09-10): Cache-busting cho `app.css`/`tailwind.css` + fix modal "Thêm Công Việc" (Vận Hành Siêu Thị) tràn màn hình laptop ngang
 
