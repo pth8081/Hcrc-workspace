@@ -26,6 +26,7 @@ function setPaymentSubTab(subTab) {
   document.getElementById('paymentManageWrap').classList.toggle('hidden', subTab !== 'MANAGE');
   document.getElementById('paymentApproveWrap').classList.toggle('hidden', subTab !== 'APPROVE');
   if (subTab === 'CREATE' && editingPaymentRequestId === null) cancelEditPaymentRequest();
+  if (subTab === 'CREATE') renderDynamicInputsForModule('PAYMENT', 'dynamicFieldsContainer_PAYMENT');
   if (subTab === 'MANAGE') renderPaymentManageTab();
   else renderPaymentRequests();
 }
@@ -184,6 +185,13 @@ async function submitManualPaymentRequest(e) {
     return;
   }
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('PAYMENT');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   // "Hồ Sơ Đề Nghị Thanh Toán" — TUỲ CHỌN ngay lúc tạo (có thể đính kèm sau ở "🗂️ Quản Lý Thanh Toán"),
   // upload ngay nếu người dùng đã chọn tệp trong form tạo.
   const createFilesInput = document.getElementById('paymentCreateRequestFiles');
@@ -212,7 +220,8 @@ async function submitManualPaymentRequest(e) {
         for (let i = 0; i < installments.length; i++) {
           const result = await callCreateAction('paymentRequests', {
             dept, title, installments: [installments[i]], requestFiles: [],
-            cycleGroupId, cycleIndex: i + 1, cycleTotal: installments.length
+            cycleGroupId, cycleIndex: i + 1, cycleTotal: installments.length,
+            customData
           });
           newPrs.push(result.item);
         }
@@ -220,11 +229,11 @@ async function submitManualPaymentRequest(e) {
           alert('ℹ️ Đề nghị thanh toán theo đợt: mỗi đợt cần đính kèm "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG — tệp vừa chọn chưa được gắn vào đợt nào, vui lòng đính kèm cho từng đợt ở "🗂️ Quản Lý Thanh Toán".');
         }
       } else {
-        const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles });
+        const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles, customData });
         newPrs = [result.item];
       }
     } else {
-      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments, requestFiles });
+      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments, requestFiles, customData });
       newPrs = result.paymentRequests || (result.paymentRequest ? [result.paymentRequest] : []);
       updatedSourceItem = result.item;
     }
@@ -730,6 +739,7 @@ function renderPaymentRequests() {
         </td>
         <td class="border p-2 text-center space-y-1">
           ${canManage && pr.status === 'APPROVED' && isOneTime ? `<button data-op="confirmPaymentRequestLumpSumAction" data-arg0="${pr.id}" class="block w-full bg-cyan-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-cyan-700">💰 Xác Nhận Toàn Bộ</button>` : ''}
+          ${canManage && pr.status === 'APPROVED' && !(pr.installments || []).some(it => it.confirmed === true) ? `<button data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${pr.status !== 'APPROVED' ? '<span class="text-[11px] text-gray-400 italic">Không có thao tác</span>' : ''}
         </td>
       </tr>

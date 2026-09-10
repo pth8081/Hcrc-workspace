@@ -345,6 +345,27 @@ async function partB() {
       assert.strictEqual(r.status, 409);
     });
 
+    // v15.9 — 2 loại nghỉ mới: HOURLY (nghỉ theo giờ, daysCount phân số) + PERSONAL (nghỉ việc riêng,
+    // tách khỏi UNPAID trên báo cáo).
+    await test('POST /api/create/leaveRequests — HOURLY tính đúng daysCount phân số theo giờ', async () => {
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'HOURLY', fromDate: '2026-03-10', startTime: '08:00', endTime: '10:00', reason: 'Đi khám bệnh' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.item.daysCount, 0.25, 'Chuẩn 8 giờ/ngày, nghỉ 2 giờ = 0.25 ngày');
+      assert.strictEqual(r.json.item.fromDate, r.json.item.toDate, 'HOURLY chỉ đúng 1 ngày');
+    });
+
+    await test('POST /api/create/leaveRequests — HOURLY quá số giờ chuẩn/ngày bị chặn 400', async () => {
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'HOURLY', fromDate: '2026-03-11', startTime: '08:00', endTime: '18:00', reason: 'x' });
+      assert.strictEqual(r.status, 400);
+    });
+
+    await test('POST /api/create/leaveRequests — PERSONAL (nghỉ việc riêng) tạo được, KHÔNG bị tính vào phép năm', async () => {
+      const balanceBefore = STORE.leaveBalances.find(b => b.id === leaveBalanceId).usedDays;
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'PERSONAL', fromDate: '2026-03-20', toDate: '2026-03-20', reason: 'Việc gia đình' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(STORE.leaveBalances.find(b => b.id === leaveBalanceId).usedDays, balanceBefore, 'PERSONAL không trừ phép năm lúc tạo (chỉ ANNUAL mới trừ)');
+    });
+
     await test('POST /api/records/leaveRequests/:id/approve — người KHÔNG phải quản lý trực tiếp bị chặn 403', async () => {
       const r = await call('storeMgr1', 'POST', `/api/records/leaveRequests/${leaveRequestId}/approve`, {});
       assert.strictEqual(r.status, 403);

@@ -74,6 +74,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubCatalog').classList.toggle('hidden', subTab !== 'CATALOG');
   document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
   document.getElementById('adminSubExtAuth').classList.toggle('hidden', subTab !== 'EXTAUTH');
+  document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'OPAPI');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -82,8 +83,78 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubCatalog').className = subTab === 'CATALOG' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubExtAuth').className = subTab === 'EXTAUTH' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubOpApi').className = subTab === 'OPAPI' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
+  if (subTab === 'OPAPI') loadOperationOrderApiConfigToForm();
+}
+
+// ---------- Cấu Hình API — đồng bộ Đơn Hàng (Vận Hành) ra dsmart16 (jobs/operationOrderApiSync.js) ----------
+// DB.operationOrderApiConfig đã có sẵn từ GET /api/data (server tự strip headerValueEnc, xem
+// sanitizeOperationOrderApiConfig() ở routes/data.js) — cùng khuôn write-only như Cấu Hình Email
+// (loadEmailConfigToForm()/saveEmailConfig() ở core.js).
+function loadOperationOrderApiConfigToForm() {
+  const cfg = DB.operationOrderApiConfig || {};
+  document.getElementById('opApiEnabled').value = cfg.enabled === true ? 'true' : 'false';
+  document.getElementById('opApiBaseUrl').value = cfg.baseUrl || '';
+  document.getElementById('opApiSyncIntervalMinutes').value = cfg.syncIntervalMinutes || 60;
+  document.getElementById('opApiHeaderName').value = cfg.headerName || '';
+  document.getElementById('opApiHeaderValuePlain').value = '';
+  document.getElementById('opApiMatchingKey').value = cfg.matchingKey || 'poNumber';
+
+  const statusEl = document.getElementById('opApiHeaderStatus');
+  statusEl.textContent = cfg.hasHeaderValue
+    ? '✅ Đã cấu hình giá trị header xác thực (ẩn vì lý do bảo mật — để trống ô khi Sửa = giữ nguyên).'
+    : '⚠️ Chưa cấu hình giá trị header xác thực.';
+
+  const lastSyncEl = document.getElementById('opApiLastSyncStatus');
+  if (!cfg.lastSyncAt) {
+    lastSyncEl.textContent = 'Chưa từng chạy đồng bộ lần nào.';
+  } else {
+    const statusLabel = cfg.lastSyncStatus === 'SUCCESS' ? '✅' : cfg.lastSyncStatus === 'PARTIAL' ? '⚠️' : '⛔';
+    lastSyncEl.textContent = `${statusLabel} Lần đồng bộ gần nhất: ${new Date(cfg.lastSyncAt).toLocaleString('vi-VN')} — ${cfg.lastSyncMessage || ''}`;
+  }
+}
+
+function saveOperationOrderApiConfig(e) {
+  e.preventDefault();
+  const matchingKey = document.getElementById('opApiMatchingKey').value.trim() || 'poNumber';
+  DB.operationOrderApiConfig = {
+    ...(DB.operationOrderApiConfig || {}),
+    enabled: document.getElementById('opApiEnabled').value === 'true',
+    baseUrl: document.getElementById('opApiBaseUrl').value.trim(),
+    syncIntervalMinutes: parseInt(document.getElementById('opApiSyncIntervalMinutes').value, 10) || 60,
+    headerName: document.getElementById('opApiHeaderName').value.trim(),
+    // "headerValuePlain" là field TẠM, chỉ để server đọc 1 lần rồi mã hoá lại thành "headerValueEnc" —
+    // không phải bản ghi lưu thật (xem prepareOperationOrderApiConfigForSave() ở routes/data.js). Để
+    // trống ô này = giữ nguyên giá trị đã lưu, khớp đúng quy ước "write-only" như mật khẩu SMTP.
+    headerValuePlain: document.getElementById('opApiHeaderValuePlain').value,
+    matchingKey
+  };
+  syncStorage('operationOrderApiConfig');
+  document.getElementById('opApiHeaderValuePlain').value = '';
+  logSystemAction('CONFIG', 'UPDATE_OPERATION_ORDER_API_CONFIG', 'Cập nhật cấu hình đồng bộ Đơn Hàng ra dsmart16.', 'SUCCESS', 'OPERATION_ORDER_API_CONFIG');
+  alert('✅ Đã lưu Cấu Hình API thành công!');
+}
+
+async function syncOperationOrdersNow() {
+  const btn = document.getElementById('opApiSyncNowBtn');
+  const statusEl = document.getElementById('opApiLastSyncStatus');
+  btn.disabled = true;
+  statusEl.textContent = '⏳ Đang đồng bộ...';
+  try {
+    const res = await fetch('/api/operation/sync-dsmart16', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body.ok) {
+      statusEl.textContent = `✅ ${body.message || 'Đã đồng bộ xong.'}`;
+    } else {
+      statusEl.textContent = `⛔ ${body.error || body.message || 'Đồng bộ thất bại'}`;
+    }
+  } catch (err) {
+    statusEl.textContent = '⛔ Không thể kết nối tới máy chủ để đồng bộ: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ---------- API Xác Thực Ngoài (routes/externalAuthAdmin.js + routes/externalAuthVerify.js) ----------

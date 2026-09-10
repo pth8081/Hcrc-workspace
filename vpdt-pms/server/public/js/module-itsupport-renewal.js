@@ -195,6 +195,12 @@ async function submitItServiceRenewal(e) {
     }
   }
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('IT_RENEWAL');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const costInput = document.getElementById('itRenewalCost');
   const payload = {
     name, category,
@@ -205,7 +211,8 @@ async function submitItServiceRenewal(e) {
     note: document.getElementById('itRenewalNote').value.trim(),
     fileUrl: uploaded ? uploaded.fileUrl : null,
     fileName: uploaded ? uploaded.fileName : null,
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newItem;

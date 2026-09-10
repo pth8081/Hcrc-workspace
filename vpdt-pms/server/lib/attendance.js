@@ -50,8 +50,13 @@ function todayStr() {
 }
 
 const WORK_MODELS = new Set(['OFFICE_HOURS', 'SHIFT_BASED']);
-const ATTENDANCE_RECORD_TYPES = new Set(['WORK', 'LEAVE_PAID', 'LEAVE_UNPAID', 'BUSINESS_TRIP', 'OVERTIME', 'SICK_LEAVE']);
-const LEAVE_TYPES = new Set(['ANNUAL', 'UNPAID', 'SICK']);
+// v15.9 — thêm LEAVE_PERSONAL (đơn nghỉ việc riêng, TÁCH khỏi LEAVE_UNPAID để phân biệt lý do trên báo
+// cáo dù cùng KHÔNG tính công) — HOURLY (nghỉ theo giờ) KHÔNG sinh bản ghi chấm công riêng (xem
+// buildLeaveAttendanceRecords() bên dưới — mô hình chấm công hiện tại chỉ có độ chi tiết theo NGÀY, nghỉ
+// vài giờ trong 1 ngày vẫn cần bản ghi WORK bình thường của ngày đó, chỉ trừ vào công theo giờ qua
+// daysCount phân số, không đổi recordType).
+const ATTENDANCE_RECORD_TYPES = new Set(['WORK', 'LEAVE_PAID', 'LEAVE_UNPAID', 'LEAVE_PERSONAL', 'BUSINESS_TRIP', 'OVERTIME', 'SICK_LEAVE']);
+const LEAVE_TYPES = new Set(['ANNUAL', 'UNPAID', 'SICK', 'HOURLY', 'PERSONAL']);
 const LEAVE_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']);
 const ROSTER_STATUSES = new Set(['SCHEDULED', 'SWAPPED', 'CANCELLED']);
 const SWAP_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
@@ -252,9 +257,29 @@ function computeLeavePayoutInfo(baseSalary, remainingDays, workModel) {
   return { remainingDays, dailyRate, amount: Math.round(dailyRate * remainingDays) };
 }
 
-function assertValidLeaveRequest(payload) {
+// appData (tuỳ chọn) — CHỈ cần cho leaveType 'HOURLY' để đọc attendanceHoConfig.standardHoursPerDay (số
+// giờ công chuẩn/ngày, quy đổi ra daysCount phân số) — nếu thiếu, mặc định 8 giờ/ngày.
+function assertValidLeaveRequest(payload, appData) {
   const leaveType = String(payload.leaveType || '').trim();
   if (!LEAVE_TYPES.has(leaveType)) throw new HttpError(400, 'Loại nghỉ phép không hợp lệ');
+  const reason = String(payload.reason || '').trim().slice(0, 500);
+
+  if (leaveType === 'HOURLY') {
+    const fromDate = String(payload.fromDate || '').trim();
+    if (!fromDate || Number.isNaN(new Date(fromDate).getTime())) throw new HttpError(400, 'Ngày nghỉ không hợp lệ');
+    const startTime = String(payload.startTime || '').trim();
+    const endTime = String(payload.endTime || '').trim();
+    const startMin = timeStrToMinutes(startTime);
+    const endMin = timeStrToMinutes(endTime);
+    if (startMin == null || endMin == null) throw new HttpError(400, 'Vui lòng nhập đúng Giờ Bắt Đầu/Giờ Kết Thúc (HH:mm)');
+    if (endMin <= startMin) throw new HttpError(400, 'Giờ Kết Thúc phải sau Giờ Bắt Đầu');
+    const standardHoursPerDay = Number(appData?.attendanceHoConfig?.standardHoursPerDay) || 8;
+    const hours = (endMin - startMin) / 60;
+    if (hours > standardHoursPerDay) throw new HttpError(400, `Nghỉ theo giờ không được quá ${standardHoursPerDay} giờ trong 1 ngày — nghỉ cả ngày vui lòng chọn loại "Phép năm"/"Nghỉ không lương"/"Nghỉ ốm"/"Nghỉ việc riêng"`);
+    const daysCount = Math.round((hours / standardHoursPerDay) * 100) / 100;
+    return { leaveType, fromDate, toDate: fromDate, daysCount, reason, startTime, endTime, hours };
+  }
+
   const fromDate = String(payload.fromDate || '').trim();
   const toDate = String(payload.toDate || '').trim();
   if (!fromDate || Number.isNaN(new Date(fromDate).getTime())) throw new HttpError(400, 'Ngày bắt đầu nghỉ không hợp lệ');
@@ -262,7 +287,6 @@ function assertValidLeaveRequest(payload) {
   if (new Date(toDate) < new Date(fromDate)) throw new HttpError(400, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
   const daysCount = Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1;
   if (daysCount > 90) throw new HttpError(400, 'Không thể nộp 1 đơn nghỉ quá 90 ngày liên tục');
-  const reason = String(payload.reason || '').trim().slice(0, 500);
   return { leaveType, fromDate, toDate, daysCount, reason };
 }
 
@@ -281,6 +305,7 @@ function defaultLeaveRequest(employeeCode, valid, workModel) {
   return {
     employeeCode, leaveType: valid.leaveType, fromDate: valid.fromDate, toDate: valid.toDate,
     daysCount: valid.daysCount, reason: valid.reason, workModel,
+    startTime: valid.startTime || null, endTime: valid.endTime || null,
     status: 'PENDING', approverUsername: null, approverName: null, decidedAt: null, rejectReason: null,
     affectedRosterIds: [], createdAt: nowVN(), updatedAt: nowVN()
   };
@@ -337,7 +362,12 @@ function deductLeaveBalance(balance, daysCount) {
 // nghỉ đã duyệt — GHI ĐÈ bản ghi WORK (nếu máy chấm công đã lỡ ghi ngày đó) vì đơn đã duyệt là nguồn sự
 // thật cao hơn; KHÔNG ghi đè nếu ngày đó đã có bản ghi nghỉ phép khác (tránh đơn chồng đơn).
 function buildLeaveAttendanceRecords(request, existingList) {
-  const recordType = request.leaveType === 'UNPAID' ? 'LEAVE_UNPAID' : (request.leaveType === 'SICK' ? 'SICK_LEAVE' : 'LEAVE_PAID');
+  // HOURLY (nghỉ theo giờ) không sinh bản ghi chấm công riêng — xem ghi chú tại ATTENDANCE_RECORD_TYPES.
+  if (request.leaveType === 'HOURLY') return [];
+  const recordType = request.leaveType === 'UNPAID' ? 'LEAVE_UNPAID'
+    : request.leaveType === 'SICK' ? 'SICK_LEAVE'
+    : request.leaveType === 'PERSONAL' ? 'LEAVE_PERSONAL'
+    : 'LEAVE_PAID';
   const dates = listDatesInRange(request.fromDate, request.toDate);
   const results = [];
   for (const workDate of dates) {

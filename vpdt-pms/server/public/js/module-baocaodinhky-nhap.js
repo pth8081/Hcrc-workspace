@@ -98,8 +98,8 @@ function setPeriodicReportSubTab(subTab) {
   document.getElementById('btnPRSubAggregate').className = subTab === 'AGGREGATE' ? activeCls : inactiveCls;
   document.getElementById('btnPRSubPublished').className = subTab === 'PUBLISHED' ? activeCls : inactiveCls;
 
-  if (subTab === 'ENTRY') { renderPrEntryPeriodOptions(); renderPrEntryTable(); }
-  if (subTab === 'PERIODS') { renderReportDeptCheckboxes(); renderPrPeriodsTable(); }
+  if (subTab === 'ENTRY') { renderPrEntryPeriodOptions(); renderPrEntryTable(); renderDynamicInputsForModule('REPORT_ENTRY', 'dynamicFieldsContainer_REPORT_ENTRY'); }
+  if (subTab === 'PERIODS') { renderReportDeptCheckboxes(); renderPrPeriodsTable(); renderDynamicInputsForModule('REPORT_PERIOD', 'dynamicFieldsContainer_REPORT_PERIOD'); }
   if (subTab === 'AGGREGATE') { renderPrAggPeriodOptions(); }
   if (subTab === 'PUBLISHED') { renderPrPublishedTable(); }
 }
@@ -299,7 +299,13 @@ async function savePrEntryDraft() {
   const title = document.getElementById('prEntryTitle').value.trim();
   if (!title) return alert('Vui lòng nhập tiêu đề báo cáo!');
 
-  const payload = { periodId, title, entryType: 'PDF' };
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('REPORT_ENTRY');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const payload = { periodId, title, entryType: 'PDF', customData };
   try {
     if (prEntryPendingFile) {
       const uploaded = await uploadFileToServer(prEntryPendingFile.file, 'periodicReport');
@@ -462,7 +468,13 @@ async function createReportPeriod(e) {
   };
   if (!deptScope.all && !deptScope.depts.length) return alert('Vui lòng chọn ít nhất 1 phòng ban áp dụng, hoặc chọn "Tất cả phòng ban"!');
 
-  const payload = { name, endTime, deptScope, createdAt: new Date().toLocaleString('vi-VN') };
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('REPORT_PERIOD');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const payload = { name, endTime, deptScope, createdAt: new Date().toLocaleString('vi-VN'), customData };
   let newPeriod;
   try {
     const result = await callCreateAction('reportPeriods', payload);

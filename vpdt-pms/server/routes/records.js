@@ -250,6 +250,7 @@ router.post('/paymentRequests/from-source', async (req, res) => {
       title: req.body?.title,
       installments: req.body?.installments,
       requestFiles: req.body?.requestFiles,
+      customData: req.body?.customData,
       skipManageGate: true
     };
 
@@ -625,7 +626,8 @@ async function withTaskAction(req, res, action, mutator) {
 router.post('/tasks', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const result = recordActions.createTask(req.body, freshUser, users);
+    const formTemplates = await getAppDataValue('formTemplates');
+    const result = recordActions.createTask(req.body, freshUser, users, formTemplates);
     await insertTask(result);
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -2088,7 +2090,8 @@ router.post('/operationWorkItems', async (req, res) => {
     // buộc chọn đúng kỳ đang "Đang thực hiện"), xem lib/createValidation.js operationExecutionPeriods.
     const allPeriods = await getAllForCollection('operationExecutionPeriods');
     const periodsForSource = allPeriods.filter(p => p.sourceType === sourceType && p.sourceId === srcId);
-    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource, users, sourceType);
+    const formTemplates = await getAppDataValue('formTemplates');
+    const newItem = recordActions.createOperationWorkItem(freshUser, req.body, sourceRecord, siblings, periodsForSource, users, sourceType, formTemplates);
     newItem.sourceType = sourceType;
     newItem.sourceId = srcId;
     await insertWorkItem(newItem);
@@ -2939,16 +2942,17 @@ router.post('/uniformIssuances/create', async (req, res) => {
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
       // uniformStockAdjustments PHẢI đọc cùng lượt (giống uniformStockAdjustments/create bên dưới):
       // tồn kho lúc cấp phát trừ cả hàng hỏng/hủy/mất và cộng lại phần đã thu hồi từ nhân viên.
-      const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
+      const [allPeriods, allIssuances, allAdjustments, allTransfers, formTemplates] = await Promise.all([
         getAllForCollection('uniformPeriods'),
         getAllForCollection('uniformIssuances'),
         getAllForCollection('uniformStockAdjustments'),
-        getAllForCollection('uniformTransfers')
+        getAllForCollection('uniformTransfers'),
+        getAppDataValue('formTemplates')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
-      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers);
+      const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers, formTemplates);
       return insertRecord('uniformIssuances', record);
     });
     res.json({ ok: true, item: result });
@@ -3014,16 +3018,17 @@ router.post('/uniformTransfers/create', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền yêu cầu điều chuyển kho' });
     }
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
-      const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
+      const [allPeriods, allIssuances, allAdjustments, allTransfers, formTemplates] = await Promise.all([
         getAllForCollection('uniformPeriods'),
         getAllForCollection('uniformIssuances'),
         getAllForCollection('uniformStockAdjustments'),
-        getAllForCollection('uniformTransfers')
+        getAllForCollection('uniformTransfers'),
+        getAppDataValue('formTemplates')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
-      const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers);
+      const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers, formTemplates);
       return insertRecord('uniformTransfers', record);
     });
     res.json({ ok: true, item: result });

@@ -44,11 +44,19 @@ async function submitHrFeedbackQuestion(e) {
   const question = document.getElementById('hrFeedbackQuestion').value.trim();
   if (!question) return alert('⛔ Vui lòng nhập nội dung câu hỏi!');
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('HR_FEEDBACK');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   let newItem;
   try {
     const result = await callCreateAction('hrFeedback', {
       question,
-      category: document.getElementById('hrFeedbackCategory').value
+      category: document.getElementById('hrFeedbackCategory').value,
+      customData
     });
     newItem = result.item;
   } catch (err) {

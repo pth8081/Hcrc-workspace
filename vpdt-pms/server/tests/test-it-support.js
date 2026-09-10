@@ -306,7 +306,7 @@ async function main() {
         // chọn mục "📨 Gửi Phê Duyệt" ở <select> "Khác ▾" (handleActionCellDispatch() ở core.js).
         runItTicketAction(id, 'escalate');
         const modalOpen = !document.getElementById('itTicketModal').classList.contains('hidden');
-        const formShown = !!document.getElementById('itTicketApproverSelect') && !!document.getElementById('itTicketApprovalReason');
+        const formShown = !!document.getElementById('itTicketApproverInput') && !!document.getElementById('itTicketApprovalReason');
         // Chỉ đóng FORM (không gửi, không đụng gì tới trạng thái ticket) — CỐ Ý không gọi
         // closeItTicketModal() ở đây: kịch bản kế tiếp (Leo thang phê duyệt) giả định modal ĐANG MỞ
         // sẵn đúng ticket này (chỉ tự bật lại form qua showItTicketEscalateForm=true, không tự mở lại
@@ -324,7 +324,10 @@ async function main() {
       const escalateResult = await page.evaluate(async (id) => {
         showItTicketEscalateForm = true;
         renderItTicketModal();
-        document.getElementById('itTicketApproverSelect').value = 'approver1';
+        // Đổi từ <select> sang ô tìm-kiếm-gõ-chọn (sdd*) — mô phỏng đúng kết quả người dùng bấm chọn 1
+        // gợi ý (chỉ hidden input backing field mới có ý nghĩa với escalateItTicketAction(), input hiển
+        // thị chỉ để gõ tìm nên test không cần set giá trị hiển thị).
+        document.getElementById('itTicketApproverUsername').value = 'approver1';
         document.getElementById('itTicketApprovalReason').value = 'Cần xin ý kiến trước khi thay thế linh kiện đắt tiền';
         await escalateItTicketAction();
         const t = DB.itSupportTickets.find(x => x.id === id);
@@ -391,7 +394,10 @@ async function main() {
         await claimItTicketAction();
         showItTicketEscalateForm = true;
         renderItTicketModal();
-        document.getElementById('itTicketApproverSelect').value = 'approver1';
+        // Đổi từ <select> sang ô tìm-kiếm-gõ-chọn (sdd*) — mô phỏng đúng kết quả người dùng bấm chọn 1
+        // gợi ý (chỉ hidden input backing field mới có ý nghĩa với escalateItTicketAction(), input hiển
+        // thị chỉ để gõ tìm nên test không cần set giá trị hiển thị).
+        document.getElementById('itTicketApproverUsername').value = 'approver1';
         document.getElementById('itTicketApprovalReason').value = 'Cần duyệt ngân sách thuê đơn vị khảo sát mạng';
         await escalateItTicketAction();
       }, ticketDeniedId);

@@ -192,7 +192,11 @@ function collectPermsFromForm() {
     // operationStoreOpenCreate/operationRepairCreate (đúng hồ sơ mình tạo) + quyền MỚI
     // operationRecordManageAll (mọi hồ sơ, không phân biệt người tạo) — xem lib/createValidation.js
     // canManageOperationRecord().
-    operationRecordManageAll: document.getElementById('pOperationRecordManageAll').checked
+    operationRecordManageAll: document.getElementById('pOperationRecordManageAll').checked,
+    // operationOrderReceiptManage — quyền RIÊNG cho "🧾 Duyệt Nhập/Hủy Đơn Hàng" (tách khỏi quần thể
+    // duyệt/từ chối đơn hàng nội bộ) — scopeFromForm() đọc theo cb.value nên tự nhận đúng cả mục 'HO'
+    // đặc biệt lẫn tên siêu thị/phòng ban thật, không cần đổi gì thêm.
+    operationOrderReceiptManage: scopeFromForm('pOperationOrderReceiptAll', 'pOperationOrderReceiptDept')
   };
 }
 
@@ -260,6 +264,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
+  document.getElementById('pOperationOrderReceiptAll').checked = !!perms.operationOrderReceiptManage?.all;
+  setOperationOrderReceiptScopeCheckboxes(perms.operationOrderReceiptManage?.depts);
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -331,6 +337,7 @@ function populatePermsForm(permsInput) {
     const deptPrefix = allId.replace(/All$/, 'Dept');
     toggleScopeGroup(allId, deptPrefix);
   });
+  toggleOperationOrderReceiptScopeGroup();
 
   refreshPermTreeBadges();
   clearPermTreeDirtyMarks();

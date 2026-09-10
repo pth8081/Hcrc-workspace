@@ -58,9 +58,11 @@ function showHrCreateForm(type) {
     populateHrpOnboardingDeptDropdowns();
     document.getElementById('hrpOnbPosType').value = 'HO';
     onHrpOnboardingPosTypeChange();
+    renderDynamicInputsForModule('HR_ONBOARDING', 'dynamicFieldsContainer_HR_ONBOARDING');
   } else if (type === 'OFFBOARDING') {
     populateSystemUsersDatalist();
     updateHrpOffboardingSubmitState();
+    renderDynamicInputsForModule('HR_OFFBOARDING', 'dynamicFieldsContainer_HR_OFFBOARDING');
   }
 }
 function hideHrCreateForms() {
@@ -137,6 +139,12 @@ function updateHrpOffboardingSubmitState() {
 async function submitHrpOnboarding(e) {
   e.preventDefault();
   const posType = document.getElementById('hrpOnbPosType').value;
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('HR_ONBOARDING');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     processType: 'ONBOARDING',
     employeeCode: document.getElementById('hrpOnbEmployeeCode').value.trim(),
@@ -148,7 +156,8 @@ async function submitHrpOnboarding(e) {
     phone: document.getElementById('hrpOnbPhone').value.trim(),
     startDate: document.getElementById('hrpOnbStartDate').value,
     directManagerUsername: document.getElementById('hrpOnbDirectManagerUsername').value || null,
-    note: document.getElementById('hrpOnbNote').value.trim()
+    note: document.getElementById('hrpOnbNote').value.trim(),
+    customData
   };
   let newItem;
   try {
@@ -180,12 +189,19 @@ async function submitHrpOffboarding(e) {
   if (!employeeUsername) return alert('⛔ Vui lòng gõ tên/tài khoản rồi bấm chọn đúng 1 nhân viên trong gợi ý!');
   const lastWorkingDate = document.getElementById('hrpOffbLastWorkingDate').value;
   if (!lastWorkingDate) return alert('⛔ Vui lòng nhập Ngày nghỉ việc!');
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('HR_OFFBOARDING');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     processType: 'OFFBOARDING',
     employeeUsername, lastWorkingDate,
     isManagerialPosition: document.getElementById('hrpOffbIsManagerial').checked,
     directManagerUsername: document.getElementById('hrpOffbDirectManagerUsername').value || null,
-    reason: document.getElementById('hrpOffbReason').value.trim()
+    reason: document.getElementById('hrpOffbReason').value.trim(),
+    customData
   };
   let newItem;
   try {

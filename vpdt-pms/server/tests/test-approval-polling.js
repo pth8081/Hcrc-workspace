@@ -118,15 +118,17 @@ function buildFixtureAppData() {
       { id: 121, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [],
         orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0 },
       // AWAITING_RECEIPT — mục ĐẶC BIỆT, không đi qua pushDeptWorkflowKeys() (status khác PENDING) —
-      // quyền dùng isApproverForOperationOrderReceipt() (lib/recordActions.js), mirror quần thể approver
-      // của CHÍNH hồ sơ Đơn Hàng ở trên (đúng phòng ban 'Kế Toán', HO, mức LT100M).
+      // quyền dùng isApproverForOperationOrderReceipt() (lib/recordActions.js): quyền RIÊNG
+      // operationOrderReceiptManage {all, depts[]}, scopeKey = 'HO' (orderLocationType==='HO') hoặc tên
+      // siêu thị cụ thể (orderLocationType==='STORE', xem lib/recordActions.js). duyet1 chỉ được cấp
+      // scope 'HO' ở fixture DUYET1 phía trên -> đơn HO này lọt, đơn STORE dưới không.
       { id: 122, dept: 'Kế Toán', status: 'AWAITING_RECEIPT', currentStep: 1, history: [],
         orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0 },
-      // Khác phòng ban -> KHÔNG ai trong approvers ['duyet1'] (map chỉ khai cho tier LT100M chung, không
-      // theo dept nữa — orderLocationType/amount quyết định tier, không phải dept) — dùng mức GTE100M
-      // (chưa cấu hình approvers nào) để chắc chắn bị loại, tránh nhầm lẫn "tier nào cũng gồm duyet1".
-      { id: 123, dept: 'Kế Toán', status: 'AWAITING_RECEIPT', currentStep: 1, history: [],
-        orderLocationType: 'HO', amount: 500000000, paymentTotalAmount: 0 }
+      // orderLocationType STORE, dept = tên 1 siêu thị KHÔNG nằm trong operationOrderReceiptManage.depts
+      // của duyet1 (chỉ có 'HO') -> PHẢI bị loại, dù cùng phòng ban 'Kế Toán' với đơn 122 (phòng ban
+      // KHÔNG còn liên quan tới quyền này nữa — chỉ scopeKey mới quyết định).
+      { id: 123, dept: 'Siêu Thị ABC', status: 'AWAITING_RECEIPT', currentStep: 1, history: [],
+        orderLocationType: 'STORE', storeCode: 'Siêu Thị ABC', amount: 500000000, paymentTotalAmount: 0 }
     ],
     operationStoreOpenings: [
       { id: 131, dept: 'Kế Toán', estimateStatus: 'PENDING', estimateCurrentStep: 1, estimateHistory: [] }
@@ -141,7 +143,12 @@ const DUYET1 = {
   username: 'duyet1', name: 'Người Duyệt Một', dept: 'Kế Toán',
   perms: {
     admin: false, meetingApprove: true, internalPostApprove: true, licenseApprove: true,
-    paymentManage: true, itPriceEmergencyRejectApprove: true
+    paymentManage: true, itPriceEmergencyRejectApprove: true,
+    // operationOrderReceiptManage: quyền RIÊNG (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung"), KHÔNG còn mirror
+    // quần thể duyệt/từ chối dept-workflow của đơn hàng nữa — xem isApproverForOperationOrderReceipt()
+    // (lib/recordActions.js). Chỉ cấp scope 'HO' (KHÔNG all:true) để bài test dưới còn phân biệt được
+    // đúng/sai theo scopeKey (HO sentinel vs tên siêu thị cụ thể) thay vì luôn qua bất kể fixture nào.
+    operationOrderReceiptManage: { all: false, depts: ['HO'] }
   }
 };
 const OUTSIDER = {
@@ -183,8 +190,8 @@ async function runPartA(run) {
     assert(keys.includes('license:101'), 'phải gồm license:101 (licenseApprove=true)');
     assert(keys.includes('payment:111') && keys.includes('payment:112'), 'phải gồm CẢ payment:111 (PENDING) và payment:112 (NEED_INFO)');
     assert(keys.includes('itPriceEmergencyReject:52'), 'phải gồm itPriceEmergencyReject:52 (mục riêng, KHÔNG lệ thuộc status chính APPROVED)');
-    assert(keys.includes('operationOrderReceipt:122'), 'phải gồm operationOrderReceipt:122 (AWAITING_RECEIPT, duyet1 là approver của dept-workflow đơn hàng này)');
-    assert(!keys.includes('operationOrderReceipt:123'), 'PHẢI loại operationOrderReceipt:123 (mức GTE100M chưa cấu hình approver nào)');
+    assert(keys.includes('operationOrderReceipt:122'), 'phải gồm operationOrderReceipt:122 (đơn HO, duyet1 có scope HO trong operationOrderReceiptManage)');
+    assert(!keys.includes('operationOrderReceipt:123'), 'PHẢI loại operationOrderReceipt:123 (đơn STORE, duyet1 không có scope siêu thị đó)');
   });
 
   await run.run('computeMyPendingApprovalKeys(): outsider (không có quyền/không đúng phòng ban nào) trả về RỖNG', async () => {

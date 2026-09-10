@@ -61,6 +61,7 @@ function openCreateTaskModal(opts) {
   document.getElementById('createTaskSourceLabel').innerText = opts.sourceCode ? `${labels[pendingTaskSource.sourceType]}: ${opts.sourceCode}` : labels[pendingTaskSource.sourceType];
   document.getElementById('createTaskConfirmBtn').innerText = '✅ Xác Nhận Giao Việc';
 
+  renderDynamicInputsForModule('TASK', 'dynamicFieldsContainer_TASK');
   document.getElementById('createTaskModal').classList.remove('hidden');
 }
 
@@ -93,6 +94,11 @@ function openAssignTaskModal(taskId) {
   document.getElementById('createTaskSourceLabel').innerText = `Gán người nhận cho công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''} — giữ Ctrl/Cmd để chọn nhiều người thực hiện cùng lúc`;
   document.getElementById('createTaskConfirmBtn').innerText = '✅ Gán Người Nhận';
 
+  // ASSIGN chỉ đổi người nhận/hạn — không áp dụng trường bổ sung (Biểu Mẫu) như CREATE/EDIT, xem chú
+  // thích CORE_FIELD_MANIFEST.TASK ở core.js — xoá trắng container thay vì để sót nội dung lần render
+  // CREATE/EDIT trước đó.
+  const dynWrap = document.getElementById('dynamicFieldsContainer_TASK');
+  if (dynWrap) dynWrap.innerHTML = '';
   document.getElementById('createTaskModal').classList.remove('hidden');
 }
 
@@ -119,6 +125,7 @@ function openEditTaskModal(taskId) {
   document.getElementById('createTaskSourceLabel').innerText = `Sửa công việc ${t.sourceCode ? `${labels[t.sourceType] || t.sourceType}: ${t.sourceCode}` : labels[t.sourceType] || ''}`;
   document.getElementById('createTaskConfirmBtn').innerText = '💾 Lưu Thay Đổi';
 
+  renderDynamicInputsForModule('TASK', 'dynamicFieldsContainer_TASK');
   document.getElementById('createTaskModal').classList.remove('hidden');
 }
 
@@ -235,6 +242,14 @@ async function confirmCreateTask() {
     return;
   }
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('TASK');
+  } catch (err) {
+    closeCreateTaskModal();
+    return alert(`⛔ ${err.message}`);
+  }
+
   const taskPayload = {
     title, description, deadline,
     assignedTo, collaborators,
@@ -242,7 +257,8 @@ async function confirmCreateTask() {
     sourceCode: pendingTaskSource?.sourceCode || '',
     status: 'TODO',
     extensionCount: 0, lateCount: 0, pendingExtension: null, pendingCancellation: null,
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newTask;

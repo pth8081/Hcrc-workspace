@@ -268,7 +268,10 @@ async function main() {
     await run.run('MỤC 4 (DOM thật, bấm THẬT): gửi phê duyệt TRƯỚC khi nhận việc -> ticket vẫn TODO nhưng approvalStatus=PENDING, "🎯 Nhận Xử Lý" PHẢI biến mất (chặn nhận việc khi đang chờ duyệt)', async () => {
       await page.click('button[data-op="openItTicketEscalateForm"]');
       await page.waitForTimeout(60);
-      await page.selectOption('#itTicketApproverSelect', { value: APPROVER1.username });
+      // Đổi từ <select> sang ô tìm-kiếm-gõ-chọn (sdd*) — gõ đúng nhãn hiển thị "Tên — Phòng ban
+      // (username)" để trigger đúng cspDispatchOp('input') -> resolveItTicketApproverInput() y hệt
+      // đường đi thật khi người dùng bấm chọn 1 gợi ý.
+      await page.fill('#itTicketApproverInput', `${APPROVER1.name} — ${APPROVER1.dept} (${APPROVER1.username})`);
       await page.fill('#itTicketApprovalReason', 'Cần duyệt ngân sách mua máy in mới trước khi xử lý');
       await page.click('button[data-op="escalateItTicketAction"]');
       await page.waitForTimeout(100);

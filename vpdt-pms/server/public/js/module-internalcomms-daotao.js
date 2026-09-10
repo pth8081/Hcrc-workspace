@@ -218,6 +218,15 @@ function renderTrainingLms() {
   populateTrainingClassMultiSelects();
   populateTrainingCourseSelects();
   populateTrainingPlanDeptSelects();
+  // Trường bổ sung (Biểu Mẫu) của 7 form Đào Tạo/Đào Tạo Tân Binh — vẽ lại mỗi lần renderTrainingLms()
+  // chạy (vào module + mỗi lần đổi sub-tab), cùng khuôn DOC/SUBMISSION ở core.js.
+  renderDynamicInputsForModule('TRAINING_CLASS', 'dynamicFieldsContainer_TRAINING_CLASS');
+  renderDynamicInputsForModule('TRAINING_TEST', 'dynamicFieldsContainer_TRAINING_TEST');
+  renderDynamicInputsForModule('TRAINING_COURSE', 'dynamicFieldsContainer_TRAINING_COURSE');
+  renderDynamicInputsForModule('TRAINING_PLAN', 'dynamicFieldsContainer_TRAINING_PLAN');
+  renderDynamicInputsForModule('TRAINING_DOC', 'dynamicFieldsContainer_TRAINING_DOC');
+  renderDynamicInputsForModule('CAREER_PATH', 'dynamicFieldsContainer_CAREER_PATH');
+  renderDynamicInputsForModule('ONBOARDING_PATH', 'dynamicFieldsContainer_ONBOARDING_PATH');
   onTrainingClassModeChange(); // đồng bộ lại ẩn/hiện Giảng Viên+Địa Điểm theo đúng #tcMode hiện tại (mặc định Online)
   const canManage = canManageTrainingLocal(currentUser);
   // Dashboard (thẻ tổng hợp + bảng "Top Điểm Cao Nhất"): trước đây hiện cho MỌI người vào được module,
@@ -362,6 +371,12 @@ async function submitTrainingClass(e) {
     return alert('Vui lòng chọn đúng giảng viên từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm), hoặc để trống nếu chưa gán!');
   }
   const documentIds = [...document.getElementById('tcDocumentIds').selectedOptions].map(o => Number(o.value));
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('TRAINING_CLASS');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code: `LOP-${Date.now()}`,
     category: document.getElementById('tcCategory').value,
@@ -380,7 +395,8 @@ async function submitTrainingClass(e) {
     documentIds,
     description: document.getElementById('tcDescription').value.trim(),
     inviteList: tcInviteListStaged.map(p => p.username),
-    courseId: document.getElementById('tcCourseId').value
+    courseId: document.getElementById('tcCourseId').value,
+    customData
   };
   if (!payload.category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
   // Lớp có gán Bài Test thì bắt buộc nhập Điểm Đạt (server tự xác minh lại y hệt ở
@@ -835,11 +851,18 @@ async function submitTrainingCourse(e) {
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo chương trình đào tạo!');
   const category = document.getElementById('tccCategory').value;
   if (!category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('TRAINING_COURSE');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code: `CT-${Date.now()}`,
     name: document.getElementById('tccName').value.trim(),
     category,
-    description: document.getElementById('tccDescription').value.trim()
+    description: document.getElementById('tccDescription').value.trim(),
+    customData
   };
   let newCourse;
   try {
@@ -896,6 +919,12 @@ async function submitTrainingPlan(e) {
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền lập kế hoạch đào tạo!');
   const month = document.getElementById('tpMonth').value;
   if (!month) return alert('Vui lòng chọn Tháng!');
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('TRAINING_PLAN');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     month,
     courseId: document.getElementById('tpCourseId').value || null,
@@ -903,7 +932,8 @@ async function submitTrainingPlan(e) {
     audience: document.getElementById('tpAudience').value.trim(),
     plannedClasses: document.getElementById('tpPlannedClasses').value,
     plannedTrainees: document.getElementById('tpPlannedTrainees').value,
-    plannedHours: document.getElementById('tpPlannedHours').value
+    plannedHours: document.getElementById('tpPlannedHours').value,
+    customData
   };
   let saved;
   try {
@@ -1775,10 +1805,17 @@ async function submitTrainingTest(e) {
     if (filled.length < 2) return alert(`Câu hỏi số ${i + 1} cần ít nhất 2 đáp án!`);
     if (!filled.some(o => o.correct)) return alert(`Câu hỏi số ${i + 1} chưa chọn đáp án đúng!`);
   }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('TRAINING_TEST');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     title,
     category: document.getElementById('ttCategory').value,
     passScore: document.getElementById('ttPassScore').value,
+    customData,
     questions: tbQuestions.map(q => {
       if (q.type === 'ESSAY') {
         return { text: q.text.trim(), type: q.type, points: q.points, imageUrl: q.imageUrl || '', options: [], correctOptionIds: [] };
@@ -2619,6 +2656,12 @@ async function submitTrainingDocument(e) {
   const category = document.getElementById('tdCategory').value;
   if (!category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
   const docType = document.getElementById('tdDocType').value;
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('TRAINING_DOC');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code: `TL-DT-${Date.now()}`,
     category,
@@ -2627,7 +2670,8 @@ async function submitTrainingDocument(e) {
     docType,
     mandatory: document.getElementById('tdMandatory').checked,
     courseId: document.getElementById('tdCourseId').value,
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
   if (docType === 'VIDEO') {
     // VIDEO (Đợt 4) — nhúng Youtube qua link thay vì tải file, không gọi /api/upload.
@@ -2961,12 +3005,19 @@ async function submitCareerPath(e) {
     if (!requiredCourseIds.length) return alert(`Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc!`);
     stages.push({ name, requiredCourseIds });
   }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('CAREER_PATH');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code: `LT-${Date.now()}`,
     name: document.getElementById('cpName').value.trim(),
     targetTitle: document.getElementById('cpTargetTitle').value.trim(),
     stages,
-    description: document.getElementById('cpDescription').value.trim()
+    description: document.getElementById('cpDescription').value.trim(),
+    customData
   };
   let newPath;
   try {
@@ -3188,11 +3239,18 @@ function populateOnboardingPathSelects() {
 async function submitOnboardingPath(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền quản lý lộ trình đào tạo tân binh!');
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('ONBOARDING_PATH');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     name: document.getElementById('opName').value.trim(),
     stage1RequiredCourseIds: [...document.getElementById('opStage1RequiredCourseIds').selectedOptions].map(o => Number(o.value)),
     stage2RequiredCourseIds: [...document.getElementById('opStage2RequiredCourseIds').selectedOptions].map(o => Number(o.value)),
-    stage3Criteria: document.getElementById('opStage3Criteria').value.trim()
+    stage3Criteria: document.getElementById('opStage3Criteria').value.trim(),
+    customData
   };
   try {
     if (editingOnboardingPathId) {

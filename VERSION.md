@@ -1,8 +1,72 @@
 # Phiên bản hiện tại
 
-**15.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.9 (2026-09-10): 6 việc — Thanh Toán/Hợp Đồng LĐ/Công&Phép/Hỗ Trợ IT/Vận Hành Đặt Hàng/Biểu Mẫu
+
+Người dùng yêu cầu 1 đợt gồm 6 việc:
+
+**1. Thanh Toán** — thêm lại nút **"📝 Yêu Cầu Bổ Sung"** ngay tại tab "✅ Xác
+Nhận Đề Nghị Thanh Toán": kế toán trả đề nghị đang "⏳ Đang chờ thanh toán" về
+"Cần bổ sung" nếu **CHƯA xác nhận bất kỳ đợt nào** — không cần nhờ người
+duyệt phòng ban (đã chuyển hẳn sang "🗂️ Quản Lý Thanh Toán" từ v15.8) thao tác
+hộ khi phát hiện thiếu/sai thông tin ngay lúc chuẩn bị chi tiền.
+
+**2. Hợp Đồng Lao Động** — admin UI cấu hình lại **ngưỡng ngày cảnh báo hết
+hạn** (`laborContractExpiryReminderDays`, mặc định 60/45/30 ngày) ngay ở Hệ
+Thống > Quản Trị > Cấu Hình Email, tách riêng khỏi ngưỡng của Giấy Phép/Gia
+Hạn CNTT/Hợp Đồng (mua bán).
+
+**3. Công & Phép** — thêm 2 loại nghỉ mới: **Nghỉ theo giờ** (chọn 1 ngày +
+giờ bắt đầu/kết thúc, không trừ phép năm, không sinh bản ghi chấm công
+nguyên ngày) và **Việc riêng** (khuôn Từ ngày–Đến ngày như Nghỉ không lương/
+Nghỉ ốm, cũng không trừ phép năm).
+
+**4. Hỗ Trợ IT** — đổi picker chọn người duyệt ticket (escalate) từ dropdown
+native sang widget tìm-chọn `sdd*` dùng chung toàn hệ thống (không dùng
+`<datalist>`).
+
+**5. Vận Hành Đặt Hàng** — 3 việc:
+- **Tạo hàng loạt từ nhiều file PDF cùng lúc**: ô "File Đơn Hàng" nhận NHIỀU
+  tệp PDF 1 lượt, mỗi file đọc/tạo đơn **độc lập** — 1 file lỗi không chặn
+  các file còn lại, kết quả tổng kết theo từng file.
+- **Bỏ 2 nút "Nhập Hàng"/"Hủy Nhập" lẫn trong bảng Đơn Hàng chính**, chuyển
+  hẳn sang 1 sub-tab riêng **"📦 Duyệt Nhập/Hủy Đơn Hàng"**.
+- **Quyền RIÊNG cho sub-tab đó** — **"📦 Duyệt Nhập/Hủy Đơn Hàng"**
+  (`operationOrderReceiptManage`, khối cây phân quyền 22 "Vận Hành", mô hình
+  `{all, depts[]}` — "HO" là sentinel riêng cho đơn tại HO, còn lại là tên
+  siêu thị cụ thể), **tách hoàn toàn** khỏi quyền duyệt/từ chối đơn hàng theo
+  mức giá trị (dept-workflow nội bộ, không đổi) — cho phép giao việc "nhận
+  hàng thực tế" cho nhóm người khác (VD thủ kho) mà không cần cấp quyền
+  duyệt chi tiêu.
+- **Cấu Hình API + job đồng bộ ra hệ thống dsmart16**: Hệ Thống > Quản Trị,
+  sub-tab mới **"🔌 Cấu Hình API"** — bật/tắt, Base URL, tên/giá trị header
+  xác thực (write-only, giống mật khẩu SMTP), trường đối chiếu (mặc định Số
+  Đơn NCC), chu kỳ đồng bộ (phút), nút "🔄 Đồng Bộ Ngay". Job nền chạy mỗi 5
+  phút, tự bỏ qua nếu chưa tới chu kỳ hoặc tính năng tắt, gửi từng đơn hàng
+  chưa đồng bộ qua API dsmart16 — lỗi 1 đơn không chặn các đơn còn lại.
+
+**6. Biểu Mẫu** — vá nốt phần còn thiếu của đợt "gộp lưới 7 module" (v15.x
+trước): wire `dynamicFieldsContainer`/`renderDynamicInputsForModule()`/
+`collectDynamicFieldsData()` cho ~20 module còn lại (Đợt 1-4) chưa hiện được
+trường tuỳ biến admin cấu hình ở màn Biểu Mẫu — nay tạo hồ sơ ở các module đó
+đã hiện + lưu đúng `customData` như các module đã làm trước.
+
+Verify: syntax/dup-id/div-balance check toàn bộ file đổi (0 dup-id, div-
+balance khớp đúng baseline `final_depth=6, min_depth_ever=0`), sửa lại 3 file
+test cũ (`test-operation-order-receiving.js`, `test-operation-order-report.js`,
+`test-approval-polling.js`) theo đúng mô hình `operationOrderReceiptManage`
+mới (trước đó còn giả định "quyền Nhập/Hủy mirror quần thể duyệt dept-
+workflow" — thiết kế cũ đã đổi ở đợt này). Chạy toàn bộ `tests/test-*.js` —
+không phát sinh regression mới ngoài các lỗi `localhost:1433` (SQL Server
+không chạy trong môi trường build, baseline đã biết trước).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ
+copy code + `pm2 restart`. Cấu Hình API/dsmart16 (mục 5) là tính năng TẮT mặc
+định (`enabled: false`) — không ảnh hưởng gì tới vận hành hiện tại cho tới
+khi admin chủ động bật + điền Base URL.
 
 ## v15.8 (2026-09-10): Văn Bản Trình — mở rộng "Đề xuất thay thế file" ra bước phê duyệt cuối cùng; Thanh Toán — dời bước duyệt phòng ban sang "Quản Lý Thanh Toán" + fix thời điểm paymentStatus
 

@@ -222,6 +222,10 @@ function resetUserForm() {
   document.getElementById('pOperationStoreOpenCreate').checked = !!defaults.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!defaults.operationRepairCreate;
   document.getElementById('pOperationRecordManageAll').checked = !!defaults.operationRecordManageAll;
+  // operationOrderReceiptManage — reset tường minh về rỗng cho user MỚI (cùng lý do 11 checkbox Nhân Sự
+  // ở trên: tránh "dính" trạng thái tick còn sót lại từ lần sửa user KHÁC trước đó trong cùng phiên).
+  document.getElementById('pOperationOrderReceiptAll').checked = !!defaults.operationOrderReceiptManage?.all;
+  toggleOperationOrderReceiptScopeGroup();
 
   [
     'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',

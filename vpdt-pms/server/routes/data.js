@@ -68,6 +68,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // ở trên: không cho user thường tự ghi thẳng qua POST /api/data/itPriceTierWorkflows và tự phong
   // mình làm approver.
   'itPriceTierWorkflows',
+  // operationOrderApiConfig: cấu hình đồng bộ Đơn Hàng (Vận Hành) ra hệ thống ngoài "dsmart16" (Base
+  // URL + header xác thực tuỳ chỉnh) — chứa bí mật (headerValueEnc, mã hoá bằng lib/emailCrypto.js)
+  // nên phải admin-only ghi, cùng lý do bảo mật với emailConfig (không cho user thường tự ghi thẳng
+  // qua POST /api/data/operationOrderApiConfig và tự đổi Base URL/header trỏ tới máy chủ khác).
+  'operationOrderApiConfig',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractManageDeptWorkflows',
   // paymentDeptWorkflows: cấu hình người duyệt theo BƯỚC quy trình phòng ban cho đề nghị thanh toán
   // (thay cho quyền phẳng paymentManage khi "Chuyển Xác Nhận Thanh Toán") — cùng lý do bảo mật với
@@ -280,6 +285,15 @@ function sanitizeAttendanceClockApiKeys(list, isAdmin) {
 function sanitizeExternalApiKeys(list, isAdmin) {
   if (!isAdmin || !Array.isArray(list)) return [];
   return list.map(({ keyHash, ...rest }) => rest);
+}
+
+// operationOrderApiConfig.headerValueEnc (giá trị header xác thực gửi tới dsmart16, VD API key/Bearer
+// token) — KHÔNG bao giờ trả ra ngoài, kể cả cho admin, cùng khuôn sanitizeEmailConfig() ở trên (chỉ
+// cần biết "đã cấu hình hay chưa" qua hasHeaderValue, ô trên form luôn hiện trống khi Sửa).
+function sanitizeOperationOrderApiConfig(config) {
+  if (!config || typeof config !== 'object') return config;
+  const { headerValueEnc, ...rest } = config;
+  return { ...rest, hasHeaderValue: !!headerValueEnc };
 }
 
 // isCurrentlyAdmin()/isCurrentlyAdminOrUniformManage(): chuyển sang lib/adminAuth.js (dùng chung với
@@ -498,6 +512,23 @@ async function prepareEmailConfigForSave(payload) {
   return { ...rest, smtpPassEnc: prior?.smtpPassEnc };
 }
 
+// headerValueEnc là write-only ở giao diện (ô luôn hiện trống, xem index.html) — cùng quy ước
+// "headerValuePlain" tạm thời như prepareEmailConfigForSave() ở trên: có giá trị mới thì mã hoá lại,
+// để trống thì giữ nguyên headerValueEnc đã lưu (KHÔNG xoá mất cấu hình cũ chỉ vì admin sửa Base
+// URL/enabled mà không gõ lại header).
+async function prepareOperationOrderApiConfigForSave(payload) {
+  const { headerValuePlain, headerValueEnc: _ignoredFromClient, ...rest } = payload || {};
+  if (headerValuePlain) {
+    try {
+      return { ...rest, headerValueEnc: encryptSecret(headerValuePlain) };
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu giá trị header xác thực: ${err.message}`);
+    }
+  }
+  const prior = await getAppDataValue('operationOrderApiConfig');
+  return { ...rest, headerValueEnc: prior?.headerValueEnc };
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -523,6 +554,7 @@ router.get('/', async (req, res) => {
       data.users = sanitizeUsersPermsForViewer(stripPasswords(data.users), req.freshUser?.username, !!req.freshUser?.perms?.admin);
     }
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
+    if (data.operationOrderApiConfig) data.operationOrderApiConfig = sanitizeOperationOrderApiConfig(data.operationOrderApiConfig);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
     if (data.attendanceClockApiKeys) data.attendanceClockApiKeys = sanitizeAttendanceClockApiKeys(data.attendanceClockApiKeys, !!req.freshUser?.perms?.admin);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
@@ -717,6 +749,7 @@ router.get('/:key', async (req, res) => {
     if (value === null) return res.json(DEFAULTS[key]);
     if (key === 'users') return res.json(sanitizeUsersPermsForViewer(stripPasswords(value), req.freshUser?.username, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
+    if (key === 'operationOrderApiConfig') return res.json(sanitizeOperationOrderApiConfig(value));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
     if (key === 'attendanceClockApiKeys') return res.json(sanitizeAttendanceClockApiKeys(value, !!req.freshUser?.perms?.admin));
     // employeeProfiles: cùng lý do vừa vá ở GET /api/data chung ở trên — hồ sơ nhân sự đầy đủ chỉ nên
@@ -763,6 +796,7 @@ router.post('/:key', async (req, res) => {
 
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
+    if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
 
     const ifMatch = req.get('If-Match');
     let savedVersion = null;

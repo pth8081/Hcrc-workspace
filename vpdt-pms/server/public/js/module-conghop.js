@@ -12,7 +12,7 @@
 // shiftSwapRequests) đã được SERVER lọc quyền xem sẵn trong GET /api/data (xem routes/data.js) — client
 // chỉ cần lọc thêm theo "của tôi" (so DB.myEmployeeCode) hoặc hiển thị nguyên những gì server đã trả về,
 // KHÔNG cần tự lọc lại quyền xem (đã đúng phạm vi từ server).
-const HAC_LEAVE_TYPE_LABELS = { ANNUAL: 'Phép năm', UNPAID: 'Nghỉ không lương', SICK: 'Nghỉ ốm' };
+const HAC_LEAVE_TYPE_LABELS = { ANNUAL: 'Phép năm', UNPAID: 'Nghỉ không lương', SICK: 'Nghỉ ốm', PERSONAL: 'Nghỉ việc riêng', HOURLY: 'Nghỉ theo giờ' };
 const HAC_LEAVE_STATUS_LABELS = {
   PENDING: '<span class="text-amber-600 font-bold">⏳ Chờ duyệt</span>',
   APPROVED: '<span class="text-green-700 font-bold">✅ Đã duyệt</span>',
@@ -21,7 +21,7 @@ const HAC_LEAVE_STATUS_LABELS = {
 };
 const HAC_RECORD_TYPE_LABELS = {
   WORK: 'Đi làm', LEAVE_PAID: 'Nghỉ phép năm', LEAVE_UNPAID: 'Nghỉ không lương',
-  SICK_LEAVE: 'Nghỉ ốm', BUSINESS_TRIP: 'Công tác', OVERTIME: 'Tăng ca'
+  SICK_LEAVE: 'Nghỉ ốm', LEAVE_PERSONAL: 'Nghỉ việc riêng', BUSINESS_TRIP: 'Công tác', OVERTIME: 'Tăng ca'
 };
 const HAC_ROSTER_STATUS_LABELS = {
   SCHEDULED: '<span class="text-green-700 font-bold">Đã xếp lịch</span>',
@@ -151,19 +151,46 @@ function renderHacSelfView() {
 
 function openHacLeaveRequestModal() {
   document.getElementById('hacLeaveRequestForm').reset();
+  onHacLrTypeChange();
+  renderDynamicInputsForModule('HAC_LEAVE_REQUEST', 'dynamicFieldsContainer_HAC_LEAVE_REQUEST');
   document.getElementById('hacLeaveRequestModal').classList.remove('hidden');
 }
 function closeHacLeaveRequestModal() { document.getElementById('hacLeaveRequestModal').classList.add('hidden'); }
 
+// Đổi khối nhập theo loại nghỉ: HOURLY (nghỉ theo giờ) hiện 1 ngày + giờ bắt đầu/kết thúc; các loại còn
+// lại (trọn ngày) hiện Từ Ngày/Đến Ngày như cũ.
+function onHacLrTypeChange() {
+  const isHourly = document.getElementById('hacLrType').value === 'HOURLY';
+  document.getElementById('hacLrWholeDayWrap').classList.toggle('hidden', isHourly);
+  document.getElementById('hacLrHourlyWrap').classList.toggle('hidden', !isHourly);
+}
+
 async function submitHacLeaveRequest(e) {
   e.preventDefault();
   const leaveType = document.getElementById('hacLrType').value;
-  const fromDate = document.getElementById('hacLrFromDate').value;
-  const toDate = document.getElementById('hacLrToDate').value;
-  if (!fromDate || !toDate) return alert('⛔ Vui lòng chọn đủ Từ Ngày/Đến Ngày.');
   const reason = document.getElementById('hacLrReason').value.trim();
+  let payload;
+  if (leaveType === 'HOURLY') {
+    const fromDate = document.getElementById('hacLrHourlyDate').value;
+    const startTime = document.getElementById('hacLrStartTime').value;
+    const endTime = document.getElementById('hacLrEndTime').value;
+    if (!fromDate || !startTime || !endTime) return alert('⛔ Vui lòng chọn đủ Ngày/Từ Giờ/Đến Giờ.');
+    payload = { leaveType, fromDate, toDate: fromDate, startTime, endTime, reason };
+  } else {
+    const fromDate = document.getElementById('hacLrFromDate').value;
+    const toDate = document.getElementById('hacLrToDate').value;
+    if (!fromDate || !toDate) return alert('⛔ Vui lòng chọn đủ Từ Ngày/Đến Ngày.');
+    payload = { leaveType, fromDate, toDate, reason };
+  }
+  let customData;
   try {
-    await callCreateAction('leaveRequests', { leaveType, fromDate, toDate, reason });
+    customData = await collectDynamicFieldsData('HAC_LEAVE_REQUEST');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  payload.customData = customData;
+  try {
+    await callCreateAction('leaveRequests', payload);
     closeHacLeaveRequestModal();
     alert('✅ Đã gửi đơn nghỉ phép, chờ quản lý trực tiếp/HR duyệt.');
     await initDatabase(currentUser);
@@ -191,6 +218,7 @@ function openHacSwapRequestModal(rosterId) {
   document.getElementById('hacSwapRequestForm').reset();
   document.getElementById('hacSwapRosterId').value = rosterId;
   document.getElementById('hacSwapRosterInfo').textContent = `Ca ngày ${roster.workDate} — ${tpl ? `${tpl.shiftCode} (${tpl.startTime}-${tpl.endTime})` : ''} tại ${roster.storeCode}`;
+  renderDynamicInputsForModule('HAC_SWAP_REQUEST', 'dynamicFieldsContainer_HAC_SWAP_REQUEST');
   document.getElementById('hacSwapRequestModal').classList.remove('hidden');
 }
 function closeHacSwapRequestModal() { document.getElementById('hacSwapRequestModal').classList.add('hidden'); }
@@ -201,8 +229,14 @@ async function submitHacSwapRequest(e) {
   const targetEmployeeCode = document.getElementById('hacSwapTargetEmployeeCode').value.trim();
   if (!targetEmployeeCode) return alert('⛔ Vui lòng nhập Mã Nhân Viên nhận ca thay.');
   const reason = document.getElementById('hacSwapReason').value.trim();
+  let customData;
   try {
-    await callCreateAction('shiftSwapRequests', { requesterRosterId, targetEmployeeCode, reason });
+    customData = await collectDynamicFieldsData('HAC_SWAP_REQUEST');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  try {
+    await callCreateAction('shiftSwapRequests', { requesterRosterId, targetEmployeeCode, reason, customData });
     closeHacSwapRequestModal();
     alert('✅ Đã gửi yêu cầu đổi ca, chờ Quản Lý Siêu Thị/HR duyệt.');
     await initDatabase(currentUser);
@@ -330,6 +364,7 @@ function openHacRosterModal() {
     .map(t => `<option value="${t.id}">${escapeHtml(t.shiftCode)} — ${escapeHtml(t.shiftName)} (${escapeHtml(t.startTime)}-${escapeHtml(t.endTime)})</option>`).join('');
   sddSetOptions('hacRosterStoreDatalist', DB.stores || []);
   if (currentUser?.posType === 'STORE') document.getElementById('hacRosterStoreCode').value = currentUser.dept || '';
+  renderDynamicInputsForModule('HAC_ROSTER', 'dynamicFieldsContainer_HAC_ROSTER');
   document.getElementById('hacRosterModal').classList.remove('hidden');
 }
 function closeHacRosterModal() { document.getElementById('hacRosterModal').classList.add('hidden'); }
@@ -341,8 +376,14 @@ async function submitHacRoster(e) {
   const shiftTemplateId = Number(document.getElementById('hacRosterShiftTemplateId').value);
   const storeCode = document.getElementById('hacRosterStoreCode').value.trim();
   if (!employeeCode || !workDate || !shiftTemplateId || !storeCode) return alert('⛔ Vui lòng điền đủ thông tin.');
+  let customData;
   try {
-    await callCreateAction('shiftRoster', { employeeCode, workDate, shiftTemplateId, storeCode });
+    customData = await collectDynamicFieldsData('HAC_ROSTER');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  try {
+    await callCreateAction('shiftRoster', { employeeCode, workDate, shiftTemplateId, storeCode, customData });
     closeHacRosterModal();
     await initDatabase(currentUser);
     renderHacRosterView();
@@ -427,6 +468,7 @@ function hacApplyAttendanceUpdate(item) {
 
 function openHacManualAttendanceModal() {
   document.getElementById('hacManualAttendanceForm').reset();
+  renderDynamicInputsForModule('HAC_MANUAL_ATTENDANCE', 'dynamicFieldsContainer_HAC_MANUAL_ATTENDANCE');
   document.getElementById('hacManualAttendanceModal').classList.remove('hidden');
 }
 function closeHacManualAttendanceModal() { document.getElementById('hacManualAttendanceModal').classList.add('hidden'); }
@@ -440,12 +482,18 @@ async function submitHacManualAttendance(e) {
   const checkInRaw = document.getElementById('hacManAttCheckIn').value;
   const checkOutRaw = document.getElementById('hacManAttCheckOut').value;
   const noteInput = document.getElementById('hacManAttNote').value.trim();
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('HAC_MANUAL_ATTENDANCE');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   try {
     await callCreateAction('attendanceRecords', {
       employeeCode, workDate, recordTypeInput,
       checkInTimeInput: checkInRaw ? new Date(checkInRaw).toISOString() : null,
       checkOutTimeInput: checkOutRaw ? new Date(checkOutRaw).toISOString() : null,
-      noteInput
+      noteInput, customData
     });
     closeHacManualAttendanceModal();
     await initDatabase(currentUser);

@@ -710,7 +710,7 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.operationOrderCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo đơn hàng');
       }
@@ -802,6 +802,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'OPERATION_ORDER');
     }
   },
   operationStoreOpenings: {
@@ -878,6 +879,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.estimateHistory = [];
       payload.estimateItems = [];
       payload.estimateTotalAmount = 0;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'OPERATION_STORE_OPEN');
     }
   },
   operationRepairs: {
@@ -923,6 +925,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.estimateHistory = [];
       payload.estimateItems = [];
       payload.estimateTotalAmount = 0;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'OPERATION_REPAIR');
     }
   },
   // Vận Hành > "Siêu Thị" > "Thực hiện" — "Kỳ Thực Hiện": mỗi hồ sơ Mở mới/Sửa chữa có DANH SÁCH kỳ
@@ -1134,10 +1137,11 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'paymentRequests',
     getScope: () => ({ all: true, depts: [] }),
     creatorField: 'createdBy', creatorNameField: 'createdByName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.paymentManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề nghị thanh toán');
       }
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'PAYMENT');
       // Đề nghị tạo thủ công (không có nguồn Hợp đồng/Mua Bán/Sửa Chữa để suy ra tên) — thiếu tiêu đề
       // để lại 1 hồ sơ trống trong danh sách chờ duyệt, khó nhận diện.
       payload.title = String(payload.title || '').trim();
@@ -1189,7 +1193,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.vppManage) {
         throw new CreateError(403, 'Chỉ người có quyền quản lý Văn phòng phẩm mới được tạo kỳ đăng ký');
       }
@@ -1231,6 +1235,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'OPEN';
       payload.closedAt = null;
       payload.closedBy = null;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'VPP');
     }
   },
   // Văn phòng phẩm — đăng ký của từng nhân viên cho 1 kỳ. Cũng forceOwnDept (dept = phòng ban thật của
@@ -1339,6 +1344,7 @@ const CREATE_MODULE_CONFIGS = {
       // parsedSlides .pptx) — dành cho reportEntries.entryType==='PDF', xem mergeReportPeriodPdf()/
       // publishReportPeriodPdf() ở lib/recordActions.js.
       payload.pdfCompilation = null;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'REPORT_PERIOD');
     }
   },
   reportEntries: {
@@ -1380,6 +1386,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.periodName = period.name;
       payload.periodEndTime = period.endTime;
       payload.status = 'DRAFT';
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'REPORT_ENTRY');
     }
   },
   // ===== HỖ TRỢ IT — 2 sub-module tách biệt hoàn toàn, không chung dữ liệu =====
@@ -1488,6 +1495,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.currentStep = 1;
       payload.autoApproved = false;
       payload.history = [];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'IT_PRICE');
     }
   },
   // 2) "Hỗ Trợ Yêu Cầu" (itSupportTickets): ticket helpdesk IT nội bộ — MỞ CHO TOÀN BỘ NHÂN VIÊN, không
@@ -1527,6 +1535,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.approvalApproverName = null;
       payload.approvalReason = '';
       payload.approvalComment = '';
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'IT_TICKET');
     }
   },
   // ===== NHÂN SỰ ("HCRC Đồng Hành" — hỏi & đáp chế độ/quy định công ty) =====
@@ -1553,6 +1562,7 @@ const CREATE_MODULE_CONFIGS = {
         ? appData.hrFeedbackCategories
         : [{ key: 'BENEFITS' }, { key: 'POLICY' }, { key: 'SALARY' }, { key: 'OTHER' }];
       payload.category = categoryList.some(c => c.key === payload.category) ? payload.category : 'OTHER';
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HR_FEEDBACK');
       // Thời điểm gửi do SERVER gán (không tin client) — khác itSupportTickets ở trên vốn nhận
       // createdAt từ payload; đây là bản ghi 2 phía (nhân viên hỏi/Nhân Sự đáp) nên mốc thời gian
       // phải là mốc server ghi nhận thật.
@@ -1586,6 +1596,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên tài liệu');
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_DOC');
 
       // Đợt 4: Loại tài liệu — DOCUMENT (mặc định, giữ NGUYÊN hành vi cũ: bắt buộc fileUrl từ tải file
       // .pdf/.docx/.xlsx), VIDEO (MỚI — nhúng Youtube qua videoUrl thay vì tải file, kiểm tra chặt
@@ -1649,6 +1660,7 @@ const CREATE_MODULE_CONFIGS = {
       }
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_CLASS');
       payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
       payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];
       // Kiểu lớp: ONLINE (mặc định, theo giáo trình đọc bắt buộc) hay OFFLINE (giáo trình chỉ là tài
@@ -1733,11 +1745,12 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo bài test');
       }
       if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên bài test');
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_TEST');
       const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
       if (!rawQuestions.length) throw new CreateError(400, 'Bài test cần ít nhất 1 câu hỏi');
       if (rawQuestions.length > 100) throw new CreateError(400, 'Bài test tối đa 100 câu hỏi');
@@ -1828,7 +1841,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty, giống trainingDocuments/trainingClasses)
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo chương trình đào tạo');
       }
@@ -1837,6 +1850,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.name = String(payload.name).trim();
       payload.category = String(payload.category).trim();
       payload.description = payload.description ? String(payload.description).trim() : '';
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_COURSE');
     }
   },
   // Kế Hoạch Đào Tạo (trainingPlans, Đợt 5) — hồ sơ "Tháng X dự kiến mở bao nhiêu lớp/học viên/giờ" do
@@ -1860,6 +1874,7 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
       }
       normalizeTrainingPlanFields(payload, appData);
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_PLAN');
     }
   },
   // Đào Tạo Tân Binh (Đợt 8 — đổi Giai đoạn 1/2 sang cùng khuôn Lộ Trình Thăng Tiến) — "Lộ Trình"
@@ -1882,6 +1897,7 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền tạo lộ trình đào tạo tân binh');
       }
       normalizeOnboardingPathFields(payload, appData);
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'ONBOARDING_PATH');
     }
   },
   // "Phân Công" (onboardingProgress) — 1 dòng = 1 nhân viên ĐƯỢC GÁN 1 onboardingPaths cụ thể, theo dõi
@@ -2024,6 +2040,7 @@ const CREATE_MODULE_CONFIGS = {
         return { name, requiredCourseIds };
       });
       delete payload.requiredClassIds; // field cũ đã bỏ hẳn, không giữ tương thích ngược
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAREER_PATH');
     }
   },
   // Tuyển Dụng — thay thế mục "Khen Thưởng" cũ (chỉ là 1 loại bài đăng đơn giản trong internalPosts,
@@ -2080,6 +2097,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.filledBy = null;
       payload.filledByName = null;
       payload.filledAt = null;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'RECRUITMENT_JOB');
     }
   },
   // Hồ sơ giới thiệu ứng viên — snapshot jobTitle từ tin tuyển dụng tại thời điểm giới thiệu (không tin
@@ -2126,6 +2144,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.statusBy = null;
       payload.statusByName = null;
       payload.statusAt = null;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'RECRUITMENT_REFERRAL');
     }
   },
   // ===== ĐỒNG PHỤC (module con của Hành Chính) =====
@@ -2181,6 +2200,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.approvedByName = null;
       payload.approvedAt = null;
       payload.rejectReason = '';
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'UNIFORM_PERIOD');
     }
   },
   // ===== NGÂN SÁCH (module con "Tổng Hợp") =====
@@ -2194,13 +2214,14 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true, // không có khái niệm phòng ban (dùng chung toàn công ty)
     getScope: () => ({ all: true }),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.budgetManage) {
         throw new CreateError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được tạo mẫu ngân sách');
       }
       if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên mẫu ngân sách');
       payload.name = String(payload.name).trim().slice(0, 150);
       payload.fields = sanitizeBudgetCustomFields(payload.fields);
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'BUDGET_TEMPLATE');
     }
   },
   budgetPeriods: {
@@ -2234,6 +2255,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.templateId = templateId;
       payload.status = 'OPEN';
       payload.closeHistory = [];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'BUDGET_PERIOD');
     }
   },
   budgetEntries: {
@@ -2310,7 +2332,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.licenseCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo/tải lên giấy phép');
       }
@@ -2369,6 +2391,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.history = [{
         action: 'UPLOADED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
       }];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'LICENSE');
     }
   },
   // "Gia Hạn Dịch Vụ CNTT" (module con của Hỗ Trợ IT, itManage) — danh mục dịch vụ/hợp đồng CNTT cần
@@ -2384,7 +2407,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.itManage) {
         throw new CreateError(403, 'Bạn không có quyền quản lý danh mục gia hạn dịch vụ CNTT');
       }
@@ -2419,6 +2442,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.history = [{
         action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
       }];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'IT_RENEWAL');
     }
   },
   // ===== NHÂN SỰ > Onboarding / Offboarding (v2 — checklist theo giai đoạn, thay hẳn cho mô hình "1
@@ -2585,6 +2609,7 @@ const CREATE_MODULE_CONFIGS = {
         action: 'CREATED', detail: `Tạo quy trình ${processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'} (${payload.tasks.length} việc cần làm)`,
         actionBy: user.username, actionByName: user.name, actionAt: new Date().toLocaleString('vi-VN')
       }];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, processType === 'ONBOARDING' ? 'HR_ONBOARDING' : 'HR_OFFBOARDING');
     }
   },
   // ===== NHÂN SỰ > Hợp Đồng Lao Động (Đợt 2/4 module Nhân Sự, Phần D tài liệu thiết kế gốc) =====
@@ -2599,7 +2624,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       const { canManageContracts, CONTRACT_TYPES, generateContractCode } = require('./laborContract');
       if (!canManageContracts(user)) throw new CreateError(403, 'Bạn không có quyền tạo/quản lý hợp đồng lao động');
       if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
@@ -2632,6 +2657,7 @@ const CREATE_MODULE_CONFIGS = {
         action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN'),
         detail: 'Tạo tay bởi Nhân Sự (ngoài luồng Onboarding tự động)'
       }];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'LABOR_CONTRACT');
     }
   },
   // ===== NHÂN SỰ > Công & Phép (Đợt 3/4 module Nhân Sự, Phần E tài liệu thiết kế gốc) =====
@@ -2665,6 +2691,7 @@ const CREATE_MODULE_CONFIGS = {
         payload.hoursWorked = Math.round(((new Date(payload.checkOutTime) - new Date(payload.checkInTime)) / 3600000) * 100) / 100;
       }
       delete payload.recordTypeInput; delete payload.checkInTimeInput; delete payload.checkOutTimeInput; delete payload.noteInput;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HAC_MANUAL_ATTENDANCE');
     }
   },
   // leaveBalances: HỆ THỐNG tự tạo (pro-rated) lúc HR_Process (ONBOARDING) Stage=COMPLETED (xem
@@ -2704,7 +2731,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!profile || profile.status !== 'ACTIVE') throw new CreateError(400, 'Không tìm thấy hồ sơ nhân sự đang hoạt động liên kết với tài khoản của bạn — vui lòng liên hệ HR');
       const info = attendance.resolveWorkModelForEmployeeCode(profile.employeeCode, appData);
       if (!info) throw new CreateError(400, 'Không xác định được mô hình chấm công áp dụng cho bạn — vui lòng liên hệ HR');
-      const valid = attendance.assertValidLeaveRequest(payload);
+      const valid = attendance.assertValidLeaveRequest(payload, appData);
       if (valid.leaveType === 'ANNUAL') {
         const year = new Date(valid.fromDate).getFullYear();
         const balance = (appData.leaveBalances || []).find(b => b.employeeCode === profile.employeeCode && b.year === year);
@@ -2719,9 +2746,11 @@ const CREATE_MODULE_CONFIGS = {
       payload.employeeCode = profile.employeeCode;
       payload.leaveType = valid.leaveType; payload.fromDate = valid.fromDate; payload.toDate = valid.toDate;
       payload.daysCount = valid.daysCount; payload.reason = valid.reason; payload.workModel = info.workModel;
+      payload.startTime = valid.startTime || null; payload.endTime = valid.endTime || null;
       payload.status = 'PENDING';
       payload.approverUsername = null; payload.approverName = null; payload.decidedAt = null; payload.rejectReason = null;
       payload.affectedRosterIds = [];
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HAC_LEAVE_REQUEST');
     }
   },
   // shiftRoster: Quản Lý Siêu Thị/HR lập lịch phân ca cho nhân viên mô hình SHIFT_BASED — KHÔNG có bước
@@ -2731,7 +2760,7 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'createdBy', creatorNameField: 'creatorName',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       const attendance = require('./attendance');
       if (!user.perms?.admin && !user.perms?.hrShiftRosterManage && !user.perms?.hrAttendanceManage) {
         throw new CreateError(403, 'Bạn không có quyền lập lịch phân ca');
@@ -2740,6 +2769,7 @@ const CREATE_MODULE_CONFIGS = {
       attendance.assertNoRosterConflict(collection, valid.employeeCode, valid.workDate, null);
       Object.assign(payload, valid, { status: 'SCHEDULED' });
       delete payload.creatorName;
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HAC_ROSTER');
     }
   },
   // shiftSwapRequests: nhân viên SHIFT_BASED xin đổi ca của chính mình cho người khác — đổi 1 CHIỀU
@@ -2759,6 +2789,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!roster || roster.employeeCode !== profile.employeeCode) throw new CreateError(404, 'Không tìm thấy ca làm việc của bạn cần đổi');
       if (roster.status === 'CANCELLED') throw new CreateError(400, 'Ca làm việc này đã bị huỷ, không thể xin đổi');
       Object.assign(payload, built);
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HAC_SWAP_REQUEST');
     }
   }
 };

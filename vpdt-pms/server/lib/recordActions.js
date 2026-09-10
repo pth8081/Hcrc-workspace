@@ -217,13 +217,15 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
 // ở lib/workflowEngine.js, KHÁC hẳn nhóm duyệt hợp đồng gốc contractApprovalDeptWorkflows), theo xác
 // nhận của người dùng — không đụng tới CONTRACT_EDITABLE_FIELDS/editContract() nào khác.
 //
-// isApproverForContractManageWorkflow: mirror ĐÚNG isApproverForOperationOrderReceipt() ở trên (admin
-// hoặc có tên trong approvers của BẤT KỲ bước nào của quy trình) — TÁI SỬ DỤNG
-// MODULE_CONFIGS.contractsSignedFile.resolveWfConfig() (workflowEngine.js), không viết lại logic
-// duyệt-theo-phòng-ban từ đầu.
+// isApproverForContractManageWorkflow: admin hoặc có tên trong approvers của BẤT KỲ bước nào của quy
+// trình — TÁI SỬ DỤNG MODULE_CONFIGS.contractsSignedFile.resolveWfConfig() (workflowEngine.js), không
+// viết lại logic duyệt-theo-phòng-ban từ đầu. (Trước đây chú thích này mô tả là "mirror
+// isApproverForOperationOrderReceipt()" — không còn đúng từ đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung":
+// hàm đó giờ dùng quyền phẳng operationOrderReceiptManage riêng, KHÔNG còn đọc lại approvers của quy
+// trình duyệt/từ chối đơn hàng như hàm này.)
 function isApproverForContractManageWorkflow(user, contract, appData) {
   if (user.perms?.admin) return true;
-  const { MODULE_CONFIGS } = require('./workflowEngine'); // require trễ — tránh vòng lặp (xem hàm mirror ở trên)
+  const { MODULE_CONFIGS } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = MODULE_CONFIGS.contractsSignedFile.resolveWfConfig(contract, appData) || {};
   return Object.values(approvers || {}).some(list => Array.isArray(list) ? list.includes(user.username) : list === user.username);
 }
@@ -537,20 +539,18 @@ function submitOperationOrderDraft(user, item) {
 // ngay ở bước duyệt phòng ban, trước khi có hàng gì để nói tới việc nhập hay không).
 //
 // Quyền thao tác: MIRROR đúng quần thể được phép Duyệt/Từ chối đơn hàng này (canApproveStep() ở
-// lib/workflowEngine.js — admin hoặc có tên trong approvers của BẤT KỲ bước nào ở dept-workflow của
-// đúng phòng ban hồ sơ) — không phải người tạo đơn (canApproveStep xưa nay đã tách biệt "người tạo" và
-// "người duyệt", người tạo trong module này thường là người ĐI MUA/đặt hàng, còn người xác nhận nhập
-// kho thực tế hợp lý hơn khi là cùng phía quản lý/phê duyệt đã ký duyệt đơn — xem chú thích đầy đủ ở
-// báo cáo bàn giao, đây là 1 lựa chọn thiết kế có thể điều chỉnh sau nếu nghiệp vụ thực tế khác). KHÔNG
-// xét theo "cùng phòng ban" như canViewOperationOrder() (lib/recordViewScope.js, dùng để XEM) — thao
-// tác đổi trạng thái phải chặt hơn xem, chỉ đúng quần thể approver mới được bấm.
-function isApproverForOperationOrderReceipt(user, item, appData) {
-  if (user.perms?.admin) return true;
-  const { MODULE_CONFIGS } = require('./workflowEngine'); // require trễ (bên trong hàm) — tránh vòng lặp
-  // require ở mức module: workflowEngine.js không require recordActions.js/recordViewScope.js nên về lý
-  // thuyết require ở đầu file cũng an toàn, nhưng đặt trễ ở đây để tường minh "chỉ dùng đúng 1 chỗ".
-  const { approvers } = MODULE_CONFIGS.operationOrders.resolveWfConfig(item, appData) || {};
-  return Object.values(approvers || {}).some(list => Array.isArray(list) ? list.includes(user.username) : list === user.username);
+// ĐỢT "Duyệt Nhập/Hủy Đơn Hàng tập trung": TRƯỚC ĐÂY quần thể được phép y hệt quần thể duyệt/từ chối đơn
+// hàng (approver của dept-workflow) — giờ TÁCH RIÊNG thành 1 quyền scope MỚI, độc lập với quy trình duyệt
+// nội bộ (canApproveStep ở buildOperationRowHTML/lib/workflowEngine.js — cặp "✅ Phê Duyệt"/"❌ Từ chối"
+// GIỮ NGUYÊN không đổi gì): operationOrderReceiptManage mirror ĐÚNG khuôn {all, depts[]} dùng chung ở
+// scopeAllows() (contractCreate/officeCreate...) — "depts" ở đây là danh sách CÁC SCOPE KEY được cấp,
+// mỗi phần tử HOẶC là 1 tên siêu thị thật (đối chiếu item.dept — dept của NGƯỜI TẠO đơn STORE chính là
+// tên siêu thị đó) HOẶC literal chuỗi 'HO' (đơn orderLocationType==='HO', không có siêu thị cụ thể nào để
+// so — dùng 1 sentinel cố định, không đụng chạm danh sách phòng ban/siêu thị thật nào). appData không
+// còn cần dùng (không còn tra dept-workflow) — giữ tham số thứ 3 cho tương thích chữ ký cũ nhưng bỏ qua.
+function isApproverForOperationOrderReceipt(user, item) {
+  const scopeKey = item.orderLocationType === 'HO' ? 'HO' : item.dept;
+  return scopeAllows(user, user.perms?.operationOrderReceiptManage, scopeKey);
 }
 function receiveOperationOrderGoods(user, item, appData) {
   if (item.status !== 'AWAITING_RECEIPT') {
@@ -1016,7 +1016,7 @@ function computeOperationWorkItemDeadlineStatus(item) {
 // sourceType = 'OPERATION_STORE_OPENING' | 'OPERATION_REPAIR' (route đã biết sẵn từ payload đã validate)
 // — dùng cho assertCanManageOperationRecord() VÀ gán thẳng lên work item mới (thay cho đọc lại
 // sourceRecord.__workItemSourceType — field tạm ĐÃ BỎ, tránh gắn field nội bộ lên sourceRecord).
-function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource, users, sourceType) {
+function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescendants, periodsForSource, users, sourceType, formTemplates) {
   assertCanManageOperationRecord(user, sourceRecord, sourceType, 'Bạn không có quyền tạo công việc Thực hiện cho hồ sơ này');
   if (sourceRecord.estimateStatus !== 'APPROVED') {
     throw new HttpError(409, 'Dự toán của hồ sơ này chưa được phê duyệt xong, chưa thể tạo công việc Thực hiện');
@@ -1063,6 +1063,7 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
   // VHST-5: "🔗 Liên kết" — CHỈ việc LÁ (cùng lý do hasChildren=false luôn đúng lúc TẠO MỚI ở trên).
   // selfId=null (item chưa có id) — xem chú thích đầy đủ ở resolveOperationWorkItemDependencyIds().
   const dependsOnWorkItemIds = resolveOperationWorkItemDependencyIds(payload, false, siblingsAndDescendants, null);
+  validateRequiredCustomData(payload?.customData, formTemplates, 'OPERATION_WORK_ITEM');
   return {
     id: Date.now(),
     parentWorkItemId,
@@ -1087,7 +1088,8 @@ function createOperationWorkItem(user, payload, sourceRecord, siblingsAndDescend
     acceptedBy: null, acceptedByName: null, acceptanceNote: null,
     history: [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }],
     createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
-    sourceType, sourceCode: sourceRecord.code
+    sourceType, sourceCode: sourceRecord.code,
+    customData: payload?.customData && typeof payload.customData === 'object' ? payload.customData : {}
   };
 }
 
@@ -1609,6 +1611,7 @@ function startContractPayment(user, contract, overrides, allPaymentRequests) {
     // CHỤP LẠI (không tra contract.paymentType lại mỗi lần) để nếu hợp đồng đổi paymentType SAU KHI đề
     // nghị đã tạo thì đề nghị ĐANG CHỜ XỬ LÝ không bị đổi luật xác nhận giữa chừng.
     sourcePaymentType: contract.paymentType || null,
+    customData: overrides?.customData || null,
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
   // "Thanh toán 1 lần" (ONE_TIME) — GIỮ NGUYÊN 100% hành vi cũ: 1 bản ghi duy nhất, 1 bộ "Hồ Sơ Đề Nghị
@@ -1738,6 +1741,7 @@ function startOfficePayment(user, item, overrides, allPaymentRequests) {
     // sourcePaymentType luôn null -> LUÔN tách mỗi đợt thành 1 quy trình riêng như "Thanh toán định kỳ"
     // (xem splitPaymentDraftsByInstallment() ở trên) — officeReqs chưa từng có khái niệm ONE_TIME.
     sourcePaymentType: null,
+    customData: overrides?.customData || null,
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
   return splitPaymentDraftsByInstallment(base, installments);
@@ -1870,11 +1874,34 @@ function submitPaymentRequest(user, pr) {
   return pr;
 }
 
+// v15.9 — mở rộng thêm cho phép "Yêu Cầu Bổ Sung" cả khi đã APPROVED (duyệt xong toàn bộ quy trình theo
+// phòng ban, đang chờ kế toán xác nhận chi) — trước đây CHỈ gọi được lúc còn PENDING (giữa chừng quy
+// trình duyệt). Mục đích nghiệp vụ: kế toán phát hiện thiếu giấy tờ đủ điều kiện chi NGAY LÚC chuẩn bị
+// xác nhận thanh toán (sau khi đã duyệt xong), cần trả lại để bổ sung thay vì phải Xoá + tạo lại từ đầu.
 function requestPaymentInfo(payload, user, pr) {
   if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung');
-  if (pr.status !== 'PENDING') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt');
+  if (!['PENDING', 'APPROVED'].includes(pr.status)) {
+    throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái chờ duyệt hoặc đã duyệt xong');
+  }
+  // Cùng lý do assertCanDeletePaymentRequest() chặn xoá khi đã có đợt xác nhận chi — sửa lại đề nghị sau
+  // "Yêu cầu bổ sung" sẽ RESET confirmed:false cho MỌI đợt (editPaymentRequest()), xoá mất dấu vết đã chi
+  // thật nếu cho phép bổ sung khi đã thanh toán một phần -> nguy cơ thanh toán trùng/mất dữ liệu chi.
+  if ((pr.installments || []).some(it => it.confirmed === true)) {
+    throw new HttpError(409, 'Đề nghị thanh toán đã có đợt được xác nhận chi — không thể yêu cầu bổ sung (sẽ làm mất dấu vết đã chi)');
+  }
   const comment = (payload?.comment || '').trim();
   if (!comment) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
+  // Đề nghị ĐÃ duyệt xong toàn bộ (APPROVED) -> quay lại NEED_INFO rồi sửa/gửi lại nghĩa là phải duyệt
+  // LẠI TỪ ĐẦU theo phòng ban — khớp đúng khuôn REQUEST_CHANGES/RESOLVE_FILE_PROPOSAL (đánh dấu
+  // invalidated toàn bộ lượt duyệt cũ + reset currentStep về 1, xem lib/workflowEngine.js) — nếu không,
+  // canApproveStep() sẽ luôn chặn đúng những người ĐÃ duyệt xong ở vòng trước (lịch sử cũ vẫn còn), không
+  // ai duyệt lại được nữa, kẹt vĩnh viễn ở NEED_INFO/PENDING. Khi còn PENDING (chưa duyệt xong hẳn, có
+  // thể đang dở dang giữa bước) — GIỮ NGUYÊN hành vi cũ, không đụng currentStep/history, để các lượt
+  // duyệt từng phần đã có vẫn được tính tiếp sau khi bổ sung xong.
+  if (pr.status === 'APPROVED') {
+    (pr.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+    pr.currentStep = 1;
+  }
   pr.status = 'NEED_INFO';
   pr.infoRequestComment = comment;
   return pr;
@@ -2694,7 +2721,7 @@ function assertCanDeleteTask(user) {
 // Giao việc THỦ CÔNG qua modal (khác việc tự động sinh từ chỉ đạo biên bản — xem
 // buildTasksFromDirectives() ở trên, không đòi canManageTasks vì quyền hạn ở đó tới từ việc được phép
 // tạo/sửa biên bản, không phải quyền quản lý việc chung).
-function createTask(payload, user, usersList) {
+function createTask(payload, user, usersList, formTemplates) {
   if (!canManageTasks(user)) {
     throw new HttpError(403, 'Bạn không có quyền tạo công việc mới');
   }
@@ -2726,6 +2753,7 @@ function createTask(payload, user, usersList) {
   record.pendingExtension = null;
   record.pendingCancellation = null;
   record.history = [{ action: 'CREATED', by: user.username, byName: user.name, time: nowVN() }];
+  validateRequiredCustomData(payload.customData, formTemplates, 'TASK');
   return record;
 }
 
@@ -5453,7 +5481,7 @@ function confirmUniformAllocation(user, period, payload) {
 // bộ hàng đã báo hỏng/hủy/mất và phần đã thu hồi từ nhân viên: giám đốc siêu thị vẫn cấp được món đã
 // không còn trong kho, số liệu server lệch hẳn với màn hình Kho ở client (public/index.html đã trừ
 // adjustments từ đầu). Tính đúng = cùng 1 công thức với mọi nơi khác đọc tồn kho.
-function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList, allApprovedTransfers) {
+function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList, allApprovedTransfers, formTemplates) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền cấp phát đồng phục');
   const employeeUsername = String(payload?.employeeUsername || '').trim();
   const employee = (usersList || []).find(u => u.username === employeeUsername && u.active !== false);
@@ -5470,6 +5498,8 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, al
     }
   }
 
+  validateRequiredCustomData(payload?.customData, formTemplates, 'UNIFORM_ISSUE');
+
   return {
     id: Date.now(), code: String(payload?.code || '').trim(),
     dept: user.dept, deptName: user.dept,
@@ -5477,6 +5507,7 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, al
     employeeUsername: employee.username, employeeName: employee.name,
     items,
     note: (payload?.note || '').trim().slice(0, 500),
+    customData: payload?.customData && typeof payload.customData === 'object' ? payload.customData : {},
     createdAt: nowVN(),
     // ackStatus (mới): cấp phát xong KHÔNG còn coi là hoàn tất ngay — nhân viên phải tự bấm "Xác nhận đã
     // nhận" (acknowledgeUniformIssuance() bên dưới). CHỈ là xác nhận đã nhận, KHÔNG chặn/ảnh hưởng tính
@@ -5595,7 +5626,7 @@ function canConfirmUniformTransferReceipt(user, transfer) {
 
 // allPeriods/allIssuancesOfSourceStore/allAdjustmentsOfSourceStore/allApprovedTransfers: CỦA ĐÚNG siêu
 // thị NGUỒN (= user.dept, caller tự lọc trước khi gọi, giống mọi hàm build...() khác của module này).
-function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceStore, allAdjustmentsOfSourceStore, allApprovedTransfers) {
+function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceStore, allAdjustmentsOfSourceStore, allApprovedTransfers, formTemplates) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu điều chuyển kho');
   const sourceDept = user.dept; // luôn = siêu thị của người yêu cầu, không cho tự chọn siêu thị khác làm nguồn
   const targetDept = String(payload?.targetDept || '').trim();
@@ -5617,6 +5648,8 @@ function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceSto
     throw new HttpError(409, `Không đủ tồn kho "${itemName}"${size ? ` (size ${size})` : ''} tại siêu thị nguồn: còn ${available}, cần chuyển ${qty}`);
   }
 
+  validateRequiredCustomData(payload?.customData, formTemplates, 'UNIFORM_TRANSFER');
+
   return {
     id: Date.now(),
     sourceDept, targetDept, itemName, size, qty, reason,
@@ -5624,7 +5657,8 @@ function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceSto
     requestedBy: user.username, requestedByName: user.name, requestedAt: nowVN(),
     approvedBy: null, approvedByName: null, approvedAt: null, rejectReason: '',
     // Bước xác nhận nhận hàng (mô hình "hàng đang vận chuyển") — xem receiveUniformTransfer() bên dưới.
-    receivedBy: null, receivedByName: null, receivedAt: null
+    receivedBy: null, receivedByName: null, receivedAt: null,
+    customData: payload?.customData && typeof payload.customData === 'object' ? payload.customData : {}
   };
 }
 
@@ -5903,8 +5937,7 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users) {
     throw new HttpError(409, 'Chỉ đổi tài xế/xe được cho chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
   }
   const { findCarPlateConflict } = require('./workflowEngine'); // require trễ (bên trong hàm) — tránh
-  // vòng lặp require ở mức module, mirror đúng isApproverForOperationOrderReceipt() ở trên (workflowEngine.js
-  // không require lại recordActions.js nên an toàn).
+  // vòng lặp require ở mức module (workflowEngine.js không require lại recordActions.js nên an toàn).
   const newPlate = String(payload?.assignedPlate || '').trim();
   if (newPlate && newPlate !== item.assignedPlate) {
     const conflict = findCarPlateConflict(existingCarRegs, item.id, newPlate, item.startTime, item.endTime);

@@ -34,6 +34,7 @@ const employeeProfileRoutes = require('./routes/employeeProfile');
 const adminCatalogRoutes = require('./routes/adminCatalog');
 const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
 const operationImportRoutes = require('./routes/operationImport');
+const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
 const pwaManifestRoutes = require('./routes/pwaManifest');
 const budgetTemplateImportRoutes = require('./routes/budgetTemplateImport');
 const downloadRoutes = require('./routes/download');
@@ -49,6 +50,7 @@ const { checkLaborContractExpiryReminders } = require('./jobs/laborContractExpir
 const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalReminder');
 const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
+const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -160,6 +162,7 @@ app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
 app.use('/api/stores', storeCatalogImportRoutes);
 app.use('/api/operation', operationImportRoutes);
+app.use('/api/operation', operationOrderApiSyncRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
 // /api/admin/external-api-keys: router tự áp requireAuth + kiểm admin bên trong (khớp routes/adminCatalog.js).
 app.use('/api/admin/external-api-keys', externalAuthAdminRoutes);
@@ -366,6 +369,11 @@ async function start() {
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.
       checkDiskSpace();
       setInterval(checkDiskSpace, 60 * 60 * 1000);
+      // Đồng bộ Đơn Hàng ra dsmart16: tick cố định mỗi 5 phút, nhưng syncOperationOrdersToDsmart16()
+      // (force=false) tự quyết định có thực sự cần gọi hệ thống ngoài ở tick đó không (so lastSyncAt với
+      // operationOrderApiConfig.syncIntervalMinutes admin đã cấu hình) — không đợi khởi động lại server
+      // để áp dụng thay đổi chu kỳ, và tick 5 phút đủ mịn cho mọi giá trị chu kỳ hợp lý (phút → giờ).
+      setInterval(() => { syncOperationOrdersToDsmart16(); }, 5 * 60 * 1000);
     }
   } catch (err) {
     console.error('⛔ Không thể khởi động server:', err.message);

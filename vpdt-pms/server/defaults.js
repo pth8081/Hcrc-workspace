@@ -270,6 +270,7 @@ const DEFAULTS = {
     senderEmail: 'dms-noreply@company.com',
     contractExpiryReminderDays: [30, 15, 7], contractExpiryCcEmails: [],
     licenseExpiryReminderDays: [30, 15, 7], licenseExpiryCcEmails: [],
+    laborContractExpiryReminderDays: [60, 45, 30],
     // Giám sát ổ đĩa (jobs/diskSpaceMonitor.js) — cảnh báo qua email khi phân vùng chứa uploads/ đã
     // dùng vượt ngưỡng này (%). diskSpaceAlertCcEmails bổ sung cho danh sách mặc định (mọi tài khoản
     // đang có quyền admin), không thay thế.
@@ -475,6 +476,27 @@ const DEFAULTS = {
   // TOÀN riêng biệt ở tab "Quy Trình & Phê Duyệt" (không dùng chung người duyệt nào giữa 2 luồng).
   operationOrderStoreTierWorkflows: {},
   operationOrderHOTierWorkflows: {},
+  // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ĐƠN HÀNG (operationOrders) ra hệ thống
+  // ngoài "dsmart16" (job outbound, xem jobs/operationOrderApiSync.js). Cùng khuôn admin-config phẳng
+  // với emailConfig (xác thực linh hoạt: Base URL + 1 header tuỳ chỉnh tên/giá trị, KHÔNG cố định kiểu
+  // xác thực như Bearer/Basic — mỗi hệ thống ngoài có thể yêu cầu header khác nhau, VD "X-Api-Key" hay
+  // "Authorization: Bearer ..."). "headerValueEnc" mã hoá 2 chiều bằng lib/emailCrypto.js (AES-256-GCM,
+  // cùng cơ chế smtpPassEnc) — PHẢI lọc khỏi mọi response đọc (xem sanitizeOperationOrderApiConfig() ở
+  // routes/data.js), không lộ ra ngoài dù cho admin. "matchingKey" mặc định "poNumber" — placeholder
+  // trường dùng để đối chiếu bản ghi giữa 2 hệ thống, admin có thể đổi nếu dsmart16 dùng khoá khác.
+  // "syncIntervalMinutes" cho job tự động định kỳ (server.js); nút "🔄 Đồng Bộ Ngay" (client) gọi thẳng
+  // POST /api/operation/sync-dsmart16 để chạy thủ công NGAY LẬP TỨC, không đợi chu kỳ tự động.
+  operationOrderApiConfig: {
+    enabled: false,
+    baseUrl: '',
+    headerName: '',
+    headerValueEnc: null,
+    matchingKey: 'poNumber',
+    syncIntervalMinutes: 60,
+    lastSyncAt: null,
+    lastSyncStatus: null,
+    lastSyncMessage: null
+  },
   // Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — quy trình duyệt RIÊNG, ĐỘC LẬP với 2 map duyệt hồ sơ
   // chính ở trên (cùng kỹ thuật contractManageDeptWorkflows tách riêng contractApprovalDeptWorkflows).
   operationStoreOpenEstimateDeptWorkflows: {},

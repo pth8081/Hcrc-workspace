@@ -100,7 +100,7 @@ function setVppSubTab(subTab) {
   document.getElementById('btnVppSubReports').className = subTab === 'REPORTS' ? activeCls : inactiveCls;
 
   if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); }
-  if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); }
+  if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); renderDynamicInputsForModule('VPP', 'dynamicFieldsContainer_VPP'); }
   if (subTab === 'REPORTS') { renderVppReportPeriodOptions(); renderVppReports(); }
 }
 
@@ -616,13 +616,20 @@ async function createVppPeriod() {
 
   const budgetInput = document.getElementById('vppNewPeriodBudget');
   const perPersonBudget = budgetInput.value.trim() ? getMoneyValue(budgetInput) : null;
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('VPP');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code: `VPP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`,
     name, startDate: startDate || '', endDate: endDate || '',
     catalogItems: vppPendingCatalog.items,
     catalogFileUrl: vppPendingCatalog.fileUrl, catalogFileName: vppPendingCatalog.fileName,
     perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(),
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newPeriod;

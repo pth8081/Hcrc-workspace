@@ -1173,12 +1173,20 @@ async function uploadLicense(e) {
     DB.licenseTypes = [...(DB.licenseTypes || []), licenseType];
   }
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('LICENSE');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   const payload = {
     code, displayCode, versionNumber, rootLicenseId,
     companyName, locationName, operatingStatus, licenseType, licenseNumber,
     issueDate, expiryDate, issuingAuthority,
     fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl,
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newItem;

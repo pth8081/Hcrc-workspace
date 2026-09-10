@@ -486,6 +486,16 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
         nguồn Mua Bán/Sửa Chữa/Đầu Tư: nút **"Xác nhận"** riêng cho TỪNG ĐỢT
         — mỗi lần xác nhận 1 đợt phải kèm 1 tệp riêng, lặp lại cho tới khi
         xác nhận HẾT mọi đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
+      - **"📝 Yêu Cầu Bổ Sung" ngay tại tab này** — kế toán (quyền quản lý
+        thanh toán) vẫn có thể trả đề nghị đang "APPROVED" (⏳ Đang chờ thanh
+        toán) về **"Cần bổ sung"** (`NEED_INFO`, quay lại sửa được ở "➕ Tạo
+        Mới"/"🗂️ Quản Lý Thanh Toán") **NẾU CHƯA xác nhận bất kỳ đợt nào**
+        (`installments` chưa đợt nào `confirmed:true`, và với Hợp đồng "Thanh
+        toán 1 lần" — chưa bấm "💰 Xác Nhận Toàn Bộ") — mục đích: kế toán phát
+        hiện thiếu/sai thông tin ngay khi chuẩn bị chi tiền (dù đã qua đủ bước
+        duyệt nội bộ) vẫn trả lại được mà không cần nhờ người duyệt phòng ban
+        thao tác hộ. Đã xác nhận dù chỉ 1 đợt thì nút này biến mất — không thể
+        "rút lại" khoản đã chi.
     Vòng đời đầy đủ: **[NHÁP `DRAFT`]** → Chờ duyệt (sửa được, qua duyệt theo
     bước/phòng ban) → [Cần bổ sung thông tin (sửa được)] → Đã duyệt (xác nhận
     — toàn bộ 1 lần hoặc từng đợt, tuỳ loại ở trên) → Đã thanh toán (khoá
@@ -524,6 +534,36 @@ chung nhóm khác.
     PDF thành công**: các field vừa tự điền được từ PDF chuyển xám/không sửa
     được nữa (tránh gõ đè nhầm) — Tiêu Đề/Nhà Cung Cấp/Ghi Chú vẫn luôn sửa tự
     do. Bấm **"🔄 Nhập Lại Từ Đầu"** để mở khoá + xoá file PDF đã chọn.
+  - **Tạo hàng loạt từ nhiều file PDF cùng lúc**: ô "File Đơn Hàng" nhận
+    **NHIỀU** tệp PDF 1 lượt (không còn giới hạn 1 file/lượt) — mỗi file được
+    đọc/điền form/kiểm tra trùng Số Đơn NCC **độc lập**, tạo thành **từng đơn
+    hàng riêng** (không gộp chung 1 đơn). Kết quả trả về theo từng file: đơn
+    tạo thành công lẫn file lỗi (đọc PDF thất bại/trùng Số Đơn NCC) đều hiện rõ
+    trong 1 bảng tổng kết cuối cùng — 1 file lỗi không chặn các file còn lại.
+  - **Duyệt Nhập Hàng/Hủy Đơn — sub-tab riêng + quyền riêng, tách khỏi luồng
+    duyệt nội bộ**: 2 nút "✅ Xác nhận nhập hàng"/"❌ Hủy đơn" (áp dụng khi đơn
+    đã ở trạng thái **Chờ Nhập Hàng** — tức đã qua đủ các bước duyệt nội bộ
+    theo mức giá trị ở trên) **không còn nằm lẫn trong bảng danh sách Đơn
+    Hàng chính nữa** — chuyển hẳn sang 1 sub-tab con riêng **"📦 Duyệt Nhập/Hủy
+    Đơn Hàng"**, gác bởi quyền **RIÊNG, độc lập hoàn toàn** với quyền duyệt nội
+    bộ theo mức giá trị: **"📦 Duyệt Nhập/Hủy Đơn Hàng"**
+    (`operationOrderReceiptManage`, khối cây phân quyền 22 "Vận Hành") — mô
+    hình phạm vi giống các quyền theo-phạm-vi khác (toàn quyền HOẶC giới hạn
+    đúng 1/nhiều siêu thị cụ thể/HO). Mục đích: cho phép giao việc "nhận hàng
+    thực tế tại kho/siêu thị" cho 1 nhóm người khác hẳn nhóm phê duyệt ngân
+    sách đơn hàng (VD thủ kho xác nhận nhập hàng, không cần và không nên có
+    quyền duyệt chi tiêu).
+- **Cấu Hình API (đồng bộ đơn hàng ra hệ thống dsmart16)** — Hệ Thống → Quản
+  Trị (admin), sub-tab **"🔌 Cấu Hình API"**: bật/tắt đồng bộ, Base URL hệ
+  thống dsmart16, tên + giá trị header xác thực (giá trị nhập 1 lần, sau đó ẩn
+  — giống cơ chế mật khẩu SMTP, không hiện lại giá trị đã lưu), trường dùng để
+  đối chiếu đơn hàng phía dsmart16 (mặc định Số Đơn NCC), chu kỳ đồng bộ (phút).
+  Có nút **"🔄 Đồng Bộ Ngay"** để kích hoạt thủ công ngoài chu kỳ tự động. Job
+  nền chạy mỗi 5 phút (tự bỏ qua nếu chưa tới chu kỳ đã cấu hình hoặc tính
+  năng đang tắt), lấy các đơn hàng chưa từng đồng bộ, gửi từng đơn qua API
+  dsmart16 (Base URL + header tuỳ chỉnh), đánh dấu đơn đã đồng bộ khi thành
+  công — lỗi ở 1 đơn không chặn các đơn còn lại trong cùng lượt chạy. Trạng
+  thái/thông báo lần đồng bộ gần nhất hiện ngay trên màn Cấu Hình API.
 - **Mở Mới / Sửa Chữa Siêu Thị** — pipeline 4 giai đoạn **Dự toán → Thực hiện
   → Nghiệm thu → Báo cáo**:
   - **Hồ sơ Mở Mới/Sửa Chữa (bản thân bản ghi)** — đi thẳng trạng thái đã
@@ -801,10 +841,13 @@ xem hợp đồng của chính mình ở đợt này.
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
   hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
   hạn số lần, giữ nguyên lịch sử.
-- **Cảnh báo hết hạn tự động** (job chạy mỗi 24h, ngưỡng 60/45/30 ngày trước
-  hạn): gửi email tới HR **CỘNG** quản lý trực tiếp của nhân viên đó, nhắc gia
-  hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục sử dụng lao
-  động — không gửi trùng lặp cho cùng 1 ngưỡng.
+- **Cảnh báo hết hạn tự động** (job chạy mỗi 24h, mặc định ngưỡng 60/45/30
+  ngày trước hạn — **admin tự sửa được danh sách ngưỡng** ở Hệ Thống > Quản
+  Trị > Cấu Hình Email, mục 7.8, ô riêng cho Hợp Đồng Lao Động, tách biệt
+  ngưỡng của Giấy Phép/Gia Hạn CNTT): gửi email tới HR **CỘNG** quản lý trực
+  tiếp của nhân viên đó, nhắc gia hạn/đổi loại hợp đồng/khởi tạo Offboarding
+  nếu không tiếp tục sử dụng lao động — không gửi trùng lặp cho cùng 1
+  ngưỡng.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có tầng nhân
   viên tự xem hợp đồng lao động của chính mình; thời hạn thử việc theo từng
   loại vị trí (chuyên môn/kỹ thuật/mùa vụ) vẫn dùng chung 1 mốc ước tính 60
@@ -833,9 +876,14 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   cuối), tự đánh dấu **đi muộn/về sớm/tăng ca ngày lễ/tăng ca cuối tuần**
   theo cấu hình. HR sửa/bổ sung tay ở **"Quản Lý & Cấu Hình"** khi máy chấm
   công lỗi/nhân viên quên quẹt thẻ.
-- **Đơn nghỉ phép** (Phép năm / Nghỉ không lương / Nghỉ ốm) — nhân viên tự nộp
-  cho CHÍNH MÌNH (chọn loại, từ ngày, đến ngày, lý do), nghỉ phép năm bị chặn
-  ngay lúc nộp nếu vượt quá số ngày còn lại. Quản lý trực tiếp (cần thêm quyền
+- **Đơn nghỉ phép** (Phép năm / Nghỉ không lương / Nghỉ ốm / **Nghỉ theo giờ**
+  / **Việc riêng**) — nhân viên tự nộp cho CHÍNH MÌNH (chọn loại, từ ngày, đến
+  ngày, lý do), nghỉ phép năm bị chặn ngay lúc nộp nếu vượt quá số ngày còn
+  lại. **Nghỉ theo giờ** dùng form riêng (chọn đúng 1 ngày + giờ bắt đầu/kết
+  thúc thay vì khoảng Từ ngày–Đến ngày) — không trừ vào phép năm, không sinh
+  bản ghi chấm công nguyên ngày (chỉ ghi nhận khoảng giờ nghỉ). **Việc riêng**
+  dùng chung khuôn Từ ngày–Đến ngày như Nghỉ không lương/Nghỉ ốm, cũng không
+  trừ phép năm. Quản lý trực tiếp (cần thêm quyền
   **"✅ Duyệt Nghỉ Phép"**, không tự động có chỉ vì là quản lý) hoặc HR duyệt/
   từ chối; đơn được duyệt **tự động trừ phép năm** (chỉ loại Phép năm) và
   **tự sinh bản ghi chấm công loại nghỉ phép** cho từng ngày trong khoảng nghỉ

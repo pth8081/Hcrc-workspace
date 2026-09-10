@@ -27,7 +27,11 @@ const PORT = 8985;
 
 const DEPT = 'Phòng Vận Hành';
 const CREATOR = { username: 'nv.mua', name: 'Nhân Viên Mua Hàng', dept: DEPT, perms: { operationOrderCreate: true }, active: true };
-const APPROVER = { username: 'tp.vanhanh', name: 'Trưởng Phòng Vận Hành', dept: DEPT, perms: {}, active: true };
+// Đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung": quyền Nhập Hàng/Hủy Nhập KHÔNG còn mirror quần thể Duyệt/Từ
+// chối nữa — cần quyền RIÊNG operationOrderReceiptManage ({all,depts[]}, xem lib/recordActions.js
+// isApproverForOperationOrderReceipt()). Gán all:true cho APPROVER ở đây để giữ nguyên các kịch bản
+// "Trưởng phòng vừa Duyệt vừa Nhập Hàng" của test này (đơn giản hoá, không cần tách 2 role riêng).
+const APPROVER = { username: 'tp.vanhanh', name: 'Trưởng Phòng Vận Hành', dept: DEPT, perms: { operationOrderReceiptManage: { all: true, depts: [] } }, active: true };
 const OUTSIDER = { username: 'nv.khac', name: 'Nhân Viên Phòng Khác', dept: 'Phòng Kế Toán', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: DEPT, perms: { admin: true }, active: true };
 
@@ -165,20 +169,23 @@ async function main() {
       assertEqual(result.item.status, 'PENDING', 'Đơn C không được đổi trạng thái khi bị chặn quyền');
     });
 
-    // ===== 3) Nút "Nhập Hàng"/"Hủy Nhập" — chỉ hiện + chỉ hoạt động đúng trạng thái/quyền =====
-    await run.run('Nút Nhập Hàng/Hủy Nhập CHỈ hiện ở dòng AWAITING_RECEIPT, KHÔNG hiện ở dòng PENDING/REJECTED', async () => {
+    // ===== 3) Nút "Nhập Hàng"/"Hủy Nhập" — đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung" đã CHUYỂN 2 nút này
+    // khỏi dòng ở Danh Sách STORE/HO sang HẲN 1 sub-tab riêng "🧾 Duyệt Nhập/Hủy Đơn Hàng"
+    // (renderOperationOrderReceiptApprovalTab() -> #opOrderReceiptTableBody), gated bởi quyền RIÊNG
+    // operationOrderReceiptManage — KHÔNG còn nằm trong dropdown "Khác" của bảng Danh Sách nữa. =====
+    await run.run('Sub-tab "Duyệt Nhập/Hủy Đơn Hàng": chỉ hiện đúng các đơn AWAITING_RECEIPT mà mình có quyền', async () => {
       await loginAs(page, APPROVER);
-      const html = await page.evaluate(() => { renderOperationList('operationOrders'); return document.getElementById('operationOrderTableBody').innerHTML; });
+      const html = await page.evaluate(() => { renderOperationOrderReceiptApprovalTab(); return document.getElementById('opOrderReceiptTableBody').innerHTML; });
       const countReceive = (html.match(/📥 Nhập Hàng/g) || []).length;
       const countCancel = (html.match(/🚫 Hủy Nhập/g) || []).length;
-      // AWAITING_RECEIPT ngay lúc này: chỉ còn idE (idA/idB sẽ được xử lý ở kịch bản dưới, nhưng thứ tự
-      // chạy tới đây A/B vẫn còn AWAITING_RECEIPT -> tổng cộng 3 dòng đủ điều kiện: A, B, E).
+      // AWAITING_RECEIPT ngay lúc này: A, B, E (idA/idB sẽ được xử lý ở kịch bản dưới, nhưng thứ tự
+      // chạy tới đây A/B vẫn còn AWAITING_RECEIPT -> tổng cộng 3 dòng đủ điều kiện).
       assertEqual(countReceive, 3, 'Phải có đúng 3 nút Nhập Hàng (A, B, E đang AWAITING_RECEIPT)');
       assertEqual(countCancel, 3, 'Phải có đúng 3 nút Hủy Nhập (A, B, E đang AWAITING_RECEIPT)');
     });
-    await run.run('Người NGOÀI quyền KHÔNG thấy nút Nhập Hàng/Hủy Nhập (ẩn ở UI)', async () => {
+    await run.run('Người NGOÀI quyền operationOrderReceiptManage KHÔNG thấy đơn nào ở sub-tab Duyệt Nhập/Hủy Đơn Hàng', async () => {
       await loginAs(page, OUTSIDER);
-      const html = await page.evaluate(() => { renderOperationList('operationOrders'); return document.getElementById('operationOrderTableBody').innerHTML; });
+      const html = await page.evaluate(() => { renderOperationOrderReceiptApprovalTab(); return document.getElementById('opOrderReceiptTableBody').innerHTML; });
       assert(!html.includes('📥 Nhập Hàng'), 'Người ngoài quyền không được thấy nút Nhập Hàng');
       assert(!html.includes('🚫 Hủy Nhập'), 'Người ngoài quyền không được thấy nút Hủy Nhập');
     });

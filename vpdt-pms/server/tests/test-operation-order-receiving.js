@@ -12,7 +12,9 @@
 //        dừng ở APPROVED như trước (đúng phạm vi if (moduleKey === 'operationOrders') tường minh).
 //   2. lib/recordActions.js receiveOperationOrderGoods()/cancelOperationOrderReceipt():
 //      - Chỉ nhận từ AWAITING_RECEIPT, từ chối rõ ràng (409) nếu sai trạng thái nguồn.
-//      - Chỉ đúng quần thể được phép (admin hoặc approver dept-workflow của hồ sơ) mới gọi được (403).
+//      - Chỉ đúng quần thể được phép mới gọi được (403) — admin hoặc quyền RIÊNG
+//        operationOrderReceiptManage ({all,depts[]}, 'HO' là sentinel) — KHÔNG còn mirror approvers
+//        dept-workflow của quy trình Duyệt/Từ chối như trước (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung").
 //      - cancelOperationOrderReceipt() bắt buộc có lý do (400 nếu thiếu).
 //      - Thành công: đúng status đích + timestamp ISO tương ứng + 1 dòng lịch sử mới.
 //   3. seedDefaults.migrateApprovedOperationOrdersToAwaitingReceipt() — hồ sơ CŨ kẹt APPROVED (từ trước
@@ -161,11 +163,35 @@ test('receiveOperationOrderGoods(): admin, đúng AWAITING_RECEIPT -> RECEIVED +
   assert.strictEqual(result.history[result.history.length - 1].action, 'RECEIVED');
 });
 
-test('receiveOperationOrderGoods(): approver dept-workflow (KHÔNG admin) cũng được phép — mirror đúng quần thể Duyệt/Từ chối', () => {
+// Đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung": quyền Nhập Hàng/Hủy Nhập KHÔNG còn mirror quần thể Duyệt/Từ
+// chối (approvers dept-workflow) như trước — giờ là quyền RIÊNG, phẳng
+// (operationOrderReceiptManage: {all, depts[]}, 'HO' là sentinel cho đơn Đặt Hàng Tại HO). 2 test dưới
+// đây khoá lại đúng hành vi MỚI: approver bước duyệt KHÔNG có quyền receipt riêng bị chặn; người có
+// đúng quyền receipt (dù không phải approver bước duyệt nào) thì được phép.
+test('receiveOperationOrderGoods(): approver dept-workflow (KHÔNG có operationOrderReceiptManage) KHÔNG còn được phép mặc định — quyền đã tách riêng', () => {
   const item = freshOrder({ status: 'AWAITING_RECEIPT' });
   const approver = makeUser(APPROVER_STEP1);
-  const result = recordActions.receiveOperationOrderGoods(approver, item, appData);
+  assertThrows(() => recordActions.receiveOperationOrderGoods(approver, item, appData), 403, 'không có quyền', 'receiveOperationOrderGoods approver bước duyệt không có quyền receipt riêng');
+});
+
+test('receiveOperationOrderGoods(): người có operationOrderReceiptManage.all=true (KHÔNG phải admin/approver bước duyệt nào) vẫn được phép', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT' });
+  const receiptManager = makeUser('nv.kho', { perms: { operationOrderReceiptManage: { all: true, depts: [] } } });
+  const result = recordActions.receiveOperationOrderGoods(receiptManager, item, appData);
   assert.strictEqual(result.status, 'RECEIVED');
+});
+
+test('receiveOperationOrderGoods(): người có operationOrderReceiptManage.depts=["HO"] được phép cho đơn orderLocationType=HO', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO' });
+  const receiptManager = makeUser('nv.kho2', { perms: { operationOrderReceiptManage: { all: false, depts: ['HO'] } } });
+  const result = recordActions.receiveOperationOrderGoods(receiptManager, item, appData);
+  assert.strictEqual(result.status, 'RECEIVED');
+});
+
+test('receiveOperationOrderGoods(): người có operationOrderReceiptManage nhưng chỉ cấp phòng ban khác (KHÔNG có "HO") bị chặn cho đơn HO', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO' });
+  const wrongScope = makeUser('nv.kho3', { perms: { operationOrderReceiptManage: { all: false, depts: ['Siêu Thị Quận 1'] } } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(wrongScope, item, appData), 403, 'không có quyền', 'receiveOperationOrderGoods sai phạm vi phòng ban');
 });
 
 test('receiveOperationOrderGoods(): sai trạng thái nguồn (PENDING) -> 409, không đổi gì', () => {

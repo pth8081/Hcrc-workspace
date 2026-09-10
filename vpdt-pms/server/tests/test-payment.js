@@ -733,6 +733,39 @@ async function run() {
       check('filterPaymentRequestsForUser() — người "Phòng Kinh Doanh" chỉ thấy đúng 1/2 đề nghị (của phòng mình)', filtered.length === 1 && filtered[0] === prKinhDoanh, filtered);
     })();
 
+    // ============ Kịch bản 18 (v15.9): "Yêu Cầu Bổ Sung" giờ gọi được cả khi đề nghị ĐÃ APPROVED (duyệt
+    // xong toàn bộ quy trình theo phòng ban) — trước đây (Kịch bản 14) chỉ gọi được lúc PENDING. Tái dùng
+    // manualPr (Kịch bản 10, dept "Phòng Kế Toán", đã APPROVED bởi ketoan1, CHƯA xác nhận đợt nào) ============
+    await page.evaluate(() => { window.__promptQueue.push('Thiếu hoá đơn VAT gốc, bổ sung trước khi xác nhận chi.'); });
+    await page.evaluate((id) => requestPaymentInfoAction(id), manualPr.id);
+    await confirmPending();
+    const manualPrNeedInfo = await readPr(manualPr.id);
+    check('"Yêu Cầu Bổ Sung" gọi được cả khi ĐÃ APPROVED (duyệt xong toàn bộ) -> chuyển NEED_INFO', manualPrNeedInfo.status === 'NEED_INFO', manualPrNeedInfo.status);
+    check('Đề nghị đã APPROVED trước đó -> lịch sử duyệt CŨ bị đánh dấu invalidated + currentStep reset về 1 (để duyệt lại từ đầu, không kẹt)', manualPrNeedInfo.currentStep === 1 && (manualPrNeedInfo.history || []).filter((h) => h.action === 'APPROVED').every((h) => h.invalidated === true), manualPrNeedInfo);
+
+    await page.evaluate((id) => openEditPaymentRequest(id), manualPr.id);
+    await clearAlerts();
+    await page.evaluate(() => submitManualPaymentRequest({ preventDefault() {} }));
+    await page.waitForTimeout(200);
+    const manualPrBackPending = await readPr(manualPr.id);
+    check('Sửa & Gửi Lại từ NEED_INFO (sau khi đã từng APPROVED) -> quay lại PENDING', manualPrBackPending.status === 'PENDING', manualPrBackPending.status);
+
+    await goToPaymentApprove();
+    await page.evaluate((id) => approvePaymentRequestAction(id), manualPr.id);
+    await confirmPending();
+    const manualPrReApproved = await readPr(manualPr.id);
+    check('Duyệt lại TỪ ĐẦU sau khi bổ sung -> đạt APPROVED trở lại bình thường (KHÔNG bị kẹt vì lịch sử duyệt cũ còn sót)', manualPrReApproved.status === 'APPROVED', manualPrReApproved.status);
+
+    // Chặn "Yêu Cầu Bổ Sung" khi ĐÃ có đợt xác nhận chi thật (tránh mất dấu vết đã chi — cùng lý do
+    // assertCanDeletePaymentRequest() chặn xoá) — kiểm ĐƠN VỊ hàm thuần, không qua UI.
+    (function testRequestInfoBlockedWhenConfirmed() {
+      const prWithConfirmed = { status: 'APPROVED', installments: [{ confirmed: true }, { confirmed: false }], history: [] };
+      let threw = null;
+      try { recordActions.requestPaymentInfo({ comment: 'x' }, { perms: { paymentManage: true } }, prWithConfirmed); }
+      catch (err) { threw = err; }
+      check('requestPaymentInfo() chặn khi đề nghị đã có đợt xác nhận chi (dù chỉ 1/N đợt) — tránh mất dấu vết chi', !!threw && /đã có đợt được xác nhận chi/.test(threw.message), threw && threw.message);
+    })();
+
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {
     fail++;

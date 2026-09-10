@@ -57,6 +57,7 @@ function hrcApplyUpdate(item) {
 // ===== Tạo hợp đồng TAY (ngoại lệ — đa số bản ghi hệ thống tự tạo qua hook Onboarding) =====
 function openHrContractCreateModal() {
   document.getElementById('hrContractCreateForm').reset();
+  renderDynamicInputsForModule('LABOR_CONTRACT', 'dynamicFieldsContainer_LABOR_CONTRACT');
   document.getElementById('hrContractCreateModal').classList.remove('hidden');
 }
 function closeHrContractCreateModal() {
@@ -85,8 +86,15 @@ async function submitHrContractCreate(e) {
     }
   }
 
+  let customData;
   try {
-    const result = await callCreateAction('laborContracts', { employeeCode, contractType, startDate, endDate, baseSalary, fileUrl, fileName });
+    customData = await collectDynamicFieldsData('LABOR_CONTRACT');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  try {
+    const result = await callCreateAction('laborContracts', { employeeCode, contractType, startDate, endDate, baseSalary, fileUrl, fileName, customData });
     hrcApplyUpdate(result.item);
     closeHrContractCreateModal();
     alert('✅ Đã tạo hợp đồng lao động.');

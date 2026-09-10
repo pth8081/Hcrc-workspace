@@ -35,13 +35,16 @@ function setItSupportSubTab(subTab) {
       if (fileInput) fileInput.value = '';
       renderItPriceMasterListSelect();
     }
+    renderDynamicInputsForModule('IT_PRICE', 'dynamicFieldsContainer_IT_PRICE');
     renderItPriceApprovals();
   }
   if (subTab === 'TICKET') {
     document.getElementById('itTicketCode').value = generateItTicketCode();
+    renderDynamicInputsForModule('IT_TICKET', 'dynamicFieldsContainer_IT_TICKET');
     renderItTickets();
   }
   if (subTab === 'RENEWAL') {
+    renderDynamicInputsForModule('IT_RENEWAL', 'dynamicFieldsContainer_IT_RENEWAL');
     renderItServiceRenewals();
   }
 }
@@ -349,6 +352,12 @@ async function submitItPriceApproval(e) {
       return alert(`⛔ Tải tài liệu bổ sung thất bại: ${err.message}`);
     }
   }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('IT_PRICE');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code,
     // Tự động gắn đúng priceType theo sub-tab con đang mở (KHÔNG có dropdown chọn tay — mục 1 kế
@@ -362,7 +371,8 @@ async function submitItPriceApproval(e) {
     }],
     extraFiles,
     reason: document.getElementById('itPriceReason').value.trim(),
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newItem;
@@ -1352,12 +1362,19 @@ async function submitItTicket(e) {
   if (DB.itSupportTickets.some(t => t.code === code)) {
     return alert('Mã yêu cầu đã tồn tại!');
   }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('IT_TICKET');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code,
     title: document.getElementById('itTicketTitle').value.trim(),
     category: document.getElementById('itTicketCategory').value,
     description: document.getElementById('itTicketDescription').value.trim(),
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newItem;
@@ -1555,12 +1572,20 @@ function renderItTicketModal() {
       if (!showItTicketEscalateForm) {
         controlsHTML += `<button type="button" data-op="openItTicketEscalateForm" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300 mb-2">📨 ${blockedByRejection ? 'Gửi Lại' : 'Gửi'} Yêu Cầu Phê Duyệt</button>`;
       } else {
-        const approverOptions = DB.users.filter(u => u.active !== false && u.username !== currentUser.username)
-          .map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} — ${escapeHtml(u.dept || '')}</option>`).join('');
+        // Đổi từ <select> liệt kê toàn bộ user sang ô tìm-kiếm-gõ-chọn dùng chung (quy ước "sdd*", xem
+        // CLAUDE.md) — VẪN chọn đúng 1 người (bàn giao dữ liệu server không đổi: itTicketApproverUsername
+        // đọc ra 1 username duy nhất, y hệt .value của <select> cũ), chỉ đổi giao diện. Tái dùng chính
+        // div#systemUsersDatalist dùng chung toàn hệ thống — nạp lại đúng lúc mở form này (loại trừ chính
+        // currentUser, không thể tự gửi duyệt cho mình) qua sddSetOptions() ngay dưới đây.
+        sddSetOptions('systemUsersDatalist', DB.users.filter(u => u.active !== false && u.username !== currentUser.username)
+          .map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
         controlsHTML += `
           <div class="bg-sky-50 p-3 rounded border border-sky-200 space-y-2 mb-2">
             <h4 class="font-bold text-sky-900">📨 Gửi Yêu Cầu Phê Duyệt</h4>
-            <select id="itTicketApproverSelect" class="w-full border p-1.5 rounded bg-white text-xs">${approverOptions}</select>
+            <div class="relative">
+              <input type="text" id="itTicketApproverInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveItTicketApproverInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm người duyệt..." class="w-full border p-1.5 rounded bg-white text-xs">
+              <input type="hidden" id="itTicketApproverUsername">
+            </div>
             <textarea id="itTicketApprovalReason" placeholder="Vì sao yêu cầu này cần phê duyệt trước khi xử lý?" class="w-full border p-1.5 rounded h-16 text-xs"></textarea>
             <div class="flex gap-2">
               <button type="button" data-op="escalateItTicketAction" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Gửi phê duyệt</button>
@@ -1618,9 +1643,17 @@ async function claimItTicketAction() {
   renderItTicketModal();
 }
 
+// Mirror resolveVsoPersonInChargeInput() (module-vanhanh.js) — tách username từ nhãn hiển thị
+// "Tên — Phòng ban (username)" khi người dùng bấm chọn 1 gợi ý trong ô tìm-kiếm-gõ-chọn.
+function resolveItTicketApproverInput(rawValue) {
+  const m = rawValue.match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('itTicketApproverUsername').value = m ? m[2].trim() : '';
+}
+
 async function escalateItTicketAction() {
   if (!currentItTicketModalId) return;
-  const approverUsername = document.getElementById('itTicketApproverSelect').value;
+  const approverUsername = document.getElementById('itTicketApproverUsername').value;
+  if (!approverUsername) return alert('Vui lòng chọn đúng người duyệt từ danh sách gợi ý (gõ tên hoặc tài khoản để tìm)!');
   const reason = document.getElementById('itTicketApprovalReason').value.trim();
   if (!reason) return alert('Vui lòng nhập lý do cần phê duyệt.');
 

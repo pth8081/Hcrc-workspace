@@ -50,6 +50,7 @@ function setInternalSubTab(subTab) {
   // pin-field/chuyên đề/nhãn form bên dưới) vì toàn bộ logic còn lại giả định chỉ còn NEWS/SHARE.
   document.getElementById('internalQnaSection').classList.toggle('hidden', subTab !== 'QNA');
   if (subTab === 'QNA') {
+    renderDynamicInputsForModule('HR_FEEDBACK', 'dynamicFieldsContainer_HR_FEEDBACK');
     renderHrFeedbackInbox();
     return;
   }
@@ -469,6 +470,7 @@ function renderRecruitment() {
   const canManage = canManageRecruitmentLocal(currentUser);
   document.getElementById('recruitmentJobForm').classList.toggle('hidden', !canManage);
   document.getElementById('recruitmentJobNoPermNote').classList.toggle('hidden', canManage);
+  renderDynamicInputsForModule('RECRUITMENT_JOB', 'dynamicFieldsContainer_RECRUITMENT_JOB');
   if (!canManage && activeRecruitmentTab === 'MANAGE') { activeRecruitmentTab = 'JOBS'; }
   // Đồng bộ class active/hidden của cả 3 nút tab con — "Quản Lý Ứng Viên" chỉ HR mới thấy nút.
   const btnMap = { JOBS: 'btnRecruitmentJobs', MY_REFERRALS: 'btnRecruitmentMyReferrals', MANAGE: 'btnRecruitmentManage' };
@@ -504,6 +506,12 @@ async function submitRecruitmentJob(e) {
       return alert(`⛔ Tải banner thất bại: ${err.message}`);
     }
   }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('RECRUITMENT_JOB');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     title: document.getElementById('rjTitle').value.trim(),
     description: document.getElementById('rjDescription').value.trim(),
@@ -516,7 +524,8 @@ async function submitRecruitmentJob(e) {
     // phòng ban của người tạo (forceOwnDept, xem lib/createValidation.js), không phải đơn vị đăng tuyển.
     hiringDept: document.getElementById('rjDept').value,
     contactInfo: document.getElementById('rjContactInfo').value.trim(),
-    bannerUrl, bannerFileName
+    bannerUrl, bannerFileName,
+    customData
   };
   let newJob;
   try {
@@ -647,6 +656,7 @@ function openRecruitmentReferModal(jobId) {
   document.getElementById('rrJobId').value = jobId;
   document.getElementById('rrJobTitleLabel').innerText = job.title;
   document.getElementById('rrReferrerLabel').innerText = currentUser.name;
+  renderDynamicInputsForModule('RECRUITMENT_REFERRAL', 'dynamicFieldsContainer_RECRUITMENT_REFERRAL');
   document.getElementById('recruitmentReferModal').classList.remove('hidden');
 }
 
@@ -680,6 +690,12 @@ async function submitRecruitmentReferral(e) {
   } catch (err) {
     return alert(`⛔ Tải CV thất bại: ${err.message}`);
   }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('RECRUITMENT_REFERRAL');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     jobId,
     candidateName: document.getElementById('rrCandidateName').value.trim(),
@@ -687,7 +703,8 @@ async function submitRecruitmentReferral(e) {
     candidateEmail: document.getElementById('rrCandidateEmail').value.trim(),
     candidateNote: document.getElementById('rrCandidateNote').value.trim(),
     cvFileUrl: uploaded.fileUrl,
-    cvFileName: uploaded.fileName
+    cvFileName: uploaded.fileName,
+    customData
   };
   let newReferral;
   try {

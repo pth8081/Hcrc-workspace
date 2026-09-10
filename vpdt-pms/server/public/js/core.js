@@ -3027,6 +3027,10 @@ async function initDatabase(loggingInUser) {
     // operationStoreOpeningEstimate/operationRepairEstimate.
     DB.operationStoreOpenEstimateDeptWorkflows = data.operationStoreOpenEstimateDeptWorkflows || {};
     DB.operationRepairEstimateDeptWorkflows = data.operationRepairEstimateDeptWorkflows || {};
+    // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ra dsmart16 (xem
+    // jobs/operationOrderApiSync.js). headerValueEnc đã bị server strip (sanitizeOperationOrderApiConfig()
+    // ở routes/data.js), chỉ còn cờ "hasHeaderValue" — xem loadOperationOrderApiConfigToForm().
+    DB.operationOrderApiConfig = data.operationOrderApiConfig || {};
     DB.operationOrders = data.operationOrders || [];
     DB.operationStoreOpenings = data.operationStoreOpenings || [];
     DB.operationRepairs = data.operationRepairs || [];
@@ -4360,6 +4364,10 @@ function saveEmailConfig(e) {
   if (itRenewalReminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn dịch vụ CNTT hợp lệ (vd: 30, 15, 7)!');
   }
+  const laborContractReminderDays = parseDaysListInput(document.getElementById('cfgLaborContractReminderDays').value);
+  if (laborContractReminderDays.length === 0) {
+    return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp đồng lao động hợp lệ (vd: 60, 45, 30)!');
+  }
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
@@ -4379,6 +4387,7 @@ function saveEmailConfig(e) {
     licenseExpiryCcEmails: parseEmailListInput(document.getElementById('cfgLicenseReminderCc').value),
     itRenewalReminderDays: itRenewalReminderDays,
     itRenewalCcEmails: parseEmailListInput(document.getElementById('cfgItRenewalReminderCc').value),
+    laborContractExpiryReminderDays: laborContractReminderDays,
     diskSpaceAlertThresholdPercent: parseInt(document.getElementById('cfgDiskAlertThreshold').value, 10) || 85,
     diskSpaceAlertCcEmails: parseEmailListInput(document.getElementById('cfgDiskAlertCc').value)
   };
@@ -4421,6 +4430,8 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgItRenewalReminderDays').value = (DB.emailConfig.itRenewalReminderDays && DB.emailConfig.itRenewalReminderDays.length
     ? DB.emailConfig.itRenewalReminderDays : [30, 15, 7]).join(', ');
   document.getElementById('cfgItRenewalReminderCc').value = (DB.emailConfig.itRenewalCcEmails || []).join(', ');
+  document.getElementById('cfgLaborContractReminderDays').value = (DB.emailConfig.laborContractExpiryReminderDays && DB.emailConfig.laborContractExpiryReminderDays.length
+    ? DB.emailConfig.laborContractExpiryReminderDays : [60, 45, 30]).join(', ');
   document.getElementById('cfgDiskAlertThreshold').value = DB.emailConfig.diskSpaceAlertThresholdPercent || 85;
   document.getElementById('cfgDiskAlertCc').value = (DB.emailConfig.diskSpaceAlertCcEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
@@ -6134,7 +6145,7 @@ function _dispatchTabRender(tabName) {
   if (tabName === 'car') { setCarSubTab(activeCarSubTab); }
   if (tabName === 'vpp') { setVppSubTab(activeVppSubTab); }
   if (tabName === 'uniform') { setUniformSubTab(activeUniformSubTab); }
-  if (tabName === 'license') { renderLicenses(); document.getElementById('licenseOpMode').value = 'NEW'; onLicenseOpModeChange(); }
+  if (tabName === 'license') { renderDynamicInputsForModule('LICENSE', 'dynamicFieldsContainer_LICENSE'); renderLicenses(); document.getElementById('licenseOpMode').value = 'NEW'; onLicenseOpModeChange(); }
   if (tabName === 'periodicReport') { setPeriodicReportSubTab(activePeriodicReportSubTab); }
   if (tabName === 'office') {
     let targetSub = activeOfficeSubTab;

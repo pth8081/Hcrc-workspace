@@ -581,6 +581,8 @@ function renderBudgetPeriodSubTab() {
   renderBudgetPeriodTemplateOptions();
   renderBudgetPeriodList();
   renderBudgetTemplateList();
+  renderDynamicInputsForModule('BUDGET_PERIOD', 'dynamicFieldsContainer_BUDGET_PERIOD');
+  renderDynamicInputsForModule('BUDGET_TEMPLATE', 'dynamicFieldsContainer_BUDGET_TEMPLATE');
 }
 
 function renderBudgetPeriodDeptChecklist() {
@@ -615,7 +617,13 @@ async function createBudgetPeriod(e) {
 
   const templateSel = document.getElementById('budgetPeriodTemplateSelect').value;
   const templateId = templateSel ? Number(templateSel) : null;
-  const payload = { name, endTime, deptScope, templateId, createdAt: new Date().toLocaleString('vi-VN') };
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('BUDGET_PERIOD');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const payload = { name, endTime, deptScope, templateId, createdAt: new Date().toLocaleString('vi-VN'), customData };
 
   let newPeriod;
   try {
@@ -933,7 +941,14 @@ async function saveBudgetTemplate(e) {
       const result = await callRecordAction('budgetTemplates', editingBudgetTemplateId, 'update', payload);
       saved = result.item;
     } else {
+      let customData;
+      try {
+        customData = await collectDynamicFieldsData('BUDGET_TEMPLATE');
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
       payload.createdAt = new Date().toLocaleString('vi-VN');
+      payload.customData = customData;
       const result = await callCreateAction('budgetTemplates', payload);
       saved = result.item;
     }

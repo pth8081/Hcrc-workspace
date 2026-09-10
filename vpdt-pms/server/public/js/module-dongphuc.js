@@ -56,11 +56,14 @@ function setUniformSubTab(subTab) {
     // Form "Tạo Kỳ Cấp Phát" chỉ dành cho uniformManage/admin — approver-only vào tab này CHỈ để
     // duyệt/từ chối, không tạo kỳ mới được (server cũng chặn nếu cố gọi thẳng API).
     document.getElementById('uniformCreatePeriodBlock')?.classList.toggle('hidden', !canHc);
+    renderDynamicInputsForModule('UNIFORM_PERIOD', 'dynamicFieldsContainer_UNIFORM_PERIOD');
   }
   if (subTab === 'STORE') {
     renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable();
     renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable();
     resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransferReceiveQueue(); renderUniformTransfersTable();
+    renderDynamicInputsForModule('UNIFORM_ISSUE', 'dynamicFieldsContainer_UNIFORM_ISSUE');
+    renderDynamicInputsForModule('UNIFORM_TRANSFER', 'dynamicFieldsContainer_UNIFORM_TRANSFER');
   }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
   if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
@@ -261,11 +264,18 @@ async function submitUniformPeriod() {
   const depts = allocations.map(a => a.dept);
   if (new Set(depts).size !== depts.length) return alert('Mỗi siêu thị chỉ được xuất hiện 1 lần trong 1 kỳ cấp phát!');
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('UNIFORM_PERIOD');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     name,
     note: document.getElementById('uniformPeriodNote').value.trim(),
     allocations,
-    createdAt: new Date().toLocaleString('vi-VN')
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
   };
 
   let newPeriod;
@@ -589,11 +599,18 @@ async function submitUniformIssuance() {
   const items = uniformIssueItems.filter(it => (it.name || '').trim() && it.qty > 0);
   if (!items.length) return alert('Vui lòng nhập ít nhất 1 mặt hàng hợp lệ (có tên + số lượng > 0)!');
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('UNIFORM_ISSUE');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
   const payload = {
     code: document.getElementById('uniformIssueCode').value.trim(),
     employeeUsername,
     items,
-    note: document.getElementById('uniformIssueNote').value.trim()
+    note: document.getElementById('uniformIssueNote').value.trim(),
+    customData
   };
 
   let newIssuance;
@@ -1299,9 +1316,16 @@ async function submitUniformTransfer() {
   if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
   if (!reason) return alert('Vui lòng nhập lý do điều chuyển!');
 
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('UNIFORM_TRANSFER');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
   let newTransfer;
   try {
-    const result = await callCreateUniformTransfer({ targetDept, itemName, size, qty, reason });
+    const result = await callCreateUniformTransfer({ targetDept, itemName, size, qty, reason, customData });
     newTransfer = result.item;
   } catch (err) {
     return alert(`⛔ ${err.message}`);
