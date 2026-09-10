@@ -93,7 +93,9 @@ async function main() {
 
         if (action === 'propose-file-replacement') {
           const layerKey = (steps[rec.currentStep - 1] || {}).layerKey;
-          if (layerKey !== 'TRO_LY_THU_KY') throw new Error('Chỉ bước Bộ phận Trợ Lý/Thư Ký mới có thể đề xuất thay thế tệp tờ trình');
+          // v15.8 — mirrors lib/workflowEngine.js: TRO_LY_THU_KY (không đổi) HOẶC đúng bước cuối cùng.
+          const isFinalStep = rec.currentStep === totalSteps;
+          if (layerKey !== 'TRO_LY_THU_KY' && !isFinalStep) throw new Error('Chỉ bước Bộ phận Trợ Lý/Thư Ký hoặc bước phê duyệt cuối cùng mới có thể đề xuất thay thế tệp tờ trình');
           const { fileUrl, fileName, fileType } = body.extraFields || {};
           if (!fileUrl || !fileName) throw new Error('Thiếu tệp thay thế tờ trình');
           rec.pendingFileProposal = {
@@ -648,6 +650,78 @@ async function main() {
         );
 
         finishLogin(adminUser);
+      }
+
+      // ================= Scenario 9 (v15.8): lựa chọn "Thay thế tệp / Chỉ bổ sung" mở rộng sang bước
+      // phê duyệt CUỐI CÙNG của quy trình, bất kể lớp gì (TGD/PTGD/GD_PGD...) — không chỉ TRO_LY_THU_KY
+      // như trước. Dùng mức "GD_PGD" (không có lớp Trợ Lý/Thư Ký nào cả) để xác nhận đây là do "bước
+      // cuối cùng" quyết định, không phải do tình cờ trùng layerKey. Đồng thời xác nhận bước GIỮA (không
+      // phải cuối, không phải TRO_LY_THU_KY) vẫn CHỈ có REQUEST_CHANGES thường như trước — không bị ảnh
+      // hưởng bởi thay đổi này (khớp yêu cầu người dùng: "chỗ thư ký trước TGĐ không đổi").
+      {
+        const finalStepSub = {
+          id: 9002, code: 'TT-TEST-FINALSTEP', title: 'Tờ trình mức GD_PGD (không có lớp Thư Ký)',
+          content: 'Nội dung gốc', dept: 'Phòng Kinh Doanh', type: 'Hành chính', priority: 'Bình thường',
+          creator: 'alice', creatorName: 'Nguyễn Thị Alice',
+          status: 'PENDING', currentStep: 1,
+          fileName: 'to-trinh-goc-2.pdf', fileUrl: '/uploads/to-trinh-goc-2.pdf', fileType: 'application/pdf',
+          effectiveSteps: [
+            { order: 1, name: 'Giám Đốc/Phó Giám Đốc', layerKey: 'GD_PGD' }
+          ],
+          effectiveApprovers: { 1: ['admin'] },
+          history: []
+        };
+        DB.submissions.push(finalStepSub);
+
+        // Bước 1 CŨNG là bước cuối (chỉ có 1 bước) -> nút "Yêu Cầu Bổ Sung" phải mở hộp lựa chọn, dù
+        // layerKey là GD_PGD (không phải TRO_LY_THU_KY).
+        openProcessSubmissionModal(finalStepSub.id);
+        const finalStepBtnsHTML = document.getElementById('subModalActionBtns').innerHTML;
+        check(
+          'submission bước cuối (GD_PGD, không phải TRO_LY_THU_KY): nút "Yêu Cầu Bổ Sung" mở hộp lựa chọn openTroLyThuKyBoSungChoice() giống Trợ Lý/Thư Ký',
+          finalStepBtnsHTML.includes('data-op="openTroLyThuKyBoSungChoice" data-arg0="9002"') &&
+            !(finalStepBtnsHTML.includes('data-op="confirmProcessSubmission"') && finalStepBtnsHTML.includes('data-arg0="REQUEST_CHANGES"')),
+          finalStepBtnsHTML
+        );
+
+        // Đề xuất thay thế tệp thật sự thành công ở bước cuối này (server/mock không còn chặn theo
+        // layerKey nữa, chỉ cần đúng bước cuối).
+        openTroLyThuKyBoSungChoice(finalStepSub.id, 'Giám Đốc/Phó Giám Đốc');
+        openTroLyThuKyProposeFileForm(finalStepSub.id);
+        setFileInput('tltkProposeFile', 'to-trinh-thay-the-final.pdf', 'noi dung thay the final', 'application/pdf');
+        document.getElementById('tltkProposeNote').value = '';
+        await confirmTroLyThuKyProposeFile(finalStepSub.id);
+        const finalStepSubAfter = DB.submissions.find(s => s.id === finalStepSub.id);
+        check(
+          'submission bước cuối (GD_PGD): đề xuất thay thế tệp được server chấp nhận, pendingFileProposal ghi lại đúng',
+          finalStepSubAfter.pendingFileProposal && finalStepSubAfter.pendingFileProposal.fileName === 'to-trinh-thay-the-final.pdf',
+          JSON.stringify(finalStepSubAfter.pendingFileProposal)
+        );
+
+        // Bước GIỮA (không phải cuối, không phải TRO_LY_THU_KY) — hành vi CŨ không đổi: chỉ có
+        // REQUEST_CHANGES trực tiếp, không có hộp lựa chọn.
+        const midStepSub = {
+          id: 9003, code: 'TT-TEST-MIDSTEP', title: 'Tờ trình bước giữa (không phải cuối, không Thư Ký)',
+          content: 'Nội dung gốc', dept: 'Phòng Kinh Doanh', type: 'Hành chính', priority: 'Bình thường',
+          creator: 'alice', creatorName: 'Nguyễn Thị Alice',
+          status: 'PENDING', currentStep: 1,
+          fileName: 'to-trinh-goc-3.pdf', fileUrl: '/uploads/to-trinh-goc-3.pdf', fileType: 'application/pdf',
+          effectiveSteps: [
+            { order: 1, name: 'Trưởng phòng duyệt' },
+            { order: 2, name: 'Tổng Giám Đốc', layerKey: 'TGD' }
+          ],
+          effectiveApprovers: { 1: ['admin'], 2: ['admin'] },
+          history: []
+        };
+        DB.submissions.push(midStepSub);
+        openProcessSubmissionModal(midStepSub.id);
+        const midStepBtnsHTML = document.getElementById('subModalActionBtns').innerHTML;
+        check(
+          'submission bước giữa (không phải cuối, không phải TRO_LY_THU_KY): nút "Yêu Cầu Bổ Sung" VẪN CHỈ là REQUEST_CHANGES trực tiếp, không có hộp lựa chọn — không bị ảnh hưởng bởi thay đổi bước cuối',
+          midStepBtnsHTML.includes('data-op="confirmProcessSubmission"') && midStepBtnsHTML.includes('data-arg0="REQUEST_CHANGES"') &&
+            !midStepBtnsHTML.includes('data-op="openTroLyThuKyBoSungChoice"'),
+          midStepBtnsHTML
+        );
       }
 
       return results;

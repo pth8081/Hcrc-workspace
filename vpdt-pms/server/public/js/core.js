@@ -6193,6 +6193,17 @@ function canManagePaymentRequestsClient(user) {
   return !!(user?.perms?.admin || user?.perms?.paymentManage);
 }
 
+// hasActivePaymentRequestForSourceClient() — bản sao client-side của hasActivePaymentRequestForSource()
+// (lib/recordActions.js, v15.8, LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên) — đặt ở core.js (luôn nạp
+// sẵn) vì cần gọi được từ nhiều module lazy-load khác nhau (module-hopdong.js/module-office.js/
+// module-thanhtoan.js), không chỉ riêng module Thanh Toán. paymentStatus của nguồn (Hợp đồng/officeReqs)
+// giờ CHỈ đổi CHO_THANH_TOAN khi đề nghị thanh toán duyệt xong (không còn ngay lúc tạo NHÁP nữa) — các
+// gate "nguồn đang bận, không cho mở thêm 1 chu kỳ nữa" phải kiểm tra thẳng danh sách đề nghị thay vì chỉ
+// dựa vào paymentStatus.
+function hasActivePaymentRequestForSourceClient(sourceModule, sourceId) {
+  return (DB.paymentRequests || []).some(pr => pr.sourceModule === sourceModule && pr.sourceId === sourceId && pr.status !== 'PAID');
+}
+
 // canAggregateReportsClient() - CHUYEN tu module-baocaodinhky-nhap.js sang day (Ha tang: nap module theo
 // cum, dot 7) - buildDashboardCards() (core-dashboard.js, luon nap san) goi thang ham nay o MOI lan mo
 // trang chu (khong the de nam o 1 file module-*.js duoc nap luoi).

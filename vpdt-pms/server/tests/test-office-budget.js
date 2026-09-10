@@ -458,7 +458,11 @@ async function run() {
     await page.evaluate((id) => startOfficePaymentAction(id), office1.id);
     await confirmPending();
     const office1AfterStartPayment = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office1.id);
-    check('"Chuyển Sang Thanh Toán" thành công -> paymentStatus rời khỏi CHUA_THANH_TOAN', office1AfterStartPayment.paymentStatus === 'CHO_THANH_TOAN', office1AfterStartPayment.paymentStatus);
+    // v15.8: paymentStatus KHÔNG còn đổi CHO_THANH_TOAN ngay lúc "Chuyển Sang Thanh Toán" nữa — chỉ đổi
+    // khi đề nghị vừa sinh ra được duyệt XONG theo phòng ban (xem routes/workflow.js); việc khoá
+    // uploadSigned/startPayment ngay sau đây giờ dựa vào hasActivePaymentRequestForSourceClient() (đã có
+    // đề nghị đang mở), không còn phụ thuộc paymentStatus.
+    check('"Chuyển Sang Thanh Toán" thành công -> paymentStatus VẪN CHUA_THANH_TOAN (chỉ đổi CHO_THANH_TOAN khi đề nghị vừa tạo được duyệt xong)', office1AfterStartPayment.paymentStatus === 'CHUA_THANH_TOAN', office1AfterStartPayment.paymentStatus);
 
     await goToOffice('MUA_BAN');
     const office1AfterStartPaymentOptions = await officeSecondaryOptionValues(office1.id);

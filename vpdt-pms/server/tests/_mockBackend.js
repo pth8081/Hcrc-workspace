@@ -86,6 +86,15 @@ function createMockApi(state) {
       comment: payload && payload.comment, extraFields: payload && payload.extraFields,
       appData: state.appData, existingCollection: null
     });
+    // v15.8 — khớp routes/workflow.js thật: đề nghị thanh toán (paymentRequests) duyệt XONG toàn bộ quy
+    // trình (transition COMPLETED) -> ghi ngược paymentStatus = CHO_THANH_TOAN về bản ghi nguồn (Hợp
+    // đồng/officeReqs) NGAY LÚC NÀY (không còn ngay lúc tạo NHÁP như trước v15.8).
+    if (moduleKey === 'paymentRequests' && outcome.transition.type === 'COMPLETED'
+        && outcome.item.sourceModule && outcome.item.sourceId != null) {
+      const sourceCollection = outcome.item.sourceModule === 'CONTRACT' ? state.collections.contracts : state.collections.officeReqs;
+      const src = (sourceCollection || []).find(x => x.id === outcome.item.sourceId);
+      if (src && src.paymentStatus === 'CHUA_THANH_TOAN') src.paymentStatus = 'CHO_THANH_TOAN';
+    }
     return { item: outcome.item, transition: outcome.transition, createdTask: null };
   }
 
@@ -105,11 +114,11 @@ function createMockApi(state) {
         return { item: result };
       }
       if (action === 'upload-signed') {
-        const result = recordActions.uploadContractSignedFile(payload, user, item);
+        const result = recordActions.uploadContractSignedFile(payload, user, item, state.collections.paymentRequests);
         return { item: result };
       }
       if (action === 'start-payment') {
-        const draft = recordActions.startContractPayment(user, item);
+        const draft = recordActions.startContractPayment(user, item, undefined, state.collections.paymentRequests);
         const paymentRequests = createPaymentRequestsFromDraft(draft);
         return { item, paymentRequest: paymentRequests[0], paymentRequests };
       }
@@ -124,11 +133,11 @@ function createMockApi(state) {
       const id = Number(idOrAction);
       const item = findOr404(state.collections.officeReqs, id);
       if (action === 'upload-signed') {
-        const result = recordActions.uploadOfficeSignedFile(payload, user, item);
+        const result = recordActions.uploadOfficeSignedFile(payload, user, item, state.collections.paymentRequests);
         return { item: result };
       }
       if (action === 'start-payment') {
-        const draft = recordActions.startOfficePayment(user, item);
+        const draft = recordActions.startOfficePayment(user, item, undefined, state.collections.paymentRequests);
         const paymentRequests = createPaymentRequestsFromDraft(draft);
         return { item, paymentRequest: paymentRequests[0], paymentRequests };
       }
@@ -150,10 +159,10 @@ function createMockApi(state) {
         let draft, result;
         if (sourceModule === 'CONTRACT') {
           result = findOr404(state.collections.contracts, sourceId);
-          draft = recordActions.startContractPayment(user, result, overrides);
+          draft = recordActions.startContractPayment(user, result, overrides, state.collections.paymentRequests);
         } else if (['MUA_BAN', 'SUA_CHUA', 'DAU_TU'].includes(sourceModule)) {
           result = findOr404(state.collections.officeReqs, sourceId);
-          draft = recordActions.startOfficePayment(user, result, overrides);
+          draft = recordActions.startOfficePayment(user, result, overrides, state.collections.paymentRequests);
         } else {
           throw new HttpError(400, 'Loại đề nghị không hợp lệ');
         }

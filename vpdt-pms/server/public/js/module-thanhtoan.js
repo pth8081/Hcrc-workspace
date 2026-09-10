@@ -98,9 +98,13 @@ function populatePaymentSourceRecordOptions() {
   // ở lib/recordActions.js); đề xuất Tổng Hợp (Mua Bán/Sửa Chữa/Đầu Tư) chỉ cần ĐÃ TẢI LÊN (signedFileUrl,
   // khớp startOfficePayment() — module này không có bước duyệt riêng cho Tài liệu ký) — 2 điều kiện khác
   // nhau tuỳ nguồn, giữ đúng logic gốc.
-  const unpaid = sourceType === 'CONTRACT'
+  // v15.8: paymentStatus CHUA_THANH_TOAN không còn đủ để biết hồ sơ này "rảnh" — nó giữ nguyên
+  // CHUA_THANH_TOAN suốt lúc đề nghị đang DRAFT/PENDING/NEED_INFO (chỉ đổi khi duyệt xong), nên phải loại
+  // thêm hồ sơ đang có đề nghị thanh toán chưa PAID (xem hasActivePaymentRequestForSourceClient() ở core.js).
+  const unpaid = (sourceType === 'CONTRACT'
     ? DB.contracts.filter(c => c.paymentStatus === 'CHUA_THANH_TOAN')
-    : DB.officeReqs.filter(o => o.subType === sourceType && o.paymentStatus === 'CHUA_THANH_TOAN');
+    : DB.officeReqs.filter(o => o.subType === sourceType && o.paymentStatus === 'CHUA_THANH_TOAN')
+  ).filter(r => !hasActivePaymentRequestForSourceClient(sourceType, r.id));
   const isReady = r => sourceType === 'CONTRACT' ? (r.signedFileUrl && r.signedFileStatus === 'APPROVED') : !!r.signedFileUrl;
   const eligible = unpaid.filter(isReady);
   // Hồ sơ chưa thanh toán nhưng CHƯA đủ điều kiện — liệt kê riêng dạng disabled để người dùng hiểu vì
@@ -174,7 +178,9 @@ async function submitManualPaymentRequest(e) {
     logSystemAction('OFFICE', 'EDIT_PAYMENT_REQUEST', `Cập nhật đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
     alert('✅ Đã cập nhật đề nghị thanh toán!');
     cancelEditPaymentRequest();
-    setPaymentSubTab('APPROVE');
+    // v15.8 — nút "✏️ Sửa" giờ chỉ còn xuất hiện ở "🗂️ Quản Lý Thanh Toán" (đã dời khỏi "✅ Xác Nhận Đề
+    // Nghị Thanh Toán") nên sửa xong quay lại ĐÚNG tab đó, không còn quay lại APPROVE như trước.
+    setPaymentSubTab('MANAGE');
     return;
   }
 
@@ -287,7 +293,11 @@ function openEditPaymentRequest(id) {
 
 // DRAFT — MỚI (sub-tab "🗂️ Quản Lý Thanh Toán"): đề nghị vừa "🧾 Lập Thanh Toán" (module Hợp Đồng) hoặc
 // đang tự lập/sửa đợt, CHƯA gửi duyệt (số tiền từng đợt CHƯA bắt buộc).
-const PAYMENT_STATUS_LABELS = { DRAFT: '📝 Nháp — chưa gửi duyệt', PENDING: '⏳ Chờ duyệt', NEED_INFO: '📝 Cần bổ sung', APPROVED: '✅ Đã duyệt (chờ xác nhận)', PAID: '💰 Đã thanh toán' };
+// v15.8 — APPROVED đổi nhãn thành "Đang chờ thanh toán" (khớp đúng nhãn CHO_THANH_TOAN "Chờ thanh toán"
+// ghi ngược về Hợp đồng/Mua Bán/Sửa Chữa lúc này — xem lib/recordActions.js hasActivePaymentRequestForSource(),
+// routes/workflow.js) — trước là "Đã duyệt (chờ xác nhận)", đổi tên cho khớp đúng tinh thần nghiệp vụ
+// "khi đề nghị được phê duyệt thì trạng thái ở tổng... sẽ là đang chờ thanh toán".
+const PAYMENT_STATUS_LABELS = { DRAFT: '📝 Nháp — chưa gửi duyệt', PENDING: '⏳ Chờ duyệt', NEED_INFO: '📝 Cần bổ sung', APPROVED: '⏳ Đang chờ thanh toán', PAID: '💰 Đã thanh toán' };
 const PAYMENT_STATUS_BADGE_CLS = { DRAFT: 'bg-gray-200 text-gray-700', PENDING: 'bg-amber-100 text-amber-800', NEED_INFO: 'bg-orange-100 text-orange-800', APPROVED: 'bg-blue-100 text-blue-800', PAID: 'bg-green-100 text-green-800' };
 const PAYMENT_SOURCE_LABELS = { CONTRACT: '📄 Hợp đồng', MUA_BAN: '🛒 Mua Bán', SUA_CHUA: '🔧 Sửa Chữa', MANUAL: '✍️ Thủ công' };
 
@@ -331,9 +341,15 @@ function paymentCycleBadgeHTML(pr) {
   return `<span class="inline-block px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[10px]">🔗 Đợt ${pr.cycleIndex}/${pr.cycleTotal}</span>`;
 }
 
-function paymentInstallmentDeadlineBadge(installment) {
+// pr (tuỳ chọn) — v15.8: đợt CHƯA xác nhận của đề nghị đã APPROVED ("Đang chờ thanh toán") hiện badge
+// riêng nếu không có cảnh báo hạn nào cấp bách hơn (quá hạn/sắp đến hạn vẫn ưu tiên hiện trước, đúng tinh
+// thần "khi đề nghị được phê duyệt thì trạng thái... ở các đợt thanh toán khởi đầu sẽ là đang chờ thanh toán").
+function paymentInstallmentDeadlineBadge(installment, pr) {
   if (installment?.confirmed) return '<span class="inline-block px-1.5 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[10px]">✅ Đã thanh toán</span>';
-  return PAYMENT_INSTALLMENT_DEADLINE_BADGE[computePaymentInstallmentDeadlineStatusClient(installment)] || '';
+  const deadlineBadge = PAYMENT_INSTALLMENT_DEADLINE_BADGE[computePaymentInstallmentDeadlineStatusClient(installment)];
+  if (deadlineBadge) return deadlineBadge;
+  if (pr?.status === 'APPROVED') return '<span class="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-[10px]">⏳ Đang chờ thanh toán</span>';
+  return '';
 }
 
 // Trạng thái TỔNG HỢP ("tổng đợt") của 1 đề nghị — bản sao client-side của
@@ -539,7 +555,15 @@ function renderPaymentManageTab() {
   // hoàn tất thanh toán (bug nghiệp vụ #1: "mà không bị biến mất như bây giờ sau khi xác nhận hoàn thành
   // thanh toán") — giờ giữ lại PAID để người tạo vẫn theo dõi được trạng thái/lịch sử tại đây, không chỉ
   // ở sub-tab "✅ Xác Nhận Đề Nghị Thanh Toán".
-  const all = (DB.paymentRequests || []).filter(pr => ['DRAFT', 'PENDING', 'APPROVED', 'PAID'].includes(pr.status));
+  // v15.8 — sắp đề nghị MỚI lên đầu (yêu cầu nghiệp vụ: "đề nghị mới sẽ sắp xếp lên đầu" khi chuyển qua
+  // tab này) — id sinh từ Date.now() (+i cho các bản ghi tách theo lô, xem createPaymentRequestsFromDraft()
+  // ở routes/records.js) nên id lớn hơn luôn là bản ghi mới hơn, sort giảm dần là đủ, không cần field
+  // thời gian riêng.
+  // NEED_INFO PHẢI có trong danh sách này (trước đây thiếu — hồ sơ "Cần bổ sung" sẽ hoàn toàn không hiện
+  // ở đâu cả nếu bỏ sót, vì giờ hành động Sửa/Yêu Cầu Bổ Sung đã dời hẳn về tab này, không còn ở
+  // "✅ Xác Nhận Đề Nghị Thanh Toán" nữa).
+  const all = (DB.paymentRequests || []).filter(pr => ['DRAFT', 'PENDING', 'NEED_INFO', 'APPROVED', 'PAID'].includes(pr.status))
+    .sort((a, b) => (b.id || 0) - (a.id || 0));
   populatePaymentManageFilterOptions(all);
   const list = all.filter(pr => !managePaymentFilterSource || pr.sourceCode === managePaymentFilterSource);
   if (!list.length) {
@@ -555,7 +579,7 @@ function renderPaymentManageTab() {
         <span>${escapeHtml(it.description || '')} — ${it.amount != null ? it.amount.toLocaleString('vi-VN') + ' VNĐ' : '<span class="italic text-gray-400">(chưa nhập số tiền)</span>'}${it.dueDate ? ` — hạn ${escapeHtml(it.dueDate)}` : ''}
           ${it.confirmFileUrl ? `<button type="button" data-op="viewPaymentConfirmFile" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 hover:underline ml-1">📎 Xem tệp</button>` : ''}
         </span>
-        ${paymentInstallmentDeadlineBadge(it)}
+        ${paymentInstallmentDeadlineBadge(it, pr)}
       </div>
     `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào.</p>';
     const lumpFileRow = pr.lumpConfirmFileUrl ? `
@@ -606,7 +630,31 @@ function renderPaymentManageTab() {
           <div class="flex justify-end gap-2 pt-1">
             <button type="button" data-op="openPaymentManageEdit" data-arg0="${pr.id}" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✏️ Lập / Sửa Đợt Thanh Toán</button>
           </div>
-        `) : `<div class="border-t pt-2">${readOnlyRows}${lumpFileRow}<div class="mt-1"><span class="text-[11px] font-semibold text-gray-600">📎 Hồ Sơ Đề Nghị Thanh Toán:</span>${requestFilesListHTML}</div></div>`}
+        `) : (() => {
+          // v15.8 — "Sửa"/"Xác nhận duyệt (theo phòng ban)"/"Yêu Cầu Bổ Sung"/"Xoá" dời hẳn về ĐÂY (tab
+          // "Quản Lý Thanh Toán") — sub-tab "✅ Xác Nhận Đề Nghị Thanh Toán" giờ CHỈ còn giữ đúng 2 nút
+          // xác nhận ĐÃ THANH TOÁN (từng đợt/toàn bộ, xem renderPaymentRequests()), khớp yêu cầu nghiệp vụ
+          // "bộ phận kế toán sẽ được phân quyền ở sub-tab đó chỉ để ấn xác nhận khi đã thanh toán".
+          const mgmtBtns = [];
+          if (pr.status !== 'DRAFT') {
+            if (canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO')) {
+              mgmtBtns.push(`<button type="button" data-op="openEditPaymentRequest" data-arg0="${pr.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>`);
+            }
+            if (canApprovePaymentRequestStepClient(currentUser, pr)) {
+              mgmtBtns.push(`<button type="button" data-op="approvePaymentRequestAction" data-arg0="${pr.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Duyệt</button>`);
+            }
+            if (canManage && pr.status === 'PENDING') {
+              mgmtBtns.push(`<button type="button" data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>`);
+            }
+            if (currentUser.perms?.admin && pr.status !== 'PAID') {
+              mgmtBtns.push(`<button type="button" data-op="deletePaymentRequestAction" data-arg0="${pr.id}" class="bg-red-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>`);
+            }
+          }
+          return `
+            <div class="border-t pt-2">${readOnlyRows}${lumpFileRow}<div class="mt-1"><span class="text-[11px] font-semibold text-gray-600">📎 Hồ Sơ Đề Nghị Thanh Toán:</span>${requestFilesListHTML}</div></div>
+            ${mgmtBtns.length ? `<div class="flex justify-end flex-wrap gap-2 pt-1">${mgmtBtns.join('')}</div>` : ''}
+          `;
+        })()}
       </div>
     `;
   }).join('');
@@ -681,11 +729,8 @@ function renderPaymentRequests() {
           <div class="mt-1">${paymentOverallStatusBadge(pr)}</div>
         </td>
         <td class="border p-2 text-center space-y-1">
-          ${canManage && (pr.status === 'PENDING' || pr.status === 'NEED_INFO') ? `<button data-op="openEditPaymentRequest" data-arg0="${pr.id}" class="block w-full bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>` : ''}
-          ${canApprovePaymentRequestStepClient(currentUser, pr) ? `<button data-op="approvePaymentRequestAction" data-arg0="${pr.id}" class="block w-full bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác nhận</button>` : ''}
-          ${canManage && pr.status === 'PENDING' ? `<button data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${canManage && pr.status === 'APPROVED' && isOneTime ? `<button data-op="confirmPaymentRequestLumpSumAction" data-arg0="${pr.id}" class="block w-full bg-cyan-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-cyan-700">💰 Xác Nhận Toàn Bộ</button>` : ''}
-          ${currentUser.perms?.admin && pr.status !== 'PAID' ? `<button data-op="deletePaymentRequestAction" data-arg0="${pr.id}" class="block w-full bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-600">🗑️ Xoá</button>` : ''}
+          ${pr.status !== 'APPROVED' ? '<span class="text-[11px] text-gray-400 italic">Không có thao tác</span>' : ''}
         </td>
       </tr>
     `;
@@ -721,11 +766,25 @@ function approvePaymentRequestAction(id) {
       if (idx !== -1) DB.paymentRequests[idx] = updated;
       logSystemAction('OFFICE', 'APPROVE_PAYMENT_REQUEST', `Xác nhận đề nghị thanh toán [${updated.title}]`, 'SUCCESS', String(updated.id));
       let msg = '✅ Đã ghi nhận phê duyệt của bạn!';
-      if (transition.type === 'COMPLETED') msg = '✅ Xác nhận đề nghị thanh toán thành công — có thể xác nhận thanh toán từng đợt!';
+      if (transition.type === 'COMPLETED') {
+        msg = '✅ Xác nhận đề nghị thanh toán thành công — có thể xác nhận thanh toán từng đợt!';
+        // v15.8 — duyệt xong TOÀN BỘ quy trình thì server đã ghi ngược paymentStatus = CHO_THANH_TOAN về
+        // bản ghi nguồn (routes/workflow.js) — đồng bộ cục bộ để UI (badge "Chờ thanh toán" ở Hợp đồng/
+        // Mua Bán/Sửa Chữa) cập nhật ngay, không cần tải lại trang. Chỉ gán khi đang CHUA_THANH_TOAN,
+        // khớp đúng guard phía server (item.paymentStatus === 'CHUA_THANH_TOAN' mới ghi đè).
+        if (updated.sourceModule && updated.sourceId != null) {
+          const coll = updated.sourceModule === 'CONTRACT' ? DB.contracts : DB.officeReqs;
+          const src = coll.find(x => x.id === updated.sourceId);
+          if (src && src.paymentStatus === 'CHUA_THANH_TOAN') src.paymentStatus = 'CHO_THANH_TOAN';
+        }
+        if (activeContractSubTab) renderContracts();
+        if (activeOfficeSubTab && activeOfficeSubTab !== 'PAYMENT') renderOfficeReqs();
+      }
       else if (transition.type === 'ADVANCED') msg = getStepAdvanceMessage(transition.stepApprovers);
       else if (transition.type === 'PARTIAL_APPROVE') msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
       alert(msg);
       renderPaymentRequests();
+      renderPaymentManageTab();
       refreshApprovalSurfaces();
     })
   });
@@ -751,6 +810,7 @@ function requestPaymentInfoAction(id) {
       if (idx !== -1) DB.paymentRequests[idx] = updated;
       logSystemAction('OFFICE', 'REQUEST_PAYMENT_INFO', `Yêu cầu bổ sung đề nghị thanh toán [${updated.title}]: ${comment.trim()}`, 'SUCCESS', String(updated.id));
       renderPaymentRequests();
+      renderPaymentManageTab();
     }
   });
 }

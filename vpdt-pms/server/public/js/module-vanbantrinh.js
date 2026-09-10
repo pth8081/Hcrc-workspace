@@ -659,7 +659,12 @@ function openProcessSubmissionModal(subId) {
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
   // Lớp Bộ phận Trợ Lý/Thư Ký (luôn ngay TRƯỚC TGD) có thêm lựa chọn "Thay thế toàn bộ tờ trình" khi
   // ấn Yêu Cầu Bổ Sung — xem openTroLyThuKyBoSungChoice()/lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
+  // v15.8 — GIỮ NGUYÊN 100% hành vi này cho TRO_LY_THU_KY, CHỈ THÊM lựa chọn tương tự ở ĐÚNG bước phê
+  // duyệt CUỐI CÙNG của quy trình (isFinalStep, bất kể layerKey là gì — TGD/PTGD/GD_PGD tuỳ mức "Cấp Phê
+  // Duyệt Cuối Cùng" người trình đã chọn), khớp gate server ở lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
   const currentLayerKey = wfConfig.steps?.[sub.currentStep - 1]?.layerKey;
+  const isFinalStep = sub.currentStep === wfConfig.steps?.length;
+  const currentStepLabel = wfConfig.steps?.[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
 
   const actionBtns = document.getElementById('subModalActionBtns');
   if (sub.pendingFileProposal) {
@@ -667,8 +672,8 @@ function openProcessSubmissionModal(subId) {
     // không ai được Duyệt/Từ chối/Yêu cầu bổ sung thêm lúc này (khớp guard ở server).
     actionBtns.innerHTML = `<span class="text-amber-600 italic text-xs font-semibold">⏳ Đang chờ người trình (${escapeHtml(sub.creatorName)}) xác nhận đề xuất thay thế tờ trình của ${escapeHtml(sub.pendingFileProposal.proposedByName)} (${escapeHtml(sub.pendingFileProposal.proposedAt)}).</span>`;
   } else if (canApprove) {
-    const boSungBtnHTML = currentLayerKey === 'TRO_LY_THU_KY'
-      ? `<button data-op="openTroLyThuKyBoSungChoice" data-arg0="${sub.id}" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Bộ phận Trợ Lý/Thư Ký: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
+    const boSungBtnHTML = (currentLayerKey === 'TRO_LY_THU_KY' || isFinalStep)
+      ? `<button data-op="openTroLyThuKyBoSungChoice" data-arg0="${sub.id}" data-arg1="${escapeHtml(currentStepLabel)}" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="${escapeHtml(currentStepLabel)}: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
       : `<button data-op="confirmProcessSubmission" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>`;
     actionBtns.innerHTML = `
       <button data-op="confirmProcessSubmission" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
@@ -682,17 +687,22 @@ function openProcessSubmissionModal(subId) {
   document.getElementById('submissionProcessModal').classList.remove('hidden');
 }
 
-// ===== Trợ Lý/Thư Ký — đề xuất thay thế toàn bộ tệp tờ trình (thay vì chỉ bình luận bổ sung) =====
-// Chỉ hiện ở lớp TRO_LY_THU_KY (xem openProcessSubmissionModal() ở trên). Dùng chung khung
-// showConfirmModal() nhưng đặt 2 nút lựa chọn NGAY TRONG bodyHTML (thay vì nút Đồng Ý/Hủy mặc định
-// của modal) — vì "Hủy" ở đây phải TỰ THỰC HIỆN luồng REQUEST_CHANGES cũ (đóng modal này rồi gọi
-// confirmProcessSubmission('REQUEST_CHANGES'), dùng lại ô Ý kiến chỉ đạo có sẵn ở modal Bút Phê phía
+// ===== Trợ Lý/Thư Ký (+ bước phê duyệt cuối cùng, v15.8) — đề xuất thay thế toàn bộ tệp tờ trình (thay
+// vì chỉ bình luận bổ sung) =====
+// Hiện ở lớp TRO_LY_THU_KY HOẶC ở ĐÚNG bước phê duyệt cuối cùng của quy trình (xem
+// openProcessSubmissionModal() ở trên + gate tương ứng lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT).
+// stepLabel — tên bước hiện tại (VD "Bộ Phận Trợ Lý/Thư Ký"/"Tổng Giám Đốc"/"Phó Tổng Giám Đốc"...),
+// dùng để hiển thị đúng ngữ cảnh thay vì hard-code "Trợ Lý/Thư Ký" (đợt này áp dụng cho cả bước khác).
+// Dùng chung khung showConfirmModal() nhưng đặt 2 nút lựa chọn NGAY TRONG bodyHTML (thay vì nút Đồng Ý/
+// Hủy mặc định của modal) — vì "Hủy" ở đây phải TỰ THỰC HIỆN luồng REQUEST_CHANGES cũ (đóng modal này rồi
+// gọi confirmProcessSubmission('REQUEST_CHANGES'), dùng lại ô Ý kiến chỉ đạo có sẵn ở modal Bút Phê phía
 // sau) chứ không đơn thuần đóng modal như nút "Hủy" mặc định.
-function openTroLyThuKyBoSungChoice(subId) {
+function openTroLyThuKyBoSungChoice(subId, stepLabel) {
+  const label = stepLabel || 'Bộ Phận Trợ Lý/Thư Ký';
   showConfirmModal({
-    title: '🔄 Yêu Cầu Bổ Sung — Bộ Phận Trợ Lý/Thư Ký',
+    title: `🔄 Yêu Cầu Bổ Sung — ${label}`,
     bodyHTML: `
-      <p class="mb-3">Bộ phận Trợ Lý/Thư Ký có thể xử lý theo 1 trong 2 cách:</p>
+      <p class="mb-3">Người duyệt bước "${escapeHtml(label)}" có thể xử lý theo 1 trong 2 cách:</p>
       <div class="flex flex-col gap-2">
         <button type="button" data-op-seq="closeGenericConfirmModal()|openTroLyThuKyProposeFileForm(${subId})" class="w-full text-left border border-blue-300 bg-blue-50 hover:bg-blue-100 rounded p-2">
           <div class="font-bold text-blue-800">📤 Đồng Ý — Thay Thế Toàn Bộ Tờ Trình</div>

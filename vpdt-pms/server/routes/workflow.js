@@ -152,6 +152,22 @@ router.post('/:module/:id/:action', async (req, res) => {
       await insertTask(createdTask);
     }
 
+    // v15.8 — đề nghị thanh toán (paymentRequests) duyệt xong TOÀN BỘ quy trình theo bước/phòng ban
+    // (transition COMPLETED, item.status -> APPROVED) -> ghi ngược paymentStatus = CHO_THANH_TOAN về bản
+    // ghi nguồn (Hợp đồng/officeReqs) NGAY LÚC NÀY — trước đây (< v15.8) việc này bị gán quá sớm, ngay
+    // lúc tạo NHÁP (xem lib/recordActions.js startContractPayment()/startOfficePayment()), khiến "Chờ
+    // thanh toán" hiện ra dù đề nghị còn chưa qua duyệt phòng ban. Cùng khuôn khối ghi ngược PAID ở
+    // routes/records.js (withPaymentConfirmAction()) — chỉ khác: ghi ngay (không cần đợi isCycleGroupFullyResolved(),
+    // vì CHO_THANH_TOAN chỉ có ý nghĩa "có 1 đợt đang xử lý", không cần đợi CẢ lô cùng xong như DA_THANH_TOAN).
+    if (moduleKey === 'paymentRequests' && transition.type === 'COMPLETED'
+        && resultItem.sourceModule && resultItem.sourceId != null) {
+      const sourceCollection = resultItem.sourceModule === 'CONTRACT' ? 'contracts' : 'officeReqs';
+      await withLockedRecordForCollection(sourceCollection, resultItem.sourceId, (item) => {
+        if (item.paymentStatus === 'CHUA_THANH_TOAN') item.paymentStatus = 'CHO_THANH_TOAN';
+        return item;
+      }).catch(() => {}); // nguồn có thể đã bị xoá — không chặn việc đề nghị thanh toán đã duyệt hợp lệ
+    }
+
     res.json({ ok: true, item: resultItem, transition, createdTask });
   } catch (err) {
     if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });

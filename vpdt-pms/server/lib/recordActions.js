@@ -1454,7 +1454,21 @@ function canManageContractPayment(user, contract) {
   return !!(user.perms?.admin || scopeAllows(user, user.perms?.contractCreate, contract.custodianDept || contract.dept));
 }
 
-function uploadContractSignedFile(payload, user, contract) {
+// v15.8 — trước đây contract.paymentStatus/item.paymentStatus chuyển sang CHO_THANH_TOAN NGAY lúc tạo
+// NHÁP đề nghị thanh toán (startContractPayment()/startOfficePayment() bên dưới), tức là TRƯỚC KHI qua
+// duyệt phòng ban — sai với nghiệp vụ mong muốn ("Chờ thanh toán" chỉ nên đúng nghĩa SAU khi đề nghị đã
+// được duyệt xong, xem routes/workflow.js). Giờ paymentStatus CHỈ đổi khi quy trình duyệt phòng ban của
+// đề nghị thanh toán HOÀN TẤT (transition COMPLETED) — trong lúc đề nghị còn DRAFT/PENDING/NEED_INFO,
+// nguồn vẫn hiện CHUA_THANH_TOAN. Vì vậy các gate "đã có 1 chu kỳ đang chạy, không cho mở thêm" KHÔNG còn
+// dựa được vào paymentStatus nữa (nó chưa đổi ở giai đoạn này) — thay bằng kiểm tra trực tiếp: nguồn này
+// có đề nghị thanh toán nào CHƯA "PAID" hay không (DRAFT/PENDING/NEED_INFO/APPROVED đều tính là đang
+// chạy dở). Dùng chung cho cả gate "Chuyển Sang Thanh Toán" lẫn gate "khoá Tài liệu ký khi đang thanh
+// toán" (2 hàm ngay bên dưới).
+function hasActivePaymentRequestForSource(allPaymentRequests, sourceModule, sourceId) {
+  return (allPaymentRequests || []).some(pr => pr.sourceModule === sourceModule && pr.sourceId === sourceId && pr.status !== 'PAID');
+}
+
+function uploadContractSignedFile(payload, user, contract, allPaymentRequests) {
   // Phụ lục CŨNG có "Tài liệu ký" + luồng thanh toán riêng của chính nó (độc lập với hợp đồng gốc) —
   // trước đây chặn cứng contract.isAddendum, khiến phụ lục đã duyệt xong không có cách nào hoàn tất hồ
   // sơ lưu trữ "Phụ lục hợp đồng đã ký".
@@ -1465,8 +1479,10 @@ function uploadContractSignedFile(payload, user, contract) {
   // kiện, cùng kiểu lỗi). Trước đây Hợp Đồng KHÔNG có lớp này: tuy signedFileStatus === 'APPROVED' đã
   // chặn được đa số trường hợp, hồ sơ có Tài liệu ký đang PENDING/REJECTED vẫn "Chuyển Sang Thanh Toán"
   // được ở dữ liệu cũ (trước khi có bước duyệt tài liệu ký) — khi đó tệp căn cứ thanh toán vẫn bị thay
-  // sau khi tiền đã đi, đúng lỗ hổng mà officeReqs đã vá.
-  if (contract.signedFileUrl && contract.paymentStatus !== 'CHUA_THANH_TOAN') {
+  // sau khi tiền đã đi, đúng lỗ hổng mà officeReqs đã vá. "|| hasActivePaymentRequestForSource(...)" —
+  // v15.8: paymentStatus giờ chỉ đổi SAU khi duyệt xong nên cần thêm điều kiện này để vẫn khoá được
+  // trong lúc đề nghị đang DRAFT/PENDING/NEED_INFO (paymentStatus lúc đó vẫn còn CHUA_THANH_TOAN).
+  if (contract.signedFileUrl && (contract.paymentStatus !== 'CHUA_THANH_TOAN' || hasActivePaymentRequestForSource(allPaymentRequests, 'CONTRACT', contract.id))) {
     throw new HttpError(409, 'Đã chuyển sang thanh toán — không thể thay đổi Tài liệu ký nữa');
   }
   const { fileName, fileType, fileUrl, customData } = payload || {};
@@ -1552,7 +1568,7 @@ function normalizePaymentRequestFiles(raw) {
 // nghị ở trạng thái DRAFT (số tiền từng đợt CHƯA bắt buộc — chỉ bắt buộc khi bấm "Chuyển Xác Nhận Thanh
 // Toán", xem submitPaymentRequest() bên dưới), rồi điều hướng người dùng sang sub-tab "🗂️ Quản Lý Thanh
 // Toán" để tự lập/sửa các đợt thanh toán trước khi gửi duyệt.
-function startContractPayment(user, contract, overrides) {
+function startContractPayment(user, contract, overrides, allPaymentRequests) {
   // Phụ lục có thể phát sinh thanh toán riêng (VD bổ sung khối lượng/giá trị) — chuyển sang thanh toán
   // độc lập với hợp đồng gốc, sourceId/sourceCode dưới đây luôn theo ĐÚNG bản ghi (gốc hay phụ lục)
   // đang gọi hàm này, nên "Xác nhận đề nghị thanh toán" hiện đúng 2 dòng tách biệt khi cả 2 cùng có đợt
@@ -1563,11 +1579,20 @@ function startContractPayment(user, contract, overrides) {
   // "Thanh toán định kỳ" — sau khi 1 chu kỳ đã HOÀN TẤT (DA_THANH_TOAN), cho phép bắt đầu chu kỳ MỚI
   // (contract.paymentType === 'PERIODIC', xem confirmPaymentInstallment()/routes/records.js ghi ngược
   // paymentStatus về CHUA_THANH_TOAN thay vì DA_THANH_TOAN như "Thanh toán 1 lần"). VẪN chặn cứng khi
-  // đang CHO_THANH_TOAN (1 chu kỳ đang dở dang) cho CẢ 2 loại — không cho mở đồng thời 2 chu kỳ.
-  const canStart = contract.paymentStatus === 'CHUA_THANH_TOAN'
-    || (contract.paymentType === 'PERIODIC' && contract.paymentStatus === 'DA_THANH_TOAN');
-  if (!canStart) throw new HttpError(409, 'Hợp đồng không ở trạng thái chưa thanh toán');
-  contract.paymentStatus = 'CHO_THANH_TOAN';
+  // đang có đề nghị thanh toán nào chưa PAID (1 chu kỳ đang dở dang) cho CẢ 2 loại — không cho mở đồng
+  // thời 2 chu kỳ. v15.8: KHÔNG còn dựa vào paymentStatus === 'CHO_THANH_TOAN' để phát hiện "đang dở
+  // dang" nữa (paymentStatus giờ chỉ đổi SAU khi duyệt xong, xem hasActivePaymentRequestForSource() ở
+  // trên) — kiểm tra thẳng có đề nghị nào tham chiếu tới hợp đồng này mà chưa PAID hay không.
+  const hasActiveRequest = hasActivePaymentRequestForSource(allPaymentRequests, 'CONTRACT', contract.id);
+  const canStart = !hasActiveRequest && (contract.paymentStatus === 'CHUA_THANH_TOAN'
+    || (contract.paymentType === 'PERIODIC' && contract.paymentStatus === 'DA_THANH_TOAN'));
+  if (!canStart) {
+    throw new HttpError(409, hasActiveRequest
+      ? 'Hợp đồng đang có đề nghị thanh toán chưa hoàn tất — vui lòng xử lý xong (hoặc xoá) đề nghị đó trước khi chuyển sang thanh toán mới'
+      : 'Hợp đồng không ở trạng thái chưa thanh toán');
+  }
+  // paymentStatus KHÔNG còn đổi ngay ở đây nữa — sẽ được ghi CHO_THANH_TOAN khi đề nghị thanh toán vừa
+  // tạo ra ở đây duyệt xong (routes/workflow.js, transition COMPLETED của module paymentRequests).
   const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
   const installments = overrideInstallments || buildPaymentInstallments(contract.paymentInstallments, contract.amount, 'Thanh toán toàn bộ giá trị hợp đồng');
   const base = {
@@ -1664,7 +1689,7 @@ function canManageOfficePayment(user, item) {
   return !!(user.perms?.admin || (scopeAllows(user, user.perms?.officeCreate, item.dept) && (!flag || user.perms?.[flag])));
 }
 
-function uploadOfficeSignedFile(payload, user, item) {
+function uploadOfficeSignedFile(payload, user, item, allPaymentRequests) {
   if (!canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền tải lên tài liệu ký cho đề xuất này');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất chưa được phê duyệt xong');
   // Khác Hợp đồng (có quy trình duyệt riêng cho Tài liệu ký, khoá lại khi signedFileStatus==='APPROVED'),
@@ -1672,8 +1697,10 @@ function uploadOfficeSignedFile(payload, user, item) {
   // Vẫn cho tải lại/sửa TRƯỚC KHI bắt đầu chuyển sang thanh toán (paymentStatus vẫn CHUA_THANH_TOAN, vd
   // lỡ chọn nhầm tệp), nhưng khoá cứng ngay khi đã "Chuyển Sang Thanh Toán" hoặc đã thanh toán xong —
   // trước đây không có điều kiện này, tệp căn cứ thanh toán bị thay được ngay cả sau khi tiền đã giải
-  // ngân xong (paymentStatus === 'DA_THANH_TOAN').
-  if (item.signedFileUrl && item.paymentStatus !== 'CHUA_THANH_TOAN') {
+  // ngân xong (paymentStatus === 'DA_THANH_TOAN'). "|| hasActivePaymentRequestForSource(...)" — v15.8:
+  // paymentStatus giờ chỉ đổi SAU khi duyệt xong nên cần thêm điều kiện này để vẫn khoá được trong lúc
+  // đề nghị đang DRAFT/PENDING/NEED_INFO (paymentStatus lúc đó vẫn còn CHUA_THANH_TOAN).
+  if (item.signedFileUrl && (item.paymentStatus !== 'CHUA_THANH_TOAN' || hasActivePaymentRequestForSource(allPaymentRequests, item.subType, item.id))) {
     throw new HttpError(409, 'Đã chuyển sang thanh toán — không thể thay đổi Tài liệu ký nữa');
   }
   const { fileName, fileType, fileUrl } = payload || {};
@@ -1688,11 +1715,19 @@ function uploadOfficeSignedFile(payload, user, item) {
 }
 
 // overrides — cùng ý nghĩa như startContractPayment() ở trên (skipManageGate bỏ qua canManageOfficePayment()).
-function startOfficePayment(user, item, overrides) {
+function startOfficePayment(user, item, overrides, allPaymentRequests) {
   if (!overrides?.skipManageGate && !canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền chuyển đề xuất này sang thanh toán');
   if (!item.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
-  if (item.paymentStatus !== 'CHUA_THANH_TOAN') throw new HttpError(409, 'Đề xuất không ở trạng thái chưa thanh toán');
-  item.paymentStatus = 'CHO_THANH_TOAN';
+  // v15.8: paymentStatus giờ chỉ đổi SAU khi duyệt xong (không còn ngay lúc tạo NHÁP ở dưới) — thêm điều
+  // kiện "chưa có đề nghị thanh toán nào đang dở dang" để vẫn chặn mở đồng thời 2 chu kỳ như cũ.
+  const hasActiveRequest = hasActivePaymentRequestForSource(allPaymentRequests, item.subType, item.id);
+  if (item.paymentStatus !== 'CHUA_THANH_TOAN' || hasActiveRequest) {
+    throw new HttpError(409, hasActiveRequest
+      ? 'Đề xuất đang có đề nghị thanh toán chưa hoàn tất — vui lòng xử lý xong (hoặc xoá) đề nghị đó trước khi chuyển sang thanh toán mới'
+      : 'Đề xuất không ở trạng thái chưa thanh toán');
+  }
+  // paymentStatus KHÔNG còn đổi ngay ở đây nữa — sẽ được ghi CHO_THANH_TOAN khi đề nghị thanh toán vừa
+  // tạo ra ở đây duyệt xong (routes/workflow.js, transition COMPLETED của module paymentRequests).
   const overrideInstallments = normalizePaymentInstallmentsOverride(overrides?.installments);
   const installments = overrideInstallments || buildPaymentInstallments(null, item.amount, 'Thanh toán toàn bộ giá trị đề xuất');
   const base = {

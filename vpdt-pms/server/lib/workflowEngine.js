@@ -535,8 +535,15 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   if (action === 'PROPOSE_FILE_REPLACEMENT') {
     if (moduleKey !== 'submissions') throw new WorkflowError(400, 'Chỉ áp dụng cho Văn Bản Trình');
     const layerKey = steps[currentStep - 1]?.layerKey;
-    if (layerKey !== 'TRO_LY_THU_KY') {
-      throw new WorkflowError(403, 'Chỉ bước Bộ phận Trợ Lý/Thư Ký mới có thể đề xuất thay thế tệp tờ trình');
+    // v15.8 — mở rộng thêm cho ĐÚNG bước phê duyệt CUỐI CÙNG của quy trình (currentStep === steps.length),
+    // bất kể layerKey là gì (TGD/PTGD/GD_PGD tuỳ mức "Cấp Phê Duyệt Cuối Cùng" người trình chọn) — TRƯỚC
+    // ĐÂY chỉ đúng lớp TRO_LY_THU_KY mới có lựa chọn này, nhưng lớp đó KHÔNG PHẢI LÚC NÀO cũng là bước
+    // cuối (với mức "Tổng giám đốc phê duyệt", TRO_LY_THU_KY luôn đứng NGAY TRƯỚC bước TGD — bước cuối
+    // thật sự vẫn là TGD). Giữ NGUYÊN 100% hành vi cũ cho TRO_LY_THU_KY (không đổi gì cả), chỉ THÊM điều
+    // kiện OR cho bước cuối cùng — theo đúng yêu cầu nghiệp vụ mới, không đụng tới lối cũ.
+    const isFinalStep = currentStep === steps.length;
+    if (layerKey !== 'TRO_LY_THU_KY' && !isFinalStep) {
+      throw new WorkflowError(403, 'Chỉ bước Bộ phận Trợ Lý/Thư Ký hoặc bước phê duyệt cuối cùng mới có thể đề xuất thay thế tệp tờ trình');
     }
     if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');

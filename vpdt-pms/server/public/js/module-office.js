@@ -256,9 +256,13 @@ function renderOfficeReqs() {
                 // Khớp uploadOfficeSignedFile() ở server: vẫn cho tải lại/sửa Tài liệu ký TRƯỚC KHI
                 // chuyển sang thanh toán (paymentStatus vẫn CHUA_THANH_TOAN), kể cả khi đã có tệp —
                 // trước đây nút "Tải Tài Liệu Ký" biến mất vĩnh viễn ngay sau lần tải đầu tiên, không
-                // còn cách nào sửa khi lỡ chọn nhầm tệp.
-                if (!o.signedFileUrl || o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
-                if (o.signedFileUrl && o.paymentStatus === 'CHUA_THANH_TOAN') secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
+                // còn cách nào sửa khi lỡ chọn nhầm tệp. v15.8: paymentStatus giờ chỉ đổi CHO_THANH_TOAN
+                // SAU KHI đề nghị thanh toán duyệt xong (không còn ngay lúc tạo NHÁP) — thêm điều kiện
+                // hasActivePaymentRequestForSourceClient() (core.js) để vẫn ẩn đúng 2 nút này trong lúc
+                // đề nghị đang DRAFT/PENDING/NEED_INFO (paymentStatus lúc đó vẫn còn CHUA_THANH_TOAN).
+                const hasActivePr = hasActivePaymentRequestForSourceClient(o.subType, o.id);
+                if (!o.signedFileUrl || (o.paymentStatus === 'CHUA_THANH_TOAN' && !hasActivePr)) secondaryOptions.push({ value: 'uploadSigned', label: '📤 Tải Tài Liệu Ký' });
+                if (o.signedFileUrl && o.paymentStatus === 'CHUA_THANH_TOAN' && !hasActivePr) secondaryOptions.push({ value: 'startPayment', label: '💰 Chuyển Sang Thanh Toán' });
               }
             }
             // "Sửa & Gửi Lại" — chỉ chính người tạo, chỉ khi đang cần bổ sung (NHÁP do

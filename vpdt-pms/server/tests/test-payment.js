@@ -160,7 +160,9 @@ async function run() {
       activeOfficeSubTab, activePaymentSubTab,
       pr: DB.paymentRequests[0]
     }), contractA.id);
-    check('"🧾 Lập Thanh Toán" -> hợp đồng nguồn chuyển paymentStatus = CHO_THANH_TOAN', afterStart.contractPaymentStatus === 'CHO_THANH_TOAN', afterStart.contractPaymentStatus);
+    // v15.8: paymentStatus KHÔNG còn đổi CHO_THANH_TOAN ngay lúc tạo NHÁP nữa — chỉ đổi khi đề nghị vừa
+    // tạo duyệt XONG theo phòng ban (xem routes/workflow.js) — hợp đồng nguồn VẪN CHUA_THANH_TOAN ở đây.
+    check('"🧾 Lập Thanh Toán" -> hợp đồng nguồn VẪN paymentStatus = CHUA_THANH_TOAN (chỉ đổi CHO_THANH_TOAN khi đề nghị vừa tạo được duyệt xong)', afterStart.contractPaymentStatus === 'CHUA_THANH_TOAN', afterStart.contractPaymentStatus);
     check('Đề nghị thanh toán sinh ra ở trạng thái DRAFT (chưa gửi duyệt), mang ĐÚNG 2 đợt đã khai (180tr + 120tr), requestFiles rỗng', afterStart.pr.status === 'DRAFT' && afterStart.pr.installments.length === 2 && afterStart.pr.installments[0].amount === 180000000 && afterStart.pr.installments[1].amount === 120000000 && Array.isArray(afterStart.pr.requestFiles) && afterStart.pr.requestFiles.length === 0, afterStart.pr);
     check('Tự động điều hướng sang module Tổng Hợp > Thanh Toán > sub-tab "🗂️ Quản Lý Thanh Toán"', afterStart.activeOfficeSubTab === 'PAYMENT' && afterStart.activePaymentSubTab === 'MANAGE', afterStart);
     const prAId = afterStart.pr.id;
@@ -223,6 +225,22 @@ async function run() {
     check('requestFiles lưu đúng 2 tệp vừa chọn', Array.isArray(prAfterSubmit.requestFiles) && prAfterSubmit.requestFiles.length === 2, prAfterSubmit.requestFiles);
     check('currentStep khởi tạo = 1, history rỗng ngay lúc gửi duyệt', prAfterSubmit.currentStep === 1 && Array.isArray(prAfterSubmit.history) && prAfterSubmit.history.length === 0, prAfterSubmit);
 
+    // ============ Kịch bản 4b (v15.8): nút hành động dời từ "✅ Xác Nhận Đề Nghị Thanh Toán" sang
+    // "🗂️ Quản Lý Thanh Toán" — tp_kd (approver bước 1) phải thấy nút "✅ Xác Nhận Duyệt" cho prAId ở
+    // MANAGE, KHÔNG thấy nút đó (hay Sửa/Yêu Cầu Bổ Sung) ở APPROVE nữa; APPROVE chỉ còn giữ đúng 2 nút
+    // xác nhận ĐÃ THANH TOÁN (không áp dụng ở đây vì prAId còn PENDING, chưa APPROVED) ============
+    await loginAs('tp_kd');
+    await goToPaymentManage();
+    const manageRowHTML = await page.evaluate((id) => {
+      const cards = [...document.querySelectorAll('#paymentManageList > div')];
+      const card = cards.find((c) => c.innerHTML.includes('Hợp đồng nguồn A'));
+      return card ? card.innerHTML : '';
+    }, prAId);
+    check('"🗂️ Quản Lý Thanh Toán": tp_kd thấy nút "✅ Xác Nhận Duyệt" (approvePaymentRequestAction) cho đề nghị PENDING của phòng mình', manageRowHTML.includes('data-op="approvePaymentRequestAction"'), manageRowHTML);
+    await goToPaymentApprove();
+    const approveRowHTML = await page.evaluate(() => document.getElementById('paymentTableBody').innerHTML);
+    check('"✅ Xác Nhận Đề Nghị Thanh Toán": KHÔNG còn nút "approvePaymentRequestAction"/"openEditPaymentRequest"/"requestPaymentInfoAction" nào nữa (đã dời hẳn sang Quản Lý Thanh Toán)', !approveRowHTML.includes('data-op="approvePaymentRequestAction"') && !approveRowHTML.includes('data-op="openEditPaymentRequest"') && !approveRowHTML.includes('data-op="requestPaymentInfoAction"'), approveRowHTML);
+
     // ============ Kịch bản 5: "Xác Nhận Đề Nghị Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt
     // THEO PHÒNG BAN (paymentDeptWorkflows['Phòng Kinh Doanh'] = tp_kd) — ketoan1 (chỉ có paymentManage,
     // KHÔNG phải approver bước này) bị CHẶN; đúng người (tp_kd) mới duyệt được ============
@@ -243,6 +261,11 @@ async function run() {
     await confirmPending();
     const prApproved = await readPr(prAId);
     check('tp_kd (đúng approver bước 1, phòng "Phòng Kinh Doanh") duyệt -> chuyển APPROVED', prApproved.status === 'APPROVED' && prApproved.approvedBy === 'tp_kd', prApproved);
+    // v15.8: duyệt XONG toàn bộ quy trình (transition COMPLETED) mới là lúc paymentStatus của hợp đồng
+    // nguồn ĐÚNG lần đầu tiên đổi sang CHO_THANH_TOAN — không phải ngay lúc tạo NHÁP như Kịch bản 1 đã xác
+    // nhận VẪN CHUA_THANH_TOAN.
+    const contractAAfterApprove = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractA.id);
+    check('Đề nghị vừa duyệt XONG (APPROVED) -> hợp đồng nguồn NGAY LÚC NÀY mới chuyển CHO_THANH_TOAN', contractAAfterApprove === 'CHO_THANH_TOAN', contractAAfterApprove);
 
     // Đề nghị đã APPROVED thì không sửa được nữa (khoá trạng thái Sửa).
     await loginAs('ketoan1');
@@ -318,13 +341,16 @@ async function run() {
     const d1Inst2 = d1Records.find((p) => p.installments[0].amount === 20000000);
     check('Cả 2 bản ghi tách ra đều chỉ mang ĐÚNG 1 đợt, chung 1 cycleGroupId, cycleTotal=2, cycleIndex phân biệt 1/2', !!d1Inst1 && !!d1Inst2 && d1Inst1.installments.length === 1 && d1Inst2.installments.length === 1 && d1Inst1.cycleGroupId === d1Inst2.cycleGroupId && !!d1Inst1.cycleGroupId && d1Inst1.cycleTotal === 2 && d1Inst2.cycleTotal === 2 && d1Inst1.cycleIndex === 1 && d1Inst2.cycleIndex === 2, { d1Inst1, d1Inst2 });
     const contractDAfterStart = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
-    check('Hợp đồng ĐỊNH KỲ chuyển CHO_THANH_TOAN ngay sau khi tách 2 đợt', contractDAfterStart === 'CHO_THANH_TOAN', contractDAfterStart);
+    // v15.8: KHÔNG còn đổi CHO_THANH_TOAN ngay lúc tách nữa (chỉ đổi khi 1 trong 2 đợt duyệt xong) — vẫn
+    // CHUA_THANH_TOAN ở đây; việc chặn "mở đồng thời 2 chu kỳ" giờ dựa vào hasActivePaymentRequestForSource()
+    // (còn 2 bản ghi DRAFT chưa PAID tham chiếu tới nguồn này), không còn dựa vào paymentStatus nữa.
+    check('Hợp đồng ĐỊNH KỲ VẪN CHUA_THANH_TOAN ngay sau khi tách 2 đợt (chưa đợt nào duyệt xong)', contractDAfterStart === 'CHUA_THANH_TOAN', contractDAfterStart);
 
     const midFlightBlocked = await page.evaluate(async (id) => {
       try { await callRecordAction('contracts', id, 'start-payment', {}); return { ok: true }; }
       catch (err) { return { ok: false, message: err.message }; }
     }, contractD.id);
-    check('Hợp đồng ĐỊNH KỲ đang CHO_THANH_TOAN (chu kỳ dở dang) -> "🧾 Lập Thanh Toán" lần 2 bị chặn 409 (không cho song song 2 chu kỳ)', !midFlightBlocked.ok && midFlightBlocked.message.includes('chưa thanh toán'), midFlightBlocked);
+    check('Hợp đồng ĐỊNH KỲ đang có 2 đề nghị (đợt) chưa PAID -> "🧾 Lập Thanh Toán" lần 2 bị chặn 409 (hasActivePaymentRequestForSource, không cho song song 2 chu kỳ)', !midFlightBlocked.ok && midFlightBlocked.message.includes('chưa hoàn tất'), midFlightBlocked);
 
     // editPaymentRequest() guard MỚI — bản ghi đã tách (cycleGroupId) chỉ được ĐÚNG 1 đợt, không thêm/bớt.
     const splitEditGuardBlocked = await page.evaluate(async (id) => {
@@ -351,6 +377,10 @@ async function run() {
     const d1Inst1Approved = await readPr(d1Inst1.id);
     check('Đợt 1/2 (định kỳ) -> tp_kd duyệt theo phòng ban thành công (APPROVED)', d1Inst1Approved.status === 'APPROVED', d1Inst1Approved.status);
     check('Đợt 1/2 (định kỳ) -> sourcePaymentType chụp đúng "PERIODIC"', d1Inst1Approved.sourcePaymentType === 'PERIODIC', d1Inst1Approved.sourcePaymentType);
+    // v15.8: đúng NGAY LÚC đợt 1 duyệt xong (đợt 2 vẫn DRAFT) -> hợp đồng nguồn lần đầu tiên chuyển
+    // CHO_THANH_TOAN ở đây (KHÔNG phải lúc tách 2 đợt như Kịch bản 8 đã xác nhận VẪN CHUA_THANH_TOAN).
+    const contractDAfterD1Approve = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
+    check('Đợt 1/2 (định kỳ) duyệt xong -> hợp đồng nguồn NGAY LÚC NÀY chuyển CHO_THANH_TOAN', contractDAfterD1Approve === 'CHO_THANH_TOAN', contractDAfterD1Approve);
 
     await loginAs('ketoan1');
     await goToPaymentApprove();
@@ -406,7 +436,9 @@ async function run() {
     await confirmPending();
     const d2Records = (await readPrsBySource('CONTRACT', contractD.id)).filter((p) => p.status === 'DRAFT');
     const contractDDuringCycle2 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
-    check('Chu kỳ 2 (định kỳ) -> "🧾 Lập Thanh Toán" tách đúng 2 bản ghi NHÁP MỚI, hợp đồng quay lại CHO_THANH_TOAN', d2Records.length === 2 && contractDDuringCycle2 === 'CHO_THANH_TOAN', { d2Records, contractDDuringCycle2 });
+    // v15.8: VẪN CHUA_THANH_TOAN ngay lúc tách (chỉ đổi CHO_THANH_TOAN khi 1 trong 2 đợt duyệt xong,
+    // khớp đúng Kịch bản 8 phía trên) — khác cách hiểu cũ "tách xong là CHO_THANH_TOAN ngay".
+    check('Chu kỳ 2 (định kỳ) -> "🧾 Lập Thanh Toán" tách đúng 2 bản ghi NHÁP MỚI, hợp đồng VẪN CHUA_THANH_TOAN (chưa đợt nào duyệt xong)', d2Records.length === 2 && contractDDuringCycle2 === 'CHUA_THANH_TOAN', { d2Records, contractDDuringCycle2 });
     check('Số đề nghị thanh toán tăng thêm đúng 2 (chu kỳ 2 mới tách 2 bản ghi, KHÔNG tái sử dụng bản ghi chu kỳ 1 đã PAID)', (await page.evaluate(() => DB.paymentRequests.length)) === prCountBeforeCycle2 + 2, prCountBeforeCycle2);
     const d2Inst1 = d2Records.find((p) => p.installments[0].amount === 30000000);
     const d2Inst2 = d2Records.find((p) => p.installments[0].amount === 20000000);
@@ -564,13 +596,18 @@ async function run() {
       contractPaymentStatus: DB.contracts.find((c) => c.id === id).paymentStatus,
       pr: DB.paymentRequests.find((p) => p.sourceModule === 'CONTRACT' && p.sourceId === id)
     }), contractB.id);
-    check('Tạo đề nghị có nguồn Hợp Đồng từ module Thanh Toán -> sinh đúng đề nghị NHÁP (KHÔNG còn thẳng PENDING) + hợp đồng chuyển CHO_THANH_TOAN', !!afterFromSourceContract.pr && afterFromSourceContract.pr.status === 'DRAFT' && afterFromSourceContract.contractPaymentStatus === 'CHO_THANH_TOAN', afterFromSourceContract);
+    // v15.8: VẪN CHUA_THANH_TOAN ngay lúc tạo NHÁP (chỉ đổi CHO_THANH_TOAN khi đề nghị duyệt xong, xem
+    // các kiểm tra ở dưới sau khi tp_kd duyệt).
+    check('Tạo đề nghị có nguồn Hợp Đồng từ module Thanh Toán -> sinh đúng đề nghị NHÁP (KHÔNG còn thẳng PENDING), hợp đồng VẪN CHUA_THANH_TOAN', !!afterFromSourceContract.pr && afterFromSourceContract.pr.status === 'DRAFT' && afterFromSourceContract.contractPaymentStatus === 'CHUA_THANH_TOAN', afterFromSourceContract);
     await attachRequestFilesInManage(afterFromSourceContract.pr.id, [requestFile1]);
     await page.evaluate((id) => submitPaymentRequestAction(id), afterFromSourceContract.pr.id);
     await confirmPending();
     await page.waitForTimeout(200);
     const prBAfterSubmit = await readPr(afterFromSourceContract.pr.id);
     check('Đính kèm Hồ Sơ Đề Nghị Thanh Toán rồi Gửi -> chuyển PENDING, amount khớp giá trị hợp đồng', prBAfterSubmit.status === 'PENDING' && prBAfterSubmit.amount === contractB.amount, prBAfterSubmit);
+    // (Đề nghị nguồn contractB được dùng lại ở Kịch bản 14 để test "Yêu Cầu Bổ Sung" ở trạng thái PENDING —
+    // KHÔNG duyệt xong ở đây để giữ nguyên PENDING cho kịch bản đó; việc "duyệt xong -> paymentStatus mới
+    // chuyển CHO_THANH_TOAN" đã được kiểm đầy đủ qua contractA/contractD ở các Kịch bản 5 và 8 phía trên.)
 
     // ============ Kịch bản 13: Tạo đề nghị CÓ NGUỒN từ đề xuất Mua Bán (officeC) — cũng LUÔN tạo NHÁP
     // trước giờ (officeReqs trước đây đi thẳng PENDING, nay thống nhất với mọi nguồn khác) ============
@@ -584,7 +621,9 @@ async function run() {
       officePaymentStatus: DB.officeReqs.find((o) => o.id === id).paymentStatus,
       pr: DB.paymentRequests.find((p) => p.sourceModule === 'MUA_BAN' && p.sourceId === id)
     }), officeC.id);
-    check('Tạo đề nghị có nguồn Mua Bán từ module Thanh Toán -> sinh đúng đề nghị NHÁP (KHÔNG còn thẳng PENDING) + đề xuất chuyển CHO_THANH_TOAN', !!afterFromSourceOffice.pr && afterFromSourceOffice.pr.status === 'DRAFT' && afterFromSourceOffice.officePaymentStatus === 'CHO_THANH_TOAN', afterFromSourceOffice);
+    // v15.8: VẪN CHUA_THANH_TOAN ngay lúc tạo NHÁP (chỉ đổi CHO_THANH_TOAN khi đề nghị duyệt xong, xem
+    // kiểm tra sau khi tp_kd duyệt bên dưới).
+    check('Tạo đề nghị có nguồn Mua Bán từ module Thanh Toán -> sinh đúng đề nghị NHÁP (KHÔNG còn thẳng PENDING), đề xuất VẪN CHUA_THANH_TOAN', !!afterFromSourceOffice.pr && afterFromSourceOffice.pr.status === 'DRAFT' && afterFromSourceOffice.officePaymentStatus === 'CHUA_THANH_TOAN', afterFromSourceOffice);
     await attachRequestFilesInManage(afterFromSourceOffice.pr.id, [requestFile2]);
     await page.evaluate((id) => submitPaymentRequestAction(id), afterFromSourceOffice.pr.id);
     await confirmPending();
@@ -601,6 +640,8 @@ async function run() {
     const officePrApproved = await readPr(afterFromSourceOffice.pr.id);
     check('tp_kd (approver bước 1 dept "Phòng Kinh Doanh") duyệt được đề nghị nguồn Mua Bán — cùng ĐÚNG 1 quy trình paymentDeptWorkflows chung với Hợp Đồng', officePrApproved.status === 'APPROVED', officePrApproved.status);
     check('officeReqs (Mua Bán) KHÔNG có paymentType -> sourcePaymentType luôn null (đi theo chế độ xác nhận TỪNG ĐỢT, KHÔNG có lối tắt lump-sum)', officePrApproved.sourcePaymentType === null || officePrApproved.sourcePaymentType === undefined, officePrApproved.sourcePaymentType);
+    const officeCAfterApprove = await page.evaluate((id) => DB.officeReqs.find((o) => o.id === id).paymentStatus, officeC.id);
+    check('Duyệt xong -> đề xuất Mua Bán nguồn (officeC) NGAY LÚC NÀY mới chuyển CHO_THANH_TOAN', officeCAfterApprove === 'CHO_THANH_TOAN', officeCAfterApprove);
     await loginAs('ketoan1');
     await goToPaymentApprove();
     // officeReqs cũng đi qua ĐÚNG 1 cơ chế confirmPaymentInstallment() dùng chung — KHÔNG còn cần tệp gì.

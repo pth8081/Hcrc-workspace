@@ -1011,10 +1011,14 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   // "🧾 Lập Thanh Toán" — mở khi CHUA_THANH_TOAN (chu kỳ đầu, hoặc "Thanh toán 1 lần" duy nhất) HOẶC khi
   // hợp đồng "Thanh toán định kỳ" đã HOÀN TẤT 1 chu kỳ (DA_THANH_TOAN — xem confirmPaymentInstallment()/
   // routes/records.js ghi ngược CHUA_THANH_TOAN cho paymentType PERIODIC) để bắt đầu chu kỳ MỚI. VẪN ẩn
-  // khi đang CHO_THANH_TOAN (1 chu kỳ dở dang) cho CẢ 2 loại — không cho mở đồng thời 2 chu kỳ, khớp
-  // đúng gate ở startContractPayment() (lib/recordActions.js).
-  const canStartPaymentCycle = c.paymentStatus === 'CHUA_THANH_TOAN'
-    || (c.paymentType === 'PERIODIC' && c.paymentStatus === 'DA_THANH_TOAN');
+  // khi đang có đề nghị thanh toán nào chưa PAID (1 chu kỳ dở dang) cho CẢ 2 loại — không cho mở đồng
+  // thời 2 chu kỳ, khớp đúng gate ở startContractPayment() (lib/recordActions.js). v15.8: paymentStatus
+  // giờ chỉ đổi CHO_THANH_TOAN SAU KHI đề nghị duyệt xong (không còn ngay lúc tạo NHÁP) nên phải kiểm tra
+  // thêm hasActivePaymentRequestForSourceClient() (core.js) — trong lúc đề nghị đang DRAFT/PENDING/
+  // NEED_INFO, paymentStatus vẫn còn CHUA_THANH_TOAN.
+  const canStartPaymentCycle = (c.paymentStatus === 'CHUA_THANH_TOAN'
+    || (c.paymentType === 'PERIODIC' && c.paymentStatus === 'DA_THANH_TOAN'))
+    && !hasActivePaymentRequestForSourceClient('CONTRACT', c.id);
   if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && canStartPaymentCycle && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '🧾 Lập Thanh Toán' });
   }

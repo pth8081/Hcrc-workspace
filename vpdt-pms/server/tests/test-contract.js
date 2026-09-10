@@ -332,7 +332,11 @@ async function run() {
       const c = DB.contracts.find((x) => x.id === id);
       return { paymentStatus: c.paymentStatus, paymentRequestsLen: DB.paymentRequests.length, latest: DB.paymentRequests[0] };
     }, contract1.id);
-    check('Chuyển Sang Thanh Toán -> paymentStatus chuyển CHO_THANH_TOAN', afterPaymentStart.paymentStatus === 'CHO_THANH_TOAN', afterPaymentStart.paymentStatus);
+    // v15.8: paymentStatus KHÔNG còn đổi CHO_THANH_TOAN ngay lúc "Chuyển Sang Thanh Toán" nữa — chỉ đổi
+    // khi đề nghị vừa sinh ra được duyệt XONG theo phòng ban (xem routes/workflow.js); luồng duyệt-xong ->
+    // CHO_THANH_TOAN đã được kiểm đầy đủ ở tests/test-payment.js (Kịch bản 5/8), file này chỉ tập trung
+    // module Hợp Đồng nên không lặp lại.
+    check('Chuyển Sang Thanh Toán -> paymentStatus VẪN CHUA_THANH_TOAN (chỉ đổi CHO_THANH_TOAN khi đề nghị vừa tạo được duyệt xong)', afterPaymentStart.paymentStatus === 'CHUA_THANH_TOAN', afterPaymentStart.paymentStatus);
     check('Sinh đúng 1 đề nghị thanh toán mới, nguồn = CONTRACT đúng mã hợp đồng', afterPaymentStart.paymentRequestsLen === paymentReqCountBefore + 1 && afterPaymentStart.latest.sourceModule === 'CONTRACT' && afterPaymentStart.latest.sourceCode === contract1.code, afterPaymentStart.latest);
     check('Đề nghị thanh toán mang đúng 2 đợt đã khai lúc tạo hợp đồng (300tr + 200tr)', afterPaymentStart.latest.installments.length === 2 && afterPaymentStart.latest.installments[0].amount === 300000000 && afterPaymentStart.latest.installments[1].amount === 200000000, afterPaymentStart.latest.installments);
 

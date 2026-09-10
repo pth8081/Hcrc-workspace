@@ -76,8 +76,22 @@ async function withContractAction(req, res, action, mutator) {
   }
 }
 
-router.post('/contracts/:id/upload-signed', (req, res) =>
-  withContractAction(req, res, 'upload-signed', recordActions.uploadContractSignedFile));
+// uploadContractSignedFile() cần allPaymentRequests (v15.8, xem lib/recordActions.js) để biết nguồn có
+// đề nghị thanh toán nào đang dở dang hay không — không dùng chung withContractAction() ở trên nữa (chữ
+// ký mutator khác, cần thêm 1 tham số).
+router.post('/contracts/:id/upload-signed', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const allPaymentRequests = await getAllForCollection('paymentRequests');
+    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
+      recordActions.uploadContractSignedFile(req.body, freshUser, item, allPaymentRequests));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `contracts/${req.params.id}/upload-signed`, err);
+  }
+});
 
 // Đổi Hình Thức Thanh Toán sau khi hợp đồng đã APPROVED — qua phê duyệt lại bởi ĐÚNG nhóm người duyệt
 // "Tài liệu ký" (contractManageDeptWorkflows[dept], xem isApproverForContractManageWorkflow() ở
@@ -149,9 +163,10 @@ router.post('/contracts/:id/start-payment', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const allPaymentRequests = await getAllForCollection('paymentRequests');
     let draft = null;
     const result = await withLockedRecordForCollection('contracts', itemId, (item) => {
-      draft = recordActions.startContractPayment(freshUser, item);
+      draft = recordActions.startContractPayment(freshUser, item, undefined, allPaymentRequests);
       return item;
     });
     const paymentRequests = await createPaymentRequestsFromDraft(draft);
@@ -176,17 +191,31 @@ async function withOfficeReqAction(req, res, action, mutator) {
   }
 }
 
-router.post('/officeReqs/:id/upload-signed', (req, res) =>
-  withOfficeReqAction(req, res, 'upload-signed', recordActions.uploadOfficeSignedFile));
+// uploadOfficeSignedFile() cần allPaymentRequests (v15.8, xem lib/recordActions.js) — không dùng chung
+// withOfficeReqAction() ở trên nữa (chữ ký mutator khác, cần thêm 1 tham số).
+router.post('/officeReqs/:id/upload-signed', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const allPaymentRequests = await getAllForCollection('paymentRequests');
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) =>
+      recordActions.uploadOfficeSignedFile(req.body, freshUser, item, allPaymentRequests));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `officeReqs/${req.params.id}/upload-signed`, err);
+  }
+});
 
 router.post('/officeReqs/:id/start-payment', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const allPaymentRequests = await getAllForCollection('paymentRequests');
     let draft = null;
     const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => {
-      draft = recordActions.startOfficePayment(freshUser, item);
+      draft = recordActions.startOfficePayment(freshUser, item, undefined, allPaymentRequests);
       return item;
     });
     const paymentRequests = await createPaymentRequestsFromDraft(draft);
@@ -224,16 +253,17 @@ router.post('/paymentRequests/from-source', async (req, res) => {
       skipManageGate: true
     };
 
+    const allPaymentRequests = await getAllForCollection('paymentRequests');
     let draft = null;
     let result;
     if (sourceModule === 'CONTRACT') {
       result = await withLockedRecordForCollection('contracts', sourceId, (item) => {
-        draft = recordActions.startContractPayment(freshUser, item, overrides);
+        draft = recordActions.startContractPayment(freshUser, item, overrides, allPaymentRequests);
         return item;
       });
     } else if (['MUA_BAN', 'SUA_CHUA'].includes(sourceModule)) {
       result = await withLockedRecordForCollection('officeReqs', sourceId, (item) => {
-        draft = recordActions.startOfficePayment(freshUser, item, overrides);
+        draft = recordActions.startOfficePayment(freshUser, item, overrides, allPaymentRequests);
         return item;
       });
     } else {

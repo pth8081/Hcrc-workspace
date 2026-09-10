@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**15.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**15.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v15.8 (2026-09-10): Văn Bản Trình — mở rộng "Đề xuất thay thế file" ra bước phê duyệt cuối cùng; Thanh Toán — dời bước duyệt phòng ban sang "Quản Lý Thanh Toán" + fix thời điểm paymentStatus
+
+Người dùng yêu cầu 2 việc trong 1 đợt:
+
+**1. Văn Bản Trình**: cơ chế "Đề xuất thay thế file" (`PROPOSE_FILE_REPLACEMENT`/`RESOLVE_FILE_PROPOSAL`
+ở `lib/workflowEngine.js`) trước đây CHỈ mở cho lớp Bộ phận Trợ Lý/Thư Ký (bước ngay trước TGĐ, chỉ tồn
+tại khi chọn Cấp Phê Duyệt Cuối Cùng = TGĐ). Người dùng xác nhận: **giữ nguyên hành vi lớp Trợ Lý/Thư Ký**
+(không đổi gì), nhưng **bổ sung thêm** cùng lựa chọn (đề xuất thay thế file HOẶC "Yêu cầu bổ sung" dạng
+bình luận thường) tại **bước phê duyệt CUỐI CÙNG** của MỌI cấp phê duyệt (`currentStep === steps.length`)
+— áp dụng cho cả các cấp KHÔNG có lớp Trợ Lý/Thư Ký (PTGD/GD_PGD/Khác), nơi trước đây chỉ có
+duyệt/từ chối/yêu cầu bổ sung thường. Server (`lib/workflowEngine.js`) nới điều kiện gate từ
+`layerKey !== 'TRO_LY_THU_KY'` thành `layerKey !== 'TRO_LY_THU_KY' && !isFinalStep`; client
+(`public/js/module-vanbantrinh.js`) mở hộp thoại chọn lựa tương ứng khi `currentLayerKey === 'TRO_LY_THU_KY'
+|| isFinalStep`.
+
+**2. Thanh Toán** — 2 phần:
+- **Dời nút duyệt theo phòng ban** ("✅ Xác Nhận Duyệt"/"📝 Yêu Cầu Bổ Sung", cộng "✏️ Sửa"/"🗑️ Xoá") từ
+  sub-tab "✅ Xác Nhận Đề Nghị Thanh Toán" **sang** "🗂️ Quản Lý Thanh Toán" — mục đích: có thể phân quyền
+  sub-tab "✅ Xác Nhận" CHỈ cho kế toán, dùng riêng để bấm xác nhận ĐÃ CHI TIỀN THẬT (nút xác nhận từng đợt/
+  toàn bộ vẫn giữ nguyên ở đây, KHÔNG đổi chỗ). Trạng thái hiển thị "APPROVED" đổi nhãn thành **"⏳ Đang
+  chờ thanh toán"**. "🗂️ Quản Lý Thanh Toán" giờ sắp **đề nghị mới tạo lên đầu danh sách**.
+- **Fix thời điểm `paymentStatus` chuyển "Chờ thanh toán" (`CHO_THANH_TOAN`)** trên hồ sơ nguồn (Hợp
+  đồng/Mua Bán/Sửa Chữa): trước đây đổi NGAY lúc bấm "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán" (tức lúc
+  đề nghị thanh toán còn đang NHÁP, chưa ai duyệt gì) — SAI, gây hiểu nhầm "đang chờ thanh toán" trong khi
+  thực ra còn chưa nộp duyệt. Sửa lại: `paymentStatus` **giữ nguyên "Chưa thanh toán" cho tới khi đề nghị
+  thanh toán vừa sinh ra được duyệt XONG theo phòng ban** (`routes/workflow.js`, hook mới trên
+  `transition.type === 'COMPLETED'` của `moduleKey === 'paymentRequests'`) — mới ghi `CHO_THANH_TOAN`.
+  Việc chặn "mở 2 chu kỳ thanh toán song song" (trước đây dựa vào `paymentStatus`) đổi sang dựa trên
+  `hasActivePaymentRequestForSource()` (`lib/recordActions.js`, kiểm tra còn đề nghị thanh toán nào đang mở
+  của đúng hồ sơ nguồn đó) — không còn phụ thuộc `paymentStatus` nữa.
+
+Verify: `tests/test-submission.js` (22/22), `tests/test-payment.js` (92/92, viết thêm "Kịch bản 4b" kiểm
+tra đúng vị trí nút mới), `tests/test-contract.js` (46/46) và `tests/test-office-budget.js` (62/62, cả 2
+file cập nhật lại 2 assertion cho khớp thời điểm `CHO_THANH_TOAN` mới). Chạy toàn bộ 96 file
+`tests/test-*.js` — chỉ các lỗi `localhost:1433` (SQL Server không chạy trong môi trường build, baseline
+đã biết trước, không liên quan) là còn FAIL, không phát sinh regression mới. Cập nhật
+`deploy/Huong-dan-nghiep-vu.md` mục 4.1 (Văn Bản Trình) và 4.3 (Thanh Toán).
+
+Deploy-impact: không đổi `schema.sql`/`.env.example`/`dependencies` — chỉ copy code + `pm2 restart`.
 
 ## v15.7 (2026-09-09): Cache-busting mạnh hơn — index.html "no-store" + banner client tự phát hiện bản mới
 

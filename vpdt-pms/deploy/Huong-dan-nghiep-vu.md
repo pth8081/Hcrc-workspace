@@ -272,6 +272,20 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
   (Bình thường/Gấp/Thượng khẩn) ở màn Biểu Mẫu (mục 7.3). Có bản xem trước quy
   trình duyệt ngay trước khi gửi.
+  - **Đề xuất thay thế file** (lớp Bộ phận Trợ Lý/Thư Ký, ngay trước TGĐ khi
+    chọn Cấp Phê Duyệt Cuối Cùng = TGĐ) — thay vì chỉ duyệt/từ chối, người
+    duyệt ở lớp này có thể **đề xuất thay thế hẳn file tờ trình** (tải file
+    mới kèm ghi chú) — hồ sơ "treo" lại (khoá mọi thao tác khác) cho tới khi
+    người tạo tờ trình **Đồng ý** (file mới được áp dụng, gửi duyệt lại từ
+    bước 1) hoặc **Không đồng ý** (huỷ đề xuất, hồ sơ về NHÁP như bị "Yêu cầu
+    bổ sung" thường).
+  - **Ở bước phê duyệt CUỐI CÙNG** (bước có `currentStep === steps.length` —
+    có thể là TGĐ, hoặc bước cuối của cấp GD_PGD/PTGD/Khác nếu tờ trình không
+    đi qua lớp Trợ Lý/Thư Ký), người duyệt cũng có lựa chọn tương tự: **"Đề
+    xuất thay thế file"** (y hệt cơ chế Trợ Lý/Thư Ký ở trên) hoặc **"Yêu cầu
+    bổ sung"** dạng bình luận thường (không kèm file, chỉ trả hồ sơ về NHÁP
+    kèm lý do) — tuỳ người duyệt chọn khi hồ sơ đã tới đúng bước cuối cùng
+    của quy trình đã chọn.
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
@@ -406,13 +420,18 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
   - **Loại Thanh Toán** (chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh Đợt Thanh
     Toán): **"Thanh toán 1 lần"** (mặc định) hoặc **"Thanh toán định kỳ"**.
     Khi Tài liệu ký đã duyệt xong, nút **"🧾 Lập Thanh Toán"** mở ra; bấm xong
-    hợp đồng chuyển "Chờ thanh toán" và tự điều hướng sang sub-tab **"🗂️ Quản
-    Lý Thanh Toán"** (Tổng Hợp > Thanh Toán). Với hợp đồng **"Thanh toán 1
-    lần"**: sau khi 1 đề nghị hoàn tất (PAID), nút "🧾 Lập Thanh Toán" **không**
-    mở lại nữa (khoá cứng). Với hợp đồng **"Thanh toán định kỳ"**: sau khi 1
-    đợt/chu kỳ PAID, hệ thống tự trả hợp đồng về "Chưa thanh toán" và nút mở
-    lại ngay để bắt đầu chu kỳ mới — nhưng **không** cho mở 2 chu kỳ song
-    song.
+    sinh ra đề nghị thanh toán **NHÁP** và tự điều hướng sang sub-tab **"🗂️
+    Quản Lý Thanh Toán"** (Tổng Hợp > Thanh Toán) — hợp đồng nguồn **VẪN
+    "Chưa thanh toán"** ở bước này, **chỉ chuyển "Chờ thanh toán" khi đề nghị
+    vừa sinh ra đó được duyệt XONG theo phòng ban** (không còn đổi ngay lúc
+    bấm nút như trước — tránh hiển thị "Chờ thanh toán" khi đề nghị còn đang
+    NHÁP/chưa ai duyệt gì). Với hợp đồng **"Thanh toán 1 lần"**: sau khi 1 đề
+    nghị hoàn tất (PAID), nút "🧾 Lập Thanh Toán" **không** mở lại nữa (khoá
+    cứng). Với hợp đồng **"Thanh toán định kỳ"**: sau khi 1 đợt/chu kỳ PAID,
+    hệ thống tự trả hợp đồng về "Chưa thanh toán" và nút mở lại ngay để bắt
+    đầu chu kỳ mới — nhưng **không** cho mở 2 chu kỳ song song (kiểm tra dựa
+    trên việc còn đề nghị thanh toán nào đang mở của đúng hồ sơ nguồn đó,
+    không còn dựa vào paymentStatus).
   - **Đổi Hình Thức Thanh Toán sau khi ĐÃ DUYỆT xong** — người tạo hợp đồng
     bấm **"✏️ Đổi Hình Thức Thanh Toán"** (chỉ hiện khi ĐÃ `APPROVED` VÀ hợp
     đồng **chưa từng có đề nghị thanh toán nào**) — chọn lại Loại Thanh Toán +
@@ -435,21 +454,31 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       **"💾 Lưu"** để giữ nguyên NHÁP, chỉnh sửa dần. Chỉ khi bấm **"📨 Chuyển
       Xác Nhận Thanh Toán"** (NHÁP → Chờ duyệt) thì **MỌI đợt mới bắt buộc
       phải có số tiền > 0** — thiếu đợt nào bị chặn ngay, cả ở giao diện lẫn
-      server. Sub-tab này cũng hiện **cảnh báo hạn thanh toán** theo từng đợt
-      (🔴 quá hạn / 🟡 sắp đến hạn ≤ 3 ngày) VÀ badge trạng thái tổng hợp "tổng
-      đợt" (🔴 Quá hạn / 🟡 Đang thanh toán / ✅ Đã thanh toán) theo dõi các đề
-      nghị **cho tới khi HOÀN TẤT** (đề nghị `PAID` không biến mất khỏi
-      sub-tab này, vẫn hiện đầy đủ kèm link "📎 Xem tệp") — đọc CHUNG 1 danh
-      sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi trạng thái tự hiện
-      ngay ở đây.
-    - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — hàng chờ **duyệt theo bước/phòng
-      ban** (như các module duyệt khác, admin cấu hình người duyệt ở "⚙️ Quản
-      Trị" > "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") + xác nhận PAID.
-      Không có nút Từ Chối ở bước này (chỉ có Duyệt) — cần yêu cầu sửa lại
-      thì dùng "📝 Yêu Cầu Bổ Sung" (đưa về "Cần bổ sung").
-      **Xác nhận thanh toán** (bắt buộc kèm tệp "đề nghị thanh toán đã phê
-      duyệt") có 2 CHẾ ĐỘ tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo
-      đề nghị:
+      server.
+      Sub-tab này cũng là nơi **duyệt theo bước/phòng ban** cho đề nghị đang
+      "Chờ duyệt"/"Cần bổ sung" (admin cấu hình người duyệt ở "⚙️ Quản Trị" >
+      "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") — mỗi đề nghị hiện nút
+      **"✅ Xác Nhận Duyệt"**/**"📝 Yêu Cầu Bổ Sung"** (không có nút Từ Chối ở
+      bước này, chỉ đưa về "Cần bổ sung" để sửa lại) cộng "✏️ Sửa"/"🗑️ Xoá" —
+      **KHÔNG còn ở sub-tab "✅ Xác Nhận" như trước** (đổi chỗ để tách bạch:
+      "🗂️ Quản Lý Thanh Toán" phụ trách toàn bộ vòng lập + duyệt nội bộ, "✅
+      Xác Nhận" chỉ còn dành riêng cho bước xác nhận ĐÃ CHI TIỀN THẬT bên
+      dưới, để có thể phân quyền tab đó CHỈ cho kế toán). Danh sách sắp **đề
+      nghị mới tạo lên đầu**. Sub-tab này cũng hiện **cảnh báo hạn thanh toán**
+      theo từng đợt (🔴 quá hạn / 🟡 sắp đến hạn ≤ 3 ngày) VÀ badge trạng thái
+      tổng hợp "tổng đợt" (🔴 Quá hạn / 🟡 Đang thanh toán / ✅ Đã thanh toán)
+      theo dõi các đề nghị **cho tới khi HOÀN TẤT** (đề nghị `PAID` không
+      biến mất khỏi sub-tab này, vẫn hiện đầy đủ kèm link "📎 Xem tệp") — đọc
+      CHUNG 1 danh sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi
+      trạng thái tự hiện ngay ở đây.
+    - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — chỉ còn hiện đề nghị đã duyệt
+      XONG bước/phòng ban ở trên (hiển thị **"⏳ Đang chờ thanh toán"** thay vì
+      nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
+      được gán quyền ở tab này CHỈ bấm xác nhận đã chi tiền thật, không đụng
+      tới bước duyệt nội bộ (đã chuyển hẳn sang "🗂️ Quản Lý Thanh Toán" ở
+      trên). **Xác nhận thanh toán** (bắt buộc kèm tệp "đề nghị thanh toán đã
+      phê duyệt") có 2 CHẾ ĐỘ tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc
+      tạo đề nghị:
       - Hợp đồng **"Thanh toán 1 lần"** (và MỌI đề nghị nguồn Hợp đồng loại
         này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 tệp DUY NHẤT cho CẢ đề nghị,
         1 lần bấm chuyển thẳng "Đã thanh toán" cho TẤT CẢ các đợt cùng lúc.
