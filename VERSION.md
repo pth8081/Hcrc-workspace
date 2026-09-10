@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**16.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.2 (2026-09-10): Nhân Sự — module Lương (Payroll) hoàn chỉnh
+
+Module mới "Nhân Sự > Lương": tạo/tính lương tự động (lương cơ bản từ Hợp
+Đồng Lao Động, làm thêm giờ/nghỉ không lương từ Công & Phép, BHXH/BHYT/BHTN/
+thuế TNCN lũy tiến), điều chỉnh tay các dòng phụ cấp/thưởng/tạm ứng/phạt,
+vòng đời kỳ lương Nháp → Chờ Duyệt → Đã Duyệt → Đã Chốt → Đã Công Bố với
+**phân tách nhiệm vụ** Lập/Tính (`hrPayrollManage`) và Duyệt
+(`hrPayrollApprove`) — không ai vừa lập vừa tự duyệt được. Nhân viên tự xem
+"Phiếu Lương Của Tôi" (IDOR-safe — mã nhân viên luôn suy từ tài khoản đăng
+nhập, không nhận từ client) + xuất PDF ngay tại trình duyệt.
+
+Toàn bộ %BHXH/BHYT/BHTN, biểu thuế TNCN 7 bậc, mức giảm trừ bản thân/người
+phụ thuộc, số ngày công chuẩn, hệ số tăng ca là **cấu hình admin sửa được**
+(seed theo số liệu tham khảo — admin cần tự xác nhận đúng số thật của công
+ty trước khi chạy lương thật lần đầu, xem cảnh báo trong UI "Cấu Hình Lương").
+
+Kèm theo: module **thông báo trong app** dùng chung (chuông 🔔 góc màn hình)
+— công bố kỳ lương tự tạo thông báo cho từng nhân viên có phiếu lương, thay
+email; module khác (hợp đồng sắp hết hạn, công việc quá hạn...) có thể tái
+sử dụng ngay không cần sửa gì thêm. Liên kết Offboarding: số tiền quy đổi
+phép năm chưa nghỉ (đã tính sẵn từ trước) nay hiển thị ngay trên checklist
+thay vì không hiển thị ở đâu cả.
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — `payrollPeriods`/
+`payslips`/`notifications` là collection JSON-blob mới trong `dbo.Records`
+(tự khởi tạo, không cần migrate SQL riêng) — chỉ cần copy code + `pm2 restart`.
+
+Test: `tests/test-payroll.js` (12 kịch bản — tính lương, phân tách nhiệm vụ,
+vòng đời kỳ lương, chống IDOR, cấu hình tỷ lệ, thuế lũy tiến), toàn bộ pass.
+Chạy full regression suite (98 file) xác nhận không phát sinh lỗi mới (đã fix
+1 lỗi form-audit tự phát hiện: bổ sung `HRP_PERIOD` vào `CORE_FIELD_MANIFEST`)
+— các lỗi còn lại (test-approval-hub.js, test-audit-fixes-batch1.js,
+test-audit-round2-cluster1.js) xác nhận có sẵn từ trước, không liên quan
+module Lương (đã đối chiếu lại diff, không đụng tới các vùng code liên quan).
 
 ## v16.1 (2026-09-10): Hợp Đồng Lao Động — Mã Nhân Viên chọn từ Hồ Sơ Nhân Sự + tick nhập mã ngoài hệ thống
 
