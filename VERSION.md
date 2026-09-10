@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**16.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.3 (2026-09-10): Fix lỗi "Không tải được phần chức năng cần thiết" khi tạo Hợp Đồng Lao Động
+
+Người dùng báo tạo Hợp Đồng Lao Động luôn báo lỗi ⛔ "Không tải được phần
+chức năng cần thiết. Vui lòng tải lại trang và thử lại." — cả 2 nhánh (tick
+"Không lấy từ hồ sơ" hay không) đều lỗi như nhau. Điều tra sâu hạ tầng nạp
+module theo cụm (lazy-load, `core.js`) tìm ra 2 lỗi thật:
+
+1. **Lỗi gốc (`_loadModuleScriptTag()`)**: khi 1 cụm module (`MODULE_LOAD_GROUPS`)
+   nạp thất bại 1 lần (VD 1 file/1 cụm deps chập chờn mạng), cache cấp CỤM bị
+   xoá — nhưng các FILE khác trong cùng cụm đã nạp+thực thi THÀNH CÔNG trước
+   đó thì không có cache riêng. Lần gọi lại sau đó (thao tác lại) chèn LẠI
+   `<script>` cho TOÀN BỘ file trong cụm, kể cả file đã chạy xong — file đó bị
+   thực thi lần 2, các khai báo `const`/`let` cấp cao nhất (VD
+   `HRC_CONTRACT_TYPE_LABELS` ở `module-hopdonglaodong.js`) văng lỗi cú pháp
+   "Identifier ... has already been declared" (không bắt được) — mọi thao tác
+   sau đó cần nạp lại cụm này đều rơi vào thông báo lỗi tải module chung.
+   Tái hiện được bằng Playwright thật (real click + real gõ ký tự), xác nhận
+   trước fix có `jsExceptions`, sau fix không còn. Fix: thêm cache RIÊNG theo
+   TỪNG FILE (`_loadedScriptFiles`), không xoá khi file đã nạp thành công —
+   chỉ file thật sự lỗi (`onerror`) mới được phép thử lại, không ảnh hưởng
+   toàn bộ 32 cụm module khác dùng chung hạ tầng này.
+2. **Lỗi phụ (`MODULE_FN_GROUP`)**: 2 hàm mới của tính năng chọn nhân viên từ
+   Hồ Sơ Nhân Sự (`resolveHrcEmployeeCodeInput`, `onHrcUseExternalCodeChange`,
+   thêm ở đợt v16.1) bị sót khỏi bảng tra `MODULE_FN_GROUP` — các hàm anh em
+   cùng file (`openHrContractCreateModal`...) đã được đăng ký đúng. Bổ sung 2
+   entry còn thiếu cho đúng quy ước (mọi hàm dùng qua `data-op*` phải có mặt
+   trong bảng tra này).
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — chỉ sửa
+`public/js/core.js`, chỉ cần copy code + `pm2 restart`.
+
+Full regression suite (99 file) chạy lại sau fix: không phát sinh lỗi mới —
+các lỗi còn lại (test-approval-hub.js, test-audit-fixes-batch1.js,
+test-audit-round2-cluster1.js) vẫn là lỗi có sẵn từ trước, không liên quan.
 
 ## v16.2 (2026-09-10): Nhân Sự — module Lương (Payroll) hoàn chỉnh
 
