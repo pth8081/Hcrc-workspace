@@ -530,6 +530,13 @@ const CORE_FIELD_MANIFEST = {
     { id: 'budgetPeriodEndTime', label: 'Hạn Chót Lập', required: true },
     { id: 'budgetPeriodTemplateSelect', label: 'Mẫu Ngân Sách', required: false }
   ],
+  // HRP_PERIOD: form "+ Tạo Kỳ Lương" (#hrpCreatePeriodForm, Nhân Sự > Lương > Quản Lý Kỳ Lương) — cùng
+  // lý do đơn giản như BUDGET_PERIOD ngay trên, KHÔNG có bảng thành phần lương động nào đi kèm.
+  HRP_PERIOD: [
+    { id: 'hrpNewMonth', label: 'Tháng', required: true },
+    { id: 'hrpNewYear', label: 'Năm', required: true },
+    { id: 'hrpNewName', label: 'Tên Kỳ Lương', required: false }
+  ],
   // BUDGET_TEMPLATE: form "🧩 Mẫu Ngân Sách" (#budgetTemplateForm, cùng modal ⚙️ Quản Lý Kỳ & Mẫu) —
   // chỉ riêng "Tên Mẫu" (field cố định ngoài bảng cột động) là ứng viên hợp lệ ở đây; bản thân bảng cột
   // (budgetTemplateFieldsBody) đã tự sửa được ngay tại chỗ (không qua Biểu Mẫu, xem BUDGET_PERIOD ở trên).
