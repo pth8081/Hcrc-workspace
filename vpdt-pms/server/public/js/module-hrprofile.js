@@ -14,6 +14,8 @@ let activeHrProfileView = 'ME';
 let _hrpfMyProfile = null; // cache hồ sơ /me đang xem (để applyProfileEdit tại chỗ khi lưu form)
 let _hrpfManageList = [];  // cache danh sách nhẹ (employeeCode/username/status/updatedAt) của GET /
 let _hrpfManageDetailCode = null; // employeeCode đang mở trong #hrpfDetailModal
+let _hrpfManageDetailReadOnly = false; // true = đang mở #hrpfDetailModal ở chế độ "👁️ Xem" (chỉ đọc,
+  // KHÔNG phải 1 tầng quyền mới — cùng quyền hrProfileManage như "✏️ Sửa", chỉ khác cách hiển thị)
 
 const HRPF_GENDERS = ['Nam', 'Nữ', 'Khác'];
 const HRPF_STATUS_BADGES = {
@@ -179,20 +181,28 @@ function renderHrProfileManageList() {
       <td class="p-2">${p.username ? '<span class="font-mono">' + escapeHtml(p.username) + '</span>' : '<span class="text-gray-400 italic">Chưa liên kết</span>'}</td>
       <td class="p-2">${HRPF_STATUS_BADGES[p.status] || p.status}</td>
       <td class="p-2 text-gray-500">${escapeHtml(p.updatedAt || '')}</td>
-      <td class="p-2"><button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">Chi tiết</button></td>
+      <td class="p-2 space-x-1 whitespace-nowrap">
+        <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="true" class="px-2 py-1 rounded text-[11px] font-bold bg-gray-500 text-white hover:bg-gray-600">👁️ Xem</button>
+        <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✏️ Sửa</button>
+      </td>
     </tr>`;
   }).join('');
 }
 
-async function openHrpfDetailModal(employeeCode) {
+async function openHrpfDetailModal(employeeCode, readOnlyArg) {
   // employeeCode là chuỗi HR tự gõ tự do (xem lib/employeeProfile.js đầu file) — ÉP KIỂU String() ngay
   // đây vì cspCoerceArg() (core.js) tự chuyển data-arg toàn số thành kiểu Number (VD mã "1001"), nếu
   // không mọi so sánh === với p.employeeCode (chuỗi thật) ở các hàm dưới sẽ SAI dù nhìn qua tưởng đúng.
   employeeCode = String(employeeCode);
   _hrpfManageDetailCode = employeeCode;
+  // readOnlyArg đến từ data-arg1="true"/"false" (chuỗi, KHÔNG phải boolean thật — cspCoerceArg() chỉ tự
+  // ép kiểu Number cho chuỗi toàn số, giữ nguyên "true"/"false" dạng string) — so cả 2 dạng để không lặp
+  // lại đúng lớp lỗi setAllPermTreeNodes() từng gặp (so sánh === true với 1 string luôn false).
+  _hrpfManageDetailReadOnly = (readOnlyArg === true || readOnlyArg === 'true');
   try {
     const data = await hrProfileApiCall('GET', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}`);
-    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE' });
+    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    document.getElementById('hrpfDetailModalTitle').textContent = _hrpfManageDetailReadOnly ? '👁️ Hồ Sơ Nhân Sự (chỉ xem)' : '✏️ Hồ Sơ Nhân Sự (đang sửa)';
     document.getElementById('hrpfDetailModal').classList.remove('hidden');
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -200,6 +210,7 @@ async function openHrpfDetailModal(employeeCode) {
 }
 function closeHrpfDetailModal() {
   document.getElementById('hrpfDetailModal').classList.add('hidden');
+  _hrpfManageDetailReadOnly = false;
   _hrpfManageDetailCode = null;
 }
 
@@ -209,7 +220,7 @@ async function saveHrpfManageProfile() {
   try {
     const data = await hrProfileApiCall('PATCH', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}`, payload);
     alert('✅ Đã lưu Hồ Sơ Nhân Sự.');
-    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE' });
+    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -224,7 +235,7 @@ async function toggleHrpfManualStatus() {
   if (!confirm(next === 'ON_LEAVE' ? 'Chuyển hồ sơ này sang "Nghỉ dài hạn"?' : 'Chuyển hồ sơ này về "Đang làm việc"?')) return;
   try {
     const data = await hrProfileApiCall('PATCH', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/status`, { status: next });
-    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE' });
+    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -245,7 +256,7 @@ async function confirmHrpfLinkAccount() {
   try {
     const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/link-account`, { username });
     alert('✅ Đã liên kết tài khoản VPDT với hồ sơ này.');
-    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE' });
+    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -354,13 +365,22 @@ async function confirmHrpfImport() {
 // scope 'ME': chính chủ tự sửa — chỉ SELF_EDITABLE_FIELDS (xem lib/employeeProfile.js), không đổi được
 // nationalId/socialInsuranceNo/taxCode/status/username.
 // scope 'MANAGE': HR/admin — sửa thêm được HR_ONLY_EDITABLE_FIELDS + đổi trạng thái tay + liên kết TK.
-function renderHrpfProfileForm(profile, { scope }) {
+function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
   const idn = hrpfIdentitySnapshot(profile);
-  const editableHrOnly = scope === 'MANAGE';
+  // readOnly: chế độ "👁️ Xem" ở "Quản Lý Hồ Sơ" (KHÁC hẳn scope — scope vẫn là 'MANAGE', chỉ đổi cách
+  // hiển thị: mọi input/select/date-picker đổi thành chữ tĩnh, ẩn hết các nút mutate (đổi trạng thái/
+  // liên kết tài khoản/lưu/+thêm dòng/xoá dòng người phụ thuộc-học vấn) — KHÔNG phải 1 tầng quyền mới,
+  // vẫn cùng quyền hrProfileManage như "✏️ Sửa" (server route GET/PATCH không phân biệt 2 chế độ này).
+  const isReadOnly = !!readOnly;
+  const editableHrOnly = scope === 'MANAGE' && !isReadOnly;
   const roField = (label, val) => `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>
     <p class="text-sm text-gray-800">${escapeHtml(val || '—')}</p></div>`;
   const dateInput = (id, val) => `<input type="date" id="${id}" value="${escapeHtml((val || '').slice(0, 10))}" class="w-full border p-1.5 rounded text-sm">`;
   const textInput = (id, val, ph) => `<input id="${id}" value="${escapeHtml(val || '')}" placeholder="${ph || ''}" class="w-full border p-1.5 rounded text-sm">`;
+  const dateField = (label, id, val) => isReadOnly ? roField(label, (val || '').slice(0, 10))
+    : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>${dateInput(id, val)}</div>`;
+  const textField = (label, id, val) => isReadOnly ? roField(label, val)
+    : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>${textInput(id, val)}</div>`;
 
   const identityBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
     ${roField('Mã Nhân Viên', profile.employeeCode)}
@@ -372,35 +392,35 @@ function renderHrpfProfileForm(profile, { scope }) {
       <p>${HRPF_STATUS_BADGES[profile.status] || profile.status}</p></div>
   </div>`;
 
-  const manageActionsBlock = scope !== 'MANAGE' ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
+  const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
     <button type="button" data-op="toggleHrpfManualStatus" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">
       ${profile.status === 'ON_LEAVE' ? '↩️ Chuyển về Đang làm việc' : '🌙 Chuyển sang Nghỉ dài hạn'}
     </button>
     ${profile.username ? '' : `<div class="flex items-center gap-1">
-      <input id="hrpfLinkAccountInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfLinkAccountInput" placeholder="Gõ tên/tài khoản VPDT để liên kết..." class="border p-1.5 rounded text-xs w-64">
+      <input id="hrpfLinkAccountInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfLinkAccountInput" data-arg-value="0" placeholder="Gõ tên/tài khoản VPDT để liên kết..." class="border p-1.5 rounded text-xs w-64">
       <input type="hidden" id="hrpfLinkAccountUsername">
       <button type="button" data-op="confirmHrpfLinkAccount" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">🔗 Liên Kết Tài Khoản VPDT</button>
     </div>`}
   </div>`;
 
   const personalBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày sinh</label>${dateInput('hrpfF_dateOfBirth', profile.dateOfBirth)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Giới tính</label>
+    ${dateField('Ngày sinh', 'hrpfF_dateOfBirth', profile.dateOfBirth)}
+    ${isReadOnly ? roField('Giới tính', profile.gender) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Giới tính</label>
       <select id="hrpfF_gender" class="w-full border p-1.5 rounded text-sm bg-white">
         <option value="">-- Chọn --</option>
         ${HRPF_GENDERS.map(g => `<option value="${g}" ${profile.gender === g ? 'selected' : ''}>${g}</option>`).join('')}
-      </select></div>
+      </select></div>`}
     <div></div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ thường trú</label>${textInput('hrpfF_permanentAddress', profile.permanentAddress)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ hiện tại</label>${textInput('hrpfF_currentAddress', profile.currentAddress)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Email cá nhân</label>${textInput('hrpfF_personalEmail', profile.personalEmail)}</div>
+    ${textField('Địa chỉ thường trú', 'hrpfF_permanentAddress', profile.permanentAddress)}
+    ${textField('Địa chỉ hiện tại', 'hrpfF_currentAddress', profile.currentAddress)}
+    ${textField('Email cá nhân', 'hrpfF_personalEmail', profile.personalEmail)}
   </div>
   <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Người liên hệ khẩn cấp</label>${textInput('hrpfF_emergencyContactName', profile.emergencyContactName)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">SĐT liên hệ khẩn cấp</label>${textInput('hrpfF_emergencyContactPhone', profile.emergencyContactPhone)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Quan hệ</label>${textInput('hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số tài khoản ngân hàng</label>${textInput('hrpfF_bankAccountNo', profile.bankAccountNo)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngân hàng</label>${textInput('hrpfF_bankName', profile.bankName)}</div>
+    ${textField('Người liên hệ khẩn cấp', 'hrpfF_emergencyContactName', profile.emergencyContactName)}
+    ${textField('SĐT liên hệ khẩn cấp', 'hrpfF_emergencyContactPhone', profile.emergencyContactPhone)}
+    ${textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship)}
+    ${textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo)}
+    ${textField('Ngân hàng', 'hrpfF_bankName', profile.bankName)}
   </div>`;
 
   const hrOnlyBlock = !('nationalId' in profile) ? '' : `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t">
@@ -412,22 +432,26 @@ function renderHrpfProfileForm(profile, { scope }) {
   const dependentsBlock = !('dependents' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
     <div class="flex items-center justify-between mb-1">
       <label class="block text-[11px] font-semibold text-gray-500">👨‍👩‍👧 Người phụ thuộc</label>
-      <button type="button" data-op="addHrpfDependentRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>
+      ${isReadOnly ? '' : '<button type="button" data-op="addHrpfDependentRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
     </div>
-    <div id="hrpfDependentsRows" class="space-y-1">${(profile.dependents || []).map(hrpfDependentRowHtml).join('')}</div>
+    <div id="hrpfDependentsRows" class="space-y-1">${isReadOnly
+      ? ((profile.dependents || []).length ? (profile.dependents || []).map(hrpfDependentRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>')
+      : (profile.dependents || []).map(hrpfDependentRowHtml).join('')}</div>
   </div>`;
 
   const educationBlock = !('education' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
     <div class="flex items-center justify-between mb-1">
       <label class="block text-[11px] font-semibold text-gray-500">🎓 Học vấn</label>
-      <button type="button" data-op="addHrpfEducationRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>
+      ${isReadOnly ? '' : '<button type="button" data-op="addHrpfEducationRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
     </div>
-    <div id="hrpfEducationRows" class="space-y-1">${(profile.education || []).map(hrpfEducationRowHtml).join('')}</div>
+    <div id="hrpfEducationRows" class="space-y-1">${isReadOnly
+      ? ((profile.education || []).length ? (profile.education || []).map(hrpfEducationRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>')
+      : (profile.education || []).map(hrpfEducationRowHtml).join('')}</div>
   </div>`;
 
-  const saveBtn = scope === 'ME'
+  const saveBtn = isReadOnly ? '' : (scope === 'ME'
     ? `<button type="button" data-op="saveHrpfMyProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`
-    : `<button type="button" data-op="saveHrpfManageProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`;
+    : `<button type="button" data-op="saveHrpfManageProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`);
 
   const limitedNote = ('nationalId' in profile) ? '' : `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
     ℹ️ Bạn đang xem hồ sơ này với tư cách "quản lý trực tiếp" — chỉ hiển thị thông tin cơ bản, không hiển thị CCCD/ngân hàng/BHXH/người phụ thuộc/học vấn.</p>`;
@@ -458,6 +482,26 @@ function hrpfEducationRowHtml(e) {
       <input type="number" value="${ee.graduationYear || ''}" placeholder="Năm TN" class="border p-1 rounded text-xs w-20 hrpf-edu-year">
       <button type="button" data-op="removeHrpfRow" data-arg0="education" data-arg-el="1" class="text-red-500 hover:text-red-700 text-xs">✕</button>
     </div>
+  </div>`;
+}
+// 2 hàm dưới đây — bản CHỈ ĐỌC của 2 hàm trên (chế độ "👁️ Xem" ở Quản Lý Hồ Sơ), hiện đúng 4 cột dữ liệu
+// dạng chữ tĩnh, không có input/nút xoá dòng nào.
+function hrpfDependentRowReadOnlyHtml(d) {
+  const dd = d || {};
+  return `<div class="grid grid-cols-4 gap-1 text-xs py-0.5 border-b border-gray-100">
+    <span>${escapeHtml(dd.fullName || '—')}</span>
+    <span>${escapeHtml(dd.relationship || '—')}</span>
+    <span>${escapeHtml((dd.dateOfBirth || '').slice(0, 10) || '—')}</span>
+    <span>${escapeHtml(dd.taxCode || '—')}</span>
+  </div>`;
+}
+function hrpfEducationRowReadOnlyHtml(e) {
+  const ee = e || {};
+  return `<div class="grid grid-cols-4 gap-1 text-xs py-0.5 border-b border-gray-100">
+    <span>${escapeHtml(ee.degree || '—')}</span>
+    <span>${escapeHtml(ee.major || '—')}</span>
+    <span>${escapeHtml(ee.school || '—')}</span>
+    <span>${escapeHtml(ee.graduationYear ? String(ee.graduationYear) : '—')}</span>
   </div>`;
 }
 function addHrpfDependentRow() {

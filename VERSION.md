@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**15.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.0 (2026-09-10): Nhân Sự — sửa lỗi liên kết tài khoản VPĐT + tách Xem/Sửa ở Quản Lý Hồ Sơ
+
+Người dùng báo lỗi thật qua ảnh chụp: mở "Quản Lý Hồ Sơ" (Nhân Sự > Hồ Sơ
+Nhân Sự), chọn đúng tài khoản VPĐT ở ô "🔗 Liên Kết Tài Khoản VPĐT" rồi bấm
+liên kết vẫn luôn báo "⛔ Vui lòng gõ và chọn đúng 1 tài khoản VPDT từ gợi ý"
+dù chọn đúng, thử lại nhiều lần không hết. Đồng thời yêu cầu làm lại nút thao
+tác ở "Quản Lý Hồ Sơ" theo khuôn Xem (chỉ xem)/Sửa (cho phép cập nhật)/Xoá
+(chỉ admin) như các module khác, và kiểm tra Onboarding/Offboarding có bị lỗi
+tương tự khi liên kết tài khoản không.
+
+**Nguyên nhân lỗi liên kết**: ô nhập gõ-chọn (`sdd*`) chọn xong sẽ bắn sự
+kiện `input` mang giá trị input đó, nhưng hàm đọc giá trị
+(`resolveHrpfLinkAccountInput`) nhận tham số qua cơ chế `data-op-input` —
+thiếu thuộc tính `data-arg-value="0"` trên ô nhập nên hàm luôn nhận
+`undefined`, không đọc được tài khoản vừa chọn, dẫn tới báo "chưa chọn tài
+khoản" ngay cả khi đã chọn đúng. Đã rà soát và vá thêm 2 điểm bị cùng lỗi
+(chưa ai báo, phát hiện khi rà soát toàn bộ module): ô liên kết ở form
+"➕ Tạo Hồ Sơ Nhân Sự Mới" và ô tìm nhân viên ở "👁️ Xem Hồ Sơ Nhân Sự Cấp
+Dưới". Đã kiểm tra Onboarding/Offboarding — các ô liên kết ở đó vốn đã đúng
+(có `data-arg-value="0"`), không bị lỗi này.
+
+**Quản Lý Hồ Sơ — đổi nút thao tác**: mỗi dòng nay có 2 nút **"👁️ Xem"** (mở
+hồ sơ CHỈ ĐỌC, không có nút Lưu/liên kết tài khoản/đổi trạng thái) và
+**"✏️ Sửa"** (mở đúng form sửa như trước) — cả 2 dùng chung quyền
+`hrProfileManage`, không phải 2 tầng quyền khác nhau. **Quyết định KHÔNG thêm
+nút Xoá** (khác các module khác đều cho admin xoá): Mã Nhân Viên được nhiều
+module khác tham chiếu bằng chuỗi tự do (Công & Phép, Đồng Phục, Hợp Đồng Lao
+Động, Cơ Cấu Tổ Chức...) không phải khoá ngoại SQL thật, xoá sẽ để lại tham
+chiếu mồ côi mà hệ thống không tự dọn được — hồ sơ sai/dư chỉ nên sửa lại
+hoặc để nguyên.
+
+Không đổi `schema.sql`/`.env.example`/`dependencies` — thuần sửa client
+(HTML thuộc tính + JS hiển thị), chỉ cần copy code + `pm2 restart`.
 
 ## v15.9 (2026-09-10): 6 việc — Thanh Toán/Hợp Đồng LĐ/Công&Phép/Hỗ Trợ IT/Vận Hành Đặt Hàng/Biểu Mẫu
 

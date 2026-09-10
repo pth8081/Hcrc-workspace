@@ -799,7 +799,17 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
 - Mọi nhân viên đã đăng nhập đều **tự xem/sửa được hồ sơ CHÍNH MÌNH** (mục
   **"Hồ Sơ Của Tôi"**) — không cần quyền gì thêm; **"Quản Lý Hồ Sơ"** (danh
   sách toàn bộ, sửa mọi trường, đổi trạng thái tay Đang làm việc ↔ Nghỉ dài
-  hạn) chỉ HR/admin thấy.
+  hạn) chỉ HR/admin thấy. Mỗi dòng có 2 nút thao tác: **"👁️ Xem"** (mở hồ sơ ở
+  chế độ chỉ đọc, không có nút Lưu/liên kết tài khoản) và **"✏️ Sửa"** (mở
+  đúng form sửa như trước) — CẢ 2 đều dùng chung quyền `hrProfileManage`,
+  KHÔNG phải 2 tầng quyền khác nhau. **Không có nút Xoá** cho Hồ Sơ Nhân Sự —
+  khác với hầu hết module khác đều cho admin xoá — vì Mã Nhân Viên được nhiều
+  module khác tham chiếu bằng chuỗi tự do (Công & Phép, Đồng Phục, Hợp Đồng
+  Lao Động, Cơ Cấu Tổ Chức...) chứ không phải khoá ngoại SQL thật, xoá 1 hồ sơ
+  sẽ để lại tham chiếu "mồ côi" ở các module đó mà hệ thống không tự dọn được;
+  hồ sơ sai/dư chỉ nên sửa lại hoặc để nguyên (không có tác dụng phụ nếu không
+  liên kết tài khoản/không hiển thị trong danh sách nhân viên đang làm việc
+  nếu chuyển trạng thái Nghỉ dài hạn).
 - **Không đổi trạng thái tay được** DRAFT/Đã nghỉ việc — 2 trạng thái này chỉ
   do hệ thống tự đặt theo Onboarding/Offboarding, tránh HR lỡ tay đóng nhầm hồ
   sơ người đang thực sự làm việc.

@@ -7619,7 +7619,7 @@
       <div id="hrpfSubordinateSearchWrap" class="hidden pt-2 border-t mt-2">
         <p class="text-xs font-semibold text-gray-600 mb-1">🔍 Xem Hồ Sơ Nhân Viên (Quản Lý Trực Tiếp)</p>
         <div class="flex flex-wrap items-center gap-2">
-          <input id="hrpfSubordinateInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfSubordinateInput" placeholder="Gõ tên/tài khoản nhân viên..." class="border p-1.5 rounded text-xs w-72 bg-white">
+          <input id="hrpfSubordinateInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfSubordinateInput" data-arg-value="0" placeholder="Gõ tên/tài khoản nhân viên..." class="border p-1.5 rounded text-xs w-72 bg-white">
           <input type="hidden" id="hrpfSubordinateUsername">
           <button type="button" data-op="viewHrpfSubordinateProfile" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">Xem</button>
         </div>
@@ -8228,7 +8228,7 @@
   <div id="hrpfDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-4">
       <div class="flex items-center justify-between mb-2">
-        <h3 class="font-bold text-base text-gray-800">Hồ Sơ Nhân Sự</h3>
+        <h3 id="hrpfDetailModalTitle" class="font-bold text-base text-gray-800">Hồ Sơ Nhân Sự</h3>
         <button type="button" data-op="closeHrpfDetailModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
       </div>
       <div id="hrpfDetailBody"></div>
@@ -8251,7 +8251,7 @@
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã Nhân Viên <span class="text-red-500">*</span></label>
           <input id="hrpfCF_employeeCode" class="w-full border p-1.5 rounded text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Liên Kết Tài Khoản VPDT (tuỳ chọn)</label>
-          <input id="hrpfCF_usernameInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfCreateUsernameInput" placeholder="Gõ tên/tài khoản..." class="w-full border p-1.5 rounded text-sm">
+          <input id="hrpfCF_usernameInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfCreateUsernameInput" data-arg-value="0" placeholder="Gõ tên/tài khoản..." class="w-full border p-1.5 rounded text-sm">
           <input type="hidden" id="hrpfCF_username"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày sinh</label>
           <input type="date" id="hrpfCF_dateOfBirth" class="w-full border p-1.5 rounded text-sm"></div>
