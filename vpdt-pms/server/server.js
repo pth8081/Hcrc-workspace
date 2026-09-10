@@ -296,6 +296,14 @@ app.use('/js', express.static(path.join(__dirname, 'public', 'js'), JS_STATIC_OP
 // 1 lần fs.statSync() rẻ hơn nhiều so với đọc+regex lại toàn bộ trang ~8000 dòng mỗi lần).
 const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
 const SCRIPT_SRC_RE = /(<script\b[^>]*\bsrc=")\/js\/([\w.-]+)\.js(")/g;
+// BUG THẬT đã sửa: 2 thẻ <link rel="stylesheet" href="/tailwind.css"|"/app.css"> KHÔNG hề được gắn
+// "?v=..." như mọi <script src="/js/...">/index.html ở trên — nội dung 2 file CSS này ĐỔI mỗi lần deploy
+// (sửa giao diện, thêm class Tailwind mới...) nhưng URL luôn CỐ ĐỊNH, nên trình duyệt (và bất kỳ proxy/
+// CDN cache trung gian nào) có thể tiếp tục phục vụ bản CSS CŨ vô thời hạn sau khi deploy bản mới — trong
+// khi HTML/JS đã cập nhật đúng. Hậu quả thực tế: người dùng thấy JS/HTML mới (VD widget "sdd*" tìm-kiếm-
+// gõ-chọn đã có) nhưng CSS cũ (VD .sdd-dropdown thiếu max-height/overflow-y, dropdown dài tràn cả trang).
+// Gắn "?v=<version>" giống hệt <script src="/js/...">.
+const CSS_HREF_RE = /(<link\b[^>]*\bhref=")\/(tailwind|app)\.css(")/g;
 let _indexHtmlCache = null; // { mtimeMs, html }
 
 function renderIndexHtml() {
@@ -303,6 +311,7 @@ function renderIndexHtml() {
   if (!_indexHtmlCache || _indexHtmlCache.mtimeMs !== stat.mtimeMs) {
     const raw = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
     let versioned = raw.replace(SCRIPT_SRC_RE, (full, pre, name, post) => `${pre}/js/${name}.js?v=${encodeURIComponent(APP_VERSION)}${post}`);
+    versioned = versioned.replace(CSS_HREF_RE, (full, pre, name, post) => `${pre}/${name}.css?v=${encodeURIComponent(APP_VERSION)}${post}`);
     // Gắn version ra window TRƯỚC thẻ <script src="/js/core.js..."> đầu tiên — loadModuleGroup() (core.js)
     // đọc lại đúng giá trị này để gắn "?v=..." cho các file lazy-load nạp sau, không hardcode version
     // client-side (khớp đúng bản server đang chạy tại thời điểm request, kể cả khi deploy version mới

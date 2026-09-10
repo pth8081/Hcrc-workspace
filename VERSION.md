@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**16.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.4 (2026-09-10): Cache-busting cho `app.css`/`tailwind.css` + fix modal "Thêm Công Việc" (Vận Hành Siêu Thị) tràn màn hình laptop ngang
+
+**1) Lỗi thật đã sửa — cache-busting CSS.** Người dùng báo ô chọn người
+duyệt (searchable single-select, module Hỗ Trợ IT) hiện SỔ DANH SÁCH DÀI
+TRÀN CẢ TRANG thay vì cuộn gọn trong khung ~224px như thiết kế. Kiểm tra
+trực tiếp bằng Playwright thật (real click + đo `getBoundingClientRect()`)
+xác nhận code HIỆN TẠI hoàn toàn đúng — `.sdd-dropdown` luôn có
+`max-height:14rem; overflow-y:auto`. Nguyên nhân: 2 thẻ
+`<link rel="stylesheet" href="/tailwind.css">` và `"/app.css">` KHÔNG hề
+được gắn `?v=<version>` như mọi `<script src="/js/...">`/`index.html`
+(`renderIndexHtml()` ở `server.js`) — nội dung 2 file CSS này đổi mỗi lần
+deploy nhưng URL cố định, khiến trình duyệt (hoặc bất kỳ proxy/CDN trung
+gian nào) có thể tiếp tục phục vụ bản CSS CŨ vô thời hạn sau khi deploy bản
+mới, dù HTML/JS đã cập nhật đúng — đúng khớp triệu chứng người dùng mô tả
+(JS mới đã có widget tìm-kiếm-gõ-chọn nhưng CSS cũ thiếu max-height). Fix:
+gắn `?v=<version>` cho cả 2 thẻ CSS, mirror đúng cách JS đã làm.
+
+**2) Vận Hành Siêu Thị — màn "➕ Thêm Công Việc" (mục Thực Hiện) bị che/
+không nhập được trên laptop màn hình ngang.** `#operationWorkItemFormModal`
+(dùng chung cho Thêm Công Việc Gốc/Con/Sửa) không có `max-h-[...vh]
+overflow-y-auto` trên khung nội dung — trên màn hình laptop chiều cao thấp
+(kiểu 13-14 inch, viewport ~700-800px), form dài (tiêu đề, mô tả, người phụ
+trách, người nghiệm thu, kỳ thực hiện, ngày bắt đầu/hạn, tần suất cập nhật,
+nghiệm thu...) tràn quá chiều cao màn hình, phần đầu bị đẩy lên trên khỏi
+vùng nhìn thấy, không bấm/nhập được — đúng quy ước modal nội dung dài khác
+trong hệ thống (`max-w-{N} w-full max-h-[85vh|90vh|92vh] overflow-y-auto`).
+Thêm `max-h-[90vh] overflow-y-auto`.
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — chỉ sửa
+`server.js`/`public/index.html`, chỉ cần copy code + `pm2 restart`.
+
+Full regression suite chạy lại sau cả 2 fix: không phát sinh lỗi mới — các
+lỗi còn lại (test-approval-hub.js, test-audit-fixes-batch1.js,
+test-audit-round2-cluster1.js) vẫn là lỗi có sẵn từ trước, không liên quan.
 
 ## v16.3 (2026-09-10): Fix lỗi "Không tải được phần chức năng cần thiết" khi tạo Hợp Đồng Lao Động
 
