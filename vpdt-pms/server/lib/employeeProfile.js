@@ -72,7 +72,7 @@ function defaultProfile(employeeCode) {
     // Chức vụ hiện tại — LUÔN chọn từ 1 node POSITION của bản Cơ Cấu Tổ Chức đang áp dụng (KHÔNG gõ tự
     // do), xem applyPositionAssignment(). positionLabel là tên hiển thị đã ghép sẵn (VD "Trưởng Phòng
     // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
-    positionKey: null, jobTitle: null, dept: null, positionLabel: null,
+    positionKey: null, jobTitle: null, dept: null, positionLabel: null, posType: null,
     positionHistory: [],
     processId: null,
     createdAt: nowVN(), createdBy: 'system',
@@ -168,8 +168,11 @@ function canManageProfiles(user) {
 // ĐANG ÁP DỤNG (orgChartVersion, xem getAppliedVersion() ở lib/orgChart.js), không nhận chuỗi gõ tự do.
 // Mỗi lần gọi ghi thêm 1 dòng vào positionHistory[] (kể cả lần gán ĐẦU TIÊN — chính là mốc bắt đầu của
 // "lịch sử thăng chức/điều chuyển" mà người dùng yêu cầu theo dõi xuyên suốt hồ sơ). Trả về
-// { jobTitle, dept } (giá trị MỚI) để caller (route) biết cần đồng bộ gì sang DB.users nếu hồ sơ đã liên
-// kết tài khoản — hàm này CHỈ mutate profile, KHÔNG động vào users (route lo phần đó, khác collection).
+// { jobTitle, dept, posType } (giá trị MỚI) để caller (route) biết cần đồng bộ gì sang DB.users nếu hồ sơ
+// đã liên kết tài khoản — hàm này CHỈ mutate profile, KHÔNG động vào users (route lo phần đó, khác
+// collection). posType ('HO'/'STORE') là TUỲ CHỌN trên node (xem lib/orgChart.js) — trả về null nếu node
+// chưa gán, caller khi đó KHÔNG đồng bộ posType xuống tài khoản (giữ nguyên giá trị hiện có, không ghi
+// đè bằng null — xem routes/employeeProfile.js).
 function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiveDate, actorUsername, actorName, note) {
   const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart');
   if (!orgChartVersion) throw new HttpError(400, 'Chưa có bản Cơ Cấu Tổ Chức nào được áp dụng — vào Cơ Cấu Tổ Chức tạo và áp dụng cây tổ chức trước khi gán chức vụ');
@@ -178,6 +181,7 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   if (profile.positionKey === positionKey) throw new HttpError(400, 'Nhân viên đã ở đúng vị trí này rồi');
   const label = buildNodeDisplayName(orgChartVersion, node);
   const jobTitle = node.jobTitle;
+  const posType = (node.posType === 'HO' || node.posType === 'STORE') ? node.posType : null;
   let dept = null;
   if (node.requiresDept !== false) {
     const deptNode = findNearestDeptAncestor(orgChartVersion, node);
@@ -190,16 +194,16 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   const entry = {
     id: randomUUID(),
     effectiveDate: effectiveDate || todayISO(),
-    oldPositionKey: profile.positionKey, oldJobTitle: profile.jobTitle, oldDept: profile.dept, oldPositionLabel: profile.positionLabel,
-    newPositionKey: positionKey, newJobTitle: jobTitle, newDept: dept, newPositionLabel: label,
+    oldPositionKey: profile.positionKey, oldJobTitle: profile.jobTitle, oldDept: profile.dept, oldPositionLabel: profile.positionLabel, oldPosType: profile.posType,
+    newPositionKey: positionKey, newJobTitle: jobTitle, newDept: dept, newPositionLabel: label, newPosType: posType,
     changedBy: actorUsername, changedByName: actorName || actorUsername,
     note: note ? String(note).trim().slice(0, 500) : null,
     createdAt: nowStr
   };
   profile.positionHistory = [...(profile.positionHistory || []), entry];
-  profile.positionKey = positionKey; profile.jobTitle = jobTitle; profile.dept = dept; profile.positionLabel = label;
+  profile.positionKey = positionKey; profile.jobTitle = jobTitle; profile.dept = dept; profile.positionLabel = label; profile.posType = posType;
   profile.updatedAt = nowStr; profile.updatedBy = actorUsername;
-  return { jobTitle, dept };
+  return { jobTitle, dept, posType };
 }
 
 // Tra tên hiển thị cho 1 hồ sơ — employeeProfiles KHÔNG lưu fullName (chỉ giữ employeeCode + dữ liệu cá

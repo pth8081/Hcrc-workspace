@@ -690,7 +690,10 @@ theo đúng vị trí trong cây**.
   gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
   làm căn cứ so khớp — không bắt buộc), **Vị Trí** (chức danh — tên hiển thị
   tự ghép "<Chức danh> <Tên phòng ban chứa nó>", trừ vị trí đánh dấu "không
-  thuộc phòng ban nào" như Tổng Giám Đốc thì chỉ hiện đúng chức danh).
+  thuộc phòng ban nào" như Tổng Giám Đốc thì chỉ hiện đúng chức danh). Mỗi
+  **Vị Trí** còn có thể gắn thêm **"Vị Trí Làm Việc"** (🏢 Văn phòng / 🏪 Siêu
+  Thị, tuỳ chọn) — dùng để tự đồng bộ mô hình chấm công (module Công & Phép)
+  xuống tài khoản khi HR gán chức vụ này cho ai đó ở Hồ Sơ Nhân Sự (mục 4.5.3).
 - **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
   Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
   hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức
@@ -854,6 +857,18 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     vụ/phòng ban nữa — nguồn xác định chức vụ/phòng ban chính thức từ nay là
     Chức Vụ gán trên Hồ Sơ Nhân Sự (đồng bộ NGƯỢC xuống tài khoản, không phải
     chiều ngược lại).
+  - **"Vị Trí Làm Việc" (Văn phòng/Siêu Thị) cũng đồng bộ theo, nếu đã cấu
+    hình**: mỗi vị trí (POSITION node) trong Cơ Cấu Tổ Chức có thể gắn thêm
+    thuộc tính "Vị Trí Làm Việc" (🏢 Văn phòng / 🏪 Siêu Thị, tuỳ chọn — vào
+    Cơ Cấu Tổ Chức, mở Thêm/Sửa 1 vị trí để gắn). Việc này bổ sung sau khi
+    phát hiện: module Công & Phép xác định mô hình chấm công (giờ hành chính
+    hay theo ca) dựa vào field `posType` của tài khoản, mà trước đó cơ chế
+    "Gán/Đổi Chức Vụ" chỉ đồng bộ Phòng Ban/Chức Danh — nếu HR đổi chức vụ 1
+    nhân viên giữa vị trí Văn phòng ↔ Siêu Thị mà không cấu hình "Vị Trí Làm
+    Việc" cho node đó, mô hình chấm công của họ ở Công & Phép sẽ KHÔNG tự đổi
+    theo (vẫn cần vào màn "Người Dùng" sửa tay như trước). Với các vị trí ĐÃ
+    gắn "Vị Trí Làm Việc", đồng bộ diễn ra tự động cùng lúc với Phòng Ban/Chức
+    Danh khi gán chức vụ.
 - **Lịch Sử Nhân Sự** (khối cuối Chi tiết hồ sơ, chỉ hiện ở chế độ "Quản Lý
   Hồ Sơ"): gộp hiển thị theo thời gian **cả 3 nguồn** — lịch sử chức vụ (mục
   trên), lịch sử hợp đồng lao động (mục 4.5.4 bên dưới: tạo/kích hoạt/thay

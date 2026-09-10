@@ -1,8 +1,64 @@
 # Phiên bản hiện tại
 
-**16.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
 `MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.7 (2026-09-10): Cơ Cấu Tổ Chức — thêm "Vị Trí Làm Việc" (Văn phòng/Siêu Thị) cho từng vị trí, tự đồng bộ xuống Công & Phép
+
+Người dùng hỏi module Công & Phép có liên quan gì tới cơ chế đồng bộ tài
+khoản mới ở v16.6 không. Rà soát phát hiện: Công & Phép
+(`lib/attendance.js::resolveWorkModelForEmployeeCode()`) xác định mô hình
+chấm công (`OFFICE_HOURS` giờ hành chính hay `SHIFT_BASED` theo ca) dựa vào
+`user.posType` ('HO'/'STORE') của tài khoản liên kết — phần `dept` đã tự ăn
+theo đúng (đọc trực tiếp `user.dept` mỗi lần cần, không cache), nhưng
+`posType` thì KHÔNG được cơ chế "Gán/Đổi Chức Vụ" (v16.6) đồng bộ, vì Cơ Cấu
+Tổ Chức chưa có khái niệm này trên từng vị trí — lỗ hổng thật, không phải
+suy đoán.
+
+**Đã xác nhận với người dùng (AskUserQuestion)**: thêm hẳn "Vị Trí Làm Việc"
+vào Cơ Cấu Tổ Chức và tự đồng bộ, thay vì giữ nguyên sửa tay như cũ.
+
+**Thay đổi:**
+1. **`lib/orgChart.js`** — mỗi node loại POSITION có thêm field `posType`
+   ('HO'/'STORE', TUỲ CHỌN — null nếu chưa gán, không phá vỡ các vị trí đã
+   tạo trước đây). `addNode()`/`editNode()` validate giá trị nếu có gửi lên.
+2. **`lib/employeeProfile.js`::`applyPositionAssignment()`** — đọc thêm
+   `node.posType`, lưu vào `profile.posType` (mirror dept/jobTitle), trả về
+   trong kết quả để route đồng bộ.
+3. **`routes/employeeProfile.js`** (`set-position` + tạo hồ sơ kèm
+   `positionKey`) — đồng bộ `posType` xuống tài khoản liên kết **CHỈ KHI**
+   vị trí đó đã gán posType (`result.posType` khác null) — vị trí CHƯA cấu
+   hình thì GIỮ NGUYÊN posType hiện có của tài khoản, không ghi đè bằng
+   null (tránh làm hỏng mô hình chấm công của người đã có posType đúng chỉ
+   vì HR đổi sang 1 vị trí chưa kịp cấu hình).
+4. **Client** (`public/index.html`, `public/js/module-orgchart.js`) — thêm
+   dropdown "Vị Trí Làm Việc" (🏢 Văn phòng / 🏪 Siêu Thị / -- Chưa gán --)
+   vào form Thêm/Sửa vị trí trong Cơ Cấu Tổ Chức.
+
+Mở rộng `tests/test-hr-profile-position-history.js` (17/17 pass, thêm 5
+kịch bản mới): `applyPositionAssignment()` trả đúng `posType` theo node; vị
+trí requiresDept=false vẫn trả `posType: null` nếu chưa gán; set-position
+đồng bộ đúng `posType` xuống tài khoản khi node có gán; set-position sang
+vị trí CHƯA gán posType thì tài khoản GIỮ NGUYÊN posType cũ (không bị ghi
+đè null). `tests/test-orgchart-v2.js` (14/14) và `tests/test-attendance-leave.js`
+(47/47) chạy lại không phát sinh lỗi mới.
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — chỉ sửa code
+server (`lib/orgChart.js`, `lib/employeeProfile.js`,
+`routes/employeeProfile.js`) và client (`public/index.html`,
+`public/js/module-orgchart.js`), chỉ cần copy code + `pm2 restart`. Các vị
+trí đã có trong Cơ Cấu Tổ Chức TRƯỚC bản này sẽ có `posType: null` — HR/admin
+vào Cơ Cấu Tổ Chức mở Sửa từng vị trí để bổ sung dần nếu muốn dùng tính năng
+tự đồng bộ (không bắt buộc, hệ thống vẫn chạy bình thường nếu để trống).
+
+Full regression suite chạy lại sau khi merge: 100/100 file test chạy xong,
+không phát sinh lỗi mới — chỉ còn đúng 3 lỗi có sẵn từ trước (đã xác nhận
+lại, không liên quan): `test-approval-hub.js` (2 kịch bản về tính năng
+`operationOrderReceipt`, không liên quan tới thay đổi này) và
+`test-audit-fixes-batch1.js`/`test-audit-fixes-batch2-zipbomb.js` (lỗi kết
+nối SQL Server tạm thời trong môi trường test — "Failed to connect to
+localhost:1433" — không phải lỗi logic).
 
 ## v16.6 (2026-09-10): Nhân Sự — "Chức Vụ" chọn từ Cơ Cấu Tổ Chức + "Lịch Sử Nhân Sự" xuyên suốt hồ sơ
 

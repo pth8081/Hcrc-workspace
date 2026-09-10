@@ -25,6 +25,14 @@
 //   4. Không có bảng PositionAssignments riêng nên KHÔNG có JobTitles.RequiresDept catalog riêng — mỗi
 //      node loại POSITION tự mang cờ `requiresDept` (mặc định true, false cho vị trí kiểu Tổng Giám Đốc
 //      không thuộc phòng ban nào).
+//   5. `posType` ('HO'|'STORE', TUỲ CHỌN — null nếu chưa gán) trên mỗi node POSITION — bổ sung sau khi
+//      phát hiện module Công & Phép (lib/attendance.js::resolveWorkModelForEmployeeCode()) xác định mô
+//      hình chấm công (OFFICE_HOURS/SHIFT_BASED) dựa vào user.posType, mà cơ chế "Gán/Đổi Chức Vụ" ở Hồ
+//      Sơ Nhân Sự (lib/employeeProfile.js::applyPositionAssignment()) lại chỉ đồng bộ dept/jobTitle
+//      xuống tài khoản liên kết — nếu không có field này, đổi chức vụ giữa vị trí Văn phòng/Siêu Thị sẽ
+//      không tự cập nhật đúng mô hình chấm công. TUỲ CHỌN (không bắt buộc như jobTitle) để không phá vỡ
+//      các node POSITION đã tạo trước khi có field này (giữ null, applyPositionAssignment() bỏ qua đồng
+//      bộ posType nếu node chưa gán) — HR/admin vào Cơ Cấu Tổ Chức sửa từng vị trí để bổ sung dần.
 //
 // Toàn bộ version lưu chung 1 khoá DB.orgChartVersions (AppData, KHÔNG qua dbo.Records — số version
 // luôn nhỏ, quản lý/sửa node hoàn toàn qua các hàm ở đây, không cần tìm kiếm/phân trang/optimistic-
@@ -34,6 +42,7 @@ const { HttpError } = require('./httpErrors');
 const { assertNoManagerCycle } = require('./recordViewScope');
 
 const NODE_TYPES = new Set(['COMPANY', 'DEPARTMENT', 'POSITION']);
+const POS_TYPES = new Set(['HO', 'STORE']);
 
 function findVersion(list, versionId) {
   return (list || []).find(v => v.id === versionId) || null;
@@ -108,7 +117,7 @@ function findPositionNodeForUser(version, user) {
 
 // ===== CRUD node (chỉ khi version.status==='DRAFT') =====
 
-function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, displayOrder }) {
+function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, displayOrder }) {
   requireDraft(version);
   if (!NODE_TYPES.has(nodeType)) throw new HttpError(400, 'Loại node không hợp lệ');
   const isRoot = parentNodeId == null;
@@ -120,6 +129,7 @@ function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, job
   }
   if (nodeType === 'POSITION') {
     if (!jobTitle || !jobTitle.trim()) throw new HttpError(400, 'Vui lòng nhập Chức Danh cho vị trí');
+    if (posType !== undefined && posType !== null && !POS_TYPES.has(posType)) throw new HttpError(400, 'Vị Trí Làm Việc (posType) không hợp lệ — chỉ nhận HO hoặc STORE');
   } else if (!nodeName || !nodeName.trim()) {
     throw new HttpError(400, 'Vui lòng nhập tên cho node');
   }
@@ -130,6 +140,7 @@ function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, job
     departmentRef: nodeType === 'DEPARTMENT' ? (departmentRef || null) : null,
     jobTitle: nodeType === 'POSITION' ? jobTitle.trim() : null,
     requiresDept: nodeType === 'POSITION' ? (requiresDept !== false) : null,
+    posType: nodeType === 'POSITION' ? (POS_TYPES.has(posType) ? posType : null) : null,
     nodeName: nodeType === 'POSITION' ? null : nodeName.trim(),
     positionKey: nodeType === 'POSITION' ? randomUUID() : null,
     displayOrder: Number.isFinite(displayOrder) ? displayOrder : (version.nodes || []).length
@@ -170,6 +181,10 @@ function editNode(version, nodeId, patch) {
       node.jobTitle = patch.jobTitle.trim();
     }
     if (patch.requiresDept !== undefined) node.requiresDept = !!patch.requiresDept;
+    if (patch.posType !== undefined) {
+      if (patch.posType !== null && !POS_TYPES.has(patch.posType)) throw new HttpError(400, 'Vị Trí Làm Việc (posType) không hợp lệ — chỉ nhận HO hoặc STORE');
+      node.posType = patch.posType || null;
+    }
   } else if (patch.nodeName !== undefined) {
     if (!patch.nodeName || !patch.nodeName.trim()) throw new HttpError(400, 'Tên không được để trống');
     node.nodeName = patch.nodeName.trim();
@@ -288,7 +303,7 @@ function bootstrapFirstVersion(list, versionName, actingUsername) {
   const version = {
     id: Date.now(), versionName: versionName || 'Cơ cấu tổ chức', status: 'DRAFT',
     effectiveDate: null, clonedFromVersionId: null,
-    nodes: [{ nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null, displayOrder: 0 }],
+    nodes: [{ nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, posType: null, positionKey: null, displayOrder: 0 }],
     kpiFlow: [], createdBy: actingUsername, createdAt: new Date().toISOString(), appliedBy: null, appliedAt: null
   };
   return version;

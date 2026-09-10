@@ -353,6 +353,7 @@ function openOrgChartAddNodeModal(parentNodeId) {
   document.getElementById('orgChartNodeNameInput').value = '';
   document.getElementById('orgChartNodeJobTitleInput').value = '';
   document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = true;
+  document.getElementById('orgChartNodePosTypeSelect').value = '';
   ocPopulateNodeDeptRefSelect('');
   ocPopulateJobTitleDatalist();
   onOrgChartNodeTypeChange();
@@ -372,6 +373,7 @@ function openOrgChartEditNodeModal(nodeId) {
   if (node.nodeType === 'POSITION') {
     document.getElementById('orgChartNodeJobTitleInput').value = node.jobTitle || '';
     document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = node.requiresDept !== false;
+    document.getElementById('orgChartNodePosTypeSelect').value = node.posType || '';
   } else {
     document.getElementById('orgChartNodeNameInput').value = node.nodeName || '';
     ocPopulateNodeDeptRefSelect(node.departmentRef || '');
@@ -390,6 +392,7 @@ async function saveOrgChartNodeClick() {
   if (nodeType === 'POSITION') {
     payload.jobTitle = document.getElementById('orgChartNodeJobTitleInput').value.trim();
     payload.requiresDept = document.getElementById('orgChartNodeRequiresDeptCheckbox').checked;
+    payload.posType = document.getElementById('orgChartNodePosTypeSelect').value || null;
     if (!payload.jobTitle) return alert('⛔ Vui lòng nhập Chức Danh.');
   } else {
     payload.nodeName = document.getElementById('orgChartNodeNameInput').value.trim();

@@ -144,7 +144,10 @@ router.get('/position-options', requireProfileManage, async (req, res) => {
 // 1 giao dịch chéo collection, cùng cách catalogRename.js xử lý cascade nhiều collection) — đã xác nhận
 // với người dùng: Hồ Sơ Nhân Sự là nguồn CHÍNH THỨC cho chức vụ/phòng ban, tài khoản chỉ còn ý nghĩa
 // liên hệ đăng nhập/tra cứu chéo module, nhưng CẦN khớp đúng để Cơ Cấu Tổ Chức + phân quyền theo phòng
-// ban ở các module khác không bị lệch.
+// ban ở các module khác không bị lệch. posType chỉ đồng bộ nếu node có gán (result.posType khác null) —
+// vị trí CHƯA cấu hình posType thì giữ nguyên posType hiện có của tài khoản (không ghi đè bằng null), vì
+// module Công & Phép (lib/attendance.js) dựa vào posType để xác định mô hình chấm công OFFICE_HOURS/
+// SHIFT_BASED — xem chú thích tại lib/orgChart.js mục 5.
 router.post('/by-code/:employeeCode/set-position', async (req, res) => {
   try {
     if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới gán chức vụ' });
@@ -160,12 +163,12 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
       const result = employeeProfile.applyPositionAssignment(profile, applied, positionKey, effectiveDate, req.freshUser.username, req.freshUser.name, note);
       updated = profile;
-      if (profile.username) syncTarget = { username: profile.username, jobTitle: result.jobTitle, dept: result.dept };
+      if (profile.username) syncTarget = { username: profile.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
       return list;
     });
     if (syncTarget) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept } : u
+        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
       ));
     }
     res.json({ ok: true, profile: updated });
@@ -317,13 +320,13 @@ router.post('/', requireProfileManage, async (req, res) => {
       created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username);
       if (positionKey) {
         const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
-        if (created.username) syncTarget = { username: created.username, jobTitle: result.jobTitle, dept: result.dept };
+        if (created.username) syncTarget = { username: created.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
       }
       return list;
     });
     if (syncTarget) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept } : u
+        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
       ));
     }
     res.json({ ok: true, profile: created });

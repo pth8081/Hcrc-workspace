@@ -42,9 +42,9 @@ function buildOrgVersion() {
     nodes: [
       { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
       { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng Kinh Doanh', departmentRef: 'Phòng Kinh Doanh', jobTitle: null, requiresDept: null, positionKey: null },
-      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Trưởng Phòng', requiresDept: true, positionKey: 'POS-TP-KD' },
-      { nodeId: 4, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân Viên', requiresDept: true, positionKey: 'POS-NV-KD' },
-      { nodeId: 5, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Tổng Giám Đốc', requiresDept: false, positionKey: 'POS-TGD' },
+      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Trưởng Phòng', requiresDept: true, posType: 'HO', positionKey: 'POS-TP-KD' },
+      { nodeId: 4, parentNodeId: 2, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Nhân Viên', requiresDept: true, posType: 'STORE', positionKey: 'POS-NV-KD' },
+      { nodeId: 5, parentNodeId: 1, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Tổng Giám Đốc', requiresDept: false, posType: null, positionKey: 'POS-TGD' },
       { nodeId: 6, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Khối Chưa Gắn Phòng', departmentRef: null, jobTitle: null, requiresDept: null, positionKey: null },
       { nodeId: 7, parentNodeId: 6, nodeType: 'POSITION', nodeName: null, departmentRef: null, jobTitle: 'Vị Trí Thiếu DeptRef', requiresDept: true, positionKey: 'POS-NO-DEPTREF' }
     ]
@@ -61,9 +61,11 @@ async function main() {
     const result = employeeProfile.applyPositionAssignment(profile, version, 'POS-TP-KD', '2026-01-01', 'hr1', 'Nhân Sự Trưởng', 'QĐ số 01');
     assertEqual(result.jobTitle, 'Trưởng Phòng', 'jobTitle trả về đúng');
     assertEqual(result.dept, 'Phòng Kinh Doanh', 'dept trả về đúng (departmentRef của phòng ban cha)');
+    assertEqual(result.posType, 'HO', 'posType trả về đúng theo node (POS-TP-KD gắn HO)');
     assertEqual(profile.positionKey, 'POS-TP-KD', 'profile.positionKey đã set');
     assertEqual(profile.jobTitle, 'Trưởng Phòng', 'profile.jobTitle đã set');
     assertEqual(profile.dept, 'Phòng Kinh Doanh', 'profile.dept đã set');
+    assertEqual(profile.posType, 'HO', 'profile.posType đã set');
     assertIncludes(profile.positionLabel, 'Trưởng Phòng', 'positionLabel chứa chức danh');
     assertEqual(profile.positionHistory.length, 1, 'Ghi đúng 1 dòng lịch sử');
     assertEqual(profile.positionHistory[0].oldPositionKey, null, 'Lần đầu -> oldPositionKey null');
@@ -98,6 +100,7 @@ async function main() {
     const profile = employeeProfile.defaultProfile('NV004');
     const result = employeeProfile.applyPositionAssignment(profile, version, 'POS-TGD', null, 'hr1', 'HR', null);
     assertEqual(result.dept, null, 'Vị trí không yêu cầu phòng ban -> dept null');
+    assertEqual(result.posType, null, 'Node POS-TGD chưa gán posType -> trả về null');
     assertEqual(profile.jobTitle, 'Tổng Giám Đốc', 'jobTitle vẫn set đúng');
   });
 
@@ -150,7 +153,7 @@ async function main() {
   const ADMIN = { username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, active: true };
   const HR_FULL = { username: 'hr1', name: 'Nhân Sự Trưởng', perms: { hrProfileManage: true, hrContractManage: true }, active: true };
   const HR_PROFILE_ONLY = { username: 'hr2', name: 'HR Chỉ Hồ Sơ', perms: { hrProfileManage: true }, active: true };
-  const EMP1 = { username: 'emp1', name: 'Nhân Viên Một', dept: 'Cũ', jobTitle: 'Chức Cũ', perms: {}, active: true };
+  const EMP1 = { username: 'emp1', name: 'Nhân Viên Một', dept: 'Cũ', jobTitle: 'Chức Cũ', posType: 'HO', perms: {}, active: true };
   let USERS = [ADMIN, HR_FULL, HR_PROFILE_ONLY, EMP1];
   let APP_DATA;
   function resetAppData() {
@@ -228,7 +231,7 @@ async function main() {
       assertEqual(res.body.profile.positionHistory.length, 1, 'Có 1 dòng lịch sử');
     });
 
-    await run.run('POST /by-code/:code/set-position — hồ sơ ĐÃ liên kết tài khoản -> đồng bộ GHI ĐÈ dept/jobTitle của tài khoản đó', async () => {
+    await run.run('POST /by-code/:code/set-position — hồ sơ ĐÃ liên kết tài khoản -> đồng bộ GHI ĐÈ dept/jobTitle/posType của tài khoản đó', async () => {
       resetAppData();
       seedProfile({ employeeCode: 'NV100', username: 'emp1' });
       const res = await api('POST', '/api/hr-profile/by-code/NV100/set-position', { positionKey: 'POS-NV-KD' }, HR_FULL);
@@ -236,6 +239,17 @@ async function main() {
       const syncedUser = APP_DATA.users.find(u => u.username === 'emp1');
       assertEqual(syncedUser.jobTitle, 'Nhân Viên', 'Tài khoản emp1 phải được đồng bộ jobTitle mới');
       assertEqual(syncedUser.dept, 'Phòng Kinh Doanh', 'Tài khoản emp1 phải được đồng bộ dept mới');
+      assertEqual(syncedUser.posType, 'STORE', 'Tài khoản emp1 phải được đồng bộ posType mới (node POS-NV-KD gắn STORE)');
+    });
+
+    await run.run('POST /by-code/:code/set-position — vị trí CHƯA gán posType (POS-TGD) -> KHÔNG ghi đè posType hiện có của tài khoản', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'NV100', username: 'emp1' });
+      const res = await api('POST', '/api/hr-profile/by-code/NV100/set-position', { positionKey: 'POS-TGD' }, HR_FULL);
+      assertEqual(res.status, 200, 'Gán thành công');
+      const syncedUser = APP_DATA.users.find(u => u.username === 'emp1');
+      assertEqual(syncedUser.jobTitle, 'Tổng Giám Đốc', 'jobTitle vẫn đồng bộ đúng');
+      assertEqual(syncedUser.posType, 'HO', 'posType giữ nguyên giá trị cũ (HO) — KHÔNG bị ghi đè thành null');
     });
 
     await run.run('POST /by-code/:code/set-position — người không có hrProfileManage bị chặn 403', async () => {
