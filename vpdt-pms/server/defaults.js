@@ -561,6 +561,8 @@ const DEFAULTS = {
   payrollRateConfig: {},
   // payrollPeriods/payslips: dbo.Records (MIGRATED_COLLECTIONS), KHÔNG cần seed ở đây — cùng khuôn
   // laborContracts/attendanceRecords. notifications: cùng lý do.
+  // checklistTemplates/checklistSubmissions (module TOP-LEVEL "Checklist Đánh Giá Siêu Thị", xem
+  // lib/checklist.js): cùng lý do — MIGRATED_COLLECTIONS (dbo.Records), KHÔNG seed ở đây.
 
   // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
   // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY

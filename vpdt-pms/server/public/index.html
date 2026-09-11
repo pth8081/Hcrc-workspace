@@ -137,6 +137,12 @@
       <button id="btnDocTab" data-op="switchTab" data-arg0="doc" class="hidden sidebar-item">
         <span class="sidebar-icon">📂</span><span class="sidebar-label">Tài liệu</span>
       </button>
+      <!-- "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL riêng, đứng lẻ (không dropdown) như Tài Liệu ở
+           trên: 4 tab (Cấu Hình/Thực Hiện/Kết Quả & Phản Hồi/Báo Cáo) đều nằm TRONG module tự quản lý qua
+           setChecklistSubTab() (public/js/module-checklist.js), không cần nhóm dropdown ở sidebar. -->
+      <button id="btnChecklistTab" data-op="switchTab" data-arg0="checklist" class="hidden sidebar-item">
+        <span class="sidebar-icon">✅</span><span class="sidebar-label">Checklist Đánh Giá Siêu Thị</span>
+      </button>
       <button id="btnSubmissionTab" data-op="switchTab" data-arg0="submission" class="hidden sidebar-item">
         <span class="sidebar-icon">📜</span><span class="sidebar-label">Văn bản trình</span>
       </button>
@@ -5532,6 +5538,33 @@
             </div>
           </div>
         </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>✅ 23. Checklist Đánh Giá Siêu Thị</span></span>
+            <span id="permTreeBadge_checklist" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Module TOP-LEVEL riêng (xem lib/checklist.js), phân quyền PHẲNG — KHÔNG theo phòng ban. Nhân viên siêu thị (posType Siêu Thị) tự làm checklist "Tự Đánh Giá" (STORE_SELF) của đúng siêu thị mình mà không cần quyền gì thêm ở đây. "Phạm Vi Kiểm Soát" bên dưới CHỈ áp dụng cho checklist "Kiểm Soát" (CONTROL_AUDIT) — kiểm soát viên/khu vực chọn siêu thị mình được phân công đi kiểm tra.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pChecklistTemplateManage"> 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)
+              </label>
+              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pChecklistReportView"> 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)
+              </label>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)</span>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pChecklistAuditScopeAll" data-op-change="toggleChecklistAuditScopeGroup"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pChecklistAuditScopeStoreContainer" class="grid grid-cols-2 md:grid-cols-3 gap-1 pl-1 max-h-40 overflow-y-auto"></div>
+            </div>
+          </div>
+        </details>
         </div>
         </div>
       </form>
@@ -7357,6 +7390,95 @@
         </div>
         <div id="operationProcessModalControls" class="border-t pt-3"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Màn hình MODULE "Checklist Đánh Giá Siêu Thị" — top-level riêng (xem lib/checklist.js phía server,
+       public/js/module-checklist.js phía client). 4 tab nội bộ tự quản lý qua setChecklistSubTab() —
+       KHÔNG dùng dropdown sidebar (đứng lẻ như Tài Liệu, xem #btnChecklistTab). -->
+  <div id="checklistSection" class="hidden space-y-4">
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setChecklistSubTab" data-arg0="CONFIG" id="btnChecklistSubConfig" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white">🛠️ Cấu Hình</button>
+      <button type="button" data-op="setChecklistSubTab" data-arg0="EXECUTE" id="btnChecklistSubExecute" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Thực Hiện</button>
+      <button type="button" data-op="setChecklistSubTab" data-arg0="RESULT" id="btnChecklistSubResult" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📣 Kết Quả &amp; Phản Hồi</button>
+      <button type="button" data-op="setChecklistSubTab" data-arg0="REPORT" id="btnChecklistSubReport" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+    </div>
+
+    <!-- Sub-tab: Cấu Hình (checklistTemplateManage) — CRUD mẫu checklist. -->
+    <div id="checklistSubConfig" class="hidden space-y-4">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Sách Mẫu Checklist</h3>
+        <button type="button" data-op="openChecklistTemplateBuilder" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">+ Tạo Mẫu Mới</button>
+      </div>
+      <div id="checklistTemplateListWrap" class="space-y-2"></div>
+
+      <div id="checklistTemplateBuilderWrap" class="hidden bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <h3 id="checklistBuilderTitle" class="font-bold text-rose-900 text-base">🛠️ Tạo Mẫu Checklist Mới</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Checklist <span class="text-red-500">*</span></label>
+            <input id="checklistBuilderCode" placeholder="VD: CL_VESINH" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Checklist <span class="text-red-500">*</span></label>
+            <input id="checklistBuilderName" placeholder="VD: Đánh giá vệ sinh siêu thị" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Loại Checklist <span class="text-red-500">*</span></label>
+            <select id="checklistBuilderType" class="w-full border p-1.5 rounded text-xs">
+              <option value="STORE_SELF">Tự Đánh Giá (Siêu Thị tự làm)</option>
+              <option value="CONTROL_AUDIT">Kiểm Soát (Kiểm Soát Viên đi đánh giá)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Ngưỡng Điểm Đạt (%) — để trống nếu không chấm ngưỡng</label>
+            <input id="checklistBuilderPassThreshold" type="number" min="0" max="100" placeholder="VD: 80" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-gray-700 text-sm">❓ Câu Hỏi</h4>
+          <button type="button" data-op="addChecklistBuilderQuestion" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Câu Hỏi</button>
+        </div>
+        <div id="checklistBuilderQuestionsWrap" class="space-y-3"></div>
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button type="button" data-op="closeChecklistTemplateBuilder" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+          <button type="button" data-op="saveChecklistTemplateBuilder" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Thực Hiện (STORE_SELF tự động cho posType Siêu Thị / CONTROL_AUDIT theo checklistAuditScope). -->
+    <div id="checklistSubExecute" class="hidden space-y-4">
+      <div id="checklistExecuteListWrap" class="space-y-3"></div>
+      <div id="checklistSubmissionFormWrap" class="hidden bg-white p-4 rounded border space-y-3"></div>
+    </div>
+
+    <!-- Sub-tab: Kết Quả & Phản Hồi (nhân viên siêu thị xem kết quả CONTROL_AUDIT làm tại siêu thị mình). -->
+    <div id="checklistSubResult" class="hidden space-y-3">
+      <div id="checklistResultListWrap" class="space-y-2"></div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo (checklistReportView) — báo cáo RIÊNG cho module này, KHÔNG liên quan module
+         "Báo Cáo" tổng hợp. -->
+    <div id="checklistSubReport" class="hidden space-y-3">
+      <div class="bg-slate-50 p-4 rounded border border-slate-200 flex flex-wrap items-end gap-2">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Mẫu Checklist</label>
+          <select id="checklistReportTemplateFilter" class="border p-1.5 rounded text-xs"><option value="">Tất cả</option></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Từ ngày</label>
+          <input id="checklistReportFromDate" type="date" class="border p-1.5 rounded text-xs">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Đến ngày</label>
+          <input id="checklistReportToDate" type="date" class="border p-1.5 rounded text-xs">
+        </div>
+        <button type="button" data-op="applyChecklistReportFilter" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Lọc</button>
+        <button type="button" data-op="exportChecklistReportExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
+      </div>
+      <div id="checklistReportStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      <div id="checklistReportTableWrap" class="space-y-2"></div>
     </div>
   </div>
 

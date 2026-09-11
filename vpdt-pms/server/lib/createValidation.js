@@ -25,6 +25,11 @@ const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFilePar
 // thuộc gì khác — an toàn require thẳng, xem chú thích đầu file lib/positionApprovers.js để biết lý do
 // KHÔNG require thẳng lib/workflowEngine.js ở đây (vòng lặp require).
 const { resolveStepApproverUsernames } = require('./positionApprovers');
+// lib/checklist.js — module "Checklist Đánh Giá Siêu Thị" (file thuần, không đọc DB, an toàn require
+// thẳng giống vppCatalog.js/priceFileParser.js ở trên) — validateChecklistQuestions()/
+// assertTemplateCoreFields() dùng ở extraValidate bên dưới, phần còn lại (scoring/store-resolution)
+// dùng ở routes/checklist.js.
+const { canManageChecklistTemplates, validateChecklistQuestions, assertTemplateCoreFields } = require('./checklist');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -1825,6 +1830,30 @@ const CREATE_MODULE_CONFIGS = {
       const suggestedPassScore = Number(payload.passScore);
       payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100
         ? suggestedPassScore : null;
+    }
+  },
+  // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js đầu file cho toàn bộ thiết
+  // kế) — CHỈ dùng đường CREATE này để TẠO MỚI 1 template DRAFT (mirror khuôn trainingTests: câu hỏi +
+  // lựa chọn nhúng thẳng trong bản ghi, không phải bảng quan hệ riêng). SỬA template (khi còn DRAFT)/
+  // nhân bản/kích hoạt/xoá đi qua routes/checklist.js riêng (cần đọc lại bản ghi cũ để enforce trạng
+  // thái vòng đời, không hợp với đường tạo-mới 1 chiều ở đây).
+  checklistTemplates: {
+    dbKey: 'checklistTemplates',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!canManageChecklistTemplates(user)) {
+        throw new CreateError(403, 'Bạn không có quyền tạo Checklist Đánh Giá Siêu Thị');
+      }
+      const core = assertTemplateCoreFields(payload);
+      const questions = validateChecklistQuestions(payload.questions);
+      Object.assign(payload, core);
+      payload.questions = questions;
+      payload.status = 'DRAFT';
+      payload.version = 1;
+      payload.clonedFromTemplateId = null;
+      payload.activatedAt = null;
     }
   },
   // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC

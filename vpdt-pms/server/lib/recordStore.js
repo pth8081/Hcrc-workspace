@@ -67,7 +67,11 @@ const { HttpError } = require('./httpErrors');
 // lib/notifications.js) — hệ thống tự sinh liên tục (không qua createValidation.js), cùng khuôn
 // attendanceRecords (tăng trưởng theo thời gian, cần khoá optimistic theo bản ghi khi đánh dấu đã đọc).
 const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress', 'hrProcesses', 'laborContracts',
-  'attendanceRecords', 'shiftRoster', 'shiftSwapRequests', 'leaveBalances', 'leaveRequests', 'payrollPeriods', 'payslips', 'notifications']);
+  'attendanceRecords', 'shiftRoster', 'shiftSwapRequests', 'leaveBalances', 'leaveRequests', 'payrollPeriods', 'payslips', 'notifications',
+  // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL mới, xem lib/checklist.js) — checklistTemplates cùng
+  // khuôn trainingTests (câu hỏi+lựa chọn nhúng thẳng trong bản ghi); checklistSubmissions cùng khuôn
+  // trainingTestSubmissions (route tự quản lý, không qua createValidation.js).
+  'checklistTemplates', 'checklistSubmissions']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);

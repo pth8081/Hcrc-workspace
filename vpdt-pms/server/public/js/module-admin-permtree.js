@@ -198,7 +198,13 @@ function collectPermsFromForm() {
     // operationOrderReceiptManage — quyền RIÊNG cho "🧾 Duyệt Nhập/Hủy Đơn Hàng" (tách khỏi quần thể
     // duyệt/từ chối đơn hàng nội bộ) — scopeFromForm() đọc theo cb.value nên tự nhận đúng cả mục 'HO'
     // đặc biệt lẫn tên siêu thị/phòng ban thật, không cần đổi gì thêm.
-    operationOrderReceiptManage: scopeFromForm('pOperationOrderReceiptAll', 'pOperationOrderReceiptDept')
+    operationOrderReceiptManage: scopeFromForm('pOperationOrderReceiptAll', 'pOperationOrderReceiptDept'),
+    // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — checklistAuditScope dùng scopeFromForm() như
+    // các scope {all,depts} khác, chỉ khác nguồn checkbox là DB.stores (siêu thị) thay vì DB.depts, xem
+    // renderChecklistAuditScopeCheckboxes() ở module-admin.js.
+    checklistTemplateManage: document.getElementById('pChecklistTemplateManage').checked,
+    checklistReportView: document.getElementById('pChecklistReportView').checked,
+    checklistAuditScope: scopeFromForm('pChecklistAuditScopeAll', 'pChecklistAuditScopeStore')
   };
 }
 
@@ -270,6 +276,10 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
   document.getElementById('pOperationOrderReceiptAll').checked = !!perms.operationOrderReceiptManage?.all;
   setOperationOrderReceiptScopeCheckboxes(perms.operationOrderReceiptManage?.depts);
+  document.getElementById('pChecklistTemplateManage').checked = !!perms.checklistTemplateManage;
+  document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
+  document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;
+  setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
@@ -342,6 +352,7 @@ function populatePermsForm(permsInput) {
     toggleScopeGroup(allId, deptPrefix);
   });
   toggleOperationOrderReceiptScopeGroup();
+  toggleChecklistAuditScopeGroup();
 
   refreshPermTreeBadges();
   clearPermTreeDirtyMarks();

@@ -540,6 +540,9 @@ function renderDeptCheckboxes() {
   // chạy (DB.depts đổi thì danh sách siêu thị/phòng ban ở đây cũng phải đổi theo) — gọi kèm luôn tại đây
   // thay vì rải thêm lời gọi riêng ở từng nơi renderDeptCheckboxes() đang được gọi.
   renderOperationOrderReceiptScopeCheckboxes();
+  // checklistAuditScope (Checklist Đánh Giá Siêu Thị) — cùng lý do gọi kèm tại đây, nhưng nguồn là
+  // DB.stores (siêu thị), KHÔNG phải DB.depts, và KHÔNG có mục 'HO' đặc biệt.
+  renderChecklistAuditScopeCheckboxes();
 }
 
 function toggleScopeGroup(allCheckId, deptCheckPrefix) {
@@ -577,6 +580,33 @@ function toggleOperationOrderReceiptScopeGroup() {
 function setOperationOrderReceiptScopeCheckboxes(scopeKeyList) {
   if (!Array.isArray(scopeKeyList)) return;
   const boxes = document.querySelectorAll('[id^="pOperationOrderReceiptDept_"]');
+  scopeKeyList.forEach(key => {
+    const cb = [...boxes].find(b => b.value === key);
+    if (cb) cb.checked = true;
+  });
+}
+
+// checklistAuditScope (Checklist Đánh Giá Siêu Thị — phạm vi siêu thị của kiểm soát viên CONTROL_AUDIT,
+// xem lib/checklist.js) — mirror ĐÚNG khuôn renderOperationOrderReceiptScopeCheckboxes()/
+// toggleOperationOrderReceiptScopeGroup()/setOperationOrderReceiptScopeCheckboxes() ở trên, nhưng nguồn
+// DB.stores (không có mục 'HO' đặc biệt — checklist Kiểm Soát chỉ áp dụng cho siêu thị).
+function renderChecklistAuditScopeCheckboxes() {
+  const el = document.getElementById('pChecklistAuditScopeStoreContainer');
+  if (!el) return;
+  el.innerHTML = (DB.stores || []).map((s, idx) => `
+    <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
+      <input type="checkbox" id="pChecklistAuditScopeStore_${idx}" value="${escapeHtml(s)}">
+      <span class="truncate">${escapeHtml(s)}</span>
+    </label>
+  `).join('');
+}
+function toggleChecklistAuditScopeGroup() {
+  const isAll = document.getElementById('pChecklistAuditScopeAll').checked;
+  document.querySelectorAll('[id^="pChecklistAuditScopeStore_"]').forEach(cb => { cb.disabled = isAll; });
+}
+function setChecklistAuditScopeCheckboxes(scopeKeyList) {
+  if (!Array.isArray(scopeKeyList)) return;
+  const boxes = document.querySelectorAll('[id^="pChecklistAuditScopeStore_"]');
   scopeKeyList.forEach(key => {
     const cb = [...boxes].find(b => b.value === key);
     if (cb) cb.checked = true;

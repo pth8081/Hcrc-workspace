@@ -1135,6 +1135,61 @@ lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng
 - **Từ ngày/Đến ngày**: GHI ĐÈ mốc bắt đầu/kết thúc tự suy ra ở trên (không
   phải lọc thêm) — để trống cả 2 thì hành vi y hệt trước đây.
 
+### 4.7. Checklist Đánh Giá Siêu Thị
+
+Module top-level riêng (không nằm trong Vận Hành), kiến trúc JSON-blob thuần
+(`checklistTemplates`/`checklistSubmissions` — MIGRATED_COLLECTIONS, mỗi bản
+ghi 1 dòng `dbo.Records`), phân quyền HOÀN TOÀN PHẲNG (không theo phòng ban
+như đa số module khác). 4 tab nội bộ: **Cấu Hình / Thực Hiện / Kết Quả & Phản
+Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này, tách biệt
+hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
+
+**3 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
+- `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist
+  (tab Cấu Hình).
+- `checklistReportView` — xem tab Báo Cáo (thống kê + xuất Excel) của module
+  này.
+- `checklistAuditScope` — phạm vi **siêu thị được phân công kiểm soát**
+  (dạng `{all, depts}` — field tên là `depts` dù chứa danh sách SIÊU THỊ,
+  không phải phòng ban, để tái dùng cơ chế merge phẳng theo nhóm quyền có sẵn
+  cho mọi field tên `depts`) — quyết định auditor được tạo/xem loại checklist
+  **Kiểm Soát Viên** cho những siêu thị nào.
+
+**2 loại Mẫu Checklist** (`templateType`), mỗi mẫu có bộ câu hỏi + thang điểm
+riêng, chỉ 1 bản `ACTIVE` cho mỗi `templateCode` tại 1 thời điểm (kích hoạt
+bản mới tự động lưu trữ bản cũ):
+- **STORE_SELF** (Siêu thị tự đánh giá) — bất kỳ nhân viên `posType=STORE`
+  nào cũng thực hiện được cho ĐÚNG siêu thị mình đang công tác; `storeCode`
+  **server luôn tự suy từ `user.dept`, không bao giờ tin giá trị client gửi
+  lên** (chặn giả mạo tự chấm hộ siêu thị khác).
+- **CONTROL_AUDIT** (Kiểm soát viên đánh giá) — chỉ người có
+  `checklistAuditScope` phù hợp mới thực hiện được, phải chọn đúng 1 siêu thị
+  nằm trong phạm vi được phân công (server validate lại, không chỉ ẩn/hiện ở
+  giao diện).
+
+**Cấu trúc câu hỏi** — mỗi câu có nhiều lựa chọn, mỗi lựa chọn có thể đánh
+dấu `isPassing`/`isCriticalFail`, và có thể **chỉ hiện khi** 1 lựa chọn cụ
+thể của câu hỏi TRƯỚC ĐÓ được chọn (`showIfOptionId`, đánh số ID lựa chọn
+LIÊN TỤC xuyên suốt toàn bộ mẫu chứ không reset theo từng câu, để chọn được
+lựa chọn của bất kỳ câu nào trước đó, không chỉ câu liền trước). Câu/lựa
+chọn đánh dấu **"Bắt buộc"** hoặc **"Lỗi nghiêm trọng" (Critical Fail)** thì
+khi chọn lựa chọn Critical Fail bắt buộc phải đính kèm ảnh minh chứng mới
+hoàn tất được bài đánh giá.
+
+**Chấm điểm & kết luận** — khi hoàn tất (Kết Thúc & Nộp), hệ thống tự tính
+`scorePercent` (tỉ lệ lựa chọn `isPassing`/tổng số câu bắt buộc) và
+`isPassed`: **hễ có ÍT NHẤT 1 lựa chọn Critical Fail được chọn thì
+`isPassed` LUÔN là `false` bất kể điểm số bao nhiêu** (lỗi nghiêm trọng phủ
+quyết điểm số). Sau khi nộp, siêu thị liên quan xem được kết quả + phản hồi
+lại (tab Kết Quả & Phản Hồi) — chỉ đúng siêu thị bị đánh giá mới phản hồi
+được, không ai khác.
+
+**Tab Báo Cáo** (module-local, quyền `checklistReportView`) — lọc theo mẫu/
+khoảng ngày, hiện thẻ thống kê (tổng số bài, điểm trung bình, tỉ lệ đạt, số
+lượt Lỗi nghiêm trọng) + bảng chi tiết, xuất Excel. Đây là báo cáo RIÊNG cho
+checklist — module **Báo Cáo** tổng hợp (mục 5) không đọc dữ liệu module
+này.
+
 ---
 
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)

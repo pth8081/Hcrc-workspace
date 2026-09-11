@@ -37,10 +37,14 @@ const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
 // hệ thống đang chạy nâng cấp code). Admin vẫn override được bình thường qua UI (config[moduleKey] khi
 // đó khác rỗng sẽ thắng map này, xem 2 dòng "||" bên dưới).
 const MODULE_DEFAULT_ALLOWED_EXT = {
-  trainingTestImage: ['.jpg', '.jpeg', '.png', '.webp']
+  trainingTestImage: ['.jpg', '.jpeg', '.png', '.webp'],
+  // checklistAnswerPhoto (ảnh bằng chứng đính kèm câu trả lời Checklist Đánh Giá Siêu Thị) — cùng lý do
+  // trainingTestImage ở trên, chỉ nên nhận ảnh ngay từ đầu.
+  checklistAnswerPhoto: ['.jpg', '.jpeg', '.png', '.webp']
 };
 const MODULE_DEFAULT_MAX_MB = {
-  trainingTestImage: 5
+  trainingTestImage: 5,
+  checklistAnswerPhoto: 5
 };
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });

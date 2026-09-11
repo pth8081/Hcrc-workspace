@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**16.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**16.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.9 (2026-09-11): Module mới "✅ Checklist Đánh Giá Siêu Thị"
+
+Module top-level riêng theo yêu cầu người dùng: **kiến trúc JSON-blob**
+(`checklistTemplates`/`checklistSubmissions`, MIGRATED_COLLECTIONS —
+`dbo.Records`), **phân quyền hoàn toàn phẳng** (không theo phòng ban), và
+**tab Báo Cáo nằm NGAY BÊN TRONG module này** (tách biệt hoàn toàn với module
+Báo Cáo tổng hợp — quyền xem cũng phân quyền riêng). Chi tiết nghiệp vụ đầy
+đủ xem mục 4.7 `Huong-dan-nghiep-vu.md`.
+
+**Tóm tắt:**
+1. **4 tab nội bộ**: Cấu Hình (tạo/sửa/kích hoạt/nhân bản Mẫu Checklist) /
+   Thực Hiện (làm bài đánh giá) / Kết Quả & Phản Hồi / Báo Cáo (module-local).
+2. **3 quyền phẳng mới** (khối cây phân quyền 23): `checklistTemplateManage`,
+   `checklistReportView`, `checklistAuditScope` (`{all, depts}` — field tên
+   `depts` nhưng chứa danh sách SIÊU THỊ, để tái dùng cơ chế merge phẳng theo
+   nhóm quyền có sẵn cho mọi field tên `depts`).
+3. **2 loại mẫu**: **STORE_SELF** (siêu thị tự đánh giá — `storeCode` server
+   LUÔN tự suy từ `user.dept`, không tin giá trị client gửi lên) và
+   **CONTROL_AUDIT** (Kiểm soát viên đánh giá siêu thị trong phạm vi được
+   phân công qua `checklistAuditScope`, server validate lại phạm vi).
+4. **Câu hỏi phân nhánh** (`showIfOptionId`, đánh số ID lựa chọn liên tục
+   xuyên suốt cả mẫu — không reset theo từng câu) + bắt buộc đính kèm ảnh khi
+   chọn lựa chọn **"Lỗi nghiêm trọng"**.
+5. **Chấm điểm**: có ít nhất 1 lựa chọn Lỗi nghiêm trọng → `isPassed` LUÔN
+   `false` bất kể điểm số (phủ quyết điểm số).
+6. `routes/upload.js` — thêm cấu hình `checklistAnswerPhoto` (ảnh minh
+   chứng, .jpg/.jpeg/.png/.webp, tối đa 5MB).
+
+`tests/test-checklist.js` mới (13/13 pass) — bao phủ đủ các đường bảo mật cốt
+lõi: storeCode server-authoritative (bỏ qua giá trị giả client gửi), phạm vi
+`checklistAuditScope` (403 ngoài phạm vi/200 trong phạm vi), Lỗi nghiêm trọng
+phủ quyết điểm số, thiếu ảnh minh chứng chặn nộp bài, chặn sửa/xoá mẫu không
+còn ở trạng thái NHÁP, chặn nộp lại bài đã hoàn tất. Full regression toàn bộ
+`tests/test-*.js` chạy lại sau thay đổi — không phát sinh lỗi mới ngoài các
+cảnh báo đã biết từ trước (DB_ENCRYPT/LOG_ENCRYPTION_KEY chưa bật trong
+sandbox, không liên quan tính năng này).
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — kiến trúc JSON-blob
+không cần bảng mới. Chỉ cần copy code + `pm2 restart`.
 
 ## v16.8 (2026-09-11): "Vị Trí Kiêm Nhiệm" — 1 người kiêm thêm chức danh/phòng ban chỉ để tính người duyệt "Theo vị trí"
 

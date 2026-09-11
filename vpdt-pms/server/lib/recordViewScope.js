@@ -12,6 +12,7 @@ const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3, workItemAssignees, isWorkItemAssignee } = require('./recordActions');
 const { HttpError } = require('./httpErrors');
+const { canManageChecklistTemplates, canViewChecklistReports, hasChecklistAuditScope, isEligibleForStoreSelf } = require('./checklist');
 
 // Khớp canManageVpp() ở public/index.html.
 function canManageVpp(user) {
@@ -944,6 +945,36 @@ function filterPayslipsForUser(items, user) {
   return canViewAllPayrollData(user) ? (items || []) : [];
 }
 
+// ===== Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — phân quyền PHẲNG,
+// không theo phòng ban. checklistTemplates: người quản lý (checklistTemplateManage) hoặc xem báo cáo
+// (checklistReportView) thấy MỌI trạng thái (kể cả DRAFT/ARCHIVED, cần để cấu hình/đối chiếu lịch sử);
+// người khác CHỈ thấy template ACTIVE và đúng loại họ đủ điều kiện làm (STORE_SELF nếu posType STORE,
+// CONTROL_AUDIT nếu có checklistAuditScope) — không thấy template đang soạn (DRAFT) hay của loại khác.
+function canViewChecklistTemplate(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return true;
+  if (item.status !== 'ACTIVE') return false;
+  if (item.templateType === 'STORE_SELF') return isEligibleForStoreSelf(user);
+  if (item.templateType === 'CONTROL_AUDIT') return hasChecklistAuditScope(user);
+  return false;
+}
+function filterChecklistTemplatesForUser(items, user) {
+  return (items || []).filter(t => canViewChecklistTemplate(user, t));
+}
+// checklistSubmissions: người quản lý/xem báo cáo thấy hết; còn lại thấy bài của CHÍNH MÌNH (mọi trạng
+// thái, kể cả DRAFT đang làm dở) cộng bài đã NỘP (SUBMITTED, không phải DRAFT người khác đang làm dở)
+// thực hiện tại ĐÚNG siêu thị của mình (Kết Quả & Phản Hồi — nhân viên siêu thị xem kết quả kiểm tra
+// CONTROL_AUDIT làm tại siêu thị họ, dù người thực hiện là kiểm soát viên khác).
+function canViewChecklistSubmission(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return true;
+  if (item.submittedByUsername === user.username) return true;
+  return !!(item.status !== 'DRAFT' && user.posType === 'STORE' && item.storeCode === user.dept);
+}
+function filterChecklistSubmissionsForUser(items, user) {
+  return (items || []).filter(s => canViewChecklistSubmission(user, s));
+}
+
 module.exports = {
   isManagerOf, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
@@ -990,6 +1021,8 @@ module.exports = {
   canViewShiftRoster, filterShiftRosterForUser,
   canViewShiftSwapRequest, filterShiftSwapRequestsForUser,
   canViewAllPayrollData, filterPayrollPeriodsForUser, filterPayslipsForUser,
+  canViewChecklistTemplate, filterChecklistTemplatesForUser,
+  canViewChecklistSubmission, filterChecklistSubmissionsForUser,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile
 };

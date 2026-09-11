@@ -31,7 +31,8 @@ const {
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle,
   filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
-  filterPayrollPeriodsForUser, filterPayslipsForUser
+  filterPayrollPeriodsForUser, filterPayslipsForUser,
+  filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser
 } = require('../lib/recordViewScope');
 const { filterNotificationsForUser } = require('../lib/notifications');
 
@@ -731,6 +732,11 @@ router.get('/', async (req, res) => {
     // /api/payroll/my-payslips*, xem routes/payroll.js), vì đây là dữ liệu nhạy cảm nhất hệ thống.
     if (data.payrollPeriods) data.payrollPeriods = filterPayrollPeriodsForUser(data.payrollPeriods, req.freshUser);
     if (data.payslips) data.payslips = filterPayslipsForUser(data.payslips, req.freshUser);
+    // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — người quản lý/xem báo
+    // cáo thấy hết; người khác chỉ thấy template ACTIVE đúng loại họ đủ điều kiện + bài của chính mình/
+    // bài SUBMITTED làm tại đúng siêu thị mình (xem lib/recordViewScope.js).
+    if (data.checklistTemplates) data.checklistTemplates = filterChecklistTemplatesForUser(data.checklistTemplates, req.freshUser);
+    if (data.checklistSubmissions) data.checklistSubmissions = filterChecklistSubmissionsForUser(data.checklistSubmissions, req.freshUser);
     // notifications (thông báo trong app, dùng chung — xem lib/notifications.js): PHẢI lọc ngay từ khi
     // thêm vào MIGRATED_COLLECTIONS, nếu không GET /api/data trả THẲNG thông báo của MỌI người dùng cho
     // bất kỳ ai gọi (route chính thức để đọc thông báo là GET /api/notifications riêng — chuông ở

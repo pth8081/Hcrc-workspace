@@ -45,6 +45,7 @@ const attendanceClockAdminRoutes = require('./routes/attendanceClockAdmin');
 const attendanceClockPunchRoutes = require('./routes/attendanceClockPunch');
 const notificationsRoutes = require('./routes/notifications');
 const payrollRoutes = require('./routes/payroll');
+const checklistRoutes = require('./routes/checklist');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -181,6 +182,9 @@ app.use('/api/attendance', attendanceClockPunchRoutes);
 // Nhân Sự > Lương (Module Lương) + Thông báo trong app dùng chung — xem lib/payroll.js/lib/notifications.js.
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/payroll', payrollRoutes);
+// Module TOP-LEVEL "Checklist Đánh Giá Siêu Thị" — xem lib/checklist.js cho toàn bộ thiết kế (kiến trúc
+// JSON-blob + phân quyền phẳng, không phải theo phòng ban).
+app.use('/api/checklist', checklistRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);
