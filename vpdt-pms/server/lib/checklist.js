@@ -155,6 +155,16 @@ function assertTemplateCoreFields(payload) {
 // của tài liệu gốc).
 function resolveStoreCodeForSubmission(template, user, requestedStoreCode) {
   if (template.templateType === 'STORE_SELF') {
+    // Admin: cho phép TỰ CHỌN siêu thị để test mẫu Tự Đánh Giá (tài khoản admin thường không gắn Vị Trí
+    // Siêu Thị cụ thể nào nên isEligibleForStoreSelf() luôn false với admin) — vẫn giữ NGUYÊN bất biến
+    // bảo mật cho người dùng thường bên dưới (storeCode LUÔN suy từ user.dept, KHÔNG tin client). Admin
+    // vốn đã bỏ qua mọi kiểm tra quyền khác trong toàn hệ thống nên nới ở đây không phát sinh rủi ro mới.
+    if (user?.perms?.admin) {
+      const adminStoreCode = String(requestedStoreCode || '').trim();
+      if (adminStoreCode) return adminStoreCode;
+      if (isEligibleForStoreSelf(user)) return user.dept;
+      throw new HttpError(400, 'Vui lòng chọn siêu thị để test (tài khoản admin không gắn Vị Trí Siêu Thị cụ thể)');
+    }
     if (!isEligibleForStoreSelf(user)) {
       throw new HttpError(400, 'Vị trí hiện tại của bạn không gắn với siêu thị nào — liên hệ HR để kiểm tra Cơ Cấu Tổ Chức (Vị Trí Làm Việc)');
     }

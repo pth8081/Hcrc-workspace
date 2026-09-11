@@ -201,6 +201,16 @@ async function main() {
       assertEqual(res.status, 400, 'posType không phải STORE thì không tự đánh giá được');
     });
 
+    await run.run('STORE_SELF: admin không gắn Vị Trí Siêu Thị vẫn test được nếu tự chọn siêu thị (storeCode do admin gửi lên được tin, khác hẳn user thường)', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const blocked = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, ADMIN);
+      assertEqual(blocked.status, 400, 'Admin KHÔNG chọn siêu thị thì vẫn bị chặn (không có storeCode nào để dùng)');
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị B' }, ADMIN);
+      assertEqual(res.status, 200, 'Admin CÓ chọn siêu thị thì bắt đầu được (mục đích test mẫu)');
+      assertEqual(res.body.item.storeCode, 'Siêu thị B', 'storeCode phải đúng giá trị admin chọn (khác quy tắc "luôn = user.dept" áp dụng cho người dùng thường)');
+    });
+
     // ===== 3. Phạm vi CONTROL_AUDIT =====
     await run.run('CONTROL_AUDIT: kiểm soát viên ngoài phạm vi checklistAuditScope bị 403', async () => {
       resetRecords();

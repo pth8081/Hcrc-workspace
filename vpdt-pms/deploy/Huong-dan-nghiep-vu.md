@@ -1158,6 +1158,16 @@ tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
   cho mọi field tên `depts`) — quyết định auditor được tạo/xem loại checklist
   **Kiểm Soát Viên** cho những siêu thị nào.
 
+**Sửa mẫu ĐANG DÙNG (ACTIVE)**: KHÔNG sửa trực tiếp được (chặn 409) — phải
+bấm **"Nhân Bản"** (tạo 1 bản Nháp `version+1`), sửa nội dung trên bản Nháp
+đó rồi **"Kích Hoạt"** (tự động chuyển bản ACTIVE cũ sang Lưu Trữ cùng
+`templateCode`). Đây là chủ đích, KHÔNG phải thiếu sót: các bài đã làm cũ
+(`checklistSubmissions`) tham chiếu ngược lại `templateId` để tra câu hỏi/lựa
+chọn gốc khi xem lại — sửa thẳng nội dung câu hỏi của bản ACTIVE sẽ làm sai
+lệch/mất ý nghĩa các bài đã chấm điểm trước đó (option đã chọn không còn khớp
+định nghĩa mới). Muốn sửa nội dung mà KHÔNG cần versioning → chỉ sửa được khi
+mẫu còn ở trạng thái Nháp (chưa từng kích hoạt lần nào).
+
 **2 loại Mẫu Checklist** (`templateType`), mỗi mẫu có bộ câu hỏi + thang điểm
 riêng, chỉ 1 bản `ACTIVE` cho mỗi `templateCode` tại 1 thời điểm (kích hoạt
 bản mới tự động lưu trữ bản cũ):
@@ -1169,6 +1179,16 @@ bản mới tự động lưu trữ bản cũ):
   `checklistAuditScope` phù hợp mới thực hiện được, phải chọn đúng 1 siêu thị
   nằm trong phạm vi được phân công (server validate lại, không chỉ ẩn/hiện ở
   giao diện).
+
+**Admin test Tự Đánh Giá (từ v17.1)**: tài khoản `admin` thường KHÔNG gắn Vị
+Trí Siêu Thị (`posType` khác `STORE`) nên mặc định không thực hiện được
+checklist STORE_SELF. Riêng admin được PHÉP tự chọn 1 siêu thị bất kỳ ở tab
+Thực Hiện (khối "🧪 Test Tự Đánh Giá") để test mẫu vừa tạo/kích hoạt — server
+tin `storeCode` admin gửi lên (khác hẳn quy tắc "luôn suy từ `user.dept`" áp
+dụng cho người dùng thường, xem `resolveStoreCodeForSubmission()`
+`lib/checklist.js`). Bài làm test này tạo `checklistSubmissions` THẬT (không
+phải dữ liệu ảo) gắn `storeCode` của siêu thị được chọn — nên xoá đi sau khi
+test xong nếu không muốn lẫn vào dữ liệu thật của siêu thị đó.
 
 **Cấu trúc câu hỏi** — mỗi câu có nhiều lựa chọn, mỗi lựa chọn có thể đánh
 dấu `isPassing`/`isCriticalFail`, và có thể **chỉ hiện khi** 1 lựa chọn cụ

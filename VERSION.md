@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**17.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.1 (2026-09-11): Checklist — Admin test được checklist Tự Đánh Giá (STORE_SELF) dù không gắn Vị Trí Siêu Thị
+
+Bug thực tế: tài khoản `admin` (posType khác `STORE`) mở tab "Thực Hiện" của
+module Checklist Đánh Giá Siêu Thị không thấy checklist STORE_SELF nào dù đã
+có mẫu ACTIVE, vì `isEligibleForStoreSelf()` chỉ cho phép đúng người có
+`posType==='STORE'` — không có ngoại lệ cho admin (khác hầu hết chỗ khác
+trong hệ thống, nơi admin luôn bỏ qua mọi kiểm tra quyền).
+
+**Đã sửa**: `resolveStoreCodeForSubmission()` (`lib/checklist.js`) — riêng
+admin được phép TỰ CHỌN 1 siêu thị bất kỳ khi bắt đầu bài STORE_SELF (server
+tin `storeCode` admin gửi lên), phục vụ mục đích test mẫu vừa tạo. Người dùng
+thường KHÔNG đổi — vẫn giữ nguyên bất biến bảo mật "storeCode LUÔN suy từ
+user.dept, không tin client". Client (`module-checklist.js`) thêm khối "🧪
+Test Tự Đánh Giá (Admin)" ở tab Thực Hiện — chọn mẫu + chọn siêu thị + Bắt
+Đầu Test. Thêm 1 test case xác nhận cả 2 nhánh (admin không chọn siêu thị →
+400; admin chọn siêu thị → 200, đúng storeCode đã chọn).
+
+Nhân tiện làm rõ trong docs (mục 4.7 `Huong-dan-nghiep-vu.md`): sửa mẫu
+ACTIVE luôn bị chặn theo THIẾT KẾ (không phải thiếu sót) — phải Nhân Bản →
+sửa bản Nháp → Kích Hoạt, để không làm sai lệch dữ liệu các bài đã chấm điểm
+trước đó tham chiếu ngược lại nội dung câu hỏi gốc.
+
+**Deploy-impact**: chỉ đổi `lib/checklist.js` + `public/js/module-checklist.js`
+(logic + UI thuần, không đổi cấu trúc dữ liệu) — không đổi `schema.sql`/
+`.env.example`/dependencies. Chỉ cần copy code + `pm2 restart`.
 
 ## v17.0 (2026-09-11): Gộp nút điều hướng "Checklist Đánh Giá Siêu Thị" vào chung dropdown "Vận Hành"
 

@@ -293,11 +293,18 @@ async function deleteChecklistTemplate(id) {
 function renderChecklistExecuteTab() {
   const el = document.getElementById('checklistExecuteListWrap');
   const user = currentUser;
+  const isAdmin = !!user?.perms?.admin;
   const activeTemplates = (DB.checklistTemplates || []).filter(t => t.status === 'ACTIVE');
-  const storeSelfTemplates = isEligibleForStoreSelfClient(user) ? activeTemplates.filter(t => t.templateType === 'STORE_SELF') : [];
+  const storeSelfTemplatesAll = activeTemplates.filter(t => t.templateType === 'STORE_SELF');
+  const storeSelfTemplates = isEligibleForStoreSelfClient(user) ? storeSelfTemplatesAll : [];
   const auditScope = hasChecklistAuditScopeClient(user) ? user?.perms?.checklistAuditScope || { all: true, depts: [] } : null;
   const auditTemplates = auditScope ? activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT') : [];
   const auditStores = auditScope ? (auditScope.all ? (DB.stores || []) : (auditScope.depts || [])) : [];
+  // Admin: tài khoản admin thường KHÔNG gắn Vị Trí Siêu Thị cụ thể (posType khác 'STORE') nên không lọt
+  // vào storeSelfTemplates ở trên dù mẫu đang ACTIVE — thêm khối riêng cho phép admin chọn TÙY Ý 1 siêu
+  // thị để test mẫu Tự Đánh Giá (server đã nới ở resolveStoreCodeForSubmission()), phục vụ nhu cầu kiểm
+  // tra mẫu vừa tạo/kích hoạt mà không cần tài khoản STORE riêng.
+  const adminTestTemplates = (isAdmin && !isEligibleForStoreSelfClient(user)) ? storeSelfTemplatesAll : [];
 
   const myDrafts = (DB.checklistSubmissions || []).filter(s => s.submittedByUsername === user.username && s.status === 'DRAFT');
 
@@ -330,8 +337,24 @@ function renderChecklistExecuteTab() {
       </div>
     </div>`;
   }
+  if (adminTestTemplates.length) {
+    html += `<div class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
+      <h4 class="font-bold text-indigo-800 text-xs">🧪 Test Tự Đánh Giá (Admin — chọn siêu thị bất kỳ)</h4>
+      <p class="text-[11px] text-indigo-600">Tài khoản admin không gắn Vị Trí Siêu Thị nên chọn tạm 1 siêu thị để test mẫu — không tính là dữ liệu thật của siêu thị đó.</p>
+      <div class="flex items-center gap-2 flex-wrap">
+        <select id="checklistAdminTestTemplateSelect" class="border p-1.5 rounded text-xs">${adminTestTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('')}</select>
+        <select id="checklistAdminTestStoreSelect" class="border p-1.5 rounded text-xs">${(DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        <button type="button" data-op="startChecklistAdminTestSubmission" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700">Bắt Đầu Test</button>
+      </div>
+    </div>`;
+  }
   if (!html) html = '<p class="text-xs text-gray-400 italic">Bạn chưa có checklist nào để thực hiện.</p>';
   el.innerHTML = html;
+}
+function startChecklistAdminTestSubmission() {
+  const templateId = Number(document.getElementById('checklistAdminTestTemplateSelect').value);
+  const storeCode = document.getElementById('checklistAdminTestStoreSelect').value;
+  startChecklistSubmission(templateId, storeCode);
 }
 function startChecklistAuditSubmission() {
   const templateId = Number(document.getElementById('checklistAuditTemplateSelect').value);
