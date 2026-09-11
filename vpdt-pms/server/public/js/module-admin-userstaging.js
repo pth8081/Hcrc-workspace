@@ -4,6 +4,30 @@
 // gửi tất cả lên server cùng lúc — tiện khi cần tạo nhiều tài khoản cùng lúc (vd. nhân viên mới hàng
 // loạt) thay vì phải chờ round-trip lưu từng người một.
 // ==========================================
+
+// Bọc an toàn TOÀN BỘ việc dựng ô "Vị Trí Kiêm Nhiệm" — wfPositionPairPickerItems()/encodeWfPositionPair()
+// (module-admin-specialperm.js, cụm nạp lười "admin-specialperm") bình thường LUÔN sẵn sàng vì
+// switchTab('system') nạp cụm này ngay khi vào Hệ Thống (xem MODULE_LOAD_GROUPS.hethong-tabs.deps ở
+// core.js), nhưng bọc try/catch quanh CẢ hàm (không chỉ riêng wfPositionPairPickerItems()) để NẾU vì bất
+// kỳ lý do gì (trang bị cache cũ/JS lỗi ở module khác cùng cụm...) các hàm này chưa sẵn sàng, admin thấy
+// rõ dòng chữ báo lỗi NGAY TRONG ô thay vì 1 ô trống khó hiểu không biết đang lỗi gì — xem phản hồi thực
+// tế từ người dùng: ô hiện trống trơn, không chọn được vị trí nào.
+function renderSecondaryPositionsWidget(existingPositions) {
+  try {
+    const items = wfPositionPairPickerItems();
+    const initialSelected = (existingPositions || []).map(encodeWfPositionPair);
+    renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', items, initialSelected, {
+      placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
+      emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
+    });
+  } catch (err) {
+    console.error('renderSecondaryPositionsWidget() lỗi:', err);
+    renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', [], [], {
+      placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
+      emptyText: '⛔ Không tải được danh mục vị trí — tải lại trang (F5) rồi thử lại.'
+    });
+  }
+}
 function addUserToStagingList() {
   const editId = document.getElementById('editUserId').value;
   if (editId) return alert('⛔ Đang sửa 1 người dùng có sẵn — không thể thêm vào danh sách chờ. Bấm "Hủy" trước nếu muốn tạo người dùng mới.');
@@ -76,10 +100,7 @@ function editPendingNewUser(idx) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = u.dept;
   else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
-  renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), (u.secondaryPositions || []).map(encodeWfPositionPair), {
-    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
-    emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
-  });
+  renderSecondaryPositionsWidget(u.secondaryPositions);
   document.getElementById('uIsDriver').checked = !!u.isDriver;
   document.getElementById('uStartDate').value = u.startDate || '';
   renderUPermGroupsChecklist(u.groupIds || []);
@@ -137,10 +158,7 @@ function resetUserForm() {
   document.getElementById('uPosType').value = 'HO';
   onUserPosTypeChange();
   document.getElementById('uJobTitle').value = '';
-  renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), [], {
-    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
-    emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
-  });
+  renderSecondaryPositionsWidget([]);
   document.getElementById('uIsDriver').checked = false;
   document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
@@ -285,10 +303,7 @@ function editUser(id) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = user.dept;
   else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
-  renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), (user.secondaryPositions || []).map(encodeWfPositionPair), {
-    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
-    emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
-  });
+  renderSecondaryPositionsWidget(user.secondaryPositions);
   document.getElementById('uIsDriver').checked = !!user.isDriver;
   document.getElementById('uStartDate').value = user.startDate || '';
   // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy

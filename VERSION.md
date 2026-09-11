@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**17.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.2 (2026-09-11): Vị Trí Kiêm Nhiệm — bọc an toàn ô chọn để không còn hiện trống trơn khi lỗi
+
+Phản hồi thực tế: ô "🏷️ Vị Trí Kiêm Nhiệm" (form Sửa/Thêm Người Dùng) hiện
+trống trơn, không gõ/chọn được gì. Đã kiểm tra kỹ toàn bộ chuỗi nạp module lười
+(`switchTab('system')` → `MODULE_LOAD_GROUPS.hethong-tabs.deps` đã có sẵn
+`admin-specialperm`, nơi định nghĩa `wfPositionPairPickerItems()`/
+`encodeWfPositionPair()`) và dựng lại đúng luồng thật bằng trình duyệt thật —
+**không tái hiện được lỗi**: ô hiện đúng ô tìm-kiếm-chọn-nhiều với placeholder
+rõ ràng, cả trên màn hình di động. Nhiều khả năng nguyên nhân là trang/PWA bị
+cache JS cũ (chưa tải lại sau khi có tính năng này).
+
+**Vẫn xử lý luôn theo yêu cầu**: dù không tái hiện được lỗi gốc, đã bọc
+try/catch quanh TOÀN BỘ việc dựng ô này thành 1 hàm dùng chung
+(`renderSecondaryPositionsWidget()`, `module-admin-userstaging.js`) — nếu vì
+BẤT KỲ lý do gì (cache cũ, lỗi tải module...) các hàm phụ thuộc
+(`wfPositionPairPickerItems()`/`encodeWfPositionPair()`) chưa sẵn sàng, ô sẽ
+hiện rõ dòng "⛔ Không tải được danh mục vị trí — tải lại trang (F5) rồi thử
+lại." thay vì trống trơn không rõ nguyên nhân như trước — giúp chẩn đoán tức
+thì nếu tình huống này lặp lại. Không đổi hành vi khi mọi thứ hoạt động bình
+thường (đã chạy lại `tests/test-admin-users-permgroups.js`, cả 60/60 kịch bản
+— gồm 4 kịch bản (n) kiểm tra riêng Vị Trí Kiêm Nhiệm — vẫn pass nguyên vẹn).
+
+**Nếu vẫn gặp lại**: đóng hẳn tab/app rồi mở lại (hoặc bấm banner "có bản mới"
+nếu hiện ra), và cho biết ô có hiện dòng "⛔ Không tải được..." mới hay không —
+nếu KHÔNG hiện dòng đó mà vẫn trống trơn thì đây là 1 nguyên nhân khác cần
+điều tra thêm.
+
+**Deploy-impact**: chỉ đổi `public/js/module-admin-userstaging.js` (logic
+thuần, không đổi cấu trúc dữ liệu) — không đổi `schema.sql`/`.env.example`/
+dependencies. Chỉ cần copy code + `pm2 restart` (và người dùng cần tải lại
+trang/app 1 lần để nhận JS mới).
 
 ## v17.1 (2026-09-11): Checklist — Admin test được checklist Tự Đánh Giá (STORE_SELF) dù không gắn Vị Trí Siêu Thị
 
