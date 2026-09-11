@@ -14,6 +14,32 @@ router.use(requireAuth);
 const MAX_GET_LIMIT = 1000;
 const DEFAULT_GET_LIMIT = 200;
 
+// PHÁT HIỆN ở đợt audit chuyên sâu: POST /api/log trước đây KHÔNG kiểm tra gì ngoài "khác rỗng" cho
+// module/actionType/description/target — bất kỳ tài khoản đã đăng nhập nào cũng ghi được dòng nhật ký
+// GIẢ vào Nhật ký hệ thống (module/actionType tự bịa, mô tả tuỳ ý dài tuỳ thích), làm nhiễu/giảm độ tin
+// cậy của log khi điều tra sự cố sau này — dù username/fullName/ipAddress vẫn luôn lấy đúng từ phiên
+// đăng nhập thật (KHÔNG mạo danh được người khác). Chặn ở 2 lớp: (1) module phải khớp ĐÚNG 1 trong danh
+// sách token module cố định hiện có trong hệ thống (khớp tham số đầu tiên của mọi lời gọi
+// logSystemAction() ở public/js/*.js — rà bằng grep lúc viết bản vá này); (2) actionType/status phải
+// đúng khuôn UPPER_SNAKE_CASE (khớp quy ước ĐANG DÙNG cho toàn bộ ~200 actionType hiện có, không cần
+// liệt kê hết từng giá trị — danh sách này tăng liên tục theo tính năng mới, liệt kê cứng sẽ vỡ ngay khi
+// thêm module) kèm giới hạn độ dài hợp lý, tránh chuỗi rác/nhị phân/HTML lẫn vào cột hiển thị dạng text
+// thô ở giao diện Nhật ký hệ thống.
+const VALID_LOG_MODULES = new Set([
+  'ADMIN', 'AUTH', 'BUDGET', 'CAR', 'CONFIG', 'CONTRACT', 'DOC', 'EMAIL', 'HR', 'INTERNAL',
+  'IT_SERVICE_RENEWAL', 'IT_SUPPORT', 'LICENSE', 'MEETING', 'MEETING_MINUTES', 'MINUTES', 'OFFICE',
+  'PERIODIC_REPORT', 'SUBMISSION', 'SYSTEM', 'TASK', 'UNIFORM', 'USER_MGM', 'VPP',
+  // Các module nghiệp vụ mới hơn (chưa có lời gọi logSystemAction() lúc rà đợt audit, nhưng có khả năng
+  // dùng chung khuôn UPPER_SNAKE_CASE này) — thêm sẵn để không phải vá lại route này mỗi lần có module
+  // mới; KHÔNG mở rộng tuỳ tiện, chỉ thêm token đã thấy dùng thật trong code.
+  'ATTENDANCE', 'CHECKLIST', 'LABOR_CONTRACT', 'OPERATION', 'ORG_CHART', 'PAYMENT', 'PAYROLL',
+  'RECRUITMENT', 'TRAINING'
+]);
+const ACTION_TYPE_RE = /^[A-Z][A-Z0-9_]{1,59}$/;
+const STATUS_RE = /^[A-Z][A-Z0-9_]{1,29}$/;
+const MAX_DESCRIPTION_LEN = 500;
+const MAX_TARGET_LEN = 200;
+
 // GET /api/log — đọc nhật ký hệ thống, endpoint RIÊNG (trước đây chỉ đọc được qua GET /api/data bulk
 // chung, trả kèm cho MỌI người đã đăng nhập dù giao diện Nhật ký chỉ admin mới thấy — lộ dữ liệu qua
 // API dù đã ẩn ở giao diện). CHỈ Quản Trị Viên mới đọc được, khớp đúng quyền xem màn Nhật ký hệ thống
@@ -42,6 +68,18 @@ router.post('/', async (req, res) => {
   if (!moduleKey || !actionType || !description) {
     return res.status(400).json({ error: 'Thiếu thông tin nhật ký (module/actionType/description)' });
   }
+  if (!VALID_LOG_MODULES.has(moduleKey)) {
+    return res.status(400).json({ error: `Module nhật ký không hợp lệ: ${moduleKey}` });
+  }
+  if (!ACTION_TYPE_RE.test(actionType)) {
+    return res.status(400).json({ error: 'actionType không hợp lệ (phải viết HOA_GẠCH_DƯỚI, tối đa 60 ký tự)' });
+  }
+  const statusValue = status || 'SUCCESS';
+  if (!STATUS_RE.test(statusValue)) {
+    return res.status(400).json({ error: 'status không hợp lệ' });
+  }
+  const descriptionValue = String(description).slice(0, MAX_DESCRIPTION_LEN);
+  const targetValue = String(target || '').slice(0, MAX_TARGET_LEN);
 
   try {
     const entry = await insertSystemLog({
@@ -50,9 +88,9 @@ router.post('/', async (req, res) => {
       ipAddress: req.ip,
       module: moduleKey,
       actionType,
-      targetObject: target || '',
-      description,
-      status: status || 'SUCCESS'
+      targetObject: targetValue,
+      description: descriptionValue,
+      status: statusValue
     });
     res.json({ ok: true, item: entry });
   } catch (err) {

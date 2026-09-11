@@ -60,12 +60,33 @@ const IT_PRICE_ITEM = {
   extraFiles: [{ id: 1, fileUrl: '/uploads/itprice-extra.pdf', fileName: 'extra.pdf' }]
 };
 
+// 4 collection PHÁT HIỆN THIẾU ở đợt audit chuyên sâu — trước bản vá, fileUrl của cả 4 loại này rơi
+// thẳng vào FAIL-OPEN (mục 5 dưới) dù bản ghi đã bị giới hạn theo quyền ở GET /api/data.
+const LABOR_CONTRACT = { id: 'lc-1', fileUrl: '/uploads/labor-contract.pdf', dept: DEPT_A };
+const PAYMENT_REQUEST = {
+  id: 'pr-1', dept: DEPT_A,
+  requestFiles: [{ fileUrl: '/uploads/payment-request.pdf' }],
+  installments: [{ confirmFileUrl: '/uploads/payment-confirm-1.pdf' }]
+};
+const HR_PROCESS = {
+  id: 'hp-1', creator: 'owner_hp', processType: 'ONBOARDING',
+  attachments: [{ fileUrl: '/uploads/hr-process-doc.pdf' }]
+};
+const CHECKLIST_SUBMISSION = {
+  id: 'cs-1', submittedByUsername: 'owner_cs', storeCode: DEPT_A, status: 'SUBMITTED',
+  answers: [{ questionId: 1, attachments: [{ fileUrl: '/uploads/checklist-proof.jpg' }] }]
+};
+
 const COLLECTIONS = {
   docs: [DOC],
   internalPosts: [POST_PENDING],
   licenses: [LICENSE],
   itServiceRenewals: [IT_RENEWAL],
-  itPriceApprovals: [IT_PRICE_ITEM]
+  itPriceApprovals: [IT_PRICE_ITEM],
+  laborContracts: [LABOR_CONTRACT],
+  paymentRequests: [PAYMENT_REQUEST],
+  hrProcesses: [HR_PROCESS],
+  checklistSubmissions: [CHECKLIST_SUBMISSION]
 };
 
 // ===================== Người dùng =====================
@@ -205,6 +226,34 @@ async function main() {
     assert.strictEqual(await authorizeFileAccess(OWNER_ITP, latestSheetUrl, 'download'), true, 'File mới nhất (đã duyệt) vẫn tải được như cũ');
     // mode 'view' không bị giới hạn "chỉ file đã duyệt" cho CẢ 2 loại (chỉ 'download' mới giới hạn).
     assert.strictEqual(await authorizeFileAccess(OWNER_ITP, origSheetUrl, 'view'), true, 'Xem (view, Khung Xem Bảo Vệ) không bị giới hạn "chỉ file đã duyệt" — chỉ hành động Tải mới giới hạn');
+  });
+
+  // ===== 4c) laborContracts/paymentRequests/hrProcesses/checklistSubmissions (đợt audit chuyên sâu) =====
+  await run('laborContracts: quyền PHẲNG hrContractManage/admin — CÙNG PHÒNG BAN KHÔNG đủ để xem', async () => {
+    // OWNER_ITP cùng DEPT_A với LABOR_CONTRACT nhưng không có hrContractManage -> canViewLaborContract()
+    // bỏ qua dept hoàn toàn, phải bị chặn (khác các module "theo phòng ban" khác).
+    assert.strictEqual(await authorizeFileAccess(OWNER_ITP, LABOR_CONTRACT.fileUrl, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess({ username: 'hr1', dept: DEPT_A, perms: { hrContractManage: true } }, LABOR_CONTRACT.fileUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(ADMIN, LABOR_CONTRACT.fileUrl, 'download'), true);
+  });
+
+  await run('paymentRequests: đúng phòng ban xem được, phòng ban khác bị chặn, paymentManage luôn qua', async () => {
+    assert.strictEqual(await authorizeFileAccess({ username: 'nv_a', dept: DEPT_A, perms: {} }, PAYMENT_REQUEST.requestFiles[0].fileUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, PAYMENT_REQUEST.requestFiles[0].fileUrl, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess({ username: 'ketoan', dept: DEPT_B, perms: { paymentManage: true } }, PAYMENT_REQUEST.installments[0].confirmFileUrl, 'download'), true);
+  });
+
+  await run('hrProcesses: người tạo hồ sơ và hrOnboardingManage xem được, người ngoài bị chặn', async () => {
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, HR_PROCESS.attachments[0].fileUrl, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess({ username: 'owner_hp', perms: {} }, HR_PROCESS.attachments[0].fileUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess({ username: 'hr2', perms: { hrOnboardingManage: true } }, HR_PROCESS.attachments[0].fileUrl, 'download'), true);
+  });
+
+  await run('checklistSubmissions: chặn khác siêu thị, cho phép người nộp/cùng siêu thị (posType STORE)', async () => {
+    const url = CHECKLIST_SUBMISSION.answers[0].attachments[0].fileUrl;
+    assert.strictEqual(await authorizeFileAccess({ username: 'gs_b', posType: 'STORE', dept: DEPT_B, perms: {} }, url, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess({ username: 'owner_cs', perms: {} }, url, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess({ username: 'gs_a', posType: 'STORE', dept: DEPT_A, perms: {} }, url, 'view'), true);
   });
 
   // ===== 5) Fail-open có chủ ý cho file không tra ra hồ sơ nào =====

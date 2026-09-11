@@ -28,7 +28,7 @@ const {
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
   filterHrProcessesForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
-  computeModuleApproverUsernames, sanitizeUsersPermsForViewer, assertNoManagerCycle,
+  computeModuleApproverUsernames, sanitizeUsersPermsForViewer, sanitizePermGroupsForViewer, assertNoManagerCycle,
   filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
   filterPayrollPeriodsForUser, filterPayslipsForUser,
@@ -576,6 +576,9 @@ router.get('/', async (req, res) => {
       data.moduleApproverUsernames = computeModuleApproverUsernames(data.users);
       data.users = sanitizeUsersPermsForViewer(stripPasswords(data.users), req.freshUser?.username, !!req.freshUser?.perms?.admin);
     }
+    // permGroups: ma trận quyền đầy đủ của từng Nhóm Phân Quyền — chỉ admin cần (xem
+    // sanitizePermGroupsForViewer() ở lib/recordViewScope.js), ẩn hẳn với người khác.
+    if (data.permGroups) data.permGroups = sanitizePermGroupsForViewer(data.permGroups, !!req.freshUser?.perms?.admin);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
     if (data.operationOrderApiConfig) data.operationOrderApiConfig = sanitizeOperationOrderApiConfig(data.operationOrderApiConfig);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
@@ -786,6 +789,7 @@ router.get('/:key', async (req, res) => {
     if (version) res.set('ETag', version);
     if (value === null) return res.json(DEFAULTS[key]);
     if (key === 'users') return res.json(sanitizeUsersPermsForViewer(stripPasswords(value), req.freshUser?.username, !!req.freshUser?.perms?.admin));
+    if (key === 'permGroups') return res.json(sanitizePermGroupsForViewer(value, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
     if (key === 'operationOrderApiConfig') return res.json(sanitizeOperationOrderApiConfig(value));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));

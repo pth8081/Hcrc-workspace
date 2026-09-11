@@ -869,14 +869,26 @@ router.post('/carRegs/:id/cancel', async (req, res) => {
 // (lib/recordActions.js) cần đọc TOÀN BỘ carRegs hiện có để tái kiểm tra trùng biển số (mirror đúng
 // applyWorkflowAction() ở lib/workflowEngine.js/findCarPlateConflict()) + danh sách users để đối chiếu
 // tài khoản lái xe mới — đọc TRƯỚC khi khoá bản ghi (cùng khuôn allMeetings ở routes/meetingActions.js).
+// PHÁT HIỆN ở đợt audit chuyên sâu: nhánh APPROVE (routes/workflow.js) đã bọc
+// withAppLock(`car_plate:<biển số>`, ...) quanh TOÀN BỘ đọc-kiểm tra-ghi để chặn race condition (2 người
+// cùng gán 1 biển số trùng khung giờ trong lúc đọc snapshot existingCarRegs gần như đồng thời) — nhánh
+// REASSIGN này lại đọc existingCarRegs TRƯỚC khi khoá bản ghi, và hoàn toàn KHÔNG khoá theo biển số, nên
+// findCarPlateConflict() vẫn có thể đọc trúng snapshot CŨ nếu 2 yêu cầu reassign (hoặc 1 reassign + 1
+// approve) sang CÙNG 1 biển số chạy gần như đồng thời — đúng race condition đã vá ở nhánh kia nhưng bỏ
+// sót ở đây. Bọc withAppLock CÙNG khoá `car_plate:<biển số>` quanh TOÀN BỘ đọc+ghi (đọc existingCarRegs
+// lại BÊN TRONG closure, sau khi đã có khoá) để khớp đúng mẫu đã dùng cho APPROVE.
 router.post('/carRegs/:id/reassign', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const existingCarRegs = await getAllForCollection('carRegs');
-    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
-      recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users));
+    const newPlate = req.body?.assignedPlate;
+    const runReassign = async () => {
+      const existingCarRegs = await getAllForCollection('carRegs');
+      return withLockedRecordForCollection('carRegs', itemId, (item) =>
+        recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users));
+    };
+    const result = newPlate ? await withAppLock(`car_plate:${newPlate}`, runReassign) : await runReassign();
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/reassign`, err);
@@ -2635,6 +2647,34 @@ async function syncLaborContractOnHrProcessCompletion(hrProcessItem, routeLabel)
   }
 }
 
+// PHÁT HIỆN ở đợt audit chuyên sâu: OFFBOARDING hoàn tất chỉ đóng Hợp Đồng Lao Động (hàm ở trên) —
+// KHÔNG hề tự động khoá tài khoản đăng nhập của nhân viên đã nghỉ việc, để lại tài khoản còn active vô
+// thời hạn (vẫn đăng nhập/gọi API bình thường cho tới khi HR/admin nhớ ra và khoá tay). Khoá NGAY khi
+// dòng lịch sử cuối là COMPLETED — đặt active=false + tăng sessionVersion (mẫu đã dùng cho đổi mật khẩu/
+// PIN, gỡ TOTP/WebAuthn) để mọi JWT đang có của tài khoản này mất hiệu lực NGAY, không chỉ chặn đăng
+// nhập lần sau.
+async function syncUserAccountOnOffboardingCompletion(hrProcessItem, routeLabel) {
+  if (hrProcessItem.processType !== 'OFFBOARDING') return;
+  const last = (hrProcessItem.history || [])[hrProcessItem.history.length - 1];
+  if (!last || last.action !== 'COMPLETED') return;
+  if (!hrProcessItem.employeeUsername) return;
+  try {
+    await withLockedAppDataValue('users', (list) => {
+      let changed = false;
+      const updated = (list || []).map(u => {
+        if (u.username === hrProcessItem.employeeUsername && u.active !== false) {
+          changed = true;
+          return { ...u, active: false, sessionVersion: (u.sessionVersion || 0) + 1 };
+        }
+        return u;
+      });
+      return changed ? updated : list;
+    });
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi tự động khoá tài khoản khi Offboarding hoàn tất:`, err.message);
+  }
+}
+
 // Công & Phép (Đợt 3/4 module Nhân Sự — xem lib/attendance.js đầu file cho toàn bộ các điều chỉnh so
 // với tài liệu gốc). ONBOARDING Stage=COMPLETED -> tạo LeaveBalance năm hiện tại (pro-rated theo
 // startDate) cho employeeCode này — idempotent (ensureLeaveBalanceForYear không tạo trùng).
@@ -2775,6 +2815,7 @@ router.post('/hrProcesses/:id/complete-task', async (req, res) => {
     await syncLeaveBalanceOnOnboardingCompletion(result, `hrProcesses/${itemId}/complete-task`);
     await syncLeavePayoutInfoOnSettlementTask(result, req.body?.taskId, `hrProcesses/${itemId}/complete-task`);
     await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/complete-task`);
+    await syncUserAccountOnOffboardingCompletion(result, `hrProcesses/${itemId}/complete-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/complete-task`, err);
@@ -2791,6 +2832,7 @@ router.post('/hrProcesses/:id/skip-task', async (req, res) => {
     await syncEmployeeProfileOnHrCompletion(result, `hrProcesses/${itemId}/skip-task`);
     await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/skip-task`);
     await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/skip-task`);
+    await syncUserAccountOnOffboardingCompletion(result, `hrProcesses/${itemId}/skip-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/skip-task`, err);

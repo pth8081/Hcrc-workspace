@@ -2389,9 +2389,17 @@ function toggleInternalPostCommentLike(user, post, commentId) {
 
 // Chuẩn hoá để so khớp từ khoá nhạy cảm — bỏ dấu tiếng Việt (kể cả "đ/Đ", không có dạng phân rã NFD)
 // + viết thường + gộp khoảng trắng, cùng khuôn normalizeHeader() ở lib/vppCatalog.js.
+// Trước đây chỉ GOM khoảng trắng liên tiếp thành 1 dấu cách (`\s+` -> ' ') rồi trim — vẫn giữ NGUYÊN
+// khoảng trắng/dấu câu XEN GIỮA từng ký tự, nên chỉ cần gõ "t ệ   n ạ n"/"t.ệ-n.ạ.n" là qua được
+// .includes() dù mắt người đọc vẫn hiểu y hệt từ khoá cấm — vô hiệu hoá gần như mọi từ khoá trong
+// DB.sensitiveKeywords chỉ bằng cách chèn thêm khoảng trắng/dấu câu. Đổi sang XOÁ HẲN mọi ký tự không
+// phải chữ/số (thay vì chỉ gom lại) — áp dụng ĐỒNG NHẤT cho CẢ content lẫn keyword (scanCommentForSensitiveContent
+// gọi normalizeForScan() cho cả 2 vế .includes()), nên cụm từ khoá NHIỀU TỪ (VD "quấy rối tình dục") vẫn
+// khớp bình thường (dấu cách trong keyword cũng bị xoá y hệt) — không phá cụm từ khoá hợp lệ, chỉ đóng
+// đường né bằng ký tự chèn giữa.
 function normalizeForScan(s) {
   return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 // Quét (KHÔNG chặn đăng) nội dung bình luận theo danh sách từ khoá admin tự cấu hình
@@ -5899,6 +5907,10 @@ function updateApprovedActualBudgetEntry(user, item, payload, period, templates)
   if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa trực tiếp bản ngân sách thực hiện');
   if (item.entryKind !== 'ACTUAL') throw new HttpError(409, 'Thao tác này chỉ áp dụng cho Ngân Sách Thực Hiện');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  // Thiếu SÓT so với 2 hàm anh em ở trên (updateBudgetEntryDraft/submitBudgetEntry đều chặn khi kỳ đã
+  // đóng) — cho phép người quản lý Ngân Sách sửa số liệu Ngân Sách Thực Hiện VÔ THỜI HẠN, kể cả sau khi
+  // kỳ đã đóng sổ và báo cáo tổng hợp đã phát hành, làm sai lệch số liệu đã chốt.
+  if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể sửa nữa');
   const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
   item.lines = sanitizeBudgetLines(payload?.lines, customFields);
   if (!item.history) item.history = [];

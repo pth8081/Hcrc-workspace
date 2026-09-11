@@ -690,6 +690,57 @@ có thể tạm đặt `COOKIE_SECURE=false` — nhưng khi đó phiên đăng n
 JWT) đi dạng cleartext trên mạng, **không nên dùng cấu hình này khi đã có dữ
 liệu thật của nhân viên**.
 
+**Mẫu cấu hình Nginx đầy đủ với HTTPS** (đợt rà soát bảo mật xác nhận file
+này trước đây chỉ có VÍ DỤ HTTP-ONLY ở trên — nếu dùng `certbot --nginx`, nó
+tự sinh đúng khối 443 + redirect này cho bạn nên có thể bỏ qua; nếu tự cấp
+chứng chỉ qua CA nội bộ/self-signed thì cần tự thêm thủ công như dưới đây,
+đổi `ssl_certificate`/`ssl_certificate_key` theo đường dẫn chứng chỉ thật của
+bạn):
+
+```nginx
+server {
+    listen 80;
+    server_name vpdt.congty.local;   # đổi thành domain/IP nội bộ của bạn
+
+    # Chuyển hướng TOÀN BỘ HTTP -> HTTPS — không phục vụ nội dung app qua cổng
+    # 80 nữa, tránh trường hợp ai đó vẫn gõ http:// và gửi cookie phiên dạng
+    # cleartext dù đã cấu hình HTTPS ở dưới.
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name vpdt.congty.local;   # đổi thành domain/IP nội bộ của bạn
+
+    ssl_certificate     /etc/letsencrypt/live/vpdt.congty.local/fullchain.pem;  # hoặc đường dẫn chứng chỉ CA nội bộ/self-signed
+    ssl_certificate_key /etc/letsencrypt/live/vpdt.congty.local/privkey.pem;
+
+    # Chỉ chấp nhận TLS 1.2 trở lên — TLS 1.0/1.1 đã bị coi là không an toàn
+    # (dễ bị tấn công kiểu BEAST/POODLE), trình duyệt hiện đại đều hỗ trợ 1.2+.
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    client_max_body_size 20M;        # khớp UPLOAD_MAX_MB (.env) — đổi cả 2 cùng lúc nếu cần nâng
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Sau khi sửa xong, chạy lại `sudo nginx -t && sudo systemctl reload nginx` như
+bước ở trên, rồi kiểm tra mục 12 (`TRUST_PROXY`) — bắt buộc phải bật khi đã
+đứng sau Nginx như thế này.
+
 ---
 
 ## 12. Bật `TRUST_PROXY` sau khi có Nginx (BẮT BUỘC, dễ bỏ sót)

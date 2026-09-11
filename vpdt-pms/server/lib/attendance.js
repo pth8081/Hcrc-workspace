@@ -67,6 +67,13 @@ const SWAP_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
 function resolveWorkModelForEmployeeCode(employeeCode, { employeeProfiles, users, hrProcesses }) {
   const profile = (employeeProfiles || []).find(p => p.employeeCode === employeeCode);
   if (!profile) return null;
+  // profile.status: DRAFT (Onboarding chưa hoàn tất, vẫn cho phép — nhánh dự phòng qua hrProcesses bên
+  // dưới CHÍNH LÀ dành cho người mới chưa kịp liên kết tài khoản) / ACTIVE (đang làm việc) / ON_LEAVE
+  // (nghỉ dài hạn) / INACTIVE (ĐÃ NGHỈ VIỆC, xem lib/employeeProfile.js tự đặt khi Offboarding hoàn
+  // tất) — trước đây hàm này KHÔNG kiểm tra status, nên POST /api/attendance/clock-punch (máy chấm công
+  // vật lý) vẫn ghi nhận công/lương bình thường cho nhân viên ĐÃ NGHỈ VIỆC nếu mã chấm công cũ chưa kịp
+  // gỡ khỏi máy. Chỉ chặn đúng nhánh INACTIVE — DRAFT/ON_LEAVE không phải mục tiêu của lỗ hổng này.
+  if (profile.status === 'INACTIVE') return null;
   if (profile.username) {
     const user = (users || []).find(u => u.username === profile.username);
     if (user) {

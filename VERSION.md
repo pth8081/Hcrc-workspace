@@ -1,8 +1,95 @@
 # Phiên bản hiện tại
 
-**17.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.5 (2026-09-11): Đợt rà soát bảo mật + nghiệp vụ chuyên sâu — vá 12 lỗ hổng/lỗi xác nhận được
+
+Theo yêu cầu rà soát toàn diện (8 agent chạy song song: từng module nghiệp vụ
++ an ninh thông tin XSS/SQL injection/brute force/CSP/MITM), vá TOÀN BỘ phát
+hiện đã xác nhận bằng đọc code trực tiếp, xếp theo mức độ nghiêm trọng:
+
+**Nghiêm trọng:**
+- `lib/fileAuthz.js`: `findOwningRecord()` THIẾU 4 collection
+  (`laborContracts`/`paymentRequests`/`hrProcesses`/`checklistSubmissions`) —
+  file đính kèm Hợp Đồng Lao Động/chứng từ Thanh Toán/tài liệu Onboarding-
+  Offboarding/ảnh minh chứng Checklist đều rơi vào FAIL-OPEN (bất kỳ ai đã
+  đăng nhập cũng đọc được qua `/uploads/<tên-file>`), dù bản ghi đã bị giới
+  hạn theo quyền ở `GET /api/data`. Đồng thời mở rộng kiểm tra field bổ sung
+  (Biểu Mẫu, `customData`) cho 7 collection khác đã có sẵn khuôn nhưng bị bỏ
+  sót (`itPriceApprovals`/`reportEntries`/`reportPeriods`/`recruitmentReferrals`/
+  `licenses`/`itServiceRenewals`/`operationOrders`/`operationStoreOpenings`/
+  `operationRepairs`).
+- `routes/records.js`: Offboarding hoàn tất KHÔNG tự động khoá tài khoản đăng
+  nhập của nhân viên nghỉ việc — thêm `syncUserAccountOnOffboardingCompletion()`
+  (đặt `active=false` + tăng `sessionVersion` để mọi JWT hiện có mất hiệu lực
+  ngay), wire vào cả `complete-task` và `skip-task`.
+
+**Cao:**
+- `routes/records.js`: `POST /carRegs/:id/reassign` (Đổi Tài Xế-Xe) đọc
+  snapshot phiếu trước khi khoá và KHÔNG khoá theo biển số — race condition
+  có thể gán trùng 1 biển số cho 2 chuyến chồng khung giờ nếu 2 yêu cầu chạy
+  gần đồng thời (nhánh APPROVE đã khoá đúng, nhánh này bị bỏ sót). Bọc
+  `withAppLock('car_plate:<biển số>', ...)` quanh toàn bộ đọc+ghi, khớp mẫu
+  đã dùng cho APPROVE.
+- `lib/recordViewScope.js` + `routes/data.js`: `permGroups` (ma trận quyền
+  đầy đủ của mọi Nhóm Phân Quyền) trả nguyên cho MỌI người đã đăng nhập qua
+  `GET /api/data`, dù màn quản lý chỉ dành cho admin — thêm
+  `sanitizePermGroupsForViewer()` (ẩn hẳn với non-admin, không dùng ở đâu
+  khác ngoài admin panel).
+
+**Trung bình:**
+- `lib/recordActions.js`: bộ lọc từ khoá nhạy cảm (Tin Tức) chỉ GOM khoảng
+  trắng liên tiếp, không xoá — chèn thêm khoảng trắng/dấu câu giữa các ký tự
+  (VD "t ệ n ạ n") là qua được kiểm duyệt. Đổi `normalizeForScan()` sang xoá
+  hẳn ký tự không phải chữ/số, áp dụng đồng nhất cho cả nội dung lẫn từ khoá.
+- `lib/recordActions.js`: `updateApprovedActualBudgetEntry()` (sửa trực tiếp
+  Ngân Sách Thực Hiện) thiếu kiểm tra kỳ đã đóng — 2 hàm anh em đều đã chặn,
+  hàm này bị bỏ sót, cho sửa số liệu vô thời hạn kể cả sau khi báo cáo đã
+  phát hành.
+- `lib/catalogRename.js`: đổi tên phòng ban/siêu thị không cascade sang
+  `paymentRequests.dept`/`laborContracts.dept` — thêm 2 collection vào
+  `DEPT_FIELD_COLLECTIONS`.
+- `deploy/Huong-dan-trien-khai-PM2-Nginx.md`: mục 11 chỉ có ví dụ Nginx
+  HTTP-only — bổ sung mẫu cấu hình HTTPS đầy đủ (khối 443 + TLS 1.2/1.3 +
+  redirect 80→443 tường minh) cho trường hợp không dùng `certbot --nginx`
+  (tự cấp chứng chỉ CA nội bộ/self-signed).
+- `lib/attendance.js`: `resolveWorkModelForEmployeeCode()` không kiểm
+  `profile.status` — máy chấm công vật lý vẫn ghi nhận công cho nhân viên đã
+  nghỉ việc (`INACTIVE`) nếu mã chấm công cũ chưa gỡ khỏi máy. Chặn đúng
+  nhánh `INACTIVE` (không đụng `DRAFT`/`ON_LEAVE`, tránh phá luồng Onboarding
+  dự phòng qua `hrProcesses`).
+
+**Thấp:**
+- `routes/storeCatalogImport.js`: 2 route (tải mẫu Excel/đọc file xem trước)
+  của panel "Quản Lý Danh Mục Siêu Thị" (chỉ hiện cho admin ở giao diện)
+  thiếu gate admin ở server — thêm middleware `isCurrentlyAdmin()`.
+- `routes/systemLog.js`: `POST /api/log` không kiểm tra `module`/`actionType`
+  — bất kỳ ai đã đăng nhập cũng ghi được dòng nhật ký giả (module/actionType
+  tự bịa), làm nhiễu log khi điều tra sự cố. Thêm whitelist `module` (danh
+  sách token cố định) + kiểm khuôn `UPPER_SNAKE_CASE` cho `actionType`/
+  `status` + giới hạn độ dài `description`/`target`.
+- `lib/adminExport.js`: `buildGenericWorkbook()` (xuất Excel danh sách người
+  dùng...) không escape ô bắt đầu bằng `=`/`+`/`-`/`@` — cổ điển "Excel
+  Formula Injection" nếu tên/ghi chú do người dùng tự nhập chứa công thức.
+  Thêm `excelFormulaGuard()` (prefix dấu nháy đơn) áp dụng cho mọi giá trị
+  chuỗi trước khi ghi vào sheet.
+
+**Test**: mở rộng `tests/test-uploads-file-authz.js` (15→19 kịch bản, phủ 4
+collection mới của `fileAuthz.js`); toàn bộ `tests/test-*.js` liên quan
+(`test-meeting-car.js` 64/64, `test-attendance-leave.js` 47/47,
+`test-admin-users-permgroups.js` 60/60) và full regression suite đều pass —
+không phát sinh regression.
+
+**Đã biết, không phải phần vá lần này** (đã ghi nhận, ưu tiên phần trước):
+chưa có test tích hợp riêng qua route thật cho hook khoá tài khoản
+Offboarding (`test-hr-lifecycle.js` mock ở tầng client/network, không chạm
+tới route Express thật).
+
+**Deploy-impact**: chỉ đổi logic thuần (`lib/`/`routes/`) + 1 file docs triển
+khai — không đổi `schema.sql`/`.env.example`/`dependencies`. Chỉ cần copy
+code + `pm2 restart`.
 
 ## v17.4 (2026-09-11): Fix lỗi thật — "Bắt Đầu Test"/"Nhân Bản" checklist báo lỗi 500 ở production
 

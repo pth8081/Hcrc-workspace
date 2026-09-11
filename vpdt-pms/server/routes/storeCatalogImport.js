@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
+const { isCurrentlyAdmin } = require('../lib/adminAuth');
 const { buildStoreTemplateWorkbook, parseStoreFile } = require('../lib/storeCatalogImport');
 const { getAppDataValue } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -18,6 +19,22 @@ const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
+
+// PHÁT HIỆN THIẾU ở đợt audit chuyên sâu: panel "🏬 Quản Lý Danh Mục Siêu Thị" chỉ hiện cho admin ở
+// giao diện (cùng khuôn stores/jobTitles đã khoá ở ADMIN_ONLY_KEYS, xem routes/data.js), nhưng 2 route
+// ở file này (tải mẫu Excel + đọc file đã điền để xem trước) lại KHÔNG gate gì thêm ngoài requireAuth —
+// bất kỳ tài khoản đã đăng nhập nào cũng gọi thẳng được, dù không tự ghi được DB.stores (route xem
+// trước không ghi gì, nhưng vẫn không nên mở cho non-admin vì đây là bước đầu của luồng quản trị danh
+// mục, khớp gate isCurrentlyAdmin() đã dùng cho POST /api/admin/renameCatalogEntry cùng khu vực).
+router.use(async (req, res, next) => {
+  try {
+    const allowed = await isCurrentlyAdmin(req.user.username);
+    if (!allowed) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được thao tác với Danh Mục Siêu Thị' });
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 const uploadRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,

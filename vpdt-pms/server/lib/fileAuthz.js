@@ -33,7 +33,8 @@ const {
   canViewLicense, canViewItServiceRenewal,
   canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
   canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq,
-  canViewTrainingTestQuestionImage
+  canViewTrainingTestQuestionImage,
+  canViewLaborContract, canViewPaymentRequest, canViewHrProcess, canViewChecklistSubmission
 } = require('./recordViewScope');
 // resolveApprovedFileUrl() — nguồn sự thật DUY NHẤT cho "file đã phê duyệt" của itPriceApprovals, dùng
 // chung với routes/priceFile.js (route đánh dấu cột) — xem chú thích đầy đủ ở lib/recordActions.js.
@@ -91,7 +92,7 @@ function customDataHasFileUrl(record, fileUrl) {
 }
 
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
@@ -110,7 +111,15 @@ async function findOwningRecord(fileUrl) {
     // trainingTests (Ngân Hàng Câu Hỏi hỗ trợ ảnh minh hoạ câu hỏi): questions[].imageUrl là 1 file
     // /uploads/... như mọi field khác — thiếu nhánh này thì ảnh câu hỏi rơi thẳng vào FAIL-OPEN bên dưới,
     // đọc được bởi BẤT KỲ ai đã đăng nhập dù bài test có thể đang gán cho lớp giới hạn theo danh sách mời.
-    getAllForCollection('trainingTests')
+    getAllForCollection('trainingTests'),
+    // laborContracts/paymentRequests/hrProcesses/checklistSubmissions — 4 collection PHÁT HIỆN THIẾU ở
+    // đợt audit chuyên sâu (fileUrl của Hợp Đồng Lao Động/chứng từ Thanh Toán/tài liệu Onboarding-Offboarding/
+    // ảnh minh chứng Checklist đều rơi vào FAIL-OPEN dù bản ghi đã bị giới hạn theo quyền ở GET /api/data)
+    // — vá cùng đợt, dùng ĐÚNG hàm canView* đã có sẵn của mỗi module (lib/recordViewScope.js).
+    getAllForCollection('laborContracts'),
+    getAllForCollection('paymentRequests'),
+    getAllForCollection('hrProcesses'),
+    getAllForCollection('checklistSubmissions')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp cho đúng 6 module
   // có hỗ trợ Biểu Mẫu ở đây (xem validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG
@@ -128,23 +137,23 @@ async function findOwningRecord(fileUrl) {
   if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator, record: officeReq };
   const post = (internalPosts || []).find(p => (p.attachment && p.attachment.fileUrl === fileUrl) || customDataHasFileUrl(p, fileUrl));
   if (post) return { internal: true, post };
-  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl) || (p.extraFiles || []).some(f => f.fileUrl === fileUrl));
+  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl) || (p.extraFiles || []).some(f => f.fileUrl === fileUrl) || customDataHasFileUrl(p, fileUrl));
   if (priceItem) return { itPrice: true, item: priceItem };
-  const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl);
+  const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl || customDataHasFileUrl(e, fileUrl));
   if (entry) return { reportEntry: true, entry };
   const period = (reportPeriods || []).find(p =>
     (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl) ||
-    p.pdfCompilation?.publishedFileUrl === fileUrl
+    p.pdfCompilation?.publishedFileUrl === fileUrl || customDataHasFileUrl(p, fileUrl)
   );
   if (period) return { reportPeriod: true, period };
-  const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl);
+  const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl || customDataHasFileUrl(r, fileUrl));
   if (referral) return { recruitment: true, referral };
   // licenses (Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/licenseView), khác hẳn
   // canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
-  const license = (licenses || []).find(l => l.fileUrl === fileUrl);
+  const license = (licenses || []).find(l => l.fileUrl === fileUrl || customDataHasFileUrl(l, fileUrl));
   if (license) return { license: true, item: license };
   // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses ở trên.
-  const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl);
+  const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl || customDataHasFileUrl(r, fileUrl));
   if (itRenewal) return { itServiceRenewal: true, item: itRenewal };
   // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs): trước đây HOÀN TOÀN vắng mặt ở
   // findOwningRecord() — file đính kèm của cả 3 luồng (đơn hàng/đề xuất mở mới/đề xuất sửa chữa siêu thị)
@@ -152,11 +161,11 @@ async function findOwningRecord(fileUrl) {
   // theo phòng ban — cùng dạng lỗ hổng đã vá cho 5 module "theo phòng ban" khác. Trả owning riêng vì 3
   // luồng này không dùng khuôn quyền tải "<moduleKey>Download" mà dùng canView* trực tiếp cho cả 2 mode
   // (xem canViewOperationOrder()/canViewOperationStoreOpening()/canViewOperationRepair(), lib/recordViewScope.js).
-  const opOrder = (operationOrders || []).find(o => o.fileUrl === fileUrl);
+  const opOrder = (operationOrders || []).find(o => o.fileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
   if (opOrder) return { operationOrder: true, item: opOrder };
-  const opStoreOpening = (operationStoreOpenings || []).find(o => o.fileUrl === fileUrl);
+  const opStoreOpening = (operationStoreOpenings || []).find(o => o.fileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
   if (opStoreOpening) return { operationStoreOpening: true, item: opStoreOpening };
-  const opRepair = (operationRepairs || []).find(o => o.fileUrl === fileUrl);
+  const opRepair = (operationRepairs || []).find(o => o.fileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
   if (opRepair) return { operationRepair: true, item: opRepair };
   // trainingTests: tra theo ĐÚNG câu hỏi chứa fileUrl (1 bài test có thể có nhiều ảnh câu hỏi khác nhau)
   // — trả kèm câu hỏi khớp để dùng chung nếu cần, dù authorizeFileAccess() bên dưới hiện chỉ cần "item"
@@ -166,6 +175,18 @@ async function findOwningRecord(fileUrl) {
   const test = (trainingTests || []).find(t => (t.questions || []).some(q =>
     q.imageUrl === fileUrl || (q.options || []).some(o => o.imageUrl === fileUrl)));
   if (test) return { trainingTestQuestion: true, item: test };
+  const laborContract = (laborContracts || []).find(l => l.fileUrl === fileUrl || customDataHasFileUrl(l, fileUrl));
+  if (laborContract) return { laborContract: true, item: laborContract };
+  const paymentRequest = (paymentRequests || []).find(p =>
+    (p.requestFiles || []).some(f => f.fileUrl === fileUrl) ||
+    (p.installments || []).some(i => i.confirmFileUrl === fileUrl) ||
+    customDataHasFileUrl(p, fileUrl));
+  if (paymentRequest) return { paymentRequest: true, item: paymentRequest };
+  const hrProcess = (hrProcesses || []).find(h => (h.attachments || []).some(a => a.fileUrl === fileUrl) || customDataHasFileUrl(h, fileUrl));
+  if (hrProcess) return { hrProcess: true, item: hrProcess };
+  const checklistSubmission = (checklistSubmissions || []).find(s =>
+    (s.answers || []).some(a => (a.attachments || []).some(att => att.fileUrl === fileUrl)));
+  if (checklistSubmission) return { checklistSubmission: true, item: checklistSubmission };
   return null;
 }
 
@@ -273,6 +294,10 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     ]);
     return canViewTrainingTestQuestionImage(user, owning.item, { trainingClasses, trainingRegistrations });
   }
+  if (owning.laborContract) return canViewLaborContract(user);
+  if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item);
+  if (owning.hrProcess) return canViewHrProcess(user, owning.item);
+  if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item);
 
   // ——— Nhóm 5 module "theo phòng ban" (doc/submission/contract/car/office) ———
   if (mode === 'download') {

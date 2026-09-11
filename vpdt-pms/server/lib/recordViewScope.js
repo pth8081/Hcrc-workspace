@@ -334,6 +334,19 @@ function sanitizeUsersPermsForViewer(users, viewerUsername, isAdmin) {
   });
 }
 
+// permGroups: mảng ma trận quyền ĐẦY ĐỦ của TỪNG Nhóm Phân Quyền — trước đây GET /api/data trả nguyên
+// mảng này cho MỌI người đã đăng nhập (không riêng admin), để lộ toàn bộ cấu trúc phân quyền của hệ
+// thống (tên nhóm + từng cờ quyền/scope phòng ban/approverAuthLevel của mỗi nhóm) cho bất kỳ ai gọi
+// thẳng GET /api/data — bản đồ hữu ích cho kẻ tấn công dò xem nhóm nào có quyền cao để nhắm social-
+// engineering, dù groupIds (ai thuộc nhóm nào) đã được ẩn riêng ở sanitizeUsersPermsForViewer(). Đã rà
+// toàn bộ public/js: DB.permGroups CHỈ được đọc trong 3 file "admin-permgroups"/"admin-submissiongroups"/
+// "admin-userstaging" (cụm lazy-load chỉ admin mới mở tới), không có màn non-admin nào cần tới nội dung
+// nhóm — ẩn hẳn (mảng rỗng) với người không phải admin là an toàn, không làm hỏng tính năng nào.
+function sanitizePermGroupsForViewer(permGroups, isAdmin) {
+  if (isAdmin) return permGroups;
+  return [];
+}
+
 // Hồ sơ giới thiệu ứng viên (recruitmentReferrals) chứa thông tin cá nhân của người NGOÀI công ty (tên/
 // SĐT/email/CV ứng viên) do nhân viên tự nguyện cung cấp để giới thiệu — khác trainingRegistrations/
 // trainingClasses (công khai toàn công ty có chủ đích, xem đầu file), hồ sơ này CHỈ nên lộ cho chính
@@ -982,7 +995,7 @@ module.exports = {
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
   sanitizeTrainingTestsForUser, filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,
   canViewTrainingTestQuestionImage, filterTrainingDocumentProgressForUser,
-  computeModuleApproverUsernames, sanitizeUsersPermsForViewer,
+  computeModuleApproverUsernames, sanitizeUsersPermsForViewer, sanitizePermGroupsForViewer,
   filterRecruitmentReferralsForUser,
   canViewReportEntry, filterReportEntriesForUser,
   canViewContract, filterContractsForUser,

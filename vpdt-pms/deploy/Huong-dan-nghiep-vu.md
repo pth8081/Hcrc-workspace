@@ -938,6 +938,11 @@ xem hợp đồng của chính mình ở đợt này.
     **"Chấm dứt sau thử việc"** (đóng hẳn, không tạo hợp đồng mới).
   - Quy trình **Offboarding hoàn tất** → tự đóng (Đã chấm dứt) hợp đồng đang
     hiệu lực của nhân viên đó.
+  - Quy trình **Offboarding hoàn tất** (đợt rà soát bảo mật v17.5) → nếu nhân
+    viên đó CÓ tài khoản đăng nhập hệ thống, tự động **khoá tài khoản**
+    (chuyển "Đang hoạt động" → "Đã khoá") VÀ vô hiệu hoá NGAY mọi phiên đăng
+    nhập đang mở của tài khoản đó — không cần HR/admin tự tay khoá thủ công
+    sau khi hoàn tất quy trình nghỉ việc.
 - **Gia hạn hợp đồng Xác định thời hạn về sau** (không còn gắn với 1 việc
   Onboarding cụ thể nữa) là thao tác **tay** của HR ở màn Hợp Đồng Lao Động —
   quá **2 lần gia hạn liên tiếp bắt buộc chuyển Vô thời hạn** theo luật.

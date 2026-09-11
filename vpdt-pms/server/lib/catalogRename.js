@@ -28,7 +28,14 @@ const DEPT_FIELD_COLLECTIONS = [
   { collection: 'uniformStockAdjustments', fields: ['dept'] },
   { collection: 'uniformTransfers', fields: ['sourceDept', 'targetDept'] },
   { collection: 'recruitmentJobs', fields: ['hiringDept'] },
-  { collection: 'trainingPlans', fields: ['targetDept'] }
+  { collection: 'trainingPlans', fields: ['targetDept'] },
+  // paymentRequests/laborContracts: PHÁT HIỆN THIẾU ở đợt audit chuyên sâu — cả 2 đều lưu field .dept
+  // (paymentRequests: phòng ban đề nghị, khớp DEPT_FIELD_COLLECTIONS.contracts kiểu cũ; laborContracts:
+  // forceOwnDept ép theo phòng ban người tạo, xem lib/createValidation.js dòng ~3052) nhưng bị bỏ sót
+  // khỏi danh sách này — đổi tên 1 phòng ban KHÔNG cascade sang 2 collection này, để lại giá trị dept CŨ
+  // (không còn khớp DB.depts nào) trên các hồ sơ đã tạo trước đó.
+  { collection: 'paymentRequests', fields: ['dept'] },
+  { collection: 'laborContracts', fields: ['dept'] }
 ];
 
 function renameSimpleFields(item, fields, oldValue, newValue) {
