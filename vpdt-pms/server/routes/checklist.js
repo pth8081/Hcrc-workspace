@@ -50,6 +50,7 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
     const source = templates.find(t => t.id === templateId);
     if (!source) return res.status(404).json({ error: 'Không tìm thấy checklist' });
     const clone = {
+      id: Date.now(),
       templateCode: source.templateCode, templateName: source.templateName, templateType: source.templateType,
       version: (source.version || 1) + 1, status: 'DRAFT',
       clonedFromTemplateId: source.id, passThreshold: source.passThreshold,
@@ -120,6 +121,7 @@ router.post('/submissions/start', async (req, res) => {
     if (existingDraft) return res.json({ ok: true, item: existingDraft });
 
     const submission = {
+      id: Date.now(),
       templateId: template.id, templateCode: template.templateCode, templateName: template.templateName,
       templateType: template.templateType, templateVersion: template.version,
       storeCode, submittedByUsername: user.username, submittedByName: user.name,

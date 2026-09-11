@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**17.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.4 (2026-09-11): Fix lỗi thật — "Bắt Đầu Test"/"Nhân Bản" checklist báo lỗi 500 ở production
+
+Phản hồi thực tế kèm ảnh chụp màn hình: bấm "Bắt Đầu Test" ở tab Thực Hiện
+báo "Đã có lỗi xảy ra, vui lòng thử lại sau" (thông báo lỗi 500 ẩn chi tiết
+khi `NODE_ENV=production`, xem `lib/errorResponse.js`).
+
+**Nguyên nhân xác nhận được (đọc trực tiếp code, không phải phỏng đoán)**:
+`routes/checklist.js` — cả 2 điểm tạo bản ghi mới hoàn toàn
+(`POST /templates/:id/clone` — Nhân Bản; `POST /submissions/start` — Bắt Đầu
+[Test]) xây object mới nhưng **quên gán field `id`** trước khi gọi
+`insertRecord()`. `lib/recordStore.js::insertRecord()` KHÔNG tự sinh id hộ
+(khác với 1 số hàm khác trong hệ thống) — nó dùng thẳng `record.id` làm tham
+số SQL `BigInt`; `id` là `undefined` khiến driver SQL Server ném lỗi thật
+(không phải `HttpError` nghiệp vụ) → rơi vào nhánh lỗi 500 ẩn chi tiết.
+
+Vì sao bộ test cũ (`tests/test-checklist.js`, 14/14 pass mỗi lần trước đó)
+không bắt được: mock `insertRecord()` trong test tự
+`Object.assign({id:...}, record)` — vô tình "vá hộ" thiếu sót này, khác hành
+vi thật của `lib/recordStore.js`. Đã sửa cả 2 phía:
+- `routes/checklist.js`: gán `id: Date.now()` cho cả `clone` (Nhân Bản) và
+  `submission` (Bắt Đầu) trước khi `insertRecord()` — đúng quy ước đã dùng ở
+  mọi nơi khác trong hệ thống (VD `lib/notifications.js`).
+- `tests/test-checklist.js`: sửa lại mock để **không tự vá** id thiếu —
+  ném lỗi rõ ràng nếu 1 lời gọi `insertRecord()` nào quên gán `id`, để lớp
+  lỗi này không lặp lại mà không bị bộ test bắt được. 14/14 kịch bản vẫn pass
+  sau khi sửa (đúng hành vi, không đổi kết quả nghiệp vụ).
+
+**Deploy-impact**: chỉ đổi `routes/checklist.js` (logic thuần) —
+không đổi `schema.sql`/`.env.example`/dependencies. Chỉ cần copy code +
+`pm2 restart`.
 
 ## v17.3 (2026-09-11): Checklist — thêm chức năng "Xem" mẫu ĐANG DÙNG/LƯU TRỮ (chỉ đọc)
 

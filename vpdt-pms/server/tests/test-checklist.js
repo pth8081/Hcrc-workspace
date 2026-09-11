@@ -52,11 +52,16 @@ stubModule('lib/appData', {
 
 stubModule('lib/recordStore', {
   getAllForCollection: async (collection) => RECORDS[collection] || [],
+  // KHÔNG tự gán id nếu record thiếu — mirror ĐÚNG lib/recordStore.js thật (insertRecord() dùng thẳng
+  // record.id làm tham số SQL BigInt, không tự sinh id hộ). Mock trước đây tự Object.assign({id:...},
+  // record) che mất 1 lỗi thật ở routes/checklist.js (clone/submission thiếu "id:" trước khi gọi
+  // insertRecord() -> record.id=undefined -> lỗi 500 thật ở production, không tái hiện được ở đây vì
+  // mock tự vá hộ) — xem phản hồi thực tế "Bắt Đầu Test báo lỗi" đã fix ở routes/checklist.js.
   insertRecord: async (collection, record) => {
-    const withId = Object.assign({ id: idSeq++ }, record);
+    if (record.id == null) throw new Error(`insertRecord('${collection}', ...) thiếu record.id — lib/recordStore.js thật KHÔNG tự sinh id hộ, phải gán id: Date.now() trước khi gọi`);
     RECORDS[collection] = RECORDS[collection] || [];
-    RECORDS[collection].push(withId);
-    return withId;
+    RECORDS[collection].push(record);
+    return record;
   },
   withLockedRecordForCollection: async (collection, id, mutatorFn) => {
     const list = RECORDS[collection] || [];
