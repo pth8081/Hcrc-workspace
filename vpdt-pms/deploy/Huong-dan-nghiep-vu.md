@@ -1137,12 +1137,15 @@ lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng
 
 ### 4.7. Checklist Đánh Giá Siêu Thị
 
-Module top-level riêng (không nằm trong Vận Hành), kiến trúc JSON-blob thuần
-(`checklistTemplates`/`checklistSubmissions` — MIGRATED_COLLECTIONS, mỗi bản
-ghi 1 dòng `dbo.Records`), phân quyền HOÀN TOÀN PHẲNG (không theo phòng ban
-như đa số module khác). 4 tab nội bộ: **Cấu Hình / Thực Hiện / Kết Quả & Phản
-Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này, tách biệt
-hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
+Module ĐỘC LẬP HOÀN TOÀN về dữ liệu/quyền/route (không dùng chung bất kỳ gì
+với module Vận Hành), kiến trúc JSON-blob thuần (`checklistTemplates`/
+`checklistSubmissions` — MIGRATED_COLLECTIONS, mỗi bản ghi 1 dòng
+`dbo.Records`), phân quyền HOÀN TOÀN PHẲNG (không theo phòng ban như đa số
+module khác). Từ v17.0, nút điều hướng "✅ Checklist Đánh Giá" được GỘP CHUNG
+dropdown sidebar `"⚙️ Vận Hành ▾"` cho gọn (thuần UI, không đổi dữ liệu/quyền)
+— bấm vào vẫn mở đúng module này. 4 tab nội bộ: **Cấu Hình / Thực Hiện / Kết
+Quả & Phản Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này,
+tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
 
 **3 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
 - `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist

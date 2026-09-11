@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**16.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.0 (2026-09-11): Gộp nút điều hướng "Checklist Đánh Giá Siêu Thị" vào chung dropdown "Vận Hành"
+
+Theo phản hồi người dùng: module **"Checklist Đánh Giá Siêu Thị"** vẫn là
+module ĐỘC LẬP HOÀN TOÀN về dữ liệu/quyền/route như v16.9 (không đổi bất kỳ
+logic server nào) — chỉ đổi **vị trí nút trên thanh điều hướng (sidebar)**
+cho gọn: gỡ nút đứng lẻ `btnChecklistTab`, thêm nút `✅ Checklist Đánh Giá`
+vào chung dropdown `"⚙️ Vận Hành ▾"` (cùng nhóm với "📦 Phê Duyệt Đơn Hàng"/
+"🏬 Siêu Thị"), giống cách các module con Xe/Phòng Họp/VPP/Đồng Phục/Giấy
+Phép đang gộp chung dropdown "🏢 Hành Chính". Bấm vào vẫn mở đúng module
+Checklist với 4 tab con y hệt cũ.
+
+**Điểm cần cẩn trọng đã xử lý**: dropdown cha "Vận Hành" trước đây chỉ mở khi
+có quyền Đơn Hàng/Siêu Thị — đã sửa `updateVanHanhNavVisibility()` để mở
+dropdown khi có BẤT KỲ quyền nào trong 3 nhánh (Đơn Hàng/Siêu Thị/Checklist),
+tránh trường hợp Kiểm Soát Viên/Giám Đốc Siêu Thị chỉ có quyền Checklist (không
+có quyền Vận Hành nào khác) bị ẩn mất cả dropdown.
+
+**Deploy-impact**: chỉ đổi `public/index.html` + `public/js/core.js` (thuần
+UI điều hướng) — không đổi `schema.sql`/`.env.example`/`package.json`
+dependencies. Chỉ cần copy code + `pm2 restart`.
 
 ## v16.9 (2026-09-11): Module mới "✅ Checklist Đánh Giá Siêu Thị"
 

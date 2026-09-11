@@ -5489,6 +5489,7 @@ function finishLogin(user) {
   updateTongHopNavVisibility();
   document.getElementById('btnOperationOrderNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'ORDER'));
   document.getElementById('btnOperationStoreNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'STORE'));
+  document.getElementById('btnChecklistNav').classList.toggle('hidden', !canAccessChecklistModule(user));
   updateVanHanhNavVisibility();
   updateOperationStoreSubTabVisibility(user);
   document.getElementById('btnHrFeedbackNav').classList.toggle('hidden', !canAccessHrModule(user));
@@ -5499,7 +5500,6 @@ function finishLogin(user) {
   document.getElementById('btnHrAttendanceNav').classList.toggle('hidden', !canAccessHrAttendanceModule(user));
   document.getElementById('btnHrPayrollNav').classList.toggle('hidden', !canAccessHrPayrollModule(user));
   updateHrNavVisibility();
-  document.getElementById('btnChecklistTab').classList.toggle('hidden', !canAccessChecklistModule(user));
 
   populateDropdowns();
   switchTab('dashboard');
@@ -5846,11 +5846,17 @@ document.addEventListener('click', (ev) => {
 // "Vận Hành" — cùng khuôn "Tổng Hợp" ở trên, bọc 3 luồng ĐỘC LẬP Phê Duyệt Đơn Hàng/Mở Mới Siêu Thị/
 // Sửa Chữa Siêu Thị (module "vanHanh", xem HTML #vanHanhNavWrap). LƯU Ý ĐẶT TÊN: KHÔNG dùng tiền tố
 // "dieuHanh" (module "Điều Hành" — Biên Bản Họp/Công Việc/Báo Cáo Định Kỳ — đã tồn tại sẵn, dễ nhầm lẫn
-// khi đọc code vì phát âm gần giống "Vận Hành").
+// khi đọc code vì phát âm gần giống "Vận Hành"). "Checklist Đánh Giá Siêu Thị" (nút btnChecklistNav) GỘP
+// CHUNG dropdown này (theo yêu cầu người dùng) nhưng vẫn là module "checklist" ĐỘC LẬP hoàn toàn về
+// quyền/dữ liệu (canAccessChecklistModule() không liên quan canAccessOperationModule()) — do đó dropdown
+// cha phải mở khi có BẤT KỲ quyền nào trong 3 nhánh (Đơn Hàng/Siêu Thị/Checklist), KHÔNG được bắt buộc
+// có quyền Vận Hành mới thấy Checklist (nếu không, Kiểm Soát Viên/Giám Đốc Siêu Thị chỉ có quyền
+// Checklist sẽ mất luôn quyền truy cập vì cả dropdown cha bị ẩn).
 function updateVanHanhNavVisibility() {
   const orderVisible = !document.getElementById('btnOperationOrderNav').classList.contains('hidden');
   const storeVisible = !document.getElementById('btnOperationStoreNav').classList.contains('hidden');
-  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible);
+  const checklistVisible = !document.getElementById('btnChecklistNav').classList.contains('hidden');
+  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible);
 }
 function toggleVanHanhDropdown(e) {
   e.stopPropagation();

@@ -137,12 +137,6 @@
       <button id="btnDocTab" data-op="switchTab" data-arg0="doc" class="hidden sidebar-item">
         <span class="sidebar-icon">📂</span><span class="sidebar-label">Tài liệu</span>
       </button>
-      <!-- "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL riêng, đứng lẻ (không dropdown) như Tài Liệu ở
-           trên: 4 tab (Cấu Hình/Thực Hiện/Kết Quả & Phản Hồi/Báo Cáo) đều nằm TRONG module tự quản lý qua
-           setChecklistSubTab() (public/js/module-checklist.js), không cần nhóm dropdown ở sidebar. -->
-      <button id="btnChecklistTab" data-op="switchTab" data-arg0="checklist" class="hidden sidebar-item">
-        <span class="sidebar-icon">✅</span><span class="sidebar-label">Checklist Đánh Giá Siêu Thị</span>
-      </button>
       <button id="btnSubmissionTab" data-op="switchTab" data-arg0="submission" class="hidden sidebar-item">
         <span class="sidebar-icon">📜</span><span class="sidebar-label">Văn bản trình</span>
       </button>
@@ -217,7 +211,12 @@
       </div>
 
       <!-- Vận Hành — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu officeReqs của "Tổng
-           Hợp"), cùng khuôn dropdown #tongHopNavWrap ở trên. -->
+           Hợp"), cùng khuôn dropdown #tongHopNavWrap ở trên. "Checklist Đánh Giá Siêu Thị" ĐƯỢC GỘP CHUNG
+           dropdown này (cùng nhóm điều hướng theo yêu cầu người dùng) NHƯNG VẪN LÀ module ĐỘC LẬP hoàn
+           toàn về dữ liệu/quyền/route (checklistTemplates/checklistSubmissions, xem lib/checklist.js) —
+           bấm vào vẫn switchTab(checklist) y hệt trước đây, chỉ đổi vị trí nút trên sidebar. KHÔNG nhập
+           chung permission gate với canAccessOperationModule() — xem updateVanHanhNavVisibility() (mở
+           dropdown khi có quyền Đơn Hàng/Siêu Thị HOẶC quyền Checklist, không bắt buộc cả hai). -->
       <div id="vanHanhNavWrap" class="hidden">
         <button id="btnVanHanhTab" data-op="toggleVanHanhDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">⚙️</span><span class="sidebar-label flex-1">Vận Hành</span><span class="sidebar-label text-[10px]">▾</span>
@@ -225,6 +224,7 @@
         <div id="vanHanhDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
           <button id="btnOperationOrderNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(ORDERS)" class="hidden sidebar-subitem">📦 Phê Duyệt Đơn Hàng</button>
           <button id="btnOperationStoreNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(STORE)" class="hidden sidebar-subitem">🏬 Siêu Thị</button>
+          <button id="btnChecklistNav" data-op-seq="closeVanHanhDropdown()|switchTab(checklist)" class="hidden sidebar-subitem">✅ Checklist Đánh Giá</button>
         </div>
       </div>
 
@@ -7393,9 +7393,11 @@
     </div>
   </div>
 
-  <!-- Màn hình MODULE "Checklist Đánh Giá Siêu Thị" — top-level riêng (xem lib/checklist.js phía server,
-       public/js/module-checklist.js phía client). 4 tab nội bộ tự quản lý qua setChecklistSubTab() —
-       KHÔNG dùng dropdown sidebar (đứng lẻ như Tài Liệu, xem #btnChecklistTab). -->
+  <!-- Màn hình MODULE "Checklist Đánh Giá Siêu Thị" — module ĐỘC LẬP hoàn toàn về dữ liệu/quyền/route
+       (xem lib/checklist.js phía server, public/js/module-checklist.js phía client), CHỈ gộp chung
+       dropdown sidebar "Vận Hành" cho gọn điều hướng (nút #btnChecklistNav trong #vanHanhDropdownPanel,
+       switchTab(checklist) như cũ) — xem updateVanHanhNavVisibility() ở core.js. 4 tab nội bộ tự quản lý
+       qua setChecklistSubTab(). -->
   <div id="checklistSection" class="hidden space-y-4">
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" data-op="setChecklistSubTab" data-arg0="CONFIG" id="btnChecklistSubConfig" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white">🛠️ Cấu Hình</button>
