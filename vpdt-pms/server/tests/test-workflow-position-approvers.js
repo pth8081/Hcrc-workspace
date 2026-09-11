@@ -75,6 +75,44 @@ async function main() {
     assert(!result.includes('a5'), 'a5 khác jobTitle -> loại');
   });
 
+  // ===== 1b) "Vị Trí Kiêm Nhiệm" (secondaryPositions) — tính năng mở rộng matching, KHÔNG thay logic canBeApprover =====
+  await run.run('resolvePositionApprovers(): user khớp qua secondaryPositions (kiêm nhiệm) dù jobTitle/dept CHÍNH không khớp -> vẫn được tính là approver', () => {
+    const kiemNhiem = makeUser({
+      username: 'kn1', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [kiemNhiem]);
+    assertEqual(JSON.stringify(result), JSON.stringify(['kn1']), 'Vị trí kiêm nhiệm khớp cặp cấu hình -> phải được tính');
+  });
+
+  await run.run('resolvePositionApprovers(): kiêm nhiệm KHÔNG bỏ qua yêu cầu canBeApprover/admin (bất biến bảo mật cốt lõi)', () => {
+    const kiemNhiemNoPerm = makeUser({
+      username: 'kn2', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: {},
+      secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [kiemNhiemNoPerm]);
+    assertEqual(result.length, 0, 'Khớp kiêm nhiệm nhưng thiếu canBeApprover/admin -> vẫn KHÔNG được tính là approver');
+  });
+
+  await run.run('resolvePositionApprovers(): user không có secondaryPositions (undefined) vẫn hoạt động bình thường (tương thích ngược)', () => {
+    const noField = makeUser({ username: 'nofield', perms: { canBeApprover: true } });
+    delete noField.secondaryPositions;
+    const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [noField]);
+    assertEqual(JSON.stringify(result), JSON.stringify(['nofield']), 'Không có field secondaryPositions -> vẫn khớp qua jobTitle/dept chính như cũ');
+  });
+
+  await run.run('resolvePositionApprovers(): khớp CẢ vị trí chính lẫn kiêm nhiệm cho 2 cặp cấu hình khác nhau -> không trùng lặp username', () => {
+    const both = makeUser({
+      username: 'both1', jobTitle: 'Trưởng phòng', dept: 'Phòng IT', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Phó phòng', dept: 'Phòng Kế Toán' }]
+    });
+    const result = resolvePositionApprovers(
+      [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }, { jobTitle: 'Phó phòng', dept: 'Phòng Kế Toán' }],
+      [both]
+    );
+    assertEqual(JSON.stringify(result), JSON.stringify(['both1']), 'Khớp cả 2 cặp (chính + kiêm nhiệm) nhưng chỉ liệt kê username 1 lần');
+  });
+
   await run.run('resolvePositionApprovers(): không cấu hình cặp nào (rỗng/thiếu jobTitle,dept) -> trả về mảng rỗng, không throw', () => {
     assertEqual(resolvePositionApprovers([], [makeUser({ username: 'a1', perms: { canBeApprover: true } })]).length, 0, 'Mảng cặp rỗng -> không ai');
     assertEqual(resolvePositionApprovers(null, []).length, 0, 'null -> không throw, trả về rỗng');

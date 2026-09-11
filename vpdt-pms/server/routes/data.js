@@ -354,6 +354,20 @@ function mergeGroupsBasePermsServer(groupsPerms) {
 // vẫn không ai vào lại được màn Quản Trị. Trước đây chỉ xét perms.admin, cho phép 1 request tự soạn
 // (bỏ qua nút "Khoá" ở UI, vốn chỉ chặn tự khoá chính mình ở CLIENT) đặt active:false cho chính admin
 // duy nhất còn lại mà vẫn qua được kiểm tra này.
+// "Vị Trí Kiêm Nhiệm" (u.secondaryPositions[]) — mảng {jobTitle,dept} BỔ SUNG cho 1 user, CHỈ dùng ở
+// lib/positionApprovers.js để tính là approver "Theo vị trí" (xem chú thích ở đó) — KHÔNG phải chức
+// danh/phòng ban chính thức (vẫn đúng 1 cặp u.jobTitle/u.dept như trước, không đổi). Sanitize hình dạng
+// ở điểm ghi DUY NHẤT (giống các field admin-editable khác) — không bắt buộc phải khớp đúng 1 cặp có
+// trong DB.workflowParticipatingPositions (danh mục có thể đổi sau lúc gán, giữ nguyên lựa chọn cũ
+// tương tự approversByPosition[] khi 1 cặp bị xoá khỏi danh mục).
+function sanitizeSecondaryPositions(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(p => p && typeof p.jobTitle === 'string' && typeof p.dept === 'string' && p.jobTitle.trim() && p.dept.trim())
+    .slice(0, 20)
+    .map(p => ({ jobTitle: p.jobTitle.trim().slice(0, 200), dept: p.dept.trim().slice(0, 200) }));
+}
+
 function assertAtLeastOneAdmin(users) {
   if (!(users || []).some(u => u.perms?.admin && u.active !== false)) {
     throw new HttpError(400, 'Không thể lưu: thao tác này sẽ khiến hệ thống không còn tài khoản nào có quyền Quản Trị Viên (Admin) đang hoạt động.');
@@ -421,6 +435,7 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
 
     let record = { ...u, ...preserved };
     delete record.pin; // KHÔNG BAO GIỜ lưu PIN dạng plaintext — chỉ lưu pinHash bên dưới.
+    record.secondaryPositions = sanitizeSecondaryPositions(u.secondaryPositions);
 
     // Tài khoản "admin" mặc định (xem defaults.js) LUÔN có toàn quyền và KHÔNG bị sửa quyền bởi bất kỳ
     // ai — kể cả từ form phân quyền hay gán vào nhóm phân quyền — đảm bảo hệ thống luôn còn đúng 1 tài

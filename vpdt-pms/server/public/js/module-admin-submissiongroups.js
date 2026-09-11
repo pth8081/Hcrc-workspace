@@ -114,6 +114,7 @@ function readUserFormState() {
   const dept = posType === 'STORE' ? document.getElementById('uStore').value : document.getElementById('uDept').value;
   if (!dept) { alert(posType === 'STORE' ? 'Vui lòng chọn Siêu Thị!' : 'Vui lòng chọn Phòng Ban!'); return null; }
   const jobTitle = document.getElementById('uJobTitle').value || null;
+  const secondaryPositions = getMultiSelectValues('uSecondaryPositionsMultiSelect').map(decodeWfPositionPair).filter(Boolean);
   const isDriver = !!document.getElementById('uIsDriver')?.checked;
   const startDate = document.getElementById('uStartDate').value || '';
   const groupIds = currentEditingUserGroupIds();
@@ -137,20 +138,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, secondaryPositions, isDriver, startDate, groupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, secondaryPositions, isDriver, startDate, groupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, isDriver, startDate, perms, groupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, secondaryPositions, isDriver, startDate, perms, groupIds, permOverrides
   };
 }
 
@@ -160,7 +161,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, isDriver, startDate, groupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, secondaryPositions, isDriver, startDate, groupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -182,6 +183,7 @@ async function saveUser(e) {
       user.posType = posType;
       user.dept = dept;
       user.jobTitle = jobTitle;
+      user.secondaryPositions = secondaryPositions;
       user.isDriver = isDriver;
       user.startDate = startDate;
       // Tài khoản "admin" luôn toàn quyền, không cho sửa qua form (khối cây phân quyền đã bị khoá ở

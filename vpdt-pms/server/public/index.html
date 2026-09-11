@@ -4746,6 +4746,17 @@
           </div>
         </div>
 
+        <!-- Vị Trí Kiêm Nhiệm (u.secondaryPositions[]) — CHỈ dùng để tính là approver "Theo vị trí"
+             (approverMode POSITION) ở CÁC MODULE KHÁC, KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên,
+             KHÔNG ảnh hưởng Quản Lý Trực Tiếp/KPI (Cơ Cấu Tổ Chức) hay mô hình chấm công (Công & Phép) —
+             xem lib/positionApprovers.js. Nguồn chọn = DB.workflowParticipatingPositions (cùng danh mục
+             "Vị Trí Tham Gia Quy Trình" ở khối 17, xem wfPositionPairPickerItems()). -->
+        <div class="bg-white p-3 rounded border">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">🏷️ Vị Trí Kiêm Nhiệm (tuỳ chọn)</label>
+          <div id="uSecondaryPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+          <p class="text-[11px] text-gray-400 mt-1">Chỉ dùng để tính người này là người duyệt/tham gia quy trình "Theo vị trí" ở các module khác cho (các) chức danh/phòng ban được chọn thêm dưới đây — KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên, không ảnh hưởng Quản Lý Trực Tiếp/KPI/Chấm công.</p>
+        </div>
+
         <!-- Là tài xế: đánh dấu để hiện trong picker "Lái xe được phân công" (Đăng Ký Xe > Xử lý duyệt,
         #carAssignedDriver) — trước đây picker đó tìm toàn bộ nhân viên công ty vì không có cách nào lọc
         đúng nhóm tài xế thực tế. Không phải quyền truy cập (không gate action gì) — chỉ là cờ phân loại

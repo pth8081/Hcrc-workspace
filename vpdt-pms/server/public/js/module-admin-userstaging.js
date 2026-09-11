@@ -76,6 +76,10 @@ function editPendingNewUser(idx) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = u.dept;
   else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
+  renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), (u.secondaryPositions || []).map(encodeWfPositionPair), {
+    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
+    emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
+  });
   document.getElementById('uIsDriver').checked = !!u.isDriver;
   document.getElementById('uStartDate').value = u.startDate || '';
   renderUPermGroupsChecklist(u.groupIds || []);
@@ -133,6 +137,10 @@ function resetUserForm() {
   document.getElementById('uPosType').value = 'HO';
   onUserPosTypeChange();
   document.getElementById('uJobTitle').value = '';
+  renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), [], {
+    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
+    emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
+  });
   document.getElementById('uIsDriver').checked = false;
   document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
@@ -277,6 +285,10 @@ function editUser(id) {
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = user.dept;
   else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
+  renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), (user.secondaryPositions || []).map(encodeWfPositionPair), {
+    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
+    emptyText: 'Chưa gán Vị Trí Kiêm Nhiệm nào.'
+  });
   document.getElementById('uIsDriver').checked = !!user.isDriver;
   document.getElementById('uStartDate').value = user.startDate || '';
   // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy

@@ -30,13 +30,25 @@
 // bị thu hồi sau đó — hành vi CŨ, giữ nguyên, ngoài phạm vi đợt này) — POSITION mode LUÔN tính lại
 // ĐỘNG (hoặc tại thời điểm snapshot, cho 2 module có snapshot) nên LUÔN phản ánh đúng canBeApprover
 // hiện tại ngay lúc đó.
+// Khớp (jobTitle, dept) CHÍNH THỨC của user (u.jobTitle/u.dept, 1 cặp duy nhất) HOẶC bất kỳ cặp nào
+// trong u.secondaryPositions[] ("Vị Trí Kiêm Nhiệm" — xem defaults.js/routes/data.js::sanitizeSecondaryPositions()
+// + admin form "Sửa Người Dùng"). Kiêm nhiệm CHỈ có ý nghĩa ở ĐÚNG điểm tra cứu này (tính là approver
+// "Theo vị trí") — KHÔNG ảnh hưởng managerUsername/KPI flow (lib/orgChart.js) hay mô hình chấm công
+// (lib/attendance.js::resolveWorkModelForEmployeeCode() dựa vào posType) — cả 2 vẫn CHỈ đọc u.jobTitle/
+// u.dept CHÍNH THỨC như trước, đã xác nhận với người dùng (mỗi người vẫn đúng 1 chức danh/phòng ban
+// "chính", kiêm nhiệm chỉ nới thêm phạm vi được TÍNH LÀ approver, không đổi danh tính chính thức).
+function matchesPositionPair(user, pair) {
+  if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
+  return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
+}
+
 function resolvePositionApprovers(positionPairs, users) {
   const pairs = (positionPairs || []).filter(p => p && p.jobTitle && p.dept);
   if (!pairs.length) return [];
   return (users || [])
     .filter(u => u && u.active !== false)
     .filter(u => !!(u.perms?.canBeApprover || u.perms?.admin))
-    .filter(u => pairs.some(p => p.jobTitle === u.jobTitle && p.dept === u.dept))
+    .filter(u => pairs.some(p => matchesPositionPair(u, p)))
     .map(u => u.username);
 }
 

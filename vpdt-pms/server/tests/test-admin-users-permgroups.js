@@ -916,6 +916,75 @@ async function scenario(name, fn) {
       r.found && r.fixedIdIsInteger === true, JSON.stringify(r));
   });
 
+  // ==========================================================================
+  // (n) "Vị Trí Kiêm Nhiệm" (secondaryPositions) — chọn từ danh mục workflowParticipatingPositions,
+  //     lưu đúng vào user.secondaryPositions, editUser() tick lại đúng lựa chọn cũ.
+  // ==========================================================================
+  let knUserId = null;
+  await scenario('(n) tạo user với Vị Trí Kiêm Nhiệm -> lưu đúng user.secondaryPositions', async () => {
+    const r = await page.evaluate(async () => {
+      DB.workflowParticipatingPositions = [
+        { jobTitle: 'Trưởng phòng', dept: 'Kế Toán' },
+        { jobTitle: 'Nhân viên', dept: 'Kinh Doanh' },
+      ];
+      resetUserForm();
+      const emptyOnReset = getMultiSelectValues('uSecondaryPositionsMultiSelect').length === 0;
+
+      document.getElementById('uUsername').value = 'nv.kiemnhiem';
+      document.getElementById('uPassword').value = 'Passw0rd!23';
+      document.getElementById('uFullName').value = 'Nguyễn Kiêm Nhiệm';
+      document.getElementById('uEmail').value = 'kiemnhiem@hcrc.local';
+      document.getElementById('uPhone').value = '0922222222';
+      document.getElementById('uDept').value = 'Kinh Doanh';
+      document.getElementById('uJobTitle').value = 'Nhân viên';
+
+      renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), [encodeWfPositionPair({ jobTitle: 'Trưởng phòng', dept: 'Kế Toán' })], {
+        placeholder: 'x', emptyText: 'x'
+      });
+
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault() {} });
+      const created = DB.users.find(u => u.username === 'nv.kiemnhiem');
+      return {
+        emptyOnReset,
+        alerts: window.__alerts.slice(),
+        secondaryPositions: created ? created.secondaryPositions : null,
+        id: created ? created.id : null,
+      };
+    });
+    knUserId = r.id;
+    record('(n) resetUserForm() không để sót lựa chọn Vị Trí Kiêm Nhiệm của người vừa sửa trước đó',
+      r.emptyOnReset, JSON.stringify(r));
+    record('(n) saveUser() ghi đúng user.secondaryPositions từ ô chọn-nhiều-thật',
+      JSON.stringify(r.secondaryPositions) === JSON.stringify([{ jobTitle: 'Trưởng phòng', dept: 'Kế Toán' }]), JSON.stringify(r));
+  });
+
+  await scenario('(n) editUser() tick lại đúng Vị Trí Kiêm Nhiệm đã lưu; sửa (thêm 1, bỏ 1) rồi lưu -> cập nhật đúng', async () => {
+    if (knUserId == null) { record('(n) edit + update secondaryPositions', false, 'skipped: creation scenario did not produce a user id'); return; }
+    const r = await page.evaluate(async (userId) => {
+      editUser(userId);
+      const selectedOnEdit = getMultiSelectValues('uSecondaryPositionsMultiSelect');
+      const expectedOnEdit = encodeWfPositionPair({ jobTitle: 'Trưởng phòng', dept: 'Kế Toán' });
+
+      // Bỏ "Trưởng phòng — Kế Toán", thêm "Nhân viên — Kinh Doanh".
+      renderMultiSelectDropdown('uSecondaryPositionsMultiSelect', wfPositionPairPickerItems(), [encodeWfPositionPair({ jobTitle: 'Nhân viên', dept: 'Kinh Doanh' })], {
+        placeholder: 'x', emptyText: 'x'
+      });
+
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault() {} });
+      const updated = DB.users.find(u => u.id === userId);
+      return {
+        matchesExpectedOnEdit: selectedOnEdit.length === 1 && selectedOnEdit[0] === expectedOnEdit,
+        secondaryPositionsAfter: updated ? updated.secondaryPositions : null,
+      };
+    }, knUserId);
+    record('(n) editUser() tick đúng lại lựa chọn Vị Trí Kiêm Nhiệm đã lưu trước đó',
+      r.matchesExpectedOnEdit, JSON.stringify(r));
+    record('(n) saveUser() khi sửa (editId) cập nhật đúng user.secondaryPositions mới (không còn giữ lựa chọn cũ)',
+      JSON.stringify(r.secondaryPositionsAfter) === JSON.stringify([{ jobTitle: 'Nhân viên', dept: 'Kinh Doanh' }]), JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 

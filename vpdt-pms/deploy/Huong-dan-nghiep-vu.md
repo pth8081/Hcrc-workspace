@@ -209,6 +209,42 @@ danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá �
 > giá KPI — 2 khái niệm **không dùng chung dữ liệu**, chỉ giống nhau về ý
 > tưởng "chức danh + phòng ban = 1 vị trí".
 
+#### "Vị Trí Kiêm Nhiệm" (1 người giữ thêm vị trí phụ, chỉ để tính người duyệt)
+
+Cơ Cấu Tổ Chức (mục 4.5) chỉ cho 1 người giữ đúng **1** cặp Chức Danh/Phòng Ban
+chính thức tại 1 thời điểm — không hỗ trợ "kiêm nhiệm" nhiều chức danh/phòng
+ban cùng lúc, vì Quản Lý Trực Tiếp/luồng KPI/Chấm công (work-model theo
+`posType`) đều cần đúng 1 vị trí duy nhất để tính toán, không mơ hồ được.
+
+Để vẫn đáp ứng nhu cầu "1 người kiêm thêm 1-2 vị trí khác chỉ để được tính là
+người duyệt/tham gia quy trình 'Theo vị trí' ở module khác" mà **không** đổi
+kiến trúc 1-vị-trí-chính thức nói trên, mỗi user có thêm 1 trường tuỳ chọn
+**"🏷️ Vị Trí Kiêm Nhiệm"** ở form **Sửa Người Dùng** (dưới ô Chức Danh/Phòng
+Ban chính, cùng khối với ô "Là tài xế"):
+
+- Chọn nhiều từ danh mục **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`,
+  mục 3.3) — ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá được), giống hệt
+  thao tác ở khối 17.
+- Mỗi vị trí kiêm nhiệm chọn thêm sẽ được cộng vào tập (chức danh, phòng ban)
+  dùng để khớp bước duyệt **"Theo vị trí"** (3.1) cho người đó — **CHỈ** ảnh
+  hưởng bước duyệt "Theo vị trí" ở các module khác (Ngân Sách, Hỗ Trợ IT...).
+  **KHÔNG** đổi Chức Danh/Phòng Ban chính thức của người đó, **KHÔNG** ảnh
+  hưởng Quản Lý Trực Tiếp/luồng đánh giá KPI (Cơ Cấu Tổ Chức, mục 4.5), và
+  **KHÔNG** ảnh hưởng Chấm công/work-model (Công&Phép, mục 4.x).
+- Vẫn giữ nguyên **điểm bảo mật cốt lõi** ở 3.1: khớp vị trí kiêm nhiệm chỉ là
+  điều kiện lọc bớt — người đó vẫn phải có quyền "Người duyệt" (`canBeApprover`,
+  3.2) mới thực sự duyệt được.
+- Để trống (mặc định) = hành vi hoàn toàn như cũ, người đó chỉ được tính theo
+  đúng 1 cặp Chức Danh/Phòng Ban chính thức.
+
+**Ví dụ**: Chị A chính thức là "Nhân viên — Phòng Kinh Doanh" nhưng thực tế
+còn kiêm phụ trách duyệt hồ sơ Ngân Sách với vai trò "Trưởng phòng — Phòng Kế
+Toán" (không đổi chức danh/phòng ban chính thức của chị A). Vào Sửa Người
+Dùng của chị A, thêm "Trưởng phòng — Phòng Kế Toán" vào ô "Vị Trí Kiêm Nhiệm"
+(danh mục này phải có sẵn cặp đó ở khối 17 trước) → chị A sẽ được tính là
+người duyệt ở bất kỳ bước "Theo vị trí" nào cấu hình đúng cặp đó, miễn là chị
+A đã có quyền "Người duyệt".
+
 ### 3.4. Hộp Thư Phê Duyệt (Approval Hub) — cơ chế đầy đủ
 
 **Hệ Thống → ✅ Phê Duyệt** (vai trò tóm tắt ở mục 2.2) — hộp thư tổng hợp

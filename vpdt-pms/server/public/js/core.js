@@ -1924,13 +1924,20 @@ function getScopedDepts(user, scope) {
 // lib/positionApprovers.js (server) — sửa 1 bên PHẢI sửa cả 2 bên. Đây là bản CLIENT của điểm tra cứu
 // approvers[stepOrder] tập trung — CHỈ dùng để quyết định hiện/ẩn nút Duyệt (UX), server LUÔN tự xác
 // minh lại qua đúng bản gốc trước khi ghi (xem applyWorkflowAction()), nên không phải điểm bảo mật.
+// Khớp (jobTitle, dept) CHÍNH THỨC (u.jobTitle/u.dept) HOẶC bất kỳ cặp nào trong u.secondaryPositions[]
+// ("Vị Trí Kiêm Nhiệm" — xem lib/positionApprovers.js::matchesPositionPair() bản server, PHẢI khớp
+// đúng cùng logic 2 bên).
+function clientMatchesPositionPair(user, pair) {
+  if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
+  return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
+}
 function resolvePositionApproverUsernamesClient(positionPairs) {
   const pairs = (positionPairs || []).filter(p => p && p.jobTitle && p.dept);
   if (!pairs.length) return [];
   return (DB.users || [])
     .filter(u => u && u.active !== false)
     .filter(u => !!(u.perms?.canBeApprover || u.perms?.admin))
-    .filter(u => pairs.some(p => p.jobTitle === u.jobTitle && p.dept === u.dept))
+    .filter(u => pairs.some(p => clientMatchesPositionPair(u, p)))
     .map(u => u.username);
 }
 

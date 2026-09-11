@@ -1,8 +1,71 @@
 # Phiên bản hiện tại
 
-**16.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
-`/api/health`). Đã merge vào `main` (fast-forward) cùng đợt này. Từ v2.0 trở đi đổi sang định dạng
-`MAJOR.MINOR` (không còn semver 3 phần kiểu `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+**16.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+`/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v16.8 (2026-09-11): "Vị Trí Kiêm Nhiệm" — 1 người kiêm thêm chức danh/phòng ban chỉ để tính người duyệt "Theo vị trí"
+
+Người dùng hỏi: Cơ Cấu Tổ Chức có gán được 1 người vào nhiều chức danh/phòng
+ban không? Phân quyền có gán được 1 người vào nhiều chức danh/phòng ban
+không? Nếu chưa, yêu cầu phân tích + xử lý.
+
+**Kết quả rà soát (xác nhận bằng code, không suy đoán):**
+- **Cơ Cấu Tổ Chức**: KHÔNG hỗ trợ — mỗi user chỉ có đúng 1 cặp scalar
+  `dept`/`jobTitle` tại 1 thời điểm; `applyPositionAssignment()` GHI ĐÈ mỗi
+  lần gán, không append; `positionHistory[]` chỉ là log audit, không phải
+  tập hợp nhiều vị trí đang giữ cùng lúc. Đây là thiết kế có chủ đích — Quản
+  Lý Trực Tiếp/luồng KPI (`lib/orgChart.js`) và mô hình chấm công theo
+  `posType` (`lib/attendance.js`) đều cần đúng 1 vị trí duy nhất để tính,
+  không thể mơ hồ.
+- **Phân quyền**: CÓ 1 cơ chế multi khác nhưng KHÔNG giải quyết đúng nhu cầu
+  hỏi — `groupIds` (mảng) cho phép 1 user thuộc nhiều Nhóm Phân Quyền cùng
+  lúc, và `perms.uploadDepts`/`viewDraftDepts`/`viewApprovedDepts` (mảng)
+  cho phép cấp quyền THAO TÁC trên nhiều phòng ban — nhưng cả 2 đều là phạm
+  vi QUYỀN, không phải "danh tính chức danh/phòng ban", nên không tự động
+  giúp 1 người được tính là người giữ vị trí X ở module khác.
+
+**Đã chốt với người dùng (AskUserQuestion)**: thêm "Kiêm nhiệm" NHẸ, chỉ
+phục vụ mục đích được tính là người duyệt/tham gia quy trình "Theo vị trí"
+(3.1/3.3 `Huong-dan-nghiep-vu.md`) ở CÁC MODULE KHÁC — không đụng tới kiến
+trúc 1-vị-trí-chính-thức của Cơ Cấu Tổ Chức/Chấm công.
+
+**Thay đổi:**
+1. **`user.secondaryPositions: [{jobTitle, dept}]`** — trường mới trên
+   `DB.users`, chọn từ danh mục có sẵn `workflowParticipatingPositions`
+   (khối 17 "Nhóm Quyền Đặc Biệt") — tái dùng nguyên `encodeWfPositionPair`/
+   `decodeWfPositionPair`/`wfPositionPairPickerItems()` đã có.
+2. **`lib/positionApprovers.js`** — `matchesPositionPair(user, pair)` khớp
+   theo (jobTitle,dept) chính thức HOẶC bất kỳ mục nào trong
+   `secondaryPositions`; `resolvePositionApprovers()` dùng hàm này thay vì
+   so sánh trực tiếp `user.jobTitle`/`user.dept`. **Bất biến bảo mật cốt
+   lõi giữ nguyên**: khớp vị trí (kể cả kiêm nhiệm) vẫn chỉ là điều kiện lọc
+   bớt — `perms.canBeApprover`/`perms.admin` vẫn bắt buộc.
+3. **`public/js/core.js`** — mirror y hệt phía client
+   (`resolvePositionApproverUsernamesClient()`), giữ đúng quy ước "sửa 1 bên
+   phải sửa cả 2 bên" đã ghi chú sẵn trong file.
+4. **`routes/data.js`** — `sanitizeSecondaryPositions()` ở điểm ghi
+   `prepareUsersForSave()` (lọc entry hỏng, trần 20 mục, cắt chuỗi 200 ký tự).
+5. **Client UI** — ô "🏷️ Vị Trí Kiêm Nhiệm" (chọn-nhiều-thật, tái dùng
+   `renderMultiSelectDropdown`) trong form Sửa Người Dùng, ngay dưới khối
+   Chức Danh/Phòng Ban chính thức.
+
+Mở rộng `tests/test-workflow-position-approvers.js` (19/19 pass, +4 kịch bản
+kiêm nhiệm: khớp qua secondaryPositions dù chính thức không khớp; kiêm nhiệm
+KHÔNG bỏ qua yêu cầu canBeApprover/admin; user không có field
+secondaryPositions vẫn hoạt động bình thường — tương thích ngược; khớp cả
+chính thức lẫn kiêm nhiệm không trùng lặp username) và
+`tests/test-admin-users-permgroups.js` (60/60 pass, +4 kịch bản UI: tạo user
+với kiêm nhiệm lưu đúng; resetUserForm() không rò rỉ lựa chọn cũ; editUser()
+tick lại đúng; sửa/lưu cập nhật đúng). Full regression 100/100 file chạy lại
+sau thay đổi — không phát sinh lỗi mới ngoài các lỗi đã biết từ trước (SQL
+Server không kết nối được trong sandbox, không liên quan).
+
+**Không đổi `schema.sql`/`.env.example`/`dependencies`** — chỉ sửa code
+server (`lib/positionApprovers.js`, `routes/data.js`) và client
+(`public/js/core.js`, `public/js/module-admin-userstaging.js`,
+`public/js/module-admin-submissiongroups.js`, `public/index.html`), chỉ cần
+copy code + `pm2 restart`. Để trống (mặc định) = hành vi hoàn toàn như cũ.
 
 ## v16.7 (2026-09-10): Cơ Cấu Tổ Chức — thêm "Vị Trí Làm Việc" (Văn phòng/Siêu Thị) cho từng vị trí, tự đồng bộ xuống Công & Phép
 
