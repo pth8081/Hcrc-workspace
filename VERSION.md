@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**17.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.3 (2026-09-11): Checklist — thêm chức năng "Xem" mẫu ĐANG DÙNG/LƯU TRỮ (chỉ đọc)
+
+Phản hồi thực tế: chỉ mẫu Nháp mới có nút xem/sửa nội dung — mẫu đã Kích Hoạt
+(`ACTIVE`) hoặc Lưu Trữ (`ARCHIVED`) không có cách nào xem lại câu hỏi/lựa
+chọn đang áp dụng trong màn Cấu Hình. Thêm nút **"👁️ Xem"** cho các mẫu này
+(thay vị trí nút "Sửa" vốn chỉ hiện ở bản Nháp), mở 1 khối CHỈ ĐỌC riêng
+(`#checklistTemplateViewWrap`, hàm `viewChecklistTemplate()` —
+`public/js/module-checklist.js`) hiển thị đầy đủ mã/tên/loại/ngưỡng đạt +
+toàn bộ câu hỏi (điểm tối đa, bắt buộc, điều kiện hiển thị phân nhánh) và
+lựa chọn (điểm, cờ Đạt/Lỗi nghiêm trọng) — KHÔNG cho sửa gì. Bất biến "chỉ
+sửa được khi còn DRAFT" (xem mục 4.7 `Huong-dan-nghiep-vu.md`, bảo vệ toàn
+vẹn dữ liệu các bài đã nộp tham chiếu `templateId`) giữ nguyên không đổi —
+đây thuần là bổ sung khả năng xem, không đổi luồng sửa/nhân bản/kích hoạt.
+
+**Deploy-impact**: chỉ đổi `public/index.html` (thêm khối HTML mới) +
+`public/js/module-checklist.js` (JS thuần phía client) — không đổi
+`schema.sql`/`.env.example`/dependencies, không đổi API server. Chỉ cần copy
+code + `pm2 restart`.
 
 ## v17.2 (2026-09-11): Vị Trí Kiêm Nhiệm — bọc an toàn ô chọn để không còn hiện trống trơn khi lỗi
 

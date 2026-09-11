@@ -1168,6 +1168,12 @@ lệch/mất ý nghĩa các bài đã chấm điểm trước đó (option đã 
 định nghĩa mới). Muốn sửa nội dung mà KHÔNG cần versioning → chỉ sửa được khi
 mẫu còn ở trạng thái Nháp (chưa từng kích hoạt lần nào).
 
+**Xem mẫu ĐANG DÙNG/LƯU TRỮ (v17.3)**: mẫu `ACTIVE`/`ARCHIVED` có nút
+**"👁️ Xem"** (thay cho nút "Sửa" chỉ có ở bản Nháp) mở màn hình chỉ đọc, hiển
+thị đầy đủ mã/tên/loại/ngưỡng đạt + toàn bộ câu hỏi, lựa chọn, điểm, cờ
+Đạt/Lỗi nghiêm trọng, điều kiện hiển thị phân nhánh — không cho sửa gì ở đây,
+muốn sửa vẫn phải theo đúng luồng Nhân Bản → sửa bản Nháp → Kích Hoạt ở trên.
+
 **2 loại Mẫu Checklist** (`templateType`), mỗi mẫu có bộ câu hỏi + thang điểm
 riêng, chỉ 1 bản `ACTIVE` cho mỗi `templateCode` tại 1 thời điểm (kích hoạt
 bản mới tự động lưu trữ bản cũ):

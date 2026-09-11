@@ -78,7 +78,8 @@ function renderChecklistConfigTab() {
         <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${statusBadge[t.status] || ''}">${statusLabel[t.status] || t.status}</span>
         ${t.status === 'DRAFT' ? `<button type="button" data-op="openChecklistTemplateBuilder" data-arg0="${t.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">Sửa</button>
           <button type="button" data-op="activateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700">Kích Hoạt</button>
-          <button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">Xoá</button>` : ''}
+          <button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">Xoá</button>`
+          : `<button type="button" data-op="viewChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700">👁️ Xem</button>`}
         <button type="button" data-op="cloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-gray-500 text-white rounded text-[11px] font-bold hover:bg-gray-600">Nhân Bản</button>
       </div>
     </div>
@@ -86,6 +87,7 @@ function renderChecklistConfigTab() {
 }
 
 function openChecklistTemplateBuilder(templateId) {
+  closeChecklistTemplateView();
   templateId = templateId ? Number(templateId) : null;
   checklistBuilderEditingId = templateId;
   if (templateId) {
@@ -117,6 +119,55 @@ function closeChecklistTemplateBuilder() {
   document.getElementById('checklistTemplateBuilderWrap').classList.add('hidden');
   checklistBuilderQuestions = [];
   checklistBuilderEditingId = null;
+}
+
+// ===================== Xem READ-ONLY mẫu ĐANG DÙNG/LƯU TRỮ =====================
+// Phản hồi thực tế: admin muốn xem được nội dung checklist đang áp dụng (câu hỏi/lựa chọn/thang điểm)
+// mà KHÔNG sửa được trực tiếp — đúng tinh thần bất biến "chỉ sửa được khi còn DRAFT" (xem
+// lib/checklist.js) nên đây là màn CHỈ ĐỌC riêng, không tái dùng #checklistTemplateBuilderWrap (tránh
+// hiểu nhầm có thể bấm Lưu để sửa 1 bản ACTIVE/ARCHIVED).
+function viewChecklistTemplate(id) {
+  const t = (DB.checklistTemplates || []).find(x => x.id === Number(id));
+  if (!t) return alert('⛔ Không tìm thấy mẫu checklist');
+  closeChecklistTemplateBuilder();
+  const typeLabel = { STORE_SELF: 'Tự Đánh Giá', CONTROL_AUDIT: 'Kiểm Soát' };
+  const statusLabel = { DRAFT: 'Nháp', ACTIVE: 'Đang dùng', ARCHIVED: 'Lưu trữ' };
+  const optionLabelById = new Map();
+  (t.questions || []).forEach((q, qi) => (q.options || []).forEach(o => optionLabelById.set(o.id, `Câu ${qi + 1} — ${o.text}`)));
+
+  document.getElementById('checklistTemplateViewTitle').innerText = `👁️ Xem Mẫu Checklist: ${t.templateName}`;
+  document.getElementById('checklistTemplateViewMeta').innerHTML = `
+    <div><span class="text-gray-500">Mã:</span> <b>${escapeHtml(t.templateCode)}</b></div>
+    <div><span class="text-gray-500">Loại:</span> <b>${typeLabel[t.templateType] || t.templateType}</b></div>
+    <div><span class="text-gray-500">Trạng thái:</span> <b>${statusLabel[t.status] || t.status}</b> (v${t.version || 1})</div>
+    <div><span class="text-gray-500">Ngưỡng đạt:</span> <b>${t.passThreshold != null ? t.passThreshold + '%' : 'Không chấm ngưỡng'}</b></div>
+  `;
+  document.getElementById('checklistTemplateViewQuestionsWrap').innerHTML = (t.questions || []).map((q, qi) => `
+    <div class="bg-white border rounded p-3 space-y-1.5">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <span class="font-bold text-gray-800 text-xs">Câu ${qi + 1}. ${escapeHtml(q.text)}</span>
+        <span class="text-[10px] text-gray-400">${q.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}${q.isRequired ? ' · Bắt buộc' : ''}${q.maxScore ? ' · Tối đa ' + q.maxScore + 'đ' : ''}</span>
+      </div>
+      ${q.showIfOptionId != null ? `<div class="text-[10px] text-amber-600">↳ Chỉ hiện khi: ${escapeHtml(optionLabelById.get(q.showIfOptionId) || '—')}</div>` : ''}
+      ${q.note ? `<div class="text-[11px] text-gray-500 italic">${escapeHtml(q.note)}</div>` : ''}
+      <div class="space-y-1">
+        ${(q.options || []).map(o => `
+          <div class="flex items-center gap-2 text-[11px]">
+            <span class="text-gray-400 w-6">#${o.id}</span>
+            <span class="flex-1">${escapeHtml(o.text)}</span>
+            <span class="text-gray-500">${o.scoreValue}đ</span>
+            <span class="px-1.5 py-0.5 rounded-full font-bold ${o.isPassing ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${o.isPassing ? 'Đạt' : 'Không đạt'}</span>
+            ${o.isCriticalFail ? '<span class="px-1.5 py-0.5 rounded-full font-bold bg-red-600 text-white">Lỗi nghiêm trọng</span>' : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có câu hỏi.</p>';
+
+  document.getElementById('checklistTemplateViewWrap').classList.remove('hidden');
+}
+function closeChecklistTemplateView() {
+  document.getElementById('checklistTemplateViewWrap').classList.add('hidden');
 }
 
 function addChecklistBuilderQuestion() {

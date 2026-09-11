@@ -7414,6 +7414,18 @@
       </div>
       <div id="checklistTemplateListWrap" class="space-y-2"></div>
 
+      <!-- Xem read-only mẫu ĐANG DÙNG/LƯU TRỮ — KHÔNG cho sửa trực tiếp ở đây (bảo vệ toàn vẹn dữ liệu
+           lịch sử các bài đã nộp tham chiếu templateId, xem lib/checklist.js) — chỉ hiển thị đúng nội
+           dung câu hỏi/lựa chọn hiện có, muốn sửa phải Nhân Bản thành bản Nháp mới. -->
+      <div id="checklistTemplateViewWrap" class="hidden bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 id="checklistTemplateViewTitle" class="font-bold text-indigo-900 text-base">👁️ Xem Mẫu Checklist</h3>
+          <button type="button" data-op="closeChecklistTemplateView" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✕ Đóng</button>
+        </div>
+        <div id="checklistTemplateViewMeta" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-white p-2 rounded border"></div>
+        <div id="checklistTemplateViewQuestionsWrap" class="space-y-2"></div>
+      </div>
+
       <div id="checklistTemplateBuilderWrap" class="hidden bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
         <h3 id="checklistBuilderTitle" class="font-bold text-rose-900 text-base">🛠️ Tạo Mẫu Checklist Mới</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
