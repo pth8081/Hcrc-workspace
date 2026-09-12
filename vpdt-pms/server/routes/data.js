@@ -14,7 +14,7 @@ const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/ad
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
-const { flatWorkflowConfigToSteps } = require('../lib/workflowEngine');
+const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const {
@@ -683,6 +683,52 @@ async function loadOfficeReqsScoped(user, data) {
   return [...byId.values()];
 }
 
+// Bước 8h — itPriceApprovals: canViewItPriceApproval() (lib/recordViewScope.js) KHÁC hẳn carRegs/
+// officeReqs — KHÔNG có nhánh "phòng ban mình" nào cả (người thường không tự động thấy đề xuất giá của
+// phòng ban mình) — chỉ: (1) admin/itManage xem HẾT, (2) chính người TẠO (Creator), (3)
+// itPriceEmergencyRejectApprove xem hồ sơ đang/đã tự mình xét "Từ chối khẩn cấp" (điều kiện theo DỮ LIỆU
+// emergencyRejectStatus/emergencyRejectDecidedBy, KHÔNG theo phòng ban — coi như "canSeeAll" cho số ít
+// người có quyền này, để filterItPriceApprovalsForUser() lọc lại đúng phạm vi hẹp thật sau đó), (4) đang
+// là người duyệt — NHƯNG cấu hình duyệt tách 2 nhánh theo priceType: RETAIL tra theo PHÒNG BAN
+// (itPriceDeptWorkflows), WHOLESALE tra theo 1 trong 4 MỨC cố định (itPriceTierWorkflows, không theo
+// phòng ban — giống operationOrders, coi như "canSeeAll" nếu approver ở bất kỳ mức nào).
+function isApproverForAnyItPriceWholesaleTier(user, data) {
+  if (!user?.username) return false;
+  for (const tierConfig of Object.values(data.itPriceTierWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(tierConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user.username) : list === user.username);
+    if (isApproverHere) return true;
+  }
+  return false;
+}
+function computeItPriceApprovalsApproverDepts(user, data) {
+  const depts = [];
+  for (const dept of Object.keys(data.itPriceDeptWorkflows || {})) {
+    const retailCfg = resolveItPriceDeptWorkflowConfig(data.itPriceDeptWorkflows, dept, 'RETAIL');
+    const { approvers } = flatWorkflowConfigToSteps(retailCfg, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadItPriceApprovalsScoped(user, data) {
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.itManage || user?.perms?.itPriceEmergencyRejectApprove
+    || isApproverForAnyItPriceWholesaleTier(user, data));
+  if (canSeeAll) return getAllForCollectionCached('itPriceApprovals');
+
+  const depts = new Set(computeItPriceApprovalsApproverDepts(user, data));
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('itPriceApprovals', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownCreatedItems = await getForCollectionByColumnCached('itPriceApprovals', 'Creator', user?.username);
+  for (const r of ownCreatedItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -742,11 +788,11 @@ router.get('/', async (req, res) => {
     // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
     // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
     // where.Dept ở SQL.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -761,6 +807,7 @@ router.get('/', async (req, res) => {
         : getForCollectionByDeptCached('operationOrders', req.freshUser?.dept),
       loadCarRegsScoped(req.freshUser, data),
       loadOfficeReqsScoped(req.freshUser, data),
+      loadItPriceApprovalsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -774,6 +821,7 @@ router.get('/', async (req, res) => {
     data.operationOrders = operationOrdersResult;
     data.carRegs = carRegsResult;
     data.officeReqs = officeReqsResult;
+    data.itPriceApprovals = itPriceApprovalsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem

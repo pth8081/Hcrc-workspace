@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**19.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.4 (2026-09-12): Bước 8h — SQL-filter itPriceApprovals trong GET /api/data
+
+Tiếp Bước 8g, `itPriceApprovals` KHÁC HẲN `carRegs`/`officeReqs`: `canViewItPriceApproval()`
+(lib/recordViewScope.js) KHÔNG có nhánh "phòng ban mình" nào — người thường KHÔNG tự động thấy đề xuất
+giá của phòng ban mình dù cùng phòng ban với hồ sơ. Chỉ 4 nhánh: (1) admin/itManage xem hết, (2) chính
+người TẠO (`Creator`), (3) `itPriceEmergencyRejectApprove` — điều kiện theo DỮ LIỆU
+(`emergencyRejectStatus==='PENDING'` HOẶC `emergencyRejectDecidedBy===username`), hoàn toàn KHÔNG theo
+phòng ban, (4) đang là người duyệt — nhưng cấu hình duyệt TÁCH 2 nhánh theo `priceType`: RETAIL tra theo
+PHÒNG BAN (`itPriceDeptWorkflows`), WHOLESALE tra theo 1 trong 4 MỨC cố định
+(`itPriceTierWorkflows`, không theo phòng ban — giống `operationOrders`).
+
+Thiết kế: nhánh (3) và nhánh (4)-WHOLESALE đều KHÔNG quy về được 1 tập phòng ban cụ thể → coi là
+"canSeeAll" (tải company-wide, số ít người có quyền này) — `filterItPriceApprovalsForUser()` vẫn lọc lại
+ĐÚNG phạm vi hẹp thật sau đó (đã viết test xác nhận: người duyệt WHOLESALE tải company-wide nhưng CHỈ
+còn lại đúng 1 hồ sơ họ thực sự được duyệt sau khi lọc). Nhánh (4)-RETAIL quy về được tập phòng ban (như
+`carRegs`) nên tính trước rồi tải theo `where.Dept`. Nhánh (2) tải riêng theo `where.Creator`.
+
+`routes/data.js`: thêm `isApproverForAnyItPriceWholesaleTier()` + `computeItPriceApprovalsApproverDepts()`
++ `loadItPriceApprovalsScoped()`.
+
+Thêm `tests/test-it-price-approvals-scope.js` (7/7 pass NGAY LẦN ĐẦU) — phủ đủ cả 4 nhánh, đặc biệt xác
+nhận "không có nhánh phòng ban mình" (người tạo 1 hồ sơ ở phòng X không tự động thấy hồ sơ KHÁC cùng
+phòng X do người khác tạo — khác hẳn `carRegs`/`officeReqs`).
+
+**Còn lại (Bước 8 tiếp theo)**: `vppRegistrations`/`budgetEntries` — mỗi collection cần nghiên cứu
+riêng; để sau `operationStoreOpenings`/`operationRepairs`/`docs`/`submissions`/`attendanceRecords` (cây
+quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
 
 ## v19.3 (2026-09-12): Bước 8g — SQL-filter officeReqs trong GET /api/data
 
