@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**17.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.8 (2026-09-12): Vá cờ `adminOverride` gắn sai trong engine phê duyệt dùng chung (lib/workflowEngine.js)
+
+Phát hiện từ rà soát chuyên sâu **luồng nghiệp vụ** (đối chiếu trực tiếp code
+`applyWorkflowAction()` — hàm engine phê duyệt dùng CHUNG cho hơn 15 module:
+Tài Liệu, Văn Bản Trình, Đăng Ký Xe, Mua Sắm/Sửa Chữa Văn Phòng, Văn Phòng
+Phẩm, Hợp Đồng, Hỗ Trợ IT (giá), Ngân Sách, Thanh Toán, Vận Hành Đơn Hàng/Dự
+toán) — nên bất kỳ lỗi nào ở đây có phạm vi ảnh hưởng rộng nhất hệ thống.
+
+**Thấp/Trung bình (đã vá — sai lệch dữ liệu lịch sử/audit, không phải lỗ hổng bảo mật/không đổi kết quả duyệt):**
+- `lib/workflowEngine.js` (`applyWorkflowAction()`) — cờ `adminOverride:true`
+  (gắn từ đợt v17.5, mục đích: phân biệt "admin chính là approver hợp lệ của
+  bước, duyệt bình thường" với "admin dùng đặc quyền bỏ qua điều kiện đủ
+  approver để ghi đè quy trình nhiều người ký") bị gắn NHẦM cho cả những lượt
+  duyệt hoàn toàn hợp lệ, KHÔNG hề ghi đè ai: công thức gốc yêu cầu TOÀN BỘ
+  approver được liệt kê — **kể cả chính username của admin đang thao tác** —
+  phải có mặt trong lịch sử duyệt TRƯỚC lượt hiện tại. Nhưng không ai có thể
+  "đã tự duyệt trước chính hành động đang thực hiện", nên điều kiện này LUÔN
+  sai bất cứ khi nào admin được cấu hình là 1 approver hợp lệ của bước (VD
+  "Theo người" chọn thẳng tài khoản admin, hoặc admin nằm trong 1 danh sách
+  nhiều người ký) — kể cả khi đó là chữ ký CUỐI CÙNG hợp lệ sau khi mọi
+  approver khác đã ký đủ, hoặc khi admin là approver DUY NHẤT của bước. Kết
+  quả: mọi lượt admin duyệt ở bất kỳ bước nào có admin trong danh sách approver
+  đều bị gắn nhầm là "ghi đè", làm nhiễu lịch sử/audit trail — không ảnh hưởng
+  tới quyền hạn hay trạng thái hồ sơ (transition/APPROVED/PENDING vẫn đúng),
+  chỉ sai ở dữ liệu chẩn đoán "ai đã bỏ qua ai" hiển thị lại trong lịch sử xử
+  lý. Vá: loại trừ username của chính admin đang duyệt khỏi danh sách "phải đủ
+  người ký trước đó" — chỉ còn hỏi đúng câu "có approver KHÁC nào lẽ ra phải
+  ký mà bị bỏ qua không". Thêm 3 test vào
+  `tests/test-audit-round3-lowfixes.js` cô lập đúng 3 trường hợp (ký cuối hợp
+  lệ, approver duy nhất, bỏ qua người khác thật sự — vẫn phải giữ nguyên
+  override=true); xác nhận bằng `git stash`: không vá thì đúng 2 test đầu
+  fail, có vá thì cả 21 test (18 cũ + 3 mới) pass. Chạy thêm 14 file test khác
+  dùng chung engine này (440+ kịch bản: Tài Liệu, Văn Bản Trình, Xe, Ngân
+  Sách/Mua Sắm, Hỗ Trợ IT, Vận Hành Đơn Hàng...) — không có regression nào.
+
+**Deploy-impact**: chỉ đổi logic tính 1 cờ chẩn đoán trong `lib/workflowEngine.js`
+— **không** đổi `sql/schema.sql`, **không** thêm biến môi trường, **không** đổi
+`package.json` dependencies. Chỉ cần copy code + `pm2 restart`.
 
 ## v17.7 (2026-09-12): Vá lỗ hổng xoá dữ liệu qua "Người Phụ Trách danh mục lớn" (Vận Hành > Siêu Thị) + cập nhật tài liệu Thanh Toán
 

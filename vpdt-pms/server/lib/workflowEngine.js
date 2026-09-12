@@ -692,11 +692,20 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   // duyệt trông giống hệt nhau trên lịch sử, không có dấu hiệu nào cho biết bước 2-3 người ký đã bị bỏ
   // qua. Tính lại NGAY TRƯỚC KHI push entry mới (approvedBeforeThis chưa gồm lượt duyệt này) để biết
   // đây có phải override hay không, gắn cờ adminOverride:true vào đúng entry đó nếu có.
+  // AUDIT (rà soát chuyên sâu luồng nghiệp vụ): công thức gốc coi TOÀN BỘ approversListForOverrideCheck
+  // (kể cả chính username admin đang thao tác) đều phải có mặt trong approvedBeforeThis (lịch sử TRƯỚC
+  // lượt duyệt này) mới coi là "không override" — nhưng admin không thể nào "đã tự duyệt trước chính
+  // hành động đang thực hiện", nên bất kỳ khi nào admin được đặt tên là 1 trong các approver của bước
+  // (cấu hình hợp lệ, không phải bypass), điều kiện NÀY LUÔN sai -> mọi lượt admin duyệt (kể cả chữ ký
+  // CUỐI CÙNG hợp lệ sau khi mọi approver khác đã ký đủ) đều bị gắn nhầm adminOverride:true, ngược hẳn
+  // với chính mục đích đã nêu ở comment trên. Sửa: chỉ xét những approver KHÁC (loại bỏ username của
+  // chính admin đang duyệt) có đủ người đã ký trước đó hay chưa — đây mới đúng câu hỏi "có ai khác lẽ ra
+  // phải ký mà bị admin bỏ qua không", không phải "chính admin đã ký trước đó chưa" (luôn là chưa).
   const approversListForOverrideCheck = normalizeApproversList(currentStepApprovers);
   const approvedBeforeThis = getStepApprovedUsernames(item[historyField], currentStep);
+  const otherApproversRequired = approversListForOverrideCheck.filter(u => u !== user.username);
   const isAdminOverride = !!user.perms?.admin
-    && approversListForOverrideCheck.length > 0
-    && !approversListForOverrideCheck.every(u => approvedBeforeThis.has(u));
+    && !otherApproversRequired.every(u => approvedBeforeThis.has(u));
 
   item[historyField].push({
     step: currentStep, stepName, approver: user.name, username: user.username,
