@@ -1306,6 +1306,17 @@ Không cần cấu hình gì đặc biệt để dùng — mọi nhân viên có
 thì tự thấy đúng phần báo cáo tương ứng của module đó khi có quyền xem báo cáo
 (quyền riêng, không tự động theo quyền tạo hồ sơ).
 
+**Kỹ thuật (Bước 7d/7e, v18.3+)**: 6 module đọc/khối lượng dữ liệu tăng theo
+thời gian nhiều nhất (Tài Liệu, Văn Bản Trình, Thanh Toán, và 3 luồng Vận Hành
+— Đơn Hàng/Mở Mới/Sửa Chữa) giờ đọc qua `GET /api/reports/:collection` — lọc
+sẵn theo phòng ban/khoảng ngày ngay ở CSDL thay vì tải nguyên cả danh sách về
+trình duyệt rồi mới lọc — vẫn áp dụng ĐÚNG quyền xem như trước (không đổi ai
+thấy gì). Nếu API này lỗi (mất mạng tạm thời, server đang khởi động lại...),
+màn hình tự động rơi về cách đọc cũ (dữ liệu đã tải sẵn qua `GET /api/data`)
+— không mất tính năng, chỉ mất phần tối ưu tốc độ trong đúng lúc đó. Các
+module Báo Cáo còn lại (Đồng Phục, Giấy Phép, Ngân Sách...) vẫn đọc theo cách
+cũ, chưa cần đổi vì khối lượng dữ liệu chưa tới mức cần tối ưu.
+
 ---
 
 ## 6. Phân quyền (permission model)

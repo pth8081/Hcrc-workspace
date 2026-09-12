@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**18.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.3 (2026-09-12): Bước 7d/7e — nối API lọc SQL vào Báo Cáo + sửa 2 lỗi có sẵn ở test-vpp.js
+
+**Bước 7d/7e**: thêm `GET /api/reports/:collection` (`routes/reports.js`) — đọc CÓ LỌC theo dept/khoảng
+ngày ngay ở SQL (`queryDedicatedRecords()`, Bước 7d) cho 6 collection nhóm A đang thật sự dùng trong Báo
+Cáo (`docs`, `submissions`, `paymentRequests`, `operationOrders`, `operationStoreOpenings`,
+`operationRepairs`) thay vì tải nguyên collection vào bộ nhớ trình duyệt. Vẫn áp dụng ĐÚNG hàm
+`filter*ForUser()` thật của `lib/recordViewScope.js` (y hệt `GET /api/data`) trên tập đã thu hẹp — không
+phát minh logic phân quyền mới, không đổi ai thấy gì.
+
+`public/js/module-baocaoquantri.js`/`module-baocaoquantri-preview.js`: `getRecords()` của 6 collection
+trên chuyển sang gọi API mới qua `fetchReportRecords()` (có dự phòng tự rơi về cách lọc cũ trong bộ nhớ
+nếu API lỗi — không mất tính năng). `renderModuleReport()`/`renderReports()`/`exportModuleReportExcel()`/
+`exportReportsExcel()` chuyển sang `async`/`await` để dùng được `getRecords()` bất đồng bộ.
+
+Thêm `tests/test-query-dedicated-records.js` (mock SQL, xác nhận đúng lọc where/khoảng ngày/phân trang)
+— phép thử tự động đầu tiên cho `queryDedicatedRecords()`. Cập nhật `tests/test-reports.js` theo đúng
+`getRecords()` async mới — 17/17 pass (bộ mock trình duyệt không có route `/api/reports/*` nên tự rơi về
+fallback, xác nhận đúng dự phòng hoạt động).
+
+**Sửa thêm 2 lỗi có sẵn** (phát hiện khi chạy lại test suite, không liên quan Bước 7) trong
+`tests/test-vpp.js`: (1) thiếu `setVppSubTab('REGISTER')` trước khi thao tác dropdown chọn kỳ đăng ký —
+`switchTab('vpp')` không tự chuyển subtab; (2) ngày kỳ đăng ký hardcode `2026-09-10` khiến kỳ bị coi ĐÃ
+HẾT HẠN khi chạy sau ngày đó — đổi sang tính động theo ngày hiện tại. 19/19 pass sau khi sửa cả 2.
+
+**Còn lại**: mở rộng `REPORT_QUERY_CONFIGS` khi có thêm collection cần lọc SQL trong Báo Cáo, dọn
+`dbo.Records` cũ sau khi xác nhận ổn định trên server thật (Bước 7g).
 
 ## v18.2 (2026-09-12): Bước 7f — hoàn tất di trú TOÀN BỘ 55 collection khỏi `dbo.Records`
 

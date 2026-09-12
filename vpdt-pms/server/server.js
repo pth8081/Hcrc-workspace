@@ -16,6 +16,7 @@ const { uploadsAuthz } = require('./lib/fileAuthz');
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const approvalsRoutes = require('./routes/approvals');
+const reportsRoutes = require('./routes/reports');
 const workflowRoutes = require('./routes/workflow');
 const createRoutes = require('./routes/create');
 const meetingActionsRoutes = require('./routes/meetingActions');
@@ -147,6 +148,7 @@ app.use('/api/data', dataRoutes);
 // Endpoint polling nhẹ cho "Hộp Thư Phê Duyệt tự làm mới, không cần F5" — router tự áp requireAuth bên
 // trong (khớp routes/data.js), xem chú thích đầy đủ ở routes/approvals.js.
 app.use('/api/approvals', approvalsRoutes);
+app.use('/api/reports', reportsRoutes);
 app.use('/api/workflow', workflowRoutes);
 app.use('/api/create', createRoutes);
 app.use('/api/meetings', meetingActionsRoutes);

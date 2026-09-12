@@ -315,13 +315,21 @@ async function main() {
 
     await run('Báo Cáo Vận Hành: 3 luồng Đơn Hàng/Mở Mới/Sửa Chữa đếm đúng độc lập nhau', async () => {
       await page.evaluate(() => { selectReportsNavL1('vanHanh'); selectReportsNavL2('vanHanh'); });
-      const stats = await page.evaluate(() => ({
-        orders: REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31').length,
-        storeOpen: REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31').length,
-        repair: REPORT_MODULE_CONFIGS.operationRepair.getRecords('', '2026-01-01', '2026-12-31').length,
-        ordersAwaiting: REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31').filter((r) => r.status === 'AWAITING_RECEIPT').length,
-        storeOpenApproved: REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31').filter((r) => r.estimateStatus === 'APPROVED').length
-      }));
+      // getRecords() của 3 collection Vận Hành giờ ASYNC (Bước 7e — fetchReportRecords() gọi
+      // /api/reports/:collection, mock harness không có route này nên tự rơi về fallback lọc
+      // DB.<collection> cũ, vẫn đúng số liệu) — phải await, không .filter() thẳng lên Promise nữa.
+      const stats = await page.evaluate(async () => {
+        const orders = await REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31');
+        const storeOpen = await REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31');
+        const repair = await REPORT_MODULE_CONFIGS.operationRepair.getRecords('', '2026-01-01', '2026-12-31');
+        return {
+          orders: orders.length,
+          storeOpen: storeOpen.length,
+          repair: repair.length,
+          ordersAwaiting: orders.filter((r) => r.status === 'AWAITING_RECEIPT').length,
+          storeOpenApproved: storeOpen.filter((r) => r.estimateStatus === 'APPROVED').length
+        };
+      });
       assertEqual(stats.orders, 3, 'operationOrders total mismatch'); assertEqual(stats.storeOpen, 2, 'operationStoreOpenings total mismatch'); assertEqual(stats.repair, 1, 'operationRepairs total mismatch');
       assertEqual(stats.ordersAwaiting, 1, 'AWAITING_RECEIPT count mismatch'); assertEqual(stats.storeOpenApproved, 1, 'estimateStatus APPROVED count mismatch');
     });
