@@ -39,12 +39,13 @@ router.post('/:id/:action', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này' });
     }
 
-    // Duyệt cần đọc trước các lịch khác để tái kiểm tra trùng phòng ngay tại thời điểm duyệt (không chỉ
-    // lúc tạo) — dùng cho nhánh approve bên dưới, đọc trước khi khoá bản ghi (cùng mức chặt chẽ với
-    // editContract() kiểm tra phụ lục, không cần khoá cả collection).
-    const allMeetings = action === 'approve' ? await getAllForCollection('meetings') : null;
-
-    const doAction = () => withLockedRecordForCollection('meetings', itemId, (item) => {
+    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: allMeetings trước đây được đọc 1 LẦN DUY NHẤT TRƯỚC CẢ
+    // withAppLock('meeting_room:...') ở dưới — bên trong closure đã khoá vẫn dùng LẠI đúng snapshot cũ
+    // đó để kiểm tra trùng phòng, nên khoá theo phòng không có tác dụng chống race thật (giữ nguyên đúng
+    // lỗi carRegs reassign đã vá ở v17.5, xem routes/records.js::POST /carRegs/:id/reassign). Đọc lại
+    // TOÀN BỘ collection BÊN TRONG doAction() (đã có khoá) để đảm bảo dữ liệu tái kiểm tra trùng phòng là
+    // MỚI NHẤT tại thời điểm ghi.
+    const doAction = () => withLockedRecordForCollection('meetings', itemId, async (item) => {
       if (action === 'cancel' && !hasPerm && item.creator !== freshUser.username) {
         throw new HttpError(403, 'Bạn chỉ có thể huỷ lịch do chính mình đặt');
       }
@@ -56,8 +57,9 @@ router.post('/:id/:action', async (req, res) => {
         if (item.status !== 'PENDING') {
           throw new HttpError(409, 'Lịch này không còn ở trạng thái chờ duyệt (có thể đã được xử lý ở nơi khác)');
         }
+        const freshMeetings = await getAllForCollection('meetings');
         const conflict = findMeetingConflict(
-          (allMeetings || []).filter(m => m.id !== item.id), item.room, item.startTime, item.endTime
+          (freshMeetings || []).filter(m => m.id !== item.id), item.room, item.startTime, item.endTime
         );
         if (conflict) {
           throw new HttpError(409, `Phòng "${item.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
@@ -77,13 +79,12 @@ router.post('/:id/:action', async (req, res) => {
       return item;
     });
 
-    // allMeetings (snapshot đọc TRƯỚC khi khoá) chỉ đủ để chặn trùng phòng nếu KHÔNG CÓ ai khác cũng
-    // đang duyệt 1 lịch KHÁC cùng phòng/trùng giờ CÙNG LÚC — withLockedRecordForCollection chỉ khoá
-    // ĐÚNG 1 dòng theo Id, 2 request duyệt 2 lịch khác nhau cùng phòng trùng giờ vẫn có thể cùng đọc
-    // "chưa ai trùng" trước khi cả hai kịp ghi APPROVED (y hệt race findCarPlateConflict() ở carRegs,
-    // xem routes/workflow.js). Khoá thêm bằng withAppLock() theo TÊN PHÒNG (giống getLockKey() lúc TẠO
-    // lịch ở lib/createValidation.js) bọc quanh toàn bộ đọc-kiểm tra-ghi để chặn đúng race này.
-    const targetRoom = action === 'approve' ? (allMeetings || []).find(m => m.id === itemId)?.room : null;
+    // targetRoom cần biết TRƯỚC để dựng khoá withAppLock — đọc 1 lần CHỈ để lấy tên phòng (an toàn,
+    // room của 1 lịch cụ thể không đổi giữa lúc đọc tên phòng và lúc ghi), KHÔNG dùng snapshot này để
+    // kiểm tra trùng (kiểm tra trùng đọc LẠI bên trong doAction(), sau khi đã có khoá — xem ở trên).
+    const targetRoom = action === 'approve'
+      ? (await getAllForCollection('meetings')).find(m => m.id === itemId)?.room
+      : null;
     const resultItem = targetRoom
       ? await withAppLock(`meeting_room:${targetRoom}`, doAction)
       : await doAction();

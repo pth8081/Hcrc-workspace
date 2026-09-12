@@ -87,20 +87,40 @@ router.post('/periods/:id/calculate', requireManage, async (req, res) => {
     if (period.status !== 'DRAFT') return res.status(409).json({ error: 'Chỉ tính lương được khi kỳ đang ở trạng thái Nháp' });
 
     const { appData, rateConfig } = await buildComputationAppData(req);
+    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: chỉ lọc status==='ACTIVE' bỏ sót HOÀN TOÀN nhân viên vừa
+    // hoàn tất Offboarding NGAY TRONG kỳ lương (nghỉ giữa tháng, status đã chuyển INACTIVE trước khi HR
+    // bấm "Tính Lương") — không có payslip nào cho những ngày đã làm việc trước khi nghỉ. Bổ sung nhánh
+    // INACTIVE có Offboarding COMPLETED với lastWorkingDate rơi trong kỳ (computeEmployeePayslip() tự xử
+    // lý nhánh này, xem lib/payroll.js) — LƯU Ý: hệ thống KHÔNG tự bịa công thức trừ lương tương ứng
+    // những ngày sau lastWorkingDate, payslip sinh ra sẽ có ghi chú để kế toán tự rà soát/điều chỉnh.
+    const { start: periodStart, end: periodEnd } = payroll.periodDateRange(period);
     const activeProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'ACTIVE');
+    const offboardedMidPeriodProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'INACTIVE' &&
+      (appData.hrProcesses || []).some(h => h.processType === 'OFFBOARDING' && h.status === 'COMPLETED' &&
+        h.employeeUsername === p.username && h.lastWorkingDate >= periodStart && h.lastWorkingDate <= periodEnd));
     const skipped = [];
     const computedList = [];
-    for (const profile of activeProfiles) {
+    for (const profile of [...activeProfiles, ...offboardedMidPeriodProfiles]) {
       const result = payroll.computeEmployeePayslip(profile.employeeCode, period, appData, rateConfig);
       if (result.skipped) { skipped.push({ employeeCode: profile.employeeCode, reason: result.reason }); continue; }
       computedList.push(result);
     }
 
     const existingPayslips = (await getAllForCollection('payslips')).filter(p => p.periodId === periodId);
+    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: tính lại CẢ KỲ (VD chỉ để sửa/thêm 1 người) trước đây xoá
+    // trắng LUÔN mọi dòng "Điều chỉnh dòng lương" (phụ cấp/thưởng/tạm ứng/phạt nhập tay, isManualAdjustment)
+    // đã chốt cho MỌI nhân viên KHÁC trong kỳ — giữ lại bằng cách gom trước rồi gộp lại vào payslip mới
+    // (xem mergeManualAdjustmentsIntoPayslip() ở lib/payroll.js).
+    const manualAdjustmentsByEmployee = new Map();
+    for (const old of existingPayslips) {
+      const manualLines = (old.details || []).filter(d => d.isManualAdjustment);
+      if (manualLines.length) manualAdjustmentsByEmployee.set(old.employeeCode, manualLines);
+    }
     for (const old of existingPayslips) await deleteRecordById('payslips', old.id);
     let idSeq = 0;
     for (const computed of computedList) {
       const record = payroll.defaultPayslip(period, computed);
+      payroll.mergeManualAdjustmentsIntoPayslip(record, manualAdjustmentsByEmployee.get(computed.employeeCode));
       record.id = Date.now() + (idSeq++);
       await insertRecord('payslips', record);
     }

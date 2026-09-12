@@ -3928,7 +3928,7 @@ async function requestWorkflowChangesAction(moduleKey, id, list, renderFnName, r
       } catch (e) { return alert('⛔ ' + e.message); }
       const idx = list.findIndex(x => x.id === id);
       if (idx !== -1) list[idx] = result.item;
-      logSystemAction(moduleKey.toUpperCase(), 'REQUEST_CHANGES', `Yêu cầu bổ sung hồ sơ [${result.item.code || id}]: ${reason.trim()}`, 'SUCCESS', String(result.item.code || id));
+      logSystemAction(toLogModuleToken(moduleKey), 'REQUEST_CHANGES', `Yêu cầu bổ sung hồ sơ [${result.item.code || id}]: ${reason.trim()}`, 'SUCCESS', String(result.item.code || id));
       alert('✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để sửa lại!');
       const renderFn = window[renderFnName];
       if (typeof renderFn === 'function') renderFn();
@@ -3948,6 +3948,20 @@ let bosungEditTarget = null; // { module, id }
 // operationStoreOpenings/operationRepairs ĐÃ BỊ XOÁ khỏi đây (Mục H, 60c473b — bỏ hẳn phê duyệt cho 2
 // luồng "Siêu Thị": status đi thẳng APPROVED ngay lúc tạo, không bao giờ vào lại DRAFT nữa nên không
 // còn hồ sơ nào cần "Bổ Sung" — server cũng đã xoá route update/submit tương ứng, xem routes/records.js).
+// Ánh xạ moduleKey (khoá client, camelCase số nhiều: docs/carRegs/officeReqs/submissions/operationOrders)
+// sang ĐÚNG token module Nhật ký hệ thống (VALID_LOG_MODULES ở routes/systemLog.js, số ít, UPPER_SNAKE_CASE)
+// — PHÁT HIỆN ở đợt audit chuyên sâu lần 2: 2 chỗ log ở openRequestChangesModal()/confirmBosungResubmit()
+// bên dưới trước đây gọi thẳng moduleKey.toUpperCase() (ra DOCS/CARREGS/OFFICEREQS/SUBMISSIONS —
+// operationOrders may mắn trùng sẵn "OPERATIONORDERS" cũng KHÔNG khớp) — không khớp bất kỳ token nào
+// trong whitelist, khiến POST /api/log bị server chặn 400 (âm thầm mất — gọi fire-and-forget, không ai
+// chờ/hiển thị lỗi) cho MỌI lượt "Yêu Cầu Bổ Sung"/"Sửa & Gửi Lại sau Bổ Sung" ở cả 5 module này.
+const LOG_MODULE_TOKEN_MAP = {
+  docs: 'DOC', carRegs: 'CAR', officeReqs: 'OFFICE', submissions: 'SUBMISSION', operationOrders: 'OPERATION_ORDER'
+};
+function toLogModuleToken(moduleKey) {
+  return LOG_MODULE_TOKEN_MAP[moduleKey] || String(moduleKey || '').toUpperCase();
+}
+
 const BOSUNG_MODULE_META = {
   docs: { list: () => DB.docs, title: '📂 Bổ Sung Tài Liệu', renderFn: 'renderDocs' },
   carRegs: { list: () => DB.carRegs, title: '🚗 Bổ Sung Phiếu Đăng Ký Xe', renderFn: 'renderCarRegs' },
@@ -4138,7 +4152,7 @@ async function confirmBosungResubmit() {
   const idx = list.findIndex(x => x.id === id);
   if (idx !== -1) list[idx] = updated;
 
-  logSystemAction(moduleKey.toUpperCase(), 'RESUBMIT_AFTER_BOSUNG', `Sửa & gửi lại hồ sơ [${updated.code}] sau khi được yêu cầu bổ sung`, 'SUCCESS', updated.code);
+  logSystemAction(toLogModuleToken(moduleKey), 'RESUBMIT_AFTER_BOSUNG', `Sửa & gửi lại hồ sơ [${updated.code}] sau khi được yêu cầu bổ sung`, 'SUCCESS', updated.code);
   alert('✅ Đã lưu thay đổi và gửi lại — hồ sơ đã vào lại hàng chờ duyệt từ bước 1!');
   closeBosungEditModal();
   const renderFn = window[meta.renderFn];

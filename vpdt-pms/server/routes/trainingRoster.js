@@ -21,6 +21,20 @@ const { sendCatchError } = require('../lib/errorResponse');
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
 
+// PHÁT HIỆN (Thấp) ở đợt audit chuyên sâu lần 2: 2 route dưới đây trước đây chỉ có requireAuth (bất kỳ
+// ai đã đăng nhập cũng tải được file mẫu/đọc-xem-trước file danh sách học viên) — KHÔNG phải lỗ hổng lộ
+// dữ liệu thật (file mẫu rỗng, "xem trước" chỉ đối chiếu username có tồn tại hay không, và bước xác nhận
+// thêm thật ở POST /api/records/trainingClasses/:id/bulk-register đã tự kiểm tra lại quyền/còn chỗ) —
+// nhưng thiếu nhất quán phòng thủ theo chiều sâu so với các route "hỗ trợ tạo lớp" khác. Gate theo ĐÚNG
+// quyền TẠO lớp học (trainingManage/admin — xem trainingClasses.extraValidate ở lib/createValidation.js,
+// KHÔNG gồm trainingInstruct vì giảng viên không tự tạo lớp được).
+function requireTrainingManage(req, res, next) {
+  if (!req.freshUser?.perms?.admin && !req.freshUser?.perms?.trainingManage) {
+    return res.status(403).json({ error: 'Bạn không có quyền quản lý Đào Tạo' });
+  }
+  next();
+}
+
 const uploadRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: 30,
@@ -57,7 +71,7 @@ const upload = multer({
 });
 
 // GET /api/training/roster-template — file mẫu Excel để nhân sự điền tài khoản học viên.
-router.get('/roster-template', async (req, res) => {
+router.get('/roster-template', requireTrainingManage, async (req, res) => {
   try {
     const wb = await buildRosterTemplateWorkbook();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -74,7 +88,7 @@ router.get('/roster-template', async (req, res) => {
 // hiện có để trả về xem trước (ai hợp lệ/ai không tìm thấy) — nhân sự xác nhận thêm thật ở bước sau qua
 // POST /api/records/trainingClasses/:id/bulk-register (route đó tự kiểm tra lại quyền/còn chỗ/trùng,
 // không tin nguyên danh sách "đã xem trước" ở bước này).
-router.post('/parse-roster', uploadRateLimiter, (req, res) => {
+router.post('/parse-roster', uploadRateLimiter, requireTrainingManage, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {

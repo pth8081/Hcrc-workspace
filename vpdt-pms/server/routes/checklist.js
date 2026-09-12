@@ -49,6 +49,10 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
     const templates = await getAllForCollection('checklistTemplates');
     const source = templates.find(t => t.id === templateId);
     if (!source) return res.status(404).json({ error: 'Không tìm thấy checklist' });
+    // PHÁT HIỆN (Thấp) ở đợt audit chuyên sâu lần 2: chú thích route này ghi rõ "từ 1 template ACTIVE"
+    // nhưng code trước đây không hề kiểm tra — nhân bản được cả từ DRAFT/ARCHIVED, tạo version+1 không
+    // đúng ý nghĩa "phiên bản kế tiếp của bản đang dùng thật", dễ gây nhầm lẫn số phiên bản.
+    if (source.status !== 'ACTIVE') return res.status(409).json({ error: 'Chỉ nhân bản được từ checklist đang ở trạng thái Đang dùng' });
     const clone = {
       id: Date.now(),
       templateCode: source.templateCode, templateName: source.templateName, templateType: source.templateType,

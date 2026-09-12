@@ -33,7 +33,13 @@ const VALID_LOG_MODULES = new Set([
   // dùng chung khuôn UPPER_SNAKE_CASE này) — thêm sẵn để không phải vá lại route này mỗi lần có module
   // mới; KHÔNG mở rộng tuỳ tiện, chỉ thêm token đã thấy dùng thật trong code.
   'ATTENDANCE', 'CHECKLIST', 'LABOR_CONTRACT', 'OPERATION', 'ORG_CHART', 'PAYMENT', 'PAYROLL',
-  'RECRUITMENT', 'TRAINING'
+  'RECRUITMENT', 'TRAINING',
+  // OPERATION_ORDER/OPERATION_STORE_OPEN/OPERATION_REPAIR: PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2
+  // — module-vanhanh.js (Vận Hành) dùng ĐÚNG 3 token này làm module log (xem OPERATION_KIND_META.*.logModule),
+  // KHÔNG dùng chung token "OPERATION" đã có sẵn — thiếu 3 token này khiến MỌI hành động ghi log của Vận
+  // Hành (tạo/xử lý/xoá đơn hàng, đề xuất mở mới/sửa chữa siêu thị) bị 400, mất log âm thầm (gọi
+  // fire-and-forget, không ai chờ/hiển thị lỗi).
+  'OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'
 ]);
 const ACTION_TYPE_RE = /^[A-Z][A-Z0-9_]{1,59}$/;
 const STATUS_RE = /^[A-Z][A-Z0-9_]{1,29}$/;

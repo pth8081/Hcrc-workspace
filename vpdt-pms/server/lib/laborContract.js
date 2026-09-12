@@ -270,8 +270,16 @@ function assertValidAmendment(payload) {
   if (!payload?.amendmentType || !String(payload.amendmentType).trim()) throw new HttpError(400, 'Vui lòng nhập Loại thay đổi');
   if (!payload?.effectiveDate || isNaN(new Date(payload.effectiveDate).getTime())) throw new HttpError(400, 'Vui lòng nhập Ngày hiệu lực thay đổi hợp lệ');
 }
+// fileUrl/fileName ("Quyết định" đính kèm) — bổ sung theo yêu cầu người dùng: mỗi thay đổi lương/chức
+// vụ giữa kỳ hợp đồng (addAmendment(), KHÁC applyManualEdit() chỉ dùng lúc còn DRAFT trước khi kích
+// hoạt — xem chú thích hàm đó, cố ý KHÔNG thêm file ở đó vì chưa phải thay đổi chính thức) nên có văn
+// bản quyết định gắn kèm để tra soát lịch sử sau này, cùng khuôn "Quyết định" ở
+// lib/employeeProfile.js::applyPositionAssignment(). TUỲ CHỌN (không bắt buộc — nhiều loại thay đổi nhỏ
+// có thể không cần quyết định riêng).
 function addAmendment(contract, payload, actorUsername, actorName) {
   assertValidAmendment(payload);
+  const { assertUploadedFileUrl } = require('./createValidation'); // require trễ — tránh vòng lặp require
+  assertUploadedFileUrl(payload.fileUrl, 'Tệp quyết định');
   const amendment = {
     id: randomUUID(),
     amendmentType: String(payload.amendmentType).trim().slice(0, 100),
@@ -279,6 +287,8 @@ function addAmendment(contract, payload, actorUsername, actorName) {
     oldValue: payload.oldValue ? String(payload.oldValue).trim().slice(0, 300) : null,
     newValue: payload.newValue ? String(payload.newValue).trim().slice(0, 300) : null,
     note: payload.note ? String(payload.note).trim().slice(0, 500) : null,
+    fileUrl: payload.fileUrl ? String(payload.fileUrl).trim().slice(0, 500) : null,
+    fileName: payload.fileUrl ? String(payload.fileName || '').trim().slice(0, 200) : null,
     createdAt: nowVN(), createdBy: actorUsername, createdByName: actorName || actorUsername
   };
   contract.amendments = [...(contract.amendments || []), amendment];

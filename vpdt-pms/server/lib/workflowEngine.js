@@ -359,7 +359,20 @@ const MODULE_CONFIGS = {
   budgetEntries: {
     dbKey: 'budgetEntries',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.budgetDeptWorkflows?.[item.dept], appData),
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: applyWorkflowAction() (Duyệt/Từ chối) trước đây KHÔNG kiểm
+    // tra kỳ ngân sách đã đóng sổ hay chưa — khác hẳn updateBudgetEntryDraft()/submitBudgetEntry() (đều
+    // gọi isBudgetPeriodClosed() ở lib/recordActions.js) — Trưởng phòng vẫn duyệt/từ chối được 1 bản NGÂN
+    // SÁCH PENDING dù kỳ đã đóng sổ (hết hạn hoặc admin đóng thủ công), làm sai lệch số liệu đã chốt sau
+    // khi báo cáo tổng hợp đã phát hành. Require trễ (bên trong hàm) tránh vòng lặp require giữa
+    // workflowEngine.js và recordActions.js (đã có ở nơi khác trong file này, xem chú thích MODULE_CONFIGS).
+    blockApproveIf: (item, appData) => {
+      const { isBudgetPeriodClosed } = require('./recordActions');
+      const period = (appData?.budgetPeriods || []).find(p => p.id === item.periodId);
+      return period && isBudgetPeriodClosed(period)
+        ? 'Kỳ ngân sách này đã kết thúc, không thể duyệt/từ chối nữa'
+        : null;
+    }
   },
   // Vận Hành > Đơn Hàng — ĐỔI HẲN từ quy trình duyệt theo phòng ban (operationOrderDeptWorkflows, đã bị
   // xoá khỏi AppData/admin UI) sang quy trình duyệt theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG hoàn toàn cho
@@ -443,10 +456,10 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   const historyField = config.historyField || 'history';
   if (item[statusField] !== 'PENDING') throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý (có thể đã được xử lý ở nơi khác)');
 
-  // Hook tuỳ chọn theo module (hiện chỉ itPriceApprovals dùng) — chặn APPROVE/REJECT khi hồ sơ đang có
-  // điều kiện riêng chưa thoả (vd còn yêu cầu bổ sung treo chưa phản hồi). Không đụng tới module khác.
+  // Hook tuỳ chọn theo module (itPriceApprovals: yêu cầu bổ sung treo; budgetEntries: kỳ đã đóng sổ) —
+  // chặn APPROVE/REJECT khi hồ sơ đang có điều kiện riêng chưa thoả. Không đụng tới module khác.
   if (config.blockApproveIf && (action === 'APPROVE' || action === 'REJECT')) {
-    const blockedReason = config.blockApproveIf(item);
+    const blockedReason = config.blockApproveIf(item, appData);
     if (blockedReason) throw new WorkflowError(409, blockedReason);
   }
 
@@ -621,6 +634,12 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
 
   const extraSnapshot = {};
   if (config.extraFields) {
+    // Trim biển số ngay tại nguồn (đồng bộ với routes/workflow.js/reassignCarDispatch() — xem chú thích ở
+    // đó) trước khi dùng cho kiểm tra trùng LẪN lưu vào item.assignedPlate qua vòng lặp config.extraFields
+    // bên dưới, để không lệch giá trị đã trim dùng để khoá race với giá trị thật sự được lưu.
+    if (moduleKey === 'carRegs' && extraFields && typeof extraFields.assignedPlate === 'string') {
+      extraFields.assignedPlate = extraFields.assignedPlate.trim();
+    }
     const newPlate = extraFields?.assignedPlate;
     if (moduleKey === 'carRegs' && newPlate && newPlate !== item.assignedPlate) {
       const conflict = findCarPlateConflict(existingCollection, item.id, newPlate, item.startTime, item.endTime);

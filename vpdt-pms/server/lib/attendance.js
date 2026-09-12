@@ -92,6 +92,17 @@ function resolveWorkModelForEmployeeCode(employeeCode, { employeeProfiles, users
   return null;
 }
 
+// Tìm quy trình Offboarding ĐÃ HOÀN TẤT của 1 hồ sơ INACTIVE — nhánh dự phòng CÓ CHỦ ĐÍCH cho vài thao
+// tác hợp lệ giới hạn trước lastWorkingDate (bổ sung công tay ngày trước khi nghỉ, tính lương prorate
+// theo thời gian đã làm việc) — KHÔNG dùng để nới lỏng resolveWorkModelForEmployeeCode() mặc định ở
+// trên (hàm đó vẫn PHẢI chặn hẳn INACTIVE cho máy chấm công/tạo công tay ngày SAU khi nghỉ, xem chú
+// thích dòng 76). Trả về hrProcess (có employeePosType/employeeDept/lastWorkingDate) hoặc null.
+function findCompletedOffboardingForProfile(profile, hrProcesses) {
+  if (!profile || profile.status !== 'INACTIVE') return null;
+  return (hrProcesses || []).find(p => p.processType === 'OFFBOARDING' && p.status === 'COMPLETED' &&
+    p.employeeUsername === profile.username && p.lastWorkingDate) || null;
+}
+
 function isHolidayDate(dateStr, publicHolidays) {
   return (publicHolidays || []).some(h => h.date === dateStr);
 }
@@ -487,7 +498,7 @@ function cancelPendingLeaveRequestsAfterOffboarding(leaveRequestList, employeeCo
 
 module.exports = {
   WORK_MODELS, ATTENDANCE_RECORD_TYPES, LEAVE_TYPES, LEAVE_STATUSES, ROSTER_STATUSES, SWAP_STATUSES,
-  resolveWorkModelForEmployeeCode, isHolidayDate, isWeekendDate,
+  resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile, isHolidayDate, isWeekendDate,
   defaultAttendanceRecord, applyClockPunch, assertValidManualAttendanceEdit, applyManualAttendanceEdit,
   computeAnnualLeaveDays, defaultLeaveBalance, ensureLeaveBalanceForYear, computeLeavePayoutInfo,
   assertValidLeaveRequest, defaultLeaveRequest, canApproveLeaveRequest,

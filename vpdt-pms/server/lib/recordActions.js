@@ -1893,6 +1893,18 @@ function editPaymentRequest(payload, user, pr) {
       pr.amountMismatchesSource = Math.abs(pr.amount - pr.referenceAmount) > 1;
     }
   }
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: sửa installments/amount khi ĐANG GIỮA CHỪNG quy trình duyệt
+  // (PENDING đã có 1+ bước duyệt xong, hoặc NEED_INFO còn giữ lại lịch sử duyệt dở dang từ trước — xem
+  // requestPaymentInfo() ở trên, nhánh PENDING giữ nguyên currentStep/history) trước đây KHÔNG đánh dấu
+  // invalidated các lượt "APPROVED" cũ/reset currentStep — người duyệt bước SAU vẫn duyệt tiếp trên số
+  // liệu MỚI dựa vào các bước TRƯỚC đã duyệt trên số liệu CŨ, khiến đề nghị được duyệt xong với nội dung
+  // chưa từng được đúng người duyệt bước đầu xác nhận. Khớp đúng khuôn REQUEST_CHANGES/RESOLVE_FILE_PROPOSAL/
+  // requestPaymentInfo() (nhánh APPROVED) — chỉ cần khi THẬT SỰ có sửa đợt thanh toán (payload.installments),
+  // không đụng khi chỉ sửa title/dept (không ảnh hưởng số tiền đang chờ duyệt).
+  if (!isDraft && payload.installments !== undefined) {
+    (pr.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+    pr.currentStep = 1;
+  }
   // NHÁP lưu lại vẫn giữ nguyên NHÁP (nút "💾 Lưu" — chưa gửi duyệt); PENDING/NEED_INFO sửa xong luôn
   // quay lại PENDING như hành vi cũ (NEED_INFO -> "Sửa & Gửi Lại" tự động gửi lại hàng chờ duyệt).
   if (!isDraft) pr.status = 'PENDING';
@@ -2397,8 +2409,30 @@ function toggleInternalPostCommentLike(user, post, commentId) {
 // gọi normalizeForScan() cho cả 2 vế .includes()), nên cụm từ khoá NHIỀU TỪ (VD "quấy rối tình dục") vẫn
 // khớp bình thường (dấu cách trong keyword cũng bị xoá y hệt) — không phá cụm từ khoá hợp lệ, chỉ đóng
 // đường né bằng ký tự chèn giữa.
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 2: normalizeForScan() trước đây chỉ STRIP (xoá hẳn, không thay
+// thế) mọi ký tự KHÔNG PHẢI a-z0-9 — một ký tự Cyrillic/Greek nhìn Y HỆT chữ Latin (VD Cyrillic "а"
+// U+0430 thay cho Latin "a") bị XOÁ MẤT thay vì được hiểu là "a", nên chèn 1 ký tự như vậy vào giữa 1 từ
+// khoá nhạy cảm (VD "b<Cyrillic а>d") khiến chuỗi chuẩn hoá thành "bd" — không còn khớp từ khoá "bad"
+// nữa, NÉ được bộ lọc dù mắt người đọc vẫn thấy y hệt nội dung gốc. Chuyển các ký tự dễ nhầm (bộ chữ hoa
+// Cyrillic/Greek trùng hình chữ Latin viết hoa gần như tuyệt đối trên mọi font, + vài chữ thường phổ
+// biến nhất trong tấn công homoglyph thực tế) về đúng chữ Latin TRƯỚC KHI strip. KHÔNG bao phủ 100% bộ
+// Unicode confusables (danh sách chính thức rất lớn, nhiều ký tự chỉ giống ở 1 số font) — đây là phòng
+// thủ theo chiều sâu cho các trường hợp phổ biến nhất, không phải giải pháp tuyệt đối.
+const HOMOGLYPH_TO_LATIN = {
+  // Cyrillic viết hoa — giống hệt Latin viết hoa trên hầu hết font.
+  'А': 'a', 'В': 'b', 'Е': 'e', 'К': 'k', 'М': 'm', 'Н': 'h', 'О': 'o', 'Р': 'p', 'С': 'c', 'Т': 't', 'Х': 'x',
+  // Cyrillic viết thường hay dùng nhất để né lọc từ khoá.
+  'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's',
+  // Greek viết hoa — giống hệt Latin viết hoa trên hầu hết font.
+  'Α': 'a', 'Β': 'b', 'Ε': 'e', 'Ζ': 'z', 'Η': 'h', 'Ι': 'i', 'Κ': 'k', 'Μ': 'm', 'Ν': 'n', 'Ο': 'o', 'Ρ': 'p', 'Τ': 't', 'Υ': 'y', 'Χ': 'x',
+  // Greek viết thường phổ biến nhất trong tấn công homoglyph thực tế (omicron thay "o").
+  'ο': 'o'
+};
+function replaceHomoglyphs(s) {
+  return String(s || '').replace(/[Ͱ-ϿЀ-ӿ]/g, ch => HOMOGLYPH_TO_LATIN[ch] || ch);
+}
 function normalizeForScan(s) {
-  return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+  return replaceHomoglyphs(String(s || '')).replace(/đ/g, 'd').replace(/Đ/g, 'D')
     .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
@@ -5159,6 +5193,10 @@ function addHrProcessAttachment(user, item, body) {
   const fileUrl = String(body?.fileUrl || '').trim();
   const fileName = String(body?.fileName || '').trim();
   if (!fileUrl || !fileName) throw new HttpError(400, 'Thiếu thông tin tệp đính kèm');
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: trước đây fileUrl chỉ trim+cắt độ dài, KHÔNG xác nhận khuôn
+  // "/uploads/..." như mọi field file khác (xem assertUploadedFileUrl()) — cho phép nhét scheme
+  // "javascript:" (stored XSS khi client render lại đường dẫn tệp đính kèm ở module-hrlifecycle.js).
+  assertUploadedFileUrl(fileUrl, 'Tệp đính kèm quy trình');
   item.attachments = item.attachments || [];
   item.attachments.push({
     fileUrl: fileUrl.slice(0, 500), fileName: fileName.slice(0, 255), fileType: String(body?.fileType || '').slice(0, 100),

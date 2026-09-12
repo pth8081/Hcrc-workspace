@@ -26,7 +26,8 @@
 // Phép, Gia Hạn Dịch Vụ CNTT) dùng CHUNG một phép kiểm canView* cho cả 2 mode — vì bản thân các module
 // đó không có khái niệm quyền "tải riêng", ai xem được thì tải được.
 const { getAllForCollection, getAllTrashItemsCached } = require('./recordStore');
-const { getAllAppData } = require('./appData');
+const { getAllAppData, getAppDataValue } = require('./appData');
+const { canViewFullProfile } = require('./employeeProfile');
 const {
   canDownloadRecordFile, canViewInternalPost,
   canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, canSeeReportPdfCompilation, filterRecruitmentReferralsForUser,
@@ -92,7 +93,7 @@ function customDataHasFileUrl(record, fileUrl) {
 }
 
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles] = await Promise.all([
     getAllForCollection('docs'),
     getAllForCollection('submissions'),
     getAllForCollection('contracts'),
@@ -119,74 +120,87 @@ async function findOwningRecord(fileUrl) {
     getAllForCollection('laborContracts'),
     getAllForCollection('paymentRequests'),
     getAllForCollection('hrProcesses'),
-    getAllForCollection('checklistSubmissions')
+    getAllForCollection('checklistSubmissions'),
+    // employeeProfiles: KHÁC 19 collection ở trên (dbo.Records) — collection này ở dbo.AppData (mảng
+    // phẳng 1 key duy nhất, xem lib/employeeProfile.js), đọc qua getAppDataValue() thay vì getAllForCollection().
+    // Thêm vào đây cùng đợt bổ sung "Quyết định" đính kèm cho positionHistory[] (applyPositionAssignment())
+    // — không có nhánh này, fileUrl của Quyết định gán/đổi chức vụ sẽ rơi vào FAIL-OPEN (đọc được bởi BẤT
+    // KỲ ai đã đăng nhập) dù Hồ Sơ Nhân Sự vốn là dữ liệu nhạy cảm nhất hệ thống.
+    getAppDataValue('employeeProfiles')
   ]);
-  // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp cho đúng 6 module
-  // có hỗ trợ Biểu Mẫu ở đây (xem validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG
-  // owning-info như khi khớp field đính kèm cố định, để toàn bộ dispatch theo module ở
-  // authorizeFileAccess() (cả 2 mode view/download) chạy y nguyên, không cần biết file tới từ đường nào.
-  const doc = (docs || []).find(d => d.fileUrl === fileUrl || customDataHasFileUrl(d, fileUrl));
-  if (doc) return { moduleKey: 'doc', dept: doc.dept, ownerUsername: doc.uploader, record: doc };
-  const sub = (submissions || []).find(s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl) || customDataHasFileUrl(s, fileUrl));
-  if (sub) return { moduleKey: 'submission', dept: sub.dept, ownerUsername: sub.creator, record: sub };
-  const contract = (contracts || []).find(c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl || customDataHasFileUrl(c, fileUrl));
-  if (contract) return { moduleKey: 'contract', dept: contract.dept, custodianDept: contract.custodianDept, ownerUsername: contract.creator, record: contract };
-  const carReg = (carRegs || []).find(c => c.fileUrl === fileUrl || customDataHasFileUrl(c, fileUrl));
-  if (carReg) return { moduleKey: 'car', dept: carReg.dept, ownerUsername: carReg.creator, record: carReg };
-  const officeReq = (officeReqs || []).find(o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
-  if (officeReq) return { moduleKey: 'office', dept: officeReq.dept, ownerUsername: officeReq.creator, record: officeReq };
-  const post = (internalPosts || []).find(p => (p.attachment && p.attachment.fileUrl === fileUrl) || customDataHasFileUrl(p, fileUrl));
-  if (post) return { internal: true, post };
-  const priceItem = (itPriceApprovals || []).find(p => (p.files || []).some(f => f.fileUrl === fileUrl) || (p.extraFiles || []).some(f => f.fileUrl === fileUrl) || customDataHasFileUrl(p, fileUrl));
-  if (priceItem) return { itPrice: true, item: priceItem };
-  const entry = (reportEntries || []).find(e => e.fileUrl === fileUrl || customDataHasFileUrl(e, fileUrl));
-  if (entry) return { reportEntry: true, entry };
-  const period = (reportPeriods || []).find(p =>
-    (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl) ||
-    p.pdfCompilation?.publishedFileUrl === fileUrl || customDataHasFileUrl(p, fileUrl)
-  );
-  if (period) return { reportPeriod: true, period };
-  const referral = (recruitmentReferrals || []).find(r => r.cvFileUrl === fileUrl || customDataHasFileUrl(r, fileUrl));
-  if (referral) return { recruitment: true, referral };
-  // licenses (Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/licenseView), khác hẳn
-  // canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
-  const license = (licenses || []).find(l => l.fileUrl === fileUrl || customDataHasFileUrl(l, fileUrl));
-  if (license) return { license: true, item: license };
-  // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses ở trên.
-  const itRenewal = (itServiceRenewals || []).find(r => r.fileUrl === fileUrl || customDataHasFileUrl(r, fileUrl));
-  if (itRenewal) return { itServiceRenewal: true, item: itRenewal };
-  // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs): trước đây HOÀN TOÀN vắng mặt ở
-  // findOwningRecord() — file đính kèm của cả 3 luồng (đơn hàng/đề xuất mở mới/đề xuất sửa chữa siêu thị)
-  // luôn rơi vào nhánh FAIL-OPEN bên dưới, đọc được bởi BẤT KỲ ai đã đăng nhập dù bản ghi bị giới hạn
-  // theo phòng ban — cùng dạng lỗ hổng đã vá cho 5 module "theo phòng ban" khác. Trả owning riêng vì 3
-  // luồng này không dùng khuôn quyền tải "<moduleKey>Download" mà dùng canView* trực tiếp cho cả 2 mode
-  // (xem canViewOperationOrder()/canViewOperationStoreOpening()/canViewOperationRepair(), lib/recordViewScope.js).
-  const opOrder = (operationOrders || []).find(o => o.fileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
-  if (opOrder) return { operationOrder: true, item: opOrder };
-  const opStoreOpening = (operationStoreOpenings || []).find(o => o.fileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
-  if (opStoreOpening) return { operationStoreOpening: true, item: opStoreOpening };
-  const opRepair = (operationRepairs || []).find(o => o.fileUrl === fileUrl || customDataHasFileUrl(o, fileUrl));
-  if (opRepair) return { operationRepair: true, item: opRepair };
-  // trainingTests: tra theo ĐÚNG câu hỏi chứa fileUrl (1 bài test có thể có nhiều ảnh câu hỏi khác nhau)
-  // — trả kèm câu hỏi khớp để dùng chung nếu cần, dù authorizeFileAccess() bên dưới hiện chỉ cần "item"
-  // (cả bài test) cho canViewTrainingTestQuestionImage(). Đợt 10 — loại IMAGE_DRAG_DROP (kéo thả hình)
-  // thêm 1 nguồn ảnh MỚI: q.options[].imageUrl (ảnh của TỪNG đáp án, khác q.imageUrl chỉ là ảnh minh hoạ
-  // đề bài) — thiếu nhánh này thì ảnh đáp án rơi thẳng vào FAIL-OPEN như chú thích ở trên đã cảnh báo.
-  const test = (trainingTests || []).find(t => (t.questions || []).some(q =>
-    q.imageUrl === fileUrl || (q.options || []).some(o => o.imageUrl === fileUrl)));
-  if (test) return { trainingTestQuestion: true, item: test };
-  const laborContract = (laborContracts || []).find(l => l.fileUrl === fileUrl || customDataHasFileUrl(l, fileUrl));
-  if (laborContract) return { laborContract: true, item: laborContract };
-  const paymentRequest = (paymentRequests || []).find(p =>
-    (p.requestFiles || []).some(f => f.fileUrl === fileUrl) ||
-    (p.installments || []).some(i => i.confirmFileUrl === fileUrl) ||
-    customDataHasFileUrl(p, fileUrl));
-  if (paymentRequest) return { paymentRequest: true, item: paymentRequest };
-  const hrProcess = (hrProcesses || []).find(h => (h.attachments || []).some(a => a.fileUrl === fileUrl) || customDataHasFileUrl(h, fileUrl));
-  if (hrProcess) return { hrProcess: true, item: hrProcess };
-  const checklistSubmission = (checklistSubmissions || []).find(s =>
-    (s.answers || []).some(a => (a.attachments || []).some(att => att.fileUrl === fileUrl)));
-  if (checklistSubmission) return { checklistSubmission: true, item: checklistSubmission };
+  // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp (xem
+  // validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG owning-info như khi khớp field
+  // đính kèm cố định, để toàn bộ dispatch theo module ở authorizeFileAccess() (cả 2 mode view/download)
+  // chạy y nguyên, không cần biết file tới từ đường nào.
+  //
+  // PHÁT HIỆN NGHIÊM TRỌNG ở đợt audit chuyên sâu lần 2: trước đây mỗi collection được quét bằng ĐÚNG 1
+  // `.find()` gộp chung "field cố định" OR "customData", theo THỨ TỰ CỐ ĐỊNH của mảng checkers dưới đây
+  // (docs trước, rồi submissions, contracts...). Vì customDataHasFileUrl() chấp nhận BẤT KỲ key nào
+  // trong customData có .fileUrl khớp, một kẻ tấn công có quyền TẠO ở collection được quét TRƯỚC (VD
+  // docs) có thể tạo 1 bản ghi giả với customData chứa fileUrl THẬT của nạn nhân ở 1 module khác được
+  // quét SAU — bản ghi giả "thắng" trước bản ghi thật, và authorizeFileAccess() cấp quyền theo bản ghi
+  // giả (kẻ tấn công là chủ bản ghi giả đó) thay vì bản ghi thật đang giữ file. Vá bằng 2 lượt quét TÁCH
+  // RIÊNG: lượt 1 CHỈ xét field cố định trên TOÀN BỘ 20 collection (không phụ thuộc thứ tự — 1 file chỉ
+  // có thể thuộc field cố định của ĐÚNG 1 bản ghi thật do tên file random theo lượt /api/upload); chỉ khi
+  // lượt 1 không khớp bất kỳ đâu mới xét tới lượt 2 (customData). Nhờ vậy, 1 bản ghi thật sở hữu file qua
+  // field cố định LUÔN thắng bản ghi giả mạo chỉ khớp qua customData, bất kể collection nào được quét
+  // trước — đóng lỗ hổng cho đúng kịch bản trên. Whitelist key ở validateRequiredCustomData() (lớp vá
+  // thứ 2) chặn thêm việc nhét customData VỚI KEY TUỲ Ý (không thuộc field đã cấu hình cho module) —
+  // 2 lớp vá cộng lại chỉ còn hở đúng 1 kịch bản, hẹp hơn nhiều: kẻ tấn công vừa có quyền tạo ở 1 module
+  // CÓ field bổ sung kiểu Tải tệp thật, vừa biết/đoán đúng fileUrl (random) của nạn nhân ở 1 bản ghi
+  // KHÁC cũng chỉ tham chiếu qua customData — muốn đóng triệt để cần thêm sổ ghi nhận "ai tải file nào"
+  // ngay tại /api/upload (xem đề xuất ở báo cáo audit), chưa làm trong đợt vá này.
+  const checkers = [
+    { records: docs, fixed: d => d.fileUrl === fileUrl, build: d => ({ moduleKey: 'doc', dept: d.dept, ownerUsername: d.uploader, record: d }) },
+    { records: submissions, fixed: s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl), build: s => ({ moduleKey: 'submission', dept: s.dept, ownerUsername: s.creator, record: s }) },
+    { records: contracts, fixed: c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl, build: c => ({ moduleKey: 'contract', dept: c.dept, custodianDept: c.custodianDept, ownerUsername: c.creator, record: c }) },
+    { records: carRegs, fixed: c => c.fileUrl === fileUrl, build: c => ({ moduleKey: 'car', dept: c.dept, ownerUsername: c.creator, record: c }) },
+    { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl, build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
+    { records: internalPosts, fixed: p => !!(p.attachment && p.attachment.fileUrl === fileUrl), build: p => ({ internal: true, post: p }) },
+    { records: itPriceApprovals, fixed: p => (p.files || []).some(f => f.fileUrl === fileUrl) || (p.extraFiles || []).some(f => f.fileUrl === fileUrl), build: p => ({ itPrice: true, item: p }) },
+    { records: reportEntries, fixed: e => e.fileUrl === fileUrl, build: e => ({ reportEntry: true, entry: e }) },
+    { records: reportPeriods, fixed: p => (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl) || p.pdfCompilation?.publishedFileUrl === fileUrl, build: p => ({ reportPeriod: true, period: p }) },
+    { records: recruitmentReferrals, fixed: r => r.cvFileUrl === fileUrl, build: r => ({ recruitment: true, referral: r }) },
+    // licenses (Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/licenseView), khác
+    // hẳn canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
+    { records: licenses, fixed: l => l.fileUrl === fileUrl, build: l => ({ license: true, item: l }) },
+    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses.
+    { records: itServiceRenewals, fixed: r => r.fileUrl === fileUrl, build: r => ({ itServiceRenewal: true, item: r }) },
+    // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs): dùng canView* trực tiếp cho cả
+    // 2 mode (xem canViewOperationOrder()/canViewOperationStoreOpening()/canViewOperationRepair(),
+    // lib/recordViewScope.js) thay vì khuôn quyền tải "<moduleKey>Download".
+    { records: operationOrders, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationOrder: true, item: o }) },
+    { records: operationStoreOpenings, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationStoreOpening: true, item: o }) },
+    { records: operationRepairs, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationRepair: true, item: o }) },
+    // trainingTests: tra theo ĐÚNG câu hỏi chứa fileUrl (1 bài test có thể có nhiều ảnh câu hỏi khác
+    // nhau) — không có customData, chỉ tham gia lượt 1 (fixed). Đợt 10 — loại IMAGE_DRAG_DROP (kéo thả
+    // hình) thêm 1 nguồn ảnh MỚI: q.options[].imageUrl (ảnh của TỪNG đáp án).
+    { records: trainingTests, fixed: t => (t.questions || []).some(q => q.imageUrl === fileUrl || (q.options || []).some(o => o.imageUrl === fileUrl)), build: t => ({ trainingTestQuestion: true, item: t }) },
+    // amendments[].fileUrl ("Quyết định" đính kèm khi Bổ Sung Thay Đổi — xem lib/laborContract.js::addAmendment())
+    // — bổ sung cùng đợt thêm tính năng đính kèm quyết định lương/chức vụ.
+    { records: laborContracts, fixed: l => l.fileUrl === fileUrl || (l.amendments || []).some(a => a.fileUrl === fileUrl), build: l => ({ laborContract: true, item: l }) },
+    { records: paymentRequests, fixed: p => (p.requestFiles || []).some(f => f.fileUrl === fileUrl) || (p.installments || []).some(i => i.confirmFileUrl === fileUrl), build: p => ({ paymentRequest: true, item: p }) },
+    { records: hrProcesses, fixed: h => (h.attachments || []).some(a => a.fileUrl === fileUrl), build: h => ({ hrProcess: true, item: h }) },
+    // checklistSubmissions: không có customData, chỉ tham gia lượt 1 (fixed).
+    { records: checklistSubmissions, fixed: s => (s.answers || []).some(a => (a.attachments || []).some(att => att.fileUrl === fileUrl)), build: s => ({ checklistSubmission: true, item: s }) },
+    // employeeProfiles.positionHistory[].fileUrl ("Quyết định" đính kèm khi gán/đổi chức vụ — xem
+    // lib/employeeProfile.js::applyPositionAssignment()) — không có customData, chỉ tham gia lượt 1
+    // (fixed). getAppDataValue() (khác getAllForCollection() ở mọi checker khác) trả về GIÁ TRỊ THÔ của
+    // key AppData — Array.isArray() phòng thân trường hợp key chưa từng seed/mock trả về không phải mảng.
+    { records: Array.isArray(employeeProfiles) ? employeeProfiles : [], fixed: p => (p.positionHistory || []).some(h => h.fileUrl === fileUrl), build: p => ({ employeeProfile: true, item: p }) }
+  ];
+
+  // Lượt 1 — CHỈ field cố định, thứ tự không còn ý nghĩa an ninh (mỗi file /uploads/... thật sự chỉ
+  // thuộc ĐÚNG 1 bản ghi qua field cố định).
+  for (const c of checkers) {
+    const match = (c.records || []).find(c.fixed);
+    if (match) return c.build(match);
+  }
+  // Lượt 2 — chỉ xét customData khi KHÔNG có bản ghi nào khớp field cố định ở lượt 1.
+  for (const c of checkers) {
+    const match = (c.records || []).find(r => customDataHasFileUrl(r, fileUrl));
+    if (match) return c.build(match);
+  }
   return null;
 }
 
@@ -298,6 +312,11 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item);
   if (owning.hrProcess) return canViewHrProcess(user, owning.item);
   if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item);
+  // employeeProfile (Quyết định gán/đổi chức vụ): CHỈ chính chủ hồ sơ/hrProfileManage/admin xem được —
+  // cùng khuôn canViewFullProfile() dùng cho chính màn Hồ Sơ Nhân Sự (không dùng canViewLimitedProfile,
+  // vốn còn mở cho quản lý trực tiếp xem — Quyết định lương/chức vụ là dữ liệu nhạy cảm hơn, giới hạn
+  // chặt hơn cả thông tin hồ sơ thông thường).
+  if (owning.employeeProfile) return canViewFullProfile(user, owning.item);
 
   // ——— Nhóm 5 module "theo phòng ban" (doc/submission/contract/car/office) ———
   if (mode === 'download') {

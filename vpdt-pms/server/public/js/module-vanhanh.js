@@ -1623,7 +1623,7 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
         : `<td class="border p-1"><select data-op-change="changeOperationEstimateItemParent" data-idx="${idx}" class="w-full border-0 p-0.5 text-[10px] bg-white focus:outline-none">${buildEligibleParentOptionsFor(it)}</select></td>`)
     : `<td class="border p-1 text-[10px] text-gray-500">${it.parentId != null ? 'Danh mục con' : ''}</td>`;
   const contentCell = editable
-    ? `<td class="border p-1">${indent}<input value="${escapeHtml(it.content)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="content" class="w-auto border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung" style="width:calc(100% - ${depth * 32 + 4}px)"></td>`
+    ? `<td class="border p-1">${indent}<input value="${escapeHtml(it.content)}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="content" class="w-auto border-0 p-0.5 text-xs focus:outline-none" placeholder="Nội dung" data-style="width:calc(100% - ${depth * 32 + 4}px)"></td>`
     : `<td class="border p-1">${indent}${escapeHtml(it.content)}</td>`;
   const descCell = editable
     ? `<td class="border p-1"><input value="${escapeHtml(it.description || '')}" data-op-input="updateOperationEstimateItemField" data-idx="${idx}" data-field="description" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Mô tả"></td>`

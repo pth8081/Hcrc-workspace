@@ -369,12 +369,34 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
 // (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
 // nhận payload.customData thật sự đủ field bắt buộc hay không. collectDynamicFieldsData() khoá theo
 // f.label (nhãn hiển thị, KHÔNG phải f.id) nên đối chiếu ở đây cũng phải theo đúng field "label".
+// PHÁT HIỆN NGHIÊM TRỌNG ở đợt audit chuyên sâu lần 2: hàm này trước đây CHỈ kiểm "required", không hề
+// đối chiếu KEY của customData với danh sách field thật sự cấu hình cho modKey — nghĩa là payload có
+// thể nhét THÊM bất kỳ key tuỳ ý nào (VD customData.abc = {fileUrl: "<url file của người khác>"}), và
+// key lạ đó vẫn được lưu nguyên vào bản ghi. lib/fileAuthz.js::customDataHasFileUrl() quét MỌI key
+// trong customData (không riêng key hợp lệ), nên bản ghi giả này "nhận vơ" được quyền sở hữu file người
+// khác — chiếm được quyền xem/tải qua findOwningRecord(). Vá bằng 2 lớp:
+//  1) Xoá thẳng (không lưu) mọi key không khớp field.label nào đã cấu hình cho modKey — chặn hẳn việc
+//     nhét key tuỳ ý (khai thác dễ nhất, không cần biết field thật của module).
+//  2) Với field kiểu 'file'/'multifile' còn lại, xác nhận đúng dạng "/uploads/..." bằng
+//     assertUploadedFileUrl()/assertUploadedFileUrlList() (đã dùng cho các field cố định khác) — vẫn
+//     KHÔNG xác minh được chủ sở hữu thật của URL (cần một sổ ghi nhận riêng ở /api/upload để làm triệt
+//     để hơn — xem thêm bản vá ưu tiên field cố định ở findOwningRecord()), nhưng chặn được dạng
+//     "javascript:"/URL ngoài hệ thống lọt qua field file.
 function validateRequiredCustomData(customData, formTemplates, modKey) {
   const fields = (formTemplates || {})[modKey] || [];
   const data = customData || {};
+  const allowedLabels = new Set(fields.map(f => f.label));
+  for (const key of Object.keys(data)) {
+    if (!allowedLabels.has(key)) delete data[key];
+  }
   for (const f of fields) {
-    if (!f.required) continue;
     const value = data[f.label];
+    if (f.type === 'file') {
+      assertUploadedFileUrl(value && typeof value === 'object' ? value.fileUrl : value, f.label);
+    } else if (f.type === 'multifile') {
+      assertUploadedFileUrlList(value, f.label);
+    }
+    if (!f.required) continue;
     const missing = value === undefined || value === null || value === '' ||
       (Array.isArray(value) && value.length === 0);
     if (missing) {
@@ -2717,7 +2739,21 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.hrAttendanceManage) throw new CreateError(403, 'Bạn không có quyền bổ sung bản ghi công tay');
       const employeeCode = String(payload.employeeCode || '').trim();
       if (!employeeCode) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
-      const info = attendance.resolveWorkModelForEmployeeCode(employeeCode, appData);
+      const workDate = String(payload.workDate || '').trim();
+      let info = attendance.resolveWorkModelForEmployeeCode(employeeCode, appData);
+      // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: resolveWorkModelForEmployeeCode() chặn HẲN hồ sơ INACTIVE
+      // (đúng ý, xem lib/attendance.js) — nhưng vì vậy HR không còn bổ sung được công tay cho MỘT NGÀY
+      // TRƯỚC KHI nghỉ việc (VD nhân viên quên quẹt thẻ ngày cuối, phát hiện sau khi Offboarding đã hoàn
+      // tất) dù ngày đó hoàn toàn hợp lệ (nhân viên còn đang làm việc). Nhánh dự phòng CHỈ áp dụng khi
+      // workDate <= lastWorkingDate của quy trình Offboarding đã hoàn tất — ngày SAU khi nghỉ vẫn bị chặn
+      // như cũ (đúng ý lỗ hổng gốc: máy chấm công/tạo công tay không được ghi nhận công cho người đã nghỉ).
+      if (!info) {
+        const profile = (appData.employeeProfiles || []).find(p => p.employeeCode === employeeCode);
+        const offboarding = attendance.findCompletedOffboardingForProfile(profile, appData.hrProcesses);
+        if (offboarding && workDate && workDate <= offboarding.lastWorkingDate) {
+          info = { workModel: offboarding.employeePosType === 'STORE' ? 'SHIFT_BASED' : 'OFFICE_HOURS', dept: offboarding.employeeDept || null };
+        }
+      }
       if (!info) throw new CreateError(400, 'Không xác định được mô hình chấm công của nhân viên này (hồ sơ chưa liên kết tài khoản/chưa có quy trình Onboarding gốc)');
       if ((collection || []).some(r => r.employeeCode === employeeCode && r.workDate === payload.workDate)) {
         throw new CreateError(409, 'Ngày này đã có bản ghi công cho nhân viên — vui lòng sửa bản ghi hiện có thay vì tạo mới');

@@ -100,8 +100,21 @@ async function confirmHrpfAssignPosition() {
   if (!positionKey) return alert('⛔ Vui lòng gõ và chọn đúng 1 chức vụ từ gợi ý (Cơ Cấu Tổ Chức).');
   const effectiveDate = document.getElementById('hrpfAssignPositionDate')?.value || null;
   const note = document.getElementById('hrpfAssignPositionNote')?.value || null;
+  // Quyết định đính kèm (tuỳ chọn) — cùng khuôn Quyết định của Hợp Đồng Lao Động
+  // (submitHrContractAmendment(), module-hopdonglaodong.js), giúp tra soát lịch sử gán/đổi chức vụ có
+  // văn bản quyết định đi kèm.
+  let fileUrl = null, fileName = null;
+  const fileInput = document.getElementById('hrpfAssignPositionFile');
+  if (fileInput?.files[0]) {
+    try {
+      const uploaded = await uploadFileToServer(fileInput.files[0], 'hrProfile');
+      fileUrl = uploaded.fileUrl; fileName = uploaded.fileName || fileInput.files[0].name;
+    } catch (err) {
+      return alert('⛔ Tải tệp quyết định thất bại: ' + err.message);
+    }
+  }
   try {
-    const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/set-position`, { positionKey, effectiveDate, note });
+    const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/set-position`, { positionKey, effectiveDate, note, fileUrl, fileName });
     alert('✅ Đã gán/đổi chức vụ. Lịch sử đã được ghi lại.');
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     loadHrpfHistory(_hrpfManageDetailCode);
@@ -134,6 +147,7 @@ async function loadHrpfHistory(employeeCode) {
           <span class="text-gray-400 ml-auto whitespace-nowrap">${escapeHtml(e.date || '')}</span>
         </div>
         ${e.detail ? `<div class="text-gray-500 mt-0.5 ml-5">${escapeHtml(e.detail)}</div>` : ''}
+        ${e.fileUrl ? `<div class="ml-5"><a href="${attachmentDownloadUrl(e.fileUrl, null, e.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(e.fileName || 'Quyết định')}</a></div>` : ''}
         <div class="text-gray-400 mt-0.5 ml-5">bởi ${escapeHtml(e.by || '')}</div>
       </div>`).join('') : '<p class="text-xs text-gray-400 italic">Chưa có sự kiện nào.</p>';
   } catch (err) {
@@ -486,6 +500,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
       <input type="hidden" id="hrpfAssignPositionKey">
       <input type="date" id="hrpfAssignPositionDate" class="border p-1.5 rounded text-xs" title="Ngày hiệu lực (mặc định hôm nay)">
       <input id="hrpfAssignPositionNote" placeholder="Ghi chú (VD số QĐ bổ nhiệm)" class="border p-1.5 rounded text-xs flex-1 min-w-[10rem]">
+      <input type="file" id="hrpfAssignPositionFile" accept=".pdf,.docx,.jpg,.jpeg,.png" title="Quyết định đính kèm (tuỳ chọn)" class="border p-1 bg-white rounded text-[11px]">
       <button type="button" data-op="confirmHrpfAssignPosition" class="px-2.5 py-1.5 rounded text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700">🏷️ Gán/Đổi Chức Vụ</button>
     </div>
   </div>`;

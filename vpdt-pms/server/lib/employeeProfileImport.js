@@ -12,6 +12,7 @@
 const ExcelJS = require('exceljs');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { sanitizeRowForFormulaInjection } = require('./adminExport');
 
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 
@@ -225,16 +226,20 @@ async function buildExportWorkbook(profiles, users, hrProcesses) {
     { header: 'Cập Nhật Lần Cuối', key: 'updatedAt', width: 20 }
   ];
   styleHeaderRow(sheet.getRow(1));
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hàm này tự gọi sheet.addRow() trực tiếp, không đi qua
+  // buildGenericWorkbook() (lib/adminExport.js) nên KHÔNG có luật chống Excel Formula Injection — nhiều
+  // trường ở đây do CHÍNH NHÂN VIÊN/HR tự nhập (fullName/dept/jobTitle/address/...), ai đó đặt
+  // "=HYPERLINK(...)" là công thức chạy ngay khi HR mở file xuất. Bọc qua sanitizeRowForFormulaInjection().
   for (const p of profiles || []) {
     const idn = identitySnapshot(p, usersByUsername, processesById);
-    sheet.addRow({
+    sheet.addRow(sanitizeRowForFormulaInjection({
       employeeCode: p.employeeCode, fullName: idn.fullName, dept: idn.dept, jobTitle: idn.jobTitle,
       username: p.username || '', statusLabel: STATUS_LABELS[p.status] || p.status,
       dateOfBirth: p.dateOfBirth || '', gender: p.gender || '', nationalId: p.nationalId || '',
       permanentAddress: p.permanentAddress || '', currentAddress: p.currentAddress || '',
       personalEmail: p.personalEmail || '', emergencyContactPhone: p.emergencyContactPhone || '',
       socialInsuranceNo: p.socialInsuranceNo || '', taxCode: p.taxCode || '', updatedAt: p.updatedAt || ''
-    });
+    }));
   }
   return wb;
 }

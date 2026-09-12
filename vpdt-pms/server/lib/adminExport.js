@@ -125,4 +125,9 @@ async function parseUsersImportXlsx(buffer) {
   return rows;
 }
 
-module.exports = { buildGenericWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS };
+// excelFormulaGuard/sanitizeRowForFormulaInjection export thêm ở đợt audit chuyên sâu lần 2 — trước đây
+// CHỈ buildGenericWorkbook() (dùng nội bộ file này) áp dụng được luật chống Excel Formula Injection ở
+// trên; các hàm dựng workbook RIÊNG của module khác (lib/employeeProfileImport.js, lib/vppExport.js) tự
+// gọi sheet.addRow() trực tiếp, không đi qua buildGenericWorkbook() nên KHÔNG được bảo vệ — export ra để
+// những nơi đó gọi lại đúng 1 luật chung thay vì viết trùng.
+module.exports = { buildGenericWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection };

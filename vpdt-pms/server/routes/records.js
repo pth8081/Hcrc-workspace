@@ -16,7 +16,7 @@ const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../l
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
-const { sanitizeInternalPostCommentsForUser, canViewInternalPost } = require('../lib/recordViewScope');
+const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle } = require('../lib/recordViewScope');
 router.use(requireAuth, blockIfMustChangePassword);
 
 // requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện tại từ DB (kể cả trạng thái active) và gắn
@@ -2453,6 +2453,14 @@ router.post('/itSupportTickets/:id/update-status', async (req, res) => {
           const linkedItem = await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
             recordActions.applyItTicketCompletionToHrProcessTask(freshUser, item, result, users));
           await syncEmployeeProfileOnHrCompletion(linkedItem, `itSupportTickets/${itemId}/update-status`);
+          // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: nhánh ghi ngược này thiếu 2 lượt đồng bộ mà
+          // complete-task/skip-task ĐỀU gọi sau khi task cuối cùng hoàn tất quy trình — nếu chính task
+          // nhãn IT (VD "Thu hồi thiết bị + khoá tài khoản") là task BẮT BUỘC CUỐI CÙNG khiến Offboarding
+          // tự chuyển COMPLETED, thì trước đây hợp đồng lao động KHÔNG tự đóng và tài khoản người dùng
+          // KHÔNG tự khoá khi IT xác nhận qua đường ticket này (chỉ hoạt động đúng khi HR tự bấm "Hoàn
+          // thành" trực tiếp trên task).
+          await syncLaborContractOnHrProcessCompletion(linkedItem, `itSupportTickets/${itemId}/update-status`);
+          await syncUserAccountOnOffboardingCompletion(linkedItem, `itSupportTickets/${itemId}/update-status`);
         } catch (linkErr) {
           console.error(`itSupportTickets/${itemId}/update-status: lỗi ghi ngược hồ sơ ${linkedCollection}/${result.sourceId}:`, linkErr.message);
         }
@@ -2683,11 +2691,17 @@ async function syncLeaveBalanceOnOnboardingCompletion(hrProcessItem, routeLabel)
   const last = (hrProcessItem.history || [])[hrProcessItem.history.length - 1];
   if (!last || last.action !== 'COMPLETED') return;
   try {
+    // BUG THẬT phát hiện ở đợt audit chuyên sâu lần 2: leaveBalances là collection dbo.Records
+    // (MIGRATED_COLLECTIONS, xem lib/recordStore.js), KHÔNG PHẢI dbo.AppData — dòng cũ gọi
+    // withLockedAppDataValue('leaveBalances', ...) đọc/ghi nhầm bảng dbo.AppData (key không tồn tại ở
+    // đó), khiến hàm này LUÔN ném lỗi bị catch âm thầm ở dưới — nhân viên mới hoàn tất Onboarding
+    // KHÔNG BAO GIỜ được tự tạo LeaveBalance năm hiện tại. Sửa đúng khuôn POST /leaveRequests/:id/approve
+    // ở trên (getAllForCollection() đọc + createForCollection() chỉ khi thật sự có bản ghi MỚI cần tạo —
+    // ensureLeaveBalanceForYear() trả created=null nếu năm đó nhân viên đã có sẵn LeaveBalance).
     const year = new Date().getFullYear();
-    await withLockedAppDataValue('leaveBalances', (list) => {
-      const { list: updated } = attendance.ensureLeaveBalanceForYear(list, hrProcessItem.employeeCode, hrProcessItem.startDate, year);
-      return updated;
-    });
+    const balanceList = await getAllForCollection('leaveBalances');
+    const { created } = attendance.ensureLeaveBalanceForYear(balanceList, hrProcessItem.employeeCode, hrProcessItem.startDate, year);
+    if (created) await createForCollection('leaveBalances', () => created);
   } catch (err) {
     console.error(`${routeLabel}: lỗi tạo Phép Năm khi Onboarding hoàn tất:`, err.message);
   }
@@ -2773,13 +2787,21 @@ async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel)
     await withLockedAppDataValue('users', (list) => {
       let changed = false;
       const updated = (list || []).map(u => {
-        if (u.active !== false && u.managerUsername === hrProcessItem.employeeUsername) {
+        // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: bulk reassign trước đây KHÔNG loại trừ CHÍNH người kế
+        // nhiệm — nếu người kế nhiệm từng là direct report của người sắp nghỉ, họ bị gán managerUsername
+        // = CHÍNH HỌ (vòng lặp quản lý 1 bước), và hàm này cũng chưa từng gọi assertNoManagerCycle() để
+        // dò vòng lặp phức tạp hơn sau khi đổi hàng loạt — khớp đúng cách lib/orgChart.js đã dùng hàm đó
+        // sau applyManagerUsernameUpdates(). Loại trừ successor khỏi diện bị đổi managerUsername + xác
+        // thực lại TOÀN BỘ danh sách sau khi đổi.
+        if (u.active !== false && u.username !== hrProcessItem.successorUsername && u.managerUsername === hrProcessItem.employeeUsername) {
           changed = true;
           return { ...u, managerUsername: hrProcessItem.successorUsername };
         }
         return u;
       });
-      return changed ? updated : list;
+      if (!changed) return list;
+      assertNoManagerCycle(updated);
+      return updated;
     });
   } catch (err) {
     console.error(`${routeLabel}: lỗi chuyển giao Quản Lý Trực Tiếp sang người kế nhiệm:`, err.message);

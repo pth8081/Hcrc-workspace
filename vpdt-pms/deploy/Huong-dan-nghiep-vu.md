@@ -811,10 +811,16 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
 - **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không bắt
   buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh mục
   "🔑 Tài khoản / Đăng nhập", mục 4.2) để đội IT xử lý theo đúng quy trình sẵn
-  có. **IT vẫn tự tay tạo/khoá email + tài khoản AD hoàn toàn NGOÀI hệ thống
-  này** — khi IT đánh dấu ticket "Hoàn thành" kèm ghi chú, hệ thống CHỈ ghi
-  lại đúng việc đã sinh ra ticket đó chuyển "Hoàn thành" — **không có bất kỳ
-  thao tác tự động nào tạo mới/khoá tài khoản `DB.users`**.
+  có. **IT vẫn tự tay tạo email + tài khoản AD hoàn toàn NGOÀI hệ thống
+  này** — hệ thống KHÔNG BAO GIỜ tự động TẠO MỚI tài khoản `DB.users` qua bất
+  kỳ đường nào. Khi IT đánh dấu ticket "Hoàn thành" kèm ghi chú, hệ thống ghi
+  lại đúng việc đã sinh ra ticket đó chuyển "Hoàn thành", và (từ v17.6, khớp
+  đúng những gì xảy ra khi HR tự bấm "Hoàn thành" trực tiếp trên việc đó)
+  **cũng tự đóng hợp đồng lao động đang hiệu lực + khoá tài khoản đăng nhập
+  của nhân viên đó** nếu chính việc nhãn IT này là việc cuối cùng khiến
+  Offboarding đủ điều kiện hoàn tất — trước đó 2 hiệu ứng phụ này CHỈ chạy
+  đúng khi hoàn thành việc trực tiếp trên giao diện, bỏ sót nếu hoàn thành
+  qua xác nhận ticket IT.
 - **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang được
   giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm), gộp cả
   Onboarding lẫn Offboarding.
@@ -882,7 +888,10 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   **lịch sử thăng chức/điều chuyển**. Không cho gán lại đúng chức vụ hiện tại
   (tránh spam lịch sử); chặn nếu vị trí chọn chưa gắn đúng Phòng Ban chuẩn
   trong Cơ Cấu Tổ Chức (trừ các chức vụ không thuộc phòng ban nào, VD Tổng
-  Giám Đốc).
+  Giám Đốc). Có thể **đính kèm Quyết định** (tệp PDF/Word/ảnh, tuỳ chọn) ngay
+  lúc gán/đổi — hiển thị lại kèm liên kết tải ở từng dòng lịch sử chức vụ và ở
+  khối "Lịch Sử Nhân Sự" gộp bên dưới, chỉ chính chủ hồ sơ/HR quản lý hồ
+  sơ/admin xem/tải được (v17.6).
   - **Nếu hồ sơ đã liên kết tài khoản VPDT, hệ thống TỰ ĐỒNG BỘ ghi đè luôn
     Phòng Ban + Chức Danh của tài khoản đó** theo chức vụ vừa gán (đã xác
     nhận với người dùng, có ảnh hưởng tới phân quyền/hiển thị theo phòng ban
@@ -954,7 +963,11 @@ xem hợp đồng của chính mình ở đợt này.
   cũ/cộng tác viên chưa có hồ sơ trong hệ thống.
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
   hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
-  hạn số lần, giữ nguyên lịch sử.
+  hạn số lần, giữ nguyên lịch sử. Có thể **đính kèm Quyết định** (tệp
+  PDF/Word/ảnh, tuỳ chọn) ngay khi thêm thay đổi — hiển thị lại kèm liên kết
+  tải ở từng dòng Phụ Lục và ở khối "Lịch Sử Nhân Sự" gộp (mục 4.5.3), giúp
+  tra soát có văn bản quyết định gốc đi kèm mỗi lần tăng lương/đổi vị trí giữa
+  kỳ hợp đồng (v17.6).
 - **Sửa tay trực tiếp trên hợp đồng** (loại HĐ, ngày bắt đầu/hết hạn, lương cơ
   bản, phòng ban, tệp đính kèm) giờ cũng **tự ghi 1 dòng lịch sử** (giá trị cũ
   → mới từng trường thực sự đổi, người sửa, thời điểm) — trước đây chỉ các
@@ -1110,6 +1123,22 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   nghỉ hiện thị tham khảo ngay trên dòng công việc đó — kế toán tự thêm vào
   phiếu lương kỳ cuối của nhân viên (dòng "Thưởng khác") nếu công ty quyết
   định chi trả, hệ thống không tự động ghi thẳng vào phiếu lương.
+- **Nhân viên nghỉ việc GIỮA kỳ lương** (v17.6): trước đây "Tính Lương" chỉ
+  lấy nhân viên đang "Đang làm việc" — ai hoàn tất Offboarding TRƯỚC khi kế
+  toán bấm "Tính Lương" của kỳ đó bị bỏ sót hoàn toàn, không có phiếu lương
+  nào dù đã làm việc một phần kỳ. Từ nay hệ thống VẪN đưa những nhân viên này
+  vào tính (dò theo ngày nghỉ việc cuối cùng của quy trình Offboarding đã
+  hoàn tất, nằm trong khoảng kỳ đang tính) — phiếu lương sinh ra có ghi chú rõ
+  ngày nghỉ việc ở dòng Lương cơ bản. **Lưu ý quan trọng**: hệ thống KHÔNG tự
+  trừ tương ứng số ngày không làm việc sau khi nghỉ (vẫn tính đủ 1 tháng lương
+  cơ bản theo hợp đồng) — kế toán BẮT BUỘC tự rà soát và dùng "Điều chỉnh dòng
+  lương" để trừ đúng phần chưa làm việc trước khi duyệt.
+- **Tính lại 1 kỳ KHÔNG còn xoá mất phụ cấp/thưởng/tạm ứng/phạt đã nhập tay
+  cho người khác** (v17.6): trước đây bấm "Tính Lương" lại (VD chỉ để bổ sung
+  1 nhân viên mới sót/sửa lỗi chấm công của 1 người) xoá HẲN mọi phiếu lương
+  cũ của kỳ rồi dựng lại từ đầu — mất luôn các dòng "Điều chỉnh dòng lương" đã
+  nhập tay cho TẤT CẢ nhân viên khác trong kỳ đó. Từ nay các dòng điều chỉnh
+  tay được giữ lại và gộp vào phiếu lương mới tính cho đúng người đó.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có danh mục
   thành phần lương admin tự thêm/bớt được (danh mục 17 mã hiện cố định trong
   code, sửa được nhanh khi có yêu cầu thật); chưa tự tính phụ cấp ca đêm/thưởng

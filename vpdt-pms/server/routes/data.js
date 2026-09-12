@@ -185,7 +185,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // Lương, xem lib/payroll.js) — sửa qua route RIÊNG PUT /api/payroll/rate-config (cho phép cả
   // hrPayrollManage, không chỉ admin), route này chỉ còn là đường lùi ghi thô admin-only, chặn user
   // thường tự đổi % bảo hiểm/thuế để lương tính sai.
-  'payrollRateConfig'
+  'payrollRateConfig',
+  // diskSpaceMonitorState: PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2 — state nội bộ do
+  // jobs/diskSpaceMonitor.js tự quản lý (thời điểm cảnh báo hết dung lượng đĩa gần nhất), không có màn
+  // hình nào cần client ghi tay — trước đây bất kỳ ai đã đăng nhập cũng ghi được để ỉm/spam cảnh báo.
+  'diskSpaceMonitorState'
 ]);
 
 // Các collection KHÔNG phải admin-only nhưng cũng KHÔNG mở cho mọi tài khoản đã đăng nhập — mỗi key ở
@@ -812,6 +816,14 @@ router.get('/:key', async (req, res) => {
 router.post('/:key', async (req, res) => {
   const { key } = req.params;
   if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
+  // employeeProfiles: PHÁT HIỆN NGHIÊM TRỌNG ở đợt audit chuyên sâu lần 2 — route generic này hoàn
+  // toàn KHÔNG có gate quyền cho key này (không nằm trong ADMIN_ONLY_KEYS lẫn NON_ADMIN_GATED_KEYS),
+  // trong khi GET đã chặn hẳn ở dòng ~800 (cùng lý do). Bất kỳ ai đã đăng nhập gọi thẳng route này đều
+  // ghi đè/xoá trắng được TOÀN BỘ hồ sơ nhân sự thật (CCCD/tài khoản ngân hàng/BHXH/người phụ thuộc)
+  // — chặn hẳn, bắt buộc đi qua `/api/hr-profile/*` (đã validate cấu trúc + quyền theo vai trò).
+  if (key === 'employeeProfiles') {
+    return res.status(403).json({ error: 'Vui lòng dùng /api/hr-profile/* để ghi Hồ Sơ Nhân Sự (có kiểm tra quyền theo vai trò)' });
+  }
 
   let value = req.body;
   if (value === undefined) return res.status(400).json({ error: 'Thiếu dữ liệu (body) cần lưu' });

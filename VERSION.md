@@ -1,8 +1,209 @@
 # Phiên bản hiện tại
 
-**17.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.6 (2026-09-12): Đợt rà soát chuyên sâu LẦN 2 (8 agent song song) — vá toàn bộ phát hiện + tính năng đính kèm Quyết định lương/chức vụ
+
+Tiếp nối v17.5: sau khi vá xong đợt 1, chạy LẠI 1 đợt rà soát chuyên sâu thứ 2
+(8 agent song song, vừa xác minh lại các bản vá v17.5 còn hiệu lực vừa săn lỗi
+mới trong các cụm module được phân công riêng), cộng thêm 1 tính năng mới do
+người dùng yêu cầu (đính kèm văn bản "Quyết định" khi thay đổi lương/chức vụ
++ rà soát ô chọn chức danh). Toàn bộ ~29 phát hiện đã xác nhận bằng đọc code
+trực tiếp đều được vá trong đợt này, xếp theo mức độ nghiêm trọng:
+
+**Nghiêm trọng:**
+- `lib/fileAuthz.js` + `lib/createValidation.js`: **giả mạo customData chiếm
+  quyền xem file người khác**. `findOwningRecord()` trước đây quét MỖI
+  collection bằng 1 `.find()` gộp chung field cố định + `customData` theo thứ
+  tự cố định (docs trước, rồi submissions, contracts...) — `customDataHasFileUrl()`
+  chấp nhận BẤT KỲ key nào trong `customData` có `.fileUrl` khớp, không đối
+  chiếu với field bổ sung THẬT SỰ đã cấu hình cho module đó (Quản Trị > Biểu
+  Mẫu). Kẻ tấn công có quyền tạo ở 1 module bất kỳ (VD `docs`, quét trước
+  nhất) có thể nhét `customData: {tênBịaĐặt: {fileUrl: "<file thật của nạn
+  nhân>"}}` — bản ghi giả "thắng" trước bản ghi thật sở hữu file đó, cấp
+  quyền xem/tải file của người khác dù bị giới hạn phòng ban/module. Vá 2
+  lớp: (1) `validateRequiredCustomData()` giờ **whitelist** — xoá thẳng mọi
+  key `customData` không khớp field đã cấu hình cho module, và xác nhận field
+  kiểu "Tải tệp"/"Tải nhiều tệp" đúng khuôn `/uploads/...`
+  (`assertUploadedFileUrl`/`assertUploadedFileUrlList`); (2) `findOwningRecord()`
+  đổi sang **2 lượt quét tách riêng** — lượt 1 CHỈ field cố định trên TOÀN BỘ
+  20 collection (thứ tự không còn ý nghĩa an ninh, 1 file chỉ thuộc ĐÚNG 1
+  bản ghi thật qua field cố định), lượt 2 mới xét `customData`, chỉ khi lượt
+  1 không khớp đâu — bản ghi thật LUÔN thắng bản ghi giả mạo. Còn hở 1 kịch
+  bản hẹp hơn nhiều (tấn công vừa có field file thật vừa đoán đúng fileUrl
+  của người khác cũng chỉ tham chiếu qua `customData`) — đóng triệt để cần
+  sổ ghi nhận "ai tải file nào" ngay tại `/api/upload`, chưa làm ở đợt này.
+- `routes/data.js`: `POST /api/data/employeeProfiles` (route ghi generic)
+  hoàn toàn KHÔNG có gate quyền — bất kỳ ai đã đăng nhập gọi thẳng route này
+  ghi đè/xoá trắng được TOÀN BỘ Hồ Sơ Nhân Sự (CCCD/tài khoản ngân hàng/BHXH/
+  người phụ thuộc). Chặn hẳn, bắt buộc đi qua `/api/hr-profile/*` (đã kiểm
+  cấu trúc + quyền theo vai trò).
+- `lib/recordActions.js::addHrProcessAttachment()`: fileUrl đính kèm quy
+  trình Onboarding/Offboarding chỉ trim+cắt độ dài, KHÔNG xác nhận khuôn
+  `/uploads/...` như mọi field file khác — cho phép scheme `javascript:`
+  (stored XSS, `module-hrlifecycle.js` render lại đường dẫn không qua
+  `escapeHtml()`). Vá cả 2 lớp: `assertUploadedFileUrl()` ở nguồn + bọc
+  `escapeHtml()` quanh `href` ở client (phòng thủ theo chiều sâu cho dữ liệu
+  cũ).
+- `lib/workflowEngine.js`: Duyệt/Từ chối ngân sách (`budgetEntries`) không hề
+  kiểm tra kỳ ngân sách đã đóng sổ — khác `updateBudgetEntryDraft()`/
+  `submitBudgetEntry()` đều đã chặn. Thêm hook `blockApproveIf` (đã dùng sẵn
+  cho `itPriceApprovals`) tra `isBudgetPeriodClosed()`.
+- `lib/employeeProfileImport.js` + `lib/vppExport.js`: 2 hàm dựng workbook
+  Excel tự gọi `sheet.addRow()` trực tiếp, không qua `buildGenericWorkbook()`
+  (lib/adminExport.js) nên thiếu luật chống Excel Formula Injection đã vá ở
+  v17.5 — export thêm `sanitizeRowForFormulaInjection()` để 2 nơi này dùng
+  lại được.
+- `routes/records.js::syncLeaveBalanceOnOnboardingCompletion()`: gọi
+  `withLockedAppDataValue('leaveBalances', ...)` nhưng `leaveBalances` là
+  collection `dbo.Records` (đã migrate), KHÔNG PHẢI `dbo.AppData` — hàm LUÔN
+  ném lỗi bị `catch` âm thầm nuốt, nhân viên mới hoàn tất Onboarding KHÔNG
+  BAO GIỜ được tự tạo Phép Năm năm hiện tại. Sửa đúng khuôn
+  `getAllForCollection()`/`createForCollection()` (mirror
+  `POST /leaveRequests/:id/approve`).
+
+**Cao:**
+- `routes/records.js`: xác nhận "Hoàn thành" ticket Hỗ Trợ IT (liên kết từ 1
+  việc nhãn IT trong Onboarding/Offboarding) chỉ đồng bộ Hồ Sơ Nhân Sự — thiếu
+  2 lượt đồng bộ mà route "Hoàn thành trực tiếp" đã có: đóng Hợp Đồng Lao
+  Động + khoá tài khoản đăng nhập khi chính việc IT đó là việc CUỐI CÙNG
+  khiến Offboarding đủ điều kiện hoàn tất. Thêm đủ 2 lệnh gọi.
+- `lib/catalogRename.js`: đổi tên phòng ban/siêu thị/chức danh **không
+  cascade** sang: (1) hơn 10 map cấu hình duyệt theo bước/phòng ban trong
+  AppData (`budgetDeptWorkflows`/`paymentDeptWorkflows`/`carDeptWorkflows`/
+  `vppDeptWorkflows`/`contractManageDeptWorkflows`/`contractApprovalDeptWorkflows`/
+  `itPriceDeptWorkflows`/`officeBuyDeptWorkflows`/`officeFixDeptWorkflows`/
+  `operationStoreOpenEstimateDeptWorkflows`/`operationRepairEstimateDeptWorkflows`
+  + 2 map cũ không còn dùng) — cấu hình duyệt cũ "mồ côi" dưới tên cũ, không
+  ai duyệt được hồ sơ mới (mang tên mới) nữa; (2) `users[].perms.*` — cả
+  dạng mảng phẳng kết thúc bằng "Depts" (`viewApprovedDepts`/`viewDraftDepts`/
+  `uploadDepts`...) lẫn dạng `{all,depts:[...]}` (`contractCreate`/
+  `carCreate`/`submissionCreate`/`officeCreate`/`meetingBookScope`...); (3)
+  `orgChartVersions[].nodes[].departmentRef`/`.jobTitle` (mọi version, không
+  chỉ bản đang áp dụng); (4) `employeeProfiles.dept`/`.jobTitle` (AppData,
+  khác cơ chế `dbo.Records` của các collection khác — cascade riêng).
+- `lib/recordActions.js::editPaymentRequest()`: sửa `installments`/số tiền
+  khi đề nghị đang PENDING/NEED_INFO (đã có bước duyệt trước đó xong) không
+  đánh dấu `invalidated` các lượt "APPROVED" cũ/reset `currentStep` — người
+  duyệt bước sau vẫn duyệt tiếp trên số liệu MỚI dựa trên các bước TRƯỚC đã
+  duyệt số liệu CŨ. Khớp đúng khuôn `REQUEST_CHANGES`/`requestPaymentInfo()`.
+- `routes/meetingActions.js`: y hệt lỗi race condition carRegs reassign đã vá
+  ở v17.5 — đọc snapshot `allMeetings` TRƯỚC `withAppLock('meeting_room:...')`
+  rồi dùng LẠI snapshot cũ bên trong closure đã khoá, khiến khoá theo phòng
+  không có tác dụng chống race thật. Đọc lại collection BÊN TRONG closure.
+- `routes/workflow.js` + `lib/workflowEngine.js`: biển số xe (`assignedPlate`)
+  không trim nhất quán — `reassignCarDispatch()` trim, nhánh APPROVE (kể cả
+  khoá `car_plate:<biển số>`) không trim, khiến 2 request cùng 1 biển số thật
+  lệch khoảng trắng bị coi là 2 biển số khác nhau (lọt qua kiểm tra trùng +
+  mất tác dụng khoá race). Trim thống nhất ở cả 2 nơi.
+- `routes/records.js::syncManagerUsernameOnSuccessorAssigned()`: bulk gán
+  `managerUsername` sang người kế nhiệm không loại trừ CHÍNH người kế nhiệm
+  (self-loop nếu họ từng là direct report của người sắp nghỉ) và chưa từng
+  gọi `assertNoManagerCycle()`. Loại trừ successor khỏi diện bị đổi + xác
+  thực lại toàn bộ danh sách sau khi đổi.
+- `lib/payroll.js` + `routes/payroll.js`: (1) "Tính Lương" chỉ lấy nhân viên
+  "Đang làm việc" — ai hoàn tất Offboarding TRƯỚC khi tính lương của kỳ đó bị
+  bỏ sót hoàn toàn, không phiếu lương cho những ngày đã làm; bổ sung nhánh dò
+  Offboarding hoàn tất có `lastWorkingDate` rơi trong kỳ (payslip sinh ra có
+  ghi chú rõ để kế toán tự rà soát/điều chỉnh — KHÔNG tự bịa công thức trừ
+  lương tương ứng ngày nghỉ, đúng nguyên tắc "không tự tính công thức chưa có
+  nguồn dữ liệu xác nhận" của module này); (2) tính lại 1 kỳ XOÁ SẠCH mọi
+  dòng "Điều chỉnh dòng lương" đã nhập tay cho MỌI nhân viên khác trong kỳ đó
+  — giữ lại và gộp vào phiếu lương mới tính.
+- `lib/createValidation.js`: bổ sung công tay (HR) cho nhân viên đã hoàn tất
+  Offboarding bị chặn HẲN (kể cả ngày làm việc THẬT trước khi nghỉ) do
+  `resolveWorkModelForEmployeeCode()` chặn cứng `INACTIVE` (đúng ý cho máy
+  chấm công, quá tay cho HR bổ sung công cũ) — thêm nhánh dự phòng cho phép
+  khi `workDate <= lastWorkingDate` của Offboarding đã hoàn tất.
+
+**Trung bình:**
+- `lib/recordActions.js::normalizeForScan()`: bộ lọc từ khoá nhạy cảm chỉ
+  STRIP (xoá hẳn) ký tự không phải a-z0-9 — ký tự Cyrillic/Greek nhìn giống
+  hệt chữ Latin (VD Cyrillic "а" thay "a") bị xoá mất thay vì hiểu là chữ đó,
+  khiến chèn 1 ký tự như vậy vào giữa từ khoá né được bộ lọc dù mắt người đọc
+  không thấy khác biệt. Thêm bảng chuyển các ký tự Cyrillic/Greek hay bị lợi
+  dụng nhất về đúng chữ Latin trước khi strip.
+- `lib/catalogRename.js`: bổ sung `meetings.dept`/`hrProcesses.employeeDept`
+  vào `DEPT_FIELD_COLLECTIONS` (cùng dạng thiếu sót đã vá cho `paymentRequests`/
+  `laborContracts` ở v17.5).
+- `routes/systemLog.js` + `public/js/core.js`: **tự vá lại 1 hồi quy từ chính
+  v17.5** — whitelist `VALID_LOG_MODULES` thiếu `OPERATION_ORDER`/
+  `OPERATION_STORE_OPEN`/`OPERATION_REPAIR` (module Vận Hành dùng đúng 3 token
+  này, không dùng chung `OPERATION`), khiến MỌI log Vận Hành bị 400 (mất âm
+  thầm — log gọi fire-and-forget). Đồng thời 2 chỗ ở client gọi thẳng
+  `moduleKey.toUpperCase()` (`DOCS`/`CARREGS`/`OFFICEREQS`/`SUBMISSIONS`) —
+  không khớp token số ít trong whitelist — cũng bị mất log cho "Yêu Cầu Bổ
+  Sung"/"Sửa & Gửi Lại sau Bổ Sung". Thêm 3 token thiếu + hàm `toLogModuleToken()`
+  ánh xạ đúng thay vì `.toUpperCase()` thô.
+
+**Thấp:**
+- `routes/trainingRoster.js`: 2 route (tải mẫu Excel/đọc file xem trước danh
+  sách học viên) chỉ có `requireAuth` — không phải lỗ hổng lộ dữ liệu thật
+  (file mẫu rỗng, bước xác nhận thêm thật đã tự kiểm tra lại), nhưng thiếu
+  nhất quán phòng thủ theo chiều sâu. Thêm gate `trainingManage`/admin.
+- `routes/checklist.js::POST /templates/:id/clone`: chú thích route ghi rõ
+  "từ 1 template ACTIVE" nhưng code không kiểm tra — nhân bản được cả từ
+  DRAFT/ARCHIVED. Thêm đúng kiểm tra.
+- `public/js/module-vanhanh.js`: 1 inline `style="..."` động còn sót (cột
+  thụt lề dòng Ước Tính) chưa migrate sang `data-style`/`applyDataStyles()` —
+  bị CSP `styleSrc` (không có `unsafe-inline`) chặn âm thầm. Chuyển sang
+  `data-style`.
+
+**Tính năng mới — đính kèm "Quyết định" cho thay đổi lương/chức vụ** (theo
+yêu cầu người dùng, kèm rà soát 2 câu hỏi liên quan):
+- **Hợp Đồng Lao Động** (`lib/laborContract.js::addAmendment()`): mỗi lần
+  "Bổ Sung Thay Đổi" (Phụ Lục — tăng lương, đổi vị trí...) có thể đính kèm 1
+  tệp "Quyết định" (PDF/Word/ảnh, tuỳ chọn) — validate khuôn `/uploads/...`,
+  hiển thị lại kèm link tải ở từng dòng Phụ Lục.
+- **Hồ Sơ Nhân Sự** (`lib/employeeProfile.js::applyPositionAssignment()`):
+  mỗi lần "Gán/Đổi Chức Vụ" cũng đính kèm được Quyết định tương tự, lưu vào
+  `positionHistory[]`.
+- **"Lịch Sử Nhân Sự"** (khối gộp chức vụ + hợp đồng): hiển thị thêm link
+  tải Quyết định ở cả 2 loại sự kiện.
+- **`lib/fileAuthz.js`**: mở rộng `findOwningRecord()` phủ thêm
+  `employeeProfiles.positionHistory[].fileUrl` (collection AppData, đọc qua
+  `getAppDataValue()` khác 20 collection còn lại) — gate bằng
+  `canViewFullProfile()` (chính chủ/`hrProfileManage`/admin), tránh lỗ hổng
+  FAIL-OPEN mới phát sinh từ chính tính năng này.
+- **Rà soát thêm (theo yêu cầu)**: (1) trường lương cơ bản Hợp Đồng Lao Động
+  đã dùng đúng khuôn `money-input` như các module chi phí khác — không phải
+  lỗ hổng, không cần sửa; (2) ô chọn Chức Danh khi tạo Onboarding
+  (`module-hrlifecycle.js`) nâng cấp từ `<select>` sang ô tìm-kiếm-gõ-chọn
+  "sdd*" bắt buộc dùng cho mọi ô mới (CLAUDE.md); (3) modal Thêm/Sửa node Cơ
+  Cấu Tổ Chức (`module-orgchart.js`) trước đây gộp chung gợi ý chức danh Văn
+  Phòng + Siêu Thị bất kể "Vị Trí Làm Việc" (posType) đã chọn — lọc đúng theo
+  posType, cập nhật lại ngay khi đổi lựa chọn.
+
+**Test**: cập nhật `tests/test-form-reset-file-remove.js` (ô Chức Danh
+Onboarding đổi sang widget "sdd*" — sửa lại theo `_sddItems`/`page.fill()`
+thay vì `<select>.options`/`page.selectOption()`, không đổi ý nghĩa kịch
+bản). Full regression suite (`tests/test-*.js`, 100+ file) chạy lại toàn bộ —
+không phát sinh regression mới; các thất bại còn sót đều xác nhận là PRE-
+EXISTING trên baseline v17.5 (đối chiếu qua `git stash`): 2 kịch bản
+`test-approval-hub.js` (operationOrderReceipt) và vài kịch bản cần kết nối
+SQL Server thật (`test-audit-fixes-batch1.js`/`test-audit-round2-cluster1.js`)
+mà sandbox này không có sẵn — không liên quan tới bất kỳ thay đổi nào trong
+đợt vá này.
+
+**Đã biết, không phải phần vá lần này** (agent audit tự đánh giá "không khẩn
+cấp", ghi nhận để không bỏ sót khỏi hồ sơ):
+- Bộ lọc từ khoá nhạy cảm vẫn có thể khớp nhầm ranh giới từ (VD "tự túc" khớp
+  "tự tử") — vấn đề word-boundary chung của cách so khớp chuỗi con hiện tại,
+  không phải lỗi riêng đợt này.
+- Chưa có luồng "hoàn tác"/kích hoạt lại nếu Offboarding bị hoàn tất nhầm.
+- Số tiền quy đổi phép chưa nghỉ (tham khảo, Offboarding) có thể đổi theo thứ
+  tự hoàn thành task — chỉ là số tham khảo hiển thị, không phải giao dịch
+  thật nên không ảnh hưởng số liệu đã chốt.
+- Đóng triệt để lỗ hổng customData spoofing (Nghiêm trọng #1) cho kịch bản
+  hẹp còn lại (biết trước fileUrl thật + có field file hợp lệ) cần sổ ghi
+  nhận "ai tải file nào" ở `/api/upload` — việc lớn hơn, để lại làm riêng.
+
+**Deploy-impact**: chỉ đổi logic thuần (`lib/`/`routes/`) + client JS/HTML
+(`public/`) + 1 file docs nghiệp vụ (`deploy/Huong-dan-nghiep-vu.md`) — KHÔNG
+đổi `schema.sql`/`.env.example`/`dependencies`. Chỉ cần copy code +
+`pm2 restart`, không cần thao tác migrate dữ liệu nào thêm.
 
 ## v17.5 (2026-09-11): Đợt rà soát bảo mật + nghiệp vụ chuyên sâu — vá 12 lỗ hổng/lỗi xác nhận được
 

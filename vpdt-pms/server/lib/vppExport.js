@@ -5,6 +5,7 @@
 // Chỉ tính đăng ký ĐÃ DUYỆT (APPROVED) — khớp đúng nghiệp vụ "kết thúc phê duyệt thì thông tin mới vào
 // file tổng hợp".
 const ExcelJS = require('exceljs');
+const { sanitizeRowForFormulaInjection } = require('./adminExport');
 
 const VND = (n) => Number(n || 0).toLocaleString('vi-VN');
 
@@ -47,11 +48,14 @@ async function buildSummaryWorkbook(period, registrations) {
       stt++;
       const total = (Number(it.price) || 0) * (Number(it.qty) || 0);
       grandTotal += total;
-      sheet.addRow({
+      // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: 2 hàm dựng workbook ở file này tự gọi sheet.addRow()
+      // trực tiếp, không đi qua buildGenericWorkbook() (lib/adminExport.js) nên KHÔNG có luật chống Excel
+      // Formula Injection — dept/creator/code/name/unit đều do NGƯỜI DÙNG tự nhập khi tạo đăng ký VPP.
+      sheet.addRow(sanitizeRowForFormulaInjection({
         stt, dept: r.dept, creator: r.creatorName, code: it.code || '', name: it.name,
         unit: it.unit || '', qty: it.qty, price: it.price != null ? VND(it.price) : '',
         total: it.price != null ? VND(total) : ''
-      });
+      }));
     });
   });
 
@@ -111,7 +115,7 @@ async function buildByDeptWorkbook(period, registrations) {
     grandTotal += total;
     rowData.totalQty = entry.total;
     rowData.total = entry.price != null ? VND(total) : '';
-    sheet.addRow(rowData);
+    sheet.addRow(sanitizeRowForFormulaInjection(rowData));
   });
 
   if (!sortedNames.length) {

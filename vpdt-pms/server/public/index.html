@@ -7673,7 +7673,8 @@
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
-              <select id="hrpOnbJobTitle" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+              <input id="hrpOnbJobTitle" data-sdd-list="hrpOnbJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <div id="hrpOnbJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label id="hrpOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu chưa cấp)</label>
@@ -8731,7 +8732,7 @@
           </label>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí Làm Việc (tuỳ chọn)</label>
-            <select id="orgChartNodePosTypeSelect" class="w-full border p-1.5 rounded text-sm bg-white">
+            <select id="orgChartNodePosTypeSelect" data-op-change="ocOnNodePosTypeChange" class="w-full border p-1.5 rounded text-sm bg-white">
               <option value="">-- Chưa gán --</option>
               <option value="HO">🏢 Văn phòng (HO)</option>
               <option value="STORE">🏪 Siêu Thị</option>
