@@ -1,8 +1,31 @@
 # Phiên bản hiện tại
 
-**19.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.3 (2026-09-12): Bước 8g — SQL-filter officeReqs trong GET /api/data
+
+Tiếp Bước 8f, `officeReqs` cùng khuôn `carRegs` (4 nhánh: admin, chính người TẠO — `Creator` — nhưng
+officeReqs KHÔNG `forceOwnDept` nên 1 người có thể tạo hộ đề xuất cho phòng ban KHÁC phòng ban mình nếu
+`officeCreate` scope cho phép; `scopeAllows(officeView, dept)`: phòng ban mình + `officeView.all` +
+`officeView.depts[]`; đang là người duyệt theo `*DeptWorkflows`) — khác `carRegs` ở chỗ CÓ **2 bộ cấu
+hình duyệt riêng theo subType** (`officeBuyDeptWorkflows` cho Mua Bán, `officeFixDeptWorkflows` cho Sửa
+Chữa, xem `MODULE_CONFIGS.officeReqs.resolveWfConfig()` ở lib/workflowEngine.js).
+
+`routes/data.js`: thêm `computeOfficeReqsApproverDepts(user, data)` (quét CẢ 2 map cấu hình, có thể
+"thừa" nếu user chỉ duyệt 1 trong 2 loại ở 1 phòng ban — an toàn vì `filterOfficeReqsForUser()` vẫn lọc
+lại ĐÚNG theo subType thật của từng hồ sơ sau đó) + `loadOfficeReqsScoped(user, data)` (gộp {phòng ban
+mình} ∪ `officeView.depts[]` ∪ {phòng ban approver}, tải từng phòng ban + 1 lượt riêng theo `Creator`,
+gộp + khử trùng). `officeView.all`/admin vẫn tải company-wide như cũ.
+
+Thêm `tests/test-office-reqs-scope.js` (7/7 pass) — phủ đủ 4 nhánh, đặc biệt kịch bản "tạo hộ phòng ban
+khác" (khác `carRegs`'s `assignedDriverUsername` ở chỗ người tạo VẪN thấy thêm cả đề xuất phòng ban CHÍNH
+mình, không chỉ đề xuất đã tạo hộ — 2 nhánh cộng dồn, không thay thế nhau).
+
+**Còn lại (Bước 8 tiếp theo)**: `itPriceApprovals`/`vppRegistrations`/`budgetEntries` — mỗi collection
+cần nghiên cứu riêng; để sau `operationStoreOpenings`/`operationRepairs`/`docs`/`submissions`/
+`attendanceRecords` (cây quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
 
 ## v19.2 (2026-09-12): Bước 8f — SQL-filter carRegs trong GET /api/data (4 nhánh gộp thành tập phòng ban)
 

@@ -642,6 +642,47 @@ async function loadCarRegsScoped(user, data) {
   return [...byId.values()];
 }
 
+// Bước 8g — officeReqs: canViewOfficeReq() (lib/recordViewScope.js) cùng khuôn carRegs (4 nhánh: admin,
+// chính người TẠO — Creator, KHÔNG forceOwnDept nên có thể tạo hộ phòng ban khác, xem lib/createValidation.js
+// officeReqs; scopeAllows(officeView, dept): phòng ban mình + officeView.all + officeView.depts[]; đang
+// là người duyệt theo *DeptWorkflows) — chỉ khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
+// (officeBuyDeptWorkflows cho MUA_BAN, officeFixDeptWorkflows cho SUA_CHUA, xem
+// MODULE_CONFIGS.officeReqs.resolveWfConfig() ở lib/workflowEngine.js) — quét CẢ 2 map khi tính tập
+// phòng ban approver (có thể "thừa" nếu user chỉ duyệt 1 trong 2 loại ở 1 phòng ban, nhưng
+// filterOfficeReqsForUser() vẫn lọc lại ĐÚNG theo subType thật của từng hồ sơ sau đó, an toàn).
+function computeOfficeReqsApproverDepts(user, data) {
+  const depts = [];
+  for (const mapKey of ['officeBuyDeptWorkflows', 'officeFixDeptWorkflows']) {
+    for (const [dept, wfConfig] of Object.entries(data[mapKey] || {})) {
+      const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+      const isApproverHere = Object.values(approvers || {}).some(list =>
+        Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+      if (isApproverHere) depts.push(dept);
+    }
+  }
+  return depts;
+}
+async function loadOfficeReqsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.officeView?.all) {
+    return getAllForCollectionCached('officeReqs');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  if (Array.isArray(user?.perms?.officeView?.depts)) user.perms.officeView.depts.forEach(d => depts.add(d));
+  computeOfficeReqsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('officeReqs', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  // Creator: officeReqs KHÔNG forceOwnDept (có thể tạo hộ phòng ban khác nếu officeCreate scope cho
+  // phép) — item.dept lúc đó có thể KHÁC phòng ban thật của người tạo, cần 1 lượt riêng theo Creator.
+  const ownCreatedItems = await getForCollectionByColumnCached('officeReqs', 'Creator', user?.username);
+  for (const r of ownCreatedItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -701,11 +742,11 @@ router.get('/', async (req, res) => {
     // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
     // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
     // where.Dept ở SQL.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -719,6 +760,7 @@ router.get('/', async (req, res) => {
         ? getAllForCollectionCached('operationOrders')
         : getForCollectionByDeptCached('operationOrders', req.freshUser?.dept),
       loadCarRegsScoped(req.freshUser, data),
+      loadOfficeReqsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -731,6 +773,7 @@ router.get('/', async (req, res) => {
     data.checklistSubmissions = checklistSubmissionsResult;
     data.operationOrders = operationOrdersResult;
     data.carRegs = carRegsResult;
+    data.officeReqs = officeReqsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
