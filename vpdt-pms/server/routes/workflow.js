@@ -127,7 +127,16 @@ router.post('/:module/:id/:action', async (req, res) => {
     // createForCollectionSerialized() ở lib/createValidation.js cho lịch phòng họp lúc TẠO. Khoá thêm
     // bằng withAppLock() theo GIÁ TRỊ BIỂN SỐ đang gán (không phải theo Id phiếu) bọc quanh toàn bộ
     // đọc-kiểm tra-ghi để chặn đúng race này; chỉ cần khi có gán biển số mới (assignedPlate được gửi).
-    const newPlate = moduleKey === 'carRegs' ? extraFields?.assignedPlate : null;
+    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: reassignCarDispatch() (lib/recordActions.js) trim biển số
+    // trước khi so sánh/lưu/dựng khoá, nhánh APPROVE này trước đây KHÔNG trim — 2 yêu cầu cùng 1 biển số
+    // thật nhưng lệch khoảng trắng (VD " 51A-111.11" vs "51A-111.11") bị coi là 2 biển số KHÁC NHAU, vừa
+    // lọt qua findCarPlateConflict() (so sánh === thô, xem lib/workflowEngine.js), vừa dựng 2 khoá
+    // withAppLock() khác nhau nên mất tác dụng chống race. Trim ngay tại đây để khoá + applyWorkflowAction()
+    // dùng thống nhất 1 giá trị.
+    const newPlate = moduleKey === 'carRegs' ? String(extraFields?.assignedPlate || '').trim() || null : null;
+    if (moduleKey === 'carRegs' && extraFields && typeof extraFields.assignedPlate === 'string') {
+      extraFields.assignedPlate = extraFields.assignedPlate.trim();
+    }
     const runApprove = async () => {
       const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
       return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {

@@ -44,7 +44,7 @@
 
 const { HttpError } = require('./httpErrors');
 const { findActiveContractByEmployeeCode } = require('./laborContract');
-const { resolveWorkModelForEmployeeCode } = require('./attendance');
+const { resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile } = require('./attendance');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -150,10 +150,35 @@ function sumDetails(details, type) {
 function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   const contract = findActiveContractByEmployeeCode(appData.laborContracts, employeeCode);
   if (!contract || !contract.baseSalary) return { skipped: true, reason: 'Không có hợp đồng lao động đang hiệu lực kèm lương cơ bản' };
-  const workModelInfo = resolveWorkModelForEmployeeCode(employeeCode, appData);
+  let workModelInfo = resolveWorkModelForEmployeeCode(employeeCode, appData);
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: resolveWorkModelForEmployeeCode() CHẶN HẲN hồ sơ INACTIVE
+  // (đúng ý — chặn máy chấm công/tạo công tay cho người đã nghỉ, xem lib/attendance.js) — nhưng payroll
+  // dùng LẠI đúng hàm đó nên nhân viên hoàn tất Offboarding NGAY TRONG kỳ lương (nghỉ giữa tháng) bị BỎ
+  // SÓT HOÀN TOÀN, không có payslip nào dù đã làm việc 1 phần kỳ. Nhánh dự phòng CHỈ áp dụng riêng cho
+  // payroll (không đổi hành vi dùng chung của hàm trên): nếu có quy trình Offboarding ĐÃ HOÀN TẤT của
+  // đúng nhân viên này với lastWorkingDate rơi trong kỳ, vẫn coi là có mô hình chấm công để tính. LƯU Ý
+  // PHẠM VI: KHÔNG tự bịa công thức trừ lương tương ứng những ngày sau lastWorkingDate (đúng nguyên tắc
+  // "không tự tính công thức chưa có nguồn dữ liệu xác nhận" nêu ở đầu file) — kế toán rà soát payslip
+  // này và dùng "Điều chỉnh dòng lương" (applyAdjustPayslipDetail) để trừ đúng phần ngày không làm việc.
+  let offboardingLastWorkingDate = null;
+  if (!workModelInfo) {
+    const profile = (appData.employeeProfiles || []).find(p => p.employeeCode === employeeCode);
+    const offboarding = findCompletedOffboardingForProfile(profile, appData.hrProcesses);
+    if (offboarding) {
+      const { start: pStart, end: pEnd } = periodDateRange(period);
+      if (offboarding.lastWorkingDate >= pStart && offboarding.lastWorkingDate <= pEnd) {
+        offboardingLastWorkingDate = offboarding.lastWorkingDate;
+        workModelInfo = {
+          workModel: offboarding.employeePosType === 'STORE' ? 'SHIFT_BASED' : 'OFFICE_HOURS',
+          dept: offboarding.employeeDept || null, profile, user: null
+        };
+      }
+    }
+  }
   if (!workModelInfo) return { skipped: true, reason: 'Không xác định được mô hình chấm công (hồ sơ chưa liên kết tài khoản)' };
 
-  const { start, end } = periodDateRange(period);
+  const { start, end: periodEnd } = periodDateRange(period);
+  const end = offboardingLastWorkingDate && offboardingLastWorkingDate < periodEnd ? offboardingLastWorkingDate : periodEnd;
   const records = (appData.attendanceRecords || []).filter(r => r.employeeCode === employeeCode && r.workDate >= start && r.workDate <= end);
   const baseSalary = Number(contract.baseSalary);
   const standardDays = workModelInfo.workModel === 'SHIFT_BASED' ? Number(rateConfig.standardWorkDaysStore) || 26 : Number(rateConfig.standardWorkDaysHo) || 22;
@@ -164,7 +189,11 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   const unpaidDays = records.filter(r => ['LEAVE_UNPAID', 'LEAVE_PERSONAL'].includes(r.recordType)).length;
 
   const details = [];
-  addDetail(details, 'BASIC_SALARY', baseSalary, 'Theo hợp đồng lao động đang hiệu lực', false);
+  addDetail(details, 'BASIC_SALARY', baseSalary,
+    offboardingLastWorkingDate
+      ? `Theo hợp đồng lao động — nghỉ việc ngày ${offboardingLastWorkingDate} giữa kỳ, CHƯA trừ tương ứng số ngày không làm việc, kế toán cần rà soát + Điều chỉnh dòng lương`
+      : 'Theo hợp đồng lao động đang hiệu lực',
+    false);
 
   let ot150 = 0, ot200 = 0, ot300 = 0;
   for (const r of records) {
@@ -325,11 +354,26 @@ function applyAdjustPayslipDetail(payslip, payload, actorUsername) {
   return payslip;
 }
 
+// Gộp lại các dòng ĐIỀU CHỈNH TAY (isManualAdjustment=true, xem applyAdjustPayslipDetail()) từ payslip
+// CŨ vào payslip vừa tính lại tự động — PHÁT HIỆN ở đợt audit chuyên sâu lần 2: POST /periods/:id/calculate
+// (routes/payroll.js) xoá HẲN mọi payslip cũ của kỳ rồi dựng lại HOÀN TOÀN MỚI từ computeEmployeePayslip()
+// (chỉ có các dòng TỰ ĐỘNG isManualAdjustment=false) — kế toán cần tính lại CHỈ 1 người (VD thêm nhân
+// viên mới sót/sửa lỗi chấm công) buộc phải chạy lại CẢ KỲ, xoá sạch luôn phụ cấp/thưởng/tạm ứng/phạt đã
+// nhập tay cho MỌI nhân viên KHÁC trong kỳ đó — mất dữ liệu tài chính đã chốt mà không hề cảnh báo.
+function mergeManualAdjustmentsIntoPayslip(record, manualDetails) {
+  if (!manualDetails || !manualDetails.length) return record;
+  record.details = [...record.details, ...manualDetails];
+  record.grossIncome = Math.round(sumDetails(record.details, 'INCOME'));
+  record.totalDeduction = Math.round(sumDetails(record.details, 'DEDUCTION'));
+  record.netPay = record.grossIncome - record.totalDeduction;
+  return record;
+}
+
 module.exports = {
   PERIOD_STATUSES, PAYROLL_COMPONENTS, MANUAL_COMPONENT_CODES,
   defaultRateConfig, canManagePayroll, canApprovePayroll, canViewAllPayroll,
   computeTaxFromBrackets, periodDateRange, computeEmployeePayslip, defaultPayslip,
   assertValidNewPeriod, defaultPeriod,
   applySubmitForApproval, applyApprove, applyReject, applyFinalize, applyPublish, applyReopen,
-  assertValidDetailAdjustment, applyAdjustPayslipDetail
+  assertValidDetailAdjustment, applyAdjustPayslipDetail, mergeManualAdjustmentsIntoPayslip
 };

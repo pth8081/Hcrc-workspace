@@ -67,6 +67,13 @@ const SWAP_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
 function resolveWorkModelForEmployeeCode(employeeCode, { employeeProfiles, users, hrProcesses }) {
   const profile = (employeeProfiles || []).find(p => p.employeeCode === employeeCode);
   if (!profile) return null;
+  // profile.status: DRAFT (Onboarding chưa hoàn tất, vẫn cho phép — nhánh dự phòng qua hrProcesses bên
+  // dưới CHÍNH LÀ dành cho người mới chưa kịp liên kết tài khoản) / ACTIVE (đang làm việc) / ON_LEAVE
+  // (nghỉ dài hạn) / INACTIVE (ĐÃ NGHỈ VIỆC, xem lib/employeeProfile.js tự đặt khi Offboarding hoàn
+  // tất) — trước đây hàm này KHÔNG kiểm tra status, nên POST /api/attendance/clock-punch (máy chấm công
+  // vật lý) vẫn ghi nhận công/lương bình thường cho nhân viên ĐÃ NGHỈ VIỆC nếu mã chấm công cũ chưa kịp
+  // gỡ khỏi máy. Chỉ chặn đúng nhánh INACTIVE — DRAFT/ON_LEAVE không phải mục tiêu của lỗ hổng này.
+  if (profile.status === 'INACTIVE') return null;
   if (profile.username) {
     const user = (users || []).find(u => u.username === profile.username);
     if (user) {
@@ -83,6 +90,17 @@ function resolveWorkModelForEmployeeCode(employeeCode, { employeeProfiles, users
     }
   }
   return null;
+}
+
+// Tìm quy trình Offboarding ĐÃ HOÀN TẤT của 1 hồ sơ INACTIVE — nhánh dự phòng CÓ CHỦ ĐÍCH cho vài thao
+// tác hợp lệ giới hạn trước lastWorkingDate (bổ sung công tay ngày trước khi nghỉ, tính lương prorate
+// theo thời gian đã làm việc) — KHÔNG dùng để nới lỏng resolveWorkModelForEmployeeCode() mặc định ở
+// trên (hàm đó vẫn PHẢI chặn hẳn INACTIVE cho máy chấm công/tạo công tay ngày SAU khi nghỉ, xem chú
+// thích dòng 76). Trả về hrProcess (có employeePosType/employeeDept/lastWorkingDate) hoặc null.
+function findCompletedOffboardingForProfile(profile, hrProcesses) {
+  if (!profile || profile.status !== 'INACTIVE') return null;
+  return (hrProcesses || []).find(p => p.processType === 'OFFBOARDING' && p.status === 'COMPLETED' &&
+    p.employeeUsername === profile.username && p.lastWorkingDate) || null;
 }
 
 function isHolidayDate(dateStr, publicHolidays) {
@@ -480,7 +498,7 @@ function cancelPendingLeaveRequestsAfterOffboarding(leaveRequestList, employeeCo
 
 module.exports = {
   WORK_MODELS, ATTENDANCE_RECORD_TYPES, LEAVE_TYPES, LEAVE_STATUSES, ROSTER_STATUSES, SWAP_STATUSES,
-  resolveWorkModelForEmployeeCode, isHolidayDate, isWeekendDate,
+  resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile, isHolidayDate, isWeekendDate,
   defaultAttendanceRecord, applyClockPunch, assertValidManualAttendanceEdit, applyManualAttendanceEdit,
   computeAnnualLeaveDays, defaultLeaveBalance, ensureLeaveBalanceForYear, computeLeavePayoutInfo,
   assertValidLeaveRequest, defaultLeaveRequest, canApproveLeaveRequest,

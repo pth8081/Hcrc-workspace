@@ -11,6 +11,37 @@ mặc định cho mọi việc nữa. Vẫn giữ nguyên các quy tắc khác (
 fetch/log trước khi báo cáo, chạy full regression, báo deploy-impact rõ ràng,
 bump version + cập nhật VERSION.md mỗi lần merge).
 
+## Module mới → bắt buộc thêm vào Báo Cáo + Biểu Mẫu ngay trong cùng đợt merge
+
+Phát hiện từ đợt rà soát chuyên sâu (9/2026): nhiều module nghiệp vụ đã tồn
+tại lâu (Nhân Sự, Vận Hành...) nhưng chưa từng được thêm vào 2 màn dùng
+chung sau — để không lặp lại khoảng trống này, từ nay **bất kỳ module/module
+con MỚI nào có tạo hồ sơ (collection riêng)** phải kiểm tra & bổ sung ngay
+trong CÙNG đợt merge tạo module đó (không để dành "làm sau"):
+
+- **📊 Báo Cáo** (`public/js/module-baocaoquantri.js`, `REPORT_NAV_TREE` +
+  `REPORT_MODULE_CONFIGS`) — thêm 1 entry `getRecords(dept, from, to)` đọc
+  `DB.<collection>` (chuẩn `dept`/`createdAt`, xem 16+ entry đã có làm mẫu).
+  **Ngoại lệ phải cân nhắc kỹ**: nếu collection thuộc nhóm dữ liệu CỰC NHẠY
+  CẢM đã bị chặn hẳn khỏi `GET /api/data` chung (VD `employeeProfiles`/
+  `laborContracts`/`payslips`/`attendanceRecords` — xem `routes/data.js`),
+  KHÔNG được thêm theo khuôn `DB.<collection>` này (sẽ luôn rỗng phía client
+  và vô tình gợi ý sai hướng sửa) — cần thiết kế route thống kê riêng, gác
+  đúng quyền quản lý hiện có của module đó, rồi mới đưa vào Báo Cáo; nếu chưa
+  có thời gian làm đúng, nêu rõ với người dùng và xin xác nhận trước khi bỏ
+  qua ở đợt hiện tại thay vì tự ý bỏ qua.
+- **📋 Biểu Mẫu** (`public/js/core.js`, `CORE_FIELD_MANIFEST` + `FORM_TABS` +
+  `FORM_GROUPS`) — mọi form nhập tay THẬT (không phải bảng nhập động kiểu
+  câu hỏi/hạng mục tự thêm-bớt, xem ngoại lệ TRAINING_TEST/CHECKLIST/
+  CAREER_PATH đã áp dụng) phải có 1 entry liệt kê đúng field id DOM thật,
+  để admin tự đổi nhãn/bắt buộc không cần sửa code. `applyAllCoreFieldCustomizations()`
+  đã tự chạy 1 lần lúc đăng nhập — thêm entry vào 3 mảng trên là ĐỦ, không
+  cần gọi thêm hàm nào khác.
+
+Không bỏ qua bước này chỉ vì module mới nhỏ — cả 2 màn trên đều tồn tại lâu
+dài, việc bổ sung càng chậm càng dễ bị quên/tích tụ thành nợ kỹ thuật lớn
+(đợt rà soát vừa rồi phát hiện 8 module thiếu ở Báo Cáo cùng lúc).
+
 ## 3 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
 
 Có 3 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:

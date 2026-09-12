@@ -950,6 +950,51 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hacStEndTime', label: 'Giờ kết thúc', required: true },
     { id: 'hacStBreakMinutes', label: 'Nghỉ giữa ca (phút)', required: false },
     { id: 'hacStStandardHours', label: 'Số Giờ Chuẩn', required: true }
+  ],
+  // Gap-fill (rà soát "phần nào có form nhập cũng cho vào Biểu Mẫu") — 3 form còn thiếu, mỗi field id
+  // đối chiếu trực tiếp với DOM thật ở public/index.html (#hrpfCreateModal/#hrpAdjustDetailModal) và
+  // public/js/module-checklist.js (#checklistTemplateBuilderWrap, render tĩnh trong index.html, chỉ
+  // toggle .hidden — không dựng lại DOM mỗi lần mở, nên applyAllCoreFieldCustomizations() gọi 1 lần lúc
+  // đăng nhập là đủ, không cần thêm lời gọi riêng nào khác, đúng khuôn mọi coreKey khác ở trên).
+  // HR_PROFILE: "➕ Tạo Hồ Sơ Nhân Sự Mới" (Nhân Sự > Hồ Sơ Nhân Sự) — CHỈ phần nhập tay của HR/admin,
+  // KHÔNG đụng gì tới dữ liệu hồ sơ đã lưu (employeeProfiles vẫn bị chặn hẳn khỏi GET /api/data như cũ,
+  // Biểu Mẫu chỉ đổi NHÃN HIỂN THỊ + BẮT BUỘC của form, không phải nguồn dữ liệu).
+  HR_PROFILE: [
+    { id: 'hrpfCF_employeeCode', label: 'Mã Nhân Viên', required: true },
+    { id: 'hrpfCF_usernameInput', label: 'Liên Kết Tài Khoản VPDT', required: false },
+    { id: 'hrpfCF_positionInput', label: 'Chức Vụ Ban Đầu', required: false },
+    { id: 'hrpfCF_dateOfBirth', label: 'Ngày Sinh', required: false },
+    { id: 'hrpfCF_gender', label: 'Giới Tính', required: false },
+    { id: 'hrpfCF_nationalId', label: 'Số CCCD/CMND', required: false },
+    { id: 'hrpfCF_permanentAddress', label: 'Địa Chỉ Thường Trú', required: false },
+    { id: 'hrpfCF_currentAddress', label: 'Địa Chỉ Hiện Tại', required: false },
+    { id: 'hrpfCF_personalEmail', label: 'Email Cá Nhân', required: false },
+    { id: 'hrpfCF_emergencyContactName', label: 'Người Liên Hệ Khẩn Cấp', required: false },
+    { id: 'hrpfCF_emergencyContactPhone', label: 'SĐT Liên Hệ Khẩn Cấp', required: false },
+    { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false },
+    { id: 'hrpfCF_bankAccountNo', label: 'Số Tài Khoản Ngân Hàng', required: false },
+    { id: 'hrpfCF_bankName', label: 'Ngân Hàng', required: false },
+    { id: 'hrpfCF_socialInsuranceNo', label: 'Số Sổ BHXH', required: false },
+    { id: 'hrpfCF_taxCode', label: 'Mã Số Thuế TNCN', required: false }
+  ],
+  // HR_PAYROLL: "✏️ Điều Chỉnh Phiếu Lương" (Nhân Sự > Lương) — form nhập tay DUY NHẤT của module này
+  // (kỳ lương/phiếu lương bản thân là dữ liệu TÍNH TỰ ĐỘNG, không phải form nhập; payslips vẫn bị chặn
+  // hẳn khỏi GET /api/data như cũ, không liên quan gì tới thay đổi ở đây).
+  HR_PAYROLL: [
+    { id: 'hrpAdjComponent', label: 'Thành Phần', required: true },
+    { id: 'hrpAdjAmount', label: 'Số Tiền', required: true },
+    { id: 'hrpAdjNote', label: 'Ghi Chú', required: false }
+  ],
+  // CHECKLIST: "🛠️ Tạo Mẫu Checklist Mới" (Checklist Đánh Giá Siêu Thị > Cấu Hình) — CHỈ 4 trường cấp
+  // mẫu (mã/tên/loại/ngưỡng đạt), cùng khuôn TRAINING_TEST ở trên (Ngân Hàng Câu Hỏi): phần câu hỏi/lựa
+  // chọn động (checklistBuilderQuestionsWrap) KHÔNG đưa vào đây — không có "1 nhãn mặc định" cố định cho
+  // nội dung tự thêm-bớt tuỳ ý theo từng mẫu, giống lý do trainingTests.questions[] không nằm trong
+  // TRAINING_TEST manifest.
+  CHECKLIST: [
+    { id: 'checklistBuilderCode', label: 'Mã Checklist', required: true },
+    { id: 'checklistBuilderName', label: 'Tên Checklist', required: true },
+    { id: 'checklistBuilderType', label: 'Loại Checklist', required: true },
+    { id: 'checklistBuilderPassThreshold', label: 'Ngưỡng Điểm Đạt (%)', required: false }
   ]
 };
 
@@ -1033,7 +1078,12 @@ const FORM_TABS = [
   { key: 'HAC_LEAVE_BALANCE', coreKey: 'HAC_LEAVE_BALANCE', group: 'HR_ATTENDANCE', label: 'Công & Phép - Tạo/Sửa Phép Năm', icon: '🌴', short: 'Tạo/Sửa Phép Năm' },
   { key: 'HAC_ADJUST_LEAVE_BALANCE', coreKey: 'HAC_ADJUST_LEAVE_BALANCE', group: 'HR_ATTENDANCE', label: 'Công & Phép - Điều Chỉnh Phép Năm', icon: '✏️', short: 'Điều Chỉnh Phép Năm' },
   { key: 'HAC_HOLIDAY', coreKey: 'HAC_HOLIDAY', group: 'HR_ATTENDANCE', label: 'Công & Phép - Thêm Ngày Lễ', icon: '📅', short: 'Thêm Ngày Lễ' },
-  { key: 'HAC_SHIFT_TEMPLATE', coreKey: 'HAC_SHIFT_TEMPLATE', group: 'HR_ATTENDANCE', label: 'Công & Phép - Thêm Mẫu Ca', icon: '🕒', short: 'Thêm Mẫu Ca' }
+  { key: 'HAC_SHIFT_TEMPLATE', coreKey: 'HAC_SHIFT_TEMPLATE', group: 'HR_ATTENDANCE', label: 'Công & Phép - Thêm Mẫu Ca', icon: '🕒', short: 'Thêm Mẫu Ca' },
+  // Gap-fill (rà soát "phần nào có form nhập cũng cho vào Biểu Mẫu") — 3 nhóm mới, mỗi tab key riêng
+  // TRÙNG coreKey (module chỉ có 1 form), cùng khuôn mọi đợt gap-fill trước.
+  { key: 'HR_PROFILE', coreKey: 'HR_PROFILE', group: 'HR_PROFILE', label: 'Hồ Sơ Nhân Sự - Tạo Hồ Sơ Mới', icon: '🗂️', short: 'Hồ Sơ Nhân Sự' },
+  { key: 'HR_PAYROLL', coreKey: 'HR_PAYROLL', group: 'HR_PAYROLL', label: 'Lương - Điều Chỉnh Phiếu Lương', icon: '💵', short: 'Điều Chỉnh Lương' },
+  { key: 'CHECKLIST', coreKey: 'CHECKLIST', group: 'CHECKLIST', label: 'Checklist Đánh Giá Siêu Thị - Tạo Mẫu', icon: '✅', short: 'Checklist' }
 ];
 
 // Nhóm module CẤP 1 cho thanh tab Biểu Mẫu (mirror WF_MODULE_CONFIG/renderWfSubmissionTypeTabs bên màn
@@ -1067,7 +1117,10 @@ const FORM_GROUPS = [
   { key: 'HR_FEEDBACK', label: 'HCRC Đồng Hành', icon: '🤝' },
   { key: 'HR_LIFECYCLE', label: 'Onboarding / Offboarding', icon: '🆕' },
   { key: 'HR_CONTRACT', label: 'Hợp Đồng Lao Động', icon: '📝' },
-  { key: 'HR_ATTENDANCE', label: 'Công & Phép', icon: '⏱️' }
+  { key: 'HR_ATTENDANCE', label: 'Công & Phép', icon: '⏱️' },
+  { key: 'HR_PROFILE', label: 'Hồ Sơ Nhân Sự', icon: '🗂️' },
+  { key: 'HR_PAYROLL', label: 'Lương', icon: '💵' },
+  { key: 'CHECKLIST', label: 'Checklist Đánh Giá Siêu Thị', icon: '✅' }
 ];
 
 function getFormTabsInGroup(groupKey) {
@@ -3928,7 +3981,7 @@ async function requestWorkflowChangesAction(moduleKey, id, list, renderFnName, r
       } catch (e) { return alert('⛔ ' + e.message); }
       const idx = list.findIndex(x => x.id === id);
       if (idx !== -1) list[idx] = result.item;
-      logSystemAction(moduleKey.toUpperCase(), 'REQUEST_CHANGES', `Yêu cầu bổ sung hồ sơ [${result.item.code || id}]: ${reason.trim()}`, 'SUCCESS', String(result.item.code || id));
+      logSystemAction(toLogModuleToken(moduleKey), 'REQUEST_CHANGES', `Yêu cầu bổ sung hồ sơ [${result.item.code || id}]: ${reason.trim()}`, 'SUCCESS', String(result.item.code || id));
       alert('✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để sửa lại!');
       const renderFn = window[renderFnName];
       if (typeof renderFn === 'function') renderFn();
@@ -3948,6 +4001,20 @@ let bosungEditTarget = null; // { module, id }
 // operationStoreOpenings/operationRepairs ĐÃ BỊ XOÁ khỏi đây (Mục H, 60c473b — bỏ hẳn phê duyệt cho 2
 // luồng "Siêu Thị": status đi thẳng APPROVED ngay lúc tạo, không bao giờ vào lại DRAFT nữa nên không
 // còn hồ sơ nào cần "Bổ Sung" — server cũng đã xoá route update/submit tương ứng, xem routes/records.js).
+// Ánh xạ moduleKey (khoá client, camelCase số nhiều: docs/carRegs/officeReqs/submissions/operationOrders)
+// sang ĐÚNG token module Nhật ký hệ thống (VALID_LOG_MODULES ở routes/systemLog.js, số ít, UPPER_SNAKE_CASE)
+// — PHÁT HIỆN ở đợt audit chuyên sâu lần 2: 2 chỗ log ở openRequestChangesModal()/confirmBosungResubmit()
+// bên dưới trước đây gọi thẳng moduleKey.toUpperCase() (ra DOCS/CARREGS/OFFICEREQS/SUBMISSIONS —
+// operationOrders may mắn trùng sẵn "OPERATIONORDERS" cũng KHÔNG khớp) — không khớp bất kỳ token nào
+// trong whitelist, khiến POST /api/log bị server chặn 400 (âm thầm mất — gọi fire-and-forget, không ai
+// chờ/hiển thị lỗi) cho MỌI lượt "Yêu Cầu Bổ Sung"/"Sửa & Gửi Lại sau Bổ Sung" ở cả 5 module này.
+const LOG_MODULE_TOKEN_MAP = {
+  docs: 'DOC', carRegs: 'CAR', officeReqs: 'OFFICE', submissions: 'SUBMISSION', operationOrders: 'OPERATION_ORDER'
+};
+function toLogModuleToken(moduleKey) {
+  return LOG_MODULE_TOKEN_MAP[moduleKey] || String(moduleKey || '').toUpperCase();
+}
+
 const BOSUNG_MODULE_META = {
   docs: { list: () => DB.docs, title: '📂 Bổ Sung Tài Liệu', renderFn: 'renderDocs' },
   carRegs: { list: () => DB.carRegs, title: '🚗 Bổ Sung Phiếu Đăng Ký Xe', renderFn: 'renderCarRegs' },
@@ -4138,7 +4205,7 @@ async function confirmBosungResubmit() {
   const idx = list.findIndex(x => x.id === id);
   if (idx !== -1) list[idx] = updated;
 
-  logSystemAction(moduleKey.toUpperCase(), 'RESUBMIT_AFTER_BOSUNG', `Sửa & gửi lại hồ sơ [${updated.code}] sau khi được yêu cầu bổ sung`, 'SUCCESS', updated.code);
+  logSystemAction(toLogModuleToken(moduleKey), 'RESUBMIT_AFTER_BOSUNG', `Sửa & gửi lại hồ sơ [${updated.code}] sau khi được yêu cầu bổ sung`, 'SUCCESS', updated.code);
   alert('✅ Đã lưu thay đổi và gửi lại — hồ sơ đã vào lại hàng chờ duyệt từ bước 1!');
   closeBosungEditModal();
   const renderFn = window[meta.renderFn];

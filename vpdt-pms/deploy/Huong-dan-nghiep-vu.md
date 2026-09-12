@@ -512,16 +512,21 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
       được gán quyền ở tab này CHỈ bấm xác nhận đã chi tiền thật, không đụng
       tới bước duyệt nội bộ (đã chuyển hẳn sang "🗂️ Quản Lý Thanh Toán" ở
-      trên). **Xác nhận thanh toán** (bắt buộc kèm tệp "đề nghị thanh toán đã
-      phê duyệt") có 2 CHẾ ĐỘ tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc
-      tạo đề nghị:
+      trên). **Yêu cầu đính kèm tệp đã chuyển lên bước GỬI ĐỀ NGHỊ** (v17.6+):
+      "Hồ Sơ Đề Nghị Thanh Toán" (nhiều tệp) giờ bắt buộc đính kèm **NGAY LÚC**
+      bấm "📨 Chuyển Xác Nhận Thanh Toán" (NHÁP → Chờ duyệt, xem sub-tab "🗂️
+      Quản Lý Thanh Toán" ở trên) — thiếu tệp bị chặn ngay từ bước đó, cả giao
+      diện lẫn server. Vì vậy **bước Xác Nhận cuối cùng dưới đây KHÔNG còn bắt
+      buộc đính kèm thêm tệp nào nữa** (đảo ngược so với thiết kế cũ trước
+      v17.6, khi tệp chỉ bắt buộc ở đúng bước này) — chỉ còn 2 CHẾ ĐỘ xác nhận
+      tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo đề nghị:
       - Hợp đồng **"Thanh toán 1 lần"** (và MỌI đề nghị nguồn Hợp đồng loại
-        này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 tệp DUY NHẤT cho CẢ đề nghị,
-        1 lần bấm chuyển thẳng "Đã thanh toán" cho TẤT CẢ các đợt cùng lúc.
+        này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 lần bấm chuyển thẳng "Đã thanh
+        toán" cho TẤT CẢ các đợt cùng lúc (không cần chọn thêm tệp nào).
       - Hợp đồng **"Thanh toán định kỳ"**, đề nghị tạo THỦ CÔNG, và đề nghị
         nguồn Mua Bán/Sửa Chữa/Đầu Tư: nút **"Xác nhận"** riêng cho TỪNG ĐỢT
-        — mỗi lần xác nhận 1 đợt phải kèm 1 tệp riêng, lặp lại cho tới khi
-        xác nhận HẾT mọi đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
+        (không cần chọn thêm tệp nào), lặp lại cho tới khi xác nhận HẾT mọi
+        đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
       - **"📝 Yêu Cầu Bổ Sung" ngay tại tab này** — kế toán (quyền quản lý
         thanh toán) vẫn có thể trả đề nghị đang "APPROVED" (⏳ Đang chờ thanh
         toán) về **"Cần bổ sung"** (`NEED_INFO`, quay lại sửa được ở "➕ Tạo
@@ -811,10 +816,16 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
 - **Cơ chế liên kết Hỗ Trợ IT** — mỗi việc thuộc nhãn **IT** có thể (không bắt
   buộc) **"Tạo Ticket IT"** riêng — sinh 1 ticket "Hỗ Trợ Yêu Cầu" (danh mục
   "🔑 Tài khoản / Đăng nhập", mục 4.2) để đội IT xử lý theo đúng quy trình sẵn
-  có. **IT vẫn tự tay tạo/khoá email + tài khoản AD hoàn toàn NGOÀI hệ thống
-  này** — khi IT đánh dấu ticket "Hoàn thành" kèm ghi chú, hệ thống CHỈ ghi
-  lại đúng việc đã sinh ra ticket đó chuyển "Hoàn thành" — **không có bất kỳ
-  thao tác tự động nào tạo mới/khoá tài khoản `DB.users`**.
+  có. **IT vẫn tự tay tạo email + tài khoản AD hoàn toàn NGOÀI hệ thống
+  này** — hệ thống KHÔNG BAO GIỜ tự động TẠO MỚI tài khoản `DB.users` qua bất
+  kỳ đường nào. Khi IT đánh dấu ticket "Hoàn thành" kèm ghi chú, hệ thống ghi
+  lại đúng việc đã sinh ra ticket đó chuyển "Hoàn thành", và (từ v17.6, khớp
+  đúng những gì xảy ra khi HR tự bấm "Hoàn thành" trực tiếp trên việc đó)
+  **cũng tự đóng hợp đồng lao động đang hiệu lực + khoá tài khoản đăng nhập
+  của nhân viên đó** nếu chính việc nhãn IT này là việc cuối cùng khiến
+  Offboarding đủ điều kiện hoàn tất — trước đó 2 hiệu ứng phụ này CHỈ chạy
+  đúng khi hoàn thành việc trực tiếp trên giao diện, bỏ sót nếu hoàn thành
+  qua xác nhận ticket IT.
 - **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang được
   giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm), gộp cả
   Onboarding lẫn Offboarding.
@@ -882,7 +893,10 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   **lịch sử thăng chức/điều chuyển**. Không cho gán lại đúng chức vụ hiện tại
   (tránh spam lịch sử); chặn nếu vị trí chọn chưa gắn đúng Phòng Ban chuẩn
   trong Cơ Cấu Tổ Chức (trừ các chức vụ không thuộc phòng ban nào, VD Tổng
-  Giám Đốc).
+  Giám Đốc). Có thể **đính kèm Quyết định** (tệp PDF/Word/ảnh, tuỳ chọn) ngay
+  lúc gán/đổi — hiển thị lại kèm liên kết tải ở từng dòng lịch sử chức vụ và ở
+  khối "Lịch Sử Nhân Sự" gộp bên dưới, chỉ chính chủ hồ sơ/HR quản lý hồ
+  sơ/admin xem/tải được (v17.6).
   - **Nếu hồ sơ đã liên kết tài khoản VPDT, hệ thống TỰ ĐỒNG BỘ ghi đè luôn
     Phòng Ban + Chức Danh của tài khoản đó** theo chức vụ vừa gán (đã xác
     nhận với người dùng, có ảnh hưởng tới phân quyền/hiển thị theo phòng ban
@@ -938,6 +952,11 @@ xem hợp đồng của chính mình ở đợt này.
     **"Chấm dứt sau thử việc"** (đóng hẳn, không tạo hợp đồng mới).
   - Quy trình **Offboarding hoàn tất** → tự đóng (Đã chấm dứt) hợp đồng đang
     hiệu lực của nhân viên đó.
+  - Quy trình **Offboarding hoàn tất** (đợt rà soát bảo mật v17.5) → nếu nhân
+    viên đó CÓ tài khoản đăng nhập hệ thống, tự động **khoá tài khoản**
+    (chuyển "Đang hoạt động" → "Đã khoá") VÀ vô hiệu hoá NGAY mọi phiên đăng
+    nhập đang mở của tài khoản đó — không cần HR/admin tự tay khoá thủ công
+    sau khi hoàn tất quy trình nghỉ việc.
 - **Gia hạn hợp đồng Xác định thời hạn về sau** (không còn gắn với 1 việc
   Onboarding cụ thể nữa) là thao tác **tay** của HR ở màn Hợp Đồng Lao Động —
   quá **2 lần gia hạn liên tiếp bắt buộc chuyển Vô thời hạn** theo luật.
@@ -949,7 +968,11 @@ xem hợp đồng của chính mình ở đợt này.
   cũ/cộng tác viên chưa có hồ sơ trong hệ thống.
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
   hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
-  hạn số lần, giữ nguyên lịch sử.
+  hạn số lần, giữ nguyên lịch sử. Có thể **đính kèm Quyết định** (tệp
+  PDF/Word/ảnh, tuỳ chọn) ngay khi thêm thay đổi — hiển thị lại kèm liên kết
+  tải ở từng dòng Phụ Lục và ở khối "Lịch Sử Nhân Sự" gộp (mục 4.5.3), giúp
+  tra soát có văn bản quyết định gốc đi kèm mỗi lần tăng lương/đổi vị trí giữa
+  kỳ hợp đồng (v17.6).
 - **Sửa tay trực tiếp trên hợp đồng** (loại HĐ, ngày bắt đầu/hết hạn, lương cơ
   bản, phòng ban, tệp đính kèm) giờ cũng **tự ghi 1 dòng lịch sử** (giá trị cũ
   → mới từng trường thực sự đổi, người sửa, thời điểm) — trước đây chỉ các
@@ -1105,6 +1128,22 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   nghỉ hiện thị tham khảo ngay trên dòng công việc đó — kế toán tự thêm vào
   phiếu lương kỳ cuối của nhân viên (dòng "Thưởng khác") nếu công ty quyết
   định chi trả, hệ thống không tự động ghi thẳng vào phiếu lương.
+- **Nhân viên nghỉ việc GIỮA kỳ lương** (v17.6): trước đây "Tính Lương" chỉ
+  lấy nhân viên đang "Đang làm việc" — ai hoàn tất Offboarding TRƯỚC khi kế
+  toán bấm "Tính Lương" của kỳ đó bị bỏ sót hoàn toàn, không có phiếu lương
+  nào dù đã làm việc một phần kỳ. Từ nay hệ thống VẪN đưa những nhân viên này
+  vào tính (dò theo ngày nghỉ việc cuối cùng của quy trình Offboarding đã
+  hoàn tất, nằm trong khoảng kỳ đang tính) — phiếu lương sinh ra có ghi chú rõ
+  ngày nghỉ việc ở dòng Lương cơ bản. **Lưu ý quan trọng**: hệ thống KHÔNG tự
+  trừ tương ứng số ngày không làm việc sau khi nghỉ (vẫn tính đủ 1 tháng lương
+  cơ bản theo hợp đồng) — kế toán BẮT BUỘC tự rà soát và dùng "Điều chỉnh dòng
+  lương" để trừ đúng phần chưa làm việc trước khi duyệt.
+- **Tính lại 1 kỳ KHÔNG còn xoá mất phụ cấp/thưởng/tạm ứng/phạt đã nhập tay
+  cho người khác** (v17.6): trước đây bấm "Tính Lương" lại (VD chỉ để bổ sung
+  1 nhân viên mới sót/sửa lỗi chấm công của 1 người) xoá HẲN mọi phiếu lương
+  cũ của kỳ rồi dựng lại từ đầu — mất luôn các dòng "Điều chỉnh dòng lương" đã
+  nhập tay cho TẤT CẢ nhân viên khác trong kỳ đó. Từ nay các dòng điều chỉnh
+  tay được giữ lại và gộp vào phiếu lương mới tính cho đúng người đó.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có danh mục
   thành phần lương admin tự thêm/bớt được (danh mục 17 mã hiện cố định trong
   code, sửa được nhanh khi có yêu cầu thật); chưa tự tính phụ cấp ca đêm/thưởng
@@ -1224,9 +1263,22 @@ này.
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)
 
 Module **📊 Báo Cáo** (`reports`) là màn **tổng hợp/giám sát số liệu**, đọc dữ
-liệu từ khoảng hơn 10 module nghiệp vụ khác — bản thân nó không tạo/lưu hồ sơ
-riêng nào (khác hẳn Báo Cáo Định Kỳ ở mục 4.6, vốn là 1 quy trình nghiệp vụ
-chủ động thật sự).
+liệu từ khoảng **19 module nghiệp vụ** khác (Tài Liệu/Văn Bản Trình/Công Việc/
+Hợp Đồng/Biên Bản Họp/Hỗ Trợ IT/Báo Cáo Định Kỳ/Truyền Thông Nội Bộ/Phòng Họp/
+Đăng Ký Xe/Văn Phòng Phẩm/Đồng Phục/Giấy Phép/Mua Bán-Sửa Chữa/Thanh Toán/Ngân
+Sách/HCRC Đồng Hành/Onboarding-Offboarding/Vận Hành — 3 luồng Đơn Hàng/Mở Mới/
+Sửa Chữa tính riêng) — bản thân nó không tạo/lưu hồ sơ riêng nào (khác hẳn Báo
+Cáo Định Kỳ ở mục 4.6, vốn là 1 quy trình nghiệp vụ chủ động thật sự).
+
+**Quy ước bắt buộc (v17.9+)**: module nghiệp vụ mới nào có tạo hồ sơ đều phải
+thêm vào đây NGAY trong cùng đợt merge (xem `CLAUDE.md`) — **trừ** nhóm dữ
+liệu cực nhạy cảm đã bị chặn hẳn khỏi `GET /api/data` chung (Hồ Sơ Nhân Sự,
+Hợp Đồng Lao Động, Lương, Công & Phép) — 4 module Nhân Sự này **CHƯA có** ở
+Báo Cáo (cần thiết kế route thống kê riêng, gác đúng quyền quản lý hiện có
+của từng module, không đọc thẳng qua `DB.<collection>` như các module khác vì
+collection tương ứng luôn rỗng phía client). Checklist Đánh Giá Siêu Thị cũng
+**cố ý không** có ở đây — module đó đã có tab "📊 Báo Cáo" nội bộ riêng, tách
+biệt hoàn toàn (xem mục 4.7).
 
 - **Thống kê chung theo module** — với 4 module có luồng phê duyệt nhiều bước
   (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng): tổng số hồ sơ, phân theo trạng
@@ -1336,12 +1388,16 @@ từng form.
 form tạo hồ sơ trong hệ thống **mà không cần sửa code** — đổi nhãn hiển thị,
 đổi field nào bắt buộc, sửa danh sách lựa chọn (dropdown) của field, và **thêm
 hẳn field mới** vào form nếu công ty cần thu thập thêm thông tin riêng. Bao
-phủ 20 nhóm module (Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng, Tài Liệu,
+phủ 23 nhóm module (Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng, Tài Liệu,
 Biên Bản Họp, Đặt Phòng Họp, Truyền Thông Nội Bộ, Công Việc, VPP, Giấy Phép,
 Hỗ Trợ IT, Thanh Toán, Ngân Sách, Báo Cáo Định Kỳ, Đồng Phục, Vận Hành, Đào
-Tạo, Tuyển Dụng, HCRC Đồng Hành, Onboarding/Offboarding). Field tự thêm lưu
-trong `DB.formTemplates`, hiện thêm ngay dưới các field mặc định của đúng form
-đó — không ảnh hưởng hồ sơ cũ đã tạo trước khi thêm field.
+Tạo, Tuyển Dụng, HCRC Đồng Hành, Onboarding/Offboarding, **Hồ Sơ Nhân Sự**
+["➕ Tạo Hồ Sơ Mới"], **Lương** ["✏️ Điều Chỉnh Phiếu Lương"], **Checklist
+Đánh Giá Siêu Thị** [4 field cấp mẫu: Mã/Tên/Loại/Ngưỡng Đạt — riêng phần câu
+hỏi/lựa chọn tự thêm-bớt bên trong mỗi mẫu KHÔNG tuỳ biến được ở đây, cùng lý
+do với Ngân Hàng Câu Hỏi Đào Tạo]). Field tự thêm lưu trong `DB.formTemplates`,
+hiện thêm ngay dưới các field mặc định của đúng form đó — không ảnh hưởng hồ
+sơ cũ đã tạo trước khi thêm field.
 
 ### 7.4. Quản Lý Tệp File
 

@@ -28,8 +28,83 @@ const DEPT_FIELD_COLLECTIONS = [
   { collection: 'uniformStockAdjustments', fields: ['dept'] },
   { collection: 'uniformTransfers', fields: ['sourceDept', 'targetDept'] },
   { collection: 'recruitmentJobs', fields: ['hiringDept'] },
-  { collection: 'trainingPlans', fields: ['targetDept'] }
+  { collection: 'trainingPlans', fields: ['targetDept'] },
+  // paymentRequests/laborContracts: PHÁT HIỆN THIẾU ở đợt audit chuyên sâu — cả 2 đều lưu field .dept
+  // (paymentRequests: phòng ban đề nghị, khớp DEPT_FIELD_COLLECTIONS.contracts kiểu cũ; laborContracts:
+  // forceOwnDept ép theo phòng ban người tạo, xem lib/createValidation.js dòng ~3052) nhưng bị bỏ sót
+  // khỏi danh sách này — đổi tên 1 phòng ban KHÔNG cascade sang 2 collection này, để lại giá trị dept CŨ
+  // (không còn khớp DB.depts nào) trên các hồ sơ đã tạo trước đó.
+  { collection: 'paymentRequests', fields: ['dept'] },
+  { collection: 'laborContracts', fields: ['dept'] },
+  // meetings/hrProcesses: PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2 — cùng dạng thiếu sót như
+  // paymentRequests/laborContracts ở trên (meetings.dept: phòng ban đặt phòng họp; hrProcesses.employeeDept:
+  // snapshot phòng ban của nhân viên lúc tạo quy trình Onboarding/Offboarding).
+  { collection: 'meetings', fields: ['dept'] },
+  { collection: 'hrProcesses', fields: ['employeeDept'] }
 ];
+
+// *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
+// theo ĐÚNG TÊN phòng ban/siêu thị (dạng {[dept]: <cấu hình bước duyệt>}, xem lib/workflowEngine.js) —
+// PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2: cascadeStoreRename() trước đây KHÔNG đổi các map này,
+// nên sau khi đổi tên 1 phòng ban/siêu thị, cấu hình duyệt CŨ vẫn còn nằm dưới TÊN CŨ (không ai duyệt
+// được hồ sơ nữa, vì hồ sơ mới tạo mang tên MỚI) cho tới khi admin tự tay cấu hình lại từ đầu. Cấu trúc
+// BÊN TRONG mỗi map khác nhau (itPriceDeptWorkflows còn lồng thêm cấp RETAIL/WHOLESALE) nhưng TẦNG NGOÀI
+// CÙNG luôn là {[dept]: <cấu hình>} nên chỉ cần đổi tên KEY, không cần biết cấu trúc bên trong.
+// operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: 2 map CŨ không còn route/logic nào đọc
+// tới (xem chú thích ở lib/workflowEngine.js — quy trình duyệt hồ sơ chính operationStoreOpenings/
+// operationRepairs đã bỏ hẳn phê duyệt) — vẫn cascade cho ĐỒNG BỘ dữ liệu (admin vẫn xem lại được ở màn
+// cấu hình cũ), không có tác dụng phụ nào khác vì không route nào tiêu thụ.
+const DEPT_WORKFLOW_MAP_KEYS = [
+  'submissionDeptWorkflows', 'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows',
+  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
+  'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows',
+  'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
+  'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows'
+];
+
+async function cascadeDeptWorkflowMaps(oldValue, newValue) {
+  for (const mapKey of DEPT_WORKFLOW_MAP_KEYS) {
+    await withLockedAppDataValue(mapKey, (map) => {
+      if (!map || typeof map !== 'object' || !(oldValue in map)) return map;
+      const next = { ...map };
+      next[newValue] = next[oldValue];
+      delete next[oldValue];
+      return next;
+    });
+  }
+}
+
+// users[].perms.*: nhiều quyền phẳng giới hạn theo danh sách phòng ban/siêu thị, dưới 2 khuôn khác nhau
+// — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2, cascadeStoreRename() trước đây bỏ sót hẳn users.perms:
+//  1) mảng chuỗi phẳng, tên quyền kết thúc bằng "Depts" (viewApprovedDepts/viewDraftDepts/uploadDepts...).
+//  2) object {all, depts:[...]} (contractCreate/officeCreate/carCreate/submissionCreate/meetingBookScope/
+//     operationOrderReceiptManage..., xem scopeAllows() ở lib/recordActions.js) — "depts" ở khuôn này có
+//     thể lẫn sentinel không phải tên phòng ban thật (VD 'HO' của operationOrderReceiptManage) nhưng so
+//     trực tiếp === oldValue vẫn an toàn (không trùng bất kỳ tên phòng ban/siêu thị thật nào).
+function renameDeptInUserPerms(perms, oldValue, newValue) {
+  if (!perms || typeof perms !== 'object') return perms;
+  let changed = false;
+  const next = {};
+  for (const [key, val] of Object.entries(perms)) {
+    if (Array.isArray(val) && key.endsWith('Depts') && val.includes(oldValue)) {
+      next[key] = val.map(d => (d === oldValue ? newValue : d));
+      changed = true;
+    } else if (val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.depts) && val.depts.includes(oldValue)) {
+      next[key] = { ...val, depts: val.depts.map(d => (d === oldValue ? newValue : d)) };
+      changed = true;
+    } else {
+      next[key] = val;
+    }
+  }
+  return changed ? next : perms;
+}
+
+async function cascadeUserPermsDepts(oldValue, newValue) {
+  await withLockedAppDataValue('users', (list) => (list || []).map(u => {
+    const nextPerms = renameDeptInUserPerms(u.perms, oldValue, newValue);
+    return nextPerms === u.perms ? u : { ...u, perms: nextPerms };
+  }));
+}
 
 function renameSimpleFields(item, fields, oldValue, newValue) {
   let changed = false;
@@ -47,15 +122,41 @@ function renameUniformPeriodAllocations(item, oldValue, newValue) {
   return { ...item, allocations: item.allocations.map(a => (a?.dept === oldValue ? { ...a, dept: newValue } : a)) };
 }
 
+// employeeProfiles: collection AppData (KHÔNG phải dbo.Records, khác mọi collection ở DEPT_FIELD_COLLECTIONS
+// — cùng lý do users ở trên phải tự withLockedAppDataValue riêng thay vì renameFieldValueInCollection())
+// — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2: cascade rename bỏ sót hẳn Hồ Sơ Nhân Sự, để lại
+// profile.dept/.jobTitle mang TÊN CŨ dù tài khoản liên kết (DB.users) đã được cascade đúng ở trên — 2
+// nguồn dữ liệu lệch nhau (module Hồ Sơ Nhân Sự đọc thẳng profile.dept/.jobTitle, KHÔNG đọc lại qua
+// user liên kết, xem lib/employeeProfile.js).
+async function cascadeEmployeeProfilesDept(oldValue, newValue) {
+  await withLockedAppDataValue('employeeProfiles', (list) => (list || []).map(p =>
+    (p.dept === oldValue ? { ...p, dept: newValue } : p)
+  ));
+}
+
+async function cascadeEmployeeProfilesJobTitle(oldValue, newValue, isStore) {
+  await withLockedAppDataValue('employeeProfiles', (list) => (list || []).map(p => {
+    const matchesScope = isStore ? p.posType === 'STORE' : p.posType !== 'STORE';
+    return (p.jobTitle === oldValue && matchesScope) ? { ...p, jobTitle: newValue } : p;
+  }));
+}
+
 async function cascadeStoreRename(oldValue, newValue) {
   // user.dept dùng CHUNG 1 field cho cả tên phòng ban (HO) lẫn tên siêu thị (phân biệt bằng posType) —
   // so trực tiếp giá trị, không cần lọc posType (1 dept/store name không thể vừa là tên phòng ban vừa
   // là tên siêu thị cùng lúc trong thực tế vận hành).
   await withLockedAppDataValue('users', (list) => (list || []).map(u => (u.dept === oldValue ? { ...u, dept: newValue } : u)));
+  await cascadeEmployeeProfilesDept(oldValue, newValue);
+  await cascadeUserPermsDepts(oldValue, newValue);
+  await cascadeDeptWorkflowMaps(oldValue, newValue);
   for (const { collection, fields } of DEPT_FIELD_COLLECTIONS) {
     await renameFieldValueInCollection(collection, (item) => renameSimpleFields(item, fields, oldValue, newValue));
   }
   await renameFieldValueInCollection('uniformPeriods', (item) => renameUniformPeriodAllocations(item, oldValue, newValue));
+  await withLockedAppDataValue('orgChartVersions', (list) => {
+    const { renameDepartmentRefInAllVersions } = require('./orgChart'); // require trễ — tránh vòng lặp require
+    return renameDepartmentRefInAllVersions(list, oldValue, newValue);
+  });
 }
 
 // jobTitles (Khối Văn Phòng/HO): cascade users[].jobTitle CHỈ cho user KHÔNG phải posType STORE
@@ -68,6 +169,11 @@ async function cascadeJobTitleRename(oldValue, newValue) {
     (u.jobTitle === oldValue && u.posType !== 'STORE') ? { ...u, jobTitle: newValue } : u
   ));
   await withLockedAppDataValue('vppExcludedJobTitles', (list) => (list || []).map(jt => (jt === oldValue ? newValue : jt)));
+  await cascadeEmployeeProfilesJobTitle(oldValue, newValue, false);
+  await withLockedAppDataValue('orgChartVersions', (list) => {
+    const { renameJobTitleInAllVersions } = require('./orgChart');
+    return renameJobTitleInAllVersions(list, oldValue, newValue, false);
+  });
 }
 
 // storeJobTitles (Siêu Thị, mục 4a): cascade users[].jobTitle CHỈ cho posType === 'STORE'.
@@ -75,6 +181,11 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
   await withLockedAppDataValue('users', (list) => (list || []).map(u =>
     (u.jobTitle === oldValue && u.posType === 'STORE') ? { ...u, jobTitle: newValue } : u
   ));
+  await cascadeEmployeeProfilesJobTitle(oldValue, newValue, true);
+  await withLockedAppDataValue('orgChartVersions', (list) => {
+    const { renameJobTitleInAllVersions } = require('./orgChart');
+    return renameJobTitleInAllVersions(list, oldValue, newValue, true);
+  });
 }
 
 const CATALOG_HANDLERS = {

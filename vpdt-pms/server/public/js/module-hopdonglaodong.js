@@ -190,6 +190,7 @@ function buildHrContractDetailHTML(c) {
           <div class="font-semibold">${escapeHtml(a.amendmentType)} — hiệu lực ${escapeHtml(a.effectiveDate)}</div>
           ${a.oldValue || a.newValue ? `<div class="text-gray-600">${escapeHtml(a.oldValue || '')} → ${escapeHtml(a.newValue || '')}</div>` : ''}
           ${a.note ? `<div class="text-gray-500 italic">${escapeHtml(a.note)}</div>` : ''}
+          ${a.fileUrl ? `<div><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(a.fileName || 'Quyết định')}</a></div>` : ''}
           <div class="text-gray-400 text-[10px]">${escapeHtml(a.createdByName || a.createdBy)} — ${escapeHtml(a.createdAt)}</div>
         </div>
       `).join('')
@@ -240,6 +241,10 @@ function buildHrContractDetailHTML(c) {
         <input type="text" id="hrcNewAmendmentNew" placeholder="Giá trị mới" class="border p-1.5 rounded">
       </div>
       <textarea id="hrcNewAmendmentNote" placeholder="Ghi chú" class="w-full border p-1.5 rounded mt-2"></textarea>
+      <div class="mt-2">
+        <label class="block text-gray-600 mb-1 text-[11px]">Quyết định đính kèm (tuỳ chọn)</label>
+        <input type="file" id="hrcNewAmendmentFile" accept=".pdf,.docx,.jpg,.jpeg,.png" class="w-full border p-1 bg-white rounded text-[11px]">
+      </div>
       <button type="button" data-op="submitHrContractAmendment" data-arg0="${c.id}" class="mt-2 bg-teal-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-teal-700">➕ Thêm Thay Đổi</button>
     </div>
   `;
@@ -287,8 +292,20 @@ async function submitHrContractAmendment(id) {
   const oldValue = document.getElementById('hrcNewAmendmentOld').value.trim();
   const newValue = document.getElementById('hrcNewAmendmentNew').value.trim();
   const note = document.getElementById('hrcNewAmendmentNote').value.trim();
+  // Quyết định đính kèm (tuỳ chọn) — cùng khuôn tệp hợp đồng gốc lúc tạo (uploadFileToServer('hrContract')
+  // ở trên), giúp tra soát lịch sử thay đổi lương/chức vụ có văn bản quyết định đi kèm.
+  let fileUrl = null, fileName = null;
+  const fileInput = document.getElementById('hrcNewAmendmentFile');
+  if (fileInput?.files[0]) {
+    try {
+      const uploaded = await uploadFileToServer(fileInput.files[0], 'hrContract');
+      fileUrl = uploaded.fileUrl; fileName = uploaded.fileName || fileInput.files[0].name;
+    } catch (err) {
+      return alert('⛔ Tải tệp quyết định thất bại: ' + err.message);
+    }
+  }
   try {
-    const result = await callRecordAction('laborContracts', id, 'add-amendment', { amendmentType, effectiveDate, oldValue, newValue, note });
+    const result = await callRecordAction('laborContracts', id, 'add-amendment', { amendmentType, effectiveDate, oldValue, newValue, note, fileUrl, fileName });
     hrcApplyUpdate(result.item);
     openHrContractDetailModal(id);
   } catch (err) {

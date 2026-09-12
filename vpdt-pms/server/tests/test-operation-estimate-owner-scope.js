@@ -128,10 +128,65 @@ test('OWNER_A cố XOÁ chính danh mục lớn "Nội thất" (không gửi l�
   const sonTuong = first.estimateItems.find((it) => it.content === 'Sơn tường');
   // Chỉ gửi lại "Sơn tường" — hoàn toàn bỏ "Nội thất"/con của nó khỏi payload, y hệt hành vi client thật
   // (operationEstimateItems chỉ tải đúng phạm vi mình) khi cố tình xoá.
+  // LƯU Ý: test này vốn PASS ngay cả TRƯỚC khi vá lỗi bên dưới, vì "Sơn tường" nằm NGOÀI phạm vi ownA nên
+  // đã bị chặn 403 "ngoài phạm vi" từ nhánh kiểm tra khác — không thực sự chứng minh việc bỏ sót "Nội
+  // thất" tự nó bị chặn. Xem 2 test "PHÁT HIỆN LỖI THẬT" ngay dưới mới cô lập đúng lỗ hổng.
   assert.throws(
     () => recordActions.submitOperationEstimate(OWNER_A, item, { items: [{ id: sonTuong.id, content: 'Sơn tường', amount: 5000000 }] }, 'OPERATION_STORE_OPENING', USERS),
     /ngoài phạm vi|Vui lòng nhập ít nhất 1/
   );
+});
+
+// ===== PHÁT HIỆN LỖI THẬT (đợt test nghiệp vụ chuyên sâu) =====
+// Lỗ hổng: khi payload CHỈ gồm dòng trong phạm vi ownA (không đụng gì "Sơn tường" ngoài phạm vi), việc bỏ
+// sót/xoá trắng chính danh mục lớn "Nội thất" trước đây KHÔNG bị chặn ở bất kỳ lớp nào — server chỉ kiểm
+// tra "dòng gửi lên có nằm trong phạm vi không", không kiểm tra "mọi danh mục lớn thuộc phạm vi có còn
+// mặt sau khi xử lý không". Hệ quả: ownA xoá được cả "Nội thất" lẫn con "Kệ trưng bày" của nó dù giao diện
+// không hề có nút Xoá nào cho ownA trên danh mục lớn. Đã vá ở submitOperationEstimate() (lib/recordActions.js).
+test('[VÁ LỖI] OWNER_A bỏ sót "Nội thất" khỏi payload (chỉ gửi con) -> phải bị 403, không được xoá', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const keTrungBay = first.estimateItems.find((it) => it.content === 'Kệ trưng bày');
+  const noiThat = first.estimateItems.find((it) => it.content === 'Nội thất');
+  assert.throws(
+    () => recordActions.submitOperationEstimate(OWNER_A, item, {
+      items: [{ id: keTrungBay.id, content: 'Kệ trưng bày', amount: 20000000, parentId: noiThat.id }]
+    }, 'OPERATION_STORE_OPENING', USERS),
+    /không được xoá danh mục lớn bạn đang phụ trách/
+  );
+  // Dữ liệu gốc không bị đụng gì (submitOperationEstimate throw TRƯỚC khi ghi vào item.estimateItems).
+  assert.strictEqual(item.estimateItems.some((it) => it.content === 'Nội thất'), true);
+});
+
+test('[VÁ LỖI] OWNER_A xoá TRẮNG ô Nội Dung của chính "Nội thất" (client thật sẽ lọc dòng rỗng khỏi payload) -> phải bị 403', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const keTrungBay = first.estimateItems.find((it) => it.content === 'Kệ trưng bày');
+  const noiThat = first.estimateItems.find((it) => it.content === 'Nội thất');
+  // Mirror ĐÚNG hành vi client thật (module-vanhanh.js: validItems = operationEstimateItems.filter(it =>
+  // (it.content||'').trim())) — dòng content rỗng không hề được gửi lên trong payload.items, y hệt test
+  // ngay trên. Giữ 2 test riêng để tài liệu hoá rõ 2 con đường dẫn tới cùng 1 lỗ hổng (bỏ dòng hẳn vs xoá
+  // trắng rồi bị client tự lọc) dù cơ chế chặn ở server là chung.
+  assert.throws(
+    () => recordActions.submitOperationEstimate(OWNER_A, item, {
+      items: [{ id: keTrungBay.id, content: 'Kệ trưng bày', amount: 20000000, parentId: noiThat.id }]
+    }, 'OPERATION_STORE_OPENING', USERS),
+    /không được xoá danh mục lớn bạn đang phụ trách/
+  );
+});
+
+test('[VÁ LỖI] OWNER_A gửi lại ĐẦY ĐỦ "Nội thất" + con -> vẫn sửa bình thường (không bị chặn oan)', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const keTrungBay = first.estimateItems.find((it) => it.content === 'Kệ trưng bày');
+  const noiThat = first.estimateItems.find((it) => it.content === 'Nội thất');
+  const result = recordActions.submitOperationEstimate(OWNER_A, item, {
+    items: [
+      { id: noiThat.id, content: 'Nội thất', amount: 0 },
+      { id: keTrungBay.id, content: 'Kệ trưng bày sửa OK', amount: 30000000, parentId: noiThat.id }
+    ]
+  }, 'OPERATION_STORE_OPENING', USERS);
+  assert.strictEqual(result.estimateItems.find((it) => it.id === keTrungBay.id).content, 'Kệ trưng bày sửa OK');
 });
 
 test('OWNER_A cố tự thêm danh mục LỚN mới -> 403 (không có id nằm trong phạm vi phụ trách)', () => {

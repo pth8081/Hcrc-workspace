@@ -331,10 +331,22 @@ function ocPopulateNodeDeptRefSelect(selectedValue) {
   select.innerHTML = options.map(d => `<option value="${d.startsWith('--') ? '' : escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   select.value = selectedValue || '';
 }
-function ocPopulateJobTitleDatalist() {
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 2: trước đây LUÔN gộp chung jobTitles (Khối Văn Phòng) +
+// storeJobTitles (Siêu Thị) bất kể posType của node đang sửa — trong khi node ĐÃ có field posType riêng
+// để phân biệt (dùng đồng bộ mô hình chấm công, xem chú thích orgChartNodePosTypeSelect ở index.html),
+// khiến gợi ý chức danh không khớp đúng danh mục của posType đã chọn (VD gợi ý "Nhân viên bán hàng" cho
+// 1 vị trí Văn Phòng). posType rỗng/'' (chưa gán) vẫn gộp chung cả 2 — hợp lý vì chưa biết thuộc khối
+// nào, không thể lọc bừa.
+function ocPopulateJobTitleDatalist(posType) {
   const office = DB.jobTitles || [];
   const store = (DB.storeJobTitles || []).map(t => t.label).filter(Boolean);
-  sddSetOptions('orgChartJobTitleDatalist', [...new Set([...office, ...store])].sort((a, b) => a.localeCompare(b, 'vi')).map(t => ({ label: t, value: t })));
+  const options = posType === 'HO' ? office : posType === 'STORE' ? store : [...office, ...store];
+  sddSetOptions('orgChartJobTitleDatalist', [...new Set(options)].sort((a, b) => a.localeCompare(b, 'vi')).map(t => ({ label: t, value: t })));
+}
+// Gọi lại khi người dùng đổi "Vị Trí Làm Việc" ngay trong modal (thêm/sửa) để gợi ý chức danh luôn khớp
+// đúng khối vừa chọn, không cần đóng/mở lại modal.
+function ocOnNodePosTypeChange() {
+  ocPopulateJobTitleDatalist(document.getElementById('orgChartNodePosTypeSelect').value || '');
 }
 function onOrgChartNodeTypeChange() {
   const type = document.getElementById('orgChartNodeTypeSelect').value;
@@ -369,12 +381,13 @@ function openOrgChartEditNodeModal(nodeId) {
   document.getElementById('orgChartNodeModalParentInfo').innerText = '';
   document.getElementById('orgChartNodeTypeWrap').classList.add('hidden');
   document.getElementById('orgChartNodeTypeSelect').value = node.nodeType === 'POSITION' ? 'POSITION' : 'DEPARTMENT';
-  ocPopulateJobTitleDatalist();
   if (node.nodeType === 'POSITION') {
     document.getElementById('orgChartNodeJobTitleInput').value = node.jobTitle || '';
     document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = node.requiresDept !== false;
     document.getElementById('orgChartNodePosTypeSelect').value = node.posType || '';
+    ocPopulateJobTitleDatalist(node.posType || ''); // SAU KHI đã biết posType — lọc đúng danh mục ngay khi mở
   } else {
+    ocPopulateJobTitleDatalist();
     document.getElementById('orgChartNodeNameInput').value = node.nodeName || '';
     ocPopulateNodeDeptRefSelect(node.departmentRef || '');
   }

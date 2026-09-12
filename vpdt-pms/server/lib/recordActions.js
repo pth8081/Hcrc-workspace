@@ -707,6 +707,22 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
         throw new HttpError(403, `Bạn không có quyền sửa hạng mục "${it.content}" (ngoài phạm vi danh mục lớn bạn đang phụ trách)`);
       }
     }
+    // AUDIT (kịch bản test VHMS-09): "KHÔNG được xoá chính danh mục lớn đó" trước đây chỉ chặn ở nút Xoá
+    // trên giao diện (canDeleteThisRow ở module-vanhanh.js) — server không hề bắt buộc mọi id trong
+    // ownerTopIds phải còn mặt trong resolved. Xoá TRẮNG ô "Nội Dung" của chính danh mục lớn mình phụ
+    // trách (ô này KHÔNG bị khoá sửa, chỉ nút Xoá mới bị ẩn) khiến dòng đó có content rỗng -> bị prelim
+    // ở trên loại bỏ hoàn toàn khỏi payload (coi như không gửi lên) -> không có id trong idMap -> mọi
+    // danh mục CON của nó (vẫn có nội dung, vẫn được gửi) bị coi "mồ côi" (orphaned) và bị cascade xoá
+    // theo ở nhánh xử lý phía trên — tức xoá được cả danh mục lớn lẫn toàn bộ con của nó bằng đường vòng,
+    // dù không có quyền bấm nút Xoá nào. Chặn tường minh: mọi id trong ownerTopIds BẮT BUỘC phải còn xuất
+    // hiện (là 1 dòng danh mục lớn) trong resolved sau khi xử lý — thiếu id nào => 403 rõ ràng thay vì
+    // âm thầm để nó biến mất (cùng triết lý "không tin dữ liệu client, chặn tường minh" của cả file này).
+    for (const topId of ownerTopIds) {
+      const stillThere = resolved.some((it) => it.parentId == null && it.id === topId);
+      if (!stillThere) {
+        throw new HttpError(403, 'Bạn không được xoá danh mục lớn bạn đang phụ trách (kể cả bằng cách xoá trắng Nội Dung) — chỉ toàn quyền hồ sơ mới xoá được danh mục lớn');
+      }
+    }
   }
 
   // Chặn lồng quá 1 cấp: 1 danh mục con (đã có parentId) không được làm cha của hạng mục khác — LỖI rõ
@@ -1893,6 +1909,18 @@ function editPaymentRequest(payload, user, pr) {
       pr.amountMismatchesSource = Math.abs(pr.amount - pr.referenceAmount) > 1;
     }
   }
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: sửa installments/amount khi ĐANG GIỮA CHỪNG quy trình duyệt
+  // (PENDING đã có 1+ bước duyệt xong, hoặc NEED_INFO còn giữ lại lịch sử duyệt dở dang từ trước — xem
+  // requestPaymentInfo() ở trên, nhánh PENDING giữ nguyên currentStep/history) trước đây KHÔNG đánh dấu
+  // invalidated các lượt "APPROVED" cũ/reset currentStep — người duyệt bước SAU vẫn duyệt tiếp trên số
+  // liệu MỚI dựa vào các bước TRƯỚC đã duyệt trên số liệu CŨ, khiến đề nghị được duyệt xong với nội dung
+  // chưa từng được đúng người duyệt bước đầu xác nhận. Khớp đúng khuôn REQUEST_CHANGES/RESOLVE_FILE_PROPOSAL/
+  // requestPaymentInfo() (nhánh APPROVED) — chỉ cần khi THẬT SỰ có sửa đợt thanh toán (payload.installments),
+  // không đụng khi chỉ sửa title/dept (không ảnh hưởng số tiền đang chờ duyệt).
+  if (!isDraft && payload.installments !== undefined) {
+    (pr.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+    pr.currentStep = 1;
+  }
   // NHÁP lưu lại vẫn giữ nguyên NHÁP (nút "💾 Lưu" — chưa gửi duyệt); PENDING/NEED_INFO sửa xong luôn
   // quay lại PENDING như hành vi cũ (NEED_INFO -> "Sửa & Gửi Lại" tự động gửi lại hàng chờ duyệt).
   if (!isDraft) pr.status = 'PENDING';
@@ -2389,9 +2417,39 @@ function toggleInternalPostCommentLike(user, post, commentId) {
 
 // Chuẩn hoá để so khớp từ khoá nhạy cảm — bỏ dấu tiếng Việt (kể cả "đ/Đ", không có dạng phân rã NFD)
 // + viết thường + gộp khoảng trắng, cùng khuôn normalizeHeader() ở lib/vppCatalog.js.
+// Trước đây chỉ GOM khoảng trắng liên tiếp thành 1 dấu cách (`\s+` -> ' ') rồi trim — vẫn giữ NGUYÊN
+// khoảng trắng/dấu câu XEN GIỮA từng ký tự, nên chỉ cần gõ "t ệ   n ạ n"/"t.ệ-n.ạ.n" là qua được
+// .includes() dù mắt người đọc vẫn hiểu y hệt từ khoá cấm — vô hiệu hoá gần như mọi từ khoá trong
+// DB.sensitiveKeywords chỉ bằng cách chèn thêm khoảng trắng/dấu câu. Đổi sang XOÁ HẲN mọi ký tự không
+// phải chữ/số (thay vì chỉ gom lại) — áp dụng ĐỒNG NHẤT cho CẢ content lẫn keyword (scanCommentForSensitiveContent
+// gọi normalizeForScan() cho cả 2 vế .includes()), nên cụm từ khoá NHIỀU TỪ (VD "quấy rối tình dục") vẫn
+// khớp bình thường (dấu cách trong keyword cũng bị xoá y hệt) — không phá cụm từ khoá hợp lệ, chỉ đóng
+// đường né bằng ký tự chèn giữa.
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 2: normalizeForScan() trước đây chỉ STRIP (xoá hẳn, không thay
+// thế) mọi ký tự KHÔNG PHẢI a-z0-9 — một ký tự Cyrillic/Greek nhìn Y HỆT chữ Latin (VD Cyrillic "а"
+// U+0430 thay cho Latin "a") bị XOÁ MẤT thay vì được hiểu là "a", nên chèn 1 ký tự như vậy vào giữa 1 từ
+// khoá nhạy cảm (VD "b<Cyrillic а>d") khiến chuỗi chuẩn hoá thành "bd" — không còn khớp từ khoá "bad"
+// nữa, NÉ được bộ lọc dù mắt người đọc vẫn thấy y hệt nội dung gốc. Chuyển các ký tự dễ nhầm (bộ chữ hoa
+// Cyrillic/Greek trùng hình chữ Latin viết hoa gần như tuyệt đối trên mọi font, + vài chữ thường phổ
+// biến nhất trong tấn công homoglyph thực tế) về đúng chữ Latin TRƯỚC KHI strip. KHÔNG bao phủ 100% bộ
+// Unicode confusables (danh sách chính thức rất lớn, nhiều ký tự chỉ giống ở 1 số font) — đây là phòng
+// thủ theo chiều sâu cho các trường hợp phổ biến nhất, không phải giải pháp tuyệt đối.
+const HOMOGLYPH_TO_LATIN = {
+  // Cyrillic viết hoa — giống hệt Latin viết hoa trên hầu hết font.
+  'А': 'a', 'В': 'b', 'Е': 'e', 'К': 'k', 'М': 'm', 'Н': 'h', 'О': 'o', 'Р': 'p', 'С': 'c', 'Т': 't', 'Х': 'x',
+  // Cyrillic viết thường hay dùng nhất để né lọc từ khoá.
+  'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's',
+  // Greek viết hoa — giống hệt Latin viết hoa trên hầu hết font.
+  'Α': 'a', 'Β': 'b', 'Ε': 'e', 'Ζ': 'z', 'Η': 'h', 'Ι': 'i', 'Κ': 'k', 'Μ': 'm', 'Ν': 'n', 'Ο': 'o', 'Ρ': 'p', 'Τ': 't', 'Υ': 'y', 'Χ': 'x',
+  // Greek viết thường phổ biến nhất trong tấn công homoglyph thực tế (omicron thay "o").
+  'ο': 'o'
+};
+function replaceHomoglyphs(s) {
+  return String(s || '').replace(/[Ͱ-ϿЀ-ӿ]/g, ch => HOMOGLYPH_TO_LATIN[ch] || ch);
+}
 function normalizeForScan(s) {
-  return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return replaceHomoglyphs(String(s || '')).replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 // Quét (KHÔNG chặn đăng) nội dung bình luận theo danh sách từ khoá admin tự cấu hình
@@ -5151,6 +5209,10 @@ function addHrProcessAttachment(user, item, body) {
   const fileUrl = String(body?.fileUrl || '').trim();
   const fileName = String(body?.fileName || '').trim();
   if (!fileUrl || !fileName) throw new HttpError(400, 'Thiếu thông tin tệp đính kèm');
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: trước đây fileUrl chỉ trim+cắt độ dài, KHÔNG xác nhận khuôn
+  // "/uploads/..." như mọi field file khác (xem assertUploadedFileUrl()) — cho phép nhét scheme
+  // "javascript:" (stored XSS khi client render lại đường dẫn tệp đính kèm ở module-hrlifecycle.js).
+  assertUploadedFileUrl(fileUrl, 'Tệp đính kèm quy trình');
   item.attachments = item.attachments || [];
   item.attachments.push({
     fileUrl: fileUrl.slice(0, 500), fileName: fileName.slice(0, 255), fileType: String(body?.fileType || '').slice(0, 100),
@@ -5899,6 +5961,10 @@ function updateApprovedActualBudgetEntry(user, item, payload, period, templates)
   if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa trực tiếp bản ngân sách thực hiện');
   if (item.entryKind !== 'ACTUAL') throw new HttpError(409, 'Thao tác này chỉ áp dụng cho Ngân Sách Thực Hiện');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ ngân sách');
+  // Thiếu SÓT so với 2 hàm anh em ở trên (updateBudgetEntryDraft/submitBudgetEntry đều chặn khi kỳ đã
+  // đóng) — cho phép người quản lý Ngân Sách sửa số liệu Ngân Sách Thực Hiện VÔ THỜI HẠN, kể cả sau khi
+  // kỳ đã đóng sổ và báo cáo tổng hợp đã phát hành, làm sai lệch số liệu đã chốt.
+  if (isBudgetPeriodClosed(period)) throw new HttpError(409, 'Kỳ ngân sách này đã kết thúc, không thể sửa nữa');
   const customFields = getBudgetTemplateCustomFields(period.templateId, templates);
   item.lines = sanitizeBudgetLines(payload?.lines, customFields);
   if (!item.history) item.history = [];

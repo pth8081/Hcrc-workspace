@@ -254,6 +254,78 @@ async function main() {
       assert(html.includes('Siêu Thị A') && html.includes('Siêu Thị B'), '"Chọn Tất Cả" phải khôi phục lại đủ dữ liệu như ban đầu');
     });
 
+    // ===== Gap-fill (rà soát "module còn thiếu trong Báo Cáo"): Nhân Sự (HCRC Đồng Hành +
+    // Onboarding/Offboarding) + Vận Hành (Đơn Hàng/Mở Mới/Sửa Chữa) — seed riêng ở CUỐI file, cùng lý do
+    // Đồng Phục ở trên (không ảnh hưởng ngược các assertion Tổng Hợp/Excel đã chạy xong).
+    await page.evaluate(() => {
+      Object.assign(DB, {
+        hrFeedback: [
+          { id: 101, dept: 'Phòng Kế Toán', status: 'PENDING', category: 'SALARY', createdAt: '2026-03-01T09:00:00' },
+          { id: 102, dept: 'Phòng CNTT', status: 'ANSWERED', category: 'POLICY', createdAt: '2026-03-02T09:00:00' },
+          { id: 103, dept: 'Phòng CNTT', status: 'ANSWERED', category: 'BENEFITS', createdAt: '2026-03-03T09:00:00' }
+        ],
+        hrProcesses: [
+          { id: 201, dept: 'Phòng Kế Toán', processType: 'ONBOARDING', status: 'IN_PROGRESS', createdAt: '2026-03-01T09:00:00' },
+          { id: 202, dept: 'Phòng CNTT', processType: 'OFFBOARDING', status: 'COMPLETED', createdAt: '2026-03-02T09:00:00' },
+          { id: 203, dept: 'Phòng CNTT', processType: 'ONBOARDING', status: 'CANCELLED', createdAt: '2026-03-03T09:00:00' }
+        ],
+        operationOrders: [
+          { id: 301, dept: 'Phòng Kế Toán', status: 'PENDING', orderLocationType: 'HO', amount: 5000000, createdAt: '2026-03-01T09:00:00' },
+          { id: 302, dept: 'Phòng CNTT', status: 'AWAITING_RECEIPT', orderLocationType: 'HO', amount: 8000000, createdAt: '2026-03-02T09:00:00' },
+          { id: 303, dept: 'Phòng CNTT', status: 'RECEIVED', orderLocationType: 'HO', amount: 3000000, createdAt: '2026-03-03T09:00:00' }
+        ],
+        operationStoreOpenings: [
+          { id: 401, dept: 'Phòng Kế Toán', estimateStatus: 'DRAFT', createdAt: '2026-03-01T09:00:00' },
+          { id: 402, dept: 'Phòng CNTT', estimateStatus: 'APPROVED', createdAt: '2026-03-02T09:00:00' }
+        ],
+        operationRepairs: [
+          { id: 501, dept: 'Phòng CNTT', estimateStatus: 'PENDING', createdAt: '2026-03-01T09:00:00' }
+        ]
+      });
+    });
+
+    await run('Nav Báo Cáo: "Nhân Sự"/"Vận Hành" xuất hiện đúng với đủ module con', async () => {
+      const nav = await page.evaluate(() => REPORT_NAV_TREE.map((n) => ({ key: n.key, children: (n.children || []).map((c) => c.key) })));
+      const hrNode = nav.find((n) => n.key === 'hr');
+      const vanHanhNode = nav.find((n) => n.key === 'vanHanh');
+      assert(hrNode && JSON.stringify(hrNode.children) === JSON.stringify(['hr', 'hrLifecycle']), `node "hr" phải có đúng 2 con [hr, hrLifecycle], got: ${JSON.stringify(hrNode)}`);
+      assert(vanHanhNode && JSON.stringify(vanHanhNode.children) === JSON.stringify(['vanHanh', 'operationStoreOpen', 'operationRepair']), `node "vanHanh" phải có đúng 3 con, got: ${JSON.stringify(vanHanhNode)}`);
+    });
+
+    await run('Báo Cáo HCRC Đồng Hành: đếm đúng PENDING/ANSWERED, không lộ nội dung câu hỏi ngoài phạm vi', async () => {
+      await page.evaluate(() => { selectReportsNavL1('hr'); selectReportsNavL2('hr'); });
+      const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
+      assert(html.includes('>3<'), `expected tổng 3 câu hỏi trong khoảng lọc, snippet: ${html.slice(0, 400)}`);
+      const stats = await page.evaluate(() => {
+        const records = REPORT_MODULE_CONFIGS.hr.getRecords('', '2026-01-01', '2026-12-31');
+        return { total: records.length, pending: records.filter((r) => r.status === 'PENDING').length, answered: records.filter((r) => r.status === 'ANSWERED').length };
+      });
+      assertEqual(stats.total, 3, 'hrFeedback total mismatch'); assertEqual(stats.pending, 1, 'PENDING count mismatch'); assertEqual(stats.answered, 2, 'ANSWERED count mismatch');
+    });
+
+    await run('Báo Cáo Onboarding/Offboarding: đếm đúng IN_PROGRESS/COMPLETED/CANCELLED + lọc theo phòng ban', async () => {
+      await page.evaluate(() => selectReportsNavL2('hrLifecycle'));
+      const stats = await page.evaluate(() => {
+        const all = REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('', '2026-01-01', '2026-12-31');
+        const cntt = REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('Phòng CNTT', '2026-01-01', '2026-12-31');
+        return { total: all.length, cntt: cntt.length };
+      });
+      assertEqual(stats.total, 3, 'hrProcesses total mismatch'); assertEqual(stats.cntt, 2, 'hrProcesses CNTT-only mismatch (should be COMPLETED+CANCELLED)');
+    });
+
+    await run('Báo Cáo Vận Hành: 3 luồng Đơn Hàng/Mở Mới/Sửa Chữa đếm đúng độc lập nhau', async () => {
+      await page.evaluate(() => { selectReportsNavL1('vanHanh'); selectReportsNavL2('vanHanh'); });
+      const stats = await page.evaluate(() => ({
+        orders: REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31').length,
+        storeOpen: REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31').length,
+        repair: REPORT_MODULE_CONFIGS.operationRepair.getRecords('', '2026-01-01', '2026-12-31').length,
+        ordersAwaiting: REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31').filter((r) => r.status === 'AWAITING_RECEIPT').length,
+        storeOpenApproved: REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31').filter((r) => r.estimateStatus === 'APPROVED').length
+      }));
+      assertEqual(stats.orders, 3, 'operationOrders total mismatch'); assertEqual(stats.storeOpen, 2, 'operationStoreOpenings total mismatch'); assertEqual(stats.repair, 1, 'operationRepairs total mismatch');
+      assertEqual(stats.ordersAwaiting, 1, 'AWAITING_RECEIPT count mismatch'); assertEqual(stats.storeOpenApproved, 1, 'estimateStatus APPROVED count mismatch');
+    });
+
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
   } finally {
     await teardown({ server, browser });

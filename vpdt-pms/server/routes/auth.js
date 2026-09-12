@@ -523,8 +523,14 @@ router.patch('/me', requireAuth, async (req, res) => {
       // Danh sách key thẻ Dashboard người dùng đã tự ẩn (Đợt D — chuyển từ localStorage sang lưu
       // server để đồng bộ giữa các thiết bị). Chỉ là 1 mảng string tuỳ ý lưu riêng cho từng người, KHÔNG
       // cấp/ảnh hưởng quyền gì — không cần đối chiếu với danh sách key thật ở client.
+      // AUDIT (rà soát chuyên sâu luồng nghiệp vụ): trước đây chỉ kiểm tra "là mảng string", KHÔNG giới
+      // hạn số phần tử/độ dài từng chuỗi — khác mọi field mảng/chuỗi tương tự khác trong hệ thống (đều
+      // có .slice() giới hạn, VD sanitizeSecondaryPositions() ở routes/data.js). 1 tài khoản có thể tự
+      // gửi mảng hàng nghìn chuỗi dài để phình to bản ghi "users" (1 JSON blob DÙNG CHUNG cho toàn bộ
+      // tài khoản trong AppData), làm chậm mọi lượt đọc/ghi collection này — số thẻ Dashboard thật hiện
+      // có chưa tới 15, nên trần 30 phần tử/50 ký tự vẫn dư thừa an toàn cho mọi lựa chọn hợp lệ.
       if (Array.isArray(dashboardHiddenCards) && dashboardHiddenCards.every(k => typeof k === 'string')) {
-        updated.dashboardHiddenCards = dashboardHiddenCards;
+        updated.dashboardHiddenCards = dashboardHiddenCards.slice(0, 30).map(k => k.slice(0, 50));
       }
       if (password) {
         const passwordError = validatePasswordStrength(password);

@@ -155,13 +155,15 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
     if (!positionKey) return res.status(400).json({ error: 'Vui lòng chọn chức vụ từ Cơ Cấu Tổ Chức' });
     const effectiveDate = req.body?.effectiveDate ? String(req.body.effectiveDate).trim() : null;
     const note = req.body?.note;
+    const fileUrl = req.body?.fileUrl;
+    const fileName = req.body?.fileName;
     const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
     const applied = orgChart.getAppliedVersion(orgChartVersions);
     let updated, syncTarget = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-      const result = employeeProfile.applyPositionAssignment(profile, applied, positionKey, effectiveDate, req.freshUser.username, req.freshUser.name, note);
+      const result = employeeProfile.applyPositionAssignment(profile, applied, positionKey, effectiveDate, req.freshUser.username, req.freshUser.name, note, fileUrl, fileName);
       updated = profile;
       if (profile.username) syncTarget = { username: profile.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
       return list;
@@ -194,7 +196,8 @@ router.get('/by-code/:employeeCode/history', async (req, res) => {
       events.push({
         type: 'POSITION', time: h.createdAt, date: h.effectiveDate,
         title: h.oldPositionLabel ? `Đổi chức vụ: "${h.oldPositionLabel}" → "${h.newPositionLabel}"` : `Bổ nhiệm chức vụ: "${h.newPositionLabel}"`,
-        detail: h.note || null, by: h.changedByName || h.changedBy
+        detail: h.note || null, by: h.changedByName || h.changedBy,
+        fileUrl: h.fileUrl || null, fileName: h.fileName || null
       });
     }
     const contracts = (await getAllForCollection('laborContracts')).filter(c => c.employeeCode === profile.employeeCode);
@@ -207,7 +210,8 @@ router.get('/by-code/:employeeCode/history', async (req, res) => {
           type: 'CONTRACT_AMENDMENT', time: a.createdAt, date: a.effectiveDate,
           title: `Hợp đồng ${c.code} — Phụ lục: ${a.amendmentType}`,
           detail: [a.oldValue ? `Cũ: ${a.oldValue}` : null, a.newValue ? `Mới: ${a.newValue}` : null, a.note].filter(Boolean).join(' — ') || null,
-          by: a.createdByName || a.createdBy
+          by: a.createdByName || a.createdBy,
+          fileUrl: a.fileUrl || null, fileName: a.fileName || null
         });
       }
     }

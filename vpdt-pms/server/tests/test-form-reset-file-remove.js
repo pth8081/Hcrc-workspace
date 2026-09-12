@@ -1512,7 +1512,9 @@ async function main() {
           posType: document.getElementById('hrpOnbPosType').value,
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value)
+          // hrpOnbJobTitle: nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*" (v17.6, xem CLAUDE.md) — danh sách gợi
+          // ý giờ nằm ở dropdown._sddItems (sddSetOptions()), KHÔNG còn <select>.options.
+          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')._sddItems || []).map(it => it.value)
         }));
         assertTrue(initialState.posType === 'HO', `Vị Trí mặc định phải là HO khi vừa mở form, thực tế "${initialState.posType}"`);
         assertTrue(initialState.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN khi đang ở HO (tiền đề bài test)');
@@ -1525,7 +1527,7 @@ async function main() {
         const storeState = await page.evaluate(() => ({
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value),
+          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')._sddItems || []).map(it => it.value),
           emailRequired: document.getElementById('hrpOnbEmail').required
         }));
         assertTrue(storeState.deptWrapHidden === true, 'Khối Phòng Ban phải ẨN khi đang ở Siêu Thị (tiền đề bài test)');
@@ -1536,7 +1538,10 @@ async function main() {
         await page.fill('#hrpOnbEmployeeCode', 'NV9999');
         await page.fill('#hrpOnbFullName', 'Nguyễn Văn Kiểm Thử');
         await page.selectOption('#hrpOnbStore', 'Siêu Thị Quận 7');
-        await page.selectOption('#hrpOnbJobTitle', 'Nhân viên bán hàng');
+        // hrpOnbJobTitle giờ là ô tìm-kiếm-gõ-chọn (input tự do + gợi ý) — gõ thẳng đúng nhãn, không
+        // cần bấm chọn gợi ý (value đọc lúc submit chính là input.value, khớp cách mọi ô "sdd*" khác
+        // hoạt động khi gõ đúng khớp 1 gợi ý).
+        await page.fill('#hrpOnbJobTitle', 'Nhân viên bán hàng');
         await page.fill('#hrpOnbEmail', 'test@company.com');
         await page.fill('#hrpOnbPhone', '0912345678');
         await page.fill('#hrpOnbStartDate', '2026-10-01');
@@ -1548,7 +1553,8 @@ async function main() {
           posType: document.getElementById('hrpOnbPosType').value,
           deptWrapHidden: document.getElementById('hrpOnbDeptWrap').classList.contains('hidden'),
           storeWrapHidden: document.getElementById('hrpOnbStoreWrap').classList.contains('hidden'),
-          jobTitleOptions: Array.from(document.getElementById('hrpOnbJobTitle').options).map(o => o.value),
+          jobTitleOptions: (document.getElementById('hrpOnbJobTitleDatalist')._sddItems || []).map(it => it.value),
+          jobTitleValue: document.getElementById('hrpOnbJobTitle').value,
           emailRequired: document.getElementById('hrpOnbEmail').required,
           employeeCode: document.getElementById('hrpOnbEmployeeCode').value,
           fullName: document.getElementById('hrpOnbFullName').value,
@@ -1563,6 +1569,7 @@ async function main() {
         assertTrue(state.deptWrapHidden === false, 'Khối Phòng Ban phải HIỆN lại sau Làm Mới (đã về HO)');
         assertTrue(state.storeWrapHidden === true, 'Khối Siêu Thị phải ẨN lại sau Làm Mới (đã về HO), KHÔNG được kẹt lại ở trạng thái Siêu Thị vừa chọn');
         assertTrue(!state.jobTitleOptions.includes('Nhân viên bán hàng'), `Chức Danh phải re-populate lại ĐÚNG danh mục HO (không còn sót option Siêu Thị "Nhân viên bán hàng"), thực tế ${JSON.stringify(state.jobTitleOptions)}`);
+        assertTrue(state.jobTitleValue === '', `Chức Danh (input) phải về rỗng sau Làm Mới, thực tế "${state.jobTitleValue}"`);
         assertTrue(state.emailRequired === false, 'Email phải hết bắt buộc sau khi về lại HO');
         assertTrue(state.employeeCode === '', 'hrpOnbEmployeeCode phải về rỗng');
         assertTrue(state.fullName === '', 'hrpOnbFullName phải về rỗng');

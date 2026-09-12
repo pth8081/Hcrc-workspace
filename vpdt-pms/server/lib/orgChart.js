@@ -443,6 +443,32 @@ function diffVersions(base, other) {
   return { added, removed, changed };
 }
 
+// PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2: đổi tên phòng ban/siêu thị/chức danh ở Danh Mục (Quản
+// Trị > Đổi Tên Danh Mục) trước đây KHÔNG cascade sang orgChartVersions[].nodes[].departmentRef/
+// .jobTitle — cây tổ chức vẫn hiển thị/so khớp "ai đang giữ vị trí" (resolvePositionOccupants(), dựa vào
+// user.dept/user.jobTitle) theo TÊN CŨ cho tới khi admin tự tay sửa lại từng node. Cascade CẢ MỌI
+// version (không chỉ version đang áp dụng) vì admin có thể quay lại dùng tiếp 1 version cũ sau này. Gọi
+// từ lib/catalogRename.js — 2 hàm THUẦN (không tự khoá/đọc AppData) để giữ đúng quy ước của file này
+// (mọi thao tác ghi AppData đều do routes/orgChart.js hoặc caller tự bọc withLockedAppDataValue).
+function renameDepartmentRefInAllVersions(versions, oldValue, newValue) {
+  return (versions || []).map(v => ({
+    ...v,
+    nodes: (v.nodes || []).map(n => (n.departmentRef === oldValue ? { ...n, departmentRef: newValue } : n))
+  }));
+}
+
+// isStore=false -> jobTitles (Khối Văn Phòng, node.posType !== 'STORE', khớp đúng luật cascadeJobTitleRename()
+// ở lib/catalogRename.js); isStore=true -> storeJobTitles (Siêu Thị, node.posType === 'STORE').
+function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
+  return (versions || []).map(v => ({
+    ...v,
+    nodes: (v.nodes || []).map(n => {
+      const matchesScope = isStore ? n.posType === 'STORE' : n.posType !== 'STORE';
+      return (n.jobTitle === oldValue && matchesScope) ? { ...n, jobTitle: newValue } : n;
+    })
+  }));
+}
+
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
   buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, findPositionNodeForUser,
@@ -450,5 +476,6 @@ module.exports = {
   computeValidationIssues, seedKpiFlowGaps,
   bootstrapFirstVersion, cloneVersion, applyVersionInPlace,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
-  addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions
+  addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions,
+  renameDepartmentRefInAllVersions, renameJobTitleInAllVersions
 };

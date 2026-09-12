@@ -173,8 +173,15 @@ function canManageProfiles(user) {
 // collection). posType ('HO'/'STORE') là TUỲ CHỌN trên node (xem lib/orgChart.js) — trả về null nếu node
 // chưa gán, caller khi đó KHÔNG đồng bộ posType xuống tài khoản (giữ nguyên giá trị hiện có, không ghi
 // đè bằng null — xem routes/employeeProfile.js).
-function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiveDate, actorUsername, actorName, note) {
+// fileUrl/fileName ("Quyết định" đính kèm, TUỲ CHỌN) — bổ sung theo yêu cầu người dùng: mỗi lần gán/đổi
+// chức vụ nên có văn bản quyết định gắn kèm để tra soát lịch sử sau này, cùng khuôn "Quyết định" ở
+// lib/laborContract.js::addAmendment(). Mặc định null để không phá vỡ lượt gọi tự động lúc Onboarding
+// hoàn tất (routes/employeeProfile.js dòng ~322 — gán vị trí lần đầu, không có ngữ cảnh "quyết định" nào
+// để đính kèm) — chỉ route "gán/đổi chức vụ" thủ công (set-position) truyền tham số này.
+function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiveDate, actorUsername, actorName, note, fileUrl, fileName) {
   const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart');
+  const { assertUploadedFileUrl } = require('./createValidation'); // require trễ — tránh vòng lặp require
+  assertUploadedFileUrl(fileUrl, 'Tệp quyết định');
   if (!orgChartVersion) throw new HttpError(400, 'Chưa có bản Cơ Cấu Tổ Chức nào được áp dụng — vào Cơ Cấu Tổ Chức tạo và áp dụng cây tổ chức trước khi gán chức vụ');
   const node = (orgChartVersion.nodes || []).find(n => n.positionKey === positionKey && n.nodeType === 'POSITION');
   if (!node) throw new HttpError(400, 'Không tìm thấy vị trí này trong bản Cơ Cấu Tổ Chức đang áp dụng (có thể đã bị xoá/đổi ở bản mới hơn)');
@@ -198,6 +205,8 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
     newPositionKey: positionKey, newJobTitle: jobTitle, newDept: dept, newPositionLabel: label, newPosType: posType,
     changedBy: actorUsername, changedByName: actorName || actorUsername,
     note: note ? String(note).trim().slice(0, 500) : null,
+    fileUrl: fileUrl ? String(fileUrl).trim().slice(0, 500) : null,
+    fileName: fileUrl ? String(fileName || '').trim().slice(0, 200) : null,
     createdAt: nowStr
   };
   profile.positionHistory = [...(profile.positionHistory || []), entry];

@@ -20,12 +20,32 @@ function styleHeaderRow(row) {
 // "sheet.addRow(obj)" của exceljs, dùng lại được cho MỌI màn xuất Excel đơn giản (1 sheet, không cần
 // công thức/style phức tạp) mà không phải viết riêng từng hàm dựng workbook như VPP (vốn có 2 sheet
 // và cách tính tổng hợp riêng, không dùng chung được).
+// PHÁT HIỆN ở đợt audit chuyên sâu: dữ liệu xuất Excel ở nhiều màn Quản Trị (danh sách người dùng, log
+// hệ thống...) chứa các trường do NGƯỜI DÙNG THƯỜNG tự nhập (tên, mô tả, ghi chú...) — nếu ai đó đặt tên
+// bắt đầu bằng =/+/-/@ (VD tên "=HYPERLINK(\"http://evil\",\"click\")" hoặc "=cmd|'/c calc'!A1"), Excel
+// sẽ hiểu đây là CÔNG THỨC ngay khi admin mở file .xlsx xuất ra, không phải chuỗi văn bản thường — kinh
+// điển "CSV/Excel Formula Injection" (OWASP), có thể dẫn tới thực thi lệnh hệ thống qua DDE trên các bản
+// Excel cũ chưa vá. Chặn bằng cách thêm dấu nháy đơn (') ngay trước mọi ô bắt đầu bằng 1 trong 4 ký tự
+// trên trước khi ghi vào sheet — Excel/LibreOffice/Google Sheets đều hiểu đây là ép kiểu văn bản, không
+// còn thực thi như công thức. Chỉ áp dụng cho giá trị KIỂU CHUỖI (không đụng số/ngày/boolean — số âm
+// thật sự, VD -50000, vẫn hiển thị đúng vì kiểu number không đi qua nhánh này).
+const FORMULA_INJECTION_PREFIX_RE = /^[=+\-@]/;
+function excelFormulaGuard(value) {
+  if (typeof value !== 'string') return value;
+  return FORMULA_INJECTION_PREFIX_RE.test(value) ? `'${value}` : value;
+}
+function sanitizeRowForFormulaInjection(row) {
+  const safe = {};
+  Object.keys(row || {}).forEach(k => { safe[k] = excelFormulaGuard(row[k]); });
+  return safe;
+}
+
 function buildGenericWorkbook(sheetName, columns, rows) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet(String(sheetName || 'Sheet1').slice(0, 31)); // Excel giới hạn tên sheet 31 ký tự
   sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18 }));
   styleHeaderRow(sheet.getRow(1));
-  rows.forEach(r => sheet.addRow(r));
+  rows.forEach(r => sheet.addRow(sanitizeRowForFormulaInjection(r)));
   return wb;
 }
 
@@ -105,4 +125,9 @@ async function parseUsersImportXlsx(buffer) {
   return rows;
 }
 
-module.exports = { buildGenericWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS };
+// excelFormulaGuard/sanitizeRowForFormulaInjection export thêm ở đợt audit chuyên sâu lần 2 — trước đây
+// CHỈ buildGenericWorkbook() (dùng nội bộ file này) áp dụng được luật chống Excel Formula Injection ở
+// trên; các hàm dựng workbook RIÊNG của module khác (lib/employeeProfileImport.js, lib/vppExport.js) tự
+// gọi sheet.addRow() trực tiếp, không đi qua buildGenericWorkbook() nên KHÔNG được bảo vệ — export ra để
+// những nơi đó gọi lại đúng 1 luật chung thay vì viết trùng.
+module.exports = { buildGenericWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection };

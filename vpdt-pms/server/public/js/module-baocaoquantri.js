@@ -106,6 +106,35 @@ const REPORT_NAV_TREE = [
       { key: 'payment', label: '💰 Thanh Toán' },
       { key: 'budget', label: '📊 Ngân Sách' }
     ]
+  },
+  // Gap-fill (rà soát "module còn thiếu trong Báo Cáo"): Nhân Sự/Vận Hành trước đây HOÀN TOÀN vắng mặt
+  // khỏi Báo Cáo tổng hợp dù đã là module thật trong BUSINESS_MODULES từ lâu. Nhóm B đã xác nhận với
+  // người dùng: CHỈ thêm 3 phần dữ liệu KHÔNG thuộc nhóm cực nhạy cảm (employeeProfiles/laborContracts/
+  // payslips/attendanceRecords — vẫn CHẶN HẲN khỏi GET /api/data từ các đợt vá bảo mật trước, không đưa
+  // vào Báo Cáo theo khuôn DB.<collection> chung này được — cần thiết kế route thống kê riêng nếu làm
+  // sau). "hr"/"hrLifecycle" đều là key BUSINESS_MODULES THẬT (đã có sẵn checkbox module-access riêng)
+  // nên isReportNavNodeVisible()/L2 filter tự gác đúng theo đúng quyền hiện có, không cần sửa gì thêm ở
+  // 2 hàm đó — đúng nguyên tắc "vẫn phân quyền theo module như hiện tại, không thêm lớp quyền mới".
+  {
+    key: 'hr', label: '👤 Nhân Sự', children: [
+      { key: 'hr', label: '🤝 HCRC Đồng Hành' },
+      { key: 'hrLifecycle', label: '🆕 Onboarding / Offboarding' }
+    ]
+  },
+  // "vanHanh" là key BUSINESS_MODULES THẬT (module-access checkbox riêng); "operationStoreOpen"/
+  // "operationRepair" là 2 leaf CHỈ tồn tại trong Báo Cáo (không có checkbox module-access riêng —
+  // Vận Hành gác 3 luồng bằng 3 quyền operationOrderCreate/operationStoreOpenCreate/operationRepairCreate
+  // + dữ liệu đã được lọc đúng phạm vi TRƯỚC khi tới client qua filterOperationStoreOpeningsForUser()/
+  // filterOperationRepairsForUser(), xem lib/recordViewScope.js) — mirror ĐÚNG khuôn "payment"/"budget"
+  // dưới node "office" ở trên (leaf phụ dùng key không có trong BUSINESS_MODULES, mặc định hasModuleAccess()
+  // trả true, an toàn vì dữ liệu client nhận được đã lọc sẵn theo quyền xem thật). Node cha "Vận Hành"
+  // vẫn ẩn đúng cho người bị tắt hẳn module (còn ít nhất 1 child = "vanHanh", key thật, tự gác đúng).
+  {
+    key: 'vanHanh', label: '🛠️ Vận Hành', children: [
+      { key: 'vanHanh', label: '📦 Đơn Hàng' },
+      { key: 'operationStoreOpen', label: '🏬 Mở Mới Siêu Thị' },
+      { key: 'operationRepair', label: '🔧 Sửa Chữa Siêu Thị' }
+    ]
   }
 ];
 
@@ -380,6 +409,53 @@ const REPORT_MODULE_CONFIGS = {
   periodicReport: {
     title: '📅 Báo Cáo Định Kỳ (Kỳ Báo Cáo)',
     getRecords: (dept, from, to) => DB.reportPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+  },
+  // Gap-fill (rà soát "module còn thiếu trong Báo Cáo", Nhóm B — CHỈ 3 phần dữ liệu không thuộc nhóm
+  // cực nhạy cảm, xem chú thích ở REPORT_NAV_TREE). Cả 4 config dưới đây dùng field "dept" chuẩn
+  // (forceOwnDept:true ở lib/createValidation.js validateAndPrepareCreate() luôn gán record.dept =
+  // user.dept lúc tạo, xem dòng ~3122 file đó — hoàn toàn khớp khuôn 16 module đã có ở trên, không cần
+  // field riêng nào khác). "createdAt || id" (id = Date.now() lúc tạo, gán CHO MỌI collection ở CÙNG
+  // điểm ghi đó) làm mốc thời gian dự phòng cho hrProcesses/operationOrders/operationStoreOpenings/
+  // operationRepairs — các collection này KHÔNG tự gán createdAt tường minh trong extraValidate như
+  // hrFeedback (dòng ~1596 lib/createValidation.js), isInDateRange() (core.js) chấp nhận number vì rơi
+  // vào nhánh fallback `new Date(dateStr)` khi parseVNDateTime() (chỉ nhận chuỗi) trả null.
+  hr: {
+    title: '🤝 Báo Cáo HCRC Đồng Hành',
+    // Dữ liệu ĐÃ được lọc đúng phạm vi trước khi tới client (filterHrFeedbackForUser(), lib/recordViewScope.js
+    // — chỉ chính người hỏi + nhanSuManage/admin thấy được) nên bảng "Tra cứu chi tiết" bên dưới KHÔNG lộ
+    // câu hỏi/câu trả lời của người khác cho người không có quyền — an toàn dùng chung 1 khuôn getRecords
+    // như mọi module khác, không cần ẩn bớt field nào thêm ở đây.
+    getRecords: (dept, from, to) => DB.hrFeedback.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['PENDING', 'Chưa trả lời', 'bg-yellow-500'], ['ANSWERED', 'Đã trả lời', 'bg-green-500']]
+  },
+  hrLifecycle: {
+    title: '🆕 Báo Cáo Onboarding / Offboarding',
+    getRecords: (dept, from, to) => DB.hrProcesses.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['IN_PROGRESS', 'Đang thực hiện', 'bg-yellow-500'], ['COMPLETED', 'Hoàn tất', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
+  },
+  // "vanHanh" (key trùng node cha, cùng khuôn "office" ở trên) = Đơn Hàng, luồng DUY NHẤT trong 3 luồng
+  // Vận Hành còn giữ quy trình duyệt/trạng thái thật (status) — 2 luồng Mở Mới/Sửa Chữa (bên dưới) bản
+  // thân hồ sơ đi thẳng "đã duyệt" ngay lúc tạo (Mục H, xem lib/workflowEngine.js), chỉ giai đoạn Dự
+  // toán (estimateStatus) mới có quy trình duyệt thật nên dùng field đó làm statusOf thay vì status.
+  vanHanh: {
+    title: '📦 Báo Cáo Đơn Hàng (Vận Hành)',
+    getRecords: (dept, from, to) => DB.operationOrders.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    statusOf: r => r.status,
+    statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['AWAITING_RECEIPT', 'Chờ nhập hàng', 'bg-blue-500'], ['RECEIVED', 'Đã nhập hàng', 'bg-green-500'], ['RECEIPT_CANCELLED', 'Đã huỷ nhập', 'bg-gray-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
+  },
+  operationStoreOpen: {
+    title: '🏬 Báo Cáo Mở Mới Siêu Thị',
+    getRecords: (dept, from, to) => DB.operationStoreOpenings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    statusOf: r => r.estimateStatus,
+    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['PENDING', 'Dự toán chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Dự toán đã duyệt', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối', 'bg-red-500']]
+  },
+  operationRepair: {
+    title: '🔧 Báo Cáo Sửa Chữa Siêu Thị',
+    getRecords: (dept, from, to) => DB.operationRepairs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    statusOf: r => r.estimateStatus,
+    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['PENDING', 'Dự toán chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Dự toán đã duyệt', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối', 'bg-red-500']]
   }
 };
 

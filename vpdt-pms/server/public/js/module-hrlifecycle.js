@@ -77,11 +77,18 @@ function populateHrpOnboardingDeptDropdowns() {
   const storeSel = document.getElementById('hrpOnbStore');
   if (storeSel) storeSel.innerHTML = (DB.stores || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
 }
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hrpOnbJobTitle trước đây là <select> gõ-cứng-toàn-bộ (không
+// tìm-kiếm được khi danh mục chức danh dài) — nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*" bắt buộc dùng cho
+// mọi ô mới từ giờ (xem CLAUDE.md), việc lọc theo posType (Văn Phòng/Siêu Thị) VẪN giữ đúng logic cũ,
+// chỉ đổi cách nạp danh sách gợi ý (sddSetOptions thay vì dựng <option>).
 function populateHrpOnboardingJobTitleOptions(posType) {
-  const sel = document.getElementById('hrpOnbJobTitle');
-  if (!sel) return;
+  const input = document.getElementById('hrpOnbJobTitle');
+  if (!input) return;
   const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
-  sel.innerHTML = options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  sddSetOptions('hrpOnbJobTitleDatalist', options);
+  // Đổi posType -> chức danh đã gõ trước đó (nếu có) có thể không còn thuộc danh mục mới -> xoá để
+  // tránh gửi nhầm 1 chức danh KHÔNG khớp posType vừa chọn.
+  input.value = '';
 }
 function onHrpOnboardingPosTypeChange() {
   const posType = document.getElementById('hrpOnbPosType').value;
@@ -338,8 +345,13 @@ function renderHrProcessDetailBody(item) {
       ${t.leavePayoutInfo && t.leavePayoutInfo.amount > 0 ? `<tr><td colspan="6" class="px-2 pb-2 text-[11px] text-amber-700 italic">💰 Quy đổi phép năm chưa nghỉ (tham khảo): ${t.leavePayoutInfo.remainingDays} ngày × ${(t.leavePayoutInfo.dailyRate || 0).toLocaleString('vi-VN')}đ = <b>${t.leavePayoutInfo.amount.toLocaleString('vi-VN')}đ</b> — kế toán vào module Lương, thêm dòng "Thưởng khác" trên phiếu lương kỳ cuối của nhân viên này nếu công ty quyết định chi trả.</td></tr>` : ''}`;
   }).join('');
 
+  // escapeHtml() quanh href — PHÁT HIỆN ở đợt audit chuyên sâu lần 2: attachmentDownloadUrl() trả
+  // nguyên fileUrl thô (không qua /api/files/download) cho tệp không bắt đầu bằng "/uploads/", trước đây
+  // nhét thẳng vào href không qua escapeHtml() -> stored XSS nếu fileUrl chứa scheme "javascript:" (đã
+  // chặn ở nguồn tại addHrProcessAttachment()/lib/recordActions.js, đây là lớp phòng thủ thứ 2 cho dữ
+  // liệu cũ/đường khác).
   const attachmentList = (item.attachments || []).length
-    ? (item.attachments || []).map(a => `<div class="text-xs"><a href="${attachmentDownloadUrl(a.fileUrl)}" target="_blank" class="text-teal-700 hover:underline">📎 ${escapeHtml(a.fileName)}</a> <span class="text-gray-400">(${escapeHtml(a.uploadedByName)} — ${escapeHtml(a.uploadedAt)})</span></div>`).join('')
+    ? (item.attachments || []).map(a => `<div class="text-xs"><a href="${escapeHtml(attachmentDownloadUrl(a.fileUrl))}" target="_blank" class="text-teal-700 hover:underline">📎 ${escapeHtml(a.fileName)}</a> <span class="text-gray-400">(${escapeHtml(a.uploadedByName)} — ${escapeHtml(a.uploadedAt)})</span></div>`).join('')
     : '<div class="text-xs text-gray-400 italic">Chưa có tài liệu đính kèm.</div>';
 
   const historyList = (item.history || []).slice().reverse().map(h =>
