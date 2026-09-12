@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**19.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.5 (2026-09-12): Bước 8i — SQL-filter vppRegistrations trong GET /api/data
+
+Tiếp Bước 8h, `vppRegistrations` đơn giản hơn `itPriceApprovals`: `canViewVppRegistration()`
+(lib/recordViewScope.js) chỉ 3 nhánh — `canManageVpp` (admin/`vppManage`) xem hết, chính người TẠO
+(`Creator`), đang là người duyệt theo `vppDeptWorkflows` (dept-keyed, CHỈ 1 cấu hình duy nhất — không
+tách RETAIL/WHOLESALE như `itPriceApprovals`, không tách subType như `officeReqs`). Cũng KHÔNG có nhánh
+"phòng ban mình" (giống `itPriceApprovals`, khác `carRegs`/`officeReqs`).
+
+`routes/data.js`: thêm `computeVppRegistrationsApproverDepts(user, data)` +
+`loadVppRegistrationsScoped(user, data)` — gộp {phòng ban approver} rồi tải từng phòng ban + 1 lượt riêng
+theo `Creator`, gộp + khử trùng. `vppManage`/admin vẫn tải company-wide như cũ.
+`filterVppRegistrationsForUser()` vẫn áp lại y hệt trước.
+
+Thêm `tests/test-vpp-registrations-scope.js` (5/5 pass NGAY LẦN ĐẦU) — phủ đủ cả 3 nhánh, xác nhận không
+có nhánh phòng ban mình (giống bài học từ `itPriceApprovals`). Re-run cả 7 test scope trước đó (Bước
+8b-8h), tất cả vẫn pass.
+
+Đến đây, TOÀN BỘ 9 collection thuộc nhóm "dept-hoặc-workflow-approver" trong danh sách đã rà soát ban đầu
+(`paymentRequests`, `trainingDocumentProgress`, `checklistSubmissions`, `operationOrders`, `carRegs`,
+`officeReqs`, `itPriceApprovals`, `vppRegistrations`, cộng `notifications` ở Bước 8a) đã được SQL-filter
+hoá. **Còn lại cần thiết kế riêng, phức tạp hơn nhiều**: `budgetEntries` (chưa rà soát), và nhóm cây quản
+lý đệ quy/tra cứu chéo (`operationStoreOpenings`/`operationRepairs`/`docs`/`submissions`/
+`attendanceRecords`).
 
 ## v19.4 (2026-09-12): Bước 8h — SQL-filter itPriceApprovals trong GET /api/data
 

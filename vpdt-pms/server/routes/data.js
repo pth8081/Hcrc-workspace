@@ -729,6 +729,35 @@ async function loadItPriceApprovalsScoped(user, data) {
   return [...byId.values()];
 }
 
+// Bước 8i — vppRegistrations: canViewVppRegistration() (lib/recordViewScope.js) đơn giản hơn itPriceApprovals
+// — chỉ 3 nhánh: (1) canManageVpp (admin/vppManage) xem HẾT, (2) chính người TẠO (Creator), (3) đang là
+// người duyệt theo vppDeptWorkflows (dept-keyed, 1 cấu hình duy nhất — không tách RETAIL/WHOLESALE như
+// itPriceApprovals). KHÔNG có nhánh "phòng ban mình" (giống itPriceApprovals, khác carRegs/officeReqs).
+function computeVppRegistrationsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.vppDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadVppRegistrationsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.vppManage) {
+    return getAllForCollectionCached('vppRegistrations');
+  }
+  const depts = new Set(computeVppRegistrationsApproverDepts(user, data));
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('vppRegistrations', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownCreatedItems = await getForCollectionByColumnCached('vppRegistrations', 'Creator', user?.username);
+  for (const r of ownCreatedItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -788,11 +817,11 @@ router.get('/', async (req, res) => {
     // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
     // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
     // where.Dept ở SQL.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -808,6 +837,7 @@ router.get('/', async (req, res) => {
       loadCarRegsScoped(req.freshUser, data),
       loadOfficeReqsScoped(req.freshUser, data),
       loadItPriceApprovalsScoped(req.freshUser, data),
+      loadVppRegistrationsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -822,6 +852,7 @@ router.get('/', async (req, res) => {
     data.carRegs = carRegsResult;
     data.officeReqs = officeReqsResult;
     data.itPriceApprovals = itPriceApprovalsResult;
+    data.vppRegistrations = vppRegistrationsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
