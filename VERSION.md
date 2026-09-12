@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**19.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.2 (2026-09-12): Bước 8f — SQL-filter carRegs trong GET /api/data (4 nhánh gộp thành tập phòng ban)
+
+Tiếp Bước 8e, `carRegs` là collection ĐẦU TIÊN của nhóm "Đăng Ký Xe/Văn Phòng/IT/VPP/Ngân Sách" (đã báo
+trước là phức tạp hơn hẳn — không còn 1 khuôn chung, mỗi collection cần nghiên cứu riêng).
+`canViewCarReg()` (lib/recordViewScope.js) có **4 nhánh**: (1) admin, (2) chính LÁI XE được gán
+(`assignedDriverUsername` — KHÔNG nhất thiết cùng phòng ban, xe có thể dùng chung công ty), (3)
+`scopeAllows(carView, dept)`: phòng ban mình + `carView.all` (xem hết) + `carView.depts[]` (danh sách
+phòng ban cụ thể được cấp thêm, RIÊNG TỪNG NGƯỜI qua quyền cá nhân, không phải cấu hình chung), (4) đang
+là người duyệt theo `carDeptWorkflows` (dept-keyed, khác `operationOrders` là tier-keyed).
+
+Khác với `operationOrders` (approver phụ thuộc tier, không quy về được 1 tập phòng ban cụ thể) — ở
+`carRegs`, nhánh (3)+(4) đều quy về được 1 **TẬP PHÒNG BAN** cụ thể, tính được TRƯỚC khi tải: gộp
+`{phòng ban mình} ∪ carView.depts[] ∪ {phòng ban mà mình là approver theo carDeptWorkflows}`, rồi tải
+RIÊNG TỪNG phòng ban trong tập đó (mỗi phòng ban vẫn tự cache qua `getForCollectionByDeptCached`, nhiều
+người cùng phòng ban vẫn dùng chung 1 lượt đọc) + 1 lượt riêng theo `AssignedDriverUsername` cho nhánh
+(2), rồi gộp + khử trùng theo id. `carView.all`/admin (số ít) vẫn tải company-wide như cũ.
+
+`routes/data.js`: thêm `computeCarRegsApproverDepts(user, data)` + `loadCarRegsScoped(user, data)`.
+`filterCarRegsForUser()` vẫn áp lại y hệt trước (lớp chốt quyền xem thật).
+
+Thêm `tests/test-car-regs-scope.js` (7/7 pass) — phủ đủ cả 4 nhánh RIÊNG BIỆT + xác nhận không thừa/thiếu
+khi kết hợp (VD người duyệt phòng khác vẫn thấy đúng phòng mình + phòng đang duyệt, không thấy phòng
+không liên quan).
+
+**Còn lại (Bước 8 tiếp theo)**: `officeReqs`/`itPriceApprovals`/`vppRegistrations`/`budgetEntries` — mỗi
+collection cần nghiên cứu riêng chi tiết khác nhau (VD `officeReqs` phân theo `subType` Mua Bán/Sửa
+Chữa/Đầu Tư với workflow riêng từng loại); để sau `operationStoreOpenings`/`operationRepairs`/`docs`/
+`submissions`/`attendanceRecords` (cây quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
 
 ## v19.1 (2026-09-12): Bước 8e — SQL-filter operationOrders trong GET /api/data (nhánh OR theo TIER, không theo dept)
 
