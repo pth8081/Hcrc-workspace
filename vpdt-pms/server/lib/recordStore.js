@@ -287,6 +287,357 @@ const DEDICATED_TABLES = {
       DocId:    { sqlType: () => sql.BigInt,        extract: r => (r.docId != null ? r.docId : null) },
       Username: { sqlType: () => sql.NVarChar(100), extract: r => r.username || null }
     }
+  },
+
+  // ===== Bước 7f — Nhóm B (tăng trưởng vừa) + Nhóm C (danh mục/cấu hình) — xem sql/schema.sql khối
+  // "BƯỚC 7f" cho lý giải từng bảng. =====
+  contracts: {
+    table: 'Contracts', hasCode: true,
+    columns: {
+      Dept:           { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      CustodianDept:  { sqlType: () => sql.NVarChar(100), extract: r => r.custodianDept || null },
+      Creator:        { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:         { sqlType: () => sql.NVarChar(20),  extract: r => r.approvalStatus || null },
+      PaymentStatus:  { sqlType: () => sql.NVarChar(20),  extract: r => r.paymentStatus || null },
+      RootContractId: { sqlType: () => sql.BigInt,        extract: r => (r.rootContractId != null ? r.rootContractId : null) }
+    }
+  },
+  carRegs: {
+    table: 'CarRegs', hasCode: true,
+    columns: {
+      Dept:                    { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:                 { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:                  { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null },
+      AssignedDriverUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.assignedDriverUsername || null }
+    }
+  },
+  officeReqs: {
+    table: 'OfficeReqs', hasCode: true,
+    columns: {
+      Dept:     { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      SubType:  { sqlType: () => sql.NVarChar(20),  extract: r => r.subType || null },
+      Creator:  { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:   { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  meetings: {
+    table: 'Meetings', hasCode: true,
+    columns: {
+      Dept:     { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:  { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Room:     { sqlType: () => sql.NVarChar(100), extract: r => r.room || null },
+      Status:   { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  meetingMinutes: {
+    table: 'MeetingMinutes', hasCode: true,
+    columns: {
+      Author:          { sqlType: () => sql.NVarChar(100), extract: r => r.author || null },
+      LinkedMeetingId: { sqlType: () => sql.BigInt,        extract: r => (r.linkedMeetingId != null ? r.linkedMeetingId : null) }
+    }
+  },
+  internalPosts: {
+    table: 'InternalPosts', hasCode: false,
+    columns: {
+      Author: { sqlType: () => sql.NVarChar(100), extract: r => r.author || null },
+      Type:   { sqlType: () => sql.NVarChar(20),  extract: r => r.type || null },
+      Status: { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  itSupportTickets: {
+    table: 'ItSupportTickets', hasCode: false,
+    columns: {
+      Dept:              { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:           { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:            { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null },
+      ApprovalApprover:  { sqlType: () => sql.NVarChar(100), extract: r => r.approvalApprover || null }
+    }
+  },
+  itPriceApprovals: {
+    table: 'ItPriceApprovals', hasCode: false,
+    columns: {
+      Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:   { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      PriceType: { sqlType: () => sql.NVarChar(20),  extract: r => r.priceType || null },
+      Status:    { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  uniformIssuances: {
+    table: 'UniformIssuances', hasCode: true,
+    columns: {
+      Dept:              { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      EmployeeUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.employeeUsername || null }
+    }
+  },
+  uniformStockAdjustments: {
+    table: 'UniformStockAdjustments', hasCode: false,
+    columns: {
+      Dept:              { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      EmployeeUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.employeeUsername || null }
+    }
+  },
+  uniformTransfers: {
+    table: 'UniformTransfers', hasCode: false,
+    columns: {
+      SourceDept:  { sqlType: () => sql.NVarChar(100), extract: r => r.sourceDept || null },
+      TargetDept:  { sqlType: () => sql.NVarChar(100), extract: r => r.targetDept || null },
+      Status:      { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  budgetEntries: {
+    table: 'BudgetEntries', hasCode: false,
+    columns: {
+      Dept:       { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      EntryKind:  { sqlType: () => sql.NVarChar(10),  extract: r => r.entryKind || null },
+      PeriodId:   { sqlType: () => sql.BigInt,        extract: r => (r.periodId != null ? r.periodId : null) },
+      Status:     { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  recruitmentReferrals: {
+    table: 'RecruitmentReferrals', hasCode: false,
+    columns: {
+      Dept:              { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      ReferrerUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.referrerUsername || null },
+      JobId:             { sqlType: () => sql.BigInt,        extract: r => (r.jobId != null ? r.jobId : null) },
+      Status:            { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  licenses: {
+    table: 'Licenses', hasCode: true,
+    columns: {
+      Dept:             { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:          { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      RootLicenseId:    { sqlType: () => sql.BigInt,        extract: r => (r.rootLicenseId != null ? r.rootLicenseId : null) },
+      Status:           { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null },
+      LifecycleStatus:  { sqlType: () => sql.NVarChar(20),  extract: r => r.lifecycleStatus || null },
+      ExpiryDate:       { sqlType: () => sql.Date,          extract: r => r.expiryDate || null }
+    }
+  },
+  itServiceRenewals: {
+    table: 'ItServiceRenewals', hasCode: false,
+    columns: {
+      Dept:        { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:     { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      ExpiryDate:  { sqlType: () => sql.Date,          extract: r => r.expiryDate || null }
+    }
+  },
+  leaveRequests: {
+    table: 'LeaveRequests', hasCode: false,
+    columns: {
+      EmployeeCode:  { sqlType: () => sql.NVarChar(50), extract: r => r.employeeCode || null },
+      FromDate:      { sqlType: () => sql.Date,         extract: r => r.fromDate || null },
+      ToDate:        { sqlType: () => sql.Date,         extract: r => r.toDate || null },
+      Status:        { sqlType: () => sql.NVarChar(20), extract: r => r.status || null }
+    }
+  },
+  shiftSwapRequests: {
+    table: 'ShiftSwapRequests', hasCode: false,
+    columns: {
+      RequesterEmployeeCode:  { sqlType: () => sql.NVarChar(50),  extract: r => r.requesterEmployeeCode || null },
+      TargetEmployeeCode:     { sqlType: () => sql.NVarChar(50),  extract: r => r.targetEmployeeCode || null },
+      RequesterRosterId:      { sqlType: () => sql.BigInt,        extract: r => (r.requesterRosterId != null ? r.requesterRosterId : null) },
+      Status:                 { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  operationExecutionPeriods: {
+    table: 'OperationExecutionPeriods', hasCode: false,
+    columns: {
+      SourceType:  { sqlType: () => sql.NVarChar(30), extract: r => r.sourceType || null },
+      SourceId:    { sqlType: () => sql.BigInt,       extract: r => (r.sourceId != null ? r.sourceId : null) },
+      Status:      { sqlType: () => sql.NVarChar(20), extract: r => r.status || null }
+    }
+  },
+  vppRegistrations: {
+    table: 'VppRegistrations', hasCode: false,
+    columns: {
+      Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:   { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      PeriodId:  { sqlType: () => sql.BigInt,        extract: r => (r.periodId != null ? r.periodId : null) },
+      Status:    { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  trainingRegistrations: {
+    table: 'TrainingRegistrations', hasCode: false,
+    columns: {
+      Creator:  { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      ClassId:  { sqlType: () => sql.BigInt,        extract: r => (r.classId != null ? r.classId : null) },
+      Result:   { sqlType: () => sql.NVarChar(20),  extract: r => r.result || null }
+    }
+  },
+  reportPeriods: {
+    table: 'ReportPeriods', hasCode: false,
+    columns: {
+      Dept:     { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:  { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:   { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  reportEntries: {
+    table: 'ReportEntries', hasCode: false,
+    columns: {
+      PeriodId:  { sqlType: () => sql.BigInt,        extract: r => (r.periodId != null ? r.periodId : null) },
+      Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:   { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:    { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  trainingDocuments: {
+    table: 'TrainingDocuments', hasCode: false,
+    columns: {
+      CourseId: { sqlType: () => sql.BigInt, extract: r => (r.courseId != null ? r.courseId : null) }
+    }
+  },
+  trainingClasses: {
+    table: 'TrainingClasses', hasCode: false,
+    columns: {
+      CourseId:            { sqlType: () => sql.BigInt,        extract: r => (r.courseId != null ? r.courseId : null) },
+      TestId:              { sqlType: () => sql.BigInt,        extract: r => (r.testId != null ? r.testId : null) },
+      InstructorUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.instructorUsername || null },
+      Status:              { sqlType: () => sql.NVarChar(10),  extract: r => r.status || null },
+      SessionState:        { sqlType: () => sql.NVarChar(10),  extract: r => r.sessionState || null }
+    }
+  },
+  trainingCourses: {
+    table: 'TrainingCourses', hasCode: false,
+    columns: {}
+  },
+  trainingPlans: {
+    table: 'TrainingPlans', hasCode: false,
+    columns: {
+      CourseId:    { sqlType: () => sql.BigInt,        extract: r => (r.courseId != null ? r.courseId : null) },
+      Month:       { sqlType: () => sql.NVarChar(7),   extract: r => r.month || null },
+      TargetDept:  { sqlType: () => sql.NVarChar(100), extract: r => r.targetDept || null }
+    }
+  },
+  careerPaths: {
+    table: 'CareerPaths', hasCode: false,
+    columns: {}
+  },
+  careerPathConfirmations: {
+    table: 'CareerPathConfirmations', hasCode: false,
+    columns: {
+      PathId:    { sqlType: () => sql.BigInt,        extract: r => (r.pathId != null ? r.pathId : null) },
+      Username:  { sqlType: () => sql.NVarChar(100), extract: r => r.username || null },
+      Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null }
+    }
+  },
+  onboardingPaths: {
+    table: 'OnboardingPaths', hasCode: false,
+    columns: {}
+  },
+  onboardingProgress: {
+    table: 'OnboardingProgress', hasCode: false,
+    columns: {
+      EmployeeUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.employeeUsername || null },
+      PathId:            { sqlType: () => sql.BigInt,        extract: r => (r.pathId != null ? r.pathId : null) },
+      StartDate:         { sqlType: () => sql.Date,          extract: r => r.startDate || null }
+    }
+  },
+  recruitmentJobs: {
+    table: 'RecruitmentJobs', hasCode: false,
+    columns: {
+      HiringDept: { sqlType: () => sql.NVarChar(100), extract: r => r.hiringDept || null },
+      Status:     { sqlType: () => sql.NVarChar(10),  extract: r => r.status || null }
+    }
+  },
+  uniformPeriods: {
+    table: 'UniformPeriods', hasCode: false,
+    columns: {
+      Dept:            { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:         { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      ApprovalStatus:  { sqlType: () => sql.NVarChar(20),  extract: r => r.approvalStatus || null }
+    }
+  },
+  budgetTemplates: {
+    table: 'BudgetTemplates', hasCode: false,
+    columns: {}
+  },
+  budgetPeriods: {
+    table: 'BudgetPeriods', hasCode: false,
+    columns: {
+      Dept:        { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      TemplateId:  { sqlType: () => sql.BigInt,        extract: r => (r.templateId != null ? r.templateId : null) },
+      Status:      { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  checklistTemplates: {
+    table: 'ChecklistTemplates', hasCode: false,
+    columns: {
+      TemplateCode:  { sqlType: () => sql.NVarChar(50), extract: r => r.templateCode || null },
+      TemplateType:  { sqlType: () => sql.NVarChar(20), extract: r => r.templateType || null },
+      Status:        { sqlType: () => sql.NVarChar(20), extract: r => r.status || null }
+    }
+  },
+  trainingTests: {
+    table: 'TrainingTests', hasCode: false,
+    columns: {}
+  },
+  hrFeedback: {
+    table: 'HrFeedback', hasCode: false,
+    columns: {
+      Dept:     { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:  { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:   { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  hrProcesses: {
+    table: 'HrProcesses', hasCode: false,
+    columns: {
+      Dept:                    { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      ProcessType:             { sqlType: () => sql.NVarChar(20),  extract: r => r.processType || null },
+      EmployeeCode:            { sqlType: () => sql.NVarChar(50),  extract: r => r.employeeCode || null },
+      EmployeeUsername:        { sqlType: () => sql.NVarChar(100), extract: r => r.employeeUsername || null },
+      DirectManagerUsername:   { sqlType: () => sql.NVarChar(100), extract: r => r.directManagerUsername || null },
+      Status:                  { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  laborContracts: {
+    table: 'LaborContracts', hasCode: true,
+    columns: {
+      EmployeeCode:      { sqlType: () => sql.NVarChar(50),  extract: r => r.employeeCode || null },
+      EmployeeUsername:  { sqlType: () => sql.NVarChar(100), extract: r => r.employeeUsername || null },
+      HrProcessId:       { sqlType: () => sql.BigInt,        extract: r => (r.hrProcessId != null ? r.hrProcessId : null) },
+      Status:            { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  shiftRoster: {
+    table: 'ShiftRoster', hasCode: false,
+    columns: {
+      EmployeeCode:  { sqlType: () => sql.NVarChar(50),  extract: r => r.employeeCode || null },
+      WorkDate:      { sqlType: () => sql.Date,          extract: r => r.workDate || null },
+      StoreCode:     { sqlType: () => sql.NVarChar(100), extract: r => r.storeCode || null },
+      Status:        { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  leaveBalances: {
+    table: 'LeaveBalances', hasCode: false,
+    columns: {
+      EmployeeCode:  { sqlType: () => sql.NVarChar(50), extract: r => r.employeeCode || null },
+      Year:          { sqlType: () => sql.Int,          extract: r => (r.year != null ? r.year : null) }
+    }
+  },
+  payrollPeriods: {
+    table: 'PayrollPeriods', hasCode: false,
+    columns: {
+      PeriodMonth:  { sqlType: () => sql.Int,         extract: r => (r.periodMonth != null ? r.periodMonth : null) },
+      PeriodYear:   { sqlType: () => sql.Int,         extract: r => (r.periodYear != null ? r.periodYear : null) },
+      Status:       { sqlType: () => sql.NVarChar(20), extract: r => r.status || null }
+    }
+  },
+  payslips: {
+    table: 'Payslips', hasCode: true,
+    columns: {
+      PeriodId:      { sqlType: () => sql.BigInt,       extract: r => (r.periodId != null ? r.periodId : null) },
+      EmployeeCode:  { sqlType: () => sql.NVarChar(50), extract: r => r.employeeCode || null }
+    }
+  },
+  vppPeriods: {
+    table: 'VppPeriods', hasCode: false,
+    columns: {
+      Dept:     { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:  { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:   { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
   }
 };
 
@@ -539,13 +890,40 @@ async function withLockedRecordById(collection, id, mutatorFn) {
 // checkFn(item) (tuỳ chọn) -> throw HttpError (vd 403) để huỷ, không xoá gì — chạy SAU khi đã khoá đọc
 // được đúng bản ghi (UPDLOCK/HOLDLOCK), TRƯỚC khi xoá, khớp đúng thời điểm mutatorFn chạy ở
 // withLockedRecordById() bên trên.
-async function deleteRecordById(collection, id, checkFn) {
-  // Chưa có bản "xoá thẳng" (không qua Thùng Rác) cho bảng riêng Bước 7 — 11 collection ở
-  // DEDICATED_TABLES đều xoá qua Thùng Rác (deleteRecordForCollection() -> moveDedicatedRecordToTrash()).
-  // Thà báo lỗi rõ ràng ngay ở đây còn hơn âm thầm xoá nhầm dbo.Records (nay rỗng cho collection đó).
-  if (DEDICATED_TABLES[collection]) {
-    throw new Error(`deleteRecordById() không hỗ trợ collection "${collection}" (đã chuyển sang bảng riêng Bước 7, dùng deleteRecordForCollection() thay thế).`);
+// Xoá THẲNG 1 dòng ở bảng riêng Bước 7 (KHÔNG qua Thùng Rác) — dùng cho collection có luồng nghiệp vụ
+// tự xoá-rồi-tạo-lại KHÔNG cần khôi phục (VD payslips: routes/payroll.js xoá phiếu lương cũ trước khi
+// tính lại toàn bộ kỳ lương). Khác moveDedicatedRecordToTrash() (soft-delete, có thể khôi phục) — hàm
+// này mất vĩnh viễn ngay, đúng khuôn deleteRecordById() gốc cho dbo.Records trước đây.
+async function deleteDedicatedRecordById(collection, id, checkFn) {
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('id', sql.BigInt, id)
+      .query(`SELECT Payload FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE Id = @id`);
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    }
+    const item = toRecord(readResult.recordset[0]);
+
+    if (checkFn) await checkFn(item);
+
+    const delReq = new sql.Request(tx);
+    await delReq.input('id', sql.BigInt, id).query(`DELETE FROM ${table} WHERE Id = @id`);
+
+    await tx.commit();
+    invalidateCollectionCache(collection);
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
   }
+}
+
+async function deleteRecordById(collection, id, checkFn) {
+  if (DEDICATED_TABLES[collection]) return deleteDedicatedRecordById(collection, id, checkFn);
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -1104,12 +1482,7 @@ async function createForCollection(collection, builderFn) {
 // cần hàm này — UNIQUE INDEX (Collection, Code) ở createForCollection() thường đã đủ chặn race thật.
 // @LockOwner='Transaction' -> khoá tự nhả khi commit/rollback, không cần tự gọi sp_releaseapplock.
 async function createForCollectionSerialized(collection, lockKey, builderFn) {
-  // Chưa hỗ trợ bảng riêng Bước 7 (chỉ dùng cho "meetings" hiện tại, chưa collection nào trong
-  // DEDICATED_TABLES cần khoá nghiêm túc theo khoá nghiệp vụ khi tạo) — báo lỗi rõ thay vì âm thầm ghi
-  // nhầm dbo.Records nếu sau này có ai gán thêm collection mới vào đường này.
-  if (DEDICATED_TABLES[collection]) {
-    throw new Error(`createForCollectionSerialized() chưa hỗ trợ collection "${collection}" (đã chuyển sang bảng riêng Bước 7).`);
-  }
+  const cfg = DEDICATED_TABLES[collection];
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -1125,21 +1498,46 @@ async function createForCollectionSerialized(collection, lockKey, builderFn) {
       throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
     }
 
-    const readReq = new sql.Request(tx);
-    const readResult = await readReq
-      .input('collection', sql.NVarChar(50), collection)
-      .query('SELECT Payload FROM dbo.Records WHERE Collection = @collection ORDER BY CreatedAt DESC, Id DESC');
-    const existing = readResult.recordset.map(toRecord);
+    if (cfg) {
+      // Bảng riêng Bước 7 (VD "meetings", khoá theo phòng họp — xem routes/create.js) — cùng cơ chế
+      // khoá nghiêm túc, chỉ khác nơi đọc/ghi (bảng riêng thay vì dbo.Records dùng chung).
+      const table = dedicatedTableName(collection);
+      const readReq = new sql.Request(tx);
+      const readResult = await readReq.query(`SELECT Payload FROM ${table} ORDER BY CreatedAt DESC, Id DESC`);
+      const existing = readResult.recordset.map(toRecord);
 
-    record = await builderFn(existing);
+      record = await builderFn(existing);
 
-    const writeReq = new sql.Request(tx);
-    await writeReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, record.id)
-      .input('code', sql.NVarChar(100), record.code || null)
-      .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
-      .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+      const writeReq = new sql.Request(tx);
+      writeReq.input('id', sql.BigInt, record.id);
+      writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+      const colNames = ['Id', 'Payload'];
+      const colParams = ['@id', '@payload'];
+      if (cfg.hasCode) {
+        writeReq.input('code', sql.NVarChar(100), record.code || null);
+        colNames.push('Code'); colParams.push('@code');
+      }
+      for (const { col, param } of bindExtractedColumns(writeReq, cfg, record)) {
+        colNames.push(col); colParams.push('@' + param);
+      }
+      await writeReq.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+    } else {
+      const readReq = new sql.Request(tx);
+      const readResult = await readReq
+        .input('collection', sql.NVarChar(50), collection)
+        .query('SELECT Payload FROM dbo.Records WHERE Collection = @collection ORDER BY CreatedAt DESC, Id DESC');
+      const existing = readResult.recordset.map(toRecord);
+
+      record = await builderFn(existing);
+
+      const writeReq = new sql.Request(tx);
+      await writeReq
+        .input('collection', sql.NVarChar(50), collection)
+        .input('id', sql.BigInt, record.id)
+        .input('code', sql.NVarChar(100), record.code || null)
+        .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
+        .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+    }
 
     await tx.commit();
     invalidateCollectionCache(collection);

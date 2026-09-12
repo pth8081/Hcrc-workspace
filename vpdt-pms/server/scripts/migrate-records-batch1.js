@@ -1,8 +1,11 @@
 // scripts/migrate-records-batch1.js — Script MỘT LẦN, chạy thủ công SAU KHI đã chạy sql/schema.sql bản
-// mới (tạo 11 bảng riêng Bước 7: Notifications/Docs/Submissions/AttendanceRecords/OperationOrders/
-// OperationStoreOpenings/OperationRepairs/PaymentRequests/ChecklistSubmissions/
-// TrainingTestSubmissions/TrainingDocumentProgress) — sao chép dữ liệu ĐANG CÓ của 11 collection này từ
-// dbo.Records (bảng dùng chung cũ) sang bảng riêng tương ứng.
+// mới (tạo toàn bộ bảng riêng Bước 7) — sao chép dữ liệu ĐANG CÓ (nếu có) của MỌI collection đã đăng ký
+// trong lib/recordStore.js DEDICATED_TABLES (hiện 55 collection — toàn bộ Bước 7a-7f: nhóm A tăng
+// trưởng cao + nhóm B tăng trưởng vừa + nhóm C danh mục/cấu hình) từ dbo.Records (bảng dùng chung cũ)
+// sang bảng riêng tương ứng. Tự động — không cần sửa gì ở đây khi có collection mới đăng ký vào
+// DEDICATED_TABLES, script tự lặp qua Object.keys(DEDICATED_TABLES).
+// Tên file giữ nguyên "batch1" dù không còn giới hạn ở 1 batch nữa — đổi tên sẽ phải sửa lại 2 file
+// hướng dẫn triển khai đã trỏ tới tên này, không có lợi ích chức năng gì để đánh đổi.
 //
 // AN TOÀN — script CHỈ THÊM, KHÔNG XOÁ:
 //   - KHÔNG xoá gì ở dbo.Records — dữ liệu gốc giữ nguyên vẹn làm bản sao lưu tới khi Bước 7g (dọn dẹp,

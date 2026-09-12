@@ -219,15 +219,16 @@ async function withMockedDb(rows, fn, dedicatedTables = {}) {
     }, dedicatedTables);
   });
 
+  // carRegs cũng đã chuyển sang bảng riêng dbo.CarRegs (Bước 7) — seed vào dedicatedTables thay vì rows.
   await checkAsync('insertRecord(): code trùng KHÔNG có chữ số cuối -> ném 409 ngay, không retry mù', async () => {
-    const rows = [{ Collection: 'carRegs', Id: 1, Code: 'KHONGCOSO', Payload: '{}' }];
-    await withMockedDb(rows, async (recordStore) => {
+    const dedicatedTables = { CarRegs: [{ Id: 1, Code: 'KHONGCOSO', Payload: '{}' }] };
+    await withMockedDb([], async (recordStore) => {
       const rec = { id: 2, code: 'KHONGCOSO', title: 'X' };
       await assert.rejects(
         () => recordStore.insertRecord('carRegs', rec),
         (err) => err.status === 409 && /đã tồn tại/.test(err.message) && !/tự động sinh/.test(err.message)
       );
-    });
+    }, dedicatedTables);
   });
 
   await checkAsync('insertRecord(): vẫn trùng sau khi hết vòng lặp retry -> 409 kèm rõ "đã thử tự động sinh mã mới nhưng vẫn trùng"', async () => {
