@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**18.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.2 (2026-09-12): Bước 7f — hoàn tất di trú TOÀN BỘ 55 collection khỏi `dbo.Records`
+
+Người dùng xác nhận CHƯA có dữ liệu thật trên production ("coi như dựng hệ
+thống mới") — bỏ cách tiếp cận thận trọng chỉ ưu tiên nhóm rủi ro cao nhất
+(v18.1), làm luôn toàn bộ 44 collection còn lại (nhóm B: 20 collection tăng
+trưởng vừa; nhóm C: 24 collection danh mục/cấu hình) sang bảng riêng —
+hoàn tất kiến trúc quan hệ cho **toàn bộ 55/55 collection** từng nằm chung
+trong `dbo.Records`.
+
+Cùng phương pháp/nguyên tắc đã dùng ở v18.1: khảo sát field-shape thật từ
+code (không đoán mò, có trích dẫn), chỉ tách cột SQL thật cho field có bằng
+chứng dùng lọc quyền xem/Báo Cáo, mảng lồng giữ nguyên trong Payload. Đối
+chiếu tự động xác nhận mọi bảng/cột trong `lib/recordStore.js`
+`DEDICATED_TABLES` đều khớp đúng `sql/schema.sql`.
+
+Rà soát toàn bộ call site trực tiếp (không qua dispatcher chung) trên cả
+repo cho các hàm cấp thấp, phát hiện + vá 2 lỗi thật TRƯỚC khi merge:
+`createForCollectionSerialized()` (dùng cho tạo mới có khoá nghiêm túc theo
+khoá nghiệp vụ — "meetings"/"vppRegistrations"/"trainingRegistrations")
+và `deleteRecordById()` (xoá thẳng không qua Thùng Rác — `payslips` khi
+tính lại lương) đều chỉ hỗ trợ đường `dbo.Records` cũ, nếu không vá sẽ chặn
+cứng các luồng này ngay khi deploy.
+
+Chạy lại toàn bộ 101 test hiện có — không phát sinh regression mới.
+
+**Còn lại**: nối API lọc/phân trang vào Báo Cáo + các màn danh sách (Bước
+7d/7e, cần ghép đúng logic phân quyền xem hiện có theo từng collection),
+dọn `dbo.Records` cũ sau khi xác nhận ổn định (Bước 7g), rồi test nghiệp vụ
+toàn diện (218 kịch bản) + rà soát an toàn tổng thể + demo như người dùng
+yêu cầu.
 
 ## v18.1 (2026-09-12): Bước 7 — bắt đầu tách collection tăng trưởng nhanh khỏi `dbo.Records` sang bảng riêng
 
