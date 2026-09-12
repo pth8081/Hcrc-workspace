@@ -1,8 +1,51 @@
 # Phiên bản hiện tại
 
-**19.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.8 (2026-09-12): Bước 8k/8l/8m — SQL-filter docs/submissions/attendanceRecords trong GET /api/data
+
+Tiếp tục Bước 8 (đã dừng ở 10 collection từ v19.6) sang 3 collection còn lại được xác định là khả thi:
+`docs`, `submissions`, `attendanceRecords` (2 collection còn lại — `operationStoreOpenings`/
+`operationRepairs` — đã hết nghĩa cần tối ưu riêng sau khi v19.7 bỏ hẳn phê duyệt Dự toán).
+
+- **`docs`** (`canViewDoc()`, lib/recordViewScope.js) — 4 nhánh: admin xem hết; chính người TẢI LÊN
+  (uploader, mọi phòng ban/trạng thái); viewApprovedAll/Depts (chỉ hồ sơ APPROVED) HOẶC viewDraftAll/
+  Depts (hồ sơ khác APPROVED); đang là người duyệt theo `deptWorkflows[dept]` (bất kỳ bước nào, không
+  phân biệt trạng thái). `loadDocsScoped()` (routes/data.js): viewDraftAll/viewApprovedAll (hiếm) tải
+  company-wide như admin; còn lại tải theo tập phòng ban (viewDraftDepts ∪ viewApprovedDepts ∪
+  approverDepts) + 1 lượt riêng theo Uploader.
+- **`submissions`** (`canViewSubmission()`) — 5 nhánh, phức tạp hơn docs vì có thêm 2 nhánh KHÔNG tra
+  được bằng cột SQL nào: "Xin ý kiến" (opinionRequestees, mảng username admin gán tay từng hồ sơ) và
+  approver theo `effectiveApprovers` ĐÓNG BĂNG lúc tạo (có thể lệch khỏi cấu hình HIỆN TẠI nếu admin đổi
+  người duyệt sau đó). `loadSubmissionsScoped()` SQL-narrow theo dept/creator/approver-cấu-hình-hiện-tại,
+  và LUÔN tải thêm mọi hồ sơ ĐANG PENDING company-wide để bù 2 nhánh trên — đánh đổi CHỦ Ý: hồ sơ đã
+  APPROVED/REJECTED từ lâu mà rơi vào 2 trường hợp hiếm này sẽ không hiện qua đường tải nhanh (chỉ mất
+  xem lại lịch sử, không phải chặn duyệt/thao tác thật đang hoạt động).
+- **`attendanceRecords`** (`canViewEmployeeAttendanceRecord()`) — không có cột Dept/Username nào để tra
+  thẳng, phải tự tính tập employeeCode cần tải TRƯỚC (self + toàn bộ cấp dưới trực tiếp/gián tiếp) rồi
+  mới tải theo EmployeeCode. Thêm hàm mới `computeSubordinateUsernames()` (lib/recordViewScope.js) — BFS
+  xuôi cây quản lý 1 LẦN từ danh sách `users` đã tải sẵn (O(số nhân viên), không phụ thuộc số bản ghi
+  chấm công — rẻ hơn hẳn gọi `isManagerOf()` lặp lại cho từng bản ghi).
+
+`filterDocsForUser()`/`filterSubmissionsForUser()`/`filterAttendanceRecordsForUser()` vẫn áp lại y hệt
+trước sau khi tải — SQL chỉ thu hẹp, không thay cho lớp chốt quyền xem thật (nguyên tắc xuyên suốt cả
+Bước 8).
+
+Thêm 3 test file mới (`test-docs-scope.js`, `test-submissions-scope.js`,
+`test-attendance-records-scope.js`, 21/21 scenario pass). Phát hiện + vá 1 lỗ hổng test: vì
+`loadDocsScoped()`/`loadSubmissionsScoped()`/`loadAttendanceRecordsScoped()` chạy KHÔNG điều kiện cho
+MỌI request (giống 10 loader Bước 8 trước), sub-test "over-fetch simulation" (giả lập tầng tải trả thừa)
+ở CẢ 8 file test Bước 8 cũ đều vô tình stub `getForCollectionByDeptCached`/`getForCollectionByColumnCached`
+bỏ qua tham số `collection` — khiến chúng "nhồi" dữ liệu sai hình dạng vào docs/submissions, làm
+`canViewDoc()`/`canViewSubmission()` (gọi `getAppDataValue()` thật) ném lỗi ngoài ý muốn. Đã sửa cả 8
+file cũ (`test-payment-requests-dept-scope.js`, `test-checklist-submissions-scope.js`,
+`test-operation-orders-dept-scope.js`, `test-car-regs-scope.js`, `test-office-reqs-scope.js`,
+`test-it-price-approvals-scope.js`, `test-vpp-registrations-scope.js`, `test-budget-entries-scope.js`)
+để stub tôn trọng đúng tham số `collection` — chỉ là sửa TEST, không đổi hành vi code thật. Full
+regression suite (128+ file) chạy lại toàn bộ, không phát sinh lỗi mới ngoài các lỗi môi trường đã biết
+từ trước (thiếu SQL Server cục bộ, thiếu file PDF mẫu, 1 lỗi operationOrderReceipt không liên quan).
 
 ## v19.7 (2026-09-12): Xoá hẳn quy trình duyệt Dự Toán ở Vận Hành > Siêu Thị
 

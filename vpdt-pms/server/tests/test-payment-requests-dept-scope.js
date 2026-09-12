@@ -161,8 +161,13 @@ async function main() {
       // riêng nhánh tải SQL.
       stubModule('lib/recordStore', {
         MIGRATED_COLLECTIONS: new Set(['paymentRequests']),
-        getAllForCollectionCached: async () => ALL_PAYMENT_REQUESTS.map(r => ({ ...r })),
-        getForCollectionByDeptCached: async () => ALL_PAYMENT_REQUESTS.map(r => ({ ...r })), // CỐ Ý trả thừa mọi phòng ban
+        getAllForCollectionCached: async (collection) => (collection === 'paymentRequests' ? ALL_PAYMENT_REQUESTS.map(r => ({ ...r })) : []),
+        // CỐ Ý trả thừa mọi phòng ban CHỈ cho paymentRequests — các collection khác (docs/submissions/
+        // attendanceRecords... cũng gọi hàm này KHÔNG điều kiện ở routes/data.js) vẫn phải trả đúng rỗng,
+        // nếu không sẽ vô tình "nhồi" dữ liệu sai hình dạng vào collection khác, có thể khiến
+        // canViewDoc()/canViewSubmission() (đọc appData thật qua getAppDataValue(), KHÔNG stub ở test
+        // này) ném lỗi ngoài ý muốn thay vì đúng lỗi cần giả lập.
+        getForCollectionByDeptCached: async (collection) => (collection === 'paymentRequests' ? ALL_PAYMENT_REQUESTS.map(r => ({ ...r })) : []),
         getForCollectionByUsernameCached: async () => [],
         getForCollectionByColumnCached: async () => []
       });

@@ -163,10 +163,14 @@ async function main() {
       resetData();
       stubModule('lib/recordStore', {
         MIGRATED_COLLECTIONS: new Set(['checklistSubmissions']),
-        getAllForCollectionCached: async () => ALL_SUBMISSIONS.map(r => ({ ...r })),
+        // Chỉ trả thừa cho ĐÚNG checklistSubmissions — collection khác (docs/submissions/attendanceRecords...
+        // cũng gọi các hàm này KHÔNG điều kiện ở routes/data.js) phải trả đúng rỗng, tránh vô tình "nhồi"
+        // dữ liệu sai hình dạng khiến canViewDoc()/canViewSubmission() (đọc appData thật qua
+        // getAppDataValue(), KHÔNG stub ở test này) ném lỗi ngoài ý muốn.
+        getAllForCollectionCached: async (collection) => (collection === 'checklistSubmissions' ? ALL_SUBMISSIONS.map(r => ({ ...r })) : []),
         getForCollectionByDeptCached: async () => [],
         getForCollectionByUsernameCached: async () => [],
-        getForCollectionByColumnCached: async () => ALL_SUBMISSIONS.map(r => ({ ...r })) // CỐ Ý trả thừa mọi siêu thị
+        getForCollectionByColumnCached: async (collection) => (collection === 'checklistSubmissions' ? ALL_SUBMISSIONS.map(r => ({ ...r })) : []) // CỐ Ý trả thừa mọi siêu thị
       });
       delete require.cache[require.resolve('../routes/data')];
       const freshDataRoutes = require('../routes/data');

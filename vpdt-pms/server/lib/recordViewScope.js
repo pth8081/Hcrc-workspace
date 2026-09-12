@@ -34,6 +34,37 @@ function isManagerOf(managerUsername, targetUsername, allUsers) {
   return false;
 }
 
+// computeSubordinateUsernames(): TOÀN BỘ cấp dưới TRỰC TIẾP + GIÁN TIẾP của `username` (đi XUÔI cây Cơ
+// Cấu Tổ Chức, ngược hướng isManagerOf() ở trên vốn đi NGƯỢC từ 1 người cụ thể lên tra "ai đó có phải
+// quản lý của tôi không") — dùng cho Bước 8 (GET /api/data, routes/data.js loadAttendanceRecordsScoped())
+// để tính trước 1 LẦN DUY NHẤT tập username cần tải AttendanceRecords, thay vì gọi isManagerOf() lặp lại
+// cho TỪNG bản ghi chấm công (mỗi lần isManagerOf() tự đi ngược tối đa 50 bước — với hàng nghìn bản ghi
+// công ty lớn sẽ nhân lên rất tốn). Dựng map con->cha 1 lần rồi BFS xuôi từ `username` — O(số nhân viên),
+// không phụ thuộc số bản ghi chấm công (collection tăng trưởng theo thời gian, số nhân viên thì không).
+// assertNoManagerCycle() (routes/data.js prepareUsersForSave()) đã chặn vòng lặp lúc GHI users nên BFS ở
+// đây không cần tự giới hạn bước — vẫn giữ 1 `visited` Set để không lặp vô hạn nếu lỡ có dữ liệu cũ kẹt
+// vòng lặp trước khi validate được thêm.
+function computeSubordinateUsernames(username, allUsers) {
+  const result = new Set();
+  if (!username) return result;
+  const childrenByManager = new Map();
+  for (const u of allUsers || []) {
+    if (!u.managerUsername) continue;
+    if (!childrenByManager.has(u.managerUsername)) childrenByManager.set(u.managerUsername, []);
+    childrenByManager.get(u.managerUsername).push(u.username);
+  }
+  const queue = [username];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const child of childrenByManager.get(cur) || []) {
+      if (result.has(child)) continue;
+      result.add(child);
+      queue.push(child);
+    }
+  }
+  return result;
+}
+
 // Cơ Cấu Tổ Chức: user.managerUsername (field phẳng, lưu như "Chức danh"/jobTitle — không có bảng/
 // collection riêng) — CHƯA từng có khái niệm quản lý/cấp trên trong hệ thống trước đây nên KHÔNG có gì
 // chặn vòng lặp sẵn; phải tự viết validate ở ĐÂY, dùng chung cho MỌI đường ghi "users" (đường ghi toàn
@@ -984,7 +1015,7 @@ function filterChecklistSubmissionsForUser(items, user) {
 }
 
 module.exports = {
-  isManagerOf, assertNoManagerCycle, hasOwnWorkItemInSource,
+  isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,

@@ -30,6 +30,7 @@ const {
   filterHrProcessesForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, sanitizePermGroupsForViewer, assertNoManagerCycle,
+  computeSubordinateUsernames,
   filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
   filterPayrollPeriodsForUser, filterPayslipsForUser,
@@ -788,6 +789,127 @@ async function loadBudgetEntriesScoped(user, data) {
   return [...byId.values()];
 }
 
+// Bước 8k — docs: canViewDoc() (lib/recordViewScope.js) 4 nhánh — (1) admin xem HẾT, (2) chính người
+// TẢI LÊN (uploader, mọi phòng ban/trạng thái), (3) viewApprovedAll/viewApprovedDepts (chỉ áp dụng hồ sơ
+// APPROVED) HOẶC viewDraftAll/viewDraftDepts (áp dụng hồ sơ KHÁC APPROVED), (4) đang là người duyệt theo
+// deptWorkflows[dept] (BẤT KỲ bước nào, không phân biệt trạng thái hồ sơ — khớp đúng
+// resolveDocApproversServer(), KHÔNG có snapshot effectiveApprovers như submissions bên dưới nên luôn
+// tra đúng cấu hình HIỆN TẠI, không có nguy cơ lệch dữ liệu cũ). viewDraftAll/viewApprovedAll (hiếm, vai
+// trò kiểu quản lý cấp cao) tải company-wide như admin — còn lại tải theo tập PHÒNG BAN (viewDraftDepts ∪
+// viewApprovedDepts ∪ approverDepts, TRÙNG hơi thừa 1 chút giữa 2 loại trạng thái nhưng filterDocsForUser()
+// vẫn lọc lại ĐÚNG sau đó, an toàn) + 1 lượt riêng theo Uploader.
+function computeDocsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.deptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadDocsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.viewDraftAll || user?.perms?.viewApprovedAll) {
+    return getAllForCollectionCached('docs');
+  }
+  const depts = new Set();
+  (user?.perms?.viewDraftDepts || []).forEach(d => depts.add(d));
+  (user?.perms?.viewApprovedDepts || []).forEach(d => depts.add(d));
+  computeDocsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('docs', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownUploads = await getForCollectionByColumnCached('docs', 'Uploader', user?.username);
+  for (const r of ownUploads) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8l — submissions: canViewSubmission() (lib/recordViewScope.js) 5 nhánh — (1) admin xem HẾT, (2)
+// chính người TẠO (creator), (3) scopeAllows(submissionView, dept) — phòng ban mình HOẶC submissionView.
+// all/depts[], (4) đang được mời "Xin ý kiến" (opinionRequestees, mảng username admin gán TAY từng hồ
+// sơ), (5) đang là người duyệt theo effectiveApprovers ĐÃ ĐÓNG BĂNG lúc tạo (resolveSubmissionApproversServer()
+// ưu tiên đọc snapshot này trước, chỉ tra lại submissionTypeDeptWorkflows/submissionDeptWorkflows HIỆN
+// TẠI cho hồ sơ CŨ chưa có snapshot).
+//
+// Nhánh (4)/(5) KHÔNG có cột SQL nào tra theo username (opinionRequestees là mảng tự do admin gán tay
+// từng hồ sơ, không giống Dept/Creator; effectiveApprovers là ẢNH CHỤP lúc tạo nên có thể LỆCH khỏi
+// computeSubmissionsApproverDepts() bên dưới — hàm đó chỉ quét được cấu hình HIỆN TẠI, nếu admin đổi
+// người duyệt SAU khi hồ sơ đã tạo thì approver gốc theo snapshot cũ rơi ngoài tập phòng ban vừa tính) —
+// không lập bảng phụ riêng chỉ để tra 2 trường hợp này. Bù đắp bằng cách LUÔN tải thêm mọi hồ sơ ĐANG
+// PENDING company-wide (tập luôn NHỎ — chỉ hồ sơ đang xử lý dở, không tích luỹ theo thời gian như
+// APPROVED/REJECTED) — đúng lúc "Xin ý kiến"/approver gốc còn ý nghĩa THẬT SỰ (đang chờ xử lý). Hồ sơ ĐÃ
+// xong (APPROVED/REJECTED) mà rơi vào 2 trường hợp hiếm này sẽ không hiện qua đường tải nhanh nữa — đánh
+// đổi CHỦ Ý, chỉ mất xem lại LỊCH SỬ (không phải bị chặn duyệt/thao tác thật nào đang hoạt động, khác
+// hẳn lỗ hổng "chặn nhầm approver đang active" mà canViewSubmission() từng phải vá — xem chú thích ở
+// lib/recordViewScope.js ngay trên hàm đó).
+function computeSubmissionsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.submissionDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  for (const typeMap of Object.values(data.submissionTypeDeptWorkflows || {})) {
+    for (const [dept, wfConfig] of Object.entries(typeMap || {})) {
+      const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+      const isApproverHere = Object.values(approvers || {}).some(list =>
+        Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+      if (isApproverHere) depts.push(dept);
+    }
+  }
+  return depts;
+}
+async function loadSubmissionsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.submissionView?.all) {
+    return getAllForCollectionCached('submissions');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  if (Array.isArray(user?.perms?.submissionView?.depts)) user.perms.submissionView.depts.forEach(d => depts.add(d));
+  computeSubmissionsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('submissions', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownCreated = await getForCollectionByColumnCached('submissions', 'Creator', user?.username);
+  for (const r of ownCreated) byId.set(r.id, r);
+  const pendingItems = await getForCollectionByColumnCached('submissions', 'Status', 'PENDING');
+  for (const r of pendingItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8m — attendanceRecords: canViewEmployeeAttendanceRecord() (lib/recordViewScope.js) 3 nhánh —
+// (1) admin/hrAttendanceManage xem HẾT, (2) chính chủ (employeeCode -> username qua employeeProfiles),
+// (3) quản lý TRỰC TIẾP/GIÁN TIẾP của chủ bản ghi (isManagerOf(), đi ngược cây Cơ Cấu Tổ Chức không giới
+// hạn số cấp). Bảng AttendanceRecords chỉ có cột EmployeeCode/WorkDate/RecordType — KHÔNG có Dept/
+// Username/ManagerUsername nào để tra thẳng, phải tự tính tập "employeeCode nào user này được xem"
+// TRƯỚC (self + toàn bộ cấp dưới, qua computeSubordinateUsernames() — BFS xuôi 1 LẦN từ `users` đã tải
+// sẵn trong `data`, O(số nhân viên) — rẻ hơn hẳn gọi isManagerOf() lặp lại cho từng bản ghi chấm công vì
+// KHÔNG phụ thuộc số bản ghi, chỉ phụ thuộc số nhân viên) rồi mới tải theo EmployeeCode cho từng mã.
+function loadAttendanceRecordsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.hrAttendanceManage) {
+    return getAllForCollectionCached('attendanceRecords');
+  }
+  const relevantUsernames = computeSubordinateUsernames(user?.username, data.users);
+  if (user?.username) relevantUsernames.add(user.username);
+  const employeeCodes = new Set();
+  (data.employeeProfiles || []).forEach(p => {
+    if (p.username && p.employeeCode && relevantUsernames.has(p.username)) employeeCodes.add(p.employeeCode);
+  });
+
+  const byId = new Map();
+  return Promise.all([...employeeCodes].map(async (code) => {
+    const items = await getForCollectionByColumnCached('attendanceRecords', 'EmployeeCode', code);
+    for (const r of items) byId.set(r.id, r);
+  })).then(() => [...byId.values()]);
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -847,11 +969,14 @@ router.get('/', async (req, res) => {
     // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
     // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
     // where.Dept ở SQL.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries');
+    // Bước 8k/8l/8m — docs/submissions/attendanceRecords tách riêng khỏi vòng lặp tải chung, cùng lý do
+    // các collection ở trên: xem chú thích đầy đủ ở loadDocsScoped()/loadSubmissionsScoped()/
+    // loadAttendanceRecordsScoped() phía trên.
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -869,6 +994,9 @@ router.get('/', async (req, res) => {
       loadItPriceApprovalsScoped(req.freshUser, data),
       loadVppRegistrationsScoped(req.freshUser, data),
       loadBudgetEntriesScoped(req.freshUser, data),
+      loadDocsScoped(req.freshUser, data),
+      loadSubmissionsScoped(req.freshUser, data),
+      loadAttendanceRecordsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -885,6 +1013,9 @@ router.get('/', async (req, res) => {
     data.itPriceApprovals = itPriceApprovalsResult;
     data.vppRegistrations = vppRegistrationsResult;
     data.budgetEntries = budgetEntriesResult;
+    data.docs = docsResult;
+    data.submissions = submissionsResult;
+    data.attendanceRecords = attendanceRecordsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem

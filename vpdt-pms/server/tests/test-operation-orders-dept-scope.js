@@ -162,8 +162,12 @@ async function main() {
       resetData();
       stubModule('lib/recordStore', {
         MIGRATED_COLLECTIONS: new Set(['operationOrders']),
-        getAllForCollectionCached: async () => ALL_ORDERS.map(r => ({ ...r })),
-        getForCollectionByDeptCached: async () => ALL_ORDERS.map(r => ({ ...r })), // CỐ Ý trả thừa mọi siêu thị
+        // Chỉ trả thừa cho ĐÚNG operationOrders — collection khác (docs/submissions/attendanceRecords...
+        // cũng gọi các hàm này KHÔNG điều kiện ở routes/data.js) phải trả đúng rỗng, tránh vô tình "nhồi"
+        // dữ liệu sai hình dạng khiến canViewDoc()/canViewSubmission() (đọc appData thật qua
+        // getAppDataValue(), KHÔNG stub ở test này) ném lỗi ngoài ý muốn.
+        getAllForCollectionCached: async (collection) => (collection === 'operationOrders' ? ALL_ORDERS.map(r => ({ ...r })) : []),
+        getForCollectionByDeptCached: async (collection) => (collection === 'operationOrders' ? ALL_ORDERS.map(r => ({ ...r })) : []), // CỐ Ý trả thừa mọi siêu thị
         getForCollectionByUsernameCached: async () => [],
         getForCollectionByColumnCached: async () => []
       });
