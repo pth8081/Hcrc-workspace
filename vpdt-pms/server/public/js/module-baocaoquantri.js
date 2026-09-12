@@ -418,7 +418,8 @@ const REPORT_MODULE_CONFIGS = {
   task: {
     title: '✅ Báo Cáo Công Việc',
     // Công việc không có field phòng ban đáng tin (giao theo người, không theo phòng ban) — không lọc/không xếp theo phòng ban, khớp renderReportsSummary() hiện tại.
-    getRecords: (dept, from, to) => DB.tasks.filter(t => isInDateRange(t.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('tasks', dept, from, to,
+      () => DB.tasks.filter(t => isInDateRange(t.createdAt, from, to))),
     deptBreakdown: false,
     statusOf: t => t.status,
     statusBuckets: [['TODO', 'Chưa bắt đầu', 'bg-gray-500'], ['DOING', 'Đang thực hiện', 'bg-blue-500'], ['DONE', 'Hoàn thành', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']],

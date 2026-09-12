@@ -1,8 +1,21 @@
 # Phiên bản hiện tại
 
-**18.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.5 (2026-09-12): Bước 7h (tiếp) — nối nốt Công Việc vào API lọc SQL Báo Cáo
+
+Thêm `queryTasksInRange()` (`lib/taskStore.js`) — đọc `dbo.Tasks` (bảng riêng có từ Bước 6b, không thuộc
+55 collection `DEDICATED_TABLES` của Bước 7) có lọc theo khoảng ngày ngay ở SQL, cùng khuôn với
+`queryDedicatedRecords()` nhưng không dùng chung hàm đó (khác nguồn bảng). `routes/reports.js` rẽ nhánh
+đọc riêng cho `tasks` (không có `where.Dept` vì Công việc không có field phòng ban đáng tin) rồi vẫn áp
+đúng `filterTasksForUser()` thật như trước.
+
+`module-baocaoquantri.js`: `getRecords()` của module Công Việc chuyển sang gọi `fetchReportRecords()` —
+nâng tổng số module Báo Cáo đọc qua `GET /api/reports/:collection` lên **20/21** (chỉ còn Đồng Phục đọc
+cách cũ). `tests/test-reports.js`: sửa 1 lời gọi `REPORT_MODULE_CONFIGS.task.getRecords()` thiếu `await`
+— 17/17 pass.
 
 ## v18.4 (2026-09-12): Bước 7h — mở rộng API lọc SQL sang 13 collection nhóm B/C trong Báo Cáo
 

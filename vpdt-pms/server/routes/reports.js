@@ -16,6 +16,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { queryDedicatedRecords, DEDICATED_TABLES } = require('../lib/recordStore');
+const { queryTasksInRange } = require('../lib/taskStore');
 const { getAllAppDataWithVersionsCached } = require('../lib/appData');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { sendServerError } = require('../lib/errorResponse');
@@ -25,7 +26,8 @@ const {
   filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterInternalPostsForUser,
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
-  filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser
+  filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
+  filterTasksForUser
 } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -74,7 +76,11 @@ const REPORT_QUERY_CONFIGS = {
   // filter*ForUser() riêng nào ở lib/recordViewScope.js (routes/data.js cũng trả nguyên, không lọc) —
   // filterFn: null nghĩa là chỉ thu hẹp theo dept/ngày ở SQL, không áp thêm bước lọc quyền nào khác.
   budgetPeriods: { filterFn: null, needsAppData: false },
-  vppRegistrations: { filterFn: filterVppRegistrationsForUser, needsAppData: true }
+  vppRegistrations: { filterFn: filterVppRegistrationsForUser, needsAppData: true },
+  // dbo.Tasks KHÔNG thuộc 55 collection DEDICATED_TABLES (bảng riêng có sẵn từ Bước 6b, xem
+  // lib/taskStore.js queryTasksInRange()) — cfg (DEDICATED_TABLES[collection]) sẽ là undefined cho
+  // "tasks", route bên dưới tự rẽ nhánh đọc riêng, không where.Dept (Công việc không có field phòng ban).
+  tasks: { filterFn: filterTasksForUser, needsAppData: true }
 };
 
 router.get('/:collection', async (req, res) => {
@@ -84,24 +90,22 @@ router.get('/:collection', async (req, res) => {
     if (!config) {
       return res.status(400).json({ error: `Báo Cáo chưa hỗ trợ lọc SQL cho collection "${collection}"` });
     }
-    const cfg = DEDICATED_TABLES[collection];
+    const cfg = DEDICATED_TABLES[collection]; // undefined cho "tasks" (bảng riêng, xem chú thích ở trên)
 
     const { dept, from, to } = req.query;
     const where = {};
     // "Dept" là field lọc theo phòng ban chuẩn — chỉ áp dụng nếu bảng THẬT SỰ có cột Dept và module Báo
     // Cáo tương ứng có lọc theo dept (ignoreDept:true bỏ qua dù bảng có cột, xem internalPosts ở trên).
-    if (dept && cfg.columns.Dept && !config.ignoreDept) where.Dept = dept;
+    if (dept && cfg && cfg.columns.Dept && !config.ignoreDept) where.Dept = dept;
 
     // "to" PHẢI hiểu là HẾT NGÀY đó (23:59:59.999), khớp đúng isInDateRange() phía client
     // (core.js: `d > new Date(toDate + 'T23:59:59')`) — "to" chỉ có phần ngày (YYYY-MM-DD), nếu để
     // nguyên new Date(to) sẽ hiểu là 00:00:00 UTC, LOẠI NHẦM mọi bản ghi tạo sau nửa đêm cùng ngày đó.
     const dateTo = to ? `${to}T23:59:59.999` : undefined;
 
-    const { items } = await queryDedicatedRecords(collection, {
-      where,
-      dateFrom: from || undefined,
-      dateTo
-    });
+    const { items } = collection === 'tasks'
+      ? await queryTasksInRange({ dateFrom: from || undefined, dateTo })
+      : await queryDedicatedRecords(collection, { where, dateFrom: from || undefined, dateTo });
 
     const postFiltered = config.postFilter ? config.postFilter(items, dept) : items;
 

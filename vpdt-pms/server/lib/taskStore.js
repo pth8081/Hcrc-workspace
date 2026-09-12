@@ -179,6 +179,28 @@ async function deleteTaskById(id, permissionCheckFn) {
   invalidateTasksCache();
 }
 
+// Đọc Công việc CÓ LỌC theo khoảng ngày ngay ở SQL — dùng cho GET /api/reports/tasks (routes/reports.js,
+// Bước 7h), khớp đúng khuôn queryDedicatedRecords() (lib/recordStore.js) nhưng KHÔNG dùng chung hàm đó vì
+// dbo.Tasks không thuộc 55 collection DEDICATED_TABLES (đã có bảng riêng từ Bước 6b, trước cả đợt Bước 7).
+// Không lọc theo dept (Công việc giao theo người, không có field phòng ban đáng tin — khớp getRecords()
+// cũ ở module-baocaoquantri.js: chỉ lọc theo ngày, không có tham số dept).
+async function queryTasksInRange({ dateFrom, dateTo } = {}) {
+  const pool = await getPool();
+  const req = pool.request();
+  const conditions = [];
+  if (dateFrom) {
+    req.input('dateFrom', sql.DateTime2(3), new Date(dateFrom));
+    conditions.push('CreatedAt >= @dateFrom');
+  }
+  if (dateTo) {
+    req.input('dateTo', sql.DateTime2(3), new Date(dateTo));
+    conditions.push('CreatedAt <= @dateTo');
+  }
+  const whereSql = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
+  const result = await req.query(`SELECT Payload FROM dbo.Tasks${whereSql} ORDER BY CreatedAt DESC, Id DESC`);
+  return { items: result.recordset.map(toTask), total: result.recordset.length };
+}
+
 // Di chuyển dữ liệu cũ (nếu còn) từ AppData.tasks sang bảng Tasks — CHỈ chạy nếu bảng mới đang RỖNG
 // (idempotent, khớp đúng lib/systemLogStore.js migrateLegacySystemLogs()). Giữ nguyên id/thứ tự cũ:
 // AppData.tasks giữ mới-nhất-trước (do unshift() khi tạo) — chèn từ cuối mảng lên đầu để CreatedAt
@@ -227,5 +249,5 @@ async function migrateDirectiveTaskLinks(minutesCode, migrations) {
 
 module.exports = {
   getAllTasks, getAllTasksCached, insertTask, withLockedTaskById, deleteTaskById, migrateLegacyTasks,
-  findTaskBySource, migrateDirectiveTaskLinks
+  findTaskBySource, migrateDirectiveTaskLinks, queryTasksInRange
 };

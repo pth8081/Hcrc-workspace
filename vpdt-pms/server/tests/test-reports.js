@@ -143,8 +143,8 @@ async function main() {
 
     await run('Công Việc report tab computes the on-time completion rate from DONE tasks with a deadline', async () => {
       await page.evaluate(() => selectReportsNavL1('task'));
-      const extraHTML = await page.evaluate(() => {
-        const records = REPORT_MODULE_CONFIGS.task.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+      const extraHTML = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.task.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
         return renderTaskReportExtra(records);
       });
       // t1 is the only DONE task with a deadline and has no history entries, so it counts as NOT
