@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**19.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.1 (2026-09-12): Bước 8e — SQL-filter operationOrders trong GET /api/data (nhánh OR theo TIER, không theo dept)
+
+Tiếp Bước 8d, áp dụng cho collection có rủi ro nghiệp vụ CAO HƠN hẳn nếu sai: `canViewOperationOrder()`
+(lib/recordViewScope.js) có nhánh OR "đang là người duyệt theo cấu hình quy trình" — nhưng KHÁC
+`checklistSubmissions` (nhánh OR theo StoreCode, map được sang 1 cột), nhánh này phụ thuộc **MỨC GIÁ TRỊ
+đơn hàng** (tier, `resolveOperationOrderWorkflow()` ở lib/workflowEngine.js) — hoàn toàn KHÔNG liên quan
+tới phòng ban của hồ sơ. Một người duyệt 1 tier có thể cần thấy đơn hàng của MỌI phòng ban rơi vào đúng
+tier đó — sai ở đây nghĩa là người duyệt KHÔNG THẤY hồ sơ cần duyệt (lỗi nghiệp vụ thật, nặng hơn rủi ro
+lộ dữ liệu của các collection trước).
+
+Giải pháp: thêm `isApproverForAnyOperationOrderTier(user, data)` (routes/data.js) — quét TRƯỚC (không
+tính theo từng hồ sơ) toàn bộ cấu hình `operationOrderStoreTierWorkflows`/`operationOrderHOTierWorkflows`
+(đã có sẵn trong `data` từ đầu request, không cần tải thêm) xem user có xuất hiện làm approver ở BẤT KỲ
+tier nào không — nếu có (số ít, thường là quản lý cấp cao), tải company-wide như admin (an toàn,
+`filterOperationOrdersForUser()` vẫn lọc lại đúng theo TỪNG hồ sơ sau đó); nếu không (đa số người dùng
+thường), tải qua `where.Dept` ở SQL như các collection trước.
+
+Thêm `tests/test-operation-orders-dept-scope.js` (5/5 pass) — kịch bản quan trọng nhất xác nhận người
+duyệt tier PHẢI thấy đủ hồ sơ mọi phòng ban. Quá trình viết test phát hiện 1 lỗi TRONG CHÍNH TEST FIXTURE
+(dùng sai định dạng khoá tier — số `1`/`2` thay vì khoá thật `LT10M`/`FROM10M_TO100M`/`GTE100M`/`LT100M`/
+`GTE100M`) khiến lớp lọc thật (`filterOperationOrdersForUser`, không đổi) đúng đắn loại bỏ hồ sơ — xác
+nhận code MỚI hoạt động đúng, chỉ cần sửa lại fixture cho khớp tier thật, không phải lỗi logic.
+
+**Còn lại (Bước 8 tiếp theo)**: `carRegs`/`officeReqs`/`itPriceApprovals`/`vppRegistrations`/
+`budgetEntries` dùng CHUNG khuôn `dept-hoặc-approver` nhưng approver ở các collection này lại tra theo
+**phòng ban** (không theo tier) — cần thiết kế khác (danh sách phòng ban được phép qua IN-list, chưa được
+`queryDedicatedRecords()` hỗ trợ) trước khi làm; để sau `operationStoreOpenings`/`operationRepairs`/
+`docs`/`submissions`/`attendanceRecords` (cây quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
 
 ## v19.0 (2026-09-12): Bước 8d — SQL-filter checklistSubmissions trong GET /api/data (nhánh OR đầu tiên)
 

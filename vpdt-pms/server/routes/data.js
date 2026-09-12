@@ -14,6 +14,7 @@ const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/ad
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
+const { flatWorkflowConfigToSteps } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const {
@@ -578,6 +579,29 @@ async function loadChecklistSubmissionsScoped(user) {
   return [...byId.values()];
 }
 
+// Bước 8e — operationOrders: canViewOperationOrder() (lib/recordViewScope.js) cũng có nhánh OR thứ 2,
+// nhưng KHÁC checklistSubmissions ở chỗ nhánh đó không map được sang 1 cột cụ thể — "đang là người duyệt"
+// phụ thuộc CẤU HÌNH QUY TRÌNH theo MỨC GIÁ TRỊ đơn hàng (tier, resolveOperationOrderWorkflow() ở
+// lib/workflowEngine.js), không phải theo phòng ban của hồ sơ — 1 người duyệt tier có thể cần thấy đơn
+// hàng CỦA MỌI PHÒNG BAN rơi vào đúng tier đó, nên không thể thu hẹp bằng where.Dept cho riêng họ. Thay
+// vì tính đúng-sai cho TỪNG hồ sơ (cần tải hết mới tính được, mất hết lợi ích), chỉ cần biết TRƯỚC khi
+// tải: "user này CÓ đang là người duyệt ở BẤT KỲ tier nào không?" — nếu có (số ít, thường là quản lý cấp
+// cao), tải company-wide như admin (an toàn, filterOperationOrdersForUser() vẫn lọc lại đúng sau đó);
+// nếu không (đa số người dùng thường — chỉ xem đơn hàng phòng ban mình), tải qua where.Dept ở SQL.
+function isApproverForAnyOperationOrderTier(user, data) {
+  if (!user?.username) return false;
+  const tierMaps = [data.operationOrderStoreTierWorkflows, data.operationOrderHOTierWorkflows];
+  for (const tierMap of tierMaps) {
+    for (const tierConfig of Object.values(tierMap || {})) {
+      const { approvers } = flatWorkflowConfigToSteps(tierConfig, data);
+      const isApproverHere = Object.values(approvers || {}).some(list =>
+        Array.isArray(list) ? list.includes(user.username) : list === user.username);
+      if (isApproverHere) return true;
+    }
+  }
+  return false;
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -634,10 +658,14 @@ router.get('/', async (req, res) => {
     // đúng 2 nhánh phẳng — canManageTraining (admin/trainingManage) xem HẾT, còn lại CHỈ đúng tiến độ của
     // CHÍNH MÌNH (p.username === user.username, không có OR nào khác) — tải qua where.Username ngay ở
     // SQL cho phần lớn người dùng (không có trainingManage) thay vì luôn tải TOÀN BỘ company-wide.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions');
+    // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
+    // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
+    // where.Dept ở SQL.
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, ...collectionResults] = await Promise.all([
+    const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -647,6 +675,9 @@ router.get('/', async (req, res) => {
         ? getAllForCollectionCached('trainingDocumentProgress')
         : getForCollectionByUsernameCached('trainingDocumentProgress', req.freshUser?.username),
       loadChecklistSubmissionsScoped(req.freshUser),
+      canSeeAllOperationOrders
+        ? getAllForCollectionCached('operationOrders')
+        : getForCollectionByDeptCached('operationOrders', req.freshUser?.dept),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -657,6 +688,7 @@ router.get('/', async (req, res) => {
     data.paymentRequests = paymentRequestsResult;
     data.trainingDocumentProgress = trainingDocumentProgressResult;
     data.checklistSubmissions = checklistSubmissionsResult;
+    data.operationOrders = operationOrdersResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
