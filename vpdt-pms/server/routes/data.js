@@ -758,6 +758,36 @@ async function loadVppRegistrationsScoped(user, data) {
   return [...byId.values()];
 }
 
+// Bước 8j — budgetEntries: canViewBudgetEntry() (lib/recordViewScope.js) đơn giản nhất trong nhóm này —
+// 3 nhánh: (1) admin/budgetManage/budgetAggregate xem HẾT, (2) phòng ban mình, (3) đang là người duyệt
+// theo budgetDeptWorkflows (dept-keyed, 1 cấu hình duy nhất). KHÔNG có nhánh "chính người tạo" (khác
+// carRegs/officeReqs) — không cần lượt tải riêng theo cột nào khác ngoài Dept.
+function computeBudgetEntriesApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.budgetDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadBudgetEntriesScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate) {
+    return getAllForCollectionCached('budgetEntries');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  computeBudgetEntriesApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('budgetEntries', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  return [...byId.values()];
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -817,11 +847,11 @@ router.get('/', async (req, res) => {
     // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
     // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
     // where.Dept ở SQL.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -838,6 +868,7 @@ router.get('/', async (req, res) => {
       loadOfficeReqsScoped(req.freshUser, data),
       loadItPriceApprovalsScoped(req.freshUser, data),
       loadVppRegistrationsScoped(req.freshUser, data),
+      loadBudgetEntriesScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -853,6 +884,7 @@ router.get('/', async (req, res) => {
     data.officeReqs = officeReqsResult;
     data.itPriceApprovals = itPriceApprovalsResult;
     data.vppRegistrations = vppRegistrationsResult;
+    data.budgetEntries = budgetEntriesResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem

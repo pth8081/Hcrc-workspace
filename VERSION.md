@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**19.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.6 (2026-09-12): Bước 8j — SQL-filter budgetEntries trong GET /api/data
+
+Tiếp Bước 8i, `budgetEntries` đơn giản NHẤT trong cả nhóm: `canViewBudgetEntry()`
+(lib/recordViewScope.js) chỉ 3 nhánh — `admin`/`budgetManage`/`budgetAggregate` xem hết, phòng ban mình,
+đang là người duyệt theo `budgetDeptWorkflows` (dept-keyed, 1 cấu hình duy nhất). KHÔNG có nhánh "chính
+người tạo" (khác `carRegs`/`officeReqs`) — không cần lượt tải riêng theo cột nào khác ngoài `Dept`.
+
+`routes/data.js`: thêm `computeBudgetEntriesApproverDepts(user, data)` + `loadBudgetEntriesScoped(user,
+data)` — gộp {phòng ban mình} ∪ {phòng ban approver}, tải từng phòng ban (không cần merge với lượt nào
+khác). `budgetManage`/`budgetAggregate`/admin vẫn tải company-wide như cũ.
+`filterBudgetEntriesForUser()` vẫn áp lại y hệt trước.
+
+Thêm `tests/test-budget-entries-scope.js` (6/6 pass NGAY LẦN ĐẦU). Re-run cả 8 test scope trước đó (Bước
+8b-8i), tất cả vẫn pass.
+
+**Bước 8 — tổng kết đến đây**: 10 collection đã SQL-filter hoá (`notifications`, `paymentRequests`,
+`trainingDocumentProgress`, `checklistSubmissions`, `operationOrders`, `carRegs`, `officeReqs`,
+`itPriceApprovals`, `vppRegistrations`, `budgetEntries`). Còn lại (`operationStoreOpenings`/
+`operationRepairs`/`docs`/`submissions`/`attendanceRecords`) cần duyệt cây quản lý đệ quy hoặc tra cứu
+chéo phức tạp hơn nhiều — để dành cho đợt sau, cần thiết kế riêng cẩn thận.
 
 ## v19.5 (2026-09-12): Bước 8i — SQL-filter vppRegistrations trong GET /api/data
 
