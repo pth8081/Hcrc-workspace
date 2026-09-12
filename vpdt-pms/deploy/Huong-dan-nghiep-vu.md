@@ -1263,9 +1263,22 @@ này.
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)
 
 Module **📊 Báo Cáo** (`reports`) là màn **tổng hợp/giám sát số liệu**, đọc dữ
-liệu từ khoảng hơn 10 module nghiệp vụ khác — bản thân nó không tạo/lưu hồ sơ
-riêng nào (khác hẳn Báo Cáo Định Kỳ ở mục 4.6, vốn là 1 quy trình nghiệp vụ
-chủ động thật sự).
+liệu từ khoảng **19 module nghiệp vụ** khác (Tài Liệu/Văn Bản Trình/Công Việc/
+Hợp Đồng/Biên Bản Họp/Hỗ Trợ IT/Báo Cáo Định Kỳ/Truyền Thông Nội Bộ/Phòng Họp/
+Đăng Ký Xe/Văn Phòng Phẩm/Đồng Phục/Giấy Phép/Mua Bán-Sửa Chữa/Thanh Toán/Ngân
+Sách/HCRC Đồng Hành/Onboarding-Offboarding/Vận Hành — 3 luồng Đơn Hàng/Mở Mới/
+Sửa Chữa tính riêng) — bản thân nó không tạo/lưu hồ sơ riêng nào (khác hẳn Báo
+Cáo Định Kỳ ở mục 4.6, vốn là 1 quy trình nghiệp vụ chủ động thật sự).
+
+**Quy ước bắt buộc (v17.9+)**: module nghiệp vụ mới nào có tạo hồ sơ đều phải
+thêm vào đây NGAY trong cùng đợt merge (xem `CLAUDE.md`) — **trừ** nhóm dữ
+liệu cực nhạy cảm đã bị chặn hẳn khỏi `GET /api/data` chung (Hồ Sơ Nhân Sự,
+Hợp Đồng Lao Động, Lương, Công & Phép) — 4 module Nhân Sự này **CHƯA có** ở
+Báo Cáo (cần thiết kế route thống kê riêng, gác đúng quyền quản lý hiện có
+của từng module, không đọc thẳng qua `DB.<collection>` như các module khác vì
+collection tương ứng luôn rỗng phía client). Checklist Đánh Giá Siêu Thị cũng
+**cố ý không** có ở đây — module đó đã có tab "📊 Báo Cáo" nội bộ riêng, tách
+biệt hoàn toàn (xem mục 4.7).
 
 - **Thống kê chung theo module** — với 4 module có luồng phê duyệt nhiều bước
   (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng): tổng số hồ sơ, phân theo trạng
@@ -1375,12 +1388,16 @@ từng form.
 form tạo hồ sơ trong hệ thống **mà không cần sửa code** — đổi nhãn hiển thị,
 đổi field nào bắt buộc, sửa danh sách lựa chọn (dropdown) của field, và **thêm
 hẳn field mới** vào form nếu công ty cần thu thập thêm thông tin riêng. Bao
-phủ 20 nhóm module (Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng, Tài Liệu,
+phủ 23 nhóm module (Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng, Tài Liệu,
 Biên Bản Họp, Đặt Phòng Họp, Truyền Thông Nội Bộ, Công Việc, VPP, Giấy Phép,
 Hỗ Trợ IT, Thanh Toán, Ngân Sách, Báo Cáo Định Kỳ, Đồng Phục, Vận Hành, Đào
-Tạo, Tuyển Dụng, HCRC Đồng Hành, Onboarding/Offboarding). Field tự thêm lưu
-trong `DB.formTemplates`, hiện thêm ngay dưới các field mặc định của đúng form
-đó — không ảnh hưởng hồ sơ cũ đã tạo trước khi thêm field.
+Tạo, Tuyển Dụng, HCRC Đồng Hành, Onboarding/Offboarding, **Hồ Sơ Nhân Sự**
+["➕ Tạo Hồ Sơ Mới"], **Lương** ["✏️ Điều Chỉnh Phiếu Lương"], **Checklist
+Đánh Giá Siêu Thị** [4 field cấp mẫu: Mã/Tên/Loại/Ngưỡng Đạt — riêng phần câu
+hỏi/lựa chọn tự thêm-bớt bên trong mỗi mẫu KHÔNG tuỳ biến được ở đây, cùng lý
+do với Ngân Hàng Câu Hỏi Đào Tạo]). Field tự thêm lưu trong `DB.formTemplates`,
+hiện thêm ngay dưới các field mặc định của đúng form đó — không ảnh hưởng hồ
+sơ cũ đã tạo trước khi thêm field.
 
 ### 7.4. Quản Lý Tệp File
 

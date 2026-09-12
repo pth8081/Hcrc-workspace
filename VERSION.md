@@ -1,8 +1,71 @@
 # Phiên bản hiện tại
 
-**17.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.0 (2026-09-12): Bổ sung module còn thiếu vào Báo Cáo + Biểu Mẫu (rà soát "điều kiện lọc xem" toàn hệ thống)
+
+Yêu cầu người dùng: (1) rà soát chuyên sâu điều kiện lọc xem (view-scope) ở
+TẤT CẢ module, (2) cập nhật mọi module còn thiếu vào Báo Cáo, (3) mọi form
+nhập cũng phải có mặt ở Biểu Mẫu, (4) thêm quy tắc thường trực để module mới
+sau này không bị bỏ sót nữa.
+
+**Phần 1 — Rà soát điều kiện lọc xem**: đọc toàn bộ `lib/recordViewScope.js`
+(1041 dòng, mọi hàm `canView*`/`filter*ForUser` của ~30 collection) — **sạch,
+không phát hiện lỗi mới**. File đã qua nhiều đợt audit trước, mọi hàm đều
+khớp đúng nghiệp vụ tài liệu hoá.
+
+**Phần 2 — Báo Cáo (`public/js/module-baocaoquantri.js`)**: phát hiện toàn bộ
+nhóm Nhân Sự (7 module con) + Vận Hành hoàn toàn vắng mặt khỏi Báo Cáo tổng
+hợp dù đã tồn tại lâu trong `BUSINESS_MODULES`. Đã xác nhận với người dùng
+chọn phương án **B** (bỏ qua nhóm dữ liệu cực nhạy cảm — Hồ Sơ Nhân Sự/Hợp
+Đồng Lao Động/Lương/Công & Phép, vì các collection này đã bị CHẶN HẲN khỏi
+`GET /api/data` từ các đợt vá bảo mật trước, không thể dùng khuôn
+`DB.<collection>` chung mà không phá vỡ lớp bảo mật đó). Đã thêm:
+- **HCRC Đồng Hành** (`hr` → `hrFeedback`) — đếm PENDING/ANSWERED. Dữ liệu ĐÃ
+  được lọc đúng phạm vi bởi `filterHrFeedbackForUser()` TRƯỚC KHI tới client
+  nên bảng "Tra cứu chi tiết" không lộ câu hỏi/câu trả lời ngoài phạm vi.
+- **Onboarding/Offboarding** (`hrLifecycle` → `hrProcesses`) — đếm
+  IN_PROGRESS/COMPLETED/CANCELLED, lọc theo phòng ban.
+- **Vận Hành** — 3 luồng độc lập đúng như bản chất module (mirror khuôn
+  "office" đã có sẵn ở trên, node cha "🛠️ Vận Hành" gồm 3 con): `vanHanh` →
+  `operationOrders` (Đơn Hàng, có status thật PENDING/AWAITING_RECEIPT/
+  RECEIVED/RECEIPT_CANCELLED/REJECTED), `operationStoreOpen` →
+  `operationStoreOpenings`, `operationRepair` → `operationRepairs` (2 luồng
+  sau dùng `estimateStatus` — Dự toán — làm statusOf vì bản thân hồ sơ đi
+  thẳng "đã duyệt" ngay lúc tạo, không có status thật ở cấp hồ sơ).
+  Tab hiện/ẩn vẫn theo ĐÚNG checkbox module-access sẵn có (`hasModuleAccess()`)
+  — không thêm lớp quyền mới nào riêng cho Báo Cáo, giữ đúng nguyên tắc
+  "phân quyền theo module" đã xác nhận với người dùng. Thêm 4 test mới vào
+  `tests/test-reports.js` (17/17 pass, gồm 13 test cũ không regression).
+
+**Phần 3 — Biểu Mẫu (`public/js/core.js`)**: bổ sung 3 nhóm còn thiếu (không
+bị giới hạn bởi lý do nhạy cảm ở Phần 2 — Biểu Mẫu chỉ đổi NHÃN/BẮT BUỘC của
+form, không đọc/hiện dữ liệu hồ sơ đã lưu):
+- **Hồ Sơ Nhân Sự** — form "➕ Tạo Hồ Sơ Nhân Sự Mới" (16 field: Mã Nhân
+  Viên, Liên Kết Tài Khoản, Chức Vụ Ban Đầu, Ngày Sinh, Giới Tính, CCCD, địa
+  chỉ, email cá nhân, liên hệ khẩn cấp, tài khoản ngân hàng, số Sổ BHXH, mã
+  số thuế).
+- **Lương** — form "✏️ Điều Chỉnh Phiếu Lương" (Thành Phần/Số Tiền/Ghi Chú).
+- **Checklist Đánh Giá Siêu Thị** — form "🛠️ Tạo Mẫu Checklist Mới", CHỈ 4
+  field cấp mẫu (Mã/Tên/Loại/Ngưỡng Đạt) — cùng khuôn TRAINING_TEST đã có:
+  phần câu hỏi/lựa chọn tự thêm-bớt bên trong KHÔNG tuỳ biến được (không có
+  "nhãn mặc định" cố định cho nội dung tự do). `applyAllCoreFieldCustomizations()`
+  đã tự chạy 1 lần lúc đăng nhập nên chỉ cần thêm entry vào
+  `CORE_FIELD_MANIFEST`/`FORM_TABS`/`FORM_GROUPS`, không cần sửa gì thêm.
+  Xác nhận bằng `tests/test-forms-nav-groups.js` (273/273) + `test-forms-batch1..4.js`
+  (26+41+44+43 = 154 scenario) — tất cả pass, không regression.
+
+**Phần 4 — Quy tắc thường trực**: thêm mục mới vào `CLAUDE.md` — "Module mới
+→ bắt buộc thêm vào Báo Cáo + Biểu Mẫu ngay trong cùng đợt merge" (kèm ngoại
+lệ rõ ràng cho nhóm dữ liệu cực nhạy cảm ở Báo Cáo).
+
+**Deploy-impact**: chỉ đổi 2 file JS client (`module-baocaoquantri.js`,
+`core.js`) — **không** đổi `sql/schema.sql`, **không** thêm biến môi trường,
+**không** đổi `package.json` dependencies. Chỉ cần copy code (không cần
+restart PM2 backend vì đây thuần JS phía trình duyệt, nhưng vẫn nên restart
+theo quy trình chuẩn để chắc chắn cache tĩnh không phục vụ bản cũ).
 
 ## v17.9 (2026-09-12): Giới hạn kích thước `dashboardHiddenCards` (PATCH /api/auth/me)
 
