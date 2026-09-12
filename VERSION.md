@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**17.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.9 (2026-09-12): Giới hạn kích thước `dashboardHiddenCards` (PATCH /api/auth/me)
+
+Phát hiện từ rà soát chuyên sâu luồng nghiệp vụ (mục Nền Tảng Dùng Chung —
+Dashboard cá nhân hoá).
+
+**Thấp (đã vá — rủi ro phình dữ liệu tự giới hạn, không lộ/sửa được dữ liệu người khác):**
+- `routes/auth.js` (`PATCH /api/auth/me`) — field `dashboardHiddenCards`
+  (mảng key thẻ Dashboard người dùng tự ẩn, lưu server từ v-Đợt D để đồng bộ
+  giữa các thiết bị) chỉ kiểm tra "là mảng string", KHÔNG giới hạn số phần tử
+  hay độ dài từng chuỗi — khác mọi field mảng/chuỗi tương tự khác trong hệ
+  thống (đều có `.slice()` giới hạn, VD `sanitizeSecondaryPositions()` ở
+  `routes/data.js`). 1 tài khoản có thể tự gửi mảng hàng nghìn chuỗi dài để
+  phình to bản ghi của chính mình trong `users` (1 blob JSON DÙNG CHUNG cho
+  toàn bộ tài khoản trong AppData), có thể làm chậm mọi lượt đọc/ghi
+  collection này cho MỌI người dùng. Vá: giới hạn tối đa 30 phần tử, mỗi
+  chuỗi tối đa 50 ký tự (số thẻ Dashboard thật hiện có chưa tới 15, trần này
+  vẫn dư an toàn cho mọi lựa chọn hợp lệ). Đã chạy 129 kịch bản test liên
+  quan tới auth/phân quyền (`test-auth-login.js`, `test-admin-totp.js`,
+  `test-admin-users-permgroups.js`, `test-admin-webauthn-reset.js`,
+  `test-hr-profile.js`) — không có regression. Route này cần server thật +
+  SQL Server để test end-to-end (không có trong môi trường rà soát), nên chỉ
+  xác minh logic cắt mảng/chuỗi bằng script độc lập — khuyến nghị thử tay 1
+  lần trên môi trường thật (mở/đóng vài thẻ Dashboard) trước khi coi đợt vá
+  này là đã kiểm chứng đầy đủ.
+
+**Deploy-impact**: chỉ đổi 1 dòng logic trong `routes/auth.js` — **không**
+đổi `sql/schema.sql`, **không** thêm biến môi trường, **không** đổi
+`package.json` dependencies. Chỉ cần copy code + `pm2 restart`.
 
 ## v17.8 (2026-09-12): Vá cờ `adminOverride` gắn sai trong engine phê duyệt dùng chung (lib/workflowEngine.js)
 
