@@ -53,9 +53,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // (kể cả người chỉ có quyền tạo hồ sơ operationStoreOpenCreate/operationRepairCreate) cũng ghi trực
   // tiếp được qua POST /api/data/<key> và tự đặt mình làm người duyệt bước 1 phòng ban mình.
   'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
-  // Cùng lý do — quy trình duyệt RIÊNG cho giai đoạn Dự toán (Vận Hành > Siêu Thị), độc lập với 2 map
-  // duyệt hồ sơ chính ở trên.
-  'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
+  // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows ĐÃ XOÁ khỏi đây — Vận
+  // Hành > Siêu Thị KHÔNG còn bước phê duyệt Dự toán nào cả (chủ ứng dụng xác nhận), không còn map cấu
+  // hình nào cần bảo vệ ở đây nữa.
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows: cấu hình người duyệt Đơn Hàng (Vận
   // Hành) theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đã thay hẳn
   // cho operationOrderDeptWorkflows theo phòng ban trước đây — xem lib/workflowEngine.js) — cùng lý do

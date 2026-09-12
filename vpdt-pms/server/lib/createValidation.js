@@ -897,10 +897,11 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'APPROVED';
       payload.currentStep = 0;
       payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN') }];
-      // Giai đoạn "Danh mục đầu tư" — workflow ĐỘC LẬP, chạy song song với hồ sơ chính (không chờ status
-      // ở trên APPROVED mới cho lập, xem lib/workflowEngine.js module ảo
-      // operationStoreOpeningEstimate). Field FLAT có tiền tố estimate*, cùng kỹ thuật signedFileStatus*
-      // của contracts — không lồng object để applyWorkflowAction() truy cập được bằng bracket-access.
+      // Giai đoạn "Danh mục đầu tư" (trước đây gọi "Dự toán") — ĐÃ BỎ HẲN phê duyệt luôn (module ảo
+      // operationStoreOpeningEstimate/operationRepairEstimate đã xoá khỏi lib/workflowEngine.js), lập
+      // xong là estimateStatus đi thẳng DRAFT -> APPROVED (xem submitOperationEstimate(), lib/recordActions.js).
+      // Field FLAT có tiền tố estimate* vẫn giữ nguyên (chỉ còn vai trò field trạng thái đơn thuần, không
+      // còn giàn giáo phê duyệt nào đọc tới), cùng kỹ thuật signedFileStatus* của contracts.
       payload.estimateStatus = 'DRAFT';
       payload.estimateCurrentStep = 0;
       payload.estimateHistory = [];

@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**19.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.7 (2026-09-12): Xoá hẳn quy trình duyệt Dự Toán ở Vận Hành > Siêu Thị
+
+Chủ ứng dụng xác nhận: **Vận Hành > 🏬 Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả giai đoạn Dự
+toán** (Mục H trước đây chỉ mới bỏ phê duyệt cho hồ sơ chính Mở Mới/Sửa Chữa, còn giữ lại nguyên giàn
+giáo kỹ thuật cho Dự toán) — để trưởng phòng/người quản lý dự án tự lập/lưu Danh Mục Đầu Tư, không cần
+ai duyệt.
+
+Xoá hẳn (không chỉ tắt hiển thị) toàn bộ giàn giáo kỹ thuật của quy trình duyệt Dự toán:
+- `lib/workflowEngine.js`: xoá 2 module ảo `operationStoreOpeningEstimate`/`operationRepairEstimate`
+  khỏi `MODULE_CONFIGS`.
+- `lib/recordViewScope.js`: `canViewOperationStoreOpening()`/`canViewOperationRepair()` bỏ nhánh "đang
+  là approver" (chỉ còn dept/công việc được giao/danh mục đầu tư phụ trách).
+- `lib/approvalAggregator.js`: bỏ 2 lời gọi `pushDeptWorkflowKeys()` tương ứng (khớp việc xoá ở
+  `core-approvalhub.js`).
+- `defaults.js`/`routes/data.js` (`ADMIN_ONLY_KEYS`)/`lib/catalogRename.js`: xoá 2 map cấu hình
+  `operationStoreOpenEstimateDeptWorkflows`/`operationRepairEstimateDeptWorkflows`.
+- Client: `public/js/module-vanhanh.js` (bỏ nút Duyệt/Từ chối/Yêu cầu bổ sung +
+  `confirmProcessOperationEstimate()`/`processOperationEstimate()`, giữ nguyên nút "💾 Lưu Danh Mục Đầu
+  Tư" + `resetOperationEstimateToDraft()` cho dữ liệu CŨ còn kẹt REJECTED), `public/js/module-workflow.js`
+  (bỏ 2 entry `WF_MODULE_CONFIG`), `public/index.html` (bỏ 2 nút màn Quy Trình & Phê Duyệt),
+  `public/js/core.js` + `public/js/core-approvalhub.js` (bỏ đọc 2 map cấu hình + bỏ 2 mục khỏi Approval
+  Hub), `public/js/module-baocaoquantri.js` (đổi nhãn báo cáo: bỏ chữ "chờ duyệt/đã duyệt", bỏ bucket
+  PENDING — không còn hồ sơ MỚI nào dừng ở đây nữa).
+- Test: cập nhật/xoá test khẳng định nhánh approver đã xoá
+  (`test-audit-dot5-phase2.js`, `test-approval-polling.js`, `test-workflow-position-approvers.js`,
+  `testHarness.js`, `test-lazy-load-all-tabs.js`).
+- `deploy/Huong-dan-nghiep-vu.md`: cập nhật mục 3 + 4.4 khớp nghiệp vụ mới.
+
+**Giữ nguyên** (không đụng tới): field kỹ thuật `estimateStatus`/`estimateCurrentStep`/`estimateHistory`
+(chỉ còn vai trò field trạng thái đơn thuần, `submitOperationEstimate()` đã tự lưu thẳng
+`estimateStatus='APPROVED'` từ Mục H); `resetOperationEstimateToDraft()` (escape hatch cho dữ liệu CŨ
+kẹt REJECTED trước Mục H); `hasOwnEstimateCategoryInSource()`/`hasOwnWorkItemInSource()` (tiêu chí xem hồ
+sơ KHÔNG liên quan phê duyệt); toàn bộ UI lập/sửa Danh Mục Đầu Tư; quy trình duyệt hồ sơ chính
+Đơn Hàng (`operationOrders`) — không đổi gì.
+
+Full regression suite (128 file test) chạy lại toàn bộ sau đợt này, không phát sinh lỗi mới.
 
 ## v19.6 (2026-09-12): Bước 8j — SQL-filter budgetEntries trong GET /api/data
 

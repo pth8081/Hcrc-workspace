@@ -82,10 +82,9 @@ const WF_MODULE_CONFIG = {
     label: 'Vận Hành - Đặt Hàng Tại HO', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại HO Theo Mức Giá Trị'
   },
   OPERATION_STORE_OPEN: { dbKey: 'operationStoreOpenDeptWorkflows', label: 'Vận Hành - Mở Mới Siêu Thị', title: '🏬 Cấu Hình Quy Trình Phê Duyệt Mở Mới Siêu Thị Theo Phòng Ban' },
-  OPERATION_REPAIR: { dbKey: 'operationRepairDeptWorkflows', label: 'Vận Hành - Sửa Chữa Siêu Thị', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa Siêu Thị Theo Phòng Ban' },
-  // Giai đoạn Dự toán (tab "🏬 Siêu Thị") — quy trình duyệt RIÊNG, độc lập với quy trình duyệt hồ sơ
-  // chính ở trên (xem lib/workflowEngine.js operationStoreOpeningEstimate/operationRepairEstimate).
-  OPERATION_STORE_OPEN_ESTIMATE: { dbKey: 'operationStoreOpenEstimateDeptWorkflows', label: 'Vận Hành - Dự Toán Mở Mới Siêu Thị', title: '📊 Cấu Hình Quy Trình Phê Duyệt Dự Toán Mở Mới Siêu Thị Theo Phòng Ban' },
-  OPERATION_REPAIR_ESTIMATE: { dbKey: 'operationRepairEstimateDeptWorkflows', label: 'Vận Hành - Dự Toán Sửa Chữa Siêu Thị', title: '📊 Cấu Hình Quy Trình Phê Duyệt Dự Toán Sửa Chữa Siêu Thị Theo Phòng Ban' }
+  OPERATION_REPAIR: { dbKey: 'operationRepairDeptWorkflows', label: 'Vận Hành - Sửa Chữa Siêu Thị', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa Siêu Thị Theo Phòng Ban' }
+  // Giai đoạn Dự toán (tab "🏬 Siêu Thị") ĐÃ BỎ HẲN phê duyệt — chủ ứng dụng xác nhận Vận Hành > Siêu Thị
+  // không có bước duyệt nào cả, kể cả Dự toán — 2 entry OPERATION_STORE_OPEN_ESTIMATE/
+  // OPERATION_REPAIR_ESTIMATE đã xoá khỏi đây.
 };
 

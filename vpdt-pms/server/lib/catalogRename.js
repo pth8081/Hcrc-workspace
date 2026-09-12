@@ -54,11 +54,13 @@ const DEPT_FIELD_COLLECTIONS = [
 // tới (xem chú thích ở lib/workflowEngine.js — quy trình duyệt hồ sơ chính operationStoreOpenings/
 // operationRepairs đã bỏ hẳn phê duyệt) — vẫn cascade cho ĐỒNG BỘ dữ liệu (admin vẫn xem lại được ở màn
 // cấu hình cũ), không có tác dụng phụ nào khác vì không route nào tiêu thụ.
+// operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows ĐÃ XOÁ khỏi danh sách này
+// — Vận Hành > Siêu Thị không còn bước phê duyệt Dự toán nào cả, 2 map cấu hình đó không còn tồn tại
+// trong defaults.js nữa (xem lib/workflowEngine.js MODULE_CONFIGS).
 const DEPT_WORKFLOW_MAP_KEYS = [
   'submissionDeptWorkflows', 'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows',
-  'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
   'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows'
 ];
 

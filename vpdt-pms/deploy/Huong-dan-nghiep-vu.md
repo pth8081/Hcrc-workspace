@@ -150,8 +150,10 @@ Liệu, Văn Bản Trình (theo từng loại tờ trình), Đăng Ký Xe, Mua S
 Phòng, Văn Phòng Phẩm, Hợp Đồng (2 quy trình tách riêng: Phê Duyệt gốc và Quản
 Lý HĐ/tài liệu ký), Hỗ Trợ IT (Phê Duyệt Giá bán lẻ theo phòng ban + bán buôn
 theo 4 mức Margin/Chiết khấu cố định), Ngân Sách, **Thanh Toán** ("Chuyển Xác
-Nhận Thanh Toán"), và các luồng Vận Hành (Mở Mới/Sửa Chữa Siêu Thị — riêng bước
-Dự toán, xem mục 4.4; Đặt Hàng theo mức giá trị đơn hàng). Riêng Thanh Toán
+Nhận Thanh Toán"), và Vận Hành > Đặt Hàng (theo mức giá trị đơn hàng, tách
+riêng Siêu Thị/HO). Mở Mới/Sửa Chữa Siêu Thị (xem mục 4.4) **không** dùng
+quy trình này nữa — không có bước phê duyệt nào cả, kể cả giai đoạn Dự toán.
+Riêng Thanh Toán
 **không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì dùng
 "Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
 
@@ -609,15 +611,14 @@ chung nhóm khác.
   → Nghiệm thu → Báo cáo**:
   - **Hồ sơ Mở Mới/Sửa Chữa (bản thân bản ghi)** — đi thẳng trạng thái đã
     duyệt ngay lúc tạo, **không** qua bước phê duyệt riêng cho chính bản ghi.
-  - **Giai đoạn Dự toán, riêng bước NÀY vẫn có luồng phê duyệt thật** — lập
-    danh mục đầu tư dự toán rồi gửi duyệt theo phòng ban (`estimateStatus`:
-    Nháp → Chờ duyệt → Đã duyệt/Từ chối, cấu hình người duyệt tại Hệ Thống →
-    Quy Trình & Phê Duyệt như các luồng khác ở mục 3) — **duyệt Dự toán xong
-    mới mở khoá được giai đoạn Thực hiện**. Đừng nhầm với ý "cả hồ sơ không
-    qua duyệt" ở trên — 2 việc tách biệt: **hồ sơ** không cần ai duyệt để tồn
-    tại, nhưng **Dự toán bên trong hồ sơ đó** vẫn phải qua đúng 1 vòng duyệt
-    mới cho phép làm tiếp.
-  - Sau khi Dự toán được duyệt: lập/theo dõi cây công việc thực hiện thực tế
+  - **Giai đoạn "Danh mục đầu tư" (trước đây gọi "Dự toán") — KHÔNG có bước
+    phê duyệt nào cả**: người quản lý dự án (người tạo hồ sơ) tự lập danh mục
+    đầu tư rồi bấm "💾 Lưu Danh Mục Đầu Tư" là hoàn tất ngay
+    (`estimateStatus` đi thẳng Nháp → Đã lưu, không qua ai duyệt, không cấu
+    hình được ở Hệ Thống → Quy Trình & Phê Duyệt nữa) — mở khoá giai đoạn
+    Thực hiện ngay lúc lưu xong. Đã lưu rồi vẫn sửa lại được (thêm/sửa/xoá
+    hạng mục) bất cứ lúc nào, không chỉ lần đầu.
+  - Sau khi lưu xong Danh mục đầu tư: lập/theo dõi cây công việc thực hiện thực tế
     (độc lập, không tự đồng bộ theo danh mục dự toán) → nghiệm thu khi toàn
     bộ công việc đã xong (ngay hoặc sau N ngày) → báo cáo tổng kết.
   - **Cây công việc Thực hiện/Nghiệm thu, cập nhật tiến độ**: mỗi công việc

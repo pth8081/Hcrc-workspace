@@ -593,11 +593,12 @@ function cancelOperationOrderReceipt(user, item, payload, appData) {
 // Bảng hạng mục + chi phí cho hồ sơ Mở Mới/Sửa Chữa — trước đây là workflow duyệt riêng song song với
 // duyệt hồ sơ chính; từ Mục H (bỏ phê duyệt module Vận Hành > Siêu Thị) người lập tự lưu là XONG NGAY,
 // không còn ai khác cần bấm Duyệt — estimateStatus đi thẳng DRAFT -> APPROVED (KHÔNG qua PENDING nữa).
-// GIỮ NGUYÊN field kỹ thuật estimateStatus/estimateCurrentStep/estimateHistory (xem lib/workflowEngine.js
-// module ảo operationStoreOpeningEstimate/operationRepairEstimate — vẫn khai báo, chỉ đơn giản không
-// còn hồ sơ nào dừng ở PENDING để đi qua nữa) để mọi nơi đọc lại (badge/gate createOperationWorkItem()
-// đòi estimateStatus==='APPROVED') tự hoạt động đúng không cần sửa thêm. Dùng CHUNG 1 hàm cho cả 2
-// collection (chỉ khác thông điệp lỗi/quyền kiểm ở route gọi).
+// GIỮ NGUYÊN field kỹ thuật estimateStatus/estimateCurrentStep/estimateHistory để mọi nơi đọc lại
+// (badge/gate createOperationWorkItem() đòi estimateStatus==='APPROVED') tự hoạt động đúng không cần
+// sửa thêm — module ảo operationStoreOpeningEstimate/operationRepairEstimate ĐÃ XOÁ hẳn khỏi
+// MODULE_CONFIGS (lib/workflowEngine.js), không còn giàn giáo phê duyệt nào cho 2 field này nữa, chỉ
+// còn đúng vai trò field trạng thái đơn thuần. Dùng CHUNG 1 hàm cho cả 2 collection (chỉ khác thông
+// điệp lỗi/quyền kiểm ở route gọi).
 //
 // Cấu trúc estimateItems[] (đổi từ {name,unit,qty,unitPrice,amount,note} sang {content,description,
 // amount,note} — bỏ ĐVT/Số lượng/Đơn giá, "Chi phí" nhập trực tiếp thay vì tự tính qty×unitPrice, đúng

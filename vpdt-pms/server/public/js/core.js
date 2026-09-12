@@ -3126,11 +3126,6 @@ async function initDatabase(loggingInUser) {
     DB.operationOrderHOTierWorkflows = data.operationOrderHOTierWorkflows || {};
     DB.operationStoreOpenDeptWorkflows = data.operationStoreOpenDeptWorkflows || {};
     DB.operationRepairDeptWorkflows = data.operationRepairDeptWorkflows || {};
-    // Giai đoạn Dự toán (tab "🏬 Siêu Thị") — 2 map quy trình duyệt RIÊNG (song song, không dùng chung
-    // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows ở trên), xem lib/workflowEngine.js
-    // operationStoreOpeningEstimate/operationRepairEstimate.
-    DB.operationStoreOpenEstimateDeptWorkflows = data.operationStoreOpenEstimateDeptWorkflows || {};
-    DB.operationRepairEstimateDeptWorkflows = data.operationRepairEstimateDeptWorkflows || {};
     // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ra dsmart16 (xem
     // jobs/operationOrderApiSync.js). headerValueEnc đã bị server strip (sanitizeOperationOrderApiConfig()
     // ở routes/data.js), chỉ còn cờ "hasHeaderValue" — xem loadOperationOrderApiConfigToForm().

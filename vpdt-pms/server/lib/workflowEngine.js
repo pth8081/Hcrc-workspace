@@ -105,8 +105,7 @@ const { resolveStepApproverUsernames } = require('./positionApprovers');
 // nữa) — đây là điểm TRUNG TÂM DUY NHẤT mọi module (trừ 2 module snapshot ở lib/createValidation.js) đi
 // qua trước khi tới canApproveStep(), nên bước "Theo vị trí" tự động có hiệu lực ở TẤT CẢ các module gọi
 // hàm này (docs/carRegs/officeReqs/vppRegistrations/contractsSignedFile/itPriceApprovals(RETAIL+WHOLESALE)/
-// budgetEntries/operationOrders(STORE+HO)/operationStoreOpeningEstimate/operationRepairEstimate) mà
-// KHÔNG cần sửa riêng từng module.
+// budgetEntries/operationOrders(STORE+HO)) mà KHÔNG cần sửa riêng từng module.
 function flatWorkflowConfigToSteps(wfConfig, appData) {
   const wf = (appData.workflows || []).find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
   const approvers = {};
@@ -389,30 +388,19 @@ const MODULE_CONFIGS = {
   // liệu cấu hình cũ của admin, đơn giản không còn nơi nào đọc tới) — canViewOperationStoreOpening()/
   // canViewOperationRepair() (lib/recordViewScope.js) đã bỏ nhánh "đang là approver" tương ứng, chỉ còn
   // dept/hasOwnWorkItemInSource/approver của Danh mục đầu tư (vẫn giữ nguyên object bên dưới).
+  //
+  // Giai đoạn "Dự toán" (Danh Mục Đầu Tư) của 2 luồng "Siêu Thị" CŨNG ĐÃ BỊ XOÁ khỏi đây — chủ ứng dụng
+  // xác nhận: KHÔNG có bước phê duyệt nào ở Vận Hành > Siêu Thị cả (kể cả Dự Toán), để người quản lý
+  // (trưởng phòng) tự lập/lưu, không cần ai duyệt. submitOperationEstimate() (lib/recordActions.js) đã
+  // tự lưu thẳng estimateStatus = 'APPROVED' (không qua PENDING) từ trước, xoá 2 module ẢO
+  // operationStoreOpeningEstimate/operationRepairEstimate ở đây là dọn nốt cấu hình đã thành giàn giáo
+  // chết (route generic /api/workflow/<module>/:id/:action cho 2 module này vốn đã luôn ném lỗi 409, giờ
+  // trả lỗi "module không hợp lệ" thay vì 409 — cùng tinh thần dọn ở trên). 2 map
+  // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows cũng đã xoá khỏi
+  // defaults.js/routes/data.js ADMIN_ONLY_KEYS — không còn màn admin nào cấu hình được nữa.
   operationOrders: {
     dbKey: 'operationOrders',
     resolveWfConfig: (item, appData) => resolveOperationOrderWorkflow(item, appData),
-    supportsRequestChanges: true
-  },
-  // Vận Hành — giai đoạn "Dự toán", 2 module ẢO cùng dbKey với hồ sơ gốc nhưng field trạng thái RIÊNG
-  // (đúng kỹ thuật contractsSignedFile ở trên) — chạy ĐỘC LẬP song song với workflow duyệt hồ sơ chính
-  // (operationStoreOpenings/operationRepairs), không chờ hồ sơ chính APPROVED mới cho lập dự toán.
-  // submitOperationEstimate() (lib/recordActions.js) tự đưa estimateStatus về PENDING/bước 1 mỗi lần
-  // gửi (lần đầu từ DRAFT, hoặc gửi lại sau REQUEST_CHANGES) — engine chỉ còn lo Duyệt/Từ chối/Bổ sung.
-  operationStoreOpeningEstimate: {
-    dbKey: 'operationStoreOpenings',
-    statusField: 'estimateStatus',
-    currentStepField: 'estimateCurrentStep',
-    historyField: 'estimateHistory',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationStoreOpenEstimateDeptWorkflows?.[item.dept], appData),
-    supportsRequestChanges: true
-  },
-  operationRepairEstimate: {
-    dbKey: 'operationRepairs',
-    statusField: 'estimateStatus',
-    currentStepField: 'estimateCurrentStep',
-    historyField: 'estimateHistory',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.operationRepairEstimateDeptWorkflows?.[item.dept], appData),
     supportsRequestChanges: true
   },
   // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED, đề nghị chung cho CẢ Hợp đồng/Mua

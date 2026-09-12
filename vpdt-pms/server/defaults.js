@@ -497,10 +497,9 @@ const DEFAULTS = {
     lastSyncStatus: null,
     lastSyncMessage: null
   },
-  // Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — quy trình duyệt RIÊNG, ĐỘC LẬP với 2 map duyệt hồ sơ
-  // chính ở trên (cùng kỹ thuật contractManageDeptWorkflows tách riêng contractApprovalDeptWorkflows).
-  operationStoreOpenEstimateDeptWorkflows: {},
-  operationRepairEstimateDeptWorkflows: {},
+  // Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — ĐÃ BỎ HẲN phê duyệt (chủ ứng dụng xác nhận: không có bước
+  // duyệt nào ở Vận Hành > Siêu Thị, kể cả Dự toán, để trưởng phòng tự lập/lưu) — 2 map cấu hình
+  // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows đã xoá khỏi đây.
   // Hợp đồng — 2 quy trình TÁCH RIÊNG (xem lib/workflowEngine.js/lib/createValidation.js): "Phê Duyệt"
   // (contractApprovalDeptWorkflows, cùng khuôn deptWorkflows/carDeptWorkflows) + tối đa 4 lớp bổ sung
   // tuỳ chọn (contractApprovalGroups, cùng khuôn submissionApprovalGroups nhưng RIÊNG, không dùng

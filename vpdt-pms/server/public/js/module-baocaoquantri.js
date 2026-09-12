@@ -504,19 +504,24 @@ const REPORT_MODULE_CONFIGS = {
     statusOf: r => r.status,
     statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['AWAITING_RECEIPT', 'Chờ nhập hàng', 'bg-blue-500'], ['RECEIVED', 'Đã nhập hàng', 'bg-green-500'], ['RECEIPT_CANCELLED', 'Đã huỷ nhập', 'bg-gray-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
+  // estimateStatus buckets: Vận Hành > Siêu Thị ĐÃ BỎ HẲN phê duyệt Dự toán (chủ ứng dụng xác nhận) —
+  // bấm Lưu là APPROVED ngay, không còn ai duyệt nên bỏ hẳn bucket PENDING (không còn hồ sơ MỚI nào dừng
+  // ở đây nữa — hồ sơ CŨ kẹt PENDING cũng được migrateStuckOperationApprovalStatuses() (seedDefaults.js)
+  // tự chuyển sang APPROVED mỗi lúc khởi động server) + đổi nhãn APPROVED bỏ chữ "duyệt". REJECTED giữ
+  // lại CHỈ để hiển thị nốt dữ liệu CŨ (trước Mục H) còn tồn, không còn hồ sơ MỚI nào rơi vào đây.
   operationStoreOpen: {
     title: '🏬 Báo Cáo Mở Mới Siêu Thị',
     getRecords: (dept, from, to) => fetchReportRecords('operationStoreOpenings', dept, from, to,
       () => DB.operationStoreOpenings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.estimateStatus,
-    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['PENDING', 'Dự toán chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Dự toán đã duyệt', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối', 'bg-red-500']]
+    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['APPROVED', 'Đã lập dự toán', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối (dữ liệu cũ)', 'bg-red-500']]
   },
   operationRepair: {
     title: '🔧 Báo Cáo Sửa Chữa Siêu Thị',
     getRecords: (dept, from, to) => fetchReportRecords('operationRepairs', dept, from, to,
       () => DB.operationRepairs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.estimateStatus,
-    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['PENDING', 'Dự toán chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Dự toán đã duyệt', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối', 'bg-red-500']]
+    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['APPROVED', 'Đã lập dự toán', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối (dữ liệu cũ)', 'bg-red-500']]
   }
 };
 

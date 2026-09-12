@@ -97,8 +97,8 @@ function createMockState(seed) {
     // chạm tới field liên quan, seed rỗng cho an toàn (khớp lý do "phần không dùng" ở đầu hàm).
     submissionPriorities: [], carPurposes: [], meetingRooms: [],
     operationOrders: [], operationOrderStoreTierWorkflows: {}, operationOrderHOTierWorkflows: {},
-    operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
-    operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
+    operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {},
+    operationRepairs: [], operationRepairDeptWorkflows: {},
     operationWorkItems: [], operationExecutionPeriods: [],
     // hrProcesses/hrTaskTemplates (Nhân Sự > Onboarding/Offboarding v2) + storeJobTitles (nguồn tra cứu
     // employeeJobTitle khi employeePosType==='STORE') — xem lib/createValidation.js/lib/recordActions.js.
@@ -126,10 +126,9 @@ function buildAppDataForCreate(moduleKey, state) {
     // hrFeedbackCategories: nguồn hợp lệ cho hrFeedback.category (CORE_FIELD_MANIFEST.HR_FEEDBACK,
     // optionsKey, đợt audit "form-fields-6") — xem hrFeedback.extraValidate ở lib/createValidation.js.
     hrFeedbackCategories: state.hrFeedbackCategories,
-    // Vận Hành > Siêu Thị > Danh mục đầu tư — resolveWfConfig() (lib/workflowEngine.js) đọc thẳng 2 map
-    // này qua appData khi xử lý /api/workflow/operationStoreOpeningEstimate|operationRepairEstimate/:id/:action.
-    operationStoreOpenEstimateDeptWorkflows: state.operationStoreOpenEstimateDeptWorkflows,
-    operationRepairEstimateDeptWorkflows: state.operationRepairEstimateDeptWorkflows,
+    // Vận Hành > Siêu Thị > Danh mục đầu tư — ĐÃ BỎ HẲN phê duyệt (chủ ứng dụng xác nhận không có bước
+    // duyệt nào ở đây, kể cả Dự toán) — MODULE_CONFIGS.operationStoreOpeningEstimate/operationRepairEstimate
+    // đã xoá khỏi lib/workflowEngine.js, không còn 2 map cấu hình này nữa.
     // Vận Hành > Đơn Hàng (đợt "Tách Đơn Hàng Siêu Thị/HO") — resolveWfConfig() (MODULE_CONFIGS.operationOrders,
     // lib/workflowEngine.js) đọc thẳng 2 map này qua appData theo item.orderLocationType khi xử lý
     // /api/workflow/operationOrders/:id/:action (quy trình duyệt theo MỨC GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/

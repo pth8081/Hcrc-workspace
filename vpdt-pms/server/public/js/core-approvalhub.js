@@ -266,13 +266,14 @@ function getMyPendingApprovals(user) {
     });
   }
 
-  // Vận Hành — TRƯỚC ĐÂY hoàn toàn KHÔNG có mặt ở Approval Hub (chỉ ở tab "Đã xử lý"). Còn 3 luồng: 1 hồ
-  // sơ chính (Đơn hàng — operationOrders, VẪN giữ nguyên quy trình duyệt cũ) + 2 quy trình Dự toán ĐỘC
-  // LẬP song song trên chính hồ sơ Mở mới/Sửa chữa (đúng kỹ thuật dual-workflow Hợp đồng ở trên — fields
-  // override estimateStatus/estimateCurrentStep/estimateHistory, xem lib/workflowEngine.js
-  // operationStoreOpeningEstimate/operationRepairEstimate). Hồ sơ chính operationStoreOpenings/
-  // operationRepairs KHÔNG còn ở đây nữa (Mục H, 60c473b — bỏ hẳn phê duyệt, status không bao giờ vào
-  // PENDING nên 2 lệnh addDeptWorkflowItems() tương ứng chỉ luôn góp 0 kết quả — dọn hẳn).
+  // Vận Hành — TRƯỚC ĐÂY hoàn toàn KHÔNG có mặt ở Approval Hub (chỉ ở tab "Đã xử lý"). Chỉ còn 1 luồng ở
+  // đây: hồ sơ chính Đơn hàng (operationOrders, VẪN giữ nguyên quy trình duyệt cũ). Hồ sơ chính
+  // operationStoreOpenings/operationRepairs KHÔNG có ở đây (Mục H, 60c473b — bỏ hẳn phê duyệt, status
+  // không bao giờ vào PENDING). Giai đoạn "Dự toán" (2 quy trình operationStoreOpeningEstimate/
+  // operationRepairEstimate, dual-workflow song song trên field estimateStatus/estimateCurrentStep/
+  // estimateHistory) CŨNG ĐÃ BỊ XOÁ HẲN — chủ ứng dụng xác nhận Vận Hành > Siêu Thị KHÔNG có bước phê
+  // duyệt nào cả, kể cả Dự toán, để trưởng phòng tự lập/lưu không cần ai duyệt (xem lib/workflowEngine.js
+  // MODULE_CONFIGS đã xoá 2 module ảo này).
   // Đơn hàng (operationOrders) đã ĐỔI HẲN từ quy trình theo phòng ban sang theo MỨC GIÁ TRỊ, TÁCH RIÊNG
   // Siêu Thị/HO — resolveOperationOrderWorkflowConfigForItemClient() (core.js) tự tra đúng nhánh theo
   // item.orderLocationType, cùng khuôn resolveSubmissionWorkflow(sub) ngay trên (resolver theo TỪNG hồ
@@ -311,25 +312,6 @@ function getMyPendingApprovals(user) {
       if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
     }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "vanhanh" cho mục AWAITING_RECEIPT', err));
   }
-  addDeptWorkflowItems(
-    DB.operationStoreOpenings, o => DB.operationStoreOpenEstimateDeptWorkflows[o.dept],
-    {
-      type: 'operationStoreOpenEstimate', typeLabel: '📊 Vận Hành - Dự toán Mở mới',
-      codeOf: r => r.code, titleOf: r => r.storeName,
-      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationEstimateModal', args: ['operationStoreOpenings', r.id], primary: true }]
-    },
-    { status: 'estimateStatus', currentStep: 'estimateCurrentStep', history: 'estimateHistory' }
-  );
-  addDeptWorkflowItems(
-    DB.operationRepairs, o => DB.operationRepairEstimateDeptWorkflows[o.dept],
-    {
-      type: 'operationRepairEstimate', typeLabel: '📊 Vận Hành - Dự toán Sửa chữa',
-      codeOf: r => r.code, titleOf: r => r.title,
-      actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationEstimateModal', args: ['operationRepairs', r.id], primary: true }]
-    },
-    { status: 'estimateStatus', currentStep: 'estimateCurrentStep', history: 'estimateHistory' }
-  );
-
   return items;
 }
 
