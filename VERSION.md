@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**18.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.6 (2026-09-12): Bước 7h (hoàn tất) — nối nốt Đồng Phục, đủ 21/21 module Báo Cáo
+
+Thêm `uniformIssuances` vào `REPORT_QUERY_CONFIGS` (`routes/reports.js`) — module cuối cùng còn lại của
+Báo Cáo (Đồng Phục) trước đây bị bỏ qua do dùng bộ lọc CHỌN NHIỀU siêu thị (không phải 1 dept đơn như các
+module khác) tưởng như không khớp khuôn API hiện có. Giải pháp: API chỉ thu hẹp theo NGÀY ở SQL (không
+truyền `dept`), còn lọc theo danh sách siêu thị đã chọn vẫn giữ nguyên ở JS sau khi nhận về — kết quả cuối
+giống hệt trước, chỉ đổi nguồn tải ban đầu. Từ đây, TOÀN BỘ 21/21 module Báo Cáo đã đọc qua
+`GET /api/reports/:collection`, hoàn tất mục tiêu Bước 7h.
+
+`tests/test-reports.js`: 17/17 pass (3 kịch bản Đồng Phục không đổi kết quả).
 
 ## v18.5 (2026-09-12): Bước 7h (tiếp) — nối nốt Công Việc vào API lọc SQL Báo Cáo
 

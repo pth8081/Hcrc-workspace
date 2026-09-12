@@ -405,9 +405,14 @@ const REPORT_MODULE_CONFIGS = {
     // kho (dùng chung logic computeUniformStockClient() ở phần module Đồng Phục phía trên).
     // Bỏ qua tham số `dept` (single-select #reportsDeptFilter, đã ẩn cho module này) — module Đồng Phục
     // dùng riêng bộ lọc chọn NHIỀU siêu thị (getUniformReportSelectedStores(), null = không giới hạn).
+    // fetchReportRecords() chỉ thu hẹp theo NGÀY ở SQL (không truyền dept — API chỉ hỗ trợ 1 giá trị,
+    // không khớp bộ lọc CHỌN NHIỀU siêu thị này) — lọc theo danh sách siêu thị đã chọn vẫn làm ở JS như
+    // cũ, SAU khi đã nhận về (đúng y hệt kết quả cuối, chỉ đổi nguồn tải ban đầu).
     getRecords: (dept, from, to) => {
       const selected = getUniformReportSelectedStores();
-      return DB.uniformIssuances.filter(r => (!selected || selected.includes(r.dept)) && isInDateRange(r.createdAt, from, to));
+      return fetchReportRecords('uniformIssuances', '', from, to,
+        () => DB.uniformIssuances.filter(r => isInDateRange(r.createdAt, from, to))
+      ).then(items => items.filter(r => !selected || selected.includes(r.dept)));
     },
     renderExtra: renderUniformReportExtra,
     extraRows: records => {

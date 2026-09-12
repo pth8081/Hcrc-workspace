@@ -1306,23 +1306,22 @@ Không cần cấu hình gì đặc biệt để dùng — mọi nhân viên có
 thì tự thấy đúng phần báo cáo tương ứng của module đó khi có quyền xem báo cáo
 (quyền riêng, không tự động theo quyền tạo hồ sơ).
 
-**Kỹ thuật (Bước 7d/7e/7h, v18.3-v18.5)**: 20/21 module Báo Cáo (mọi module
-TRỪ Đồng Phục — Tài Liệu, Văn Bản Trình, Công Việc, 3 luồng Vận Hành — Đơn
-Hàng/Mở Mới/Sửa Chữa, Hợp Đồng, Đăng Ký Xe, Văn Phòng Tổng Hợp, Phòng Họp,
-Biên Bản Họp, Truyền Thông Nội Bộ, Hỗ Trợ IT, Giấy Phép, HCRC Đồng Hành,
-Onboarding/Offboarding, Định Kỳ, Ngân Sách, Văn Phòng Phẩm, Thanh Toán) giờ
-đọc qua `GET /api/reports/:collection` — lọc sẵn theo phòng ban/khoảng ngày
-ngay ở CSDL thay vì tải nguyên cả danh sách về trình duyệt rồi mới lọc — vẫn
-áp dụng ĐÚNG quyền xem như trước (không đổi ai thấy gì; các phần lọc nghiệp
-vụ riêng ngoài dept/ngày — VD Giấy Phép chỉ đếm hồ sơ gốc, Truyền Thông Nội
-Bộ không lọc theo phòng ban — vẫn giữ nguyên). Công Việc (`tasks`) đọc từ
-bảng riêng `dbo.Tasks` (có từ Bước 6b, không thuộc 55 collection Bước 7) qua
-1 hàm truy vấn riêng cùng khuôn. Nếu API này lỗi (mất mạng tạm thời, server
-đang khởi động lại...), màn hình tự động rơi về cách đọc cũ (dữ liệu đã tải
-sẵn qua `GET /api/data`) — không mất tính năng, chỉ mất phần tối ưu tốc độ
-trong đúng lúc đó. Module Đồng Phục vẫn đọc theo cách cũ (dữ liệu
-allocations[]/items[] lồng nhau, không khớp khuôn lọc phẳng theo dept/ngày
-của API này).
+**Kỹ thuật (Bước 7d/7e/7h, v18.3-v18.6)**: TOÀN BỘ 21/21 module Báo Cáo (Tài
+Liệu, Văn Bản Trình, Công Việc, 3 luồng Vận Hành — Đơn Hàng/Mở Mới/Sửa Chữa,
+Hợp Đồng, Đăng Ký Xe, Văn Phòng Tổng Hợp, Phòng Họp, Biên Bản Họp, Truyền
+Thông Nội Bộ, Hỗ Trợ IT, Giấy Phép, HCRC Đồng Hành, Onboarding/Offboarding,
+Định Kỳ, Ngân Sách, Văn Phòng Phẩm, Thanh Toán, Đồng Phục) giờ đọc qua
+`GET /api/reports/:collection` — lọc sẵn theo phòng ban/khoảng ngày ngay ở
+CSDL thay vì tải nguyên cả danh sách về trình duyệt rồi mới lọc — vẫn áp
+dụng ĐÚNG quyền xem như trước (không đổi ai thấy gì; các phần lọc nghiệp vụ
+riêng ngoài dept/ngày — VD Giấy Phép chỉ đếm hồ sơ gốc, Truyền Thông Nội Bộ
+không lọc theo phòng ban, Đồng Phục lọc theo NHIỀU siêu thị đã chọn thay vì
+1 phòng ban — vẫn giữ nguyên, chỉ đổi nguồn tải ban đầu). Công Việc (`tasks`)
+đọc từ bảng riêng `dbo.Tasks` (có từ Bước 6b, không thuộc 55 collection Bước
+7) qua 1 hàm truy vấn riêng cùng khuôn. Nếu API này lỗi (mất mạng tạm thời,
+server đang khởi động lại...), màn hình tự động rơi về cách đọc cũ (dữ liệu
+đã tải sẵn qua `GET /api/data`) — không mất tính năng, chỉ mất phần tối ưu
+tốc độ trong đúng lúc đó.
 
 ---
 

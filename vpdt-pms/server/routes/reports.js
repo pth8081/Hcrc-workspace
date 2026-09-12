@@ -27,7 +27,7 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterInternalPostsForUser,
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
-  filterTasksForUser
+  filterTasksForUser, filterUniformIssuancesForUser
 } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -80,7 +80,11 @@ const REPORT_QUERY_CONFIGS = {
   // dbo.Tasks KHÔNG thuộc 55 collection DEDICATED_TABLES (bảng riêng có sẵn từ Bước 6b, xem
   // lib/taskStore.js queryTasksInRange()) — cfg (DEDICATED_TABLES[collection]) sẽ là undefined cho
   // "tasks", route bên dưới tự rẽ nhánh đọc riêng, không where.Dept (Công việc không có field phòng ban).
-  tasks: { filterFn: filterTasksForUser, needsAppData: true }
+  tasks: { filterFn: filterTasksForUser, needsAppData: true },
+  // Đồng Phục dùng bộ lọc CHỌN NHIỀU siêu thị (không phải dept đơn) — client cố tình KHÔNG truyền dept
+  // (xem module-baocaoquantri.js), nên where.Dept ở đây luôn bỏ qua; lọc theo danh sách đã chọn vẫn làm
+  // ở JS sau khi nhận về, chỉ phần thu hẹp theo ngày là đẩy xuống SQL.
+  uniformIssuances: { filterFn: filterUniformIssuancesForUser, needsAppData: false }
 };
 
 router.get('/:collection', async (req, res) => {
