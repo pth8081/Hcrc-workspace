@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**18.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.1 (2026-09-12): Bước 7 — bắt đầu tách collection tăng trưởng nhanh khỏi `dbo.Records` sang bảng riêng
+
+Yêu cầu người dùng: lo ngại mô hình lưu trữ JSON blob dùng chung
+(`dbo.Records`) không chịu được quy mô hàng triệu dòng về sau, yêu cầu
+nghiên cứu sâu và chuyển sang mô hình bảng quan hệ truyền thống MSSQL —
+"chỉ làm một lần", không cần hỏi lại, cứ merge và báo cáo.
+
+**Phân tích**: `dbo.Records` (bảng dùng chung cho ~48 collection nghiệp vụ)
+chỉ có `Collection`/`Id`/`Code`/`CreatedAt` là cột SQL thật — mọi field còn
+lại (status, dept, người tạo...) chỉ nằm trong `Payload` JSON, không lọc/
+phân trang được ở tầng CSDL. Phân loại toàn bộ 48 collection theo tốc độ
+tăng trưởng thực tế (dựa trên khảo sát code, không có SQL Server thật để đo
+số liệu production) — chọn 11 collection tăng trưởng KHÔNG GIỚI HẠN theo
+thời gian làm đợt đầu ("nhóm A"): `docs`, `submissions`, `attendanceRecords`,
+`notifications`, `operationOrders`, `operationStoreOpenings`,
+`operationRepairs`, `paymentRequests`, `checklistSubmissions`,
+`trainingTestSubmissions`, `trainingDocumentProgress`. Các collection còn
+lại (catalog/cấu hình bị chặn trần bởi số nhân sự/danh mục) chuyển sau
+(nhóm B/C, xem kế hoạch đầy đủ).
+
+**Đã hoàn tất ở đợt này (Bước 7a-7d)**:
+- Thêm 11 bảng riêng vào `sql/schema.sql` (additive, `IF OBJECT_ID IS NULL`)
+  — mỗi bảng chỉ trích cột SQL thật cho field ĐÃ CÓ BẰNG CHỨNG dùng để lọc
+  quyền xem (`lib/recordViewScope.js`) hoặc dùng ở Báo Cáo, dựa trên khảo
+  sát thực tế field-shape từ `lib/createValidation.js`/`lib/recordActions.js`
+  (không đoán mò). Mảng lồng (history[]/items[]/estimateItems[]/answers[])
+  CHƯA tách bảng con — không phải điều kiện lọc SQL, giữ trong `Payload`.
+- Viết lại `lib/recordStore.js`: 11 collection này tự động đọc/ghi bảng
+  riêng thay vì `dbo.Records` — rà soát TOÀN BỘ call site thật trong repo
+  (không chỉ qua các hàm dispatch chung) và phát hiện `seedDefaults.js` +
+  `jobs/operationOrderApiSync.js` gọi thẳng hàm cấp thấp cho
+  `operationOrders`/`paymentRequests`, đã vá để không âm thầm ghi nhầm bảng
+  cũ (rỗng sau khi migrate) — lỗi loại này sẽ KHÔNG báo gì, rất khó phát
+  hiện nếu bỏ sót.
+- `scripts/migrate-records-batch1.js`: script di trú dữ liệu 1 lần, dry-run
+  mặc định, chỉ INSERT bản ghi còn thiếu (idempotent), KHÔNG xoá gì ở
+  `dbo.Records` — giữ nguyên làm bản sao lưu tới khi xác nhận ổn định.
+- `queryDedicatedRecords()`: hạ tầng đọc có lọc (WHERE) + phân trang thật ở
+  SQL cho 11 bảng trên — CHƯA có route nào gọi (chưa nối vào Báo Cáo/client)
+  vì cần ghép đúng với `recordViewScope.js` của từng collection để không lộ
+  dữ liệu ngoài phạm vi xem — việc này cần làm cẩn thận, để lại cho đợt sau.
+- Cập nhật `deploy/Huong-dan-trien-khai-PM2.md` + `-Nginx.md` (mục 13): thứ
+  tự bắt buộc khi cập nhật — `schema.sql` → script migrate `--confirm` →
+  MỚI `pm2 restart` (restart trước sẽ khiến 11 collection này RỖNG).
+
+**Giới hạn đã biết**: môi trường phát triển không có SQL Server thật + bộ
+test hiện có (`tests/test-*.js`) mock ở tầng HTTP/trình duyệt, không chạy
+qua `lib/recordStore.js` thật — đã syntax-check toàn bộ + viết lại
+`tests/test-code-autogen-retry.js` (mock SQL thủ công) để xác nhận đúng
+logic retry/sinh mã cho bảng mới (12/12 pass, phép thử tự động DUY NHẤT có
+thể kiểm chứng phần SQL mới trong môi trường này). **Khuyến nghị bắt buộc**:
+chạy `schema.sql` + script migrate trên bản sao CSDL thử nghiệm trước, đối
+chiếu số liệu khớp, rồi mới áp dụng production thật.
+
+**Còn lại (đang tiếp tục)**: nối `queryDedicatedRecords()` vào route + client
+Báo Cáo (Bước 7e), lặp lại cho nhóm B/C (Bước 7f), dọn `dbo.Records` cũ sau
+khi ổn định (Bước 7g), test nghiệp vụ toàn diện + rà soát an toàn tổng thể
+sau khi hoàn tất toàn bộ di trú.
 
 ## v18.0 (2026-09-12): Bổ sung module còn thiếu vào Báo Cáo + Biểu Mẫu (rà soát "điều kiện lọc xem" toàn hệ thống)
 
