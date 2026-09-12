@@ -65,7 +65,10 @@ stubModule('lib/recordStore', {
     if (collection !== 'paymentRequests') return [];
     byDeptCallCount++;
     return ALL_PAYMENT_REQUESTS.filter(r => r.dept === dept).map(r => ({ ...r }));
-  }
+  },
+  // routes/data.js (Bước 8c) LUÔN gọi nhánh trainingDocumentProgress bất kể test này không quan tâm tới
+  // collection đó — chỉ cần không throw, trả rỗng là đủ (không ảnh hưởng các assertion về paymentRequests).
+  getForCollectionByUsernameCached: async () => []
 });
 
 let CURRENT_USERNAME = REGULAR_A.username;
@@ -158,7 +161,8 @@ async function main() {
       stubModule('lib/recordStore', {
         MIGRATED_COLLECTIONS: new Set(['paymentRequests']),
         getAllForCollectionCached: async () => ALL_PAYMENT_REQUESTS.map(r => ({ ...r })),
-        getForCollectionByDeptCached: async () => ALL_PAYMENT_REQUESTS.map(r => ({ ...r })) // CỐ Ý trả thừa mọi phòng ban
+        getForCollectionByDeptCached: async () => ALL_PAYMENT_REQUESTS.map(r => ({ ...r })), // CỐ Ý trả thừa mọi phòng ban
+        getForCollectionByUsernameCached: async () => []
       });
       delete require.cache[require.resolve('../routes/data')];
       const freshDataRoutes = require('../routes/data');

@@ -1,8 +1,9 @@
-// tests/test-collection-by-dept-cache.js — Bước 8b: getForCollectionByDeptCached() + invalidateCollectionCache()
-// (lib/recordStore.js) là 2 hàm MỚI dùng cho routes/data.js (paymentRequests) — mock '../db' bằng 1 SQL
-// engine giả (cùng khuôn tests/test-query-dedicated-records.js) để xác nhận đúng hành vi lọc theo phòng
-// ban + cache riêng theo phòng ban (không lẫn giữa các phòng ban khác nhau) + TTL + invalidate mà không
-// cần SQL Server thật.
+// tests/test-collection-by-dept-cache.js — Bước 8b/8c: getForCollectionByDeptCached()/
+// getForCollectionByUsernameCached() (cùng dựng trên getForCollectionByColumnCached() chung) +
+// invalidateCollectionCache() (lib/recordStore.js) — dùng cho routes/data.js (paymentRequests theo Dept,
+// trainingDocumentProgress theo Username). Mock '../db' bằng 1 SQL engine giả (cùng khuôn
+// tests/test-query-dedicated-records.js) để xác nhận đúng hành vi lọc + cache riêng theo TỪNG GIÁ TRỊ cột
+// (không lẫn giữa các giá trị/collection khác nhau) + TTL + invalidate mà không cần SQL Server thật.
 'use strict';
 const assert = require('assert');
 const Module = require('module');
@@ -138,6 +139,35 @@ async function withMockedDb(tables, ttlMs, fn) {
       // docs không bị xoá cache — vẫn nên trả đúng dữ liệu (không assert số lượt SQL, chỉ xác nhận không lỗi/dữ liệu vẫn đúng)
       const docsItems = await recordStore.getForCollectionByDeptCached('docs', 'Phòng A');
       assert.strictEqual(docsItems.length, 1);
+    });
+  });
+
+  // ===== getForCollectionByUsernameCached() (Bước 8c — trainingDocumentProgress) =====
+  const progressRows = [
+    { Id: 1, CreatedAt: 1000, Username: 'nva', Payload: { id: 1, username: 'nva' } },
+    { Id: 2, CreatedAt: 2000, Username: 'ntb', Payload: { id: 2, username: 'ntb' } },
+    { Id: 3, CreatedAt: 3000, Username: 'nva', Payload: { id: 3, username: 'nva' } }
+  ];
+
+  await check('getForCollectionByUsernameCached(): chỉ trả đúng bản ghi của username được truyền', async () => {
+    await withMockedDb({ TrainingDocumentProgress: progressRows }, 3000, async (recordStore) => {
+      const items = await recordStore.getForCollectionByUsernameCached('trainingDocumentProgress', 'nva');
+      assert.deepStrictEqual(items.map(i => i.id).sort(), [1, 3]);
+    });
+  });
+
+  await check('getForCollectionByUsernameCached(): 2 username khác nhau KHÔNG lẫn cache của nhau, và KHÔNG lẫn với cache theo Dept của collection khác', async () => {
+    const freshPaymentRows = [
+      { Id: 101, CreatedAt: 1000, Dept: 'Phòng A', Payload: { id: 101, dept: 'Phòng A' } },
+      { Id: 102, CreatedAt: 2000, Dept: 'Phòng B', Payload: { id: 102, dept: 'Phòng B' } }
+    ];
+    await withMockedDb({ TrainingDocumentProgress: progressRows, PaymentRequests: freshPaymentRows }, 3000, async (recordStore) => {
+      const a = await recordStore.getForCollectionByUsernameCached('trainingDocumentProgress', 'nva');
+      const b = await recordStore.getForCollectionByUsernameCached('trainingDocumentProgress', 'ntb');
+      const dept = await recordStore.getForCollectionByDeptCached('paymentRequests', 'Phòng A');
+      assert.deepStrictEqual(a.map(i => i.id).sort(), [1, 3]);
+      assert.deepStrictEqual(b.map(i => i.id), [2]);
+      assert.deepStrictEqual(dept.map(i => i.id), [101]);
     });
   });
 

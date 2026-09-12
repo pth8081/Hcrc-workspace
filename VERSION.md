@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**18.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.9 (2026-09-12): Bước 8c — SQL-filter trainingDocumentProgress trong GET /api/data
+
+Tiếp Bước 8b, áp dụng đúng khuôn cho collection thứ 2: `filterTrainingDocumentProgressForUser()`
+(lib/recordViewScope.js) cũng chỉ có 2 nhánh phẳng — `canManageTraining` (admin/trainingManage) xem HẾT,
+còn lại CHỈ đúng tiến độ đọc tài liệu của CHÍNH MÌNH (`p.username === user.username`, không có nhánh nào
+khác) — khác `paymentRequests` ở chỗ lọc theo **Username** thay vì Dept.
+
+Tổng quát hoá `lib/recordStore.js`: `getForCollectionByDeptCached()` giờ dựng trên 1 hàm dùng chung mới
+`getForCollectionByColumnCached(collection, column, value)` (cache key `collection::column::value`) — thêm
+`getForCollectionByUsernameCached(collection, username)` làm biến thể thứ 2 từ CÙNG hàm nền, không viết lại
+logic cache/TTL/invalidate. `invalidateCollectionCache()` không đổi (đã tổng quát từ Bước 8b, xoá đúng mọi
+entry theo-cột-lọc của collection bất kể lọc theo cột nào).
+
+`routes/data.js`: `trainingDocumentProgress` tách khỏi vòng lặp tải chung — admin/trainingManage vẫn tải
+company-wide như cũ, còn lại tải qua `getForCollectionByUsernameCached('trainingDocumentProgress', user.username)`.
+`filterTrainingDocumentProgressForUser()` vẫn áp lại y hệt trước (lớp chốt quyền xem thật).
+
+Mở rộng `tests/test-collection-by-dept-cache.js` (nay 8/8 pass — thêm 2 kịch bản cho biến thể Username,
+xác nhận không lẫn cache giữa các username/collection khác nhau) + thêm
+`tests/test-training-document-progress-scope.js` (5/5 pass, mount thật `routes/data.js` qua HTTP —
+IDOR-safe giữa các nhân viên, trainingManage/admin không mất dữ liệu, lớp lọc thứ 2 vẫn chốt đúng khi tầng
+tải giả lập lỗi).
+
+**Còn lại (Bước 8 tiếp theo)**: `checklistSubmissions` cần thêm cơ chế lọc OR (phòng ban HOẶC người nộp)
+— `queryDedicatedRecords()` hiện chỉ AND các điều kiện, cần thiết kế thêm trước khi làm collection này; để
+sau `operationStoreOpenings`/`operationRepairs`/`docs`/`submissions` (cây quản lý/tra cứu chéo phức tạp).
 
 ## v18.8 (2026-09-12): Bước 8b — SQL-filter paymentRequests trong GET /api/data (collection thật đầu tiên)
 

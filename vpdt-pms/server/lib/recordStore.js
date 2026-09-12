@@ -1437,21 +1437,22 @@ async function renameFieldValueInCollection(collection, mutateFn) {
 // mới nhất tuyệt đối để chặn đúng race (trùng mã, trùng khung giờ...).
 const RECORDS_CACHE_TTL_MS = parseInt(process.env.APPDATA_CACHE_TTL_MS || '3000', 10);
 const collectionCache = new Map(); // collection -> { value, expiresAt }
-// collectionByDeptCache (Bước 8b) — cache RIÊNG theo (collection, dept), dùng cho các collection mà GET
-// /api/data (routes/data.js) không còn tải TOÀN BỘ company-wide cho MỌI người dùng nữa (chỉ những
-// collection có quyền xem PHẲNG dạng "admin/<quyền quản lý> xem HẾT, còn lại CHỈ đúng phòng ban mình" —
-// KHÔNG dùng được cho collection cần duyệt cây quản lý/tra cứu chéo phức tạp). Cùng TTL với
-// collectionCache — vẫn giữ đúng lợi ích dùng chung 1 lượt đọc SQL cho nhiều người CÙNG PHÒNG BAN gọi
-// gần như cùng lúc, chỉ thu hẹp phạm vi cache từ "toàn công ty" xuống "theo phòng ban" (số phòng ban ít,
-// vẫn đủ để nhiều người dùng chung 1 entry trong cùng cửa sổ vài giây).
-const collectionByDeptCache = new Map(); // "collection::dept" -> { value, expiresAt }
+// collectionByColumnCache (Bước 8b/8c) — cache RIÊNG theo (collection, cột lọc, giá trị), dùng cho các
+// collection mà GET /api/data (routes/data.js) không còn tải TOÀN BỘ company-wide cho MỌI người dùng nữa
+// (chỉ những collection có quyền xem PHẲNG dạng "admin/<quyền quản lý> xem HẾT, còn lại CHỈ đúng 1 giá
+// trị cột nào đó của chính mình — Dept cho paymentRequests, Username cho trainingDocumentProgress..." —
+// KHÔNG dùng được cho collection cần duyệt cây quản lý/tra cứu chéo/nhiều điều kiện OR phức tạp). Cùng
+// TTL với collectionCache — với cột có ít giá trị phân biệt (VD Dept, không phải Username) vẫn giữ đúng
+// lợi ích nhiều người CÙNG giá trị đó gọi gần như cùng lúc chỉ tốn 1 lượt đọc SQL.
+const collectionByColumnCache = new Map(); // "collection::col::value" -> { value, expiresAt }
 
 function invalidateCollectionCache(collection) {
   collectionCache.delete(collection);
-  // Xoá luôn MỌI entry theo-phòng-ban của collection này — 1 điểm invalidate duy nhất, không cần sửa lại
-  // từng nơi đang gọi invalidateCollectionCache() rải rác trong file (insert/update/xoá/khoá bản ghi...).
-  for (const key of collectionByDeptCache.keys()) {
-    if (key.startsWith(collection + '::')) collectionByDeptCache.delete(key);
+  // Xoá luôn MỌI entry theo-cột-lọc của collection này (bất kể lọc theo Dept hay Username hay cột nào
+  // khác sau này) — 1 điểm invalidate duy nhất, không cần sửa lại từng nơi đang gọi
+  // invalidateCollectionCache() rải rác trong file (insert/update/xoá/khoá bản ghi...).
+  for (const key of collectionByColumnCache.keys()) {
+    if (key.startsWith(collection + '::')) collectionByColumnCache.delete(key);
   }
 }
 
@@ -1463,18 +1464,24 @@ async function getAllForCollectionCached(collection) {
   return value;
 }
 
-// getForCollectionByDeptCached() — CHỈ dùng cho collection có DEDICATED_TABLES (Bước 7) + cột Dept thật
-// (queryDedicatedRecords() lọc where.Dept ngay ở SQL, không tải nguyên bảng về Node như
+// getForCollectionByColumnCached() — CHỈ dùng cho collection có DEDICATED_TABLES (Bước 7) + cột lọc thật
+// (queryDedicatedRecords() lọc where.<column> ngay ở SQL, không tải nguyên bảng về Node như
 // getAllForCollectionCached() rồi mới lọc). Gọi hàm này KHÔNG thay cho filter*ForUser() thật ở
 // lib/recordViewScope.js — nơi gọi vẫn PHẢI áp lại đúng hàm đó sau khi nhận kết quả (SQL chỉ thu hẹp,
 // không phải chốt quyền xem — cùng nguyên tắc xuyên suốt Bước 7/8, xem routes/reports.js/notifications.js).
-async function getForCollectionByDeptCached(collection, dept) {
-  const key = `${collection}::${dept}`;
-  const hit = collectionByDeptCache.get(key);
+async function getForCollectionByColumnCached(collection, column, value) {
+  const key = `${collection}::${column}::${value}`;
+  const hit = collectionByColumnCache.get(key);
   if (hit && hit.expiresAt > Date.now()) return hit.value;
-  const { items } = await queryDedicatedRecords(collection, { where: { Dept: dept } });
-  collectionByDeptCache.set(key, { value: items, expiresAt: Date.now() + RECORDS_CACHE_TTL_MS });
+  const { items } = await queryDedicatedRecords(collection, { where: { [column]: value } });
+  collectionByColumnCache.set(key, { value: items, expiresAt: Date.now() + RECORDS_CACHE_TTL_MS });
   return items;
+}
+function getForCollectionByDeptCached(collection, dept) {
+  return getForCollectionByColumnCached(collection, 'Dept', dept);
+}
+function getForCollectionByUsernameCached(collection, username) {
+  return getForCollectionByColumnCached(collection, 'Username', username);
 }
 
 // builderFn(existingList) -> bản ghi mới (hoặc throw để huỷ, không tạo gì). Với collection ĐÃ migrate,
@@ -1656,7 +1663,7 @@ module.exports = {
   MIGRATED_COLLECTIONS,
   CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, getAllForCollectionCached, getForCollectionByDeptCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
+  getAllForCollection, getAllForCollectionCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads,
