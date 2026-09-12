@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
+const { getAllForCollectionCached, getForCollectionByDeptCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const {
@@ -599,10 +599,23 @@ router.get('/', async (req, res) => {
     // nối tiếp nhau, cộng dồn độ trễ mạng/DB của từng lượt (đây là nguyên nhân chính khiến lần tải dữ
     // liệu đầu tiên sau khi đăng nhập mất nhiều giây) — các collection này độc lập nhau, pool kết nối
     // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
-    const migratedList = [...MIGRATED_COLLECTIONS];
-    const [tasksResult, workItemsResult, ...collectionResults] = await Promise.all([
+    // Bước 8b — paymentRequests tách riêng khỏi vòng lặp tải chung ở dưới: canViewPaymentRequest()
+    // (lib/recordViewScope.js) chỉ có ĐÚNG 2 nhánh phẳng — admin/paymentManage xem HẾT, còn lại CHỈ đúng
+    // phòng ban mình, không có quản lý cấp trên/cấp dưới hay ngoại lệ nào khác. Với phần lớn người dùng
+    // (không có paymentManage), tải qua SQL where.Dept ngay từ đầu (getForCollectionByDeptCached(), Bước
+    // 7d) thay vì luôn tải TOÀN BỘ collection company-wide rồi mới lọc bớt ở Node — giảm đúng phần việc
+    // nặng nhất đã đo được ở load test (dựng lại + parse JSON + lọc quyền cho khối dữ liệu ngày càng
+    // lớn, MỖI request). admin/paymentManage (số ít) vẫn tải như cũ (dùng chung getAllForCollectionCached,
+    // không đổi). filterPaymentRequestsForUser() bên dưới VẪN được áp lại y hệt trước — SQL chỉ thu hẹp,
+    // không thay cho lớp chốt quyền xem thật.
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests');
+    const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
+    const [tasksResult, workItemsResult, paymentRequestsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
+      canSeeAllPaymentRequests
+        ? getAllForCollectionCached('paymentRequests')
+        : getForCollectionByDeptCached('paymentRequests', req.freshUser?.dept),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -610,6 +623,7 @@ router.get('/', async (req, res) => {
     // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
     // dbo.AppData, không có _versions.operationWorkItems tương ứng).
     data.operationWorkItems = workItemsResult;
+    data.paymentRequests = paymentRequestsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem

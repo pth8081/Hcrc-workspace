@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**18.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.8 (2026-09-12): Bước 8b — SQL-filter paymentRequests trong GET /api/data (collection thật đầu tiên)
+
+Tiếp Bước 8a (Thông Báo — API riêng, đơn giản): đây là lần đầu áp dụng cho 1 collection nằm TRONG
+`GET /api/data` (API chung, tải hàng chục collection 1 lượt cho MỌI màn hình) — chọn `paymentRequests` vì
+`canViewPaymentRequest()` (lib/recordViewScope.js) chỉ có ĐÚNG 2 nhánh phẳng: admin/paymentManage xem HẾT,
+còn lại CHỈ đúng phòng ban mình — không có quản lý cấp trên/cấp dưới hay ngoại lệ nào khác (đã xác nhận kỹ
+qua rà soát trước khi chọn, để tránh lặp lỗi kiểu operationStoreOpenings/operationRepairs — 2 collection cần
+duyệt CÂY QUẢN LÝ đệ quy nên KHÔNG làm ở đợt này).
+
+**Cân nhắc quan trọng trước khi làm**: `GET /api/data` vốn có 1 cache DÙNG CHUNG (`collectionCache`, TTL
+~3s) để nhiều người gọi gần như cùng lúc chỉ tốn 1 lượt đọc SQL — nếu đổi thẳng sang lọc theo TỪNG NGƯỜI
+DÙNG sẽ mất lợi ích dùng chung này. Giải pháp: lọc theo TỪNG PHÒNG BAN (không phải từng người) — số phòng
+ban ít, nhiều người CÙNG PHÒNG BAN vẫn dùng chung 1 cache entry trong cùng cửa sổ vài giây, vừa giảm được
+kích thước dữ liệu tải/lọc mỗi request (đúng điểm nghẽn CPU đã đo ở load test trước đây) vừa giữ nguyên lợi
+ích cache dùng chung.
+
+`lib/recordStore.js`: thêm `getForCollectionByDeptCached(collection, dept)` (dùng `queryDedicatedRecords()`
+Bước 7d, cache riêng theo `collection::dept`) + sửa `invalidateCollectionCache()` xoá luôn mọi entry
+theo-phòng-ban của collection đó (1 điểm invalidate duy nhất, không cần sửa lại 12 nơi đang gọi hàm này).
+
+`routes/data.js`: `paymentRequests` tách khỏi vòng lặp tải chung — admin/paymentManage vẫn tải company-wide
+như cũ (không đổi), còn lại tải qua `getForCollectionByDeptCached('paymentRequests', user.dept)`.
+`filterPaymentRequestsForUser()` VẪN được áp lại y hệt trước — SQL chỉ thu hẹp, không thay cho lớp chốt
+quyền xem thật (đã viết test xác nhận: dù tầng tải giả lập LỖI trả thừa mọi phòng ban, lớp lọc thứ 2 vẫn
+chốt đúng phạm vi).
+
+Thêm 2 test mới: `tests/test-collection-by-dept-cache.js` (6/6 pass, mock SQL — xác nhận lọc đúng phòng
+ban, cache riêng không lẫn giữa các phòng ban, TTL, invalidate đúng phạm vi) và
+`tests/test-payment-requests-dept-scope.js` (5/5 pass, mount thật `routes/data.js` qua HTTP — xác nhận
+IDOR-safe giữa các phòng ban, admin/paymentManage không mất dữ liệu, lớp lọc thứ 2 vẫn chốt đúng khi tầng
+dưới giả lập lỗi).
+
+**Còn lại (Bước 8 tiếp theo)**: mở rộng cùng khuôn cho `checklistSubmissions`/`trainingDocumentProgress`
+(quyền phẳng đơn giản, đã xác nhận qua rà soát) — để sau `operationStoreOpenings`/`operationRepairs`/`docs`/
+`submissions` (cần duyệt cây quản lý hoặc tra cứu chéo phức tạp, rủi ro cao hơn nhiều).
 
 ## v18.7 (2026-09-12): Bước 8a — khởi động SQL-filter hoá GET /api/data, bắt đầu từ Thông Báo
 
