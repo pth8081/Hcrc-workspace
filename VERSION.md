@@ -1,8 +1,64 @@
 # Phiên bản hiện tại
 
-**17.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**17.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v17.7 (2026-09-12): Vá lỗ hổng xoá dữ liệu qua "Người Phụ Trách danh mục lớn" (Vận Hành > Siêu Thị) + cập nhật tài liệu Thanh Toán
+
+Phát hiện từ việc viết bộ kịch bản test nghiệp vụ chuyên sâu (218 kịch bản,
+toàn bộ module/tab/sub-tab) rồi tự kiểm chứng lại code theo đúng các kịch bản
+rủi ro cao nhất (dòng tiền, cascade dữ liệu, ranh giới bảo mật) — không có SQL
+Server thật trong môi trường kiểm tra nên xác minh bằng đọc/đối chiếu code
+trực tiếp thay vì chạy UI end-to-end.
+
+**Trung bình (đã vá):**
+- `lib/recordActions.js` (`submitOperationEstimate()`) — Vận Hành > Siêu Thị >
+  Dự toán > Danh Mục Đầu Tư: người chỉ được gán **"Người Phụ Trách"** 1 danh
+  mục lớn (không phải toàn quyền hồ sơ) có thể **tự xoá chính danh mục lớn
+  mình phụ trách + toàn bộ danh mục con bên trong**, dù giao diện không hề có
+  nút Xoá nào cho vai trò này. Đường vòng: ô "Nội Dung" của danh mục lớn không
+  bị khoá sửa (chỉ nút Xoá bị ẩn) — xoá trắng ô này rồi Lưu khiến dòng đó có
+  content rỗng, bị cả client (`module-vanhanh.js`) lẫn server lọc bỏ khỏi
+  payload xử lý (coi như "không gửi lên"); server trước đây chỉ kiểm tra "dòng
+  ĐÃ gửi có nằm trong phạm vi không" (403 nếu đụng ngoài phạm vi) mà không hề
+  kiểm tra "mọi danh mục lớn thuộc phạm vi có còn mặt sau khi xử lý không" —
+  danh mục lớn "biến mất" khỏi payload khiến các danh mục con của nó (vẫn có
+  nội dung, vẫn được gửi) bị coi "mồ côi" (không tra được `parentId`) và bị
+  cascade xoá theo, cùng cơ chế cascade vốn CHỈ nhằm phục vụ toàn quyền hồ sơ
+  xoá chủ động. Vá: sau khi xử lý payload trong phạm vi phụ trách, bắt buộc
+  kiểm tra lại **mọi id trong `ownerTopIds` phải còn xuất hiện** trong danh
+  sách kết quả — thiếu id nào (dù do bỏ sót hẳn khỏi payload hay do xoá trắng
+  Nội Dung khiến bị lọc mất) đều bị chặn 403 rõ ràng ngay, không âm thầm để
+  mất dữ liệu. Bổ sung 3 test mới vào `tests/test-operation-estimate-owner-scope.js`
+  cô lập đúng lỗ hổng (test cũ ở file này vốn PASS "giả" — do payload test kèm
+  1 dòng ngoài phạm vi khác nên bị chặn bởi lý do khác, không thực sự chứng
+  minh việc bỏ sót/xoá trắng chính danh mục lớn tự nó bị chặn); đã xác nhận lại
+  bằng `git stash` — không có bản vá thì đúng 2 test mới thất bại, có bản vá
+  thì cả 14 test (11 cũ + 3 mới) đều pass.
+
+**Tài liệu (không phải lỗi code, chỉ cập nhật `Huong-dan-nghiep-vu.md` cho khớp hành vi hiện tại):**
+- Mục 4.3 (Tổng Hợp > Thanh Toán > "✅ Xác Nhận Đề Nghị Thanh Toán"): tài liệu
+  trước đây ghi bước xác nhận cuối (Xác Nhận Toàn Bộ/xác nhận từng đợt) "bắt
+  buộc kèm tệp đề nghị thanh toán đã phê duyệt" — nhưng code thực tế
+  (`confirmPaymentInstallment()`/`confirmPaymentRequestLumpSum()`,
+  `lib/recordActions.js`) đã chuyển yêu cầu đính kèm tệp lên bước GỬI đề nghị
+  ("📨 Chuyển Xác Nhận Thanh Toán", `submitPaymentRequest()`) từ trước, bước
+  xác nhận cuối không còn bắt buộc tệp nào nữa (thay đổi có chủ đích, có ghi
+  chú rõ trong code, chỉ riêng tài liệu nghiệp vụ chưa cập nhật theo).
+
+**Kết quả kiểm tra thêm (không phát hiện lỗi, đã xác minh khớp đúng tài liệu):**
+Đồng Phục điều chuyển kho giữa 2 siêu thị (mô hình "hàng đang vận chuyển"),
+Vận Hành mức tier duyệt đơn hàng (MAX(amount, paymentTotalAmount), mốc đúng
+bằng), Hợp Đồng Đổi Hình Thức Thanh Toán, Checklist Đánh Giá Siêu Thị (khoá
+sửa mẫu ACTIVE, chống giả mạo storeCode), Công & Phép (đổi ca 1 chiều), Vận
+Hành Liên Kết công việc (chặn vòng lặp phụ thuộc), API Đối Tác Ngoài (giới hạn
+IP theo key).
+
+**Deploy-impact**: chỉ đổi logic 1 hàm ở `lib/recordActions.js` + tài liệu —
+**không** đổi `sql/schema.sql`, **không** thêm biến môi trường, **không** đổi
+`package.json` dependencies. Chỉ cần copy code + `pm2 restart`, không cần thao
+tác 1 lần nào khác.
 
 ## v17.6 (2026-09-12): Đợt rà soát chuyên sâu LẦN 2 (8 agent song song) — vá toàn bộ phát hiện + tính năng đính kèm Quyết định lương/chức vụ
 

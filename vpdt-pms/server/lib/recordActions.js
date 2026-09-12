@@ -707,6 +707,22 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
         throw new HttpError(403, `Bạn không có quyền sửa hạng mục "${it.content}" (ngoài phạm vi danh mục lớn bạn đang phụ trách)`);
       }
     }
+    // AUDIT (kịch bản test VHMS-09): "KHÔNG được xoá chính danh mục lớn đó" trước đây chỉ chặn ở nút Xoá
+    // trên giao diện (canDeleteThisRow ở module-vanhanh.js) — server không hề bắt buộc mọi id trong
+    // ownerTopIds phải còn mặt trong resolved. Xoá TRẮNG ô "Nội Dung" của chính danh mục lớn mình phụ
+    // trách (ô này KHÔNG bị khoá sửa, chỉ nút Xoá mới bị ẩn) khiến dòng đó có content rỗng -> bị prelim
+    // ở trên loại bỏ hoàn toàn khỏi payload (coi như không gửi lên) -> không có id trong idMap -> mọi
+    // danh mục CON của nó (vẫn có nội dung, vẫn được gửi) bị coi "mồ côi" (orphaned) và bị cascade xoá
+    // theo ở nhánh xử lý phía trên — tức xoá được cả danh mục lớn lẫn toàn bộ con của nó bằng đường vòng,
+    // dù không có quyền bấm nút Xoá nào. Chặn tường minh: mọi id trong ownerTopIds BẮT BUỘC phải còn xuất
+    // hiện (là 1 dòng danh mục lớn) trong resolved sau khi xử lý — thiếu id nào => 403 rõ ràng thay vì
+    // âm thầm để nó biến mất (cùng triết lý "không tin dữ liệu client, chặn tường minh" của cả file này).
+    for (const topId of ownerTopIds) {
+      const stillThere = resolved.some((it) => it.parentId == null && it.id === topId);
+      if (!stillThere) {
+        throw new HttpError(403, 'Bạn không được xoá danh mục lớn bạn đang phụ trách (kể cả bằng cách xoá trắng Nội Dung) — chỉ toàn quyền hồ sơ mới xoá được danh mục lớn');
+      }
+    }
   }
 
   // Chặn lồng quá 1 cấp: 1 danh mục con (đã có parentId) không được làm cha của hạng mục khác — LỖI rõ

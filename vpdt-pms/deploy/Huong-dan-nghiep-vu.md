@@ -512,16 +512,21 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
       được gán quyền ở tab này CHỈ bấm xác nhận đã chi tiền thật, không đụng
       tới bước duyệt nội bộ (đã chuyển hẳn sang "🗂️ Quản Lý Thanh Toán" ở
-      trên). **Xác nhận thanh toán** (bắt buộc kèm tệp "đề nghị thanh toán đã
-      phê duyệt") có 2 CHẾ ĐỘ tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc
-      tạo đề nghị:
+      trên). **Yêu cầu đính kèm tệp đã chuyển lên bước GỬI ĐỀ NGHỊ** (v17.6+):
+      "Hồ Sơ Đề Nghị Thanh Toán" (nhiều tệp) giờ bắt buộc đính kèm **NGAY LÚC**
+      bấm "📨 Chuyển Xác Nhận Thanh Toán" (NHÁP → Chờ duyệt, xem sub-tab "🗂️
+      Quản Lý Thanh Toán" ở trên) — thiếu tệp bị chặn ngay từ bước đó, cả giao
+      diện lẫn server. Vì vậy **bước Xác Nhận cuối cùng dưới đây KHÔNG còn bắt
+      buộc đính kèm thêm tệp nào nữa** (đảo ngược so với thiết kế cũ trước
+      v17.6, khi tệp chỉ bắt buộc ở đúng bước này) — chỉ còn 2 CHẾ ĐỘ xác nhận
+      tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo đề nghị:
       - Hợp đồng **"Thanh toán 1 lần"** (và MỌI đề nghị nguồn Hợp đồng loại
-        này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 tệp DUY NHẤT cho CẢ đề nghị,
-        1 lần bấm chuyển thẳng "Đã thanh toán" cho TẤT CẢ các đợt cùng lúc.
+        này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 lần bấm chuyển thẳng "Đã thanh
+        toán" cho TẤT CẢ các đợt cùng lúc (không cần chọn thêm tệp nào).
       - Hợp đồng **"Thanh toán định kỳ"**, đề nghị tạo THỦ CÔNG, và đề nghị
         nguồn Mua Bán/Sửa Chữa/Đầu Tư: nút **"Xác nhận"** riêng cho TỪNG ĐỢT
-        — mỗi lần xác nhận 1 đợt phải kèm 1 tệp riêng, lặp lại cho tới khi
-        xác nhận HẾT mọi đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
+        (không cần chọn thêm tệp nào), lặp lại cho tới khi xác nhận HẾT mọi
+        đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
       - **"📝 Yêu Cầu Bổ Sung" ngay tại tab này** — kế toán (quyền quản lý
         thanh toán) vẫn có thể trả đề nghị đang "APPROVED" (⏳ Đang chờ thanh
         toán) về **"Cần bổ sung"** (`NEED_INFO`, quay lại sửa được ở "➕ Tạo
