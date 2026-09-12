@@ -52,9 +52,10 @@ stubModule('lib/recordStore', {
     fullLoadCallCount++;
     return ALL_PROGRESS.map(r => ({ ...r }));
   },
-  // routes/data.js (Bước 8b) LUÔN gọi nhánh paymentRequests bất kể test này không quan tâm — chỉ cần
-  // không throw.
+  // routes/data.js (Bước 8b/8d) LUÔN gọi nhánh paymentRequests/checklistSubmissions bất kể test này
+  // không quan tâm — chỉ cần không throw.
   getForCollectionByDeptCached: async () => [],
+  getForCollectionByColumnCached: async () => [],
   getForCollectionByUsernameCached: async (collection, username) => {
     if (collection !== 'trainingDocumentProgress') return [];
     byUsernameCallCount++;
@@ -150,6 +151,7 @@ async function main() {
         MIGRATED_COLLECTIONS: new Set(['trainingDocumentProgress']),
         getAllForCollectionCached: async () => ALL_PROGRESS.map(r => ({ ...r })),
         getForCollectionByDeptCached: async () => [],
+        getForCollectionByColumnCached: async () => [],
         getForCollectionByUsernameCached: async () => ALL_PROGRESS.map(r => ({ ...r })) // CỐ Ý trả thừa của MỌI người
       });
       delete require.cache[require.resolve('../routes/data')];

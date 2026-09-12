@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { getAllForCollectionCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
+const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const {
@@ -556,6 +556,28 @@ async function prepareOperationOrderApiConfigForSave(payload) {
   return { ...rest, headerValueEnc: prior?.headerValueEnc };
 }
 
+// Bước 8d — checklistSubmissions: canViewChecklistSubmission() (lib/recordViewScope.js) có 3 nhánh —
+// (1) admin/checklistTemplateManage/checklistReportView xem HẾT, (2) chính người nộp xem bài của mình,
+// (3) người posType STORE xem bài CHƯA NHÁP của ĐÚNG siêu thị mình (storeCode === dept) — khác
+// paymentRequests/trainingDocumentProgress ở chỗ có 2 điều kiện OR (không phải 1 điều kiện phẳng duy
+// nhất), nên queryDedicatedRecords() (chỉ AND các where, không hỗ trợ OR) không đủ để gộp thành 1 lượt.
+// Tải 2 lượt riêng (theo SubmittedByUsername, theo StoreCode khi posType STORE) rồi gộp + khử trùng theo
+// id ở Node — mỗi lượt vẫn tự lọc/cache đúng ở SQL (không tải nguyên bảng company-wide).
+async function loadChecklistSubmissionsScoped(user) {
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.checklistTemplateManage || user?.perms?.checklistReportView);
+  if (canSeeAll) return getAllForCollectionCached('checklistSubmissions');
+
+  const own = await getForCollectionByColumnCached('checklistSubmissions', 'SubmittedByUsername', user?.username);
+  if (user?.posType !== 'STORE') return own;
+
+  const storeAll = await getForCollectionByColumnCached('checklistSubmissions', 'StoreCode', user?.dept);
+  const storeVisible = storeAll.filter(s => s.status !== 'DRAFT');
+  const byId = new Map();
+  for (const r of own) byId.set(r.id, r);
+  for (const r of storeVisible) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -612,10 +634,10 @@ router.get('/', async (req, res) => {
     // đúng 2 nhánh phẳng — canManageTraining (admin/trainingManage) xem HẾT, còn lại CHỈ đúng tiến độ của
     // CHÍNH MÌNH (p.username === user.username, không có OR nào khác) — tải qua where.Username ngay ở
     // SQL cho phần lớn người dùng (không có trainingManage) thay vì luôn tải TOÀN BỘ company-wide.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -624,6 +646,7 @@ router.get('/', async (req, res) => {
       canManageTrainingFlat
         ? getAllForCollectionCached('trainingDocumentProgress')
         : getForCollectionByUsernameCached('trainingDocumentProgress', req.freshUser?.username),
+      loadChecklistSubmissionsScoped(req.freshUser),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -633,6 +656,7 @@ router.get('/', async (req, res) => {
     data.operationWorkItems = workItemsResult;
     data.paymentRequests = paymentRequestsResult;
     data.trainingDocumentProgress = trainingDocumentProgressResult;
+    data.checklistSubmissions = checklistSubmissionsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem

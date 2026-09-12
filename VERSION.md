@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**18.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.0 (2026-09-12): Bước 8d — SQL-filter checklistSubmissions trong GET /api/data (nhánh OR đầu tiên)
+
+Tiếp Bước 8b/8c, áp dụng cho collection PHỨC TẠP HƠN: `canViewChecklistSubmission()` (lib/recordViewScope.js)
+có **3 nhánh**, trong đó 2 nhánh là quan hệ **OR** (không phải AND như `queryDedicatedRecords()` hỗ trợ) —
+(1) `admin`/`checklistTemplateManage`/`checklistReportView` xem HẾT, (2) chính người nộp xem bài của mình,
+(3) người `posType STORE` xem bài **CHƯA NHÁP** của ĐÚNG siêu thị mình. Vì `queryDedicatedRecords()` chỉ
+AND các điều kiện `where`, không tự ghép được 2 điều kiện OR — giải pháp: tải **2 lượt** SQL riêng biệt
+(theo `SubmittedByUsername`, theo `StoreCode` khi `posType === 'STORE'`) qua hàm dùng chung
+`getForCollectionByColumnCached()` (đã tổng quát từ Bước 8b/8c), rồi **gộp + khử trùng theo id ở Node**
+(1 bài nộp có thể vừa "của mình" vừa "của siêu thị mình" cùng lúc). Điều kiện phụ "CHƯA NHÁP" (không phải
+DRAFT) không đẩy được xuống SQL (chỉ hỗ trợ so bằng, không so khác) nên lọc lại ở Node sau khi tải theo
+StoreCode — vẫn rẻ hơn nhiều so với tải nguyên bảng company-wide.
+
+`lib/recordStore.js`: export thêm `getForCollectionByColumnCached()` (hàm nền đã có từ Bước 8b/8c, giờ
+dùng trực tiếp thay vì chỉ qua 2 hàm bọc Dept/Username) để routes/data.js tự truyền tên cột
+(`SubmittedByUsername`/`StoreCode`) mà không cần thêm hàm bọc riêng cho từng cột mới.
+
+`routes/data.js`: thêm `loadChecklistSubmissionsScoped(user)` xử lý đúng 3 nhánh trên; `checklistSubmissions`
+tách khỏi vòng lặp tải chung. `filterChecklistSubmissionsForUser()` vẫn áp lại y hệt trước (lớp chốt quyền
+xem thật — đã viết test xác nhận vẫn chốt đúng dù tầng tải giả lập lỗi trả thừa của siêu thị khác).
+
+Thêm `tests/test-checklist-submissions-scope.js` (6/6 pass, mount thật `routes/data.js` qua HTTP — xác
+nhận đúng cả 3 nhánh + gộp/khử trùng đúng + không có lượt tải StoreCode thừa cho người không phải
+`posType STORE`). Sửa 2 test trước đó (`test-payment-requests-dept-scope.js`,
+`test-training-document-progress-scope.js`) thiếu stub `getForCollectionByColumnCached` (giờ luôn được
+gọi cho MỌI request `GET /api/data` do `checklistSubmissions` tải không điều kiện).
+
+**Còn lại (Bước 8 tiếp theo)**: `operationOrders` (mức trung bình — cần tra thêm 1 cấp cấu hình quy
+trình duyệt theo phòng ban, không đệ quy) có thể làm tiếp; để sau `operationStoreOpenings`/
+`operationRepairs`/`docs`/`submissions`/`attendanceRecords` (cây quản lý đệ quy hoặc tra cứu chéo phức
+tạp, rủi ro cao hơn nhiều, cần thiết kế riêng).
 
 ## v18.9 (2026-09-12): Bước 8c — SQL-filter trainingDocumentProgress trong GET /api/data
 

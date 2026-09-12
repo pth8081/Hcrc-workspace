@@ -1663,7 +1663,7 @@ module.exports = {
   MIGRATED_COLLECTIONS,
   CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
-  getAllForCollection, getAllForCollectionCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
+  getAllForCollection, getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads,
