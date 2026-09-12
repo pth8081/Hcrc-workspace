@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**18.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.4 (2026-09-12): Bước 7h — mở rộng API lọc SQL sang 13 collection nhóm B/C trong Báo Cáo
+
+Mở rộng `REPORT_QUERY_CONFIGS` (`routes/reports.js`, Bước 7d/7e) sang 13 collection nhóm B/C đã có bảng
+riêng (Bước 7f) và đã dùng trong Báo Cáo: `contracts`, `carRegs`, `officeReqs`, `meetings`,
+`meetingMinutes`, `internalPosts`, `itSupportTickets`, `licenses`, `hrFeedback`, `hrProcesses`,
+`reportPeriods`, `budgetPeriods`, `vppRegistrations` — nâng tổng số module Báo Cáo đọc qua
+`GET /api/reports/:collection` từ 6 lên 19/20 (chỉ còn Đồng Phục đọc cách cũ, do dữ liệu
+allocations[]/items[] lồng nhau không khớp khuôn lọc phẳng). Vẫn đúng nguyên tắc cũ: SQL chỉ thu hẹp theo
+dept/khoảng ngày, sau đó áp lại ĐÚNG hàm `filter*ForUser()`/`sanitize*ForUser()` thật của
+`lib/recordViewScope.js` — không phát minh logic phân quyền mới. `budgetPeriods` chưa có hàm lọc quyền
+riêng (đã vậy từ trước, `routes/data.js` cũng trả nguyên) nên chỉ thu hẹp theo dept/ngày, không thêm bước
+lọc nào khác.
+
+3 collection có thêm bước lọc nghiệp vụ ngoài dept/ngày — áp lại ĐÚNG hành vi cũ qua `postFilter` mới
+trong config, không đổi số liệu hiển thị: `meetingMinutes` (bảng không có cột Dept riêng, lọc dept bằng
+JS sau khi tải), `internalPosts` (kênh dùng chung toàn công ty, bỏ qua dept, chỉ ẩn bài PENDING/REJECTED),
+`licenses` (chỉ đếm hồ sơ gốc, `rootLicenseId == null`).
+
+Phát hiện + sửa 1 lỗi đua (race condition) có thật trong `renderReports()`/`renderModuleReport()`
+(`module-baocaoquantri.js`): các nút chọn tab gọi `renderReports()` kiểu fire-and-forget (không `await`)
+— khi ngày càng nhiều module dùng `getRecords()` bất đồng bộ (gọi API), đổi tab nhanh trước khi lần tải
+trước xong khiến promise cũ trả về SAU vẫn ghi đè nội dung tab đã rời đi. Thêm `reportsRenderSeq` (số thứ
+tự lượt render) — `renderModuleReport()` chỉ ghi DOM nếu vẫn là lượt mới nhất khi dữ liệu tải xong. Phát
+hiện qua `tests/test-reports.js` (test Đồng Phục bất ngờ fail sau khi thêm nhiều async `getRecords` khác,
+dù không đụng gì tới code Đồng Phục) — xác nhận bằng `git stash` so với HEAD trước đó (17/17 pass) rồi lần
+theo đúng nguyên nhân thay vì bỏ qua.
+
+`tests/test-reports.js`: sửa 3 lời gọi trực tiếp `REPORT_MODULE_CONFIGS.<office|hr|hrLifecycle>.getRecords()`
+thiếu `await` (giờ các collection này cũng async) — 17/17 pass sau khi sửa.
 
 ## v18.3 (2026-09-12): Bước 7d/7e — nối API lọc SQL vào Báo Cáo + sửa 2 lỗi có sẵn ở test-vpp.js
 

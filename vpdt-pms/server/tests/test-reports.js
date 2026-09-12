@@ -132,8 +132,8 @@ async function main() {
       await page.evaluate(() => selectReportsNavL1('office'));
       // Scope the assertion to the "dự toán" extra-metrics snippet specifically (not the raw records
       // table further down, which legitimately lists VP-003's own amount as a regular row value).
-      const extraHTML = await page.evaluate(() => {
-        const records = REPORT_MODULE_CONFIGS.office.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+      const extraHTML = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.office.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
         return renderOfficeReportExtra(records);
       });
       assert(extraHTML.includes('20.000.000'), 'expected Mua sắm dự toán 20.000.000 in the extra-metrics HTML');
@@ -296,8 +296,8 @@ async function main() {
       await page.evaluate(() => { selectReportsNavL1('hr'); selectReportsNavL2('hr'); });
       const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
       assert(html.includes('>3<'), `expected tổng 3 câu hỏi trong khoảng lọc, snippet: ${html.slice(0, 400)}`);
-      const stats = await page.evaluate(() => {
-        const records = REPORT_MODULE_CONFIGS.hr.getRecords('', '2026-01-01', '2026-12-31');
+      const stats = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.hr.getRecords('', '2026-01-01', '2026-12-31');
         return { total: records.length, pending: records.filter((r) => r.status === 'PENDING').length, answered: records.filter((r) => r.status === 'ANSWERED').length };
       });
       assertEqual(stats.total, 3, 'hrFeedback total mismatch'); assertEqual(stats.pending, 1, 'PENDING count mismatch'); assertEqual(stats.answered, 2, 'ANSWERED count mismatch');
@@ -305,9 +305,9 @@ async function main() {
 
     await run('Báo Cáo Onboarding/Offboarding: đếm đúng IN_PROGRESS/COMPLETED/CANCELLED + lọc theo phòng ban', async () => {
       await page.evaluate(() => selectReportsNavL2('hrLifecycle'));
-      const stats = await page.evaluate(() => {
-        const all = REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('', '2026-01-01', '2026-12-31');
-        const cntt = REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('Phòng CNTT', '2026-01-01', '2026-12-31');
+      const stats = await page.evaluate(async () => {
+        const all = await REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('', '2026-01-01', '2026-12-31');
+        const cntt = await REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('Phòng CNTT', '2026-01-01', '2026-12-31');
         return { total: all.length, cntt: cntt.length };
       });
       assertEqual(stats.total, 3, 'hrProcesses total mismatch'); assertEqual(stats.cntt, 2, 'hrProcesses CNTT-only mismatch (should be COMPLETED+CANCELLED)');
