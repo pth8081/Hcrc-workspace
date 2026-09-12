@@ -250,7 +250,7 @@ GO
 IF OBJECT_ID('dbo.Notifications', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Notifications (
-        Id         BIGINT         NOT NULL PRIMARY KEY,
+        Id         BIGINT         NOT NULL CONSTRAINT PK_Notifications PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Username   NVARCHAR(100)  NOT NULL,
         IsRead     BIT            NOT NULL DEFAULT 0,
@@ -271,7 +271,7 @@ GO
 IF OBJECT_ID('dbo.Docs', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Docs (
-        Id         BIGINT         NOT NULL PRIMARY KEY,
+        Id         BIGINT         NOT NULL CONSTRAINT PK_Docs PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Code       NVARCHAR(100)  NULL,
         Dept       NVARCHAR(100)  NOT NULL,
@@ -294,7 +294,7 @@ GO
 IF OBJECT_ID('dbo.Submissions', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Submissions (
-        Id         BIGINT         NOT NULL PRIMARY KEY,
+        Id         BIGINT         NOT NULL CONSTRAINT PK_Submissions PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Code       NVARCHAR(100)  NULL,
         Dept       NVARCHAR(100)  NOT NULL,
@@ -319,7 +319,7 @@ GO
 IF OBJECT_ID('dbo.AttendanceRecords', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.AttendanceRecords (
-        Id            BIGINT         NOT NULL PRIMARY KEY,
+        Id            BIGINT         NOT NULL CONSTRAINT PK_AttendanceRecords PRIMARY KEY,
         CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         EmployeeCode  NVARCHAR(50)   NOT NULL,
         WorkDate      DATE           NOT NULL,
@@ -338,7 +338,7 @@ GO
 IF OBJECT_ID('dbo.OperationOrders', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.OperationOrders (
-        Id         BIGINT         NOT NULL PRIMARY KEY,
+        Id         BIGINT         NOT NULL CONSTRAINT PK_OperationOrders PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Code       NVARCHAR(100)  NULL,
         Dept       NVARCHAR(100)  NOT NULL,
@@ -359,7 +359,7 @@ GO
 IF OBJECT_ID('dbo.OperationStoreOpenings', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.OperationStoreOpenings (
-        Id              BIGINT         NOT NULL PRIMARY KEY,
+        Id              BIGINT         NOT NULL CONSTRAINT PK_OperationStoreOpenings PRIMARY KEY,
         CreatedAt       DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Code            NVARCHAR(100)  NULL,
         Dept            NVARCHAR(100)  NOT NULL,
@@ -375,7 +375,7 @@ GO
 IF OBJECT_ID('dbo.OperationRepairs', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.OperationRepairs (
-        Id              BIGINT         NOT NULL PRIMARY KEY,
+        Id              BIGINT         NOT NULL CONSTRAINT PK_OperationRepairs PRIMARY KEY,
         CreatedAt       DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Code            NVARCHAR(100)  NULL,
         Dept            NVARCHAR(100)  NOT NULL,
@@ -397,7 +397,7 @@ GO
 IF OBJECT_ID('dbo.PaymentRequests', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PaymentRequests (
-        Id            BIGINT         NOT NULL PRIMARY KEY,
+        Id            BIGINT         NOT NULL CONSTRAINT PK_PaymentRequests PRIMARY KEY,
         CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         Dept          NVARCHAR(100)  NOT NULL,
         CreatedBy     NVARCHAR(100)  NULL,
@@ -418,7 +418,7 @@ GO
 IF OBJECT_ID('dbo.ChecklistSubmissions', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ChecklistSubmissions (
-        Id                    BIGINT         NOT NULL PRIMARY KEY,
+        Id                    BIGINT         NOT NULL CONSTRAINT PK_ChecklistSubmissions PRIMARY KEY,
         CreatedAt             DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         TemplateId            BIGINT         NOT NULL,
         StoreCode             NVARCHAR(50)   NOT NULL,
@@ -440,7 +440,7 @@ GO
 IF OBJECT_ID('dbo.TrainingTestSubmissions', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.TrainingTestSubmissions (
-        Id         BIGINT         NOT NULL PRIMARY KEY,
+        Id         BIGINT         NOT NULL CONSTRAINT PK_TrainingTestSubmissions PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         TestId     BIGINT         NOT NULL,
         ClassId    BIGINT         NOT NULL,
@@ -459,7 +459,7 @@ GO
 IF OBJECT_ID('dbo.TrainingDocumentProgress', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.TrainingDocumentProgress (
-        Id         BIGINT         NOT NULL PRIMARY KEY,
+        Id         BIGINT         NOT NULL CONSTRAINT PK_TrainingDocumentProgress PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
         DocId      BIGINT         NOT NULL,
         Username   NVARCHAR(100)  NOT NULL,

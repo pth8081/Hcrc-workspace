@@ -1120,7 +1120,15 @@ cầu:
 3. **`server/package.json` đổi `dependencies`** — cần chạy lại `npm install`
    trong thư mục `server/` trước khi restart, nếu không server có thể báo lỗi
    "Cannot find module" ngay khi khởi động.
-4. **`server/public/tailwind.css` đổi** — file này là CSS đã build sẵn
+4. **Bản cập nhật kèm script di trú dữ liệu 1 lần** (`server/scripts/migrate-*.js`) — một số bản cập
+   nhật lớn (đổi kiến trúc lưu trữ, VD Bước 7 — tách 1 số collection khỏi bảng dùng chung `dbo.Records`
+   sang bảng riêng có cột lọc thật) yêu cầu chạy 1 script Node **SAU KHI** chạy `schema.sql` (bảng mới
+   được tạo) nhưng **TRƯỚC KHI** `pm2 restart` (code mới sẽ đọc từ bảng mới — nếu restart trước khi
+   script chạy xong, app sẽ thấy các collection đó RỖNG). Mỗi script tự nêu rõ cách chạy ở đầu file
+   (`node scripts/<tên-script>.js` xem trước, thêm `--confirm` để chạy thật) — luôn xem README/comment
+   đầu file trước khi chạy, và **luôn sao lưu CSDL trước** (script không xoá dữ liệu cũ nhưng vẫn nên
+   có bản sao lưu đề phòng, đặc biệt lần đầu áp dụng 1 script loại này).
+5. **`server/public/tailwind.css` đổi** — file này là CSS đã build sẵn
    (`npm run build:css`, đọc `tailwind.config.js` + `tailwind-input.css`,
    xem `package.json` script `build:css`), **KHÔNG** tự sinh lúc chạy server
    và **KHÔNG** đổi theo mỗi lần đổi `index.html`/JS. Nếu bản cập nhật có kèm
@@ -1154,6 +1162,11 @@ sudo npm install
 # 3. Chạy lại schema.sql — an toàn chạy nhiều lần
 sqlcmd -S localhost -U sa -i sql/schema.sql
 # (dùng sqlcmd18 nếu Ubuntu 22.04+, xem mục 2)
+
+# 3b. NẾU bản cập nhật kèm script scripts/migrate-*.js (xem điểm 4 ở trên) — chạy dry-run trước, đọc
+#     kỹ kết quả, rồi mới --confirm. Bỏ qua bước này nếu bản cập nhật không nhắc tới script nào.
+node scripts/migrate-records-batch1.js
+node scripts/migrate-records-batch1.js --confirm
 
 # 4. Xem có biến .env mới cần thêm không
 sudo diff .env .env.example

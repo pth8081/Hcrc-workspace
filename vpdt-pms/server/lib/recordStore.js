@@ -84,6 +84,10 @@ function isUniqueConstraintViolation(err) {
 }
 
 async function getAllRecords(collection) {
+  // Cùng lý do bảo vệ như insertRecord() ở dưới (Bước 7) — hàm này được gọi trực tiếp ở vài nơi ngoài
+  // getAllForCollection() (seedDefaults.js...), phải tự biết collection nào đã "tốt nghiệp" sang bảng
+  // riêng để không đọc nhầm dbo.Records (nay đã rỗng cho collection đó sau khi migrate dữ liệu).
+  if (DEDICATED_TABLES[collection]) return getAllDedicatedRecords(collection);
   const pool = await getPool();
   const result = await pool.request()
     .input('collection', sql.NVarChar(50), collection)
@@ -128,7 +132,14 @@ function computeNextSeqForPrefix(records, prefix) {
 // createForCollection() — buildUniformIssuance()/buildUniformTransfer()... ở lib/recordActions.js cũng
 // gọi thẳng hàm này) — retry ở đây là fix TẦNG CHUNG, áp dụng tự nhiên cho mọi nơi.
 const INSERT_RECORD_MAX_ATTEMPTS = 5;
+// insertRecord() được gọi trực tiếp (không qua createForCollection()) ở nhiều nơi — lib/notifications.js
+// notifyUsers(), lib/recordActions.js buildUniformIssuance()/buildUniformTransfer()... — nên bản thân
+// hàm XUẤT RA này phải tự kiểm tra DEDICATED_TABLES (Bước 7) trước, KHÔNG được để mọi nơi gọi tự nhớ
+// đổi sang insertDedicatedRecord() (dễ quên sót 1 chỗ, ghi nhầm vào dbo.Records cho collection đã
+// "tốt nghiệp" sang bảng riêng — insertRecord() cũ sẽ không báo lỗi gì vì Collection vẫn là cột hợp lệ
+// ở dbo.Records, chỉ là dữ liệu rơi sai bảng, rất khó phát hiện sau này).
 async function insertRecord(collection, record) {
+  if (DEDICATED_TABLES[collection]) return insertDedicatedRecord(collection, record);
   const pool = await getPool();
   for (let attempt = 1; attempt <= INSERT_RECORD_MAX_ATTEMPTS; attempt++) {
     try {
@@ -176,7 +187,269 @@ async function insertRecord(collection, record) {
   }
 }
 
+// ===== BƯỚC 7 — Bảng riêng cho các collection tăng trưởng nhanh (xem sql/schema.sql, khối "BƯỚC 7") =====
+//
+// DEDICATED_TABLES: collection đã "tốt nghiệp" khỏi dbo.Records sang bảng riêng có cột SQL thật cho
+// field lọc/join đã CÓ BẰNG CHỨNG cần dùng (lib/recordViewScope.js + module-baocaoquantri.js) — KHÔNG
+// dùng chung dbo.Records (Collection column) nữa, mỗi collection ở đây là 1 bảng thật riêng. `hasCode`
+// = bảng có cột Code + UNIQUE INDEX lọc (theo đúng khuôn dbo.Records) hay không — 6/11 collection ở
+// đây không dùng Code (notifications/attendanceRecords/paymentRequests/checklistSubmissions/
+// trainingTestSubmissions/trainingDocumentProgress đều có khoá tự nhiên riêng, không phải mã người
+// dùng gõ). `columns` liệt kê CHÍNH XÁC cột trích xuất thêm (ngoài Id/CreatedAt/Code/Payload) — mỗi
+// lần ghi (insert HOẶC sửa) đều tính lại toàn bộ từ Payload mới nhất, giữ luôn đồng bộ 2 bên.
+const DEDICATED_TABLES = {
+  notifications: {
+    table: 'Notifications', hasCode: false,
+    columns: {
+      Username: { sqlType: () => sql.NVarChar(100), extract: r => r.username || null },
+      IsRead:   { sqlType: () => sql.Bit,            extract: r => !!r.isRead }
+    }
+  },
+  docs: {
+    table: 'Docs', hasCode: true,
+    columns: {
+      Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Status:    { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null },
+      Uploader:  { sqlType: () => sql.NVarChar(100), extract: r => r.uploader || null },
+      RootDocId: { sqlType: () => sql.BigInt,        extract: r => (r.rootDocId != null ? r.rootDocId : null) }
+    }
+  },
+  submissions: {
+    table: 'Submissions', hasCode: true,
+    columns: {
+      Dept:    { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator: { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:  { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  attendanceRecords: {
+    table: 'AttendanceRecords', hasCode: false,
+    columns: {
+      EmployeeCode: { sqlType: () => sql.NVarChar(50), extract: r => r.employeeCode || null },
+      WorkDate:     { sqlType: () => sql.Date,         extract: r => r.workDate || null },
+      RecordType:   { sqlType: () => sql.NVarChar(20), extract: r => r.recordType || null }
+    }
+  },
+  operationOrders: {
+    table: 'OperationOrders', hasCode: true,
+    columns: {
+      Dept:    { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator: { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      Status:  { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  operationStoreOpenings: {
+    table: 'OperationStoreOpenings', hasCode: true,
+    columns: {
+      Dept:           { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:        { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      EstimateStatus: { sqlType: () => sql.NVarChar(20),  extract: r => r.estimateStatus || null }
+    }
+  },
+  operationRepairs: {
+    table: 'OperationRepairs', hasCode: true,
+    columns: {
+      Dept:           { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Creator:        { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
+      EstimateStatus: { sqlType: () => sql.NVarChar(20),  extract: r => r.estimateStatus || null }
+    }
+  },
+  paymentRequests: {
+    table: 'PaymentRequests', hasCode: false,
+    columns: {
+      Dept:         { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      CreatedBy:    { sqlType: () => sql.NVarChar(100), extract: r => r.createdBy || null },
+      SourceModule: { sqlType: () => sql.NVarChar(20),  extract: r => r.sourceModule || null },
+      SourceId:     { sqlType: () => sql.BigInt,        extract: r => (r.sourceId != null ? r.sourceId : null) },
+      Status:       { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  checklistSubmissions: {
+    table: 'ChecklistSubmissions', hasCode: false,
+    columns: {
+      TemplateId:          { sqlType: () => sql.BigInt,        extract: r => (r.templateId != null ? r.templateId : null) },
+      StoreCode:           { sqlType: () => sql.NVarChar(50),  extract: r => r.storeCode || null },
+      SubmittedByUsername: { sqlType: () => sql.NVarChar(100), extract: r => r.submittedByUsername || null },
+      Status:              { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  trainingTestSubmissions: {
+    table: 'TrainingTestSubmissions', hasCode: false,
+    columns: {
+      TestId:   { sqlType: () => sql.BigInt,        extract: r => (r.testId != null ? r.testId : null) },
+      ClassId:  { sqlType: () => sql.BigInt,        extract: r => (r.classId != null ? r.classId : null) },
+      Username: { sqlType: () => sql.NVarChar(100), extract: r => r.username || null }
+    }
+  },
+  trainingDocumentProgress: {
+    table: 'TrainingDocumentProgress', hasCode: false,
+    columns: {
+      DocId:    { sqlType: () => sql.BigInt,        extract: r => (r.docId != null ? r.docId : null) },
+      Username: { sqlType: () => sql.NVarChar(100), extract: r => r.username || null }
+    }
+  }
+};
+
+function dedicatedTableName(collection) {
+  return 'dbo.' + DEDICATED_TABLES[collection].table;
+}
+
+// Build "SET Col1=@c_Col1, Col2=@c_Col2..." + gán input tương ứng — dùng chung cho insert/update để
+// KHÔNG BAO GIỜ quên đồng bộ 1 cột nào đó (rủi ro thật nếu viết tay từng nơi: sửa Payload mà quên cập
+// nhật cột trích xuất tương ứng, cột đó sẽ "đứng hình" mãi mãi giá trị lúc insert ban đầu).
+function bindExtractedColumns(req, cfg, record) {
+  const assignments = [];
+  for (const [col, def] of Object.entries(cfg.columns)) {
+    const paramName = 'c_' + col;
+    req.input(paramName, def.sqlType(), def.extract(record));
+    assignments.push({ col, param: paramName });
+  }
+  return assignments;
+}
+
+async function getAllDedicatedRecords(collection) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .query(`SELECT Payload FROM ${dedicatedTableName(collection)} ORDER BY CreatedAt DESC, Id DESC`);
+  return result.recordset.map(toRecord);
+}
+
+async function insertDedicatedRecord(collection, record) {
+  const cfg = DEDICATED_TABLES[collection];
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  for (let attempt = 1; attempt <= INSERT_RECORD_MAX_ATTEMPTS; attempt++) {
+    const req = pool.request();
+    req.input('id', sql.BigInt, record.id);
+    req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+    const colNames = ['Id', 'Payload'];
+    const colParams = ['@id', '@payload'];
+    if (cfg.hasCode) {
+      req.input('code', sql.NVarChar(100), record.code || null);
+      colNames.push('Code'); colParams.push('@code');
+    }
+    for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
+      colNames.push(col); colParams.push('@' + param);
+    }
+    try {
+      await req.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+      invalidateCollectionCache(collection);
+      return record;
+    } catch (err) {
+      if (!isUniqueConstraintViolation(err)) throw err;
+      const isIdCollision = String(err.message || '').includes(`PK_${cfg.table}`);
+      if (isIdCollision) {
+        if (attempt === INSERT_RECORD_MAX_ATTEMPTS) {
+          throw new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.');
+        }
+        record.id = Date.now() + Math.floor(Math.random() * 1000);
+        continue;
+      }
+      // Trùng Code (chỉ 5/11 bảng có cột này) — cùng logic tự sinh mã mới rồi thử lại như insertRecord().
+      if (!cfg.hasCode) throw err;
+      const m = CODE_SEQ_SUFFIX_RE.exec(String(record.code || ''));
+      if (!m) throw new HttpError(409, `Mã "${record.code}" đã tồn tại`);
+      if (attempt === INSERT_RECORD_MAX_ATTEMPTS) {
+        throw new HttpError(409, `Mã "${record.code}" đã tồn tại — đã thử tự động sinh mã mới nhưng vẫn trùng, vui lòng thử lại.`);
+      }
+      const [, prefix, digitsStr] = m;
+      const existing = await getAllDedicatedRecords(collection);
+      const nextSeq = computeNextSeqForPrefix(existing, prefix);
+      record.code = prefix + String(nextSeq).padStart(digitsStr.length, '0');
+    }
+  }
+}
+
+async function withLockedDedicatedRecordById(collection, id, mutatorFn) {
+  const cfg = DEDICATED_TABLES[collection];
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('id', sql.BigInt, id)
+      .query(`SELECT Payload FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE Id = @id`);
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    }
+    const item = toRecord(readResult.recordset[0]);
+
+    const updated = await mutatorFn(item);
+
+    const writeReq = new sql.Request(tx);
+    writeReq.input('id', sql.BigInt, id);
+    writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated));
+    const setClauses = ['Payload = @payload'];
+    if (cfg.hasCode) {
+      writeReq.input('code', sql.NVarChar(100), updated.code || null);
+      setClauses.push('Code = @code');
+    }
+    for (const { col, param } of bindExtractedColumns(writeReq, cfg, updated)) {
+      setClauses.push(`${col} = @${param}`);
+    }
+    await writeReq.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE Id = @id`);
+
+    await tx.commit();
+    invalidateCollectionCache(collection);
+    return updated;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
+// Cùng khuôn moveRecordToTrash() (bên dưới) — vẫn dùng CHUNG dbo.TrashBin (cột Collection ở đó đã đủ
+// phân biệt bảng nguồn để restoreTrashItem() biết đường phục hồi đúng chỗ, xem sửa đổi restoreTrashItem()).
+async function moveDedicatedRecordToTrash(collection, id, actor, checkFn) {
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('id', sql.BigInt, id)
+      .query(`SELECT Payload, ${DEDICATED_TABLES[collection].hasCode ? 'Code' : 'NULL AS Code'} FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE Id = @id`);
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    }
+    const row = readResult.recordset[0];
+    const item = toRecord(row);
+
+    if (checkFn) await checkFn(item);
+
+    const trashReq = new sql.Request(tx);
+    await trashReq
+      .input('collection', sql.NVarChar(50), collection)
+      .input('originalId', sql.BigInt, id)
+      .input('code', sql.NVarChar(100), row.Code || null)
+      .input('payload', sql.NVarChar(sql.MAX), row.Payload)
+      .input('deletedBy', sql.NVarChar(100), actor?.username || 'unknown')
+      .input('deletedByName', sql.NVarChar(200), actor?.name || null)
+      .query(`
+        INSERT INTO dbo.TrashBin (Collection, OriginalId, Code, Payload, DeletedBy, DeletedByName)
+        VALUES (@collection, @originalId, @code, @payload, @deletedBy, @deletedByName);
+      `);
+
+    const delReq = new sql.Request(tx);
+    await delReq.input('id', sql.BigInt, id).query(`DELETE FROM ${table} WHERE Id = @id`);
+
+    await tx.commit();
+    invalidateCollectionCache(collection);
+    invalidateTrashCache();
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 async function withLockedRecordById(collection, id, mutatorFn) {
+  // Cùng lý do bảo vệ như insertRecord()/getAllRecords() ở trên (Bước 7) — routes/records.js,
+  // routes/payroll.js, seedDefaults.js, jobs/*.js đều gọi thẳng hàm này (không qua
+  // withLockedRecordForCollection()) cho nhiều collection khác nhau.
+  if (DEDICATED_TABLES[collection]) return withLockedDedicatedRecordById(collection, id, mutatorFn);
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -214,6 +487,12 @@ async function withLockedRecordById(collection, id, mutatorFn) {
 // được đúng bản ghi (UPDLOCK/HOLDLOCK), TRƯỚC khi xoá, khớp đúng thời điểm mutatorFn chạy ở
 // withLockedRecordById() bên trên.
 async function deleteRecordById(collection, id, checkFn) {
+  // Chưa có bản "xoá thẳng" (không qua Thùng Rác) cho bảng riêng Bước 7 — 11 collection ở
+  // DEDICATED_TABLES đều xoá qua Thùng Rác (deleteRecordForCollection() -> moveDedicatedRecordToTrash()).
+  // Thà báo lỗi rõ ràng ngay ở đây còn hơn âm thầm xoá nhầm dbo.Records (nay rỗng cho collection đó).
+  if (DEDICATED_TABLES[collection]) {
+    throw new Error(`deleteRecordById() không hỗ trợ collection "${collection}" (đã chuyển sang bảng riêng Bước 7, dùng deleteRecordForCollection() thay thế).`);
+  }
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -262,6 +541,8 @@ async function deleteRecordById(collection, id, checkFn) {
 // deleteRecordForCollection() NHIỀU LẦN, mỗi bản ghi liên quan tự vào Thùng Rác riêng, khôi phục lại
 // được TỪNG bản ghi độc lập.
 async function moveRecordToTrash(collection, id, actor, checkFn) {
+  // Cùng lý do bảo vệ như deleteRecordById()/withLockedRecordById() ở trên (Bước 7).
+  if (DEDICATED_TABLES[collection]) return moveDedicatedRecordToTrash(collection, id, actor, checkFn);
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -368,33 +649,52 @@ async function restoreTrashItem(trashId) {
       throw new HttpError(404, 'Không tìm thấy mục này trong thùng rác');
     }
     const row = readResult.recordset[0];
+    // Bảng đích để kiểm tra trùng Code/Id + INSERT khôi phục — dbo.Records (mọi collection cũ) HOẶC
+    // bảng riêng của collection (nếu đã "tốt nghiệp" ở Bước 7, xem DEDICATED_TABLES) — dbo.TrashBin vẫn
+    // dùng CHUNG cho cả 2 loại (cột Collection ở đó đủ phân biệt), chỉ nơi khôi phục TỚI là khác nhau.
+    const dedicatedCfg = DEDICATED_TABLES[row.Collection];
+    const targetTable = dedicatedCfg ? dedicatedTableName(row.Collection) : 'dbo.Records';
+    const collectionFilter = dedicatedCfg ? '' : ' AND Collection = @collection';
 
     if (row.Code) {
       const codeCheckReq = new sql.Request(tx);
+      codeCheckReq.input('code', sql.NVarChar(100), row.Code);
+      if (!dedicatedCfg) codeCheckReq.input('collection', sql.NVarChar(50), row.Collection);
       const codeCheck = await codeCheckReq
-        .input('collection', sql.NVarChar(50), row.Collection)
-        .input('code', sql.NVarChar(100), row.Code)
-        .query('SELECT TOP 1 Id FROM dbo.Records WHERE Collection = @collection AND Code = @code');
+        .query(`SELECT TOP 1 Id FROM ${targetTable} WHERE Code = @code${collectionFilter}`);
       if (codeCheck.recordset.length > 0) {
         throw new HttpError(409, `Mã "${row.Code}" đã được dùng lại cho 1 hồ sơ khác kể từ lúc bị xóa — vui lòng đổi mã hồ sơ mới đó trước khi khôi phục.`);
       }
     }
     const idCheckReq = new sql.Request(tx);
+    idCheckReq.input('id', sql.BigInt, row.OriginalId);
+    if (!dedicatedCfg) idCheckReq.input('collection', sql.NVarChar(50), row.Collection);
     const idCheck = await idCheckReq
-      .input('collection', sql.NVarChar(50), row.Collection)
-      .input('id', sql.BigInt, row.OriginalId)
-      .query('SELECT TOP 1 Id FROM dbo.Records WHERE Collection = @collection AND Id = @id');
+      .query(`SELECT TOP 1 Id FROM ${targetTable} WHERE Id = @id${collectionFilter}`);
     if (idCheck.recordset.length > 0) {
       throw new HttpError(409, 'Đã có hồ sơ khác chiếm đúng vị trí (Id) này — không thể khôi phục.');
     }
 
     const insReq = new sql.Request(tx);
-    await insReq
-      .input('collection', sql.NVarChar(50), row.Collection)
-      .input('id', sql.BigInt, row.OriginalId)
-      .input('code', sql.NVarChar(100), row.Code || null)
-      .input('payload', sql.NVarChar(sql.MAX), row.Payload)
-      .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+    insReq.input('id', sql.BigInt, row.OriginalId);
+    insReq.input('payload', sql.NVarChar(sql.MAX), row.Payload);
+    if (dedicatedCfg) {
+      const colNames = ['Id', 'Payload'];
+      const colParams = ['@id', '@payload'];
+      if (dedicatedCfg.hasCode) {
+        insReq.input('code', sql.NVarChar(100), row.Code || null);
+        colNames.push('Code'); colParams.push('@code');
+      }
+      const restoredItem = JSON.parse(row.Payload);
+      for (const { col, param } of bindExtractedColumns(insReq, dedicatedCfg, restoredItem)) {
+        colNames.push(col); colParams.push('@' + param);
+      }
+      await insReq.query(`INSERT INTO ${targetTable} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+    } else {
+      insReq.input('collection', sql.NVarChar(50), row.Collection);
+      insReq.input('code', sql.NVarChar(100), row.Code || null);
+      await insReq.query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+    }
 
     const delReq = new sql.Request(tx);
     await delReq.input('trashId', sql.BigInt, trashId).query('DELETE FROM dbo.TrashBin WHERE Id = @trashId');
@@ -605,6 +905,7 @@ async function migrateAllLegacyCollections() {
 // collection đã migrate hay chưa. =====
 
 async function getAllForCollection(collection) {
+  if (DEDICATED_TABLES[collection]) return getAllDedicatedRecords(collection);
   if (MIGRATED_COLLECTIONS.has(collection)) return getAllRecords(collection);
   return (await getAppDataValue(collection)) || [];
 }
@@ -617,6 +918,42 @@ async function getAllForCollection(collection) {
 // được vì đây là thao tác ADMIN, không thường xuyên, không cần tối ưu tương tranh cao như các route
 // nghiệp vụ hàng ngày khác.
 async function renameFieldValueInCollection(collection, mutateFn) {
+  if (DEDICATED_TABLES[collection]) {
+    const cfg = DEDICATED_TABLES[collection];
+    const table = dedicatedTableName(collection);
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+      const readReq = new sql.Request(tx);
+      const readResult = await readReq.query(`SELECT Id, Payload, Code FROM ${table} WITH (UPDLOCK, HOLDLOCK)`);
+      let changedCount = 0;
+      for (const row of readResult.recordset) {
+        const item = toRecord(row);
+        const updated = mutateFn(item);
+        if (updated === item) continue;
+        changedCount++;
+        const writeReq = new sql.Request(tx);
+        writeReq.input('id', sql.BigInt, row.Id);
+        writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated));
+        const setClauses = ['Payload = @payload'];
+        if (cfg.hasCode) {
+          writeReq.input('code', sql.NVarChar(100), updated.code || row.Code || null);
+          setClauses.push('Code = @code');
+        }
+        for (const { col, param } of bindExtractedColumns(writeReq, cfg, updated)) {
+          setClauses.push(`${col} = @${param}`);
+        }
+        await writeReq.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE Id = @id`);
+      }
+      await tx.commit();
+      if (changedCount) invalidateCollectionCache(collection);
+      return changedCount;
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    }
+  }
   if (MIGRATED_COLLECTIONS.has(collection)) {
     const pool = await getPool();
     const tx = new sql.Transaction(pool);
@@ -687,6 +1024,11 @@ async function getAllForCollectionCached(collection) {
 // và ghi được UNIQUE INDEX (Collection, Code) ở tầng CSDL đóng lại cho trường hợp trùng mã do race
 // thật (2 request tạo cùng mã cùng lúc), không chỉ dựa vào kiểm tra ở tầng ứng dụng.
 async function createForCollection(collection, builderFn) {
+  if (DEDICATED_TABLES[collection]) {
+    const existing = await getAllDedicatedRecords(collection);
+    const record = await builderFn(existing);
+    return insertDedicatedRecord(collection, record);
+  }
   if (MIGRATED_COLLECTIONS.has(collection)) {
     const existing = await getAllRecords(collection);
     const record = await builderFn(existing);
@@ -709,6 +1051,12 @@ async function createForCollection(collection, builderFn) {
 // cần hàm này — UNIQUE INDEX (Collection, Code) ở createForCollection() thường đã đủ chặn race thật.
 // @LockOwner='Transaction' -> khoá tự nhả khi commit/rollback, không cần tự gọi sp_releaseapplock.
 async function createForCollectionSerialized(collection, lockKey, builderFn) {
+  // Chưa hỗ trợ bảng riêng Bước 7 (chỉ dùng cho "meetings" hiện tại, chưa collection nào trong
+  // DEDICATED_TABLES cần khoá nghiêm túc theo khoá nghiệp vụ khi tạo) — báo lỗi rõ thay vì âm thầm ghi
+  // nhầm dbo.Records nếu sau này có ai gán thêm collection mới vào đường này.
+  if (DEDICATED_TABLES[collection]) {
+    throw new Error(`createForCollectionSerialized() chưa hỗ trợ collection "${collection}" (đã chuyển sang bảng riêng Bước 7).`);
+  }
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -794,6 +1142,7 @@ async function withAppLock(lockKeyOrKeys, fn) {
 
 // mutatorFn(item) -> bản ghi đã sửa (hoặc throw HttpError, ví dụ 404/403/409, để huỷ giao dịch).
 async function withLockedRecordForCollection(collection, id, mutatorFn) {
+  if (DEDICATED_TABLES[collection]) return withLockedDedicatedRecordById(collection, id, mutatorFn);
   if (MIGRATED_COLLECTIONS.has(collection)) return withLockedRecordById(collection, id, mutatorFn);
   let result;
   await withLockedAppDataValue(collection, (list) => {
@@ -813,6 +1162,7 @@ async function withLockedRecordForCollection(collection, id, mutatorFn) {
 // thật); các collection còn ở AppData (users, permGroups, danh mục cấu hình...) KHÔNG nằm trong phạm
 // vi Thùng Rác (đã thống nhất phạm vi), vẫn xóa thẳng như cũ.
 async function deleteRecordForCollection(collection, id, checkFn, actor) {
+  if (DEDICATED_TABLES[collection]) return moveDedicatedRecordToTrash(collection, id, actor, checkFn);
   if (MIGRATED_COLLECTIONS.has(collection)) return moveRecordToTrash(collection, id, actor, checkFn);
   await withLockedAppDataValue(collection, (list) => {
     const arr = Array.isArray(list) ? list : [];
@@ -831,5 +1181,8 @@ module.exports = {
   getAllForCollection, getAllForCollectionCached, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
-  collectRecordFileUrls, unlinkUnreferencedUploads
+  collectRecordFileUrls, unlinkUnreferencedUploads,
+  // Bước 7 — xuất thêm để scripts/migrate-records-batch1.js (di trú dữ liệu 1 lần) dùng ĐÚNG cùng 1
+  // logic trích cột (không viết lại tay ở script, tránh lệch giữa 2 nơi).
+  DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords
 };
