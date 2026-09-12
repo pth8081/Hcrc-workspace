@@ -2708,6 +2708,18 @@ const CREATE_MODULE_CONFIGS = {
       payload.dept = payload.dept ? String(payload.dept).trim().slice(0, 100) : null;
       payload.hrProcessId = null; // tạo tay ngoài luồng Onboarding -> không gắn với quy trình nào
       payload.renewalIndex = payload.contractType === 'PROBATION' ? 0 : (Number(payload.renewalIndex) || 1);
+      // PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu): Luật Lao Động chỉ cho phép TỐI ĐA 2 lần
+      // gia hạn Xác Định Thời Hạn liên tiếp — từ lần gia hạn thứ 3 BẮT BUỘC phải là Vô Thời Hạn.
+      // nextContractTypeAndRenewal() (lib/laborContract.js) đã có sẵn đúng công thức này (idx > 2 ->
+      // INDEFINITE) nhưng CHỈ mới áp dụng cho luồng TỰ ĐỘNG sau thử việc (applyPostProbationDecision()) —
+      // luồng TẠO TAY này (HR tự nhập, ngoài luồng Onboarding) trước đây nhận renewalIndex thẳng từ
+      // client, không có gì chặn nếu HR (hoặc 1 request tự soạn bỏ qua UI) vẫn chọn contractType=
+      // FIXED_TERM với renewalIndex=3 trở lên — sai luật, và tài liệu nghiệp vụ ghi rõ hệ thống phải
+      // BẮT BUỘC chặn, không tự âm thầm đổi thành Vô Thời Hạn (giữ đúng ý người dùng, chỉ báo lỗi để HR
+      // tự chọn lại).
+      if (payload.contractType === 'FIXED_TERM' && payload.renewalIndex >= 3) {
+        throw new CreateError(400, 'Hợp đồng Xác định thời hạn chỉ được gia hạn tối đa 2 lần — từ lần gia hạn thứ 3 bắt buộc phải chọn loại "Vô thời hạn"');
+      }
       payload.code = generateContractCode(collection || [], payload.employeeCode);
       payload.status = 'DRAFT';
       payload.terminationDate = null; payload.terminationReason = null;

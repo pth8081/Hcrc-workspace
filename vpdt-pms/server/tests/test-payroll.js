@@ -208,6 +208,68 @@ async function main() {
       assertEqual(payslips.body.payslips.length, 1, 'Tính lại không được tạo trùng payslip');
     });
 
+    // LUONG-09 (regression quan trọng nhất module Lương — bug đã từng gây MẤT DỮ LIỆU lương thật đã nhập
+    // tay): tính lại CẢ KỲ (VD chỉ để bổ sung 1 người mới sót) KHÔNG được xoá điều chỉnh tay đã lưu cho
+    // người KHÁC — xem mergeManualAdjustmentsIntoPayslip() (lib/payroll.js) + chú thích ở
+    // POST /periods/:id/calculate (routes/payroll.js).
+    await run.run('LUONG-09: tính lại (recalculate) KHÔNG xoá điều chỉnh tay (thưởng/phạt) đã lưu cho người khác', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips1 = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip1 = payslips1.body.payslips.find(p => p.employeeCode === 'NV001');
+      // Kế toán thêm 1 dòng thưởng nhập tay cho NV001 (đã "chốt" trong lúc rà soát).
+      await api('PATCH', `/api/payroll/payslips/${slip1.id}/details`, { componentCode: 'BONUS_OTHER', amount: 2000000, note: 'Thưởng dự án Q1' }, HR_MGR);
+
+      // Giả lập tình huống thật: kế toán phát hiện sót 1 nhân viên (thêm hợp đồng ACTIVE cho NV002 —
+      // trước đó bị skip vì chưa có hợp đồng) rồi bấm "Tính Lương" LẠI để bổ sung NV002, KHÔNG có ý định
+      // đụng gì tới payslip NV001 đã rà soát xong.
+      RECORDS.laborContracts.push({ id: 2, employeeCode: 'NV002', status: 'ACTIVE', baseSalary: 12000000, dept: 'Phòng Kinh Doanh' });
+      const recalc = await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      assertEqual(recalc.body.item.employeeCount, 2, 'Tính lại phải nhận đủ cả NV001 lẫn NV002 (mới bổ sung hợp đồng)');
+
+      const payslips2 = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      assertEqual(payslips2.body.payslips.length, 2, 'Phải có đúng 2 payslip sau khi tính lại (không trùng, không thiếu)');
+      const slip1After = payslips2.body.payslips.find(p => p.employeeCode === 'NV001');
+      const bonusAfter = slip1After.details.find(d => d.componentCode === 'BONUS_OTHER' && d.isManualAdjustment);
+      assertIncludes([true], !!bonusAfter, 'Dòng thưởng nhập tay của NV001 PHẢI CÒN NGUYÊN sau khi tính lại cả kỳ');
+      assertEqual(bonusAfter.amount, 2000000, 'Số tiền thưởng nhập tay phải giữ đúng giá trị cũ, không bị tính lại/mất');
+      assertEqual(slip1After.netPay, slip1After.grossIncome - slip1After.totalDeduction, 'netPay phải được tính lại đúng có gồm cả dòng thưởng nhập tay vừa gộp lại');
+
+      const slip2After = payslips2.body.payslips.find(p => p.employeeCode === 'NV002');
+      assertIncludes([true], !!slip2After, 'NV002 (mới bổ sung hợp đồng) phải có payslip sau khi tính lại');
+      assertIncludes([false], (slip2After.details || []).some(d => d.isManualAdjustment), 'NV002 mới tính lần đầu không có dòng nhập tay nào');
+    });
+
+    // LUONG-07/08: nhân viên hoàn tất Offboarding GIỮA KỲ lương (hợp đồng đã bị applyOffboardingTermination()
+    // tự đóng thành TERMINATED TRƯỚC khi kế toán bấm Tính Lương — đúng thứ tự thực tế "nghỉ ngày 15, tính
+    // lương ngày 28 cùng tháng") VẪN phải xuất hiện trong kỳ lương, KHÔNG bị bỏ sót, và KHÔNG bị tự động
+    // trừ ngày không làm việc (kế toán tự Điều chỉnh dòng lương nếu cần).
+    await run.run('LUONG-07/08: nhân viên Offboarding hoàn tất GIỮA KỲ (hợp đồng đã TERMINATED) vẫn được tính lương đủ tháng, có ghi chú', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV003', username: 'emp3', status: 'INACTIVE', dependents: [] });
+      // Hợp đồng đã CHUYỂN TERMINATED (do applyOffboardingTermination() tự đóng khi Offboarding hoàn tất
+      // ngày 15/01) — KHÔNG còn ACTIVE nữa vào lúc kế toán bấm Tính Lương.
+      RECORDS.laborContracts.push({ id: 3, employeeCode: 'NV003', status: 'TERMINATED', baseSalary: 12000000, dept: 'Phòng Kinh Doanh' });
+      RECORDS.hrProcesses.push({
+        id: 1, processType: 'OFFBOARDING', status: 'COMPLETED',
+        employeeUsername: 'emp3', employeePosType: 'OFFICE', employeeDept: 'Phòng Kinh Doanh',
+        lastWorkingDate: '2025-01-15'
+      });
+
+      const res = await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      assertEqual(res.status, 200, 'Tính lương phải thành công');
+      assertIncludes([false], res.body.skipped.some(s => s.employeeCode === 'NV003'), 'NV003 (offboard giữa kỳ) KHÔNG được rơi vào danh sách bị bỏ qua');
+
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV003');
+      assertIncludes([true], !!slip, 'NV003 phải có payslip trong kỳ dù đã nghỉ việc giữa kỳ');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.amount, 12000000, 'Lương cơ bản phải tính ĐỦ 1 tháng — KHÔNG tự trừ theo số ngày không làm việc sau khi nghỉ');
+      assertIncludes([true], basic.note.includes('nghỉ việc'), 'Dòng Lương cơ bản phải có ghi chú ngày nghỉ việc để kế toán tự rà soát/điều chỉnh');
+    });
+
     await run.run('Điều chỉnh dòng tay: chặn mã thành phần không thuộc danh mục nhập tay', async () => {
       resetAppData();
       const period = seedDraftPeriod();

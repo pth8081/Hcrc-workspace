@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**19.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**19.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v19.9 (2026-09-12): Test chuyên sâu theo kịch bản nghiệp vụ — vá 2 lỗ hổng thật (Lương + Hợp Đồng LĐ)
+
+Đối chiếu code với bộ kịch bản test chuyên sâu (~150 test case, ưu tiên các quy tắc nghiệp vụ tinh vi dễ
+sai). Dùng 4 subagent song song đào sâu từng nhóm module (Lương; Vận Hành/Checklist; Offboarding/HĐLĐ/
+Email/ExtAuth; Engine phê duyệt/Thanh Toán/Đồng Phục/Báo Cáo) — phát hiện các agent chạy trong worktree
+cô lập bị BASE CŨ (thiếu ~8300 dòng thay đổi so với nhánh đang làm việc), khiến 3 "lỗi" các agent báo ra
+(LUONG-07/09, HDLD-03) hoá ra ĐÃ ĐƯỢC VÁ TỪ TRƯỚC — tự tay verify lại TỪNG finding trên code thật trước
+khi hành động, không tin thẳng báo cáo agent. Sau khi lọc, phát hiện + vá đúng 2 lỗ hổng CÒN THẬT:
+
+- **LUONG-07/08 (tái phát một phần)**: `computeEmployeePayslip()` (lib/payroll.js) đã có nhánh dự phòng
+  cho nhân viên hoàn tất Offboarding GIỮA KỲ lương (tránh bị `resolveWorkModelForEmployeeCode()` chặn vì
+  hồ sơ đã INACTIVE) — nhưng CHƯA xử lý một bước SỚM HƠN: `applyOffboardingTermination()`
+  (lib/laborContract.js) tự đóng hợp đồng ACTIVE thành TERMINATED NGAY lúc Offboarding hoàn tất, nên đúng
+  thứ tự thực tế "nghỉ ngày 15 → kế toán tính lương ngày 28 cùng tháng", `findActiveContractByEmployeeCode()`
+  đã không còn tìm thấy hợp đồng ACTIVE nào nữa, nhân viên bị đẩy thẳng vào `skipped[]` — tái hiện đúng
+  lỗi LUONG-07. Sửa: khi có Offboarding hoàn tất đúng người này rơi trong kỳ, dùng lại ĐÚNG hợp đồng vừa
+  bị đóng (mới nhất theo id) thay vì chỉ tìm hợp đồng ACTIVE.
+- **HDLD-04**: Luật Lao Động chỉ cho phép tối đa 2 lần gia hạn Xác Định Thời Hạn liên tiếp — lần thứ 3
+  bắt buộc Vô Thời Hạn. Công thức đã có sẵn (`nextContractTypeAndRenewal()`, lib/laborContract.js) nhưng
+  CHƯA từng được áp dụng cho luồng HR tạo tay hợp đồng (`POST /api/create/laborContracts`) — renewalIndex
+  nhận thẳng từ client, không có gì chặn tạo FIXED_TERM lần thứ 3 trở đi. Thêm validate server-side ở
+  `lib/createValidation.js` (laborContracts.extraValidate): chặn 400 nếu contractType=FIXED_TERM và
+  renewalIndex ≥ 3, yêu cầu chọn đúng Vô thời hạn.
+
+Các mục còn lại trong 4 nhóm đã đối chiếu (DH-01→08, CL-01/02/08/09, WF-01/07, PQ-04, HD-01→04, TT-03,
+DP-03/04, RPT-01, OFF-01/02, EMAIL-02, EXTAUTH-01/02/04) đều xác nhận ĐÚNG như tài liệu nghiệp vụ mô tả,
+đã có test tự động bảo vệ — không cần sửa gì thêm.
+
+Thêm 2 test hồi quy mới vào `tests/test-payroll.js` (LUONG-07/08, LUONG-09 — trước đó CHƯA có test nào
+bảo vệ 2 quy tắc này dù đã từng là bug gây mất dữ liệu lương thật) + 3 test mới vào
+`tests/test-labor-contract.js` cho HDLD-04 (chặn đúng, cho qua đúng ranh giới renewalIndex=2, và không
+chặn nhầm khi chọn đúng Vô thời hạn). Full regression suite chạy lại toàn bộ, không phát sinh lỗi mới
+ngoài 4 lỗi môi trường đã biết từ trước.
 
 ## v19.8 (2026-09-12): Bước 8k/8l/8m — SQL-filter docs/submissions/attendanceRecords trong GET /api/data
 

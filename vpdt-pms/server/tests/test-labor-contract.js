@@ -79,13 +79,7 @@ async function partA() {
     assert.throws(() => laborContract.applyPostProbationDecision(contract, 'EXTEND', [contract], 'hr1'), /không hợp lệ/);
   });
 
-  await test('Sau 2 lần gia hạn FIXED_TERM, lần thứ 3 phải chuyển INDEFINITE (nextContractTypeAndRenewal qua applyManualEdit hoặc renewalIndex tay)', () => {
-    // Kiểm tra gián tiếp qua applyPostProbationDecision với renewalIndex đã 2 (giả lập trạng thái sau 2 lần
-    // gia hạn tay) — decision chỉ tái sử dụng nextContractTypeAfterProbation() cho PROBATION, nên ta gọi
-    // thẳng hàm renewal chung qua 1 hợp đồng FIXED_TERM renewalIndex=2 rồi tính tay theo luật đã export
-    // gián tiếp: applyPostProbationDecision CHỈ áp dụng cho PROBATION -> bỏ qua nhánh này, xác nhận bằng
-    // cách đọc lại luật qua applyManualEdit không đổi renewalIndex (renewalIndex chỉ đổi qua service).
-    // Test này xác nhận tối thiểu: renewalIndex giữ nguyên nếu HR chỉ sửa field khác.
+  await test('applyManualEdit() không tự đổi renewalIndex (chỉ đổi qua service riêng)', () => {
     const contract = { id: 5, contractType: 'FIXED_TERM', renewalIndex: 2, status: 'ACTIVE', history: [], startDate: '2026-01-01', endDate: '2026-06-01' };
     laborContract.applyManualEdit(contract, { baseSalary: '15000000' }, 'hr1');
     assert.strictEqual(contract.renewalIndex, 2, 'applyManualEdit không được tự đổi renewalIndex');
@@ -224,6 +218,28 @@ async function partB() {
       assert.strictEqual(r.json.item.status, 'DRAFT');
       assert.strictEqual(r.json.item.code, 'HDLD-NV4001-1');
       created = r.json.item;
+    });
+
+    await test('POST /api/create/laborContracts — HDLD-04: FIXED_TERM với renewalIndex=3 (lần gia hạn thứ 3) BỊ CHẶN 400', async () => {
+      const r = await call('hr1', 'POST', '/api/create/laborContracts', {
+        employeeCode: 'NV4001', contractType: 'FIXED_TERM', renewalIndex: 3, startDate: '2026-01-01', endDate: '2026-12-31', baseSalary: '10000000'
+      });
+      assert.strictEqual(r.status, 400, JSON.stringify(r.json));
+      assert.ok(/Vô thời hạn/.test(r.json.error), JSON.stringify(r.json));
+    });
+
+    await test('POST /api/create/laborContracts — HDLD-04: FIXED_TERM với renewalIndex=2 (lần gia hạn thứ 2, còn hợp lệ) KHÔNG bị chặn', async () => {
+      const r = await call('hr1', 'POST', '/api/create/laborContracts', {
+        employeeCode: 'NV4001', contractType: 'FIXED_TERM', renewalIndex: 2, startDate: '2026-01-01', endDate: '2026-12-31', baseSalary: '10000000'
+      });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    });
+
+    await test('POST /api/create/laborContracts — HDLD-04: renewalIndex=3 nhưng chọn đúng INDEFINITE thì KHÔNG bị chặn', async () => {
+      const r = await call('hr1', 'POST', '/api/create/laborContracts', {
+        employeeCode: 'NV4001', contractType: 'INDEFINITE', renewalIndex: 3, startDate: '2026-01-01', baseSalary: '10000000'
+      });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
     });
 
     await test('POST /api/create/laborContracts — thiếu endDate cho FIXED_TERM bị chặn 400', async () => {
