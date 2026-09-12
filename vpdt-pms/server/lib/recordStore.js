@@ -314,6 +314,59 @@ async function getAllDedicatedRecords(collection) {
   return result.recordset.map(toRecord);
 }
 
+// Bước 7d — đọc CÓ LỌC theo cột thật (WHERE ở SQL) + phân trang thật (OFFSET/FETCH), thay vì luôn tải
+// nguyên collection về Node như getAllDedicatedRecords(). CHỦ Ý CHỈ nhận filter theo ĐÚNG tên cột đã
+// khai báo trong DEDICATED_TABLES[collection].columns (bỏ qua field lạ, không cho where tuỳ ý theo
+// chuỗi client gửi lên — tránh SQL injection qua tên cột động) — nơi gọi (route) tự map field cho phép
+// theo TỪNG collection, không truyền thẳng req.query nguyên văn vào đây.
+//
+// KHÔNG thay thế logic lọc quyền xem (lib/recordViewScope.js filter*ForUser()) — hàm đó vẫn chạy y
+// nguyên SAU khi đọc, trên tập đã được SQL thu hẹp trước thay vì trên nguyên cả collection. Vì vậy hàm
+// này AN TOÀN dùng ngay (không đổi hành vi phân quyền hiện có), chỉ đổi hiệu năng: bớt số dòng phải tải
+// + JSON.parse ở Node khi caller đã biết trước sẽ chỉ cần 1 khoảng dept/thời gian cụ thể (VD Báo Cáo).
+async function queryDedicatedRecords(collection, { where = {}, dateFrom, dateTo, page, pageSize } = {}) {
+  const cfg = DEDICATED_TABLES[collection];
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  const req = pool.request();
+  const conditions = [];
+  for (const [col, value] of Object.entries(where)) {
+    if (value == null) continue;
+    const def = cfg.columns[col];
+    if (!def) continue; // KHÔNG khai báo trong schema -> bỏ qua âm thầm, không đoán mò/không lỗi 500
+    const paramName = 'w_' + col;
+    req.input(paramName, def.sqlType(), value);
+    conditions.push(`${col} = @${paramName}`);
+  }
+  if (dateFrom) {
+    req.input('dateFrom', sql.DateTime2(3), new Date(dateFrom));
+    conditions.push('CreatedAt >= @dateFrom');
+  }
+  if (dateTo) {
+    req.input('dateTo', sql.DateTime2(3), new Date(dateTo));
+    conditions.push('CreatedAt <= @dateTo');
+  }
+  const whereSql = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
+
+  if (page == null || pageSize == null) {
+    const result = await req.query(`SELECT Payload FROM ${table}${whereSql} ORDER BY CreatedAt DESC, Id DESC`);
+    return { items: result.recordset.map(toRecord), total: result.recordset.length };
+  }
+
+  // Phân trang thật: đếm tổng số khớp điều kiện (để client biết còn bao nhiêu trang) + lấy đúng 1 trang
+  // bằng OFFSET/FETCH — CÙNG 1 request (dùng lại param đã bind ở trên cho cả 2 câu) để không phải bind
+  // lại where 2 lần.
+  req.input('offset', sql.Int, Math.max(0, (page - 1) * pageSize));
+  req.input('pageSize', sql.Int, pageSize);
+  const result = await req.query(`
+    SELECT COUNT(*) AS Total FROM ${table}${whereSql};
+    SELECT Payload FROM ${table}${whereSql} ORDER BY CreatedAt DESC, Id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+  `);
+  const total = result.recordsets[0][0].Total;
+  const items = result.recordsets[1].map(toRecord);
+  return { items, total };
+}
+
 async function insertDedicatedRecord(collection, record) {
   const cfg = DEDICATED_TABLES[collection];
   const table = dedicatedTableName(collection);
@@ -1184,5 +1237,5 @@ module.exports = {
   collectRecordFileUrls, unlinkUnreferencedUploads,
   // Bước 7 — xuất thêm để scripts/migrate-records-batch1.js (di trú dữ liệu 1 lần) dùng ĐÚNG cùng 1
   // logic trích cột (không viết lại tay ở script, tránh lệch giữa 2 nơi).
-  DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords
+  DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords
 };
