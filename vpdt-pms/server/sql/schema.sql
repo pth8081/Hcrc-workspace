@@ -213,6 +213,53 @@ BEGIN
 END
 GO
 
+/* ==========================================================
+   BƯỚC 7 — Tách các collection tăng trưởng nhanh (không giới hạn theo thời gian, KHÔNG bị chặn trần
+   bởi số nhân sự/danh mục cấu hình) khỏi bảng dùng chung dbo.Records sang bảng riêng — cùng lý do và
+   cùng khuôn đã áp dụng cho SystemLogs (Bước 6a)/Tasks (Bước 6b): dbo.Records chỉ có Collection/Id/
+   Code/CreatedAt là cột SQL thật, MỌI field nghiệp vụ khác (status, dept, người tạo...) chỉ nằm trong
+   Payload JSON — không lọc/sắp xếp được ở tầng CSDL, mọi request đều phải tải NGUYÊN cả collection vào
+   Node rồi lọc bằng JavaScript. Ở quy mô nhỏ (hàng nghìn dòng) không sao, nhưng các collection tăng
+   trưởng theo THỜI GIAN không giới hạn (chấm công mỗi ngày/mỗi nhân viên, thông báo hệ thống tự sinh
+   liên tục, đơn hàng/hồ sơ mỗi sự kiện nghiệp vụ...) sẽ chạm ngưỡng hàng triệu dòng sau vài năm vận
+   hành — đây là bước bắt đầu xử lý đúng nhóm collection đó (không áp dụng cho TOÀN BỘ 44+ collection
+   còn lại trong dbo.Records — phần lớn bị chặn trần tự nhiên bởi số nhân sự/danh mục, không cần bảng
+   riêng, xem thảo luận đã thống nhất với người dùng).
+
+   Nguyên tắc thiết kế mỗi bảng ở Bước 7 (giữ NHẤT QUÁN với Tasks/OperationWorkItems đã có):
+   - Payload NVARCHAR(MAX) vẫn là NGUỒN DỮ LIỆU CHÍNH (đầy đủ, không mất field nào) — an toàn ngay cả
+     khi có field nào đó chưa được liệt kê thành cột trích xuất.
+   - Chỉ trích xuất thành cột SQL thật ĐÚNG các field đã xác nhận dùng để lọc quyền xem
+     (lib/recordViewScope.js) hoặc dùng ở Báo Cáo (module-baocaoquantri.js) — đây là field THỰC SỰ cần
+     WHERE/index, không suy đoán thêm field khác chưa có bằng chứng dùng tới.
+   - Id GIỮ NGUYÊN kiểu Date.now() cho dữ liệu cũ di trú từ dbo.Records (khớp đúng mọi tham chiếu chéo
+     hiện có: taskId, rootDocId...); bản ghi MỚI tạo sau khi migrate mới dùng IDENTITY.
+   ========================================================== */
+
+/* Thông báo trong app (lib/notifications.js) — sinh liên tục, không giới hạn theo thời gian (mỗi hành
+   động nghiệp vụ ở BẤT KỲ module nào có thể tạo thông báo mới cho nhiều người nhận cùng lúc). Trước đây
+   ở dbo.Records, mọi lượt "đánh dấu đã đọc" hay đếm số chưa đọc đều phải tải NGUYÊN mảng thông báo của
+   TẤT CẢ mọi người rồi lọc theo username trong Node — trong khi bản chất truy vấn chỉ cần "thông báo của
+   1 người". Username tách cột thật + index vì đây là DUY NHẤT điều kiện lọc (xem canViewNotification()/
+   filterNotificationsForUser() ở lib/notifications.js — chỉ so username, không có field nào khác dùng
+   để lọc quyền xem). IsRead tách cột thật vì đây là field bị SỬA thường xuyên nhất (mỗi lần người dùng
+   mở thông báo) — tách riêng để UPDATE 1 cột thay vì ghi lại cả Payload mỗi lần đánh dấu đã đọc.
+   CreatedAt: cột SQL dùng SYSUTCDATETIME() (giờ ghi thật, sắp xếp được) — KHÁC với field "createdAt"
+   bên trong Payload (chuỗi hiển thị theo giờ Việt Nam dạng toLocaleString('vi-VN'), không sort được bằng
+   SQL) — Payload["createdAt"] giữ nguyên để hiển thị, không dùng làm cột sắp xếp. */
+IF OBJECT_ID('dbo.Notifications', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Notifications (
+        Id         BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Username   NVARCHAR(100)  NOT NULL,
+        IsRead     BIT            NOT NULL DEFAULT 0,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_Notifications_Username_CreatedAt ON dbo.Notifications (Username, CreatedAt DESC, Id DESC);
+END
+GO
+
 /* Thùng Rác (Trash Bin) — khi admin xoá 1 hồ sơ ở bất kỳ collection nào trong dbo.Records
    (lib/recordStore.js deleteRecordForCollection()), bản ghi được CHUYỂN vào đây thay vì xoá thẳng —
    giữ nguyên Payload gốc để khôi phục lại đúng vị trí (cùng Id) nếu cần, hoặc xoá vĩnh viễn (chỉ xoá
