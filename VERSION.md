@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**18.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**18.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v18.7 (2026-09-12): Bước 8a — khởi động SQL-filter hoá GET /api/data, bắt đầu từ Thông Báo
+
+Mở đầu sáng kiến MỚI (Bước 8, tiếp nối Bước 7): Bước 7 đã cho MỌI collection bảng riêng + cột lọc thật,
+nhưng chỉ mới dùng để tối ưu Báo Cáo (`GET /api/reports/:collection`) — trong khi `GET /api/data`, API mà
+MỌI màn hình nghiệp vụ hàng ngày dùng (không chỉ Báo Cáo), vẫn tải NGUYÊN từng collection vào bộ nhớ Node
+mỗi request rồi mới lọc quyền xem. Đây mới là điểm ảnh hưởng trực tiếp nhất tới lo ngại "hàng triệu dòng"
+ban đầu, vì chạy liên tục cả ngày chứ không chỉ lúc xem báo cáo.
+
+Đây là thay đổi kiến trúc LỚN hơn Bước 7 nhiều lần (hầu hết màn hình client hiện giả định có sẵn toàn bộ
+`DB.<collection>` trong bộ nhớ trình duyệt — không chỉ để hiển thị danh sách mà còn để tra cứu chéo/sinh
+mã tự động/dropdown...) nên triển khai theo từng bước nhỏ, kiểm chứng kỹ từng bước thay vì đổi 1 lần.
+
+**Bước 8a (thí điểm đầu tiên) — Thông Báo trong app (`routes/notifications.js`)**: chọn làm thí điểm vì
+đơn giản nhất (không có tra cứu chéo/family/mã tự sinh nào phụ thuộc toàn bộ collection) và tăng trưởng
+nhanh nhất hệ thống (tự sinh liên tục qua `notifyUsers()`). `GET /api/notifications` và
+`POST /api/notifications/mark-all-read` chuyển từ quét NGUYÊN bảng Thông Báo (mọi người dùng) sang lọc
+`where.Username` ngay ở SQL (`queryDedicatedRecords()`, tái dùng nguyên hàm đã có từ Bước 7d, không viết
+SQL mới) — vẫn áp lại ĐÚNG `filterNotificationsForUser()` làm lớp chắn quyền xem thứ 2 sau khi SQL đã thu
+hẹp, không tin riêng SQL where (giữ nguyên tắc xuyên suốt Bước 7/8).
+
+**Sửa thêm 1 lỗi có sẵn** phát hiện khi rà soát: `unreadCount` (số hiển thị ở chuông 🔔 góc màn hình)
+trước đây tính bằng cách đếm trong đúng 100 bản ghi mới nhất đã tải về — người có **hơn 100 thông báo
+chưa đọc** sẽ luôn thấy số ở chuông bị THIẾU (tối đa 100 dù thực tế nhiều hơn). Giờ đếm THẬT bằng 1 truy
+vấn `where.IsRead=false` riêng ở SQL, không phụ thuộc số bản ghi đã tải về hiển thị.
+
+Thêm `tests/test-notifications.js` (mới, 6/6 pass) — xác nhận: mỗi người chỉ thấy thông báo của mình
+(IDOR-safe), sắp mới nhất trước, `unreadCount` đúng dù vượt quá 100, không tính nhầm thông báo người
+khác, `mark-all-read` chỉ đụng đúng thông báo chưa đọc của người gọi, `PATCH /:id/read` vẫn chặn đánh dấu
+hộ người khác (hành vi cũ không đổi). Không cần đổi gì ở client (`updateNotifBadge()` đã có sẵn khuôn
+hiển thị `"99+"` khi vượt 99, chỉ hưởng lợi từ số đầu vào chính xác hơn).
+
+**Còn lại (Bước 8 tiếp theo)**: tiếp tục rà soát + chuyển từng phần khác của `GET /api/data` sang lọc SQL
+— ưu tiên các collection tăng trưởng nhanh (nhóm A) có màn hình danh sách ĐƠN GIẢN (không phụ thuộc toàn
+bộ mảng cho tra cứu chéo), từng module một, kiểm chứng kỹ từng bước.
 
 ## v18.6 (2026-09-12): Bước 7h (hoàn tất) — nối nốt Đồng Phục, đủ 21/21 module Báo Cáo
 
