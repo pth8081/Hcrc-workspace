@@ -260,6 +260,215 @@ BEGIN
 END
 GO
 
+/* docs (lib/createValidation.js validateAndPrepareCreate 'docs' + lib/workflowEngine.js) — Dept/Status/
+   Uploader tách cột thật vì đây đúng 3 field lib/recordViewScope.js canViewDoc()/filterDocsForUser()
+   dùng để lọc quyền xem + Báo Cáo module-baocaoquantri.js dùng để nhóm/đếm. RootDocId (tự tham chiếu
+   tới chính bảng này) tách cột vì đây là khoá nhóm "họ" phiên bản tài liệu (xem familyRootId() ở
+   lib/recordStore.js) — cần lọc nhanh "mọi phiên bản của 1 tài liệu gốc" khi hiển thị lịch sử phiên bản.
+   history[] (lịch sử duyệt, tăng theo mỗi hành động) CHƯA tách bảng con ở đợt này — không phải field bị
+   lọc/WHERE trực tiếp (chỉ đọc kèm khi xem 1 hồ sơ cụ thể), giữ trong Payload đúng nguyên tắc chỉ tách
+   cột có bằng chứng cần lọc SQL thật. */
+IF OBJECT_ID('dbo.Docs', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Docs (
+        Id         BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code       NVARCHAR(100)  NULL,
+        Dept       NVARCHAR(100)  NOT NULL,
+        Status     NVARCHAR(20)   NOT NULL,
+        Uploader   NVARCHAR(100)  NULL,
+        RootDocId  BIGINT         NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_Docs_Dept_Status_CreatedAt ON dbo.Docs (Dept, Status, CreatedAt DESC, Id DESC);
+    CREATE INDEX IX_Docs_RootDocId ON dbo.Docs (RootDocId);
+    CREATE UNIQUE INDEX UX_Docs_Code ON dbo.Docs (Code) WHERE Code IS NOT NULL;
+END
+GO
+
+/* submissions (Văn Bản Trình — lib/createValidation.js + lib/workflowEngine.js) — Dept/Creator/Status
+   cùng lý do docs ở trên (lib/recordViewScope.js canViewSubmission()/filterSubmissionsForUser() + Báo
+   Cáo). effectiveSteps/effectiveApprovers/selectedLayerMembers (snapshot cấu hình quy trình tại thời
+   điểm tạo) CỐ Ý giữ trong Payload — hình dạng phụ thuộc cấu hình quy trình theo phòng ban admin tự
+   thiết lập, không cố định để làm cột. */
+IF OBJECT_ID('dbo.Submissions', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Submissions (
+        Id         BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code       NVARCHAR(100)  NULL,
+        Dept       NVARCHAR(100)  NOT NULL,
+        Creator    NVARCHAR(100)  NULL,
+        Status     NVARCHAR(20)   NOT NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_Submissions_Dept_Status_CreatedAt ON dbo.Submissions (Dept, Status, CreatedAt DESC, Id DESC);
+    CREATE INDEX IX_Submissions_Creator ON dbo.Submissions (Creator, CreatedAt DESC);
+    CREATE UNIQUE INDEX UX_Submissions_Code ON dbo.Submissions (Code) WHERE Code IS NOT NULL;
+END
+GO
+
+/* attendanceRecords (Chấm Công — lib/attendance.js) — ứng viên tăng trưởng NHANH NHẤT trong toàn bộ hệ
+   thống (1 dòng/nhân viên/ngày, không có trần tự nhiên, cộng dồn qua nhiều năm chắc chắn tới quy mô
+   triệu dòng). EmployeeCode+WorkDate tách cột thật (khoá tự nhiên UNIQUE đã áp dụng ở tầng ứng dụng,
+   nay ràng buộc thêm ở CSDL) — đây cũng đúng 2 field lib/recordViewScope.js
+   filterAttendanceRecordsForUser() dùng để lọc. RecordType tách cột vì Báo Cáo Chấm Công cần nhóm theo
+   loại (WORK/LEAVE.../OVERTIME...) nhanh khi lọc theo khoảng ngày dài (cả năm). KHÔNG đưa vào Báo Cáo
+   Quản Trị chung (module-baocaoquantri.js) — thuộc nhóm dữ liệu cực nhạy cảm đã chặn khỏi GET /api/data
+   chung, giữ nguyên ngoại lệ đã thống nhất trước đây. */
+IF OBJECT_ID('dbo.AttendanceRecords', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AttendanceRecords (
+        Id            BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        EmployeeCode  NVARCHAR(50)   NOT NULL,
+        WorkDate      DATE           NOT NULL,
+        RecordType    NVARCHAR(20)   NOT NULL,
+        Payload       NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_AttendanceRecords_Employee_Date ON dbo.AttendanceRecords (EmployeeCode, WorkDate);
+    CREATE INDEX IX_AttendanceRecords_Date_Type ON dbo.AttendanceRecords (WorkDate, RecordType);
+END
+GO
+
+/* operationOrders (Vận Hành > Đơn Hàng — lib/createValidation.js + lib/recordActions.js) — Dept/Creator/
+   Status cùng lý do docs/submissions (lib/recordViewScope.js canViewOperationOrder() + Báo Cáo).
+   items[] (dòng hàng hoá) và history[] CHƯA tách bảng con ở đợt này — cùng lý do đã nêu ở docs.history
+   (không phải điều kiện lọc SQL, chỉ đọc kèm theo đúng 1 hồ sơ). */
+IF OBJECT_ID('dbo.OperationOrders', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OperationOrders (
+        Id         BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code       NVARCHAR(100)  NULL,
+        Dept       NVARCHAR(100)  NOT NULL,
+        Creator    NVARCHAR(100)  NULL,
+        Status     NVARCHAR(20)   NOT NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_OperationOrders_Dept_Status_CreatedAt ON dbo.OperationOrders (Dept, Status, CreatedAt DESC, Id DESC);
+    CREATE UNIQUE INDEX UX_OperationOrders_Code ON dbo.OperationOrders (Code) WHERE Code IS NOT NULL;
+END
+GO
+
+/* operationStoreOpenings / operationRepairs (Vận Hành > Mở Mới & Sửa Chữa Siêu Thị — cùng khuôn field,
+   xử lý chung 1 cặp hàm ở lib/recordActions.js theo sourceType) — Dept/Creator/EstimateStatus tách cột
+   (EstimateStatus, không phải Status cũ đã bỏ theo Mục H, là trạng thái THẬT hiện dùng ở Báo Cáo +
+   lib/recordViewScope.js). estimateItems[] (cây hạng mục đầu tư, có ParentId) và estimateHistory[]/
+   history[] CHƯA tách bảng ở đợt này, cùng lý do docs.history. */
+IF OBJECT_ID('dbo.OperationStoreOpenings', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OperationStoreOpenings (
+        Id              BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt       DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code            NVARCHAR(100)  NULL,
+        Dept            NVARCHAR(100)  NOT NULL,
+        Creator         NVARCHAR(100)  NULL,
+        EstimateStatus  NVARCHAR(20)   NOT NULL,
+        Payload         NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_OperationStoreOpenings_Dept_Status_CreatedAt ON dbo.OperationStoreOpenings (Dept, EstimateStatus, CreatedAt DESC, Id DESC);
+    CREATE UNIQUE INDEX UX_OperationStoreOpenings_Code ON dbo.OperationStoreOpenings (Code) WHERE Code IS NOT NULL;
+END
+GO
+
+IF OBJECT_ID('dbo.OperationRepairs', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.OperationRepairs (
+        Id              BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt       DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code            NVARCHAR(100)  NULL,
+        Dept            NVARCHAR(100)  NOT NULL,
+        Creator         NVARCHAR(100)  NULL,
+        EstimateStatus  NVARCHAR(20)   NOT NULL,
+        Payload         NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_OperationRepairs_Dept_Status_CreatedAt ON dbo.OperationRepairs (Dept, EstimateStatus, CreatedAt DESC, Id DESC);
+    CREATE UNIQUE INDEX UX_OperationRepairs_Code ON dbo.OperationRepairs (Code) WHERE Code IS NOT NULL;
+END
+GO
+
+/* paymentRequests (Đề Nghị Thanh Toán — lib/createValidation.js + lib/recordActions.js) — Dept/
+   CreatedBy/Status cùng lý do docs (lib/recordViewScope.js canViewPaymentRequest() + Báo Cáo).
+   SourceModule+SourceId là FK ĐA HÌNH (polymorphic) tới contracts.id HOẶC officeReqs.id tuỳ
+   SourceModule — không ràng buộc FK CỨNG được (2 bảng đích khác nhau), chỉ index để tra cứu nhanh
+   "các đề nghị thanh toán của 1 hợp đồng/đề nghị mua sắm cụ thể". installments[]/requestFiles[]/
+   history[] CHƯA tách bảng ở đợt này, cùng lý do docs.history. */
+IF OBJECT_ID('dbo.PaymentRequests', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PaymentRequests (
+        Id            BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Dept          NVARCHAR(100)  NOT NULL,
+        CreatedBy     NVARCHAR(100)  NULL,
+        SourceModule  NVARCHAR(20)   NULL,
+        SourceId      BIGINT         NULL,
+        Status        NVARCHAR(20)   NOT NULL,
+        Payload       NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_PaymentRequests_Dept_Status_CreatedAt ON dbo.PaymentRequests (Dept, Status, CreatedAt DESC, Id DESC);
+    CREATE INDEX IX_PaymentRequests_Source ON dbo.PaymentRequests (SourceModule, SourceId);
+END
+GO
+
+/* checklistSubmissions (Checklist Đánh Giá Siêu Thị — lib/checklist.js + routes/checklist.js) —
+   TemplateId/StoreCode/SubmittedByUsername tách cột (lib/recordViewScope.js
+   canViewChecklistSubmission()/filterChecklistSubmissionsForUser() dùng đúng 2 field StoreCode +
+   SubmittedByUsername để lọc quyền xem, TemplateId cần tra cứu nhanh "mọi bài nộp theo 1 mẫu"). */
+IF OBJECT_ID('dbo.ChecklistSubmissions', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ChecklistSubmissions (
+        Id                    BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt             DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        TemplateId            BIGINT         NOT NULL,
+        StoreCode             NVARCHAR(50)   NOT NULL,
+        SubmittedByUsername   NVARCHAR(100)  NULL,
+        Status                NVARCHAR(20)   NOT NULL,
+        Payload               NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_ChecklistSubmissions_Store_CreatedAt ON dbo.ChecklistSubmissions (StoreCode, CreatedAt DESC, Id DESC);
+    CREATE INDEX IX_ChecklistSubmissions_Template ON dbo.ChecklistSubmissions (TemplateId);
+    CREATE INDEX IX_ChecklistSubmissions_SubmittedBy ON dbo.ChecklistSubmissions (SubmittedByUsername, CreatedAt DESC);
+END
+GO
+
+/* trainingTestSubmissions (Đào Tạo > Bài Test — routes/records.js + lib/recordActions.js chấm điểm) —
+   khoá tự nhiên (ClassId, Username) — mỗi học viên chỉ nộp 1 lần/lớp (upsert theo khoá này, xem
+   routes/records.js). TestId/ClassId/Username tách cột (lib/recordViewScope.js
+   filterTrainingTestSubmissionsForUser() dùng ClassId để xác định quyền giảng viên + Username để xác
+   định quyền tự xem bài của mình). answers[] CHƯA tách bảng — cùng lý do docs.history. */
+IF OBJECT_ID('dbo.TrainingTestSubmissions', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.TrainingTestSubmissions (
+        Id         BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        TestId     BIGINT         NOT NULL,
+        ClassId    BIGINT         NOT NULL,
+        Username   NVARCHAR(100)  NOT NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_TrainingTestSubmissions_Class_Username ON dbo.TrainingTestSubmissions (ClassId, Username);
+    CREATE INDEX IX_TrainingTestSubmissions_Test ON dbo.TrainingTestSubmissions (TestId);
+END
+GO
+
+/* trainingDocumentProgress (Đào Tạo > Tiến Độ Xem Tài Liệu — routes/records.js, khoá tự nhiên
+   (DocId, Username), tự cập nhật liên tục khi xem video/PDF) — không có mảng lồng tăng trưởng không
+   giới hạn nào (viewedPages[] nhỏ, bị chặn bởi số trang tài liệu) — bảng "sạch" nhất trong đợt này,
+   phù hợp chuẩn hoá đầy đủ ngay từ đầu nếu cần ở bước sau. */
+IF OBJECT_ID('dbo.TrainingDocumentProgress', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.TrainingDocumentProgress (
+        Id         BIGINT         NOT NULL PRIMARY KEY,
+        CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        DocId      BIGINT         NOT NULL,
+        Username   NVARCHAR(100)  NOT NULL,
+        Payload    NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_TrainingDocumentProgress_Doc_Username ON dbo.TrainingDocumentProgress (DocId, Username);
+END
+GO
+
 /* Thùng Rác (Trash Bin) — khi admin xoá 1 hồ sơ ở bất kỳ collection nào trong dbo.Records
    (lib/recordStore.js deleteRecordForCollection()), bản ghi được CHUYỂN vào đây thay vì xoá thẳng —
    giữ nguyên Payload gốc để khôi phục lại đúng vị trí (cùng Id) nếu cần, hoặc xoá vĩnh viễn (chỉ xoá
