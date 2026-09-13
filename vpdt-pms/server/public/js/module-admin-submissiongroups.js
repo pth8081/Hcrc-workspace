@@ -168,6 +168,7 @@ async function saveUser(e) {
   // dở trong bộ nhớ trình duyệt (đã đổi nhưng chưa từng được server chấp nhận) mà giao diện không hề
   // phản ánh đúng cho tới lần tải lại trang tiếp theo.
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  let savedUserId = editId ? parseInt(editId, 10) : null;
 
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
@@ -200,6 +201,7 @@ async function saveUser(e) {
     const newUser = buildNewUserFromState(state);
     if (!newUser) return;
     DB.users.push(newUser);
+    savedUserId = newUser.id;
   }
 
   // Chờ server xác nhận đã lưu thật rồi mới báo thành công/dọn form — trước đây gọi syncStorage() rồi
@@ -218,5 +220,15 @@ async function saveUser(e) {
   resetUserForm();
   renderUsers();
   renderPermGroupsList();
+
+  // Chớp sáng đúng dòng vừa lưu trong bảng — sau khi bấm "OK" ở alert() trên, admin quay lại màn hình
+  // dài (nhiều người dùng) dễ mất dấu vừa sửa/thêm ai; alert() chỉ xác nhận SERVER đã chấp nhận, không
+  // chỉ ra TRỰC QUAN đúng dòng nào vừa đổi. Có thể không tìm thấy dòng nếu người này đang ở trang khác/
+  // bị bộ lọc ẩn — bỏ qua im lặng, không phải lỗi.
+  const rowEl = savedUserId != null ? document.getElementById(`userRow_${savedUserId}`) : null;
+  if (rowEl) {
+    rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    rowEl.classList.add('admin-row-saved-highlight');
+  }
 }
 

@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**20.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.3 (2026-09-13): UX — "✏️ Sửa"/"💾 Lưu" ở Người Dùng & Phân Quyền cuộn tới + chớp sáng phản hồi rõ ràng
+
+Người dùng phản hồi: bấm "✏️ Sửa" một người dùng ở cuối danh sách dài, hoặc "💾 Lưu" xong, cảm giác
+"không có gì xảy ra" — khó cảm nhận thao tác đã có tác dụng. Nguyên nhân: khối form "Cấu Hình Quyền
+Hạn..." (`#adminSubPerms`) là 1 `<div>` nằm ngay trên trang admin dài (không phải modal nổi lên) —
+`editUser()` trước đây chỉ đổ dữ liệu vào form, không cuộn/không có hiệu ứng gì, nên nếu form đang ở
+ngoài màn hình thì admin không thấy tác dụng của nút "Sửa". Tương tự, `saveUser()` chỉ có `alert()` xác
+nhận đã lưu (dialog chặn, không phải yếu — nhưng không chỉ ra chính xác dòng nào trong bảng vừa đổi).
+
+Sửa: tái dùng đúng hiệu ứng "cuộn tới + chớp sáng vàng 1.8s" (`permTreeJumpFlash`) đã áp dụng cho
+`jumpToPermField()` ở màn Phân Quyền — thêm 2 class `.admin-form-jump-highlight`/`.admin-row-saved-
+highlight` (`public/app.css`). `editUser(id)` (`public/js/module-admin-userstaging.js`) giờ cuộn tới +
+chớp sáng khối form ngay khi bấm "Sửa"; mỗi dòng bảng người dùng (`renderUsers()`) có thêm
+`id="userRow_<id>"` để định vị; `saveUser()` (`public/js/module-admin-submissiongroups.js`) sau khi
+lưu xong cuộn tới + chớp sáng đúng dòng vừa lưu/thêm trong bảng. Thêm 2 kịch bản test mới vào
+`tests/test-admin-users-permgroups.js` (62/62 pass, không có hồi quy).
 
 ## v20.2 (2026-09-13): Khôi phục `scripts/migrate-records-batch1.js` — cần thiết cho nâng cấp CSDL production thật
 

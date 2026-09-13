@@ -121,6 +121,14 @@
   0%, 20% { background-color: #fef9c3; border-color: #facc15 !important; }
   100% { background-color: transparent; }
 }
+/* Phản hồi "✏️ Sửa"/"💾 Lưu" ở Người Dùng & Phân Quyền TRƯỚC ĐÂY chỉ đổi giá trị form/alert() —
+   không cuộn/không chớp sáng gì, nên bấm "Sửa" 1 người dùng ở cuối danh sách dài thấy như "không có gì
+   xảy ra" nếu form đang ở ngoài màn hình. Dùng lại đúng hiệu ứng permTreeJumpFlash ở trên (khác class,
+   khác nơi áp dụng: form khi BẮT ĐẦU sửa — editUser(); dòng bảng vừa lưu xong — saveUser()/
+   commitPendingNewUsers()) để nhất quán 1 ngôn ngữ hình ảnh "chớp sáng vàng" cho mọi thao tác điều
+   hướng+xác nhận trong toàn màn Phân Quyền. */
+.admin-form-jump-highlight { animation: permTreeJumpFlash 1.8s ease-out; }
+.admin-row-saved-highlight { animation: permTreeJumpFlash 2.2s ease-out; }
 
 /* Sidebar điều hành (thay thanh nav ngang cũ) — #userHeader GIỮ NGUYÊN id cũ (finishLogin()/logout()
    chỉ toggle add/remove('hidden'), không sửa JS), giờ gắn vào chính khối <aside>. Tailwind ".hidden"
