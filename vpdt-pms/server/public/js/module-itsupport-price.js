@@ -320,6 +320,28 @@ function renderItPriceMasterListSelect() {
   updateItPriceMasterListDownloadLink();
 }
 
+// "Siêu thị áp dụng" — chọn "Khác" mới hiện ô multi-select (renderMultiSelectDropdown(), lấy từ
+// DB.stores — danh mục siêu thị, xem module-admin.js::saveStore()) để chọn cụ thể siêu thị/cửa hàng áp
+// dụng. CHỈ mang tính thông tin (đã xác nhận với người dùng) — không giới hạn ai xem được đề xuất.
+function onItPriceStoreScopeModeChange() {
+  const mode = document.getElementById('itPriceStoreScopeMode').value;
+  const wrap = document.getElementById('itPriceStoreScopeStoresWrap');
+  wrap.classList.toggle('hidden', mode !== 'OTHER');
+  if (mode === 'OTHER') {
+    renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], [], {
+      placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',
+      emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
+    });
+  }
+}
+
+// "Ngày hết hiệu lực" — chọn "Khác" mới hiện ô nhập ngày thật, bắt buộc (server tự xác minh lại y hệt ở
+// itPriceApprovals.extraValidate). Mặc định "Vĩnh viễn" (PERMANENT) — không nhập ngày hết hiệu lực nào.
+function onItPriceExpiryModeChange() {
+  const mode = document.getElementById('itPriceExpiryMode').value;
+  document.getElementById('itPriceExpiryDateWrap').classList.toggle('hidden', mode !== 'OTHER');
+}
+
 async function submitItPriceApproval(e) {
   e.preventDefault();
   const code = document.getElementById('itPriceCode').value.trim();
@@ -340,6 +362,21 @@ async function submitItPriceApproval(e) {
   // mượt (server tự xác minh lại y hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi).
   if (activeItPriceSubTab === 'WHOLESALE' && !document.getElementById('itPriceTier').value) {
     return alert('⛔ Vui lòng chọn Mức Margin/Chiết Khấu áp dụng.');
+  }
+  // "Siêu thị áp dụng"/"Ngày áp dụng"/"Ngày hết hiệu lực" — chặn sớm cho trải nghiệm mượt, server tự
+  // xác minh lại y hệt ở itPriceApprovals.extraValidate (không tin giá trị client gửi).
+  const storeScopeMode = document.getElementById('itPriceStoreScopeMode').value === 'OTHER' ? 'OTHER' : 'ALL';
+  const storeScopeStores = storeScopeMode === 'OTHER' ? getMultiSelectValues('itPriceStoreScopeStoresMultiSelect') : [];
+  if (storeScopeMode === 'OTHER' && storeScopeStores.length === 0) {
+    return alert('⛔ Vui lòng chọn ít nhất 1 siêu thị/cửa hàng áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng").');
+  }
+  const effectiveDate = document.getElementById('itPriceEffectiveDate').value;
+  if (!effectiveDate) return alert('⛔ Vui lòng chọn Ngày Áp Dụng.');
+  const expiryMode = document.getElementById('itPriceExpiryMode').value === 'OTHER' ? 'OTHER' : 'PERMANENT';
+  const expiryDate = expiryMode === 'OTHER' ? document.getElementById('itPriceExpiryDate').value : null;
+  if (expiryMode === 'OTHER') {
+    if (!expiryDate) return alert('⛔ Vui lòng chọn Ngày Hết Hiệu Lực (hoặc chọn lại "Vĩnh viễn").');
+    if (expiryDate < effectiveDate) return alert('⛔ Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi.');
   }
   // Tài liệu bổ sung liên quan (mục A, mirror ĐÚNG extraFilesInput/extraFiles của doSubmitSubmissionReq())
   // — hoàn toàn TUỲ CHỌN, mảng rỗng nếu không chọn tệp nào.
@@ -371,6 +408,10 @@ async function submitItPriceApproval(e) {
     }],
     extraFiles,
     reason: document.getElementById('itPriceReason').value.trim(),
+    storeScope: { mode: storeScopeMode, stores: storeScopeStores },
+    effectiveDate,
+    expiryMode,
+    expiryDate,
     createdAt: new Date().toLocaleString('vi-VN'),
     customData
   };
@@ -423,6 +464,15 @@ function resetItPriceForm() {
   renderItPriceMasterListSelect();
   clearSingleFileInput('itPriceFileInput', 'itPriceFileChip');
   clearMultiFileInput('itPriceExtraFiles', 'itPriceExtraFilesChip');
+  // "Siêu thị áp dụng"/"Ngày hết hiệu lực" — form.reset() ở trên đã tự đưa 2 <select> về lại giá trị
+  // mặc định (option đầu tiên = ALL/PERMANENT), chỉ cần tự ẩn lại 2 khối "Khác" đi kèm (form.reset()
+  // không đụng gì tới class "hidden") + xoá lựa chọn multi-select đã chọn trước đó (nếu có).
+  document.getElementById('itPriceStoreScopeStoresWrap').classList.add('hidden');
+  document.getElementById('itPriceExpiryDateWrap').classList.add('hidden');
+  renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',
+    emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
+  });
 }
 
 function onItPriceFilterChange() {
@@ -786,6 +836,14 @@ function itPriceMasterListDownloadLinkHTML(masterListId) {
   return ` <a href="${attachmentDownloadUrl(list.fileUrl, null, list.fileName)}" target="_blank" class="text-sky-600 hover:underline font-semibold">📥 Tải Mẫu</a>`;
 }
 
+// Hiển thị "Siêu thị áp dụng" ở modal chi tiết đề xuất — CHỈ mang tính thông tin cho đội Hỗ Trợ IT (đã
+// xác nhận với người dùng), không có logic giới hạn xem gì đi kèm.
+function itPriceStoreScopeLabel(storeScope) {
+  if (!storeScope || storeScope.mode !== 'OTHER') return 'Toàn bộ siêu thị, cửa hàng';
+  const stores = storeScope.stores || [];
+  return stores.length ? escapeHtml(stores.join(', ')) : '<span class="text-gray-400">—</span>';
+}
+
 // Xem trước 1 tệp trong danh sách "Tài liệu bổ sung liên quan" (p.extraFiles[idx]) — cùng Khung Xem
 // Bảo Vệ với mọi tệp khác trong hệ thống (mirror viewSubmissionExtraFile()).
 function viewItPriceExtraFile(itemId, idx) {
@@ -833,6 +891,8 @@ function renderItPriceModal() {
     ${p.priceType === 'WHOLESALE' ? `<div><b>Mức áp dụng:</b> ${escapeHtml(itPriceTierLabel(p.priceTier))}</div>` : ''}
     ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
+    <div><b>🏬 Siêu thị áp dụng:</b> ${itPriceStoreScopeLabel(p.storeScope)}</div>
+    <div><b>📅 Ngày áp dụng:</b> ${p.effectiveDate ? escapeHtml(p.effectiveDate) : '<span class="text-gray-400">—</span>'} <b class="ml-2">⏳ Hết hiệu lực:</b> ${p.expiryMode === 'OTHER' && p.expiryDate ? escapeHtml(p.expiryDate) : 'Vĩnh viễn'}</div>
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
     ${!p.applied && p.applyClaimedBy ? `<div><b>Đang xử lý bởi:</b> ${escapeHtml(p.applyClaimedByName || p.applyClaimedBy)} · ${escapeHtml(p.applyClaimedAt || '')}</div>` : ''}

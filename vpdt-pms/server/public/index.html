@@ -5900,6 +5900,42 @@
               </table>
             </div>
           </div>
+          <!-- "Siêu thị áp dụng" — CHỈ mang tính thông tin (đã xác nhận với người dùng: không giới hạn
+               ai xem được đề xuất, không tự động xử lý gì thêm — để đội Hỗ Trợ IT tự biết mà áp giá đúng
+               phạm vi). Mặc định "Toàn bộ" — chọn "Khác" mới hiện ô multi-select chọn siêu thị/cửa hàng cụ
+               thể (renderMultiSelectDropdown(), xem onItPriceStoreScopeModeChange() ở
+               module-itsupport-price.js). -->
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">🏬 Siêu Thị Áp Dụng</label>
+            <select id="itPriceStoreScopeMode" data-op-change="onItPriceStoreScopeModeChange" class="w-full border p-1.5 rounded bg-white">
+              <option value="ALL">Toàn bộ siêu thị, cửa hàng</option>
+              <option value="OTHER">Khác</option>
+            </select>
+            <div id="itPriceStoreScopeStoresWrap" class="hidden mt-2">
+              <div id="itPriceStoreScopeStoresMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <p class="text-gray-400 mt-1">Chọn 1 hoặc nhiều siêu thị/cửa hàng áp dụng đề xuất giá này.</p>
+            </div>
+          </div>
+          <!-- "Ngày áp dụng"/"Ngày hết hiệu lực" — cùng lý do CHỈ mang tính thông tin ở trên, không có xử
+               lý tự động nào theo ngày (không tự khoá/ẩn đề xuất khi quá hạn). "Vĩnh viễn" là mặc định —
+               chọn "Khác" mới hiện ô nhập ngày hết hiệu lực thật (bắt buộc, xem
+               onItPriceExpiryModeChange()/submitItPriceApproval()). -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">📅 Ngày Áp Dụng <span class="text-red-500">*</span></label>
+              <input id="itPriceEffectiveDate" type="date" required class="w-full border p-1.5 rounded bg-white">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">⏳ Ngày Hết Hiệu Lực</label>
+              <select id="itPriceExpiryMode" data-op-change="onItPriceExpiryModeChange" class="w-full border p-1.5 rounded bg-white">
+                <option value="PERMANENT">Vĩnh viễn</option>
+                <option value="OTHER">Khác</option>
+              </select>
+              <div id="itPriceExpiryDateWrap" class="hidden mt-2">
+                <input id="itPriceExpiryDate" type="date" class="w-full border p-1.5 rounded bg-white">
+              </div>
+            </div>
+          </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Lý Do Điều Chỉnh Giá</label>
             <textarea id="itPriceReason" placeholder="VD: Giá nhập tăng theo nhà cung cấp, điều chỉnh theo mặt bằng thị trường..." class="w-full border p-1.5 rounded h-16"></textarea>
