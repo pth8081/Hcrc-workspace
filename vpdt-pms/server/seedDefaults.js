@@ -7,10 +7,12 @@ const { hashPassword, isBcryptHash, verifyPassword } = require('./lib/auth');
 const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('./lib/appData');
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
 const { migrateLegacyTasks } = require('./lib/taskStore');
-const { getAllRecords, withLockedRecordById } = require('./lib/recordStore');
+const { getAllRecords, withLockedRecordById, getAllForCollection, insertRecord } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
 const { parseVNDateTime } = require('./lib/recordActions');
+const { validateChecklistCategories } = require('./lib/checklist');
+const { VSATTP_CHECKLIST_TEMPLATE } = require('./seedVsattpChecklist');
 
 // Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
 // tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
@@ -44,6 +46,7 @@ async function seedDefaults() {
   await migrateApprovedOperationOrdersToAwaitingReceipt();
   await migrateOperationOrdersDefaultLocationType();
   await migratePaymentRequestsMissingCurrentStep();
+  await seedVsattpChecklistTemplateIfMissing();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
 }
 
@@ -379,6 +382,26 @@ async function migratePaymentRequestsMissingCurrentStep() {
   }
 }
 
+// v21.0 — Dựng sẵn 1 mẫu checklist "Trừ điểm theo hạng mục" (templateKind DEDUCTION) với ĐÚNG nội dung
+// VSATTP người dùng gửi (5 hạng mục, ~38 tiêu chí, seedVsattpChecklist.js) — chỉ chạy MỘT LẦN DUY NHẤT
+// (kiểm tra theo templateCode 'CL_VSATTP', idempotent giống mọi hàm seed khác trong file này — chạy lại
+// không tạo trùng). Tạo ở trạng thái DRAFT (KHÔNG tự ACTIVATE) — admin xem lại nội dung rồi tự bấm "Kích
+// Hoạt" khi sẵn sàng dùng thật, đúng vòng đời bình thường của mọi checklist khác, không phải ngoại lệ.
+async function seedVsattpChecklistTemplateIfMissing() {
+  const templates = await getAllForCollection('checklistTemplates');
+  if (templates.some(t => t.templateCode === VSATTP_CHECKLIST_TEMPLATE.templateCode)) return;
+  const categories = validateChecklistCategories(VSATTP_CHECKLIST_TEMPLATE.categories);
+  await insertRecord('checklistTemplates', {
+    id: Date.now(),
+    templateCode: VSATTP_CHECKLIST_TEMPLATE.templateCode, templateName: VSATTP_CHECKLIST_TEMPLATE.templateName,
+    templateType: 'CONTROL_AUDIT', templateKind: 'DEDUCTION', scoringMode: null, passThreshold: null,
+    status: 'DRAFT', version: 1, clonedFromTemplateId: null, activatedAt: null,
+    categories,
+    creator: 'system', creatorName: 'Hệ thống (dựng sẵn)'
+  });
+  console.log(`   ↳ Đã dựng sẵn mẫu checklist "${VSATTP_CHECKLIST_TEMPLATE.templateName}" (${VSATTP_CHECKLIST_TEMPLATE.templateCode}, DRAFT — vào Checklist Đánh Giá Siêu Thị > Cấu Hình để xem lại và Kích Hoạt khi sẵn sàng dùng).`);
+}
+
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
 // nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
 function nowVNForMigration() {
@@ -392,5 +415,6 @@ function nowVNForMigration() {
 // bộ test hồi quy MỚI của đợt "Tách Đơn Hàng Siêu Thị/HO" (cùng lý do, cùng khuôn mock recordStore).
 module.exports = {
   seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
-  migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep
+  migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep,
+  seedVsattpChecklistTemplateIfMissing
 };

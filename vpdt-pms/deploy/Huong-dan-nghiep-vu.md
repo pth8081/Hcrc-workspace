@@ -1315,6 +1315,65 @@ trống nếu mẫu **Chỉ Đạt/Chưa đạt** (server tự bỏ qua). File m
 điều kiện hiển thị phân nhánh (`showIfOptionId`) — cấu hình tay lại sau khi
 nhập nếu cần dùng tính năng đó.
 
+**2 LOẠI MẪU CHECKLIST — chọn NGAY LÚC TẠO, bất biến sau đó (v21.0)** —
+theo yêu cầu tách mẫu VSATTP (file Excel người dùng gửi) thành 1 loại mẫu
+riêng thay vì gò vào khuôn câu hỏi/đáp án cũ. Bấm **"+ Tạo Mẫu Mới"** giờ
+hiện bảng chọn 1 trong 2 loại (`templateKind`) trước khi mở khung soạn —
+**loại đã chọn không đổi được nữa sau khi tạo** (kể cả khi sửa bản Nháp,
+server chặn 400 nếu cố gửi `templateKind` khác đi):
+
+- **📋 Câu Hỏi & Đáp Án (`QA`)** — chính là mô hình đã có từ trước (mục
+  ở trên: câu hỏi/lựa chọn, Chế Độ Chấm Điểm, trừ điểm bằng điểm đáp án âm,
+  Nhập/Xuất Excel...). Mọi mẫu tạo trước v21.0 tự hiểu là loại này
+  (`templateKind` cũ để trống = `QA`).
+- **📉 Trừ Điểm Theo Hạng Mục (`DEDUCTION`)** — mô hình MỚI, dựng đúng cấu
+  trúc file Excel VSATTP người dùng gửi: cây 3 cấp **Hạng Mục Lớn** (có điểm
+  tối đa, VD "CHẤT LƯỢNG SẢN PHẨM" 40đ) → **Hạng Mục Con** (có thể đặt điểm
+  tối đa RIÊNG hoặc để trống để dùng chung trần của Hạng Mục Lớn, VD "Chất
+  lượng cảm quan") → **Tiêu Chí Vi Phạm** (mô tả + ghi chú quy tắc tham khảo
+  + điểm tham khảo/lần, KHÔNG ép buộc). Không có khái niệm Chế Độ Chấm
+  Điểm/Ngưỡng Đạt %/Nhập-Xuất Excel như loại QA — 2 khối này ẨN HẲN khi soạn
+  loại `DEDUCTION` (kể cả server: `scoringMode` luôn `null`).
+
+**Làm bài loại `DEDUCTION`** — khác hẳn loại QA, hiện TOÀN BỘ cây hạng mục/
+tiêu chí ngay từ đầu (không có nhánh hiển thị theo câu trả lời trước).
+Người làm bài nhập, cho MỖI tiêu chí phát hiện vi phạm: **điểm trừ thực tế**
+(người kiểm tra tự quyết định, không bị ép theo điểm tham khảo/lần đã cấu
+hình ở mẫu), **mức độ rủi ro A/B/C** (**người kiểm tra TỰ CHỌN**, hệ thống
+KHÔNG tự tính theo ngưỡng như công thức Excel gốc — quyết định thiết kế:
+ngưỡng phân loại A/B/C trong file gốc khác nhau tuỳ dòng, tự động hoá dễ sai
+lệch hơn là để người kiểm tra trực tiếp đánh giá), thời hạn hoàn thành, ghi
+chú, và **ảnh minh chứng KHÔNG BẮT BUỘC** (khác hẳn loại QA — chọn đáp án
+lỗi nghiêm trọng ở QA bắt buộc phải có ảnh mới nộp bài được, loại
+`DEDUCTION` cho nộp bài dù không đính kèm ảnh nào, khớp đúng file gốc không
+có ràng buộc này).
+
+**Chấm điểm loại `DEDUCTION`** — với mỗi Hạng Mục Con: điểm = tối đa(0, trần
+hiệu lực − tổng điểm đã trừ trong hạng mục con đó); "trần hiệu lực" là điểm
+tối đa riêng của hạng mục con nếu có đặt, ngược lại dùng TRỌN VẸN trần của
+Hạng Mục Lớn (không chia đều cho nhiều hạng mục con). Điểm Hạng Mục Lớn =
+tổng điểm các hạng mục con của nó, nhưng **luôn bị chặn thêm 1 lớp trần ở
+đúng điểm tối đa của Hạng Mục Lớn** (phòng trường hợp lỡ cấu hình tổng trần
+các hạng mục con vượt quá trần hạng mục lớn). Tổng điểm bài làm = tổng điểm
+mọi Hạng Mục Lớn. Không có khái niệm "lỗi nghiêm trọng"/"câu bắt buộc" như
+QA — luôn ra 1 điểm số cụ thể (không có chế độ "Chỉ Đạt/Chưa đạt").
+
+**2 lần kiểm tra (Lần 1/Lần 2) trong cùng 1 đợt** — file Excel gốc theo dõi
+song song 2 lần kiểm tra trên cùng 1 sheet; hệ thống **KHÔNG** gộp 2 lần vào
+1 bài làm — mỗi lần kiểm tra là **1 bài nộp riêng** (tạo bài mới ở tab Thực
+Hiện), giữ đúng kiến trúc "1 bài nộp = 1 đợt đánh giá" sẵn có, xem lại/so
+sánh 2 lần qua tab Báo Cáo hoặc Kết Quả như các checklist khác.
+
+**Mẫu VSATTP dựng sẵn (seed tự động, v21.0)** — ngay lần khởi động server
+đầu tiên sau khi cập nhật lên bản này, hệ thống **tự động tạo sẵn 1 mẫu**
+đúng nội dung file Excel người dùng gửi (mã `CL_VSATTP`, tên "Checklist
+Đánh Giá VSATTP (An Toàn Thực Phẩm)", loại `DEDUCTION`, 5 Hạng Mục Lớn/12
+Hạng Mục Con/38 Tiêu Chí, tổng điểm tối đa 100) ở trạng thái **Nháp** —
+KHÔNG tự kích hoạt. Vào tab Cấu Hình, xem lại nội dung (nút "Sửa" trên bản
+Nháp này), chỉnh sửa nếu cần rồi bấm **"Kích Hoạt"** khi sẵn sàng dùng thật.
+Việc dựng sẵn này chạy ĐÚNG 1 LẦN (idempotent theo mã `CL_VSATTP` — không
+tạo trùng nếu server khởi động lại nhiều lần).
+
 ---
 
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)
