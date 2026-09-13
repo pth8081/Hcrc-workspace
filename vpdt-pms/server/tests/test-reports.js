@@ -12,7 +12,7 @@ function seedReportData() {
   // below. Amounts are chosen to be easy to eyeball in assertions once combined.
   return {
     contracts: [
-      { id: 1, code: 'HD-001', dept: 'Phòng Kế Toán', approvalStatus: 'APPROVED', amount: 100000000, endDate: '2027-01-01', createdAt: '2026-03-01T09:00:00' }, // active
+      { id: 1, code: 'HD-001', dept: 'Phòng Kế Toán', approvalStatus: 'APPROVED', amount: 100000000, endDate: '2027-01-01', createdAt: '2026-03-01T09:00:00', customData: { shipmentTrackingCode: 'ABC123' } }, // active
       { id: 2, code: 'HD-002', dept: 'Phòng Kế Toán', approvalStatus: 'APPROVED', amount: 50000000, endDate: '2025-01-01', createdAt: '2026-03-02T09:00:00' }, // expired
       { id: 3, code: 'HD-003', dept: 'Phòng CNTT', approvalStatus: 'PENDING', amount: 30000000, endDate: '2027-01-01', createdAt: '2026-03-03T09:00:00' } // not counted (not APPROVED)
     ],
@@ -171,6 +171,16 @@ async function main() {
       const html = await page.evaluate(() => document.getElementById('reportDetailResultsWrap').innerHTML);
       assert(html.includes('HD-001') && html.includes('HD-002'), 'APPROVED filter should keep HD-001 and HD-002');
       assert(!html.includes('HD-003'), 'APPROVED filter should exclude the PENDING HD-003');
+    });
+
+    // RPT-02: customData (trường tuỳ biến do Biểu Mẫu tạo, VD "shipmentTrackingCode") trước đây bị loại
+    // hoàn toàn khỏi Tra Cứu Chi Tiết vì typeof là 'object' — giờ phải tự tách ra thành cột riêng.
+    await run('Tra Cứu Chi Tiết (contract tab): trường customData (Biểu Mẫu tuỳ biến) hiện đúng thành cột riêng', async () => {
+      const columnKeys = await page.evaluate(() => reportDetailContext.columns.map((c) => c.key));
+      assert(columnKeys.includes('customData.shipmentTrackingCode'), `expected a "customData.shipmentTrackingCode" column, got: ${columnKeys.join(', ')}`);
+      await page.evaluate(() => onReportDetailColumnToggle('contract', 'customData.shipmentTrackingCode', true));
+      const html = await page.evaluate(() => document.getElementById('reportDetailResultsWrap').innerHTML);
+      assert(html.includes('ABC123'), 'expected the customData value "ABC123" to render in the detail table');
     });
 
     await run('Excel export (detail, contract tab) sends the selected columns and filtered rows', async () => {

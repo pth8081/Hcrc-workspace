@@ -200,9 +200,15 @@ function operationStatusBadge(o) {
 // cấp, mỗi phần tử HOẶC 1 tên siêu thị thật (đối chiếu o.dept của đơn STORE) HOẶC literal 'HO' cho đơn
 // orderLocationType==='HO') — TÁCH RIÊNG hoàn toàn khỏi quần thể duyệt/từ chối đơn hàng nội bộ (đã đổi từ
 // đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung", KHÔNG còn dùng chung isApproverForDeptWorkflow() như trước).
+// DH-09: mirror ĐÚNG lib/recordActions.js isApproverForOperationOrderReceipt() — KHÔNG dùng scopeAllows()
+// chung (có nhánh dept-fallback sai cho quyền này, xem chú thích đầy đủ ở hàm server) — chỉ xét đúng cấu
+// trúc {all, depts[]} của operationOrderReceiptManage.
 function canManageOperationOrderReceiptClient(o) {
+  if (currentUser?.perms?.admin) return true;
+  const scope = currentUser?.perms?.operationOrderReceiptManage;
+  if (scope?.all) return true;
   const scopeKey = o.orderLocationType === 'HO' ? 'HO' : o.dept;
-  return scopeAllows(currentUser, currentUser?.perms?.operationOrderReceiptManage, scopeKey);
+  return !!(Array.isArray(scope?.depts) && scope.depts.includes(scopeKey));
 }
 
 // Đổ danh sách "Nơi Nhận" (siêu thị/kho) cho ô lọc — dùng chung cho cả Danh Sách (filterLocationOperationOrder)

@@ -340,6 +340,21 @@ async function run() {
     check('Sinh đúng 1 đề nghị thanh toán mới, nguồn = CONTRACT đúng mã hợp đồng', afterPaymentStart.paymentRequestsLen === paymentReqCountBefore + 1 && afterPaymentStart.latest.sourceModule === 'CONTRACT' && afterPaymentStart.latest.sourceCode === contract1.code, afterPaymentStart.latest);
     check('Đề nghị thanh toán mang đúng 2 đợt đã khai lúc tạo hợp đồng (300tr + 200tr)', afterPaymentStart.latest.installments.length === 2 && afterPaymentStart.latest.installments[0].amount === 300000000 && afterPaymentStart.latest.installments[1].amount === 200000000, afterPaymentStart.latest.installments);
 
+    // ============ HD-05: nút/modal "Đổi Hình Thức Thanh Toán" phải bị chặn khi hợp đồng đã có đề nghị
+    // thanh toán DÙ ĐÃ PAID (server chặn hẳn ở MỌI trạng thái, xem requestContractPaymentTypeChange() ở
+    // lib/recordActions.js: "Hợp đồng đã có đề nghị thanh toán...") — trước đây client chỉ kiểm tra đề
+    // nghị CÒN HIỆU LỰC (hasActivePaymentRequestForSourceClient(): status !== 'PAID'), để lọt nút/modal
+    // khi đề nghị vừa tạo ở Kịch bản 9 đã được đánh dấu PAID, dẫn tới bấm xong luôn bị server từ chối 409 ============
+    await page.evaluate((id) => {
+      const pr = DB.paymentRequests.find((p) => p.sourceModule === 'CONTRACT' && p.sourceId === id);
+      pr.status = 'PAID';
+    }, contract1.id);
+    await clearAlerts();
+    await page.evaluate((id) => openContractPaymentTypeChangeModal(id), contract1.id);
+    const hd05Alerts = await alerts();
+    const hd05ModalHidden = await page.evaluate(() => document.getElementById('contractPaymentTypeChangeModal').classList.contains('hidden'));
+    check('HD-05: mở modal Đổi HTTT bị chặn khi hợp đồng đã có đề nghị thanh toán (kể cả đã PAID)', hd05Alerts.some((a) => /đã có đề nghị thanh toán/.test(a)) && hd05ModalHidden, { hd05Alerts, hd05ModalHidden });
+
     // ============ Kịch bản 10: "Bổ Sung" (REQUEST_CHANGES) hợp đồng — người duyệt trả về NHÁP (khác
     // Từ Chối hẳn), người tạo SỬA (editContract() ở lib/recordActions.js đã tự đưa DRAFT về PENDING/
     // bước 1 khi lưu — xem requestContractChangesAction()/openEditContract() ở public/index.html), rồi
@@ -399,6 +414,16 @@ async function run() {
     await approveAs('tp_kd', contract3.id);
     const contract3Final = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, contract3.id);
     check('Sau khi bổ sung + gửi lại, hợp đồng (1 bước) được duyệt lại bình thường -> APPROVED', contract3Final === 'APPROVED', contract3Final);
+
+    // Đối chứng HD-05: hợp đồng APPROVED, chưa có đề nghị thanh toán nào (contract3) vẫn phải mở modal
+    // Đổi HTTT bình thường — điều kiện chặn mới không được chặn oan trường hợp hợp lệ.
+    await loginAs('kd1');
+    await clearAlerts();
+    await page.evaluate((id) => openContractPaymentTypeChangeModal(id), contract3.id);
+    const hd05NoBlockAlerts = await alerts();
+    const hd05NoBlockModalHidden = await page.evaluate(() => document.getElementById('contractPaymentTypeChangeModal').classList.contains('hidden'));
+    check('HD-05 (đối chứng): hợp đồng CHƯA có đề nghị thanh toán vẫn mở modal Đổi HTTT bình thường', hd05NoBlockAlerts.length === 0 && !hd05NoBlockModalHidden, { hd05NoBlockAlerts, hd05NoBlockModalHidden });
+    await page.evaluate(() => closeContractPaymentTypeChangeModal());
 
     // ============ Kịch bản 11: "Bổ Sung" cho Tài liệu ký (module ảo contractsSignedFile) — trả về
     // NHÁP để tải lại, KHÔNG xoá field vừa cập nhật của quy trình Phê Duyệt gốc ============

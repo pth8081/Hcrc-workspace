@@ -549,8 +549,18 @@ function submitOperationOrderDraft(user, item) {
 // so — dùng 1 sentinel cố định, không đụng chạm danh sách phòng ban/siêu thị thật nào). appData không
 // còn cần dùng (không còn tra dept-workflow) — giữ tham số thứ 3 cho tương thích chữ ký cũ nhưng bỏ qua.
 function isApproverForOperationOrderReceipt(user, item) {
+  // PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, DH-09): scopeAllows() dùng chung (contractCreate/
+  // officeCreate...) có nhánh "user.dept === dept -> luôn cho qua" — ĐÚNG cho các quyền theo-phòng-ban
+  // thông thường, nhưng SAI ở đây: quyền này cố tình thiết kế "độc lập hoàn toàn" với phòng ban thật của
+  // người dùng (đọc chú thích khối trên) — 1 nhân viên BẤT KỲ của đúng siêu thị đó (user.dept === scopeKey,
+  // dù KHÔNG hề được cấp operationOrderReceiptManage) vẫn lọt qua nhánh dept-fallback của scopeAllows(),
+  // được xác nhận/huỷ nhập hàng dù không có quyền nào cả — không dùng scopeAllows() chung ở đây nữa, chỉ
+  // xét đúng cấu trúc {all, depts[]} của quyền RIÊNG này.
+  if (user?.perms?.admin) return true;
+  const scope = user?.perms?.operationOrderReceiptManage;
+  if (scope?.all) return true;
   const scopeKey = item.orderLocationType === 'HO' ? 'HO' : item.dept;
-  return scopeAllows(user, user.perms?.operationOrderReceiptManage, scopeKey);
+  return !!(Array.isArray(scope?.depts) && scope.depts.includes(scopeKey));
 }
 function receiveOperationOrderGoods(user, item, appData) {
   if (item.status !== 'AWAITING_RECEIPT') {

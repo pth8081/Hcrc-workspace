@@ -657,6 +657,10 @@ function buildReportDetailColumns(moduleKey, records, config) {
 
   const sampleSize = Math.min(records.length, 300);
   const valuesByKey = {};
+  // customData: object lồng chứa các trường tuỳ biến do Biểu Mẫu (module-core.js CORE_FIELD_MANIFEST)
+  // sinh ra — không có tên cố định nên phải quét riêng, không lọt qua vòng Object.keys(r) ở trên (bị
+  // loại vì typeof là 'object'). Gộp vào cùng valuesByKey với tiền tố "customData." để không trùng tên
+  // với trường gốc cùng cấp, rồi build cột y hệt các trường scalar thường.
   for (let i = 0; i < sampleSize; i++) {
     const r = records[i];
     Object.keys(r).forEach(k => {
@@ -666,10 +670,22 @@ function buildReportDetailColumns(moduleKey, records, config) {
       if (v !== null && v !== undefined && t !== 'string' && t !== 'number' && t !== 'boolean') return;
       (valuesByKey[k] = valuesByKey[k] || []).push(v);
     });
+    if (r.customData && typeof r.customData === 'object') {
+      Object.keys(r.customData).forEach(ck => {
+        const v = r.customData[ck];
+        const t = typeof v;
+        if (v !== null && v !== undefined && t !== 'string' && t !== 'number' && t !== 'boolean') return;
+        const key = 'customData.' + ck;
+        (valuesByKey[key] = valuesByKey[key] || []).push(v);
+      });
+    }
   }
 
   Object.keys(valuesByKey).forEach(k => {
-    cols.push({ key: k, label: REPORT_FIELD_LABELS[k] || humanizeReportFieldKey(k), type: inferReportFieldType(k, valuesByKey[k]), getValue: r => r[k] });
+    const isCustom = k.startsWith('customData.');
+    const subKey = isCustom ? k.slice('customData.'.length) : k;
+    const getValue = isCustom ? (r => r.customData ? r.customData[subKey] : undefined) : (r => r[k]);
+    cols.push({ key: k, label: REPORT_FIELD_LABELS[k] || humanizeReportFieldKey(subKey), type: inferReportFieldType(k, valuesByKey[k]), getValue });
   });
 
   cols.forEach(c => {

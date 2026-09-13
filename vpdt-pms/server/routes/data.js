@@ -34,7 +34,8 @@ const {
   filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
   filterPayrollPeriodsForUser, filterPayslipsForUser,
-  filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser
+  filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS
 } = require('../lib/recordViewScope');
 const { filterNotificationsForUser } = require('../lib/notifications');
 
@@ -488,6 +489,20 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
       sessionVersion: (prior?.sessionVersion || 0) + 1
     };
   }));
+
+  // USER-BULK-02: "users" là 1 mảng ghi TOÀN BỘ (whole-blob, xem routes/data.js POST /api/data/:key),
+  // khớp theo "id" chứ chưa từng kiểm tra "username" trùng nhau — 2 tài khoản khác id nhưng cùng
+  // username khiến routes/auth.js (mọi chỗ users.find(u => u.username === username)) LUÔN chỉ thấy tài
+  // khoản đứng TRƯỚC trong mảng, tài khoản còn lại thành "ma" (không ai đăng nhập/đặt lại mật khẩu/khoá
+  // được), và trật tự mảng có thể đổi qua các lần lưu khác nhau -> hành vi không dự đoán được.
+  const seenUsernames = new Map();
+  for (const u of prepared) {
+    if (!u.username) continue;
+    if (seenUsernames.has(u.username)) {
+      throw new HttpError(400, `Tên đăng nhập "${u.username}" đã bị trùng giữa nhiều tài khoản — mỗi tài khoản phải có tên đăng nhập duy nhất.`);
+    }
+    seenUsernames.set(u.username, true);
+  }
 
   assertAtLeastOneAdmin(prepared);
   assertNoManagerCycle(prepared);
@@ -1148,7 +1163,7 @@ router.get('/', async (req, res) => {
     // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — người quản lý/xem báo
     // cáo thấy hết; người khác chỉ thấy template ACTIVE đúng loại họ đủ điều kiện + bài của chính mình/
     // bài SUBMITTED làm tại đúng siêu thị mình (xem lib/recordViewScope.js).
-    if (data.checklistTemplates) data.checklistTemplates = filterChecklistTemplatesForUser(data.checklistTemplates, req.freshUser);
+    if (data.checklistTemplates) data.checklistTemplates = filterChecklistTemplatesForUser(data.checklistTemplates, req.freshUser, data);
     if (data.checklistSubmissions) data.checklistSubmissions = filterChecklistSubmissionsForUser(data.checklistSubmissions, req.freshUser);
     // notifications (thông báo trong app, dùng chung — xem lib/notifications.js): PHẢI lọc ngay từ khi
     // thêm vào MIGRATED_COLLECTIONS, nếu không GET /api/data trả THẲNG thông báo của MỌI người dùng cho
@@ -1177,6 +1192,18 @@ router.get('/', async (req, res) => {
     // chất như đánh giá hiệu suất) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — xem
     // lib/recordViewScope.js canViewOnboardingProgress().
     if (data.onboardingProgress) data.onboardingProgress = filterOnboardingProgressForUser(data.onboardingProgress, req.freshUser, data);
+
+    // PQ-01: "Khối 0" (moduleAccess) chỉ có gate ở CLIENT (public/js/core.js hasModuleAccess()) — với 6
+    // module "mở sẵn cho mọi nhân viên" không có quyền chi tiết nào chặn XEM (doc/submission/task/
+    // internal/contract/itSupport, xem MODULE_ACCESS_GATED_COLLECTIONS ở lib/recordViewScope.js), admin
+    // tắt moduleAccess cho 1 user cụ thể vẫn không chặn được GET /api/data gọi thẳng — bổ sung mirror
+    // gate ở đây, CHỈ cho đúng 6 module này (phần còn lại đã có quyền chi tiết riêng chặn rồi).
+    for (const [moduleKey, collections] of Object.entries(MODULE_ACCESS_GATED_COLLECTIONS)) {
+      if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
+      for (const col of collections) {
+        if (data[col]) data[col] = [];
+      }
+    }
 
     data._versions = versions;
     res.json(data);

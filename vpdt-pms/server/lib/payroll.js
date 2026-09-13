@@ -318,8 +318,12 @@ function applyApprove(period, actorUsername, actorName) {
 }
 function applyReject(period, actorUsername, actorName, reason) {
   assertTransition(period, ['PENDING_APPROVAL'], 'Từ chối');
+  // LUONG-04: bắt buộc lý do (route đã bật historyNoteRequired=true, xem routes/payroll.js) — chặn LẠI ở
+  // đây cho chắc, đúng khuôn applyReopen() ngay dưới, để kế toán luôn biết ĐÍCH XÁC vì sao bị từ chối
+  // thay vì 1 câu chung chung.
+  if (!reason || !String(reason).trim()) throw new HttpError(400, 'Vui lòng nhập lý do từ chối kỳ lương');
   period.status = 'DRAFT';
-  pushHistory(period, 'REJECTED', actorUsername, actorName, reason ? String(reason).trim().slice(0, 500) : 'Từ chối — trả về rà soát lại');
+  pushHistory(period, 'REJECTED', actorUsername, actorName, String(reason).trim().slice(0, 500));
   return period;
 }
 function applyFinalize(period, actorUsername, actorName) {

@@ -338,6 +338,20 @@ async function main() {
       assertIncludes([true], !!notif, 'Phải tạo Notification trong app cho nhân viên emp1');
     });
 
+    await run.run('LUONG-04: Từ Chối kỳ lương bắt buộc nhập lý do', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
+      const noReason = await api('POST', `/api/payroll/periods/${period.id}/reject`, {}, APPROVER);
+      assertEqual(noReason.status, 400, 'Thiếu lý do -> 400');
+      const withReason = await api('POST', `/api/payroll/periods/${period.id}/reject`, { reason: 'Thiếu chứng từ OT tháng này' }, APPROVER);
+      assertEqual(withReason.status, 200, 'Có lý do -> thành công');
+      assertEqual(withReason.body.item.status, 'DRAFT', 'Từ chối phải trả kỳ về DRAFT');
+      const lastEntry = withReason.body.item.history[withReason.body.item.history.length - 1];
+      assertIncludes([true], lastEntry.detail.includes('Thiếu chứng từ OT tháng này'), 'Lịch sử phải ghi đúng lý do từ chối, không phải câu chung chung');
+    });
+
     await run.run('reopen: bắt buộc nhập lý do', async () => {
       resetAppData();
       const period = seedDraftPeriod();

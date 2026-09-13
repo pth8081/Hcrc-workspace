@@ -305,6 +305,25 @@ async function main() {
       assertEqual(correctStore.body.item.storeResponseText, 'Đã khắc phục', 'Nội dung phản hồi phải được lưu đúng');
     });
 
+    // ===== CL-06: template không còn ACTIVE (đã bị thay bằng bản clone/kích hoạt khác) vẫn phải xem
+    // được nếu user có bài nộp tham chiếu đúng template đó — nếu không, người từng làm bài mất khả năng
+    // tra cứu lại câu hỏi/đáp án gốc ngay khi có ai kích hoạt bản mới thay thế (xem lib/recordViewScope.js).
+    await run.run('CL-06: template ARCHIVED vẫn xem được nếu user có bài nộp (checklistSubmissions) tham chiếu tới nó', () => {
+      const { canViewChecklistTemplate, filterChecklistTemplatesForUser } = require('../lib/recordViewScope');
+      const archived = { id: 501, status: 'ARCHIVED', templateCode: 'CL_OLD', templateType: 'STORE_SELF' };
+      const otherArchived = { id: 502, status: 'ARCHIVED', templateCode: 'CL_OTHER', templateType: 'STORE_SELF' };
+      const ownSubmission = { id: 1, templateId: 501, submittedByUsername: STORE_A_EMP.username, status: 'SUBMITTED', storeCode: 'Siêu thị A' };
+      const appData = { checklistSubmissions: [ownSubmission] };
+
+      assertEqual(canViewChecklistTemplate(STORE_A_EMP, archived, appData), true, 'user có bài nộp tham chiếu template ARCHIVED phải xem được template đó');
+      assertEqual(canViewChecklistTemplate(STORE_A_EMP, otherArchived, appData), false, 'user KHÔNG có bài nộp nào tham chiếu template ARCHIVED khác vẫn phải bị chặn');
+      assertEqual(canViewChecklistTemplate(STORE_B_EMP, archived, appData), false, 'user khác (không phải chủ bài nộp) không được xem template ARCHIVED qua lỗ hổng này');
+
+      const visible = filterChecklistTemplatesForUser([archived, otherArchived], STORE_A_EMP, appData);
+      assertEqual(visible.length, 1, 'filterChecklistTemplatesForUser phải chỉ giữ lại đúng 1 template được tham chiếu');
+      assertEqual(visible[0].id, 501, 'template giữ lại phải đúng là template được bài nộp tham chiếu');
+    });
+
     run.summary();
   } finally {
     server.close();

@@ -373,6 +373,7 @@ function openContractPaymentTypeChangeModal(id) {
   if (c.creator !== currentUser.username) return alert('Chỉ người tạo hợp đồng mới yêu cầu đổi hình thức thanh toán được!');
   if (c.approvalStatus !== 'APPROVED') return alert('Hợp đồng chưa được phê duyệt xong, vui lòng dùng nút "✏️ Sửa" thay vì đổi hình thức thanh toán.');
   if (c.pendingPaymentTypeChange) return alert('Hợp đồng đang có 1 yêu cầu đổi hình thức thanh toán khác chờ duyệt.');
+  if (hasAnyPaymentRequestForSourceClient('CONTRACT', c.id)) return alert('Hợp đồng đã có đề nghị thanh toán, không thể đổi hình thức thanh toán nữa.');
   cptcContractId = id;
   document.getElementById('cptcPaymentType').value = c.paymentType === 'PERIODIC' ? 'PERIODIC' : 'ONE_TIME';
   document.getElementById('cptcReason').value = '';
@@ -999,9 +1000,12 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     secondaryOptions.push({ value: 'requestSignedChanges', label: `🔄 Bổ Sung ${signedDocNoun}` });
   }
   // Đổi Hình Thức Thanh Toán (yêu cầu mới) — chỉ người tạo, chỉ khi ĐÃ APPROVED và chưa có yêu cầu nào
-  // khác đang chờ (server validate lại toàn bộ, đây chỉ là gate hiện/ẩn nút). Duyệt/Từ chối yêu cầu này
-  // dành cho ĐÚNG nhóm người duyệt "Tài liệu ký" (contractManageDeptWorkflows[dept])/admin.
-  if (c.approvalStatus === 'APPROVED' && !c.pendingPaymentTypeChange && c.creator === currentUser.username) {
+  // khác đang chờ (server validate lại toàn bộ, đây chỉ là gate hiện/ẩn nút). HD-05: server còn chặn
+  // hẳn khi hợp đồng đã có BẤT KỲ đề nghị thanh toán nào (kể cả đã PAID, xem
+  // requestContractPaymentTypeChange() lib/recordActions.js) — phải ẩn nút cùng điều kiện, nếu không
+  // nút vẫn hiện rồi luôn bị server từ chối 409. Duyệt/Từ chối yêu cầu này dành cho ĐÚNG nhóm người
+  // duyệt "Tài liệu ký" (contractManageDeptWorkflows[dept])/admin.
+  if (c.approvalStatus === 'APPROVED' && !c.pendingPaymentTypeChange && c.creator === currentUser.username && !hasAnyPaymentRequestForSourceClient('CONTRACT', c.id)) {
     secondaryOptions.push({ value: 'changePaymentType', label: '✏️ Đổi Hình Thức Thanh Toán' });
   }
   if (c.pendingPaymentTypeChange && isApproverForContractManageWorkflowClient(currentUser, c)) {

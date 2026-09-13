@@ -1,8 +1,78 @@
 # Phiên bản hiện tại
 
-**19.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.0 (2026-09-13): Test chuyên sâu theo kịch bản nghiệp vụ (đợt 2) — vá 6 lỗ hổng/lỗi thật
+
+Tiếp tục đối chiếu bộ kịch bản test chuyên sâu (v19.9 mới xử lý top-15/20 ưu tiên cao nhất) sang toàn bộ
+~130 test case còn lại (Workflow engine/Phân quyền, Văn Bản Trình/Tự phục vụ hành chính, Thanh Toán/Hợp
+Đồng/Đơn Hàng, cây Thực Hiện Vận Hành, Cơ Cấu Tổ Chức/Onboarding/Offboarding/HĐLĐ, Hồ Sơ NS/Công Phép/
+Lương, Checklist/Báo Cáo, Hệ Thống/Bảo Mật). Rút kinh nghiệm từ v19.9 (agent chạy `isolation: "worktree"`
+bị dính BASE CŨ), đợt này 7 subagent chạy TRỰC TIẾP trong thư mục làm việc hiện tại (không cô lập
+worktree) — mọi finding vẫn được tự tay verify lại trên code thật trước khi hành động. Phát hiện + vá 6
+lỗ hổng/lỗi CÒN THẬT:
+
+- **VH-05**: Người chỉ được giao 1 DANH MỤC ĐẦU TƯ (không phải cả hồ sơ, không phải công việc nào trong
+  cây Thực Hiện) trong 1 hồ sơ Mở Mới/Sửa Chữa Siêu Thị vẫn nhận NGUYÊN VẸN `estimateItems` của TOÀN BỘ
+  hồ sơ qua `GET /api/data` (chỉ client tự lọc bớt hiển thị — server trả thừa). Thêm
+  `redactOperationEstimateItemsToOwnedScope()` (`lib/recordViewScope.js`) cắt về đúng danh mục (+ hạng
+  mục con) người đó phụ trách, áp dụng CHỈ khi quyền duy nhất của họ là sở hữu danh mục (admin/quản lý
+  toàn bộ/cùng phòng ban/được giao việc trong cây Thực Hiện vẫn xem đủ như cũ).
+- **DH-09**: `isApproverForOperationOrderReceipt()` (server) và bản mirror client dùng chung hàm
+  `scopeAllows()` — hàm này có nhánh "cùng phòng ban -> luôn cho qua" hợp lý cho phần lớn quyền theo
+  phòng ban, nhưng quyền "Duyệt Nhập/Huỷ Đơn Hàng" (`operationOrderReceiptManage`) được thiết kế CỐ Ý
+  độc lập hoàn toàn với phòng ban thật của người dùng — nhánh dùng chung khiến BẤT KỲ nhân viên nào cùng
+  siêu thị cũng xác nhận/huỷ nhập hàng được dù không hề được cấp quyền này. Thay bằng kiểm tra hẹp riêng
+  (admin/`scope.all`/`scope.depts` khớp đúng `HO` hoặc siêu thị của đơn) ở cả 2 phía.
+- **CL-06**: Khi 1 mẫu Checklist bị thay bằng bản kích hoạt mới (clone → activate, tự lưu trữ bản cũ
+  thành ARCHIVED), người đã NỘP BÀI theo bản cũ không còn tra cứu lại được câu hỏi/đáp án gốc của bài
+  mình — `canViewChecklistTemplate()` chỉ cho xem template ACTIVE. Sửa: cho xem thêm template không
+  ACTIVE nếu người đó có 1 bài nộp (`checklistSubmissions`) tham chiếu đúng template đó mà họ có quyền
+  xem bài nộp ấy.
+- **RPT-02**: "🔍 Tra Cứu Chi Tiết" (Báo Cáo Quản Trị) loại bỏ hoàn toàn trường tuỳ biến do Biểu Mẫu tạo
+  (`record.customData`, ví dụ mã vận đơn tự thêm cho 1 module) vì chỉ quét `Object.keys(r)` cấp 1 rồi
+  loại bỏ mọi giá trị kiểu object — mọi field tuỳ biến mới hoàn toàn vô hình ở lọc/hiển thị/xuất Excel.
+  Sửa `buildReportDetailColumns()` (`module-baocaoquantri.js`) tự tách `customData.*` thành cột riêng
+  (tiền tố `customData.` tránh trùng tên trường gốc).
+- **USER-BULK-02**: `prepareUsersForSave()` (`routes/data.js`, điểm ghi duy nhất cho "users") chỉ khớp
+  theo `id`, chưa từng kiểm tra `username` trùng giữa nhiều tài khoản — trong khi MỌI chỗ đăng nhập/đặt
+  lại mật khẩu/khoá tài khoản (`routes/auth.js`) chỉ tìm bằng `users.find(u => u.username === ...)`,
+  khiến tài khoản đứng SAU trong mảng thành "tài khoản ma" không ai đăng nhập/quản lý được, và hành vi
+  phụ thuộc thứ tự mảng không dự đoán được qua các lần lưu. Thêm kiểm tra trùng username, chặn 400 rõ
+  ràng nếu phát hiện.
+- **HD-05**: Nút/modal "✏️ Đổi Hình Thức Thanh Toán" (Hợp Đồng) chỉ ẩn khi đề nghị thanh toán CÒN HIỆU
+  LỰC (`hasActivePaymentRequestForSourceClient()`: loại trừ PAID) — trong khi server
+  (`requestContractPaymentTypeChange()`) chặn hẳn khi hợp đồng đã có BẤT KỲ đề nghị thanh toán nào (kể
+  cả đã PAID, vì đổi hình thức sau khi có lịch sử thanh toán làm sai lệch số đợt/tiền đã ghi nhận) — nút
+  vẫn hiện rồi luôn bị server từ chối 409. Thêm `hasAnyPaymentRequestForSourceClient()` (core.js), dùng
+  đúng điều kiện này cho cả gate hiện nút lẫn gate mở modal.
+
+Ngoài 6 lỗi trên, phát hiện thêm **PQ-01** (rủi ro kiến trúc lớn nhất đợt này): "Khối 0"
+(`user.perms.moduleAccess`, cho phép admin tắt hẳn 1 module cho 1 người cụ thể) trước đây CHỈ được thực
+thi ở CLIENT (`hasModuleAccess()`, core.js) — không có gate tương ứng ở server. Với phần lớn module,
+đây KHÔNG phải lỗ hổng thật vì đã có quyền chi tiết riêng chặn đúng ở server (moduleAccess chỉ dư thừa/
+thứ yếu ở đó) — nhưng 6 module "mở sẵn cho mọi nhân viên" (không có quyền chi tiết nào gác việc XEM, chỉ
+gác AI ĐƯỢC TẠO/DUYỆT): Tài Liệu, Văn Bản Trình, Công Việc, Truyền Thông Nội Bộ, Hợp Đồng, Hỗ Trợ IT —
+tắt moduleAccess ở giao diện cho 1 user xong vẫn gọi thẳng `GET /api/data` là thấy nguyên dữ liệu. Thêm
+mirror gate CHỈ cho đúng 6 module này (`MODULE_ACCESS_GATED_COLLECTIONS`/`hasModuleAccessServer()` ở
+`lib/recordViewScope.js`, áp dụng trong `GET /api/data`) — không mirror toàn bộ 25 module vì phần còn
+lại đã có quyền chi tiết chặn đúng rồi, mirror thêm chỉ tạo thêm 1 nguồn có thể lệch dữ liệu về sau.
+
+Các mục còn lại đã đối chiếu trong đợt này (toàn bộ Workflow engine core, phần lớn Văn Bản Trình/tự phục
+vụ hành chính, Thanh Toán/Đơn Hàng còn lại, cây Thực Hiện VH-01→04/06→13, Cơ Cấu Tổ Chức/Onboarding/
+Offboarding/HĐLĐ còn lại, Hồ Sơ NS/Công Phép/Lương còn lại, phần lớn Checklist/Báo Cáo, Hệ Thống/Bảo
+Mật) đều xác nhận ĐÚNG như tài liệu nghiệp vụ mô tả — không cần sửa gì thêm.
+
+Thêm test hồi quy mới: `tests/test-operation-order-receiving.js` (DH-09), `tests/test-checklist.js`
+(CL-06), `tests/test-reports.js` (RPT-02), `tests/test-user-username-uniqueness.js` (USER-BULK-02, file
+mới), `tests/test-contract.js` (HD-05, cả 2 chiều chặn/không chặn oan), `tests/test-module-access-gate.js`
+(PQ-01, file mới). Full regression suite chạy lại toàn bộ, không phát sinh lỗi mới ngoài các lỗi môi
+trường đã biết từ trước (SQL Server không kết nối được trong sandbox, thiếu fixture PDF).
+
+**Không cần thao tác triển khai gì thêm ngoài copy code + `pm2 restart`** — không đổi `schema.sql`,
+không thêm biến môi trường mới, không thêm dependency `package.json` nào.
 
 ## v19.9 (2026-09-12): Test chuyên sâu theo kịch bản nghiệp vụ — vá 2 lỗ hổng thật (Lương + Hợp Đồng LĐ)
 
