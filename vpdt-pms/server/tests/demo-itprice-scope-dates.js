@@ -2,10 +2,12 @@
 //
 // DEMO thật (không phải bộ hồi quy tự động — xem tests/test-itprice-scope-dates.js cho phần đó) cho 2
 // trường mới ở form "Phê Duyệt Giá" (Bán Lẻ + Bán Buôn dùng CHUNG 1 form):
-//   - "🏬 Siêu Thị Áp Dụng" — mặc định "Toàn bộ siêu thị, cửa hàng", chọn "Khác" hiện ô multi-select
-//     tìm-kiếm-gõ-chọn (renderMultiSelectDropdown(), lấy từ danh mục DB.stores).
+//   - "🏬 Siêu Thị Áp Dụng" (Bán Lẻ) — mặc định "Toàn bộ siêu thị, cửa hàng", chọn "Khác" hiện ô
+//     multi-select tìm-kiếm-gõ-chọn (renderMultiSelectDropdown(), lấy từ danh mục DB.stores). Bán Buôn
+//     đổi nhãn "🏬 Siêu Thị Đề Xuất" — KHÔNG có khái niệm "Toàn bộ", ô multi-select LUÔN hiện sẵn và
+//     LUÔN bắt buộc chọn (mục 2 đợt sau, xem applyItPriceStoreScopeUIForSubTab() ở module-itsupport-price.js).
 //   - "📅 Ngày Áp Dụng" (luôn bắt buộc) + "⏳ Ngày Hết Hiệu Lực" (mặc định "Vĩnh viễn", chọn "Khác" hiện
-//     ô nhập ngày thật).
+//     ô nhập ngày thật) — áp dụng chung cho cả 2 loại giá, không đổi theo sub-tab.
 // Chụp ảnh thật từng bước bằng Chromium (Playwright) mở ĐÚNG public/index.html + public/js/*.js thật,
 // dùng lại hạ tầng mock backend của tests/testHarness.js (sandbox không có SQL Server thật).
 //
@@ -92,6 +94,39 @@ async function main() {
     const saved = await page.evaluate(() => DB.itPriceApprovals[0]);
     console.log('\nDữ liệu thật đã lưu (payload đi qua server thật, không phải chỉ hiển thị):');
     console.log(JSON.stringify({ storeScope: saved.storeScope, effectiveDate: saved.effectiveDate, expiryMode: saved.expiryMode, expiryDate: saved.expiryDate }, null, 2));
+
+    // ===== Đợt sau (mục 2): Bán Buôn đổi tên "Siêu Thị Đề Xuất", KHÔNG có "Toàn bộ" =====
+    console.log('\n06: chuyển sang sub-tab "Bán Buôn" — nhãn đổi thành "Siêu Thị Đề Xuất", KHÔNG còn lựa chọn Toàn bộ/Khác, ô multi-select LUÔN hiện sẵn.');
+    await page.evaluate(() => { closeItPriceModal(); resetItPriceForm(); setItPriceSubTab('WHOLESALE'); });
+    await page.locator('#itPriceCreateForm').scrollIntoViewIfNeeded();
+    await shot(page, '06-ban-buon-sieu-thi-de-xuat');
+
+    console.log('07: gõ tìm + chọn 1 siêu thị đề xuất, điền Mức Margin/Chiết Khấu, gửi đề xuất Bán Buôn thật, xem modal chi tiết.');
+    await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-search]');
+    await page.fill('#itPriceStoreScopeStoresMultiSelect [data-pms-search]', 'Biên Hòa');
+    await page.waitForTimeout(100);
+    await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-dropdown] div:has-text("Cửa hàng Biên Hòa")');
+    await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+    await page.fill('#itPriceEffectiveDate', '2026-10-01');
+    await page.fill('#itPriceReason', 'Đề xuất giá bán buôn riêng cho cửa hàng Biên Hòa');
+    await page.evaluate(() => {
+      itPricePendingFile = {
+        fileUrl: '/uploads/gia-buon-demo.xlsx', fileName: 'gia-buon-demo.xlsx',
+        items: [{ values: { code: 'SP002', name: 'Mì gói Omachi', price: '4800' } }],
+        columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'price', label: 'Giá bán' }]
+      };
+    });
+    const wholesaleId = await page.evaluate(async () => {
+      await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+      return DB.itPriceApprovals[0].id;
+    });
+    await page.evaluate((id) => openItPriceModal(id), wholesaleId);
+    await page.waitForTimeout(150);
+    await shot(page, '07-ban-buon-modal-chi-tiet');
+
+    const savedWholesale = await page.evaluate(() => DB.itPriceApprovals[0]);
+    console.log('\nDữ liệu Bán Buôn thật đã lưu (storeScope.mode LUÔN là OTHER, không có ALL):');
+    console.log(JSON.stringify({ priceType: savedWholesale.priceType, storeScope: savedWholesale.storeScope }, null, 2));
   } finally {
     await browser.close();
     server.close();

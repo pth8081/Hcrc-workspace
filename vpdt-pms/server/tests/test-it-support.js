@@ -61,6 +61,9 @@ const MASTER_LIST = {
 
 const state = createMockState({
   depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc', 'Marketing'],
+  // "Siêu Thị Đề Xuất" (đợt 9/2026, Bán Buôn) bắt buộc chọn >=1 siêu thị hợp lệ đối chiếu appData.stores
+  // — seed 1 giá trị để các kịch bản Bán Buôn dưới đây chọn được (xem gmsAdd() ở các kịch bản 10/11).
+  stores: ['Siêu thị Demo'],
   users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER, STAFF_MKT, RETAIL_APPROVER_MKT, WHOLESALE_APPROVER_MKT, ADMIN, TIER_A_APPROVER, TIER_B_APPROVER],
   itPriceMasterLists: [MASTER_LIST],
   // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban trước khi đội IT áp giá.
@@ -591,6 +594,10 @@ async function main() {
         const retailItem = DB.itPriceApprovals[0];
 
         setItPriceSubTab('WHOLESALE');
+        // "Siêu Thị Đề Xuất" (đợt 9/2026) — Bán Buôn KHÔNG có "Toàn bộ", bắt buộc chọn >=1 siêu thị
+        // (setItPriceSubTab() ở trên đã tự render sẵn ô multi-select rỗng qua
+        // applyItPriceStoreScopeUIForSubTab(), gmsAdd() mô phỏng đúng thao tác click chọn 1 gợi ý).
+        gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing';
         document.getElementById('itPriceTier').value = 'MARGIN_LT5';
@@ -679,6 +686,7 @@ async function main() {
       await loginAs(page, STAFF_MKT);
       const created = await page.evaluate(async () => {
         switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE');
+        gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
         document.getElementById('itPriceTier').value = 'DISCOUNT_GT5';

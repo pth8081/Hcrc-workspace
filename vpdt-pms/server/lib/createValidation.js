@@ -1497,10 +1497,14 @@ const CREATE_MODULE_CONFIGS = {
         items, columnLabels
       }];
       payload.reason = (payload.reason || '').trim();
-      // "Siêu thị áp dụng"/"Ngày áp dụng"/"Ngày hết hiệu lực" (đợt 9/2026) — CHỈ mang tính thông tin cho
-      // đội Hỗ Trợ IT biết phạm vi/thời hạn áp giá (đã xác nhận với người dùng: không giới hạn ai xem
-      // được đề xuất, không có xử lý tự động nào theo ngày hết hiệu lực — IT tự theo dõi thủ công).
-      const storeScopeMode = payload.storeScope?.mode === 'OTHER' ? 'OTHER' : 'ALL';
+      // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" (đợt 9/2026) — CHỈ mang tính thông
+      // tin cho đội Hỗ Trợ IT biết phạm vi/thời hạn áp giá (đã xác nhận với người dùng: không giới hạn
+      // ai xem được đề xuất, không có xử lý tự động nào theo ngày hết hiệu lực — IT tự theo dõi thủ
+      // công). Bán Buôn (mục 2 đợt sau) KHÔNG có khái niệm "Toàn bộ" — luôn ép 'OTHER' + bắt buộc chọn
+      // ít nhất 1 siêu thị/cửa hàng ("Siêu Thị Đề Xuất"), KHÔNG tin giá trị mode client tự gửi (client
+      // đã ẩn hẳn lựa chọn "Toàn bộ" khỏi giao diện Bán Buôn, nhưng vẫn tự ép lại ở đây phòng request tự
+      // soạn/DevTools sửa tay — xem applyItPriceStoreScopeUIForSubTab() ở module-itsupport-price.js).
+      const storeScopeMode = (priceType === 'WHOLESALE' || payload.storeScope?.mode === 'OTHER') ? 'OTHER' : 'ALL';
       let storeScopeStores = [];
       if (storeScopeMode === 'OTHER') {
         const validStores = new Set(appData?.stores || []);
@@ -1508,7 +1512,9 @@ const CREATE_MODULE_CONFIGS = {
           ? [...new Set(payload.storeScope.stores.map(s => String(s || '').trim()).filter(Boolean))].filter(s => validStores.has(s)).slice(0, 200)
           : [];
         if (!storeScopeStores.length) {
-          throw new CreateError(400, 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng")');
+          throw new CreateError(400, priceType === 'WHOLESALE'
+            ? 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ đề xuất'
+            : 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng")');
         }
       }
       payload.storeScope = { mode: storeScopeMode, stores: storeScopeStores };

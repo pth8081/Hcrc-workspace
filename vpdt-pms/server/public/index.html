@@ -5906,7 +5906,12 @@
                thể (renderMultiSelectDropdown(), xem onItPriceStoreScopeModeChange() ở
                module-itsupport-price.js). -->
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">🏬 Siêu Thị Áp Dụng</label>
+            <!-- Bán Lẻ: "Siêu Thị Áp Dụng", có lựa chọn Toàn bộ/Khác (select #itPriceStoreScopeMode).
+                 Bán Buôn: đổi nhãn "Siêu Thị Đề Xuất", KHÔNG có khái niệm "Toàn bộ" (mỗi đề xuất Bán
+                 Buôn luôn gắn 1-nhiều siêu thị/cửa hàng cụ thể) — ẩn hẳn select, ô multi-select LUÔN
+                 hiện sẵn. 2 nhánh hiển thị đổi qua applyItPriceStoreScopeUIForSubTab() (gọi trong
+                 setItPriceSubTab()/resetItPriceForm(), module-itsupport-price.js). -->
+            <label id="itPriceStoreScopeLabelEl" class="block font-semibold text-gray-600 mb-1">🏬 Siêu Thị Áp Dụng</label>
             <select id="itPriceStoreScopeMode" data-op-change="onItPriceStoreScopeModeChange" class="w-full border p-1.5 rounded bg-white">
               <option value="ALL">Toàn bộ siêu thị, cửa hàng</option>
               <option value="OTHER">Khác</option>
