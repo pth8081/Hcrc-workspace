@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**20.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.6 (2026-09-13): Vá lỗ hổng — 2 module thiếu bảo vệ trùng mã tự sinh (Hỗ Trợ Yêu Cầu + Phê Duyệt Giá)
+
+Người dùng yêu cầu rà soát toàn bộ module có mã tự động, đảm bảo 2 người tạo cùng lúc không bị trùng mã.
+Rà soát xác nhận **12/14 module** (Tài Liệu, Văn Bản Trình, Đơn Hàng Vận Hành, Mở Mới/Sửa Chữa Siêu Thị,
+Hợp Đồng, Đăng Ký Xe, Đề Xuất Văn Phòng, Đặt Phòng Họp, Biên Bản Họp, Cấp Phát Đồng Phục, Giấy Phép, Hợp
+Đồng Lao Động, Phiếu Lương) đã được bảo vệ đúng bằng UNIQUE INDEX + tự động thử lại — đã có test hồi quy
+mô phỏng race thật xác nhận (`tests/test-code-autogen-retry.js`, 12/12 pass trước khi vá).
+
+**Phát hiện lỗ hổng thật ở 2 module còn lại — "🎫 Hỗ Trợ Yêu Cầu" (`itSupportTickets`) và "🏷️ Phê Duyệt
+Giá" (`itPriceApprovals`)**: cả 2 bảng này trước đây **KHÔNG có cột `Code` + UNIQUE INDEX** dù client vẫn
+tự sinh + hiển thị "Mã tự sinh" cho người dùng thấy (ô `itTicketCode`/`itPriceCode`) — 2 người tạo gần
+như đồng thời có thể ra **CÙNG 1 mã hiển thị mà CSDL không hề chặn** (chỉ có lớp mềm
+`validateAndPrepareCreate()` đọc dữ liệu tại thời điểm đó, không phải trọng tài thật khi có race thật).
+
+**Đã vá**:
+- `sql/schema.sql`: thêm cột `Code NVARCHAR(100) NULL` + `UNIQUE INDEX` lọc (`WHERE Code IS NOT NULL`)
+  cho `dbo.ItSupportTickets`/`dbo.ItPriceApprovals` — script tự thêm cho CẢ database mới (trong khối
+  `CREATE TABLE`) LẪN database đã có sẵn bảng từ trước (khối `ALTER TABLE`/`CREATE INDEX` riêng, tự kiểm
+  tra cột/index đã tồn tại chưa trước khi thêm — an toàn chạy lại nhiều lần). Bản ghi cũ trước khi vá sẽ
+  có `Code = NULL` (không nằm trong phạm vi UNIQUE INDEX lọc, không gây trùng oan, không cần dọn gì).
+- `lib/recordStore.js`: bật `hasCode: true` cho cả 2 collection — toàn bộ cơ chế ghi/kiểm tra trùng/tự
+  sinh mã mới đã có sẵn (`insertDedicatedRecord()`/`withLockedDedicatedRecordById()`) tự động áp dụng
+  đúng, không cần sửa gì thêm ở tầng này.
+- Dọn luôn vài chú thích lỗi thời còn nhắc `dbo.Records`/số lượng module cũ (kiến trúc đã đổi từ Bước 7g,
+  xem `VERSION.md` các bản trước) để tránh gây hiểu nhầm cho lần rà soát sau.
+
+Thêm 2 kịch bản test mới vào `tests/test-code-autogen-retry.js` (mô phỏng race thật qua mock SQL Server
+cho cả 2 module) — đã tự xác nhận test THẬT SỰ bắt được lỗi (tạm revert `hasCode` về `false` để test FAIL
+đúng như mong đợi, rồi khôi phục lại). Chạy lại toàn bộ ~120 file `tests/test-*.js` — không hồi quy nào
+ngoài các vấn đề môi trường đã biết từ trước.
+
+**Deploy-impact**: `sql/schema.sql` có thay đổi — cần chạy lại (script tự bọc kiểm tra, an toàn chạy
+nhiều lần, không cần thao tác gì thêm ngoài chạy lại + `pm2 restart`).
 
 ## v20.5 (2026-09-13): Phê Duyệt Giá — thêm "Siêu thị áp dụng/đề xuất" + "Ngày áp dụng"/"Ngày hết hiệu lực"
 
