@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**20.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.7 (2026-09-13): Đính kèm tệp RIÊNG theo từng đợt thanh toán (bổ sung cạnh Hồ Sơ Đề Nghị Thanh Toán chung)
+
+Người dùng kiểm tra thấy đề nghị thanh toán "nhiều đợt" chỉ có 1 bộ "Hồ Sơ Đề Nghị Thanh Toán" (multi-file)
+dùng CHUNG cho cả đề nghị, chưa có mục đính kèm tệp riêng cho TỪNG đợt — yêu cầu bổ sung mục upload riêng
+theo từng đợt (vẫn giữ nguyên mục upload chung), cũng cho phép nhiều tệp/đợt.
+
+**Đã làm**:
+- Thêm field `files` (mảng, tối đa 20 tệp, sanitize/validate URL giống `requestFiles`) vào mỗi phần tử
+  `installments` — áp dụng thống nhất ở CẢ 3 đường tạo/sửa đề nghị thanh toán: `buildPaymentInstallments()`/
+  `normalizePaymentInstallmentsOverride()`/`editPaymentRequest()` (`lib/recordActions.js`) và
+  `CREATE_MODULE_CONFIGS.paymentRequests` (`lib/createValidation.js`, đường tạo thủ công).
+- UI: sub-tab "🗂️ Quản Lý Thanh Toán" — mỗi hàng đợt thanh toán (đang sửa NHÁP) có thêm 1 ô chọn nhiều
+  tệp riêng + hiện danh sách tệp đã đính kèm (chip, bấm xem được) — tệp mới chọn chỉ upload thật lúc bấm
+  "💾 Lưu"/"📨 Chuyển Xác Nhận Thanh Toán" (cùng khuôn tệp chung `requestFiles` đã có). Tệp riêng từng đợt
+  cũng hiện ở cả 2 chế độ xem (đóng khối sửa/"✅ Xác Nhận Đề Nghị Thanh Toán").
+- Hoàn toàn TUỲ CHỌN, không thay thế `requestFiles` (tệp chung vẫn là điều kiện BẮT BUỘC >=1 tệp trước
+  khi "Chuyển Xác Nhận Thanh Toán", không đổi).
+
+**Xác nhận lại theo yêu cầu người dùng (không cần sửa code — đã đúng từ trước)**: hợp đồng "Thanh toán 1
+lần" sau khi hoàn tất thanh toán (`paymentStatus` chuyển `DA_THANH_TOAN`, khoá cứng vĩnh viễn) **không thể**
+lập đề nghị thanh toán mới; hợp đồng "Thanh toán định kỳ" sau khi hoàn tất 1 chu kỳ (`paymentStatus` được
+ghi ngược về `CHUA_THANH_TOAN`) **có thể** mở chu kỳ mới — xem `startContractPayment()`
+(`lib/recordActions.js`), đã có test hồi quy xác nhận ở `tests/test-payment.js`.
+
+Thêm test hồi quy vào `tests/test-payment.js` (đính kèm tệp riêng cho 1 đợt, xác nhận đợt khác không bị
+lẫn tệp, đóng/mở lại khối sửa vẫn giữ đúng tệp đã lưu). Chạy lại `tests/test-payment.js` (100/100) +
+`tests/test-contract.js` (48/48) — không hồi quy nào ngoài các vấn đề môi trường đã biết từ trước
+(`tests/test-audit-fixes-batch1.js` lỗi kết nối SQL Server cục bộ, có sẵn trước cả thay đổi này).
+
+**Deploy-impact**: không đổi `schema.sql`/`.env.example`/`package.json` dependencies — chỉ copy code +
+`pm2 restart` là đủ.
 
 ## v20.6 (2026-09-13): Vá lỗ hổng — 2 module thiếu bảo vệ trùng mã tự sinh (Hỗ Trợ Yêu Cầu + Phê Duyệt Giá)
 

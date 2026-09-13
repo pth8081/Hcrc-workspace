@@ -501,6 +501,11 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       Xác Nhận Thanh Toán"** (NHÁP → Chờ duyệt) thì **MỌI đợt mới bắt buộc
       phải có số tiền > 0** — thiếu đợt nào bị chặn ngay, cả ở giao diện lẫn
       server.
+      **v20.7+**: ngoài "Hồ Sơ Đề Nghị Thanh Toán" dùng CHUNG cho cả đề nghị
+      (bắt buộc >=1 tệp trước khi gửi, xem bên dưới), **mỗi đợt thanh toán còn
+      có thể đính kèm thêm tệp RIÊNG của đợt đó** (cũng nhiều tệp/lần) — hoàn
+      toàn TUỲ CHỌN, không thay thế tệp chung, chỉ để lưu chứng từ/căn cứ
+      riêng cho từng đợt khi cần (VD hoá đơn từng lần thanh toán khác nhau).
       Sub-tab này cũng là nơi **duyệt theo bước/phòng ban** cho đề nghị đang
       "Chờ duyệt"/"Cần bổ sung" (admin cấu hình người duyệt ở "⚙️ Quản Trị" >
       "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") — mỗi đề nghị hiện nút

@@ -1601,7 +1601,11 @@ function buildPaymentInstallments(sourceInstallments, totalAmount, fallbackDesc)
   // confirmFileUrl/confirmFileName/confirmFileType — tệp "đề nghị thanh toán đã phê duyệt" đính kèm lúc
   // xác nhận TỪNG ĐỢT (confirmPaymentInstallment() bên dưới, CHỈ áp dụng cho đề nghị KHÔNG phải "Thanh
   // toán 1 lần" — xem sourcePaymentType) — khởi tạo null, chỉ được gán lúc xác nhận đợt đó.
-  return base.map(it => ({ description: it.description || fallbackDesc, amount: it.amount || 0, dueDate: it.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null }));
+  // files — "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG theo TỪNG đợt (multi-file, BỔ SUNG thêm cạnh requestFiles
+  // dùng CHUNG cho cả đề nghị, xem normalizePaymentRequestFiles()) — TUỲ CHỌN, không thay thế requestFiles
+  // (requestFiles chung mới là điều kiện BẮT BUỘC >=1 tệp để "Chuyển Xác Nhận Thanh Toán", xem
+  // submitPaymentRequest()) — đính kèm/sửa qua editPaymentRequest() ở "🗂️ Quản Lý Thanh Toán".
+  return base.map(it => ({ description: it.description || fallbackDesc, amount: it.amount || 0, dueDate: it.dueDate || '', files: normalizePaymentRequestFiles(it.files), confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null }));
 }
 
 // Kế toán có thể SỬA LẠI các đợt thanh toán đề xuất (lấy tham khảo từ Hợp đồng/Mua Bán/Sửa Chữa/Đầu
@@ -1619,6 +1623,7 @@ function normalizePaymentInstallmentsOverride(raw) {
     const n = (rawAmount === '' || rawAmount === null || rawAmount === undefined) ? NaN : Number(rawAmount);
     return {
       description: (it?.description || '').trim(), amount: Number.isFinite(n) ? n : null, dueDate: it?.dueDate || '',
+      files: normalizePaymentRequestFiles(it?.files),
       confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
     };
   });
@@ -1909,7 +1914,9 @@ function editPaymentRequest(payload, user, pr) {
       } else {
         amount = Number(it?.amount) || 0;
       }
-      return { description: (it?.description || '').trim(), amount, dueDate: it?.dueDate || '', confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null };
+      // files — "Hồ Sơ Đề Nghị Thanh Toán" riêng theo TỪNG đợt (xem buildPaymentInstallments()) — phải
+      // chuẩn hoá/kiểm tra URL lại ở ĐÂY (không chỉ tin nguyên payload gửi lên) như mọi field tệp khác.
+      return { description: (it?.description || '').trim(), amount, dueDate: it?.dueDate || '', files: normalizePaymentRequestFiles(it?.files), confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null };
     });
     pr.amount = pr.installments.reduce((sum, it) => sum + (it.amount || 0), 0);
     // Đề nghị có nguồn (từ Hợp đồng/Mua Bán/Sửa Chữa) mang sẵn referenceAmount — sửa lại đợt ở đây cũng

@@ -182,6 +182,26 @@ async function run() {
     const prAfterBlankSave = await readPr(prAId);
     check('"💾 Lưu" nháp với 1 đợt để TRỐNG số tiền -> LƯU ĐƯỢC, vẫn ở DRAFT, đợt 2 amount = null', prAfterBlankSave.status === 'DRAFT' && (prAfterBlankSave.installments[1].amount === null || prAfterBlankSave.installments[1].amount === undefined), prAfterBlankSave);
 
+    // ============ Kịch bản 2b (MỚI): mỗi đợt thanh toán cũng đính kèm được "Hồ Sơ" RIÊNG của mình
+    // (multi-file, BỔ SUNG cạnh "Hồ Sơ Đề Nghị Thanh Toán" dùng chung, xem buildPaymentInstallments()/
+    // editPaymentRequest() ở lib/recordActions.js) — chọn tệp qua input riêng của ĐÚNG đợt 1 (index 0),
+    // Lưu, kiểm tra installments[0].files lưu đúng còn installments[1].files (đợt 2) không bị lẫn tệp —
+    // KHÔNG đụng tới số tiền đợt 2 (vẫn để trống, cần thiết nguyên trạng cho Kịch bản 3 ngay sau).
+    await page.setInputFiles(`#paymentManageInstallmentFilesInput_${prAId}_0`, [requestFile1]);
+    await page.evaluate((id) => savePaymentManageDraft(id), prAId);
+    await page.waitForTimeout(150);
+    const prAfterInstallmentFile = await readPr(prAId);
+    check('Đính kèm tệp RIÊNG cho đợt 1 (index 0) -> lưu đúng vào installments[0].files (1 tệp)', Array.isArray(prAfterInstallmentFile.installments[0].files) && prAfterInstallmentFile.installments[0].files.length === 1, prAfterInstallmentFile.installments[0]);
+    check('Đợt 2 (index 1) KHÔNG bị lẫn tệp của đợt 1', Array.isArray(prAfterInstallmentFile.installments[1].files) && prAfterInstallmentFile.installments[1].files.length === 0, prAfterInstallmentFile.installments[1]);
+    await page.evaluate(() => closePaymentManageEdit());
+    await page.evaluate((id) => openPaymentManageEdit(id), prAId);
+    await page.waitForTimeout(80);
+    const reopenedRow0Files = await page.evaluate((id) => {
+      const row = document.querySelector(`#paymentManageInstallmentsList_${id} [data-installment-row="0"]`);
+      return row ? JSON.parse(row.dataset.existingFiles || '[]') : null;
+    }, prAId);
+    check('Đóng/mở lại khối sửa -> vẫn hiện đúng tệp riêng đã lưu của đợt 1 (đọc lại từ server)', Array.isArray(reopenedRow0Files) && reopenedRow0Files.length === 1, reopenedRow0Files);
+
     // ============ Kịch bản 3: "Chuyển Xác Nhận Thanh Toán" khi CÒN đợt thiếu số tiền -> CHẶN cả ở client
     // LẪN server ============
     await clearAlerts();

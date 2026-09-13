@@ -1193,11 +1193,18 @@ const CREATE_MODULE_CONFIGS = {
       // Số tiền từng đợt CHƯA bắt buộc > 0 ngay lúc tạo NHÁP (chỉ bắt buộc lúc "Chuyển Xác Nhận Thanh
       // Toán", xem submitPaymentRequest() ở lib/recordActions.js) — khớp đúng luật NHÁP của đề nghị có
       // nguồn Hợp đồng/Mua Bán/Sửa Chữa (editPaymentRequest() nhánh NHÁP).
+      // files — "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG theo TỪNG đợt (multi-file, BỔ SUNG cạnh requestFiles dùng
+      // CHUNG cho cả đề nghị bên dưới) — TUỲ CHỌN, mirror đúng buildPaymentInstallments() ở lib/recordActions.js
+      // để 2 đường tạo đề nghị thanh toán (có nguồn/thủ công) không lệch luật nhau.
       payload.installments = installments.map(it => {
         const rawAmount = it?.amount;
         const n = (rawAmount === '' || rawAmount === null || rawAmount === undefined) ? NaN : Number(rawAmount);
+        const itFiles = Array.isArray(it?.files) ? it.files.slice(0, 20) : [];
+        assertUploadedFileUrlList(itFiles, 'Hồ sơ đề nghị thanh toán theo đợt');
         return {
           description: (it?.description || '').trim(), amount: Number.isFinite(n) ? n : null, dueDate: it?.dueDate || '',
+          files: itFiles.filter(f => f && typeof f === 'object' && f.fileUrl && f.fileName)
+            .map(f => ({ fileUrl: String(f.fileUrl), fileName: String(f.fileName).slice(0, 200), fileType: f.fileType ? String(f.fileType).slice(0, 100) : null })),
           confirmed: false, confirmedAt: null, confirmedBy: null, confirmFileUrl: null, confirmFileName: null, confirmFileType: null
         };
       });
