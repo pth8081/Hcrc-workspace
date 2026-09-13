@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**20.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.2 (2026-09-13): Khôi phục `scripts/migrate-records-batch1.js` — cần thiết cho nâng cấp CSDL production thật
+
+**Đính chính đợt v20.1**: v20.1 xoá `scripts/migrate-records-batch1.js` (script di trú `dbo.Records` →
+bảng riêng) với lý do "hết tác dụng, chỉ hữu ích cho di trú dữ liệu cũ" — giả định lúc đó là mọi lần
+deploy về sau đều bắt đầu từ CSDL trống. Người dùng cho biết THỰC TẾ cần dùng: server production đang
+chạy **v17.3** (bản rất cũ, trước cả Bước 6-7) muốn nâng cấp CSDL lên kiến trúc bảng riêng của v20.x —
+tức là CẦN chuyển dữ liệu thật đang có, không phải khởi tạo trống. Khôi phục lại nguyên vẹn script này
+(vẫn tương thích 100% với `lib/recordStore.js` hiện tại — `DEDICATED_TABLES`/`dedicatedTableName`/
+`bindExtractedColumns` không đổi từ lúc xoá tới giờ) + trỏ lại đúng tên file trong 2 file hướng dẫn triển
+khai (đã tạm đổi thành placeholder `<ten-script-migrate>.js` ở v20.1).
+
+**Khảo sát để xác nhận đường di trú đúng cho v17.3 → v20.2** (không đoán mò — đối chiếu `sql/schema.sql`
+tại đúng thời điểm lịch sử tương ứng qua git log):
+- v17.3 đã có sẵn `dbo.SystemLogs`/`dbo.Tasks`/`dbo.OperationWorkItems` (bảng riêng từ rất sớm, trước cả
+  v13.x) — cấu trúc cột KHÔNG đổi gì so với hiện tại, mang nguyên sang khi nâng cấp CSDL tại chỗ.
+- v17.3 đã có `dbo.Records` (bảng dùng chung, xuất hiện cùng lúc — toàn bộ ~48 collection nghiệp vụ thời
+  đó đều ghi qua đây, KHÔNG còn nằm ở `dbo.AppData` blob nữa) — đây chính xác là nguồn mà
+  `migrate-records-batch1.js` đọc để chuyển vào bảng riêng tương ứng.
+- `dbo.AppData` (users/permGroups/workflows/danh mục...) không đổi cấu trúc gì giữa v17.3 và v20.2 — mang
+  nguyên sang khi nâng cấp CSDL tại chỗ, không cần script gì.
+
+**Cách nâng cấp CSDL production thật (v17.3 → v20.2), khuyến nghị làm trên bản sao/CSDL thử nghiệm
+trước)**:
+1. Backup CSDL v17.3 hiện tại (`sqlcmd`/SSMS `BACKUP DATABASE`).
+2. **Nâng cấp TẠI CHỖ** cùng 1 database đó — KHÔNG tạo CSDL trống riêng: chạy `sql/schema.sql` bản v20.2
+   (script chỉ THÊM bảng mới `IF OBJECT_ID(...) IS NULL`, không đụng gì dữ liệu/bảng đã có).
+3. Chạy `node scripts/migrate-records-batch1.js` (dry-run, xem số liệu) rồi `--confirm` (di trú thật —
+   idempotent, chỉ INSERT bản ghi còn thiếu, KHÔNG xoá gì ở `dbo.Records`).
+4. Đối chiếu số liệu nguồn/đích khớp nhau (script tự in ra bảng tổng kết).
+5. Deploy code v20.2 trỏ vào ĐÚNG database vừa nâng cấp này, `pm2 restart`.
+6. Sau khi xác nhận chạy ổn định 1 thời gian, có thể tự `DROP TABLE dbo.Records` thủ công nếu muốn dọn
+   hẳn (không bắt buộc — bảng đó giờ chỉ là bản sao lưu chết, không còn code nào đọc/ghi tới, xem v20.1).
+
+Không cần viết script chuyển dữ liệu giữa 2 CSDL khác nhau (source/target riêng biệt) — nâng cấp tại chỗ
+đơn giản và an toàn hơn nhiều so với chuyển dữ liệu qua database khác.
 
 ## v20.1 (2026-09-13): Bước 7g — Dọn dẹp `dbo.Records` dùng chung + AppData JSON cũ
 
