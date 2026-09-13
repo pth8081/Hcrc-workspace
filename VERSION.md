@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**21.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.2 (2026-09-13): FIX LỖI THẬT NGHIÊM TRỌNG — Checklist mẫu/bài nộp CŨ không hiện lại sau khi tải trang
+
+Phát hiện khi dựng demo minh hoạ toàn bộ module Checklist theo yêu cầu người dùng (sau đợt v21.0/v21.1):
+seed thẳng 1 mẫu + 1 bài nộp "đã tồn tại từ trước" (mô phỏng dữ liệu thật do người khác/phiên trước tạo)
+rồi đăng nhập mới — tab Cấu Hình/Thực Hiện/Kết Quả/Báo Cáo đều trống trơn, dù server trả về đúng dữ liệu
+qua `GET /api/data`.
+
+**Nguyên nhân**: `initDatabase()` (`public/js/core.js`) — hàm DUY NHẤT gán dữ liệu server vào biến toàn
+cục `DB` ngay sau khi đăng nhập — **CHƯA TỪNG có 2 dòng** `DB.checklistTemplates = data.checklistTemplates
+|| []`/`DB.checklistSubmissions = data.checklistSubmissions || []`. `module-checklist.js` đọc thẳng 2
+field này (comment đầu file ghi rõ "đã nạp sẵn qua GET /api/data") nhưng thực tế không ai gán chúng —
+mọi nơi đọc đều tự `|| []` nên KHÔNG hề có lỗi JS/crash nào lộ ra, khiến lỗi này "vô hình" suốt từ khi
+module ra đời (~v16.x). Chỉ "vô tình" hoạt động ĐÚNG trong 1 trường hợp: NGAY SAU KHI người dùng tự tạo/
+sửa 1 mẫu hoặc bài nộp trong CÙNG phiên trình duyệt đó (`checklistApplyTemplateUpdate()`/
+`checklistApplySubmissionUpdate()` tự "DB.checklistTemplates = DB.checklistTemplates || []" rồi
+thêm/cập nhật bản ghi vào mảng local) — nên trong lúc phát triển/test thủ công (luôn tạo mới rồi xem
+ngay), lỗi này không bao giờ lộ ra.
+
+**Tác động thật**: BẤT KỲ ai mở lại module Checklist ở 1 phiên trình duyệt MỚI (tải lại trang, đăng nhập
+lại, máy khác...) sẽ thấy **TRỐNG TRƠN** — không thấy mẫu nào ở Cấu Hình, không thấy checklist nào ở
+Thực Hiện, không thấy bài nộp nào ở Kết Quả/Báo Cáo — dù dữ liệu vẫn còn nguyên trong SQL Server, cho
+tới khi họ (hoặc ai khác dùng chung phiên) tự tạo 1 bản ghi mới. Đây LÀ lỗi tồn tại từ trước, không phải
+lỗi mới phát sinh từ đợt v21.0/v21.1 — 8 bộ test browser trước đó của module này đều seed
+`checklistTemplates: []`/`checklistSubmissions: []` RỖNG nên chưa từng chạm phải gap này (luôn tạo mới
+trong phiên test, chưa từng kiểm tra "tải lại dữ liệu ĐÃ CÓ SẴN").
+
+**Đã vá**: thêm đúng 2 dòng còn thiếu vào `initDatabase()`. Thêm `tests/test-checklist-initdatabase-load.js`
+(3 test, xác nhận có FAIL đúng như mô tả khi revert bản vá, PASS sau khi vá) — seed 1 mẫu + 1 bài nộp
+"đã tồn tại từ trước" (không qua bất kỳ hành động client nào), xác nhận `DB.checklistTemplates`/
+`DB.checklistSubmissions` VÀ giao diện tab Cấu Hình hiển thị ĐÚNG ngay sau khi đăng nhập. Cũng thêm
+`tests/demo-checklist-full-module.js` (demo browser thật minh hoạ toàn bộ module — cả 2 loại mẫu, cả 4
+tab, cả tính năng Xuất Theo Mẫu Gốc — theo yêu cầu người dùng, phát hiện ra lỗi này trong lúc dựng).
+
+**Deploy-impact**: chỉ sửa `public/js/core.js` (client-side, không đổi API/schema/`.env.example`, không
+thêm dependency). **Khuyến nghị mạnh: cập nhật NGAY** — đây là lỗi ảnh hưởng khả năng DÙNG ĐƯỢC thực tế
+của module Checklist ở mọi bản đã triển khai trước đó. Chỉ cần copy code + `pm2 restart` (không cần xoá
+cache trình duyệt phía người dùng vì đây là file JS được tải lại mỗi lần vào trang, không có service
+worker cache riêng cho module này).
 
 ## v21.1 (2026-09-13): Checklist — Xuất Báo Cáo Theo Đúng Mẫu Excel Gốc (2 loại mẫu)
 
