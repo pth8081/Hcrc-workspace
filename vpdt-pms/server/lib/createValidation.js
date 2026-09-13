@@ -1497,6 +1497,43 @@ const CREATE_MODULE_CONFIGS = {
         items, columnLabels
       }];
       payload.reason = (payload.reason || '').trim();
+      // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" (đợt 9/2026) — CHỈ mang tính thông
+      // tin cho đội Hỗ Trợ IT biết phạm vi/thời hạn áp giá (đã xác nhận với người dùng: không giới hạn
+      // ai xem được đề xuất, không có xử lý tự động nào theo ngày hết hiệu lực — IT tự theo dõi thủ
+      // công). Bán Buôn (mục 2 đợt sau) KHÔNG có khái niệm "Toàn bộ" — luôn ép 'OTHER' + bắt buộc chọn
+      // ít nhất 1 siêu thị/cửa hàng ("Siêu Thị Đề Xuất"), KHÔNG tin giá trị mode client tự gửi (client
+      // đã ẩn hẳn lựa chọn "Toàn bộ" khỏi giao diện Bán Buôn, nhưng vẫn tự ép lại ở đây phòng request tự
+      // soạn/DevTools sửa tay — xem applyItPriceStoreScopeUIForSubTab() ở module-itsupport-price.js).
+      const storeScopeMode = (priceType === 'WHOLESALE' || payload.storeScope?.mode === 'OTHER') ? 'OTHER' : 'ALL';
+      let storeScopeStores = [];
+      if (storeScopeMode === 'OTHER') {
+        const validStores = new Set(appData?.stores || []);
+        storeScopeStores = Array.isArray(payload.storeScope?.stores)
+          ? [...new Set(payload.storeScope.stores.map(s => String(s || '').trim()).filter(Boolean))].filter(s => validStores.has(s)).slice(0, 200)
+          : [];
+        if (!storeScopeStores.length) {
+          throw new CreateError(400, priceType === 'WHOLESALE'
+            ? 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ đề xuất'
+            : 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng")');
+        }
+      }
+      payload.storeScope = { mode: storeScopeMode, stores: storeScopeStores };
+
+      const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+      const effectiveDate = String(payload.effectiveDate || '').trim();
+      if (!DATE_RE.test(effectiveDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Áp Dụng hợp lệ');
+      payload.effectiveDate = effectiveDate;
+
+      const expiryMode = payload.expiryMode === 'OTHER' ? 'OTHER' : 'PERMANENT';
+      let expiryDate = null;
+      if (expiryMode === 'OTHER') {
+        expiryDate = String(payload.expiryDate || '').trim();
+        if (!DATE_RE.test(expiryDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Hết Hiệu Lực hợp lệ (hoặc chọn lại "Vĩnh viễn")');
+        if (expiryDate < effectiveDate) throw new CreateError(400, 'Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi');
+      }
+      payload.expiryMode = expiryMode;
+      payload.expiryDate = expiryDate;
+
       // Lịch sử "Yêu Cầu Bổ Sung" — có thể đến từ người duyệt phòng ban (trong lúc PENDING, qua hành
       // động REQUEST_INFO chung của lib/workflowEngine.js) HOẶC từ đội Hỗ Trợ IT (sau khi đã APPROVED,
       // trước khi áp giá — xem requestPriceInfoFromIt() ở lib/recordActions.js). Cả 2 nguồn dùng CHUNG

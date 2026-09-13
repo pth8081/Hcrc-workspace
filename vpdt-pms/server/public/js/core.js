@@ -497,6 +497,14 @@ const CORE_FIELD_MANIFEST = {
   // phải nhãn thuần), còn itPriceTier (Margin/Chiết Khấu) là 4 mức CỐ ĐỊNH gắn trực tiếp với cấu hình
   // quy trình duyệt riêng theo mức (itPriceTierWorkflows) — đổi khoá ở đây sẽ làm mồ côi cấu hình duyệt
   // đã gán, nên KHÔNG đưa vào diện admin tự thêm/bớt giá trị (chỉ sửa nhãn/bắt buộc như mọi field khác).
+  // itPriceStoreScopeMode/itPriceExpiryMode: cùng lý do itPriceTier ở trên (giá trị gắn cứng với logic
+  // hiện/ẩn khối "Khác" đi kèm, KHÔNG đưa optionsKey). itPriceStoreScopeStoresMultiSelect (div chứa
+  // renderMultiSelectDropdown()) KHÔNG đưa vào manifest — cùng lý do owiAssignedToPicker/
+  // workflowParticipatingDeptsMultiSelect chưa từng vào diện Biểu Mẫu (div container, không phải input/
+  // không có <label> riêng bên trong, xem chú thích OPERATION_WORK_ITEM). itPriceExpiryDate chỉ THẬT SỰ
+  // bắt buộc khi itPriceExpiryMode="OTHER" (điều kiện, không tĩnh) — required ở đây chỉ là mặc định ban
+  // đầu, đặt false cho đúng bản chất; validate điều kiện thật nằm ở submitItPriceApproval()/
+  // itPriceApprovals.extraValidate (lib/createValidation.js), không đổi khi admin bật required ở đây.
   IT_PRICE: [
     { id: 'itPriceCode', label: 'Mã Đề Xuất', required: false },
     { id: 'itPriceDeptDisplay', label: 'Phòng Ban Đề Xuất', required: false },
@@ -504,7 +512,11 @@ const CORE_FIELD_MANIFEST = {
     { id: 'itPriceTier', label: 'Mức Margin / Chiết Khấu', required: false },
     { id: 'itPriceFileInput', label: 'Tệp Bảng Giá (.xlsx)', required: false },
     { id: 'itPriceReason', label: 'Lý Do Điều Chỉnh Giá', required: false },
-    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false }
+    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false },
+    { id: 'itPriceStoreScopeMode', label: 'Siêu Thị Áp Dụng', required: false },
+    { id: 'itPriceEffectiveDate', label: 'Ngày Áp Dụng', required: true },
+    { id: 'itPriceExpiryMode', label: 'Ngày Hết Hiệu Lực', required: false },
+    { id: 'itPriceExpiryDate', label: 'Ngày Hết Hiệu Lực (Khác)', required: false }
   ],
   // IT_TICKET: #itTicketCreateForm (Hỗ Trợ IT > Hỗ Trợ Yêu Cầu). itTicketCategory optionsKey trỏ DB.
   // itTicketCategories (MỚI — TRƯỚC ĐÂY gõ cứng <option>, xem defaults.js + populateItTicketCategorySelect()),

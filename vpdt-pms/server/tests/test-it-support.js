@@ -61,6 +61,9 @@ const MASTER_LIST = {
 
 const state = createMockState({
   depts: ['Kinh Doanh', 'IT', 'Ban Giám Đốc', 'Marketing'],
+  // "Siêu Thị Đề Xuất" (đợt 9/2026, Bán Buôn) bắt buộc chọn >=1 siêu thị hợp lệ đối chiếu appData.stores
+  // — seed 1 giá trị để các kịch bản Bán Buôn dưới đây chọn được (xem gmsAdd() ở các kịch bản 10/11).
+  stores: ['Siêu thị Demo'],
   users: [STAFF_KD, IT1, APPROVER1, PLAIN, EMERGENCY_APPROVER, STAFF_MKT, RETAIL_APPROVER_MKT, WHOLESALE_APPROVER_MKT, ADMIN, TIER_A_APPROVER, TIER_B_APPROVER],
   itPriceMasterLists: [MASTER_LIST],
   // Bỏ auto-approve -> mọi đề xuất phải qua đúng 1 bước duyệt phòng ban trước khi đội IT áp giá.
@@ -128,6 +131,10 @@ async function main() {
             { key: 'newPrice', label: 'Giá mới' }
           ]
         };
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const p = DB.itPriceApprovals[0];
         return { alerts: window.__alerts, item: p };
@@ -164,6 +171,10 @@ async function main() {
         window.__resetCapture();
         document.getElementById('itPriceCode').value = generateItPriceCode();
         itPricePendingFile = null;
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return { alerts: window.__alerts, count: DB.itPriceApprovals.length };
       });
@@ -449,6 +460,10 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return DB.itPriceApprovals[0].id;
       });
@@ -571,10 +586,18 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const retailItem = DB.itPriceApprovals[0];
 
         setItPriceSubTab('WHOLESALE');
+        // "Siêu Thị Đề Xuất" (đợt 9/2026) — Bán Buôn KHÔNG có "Toàn bộ", bắt buộc chọn >=1 siêu thị
+        // (setItPriceSubTab() ở trên đã tự render sẵn ô multi-select rỗng qua
+        // applyItPriceStoreScopeUIForSubTab(), gmsAdd() mô phỏng đúng thao tác click chọn 1 gợi ý).
+        gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing';
         document.getElementById('itPriceTier').value = 'MARGIN_LT5';
@@ -586,6 +609,10 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const wholesaleItem = DB.itPriceApprovals[0];
 
@@ -625,6 +652,10 @@ async function main() {
           columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }]
         };
         const before = DB.itPriceApprovals.length;
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return { alerts: window.__alerts.slice(), count: DB.itPriceApprovals.length, before };
       });
@@ -655,6 +686,7 @@ async function main() {
       await loginAs(page, STAFF_MKT);
       const created = await page.evaluate(async () => {
         switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE');
+        gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
         document.getElementById('itPriceTier').value = 'DISCOUNT_GT5';
@@ -666,6 +698,10 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return DB.itPriceApprovals[0];
       });
@@ -835,6 +871,10 @@ async function main() {
         dt.items.add(new File(['bang bao gia nha cung cap'], 'bao-gia-ncc.pdf', { type: 'application/pdf' }));
         document.getElementById('itPriceExtraFiles').files = dt.files;
 
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const item = DB.itPriceApprovals[0];
 
@@ -868,6 +908,10 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
+        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
+        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const item = DB.itPriceApprovals[0];
         openItPriceModal(item.id);

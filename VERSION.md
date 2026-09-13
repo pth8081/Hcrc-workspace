@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**20.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.5 (2026-09-13): Phê Duyệt Giá — thêm "Siêu thị áp dụng/đề xuất" + "Ngày áp dụng"/"Ngày hết hiệu lực"
+
+Form "Phê Duyệt Giá" (Bán Lẻ + Bán Buôn dùng chung 1 form) thêm 3 trường **CHỈ mang tính thông tin**
+(đã xác nhận với người dùng: không giới hạn ai xem được đề xuất, không có xử lý tự động nào theo ngày
+hết hiệu lực — đội Hỗ Trợ IT tự theo dõi thủ công để biết phạm vi/thời hạn áp giá):
+
+- **Bán Lẻ — "🏬 Siêu Thị Áp Dụng"**: mặc định "Toàn bộ siêu thị, cửa hàng", chọn "Khác" hiện ô
+  multi-select tìm-kiếm-gõ-chọn (`renderMultiSelectDropdown()`, lấy từ danh mục siêu thị `DB.stores`).
+- **Bán Buôn — "🏬 Siêu Thị Đề Xuất"** (chỉnh riêng theo yêu cầu sau khi xem demo đợt đầu): KHÔNG có
+  khái niệm "Toàn bộ" — mỗi đề xuất Bán Buôn luôn phải gắn rõ 1-nhiều siêu thị/cửa hàng cụ thể, nên bỏ
+  hẳn lựa chọn Toàn bộ/Khác, ô multi-select hiện sẵn và luôn bắt buộc chọn ít nhất 1. Server tự ép
+  `priceType==='WHOLESALE'` về `storeScope.mode='OTHER'`, không tin giá trị `mode` client gửi (phòng
+  request tự soạn/DevTools sửa tay).
+- **"📅 Ngày Áp Dụng"**: luôn bắt buộc (áp dụng chung cho cả 2 loại giá).
+- **"⏳ Ngày Hết Hiệu Lực"**: mặc định "Vĩnh viễn", chọn "Khác" bắt buộc nhập ngày thật, phải ≥ Ngày Áp
+  Dụng.
+
+Validate cả client (trải nghiệm mượt) lẫn server (`itPriceApprovals.extraValidate`,
+`lib/createValidation.js` — nguồn quyết định thật, đối chiếu siêu thị hợp lệ với danh mục `appData.stores`).
+`itPriceApprovals` không có màn Sửa sau khi tạo (chỉ xem/duyệt/nộp bổ sung file) nên 3 trường này cũng
+chỉ nhập được lúc tạo mới, giống mọi trường khác của form.
+
+Test mới: `tests/test-itprice-scope-dates.js` (16 kịch bản, gồm cả nhánh Bán Buôn ép `storeScope.mode`
+bất kể client gửi gì). Demo Playwright chụp ảnh thật: `tests/demo-itprice-scope-dates.js`. Cập nhật 2
+test cũ (`test-it-support.js`, `test-audit-round2-cluster2.js`) do "Ngày Áp Dụng" giờ bắt buộc + Bán
+Buôn giờ cần chọn sẵn 1 siêu thị trước khi gửi. Chạy lại toàn bộ ~120 file `tests/test-*.js` — không có
+hồi quy nào ngoài các vấn đề môi trường đã biết từ trước (thiếu SQL Server thật/file PDF mẫu phiên
+trước, 1 lỗi Hộp Thư Phê Duyệt đã ghi nhận từ trước không liên quan).
 
 ## v20.4 (2026-09-13): Vá 6 lỗi phát hiện qua đợt test chuyên sâu 8-agent (trọng tâm Phân Quyền)
 

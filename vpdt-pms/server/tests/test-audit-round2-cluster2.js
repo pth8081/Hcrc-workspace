@@ -87,7 +87,7 @@ const subPayload = (over) => ({
 // sanitizePriceFileItems() (lib/priceFileParser.js) từ chối bảng giá không có dòng dữ liệu nào.
 const PRICE_ITEMS = [{ values: { c0: 'Mặt hàng A', c1: '15000' } }];
 const itPricePayload = (over) => ({
-  dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL',
+  dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL', effectiveDate: '2026-09-01',
   files: [{ fileUrl: GOOD_URL, fileName: 'bang-gia.xlsx', items: PRICE_ITEMS, columnLabels: [] }], ...over
 });
 
