@@ -413,28 +413,51 @@ function onPaymentManageFilterChange() {
   renderPaymentManageTab();
 }
 
+// files (đã tải lên trước đó, {fileUrl,fileName,fileType}) được gắn trực tiếp vào JSON ở data-existing-files
+// của mỗi hàng — collectPaymentManageInstallments() đọc lại nguyên vẹn, KHÔNG cần re-upload. Tệp MỚI chọn
+// ở input riêng của từng đợt chỉ được upload lúc Lưu/Gửi (xem collectAndUploadPaymentManageInstallmentFiles()
+// bên dưới, cùng khuôn collectAndUploadPaymentManageRequestFiles() cho "Hồ Sơ Đề Nghị Thanh Toán" chung).
 function renderPaymentManageInstallmentsList(prId, installments) {
   const container = document.getElementById(`paymentManageInstallmentsList_${prId}`);
   if (!container) return;
-  container.innerHTML = (installments || []).map((it, idx) => `
-    <div class="flex gap-2 items-center" data-installment-row="${idx}">
-      <input placeholder="Mô tả đợt (VD: Đợt 1)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded payment-installment-desc">
-      <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ) — có thể để trống" value="${it.amount != null ? formatMoneyDisplay(it.amount) : ''}" class="w-48 border p-1.5 rounded payment-installment-amount money-input">
-      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded payment-installment-due">
-      <button type="button" data-op="removePaymentManageInstallmentRow" data-arg0="${prId}" data-arg1="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
+  container.innerHTML = (installments || []).map((it, idx) => {
+    const existingFiles = Array.isArray(it.files) ? it.files : [];
+    const filesHTML = existingFiles.length
+      ? `<div class="flex flex-wrap gap-1 mt-1">${existingFiles.map(f => `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]"><button type="button" data-op="viewPaymentRequestFile" data-arg0="${prId}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-700 hover:underline">📎 ${escapeHtml(f.fileName)}</button></span>`).join('')}</div>`
+      : '';
+    return `
+    <div class="border rounded p-2 space-y-1" data-installment-row="${idx}" data-existing-files="${escapeHtml(JSON.stringify(existingFiles))}">
+      <div class="flex gap-2 items-center">
+        <input placeholder="Mô tả đợt (VD: Đợt 1)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded payment-installment-desc">
+        <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ) — có thể để trống" value="${it.amount != null ? formatMoneyDisplay(it.amount) : ''}" class="w-48 border p-1.5 rounded payment-installment-amount money-input">
+        <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded payment-installment-due">
+        <button type="button" data-op="removePaymentManageInstallmentRow" data-arg0="${prId}" data-arg1="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
+      </div>
+      <div class="pl-1">
+        <label class="text-[10px] font-semibold text-gray-500">📎 Hồ sơ riêng đợt này (tuỳ chọn, có thể chọn nhiều tệp)</label>
+        ${filesHTML}
+        <input id="paymentManageInstallmentFilesInput_${prId}_${idx}" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="paymentManageInstallmentFilesChips_${prId}_${idx}" class="w-full border p-1 rounded bg-white mt-1 text-[11px]">
+        <div id="paymentManageInstallmentFilesChips_${prId}_${idx}" class="flex flex-wrap gap-1 mt-1"></div>
+      </div>
     </div>
-  `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt".</p>';
+  `;
+  }).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt".</p>';
 }
 function collectPaymentManageInstallments(prId) {
-  return [...document.querySelectorAll(`#paymentManageInstallmentsList_${prId} [data-installment-row]`)].map(row => ({
-    description: row.querySelector('.payment-installment-desc').value.trim(),
-    amount: getMoneyValue(row.querySelector('.payment-installment-amount')) || null,
-    dueDate: row.querySelector('.payment-installment-due').value
-  }));
+  return [...document.querySelectorAll(`#paymentManageInstallmentsList_${prId} [data-installment-row]`)].map(row => {
+    let files = [];
+    try { files = JSON.parse(row.dataset.existingFiles || '[]'); } catch (e) { files = []; }
+    return {
+      description: row.querySelector('.payment-installment-desc').value.trim(),
+      amount: getMoneyValue(row.querySelector('.payment-installment-amount')) || null,
+      dueDate: row.querySelector('.payment-installment-due').value,
+      files
+    };
+  });
 }
 function addPaymentManageInstallmentRow(prId) {
   const current = collectPaymentManageInstallments(prId);
-  current.push({ description: '', amount: null, dueDate: '' });
+  current.push({ description: '', amount: null, dueDate: '', files: [] });
   renderPaymentManageInstallmentsList(prId, current);
 }
 function removePaymentManageInstallmentRow(prId, idx) {
@@ -466,6 +489,22 @@ async function collectAndUploadPaymentManageRequestFiles(id) {
   return existing.concat(uploaded.map(u => ({ fileUrl: u.fileUrl, fileName: u.fileName, fileType: u.fileType })));
 }
 
+// Như trên nhưng lặp qua TỪNG đợt thanh toán (installments[i].files, RIÊNG cho từng đợt — bổ sung cạnh
+// requestFiles dùng chung ở trên) — sửa THẲNG vào mảng installments (đã có sẵn files cũ từ
+// data-existing-files, xem collectPaymentManageInstallments()), GỘP thêm tệp mới nếu người dùng vừa chọn
+// ở input riêng của đúng đợt đó. Chỉ gọi được khi khối sửa NHÁP đang MỞ (input theo id ổn định
+// paymentManageInstallmentFilesInput_<prId>_<idx> chỉ tồn tại trong DOM lúc đó).
+async function collectAndUploadPaymentManageInstallmentFiles(prId, installments) {
+  for (let i = 0; i < installments.length; i++) {
+    const input = document.getElementById(`paymentManageInstallmentFilesInput_${prId}_${i}`);
+    const newFiles = input && input.files ? Array.from(input.files) : [];
+    if (!newFiles.length) continue;
+    const uploaded = await Promise.all(newFiles.map(f => uploadFileToServer(f, 'payment')));
+    installments[i].files = (installments[i].files || []).concat(uploaded.map(u => ({ fileUrl: u.fileUrl, fileName: u.fileName, fileType: u.fileType })));
+  }
+  return installments;
+}
+
 // "💾 Lưu" — LƯU đợt thanh toán đang lập/sửa, GIỮ NGUYÊN trạng thái NHÁP (số tiền để trống vẫn lưu được
 // — quyết định nghiệp vụ đã chốt: chỉ bắt buộc số tiền lúc "Chuyển Xác Nhận Thanh Toán"). Kèm luôn upload
 // + gộp "Hồ Sơ Đề Nghị Thanh Toán" mới chọn (nếu có) — không bắt buộc lúc Lưu, chỉ bắt buộc lúc Gửi.
@@ -477,6 +516,7 @@ async function savePaymentManageDraft(id) {
   let requestFiles;
   try {
     requestFiles = await collectAndUploadPaymentManageRequestFiles(id);
+    await collectAndUploadPaymentManageInstallmentFiles(id, installments);
   } catch (err) { return alert(`⛔ Tải tệp lên thất bại: ${err.message}`); }
   let updated;
   try {
@@ -519,6 +559,7 @@ function submitPaymentRequestAction(id) {
       let requestFiles;
       try {
         requestFiles = await collectAndUploadPaymentManageRequestFiles(id);
+        if (managePaymentExpandedId === id) await collectAndUploadPaymentManageInstallmentFiles(id, installments);
       } catch (err) { return alert(`⛔ Tải tệp lên thất bại: ${err.message}`); }
       // Đang sửa dở -> LUÔN lưu lại đúng nội dung mới nhất (installments + requestFiles) TRƯỚC, kể cả
       // khi sắp bị chặn ở bước kiểm tra requestFiles ngay bên dưới — nếu không, người dùng gõ đủ số tiền
@@ -587,6 +628,7 @@ function renderPaymentManageTab() {
       <div class="flex items-center justify-between gap-2 text-[11px] text-gray-700 border-b py-1">
         <span>${escapeHtml(it.description || '')} — ${it.amount != null ? it.amount.toLocaleString('vi-VN') + ' VNĐ' : '<span class="italic text-gray-400">(chưa nhập số tiền)</span>'}${it.dueDate ? ` — hạn ${escapeHtml(it.dueDate)}` : ''}
           ${it.confirmFileUrl ? `<button type="button" data-op="viewPaymentConfirmFile" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 hover:underline ml-1">📎 Xem tệp</button>` : ''}
+          ${(it.files || []).map(f => `<button type="button" data-op="viewPaymentRequestFile" data-arg0="${pr.id}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-600 hover:underline ml-1">📎 ${escapeHtml(f.fileName)}</button>`).join('')}
         </span>
         ${paymentInstallmentDeadlineBadge(it, pr)}
       </div>
@@ -717,6 +759,7 @@ function renderPaymentRequests() {
       <div class="flex items-center justify-between gap-2 text-[11px] ${it.confirmed ? 'text-green-700' : 'text-gray-600'}">
         <span>${it.confirmed ? '✅' : '⬜'} ${escapeHtml(it.description || '')} — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ
           ${it.confirmFileUrl ? `<button type="button" data-op="viewPaymentConfirmFile" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 hover:underline ml-1">📎</button>` : ''}
+          ${(it.files || []).map(f => `<button type="button" data-op="viewPaymentRequestFile" data-arg0="${pr.id}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-600 hover:underline ml-1">📎</button>`).join('')}
         </span>
         ${(!it.confirmed && pr.status === 'APPROVED' && canManage && !isOneTime) ? `<button data-op="confirmPaymentInstallmentAction" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
       </div>
