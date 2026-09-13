@@ -120,6 +120,12 @@ function validateChecklistQuestions(rawQuestions, scoringMode) {
     const maxScore = passFailOnly ? 0 : (Number(q?.maxScore) >= 0 ? Number(q.maxScore) : 0);
     const isRequired = q?.isRequired !== false;
     const note = q?.note ? String(q.note).trim().slice(0, 500) : '';
+    // category (v21.1) — nhãn NHÓM/HẠNG MỤC tuỳ chọn, THUẦN hiển thị/xuất báo cáo (không ảnh hưởng chấm
+    // điểm/hiển thị phân nhánh gì) — cho phép "Xuất Báo Cáo" (lib/checklistReportExport.js) in đúng dòng
+    // tiêu đề nhóm + tính % Đạt riêng từng nhóm ở sheet "form thống kê", khớp mẫu Excel người dùng gửi.
+    // Để trống = câu hỏi đứng ĐỘC LẬP (không thuộc nhóm nào) — mọi mẫu tạo trước v21.1 không có field này
+    // tự hiểu là để trống, không đổi hành vi export (chỉ đơn giản không có dòng tiêu đề nhóm nào cả).
+    const category = q?.category ? String(q.category).trim().slice(0, 200) : '';
 
     const rawOptions = Array.isArray(q?.options) ? q.options : [];
     if (rawOptions.length < 2) throw new HttpError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 lựa chọn`);
@@ -145,7 +151,7 @@ function validateChecklistQuestions(rawQuestions, scoringMode) {
     return {
       id: i + 1, text, type, displayOrder: i + 1,
       showIfOptionId: null, // gán ở lượt duyệt thứ 2 bên dưới (cần biết hết optionId của MỌI câu trước đã)
-      isRequired, maxScore, note, options
+      isRequired, maxScore, note, category, options
     };
   });
 

@@ -1374,6 +1374,45 @@ Nháp này), chỉnh sửa nếu cần rồi bấm **"Kích Hoạt"** khi sẵn 
 Việc dựng sẵn này chạy ĐÚNG 1 LẦN (idempotent theo mã `CL_VSATTP` — không
 tạo trùng nếu server khởi động lại nhiều lần).
 
+**Nhóm/Hạng mục cho câu hỏi loại QA (v21.1, tuỳ chọn)** — khi soạn câu hỏi
+loại **Câu Hỏi & Đáp Án**, có thêm 1 ô **"Nhóm/Hạng mục"** không bắt buộc
+(để trống = câu hỏi đứng độc lập, không thuộc nhóm nào — mọi mẫu tạo trước
+v21.1 không có field này vẫn hoạt động y nguyên, xuất phẳng không có dòng
+tiêu đề nhóm). Gắn cùng 1 tên nhóm cho nhiều câu hỏi liên tiếp (VD "1. Kiểm
+soát cảnh quan chung") để **"Xuất Theo Mẫu Gốc"** (xem ngay dưới đây) in ra
+đúng dòng tiêu đề nhóm (in đậm, nền cam nhạt) + tính đúng % Đạt riêng từng
+nhóm ở sheet thống kê.
+
+**Xuất Báo Cáo Theo Đúng Mẫu Excel Gốc (v21.1)** — tab **📊 Báo Cáo**, ngoài
+nút "📥 Xuất Excel (bảng phẳng)" sẵn có (1 dòng/bài nộp, mọi mẫu/mọi loại
+dùng chung 1 layout), có thêm khối **"📥 Xuất Theo Mẫu Gốc"** sinh file
+`.xlsx` ĐÚNG layout mẫu Excel người dùng đang dùng thật ngoài đời (khác hẳn
+bảng phẳng ở trên):
+- **Bắt buộc chọn ĐÚNG 1 mẫu cụ thể** ở bộ lọc "Mẫu Checklist" phía trên
+  (không hỗ trợ "Tất cả" — 2 loại mẫu có layout khác hẳn nhau, chọn "Tất cả"
+  sẽ báo lỗi rõ ràng yêu cầu chọn lại).
+- **Chọn 1, nhiều, hoặc để trống (= tất cả) siêu thị** đang có bài nộp khớp
+  bộ lọc mẫu/ngày — **mỗi siêu thị ra 1 (nhóm) sheet riêng** trong CÙNG 1
+  file, không cần xuất nhiều lần.
+- **Loại Câu Hỏi & Đáp Án**: mỗi siêu thị ra 2 sheet — `<Tên ST> - Chi tiết`
+  (1 dòng/câu hỏi: Thời gian báo cáo/Người gửi báo cáo/ST/Nội dung/Vấn đề
+  cần xử lý [Đạt/Không đạt]/Mô tả lý do chưa đạt/Thời gian hoàn thành — có
+  in dòng tiêu đề nhóm nếu câu hỏi có gắn "Nhóm/Hạng mục") và `<Tên ST> -
+  Thống kê` (% Đạt theo từng nhóm, gộp mọi bài nộp khớp bộ lọc của siêu thị
+  đó). Cột **"Thời gian hoàn thành" luôn để trống** — hệ thống hiện CHƯA có
+  chỗ lưu trạng thái khắc phục riêng từng câu hỏi (chỉ có 1 ô "Phản hồi"
+  chung cho cả bài ở tab Kết Quả & Phản Hồi) — quyết định đã chốt: không xây
+  thêm tính năng này trong đợt này, cột này để trống cho người dùng tự điền
+  tay sau khi xuất nếu cần theo dõi.
+- **Loại Trừ Điểm Theo Hạng Mục (VSATTP)**: mỗi siêu thị ra 1 sheet, mirror
+  đúng cây Hạng Mục Lớn/Hạng Mục Con/Tiêu Chí gốc + điểm tối đa hiệu lực +
+  điểm trừ thực tế đã nhập + mô tả/mức độ rủi ro/thời hạn/ghi chú của từng
+  lượt trừ điểm. Nhiều lượt kiểm tra (nhiều bài nộp) của cùng 1 siêu thị
+  trong khoảng ngày lọc được xếp thành các khối riêng, mỗi khối có 1 dòng
+  tóm tắt (ngày kiểm tra/người kiểm tra/tổng điểm) ngay phía trên.
+- Quyền: `checklistReportView` (đúng quyền xem tab Báo Cáo hiện có, không
+  cần thêm quyền riêng).
+
 ---
 
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)
