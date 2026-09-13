@@ -735,7 +735,63 @@ async function run() {
 
       const paidPr = { status: 'PAID', installments: [{ confirmed: true, dueDate: daysFromNow(-10) }] };
       check('computePaymentRequestOverallStatus() — pr.status PAID -> LUÔN "DA_THANH_TOAN" bất kể hạn từng đợt', recordActions.computePaymentRequestOverallStatus(paidPr) === 'DA_THANH_TOAN', recordActions.computePaymentRequestOverallStatus(paidPr));
+
+      // v20.8 (yêu cầu MỚI: "quá hạn đã thanh toán, dựa theo ngày thanh toán") — xác nhận confirmedAt SAU
+      // dueDate -> 'QUA_HAN_DA_THANH_TOAN' (đã chi nhưng TRỄ HẠN), TÁCH RIÊNG khỏi 'DA_THANH_TOAN' (đã chi
+      // ĐÚNG hạn). confirmedAt lưu dạng "HH:MM:SS D/M/YYYY" (nowVN()), KHÔNG phải ISO như dueDate.
+      const fmtVN = (d) => `10:00:00 ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+      const confirmedAfterDue = new Date(today); confirmedAfterDue.setDate(confirmedAfterDue.getDate() - 5); // confirmedAt = hôm nay - 5
+      const latePaidInstallment = { confirmed: true, dueDate: daysFromNow(-10), confirmedAt: fmtVN(confirmedAfterDue) }; // hạn cách đây 10 ngày, xác nhận cách đây 5 ngày -> TRỄ 5 ngày
+      check('computePaymentInstallmentDeadlineStatus() — confirmedAt SAU dueDate -> "QUA_HAN_DA_THANH_TOAN" (thanh toán trễ hạn)', recordActions.computePaymentInstallmentDeadlineStatus(latePaidInstallment) === 'QUA_HAN_DA_THANH_TOAN', latePaidInstallment);
+
+      const onTimePaidInstallment = { confirmed: true, dueDate: daysFromNow(-10), confirmedAt: fmtVN(new Date(daysFromNowDate(-12))) }; // xác nhận TRƯỚC hạn 2 ngày
+      check('computePaymentInstallmentDeadlineStatus() — confirmedAt TRƯỚC/ĐÚNG dueDate -> vẫn "DA_THANH_TOAN" (không bị gắn nhầm trễ hạn)', recordActions.computePaymentInstallmentDeadlineStatus(onTimePaidInstallment) === 'DA_THANH_TOAN', onTimePaidInstallment);
+
+      const paidNoConfirmedAt = { confirmed: true, dueDate: daysFromNow(-10) }; // dữ liệu cũ trước v20.8, chưa từng có confirmedAt
+      check('computePaymentInstallmentDeadlineStatus() — confirmed=true nhưng THIẾU confirmedAt (dữ liệu cũ) -> fallback "DA_THANH_TOAN", không crash', recordActions.computePaymentInstallmentDeadlineStatus(paidNoConfirmedAt) === 'DA_THANH_TOAN', paidNoConfirmedAt);
+
+      const latePaidPr = {
+        status: 'APPROVED',
+        installments: [
+          latePaidInstallment,
+          { confirmed: false, dueDate: daysFromNow(30) }
+        ]
+      };
+      const latePaidWarnCounts = recordActions.countPaymentInstallmentWarnings(latePaidPr);
+      check('countPaymentInstallmentWarnings() — đếm đúng 1 đợt "đã thanh toán trễ hạn" (latePaidCount), KHÔNG tính vào overdueCount (đã chi xong, không còn là nợ quá hạn)', latePaidWarnCounts.latePaidCount === 1 && latePaidWarnCounts.overdueCount === 0, latePaidWarnCounts);
+      check('computePaymentRequestOverallStatus() — đợt đã thanh toán trễ hạn KHÔNG kéo tổng đợt xuống "QUA_HAN" (đã chi xong)', recordActions.computePaymentRequestOverallStatus(latePaidPr) === 'DANG_THANH_TOAN', recordActions.computePaymentRequestOverallStatus(latePaidPr));
+
+      function daysFromNowDate(n) { const d = new Date(today); d.setDate(d.getDate() + n); return d; }
     })();
+
+    // ============ Kịch bản 16b (v20.8, MỚI — yêu cầu người dùng: "trạng thái theo từng đợt: đang chờ phê
+    // duyệt/đang chờ thanh toán/thanh toán/quá hạn chưa thanh toán/quá hạn đã thanh toán") — kiểm badge
+    // CLIENT paymentInstallmentDeadlineBadge()/computePaymentInstallmentDeadlineStatusClient() phủ ĐỦ 5
+    // trạng thái, KHÔNG còn để trống '' như trước (PENDING/NEED_INFO/DRAFT trước đây không hiện gì) ============
+    const badgeChecks = await page.evaluate(() => {
+      const today = new Date();
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      const daysFromNow = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return fmt(d); };
+      const farFutureDue = daysFromNow(120); // xa hẳn "sắp đến hạn" (>3 ngày) để không bị badge hạn che mất
+      const unconfirmed = { confirmed: false, dueDate: farFutureDue };
+      const confirmedAtDate = new Date(today); confirmedAtDate.setDate(confirmedAtDate.getDate() - 5);
+      const confirmedLate = { confirmed: true, dueDate: daysFromNow(-10), confirmedAt: `10:00:00 ${confirmedAtDate.getDate()}/${confirmedAtDate.getMonth() + 1}/${confirmedAtDate.getFullYear()}` };
+      const confirmedOnTime = { confirmed: true, dueDate: farFutureDue, confirmedAt: '10:00:00 1/1/2026' };
+      return {
+        pending: paymentInstallmentDeadlineBadge(unconfirmed, { status: 'PENDING' }),
+        needInfo: paymentInstallmentDeadlineBadge(unconfirmed, { status: 'NEED_INFO' }),
+        approved: paymentInstallmentDeadlineBadge(unconfirmed, { status: 'APPROVED' }),
+        draft: paymentInstallmentDeadlineBadge(unconfirmed, { status: 'DRAFT' }),
+        latePaid: paymentInstallmentDeadlineBadge(confirmedLate, { status: 'PAID' }),
+        onTimePaid: paymentInstallmentDeadlineBadge(confirmedOnTime, { status: 'PAID' })
+      };
+    });
+    check('Badge từng đợt — PENDING (chưa xác nhận, không hạn cấp bách) -> "Đang chờ phê duyệt" (TRƯỚC ĐÂY để trống)', badgeChecks.pending.includes('Đang chờ phê duyệt'), badgeChecks.pending);
+    check('Badge từng đợt — NEED_INFO -> cũng "Đang chờ phê duyệt" (đang quay lại sửa/gửi lại, chưa qua hết duyệt)', badgeChecks.needInfo.includes('Đang chờ phê duyệt'), badgeChecks.needInfo);
+    check('Badge từng đợt — APPROVED (chưa xác nhận) -> "Đang chờ thanh toán" (giữ nguyên hành vi cũ)', badgeChecks.approved.includes('Đang chờ thanh toán'), badgeChecks.approved);
+    check('Badge từng đợt — DRAFT -> "Nháp" (TRƯỚC ĐÂY để trống)', badgeChecks.draft.includes('Nháp'), badgeChecks.draft);
+    check('Badge từng đợt — đã xác nhận NHƯNG confirmedAt trễ hơn dueDate -> "Đã thanh toán (trễ hạn)" (MỚI, tách khỏi "Đã thanh toán")', badgeChecks.latePaid.includes('Đã thanh toán (trễ hạn)'), badgeChecks.latePaid);
+    check('Badge từng đợt — đã xác nhận đúng/trước hạn -> vẫn "✅ Đã thanh toán" (KHÔNG bị gắn nhầm trễ hạn)', badgeChecks.onTimePaid.includes('Đã thanh toán') && !badgeChecks.onTimePaid.includes('trễ hạn'), badgeChecks.onTimePaid);
 
     // ============ Kịch bản 17 (yêu cầu nghiệp vụ #6 — dept-scope KHÔNG bị nới/lỏng bởi bất kỳ thay đổi
     // nào của đợt này) ============

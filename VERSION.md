@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**20.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.8 (2026-09-13): Trạng thái ĐỦ 5 mức theo TỪNG đợt thanh toán + phát hiện "đã thanh toán trễ hạn"
+
+Người dùng hỏi trạng thái có hiển thị đúng theo từng đợt không, liệt kê 5 mức mong muốn: đang chờ phê
+duyệt / đang chờ thanh toán / đã thanh toán / quá hạn chưa thanh toán / quá hạn đã thanh toán (dựa theo
+ngày thanh toán). Rà soát phát hiện: 3/5 mức đã có (đang chờ thanh toán, đã thanh toán, quá hạn chưa
+thanh toán) nhưng **2 khoảng trống thật**:
+1. Đợt thuộc đề nghị còn "Chờ duyệt"/"Cần bổ sung" (chưa xác nhận, không có hạn cấp bách) — badge để
+   TRỐNG (không hiện "đang chờ phê duyệt" như mong đợi).
+2. Đợt ĐÃ xác nhận chi nhưng xác nhận TRỄ HƠN hạn đã khai — vẫn hiện y hệt "✅ Đã thanh toán" như đợt trả
+   đúng hạn, không có cách nào phân biệt "trễ hạn" dựa theo ngày thanh toán thật.
+
+**Đã vá**:
+- `lib/recordActions.js`/`public/js/module-thanhtoan.js` — `computePaymentInstallmentDeadlineStatus()`
+  (2 bản mirror server/client) thêm trạng thái mới `QUA_HAN_DA_THANH_TOAN`: so `confirmedAt` (parse bằng
+  `parseVNDateTime()` có sẵn, dạng "HH:MM:SS D/M/YYYY") với `dueDate` — xác nhận SAU ngày hạn thì tách
+  riêng khỏi `DA_THANH_TOAN`. Dữ liệu cũ thiếu `confirmedAt` (trước khi field này được ghi) fallback về
+  `DA_THANH_TOAN`, không crash.
+- Badge từng đợt (`paymentInstallmentDeadlineBadge()`) giờ LUÔN hiện đúng 1 trong 5+ trạng thái, không
+  còn để trống: 🕐 Đang chờ phê duyệt (PENDING/NEED_INFO), ⏳ Đang chờ thanh toán (APPROVED, giữ nguyên),
+  ✅ Đã thanh toán, 🔴 Quá hạn — Chưa thanh toán, ⚠️ Đã thanh toán (trễ hạn) — MỚI, 🟡 Sắp đến hạn, 📝 Nháp
+  (DRAFT, cho đủ bộ). Badge này hiện ở CẢ "🗂️ Quản Lý Thanh Toán" lẫn "✅ Xác Nhận Đề Nghị Thanh Toán"
+  (trước đây tab Xác Nhận không hiện badge hạn cho từng đợt, giờ bổ sung luôn).
+- `countPaymentInstallmentWarnings()` thêm `latePaidCount` — cảnh báo tổng hợp hiện thêm "N đợt đã thanh
+  toán trễ hạn" cạnh "N đợt quá hạn"/"N đợt sắp đến hạn" đã có. Đợt trễ hạn ĐÃ chi xong không tính vào
+  `overdueCount`/kéo badge "tổng đợt" xuống "Quá hạn" (không còn là nợ đang treo).
+
+Thêm 12 test hồi quy mới vào `tests/test-payment.js` (unit `computePaymentInstallmentDeadlineStatus`/
+`countPaymentInstallmentWarnings` + UI `paymentInstallmentDeadlineBadge` phủ đủ 6 trường hợp badge). Chạy
+lại `tests/test-payment.js` (111/111) + `tests/test-contract.js` (48/48) — không hồi quy.
+
+**Deploy-impact**: không đổi `schema.sql`/`.env.example`/dependencies — chỉ copy code + `pm2 restart`.
 
 ## v20.7 (2026-09-13): Đính kèm tệp RIÊNG theo từng đợt thanh toán (bổ sung cạnh Hồ Sơ Đề Nghị Thanh Toán chung)
 
