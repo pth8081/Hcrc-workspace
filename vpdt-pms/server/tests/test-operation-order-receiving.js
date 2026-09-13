@@ -194,6 +194,16 @@ test('receiveOperationOrderGoods(): người có operationOrderReceiptManage nh�
   assertThrows(() => recordActions.receiveOperationOrderGoods(wrongScope, item, appData), 403, 'không có quyền', 'receiveOperationOrderGoods sai phạm vi phòng ban');
 });
 
+// DH-09: scopeAllows() dùng chung có nhánh "user.dept === dept -> cho qua" — SAI cho quyền
+// operationOrderReceiptManage (cố tình thiết kế độc lập hoàn toàn với phòng ban thật của user, xem chú
+// thích isApproverForOperationOrderReceipt()) — 1 nhân viên BẤT KỲ của đúng siêu thị đó, hoàn toàn KHÔNG
+// được cấp quyền này, phải VẪN bị chặn.
+test('receiveOperationOrderGoods(): nhân viên CÙNG siêu thị (dept khớp) nhưng KHÔNG được cấp operationOrderReceiptManage vẫn bị chặn (DH-09)', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Siêu Thị Quận 1' });
+  const sameStoreNoPerm = makeUser('nv.st1', { dept: 'Siêu Thị Quận 1', perms: {} });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(sameStoreNoPerm, item, appData), 403, 'không có quyền', 'cùng siêu thị nhưng không có operationOrderReceiptManage vẫn phải bị chặn');
+});
+
 test('receiveOperationOrderGoods(): sai trạng thái nguồn (PENDING) -> 409, không đổi gì', () => {
   const item = freshOrder({ status: 'PENDING' });
   const admin = makeUser('admin', { perms: { admin: true } });

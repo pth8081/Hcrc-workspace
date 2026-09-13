@@ -187,10 +187,15 @@ periodTransitionRoute('/periods/:id/approve', (req, res, next) => {
   if (!payroll.canApprovePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền duyệt kỳ lương' });
   next();
 }, (p, u, n) => payroll.applyApprove(p, u, n));
+// PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, LUONG-04): route này TRƯỚC ĐÂY thiếu tham số
+// `historyNoteRequired=true` (khác /reopen ngay dưới) — periodTransitionRoute() chỉ bắt buộc `reason`
+// khi cờ này bật, nên Từ Chối một kỳ lương KHÔNG cần nhập lý do gì cả, dù applyReject() (lib/payroll.js)
+// tự thay bằng 1 câu chung chung "Từ chối — trả về rà soát lại" khi thiếu — kế toán không biết ĐÍCH XÁC
+// vì sao bị từ chối để sửa đúng chỗ.
 periodTransitionRoute('/periods/:id/reject', (req, res, next) => {
   if (!payroll.canApprovePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền duyệt kỳ lương' });
   next();
-}, (p, u, n, reason) => payroll.applyReject(p, u, n, reason));
+}, (p, u, n, reason) => payroll.applyReject(p, u, n, reason), true);
 periodTransitionRoute('/periods/:id/finalize', requireViewAll, (p, u, n) => payroll.applyFinalize(p, u, n));
 periodTransitionRoute('/periods/:id/reopen', requireManage, (p, u, n, reason) => payroll.applyReopen(p, u, n, reason), true);
 

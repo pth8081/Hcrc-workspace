@@ -34,6 +34,37 @@ function isManagerOf(managerUsername, targetUsername, allUsers) {
   return false;
 }
 
+// computeSubordinateUsernames(): TOÀN BỘ cấp dưới TRỰC TIẾP + GIÁN TIẾP của `username` (đi XUÔI cây Cơ
+// Cấu Tổ Chức, ngược hướng isManagerOf() ở trên vốn đi NGƯỢC từ 1 người cụ thể lên tra "ai đó có phải
+// quản lý của tôi không") — dùng cho Bước 8 (GET /api/data, routes/data.js loadAttendanceRecordsScoped())
+// để tính trước 1 LẦN DUY NHẤT tập username cần tải AttendanceRecords, thay vì gọi isManagerOf() lặp lại
+// cho TỪNG bản ghi chấm công (mỗi lần isManagerOf() tự đi ngược tối đa 50 bước — với hàng nghìn bản ghi
+// công ty lớn sẽ nhân lên rất tốn). Dựng map con->cha 1 lần rồi BFS xuôi từ `username` — O(số nhân viên),
+// không phụ thuộc số bản ghi chấm công (collection tăng trưởng theo thời gian, số nhân viên thì không).
+// assertNoManagerCycle() (routes/data.js prepareUsersForSave()) đã chặn vòng lặp lúc GHI users nên BFS ở
+// đây không cần tự giới hạn bước — vẫn giữ 1 `visited` Set để không lặp vô hạn nếu lỡ có dữ liệu cũ kẹt
+// vòng lặp trước khi validate được thêm.
+function computeSubordinateUsernames(username, allUsers) {
+  const result = new Set();
+  if (!username) return result;
+  const childrenByManager = new Map();
+  for (const u of allUsers || []) {
+    if (!u.managerUsername) continue;
+    if (!childrenByManager.has(u.managerUsername)) childrenByManager.set(u.managerUsername, []);
+    childrenByManager.get(u.managerUsername).push(u.username);
+  }
+  const queue = [username];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const child of childrenByManager.get(cur) || []) {
+      if (result.has(child)) continue;
+      result.add(child);
+      queue.push(child);
+    }
+  }
+  return result;
+}
+
 // Cơ Cấu Tổ Chức: user.managerUsername (field phẳng, lưu như "Chức danh"/jobTitle — không có bảng/
 // collection riêng) — CHƯA từng có khái niệm quản lý/cấp trên trong hệ thống trước đây nên KHÔNG có gì
 // chặn vòng lặp sẵn; phải tự viết validate ở ĐÂY, dùng chung cho MỌI đường ghi "users" (đường ghi toàn
@@ -539,18 +570,41 @@ function canViewOperationStoreOpening(user, item, appData) {
   if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
-  if (hasOwnEstimateCategoryInSource(user, item)) return true;
-  // KHÔNG còn nhánh "đang là approver hồ sơ chính" — MODULE_CONFIGS.operationStoreOpenings đã bị xoá
-  // khỏi lib/workflowEngine.js (Mục H, 60c473b: hồ sơ này không bao giờ vào PENDING nữa nên không còn
-  // ai là approver thật để mở rộng quyền xem). Dự toán vẫn chạy quy trình duyệt ĐỘC LẬP RIÊNG của nó
-  // (operationStoreOpenEstimateDeptWorkflows) nên GIỮ NGUYÊN nhánh dưới đây — thường gán người duyệt
-  // khác phòng ban với hồ sơ chính, thiếu nhánh này khiến người được admin chỉ định duyệt Dự toán không
-  // thấy hồ sơ trong GET /api/data để duyệt qua giao diện bình thường (dù action API vẫn chạy được nếu
-  // biết trước id — phát hiện ở audit Đợt 5, Cao #2).
-  return isApproverForApproversMap(MODULE_CONFIGS.operationStoreOpeningEstimate.resolveWfConfig(item, appData).approvers, user.username);
+  // KHÔNG còn nhánh "đang là approver" nào (hồ sơ chính lẫn Dự toán) — chủ ứng dụng xác nhận Vận Hành >
+  // Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả Dự toán (để trưởng phòng tự lập/lưu). MODULE_CONFIGS
+  // operationStoreOpeningEstimate đã xoá khỏi lib/workflowEngine.js — không còn approver nào để mở rộng
+  // quyền xem qua nhánh này nữa.
+  return hasOwnEstimateCategoryInSource(user, item);
+}
+// PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, VH-05): canViewOperationStoreOpening()/
+// canViewOperationRepair() chỉ gác ở mức "được xem CẢ hồ sơ hay không" (boolean) — người CHỈ được xem
+// qua đúng 1 nhánh "Người Phụ Trách danh mục lớn" (hasOwnEstimateCategoryInSource, KHÔNG phải admin/
+// operationRecordManageAll/cùng phòng ban/đang có việc trong cây Thực hiện) trước đây vẫn nhận NGUYÊN
+// VĂN estimateItems của MỌI danh mục lớn khác trong CÙNG hồ sơ qua GET /api/data — giao diện
+// (renderOperationEstimateItemsTable()/openOperationEstimateModal() isOwnerScoped, public/js/
+// module-vanhanh.js) đã tự ẩn bớt, nhưng ai gọi thẳng GET /api/data (devtools/HTTP client) vẫn đọc được
+// nguyên chi phí/người phụ trách của danh mục KHÁC không liên quan tới mình. Thu hẹp lại estimateItems
+// xuống ĐÚNG (các) danh mục lớn user phụ trách + con của nó — mirror CHÍNH XÁC logic ownedTopIds ở
+// client, chỉ áp dụng khi hasOwnEstimateCategoryInSource là nhánh DUY NHẤT cho phép xem (nếu user còn có
+// việc trong cây Thực hiện — hasOwnWorkItemInSource — vẫn giữ nguyên hành vi CŨ, đúng như client hiện
+// tại cũng không thu hẹp cho trường hợp đó).
+function redactOperationEstimateItemsToOwnedScope(user, sourceType, item, appData) {
+  if (!user) return item;
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || item.dept === user.dept) return item;
+  if (hasOwnWorkItemInSource(user, sourceType, item.id, appData)) return item;
+  if (!hasOwnEstimateCategoryInSource(user, item)) return item;
+  const ownedTopIds = new Set((item.estimateItems || [])
+    .filter(it => it.parentId == null && Array.isArray(it.assignedToUsernames) && it.assignedToUsernames.includes(user.username))
+    .map(it => it.id));
+  return {
+    ...item,
+    estimateItems: (item.estimateItems || []).filter(it => it.parentId == null ? ownedTopIds.has(it.id) : ownedTopIds.has(it.parentId))
+  };
 }
 function filterOperationStoreOpeningsForUser(items, user, appData) {
-  return (items || []).filter(o => canViewOperationStoreOpening(user, o, appData));
+  return (items || [])
+    .filter(o => canViewOperationStoreOpening(user, o, appData))
+    .map(o => redactOperationEstimateItemsToOwnedScope(user, 'OPERATION_STORE_OPENING', o, appData));
 }
 function canViewOperationRepair(user, item, appData) {
   if (!user) return false;
@@ -558,13 +612,14 @@ function canViewOperationRepair(user, item, appData) {
   if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
-  if (hasOwnEstimateCategoryInSource(user, item)) return true;
-  // Cùng lý do ở canViewOperationStoreOpening() bên trên — bỏ nhánh approver hồ sơ chính, giữ nguyên
-  // approver Dự toán (operationRepairEstimate, vẫn còn trong MODULE_CONFIGS).
-  return isApproverForApproversMap(MODULE_CONFIGS.operationRepairEstimate.resolveWfConfig(item, appData).approvers, user.username);
+  // Cùng lý do ở canViewOperationStoreOpening() bên trên — KHÔNG còn nhánh "đang là approver" nào (hồ sơ
+  // chính lẫn Dự toán).
+  return hasOwnEstimateCategoryInSource(user, item);
 }
 function filterOperationRepairsForUser(items, user, appData) {
-  return (items || []).filter(o => canViewOperationRepair(user, o, appData));
+  return (items || [])
+    .filter(o => canViewOperationRepair(user, o, appData))
+    .map(o => redactOperationEstimateItemsToOwnedScope(user, 'OPERATION_REPAIR', o, appData));
 }
 // operationExecutionPeriods: mirror ĐÚNG phạm vi xem của hồ sơ NGUỒN (operationStoreOpenings/
 // operationRepairs) — 1 kỳ chỉ nên lộ cho đúng người xem được hồ sơ mà kỳ đó thuộc về.
@@ -963,16 +1018,23 @@ function filterPayslipsForUser(items, user) {
 // (checklistReportView) thấy MỌI trạng thái (kể cả DRAFT/ARCHIVED, cần để cấu hình/đối chiếu lịch sử);
 // người khác CHỈ thấy template ACTIVE và đúng loại họ đủ điều kiện làm (STORE_SELF nếu posType STORE,
 // CONTROL_AUDIT nếu có checklistAuditScope) — không thấy template đang soạn (DRAFT) hay của loại khác.
-function canViewChecklistTemplate(user, item) {
+function canViewChecklistTemplate(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return true;
-  if (item.status !== 'ACTIVE') return false;
-  if (item.templateType === 'STORE_SELF') return isEligibleForStoreSelf(user);
-  if (item.templateType === 'CONTROL_AUDIT') return hasChecklistAuditScope(user);
-  return false;
+  if (item.status === 'ACTIVE') {
+    if (item.templateType === 'STORE_SELF') return isEligibleForStoreSelf(user);
+    if (item.templateType === 'CONTROL_AUDIT') return hasChecklistAuditScope(user);
+    return false;
+  }
+  // Template không còn ACTIVE (đã bị thay bằng bản clone khác, xem lib/checklist.js activate()): vẫn
+  // phải cho user xem nếu họ có 1 bài nộp (checklistSubmissions) tham chiếu đúng template này mà họ có
+  // quyền xem bài đó — nếu không, người từng làm bài sẽ mất khả năng tra cứu lại câu hỏi/đáp án gốc
+  // ngay khi có ai đó kích hoạt bản template mới thay thế.
+  const submissions = (appData && appData.checklistSubmissions) || [];
+  return submissions.some(s => s.templateId === item.id && canViewChecklistSubmission(user, s));
 }
-function filterChecklistTemplatesForUser(items, user) {
-  return (items || []).filter(t => canViewChecklistTemplate(user, t));
+function filterChecklistTemplatesForUser(items, user, appData) {
+  return (items || []).filter(t => canViewChecklistTemplate(user, t, appData));
 }
 // checklistSubmissions: người quản lý/xem báo cáo thấy hết; còn lại thấy bài của CHÍNH MÌNH (mọi trạng
 // thái, kể cả DRAFT đang làm dở) cộng bài đã NỘP (SUBMITTED, không phải DRAFT người khác đang làm dở)
@@ -988,8 +1050,29 @@ function filterChecklistSubmissionsForUser(items, user) {
   return (items || []).filter(s => canViewChecklistSubmission(user, s));
 }
 
+// PQ-01: "Khối 0" (user.perms.moduleAccess, xem BUSINESS_MODULES/hasModuleAccess() ở public/js/core.js)
+// là gate cấp module TOÀN BỘ (admin có thể tắt hẳn 1 module cho 1 user cụ thể, độc lập với mọi quyền
+// chi tiết khác) — trước đây CHỈ được thực thi ở CLIENT (ẩn tab/route điều hướng), không hề có gate
+// tương ứng ở server. Với phần lớn module (Đồng Phục/Giấy Phép/Nhân Sự/Ngân Sách...) đây không phải lỗ
+// hổng thật vì đã có quyền chi tiết riêng chặn đúng ở server rồi (moduleAccess chỉ dư thừa/thứ yếu) —
+// nhưng 1 nhóm module "mở sẵn cho mọi nhân viên" (không có quyền chi tiết nào gác việc XEM, chỉ có gate
+// AI ĐƯỢC TẠO/DUYỆT) thì tắt moduleAccess ở giao diện xong vẫn gọi thẳng GET /api/data là thấy nguyên
+// dữ liệu. Chỉ mirror ĐÚNG các module này (không mirror toàn bộ 25 module — phần còn lại không cần vì
+// đã có gate riêng, mirror thêm chỉ tạo thêm 1 nguồn có thể lệch dữ liệu về sau).
+const MODULE_ACCESS_GATED_COLLECTIONS = {
+  doc: ['docs'], submission: ['submissions'], task: ['tasks'], internal: ['internalPosts'],
+  contract: ['contracts'], itSupport: ['itSupportTickets', 'itPriceApprovals']
+};
+function hasModuleAccessServer(user, moduleKey) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  const ma = user.perms?.moduleAccess;
+  if (!ma) return true;
+  return ma[moduleKey] !== false;
+}
+
 module.exports = {
-  isManagerOf, assertNoManagerCycle, hasOwnWorkItemInSource,
+  isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
@@ -1037,5 +1120,6 @@ module.exports = {
   canViewChecklistTemplate, filterChecklistTemplatesForUser,
   canViewChecklistSubmission, filterChecklistSubmissionsForUser,
   sanitizeInternalPostCommentsForUser,
-  canDownloadRecordFile
+  canDownloadRecordFile,
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS
 };

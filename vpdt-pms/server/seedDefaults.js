@@ -7,7 +7,7 @@ const { hashPassword, isBcryptHash, verifyPassword } = require('./lib/auth');
 const { getAppDataValue, setAppDataValue, withLockedAppDataValue } = require('./lib/appData');
 const { migrateLegacySystemLogs } = require('./lib/systemLogStore');
 const { migrateLegacyTasks } = require('./lib/taskStore');
-const { migrateAllLegacyCollections, getAllRecords, withLockedRecordById } = require('./lib/recordStore');
+const { getAllRecords, withLockedRecordById } = require('./lib/recordStore');
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
 const { parseVNDateTime } = require('./lib/recordActions');
@@ -19,12 +19,6 @@ const KNOWN_DEFAULT_PASSWORDS = ['123456'];
 
 async function seedDefaults() {
   const pool = await getPool();
-  // PHẢI chạy TRƯỚC vòng lặp seed mặc định bên dưới — vòng lặp đó sẽ tự tạo row "vppExcludedJobTitles"
-  // rỗng ([]) cho MỌI DB (kể cả DB đã tồn tại lâu năm, chưa từng có key này) ngay khi thấy key thiếu
-  // trong DEFAULTS, khiến hàm này không còn phân biệt được "chưa từng tồn tại" (cần di trú dữ liệu cũ)
-  // với "đã tồn tại nhưng rỗng" (admin xoá hết/chưa cấu hình gì thật) nếu chạy sau. Xem chi tiết ở
-  // migrateVppExcludedJobTitles() bên dưới.
-  await migrateVppExcludedJobTitles(pool);
   await migrateItRenewalCategories(pool);
   await migrateHrLifecycleV2Perms(pool);
   for (const key of Object.keys(DEFAULTS)) {
@@ -45,7 +39,6 @@ async function seedDefaults() {
   await flagKnownDefaultPasswords();
   await migrateLegacySystemLogs();
   await migrateLegacyTasks();
-  await migrateAllLegacyCollections();
   await migratePendingActualBudgetEntries();
   await migrateStuckOperationApprovalStatuses();
   await migrateApprovedOperationOrdersToAwaitingReceipt();
@@ -125,38 +118,11 @@ async function flagKnownDefaultPasswords() {
   }
 }
 
-// Di trú "Nhóm Không Cấp Văn Phòng Phẩm" từ vppExcludeGroups[] (DẠNG CŨ — nhiều nhóm đặt tên tự do,
-// mỗi nhóm mang 1 danh sách chức danh, user còn phải được gán thủ công vào từng nhóm) sang
-// vppExcludedJobTitles[] (DẠNG MỚI — 1 mảng chuỗi phẳng, cùng khuôn workflowParticipatingDepts, xem
-// isUserVppExcluded() ở index.html). CHỈ chạy đúng 1 lần trên mỗi DB: kiểm tra TRỰC TIẾP bằng SQL xem
-// row "vppExcludedJobTitles" đã tồn tại trong dbo.AppData hay chưa (giống hệt cách vòng lặp DEFAULTS ở
-// seedDefaults() kiểm tra) — PHẢI tự kiểm tra riêng thay vì dùng getAppDataValue()==null, vì hàm này
-// bắt buộc phải chạy TRƯỚC vòng lặp đó (xem seedDefaults()) nên tại thời điểm gọi, row chắc chắn CHƯA
-// được vòng lặp tạo). Nếu chưa từng tồn tại: gộp (union, khử trùng) toàn bộ jobTitles[] của MỌI nhóm
-// trong vppExcludeGroups[] hiện có thành giá trị khởi tạo — không để mất cấu hình admin đã lưu trước
-// đó dù DB hoàn toàn mới (vppExcludeGroups rỗng/chưa có) vẫn ra mảng rỗng, đúng ý "khởi tạo lần đầu".
-// key "vppExcludeGroups" + field user.vppExcludeGroupIds vẫn giữ nguyên trong CSDL sau di trú này,
-// không xoá — chỉ đơn giản không còn nơi nào trong code mới đọc/ghi tới 2 chỗ đó nữa.
-async function migrateVppExcludedJobTitles(pool) {
-  const existing = await pool.request()
-    .input('k', sql.NVarChar(100), 'vppExcludedJobTitles')
-    .query('SELECT 1 FROM dbo.AppData WHERE DataKey = @k');
-  if (existing.recordset.length > 0) return; // đã di trú/seed rồi (kể cả admin đã lưu qua UI mới)
-
-  const oldGroups = await getAppDataValue('vppExcludeGroups');
-  const unioned = [...new Set(
-    (Array.isArray(oldGroups) ? oldGroups : [])
-      .flatMap(g => (Array.isArray(g?.jobTitles) ? g.jobTitles : []))
-  )];
-  await setAppDataValue('vppExcludedJobTitles', unioned);
-  console.log(`   ↳ Di trú "Nhóm Không Cấp Văn Phòng Phẩm" (vppExcludeGroups -> vppExcludedJobTitles, ${unioned.length} chức danh).`);
-}
-
 // Đợt audit "form-fields-6" — danh mục "Loại Dịch Vụ" (Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT) TRƯỚC ĐÂY
 // free-text + gợi ý cố định (IT_RENEWAL_CATEGORY_SUGGESTIONS ở client), giờ chuyển hẳn thành
 // appData.itRenewalCategories (admin-editable, cùng khuôn licenseTypes). PHẢI chạy TRƯỚC vòng lặp seed
-// DEFAULTS chính (cùng lý do migrateVppExcludedJobTitles() ở trên) để tự phân biệt được "key chưa từng
-// tồn tại" (cần quét bổ sung giá trị cũ) với "đã tồn tại" (admin đã lưu qua UI mới, không đụng vào).
+// DEFAULTS chính để tự phân biệt được "key chưa từng tồn tại" (cần quét bổ sung giá trị cũ) với "đã tồn
+// tại" (admin đã lưu qua UI mới, không đụng vào).
 // Nếu hệ thống ĐÃ có bản ghi itServiceRenewals thật trước khi nâng cấp (category tự do, có thể KHÁC 6
 // giá trị gợi ý gốc) — quét toàn bộ giá trị .category ĐANG có, gộp thêm vào cuối danh mục mặc định để
 // không mồ côi giá trị nào (không có bản ghi nào coi là "danh mục không nhận diện được" sau nâng cấp).
@@ -182,7 +148,7 @@ async function migrateItRenewalCategories(pool) {
 // v2: cấp sẵn 4 quyền mới này cho mọi user/permGroup ĐANG có hrOnboardingCreate/hrOffboardingCreate
 // (bản cũ) HOẶC nhanSuManage=true, để không ai bị MẤT quyền so với trước. Admin có thể tự thu hẹp/mở
 // rộng lại sau — di trú CHỈ chạy ĐÚNG 1 LẦN (marker "hrLifecycleV2PermsSeeded", cùng khuôn
-// migrateVppExcludedJobTitles()/migrateItRenewalCategories() ở trên).
+// migrateItRenewalCategories() ở trên).
 async function migrateHrLifecycleV2Perms(pool) {
   const existing = await pool.request()
     .input('k', sql.NVarChar(100), 'hrLifecycleV2PermsSeeded')

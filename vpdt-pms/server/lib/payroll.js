@@ -43,7 +43,7 @@
 'use strict';
 
 const { HttpError } = require('./httpErrors');
-const { findActiveContractByEmployeeCode } = require('./laborContract');
+const { findActiveContractByEmployeeCode, findContractsByEmployeeCode } = require('./laborContract');
 const { resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile } = require('./attendance');
 
 function nowVN() {
@@ -148,32 +148,49 @@ function sumDetails(details, type) {
 // Tính 1 payslip cho 1 nhân viên — TRẢ VỀ null nếu bỏ qua (không có hợp đồng ACTIVE/không xác định được
 // mô hình chấm công), caller (calculatePayrollPeriod) tự quyết định có báo cho HR biết ai bị bỏ qua.
 function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
-  const contract = findActiveContractByEmployeeCode(appData.laborContracts, employeeCode);
+  // Tra Offboarding ĐÃ HOÀN TẤT của đúng nhân viên này với lastWorkingDate rơi trong kỳ TRƯỚC, dùng
+  // chung cho CẢ 2 nhánh dự phòng bên dưới (hợp đồng lẫn mô hình chấm công) — xem 2 chú thích PHÁT HIỆN
+  // ngay dưới đây.
+  const profile = (appData.employeeProfiles || []).find(p => p.employeeCode === employeeCode);
+  const offboarding = findCompletedOffboardingForProfile(profile, appData.hrProcesses);
+  const { start: pStart, end: pEnd } = periodDateRange(period);
+  const offboardingLastWorkingDate = (offboarding && offboarding.lastWorkingDate >= pStart && offboarding.lastWorkingDate <= pEnd)
+    ? offboarding.lastWorkingDate : null;
+
+  let contract = findActiveContractByEmployeeCode(appData.laborContracts, employeeCode);
+  // PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, sau đợt audit lần 2 ở dưới): applyOffboardingTermination()
+  // (lib/laborContract.js) tự đóng hợp đồng ACTIVE thành TERMINATED NGAY lúc Offboarding hoàn tất — đúng
+  // trình tự thực tế "Offboarding hoàn tất ngày 15 -> kế toán bấm Tính Lương ngày 28 CÙNG THÁNG" (kịch
+  // bản LUONG-07), hợp đồng đã KHÔNG CÒN ACTIVE vào lúc tính lương nữa, khiến findActiveContractByEmployeeCode()
+  // trả về null và nhân viên bị đẩy thẳng vào skipped[] (lý do "không có hợp đồng hiệu lực") TRƯỚC KHI
+  // kịp chạm tới nhánh dự phòng workModelInfo bên dưới — tái hiện lại ĐÚNG lỗi LUONG-07 mà nhánh đó định
+  // sửa nhưng chưa đủ. Dùng lại ĐÚNG hợp đồng vừa bị đóng (mới nhất theo id — applyOffboardingTermination()
+  // chỉ đóng ĐÚNG 1 hợp đồng ACTIVE tại thời điểm Offboarding hoàn tất, findContractsByEmployeeCode() lấy
+  // TOÀN BỘ lịch sử bất kể trạng thái) CHỈ khi có Offboarding hoàn tất đúng người này rơi trong kỳ — hợp
+  // đồng hết hiệu lực vì lý do KHÁC (hết hạn tự nhiên, chấm dứt thủ công không qua Offboarding...) vẫn bị
+  // skip như cũ, đúng nguyên tắc "không tự suy diễn khi thiếu xác nhận" nêu ở đầu file.
+  if (!contract && offboardingLastWorkingDate) {
+    const candidates = findContractsByEmployeeCode(appData.laborContracts, employeeCode);
+    if (candidates.length) contract = candidates.reduce((a, b) => (b.id > a.id ? b : a));
+  }
   if (!contract || !contract.baseSalary) return { skipped: true, reason: 'Không có hợp đồng lao động đang hiệu lực kèm lương cơ bản' };
+
   let workModelInfo = resolveWorkModelForEmployeeCode(employeeCode, appData);
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: resolveWorkModelForEmployeeCode() CHẶN HẲN hồ sơ INACTIVE
   // (đúng ý — chặn máy chấm công/tạo công tay cho người đã nghỉ, xem lib/attendance.js) — nhưng payroll
   // dùng LẠI đúng hàm đó nên nhân viên hoàn tất Offboarding NGAY TRONG kỳ lương (nghỉ giữa tháng) bị BỎ
   // SÓT HOÀN TOÀN, không có payslip nào dù đã làm việc 1 phần kỳ. Nhánh dự phòng CHỈ áp dụng riêng cho
   // payroll (không đổi hành vi dùng chung của hàm trên): nếu có quy trình Offboarding ĐÃ HOÀN TẤT của
-  // đúng nhân viên này với lastWorkingDate rơi trong kỳ, vẫn coi là có mô hình chấm công để tính. LƯU Ý
-  // PHẠM VI: KHÔNG tự bịa công thức trừ lương tương ứng những ngày sau lastWorkingDate (đúng nguyên tắc
-  // "không tự tính công thức chưa có nguồn dữ liệu xác nhận" nêu ở đầu file) — kế toán rà soát payslip
-  // này và dùng "Điều chỉnh dòng lương" (applyAdjustPayslipDetail) để trừ đúng phần ngày không làm việc.
-  let offboardingLastWorkingDate = null;
-  if (!workModelInfo) {
-    const profile = (appData.employeeProfiles || []).find(p => p.employeeCode === employeeCode);
-    const offboarding = findCompletedOffboardingForProfile(profile, appData.hrProcesses);
-    if (offboarding) {
-      const { start: pStart, end: pEnd } = periodDateRange(period);
-      if (offboarding.lastWorkingDate >= pStart && offboarding.lastWorkingDate <= pEnd) {
-        offboardingLastWorkingDate = offboarding.lastWorkingDate;
-        workModelInfo = {
-          workModel: offboarding.employeePosType === 'STORE' ? 'SHIFT_BASED' : 'OFFICE_HOURS',
-          dept: offboarding.employeeDept || null, profile, user: null
-        };
-      }
-    }
+  // đúng nhân viên này với lastWorkingDate rơi trong kỳ (đã tính sẵn ở offboardingLastWorkingDate phía
+  // trên), vẫn coi là có mô hình chấm công để tính. LƯU Ý PHẠM VI: KHÔNG tự bịa công thức trừ lương tương
+  // ứng những ngày sau lastWorkingDate (đúng nguyên tắc "không tự tính công thức chưa có nguồn dữ liệu
+  // xác nhận" nêu ở đầu file) — kế toán rà soát payslip này và dùng "Điều chỉnh dòng lương"
+  // (applyAdjustPayslipDetail) để trừ đúng phần ngày không làm việc.
+  if (!workModelInfo && offboardingLastWorkingDate) {
+    workModelInfo = {
+      workModel: offboarding.employeePosType === 'STORE' ? 'SHIFT_BASED' : 'OFFICE_HOURS',
+      dept: offboarding.employeeDept || null, profile, user: null
+    };
   }
   if (!workModelInfo) return { skipped: true, reason: 'Không xác định được mô hình chấm công (hồ sơ chưa liên kết tài khoản)' };
 
@@ -219,7 +236,6 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   addDetail(details, 'HEALTH_INSURANCE', bhyt, `${rateConfig.bhytPercent}% trên ${Math.round(insuranceSalary).toLocaleString('vi-VN')}đ`, false);
   addDetail(details, 'UNEMPLOYMENT_INSURANCE', bhtn, `${rateConfig.bhtnPercent}% trên ${Math.round(insuranceSalary).toLocaleString('vi-VN')}đ`, false);
 
-  const profile = (appData.employeeProfiles || []).find(p => p.employeeCode === employeeCode);
   const dependentCount = (profile?.dependents || []).length;
   const unpaidLeaveAmount = sumDetails(details.filter(d => d.componentCode === 'UNPAID_LEAVE_DEDUCT'), 'DEDUCTION');
   const taxableBase = grossSoFar - (bhxh + bhyt + bhtn) - unpaidLeaveAmount
@@ -302,8 +318,12 @@ function applyApprove(period, actorUsername, actorName) {
 }
 function applyReject(period, actorUsername, actorName, reason) {
   assertTransition(period, ['PENDING_APPROVAL'], 'Từ chối');
+  // LUONG-04: bắt buộc lý do (route đã bật historyNoteRequired=true, xem routes/payroll.js) — chặn LẠI ở
+  // đây cho chắc, đúng khuôn applyReopen() ngay dưới, để kế toán luôn biết ĐÍCH XÁC vì sao bị từ chối
+  // thay vì 1 câu chung chung.
+  if (!reason || !String(reason).trim()) throw new HttpError(400, 'Vui lòng nhập lý do từ chối kỳ lương');
   period.status = 'DRAFT';
-  pushHistory(period, 'REJECTED', actorUsername, actorName, reason ? String(reason).trim().slice(0, 500) : 'Từ chối — trả về rà soát lại');
+  pushHistory(period, 'REJECTED', actorUsername, actorName, String(reason).trim().slice(0, 500));
   return period;
 }
 function applyFinalize(period, actorUsername, actorName) {

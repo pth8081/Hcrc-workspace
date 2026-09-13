@@ -85,8 +85,9 @@ function computeMyPendingApprovalKeys(user, appData) {
   pushDeptWorkflowKeys(keys, 'contracts', contractsNonAddendum, appData, user, 'contract');
   pushDeptWorkflowKeys(keys, 'contractsSignedFile', contractsNonAddendum, appData, user, 'contractSigned');
   pushDeptWorkflowKeys(keys, 'operationOrders', appData.operationOrders, appData, user, 'operationOrder');
-  pushDeptWorkflowKeys(keys, 'operationStoreOpeningEstimate', appData.operationStoreOpenings, appData, user, 'operationStoreOpenEstimate');
-  pushDeptWorkflowKeys(keys, 'operationRepairEstimate', appData.operationRepairs, appData, user, 'operationRepairEstimate');
+  // operationStoreOpeningEstimate/operationRepairEstimate ĐÃ XOÁ khỏi MODULE_CONFIGS (lib/workflowEngine.js)
+  // — chủ ứng dụng xác nhận Vận Hành > Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả Dự toán. Khớp việc xoá
+  // 2 lời gọi addDeptWorkflowItems() tương ứng ở getMyPendingApprovals() (core-approvalhub.js).
 
   // ----- 2) Module theo 1 QUYỀN PHẲNG, không có khái niệm bước -----
   if (canApproveMeeting(user)) {

@@ -238,11 +238,11 @@ async function main() {
     // lib/workflowEngine.js MODULE_CONFIGS.paymentRequests).
     const expectedKeys = [
       'docs', 'submissions', 'carRegs', 'officeReqs', 'vppRegistrations', 'contracts', 'contractsSignedFile',
-      'itPriceApprovals', 'budgetEntries', 'operationOrders', 'operationStoreOpeningEstimate', 'operationRepairEstimate',
+      'itPriceApprovals', 'budgetEntries', 'operationOrders',
       'paymentRequests'
     ];
     expectedKeys.forEach(k => assert(k in MODULE_CONFIGS, `MODULE_CONFIGS phải có key "${k}"`));
-    assertEqual(Object.keys(MODULE_CONFIGS).length, expectedKeys.length, 'MODULE_CONFIGS phải có đúng 13 khoá (đúng số đã liệt kê, không thừa/thiếu)');
+    assertEqual(Object.keys(MODULE_CONFIGS).length, expectedKeys.length, 'MODULE_CONFIGS phải có đúng 11 khoá (operationStoreOpeningEstimate/operationRepairEstimate đã xoá — Vận Hành > Siêu Thị không còn phê duyệt Dự toán)');
   });
 
   run.summary();

@@ -13,7 +13,8 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { getAllForCollectionCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
+const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
+const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const {
@@ -29,10 +30,12 @@ const {
   filterHrProcessesForUser,
   filterItServiceRenewalsForUser, filterPaymentRequestsForUser, filterOnboardingProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, sanitizePermGroupsForViewer, assertNoManagerCycle,
+  computeSubordinateUsernames,
   filterLaborContractsForUser, filterAttendanceRecordsForUser, filterLeaveBalancesForUser,
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
   filterPayrollPeriodsForUser, filterPayslipsForUser,
-  filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser
+  filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS
 } = require('../lib/recordViewScope');
 const { filterNotificationsForUser } = require('../lib/notifications');
 
@@ -45,16 +48,16 @@ const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig', 'workflows',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
-  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows', 'vppDeptWorkflows',
+  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình người duyệt theo phòng ban
   // cho 2 luồng "Siêu Thị" của module Vận Hành — cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên
   // nhưng BỊ BỎ SÓT khỏi danh sách này khi thêm module Vận Hành, khiến bất kỳ tài khoản đã đăng nhập nào
   // (kể cả người chỉ có quyền tạo hồ sơ operationStoreOpenCreate/operationRepairCreate) cũng ghi trực
   // tiếp được qua POST /api/data/<key> và tự đặt mình làm người duyệt bước 1 phòng ban mình.
   'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
-  // Cùng lý do — quy trình duyệt RIÊNG cho giai đoạn Dự toán (Vận Hành > Siêu Thị), độc lập với 2 map
-  // duyệt hồ sơ chính ở trên.
-  'operationStoreOpenEstimateDeptWorkflows', 'operationRepairEstimateDeptWorkflows',
+  // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows ĐÃ XOÁ khỏi đây — Vận
+  // Hành > Siêu Thị KHÔNG còn bước phê duyệt Dự toán nào cả (chủ ứng dụng xác nhận), không còn map cấu
+  // hình nào cần bảo vệ ở đây nữa.
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows: cấu hình người duyệt Đơn Hàng (Vận
   // Hành) theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đã thay hẳn
   // cho operationOrderDeptWorkflows theo phòng ban trước đây — xem lib/workflowEngine.js) — cùng lý do
@@ -128,13 +131,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // sách từ khoá quét (xem defaults.js + lib/recordActions.js scanCommentForSensitiveContent()).
   'sensitiveKeywords',
   // vppExcludedJobTitles/workflowParticipatingDepts (khối 17 "Nhóm Quyền Đặc Biệt"): cấu hình quản trị,
-  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js. vppExcludeGroups (DẠNG CŨ, đã thay bằng
-  // vppExcludedJobTitles) vẫn giữ trong danh sách này để nếu có nơi nào lỡ còn ghi tới thì vẫn bị chặn
-  // đúng như trước — không phải vì còn được code mới dùng tới (xem migrateVppExcludedJobTitles() ở
-  // seedDefaults.js).
+  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js.
   // workflowParticipatingPositions ("Vị Trí Tham Gia Quy Trình", cùng khối 17 — xem defaults.js): danh
   // mục cặp (jobTitle,dept) độc lập dùng cho bước duyệt "Theo vị trí" — cùng độ mở với 2 key ngay trên.
-  'vppExcludeGroups', 'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
+  'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',
@@ -487,6 +487,20 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     };
   }));
 
+  // USER-BULK-02: "users" là 1 mảng ghi TOÀN BỘ (whole-blob, xem routes/data.js POST /api/data/:key),
+  // khớp theo "id" chứ chưa từng kiểm tra "username" trùng nhau — 2 tài khoản khác id nhưng cùng
+  // username khiến routes/auth.js (mọi chỗ users.find(u => u.username === username)) LUÔN chỉ thấy tài
+  // khoản đứng TRƯỚC trong mảng, tài khoản còn lại thành "ma" (không ai đăng nhập/đặt lại mật khẩu/khoá
+  // được), và trật tự mảng có thể đổi qua các lần lưu khác nhau -> hành vi không dự đoán được.
+  const seenUsernames = new Map();
+  for (const u of prepared) {
+    if (!u.username) continue;
+    if (seenUsernames.has(u.username)) {
+      throw new HttpError(400, `Tên đăng nhập "${u.username}" đã bị trùng giữa nhiều tài khoản — mỗi tài khoản phải có tên đăng nhập duy nhất.`);
+    }
+    seenUsernames.set(u.username, true);
+  }
+
   assertAtLeastOneAdmin(prepared);
   assertNoManagerCycle(prepared);
   return prepared;
@@ -556,6 +570,358 @@ async function prepareOperationOrderApiConfigForSave(payload) {
   return { ...rest, headerValueEnc: prior?.headerValueEnc };
 }
 
+// Bước 8d — checklistSubmissions: canViewChecklistSubmission() (lib/recordViewScope.js) có 3 nhánh —
+// (1) admin/checklistTemplateManage/checklistReportView xem HẾT, (2) chính người nộp xem bài của mình,
+// (3) người posType STORE xem bài CHƯA NHÁP của ĐÚNG siêu thị mình (storeCode === dept) — khác
+// paymentRequests/trainingDocumentProgress ở chỗ có 2 điều kiện OR (không phải 1 điều kiện phẳng duy
+// nhất), nên queryDedicatedRecords() (chỉ AND các where, không hỗ trợ OR) không đủ để gộp thành 1 lượt.
+// Tải 2 lượt riêng (theo SubmittedByUsername, theo StoreCode khi posType STORE) rồi gộp + khử trùng theo
+// id ở Node — mỗi lượt vẫn tự lọc/cache đúng ở SQL (không tải nguyên bảng company-wide).
+async function loadChecklistSubmissionsScoped(user) {
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.checklistTemplateManage || user?.perms?.checklistReportView);
+  if (canSeeAll) return getAllForCollectionCached('checklistSubmissions');
+
+  const own = await getForCollectionByColumnCached('checklistSubmissions', 'SubmittedByUsername', user?.username);
+  if (user?.posType !== 'STORE') return own;
+
+  const storeAll = await getForCollectionByColumnCached('checklistSubmissions', 'StoreCode', user?.dept);
+  const storeVisible = storeAll.filter(s => s.status !== 'DRAFT');
+  const byId = new Map();
+  for (const r of own) byId.set(r.id, r);
+  for (const r of storeVisible) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8e — operationOrders: canViewOperationOrder() (lib/recordViewScope.js) cũng có nhánh OR thứ 2,
+// nhưng KHÁC checklistSubmissions ở chỗ nhánh đó không map được sang 1 cột cụ thể — "đang là người duyệt"
+// phụ thuộc CẤU HÌNH QUY TRÌNH theo MỨC GIÁ TRỊ đơn hàng (tier, resolveOperationOrderWorkflow() ở
+// lib/workflowEngine.js), không phải theo phòng ban của hồ sơ — 1 người duyệt tier có thể cần thấy đơn
+// hàng CỦA MỌI PHÒNG BAN rơi vào đúng tier đó, nên không thể thu hẹp bằng where.Dept cho riêng họ. Thay
+// vì tính đúng-sai cho TỪNG hồ sơ (cần tải hết mới tính được, mất hết lợi ích), chỉ cần biết TRƯỚC khi
+// tải: "user này CÓ đang là người duyệt ở BẤT KỲ tier nào không?" — nếu có (số ít, thường là quản lý cấp
+// cao), tải company-wide như admin (an toàn, filterOperationOrdersForUser() vẫn lọc lại đúng sau đó);
+// nếu không (đa số người dùng thường — chỉ xem đơn hàng phòng ban mình), tải qua where.Dept ở SQL.
+function isApproverForAnyOperationOrderTier(user, data) {
+  if (!user?.username) return false;
+  const tierMaps = [data.operationOrderStoreTierWorkflows, data.operationOrderHOTierWorkflows];
+  for (const tierMap of tierMaps) {
+    for (const tierConfig of Object.values(tierMap || {})) {
+      const { approvers } = flatWorkflowConfigToSteps(tierConfig, data);
+      const isApproverHere = Object.values(approvers || {}).some(list =>
+        Array.isArray(list) ? list.includes(user.username) : list === user.username);
+      if (isApproverHere) return true;
+    }
+  }
+  return false;
+}
+
+// Bước 8f — carRegs: canViewCarReg() (lib/recordViewScope.js) có TỚI 4 nhánh — (1) admin, (2) chính
+// LÁI XE được gán (assignedDriverUsername, KHÔNG nhất thiết cùng phòng ban — xe dùng chung công ty), (3)
+// scopeAllows(carView, dept): phòng ban mình + carView.all (xem hết) + carView.depts[] (danh sách phòng
+// ban cụ thể được cấp thêm quyền xem, RIÊNG TỪNG NGƯỜI — không phải cấu hình chung), (4) đang là người
+// duyệt theo carDeptWorkflows (dept-keyed, khác operationOrders là tier-keyed). Khác operationOrders ở
+// chỗ nhánh (3)+(4) đều quy về 1 TẬP PHÒNG BAN cụ thể (không phải "toàn bộ mơ hồ") nên tính được TRƯỚC
+// khi tải: gộp {phòng ban mình} ∪ carView.depts[] ∪ {phòng ban mà mình là approver theo carDeptWorkflows}
+// rồi tải riêng từng phòng ban trong tập đó (mỗi phòng ban vẫn tự cache riêng qua
+// getForCollectionByDeptCached, nhiều người cùng phòng ban vẫn dùng chung 1 lượt đọc) + 1 lượt riêng theo
+// AssignedDriverUsername cho nhánh (2), rồi gộp + khử trùng theo id. carView.all (số ít) vẫn tải
+// company-wide như admin.
+function computeCarRegsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.carDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadCarRegsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.carView?.all) {
+    return getAllForCollectionCached('carRegs');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  if (Array.isArray(user?.perms?.carView?.depts)) user.perms.carView.depts.forEach(d => depts.add(d));
+  computeCarRegsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('carRegs', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownDriverItems = await getForCollectionByColumnCached('carRegs', 'AssignedDriverUsername', user?.username);
+  for (const r of ownDriverItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8g — officeReqs: canViewOfficeReq() (lib/recordViewScope.js) cùng khuôn carRegs (4 nhánh: admin,
+// chính người TẠO — Creator, KHÔNG forceOwnDept nên có thể tạo hộ phòng ban khác, xem lib/createValidation.js
+// officeReqs; scopeAllows(officeView, dept): phòng ban mình + officeView.all + officeView.depts[]; đang
+// là người duyệt theo *DeptWorkflows) — chỉ khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
+// (officeBuyDeptWorkflows cho MUA_BAN, officeFixDeptWorkflows cho SUA_CHUA, xem
+// MODULE_CONFIGS.officeReqs.resolveWfConfig() ở lib/workflowEngine.js) — quét CẢ 2 map khi tính tập
+// phòng ban approver (có thể "thừa" nếu user chỉ duyệt 1 trong 2 loại ở 1 phòng ban, nhưng
+// filterOfficeReqsForUser() vẫn lọc lại ĐÚNG theo subType thật của từng hồ sơ sau đó, an toàn).
+function computeOfficeReqsApproverDepts(user, data) {
+  const depts = [];
+  for (const mapKey of ['officeBuyDeptWorkflows', 'officeFixDeptWorkflows']) {
+    for (const [dept, wfConfig] of Object.entries(data[mapKey] || {})) {
+      const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+      const isApproverHere = Object.values(approvers || {}).some(list =>
+        Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+      if (isApproverHere) depts.push(dept);
+    }
+  }
+  return depts;
+}
+async function loadOfficeReqsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.officeView?.all) {
+    return getAllForCollectionCached('officeReqs');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  if (Array.isArray(user?.perms?.officeView?.depts)) user.perms.officeView.depts.forEach(d => depts.add(d));
+  computeOfficeReqsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('officeReqs', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  // Creator: officeReqs KHÔNG forceOwnDept (có thể tạo hộ phòng ban khác nếu officeCreate scope cho
+  // phép) — item.dept lúc đó có thể KHÁC phòng ban thật của người tạo, cần 1 lượt riêng theo Creator.
+  const ownCreatedItems = await getForCollectionByColumnCached('officeReqs', 'Creator', user?.username);
+  for (const r of ownCreatedItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8h — itPriceApprovals: canViewItPriceApproval() (lib/recordViewScope.js) KHÁC hẳn carRegs/
+// officeReqs — KHÔNG có nhánh "phòng ban mình" nào cả (người thường không tự động thấy đề xuất giá của
+// phòng ban mình) — chỉ: (1) admin/itManage xem HẾT, (2) chính người TẠO (Creator), (3)
+// itPriceEmergencyRejectApprove xem hồ sơ đang/đã tự mình xét "Từ chối khẩn cấp" (điều kiện theo DỮ LIỆU
+// emergencyRejectStatus/emergencyRejectDecidedBy, KHÔNG theo phòng ban — coi như "canSeeAll" cho số ít
+// người có quyền này, để filterItPriceApprovalsForUser() lọc lại đúng phạm vi hẹp thật sau đó), (4) đang
+// là người duyệt — NHƯNG cấu hình duyệt tách 2 nhánh theo priceType: RETAIL tra theo PHÒNG BAN
+// (itPriceDeptWorkflows), WHOLESALE tra theo 1 trong 4 MỨC cố định (itPriceTierWorkflows, không theo
+// phòng ban — giống operationOrders, coi như "canSeeAll" nếu approver ở bất kỳ mức nào).
+function isApproverForAnyItPriceWholesaleTier(user, data) {
+  if (!user?.username) return false;
+  for (const tierConfig of Object.values(data.itPriceTierWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(tierConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user.username) : list === user.username);
+    if (isApproverHere) return true;
+  }
+  return false;
+}
+function computeItPriceApprovalsApproverDepts(user, data) {
+  const depts = [];
+  for (const dept of Object.keys(data.itPriceDeptWorkflows || {})) {
+    const retailCfg = resolveItPriceDeptWorkflowConfig(data.itPriceDeptWorkflows, dept, 'RETAIL');
+    const { approvers } = flatWorkflowConfigToSteps(retailCfg, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadItPriceApprovalsScoped(user, data) {
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.itManage || user?.perms?.itPriceEmergencyRejectApprove
+    || isApproverForAnyItPriceWholesaleTier(user, data));
+  if (canSeeAll) return getAllForCollectionCached('itPriceApprovals');
+
+  const depts = new Set(computeItPriceApprovalsApproverDepts(user, data));
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('itPriceApprovals', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownCreatedItems = await getForCollectionByColumnCached('itPriceApprovals', 'Creator', user?.username);
+  for (const r of ownCreatedItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8i — vppRegistrations: canViewVppRegistration() (lib/recordViewScope.js) đơn giản hơn itPriceApprovals
+// — chỉ 3 nhánh: (1) canManageVpp (admin/vppManage) xem HẾT, (2) chính người TẠO (Creator), (3) đang là
+// người duyệt theo vppDeptWorkflows (dept-keyed, 1 cấu hình duy nhất — không tách RETAIL/WHOLESALE như
+// itPriceApprovals). KHÔNG có nhánh "phòng ban mình" (giống itPriceApprovals, khác carRegs/officeReqs).
+function computeVppRegistrationsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.vppDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadVppRegistrationsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.vppManage) {
+    return getAllForCollectionCached('vppRegistrations');
+  }
+  const depts = new Set(computeVppRegistrationsApproverDepts(user, data));
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('vppRegistrations', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownCreatedItems = await getForCollectionByColumnCached('vppRegistrations', 'Creator', user?.username);
+  for (const r of ownCreatedItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8j — budgetEntries: canViewBudgetEntry() (lib/recordViewScope.js) đơn giản nhất trong nhóm này —
+// 3 nhánh: (1) admin/budgetManage/budgetAggregate xem HẾT, (2) phòng ban mình, (3) đang là người duyệt
+// theo budgetDeptWorkflows (dept-keyed, 1 cấu hình duy nhất). KHÔNG có nhánh "chính người tạo" (khác
+// carRegs/officeReqs) — không cần lượt tải riêng theo cột nào khác ngoài Dept.
+function computeBudgetEntriesApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.budgetDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadBudgetEntriesScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate) {
+    return getAllForCollectionCached('budgetEntries');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  computeBudgetEntriesApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('budgetEntries', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  return [...byId.values()];
+}
+
+// Bước 8k — docs: canViewDoc() (lib/recordViewScope.js) 4 nhánh — (1) admin xem HẾT, (2) chính người
+// TẢI LÊN (uploader, mọi phòng ban/trạng thái), (3) viewApprovedAll/viewApprovedDepts (chỉ áp dụng hồ sơ
+// APPROVED) HOẶC viewDraftAll/viewDraftDepts (áp dụng hồ sơ KHÁC APPROVED), (4) đang là người duyệt theo
+// deptWorkflows[dept] (BẤT KỲ bước nào, không phân biệt trạng thái hồ sơ — khớp đúng
+// resolveDocApproversServer(), KHÔNG có snapshot effectiveApprovers như submissions bên dưới nên luôn
+// tra đúng cấu hình HIỆN TẠI, không có nguy cơ lệch dữ liệu cũ). viewDraftAll/viewApprovedAll (hiếm, vai
+// trò kiểu quản lý cấp cao) tải company-wide như admin — còn lại tải theo tập PHÒNG BAN (viewDraftDepts ∪
+// viewApprovedDepts ∪ approverDepts, TRÙNG hơi thừa 1 chút giữa 2 loại trạng thái nhưng filterDocsForUser()
+// vẫn lọc lại ĐÚNG sau đó, an toàn) + 1 lượt riêng theo Uploader.
+function computeDocsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.deptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadDocsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.viewDraftAll || user?.perms?.viewApprovedAll) {
+    return getAllForCollectionCached('docs');
+  }
+  const depts = new Set();
+  (user?.perms?.viewDraftDepts || []).forEach(d => depts.add(d));
+  (user?.perms?.viewApprovedDepts || []).forEach(d => depts.add(d));
+  computeDocsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('docs', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownUploads = await getForCollectionByColumnCached('docs', 'Uploader', user?.username);
+  for (const r of ownUploads) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8l — submissions: canViewSubmission() (lib/recordViewScope.js) 5 nhánh — (1) admin xem HẾT, (2)
+// chính người TẠO (creator), (3) scopeAllows(submissionView, dept) — phòng ban mình HOẶC submissionView.
+// all/depts[], (4) đang được mời "Xin ý kiến" (opinionRequestees, mảng username admin gán TAY từng hồ
+// sơ), (5) đang là người duyệt theo effectiveApprovers ĐÃ ĐÓNG BĂNG lúc tạo (resolveSubmissionApproversServer()
+// ưu tiên đọc snapshot này trước, chỉ tra lại submissionTypeDeptWorkflows/submissionDeptWorkflows HIỆN
+// TẠI cho hồ sơ CŨ chưa có snapshot).
+//
+// Nhánh (4)/(5) KHÔNG có cột SQL nào tra theo username (opinionRequestees là mảng tự do admin gán tay
+// từng hồ sơ, không giống Dept/Creator; effectiveApprovers là ẢNH CHỤP lúc tạo nên có thể LỆCH khỏi
+// computeSubmissionsApproverDepts() bên dưới — hàm đó chỉ quét được cấu hình HIỆN TẠI, nếu admin đổi
+// người duyệt SAU khi hồ sơ đã tạo thì approver gốc theo snapshot cũ rơi ngoài tập phòng ban vừa tính) —
+// không lập bảng phụ riêng chỉ để tra 2 trường hợp này. Bù đắp bằng cách LUÔN tải thêm mọi hồ sơ ĐANG
+// PENDING company-wide (tập luôn NHỎ — chỉ hồ sơ đang xử lý dở, không tích luỹ theo thời gian như
+// APPROVED/REJECTED) — đúng lúc "Xin ý kiến"/approver gốc còn ý nghĩa THẬT SỰ (đang chờ xử lý). Hồ sơ ĐÃ
+// xong (APPROVED/REJECTED) mà rơi vào 2 trường hợp hiếm này sẽ không hiện qua đường tải nhanh nữa — đánh
+// đổi CHỦ Ý, chỉ mất xem lại LỊCH SỬ (không phải bị chặn duyệt/thao tác thật nào đang hoạt động, khác
+// hẳn lỗ hổng "chặn nhầm approver đang active" mà canViewSubmission() từng phải vá — xem chú thích ở
+// lib/recordViewScope.js ngay trên hàm đó).
+function computeSubmissionsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.submissionDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  for (const typeMap of Object.values(data.submissionTypeDeptWorkflows || {})) {
+    for (const [dept, wfConfig] of Object.entries(typeMap || {})) {
+      const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+      const isApproverHere = Object.values(approvers || {}).some(list =>
+        Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+      if (isApproverHere) depts.push(dept);
+    }
+  }
+  return depts;
+}
+async function loadSubmissionsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.submissionView?.all) {
+    return getAllForCollectionCached('submissions');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  if (Array.isArray(user?.perms?.submissionView?.depts)) user.perms.submissionView.depts.forEach(d => depts.add(d));
+  computeSubmissionsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('submissions', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  const ownCreated = await getForCollectionByColumnCached('submissions', 'Creator', user?.username);
+  for (const r of ownCreated) byId.set(r.id, r);
+  const pendingItems = await getForCollectionByColumnCached('submissions', 'Status', 'PENDING');
+  for (const r of pendingItems) byId.set(r.id, r);
+  return [...byId.values()];
+}
+
+// Bước 8m — attendanceRecords: canViewEmployeeAttendanceRecord() (lib/recordViewScope.js) 3 nhánh —
+// (1) admin/hrAttendanceManage xem HẾT, (2) chính chủ (employeeCode -> username qua employeeProfiles),
+// (3) quản lý TRỰC TIẾP/GIÁN TIẾP của chủ bản ghi (isManagerOf(), đi ngược cây Cơ Cấu Tổ Chức không giới
+// hạn số cấp). Bảng AttendanceRecords chỉ có cột EmployeeCode/WorkDate/RecordType — KHÔNG có Dept/
+// Username/ManagerUsername nào để tra thẳng, phải tự tính tập "employeeCode nào user này được xem"
+// TRƯỚC (self + toàn bộ cấp dưới, qua computeSubordinateUsernames() — BFS xuôi 1 LẦN từ `users` đã tải
+// sẵn trong `data`, O(số nhân viên) — rẻ hơn hẳn gọi isManagerOf() lặp lại cho từng bản ghi chấm công vì
+// KHÔNG phụ thuộc số bản ghi, chỉ phụ thuộc số nhân viên) rồi mới tải theo EmployeeCode cho từng mã.
+function loadAttendanceRecordsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.hrAttendanceManage) {
+    return getAllForCollectionCached('attendanceRecords');
+  }
+  const relevantUsernames = computeSubordinateUsernames(user?.username, data.users);
+  if (user?.username) relevantUsernames.add(user.username);
+  const employeeCodes = new Set();
+  (data.employeeProfiles || []).forEach(p => {
+    if (p.username && p.employeeCode && relevantUsernames.has(p.username)) employeeCodes.add(p.employeeCode);
+  });
+
+  const byId = new Map();
+  return Promise.all([...employeeCodes].map(async (code) => {
+    const items = await getForCollectionByColumnCached('attendanceRecords', 'EmployeeCode', code);
+    for (const r of items) byId.set(r.id, r);
+  })).then(() => [...byId.values()]);
+}
+
 // GET /api/data  → trả về TOÀN BỘ dữ liệu app dưới dạng { depts, cats, users, docs, ..., _versions }
 // _versions[key] = UpdatedAt (ISO string) tại thời điểm đọc — client lưu lại, gửi kèm header
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
@@ -599,10 +965,50 @@ router.get('/', async (req, res) => {
     // nối tiếp nhau, cộng dồn độ trễ mạng/DB của từng lượt (đây là nguyên nhân chính khiến lần tải dữ
     // liệu đầu tiên sau khi đăng nhập mất nhiều giây) — các collection này độc lập nhau, pool kết nối
     // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
-    const migratedList = [...MIGRATED_COLLECTIONS];
-    const [tasksResult, workItemsResult, ...collectionResults] = await Promise.all([
+    // Bước 8b — paymentRequests tách riêng khỏi vòng lặp tải chung ở dưới: canViewPaymentRequest()
+    // (lib/recordViewScope.js) chỉ có ĐÚNG 2 nhánh phẳng — admin/paymentManage xem HẾT, còn lại CHỈ đúng
+    // phòng ban mình, không có quản lý cấp trên/cấp dưới hay ngoại lệ nào khác. Với phần lớn người dùng
+    // (không có paymentManage), tải qua SQL where.Dept ngay từ đầu (getForCollectionByDeptCached(), Bước
+    // 7d) thay vì luôn tải TOÀN BỘ collection company-wide rồi mới lọc bớt ở Node — giảm đúng phần việc
+    // nặng nhất đã đo được ở load test (dựng lại + parse JSON + lọc quyền cho khối dữ liệu ngày càng
+    // lớn, MỖI request). admin/paymentManage (số ít) vẫn tải như cũ (dùng chung getAllForCollectionCached,
+    // không đổi). filterPaymentRequestsForUser() bên dưới VẪN được áp lại y hệt trước — SQL chỉ thu hẹp,
+    // không thay cho lớp chốt quyền xem thật.
+    // Bước 8c — trainingDocumentProgress cùng lý do: filterTrainingDocumentProgressForUser() chỉ có
+    // đúng 2 nhánh phẳng — canManageTraining (admin/trainingManage) xem HẾT, còn lại CHỈ đúng tiến độ của
+    // CHÍNH MÌNH (p.username === user.username, không có OR nào khác) — tải qua where.Username ngay ở
+    // SQL cho phần lớn người dùng (không có trainingManage) thay vì luôn tải TOÀN BỘ company-wide.
+    // Bước 8e — operationOrders: xem chú thích đầy đủ ở isApproverForAnyOperationOrderTier() phía trên —
+    // tải company-wide cho admin HOẶC người đang là approver ở BẤT KỲ tier nào (số ít), còn lại tải qua
+    // where.Dept ở SQL.
+    // Bước 8k/8l/8m — docs/submissions/attendanceRecords tách riêng khỏi vòng lặp tải chung, cùng lý do
+    // các collection ở trên: xem chú thích đầy đủ ở loadDocsScoped()/loadSubmissionsScoped()/
+    // loadAttendanceRecordsScoped() phía trên.
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords');
+    const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
+    const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
+    const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
+      canSeeAllPaymentRequests
+        ? getAllForCollectionCached('paymentRequests')
+        : getForCollectionByDeptCached('paymentRequests', req.freshUser?.dept),
+      canManageTrainingFlat
+        ? getAllForCollectionCached('trainingDocumentProgress')
+        : getForCollectionByUsernameCached('trainingDocumentProgress', req.freshUser?.username),
+      loadChecklistSubmissionsScoped(req.freshUser),
+      canSeeAllOperationOrders
+        ? getAllForCollectionCached('operationOrders')
+        : getForCollectionByDeptCached('operationOrders', req.freshUser?.dept),
+      loadCarRegsScoped(req.freshUser, data),
+      loadOfficeReqsScoped(req.freshUser, data),
+      loadItPriceApprovalsScoped(req.freshUser, data),
+      loadVppRegistrationsScoped(req.freshUser, data),
+      loadBudgetEntriesScoped(req.freshUser, data),
+      loadDocsScoped(req.freshUser, data),
+      loadSubmissionsScoped(req.freshUser, data),
+      loadAttendanceRecordsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     data.tasks = tasksResult;
@@ -610,6 +1016,18 @@ router.get('/', async (req, res) => {
     // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
     // dbo.AppData, không có _versions.operationWorkItems tương ứng).
     data.operationWorkItems = workItemsResult;
+    data.paymentRequests = paymentRequestsResult;
+    data.trainingDocumentProgress = trainingDocumentProgressResult;
+    data.checklistSubmissions = checklistSubmissionsResult;
+    data.operationOrders = operationOrdersResult;
+    data.carRegs = carRegsResult;
+    data.officeReqs = officeReqsResult;
+    data.itPriceApprovals = itPriceApprovalsResult;
+    data.vppRegistrations = vppRegistrationsResult;
+    data.budgetEntries = budgetEntriesResult;
+    data.docs = docsResult;
+    data.submissions = submissionsResult;
+    data.attendanceRecords = attendanceRecordsResult;
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
@@ -742,7 +1160,7 @@ router.get('/', async (req, res) => {
     // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — người quản lý/xem báo
     // cáo thấy hết; người khác chỉ thấy template ACTIVE đúng loại họ đủ điều kiện + bài của chính mình/
     // bài SUBMITTED làm tại đúng siêu thị mình (xem lib/recordViewScope.js).
-    if (data.checklistTemplates) data.checklistTemplates = filterChecklistTemplatesForUser(data.checklistTemplates, req.freshUser);
+    if (data.checklistTemplates) data.checklistTemplates = filterChecklistTemplatesForUser(data.checklistTemplates, req.freshUser, data);
     if (data.checklistSubmissions) data.checklistSubmissions = filterChecklistSubmissionsForUser(data.checklistSubmissions, req.freshUser);
     // notifications (thông báo trong app, dùng chung — xem lib/notifications.js): PHẢI lọc ngay từ khi
     // thêm vào MIGRATED_COLLECTIONS, nếu không GET /api/data trả THẲNG thông báo của MỌI người dùng cho
@@ -771,6 +1189,18 @@ router.get('/', async (req, res) => {
     // chất như đánh giá hiệu suất) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — xem
     // lib/recordViewScope.js canViewOnboardingProgress().
     if (data.onboardingProgress) data.onboardingProgress = filterOnboardingProgressForUser(data.onboardingProgress, req.freshUser, data);
+
+    // PQ-01: "Khối 0" (moduleAccess) chỉ có gate ở CLIENT (public/js/core.js hasModuleAccess()) — với 6
+    // module "mở sẵn cho mọi nhân viên" không có quyền chi tiết nào chặn XEM (doc/submission/task/
+    // internal/contract/itSupport, xem MODULE_ACCESS_GATED_COLLECTIONS ở lib/recordViewScope.js), admin
+    // tắt moduleAccess cho 1 user cụ thể vẫn không chặn được GET /api/data gọi thẳng — bổ sung mirror
+    // gate ở đây, CHỈ cho đúng 6 module này (phần còn lại đã có quyền chi tiết riêng chặn rồi).
+    for (const [moduleKey, collections] of Object.entries(MODULE_ACCESS_GATED_COLLECTIONS)) {
+      if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
+      for (const col of collections) {
+        if (data[col]) data[col] = [];
+      }
+    }
 
     data._versions = versions;
     res.json(data);

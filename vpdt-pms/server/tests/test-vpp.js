@@ -243,8 +243,14 @@ async function main() {
     switchTab('vpp');
     setVppSubTab('PERIODS');
     document.getElementById('vppNewPeriodName').value = 'Đăng ký Văn phòng phẩm Q3/2026';
-    document.getElementById('vppNewPeriodStart').value = '2026-09-01';
-    document.getElementById('vppNewPeriodEnd').value = '2026-09-10';
+    // Ngày ĐỘNG theo "hôm nay" (không hardcode) — vppPeriodIsOpen() (module-vpp.js) so sánh endDate với
+    // ngày thật của máy chạy test, hardcode 1 ngày cố định trong quá khứ sẽ khiến kỳ bị coi là ĐÃ HẾT
+    // HẠN ngay khi ngày hệ thống vượt qua mốc đó, dù status vẫn 'OPEN' — làm rỗng dropdown "Chọn kỳ đăng
+    // ký" ở V2 trở đi mà không phải lỗi nghiệp vụ thật.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const endIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    document.getElementById('vppNewPeriodStart').value = todayIso;
+    document.getElementById('vppNewPeriodEnd').value = endIso;
     document.getElementById('vppNewPeriodBudget').value = '100.000';
     renderVppDeptHeadcountTable();
     // Mô phỏng kết quả đã đọc xong file Excel/CSV danh mục (onVppCatalogFileChange() gán đúng biến này
@@ -275,6 +281,12 @@ async function main() {
   const v2 = await page.evaluate(async (periodId) => {
     window.__alerts = [];
     switchTab('vpp');
+    // setVppSubTab('REGISTER') PHẢI gọi tường minh — switchTab('vpp') KHÔNG tự chuyển sang subtab
+    // "Đăng Ký" (xem core-approvalhub.js: case 'vpp' luôn gọi CẢ 2 lệnh riêng biệt). Thiếu dòng này,
+    // #vppRegPeriodSelect vẫn ở HTML tĩnh ban đầu (chỉ có option rỗng) — gán .value=periodId cho 1
+    // <select> không có <option> khớp sẽ bị trình duyệt ÂM THẦM bỏ qua (giữ nguyên rỗng), khiến
+    // onVppRegPeriodChange() đọc lại periodId=0 và return sớm mà không render #vppItemQty_0.
+    setVppSubTab('REGISTER');
     document.getElementById('vppRegPeriodSelect').value = String(periodId);
     onVppRegPeriodChange();
     document.getElementById('vppItemQty_0').value = '3'; // Bút bi x3 = 15.000đ

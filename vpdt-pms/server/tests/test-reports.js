@@ -12,7 +12,7 @@ function seedReportData() {
   // below. Amounts are chosen to be easy to eyeball in assertions once combined.
   return {
     contracts: [
-      { id: 1, code: 'HD-001', dept: 'Phòng Kế Toán', approvalStatus: 'APPROVED', amount: 100000000, endDate: '2027-01-01', createdAt: '2026-03-01T09:00:00' }, // active
+      { id: 1, code: 'HD-001', dept: 'Phòng Kế Toán', approvalStatus: 'APPROVED', amount: 100000000, endDate: '2027-01-01', createdAt: '2026-03-01T09:00:00', customData: { shipmentTrackingCode: 'ABC123' } }, // active
       { id: 2, code: 'HD-002', dept: 'Phòng Kế Toán', approvalStatus: 'APPROVED', amount: 50000000, endDate: '2025-01-01', createdAt: '2026-03-02T09:00:00' }, // expired
       { id: 3, code: 'HD-003', dept: 'Phòng CNTT', approvalStatus: 'PENDING', amount: 30000000, endDate: '2027-01-01', createdAt: '2026-03-03T09:00:00' } // not counted (not APPROVED)
     ],
@@ -132,8 +132,8 @@ async function main() {
       await page.evaluate(() => selectReportsNavL1('office'));
       // Scope the assertion to the "dự toán" extra-metrics snippet specifically (not the raw records
       // table further down, which legitimately lists VP-003's own amount as a regular row value).
-      const extraHTML = await page.evaluate(() => {
-        const records = REPORT_MODULE_CONFIGS.office.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+      const extraHTML = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.office.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
         return renderOfficeReportExtra(records);
       });
       assert(extraHTML.includes('20.000.000'), 'expected Mua sắm dự toán 20.000.000 in the extra-metrics HTML');
@@ -143,8 +143,8 @@ async function main() {
 
     await run('Công Việc report tab computes the on-time completion rate from DONE tasks with a deadline', async () => {
       await page.evaluate(() => selectReportsNavL1('task'));
-      const extraHTML = await page.evaluate(() => {
-        const records = REPORT_MODULE_CONFIGS.task.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+      const extraHTML = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.task.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
         return renderTaskReportExtra(records);
       });
       // t1 is the only DONE task with a deadline and has no history entries, so it counts as NOT
@@ -171,6 +171,16 @@ async function main() {
       const html = await page.evaluate(() => document.getElementById('reportDetailResultsWrap').innerHTML);
       assert(html.includes('HD-001') && html.includes('HD-002'), 'APPROVED filter should keep HD-001 and HD-002');
       assert(!html.includes('HD-003'), 'APPROVED filter should exclude the PENDING HD-003');
+    });
+
+    // RPT-02: customData (trường tuỳ biến do Biểu Mẫu tạo, VD "shipmentTrackingCode") trước đây bị loại
+    // hoàn toàn khỏi Tra Cứu Chi Tiết vì typeof là 'object' — giờ phải tự tách ra thành cột riêng.
+    await run('Tra Cứu Chi Tiết (contract tab): trường customData (Biểu Mẫu tuỳ biến) hiện đúng thành cột riêng', async () => {
+      const columnKeys = await page.evaluate(() => reportDetailContext.columns.map((c) => c.key));
+      assert(columnKeys.includes('customData.shipmentTrackingCode'), `expected a "customData.shipmentTrackingCode" column, got: ${columnKeys.join(', ')}`);
+      await page.evaluate(() => onReportDetailColumnToggle('contract', 'customData.shipmentTrackingCode', true));
+      const html = await page.evaluate(() => document.getElementById('reportDetailResultsWrap').innerHTML);
+      assert(html.includes('ABC123'), 'expected the customData value "ABC123" to render in the detail table');
     });
 
     await run('Excel export (detail, contract tab) sends the selected columns and filtered rows', async () => {
@@ -296,8 +306,8 @@ async function main() {
       await page.evaluate(() => { selectReportsNavL1('hr'); selectReportsNavL2('hr'); });
       const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
       assert(html.includes('>3<'), `expected tổng 3 câu hỏi trong khoảng lọc, snippet: ${html.slice(0, 400)}`);
-      const stats = await page.evaluate(() => {
-        const records = REPORT_MODULE_CONFIGS.hr.getRecords('', '2026-01-01', '2026-12-31');
+      const stats = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.hr.getRecords('', '2026-01-01', '2026-12-31');
         return { total: records.length, pending: records.filter((r) => r.status === 'PENDING').length, answered: records.filter((r) => r.status === 'ANSWERED').length };
       });
       assertEqual(stats.total, 3, 'hrFeedback total mismatch'); assertEqual(stats.pending, 1, 'PENDING count mismatch'); assertEqual(stats.answered, 2, 'ANSWERED count mismatch');
@@ -305,9 +315,9 @@ async function main() {
 
     await run('Báo Cáo Onboarding/Offboarding: đếm đúng IN_PROGRESS/COMPLETED/CANCELLED + lọc theo phòng ban', async () => {
       await page.evaluate(() => selectReportsNavL2('hrLifecycle'));
-      const stats = await page.evaluate(() => {
-        const all = REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('', '2026-01-01', '2026-12-31');
-        const cntt = REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('Phòng CNTT', '2026-01-01', '2026-12-31');
+      const stats = await page.evaluate(async () => {
+        const all = await REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('', '2026-01-01', '2026-12-31');
+        const cntt = await REPORT_MODULE_CONFIGS.hrLifecycle.getRecords('Phòng CNTT', '2026-01-01', '2026-12-31');
         return { total: all.length, cntt: cntt.length };
       });
       assertEqual(stats.total, 3, 'hrProcesses total mismatch'); assertEqual(stats.cntt, 2, 'hrProcesses CNTT-only mismatch (should be COMPLETED+CANCELLED)');
@@ -315,13 +325,21 @@ async function main() {
 
     await run('Báo Cáo Vận Hành: 3 luồng Đơn Hàng/Mở Mới/Sửa Chữa đếm đúng độc lập nhau', async () => {
       await page.evaluate(() => { selectReportsNavL1('vanHanh'); selectReportsNavL2('vanHanh'); });
-      const stats = await page.evaluate(() => ({
-        orders: REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31').length,
-        storeOpen: REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31').length,
-        repair: REPORT_MODULE_CONFIGS.operationRepair.getRecords('', '2026-01-01', '2026-12-31').length,
-        ordersAwaiting: REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31').filter((r) => r.status === 'AWAITING_RECEIPT').length,
-        storeOpenApproved: REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31').filter((r) => r.estimateStatus === 'APPROVED').length
-      }));
+      // getRecords() của 3 collection Vận Hành giờ ASYNC (Bước 7e — fetchReportRecords() gọi
+      // /api/reports/:collection, mock harness không có route này nên tự rơi về fallback lọc
+      // DB.<collection> cũ, vẫn đúng số liệu) — phải await, không .filter() thẳng lên Promise nữa.
+      const stats = await page.evaluate(async () => {
+        const orders = await REPORT_MODULE_CONFIGS.vanHanh.getRecords('', '2026-01-01', '2026-12-31');
+        const storeOpen = await REPORT_MODULE_CONFIGS.operationStoreOpen.getRecords('', '2026-01-01', '2026-12-31');
+        const repair = await REPORT_MODULE_CONFIGS.operationRepair.getRecords('', '2026-01-01', '2026-12-31');
+        return {
+          orders: orders.length,
+          storeOpen: storeOpen.length,
+          repair: repair.length,
+          ordersAwaiting: orders.filter((r) => r.status === 'AWAITING_RECEIPT').length,
+          storeOpenApproved: storeOpen.filter((r) => r.estimateStatus === 'APPROVED').length
+        };
+      });
       assertEqual(stats.orders, 3, 'operationOrders total mismatch'); assertEqual(stats.storeOpen, 2, 'operationStoreOpenings total mismatch'); assertEqual(stats.repair, 1, 'operationRepairs total mismatch');
       assertEqual(stats.ordersAwaiting, 1, 'AWAITING_RECEIPT count mismatch'); assertEqual(stats.storeOpenApproved, 1, 'estimateStatus APPROVED count mismatch');
     });

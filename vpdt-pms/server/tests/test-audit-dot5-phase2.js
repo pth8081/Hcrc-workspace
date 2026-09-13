@@ -1,9 +1,10 @@
 // server/tests/test-audit-dot5-phase2.js
 //
 // Regression test cho Giai đoạn 2 của Audit Đợt 5:
-//   1) lib/recordViewScope.js canViewOperationStoreOpening()/canViewOperationRepair() — người được
-//      chỉ định duyệt Dự toán (quy trình estimate ĐỘC LẬP, thường khác phòng ban với hồ sơ chính)
-//      phải thấy được hồ sơ qua GET /api/data, không chỉ gọi được action nếu biết trước id.
+//   1) lib/recordViewScope.js canViewOperationStoreOpening()/canViewOperationRepair() — nhánh "đang là
+//      approver Dự toán" ĐÃ BỊ XOÁ (chủ ứng dụng xác nhận Vận Hành > Siêu Thị không còn bước phê duyệt
+//      nào cả, kể cả Dự toán) — người ở phòng ban khác, không phải người phụ trách công việc/danh mục
+//      đầu tư nào trên hồ sơ, KHÔNG còn được thấy hồ sơ chỉ vì từng được cấu hình là approver.
 //   2) lib/recordViewScope.js assertNoManagerCycle() — vẫn hoạt động đúng sau khi chuyển từ
 //      routes/data.js sang đây (dùng chung cho cả POST /api/data/users lẫn route hẹp
 //      POST /api/admin/org-chart/set-manager).
@@ -31,36 +32,31 @@ function assertThrows(fn, message) {
 
 async function main() {
 
-// ===== 1) Người duyệt Dự toán (khác phòng ban) phải thấy hồ sơ =====
+// ===== 1) Nhánh "đang là approver Dự toán" đã XOÁ — người khác phòng ban, không phụ trách gì trên hồ
+// sơ, KHÔNG còn được thấy hồ sơ nữa (dù trước đây từng có cấu hình approver cho phòng ban đó) =====
 const APP_DATA_ESTIMATE = {
   users: [],
   operationWorkItems: [],
-  operationStoreOpenEstimateDeptWorkflows: {
-    'Phòng A': { approvers: { 1: ['duyet_dutoan'] } }
-  },
-  operationRepairEstimateDeptWorkflows: {
-    'Phòng A': { approvers: { 1: ['duyet_dutoan_sc'] } }
-  },
   operationStoreOpenDeptWorkflows: {},
   operationRepairDeptWorkflows: {}
 };
 
-await run.run('canViewOperationStoreOpening(): người được gán duyệt Dự toán (khác phòng ban) VẪN thấy hồ sơ', () => {
-  const item = { id: 1, dept: 'Phòng A' };
-  const approver = { username: 'duyet_dutoan', dept: 'Phòng B', perms: {} };
-  assert(canViewOperationStoreOpening(approver, item, APP_DATA_ESTIMATE), 'người duyệt Dự toán phải thấy được hồ sơ dù khác phòng ban');
+await run.run('canViewOperationStoreOpening(): người khác phòng ban, không phụ trách công việc/danh mục nào -> KHÔNG còn thấy hồ sơ (đã bỏ nhánh approver Dự toán)', () => {
+  const item = { id: 1, dept: 'Phòng A', estimateItems: [] };
+  const outsider = { username: 'duyet_dutoan', dept: 'Phòng B', perms: {} };
+  assert(!canViewOperationStoreOpening(outsider, item, APP_DATA_ESTIMATE), 'Vận Hành > Siêu Thị không còn phê duyệt Dự toán -> không còn nhánh approver mở rộng quyền xem');
 });
 
-await run.run('canViewOperationStoreOpening(): người không liên quan (không cùng phòng, không duyệt gì) -> KHÔNG thấy', () => {
-  const item = { id: 1, dept: 'Phòng A' };
+await run.run('canViewOperationStoreOpening(): người không liên quan (không cùng phòng, không phụ trách gì) -> KHÔNG thấy', () => {
+  const item = { id: 1, dept: 'Phòng A', estimateItems: [] };
   const unrelated = { username: 'nv_khac', dept: 'Phòng C', perms: {} };
   assert(!canViewOperationStoreOpening(unrelated, item, APP_DATA_ESTIMATE), 'người không liên quan không được thấy hồ sơ Phòng A');
 });
 
-await run.run('canViewOperationRepair(): người được gán duyệt Dự toán sửa chữa (khác phòng ban) VẪN thấy hồ sơ', () => {
-  const item = { id: 2, dept: 'Phòng A' };
-  const approver = { username: 'duyet_dutoan_sc', dept: 'Phòng B', perms: {} };
-  assert(canViewOperationRepair(approver, item, APP_DATA_ESTIMATE), 'người duyệt Dự toán sửa chữa phải thấy được hồ sơ dù khác phòng ban');
+await run.run('canViewOperationRepair(): người khác phòng ban, không phụ trách công việc/danh mục nào -> KHÔNG còn thấy hồ sơ (đã bỏ nhánh approver Dự toán)', () => {
+  const item = { id: 2, dept: 'Phòng A', estimateItems: [] };
+  const outsider = { username: 'duyet_dutoan_sc', dept: 'Phòng B', perms: {} };
+  assert(!canViewOperationRepair(outsider, item, APP_DATA_ESTIMATE), 'Vận Hành > Siêu Thị không còn phê duyệt Dự toán -> không còn nhánh approver mở rộng quyền xem');
 });
 
 // ===== 2) assertNoManagerCycle vẫn đúng sau khi chuyển vị trí =====

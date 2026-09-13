@@ -200,9 +200,15 @@ function operationStatusBadge(o) {
 // cấp, mỗi phần tử HOẶC 1 tên siêu thị thật (đối chiếu o.dept của đơn STORE) HOẶC literal 'HO' cho đơn
 // orderLocationType==='HO') — TÁCH RIÊNG hoàn toàn khỏi quần thể duyệt/từ chối đơn hàng nội bộ (đã đổi từ
 // đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung", KHÔNG còn dùng chung isApproverForDeptWorkflow() như trước).
+// DH-09: mirror ĐÚNG lib/recordActions.js isApproverForOperationOrderReceipt() — KHÔNG dùng scopeAllows()
+// chung (có nhánh dept-fallback sai cho quyền này, xem chú thích đầy đủ ở hàm server) — chỉ xét đúng cấu
+// trúc {all, depts[]} của operationOrderReceiptManage.
 function canManageOperationOrderReceiptClient(o) {
+  if (currentUser?.perms?.admin) return true;
+  const scope = currentUser?.perms?.operationOrderReceiptManage;
+  if (scope?.all) return true;
   const scopeKey = o.orderLocationType === 'HO' ? 'HO' : o.dept;
-  return scopeAllows(currentUser, currentUser?.perms?.operationOrderReceiptManage, scopeKey);
+  return !!(Array.isArray(scope?.depts) && scope.depts.includes(scopeKey));
 }
 
 // Đổ danh sách "Nơi Nhận" (siêu thị/kho) cho ô lọc — dùng chung cho cả Danh Sách (filterLocationOperationOrder)
@@ -1362,12 +1368,10 @@ async function processOperation(actionType) {
 // ==========================================
 // VẬN HÀNH > "SIÊU THỊ" > DỰ TOÁN — estimateItems[]/estimateStatus nested TRÊN chính bản ghi
 // operationStoreOpenings/operationRepairs (không phải collection riêng), quyền: toàn quyền quản lý hồ sơ.
-// Duyệt/Từ chối/Bổ sung đi qua route generic /api/workflow/<ESTIMATE_MODULE_KEY>/:id/:action.
+// KHÔNG CÒN bước phê duyệt nào (chủ ứng dụng xác nhận Vận Hành > Siêu Thị không có phê duyệt, kể cả Dự
+// toán) — bấm Lưu là hoàn tất ngay (submitOperationEstimate(), lib/recordActions.js, DRAFT -> APPROVED
+// trực tiếp). resetOperationEstimateToDraft() vẫn giữ lại CHỈ để xử lý nốt hồ sơ CŨ còn kẹt REJECTED.
 // ==========================================
-const OPERATION_ESTIMATE_MODULE_KEY = { operationStoreOpenings: 'operationStoreOpeningEstimate', operationRepairs: 'operationRepairEstimate' };
-function operationEstimateWfMap(kind) {
-  return kind === 'operationStoreOpenings' ? (DB.operationStoreOpenEstimateDeptWorkflows || {}) : (DB.operationRepairEstimateDeptWorkflows || {});
-}
 // Overhaul quyền Vận Hành > Siêu Thị — mirror ĐÚNG lib/createValidation.js canManageOperationRecord():
 // admin/operationRecordManageAll toàn quyền MỌI hồ sơ; operationStoreOpenCreate/operationRepairCreate
 // (đúng theo kind — dùng thẳng OPERATION_KIND_META[kind].permCreate, KHỎI cần map lại lần 2) CHỈ toàn
@@ -1744,10 +1748,6 @@ function openOperationEstimateModal(kind, id) {
   document.getElementById('operationEstimateModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
   const controls = document.getElementById('operationEstimateModalControls');
-  const wfMap = operationEstimateWfMap(kind);
-  const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.estimateCurrentStep);
-  const canApprove = (o.estimateStatus === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.estimateHistory, o.estimateCurrentStep);
 
   if (editable) {
     // Mục H: module Vận Hành > Siêu Thị không còn qua bước phê duyệt của ai khác — bấm Lưu là hoàn tất
@@ -1759,16 +1759,6 @@ function openOperationEstimateModal(kind, id) {
     const resaveNote = o.estimateStatus === 'APPROVED'
       ? `<p class="text-[11px] text-gray-500 italic mt-1">Sửa xong danh mục, các số Tổng/Còn lại và trạng thái hồ sơ tự cập nhật ngay — Công việc ở Thực hiện vẫn thêm/sửa/xoá riêng như bình thường.</p>` : '';
     controls.innerHTML = `<div class="flex flex-col items-end gap-1"><button data-op="submitOperationEstimateForApproval" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700 text-xs">💾 Lưu Danh Mục Đầu Tư</button>${resaveNote}</div>`;
-  } else if (canApprove) {
-    controls.innerHTML = `
-      <div class="space-y-2">
-        <textarea id="txtOperationEstimateComment" rows="2" class="w-full border p-2 rounded text-xs" placeholder="Ghi chú (bắt buộc khi Từ chối/Yêu cầu bổ sung)"></textarea>
-        <div class="flex justify-end gap-2">
-          <button data-op="confirmProcessOperationEstimate" data-action="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-          <button data-op="confirmProcessOperationEstimate" data-action="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-          <button data-op="confirmProcessOperationEstimate" data-action="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
-        </div>
-      </div>`;
   } else if (o.estimateStatus === 'REJECTED' && canCreateOperationEstimateClient(currentUser, kind, o)) {
     // Nhánh này chỉ còn khả năng xảy ra với hồ sơ CŨ (trước Mục H) từng bị Từ chối — hồ sơ MỚI từ giờ
     // không còn ai duyệt/từ chối nữa (đi thẳng DRAFT -> APPROVED, xem submitOperationEstimate()), giữ lại
@@ -1884,75 +1874,9 @@ async function resetOperationEstimateToDraft() {
   openOperationEstimateModal(kind, id);
 }
 
-function confirmProcessOperationEstimate(actionType) {
-  const comment = document.getElementById('txtOperationEstimateComment').value.trim();
-  if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
-    return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
-  }
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt Danh Mục Đầu Tư', REJECT: '❌ Xác Nhận Từ Chối Danh Mục Đầu Tư', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung Danh Mục Đầu Tư' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa danh mục đầu tư về nháp để người lập sửa lại)' };
-  showConfirmModal({
-    title: titleMap[actionType],
-    bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> danh mục đầu tư này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,
-    confirmLabel: labelMap[actionType],
-    onConfirm: () => actionType === 'APPROVE' ? withApprovalAuth(() => processOperationEstimate(actionType)) : processOperationEstimate(actionType)
-  });
-}
-async function processOperationEstimate(actionType) {
-  if (!currentEstimateKind || !currentEstimateRecordId) return;
-  const kind = currentEstimateKind, id = currentEstimateRecordId;
-  const meta = OPERATION_KIND_META[kind];
-  const arr = meta.list();
-  const item = arr.find(x => x.id === id);
-  if (!item) return;
-  const comment = document.getElementById('txtOperationEstimateComment').value.trim();
-  const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
-  const moduleKey = OPERATION_ESTIMATE_MODULE_KEY[kind];
-
-  let result;
-  try {
-    result = await callWorkflowAction(moduleKey, id, actionUrlMap[actionType], { comment });
-  } catch (e) { return alert('⛔ ' + e.message); }
-
-  const updated = result.item;
-  const idx = arr.findIndex(x => x.id === id);
-  if (idx !== -1) arr[idx] = updated;
-
-  let msg = '✅ Đã cập nhật trạng thái danh mục đầu tư!';
-  const transition = result.transition;
-  if (transition.type === 'REQUEST_CHANGES') {
-    notifyUsersByEmail(meta.logModule, 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
-      `[VPDT] Danh mục đầu tư ${updated.code} cần bổ sung/chỉnh sửa`,
-      `Danh mục đầu tư của ${meta.subLabel.toLowerCase()} "${meta.titleField(updated)}" (${updated.code}) cần được sửa lại. Lý do: ${comment}.`);
-    msg = '✅ Đã yêu cầu bổ sung — danh mục đầu tư đã chuyển về NHÁP để lập lại!';
-  } else if (transition.type === 'REJECTED') {
-    notifyUsersByEmail(meta.logModule, 'NOTIFY_REJECTED', updated.code, [updated.creator],
-      `[VPDT] Danh mục đầu tư ${updated.code} bị từ chối`,
-      `Danh mục đầu tư của ${meta.subLabel.toLowerCase()} "${meta.titleField(updated)}" (${updated.code}) đã bị từ chối. Lý do: ${comment}`);
-    msg = '✅ Đã từ chối danh mục đầu tư!';
-  } else if (transition.type === 'ADVANCED') {
-    msg = getStepAdvanceMessage(transition.stepApprovers);
-    if (transition.nextApprovers.length) {
-      notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
-        `[VPDT] Danh mục đầu tư ${updated.code} cần bạn phê duyệt`,
-        `Danh mục đầu tư của ${meta.subLabel.toLowerCase()} "${meta.titleField(updated)}" (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
-    }
-  } else if (transition.type === 'COMPLETED') {
-    msg = '✅ Phê duyệt danh mục đầu tư thành công! Giai đoạn Thực hiện đã được mở khoá.';
-    notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVED', updated.code, [updated.creator],
-      `[VPDT] Danh mục đầu tư ${updated.code} đã được phê duyệt`,
-      `Danh mục đầu tư của ${meta.subLabel.toLowerCase()} "${meta.titleField(updated)}" (${updated.code}) đã được phê duyệt hoàn tất — có thể chuyển sang Thực hiện.`);
-  } else if (transition.type === 'PARTIAL_APPROVE') {
-    msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
-  }
-
-  logSystemAction(meta.logModule, `PROCESS_ESTIMATE_${actionType}`, `Xử lý danh mục đầu tư [${updated.code}]: ${actionType}`, 'SUCCESS', updated.code);
-  alert(msg);
-  closeOperationEstimateModal();
-  renderOperationEstimateList();
-  refreshApprovalSurfaces();
-}
+// confirmProcessOperationEstimate()/processOperationEstimate() (Duyệt/Từ chối/Yêu cầu bổ sung Danh mục
+// đầu tư) ĐÃ XOÁ — chủ ứng dụng xác nhận Vận Hành > Siêu Thị không có bước phê duyệt nào cả, kể cả Dự
+// toán (submitOperationEstimateForApproval() ở trên lưu thẳng DRAFT -> APPROVED, không qua ai duyệt).
 
 // ==========================================
 // VẬN HÀNH > "SIÊU THỊ" > THỰC HIỆN + NGHIỆM THU — cây công việc đa cấp dbo.OperationWorkItems
@@ -3429,7 +3353,6 @@ const OP_CLICK_ACTIONS = {
   addOperationEstimateChildRow: el => addOperationEstimateChildRow(Number(el.dataset.idx)),
   openOperationEstimateModal: el => openOperationEstimateModal(el.dataset.kind, Number(el.dataset.id)),
   submitOperationEstimateForApproval: () => submitOperationEstimateForApproval(),
-  confirmProcessOperationEstimate: el => confirmProcessOperationEstimate(el.dataset.action),
   resetOperationEstimateToDraft: () => resetOperationEstimateToDraft(),
   exportOperationEstimateItems: () => exportOperationEstimateItems(),
   exportOperationWorkItems: () => exportOperationWorkItems(),

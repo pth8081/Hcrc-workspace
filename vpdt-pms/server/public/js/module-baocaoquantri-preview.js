@@ -399,13 +399,13 @@ function renderInternalReportExtra(records) {
   `;
 }
 
-function exportModuleReportExcel(moduleKey) {
+async function exportModuleReportExcel(moduleKey) {
   const config = REPORT_MODULE_CONFIGS[moduleKey];
   if (!config) return;
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
-  const records = config.getRecords(deptFilter, fromDate, toDate);
+  const records = await config.getRecords(deptFilter, fromDate, toDate);
 
   const rows = [['Tổng số hồ sơ', records.length]];
   if (config.statusOf) {
@@ -652,9 +652,9 @@ function renderReportsSummary(container) {
 // Nút "Xuất Báo Cáo Excel" dùng chung cho mọi tab — Tổng Hợp xuất đủ mọi chỉ số như trước
 // (exportReportsSummaryExcel giữ nguyên logic cũ), các tab module xuất đúng phạm vi module đó
 // (exportModuleReportExcel(), xem REPORT_MODULE_CONFIGS phía trên).
-function exportReportsExcel() {
+async function exportReportsExcel() {
   const leafKey = getActiveReportLeafKey();
-  if (leafKey && leafKey !== 'SUMMARY') { exportModuleReportExcel(leafKey); return; }
+  if (leafKey && leafKey !== 'SUMMARY') { await exportModuleReportExcel(leafKey); return; }
   exportReportsSummaryExcel();
 }
 

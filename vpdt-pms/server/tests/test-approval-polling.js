@@ -4,13 +4,14 @@
 // — server chạy PM2 cluster mode, xem chú thích đầy đủ ở routes/approvals.js):
 //
 //   PHẦN A — lib/approvalAggregator.js::computeMyPendingApprovalKeys(user, appData), HÀM THUẦN không tự
-//   đọc DB, gọi TRỰC TIẾP (không mock gì) với fixture dựng tay, phủ ĐỦ 19 nguồn hồ sơ mà hàm này tổng
+//   đọc DB, gọi TRỰC TIẾP (không mock gì) với fixture dựng tay, phủ ĐỦ 17 nguồn hồ sơ mà hàm này tổng
 //   hợp (khớp 1:1 public/js/core-approvalhub.js::getMyPendingApprovals(), xem cross-reference ở đầu
-//   lib/approvalAggregator.js): 9 module theo BƯỚC quy trình phòng ban (docs, submissions, carRegs,
+//   lib/approvalAggregator.js): 7 module theo BƯỚC quy trình phòng ban (docs, submissions, carRegs,
 //   officeReqs x2 subType, vppRegistrations, itPriceApprovals, budgetEntries, contracts x2 luồng,
-//   operationOrders, operationStoreOpenings/operationRepairs "Dự toán") + module theo QUYỀN PHẲNG
-//   (meetings, internalPosts SHARE + bình luận bị gắn cờ, licenses, paymentRequests, itPrice "Từ chối
-//   khẩn cấp", operationOrders AWAITING_RECEIPT).
+//   operationOrders) + module theo QUYỀN PHẲNG (meetings, internalPosts SHARE + bình luận bị gắn cờ,
+//   licenses, paymentRequests, itPrice "Từ chối khẩn cấp", operationOrders AWAITING_RECEIPT).
+//   operationStoreOpenings/operationRepairs "Dự toán" ĐÃ XOÁ KHỎI ĐÂY — Vận Hành > Siêu Thị không còn
+//   bước phê duyệt nào cả, kể cả Dự toán (chủ ứng dụng xác nhận).
 //
 //   PHẦN B — GET /api/approvals/pending-signature (routes/approvals.js), gọi thẳng router express THẬT
 //   trong tiến trình Node (cùng khuôn test-approval-email-config-admin-gate.js/test-audit-round2-
@@ -47,8 +48,6 @@ function buildFixtureAppData() {
     contractManageDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
     operationOrderStoreTierWorkflows: {},
     operationOrderHOTierWorkflows: { LT100M: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
-    operationStoreOpenEstimateDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
-    operationRepairEstimateDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
 
     // ----- Collection hồ sơ (đã migrate sang dbo.Records — ở đây chỉ là mảng JS thuần, hàm test không
     // quan tâm nguồn lưu trữ thật) — mỗi module: 1 bản ghi duyet1 ĐƯỢC duyệt + 1 bản ghi PHẢI bị loại
@@ -129,12 +128,6 @@ function buildFixtureAppData() {
       // KHÔNG còn liên quan tới quyền này nữa — chỉ scopeKey mới quyết định).
       { id: 123, dept: 'Siêu Thị ABC', status: 'AWAITING_RECEIPT', currentStep: 1, history: [],
         orderLocationType: 'STORE', storeCode: 'Siêu Thị ABC', amount: 500000000, paymentTotalAmount: 0 }
-    ],
-    operationStoreOpenings: [
-      { id: 131, dept: 'Kế Toán', estimateStatus: 'PENDING', estimateCurrentStep: 1, estimateHistory: [] }
-    ],
-    operationRepairs: [
-      { id: 141, dept: 'Kế Toán', estimateStatus: 'PENDING', estimateCurrentStep: 1, estimateHistory: [] }
     ]
   };
 }
@@ -157,7 +150,7 @@ const OUTSIDER = {
 };
 
 async function runPartA(run) {
-  await run.run('computeMyPendingApprovalKeys(): 9 module dept-workflow đều được tổng hợp ĐÚNG cho duyet1', async () => {
+  await run.run('computeMyPendingApprovalKeys(): 7 module dept-workflow đều được tổng hợp ĐÚNG cho duyet1', async () => {
     const appData = buildFixtureAppData();
     const keys = computeMyPendingApprovalKeys(DUYET1, appData);
 
@@ -176,8 +169,6 @@ async function runPartA(run) {
     assert(keys.includes('contractSigned:71'), 'phải gồm contractSigned:71 (luồng Tài liệu ký, field riêng)');
     assert(!keys.includes('contract:72') && !keys.includes('contractSigned:72'), 'PHẢI loại phụ lục (isAddendum:true) khỏi CẢ 2 luồng hợp đồng');
     assert(keys.includes('operationOrder:121'), 'phải gồm operationOrder:121 (mức HO/LT100M, duyet1 có tên)');
-    assert(keys.includes('operationStoreOpenEstimate:131'), 'phải gồm operationStoreOpenEstimate:131');
-    assert(keys.includes('operationRepairEstimate:141'), 'phải gồm operationRepairEstimate:141');
   });
 
   await run.run('computeMyPendingApprovalKeys(): 6 module/nhánh QUYỀN PHẲNG (không theo bước) đều đúng', async () => {

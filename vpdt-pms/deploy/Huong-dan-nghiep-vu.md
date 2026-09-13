@@ -59,7 +59,7 @@ song an toàn.
 [Node.js/Express — PM2 cluster] ──── phục vụ luôn giao diện (public/) + API
         │
         ▼
-[SQL Server] — dbo.AppData (cấu hình) + dbo.SystemLogs/Tasks/Records (hồ sơ nghiệp vụ)
+[SQL Server] — dbo.AppData (cấu hình) + dbo.SystemLogs/Tasks/Docs/Contracts/... (hồ sơ nghiệp vụ, mỗi collection 1 bảng riêng)
 ```
 
 **Ai dùng gì**:
@@ -150,8 +150,10 @@ Liệu, Văn Bản Trình (theo từng loại tờ trình), Đăng Ký Xe, Mua S
 Phòng, Văn Phòng Phẩm, Hợp Đồng (2 quy trình tách riêng: Phê Duyệt gốc và Quản
 Lý HĐ/tài liệu ký), Hỗ Trợ IT (Phê Duyệt Giá bán lẻ theo phòng ban + bán buôn
 theo 4 mức Margin/Chiết khấu cố định), Ngân Sách, **Thanh Toán** ("Chuyển Xác
-Nhận Thanh Toán"), và các luồng Vận Hành (Mở Mới/Sửa Chữa Siêu Thị — riêng bước
-Dự toán, xem mục 4.4; Đặt Hàng theo mức giá trị đơn hàng). Riêng Thanh Toán
+Nhận Thanh Toán"), và Vận Hành > Đặt Hàng (theo mức giá trị đơn hàng, tách
+riêng Siêu Thị/HO). Mở Mới/Sửa Chữa Siêu Thị (xem mục 4.4) **không** dùng
+quy trình này nữa — không có bước phê duyệt nào cả, kể cả giai đoạn Dự toán.
+Riêng Thanh Toán
 **không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì dùng
 "Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
 
@@ -609,15 +611,14 @@ chung nhóm khác.
   → Nghiệm thu → Báo cáo**:
   - **Hồ sơ Mở Mới/Sửa Chữa (bản thân bản ghi)** — đi thẳng trạng thái đã
     duyệt ngay lúc tạo, **không** qua bước phê duyệt riêng cho chính bản ghi.
-  - **Giai đoạn Dự toán, riêng bước NÀY vẫn có luồng phê duyệt thật** — lập
-    danh mục đầu tư dự toán rồi gửi duyệt theo phòng ban (`estimateStatus`:
-    Nháp → Chờ duyệt → Đã duyệt/Từ chối, cấu hình người duyệt tại Hệ Thống →
-    Quy Trình & Phê Duyệt như các luồng khác ở mục 3) — **duyệt Dự toán xong
-    mới mở khoá được giai đoạn Thực hiện**. Đừng nhầm với ý "cả hồ sơ không
-    qua duyệt" ở trên — 2 việc tách biệt: **hồ sơ** không cần ai duyệt để tồn
-    tại, nhưng **Dự toán bên trong hồ sơ đó** vẫn phải qua đúng 1 vòng duyệt
-    mới cho phép làm tiếp.
-  - Sau khi Dự toán được duyệt: lập/theo dõi cây công việc thực hiện thực tế
+  - **Giai đoạn "Danh mục đầu tư" (trước đây gọi "Dự toán") — KHÔNG có bước
+    phê duyệt nào cả**: người quản lý dự án (người tạo hồ sơ) tự lập danh mục
+    đầu tư rồi bấm "💾 Lưu Danh Mục Đầu Tư" là hoàn tất ngay
+    (`estimateStatus` đi thẳng Nháp → Đã lưu, không qua ai duyệt, không cấu
+    hình được ở Hệ Thống → Quy Trình & Phê Duyệt nữa) — mở khoá giai đoạn
+    Thực hiện ngay lúc lưu xong. Đã lưu rồi vẫn sửa lại được (thêm/sửa/xoá
+    hạng mục) bất cứ lúc nào, không chỉ lần đầu.
+  - Sau khi lưu xong Danh mục đầu tư: lập/theo dõi cây công việc thực hiện thực tế
     (độc lập, không tự đồng bộ theo danh mục dự toán) → nghiệm thu khi toàn
     bộ công việc đã xong (ngay hoặc sau N ngày) → báo cáo tổng kết.
   - **Cây công việc Thực hiện/Nghiệm thu, cập nhật tiến độ**: mỗi công việc
@@ -1177,10 +1178,10 @@ lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng
 ### 4.7. Checklist Đánh Giá Siêu Thị
 
 Module ĐỘC LẬP HOÀN TOÀN về dữ liệu/quyền/route (không dùng chung bất kỳ gì
-với module Vận Hành), kiến trúc JSON-blob thuần (`checklistTemplates`/
-`checklistSubmissions` — MIGRATED_COLLECTIONS, mỗi bản ghi 1 dòng
-`dbo.Records`), phân quyền HOÀN TOÀN PHẲNG (không theo phòng ban như đa số
-module khác). Từ v17.0, nút điều hướng "✅ Checklist Đánh Giá" được GỘP CHUNG
+với module Vận Hành), mỗi collection (`checklistTemplates`/
+`checklistSubmissions`) có 1 bảng SQL riêng (`dbo.ChecklistTemplates`/
+`dbo.ChecklistSubmissions`, mỗi bản ghi 1 dòng), phân quyền HOÀN TOÀN PHẲNG
+(không theo phòng ban như đa số module khác). Từ v17.0, nút điều hướng "✅ Checklist Đánh Giá" được GỘP CHUNG
 dropdown sidebar `"⚙️ Vận Hành ▾"` cho gọn (thuần UI, không đổi dữ liệu/quyền)
 — bấm vào vẫn mở đúng module này. 4 tab nội bộ: **Cấu Hình / Thực Hiện / Kết
 Quả & Phản Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này,
@@ -1305,6 +1306,23 @@ biệt hoàn toàn (xem mục 4.7).
 Không cần cấu hình gì đặc biệt để dùng — mọi nhân viên có quyền vào module nào
 thì tự thấy đúng phần báo cáo tương ứng của module đó khi có quyền xem báo cáo
 (quyền riêng, không tự động theo quyền tạo hồ sơ).
+
+**Kỹ thuật (Bước 7d/7e/7h, v18.3-v18.6)**: TOÀN BỘ 21/21 module Báo Cáo (Tài
+Liệu, Văn Bản Trình, Công Việc, 3 luồng Vận Hành — Đơn Hàng/Mở Mới/Sửa Chữa,
+Hợp Đồng, Đăng Ký Xe, Văn Phòng Tổng Hợp, Phòng Họp, Biên Bản Họp, Truyền
+Thông Nội Bộ, Hỗ Trợ IT, Giấy Phép, HCRC Đồng Hành, Onboarding/Offboarding,
+Định Kỳ, Ngân Sách, Văn Phòng Phẩm, Thanh Toán, Đồng Phục) giờ đọc qua
+`GET /api/reports/:collection` — lọc sẵn theo phòng ban/khoảng ngày ngay ở
+CSDL thay vì tải nguyên cả danh sách về trình duyệt rồi mới lọc — vẫn áp
+dụng ĐÚNG quyền xem như trước (không đổi ai thấy gì; các phần lọc nghiệp vụ
+riêng ngoài dept/ngày — VD Giấy Phép chỉ đếm hồ sơ gốc, Truyền Thông Nội Bộ
+không lọc theo phòng ban, Đồng Phục lọc theo NHIỀU siêu thị đã chọn thay vì
+1 phòng ban — vẫn giữ nguyên, chỉ đổi nguồn tải ban đầu). Công Việc (`tasks`)
+đọc từ bảng riêng `dbo.Tasks` (có từ Bước 6b, không thuộc 55 collection Bước
+7) qua 1 hàm truy vấn riêng cùng khuôn. Nếu API này lỗi (mất mạng tạm thời,
+server đang khởi động lại...), màn hình tự động rơi về cách đọc cũ (dữ liệu
+đã tải sẵn qua `GET /api/data`) — không mất tính năng, chỉ mất phần tối ưu
+tốc độ trong đúng lúc đó.
 
 ---
 

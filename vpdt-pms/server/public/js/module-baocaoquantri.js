@@ -274,13 +274,49 @@ function getUniformReportSelectedStores() {
   return Array.from(reportsUniformCheckedStores);
 }
 
-function renderReports() {
+// Chặn "render chậm ghi đè render mới": các nút chọn tab Báo Cáo (selectReportsNavL1/L2) gọi renderReports()
+// kiểu fire-and-forget (không await), và ngày càng nhiều module dùng getRecords() bất đồng bộ
+// (fetchReportRecords() gọi /api/reports/:collection) — nếu người dùng đổi tab NHANH trước khi lần tải
+// trước xong, promise cũ trả về sau vẫn sẽ ghi đè #reportsContent bằng đúng nội dung của tab ĐÃ RỜI ĐI
+// nếu không có cờ chặn này. Mỗi lần renderReports() chạy sẽ tự tăng số thứ tự riêng; renderModuleReport()
+// chỉ ghi DOM nếu vẫn đang là lượt render MỚI NHẤT tại thời điểm dữ liệu tải xong.
+let reportsRenderSeq = 0;
+
+async function renderReports() {
   const container = document.getElementById('reportsContent');
   if (!container) return;
   renderReportsNavPicker();
   const leafKey = getActiveReportLeafKey();
+  const mySeq = ++reportsRenderSeq;
   if (!leafKey || leafKey === 'SUMMARY') { renderReportsSummary(container); return; }
-  renderModuleReport(leafKey, container);
+  await renderModuleReport(leafKey, container, mySeq);
+}
+
+// Bước 7d/7e — đọc CÓ LỌC ở SQL (routes/reports.js, chỉ 6 collection nhóm A đã hỗ trợ: docs/
+// submissions/paymentRequests/operationOrders/operationStoreOpenings/operationRepairs) thay vì luôn
+// duyệt nguyên DB.<collection> đã tải hết trong bộ nhớ trình duyệt. Vẫn lọc quyền xem SERVER-SIDE y hệt
+// GET /api/data đang dùng (routes/reports.js gọi lại ĐÚNG filter*ForUser() đó) — không đổi ai thấy gì so
+// với trước, chỉ đổi CÁCH lấy dữ liệu. Có dự phòng: lỗi mạng/API (hiếm, VD server tạm gián đoạn) tự động
+// rơi về cách lọc cũ ngay trong bộ nhớ (DB.<collection> vẫn được tải như trước qua GET /api/data, không
+// mất tính năng) — không để 1 lỗi mạng làm cả màn Báo Cáo trắng trơn.
+async function fetchReportRecords(collection, dept, from, to, fallbackFilterFn) {
+  try {
+    const params = new URLSearchParams();
+    if (dept) params.set('dept', dept);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const res = await fetch(`/api/reports/${collection}?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    // body.items PHẢI là mảng — không tin phản hồi thiếu/sai hình dạng (VD proxy/middleware lạ trả 200
+    // kèm body rỗng {} thay vì lỗi thật) mù quáng, rơi về fallback thay vì để nguyên undefined lan xuống
+    // .filter()/.length ở nơi gọi.
+    if (!Array.isArray(body.items)) throw new Error('Phản hồi không đúng định dạng (thiếu items[])');
+    return body.items;
+  } catch (err) {
+    console.error(`⚠️ Không gọi được /api/reports/${collection}, dùng lại dữ liệu đã tải sẵn:`, err.message);
+    return fallbackFilterFn();
+  }
 }
 
 // Thống kê dùng chung cho mọi tab module con (trừ "Tổng Hợp") — tổng số hồ sơ trong khoảng lọc, tình
@@ -289,22 +325,26 @@ function renderReports() {
 const REPORT_MODULE_CONFIGS = {
   doc: {
     title: '📂 Báo Cáo Tài Liệu',
-    getRecords: (dept, from, to) => DB.docs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+    getRecords: (dept, from, to) => fetchReportRecords('docs', dept, from, to,
+      () => DB.docs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
     , statusOf: r => r.status
   },
   submission: {
     title: '📜 Báo Cáo Văn Bản Trình',
-    getRecords: (dept, from, to) => DB.submissions.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('submissions', dept, from, to,
+      () => DB.submissions.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status
   },
   car: {
     title: '🚗 Báo Cáo Đăng Ký Xe',
-    getRecords: (dept, from, to) => DB.carRegs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('carRegs', dept, from, to,
+      () => DB.carRegs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status
   },
   office: {
     title: '🛒 Báo Cáo Văn Phòng Tổng Hợp',
-    getRecords: (dept, from, to) => DB.officeReqs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('officeReqs', dept, from, to,
+      () => DB.officeReqs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status,
     renderExtra: renderOfficeReportExtra,
     extraRows: records => {
@@ -315,7 +355,8 @@ const REPORT_MODULE_CONFIGS = {
   },
   contract: {
     title: '📄 Báo Cáo Hợp Đồng',
-    getRecords: (dept, from, to) => DB.contracts.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('contracts', dept, from, to,
+      () => DB.contracts.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.approvalStatus,
     renderExtra: renderContractReportExtra,
     extraRows: records => {
@@ -329,17 +370,20 @@ const REPORT_MODULE_CONFIGS = {
   },
   minutes: {
     title: '📝 Báo Cáo Biên Bản Họp',
-    getRecords: (dept, from, to) => DB.meetingMinutes.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+    getRecords: (dept, from, to) => fetchReportRecords('meetingMinutes', dept, from, to,
+      () => DB.meetingMinutes.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
   },
   meeting: {
     title: '🏢 Báo Cáo Phòng Họp',
-    getRecords: (dept, from, to) => DB.meetings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('meetings', dept, from, to,
+      () => DB.meetings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['PENDING', 'Đang chờ', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
   },
   vpp: {
     title: '🖇️ Báo Cáo Văn Phòng Phẩm',
-    getRecords: (dept, from, to) => DB.vppRegistrations.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('vppRegistrations', dept, from, to,
+      () => DB.vppRegistrations.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['NHAP', 'Nháp', 'bg-gray-400'], ['PENDING', 'Đang chờ', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
@@ -348,7 +392,8 @@ const REPORT_MODULE_CONFIGS = {
     // Kênh toàn công ty, không lọc theo phòng ban (khớp hành vi Góc chia sẻ hiện tại — ai cũng xem được).
     // Loại bài PENDING/REJECTED (chỉ xảy ra ở Góc chia sẻ, xem canViewInternalPost() ở lib/recordViewScope.js)
     // — chưa từng công khai thật sự, tính vào báo cáo sẽ thổi phồng số liệu hoạt động.
-    getRecords: (dept, from, to) => DB.internalPosts.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED' && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('internalPosts', dept, from, to,
+      () => DB.internalPosts.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED' && isInDateRange(r.createdAt, from, to))),
     deptBreakdown: false,
     renderExtra: renderInternalReportExtra
   },
@@ -360,9 +405,14 @@ const REPORT_MODULE_CONFIGS = {
     // kho (dùng chung logic computeUniformStockClient() ở phần module Đồng Phục phía trên).
     // Bỏ qua tham số `dept` (single-select #reportsDeptFilter, đã ẩn cho module này) — module Đồng Phục
     // dùng riêng bộ lọc chọn NHIỀU siêu thị (getUniformReportSelectedStores(), null = không giới hạn).
+    // fetchReportRecords() chỉ thu hẹp theo NGÀY ở SQL (không truyền dept — API chỉ hỗ trợ 1 giá trị,
+    // không khớp bộ lọc CHỌN NHIỀU siêu thị này) — lọc theo danh sách siêu thị đã chọn vẫn làm ở JS như
+    // cũ, SAU khi đã nhận về (đúng y hệt kết quả cuối, chỉ đổi nguồn tải ban đầu).
     getRecords: (dept, from, to) => {
       const selected = getUniformReportSelectedStores();
-      return DB.uniformIssuances.filter(r => (!selected || selected.includes(r.dept)) && isInDateRange(r.createdAt, from, to));
+      return fetchReportRecords('uniformIssuances', '', from, to,
+        () => DB.uniformIssuances.filter(r => isInDateRange(r.createdAt, from, to))
+      ).then(items => items.filter(r => !selected || selected.includes(r.dept)));
     },
     renderExtra: renderUniformReportExtra,
     extraRows: records => {
@@ -373,7 +423,8 @@ const REPORT_MODULE_CONFIGS = {
   task: {
     title: '✅ Báo Cáo Công Việc',
     // Công việc không có field phòng ban đáng tin (giao theo người, không theo phòng ban) — không lọc/không xếp theo phòng ban, khớp renderReportsSummary() hiện tại.
-    getRecords: (dept, from, to) => DB.tasks.filter(t => isInDateRange(t.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('tasks', dept, from, to,
+      () => DB.tasks.filter(t => isInDateRange(t.createdAt, from, to))),
     deptBreakdown: false,
     statusOf: t => t.status,
     statusBuckets: [['TODO', 'Chưa bắt đầu', 'bg-gray-500'], ['DOING', 'Đang thực hiện', 'bg-blue-500'], ['DONE', 'Hoàn thành', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']],
@@ -387,28 +438,33 @@ const REPORT_MODULE_CONFIGS = {
     title: '🪪 Báo Cáo Giấy Phép',
     // rootLicenseId == null: chỉ tính hồ sơ GỐC, không tính từng bản gia hạn/sửa đổi con (khớp cách
     // renderLicenseDashboard() đếm "Tổng" — xem getLicenseFamilyLatest()).
-    getRecords: (dept, from, to) => DB.licenses.filter(r => r.rootLicenseId == null && (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('licenses', dept, from, to,
+      () => DB.licenses.filter(r => r.rootLicenseId == null && (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status
   },
   payment: {
     title: '💰 Báo Cáo Thanh Toán',
-    getRecords: (dept, from, to) => DB.paymentRequests.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('paymentRequests', dept, from, to,
+      () => DB.paymentRequests.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['NEED_INFO', 'Chờ bổ sung', 'bg-orange-500'], ['APPROVED', 'Đã duyệt', 'bg-cyan-500'], ['PAID', 'Đã thanh toán', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
   budget: {
     title: '📊 Báo Cáo Ngân Sách',
-    getRecords: (dept, from, to) => DB.budgetPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+    getRecords: (dept, from, to) => fetchReportRecords('budgetPeriods', dept, from, to,
+      () => DB.budgetPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
   },
   itSupport: {
     title: '🖥️ Báo Cáo Hỗ Trợ IT',
-    getRecords: (dept, from, to) => DB.itSupportTickets.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('itSupportTickets', dept, from, to,
+      () => DB.itSupportTickets.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['TODO', 'Chưa xử lý', 'bg-gray-500'], ['DOING', 'Đang xử lý', 'bg-blue-500'], ['DONE', 'Hoàn thành', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
   },
   periodicReport: {
     title: '📅 Báo Cáo Định Kỳ (Kỳ Báo Cáo)',
-    getRecords: (dept, from, to) => DB.reportPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))
+    getRecords: (dept, from, to) => fetchReportRecords('reportPeriods', dept, from, to,
+      () => DB.reportPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
   },
   // Gap-fill (rà soát "module còn thiếu trong Báo Cáo", Nhóm B — CHỈ 3 phần dữ liệu không thuộc nhóm
   // cực nhạy cảm, xem chú thích ở REPORT_NAV_TREE). Cả 4 config dưới đây dùng field "dept" chuẩn
@@ -425,13 +481,15 @@ const REPORT_MODULE_CONFIGS = {
     // — chỉ chính người hỏi + nhanSuManage/admin thấy được) nên bảng "Tra cứu chi tiết" bên dưới KHÔNG lộ
     // câu hỏi/câu trả lời của người khác cho người không có quyền — an toàn dùng chung 1 khuôn getRecords
     // như mọi module khác, không cần ẩn bớt field nào thêm ở đây.
-    getRecords: (dept, from, to) => DB.hrFeedback.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('hrFeedback', dept, from, to,
+      () => DB.hrFeedback.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['PENDING', 'Chưa trả lời', 'bg-yellow-500'], ['ANSWERED', 'Đã trả lời', 'bg-green-500']]
   },
   hrLifecycle: {
     title: '🆕 Báo Cáo Onboarding / Offboarding',
-    getRecords: (dept, from, to) => DB.hrProcesses.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('hrProcesses', dept, from, to,
+      () => DB.hrProcesses.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['IN_PROGRESS', 'Đang thực hiện', 'bg-yellow-500'], ['COMPLETED', 'Hoàn tất', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
   },
@@ -441,31 +499,44 @@ const REPORT_MODULE_CONFIGS = {
   // toán (estimateStatus) mới có quy trình duyệt thật nên dùng field đó làm statusOf thay vì status.
   vanHanh: {
     title: '📦 Báo Cáo Đơn Hàng (Vận Hành)',
-    getRecords: (dept, from, to) => DB.operationOrders.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('operationOrders', dept, from, to,
+      () => DB.operationOrders.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['AWAITING_RECEIPT', 'Chờ nhập hàng', 'bg-blue-500'], ['RECEIVED', 'Đã nhập hàng', 'bg-green-500'], ['RECEIPT_CANCELLED', 'Đã huỷ nhập', 'bg-gray-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
+  // estimateStatus buckets: Vận Hành > Siêu Thị ĐÃ BỎ HẲN phê duyệt Dự toán (chủ ứng dụng xác nhận) —
+  // bấm Lưu là APPROVED ngay, không còn ai duyệt nên bỏ hẳn bucket PENDING (không còn hồ sơ MỚI nào dừng
+  // ở đây nữa — hồ sơ CŨ kẹt PENDING cũng được migrateStuckOperationApprovalStatuses() (seedDefaults.js)
+  // tự chuyển sang APPROVED mỗi lúc khởi động server) + đổi nhãn APPROVED bỏ chữ "duyệt". REJECTED giữ
+  // lại CHỈ để hiển thị nốt dữ liệu CŨ (trước Mục H) còn tồn, không còn hồ sơ MỚI nào rơi vào đây.
   operationStoreOpen: {
     title: '🏬 Báo Cáo Mở Mới Siêu Thị',
-    getRecords: (dept, from, to) => DB.operationStoreOpenings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('operationStoreOpenings', dept, from, to,
+      () => DB.operationStoreOpenings.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.estimateStatus,
-    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['PENDING', 'Dự toán chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Dự toán đã duyệt', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối', 'bg-red-500']]
+    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['APPROVED', 'Đã lập dự toán', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối (dữ liệu cũ)', 'bg-red-500']]
   },
   operationRepair: {
     title: '🔧 Báo Cáo Sửa Chữa Siêu Thị',
-    getRecords: (dept, from, to) => DB.operationRepairs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to)),
+    getRecords: (dept, from, to) => fetchReportRecords('operationRepairs', dept, from, to,
+      () => DB.operationRepairs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.estimateStatus,
-    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['PENDING', 'Dự toán chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Dự toán đã duyệt', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối', 'bg-red-500']]
+    statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['APPROVED', 'Đã lập dự toán', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối (dữ liệu cũ)', 'bg-red-500']]
   }
 };
 
-function renderModuleReport(moduleKey, container) {
+async function renderModuleReport(moduleKey, container, renderSeq) {
   const config = REPORT_MODULE_CONFIGS[moduleKey];
   if (!config) { container.innerHTML = ''; return; }
   const fromDate = document.getElementById('reportsFromDate')?.value || '';
   const toDate = document.getElementById('reportsToDate')?.value || '';
   const deptFilter = document.getElementById('reportsDeptFilter')?.value || '';
-  const records = config.getRecords(deptFilter, fromDate, toDate);
+  // await luôn an toàn dù getRecords() của module đó là sync (đa số, trả mảng thẳng — Promise.resolve()
+  // ngầm định) hay async (các collection Bước 7e/7h gọi fetchReportRecords()).
+  const records = await config.getRecords(deptFilter, fromDate, toDate);
+  // Trong lúc chờ ở trên, người dùng có thể đã đổi sang tab khác (renderReports() chạy lượt mới hơn) —
+  // bỏ qua, KHÔNG ghi đè DOM của tab hiện tại bằng dữ liệu của tab đã rời đi (xem chú thích reportsRenderSeq).
+  if (renderSeq !== undefined && renderSeq !== reportsRenderSeq) return;
 
   const totalHTML = `
     <div class="bg-white p-4 rounded border">
@@ -586,6 +657,10 @@ function buildReportDetailColumns(moduleKey, records, config) {
 
   const sampleSize = Math.min(records.length, 300);
   const valuesByKey = {};
+  // customData: object lồng chứa các trường tuỳ biến do Biểu Mẫu (module-core.js CORE_FIELD_MANIFEST)
+  // sinh ra — không có tên cố định nên phải quét riêng, không lọt qua vòng Object.keys(r) ở trên (bị
+  // loại vì typeof là 'object'). Gộp vào cùng valuesByKey với tiền tố "customData." để không trùng tên
+  // với trường gốc cùng cấp, rồi build cột y hệt các trường scalar thường.
   for (let i = 0; i < sampleSize; i++) {
     const r = records[i];
     Object.keys(r).forEach(k => {
@@ -595,10 +670,22 @@ function buildReportDetailColumns(moduleKey, records, config) {
       if (v !== null && v !== undefined && t !== 'string' && t !== 'number' && t !== 'boolean') return;
       (valuesByKey[k] = valuesByKey[k] || []).push(v);
     });
+    if (r.customData && typeof r.customData === 'object') {
+      Object.keys(r.customData).forEach(ck => {
+        const v = r.customData[ck];
+        const t = typeof v;
+        if (v !== null && v !== undefined && t !== 'string' && t !== 'number' && t !== 'boolean') return;
+        const key = 'customData.' + ck;
+        (valuesByKey[key] = valuesByKey[key] || []).push(v);
+      });
+    }
   }
 
   Object.keys(valuesByKey).forEach(k => {
-    cols.push({ key: k, label: REPORT_FIELD_LABELS[k] || humanizeReportFieldKey(k), type: inferReportFieldType(k, valuesByKey[k]), getValue: r => r[k] });
+    const isCustom = k.startsWith('customData.');
+    const subKey = isCustom ? k.slice('customData.'.length) : k;
+    const getValue = isCustom ? (r => r.customData ? r.customData[subKey] : undefined) : (r => r[k]);
+    cols.push({ key: k, label: REPORT_FIELD_LABELS[k] || humanizeReportFieldKey(subKey), type: inferReportFieldType(k, valuesByKey[k]), getValue });
   });
 
   cols.forEach(c => {

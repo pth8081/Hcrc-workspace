@@ -128,8 +128,8 @@ async function main() {
       budgetEntries: [], budgetDeptWorkflows: {}, budgetTemplates: [], budgetPeriods: [],
       reportPeriods: [], reportEntries: [], licenses: [], licenseTypes: [],
       operationOrders: [], operationOrderStoreTierWorkflows: {}, operationOrderHOTierWorkflows: {},
-      operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {}, operationStoreOpenEstimateDeptWorkflows: {},
-      operationRepairs: [], operationRepairDeptWorkflows: {}, operationRepairEstimateDeptWorkflows: {},
+      operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {},
+      operationRepairs: [], operationRepairDeptWorkflows: {},
       operationWorkItems: [], operationExecutionPeriods: [], orgChartManagerOverrides: {},
       _versions: {}
     });

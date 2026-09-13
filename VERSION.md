@@ -1,8 +1,691 @@
 # Phiên bản hiện tại
 
-**18.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.1 (2026-09-13): Bước 7g — Dọn dẹp `dbo.Records` dùng chung + AppData JSON cũ
+
+Hoàn tất lộ trình chuyển toàn bộ collection nghiệp vụ tăng-trưởng-nhanh sang bảng SQL riêng (Bước 6-7):
+bảng dùng chung `dbo.Records` (55 collection từng ở đó, xem `MIGRATED_COLLECTIONS`/`DEDICATED_TABLES` ở
+`lib/recordStore.js`) đã hoàn toàn RỖNG kể từ khi collection cuối cùng "tốt nghiệp" sang bảng riêng — dọn
+sạch mọi code path đọc/ghi thẳng bảng này để kiến trúc lưu trữ nhất quán 100% (mỗi collection nghiệp vụ =
+1 bảng riêng, mọi collection MỚI từ nay bắt buộc có bảng riêng ngay từ đầu, không còn "đường tắt" bảng
+dùng chung). Người dùng xác nhận sẽ trỏ ứng dụng vào 1 CSDL hoàn toàn mới (không có dữ liệu cũ cần giữ
+lại), nên đây là dọn kiến trúc thuần, không phải di trú dữ liệu an toàn zero-downtime.
+
+- **`lib/recordStore.js`**: gỡ toàn bộ nhánh SQL thô còn lại nhắm vào `dbo.Records` trong
+  `getAllRecords()`/`insertRecord()`/`withLockedRecordById()`/`deleteRecordById()`/`moveRecordToTrash()`/
+  `restoreTrashItem()`/`createForCollectionSerialized()` — các hàm này giờ LUÔN yêu cầu collection có
+  entry trong `DEDICATED_TABLES`, ném lỗi rõ ràng thay vì âm thầm sai nếu thiếu (an toàn hơn so với đọc/
+  ghi nhầm 1 bảng nay đã rỗng). Xoá hẳn `migrateLegacyCollection()`/`migrateAllLegacyCollections()` (chạy
+  ở mỗi lần khởi động server, luôn no-op từ lâu vì `dbo.Records` không còn dữ liệu để di trú).
+- **Vá 1 lỗi thật phát hiện trong lúc dọn dẹp**: `isFileUrlStillReferenced()` (kiểm tra "còn ai dùng file
+  này trước khi xoá vĩnh viễn ở Thùng Rác") chỉ quét `dbo.Records` — từ khi TỪNG collection lần lượt tốt
+  nghiệp sang bảng riêng, hàm này ngày càng mù dần rồi mù HẲN với hồ sơ đang sống ở bảng riêng, có thể xoá
+  nhầm file vẫn đang được 1 hồ sơ khác (chưa vào Thùng Rác) sử dụng. Sửa: quét TỪNG bảng riêng
+  (`DEDICATED_TABLES`) song song thay vì bảng chung đã rỗng.
+- **`sql/schema.sql`**: không còn tạo `dbo.Records` (+ 2 index của nó) trên DB mới; cập nhật lại các khối
+  comment giải thích kiến trúc cho khớp trạng thái hiện tại.
+- **`scripts/`**: xoá `migrate-records-batch1.js` và `purge-dau-tu.js` — cả 2 là script di trú/dọn dữ
+  liệu MỘT LẦN nhắm vào `dbo.Records`, đã hết tác dụng từ lâu (di trú 0 dòng vì bảng nguồn rỗng) và không
+  còn tương thích với kiến trúc bảng riêng hiện tại.
+- **AppData JSON cũ**: gỡ key `vppExcludeGroups` (dạng "Nhóm Không Cấp Văn Phòng Phẩm" cũ, đã thay hẳn
+  bằng `vppExcludedJobTitles` từ trước, chỉ còn di trú 1 lần lúc khởi động — bỏ luôn
+  `migrateVppExcludedJobTitles()` vì trên DB mới nó chỉ tạo ra đúng giá trị mặc định `[]` mà vòng lặp seed
+  chung đã tự làm) + dọn 2 entry admin-only đã hết tác dụng (`officeInvestDeptWorkflows` — DEFAULTS key
+  tương ứng đã xoá từ trước; `vppExcludeGroups` theo trên).
+- Cập nhật `deploy/Huong-dan-trien-khai-PM2.md`, `-PM2-Nginx.md`, `Huong-dan-nghiep-vu.md`: bỏ mọi chỗ
+  còn mô tả `dbo.Records` như kiến trúc hiện tại, thay bằng "mỗi collection 1 bảng riêng".
+
+Full regression suite chạy lại toàn bộ, chỉ còn đúng 4 lỗi môi trường đã biết từ trước (không mới) — 1
+test cũ (`test-audit-round2-cluster6.js`) được cập nhật mock để khớp đúng hành vi MỚI (và ĐÚNG hơn) của
+`isFileUrlStillReferenced()`.
+
+**Không cần thao tác triển khai gì thêm ngoài copy code + `pm2 restart`** — `schema.sql` có đổi (không
+còn tạo `dbo.Records`) nhưng script vẫn an toàn chạy lại nhiều lần như thường lệ; không thêm biến môi
+trường mới, không thêm dependency `package.json` nào. Nếu server thật của bạn ĐANG có sẵn bảng
+`dbo.Records` từ trước (không áp dụng nếu bạn trỏ sang CSDL hoàn toàn mới) — bảng đó đã rỗng/không còn
+code nào đọc/ghi, có thể tự `DROP TABLE dbo.Records` thủ công nếu muốn dọn hẳn, không bắt buộc.
+
+## v20.0 (2026-09-13): Test chuyên sâu theo kịch bản nghiệp vụ (đợt 2) — vá 6 lỗ hổng/lỗi thật
+
+Tiếp tục đối chiếu bộ kịch bản test chuyên sâu (v19.9 mới xử lý top-15/20 ưu tiên cao nhất) sang toàn bộ
+~130 test case còn lại (Workflow engine/Phân quyền, Văn Bản Trình/Tự phục vụ hành chính, Thanh Toán/Hợp
+Đồng/Đơn Hàng, cây Thực Hiện Vận Hành, Cơ Cấu Tổ Chức/Onboarding/Offboarding/HĐLĐ, Hồ Sơ NS/Công Phép/
+Lương, Checklist/Báo Cáo, Hệ Thống/Bảo Mật). Rút kinh nghiệm từ v19.9 (agent chạy `isolation: "worktree"`
+bị dính BASE CŨ), đợt này 7 subagent chạy TRỰC TIẾP trong thư mục làm việc hiện tại (không cô lập
+worktree) — mọi finding vẫn được tự tay verify lại trên code thật trước khi hành động. Phát hiện + vá 6
+lỗ hổng/lỗi CÒN THẬT:
+
+- **VH-05**: Người chỉ được giao 1 DANH MỤC ĐẦU TƯ (không phải cả hồ sơ, không phải công việc nào trong
+  cây Thực Hiện) trong 1 hồ sơ Mở Mới/Sửa Chữa Siêu Thị vẫn nhận NGUYÊN VẸN `estimateItems` của TOÀN BỘ
+  hồ sơ qua `GET /api/data` (chỉ client tự lọc bớt hiển thị — server trả thừa). Thêm
+  `redactOperationEstimateItemsToOwnedScope()` (`lib/recordViewScope.js`) cắt về đúng danh mục (+ hạng
+  mục con) người đó phụ trách, áp dụng CHỈ khi quyền duy nhất của họ là sở hữu danh mục (admin/quản lý
+  toàn bộ/cùng phòng ban/được giao việc trong cây Thực Hiện vẫn xem đủ như cũ).
+- **DH-09**: `isApproverForOperationOrderReceipt()` (server) và bản mirror client dùng chung hàm
+  `scopeAllows()` — hàm này có nhánh "cùng phòng ban -> luôn cho qua" hợp lý cho phần lớn quyền theo
+  phòng ban, nhưng quyền "Duyệt Nhập/Huỷ Đơn Hàng" (`operationOrderReceiptManage`) được thiết kế CỐ Ý
+  độc lập hoàn toàn với phòng ban thật của người dùng — nhánh dùng chung khiến BẤT KỲ nhân viên nào cùng
+  siêu thị cũng xác nhận/huỷ nhập hàng được dù không hề được cấp quyền này. Thay bằng kiểm tra hẹp riêng
+  (admin/`scope.all`/`scope.depts` khớp đúng `HO` hoặc siêu thị của đơn) ở cả 2 phía.
+- **CL-06**: Khi 1 mẫu Checklist bị thay bằng bản kích hoạt mới (clone → activate, tự lưu trữ bản cũ
+  thành ARCHIVED), người đã NỘP BÀI theo bản cũ không còn tra cứu lại được câu hỏi/đáp án gốc của bài
+  mình — `canViewChecklistTemplate()` chỉ cho xem template ACTIVE. Sửa: cho xem thêm template không
+  ACTIVE nếu người đó có 1 bài nộp (`checklistSubmissions`) tham chiếu đúng template đó mà họ có quyền
+  xem bài nộp ấy.
+- **RPT-02**: "🔍 Tra Cứu Chi Tiết" (Báo Cáo Quản Trị) loại bỏ hoàn toàn trường tuỳ biến do Biểu Mẫu tạo
+  (`record.customData`, ví dụ mã vận đơn tự thêm cho 1 module) vì chỉ quét `Object.keys(r)` cấp 1 rồi
+  loại bỏ mọi giá trị kiểu object — mọi field tuỳ biến mới hoàn toàn vô hình ở lọc/hiển thị/xuất Excel.
+  Sửa `buildReportDetailColumns()` (`module-baocaoquantri.js`) tự tách `customData.*` thành cột riêng
+  (tiền tố `customData.` tránh trùng tên trường gốc).
+- **USER-BULK-02**: `prepareUsersForSave()` (`routes/data.js`, điểm ghi duy nhất cho "users") chỉ khớp
+  theo `id`, chưa từng kiểm tra `username` trùng giữa nhiều tài khoản — trong khi MỌI chỗ đăng nhập/đặt
+  lại mật khẩu/khoá tài khoản (`routes/auth.js`) chỉ tìm bằng `users.find(u => u.username === ...)`,
+  khiến tài khoản đứng SAU trong mảng thành "tài khoản ma" không ai đăng nhập/quản lý được, và hành vi
+  phụ thuộc thứ tự mảng không dự đoán được qua các lần lưu. Thêm kiểm tra trùng username, chặn 400 rõ
+  ràng nếu phát hiện.
+- **HD-05**: Nút/modal "✏️ Đổi Hình Thức Thanh Toán" (Hợp Đồng) chỉ ẩn khi đề nghị thanh toán CÒN HIỆU
+  LỰC (`hasActivePaymentRequestForSourceClient()`: loại trừ PAID) — trong khi server
+  (`requestContractPaymentTypeChange()`) chặn hẳn khi hợp đồng đã có BẤT KỲ đề nghị thanh toán nào (kể
+  cả đã PAID, vì đổi hình thức sau khi có lịch sử thanh toán làm sai lệch số đợt/tiền đã ghi nhận) — nút
+  vẫn hiện rồi luôn bị server từ chối 409. Thêm `hasAnyPaymentRequestForSourceClient()` (core.js), dùng
+  đúng điều kiện này cho cả gate hiện nút lẫn gate mở modal.
+
+Ngoài 6 lỗi trên, phát hiện thêm **PQ-01** (rủi ro kiến trúc lớn nhất đợt này): "Khối 0"
+(`user.perms.moduleAccess`, cho phép admin tắt hẳn 1 module cho 1 người cụ thể) trước đây CHỈ được thực
+thi ở CLIENT (`hasModuleAccess()`, core.js) — không có gate tương ứng ở server. Với phần lớn module,
+đây KHÔNG phải lỗ hổng thật vì đã có quyền chi tiết riêng chặn đúng ở server (moduleAccess chỉ dư thừa/
+thứ yếu ở đó) — nhưng 6 module "mở sẵn cho mọi nhân viên" (không có quyền chi tiết nào gác việc XEM, chỉ
+gác AI ĐƯỢC TẠO/DUYỆT): Tài Liệu, Văn Bản Trình, Công Việc, Truyền Thông Nội Bộ, Hợp Đồng, Hỗ Trợ IT —
+tắt moduleAccess ở giao diện cho 1 user xong vẫn gọi thẳng `GET /api/data` là thấy nguyên dữ liệu. Thêm
+mirror gate CHỈ cho đúng 6 module này (`MODULE_ACCESS_GATED_COLLECTIONS`/`hasModuleAccessServer()` ở
+`lib/recordViewScope.js`, áp dụng trong `GET /api/data`) — không mirror toàn bộ 25 module vì phần còn
+lại đã có quyền chi tiết chặn đúng rồi, mirror thêm chỉ tạo thêm 1 nguồn có thể lệch dữ liệu về sau.
+
+Các mục còn lại đã đối chiếu trong đợt này (toàn bộ Workflow engine core, phần lớn Văn Bản Trình/tự phục
+vụ hành chính, Thanh Toán/Đơn Hàng còn lại, cây Thực Hiện VH-01→04/06→13, Cơ Cấu Tổ Chức/Onboarding/
+Offboarding/HĐLĐ còn lại, Hồ Sơ NS/Công Phép/Lương còn lại, phần lớn Checklist/Báo Cáo, Hệ Thống/Bảo
+Mật) đều xác nhận ĐÚNG như tài liệu nghiệp vụ mô tả — không cần sửa gì thêm.
+
+Thêm test hồi quy mới: `tests/test-operation-order-receiving.js` (DH-09), `tests/test-checklist.js`
+(CL-06), `tests/test-reports.js` (RPT-02), `tests/test-user-username-uniqueness.js` (USER-BULK-02, file
+mới), `tests/test-contract.js` (HD-05, cả 2 chiều chặn/không chặn oan), `tests/test-module-access-gate.js`
+(PQ-01, file mới). Full regression suite chạy lại toàn bộ, không phát sinh lỗi mới ngoài các lỗi môi
+trường đã biết từ trước (SQL Server không kết nối được trong sandbox, thiếu fixture PDF).
+
+**Không cần thao tác triển khai gì thêm ngoài copy code + `pm2 restart`** — không đổi `schema.sql`,
+không thêm biến môi trường mới, không thêm dependency `package.json` nào.
+
+## v19.9 (2026-09-12): Test chuyên sâu theo kịch bản nghiệp vụ — vá 2 lỗ hổng thật (Lương + Hợp Đồng LĐ)
+
+Đối chiếu code với bộ kịch bản test chuyên sâu (~150 test case, ưu tiên các quy tắc nghiệp vụ tinh vi dễ
+sai). Dùng 4 subagent song song đào sâu từng nhóm module (Lương; Vận Hành/Checklist; Offboarding/HĐLĐ/
+Email/ExtAuth; Engine phê duyệt/Thanh Toán/Đồng Phục/Báo Cáo) — phát hiện các agent chạy trong worktree
+cô lập bị BASE CŨ (thiếu ~8300 dòng thay đổi so với nhánh đang làm việc), khiến 3 "lỗi" các agent báo ra
+(LUONG-07/09, HDLD-03) hoá ra ĐÃ ĐƯỢC VÁ TỪ TRƯỚC — tự tay verify lại TỪNG finding trên code thật trước
+khi hành động, không tin thẳng báo cáo agent. Sau khi lọc, phát hiện + vá đúng 2 lỗ hổng CÒN THẬT:
+
+- **LUONG-07/08 (tái phát một phần)**: `computeEmployeePayslip()` (lib/payroll.js) đã có nhánh dự phòng
+  cho nhân viên hoàn tất Offboarding GIỮA KỲ lương (tránh bị `resolveWorkModelForEmployeeCode()` chặn vì
+  hồ sơ đã INACTIVE) — nhưng CHƯA xử lý một bước SỚM HƠN: `applyOffboardingTermination()`
+  (lib/laborContract.js) tự đóng hợp đồng ACTIVE thành TERMINATED NGAY lúc Offboarding hoàn tất, nên đúng
+  thứ tự thực tế "nghỉ ngày 15 → kế toán tính lương ngày 28 cùng tháng", `findActiveContractByEmployeeCode()`
+  đã không còn tìm thấy hợp đồng ACTIVE nào nữa, nhân viên bị đẩy thẳng vào `skipped[]` — tái hiện đúng
+  lỗi LUONG-07. Sửa: khi có Offboarding hoàn tất đúng người này rơi trong kỳ, dùng lại ĐÚNG hợp đồng vừa
+  bị đóng (mới nhất theo id) thay vì chỉ tìm hợp đồng ACTIVE.
+- **HDLD-04**: Luật Lao Động chỉ cho phép tối đa 2 lần gia hạn Xác Định Thời Hạn liên tiếp — lần thứ 3
+  bắt buộc Vô Thời Hạn. Công thức đã có sẵn (`nextContractTypeAndRenewal()`, lib/laborContract.js) nhưng
+  CHƯA từng được áp dụng cho luồng HR tạo tay hợp đồng (`POST /api/create/laborContracts`) — renewalIndex
+  nhận thẳng từ client, không có gì chặn tạo FIXED_TERM lần thứ 3 trở đi. Thêm validate server-side ở
+  `lib/createValidation.js` (laborContracts.extraValidate): chặn 400 nếu contractType=FIXED_TERM và
+  renewalIndex ≥ 3, yêu cầu chọn đúng Vô thời hạn.
+
+Các mục còn lại trong 4 nhóm đã đối chiếu (DH-01→08, CL-01/02/08/09, WF-01/07, PQ-04, HD-01→04, TT-03,
+DP-03/04, RPT-01, OFF-01/02, EMAIL-02, EXTAUTH-01/02/04) đều xác nhận ĐÚNG như tài liệu nghiệp vụ mô tả,
+đã có test tự động bảo vệ — không cần sửa gì thêm.
+
+Thêm 2 test hồi quy mới vào `tests/test-payroll.js` (LUONG-07/08, LUONG-09 — trước đó CHƯA có test nào
+bảo vệ 2 quy tắc này dù đã từng là bug gây mất dữ liệu lương thật) + 3 test mới vào
+`tests/test-labor-contract.js` cho HDLD-04 (chặn đúng, cho qua đúng ranh giới renewalIndex=2, và không
+chặn nhầm khi chọn đúng Vô thời hạn). Full regression suite chạy lại toàn bộ, không phát sinh lỗi mới
+ngoài 4 lỗi môi trường đã biết từ trước.
+
+## v19.8 (2026-09-12): Bước 8k/8l/8m — SQL-filter docs/submissions/attendanceRecords trong GET /api/data
+
+Tiếp tục Bước 8 (đã dừng ở 10 collection từ v19.6) sang 3 collection còn lại được xác định là khả thi:
+`docs`, `submissions`, `attendanceRecords` (2 collection còn lại — `operationStoreOpenings`/
+`operationRepairs` — đã hết nghĩa cần tối ưu riêng sau khi v19.7 bỏ hẳn phê duyệt Dự toán).
+
+- **`docs`** (`canViewDoc()`, lib/recordViewScope.js) — 4 nhánh: admin xem hết; chính người TẢI LÊN
+  (uploader, mọi phòng ban/trạng thái); viewApprovedAll/Depts (chỉ hồ sơ APPROVED) HOẶC viewDraftAll/
+  Depts (hồ sơ khác APPROVED); đang là người duyệt theo `deptWorkflows[dept]` (bất kỳ bước nào, không
+  phân biệt trạng thái). `loadDocsScoped()` (routes/data.js): viewDraftAll/viewApprovedAll (hiếm) tải
+  company-wide như admin; còn lại tải theo tập phòng ban (viewDraftDepts ∪ viewApprovedDepts ∪
+  approverDepts) + 1 lượt riêng theo Uploader.
+- **`submissions`** (`canViewSubmission()`) — 5 nhánh, phức tạp hơn docs vì có thêm 2 nhánh KHÔNG tra
+  được bằng cột SQL nào: "Xin ý kiến" (opinionRequestees, mảng username admin gán tay từng hồ sơ) và
+  approver theo `effectiveApprovers` ĐÓNG BĂNG lúc tạo (có thể lệch khỏi cấu hình HIỆN TẠI nếu admin đổi
+  người duyệt sau đó). `loadSubmissionsScoped()` SQL-narrow theo dept/creator/approver-cấu-hình-hiện-tại,
+  và LUÔN tải thêm mọi hồ sơ ĐANG PENDING company-wide để bù 2 nhánh trên — đánh đổi CHỦ Ý: hồ sơ đã
+  APPROVED/REJECTED từ lâu mà rơi vào 2 trường hợp hiếm này sẽ không hiện qua đường tải nhanh (chỉ mất
+  xem lại lịch sử, không phải chặn duyệt/thao tác thật đang hoạt động).
+- **`attendanceRecords`** (`canViewEmployeeAttendanceRecord()`) — không có cột Dept/Username nào để tra
+  thẳng, phải tự tính tập employeeCode cần tải TRƯỚC (self + toàn bộ cấp dưới trực tiếp/gián tiếp) rồi
+  mới tải theo EmployeeCode. Thêm hàm mới `computeSubordinateUsernames()` (lib/recordViewScope.js) — BFS
+  xuôi cây quản lý 1 LẦN từ danh sách `users` đã tải sẵn (O(số nhân viên), không phụ thuộc số bản ghi
+  chấm công — rẻ hơn hẳn gọi `isManagerOf()` lặp lại cho từng bản ghi).
+
+`filterDocsForUser()`/`filterSubmissionsForUser()`/`filterAttendanceRecordsForUser()` vẫn áp lại y hệt
+trước sau khi tải — SQL chỉ thu hẹp, không thay cho lớp chốt quyền xem thật (nguyên tắc xuyên suốt cả
+Bước 8).
+
+Thêm 3 test file mới (`test-docs-scope.js`, `test-submissions-scope.js`,
+`test-attendance-records-scope.js`, 21/21 scenario pass). Phát hiện + vá 1 lỗ hổng test: vì
+`loadDocsScoped()`/`loadSubmissionsScoped()`/`loadAttendanceRecordsScoped()` chạy KHÔNG điều kiện cho
+MỌI request (giống 10 loader Bước 8 trước), sub-test "over-fetch simulation" (giả lập tầng tải trả thừa)
+ở CẢ 8 file test Bước 8 cũ đều vô tình stub `getForCollectionByDeptCached`/`getForCollectionByColumnCached`
+bỏ qua tham số `collection` — khiến chúng "nhồi" dữ liệu sai hình dạng vào docs/submissions, làm
+`canViewDoc()`/`canViewSubmission()` (gọi `getAppDataValue()` thật) ném lỗi ngoài ý muốn. Đã sửa cả 8
+file cũ (`test-payment-requests-dept-scope.js`, `test-checklist-submissions-scope.js`,
+`test-operation-orders-dept-scope.js`, `test-car-regs-scope.js`, `test-office-reqs-scope.js`,
+`test-it-price-approvals-scope.js`, `test-vpp-registrations-scope.js`, `test-budget-entries-scope.js`)
+để stub tôn trọng đúng tham số `collection` — chỉ là sửa TEST, không đổi hành vi code thật. Full
+regression suite (128+ file) chạy lại toàn bộ, không phát sinh lỗi mới ngoài các lỗi môi trường đã biết
+từ trước (thiếu SQL Server cục bộ, thiếu file PDF mẫu, 1 lỗi operationOrderReceipt không liên quan).
+
+## v19.7 (2026-09-12): Xoá hẳn quy trình duyệt Dự Toán ở Vận Hành > Siêu Thị
+
+Chủ ứng dụng xác nhận: **Vận Hành > 🏬 Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả giai đoạn Dự
+toán** (Mục H trước đây chỉ mới bỏ phê duyệt cho hồ sơ chính Mở Mới/Sửa Chữa, còn giữ lại nguyên giàn
+giáo kỹ thuật cho Dự toán) — để trưởng phòng/người quản lý dự án tự lập/lưu Danh Mục Đầu Tư, không cần
+ai duyệt.
+
+Xoá hẳn (không chỉ tắt hiển thị) toàn bộ giàn giáo kỹ thuật của quy trình duyệt Dự toán:
+- `lib/workflowEngine.js`: xoá 2 module ảo `operationStoreOpeningEstimate`/`operationRepairEstimate`
+  khỏi `MODULE_CONFIGS`.
+- `lib/recordViewScope.js`: `canViewOperationStoreOpening()`/`canViewOperationRepair()` bỏ nhánh "đang
+  là approver" (chỉ còn dept/công việc được giao/danh mục đầu tư phụ trách).
+- `lib/approvalAggregator.js`: bỏ 2 lời gọi `pushDeptWorkflowKeys()` tương ứng (khớp việc xoá ở
+  `core-approvalhub.js`).
+- `defaults.js`/`routes/data.js` (`ADMIN_ONLY_KEYS`)/`lib/catalogRename.js`: xoá 2 map cấu hình
+  `operationStoreOpenEstimateDeptWorkflows`/`operationRepairEstimateDeptWorkflows`.
+- Client: `public/js/module-vanhanh.js` (bỏ nút Duyệt/Từ chối/Yêu cầu bổ sung +
+  `confirmProcessOperationEstimate()`/`processOperationEstimate()`, giữ nguyên nút "💾 Lưu Danh Mục Đầu
+  Tư" + `resetOperationEstimateToDraft()` cho dữ liệu CŨ còn kẹt REJECTED), `public/js/module-workflow.js`
+  (bỏ 2 entry `WF_MODULE_CONFIG`), `public/index.html` (bỏ 2 nút màn Quy Trình & Phê Duyệt),
+  `public/js/core.js` + `public/js/core-approvalhub.js` (bỏ đọc 2 map cấu hình + bỏ 2 mục khỏi Approval
+  Hub), `public/js/module-baocaoquantri.js` (đổi nhãn báo cáo: bỏ chữ "chờ duyệt/đã duyệt", bỏ bucket
+  PENDING — không còn hồ sơ MỚI nào dừng ở đây nữa).
+- Test: cập nhật/xoá test khẳng định nhánh approver đã xoá
+  (`test-audit-dot5-phase2.js`, `test-approval-polling.js`, `test-workflow-position-approvers.js`,
+  `testHarness.js`, `test-lazy-load-all-tabs.js`).
+- `deploy/Huong-dan-nghiep-vu.md`: cập nhật mục 3 + 4.4 khớp nghiệp vụ mới.
+
+**Giữ nguyên** (không đụng tới): field kỹ thuật `estimateStatus`/`estimateCurrentStep`/`estimateHistory`
+(chỉ còn vai trò field trạng thái đơn thuần, `submitOperationEstimate()` đã tự lưu thẳng
+`estimateStatus='APPROVED'` từ Mục H); `resetOperationEstimateToDraft()` (escape hatch cho dữ liệu CŨ
+kẹt REJECTED trước Mục H); `hasOwnEstimateCategoryInSource()`/`hasOwnWorkItemInSource()` (tiêu chí xem hồ
+sơ KHÔNG liên quan phê duyệt); toàn bộ UI lập/sửa Danh Mục Đầu Tư; quy trình duyệt hồ sơ chính
+Đơn Hàng (`operationOrders`) — không đổi gì.
+
+Full regression suite (128 file test) chạy lại toàn bộ sau đợt này, không phát sinh lỗi mới.
+
+## v19.6 (2026-09-12): Bước 8j — SQL-filter budgetEntries trong GET /api/data
+
+Tiếp Bước 8i, `budgetEntries` đơn giản NHẤT trong cả nhóm: `canViewBudgetEntry()`
+(lib/recordViewScope.js) chỉ 3 nhánh — `admin`/`budgetManage`/`budgetAggregate` xem hết, phòng ban mình,
+đang là người duyệt theo `budgetDeptWorkflows` (dept-keyed, 1 cấu hình duy nhất). KHÔNG có nhánh "chính
+người tạo" (khác `carRegs`/`officeReqs`) — không cần lượt tải riêng theo cột nào khác ngoài `Dept`.
+
+`routes/data.js`: thêm `computeBudgetEntriesApproverDepts(user, data)` + `loadBudgetEntriesScoped(user,
+data)` — gộp {phòng ban mình} ∪ {phòng ban approver}, tải từng phòng ban (không cần merge với lượt nào
+khác). `budgetManage`/`budgetAggregate`/admin vẫn tải company-wide như cũ.
+`filterBudgetEntriesForUser()` vẫn áp lại y hệt trước.
+
+Thêm `tests/test-budget-entries-scope.js` (6/6 pass NGAY LẦN ĐẦU). Re-run cả 8 test scope trước đó (Bước
+8b-8i), tất cả vẫn pass.
+
+**Bước 8 — tổng kết đến đây**: 10 collection đã SQL-filter hoá (`notifications`, `paymentRequests`,
+`trainingDocumentProgress`, `checklistSubmissions`, `operationOrders`, `carRegs`, `officeReqs`,
+`itPriceApprovals`, `vppRegistrations`, `budgetEntries`). Còn lại (`operationStoreOpenings`/
+`operationRepairs`/`docs`/`submissions`/`attendanceRecords`) cần duyệt cây quản lý đệ quy hoặc tra cứu
+chéo phức tạp hơn nhiều — để dành cho đợt sau, cần thiết kế riêng cẩn thận.
+
+## v19.5 (2026-09-12): Bước 8i — SQL-filter vppRegistrations trong GET /api/data
+
+Tiếp Bước 8h, `vppRegistrations` đơn giản hơn `itPriceApprovals`: `canViewVppRegistration()`
+(lib/recordViewScope.js) chỉ 3 nhánh — `canManageVpp` (admin/`vppManage`) xem hết, chính người TẠO
+(`Creator`), đang là người duyệt theo `vppDeptWorkflows` (dept-keyed, CHỈ 1 cấu hình duy nhất — không
+tách RETAIL/WHOLESALE như `itPriceApprovals`, không tách subType như `officeReqs`). Cũng KHÔNG có nhánh
+"phòng ban mình" (giống `itPriceApprovals`, khác `carRegs`/`officeReqs`).
+
+`routes/data.js`: thêm `computeVppRegistrationsApproverDepts(user, data)` +
+`loadVppRegistrationsScoped(user, data)` — gộp {phòng ban approver} rồi tải từng phòng ban + 1 lượt riêng
+theo `Creator`, gộp + khử trùng. `vppManage`/admin vẫn tải company-wide như cũ.
+`filterVppRegistrationsForUser()` vẫn áp lại y hệt trước.
+
+Thêm `tests/test-vpp-registrations-scope.js` (5/5 pass NGAY LẦN ĐẦU) — phủ đủ cả 3 nhánh, xác nhận không
+có nhánh phòng ban mình (giống bài học từ `itPriceApprovals`). Re-run cả 7 test scope trước đó (Bước
+8b-8h), tất cả vẫn pass.
+
+Đến đây, TOÀN BỘ 9 collection thuộc nhóm "dept-hoặc-workflow-approver" trong danh sách đã rà soát ban đầu
+(`paymentRequests`, `trainingDocumentProgress`, `checklistSubmissions`, `operationOrders`, `carRegs`,
+`officeReqs`, `itPriceApprovals`, `vppRegistrations`, cộng `notifications` ở Bước 8a) đã được SQL-filter
+hoá. **Còn lại cần thiết kế riêng, phức tạp hơn nhiều**: `budgetEntries` (chưa rà soát), và nhóm cây quản
+lý đệ quy/tra cứu chéo (`operationStoreOpenings`/`operationRepairs`/`docs`/`submissions`/
+`attendanceRecords`).
+
+## v19.4 (2026-09-12): Bước 8h — SQL-filter itPriceApprovals trong GET /api/data
+
+Tiếp Bước 8g, `itPriceApprovals` KHÁC HẲN `carRegs`/`officeReqs`: `canViewItPriceApproval()`
+(lib/recordViewScope.js) KHÔNG có nhánh "phòng ban mình" nào — người thường KHÔNG tự động thấy đề xuất
+giá của phòng ban mình dù cùng phòng ban với hồ sơ. Chỉ 4 nhánh: (1) admin/itManage xem hết, (2) chính
+người TẠO (`Creator`), (3) `itPriceEmergencyRejectApprove` — điều kiện theo DỮ LIỆU
+(`emergencyRejectStatus==='PENDING'` HOẶC `emergencyRejectDecidedBy===username`), hoàn toàn KHÔNG theo
+phòng ban, (4) đang là người duyệt — nhưng cấu hình duyệt TÁCH 2 nhánh theo `priceType`: RETAIL tra theo
+PHÒNG BAN (`itPriceDeptWorkflows`), WHOLESALE tra theo 1 trong 4 MỨC cố định
+(`itPriceTierWorkflows`, không theo phòng ban — giống `operationOrders`).
+
+Thiết kế: nhánh (3) và nhánh (4)-WHOLESALE đều KHÔNG quy về được 1 tập phòng ban cụ thể → coi là
+"canSeeAll" (tải company-wide, số ít người có quyền này) — `filterItPriceApprovalsForUser()` vẫn lọc lại
+ĐÚNG phạm vi hẹp thật sau đó (đã viết test xác nhận: người duyệt WHOLESALE tải company-wide nhưng CHỈ
+còn lại đúng 1 hồ sơ họ thực sự được duyệt sau khi lọc). Nhánh (4)-RETAIL quy về được tập phòng ban (như
+`carRegs`) nên tính trước rồi tải theo `where.Dept`. Nhánh (2) tải riêng theo `where.Creator`.
+
+`routes/data.js`: thêm `isApproverForAnyItPriceWholesaleTier()` + `computeItPriceApprovalsApproverDepts()`
++ `loadItPriceApprovalsScoped()`.
+
+Thêm `tests/test-it-price-approvals-scope.js` (7/7 pass NGAY LẦN ĐẦU) — phủ đủ cả 4 nhánh, đặc biệt xác
+nhận "không có nhánh phòng ban mình" (người tạo 1 hồ sơ ở phòng X không tự động thấy hồ sơ KHÁC cùng
+phòng X do người khác tạo — khác hẳn `carRegs`/`officeReqs`).
+
+**Còn lại (Bước 8 tiếp theo)**: `vppRegistrations`/`budgetEntries` — mỗi collection cần nghiên cứu
+riêng; để sau `operationStoreOpenings`/`operationRepairs`/`docs`/`submissions`/`attendanceRecords` (cây
+quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
+
+## v19.3 (2026-09-12): Bước 8g — SQL-filter officeReqs trong GET /api/data
+
+Tiếp Bước 8f, `officeReqs` cùng khuôn `carRegs` (4 nhánh: admin, chính người TẠO — `Creator` — nhưng
+officeReqs KHÔNG `forceOwnDept` nên 1 người có thể tạo hộ đề xuất cho phòng ban KHÁC phòng ban mình nếu
+`officeCreate` scope cho phép; `scopeAllows(officeView, dept)`: phòng ban mình + `officeView.all` +
+`officeView.depts[]`; đang là người duyệt theo `*DeptWorkflows`) — khác `carRegs` ở chỗ CÓ **2 bộ cấu
+hình duyệt riêng theo subType** (`officeBuyDeptWorkflows` cho Mua Bán, `officeFixDeptWorkflows` cho Sửa
+Chữa, xem `MODULE_CONFIGS.officeReqs.resolveWfConfig()` ở lib/workflowEngine.js).
+
+`routes/data.js`: thêm `computeOfficeReqsApproverDepts(user, data)` (quét CẢ 2 map cấu hình, có thể
+"thừa" nếu user chỉ duyệt 1 trong 2 loại ở 1 phòng ban — an toàn vì `filterOfficeReqsForUser()` vẫn lọc
+lại ĐÚNG theo subType thật của từng hồ sơ sau đó) + `loadOfficeReqsScoped(user, data)` (gộp {phòng ban
+mình} ∪ `officeView.depts[]` ∪ {phòng ban approver}, tải từng phòng ban + 1 lượt riêng theo `Creator`,
+gộp + khử trùng). `officeView.all`/admin vẫn tải company-wide như cũ.
+
+Thêm `tests/test-office-reqs-scope.js` (7/7 pass) — phủ đủ 4 nhánh, đặc biệt kịch bản "tạo hộ phòng ban
+khác" (khác `carRegs`'s `assignedDriverUsername` ở chỗ người tạo VẪN thấy thêm cả đề xuất phòng ban CHÍNH
+mình, không chỉ đề xuất đã tạo hộ — 2 nhánh cộng dồn, không thay thế nhau).
+
+**Còn lại (Bước 8 tiếp theo)**: `itPriceApprovals`/`vppRegistrations`/`budgetEntries` — mỗi collection
+cần nghiên cứu riêng; để sau `operationStoreOpenings`/`operationRepairs`/`docs`/`submissions`/
+`attendanceRecords` (cây quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
+
+## v19.2 (2026-09-12): Bước 8f — SQL-filter carRegs trong GET /api/data (4 nhánh gộp thành tập phòng ban)
+
+Tiếp Bước 8e, `carRegs` là collection ĐẦU TIÊN của nhóm "Đăng Ký Xe/Văn Phòng/IT/VPP/Ngân Sách" (đã báo
+trước là phức tạp hơn hẳn — không còn 1 khuôn chung, mỗi collection cần nghiên cứu riêng).
+`canViewCarReg()` (lib/recordViewScope.js) có **4 nhánh**: (1) admin, (2) chính LÁI XE được gán
+(`assignedDriverUsername` — KHÔNG nhất thiết cùng phòng ban, xe có thể dùng chung công ty), (3)
+`scopeAllows(carView, dept)`: phòng ban mình + `carView.all` (xem hết) + `carView.depts[]` (danh sách
+phòng ban cụ thể được cấp thêm, RIÊNG TỪNG NGƯỜI qua quyền cá nhân, không phải cấu hình chung), (4) đang
+là người duyệt theo `carDeptWorkflows` (dept-keyed, khác `operationOrders` là tier-keyed).
+
+Khác với `operationOrders` (approver phụ thuộc tier, không quy về được 1 tập phòng ban cụ thể) — ở
+`carRegs`, nhánh (3)+(4) đều quy về được 1 **TẬP PHÒNG BAN** cụ thể, tính được TRƯỚC khi tải: gộp
+`{phòng ban mình} ∪ carView.depts[] ∪ {phòng ban mà mình là approver theo carDeptWorkflows}`, rồi tải
+RIÊNG TỪNG phòng ban trong tập đó (mỗi phòng ban vẫn tự cache qua `getForCollectionByDeptCached`, nhiều
+người cùng phòng ban vẫn dùng chung 1 lượt đọc) + 1 lượt riêng theo `AssignedDriverUsername` cho nhánh
+(2), rồi gộp + khử trùng theo id. `carView.all`/admin (số ít) vẫn tải company-wide như cũ.
+
+`routes/data.js`: thêm `computeCarRegsApproverDepts(user, data)` + `loadCarRegsScoped(user, data)`.
+`filterCarRegsForUser()` vẫn áp lại y hệt trước (lớp chốt quyền xem thật).
+
+Thêm `tests/test-car-regs-scope.js` (7/7 pass) — phủ đủ cả 4 nhánh RIÊNG BIỆT + xác nhận không thừa/thiếu
+khi kết hợp (VD người duyệt phòng khác vẫn thấy đúng phòng mình + phòng đang duyệt, không thấy phòng
+không liên quan).
+
+**Còn lại (Bước 8 tiếp theo)**: `officeReqs`/`itPriceApprovals`/`vppRegistrations`/`budgetEntries` — mỗi
+collection cần nghiên cứu riêng chi tiết khác nhau (VD `officeReqs` phân theo `subType` Mua Bán/Sửa
+Chữa/Đầu Tư với workflow riêng từng loại); để sau `operationStoreOpenings`/`operationRepairs`/`docs`/
+`submissions`/`attendanceRecords` (cây quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
+
+## v19.1 (2026-09-12): Bước 8e — SQL-filter operationOrders trong GET /api/data (nhánh OR theo TIER, không theo dept)
+
+Tiếp Bước 8d, áp dụng cho collection có rủi ro nghiệp vụ CAO HƠN hẳn nếu sai: `canViewOperationOrder()`
+(lib/recordViewScope.js) có nhánh OR "đang là người duyệt theo cấu hình quy trình" — nhưng KHÁC
+`checklistSubmissions` (nhánh OR theo StoreCode, map được sang 1 cột), nhánh này phụ thuộc **MỨC GIÁ TRỊ
+đơn hàng** (tier, `resolveOperationOrderWorkflow()` ở lib/workflowEngine.js) — hoàn toàn KHÔNG liên quan
+tới phòng ban của hồ sơ. Một người duyệt 1 tier có thể cần thấy đơn hàng của MỌI phòng ban rơi vào đúng
+tier đó — sai ở đây nghĩa là người duyệt KHÔNG THẤY hồ sơ cần duyệt (lỗi nghiệp vụ thật, nặng hơn rủi ro
+lộ dữ liệu của các collection trước).
+
+Giải pháp: thêm `isApproverForAnyOperationOrderTier(user, data)` (routes/data.js) — quét TRƯỚC (không
+tính theo từng hồ sơ) toàn bộ cấu hình `operationOrderStoreTierWorkflows`/`operationOrderHOTierWorkflows`
+(đã có sẵn trong `data` từ đầu request, không cần tải thêm) xem user có xuất hiện làm approver ở BẤT KỲ
+tier nào không — nếu có (số ít, thường là quản lý cấp cao), tải company-wide như admin (an toàn,
+`filterOperationOrdersForUser()` vẫn lọc lại đúng theo TỪNG hồ sơ sau đó); nếu không (đa số người dùng
+thường), tải qua `where.Dept` ở SQL như các collection trước.
+
+Thêm `tests/test-operation-orders-dept-scope.js` (5/5 pass) — kịch bản quan trọng nhất xác nhận người
+duyệt tier PHẢI thấy đủ hồ sơ mọi phòng ban. Quá trình viết test phát hiện 1 lỗi TRONG CHÍNH TEST FIXTURE
+(dùng sai định dạng khoá tier — số `1`/`2` thay vì khoá thật `LT10M`/`FROM10M_TO100M`/`GTE100M`/`LT100M`/
+`GTE100M`) khiến lớp lọc thật (`filterOperationOrdersForUser`, không đổi) đúng đắn loại bỏ hồ sơ — xác
+nhận code MỚI hoạt động đúng, chỉ cần sửa lại fixture cho khớp tier thật, không phải lỗi logic.
+
+**Còn lại (Bước 8 tiếp theo)**: `carRegs`/`officeReqs`/`itPriceApprovals`/`vppRegistrations`/
+`budgetEntries` dùng CHUNG khuôn `dept-hoặc-approver` nhưng approver ở các collection này lại tra theo
+**phòng ban** (không theo tier) — cần thiết kế khác (danh sách phòng ban được phép qua IN-list, chưa được
+`queryDedicatedRecords()` hỗ trợ) trước khi làm; để sau `operationStoreOpenings`/`operationRepairs`/
+`docs`/`submissions`/`attendanceRecords` (cây quản lý đệ quy/tra cứu chéo phức tạp hơn nữa).
+
+## v19.0 (2026-09-12): Bước 8d — SQL-filter checklistSubmissions trong GET /api/data (nhánh OR đầu tiên)
+
+Tiếp Bước 8b/8c, áp dụng cho collection PHỨC TẠP HƠN: `canViewChecklistSubmission()` (lib/recordViewScope.js)
+có **3 nhánh**, trong đó 2 nhánh là quan hệ **OR** (không phải AND như `queryDedicatedRecords()` hỗ trợ) —
+(1) `admin`/`checklistTemplateManage`/`checklistReportView` xem HẾT, (2) chính người nộp xem bài của mình,
+(3) người `posType STORE` xem bài **CHƯA NHÁP** của ĐÚNG siêu thị mình. Vì `queryDedicatedRecords()` chỉ
+AND các điều kiện `where`, không tự ghép được 2 điều kiện OR — giải pháp: tải **2 lượt** SQL riêng biệt
+(theo `SubmittedByUsername`, theo `StoreCode` khi `posType === 'STORE'`) qua hàm dùng chung
+`getForCollectionByColumnCached()` (đã tổng quát từ Bước 8b/8c), rồi **gộp + khử trùng theo id ở Node**
+(1 bài nộp có thể vừa "của mình" vừa "của siêu thị mình" cùng lúc). Điều kiện phụ "CHƯA NHÁP" (không phải
+DRAFT) không đẩy được xuống SQL (chỉ hỗ trợ so bằng, không so khác) nên lọc lại ở Node sau khi tải theo
+StoreCode — vẫn rẻ hơn nhiều so với tải nguyên bảng company-wide.
+
+`lib/recordStore.js`: export thêm `getForCollectionByColumnCached()` (hàm nền đã có từ Bước 8b/8c, giờ
+dùng trực tiếp thay vì chỉ qua 2 hàm bọc Dept/Username) để routes/data.js tự truyền tên cột
+(`SubmittedByUsername`/`StoreCode`) mà không cần thêm hàm bọc riêng cho từng cột mới.
+
+`routes/data.js`: thêm `loadChecklistSubmissionsScoped(user)` xử lý đúng 3 nhánh trên; `checklistSubmissions`
+tách khỏi vòng lặp tải chung. `filterChecklistSubmissionsForUser()` vẫn áp lại y hệt trước (lớp chốt quyền
+xem thật — đã viết test xác nhận vẫn chốt đúng dù tầng tải giả lập lỗi trả thừa của siêu thị khác).
+
+Thêm `tests/test-checklist-submissions-scope.js` (6/6 pass, mount thật `routes/data.js` qua HTTP — xác
+nhận đúng cả 3 nhánh + gộp/khử trùng đúng + không có lượt tải StoreCode thừa cho người không phải
+`posType STORE`). Sửa 2 test trước đó (`test-payment-requests-dept-scope.js`,
+`test-training-document-progress-scope.js`) thiếu stub `getForCollectionByColumnCached` (giờ luôn được
+gọi cho MỌI request `GET /api/data` do `checklistSubmissions` tải không điều kiện).
+
+**Còn lại (Bước 8 tiếp theo)**: `operationOrders` (mức trung bình — cần tra thêm 1 cấp cấu hình quy
+trình duyệt theo phòng ban, không đệ quy) có thể làm tiếp; để sau `operationStoreOpenings`/
+`operationRepairs`/`docs`/`submissions`/`attendanceRecords` (cây quản lý đệ quy hoặc tra cứu chéo phức
+tạp, rủi ro cao hơn nhiều, cần thiết kế riêng).
+
+## v18.9 (2026-09-12): Bước 8c — SQL-filter trainingDocumentProgress trong GET /api/data
+
+Tiếp Bước 8b, áp dụng đúng khuôn cho collection thứ 2: `filterTrainingDocumentProgressForUser()`
+(lib/recordViewScope.js) cũng chỉ có 2 nhánh phẳng — `canManageTraining` (admin/trainingManage) xem HẾT,
+còn lại CHỈ đúng tiến độ đọc tài liệu của CHÍNH MÌNH (`p.username === user.username`, không có nhánh nào
+khác) — khác `paymentRequests` ở chỗ lọc theo **Username** thay vì Dept.
+
+Tổng quát hoá `lib/recordStore.js`: `getForCollectionByDeptCached()` giờ dựng trên 1 hàm dùng chung mới
+`getForCollectionByColumnCached(collection, column, value)` (cache key `collection::column::value`) — thêm
+`getForCollectionByUsernameCached(collection, username)` làm biến thể thứ 2 từ CÙNG hàm nền, không viết lại
+logic cache/TTL/invalidate. `invalidateCollectionCache()` không đổi (đã tổng quát từ Bước 8b, xoá đúng mọi
+entry theo-cột-lọc của collection bất kể lọc theo cột nào).
+
+`routes/data.js`: `trainingDocumentProgress` tách khỏi vòng lặp tải chung — admin/trainingManage vẫn tải
+company-wide như cũ, còn lại tải qua `getForCollectionByUsernameCached('trainingDocumentProgress', user.username)`.
+`filterTrainingDocumentProgressForUser()` vẫn áp lại y hệt trước (lớp chốt quyền xem thật).
+
+Mở rộng `tests/test-collection-by-dept-cache.js` (nay 8/8 pass — thêm 2 kịch bản cho biến thể Username,
+xác nhận không lẫn cache giữa các username/collection khác nhau) + thêm
+`tests/test-training-document-progress-scope.js` (5/5 pass, mount thật `routes/data.js` qua HTTP —
+IDOR-safe giữa các nhân viên, trainingManage/admin không mất dữ liệu, lớp lọc thứ 2 vẫn chốt đúng khi tầng
+tải giả lập lỗi).
+
+**Còn lại (Bước 8 tiếp theo)**: `checklistSubmissions` cần thêm cơ chế lọc OR (phòng ban HOẶC người nộp)
+— `queryDedicatedRecords()` hiện chỉ AND các điều kiện, cần thiết kế thêm trước khi làm collection này; để
+sau `operationStoreOpenings`/`operationRepairs`/`docs`/`submissions` (cây quản lý/tra cứu chéo phức tạp).
+
+## v18.8 (2026-09-12): Bước 8b — SQL-filter paymentRequests trong GET /api/data (collection thật đầu tiên)
+
+Tiếp Bước 8a (Thông Báo — API riêng, đơn giản): đây là lần đầu áp dụng cho 1 collection nằm TRONG
+`GET /api/data` (API chung, tải hàng chục collection 1 lượt cho MỌI màn hình) — chọn `paymentRequests` vì
+`canViewPaymentRequest()` (lib/recordViewScope.js) chỉ có ĐÚNG 2 nhánh phẳng: admin/paymentManage xem HẾT,
+còn lại CHỈ đúng phòng ban mình — không có quản lý cấp trên/cấp dưới hay ngoại lệ nào khác (đã xác nhận kỹ
+qua rà soát trước khi chọn, để tránh lặp lỗi kiểu operationStoreOpenings/operationRepairs — 2 collection cần
+duyệt CÂY QUẢN LÝ đệ quy nên KHÔNG làm ở đợt này).
+
+**Cân nhắc quan trọng trước khi làm**: `GET /api/data` vốn có 1 cache DÙNG CHUNG (`collectionCache`, TTL
+~3s) để nhiều người gọi gần như cùng lúc chỉ tốn 1 lượt đọc SQL — nếu đổi thẳng sang lọc theo TỪNG NGƯỜI
+DÙNG sẽ mất lợi ích dùng chung này. Giải pháp: lọc theo TỪNG PHÒNG BAN (không phải từng người) — số phòng
+ban ít, nhiều người CÙNG PHÒNG BAN vẫn dùng chung 1 cache entry trong cùng cửa sổ vài giây, vừa giảm được
+kích thước dữ liệu tải/lọc mỗi request (đúng điểm nghẽn CPU đã đo ở load test trước đây) vừa giữ nguyên lợi
+ích cache dùng chung.
+
+`lib/recordStore.js`: thêm `getForCollectionByDeptCached(collection, dept)` (dùng `queryDedicatedRecords()`
+Bước 7d, cache riêng theo `collection::dept`) + sửa `invalidateCollectionCache()` xoá luôn mọi entry
+theo-phòng-ban của collection đó (1 điểm invalidate duy nhất, không cần sửa lại 12 nơi đang gọi hàm này).
+
+`routes/data.js`: `paymentRequests` tách khỏi vòng lặp tải chung — admin/paymentManage vẫn tải company-wide
+như cũ (không đổi), còn lại tải qua `getForCollectionByDeptCached('paymentRequests', user.dept)`.
+`filterPaymentRequestsForUser()` VẪN được áp lại y hệt trước — SQL chỉ thu hẹp, không thay cho lớp chốt
+quyền xem thật (đã viết test xác nhận: dù tầng tải giả lập LỖI trả thừa mọi phòng ban, lớp lọc thứ 2 vẫn
+chốt đúng phạm vi).
+
+Thêm 2 test mới: `tests/test-collection-by-dept-cache.js` (6/6 pass, mock SQL — xác nhận lọc đúng phòng
+ban, cache riêng không lẫn giữa các phòng ban, TTL, invalidate đúng phạm vi) và
+`tests/test-payment-requests-dept-scope.js` (5/5 pass, mount thật `routes/data.js` qua HTTP — xác nhận
+IDOR-safe giữa các phòng ban, admin/paymentManage không mất dữ liệu, lớp lọc thứ 2 vẫn chốt đúng khi tầng
+dưới giả lập lỗi).
+
+**Còn lại (Bước 8 tiếp theo)**: mở rộng cùng khuôn cho `checklistSubmissions`/`trainingDocumentProgress`
+(quyền phẳng đơn giản, đã xác nhận qua rà soát) — để sau `operationStoreOpenings`/`operationRepairs`/`docs`/
+`submissions` (cần duyệt cây quản lý hoặc tra cứu chéo phức tạp, rủi ro cao hơn nhiều).
+
+## v18.7 (2026-09-12): Bước 8a — khởi động SQL-filter hoá GET /api/data, bắt đầu từ Thông Báo
+
+Mở đầu sáng kiến MỚI (Bước 8, tiếp nối Bước 7): Bước 7 đã cho MỌI collection bảng riêng + cột lọc thật,
+nhưng chỉ mới dùng để tối ưu Báo Cáo (`GET /api/reports/:collection`) — trong khi `GET /api/data`, API mà
+MỌI màn hình nghiệp vụ hàng ngày dùng (không chỉ Báo Cáo), vẫn tải NGUYÊN từng collection vào bộ nhớ Node
+mỗi request rồi mới lọc quyền xem. Đây mới là điểm ảnh hưởng trực tiếp nhất tới lo ngại "hàng triệu dòng"
+ban đầu, vì chạy liên tục cả ngày chứ không chỉ lúc xem báo cáo.
+
+Đây là thay đổi kiến trúc LỚN hơn Bước 7 nhiều lần (hầu hết màn hình client hiện giả định có sẵn toàn bộ
+`DB.<collection>` trong bộ nhớ trình duyệt — không chỉ để hiển thị danh sách mà còn để tra cứu chéo/sinh
+mã tự động/dropdown...) nên triển khai theo từng bước nhỏ, kiểm chứng kỹ từng bước thay vì đổi 1 lần.
+
+**Bước 8a (thí điểm đầu tiên) — Thông Báo trong app (`routes/notifications.js`)**: chọn làm thí điểm vì
+đơn giản nhất (không có tra cứu chéo/family/mã tự sinh nào phụ thuộc toàn bộ collection) và tăng trưởng
+nhanh nhất hệ thống (tự sinh liên tục qua `notifyUsers()`). `GET /api/notifications` và
+`POST /api/notifications/mark-all-read` chuyển từ quét NGUYÊN bảng Thông Báo (mọi người dùng) sang lọc
+`where.Username` ngay ở SQL (`queryDedicatedRecords()`, tái dùng nguyên hàm đã có từ Bước 7d, không viết
+SQL mới) — vẫn áp lại ĐÚNG `filterNotificationsForUser()` làm lớp chắn quyền xem thứ 2 sau khi SQL đã thu
+hẹp, không tin riêng SQL where (giữ nguyên tắc xuyên suốt Bước 7/8).
+
+**Sửa thêm 1 lỗi có sẵn** phát hiện khi rà soát: `unreadCount` (số hiển thị ở chuông 🔔 góc màn hình)
+trước đây tính bằng cách đếm trong đúng 100 bản ghi mới nhất đã tải về — người có **hơn 100 thông báo
+chưa đọc** sẽ luôn thấy số ở chuông bị THIẾU (tối đa 100 dù thực tế nhiều hơn). Giờ đếm THẬT bằng 1 truy
+vấn `where.IsRead=false` riêng ở SQL, không phụ thuộc số bản ghi đã tải về hiển thị.
+
+Thêm `tests/test-notifications.js` (mới, 6/6 pass) — xác nhận: mỗi người chỉ thấy thông báo của mình
+(IDOR-safe), sắp mới nhất trước, `unreadCount` đúng dù vượt quá 100, không tính nhầm thông báo người
+khác, `mark-all-read` chỉ đụng đúng thông báo chưa đọc của người gọi, `PATCH /:id/read` vẫn chặn đánh dấu
+hộ người khác (hành vi cũ không đổi). Không cần đổi gì ở client (`updateNotifBadge()` đã có sẵn khuôn
+hiển thị `"99+"` khi vượt 99, chỉ hưởng lợi từ số đầu vào chính xác hơn).
+
+**Còn lại (Bước 8 tiếp theo)**: tiếp tục rà soát + chuyển từng phần khác của `GET /api/data` sang lọc SQL
+— ưu tiên các collection tăng trưởng nhanh (nhóm A) có màn hình danh sách ĐƠN GIẢN (không phụ thuộc toàn
+bộ mảng cho tra cứu chéo), từng module một, kiểm chứng kỹ từng bước.
+
+## v18.6 (2026-09-12): Bước 7h (hoàn tất) — nối nốt Đồng Phục, đủ 21/21 module Báo Cáo
+
+Thêm `uniformIssuances` vào `REPORT_QUERY_CONFIGS` (`routes/reports.js`) — module cuối cùng còn lại của
+Báo Cáo (Đồng Phục) trước đây bị bỏ qua do dùng bộ lọc CHỌN NHIỀU siêu thị (không phải 1 dept đơn như các
+module khác) tưởng như không khớp khuôn API hiện có. Giải pháp: API chỉ thu hẹp theo NGÀY ở SQL (không
+truyền `dept`), còn lọc theo danh sách siêu thị đã chọn vẫn giữ nguyên ở JS sau khi nhận về — kết quả cuối
+giống hệt trước, chỉ đổi nguồn tải ban đầu. Từ đây, TOÀN BỘ 21/21 module Báo Cáo đã đọc qua
+`GET /api/reports/:collection`, hoàn tất mục tiêu Bước 7h.
+
+`tests/test-reports.js`: 17/17 pass (3 kịch bản Đồng Phục không đổi kết quả).
+
+## v18.5 (2026-09-12): Bước 7h (tiếp) — nối nốt Công Việc vào API lọc SQL Báo Cáo
+
+Thêm `queryTasksInRange()` (`lib/taskStore.js`) — đọc `dbo.Tasks` (bảng riêng có từ Bước 6b, không thuộc
+55 collection `DEDICATED_TABLES` của Bước 7) có lọc theo khoảng ngày ngay ở SQL, cùng khuôn với
+`queryDedicatedRecords()` nhưng không dùng chung hàm đó (khác nguồn bảng). `routes/reports.js` rẽ nhánh
+đọc riêng cho `tasks` (không có `where.Dept` vì Công việc không có field phòng ban đáng tin) rồi vẫn áp
+đúng `filterTasksForUser()` thật như trước.
+
+`module-baocaoquantri.js`: `getRecords()` của module Công Việc chuyển sang gọi `fetchReportRecords()` —
+nâng tổng số module Báo Cáo đọc qua `GET /api/reports/:collection` lên **20/21** (chỉ còn Đồng Phục đọc
+cách cũ). `tests/test-reports.js`: sửa 1 lời gọi `REPORT_MODULE_CONFIGS.task.getRecords()` thiếu `await`
+— 17/17 pass.
+
+## v18.4 (2026-09-12): Bước 7h — mở rộng API lọc SQL sang 13 collection nhóm B/C trong Báo Cáo
+
+Mở rộng `REPORT_QUERY_CONFIGS` (`routes/reports.js`, Bước 7d/7e) sang 13 collection nhóm B/C đã có bảng
+riêng (Bước 7f) và đã dùng trong Báo Cáo: `contracts`, `carRegs`, `officeReqs`, `meetings`,
+`meetingMinutes`, `internalPosts`, `itSupportTickets`, `licenses`, `hrFeedback`, `hrProcesses`,
+`reportPeriods`, `budgetPeriods`, `vppRegistrations` — nâng tổng số module Báo Cáo đọc qua
+`GET /api/reports/:collection` từ 6 lên 19/20 (chỉ còn Đồng Phục đọc cách cũ, do dữ liệu
+allocations[]/items[] lồng nhau không khớp khuôn lọc phẳng). Vẫn đúng nguyên tắc cũ: SQL chỉ thu hẹp theo
+dept/khoảng ngày, sau đó áp lại ĐÚNG hàm `filter*ForUser()`/`sanitize*ForUser()` thật của
+`lib/recordViewScope.js` — không phát minh logic phân quyền mới. `budgetPeriods` chưa có hàm lọc quyền
+riêng (đã vậy từ trước, `routes/data.js` cũng trả nguyên) nên chỉ thu hẹp theo dept/ngày, không thêm bước
+lọc nào khác.
+
+3 collection có thêm bước lọc nghiệp vụ ngoài dept/ngày — áp lại ĐÚNG hành vi cũ qua `postFilter` mới
+trong config, không đổi số liệu hiển thị: `meetingMinutes` (bảng không có cột Dept riêng, lọc dept bằng
+JS sau khi tải), `internalPosts` (kênh dùng chung toàn công ty, bỏ qua dept, chỉ ẩn bài PENDING/REJECTED),
+`licenses` (chỉ đếm hồ sơ gốc, `rootLicenseId == null`).
+
+Phát hiện + sửa 1 lỗi đua (race condition) có thật trong `renderReports()`/`renderModuleReport()`
+(`module-baocaoquantri.js`): các nút chọn tab gọi `renderReports()` kiểu fire-and-forget (không `await`)
+— khi ngày càng nhiều module dùng `getRecords()` bất đồng bộ (gọi API), đổi tab nhanh trước khi lần tải
+trước xong khiến promise cũ trả về SAU vẫn ghi đè nội dung tab đã rời đi. Thêm `reportsRenderSeq` (số thứ
+tự lượt render) — `renderModuleReport()` chỉ ghi DOM nếu vẫn là lượt mới nhất khi dữ liệu tải xong. Phát
+hiện qua `tests/test-reports.js` (test Đồng Phục bất ngờ fail sau khi thêm nhiều async `getRecords` khác,
+dù không đụng gì tới code Đồng Phục) — xác nhận bằng `git stash` so với HEAD trước đó (17/17 pass) rồi lần
+theo đúng nguyên nhân thay vì bỏ qua.
+
+`tests/test-reports.js`: sửa 3 lời gọi trực tiếp `REPORT_MODULE_CONFIGS.<office|hr|hrLifecycle>.getRecords()`
+thiếu `await` (giờ các collection này cũng async) — 17/17 pass sau khi sửa.
+
+## v18.3 (2026-09-12): Bước 7d/7e — nối API lọc SQL vào Báo Cáo + sửa 2 lỗi có sẵn ở test-vpp.js
+
+**Bước 7d/7e**: thêm `GET /api/reports/:collection` (`routes/reports.js`) — đọc CÓ LỌC theo dept/khoảng
+ngày ngay ở SQL (`queryDedicatedRecords()`, Bước 7d) cho 6 collection nhóm A đang thật sự dùng trong Báo
+Cáo (`docs`, `submissions`, `paymentRequests`, `operationOrders`, `operationStoreOpenings`,
+`operationRepairs`) thay vì tải nguyên collection vào bộ nhớ trình duyệt. Vẫn áp dụng ĐÚNG hàm
+`filter*ForUser()` thật của `lib/recordViewScope.js` (y hệt `GET /api/data`) trên tập đã thu hẹp — không
+phát minh logic phân quyền mới, không đổi ai thấy gì.
+
+`public/js/module-baocaoquantri.js`/`module-baocaoquantri-preview.js`: `getRecords()` của 6 collection
+trên chuyển sang gọi API mới qua `fetchReportRecords()` (có dự phòng tự rơi về cách lọc cũ trong bộ nhớ
+nếu API lỗi — không mất tính năng). `renderModuleReport()`/`renderReports()`/`exportModuleReportExcel()`/
+`exportReportsExcel()` chuyển sang `async`/`await` để dùng được `getRecords()` bất đồng bộ.
+
+Thêm `tests/test-query-dedicated-records.js` (mock SQL, xác nhận đúng lọc where/khoảng ngày/phân trang)
+— phép thử tự động đầu tiên cho `queryDedicatedRecords()`. Cập nhật `tests/test-reports.js` theo đúng
+`getRecords()` async mới — 17/17 pass (bộ mock trình duyệt không có route `/api/reports/*` nên tự rơi về
+fallback, xác nhận đúng dự phòng hoạt động).
+
+**Sửa thêm 2 lỗi có sẵn** (phát hiện khi chạy lại test suite, không liên quan Bước 7) trong
+`tests/test-vpp.js`: (1) thiếu `setVppSubTab('REGISTER')` trước khi thao tác dropdown chọn kỳ đăng ký —
+`switchTab('vpp')` không tự chuyển subtab; (2) ngày kỳ đăng ký hardcode `2026-09-10` khiến kỳ bị coi ĐÃ
+HẾT HẠN khi chạy sau ngày đó — đổi sang tính động theo ngày hiện tại. 19/19 pass sau khi sửa cả 2.
+
+**Còn lại**: mở rộng `REPORT_QUERY_CONFIGS` khi có thêm collection cần lọc SQL trong Báo Cáo, dọn
+`dbo.Records` cũ sau khi xác nhận ổn định trên server thật (Bước 7g).
+
+## v18.2 (2026-09-12): Bước 7f — hoàn tất di trú TOÀN BỘ 55 collection khỏi `dbo.Records`
+
+Người dùng xác nhận CHƯA có dữ liệu thật trên production ("coi như dựng hệ
+thống mới") — bỏ cách tiếp cận thận trọng chỉ ưu tiên nhóm rủi ro cao nhất
+(v18.1), làm luôn toàn bộ 44 collection còn lại (nhóm B: 20 collection tăng
+trưởng vừa; nhóm C: 24 collection danh mục/cấu hình) sang bảng riêng —
+hoàn tất kiến trúc quan hệ cho **toàn bộ 55/55 collection** từng nằm chung
+trong `dbo.Records`.
+
+Cùng phương pháp/nguyên tắc đã dùng ở v18.1: khảo sát field-shape thật từ
+code (không đoán mò, có trích dẫn), chỉ tách cột SQL thật cho field có bằng
+chứng dùng lọc quyền xem/Báo Cáo, mảng lồng giữ nguyên trong Payload. Đối
+chiếu tự động xác nhận mọi bảng/cột trong `lib/recordStore.js`
+`DEDICATED_TABLES` đều khớp đúng `sql/schema.sql`.
+
+Rà soát toàn bộ call site trực tiếp (không qua dispatcher chung) trên cả
+repo cho các hàm cấp thấp, phát hiện + vá 2 lỗi thật TRƯỚC khi merge:
+`createForCollectionSerialized()` (dùng cho tạo mới có khoá nghiêm túc theo
+khoá nghiệp vụ — "meetings"/"vppRegistrations"/"trainingRegistrations")
+và `deleteRecordById()` (xoá thẳng không qua Thùng Rác — `payslips` khi
+tính lại lương) đều chỉ hỗ trợ đường `dbo.Records` cũ, nếu không vá sẽ chặn
+cứng các luồng này ngay khi deploy.
+
+Chạy lại toàn bộ 101 test hiện có — không phát sinh regression mới.
+
+**Còn lại**: nối API lọc/phân trang vào Báo Cáo + các màn danh sách (Bước
+7d/7e, cần ghép đúng logic phân quyền xem hiện có theo từng collection),
+dọn `dbo.Records` cũ sau khi xác nhận ổn định (Bước 7g), rồi test nghiệp vụ
+toàn diện (218 kịch bản) + rà soát an toàn tổng thể + demo như người dùng
+yêu cầu.
+
+## v18.1 (2026-09-12): Bước 7 — bắt đầu tách collection tăng trưởng nhanh khỏi `dbo.Records` sang bảng riêng
+
+Yêu cầu người dùng: lo ngại mô hình lưu trữ JSON blob dùng chung
+(`dbo.Records`) không chịu được quy mô hàng triệu dòng về sau, yêu cầu
+nghiên cứu sâu và chuyển sang mô hình bảng quan hệ truyền thống MSSQL —
+"chỉ làm một lần", không cần hỏi lại, cứ merge và báo cáo.
+
+**Phân tích**: `dbo.Records` (bảng dùng chung cho ~48 collection nghiệp vụ)
+chỉ có `Collection`/`Id`/`Code`/`CreatedAt` là cột SQL thật — mọi field còn
+lại (status, dept, người tạo...) chỉ nằm trong `Payload` JSON, không lọc/
+phân trang được ở tầng CSDL. Phân loại toàn bộ 48 collection theo tốc độ
+tăng trưởng thực tế (dựa trên khảo sát code, không có SQL Server thật để đo
+số liệu production) — chọn 11 collection tăng trưởng KHÔNG GIỚI HẠN theo
+thời gian làm đợt đầu ("nhóm A"): `docs`, `submissions`, `attendanceRecords`,
+`notifications`, `operationOrders`, `operationStoreOpenings`,
+`operationRepairs`, `paymentRequests`, `checklistSubmissions`,
+`trainingTestSubmissions`, `trainingDocumentProgress`. Các collection còn
+lại (catalog/cấu hình bị chặn trần bởi số nhân sự/danh mục) chuyển sau
+(nhóm B/C, xem kế hoạch đầy đủ).
+
+**Đã hoàn tất ở đợt này (Bước 7a-7d)**:
+- Thêm 11 bảng riêng vào `sql/schema.sql` (additive, `IF OBJECT_ID IS NULL`)
+  — mỗi bảng chỉ trích cột SQL thật cho field ĐÃ CÓ BẰNG CHỨNG dùng để lọc
+  quyền xem (`lib/recordViewScope.js`) hoặc dùng ở Báo Cáo, dựa trên khảo
+  sát thực tế field-shape từ `lib/createValidation.js`/`lib/recordActions.js`
+  (không đoán mò). Mảng lồng (history[]/items[]/estimateItems[]/answers[])
+  CHƯA tách bảng con — không phải điều kiện lọc SQL, giữ trong `Payload`.
+- Viết lại `lib/recordStore.js`: 11 collection này tự động đọc/ghi bảng
+  riêng thay vì `dbo.Records` — rà soát TOÀN BỘ call site thật trong repo
+  (không chỉ qua các hàm dispatch chung) và phát hiện `seedDefaults.js` +
+  `jobs/operationOrderApiSync.js` gọi thẳng hàm cấp thấp cho
+  `operationOrders`/`paymentRequests`, đã vá để không âm thầm ghi nhầm bảng
+  cũ (rỗng sau khi migrate) — lỗi loại này sẽ KHÔNG báo gì, rất khó phát
+  hiện nếu bỏ sót.
+- `scripts/migrate-records-batch1.js`: script di trú dữ liệu 1 lần, dry-run
+  mặc định, chỉ INSERT bản ghi còn thiếu (idempotent), KHÔNG xoá gì ở
+  `dbo.Records` — giữ nguyên làm bản sao lưu tới khi xác nhận ổn định.
+- `queryDedicatedRecords()`: hạ tầng đọc có lọc (WHERE) + phân trang thật ở
+  SQL cho 11 bảng trên — CHƯA có route nào gọi (chưa nối vào Báo Cáo/client)
+  vì cần ghép đúng với `recordViewScope.js` của từng collection để không lộ
+  dữ liệu ngoài phạm vi xem — việc này cần làm cẩn thận, để lại cho đợt sau.
+- Cập nhật `deploy/Huong-dan-trien-khai-PM2.md` + `-Nginx.md` (mục 13): thứ
+  tự bắt buộc khi cập nhật — `schema.sql` → script migrate `--confirm` →
+  MỚI `pm2 restart` (restart trước sẽ khiến 11 collection này RỖNG).
+
+**Giới hạn đã biết**: môi trường phát triển không có SQL Server thật + bộ
+test hiện có (`tests/test-*.js`) mock ở tầng HTTP/trình duyệt, không chạy
+qua `lib/recordStore.js` thật — đã syntax-check toàn bộ + viết lại
+`tests/test-code-autogen-retry.js` (mock SQL thủ công) để xác nhận đúng
+logic retry/sinh mã cho bảng mới (12/12 pass, phép thử tự động DUY NHẤT có
+thể kiểm chứng phần SQL mới trong môi trường này). **Khuyến nghị bắt buộc**:
+chạy `schema.sql` + script migrate trên bản sao CSDL thử nghiệm trước, đối
+chiếu số liệu khớp, rồi mới áp dụng production thật.
+
+**Còn lại (đang tiếp tục)**: nối `queryDedicatedRecords()` vào route + client
+Báo Cáo (Bước 7e), lặp lại cho nhóm B/C (Bước 7f), dọn `dbo.Records` cũ sau
+khi ổn định (Bước 7g), test nghiệp vụ toàn diện + rà soát an toàn tổng thể
+sau khi hoàn tất toàn bộ di trú.
 
 ## v18.0 (2026-09-12): Bổ sung module còn thiếu vào Báo Cáo + Biểu Mẫu (rà soát "điều kiện lọc xem" toàn hệ thống)
 

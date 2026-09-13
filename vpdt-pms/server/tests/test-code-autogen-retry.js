@@ -113,9 +113,14 @@ console.log('\n[2/2] insertRecord() — retry khi đụng UNIQUE INDEX thật (m
 
 // Mô phỏng đúng 2 ràng buộc UNIQUE thật ở sql/schema.sql: PK_Records (Collection, Id) và
 // UX_Records_Collection_Code (Collection, Code khi Code khác NULL) — "rows" đóng vai trò dbo.Records.
-function buildFakeDbModule(rows) {
+// dedicatedTables (tuỳ chọn, {TableName: [{Id, Code, Payload}]}) mô phỏng THÊM các bảng riêng Bước 7
+// (dbo.Docs/dbo.Submissions/...) — insertRecord('docs'/'submissions'/..., ...) giờ tự route sang
+// insertDedicatedRecord() (xem lib/recordStore.js DEDICATED_TABLES), sinh câu lệnh
+// "INSERT INTO dbo.<Table> (...)" / "SELECT Payload FROM dbo.<Table> ORDER BY..." khác hẳn dbo.Records
+// (không có cột Collection) — PHẢI mô phỏng riêng để không lộ "Mock chưa hỗ trợ câu lệnh".
+function buildFakeDbModule(rows, dedicatedTables = {}) {
   function makeError(constraintName) {
-    const err = new Error(`Violation of ${constraintName === 'PK_Records' ? 'PRIMARY KEY' : 'UNIQUE KEY'} constraint '${constraintName}'. Cannot insert duplicate key.`);
+    const err = new Error(`Violation of ${constraintName.startsWith('PK') ? 'PRIMARY KEY' : 'UNIQUE KEY'} constraint '${constraintName}'. Cannot insert duplicate key.`);
     err.number = 2627;
     return err;
   }
@@ -139,6 +144,19 @@ function buildFakeDbModule(rows) {
             const rs = rows.filter(r => r.Collection === inputs.collection).map(r => ({ Payload: r.Payload }));
             return { recordset: rs };
           }
+          let m;
+          if ((m = /^INSERT INTO dbo\.(\w+) \(/.exec(text))) {
+            const tableName = m[1];
+            const tRows = dedicatedTables[tableName] || (dedicatedTables[tableName] = []);
+            if (tRows.some(r => r.Id === inputs.id)) throw makeError(`PK_${tableName}`);
+            if (inputs.code != null && tRows.some(r => r.Code === inputs.code)) throw makeError(`UX_${tableName}_Code`);
+            tRows.push({ Id: inputs.id, Code: inputs.code ?? null, Payload: inputs.payload });
+            return { recordset: [] };
+          }
+          if ((m = /^SELECT Payload FROM dbo\.(\w+) ORDER BY CreatedAt DESC, Id DESC$/.exec(text))) {
+            const tRows = dedicatedTables[m[1]] || [];
+            return { recordset: tRows.map(r => ({ Payload: r.Payload })) };
+          }
           throw new Error('Mock chưa hỗ trợ câu lệnh: ' + text);
         }
       };
@@ -146,12 +164,12 @@ function buildFakeDbModule(rows) {
     }
   };
   return {
-    sql: { NVarChar: () => null, BigInt: 'BigInt', MAX: 'MAX', Int: 'Int', Transaction: class {}, Request: class {} },
+    sql: { NVarChar: () => null, BigInt: 'BigInt', MAX: 'MAX', Int: 'Int', Bit: 'Bit', Date: 'Date', Transaction: class {}, Request: class {} },
     getPool: async () => fakePool
   };
 }
 
-async function withMockedDb(rows, fn) {
+async function withMockedDb(rows, fn, dedicatedTables = {}) {
   const dbPath = require.resolve('../db');
   const recordStorePath = require.resolve('../lib/recordStore');
   // Xoá cache của CẢ '../db' lẫn 'lib/recordStore' (nếu 1 test trước đã require thật) để nạp lại sạch
@@ -159,7 +177,7 @@ async function withMockedDb(rows, fn) {
   delete require.cache[dbPath];
   delete require.cache[recordStorePath];
   const fakeModule = new Module(dbPath, null);
-  fakeModule.exports = buildFakeDbModule(rows);
+  fakeModule.exports = buildFakeDbModule(rows, dedicatedTables);
   fakeModule.loaded = true;
   require.cache[dbPath] = fakeModule;
   const recordStore = require('../lib/recordStore');
@@ -172,41 +190,45 @@ async function withMockedDb(rows, fn) {
 }
 
 (async () => {
-  await checkAsync('insertRecord(): 2 lần chèn liên tiếp cùng code cố định qua "route thật" (SQL mock) -> cả 2 thành công, code tự tăng, không lỗi 409', async () => {
-    const rows = [];
-    await withMockedDb(rows, async (recordStore) => {
+  // 'submissions' đã chuyển sang bảng riêng dbo.Submissions (Bước 7) — insertRecord('submissions', ...)
+  // giờ tự route sang insertDedicatedRecord(), sinh "INSERT INTO dbo.Submissions (...)" thay vì
+  // "INSERT INTO dbo.Records (...)" — dùng dedicatedTables (KHÔNG có cột Collection) thay vì rows.
+  await checkAsync('insertRecord(): 2 lần chèn liên tiếp cùng code cố định qua "route thật" (SQL mock, bảng riêng dbo.Submissions) -> cả 2 thành công, code tự tăng, không lỗi 409', async () => {
+    const dedicatedTables = {};
+    await withMockedDb([], async (recordStore) => {
       const rec1 = { id: 1001, code: 'HCRC-CNTT-VBT-050', title: 'A' };
       const saved1 = await recordStore.insertRecord('submissions', rec1);
       assert.strictEqual(saved1.code, 'HCRC-CNTT-VBT-050');
 
       // record 2 CỐ TÌNH gửi lên ĐÚNG code cố định trùng với record 1 (mô phỏng client stale/2 người tạo
-      // gần như đồng thời) — id KHÁC (không đụng PK) nhưng Code đụng UX_Records_Collection_Code thật.
+      // gần như đồng thời) — id KHÁC (không đụng PK) nhưng Code đụng UX_Submissions_Code thật.
       const rec2 = { id: 1002, code: 'HCRC-CNTT-VBT-050', title: 'B' };
       const saved2 = await recordStore.insertRecord('submissions', rec2);
       assert.strictEqual(saved2.code, 'HCRC-CNTT-VBT-051');
       assert.notStrictEqual(saved1.code, saved2.code);
-    });
+    }, dedicatedTables);
   });
 
-  await checkAsync('insertRecord(): trùng Id (PK_Records) -> tự sinh Id khác, KHÔNG đụng gì tới Code', async () => {
-    const rows = [{ Collection: 'docs', Id: 5000, Code: 'DOC-1', Payload: '{}' }];
-    await withMockedDb(rows, async (recordStore) => {
+  await checkAsync('insertRecord(): trùng Id (PK_Docs, bảng riêng dbo.Docs) -> tự sinh Id khác, KHÔNG đụng gì tới Code', async () => {
+    const dedicatedTables = { Docs: [{ Id: 5000, Code: 'DOC-1', Payload: '{}' }] };
+    await withMockedDb([], async (recordStore) => {
       const rec = { id: 5000, code: 'DOC-2', title: 'Trùng Id' };
       const saved = await recordStore.insertRecord('docs', rec);
       assert.notStrictEqual(saved.id, 5000);
       assert.strictEqual(saved.code, 'DOC-2');
-    });
+    }, dedicatedTables);
   });
 
+  // carRegs cũng đã chuyển sang bảng riêng dbo.CarRegs (Bước 7) — seed vào dedicatedTables thay vì rows.
   await checkAsync('insertRecord(): code trùng KHÔNG có chữ số cuối -> ném 409 ngay, không retry mù', async () => {
-    const rows = [{ Collection: 'carRegs', Id: 1, Code: 'KHONGCOSO', Payload: '{}' }];
-    await withMockedDb(rows, async (recordStore) => {
+    const dedicatedTables = { CarRegs: [{ Id: 1, Code: 'KHONGCOSO', Payload: '{}' }] };
+    await withMockedDb([], async (recordStore) => {
       const rec = { id: 2, code: 'KHONGCOSO', title: 'X' };
       await assert.rejects(
         () => recordStore.insertRecord('carRegs', rec),
         (err) => err.status === 409 && /đã tồn tại/.test(err.message) && !/tự động sinh/.test(err.message)
       );
-    });
+    }, dedicatedTables);
   });
 
   await checkAsync('insertRecord(): vẫn trùng sau khi hết vòng lặp retry -> 409 kèm rõ "đã thử tự động sinh mã mới nhưng vẫn trùng"', async () => {
@@ -217,18 +239,20 @@ async function withMockedDb(rows, fn) {
     delete require.cache[recordStorePath];
     // Mock ĐẶC BIỆT: INSERT luôn báo trùng Code (bất kể code là gì) để ép chạy hết 5 lần thử — mô phỏng
     // 1 "kẻ ganh đua" liên tục chiếm mất đúng số kế tiếp ngay trước khi ta kịp ghi (race thật liên tục).
+    // 'submissions' -> bảng riêng dbo.Submissions (Bước 7) — mock lỗi KHÔNG chứa "PK_Submissions" nên
+    // insertDedicatedRecord() hiểu đúng đây là trùng Code (không phải trùng Id) và tự sinh mã mới thử lại.
     const fakePool = {
       request() {
         const inputs = {};
         const reqObj = {
           input(name, _t, value) { inputs[name] = value; return reqObj; },
           async query(text) {
-            if (/INSERT INTO dbo\.Records/.test(text)) {
-              const err = new Error(`Violation of UNIQUE KEY constraint 'UX_Records_Collection_Code'.`);
+            if (/^INSERT INTO dbo\.\w+ \(/.test(text)) {
+              const err = new Error(`Violation of UNIQUE KEY constraint 'UX_Submissions_Code'.`);
               err.number = 2627;
               throw err;
             }
-            if (/SELECT Payload FROM dbo\.Records WHERE Collection = @collection ORDER BY/.test(text)) {
+            if (/^SELECT Payload FROM dbo\.\w+ ORDER BY CreatedAt DESC, Id DESC$/.test(text)) {
               return { recordset: [] };
             }
             throw new Error('Mock chưa hỗ trợ: ' + text);
@@ -238,7 +262,7 @@ async function withMockedDb(rows, fn) {
       }
     };
     const fakeModule = new Module(dbPath, null);
-    fakeModule.exports = { sql: { NVarChar: () => null, BigInt: 'BigInt', MAX: 'MAX' }, getPool: async () => fakePool };
+    fakeModule.exports = { sql: { NVarChar: () => null, BigInt: 'BigInt', MAX: 'MAX', Int: 'Int', Bit: 'Bit', Date: 'Date' }, getPool: async () => fakePool };
     fakeModule.loaded = true;
     require.cache[dbPath] = fakeModule;
     const recordStore = require('../lib/recordStore');

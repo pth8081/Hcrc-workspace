@@ -306,7 +306,7 @@ const DB = {
   paymentRequests: [], paymentDeptWorkflows: {},
   formTemplates: {},
   permGroups: [],
-  vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [],
+  vppExcludedJobTitles: [], workflowParticipatingDepts: [],
   pwaShortcutModules: [],
   itPriceMasterLists: [],
   uploadFileTypeConfig: {}, uploadSizeLimitConfig: {},
@@ -3039,7 +3039,6 @@ async function initDatabase(loggingInUser) {
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.permGroups = data.permGroups || [];
-    DB.vppExcludeGroups = data.vppExcludeGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
     // BUG THẬT đã sửa: dòng này trước nay CHƯA từng được gán từ data (chỉ có nhánh khởi tạo lười "|| []"
@@ -3126,11 +3125,6 @@ async function initDatabase(loggingInUser) {
     DB.operationOrderHOTierWorkflows = data.operationOrderHOTierWorkflows || {};
     DB.operationStoreOpenDeptWorkflows = data.operationStoreOpenDeptWorkflows || {};
     DB.operationRepairDeptWorkflows = data.operationRepairDeptWorkflows || {};
-    // Giai đoạn Dự toán (tab "🏬 Siêu Thị") — 2 map quy trình duyệt RIÊNG (song song, không dùng chung
-    // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows ở trên), xem lib/workflowEngine.js
-    // operationStoreOpeningEstimate/operationRepairEstimate.
-    DB.operationStoreOpenEstimateDeptWorkflows = data.operationStoreOpenEstimateDeptWorkflows || {};
-    DB.operationRepairEstimateDeptWorkflows = data.operationRepairEstimateDeptWorkflows || {};
     // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ra dsmart16 (xem
     // jobs/operationOrderApiSync.js). headerValueEnc đã bị server strip (sanitizeOperationOrderApiConfig()
     // ở routes/data.js), chỉ còn cờ "hasHeaderValue" — xem loadOperationOrderApiConfigToForm().
@@ -6352,6 +6346,17 @@ function canManagePaymentRequestsClient(user) {
 // dựa vào paymentStatus.
 function hasActivePaymentRequestForSourceClient(sourceModule, sourceId) {
   return (DB.paymentRequests || []).some(pr => pr.sourceModule === sourceModule && pr.sourceId === sourceId && pr.status !== 'PAID');
+}
+
+// hasAnyPaymentRequestForSourceClient() — bản sao client-side của điều kiện chặn thật trong
+// requestContractPaymentTypeChange() (lib/recordActions.js: "Hợp đồng đã có đề nghị thanh toán, không
+// thể đổi hình thức thanh toán nữa") — KHÁC hasActivePaymentRequestForSourceClient() ở trên: server chặn
+// đổi hình thức thanh toán ngay khi có BẤT KỲ đề nghị thanh toán nào (kể cả đã PAID, vì đổi hình thức
+// sau khi đã có lịch sử thanh toán làm sai lệch số đợt/số tiền đã ghi nhận), không riêng đề nghị còn
+// hiệu lực. Dùng riêng cho nút/modal "Đổi Hình Thức Thanh Toán" để không hiện nút rồi luôn bị server từ
+// chối 409 (HD-05).
+function hasAnyPaymentRequestForSourceClient(sourceModule, sourceId) {
+  return (DB.paymentRequests || []).some(pr => pr.sourceModule === sourceModule && pr.sourceId === sourceId);
 }
 
 // canAggregateReportsClient() - CHUYEN tu module-baocaodinhky-nhap.js sang day (Ha tang: nap module theo
