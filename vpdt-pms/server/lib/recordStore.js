@@ -149,11 +149,13 @@ async function insertRecord(collection, record) {
 // DEDICATED_TABLES: collection đã "tốt nghiệp" khỏi dbo.Records sang bảng riêng có cột SQL thật cho
 // field lọc/join đã CÓ BẰNG CHỨNG cần dùng (lib/recordViewScope.js + module-baocaoquantri.js) — KHÔNG
 // dùng chung dbo.Records (Collection column) nữa, mỗi collection ở đây là 1 bảng thật riêng. `hasCode`
-// = bảng có cột Code + UNIQUE INDEX lọc (theo đúng khuôn dbo.Records) hay không — 6/11 collection ở
-// đây không dùng Code (notifications/attendanceRecords/paymentRequests/checklistSubmissions/
-// trainingTestSubmissions/trainingDocumentProgress đều có khoá tự nhiên riêng, không phải mã người
-// dùng gõ). `columns` liệt kê CHÍNH XÁC cột trích xuất thêm (ngoài Id/CreatedAt/Code/Payload) — mỗi
-// lần ghi (insert HOẶC sửa) đều tính lại toàn bộ từ Payload mới nhất, giữ luôn đồng bộ 2 bên.
+// = bảng có cột Code + UNIQUE INDEX lọc hay không — collection nào KHÔNG có mã tự sinh cho người dùng
+// gõ/thấy (VD notifications/attendanceRecords/paymentRequests, có khoá tự nhiên riêng — Id/khoá ngoài
+// đủ định danh) thì để false, KHÔNG liệt kê cứng số lượng ở đây nữa vì danh sách hay đổi theo thời gian
+// (đợt 9/2026: rà soát lại toàn bộ, phát hiện + vá 2 collection lẽ ra phải hasCode:true nhưng bị bỏ sót
+// từ đầu — itSupportTickets/itPriceApprovals, xem chú thích ngay tại 2 entry đó). `columns` liệt kê
+// CHÍNH XÁC cột trích xuất thêm (ngoài Id/CreatedAt/Code/Payload) — mỗi lần ghi (insert HOẶC sửa) đều
+// tính lại toàn bộ từ Payload mới nhất, giữ luôn đồng bộ 2 bên.
 const DEDICATED_TABLES = {
   notifications: {
     table: 'Notifications', hasCode: false,
@@ -302,7 +304,13 @@ const DEDICATED_TABLES = {
     }
   },
   itSupportTickets: {
-    table: 'ItSupportTickets', hasCode: false,
+    // hasCode (đợt 9/2026): trước đây false — bảng không có cột Code riêng dù client vẫn tự sinh +
+    // hiển thị mã ("Mã tự sinh"), khiến 2 request tạo ticket gần như đồng thời có thể ra CÙNG 1 mã mà
+    // không hề bị CSDL chặn (chỉ có lớp mềm validateAndPrepareCreate() đọc dữ liệu lúc đó, không phải
+    // trọng tài thật khi có race thật). Đã thêm cột Code + UNIQUE INDEX lọc ở sql/schema.sql — bật cờ
+    // này để insertDedicatedRecord()/withLockedDedicatedRecordById() tự động ghi + kiểm tra trùng đúng
+    // y hệt 14 module khác đang có Code.
+    table: 'ItSupportTickets', hasCode: true,
     columns: {
       Dept:              { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
       Creator:           { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
@@ -311,7 +319,9 @@ const DEDICATED_TABLES = {
     }
   },
   itPriceApprovals: {
-    table: 'ItPriceApprovals', hasCode: false,
+    // hasCode (đợt 9/2026): cùng lý do itSupportTickets ở trên — thêm cột Code + UNIQUE INDEX lọc để
+    // chặn race thật khi 2 người gửi đề xuất giá gần như đồng thời (xem sql/schema.sql).
+    table: 'ItPriceApprovals', hasCode: true,
     columns: {
       Dept:      { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
       Creator:   { sqlType: () => sql.NVarChar(100), extract: r => r.creator || null },
@@ -706,7 +716,8 @@ async function insertDedicatedRecord(collection, record) {
         record.id = Date.now() + Math.floor(Math.random() * 1000);
         continue;
       }
-      // Trùng Code (chỉ 5/11 bảng có cột này) — cùng logic tự sinh mã mới rồi thử lại như insertRecord().
+      // Trùng Code (chỉ những bảng có cfg.hasCode=true mới có cột này, xem DEDICATED_TABLES ở trên) —
+      // cùng logic tự sinh mã mới rồi thử lại như insertRecord().
       if (!cfg.hasCode) throw err;
       const m = CODE_SEQ_SUFFIX_RE.exec(String(record.code || ''));
       if (!m) throw new HttpError(409, `Mã "${record.code}" đã tồn tại`);

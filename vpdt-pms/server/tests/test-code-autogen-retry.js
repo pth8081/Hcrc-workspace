@@ -5,8 +5,9 @@
 //      trực tiếp bằng dữ liệu thuần trong bộ nhớ (không cần DB, giống tests/_mockBackend.js).
 //   2) lib/recordStore.js insertRecord() — lớp UNIQUE INDEX ở CSDL (2601/2627), test bằng cách MOCK
 //      module '../db' (không có SQL Server thật trong sandbox — xem tests/testHarness.js) để mô phỏng
-//      trung thực hành vi ràng buộc UNIQUE thật (PK_Records theo Id, UX_Records_Collection_Code theo
-//      Collection+Code) và xác nhận đúng luồng tự sinh mã mới + đọc lại real-time.
+//      trung thực hành vi ràng buộc UNIQUE thật của bảng riêng (VD PK_Docs theo Id, UX_Docs_Code theo
+//      Code — mỗi collection tốt nghiệp sang bảng riêng có ràng buộc riêng, xem DEDICATED_TABLES ở
+//      lib/recordStore.js) và xác nhận đúng luồng tự sinh mã mới + đọc lại real-time.
 'use strict';
 const assert = require('assert');
 const path = require('path');
@@ -276,6 +277,43 @@ async function withMockedDb(rows, fn, dedicatedTables = {}) {
       delete require.cache[dbPath];
       delete require.cache[recordStorePath];
     }
+  });
+
+  // Đợt 9/2026 — PHÁT HIỆN LỖI THẬT: itSupportTickets/itPriceApprovals vẫn tự sinh + hiển thị "Mã tự
+  // sinh" cho người dùng (generateItTicketCode()/generateItPriceCode(), public/js/module-itsupport-*.js)
+  // NHƯNG 2 bảng này trước đây KHÔNG có cột Code + UNIQUE INDEX (hasCode: false, "không dùng mã" — hiểu
+  // nhầm rằng mã này chỉ mang tính hiển thị) — 2 request gần như đồng thời có thể ghi CÙNG 1 mã hiển thị
+  // mà CSDL không hề chặn (chỉ có lớp mềm validateAndPrepareCreate() đọc dữ liệu lúc đó, không phải
+  // trọng tài thật khi có race thật). Đã vá: thêm cột Code + UNIQUE INDEX lọc ở sql/schema.sql, bật
+  // hasCode:true cho cả 2 ở lib/recordStore.js — 2 test dưới đây xác nhận race giờ được xử lý đúng y hệt
+  // các bảng khác (nếu lỡ tay đổi hasCode về false, test này sẽ FAIL ngay vì Code không được gửi vào
+  // INSERT nên "insert trùng Code" sẽ không xảy ra như mong đợi).
+  await checkAsync('itSupportTickets: 2 lần chèn liên tiếp cùng mã cố định (race mô phỏng) -> cả 2 thành công, mã tự tăng khác nhau', async () => {
+    const dedicatedTables = {};
+    await withMockedDb([], async (recordStore) => {
+      const rec1 = { id: 2001, code: 'HCRC-CNTT-ITHT-777', title: 'Ticket A' };
+      const saved1 = await recordStore.insertRecord('itSupportTickets', rec1);
+      assert.strictEqual(saved1.code, 'HCRC-CNTT-ITHT-777');
+
+      const rec2 = { id: 2002, code: 'HCRC-CNTT-ITHT-777', title: 'Ticket B' };
+      const saved2 = await recordStore.insertRecord('itSupportTickets', rec2);
+      assert.strictEqual(saved2.code, 'HCRC-CNTT-ITHT-778');
+      assert.notStrictEqual(saved1.code, saved2.code);
+    }, dedicatedTables);
+  });
+
+  await checkAsync('itPriceApprovals: 2 lần chèn liên tiếp cùng mã cố định (race mô phỏng) -> cả 2 thành công, mã tự tăng khác nhau', async () => {
+    const dedicatedTables = {};
+    await withMockedDb([], async (recordStore) => {
+      const rec1 = { id: 3001, code: 'HCRC-KD-ITPG-042', reason: 'Đề xuất A' };
+      const saved1 = await recordStore.insertRecord('itPriceApprovals', rec1);
+      assert.strictEqual(saved1.code, 'HCRC-KD-ITPG-042');
+
+      const rec2 = { id: 3002, code: 'HCRC-KD-ITPG-042', reason: 'Đề xuất B' };
+      const saved2 = await recordStore.insertRecord('itPriceApprovals', rec2);
+      assert.strictEqual(saved2.code, 'HCRC-KD-ITPG-043');
+      assert.notStrictEqual(saved1.code, saved2.code);
+    }, dedicatedTables);
   });
 
   console.log(`\n=== test-code-autogen-retry.js: ${pass} pass, ${fail} fail ===`);

@@ -940,12 +940,18 @@ GO
 
 /* itSupportTickets — trạng thái PHẲNG (TODO/DOING/DONE/CANCELLED), KHÔNG có history[]/currentStep
    (khác đa số collection khác) — có thêm nhánh "leo thang" (ApprovalApprover) độc lập với Status chính.
-   Không có Code. */
+   Code (đợt 9/2026): trước đây KHÔNG có cột riêng dù client vẫn tự sinh + hiển thị "Mã tự sinh" (ô
+   itTicketCode) — 2 request tạo ticket gần như đồng thời có thể ra CÙNG 1 mã hiển thị mà không hề bị
+   CSDL chặn (chỉ có lớp mềm validateAndPrepareCreate() đọc dữ liệu lúc đó, không phải trọng tài thật khi
+   có race thật). Thêm cột + UNIQUE INDEX lọc để insertDedicatedRecord()/withLockedDedicatedRecordById()
+   (lib/recordStore.js, đã tự branch theo cfg.hasCode) tự động bật cơ chế phát hiện trùng + tự sinh mã
+   mới y hệt 14 module khác đang có Code, không cần sửa gì thêm ở lib/recordStore.js. */
 IF OBJECT_ID('dbo.ItSupportTickets', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ItSupportTickets (
         Id                BIGINT         NOT NULL CONSTRAINT PK_ItSupportTickets PRIMARY KEY,
         CreatedAt         DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code              NVARCHAR(100)  NULL,
         Dept              NVARCHAR(100)  NOT NULL,
         Creator           NVARCHAR(100)  NULL,
         Status            NVARCHAR(20)   NOT NULL,
@@ -954,16 +960,32 @@ BEGIN
     );
     CREATE INDEX IX_ItSupportTickets_Dept_Status_CreatedAt ON dbo.ItSupportTickets (Dept, Status, CreatedAt DESC, Id DESC);
     CREATE INDEX IX_ItSupportTickets_ApprovalApprover ON dbo.ItSupportTickets (ApprovalApprover);
+    CREATE UNIQUE INDEX UX_ItSupportTickets_Code ON dbo.ItSupportTickets (Code) WHERE Code IS NOT NULL;
+END
+GO
+-- Nâng cấp CSDL đã tồn tại từ trước đợt 9/2026 (bảng đã có sẵn, thiếu cột Code) — script CREATE TABLE ở
+-- trên chỉ chạy khi bảng CHƯA tồn tại nên không tự thêm cột cho bảng cũ, phải bổ sung riêng ở đây.
+IF OBJECT_ID('dbo.ItSupportTickets', 'U') IS NOT NULL AND COL_LENGTH('dbo.ItSupportTickets', 'Code') IS NULL
+BEGIN
+    ALTER TABLE dbo.ItSupportTickets ADD Code NVARCHAR(100) NULL;
+END
+GO
+IF OBJECT_ID('dbo.ItSupportTickets', 'U') IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_ItSupportTickets_Code' AND object_id = OBJECT_ID('dbo.ItSupportTickets'))
+BEGIN
+    CREATE UNIQUE INDEX UX_ItSupportTickets_Code ON dbo.ItSupportTickets (Code) WHERE Code IS NOT NULL;
 END
 GO
 
-/* itPriceApprovals — PriceType (RETAIL/WHOLESALE) chi phối quy trình duyệt khác nhau hoàn toàn. Không
-   có Code. */
+/* itPriceApprovals — PriceType (RETAIL/WHOLESALE) chi phối quy trình duyệt khác nhau hoàn toàn. Code
+   (đợt 9/2026): cùng lý do itSupportTickets ở trên — thêm cột + UNIQUE INDEX lọc để chặn race thật khi
+   2 người gửi đề xuất gần như đồng thời. */
 IF OBJECT_ID('dbo.ItPriceApprovals', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ItPriceApprovals (
         Id         BIGINT         NOT NULL CONSTRAINT PK_ItPriceApprovals PRIMARY KEY,
         CreatedAt  DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Code       NVARCHAR(100)  NULL,
         Dept       NVARCHAR(100)  NOT NULL,
         Creator    NVARCHAR(100)  NULL,
         PriceType  NVARCHAR(20)   NOT NULL,
@@ -971,6 +993,19 @@ BEGIN
         Payload    NVARCHAR(MAX)  NOT NULL
     );
     CREATE INDEX IX_ItPriceApprovals_Dept_Status_CreatedAt ON dbo.ItPriceApprovals (Dept, Status, CreatedAt DESC, Id DESC);
+    CREATE UNIQUE INDEX UX_ItPriceApprovals_Code ON dbo.ItPriceApprovals (Code) WHERE Code IS NOT NULL;
+END
+GO
+-- Nâng cấp CSDL đã tồn tại từ trước đợt 9/2026 — cùng lý do ItSupportTickets ở trên.
+IF OBJECT_ID('dbo.ItPriceApprovals', 'U') IS NOT NULL AND COL_LENGTH('dbo.ItPriceApprovals', 'Code') IS NULL
+BEGIN
+    ALTER TABLE dbo.ItPriceApprovals ADD Code NVARCHAR(100) NULL;
+END
+GO
+IF OBJECT_ID('dbo.ItPriceApprovals', 'U') IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_ItPriceApprovals_Code' AND object_id = OBJECT_ID('dbo.ItPriceApprovals'))
+BEGIN
+    CREATE UNIQUE INDEX UX_ItPriceApprovals_Code ON dbo.ItPriceApprovals (Code) WHERE Code IS NOT NULL;
 END
 GO
 
