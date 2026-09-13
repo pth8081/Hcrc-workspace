@@ -946,8 +946,8 @@ sqlcmd -S localhost -U sa -i sql/schema.sql
 
 # 3b. NẾU bản cập nhật kèm script scripts/migrate-*.js (xem điểm 4 ở trên) — chạy dry-run trước, đọc
 #     kỹ kết quả, rồi mới --confirm. Bỏ qua bước này nếu bản cập nhật không nhắc tới script nào.
-node scripts/<ten-script-migrate>.js
-node scripts/<ten-script-migrate>.js --confirm
+node scripts/migrate-records-batch1.js
+node scripts/migrate-records-batch1.js --confirm
 
 # 4. Xem có biến .env mới cần thêm không
 sudo diff .env .env.example
