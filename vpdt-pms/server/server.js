@@ -47,6 +47,7 @@ const attendanceClockPunchRoutes = require('./routes/attendanceClockPunch');
 const notificationsRoutes = require('./routes/notifications');
 const payrollRoutes = require('./routes/payroll');
 const checklistRoutes = require('./routes/checklist');
+const checklistImportRoutes = require('./routes/checklistImport');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -187,6 +188,9 @@ app.use('/api/payroll', payrollRoutes);
 // Module TOP-LEVEL "Checklist Đánh Giá Siêu Thị" — xem lib/checklist.js cho toàn bộ thiết kế (kiến trúc
 // JSON-blob + phân quyền phẳng, không phải theo phòng ban).
 app.use('/api/checklist', checklistRoutes);
+// Nhập/tải mẫu Excel câu hỏi checklist (routes/checklistImport.js) — tách riêng vì cần multer, cùng lý do
+// routes/trainingTestImport.js tách khỏi routes/training.js.
+app.use('/api/checklist', checklistImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);

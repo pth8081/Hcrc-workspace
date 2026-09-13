@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**20.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.9 (2026-09-13): Checklist — trừ điểm (yêu cầu vàng), chế độ chỉ Đạt/Chưa đạt, Nhập/Xuất Excel
+
+Người dùng hỏi 3 việc cho module "Checklist Đánh Giá Siêu Thị": (1) có chỗ trừ điểm khi câu "yêu cầu
+vàng" không đạt không, (2) nếu checklist chỉ kiểm tra đạt/chưa đạt thì ẩn chấm điểm được không, (3) nhập/
+tải mẫu/xuất Excel câu hỏi cho cả 2 trường hợp có/không tính điểm. Đã phân tích + chốt phương án với người
+dùng trước khi triển khai (không cần demo trước khi merge, theo quy trình đã chốt).
+
+**Đã làm**:
+- **Trừ điểm**: cho phép nhập SỐ ÂM ở "Điểm Đáp Án" (tái dùng field `scoreValue` sẵn có, không thêm field
+  mới) — VD đáp án "Không đạt" của câu "yêu cầu vàng" đặt `-20` để trừ 20 điểm khi chọn. Tổng điểm/%
+  CHẶN SÀN ở 0 (`Math.max(0, ...)`), không hiển thị số âm ra báo cáo — `computeChecklistScoring()`
+  (`lib/checklist.js`).
+- **Chế độ chấm điểm cấp TEMPLATE mới** (`scoringMode`: `SCORED`/`PASS_FAIL_ONLY`, mặc định `SCORED` —
+  tương thích ngược 100% với mọi mẫu cũ không có field này): `PASS_FAIL_ONLY` ẩn hết ô nhập/hiển thị điểm
+  ở CẢ SERVER (không chỉ UI) — `maxScore`/`scoreValue` bị ép về 0, không lưu `totalScore`/`scorePercent`
+  nào; kết quả Đạt/Không đạt suy TRỰC TIẾP từ `isPassing` của đáp án đã chọn, độc lập điểm số. Badge từng
+  đợt/kết quả/báo cáo (7 điểm hiển thị: danh sách mẫu, xem mẫu, builder, kết quả, thống kê báo cáo, bảng
+  báo cáo, xuất Excel báo cáo) đều tự ẩn số điểm khi ở chế độ này.
+- **Nhập/Tải mẫu/Xuất Excel câu hỏi** (`lib/checklistImport.js` + `routes/checklistImport.js`, mirror
+  đúng khuôn `lib/trainingTestImport.js` — dùng chung `lib/xlsxSafeRead.js` chống zip-bomb): layout 1
+  dòng/đáp án, nhóm theo cột "STT Câu Hỏi". Nhập CHỈ xem trước (không tự lưu) — vẫn phải bấm "💾 Lưu Mẫu"
+  để server xác minh lại toàn bộ qua đúng `validateChecklistQuestions()`. 1 file mẫu dùng chung cho CẢ 2
+  chế độ chấm điểm (cột điểm để trống nếu không tính điểm).
+
+Thêm 3 file test mới: `tests/test-checklist-import.js` (17 test, parser Excel/CSV thuần), mở rộng
+`tests/test-checklist.js` (+6 test HTTP-level: trừ điểm/sàn 0/PASS_FAIL_ONLY qua route thật), thêm
+`tests/test-checklist-builder-ui.js` (5 test browser thật qua route `/api/create/checklistTemplates`
+thật — xác nhận UI ẩn/hiện đúng + server ép ngược giá trị dù state JS còn "sót"). Chạy lại toàn bộ 4 file
+checklist + `test-lazy-load-all-tabs.js` — không hồi quy.
+
+**Deploy-impact**: không đổi `schema.sql`/`.env.example` — `scoringMode` là field JSON mới trong payload
+sẵn có (`ChecklistTemplates.Payload`), không cần migrate. Không thêm dependency mới (dùng lại `exceljs`/
+`csv-parse` đã có). Chỉ copy code + `pm2 restart`.
 
 ## v20.8 (2026-09-13): Trạng thái ĐỦ 5 mức theo TỪNG đợt thanh toán + phát hiện "đã thanh toán trễ hạn"
 

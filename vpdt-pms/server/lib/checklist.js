@@ -27,6 +27,14 @@ const { HttpError } = require('./httpErrors');
 const TEMPLATE_TYPES = new Set(['STORE_SELF', 'CONTROL_AUDIT']);
 const TEMPLATE_STATUSES = new Set(['DRAFT', 'ACTIVE', 'ARCHIVED']);
 const QUESTION_TYPES = new Set(['SINGLE_CHOICE', 'MULTIPLE_CHOICE']);
+// v20.9 — chế độ chấm điểm cấp TEMPLATE (yêu cầu người dùng: "nếu checklist chỉ kiểm tra đạt hoặc chưa
+// đạt thì ẩn chấm điểm đi"). SCORED (mặc định, khớp hành vi mọi template cũ trước v20.9 — field vắng mặt
+// trên bản ghi cũ tự coi là SCORED, xem chỗ đọc `template.scoringMode` bên dưới) — chấm điểm/% như cũ.
+// PASS_FAIL_ONLY — KHÔNG chấm điểm/%, kết quả Đạt/Không đạt suy từ việc mọi câu trả lời đã chọn có phải
+// đáp án "Đạt" hay không (isPassing), độc lập hẳn con số. maxScore/scoreValue vẫn được LƯU (ép về 0 ở
+// validateChecklistQuestions() bên dưới — server không tin nguyên payload dù client đã ẩn ô nhập) để giữ
+// nguyên hình dạng dữ liệu, tránh phải viết 2 nhánh xử lý khác nhau ở nơi khác.
+const SCORING_MODES = new Set(['SCORED', 'PASS_FAIL_ONLY']);
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -71,7 +79,11 @@ function canAccessChecklistModule(user) {
 // Mirror ĐÚNG khuôn createValidation.js::trainingTests (câu hỏi + lựa chọn nhúng thẳng trong template,
 // không phải bảng quan hệ riêng) — chỉ khác: mỗi lựa chọn có thêm scoreValue/isPassing/isCriticalFail
 // (thay vì correctOptionIds), và mỗi câu hỏi có thêm showIfOptionId (điều kiện hiển thị phân nhánh).
-function validateChecklistQuestions(rawQuestions) {
+// scoringMode ('SCORED'/'PASS_FAIL_ONLY', xem SCORING_MODES) — PASS_FAIL_ONLY ép cứng maxScore/scoreValue
+// về 0 ở SERVER (bỏ qua hoàn toàn con số client gửi lên, kể cả khi ai đó bỏ qua UI gọi thẳng route) —
+// chỉ isPassing/isCriticalFail còn ý nghĩa trong chế độ này.
+function validateChecklistQuestions(rawQuestions, scoringMode) {
+  const passFailOnly = scoringMode === 'PASS_FAIL_ONLY';
   const list = Array.isArray(rawQuestions) ? rawQuestions : [];
   if (!list.length) throw new HttpError(400, 'Checklist cần ít nhất 1 câu hỏi');
   if (list.length > 200) throw new HttpError(400, 'Checklist tối đa 200 câu hỏi');
@@ -87,7 +99,10 @@ function validateChecklistQuestions(rawQuestions) {
     const text = String(q?.text || '').trim();
     if (!text) throw new HttpError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
     const type = QUESTION_TYPES.has(q?.type) ? q.type : 'SINGLE_CHOICE';
-    const maxScore = Number(q?.maxScore) >= 0 ? Number(q.maxScore) : 0;
+    // maxScore — cho phép SỐ ÂM (yêu cầu người dùng: "trừ điểm mỗi câu chưa đáp ứng yêu cầu vàng") ở cấp
+    // LỰA CHỌN (scoreValue bên dưới, xem computeChecklistScoring() chặn sàn tổng điểm ở 0 khi cộng dồn)
+    // — maxScore CẤP CÂU HỎI vẫn giữ nguyên >=0 (đây là "trần điểm tối đa" của câu, không phải điểm trừ).
+    const maxScore = passFailOnly ? 0 : (Number(q?.maxScore) >= 0 ? Number(q.maxScore) : 0);
     const isRequired = q?.isRequired !== false;
     const note = q?.note ? String(q.note).trim().slice(0, 500) : '';
 
@@ -100,7 +115,10 @@ function validateChecklistQuestions(rawQuestions) {
       return {
         id: nextOptionId++,
         text: oText,
-        scoreValue: Number.isFinite(Number(o?.scoreValue)) ? Number(o.scoreValue) : 0,
+        // scoreValue — CHO PHÉP ÂM (VD "-20" cho đáp án "Không đạt" của câu "yêu cầu vàng") để trừ điểm
+        // tổng — KHÔNG có ràng buộc >=0 như maxScore, đây chính là cơ chế "trừ điểm" người dùng yêu cầu,
+        // không cần field/cờ riêng nào khác (xem trao đổi thiết kế đã chốt).
+        scoreValue: passFailOnly ? 0 : (Number.isFinite(Number(o?.scoreValue)) ? Number(o.scoreValue) : 0),
         isPassing: o?.isPassing !== false,
         isCriticalFail: o?.isCriticalFail === true,
         displayOrder: oi + 1
@@ -141,12 +159,16 @@ function assertTemplateCoreFields(payload) {
   if (!templateCode) throw new HttpError(400, 'Thiếu mã checklist (templateCode)');
   if (!templateName) throw new HttpError(400, 'Thiếu tên checklist');
   if (!TEMPLATE_TYPES.has(payload?.templateType)) throw new HttpError(400, 'Loại checklist không hợp lệ (STORE_SELF/CONTROL_AUDIT)');
-  const passThreshold = payload?.passThreshold === null || payload?.passThreshold === undefined || payload?.passThreshold === ''
+  // scoringMode — mặc định SCORED nếu payload không gửi/gửi giá trị lạ (khớp hành vi mọi template tạo
+  // trước v20.9, vốn không có field này). PASS_FAIL_ONLY ép cứng passThreshold về null NGAY Ở ĐÂY (không
+  // còn ý nghĩa "ngưỡng đạt theo %" khi không chấm điểm/% nữa) — bất kể client gửi gì.
+  const scoringMode = SCORING_MODES.has(payload?.scoringMode) ? payload.scoringMode : 'SCORED';
+  const passThreshold = scoringMode === 'PASS_FAIL_ONLY' || payload?.passThreshold === null || payload?.passThreshold === undefined || payload?.passThreshold === ''
     ? null : Number(payload.passThreshold);
   if (passThreshold !== null && (!Number.isFinite(passThreshold) || passThreshold < 0 || passThreshold > 100)) {
     throw new HttpError(400, 'Ngưỡng điểm đạt (%) không hợp lệ');
   }
-  return { templateCode: templateCode.slice(0, 50), templateName: templateName.slice(0, 200), templateType: payload.templateType, passThreshold };
+  return { templateCode: templateCode.slice(0, 50), templateName: templateName.slice(0, 200), templateType: payload.templateType, scoringMode, passThreshold };
 }
 
 // ===================== Mục 7.1 tài liệu gốc — điểm bảo mật cốt lõi =====================
@@ -217,13 +239,15 @@ function computeVisibleQuestions(template, answers) {
 // Trả về { totalScore, maxPossibleScore, scorePercent, hasCriticalFail, isPassed, missingRequired,
 // answersNeedingPhoto } — route gọi hàm này rồi TỰ quyết định throw lỗi (giữ hàm thuần, dễ test).
 function computeChecklistScoring(template, answers) {
+  // Template CŨ (trước v20.9) không có field scoringMode -> mặc định SCORED (tương thích ngược).
+  const scoringMode = SCORING_MODES.has(template?.scoringMode) ? template.scoringMode : 'SCORED';
   const visibleQuestions = computeVisibleQuestions(template, answers);
   const visibleIds = new Set(visibleQuestions.map(q => q.id));
   const answersByQ = new Map((answers || []).map(a => [a.questionId, a]));
 
   const missingRequired = visibleQuestions.filter(q => q.isRequired && !(answersByQ.get(q.id)?.optionIds || []).length);
 
-  let totalScore = 0, maxPossibleScore = 0, hasCriticalFail = false;
+  let totalScore = 0, maxPossibleScore = 0, hasCriticalFail = false, hasFailingAnswer = false;
   const answersNeedingPhoto = [];
   for (const q of visibleQuestions) {
     maxPossibleScore += q.maxScore;
@@ -238,12 +262,26 @@ function computeChecklistScoring(template, answers) {
     // Lỗi nghiêm trọng nhưng vẫn mang cờ isPassing:true — "Kết Thúc & Nộp" thành công mà không cần ảnh dù
     // đã chọn Lỗi nghiêm trọng. Xét CẢ 2 cờ: cần ảnh nếu KHÔNG đạt HOẶC là lỗi nghiêm trọng.
     const anyFailing = selectedOptions.some(o => !o.isPassing || o.isCriticalFail);
+    if (anyFailing) hasFailingAnswer = true;
     if (selectedOptions.some(o => o.isCriticalFail)) hasCriticalFail = true;
     if (anyFailing && !(ans.attachments || []).length) answersNeedingPhoto.push(q.id);
   }
   // Câu KHÔNG còn hiển thị (do đổi ý ở câu điều kiện) vẫn giữ lại trong answers[] (audit trail, Mục
   // 5.3) nhưng KHÔNG tính vào điểm — đã tự động loại vì vòng lặp trên chỉ chạy qua visibleQuestions.
-  const scorePercent = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : null;
+
+  // PASS_FAIL_ONLY (v20.9) — KHÔNG có khái niệm điểm/% (kể cả để lưu ngầm), "Đạt" suy TRỰC TIẾP từ việc
+  // mọi câu trả lời đã chọn đều là đáp án "Đạt" (không phụ thuộc con số nào) — độc lập hẳn với nhánh
+  // SCORED bên dưới, đúng yêu cầu "ẩn chấm điểm đi" (không chỉ ẩn ở UI mà server cũng không tính ra).
+  if (scoringMode === 'PASS_FAIL_ONLY') {
+    const isPassed = hasCriticalFail ? false : !hasFailingAnswer;
+    return { totalScore: null, maxPossibleScore: null, scorePercent: null, hasCriticalFail, isPassed, missingRequired, answersNeedingPhoto, visibleIds: [...visibleIds] };
+  }
+
+  // SCORED — yêu cầu người dùng: cho phép trừ điểm (scoreValue âm, xem validateChecklistQuestions()) khi
+  // 1 câu "yêu cầu vàng" không đạt, nhưng CHẶN SÀN tổng điểm/% ở 0 (không hiển thị số âm) — quyết định đã
+  // chốt qua trao đổi thiết kế, KHÔNG lộ ra 1 checklist bị trừ "quá tay" xuống âm sâu gây khó đọc báo cáo.
+  totalScore = Math.max(0, totalScore);
+  const scorePercent = maxPossibleScore > 0 ? Math.max(0, (totalScore / maxPossibleScore) * 100) : null;
   const isPassed = hasCriticalFail ? false
     : (template.passThreshold != null && scorePercent != null ? scorePercent >= template.passThreshold : null);
 
@@ -260,7 +298,7 @@ function assertReadyToFinalize(scoring) {
 }
 
 module.exports = {
-  TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES,
+  TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES, SCORING_MODES,
   canManageChecklistTemplates, canViewChecklistReports, getChecklistAuditStores, hasChecklistAuditScope,
   canAuditStore, isEligibleForStoreSelf, canAccessChecklistModule,
   validateChecklistQuestions, assertTemplateCoreFields,

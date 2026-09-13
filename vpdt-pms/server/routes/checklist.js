@@ -34,7 +34,7 @@ router.post('/templates/:id/edit', requireManage, async (req, res) => {
         throw new HttpError(409, 'Chỉ sửa được checklist đang ở trạng thái Nháp — checklist đã Kích Hoạt/Lưu Trữ phải Nhân Bản thành bản mới để sửa');
       }
       const core = checklist.assertTemplateCoreFields(req.body);
-      const questions = checklist.validateChecklistQuestions(req.body?.questions);
+      const questions = checklist.validateChecklistQuestions(req.body?.questions, core.scoringMode);
       return { ...template, ...core, questions };
     });
     res.json({ ok: true, item: updated });
@@ -57,7 +57,7 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
       id: Date.now(),
       templateCode: source.templateCode, templateName: source.templateName, templateType: source.templateType,
       version: (source.version || 1) + 1, status: 'DRAFT',
-      clonedFromTemplateId: source.id, passThreshold: source.passThreshold,
+      clonedFromTemplateId: source.id, scoringMode: source.scoringMode || 'SCORED', passThreshold: source.passThreshold,
       questions: source.questions, activatedAt: null,
       creator: req.freshUser.username, creatorName: req.freshUser.name
     };

@@ -1914,7 +1914,7 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền tạo Checklist Đánh Giá Siêu Thị');
       }
       const core = assertTemplateCoreFields(payload);
-      const questions = validateChecklistQuestions(payload.questions);
+      const questions = validateChecklistQuestions(payload.questions, core.scoringMode);
       Object.assign(payload, core);
       payload.questions = questions;
       payload.status = 'DRAFT';

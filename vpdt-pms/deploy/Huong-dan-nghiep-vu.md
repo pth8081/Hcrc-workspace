@@ -1280,6 +1280,41 @@ lượt Lỗi nghiêm trọng) + bảng chi tiết, xuất Excel. Đây là báo
 checklist — module **Báo Cáo** tổng hợp (mục 5) không đọc dữ liệu module
 này.
 
+**Chế Độ Chấm Điểm + trừ điểm (v20.9)** — mỗi mẫu chọn 1 trong 2 chế độ khi
+tạo/sửa (tab Cấu Hình, ô "Chế Độ Chấm Điểm"):
+- **Có chấm điểm** (mặc định, khớp mọi mẫu tạo trước v20.9) — như mô tả ở
+  trên, có "Điểm Tối Đa"/"Điểm Đáp Án"/"Ngưỡng Điểm Đạt (%)". **Điểm đáp án
+  cho phép nhập SỐ ÂM** để TRỪ điểm tổng khi chọn đáp án đó (VD đáp án "Không
+  đạt" của 1 câu hỏi "yêu cầu vàng" quan trọng có thể đặt `-20` để trừ 20
+  điểm) — không cần cờ/field riêng nào khác, tái dùng đúng field "Điểm Đáp
+  Án" đã có. Tổng điểm/% **chặn sàn ở 0** (không hiển thị số âm dù cộng dồn
+  nhiều lượt trừ ra kết quả âm) — hiển thị cho người xem luôn là 0% trở lên.
+- **Chỉ Đạt / Chưa đạt** (không chấm điểm) — ẨN HẲN mọi ô nhập/hiển thị
+  điểm (Điểm Tối Đa/Điểm Đáp Án/Ngưỡng Đạt %/số điểm ở kết quả/báo cáo), kể
+  cả ở tầng SERVER (không chỉ ẩn giao diện — `maxScore`/`scoreValue` bị ép về
+  0 và không lưu `totalScore`/`scorePercent` nào cả). Kết quả Đạt/Không đạt
+  suy TRỰC TIẾP từ việc mọi câu trả lời đã chọn có phải đáp án "Đạt"
+  (`isPassing`) hay không — độc lập hoàn toàn với điểm số. Cờ "Lỗi nghiêm
+  trọng" vẫn hoạt động y hệt ở cả 2 chế độ (vẫn phủ quyết `isPassed=false`
+  bất kể gì khác). Đổi chế độ của 1 mẫu ĐANG DÙNG phải qua đúng luồng Nhân
+  Bản → sửa bản Nháp → Kích Hoạt như mọi thay đổi câu hỏi khác.
+
+**Nhập/Tải Mẫu/Xuất Excel câu hỏi (v20.9)** — tab Cấu Hình, khi đang soạn 1
+mẫu (tạo mới/sửa bản Nháp): **"⬇️ Tải Mẫu Excel"** tải file `.xlsx` có sẵn ví
+dụ (kèm sheet "Ghi Chú" giải thích từng cột) để điền hàng loạt thay vì gõ tay
+từng câu; **"📥 Nhập Câu Hỏi Từ Excel"** tải file đã điền lên để XEM TRƯỚC
+(hiện bảng câu nào hợp lệ/lỗi kèm lý do) rồi bấm nạp — CHỈ nạp vào danh sách
+câu hỏi đang soạn, vẫn phải bấm **"💾 Lưu Mẫu"** như bình thường sau đó (server
+xác minh lại toàn bộ, không tin nguyên nội dung file); **"📥 Xuất Excel"**
+xuất NGAY danh sách câu hỏi đang soạn (kể cả chưa lưu) ra cùng định dạng file
+mẫu, dùng để sửa offline rồi nhập lại. Layout: **1 dòng = 1 đáp án**, các
+dòng cùng 1 câu hỏi nhóm theo cột "STT Câu Hỏi" (thông tin câu hỏi chỉ cần
+điền ở dòng đầu). Dùng CHUNG 1 file mẫu cho CẢ 2 Chế Độ Chấm Điểm — cột
+"Điểm Tối Đa Câu Hỏi"/"Điểm Đáp Án" chỉ cần điền nếu mẫu **Có chấm điểm**, để
+trống nếu mẫu **Chỉ Đạt/Chưa đạt** (server tự bỏ qua). File mẫu KHÔNG có cột
+điều kiện hiển thị phân nhánh (`showIfOptionId`) — cấu hình tay lại sau khi
+nhập nếu cần dùng tính năng đó.
+
 ---
 
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)
