@@ -2977,6 +2977,18 @@ async function initDatabase(loggingInUser) {
     DB.carTypes = data.carTypes || [];
     DB.itTicketCategories = data.itTicketCategories || [];
     DB.uniformCatalog = data.uniformCatalog || [];
+    // LỖ HỔNG THẬT ĐÃ VÁ (phát hiện lúc dựng demo cho module Checklist, v21.1): 2 dòng này chưa từng tồn
+    // tại — module-checklist.js đọc thẳng DB.checklistTemplates/DB.checklistSubmissions (comment đầu file
+    // đó ghi rõ "đã nạp sẵn qua GET /api/data") nhưng KHÔNG có nơi nào trong initDatabase() thực sự gán 2
+    // field này từ response server. Chỉ "vô tình" không vỡ vì mọi hàm đọc đều tự `|| []` VÀ vì
+    // checklistApplyTemplateUpdate()/checklistApplySubmissionUpdate() tự "DB.checklistTemplates =
+    // DB.checklistTemplates || []" ngay khi tạo/sửa 1 bản ghi trong CÙNG phiên trình duyệt đó — nghĩa là
+    // mọi mẫu/bài nộp đã có SẴN TỪ TRƯỚC (do người khác tạo, hoặc phiên trước của chính mình) không bao
+    // giờ hiện ra sau khi tải lại trang, cho tới khi người dùng tự tạo/sửa 1 bản ghi mới ngay trong phiên
+    // đó. Ảnh hưởng MỌI người dùng module này kể từ khi module ra đời (v16.x) — không phải lỗi riêng của
+    // đợt v21.x.
+    DB.checklistTemplates = data.checklistTemplates || [];
+    DB.checklistSubmissions = data.checklistSubmissions || [];
 
     // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
     // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải
