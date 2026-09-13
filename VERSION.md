@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**21.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.1 (2026-09-13): Checklist — Xuất Báo Cáo Theo Đúng Mẫu Excel Gốc (2 loại mẫu)
+
+Người dùng gửi file Excel báo cáo checklist "Siêu Thị Tự Đánh Giá" (2 sheet: "form xuất" chi tiết từng
+câu hỏi + "form thống kê" tổng hợp % Đạt theo nhóm) đang dùng thật ngoài đời và yêu cầu: xuất báo cáo từ
+hệ thống ra ĐÚNG layout này, cho phép chọn 1/nhiều/tất cả siêu thị (mỗi siêu thị 1 tab/sheet riêng), và
+cũng bổ sung xuất theo layout mẫu VSATTP (loại `DEDUCTION`, v21.0) cho 1/nhiều siêu thị. Đã phân tích cấu
+trúc file mẫu rồi chốt 2 quyết định thiết kế với người dùng trước khi triển khai: (1) cột "Thời gian hoàn
+thành" (trạng thái khắc phục theo từng câu hỏi) — hệ thống chưa có dữ liệu này, chốt để TRỐNG chứ không
+xây tính năng mới; (2) cần thêm field "Nhóm/Hạng mục" tuỳ chọn cho câu hỏi loại QA để tính đúng % theo
+nhóm ở sheet thống kê — chốt CÓ thêm, tuỳ chọn, không đổi hành vi mẫu cũ.
+
+**Đã làm**:
+- **`category` (Nhóm/Hạng mục) tuỳ chọn** cho câu hỏi loại QA (`lib/checklist.js::validateChecklistQuestions()`,
+  field mới trong payload JSON, để trống = câu hỏi độc lập, không ảnh hưởng chấm điểm/hiển thị phân
+  nhánh gì — THUẦN phục vụ xuất báo cáo).
+- **`lib/checklistReportExport.js` (mới)**: sinh workbook multi-sheet — `buildQaReportWorkbook()` (mỗi
+  siêu thị 2 sheet "Chi tiết"/"Thống kê", in đậm dòng tiêu đề nhóm, tính % Đạt theo nhóm + gom câu hỏi
+  không thuộc nhóm nào vào 1 bucket riêng, không bỏ sót dữ liệu) và `buildDeductionReportWorkbook()`
+  (mirror cây Hạng Mục Lớn/Hạng Mục Con/Tiêu Chí VSATTP, mỗi lượt kiểm tra 1 khối dòng có dòng tóm tắt
+  điểm số riêng). Chống Excel Formula Injection (tái dùng `excelFormulaGuard()` sẵn có ở `lib/adminExport.js`)
+  cho mọi trường tự do người dùng nhập (mô tả câu hỏi/ghi chú/tên siêu thị...).
+- **`POST /api/checklist/export-report`** (`routes/checklist.js`, quyền `checklistReportView` — đúng
+  quyền xem tab Báo Cáo hiện có): nhận `{templateId, storeCodes, fromDate, toDate}`, bắt buộc chọn ĐÚNG 1
+  mẫu cụ thể (2 loại mẫu layout khác hẳn nhau, không hỗ trợ "Tất cả"), lọc đúng bài đã NỘP khớp phạm vi,
+  chọn đúng hàm build workbook theo `templateKind` của mẫu.
+- **Client** (tab 📊 Báo Cáo, `module-checklist.js`/`index.html`): thêm bộ lọc đa-chọn Siêu Thị (để trống
+  = tất cả) + nút "📥 Xuất Theo Mẫu Gốc" (khác nút "Xuất Excel (bảng phẳng)" sẵn có, KHÔNG thay thế); ô
+  "Nhóm/Hạng mục" tuỳ chọn khi soạn câu hỏi QA ở builder.
+
+Thêm 2 file test mới: `tests/test-checklist-export.js` (10 test HTTP-level, đọc lại file .xlsx THẬT bằng
+ExcelJS xác minh đúng từng ô/định dạng đậm/số sheet/tên sheet — cả 2 loại mẫu, cả lọc siêu thị/khoảng
+ngày/quyền), `tests/test-checklist-report-export-ui.js` (6 test browser thật — ô Nhóm/Hạng mục, bộ lọc
+Siêu Thị nạp đúng danh sách, chặn khi chưa chọn mẫu cụ thể, gửi đúng payload lên server). Chạy lại toàn
+bộ 8 file test checklist (89 kịch bản) + `test-lazy-load-all-tabs.js` (42 kịch bản) — không hồi quy.
+
+**Known limitation (đã nêu rõ với người dùng, chưa làm)**: cột "Thời gian hoàn thành" ở sheet chi tiết
+loại QA luôn để trống — hệ thống chưa có nơi lưu trạng thái khắc phục RIÊNG từng câu hỏi (chỉ có 1 ô
+"Phản hồi" chung/toàn bài ở tab Kết Quả & Phản Hồi). Nếu cần theo dõi chi tiết hơn, đây sẽ là 1 tính năng
+lớn hơn hẳn phạm vi xuất báo cáo (đổi UX tab phản hồi).
+
+**Deploy-impact**: không đổi `schema.sql`/`.env.example`, không thêm dependency mới (dùng lại `exceljs`
+đã có) — `category` là field JSON mới trong payload sẵn có (`ChecklistTemplates.Payload`), không cần
+migrate SQL thủ công, không có thao tác tự động nào chạy lúc khởi động. Chỉ copy code + `pm2 restart`.
 
 ## v21.0 (2026-09-13): Checklist — 2 LOẠI MẪU (Câu Hỏi & Đáp Án / Trừ Điểm Theo Hạng Mục, mẫu VSATTP)
 

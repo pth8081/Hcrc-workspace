@@ -7597,10 +7597,26 @@
           <input id="checklistReportToDate" type="date" class="border p-1.5 rounded text-xs">
         </div>
         <button type="button" data-op="applyChecklistReportFilter" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Lọc</button>
-        <button type="button" data-op="exportChecklistReportExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
+        <button type="button" data-op="exportChecklistReportExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel (bảng phẳng)</button>
       </div>
       <div id="checklistReportStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
       <div id="checklistReportTableWrap" class="space-y-2"></div>
+
+      <!-- Xuất Theo Mẫu Gốc (v21.1) — sinh file .xlsx ĐÚNG layout mẫu gốc người dùng gửi (2 sheet Chi
+           tiết/Thống kê cho loại Câu Hỏi & Đáp Án, cây Hạng Mục/Hạng Mục Con/Tiêu Chí cho loại Trừ Điểm
+           Theo Hạng Mục) — KHÁC nút "Xuất Excel (bảng phẳng)" ở trên (bảng phẳng chung mọi mẫu/mọi loại).
+           Bắt buộc chọn ĐÚNG 1 mẫu cụ thể ở bộ lọc trên (không hỗ trợ "Tất cả" vì 2 loại mẫu trình bày
+           khác hẳn nhau) — chọn 1/nhiều/để trống = TẤT CẢ siêu thị đang có bài nộp khớp bộ lọc, MỖI SIÊU
+           THỊ ra 1 sheet riêng. -->
+      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-2">
+        <h4 class="font-bold text-rose-900 text-sm">📥 Xuất Theo Mẫu Gốc (đúng layout mẫu Excel gốc)</h4>
+        <p class="text-[11px] text-gray-600">Áp dụng cho ĐÚNG 1 mẫu đã chọn ở bộ lọc "Mẫu Checklist" phía trên (không hỗ trợ "Tất cả"). Chọn 1 hoặc nhiều siêu thị bên dưới — để trống = tất cả siêu thị đang có bài nộp khớp bộ lọc ngày. Mỗi siêu thị được xuất ra thành 1 (nhóm) sheet riêng.</p>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị (để trống = tất cả)</label>
+          <select id="checklistReportStoreFilter" multiple size="6" class="border p-1.5 rounded text-xs w-full max-w-md"></select>
+        </div>
+        <button type="button" data-op="exportChecklistReportByOriginalTemplate" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">📥 Xuất Theo Mẫu Gốc</button>
+      </div>
     </div>
   </div>
 

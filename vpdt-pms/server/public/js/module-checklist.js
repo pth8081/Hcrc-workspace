@@ -146,7 +146,7 @@ function openChecklistTemplateBuilder(templateId, kind) {
     } else {
       checklistBuilderQuestions = (t.questions || []).map(q => ({
         text: q.text, type: q.type, isRequired: q.isRequired, maxScore: q.maxScore, note: q.note || '',
-        showIfOptionId: q.showIfOptionId,
+        category: q.category || '', showIfOptionId: q.showIfOptionId,
         options: (q.options || []).map(o => ({ text: o.text, scoreValue: o.scoreValue, isPassing: o.isPassing, isCriticalFail: o.isCriticalFail }))
       }));
       checklistBuilderCategories = [];
@@ -263,7 +263,7 @@ function closeChecklistTemplateView() {
 
 function addChecklistBuilderQuestion() {
   checklistBuilderQuestions.push({
-    text: '', type: 'SINGLE_CHOICE', isRequired: true, maxScore: 10, note: '', showIfOptionId: null,
+    text: '', type: 'SINGLE_CHOICE', isRequired: true, maxScore: 10, note: '', category: '', showIfOptionId: null,
     options: [
       { text: 'Đạt', scoreValue: 10, isPassing: true, isCriticalFail: false },
       { text: 'Không đạt', scoreValue: 0, isPassing: false, isCriticalFail: false }
@@ -411,6 +411,7 @@ function renderChecklistBuilderQuestions() {
         <button type="button" data-op="removeChecklistBuilderQuestion" data-arg0="${qi}" class="text-red-600 text-[11px] font-bold hover:underline">Xoá câu hỏi</button>
       </div>
       <input value="${escapeHtml(q.text)}" placeholder="Nội dung câu hỏi" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="text" data-arg-value="2" class="w-full border p-1.5 rounded text-xs">
+      <input value="${escapeHtml(q.category || '')}" placeholder="Nhóm/Hạng mục (tuỳ chọn, VD: 1. Kiểm soát cảnh quan chung) — dùng để in tiêu đề nhóm + tính % theo nhóm khi Xuất Báo Cáo" title="Để trống nếu câu hỏi đứng độc lập, không thuộc nhóm nào" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="category" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px] bg-amber-50">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
         <select data-op-change="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="type" data-arg-value="2" class="border p-1.5 rounded text-[11px]">
           <option value="SINGLE_CHOICE" ${q.type === 'SINGLE_CHOICE' ? 'selected' : ''}>Chọn 1</option>
@@ -943,7 +944,38 @@ function renderChecklistReportTab() {
   const sel = document.getElementById('checklistReportTemplateFilter');
   sel.innerHTML = '<option value="">Tất cả</option>' + (DB.checklistTemplates || [])
     .map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('');
+  // Siêu thị (v21.1, "Xuất Theo Mẫu Gốc") — gộp mọi siêu thị TỪNG có bài nộp (kể cả siêu thị không còn
+  // trong DB.stores hiện tại) để không bỏ sót dữ liệu lịch sử, cộng thêm DB.stores cho đủ lựa chọn.
+  const storeSel = document.getElementById('checklistReportStoreFilter');
+  const storeSet = new Set([...(DB.stores || []), ...(DB.checklistSubmissions || []).map(s => s.storeCode)].filter(Boolean));
+  storeSel.innerHTML = [...storeSet].sort().map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   applyChecklistReportFilter();
+}
+async function exportChecklistReportByOriginalTemplate() {
+  const templateId = document.getElementById('checklistReportTemplateFilter').value;
+  if (!templateId) return alert('⛔ Vui lòng chọn ĐÚNG 1 mẫu checklist cụ thể ở bộ lọc "Mẫu Checklist" phía trên trước khi xuất theo mẫu gốc (không hỗ trợ "Tất cả" vì mỗi loại mẫu có cách trình bày khác nhau).');
+  const storeCodes = Array.from(document.getElementById('checklistReportStoreFilter').selectedOptions).map(o => o.value);
+  const fromDate = document.getElementById('checklistReportFromDate').value;
+  const toDate = document.getElementById('checklistReportToDate').value;
+  try {
+    const res = await fetch('/api/checklist/export-report', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId: Number(templateId), storeCodes: storeCodes.length ? storeCodes : null, fromDate: fromDate || null, toDate: toDate || null })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert('⛔ ' + (body.error || 'Không thể xuất file'));
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const t = (DB.checklistTemplates || []).find(x => x.id === Number(templateId));
+    link.download = `bao-cao-${(t?.templateCode || 'checklist')}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('⛔ Không thể kết nối tới máy chủ: ' + e.message); }
 }
 function applyChecklistReportFilter() {
   const templateId = document.getElementById('checklistReportTemplateFilter').value;

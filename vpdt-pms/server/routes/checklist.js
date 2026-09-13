@@ -14,12 +14,19 @@ const { sendCatchError } = require('../lib/errorResponse');
 const { getAllForCollection, insertRecord, withLockedRecordForCollection, withAppLock, deleteRecordForCollection } = require('../lib/recordStore');
 const { assertUploadedFileUrl } = require('../lib/createValidation');
 const checklist = require('../lib/checklist');
+const { buildQaReportWorkbook, buildDeductionReportWorkbook } = require('../lib/checklistReportExport');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
 function requireManage(req, res, next) {
   if (!checklist.canManageChecklistTemplates(req.freshUser)) {
     return res.status(403).json({ error: 'Bạn không có quyền quản lý Checklist Đánh Giá Siêu Thị' });
+  }
+  next();
+}
+function requireReportView(req, res, next) {
+  if (!checklist.canViewChecklistReports(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền xem Báo Cáo Checklist' });
   }
   next();
 }
@@ -280,6 +287,71 @@ router.post('/submissions/:id/delete', requireManage, async (req, res) => {
     await deleteRecordForCollection('checklistSubmissions', submissionId, () => {}, { username: req.freshUser.username, name: req.freshUser.name });
     res.json({ ok: true });
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/delete`); }
+});
+
+// ===================== XUẤT BÁO CÁO EXCEL THEO ĐÚNG MẪU GỐC (v21.1) =====================
+// submittedAt lưu dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN')) — ngày ở
+// TOKEN THỨ 2 (sau dấu cách), KHÔNG phải token đầu (giờ). Chỉ dùng để SO SÁNH khoảng ngày, không cần
+// chính xác múi giờ/giây.
+function parseSubmittedAtDate(submittedAt) {
+  const datePart = String(submittedAt || '').trim().split(' ')[1];
+  if (!datePart) return null;
+  const [d, m, y] = datePart.split('/').map(Number);
+  if (!d || !m || !y) return null;
+  return new Date(y, m - 1, d);
+}
+
+// Body: { templateId, storeCodes: string[] | null (null/rỗng = TẤT CẢ siêu thị có bài trong phạm vi
+// lọc), fromDate, toDate (yyyy-mm-dd, tuỳ chọn) } — CHỈ tính bài đã NỘP (status SUBMITTED), mirror đúng
+// bộ lọc tab "📊 Báo Cáo" hiện có (applyChecklistReportFilter() ở module-checklist.js), thêm khả năng
+// XUẤT FILE theo đúng layout mẫu gốc người dùng gửi thay vì bảng phẳng chung hiện có
+// (exportChecklistReportExcel()). Quyền: checklistReportView (khớp đúng quyền xem tab Báo Cáo — KHÔNG
+// cần checklistTemplateManage vì đây là XUẤT DỮ LIỆU ĐÃ NỘP, không sửa mẫu).
+router.post('/export-report', requireReportView, async (req, res) => {
+  try {
+    const templateId = Number(req.body?.templateId);
+    if (!Number.isFinite(templateId)) return res.status(400).json({ error: 'Vui lòng chọn 1 mẫu checklist cụ thể để xuất (không hỗ trợ "Tất cả" vì mỗi loại mẫu có cách trình bày khác nhau)' });
+    const templates = await getAllForCollection('checklistTemplates');
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return res.status(404).json({ error: 'Không tìm thấy checklist' });
+
+    const rawStoreCodes = Array.isArray(req.body?.storeCodes) ? req.body.storeCodes.map(s => String(s).trim()).filter(Boolean) : [];
+    const storeFilter = rawStoreCodes.length ? new Set(rawStoreCodes) : null; // null = không lọc siêu thị (tất cả)
+    const fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
+    const toDate = req.body?.toDate ? new Date(req.body.toDate) : null;
+
+    const allSubmissions = await getAllForCollection('checklistSubmissions');
+    const matched = allSubmissions.filter(s => {
+      if (s.templateId !== templateId || s.status !== 'SUBMITTED') return false;
+      if (storeFilter && !storeFilter.has(s.storeCode)) return false;
+      const submittedDate = parseSubmittedAtDate(s.submittedAt);
+      if (fromDate && submittedDate && submittedDate < fromDate) return false;
+      if (toDate && submittedDate && submittedDate > toDate) return false;
+      return true;
+    });
+    if (!matched.length) return res.status(400).json({ error: 'Không có bài đã nộp nào khớp bộ lọc (mẫu/siêu thị/khoảng ngày) để xuất' });
+
+    // Nhóm theo siêu thị, MỖI SIÊU THỊ 1 SHEET (yêu cầu người dùng) — sắp theo submittedAt tăng dần
+    // trong từng siêu thị để các khối trong sheet đọc theo đúng trình tự thời gian.
+    const submissionsByStore = new Map();
+    matched.forEach(s => {
+      if (!submissionsByStore.has(s.storeCode)) submissionsByStore.set(s.storeCode, []);
+      submissionsByStore.get(s.storeCode).push(s);
+    });
+    for (const list of submissionsByStore.values()) {
+      list.sort((a, b) => (parseSubmittedAtDate(a.submittedAt) || 0) - (parseSubmittedAtDate(b.submittedAt) || 0));
+    }
+
+    const wb = template.templateKind === 'DEDUCTION'
+      ? buildDeductionReportWorkbook(template, submissionsByStore)
+      : buildQaReportWorkbook(template, submissionsByStore);
+
+    const safeName = String(template.templateCode || 'checklist').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="bao-cao-${safeName}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { sendCatchError(res, err, 'checklist/export-report'); }
 });
 
 module.exports = router;
