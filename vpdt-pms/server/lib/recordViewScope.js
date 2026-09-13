@@ -1061,13 +1061,30 @@ function filterChecklistSubmissionsForUser(items, user) {
 // đã có gate riêng, mirror thêm chỉ tạo thêm 1 nguồn có thể lệch dữ liệu về sau).
 const MODULE_ACCESS_GATED_COLLECTIONS = {
   doc: ['docs'], submission: ['submissions'], task: ['tasks'], internal: ['internalPosts'],
-  contract: ['contracts'], itSupport: ['itSupportTickets', 'itPriceApprovals']
+  contract: ['contracts'], itSupport: ['itSupportTickets', 'itPriceApprovals'],
+  // Đợt test chuyên sâu 9/2026 (PQ, mục Phân Quyền): hrProfile/hrPayroll KHÔNG có mặt ở GET /api/data
+  // chung (employeeProfiles/payslips đi qua route riêng, xem routes/employeeProfile.js/routes/payroll.js
+  // — không cần mirror ở đây). hrAttendance thì CÓ 3 collection sau đi qua GET /api/data chung (tự xem
+  // chấm công/phép năm/đơn nghỉ phép CHÍNH MÌNH không cần quyền chi tiết nào khác) nên phải mirror như 6
+  // module gốc ở trên — trước đây tắt moduleAccess.hrAttendance cho 1 user KHÔNG cản được họ vẫn thấy dữ
+  // liệu Công & Phép của chính mình qua GET /api/data.
+  hrAttendance: ['attendanceRecords', 'leaveBalances', 'leaveRequests']
 };
+// hrProfile/hrAttendance/hrPayroll đều là module con (parent: 'hr', xem BUSINESS_MODULES ở
+// public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này TRƯỚC ĐÂY không mirror
+// đúng quy tắc đó (chỉ so sánh đúng moduleKey được truyền vào), nên tắt riêng module cha "hr" sẽ không
+// chặn được các route tự phục vụ của 3 module con này ở server dù client đã ẩn tab đúng. Chỉ cần khai 3
+// module con hiện đang được enforce ở server tại đây — không cần liệt kê đủ mọi cặp cha/con của
+// BUSINESS_MODULES vì các module con còn lại (car/meeting/vpp/budget/orgChart/hrLifecycle/hrContract)
+// đã có quyền chi tiết riêng chặn đúng ở server rồi, không đi qua hasModuleAccessServer().
+const MODULE_ACCESS_PARENTS = { hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr' };
 function hasModuleAccessServer(user, moduleKey) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   const ma = user.perms?.moduleAccess;
   if (!ma) return true;
+  const parent = MODULE_ACCESS_PARENTS[moduleKey];
+  if (parent && ma[parent] === false) return false;
   return ma[moduleKey] !== false;
 }
 

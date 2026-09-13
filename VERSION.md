@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**20.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.4 (2026-09-13): Vá 6 lỗi phát hiện qua đợt test chuyên sâu 8-agent (trọng tâm Phân Quyền)
+
+Người dùng yêu cầu nhiều agent test tiếp nghiệp vụ chuyên sâu theo 1 kịch bản test mới (12 mục, ~150 ca),
+riêng module **Phân Quyền** yêu cầu test kỹ hơn hẳn 5 ca tài liệu liệt kê. 8 agent chạy song song phủ
+toàn bộ 12 mục; 1 agent riêng đào sâu Phân Quyền (Khối 0, cộng dồn quyền nhóm, thời điểm áp dụng quyền
+mới). Đa số ~150 ca đều **OK** (đã kiểm chứng lại độc lập, không chỉ tin báo cáo agent) — 6 lỗi thật được
+xác nhận và vá trong đợt này:
+
+**1. Khối 0 (moduleAccess) chỉ chặn được ở khâu ĐỌC, chưa chặn ở khâu TẠO MỚI** — tắt quyền truy cập 1
+module (Tài Liệu/Văn Bản Trình/Công Việc/Truyền Thông Nội Bộ/Hợp Đồng/Hỗ Trợ IT) cho 1 user trước đây chỉ
+khiến họ không xem lại được qua `GET /api/data`, nhưng vẫn `POST /api/create/...` tạo hồ sơ mới bình
+thường — vi phạm đúng nguyên tắc "Khối 0 chặn trước tiên". Vá: thêm 1 điểm chặn chung ở
+`routes/create.js` (áp dụng cho mọi module đi qua `CREATE_MODULE_CONFIGS`) + 1 điểm riêng ở
+`routes/records.js` cho "Công Việc" (module DUY NHẤT trong nhóm không đi qua `routes/create.js`).
+
+**2. 3 module Nhân Sự tự phục vụ mới (Hồ Sơ/Công & Phép/Lương) chưa có gác Khối 0 nào ở server** — các
+route riêng `GET/PATCH /api/hr-profile/me`, `GET /api/payroll/my-payslips*` trước đây chỉ có `requireAuth`,
+bỏ qua hoàn toàn kiểm tra moduleAccess dù client đã ẩn tab đúng. Vá: thêm kiểm tra `hasModuleAccessServer()`
+vào các route này; đồng thời phát hiện + vá luôn 1 khoảng trống liên quan — hàm `hasModuleAccessServer()`
+trước đây không mirror đúng quy tắc "module cha tắt thì module con tắt theo" (client `hasModuleAccess()`
+có cascade này, server thì chưa) — thêm `MODULE_ACCESS_PARENTS` để tắt module cha "Nhân Sự" cũng chặn
+đúng cả 3 module con tự phục vụ này. Riêng API chấm công vật lý (`attendanceClockPunch`) xác thực bằng
+API key máy (không phải phiên đăng nhập cá nhân) nên KHÔNG áp dụng Khối 0 kiểu này được — giữ nguyên,
+không cưỡng ép gán sai ngữ cảnh.
+
+**3. 3 trường quyền "kiểu cũ" của Tài Liệu (`uploadDepts`/`viewDraftDepts`/`viewApprovedDepts`) không
+cộng dồn đúng khi user thuộc nhiều nhóm quyền** — đây là 3 trường MẢNG TRẦN (chưa migrate sang khuôn
+chuẩn `{all,depts}` như phần còn lại hệ thống), rơi vào nhánh xử lý "lấy giá trị nhóm cuối cùng"
+(last-write-wins) thay vì hợp nhất — user thuộc 3 nhóm mỗi nhóm cấp 1 phòng ban khác nhau chỉ còn thấy
+đúng phòng ban của NHÓM CUỐI CÙNG, 2 nhóm kia bị mất trắng. Vá cả server (`routes/data.js`
+`mergeGroupsBasePermsServer()`) lẫn client mirror (`public/js/core.js` `mergeGroupsBasePerms()`) — thêm
+nhánh nhận diện mảng trần, hợp nhất (union, khử trùng lặp) giống hệt nhánh `{all,depts}`.
+
+**4. CL-09 (Checklist Đánh Giá Siêu Thị): thiếu bắt buộc ảnh khi chọn "Lỗi nghiêm trọng"** — điều kiện
+bắt buộc ảnh minh chứng trước đây chỉ xét cờ `isPassing`, không xét `isCriticalFail` (2 cờ độc lập trên 1
+lựa chọn, không có ràng buộc nào chặn cả 2 cùng `true`) — người tạo mẫu lỡ để 1 lựa chọn vừa "Đạt" vừa
+"Lỗi nghiêm trọng" (dễ xảy ra vì builder mặc định `isPassing:true` khi thêm lựa chọn mới) khiến "Kết Thúc
+& Nộp" thành công mà không cần ảnh dù đã chọn Lỗi nghiêm trọng. Vá: `lib/checklist.js` xét CẢ 2 cờ
+(`!isPassing || isCriticalFail`) khi tính `answersNeedingPhoto`.
+
+**5. QAHR-02 (Quản Lý & Phản Hồi Ý Kiến): Nhân Sự không có dấu hiệu nào báo có câu hỏi mới** — đúng là
+không gửi email (quyết định có chủ đích), nhưng cũng KHÔNG có badge/đếm số nào ở sidebar như mọi hàng đợi
+phê duyệt khác trong hệ thống — phải chủ động mở module mới biết có câu hỏi mới. Vá: thêm badge đếm số
+câu hỏi `PENDING` vào mục nav "🤝 Quản Lý & Phản Hồi Ý Kiến" (`updateHrFeedbackManageBadge()`, tái dùng
+đúng `status` sẵn có, không cần thêm cờ "đã đọc" mới).
+
+**Đối chiếu, KHÔNG vá (kết luận sau khi tự kiểm tra độc lập, không chỉ tin báo cáo agent)**:
+- **LUONG-11** (agent báo "Phiếu lương của tôi" có thể bị tắt qua Khối 0 dù ghi chú "luôn mở"): sau khi
+  đọc lại toàn bộ `BUSINESS_MODULES`, hành vi hiện tại là ĐÚNG THIẾT KẾ nhất quán — mọi module trong hệ
+  thống (kể cả 3 module tự phục vụ) đều có thể bị admin tắt qua Khối 0, "mở cho MỌI nhân viên" chỉ mô tả
+  GIÁ TRỊ MẶC ĐỊNH (bật sẵn), không phải một bất biến "không ai được tắt". Không sửa gì ở đây.
+- **1 test lỗi thời** (`tests/test-operation-order-po-relock-stale.js`, agent Vận Hành phát hiện đang
+  "pass" trong khi mô phỏng lại 1 bug ĐÃ ĐƯỢC SỬA thay vì gọi hàm thật): để nguyên trong đợt này, cần 1
+  đợt riêng viết lại test cho đúng — không phải lỗi nghiệp vụ ảnh hưởng người dùng.
+
+Test tự động mới: `tests/test-module-access-gate-create.js`, `tests/test-hr-selfservice-module-access-gate.js`,
+`tests/test-merge-groups-perms.js`, cùng 1 kịch bản mới trong `tests/test-checklist.js` (CL-09). Chạy lại
+toàn bộ ~120 file `tests/test-*.js` — không có hồi quy nào ngoài 3 lỗi môi trường đã biết từ trước (thiếu
+kết nối SQL Server thật/thiếu file PDF mẫu từ phiên trước) và 1 lỗi đã ghi nhận từ trước không liên quan
+(Hộp Thư Phê Duyệt thiếu `operationOrderReceipt` loại AWAITING_RECEIPT).
 
 ## v20.3 (2026-09-13): UX — "✏️ Sửa"/"💾 Lưu" ở Người Dùng & Phân Quyền cuộn tới + chớp sáng phản hồi rõ ràng
 

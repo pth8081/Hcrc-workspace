@@ -16,6 +16,7 @@ const { getAllForCollection, insertRecord, deleteRecordById, withLockedRecordFor
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const { notifyUsers } = require('../lib/notifications');
 const payroll = require('../lib/payroll');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -227,6 +228,12 @@ async function resolveOwnEmployeeCode(username) {
 
 router.get('/my-payslips', async (req, res) => {
   try {
+    // Khối 0: payslips không qua GET /api/data chung (dữ liệu lương nhạy cảm) nên phải tự chặn ở đây —
+    // đợt test chuyên sâu 9/2026 (PQ, mục Phân Quyền) phát hiện trước đây route này bỏ qua Khối 0 hoàn
+    // toàn, tắt moduleAccess.hrPayroll cho 1 user vẫn không cản được họ gọi thẳng route xem phiếu lương.
+    if (!hasModuleAccessServer(req.freshUser, 'hrPayroll')) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+    }
     const employeeCode = await resolveOwnEmployeeCode(req.freshUser.username);
     const [payslips, periods] = await Promise.all([getAllForCollection('payslips'), getAllForCollection('payrollPeriods')]);
     const publishedPeriodIds = new Set(periods.filter(p => p.status === 'PUBLISHED').map(p => p.id));
@@ -242,6 +249,9 @@ router.get('/my-payslips/:periodId', async (req, res) => {
   const periodId = Number(req.params.periodId);
   if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
+    if (!hasModuleAccessServer(req.freshUser, 'hrPayroll')) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+    }
     const employeeCode = await resolveOwnEmployeeCode(req.freshUser.username);
     const [payslips, periods] = await Promise.all([getAllForCollection('payslips'), getAllForCollection('payrollPeriods')]);
     const period = periods.find(p => p.id === periodId);

@@ -342,6 +342,14 @@ function mergeGroupsBasePermsServer(groupsPerms) {
       result[key] = values.some(v => v === true);
     } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
       result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
+    } else if (Array.isArray(sample)) {
+      // PQ-02 (đợt test chuyên sâu 9/2026): uploadDepts/viewDraftDepts/viewApprovedDepts (Tài Liệu) là 3
+      // trường "kiểu cũ" — mảng phòng ban TRẦN, không phải object {all,depts} như phần còn lại của hệ
+      // thống (chưa migrate sang khuôn chung, xem đối chiếu boolean uploadAll/viewDraftAll/viewApprovedAll
+      // đi kèm đã OR đúng ở nhánh boolean trên). TRƯỚC ĐÂY rơi vào nhánh else -> lấy giá trị NHÓM CUỐI
+      // CÙNG (last-write-wins), làm mất phòng ban của các nhóm khác — vi phạm đúng nguyên tắc PQ-02
+      // "nhóm quyền là OVERLAY cộng thêm". Hợp nhất (union, khử trùng lặp) giống hệt nhánh {all,depts}.
+      result[key] = [...new Set(values.flatMap(v => Array.isArray(v) ? v : []))];
     } else {
       result[key] = values[values.length - 1];
     }
@@ -1326,3 +1334,8 @@ router.post('/:key', async (req, res) => {
 });
 
 module.exports = router;
+// Gắn thêm mergeGroupsBasePermsServer làm property của router (router vốn là 1 function, gắn thêm
+// property không ảnh hưởng gì cách server.js/các file khác require+mount router như cũ) — CHỈ để
+// tests/test-merge-groups-perms.js gọi thẳng, kiểm PQ-02 (union quyền nhiều nhóm) mà không phải chép
+// lại logic hàm này ra 1 bản riêng (dễ lệch dần với bản thật theo thời gian).
+module.exports.mergeGroupsBasePermsServer = mergeGroupsBasePermsServer;

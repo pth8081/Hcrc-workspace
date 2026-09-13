@@ -16,7 +16,7 @@ const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../l
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
-const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle } = require('../lib/recordViewScope');
+const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer } = require('../lib/recordViewScope');
 router.use(requireAuth, blockIfMustChangePassword);
 
 // requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện tại từ DB (kể cả trạng thái active) và gắn
@@ -626,6 +626,12 @@ async function withTaskAction(req, res, action, mutator) {
 router.post('/tasks', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
+    // Khối 0: "tasks" không đi qua routes/create.js (không có CREATE_MODULE_CONFIGS entry, xem chú thích
+    // ở đó) nên phải tự chặn ở đây — cùng lỗi PQ-01 phát hiện đợt test chuyên sâu 9/2026 (tắt
+    // moduleAccess.task cho 1 user trước đây không cản được họ vẫn tạo Công Việc mới).
+    if (!hasModuleAccessServer(freshUser, 'task')) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+    }
     const formTemplates = await getAppDataValue('formTemplates');
     const result = recordActions.createTask(req.body, freshUser, users, formTemplates);
     await insertTask(result);

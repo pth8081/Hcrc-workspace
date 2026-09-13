@@ -2831,6 +2831,9 @@ function mergeGroupsBasePerms(groupsPerms) {
       result[key] = values.some(v => v === true);
     } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
       result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
+    } else if (Array.isArray(sample)) {
+      // PQ-02: mirror ĐÚNG bản sửa ở mergeGroupsBasePermsServer() (routes/data.js) — xem chú thích ở đó.
+      result[key] = [...new Set(values.flatMap(v => Array.isArray(v) ? v : []))];
     } else {
       result[key] = values[values.length - 1];
     }

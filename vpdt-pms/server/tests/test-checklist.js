@@ -262,6 +262,35 @@ async function main() {
       assertEqual(res.body.item.isPassed, false, 'Lỗi nghiêm trọng phải ép isPassed=false bất kể % điểm');
     });
 
+    await run.run('CL-09: lựa chọn Lỗi nghiêm trọng NHƯNG lỡ vẫn mang cờ isPassing=true (lỗi cấu hình mẫu) vẫn bắt buộc ảnh', async () => {
+      resetRecords();
+      // Mô phỏng ĐÚNG kịch bản đã tìm thấy: builder UI mặc định isPassing:true khi thêm lựa chọn mới,
+      // người tạo mẫu tick thêm "Lỗi nghiêm trọng" nhưng quên bỏ tick "Đạt" — validateChecklistQuestions()
+      // không có ràng buộc nào chặn 2 cờ cùng true, nên đây là dữ liệu mẫu HOÀN TOÀN hợp lệ ở tầng đó.
+      const t = seedTemplate({
+        questions: [{
+          text: 'Vệ sinh khu vực quầy có đạt không?', isRequired: true, maxScore: 10,
+          options: [
+            { text: 'Đạt', scoreValue: 10, isPassing: true },
+            { text: 'Lỗi nghiêm trọng (lỡ vẫn tick Đạt)', scoreValue: 10, isPassing: true, isCriticalFail: true }
+          ]
+        }]
+      });
+      t.status = 'ACTIVE';
+      const misconfiguredOption = t.questions[0].options.find(o => o.isCriticalFail);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [misconfiguredOption.id], note: '' }] }, STORE_A_EMP);
+      const blocked = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(blocked.status, 400, 'Chọn Lỗi nghiêm trọng mà chưa có ảnh minh chứng PHẢI bị chặn, bất kể isPassing đang là gì trên lựa chọn đó');
+
+      await checklistAttachFakePhoto(subId, t.questions[0].id);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Sau khi có ảnh minh chứng phải nộp bài được');
+      assertEqual(res.body.item.hasCriticalFail, true, 'Vẫn phải ghi nhận có lỗi nghiêm trọng');
+      assertEqual(res.body.item.isPassed, false, 'Lỗi nghiêm trọng vẫn phải ép isPassed=false dù isPassing=true trên lựa chọn đã chọn');
+    });
+
     await run.run('Finalize: không lỗi, đạt ngưỡng % thì isPassed=true', async () => {
       resetRecords();
       const t = seedTemplate(); t.status = 'ACTIVE';
