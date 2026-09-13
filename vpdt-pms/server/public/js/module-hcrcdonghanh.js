@@ -145,6 +145,22 @@ function updateHrFeedbackBadge() {
   const text = count > 0 ? `🤝 HCRC Đồng Hành (${count})` : '🤝 HCRC Đồng Hành';
   if (dropdownLabel) dropdownLabel.innerText = text;
   if (subTabLabel) subTabLabel.innerText = text;
+  updateHrFeedbackManageBadge();
+}
+
+// QAHR-02 (đợt test chuyên sâu 9/2026): TRƯỚC ĐÂY Nhân Sự không có dấu hiệu nào (email lẫn badge) báo
+// có câu hỏi mới — phải chủ động mở module mới biết, khác MỌI hàng đợi phê duyệt khác trong hệ thống
+// (đều có đếm số chờ xử lý, VD updateInternalShareBadge()). Không cần thêm cờ "đã đọc" mới: PENDING đã
+// SẴN LÀ đúng tín hiệu "câu hỏi chưa được trả lời" (chuyển ANSWERED khi Nhân Sự phản hồi xong, xem
+// respondToHrFeedback() lib/recordActions.js) — chỉ cần đếm và hiện lên đúng mục nav đã sẵn có
+// (#hrFeedbackManageNavLabel, hidden/hiện theo canManageHrFeedback() ở nơi khác, hàm này không tự gác
+// quyền). Gọi cùng lúc/cùng chỗ với updateHrFeedbackBadge() (phía nhân viên) để không cần thêm móc gọi
+// riêng ở core-approvalhub.js.
+function updateHrFeedbackManageBadge() {
+  const navLabel = document.getElementById('hrFeedbackManageNavLabel');
+  if (!navLabel) return;
+  const count = (DB.hrFeedback || []).filter(q => q.status === 'PENDING').length;
+  navLabel.innerText = count > 0 ? `🤝 Quản Lý & Phản Hồi Ý Kiến (${count})` : '🤝 Quản Lý & Phản Hồi Ý Kiến';
 }
 
 // ----- Phía NHÂN SỰ (module "Nhân Sự" > "Quản Lý & Phản Hồi Ý Kiến") -----

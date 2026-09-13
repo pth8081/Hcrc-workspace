@@ -18,6 +18,7 @@ const employeeProfile = require('../lib/employeeProfile');
 const employeeProfileImport = require('../lib/employeeProfileImport');
 const { canManageContracts } = require('../lib/laborContract');
 const orgChart = require('../lib/orgChart');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -69,6 +70,13 @@ function stripForList(profile) {
 // GET /api/hr-profile/me — hồ sơ của chính người đang đăng nhập (luôn xem đủ — chính chủ).
 router.get('/me', async (req, res) => {
   try {
+    // Khối 0: employeeProfiles không qua GET /api/data chung (field nhạy cảm, xem đầu file) nên
+    // hasModuleAccessServer() không tự mirror được — phải tự chặn ở đây. Đợt test chuyên sâu 9/2026
+    // (PQ, mục Phân Quyền) phát hiện trước đây route này KHÔNG hề kiểm tra Khối 0 — tắt
+    // moduleAccess.hrProfile cho 1 user vẫn không cản được họ gọi thẳng route này xem hồ sơ chính mình.
+    if (!hasModuleAccessServer(req.freshUser, 'hrProfile')) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+    }
     const list = (await getAppDataValue('employeeProfiles')) || [];
     const profile = employeeProfile.findProfileByUsername(list, req.freshUser.username);
     if (!profile) return res.status(404).json({ error: 'Bạn chưa có Hồ Sơ Nhân Sự (có thể tài khoản chưa được liên kết với hồ sơ Onboarding)' });
@@ -79,6 +87,9 @@ router.get('/me', async (req, res) => {
 // PATCH /api/hr-profile/me — tự sửa trường tự phục vụ (SELF_EDITABLE_FIELDS).
 router.patch('/me', async (req, res) => {
   try {
+    if (!hasModuleAccessServer(req.freshUser, 'hrProfile')) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+    }
     let updated;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfileByUsername(list, req.freshUser.username);

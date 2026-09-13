@@ -8,6 +8,21 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 const employeeProfile = require('../lib/employeeProfile');
+const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS } = require('../lib/recordViewScope');
+
+// Đảo ngược MODULE_ACCESS_GATED_COLLECTIONS (moduleKey -> [collection,...]) thành collection -> moduleKey
+// để tra cứu 1 chiều tại đây — PQ-01 (đợt test chuyên sâu 9/2026) phát hiện Khối 0 (moduleAccess) TRƯỚC
+// ĐÂY chỉ được mirror ở GET /api/data (routes/data.js), CHƯA hề chặn ở khâu TẠO MỚI: tắt moduleAccess.doc/
+// contract/itSupport... cho 1 user xong họ vẫn POST /api/create/docs|contracts|itSupportTickets... tạo
+// hồ sơ bình thường (chỉ không thấy lại được sau đó qua GET /api/data) — vi phạm đúng nguyên tắc "Khối 0
+// chặn trước tiên, quyền chi tiết vô nghĩa khi thiếu Khối 0". Chặn ở ĐÚNG 1 điểm chung (route handler
+// này, nơi MỌI module qua CREATE_MODULE_CONFIGS đều đi qua) thay vì rải rác từng extraValidate.
+const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLECTIONS).reduce(
+  (acc, [moduleKey, collections]) => {
+    collections.forEach((c) => { acc[c] = moduleKey; });
+    return acc;
+  }, {}
+);
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -72,6 +87,13 @@ router.post('/:module', async (req, res) => {
     // requireAuth đã tự tra cứu bản ghi user hiện tại từ DB (kể cả trạng thái active) và gắn sẵn vào
     // req.freshUser — không cần tự đọc lại DB thêm 1 lần nữa cho cùng mục đích.
     const freshUser = req.freshUser;
+
+    // Khối 0: chặn TẠO MỚI nếu module này đang bị tắt moduleAccess cho user — xem chú thích
+    // COLLECTION_TO_MODULE_ACCESS_KEY ở đầu file.
+    const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[moduleKey];
+    if (moduleAccessKey && !hasModuleAccessServer(freshUser, moduleAccessKey)) {
+      return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+    }
 
     // Đọc kèm toàn bộ AppData (quy trình phòng ban, nhóm phê duyệt trình...) — chỉ module submissions
     // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác

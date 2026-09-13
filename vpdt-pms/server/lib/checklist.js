@@ -231,7 +231,13 @@ function computeChecklistScoring(template, answers) {
     if (!ans) continue;
     const selectedOptions = q.options.filter(o => (ans.optionIds || []).includes(o.id));
     totalScore += selectedOptions.reduce((sum, o) => sum + o.scoreValue, 0);
-    const anyFailing = selectedOptions.some(o => !o.isPassing);
+    // CL-09 (đợt test chuyên sâu 9/2026): isPassing/isCriticalFail là 2 cờ ĐỘC LẬP trên 1 lựa chọn,
+    // không có ràng buộc nào ở validateChecklistQuestions() bắt "Lỗi nghiêm trọng" phải kèm "Không đạt"
+    // — người tạo mẫu lỡ để cả 2 cờ cùng true (builder mặc định isPassing:true khi thêm lựa chọn mới,
+    // xem module-checklist.js) khiến TRƯỚC ĐÂY yêu cầu ảnh chỉ xét !o.isPassing, bỏ lọt đúng trường hợp
+    // Lỗi nghiêm trọng nhưng vẫn mang cờ isPassing:true — "Kết Thúc & Nộp" thành công mà không cần ảnh dù
+    // đã chọn Lỗi nghiêm trọng. Xét CẢ 2 cờ: cần ảnh nếu KHÔNG đạt HOẶC là lỗi nghiêm trọng.
+    const anyFailing = selectedOptions.some(o => !o.isPassing || o.isCriticalFail);
     if (selectedOptions.some(o => o.isCriticalFail)) hasCriticalFail = true;
     if (anyFailing && !(ans.attachments || []).length) answersNeedingPhoto.push(q.id);
   }
