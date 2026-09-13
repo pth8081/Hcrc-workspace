@@ -322,14 +322,30 @@ function filterPaymentByCard(status) {
 // Trạng thái cảnh báo hạn thanh toán 1 ĐỢT — bản sao client-side của
 // computePaymentInstallmentDeadlineStatus() ở lib/recordActions.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa
 // cả 2 bên, cùng khuôn computeOperationWorkItemDeadlineStatus() ở module-vanhanh.js).
+// v20.8 — thêm 'QUA_HAN_DA_THANH_TOAN' (đã xác nhận chi NHƯNG confirmedAt trễ hơn dueDate — "thanh toán
+// trễ hạn"), tách riêng khỏi 'DA_THANH_TOAN' (đã chi đúng hạn/không có hạn). parseVNDateTime() (core.js)
+// parse ngược confirmedAt dạng "HH:MM:SS D/M/YYYY" (nowVN()).
 function computePaymentInstallmentDeadlineStatusClient(installment) {
   if (!installment) return 'KHONG_CO_HAN';
-  if (installment.confirmed) return 'DA_THANH_TOAN';
-  if (!installment.dueDate) return 'KHONG_CO_HAN';
-  const m = String(installment.dueDate).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return 'KHONG_CO_HAN';
-  const due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  if (isNaN(due.getTime())) return 'KHONG_CO_HAN';
+  let due = null;
+  if (installment.dueDate) {
+    const m = String(installment.dueDate).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      if (!isNaN(d.getTime())) due = d;
+    }
+  }
+  if (installment.confirmed) {
+    if (due) {
+      const confirmedAt = parseVNDateTime(installment.confirmedAt);
+      if (confirmedAt) {
+        const confirmedDateOnly = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
+        if (confirmedDateOnly.getTime() > due.getTime()) return 'QUA_HAN_DA_THANH_TOAN';
+      }
+    }
+    return 'DA_THANH_TOAN';
+  }
+  if (!due) return 'KHONG_CO_HAN';
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
@@ -338,8 +354,10 @@ function computePaymentInstallmentDeadlineStatusClient(installment) {
   return 'DUNG_HAN';
 }
 const PAYMENT_INSTALLMENT_DEADLINE_BADGE = {
-  QUA_HAN: '<span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px]">🔴 Quá hạn</span>',
-  SAP_DEN_HAN: '<span class="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">🟡 Sắp đến hạn</span>'
+  QUA_HAN: '<span class="inline-block px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[10px]">🔴 Quá hạn — Chưa thanh toán</span>',
+  SAP_DEN_HAN: '<span class="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">🟡 Sắp đến hạn</span>',
+  DA_THANH_TOAN: '<span class="inline-block px-1.5 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[10px]">✅ Đã thanh toán</span>',
+  QUA_HAN_DA_THANH_TOAN: '<span class="inline-block px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[10px]">⚠️ Đã thanh toán (trễ hạn)</span>'
 };
 // "Mỗi đợt tự đi hết quy trình riêng" — pr.cycleGroupId/cycleIndex/cycleTotal (splitPaymentDraftsByInstallment(),
 // lib/recordActions.js) đánh dấu đề nghị này là 1 trong N bản ghi TÁCH RIÊNG của cùng 1 lô/chu kỳ thanh
@@ -353,11 +371,16 @@ function paymentCycleBadgeHTML(pr) {
 // pr (tuỳ chọn) — v15.8: đợt CHƯA xác nhận của đề nghị đã APPROVED ("Đang chờ thanh toán") hiện badge
 // riêng nếu không có cảnh báo hạn nào cấp bách hơn (quá hạn/sắp đến hạn vẫn ưu tiên hiện trước, đúng tinh
 // thần "khi đề nghị được phê duyệt thì trạng thái... ở các đợt thanh toán khởi đầu sẽ là đang chờ thanh toán").
+// v20.8 — bổ sung ĐỦ các trạng thái người dùng yêu cầu theo dõi theo TỪNG đợt: "Đang chờ phê duyệt" (đề
+// nghị còn PENDING/NEED_INFO, chưa qua hết quy trình duyệt phòng ban — TRƯỚC ĐÂY hiện trống '' ở đây, dễ
+// hiểu nhầm là chưa tải xong), "Nháp" (đề nghị còn DRAFT), và "Đã thanh toán (trễ hạn)"/"Đã thanh toán"
+// đã tách trong PAYMENT_INSTALLMENT_DEADLINE_BADGE ở trên (dựa theo confirmedAt so với dueDate).
 function paymentInstallmentDeadlineBadge(installment, pr) {
-  if (installment?.confirmed) return '<span class="inline-block px-1.5 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[10px]">✅ Đã thanh toán</span>';
   const deadlineBadge = PAYMENT_INSTALLMENT_DEADLINE_BADGE[computePaymentInstallmentDeadlineStatusClient(installment)];
   if (deadlineBadge) return deadlineBadge;
   if (pr?.status === 'APPROVED') return '<span class="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-[10px]">⏳ Đang chờ thanh toán</span>';
+  if (pr?.status === 'PENDING' || pr?.status === 'NEED_INFO') return '<span class="inline-block px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded font-bold text-[10px]">🕐 Đang chờ phê duyệt</span>';
+  if (pr?.status === 'DRAFT') return '<span class="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-bold text-[10px]">📝 Nháp</span>';
   return '';
 }
 
@@ -378,25 +401,27 @@ function paymentOverallStatusBadge(pr) {
   return `<span class="inline-block px-1.5 py-0.5 rounded font-bold text-[10px] ${PAYMENT_OVERALL_STATUS_BADGE_CLS[s] || ''}">${PAYMENT_OVERALL_STATUS_LABELS[s] || s}</span>`;
 }
 
-// Đếm số đợt quá hạn/sắp đến hạn của 1 đề nghị — bản sao client-side của countPaymentInstallmentWarnings()
-// ở lib/recordActions.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên) — dùng cho cảnh báo tổng hợp
-// "N đợt quá hạn/sắp đến hạn" (yêu cầu nghiệp vụ #5).
+// Đếm số đợt quá hạn/sắp đến hạn/đã thanh toán TRỄ HẠN của 1 đề nghị — bản sao client-side của
+// countPaymentInstallmentWarnings() ở lib/recordActions.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên)
+// — dùng cho cảnh báo tổng hợp (yêu cầu nghiệp vụ #5, v20.8 thêm latePaidCount).
 function countPaymentInstallmentWarningsClient(pr) {
   const installments = Array.isArray(pr?.installments) ? pr.installments : [];
-  let overdueCount = 0, nearDueCount = 0;
+  let overdueCount = 0, nearDueCount = 0, latePaidCount = 0;
   installments.forEach(it => {
     const s = computePaymentInstallmentDeadlineStatusClient(it);
     if (s === 'QUA_HAN') overdueCount++;
     else if (s === 'SAP_DEN_HAN') nearDueCount++;
+    else if (s === 'QUA_HAN_DA_THANH_TOAN') latePaidCount++;
   });
-  return { overdueCount, nearDueCount };
+  return { overdueCount, nearDueCount, latePaidCount };
 }
 function paymentWarningCountsHTML(pr) {
-  const { overdueCount, nearDueCount } = countPaymentInstallmentWarningsClient(pr);
-  if (!overdueCount && !nearDueCount) return '';
+  const { overdueCount, nearDueCount, latePaidCount } = countPaymentInstallmentWarningsClient(pr);
+  if (!overdueCount && !nearDueCount && !latePaidCount) return '';
   const parts = [];
   if (overdueCount) parts.push(`<span class="text-red-600 font-bold">🔴 ${overdueCount} đợt quá hạn</span>`);
   if (nearDueCount) parts.push(`<span class="text-amber-600 font-bold">🟡 ${nearDueCount} đợt sắp đến hạn</span>`);
+  if (latePaidCount) parts.push(`<span class="text-orange-600 font-bold">⚠️ ${latePaidCount} đợt đã thanh toán trễ hạn</span>`);
   return `<div class="text-[11px] mt-0.5">${parts.join(' — ')}</div>`;
 }
 
@@ -760,6 +785,7 @@ function renderPaymentRequests() {
         <span>${it.confirmed ? '✅' : '⬜'} ${escapeHtml(it.description || '')} — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ
           ${it.confirmFileUrl ? `<button type="button" data-op="viewPaymentConfirmFile" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 hover:underline ml-1">📎</button>` : ''}
           ${(it.files || []).map(f => `<button type="button" data-op="viewPaymentRequestFile" data-arg0="${pr.id}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-600 hover:underline ml-1">📎</button>`).join('')}
+          <span class="ml-1">${paymentInstallmentDeadlineBadge(it, pr)}</span>
         </span>
         ${(!it.confirmed && pr.status === 'APPROVED' && canManage && !isOneTime) ? `<button data-op="confirmPaymentInstallmentAction" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
       </div>

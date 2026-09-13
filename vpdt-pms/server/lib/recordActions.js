@@ -2022,10 +2022,23 @@ function requestPaymentInfo(payload, user, pr) {
 // để hiển thị badge + đếm cảnh báo ("cảnh báo thời hạn thanh toán theo đợt" người dùng yêu cầu). Cùng
 // khuôn computeOperationWorkItemDeadlineStatus() ở trên (tính lại NGAY LÚC ĐỌC, không lưu field riêng
 // trên installment) — mirror y hệt ở module-thanhtoan.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên).
+// v20.8 — thêm 'QUA_HAN_DA_THANH_TOAN' (đã xác nhận chi NHƯNG confirmedAt trễ hơn dueDate, tức "thanh
+// toán trễ hạn") — TÁCH RIÊNG khỏi 'DA_THANH_TOAN' (đã chi đúng hạn/không có hạn) theo yêu cầu "quá hạn
+// đã thanh toán (dựa theo ngày thanh toán)". confirmedAt lưu dạng "HH:MM:SS D/M/YYYY" (nowVN()) — parse
+// lại bằng parseVNDateTime() (không phải parseISODateOnly() như dueDate).
 function computePaymentInstallmentDeadlineStatus(installment) {
   if (!installment) return 'KHONG_CO_HAN';
-  if (installment.confirmed) return 'DA_THANH_TOAN';
   const due = parseISODateOnly(installment.dueDate);
+  if (installment.confirmed) {
+    if (due) {
+      const confirmedAt = parseVNDateTime(installment.confirmedAt);
+      if (confirmedAt) {
+        const confirmedDateOnly = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
+        if (confirmedDateOnly.getTime() > due.getTime()) return 'QUA_HAN_DA_THANH_TOAN';
+      }
+    }
+    return 'DA_THANH_TOAN';
+  }
   if (!due) return 'KHONG_CO_HAN';
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -2051,18 +2064,19 @@ function computePaymentRequestOverallStatus(pr) {
   return hasOverdue ? 'QUA_HAN' : 'DANG_THANH_TOAN';
 }
 
-// Đếm số đợt quá hạn/sắp đến hạn của 1 đề nghị — dùng cho cảnh báo "N đợt quá hạn/sắp đến hạn" theo TỪNG
-// đợt lẫn TỔNG đợt (yêu cầu nghiệp vụ #5). Đợt đã confirmed không tính (computePaymentInstallmentDeadlineStatus
-// trả DA_THANH_TOAN cho đợt đó, không rơi vào 2 nhánh đếm bên dưới).
+// Đếm số đợt quá hạn/sắp đến hạn/đã thanh toán TRỄ HẠN của 1 đề nghị — dùng cho cảnh báo "N đợt ..." theo
+// TỪNG đợt lẫn TỔNG đợt (yêu cầu nghiệp vụ #5, v20.8 thêm latePaidCount). Đợt đã confirmed ĐÚNG hạn không
+// tính vào đâu cả (computePaymentInstallmentDeadlineStatus trả DA_THANH_TOAN cho đợt đó).
 function countPaymentInstallmentWarnings(pr) {
   const installments = Array.isArray(pr?.installments) ? pr.installments : [];
-  let overdueCount = 0, nearDueCount = 0;
+  let overdueCount = 0, nearDueCount = 0, latePaidCount = 0;
   installments.forEach(it => {
     const s = computePaymentInstallmentDeadlineStatus(it);
     if (s === 'QUA_HAN') overdueCount++;
     else if (s === 'SAP_DEN_HAN') nearDueCount++;
+    else if (s === 'QUA_HAN_DA_THANH_TOAN') latePaidCount++;
   });
-  return { overdueCount, nearDueCount };
+  return { overdueCount, nearDueCount, latePaidCount };
 }
 
 // Xác nhận đã thanh toán 1 đợt — đủ hết các đợt (không còn đợt nào chưa confirmed) thì tự chuyển PAID

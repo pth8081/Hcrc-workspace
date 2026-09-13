@@ -515,13 +515,21 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       "🗂️ Quản Lý Thanh Toán" phụ trách toàn bộ vòng lập + duyệt nội bộ, "✅
       Xác Nhận" chỉ còn dành riêng cho bước xác nhận ĐÃ CHI TIỀN THẬT bên
       dưới, để có thể phân quyền tab đó CHỈ cho kế toán). Danh sách sắp **đề
-      nghị mới tạo lên đầu**. Sub-tab này cũng hiện **cảnh báo hạn thanh toán**
-      theo từng đợt (🔴 quá hạn / 🟡 sắp đến hạn ≤ 3 ngày) VÀ badge trạng thái
-      tổng hợp "tổng đợt" (🔴 Quá hạn / 🟡 Đang thanh toán / ✅ Đã thanh toán)
-      theo dõi các đề nghị **cho tới khi HOÀN TẤT** (đề nghị `PAID` không
-      biến mất khỏi sub-tab này, vẫn hiện đầy đủ kèm link "📎 Xem tệp") — đọc
-      CHUNG 1 danh sách với sub-tab "Xác Nhận" bên dưới nên mọi thay đổi
-      trạng thái tự hiện ngay ở đây.
+      nghị mới tạo lên đầu**. **v20.8+**: mỗi ĐỢT thanh toán luôn hiện đúng 1
+      trong 5 badge trạng thái (không còn để trống như trước): **🕐 Đang chờ
+      phê duyệt** (đề nghị còn "Chờ duyệt"/"Cần bổ sung"), **⏳ Đang chờ thanh
+      toán** (đã duyệt xong, chờ kế toán xác nhận chi), **✅ Đã thanh toán**
+      (đã xác nhận chi, đúng/trước hạn), **🔴 Quá hạn — Chưa thanh toán** (quá
+      hạn mà chưa xác nhận chi), **⚠️ Đã thanh toán (trễ hạn)** (đã xác nhận
+      chi nhưng NGÀY xác nhận trễ hơn hạn đã khai — so `confirmedAt` với
+      `dueDate`) — cộng badge **🟡 Sắp đến hạn** (≤ 3 ngày, chưa xác nhận) và
+      **📝 Nháp** (đề nghị còn NHÁP). Cảnh báo tổng hợp cũng đếm thêm "N đợt đã
+      thanh toán trễ hạn" cạnh "N đợt quá hạn"/"N đợt sắp đến hạn" đã có, VÀ
+      badge trạng thái tổng hợp "tổng đợt" (🔴 Quá hạn / 🟡 Đang thanh toán /
+      ✅ Đã thanh toán) theo dõi các đề nghị **cho tới khi HOÀN TẤT** (đề nghị
+      `PAID` không biến mất khỏi sub-tab này, vẫn hiện đầy đủ kèm link "📎 Xem
+      tệp") — đọc CHUNG 1 danh sách với sub-tab "Xác Nhận" bên dưới nên mọi
+      thay đổi trạng thái tự hiện ngay ở đây.
     - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — chỉ còn hiện đề nghị đã duyệt
       XONG bước/phòng ban ở trên (hiển thị **"⏳ Đang chờ thanh toán"** thay vì
       nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
