@@ -14,6 +14,10 @@ let checklistActiveSubTab = 'CONFIG';
 // mỗi câu {text, type, isRequired, maxScore, note, showIfOptionId, options:[{text, scoreValue, isPassing, isCriticalFail}]}.
 let checklistBuilderQuestions = [];
 let checklistBuilderEditingId = null; // null = tạo mới; số = đang sửa template DRAFT có id này
+// scoringMode ('SCORED'/'PASS_FAIL_ONLY', v20.9 — yêu cầu người dùng: "chỉ kiểm tra đạt/chưa đạt thì ẩn
+// chấm điểm đi") — đọc/ghi qua #checklistBuilderScoringMode, ẩn hết ô nhập điểm tối đa/điểm đáp án/ngưỡng
+// đạt % khi PASS_FAIL_ONLY (renderChecklistBuilderQuestions() bên dưới) — SERVER vẫn là nơi ép cứng
+// (validateChecklistQuestions()), đây chỉ là UI, không phải lớp bảo vệ duy nhất.
 let checklistActiveSubmission = null; // bản ghi checklistSubmissions đang mở để làm bài
 let checklistActiveTemplateForSubmission = null;
 let checklistReportFilteredRows = [];
@@ -72,7 +76,7 @@ function renderChecklistConfigTab() {
     <div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
       <div>
         <div class="font-bold text-gray-800 text-sm">${escapeHtml(t.templateName)} <span class="text-gray-400 font-normal">(${escapeHtml(t.templateCode)}, v${t.version || 1})</span></div>
-        <div class="text-[11px] text-gray-500">${typeLabel[t.templateType] || t.templateType} · ${(t.questions || []).length} câu hỏi${t.passThreshold != null ? ` · Ngưỡng đạt ${t.passThreshold}%` : ''}</div>
+        <div class="text-[11px] text-gray-500">${typeLabel[t.templateType] || t.templateType} · ${(t.questions || []).length} câu hỏi${t.scoringMode === 'PASS_FAIL_ONLY' ? ' · Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? ` · Ngưỡng đạt ${t.passThreshold}%` : '')}</div>
       </div>
       <div class="flex items-center gap-2">
         <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${statusBadge[t.status] || ''}">${statusLabel[t.status] || t.status}</span>
@@ -97,6 +101,7 @@ function openChecklistTemplateBuilder(templateId) {
     document.getElementById('checklistBuilderCode').value = t.templateCode;
     document.getElementById('checklistBuilderName').value = t.templateName;
     document.getElementById('checklistBuilderType').value = t.templateType;
+    document.getElementById('checklistBuilderScoringMode').value = t.scoringMode || 'SCORED';
     document.getElementById('checklistBuilderPassThreshold').value = t.passThreshold != null ? t.passThreshold : '';
     checklistBuilderQuestions = (t.questions || []).map(q => ({
       text: q.text, type: q.type, isRequired: q.isRequired, maxScore: q.maxScore, note: q.note || '',
@@ -108,11 +113,20 @@ function openChecklistTemplateBuilder(templateId) {
     document.getElementById('checklistBuilderCode').value = '';
     document.getElementById('checklistBuilderName').value = '';
     document.getElementById('checklistBuilderType').value = 'STORE_SELF';
+    document.getElementById('checklistBuilderScoringMode').value = 'SCORED';
     document.getElementById('checklistBuilderPassThreshold').value = '';
     checklistBuilderQuestions = [];
     document.getElementById('checklistBuilderTitle').innerText = '🛠️ Tạo Mẫu Checklist Mới';
   }
+  onChecklistBuilderScoringModeChange();
   document.getElementById('checklistTemplateBuilderWrap').classList.remove('hidden');
+  renderChecklistBuilderQuestions();
+}
+// Đổi "Chế độ chấm điểm" — ẩn/hiện khối "Ngưỡng Điểm Đạt (%)" (không còn ý nghĩa khi PASS_FAIL_ONLY) và
+// render lại câu hỏi để ẩn/hiện ô nhập điểm tối đa/điểm đáp án theo đúng chế độ hiện chọn.
+function onChecklistBuilderScoringModeChange() {
+  const isPassFailOnly = document.getElementById('checklistBuilderScoringMode').value === 'PASS_FAIL_ONLY';
+  document.getElementById('checklistBuilderPassThresholdWrap').classList.toggle('hidden', isPassFailOnly);
   renderChecklistBuilderQuestions();
 }
 function closeChecklistTemplateBuilder() {
@@ -140,13 +154,14 @@ function viewChecklistTemplate(id) {
     <div><span class="text-gray-500">Mã:</span> <b>${escapeHtml(t.templateCode)}</b></div>
     <div><span class="text-gray-500">Loại:</span> <b>${typeLabel[t.templateType] || t.templateType}</b></div>
     <div><span class="text-gray-500">Trạng thái:</span> <b>${statusLabel[t.status] || t.status}</b> (v${t.version || 1})</div>
-    <div><span class="text-gray-500">Ngưỡng đạt:</span> <b>${t.passThreshold != null ? t.passThreshold + '%' : 'Không chấm ngưỡng'}</b></div>
+    <div><span class="text-gray-500">Ngưỡng đạt:</span> <b>${t.scoringMode === 'PASS_FAIL_ONLY' ? 'Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? t.passThreshold + '%' : 'Không chấm ngưỡng')}</b></div>
   `;
+  const isPassFailOnly = t.scoringMode === 'PASS_FAIL_ONLY';
   document.getElementById('checklistTemplateViewQuestionsWrap').innerHTML = (t.questions || []).map((q, qi) => `
     <div class="bg-white border rounded p-3 space-y-1.5">
       <div class="flex items-center justify-between gap-2 flex-wrap">
         <span class="font-bold text-gray-800 text-xs">Câu ${qi + 1}. ${escapeHtml(q.text)}</span>
-        <span class="text-[10px] text-gray-400">${q.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}${q.isRequired ? ' · Bắt buộc' : ''}${q.maxScore ? ' · Tối đa ' + q.maxScore + 'đ' : ''}</span>
+        <span class="text-[10px] text-gray-400">${q.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}${q.isRequired ? ' · Bắt buộc' : ''}${!isPassFailOnly && q.maxScore ? ' · Tối đa ' + q.maxScore + 'đ' : ''}</span>
       </div>
       ${q.showIfOptionId != null ? `<div class="text-[10px] text-amber-600">↳ Chỉ hiện khi: ${escapeHtml(optionLabelById.get(q.showIfOptionId) || '—')}</div>` : ''}
       ${q.note ? `<div class="text-[11px] text-gray-500 italic">${escapeHtml(q.note)}</div>` : ''}
@@ -155,7 +170,7 @@ function viewChecklistTemplate(id) {
           <div class="flex items-center gap-2 text-[11px]">
             <span class="text-gray-400 w-6">#${o.id}</span>
             <span class="flex-1">${escapeHtml(o.text)}</span>
-            <span class="text-gray-500">${o.scoreValue}đ</span>
+            ${isPassFailOnly ? '' : `<span class="${o.scoreValue < 0 ? 'text-red-600 font-bold' : 'text-gray-500'}">${o.scoreValue}đ</span>`}
             <span class="px-1.5 py-0.5 rounded-full font-bold ${o.isPassing ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${o.isPassing ? 'Đạt' : 'Không đạt'}</span>
             ${o.isCriticalFail ? '<span class="px-1.5 py-0.5 rounded-full font-bold bg-red-600 text-white">Lỗi nghiêm trọng</span>' : ''}
           </div>
@@ -221,6 +236,7 @@ function computeChecklistBuilderOptionIds() {
 }
 function renderChecklistBuilderQuestions() {
   const el = document.getElementById('checklistBuilderQuestionsWrap');
+  const isPassFailOnly = document.getElementById('checklistBuilderScoringMode').value === 'PASS_FAIL_ONLY';
   const optionIdsByQ = computeChecklistBuilderOptionIds();
   el.innerHTML = checklistBuilderQuestions.map((q, qi) => {
     // Danh sách lựa chọn của MỌI câu hỏi ĐỨNG TRƯỚC câu này — nguồn cho dropdown "Chỉ hiện khi...".
@@ -242,7 +258,7 @@ function renderChecklistBuilderQuestions() {
           <option value="SINGLE_CHOICE" ${q.type === 'SINGLE_CHOICE' ? 'selected' : ''}>Chọn 1</option>
           <option value="MULTIPLE_CHOICE" ${q.type === 'MULTIPLE_CHOICE' ? 'selected' : ''}>Chọn nhiều</option>
         </select>
-        <input type="number" min="0" value="${q.maxScore}" placeholder="Điểm tối đa" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="maxScore" data-arg-value="2" class="border p-1.5 rounded text-[11px]">
+        ${isPassFailOnly ? '' : `<input type="number" min="0" value="${q.maxScore}" placeholder="Điểm tối đa" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="maxScore" data-arg-value="2" class="border p-1.5 rounded text-[11px]">`}
         <label class="flex items-center gap-1 text-[11px] text-gray-600">
           <input type="checkbox" ${q.isRequired ? 'checked' : ''} data-op-change="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="isRequired" data-arg-el="2"> Bắt buộc trả lời
         </label>
@@ -256,7 +272,7 @@ function renderChecklistBuilderQuestions() {
           <div class="flex items-center gap-1.5">
             <span class="text-[10px] text-gray-400 w-6">#${optionIdsByQ[qi][oi]}</span>
             <input value="${escapeHtml(o.text)}" placeholder="Lựa chọn" data-op-input="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="text" data-arg-value="3" class="flex-1 border p-1 rounded text-[11px]">
-            <input type="number" value="${o.scoreValue}" placeholder="Điểm" data-op-input="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="scoreValue" data-arg-value="3" class="w-16 border p-1 rounded text-[11px]">
+            ${isPassFailOnly ? '' : `<input type="number" value="${o.scoreValue}" placeholder="Điểm (có thể âm)" title="Có thể nhập số âm để TRỪ điểm (VD đáp án 'Không đạt' của câu yêu cầu vàng)" data-op-input="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="scoreValue" data-arg-value="3" class="w-24 border p-1 rounded text-[11px]">`}
             <label class="flex items-center gap-1 text-[10px] text-gray-600"><input type="checkbox" ${o.isPassing ? 'checked' : ''} data-op-change="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="isPassing" data-arg-el="3"> Đạt</label>
             <label class="flex items-center gap-1 text-[10px] text-red-600"><input type="checkbox" ${o.isCriticalFail ? 'checked' : ''} data-op-change="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="isCriticalFail" data-arg-el="3"> Lỗi nghiêm trọng</label>
             <button type="button" data-op="removeChecklistBuilderOption" data-arg0="${qi}" data-arg1="${oi}" class="text-red-500 text-[11px] font-bold">✕</button>
@@ -268,11 +284,105 @@ function renderChecklistBuilderQuestions() {
   }).join('');
 }
 
+// ===================== Nhập/Xuất Excel câu hỏi (v20.9) — mirror ĐÚNG khuôn Nhập Câu Hỏi Từ Excel của
+// Ngân Hàng Câu Hỏi Đào Tạo (module-internalcomms-daotao.js::onTrainingTestImportFileChange()/
+// confirmTrainingTestImport()) — parse-questions CHỈ đọc/xem trước (routes/checklistImport.js), KHÔNG tự
+// lưu gì; vẫn phải bấm "💾 Lưu Mẫu" như thường sau khi nạp để server xác minh lại toàn bộ. =====================
+let checklistImportPreviewItems = [];
+async function onChecklistImportFileChange(event) {
+  const file = event.target.files[0];
+  checklistImportPreviewItems = [];
+  document.getElementById('checklistImportPreviewWrap').classList.add('hidden');
+  document.getElementById('checklistImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('checklistImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/checklist/parse-questions', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    checklistImportPreviewItems = data.items;
+    const validCount = data.items.filter(it => it.valid).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ.`;
+    document.getElementById('checklistImportPreviewBody').innerHTML = data.items.map((it, idx) => `
+      <tr>
+        <td class="p-1 text-center">${idx + 1}</td>
+        <td class="p-1">${escapeHtml(it.text)}</td>
+        <td class="p-1">${it.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}</td>
+        <td class="p-1">${(it.options || []).length} đáp án</td>
+        <td class="p-1">${it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml((it.errors || []).join(', '))}</span>`}</td>
+      </tr>
+    `).join('');
+    document.getElementById('checklistImportPreviewWrap').classList.remove('hidden');
+    if (validCount > 0) document.getElementById('checklistImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+// Nạp câu hỏi HỢP LỆ vào checklistBuilderQuestions[] đang soạn — showIfOptionId LUÔN null (Excel không
+// có cột điều kiện phân nhánh, cấu hình thủ công lại qua dropdown "Chỉ hiện khi..." sau khi nạp nếu cần).
+function confirmChecklistImport() {
+  const validItems = checklistImportPreviewItems.filter(it => it.valid);
+  if (!validItems.length) return alert('Không có câu hỏi hợp lệ nào để nạp.');
+  validItems.forEach(it => {
+    checklistBuilderQuestions.push({
+      text: it.text, type: it.type, isRequired: it.isRequired, maxScore: it.maxScore, note: '', showIfOptionId: null,
+      options: it.options.map(o => ({ text: o.text, scoreValue: o.scoreValue, isPassing: o.isPassing, isCriticalFail: o.isCriticalFail }))
+    });
+  });
+  alert(`✅ Đã nạp ${validItems.length} câu hỏi vào danh sách — kiểm tra lại rồi bấm "💾 Lưu Mẫu" để lưu.`);
+  document.getElementById('checklistImportFileInput').value = '';
+  document.getElementById('checklistImportPreviewWrap').classList.add('hidden');
+  document.getElementById('checklistImportConfirmBtn').classList.add('hidden');
+  document.getElementById('checklistImportStatus').innerText = '';
+  checklistImportPreviewItems = [];
+  renderChecklistBuilderQuestions();
+}
+// Xuất Excel — dùng ĐÚNG khuôn cột với file mẫu Nhập Từ Excel (1 dòng/đáp án, nhóm theo "STT Câu Hỏi")
+// để xuất ra sửa offline rồi nhập lại được ngay, không cần dựng lại từ đầu — tái dùng API xuất Excel
+// generic sẵn có (routes/adminExport.js + downloadXlsxFromServer(), core.js), KHÔNG cần route riêng.
+function exportChecklistBuilderQuestionsExcel() {
+  if (!checklistBuilderQuestions.length) return alert('Chưa có câu hỏi nào để xuất.');
+  const columns = [
+    { header: 'STT Câu Hỏi', key: 'qno', width: 10 },
+    { header: 'Nội Dung Câu Hỏi', key: 'text', width: 38 },
+    { header: 'Loại', key: 'type', width: 16 },
+    { header: 'Bắt Buộc', key: 'required', width: 12 },
+    { header: 'Điểm Tối Đa Câu Hỏi', key: 'maxScore', width: 18 },
+    { header: 'Nội Dung Đáp Án', key: 'optionText', width: 32 },
+    { header: 'Đạt', key: 'isPassing', width: 10 },
+    { header: 'Yêu Cầu Vàng / Lỗi Nghiêm Trọng', key: 'isCriticalFail', width: 22 },
+    { header: 'Điểm Đáp Án', key: 'scoreValue', width: 14 }
+  ];
+  const rows = [];
+  checklistBuilderQuestions.forEach((q, qi) => {
+    (q.options || []).forEach((o, oi) => {
+      rows.push({
+        qno: oi === 0 ? qi + 1 : '',
+        text: oi === 0 ? q.text : '',
+        type: oi === 0 ? (q.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1') : '',
+        required: oi === 0 ? (q.isRequired ? 'Có' : 'Không') : '',
+        maxScore: oi === 0 ? q.maxScore : '',
+        optionText: o.text,
+        isPassing: o.isPassing ? 'Có' : 'Không',
+        isCriticalFail: o.isCriticalFail ? 'Có' : 'Không',
+        scoreValue: o.scoreValue
+      });
+    });
+  });
+  downloadXlsxFromServer('cau-hoi-checklist.xlsx', 'Câu Hỏi', columns, rows);
+}
+
 async function saveChecklistTemplateBuilder() {
   const payload = {
     templateCode: document.getElementById('checklistBuilderCode').value.trim(),
     templateName: document.getElementById('checklistBuilderName').value.trim(),
     templateType: document.getElementById('checklistBuilderType').value,
+    scoringMode: document.getElementById('checklistBuilderScoringMode').value,
     passThreshold: document.getElementById('checklistBuilderPassThreshold').value === '' ? null : Number(document.getElementById('checklistBuilderPassThreshold').value),
     questions: checklistBuilderQuestions
   };
@@ -564,7 +674,7 @@ function renderChecklistResultTab() {
           <div class="text-[11px] text-gray-500">Nộp lúc ${escapeHtml(s.submittedAt || '')} bởi ${escapeHtml(s.submittedByName || '')}</div>
         </div>
         <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${s.hasCriticalFail ? 'bg-red-100 text-red-700' : s.isPassed === false ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">
-          ${s.scorePercent != null ? s.scorePercent.toFixed(1) + '%' : '—'} ${s.hasCriticalFail ? '· Lỗi nghiêm trọng' : (s.isPassed === false ? '· Không đạt' : (s.isPassed === true ? '· Đạt' : ''))}
+          ${s.scorePercent != null ? s.scorePercent.toFixed(1) + '% · ' : ''}${s.hasCriticalFail ? 'Lỗi nghiêm trọng' : (s.isPassed === false ? 'Không đạt' : (s.isPassed === true ? 'Đạt' : '—'))}
         </span>
       </div>
       ${s.storeResponseText ? `<div class="text-xs text-gray-600 bg-gray-50 rounded p-2">💬 Phản hồi siêu thị: ${escapeHtml(s.storeResponseText)}</div>`
@@ -607,10 +717,14 @@ function applyChecklistReportFilter() {
   const total = rows.length;
   const passed = rows.filter(r => r.isPassed === true).length;
   const criticalFail = rows.filter(r => r.hasCriticalFail).length;
-  const avgScore = total ? (rows.reduce((sum, r) => sum + (r.scorePercent || 0), 0) / total) : 0;
+  // "Điểm trung bình" chỉ tính trên các bài CÓ chấm điểm (scorePercent != null) — checklist PASS_FAIL_ONLY
+  // (v20.9) không có % nên KHÔNG được tính là 0 vào trung bình (sẽ kéo lệch sai số liệu của các checklist
+  // khác trong cùng bộ lọc "Tất cả"), và hiện "—" nếu KHÔNG có bài nào trong bộ lọc có chấm điểm.
+  const scoredRows = rows.filter(r => r.scorePercent != null);
+  const avgScoreLabel = scoredRows.length ? (scoredRows.reduce((sum, r) => sum + r.scorePercent, 0) / scoredRows.length).toFixed(1) + '%' : '—';
   document.getElementById('checklistReportStatsWrap').innerHTML = `
     <div class="bg-white border rounded p-3 text-center"><div class="text-2xl font-bold text-gray-800">${total}</div><div class="text-[11px] text-gray-500">Bài đã nộp</div></div>
-    <div class="bg-white border rounded p-3 text-center"><div class="text-2xl font-bold text-emerald-600">${avgScore.toFixed(1)}%</div><div class="text-[11px] text-gray-500">Điểm trung bình</div></div>
+    <div class="bg-white border rounded p-3 text-center"><div class="text-2xl font-bold text-emerald-600">${avgScoreLabel}</div><div class="text-[11px] text-gray-500">Điểm trung bình</div></div>
     <div class="bg-white border rounded p-3 text-center"><div class="text-2xl font-bold text-sky-600">${total ? ((passed / total) * 100).toFixed(1) : 0}%</div><div class="text-[11px] text-gray-500">Tỉ lệ Đạt</div></div>
     <div class="bg-white border rounded p-3 text-center"><div class="text-2xl font-bold text-red-600">${criticalFail}</div><div class="text-[11px] text-gray-500">Lỗi nghiêm trọng</div></div>
   `;

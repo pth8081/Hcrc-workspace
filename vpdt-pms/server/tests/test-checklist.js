@@ -353,6 +353,114 @@ async function main() {
       assertEqual(visible[0].id, 501, 'template giữ lại phải đúng là template được bài nộp tham chiếu');
     });
 
+    // ===== 6 (v20.9): trừ điểm (scoreValue âm) cho câu "yêu cầu vàng" + sàn tổng điểm ở 0 =====
+    await run.run('SCORED: scoreValue âm hợp lệ (không bị validate chặn) — dùng để trừ điểm', () => {
+      const questions = checklist.validateChecklistQuestions([{
+        text: 'Có tuân thủ PCCC không?', isRequired: true, maxScore: 0,
+        options: [
+          { text: 'Đạt', scoreValue: 0, isPassing: true },
+          { text: 'Không đạt', scoreValue: -20, isPassing: false, isCriticalFail: true }
+        ]
+      }], 'SCORED');
+      assertEqual(questions[0].options[1].scoreValue, -20, 'scoreValue âm phải được giữ nguyên, không bị ép về 0/dương');
+    });
+
+    await run.run('Finalize: chọn đáp án âm điểm ở 1 đợt, đợt khác vẫn dương -> tổng điểm/% CHẶN SÀN ở 0 (không hiển thị số âm)', async () => {
+      resetRecords();
+      const t = seedTemplate({
+        questions: [
+          {
+            text: 'Câu thường (10đ)', isRequired: true, maxScore: 10,
+            options: [{ text: 'Đạt', scoreValue: 10, isPassing: true }, { text: 'Không đạt', scoreValue: 0, isPassing: false }]
+          },
+          {
+            text: 'Yêu cầu vàng (trừ 20đ nếu không đạt)', isRequired: true, maxScore: 0,
+            options: [{ text: 'Đạt', scoreValue: 0, isPassing: true }, { text: 'Không đạt', scoreValue: -20, isPassing: false, isCriticalFail: true }]
+          }
+        ]
+      });
+      t.status = 'ACTIVE';
+      const q1Pass = t.questions[0].options.find(o => o.isPassing);
+      const q2Fail = t.questions[1].options.find(o => o.isCriticalFail);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [
+        { questionId: t.questions[0].id, optionIds: [q1Pass.id] },
+        { questionId: t.questions[1].id, optionIds: [q2Fail.id] }
+      ] }, STORE_A_EMP);
+      await checklistAttachFakePhoto(subId, t.questions[1].id);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Đủ ảnh minh chứng phải nộp bài được');
+      // 10 (câu 1) + (-20) (câu 2) = -10 tổng thô -> CHẶN SÀN về 0 (không hiển thị số âm ra báo cáo).
+      assertEqual(res.body.item.totalScore, 0, 'Tổng điểm phải chặn sàn ở 0, không cho xuống âm dù cộng dồn ra số âm');
+      assertEqual(res.body.item.scorePercent, 0, 'scorePercent cũng phải chặn sàn ở 0 tương ứng');
+      assertEqual(res.body.item.hasCriticalFail, true, 'Vẫn phải ghi nhận lỗi nghiêm trọng ở câu yêu cầu vàng');
+      assertEqual(res.body.item.isPassed, false, 'Lỗi nghiêm trọng vẫn ép isPassed=false (không phụ thuộc điểm)');
+    });
+
+    // ===== 7 (v20.9): scoringMode PASS_FAIL_ONLY — ẩn hẳn điểm/%, Đạt/Không đạt suy từ isPassing =====
+    await run.run('assertTemplateCoreFields: PASS_FAIL_ONLY ép passThreshold về null bất kể client gửi gì', () => {
+      const core = checklist.assertTemplateCoreFields({
+        templateCode: 'CL_PF', templateName: 'Checklist Pass/Fail', templateType: 'STORE_SELF',
+        scoringMode: 'PASS_FAIL_ONLY', passThreshold: 80
+      });
+      assertEqual(core.scoringMode, 'PASS_FAIL_ONLY', 'scoringMode phải giữ đúng giá trị hợp lệ client gửi');
+      assertEqual(core.passThreshold, null, 'PASS_FAIL_ONLY phải ép passThreshold về null dù client cố gửi 80');
+    });
+
+    await run.run('validateChecklistQuestions: PASS_FAIL_ONLY ép cứng maxScore/scoreValue về 0 (bỏ qua số client gửi)', () => {
+      const questions = checklist.validateChecklistQuestions([{
+        text: 'Đồng phục có đúng quy định không?', isRequired: true, maxScore: 50,
+        options: [{ text: 'Đạt', scoreValue: 999, isPassing: true }, { text: 'Không đạt', scoreValue: -50, isPassing: false }]
+      }], 'PASS_FAIL_ONLY');
+      assertEqual(questions[0].maxScore, 0, 'PASS_FAIL_ONLY phải ép maxScore về 0 dù client gửi 50');
+      assertEqual(questions[0].options[0].scoreValue, 0, 'PASS_FAIL_ONLY phải ép scoreValue đáp án Đạt về 0 dù client gửi 999');
+      assertEqual(questions[0].options[1].scoreValue, 0, 'PASS_FAIL_ONLY phải ép scoreValue đáp án Không đạt về 0 dù client gửi -50');
+    });
+
+    await run.run('Finalize PASS_FAIL_ONLY: mọi câu chọn đáp án Đạt -> isPassed=true, KHÔNG có điểm/% nào được lưu', async () => {
+      resetRecords();
+      const t = seedTemplate({
+        scoringMode: 'PASS_FAIL_ONLY',
+        questions: [{
+          text: 'Khu vực có sạch sẽ không?', isRequired: true,
+          options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }]
+        }]
+      });
+      t.status = 'ACTIVE';
+      const passOption = t.questions[0].options.find(o => o.isPassing);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [passOption.id] }] }, STORE_A_EMP);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Trả lời đầy đủ phải nộp bài được');
+      assertEqual(res.body.item.isPassed, true, 'Mọi câu chọn đáp án Đạt -> isPassed=true');
+      assertEqual(res.body.item.totalScore, null, 'PASS_FAIL_ONLY KHÔNG được lưu totalScore (ẩn chấm điểm hoàn toàn, không chỉ ẩn ở UI)');
+      assertEqual(res.body.item.maxPossibleScore, null, 'PASS_FAIL_ONLY KHÔNG được lưu maxPossibleScore');
+      assertEqual(res.body.item.scorePercent, null, 'PASS_FAIL_ONLY KHÔNG được lưu scorePercent');
+    });
+
+    await run.run('Finalize PASS_FAIL_ONLY: chọn 1 đáp án "Không đạt" (không phải lỗi nghiêm trọng) -> isPassed=false dù không có % nào để so ngưỡng', async () => {
+      resetRecords();
+      const t = seedTemplate({
+        scoringMode: 'PASS_FAIL_ONLY',
+        questions: [{
+          text: 'Khu vực có sạch sẽ không?', isRequired: true,
+          options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }]
+        }]
+      });
+      t.status = 'ACTIVE';
+      const failOption = t.questions[0].options.find(o => !o.isPassing);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [failOption.id] }] }, STORE_A_EMP);
+      await checklistAttachFakePhoto(subId, t.questions[0].id);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Đủ ảnh minh chứng phải nộp bài được');
+      assertEqual(res.body.item.isPassed, false, 'PASS_FAIL_ONLY: có câu chọn đáp án Không đạt -> cả bài Không đạt (suy TRỰC TIẾP từ isPassing, không qua %)');
+      assertEqual(res.body.item.scorePercent, null, 'Vẫn không có scorePercent nào được lưu dù isPassed=false');
+    });
+
     run.summary();
   } finally {
     server.close();
