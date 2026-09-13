@@ -985,6 +985,29 @@ async function scenario(name, fn) {
       JSON.stringify(r.secondaryPositionsAfter) === JSON.stringify([{ jobTitle: 'Nhân viên', dept: 'Kinh Doanh' }]), JSON.stringify(r));
   });
 
+  await scenario('(o) editUser()/saveUser() cuộn tới + chớp sáng — phản hồi trực quan rõ ràng khi Sửa/Lưu', async () => {
+    if (knUserId == null) { record('(o) scroll+highlight feedback', false, 'skipped: no user id from prior scenario'); return; }
+    const r = await page.evaluate(async (userId) => {
+      const formEl = document.getElementById('adminSubPerms');
+      formEl.classList.remove('admin-form-jump-highlight');
+      let rowEl = document.getElementById('userRow_' + userId);
+      if (rowEl) rowEl.classList.remove('admin-row-saved-highlight');
+
+      editUser(userId);
+      const formHighlightedOnEdit = formEl.classList.contains('admin-form-jump-highlight');
+
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault() {} });
+      rowEl = document.getElementById('userRow_' + userId); // renderUsers() bên trong saveUser() dựng lại toàn bộ <tbody>, phải lấy lại tham chiếu DOM mới
+      const rowHighlightedOnSave = !!rowEl && rowEl.classList.contains('admin-row-saved-highlight');
+      return { formHighlightedOnEdit, rowHighlightedOnSave };
+    }, knUserId);
+    record('(o) editUser() cuộn tới + chớp sáng khối form ngay khi bấm Sửa',
+      r.formHighlightedOnEdit, JSON.stringify(r));
+    record('(o) saveUser() cuộn tới + chớp sáng đúng dòng vừa lưu trong bảng',
+      r.rowHighlightedOnSave, JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 

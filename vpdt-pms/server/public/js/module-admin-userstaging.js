@@ -330,6 +330,17 @@ function editUser(id) {
   document.getElementById('uTotpWrap').classList.toggle('hidden', !isTargetAdmin);
   if (isTargetAdmin) renderAdminTotpStatus(user.username);
   else document.getElementById('uTotpStatusWrap').innerHTML = '';
+
+  // Cuộn tới + chớp sáng khối form — bấm "Sửa" 1 người dùng ở cuối danh sách dài trước đây populate
+  // form xong lặng lẽ, không có gì báo cho admin biết thao tác đã có tác dụng nếu form đang ở ngoài
+  // màn hình (cùng lý do UX đã áp dụng cho jumpToPermField() ở core.js).
+  const formEl = document.getElementById('adminSubPerms');
+  if (formEl) {
+    formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    formEl.classList.remove('admin-form-jump-highlight');
+    void formEl.offsetWidth; // ép reflow để restart animation nếu bấm "Sửa" liên tiếp nhiều người khác nhau
+    formEl.classList.add('admin-form-jump-highlight');
+  }
 }
 
 async function deleteUser(id) {
@@ -460,7 +471,7 @@ function renderUsers() {
     const hasOverrides = groups.length && u.permOverrides && Object.keys(u.permOverrides).length > 0;
     const isInactive = u.active === false;
     return `
-    <tr class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
+    <tr id="userRow_${u.id}" class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
       <td class="border p-2 font-bold font-mono text-purple-700">
         ${escapeHtml(u.username)}
         ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔒 Đã khóa</span>' : ''}
