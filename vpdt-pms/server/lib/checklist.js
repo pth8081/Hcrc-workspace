@@ -35,6 +35,21 @@ const QUESTION_TYPES = new Set(['SINGLE_CHOICE', 'MULTIPLE_CHOICE']);
 // validateChecklistQuestions() bên dưới — server không tin nguyên payload dù client đã ẩn ô nhập) để giữ
 // nguyên hình dạng dữ liệu, tránh phải viết 2 nhánh xử lý khác nhau ở nơi khác.
 const SCORING_MODES = new Set(['SCORED', 'PASS_FAIL_ONLY']);
+// v21.0 — 2 LOẠI MẪU checklist hoàn toàn khác cấu trúc dữ liệu/cách chấm (yêu cầu người dùng: gửi kèm
+// file "Báo cáo Checklist VSATTP" làm mẫu thứ 2, tách riêng với mẫu Câu Hỏi & Đáp Án đang có, chọn loại
+// NGAY LÚC TẠO — không đổi được sau khi tạo, xem assertTemplateCoreFields()):
+//   - QA (mặc định — mọi template tạo trước v21.0 không có field này tự coi là QA) — mô hình ĐANG CÓ:
+//     câu hỏi + nhiều lựa chọn, mỗi lựa chọn tự mang điểm riêng (validateChecklistQuestions() ở trên).
+//   - DEDUCTION (mới) — mô hình "trừ điểm theo hạng mục" theo đúng file VSATTP người dùng gửi: cây phân
+//     cấp Hạng mục lớn (có điểm tối đa) -> Hạng mục con (điểm tối đa RIÊNG, tuỳ chọn — không đặt thì dùng
+//     chung trần của hạng mục lớn) -> nhiều dòng Tiêu chí vi phạm cụ thể (mỗi tiêu chí có "Điểm trừ/1 lần
+//     vi phạm" CHỈ mang tính THAM KHẢO hiển thị cho người kiểm tra, không ép buộc — người kiểm tra tự
+//     nhập số điểm trừ THỰC TẾ lúc làm bài, vì 1 tiêu chí có thể vi phạm nhiều lần/nhiều vị trí khác
+//     nhau trong 1 lượt kiểm tra, xem sanitizeChecklistDeductions()/computeDeductionScoring() bên dưới).
+//     KHÔNG có khái niệm "câu bắt buộc"/"ảnh minh chứng bắt buộc"/scoringMode (luôn tính điểm số, không
+//     có chế độ chỉ Đạt/Chưa đạt — bản chất mô hình này là ĐO MỨC ĐỘ tuân thủ, không phải nhị phân) —
+//     quyết định đã chốt với người dùng qua trao đổi thiết kế.
+const TEMPLATE_KINDS = new Set(['QA', 'DEDUCTION']);
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -153,22 +168,86 @@ function validateChecklistQuestions(rawQuestions, scoringMode) {
   return questions;
 }
 
+// ===================== Validate Template — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", v21.0)
+// =====================
+// Cây 3 cấp: Hạng mục lớn (categories) -> Hạng mục con (subItems) -> Tiêu chí vi phạm (criteria). Chỉ
+// criteria có "id" (đánh số TOÀN CỤC xuyên suốt cả template, cùng lý do optionId ở validateChecklistQuestions()
+// — submission cần 1 con số ổn định để tham chiếu "đợt trừ điểm này ứng với tiêu chí nào", không phụ
+// thuộc vị trí trong mảng lồng nhau) — category/subItem chỉ cần id CỤC BỘ (1-based trong phạm vi cha),
+// không ai tham chiếu ngược tới chúng nên không cần đánh số toàn cục.
+function validateChecklistCategories(rawCategories) {
+  const list = Array.isArray(rawCategories) ? rawCategories : [];
+  if (!list.length) throw new HttpError(400, 'Checklist cần ít nhất 1 hạng mục đánh giá');
+  if (list.length > 50) throw new HttpError(400, 'Checklist tối đa 50 hạng mục đánh giá');
+
+  let nextCriteriaId = 1;
+  const categories = list.map((cat, ci) => {
+    const name = String(cat?.name || '').trim();
+    if (!name) throw new HttpError(400, `Hạng mục số ${ci + 1} thiếu tên`);
+    const maxDeduction = Number(cat?.maxDeduction) >= 0 ? Number(cat.maxDeduction) : 0;
+
+    const rawSubItems = Array.isArray(cat?.subItems) ? cat.subItems : [];
+    if (!rawSubItems.length) throw new HttpError(400, `Hạng mục "${name}" cần ít nhất 1 hạng mục con`);
+    if (rawSubItems.length > 30) throw new HttpError(400, `Hạng mục "${name}" tối đa 30 hạng mục con`);
+    const subItems = rawSubItems.map((sub, si) => {
+      const subName = String(sub?.name || '').trim();
+      if (!subName) throw new HttpError(400, `Hạng mục con số ${si + 1} của "${name}" thiếu tên`);
+      // maxDeduction hạng mục con — TUỲ CHỌN (null = dùng chung trần của hạng mục lớn, quyết định đã chốt
+      // với người dùng để khớp đúng file gốc: 1 số hạng mục con để trống, dùng chung trần cha).
+      const subMaxRaw = sub?.maxDeduction;
+      const maxDeductionOwn = (subMaxRaw === '' || subMaxRaw === null || subMaxRaw === undefined)
+        ? null : (Number(subMaxRaw) >= 0 ? Number(subMaxRaw) : 0);
+
+      const rawCriteria = Array.isArray(sub?.criteria) ? sub.criteria : [];
+      if (!rawCriteria.length) throw new HttpError(400, `Hạng mục con "${subName}" cần ít nhất 1 tiêu chí đánh giá`);
+      if (rawCriteria.length > 50) throw new HttpError(400, `Hạng mục con "${subName}" tối đa 50 tiêu chí`);
+      const criteria = rawCriteria.map((c, cri) => {
+        const description = String(c?.description || '').trim();
+        if (!description) throw new HttpError(400, `Tiêu chí số ${cri + 1} của "${subName}" thiếu mô tả`);
+        return {
+          id: nextCriteriaId++,
+          description: description.slice(0, 1000),
+          // ruleText — mô tả quy tắc trừ điểm (VD "Cho 1 mã SP không phù hợp"), THUẦN THÔNG TIN cho người
+          // kiểm tra đọc, KHÔNG được server dùng để tính toán gì (xem lý do perInstanceValue bên dưới).
+          ruleText: c?.ruleText ? String(c.ruleText).trim().slice(0, 300) : '',
+          // perInstanceValue — điểm trừ THAM KHẢO cho 1 lần vi phạm (VD 2đ/mã SP không phù hợp), CHỈ hiển
+          // thị gợi ý cho người kiểm tra lúc làm bài — KHÔNG ép buộc/tính tự động, vì 1 tiêu chí có thể vi
+          // phạm ở NHIỀU vị trí/mã SP khác nhau trong 1 lượt kiểm tra (VD "3 mã SP không phù hợp" = người
+          // kiểm tra tự nhân perInstanceValue × 3 rồi nhập THẲNG tổng điểm trừ thực tế, xem
+          // sanitizeChecklistDeductions()) — khớp đúng cách file Excel gốc vận hành.
+          perInstanceValue: Number.isFinite(Number(c?.perInstanceValue)) && Number(c.perInstanceValue) >= 0 ? Number(c.perInstanceValue) : 0,
+          displayOrder: cri + 1
+        };
+      });
+      return { id: si + 1, name: subName, maxDeduction: maxDeductionOwn, criteria, displayOrder: si + 1 };
+    });
+    return { id: ci + 1, name, maxDeduction, subItems, displayOrder: ci + 1 };
+  });
+  return categories;
+}
+
 function assertTemplateCoreFields(payload) {
   const templateCode = String(payload?.templateCode || '').trim();
   const templateName = String(payload?.templateName || '').trim();
   if (!templateCode) throw new HttpError(400, 'Thiếu mã checklist (templateCode)');
   if (!templateName) throw new HttpError(400, 'Thiếu tên checklist');
   if (!TEMPLATE_TYPES.has(payload?.templateType)) throw new HttpError(400, 'Loại checklist không hợp lệ (STORE_SELF/CONTROL_AUDIT)');
-  // scoringMode — mặc định SCORED nếu payload không gửi/gửi giá trị lạ (khớp hành vi mọi template tạo
-  // trước v20.9, vốn không có field này). PASS_FAIL_ONLY ép cứng passThreshold về null NGAY Ở ĐÂY (không
+  // templateKind — mặc định QA nếu payload không gửi/gửi giá trị lạ (khớp hành vi mọi template tạo trước
+  // v21.0, vốn không có field này) — BẤT BIẾN sau khi tạo (route /templates/:id/edit tự đối chiếu lại
+  // với bản ghi gốc, xem routes/checklist.js — không cho đổi loại mẫu giữa chừng).
+  const templateKind = TEMPLATE_KINDS.has(payload?.templateKind) ? payload.templateKind : 'QA';
+  // scoringMode — CHỈ áp dụng cho templateKind QA (DEDUCTION luôn tính điểm số, không có khái niệm "chỉ
+  // Đạt/Chưa đạt" — bản chất là đo MỨC ĐỘ tuân thủ, xem chú thích TEMPLATE_KINDS) — ép về null cho
+  // DEDUCTION để không lưu field vô nghĩa. Mặc định SCORED nếu payload không gửi/gửi giá trị lạ (khớp
+  // hành vi mọi template tạo trước v20.9). PASS_FAIL_ONLY ép cứng passThreshold về null NGAY Ở ĐÂY (không
   // còn ý nghĩa "ngưỡng đạt theo %" khi không chấm điểm/% nữa) — bất kể client gửi gì.
-  const scoringMode = SCORING_MODES.has(payload?.scoringMode) ? payload.scoringMode : 'SCORED';
+  const scoringMode = templateKind === 'DEDUCTION' ? null : (SCORING_MODES.has(payload?.scoringMode) ? payload.scoringMode : 'SCORED');
   const passThreshold = scoringMode === 'PASS_FAIL_ONLY' || payload?.passThreshold === null || payload?.passThreshold === undefined || payload?.passThreshold === ''
     ? null : Number(payload.passThreshold);
   if (passThreshold !== null && (!Number.isFinite(passThreshold) || passThreshold < 0 || passThreshold > 100)) {
     throw new HttpError(400, 'Ngưỡng điểm đạt (%) không hợp lệ');
   }
-  return { templateCode: templateCode.slice(0, 50), templateName: templateName.slice(0, 200), templateType: payload.templateType, scoringMode, passThreshold };
+  return { templateCode: templateCode.slice(0, 50), templateName: templateName.slice(0, 200), templateType: payload.templateType, templateKind, scoringMode, passThreshold };
 }
 
 // ===================== Mục 7.1 tài liệu gốc — điểm bảo mật cốt lõi =====================
@@ -222,6 +301,37 @@ function sanitizeChecklistAnswers(rawAnswers, template, existingAnswers) {
         optionIds,
         note: a.note ? String(a.note).trim().slice(0, 500) : '',
         attachments: existingByQ.get(questionId)?.attachments || []
+      };
+    });
+}
+
+// ===================== Điểm trừ (lưu nháp) — LOẠI 2: DEDUCTION (v21.0) =====================
+// Chuẩn hoá deductions[] gửi lên khi lưu nháp — KHÔNG chấm điểm ở đây (chỉ finalize mới chấm, mirror
+// đúng sanitizeChecklistAnswers() ở trên). attachments[] KHÔNG bắt buộc (khác QA — mẫu VSATTP gốc không
+// có cột ảnh minh chứng, quyết định đã chốt: ảnh ở đây là TUỲ CHỌN).
+function sanitizeChecklistDeductions(rawDeductions, template, existingDeductions) {
+  const existingByC = new Map((existingDeductions || []).map(d => [d.criteriaId, d]));
+  const list = Array.isArray(rawDeductions) ? rawDeductions : [];
+  const validCriteria = new Map();
+  (template.categories || []).forEach(cat => (cat.subItems || []).forEach(sub => (sub.criteria || []).forEach(c => validCriteria.set(c.id, cat))));
+  return list
+    .filter(d => d && validCriteria.has(Number(d.criteriaId)))
+    .map(d => {
+      const criteriaId = Number(d.criteriaId);
+      const cat = validCriteria.get(criteriaId);
+      // Không cho trừ nhiều hơn trần của CẢ hạng mục lớn từ 1 dòng duy nhất — chặn nhập liệu vô lý (VD gõ
+      // nhầm thừa số 0), KHÔNG phải luật nghiệp vụ thật (trần thật áp dụng lúc CỘNG DỒN, xem
+      // computeDeductionScoring() bên dưới).
+      const rawPoints = Number(d.deductedPoints);
+      const deductedPoints = Number.isFinite(rawPoints) && rawPoints > 0 ? Math.min(rawPoints, cat.maxDeduction || rawPoints) : 0;
+      return {
+        criteriaId,
+        deductedPoints,
+        description: d.description ? String(d.description).trim().slice(0, 1000) : '',
+        riskLevel: ['A', 'B', 'C'].includes(d.riskLevel) ? d.riskLevel : null,
+        deadline: d.deadline ? String(d.deadline).trim().slice(0, 20) : '',
+        note: d.note ? String(d.note).trim().slice(0, 500) : '',
+        attachments: existingByC.get(criteriaId)?.attachments || []
       };
     });
 }
@@ -288,6 +398,37 @@ function computeChecklistScoring(template, answers) {
   return { totalScore, maxPossibleScore, scorePercent, hasCriticalFail, isPassed, missingRequired, answersNeedingPhoto, visibleIds: [...visibleIds] };
 }
 
+// ===================== Chấm điểm khi Finalize — LOẠI 2: DEDUCTION (v21.0) =====================
+// Điểm hạng mục con = max(0, trần hạng mục con − tổng điểm trừ các tiêu chí của nó) — mirror ĐÚNG công
+// thức Excel gốc (VD "=IF(SUM(G14:G17)>10,0,D14-SUM(G14:G17))"). Hạng mục con KHÔNG đặt trần riêng (null)
+// thì dùng chung TRỌN VẸN trần hạng mục lớn (không chia đều) — khớp cách file gốc để trống cột "Điểm trừ
+// tối đa" ở 1 số hạng mục con (VD "1.2 Hạn sử dụng"). Điểm hạng mục lớn = tổng điểm các hạng mục con,
+// CHẶN THÊM 1 lớp sàn ở trần hạng mục lớn (đề phòng cấu hình trần các hạng mục con cộng lại vượt trần
+// hạng mục lớn). Không có khái niệm "câu bắt buộc"/"ảnh minh chứng bắt buộc"/hasCriticalFail/scoringMode
+// ở loại mẫu này (xem chú thích TEMPLATE_KINDS) — missingRequired/answersNeedingPhoto LUÔN rỗng để dùng
+// chung được assertReadyToFinalize() với loại mẫu QA mà không cần viết thêm hàm riêng.
+function computeDeductionScoring(template, deductions) {
+  const deductionsByC = new Map((deductions || []).map(d => [d.criteriaId, d]));
+  let totalScore = 0, maxPossibleScore = 0;
+  for (const cat of (template.categories || [])) {
+    maxPossibleScore += cat.maxDeduction;
+    let categoryScore = 0;
+    for (const sub of (cat.subItems || [])) {
+      const subDeducted = (sub.criteria || []).reduce((sum, c) => sum + (deductionsByC.get(c.id)?.deductedPoints || 0), 0);
+      const effectiveMax = sub.maxDeduction != null ? sub.maxDeduction : cat.maxDeduction;
+      categoryScore += Math.max(0, effectiveMax - subDeducted);
+    }
+    totalScore += Math.min(categoryScore, cat.maxDeduction);
+  }
+  const scorePercent = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : null;
+  const isPassed = template.passThreshold != null && scorePercent != null ? scorePercent >= template.passThreshold : null;
+
+  return {
+    totalScore, maxPossibleScore, scorePercent, hasCriticalFail: false, isPassed,
+    missingRequired: [], answersNeedingPhoto: []
+  };
+}
+
 function assertReadyToFinalize(scoring) {
   if (scoring.missingRequired.length) {
     throw new HttpError(400, `Còn ${scoring.missingRequired.length} câu hỏi bắt buộc chưa trả lời`);
@@ -298,11 +439,11 @@ function assertReadyToFinalize(scoring) {
 }
 
 module.exports = {
-  TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES, SCORING_MODES,
+  TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES, SCORING_MODES, TEMPLATE_KINDS,
   canManageChecklistTemplates, canViewChecklistReports, getChecklistAuditStores, hasChecklistAuditScope,
   canAuditStore, isEligibleForStoreSelf, canAccessChecklistModule,
-  validateChecklistQuestions, assertTemplateCoreFields,
-  resolveStoreCodeForSubmission, sanitizeChecklistAnswers, computeVisibleQuestions,
-  computeChecklistScoring, assertReadyToFinalize,
+  validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields,
+  resolveStoreCodeForSubmission, sanitizeChecklistAnswers, sanitizeChecklistDeductions, computeVisibleQuestions,
+  computeChecklistScoring, computeDeductionScoring, assertReadyToFinalize,
   nowVN
 };

@@ -1,8 +1,65 @@
 # Phiên bản hiện tại
 
-**20.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.0 (2026-09-13): Checklist — 2 LOẠI MẪU (Câu Hỏi & Đáp Án / Trừ Điểm Theo Hạng Mục, mẫu VSATTP)
+
+Người dùng gửi file Excel checklist VSATTP thật đang dùng (`Báo cáo Checklist VSATTP Tháng 05.2026.xlsm`)
+và yêu cầu: thêm mẫu mới theo đúng nội dung file đó, TÁCH thành 2 loại mẫu để tự chọn trước khi tạo
+checklist, không gò vào khuôn câu hỏi/đáp án cũ. Đã phân tích cấu trúc file (5 Hạng Mục Lớn/12 Hạng Mục
+Con/38 Tiêu Chí, tổng điểm tối đa 100, mô hình TRỪ ĐIỂM chứ không phải câu hỏi/đáp án) rồi chốt phương án
+với người dùng qua 4 câu hỏi (mức độ rủi ro A/B/C tự chọn tay hay tự tính; ảnh minh chứng có bắt buộc
+không; hạng mục con có bắt buộc đặt điểm tối đa riêng không; có dựng sẵn đúng nội dung VSATTP vào hệ thống
+không) trước khi triển khai (không cần demo trước khi merge, theo quy trình đã chốt).
+
+**Đã làm**:
+- **`templateKind` mới** (`QA`/`DEDUCTION`, mặc định `QA` — tương thích ngược 100% với mọi mẫu cũ):
+  chọn NGAY LÚC TẠO qua bảng chọn loại (`chooseChecklistTemplateKind()`), **bất biến sau đó** — sửa
+  (edit) cố đổi loại bị chặn 400 (`lib/checklist.js`, `routes/checklist.js` route `/templates/:id/edit`).
+  `QA` = mô hình câu hỏi/đáp án đã có (không đổi gì). `DEDUCTION` = mô hình MỚI: cây 3 cấp Hạng Mục Lớn
+  (điểm tối đa) → Hạng Mục Con (điểm tối đa riêng tuỳ chọn, để trống = dùng chung trần cha) → Tiêu Chí
+  (mô tả + ghi chú quy tắc tham khảo + điểm tham khảo/lần) — `validateChecklistCategories()`.
+- **Chấm điểm kiểu trừ điểm**: `computeDeductionScoring()` — mỗi hạng mục con: điểm = tối đa(0, trần hiệu
+  lực − tổng đã trừ), tổng theo hạng mục lớn CHẶN THÊM 1 lớp trần ở đúng điểm tối đa hạng mục lớn (phòng
+  cấu hình trần con cộng dồn vượt trần cha). Không có khái niệm lỗi nghiêm trọng/câu bắt buộc/`scoringMode`
+  (luôn ép `null`) — luôn ra điểm số cụ thể.
+- **Làm bài `DEDUCTION`**: hiện toàn bộ cây ngay từ đầu (không có nhánh hiển thị theo câu trả lời trước
+  như QA). Mỗi tiêu chí phát hiện vi phạm nhập: điểm trừ thực tế, **mức độ rủi ro A/B/C người kiểm tra TỰ
+  CHỌN** (quyết định: KHÔNG tự tính theo ngưỡng như công thức Excel gốc vì ngưỡng khác nhau tuỳ dòng),
+  thời hạn hoàn thành, ghi chú, và **ảnh minh chứng KHÔNG bắt buộc** (khác QA — nộp bài được dù không có
+  ảnh nào, khớp đúng file gốc). "2 lần kiểm tra" trong file gốc (Lần 1/Lần 2 cùng sheet) map thành **2 bài
+  nộp riêng biệt**, không gộp vào 1 bài (giữ nguyên kiến trúc "1 bài nộp = 1 đợt đánh giá" sẵn có).
+- **Mẫu VSATTP dựng sẵn tự động** (`seedVsattpChecklist.js` + `seedDefaults.js::seedVsattpChecklistTemplateIfMissing()`,
+  idempotent theo mã `CL_VSATTP`) — đúng nội dung file Excel người dùng gửi, tạo ở trạng thái **Nháp** ngay
+  lần khởi động đầu tiên sau khi cập nhật, KHÔNG tự kích hoạt — vào tab Cấu Hình xem lại rồi Kích Hoạt khi
+  sẵn sàng dùng thật.
+- **Client** (`public/js/module-checklist.js` + `public/index.html`): bảng chọn loại mẫu trước khi mở
+  builder; builder riêng cho cây Hạng Mục/Hạng Mục Con/Tiêu Chí (thêm/xoá/sửa từng cấp); ẩn hẳn khối Chế
+  Độ Chấm Điểm/Ngưỡng Đạt/Nhập-Xuất Excel khi soạn loại `DEDUCTION` (các tính năng này CHƯA mở rộng sang
+  loại mới — vẫn CHỈ dùng được cho loại `QA`, ghi rõ để người dùng biết nếu cần Excel cho VSATTP sau này
+  là việc làm thêm riêng); form làm bài riêng cho `DEDUCTION` (nhập điểm trừ/rủi ro/hạn/ghi chú theo từng
+  tiêu chí); xem mẫu (`viewChecklistTemplate`) hiển thị đúng cây read-only cho loại này.
+
+Thêm 2 file test mới: `tests/test-checklist-vsattp-seed.js` (8 test, xác nhận seed đúng nội dung + chạy
+idempotent), `tests/test-checklist-deduction-builder-ui.js` (7 test browser thật qua route
+`/api/create/checklistTemplates` thật — bảng chọn loại, dựng cây qua thao tác DOM thật, lưu/sửa mẫu, render
+form làm bài + cập nhật field qua DOM thật). Mở rộng `tests/test-checklist.js` (+7 test HTTP-level: validate
+cây/chấm điểm/bất biến `templateKind`/kích hoạt/nộp bài không cần ảnh). Chạy lại toàn bộ 6 file checklist +
+`test-checklist-builder-ui.js` (loại QA cũ, xác nhận không hồi quy) + `test-lazy-load-all-tabs.js`
+(42 kịch bản, toàn bộ tab khác không lỗi JS) — không hồi quy.
+
+**Known limitation (chưa làm, cân nhắc theo yêu cầu sau)**: Nhập/Tải mẫu/Xuất Excel (v20.9) hiện CHỈ áp
+dụng cho loại `QA` — chưa mở rộng sang loại `DEDUCTION` (cấu trúc cây 3 cấp khác hẳn layout 1 dòng/đáp án
+hiện có, cần thiết kế layout riêng nếu người dùng cần).
+
+**Deploy-impact**: không đổi `schema.sql`/`.env.example`, không thêm dependency mới — `templateKind`/
+`categories`/`deductions` là field JSON mới trong payload sẵn có (`ChecklistTemplates.Payload`/
+`ChecklistSubmissions.Payload`), không cần migrate SQL thủ công. **Có 1 thao tác tự động 1 lần**: ngay
+lần khởi động server đầu tiên sau khi cập nhật, hệ thống tự tạo thêm 1 bản ghi `checklistTemplates` mới
+(mã `CL_VSATTP`, trạng thái Nháp) — không ảnh hưởng dữ liệu hiện có, chỉ cần biết trước để không bất ngờ
+khi thấy 1 mẫu mới xuất hiện ở tab Cấu Hình. Chỉ copy code + `pm2 restart`.
 
 ## v20.9 (2026-09-13): Checklist — trừ điểm (yêu cầu vàng), chế độ chỉ Đạt/Chưa đạt, Nhập/Xuất Excel
 

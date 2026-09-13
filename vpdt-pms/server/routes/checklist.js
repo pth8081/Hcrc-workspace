@@ -34,6 +34,16 @@ router.post('/templates/:id/edit', requireManage, async (req, res) => {
         throw new HttpError(409, 'Chỉ sửa được checklist đang ở trạng thái Nháp — checklist đã Kích Hoạt/Lưu Trữ phải Nhân Bản thành bản mới để sửa');
       }
       const core = checklist.assertTemplateCoreFields(req.body);
+      // templateKind BẤT BIẾN sau khi tạo (v21.0, xem lib/checklist.js) — template cũ trước v21.0 không
+      // có field này, mặc định coi là QA để so sánh không bị lệch oan.
+      const existingKind = template.templateKind || 'QA';
+      if (core.templateKind !== existingKind) {
+        throw new HttpError(400, 'Không thể đổi loại mẫu (Câu hỏi & đáp án / Trừ điểm theo hạng mục) sau khi đã tạo — vui lòng tạo mẫu mới nếu cần loại khác');
+      }
+      if (core.templateKind === 'DEDUCTION') {
+        const categories = checklist.validateChecklistCategories(req.body?.categories);
+        return { ...template, ...core, categories };
+      }
       const questions = checklist.validateChecklistQuestions(req.body?.questions, core.scoringMode);
       return { ...template, ...core, questions };
     });
@@ -53,12 +63,16 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
     // nhưng code trước đây không hề kiểm tra — nhân bản được cả từ DRAFT/ARCHIVED, tạo version+1 không
     // đúng ý nghĩa "phiên bản kế tiếp của bản đang dùng thật", dễ gây nhầm lẫn số phiên bản.
     if (source.status !== 'ACTIVE') return res.status(409).json({ error: 'Chỉ nhân bản được từ checklist đang ở trạng thái Đang dùng' });
+    const templateKind = source.templateKind || 'QA';
     const clone = {
       id: Date.now(),
       templateCode: source.templateCode, templateName: source.templateName, templateType: source.templateType,
       version: (source.version || 1) + 1, status: 'DRAFT',
-      clonedFromTemplateId: source.id, scoringMode: source.scoringMode || 'SCORED', passThreshold: source.passThreshold,
-      questions: source.questions, activatedAt: null,
+      clonedFromTemplateId: source.id, templateKind,
+      scoringMode: templateKind === 'DEDUCTION' ? null : (source.scoringMode || 'SCORED'), passThreshold: source.passThreshold,
+      questions: templateKind === 'DEDUCTION' ? undefined : source.questions,
+      categories: templateKind === 'DEDUCTION' ? source.categories : undefined,
+      activatedAt: null,
       creator: req.freshUser.username, creatorName: req.freshUser.name
     };
     const inserted = await insertRecord('checklistTemplates', clone);
@@ -76,7 +90,11 @@ router.post('/templates/:id/activate', requireManage, async (req, res) => {
       const target = templates.find(t => t.id === templateId);
       if (!target) throw new HttpError(404, 'Không tìm thấy checklist');
       if (target.status !== 'DRAFT') throw new HttpError(409, 'Chỉ kích hoạt được checklist đang ở trạng thái Nháp');
-      if (!(target.questions || []).length) throw new HttpError(400, 'Checklist cần ít nhất 1 câu hỏi trước khi kích hoạt');
+      if (target.templateKind === 'DEDUCTION') {
+        if (!(target.categories || []).length) throw new HttpError(400, 'Checklist cần ít nhất 1 hạng mục đánh giá trước khi kích hoạt');
+      } else if (!(target.questions || []).length) {
+        throw new HttpError(400, 'Checklist cần ít nhất 1 câu hỏi trước khi kích hoạt');
+      }
 
       const activated = await withLockedRecordForCollection('checklistTemplates', templateId, (t) => ({
         ...t, status: 'ACTIVE', activatedAt: checklist.nowVN()
@@ -129,7 +147,7 @@ router.post('/submissions/start', async (req, res) => {
       templateId: template.id, templateCode: template.templateCode, templateName: template.templateName,
       templateType: template.templateType, templateVersion: template.version,
       storeCode, submittedByUsername: user.username, submittedByName: user.name,
-      status: 'DRAFT', answers: [],
+      status: 'DRAFT', answers: [], deductions: [], // deductions[] chỉ có ý nghĩa với templateKind DEDUCTION (v21.0) — luôn khởi tạo cả 2 field cho đơn giản, field không dùng tới thì mãi mãi rỗng.
       totalScore: null, maxPossibleScore: null, scorePercent: null, hasCriticalFail: null, isPassed: null,
       startedAt: checklist.nowVN(), submittedAt: null,
       storeResponseText: null, storeRespondedAt: null, storeRespondedByUsername: null, storeRespondedByName: null
@@ -152,17 +170,23 @@ router.post('/submissions/:id/answers', async (req, res) => {
       if (sub.status !== 'DRAFT') throw new HttpError(409, 'Bài này đã nộp, không thể sửa thêm');
       const template = templates.find(t => t.id === sub.templateId);
       if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
+      if (template.templateKind === 'DEDUCTION') {
+        return { ...sub, deductions: checklist.sanitizeChecklistDeductions(req.body?.deductions, template, sub.deductions) };
+      }
       return { ...sub, answers: checklist.sanitizeChecklistAnswers(req.body?.answers, template, sub.answers) };
     });
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/answers`); }
 });
 
-// ===================== SUBMISSION: đính kèm ảnh minh chứng cho 1 câu trả lời =====================
+// ===================== SUBMISSION: đính kèm ảnh minh chứng cho 1 câu trả lời/tiêu chí =====================
 // Body: { questionId, fileUrl, fileName, fileType } — fileUrl do CHÍNH SERVER sinh ra ở bước upload
 // (POST /api/upload, moduleKey='checklistAnswerPhoto') NGAY TRƯỚC lượt gọi này (client 2 bước: upload
 // xong mới gọi route này để gắn kết quả vào đúng câu trả lời) — vẫn xác minh lại hình dạng URL cho
-// chắc (assertUploadedFileUrl, cùng luật mọi field file khác trong hệ thống).
+// chắc (assertUploadedFileUrl, cùng luật mọi field file khác trong hệ thống). "questionId" TÁI DÙNG
+// nguyên tên field cho CẢ 2 loại mẫu (v21.0) — với templateKind DEDUCTION, giá trị này thực chất là
+// criteriaId (khớp sub.deductions[].criteriaId) — ảnh TUỲ CHỌN ở loại mẫu này (khác QA), nên route vẫn
+// cho phép gọi dù chưa có dòng trừ điểm nào ứng với tiêu chí đó (tự tạo dòng deductedPoints:0 để gắn ảnh).
 router.post('/submissions/:id/attachments', async (req, res) => {
   const submissionId = Number(req.params.id);
   if (!Number.isFinite(submissionId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -174,11 +198,22 @@ router.post('/submissions/:id/attachments', async (req, res) => {
     const fileName = req.body?.fileName ? String(req.body.fileName).trim().slice(0, 255) : '';
     const fileType = req.body?.fileType ? String(req.body.fileType).trim().slice(0, 100) : '';
 
+    const templates = await getAllForCollection('checklistTemplates');
     const updated = await withLockedRecordForCollection('checklistSubmissions', submissionId, (sub) => {
       if (sub.submittedByUsername !== req.freshUser.username) {
         throw new HttpError(403, 'Bạn chỉ có thể sửa bài làm của chính mình');
       }
       if (sub.status !== 'DRAFT') throw new HttpError(409, 'Bài này đã nộp, không thể sửa thêm');
+      const template = templates.find(t => t.id === sub.templateId);
+      if (template?.templateKind === 'DEDUCTION') {
+        const deductions = [...(sub.deductions || [])];
+        let idx = deductions.findIndex(d => d.criteriaId === questionId);
+        // Ảnh TUỲ CHỌN ở loại DEDUCTION — cho phép đính kèm dù chưa nhập điểm trừ nào cho tiêu chí này.
+        if (idx < 0) { deductions.push({ criteriaId: questionId, deductedPoints: 0, description: '', riskLevel: null, deadline: '', note: '', attachments: [] }); idx = deductions.length - 1; }
+        const attachments = [...(deductions[idx].attachments || []), { fileUrl, fileName, fileType }].slice(0, 10);
+        deductions[idx] = { ...deductions[idx], attachments };
+        return { ...sub, deductions };
+      }
       const answers = [...(sub.answers || [])];
       const idx = answers.findIndex(a => a.questionId === questionId);
       if (idx < 0) throw new HttpError(400, 'Vui lòng trả lời câu hỏi này trước khi đính kèm ảnh');
@@ -204,7 +239,9 @@ router.post('/submissions/:id/finalize', async (req, res) => {
       const template = templates.find(t => t.id === sub.templateId);
       if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
 
-      const scoring = checklist.computeChecklistScoring(template, sub.answers);
+      const scoring = template.templateKind === 'DEDUCTION'
+        ? checklist.computeDeductionScoring(template, sub.deductions)
+        : checklist.computeChecklistScoring(template, sub.answers);
       checklist.assertReadyToFinalize(scoring);
       return {
         ...sub, status: 'SUBMITTED', submittedAt: checklist.nowVN(),

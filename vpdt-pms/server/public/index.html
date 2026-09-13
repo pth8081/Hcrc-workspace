@@ -7449,9 +7449,28 @@
     <div id="checklistSubConfig" class="hidden space-y-4">
       <div class="flex items-center justify-between gap-2 flex-wrap">
         <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Sách Mẫu Checklist</h3>
-        <button type="button" data-op="openChecklistTemplateBuilder" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">+ Tạo Mẫu Mới</button>
+        <button type="button" data-op="openChecklistTemplateCreatePicker" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">+ Tạo Mẫu Mới</button>
       </div>
       <div id="checklistTemplateListWrap" class="space-y-2"></div>
+
+      <!-- Chọn LOẠI mẫu TRƯỚC KHI mở khung soạn (v21.0) — 2 loại loại trừ lẫn nhau, không đổi được sau
+           khi tạo (xem TEMPLATE_KINDS ở lib/checklist.js). -->
+      <div id="checklistKindPickerWrap" class="hidden bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-rose-900 text-base">Chọn Loại Mẫu Checklist</h3>
+          <button type="button" data-op="closeChecklistTemplateCreatePicker" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✕ Đóng</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <button type="button" data-op="chooseChecklistTemplateKind" data-arg0="QA" class="text-left bg-white border-2 border-rose-200 rounded p-3 hover:border-rose-500 space-y-1">
+            <div class="font-bold text-gray-800 text-sm">📋 Câu Hỏi &amp; Đáp Án</div>
+            <div class="text-[11px] text-gray-500">Từng câu hỏi có 1 hoặc nhiều lựa chọn trả lời, mỗi lựa chọn có điểm/Đạt-Lỗi riêng. Phù hợp checklist dạng khảo sát/kiểm tra tuân thủ theo câu hỏi.</div>
+          </button>
+          <button type="button" data-op="chooseChecklistTemplateKind" data-arg0="DEDUCTION" class="text-left bg-white border-2 border-rose-200 rounded p-3 hover:border-rose-500 space-y-1">
+            <div class="font-bold text-gray-800 text-sm">📉 Trừ Điểm Theo Hạng Mục</div>
+            <div class="text-[11px] text-gray-500">Cây Hạng Mục Lớn → Hạng Mục Con → Tiêu Chí, mỗi hạng mục có điểm tối đa, người kiểm tra trừ điểm khi phát hiện vi phạm. Phù hợp checklist đánh giá kiểu VSATTP.</div>
+          </button>
+        </div>
+      </div>
 
       <!-- Xem read-only mẫu ĐANG DÙNG/LƯU TRỮ — KHÔNG cho sửa trực tiếp ở đây (bảo vệ toàn vẹn dữ liệu
            lịch sử các bài đã nộp tham chiếu templateId, xem lib/checklist.js) — chỉ hiển thị đúng nội
@@ -7483,49 +7502,66 @@
               <option value="CONTROL_AUDIT">Kiểm Soát (Kiểm Soát Viên đi đánh giá)</option>
             </select>
           </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Chế Độ Chấm Điểm <span class="text-red-500">*</span></label>
-            <select id="checklistBuilderScoringMode" data-op-change="onChecklistBuilderScoringModeChange" class="w-full border p-1.5 rounded text-xs">
-              <option value="SCORED">Có chấm điểm</option>
-              <option value="PASS_FAIL_ONLY">Chỉ Đạt / Chưa đạt (không chấm điểm)</option>
-            </select>
-          </div>
-          <div id="checklistBuilderPassThresholdWrap">
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Ngưỡng Điểm Đạt (%) — để trống nếu không chấm ngưỡng</label>
-            <input id="checklistBuilderPassThreshold" type="number" min="0" max="100" placeholder="VD: 80" class="w-full border p-1.5 rounded text-xs">
-          </div>
-        </div>
-        <div class="flex items-center justify-between flex-wrap gap-2">
-          <h4 class="font-bold text-gray-700 text-sm">❓ Câu Hỏi</h4>
-          <div class="flex items-center gap-2">
-            <button type="button" data-op="exportChecklistBuilderQuestionsExcel" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
-            <button type="button" data-op="addChecklistBuilderQuestion" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Câu Hỏi</button>
+          <div id="checklistBuilderScoringModeWrap" class="contents">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Chế Độ Chấm Điểm <span class="text-red-500">*</span></label>
+              <select id="checklistBuilderScoringMode" data-op-change="onChecklistBuilderScoringModeChange" class="w-full border p-1.5 rounded text-xs">
+                <option value="SCORED">Có chấm điểm</option>
+                <option value="PASS_FAIL_ONLY">Chỉ Đạt / Chưa đạt (không chấm điểm)</option>
+              </select>
+            </div>
+            <div id="checklistBuilderPassThresholdWrap">
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Ngưỡng Điểm Đạt (%) — để trống nếu không chấm ngưỡng</label>
+              <input id="checklistBuilderPassThreshold" type="number" min="0" max="100" placeholder="VD: 80" class="w-full border p-1.5 rounded text-xs">
+            </div>
           </div>
         </div>
 
-        <!-- Nhập Câu Hỏi Từ Excel — nạp vào checklistBuilderQuestions[] đang soạn dở (KHÔNG tự lưu mẫu),
-             người dùng vẫn bấm "💾 Lưu Mẫu" bên dưới như bình thường sau khi nạp (server xác minh lại toàn
-             bộ, xem lib/checklist.js::validateChecklistQuestions()). Dùng chung 1 file mẫu cho CẢ 2 chế độ
-             chấm điểm — cột điểm để trống nếu checklist chỉ Đạt/Chưa đạt (xem lib/checklistImport.js). -->
-        <div class="bg-gray-50 p-3 rounded border text-xs space-y-2">
-          <h5 class="font-bold text-gray-700">📥 Nhập Câu Hỏi Từ Excel</h5>
-          <div class="flex flex-wrap items-center gap-3">
-            <a href="/api/checklist/import-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
-            <input id="checklistImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onChecklistImportFileChange" data-arg-event="0" class="text-xs">
+        <!-- Loại QA: Câu Hỏi & Đáp Án (v20.9 trở về trước) — ẩn hoàn toàn khi soạn mẫu DEDUCTION. -->
+        <div id="checklistBuilderQuestionsSection" class="space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h4 class="font-bold text-gray-700 text-sm">❓ Câu Hỏi</h4>
+            <div class="flex items-center gap-2">
+              <button type="button" data-op="exportChecklistBuilderQuestionsExcel" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
+              <button type="button" data-op="addChecklistBuilderQuestion" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Câu Hỏi</button>
+            </div>
           </div>
-          <p id="checklistImportStatus" class="text-xs text-gray-500"></p>
-          <div id="checklistImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto">
-            <table class="w-full text-xs">
-              <thead class="bg-gray-100 text-left sticky top-0"><tr>
-                <th class="p-1">#</th><th class="p-1">Nội Dung Câu Hỏi</th><th class="p-1">Loại</th><th class="p-1">Đáp Án</th><th class="p-1">Trạng Thái</th>
-              </tr></thead>
-              <tbody id="checklistImportPreviewBody"></tbody>
-            </table>
+
+          <!-- Nhập Câu Hỏi Từ Excel — nạp vào checklistBuilderQuestions[] đang soạn dở (KHÔNG tự lưu mẫu),
+               người dùng vẫn bấm "💾 Lưu Mẫu" bên dưới như bình thường sau khi nạp (server xác minh lại toàn
+               bộ, xem lib/checklist.js::validateChecklistQuestions()). Dùng chung 1 file mẫu cho CẢ 2 chế độ
+               chấm điểm — cột điểm để trống nếu checklist chỉ Đạt/Chưa đạt (xem lib/checklistImport.js). -->
+          <div class="bg-gray-50 p-3 rounded border text-xs space-y-2">
+            <h5 class="font-bold text-gray-700">📥 Nhập Câu Hỏi Từ Excel</h5>
+            <div class="flex flex-wrap items-center gap-3">
+              <a href="/api/checklist/import-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+              <input id="checklistImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onChecklistImportFileChange" data-arg-event="0" class="text-xs">
+            </div>
+            <p id="checklistImportStatus" class="text-xs text-gray-500"></p>
+            <div id="checklistImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-100 text-left sticky top-0"><tr>
+                  <th class="p-1">#</th><th class="p-1">Nội Dung Câu Hỏi</th><th class="p-1">Loại</th><th class="p-1">Đáp Án</th><th class="p-1">Trạng Thái</th>
+                </tr></thead>
+                <tbody id="checklistImportPreviewBody"></tbody>
+              </table>
+            </div>
+            <button type="button" id="checklistImportConfirmBtn" data-op="confirmChecklistImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Nạp Các Câu Hỏi Hợp Lệ Vào Danh Sách</button>
           </div>
-          <button type="button" id="checklistImportConfirmBtn" data-op="confirmChecklistImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Nạp Các Câu Hỏi Hợp Lệ Vào Danh Sách</button>
+
+          <div id="checklistBuilderQuestionsWrap" class="space-y-3"></div>
         </div>
 
-        <div id="checklistBuilderQuestionsWrap" class="space-y-3"></div>
+        <!-- Loại DEDUCTION: Trừ Điểm Theo Hạng Mục (v21.0) — cây Hạng Mục Lớn → Hạng Mục Con → Tiêu Chí,
+             mirror ĐÚNG validateChecklistCategories() ở lib/checklist.js. -->
+        <div id="checklistBuilderCategoriesSection" class="hidden space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h4 class="font-bold text-gray-700 text-sm">📉 Hạng Mục Đánh Giá</h4>
+            <button type="button" data-op="addChecklistBuilderCategory" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Hạng Mục Lớn</button>
+          </div>
+          <div id="checklistBuilderCategoriesWrap" class="space-y-3"></div>
+        </div>
+
         <div class="flex justify-end gap-2 pt-2 border-t">
           <button type="button" data-op="closeChecklistTemplateBuilder" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
           <button type="button" data-op="saveChecklistTemplateBuilder" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>

@@ -29,7 +29,7 @@ const { resolveStepApproverUsernames } = require('./positionApprovers');
 // thẳng giống vppCatalog.js/priceFileParser.js ở trên) — validateChecklistQuestions()/
 // assertTemplateCoreFields() dùng ở extraValidate bên dưới, phần còn lại (scoring/store-resolution)
 // dùng ở routes/checklist.js.
-const { canManageChecklistTemplates, validateChecklistQuestions, assertTemplateCoreFields } = require('./checklist');
+const { canManageChecklistTemplates, validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields } = require('./checklist');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -1914,9 +1914,16 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền tạo Checklist Đánh Giá Siêu Thị');
       }
       const core = assertTemplateCoreFields(payload);
-      const questions = validateChecklistQuestions(payload.questions, core.scoringMode);
+      // v21.0 — 2 loại mẫu, chọn NGAY LÚC TẠO (bất biến sau đó, xem core.templateKind ở
+      // assertTemplateCoreFields()): QA (câu hỏi & đáp án, đang có) / DEDUCTION (trừ điểm theo hạng mục,
+      // theo file VSATTP người dùng gửi) — chỉ 1 trong 2 field questions/categories được gán, field còn
+      // lại để trống (JSON-blob, không cần schema chung).
       Object.assign(payload, core);
-      payload.questions = questions;
+      if (core.templateKind === 'DEDUCTION') {
+        payload.categories = validateChecklistCategories(payload.categories);
+      } else {
+        payload.questions = validateChecklistQuestions(payload.questions, core.scoringMode);
+      }
       payload.status = 'DRAFT';
       payload.version = 1;
       payload.clonedFromTemplateId = null;

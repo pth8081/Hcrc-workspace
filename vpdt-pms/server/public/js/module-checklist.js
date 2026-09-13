@@ -14,6 +14,12 @@ let checklistActiveSubTab = 'CONFIG';
 // mỗi câu {text, type, isRequired, maxScore, note, showIfOptionId, options:[{text, scoreValue, isPassing, isCriticalFail}]}.
 let checklistBuilderQuestions = [];
 let checklistBuilderEditingId = null; // null = tạo mới; số = đang sửa template DRAFT có id này
+// v21.0 — 2 LOẠI MẪU, chọn NGAY LÚC TẠO (bất biến sau đó, xem lib/checklist.js::TEMPLATE_KINDS):
+// 'QA' (Câu hỏi & đáp án, đang có) / 'DEDUCTION' (Trừ điểm theo hạng mục, theo file VSATTP người dùng
+// gửi) — checklistBuilderCategories mirror ĐÚNG cấu trúc cây validateChecklistCategories() ở
+// lib/checklist.js: mỗi phần tử {name, maxDeduction, subItems:[{name, maxDeduction, criteria:[{description, ruleText, perInstanceValue}]}]}.
+let checklistBuilderKind = 'QA';
+let checklistBuilderCategories = [];
 // scoringMode ('SCORED'/'PASS_FAIL_ONLY', v20.9 — yêu cầu người dùng: "chỉ kiểm tra đạt/chưa đạt thì ẩn
 // chấm điểm đi") — đọc/ghi qua #checklistBuilderScoringMode, ẩn hết ô nhập điểm tối đa/điểm đáp án/ngưỡng
 // đạt % khi PASS_FAIL_ONLY (renderChecklistBuilderQuestions() bên dưới) — SERVER vẫn là nơi ép cứng
@@ -72,11 +78,17 @@ function renderChecklistConfigTab() {
   const statusBadge = { DRAFT: 'bg-gray-200 text-gray-700', ACTIVE: 'bg-emerald-100 text-emerald-700', ARCHIVED: 'bg-slate-200 text-slate-600' };
   const statusLabel = { DRAFT: 'Nháp', ACTIVE: 'Đang dùng', ARCHIVED: 'Lưu trữ' };
   const typeLabel = { STORE_SELF: 'Tự Đánh Giá', CONTROL_AUDIT: 'Kiểm Soát' };
-  el.innerHTML = templates.map(t => `
+  const kindLabel = { QA: '📋 Câu hỏi & đáp án', DEDUCTION: '📉 Trừ điểm theo hạng mục' };
+  el.innerHTML = templates.map(t => {
+    const isDeduction = t.templateKind === 'DEDUCTION';
+    const countLabel = isDeduction
+      ? `${(t.categories || []).length} hạng mục lớn`
+      : `${(t.questions || []).length} câu hỏi`;
+    return `
     <div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
       <div>
         <div class="font-bold text-gray-800 text-sm">${escapeHtml(t.templateName)} <span class="text-gray-400 font-normal">(${escapeHtml(t.templateCode)}, v${t.version || 1})</span></div>
-        <div class="text-[11px] text-gray-500">${typeLabel[t.templateType] || t.templateType} · ${(t.questions || []).length} câu hỏi${t.scoringMode === 'PASS_FAIL_ONLY' ? ' · Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? ` · Ngưỡng đạt ${t.passThreshold}%` : '')}</div>
+        <div class="text-[11px] text-gray-500">${kindLabel[t.templateKind || 'QA']} · ${typeLabel[t.templateType] || t.templateType} · ${countLabel}${isDeduction ? '' : (t.scoringMode === 'PASS_FAIL_ONLY' ? ' · Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? ` · Ngưỡng đạt ${t.passThreshold}%` : ''))}</div>
       </div>
       <div class="flex items-center gap-2">
         <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${statusBadge[t.status] || ''}">${statusLabel[t.status] || t.status}</span>
@@ -87,10 +99,28 @@ function renderChecklistConfigTab() {
         <button type="button" data-op="cloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-gray-500 text-white rounded text-[11px] font-bold hover:bg-gray-600">Nhân Bản</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
-function openChecklistTemplateBuilder(templateId) {
+// "+ Tạo Mẫu Mới" (index.html) giờ gọi hàm NÀY trước (không phải openChecklistTemplateBuilder() thẳng) —
+// v21.0: 2 loại mẫu phải CHỌN NGAY LÚC TẠO (bất biến sau đó), nên chặn lại ở đây để chọn loại trước khi
+// mở đúng builder tương ứng. Sửa 1 mẫu ĐÃ có (templateId khác null) thì bỏ qua bước này — loại mẫu đọc
+// thẳng từ bản ghi, không hỏi lại.
+function openChecklistTemplateCreatePicker() {
+  closeChecklistTemplateView();
+  closeChecklistTemplateBuilder();
+  document.getElementById('checklistKindPickerWrap').classList.remove('hidden');
+}
+function closeChecklistTemplateCreatePicker() {
+  document.getElementById('checklistKindPickerWrap').classList.add('hidden');
+}
+function chooseChecklistTemplateKind(kind) {
+  closeChecklistTemplateCreatePicker();
+  openChecklistTemplateBuilder(null, kind);
+}
+
+function openChecklistTemplateBuilder(templateId, kind) {
   closeChecklistTemplateView();
   templateId = templateId ? Number(templateId) : null;
   checklistBuilderEditingId = templateId;
@@ -98,29 +128,52 @@ function openChecklistTemplateBuilder(templateId) {
     const t = (DB.checklistTemplates || []).find(x => x.id === templateId);
     if (!t) return alert('⛔ Không tìm thấy mẫu checklist');
     if (t.status !== 'DRAFT') return alert('⛔ Chỉ sửa được checklist đang ở trạng thái Nháp');
+    checklistBuilderKind = t.templateKind || 'QA';
     document.getElementById('checklistBuilderCode').value = t.templateCode;
     document.getElementById('checklistBuilderName').value = t.templateName;
     document.getElementById('checklistBuilderType').value = t.templateType;
     document.getElementById('checklistBuilderScoringMode').value = t.scoringMode || 'SCORED';
     document.getElementById('checklistBuilderPassThreshold').value = t.passThreshold != null ? t.passThreshold : '';
-    checklistBuilderQuestions = (t.questions || []).map(q => ({
-      text: q.text, type: q.type, isRequired: q.isRequired, maxScore: q.maxScore, note: q.note || '',
-      showIfOptionId: q.showIfOptionId,
-      options: (q.options || []).map(o => ({ text: o.text, scoreValue: o.scoreValue, isPassing: o.isPassing, isCriticalFail: o.isCriticalFail }))
-    }));
+    if (checklistBuilderKind === 'DEDUCTION') {
+      checklistBuilderCategories = (t.categories || []).map(cat => ({
+        name: cat.name, maxDeduction: cat.maxDeduction,
+        subItems: (cat.subItems || []).map(sub => ({
+          name: sub.name, maxDeduction: sub.maxDeduction,
+          criteria: (sub.criteria || []).map(c => ({ description: c.description, ruleText: c.ruleText || '', perInstanceValue: c.perInstanceValue }))
+        }))
+      }));
+      checklistBuilderQuestions = [];
+    } else {
+      checklistBuilderQuestions = (t.questions || []).map(q => ({
+        text: q.text, type: q.type, isRequired: q.isRequired, maxScore: q.maxScore, note: q.note || '',
+        showIfOptionId: q.showIfOptionId,
+        options: (q.options || []).map(o => ({ text: o.text, scoreValue: o.scoreValue, isPassing: o.isPassing, isCriticalFail: o.isCriticalFail }))
+      }));
+      checklistBuilderCategories = [];
+    }
     document.getElementById('checklistBuilderTitle').innerText = `🛠️ Sửa Mẫu Checklist: ${t.templateName}`;
   } else {
+    checklistBuilderKind = kind === 'DEDUCTION' ? 'DEDUCTION' : 'QA';
     document.getElementById('checklistBuilderCode').value = '';
     document.getElementById('checklistBuilderName').value = '';
     document.getElementById('checklistBuilderType').value = 'STORE_SELF';
     document.getElementById('checklistBuilderScoringMode').value = 'SCORED';
     document.getElementById('checklistBuilderPassThreshold').value = '';
     checklistBuilderQuestions = [];
-    document.getElementById('checklistBuilderTitle').innerText = '🛠️ Tạo Mẫu Checklist Mới';
+    checklistBuilderCategories = [];
+    document.getElementById('checklistBuilderTitle').innerText = checklistBuilderKind === 'DEDUCTION'
+      ? '🛠️ Tạo Mẫu Checklist Mới — Trừ Điểm Theo Hạng Mục' : '🛠️ Tạo Mẫu Checklist Mới — Câu Hỏi & Đáp Án';
   }
+  // Ô "Chế Độ Chấm Điểm"/Excel Nhập-Xuất CHỈ áp dụng cho loại QA (xem TEMPLATE_KINDS ở lib/checklist.js —
+  // DEDUCTION luôn tính điểm số, không có khái niệm "chỉ Đạt/Chưa đạt").
+  const isDeduction = checklistBuilderKind === 'DEDUCTION';
+  document.getElementById('checklistBuilderScoringModeWrap').classList.toggle('hidden', isDeduction);
+  document.getElementById('checklistBuilderQuestionsSection').classList.toggle('hidden', isDeduction);
+  document.getElementById('checklistBuilderCategoriesSection').classList.toggle('hidden', !isDeduction);
   onChecklistBuilderScoringModeChange();
   document.getElementById('checklistTemplateBuilderWrap').classList.remove('hidden');
   renderChecklistBuilderQuestions();
+  renderChecklistBuilderCategories();
 }
 // Đổi "Chế độ chấm điểm" — ẩn/hiện khối "Ngưỡng Điểm Đạt (%)" (không còn ý nghĩa khi PASS_FAIL_ONLY) và
 // render lại câu hỏi để ẩn/hiện ô nhập điểm tối đa/điểm đáp án theo đúng chế độ hiện chọn.
@@ -132,6 +185,7 @@ function onChecklistBuilderScoringModeChange() {
 function closeChecklistTemplateBuilder() {
   document.getElementById('checklistTemplateBuilderWrap').classList.add('hidden');
   checklistBuilderQuestions = [];
+  checklistBuilderCategories = [];
   checklistBuilderEditingId = null;
 }
 
@@ -146,16 +200,38 @@ function viewChecklistTemplate(id) {
   closeChecklistTemplateBuilder();
   const typeLabel = { STORE_SELF: 'Tự Đánh Giá', CONTROL_AUDIT: 'Kiểm Soát' };
   const statusLabel = { DRAFT: 'Nháp', ACTIVE: 'Đang dùng', ARCHIVED: 'Lưu trữ' };
-  const optionLabelById = new Map();
-  (t.questions || []).forEach((q, qi) => (q.options || []).forEach(o => optionLabelById.set(o.id, `Câu ${qi + 1} — ${o.text}`)));
+  const isDeduction = t.templateKind === 'DEDUCTION';
 
   document.getElementById('checklistTemplateViewTitle').innerText = `👁️ Xem Mẫu Checklist: ${t.templateName}`;
   document.getElementById('checklistTemplateViewMeta').innerHTML = `
     <div><span class="text-gray-500">Mã:</span> <b>${escapeHtml(t.templateCode)}</b></div>
     <div><span class="text-gray-500">Loại:</span> <b>${typeLabel[t.templateType] || t.templateType}</b></div>
     <div><span class="text-gray-500">Trạng thái:</span> <b>${statusLabel[t.status] || t.status}</b> (v${t.version || 1})</div>
-    <div><span class="text-gray-500">Ngưỡng đạt:</span> <b>${t.scoringMode === 'PASS_FAIL_ONLY' ? 'Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? t.passThreshold + '%' : 'Không chấm ngưỡng')}</b></div>
+    <div><span class="text-gray-500">${isDeduction ? 'Loại mẫu' : 'Ngưỡng đạt'}:</span> <b>${isDeduction ? '📉 Trừ điểm theo hạng mục' : (t.scoringMode === 'PASS_FAIL_ONLY' ? 'Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? t.passThreshold + '%' : 'Không chấm ngưỡng'))}</b></div>
   `;
+
+  if (isDeduction) {
+    document.getElementById('checklistTemplateViewQuestionsWrap').innerHTML = (t.categories || []).map((cat, ci) => `
+      <div class="bg-white border rounded p-3 space-y-2">
+        <div class="font-bold text-gray-800 text-sm">${ci + 1}. ${escapeHtml(cat.name)} <span class="text-gray-400 font-normal text-xs">(tối đa ${cat.maxDeduction}đ)</span></div>
+        ${(cat.subItems || []).map((sub, si) => `
+          <div class="pl-3 border-l-2 border-gray-200 space-y-1">
+            <div class="font-semibold text-gray-700 text-xs">${ci + 1}.${si + 1} ${escapeHtml(sub.name)}${sub.maxDeduction != null ? ` <span class="text-gray-400 font-normal">(tối đa ${sub.maxDeduction}đ riêng)</span>` : ' <span class="text-gray-400 font-normal">(dùng chung trần hạng mục lớn)</span>'}</div>
+            ${(sub.criteria || []).map(c => `
+              <div class="text-[11px] text-gray-600 flex items-start gap-2">
+                <span class="flex-1 whitespace-pre-line">${escapeHtml(c.description)}</span>
+                <span class="text-gray-400 whitespace-nowrap">${c.perInstanceValue}đ/lần${c.ruleText ? ` · ${escapeHtml(c.ruleText)}` : ''}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+      </div>
+    `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có hạng mục nào.</p>';
+    return void document.getElementById('checklistTemplateViewWrap').classList.remove('hidden');
+  }
+
+  const optionLabelById = new Map();
+  (t.questions || []).forEach((q, qi) => (q.options || []).forEach(o => optionLabelById.set(o.id, `Câu ${qi + 1} — ${o.text}`)));
   const isPassFailOnly = t.scoringMode === 'PASS_FAIL_ONLY';
   document.getElementById('checklistTemplateViewQuestionsWrap').innerHTML = (t.questions || []).map((q, qi) => `
     <div class="bg-white border rounded p-3 space-y-1.5">
@@ -226,6 +302,88 @@ function updateChecklistBuilderOptionField(qIdx, oIdx, field, value) {
   if (value instanceof HTMLElement) value = value.checked;
   if (field === 'scoreValue') value = Number(value) || 0;
   o[field] = value;
+}
+
+// ===================== Builder — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", v21.0) =====================
+// Cây 3 cấp — checklistBuilderCategories[ci].subItems[si].criteria[cri], mirror ĐÚNG cấu trúc
+// validateChecklistCategories() ở lib/checklist.js (không có optionId toàn cục kiểu QA vì loại mẫu này
+// không có điều kiện phân nhánh giữa các tiêu chí — không cần tham chiếu chéo).
+function addChecklistBuilderCategory() {
+  checklistBuilderCategories.push({ name: '', maxDeduction: 10, subItems: [] });
+  renderChecklistBuilderCategories();
+}
+function removeChecklistBuilderCategory(ci) {
+  checklistBuilderCategories.splice(Number(ci), 1);
+  renderChecklistBuilderCategories();
+}
+function updateChecklistBuilderCategoryField(ci, field, value) {
+  const cat = checklistBuilderCategories[Number(ci)];
+  if (field === 'maxDeduction') value = Number(value) || 0;
+  cat[field] = value;
+}
+function addChecklistBuilderSubItem(ci) {
+  checklistBuilderCategories[Number(ci)].subItems.push({ name: '', maxDeduction: null, criteria: [] });
+  renderChecklistBuilderCategories();
+}
+function removeChecklistBuilderSubItem(ci, si) {
+  checklistBuilderCategories[Number(ci)].subItems.splice(Number(si), 1);
+  renderChecklistBuilderCategories();
+}
+function updateChecklistBuilderSubItemField(ci, si, field, value) {
+  const sub = checklistBuilderCategories[Number(ci)].subItems[Number(si)];
+  if (field === 'maxDeduction') value = value === '' ? null : (Number(value) || 0);
+  sub[field] = value;
+}
+function addChecklistBuilderCriteria(ci, si) {
+  checklistBuilderCategories[Number(ci)].subItems[Number(si)].criteria.push({ description: '', ruleText: '', perInstanceValue: 1 });
+  renderChecklistBuilderCategories();
+}
+function removeChecklistBuilderCriteria(ci, si, cri) {
+  checklistBuilderCategories[Number(ci)].subItems[Number(si)].criteria.splice(Number(cri), 1);
+  renderChecklistBuilderCategories();
+}
+function updateChecklistBuilderCriteriaField(ci, si, cri, field, value) {
+  const c = checklistBuilderCategories[Number(ci)].subItems[Number(si)].criteria[Number(cri)];
+  if (field === 'perInstanceValue') value = Number(value) || 0;
+  c[field] = value;
+}
+function renderChecklistBuilderCategories() {
+  const el = document.getElementById('checklistBuilderCategoriesWrap');
+  if (!el) return;
+  el.innerHTML = checklistBuilderCategories.map((cat, ci) => `
+    <div class="bg-white border-2 border-rose-200 rounded p-3 space-y-2">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-gray-500 text-xs w-6">${ci + 1}.</span>
+        <input value="${escapeHtml(cat.name)}" placeholder="Tên hạng mục lớn (VD: CHẤT LƯỢNG SẢN PHẨM)" data-op-input="updateChecklistBuilderCategoryField" data-arg0="${ci}" data-arg1="name" data-arg-value="2" class="flex-1 border p-1.5 rounded text-xs font-bold">
+        <input type="number" min="0" value="${cat.maxDeduction}" placeholder="Điểm tối đa" title="Điểm tối đa của hạng mục lớn" data-op-input="updateChecklistBuilderCategoryField" data-arg0="${ci}" data-arg1="maxDeduction" data-arg-value="2" class="w-28 border p-1.5 rounded text-xs">
+        <button type="button" data-op="removeChecklistBuilderCategory" data-arg0="${ci}" class="text-red-600 text-[11px] font-bold hover:underline whitespace-nowrap">Xoá hạng mục</button>
+      </div>
+      <div class="pl-4 space-y-2">
+        ${cat.subItems.map((sub, si) => `
+          <div class="border-l-2 border-gray-200 pl-3 space-y-1.5">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-gray-500 text-[11px] w-8">${ci + 1}.${si + 1}</span>
+              <input value="${escapeHtml(sub.name)}" placeholder="Tên hạng mục con (VD: Chất lượng cảm quan)" data-op-input="updateChecklistBuilderSubItemField" data-arg0="${ci}" data-arg1="${si}" data-arg2="name" data-arg-value="3" class="flex-1 border p-1 rounded text-[11px]">
+              <input type="number" min="0" value="${sub.maxDeduction != null ? sub.maxDeduction : ''}" placeholder="Điểm tối đa riêng (để trống = dùng chung hạng mục lớn)" title="Để trống nếu dùng chung điểm tối đa của hạng mục lớn" data-op-input="updateChecklistBuilderSubItemField" data-arg0="${ci}" data-arg1="${si}" data-arg2="maxDeduction" data-arg-value="3" class="w-44 border p-1 rounded text-[11px]">
+              <button type="button" data-op="removeChecklistBuilderSubItem" data-arg0="${ci}" data-arg1="${si}" class="text-red-500 text-[11px] font-bold">Xoá</button>
+            </div>
+            <div class="space-y-1">
+              ${sub.criteria.map((c, cri) => `
+                <div class="flex items-start gap-1.5">
+                  <textarea placeholder="Mô tả tiêu chí vi phạm" data-op-input="updateChecklistBuilderCriteriaField" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" data-arg3="description" data-arg-value="4" class="flex-1 border p-1 rounded text-[11px]" rows="1">${escapeHtml(c.description)}</textarea>
+                  <input value="${escapeHtml(c.ruleText || '')}" placeholder="Quy tắc (VD: Cho 1 mã SP không phù hợp)" data-op-input="updateChecklistBuilderCriteriaField" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" data-arg3="ruleText" data-arg-value="4" class="w-56 border p-1 rounded text-[11px]">
+                  <input type="number" min="0" value="${c.perInstanceValue}" placeholder="Điểm/lần" title="Điểm trừ THAM KHẢO cho 1 lần vi phạm — không ép buộc, người kiểm tra tự nhập tổng điểm trừ thực tế lúc làm bài" data-op-input="updateChecklistBuilderCriteriaField" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" data-arg3="perInstanceValue" data-arg-value="4" class="w-20 border p-1 rounded text-[11px]">
+                  <button type="button" data-op="removeChecklistBuilderCriteria" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" class="text-red-500 text-[11px] font-bold">✕</button>
+                </div>
+              `).join('')}
+              <button type="button" data-op="addChecklistBuilderCriteria" data-arg0="${ci}" data-arg1="${si}" class="text-sky-600 text-[11px] font-bold hover:underline">+ Thêm tiêu chí</button>
+            </div>
+          </div>
+        `).join('')}
+        <button type="button" data-op="addChecklistBuilderSubItem" data-arg0="${ci}" class="text-gray-600 text-[11px] font-bold hover:underline">+ Thêm hạng mục con</button>
+      </div>
+    </div>
+  `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có hạng mục nào — bấm "+ Thêm Hạng Mục Lớn".</p>';
 }
 
 // Tính optionId TOÀN CỤC cho từng lựa chọn đang soạn — thuật toán PHẢI khớp Y HỆT server
@@ -382,10 +540,15 @@ async function saveChecklistTemplateBuilder() {
     templateCode: document.getElementById('checklistBuilderCode').value.trim(),
     templateName: document.getElementById('checklistBuilderName').value.trim(),
     templateType: document.getElementById('checklistBuilderType').value,
-    scoringMode: document.getElementById('checklistBuilderScoringMode').value,
-    passThreshold: document.getElementById('checklistBuilderPassThreshold').value === '' ? null : Number(document.getElementById('checklistBuilderPassThreshold').value),
-    questions: checklistBuilderQuestions
+    templateKind: checklistBuilderKind
   };
+  if (checklistBuilderKind === 'DEDUCTION') {
+    payload.categories = checklistBuilderCategories;
+  } else {
+    payload.scoringMode = document.getElementById('checklistBuilderScoringMode').value;
+    payload.passThreshold = document.getElementById('checklistBuilderPassThreshold').value === '' ? null : Number(document.getElementById('checklistBuilderPassThreshold').value);
+    payload.questions = checklistBuilderQuestions;
+  }
   try {
     let result;
     if (checklistBuilderEditingId) {
@@ -560,7 +723,9 @@ function computeChecklistVisibleQuestionsClient(template, answers) {
     .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 function renderChecklistSubmissionForm() {
-  const sub = checklistActiveSubmission, template = checklistActiveTemplateForSubmission;
+  const template = checklistActiveTemplateForSubmission;
+  if (template.templateKind === 'DEDUCTION') return renderChecklistDeductionSubmissionForm();
+  const sub = checklistActiveSubmission;
   const visibleQuestions = computeChecklistVisibleQuestionsClient(template, sub.answers);
   const answersByQ = new Map((sub.answers || []).map(a => [a.questionId, a]));
   const el = document.getElementById('checklistSubmissionFormWrap');
@@ -598,6 +763,79 @@ function renderChecklistSubmissionForm() {
     </div>
   `;
 }
+// ===================== Làm bài — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", v21.0) =====================
+// Không có nhánh hiển thị (showIfOptionId) kiểu QA — hiện toàn bộ cây hạng mục/tiêu chí ngay từ đầu.
+// Mỗi tiêu chí có 1 dòng nhập: điểm trừ thực tế, mô tả vi phạm, mức độ rủi ro (A/B/C, người kiểm tra tự
+// chọn — KHÔNG tự tính theo ngưỡng như file Excel gốc), thời hạn hoàn thành, ghi chú, ảnh minh chứng
+// (không bắt buộc, khác với QA yêu cầu ảnh khi trả lời bị đánh giá lỗi).
+function renderChecklistDeductionSubmissionForm() {
+  const sub = checklistActiveSubmission, template = checklistActiveTemplateForSubmission;
+  const deductionsByCriteria = new Map((sub.deductions || []).map(d => [d.criteriaId, d]));
+  const el = document.getElementById('checklistSubmissionFormWrap');
+  el.innerHTML = `
+    <div class="flex items-center justify-between gap-2 flex-wrap border-b pb-2">
+      <h3 class="font-bold text-gray-800 text-base">${escapeHtml(template.templateName)} — ${escapeHtml(sub.storeCode)}</h3>
+      <button type="button" data-op="closeChecklistSubmissionForm" class="text-gray-500 text-xs font-bold hover:underline">Đóng</button>
+    </div>
+    ${(template.categories || []).map(cat => `
+      <div class="bg-rose-50 border border-rose-200 rounded p-3 space-y-2">
+        <div class="font-bold text-gray-800 text-sm">${escapeHtml(cat.name)} <span class="text-rose-600 font-normal">(tối đa ${cat.maxDeduction} điểm)</span></div>
+        ${cat.subItems.map(sub2 => `
+          <div class="pl-3 border-l-2 border-rose-200 space-y-2">
+            <div class="font-semibold text-gray-700 text-xs">${escapeHtml(sub2.name)} ${sub2.maxDeduction != null ? `<span class="text-gray-500 font-normal">(tối đa ${sub2.maxDeduction} điểm)</span>` : '<span class="text-gray-400 font-normal">(dùng chung trần hạng mục lớn)</span>'}</div>
+            ${sub2.criteria.map(c => {
+              const d = deductionsByCriteria.get(c.id) || { criteriaId: c.id, deductedPoints: 0, description: '', riskLevel: '', deadline: '', note: '', attachments: [] };
+              return `
+              <div class="bg-white border rounded p-2 space-y-1.5">
+                <div class="text-xs text-gray-800">${escapeHtml(c.description)}</div>
+                ${c.ruleText ? `<div class="text-[11px] text-gray-500 italic">${escapeHtml(c.ruleText)} — tham khảo ${c.perInstanceValue} điểm/lần</div>` : ''}
+                <div class="flex items-center gap-2 flex-wrap">
+                  <label class="text-[11px] text-gray-600">Điểm trừ:
+                    <input type="number" min="0" value="${d.deductedPoints}" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="deductedPoints" data-arg-value="2" class="w-20 border p-1 rounded text-[11px]">
+                  </label>
+                  <label class="text-[11px] text-gray-600">Mức độ rủi ro:
+                    <select data-op-change="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="riskLevel" data-arg-value="2" class="border p-1 rounded text-[11px]">
+                      <option value="" ${!d.riskLevel ? 'selected' : ''}>—</option>
+                      <option value="A" ${d.riskLevel === 'A' ? 'selected' : ''}>A</option>
+                      <option value="B" ${d.riskLevel === 'B' ? 'selected' : ''}>B</option>
+                      <option value="C" ${d.riskLevel === 'C' ? 'selected' : ''}>C</option>
+                    </select>
+                  </label>
+                  <label class="text-[11px] text-gray-600">Thời hạn hoàn thành:
+                    <input type="date" value="${escapeHtml(d.deadline || '')}" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="deadline" data-arg-value="2" class="border p-1 rounded text-[11px]">
+                  </label>
+                </div>
+                <input value="${escapeHtml(d.description || '')}" placeholder="Mô tả nội dung không phù hợp (nếu có)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="description" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px]">
+                <input value="${escapeHtml(d.note || '')}" placeholder="Ghi chú (không bắt buộc)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="note" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px]">
+                <div class="flex items-center gap-2 flex-wrap">
+                  ${(d.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
+                  <input type="file" accept="image/*" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${c.id}" data-arg-el="1" class="text-[11px]">
+                  <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc)</span>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        `).join('')}
+      </div>
+    `).join('')}
+    <div class="flex justify-end gap-2 pt-2 border-t">
+      <button type="button" data-op="saveChecklistAnswersDraft" class="bg-gray-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600">💾 Lưu Nháp</button>
+      <button type="button" data-op="finalizeChecklistSubmission" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">✅ Nộp Bài</button>
+    </div>
+  `;
+}
+function updateChecklistDeductionField(criteriaId, field, value) {
+  criteriaId = Number(criteriaId);
+  if (value instanceof HTMLElement) value = value.value;
+  if (field === 'deductedPoints') value = Number(value) || 0;
+  const sub = checklistActiveSubmission;
+  const deductions = [...(sub.deductions || [])];
+  let idx = deductions.findIndex(d => d.criteriaId === criteriaId);
+  if (idx < 0) { deductions.push({ criteriaId, deductedPoints: 0, description: '', riskLevel: '', deadline: '', note: '', attachments: [] }); idx = deductions.length - 1; }
+  deductions[idx] = { ...deductions[idx], [field]: value };
+  sub.deductions = deductions;
+}
+
 function toggleChecklistAnswerOption(questionId, optionId, isMulti) {
   questionId = Number(questionId); optionId = Number(optionId); isMulti = isMulti === 'true' || isMulti === true;
   const sub = checklistActiveSubmission;
@@ -623,25 +861,28 @@ function updateChecklistAnswerNote(questionId, value) {
   else answers[idx] = { ...answers[idx], note: value };
   sub.answers = answers;
 }
+function checklistAnswersOrDeductionsPayload() {
+  const sub = checklistActiveSubmission, template = checklistActiveTemplateForSubmission;
+  return template.templateKind === 'DEDUCTION' ? { deductions: sub.deductions } : { answers: sub.answers };
+}
 async function saveChecklistAnswersDraft() {
   try {
-    const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/answers`, { answers: checklistActiveSubmission.answers });
+    const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/answers`, checklistAnswersOrDeductionsPayload());
     checklistApplySubmissionUpdate(result.item);
     checklistActiveSubmission = result.item;
     alert('✅ Đã lưu nháp.');
   } catch (err) { alert('⛔ ' + err.message); }
 }
-async function onChecklistAnswerPhotoChosen(questionId, inputEl) {
+async function onChecklistAnswerPhotoChosen(questionOrCriteriaId, inputEl) {
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
   try {
-    // Lưu nháp câu trả lời hiện tại TRƯỚC (route /attachments yêu cầu câu hỏi đã có câu trả lời — xem
-    // routes/checklist.js) — tránh lỗi "Vui lòng trả lời câu hỏi này trước khi đính kèm ảnh" nếu người
-    // dùng chọn ảnh ngay sau khi tick lựa chọn mà chưa bấm Lưu Nháp.
-    await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/answers`, { answers: checklistActiveSubmission.answers });
+    // Lưu nháp trước (route /attachments yêu cầu câu hỏi/tiêu chí đã có bản ghi trả lời/trừ điểm — xem
+    // routes/checklist.js) — tránh lỗi nếu người dùng chọn ảnh ngay sau khi nhập mà chưa bấm Lưu Nháp.
+    await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/answers`, checklistAnswersOrDeductionsPayload());
     const uploaded = await uploadFileToServer(file, 'checklistAnswerPhoto');
     const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/attachments`, {
-      questionId: Number(questionId), fileUrl: uploaded.fileUrl, fileName: uploaded.fileName || file.name, fileType: file.type
+      questionId: Number(questionOrCriteriaId), fileUrl: uploaded.fileUrl, fileName: uploaded.fileName || file.name, fileType: file.type
     });
     checklistApplySubmissionUpdate(result.item);
     checklistActiveSubmission = result.item;

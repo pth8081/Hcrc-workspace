@@ -145,6 +145,33 @@ function seedTemplate(overrides) {
   return template;
 }
 
+// v21.0 — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", theo file VSATTP người dùng gửi).
+function seedDeductionTemplate(overrides) {
+  const core = checklist.assertTemplateCoreFields(Object.assign({
+    templateCode: 'CL_DED_TEST', templateName: 'Checklist Trừ Điểm Kiểm Tra', templateType: 'CONTROL_AUDIT',
+    templateKind: 'DEDUCTION'
+  }, overrides));
+  const categories = checklist.validateChecklistCategories(overrides?.categories || [
+    {
+      name: 'CHẤT LƯỢNG SẢN PHẨM', maxDeduction: 30,
+      subItems: [
+        { name: 'Chất lượng cảm quan', maxDeduction: 30, criteria: [{ description: 'Bao bì không nguyên vẹn', perInstanceValue: 2, ruleText: 'Cho 1 mã SP không phù hợp' }] },
+        { name: 'Hạn sử dụng', maxDeduction: null, criteria: [{ description: 'Sản phẩm hết hạn sử dụng', perInstanceValue: 4, ruleText: 'Cho 1 mã SP không phù hợp' }] }
+      ]
+    },
+    {
+      name: 'NHÂN VIÊN', maxDeduction: 5,
+      subItems: [{ name: 'Đồng phục', maxDeduction: 5, criteria: [{ description: 'Không đúng đồng phục', perInstanceValue: 2 }] }]
+    }
+  ]);
+  const template = Object.assign({
+    id: idSeq++, status: 'DRAFT', version: 1, clonedFromTemplateId: null, activatedAt: null,
+    creator: 'admin', creatorName: 'Quản Trị Viên'
+  }, core, { categories });
+  RECORDS.checklistTemplates.push(template);
+  return template;
+}
+
 async function main() {
   const server = await startApp();
   const run = createRunner();
@@ -459,6 +486,106 @@ async function main() {
       assertEqual(res.status, 200, 'Đủ ảnh minh chứng phải nộp bài được');
       assertEqual(res.body.item.isPassed, false, 'PASS_FAIL_ONLY: có câu chọn đáp án Không đạt -> cả bài Không đạt (suy TRỰC TIẾP từ isPassing, không qua %)');
       assertEqual(res.body.item.scorePercent, null, 'Vẫn không có scorePercent nào được lưu dù isPassed=false');
+    });
+
+    // ===== 8 (v21.0) — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", theo file VSATTP người dùng gửi) =====
+    await run.run('validateChecklistCategories(): hạng mục con KHÔNG đặt trần riêng (maxDeduction=null) -> giữ null, KHÔNG tự gán = trần hạng mục lớn ở bước validate (chỉ áp dụng lúc CHẤM ĐIỂM)', () => {
+      const categories = checklist.validateChecklistCategories([
+        { name: 'A', maxDeduction: 30, subItems: [
+          { name: 'A1', maxDeduction: null, criteria: [{ description: 'crit', perInstanceValue: 2 }] }
+        ] }
+      ]);
+      assertEqual(categories[0].subItems[0].maxDeduction, null, 'maxDeduction null phải giữ nguyên null ở bước validate');
+    });
+
+    await run.run('validateChecklistCategories(): thiếu tên hạng mục/hạng mục con/mô tả tiêu chí đều bị chặn rõ ràng', () => {
+      let err1 = null;
+      try { checklist.validateChecklistCategories([{ name: '', maxDeduction: 10, subItems: [] }]); } catch (e) { err1 = e; }
+      assertEqual(err1?.status, 400, 'Thiếu tên hạng mục phải bị chặn 400');
+
+      let err2 = null;
+      try { checklist.validateChecklistCategories([{ name: 'A', maxDeduction: 10, subItems: [] }]); } catch (e) { err2 = e; }
+      assertEqual(err2?.status, 400, 'Hạng mục không có hạng mục con nào phải bị chặn 400');
+
+      let err3 = null;
+      try { checklist.validateChecklistCategories([{ name: 'A', maxDeduction: 10, subItems: [{ name: 'A1', criteria: [{ description: '' }] }] }]); } catch (e) { err3 = e; }
+      assertEqual(err3?.status, 400, 'Tiêu chí thiếu mô tả phải bị chặn 400');
+    });
+
+    await run.run('computeDeductionScoring(): hạng mục con KHÔNG có trần riêng -> dùng TRỌN VẸN trần hạng mục lớn (không chia đều)', () => {
+      const t = { categories: checklist.validateChecklistCategories([
+        { name: 'A', maxDeduction: 30, subItems: [
+          { name: 'A1', maxDeduction: null, criteria: [{ description: 'c1', perInstanceValue: 2 }] }
+        ] }
+      ]), passThreshold: null };
+      const scoring = checklist.computeDeductionScoring(t, [{ criteriaId: 1, deductedPoints: 5 }]);
+      assertEqual(scoring.totalScore, 25, 'A1 dùng trọn trần 30 của hạng mục A -> 30-5=25');
+      assertEqual(scoring.maxPossibleScore, 30, 'maxPossibleScore = tổng trần các hạng mục lớn');
+    });
+
+    await run.run('computeDeductionScoring(): trừ vượt trần hạng mục con -> điểm hạng mục con đó CHẶN SÀN ở 0 (không kéo âm sang hạng mục khác)', () => {
+      const t = { categories: checklist.validateChecklistCategories([
+        { name: 'A', maxDeduction: 30, subItems: [
+          { name: 'A1', maxDeduction: 10, criteria: [{ description: 'c1', perInstanceValue: 2 }] },
+          { name: 'A2', maxDeduction: 20, criteria: [{ description: 'c2', perInstanceValue: 2 }] }
+        ] }
+      ]), passThreshold: null };
+      // A1 (trần 10) bị trừ 15 -> chặn sàn 0 (không phải -5); A2 (trần 20) không bị trừ gì -> giữ nguyên 20.
+      const scoring = checklist.computeDeductionScoring(t, [{ criteriaId: 1, deductedPoints: 15 }]);
+      assertEqual(scoring.totalScore, 20, 'A1=max(0,10-15)=0, A2=20 -> tổng 20');
+    });
+
+    await run.run('computeDeductionScoring(): tổng điểm hạng mục con CHẶN THÊM 1 lớp sàn ở trần hạng mục lớn (đề phòng cấu hình trần con cộng lại vượt trần cha)', () => {
+      const t = { categories: checklist.validateChecklistCategories([
+        { name: 'A', maxDeduction: 30, subItems: [
+          { name: 'A1', maxDeduction: 25, criteria: [{ description: 'c1' }] },
+          { name: 'A2', maxDeduction: 25, criteria: [{ description: 'c2' }] } // 25+25=50 > trần cha 30 — cấu hình "lệch" nhưng vẫn phải an toàn
+        ] }
+      ]), passThreshold: null };
+      const scoring = checklist.computeDeductionScoring(t, []); // không trừ gì -> A1=25, A2=25, tổng thô 50
+      assertEqual(scoring.totalScore, 30, 'Tổng điểm hạng mục A phải chặn ở đúng trần 30 dù 2 hạng mục con cộng lại ra 50');
+    });
+
+    await run.run('Template: templateKind BẤT BIẾN — sửa (edit) cố đổi từ DEDUCTION sang QA (hoặc ngược lại) phải bị chặn 400', async () => {
+      resetRecords();
+      const t = seedDeductionTemplate();
+      const res = await api('POST', `/api/checklist/templates/${t.id}/edit`, {
+        templateCode: t.templateCode, templateName: t.templateName, templateType: t.templateType,
+        templateKind: 'QA', questions: [{ text: 'x', options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }] }]
+      }, MANAGER);
+      assertEqual(res.status, 400, 'Đổi loại mẫu sau khi đã tạo phải bị chặn 400');
+    });
+
+    await run.run('Template DEDUCTION: kích hoạt khi chưa có hạng mục nào bị chặn (mirror đúng luật QA "cần ít nhất 1 câu hỏi")', async () => {
+      resetRecords();
+      const t = seedDeductionTemplate();
+      t.categories = [];
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      assertEqual(res.status, 400, 'Kích hoạt template DEDUCTION rỗng categories phải bị chặn 400');
+    });
+
+    await run.run('Finalize DEDUCTION: nộp bài KHÔNG cần ảnh minh chứng (khác QA) dù có tiêu chí bị trừ điểm nhiều', async () => {
+      resetRecords();
+      const t = seedDeductionTemplate();
+      t.status = 'ACTIVE';
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị A' }, AUDITOR);
+      assertEqual(start.status, 200, 'CONTROL_AUDIT đúng phạm vi phải bắt đầu được');
+      const subId = start.body.item.id;
+      const c1 = t.categories[0].subItems[0].criteria[0].id; // "Bao bì không nguyên vẹn", cat A max=30 (A1 dùng trọn)
+      const c2 = t.categories[0].subItems[1].criteria[0].id; // "Hạn sử dụng", subItem maxDeduction=null -> dùng chung trần cat A (30)
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { deductions: [
+        { criteriaId: c1, deductedPoints: 4, description: 'Ớt chuông đỏ mốc', riskLevel: 'A', deadline: '15/05/2026', note: 'Rà soát lại' },
+        { criteriaId: c2, deductedPoints: 8, description: 'Hết hạn 2 mã', riskLevel: 'B' }
+      ] }, AUDITOR);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, AUDITOR);
+      assertEqual(res.status, 200, 'Nộp bài KHÔNG cần ảnh minh chứng phải thành công (khác QA)');
+      // cat A (max 30): A1 dùng trọn trần 30, trừ 4 -> 26. A2 (không đặt trần riêng) CŨNG dùng trọn trần 30, trừ 8 -> 22.
+      // categoryScore = 26+22=48, chặn ở trần cat A =30 -> totalScore=30. cat NHÂN VIÊN (max 5) không trừ gì -> 5.
+      // maxPossibleScore = 30+5=35. totalScore=30+5=35.
+      assertEqual(res.body.item.totalScore, 35, 'Tổng điểm phải đúng (cat A chặn ở trần 30 + cat NHÂN VIÊN nguyên vẹn 5)');
+      assertEqual(res.body.item.maxPossibleScore, 35, 'maxPossibleScore = tổng trần các hạng mục lớn (30+5)');
+      assertEqual(res.body.item.hasCriticalFail, false, 'DEDUCTION không có khái niệm Lỗi nghiêm trọng — luôn false');
+      assertEqual(Array.isArray(res.body.item.deductions) && res.body.item.deductions.length === 2, true, 'deductions phải được lưu lại đầy đủ', res.body.item.deductions);
     });
 
     run.summary();
