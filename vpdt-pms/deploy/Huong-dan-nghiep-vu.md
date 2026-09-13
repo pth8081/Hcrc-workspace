@@ -423,7 +423,15 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   - **🏷️ Phê Duyệt Giá** — dành cho người tạo/duyệt giá bán mặt hàng siêu thị
     (thực chất là 1 luồng tài chính, xem thêm mục 4.3): **Bán Lẻ** theo phòng
     ban (dùng chung engine quy trình phòng ban ở mục 3), **Bán Buôn** theo 4
-    mức Margin/Chiết khấu cố định (không theo phòng ban).
+    mức Margin/Chiết khấu cố định (không theo phòng ban). Form nộp có thêm 3
+    trường **CHỈ mang tính thông tin** cho đội Hỗ Trợ IT biết phạm vi/thời hạn
+    áp giá khi xử lý (không giới hạn ai xem được đề xuất, không có xử lý tự
+    động nào theo ngày hết hiệu lực — IT tự theo dõi thủ công): **"Siêu Thị Áp
+    Dụng"** (Bán Lẻ — mặc định "Toàn bộ siêu thị, cửa hàng", chọn "Khác" để
+    chỉ định 1-nhiều siêu thị cụ thể) hoặc **"Siêu Thị Đề Xuất"** (Bán Buôn —
+    KHÔNG có "Toàn bộ", luôn bắt buộc chọn rõ siêu thị/cửa hàng áp dụng), cùng
+    **"Ngày Áp Dụng"** (bắt buộc) và **"Ngày Hết Hiệu Lực"** (mặc định "Vĩnh
+    viễn", chọn "Khác" để nhập ngày thật).
   - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, **mở cho toàn bộ nhân
     viên** (đúng vai trò "tự phục vụ" của cả mục này), vòng đời Chưa xử lý →
     Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục" admin tự thêm/bớt/đổi
