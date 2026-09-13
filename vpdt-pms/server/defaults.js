@@ -363,15 +363,8 @@ const DEFAULTS = {
   // như 1 nhóm phân quyền bình thường — không xoá dữ liệu cũ, chỉ không tạo mới nữa.
   permGroups: [],
 
-  // "Nhóm Quyền Đặc Biệt" (khối 17 cây phân quyền) — DẠNG CŨ: mỗi nhóm mang 1 danh sách chức danh, user
-  // phải được gán thủ công vào 0..N nhóm (field user.vppExcludeGroupIds) mới bị loại. GIỮ NGUYÊN key này
-  // trong AppData (không xoá dữ liệu cũ) nhưng KHÔNG còn được đọc/ghi ở bất kỳ đâu trong code mới — đã
-  // thay bằng vppExcludedJobTitles (mảng phẳng) ngay bên dưới, xem migrateVppExcludedJobTitles() ở
-  // seedDefaults.js (di trú 1 lần, gộp toàn bộ jobTitles[] của mọi nhóm ở đây vào mảng phẳng đó).
-  vppExcludeGroups: [],
-
-  // Danh sách CHỨC DANH không được cấp Văn Phòng Phẩm (khối 17 cây phân quyền, thay cho vppExcludeGroups
-  // ở trên) — mảng chuỗi phẳng, cùng khuôn workflowParticipatingDepts ngay bên dưới. User có jobTitle
+  // Danh sách CHỨC DANH không được cấp Văn Phòng Phẩm (khối 17 cây phân quyền) — mảng chuỗi phẳng, cùng
+  // khuôn workflowParticipatingDepts ngay bên dưới. User có jobTitle
   // HIỆN TẠI nằm trong mảng này sẽ bị loại khỏi việc đăng ký Văn Phòng Phẩm (xem
   // lib/createValidation.js vppRegistrations.extraValidate) và khỏi số nhân sự gợi ý tính ngân sách/
   // người theo phòng ban (xem vppActiveHeadcountForDept() ở index.html) — không cần gán user vào nhóm

@@ -786,8 +786,9 @@ async function main() {
 
     DB_HANDLER = async (q, inputs) => {
       if (/DELETE FROM dbo\.TrashBin/.test(q)) return { recordset: [{ Id: 92, Payload: JSON.stringify(record) }] };
-      // Chỉ file "shared" còn được 1 hồ sơ ĐANG SỐNG khác dùng.
-      if (/FROM dbo\.Records/.test(q) && String(inputs.pat).includes('test-c6-shared.pdf')) {
+      // Chỉ file "shared" còn được 1 hồ sơ ĐANG SỐNG khác dùng — Bước 7g: isFileUrlStillReferenced() quét
+      // TỪNG bảng riêng (DEDICATED_TABLES) thay vì dbo.Records (đã gỡ bỏ), mô phỏng khớp trên dbo.Docs.
+      if (/FROM dbo\.Docs/.test(q) && String(inputs.pat).includes('test-c6-shared.pdf')) {
         return { recordset: [{ c: 1 }] };
       }
       return { recordset: [] };

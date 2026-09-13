@@ -59,7 +59,7 @@ song an toàn.
 [Node.js/Express — PM2 cluster] ──── phục vụ luôn giao diện (public/) + API
         │
         ▼
-[SQL Server] — dbo.AppData (cấu hình) + dbo.SystemLogs/Tasks/Records (hồ sơ nghiệp vụ)
+[SQL Server] — dbo.AppData (cấu hình) + dbo.SystemLogs/Tasks/Docs/Contracts/... (hồ sơ nghiệp vụ, mỗi collection 1 bảng riêng)
 ```
 
 **Ai dùng gì**:
@@ -1178,10 +1178,10 @@ lọc (chỉ áp dụng NGAY LẦN BẤM NÚT, không lọc trực tiếp bảng
 ### 4.7. Checklist Đánh Giá Siêu Thị
 
 Module ĐỘC LẬP HOÀN TOÀN về dữ liệu/quyền/route (không dùng chung bất kỳ gì
-với module Vận Hành), kiến trúc JSON-blob thuần (`checklistTemplates`/
-`checklistSubmissions` — MIGRATED_COLLECTIONS, mỗi bản ghi 1 dòng
-`dbo.Records`), phân quyền HOÀN TOÀN PHẲNG (không theo phòng ban như đa số
-module khác). Từ v17.0, nút điều hướng "✅ Checklist Đánh Giá" được GỘP CHUNG
+với module Vận Hành), mỗi collection (`checklistTemplates`/
+`checklistSubmissions`) có 1 bảng SQL riêng (`dbo.ChecklistTemplates`/
+`dbo.ChecklistSubmissions`, mỗi bản ghi 1 dòng), phân quyền HOÀN TOÀN PHẲNG
+(không theo phòng ban như đa số module khác). Từ v17.0, nút điều hướng "✅ Checklist Đánh Giá" được GỘP CHUNG
 dropdown sidebar `"⚙️ Vận Hành ▾"` cho gọn (thuần UI, không đổi dữ liệu/quyền)
 — bấm vào vẫn mở đúng module này. 4 tab nội bộ: **Cấu Hình / Thực Hiện / Kết
 Quả & Phản Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này,

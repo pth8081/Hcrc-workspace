@@ -48,7 +48,7 @@ const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig', 'workflows',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
-  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'officeInvestDeptWorkflows', 'vppDeptWorkflows',
+  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình người duyệt theo phòng ban
   // cho 2 luồng "Siêu Thị" của module Vận Hành — cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên
   // nhưng BỊ BỎ SÓT khỏi danh sách này khi thêm module Vận Hành, khiến bất kỳ tài khoản đã đăng nhập nào
@@ -131,13 +131,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // sách từ khoá quét (xem defaults.js + lib/recordActions.js scanCommentForSensitiveContent()).
   'sensitiveKeywords',
   // vppExcludedJobTitles/workflowParticipatingDepts (khối 17 "Nhóm Quyền Đặc Biệt"): cấu hình quản trị,
-  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js. vppExcludeGroups (DẠNG CŨ, đã thay bằng
-  // vppExcludedJobTitles) vẫn giữ trong danh sách này để nếu có nơi nào lỡ còn ghi tới thì vẫn bị chặn
-  // đúng như trước — không phải vì còn được code mới dùng tới (xem migrateVppExcludedJobTitles() ở
-  // seedDefaults.js).
+  // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js.
   // workflowParticipatingPositions ("Vị Trí Tham Gia Quy Trình", cùng khối 17 — xem defaults.js): danh
   // mục cặp (jobTitle,dept) độc lập dùng cho bước duyệt "Theo vị trí" — cùng độ mở với 2 key ngay trên.
-  'vppExcludeGroups', 'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
+  'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',

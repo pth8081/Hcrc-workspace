@@ -1,24 +1,27 @@
 // lib/recordStore.js — Kho lưu trữ DÙNG CHUNG cho các collection "hồ sơ nghiệp vụ" dùng chung 2 engine
-// generic lib/createValidation.js (tạo mới) + lib/workflowEngine.js (duyệt theo bước) — submissions,
-// docs, carRegs, officeReqs — cùng bảng dbo.Records (Bước 6c trở đi), phân biệt bằng cột Collection.
-// Khác SystemLogs/Tasks (Bước 6a/6b, mỗi collection 1 bảng riêng với bộ cột lọc cố định), các collection
-// ở đây không có bộ cột chung hợp lý để tách riêng — dùng 1 bảng CHUNG, mỗi bản ghi vẫn là 1 dòng thật
-// (khoá đúng 1 dòng thay vì cả collection, cùng lý do đã áp dụng ở SystemLogs/Tasks).
+// generic lib/createValidation.js (tạo mới) + lib/workflowEngine.js (duyệt theo bước).
+//
+// LỊCH SỬ (Bước 6-7g, không còn áp dụng — giữ lại để hiểu các comment cũ rải rác trong file): ban đầu
+// (Bước 6c-6j) các collection ở đây dùng CHUNG 1 bảng `dbo.Records` (cột Collection phân biệt từng
+// loại). Từ Bước 7, mỗi collection dần "tốt nghiệp" sang 1 bảng SQL riêng có cột lọc thật
+// (DEDICATED_TABLES bên dưới). Tới Bước 7g, TOÀN BỘ collection từng ở `dbo.Records` đã tốt nghiệp hết —
+// bảng `dbo.Records` cùng mọi code path đọc/ghi thẳng nó đã bị gỡ bỏ hoàn toàn (không còn tầng "bảng
+// dùng chung" nào nữa, chỉ còn 2 tầng: bảng riêng (DEDICATED_TABLES) hoặc AppData JSON — collection MỚI
+// từ nay bắt buộc có bảng riêng ngay từ đầu, không còn đường tắt "cứ để tạm ở bảng chung").
 //
 // getAllForCollection/createForCollection/withLockedRecordForCollection là điểm gọi DUY NHẤT mà
-// routes/create.js, routes/workflow.js, routes/data.js cần biết tới — tự động dùng bảng Records nếu
-// collection đã có trong MIGRATED_COLLECTIONS, ngược lại rơi về đường AppData cũ
-// (withLockedAppDataValue) — code gọi không cần biết/quan tâm collection đó đã migrate hay chưa. Mỗi
-// bước 6c/6d/... tiếp theo chỉ cần thêm 1 dòng vào MIGRATED_COLLECTIONS + chạy di trú, không cần sửa
-// gì ở routes/create.js hay routes/workflow.js.
+// routes/create.js, routes/workflow.js, routes/data.js cần biết tới — tự động dùng bảng riêng nếu
+// collection đã có trong DEDICATED_TABLES, ngược lại rơi về đường AppData cũ (withLockedAppDataValue) —
+// code gọi không cần biết/quan tâm collection đó đã có bảng riêng hay chưa.
 const fs = require('fs');
 const path = require('path');
 const { getPool, sql } = require('../db');
 const { getAppDataValue, withLockedAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
 
-// Collection ĐÃ chuyển sang dbo.Records — thêm dần theo đúng lộ trình đã thống nhất, mỗi bước 1
-// collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f: officeReqs, Bước 6g:
+// Collection quản lý bởi recordStore.js (KHÔNG còn ở AppData JSON blob) — thêm dần theo đúng lộ trình
+// đã thống nhất, mỗi bước 1 collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f:
+// officeReqs, Bước 6g:
 // contracts, Bước 6h: meetings, Bước 6i: meetingMinutes, Bước 6j: internalPosts — bước CUỐI của lộ
 // trình Bước 6). Khác 4 collection Bước 6c-6f (dùng chung 2 engine
 // createValidation.js/workflowEngine.js qua routes/create.js + routes/workflow.js),
@@ -83,16 +86,14 @@ function isUniqueConstraintViolation(err) {
   return err && (err.number === 2601 || err.number === 2627);
 }
 
+// Được gọi trực tiếp ở vài nơi ngoài getAllForCollection() (seedDefaults.js...) — collection truyền vào
+// LUÔN phải có DEDICATED_TABLES entry (Bước 7g: không còn bảng dbo.Records dùng chung nào để rơi về
+// nữa) — ném lỗi rõ ràng thay vì âm thầm sai nếu ai đó lỡ gọi với 1 collection chưa có bảng riêng.
 async function getAllRecords(collection) {
-  // Cùng lý do bảo vệ như insertRecord() ở dưới (Bước 7) — hàm này được gọi trực tiếp ở vài nơi ngoài
-  // getAllForCollection() (seedDefaults.js...), phải tự biết collection nào đã "tốt nghiệp" sang bảng
-  // riêng để không đọc nhầm dbo.Records (nay đã rỗng cho collection đó sau khi migrate dữ liệu).
-  if (DEDICATED_TABLES[collection]) return getAllDedicatedRecords(collection);
-  const pool = await getPool();
-  const result = await pool.request()
-    .input('collection', sql.NVarChar(50), collection)
-    .query('SELECT Payload FROM dbo.Records WHERE Collection = @collection ORDER BY CreatedAt DESC, Id DESC');
-  return result.recordset.map(toRecord);
+  if (!DEDICATED_TABLES[collection]) {
+    throw new Error(`getAllRecords(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
+  }
+  return getAllDedicatedRecords(collection);
 }
 
 // dbo.Records có 2 ràng buộc UNIQUE khác nhau (xem sql/schema.sql): PK_Records (Collection, Id) và
@@ -133,58 +134,14 @@ function computeNextSeqForPrefix(records, prefix) {
 // gọi thẳng hàm này) — retry ở đây là fix TẦNG CHUNG, áp dụng tự nhiên cho mọi nơi.
 const INSERT_RECORD_MAX_ATTEMPTS = 5;
 // insertRecord() được gọi trực tiếp (không qua createForCollection()) ở nhiều nơi — lib/notifications.js
-// notifyUsers(), lib/recordActions.js buildUniformIssuance()/buildUniformTransfer()... — nên bản thân
-// hàm XUẤT RA này phải tự kiểm tra DEDICATED_TABLES (Bước 7) trước, KHÔNG được để mọi nơi gọi tự nhớ
-// đổi sang insertDedicatedRecord() (dễ quên sót 1 chỗ, ghi nhầm vào dbo.Records cho collection đã
-// "tốt nghiệp" sang bảng riêng — insertRecord() cũ sẽ không báo lỗi gì vì Collection vẫn là cột hợp lệ
-// ở dbo.Records, chỉ là dữ liệu rơi sai bảng, rất khó phát hiện sau này).
+// notifyUsers(), lib/recordActions.js buildUniformIssuance()/buildUniformTransfer()... — collection
+// truyền vào LUÔN phải có DEDICATED_TABLES entry (Bước 7g: không còn dbo.Records dùng chung để rơi về
+// nữa) — ném lỗi rõ ràng thay vì âm thầm ghi sai nếu ai đó lỡ gọi với 1 collection chưa có bảng riêng.
 async function insertRecord(collection, record) {
-  if (DEDICATED_TABLES[collection]) return insertDedicatedRecord(collection, record);
-  const pool = await getPool();
-  for (let attempt = 1; attempt <= INSERT_RECORD_MAX_ATTEMPTS; attempt++) {
-    try {
-      await pool.request()
-        .input('collection', sql.NVarChar(50), collection)
-        .input('id', sql.BigInt, record.id)
-        .input('code', sql.NVarChar(100), record.code || null)
-        .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
-        .query(`
-          INSERT INTO dbo.Records (Collection, Id, Code, Payload)
-          VALUES (@collection, @id, @code, @payload);
-        `);
-      invalidateCollectionCache(collection);
-      return record;
-    } catch (err) {
-      if (!isUniqueConstraintViolation(err)) throw err;
-      const isIdCollision = String(err.message || '').includes('PK_Records');
-      if (isIdCollision) {
-        if (attempt === INSERT_RECORD_MAX_ATTEMPTS) {
-          throw new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.');
-        }
-        record.id = Date.now() + Math.floor(Math.random() * 1000);
-        continue;
-      }
-      // Trùng Code thật (UX_Records_Collection_Code) — THAY VÌ ném lỗi ngay như trước, tự thử sinh mã
-      // MỚI cho record này rồi INSERT lại (tối đa hết vòng lặp attempt hiện tại, 5 lần) — "cố gắng tốt
-      // nhất" cho UX mượt hơn khi mã được TÍNH Ở CLIENT trước khi gửi (client stale, hoặc 2 người tạo
-      // gần như đồng thời). UNIQUE INDEX ở CSDL đã là lớp chặn chống race THẬT SỰ ở tầng thấp nhất rồi —
-      // retry ở đây KHÔNG phải cơ chế chống race chính, chỉ tự sửa cho người dùng khỏi phải tự bấm lại.
-      const m = CODE_SEQ_SUFFIX_RE.exec(String(record.code || ''));
-      if (!m) {
-        // Không có chữ số ở cuối để tự tăng -> không đoán mò, giữ nguyên hành vi cũ.
-        throw new HttpError(409, `Mã "${record.code}" đã tồn tại`);
-      }
-      if (attempt === INSERT_RECORD_MAX_ATTEMPTS) {
-        throw new HttpError(409, `Mã "${record.code}" đã tồn tại — đã thử tự động sinh mã mới nhưng vẫn trùng, vui lòng thử lại.`);
-      }
-      const [, prefix, digitsStr] = m;
-      // Đọc lại DANH SÁCH BẢN GHI HIỆN TẠI real-time (KHÔNG dùng getAllForCollectionCached()) — cần đúng
-      // trạng thái mới nhất ngay tại thời điểm retry để không tính lại đúng số đã trùng lần trước.
-      const existing = await getAllRecords(collection);
-      const nextSeq = computeNextSeqForPrefix(existing, prefix);
-      record.code = prefix + String(nextSeq).padStart(digitsStr.length, '0');
-    }
+  if (!DEDICATED_TABLES[collection]) {
+    throw new Error(`insertRecord(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
   }
+  return insertDedicatedRecord(collection, record);
 }
 
 // ===== BƯỚC 7 — Bảng riêng cho các collection tăng trưởng nhanh (xem sql/schema.sql, khối "BƯỚC 7") =====
@@ -849,42 +806,14 @@ async function moveDedicatedRecordToTrash(collection, id, actor, checkFn) {
   }
 }
 
+// routes/records.js, routes/payroll.js, seedDefaults.js, jobs/*.js đều gọi thẳng hàm này (không qua
+// withLockedRecordForCollection()) cho nhiều collection khác nhau — collection truyền vào LUÔN phải có
+// DEDICATED_TABLES entry (Bước 7g: không còn dbo.Records dùng chung để rơi về nữa).
 async function withLockedRecordById(collection, id, mutatorFn) {
-  // Cùng lý do bảo vệ như insertRecord()/getAllRecords() ở trên (Bước 7) — routes/records.js,
-  // routes/payroll.js, seedDefaults.js, jobs/*.js đều gọi thẳng hàm này (không qua
-  // withLockedRecordForCollection()) cho nhiều collection khác nhau.
-  if (DEDICATED_TABLES[collection]) return withLockedDedicatedRecordById(collection, id, mutatorFn);
-  const pool = await getPool();
-  const tx = new sql.Transaction(pool);
-  await tx.begin();
-  try {
-    const readReq = new sql.Request(tx);
-    const readResult = await readReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, id)
-      .query('SELECT Payload FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection AND Id = @id');
-    if (readResult.recordset.length === 0) {
-      throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    }
-    const item = toRecord(readResult.recordset[0]);
-
-    const updated = await mutatorFn(item);
-
-    const writeReq = new sql.Request(tx);
-    await writeReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, id)
-      .input('code', sql.NVarChar(100), updated.code || null)
-      .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated))
-      .query('UPDATE dbo.Records SET Code = @code, Payload = @payload WHERE Collection = @collection AND Id = @id');
-
-    await tx.commit();
-    invalidateCollectionCache(collection);
-    return updated;
-  } catch (err) {
-    await tx.rollback().catch(() => {});
-    throw err;
+  if (!DEDICATED_TABLES[collection]) {
+    throw new Error(`withLockedRecordById(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
   }
+  return withLockedDedicatedRecordById(collection, id, mutatorFn);
 }
 
 // checkFn(item) (tuỳ chọn) -> throw HttpError (vd 403) để huỷ, không xoá gì — chạy SAU khi đã khoá đọc
@@ -923,35 +852,10 @@ async function deleteDedicatedRecordById(collection, id, checkFn) {
 }
 
 async function deleteRecordById(collection, id, checkFn) {
-  if (DEDICATED_TABLES[collection]) return deleteDedicatedRecordById(collection, id, checkFn);
-  const pool = await getPool();
-  const tx = new sql.Transaction(pool);
-  await tx.begin();
-  try {
-    const readReq = new sql.Request(tx);
-    const readResult = await readReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, id)
-      .query('SELECT Payload FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection AND Id = @id');
-    if (readResult.recordset.length === 0) {
-      throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    }
-    const item = toRecord(readResult.recordset[0]);
-
-    if (checkFn) await checkFn(item);
-
-    const delReq = new sql.Request(tx);
-    await delReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, id)
-      .query('DELETE FROM dbo.Records WHERE Collection = @collection AND Id = @id');
-
-    await tx.commit();
-    invalidateCollectionCache(collection);
-  } catch (err) {
-    await tx.rollback().catch(() => {});
-    throw err;
+  if (!DEDICATED_TABLES[collection]) {
+    throw new Error(`deleteRecordById(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
   }
+  return deleteDedicatedRecordById(collection, id, checkFn);
 }
 
 // ===== Thùng Rác (Trash Bin) — xem sql/schema.sql dbo.TrashBin + routes/trash.js. =====
@@ -972,51 +876,10 @@ async function deleteRecordById(collection, id, checkFn) {
 // deleteRecordForCollection() NHIỀU LẦN, mỗi bản ghi liên quan tự vào Thùng Rác riêng, khôi phục lại
 // được TỪNG bản ghi độc lập.
 async function moveRecordToTrash(collection, id, actor, checkFn) {
-  // Cùng lý do bảo vệ như deleteRecordById()/withLockedRecordById() ở trên (Bước 7).
-  if (DEDICATED_TABLES[collection]) return moveDedicatedRecordToTrash(collection, id, actor, checkFn);
-  const pool = await getPool();
-  const tx = new sql.Transaction(pool);
-  await tx.begin();
-  try {
-    const readReq = new sql.Request(tx);
-    const readResult = await readReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, id)
-      .query('SELECT Payload, Code FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection AND Id = @id');
-    if (readResult.recordset.length === 0) {
-      throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    }
-    const row = readResult.recordset[0];
-    const item = toRecord(row);
-
-    if (checkFn) await checkFn(item);
-
-    const trashReq = new sql.Request(tx);
-    await trashReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('originalId', sql.BigInt, id)
-      .input('code', sql.NVarChar(100), row.Code || null)
-      .input('payload', sql.NVarChar(sql.MAX), row.Payload)
-      .input('deletedBy', sql.NVarChar(100), actor?.username || 'unknown')
-      .input('deletedByName', sql.NVarChar(200), actor?.name || null)
-      .query(`
-        INSERT INTO dbo.TrashBin (Collection, OriginalId, Code, Payload, DeletedBy, DeletedByName)
-        VALUES (@collection, @originalId, @code, @payload, @deletedBy, @deletedByName);
-      `);
-
-    const delReq = new sql.Request(tx);
-    await delReq
-      .input('collection', sql.NVarChar(50), collection)
-      .input('id', sql.BigInt, id)
-      .query('DELETE FROM dbo.Records WHERE Collection = @collection AND Id = @id');
-
-    await tx.commit();
-    invalidateCollectionCache(collection);
-    invalidateTrashCache();
-  } catch (err) {
-    await tx.rollback().catch(() => {});
-    throw err;
+  if (!DEDICATED_TABLES[collection]) {
+    throw new Error(`moveRecordToTrash(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
   }
+  return moveDedicatedRecordToTrash(collection, id, actor, checkFn);
 }
 
 // Cache ngắn hạn cho TOÀN BỘ Thùng Rác — cùng khuôn/cùng TTL với getAllForCollectionCached() bên dưới.
@@ -1080,28 +943,28 @@ async function restoreTrashItem(trashId) {
       throw new HttpError(404, 'Không tìm thấy mục này trong thùng rác');
     }
     const row = readResult.recordset[0];
-    // Bảng đích để kiểm tra trùng Code/Id + INSERT khôi phục — dbo.Records (mọi collection cũ) HOẶC
-    // bảng riêng của collection (nếu đã "tốt nghiệp" ở Bước 7, xem DEDICATED_TABLES) — dbo.TrashBin vẫn
-    // dùng CHUNG cho cả 2 loại (cột Collection ở đó đủ phân biệt), chỉ nơi khôi phục TỚI là khác nhau.
+    // Bảng đích để kiểm tra trùng Code/Id + INSERT khôi phục — LUÔN là bảng riêng của collection (Bước
+    // 7g: dbo.Records dùng chung đã bị gỡ bỏ, mọi collection từng vào được Thùng Rác đều đã có bảng
+    // riêng) — dbo.TrashBin vẫn dùng CHUNG cho mọi collection (cột Collection ở đó đủ phân biệt).
     const dedicatedCfg = DEDICATED_TABLES[row.Collection];
-    const targetTable = dedicatedCfg ? dedicatedTableName(row.Collection) : 'dbo.Records';
-    const collectionFilter = dedicatedCfg ? '' : ' AND Collection = @collection';
+    if (!dedicatedCfg) {
+      throw new Error(`restoreTrashItem(): collection "${row.Collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
+    }
+    const targetTable = dedicatedTableName(row.Collection);
 
     if (row.Code) {
       const codeCheckReq = new sql.Request(tx);
       codeCheckReq.input('code', sql.NVarChar(100), row.Code);
-      if (!dedicatedCfg) codeCheckReq.input('collection', sql.NVarChar(50), row.Collection);
       const codeCheck = await codeCheckReq
-        .query(`SELECT TOP 1 Id FROM ${targetTable} WHERE Code = @code${collectionFilter}`);
+        .query(`SELECT TOP 1 Id FROM ${targetTable} WHERE Code = @code`);
       if (codeCheck.recordset.length > 0) {
         throw new HttpError(409, `Mã "${row.Code}" đã được dùng lại cho 1 hồ sơ khác kể từ lúc bị xóa — vui lòng đổi mã hồ sơ mới đó trước khi khôi phục.`);
       }
     }
     const idCheckReq = new sql.Request(tx);
     idCheckReq.input('id', sql.BigInt, row.OriginalId);
-    if (!dedicatedCfg) idCheckReq.input('collection', sql.NVarChar(50), row.Collection);
     const idCheck = await idCheckReq
-      .query(`SELECT TOP 1 Id FROM ${targetTable} WHERE Id = @id${collectionFilter}`);
+      .query(`SELECT TOP 1 Id FROM ${targetTable} WHERE Id = @id`);
     if (idCheck.recordset.length > 0) {
       throw new HttpError(409, 'Đã có hồ sơ khác chiếm đúng vị trí (Id) này — không thể khôi phục.');
     }
@@ -1109,23 +972,17 @@ async function restoreTrashItem(trashId) {
     const insReq = new sql.Request(tx);
     insReq.input('id', sql.BigInt, row.OriginalId);
     insReq.input('payload', sql.NVarChar(sql.MAX), row.Payload);
-    if (dedicatedCfg) {
-      const colNames = ['Id', 'Payload'];
-      const colParams = ['@id', '@payload'];
-      if (dedicatedCfg.hasCode) {
-        insReq.input('code', sql.NVarChar(100), row.Code || null);
-        colNames.push('Code'); colParams.push('@code');
-      }
-      const restoredItem = JSON.parse(row.Payload);
-      for (const { col, param } of bindExtractedColumns(insReq, dedicatedCfg, restoredItem)) {
-        colNames.push(col); colParams.push('@' + param);
-      }
-      await insReq.query(`INSERT INTO ${targetTable} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
-    } else {
-      insReq.input('collection', sql.NVarChar(50), row.Collection);
+    const colNames = ['Id', 'Payload'];
+    const colParams = ['@id', '@payload'];
+    if (dedicatedCfg.hasCode) {
       insReq.input('code', sql.NVarChar(100), row.Code || null);
-      await insReq.query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+      colNames.push('Code'); colParams.push('@code');
     }
+    const restoredItem = JSON.parse(row.Payload);
+    for (const { col, param } of bindExtractedColumns(insReq, dedicatedCfg, restoredItem)) {
+      colNames.push(col); colParams.push('@' + param);
+    }
+    await insReq.query(`INSERT INTO ${targetTable} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
 
     const delReq = new sql.Request(tx);
     await delReq.input('trashId', sql.BigInt, trashId).query('DELETE FROM dbo.TrashBin WHERE Id = @trashId');
@@ -1219,24 +1076,30 @@ function collectRecordFileUrls(value, out = new Set(), depth = 0) {
   return out;
 }
 
-// CÒN AI DÙNG file này nữa không? Quét cả 3 nơi dữ liệu có thể tham chiếu tới nó: dbo.Records (hồ sơ
-// đang sống của mọi collection), dbo.TrashBin (hồ sơ khác cũng đang nằm trong thùng rác) và dbo.AppData
-// (các collection chưa di trú + cấu hình/ảnh đại diện/logo). Dùng LIKE trên nguyên chuỗi JSON thay vì
-// tự hiểu khuôn của từng collection — tên file do routes/upload.js sinh ra là
-// "<timestamp>-<16 hex>.<ext>", đủ duy nhất để so khớp chuỗi không bị dương tính giả có ý nghĩa; và
-// nếu có nhầm thì nhầm về phía AN TOÀN (giữ lại file, không xoá).
+// CÒN AI DÙNG file này nữa không? Quét mọi nơi dữ liệu có thể tham chiếu tới nó: TỪNG bảng riêng trong
+// DEDICATED_TABLES (hồ sơ đang sống của mọi collection — Bước 7g: KHÔNG còn dbo.Records dùng chung để
+// quét gộp 1 lượt như trước, phải quét riêng từng bảng), dbo.TrashBin (hồ sơ khác cũng đang nằm trong
+// thùng rác) và dbo.AppData (các collection chưa có bảng riêng + cấu hình/ảnh đại diện/logo). Dùng LIKE
+// trên nguyên chuỗi JSON thay vì tự hiểu khuôn của từng collection — tên file do routes/upload.js sinh
+// ra là "<timestamp>-<16 hex>.<ext>", đủ duy nhất để so khớp chuỗi không bị dương tính giả có ý nghĩa;
+// và nếu có nhầm thì nhầm về phía AN TOÀN (giữ lại file, không xoá).
+//
+// PHÁT HIỆN + VÁ Ở ĐÂY (Bước 7g): hàm này TRƯỚC ĐÓ chỉ quét dbo.Records — kể từ khi TỪNG collection lần
+// lượt "tốt nghiệp" sang bảng riêng (Bước 7), dbo.Records rỗng dần rồi rỗng HẲN cho mọi collection, nên
+// hàm luôn trả `false` (không còn ai tham chiếu) cho file thuộc về 1 bản ghi ĐANG SỐNG ở bảng riêng —
+// unlinkUnreferencedUploads() (bên dưới) tin theo kết quả này và XOÁ NHẦM file vẫn đang được dùng bởi 1
+// hồ sơ khác chưa vào Thùng Rác. Chạy song song 1 lượt LIKE trên từng bảng riêng thay thế cho lượt quét
+// dbo.Records duy nhất trước đây.
 async function isFileUrlStillReferenced(pool, fileUrl) {
   const pattern = `%${fileUrl}%`;
+  const dedicatedTableNames = [...new Set(Object.values(DEDICATED_TABLES).map(cfg => cfg.table))];
   const queries = [
-    'SELECT TOP 1 1 AS c FROM dbo.Records WHERE Payload LIKE @pat',
+    ...dedicatedTableNames.map(t => `SELECT TOP 1 1 AS c FROM dbo.${t} WHERE Payload LIKE @pat`),
     'SELECT TOP 1 1 AS c FROM dbo.TrashBin WHERE Payload LIKE @pat',
     'SELECT TOP 1 1 AS c FROM dbo.AppData WHERE DataValue LIKE @pat'
   ];
-  for (const q of queries) {
-    const r = await pool.request().input('pat', sql.NVarChar(sql.MAX), pattern).query(q);
-    if (r.recordset.length > 0) return true;
-  }
-  return false;
+  const results = await Promise.all(queries.map(q => pool.request().input('pat', sql.NVarChar(sql.MAX), pattern).query(q)));
+  return results.some(r => r.recordset.length > 0);
 }
 
 // Xoá thật các file trên đĩa mà KHÔNG còn bản ghi nào (sống hay trong thùng rác) tham chiếu tới. Mọi
@@ -1302,42 +1165,11 @@ async function permanentlyDeleteTrashItem(trashId) {
   await unlinkUnreferencedUploads(collectRecordFileUrls(payload));
 }
 
-// Di trú dữ liệu cũ (nếu còn) từ AppData[collection] sang dbo.Records — CHỈ chạy nếu collection này
-// đang RỖNG trong bảng mới (idempotent, khớp đúng lib/systemLogStore.js/lib/taskStore.js). Xoá dòng
-// AppData cũ sau khi di trú xong.
-async function migrateLegacyCollection(collection) {
-  const pool = await getPool();
-  const countResult = await pool.request()
-    .input('collection', sql.NVarChar(50), collection)
-    .query('SELECT COUNT(*) AS c FROM dbo.Records WHERE Collection = @collection');
-  if (countResult.recordset[0].c > 0) return;
-
-  const legacy = await getAppDataValue(collection);
-  if (!Array.isArray(legacy) || legacy.length === 0) return;
-
-  for (let i = legacy.length - 1; i >= 0; i--) {
-    await insertRecord(collection, legacy[i]);
-  }
-  await pool.request()
-    .input('collection', sql.NVarChar(50), collection)
-    .query('DELETE FROM dbo.AppData WHERE DataKey = @collection');
-  console.log(`   ↳ Đã di chuyển ${legacy.length} bản ghi "${collection}" cũ sang bảng Records.`);
-}
-
-// Chạy di trú cho MỌI collection đã liệt kê trong MIGRATED_COLLECTIONS — gọi 1 lần lúc khởi động
-// (seedDefaults.js), không cần liệt kê tay từng collection ở đó khi thêm collection mới vào danh sách.
-async function migrateAllLegacyCollections() {
-  for (const collection of MIGRATED_COLLECTIONS) {
-    await migrateLegacyCollection(collection);
-  }
-}
-
 // ===== Dispatch: 1 điểm gọi cho routes/create.js, routes/workflow.js, routes/data.js — không cần biết
 // collection đã migrate hay chưa. =====
 
 async function getAllForCollection(collection) {
   if (DEDICATED_TABLES[collection]) return getAllDedicatedRecords(collection);
-  if (MIGRATED_COLLECTIONS.has(collection)) return getAllRecords(collection);
   return (await getAppDataValue(collection)) || [];
 }
 
@@ -1385,39 +1217,8 @@ async function renameFieldValueInCollection(collection, mutateFn) {
       throw err;
     }
   }
-  if (MIGRATED_COLLECTIONS.has(collection)) {
-    const pool = await getPool();
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
-    try {
-      const readReq = new sql.Request(tx);
-      const readResult = await readReq
-        .input('collection', sql.NVarChar(50), collection)
-        .query('SELECT Id, Payload, Code FROM dbo.Records WITH (UPDLOCK, HOLDLOCK) WHERE Collection = @collection');
-      let changedCount = 0;
-      for (const row of readResult.recordset) {
-        const item = toRecord(row);
-        const updated = mutateFn(item);
-        if (updated === item) continue; // mutateFn báo KHÔNG có gì đổi (cùng reference) -> bỏ qua, không ghi
-        changedCount++;
-        const writeReq = new sql.Request(tx);
-        await writeReq
-          .input('collection', sql.NVarChar(50), collection)
-          .input('id', sql.BigInt, row.Id)
-          .input('code', sql.NVarChar(100), updated.code || row.Code || null)
-          .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated))
-          .query('UPDATE dbo.Records SET Code = @code, Payload = @payload WHERE Collection = @collection AND Id = @id');
-      }
-      await tx.commit();
-      if (changedCount) invalidateCollectionCache(collection);
-      return changedCount;
-    } catch (err) {
-      await tx.rollback().catch(() => {});
-      throw err;
-    }
-  }
-  // Collection còn ở AppData (chưa migrate, VD "users"/"vppExcludeGroups") — dùng withLockedAppDataValue
-  // sẵn có, ghi lại cả mảng (đơn giản hơn — các collection dạng này thường nhỏ, không cần chỉ ghi phần đổi).
+  // Collection còn ở AppData (chưa có bảng riêng, VD "users") — dùng withLockedAppDataValue sẵn có, ghi
+  // lại cả mảng (đơn giản hơn — các collection dạng này thường nhỏ, không cần chỉ ghi phần đổi).
   let changedCount = 0;
   await withLockedAppDataValue(collection, (list) => {
     return (Array.isArray(list) ? list : []).map(item => {
@@ -1494,11 +1295,6 @@ async function createForCollection(collection, builderFn) {
     const record = await builderFn(existing);
     return insertDedicatedRecord(collection, record);
   }
-  if (MIGRATED_COLLECTIONS.has(collection)) {
-    const existing = await getAllRecords(collection);
-    const record = await builderFn(existing);
-    return insertRecord(collection, record);
-  }
   let record;
   await withLockedAppDataValue(collection, (list) => {
     const arr = Array.isArray(list) ? list : [];
@@ -1517,6 +1313,9 @@ async function createForCollection(collection, builderFn) {
 // @LockOwner='Transaction' -> khoá tự nhả khi commit/rollback, không cần tự gọi sp_releaseapplock.
 async function createForCollectionSerialized(collection, lockKey, builderFn) {
   const cfg = DEDICATED_TABLES[collection];
+  if (!cfg) {
+    throw new Error(`createForCollectionSerialized(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
+  }
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -1532,46 +1331,28 @@ async function createForCollectionSerialized(collection, lockKey, builderFn) {
       throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
     }
 
-    if (cfg) {
-      // Bảng riêng Bước 7 (VD "meetings", khoá theo phòng họp — xem routes/create.js) — cùng cơ chế
-      // khoá nghiêm túc, chỉ khác nơi đọc/ghi (bảng riêng thay vì dbo.Records dùng chung).
-      const table = dedicatedTableName(collection);
-      const readReq = new sql.Request(tx);
-      const readResult = await readReq.query(`SELECT Payload FROM ${table} ORDER BY CreatedAt DESC, Id DESC`);
-      const existing = readResult.recordset.map(toRecord);
+    // Bảng riêng Bước 7 (VD "meetings", khoá theo phòng họp — xem routes/create.js) — cùng cơ chế khoá
+    // nghiêm túc, chỉ khác nơi đọc/ghi (bảng riêng, không còn dbo.Records dùng chung từ Bước 7g).
+    const table = dedicatedTableName(collection);
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq.query(`SELECT Payload FROM ${table} ORDER BY CreatedAt DESC, Id DESC`);
+    const existing = readResult.recordset.map(toRecord);
 
-      record = await builderFn(existing);
+    record = await builderFn(existing);
 
-      const writeReq = new sql.Request(tx);
-      writeReq.input('id', sql.BigInt, record.id);
-      writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
-      const colNames = ['Id', 'Payload'];
-      const colParams = ['@id', '@payload'];
-      if (cfg.hasCode) {
-        writeReq.input('code', sql.NVarChar(100), record.code || null);
-        colNames.push('Code'); colParams.push('@code');
-      }
-      for (const { col, param } of bindExtractedColumns(writeReq, cfg, record)) {
-        colNames.push(col); colParams.push('@' + param);
-      }
-      await writeReq.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
-    } else {
-      const readReq = new sql.Request(tx);
-      const readResult = await readReq
-        .input('collection', sql.NVarChar(50), collection)
-        .query('SELECT Payload FROM dbo.Records WHERE Collection = @collection ORDER BY CreatedAt DESC, Id DESC');
-      const existing = readResult.recordset.map(toRecord);
-
-      record = await builderFn(existing);
-
-      const writeReq = new sql.Request(tx);
-      await writeReq
-        .input('collection', sql.NVarChar(50), collection)
-        .input('id', sql.BigInt, record.id)
-        .input('code', sql.NVarChar(100), record.code || null)
-        .input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record))
-        .query('INSERT INTO dbo.Records (Collection, Id, Code, Payload) VALUES (@collection, @id, @code, @payload);');
+    const writeReq = new sql.Request(tx);
+    writeReq.input('id', sql.BigInt, record.id);
+    writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+    const colNames = ['Id', 'Payload'];
+    const colParams = ['@id', '@payload'];
+    if (cfg.hasCode) {
+      writeReq.input('code', sql.NVarChar(100), record.code || null);
+      colNames.push('Code'); colParams.push('@code');
     }
+    for (const { col, param } of bindExtractedColumns(writeReq, cfg, record)) {
+      colNames.push(col); colParams.push('@' + param);
+    }
+    await writeReq.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
 
     await tx.commit();
     invalidateCollectionCache(collection);
@@ -1662,12 +1443,10 @@ async function deleteRecordForCollection(collection, id, checkFn, actor) {
 module.exports = {
   MIGRATED_COLLECTIONS,
   CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix,
-  getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, migrateLegacyCollection, migrateAllLegacyCollections,
+  getAllRecords, insertRecord, withLockedRecordById, deleteRecordById,
   getAllForCollection, getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads,
-  // Bước 7 — xuất thêm để scripts/migrate-records-batch1.js (di trú dữ liệu 1 lần) dùng ĐÚNG cùng 1
-  // logic trích cột (không viết lại tay ở script, tránh lệch giữa 2 nơi).
   DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords
 };

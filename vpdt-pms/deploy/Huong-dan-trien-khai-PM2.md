@@ -37,7 +37,7 @@ cứ lúc nào sau này** (chỉ cần làm thêm phần Nginx, không phải d�
    │  thống riêng KHÔNG phải root (mục 9), phục vụ TRỰC TIẾP port 3000: giao
    │  diện + API, xác thực bằng JWT ký ở server (xem mục 6)
    └─ SQL Server (MSSQL) — port 1433 — lưu trữ dữ liệu (dbo.AppData + các bảng
-      riêng theo loại hồ sơ: dbo.SystemLogs, dbo.Tasks, dbo.Records)
+      riêng theo loại hồ sơ: dbo.SystemLogs, dbo.Tasks, dbo.Docs, dbo.Contracts...)
 ```
 
 **Đặc điểm kiến trúc cần biết trước khi triển khai:**
@@ -58,7 +58,8 @@ cứ lúc nào sau này** (chỉ cần làm thêm phần Nginx, không phải d�
   ẩn/hiện nút trên giao diện.
 - **Dữ liệu nghiệp vụ** (Văn bản trình, Tài liệu, Hợp đồng, Đăng ký xe, Đề
   xuất văn phòng, Công việc, Báo cáo định kỳ...) nằm trong các bảng riêng có
-  khoá đúng từng dòng (`dbo.SystemLogs`, `dbo.Tasks`, `dbo.Records`).
+  khoá đúng từng dòng (`dbo.SystemLogs`, `dbo.Tasks`, và 1 bảng riêng cho mỗi
+  collection nghiệp vụ khác — `dbo.Docs`, `dbo.Contracts`, `dbo.Submissions`...).
   `dbo.AppData` chỉ còn giữ dữ liệu cấu hình (người dùng, phân quyền, quy
   trình mẫu, cấu hình email...). `schema.sql` (mục 4) tạo sẵn đầy đủ các bảng
   này — **không cần chạy tay thêm gì khác, không cần seed dữ liệu tay**, ứng
@@ -204,8 +205,9 @@ Script này **an toàn để chạy lại nhiều lần** (chỉ tạo bảng n�
 không đụng dữ liệu cũ) — sẽ:
 - Tạo database `VPDT_DMS`
 - Tạo bảng `dbo.AppData` (dữ liệu cấu hình — mỗi collection 1 dòng JSON)
-- Tạo `dbo.SystemLogs`, `dbo.Tasks`, `dbo.Records` (dữ liệu hồ sơ nghiệp vụ —
-  mỗi bản ghi 1 dòng riêng, xem ghi chú kiến trúc ở mục 0)
+- Tạo `dbo.SystemLogs`, `dbo.Tasks`, và 1 bảng riêng cho mỗi collection nghiệp
+  vụ khác (dữ liệu hồ sơ nghiệp vụ — mỗi bản ghi 1 dòng riêng, xem ghi chú
+  kiến trúc ở mục 0)
 
 Dữ liệu mặc định (phòng ban, user admin, quy trình mẫu...) sẽ được **tự động
 seed khi server Node.js khởi động lần đầu** (mục 8) — không cần chạy tay.
@@ -705,10 +707,16 @@ xem chi tiết ở đầu `server/sql/schema.sql`:
 
 - `dbo.SystemLogs` — nhật ký hệ thống
 - `dbo.Tasks` — Công việc
-- `dbo.Records` — submissions/docs/carRegs/officeReqs/contracts/meetings/
-  meetingMinutes/internalPosts/paymentRequests/vppPeriods/vppRegistrations/
-  reportPeriods/reportEntries/reportSlideTemplates (phân biệt bằng cột
-  `Collection`, mỗi bản ghi vẫn 1 dòng riêng)
+- Mỗi collection nghiệp vụ còn lại (submissions/docs/carRegs/officeReqs/
+  contracts/meetings/meetingMinutes/internalPosts/paymentRequests/
+  vppPeriods/vppRegistrations/reportPeriods/reportEntries + ~40 collection
+  khác) đều có BẢNG RIÊNG (`dbo.Docs`, `dbo.Contracts`, `dbo.Submissions`...
+  xem `DEDICATED_TABLES` ở `server/lib/recordStore.js` cho danh sách đầy đủ)
+  — ban đầu (Bước 6c-6j) các collection này dùng CHUNG 1 bảng `dbo.Records`
+  (phân biệt bằng cột `Collection`), nhưng từ Bước 7 đã lần lượt "tốt
+  nghiệp" sang bảng riêng để có cột lọc thật (Dept/Status/Creator...) thay
+  vì phải tải nguyên JSON rồi lọc bằng Node — tới Bước 7g, TOÀN BỘ collection
+  đã tốt nghiệp hết, bảng `dbo.Records` dùng chung không còn được tạo mới.
 
 Chỉ còn dữ liệu CẤU HÌNH (người dùng, phân quyền, quy trình phê duyệt theo
 phòng ban, danh mục...) còn ở dạng 1-blob-JSON/collection trong `dbo.AppData`
@@ -938,8 +946,8 @@ sqlcmd -S localhost -U sa -i sql/schema.sql
 
 # 3b. NẾU bản cập nhật kèm script scripts/migrate-*.js (xem điểm 4 ở trên) — chạy dry-run trước, đọc
 #     kỹ kết quả, rồi mới --confirm. Bỏ qua bước này nếu bản cập nhật không nhắc tới script nào.
-node scripts/migrate-records-batch1.js
-node scripts/migrate-records-batch1.js --confirm
+node scripts/<ten-script-migrate>.js
+node scripts/<ten-script-migrate>.js --confirm
 
 # 4. Xem có biến .env mới cần thêm không
 sudo diff .env .env.example

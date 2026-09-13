@@ -29,8 +29,9 @@ GO
 USE VPDT_DMS;
 GO
 
--- UX_Records_Collection_Code bên dưới là INDEX LỌC (filtered index, "WHERE Code IS NOT NULL") — bắt
--- buộc phiên làm việc phải bật QUOTED_IDENTIFIER, nếu không CREATE INDEX sẽ báo lỗi Msg 1934. Driver
+-- Nhiều index bên dưới (VD UX_Docs_Code, UX_Submissions_Code...) là INDEX LỌC (filtered index, "WHERE
+-- Code IS NOT NULL") — bắt buộc phiên làm việc phải bật QUOTED_IDENTIFIER, nếu không CREATE INDEX sẽ báo
+-- lỗi Msg 1934. Driver
 -- cũ (sqlcmd/ODBC) tự bật sẵn nên trước đây không phát hiện ra, nhưng sqlcmd18 (mssql-tools18, khuyến
 -- nghị dùng cho Ubuntu 22.04+ trong HUONG_DAN_DEPLOY_UBUNTU.md) không tự bật — đặt tường minh ở đây để
 -- chạy đúng với cả 2 phiên bản công cụ.
@@ -184,47 +185,30 @@ BEGIN
 END
 GO
 
-/* CẬP NHẬT (Bước 6c trở đi — hồ sơ nghiệp vụ dùng chung 2 engine generic lib/createValidation.js +
-   lib/workflowEngine.js: submissions/docs/carRegs/officeReqs, cùng lib/recordActions.js cho
-   contracts/meetingMinutes): thay vì viết 1 bảng riêng cho mỗi collection như SystemLogs/Tasks (không
-   hợp lý vì các collection này không có bộ cột lọc chung cố định như Tasks), dùng 1 bảng DÙNG CHUNG
-   cho nhiều collection, phân biệt bằng cột Collection — mỗi bản ghi vẫn là 1 dòng riêng (khoá đúng 1
-   dòng thay vì cả collection, cùng lý do đã nêu ở SystemLogs/Tasks). xem lib/recordStore.js —
-   MIGRATED_COLLECTIONS ở đó liệt kê collection nào đã chuyển sang đây; collection chưa có trong danh
-   sách đó vẫn ở AppData như cũ, cùng 1 bảng này phục vụ được TẤT CẢ các bước 6c/6d/... tiếp theo mà
-   không cần thêm bảng/schema mới mỗi bước.
-   Code (mã hồ sơ, vd "TT-001") tách thành cột thật + UNIQUE INDEX lọc (Code IS NOT NULL) — khi còn ở
-   AppData, chống trùng mã dựa vào khoá cả collection lúc tạo (WITH UPDLOCK, HOLDLOCK); ở đây không còn
-   khoá cả collection nữa nên cần ràng buộc UNIQUE thật ở tầng CSDL để chặn 2 request tạo cùng mã CÙNG
-   LÚC (race) — kể cả xác suất xảy ra rất thấp, đây là cách chặn ĐÚNG thay vì chỉ dựa vào kiểm tra ở
-   tầng ứng dụng (đọc danh sách hiện có rồi so sánh, có khoảng hở giữa đọc và ghi). */
-IF OBJECT_ID('dbo.Records', 'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.Records (
-        Collection   NVARCHAR(50)   NOT NULL,
-        Id           BIGINT         NOT NULL,
-        Code         NVARCHAR(100)  NULL,
-        CreatedAt    DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
-        Payload      NVARCHAR(MAX)  NOT NULL,
-        CONSTRAINT PK_Records PRIMARY KEY (Collection, Id)
-    );
-    CREATE INDEX IX_Records_Collection_CreatedAt ON dbo.Records (Collection, CreatedAt DESC, Id DESC);
-    CREATE UNIQUE INDEX UX_Records_Collection_Code ON dbo.Records (Collection, Code) WHERE Code IS NOT NULL;
-END
-GO
+/* LỊCH SỬ (Bước 6c-7g, không còn áp dụng): từ Bước 6c, hồ sơ nghiệp vụ dùng chung 2 engine generic
+   lib/createValidation.js + lib/workflowEngine.js (submissions/docs/carRegs/officeReqs, cùng
+   lib/recordActions.js cho contracts/meetingMinutes...) từng dùng CHUNG 1 bảng `dbo.Records` (cột
+   Collection phân biệt từng loại) thay vì viết 1 bảng riêng cho mỗi collection. Từ Bước 7, mỗi
+   collection dần "tốt nghiệp" sang bảng riêng có cột lọc thật (xem khối "BƯỚC 7" ngay dưới đây). Tới
+   Bước 7g, TOÀN BỘ collection từng ở `dbo.Records` đã tốt nghiệp hết — bảng `dbo.Records` (cùng 2 index
+   PK_Records/UX_Records_Collection_Code của nó) đã bị GỠ BỎ KHỎI SCRIPT NÀY (không còn được tạo mới):
+   không còn tầng "bảng dùng chung" nào nữa, chỉ còn 2 tầng — bảng riêng (xem lib/recordStore.js
+   DEDICATED_TABLES) hoặc AppData JSON (danh mục/cấu hình nhỏ) — collection MỚI từ nay bắt buộc có bảng
+   riêng ngay từ đầu. Nếu DB của bạn còn bảng `dbo.Records` từ trước Bước 7g (không áp dụng cho DB mới
+   hoàn toàn tạo sau thời điểm này), bảng đó đã rỗng/không còn code nào đọc/ghi — có thể tự DROP TABLE
+   thủ công nếu muốn dọn hẳn, script này không tự làm (chỉ additive, không xoá gì). */
 
 /* ==========================================================
    BƯỚC 7 — Tách các collection tăng trưởng nhanh (không giới hạn theo thời gian, KHÔNG bị chặn trần
-   bởi số nhân sự/danh mục cấu hình) khỏi bảng dùng chung dbo.Records sang bảng riêng — cùng lý do và
-   cùng khuôn đã áp dụng cho SystemLogs (Bước 6a)/Tasks (Bước 6b): dbo.Records chỉ có Collection/Id/
-   Code/CreatedAt là cột SQL thật, MỌI field nghiệp vụ khác (status, dept, người tạo...) chỉ nằm trong
-   Payload JSON — không lọc/sắp xếp được ở tầng CSDL, mọi request đều phải tải NGUYÊN cả collection vào
-   Node rồi lọc bằng JavaScript. Ở quy mô nhỏ (hàng nghìn dòng) không sao, nhưng các collection tăng
-   trưởng theo THỜI GIAN không giới hạn (chấm công mỗi ngày/mỗi nhân viên, thông báo hệ thống tự sinh
-   liên tục, đơn hàng/hồ sơ mỗi sự kiện nghiệp vụ...) sẽ chạm ngưỡng hàng triệu dòng sau vài năm vận
-   hành — đây là bước bắt đầu xử lý đúng nhóm collection đó (không áp dụng cho TOÀN BỘ 44+ collection
-   còn lại trong dbo.Records — phần lớn bị chặn trần tự nhiên bởi số nhân sự/danh mục, không cần bảng
-   riêng, xem thảo luận đã thống nhất với người dùng).
+   bởi số nhân sự/danh mục cấu hình) sang bảng riêng — cùng lý do và cùng khuôn đã áp dụng cho SystemLogs
+   (Bước 6a)/Tasks (Bước 6b): bảng dùng chung trước đây chỉ có Collection/Id/Code/CreatedAt là cột SQL
+   thật, MỌI field nghiệp vụ khác (status, dept, người tạo...) chỉ nằm trong Payload JSON — không lọc/
+   sắp xếp được ở tầng CSDL, mọi request đều phải tải NGUYÊN cả collection vào Node rồi lọc bằng
+   JavaScript. Ở quy mô nhỏ (hàng nghìn dòng) không sao, nhưng các collection tăng trưởng theo THỜI GIAN
+   không giới hạn (chấm công mỗi ngày/mỗi nhân viên, thông báo hệ thống tự sinh liên tục, đơn hàng/hồ sơ
+   mỗi sự kiện nghiệp vụ...) sẽ chạm ngưỡng hàng triệu dòng sau vài năm vận hành — đây là bước bắt đầu
+   xử lý đúng nhóm collection đó (không áp dụng cho TOÀN BỘ collection còn lại — phần lớn bị chặn trần tự
+   nhiên bởi số nhân sự/danh mục, không cần bảng riêng, xem thảo luận đã thống nhất với người dùng).
 
    Nguyên tắc thiết kế mỗi bảng ở Bước 7 (giữ NHẤT QUÁN với Tasks/OperationWorkItems đã có):
    - Payload NVARCHAR(MAX) vẫn là NGUỒN DỮ LIỆU CHÍNH (đầy đủ, không mất field nào) — an toàn ngay cả
@@ -232,8 +216,7 @@ GO
    - Chỉ trích xuất thành cột SQL thật ĐÚNG các field đã xác nhận dùng để lọc quyền xem
      (lib/recordViewScope.js) hoặc dùng ở Báo Cáo (module-baocaoquantri.js) — đây là field THỰC SỰ cần
      WHERE/index, không suy đoán thêm field khác chưa có bằng chứng dùng tới.
-   - Id GIỮ NGUYÊN kiểu Date.now() cho dữ liệu cũ di trú từ dbo.Records (khớp đúng mọi tham chiếu chéo
-     hiện có: taskId, rootDocId...); bản ghi MỚI tạo sau khi migrate mới dùng IDENTITY.
+   - Id dùng Date.now() (khớp đúng mọi tham chiếu chéo hiện có: taskId, rootDocId...), không dùng IDENTITY.
    ========================================================== */
 
 /* Thông báo trong app (lib/notifications.js) — sinh liên tục, không giới hạn theo thời gian (mỗi hành
@@ -1208,12 +1191,12 @@ BEGIN
 END
 GO
 
-/* Thùng Rác (Trash Bin) — khi admin xoá 1 hồ sơ ở bất kỳ collection nào trong dbo.Records
-   (lib/recordStore.js deleteRecordForCollection()), bản ghi được CHUYỂN vào đây thay vì xoá thẳng —
-   giữ nguyên Payload gốc để khôi phục lại đúng vị trí (cùng Id) nếu cần, hoặc xoá vĩnh viễn (chỉ xoá
-   dòng ở bảng này, dữ liệu đã không còn ở Records từ lúc chuyển vào đây nên "xoá vĩnh viễn" không cần
-   đụng gì thêm). Mỗi Id bị xoá ở Records tương ứng ĐÚNG 1 dòng ở đây — không dùng lại Id cũ cho Id mới
-   (IDENTITY riêng của bảng này). Xem routes/trash.js. */
+/* Thùng Rác (Trash Bin) — khi admin xoá 1 hồ sơ ở bất kỳ collection nào có bảng riêng (xem
+   lib/recordStore.js deleteRecordForCollection()/DEDICATED_TABLES), bản ghi được CHUYỂN vào đây thay vì
+   xoá thẳng — giữ nguyên Payload gốc để khôi phục lại đúng vị trí (cùng Id) nếu cần, hoặc xoá vĩnh viễn
+   (chỉ xoá dòng ở bảng này, dữ liệu đã không còn ở bảng gốc từ lúc chuyển vào đây nên "xoá vĩnh viễn"
+   không cần đụng gì thêm). Mỗi Id bị xoá ở bảng gốc tương ứng ĐÚNG 1 dòng ở đây — không dùng lại Id cũ
+   cho Id mới (IDENTITY riêng của bảng này). Xem routes/trash.js. */
 IF OBJECT_ID('dbo.TrashBin', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.TrashBin (

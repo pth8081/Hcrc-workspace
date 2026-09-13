@@ -306,7 +306,7 @@ const DB = {
   paymentRequests: [], paymentDeptWorkflows: {},
   formTemplates: {},
   permGroups: [],
-  vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [],
+  vppExcludedJobTitles: [], workflowParticipatingDepts: [],
   pwaShortcutModules: [],
   itPriceMasterLists: [],
   uploadFileTypeConfig: {}, uploadSizeLimitConfig: {},
@@ -3039,7 +3039,6 @@ async function initDatabase(loggingInUser) {
     DB.workflows = data.workflows || [];
     DB.formTemplates = data.formTemplates || {};
     DB.permGroups = data.permGroups || [];
-    DB.vppExcludeGroups = data.vppExcludeGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
     // BUG THẬT đã sửa: dòng này trước nay CHƯA từng được gán từ data (chỉ có nhánh khởi tạo lười "|| []"

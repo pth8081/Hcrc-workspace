@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**20.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**20.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v20.1 (2026-09-13): Bước 7g — Dọn dẹp `dbo.Records` dùng chung + AppData JSON cũ
+
+Hoàn tất lộ trình chuyển toàn bộ collection nghiệp vụ tăng-trưởng-nhanh sang bảng SQL riêng (Bước 6-7):
+bảng dùng chung `dbo.Records` (55 collection từng ở đó, xem `MIGRATED_COLLECTIONS`/`DEDICATED_TABLES` ở
+`lib/recordStore.js`) đã hoàn toàn RỖNG kể từ khi collection cuối cùng "tốt nghiệp" sang bảng riêng — dọn
+sạch mọi code path đọc/ghi thẳng bảng này để kiến trúc lưu trữ nhất quán 100% (mỗi collection nghiệp vụ =
+1 bảng riêng, mọi collection MỚI từ nay bắt buộc có bảng riêng ngay từ đầu, không còn "đường tắt" bảng
+dùng chung). Người dùng xác nhận sẽ trỏ ứng dụng vào 1 CSDL hoàn toàn mới (không có dữ liệu cũ cần giữ
+lại), nên đây là dọn kiến trúc thuần, không phải di trú dữ liệu an toàn zero-downtime.
+
+- **`lib/recordStore.js`**: gỡ toàn bộ nhánh SQL thô còn lại nhắm vào `dbo.Records` trong
+  `getAllRecords()`/`insertRecord()`/`withLockedRecordById()`/`deleteRecordById()`/`moveRecordToTrash()`/
+  `restoreTrashItem()`/`createForCollectionSerialized()` — các hàm này giờ LUÔN yêu cầu collection có
+  entry trong `DEDICATED_TABLES`, ném lỗi rõ ràng thay vì âm thầm sai nếu thiếu (an toàn hơn so với đọc/
+  ghi nhầm 1 bảng nay đã rỗng). Xoá hẳn `migrateLegacyCollection()`/`migrateAllLegacyCollections()` (chạy
+  ở mỗi lần khởi động server, luôn no-op từ lâu vì `dbo.Records` không còn dữ liệu để di trú).
+- **Vá 1 lỗi thật phát hiện trong lúc dọn dẹp**: `isFileUrlStillReferenced()` (kiểm tra "còn ai dùng file
+  này trước khi xoá vĩnh viễn ở Thùng Rác") chỉ quét `dbo.Records` — từ khi TỪNG collection lần lượt tốt
+  nghiệp sang bảng riêng, hàm này ngày càng mù dần rồi mù HẲN với hồ sơ đang sống ở bảng riêng, có thể xoá
+  nhầm file vẫn đang được 1 hồ sơ khác (chưa vào Thùng Rác) sử dụng. Sửa: quét TỪNG bảng riêng
+  (`DEDICATED_TABLES`) song song thay vì bảng chung đã rỗng.
+- **`sql/schema.sql`**: không còn tạo `dbo.Records` (+ 2 index của nó) trên DB mới; cập nhật lại các khối
+  comment giải thích kiến trúc cho khớp trạng thái hiện tại.
+- **`scripts/`**: xoá `migrate-records-batch1.js` và `purge-dau-tu.js` — cả 2 là script di trú/dọn dữ
+  liệu MỘT LẦN nhắm vào `dbo.Records`, đã hết tác dụng từ lâu (di trú 0 dòng vì bảng nguồn rỗng) và không
+  còn tương thích với kiến trúc bảng riêng hiện tại.
+- **AppData JSON cũ**: gỡ key `vppExcludeGroups` (dạng "Nhóm Không Cấp Văn Phòng Phẩm" cũ, đã thay hẳn
+  bằng `vppExcludedJobTitles` từ trước, chỉ còn di trú 1 lần lúc khởi động — bỏ luôn
+  `migrateVppExcludedJobTitles()` vì trên DB mới nó chỉ tạo ra đúng giá trị mặc định `[]` mà vòng lặp seed
+  chung đã tự làm) + dọn 2 entry admin-only đã hết tác dụng (`officeInvestDeptWorkflows` — DEFAULTS key
+  tương ứng đã xoá từ trước; `vppExcludeGroups` theo trên).
+- Cập nhật `deploy/Huong-dan-trien-khai-PM2.md`, `-PM2-Nginx.md`, `Huong-dan-nghiep-vu.md`: bỏ mọi chỗ
+  còn mô tả `dbo.Records` như kiến trúc hiện tại, thay bằng "mỗi collection 1 bảng riêng".
+
+Full regression suite chạy lại toàn bộ, chỉ còn đúng 4 lỗi môi trường đã biết từ trước (không mới) — 1
+test cũ (`test-audit-round2-cluster6.js`) được cập nhật mock để khớp đúng hành vi MỚI (và ĐÚNG hơn) của
+`isFileUrlStillReferenced()`.
+
+**Không cần thao tác triển khai gì thêm ngoài copy code + `pm2 restart`** — `schema.sql` có đổi (không
+còn tạo `dbo.Records`) nhưng script vẫn an toàn chạy lại nhiều lần như thường lệ; không thêm biến môi
+trường mới, không thêm dependency `package.json` nào. Nếu server thật của bạn ĐANG có sẵn bảng
+`dbo.Records` từ trước (không áp dụng nếu bạn trỏ sang CSDL hoàn toàn mới) — bảng đó đã rỗng/không còn
+code nào đọc/ghi, có thể tự `DROP TABLE dbo.Records` thủ công nếu muốn dọn hẳn, không bắt buộc.
 
 ## v20.0 (2026-09-13): Test chuyên sâu theo kịch bản nghiệp vụ (đợt 2) — vá 6 lỗ hổng/lỗi thật
 
