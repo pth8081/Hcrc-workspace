@@ -76,6 +76,7 @@ async function main() {
 
     console.log('05: điền nốt form + gửi đề xuất thật, mở lại modal chi tiết xem thông tin đã lưu đúng chưa.');
     await page.fill('#itPriceReason', 'Điều chỉnh giá theo chương trình khuyến mãi Quý 4');
+    await page.selectOption('#itPriceRetailZone', 'Miền Bắc');
     await page.evaluate(() => {
       itPricePendingFile = {
         fileUrl: '/uploads/gia-de-xuat-demo.xlsx', fileName: 'gia-de-xuat-demo.xlsx',

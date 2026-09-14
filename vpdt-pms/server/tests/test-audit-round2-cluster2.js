@@ -47,7 +47,9 @@ const OUTSIDE_URL = 'https://evil.example/fake.pdf';
 const TRAVERSAL_URL = '/uploads/../../etc/passwd';
 const TOO_LONG_URL = `/uploads/${'a'.repeat(UPLOADED_FILE_URL_MAX_LEN + 50)}.pdf`;
 
-const APP_DATA_EMPTY = { formTemplates: {} };
+// priceZones: "Vùng Giá Áp Dụng" (RETAIL, đợt sau) — itPriceApprovals.extraValidate() bắt buộc chọn
+// đúng 1 giá trị từ danh mục này, seed 1 giá trị để itPricePayload() (RETAIL mặc định) qua được.
+const APP_DATA_EMPTY = { formTemplates: {}, priceZones: ['Miền Bắc'] };
 // Biểu Mẫu có trường BẮT BUỘC — dùng cho nhóm kịch bản 3.
 const APP_DATA_REQUIRED = {
   formTemplates: {
@@ -87,7 +89,7 @@ const subPayload = (over) => ({
 // sanitizePriceFileItems() (lib/priceFileParser.js) từ chối bảng giá không có dòng dữ liệu nào.
 const PRICE_ITEMS = [{ values: { c0: 'Mặt hàng A', c1: '15000' } }];
 const itPricePayload = (over) => ({
-  dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL', effectiveDate: '2026-09-01',
+  dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL', effectiveDate: '2026-09-01', priceZone: 'Miền Bắc',
   files: [{ fileUrl: GOOD_URL, fileName: 'bang-gia.xlsx', items: PRICE_ITEMS, columnLabels: [] }], ...over
 });
 

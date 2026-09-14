@@ -394,6 +394,12 @@ async function submitItPriceApproval(e) {
   if (activeItPriceSubTab === 'WHOLESALE' && !wholesaleApplyUnit) {
     return alert('⛔ Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn.');
   }
+  // "Vùng Giá Áp Dụng" — bắt buộc cho Bán Lẻ, chặn sớm cho trải nghiệm mượt (server tự xác minh lại y
+  // hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi).
+  const priceZone = document.getElementById('itPriceRetailZone').value;
+  if (activeItPriceSubTab === 'RETAIL' && !priceZone) {
+    return alert('⛔ Vui lòng chọn Vùng Giá Áp Dụng.');
+  }
   // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — chặn sớm cho trải nghiệm mượt,
   // server tự xác minh lại y hệt ở itPriceApprovals.extraValidate (không tin giá trị client gửi). Bán
   // Buôn KHÔNG có khái niệm "Toàn bộ" — luôn ép OTHER (server cũng tự ép lại y hệt, bỏ qua giá trị
@@ -438,6 +444,7 @@ async function submitItPriceApproval(e) {
     priceType: activeItPriceSubTab,
     priceTier: activeItPriceSubTab === 'WHOLESALE' ? document.getElementById('itPriceTier').value : null,
     wholesaleApplyUnit: activeItPriceSubTab === 'WHOLESALE' ? wholesaleApplyUnit : null,
+    priceZone: activeItPriceSubTab === 'RETAIL' ? priceZone : null,
     masterListId: masterListId ? Number(masterListId) : null,
     files: [{
       fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName,
@@ -523,6 +530,7 @@ function resetItPriceForm() {
   document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
   document.getElementById('itPriceTier').value = '';
   document.getElementById('itPriceWholesaleApplyUnit').value = '';
+  document.getElementById('itPriceRetailZone').value = '';
   renderItPriceMasterListSelect();
   clearSingleFileInput('itPriceFileInput', 'itPriceFileChip');
   clearMultiFileInput('itPriceExtraFiles', 'itPriceExtraFilesChip');
@@ -536,6 +544,42 @@ function resetItPriceForm() {
     emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
   });
   applyItPriceStoreScopeUIForSubTab();
+}
+
+// ===== Danh Mục "Vùng Giá Áp Dụng" (DB.priceZones) — Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ, ô
+// #itPriceRetailZone. Danh sách phẳng thuần, mirror DB.carTaxiCompanies/DB.stores (không cần key ổn
+// định — tên vùng chính là giá trị lưu thẳng vào itPriceApprovals.priceZone). =====
+function savePriceZone(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtPriceZoneName').value.trim();
+  if (!name) return;
+  if (DB.priceZones.includes(name)) return alert('Vùng giá đã tồn tại!');
+  DB.priceZones.push(name);
+  syncStorage('priceZones');
+  logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtPriceZoneName').value = '';
+  renderPriceZoneList();
+  populateDropdowns();
+}
+
+function deletePriceZone(name) {
+  if (!confirm(`Xóa vùng giá "${name}"?`)) return;
+  DB.priceZones = DB.priceZones.filter(x => x !== name);
+  syncStorage('priceZones');
+  logSystemAction('USER_MGM', 'DELETE_PRICE_ZONE', `Xóa vùng giá áp dụng [${name}]`, 'SUCCESS', name);
+  renderPriceZoneList();
+  populateDropdowns();
+}
+
+function renderPriceZoneList() {
+  const ul = document.getElementById('priceZoneList');
+  if (!ul) return;
+  ul.innerHTML = (DB.priceZones || []).map(name => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(name)}</span>
+      <button data-op="deletePriceZone" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
 }
 
 function onItPriceFilterChange() {
@@ -560,6 +604,9 @@ function setItPriceSubTab(subTab) {
   // "Đơn Vị Áp Dụng Giá Bán Buôn" — cùng điều kiện hiện/ẩn với tierWrap ở trên (chỉ Bán Buôn).
   const applyUnitWrap = document.getElementById('itPriceWholesaleApplyUnitWrap');
   if (applyUnitWrap) applyUnitWrap.classList.toggle('hidden', activeItPriceSubTab !== 'WHOLESALE');
+  // "Vùng Giá Áp Dụng" — đối xứng applyUnitWrap ở trên, chỉ hiện + bắt buộc khi Bán Lẻ.
+  const retailZoneWrap = document.getElementById('itPriceRetailZoneWrap');
+  if (retailZoneWrap) retailZoneWrap.classList.toggle('hidden', activeItPriceSubTab !== 'RETAIL');
   applyItPriceStoreScopeUIForSubTab();
   resetListPage('itPrice');
   renderItPriceApprovals();

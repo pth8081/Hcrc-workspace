@@ -4656,6 +4656,18 @@
         </div>
       </div>
 
+      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <h3 class="font-bold text-rose-900 text-sm flex items-center gap-1">🗺️ Quản Lý Danh Mục Vùng Giá Áp Dụng</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Vùng Giá Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ (Hỗ Trợ IT).</p>
+        <form data-op-submit="savePriceZone" class="flex gap-2">
+          <input id="txtPriceZoneName" placeholder="Tên vùng giá mới (VD: Miền Bắc)..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="priceZoneList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
         <form data-op-submit="saveCat" class="flex gap-2">
@@ -5925,6 +5937,16 @@
             <label class="block font-semibold text-gray-600 mb-1">🏢 Đơn Vị Áp Dụng Giá Bán Buôn <span class="text-red-500">*</span></label>
             <input id="itPriceWholesaleApplyUnit" type="text" maxlength="300" placeholder="VD: Công ty TNHH ABC, Đại lý XYZ..." class="w-full border p-1.5 rounded bg-white">
             <p class="text-gray-400 mt-1">Tên đơn vị/khách hàng sẽ áp dụng mức giá bán buôn này — khác với Phòng Ban Đề Xuất ở trên (đơn vị NỘI BỘ tạo đề xuất).</p>
+          </div>
+          <!-- "Vùng Giá Áp Dụng" — CHỈ áp dụng cho sub-tab Bán Lẻ (đối xứng với "Đơn Vị Áp Dụng Giá Bán
+               Buôn" ở trên, vốn chỉ áp dụng cho Bán Buôn). Chọn từ danh mục hệ thống DB.priceZones (Hệ
+               Thống > Quản Lý Danh Mục), không nhập tay tự do — xem setItPriceSubTab()/submitItPriceApproval()
+               ở module-itsupport-price.js. -->
+          <div id="itPriceRetailZoneWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">🗺️ Vùng Giá Áp Dụng <span class="text-red-500">*</span></label>
+            <select id="itPriceRetailZone" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn Vùng Giá Áp Dụng --</option>
+            </select>
           </div>
           <div id="itPriceMasterListSelectWrap" class="hidden">
             <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>

@@ -193,6 +193,12 @@ const DEFAULTS = {
   // carRegs.assignedTaxiCompany, không có gì tham chiếu tới qua key riêng).
   carTaxiCompanies: ['Mai Linh', 'Vinasun'],
 
+  // "Vùng Giá Áp Dụng" (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ, ô #itPriceRetailZone) — danh sách
+  // phẳng thuần (mirror carTaxiCompanies ở trên), giá trị lưu thẳng vào itPriceApprovals.priceZone. CHỈ
+  // áp dụng cho Bán Lẻ (đối xứng wholesaleApplyUnit chỉ áp dụng cho Bán Buôn) — xem
+  // lib/createValidation.js::itPriceApprovals.extraValidate.
+  priceZones: ['Miền Bắc', 'Miền Trung', 'Miền Nam'],
+
   // "Chủ Đề" (HCRC Đồng Hành — hrFeedback.category, CORE_FIELD_MANIFEST.HR_FEEDBACK.hrFeedbackCategory) —
   // cùng khuôn itTicketCategories ở trên: KHÁC danh sách nhãn hiển thị thuần, key ở đây quyết định trực
   // tiếp giá trị hợp lệ server chấp nhận (xem lib/createValidation.js hrFeedback.extraValidate, ĐỌC từ
