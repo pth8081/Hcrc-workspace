@@ -1,8 +1,74 @@
 # Phiên bản hiện tại
 
-**21.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.0 (2026-09-14): Báo Cáo Đăng Ký Xe — Thống Kê Theo Lái Xe + Địa Điểm Đã Đến
+
+Người dùng yêu cầu thêm 3 mục báo cáo cho Đăng Ký Xe: (1) tổng số chuyến +
+km mỗi lái xe đi trong khoảng ngày chọn được; (2) tổng chuyến + các địa điểm
+đã đến; (3) số phiếu đăng ký theo phòng ban + tổng toàn công ty.
+
+**Phân tích trước khi làm**: mục (3) thực chất đã có sẵn — tab "🚗 Đăng Ký
+Xe" trong module 📊 Báo Cáo (`REPORT_MODULE_CONFIGS.car`,
+`module-baocaoquantri.js`) từ trước đã hiển thị tổng số hồ sơ + phân theo
+phòng ban qua khối chung `renderModuleReport()`, dùng chung bộ lọc "Từ ngày/
+Đến ngày" ở đầu tab — không cần thêm gì cho mục này, NGOẠI TRỪ 1 lỗ hổng có
+thật phát hiện được khi rà soát: tab này chưa từng khai báo `statusBuckets`
+riêng nên rơi về mặc định chỉ đếm PENDING/APPROVED/REJECTED — bỏ sót hoàn
+toàn DRAFT ("Cần bổ sung", có từ tính năng "Bổ Sung")/CANCELLED ("Đã hủy
+chuyến", Fix 4)/AWAITING_EVALUATION+COMPLETED ("Chờ đánh giá"/"Hoàn thành",
+v21.9) — đã vá cùng đợt này (khai báo đủ 7 trạng thái thật).
+
+Mục (1)/(2) là 2 khối MỚI, thêm vào NGAY DƯỚI khối chung ở trên (không thay
+thế) qua `renderExtra`/`extraRows` (cùng khuôn Hợp Đồng/Văn Phòng Tổng Hợp/
+Đồng Phục/Công Việc/Truyền Thông Nội Bộ đã có — xem
+`module-baocaoquantri-preview.js`):
+
+- **🧑‍✈️ Thống Kê Theo Lái Xe**: 2 thẻ tổng (tổng số chuyến đã thực hiện,
+  tổng km toàn công ty) + bảng số chuyến/tổng km TỪNG lái xe, sắp xếp giảm
+  dần theo km.
+- **📍 Địa Điểm Đã Đến**: tần suất từng địa điểm xuất hiện trong lộ trình
+  (`routePoints`), mỗi địa điểm chỉ tính 1 lần/chuyến dù ghé nhiều lần trong
+  cùng 1 chuyến khứ hồi (VD "Hà Nội → Hải Phòng → Hà Nội" chỉ tính "Hà Nội"
+  1 lần) — top 15 địa điểm nhiều nhất, còn lại ghi chú số lượng ẩn bớt.
+
+**Quyết định nghiệp vụ quan trọng** (không hỏi lại người dùng, suy luận trực
+tiếp từ dữ liệu/luồng đã có): CHỈ tính chuyến đã thực sự được duyệt VÀ phân
+công tài xế (`status` ∈ APPROVED/AWAITING_EVALUATION/COMPLETED VÀ có
+`assignedDriverUsername`) — phiếu PENDING/DRAFT chưa từng có tài xế (chỉ gán
+lúc duyệt, xem `applyWorkflowAction()`), REJECTED/CANCELLED không tính dù có
+thể còn sót field phân công cũ (`cancelCarReg()` không xoá lại các field
+này) vì chuyến chưa từng/không còn diễn ra thật — tính vào sẽ thổi phồng số
+liệu. Số km ưu tiên `actualKm` (số km THỰC TẾ, ghi nhận lúc lái xe "Kết Thúc
+Chuyến"/người đăng ký "Đánh Giá" — xem v21.9) nếu chuyến đã kết thúc, ngược
+lại tạm dùng `km` (số km đăng ký dự kiến) cho chuyến đã duyệt nhưng lái xe
+chưa kết thúc — có ghi chú rõ trên màn hình để không hiểu nhầm là số liệu
+thực tế 100%.
+
+**Chi tiết kỹ thuật**:
+- `public/js/module-baocaoquantri.js`: `REPORT_MODULE_CONFIGS.car` thêm
+  `statusBuckets` (7 trạng thái) + `renderExtra: renderCarReportExtra` +
+  `extraRows: computeCarReportExtraRows`.
+- `public/js/module-baocaoquantri-preview.js`: `computeCarTripStats()` (hàm
+  tính chung, dùng lại cho cả hiển thị màn hình lẫn xuất Excel) +
+  `renderCarReportExtra()` (HTML 2 khối) + `computeCarReportExtraRows()`
+  (dòng bổ sung cho Excel, cùng cơ chế `config.extraRows` đã dùng cho Hợp
+  Đồng/Văn Phòng Tổng Hợp).
+- Không cần rebuild `tailwind.css` — mọi class dùng đều đã có sẵn từ các đợt
+  trước (`bg-emerald-600`/`bg-teal-500`/`bg-sky-700`... đã dùng ở nơi khác).
+- `tests/test-reports.js`: thêm seed 5 bản ghi `carRegs` (2 lái xe, nhiều
+  trạng thái khác nhau bao gồm CANCELLED còn sót field phân công + DRAFT) +
+  4 kịch bản mới (statusBuckets đủ 7 trạng thái; thống kê lái xe chỉ tính
+  đúng chuyến "đã diễn ra" + ưu tiên actualKm; thứ tự sắp xếp theo km giảm
+  dần trong HTML; đủ dòng trong Excel export) — 22/22 kịch bản pass. Chạy
+  lại `test-meeting-car.js` (89/89), `test-car-regs-scope.js` (7/7),
+  `test-lazy-load-all-tabs.js` (42/42) — không ảnh hưởng gì.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies —
+thuần đọc lại đúng dữ liệu `carRegs` đã có sẵn (không thêm field CSDL mới,
+không thêm route mới) — chỉ cần copy code + `pm2 restart`.
 
 ## v21.9 (2026-09-14): Đăng Ký Xe — "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" bắt buộc (người đăng ký)
 

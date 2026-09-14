@@ -339,7 +339,24 @@ const REPORT_MODULE_CONFIGS = {
     title: '🚗 Báo Cáo Đăng Ký Xe',
     getRecords: (dept, from, to) => fetchReportRecords('carRegs', dept, from, to,
       () => DB.carRegs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
-    statusOf: r => r.status
+    statusOf: r => r.status,
+    // Trước đây KHÔNG khai báo statusBuckets riêng -> rơi về mặc định chỉ PENDING/APPROVED/REJECTED
+    // (renderModuleReport()) — thiếu hẳn DRAFT (Fix 4 "Bổ Sung")/CANCELLED (Fix 4 "Hủy Chuyến")/
+    // AWAITING_EVALUATION+COMPLETED (v21.9 "Kết Thúc Chuyến"/"Đánh Giá") dù các trạng thái này đã tồn tại
+    // từ lâu — khai báo đủ 7 trạng thái thật để khối "⏳ Tình Trạng" phản ánh đúng, không bỏ sót hồ sơ
+    // nào (vẫn tính đủ vào "Tổng số hồ sơ"/"Khối Lượng Theo Phòng Ban" trước đây, chỉ riêng khối trạng
+    // thái là thiếu).
+    statusBuckets: [
+      ['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'],
+      ['DRAFT', 'Cần bổ sung', 'bg-orange-500'],
+      ['APPROVED', 'Đã phê duyệt', 'bg-green-500'],
+      ['AWAITING_EVALUATION', 'Chờ đánh giá', 'bg-amber-500'],
+      ['COMPLETED', 'Hoàn thành', 'bg-emerald-600'],
+      ['REJECTED', 'Từ chối', 'bg-red-500'],
+      ['CANCELLED', 'Đã hủy chuyến', 'bg-slate-500']
+    ],
+    renderExtra: renderCarReportExtra,
+    extraRows: computeCarReportExtraRows
   },
   office: {
     title: '🛒 Báo Cáo Văn Phòng Tổng Hợp',

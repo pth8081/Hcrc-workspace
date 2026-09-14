@@ -1586,6 +1586,23 @@ biệt hoàn toàn (xem mục 4.7).
 - **Tổng Hợp (dashboard toàn công ty)** — các thẻ tổng số liệu gộp toàn công
   ty, phân quyền xem theo module con (VD Ngân Sách: quyền `budgetAggregate`
   xem mọi phòng ban, `budgetManage` xem thêm khối "Toàn Công Ty").
+- **Đăng Ký Xe — khối thống kê riêng (v22.0)**: ngoài khối chung ở trên
+  (tổng số phiếu/theo trạng thái — nay đủ cả 7 trạng thái thật gồm cả
+  "Cần bổ sung"/"Đã hủy chuyến"/"Chờ đánh giá"/"Hoàn thành"/theo phòng ban,
+  đã dùng chung bộ lọc "Từ ngày/Đến ngày" của cả màn Báo Cáo — không cần
+  thêm ô chọn tháng riêng), tab này có thêm **"🧑‍✈️ Thống Kê Theo Lái Xe"**
+  (tổng số chuyến đã thực hiện + tổng số km toàn công ty, và bảng số
+  chuyến/tổng km từng lái xe, sắp xếp theo km giảm dần) và **"📍 Địa Điểm Đã
+  Đến"** (tần suất từng địa điểm xuất hiện trong lộ trình, mỗi địa điểm chỉ
+  tính 1 lần/chuyến dù ghé nhiều lần trong cùng 1 chuyến khứ hồi). Cả 2 khối
+  CHỈ tính chuyến đã thực sự được duyệt và phân công tài xế ("Đã phê duyệt"/
+  "Chờ đánh giá"/"Hoàn thành") — phiếu "Đang chờ duyệt"/"Cần bổ sung"/"Từ
+  chối"/"Đã hủy chuyến" không tính vì chưa từng (hoặc không còn) là 1 chuyến
+  thật. Số km ưu tiên dùng **số km thực tế** (`actualKm`, ghi nhận lúc lái xe
+  "Kết Thúc Chuyến"/người đăng ký "Đánh Giá" — xem mục 4.2) nếu chuyến đã kết
+  thúc, ngược lại tạm dùng số km đăng ký dự kiến cho chuyến đã duyệt nhưng
+  chưa kết thúc. Cả 2 khối đều xuất được kèm theo khi bấm "⬇️ Xuất Excel"
+  ở khối tổng (dòng riêng cho tổng số + từng lái xe).
 
 Không cần cấu hình gì đặc biệt để dùng — mọi nhân viên có quyền vào module nào
 thì tự thấy đúng phần báo cáo tương ứng của module đó khi có quyền xem báo cáo

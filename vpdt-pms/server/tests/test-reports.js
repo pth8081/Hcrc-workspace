@@ -344,6 +344,98 @@ async function main() {
       assertEqual(stats.ordersAwaiting, 1, 'AWAITING_RECEIPT count mismatch'); assertEqual(stats.storeOpenApproved, 1, 'estimateStatus APPROVED count mismatch');
     });
 
+    // ===== Báo Cáo Đăng Ký Xe (yêu cầu người dùng, v22.0): (1) statusBuckets đủ 7 trạng thái thật —
+    // trước đây "car" KHÔNG khai báo statusBuckets riêng nên rơi về mặc định chỉ PENDING/APPROVED/
+    // REJECTED, bỏ sót DRAFT ("Bổ Sung")/CANCELLED ("Hủy Chuyến")/AWAITING_EVALUATION+COMPLETED ("Kết
+    // Thúc Chuyến"/"Đánh Giá", v21.9); (2) renderCarReportExtra()/computeCarReportExtraRows() — thống kê
+    // theo lái xe (số chuyến/tổng km) + tần suất địa điểm, CHỈ tính chuyến đã thực sự duyệt+phân công tài
+    // xế (APPROVED/AWAITING_EVALUATION/COMPLETED), km ưu tiên actualKm (số km thực tế) nếu đã có. Seed
+    // riêng ở CUỐI file, cùng lý do Uniform/HR/Vận Hành ở trên (không ảnh hưởng ngược các assertion Tổng
+    // Hợp/Excel contract/office/task đã chạy xong ở trên, vốn dựa vào đúng 2 bản ghi carRegs gốc).
+    await page.evaluate(() => {
+      DB.carRegs.push(
+        // Lái xe A (lx_a): 2 chuyến đã duyệt — 1 đã "Hoàn Thành" (actualKm ưu tiên hơn km ước tính), 1 mới
+        // duyệt chưa "Kết Thúc Chuyến" (dùng tạm km đăng ký ước tính).
+        {
+          id: 601, dept: 'Phòng Kế Toán', status: 'COMPLETED', assignedDriverUsername: 'lx_a', assignedDriver: 'Lái Xe A',
+          km: 100, actualKm: 95, routePoints: ['Hà Nội', 'Hải Phòng', 'Hà Nội'], destination: 'Hà Nội → Hải Phòng → Hà Nội',
+          createdAt: '2026-03-05T09:00:00'
+        },
+        {
+          id: 602, dept: 'Phòng Kế Toán', status: 'APPROVED', assignedDriverUsername: 'lx_a', assignedDriver: 'Lái Xe A',
+          km: 60, routePoints: ['Hà Nội', 'Bắc Ninh'], destination: 'Hà Nội → Bắc Ninh',
+          createdAt: '2026-03-06T09:00:00'
+        },
+        // Lái xe B (lx_b): 1 chuyến "Chờ Đánh Giá" (AWAITING_EVALUATION, vẫn tính actualKm dù chưa qua bước Đánh Giá).
+        {
+          id: 603, dept: 'Phòng CNTT', status: 'AWAITING_EVALUATION', assignedDriverUsername: 'lx_b', assignedDriver: 'Lái Xe B',
+          km: 200, actualKm: 210, routePoints: ['Hà Nội', 'Hải Phòng'], destination: 'Hà Nội → Hải Phòng',
+          createdAt: '2026-03-07T09:00:00'
+        },
+        // Đã hủy chuyến — CÒN SÓT field phân công cũ (mô phỏng đúng cancelCarReg() không xoá lại các field
+        // này, xem lib/recordActions.js) nhưng KHÔNG được tính vào thống kê lái xe/địa điểm.
+        {
+          id: 604, dept: 'Phòng Kế Toán', status: 'CANCELLED', assignedDriverUsername: 'lx_a', assignedDriver: 'Lái Xe A',
+          km: 999, routePoints: ['Đà Nẵng'], destination: 'Đà Nẵng', createdAt: '2026-03-08T09:00:00'
+        },
+        // Cần bổ sung (DRAFT) — chưa từng có tài xế, dùng để kiểm tra statusBucket "Cần bổ sung" hiện đúng.
+        { id: 605, dept: 'Phòng CNTT', status: 'DRAFT', km: 10, createdAt: '2026-03-09T09:00:00' }
+      );
+      selectReportsNavL1('hanhchinh');
+      selectReportsNavL2('car');
+    });
+
+    await run('Báo Cáo Đăng Ký Xe: statusBuckets đủ 7 trạng thái (không bỏ sót DRAFT/CANCELLED/AWAITING_EVALUATION/COMPLETED)', async () => {
+      const html = await page.evaluate(() => document.getElementById('reportsContent').innerHTML);
+      ['Cần bổ sung', 'Chờ đánh giá', 'Hoàn thành', 'Đã hủy chuyến', 'Đang chờ duyệt', 'Đã phê duyệt', 'Từ chối'].forEach((label) => {
+        assert(html.includes(label), `expected status bucket label "${label}" in the car report status block, got snippet without it`);
+      });
+    });
+
+    await run('Báo Cáo Đăng Ký Xe: Thống Kê Theo Lái Xe chỉ tính chuyến đã duyệt/phân công tài xế, km ưu tiên actualKm', async () => {
+      const stats = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.car.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+        const { happened, byDriver, destFreq } = computeCarTripStats(records);
+        return {
+          happenedCount: happened.length,
+          byDriver: [...byDriver.entries()].map(([username, v]) => ({ username, ...v })).sort((a, b) => a.username.localeCompare(b.username)),
+          destFreq: Object.fromEntries(destFreq)
+        };
+      });
+      assertEqual(stats.happenedCount, 3, 'chỉ 601 (COMPLETED)/602 (APPROVED)/603 (AWAITING_EVALUATION) được tính — CANCELLED/DRAFT/PENDING/APPROVED-không-có-tài-xế phải bị loại');
+      const lxA = stats.byDriver.find((d) => d.username === 'lx_a');
+      const lxB = stats.byDriver.find((d) => d.username === 'lx_b');
+      assert(lxA && lxA.trips === 2 && lxA.km === 155, `Lái Xe A phải có 2 chuyến, tổng 155km (95 actualKm + 60 km ước tính), got: ${JSON.stringify(lxA)}`);
+      assert(lxB && lxB.trips === 1 && lxB.km === 210, `Lái Xe B phải có 1 chuyến, tổng 210km (actualKm), got: ${JSON.stringify(lxB)}`);
+      assertEqual(stats.destFreq['Hà Nội'], 3, 'Hà Nội xuất hiện trong cả 3 chuyến đã tính (601/602/603)');
+      assertEqual(stats.destFreq['Hải Phòng'], 2, 'Hải Phòng xuất hiện trong 601 và 603 (601 chỉ tính 1 lần dù ghé 2 lần trong cùng 1 chuyến khứ hồi)');
+      assertEqual(stats.destFreq['Bắc Ninh'], 1, 'Bắc Ninh chỉ xuất hiện trong 602');
+      assert(!('Đà Nẵng' in stats.destFreq), 'Đà Nẵng (chuyến 604 đã CANCELLED) KHÔNG được tính vào địa điểm');
+    });
+
+    await run('Báo Cáo Đăng Ký Xe: bảng HTML hiện đúng tên lái xe, sắp xếp theo tổng km giảm dần', async () => {
+      const extraHTML = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.car.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+        return renderCarReportExtra(records);
+      });
+      assert(extraHTML.includes('Lái Xe A') && extraHTML.includes('Lái Xe B'), 'expected both driver names in the rendered HTML');
+      assert(extraHTML.indexOf('Lái Xe B') < extraHTML.indexOf('Lái Xe A'), 'Lái Xe B (210km) phải xếp trước Lái Xe A (155km) — sắp xếp theo tổng km giảm dần');
+      assert(extraHTML.includes('Hà Nội'), 'expected the "Hà Nội" destination bar in the rendered HTML');
+    });
+
+    await run('Báo Cáo Đăng Ký Xe: Excel export (extraRows) có đủ dòng tổng chuyến/tổng km + từng lái xe', async () => {
+      const rows = await page.evaluate(async () => {
+        const records = await REPORT_MODULE_CONFIGS.car.getRecords('', document.getElementById('reportsFromDate').value, document.getElementById('reportsToDate').value);
+        return computeCarReportExtraRows(records);
+      });
+      const rowFor = (label) => rows.find((r) => r[0] === label);
+      assertEqual(rowFor('Tổng số chuyến đã thực hiện (đã phân công tài xế)')?.[1], 3, 'export row: tổng số chuyến mismatch');
+      assertEqual(rowFor('Tổng số KM đã đi (toàn công ty)')?.[1], 365, 'export row: tổng km mismatch (155 + 210)');
+      assertEqual(rowFor('Lái xe "Lái Xe A" — số chuyến')?.[1], 2, 'export row: Lái Xe A số chuyến mismatch');
+      assertEqual(rowFor('Lái xe "Lái Xe A" — tổng KM')?.[1], 155, 'export row: Lái Xe A tổng km mismatch');
+      assertEqual(rowFor('Lái xe "Lái Xe B" — tổng KM')?.[1], 210, 'export row: Lái Xe B tổng km mismatch');
+    });
+
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
   } finally {
     await teardown({ server, browser });

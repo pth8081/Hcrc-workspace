@@ -346,6 +346,105 @@ function renderUniformReportExtra(records) {
   `;
 }
 
+// Báo Cáo Đăng Ký Xe — 2 khối MỚI (yêu cầu người dùng): (1) số chuyến + tổng km MỖI lái xe trong
+// khoảng ngày đã chọn (dùng chung bộ lọc "Từ ngày/Đến ngày" có sẵn ở đầu tab Báo Cáo, không cần thêm ô
+// chọn tháng riêng), (2) tần suất từng địa điểm xuất hiện trong lộ trình. "Tổng số phiếu/theo phòng
+// ban/toàn công ty" (yêu cầu thứ 3) đã có sẵn qua khối chung (totalHTML + deptHTML ở renderModuleReport(),
+// module-baocaoquantri.js) — không cần thêm gì, chỉ khai báo đủ statusBuckets (xem REPORT_MODULE_CONFIGS.car).
+//
+// CHỈ tính chuyến đã thực sự được duyệt + phân công tài xế (APPROVED/AWAITING_EVALUATION/COMPLETED, xem
+// lib/workflowEngine.js applyWorkflowAction()/lib/recordActions.js endCarTrip()) — PENDING/DRAFT chưa
+// từng có assignedDriverUsername (chỉ gán lúc duyệt), REJECTED/CANCELLED không tính là "đã đi" dù có thể
+// còn sót field phân công cũ (cancelCarReg() không xoá lại các field này, xem chú thích ở đó) — tính vào
+// sẽ thổi phồng số km/số chuyến thật của lái xe.
+const CAR_TRIP_HAPPENED_STATUSES = new Set(['APPROVED', 'AWAITING_EVALUATION', 'COMPLETED']);
+
+// records = carRegs đã lọc theo dept/ngày (getRecords() ở REPORT_MODULE_CONFIGS.car) — dùng lại NGUYÊN
+// bộ lọc đó, không tính riêng. km: dùng actualKm (số km THỰC TẾ, ghi nhận lúc "Kết Thúc Chuyến"/"Đánh
+// Giá" — xem VERSION.md v21.9) nếu chuyến đã kết thúc, ngược lại dùng km đăng ký DỰ KIẾN (record.km) cho
+// chuyến đã duyệt nhưng lái xe chưa kết thúc — vẫn phản ánh gần đúng khối lượng công việc thay vì bỏ
+// trắng, có ghi chú rõ ở phần hiển thị để không hiểu nhầm là số liệu thực tế 100%.
+function computeCarTripStats(records) {
+  const happened = records.filter(r => CAR_TRIP_HAPPENED_STATUSES.has(r.status) && r.assignedDriverUsername);
+  const byDriver = new Map();
+  happened.forEach(r => {
+    const key = r.assignedDriverUsername;
+    const km = Number(r.actualKm ?? r.km) || 0;
+    if (!byDriver.has(key)) byDriver.set(key, { name: r.assignedDriver || key, trips: 0, km: 0 });
+    const row = byDriver.get(key);
+    row.trips++;
+    row.km += km;
+  });
+  // Đếm mỗi địa điểm 1 lần/chuyến (Set khử trùng lặp trong CÙNG 1 lộ trình, VD chuyến khứ hồi "HN -> HP
+  // -> HN" chỉ tính "HN" 1 lần) — dùng routePoints (từng điểm sạch) nếu có, chuyến dữ liệu cũ trước khi
+  // tách field này chỉ còn "destination" (chuỗi đã nối "->") thì dùng tạm chuỗi đó làm 1 điểm.
+  const destFreq = new Map();
+  happened.forEach(r => {
+    const points = Array.isArray(r.routePoints) && r.routePoints.length ? r.routePoints : (r.destination ? [r.destination] : []);
+    const uniquePoints = new Set(points.map(p => String(p || '').trim()).filter(Boolean));
+    uniquePoints.forEach(p => destFreq.set(p, (destFreq.get(p) || 0) + 1));
+  });
+  return { happened, byDriver, destFreq };
+}
+
+function renderCarReportExtra(records) {
+  const { happened, byDriver, destFreq } = computeCarTripStats(records);
+  const totalKm = [...byDriver.values()].reduce((s, r) => s + r.km, 0);
+  const driverRows = [...byDriver.values()].sort((a, b) => b.km - a.km);
+  const destRows = [...destFreq.entries()].sort((a, b) => b[1] - a[1]);
+  const maxDestCount = Math.max(1, ...destRows.map(([, c]) => c));
+  const TOP_DEST_LIMIT = 15;
+  const topDest = destRows.slice(0, TOP_DEST_LIMIT);
+
+  return `
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">🧑‍✈️ Thống Kê Theo Lái Xe (Số Chuyến / Số KM)</h4>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="bg-gray-50 border rounded p-3 text-center">
+          <div class="text-2xl font-bold text-sky-700">${happened.length.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng số chuyến đã thực hiện (đã phân công tài xế)</div>
+        </div>
+        <div class="bg-gray-50 border rounded p-3 text-center">
+          <div class="text-2xl font-bold text-emerald-700">${totalKm.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng số KM đã đi (toàn công ty)</div>
+        </div>
+      </div>
+      ${driverRows.length ? `
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100"><th class="border p-2 text-left">Lái xe</th><th class="border p-2">Số chuyến</th><th class="border p-2">Tổng KM</th></tr></thead>
+            <tbody>${driverRows.map(r => `<tr><td class="border p-2">${escapeHtml(r.name)}</td><td class="border p-2 text-center">${r.trips.toLocaleString('vi-VN')}</td><td class="border p-2 text-center font-bold">${r.km.toLocaleString('vi-VN')}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <p class="text-[10px] text-gray-400 italic mt-2">* Số KM dùng số km thực tế (sau khi lái xe "Kết Thúc Chuyến"/người đăng ký "Đánh Giá") nếu đã có; chuyến đã duyệt nhưng chưa kết thúc tạm dùng số km đăng ký dự kiến.</p>
+      ` : `<p class="text-xs text-gray-500 italic">Chưa có chuyến nào được phân công tài xế trong khoảng đã lọc.</p>`}
+    </div>
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">📍 Địa Điểm Đã Đến (theo số chuyến có ghé qua)</h4>
+      ${topDest.length ? `
+        <div class="space-y-2">${topDest.map(([place, count]) => buildStatBarHTML(place, count, maxDestCount, 'bg-teal-500')).join('')}</div>
+        ${destRows.length > TOP_DEST_LIMIT ? `<p class="text-[11px] text-gray-400 italic mt-2">Còn ${destRows.length - TOP_DEST_LIMIT} địa điểm khác (đã ẩn bớt để gọn danh sách) trong tổng ${destRows.length} địa điểm.</p>` : ''}
+      ` : `<p class="text-xs text-gray-500 italic">Chưa có dữ liệu lộ trình trong khoảng đã lọc.</p>`}
+    </div>
+  `;
+}
+
+// Rows bổ sung cho file Excel xuất từ tab này (exportModuleReportExcel(), xem chú thích config.extraRows
+// ở đó) — cùng số liệu với renderCarReportExtra() ở trên, chỉ khác định dạng bảng phẳng [Chỉ số, Giá trị].
+function computeCarReportExtraRows(records) {
+  const { happened, byDriver } = computeCarTripStats(records);
+  const totalKm = [...byDriver.values()].reduce((s, r) => s + r.km, 0);
+  const rows = [
+    ['Tổng số chuyến đã thực hiện (đã phân công tài xế)', happened.length],
+    ['Tổng số KM đã đi (toàn công ty)', totalKm]
+  ];
+  [...byDriver.values()].sort((a, b) => b.km - a.km).forEach(r => {
+    rows.push([`Lái xe "${r.name}" — số chuyến`, r.trips]);
+    rows.push([`Lái xe "${r.name}" — tổng KM`, r.km]);
+  });
+  return rows;
+}
+
 function renderTaskReportExtra(records) {
   const done = records.filter(t => t.status === 'DONE');
   let onTime = 0;
