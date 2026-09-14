@@ -178,6 +178,30 @@ dùng chế độ Theo người/Theo phòng ban như trước — không có gì
 luôn cần quyền "Người duyệt" mới duyệt được (trừ chế độ Theo người, vốn không
 tái kiểm tra quyền này như đã nêu ở bảng trên).
 
+### 3.1a. Nhãn hành động theo bước (từ v22.6)
+
+Mặc định, mọi bước duyệt hiển thị nút bấm + chân ký in là "Phê Duyệt"/"ĐÃ PHÊ
+DUYỆT". Từ v22.6, **mỗi bước tự đặt được nhãn hành động riêng** — VD một bước
+thực chất chỉ là "xác nhận" hay "thẩm định" (không phải phê duyệt theo đúng
+nghĩa) thì đặt nhãn "Xác Nhận"/"Đã Thẩm Định" thay vì để mặc định "Phê Duyệt".
+
+Cấu hình ngay tại **Hệ Thống → 🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt**: mỗi
+dòng bước giờ có 2 ô — "Tên bước" (vai trò/chức danh, VD "Điều Hành Xe", VẪN
+GIỮ NGUYÊN như cũ, chỉ để admin dễ nhận diện) và **"Nhãn hành động"** (để
+trống = mặc định "Phê Duyệt", như hành vi cũ). Sau khi lưu mẫu, nhãn này tự
+động ăn theo ở **cả 2 nơi** cho MỌI hồ sơ đi qua bước đó, không cần sửa gì
+thêm:
+- **Chân ký in** trên phiếu duyệt (Đăng Ký Xe, Văn Bản Trình, VPP/Văn
+  Phòng) — đổi "✅ ĐÃ PHÊ DUYỆT" thành "✅ ĐÃ &lt;NHÃN&gt;" (VD "✅ ĐÃ XÁC NHẬN").
+- **Nút bấm + hộp thoại xác nhận** khi người duyệt xử lý hồ sơ — áp dụng cho
+  toàn bộ module dùng chung engine phê duyệt theo bước ở mục 3 (Đăng Ký Xe,
+  Văn Bản Trình, VPP, Văn Phòng, Ngân Sách, Vận Hành, Hợp Đồng — cả 2 luồng
+  Phê Duyệt/Quản Lý HĐ, Hỗ Trợ IT > Phê Duyệt Giá, Tài Liệu, Thanh Toán).
+
+Đổi nhãn hành động **không** ảnh hưởng tới ai được duyệt hay thứ tự bước —
+chỉ đổi CHỮ hiển thị trên nút/chân ký, mọi logic phân quyền/chuyển bước giữ
+nguyên 100%.
+
 ### 3.2. Quyền "Người duyệt" (`canBeApprover`)
 
 Đây là 1 checkbox trong cây phân quyền của từng người dùng (khối "1. Hệ Thống
@@ -478,13 +502,20 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
 
 - **Đăng Ký Xe** — đăng ký sử dụng xe công ty, qua quy trình duyệt theo phòng
   ban. Danh sách "Mục Đích Sử Dụng" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu.
-  3 sub-tab: **🚗 Đăng Ký Xe** (tạo/xử lý phiếu), **🗓️ Lịch Xe** (lưới CHỈ XEM
-  lịch trống/bận từng lái xe theo ngày, giống hệt lưới Lịch Họp: cột = lái xe,
+  4 sub-tab: **🚗 Đăng Ký Xe** (tạo/xử lý phiếu), **🗓️ Lịch Xe** (lưới CHỈ XEM
+  lịch trống/bận từng lái xe, **3 chế độ Ngày/Tuần/Tháng** từ v22.6 — giống
+  hệt Lịch Họp: chế độ **Ngày** là lưới giờ chi tiết như trước (cột = lái xe,
   hàng = khung giờ 30 phút 07:00-19:00, ô đỏ = lái xe đó đang có phiếu chưa bị
   từ chối/huỷ trùng khung giờ, ô trắng = trống, bấm ô đỏ xem nhanh thông tin
-  phiếu — **không** đặt/kéo-chọn lịch trực tiếp từ đây, biển số/lái xe cụ thể
-  vẫn do Phòng Hành Chính phân công khi xử lý duyệt), **🧑‍✈️ Lái Xe** (lái xe
-  tự xác nhận chuyến được phân công).
+  phiếu), chế độ **Tuần/Tháng** chỉ xem TỔNG QUAN (mỗi ô ngày hiện số chuyến
+  đã có theo từng lái xe, bấm 1 ô ngày nhảy thẳng về chế độ Ngày của đúng ngày
+  đó) — **không** đặt/kéo-chọn lịch trực tiếp ở bất kỳ chế độ nào, biển số/lái
+  xe cụ thể vẫn do Phòng Hành Chính phân công khi xử lý duyệt), **🧑‍✈️ Lái Xe**
+  (lái xe tự xác nhận chuyến được phân công), **📊 Báo Cáo** (từ v22.6, CHỈ
+  người quản lý thấy — admin/quyền xem xe toàn công ty/người duyệt ở bất kỳ
+  phòng ban nào — thẻ tổng hợp số phiếu/đã duyệt/đang chờ/bị từ chối/tổng KM,
+  thanh tỷ lệ theo Phòng Ban và theo Lái Xe, xu hướng theo tháng, lọc theo
+  khoảng ngày đi).
   **"Phần Dành Cho Phòng Hành Chính" (phân công xe lúc xử lý duyệt)** — CHỈ
   Người Điều Hành Xe (`perms.carDispatch`)/Admin mới thấy/sửa được mục này khi
   duyệt (người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường, không

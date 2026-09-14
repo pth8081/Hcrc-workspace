@@ -1147,10 +1147,11 @@ function deleteContractAction(id) {
 function approveContractAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
+  const approveLabel = resolveStepActionLabel(resolveContractApprovalWorkflow(c), c.currentStep);
   showConfirmModal({
-    title: 'Phê duyệt hợp đồng',
-    bodyHTML: `Bạn có chắc chắn muốn phê duyệt hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
-    confirmLabel: 'Phê Duyệt',
+    title: `${approveLabel} hợp đồng`,
+    bodyHTML: `Bạn có chắc chắn muốn ${approveLabel.toLowerCase()} hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    confirmLabel: approveLabel,
     // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — khớp đúng cách approveDoc() ở trên, mở rộng
     // withApprovalAuth() ra cả 7 module dùng chung engine phê duyệt (trước đây Hợp Đồng không có).
     onConfirm: () => withApprovalAuth(async () => {
@@ -1226,10 +1227,11 @@ function rejectContractAction(id) {
 function approveContractSignedFileAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
+  const approveLabel = resolveStepActionLabel(resolveContractManageWorkflow(c), c.signedFileCurrentStep);
   showConfirmModal({
-    title: 'Duyệt tài liệu ký',
-    bodyHTML: `Bạn có chắc chắn muốn duyệt tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
-    confirmLabel: 'Duyệt',
+    title: `${approveLabel} tài liệu ký`,
+    bodyHTML: `Bạn có chắc chắn muốn ${approveLabel.toLowerCase()} tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    confirmLabel: approveLabel,
     onConfirm: () => withApprovalAuth(async () => {
       let result;
       try {

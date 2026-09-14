@@ -416,7 +416,8 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           const secondaryOptions = [];
           let primaryBtnHTML;
           if (canApprove) {
-            primaryBtnHTML = `<button data-op="runDocAction" data-arg0="${doc.id}" data-arg1="approve" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="Phê duyệt tài liệu">✅ Duyệt</button>`;
+            const docApproveLabel = resolveStepActionLabel(wf, doc.currentStep);
+            primaryBtnHTML = `<button data-op="runDocAction" data-arg0="${doc.id}" data-arg1="approve" class="px-2 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold" title="${escapeHtml(docApproveLabel)} tài liệu">✅ ${escapeHtml(docApproveLabel)}</button>`;
             secondaryOptions.push({ value: 'reject', label: '❌ Từ chối' });
             secondaryOptions.push({ value: 'requestChanges', label: '🔄 Bổ Sung' });
             secondaryOptions.push({ value: 'view', label: '📋 Chi tiết' });

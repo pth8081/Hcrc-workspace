@@ -226,7 +226,7 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
   const workflows = appData.workflows || [];
   const baseWf = workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
-  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
   // resolveStepApproverUsernames() thay vì đọc thẳng baseConfig.approvers[s.order] — resolve bước
   // "Theo vị trí" (POSITION mode) NGAY LÚC DỰNG SNAPSHOT này (effectiveApprovers sẽ đông cứng usernames
@@ -344,7 +344,7 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
   const workflows = appData.workflows || [];
   const baseWf = workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
-  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
   // resolveStepApproverUsernames() — cùng lý do buildEffectiveSubmissionWorkflowServer() ở trên (resolve
   // POSITION mode ngay lúc dựng snapshot, effectiveApprovers đông cứng từ đây).

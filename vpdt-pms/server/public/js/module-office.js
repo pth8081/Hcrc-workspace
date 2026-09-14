@@ -404,10 +404,11 @@ function openOfficeProcessModal(officeId) {
 
   const actionBtns = document.getElementById('officeModalActionBtns');
   if (canApprove) {
+    const stepActionLabel = resolveStepActionLabel(wf, o.currentStep);
     actionBtns.innerHTML = `
       <button data-op="confirmProcessOfficeReq" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
       <button data-op="confirmProcessOfficeReq" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
-      <button data-op="confirmProcessOfficeReq" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessOfficeReq" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)} & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đề xuất này.</span>`;
@@ -427,9 +428,14 @@ function confirmProcessOfficeReq(actionType) {
     return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
   const isApprove = actionType === 'APPROVE';
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa đề xuất về nháp để người tạo sửa lại)' };
+  const o = DB.officeReqs.find(item => item.id === currentProcessingOfficeId);
+  const wfMapForLabel = o ? getOfficeWorkflowMap(o.subType) : {};
+  const wfConfigForLabel = o ? (wfMapForLabel[o.dept] || { workflowId: 'WF_1STEP' }) : {};
+  const wfForLabel = DB.workflows.find(w => w.id === wfConfigForLabel.workflowId) || { steps: [] };
+  const approveLabel = o ? resolveStepActionLabel(wfForLabel, o.currentStep) : 'Phê Duyệt';
+  const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: `${approveLabel.toLowerCase()} và chuyển bước`, REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa đề xuất về nháp để người tạo sửa lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đề xuất này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,

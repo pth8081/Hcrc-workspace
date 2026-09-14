@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**22.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.6 (2026-09-14): Nhãn hành động cấu hình theo bước ký + Đăng Ký Xe (Báo Cáo, Lịch Xe Ngày/Tuần/Tháng)
+
+Người dùng gửi kèm 2 ảnh chụp (phiếu duyệt xe với 3 chân ký đều ghi "✅ ĐÃ PHÊ
+DUYỆT", và lưới Lịch Xe chỉ xem được 1 ngày) kèm 3 yêu cầu: (1) mỗi bước ký
+tự cấu hình được NHÃN HÀNH ĐỘNG riêng (VD "Xác Nhận"/"Thẩm Định" thay vì luôn
+"Phê Duyệt") và nút bấm/chân ký in ra phải ăn theo đúng nhãn đó; (2) thêm
+sub-tab "📊 Báo Cáo" cho Đăng Ký Xe (giống Phòng Họp); (3) nâng "Lịch Xe" lên
+3 chế độ Ngày/Tuần/Tháng (giống Phòng Họp). Đã phân tích, xác định phạm vi
+đầy đủ (không chỉ Đăng Ký Xe — áp dụng cho MỌI module có quy trình duyệt
+theo bước) và tự triển khai + merge theo uỷ quyền của người dùng.
+
+**1. Nhãn hành động theo bước ký (`actionLabel`)** — `DB.workflows[].steps[]`
+thêm field tuỳ chọn `actionLabel` (mặc định `null` = hiển thị "Phê Duyệt" như
+cũ, không đổi hành vi hồ sơ cũ). Cấu hình ở "🛠️ Định Nghĩa Các Mẫu Bước Phê
+Duyệt" (`module-itsupport-tier.js`): mỗi bước giờ có 2 ô — "Tên bước" (vai
+trò, VD "Điều Hành Xe") và "Nhãn hành động" (VD "Xác Nhận", để trống = mặc
+định "Phê Duyệt"). Hàm dùng chung mới `resolveStepActionLabel(wf, stepOrder)`
+(`core.js`) là 1 nguồn sự thật DUY NHẤT cho cả:
+  - **Chân ký in** (`buildApprovalSignatureColumnHTML()`, `core.js`) — 3 phiếu
+    in dùng chung hàm này (Đăng Ký Xe, Văn Bản Trình, VPP/Văn Phòng) đổi
+    "✅ ĐÃ PHÊ DUYỆT" thành "✅ ĐÃ &lt;NHÃN&gt;" theo đúng bước.
+  - **Nút bấm + hộp thoại xác nhận** ở TẤT CẢ module có quy trình duyệt theo
+    bước (đi qua `callWorkflowAction()`): Đăng Ký Xe, Văn Bản Trình, VPP,
+    Văn Phòng, Ngân Sách, Vận Hành (Đơn Hàng/Mở Mới Siêu Thị/Sửa Chữa), Hợp
+    Đồng (CẢ 2 luồng — Phê Duyệt hồ sơ gốc/phụ lục VÀ Quản Lý HĐ/Tài liệu
+    ký), Hỗ Trợ IT (Phê Duyệt Giá), Tài Liệu, Thanh Toán (Đề Nghị Thanh
+    Toán) — 12 module/luồng, đúng "tất cả các chân ký chính" theo yêu cầu.
+
+  2 module snapshot hoá bước duyệt ngay lúc tạo hồ sơ (Văn Bản Trình, Hợp
+  Đồng — `effectiveSteps`) cần sửa thêm cả server (`lib/createValidation.js`)
+  lẫn 4 bản mirror client (`core.js`/`module-vanbantrinh.js`) để `actionLabel`
+  không bị rớt mất khi snapshot; các module còn lại tra cấu hình admin MỚI
+  NHẤT mỗi lần (không snapshot) nên tự động ăn theo ngay khi đổi cấu hình.
+
+**2. Đăng Ký Xe > "📊 Báo Cáo"** (sub-tab mới, chỉ người quản lý thấy —
+admin/`carView.all`/người duyệt ở bất kỳ phòng ban nào trong
+`carDeptWorkflows`, xem `canSeeCarReportClient()` ở `core.js`): thẻ tổng hợp
+(tổng số phiếu/đã duyệt/đang chờ/bị từ chối/tổng KM), thanh tỷ lệ theo Phòng
+Ban và theo Lái Xe (chỉ phiếu đã duyệt), xu hướng theo tháng — lọc theo
+khoảng ngày (thời gian ĐI, không phải ngày tạo phiếu), cùng khuôn "📊 Báo
+Cáo" của Phòng Họp (`renderCarReportTab()`, `module-dangkyxe.js`).
+
+**3. Đăng Ký Xe > "🗓️ Lịch Xe": Ngày/Tuần/Tháng** — thêm 2 chế độ Tuần/Tháng
+(chỉ xem tổng quan số chuyến theo từng lái xe mỗi ngày, bấm 1 ô ngày nhảy về
+chế độ Ngày để xem chi tiết khung giờ) cạnh chế độ Ngày cũ (giữ nguyên hành
+vi — lưới giờ 30 phút theo lái xe, CHỈ XEM, không kéo/chọn đặt lịch như
+Phòng Họp). `setCarCalViewMode()`/`renderCarScheduleCalendarWeekView()`/
+`renderCarScheduleCalendarMonthView()` (`module-dangkyxe.js`) mirror đúng
+`module-phonghop.js` — không thêm dependency chéo giữa 2 cụm module lazy-load.
+
+Test mới: `tests/test-car-report-week-month.js` (18 kịch bản — quyền xem Báo
+Cáo, số liệu tổng hợp, 3 chế độ Lịch Xe, nhảy ngày, đối chứng nhãn hành động
+trong modal xử lý phiếu xe). Toàn bộ regression liên quan (`test-contract.js`,
+`test-submission.js`, `test-vpp.js`, `test-office-budget.js`, `test-payment.js`,
+`test-doc.js`, `test-itprice-download.js`, `test-meeting-car.js`,
+`test-quick-apply-workflow-steps.js`, `test-preview-workflow-buttons.js`,
+`test-workflow-position-approvers.js`, `test-lazy-load-all-tabs.js`...) đã
+chạy lại — không có hồi quy.
 
 ## v22.5 (2026-09-14): VPP — Ngân sách theo phòng ban (mức/người riêng + chặn theo tổng quỹ phòng)
 
