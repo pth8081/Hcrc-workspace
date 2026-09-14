@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**22.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.5 (2026-09-14): VPP — Ngân sách theo phòng ban (mức/người riêng + chặn theo tổng quỹ phòng)
+
+Người dùng yêu cầu 2 thay đổi cho ngân sách Văn Phòng Phẩm: (1) đặt được mức/
+người KHÁC NHAU cho từng phòng ban (VD phòng A 100k/người, phòng B 150k/
+người) thay vì 1 mức chung cho toàn kỳ; (2) đổi cơ chế chặn khi Gửi Phê Duyệt
+từ "chặn nếu 1 đăng ký cá nhân vượt mức/người" sang "chặn nếu tổng các đăng
+ký của CẢ PHÒNG vượt tổng ngân sách phòng (Số nhân sự × Mức/người)" — không
+giới hạn riêng từng người nữa. Đã rà soát + đề xuất phương án, người dùng xác
+nhận qua 2 câu hỏi chốt chính sách (tính cả PENDING vào "đã dùng"? hiện
+realtime ngân sách còn lại cho nhân viên?) trước khi code.
+
+**Mức/người riêng theo phòng ban**: bảng "Nhân sự theo phòng ban" (form "Tạo
+Kỳ Đăng Ký") thêm cột "Mức/Người" — mỗi phòng tự đặt mức riêng, bỏ trống =
+dùng mức mặc định. Dữ liệu mới `vppPeriods.deptBudgetRates: {dept: rate}`
+(cạnh `deptHeadcounts`/`perPersonBudget` cũ — `perPersonBudget` giờ chỉ còn
+là mức MẶC ĐỊNH/fallback cho các kỳ cũ tạo trước v22.5, xem
+`resolveVppDeptBudget()` ở `lib/vppCatalog.js`).
+
+**Chặn theo tổng quỹ CẢ PHÒNG**: `submitVppRegistration()` (`lib/recordActions.js`)
+đổi từ so sánh 1 đăng ký với mức/người sang cộng dồn TẤT CẢ đăng ký khác cùng
+phòng+cùng kỳ đang PENDING/APPROVED rồi so với tổng ngân sách phòng. Route
+`POST /api/records/vppRegistrations/:id/submit` (`routes/records.js`) bọc
+`withAppLock('vpp_dept_budget:<periodId>:<dept>', ...)` quanh toàn bộ đọc-
+tính-ghi (cùng khuôn khoá `uniform_store:<dept>` đã dùng cho tồn kho Đồng
+Phục) để chặn race condition 2 người cùng phòng gửi gần như đồng thời. Route
+mới `GET /api/vpp/dept-budget-status/:periodId` (mọi người đã đăng nhập gọi
+được, chỉ trả về số TỔNG của ĐÚNG phòng ban người gọi — không lộ đăng ký
+riêng của ai) phục vụ hiển thị realtime "Ngân sách phòng ban còn lại" ngay
+trên form chọn mặt hàng, thay cho số "ngân sách cá nhân" cũ.
+
+Báo cáo "Tổng Hợp Theo Phòng Ban" (chỉ vppManage/admin) cập nhật đọc mức/
+người riêng từng phòng + đổi cột "Còn Lại" sang trừ cả đăng ký Chờ Duyệt
+(không chỉ Đã Duyệt), khớp đúng số hệ thống dùng để chặn thật.
+
+Test: viết lại `tests/test-vpp.js` (thêm kịch bản "VPP-pool" — quỹ dùng
+CHUNG giữa nhiều nhân viên cùng phòng, 1 người vượt mức/người trung bình vẫn
+duyệt được, người tiếp theo bị chặn khi tổng vượt quỹ, đúng khít thì duyệt
+được — 24/24 pass); `test-form-reset-file-remove.js` (34/34),
+`test-lazy-load-all-tabs.js` (42/42) không regression.
 
 ## v22.4 (2026-09-14): VPP — Tải Mẫu Excel + Xuất Excel danh mục mặt hàng
 

@@ -27,6 +27,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const { validateAndPrepareCreate } = require('../lib/createValidation');
 const recordActions = require('../lib/recordActions');
 const { applyWorkflowAction } = require('../lib/workflowEngine');
+const { resolveVppDeptBudget, calcItemsTotal: calcVppItemsTotal } = require('../lib/vppCatalog');
 
 const INDEX_HTML_PATH = path.join(__dirname, '..', 'public', 'index.html');
 const PORT = 8973;
@@ -115,12 +116,36 @@ const server = http.createServer(async (req, res) => {
     const item = store.vppRegistrations.find((r) => r.id === Number(submitMatch[1]));
     if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     const period = store.vppPeriods.find((p) => p.id === item.periodId);
+    // siblingRegs: mirror routes/records.js — các đăng ký KHÁC cùng kỳ + cùng phòng, đang PENDING/APPROVED
+    // (thứ tự thực thi trong test là tuần tự nên không cần mô phỏng withAppLock ở đây).
+    const siblingRegs = store.vppRegistrations.filter((r) =>
+      r.id !== item.id && r.periodId === item.periodId && r.dept === item.dept &&
+      (r.status === 'PENDING' || r.status === 'APPROVED'));
     try {
-      const updated = recordActions.submitVppRegistration(activeServerUser, item, period);
+      const updated = recordActions.submitVppRegistration(activeServerUser, item, period, siblingRegs);
       return sendJson(res, 200, { ok: true, item: updated });
     } catch (err) {
       return sendJson(res, err.status || 500, { error: err.message });
     }
+  }
+
+  // GET /api/vpp/dept-budget-status/:periodId — mirror routes/vppCatalog.js: trạng thái quỹ ngân sách
+  // CỦA ĐÚNG PHÒNG BAN activeServerUser, đọc bằng resolveVppDeptBudget() THẬT (lib/vppCatalog.js) +
+  // "used" cộng dồn các đăng ký PENDING/APPROVED cùng kỳ+cùng phòng trong store.
+  const budgetStatusMatch = url.pathname.match(/^\/api\/vpp\/dept-budget-status\/(\d+)$/);
+  if (req.method === 'GET' && budgetStatusMatch) {
+    const periodId = Number(budgetStatusMatch[1]);
+    const period = store.vppPeriods.find((p) => p.id === periodId);
+    if (!period) return sendJson(res, 404, { error: 'Không tìm thấy kỳ đăng ký' });
+    const dept = activeServerUser.dept;
+    const { rate, headcount, totalBudget } = resolveVppDeptBudget(period, dept);
+    let used = 0;
+    if (totalBudget > 0) {
+      used = store.vppRegistrations
+        .filter((r) => r.periodId === periodId && r.dept === dept && (r.status === 'PENDING' || r.status === 'APPROVED'))
+        .reduce((sum, r) => sum + calcVppItemsTotal(r.items), 0);
+    }
+    return sendJson(res, 200, { dept, rate, headcount, totalBudget, used, remaining: Math.max(0, totalBudget - used) });
   }
 
   const updateMatch = url.pathname.match(/^\/api\/records\/vppRegistrations\/(\d+)\/update$/);
@@ -187,8 +212,22 @@ const excludedUser = {
   phone: '0988888888', email: 'baove1@company.com', jobTitle: 'Bảo vệ',
   active: true, perms: { vppRegisterCreate: true }
 };
+// 2 nhân viên CÙNG PHÒNG "Phòng Kỹ Thuật" — dùng riêng cho kịch bản V10 (quỹ ngân sách CHUNG của cả
+// phòng, chia sẻ giữa nhiều người, KHÔNG còn giới hạn riêng từng người — xem lib/recordActions.js
+// submitVppRegistration()).
+const employeeUser3 = {
+  username: 'nv_kt1', name: 'Lê Văn Kỹ Thuật', dept: 'Phòng Kỹ Thuật', role: 'STAFF',
+  phone: '0911111111', email: 'kt1@company.com', jobTitle: 'Nhân viên',
+  active: true, perms: { vppRegisterCreate: true }
+};
+const employeeUser4 = {
+  username: 'nv_kt2', name: 'Phạm Thị Kỹ Thuật', dept: 'Phòng Kỹ Thuật', role: 'STAFF',
+  phone: '0922222222', email: 'kt2@company.com', jobTitle: 'Nhân viên',
+  active: true, perms: { vppRegisterCreate: true }
+};
 
 vppDeptWorkflows[employeeUser.dept] = { workflowId: 'WF_1STEP', approvers: { 1: [managerUser.username] } };
+vppDeptWorkflows['Phòng Kỹ Thuật'] = { workflowId: 'WF_1STEP', approvers: { 1: [managerUser.username] } };
 
 const CATALOG_ITEMS = [
   { code: 'VPP001', name: 'Bút bi Thiên Long', origin: 'Việt Nam', unit: 'Cây', spec: 'Mực xanh', price: 5000 },
@@ -197,11 +236,11 @@ const CATALOG_ITEMS = [
 ];
 
 const seedDB = {
-  depts: ['Phòng Kinh Doanh', 'Phòng Hành Chính'],
+  depts: ['Phòng Kinh Doanh', 'Phòng Hành Chính', 'Phòng Kỹ Thuật'],
   cats: [], stores: [],
   jobTitles: ['Nhân viên', 'Trưởng phòng Hành Chính', 'Bảo vệ'],
   submissionTypes: [], contractTypes: [], carTypes: [],
-  users: [managerUser, employeeUser, excludedUser],
+  users: [managerUser, employeeUser, excludedUser, employeeUser3, employeeUser4],
   meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
   carRegs: [], carDeptWorkflows: {},
   tasks: [], permGroups: [], vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [],
@@ -253,6 +292,12 @@ async function main() {
     document.getElementById('vppNewPeriodEnd').value = endIso;
     document.getElementById('vppNewPeriodBudget').value = '100.000';
     renderVppDeptHeadcountTable();
+    // Ép số nhân sự "Phòng Kinh Doanh" về ĐÚNG 1 (mặc định tự gợi ý 2 — employeeUser + excludedUser đều
+    // active lúc này, chưa ai bị loại) để quỹ ngân sách phòng = 100.000đ × 1 = 100.000đ, giữ nguyên đúng
+    // ý nghĩa "1 người, 1 mức" của các kịch bản V4/V5 bên dưới dù cơ chế chặn giờ đã đổi sang tính theo
+    // TỔNG QUỸ CẢ PHÒNG (không còn theo từng người) — xem kịch bản V10 riêng để kiểm tra ĐÚNG hành vi
+    // "quỹ dùng CHUNG giữa nhiều người" với phòng ban khác.
+    document.querySelector('#vppDeptHeadcountBody tr[data-vpp-dept="Phòng Kinh Doanh"] .vpp-headcount-input').value = '1';
     // Mô phỏng kết quả đã đọc xong file Excel/CSV danh mục (onVppCatalogFileChange() gán đúng biến này
     // sau khi POST /api/vpp/parse-catalog trả về) — bỏ qua thao tác chọn file thật trong trình duyệt
     // headless, nhưng dùng ĐÚNG hình dạng dữ liệu + đi qua toàn bộ createVppPeriod() thật phía sau.
@@ -273,6 +318,11 @@ async function main() {
     v1.saved.catalogItems[1].spec === '70gsm' && v1.saved.catalogItems[1].price === 65000 &&
     v1.saved.perPersonBudget === 100000,
     `alerts=${JSON.stringify(v1.alerts)} saved=${JSON.stringify(v1.saved && { status: v1.saved.status, n: v1.saved.catalogItems.length, budget: v1.saved.perPersonBudget })}`
+  );
+  record(
+    'VPP: deptHeadcounts/deptBudgetRates (mức/người TỪNG PHÒNG, TỪ v22.5) được lưu đúng cho "Phòng Kinh Doanh"',
+    v1.saved.deptHeadcounts?.['Phòng Kinh Doanh'] === 1 && v1.saved.deptBudgetRates?.['Phòng Kinh Doanh'] === 100000,
+    `deptHeadcounts=${JSON.stringify(v1.saved.deptHeadcounts)} deptBudgetRates=${JSON.stringify(v1.saved.deptBudgetRates)}`
   );
 
   // ===================== V2 — employee creates a DRAFT registration (happy path) =====================
@@ -329,29 +379,29 @@ async function main() {
   // ===================== V4 — validation: submitting an over-budget draft is rejected =====================
   const v4 = await page.evaluate(async (regId) => {
     window.__alerts = [];
-    document.getElementById('vppItemQty_1').value = '2'; // Giấy A4 x2 = 130.000đ (vượt ngân sách 100.000đ/người)
+    document.getElementById('vppItemQty_1').value = '2'; // Giấy A4 x2 = 130.000đ (vượt quỹ phòng 100.000đ — headcount=1)
     updateVppRegTotalDisplay();
     await saveVppRegDraft();
     const beforeStatus = DB.vppRegistrations.find((r) => r.id === regId).status;
-    submitVppRegDraftAction(regId, true); // kiểm tra ngân sách chặn NGAY, không mở modal xác nhận
+    await submitVppRegDraftAction(regId, true); // kiểm tra ngân sách chặn NGAY (fetch dept-budget-status + so sánh), không mở modal xác nhận
     return { alerts: window.__alerts.slice(), status: DB.vppRegistrations.find((r) => r.id === regId).status, beforeStatus };
   }, v2.saved.id);
 
   record(
-    'VPP: submitting a draft over the per-person budget is rejected before entering the approval flow',
-    v4.alerts.some((a) => a.includes('vượt quá ngân sách')) && v4.status === 'DRAFT' && v4.status === v4.beforeStatus,
+    'VPP: submitting a draft over the DEPARTMENT budget pool is rejected before entering the approval flow',
+    v4.alerts.some((a) => a.includes('Ngân sách phòng') && a.includes('không đủ')) && v4.status === 'DRAFT' && v4.status === v4.beforeStatus,
     `alerts=${JSON.stringify(v4.alerts)} status=${v4.status}`
   );
 
   // ===================== V5 — reduce back within budget and submit successfully (DRAFT -> PENDING) =====
   const v5 = await page.evaluate(async (regId) => {
     window.__alerts = [];
-    document.getElementById('vppItemQty_1').value = '1'; // trở lại trong ngân sách (90.000đ)
+    document.getElementById('vppItemQty_1').value = '1'; // trở lại trong quỹ phòng (90.000đ)
     updateVppRegTotalDisplay();
     await saveVppRegDraft();
     // "Gửi phê duyệt" đi qua showConfirmModal() nội bộ — gọi hàm khởi tạo xác nhận rồi chạy trực tiếp
     // hành động đã được gắn vào _pendingConfirmAction (đúng closure thật, không tự soạn lại logic gửi).
-    submitVppRegDraftAction(regId, true);
+    await submitVppRegDraftAction(regId, true);
     if (typeof _pendingConfirmAction === 'function') await _pendingConfirmAction();
     const item = DB.vppRegistrations.find((r) => r.id === regId);
     return { alerts: window.__alerts.slice(), status: item.status, currentStep: item.currentStep };
@@ -393,7 +443,7 @@ async function main() {
   await loginAs(page, employeeUser);
   const v7resubmit = await page.evaluate(async (regId) => {
     window.__alerts = [];
-    submitVppRegDraftAction(regId, false);
+    await submitVppRegDraftAction(regId, false);
     if (typeof _pendingConfirmAction === 'function') await _pendingConfirmAction();
     const item = DB.vppRegistrations.find((r) => r.id === regId);
     return { alerts: window.__alerts.slice(), status: item.status };
@@ -555,6 +605,109 @@ async function main() {
     'VPP: a closed period is blocked for new registrations — hidden client-side and rejected server-side',
     v8.stillListed === false && v8.serverError && v8.serverError.includes('đã kết thúc') && v8.countAfter === v8.countBefore,
     `stillListed=${v8.stillListed} serverError=${v8.serverError}`
+  );
+
+  // ===================== V10 — DEPARTMENT budget pool SHARED across MULTIPLE employees (TỪ v22.5) =====
+  // "Phòng Kỹ Thuật": 2 người (employeeUser3/4), mức/người RIÊNG cho phòng này = 60.000đ (khác mức mặc
+  // định 100.000đ dùng cho "Phòng Kinh Doanh" ở trên — kiểm tra yêu cầu 1: mỗi phòng 1 mức khác nhau),
+  // headcount = 2 -> quỹ CẢ PHÒNG = 120.000đ. Kiểm tra yêu cầu 2: 1 người ĐƯỢC đăng ký NHIỀU HƠN mức/
+  // người (80.000đ > 60.000đ vẫn duyệt được, KHÔNG còn giới hạn riêng từng người) miễn quỹ CẢ PHÒNG còn
+  // đủ — nhưng người SAU cùng phòng bị chặn nếu TỔNG CỘNG vượt quỹ chung.
+  await loginAs(page, managerUser);
+  const v10create = await page.evaluate(async (catalogItems) => {
+    window.__alerts = [];
+    switchTab('vpp');
+    setVppSubTab('PERIODS');
+    document.getElementById('vppNewPeriodName').value = 'Đăng ký Văn phòng phẩm Phòng Kỹ Thuật';
+    document.getElementById('vppNewPeriodStart').value = '';
+    document.getElementById('vppNewPeriodEnd').value = '';
+    document.getElementById('vppNewPeriodBudget').value = '100.000'; // mức mặc định — "Phòng Kỹ Thuật" sẽ ghi đè riêng ngay dưới
+    renderVppDeptHeadcountTable();
+    const row = document.querySelector('#vppDeptHeadcountBody tr[data-vpp-dept="Phòng Kỹ Thuật"]');
+    row.querySelector('.vpp-headcount-input').value = '2';
+    row.querySelector('.vpp-rate-input').value = '60.000'; // mức RIÊNG của phòng này, khác mức mặc định 100.000đ
+    onVppRateInput(row.querySelector('.vpp-rate-input'));
+    vppPendingCatalog = { items: catalogItems, fileUrl: '/uploads/vpp/catalog-test2.xlsx', fileName: 'catalog-test2.xlsx' };
+    await createVppPeriod();
+    return { alerts: window.__alerts.slice(), saved: DB.vppPeriods[0] };
+  }, CATALOG_ITEMS);
+
+  record(
+    'VPP-pool: Kỳ mới lưu ĐÚNG mức/người RIÊNG cho "Phòng Kỹ Thuật" (60.000đ, khác mức mặc định 100.000đ)',
+    v10create.saved.deptHeadcounts?.['Phòng Kỹ Thuật'] === 2 && v10create.saved.deptBudgetRates?.['Phòng Kỹ Thuật'] === 60000,
+    `alerts=${JSON.stringify(v10create.alerts)} deptHeadcounts=${JSON.stringify(v10create.saved.deptHeadcounts)} deptBudgetRates=${JSON.stringify(v10create.saved.deptBudgetRates)}`
+  );
+
+  const period2Id = v10create.saved.id;
+
+  // employeeUser3 đăng ký 80.000đ (Giấy A4 x1 = 65.000 + Bút bi x3 = 15.000) — VƯỢT mức/người (60.000đ)
+  // NHƯNG vẫn PHẢI duyệt được vì quỹ CẢ PHÒNG (120.000đ) còn đủ — đúng yêu cầu "không giới hạn riêng
+  // từng người".
+  await loginAs(page, employeeUser3);
+  const v10user3 = await page.evaluate(async (periodId) => {
+    window.__alerts = [];
+    switchTab('vpp'); setVppSubTab('REGISTER');
+    document.getElementById('vppRegPeriodSelect').value = String(periodId);
+    await onVppRegPeriodChange();
+    document.getElementById('vppItemQty_0').value = '3'; // Bút bi x3 = 15.000đ
+    document.getElementById('vppItemQty_1').value = '1'; // Giấy A4 x1 = 65.000đ => tổng 80.000đ
+    updateVppRegTotalDisplay();
+    await saveVppRegDraft();
+    const regId = vppFormDraftId;
+    await submitVppRegDraftAction(regId, true);
+    if (typeof _pendingConfirmAction === 'function') await _pendingConfirmAction();
+    const item = DB.vppRegistrations.find((r) => r.id === regId);
+    return { alerts: window.__alerts.slice(), status: item.status, regId };
+  }, period2Id);
+
+  record(
+    'VPP-pool: nhân viên 1 đăng ký 80.000đ (VƯỢT mức/người 60.000đ) VẪN được duyệt — quỹ tính theo CẢ PHÒNG, không giới hạn riêng từng người',
+    v10user3.status === 'PENDING',
+    `alerts=${JSON.stringify(v10user3.alerts)} status=${v10user3.status}`
+  );
+
+  // employeeUser4 đăng ký thêm 50.000đ -> 80.000 (đã giữ chỗ) + 50.000 = 130.000đ > quỹ 120.000đ -> BỊ CHẶN.
+  await loginAs(page, employeeUser4);
+  const v10user4over = await page.evaluate(async (periodId) => {
+    window.__alerts = [];
+    switchTab('vpp'); setVppSubTab('REGISTER');
+    document.getElementById('vppRegPeriodSelect').value = String(periodId);
+    await onVppRegPeriodChange();
+    document.getElementById('vppItemQty_2').value = '1'; // Kẹp giấy x1 = 15.000đ
+    document.getElementById('vppItemQty_1').value = '0'; // (Giấy A4 chưa chọn)
+    document.getElementById('vppItemQty_0').value = '7'; // Bút bi x7 = 35.000đ => tổng 50.000đ
+    updateVppRegTotalDisplay();
+    await saveVppRegDraft();
+    const regId = vppFormDraftId;
+    await submitVppRegDraftAction(regId, true);
+    const item = DB.vppRegistrations.find((r) => r.id === regId);
+    return { alerts: window.__alerts.slice(), status: item.status, regId };
+  }, period2Id);
+
+  record(
+    'VPP-pool: nhân viên 2 đăng ký thêm 50.000đ (80.000 đã giữ chỗ + 50.000 = 130.000 > quỹ 120.000đ) BỊ CHẶN — quỹ dùng CHUNG cả phòng',
+    v10user4over.alerts.some((a) => a.includes('Ngân sách phòng') && a.includes('không đủ')) && v10user4over.status === 'DRAFT',
+    `alerts=${JSON.stringify(v10user4over.alerts)} status=${v10user4over.status}`
+  );
+
+  // Giảm xuống đúng bằng phần quỹ còn lại (120.000 - 80.000 = 40.000đ) -> vừa khít, PHẢI duyệt được.
+  const v10user4ok = await page.evaluate(async (regId) => {
+    window.__alerts = [];
+    document.getElementById('vppItemQty_0').value = '8'; // Bút bi x8 = 40.000đ (đúng bằng phần quỹ còn lại)
+    document.getElementById('vppItemQty_1').value = '0';
+    document.getElementById('vppItemQty_2').value = '0'; // bỏ Kẹp giấy đã chọn ở lượt trước, tránh cộng dư ngoài ý test
+    updateVppRegTotalDisplay();
+    await saveVppRegDraft();
+    await submitVppRegDraftAction(regId, true);
+    if (typeof _pendingConfirmAction === 'function') await _pendingConfirmAction();
+    const item = DB.vppRegistrations.find((r) => r.id === regId);
+    return { alerts: window.__alerts.slice(), status: item.status };
+  }, v10user4over.regId);
+
+  record(
+    'VPP-pool: giảm đúng bằng phần quỹ còn lại (40.000đ, vừa khít 120.000đ) thì duyệt được',
+    v10user4ok.status === 'PENDING',
+    `alerts=${JSON.stringify(v10user4ok.alerts)} status=${v10user4ok.status}`
   );
 
   await browser.close();

@@ -539,10 +539,31 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   ngay lập tức — giúp lướt xem trước phòng nào còn trống trong cả tuần/tháng
   tới trước khi quyết định đặt ngày nào, thay vì phải dò từng ngày một.
 - **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
-  hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban mặc định** = số nhân
-  sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số
-  nhân sự gợi ý này). Chức danh nằm trong danh mục "Chức danh bị loại khỏi
-  VPP" (3.3) không được tính vào đầu người/không đăng ký được.
+  hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban** = số nhân sự đang
+  hoạt động của phòng (admin có thể sửa tay lại số nhân sự gợi ý này) ×
+  **mức/người**. Chức danh nằm trong danh mục "Chức danh bị loại khỏi VPP"
+  (3.3) không được tính vào đầu người/không đăng ký được.
+  **Mức/người RIÊNG theo từng phòng ban (TỪ v22.5)**: bảng "Nhân sự theo
+  phòng ban" ở form "Tạo Kỳ Đăng Ký" có thêm cột **"Mức/Người"** — mỗi phòng
+  tự đặt 1 mức riêng (VD Phòng A 100.000đ/người, Phòng B 150.000đ/người),
+  không còn bắt buộc dùng chung 1 mức cho toàn kỳ như trước. Ô "Mức/người MẶC
+  ĐỊNH" ở trên chỉ để tự điền sẵn cả bảng lúc mới tạo kỳ (nút "↧ Áp Dụng Cho
+  Tất Cả Phòng" ghi đè lại nếu cần); admin sửa tay từng dòng cho phòng nào cần
+  mức khác. Bỏ trống 1 dòng = dùng mức mặc định cho phòng đó.
+  **Chặn theo TỔNG NGÂN SÁCH CẢ PHÒNG, KHÔNG còn giới hạn riêng từng người (TỪ
+  v22.5)**: trước đây hệ thống chặn nếu 1 đăng ký cá nhân vượt quá mức/người —
+  nay đổi hẳn sang chặn theo **quỹ chung của cả phòng ban**: khi 1 nhân viên
+  bấm "Gửi Phê Duyệt", hệ thống cộng tổng các đăng ký KHÁC cùng phòng đang
+  **Chờ Duyệt hoặc Đã Duyệt** trong cùng kỳ, cộng thêm đăng ký đang gửi — nếu
+  vượt quá tổng ngân sách phòng ban (Số nhân sự × Mức/người) thì mới chặn. 1
+  người có thể đăng ký nhiều hơn mức/người trung bình, miễn quỹ CẢ PHÒNG còn
+  đủ — hoàn toàn không giới hạn số tiền của riêng 1 cá nhân nào. Ngay trên
+  form chọn mặt hàng, nhân viên thấy realtime dòng "Ngân sách phòng ban còn
+  lại" (đã trừ phần các đồng nghiệp khác đang giữ chỗ) để tự cân đối trước khi
+  gửi. Đăng ký bị Từ Chối/đưa về Nháp (Yêu Cầu Bổ Sung) sẽ TỰ NHẢ lại phần quỹ
+  đã giữ chỗ cho người khác trong phòng dùng tiếp. Màn "Báo Cáo Tổng Hợp" (chỉ
+  vppManage/admin) hiện cột "Còn Lại (Sau Chờ Duyệt)" đúng bằng số hệ thống
+  dùng để chặn (trừ cả Chờ Duyệt, không chỉ Đã Duyệt).
   **Danh mục mặt hàng — mẫu/nhập/xuất Excel** (form "Tạo Kỳ Đăng Ký"): nút
   **"⬇️ Tải Mẫu Excel"** ngay cạnh ô chọn file tải về 1 file mẫu rỗng (kèm 1
   dòng ví dụ in nghiêng) đúng 6 cột hệ thống nhận diện được (**Mã Hàng/Tên Mặt

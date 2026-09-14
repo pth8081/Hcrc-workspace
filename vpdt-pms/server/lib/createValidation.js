@@ -1302,13 +1302,17 @@ const CREATE_MODULE_CONFIGS = {
       if (payload.startDate && payload.endDate && payload.endDate < payload.startDate) {
         throw new CreateError(400, 'Ngày kết thúc phải sau ngày bắt đầu');
       }
-      // Ngân sách/người (VNĐ, tuỳ chọn — null/0 = không giới hạn): mức trần áp cho TỪNG CÁ NHÂN khi
-      // "Gửi phê duyệt" (xem submitVppRegistration() ở lib/recordActions.js). deptHeadcounts là số
-      // nhân sự từng phòng ban CHỐT (snapshot) tại thời điểm tạo kỳ — admin có thể sửa tay khác số
-      // tài khoản đang hoạt động thật (VD người nghỉ dài hạn, nhân viên mới chưa có tài khoản) — CHỈ
-      // dùng nhân với ngân sách/người ra "Ngân sách phòng ban" để THAM CHIẾU ở báo cáo, không dùng để
-      // chặn đăng ký (mức chặn thật sự luôn áp cho từng người ở trên, tránh race condition tranh nhau
-      // 1 quỹ chung — đã chốt với người yêu cầu tính năng).
+      // Ngân sách/người (VNĐ, tuỳ chọn — null/0 = không giới hạn): TỪ v22.5 đây là mức MẶC ĐỊNH, áp
+      // dụng cho phòng ban nào KHÔNG có mức riêng ở deptBudgetRates bên dưới — không còn là mức trần
+      // chung áp CỨNG cho mọi phòng. deptHeadcounts là số nhân sự từng phòng ban CHỐT (snapshot) tại
+      // thời điểm tạo kỳ — admin có thể sửa tay khác số tài khoản đang hoạt động thật (VD người nghỉ
+      // dài hạn, nhân viên mới chưa có tài khoản). deptBudgetRates: {dept: mức/người RIÊNG của phòng đó
+      // — VD phòng A 100.000đ/người, phòng B 150.000đ/người}, chỉ cần khai những phòng có mức KHÁC mức
+      // mặc định (xem resolveVppDeptBudget() ở lib/vppCatalog.js). Ngân sách phòng ban = mức/người ×
+      // deptHeadcounts, dùng để CHẶN THẬT lúc "Gửi phê duyệt" (chặn theo TỔNG quỹ phòng, không còn
+      // chặn riêng từng người — xem submitVppRegistration() ở lib/recordActions.js + khoá
+      // vpp_dept_budget:<periodId>:<dept> ở routes/records.js chống race condition tranh nhau 1 quỹ
+      // chung — đã đổi thiết kế cũ theo yêu cầu người dùng, KHÔNG còn chặn theo từng cá nhân nữa).
       const perPersonBudgetRaw = payload.perPersonBudget;
       payload.perPersonBudget = (perPersonBudgetRaw === null || perPersonBudgetRaw === undefined || perPersonBudgetRaw === '')
         ? null : Math.max(0, Number(perPersonBudgetRaw) || 0);
@@ -1319,6 +1323,13 @@ const CREATE_MODULE_CONFIGS = {
         if (dept && n > 0) cleanedHeadcounts[dept] = n;
       });
       payload.deptHeadcounts = cleanedHeadcounts;
+      const ratesRaw = (payload.deptBudgetRates && typeof payload.deptBudgetRates === 'object') ? payload.deptBudgetRates : {};
+      const cleanedRates = {};
+      Object.keys(ratesRaw).forEach(dept => {
+        const n = Math.max(0, Number(ratesRaw[dept]) || 0);
+        if (dept && n > 0) cleanedRates[dept] = n;
+      });
+      payload.deptBudgetRates = cleanedRates;
       payload.status = 'OPEN';
       payload.closedAt = null;
       payload.closedBy = null;
