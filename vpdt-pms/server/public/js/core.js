@@ -7263,6 +7263,14 @@ function resolveStepActionLabel(wf, stepOrder) {
 // saveWorkflowTemplate() ở module-itsupport-tier.js): nhãn hành động RIÊNG của bước đó (VD "Xác Nhận"/
 // "Thẩm Định"), thay cho "Phê Duyệt" mặc định — cho phép chân ký phản ánh đúng bản chất từng bước (VD
 // "Điều Hành Xe" chỉ XÁC NHẬN xe/lái xe, không thực sự "phê duyệt" như Trưởng Phòng).
+// TỪ v22.9 (yêu cầu người dùng, đối chiếu Mẫu BM-TS02 "Phiếu báo hỏng/đề nghị sửa chữa" — cột "Ý kiến
+// của Bộ phận chuyên môn" nằm NGAY TRONG phần đánh giá, không tách riêng): mỗi chữ ký giờ hiện ĐÚNG ghi
+// chú/ý kiến (history[].comment) của CHÍNH bước đó — trước đây chân ký KHÔNG hiện comment gì cả, 2/3
+// phiếu (Văn Bản Trình/VPP-Văn Phòng, xem buildSubmissionApprovalSlipHTML()/buildOfficeApprovalSlipHTML())
+// phải tự bù bằng 1 khối "Ý Kiến Chỉ Đạo Của Người Phê Duyệt CUỐI CÙNG" tách riêng bên dưới bảng chữ ký —
+// khiến ý kiến của các bước GIỮA (VD "Bộ Phận Chuyên Môn" cho ý kiến trước khi Trưởng Phòng phê duyệt)
+// bị RỚT MẤT, không hiện ở đâu cả trên phiếu in. Nay hiện ngay dưới từng chữ ký nên khối tách riêng kia
+// đã bỏ (xem 2 hàm trên) — không còn trùng lặp, không còn rớt ý kiến bước giữa.
 function buildApprovalSignatureColumnHTML(step, history) {
   const actionLabel = (step.actionLabel && step.actionLabel.trim()) || 'Phê Duyệt';
   const entries = (history || []).filter(h => h.step === step.order && h.action === 'APPROVED');
@@ -7280,6 +7288,7 @@ function buildApprovalSignatureColumnHTML(step, history) {
     <div class="as-sign-name">${escapeHtml(e.approver)}</div>
     ${jobTitle ? `<div class="as-sign-jobtitle">${escapeHtml(jobTitle)}</div>` : ''}
     <div class="as-sign-time">Lúc: ${escapeHtml(e.time)}</div>
+    ${e.comment ? `<div class="as-sign-comment">"${escapeHtml(e.comment)}"</div>` : ''}
   `;
   }).join('<div data-style="height:6px;"></div>');
   return `
@@ -7324,6 +7333,7 @@ const APPROVAL_SLIP_CSS = `
         .approval-slip .as-sign-name { font-weight: bold; margin-top: 2px; }
         .approval-slip .as-sign-jobtitle { font-size: 11px; color: #444; font-style: italic; }
         .approval-slip .as-sign-time { font-size: 10.5px; color: #555; }
+        .approval-slip .as-sign-comment { font-size: 10.5px; color: #7c2d12; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 4px 6px; margin-top: 6px; text-align: left; font-style: italic; }
         .approval-slip .as-comment-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 8px 10px; margin: 6px 0; }
         .approval-slip .as-comment-box p { margin: 0; font-style: italic; }
         .approval-slip .as-comment-meta { margin-top: 4px; font-size: 11px; color: #666; text-align: right; }

@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**22.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.9 (2026-09-14): Phiếu phê duyệt — hiện ý kiến của TỪNG bước ký (không chỉ bước cuối)
+
+Người dùng gửi mẫu biểu "Quy trình quản lý TS" (docx, gồm BM-TS01..06) và yêu
+cầu: khi đề xuất Sửa Chữa tài sản, muốn có ý kiến phản hồi/đánh giá của "Bộ
+Phận Chuyên Môn" TRƯỚC khi người có thẩm quyền phê duyệt cuối cùng, đối chiếu
+đúng cột "Ý kiến của Bộ phận chuyên môn" ở Mẫu BM-TS02 trong file đính kèm.
+Đã phân tích + gửi demo (mockup phiếu in) cho người dùng duyệt trước khi sửa
+code thật.
+
+**Phần cấu hình (không cần sửa code, admin tự làm)**: mọi quy trình phê duyệt
+nhiều bước trong hệ thống đã hỗ trợ sẵn từ v22.6 việc đặt **nhãn hành động
+riêng cho từng bước** (VD "Cho Ý Kiến" thay vì "Phê Duyệt" mặc định) — admin
+vào **Hệ Thống → Quy Trình & Phê Duyệt → 🔧 QT Sửa Chữa** (đúng module tương
+ứng `officeReqs`/`SUA_CHUA`, bản số hoá của Mẫu BM-TS02), thêm 1 bước
+"Bộ Phận Chuyên Môn" (nhãn "Cho Ý Kiến") đứng TRƯỚC bước phê duyệt của người
+có thẩm quyền, gán người/phòng phụ trách — là có ngay luồng "cho ý kiến trước
+khi phê duyệt" theo đúng yêu cầu, không cần đổi code.
+
+**Phần sửa code (lỗ hổng phát hiện khi phân tích)**: phiếu in "Phiếu Phê
+Duyệt" trước đây CHỈ hiện ý kiến/ghi chú (`history[].comment`) của bước DUYỆT
+CUỐI CÙNG (khối "Ý Kiến Chỉ Đạo Của Người Phê Duyệt Cuối Cùng" tách riêng
+trong `buildSubmissionApprovalSlipHTML()`/`buildOfficeApprovalSlipHTML()`) —
+nếu thêm bước "Bộ Phận Chuyên Môn" ở giữa như trên, ý kiến của bước đó sẽ bị
+RỚT MẤT khỏi phiếu in dù vẫn còn trong lịch sử hệ thống. Đã sửa tại đúng 1
+điểm dùng chung cho cả 3 loại phiếu (Đăng Ký Xe/Văn Bản Trình/VPP-Văn Phòng):
+`buildApprovalSignatureColumnHTML()` (`public/js/core.js`) giờ hiện ĐÚNG ý
+kiến của CHÍNH bước đó (nếu có) ngay dưới chữ ký/tên người ký bước đó — thêm
+`.as-sign-comment` (khung nhỏ màu vàng nhạt, chữ nghiêng, đặt dưới "Lúc: ..."),
+CSS đồng bộ cả 2 nơi như quy ước sẵn có (`APPROVAL_SLIP_CSS` trong core.js +
+`public/app.css`). Bỏ hẳn khối "Ý Kiến Chỉ Đạo..." tách riêng cũ (trùng lặp +
+chỉ hiện được bước cuối) khỏi `module-vanbantrinh.js`/`module-vpp.js` — Đăng
+Ký Xe không có khối này từ trước nên không đổi gì thêm.
+
+Test mới (`tests/test-approval-slip-step-comment.js`, 7/7): xác minh từng
+bước có/không comment hiện đúng, quy trình 2 bước (chuyên môn → trưởng
+phòng) hiện ĐỦ cả 2 ý kiến trên cả phiếu Sửa Chữa lẫn Văn Bản Trình, khối cũ
+đã bỏ hẳn. Regression liên quan chạy lại sạch: `test-contract.js` (48),
+`test-submission.js` (23/23), `test-vpp.js` (29/29), `test-office-budget.js`
+(62), `test-meeting-car.js` (89/89), `test-lazy-load-all-tabs.js` (42/42).
 
 ## v22.8 (2026-09-14): VPP — Cấu hình mức/người theo "Nhóm phòng ban" thay vì liệt kê từng dòng
 

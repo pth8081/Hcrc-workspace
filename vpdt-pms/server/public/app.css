@@ -37,6 +37,7 @@
 .approval-slip .as-sign-name { font-weight: bold; margin-top: 2px; }
 .approval-slip .as-sign-jobtitle { font-size: 11px; color: #444; font-style: italic; }
 .approval-slip .as-sign-time { font-size: 10.5px; color: #555; }
+.approval-slip .as-sign-comment { font-size: 10.5px; color: #7c2d12; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 4px 6px; margin-top: 6px; text-align: left; font-style: italic; }
 .approval-slip .as-comment-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 8px 10px; margin: 6px 0; }
 .approval-slip .as-comment-box p { margin: 0; font-style: italic; }
 .approval-slip .as-comment-meta { margin-top: 4px; font-size: 11px; color: #666; text-align: right; }

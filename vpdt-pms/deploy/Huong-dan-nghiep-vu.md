@@ -202,6 +202,25 @@ thêm:
 chỉ đổi CHỮ hiển thị trên nút/chân ký, mọi logic phân quyền/chuyển bước giữ
 nguyên 100%.
 
+### 3.1b. Ý kiến từng bước hiện trên phiếu in (từ v22.9)
+
+Mỗi bước duyệt đều có ô ghi chú/ý kiến (nhập lúc bấm nút hành động, VD "Cho Ý
+Kiến"/"Xác Nhận"/"Phê Duyệt"). Từ v22.9, **phiếu in "Phiếu Phê Duyệt"** (Đăng
+Ký Xe, Văn Bản Trình, VPP/Văn Phòng — cả bản xem trực tiếp trong app lẫn file
+`.html` tải về) hiện ĐÚNG ý kiến của **từng bước**, đặt ngay dưới tên/chữ ký
+người thực hiện bước đó (khung nhỏ, chữ nghiêng). Trước v22.9, phiếu in chỉ
+hiện được ý kiến của bước duyệt CUỐI CÙNG — ý kiến của các bước ở giữa (nếu
+có) bị rớt mất khỏi bản in dù vẫn còn lưu trong lịch sử hồ sơ.
+
+**Ứng dụng thực tế**: muốn có "ý kiến đánh giá của bộ phận chuyên môn" trước
+khi người có thẩm quyền phê duyệt cuối cùng (VD đề xuất Sửa Chữa tài sản, đối
+chiếu Mẫu BM-TS02 trong quy trình quản lý tài sản) — chỉ cần vào **Hệ Thống →
+Quy Trình & Phê Duyệt** (VD "🔧 QT Sửa Chữa" cho `Tổng Hợp (Mua Bán - Sửa
+Chữa - Thanh Toán)` → hồ sơ Sửa Chữa), thêm 1 bước tên "Bộ Phận Chuyên Môn"
+(đặt Nhãn hành động là "Cho Ý Kiến" theo mục 3.1a) đứng TRƯỚC bước phê duyệt
+chính thức, gán đúng người/phòng phụ trách kỹ thuật. Không cần sửa code —
+ý kiến bước này tự động hiện trên phiếu in ngay khi lưu quy trình.
+
 ### 3.2. Quyền "Người duyệt" (`canBeApprover`)
 
 Đây là 1 checkbox trong cây phân quyền của từng người dùng (khối "1. Hệ Thống
