@@ -109,7 +109,7 @@ async function main() {
   await run.run('WHOLESALE + Siêu thị áp dụng + ngày hết hiệu lực đều hợp lệ cùng lúc (không cross-contaminate)', async () => {
     const rec = validateAndPrepareCreate('itPriceApprovals',
       basePayload({
-        priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5',
+        priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: 'Đại lý ABC',
         storeScope: { mode: 'OTHER', stores: ['Siêu thị C'] },
         expiryMode: 'OTHER', expiryDate: '2027-01-01'
       }), IT_USER, [], APP_DATA);
@@ -122,19 +122,19 @@ async function main() {
 
   await run.run('WHOLESALE: không gửi storeScope gì cả -> server vẫn TỰ ÉP mode=OTHER (không phải ALL), thiếu siêu thị -> 400', async () => {
     expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
-      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5' }), IT_USER, [], APP_DATA),
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: 'Đại lý ABC' }), IT_USER, [], APP_DATA),
       400, 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ đề xuất');
   });
 
   await run.run('WHOLESALE: request tự soạn CỐ TÌNH gửi storeScope.mode="ALL" -> server KHÔNG tin, vẫn ép OTHER + bắt buộc chọn siêu thị -> 400', async () => {
     expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
-      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', storeScope: { mode: 'ALL', stores: [] } }), IT_USER, [], APP_DATA),
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: 'Đại lý ABC', storeScope: { mode: 'ALL', stores: [] } }), IT_USER, [], APP_DATA),
       400, 'Vui lòng chọn ít nhất 1 siêu thị/cửa hàng hợp lệ đề xuất');
   });
 
   await run.run('WHOLESALE: chọn đúng 1 siêu thị hợp lệ -> thành công, storeScope.mode LUÔN là OTHER (không phải ALL dù client có gửi ALL kèm theo)', async () => {
     const rec = validateAndPrepareCreate('itPriceApprovals',
-      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', storeScope: { mode: 'ALL', stores: ['Siêu thị A'] } }),
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: 'Đại lý ABC', storeScope: { mode: 'ALL', stores: ['Siêu thị A'] } }),
       IT_USER, [], APP_DATA);
     assertEqual(rec.storeScope.mode, 'OTHER', 'Bán Buôn không có khái niệm ALL, server luôn ép về OTHER');
     assertEqual(rec.storeScope.stores[0], 'Siêu thị A', 'vẫn giữ đúng siêu thị đã chọn');
@@ -143,6 +143,34 @@ async function main() {
   await run.run('RETAIL vẫn giữ nguyên khái niệm "Toàn bộ" như cũ (không bị ảnh hưởng bởi thay đổi riêng cho WHOLESALE)', async () => {
     const rec = validateAndPrepareCreate('itPriceApprovals', basePayload({}), IT_USER, [], APP_DATA);
     assertEqual(rec.storeScope.mode, 'ALL', 'RETAIL mặc định vẫn là ALL, không bị ép OTHER như WHOLESALE');
+  });
+
+  // ===== Đợt sau (mục "Đơn Vị Áp Dụng Giá Bán Buôn"): trường mới, nhập tay tự do, bắt buộc riêng cho
+  // WHOLESALE, KHÔNG áp dụng cho RETAIL (khác payload.dept — đơn vị NỘI BỘ tạo đề xuất) =====
+
+  await run.run('WHOLESALE: thiếu wholesaleApplyUnit -> 400', async () => {
+    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', storeScope: { mode: 'OTHER', stores: ['Siêu thị A'] } }), IT_USER, [], APP_DATA),
+      400, 'Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn');
+  });
+
+  await run.run('WHOLESALE: wholesaleApplyUnit chỉ toàn khoảng trắng -> 400 (coi như rỗng)', async () => {
+    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: '   ', storeScope: { mode: 'OTHER', stores: ['Siêu thị A'] } }), IT_USER, [], APP_DATA),
+      400, 'Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn');
+  });
+
+  await run.run('WHOLESALE: có wholesaleApplyUnit hợp lệ -> thành công, giữ đúng giá trị đã trim', async () => {
+    const rec = validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: '  Công ty TNHH ABC  ', storeScope: { mode: 'OTHER', stores: ['Siêu thị A'] } }),
+      IT_USER, [], APP_DATA);
+    assertEqual(rec.wholesaleApplyUnit, 'Công ty TNHH ABC', 'phải trim khoảng trắng thừa');
+  });
+
+  await run.run('RETAIL: wholesaleApplyUnit LUÔN bị ép về null (không tin giá trị lạ client tự gửi kèm)', async () => {
+    const rec = validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ wholesaleApplyUnit: 'Không nên áp dụng ở đây' }), IT_USER, [], APP_DATA);
+    assertEqual(rec.wholesaleApplyUnit, null, 'RETAIL không dùng field này, phải null hoá');
   });
 
   run.summary();

@@ -65,6 +65,10 @@ function onContractOpModeChange() {
   // ADDENDUM) — 2 chế độ IMPORT bỏ qua hàng chờ nên ẩn hẳn, không cần chọn.
   document.getElementById('contractApprovalLevelWrap').classList.toggle('hidden', isImportMode);
   document.getElementById('contractApprovalDropdownWrap').classList.toggle('hidden', isImportMode);
+  // 2 nút "Xem Quy Trình" tráo nhau theo chế độ: tab Phê Duyệt xem quy trình duyệt hồ sơ hợp đồng, tab
+  // Quản Lý HĐ (IMPORT_*) xem quy trình duyệt Tài liệu ký — 2 map cấu hình hoàn toàn khác nhau.
+  document.getElementById('contractPreviewWfBtn')?.classList.toggle('hidden', isImportMode);
+  document.getElementById('contractManagePreviewWfBtn')?.classList.toggle('hidden', !isImportMode);
   if (isImportMode) {
     document.getElementById('contractApprovalLayersSection').classList.add('hidden');
     document.getElementById('contractApprovalLayersContainer').innerHTML = '';
@@ -605,6 +609,21 @@ async function submitContractReq(e) {
   }
   resetContractForm();
   renderContracts();
+}
+
+// Xem trước quy trình duyệt TÀI LIỆU KÝ (tab "Quản Lý HĐ", DB.contractManageDeptWorkflows) — KHÁC HẲN
+// previewContractApprovalWorkflow() (module-vanbantrinh.js) vốn xem quy trình duyệt hồ sơ hợp đồng ở tab
+// "Phê Duyệt" (DB.contractApprovalDeptWorkflows). Nút gọi hàm này chỉ hiện ở 2 chế độ IMPORT_* — xem
+// onContractOpModeChange().
+function previewContractManageWorkflow() {
+  const dept = document.getElementById('contractDept').value;
+  if (!dept) return alert('Vui lòng chọn Phòng Ban Quản Lý trước khi xem quy trình!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ)',
+    `Phòng ban: ${dept}`,
+    (DB.contractManageDeptWorkflows || {})[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình duyệt Tài liệu ký.`
+  );
 }
 
 // resetContractForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetContractForm",

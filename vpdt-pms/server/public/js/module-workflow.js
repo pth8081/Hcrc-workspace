@@ -88,3 +88,160 @@ const WF_MODULE_CONFIG = {
   // OPERATION_REPAIR_ESTIMATE đã xoá khỏi đây.
 };
 
+// ===== "⚡ Áp Dụng Nhanh" — set NHANH cùng 1 mẫu quy trình (workflowId, tức số bước) cho MỌI phòng
+// ban/mức CHƯA từng được admin cấu hình riêng, trên TOÀN BỘ WF_MODULE_CONFIG cùng lúc — chỉ tiện lợi
+// lúc mới cài đặt hệ thống/muốn đồng bộ nhanh số bước mặc định, KHÔNG tự gán người duyệt (approvers
+// rỗng, admin vẫn phải vào từng module gán người duyệt như bình thường) và TUYỆT ĐỐI KHÔNG đụng tới bất
+// kỳ phòng ban/mức nào ĐÃ có cấu hình từ trước (kể cả chỉ có workflowId mà chưa gán người duyệt nào —
+// vẫn coi là "đã cấu hình", không ghi đè) — tránh đúng rủi ro "đổi mẫu quy trình = xoá sạch approvers đã
+// gán" mà renderWorkflowTab()/onWorkflowTemplateChange() vốn có khi admin CHỦ Ý đổi mẫu cho 1 mục cụ thể.
+//
+// OPERATION_STORE_OPEN/OPERATION_REPAIR (Vận Hành > Siêu Thị) CỐ Ý loại khỏi phạm vi quét — 2 module này
+// KHÔNG còn bước duyệt thật nào (hồ sơ luôn APPROVED ngay, xem chú thích WF_MODULE_CONFIG ở trên), set
+// workflowId ở đó không có tác dụng gì và dễ gây hiểu lầm là đã cấu hình xong.
+const QUICK_APPLY_EXCLUDED_MODULES = new Set(['OPERATION_STORE_OPEN', 'OPERATION_REPAIR']);
+
+// Liệt kê CHÍNH XÁC những "ô" (phòng ban, hoặc phòng ban×loại, hoặc mức/tier) hiện CHƯA có cấu hình
+// riêng — dùng CHUNG cho cả hiện số lượng ảnh hưởng trước (showQuickApplyWorkflowStepsImpact()) lẫn
+// thực thi thật (applyQuickApplyWorkflowSteps()), để không tính 1 đằng áp dụng 1 nẻo. Mỗi target mang
+// theo đúng `dbKey` (AppData key nó sẽ ghi vào) để bên gọi biết cần syncStorage() key nào sau khi áp
+// dụng xong.
+function collectQuickApplyUnconfiguredTargets() {
+  const targets = [];
+  const depts = getWorkflowParticipatingDepts();
+  const emptyConfig = (workflowId) => ({ workflowId, approvers: {}, approverMode: {}, approversByPosition: {} });
+
+  Object.entries(WF_MODULE_CONFIG).forEach(([modKey, cfg]) => {
+    if (QUICK_APPLY_EXCLUDED_MODULES.has(modKey)) return;
+
+    if (cfg.pureTier) {
+      // Vận Hành > Đặt Hàng Tại Siêu Thị/HO — chỉ có tier, không có dept.
+      const tierMap = DB[cfg.tierDbKeyForWholesale] || (DB[cfg.tierDbKeyForWholesale] = {});
+      cfg.fixedTiers.forEach(tier => {
+        if (tierMap[tier.key]) return;
+        targets.push({
+          label: `${cfg.label} — ${tier.label}`, dbKey: cfg.tierDbKeyForWholesale,
+          apply: (workflowId) => { tierMap[tier.key] = emptyConfig(workflowId); }
+        });
+      });
+      return;
+    }
+
+    if (cfg.priceTypeNested) {
+      // Hỗ Trợ IT > Phê Duyệt Giá — RETAIL lồng theo dept ở cfg.dbKey (dept -> {RETAIL,WHOLESALE} HOẶC
+      // cấu hình phẳng cũ = coi như RETAIL, xem resolveItPriceDeptWorkflowConfigClient() ở core.js —
+      // dùng LẠI đúng hàm resolve THẬT thay vì tự viết logic "đã cấu hình chưa" riêng, để không lệch
+      // với cách mọi nơi khác trong app đọc cấu hình này). WHOLESALE tách hẳn sang
+      // cfg.tierDbKeyForWholesale (phẳng theo tierKey).
+      const deptMap = DB[cfg.dbKey] || (DB[cfg.dbKey] = {});
+      depts.forEach(dept => {
+        if (resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL')) return;
+        targets.push({
+          label: `${cfg.label} (Bán Lẻ) — ${dept}`, dbKey: cfg.dbKey,
+          apply: (workflowId) => {
+            if (!deptMap[dept] || typeof deptMap[dept] !== 'object') deptMap[dept] = {};
+            deptMap[dept].RETAIL = emptyConfig(workflowId);
+          }
+        });
+      });
+      const tierMap = DB[cfg.tierDbKeyForWholesale] || (DB[cfg.tierDbKeyForWholesale] = {});
+      cfg.fixedTiers.forEach(tier => {
+        if (tierMap[tier.key]) return;
+        targets.push({
+          label: `${cfg.label} (Bán Buôn) — ${tier.label}`, dbKey: cfg.tierDbKeyForWholesale,
+          apply: (workflowId) => { tierMap[tier.key] = emptyConfig(workflowId); }
+        });
+      });
+      return;
+    }
+
+    if (cfg.hasTypes) {
+      // Văn Bản Trình — lồng {loại: {phòng ban: config}} + legacy phẳng {phòng ban: config} (fallback
+      // khi loại đó chưa cấu hình riêng, xem getSubmissionDeptWorkflowConfig() ở core.js) — coi "đã cấu
+      // hình" nếu MỘT TRONG HAI đã có, để không ghi đè 1 cấu hình cũ (theo phòng ban, áp dụng cho MỌI
+      // loại qua fallback) đang có hiệu lực thật. CHỈ GHI vào cfg.dbKey (type-specific) — không đụng
+      // legacyDbKey, giữ đúng ý "chỉ điền chỗ trống", không đổi cách cấu hình cũ đang hoạt động.
+      const typeMap = DB[cfg.dbKey] || (DB[cfg.dbKey] = {});
+      const legacyMap = cfg.legacyDbKey ? (DB[cfg.legacyDbKey] || {}) : {};
+      const types = getWfModuleTypes(modKey) || [];
+      types.forEach(type => {
+        depts.forEach(dept => {
+          if ((typeMap[type.key] && typeMap[type.key][dept]) || legacyMap[dept]) return;
+          targets.push({
+            label: `${cfg.label} (${type.label}) — ${dept}`, dbKey: cfg.dbKey,
+            apply: (workflowId) => {
+              if (!typeMap[type.key]) typeMap[type.key] = {};
+              typeMap[type.key][dept] = emptyConfig(workflowId);
+            }
+          });
+        });
+      });
+      return;
+    }
+
+    // Trường hợp phẳng thường (DOC/CAR/OFFICE_BUY/OFFICE_FIX/VPP/CONTRACT_APPROVAL/CONTRACT_MANAGE/
+    // PAYMENT/BUDGET) — DB[cfg.dbKey][dept] trực tiếp, không lồng gì thêm.
+    const deptMap = DB[cfg.dbKey] || (DB[cfg.dbKey] = {});
+    depts.forEach(dept => {
+      if (deptMap[dept]) return;
+      targets.push({
+        label: `${cfg.label} — ${dept}`, dbKey: cfg.dbKey,
+        apply: (workflowId) => { deptMap[dept] = emptyConfig(workflowId); }
+      });
+    });
+  });
+
+  return targets;
+}
+
+// Nạp danh sách mẫu quy trình vào ô chọn của khối "Áp Dụng Nhanh" — gọi mỗi lần vào tab (setSystemSubTab()
+// nhánh WORKFLOW) VÀ mỗi lần danh sách DB.workflows đổi (renderWorkflowTemplatesTable() gọi lại) để luôn
+// khớp mẫu mới nhất, tránh chọn nhầm mẫu vừa bị admin xoá.
+function renderQuickApplyWfSelect() {
+  const sel = document.getElementById('quickApplyWfSelect');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = DB.workflows.map(w => `<option value="${w.id}">${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
+  if (current && DB.workflows.some(w => w.id === current)) sel.value = current;
+  document.getElementById('quickApplyWfImpact')?.classList.add('hidden');
+}
+
+function showQuickApplyWorkflowStepsImpact() {
+  const targets = collectQuickApplyUnconfiguredTargets();
+  const box = document.getElementById('quickApplyWfImpact');
+  if (!box) return;
+  box.classList.remove('hidden');
+  if (!targets.length) {
+    box.innerHTML = `<div class="text-emerald-700 font-semibold">✅ Không còn mục nào thiếu cấu hình — mọi phòng ban/mức trên mọi quy trình đều đã được admin gán mẫu quy trình riêng.</div>`;
+    return;
+  }
+  box.innerHTML = `
+    <div class="font-bold text-gray-700 mb-1">${targets.length} mục đang THIẾU cấu hình (sẽ được set số bước nếu bấm "Áp Dụng Nhanh"):</div>
+    <ul class="list-disc list-inside space-y-0.5 text-gray-600">${targets.map(t => `<li>${escapeHtml(t.label)}</li>`).join('')}</ul>
+  `;
+}
+
+function applyQuickApplyWorkflowSteps() {
+  const workflowId = document.getElementById('quickApplyWfSelect')?.value;
+  if (!workflowId) return alert('Chưa có mẫu quy trình nào để áp dụng — vào khối "Định Nghĩa Các Mẫu Bước Phê Duyệt" bên dưới để tạo trước.');
+
+  const targets = collectQuickApplyUnconfiguredTargets();
+  if (!targets.length) return alert('✅ Không có phòng ban/mức nào đang thiếu cấu hình — không có gì để áp dụng.');
+
+  const wf = DB.workflows.find(w => w.id === workflowId);
+  const proceed = confirm(
+    `Sẽ áp dụng mẫu "${wf?.name || workflowId}" (${wf?.steps?.length || '?'} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình trên toàn bộ quy trình phê duyệt — KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.\n\n` +
+    `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào từng module để gán người duyệt cho từng bước sau khi áp dụng.\n\nTiếp tục?`
+  );
+  if (!proceed) return;
+
+  targets.forEach(t => t.apply(workflowId));
+  const dirtyKeys = [...new Set(targets.map(t => t.dbKey))];
+  dirtyKeys.forEach(key => syncStorage(key));
+
+  logSystemAction('CONFIG', 'QUICK_APPLY_WORKFLOW_STEPS', `Áp dụng nhanh mẫu quy trình [${workflowId}] cho ${targets.length} mục chưa cấu hình`, 'SUCCESS', workflowId);
+  alert(`✅ Đã áp dụng cho ${targets.length} mục. Vào từng module bên dưới để gán người duyệt cho từng bước.`);
+  document.getElementById('quickApplyWfImpact')?.classList.add('hidden');
+  renderWorkflowTab();
+}
+

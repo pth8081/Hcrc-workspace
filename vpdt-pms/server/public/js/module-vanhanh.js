@@ -390,6 +390,31 @@ function generateOperationRepairCode() { return generateHcrcCode(DB.operationRep
 // Đóng/mở khối "Chi Tiết Từ Phiếu Đặt Hàng" (#operationOrderPoDetailsBox) — mặc định MỞ (auto-fill điền
 // vào đây, người dùng cần thấy ngay để kiểm tra), bấm nút để thu gọn nếu không cần dùng tới các field
 // này (đặt hàng không kèm PDF, nhập tay tối thiểu title/supplier/items như trước).
+// Xem trước quy trình duyệt đơn hàng. KHÔNG theo phòng ban: mức (tier) suy ra từ chính giá trị đơn
+// đang nhập dở trên form — dựng 1 object tạm đúng 3 field mà
+// resolveOperationOrderWorkflowConfigForItemClient() (core.js) cần, để không nhân bản lại ranh giới mức
+// ở đây. amount tính y hệt server (tổng SL × Đơn giá các hạng mục hợp lệ, xem
+// recalcOperationOrderItemsTotal() + operationOrders.extraValidate ở lib/createValidation.js).
+function previewOperationOrderWorkflow() {
+  if (activeOperationOrderSubTab !== 'STORE' && activeOperationOrderSubTab !== 'HO') {
+    return alert('Vui lòng chọn đúng sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" trước khi xem quy trình!');
+  }
+  const amount = recalcOperationOrderItemsTotal();
+  const paymentTotalAmount = getMoneyValue(document.getElementById('voPaymentTotalAmount'));
+  if (!amount && !paymentTotalAmount) {
+    return alert('Vui lòng nhập ít nhất 1 hạng mục (có Số lượng và Đơn giá) để xác định mức giá trị áp dụng quy trình!');
+  }
+  const draft = { orderLocationType: activeOperationOrderSubTab, amount, paymentTotalAmount };
+  const effectiveAmount = computeOperationOrderAmountClient(draft);
+  const tier = computeOperationOrderTierClient(activeOperationOrderSubTab, effectiveAmount);
+  openGenericWorkflowPreviewModal(
+    `🔍 Xem Trước Quy Trình Phê Duyệt Đơn Hàng (${OPERATION_ORDER_SUBTAB_LABELS[activeOperationOrderSubTab]})`,
+    `Giá trị tạm tính: ${effectiveAmount.toLocaleString('vi-VN')} VNĐ — Mức áp dụng: ${operationOrderTierLabel(activeOperationOrderSubTab, tier)}`,
+    resolveOperationOrderWorkflowConfigForItemClient(draft),
+    `Mức "${operationOrderTierLabel(activeOperationOrderSubTab, tier)}" chưa được cấu hình quy trình phê duyệt đơn hàng.`
+  );
+}
+
 function toggleOperationOrderPoDetailsBox(btn) {
   const box = document.getElementById('operationOrderPoDetailsBox');
   if (!box) return;
@@ -3413,6 +3438,9 @@ const OP_CLICK_ACTIONS = {
   // như vẫn hoạt động, nhưng bấm bất kỳ thẻ nào khác (Đang Chờ Duyệt/Chờ Nhập Hàng/...) hoàn toàn im
   // lặng không lọc/không đổi màu — đúng triệu chứng người dùng mô tả. Đọc "arg0" TRỰC TIẾP từ
   // el.dataset (không qua cspReadArgSlot()) vì registry này không dùng cspCollectArgs() chung.
+  // Nút "🔍 Xem Quy Trình" của form đơn hàng — cùng lý do mọi entry phía trên: registry riêng của Vận
+  // Hành không tự soi window[fnName] như bindCspDelegation() chung, không khai ở đây là nút im lặng.
+  previewOperationOrderWorkflow: () => previewOperationOrderWorkflow(),
   filterOperationOrderByCard: el => filterOperationOrderByCard(el.dataset.arg0),
   filterOperationStoreOpenByCard: el => filterOperationStoreOpenByCard(el.dataset.arg0),
   filterOperationRepairByCard: el => filterOperationRepairByCard(el.dataset.arg0)

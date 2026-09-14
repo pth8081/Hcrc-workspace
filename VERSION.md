@@ -1,8 +1,87 @@
 # Phiên bản hiện tại
 
-**21.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.4 (2026-09-14): Phê Duyệt Giá Bán Buôn thêm "Đơn Vị Áp Dụng" + Áp Dụng Nhanh số bước quy trình + Xem Quy Trình cho toàn bộ module
+
+Người dùng yêu cầu 3 việc cùng lúc, sau khi phân tích + thống nhất phương án
+(xác nhận qua các câu hỏi làm rõ):
+
+**1. Thêm trường "🏢 Đơn Vị Áp Dụng Giá Bán Buôn"** (Hỗ Trợ IT → Phê Duyệt
+Giá, sub-tab Bán Buôn) — ô nhập tay tự do, bắt buộc, ngay gần "Phòng Ban Đề
+Xuất". Field mới `wholesaleApplyUnit` trên bản ghi `itPriceApprovals`, khác
+hẳn "Phòng Ban Đề Xuất"/"Siêu Thị Đề Xuất" đã có (đó là đơn vị NỘI BỘ tạo đề
+xuất, còn field mới ghi đơn vị/khách hàng mà giá này áp dụng CHO). Validate ở
+cả client (`module-itsupport-price.js`) lẫn server
+(`lib/createValidation.js::itPriceApprovals.extraValidate`, bắt buộc + trim +
+giới hạn 300 ký tự khi Bán Buôn, luôn null hoá khi Bán Lẻ). Thêm vào
+`CORE_FIELD_MANIFEST.IT_PRICE` (Biểu Mẫu) để admin tự đổi nhãn/bắt buộc.
+
+**2. "⚡ Áp Dụng Nhanh Số Bước Cho Toàn Bộ Quy Trình"** (Hệ Thống → Quy Trình
+& Phê Duyệt, mục 3.6 `Huong-dan-nghiep-vu.md`) — chọn 1 mẫu quy trình có sẵn
+rồi áp dụng SỐ BƯỚC đó cho MỌI phòng ban/mức đang **THIẾU cấu hình** trên
+TẤT CẢ ~14 quy trình phê duyệt trong hệ thống cùng lúc (Văn Bản Trình theo
+loại×phòng ban, Hợp Đồng Phê Duyệt/Quản Lý HĐ, Đăng Ký Xe, Mua Sắm, Sửa
+Chữa, VPP, Ngân Sách, Thanh Toán, Phê Duyệt Giá bán lẻ/bán buôn, Đặt Hàng
+Siêu Thị/HO) — KHÔNG tự gán người duyệt (admin vẫn vào từng module gán như
+bình thường) và **tuyệt đối không đụng tới bất kỳ mục nào đã có cấu hình sẵn**
+(chế độ an toàn admin đã xác nhận, tránh rủi ro xoá mất người duyệt đã gán
+khi đổi mẫu quy trình cho 1 mục — hành vi có sẵn của hệ thống). Có nút "🔍
+Xem Số Mục Ảnh Hưởng" xem trước danh sách chính xác sẽ bị ảnh hưởng trước
+khi áp dụng thật.
+
+**3. "🔍 Xem Quy Trình" cho toàn bộ module còn thiếu** (mục 3.7
+`Huong-dan-nghiep-vu.md`) — trước đây chỉ Văn Bản Trình và Hợp Đồng (Phê
+Duyệt) có nút xem trước quy trình duyệt ngay trên form tạo hồ sơ; nay thêm
+cho 9 module còn lại: Tài Liệu, Đăng Ký Xe, Mua Sắm VP, Sửa Chữa VP, Văn
+Phòng Phẩm, Hợp Đồng (Quản Lý HĐ — nút RIÊNG, tráo hiện/ẩn đúng theo sub-tab
+đang mở với nút Phê Duyệt đã có), Thanh Toán, Ngân Sách (chỉ form "Phê
+duyệt"), Phê Duyệt Giá (1 nút dùng chung Bán Lẻ/Bán Buôn), Vận Hành - Đặt
+Hàng (mức suy từ tổng giá trị đơn hàng đang nhập dở, dùng đúng công thức
+server). Dùng chung 2 hàm mới `buildGenericDeptWorkflowPreviewHTML()`/
+`openGenericWorkflowPreviewModal()` (`public/js/core.js`) tái dùng lại đúng
+hạ tầng resolve quy trình đã có sẵn (không snapshot, luôn đọc cấu hình admin
+mới nhất) — hoàn toàn client-side, không có bước duyệt nào bị ảnh hưởng, chỉ
+thêm 1 lớp xem trước tham khảo. Vận Hành > Mở Mới/Sửa Chữa Siêu Thị KHÔNG có
+nút này vì không còn bước phê duyệt nào cả.
+
+**Test**: 3 bộ test regression MỚI —
+`tests/test-quick-apply-workflow-steps.js` (24 kịch bản, xác nhận đúng 5
+khuôn dữ liệu khác nhau của quy trình: phẳng/hasTypes/priceTypeNested/
+pureTier/module bị loại khỏi phạm vi, và tính "chỉ điền chỗ trống, giữ
+nguyên chỗ đã cấu hình"), `tests/test-preview-workflow-buttons.js` (17 kịch
+bản, bấm THẬT qua trình duyệt headless cả 9 nút "Xem Quy Trình" mới + xác
+nhận 2 nút Hợp Đồng tráo đúng chiều), thêm 4 kịch bản mới vào
+`tests/test-itprice-scope-dates.js` cho field `wholesaleApplyUnit`. Chạy lại
+TOÀN BỘ regression liên quan: `test-lazy-load-all-tabs.js` (42/42),
+`test-contract.js` (48/48), `test-submission.js` (22/22), `test-vpp.js`
+(19/19), `test-payment.js` (111/111), `test-office-budget.js` (62/62),
+`test-operation-order-location-tiers.js` (35/35), `test-it-price-approvals-scope.js`
+(7/7), `test-car-regs-scope.js` (7/7), `test-office-reqs-scope.js` (7/7),
+`test-budget-entries-scope.js` (6/6), `test-payment-requests-dept-scope.js`
+(5/5) — đều PASS không cần sửa gì thêm ngoài `test-itprice-scope-dates.js`
+(cập nhật để phù hợp field mới ở mục 1).
+
+**Lưu ý kỹ thuật đáng ghi lại**: khi merge lại thay đổi từ 1 nhánh worktree
+song song, `git apply --3way` báo "Applied patch to X cleanly" cho 8 file
+nhưng do CẢ patch có 3 file khác bị conflict (đang sửa đồng thời ở nhánh
+chính), thao tác KHÔNG thực sự ghi các thay đổi "cleanly" đó xuống working
+tree — chỉ phát hiện được nhờ bộ test bấm nút thật (`test-preview-workflow-buttons.js`)
+báo FAIL toàn bộ dù `node --check`/smoke-test điều hướng đều xanh; đã khắc
+phục bằng cách copy trực tiếp nội dung file từ nhánh worktree rồi xác nhận
+lại bằng `diff` trước khi tiếp tục.
+
+**Deploy-impact**: chỉ sửa code client + server (`lib/createValidation.js`,
+`public/index.html`, `public/js/core.js`, `public/js/module-itsupport-price.js`,
+`public/js/module-workflow.js`, `public/js/module-itsupport-tier.js`,
+`public/js/module-hethong-tabs.js`, `public/js/module-tailieu.js`,
+`public/js/module-dangkyxe.js`, `public/js/module-office.js`,
+`public/js/module-vpp.js`, `public/js/module-hopdong.js`,
+`public/js/module-thanhtoan.js`, `public/js/module-ngansach.js`,
+`public/js/module-vanhanh.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến
+`.env` mới, KHÔNG thêm dependency npm mới. Chỉ cần copy code + `pm2 restart`.
 
 ## v21.3 (2026-09-14): Văn Bản Trình & Hợp Đồng — chọn CỤ THỂ 1 người khi vai trò phê duyệt cuối cùng có nhiều người + Tổng Giám Đốc chỉ 1 người
 

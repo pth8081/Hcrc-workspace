@@ -282,6 +282,59 @@ giữ đúng vị trí đó chưa (form Sửa Người Dùng có ô Chức danh 
 có người giữ vị trí: người đó đã có quyền "Người duyệt" chưa (3.2) → nếu Theo
 phòng ban: có ai trong phòng đó có quyền "Người duyệt" chưa.
 
+### 3.6. "⚡ Áp Dụng Nhanh Số Bước Cho Toàn Bộ Quy Trình"
+
+Ở đầu màn **Hệ Thống → 🔄 Quy Trình & Phê Duyệt** có khối **"⚡ Áp Dụng Nhanh"**
+— tiện ích để set NHANH **số bước** (chọn 1 mẫu quy trình đã định nghĩa sẵn ở
+khối "🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt" cùng màn) cho MỌI phòng ban/mức
+trên **TẤT CẢ** quy trình phê duyệt (mục 3) cùng lúc, thay vì phải vào từng
+thẻ phòng ban của từng module một để chọn số bước tay.
+
+Nguyên tắc quan trọng cần biết trước khi dùng:
+
+- **Chỉ set số bước, KHÔNG tự gán người duyệt** — sau khi áp dụng, mọi bước
+  vừa được điền đều CHƯA có người duyệt nào, admin vẫn phải vào từng module
+  (Đăng Ký Xe/VPP/Hợp Đồng/...) gán người duyệt cho từng bước như bình
+  thường. Đây thuần là đường tắt chọn nhanh SỐ BƯỚC ban đầu, không thay thế
+  bước cấu hình người duyệt.
+- **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình** — bất kỳ phòng
+  ban/mức nào ĐÃ được admin cấu hình từ trước (kể cả chỉ mới chọn số bước mà
+  chưa gán người duyệt) đều **được giữ nguyên hoàn toàn**, không bị ghi đè.
+  Bấm **"🔍 Xem Số Mục Ảnh Hưởng"** trước để xem chính xác danh sách phòng
+  ban/mức nào sẽ bị ảnh hưởng, rồi mới bấm **"⚡ Áp Dụng Nhanh"** nếu đồng ý.
+- **Vẫn sửa được từng bước ở từng module bình thường** sau khi áp dụng —
+  tính năng này không khoá hay thay đổi gì cách admin cấu hình chi tiết
+  từng module như trước, chỉ là 1 bước khởi tạo nhanh ban đầu.
+- **2 module Vận Hành > Mở Mới/Sửa Chữa Siêu Thị không nằm trong phạm vi** —
+  2 module này không còn bước phê duyệt nào cả (xem mục 4.4), nên "Áp Dụng
+  Nhanh" không đụng tới.
+
+**Dùng khi nào**: hữu ích nhất lúc mới triển khai hệ thống (đồng bộ nhanh 1
+số bước chuẩn cho toàn bộ quy trình trước khi đi gán người duyệt từng nơi),
+hoặc khi công ty đổi chính sách chung "từ nay mọi quy trình mới thêm đều
+theo N bước" mà không muốn phá vỡ các quy trình đã cấu hình riêng từ trước.
+
+### 3.7. "🔍 Xem Quy Trình" — xem trước quy trình duyệt ngay trên form tạo hồ sơ
+
+Mọi module có quy trình phê duyệt (mục 3) đều có nút **"🔍 Xem Quy Trình"**
+ngay trên form tạo hồ sơ, cho phép người tạo xem trước — TRƯỚC KHI gửi —
+hồ sơ của mình sẽ đi qua đúng bao nhiêu bước và ai sẽ là người duyệt từng
+bước, dựa theo phòng ban/mức đã chọn trên form tại thời điểm bấm. Đây chỉ
+mang tính tham khảo — quy trình thật sự vẫn do server tự xác minh lại khi
+bấm "Gửi phê duyệt" (không tin dữ liệu client hiển thị).
+
+Áp dụng cho: Tài Liệu, Văn Bản Trình, Đăng Ký Xe, Mua Sắm VP, Sửa Chữa VP,
+Văn Phòng Phẩm, Hợp Đồng (**2 nút riêng biệt** — 1 cho sub-tab "Phê Duyệt"
+xem quy trình duyệt hồ sơ hợp đồng, 1 cho sub-tab "Quản Lý HĐ" xem quy trình
+duyệt Tài liệu ký — 2 quy trình hoàn toàn độc lập, nút hiện đúng theo tab
+đang mở), Thanh Toán, Ngân Sách (chỉ form "Phê duyệt" — bản "Thực hiện" ghi
+nhận thẳng, không qua ai duyệt), Phê Duyệt Giá (1 nút dùng chung cho cả Bán
+Lẻ lẫn Bán Buôn, tự động xem đúng quy trình theo sub-tab đang mở), Vận Hành
+- Đặt Hàng (mức áp dụng suy ra từ tổng giá trị đơn hàng đang nhập dở, cùng
+cách tính server dùng — cần nhập ít nhất 1 hạng mục hoặc Tổng Đợt Thanh Toán
+trước khi xem được). Vận Hành > Mở Mới/Sửa Chữa Siêu Thị KHÔNG có nút này vì
+2 module đó không còn bước phê duyệt nào cả (xem mục 4.4).
+
 ---
 
 ## 4. Danh sách module nghiệp vụ theo nhóm
@@ -444,6 +497,12 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     KHÔNG có "Toàn bộ", luôn bắt buộc chọn rõ siêu thị/cửa hàng áp dụng), cùng
     **"Ngày Áp Dụng"** (bắt buộc) và **"Ngày Hết Hiệu Lực"** (mặc định "Vĩnh
     viễn", chọn "Khác" để nhập ngày thật).
+  - **🏢 "Đơn Vị Áp Dụng Giá Bán Buôn"** (chỉ hiện ở sub-tab Bán Buôn) — ô
+    nhập tay tự do, **bắt buộc**, ghi tên đơn vị/khách hàng mà mức giá bán
+    buôn này áp dụng CHO — khác hẳn "Phòng Ban Đề Xuất"/"Siêu Thị Đề Xuất" ở
+    trên (đó là đơn vị NỘI BỘ tạo đề xuất). Không có danh mục hệ thống cho
+    đối tác/khách hàng ngoài nên đây là ô gõ tự do, không phải chọn từ danh
+    sách có sẵn.
   - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, **mở cho toàn bộ nhân
     viên** (đúng vai trò "tự phục vụ" của cả mục này), vòng đời Chưa xử lý →
     Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục" admin tự thêm/bớt/đổi
