@@ -1233,15 +1233,26 @@
 
     <div id="meetingCalendarTabContent" class="hidden space-y-3">
       <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
-        <label class="font-semibold text-gray-600">Xem lịch ngày:</label>
-        <input id="meetingCalDate" type="date" data-op-change="renderMeetingCalendar" class="border p-1.5 rounded">
-        <span class="text-gray-500 italic">Kéo chuột hoặc giữ Shift rồi bấm ô thứ 2 (cùng cột phòng) để chọn nhiều khung giờ liên tiếp</span>
+        <div class="flex items-center gap-1">
+          <button type="button" id="btnMeetingCalViewDAY" data-op="setMeetingCalViewMode" data-arg0="DAY" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">📅 Ngày</button>
+          <button type="button" id="btnMeetingCalViewWEEK" data-op="setMeetingCalViewMode" data-arg0="WEEK" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Tuần</button>
+          <button type="button" id="btnMeetingCalViewMONTH" data-op="setMeetingCalViewMode" data-arg0="MONTH" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📆 Tháng</button>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" data-op="shiftMeetingCalDate" data-arg0="-1" title="Lùi lại" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">◀</button>
+          <input id="meetingCalDate" type="date" data-op-change="renderMeetingCalendar" class="border p-1.5 rounded">
+          <button type="button" data-op="shiftMeetingCalDate" data-arg0="1" title="Tiến tới" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">▶</button>
+          <button type="button" data-op="jumpMeetingCalToToday" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold text-emerald-700">Hôm nay</button>
+        </div>
+        <span id="meetingCalDayHint" class="text-gray-500 italic">Kéo chuột hoặc giữ Shift rồi bấm ô thứ 2 (cùng cột phòng) để chọn nhiều khung giờ liên tiếp</span>
         <div class="flex items-center gap-1.5 ml-auto">
-          <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống (bấm để đặt)</span>
+          <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống (bấm để đặt/xem)</span>
           <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
         </div>
       </div>
       <div id="meetingCalendarGrid"></div>
+      <div id="meetingCalendarWeekGrid" class="hidden"></div>
+      <div id="meetingCalendarMonthGrid" class="hidden"></div>
     </div>
   </div>
 

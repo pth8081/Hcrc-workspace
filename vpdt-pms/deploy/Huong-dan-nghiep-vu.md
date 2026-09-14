@@ -459,6 +459,16 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   hiện xung đột. Danh mục phòng họp (tên đầy đủ + tên gọn hiện trên lưới Lịch
   Họp) admin tự thêm/xoá ngay tại khối "🗂️ Danh Mục Phòng Họp" trong tab
   "📝 Đăng Ký" của module.
+  **Xem Lịch Họp — 3 chế độ Ngày/Tuần/Tháng**: chế độ **Ngày** (mặc định) giữ
+  nguyên lưới giờ chi tiết 30 phút/phòng, kéo chuột hoặc giữ Shift bấm ô thứ 2
+  để chọn nhiều khung giờ liên tiếp rồi đổ sẵn sang tab Đăng Ký. Chế độ **Tuần**/
+  **Tháng** chỉ xem TỔNG QUAN — mỗi ô ngày hiện số lịch đã đặt theo từng phòng
+  (hoặc tổng số lịch ở Tháng), KHÔNG chọn giờ trực tiếp được (quá dày để hiện
+  từng khung 30 phút); bấm vào 1 ô ngày bất kỳ sẽ nhảy về đúng chế độ Ngày của
+  ngày đó để xem chi tiết/đặt lịch. Nút ◀ ▶ lùi/tiến đúng 1 đơn vị theo chế độ
+  đang xem (1 ngày/1 tuần/1 tháng), nút "Hôm nay" đưa về ngày hệ thống hiện tại
+  ngay lập tức — giúp lướt xem trước phòng nào còn trống trong cả tuần/tháng
+  tới trước khi quyết định đặt ngày nào, thay vì phải dò từng ngày một.
 - **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
   hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban mặc định** = số nhân
   sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số

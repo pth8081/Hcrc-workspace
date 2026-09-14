@@ -479,6 +479,121 @@ async function main() {
     `status=${m7result.status} alerts=${JSON.stringify(m7result.alerts)}`
   );
 
+  // ===================== M8-M13 — "Xem lịch họp nhanh" thêm chế độ Tuần/Tháng (giữ nguyên chế độ Ngày
+  // cũ) — bấm 1 ô ngày ở Tuần/Tháng phải nhảy đúng về chế độ Ngày, ◀▶/"Hôm nay" phải nhảy đúng bước theo
+  // chế độ đang xem. =====================
+  const calWeekMonth = await page.evaluate((room) => {
+    switchTab('meeting');
+    setMeetingSubTab('CALENDAR');
+    document.getElementById('meetingCalDate').value = '2026-09-03'; // Thứ 5 — cùng tuần với raceMeetingA/B (2026-09-03, phòng ROOM)
+    setMeetingCalViewMode('DAY');
+    const dayModeDefaults = {
+      dayGridHidden: document.getElementById('meetingCalendarGrid').classList.contains('hidden'),
+      weekGridHidden: document.getElementById('meetingCalendarWeekGrid').classList.contains('hidden'),
+      monthGridHidden: document.getElementById('meetingCalendarMonthGrid').classList.contains('hidden'),
+      hintHidden: document.getElementById('meetingCalDayHint').classList.contains('hidden')
+    };
+
+    setMeetingCalViewMode('WEEK');
+    const weekModeVisibility = {
+      dayGridHidden: document.getElementById('meetingCalendarGrid').classList.contains('hidden'),
+      weekGridHidden: document.getElementById('meetingCalendarWeekGrid').classList.contains('hidden'),
+      hintHidden: document.getElementById('meetingCalDayHint').classList.contains('hidden')
+    };
+    // 2026-09-03 (Thứ 5) có 2 lịch PENDING cùng phòng ROOM (raceMeetingA/B, seed ở M7) -> ô Thứ 5 phải hiện "2 lịch".
+    const weekCells = Array.from(document.querySelectorAll('#meetingCalendarWeekGrid [data-op="jumpMeetingCalToDay"]'));
+    const thu5Cell = weekCells.find((el) => el.getAttribute('data-arg0') === '2026-09-03');
+    const weekThu5Text = thu5Cell ? thu5Cell.textContent : null;
+
+    setMeetingCalViewMode('MONTH');
+    const monthCell = document.querySelector('#meetingCalendarMonthGrid [data-op="jumpMeetingCalToDay"][data-arg0="2026-09-03"]');
+    const monthThu5Text = monthCell ? monthCell.textContent : null;
+
+    // Bấm ô Thứ 5 ở chế độ Tháng -> phải nhảy về chế độ Ngày, đúng ngày 2026-09-03.
+    monthCell.click();
+    const afterJumpFromMonth = {
+      dateVal: document.getElementById('meetingCalDate').value,
+      dayGridHidden: document.getElementById('meetingCalendarGrid').classList.contains('hidden'),
+      monthGridHidden: document.getElementById('meetingCalendarMonthGrid').classList.contains('hidden'),
+      activeBtnClass: document.getElementById('btnMeetingCalViewDAY').className
+    };
+
+    // ◀▶ nhảy đúng bước theo từng chế độ đang xem.
+    setMeetingCalViewMode('DAY');
+    document.getElementById('meetingCalDate').value = '2026-09-03';
+    shiftMeetingCalDate(1);
+    const dayShiftForward = document.getElementById('meetingCalDate').value;
+    shiftMeetingCalDate(-1);
+    const dayShiftBack = document.getElementById('meetingCalDate').value;
+
+    setMeetingCalViewMode('WEEK');
+    document.getElementById('meetingCalDate').value = '2026-09-03';
+    shiftMeetingCalDate(1);
+    const weekShiftForward = document.getElementById('meetingCalDate').value;
+
+    setMeetingCalViewMode('MONTH');
+    document.getElementById('meetingCalDate').value = '2026-09-03';
+    shiftMeetingCalDate(1);
+    const monthShiftForward = document.getElementById('meetingCalDate').value;
+
+    jumpMeetingCalToToday();
+    const afterToday = document.getElementById('meetingCalDate').value;
+
+    return {
+      dayModeDefaults, weekModeVisibility, weekThu5Text, monthThu5Text, afterJumpFromMonth,
+      dayShiftForward, dayShiftBack, weekShiftForward, monthShiftForward, afterToday
+    };
+  }, ROOM);
+
+  record(
+    'Lịch Họp Nhanh: mặc định chế độ Ngày — lưới Ngày hiện, Tuần/Tháng ẩn, gợi ý kéo/Shift hiện',
+    calWeekMonth.dayModeDefaults.dayGridHidden === false && calWeekMonth.dayModeDefaults.weekGridHidden === true
+      && calWeekMonth.dayModeDefaults.monthGridHidden === true && calWeekMonth.dayModeDefaults.hintHidden === false,
+    JSON.stringify(calWeekMonth.dayModeDefaults)
+  );
+  record(
+    'Lịch Họp Nhanh: chuyển chế độ Tuần — lưới Tuần hiện, lưới Ngày ẩn, gợi ý kéo/Shift ẩn (không áp dụng ở Tuần)',
+    calWeekMonth.weekModeVisibility.dayGridHidden === true && calWeekMonth.weekModeVisibility.weekGridHidden === false
+      && calWeekMonth.weekModeVisibility.hintHidden === true,
+    JSON.stringify(calWeekMonth.weekModeVisibility)
+  );
+  record(
+    'Lịch Họp Nhanh (Tuần): ô Thứ 5 (2026-09-03, có 2 lịch PENDING cùng phòng) hiện đúng "2 lịch"',
+    typeof calWeekMonth.weekThu5Text === 'string' && calWeekMonth.weekThu5Text.includes('2 lịch'),
+    calWeekMonth.weekThu5Text
+  );
+  record(
+    'Lịch Họp Nhanh (Tháng): ô ngày 3 (2026-09-03) hiện đúng "2 lịch"',
+    typeof calWeekMonth.monthThu5Text === 'string' && calWeekMonth.monthThu5Text.includes('2 lịch'),
+    calWeekMonth.monthThu5Text
+  );
+  record(
+    'Lịch Họp Nhanh: bấm ô ngày ở chế độ Tháng -> nhảy đúng về chế độ Ngày của đúng ngày đó',
+    calWeekMonth.afterJumpFromMonth.dateVal === '2026-09-03' && calWeekMonth.afterJumpFromMonth.dayGridHidden === false
+      && calWeekMonth.afterJumpFromMonth.monthGridHidden === true && calWeekMonth.afterJumpFromMonth.activeBtnClass.includes('bg-emerald-700'),
+    JSON.stringify(calWeekMonth.afterJumpFromMonth)
+  );
+  record(
+    'Lịch Họp Nhanh: nút ◀▶ ở chế độ Ngày nhảy đúng 1 ngày',
+    calWeekMonth.dayShiftForward === '2026-09-04' && calWeekMonth.dayShiftBack === '2026-09-03',
+    `forward=${calWeekMonth.dayShiftForward} back=${calWeekMonth.dayShiftBack}`
+  );
+  record(
+    'Lịch Họp Nhanh: nút ◀▶ ở chế độ Tuần nhảy đúng 7 ngày',
+    calWeekMonth.weekShiftForward === '2026-09-10',
+    calWeekMonth.weekShiftForward
+  );
+  record(
+    'Lịch Họp Nhanh: nút ◀▶ ở chế độ Tháng nhảy đúng 1 tháng (giữ nguyên ngày trong tháng)',
+    calWeekMonth.monthShiftForward === '2026-10-03',
+    calWeekMonth.monthShiftForward
+  );
+  record(
+    'Lịch Họp Nhanh: nút "Hôm nay" đưa ô ngày về đúng ngày hệ thống hiện tại',
+    calWeekMonth.afterToday === new Date().toLocaleDateString('en-CA'),
+    `afterToday=${calWeekMonth.afterToday}`
+  );
+
   // ===================== CAR REGISTRATION =====================
   await loginAs(page, bookerUser);
   const c1 = await page.evaluate(async () => {

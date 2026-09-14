@@ -1,8 +1,58 @@
 # Phiên bản hiện tại
 
-**21.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.8 (2026-09-14): Đặt Phòng Họp — "Xem Lịch Họp Nhanh" thêm chế độ Tuần/Tháng (trước chỉ có Ngày)
+
+Người dùng yêu cầu: phần "Xem lịch họp nhanh" (Đặt Phòng Họp > Lịch Họp)
+đang chỉ xem được theo ngày, muốn xem thêm theo Tuần/Tháng để dễ đặt lịch cho
+tương lai (lướt xem trước phòng nào còn trống trong cả tuần/tháng tới, thay
+vì phải dò từng ngày một qua ô chọn ngày).
+
+**Phương án đã chốt với người dùng**: chế độ **Ngày** (mặc định) giữ NGUYÊN
+hành vi cũ 100% (lưới giờ 30 phút/phòng, kéo chuột/Shift+bấm chọn khung giờ
+liên tiếp để đặt). Chế độ **Tuần**/**Tháng** (mới) chỉ xem TỔNG QUAN — mỗi ô
+ngày hiện số lịch đã đặt theo từng phòng (Tuần) hoặc tổng số lịch cả ngày
+(Tháng), KHÔNG chọn giờ trực tiếp được (quá dày đặc để hiện từng khung 30
+phút ở mức zoom này) — bấm vào 1 ô ngày bất kỳ sẽ nhảy thẳng về đúng chế độ
+Ngày của ngày đó để xem chi tiết/đặt lịch.
+
+**Chi tiết kỹ thuật** (`module-phonghop.js`): `renderMeetingCalendar()` đổi
+thành hàm điều phối theo `meetingCalViewMode` ('DAY'/'WEEK'/'MONTH'), gọi
+đúng 1 trong 3 hàm render con (`renderMeetingCalendarDayView()` — đúng logic
+cũ đổi tên, `renderMeetingCalendarWeekView()`, `renderMeetingCalendarMonthView()`
+— 2 hàm mới). Thêm nút chuyển chế độ + ◀ ▶ (lùi/tiến đúng 1 đơn vị theo chế
+độ đang xem: 1 ngày/1 tuần/1 tháng) + nút "Hôm nay". `computeMeetingDaySummary()`
+tổng hợp số lịch (chưa Hủy — mirror đúng luật "đang chiếm chỗ" ở
+`findMeetingConflict()`) theo từng phòng cho 1 ngày, dùng chung cho cả Tuần
+lẫn Tháng.
+
+**Lưu ý kỹ thuật đáng ghi lại**: `public/tailwind.css` là file CSS ĐÃ BUILD
+SẴN (`npm run build:css`, quét class Tailwind xuất hiện trong `index.html` +
+`public/js/**/*.js` tại THỜI ĐIỂM build — xem `tailwind.config.js`), không
+phải build động lúc chạy — class `grid-cols-7` (dùng cho lưới Tháng, 7 cột)
+CHƯA từng xuất hiện ở bất kỳ đâu trong code trước đợt này nên hoàn toàn không
+có rule biên dịch sẵn, khiến lưới Tháng ban đầu vỡ bố cục (xếp dọc thay vì 7
+cột) dù code JS đúng — đã tự phát hiện qua ảnh demo (không phải qua test tự
+động, vì test không tự kiểm tra bố cục CSS) và chạy lại `npm run build:css`
+để vá. Cùng lớp lỗi đã ghi chú sẵn trong `tailwind.config.js` (tab "Đăng Ký
+Xe"/"Lái Xe" từng gặp y hệt) — bất kỳ ai thêm class Tailwind MỚI trong JS
+(không có sẵn trong `index.html`/code cũ) đều phải chạy lại `npm run
+build:css` trong CÙNG đợt, không thể chỉ dựa vào test JS để phát hiện thiếu
+sót loại này.
+
+**Test**: thêm 9 kịch bản mới vào `tests/test-meeting-car.js` (mặc định
+chế độ Ngày, chuyển Tuần/Tháng ẩn-hiện đúng lưới, tổng hợp số lịch đúng theo
+từng ô ngày ở cả Tuần lẫn Tháng, bấm ô ngày nhảy đúng về chế độ Ngày, nút
+◀ ▶ nhảy đúng bước theo từng chế độ, nút "Hôm nay") — 81/81 PASS (72 kịch
+bản cũ + 9 mới). Chạy lại `test-lazy-load-all-tabs.js` (42/42) — đều PASS.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies —
+thuần sửa giao diện + rebuild `public/tailwind.css` (đã build sẵn, commit
+kèm trong PR — không cần chạy `npm run build:css` lại trên server thật, chỉ
+cần copy code + `pm2 restart` như bình thường).
 
 ## v21.7 (2026-09-14): Vá lỗi thật Checklist báo nhầm "Còn N câu hỏi bắt buộc chưa trả lời" dù đã chọn đủ đáp án
 
