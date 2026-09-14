@@ -440,9 +440,42 @@ function renderCarVehicleTypeList() {
   ul.innerHTML = (DB.carVehicleTypes || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t.name)} ${t.isTaxi ? '<span class="text-amber-600 font-bold">(Taxi)</span>' : (t.bienSo ? `<span class="text-gray-500">— BKS ${escapeHtml(t.bienSo)}</span>` : '')}</span>
+      <button data-op="editCarVehicleType" data-arg0="${t.id}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteCarVehicleType" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// BUG THẬT đã sửa (rà soát "tất cả các danh mục đều phải sửa được"): trước đây gõ nhầm tên/BKS hoặc
+// đánh dấu nhầm cờ Taxi phải xoá hẳn rồi thêm lại (mất id cũ, phiếu Đăng Ký Xe cũ vẫn giữ nguyên tên cũ
+// dạng chuỗi hiển thị — KHÔNG bị ảnh hưởng gì vì carRegs.assignedVehicleType lưu tên tại thời điểm chọn,
+// không tham chiếu ngược lại theo id). 3 prompt() tuần tự (tên/cờ Taxi/BKS) — khớp UX renameStore()...
+// nhưng gộp cả nhóm field object trong 1 lượt sửa thay vì chỉ 1 chuỗi đơn.
+async function editCarVehicleType(id) {
+  const t = DB.carVehicleTypes.find(x => x.id === id);
+  if (!t) return;
+  const newName = prompt('Tên loại xe:', t.name);
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) return alert('⛔ Tên loại xe không được để trống.');
+  if (DB.carVehicleTypes.some(x => x.id !== id && x.name === trimmedName)) return alert('⛔ Loại xe này đã tồn tại!');
+
+  const isTaxi = confirm('Đây có phải Xe Taxi không?\n(OK = Có — ẩn ô Biển Số Cố Định; Hủy = Không — hiện ô Biển Số Cố Định)');
+  let bienSo = '';
+  if (!isTaxi) {
+    const bienSoInput = prompt('Biển kiểm soát cố định (để trống nếu không cố định):', t.bienSo || '');
+    if (bienSoInput === null) return;
+    bienSo = bienSoInput.trim();
+  }
+
+  if (trimmedName === t.name && isTaxi === t.isTaxi && bienSo === (t.bienSo || '')) return;
+  const snapshot = DB.carVehicleTypes.map(x => ({ ...x }));
+  DB.carVehicleTypes = DB.carVehicleTypes.map(x => (x.id === id ? { ...x, name: trimmedName, isTaxi, bienSo } : x));
+  const saved = await syncStorage('carVehicleTypes');
+  if (!saved) { DB.carVehicleTypes = snapshot; renderCarVehicleTypeList(); return; }
+  logSystemAction('USER_MGM', 'EDIT_CAR_VEHICLE_TYPE', `Sửa loại xe cụ thể [${t.name}] → [${trimmedName}]`, 'SUCCESS', trimmedName);
+  renderCarVehicleTypeList();
+  populateDropdowns();
 }
 
 // ===== Danh Mục "Hãng Taxi" (DB.carTaxiCompanies) — danh sách phẳng thuần, mirror DB.stores (không
@@ -475,9 +508,14 @@ function renderCarTaxiCompanyList() {
   ul.innerHTML = (DB.carTaxiCompanies || []).map(name => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(name)}</span>
+      <button data-op="renameCarTaxiCompany" data-arg0="${escapeHtml(name)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteCarTaxiCompany" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+async function renameCarTaxiCompany(name) {
+  const ok = await renameCatalogEntryClient('carTaxiCompanies', name, 'Danh Mục Hãng Taxi');
+  if (ok) { renderCarTaxiCompanyList(); populateDropdowns(); }
 }
 
 function onCarFilterChange() {

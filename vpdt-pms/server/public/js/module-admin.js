@@ -41,10 +41,21 @@ function renderDeptList() {
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(d)}</span>
       <input value="${escapeHtml(getDeptAbbr(d))}" data-op-change="updateDeptAbbr" data-arg0="${escapeHtml(d)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="renameDept" data-arg0="${escapeHtml(d)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="moveDeptToStore" data-arg0="${escapeHtml(d)}" title="Chuyển sang Danh Mục Siêu Thị" class="text-orange-600 font-bold hover:underline whitespace-nowrap">Chuyển</button>
       <button data-op="deleteDept" data-arg0="${escapeHtml(d)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "trong danh mục bạn xử lý cho tất cả các danh mục
+// đều phải sửa được thay vì phải xóa tạo lại như bây giờ") — trước đây Phòng Ban chỉ sửa được viết tắt
+// (ô input inline) và "Chuyển" sang Siêu Thị, KHÔNG có cách nào đổi lại chính TÊN phòng ban nếu gõ sai
+// lúc tạo mà không xoá-tạo-lại (mất hết cấu hình quyền/quy trình gắn theo tên đó). Dùng lại ĐÚNG route
+// có cascade (routes/adminCatalog.js 'depts', xem lib/catalogRename.js::cascadeDeptRename()).
+async function renameDept(name) {
+  const ok = await renameCatalogEntryClient('depts', name, 'Danh Mục Phòng Ban');
+  if (ok) { renderDeptList(); populateDropdowns(); }
 }
 
 // ===== Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), cùng khuôn CRUD
@@ -318,11 +329,17 @@ function renderTrainingCategoryList() {
   const ul = document.getElementById('trainingCategoryList');
   if (!ul) return;
   ul.innerHTML = DB.trainingCategories.map(t => `
-    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
-      <span>${escapeHtml(t)}</span>
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(t)}</span>
+      <button data-op="renameTrainingCategory" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteTrainingCategory" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+async function renameTrainingCategory(name) {
+  const ok = await renameCatalogEntryClient('trainingCategories', name, 'Danh Mục Loại Đào Tạo');
+  if (ok) { renderTrainingCategoryList(); syncTrainingCategorySelectsIfLoaded(); }
 }
 
 // SENSITIVE_CATEGORY_LABELS/SENSITIVE_CATEGORY_SEVERE da chuyen sang core.js (Ha tang: nap module theo
@@ -356,11 +373,47 @@ function renderSensitiveKeywordList() {
   const ul = document.getElementById('sensitiveKeywordList');
   if (!ul) return;
   ul.innerHTML = DB.sensitiveKeywords.map(k => `
-    <li class="p-2 flex justify-between items-center hover:bg-gray-50">
-      <span>${escapeHtml(k.term)} <span class="text-[10px] px-1.5 py-0.5 rounded-full ${SENSITIVE_CATEGORY_SEVERE.has(k.category) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${SENSITIVE_CATEGORY_LABELS[k.category] || k.category}</span></span>
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(k.term)} <span class="text-[10px] px-1.5 py-0.5 rounded-full ${SENSITIVE_CATEGORY_SEVERE.has(k.category) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${SENSITIVE_CATEGORY_LABELS[k.category] || k.category}</span></span>
+      <button data-op="editSensitiveKeyword" data-arg0="${k.id}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteSensitiveKeyword" data-arg0="${k.id}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// BUG THẬT đã sửa (rà soát "tất cả các danh mục đều phải sửa được"): trước đây chỉ Thêm/Xóa, gõ sai từ
+// khoá hoặc chọn nhầm phân loại phải xoá hẳn rồi thêm lại. Sửa CẢ 2 field (term + category) — term qua
+// prompt() (khớp UX renameCatalogEntryClient()); category qua 1 prompt() liệt kê số thứ tự (không phải
+// <select> vì đây là hộp thoại prompt() thuần, không dựng modal riêng cho việc nhỏ này).
+async function editSensitiveKeyword(id) {
+  const kw = DB.sensitiveKeywords.find(k => k.id === id);
+  if (!kw) return;
+  const newTerm = prompt('Từ khoá:', kw.term);
+  if (newTerm === null) return;
+  const trimmedTerm = newTerm.trim();
+  if (!trimmedTerm) return alert('⛔ Từ khoá không được để trống.');
+
+  const categoryKeys = Object.keys(SENSITIVE_CATEGORY_LABELS);
+  const menu = categoryKeys.map((k, i) => `${i + 1}. ${SENSITIVE_CATEGORY_LABELS[k]}`).join('\n');
+  const currentIdx = categoryKeys.indexOf(kw.category);
+  const choice = prompt(`Phân loại:\n${menu}`, String(currentIdx >= 0 ? currentIdx + 1 : 1));
+  if (choice === null) return;
+  const choiceIdx = parseInt(choice, 10) - 1;
+  if (!Number.isInteger(choiceIdx) || choiceIdx < 0 || choiceIdx >= categoryKeys.length) {
+    return alert('⛔ Số phân loại không hợp lệ.');
+  }
+  const newCategory = categoryKeys[choiceIdx];
+
+  if (trimmedTerm === kw.term && newCategory === kw.category) return;
+  if (DB.sensitiveKeywords.some(k => k.id !== id && k.term.toLowerCase() === trimmedTerm.toLowerCase() && k.category === newCategory)) {
+    return alert('⛔ Từ khoá này đã có trong danh sách.');
+  }
+  const snapshot = DB.sensitiveKeywords.map(k => ({ ...k }));
+  DB.sensitiveKeywords = DB.sensitiveKeywords.map(k => (k.id === id ? { ...k, term: trimmedTerm, category: newCategory } : k));
+  const saved = await syncStorage('sensitiveKeywords');
+  if (!saved) { DB.sensitiveKeywords = snapshot; renderSensitiveKeywordList(); return; }
+  logSystemAction('USER_MGM', 'EDIT_SENSITIVE_KEYWORD', `Sửa từ khoá nhạy cảm [${kw.term}] → [${trimmedTerm}] (${SENSITIVE_CATEGORY_LABELS[newCategory]})`, 'SUCCESS', trimmedTerm);
+  renderSensitiveKeywordList();
 }
 
 function saveCat(e) {
@@ -403,9 +456,17 @@ function renderCatList() {
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(c)}</span>
       <input value="${escapeHtml(getDocCatAbbr(c))}" data-op-change="updateCatAbbr" data-arg0="${escapeHtml(c)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="renameCat" data-arg0="${escapeHtml(c)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteCat" data-arg0="${escapeHtml(c)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// Cùng lý do renameDept() ở trên — dùng route có cascade riêng (cascadeCatRename() cập nhật docs.cat +
+// dời key docCatAbbrs, xem lib/catalogRename.js).
+async function renameCat(name) {
+  const ok = await renameCatalogEntryClient('cats', name, 'Phân Loại Tài Liệu');
+  if (ok) { renderCatList(); populateDropdowns(); }
 }
 
 // Viết tắt Loại Pháp Lý hợp đồng (dùng sinh Mã Hợp Đồng, xem generateContractCode()) — tự suy ra mặc

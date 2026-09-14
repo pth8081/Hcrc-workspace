@@ -35,27 +35,54 @@ function generateMeetingTimeSlots() {
 
 function setMeetingSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  const btnReport = document.getElementById('btnMeetingSubReport');
+  // "📊 Báo Cáo" CHỈ hiện cho người CÓ quyền duyệt lịch họp (canApproveMeeting() — admin/meetingApprove,
+  // xem chú thích đầy đủ tại renderMeetingReportTab() bên dưới) — chặn cả trường hợp subTab='REPORT'
+  // được truyền vào khi KHÔNG có quyền (URL/gọi hàm trực tiếp), lùi về REGISTER thay vì hiện trắng.
+  const canSeeReport = canApproveMeeting(currentUser);
+  if (subTab === 'REPORT' && !canSeeReport) subTab = 'REGISTER';
+
   activeMeetingSubTab = subTab;
   const btnRegister = document.getElementById('btnMeetingSubRegister');
   const btnCalendar = document.getElementById('btnMeetingSubCalendar');
-  if (btnRegister) btnRegister.className = subTab === 'REGISTER' ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  if (btnCalendar) btnCalendar.className = subTab === 'CALENDAR' ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white';
+  const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  if (btnRegister) btnRegister.className = subTab === 'REGISTER' ? activeCls : inactiveCls;
+  if (btnCalendar) btnCalendar.className = subTab === 'CALENDAR' ? activeCls : inactiveCls;
+  // BUG THẬT đã sửa TRONG LÚC VIẾT (bắt được qua test): gán className Ở ĐÂY trước đây ghi đè MẤT hẳn
+  // class "hidden" vừa toggle phía trên (className = "..." thay hẳn toàn bộ thuộc tính class, không phải
+  // cộng thêm) — nút "Báo Cáo" bị lộ ra cho CẢ người không có quyền duyệt lịch họp dù canSeeReport=false.
+  // Gộp cả 2 mối quan tâm (ẩn/hiện theo quyền + tô màu active/inactive) trong ĐÚNG 1 lần gán.
+  if (btnReport) btnReport.className = (subTab === 'REPORT' ? activeCls : inactiveCls) + (canSeeReport ? '' : ' hidden');
   document.getElementById('meetingRegisterTabContent').classList.toggle('hidden', subTab !== 'REGISTER');
   document.getElementById('meetingCalendarTabContent').classList.toggle('hidden', subTab !== 'CALENDAR');
-  if (subTab === 'REGISTER') renderMeetingRoomCatalogList();
+  document.getElementById('meetingReportTabContent').classList.toggle('hidden', subTab !== 'REPORT');
   if (subTab === 'CALENDAR') renderMeetingCalendar();
+  if (subTab === 'REPORT') renderMeetingReportTab();
 }
 
-// ============ Danh Mục Phòng Họp (chỉ Admin — đợt audit "form-fields-6") ============
-// Cùng khuôn renderUniformCatalogList()/saveUniformCatalogItem()/deleteUniformCatalogItem()
-// (module-dongphuc.js): thêm/xoá 1 phần tử (mảng { id, name, short }), không có sửa tại chỗ — admin xoá
-// rồi thêm lại nếu cần đổi tên. TRƯỚC ĐÂY const MEETING_ROOMS gõ cứng, giờ DB.meetingRooms (ADMIN_ONLY_KEYS).
+// ============ Danh Mục Phòng Họp (DB.meetingRooms) ============
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "sao bạn lại để ngay ở chỗ phòng họp nhỉ" — chuyển
+// khối quản trị danh mục này vào Hệ Thống → Quản Trị → Quản Lý Danh Mục, cùng chỗ với Phòng Ban/Siêu
+// Thị/Giấy Phép...): TRƯỚC ĐÂY khối "🗂️ Danh Mục Phòng Họp" (admin-only) nằm lẫn NGAY TRONG màn đăng ký
+// đặt phòng (meetingRegisterTabContent) — khác hẳn quy ước mọi danh mục quản trị khác trong hệ thống (đều
+// gom về đúng 1 màn "Quản Lý Danh Mục"), khiến admin phải tìm đúng module Phòng Họp mới sửa được danh
+// mục này thay vì tìm ở màn quản trị chung như mọi danh mục khác. Đã dời sang render qua
+// renderMeetingRoomCatalogList() được gọi TỪ setSystemSubTab('ADMIN') (module-hethong-tabs.js), giống
+// hệt renderDeptList()/renderStoreList()... — hàm/id DOM giữ NGUYÊN tên (chỉ đổi container, xem
+// index.html #adminSubCatalog), không cần đổi callers khác đang gọi syncStorage('meetingRooms')/
+// populateDropdowns() ở đây. adminSubCatalog CHỈ hiện được cho admin (cả màn Hệ Thống đã bị ẩn khỏi nav
+// cho non-admin, xem finishLogin()) nên bỏ hẳn điều kiện canEdit/ẩn form cũ (luôn hiện, vì tới được đây
+// nghĩa là chắc chắn admin).
+//
+// Cùng đợt: THÊM nút "✏️ Sửa" (editMeetingRoomCatalogItem(), BUG THẬT theo yêu cầu "tất cả các danh mục
+// đều phải sửa được thay vì phải xóa tạo lại") — TRƯỚC ĐÂY chỉ Thêm/Xóa (chú thích cũ "không có sửa tại
+// chỗ — admin xoá rồi thêm lại nếu cần đổi tên" đã lỗi thời). Sửa AN TOÀN vì DB.meetings.room lưu TÊN
+// phòng tại thời điểm đặt (không tham chiếu ngược lại theo id) — hồ sơ CŨ giữ nguyên tên cũ làm nhãn hiển
+// thị, không "gãy" gì (cùng đánh đổi carVehicleTypes/priceZones... đã áp dụng).
 function renderMeetingRoomCatalogList() {
   const wrap = document.getElementById('meetingRoomCatalogListWrap');
-  const form = document.getElementById('meetingRoomCatalogAdminForm');
   if (!wrap) return;
-  const canEdit = !!currentUser.perms?.admin;
-  if (form) form.classList.toggle('hidden', !canEdit);
   const rooms = DB.meetingRooms || [];
   if (!rooms.length) {
     wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có phòng họp nào trong danh mục.</div>`;
@@ -67,7 +94,10 @@ function renderMeetingRoomCatalogList() {
         <span class="font-bold text-slate-800 text-xs">${escapeHtml(r.name)}</span>
         <div class="text-[11px] text-gray-500 mt-0.5">Tên gọn: ${escapeHtml(r.short)}</div>
       </div>
-      ${canEdit ? `<button type="button" data-op="deleteMeetingRoomCatalogItem" data-arg0="${r.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+      <div class="space-x-2">
+        <button type="button" data-op="editMeetingRoomCatalogItem" data-arg0="${r.id}" class="text-blue-600 hover:text-blue-800 text-xs font-bold">✏️ Sửa</button>
+        <button type="button" data-op="deleteMeetingRoomCatalogItem" data-arg0="${r.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>
+      </div>
     </div>
   `).join('');
 }
@@ -88,6 +118,29 @@ function saveMeetingRoomCatalogItem() {
   populateDropdowns();
 }
 
+async function editMeetingRoomCatalogItem(id) {
+  const r = (DB.meetingRooms || []).find(x => x.id === id);
+  if (!r) return;
+  const newName = prompt('Tên Phòng Họp Đầy Đủ:', r.name);
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) return alert('⛔ Tên phòng họp không được để trống.');
+  const newShort = prompt('Tên Gọn (cột trên Lịch Họp):', r.short);
+  if (newShort === null) return;
+  const trimmedShort = newShort.trim();
+  if (!trimmedShort) return alert('⛔ Tên gọn không được để trống.');
+  if (trimmedName === r.name && trimmedShort === r.short) return;
+  if (DB.meetingRooms.some(x => x.id !== id && x.name === trimmedName)) return alert('⛔ Phòng họp này đã có trong danh mục!');
+
+  const snapshot = DB.meetingRooms.map(x => ({ ...x }));
+  DB.meetingRooms = DB.meetingRooms.map(x => (x.id === id ? { ...x, name: trimmedName, short: trimmedShort } : x));
+  const saved = await syncStorage('meetingRooms');
+  if (!saved) { DB.meetingRooms = snapshot; renderMeetingRoomCatalogList(); return; }
+  logSystemAction('MEETING', 'EDIT_MEETING_ROOM', `Sửa phòng họp [${r.name}] → [${trimmedName}]`, 'SUCCESS', trimmedName);
+  renderMeetingRoomCatalogList();
+  populateDropdowns();
+}
+
 function deleteMeetingRoomCatalogItem(id) {
   const item = (DB.meetingRooms || []).find(r => r.id === id);
   if (!item) return;
@@ -97,6 +150,118 @@ function deleteMeetingRoomCatalogItem(id) {
   logSystemAction('MEETING', 'DELETE_MEETING_ROOM', `Xóa phòng họp khỏi Danh Mục Phòng Họp [${item.name}]`, 'SUCCESS', item.name);
   renderMeetingRoomCatalogList();
   populateDropdowns();
+}
+
+// ==========================================
+// PHÒNG HỌP > "📊 Báo Cáo" (đợt "Chuyển Danh Mục Phòng Họp + thêm Báo Cáo trong module") — sub-tab MỚI
+// ngay trong module Phòng Họp, KHÔNG gộp vào module "Báo Cáo" top-level riêng (đúng yêu cầu người dùng
+// "thêm subtab báo cáo nhé để người quản lý có thể xem báo cáo ngay trong module phòng họp"). Chỉ hiện
+// cho người CÓ quyền duyệt lịch họp (canApproveMeeting() — admin hoặc perms.meetingApprove, xem
+// core.js) — đúng khớp "người quản lý", không phải ai đặt phòng cũng cần xem thống kê sử dụng toàn công
+// ty. Kiểu dáng MIRROR module-vanhanh.js renderOperationOrderReport() (bộ lọc khoảng ngày + thẻ tổng hợp
+// + thanh tỷ lệ ngang thay biểu đồ thư viện ngoài) — viết lại 1 bản thanh tỷ lệ ngang RIÊNG
+// (buildMeetingReportBarHTML()) thay vì đổi deps của cụm lazy-load "phonghop" chỉ vì 1 hàm vẽ thanh
+// (module-baocaoquantri-preview.js không nằm trong deps của cụm này, xem MODULE_LOAD_GROUPS ở core.js).
+// ==========================================
+function buildMeetingReportBarHTML(label, value, max, colorClass) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return `
+    <div>
+      <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
+      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" data-style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
+// Số giờ thực của 1 lịch họp (endTime - startTime), 0 nếu dữ liệu thiếu/không hợp lệ (an toàn cho reduce()).
+function meetingHours(m) {
+  const start = new Date(m.startTime).getTime();
+  const end = new Date(m.endTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return (end - start) / 3600000;
+}
+
+// Nhóm theo "Tháng YYYY" từ startTime (thời điểm SỬ DỤNG thật, không phải lúc tạo phiếu) — chỉ nhận
+// danh sách ĐÃ LỌC SẴN theo trạng thái Đã Duyệt (đúng ý nghĩa "mức sử dụng thực tế"), khớp khuôn
+// groupOperationOrdersByMonth() (module-vanhanh.js) nhưng field mốc thời gian khác.
+function groupMeetingsByMonth(approvedList) {
+  const buckets = {};
+  approvedList.forEach(m => {
+    const d = new Date(m.startTime);
+    if (isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!buckets[key]) buckets[key] = { key, label: `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`, count: 0, hours: 0 };
+    buckets[key].count++;
+    buckets[key].hours += meetingHours(m);
+  });
+  return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function onMeetingReportFilterChange() { renderMeetingReportTab(); }
+
+function renderMeetingReportTab() {
+  const summaryEl = document.getElementById('meetingReportSummaryCards');
+  if (!summaryEl) return;
+  const fromDate = document.getElementById('meetingReportFromDate')?.value || '';
+  const toDate = document.getElementById('meetingReportToDate')?.value || '';
+
+  // Lọc theo ngày SỬ DỤNG (startTime) — đúng câu hỏi "phòng nào/phòng ban nào dùng nhiều trong khoảng
+  // này", khác bộ lọc "Từ Khóa/Trạng Thái" ở tab Đăng Ký (lọc Danh Sách theo ngày TẠO phiếu).
+  const filtered = (DB.meetings || []).filter(m => isInDateRange(m.startTime, fromDate, toDate));
+  const approved = filtered.filter(m => m.status === 'APPROVED');
+  const pending = filtered.filter(m => m.status === 'PENDING');
+  const cancelled = filtered.filter(m => m.status === 'CANCELLED');
+  const totalHours = Math.round(approved.reduce((sum, m) => sum + meetingHours(m), 0) * 10) / 10;
+
+  summaryEl.innerHTML = [
+    { label: 'Tổng Số Lịch', value: filtered.length, colorClass: 'text-blue-700' },
+    { label: 'Đã Duyệt', value: approved.length, colorClass: 'text-green-700' },
+    { label: 'Đang Chờ Duyệt', value: pending.length, colorClass: 'text-yellow-700' },
+    { label: 'Đã Hủy', value: cancelled.length, colorClass: 'text-red-700' },
+    { label: 'Tổng Giờ Đã Sử Dụng', value: totalHours, colorClass: 'text-emerald-700' }
+  ].map(c => `
+    <div class="border rounded-lg p-2 text-center bg-white">
+      <div class="text-[11px] text-gray-500 font-semibold">${escapeHtml(c.label)}</div>
+      <div class="text-lg font-bold ${c.colorClass}">${c.value.toLocaleString('vi-VN')}</div>
+    </div>
+  `).join('');
+
+  // Theo Phòng Họp — đếm + giờ sử dụng (chỉ lịch ĐÃ DUYỆT), sắp giảm dần theo số giờ để thấy ngay phòng
+  // "nóng" nhất. Duyệt HẾT DB.meetingRooms (kể cả phòng chưa có lịch nào trong khoảng lọc) để thấy rõ
+  // phòng nào đang KHÔNG được dùng, không chỉ những phòng có dữ liệu.
+  const byRoom = (DB.meetingRooms || []).map(r => {
+    const roomMeetings = approved.filter(m => m.room === r.name);
+    return { name: r.name, short: r.short, count: roomMeetings.length, hours: Math.round(roomMeetings.reduce((s, m) => s + meetingHours(m), 0) * 10) / 10 };
+  }).sort((a, b) => b.hours - a.hours);
+  const maxRoomHours = Math.max(1, ...byRoom.map(r => r.hours));
+  const roomBarsEl = document.getElementById('meetingReportRoomBars');
+  if (roomBarsEl) {
+    roomBarsEl.innerHTML = byRoom.length
+      ? byRoom.map(r => buildMeetingReportBarHTML(`${r.short || r.name} (${r.count} lịch)`, r.hours, maxRoomHours, 'bg-emerald-500')).join('')
+      : '<div class="text-xs text-gray-400 italic">Chưa có phòng họp nào trong danh mục.</div>';
+  }
+
+  // Theo Phòng Ban đặt lịch (chỉ lịch ĐÃ DUYỆT).
+  const byDeptMap = {};
+  approved.forEach(m => { const dept = m.dept || '(Không rõ)'; byDeptMap[dept] = (byDeptMap[dept] || 0) + 1; });
+  const byDept = Object.entries(byDeptMap).map(([dept, count]) => ({ dept, count })).sort((a, b) => b.count - a.count);
+  const maxDeptCount = Math.max(1, ...byDept.map(d => d.count));
+  const deptBarsEl = document.getElementById('meetingReportDeptBars');
+  if (deptBarsEl) {
+    deptBarsEl.innerHTML = byDept.length
+      ? byDept.map(d => buildMeetingReportBarHTML(d.dept, d.count, maxDeptCount, 'bg-sky-500')).join('')
+      : '<div class="text-xs text-gray-400 italic">Chưa có lịch nào đã duyệt trong khoảng lọc này.</div>';
+  }
+
+  // Xu hướng theo tháng (lịch đã duyệt, nhóm theo tháng SỬ DỤNG — startTime).
+  const monthly = groupMeetingsByMonth(approved);
+  const maxMonthCount = Math.max(1, ...monthly.map(m => m.count));
+  const monthlyEl = document.getElementById('meetingReportMonthlyBars');
+  if (monthlyEl) {
+    monthlyEl.innerHTML = monthly.length
+      ? monthly.map(m => buildMeetingReportBarHTML(`${m.label} (${m.hours ? Math.round(m.hours * 10) / 10 : 0}h)`, m.count, maxMonthCount, 'bg-indigo-500')).join('')
+      : '<div class="text-xs text-gray-400 italic">Chưa có lịch nào đã duyệt trong khoảng lọc này.</div>';
+  }
 }
 
 // Lưới xem nhanh phòng trống/bận theo ngày — bấm đơn 1 ô: ô trắng đặt nhanh 1 tiếng, ô đỏ xem thông

@@ -113,9 +113,15 @@ async function scenario(name, fn) {
     window.__confirmAnswer = true;
     window.__confirms = [];
     window.confirm = (m) => { window.__confirms.push(String(m)); return window.__confirmAnswer; };
-    window.__promptAnswer = null; // set per-scenario
+    window.__promptAnswer = null; // set per-scenario — 1 chuỗi (mọi lần prompt() trả về CÙNG giá trị đó)
+    // HOẶC 1 mảng (mỗi lần prompt() "ăn" đúng 1 phần tử theo thứ tự gọi — dùng cho hàm sửa NHIỀU field
+    // tuần tự qua nhiều prompt(), VD editCarVehicleType()) — hết mảng thì trả null (giống bấm Hủy).
     window.__prompts = [];
-    window.prompt = (m) => { window.__prompts.push(String(m)); return window.__promptAnswer; };
+    window.prompt = (m) => {
+      window.__prompts.push(String(m));
+      if (Array.isArray(window.__promptAnswer)) return window.__promptAnswer.length ? window.__promptAnswer.shift() : null;
+      return window.__promptAnswer;
+    };
 
     window.__fetchCalls = [];
     window.__fetchHandlers = {}; // key: "METHOD url" or "METHOD /prefix/*" (startsWith match) -> () => ({status, body})
@@ -163,6 +169,17 @@ async function scenario(name, fn) {
     DB.carRegs = []; DB.officeReqs = []; DB.vppRegistrations = []; DB.itPriceApprovals = [];
     DB.budgetEntries = []; DB.contracts = [];
     DB.internalPosts = []; DB.meetings = []; DB.licenses = []; DB.paymentRequests = [];
+    // Seed cho các danh mục MỚI có nút "✏️ Sửa" (đợt "tất cả các danh mục đều phải sửa được").
+    DB.cats = ['Nội bộ']; DB.deptAbbrs = {}; DB.docCatAbbrs = {};
+    DB.licenseTypes = ['Giấy phép A'];
+    DB.carTaxiCompanies = ['Mai Linh'];
+    DB.priceZones = ['Miền Bắc'];
+    DB.trainingCategories = ['Kỹ năng mềm'];
+    DB.carVehicleTypes = [{ id: 1, name: 'Xe 7 chỗ', bienSo: '30G-123.45', isTaxi: false }];
+    DB.sensitiveKeywords = [{ id: 1, term: 'chửi bậy', category: 'TUC_TIU' }];
+    // meetingRooms: dời từ trong module Phòng Họp sang Quản Lý Danh Mục (khối "Hệ Thống") — hàm
+    // render/save/edit/delete giữ nguyên tên (module-phonghop.js), chỉ đổi container DOM.
+    DB.meetingRooms = [{ id: 1, name: 'Phòng Họp Lớn A', short: 'Phòng A' }];
 
     DB.users = [
       { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '0900000000',
@@ -307,6 +324,106 @@ async function scenario(name, fn) {
     });
     record('(3b) no fetch call made when prompt is cancelled', r.calls === 0, JSON.stringify(r));
     record('(3b) DB.jobTitles unchanged', r.unchanged, JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (3-new) BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "trong danh mục bạn xử lý cho tất cả các
+  // danh mục đều phải sửa được thay vì phải xóa tạo lại như bây giờ, bạn rà soát nhé"): 8 danh mục dưới
+  // đây TRƯỚC ĐÂY chỉ Thêm/Xóa — nay có "✏️ Sửa" giống Siêu Thị/Chức Danh.
+  // ==========================================================================
+  await scenario('(3-new) renameDept() dùng ĐÚNG route có cascade (catalogKey="depts")', async () => {
+    const r = await page.evaluate(async () => {
+      window.__fetchCalls.length = 0;
+      window.__promptAnswer = 'Phòng Công Nghệ Thông Tin';
+      window.__fetchHandlers['POST /api/admin/renameCatalogEntry'] = (call) => ({
+        status: 200,
+        body: { ok: true, catalog: DB.depts.map(d => d === call.body.oldValue ? call.body.newValue : d) }
+      });
+      await renameDept('Phòng IT');
+      const call = window.__fetchCalls.find(c => c.url === '/api/admin/renameCatalogEntry');
+      return { depts: DB.depts.slice(), callBody: call ? call.body : null };
+    });
+    record('(3-new) catalogKey="depts"', r.callBody && r.callBody.catalogKey === 'depts', JSON.stringify(r));
+    record('(3-new) DB.depts phản ánh tên mới', r.depts.includes('Phòng Công Nghệ Thông Tin') && !r.depts.includes('Phòng IT'), JSON.stringify(r));
+  });
+
+  await scenario('(3-new) renameCat() dùng ĐÚNG route có cascade (catalogKey="cats")', async () => {
+    const r = await page.evaluate(async () => {
+      window.__fetchCalls.length = 0;
+      window.__promptAnswer = 'Nội bộ công ty';
+      window.__fetchHandlers['POST /api/admin/renameCatalogEntry'] = (call) => ({
+        status: 200,
+        body: { ok: true, catalog: DB.cats.map(c => c === call.body.oldValue ? call.body.newValue : c) }
+      });
+      await renameCat('Nội bộ');
+      const call = window.__fetchCalls.find(c => c.url === '/api/admin/renameCatalogEntry');
+      return { cats: DB.cats.slice(), callBody: call ? call.body : null };
+    });
+    record('(3-new) catalogKey="cats"', r.callBody && r.callBody.catalogKey === 'cats', JSON.stringify(r));
+    record('(3-new) DB.cats phản ánh tên mới', r.cats.includes('Nội bộ công ty'), JSON.stringify(r));
+  });
+
+  await scenario('(3-new) renameLicenseType()/renameCarTaxiCompany()/renamePriceZone()/renameTrainingCategory() — 4 danh mục chuỗi phẳng KHÔNG cascade', async () => {
+    const r = await page.evaluate(async () => {
+      window.__fetchHandlers['POST /api/admin/renameCatalogEntry'] = (call) => ({
+        status: 200,
+        body: { ok: true, catalog: (DB[call.body.catalogKey] || []).map(v => v === call.body.oldValue ? call.body.newValue : v) }
+      });
+      window.__promptAnswer = 'Giấy phép A (sửa)';
+      await renameLicenseType('Giấy phép A');
+      window.__promptAnswer = 'Mai Linh Taxi';
+      await renameCarTaxiCompany('Mai Linh');
+      window.__promptAnswer = 'Miền Bắc (mới)';
+      await renamePriceZone('Miền Bắc');
+      window.__promptAnswer = 'Kỹ năng mềm nâng cao';
+      await renameTrainingCategory('Kỹ năng mềm');
+      return {
+        licenseTypes: DB.licenseTypes.slice(), carTaxiCompanies: DB.carTaxiCompanies.slice(),
+        priceZones: DB.priceZones.slice(), trainingCategories: DB.trainingCategories.slice()
+      };
+    });
+    record('(3-new) licenseTypes đổi đúng', r.licenseTypes.includes('Giấy phép A (sửa)'), JSON.stringify(r));
+    record('(3-new) carTaxiCompanies đổi đúng', r.carTaxiCompanies.includes('Mai Linh Taxi'), JSON.stringify(r));
+    record('(3-new) priceZones đổi đúng', r.priceZones.includes('Miền Bắc (mới)'), JSON.stringify(r));
+    record('(3-new) trainingCategories đổi đúng', r.trainingCategories.includes('Kỹ năng mềm nâng cao'), JSON.stringify(r));
+  });
+
+  await scenario('(3-new) editCarVehicleType() sửa CẢ tên/cờ Taxi/BKS qua 2 prompt() + 1 confirm() tuần tự — trước đây phải xoá-tạo-lại', async () => {
+    const r = await page.evaluate(async () => {
+      window.__fetchHandlers['POST /api/data/carVehicleTypes'] = () => ({ status: 200, body: { ok: true } });
+      window.__confirmAnswer = false; // "Không" -> KHÔNG phải Taxi -> hiện thêm prompt() hỏi BKS
+      window.__promptAnswer = ['Xe 7 chỗ (Sửa)', '30G-999.99']; // [tên mới, BKS mới] — ăn lần lượt
+      await editCarVehicleType(1);
+      const t = DB.carVehicleTypes.find(x => x.id === 1);
+      return { t };
+    });
+    record('(3-new) tên đổi đúng', r.t && r.t.name === 'Xe 7 chỗ (Sửa)', JSON.stringify(r));
+    record('(3-new) BKS đổi đúng (prompt thứ 2, vì isTaxi=false)', r.t && r.t.bienSo === '30G-999.99', JSON.stringify(r));
+    record('(3-new) isTaxi giữ đúng false', r.t && r.t.isTaxi === false, JSON.stringify(r));
+  });
+
+  await scenario('(3-new) editSensitiveKeyword() sửa CẢ từ khoá lẫn phân loại qua 2 prompt() tuần tự', async () => {
+    const r = await page.evaluate(async () => {
+      window.__fetchHandlers['POST /api/data/sensitiveKeywords'] = () => ({ status: 200, body: { ok: true } });
+      window.__promptAnswer = ['chửi thề nặng', '3']; // [term mới, số thứ tự phân loại "3. Cực đoan"]
+      await editSensitiveKeyword(1);
+      const k = DB.sensitiveKeywords.find(x => x.id === 1);
+      return { k };
+    });
+    record('(3-new) term đổi đúng', r.k && r.k.term === 'chửi thề nặng', JSON.stringify(r));
+    record('(3-new) category đổi đúng theo số đã chọn (3 -> CUC_DOAN)', r.k && r.k.category === 'CUC_DOAN', JSON.stringify(r));
+  });
+
+  await scenario('(3-new) editMeetingRoomCatalogItem() sửa CẢ tên đầy đủ lẫn tên gọn — danh mục vừa dời từ module Phòng Họp sang Quản Lý Danh Mục vẫn hoạt động đúng qua CÙNG hàm cũ', async () => {
+    const r = await page.evaluate(async () => {
+      window.__fetchHandlers['POST /api/data/meetingRooms'] = () => ({ status: 200, body: { ok: true } });
+      window.__promptAnswer = ['Phòng Họp Lớn A (Tầng 3)', 'Phòng A3'];
+      await editMeetingRoomCatalogItem(1);
+      const r2 = DB.meetingRooms.find(x => x.id === 1);
+      return { r2 };
+    });
+    record('(3-new) tên đầy đủ đổi đúng', r.r2 && r.r2.name === 'Phòng Họp Lớn A (Tầng 3)', JSON.stringify(r));
+    record('(3-new) tên gọn đổi đúng', r.r2 && r.r2.short === 'Phòng A3', JSON.stringify(r));
   });
 
   await scenario('(3c) Store Excel-import: preview items merge only the "isNew" names into DB.stores on confirm', async () => {

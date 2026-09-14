@@ -11,7 +11,14 @@ const { HttpError } = require('../lib/httpErrors');
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
 
-const VALID_CATALOG_KEYS = new Set(['stores', 'jobTitles', 'storeJobTitles']);
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "trong danh mục bạn xử lý cho tất cả các danh mục
+// đều phải sửa được thay vì phải xóa tạo lại như bây giờ"): mở rộng từ 3 lên 7 khoá — 2 khoá mới CÓ
+// cascade riêng (depts/cats, xem lib/catalogRename.js CATALOG_HANDLERS) + 4 khoá mới KHÔNG cần cascade
+// (licenseTypes/carTaxiCompanies/priceZones/trainingCategories — dùng simpleArrayCatalogHandler()).
+const VALID_CATALOG_KEYS = new Set([
+  'stores', 'jobTitles', 'storeJobTitles', 'depts', 'cats',
+  'licenseTypes', 'carTaxiCompanies', 'priceZones', 'trainingCategories'
+]);
 
 // POST /api/admin/renameCatalogEntry — body { catalogKey, oldValue, newValue }. Chỉ Quản Trị Viên (khớp
 // đúng gate của mọi route admin khác — xem isCurrentlyAdmin() ở lib/adminAuth.js).

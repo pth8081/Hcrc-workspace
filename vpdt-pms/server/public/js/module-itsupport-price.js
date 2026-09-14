@@ -577,9 +577,14 @@ function renderPriceZoneList() {
   ul.innerHTML = (DB.priceZones || []).map(name => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(name)}</span>
+      <button data-op="renamePriceZone" data-arg0="${escapeHtml(name)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deletePriceZone" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+async function renamePriceZone(name) {
+  const ok = await renameCatalogEntryClient('priceZones', name, 'Danh Mục Vùng Giá Áp Dụng');
+  if (ok) { renderPriceZoneList(); populateDropdowns(); }
 }
 
 function onItPriceFilterChange() {
