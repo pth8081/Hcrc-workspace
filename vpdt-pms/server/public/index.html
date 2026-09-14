@@ -3204,26 +3204,38 @@
           </div>
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
-          <div class="flex items-end justify-between gap-2 flex-wrap">
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Mức/người MẶC ĐỊNH (VNĐ) — tuỳ chọn, để trống = không giới hạn</label>
-              <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" class="w-full md:w-64 border p-1.5 rounded money-input">
-            </div>
-            <button type="button" data-op="applyDefaultVppRateToAllRows" class="shrink-0 bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↧ Áp Dụng Cho Tất Cả Phòng</button>
+          <label class="block text-xs font-semibold text-gray-600">💰 Ngân Sách Văn Phòng Phẩm / Người</label>
+          <!-- TỪ v22.8: thay bảng "mỗi phòng 1 ô Mức/Người" (cồng kềnh khi nhiều phòng ban) bằng 2 chế
+               độ — "Toàn công ty" (1 mức chung, mặc định) hoặc "Áp mức khác theo nhóm phòng ban" (nhiều
+               nhóm, mỗi nhóm 1 mức tiền + chọn nhiều phòng ban áp dụng, xem setVppRateMode()/
+               renderVppRateGroupsList() ở module-vpp.js). Bảng bên dưới CHỈ còn để XEM TRƯỚC kết quả +
+               sửa Số Nhân Sự — không còn sửa mức tiền trực tiếp trong bảng nữa. -->
+          <div class="flex rounded-lg border overflow-hidden text-xs font-bold">
+            <button type="button" data-op="setVppRateMode" data-arg0="DEFAULT" id="btnVppRateModeDefault" class="flex-1 py-2 bg-orange-600 text-white">🏢 Toàn công ty (1 mức chung)</button>
+            <button type="button" data-op="setVppRateMode" data-arg0="GROUPS" id="btnVppRateModeGroups" class="flex-1 py-2 bg-gray-100 text-gray-600">🎛️ Áp mức khác theo nhóm phòng ban</button>
           </div>
-          <p class="text-[11px] text-gray-500 italic">Mỗi phòng ban có thể đặt mức/người RIÊNG ở cột "Mức/Người" trong bảng bên dưới (VD Phòng A 100.000đ/người, Phòng B 150.000đ/người) — để trống 1 dòng = dùng mức mặc định ở trên cho phòng đó. <b>Ngân sách phòng ban = Mức/người × Số nhân sự</b> — khi nhân viên bấm "Gửi phê duyệt", hệ thống chặn theo TỔNG ngân sách của CẢ PHÒNG (cộng dồn mọi đăng ký đang chờ duyệt + đã duyệt của phòng), KHÔNG giới hạn riêng số tiền của từng người.</p>
+          <div>
+            <label id="vppDefaultRateLabel" class="block text-xs font-semibold text-gray-600 mb-1">Mức/Người (VNĐ) — áp dụng cho TẤT CẢ phòng ban (tuỳ chọn, để trống = không giới hạn)</label>
+            <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" data-op-input="renderVppDeptHeadcountTable" class="w-full border p-1.5 rounded money-input">
+          </div>
+          <div id="vppRateGroupsWrap" class="hidden space-y-2">
+            <div id="vppRateGroupsList" class="space-y-2"></div>
+            <button type="button" data-op="addVppRateGroup" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 text-xs font-bold hover:bg-gray-50">+ Thêm Nhóm Mức Riêng</button>
+            <p class="text-[11px] text-gray-500 italic">Mỗi phòng ban chỉ thuộc ĐÚNG 1 nhóm — 1 phòng đã ở nhóm này sẽ KHÔNG chọn được ở nhóm khác nữa (tự loại khỏi danh sách tìm). Phòng chưa vào nhóm nào dùng "Mức mặc định" ở trên.</p>
+          </div>
+          <p class="text-[11px] text-gray-500 italic"><b>Ngân sách phòng ban = Mức/người × Số nhân sự</b> — khi nhân viên bấm "Gửi phê duyệt", hệ thống chặn theo TỔNG ngân sách của CẢ PHÒNG (cộng dồn mọi đăng ký đang chờ duyệt + đã duyệt của phòng), KHÔNG giới hạn riêng số tiền của từng người.</p>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse text-xs">
               <thead><tr class="bg-gray-100 text-left">
                 <th class="border p-1.5">Phòng Ban</th>
                 <th class="border p-1.5 text-center w-28">Số Nhân Sự</th>
-                <th class="border p-1.5 text-center w-32">Mức/Người</th>
+                <th class="border p-1.5 text-right w-32">Mức Áp Dụng</th>
                 <th class="border p-1.5 text-right w-40">Ngân Sách Phòng Ban</th>
               </tr></thead>
               <tbody id="vppDeptHeadcountBody"></tbody>
             </table>
           </div>
-          <p class="text-[11px] text-gray-500 italic">Số nhân sự tự điền theo số tài khoản đang hoạt động của từng phòng ban — sửa tay được (VD người đang nghỉ dài hạn, nhân viên mới chưa có tài khoản...).</p>
+          <p class="text-[11px] text-gray-500 italic">Số nhân sự tự điền theo số tài khoản đang hoạt động của từng phòng ban — sửa tay được (VD người đang nghỉ dài hạn, nhân viên mới chưa có tài khoản...). Cột "Mức Áp Dụng" chỉ để xem trước — đổi mức thì sửa ở ô mặc định/nhóm phía trên.</p>
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
           <div class="flex items-start justify-between gap-2 flex-wrap">

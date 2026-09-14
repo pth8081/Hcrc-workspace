@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**22.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.8 (2026-09-14): VPP — Cấu hình mức/người theo "Nhóm phòng ban" thay vì liệt kê từng dòng
+
+Người dùng gửi ảnh màn "Tạo Kỳ Đăng Ký" (bảng "Nhân sự theo phòng ban" mỗi
+dòng 1 ô Mức/Người, cồng kềnh khi công ty có nhiều phòng ban) và yêu cầu đổi
+cách nhập: có 1 box chọn "mặc định toàn công ty", chọn "khác" thì hiện ra
+chọn NHIỀU phòng ban (multi-choice) để áp 1 mức tiền riêng, và add được
+NHIỀU LẦN (nhiều nhóm, mỗi nhóm 1 mức tiền + tập phòng ban riêng) thay vì
+liệt kê kiểu cột như cũ. Đã gửi demo (mockup HTML độc lập, 2 trạng thái) cho
+người dùng duyệt trước khi sửa code thật.
+
+**Giao diện mới** (`module-vpp.js`/`index.html`, khối "💰 Ngân Sách Văn Phòng
+Phẩm / Người" trong "➕ Tạo Kỳ Đăng Ký Mới"): 2 nút chuyển chế độ —
+**"🏢 Toàn công ty"** (mặc định, 1 ô mức tiền áp cho mọi phòng, giữ nguyên
+hành vi trước v22.5) và **"🎛️ Áp mức khác theo nhóm phòng ban"** (hiện thêm
+1 ô "Mức mặc định" cho phòng chưa vào nhóm nào + danh sách **"Nhóm mức
+riêng"** — mỗi nhóm gồm 1 ô tiền và 1 ô chọn nhiều phòng ban dạng chip
+(`renderMultiSelectDropdown()` dùng chung, không phải widget mới), bấm
+"+ Thêm Nhóm Mức Riêng" để tạo thêm nhóm khác). Mỗi phòng ban chỉ thuộc
+ĐÚNG 1 nhóm — phòng đã chọn ở 1 nhóm tự biến mất khỏi danh sách tìm-chọn
+của các nhóm khác (loại trừ ngay lúc dựng dropdown, không cần validate
+riêng). Bảng "Nhân sự theo phòng ban" bên dưới đổi cột "Mức/Người" (trước
+đây sửa tay trực tiếp) thành **"Mức Áp Dụng"** (chỉ xem, tô màu theo đúng
+nhóm phòng ban thuộc về) — Số Nhân Sự vẫn sửa tay được như cũ.
+
+**Không đổi dữ liệu/server**: lúc Lưu, `collectVppDeptBudgetRates()` vẫn
+"xoè" các nhóm thành đúng khuôn `period.deptBudgetRates: {dept: rate}` như
+trước v22.8 — `resolveVppDeptBudget()` (`lib/vppCatalog.js`, server) và mọi
+nơi đọc lại kỳ đã lưu (báo cáo, chặn ngân sách...) hoàn toàn KHÔNG cần sửa.
+Chế độ "Toàn công ty" giờ lưu `deptBudgetRates: {}` (rỗng) thay vì tự động
+điền mức mặc định vào MỌI phòng như hành vi cũ (dọn sạch dữ liệu dư thừa,
+không đổi kết quả tính ngân sách).
+
+Test cập nhật (`tests/test-vpp.js`, nay 29/29): sửa 2 kịch bản dùng API cũ
+(`.vpp-rate-input`/`onVppRateInput` đã bỏ) sang API mới
+(`setVppRateMode()`/`vppRateGroups`), thêm 5 kịch bản mới (loại trừ phòng ban
+giữa các nhóm, "xoè" đúng nhiều nhóm, xoá 1 nhóm trả phòng về mức mặc định,
+"↺ Làm Mới" reset đúng chế độ). Regression liên quan
+(`test-vpp-catalog-template-export.js`, `test-vpp-registrations-scope.js`,
+`test-lazy-load-all-tabs.js`) chạy lại sạch.
 
 ## v22.7 (2026-09-14): Chân ký phiếu phê duyệt — bỏ khung ô, căn giữa cân đối
 

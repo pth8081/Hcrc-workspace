@@ -29,62 +29,145 @@ function vppResolveDeptBudgetClient(period, dept) {
   return { rate, headcount, totalBudget: rate * headcount };
 }
 
-// Dựng bảng "Nhân sự theo phòng ban" — CHỈ dựng 1 lần khi mở form (mỗi dòng input tự có handler riêng
-// onVppHeadcountInput()/onVppRateInput() để chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó,
-// KHÔNG render lại cả bảng mỗi lần gõ — tránh mất focus/con trỏ đang gõ dở giữa chừng). TỪ v22.5: thêm
-// cột "Mức/Người" RIÊNG cho từng phòng (seed sẵn = mức mặc định đang gõ ở #vppNewPeriodBudget, admin
-// sửa tay lại theo từng phòng — VD phòng A 100.000đ, phòng B 150.000đ) — không còn 1 mức chung áp cứng
-// cho mọi phòng như trước.
+// TỪ v22.8: mức/người riêng theo phòng ban đổi cách nhập — thay vì 1 dòng/1 ô "Mức/Người" trong bảng
+// (cồng kềnh khi nhiều phòng ban, mỗi lần đổi phải sửa từng ô), admin chọn 1 trong 2 chế độ:
+// - DEFAULT (mặc định): 1 mức chung áp dụng TOÀN CÔNG TY, y hệt hành vi trước v22.5.
+// - GROUPS: định nghĩa nhiều "Nhóm mức riêng" (vppRateGroups), mỗi nhóm gồm 1 mức tiền + chọn NHIỀU
+//   phòng ban áp dụng (renderMultiSelectDropdown() dùng chung, core.js) — phòng chưa vào nhóm nào dùng
+//   mức mặc định. Lúc Lưu, collectVppDeptBudgetRates() vẫn "xoè" ra ĐÚNG khuôn dữ liệu cũ
+//   {dept: rate} (period.deptBudgetRates) — server (resolveVppDeptBudget(), lib/vppCatalog.js) và mọi
+//   nơi đọc lại period đã lưu (báo cáo, resolveVppDeptBudget ở client...) KHÔNG cần sửa gì cả.
+let vppRateMode = 'DEFAULT';
+let vppRateGroups = []; // { id, rate, depts: [] } — chỉ tồn tại trong lúc điền form "Tạo Kỳ Đăng Ký Mới"
+let vppRateGroupNextId = 1;
+
+// Màu riêng cho từng nhóm (viền/nền card + chip multi-select + màu chữ ở bảng xem trước) — lặp vòng nếu
+// nhiều hơn 5 nhóm, chỉ để phân biệt trực quan, không mang ý nghĩa nghiệp vụ gì.
+const VPP_RATE_GROUP_COLORS = [
+  { border: 'border-indigo-200', bg: 'bg-indigo-50', title: 'text-indigo-800', chip: 'bg-indigo-100 text-indigo-700', hover: 'hover:bg-indigo-50', text: 'text-indigo-700' },
+  { border: 'border-emerald-200', bg: 'bg-emerald-50', title: 'text-emerald-800', chip: 'bg-emerald-100 text-emerald-700', hover: 'hover:bg-emerald-50', text: 'text-emerald-700' },
+  { border: 'border-amber-200', bg: 'bg-amber-50', title: 'text-amber-800', chip: 'bg-amber-100 text-amber-700', hover: 'hover:bg-amber-50', text: 'text-amber-700' },
+  { border: 'border-sky-200', bg: 'bg-sky-50', title: 'text-sky-800', chip: 'bg-sky-100 text-sky-700', hover: 'hover:bg-sky-50', text: 'text-sky-700' },
+  { border: 'border-rose-200', bg: 'bg-rose-50', title: 'text-rose-800', chip: 'bg-rose-100 text-rose-700', hover: 'hover:bg-rose-50', text: 'text-rose-700' }
+];
+function vppRateGroupColor(idx) { return VPP_RATE_GROUP_COLORS[idx % VPP_RATE_GROUP_COLORS.length]; }
+
+function setVppRateMode(mode) {
+  vppRateMode = mode;
+  const activeCls = 'flex-1 py-2 bg-orange-600 text-white';
+  const inactiveCls = 'flex-1 py-2 bg-gray-100 text-gray-600';
+  document.getElementById('btnVppRateModeDefault').className = mode === 'DEFAULT' ? activeCls : inactiveCls;
+  document.getElementById('btnVppRateModeGroups').className = mode === 'GROUPS' ? activeCls : inactiveCls;
+  document.getElementById('vppRateGroupsWrap').classList.toggle('hidden', mode !== 'GROUPS');
+  document.getElementById('vppDefaultRateLabel').textContent = mode === 'GROUPS'
+    ? 'Mức mặc định (VNĐ) — áp dụng cho phòng ban CHƯA chọn ở nhóm nào bên dưới'
+    : 'Mức/Người (VNĐ) — áp dụng cho TẤT CẢ phòng ban (tuỳ chọn, để trống = không giới hạn)';
+  if (mode === 'GROUPS' && !vppRateGroups.length) addVppRateGroup();
+  renderVppDeptHeadcountTable();
+}
+
+// Tập hợp phòng ban đã thuộc nhóm KHÁC (khác excludeId) — dùng để loại khỏi danh sách tìm-chọn của 1
+// nhóm, đảm bảo "mỗi phòng ban chỉ thuộc ĐÚNG 1 nhóm" ngay từ lúc chọn (không cần validate sau).
+function vppRateGroupAssignedDepts(excludeId) {
+  const set = new Set();
+  vppRateGroups.forEach(g => { if (g.id !== excludeId) g.depts.forEach(d => set.add(d)); });
+  return set;
+}
+
+function addVppRateGroup() {
+  vppRateGroups.push({ id: vppRateGroupNextId++, rate: 0, depts: [] });
+  renderVppRateGroupsList();
+}
+
+function removeVppRateGroup(id) {
+  vppRateGroups = vppRateGroups.filter(g => g.id !== Number(id));
+  renderVppRateGroupsList();
+  renderVppDeptHeadcountTable();
+}
+
+function onVppRateGroupRateInput(id, input) {
+  const g = vppRateGroups.find(x => x.id === Number(id));
+  if (g) g.rate = getMoneyValue(input);
+  renderVppDeptHeadcountTable();
+}
+
+function renderVppRateGroupsList() {
+  const wrap = document.getElementById('vppRateGroupsList');
+  if (!wrap) return;
+  wrap.innerHTML = vppRateGroups.map((g, idx) => {
+    const c = vppRateGroupColor(idx);
+    return `
+      <div class="border-2 ${c.border} ${c.bg} rounded-lg p-3 space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="font-bold ${c.title} text-xs">🏷️ Nhóm mức riêng #${idx + 1}</span>
+          <button type="button" data-op="removeVppRateGroup" data-arg0="${g.id}" class="text-red-500 text-xs font-bold hover:underline">🗑️ Xoá nhóm</button>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Mức/Người (VNĐ) cho nhóm này</label>
+          <input type="text" inputmode="numeric" value="${g.rate > 0 ? g.rate.toLocaleString('vi-VN') : ''}" placeholder="VD: 150.000" data-op-input="onVppRateGroupRateInput" data-arg0="${g.id}" data-arg-el="1" class="w-full border p-2 rounded font-bold money-input bg-white">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Áp dụng cho các phòng ban (chọn nhiều)</label>
+          <div id="vppRateGroupDeptSelect_${g.id}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  vppRateGroups.forEach((g, idx) => {
+    const c = vppRateGroupColor(idx);
+    const excluded = vppRateGroupAssignedDepts(g.id);
+    const availableDepts = DB.depts.filter(d => !excluded.has(d));
+    renderMultiSelectDropdown(`vppRateGroupDeptSelect_${g.id}`, availableDepts, g.depts, {
+      placeholder: 'Tìm phòng ban để thêm...', emptyText: 'Chưa chọn phòng ban nào.',
+      chipClass: c.chip, hoverClass: c.hover,
+      onChange: (values) => { g.depts = values; renderVppDeptHeadcountTable(); }
+    });
+  });
+}
+
+// Mức áp dụng thật sự cho 1 phòng ban theo chế độ đang chọn — trả kèm groupIdx (-1 = đang dùng mức mặc
+// định, KHÔNG thuộc nhóm nào) để renderVppDeptHeadcountTable() tô màu đúng nhóm ở bảng xem trước.
+function vppEffectiveDeptRate(dept) {
+  const defaultRate = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  if (vppRateMode === 'GROUPS') {
+    const idx = vppRateGroups.findIndex(g => g.depts.includes(dept));
+    if (idx !== -1 && vppRateGroups[idx].rate > 0) return { rate: vppRateGroups[idx].rate, groupIdx: idx };
+  }
+  return { rate: defaultRate, groupIdx: -1 };
+}
+
+// Dựng bảng "Nhân sự theo phòng ban" — gọi lại mỗi khi đổi chế độ/mức mặc định/nhóm (không còn ô Mức/
+// Người sửa tay ngay trong bảng như trước v22.8 nên render lại toàn bộ không lo mất focus đang gõ dở ở
+// CHỖ KHÁC — chỉ giữ lại đúng giá trị Số Nhân Sự đã sửa tay trước đó, không reset về gợi ý ban đầu).
 function renderVppDeptHeadcountTable() {
   const tbody = document.getElementById('vppDeptHeadcountBody');
   if (!tbody) return;
-  const defaultRate = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  const prevHeadcounts = {};
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const dept = tr.dataset.vppDept;
+    const hc = tr.querySelector('.vpp-headcount-input')?.value;
+    if (dept !== undefined) prevHeadcounts[dept] = hc;
+  });
   tbody.innerHTML = DB.depts.map(dept => {
-    const headcount = vppActiveHeadcountForDept(dept);
-    const deptBudget = defaultRate * headcount;
+    const headcount = dept in prevHeadcounts ? Math.max(0, Math.round(Number(prevHeadcounts[dept]) || 0)) : vppActiveHeadcountForDept(dept);
+    const { rate, groupIdx } = vppEffectiveDeptRate(dept);
+    const deptBudget = rate * headcount;
+    const rateColorCls = groupIdx === -1 ? 'text-gray-500 font-normal' : `font-bold ${vppRateGroupColor(groupIdx).text}`;
     return `
       <tr data-vpp-dept="${escapeHtml(dept)}">
         <td class="border p-1.5">${escapeHtml(dept)}</td>
         <td class="border p-1"><input type="number" min="0" step="1" value="${headcount}" data-op-input="onVppHeadcountInput" data-arg-el="0" class="vpp-headcount-input w-24 border p-1 rounded text-xs text-center"></td>
-        <td class="border p-1"><input type="text" inputmode="numeric" value="${defaultRate > 0 ? defaultRate.toLocaleString('vi-VN') : ''}" placeholder="(mức mặc định)" data-op-input="onVppRateInput" data-arg-el="0" class="vpp-rate-input w-28 border p-1 rounded text-xs text-right money-input"></td>
-        <td class="border p-1.5 text-right font-semibold text-orange-700 vpp-dept-budget-cell">${defaultRate > 0 ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
+        <td class="border p-1.5 text-right text-xs ${rateColorCls}">${rate > 0 ? rate.toLocaleString('vi-VN') : '—'}</td>
+        <td class="border p-1.5 text-right font-semibold text-orange-700 vpp-dept-budget-cell">${rate > 0 ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
       </tr>`;
   }).join('');
 }
 
-// Đọc mức/người của 1 dòng — trống/0 nghĩa là "dùng mức mặc định" (khớp resolveVppDeptBudget() ở server).
-function vppRowRate(tr) {
-  const rateInput = tr?.querySelector('.vpp-rate-input');
-  const raw = rateInput ? getMoneyValue(rateInput) : 0;
-  return raw > 0 ? raw : getMoneyValue(document.getElementById('vppNewPeriodBudget'));
-}
-
-// Bấm "Áp dụng cho tất cả phòng" — ghi ĐÈ mức/người của MỌI dòng bằng giá trị đang gõ ở ô mặc định (tiện
-// lúc mới tạo kỳ, chưa ai cần mức riêng); admin vẫn sửa tay lại từng dòng SAU khi bấm nếu cần.
-function applyDefaultVppRateToAllRows() {
-  const defaultRate = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
-  document.querySelectorAll('#vppDeptHeadcountBody tr').forEach(tr => {
-    const rateInput = tr.querySelector('.vpp-rate-input');
-    if (rateInput) rateInput.value = defaultRate > 0 ? defaultRate.toLocaleString('vi-VN') : '';
-    onVppRateInput(rateInput);
-  });
-}
-
 // Sửa tay 1 dòng "Số Nhân Sự" -> chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó.
 function onVppHeadcountInput(input) {
-  const rate = vppRowRate(input.closest('tr'));
-  const headcount = Math.max(0, Math.round(Number(input.value) || 0));
-  const cell = input.closest('tr')?.querySelector('.vpp-dept-budget-cell');
-  if (cell) cell.textContent = rate > 0 ? `${(rate * headcount).toLocaleString('vi-VN')} đ` : '—';
-}
-
-// Sửa tay 1 dòng "Mức/Người" -> chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó.
-function onVppRateInput(input) {
-  if (!input) return;
   const tr = input.closest('tr');
-  const rate = vppRowRate(tr);
-  const hcInput = tr?.querySelector('.vpp-headcount-input');
-  const headcount = Math.max(0, Math.round(Number(hcInput?.value) || 0));
+  const { rate } = vppEffectiveDeptRate(tr?.dataset.vppDept);
+  const headcount = Math.max(0, Math.round(Number(input.value) || 0));
   const cell = tr?.querySelector('.vpp-dept-budget-cell');
   if (cell) cell.textContent = rate > 0 ? `${(rate * headcount).toLocaleString('vi-VN')} đ` : '—';
 }
@@ -102,17 +185,17 @@ function collectVppDeptHeadcounts() {
   return out;
 }
 
-// Đọc lại bảng "Nhân sự theo phòng ban" thành {dept: mức/người RIÊNG} — CHỈ đưa vào những phòng có ô
-// Mức/Người khác trống/0 (phòng nào để trống thì rơi về mức mặc định ở server, xem resolveVppDeptBudget()).
+// "Xoè" vppRateGroups (chế độ GROUPS) thành {dept: mức/người RIÊNG} — ĐÚNG khuôn dữ liệu cũ
+// (period.deptBudgetRates) mà server (resolveVppDeptBudget(), lib/vppCatalog.js) đã đọc từ trước v22.8,
+// không cần sửa gì phía server. Chế độ DEFAULT trả về {} (rỗng) — mọi phòng dùng thẳng
+// period.perPersonBudget, khớp hành vi trước v22.5.
 function collectVppDeptBudgetRates() {
   const out = {};
-  document.querySelectorAll('#vppDeptHeadcountBody tr').forEach(tr => {
-    const dept = tr.dataset.vppDept;
-    const rateInput = tr.querySelector('.vpp-rate-input');
-    if (!dept || !rateInput) return;
-    const n = getMoneyValue(rateInput);
-    if (n > 0) out[dept] = n;
-  });
+  if (vppRateMode === 'GROUPS') {
+    vppRateGroups.forEach(g => {
+      if (g.rate > 0) g.depts.forEach(dept => { out[dept] = g.rate; });
+    });
+  }
   return out;
 }
 
@@ -762,7 +845,8 @@ function resetVppNewPeriodForm() {
   document.getElementById('vppCatalogStatus').innerText = '';
   vppPendingCatalog = null;
   clearSingleFileInput('vppCatalogFileInput', 'vppCatalogFileChip');
-  renderVppDeptHeadcountTable();
+  vppRateGroups = [];
+  setVppRateMode('DEFAULT'); // tự gọi lại renderVppDeptHeadcountTable()
 }
 
 function vppPeriodStatusBadge(p) {

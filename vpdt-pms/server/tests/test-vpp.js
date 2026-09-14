@@ -320,8 +320,13 @@ async function main() {
     `alerts=${JSON.stringify(v1.alerts)} saved=${JSON.stringify(v1.saved && { status: v1.saved.status, n: v1.saved.catalogItems.length, budget: v1.saved.perPersonBudget })}`
   );
   record(
-    'VPP: deptHeadcounts/deptBudgetRates (mức/người TỪNG PHÒNG, TỪ v22.5) được lưu đúng cho "Phòng Kinh Doanh"',
-    v1.saved.deptHeadcounts?.['Phòng Kinh Doanh'] === 1 && v1.saved.deptBudgetRates?.['Phòng Kinh Doanh'] === 100000,
+    // TỪ v22.8: chế độ mặc định "Toàn công ty" (setVppRateMode('DEFAULT'), KHÔNG đụng tới ở test này)
+    // không còn ghi đè deptBudgetRates cho từng phòng nữa (khác hành vi cũ trước v22.8, nơi mỗi dòng
+    // trong bảng tự pre-fill sẵn = mức mặc định nên MỌI phòng đều có 1 entry giống hệt perPersonBudget)
+    // — deptBudgetRates giờ CHỈ có entry khi admin chủ động dùng chế độ "Áp mức khác theo nhóm phòng
+    // ban" (xem kịch bản VPP-pool/V10 riêng). deptHeadcounts vẫn lưu như cũ.
+    'VPP: deptHeadcounts được lưu đúng, deptBudgetRates RỖNG ở chế độ mặc định "Toàn công ty" (TỪ v22.8)',
+    v1.saved.deptHeadcounts?.['Phòng Kinh Doanh'] === 1 && Object.keys(v1.saved.deptBudgetRates || {}).length === 0 && v1.saved.perPersonBudget === 100000,
     `deptHeadcounts=${JSON.stringify(v1.saved.deptHeadcounts)} deptBudgetRates=${JSON.stringify(v1.saved.deptBudgetRates)}`
   );
 
@@ -621,12 +626,19 @@ async function main() {
     document.getElementById('vppNewPeriodName').value = 'Đăng ký Văn phòng phẩm Phòng Kỹ Thuật';
     document.getElementById('vppNewPeriodStart').value = '';
     document.getElementById('vppNewPeriodEnd').value = '';
-    document.getElementById('vppNewPeriodBudget').value = '100.000'; // mức mặc định — "Phòng Kỹ Thuật" sẽ ghi đè riêng ngay dưới
+    document.getElementById('vppNewPeriodBudget').value = '100.000'; // mức mặc định — "Phòng Kỹ Thuật" sẽ ghi đè riêng qua Nhóm Mức Riêng ngay dưới
+    // TỪ v22.8: mức riêng theo phòng nhập qua "Nhóm mức riêng" (vppRateGroups) thay vì 1 ô/1 dòng trong
+    // bảng — setVppRateMode('GROUPS') tự thêm sẵn 1 nhóm rỗng, gán thẳng rate/depts của nhóm đó rồi
+    // render lại (mirror đúng những gì onVppRateGroupRateInput()/onChange của renderMultiSelectDropdown()
+    // làm khi người dùng gõ/chọn thật).
+    setVppRateMode('GROUPS');
+    vppRateGroups[0].rate = 60000;
+    vppRateGroups[0].depts = ['Phòng Kỹ Thuật'];
+    renderVppRateGroupsList();
     renderVppDeptHeadcountTable();
     const row = document.querySelector('#vppDeptHeadcountBody tr[data-vpp-dept="Phòng Kỹ Thuật"]');
     row.querySelector('.vpp-headcount-input').value = '2';
-    row.querySelector('.vpp-rate-input').value = '60.000'; // mức RIÊNG của phòng này, khác mức mặc định 100.000đ
-    onVppRateInput(row.querySelector('.vpp-rate-input'));
+    onVppHeadcountInput(row.querySelector('.vpp-headcount-input'));
     vppPendingCatalog = { items: catalogItems, fileUrl: '/uploads/vpp/catalog-test2.xlsx', fileName: 'catalog-test2.xlsx' };
     await createVppPeriod();
     return { alerts: window.__alerts.slice(), saved: DB.vppPeriods[0] };
@@ -708,6 +720,69 @@ async function main() {
     'VPP-pool: giảm đúng bằng phần quỹ còn lại (40.000đ, vừa khít 120.000đ) thì duyệt được',
     v10user4ok.status === 'PENDING',
     `alerts=${JSON.stringify(v10user4ok.alerts)} status=${v10user4ok.status}`
+  );
+
+  // ===================== V11 — UI "Nhóm mức riêng" (TỪ v22.8): 2 nhóm mức khác nhau, mỗi nhóm nhiều
+  // phòng ban, loại trừ lẫn nhau (1 phòng chỉ thuộc ĐÚNG 1 nhóm), và reset form về chế độ mặc định. =====
+  await loginAs(page, managerUser);
+  const v11 = await page.evaluate(() => {
+    switchTab('vpp'); setVppSubTab('PERIODS');
+    document.getElementById('vppNewPeriodBudget').value = '100.000';
+    setVppRateMode('GROUPS'); // tự thêm sẵn Nhóm #1 rỗng
+    const group1 = vppRateGroups[0];
+    group1.rate = 150000;
+    group1.depts = ['Phòng Kinh Doanh', 'Phòng Hành Chính'];
+    renderVppRateGroupsList();
+    addVppRateGroup(); // Nhóm #2
+    const group2 = vppRateGroups[1];
+    group2.rate = 60000;
+    group2.depts = ['Phòng Kỹ Thuật'];
+    renderVppRateGroupsList();
+    renderVppDeptHeadcountTable();
+
+    // Danh sách tìm-chọn của Nhóm #1 KHÔNG còn hiện "Phòng Kỹ Thuật" (đã thuộc Nhóm #2) — kiểm tra
+    // đúng cơ chế loại trừ NGAY LÚC dựng dropdown (vppRateGroupAssignedDepts()), không cần validate sau.
+    const group1AvailableDepts = [...document.getElementById(`vppRateGroupDeptSelect_${group1.id}`)._gmsItems].map(it => it.value);
+    const rates = collectVppDeptBudgetRates();
+    const headcounts = collectVppDeptHeadcounts();
+
+    // Xoá Nhóm #2 -> "Phòng Kỹ Thuật" rơi về mức mặc định (100.000), không còn trong rates{}.
+    removeVppRateGroup(group2.id);
+    const ratesAfterRemove = collectVppDeptBudgetRates();
+
+    // "↺ Làm Mới" (resetVppNewPeriodForm) phải đưa hẳn về chế độ mặc định, xoá sạch nhóm.
+    resetVppNewPeriodForm();
+    const modeAfterReset = vppRateMode;
+    const groupsAfterReset = vppRateGroups.length;
+    const groupsWrapHiddenAfterReset = document.getElementById('vppRateGroupsWrap').classList.contains('hidden');
+
+    return { group1AvailableDepts, rates, headcounts, ratesAfterRemove, modeAfterReset, groupsAfterReset, groupsWrapHiddenAfterReset };
+  });
+
+  record(
+    'VPP-groups: Nhóm #1 KHÔNG tìm-chọn được "Phòng Kỹ Thuật" (đã thuộc Nhóm #2) — mỗi phòng chỉ 1 nhóm',
+    !v11.group1AvailableDepts.includes('Phòng Kỹ Thuật'),
+    `group1AvailableDepts=${JSON.stringify(v11.group1AvailableDepts)}`
+  );
+  record(
+    'VPP-groups: collectVppDeptBudgetRates() "xoè" ĐÚNG cả 2 nhóm (5 phòng, 2 mức khác nhau)',
+    v11.rates['Phòng Kinh Doanh'] === 150000 && v11.rates['Phòng Hành Chính'] === 150000 && v11.rates['Phòng Kỹ Thuật'] === 60000,
+    `rates=${JSON.stringify(v11.rates)}`
+  );
+  record(
+    'VPP-groups: collectVppDeptHeadcounts() không bị ảnh hưởng bởi việc đổi chế độ mức tiền',
+    v11.headcounts['Phòng Kinh Doanh'] > 0,
+    `headcounts=${JSON.stringify(v11.headcounts)}`
+  );
+  record(
+    'VPP-groups: Xoá Nhóm #2 -> "Phòng Kỹ Thuật" KHÔNG còn trong deptBudgetRates (rơi về mức mặc định)',
+    !('Phòng Kỹ Thuật' in v11.ratesAfterRemove) && v11.ratesAfterRemove['Phòng Kinh Doanh'] === 150000,
+    `ratesAfterRemove=${JSON.stringify(v11.ratesAfterRemove)}`
+  );
+  record(
+    'VPP-groups: "↺ Làm Mới" đưa hẳn về chế độ "Toàn công ty" (DEFAULT), xoá sạch mọi nhóm đã tạo',
+    v11.modeAfterReset === 'DEFAULT' && v11.groupsAfterReset === 0 && v11.groupsWrapHiddenAfterReset === true,
+    `modeAfterReset=${v11.modeAfterReset} groupsAfterReset=${v11.groupsAfterReset} groupsWrapHidden=${v11.groupsWrapHiddenAfterReset}`
   );
 
   await browser.close();
