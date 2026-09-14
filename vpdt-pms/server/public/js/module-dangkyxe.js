@@ -83,6 +83,19 @@ async function submitCarReq(e) {
   renderCarRegs();
 }
 
+// Xem trước quy trình duyệt phiếu đăng ký xe theo Đơn Vị đang chọn — cùng khuôn
+// previewContractApprovalWorkflow() (module-vanbantrinh.js), chỉ khác map tra cứu.
+function previewCarWorkflow() {
+  const dept = document.getElementById('carDept').value;
+  if (!dept) return alert('Vui lòng chọn Đơn Vị (Phòng/Ban/Bộ phận) trước khi xem quy trình!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Đăng Ký Xe',
+    `Phòng ban: ${dept}`,
+    DB.carDeptWorkflows[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt đăng ký xe.`
+  );
+}
+
 // resetCarRegForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetCarRegForm", xem
 // core.js) VÀ luồng gửi phiếu thành công ở trên (trước đây 3 dòng reset viết thẳng tại chỗ gọi, factor
 // ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự sinh lại mã lẫn không tự trắng "Lộ Trình Di

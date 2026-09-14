@@ -136,6 +136,24 @@ async function submitOfficeReq(e) {
   renderOfficeReqs();
 }
 
+// Xem trước quy trình duyệt đề xuất văn phòng — 1 form dùng chung cho 2 phân hệ Mua Sắm/Sửa Chữa, mỗi
+// phân hệ 1 map quy trình RIÊNG: tra qua getOfficeWorkflowMap(activeOfficeSubTab) (core.js) đúng như
+// submitOfficeReq() phía trên, không tự branch lại 2 dbKey ở đây.
+function previewOfficeWorkflow() {
+  if (activeOfficeSubTab !== 'MUA_BAN' && activeOfficeSubTab !== 'SUA_CHUA') {
+    return alert('Vui lòng chọn đúng phân hệ "Mua Sắm"/"Sửa Chữa" trước khi xem quy trình!');
+  }
+  const dept = document.getElementById('offDept').value;
+  if (!dept) return alert('Vui lòng chọn Phòng Ban Trình trước khi xem quy trình!');
+  const subLabel = activeOfficeSubTab === 'MUA_BAN' ? 'Mua Sắm VP' : 'Sửa Chữa VP';
+  openGenericWorkflowPreviewModal(
+    `🔍 Xem Trước Quy Trình Phê Duyệt ${subLabel}`,
+    `Phòng ban: ${dept}`,
+    (getOfficeWorkflowMap(activeOfficeSubTab) || {})[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt ${subLabel}.`
+  );
+}
+
 // resetOfficeReqForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetOfficeReqForm",
 // xem core.js) VÀ luồng gửi đề xuất thành công ở trên (trước đây các dòng reset viết thẳng tại chỗ gọi,
 // factor ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự sinh lại mã lẫn không tự trắng bảng

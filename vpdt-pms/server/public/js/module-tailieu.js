@@ -582,6 +582,19 @@ async function uploadDoc(e) {
   renderDocs();
 }
 
+// Xem trước quy trình duyệt tài liệu theo Phòng Ban Trình đang chọn — cùng khuôn
+// previewContractApprovalWorkflow() (module-vanbantrinh.js), chỉ khác map tra cứu (DB.deptWorkflows).
+function previewDocWorkflow() {
+  const dept = document.getElementById('selDept').value;
+  if (!dept) return alert('Vui lòng chọn Phòng Ban Trình trước khi xem quy trình!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Tài Liệu',
+    `Phòng ban: ${dept}`,
+    DB.deptWorkflows[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt tài liệu.`
+  );
+}
+
 // resetDocUploadForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetDocUploadForm",
 // xem core.js) VÀ luồng tải lên thành công ở trên (trước đây 3 dòng reset viết thẳng tại chỗ gọi, factor
 // ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự đưa toggle "Loại thao tác" về "Nhập Mới" +

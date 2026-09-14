@@ -327,6 +327,20 @@ async function submitVppRegDraftAction(regId, fromForm) {
   });
 }
 
+// Xem trước quy trình duyệt đăng ký Văn phòng phẩm. Form đăng ký KHÔNG có ô chọn phòng ban nào (VPP
+// forceOwnDept: true ở lib/createValidation.js — luôn là phòng của chính người đăng ký), nên khoá tra
+// cứu lấy thẳng từ currentUser.dept thay vì đọc DOM.
+function previewVppWorkflow() {
+  const dept = currentUser?.dept;
+  if (!dept) return alert('Tài khoản của bạn chưa được gán phòng ban nên chưa xác định được quy trình phê duyệt!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Văn Phòng Phẩm',
+    `Phòng ban: ${dept}`,
+    DB.vppDeptWorkflows[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt Văn phòng phẩm.`
+  );
+}
+
 function vppRegStatusBadge(r) {
   if (r.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
   if (r.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;

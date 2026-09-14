@@ -388,6 +388,12 @@ async function submitItPriceApproval(e) {
   if (activeItPriceSubTab === 'WHOLESALE' && !document.getElementById('itPriceTier').value) {
     return alert('⛔ Vui lòng chọn Mức Margin/Chiết Khấu áp dụng.');
   }
+  // "Đơn Vị Áp Dụng Giá Bán Buôn" — bắt buộc cho Bán Buôn, chặn sớm cho trải nghiệm mượt (server tự xác
+  // minh lại y hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi).
+  const wholesaleApplyUnit = document.getElementById('itPriceWholesaleApplyUnit').value.trim();
+  if (activeItPriceSubTab === 'WHOLESALE' && !wholesaleApplyUnit) {
+    return alert('⛔ Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn.');
+  }
   // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — chặn sớm cho trải nghiệm mượt,
   // server tự xác minh lại y hệt ở itPriceApprovals.extraValidate (không tin giá trị client gửi). Bán
   // Buôn KHÔNG có khái niệm "Toàn bộ" — luôn ép OTHER (server cũng tự ép lại y hệt, bỏ qua giá trị
@@ -431,6 +437,7 @@ async function submitItPriceApproval(e) {
     // hoạch) — server tự xác minh lại giá trị hợp lệ ở itPriceApprovals.extraValidate.
     priceType: activeItPriceSubTab,
     priceTier: activeItPriceSubTab === 'WHOLESALE' ? document.getElementById('itPriceTier').value : null,
+    wholesaleApplyUnit: activeItPriceSubTab === 'WHOLESALE' ? wholesaleApplyUnit : null,
     masterListId: masterListId ? Number(masterListId) : null,
     files: [{
       fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName,
@@ -473,6 +480,30 @@ async function submitItPriceApproval(e) {
   renderItPriceApprovals();
 }
 
+// Xem trước quy trình duyệt giá — 1 nút dùng chung cho cả 2 sub-tab con vì 2 nhánh tra cứu khác hẳn
+// nhau: Bán Lẻ theo PHÒNG BAN đề xuất, Bán Buôn theo MỨC Margin/Chiết Khấu (xem 2 hàm resolve* ở
+// core.js, cùng nhánh submitItPriceApproval() dùng).
+function previewItPriceWorkflow() {
+  if (activeItPriceSubTab === 'WHOLESALE') {
+    const tier = document.getElementById('itPriceTier').value;
+    if (!tier) return alert('Vui lòng chọn Mức Margin / Chiết Khấu trước khi xem quy trình!');
+    return openGenericWorkflowPreviewModal(
+      '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Buôn',
+      `Mức áp dụng: ${itPriceTierLabel(tier)}`,
+      resolveItPriceTierWorkflowConfigClient(tier),
+      `Mức "${itPriceTierLabel(tier)}" chưa được cấu hình quy trình phê duyệt giá Bán Buôn.`
+    );
+  }
+  const dept = document.getElementById('itPriceDeptDisplay').value;
+  if (!dept) return alert('Tài khoản của bạn chưa được gán phòng ban nên chưa xác định được quy trình phê duyệt!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Lẻ',
+    `Phòng ban: ${dept}`,
+    resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL'),
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt giá Bán Lẻ.`
+  );
+}
+
 // resetItPriceForm() — nút "↺ Làm Mới" (khớp mẫu resetXxxForm dùng chung, xem CLAUDE.md/core.js
 // confirmAndResetForm()) VÀ tái dùng lại cho đúng phần dọn form sau khi gửi đề xuất thành công ở trên
 // (KHÔNG duplicate) — form.reset() gốc không tự sinh lại mã mới/tự set Phòng Ban/không tự xoá chip file
@@ -491,6 +522,7 @@ function resetItPriceForm() {
   document.getElementById('itPriceCode').value = generateItPriceCode();
   document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
   document.getElementById('itPriceTier').value = '';
+  document.getElementById('itPriceWholesaleApplyUnit').value = '';
   renderItPriceMasterListSelect();
   clearSingleFileInput('itPriceFileInput', 'itPriceFileChip');
   clearMultiFileInput('itPriceExtraFiles', 'itPriceExtraFilesChip');
@@ -525,6 +557,9 @@ function setItPriceSubTab(subTab) {
   // Mục B: trường Mức Margin/Chiết Khấu chỉ hiện + bắt buộc khi đang ở sub-tab Bán Buôn.
   const tierWrap = document.getElementById('itPriceTierSelectWrap');
   if (tierWrap) tierWrap.classList.toggle('hidden', activeItPriceSubTab !== 'WHOLESALE');
+  // "Đơn Vị Áp Dụng Giá Bán Buôn" — cùng điều kiện hiện/ẩn với tierWrap ở trên (chỉ Bán Buôn).
+  const applyUnitWrap = document.getElementById('itPriceWholesaleApplyUnitWrap');
+  if (applyUnitWrap) applyUnitWrap.classList.toggle('hidden', activeItPriceSubTab !== 'WHOLESALE');
   applyItPriceStoreScopeUIForSubTab();
   resetListPage('itPrice');
   renderItPriceApprovals();
@@ -921,6 +956,7 @@ function renderItPriceModal() {
     <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
     <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
     ${p.priceType === 'WHOLESALE' ? `<div><b>Mức áp dụng:</b> ${escapeHtml(itPriceTierLabel(p.priceTier))}</div>` : ''}
+    ${p.priceType === 'WHOLESALE' ? `<div><b>🏢 Đơn vị áp dụng giá bán buôn:</b> ${p.wholesaleApplyUnit ? escapeHtml(p.wholesaleApplyUnit) : '<span class="text-gray-400">—</span>'}</div>` : ''}
     ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     <div><b>🏬 ${p.priceType === 'WHOLESALE' ? 'Siêu thị đề xuất' : 'Siêu thị áp dụng'}:</b> ${itPriceStoreScopeLabel(p.storeScope)}</div>

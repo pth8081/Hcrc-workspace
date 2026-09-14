@@ -265,6 +265,19 @@ function resetPaymentCreateForm() {
   cancelEditPaymentRequest();
 }
 
+// Xem trước quy trình duyệt đề nghị thanh toán theo Phòng Ban đang chọn — cùng khuôn
+// previewContractApprovalWorkflow() (module-vanbantrinh.js), chỉ khác map tra cứu.
+function previewPaymentWorkflow() {
+  const dept = document.getElementById('paymentDept').value;
+  if (!dept) return alert('Vui lòng chọn Phòng Ban trước khi xem quy trình!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Thanh Toán',
+    `Phòng ban: ${dept}`,
+    (DB.paymentDeptWorkflows || {})[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt thanh toán.`
+  );
+}
+
 function cancelEditPaymentRequest() {
   editingPaymentRequestId = null;
   const form = document.getElementById('paymentCreateForm');

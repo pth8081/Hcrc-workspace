@@ -55,6 +55,7 @@ function setSystemSubTab(subTab) {
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') {
     renderWorkflowTab();
+    renderQuickApplyWfSelect();
     // Chỉ tự sinh mã khi ô Mã Quy Trình đang trống (lần đầu vào tab trong phiên này) — nếu đang có sẵn
     // giá trị (đang Sửa 1 mẫu cũ, hoặc vừa tạo mã nháp cho mẫu mới) thì giữ nguyên, không ghi đè mỗi lần
     // chuyển qua lại giữa các tab con của Hệ Thống.

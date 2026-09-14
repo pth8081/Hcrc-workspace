@@ -363,6 +363,20 @@ async function submitCurrentBudgetEntry(kind) {
 // module-tailieu.js).
 function generateBudgetEntryCode() { return generateHcrcCode(DB.budgetEntries, getDeptAbbr(currentUser.dept), 'NS'); }
 
+// Xem trước quy trình duyệt bản ngân sách — CHỈ có ở form "Phê duyệt" (kind PLAN); bản "Thực hiện"
+// (ACTUAL) vào thẳng APPROVED, không qua ai duyệt (xem submitCurrentBudgetEntry() phía trên). Ô phòng
+// ban là input readonly tự điền (budgetEntries forceOwnDept: true), vẫn đọc .value như mọi form khác.
+function previewBudgetWorkflow() {
+  const dept = document.getElementById('budgetEntryDeptDisplay_PLAN').value;
+  if (!dept) return alert('Chưa xác định được phòng ban của bản ngân sách — vui lòng chọn kỳ ngân sách trước khi xem quy trình!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Ngân Sách',
+    `Phòng ban: ${dept}`,
+    (DB.budgetDeptWorkflows || {})[dept],
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt ngân sách.`
+  );
+}
+
 function budgetEntryStatusBadge(e) {
   if (e.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
   if (e.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt</span>`;

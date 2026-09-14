@@ -1508,8 +1508,19 @@ const CREATE_MODULE_CONFIGS = {
         if (!PRICE_TIER_VALUES.has(payload.priceTier)) {
           throw new CreateError(400, 'Vui lòng chọn đúng Mức Margin/Chiết Khấu áp dụng cho đề xuất Bán Buôn');
         }
+        // "Đơn Vị Áp Dụng Giá Bán Buôn" — tên đơn vị/khách hàng mà mức giá này áp dụng CHO, KHÁC
+        // payload.dept (đơn vị NỘI BỘ tạo đề xuất) — nhập tay tự do (không có danh mục hệ thống cho đối
+        // tác/khách hàng ngoài), bắt buộc cho Bán Buôn, không áp dụng cho Bán Lẻ (xem nhánh else bên
+        // dưới). Chặn sớm ở client (submitItPriceApproval(), module-itsupport-price.js) nhưng đây mới là
+        // chốt chặn thật.
+        const wholesaleApplyUnit = String(payload.wholesaleApplyUnit || '').trim();
+        if (!wholesaleApplyUnit) {
+          throw new CreateError(400, 'Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn');
+        }
+        payload.wholesaleApplyUnit = wholesaleApplyUnit.slice(0, 300);
       } else {
         payload.priceTier = null;
+        payload.wholesaleApplyUnit = null;
       }
       // Tài liệu bổ sung liên quan (#itPriceExtraFiles ở index.html) — mirror ĐÚNG khuôn
       // submissions.extraFiles (~380): chỉ kiểm khuôn URL rồi giữ nguyên payload.extraFiles, hoàn toàn

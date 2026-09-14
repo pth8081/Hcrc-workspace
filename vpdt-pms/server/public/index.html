@@ -613,6 +613,7 @@
 
         <div class="md:col-span-3 flex justify-end gap-2">
           <button type="button" data-op="confirmAndResetForm" data-arg0="docForm" data-arg1="resetDocUploadForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">↺ Làm Mới</button>
+          <button type="button" id="docPreviewWfBtn" data-op="previewDocWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
         </div>
       </form>
@@ -1012,6 +1013,9 @@
           <button type="button" data-op="confirmAndResetForm" data-arg0="contractForm" data-arg1="resetContractForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="button" id="contractCancelEditBtn" data-op="cancelEditContract" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
           <button type="button" id="contractPreviewWfBtn" data-op="previewContractApprovalWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+          <!-- Chỉ hiện ở chế độ "Nhập Hợp Đồng/Phụ Lục Đã Ký" (tab Quản Lý HĐ) — quy trình duyệt Tài liệu
+               ký, KHÁC quy trình duyệt hồ sơ hợp đồng ở nút ngay trên (xem onContractOpModeChange()). -->
+          <button type="button" id="contractManagePreviewWfBtn" data-op="previewContractManageWorkflow" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình Duyệt Tài Liệu Ký</button>
           <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button>
         </div>
       </form>
@@ -2941,6 +2945,7 @@
         <p class="text-[11px] text-gray-500 italic">💡 Loại xe cụ thể, biển kiểm soát và lái xe được phân công sẽ do Phòng Hành Chính điền khi xử lý duyệt — không cần nhập ở bước đăng ký.</p>
         <div class="flex justify-end gap-2">
           <button type="button" data-op="confirmAndResetForm" data-arg0="carForm" data-arg1="resetCarRegForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" id="carPreviewWfBtn" data-op="previewCarWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold hover:bg-indigo-700">Gửi phê duyệt</button>
         </div>
       </form>
@@ -3077,6 +3082,7 @@
           <div id="vppRegTotalWrap" class="text-sm font-bold text-right p-2 bg-white rounded border"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="vppRegItemsWrap" data-arg1="resetVppRegForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="button" id="vppPreviewWfBtn" data-op="previewVppWorkflow" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="button" data-op="saveVppRegDraft" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
             <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Gửi phê duyệt</button>
           </div>
@@ -3874,6 +3880,7 @@
         </div>
         <div class="flex justify-end gap-2">
           <button type="button" data-op="confirmAndResetForm" data-arg0="officeForm" data-arg1="resetOfficeReqForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" id="officePreviewWfBtn" data-op="previewOfficeWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-teal-600 text-white px-5 py-2 rounded font-bold hover:bg-teal-700">Gửi phê duyệt</button>
         </div>
       </form>
@@ -3991,6 +3998,7 @@
           <div id="dynamicFieldsContainer_PAYMENT" class="contents"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="paymentCreateForm" data-arg1="resetPaymentCreateForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="button" id="paymentPreviewWfBtn" data-op="previewPaymentWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Lập Đề Nghị (Nháp)</button>
           </div>
         </form>
@@ -4209,6 +4217,24 @@
       <button data-op="switchWfModule" data-arg0="CONTRACT_MANAGE" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
       <button data-op="switchWfModule" data-arg0="PAYMENT" id="btnWfModPAYMENT" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 QT Thanh Toán</button>
       <button data-op="switchWfModule" data-arg0="ITPRICE" id="btnWfModITPRICE" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏷️ QT Hỗ Trợ IT - Duyệt Giá</button>
+    </div>
+
+    <!-- "⚡ Áp Dụng Nhanh" — chỉ tiện lợi lúc mới cài đặt/muốn đồng bộ nhanh SỐ BƯỚC cho những phòng
+         ban/mức CHƯA TỪNG cấu hình trên TOÀN BỘ quy trình phê duyệt cùng lúc (KHÔNG tự gán người
+         duyệt, KHÔNG đụng tới bất kỳ mục nào đã cấu hình sẵn) — xem quickApplyWorkflowSteps() ở
+         module-workflow.js. Vẫn sửa từng bước ở từng module bình thường như trước, tính năng này chỉ
+         là đường tắt ban đầu. -->
+    <div class="bg-amber-50 p-3 rounded border border-amber-200 flex items-center justify-between gap-3 flex-wrap">
+      <div class="text-xs text-amber-900 max-w-2xl">
+        <div class="font-bold">⚡ Áp Dụng Nhanh Số Bước Cho Toàn Bộ Quy Trình</div>
+        <div>Chỉ set nhanh SỐ BƯỚC (mẫu quy trình) cho những phòng ban/mức <b>CHƯA từng cấu hình</b> trên TẤT CẢ quy trình phê duyệt cùng lúc — KHÔNG tự gán người duyệt, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình. Vào từng module bên dưới để gán người duyệt/sửa lại như bình thường sau khi áp dụng.</div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <select id="quickApplyWfSelect" class="border p-1.5 rounded text-xs bg-white font-bold text-amber-800"></select>
+        <button data-op="showQuickApplyWorkflowStepsImpact" class="bg-white border border-amber-400 text-amber-800 px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-100">🔍 Xem Số Mục Ảnh Hưởng</button>
+        <button data-op="applyQuickApplyWorkflowSteps" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">⚡ Áp Dụng Nhanh</button>
+      </div>
+      <div id="quickApplyWfImpact" class="hidden w-full text-xs bg-white border rounded p-2 max-h-40 overflow-y-auto"></div>
     </div>
 
     <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
@@ -5865,6 +5891,15 @@
               <input id="itPriceDeptDisplay" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
             </div>
           </div>
+          <!-- "Đơn Vị Áp Dụng Giá Bán Buôn" (khác "Phòng Ban Đề Xuất" ở trên — đó là đơn vị NỘI BỘ tạo đề
+               xuất, đây là tên đơn vị/khách hàng mà mức giá bán buôn này áp dụng CHO) — nhập tay tự do
+               (không có danh mục hệ thống cho đối tác/khách hàng ngoài), CHỈ áp dụng cho sub-tab Bán
+               Buôn (xem setItPriceSubTab() ở module-itsupport-price.js). -->
+          <div id="itPriceWholesaleApplyUnitWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">🏢 Đơn Vị Áp Dụng Giá Bán Buôn <span class="text-red-500">*</span></label>
+            <input id="itPriceWholesaleApplyUnit" type="text" maxlength="300" placeholder="VD: Công ty TNHH ABC, Đại lý XYZ..." class="w-full border p-1.5 rounded bg-white">
+            <p class="text-gray-400 mt-1">Tên đơn vị/khách hàng sẽ áp dụng mức giá bán buôn này — khác với Phòng Ban Đề Xuất ở trên (đơn vị NỘI BỘ tạo đề xuất).</p>
+          </div>
           <div id="itPriceMasterListSelectWrap" class="hidden">
             <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
             <select id="itPriceMasterListSelect" data-op-change="onItPriceMasterListChange" class="w-full border p-1.5 rounded bg-white">
@@ -5955,6 +5990,9 @@
           <div id="dynamicFieldsContainer_IT_PRICE" class="contents"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="itPriceCreateForm" data-arg1="resetItPriceForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <!-- 1 nút dùng chung cho cả 2 sub-tab con: previewItPriceWorkflow() tự rẽ Bán Lẻ (theo phòng
+                 ban) / Bán Buôn (theo mức Margin/Chiết Khấu) — xem module-itsupport-price.js. -->
+            <button type="button" id="itPricePreviewWfBtn" data-op="previewItPriceWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="submit" class="bg-sky-600 text-white px-5 py-2 rounded font-bold hover:bg-sky-700">Gửi phê duyệt</button>
           </div>
         </form>
@@ -6316,6 +6354,9 @@
               <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_PLAN" class="text-violet-700">0 đ</span></div>
               <div id="budgetEntrySaveActions_PLAN" class="flex gap-2">
                 <button type="button" data-op="confirmAndResetForm" data-arg0="budgetEntryFormWrap_PLAN" data-arg1="resetBudgetEntryFormPLAN" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+                <!-- Chỉ form "Phê duyệt" (PLAN) mới có nút này — bản "Thực hiện" (ACTUAL) ghi nhận thẳng,
+                     không qua ai duyệt (xem submitCurrentBudgetEntry() ở module-ngansach.js). -->
+                <button type="button" id="budgetPreviewWfBtn" data-op="previewBudgetWorkflow" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
                 <button type="button" data-op="saveBudgetEntryDraft" data-arg0="PLAN" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
                 <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="PLAN" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
               </div>
@@ -6668,6 +6709,9 @@
           <div id="dynamicFieldsContainer_OPERATION_ORDER" class="contents"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="operationOrderForm" data-arg1="resetOperationOrderForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <!-- Quy trình duyệt đơn hàng theo MỨC GIÁ TRỊ (không theo phòng ban) — mức suy ra từ tổng
+                 hạng mục đang nhập dở, xem previewOperationOrderWorkflow() ở module-vanhanh.js. -->
+            <button type="button" id="operationOrderPreviewWfBtn" data-op="previewOperationOrderWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="submit" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button>
           </div>
         </form>
