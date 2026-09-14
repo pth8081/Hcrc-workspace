@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**21.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.7 (2026-09-14): Vá lỗi thật Checklist báo nhầm "Còn N câu hỏi bắt buộc chưa trả lời" dù đã chọn đủ đáp án
+
+Người dùng báo qua ảnh chụp: chọn ĐÚNG đáp án cho cả 2 câu hỏi trên màn hình
+Thực Hiện Checklist rồi bấm "✅ Nộp Bài" vẫn hiện lỗi "Còn 2 câu hỏi bắt buộc
+chưa trả lời" (đúng bằng số câu hỏi đang hiện, dù cả 2 đều đã chọn "Đạt").
+
+**Nguyên nhân thật**: `finalizeChecklistSubmission()` (`module-checklist.js`)
+gửi body **RỖNG** `{}` tới `POST /api/checklist/submissions/:id/finalize` —
+route này (`routes/checklist.js`) chấm điểm hoàn toàn dựa trên
+`sub.answers`/`sub.deductions` đã lưu SẴN trong DB, KHÔNG đọc gì từ request
+body. Nếu người dùng điền form rồi bấm thẳng "✅ Nộp Bài" mà **chưa từng bấm
+"💾 Lưu Nháp"** lần nào trong phiên đó, `sub.answers` ở server vẫn là mảng
+RỖNG từ lúc `/start` — mọi câu bắt buộc bị coi là chưa trả lời, bất kể người
+dùng đã chọn gì trên màn hình (dữ liệu đó mới chỉ nằm trong state JS phía
+trình duyệt, chưa từng được gửi lên).
+
+**Vá 2 lớp** (đúng gốc + phòng thủ): (1) `finalizeChecklistSubmission()`
+nay gửi kèm `checklistAnswersOrDeductionsPayload()` (đúng payload dùng để
+lưu nháp) ngay trong request finalize thay vì `{}`; (2)
+`POST /submissions/:id/finalize` (`routes/checklist.js`) nay CŨNG tự chấp
+nhận + sanitize `answers`/`deductions` gửi kèm (dùng lại đúng
+`sanitizeChecklistAnswers()`/`sanitizeChecklistDeductions()` như route
+`/answers`) trước khi chấm điểm — chỉ ghi đè khi client thực sự gửi kèm 1
+mảng, giữ nguyên `sub.answers`/`sub.deductions` đã lưu nếu body không kèm gì
+(không phá vỡ hành vi cũ khi đã "Lưu Nháp" trước rồi mới "Nộp Bài").
+
+**Test**: thêm 3 kịch bản mới vào `tests/test-checklist.js` — nộp bài NGAY
+kèm `answers` trong request `/finalize` mà KHÔNG từng gọi `/answers` trước
+(mirror đúng lỗi người dùng gặp, cả loại mẫu QA lẫn DEDUCTION), và xác nhận
+gọi `/finalize` body rỗng sau khi ĐÃ lưu nháp trước đó vẫn hoạt động như cũ
+(không bị xoá trắng oan) — 33/33 PASS. Chạy lại
+`test-checklist-submissions-scope.js` (6/6), `test-checklist-vsattp-seed.js`
+(8/8), `test-checklist-builder-ui.js` (5/5),
+`test-checklist-deduction-builder-ui.js` (7/7) — đều PASS.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies —
+thuần sửa logic code. Chỉ cần copy code + `pm2 restart`.
 
 ## v21.6 (2026-09-14): Phê Duyệt Giá Bán Lẻ thêm "Vùng Giá Áp Dụng" + vá lỗi thật DB.carVehicleTypes/DB.carTaxiCompanies không tải được sau khi tải trang
 

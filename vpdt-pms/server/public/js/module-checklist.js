@@ -893,7 +893,13 @@ async function onChecklistAnswerPhotoChosen(questionOrCriteriaId, inputEl) {
 async function finalizeChecklistSubmission() {
   if (!confirm('Nộp bài? Sau khi nộp sẽ không sửa được nữa.')) return;
   try {
-    const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/finalize`, {});
+    // LỖI THẬT vừa phát hiện: TRƯỚC ĐÂY gửi body RỖNG {} — nếu người dùng điền form rồi bấm thẳng "Nộp
+    // Bài" mà CHƯA từng bấm "Lưu Nháp" lần nào, server chấm điểm trên sub.answers/sub.deductions RỖNG từ
+    // lúc tạo bài (chưa hề lưu), báo nhầm "Còn N câu hỏi bắt buộc chưa trả lời" dù đã chọn đúng hết trên
+    // màn hình. Gửi kèm answers/deductions hiện tại (cùng payload dùng cho saveChecklistAnswersDraft())
+    // để server luôn chấm đúng trên dữ liệu MỚI NHẤT, không phụ thuộc người dùng có nhớ bấm Lưu Nháp
+    // trước đó hay không.
+    const result = await callWorkflowStyleAction(`/api/checklist/submissions/${checklistActiveSubmission.id}/finalize`, checklistAnswersOrDeductionsPayload());
     checklistApplySubmissionUpdate(result.item);
     closeChecklistSubmissionForm();
     renderChecklistExecuteTab();
