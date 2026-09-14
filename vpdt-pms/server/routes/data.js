@@ -13,6 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
+const { assertApprovalGroupsTgdSingle } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -1289,6 +1290,12 @@ router.post('/:key', async (req, res) => {
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
+    // submissionApprovalGroups (mục 11)/contractApprovalGroups (mục 14) — Tổng Giám Đốc chỉ được gán
+    // tối đa 1 người (xem lib/createValidation.js::assertApprovalGroupsTgdSingle()); client cũng tự
+    // chặn ở UI (module-admin-submissiongroups.js) nhưng đây mới là chốt chặn thật, phòng request tự
+    // soạn bỏ qua UI.
+    if (key === 'submissionApprovalGroups') assertApprovalGroupsTgdSingle(value, 'mục 11 — Nhóm Phê Duyệt Trình');
+    if (key === 'contractApprovalGroups') assertApprovalGroupsTgdSingle(value, 'mục 14 — Nhóm Phê Duyệt HĐ');
 
     const ifMatch = req.get('If-Match');
     let savedVersion = null;

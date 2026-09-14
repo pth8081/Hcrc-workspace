@@ -2304,7 +2304,11 @@ function canApprovePaymentRequestStepClient(user, pr) {
 // Dựng quy trình HIỆU LỰC cho 1 hợp đồng/phụ lục MỚI (lúc tạo) — cùng khuôn buildEffectiveSubmissionWorkflow()
 // nhưng dùng CONTRACT_APPROVAL_LAYERS/DB.contractApprovalGroups/DB.contractApprovalDeptWorkflows riêng,
 // và KHÔNG có nhánh không-chặn (cả 4 lớp đều blocking, không có opinionRequestees).
-function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers) {
+// approvalLevel: THÊM MỚI — cần biết lớp nào đang LOCKED (bắt buộc theo cấp phê duyệt) để áp đúng luật
+// "nhóm chỉ 1 người -> dùng thẳng, nhóm nhiều người -> dùng đúng 1 người người tạo đã chọn ở card
+// riêng" (xem renderContractApprovalLayerCheckboxes() ở module-vanbantrinh.js) — KHÁC lớp tuỳ chọn
+// (không locked, vẫn cho chọn nhiều người cùng duyệt như trước).
+function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   const baseConfig = DB.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
@@ -2312,10 +2316,16 @@ function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selecte
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(baseConfig, s.order); });
 
+  const rule = getContractApprovalLevelRule(approvalLevel);
   (selectedLayerKeys || []).forEach(layerKey => {
     const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
     if (!layer) return;
-    const chosen = [...(selectedLayerMembers?.[layerKey] || [])];
+    const groupMembers = DB.contractApprovalGroups[layerKey] || [];
+    // Lớp bắt buộc (locked) chỉ có 1 người trong nhóm -> dùng thẳng người đó (không có card chọn, xem
+    // renderContractApprovalLayerCheckboxes()); nhiều người -> dùng đúng người đã chọn ở card riêng.
+    const chosen = (rule.locked.includes(layerKey) && groupMembers.length <= 1)
+      ? [...groupMembers]
+      : [...(selectedLayerMembers?.[layerKey] || [])];
     const stepOrder = steps.length + 1;
     steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
     approvers[stepOrder] = chosen;
@@ -2326,7 +2336,7 @@ function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selecte
 
 // Xem trước quy trình Phê Duyệt HĐ — cùng khuôn buildSubmissionWorkflowPreviewHTML(), không có khối
 // "Xin ý kiến" (không tồn tại trong quy trình này).
-function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers) {
+function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   if (!dept) {
     return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Quản Lý để xem quy trình.</div>';
   }
@@ -2334,7 +2344,7 @@ function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selec
     const u = DB.users.find(x => x.username === username);
     return escapeHtml(u ? u.name : username);
   };
-  const wf = buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers);
+  const wf = buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   const stepsHTML = wf.steps.map(s => {
     const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
       '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
@@ -2348,12 +2358,18 @@ function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selec
 }
 
 // Đọc lại đúng lớp phê duyệt bổ sung + người đã chọn TỪ FORM HỢP ĐỒNG HIỆN TẠI — cùng khuôn
-// readSelectedSubmissionLayers() nhưng đọc từ panel/checkbox class riêng của form Hợp đồng.
+// readSelectedSubmissionLayers() nhưng đọc từ panel/checkbox class riêng của form Hợp đồng. Lớp bắt
+// buộc (locked) có NHIỀU HƠN 1 người trong nhóm dùng <select> đơn (contract-layer-single-approver, xem
+// renderLockedLayerSingleApproverCard()) để chọn ĐÚNG 1 người — khác lớp tuỳ chọn (checkbox nhiều,
+// class contract-layer-member).
 function readSelectedContractLayers() {
   const selectedLayerKeys = [...document.querySelectorAll('#contractApprovalDropdownPanel input.contract-layer-toggle:checked')].map(cb => cb.value);
   const selectedLayerMembers = {};
   for (const layerKey of selectedLayerKeys) {
-    selectedLayerMembers[layerKey] = [...document.querySelectorAll(`input.contract-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+    const singleSelect = document.querySelector(`select.contract-layer-single-approver[data-layer="${layerKey}"]`);
+    selectedLayerMembers[layerKey] = singleSelect
+      ? (singleSelect.value ? [singleSelect.value] : [])
+      : [...document.querySelectorAll(`input.contract-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
   }
   return { selectedLayerKeys, selectedLayerMembers };
 }
@@ -8197,6 +8213,30 @@ function pmsClear(containerId) {
   if (!container || !container._pmsSelected) return;
   container._pmsSelected.clear();
   container._pmsRenderChips();
+}
+
+// Card chọn ĐÚNG 1 người — dùng cho vai trò phê duyệt BẮT BUỘC (locked) của Văn Bản Trình/Hợp Đồng khi
+// nhóm admin gán (mục 11/14) có NHIỀU HƠN 1 người (VD 2 Phó Giám Đốc) — người tạo hồ sơ phải chọn CỤ
+// THỂ 1 người xử lý hồ sơ này, KHÁC hẳn renderPeopleMultiSelect() (cho phép chọn NHIỀU người cùng
+// duyệt 1 bước, dùng cho lớp TUỲ CHỌN như Đồng trình/Đồng cấp — 1 bước có thể cần nhiều người cùng ký).
+// Nhóm chỉ có ĐÚNG 1 người thì KHÔNG gọi hàm này — dùng thẳng người đó, không cần "chọn" gì cả (xem
+// renderSubmissionApprovalLayerCheckboxes()/renderContractApprovalLayerCheckboxes() ở module-vanbantrinh.js).
+// `selectClass` để readSelectedSubmissionLayers()/readSelectedContractLayers() (core.js) đọc lại đúng
+// giá trị đã chọn qua querySelector — không đặt sẵn lựa chọn nào (value rỗng) để buộc người tạo hồ sơ
+// PHẢI chủ động chọn, không vô tình gửi đi người đầu tiên trong danh sách.
+function renderLockedLayerSingleApproverCard(containerId, layerKey, layerLabel, candidates, selectClass, bgClass) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const card = document.createElement('div');
+  card.className = `border rounded p-2 ${bgClass} min-w-[220px]`;
+  card.innerHTML = `
+    <div class="font-semibold text-gray-700 mb-1">${escapeHtml(layerLabel)} <span class="text-[10px] text-sky-600 font-normal">(${candidates.length} người được cấu hình — chọn 1)</span></div>
+    <select class="${selectClass} border p-1 rounded text-xs w-full" data-layer="${layerKey}">
+      <option value="">-- Chọn người phê duyệt --</option>
+      ${candidates.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)}</option>`).join('')}
+    </select>
+  `;
+  container.appendChild(card);
 }
 // Đóng dropdown đang mở khi click ra ngoài — gắn 1 LẦN DUY NHẤT ở top-level (không gắn lại mỗi lần
 // render, tránh chồng listener) — tự áp dụng cho MỌI khối renderPeopleMultiSelect đang có trên trang
