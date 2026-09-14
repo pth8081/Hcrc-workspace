@@ -543,6 +543,17 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số
   nhân sự gợi ý này). Chức danh nằm trong danh mục "Chức danh bị loại khỏi
   VPP" (3.3) không được tính vào đầu người/không đăng ký được.
+  **Danh mục mặt hàng — mẫu/nhập/xuất Excel** (form "Tạo Kỳ Đăng Ký"): nút
+  **"⬇️ Tải Mẫu Excel"** ngay cạnh ô chọn file tải về 1 file mẫu rỗng (kèm 1
+  dòng ví dụ in nghiêng) đúng 6 cột hệ thống nhận diện được (**Mã Hàng/Tên Mặt
+  Hàng/Đơn Vị Tính/Xuất Xứ/Quy Cách Đóng Gói/Đơn Giá**) — gửi file này cho bộ
+  phận hành chính điền rồi nộp lại đảm bảo **nhập (import)** đúng cột ngay lần
+  đầu (input file Excel/CSV vẫn tự nhận diện cột theo tiêu đề hoặc theo vị trí
+  cột 1/2 nếu file không có tiêu đề, không bắt buộc phải dùng đúng file mẫu).
+  Mỗi kỳ đăng ký đã tạo trong bảng "Danh Sách Kỳ Đăng Ký" có nút **"📤 Xuất
+  Excel"** để xuất lại NGUYÊN danh mục mặt hàng đã chốt của kỳ đó ra file Excel
+  cùng đúng 6 cột trên — dùng làm cơ sở cho kỳ sau (import lại được ngay) hoặc
+  đối chiếu với file gốc hành chính đã nộp.
 - **Đồng Phục** — 2 vai trò: Hành Chính tạo "kỳ cấp phát" phân bổ đồng phục
   xuống từng siêu thị, Giám Đốc Siêu Thị xác nhận đã nhận rồi cấp phát tiếp cho
   nhân viên. "Kho" không lưu bảng riêng — luôn tính động từ số đã phân bổ đã

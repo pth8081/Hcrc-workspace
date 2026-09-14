@@ -129,4 +129,52 @@ async function buildByDeptWorkbook(period, registrations) {
   return wb;
 }
 
-module.exports = { buildSummaryWorkbook, buildByDeptWorkbook };
+// Cột dùng chung cho file mẫu (template rỗng) VÀ xuất lại danh mục của 1 kỳ đã tạo — khớp ĐÚNG các tiêu
+// đề mà lib/vppCatalog.js::FIELD_HINTS nhận diện được lúc đọc lại (Mã hàng/Tên mặt hàng/Đơn vị tính/
+// Xuất xứ/Quy cách đóng gói/Đơn giá), để 2 file này import ngược lại qua parse-catalog không bị rơi về
+// nhánh "không có tiêu đề" (cột 1 = tên, cột 2 = đơn vị).
+const CATALOG_TEMPLATE_COLUMNS = [
+  { header: 'Mã Hàng', key: 'code', width: 14 },
+  { header: 'Tên Mặt Hàng', key: 'name', width: 32 },
+  { header: 'Đơn Vị Tính', key: 'unit', width: 14 },
+  { header: 'Xuất Xứ', key: 'origin', width: 16 },
+  { header: 'Quy Cách Đóng Gói', key: 'spec', width: 20 },
+  { header: 'Đơn Giá', key: 'price', width: 14 }
+];
+
+// File mẫu rỗng (1 dòng ví dụ, in nghiêng để dễ nhận ra là mẫu) — để bộ phận hành chính tải về điền
+// đúng cột trước khi gửi lại admin tạo kỳ đăng ký (xem routes/vppCatalog.js GET /catalog-template).
+function buildCatalogTemplateWorkbook() {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('Danh Mục Mặt Hàng');
+  sheet.columns = CATALOG_TEMPLATE_COLUMNS;
+  styleHeaderRow(sheet.getRow(1));
+  const exampleRow = sheet.addRow({
+    code: 'VPP001', name: 'Bút bi Thiên Long (VD, xoá dòng này trước khi nộp)',
+    unit: 'Cái', origin: 'Việt Nam', spec: 'Hộp 10 cái', price: 3000
+  });
+  exampleRow.font = { italic: true, color: { argb: 'FF6B7280' } };
+  return wb;
+}
+
+// Xuất lại NGUYÊN danh mục mặt hàng đã chốt của 1 kỳ đăng ký ra Excel (cùng cột với file mẫu ở trên) —
+// dùng để hành chính lấy lại làm cơ sở cho kỳ sau, hoặc đối chiếu file gốc đã nộp. Đơn giá giữ nguyên
+// dạng số (không format VNĐ như 2 file báo cáo ở trên) để import lại được ngay qua parse-catalog.
+function buildCatalogWorkbook(period) {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('Danh Mục Mặt Hàng');
+  sheet.columns = CATALOG_TEMPLATE_COLUMNS;
+  styleHeaderRow(sheet.getRow(1));
+  (period.catalogItems || []).forEach(it => {
+    sheet.addRow(sanitizeRowForFormulaInjection({
+      code: it.code || '', name: it.name, unit: it.unit || '', origin: it.origin || '', spec: it.spec || '',
+      price: it.price != null ? it.price : ''
+    }));
+  });
+  if (!(period.catalogItems || []).length) {
+    sheet.addRow({ name: '(Kỳ đăng ký này chưa có mặt hàng nào)' });
+  }
+  return wb;
+}
+
+module.exports = { buildSummaryWorkbook, buildByDeptWorkbook, buildCatalogTemplateWorkbook, buildCatalogWorkbook };

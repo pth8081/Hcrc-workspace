@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**22.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.4 (2026-09-14): VPP — Tải Mẫu Excel + Xuất Excel danh mục mặt hàng
+
+Người dùng gửi ảnh chụp màn "Tạo Kỳ Đăng Ký" của module Văn Phòng Phẩm, yêu
+cầu: tải file mẫu, import file, và export file dạng Excel để bộ phận hành
+chính lấy mẫu được. Rà soát phát hiện tính năng **import đã có sẵn** từ trước
+(`POST /api/vpp/parse-catalog`, tự nhận diện cột theo tiêu đề Tên mặt hàng/
+ĐVT/Mã hàng/Xuất xứ/Quy cách/Đơn giá, hoặc theo vị trí cột 1/2 nếu không có
+tiêu đề) — chỉ thiếu 2 phần: tải file mẫu và xuất lại danh mục ra Excel.
+
+**Thêm nút "⬇️ Tải Mẫu Excel"** ngay cạnh ô chọn file trong form "Tạo Kỳ Đăng
+Ký" (`GET /api/vpp/catalog-template`, admin/`vppManage`) — sinh 1 file .xlsx
+rỗng kèm 1 dòng ví dụ in nghiêng, đúng 6 cột hệ thống nhận diện được (Mã
+Hàng/Tên Mặt Hàng/Đơn Vị Tính/Xuất Xứ/Quy Cách Đóng Gói/Đơn Giá) — gửi cho
+hành chính điền đúng khuôn ngay từ đầu.
+
+**Thêm nút "📤 Xuất Excel"** cho mỗi kỳ đăng ký trong bảng "Danh Sách Kỳ Đăng
+Ký" (`GET /api/vpp/export/catalog/:periodId`, cùng quyền) — xuất lại NGUYÊN
+danh mục mặt hàng đã chốt của kỳ đó ra Excel, cùng 6 cột với file mẫu nên
+**import lại được ngay** (đã kiểm chứng round-trip qua test) — dùng làm cơ sở
+cho kỳ sau hoặc đối chiếu file gốc.
+
+Cả 2 workbook mới (`buildCatalogTemplateWorkbook()`/`buildCatalogWorkbook()`
+ở `lib/vppExport.js`) đi qua `sanitizeRowForFormulaInjection()` như 2 file
+báo cáo VPP hiện có, chặn Excel Formula Injection từ dữ liệu do người dùng
+nhập (tên/mã mặt hàng). Test mới `tests/test-vpp-catalog-template-export.js`
+(11/11 pass, có kịch bản formula-injection + round-trip xuất-rồi-nhập-lại);
+`test-vpp.js` (19/19) và `test-lazy-load-all-tabs.js` (42/42) không regression.
 
 ## v22.3 (2026-09-14): "⚡ Áp Dụng Nhanh" tách sub-tab riêng + đa cấu hình theo module
 
