@@ -9170,9 +9170,9 @@
 </div>
 
 <!-- MODAL "Xem Trước" báo cáo theo yêu cầu (mục "1. Tạo Báo Cáo Theo Yêu Cầu" trong Báo Cáo) — xem
-     showReportPreview()/buildReportPreviewDocumentHTML(). z-[55] khớp viewDocModal ngay dưới vì cùng
-     lớp "modal xem trước nội dung", không có nhu cầu mở lồng trong modal khác nên không cần cao hơn. -->
-<div id="reportPreviewModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[55] p-4">
+     showReportPreview()/buildReportPreviewDocumentHTML(). z-[65] khớp viewDocModal ngay dưới (cùng lớp
+     "modal xem trước nội dung", xem chú thích đầy đủ tại viewDocModal ngay dưới đây về lý do z-[65]). -->
+<div id="reportPreviewModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[65] p-4">
   <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-indigo-700 text-white p-4">
       <h3 class="font-bold text-base flex items-center gap-2">👁️ Xem Trước Báo Cáo</h3>
@@ -9189,9 +9189,19 @@
 
 <!-- MODAL XEM TÀI LIỆU PROTECTED VIEW -->
 <!-- Khung Xem Bảo Vệ dùng chung (openFileProtectedView) + "Xem quy trình"/Phiếu Phê Duyệt — thường được
-     MỞ TỪ BÊN TRONG 1 modal xử lý khác (Chi tiết Văn bản trình/Xe/Văn phòng...) đều z-50, nên phải cao
-     hơn (z-[55]) để luôn nổi TRÊN modal đang mở nó, không bị modal đó (đứng sau trong DOM) đè lên. -->
-<div id="viewDocModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[55] p-4">
+     MỞ TỪ BÊN TRONG 1 modal xử lý khác (Chi tiết Văn bản trình/Xe/Văn phòng...) nên phải LUÔN cao hơn
+     BẤT KỲ modal nào có thể mở nó, không bị modal đó (đứng sau trong DOM) đè lên.
+     BUG THẬT đã sửa (rà soát theo báo cáo người dùng "khung xem tài liệu bị ẩn xuống dưới các khung
+     khác"): trước đây z-[55] — đủ cao hơn modal xử lý thường (z-50, VD submissionProcessModal) nhưng
+     KHÔNG đủ cao hơn genericConfirmModal (z-[60], showConfirmModal() dùng chung toàn hệ thống) — luồng
+     "📄 Xác Nhận Thay Thế Tờ Trình" (openResolveFileProposalModal(), module-vanbantrinh.js) mở modal xác
+     nhận (genericConfirmModal, z-60) có nút "👁️ Xem" bên trong gọi thẳng openFileProtectedView() —
+     khung xem tài liệu z-55 bị lớp nền tối (backdrop) z-60 của modal xác nhận đang mở nó đè lên, coi như
+     ẩn mất dù kỹ thuật vẫn "mở" (display khác none). Nâng lên z-[65] — cao hơn MỌI modal xử lý hiện có
+     (z-50/z-[60]) — để luôn nổi trên bất kể được mở từ đâu, kể cả các luồng tương tự phát sinh sau này
+     mà không cần rà từng nơi gọi. Vẫn thấp hơn appUpdateBanner (z-[70], PHẢI luôn là lớp cao nhất tuyệt
+     đối) — không đụng tới banner đó. -->
+<div id="viewDocModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[65] p-4">
   <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
     <div class="flex justify-between items-center bg-gray-800 text-white p-4">
       <div>

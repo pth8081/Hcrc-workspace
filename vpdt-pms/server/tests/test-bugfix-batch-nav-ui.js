@@ -61,6 +61,42 @@ async function main() {
       assertEqual(count, 9, 'Ô sửa danh mục phải luôn hiện đủ 9 tổ hợp để admin thêm được vị trí MỚI ngoài danh mục hiện có');
     });
 
+    // ===== Bug thật (rà soát theo yêu cầu người dùng "gán chức danh Giám Đốc Siêu Thị thì mặc định
+    // giám đốc ST nào phê duyệt trên luồng của siêu thị đó"): danh mục "Theo vị trí" trước đây CHỈ tích
+    // chéo DB.jobTitles × DB.depts, hoàn toàn BỎ QUA DB.storeJobTitles ({label}[], chức danh Siêu Thị,
+    // TÁCH RIÊNG khỏi DB.jobTitles) × DB.stores (phòng ban/đơn vị Siêu Thị, TÁCH RIÊNG khỏi DB.depts) —
+    // nghĩa là "Giám Đốc Siêu Thị" (chỉ tồn tại trong DB.storeJobTitles) KHÔNG BAO GIỜ ghép được với 1
+    // siêu thị cụ thể nào, khiến admin không cấu hình được "Theo vị trí" cho Phê Duyệt Giá/Đồng Phục
+    // theo đúng ý (mỗi siêu thị tự động có ĐÚNG giám đốc siêu thị đó duyệt luồng của mình). =====
+    await run('Bug MỚI: wfPositionPairCatalogItems() phải ghép ĐỦ chức danh Siêu Thị (DB.storeJobTitles) VỚI phòng ban Siêu Thị (DB.stores) — trước đây hoàn toàn vắng mặt', async () => {
+      const result = await page.evaluate(() => {
+        DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
+        DB.depts = ['Phòng Nhân Sự', 'Phòng Kế Toán'];
+        DB.storeJobTitles = [{ label: 'Giám Đốc Siêu Thị' }, { label: 'Phó Giám Đốc Siêu Thị' }];
+        DB.stores = ['Siêu Thị A', 'Siêu Thị B'];
+        const items = wfPositionPairCatalogItems();
+        return { count: items.length, labels: items.map(i => i.label).sort() };
+      });
+      // 2 jobTitles × 2 depts (thường) = 4, CỘNG 2 storeJobTitles × 2 stores = 4 -> tổng 8.
+      assertEqual(result.count, 8, 'Phải có đủ 4 tổ hợp thường + 4 tổ hợp Siêu Thị (không lai chéo 2 nhóm với nhau)');
+      assert(result.labels.includes('Giám Đốc Siêu Thị — Siêu Thị A'), 'Thiếu "Giám Đốc Siêu Thị — Siêu Thị A"');
+      assert(result.labels.includes('Giám Đốc Siêu Thị — Siêu Thị B'), 'Thiếu "Giám Đốc Siêu Thị — Siêu Thị B"');
+      assert(result.labels.includes('Phó Giám Đốc Siêu Thị — Siêu Thị A'), 'Thiếu "Phó Giám Đốc Siêu Thị — Siêu Thị A"');
+      assert(!result.labels.includes('Giám Đốc Siêu Thị — Phòng Nhân Sự'), 'KHÔNG được lai chức danh Siêu Thị với phòng ban thường (vô nghĩa)');
+      assert(!result.labels.includes('Trưởng phòng — Siêu Thị A'), 'KHÔNG được lai chức danh thường với Siêu Thị (vô nghĩa)');
+    });
+
+    await run('Bug MỚI: sau khi ghép đúng, "Theo vị trí" thật sự chọn đúng giám đốc CỦA ĐÚNG siêu thị (không lẫn sang siêu thị khác)', async () => {
+      const result = await page.evaluate(() => {
+        const gdA = { username: 'gd_a', name: 'GĐ Siêu Thị A', dept: 'Siêu Thị A', jobTitle: 'Giám Đốc Siêu Thị', active: true, perms: { canBeApprover: true } };
+        const gdB = { username: 'gd_b', name: 'GĐ Siêu Thị B', dept: 'Siêu Thị B', jobTitle: 'Giám Đốc Siêu Thị', active: true, perms: { canBeApprover: true } };
+        const pairA = [{ jobTitle: 'Giám Đốc Siêu Thị', dept: 'Siêu Thị A' }];
+        DB.users = [gdA, gdB];
+        return { usernamesForA: resolvePositionApproverUsernamesClient(pairA) };
+      });
+      assertEqual(JSON.stringify(result.usernamesForA), JSON.stringify(['gd_a']), 'Cấu hình vị trí cho Siêu Thị A chỉ được ra đúng giám đốc Siêu Thị A, không lẫn giám đốc Siêu Thị B');
+    });
+
     await run('Bug 1b: initDatabase() phải đọc lại workflowParticipatingPositions từ /api/data (không còn mất sau tải lại trang)', async () => {
       const hasAssignment = await page.evaluate(() => {
         // Xác nhận initDatabase() (core.js) có dòng gán DB.workflowParticipatingPositions từ data —

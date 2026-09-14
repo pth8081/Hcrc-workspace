@@ -181,6 +181,20 @@ function wfPositionPairCatalogItems() {
   (DB.jobTitles || []).forEach(jt => {
     (DB.depts || []).forEach(d => pairs.push({ jobTitle: jt, dept: d }));
   });
+  // BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "gán chức danh Giám Đốc Siêu Thị thì mặc định
+  // giám đốc ST nào phê duyệt trên luồng của siêu thị đó" — kiểm tra thấy KHÔNG đúng như vậy): tài
+  // khoản Siêu Thị dùng 2 danh mục RIÊNG, TÁCH HẲN khỏi DB.jobTitles/DB.depts — chức danh từ
+  // DB.storeJobTitles ({label}[], xem populateUserJobTitleOptions() ở core.js, ô "Chức Danh" khi
+  // posType=STORE) và phòng ban/đơn vị từ DB.stores (KHÔNG phải DB.depts, xem ô "uStore" ở core.js) —
+  // nên "Giám Đốc Siêu Thị" (chỉ tồn tại trong DB.storeJobTitles) trước đây KHÔNG BAO GIỜ ghép được với
+  // bất kỳ siêu thị cụ thể nào ở đây (DB.depts không chứa tên siêu thị): ô chọn "Theo vị trí" hoàn toàn
+  // THIẾU vị trí Siêu Thị, khiến admin không thể cấu hình đúng ý muốn ("Giám Đốc Siêu Thị — Siêu Thị A"
+  // không phải là 1 lựa chọn có thật). Chỉ ghép chức danh Siêu Thị VỚI phòng ban Siêu Thị (không lai
+  // chéo với DB.jobTitles/DB.depts thường — 1 "Giám Đốc Siêu Thị — Phòng Kế Toán" vô nghĩa) — mirror
+  // đúng ranh giới 2 catalog tách biệt đã có sẵn (populateUserJobTitleOptions()/uStore ở core.js).
+  (DB.storeJobTitles || []).forEach(t => {
+    (DB.stores || []).forEach(s => pairs.push({ jobTitle: t.label, dept: s }));
+  });
   return pairs.map(pair => ({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) }));
 }
 

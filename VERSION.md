@@ -1,8 +1,82 @@
 # Phiên bản hiện tại
 
-**21.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.0 (2026-09-14): Fix khung xem tài liệu bị ẩn dưới modal xác nhận + Fix danh mục "Theo vị trí" thiếu vị trí Siêu Thị
+
+Người dùng yêu cầu rà soát 2 việc: (1) kiểm tra toàn bộ các mục xem tài liệu
+ở mọi module xem có khung nào bị ẩn xuống dưới khung khác không; (2) xác
+minh "gán chức danh Giám Đốc Siêu Thị thì mặc định giám đốc ST nào phê duyệt
+trên luồng của siêu thị đó" có đúng như vậy không (Phê Duyệt Giá Siêu Thị +
+Xác Nhận Đồng Phục), vì ô chọn chức danh chỉ hiện "Giám Đốc Siêu Thị" không
+phân biệt siêu thị nào.
+
+**(1) BUG THẬT đã sửa — khung xem tài liệu bị đè**: `#viewDocModal` ("Khung
+Xem Bảo Vệ" dùng chung, `openFileProtectedView()`) và `#reportPreviewModal`
+trước đây `z-[55]` — đủ cao hơn modal xử lý thường (`z-50`) nhưng THẤP hơn
+`genericConfirmModal` (`z-[60]`, `showConfirmModal()` dùng chung toàn hệ
+thống). Luồng "📄 Xác Nhận Thay Thế Tờ Trình" (Văn Bản Trình,
+`openResolveFileProposalModal()`) mở `genericConfirmModal` (z-60) có nút
+"👁️ Xem" gọi thẳng `openFileProtectedView()` — khung xem tài liệu (z-55) bị
+lớp nền tối (backdrop) của modal xác nhận đang mở nó đè lên, coi như ẩn mất
+dù kỹ thuật vẫn "mở". Đã rà soát toàn bộ module khác dùng chung khung xem
+này (Tài Liệu, Hợp Đồng, Đăng Ký Xe, Văn Phòng, Vận Hành, Đào Tạo, Thanh
+Toán, IT Support...) — không phát hiện thêm nơi nào khác bị lỗi tương tự.
+**Fix**: nâng cả 2 modal lên `z-[65]` — cao hơn MỌI modal xử lý hiện có
+(z-50/z-[60]) để luôn nổi trên bất kể được mở từ đâu (kể cả luồng tương tự
+phát sinh sau này không cần rà từng nơi gọi), vẫn thấp hơn `appUpdateBanner`
+(`z-[70]`, phải luôn là lớp cao nhất tuyệt đối).
+
+**(2) BUG THẬT đã sửa — danh mục "Theo vị trí" thiếu hẳn vị trí Siêu Thị**:
+Xác nhận qua rà soát code: cơ chế "gán chức danh → tự động phê duyệt" chỉ áp
+dụng cho **Phê Duyệt Giá Siêu Thị** (`itPriceApprovals`, chế độ "🧭 Theo vị
+trí" ở màn Quy Trình & Phê Duyệt) — KHÔNG áp dụng cho Xác Nhận Đồng Phục
+(xem bên dưới). Cơ chế "Theo vị trí" là có thật và đã test kỹ (đọc động
+(jobTitle, dept) khớp `DB.users`, lọc theo quyền `canBeApprover`) — nhưng
+tài khoản Siêu Thị dùng 2 danh mục RIÊNG, TÁCH HẲN khỏi các tài khoản văn
+phòng: chức danh từ `DB.storeJobTitles` (không phải `DB.jobTitles`) và đơn
+vị từ `DB.stores` (không phải `DB.depts`). Hàm dựng danh mục cho ô chọn
+"Theo vị trí" (`wfPositionPairCatalogItems()`, khối "17. Nhóm Quyền Đặc
+Biệt") trước đây CHỈ tích chéo `DB.jobTitles × DB.depts`, hoàn toàn bỏ qua
+Siêu Thị — nên "Giám Đốc Siêu Thị" (chỉ tồn tại trong `DB.storeJobTitles`)
+KHÔNG BAO GIỜ ghép được với 1 siêu thị cụ thể nào trong ô chọn, đúng như
+người dùng quan sát ("chỉ thể hiện là giám đốc siêu thị", không có lựa chọn
+theo từng siêu thị). **Fix**: bổ sung tích chéo `DB.storeJobTitles ×
+DB.stores` (không lai chéo với danh mục văn phòng thường) vào cùng hàm —
+nay có thể chọn đúng "Giám Đốc Siêu Thị — Siêu Thị A" làm vị trí phê duyệt
+cho luồng của đúng Siêu Thị A.
+
+**Lưu ý quan trọng cho người dùng — vẫn cần cấu hình thủ công, KHÔNG tự động
+100%:**
+- **Phê Duyệt Giá Siêu Thị**: sau khi ô chọn đã đủ vị trí Siêu Thị, admin
+  vẫn phải vào "Hệ Thống → Quy Trình & Phê Duyệt → 🏷️ Hỗ Trợ IT - Duyệt
+  giá", bật "🧭 Theo vị trí" cho bước duyệt tương ứng và CHỌN đúng cặp
+  "Giám Đốc Siêu Thị — <tên siêu thị>" cho từng luồng siêu thị — không tự
+  bật sẵn. Đồng thời tài khoản giám đốc siêu thị đó phải được cấp quyền
+  "✅ Có thể được chọn làm người duyệt" (`canBeApprover`) thì mới thực sự
+  được chọn làm người duyệt (đây là chốt an toàn cố ý, không phải lỗi).
+- **Xác Nhận Đồng Phục**: mô-đun này KHÔNG dùng chức danh/vị trí ở bất kỳ
+  đâu (xác nhận qua rà soát code `confirmUniformAllocation()`) — hoàn toàn
+  do quyền cờ `uniformStoreManage` cấp thủ công riêng cho từng tài khoản ở
+  Phân Quyền, kết hợp `dept` của chính tài khoản đó phải trùng tên siêu thị
+  của phiếu. Gán chức danh "Giám Đốc Siêu Thị" KHÔNG có tác dụng gì cho việc
+  xác nhận đồng phục — đây là thiết kế có chủ đích từ trước, không phải bug,
+  nhưng khác cơ chế với Phê Duyệt Giá nên cần lưu ý riêng.
+
+**Test**: thêm test z-index CSS thật (không chỉ đọc class) vào
+`test-submission.js` bắt đúng lớp bug (1) nếu tái phát; thêm 2 test mới vào
+`test-bugfix-batch-nav-ui.js` xác nhận danh mục "Theo vị trí" ghép đủ Siêu
+Thị và chọn đúng giám đốc của đúng siêu thị (không lẫn sang siêu thị khác).
+Toàn bộ regression liên quan (test-submission, test-admin-users-permgroups,
+test-workflow-position-approvers, test-workflow-participating-positions,
+test-bugfix-batch-nav-ui) chạy lại PASS 100%.
+
+**Deploy-impact**: chỉ đổi code client (`index.html`,
+`module-admin-specialperm.js`) + CSS build lại (`tailwind.css`, đã build
+sẵn trong commit) — không đổi `schema.sql`/`.env.example`/dependencies. Chỉ
+cần copy code + `pm2 restart`, không cần thao tác gì thêm.
 
 ## v21.9 (2026-09-14): Đăng Ký Xe — "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" bắt buộc (người đăng ký)
 

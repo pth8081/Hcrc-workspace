@@ -205,6 +205,22 @@ danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá �
    nguồn chọn cho bước duyệt "Theo vị trí" (3.1). Có thể khai báo trước cả khi
    chưa có ai thực sự giữ đúng vị trí đó.
 
+   **Tài khoản Siêu Thị (posType=STORE) cũng nằm trong ô chọn này** (từ
+   v22.0): ô "🧭 Theo vị trí" ghép sẵn mọi cặp (chức danh Siêu Thị, tên siêu
+   thị) — VD "Giám Đốc Siêu Thị — Siêu Thị A" — vì tài khoản Siêu Thị dùng 2
+   danh mục chức danh/đơn vị RIÊNG (khác hẳn danh mục chức danh/phòng ban của
+   khối văn phòng). Nhờ vậy admin có thể cấu hình bước duyệt **Phê Duyệt Giá
+   Siêu Thị** (Hỗ Trợ IT → Duyệt giá) để mỗi siêu thị tự động do ĐÚNG giám đốc
+   siêu thị đó duyệt: bật "🧭 Theo vị trí" ở bước tương ứng trong luồng của
+   từng siêu thị, chọn đúng cặp "Giám Đốc Siêu Thị — <tên siêu thị đó>" (nhớ
+   vẫn phải cấp quyền "Người duyệt"/`canBeApprover` cho tài khoản giám đốc thì
+   mới thực sự duyệt được — xem lưu ý bảo mật cốt lõi ở 3.1).
+   **Lưu ý: Xác Nhận Đồng Phục KHÔNG dùng cơ chế "Theo vị trí"/chức danh** —
+   mô-đun Đồng Phục xác định giám đốc siêu thị được xác nhận nhận hàng qua
+   quyền cờ riêng `uniformStoreManage` (cấp thủ công theo từng tài khoản ở
+   Phân Quyền) kết hợp `dept` của tài khoản đó trùng tên siêu thị trên phiếu —
+   gán chức danh không có tác dụng gì ở mô-đun này.
+
 > Đây là danh mục "Theo vị trí" đơn giản, dùng riêng cho việc **gán bước
 > duyệt**. Nhân Sự cũng có 1 khái niệm "vị trí" khác, đầy đủ hơn (cây tổ chức
 > có thứ bậc, xem mục 4.5) dùng để tự động tính Quản Lý Trực Tiếp + luồng đánh
