@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**22.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.7 (2026-09-14): Chân ký phiếu phê duyệt — bỏ khung ô, căn giữa cân đối
+
+Người dùng nhận xét khung "Phiếu Phê Duyệt" (Đăng Ký Xe/Văn Bản Trình/VPP-Văn
+Phòng) có hàng chân ký kẻ ô viền cứng, không canh đều/cân đối khi số chân ký
+ít hay nhiều (bảng `table-layout: fixed` cũ luôn chia đều HẾT bề ngang trang
+cho từng cột, nên 2 chân ký thì mỗi ô rất rộng, 6 chân ký thì lại chật). Đã
+gửi demo (mockup HTML độc lập) cho người dùng duyệt trước khi sửa code thật.
+
+Đổi `.as-sign-table`/`<td>` (bảng, có viền `border:1px solid #ccc` quanh mỗi
+ô) sang `.as-sign-row`/`.as-sign-col` (flexbox, `justify-content:center`,
+`gap:36px`, mỗi cột rộng cố định 150-170px, KHÔNG còn viền từng ô — chỉ còn 1
+đường kẻ mảnh `border-top` phân tách phần nội dung/chân ký) — `buildApprovalSlipShellHTML()`
++ `buildApprovalSignatureColumnHTML()` (`public/js/core.js`). Nhờ flexbox tự
+bọc dòng (`flex-wrap: wrap`) khi quá nhiều chân ký, hàng chân ký LUÔN canh
+giữa trang và khoảng cách đều nhau bất kể 2 hay 6+ người ký, không bị kéo
+giãn/chật chội theo số cột như bảng cũ. Áp dụng ngay cho cả 3 phiếu in dùng
+chung khung này (Đăng Ký Xe/Văn Bản Trình/VPP-Văn Phòng) + 3 hàm tải file
+`.html` độc lập (`downloadXxxApprovalSlip()`, tự nhúng lại đúng CSS này).
+CSS được giữ đồng bộ ở 2 nơi như thiết kế sẵn có: `APPROVAL_SLIP_CSS` (core.js,
+dùng cho file tải về độc lập) và `public/app.css` (dùng cho màn xem trực tiếp
+trong app) — đã sửa cả 2.
 
 ## v22.6 (2026-09-14): Nhãn hành động cấu hình theo bước ký + Đăng Ký Xe (Báo Cáo, Lịch Xe Ngày/Tuần/Tháng)
 

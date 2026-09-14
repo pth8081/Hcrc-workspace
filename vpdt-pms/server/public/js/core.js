@@ -7268,10 +7268,10 @@ function buildApprovalSignatureColumnHTML(step, history) {
   const entries = (history || []).filter(h => h.step === step.order && h.action === 'APPROVED');
   if (entries.length === 0) {
     return `
-      <td>
+      <div class="as-sign-col">
         <span class="as-sign-role">${escapeHtml(step.name)}</span>
         <div class="as-sign-time" data-style="margin-top:44px;">Chưa ${escapeHtml(actionLabel.toLowerCase())}</div>
-      </td>
+      </div>
     `;
   }
   const namesHTML = entries.map(e => {
@@ -7283,11 +7283,11 @@ function buildApprovalSignatureColumnHTML(step, history) {
   `;
   }).join('<div data-style="height:6px;"></div>');
   return `
-    <td>
+    <div class="as-sign-col">
       <span class="as-sign-role">${escapeHtml(step.name)}</span>
       <div class="as-sign-stamp">✅ ĐÃ ${escapeHtml(actionLabel.toUpperCase())}</div>
       ${namesHTML}
-    </td>
+    </div>
   `;
 }
 
@@ -7317,8 +7317,8 @@ const APPROVAL_SLIP_CSS = `
         .approval-slip table.as-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
         .approval-slip .as-items-center { text-align: center; }
         .approval-slip .as-items-right { text-align: right; }
-        .approval-slip .as-sign-table { width: 100%; border-collapse: collapse; margin-top: 22px; table-layout: fixed; }
-        .approval-slip .as-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; border: 1px solid #ccc; }
+        .approval-slip .as-sign-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 36px; margin-top: 30px; padding-top: 18px; border-top: 1px solid #ddd; }
+        .approval-slip .as-sign-col { flex: 0 1 150px; max-width: 170px; text-align: center; vertical-align: top; }
         .approval-slip .as-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px; }
         .approval-slip .as-sign-stamp { border: 2px solid #16a34a; color: #16a34a; display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; transform: rotate(-6deg); margin: 6px 0 4px; }
         .approval-slip .as-sign-name { font-weight: bold; margin-top: 2px; }
@@ -7350,17 +7350,15 @@ function buildApprovalSlipShellHTML(opts) {
 
         ${bodyHTML}
 
-        <table class="as-sign-table">
-          <tr>
-            <td>
-              <span class="as-sign-role">${escapeHtml(requesterRoleLabel)}</span>
-              <div class="as-sign-name">${escapeHtml(requesterName || '')}</div>
-              ${requesterJobTitle ? `<div class="as-sign-jobtitle">${escapeHtml(requesterJobTitle)}</div>` : ''}
-              <div class="as-sign-time">${requesterTime || ''}</div>
-            </td>
-            ${signatureColumnsHTML}
-          </tr>
-        </table>
+        <div class="as-sign-row">
+          <div class="as-sign-col">
+            <span class="as-sign-role">${escapeHtml(requesterRoleLabel)}</span>
+            <div class="as-sign-name">${escapeHtml(requesterName || '')}</div>
+            ${requesterJobTitle ? `<div class="as-sign-jobtitle">${escapeHtml(requesterJobTitle)}</div>` : ''}
+            <div class="as-sign-time">${requesterTime || ''}</div>
+          </div>
+          ${signatureColumnsHTML}
+        </div>
 
         <div class="as-footer-note">${footerNote}</div>
       </div>
