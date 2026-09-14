@@ -1277,8 +1277,10 @@ function renderItPriceModalControls(p) {
     if (blocked) {
       html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể duyệt.</div>`;
     } else {
+      const wfForLabel = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
+      const approveLabel = resolveStepActionLabel(wfForLabel, p.currentStep);
       html += `<div class="flex gap-2 flex-wrap">
-        <button type="button" data-op="approveItPrice" data-arg0="${p.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+        <button type="button" data-op="approveItPrice" data-arg0="${p.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ ${escapeHtml(approveLabel)}</button>
         <button type="button" data-op="rejectItPrice" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
         <button type="button" data-op="requestItPriceInfoApprover" data-arg0="${p.id}" class="bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-600">✉️ Yêu Cầu Bổ Sung</button>
       </div>`;

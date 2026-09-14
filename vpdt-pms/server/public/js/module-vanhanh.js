@@ -1296,17 +1296,19 @@ function openOperationProcessModal(kind, id) {
   document.getElementById('operationProcessModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
 
   const wfConfig = meta.resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
   const controls = document.getElementById('operationProcessModalControls');
   if (canApprove) {
+    const stepActionLabel = resolveStepActionLabel(wf, o.currentStep);
     controls.innerHTML = `
       <div class="space-y-2">
         <textarea id="txtOperationProcessComment" rows="2" class="w-full border p-2 rounded text-xs" placeholder="Ghi chú (bắt buộc khi Từ chối/Yêu cầu bổ sung)"></textarea>
         <div class="flex justify-end gap-2">
           <button data-op="confirmProcessOperation" data-action="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
           <button data-op="confirmProcessOperation" data-action="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-          <button data-op="confirmProcessOperation" data-action="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
+          <button data-op="confirmProcessOperation" data-action="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)}</button>
         </div>
       </div>
     `;
@@ -1326,9 +1328,13 @@ function confirmProcessOperation(actionType) {
   if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
     return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
   }
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa hồ sơ về nháp để người tạo sửa lại)' };
+  const itemForLabel = currentProcessingOperationKind ? OPERATION_KIND_META[currentProcessingOperationKind].list().find(x => x.id === currentProcessingOperationId) : null;
+  const wfConfigForLabel = itemForLabel ? (OPERATION_KIND_META[currentProcessingOperationKind].resolveWfConfigForItem(itemForLabel) || { workflowId: 'WF_1STEP' }) : {};
+  const wfForLabel = DB.workflows.find(w => w.id === wfConfigForLabel.workflowId) || { steps: [] };
+  const approveLabel = itemForLabel ? resolveStepActionLabel(wfForLabel, itemForLabel.currentStep) : 'Phê Duyệt';
+  const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: approveLabel.toLowerCase(), REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa hồ sơ về nháp để người tạo sửa lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> hồ sơ này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,

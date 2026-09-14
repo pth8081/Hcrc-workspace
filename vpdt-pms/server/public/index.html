@@ -2900,6 +2900,10 @@
       <button type="button" data-op="setCarSubTab" data-arg0="REG" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
       <button type="button" data-op="setCarSubTab" data-arg0="CALENDAR" id="btnCarSubCalendar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Xe</button>
       <button type="button" data-op="setCarSubTab" data-arg0="DRIVER" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
+      <!-- "📊 Báo Cáo" — CHỈ hiện cho người quản lý (admin/carView.all/người duyệt ở BẤT KỲ phòng ban nào
+           trong carDeptWorkflows, xem canSeeCarReportClient() ở core.js), cùng khuôn "📊 Báo Cáo" của
+           Phòng Họp (module-phonghop.js) — ẩn/hiện + tô màu active gộp 1 lần ở setCarSubTab(). -->
+      <button type="button" data-op="setCarSubTab" data-arg0="REPORT" id="btnCarSubReport" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
     </div>
 
     <div id="carSubReg" class="space-y-6">
@@ -3038,15 +3042,26 @@
          chuyến nhiều ngày hiện đỏ ở MỌI ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu. -->
     <div id="carSubCalendar" class="hidden space-y-3">
       <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
-        <label class="font-semibold text-gray-600">Xem lịch ngày:</label>
-        <input id="carCalDate" type="date" data-op-change="renderCarScheduleCalendar" class="border p-1.5 rounded">
-        <span class="text-gray-500 italic">Chỉ xem — bấm ô đỏ để xem thông tin chuyến đang chiếm lịch của lái xe</span>
+        <div class="flex items-center gap-1">
+          <button type="button" id="btnCarCalViewDAY" data-op="setCarCalViewMode" data-arg0="DAY" class="px-3 py-1 rounded text-xs font-bold bg-indigo-700 text-white">📅 Ngày</button>
+          <button type="button" id="btnCarCalViewWEEK" data-op="setCarCalViewMode" data-arg0="WEEK" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Tuần</button>
+          <button type="button" id="btnCarCalViewMONTH" data-op="setCarCalViewMode" data-arg0="MONTH" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📆 Tháng</button>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" data-op="shiftCarCalDate" data-arg0="-1" title="Lùi lại" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">◀</button>
+          <input id="carCalDate" type="date" data-op-change="renderCarScheduleCalendar" class="border p-1.5 rounded">
+          <button type="button" data-op="shiftCarCalDate" data-arg0="1" title="Tiến tới" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">▶</button>
+          <button type="button" data-op="jumpCarCalToToday" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold text-indigo-700">Hôm nay</button>
+        </div>
+        <span id="carCalDayHint" class="text-gray-500 italic">Chỉ xem — bấm ô đỏ để xem thông tin chuyến đang chiếm lịch của lái xe</span>
         <div class="flex items-center gap-1.5 ml-auto">
           <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống</span>
           <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
         </div>
       </div>
       <div id="carCalendarGrid"></div>
+      <div id="carCalendarWeekGrid" class="hidden"></div>
+      <div id="carCalendarMonthGrid" class="hidden"></div>
     </div>
 
     <!-- Sub-tab: Lái Xe (tự xác nhận chuyến được phân công — assignedDriverUsername === currentUser) -->
@@ -3056,6 +3071,36 @@
         <p class="text-xs text-indigo-700">Danh sách phiếu đăng ký xe đã phê duyệt xong và phân công bạn làm lái xe — xác nhận để Phòng Hành Chính biết bạn đã nắm thông tin chuyến đi.</p>
         <div id="carDriverListWrap" class="space-y-2"></div>
         <div id="carDriverNoneNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Bạn chưa được phân công chuyến xe nào.</div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo (chỉ người quản lý — xem canSeeCarReportClient()/renderCarReportTab() ở
+         module-dangkyxe.js), cùng khuôn Báo Cáo Phòng Họp (module-phonghop.js). -->
+    <div id="carSubReport" class="hidden space-y-4">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Từ Ngày (theo thời gian bắt đầu đi)</label>
+          <input id="carReportFromDate" type="date" data-op-change="onCarReportFilterChange" class="border p-1.5 rounded">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="carReportToDate" type="date" data-op-change="onCarReportFilterChange" class="border p-1.5 rounded">
+        </div>
+      </div>
+      <div id="carReportSummaryCards" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-xs">🏢 Mức Sử Dụng Theo Phòng Ban</h4>
+          <div id="carReportDeptBars" class="space-y-2"></div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-xs">🧑‍✈️ Mức Sử Dụng Theo Lái Xe</h4>
+          <div id="carReportDriverBars" class="space-y-2"></div>
+        </div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">📈 Xu Hướng Theo Tháng (phiếu đã duyệt)</h4>
+        <div id="carReportMonthlyBars" class="space-y-2"></div>
       </div>
     </div>
   </div>
@@ -4287,6 +4332,7 @@
 
         <div>
           <label class="block text-xs font-bold text-gray-700 mb-2">Thêm / Sửa / Xóa Các Bước Theo Thứ Tự:</label>
+          <p class="text-[11px] text-gray-500 italic mb-2">Mỗi bước có 2 ô: <b>Tên bước</b> (ai duyệt, VD "Trưởng Phòng") và <b>Nhãn hành động</b> (chữ hiện trên nút bấm + chân ký khi hoàn tất bước đó — VD "Xác Nhận"/"Thẩm Định"/"Kiểm Duyệt" thay vì mặc định "Phê Duyệt"). Để trống ô nhãn hành động = dùng mặc định "Phê Duyệt".</p>
           <div id="stepBuilderContainer" class="space-y-2"></div>
           <button type="button" data-op="addStepRow" class="mt-2 text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-semibold hover:bg-gray-300">+ Thêm Bước Duyệt</button>
         </div>

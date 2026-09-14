@@ -146,15 +146,26 @@ function renderCarRoutePoints() {
 
 function setCarSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  // "📊 Báo Cáo" CHỈ hiện cho người quản lý (canSeeCarReportClient(), xem core.js) — chặn cả trường hợp
+  // subTab='REPORT' được truyền vào khi KHÔNG có quyền (URL/gọi hàm trực tiếp), lùi về REG thay vì hiện
+  // trắng — cùng khuôn setMeetingSubTab() (module-phonghop.js).
+  const canSeeReport = canSeeCarReportClient(currentUser);
+  if (subTab === 'REPORT' && !canSeeReport) subTab = 'REG';
+
   activeCarSubTab = subTab;
   document.getElementById('carSubReg').classList.toggle('hidden', subTab !== 'REG');
   document.getElementById('carSubCalendar').classList.toggle('hidden', subTab !== 'CALENDAR');
   document.getElementById('carSubDriver').classList.toggle('hidden', subTab !== 'DRIVER');
+  document.getElementById('carSubReport').classList.toggle('hidden', subTab !== 'REPORT');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnCarSubReg').className = subTab === 'REG' ? activeCls : inactiveCls;
   document.getElementById('btnCarSubCalendar').className = subTab === 'CALENDAR' ? activeCls : inactiveCls;
   document.getElementById('btnCarSubDriver').className = subTab === 'DRIVER' ? activeCls : inactiveCls;
+  // Gộp ẩn/hiện theo quyền + tô màu active trong ĐÚNG 1 lần gán className — tránh đúng bug đã sửa ở
+  // setMeetingSubTab() (gán className riêng sau đó xoá mất class "hidden" vừa toggle).
+  const btnReport = document.getElementById('btnCarSubReport');
+  if (btnReport) btnReport.className = (subTab === 'REPORT' ? activeCls : inactiveCls) + (canSeeReport ? '' : ' hidden');
   if (subTab === 'REG') {
     renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');
     renderCarRegs();
@@ -163,6 +174,7 @@ function setCarSubTab(subTab) {
   }
   if (subTab === 'CALENDAR') renderCarScheduleCalendar();
   if (subTab === 'DRIVER') renderCarDriverTab();
+  if (subTab === 'REPORT') renderCarReportTab();
 }
 
 // ============ Sub-tab "Lịch Xe" — lưới CHỈ XEM lịch trống/bận của lái xe (giống Lịch Họp ở
@@ -182,11 +194,96 @@ function generateCarTimeSlots() {
   return slots;
 }
 
+// carCalViewMode (mới, giống meetingCalViewMode ở module-phonghop.js) — "Lịch Xe" giờ có 3 chế độ: DAY
+// (lưới giờ chi tiết theo lái xe, hành vi CŨ giữ nguyên y hệt — chỉ xem, bấm ô đỏ xem thông tin),
+// WEEK/MONTH (mới, chỉ xem TỔNG QUAN — mỗi ô ngày hiện số chuyến đã có theo từng lái xe, bấm vào 1 ô
+// ngày bất kỳ nhảy về chế độ DAY của ngày đó). Mục đích: xem trống/bận của lái xe xa hơn 1 ngày mà
+// không phải dò từng ngày một qua ô chọn ngày.
+let carCalViewMode = 'DAY';
+
+function setCarCalViewMode(mode) {
+  carCalViewMode = mode;
+  ['DAY', 'WEEK', 'MONTH'].forEach(m => {
+    const btn = document.getElementById(`btnCarCalView${m}`);
+    if (!btn) return;
+    btn.classList.toggle('bg-indigo-700', m === mode);
+    btn.classList.toggle('text-white', m === mode);
+    btn.classList.toggle('bg-gray-200', m !== mode);
+    btn.classList.toggle('text-gray-700', m !== mode);
+  });
+  const hint = document.getElementById('carCalDayHint');
+  if (hint) hint.classList.toggle('hidden', mode !== 'DAY');
+  renderCarScheduleCalendar();
+}
+
+// Nhảy ngày/tuần/tháng (nút ◀ ▶) — bước nhảy tuỳ theo chế độ đang xem, cùng khuôn shiftMeetingCalDate().
+function shiftCarCalDate(delta) {
+  delta = Number(delta);
+  const dateInput = document.getElementById('carCalDate');
+  if (!dateInput || !dateInput.value) return;
+  const d = new Date(`${dateInput.value}T00:00:00`);
+  if (carCalViewMode === 'DAY') d.setDate(d.getDate() + delta);
+  else if (carCalViewMode === 'WEEK') d.setDate(d.getDate() + delta * 7);
+  else d.setMonth(d.getMonth() + delta);
+  dateInput.value = carCalTodayStrOf(d);
+  renderCarScheduleCalendar();
+}
+
+function carCalTodayStrOf(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function carCalTodayStr() { return carCalTodayStrOf(new Date()); }
+
+function jumpCarCalToToday() {
+  document.getElementById('carCalDate').value = carCalTodayStr();
+  renderCarScheduleCalendar();
+}
+
+// Bấm 1 ô ngày ở chế độ Tuần/Tháng -> nhảy thẳng về chế độ Ngày của đúng ngày đó để xem chi tiết.
+function jumpCarCalToDay(dateStr) {
+  document.getElementById('carCalDate').value = dateStr;
+  setCarCalViewMode('DAY');
+}
+
+// "Đang chiếm chỗ" như findCarPlateConflict() (lib/workflowEngine.js): mọi trạng thái TRỪ REJECTED/
+// CANCELLED đều tính là bận (PENDING/APPROVED/DRAFT), không chỉ APPROVED.
+function isCarRegOccupying(c) {
+  return c.status !== 'REJECTED' && c.status !== 'CANCELLED';
+}
+
+// Tổng hợp số chuyến (đang chiếm chỗ) theo từng lái xe cho 1 NGÀY cụ thể — dùng chung cho ô ngày ở cả
+// chế độ Tuần lẫn Tháng, cùng khuôn computeMeetingDaySummary() (module-phonghop.js).
+function computeCarDaySummary(dateStr, drivers) {
+  const dayStart = new Date(`${dateStr}T00:00:00`);
+  const dayEnd = new Date(`${dateStr}T23:59:59.999`);
+  const dayTrips = DB.carRegs.filter(c => {
+    if (!isCarRegOccupying(c)) return false;
+    const cStart = new Date(c.startTime), cEnd = new Date(c.endTime);
+    return cStart <= dayEnd && cEnd >= dayStart;
+  });
+  const byDriver = drivers.map(d => ({
+    username: d.username,
+    name: d.name,
+    count: dayTrips.filter(c => c.assignedDriverUsername === d.username).length
+  }));
+  return { totalCount: dayTrips.length, byDriver };
+}
+
 function renderCarScheduleCalendar() {
   const dateInput = document.getElementById('carCalDate');
   if (!dateInput) return;
-  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
-  const dateStr = dateInput.value;
+  if (!dateInput.value) dateInput.value = carCalTodayStr();
+  document.getElementById('carCalendarGrid').classList.toggle('hidden', carCalViewMode !== 'DAY');
+  document.getElementById('carCalendarWeekGrid').classList.toggle('hidden', carCalViewMode !== 'WEEK');
+  document.getElementById('carCalendarMonthGrid').classList.toggle('hidden', carCalViewMode !== 'MONTH');
+  if (carCalViewMode === 'WEEK') return renderCarScheduleCalendarWeekView(dateInput.value);
+  if (carCalViewMode === 'MONTH') return renderCarScheduleCalendarMonthView(dateInput.value);
+  renderCarScheduleCalendarDayView(dateInput.value);
+}
+
+function renderCarScheduleCalendarDayView(dateStr) {
   const grid = document.getElementById('carCalendarGrid');
   if (!grid) return;
 
@@ -207,12 +304,10 @@ function renderCarScheduleCalendar() {
       const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
       html += `<tr><td class="border p-1 text-center text-gray-500 font-mono">${slot}</td>`;
       drivers.forEach(d => {
-        // Cùng quy ước "đang chiếm chỗ" như findCarPlateConflict() ở lib/workflowEngine.js: mọi trạng
-        // thái TRỪ REJECTED/CANCELLED đều tính là bận (PENDING/APPROVED/DRAFT), không chỉ APPROVED — so
-        // sánh bằng Date đầy đủ (không chỉ giờ trong ngày) nên chuyến nhiều ngày tự động hiện đỏ ở MỌI
-        // ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu.
+        // So sánh bằng Date đầy đủ (không chỉ giờ trong ngày) nên chuyến nhiều ngày tự động hiện đỏ ở
+        // MỌI ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu.
         const booking = DB.carRegs.find(c => {
-          if (c.status === 'REJECTED' || c.status === 'CANCELLED') return false;
+          if (!isCarRegOccupying(c)) return false;
           if (c.assignedDriverUsername !== d.username) return false;
           const cStart = new Date(c.startTime);
           const cEnd = new Date(c.endTime);
@@ -230,6 +325,92 @@ function renderCarScheduleCalendar() {
   html += '</tbody></table></div>';
   grid.innerHTML = html;
   wireCarCalendarClick(grid);
+}
+
+const CAR_CAL_WEEKDAY_LABELS = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+
+// Trả về 7 Date của tuần (bắt đầu Thứ 2) chứa dateStr — cùng khuôn getMeetingCalWeekDates().
+function getCarCalWeekDates(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDay(); // 0=CN,1=T2..6=T7
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  return Array.from({ length: 7 }, (_, i) => {
+    const dt = new Date(monday);
+    dt.setDate(monday.getDate() + i);
+    return dt;
+  });
+}
+
+function renderCarScheduleCalendarWeekView(dateStr) {
+  const grid = document.getElementById('carCalendarWeekGrid');
+  if (!grid) return;
+  const todayStr = carCalTodayStr();
+  const weekDates = getCarCalWeekDates(dateStr);
+  const drivers = DB.users.filter(u => u.active !== false && u.isDriver);
+  const html = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+      ${weekDates.map((dt, i) => {
+        const dStr = carCalTodayStrOf(dt);
+        const summary = computeCarDaySummary(dStr, drivers);
+        const isToday = dStr === todayStr;
+        return `
+        <div data-op="jumpCarCalToDay" data-arg0="${dStr}" class="border rounded p-2 bg-white cursor-pointer hover:bg-indigo-50 hover:border-indigo-400 ${isToday ? 'ring-2 ring-indigo-500' : ''}">
+          <div class="text-center font-bold text-gray-700">${CAR_CAL_WEEKDAY_LABELS[i]}</div>
+          <div class="text-center text-gray-500 mb-1.5">${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}</div>
+          <div class="space-y-1">
+            ${drivers.length ? drivers.map(d => {
+              const c = summary.byDriver.find(x => x.username === d.username)?.count || 0;
+              return `<div class="px-1.5 py-1 rounded ${c > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}"><div class="leading-tight break-words">${escapeHtml(d.name)}</div><div class="font-bold">${c > 0 ? c + ' chuyến' : 'Trống'}</div></div>`;
+            }).join('') : '<div class="text-gray-400 italic text-center">Chưa có lái xe</div>'}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  grid.innerHTML = html;
+}
+
+// Trả về đúng 42 ô (6 tuần x 7 ngày, bắt đầu Thứ 2) phủ trọn tháng của dateStr — cùng khuôn
+// getMeetingCalMonthGridDates().
+function getCarCalMonthGridDates(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const year = d.getFullYear(), month = d.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const firstDay = firstOfMonth.getDay();
+  const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+  const gridStart = new Date(year, month, 1 - startOffset);
+  return { month, cells: Array.from({ length: 42 }, (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i)) };
+}
+
+function renderCarScheduleCalendarMonthView(dateStr) {
+  const grid = document.getElementById('carCalendarMonthGrid');
+  if (!grid) return;
+  const todayStr = carCalTodayStr();
+  const drivers = DB.users.filter(u => u.active !== false && u.isDriver);
+  const { month, cells } = getCarCalMonthGridDates(dateStr);
+  const html = `
+    <div class="bg-white border rounded overflow-hidden">
+      <div class="grid grid-cols-7 bg-gray-100 text-center font-bold text-gray-600">
+        ${CAR_CAL_WEEKDAY_LABELS.map(l => `<div class="p-1.5 border">${l}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7">
+        ${cells.map(dt => {
+          const dStr = carCalTodayStrOf(dt);
+          const inMonth = dt.getMonth() === month;
+          const isToday = dStr === todayStr;
+          const summary = computeCarDaySummary(dStr, drivers);
+          return `
+          <div data-op="jumpCarCalToDay" data-arg0="${dStr}" class="border p-1 min-h-[52px] cursor-pointer hover:bg-indigo-50 ${inMonth ? '' : 'opacity-40'} ${isToday ? 'ring-2 ring-indigo-500 ring-inset' : ''}">
+            <div class="font-bold text-gray-700">${dt.getDate()}</div>
+            ${summary.totalCount > 0 ? `<div class="text-red-600 font-bold">${summary.totalCount} chuyến</div>` : '<div class="text-emerald-600">Trống</div>'}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  grid.innerHTML = html;
 }
 
 // Gắn sự kiện click 1 lần cho mỗi lần tạo mới #carCalendarGrid (giữ nguyên khi chỉ đổi ngày, chỉ
@@ -809,10 +990,11 @@ function openCarProcessModal(carId) {
 
   const actionBtns = document.getElementById('carModalActionBtns');
   if (canApprove) {
+    const stepActionLabel = resolveStepActionLabel(wf, c.currentStep);
     actionBtns.innerHTML = `
       <button data-op="confirmProcessCarReg" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
       <button data-op="confirmProcessCarReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
-      <button data-op="confirmProcessCarReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessCarReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)} & Chuyển Bước</button>
     `;
   } else if (c.status === 'APPROVED' && (canDispatchCar || canCancelCarRegClient(c))) {
     // Fix 4 — phiếu đã APPROVED KHÔNG còn nút Duyệt/Từ chối nào (quy trình đã xong), nhưng vẫn có thể
@@ -841,9 +1023,15 @@ function confirmProcessCarReg(actionType) {
     return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối!' : 'Vui lòng nhập lý do cần bổ sung!');
   }
   const isApprove = actionType === 'APPROVE';
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa phiếu về nháp để người đăng ký sửa lại)' };
+  // Nhãn hành động của APPROVE ăn theo cấu hình riêng của ĐÚNG bước hiện tại (resolveStepActionLabel() —
+  // mặc định "Phê Duyệt" nếu bước chưa cấu hình riêng) — REJECT/REQUEST_CHANGES luôn giữ nguyên nhãn cũ.
+  const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
+  const wfConfig = c ? (DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP' }) : {};
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
+  const approveLabel = c ? resolveStepActionLabel(wf, c.currentStep) : 'Phê Duyệt';
+  const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: `${approveLabel.toLowerCase()} và chuyển bước`, REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa phiếu về nháp để người đăng ký sửa lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký xe này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến: "${escapeHtml(comment)}"</p>` : ''}`,
@@ -936,3 +1124,102 @@ async function processCarReg(actionType) {
   refreshApprovalSurfaces();
 }
 
+
+// ==========================================
+// ĐĂNG KÝ XE > "📊 Báo Cáo" — sub-tab MỚI ngay trong module Đăng Ký Xe (chỉ người quản lý, xem
+// canSeeCarReportClient() ở core.js), cùng khuôn "📊 Báo Cáo" của Phòng Họp (renderMeetingReportTab(),
+// module-phonghop.js) — viết lại 1 bản thanh tỷ lệ ngang RIÊNG (buildCarReportBarHTML()) vì nhóm tải
+// module "dangkyxe" KHÔNG có dependency lên nhóm "phonghop" (xem MODULE_LOAD_GROUPS ở core.js).
+// ==========================================
+function buildCarReportBarHTML(label, value, max, colorClass) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return `
+    <div>
+      <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
+      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" data-style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
+// Nhóm theo "Tháng YYYY" từ startTime (thời điểm ĐI thật, không phải lúc tạo phiếu) — chỉ nhận danh
+// sách ĐÃ LỌC SẴN theo trạng thái Đã Duyệt, khớp khuôn groupMeetingsByMonth() (module-phonghop.js).
+function groupCarRegsByMonth(approvedList) {
+  const buckets = {};
+  approvedList.forEach(c => {
+    const d = new Date(c.startTime);
+    if (isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!buckets[key]) buckets[key] = { key, label: `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`, count: 0, km: 0 };
+    buckets[key].count++;
+    buckets[key].km += Number(c.km) || 0;
+  });
+  return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function onCarReportFilterChange() { renderCarReportTab(); }
+
+function renderCarReportTab() {
+  const summaryEl = document.getElementById('carReportSummaryCards');
+  if (!summaryEl) return;
+  const fromDate = document.getElementById('carReportFromDate')?.value || '';
+  const toDate = document.getElementById('carReportToDate')?.value || '';
+
+  // Lọc theo ngày ĐI (startTime) — đúng câu hỏi "phòng ban/lái xe nào dùng nhiều trong khoảng này",
+  // khác bộ lọc "Từ Khóa/Trạng Thái" ở tab Đăng Ký (lọc Danh Sách theo ngày TẠO phiếu).
+  const filtered = DB.carRegs.filter(c => isInDateRange(c.startTime, fromDate, toDate));
+  const approved = filtered.filter(c => c.status === 'APPROVED' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED');
+  const pending = filtered.filter(c => c.status === 'PENDING');
+  const rejected = filtered.filter(c => c.status === 'REJECTED');
+  const totalKm = Math.round(approved.reduce((sum, c) => sum + (Number(c.km) || 0), 0) * 10) / 10;
+
+  summaryEl.innerHTML = [
+    { label: 'Tổng Số Phiếu', value: filtered.length, colorClass: 'text-blue-700' },
+    { label: 'Đã Duyệt', value: approved.length, colorClass: 'text-green-700' },
+    { label: 'Đang Chờ Duyệt', value: pending.length, colorClass: 'text-yellow-700' },
+    { label: 'Bị Từ Chối', value: rejected.length, colorClass: 'text-red-700' },
+    { label: 'Tổng Số KM (đã duyệt)', value: totalKm, colorClass: 'text-emerald-700' }
+  ].map(c => `
+    <div class="border rounded-lg p-2 text-center bg-white">
+      <div class="text-[11px] text-gray-500 font-semibold">${escapeHtml(c.label)}</div>
+      <div class="text-lg font-bold ${c.colorClass}">${c.value.toLocaleString('vi-VN')}</div>
+    </div>
+  `).join('');
+
+  // Theo Phòng Ban (chỉ phiếu ĐÃ DUYỆT) — sắp giảm dần theo số phiếu.
+  const byDeptMap = {};
+  approved.forEach(c => { const dept = c.dept || '(Không rõ)'; byDeptMap[dept] = (byDeptMap[dept] || 0) + 1; });
+  const byDept = Object.entries(byDeptMap).map(([dept, count]) => ({ dept, count })).sort((a, b) => b.count - a.count);
+  const maxDeptCount = Math.max(1, ...byDept.map(d => d.count));
+  const deptBarsEl = document.getElementById('carReportDeptBars');
+  if (deptBarsEl) {
+    deptBarsEl.innerHTML = byDept.length
+      ? byDept.map(d => buildCarReportBarHTML(d.dept, d.count, maxDeptCount, 'bg-sky-500')).join('')
+      : '<div class="text-xs text-gray-400 italic">Chưa có phiếu nào đã duyệt trong khoảng lọc này.</div>';
+  }
+
+  // Theo Lái Xe (chỉ phiếu ĐÃ DUYỆT có phân công lái xe) — duyệt HẾT danh sách lái xe hiện có (kể cả
+  // lái xe chưa có chuyến nào trong khoảng lọc) để thấy rõ ai đang KHÔNG được phân công, không chỉ
+  // những lái xe có dữ liệu.
+  const drivers = DB.users.filter(u => u.active !== false && u.isDriver);
+  const byDriver = drivers.map(d => {
+    const trips = approved.filter(c => c.assignedDriverUsername === d.username);
+    return { name: d.name, count: trips.length, km: Math.round(trips.reduce((s, c) => s + (Number(c.km) || 0), 0) * 10) / 10 };
+  }).sort((a, b) => b.count - a.count);
+  const maxDriverCount = Math.max(1, ...byDriver.map(d => d.count));
+  const driverBarsEl = document.getElementById('carReportDriverBars');
+  if (driverBarsEl) {
+    driverBarsEl.innerHTML = byDriver.length
+      ? byDriver.map(d => buildCarReportBarHTML(`${d.name} (${d.km} km)`, d.count, maxDriverCount, 'bg-emerald-500')).join('')
+      : '<div class="text-xs text-gray-400 italic">Chưa có lái xe nào được đánh dấu "Lái xe" trong Quản Lý Người Dùng.</div>';
+  }
+
+  // Xu hướng theo tháng (phiếu đã duyệt, nhóm theo tháng ĐI — startTime).
+  const monthly = groupCarRegsByMonth(approved);
+  const maxMonthCount = Math.max(1, ...monthly.map(m => m.count));
+  const monthlyEl = document.getElementById('carReportMonthlyBars');
+  if (monthlyEl) {
+    monthlyEl.innerHTML = monthly.length
+      ? monthly.map(m => buildCarReportBarHTML(`${m.label} (${m.km ? Math.round(m.km * 10) / 10 : 0} km)`, m.count, maxMonthCount, 'bg-indigo-500')).join('')
+      : '<div class="text-xs text-gray-400 italic">Chưa có phiếu nào đã duyệt trong khoảng lọc này.</div>';
+  }
+}

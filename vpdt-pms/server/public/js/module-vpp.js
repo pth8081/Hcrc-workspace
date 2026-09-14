@@ -574,10 +574,11 @@ function openVppRegModal(regId) {
   const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
   const actionBtns = document.getElementById('vppRegModalActionBtns');
   if (canApprove) {
+    const stepActionLabel = resolveStepActionLabel(wf, r.currentStep);
     actionBtns.innerHTML = `
       <button data-op="confirmProcessVppReg" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
       <button data-op="confirmProcessVppReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-      <button data-op="confirmProcessVppReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessVppReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)} & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
@@ -595,9 +596,13 @@ function confirmProcessVppReg(actionType) {
   const comment = document.getElementById('txtVppRegComment').value.trim();
   if (actionType === 'REJECT' && !comment) return alert('Vui lòng nhập lý do từ chối!');
   if (actionType === 'REQUEST_CHANGES' && !comment) return alert('Vui lòng nhập lý do cần bổ sung/chỉnh sửa!');
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung/chỉnh sửa (đưa hồ sơ về nháp để người đăng ký sửa lại)' };
+  const r = DB.vppRegistrations.find(item => item.id === currentProcessingVppRegId);
+  const wfConfigForLabel = r ? (DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP' }) : {};
+  const wfForLabel = DB.workflows.find(w => w.id === wfConfigForLabel.workflowId) || { steps: [] };
+  const approveLabel = r ? resolveStepActionLabel(wfForLabel, r.currentStep) : 'Phê Duyệt';
+  const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: approveLabel.toLowerCase(), REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung/chỉnh sửa (đưa hồ sơ về nháp để người đăng ký sửa lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> đăng ký này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,

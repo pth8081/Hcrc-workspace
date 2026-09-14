@@ -1237,6 +1237,7 @@ function openBudgetProcessModal(entryId) {
   const period = DB.budgetPeriods.find(p => p.id === item.periodId);
   const customFields = getBudgetPeriodTemplateFields(period || {});
   const wfConfig = DB.budgetDeptWorkflows[item.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
 
   document.getElementById('budgetProcessModalTitle').innerText = `📝 Ngân Sách ${item.entryKind === 'ACTUAL' ? 'Thực Hiện' : 'Phê Duyệt'}: ${item.code}`;
   document.getElementById('budgetProcessModalSub').innerText = `Kỳ: ${item.periodName} | Phòng ban: ${item.dept} | Tổng tiền: ${budgetEntryTotal(item).toLocaleString('vi-VN')} đ`;
@@ -1265,13 +1266,14 @@ function openBudgetProcessModal(entryId) {
   const canApprove = (item.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, item.history, item.currentStep);
   const controls = document.getElementById('budgetProcessModalControls');
   if (canApprove) {
+    const stepActionLabel = resolveStepActionLabel(wf, item.currentStep);
     controls.innerHTML = `
       <div class="space-y-2">
         <textarea id="txtBudgetProcessComment" rows="2" class="w-full border p-2 rounded text-xs" placeholder="Ghi chú (bắt buộc khi Từ chối/Yêu cầu bổ sung)"></textarea>
         <div class="flex justify-end gap-2">
           <button data-op="confirmProcessBudgetEntry" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
           <button data-op="confirmProcessBudgetEntry" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Yêu Cầu Bổ Sung</button>
-          <button data-op="confirmProcessBudgetEntry" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt</button>
+          <button data-op="confirmProcessBudgetEntry" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)}</button>
         </div>
       </div>
     `;
@@ -1289,9 +1291,13 @@ function confirmProcessBudgetEntry(actionType) {
   const comment = document.getElementById('txtBudgetProcessComment').value.trim();
   if (actionType === 'REJECT' && !comment) return alert('Vui lòng nhập lý do từ chối!');
   if (actionType === 'REQUEST_CHANGES' && !comment) return alert('Vui lòng nhập lý do cần bổ sung!');
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt', REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung/chỉnh sửa (đưa bản ngân sách về nháp để đơn vị sửa lại)' };
+  const item = DB.budgetEntries.find(x => x.id === currentProcessingBudgetEntryId);
+  const wfConfigForLabel = item ? (DB.budgetDeptWorkflows[item.dept] || { workflowId: 'WF_1STEP' }) : {};
+  const wfForLabel = DB.workflows.find(w => w.id === wfConfigForLabel.workflowId) || { steps: [] };
+  const approveLabel = item ? resolveStepActionLabel(wfForLabel, item.currentStep) : 'Phê Duyệt';
+  const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: approveLabel.toLowerCase(), REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung/chỉnh sửa (đưa bản ngân sách về nháp để đơn vị sửa lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> bản ngân sách này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,

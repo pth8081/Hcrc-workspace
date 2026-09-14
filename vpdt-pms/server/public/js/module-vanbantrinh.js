@@ -715,6 +715,7 @@ function openProcessSubmissionModal(subId) {
   const currentLayerKey = wfConfig.steps?.[sub.currentStep - 1]?.layerKey;
   const isFinalStep = sub.currentStep === wfConfig.steps?.length;
   const currentStepLabel = wfConfig.steps?.[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
+  const currentStepActionLabel = resolveStepActionLabel(wfConfig, sub.currentStep);
 
   const actionBtns = document.getElementById('subModalActionBtns');
   if (sub.pendingFileProposal) {
@@ -728,7 +729,7 @@ function openProcessSubmissionModal(subId) {
     actionBtns.innerHTML = `
       <button data-op="confirmProcessSubmission" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối / Trả Về</button>
       ${boSungBtnHTML}
-      <button data-op="confirmProcessSubmission" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ Phê Duyệt & Chuyển Bước</button>
+      <button data-op="confirmProcessSubmission" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(currentStepActionLabel)} & Chuyển Bước</button>
     `;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin tờ trình này.</span>`;
@@ -937,9 +938,12 @@ function confirmProcessSubmission(actionType) {
     return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
   const isApprove = actionType === 'APPROVE';
-  const titleMap = { APPROVE: '✅ Xác Nhận Phê Duyệt', REJECT: '❌ Xác Nhận Từ Chối / Trả Về', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
-  const labelMap = { APPROVE: 'Phê Duyệt', REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: 'phê duyệt và chuyển bước', REJECT: 'từ chối / trả về', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa tờ trình về nháp để người trình sửa lại toàn bộ nội dung + tệp rồi trình lại)' };
+  // Nhãn hành động của APPROVE ăn theo cấu hình riêng của ĐÚNG bước hiện tại (resolveStepActionLabel()).
+  const sub = DB.submissions.find(s => s.id === currentProcessingSubId);
+  const approveLabel = sub ? resolveStepActionLabel(resolveSubmissionWorkflow(sub), sub.currentStep) : 'Phê Duyệt';
+  const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối / Trả Về', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
+  const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
+  const actionTextMap = { APPROVE: `${approveLabel.toLowerCase()} và chuyển bước`, REJECT: 'từ chối / trả về', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa tờ trình về nháp để người trình sửa lại toàn bộ nội dung + tệp rồi trình lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,
@@ -1273,7 +1277,7 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
-  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
   // resolveEffectiveStepApprovers() — chỉ để XEM TRƯỚC đúng người "Theo vị trí" hiện đang khớp (nếu
   // bước gốc theo phòng ban dùng chế độ đó); giá trị THẬT vẫn do server tự dựng lại lúc Trình (xem

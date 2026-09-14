@@ -295,7 +295,7 @@ function renderWorkflowTemplatesTable() {
       <td class="p-2 border font-mono font-bold text-gray-800">${escapeHtml(wf.id)}</td>
       <td class="p-2 border font-bold text-emerald-800">${escapeHtml(wf.name)}</td>
       <td class="p-2 border text-center font-bold">${wf.steps.length} bước</td>
-      <td class="p-2 border text-xs">${wf.steps.map(s => `${s.order}. ${escapeHtml(s.name)}`).join(' ➔ ')}</td>
+      <td class="p-2 border text-xs">${wf.steps.map(s => `${s.order}. ${escapeHtml(s.name)} (${escapeHtml(s.actionLabel || 'Phê Duyệt')})`).join(' ➔ ')}</td>
       <td class="p-2 border text-center space-x-1">
         <button data-op="editWorkflowTemplate" data-arg0="${wf.id}" class="text-blue-600 font-bold hover:underline">Sửa</button>
         <button data-op="deleteWorkflowTemplate" data-arg0="${wf.id}" class="text-red-600 font-bold hover:underline">Xóa</button>
@@ -304,7 +304,11 @@ function renderWorkflowTemplatesTable() {
   `).join('');
 }
 
-function addStepRow(nameVal = '') {
+// actionLabelVal: nhãn hành động RIÊNG của bước này (VD "Xác Nhận"/"Thẩm Định") — hiện trên chân ký in
+// ("✅ ĐÃ <NHÃN>", xem buildApprovalSignatureColumnHTML() ở core.js) VÀ trên nút bấm của người duyệt bước
+// đó (xem openXxxProcessModal()/confirmProcessXxx() ở từng module) — để trống = mặc định "Phê Duyệt"
+// (hành vi cũ, hoàn toàn tương thích ngược với mẫu quy trình đã tạo trước khi có trường này).
+function addStepRow(nameVal = '', actionLabelVal = '') {
   const container = document.getElementById('stepBuilderContainer');
   if (!container) return;
   const count = container.children.length + 1;
@@ -314,6 +318,7 @@ function addStepRow(nameVal = '') {
   div.innerHTML = `
     <span class="font-bold text-xs w-16">Bước ${count}:</span>
     <input placeholder="Tên bước (VD: Trưởng phòng)" value="${escapeHtml(nameVal)}" class="border p-1 rounded text-xs flex-1 step-name-input" required>
+    <input placeholder="Nhãn hành động (mặc định: Phê Duyệt)" value="${escapeHtml(actionLabelVal)}" title="Chữ hiện trên nút bấm + chân ký khi hoàn tất bước này — VD: Xác Nhận, Thẩm Định, Kiểm Duyệt... Để trống = mặc định &quot;Phê Duyệt&quot;." class="border p-1 rounded text-xs w-44 step-actionlabel-input">
     <button type="button" data-op="removeStepRow" data-arg-el="0" class="text-red-500 font-bold px-2 text-xs">✕ Xóa</button>
   `;
   container.appendChild(div);
@@ -350,12 +355,13 @@ function saveWorkflowTemplate(e) {
   const code = document.getElementById('wfCode').value.trim();
   const name = document.getElementById('wfName').value.trim();
 
-  const stepInputs = document.querySelectorAll('.step-name-input');
-  if (stepInputs.length === 0) return alert('Vui lòng thêm ít nhất 1 bước cho quy trình!');
+  const stepRows = document.querySelectorAll('#stepBuilderContainer .step-row');
+  if (stepRows.length === 0) return alert('Vui lòng thêm ít nhất 1 bước cho quy trình!');
 
-  const steps = Array.from(stepInputs).map((input, idx) => ({
+  const steps = Array.from(stepRows).map((row, idx) => ({
     order: idx + 1,
-    name: input.value.trim()
+    name: row.querySelector('.step-name-input').value.trim(),
+    actionLabel: row.querySelector('.step-actionlabel-input').value.trim() || null
   }));
 
   if (editingCode) {
@@ -388,7 +394,7 @@ function editWorkflowTemplate(code) {
 
   const container = document.getElementById('stepBuilderContainer');
   container.innerHTML = '';
-  wf.steps.forEach(s => addStepRow(s.name));
+  wf.steps.forEach(s => addStepRow(s.name, s.actionLabel || ''));
 
   document.getElementById('btnCancelWf').classList.remove('hidden');
 }

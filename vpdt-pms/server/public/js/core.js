@@ -2270,7 +2270,7 @@ function resolveSubmissionWorkflow(sub) {
   }
   const baseConfig = getSubmissionDeptWorkflowConfig(sub.type, sub.dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
-  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(baseConfig, s.order); });
   return { steps, approvers };
@@ -2287,7 +2287,7 @@ function resolveContractApprovalWorkflow(contract) {
   }
   const baseConfig = DB.contractApprovalDeptWorkflows?.[contract.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
-  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(baseConfig, s.order); });
   return { steps, approvers };
@@ -2334,7 +2334,7 @@ function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selecte
   const baseConfig = DB.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
-  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name }));
+  const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(baseConfig, s.order); });
 
@@ -2582,6 +2582,18 @@ function canAccessCarModule(user) {
   // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
   const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere;
+}
+
+// "📊 Báo Cáo" (sub-tab riêng trong module Đăng Ký Xe) — CHỈ hiện cho người quản lý: admin, người có
+// carView phạm vi TOÀN CÔNG TY (carView.all — thường là Phòng Hành Chính), hoặc người duyệt ở BẤT KỲ
+// phòng ban nào trong carDeptWorkflows. Xe KHÔNG có quyền phẳng kiểu meetingApprove (canApproveMeeting)
+// vì luồng duyệt xe vốn cấu hình theo TỪNG phòng ban — gộp cả 2 điều kiện trên để khớp đúng "ai đang
+// thật sự quản lý/duyệt xe" thay vì để mọi người tạo phiếu đều thấy thống kê toàn công ty.
+function canSeeCarReportClient(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.carView?.all) return true;
+  return isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
 // Văn phòng phẩm: KHÔNG có khái niệm quyền "Xem/Tạo" riêng theo phòng ban (khác Xe/Phòng họp) — mọi
@@ -7237,13 +7249,28 @@ function getUserJobTitle(username) {
 // lấy người duyệt đầu tiên tìm thấy, bỏ sót các đồng phê duyệt còn lại). CẬP NHẬT: hiện thêm chức
 // danh (nếu người duyệt đã được admin gán) ngay dưới tên — tra theo h.username đã có sẵn trong mỗi
 // entry lịch sử (lib/workflowEngine.js luôn ghi kèm cả 2: approver=tên hiển thị, username=định danh).
+// Nhãn hành động của 1 bước cụ thể (theo thứ tự 1-based stepOrder) trong 1 quy trình `wf` (bản ghi
+// DB.workflows, hoặc object {steps:[...]} tương đương) — DÙNG CHUNG cho cả nút bấm hành động
+// (openXxxProcessModal()/confirmProcessXxx() ở từng module) lẫn chân ký in (buildApprovalSignatureColumnHTML()
+// ngay dưới), để 2 nơi luôn hiển thị ĐÚNG 1 nhãn như nhau cho cùng 1 bước — mặc định "Phê Duyệt" nếu
+// bước không tồn tại hoặc chưa cấu hình actionLabel riêng.
+function resolveStepActionLabel(wf, stepOrder) {
+  const step = wf?.steps?.[stepOrder - 1];
+  return (step?.actionLabel && step.actionLabel.trim()) || 'Phê Duyệt';
+}
+
+// step.actionLabel (tuỳ chọn, đặt ở khối "🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt" — xem addStepRow()/
+// saveWorkflowTemplate() ở module-itsupport-tier.js): nhãn hành động RIÊNG của bước đó (VD "Xác Nhận"/
+// "Thẩm Định"), thay cho "Phê Duyệt" mặc định — cho phép chân ký phản ánh đúng bản chất từng bước (VD
+// "Điều Hành Xe" chỉ XÁC NHẬN xe/lái xe, không thực sự "phê duyệt" như Trưởng Phòng).
 function buildApprovalSignatureColumnHTML(step, history) {
+  const actionLabel = (step.actionLabel && step.actionLabel.trim()) || 'Phê Duyệt';
   const entries = (history || []).filter(h => h.step === step.order && h.action === 'APPROVED');
   if (entries.length === 0) {
     return `
       <td>
         <span class="as-sign-role">${escapeHtml(step.name)}</span>
-        <div class="as-sign-time" data-style="margin-top:44px;">Chưa duyệt</div>
+        <div class="as-sign-time" data-style="margin-top:44px;">Chưa ${escapeHtml(actionLabel.toLowerCase())}</div>
       </td>
     `;
   }
@@ -7258,7 +7285,7 @@ function buildApprovalSignatureColumnHTML(step, history) {
   return `
     <td>
       <span class="as-sign-role">${escapeHtml(step.name)}</span>
-      <div class="as-sign-stamp">✅ ĐÃ PHÊ DUYỆT</div>
+      <div class="as-sign-stamp">✅ ĐÃ ${escapeHtml(actionLabel.toUpperCase())}</div>
       ${namesHTML}
     </td>
   `;

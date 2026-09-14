@@ -730,7 +730,8 @@ function renderPaymentManageTab() {
               mgmtBtns.push(`<button type="button" data-op="openEditPaymentRequest" data-arg0="${pr.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">✏️ Sửa</button>`);
             }
             if (canApprovePaymentRequestStepClient(currentUser, pr)) {
-              mgmtBtns.push(`<button type="button" data-op="approvePaymentRequestAction" data-arg0="${pr.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Duyệt</button>`);
+              const prApproveLabel = resolveStepActionLabel(resolvePaymentApprovalWorkflow(pr), pr.currentStep);
+              mgmtBtns.push(`<button type="button" data-op="approvePaymentRequestAction" data-arg0="${pr.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ ${escapeHtml(prApproveLabel)}</button>`);
             }
             if (canManage && pr.status === 'PENDING') {
               mgmtBtns.push(`<button type="button" data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>`);
@@ -843,10 +844,11 @@ function renderPaymentRequests() {
 function approvePaymentRequestAction(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
+  const approveLabel = resolveStepActionLabel(resolvePaymentApprovalWorkflow(pr), pr.currentStep);
   showConfirmModal({
-    title: 'Xác nhận đề nghị thanh toán',
-    bodyHTML: `Xác nhận đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
-    confirmLabel: 'Xác Nhận',
+    title: `${approveLabel} đề nghị thanh toán`,
+    bodyHTML: `${approveLabel} đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
+    confirmLabel: approveLabel,
     onConfirm: () => withApprovalAuth(async () => {
       let result;
       try {
