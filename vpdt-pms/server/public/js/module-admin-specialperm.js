@@ -23,12 +23,24 @@
 //    chọn cho bước duyệt "Theo vị trí" (POSITION mode) ở màn "Quy Trình & Phê Duyệt" (xem
 //    module-ngansach.js renderWorkflowTab()/module-itsupport-tier.js renderItPriceTierWorkflowTab()) —
 //    ĐỘC LẬP hoàn toàn khỏi DB.users thật đang có (cùng tinh thần 2 danh mục kia, admin có thể cấu hình
-//    trước cả khi có ai giữ đúng cặp đó). "items" của ô chọn nhiều là TÍCH CHÉO (cross-product) toàn bộ
-//    DB.jobTitles × DB.depts — thay vì bắt admin tự dựng từng cặp qua 2 dropdown rời rồi bấm "Thêm" (vốn
-//    thao tác nhiều bước hơn), gõ tìm trực tiếp "Trưởng phòng IT" là ra ngay đúng 1 dòng "Trưởng phòng —
-//    IT" để chọn — cùng 1 thao tác gõ-tìm-chọn như 2 danh mục kia, không cần dựng UI 2-dropdown-rời riêng
-//    cho mỗi cặp. Nhãn hiển thị "<jobTitle> — <dept>" suy ra TỪ chính cặp (không lưu field label riêng,
-//    tránh lệch nếu 1 trong 2 tên gốc đổi chữ về sau).
+//    trước cả khi có ai giữ đúng cặp đó). Nhãn hiển thị "<jobTitle> — <dept>" suy ra TỪ chính cặp (không
+//    lưu field label riêng, tránh lệch nếu 1 trong 2 tên gốc đổi chữ về sau).
+//
+//    KHÁC 2 danh mục kia — KHÔNG dùng renderMultiSelectDropdown() (chọn từ 1 danh sách TÍCH CHÉO có sẵn):
+//    BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "chọn chức danh tự ghép phòng đã bị sai... cho tôi
+//    tự chọn ghép chức danh vào phòng ban, nếu tôi chỉ chọn chức danh không ghép phòng cũng được, vì đơn
+//    giản như chức danh Tổng giám đốc không cần ghép phòng"): TÍCH CHÉO toàn bộ DB.jobTitles × DB.depts
+//    sinh ra rất nhiều tổ hợp KHÔNG có thật/vô nghĩa (VD "Nhân viên — Ban Giám Đốc") lẫn vào danh sách
+//    chọn, ĐỒNG THỜI không có cách nào chọn 1 chức danh KHÔNG ghép phòng ban (chức danh cấp cao áp dụng
+//    chung toàn công ty, VD "Tổng Giám Đốc" — trước đây dept bắt buộc phải có mới khớp được, xem
+//    resolvePositionApproverUsernamesClient()/matchesPositionPair()). Đổi sang widget TỰ DỰNG riêng
+//    (renderWorkflowParticipatingPositionsWidget() bên dưới): 2 ô gõ-tìm-chọn (sdd*, KHÔNG dùng
+//    <datalist> native — xem CLAUDE.md) — "Chức danh" (bắt buộc) + "Phòng ban" (TUỲ CHỌN, để trống = áp
+//    dụng cho MỌI phòng ban/đơn vị) — cùng 1 nút "➕ Thêm" ghép đúng 2 giá trị ĐANG GÕ thành 1 cặp mới,
+//    thay vì chọn 1 dòng có sẵn từ danh sách tích chéo. `wfPositionPairCatalogItems()` (tích chéo, giữ
+//    nguyên không đổi) giờ CHỈ còn dùng làm nguồn FALLBACK cho ô chọn "Theo vị trí" ở màn Quy Trình & Phê
+//    Duyệt khi danh mục NÀY còn rỗng (wfPositionPairPickerItems(), hành vi cũ giữ nguyên 100%) — không
+//    còn là nguồn cho chính ô XÂY danh mục này nữa.
 // ==========================================
 
 // Mã hoá 1 cặp {jobTitle,dept} thành 1 chuỗi "value" DUY NHẤT cho renderMultiSelectDropdown() (widget
@@ -44,8 +56,10 @@ function decodeWfPositionPair(value) {
   if (idx < 0) return null;
   return { jobTitle: value.slice(0, idx), dept: value.slice(idx + 1) };
 }
+// dept RỖNG (chức danh không ghép phòng ban, VD "Tổng Giám Đốc") -> nhãn chỉ còn tên chức danh, không
+// còn dấu "—" thừa — xem chú thích đầy đủ ở renderWorkflowParticipatingPositionsWidget() bên dưới.
 function wfPositionPairLabel(pair) {
-  return `${pair.jobTitle} — ${pair.dept}`;
+  return pair.dept ? `${pair.jobTitle} — ${pair.dept}` : pair.jobTitle;
 }
 
 function getWorkflowParticipatingDepts() {
@@ -214,18 +228,92 @@ function wfPositionPairPickerItems() {
   return catalog ? catalog.map(pair => ({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) })) : wfPositionPairCatalogItems();
 }
 
+// Nguồn gợi ý (sdd*, KHÔNG ép buộc — gõ tự do vẫn thêm được, cùng tinh thần mọi ô sdd* khác trong hệ
+// thống) cho 2 ô gõ-tìm-chọn của widget builder bên dưới — CẢ chức danh/phòng ban văn phòng LẪN Siêu Thị
+// (DB.storeJobTitles/DB.stores), vì builder cho phép admin TỰ GHÉP bất kỳ chức danh nào với bất kỳ phòng
+// ban nào (khác wfPositionPairCatalogItems() ở trên — hàm ĐÓ tích chéo có kiểm soát ranh giới 2 nhóm cho
+// mục đích khác, ô chọn "Theo vị trí" khi danh mục này còn rỗng).
+function wfPosBuilderJobTitleOptions() {
+  return [...new Set([...(DB.jobTitles || []), ...(DB.storeJobTitles || []).map(t => t.label)])];
+}
+function wfPosBuilderDeptOptions() {
+  return [...new Set([...(DB.depts || []), ...(DB.stores || [])])];
+}
+
+function renderWfPositionBuilderChips() {
+  const container = document.getElementById('workflowParticipatingPositionsMultiSelect');
+  const chipsEl = container && container.querySelector('[data-wfpos-chips]');
+  if (!container || !chipsEl || !container._wfposSelected) return;
+  const values = [...container._wfposSelected];
+  chipsEl.innerHTML = values.map(value => {
+    const pair = decodeWfPositionPair(value);
+    const lbl = pair ? wfPositionPairLabel(pair) : value;
+    return `
+      <span class="inline-flex items-center gap-1 bg-rose-100 text-rose-700 rounded-full px-2 py-0.5 text-[11px]">
+        ${escapeHtml(lbl)}
+        <button type="button" data-op="removeWfPositionPairFromBuilder" data-arg0="${escapeHtml(value)}" class="font-bold hover:text-rose-900">×</button>
+      </span>
+    `;
+  }).join('') || '<span class="text-gray-400 italic text-[11px]">Chưa thêm vị trí nào — bước duyệt "Theo vị trí" sẽ không có vị trí nào để chọn cho tới khi thêm ở đây.</span>';
+}
+
 function renderWorkflowParticipatingPositionsWidget() {
-  const initialSelected = (DB.workflowParticipatingPositions || []).map(encodeWfPositionPair);
-  renderMultiSelectDropdown('workflowParticipatingPositionsMultiSelect', wfPositionPairCatalogItems(), initialSelected, {
-    placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
-    emptyText: 'Chưa thêm vị trí nào — bước duyệt "Theo vị trí" sẽ không có vị trí nào để chọn cho tới khi thêm ở đây.'
-  });
+  const container = document.getElementById('workflowParticipatingPositionsMultiSelect');
+  if (!container) return;
+  container._wfposSelected = new Set((DB.workflowParticipatingPositions || []).map(encodeWfPositionPair));
+  container.innerHTML = `
+    <div data-wfpos-chips class="flex flex-wrap gap-1 mb-2"></div>
+    <div class="flex flex-wrap items-end gap-2">
+      <div class="flex-1 min-w-[180px]">
+        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Chức danh</label>
+        <input type="text" id="wfPosBuilderJobTitle" placeholder="🔍 Gõ tìm/nhập chức danh..." autocomplete="off"
+          class="w-full border p-1.5 rounded text-[11px]" data-sdd-list="wfPosBuilderJobTitleDatalist">
+        <div id="wfPosBuilderJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+      </div>
+      <div class="flex-1 min-w-[180px]">
+        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Phòng ban (tuỳ chọn — để trống nếu chức danh này áp dụng cho MỌI phòng ban/đơn vị, VD "Tổng Giám Đốc")</label>
+        <input type="text" id="wfPosBuilderDept" placeholder="🔍 Gõ tìm/nhập phòng ban (để trống = không ghép)..." autocomplete="off"
+          class="w-full border p-1.5 rounded text-[11px]" data-sdd-list="wfPosBuilderDeptDatalist">
+        <div id="wfPosBuilderDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+      </div>
+      <button type="button" data-op="addWfPositionPairFromBuilder" class="bg-cyan-700 text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-cyan-800 whitespace-nowrap">➕ Thêm</button>
+    </div>
+  `;
+  sddSetOptions('wfPosBuilderJobTitleDatalist', wfPosBuilderJobTitleOptions());
+  sddSetOptions('wfPosBuilderDeptDatalist', wfPosBuilderDeptOptions());
+  renderWfPositionBuilderChips();
+}
+
+function addWfPositionPairFromBuilder() {
+  const container = document.getElementById('workflowParticipatingPositionsMultiSelect');
+  if (!container || !container._wfposSelected) return;
+  const jobTitleInput = document.getElementById('wfPosBuilderJobTitle');
+  const deptInput = document.getElementById('wfPosBuilderDept');
+  const jobTitle = (jobTitleInput?.value || '').trim();
+  const dept = (deptInput?.value || '').trim();
+  if (!jobTitle) return alert('⛔ Vui lòng chọn/nhập Chức Danh trước khi thêm.');
+  const value = encodeWfPositionPair({ jobTitle, dept });
+  if (container._wfposSelected.has(value)) {
+    alert('⚠️ Vị trí này đã có trong danh sách.');
+  } else {
+    container._wfposSelected.add(value);
+    renderWfPositionBuilderChips();
+  }
+  jobTitleInput.value = '';
+  deptInput.value = '';
+  jobTitleInput.focus();
+}
+
+function removeWfPositionPairFromBuilder(value) {
+  const container = document.getElementById('workflowParticipatingPositionsMultiSelect');
+  if (!container || !container._wfposSelected) return;
+  container._wfposSelected.delete(value);
+  renderWfPositionBuilderChips();
 }
 
 async function saveWorkflowParticipatingPositions() {
-  const next = getMultiSelectValues('workflowParticipatingPositionsMultiSelect')
-    .map(decodeWfPositionPair)
-    .filter(Boolean);
+  const container = document.getElementById('workflowParticipatingPositionsMultiSelect');
+  const next = [...(container?._wfposSelected || [])].map(decodeWfPositionPair).filter(Boolean);
   const snapshot = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.workflowParticipatingPositions = next;
   const saved = await syncStorage('workflowParticipatingPositions');
@@ -248,7 +336,7 @@ async function saveWorkflowParticipatingPositions() {
 //   - 'CONFIGURED_EMPTY'    : đã chọn >=1 vị trí, nhưng hiện KHÔNG ai (active + canBeApprover) khớp đúng.
 //   - 'CONFIGURED_RESOLVED' : tra ra được người thật (users[] không rỗng).
 function previewWfPositionApprovers(positionPairs) {
-  const pairs = (positionPairs || []).filter(p => p && p.jobTitle && p.dept);
+  const pairs = (positionPairs || []).filter(p => p && p.jobTitle);
   if (!pairs.length) return { state: 'NOT_CONFIGURED', users: [] };
   const usernames = resolvePositionApproverUsernamesClient(pairs);
   const users = usernames.map(u => (DB.users || []).find(x => x.username === u)).filter(Boolean);

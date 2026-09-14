@@ -51,7 +51,7 @@ async function main() {
       assertEqual(count, 9, 'Danh mục rỗng phải fallback về đủ 3x3=9 tổ hợp như hành vi cũ');
     });
 
-    await run('Bug 1a: ô SỬA danh mục (khối 17, wfPositionPairCatalogItems) LUÔN hiện đủ toàn bộ tổ hợp — không tự giới hạn theo chính danh mục đang xây', async () => {
+    await run('Bug 1a: wfPositionPairCatalogItems() (nguồn FALLBACK cho picker "Theo vị trí" khi danh mục khối 17 còn rỗng) LUÔN hiện đủ toàn bộ tổ hợp — không tự giới hạn theo danh mục đang có', async () => {
       const count = await page.evaluate(() => {
         DB.jobTitles = ['Nhân viên', 'Trưởng phòng', 'Giám đốc'];
         DB.depts = ['Phòng Nhân Sự', 'Phòng Kế Toán', 'Phòng CNTT'];
@@ -97,6 +97,101 @@ async function main() {
       assertEqual(JSON.stringify(result.usernamesForA), JSON.stringify(['gd_a']), 'Cấu hình vị trí cho Siêu Thị A chỉ được ra đúng giám đốc Siêu Thị A, không lẫn giám đốc Siêu Thị B');
     });
 
+    // ===== Bug thật (rà soát theo yêu cầu người dùng "mục 17 quyền đặc biệt chọn chức danh tự ghép
+    // phòng đã bị sai... chỗ này bạn cho tôi tự chọn ghép chức danh vào phòng ban, nếu tôi chỉ chọn chức
+    // danh không ghép phòng cũng được, vì đơn giản như chức danh Tổng giám đốc không cần ghép phòng"):
+    // ô "Vị Trí Tham Gia Quy Trình" (khối 17) trước đây CHỈ cho chọn từ 1 danh sách TÍCH CHÉO có sẵn
+    // (renderMultiSelectDropdown()) — không tự ghép được cặp mới ngoài tích chéo, và dept LUÔN bắt buộc
+    // (không cách nào chỉ chọn riêng 1 chức danh áp dụng cho MỌI phòng ban). Đổi sang widget builder tự
+    // dựng: 2 ô gõ-tìm-chọn (Chức Danh bắt buộc + Phòng Ban tuỳ chọn) + nút "➕ Thêm". =====
+    await run('Bug MỚI: wfPositionPairLabel() — dept RỖNG thì nhãn CHỈ còn chức danh (không thừa dấu "—")', async () => {
+      const result = await page.evaluate(() => ({
+        withDept: wfPositionPairLabel({ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }),
+        noDept: wfPositionPairLabel({ jobTitle: 'Tổng Giám Đốc', dept: '' })
+      }));
+      assertEqual(result.withDept, 'Trưởng phòng — Phòng IT');
+      assertEqual(result.noDept, 'Tổng Giám Đốc', 'Không ghép phòng ban -> nhãn chỉ còn tên chức danh, không có "—" thừa');
+    });
+
+    await run('Bug MỚI: renderWorkflowParticipatingPositionsWidget() — builder tự dựng thêm/xoá được cặp CÓ ghép phòng ban LẪN cặp CHỈ chức danh (không ghép phòng ban)', async () => {
+      const result = await page.evaluate(() => {
+        DB.jobTitles = []; DB.depts = []; DB.storeJobTitles = []; DB.stores = [];
+        DB.workflowParticipatingPositions = [];
+        window.__alerts.length = 0;
+        renderWorkflowParticipatingPositionsWidget();
+
+        const jt = document.getElementById('wfPosBuilderJobTitle');
+        const dp = document.getElementById('wfPosBuilderDept');
+        const chipsText = () => document.querySelector('#workflowParticipatingPositionsMultiSelect [data-wfpos-chips]').textContent;
+        const chipCount = () => document.querySelectorAll('#workflowParticipatingPositionsMultiSelect [data-op="removeWfPositionPairFromBuilder"]').length;
+
+        // Thiếu chức danh -> chặn, báo alert, KHÔNG thêm gì (chip vẫn 0 — chỉ hiện text placeholder rỗng).
+        jt.value = ''; dp.value = 'Phòng IT';
+        addWfPositionPairFromBuilder();
+        const blockedNoJobTitle = window.__alerts.length === 1 && chipCount() === 0;
+
+        // 1) Cặp CÓ ghép phòng ban.
+        jt.value = 'Trưởng phòng'; dp.value = 'Phòng IT';
+        addWfPositionPairFromBuilder();
+        const hasWithDept = chipsText().includes('Trưởng phòng — Phòng IT');
+
+        // 2) Chức danh KHÔNG ghép phòng ban (để trống ô Phòng Ban).
+        jt.value = 'Tổng Giám Đốc'; dp.value = '';
+        addWfPositionPairFromBuilder();
+        const hasNoDept = chipsText().includes('Tổng Giám Đốc') && !chipsText().includes('Tổng Giám Đốc —');
+
+        // 3) Thêm trùng đúng cặp đã có -> báo alert cảnh báo, KHÔNG thêm lần 2 (đếm số chip qua nút xoá).
+        const chipCountBeforeDup = document.querySelectorAll('#workflowParticipatingPositionsMultiSelect [data-op="removeWfPositionPairFromBuilder"]').length;
+        jt.value = 'Tổng Giám Đốc'; dp.value = '';
+        addWfPositionPairFromBuilder();
+        const chipCountAfterDup = document.querySelectorAll('#workflowParticipatingPositionsMultiSelect [data-op="removeWfPositionPairFromBuilder"]').length;
+
+        // 4) Xoá cặp "Trưởng phòng — Phòng IT" -> còn lại đúng "Tổng Giám Đốc".
+        const removeBtn = [...document.querySelectorAll('#workflowParticipatingPositionsMultiSelect [data-op="removeWfPositionPairFromBuilder"]')]
+          .find(b => b.getAttribute('data-arg0').startsWith('Trưởng phòng'));
+        removeWfPositionPairFromBuilder(removeBtn.getAttribute('data-arg0'));
+        const afterRemove = chipsText();
+
+        return {
+          blockedNoJobTitle, hasWithDept, hasNoDept,
+          alertsAfterDup: window.__alerts.length,
+          chipCountBeforeDup, chipCountAfterDup,
+          stillHasNoDeptAfterRemove: afterRemove.includes('Tổng Giám Đốc'),
+          removedWithDept: !afterRemove.includes('Trưởng phòng — Phòng IT')
+        };
+      });
+      assert(result.blockedNoJobTitle, 'Thiếu Chức Danh phải bị chặn (alert), không thêm được cặp rỗng');
+      assert(result.hasWithDept, 'Phải thêm được cặp CÓ ghép phòng ban');
+      assert(result.hasNoDept, 'Phải thêm được chức danh KHÔNG ghép phòng ban (nhãn không có "—")');
+      assertEqual(result.chipCountBeforeDup, result.chipCountAfterDup, 'Thêm trùng cặp đã có KHÔNG được tạo thêm chip mới');
+      assertEqual(result.alertsAfterDup, 2, '1 alert do thiếu Chức Danh + 1 alert cảnh báo trùng');
+      assert(result.stillHasNoDeptAfterRemove, 'Xoá riêng cặp có dept KHÔNG được ảnh hưởng cặp không-dept còn lại');
+      assert(result.removedWithDept, 'Cặp vừa xoá phải biến mất khỏi danh sách chip');
+    });
+
+    await run('Bug MỚI: saveWorkflowParticipatingPositions() lưu đúng danh mục từ builder (kể cả cặp dept rỗng), và resolvePositionApproverUsernamesClient()/matchesPositionPair() khớp ĐÚNG cặp dept rỗng theo CHỈ chức danh', async () => {
+      const result = await page.evaluate(async () => {
+        DB.jobTitles = []; DB.depts = []; DB.storeJobTitles = []; DB.stores = [];
+        DB.workflowParticipatingPositions = [];
+        renderWorkflowParticipatingPositionsWidget();
+        document.getElementById('wfPosBuilderJobTitle').value = 'Tổng Giám Đốc';
+        document.getElementById('wfPosBuilderDept').value = '';
+        addWfPositionPairFromBuilder();
+        await saveWorkflowParticipatingPositions();
+
+        const tgd1 = { username: 'tgd1', dept: 'Ban Giám Đốc', jobTitle: 'Tổng Giám Đốc', active: true, perms: { canBeApprover: true } };
+        const tgd2 = { username: 'tgd2', dept: 'Chi Nhánh Khác', jobTitle: 'Tổng Giám Đốc', active: true, perms: { canBeApprover: true } };
+        const nv1 = { username: 'nv1', dept: 'Ban Giám Đốc', jobTitle: 'Nhân viên', active: true, perms: { canBeApprover: true } };
+        DB.users = [tgd1, tgd2, nv1];
+        const usernames = resolvePositionApproverUsernamesClient(DB.workflowParticipatingPositions);
+        return { saved: DB.workflowParticipatingPositions, usernames: usernames.sort() };
+      });
+      assertEqual(result.saved.length, 1);
+      assertEqual(result.saved[0].jobTitle, 'Tổng Giám Đốc');
+      assertEqual(result.saved[0].dept, '', 'Lưu đúng dept rỗng (không ghép phòng ban)');
+      assertEqual(JSON.stringify(result.usernames), JSON.stringify(['tgd1', 'tgd2']), 'Khớp CẢ 2 Tổng Giám Đốc dù khác phòng ban (dept rỗng = áp dụng mọi phòng ban), bỏ qua nv1 vì sai chức danh');
+    });
+
     await run('Bug 1b: initDatabase() phải đọc lại workflowParticipatingPositions từ /api/data (không còn mất sau tải lại trang)', async () => {
       const hasAssignment = await page.evaluate(() => {
         // Xác nhận initDatabase() (core.js) có dòng gán DB.workflowParticipatingPositions từ data —
@@ -105,6 +200,64 @@ async function main() {
         return initDatabase.toString().includes('DB.workflowParticipatingPositions = data.workflowParticipatingPositions');
       });
       assert(hasAssignment, 'initDatabase() phải gán lại DB.workflowParticipatingPositions từ response /api/data, giống hệt workflowParticipatingDepts sibling ngay phía trên nó');
+    });
+
+    // ===== Bug thật (rà soát theo báo cáo người dùng "lỗi tương tự chỉ nên ghi Lỗi kết nối đến máy chủ
+    // hoặc Hết phiên làm việc" — ảnh chụp màn hình "Không thể kết nối tới máy chủ dữ liệu (MSSQL API)...
+    // Chi tiết lỗi: HTTP 401"): initDatabase() (core.js, tải /api/data lúc đăng nhập/làm mới dữ liệu)
+    // trước đây gộp CHUNG 401 (phiên không hợp lệ) với lỗi kết nối/máy chủ thật — luôn hiện 1 thông báo
+    // sai bản chất, không đưa về màn đăng nhập như mọi điểm gọi API khác trong hệ thống. =====
+    await run('Bug MỚI: initDatabase() lỗi 401 -> gọi handleSessionExpired() TRƯỚC khi throw lỗi chung (KHÔNG còn rơi vào nhánh catch cũ hiện "MSSQL API"/"HTTP 401")', async () => {
+      // Stub handleSessionExpired() thay vì đi qua logout()/alert() thật — cô lập đúng 1 điều cần xác
+      // nhận (initDatabase() có rẽ nhánh 401 riêng hay không), không phụ thuộc trạng thái nền (session
+      // keep-alive/approval polling interval) có thể đang chạy sẵn từ các test trước trong cùng 1 trang.
+      const result = await page.evaluate(async () => {
+        const originalFetch = window.fetch;
+        const originalHandleSessionExpired = window.handleSessionExpired;
+        let handleSessionExpiredCalled = false;
+        window.handleSessionExpired = () => { handleSessionExpiredCalled = true; };
+        window.__alerts.length = 0;
+        window.fetch = async (url) => {
+          if (String(url).includes('/api/data')) return { status: 401, ok: false };
+          return originalFetch(url);
+        };
+        try {
+          await initDatabase({ username: 'x' });
+        } finally {
+          window.fetch = originalFetch;
+          window.handleSessionExpired = originalHandleSessionExpired;
+        }
+        return { handleSessionExpiredCalled, alerts: [...window.__alerts] };
+      });
+      assert(result.handleSessionExpiredCalled, 'initDatabase() lỗi 401 phải gọi handleSessionExpired()');
+      assertEqual(result.alerts.length, 0, 'KHÔNG được rơi thêm vào nhánh catch chung (handleSessionExpired() đã bị stub im lặng, alert cũ "MSSQL API"/"HTTP 401" không còn xuất hiện)');
+    });
+
+    await run('Bug MỚI: proceedAfterAuth() KHÔNG tiếp tục chạy finishLogin()/dataReady=true nếu phiên hết hạn giữa lúc initDatabase() đang tải (currentUser bị đặt null bởi handleSessionExpired()/logout())', async () => {
+      const result = await page.evaluate(async () => {
+        const someUser = { username: 'u1', name: 'Người Dùng Test', dept: 'Phòng IT', phone: '', email: '', perms: {}, active: true };
+        const originalInitDatabase = window.initDatabase;
+        const originalFinishLogin = window.finishLogin;
+        const currentUserBeforeTest = currentUser; // khôi phục lại sau — currentUser là biến toàn cục
+        // dùng chung suốt cả trang/các test còn lại trong file này, KHÔNG được để null vĩnh viễn.
+        let finishLoginCalled = false;
+        // Mô phỏng ĐÚNG hiệu ứng thật của initDatabase() khi gặp 401 giữa chừng: handleSessionExpired()
+        // -> logout() đặt currentUser=null — không cần fetch/logout() thật, chỉ cần đúng hệ quả cuối.
+        window.initDatabase = async () => { currentUser = null; };
+        window.finishLogin = (...args) => { finishLoginCalled = true; return originalFinishLogin.apply(null, args); };
+        let currentUserRightAfter;
+        try {
+          await proceedAfterAuth(someUser);
+          currentUserRightAfter = currentUser;
+        } finally {
+          window.initDatabase = originalInitDatabase;
+          window.finishLogin = originalFinishLogin;
+          currentUser = currentUserBeforeTest;
+        }
+        return { finishLoginCalled, currentUserAfter: currentUserRightAfter };
+      });
+      assert(!result.finishLoginCalled, 'finishLogin() KHÔNG được gọi khi phiên đã hết hạn (currentUser=null) ngay sau initDatabase() — nếu không sẽ lộ lại giao diện chính với dữ liệu rỗng đè lên màn đăng nhập vừa hiện ra do logout()');
+      assertEqual(result.currentUserAfter, null, 'currentUser phải giữ nguyên null, không bị finishLogin() ghi đè lại');
     });
 
     // ===== Bug 2: thông báo hết phiên đăng nhập =====

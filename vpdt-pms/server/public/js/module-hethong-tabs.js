@@ -183,8 +183,11 @@ function renderExternalApiKeysTable() {
       <td class="py-1.5 px-2">${escapeHtml(k.createdByName || k.createdBy || '')}</td>
       <td class="py-1.5 px-2">${k.createdAt ? new Date(k.createdAt).toLocaleString('vi-VN') : ''}</td>
       <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN') : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
-      <td class="py-1.5 px-2 space-x-1">${k.active === false ? '' : `
+      <td class="py-1.5 px-2 space-x-1">${k.active === false ? `
+        <button type="button" data-op="deleteExternalApiKeyAction" data-arg0="${k.id}" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700">🗑️ Xóa</button>
+      ` : `
         <button type="button" data-op="editExternalApiKeyAllowedIpsAction" data-arg0="${k.id}" class="bg-slate-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-slate-700">Sửa IP</button>
+        <button type="button" data-op="regenerateExternalApiKeyAction" data-arg0="${k.id}" class="bg-amber-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-amber-700">🔄 Tạo lại key</button>
         <button type="button" data-op="revokeExternalApiKeyAction" data-arg0="${k.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">Thu hồi</button>
       `}</td>
     </tr>
@@ -273,6 +276,49 @@ async function revokeExternalApiKeyAction(id) {
     // Cùng lý do ở createExternalApiKeyAction() — server đã tự ghi log, không gọi logSystemAction() ở đây.
   } catch (err) {
     alert(`⛔ Lỗi thu hồi API key: ${err.message}`);
+  }
+}
+
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "cho phép hành động Xóa, copy key, Tạo lại key bên
+// cạnh Thu hồi và sửa IP"): trước đây chỉ có Sửa IP/Thu hồi — không có cách nào xoay vòng (rotate) bí
+// mật của 1 key đang dùng mà KHÔNG mất lịch sử/phải cấu hình lại IP cho phép từ đầu (chỉ có thể Thu hồi
+// rồi Tạo Key mới, mất hẳn cấu hình IP + phải cập nhật id/tên bên ứng dụng ngoài). "Tạo lại key" giữ
+// nguyên id/tên/allowedIps, chỉ thay giá trị bí mật — mở lại hộp hiện key (dùng CHUNG #extApiKeyRevealBox/
+// copyExternalApiKeyReveal() với lúc Tạo Key, nên đã có sẵn nút "📋 Sao chép" — đúng ý "copy key").
+async function regenerateExternalApiKeyAction(id) {
+  const target = (DB.externalApiKeys || []).find(k => k.id === id);
+  const name = target ? target.name : '';
+  if (!confirm(`Tạo lại key cho "${name}"? Key HIỆN TẠI sẽ ngừng hoạt động NGAY LẬP TỨC — ứng dụng ngoài đang dùng key cũ phải được cập nhật sang key mới thì mới gọi được tiếp (không thể hoàn tác, tên/IP cho phép vẫn giữ nguyên).`)) return;
+  try {
+    const res = await fetch(`/api/admin/external-api-keys/${id}/regenerate`, { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    const { apiKey, ...record } = body;
+    DB.externalApiKeys = (DB.externalApiKeys || []).map(k => k.id === id ? record : k);
+    renderExternalApiKeysTable();
+    document.getElementById('extApiKeyRevealValue').textContent = apiKey;
+    document.getElementById('extApiKeyRevealBox').classList.remove('hidden');
+    // Cùng lý do ở createExternalApiKeyAction() — server đã tự ghi log, không gọi logSystemAction() ở đây.
+  } catch (err) {
+    alert(`⛔ Lỗi tạo lại API key: ${err.message}`);
+  }
+}
+
+// "Xóa" CHỈ áp dụng cho key ĐÃ thu hồi (server tự chặn 409 nếu còn active — xem
+// routes/externalAuthAdmin.js) — dọn dẹp bảng khỏi các entry "Đã thu hồi" cũ tồn đọng lâu ngày, buộc đi
+// qua bước Thu hồi (đã có xác nhận + dừng hoạt động ngay) trước, tránh bấm nhầm xoá luôn key đang dùng.
+async function deleteExternalApiKeyAction(id) {
+  const target = (DB.externalApiKeys || []).find(k => k.id === id);
+  const name = target ? target.name : '';
+  if (!confirm(`Xoá vĩnh viễn API key đã thu hồi "${name}" khỏi danh sách? Chỉ xoá bản ghi hiển thị (nhật ký hệ thống vẫn còn) — không thể hoàn tác.`)) return;
+  try {
+    const res = await fetch(`/api/admin/external-api-keys/${id}`, { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    DB.externalApiKeys = (DB.externalApiKeys || []).filter(k => k.id !== id);
+    renderExternalApiKeysTable();
+  } catch (err) {
+    alert(`⛔ Lỗi xoá API key: ${err.message}`);
   }
 }
 

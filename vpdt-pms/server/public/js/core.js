@@ -2002,12 +2002,22 @@ function getScopedDepts(user, scope) {
 // Khớp (jobTitle, dept) CHÍNH THỨC (u.jobTitle/u.dept) HOẶC bất kỳ cặp nào trong u.secondaryPositions[]
 // ("Vị Trí Kiêm Nhiệm" — xem lib/positionApprovers.js::matchesPositionPair() bản server, PHẢI khớp
 // đúng cùng logic 2 bên).
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "cho tôi tự chọn ghép chức danh vào phòng ban, nếu
+// tôi chỉ chọn chức danh không ghép phòng cũng được, vì đơn giản như chức danh Tổng giám đốc không cần
+// ghép phòng"): trước đây BẮT BUỘC phải có dept mới khớp được (pair.dept rỗng bị lọc bỏ hẳn ở
+// resolvePositionApproverUsernamesClient() bên dưới) — không cách nào cấu hình 1 chức danh áp dụng cho
+// MỌI phòng ban/đơn vị (VD "Tổng Giám Đốc"). pair.dept RỖNG giờ khớp CHỈ theo chức danh, bất kể phòng
+// ban của user là gì — mirror ĐÚNG lib/positionApprovers.js::matchesPositionPair() bản server.
 function clientMatchesPositionPair(user, pair) {
+  if (!pair.dept) {
+    if (user.jobTitle === pair.jobTitle) return true;
+    return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle);
+  }
   if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
   return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
 }
 function resolvePositionApproverUsernamesClient(positionPairs) {
-  const pairs = (positionPairs || []).filter(p => p && p.jobTitle && p.dept);
+  const pairs = (positionPairs || []).filter(p => p && p.jobTitle);
   if (!pairs.length) return [];
   return (DB.users || [])
     .filter(u => u && u.active !== false)
@@ -3018,6 +3028,14 @@ function migrateLegacyPerms(perms) {
 async function initDatabase(loggingInUser) {
   try {
     const res = await fetch('/api/data');
+    // BUG THẬT đã sửa (rà soát theo báo cáo người dùng "lỗi tương tự chỉ nên ghi Lỗi kết nối đến máy chủ
+    // hoặc Hết phiên làm việc"): trước đây MỌI lỗi ở đây (kể cả 401 — phiên đăng nhập hết hạn/cookie hết
+    // hạn) đều rơi vào catch chung bên dưới, hiện alert "Không thể kết nối tới máy chủ dữ liệu (MSSQL
+    // API)... Chi tiết lỗi: HTTP 401" — sai bản chất (401 không phải lỗi kết nối/MSSQL, mà là phiên đăng
+    // nhập không hợp lệ) và không đưa người dùng về màn đăng nhập như handleSessionExpired() đã làm ở
+    // MỌI điểm gọi API khác trong hệ thống (res.status===401 check trước throw, xem các hàm dùng chung
+    // quanh đây). Tách riêng 401 ra xử lý đúng TRƯỚC khi throw lỗi chung.
+    if (res.status === 401) { handleSessionExpired(); return; }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
@@ -3288,7 +3306,7 @@ async function initDatabase(loggingInUser) {
     applyAllCoreFieldCustomizations();
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
-    alert('⛔ Không thể kết nối tới máy chủ dữ liệu (MSSQL API). Vui lòng kiểm tra lại kết nối / liên hệ Quản trị viên.\n\nChi tiết lỗi: ' + e.message);
+    alert('⛔ Lỗi kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại, hoặc liên hệ Quản trị viên nếu vẫn không được.\n\nChi tiết lỗi: ' + e.message);
   }
 }
 
@@ -5523,6 +5541,12 @@ async function proceedAfterAuth(user) {
   // initDatabase() tải dữ liệu — chỉ ẩn đi NGAY TRƯỚC khi finishLogin() thật sự lộ giao diện chính, để
   // không có khoảng trống trắng màn hình giữa 2 lượt ẩn/hiện. Xem chú thích đầy đủ tại hideBootSplash().
   await initDatabase(user);
+  // BUG THẬT đã sửa cùng đợt (initDatabase() 401 -> handleSessionExpired() -> logout()): nếu phiên vừa
+  // đăng nhập lại bị server từ chối NGAY LÚC tải dữ liệu (401 — cookie phiên không hợp lệ), logout() đã
+  // tự ẩn hết giao diện chính + hiện lại màn đăng nhập rồi — KHÔNG được tiếp tục chạy dataReady=true/
+  // finishLogin(user) ngay sau đó nữa, nếu không sẽ lộ lại giao diện chính (với dữ liệu rỗng) đè lên màn
+  // đăng nhập vừa hiện, phủ nhận hoàn toàn logout() vừa xảy ra.
+  if (!currentUser) return;
   dataReady = true;
   hideBootSplash();
   finishLogin(user);

@@ -381,10 +381,13 @@ function mergeGroupsBasePermsServer(groupsPerms) {
 // ở điểm ghi DUY NHẤT (giống các field admin-editable khác) — không bắt buộc phải khớp đúng 1 cặp có
 // trong DB.workflowParticipatingPositions (danh mục có thể đổi sau lúc gán, giữ nguyên lựa chọn cũ
 // tương tự approversByPosition[] khi 1 cặp bị xoá khỏi danh mục).
+// dept RỖNG hợp lệ (BUG THẬT đã sửa, cùng đợt "chức danh không cần ghép phòng ban" — xem
+// lib/positionApprovers.js::matchesPositionPair()) — chỉ jobTitle mới bắt buộc, dept optional (chức
+// danh kiêm nhiệm kiểu "Tổng Giám Đốc" không gắn với 1 phòng ban cụ thể nào).
 function sanitizeSecondaryPositions(list) {
   if (!Array.isArray(list)) return [];
   return list
-    .filter(p => p && typeof p.jobTitle === 'string' && typeof p.dept === 'string' && p.jobTitle.trim() && p.dept.trim())
+    .filter(p => p && typeof p.jobTitle === 'string' && typeof p.dept === 'string' && p.jobTitle.trim())
     .slice(0, 20)
     .map(p => ({ jobTitle: p.jobTitle.trim().slice(0, 200), dept: p.dept.trim().slice(0, 200) }));
 }

@@ -174,4 +174,87 @@ router.post('/:id/revoke', async (req, res) => {
   }
 });
 
+// POST /api/admin/external-api-keys/:id/regenerate — sinh key THẬT mới cho 1 key ĐANG hoạt động, giữ
+// nguyên id/tên/allowedIps/audit trail (createdBy/createdAt) — dùng khi cần xoay vòng (rotate) bí mật mà
+// không muốn mất lịch sử/phải cấu hình lại IP cho phép từ đầu như thu hồi + tạo mới. Key CŨ ngừng hoạt
+// động NGAY LẬP TỨC (bị ghi đè keyHash) — không có cách khôi phục lại key cũ. Không cho phép regenerate
+// key đã bị thu hồi (giống allowed-ips — đã thu hồi là trạng thái cuối, phải tạo key mới hẳn).
+router.post('/:id/regenerate', async (req, res) => {
+  try {
+    const allowed = await isCurrentlyAdmin(req.user.username);
+    if (!allowed) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được tạo lại API key' });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+
+    const rawKey = generateApiKey();
+    const keyHash = await hashApiKey(rawKey);
+    let target = null;
+    await withLockedAppDataValue('externalApiKeys', (list) => {
+      const current = Array.isArray(list) ? list : [];
+      const idx = current.findIndex(k => k.id === id);
+      if (idx === -1) throw new Error('NOT_FOUND');
+      if (current[idx].active === false) throw new Error('ALREADY_REVOKED');
+      const updated = [...current];
+      updated[idx] = {
+        ...current[idx], keyPrefix: keyDisplayPrefix(rawKey), keyHash,
+        lastUsedAt: null,
+        regeneratedBy: req.user.username, regeneratedByName: req.freshUser?.name || req.user.username,
+        regeneratedAt: new Date().toISOString()
+      };
+      target = updated[idx];
+      return updated;
+    });
+
+    insertSystemLog({
+      username: req.user.username, fullName: req.freshUser?.name || req.user.username, ipAddress: req.ip,
+      module: 'EXTERNAL_AUTH', actionType: 'API_KEY_REGENERATED', targetObject: target?.name || `#${id}`,
+      description: `Tạo lại API key cho ứng dụng "${target?.name || ''}" (id #${id}) — key cũ ngừng hoạt động ngay lập tức`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (tạo lại API key):', e.message));
+
+    const { keyHash: _omit, ...safeRecord } = target;
+    res.json({ ...safeRecord, apiKey: rawKey });
+  } catch (err) {
+    if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Không tìm thấy API key' });
+    if (err.message === 'ALREADY_REVOKED') return res.status(409).json({ error: 'API key này đã bị thu hồi, không thể tạo lại — hãy tạo key mới' });
+    sendServerError(res, 500, err, 'POST /api/admin/external-api-keys/:id/regenerate', 'Không thể tạo lại API key');
+  }
+});
+
+// DELETE /api/admin/external-api-keys/:id — xoá VĨNH VIỄN khỏi danh sách. CHỈ xoá được key ĐÃ thu hồi
+// (active===false) — buộc đi qua bước "Thu hồi" trước (dừng hoạt động NGAY, có xác nhận riêng) rồi mới
+// dọn dẹp entry cũ sau, tránh admin bấm nhầm xoá luôn 1 key ứng dụng ngoài vẫn đang dùng mà không có
+// bước cảnh báo tách bạch. Nhật ký hệ thống (systemLogStore) lưu RIÊNG, không mất khi xoá bản ghi này.
+router.delete('/:id', async (req, res) => {
+  try {
+    const allowed = await isCurrentlyAdmin(req.user.username);
+    if (!allowed) return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được xoá API key' });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+
+    let target = null;
+    await withLockedAppDataValue('externalApiKeys', (list) => {
+      const current = Array.isArray(list) ? list : [];
+      const idx = current.findIndex(k => k.id === id);
+      if (idx === -1) throw new Error('NOT_FOUND');
+      if (current[idx].active !== false) throw new Error('STILL_ACTIVE');
+      target = current[idx];
+      return current.filter(k => k.id !== id);
+    });
+
+    insertSystemLog({
+      username: req.user.username, fullName: req.freshUser?.name || req.user.username, ipAddress: req.ip,
+      module: 'EXTERNAL_AUTH', actionType: 'API_KEY_DELETED', targetObject: target?.name || `#${id}`,
+      description: `Xoá vĩnh viễn API key đã thu hồi "${target?.name || ''}" (id #${id})`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (xoá API key):', e.message));
+
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Không tìm thấy API key' });
+    if (err.message === 'STILL_ACTIVE') return res.status(409).json({ error: 'Chỉ xoá được API key đã thu hồi — hãy Thu hồi trước khi xoá' });
+    sendServerError(res, 500, err, 'DELETE /api/admin/external-api-keys/:id', 'Không thể xoá API key');
+  }
+});
+
 module.exports = router;

@@ -423,6 +423,71 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(res.status, 200);
   });
 
+  // ===== "Tạo lại key" (regenerate) + "Xóa" (delete) — người dùng yêu cầu "cho phép hành động Xóa, copy
+  // key, Tạo lại key bên cạnh Thu hồi và sửa IP" =====
+  await run('POST .../:id/regenerate: sinh apiKey THẬT mới, giữ nguyên id/tên/allowedIps, key CŨ ngừng hoạt động ngay', async () => {
+    resetAppData();
+    // 127.0.0.1/8 (không phải chỉ 1 IP không liên quan) — vì bài test này còn GỌI THẬT verify-credentials
+    // ngay sau đó (từ 127.0.0.1, môi trường test) để xác nhận key mới hoạt động, khác bài test 403/409/404
+    // ở dưới chỉ kiểm tra mã trạng thái của chính route regenerate, không cần key verify được.
+    const created = await api('POST', '/api/admin/external-api-keys', { name: 'App Xoay Key', allowedIps: '127.0.0.1/8' }, ADMIN);
+    const oldApiKey = created.body.apiKey;
+    const res = await api('POST', `/api/admin/external-api-keys/${created.body.id}/regenerate`, undefined, ADMIN);
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.body.apiKey && res.body.apiKey.startsWith('hcrc_'));
+    assert.notStrictEqual(res.body.apiKey, oldApiKey, 'Phải là key MỚI, khác key cũ');
+    assert.strictEqual(res.body.id, created.body.id, 'Giữ nguyên id');
+    assert.strictEqual(res.body.name, 'App Xoay Key', 'Giữ nguyên tên');
+    assert.deepStrictEqual(res.body.allowedIps, ['127.0.0.1/8'], 'Giữ nguyên allowedIps');
+    assert.strictEqual(res.body.keyHash, undefined, 'Response không được kèm keyHash');
+
+    // Key CŨ không còn xác thực được nữa (đã bị ghi đè keyHash), key MỚI thì được.
+    const oldStillWorks = await verifyApi(oldApiKey, { account: EMP.username, password: 'NhanVien123!' });
+    assert.strictEqual(oldStillWorks.status, 401, 'Key CŨ phải ngừng hoạt động ngay sau regenerate');
+    const newWorks = await verifyApi(res.body.apiKey, { account: EMP.username, password: 'NhanVien123!' });
+    assert.strictEqual(newWorks.status, 200);
+    assert.strictEqual(newWorks.body.success, true, 'Key MỚI phải xác thực được ngay');
+  });
+
+  await run('POST .../:id/regenerate: key đã thu hồi -> 409; id sai -> 404; người không phải admin -> 403', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Test Regenerate');
+    const forbidden = await api('POST', `/api/admin/external-api-keys/${created.body.id}/regenerate`, undefined, EMP);
+    assert.strictEqual(forbidden.status, 403);
+
+    await api('POST', `/api/admin/external-api-keys/${created.body.id}/revoke`, undefined, ADMIN);
+    const onRevoked = await api('POST', `/api/admin/external-api-keys/${created.body.id}/regenerate`, undefined, ADMIN);
+    assert.strictEqual(onRevoked.status, 409);
+
+    const notFound = await api('POST', '/api/admin/external-api-keys/999999/regenerate', undefined, ADMIN);
+    assert.strictEqual(notFound.status, 404);
+  });
+
+  await run('DELETE .../:id: XOÁ được key ĐÃ thu hồi -> biến mất khỏi danh sách; key CÒN active -> 409 (phải thu hồi trước)', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Sẽ Bị Xoá');
+    const stillActive = await api('DELETE', `/api/admin/external-api-keys/${created.body.id}`, undefined, ADMIN);
+    assert.strictEqual(stillActive.status, 409, 'Chưa thu hồi thì chưa xoá được');
+    assert.strictEqual(APP_DATA.externalApiKeys.length, 1, 'Chưa bị xoá');
+
+    await api('POST', `/api/admin/external-api-keys/${created.body.id}/revoke`, undefined, ADMIN);
+    const deleted = await api('DELETE', `/api/admin/external-api-keys/${created.body.id}`, undefined, ADMIN);
+    assert.strictEqual(deleted.status, 200);
+    assert.strictEqual(APP_DATA.externalApiKeys.length, 0, 'Đã xoá khỏi danh sách');
+
+    const notFound = await api('DELETE', `/api/admin/external-api-keys/${created.body.id}`, undefined, ADMIN);
+    assert.strictEqual(notFound.status, 404, 'Xoá lần 2 -> không còn tồn tại');
+  });
+
+  await run('DELETE .../:id: người không phải admin bị chặn 403', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Test Xoá Quyền');
+    await api('POST', `/api/admin/external-api-keys/${created.body.id}/revoke`, undefined, ADMIN);
+    const forbidden = await api('DELETE', `/api/admin/external-api-keys/${created.body.id}`, undefined, EMP);
+    assert.strictEqual(forbidden.status, 403);
+    assert.strictEqual(APP_DATA.externalApiKeys.length, 1, 'Không bị xoá vì bị chặn quyền');
+  });
+
   await run('POST .../:id/allowed-ips: người không phải admin bị chặn 403; key đã thu hồi -> 409; id sai -> 404', async () => {
     resetAppData();
     const created = await createKeyAsAdmin('App Test Sửa IP');

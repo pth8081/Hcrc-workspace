@@ -37,13 +37,23 @@
 // (lib/attendance.js::resolveWorkModelForEmployeeCode() dựa vào posType) — cả 2 vẫn CHỈ đọc u.jobTitle/
 // u.dept CHÍNH THỨC như trước, đã xác nhận với người dùng (mỗi người vẫn đúng 1 chức danh/phòng ban
 // "chính", kiêm nhiệm chỉ nới thêm phạm vi được TÍNH LÀ approver, không đổi danh tính chính thức).
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "cho tôi tự chọn ghép chức danh vào phòng ban, nếu
+// tôi chỉ chọn chức danh không ghép phòng cũng được, vì đơn giản như chức danh Tổng giám đốc không cần
+// ghép phòng"): trước đây BẮT BUỘC phải có dept mới khớp được — không cách nào cấu hình 1 chức danh áp
+// dụng cho MỌI phòng ban/đơn vị. pair.dept RỖNG giờ khớp CHỈ theo chức danh, bất kể phòng ban của user
+// là gì — mirror ĐÚNG public/js/core.js::clientMatchesPositionPair() bản client, sửa 1 bên PHẢI sửa cả
+// 2 bên (xem chú thích đầu file).
 function matchesPositionPair(user, pair) {
+  if (!pair.dept) {
+    if (user.jobTitle === pair.jobTitle) return true;
+    return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle);
+  }
   if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
   return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
 }
 
 function resolvePositionApprovers(positionPairs, users) {
-  const pairs = (positionPairs || []).filter(p => p && p.jobTitle && p.dept);
+  const pairs = (positionPairs || []).filter(p => p && p.jobTitle);
   if (!pairs.length) return [];
   return (users || [])
     .filter(u => u && u.active !== false)
