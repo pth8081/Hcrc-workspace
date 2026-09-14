@@ -374,7 +374,7 @@ function saveWorkflowTemplate(e) {
   alert('✅ Đã lưu mẫu quy trình thành công!');
   resetWorkflowForm();
   renderWorkflowTab();
-  renderQuickApplyWfSelect();
+  renderQuickApplySection();
 }
 
 function editWorkflowTemplate(code) {
@@ -425,6 +425,6 @@ function deleteWorkflowTemplate(code) {
   syncStorage('workflows');
   logSystemAction('CONFIG', 'DELETE_WORKFLOW_TEMPLATE', `Xóa mẫu quy trình [${code}]`, 'SUCCESS', code);
   renderWorkflowTab();
-  renderQuickApplyWfSelect();
+  renderQuickApplySection();
 }
 

@@ -34,6 +34,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('formSection').classList.toggle('hidden', subTab !== 'FORM');
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
+  document.getElementById('quickApplySection').classList.toggle('hidden', subTab !== 'QUICKAPPLY');
   document.getElementById('uploadTypeSection').classList.toggle('hidden', subTab !== 'UPLOAD');
   document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
   document.getElementById('trashSection').classList.toggle('hidden', subTab !== 'TRASH');
@@ -43,6 +44,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubAdmin').className = subTab === 'ADMIN' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubQuickApply').className = subTab === 'QUICKAPPLY' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubUpload').className = subTab === 'UPLOAD' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
@@ -55,12 +57,14 @@ function setSystemSubTab(subTab) {
   if (subTab === 'FORM') { switchFormTab(activeFormTab); }
   if (subTab === 'WORKFLOW') {
     renderWorkflowTab();
-    renderQuickApplyWfSelect();
     // Chỉ tự sinh mã khi ô Mã Quy Trình đang trống (lần đầu vào tab trong phiên này) — nếu đang có sẵn
     // giá trị (đang Sửa 1 mẫu cũ, hoặc vừa tạo mã nháp cho mẫu mới) thì giữ nguyên, không ghi đè mỗi lần
     // chuyển qua lại giữa các tab con của Hệ Thống.
     if (!document.getElementById('wfCode').value) document.getElementById('wfCode').value = generateWfCode();
   }
+  // QUICKAPPLY: sub-tab riêng tách từ khối "⚡ Áp Dụng Nhanh" cũ trong WORKFLOW ra (xem module-workflow.js) —
+  // nhiều cấu hình độc lập (mẫu quy trình + danh sách module) thay vì 1 mẫu áp cho toàn bộ.
+  if (subTab === 'QUICKAPPLY') { renderQuickApplySection(); }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
   if (subTab === 'TRASH') { loadTrashItems(); }

@@ -48,6 +48,11 @@ const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 // lib/systemLogStore.js): ghi (mọi user) qua POST /api/log, xoá (chỉ admin) qua DELETE /api/log.
 const ADMIN_ONLY_KEYS = new Set([
   'users', 'permGroups', 'emailConfig', 'workflows',
+  // quickApplyConfigs: danh sách cấu hình "⚡ Áp Dụng Nhanh" (mẫu quy trình gắn vào module cụ thể, xem
+  // defaults.js) — cùng lý do bảo mật với "workflows"/các *DeptWorkflows bên dưới: không cho tài khoản
+  // thường tự ghi trực tiếp qua POST /api/data/quickApplyConfigs rồi tự bấm "Áp Dụng" set số bước cho
+  // module mình muốn (dù không tự gán được người duyệt, vẫn là thao tác quản trị quy trình).
+  'quickApplyConfigs',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình người duyệt theo phòng ban

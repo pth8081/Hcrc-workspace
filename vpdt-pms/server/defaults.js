@@ -452,6 +452,14 @@ const DEFAULTS = {
     { id: 'WF_3STEP', name: 'Quy trình 3 bước (KS & Kiểm toán -> Lãnh đạo)', steps: [{ order: 1, name: 'Kiểm soát viên' }, { order: 2, name: 'Trưởng Phòng' }, { order: 3, name: 'Ban Giám Đốc' }] }
   ],
 
+  // "⚡ Áp Dụng Nhanh" (sub-tab riêng, Hệ Thống > Quy Trình & Phê Duyệt) — DANH SÁCH nhiều cấu hình áp
+  // dụng nhanh, mỗi phần tử { id, workflowId, modules: [WF_MODULE_CONFIG key,...] } gắn 1 mẫu quy trình
+  // (workflowId, tra trong `workflows` ở trên) vào ĐÚNG các module admin chọn — KHÔNG còn bắt buộc 1
+  // mẫu áp cho TOÀN BỘ quy trình như trước (xem module-workflow.js collectQuickApplyUnconfiguredTargets()/
+  // applyQuickApplyConfig()). Mỗi lần bấm "Áp Dụng" cho 1 cấu hình chỉ set số bước cho phòng ban/mức
+  // CHƯA từng cấu hình, trong phạm vi đúng các module của cấu hình đó — không tự gán người duyệt.
+  quickApplyConfigs: [],
+
   deptWorkflows: DEFAULT_MAP,
   submissionDeptWorkflows: DEFAULT_MAP,
   submissionTypeDeptWorkflows: {},
