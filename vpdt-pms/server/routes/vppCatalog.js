@@ -9,7 +9,7 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parseCatalogFile } = require('../lib/vppCatalog');
-const { buildSummaryWorkbook, buildByDeptWorkbook } = require('../lib/vppExport');
+const { buildSummaryWorkbook, buildByDeptWorkbook, buildCatalogTemplateWorkbook, buildCatalogWorkbook } = require('../lib/vppExport');
 const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
@@ -92,6 +92,23 @@ router.post('/parse-catalog', uploadRateLimiter, (req, res) => {
   });
 });
 
+// GET /api/vpp/catalog-template — file mẫu rỗng (1 dòng ví dụ) đúng cột parse-catalog nhận diện được,
+// để bộ phận hành chính tải về điền rồi gửi lại admin tạo kỳ đăng ký — cùng quyền với /parse-catalog
+// (đây cũng là 1 bước của luồng "tạo kỳ đăng ký").
+router.get('/catalog-template', (req, res) => {
+  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.vppManage) {
+    return res.status(403).json({ error: 'Chỉ người có quyền quản lý Văn phòng phẩm mới được tải file mẫu' });
+  }
+  try {
+    const wb = buildCatalogTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="VPP_Mau_Danh_Muc_Mat_Hang.xlsx"');
+    wb.xlsx.write(res).then(() => res.end());
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/vpp/catalog-template', 500);
+  }
+});
+
 // Ký tự an toàn cho tên file tải xuống — loại bỏ mọi thứ ngoài chữ/số/gạch ngang/gạch dưới, tránh chèn
 // ký tự lạ vào header Content-Disposition (điều khiển bởi mã kỳ do admin đặt, không hoàn toàn tin cậy).
 function safeFileFragment(s) {
@@ -138,6 +155,26 @@ router.get('/export/by-dept/:periodId', async (req, res) => {
     const wb = await buildByDeptWorkbook(period, registrations);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="VPP_TongQuatTheoPhongBan_${safeFileFragment(period.code)}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/vpp/export', 500);
+  }
+});
+
+// GET /api/vpp/export/catalog/:periodId — xuất lại NGUYÊN danh mục mặt hàng đã chốt của 1 kỳ đăng ký ra
+// Excel (đúng cột file mẫu ở trên, import lại được ngay) — để hành chính lấy lại làm cơ sở cho kỳ sau.
+router.get('/export/catalog/:periodId', async (req, res) => {
+  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.vppManage) {
+    return res.status(403).json({ error: 'Chỉ người có quyền quản lý Văn phòng phẩm mới được xuất danh mục' });
+  }
+  const periodId = Number(req.params.periodId);
+  if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'periodId không hợp lệ' });
+  try {
+    const period = await loadPeriodOr404(periodId);
+    const wb = buildCatalogWorkbook(period);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="VPP_DanhMuc_${safeFileFragment(period.code)}.xlsx"`);
     await wb.xlsx.write(res);
     res.end();
   } catch (err) {

@@ -696,7 +696,7 @@ function renderVppPeriods() {
     const secondaryOptions = [];
     if (isOpen) secondaryOptions.push({ value: 'close', label: '🔒 Kết Thúc Kỳ' });
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
-    const primaryBtnHTML = `<span class="text-gray-400 italic text-[11px]">—</span>`;
+    const primaryBtnHTML = `<button data-op="downloadVppCatalogExport" data-arg0="${p.id}" class="px-2.5 py-1 bg-orange-600 text-white rounded text-xs hover:opacity-90 font-bold" title="Xuất danh mục mặt hàng của kỳ này ra Excel (để dùng lại làm cơ sở cho kỳ sau)">📤 Xuất Excel</button>`;
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2 font-bold text-orange-800">${escapeHtml(p.name)}</td>
@@ -715,6 +715,15 @@ function runVppPeriodAction(id, action) {
     case 'close': closeVppPeriodAction(id); break;
     case 'delete': deleteVppPeriodAction(id); break;
   }
+}
+
+// Xuất lại danh mục mặt hàng đã chốt của 1 kỳ đăng ký ra Excel (cùng cột file mẫu "⬇️ Tải Mẫu Excel" ở
+// trên) — để bộ phận hành chính lấy lại làm cơ sở cho kỳ sau, hoặc đối chiếu file gốc đã nộp. Cùng cách
+// điều hướng bằng thẻ <a> tạm như downloadVppExport() bên dưới (kèm cookie phiên đăng nhập hiện có).
+function downloadVppCatalogExport(periodId) {
+  const a = document.createElement('a');
+  a.href = `/api/vpp/export/catalog/${periodId}`;
+  a.click();
 }
 
 function closeVppPeriodAction(id) {
