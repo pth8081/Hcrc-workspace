@@ -248,7 +248,7 @@ function wireCarCalendarClick(grid) {
 function showCarScheduleSlotInfo(id) {
   const c = DB.carRegs.find(x => x.id === id);
   if (!c) return;
-  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', DRAFT: 'Cần bổ sung — chờ sửa lại' }[c.status] || c.status;
+  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành' }[c.status] || c.status;
   alert(`🚗 ${c.code}\nLái xe: ${c.assignedDriver || ''}\nBiển số: ${c.assignedPlate || '(chưa gán)'}\nĐiểm đến: ${c.destination || ''}\nThời gian: ${c.startTime} ➔ ${c.endTime}\nTrạng thái: ${statusLabel}`);
 }
 
@@ -268,7 +268,10 @@ function renderCarDriverTab() {
           <div class="text-xs text-gray-500">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)} | Xe: ${escapeHtml(c.type)}${c.assignedPlate ? ` (${escapeHtml(c.assignedPlate)})` : ''}</div>
         </div>
         ${c.driverConfirmed
-          ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>`
+          ? `<div class="flex items-center gap-2 flex-wrap">
+               <span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>
+               <button type="button" data-op="endCarTripAction" data-arg0="${c.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🏁 Kết Thúc Chuyến</button>
+             </div>`
           : `<button type="button" data-op="confirmCarDriverAssignmentAction" data-arg0="${c.id}" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
         }
       </div>
@@ -289,6 +292,36 @@ function confirmCarDriverAssignmentAction(carId) {
       const idx = DB.carRegs.findIndex(x => x.id === carId);
       if (idx !== -1) DB.carRegs[idx] = result.item;
       logSystemAction('CAR', 'CONFIRM_DRIVER', `Lái xe xác nhận đăng ký [${result.item.code}]`, 'SUCCESS', result.item.code);
+      renderCarDriverTab();
+    }
+  });
+}
+
+// "Kết Thúc Chuyến" — CHỈ hiện sau khi lái xe đã "Xác Nhận Đăng Ký" (driverConfirmed, xem
+// renderCarDriverTab()) — bắt buộc nhập số km đã đi thực tế, chuyển phiếu sang chờ người đăng ký
+// Đánh Giá (endCarTripAction() -> xem evaluateCarRegAction() ở dưới cho phía người đăng ký). Dùng
+// window.prompt() cho ô nhập km, mirror ĐÚNG khuôn openCancelCarRegModal() (prompt lý do trước, rồi
+// mới showConfirmModal xác nhận lần cuối) — không dựng modal riêng.
+function endCarTripAction(carId) {
+  const c = DB.carRegs.find(x => x.id === carId);
+  if (!c) return;
+  const kmStr = prompt('Nhập số km đã đi thực tế cho chuyến này:', '');
+  if (kmStr === null) return; // bấm Hủy ở hộp prompt -> bỏ ngang
+  const km = parseFloat(String(kmStr).trim().replace(',', '.'));
+  if (!Number.isFinite(km) || km < 0) return alert('⛔ Số km không hợp lệ, vui lòng thử lại!');
+  showConfirmModal({
+    title: '🏁 Xác Nhận Kết Thúc Chuyến',
+    bodyHTML: `<p>Kết thúc chuyến đăng ký xe <b>${escapeHtml(c.code)}</b> — <i>${escapeHtml(c.destination)}</i> với số km đã đi: <b>${km} km</b>?</p><p class="mt-2 text-gray-600 text-xs italic">Người đăng ký sẽ cần Đánh Giá xác nhận trước khi phiếu này được tính là hoàn thành.</p>`,
+    confirmLabel: 'Kết Thúc Chuyến',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('carRegs', carId, 'end-trip', { km });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === carId);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'END_TRIP', `Lái xe kết thúc chuyến [${result.item.code}] — ${km}km`, 'SUCCESS', result.item.code);
+      alert('✅ Đã kết thúc chuyến! Chờ người đăng ký Đánh Giá để phiếu hoàn thành.');
       renderCarDriverTab();
     }
   });
@@ -479,7 +512,11 @@ function renderCarRegs() {
     { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedCarRegs.filter(c => c.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
     // CANCELLED — trạng thái KẾT THÚC mới (Fix 4, đợt rà soát nghiệp vụ: "Hủy chuyến" sau khi đã duyệt,
     // xem canCancelCarReg()/cancelCarReg() ở lib/recordActions.js).
-    { key: 'CANCELLED', label: 'Đã Hủy Chuyến', count: scopedCarRegs.filter(c => c.status === 'CANCELLED').length, colorClass: 'border-l-slate-500' }
+    { key: 'CANCELLED', label: 'Đã Hủy Chuyến', count: scopedCarRegs.filter(c => c.status === 'CANCELLED').length, colorClass: 'border-l-slate-500' },
+    // AWAITING_EVALUATION/COMPLETED — luồng "Kết Thúc Chuyến" (lái xe)/"Đánh Giá" (người đăng ký) MỚI,
+    // xem endCarTrip()/evaluateCarTrip() ở lib/recordActions.js.
+    { key: 'AWAITING_EVALUATION', label: '⏳ Chờ Đánh Giá', count: scopedCarRegs.filter(c => c.status === 'AWAITING_EVALUATION').length, colorClass: 'border-l-amber-500' },
+    { key: 'COMPLETED', label: '✅ Hoàn Thành', count: scopedCarRegs.filter(c => c.status === 'COMPLETED').length, colorClass: 'border-l-emerald-600' }
   ];
   document.getElementById('carDashboardCards').innerHTML = buildDashboardCardsHTML(carDashCards, statusFilter, 'filterCarByCard');
 
@@ -511,6 +548,8 @@ function renderCarRegs() {
 
     let statusBadge = '';
     if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+    else if (c.status === 'AWAITING_EVALUATION') statusBadge = `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ đánh giá (${c.driverReportedKm ?? c.actualKm ?? 0} KM)</span>`;
+    else if (c.status === 'COMPLETED') statusBadge = `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Hoàn thành (${c.actualKm ?? 0} KM)</span>`;
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
     else if (c.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy chuyến</span>`;
     else if (c.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
@@ -520,7 +559,10 @@ function renderCarRegs() {
     // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
     const displayPlate = c.assignedPlate || c.plate || (c.assignedTaxiCompany ? `Taxi ${c.assignedTaxiCompany}` : '');
     const displayDriver = c.assignedDriver || c.driver || '';
-    const canDL = c.status === 'APPROVED' && canDownloadFile(currentUser, 'car', c.dept, c.creator);
+    // canDL/viewSlip: hồ sơ đã qua APPROVED thì luôn xem/tải được phiếu, bất kể đã Kết Thúc Chuyến/Đánh
+    // Giá xong hay chưa (AWAITING_EVALUATION/COMPLETED vẫn là "đã phê duyệt", chỉ thêm bước sau đó).
+    const isPostApproval = c.status === 'APPROVED' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED';
+    const canDL = isPostApproval && canDownloadFile(currentUser, 'car', c.dept, c.creator);
 
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -539,14 +581,21 @@ function renderCarRegs() {
               ? `<button data-op="runCarAction" data-arg0="${c.id}" data-arg1="process" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
               : `<button data-op="runCarAction" data-arg0="${c.id}" data-arg1="process" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
-            if (c.status === 'APPROVED') {
+            if (isPostApproval) {
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
               if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+            }
+            if (c.status === 'APPROVED') {
               // Fix 4 (đợt rà soát nghiệp vụ, người dùng xác nhận "Thêm nút Hủy/Đổi sau duyệt") — trước
               // đây 1 phiếu đã APPROVED là ngõ cụt, chỉ admin xóa cứng được. "Đổi Tài Xế-Xe" mở modal xử
               // lý sẵn có (đã có UI phân công) để tái dùng, "Hủy Chuyến" mở thẳng modal xác nhận riêng.
               if (canDispatchCarClient()) secondaryOptions.push({ value: 'reassign', label: '🔁 Đổi Tài Xế-Xe' });
               if (canCancelCarRegClient(c)) secondaryOptions.push({ value: 'cancelTrip', label: '🚫 Hủy Chuyến' });
+            }
+            // "Đánh Giá" — CHỈ người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành, xem
+            // canEvaluateCarTrip()/evaluateCarTrip() ở lib/recordActions.js.
+            if (c.status === 'AWAITING_EVALUATION' && c.creator === currentUser.username) {
+              secondaryOptions.push({ value: 'evaluate', label: '⭐ Đánh Giá (bắt buộc)' });
             }
             // "Sửa & Gửi Lại" — chỉ chính người tạo phiếu, chỉ khi đang cần bổ sung (NHÁP do
             // REQUEST_CHANGES, xem confirmProcessCarReg('REQUEST_CHANGES')/openBosungEditModal()).
@@ -574,7 +623,47 @@ function runCarAction(id, action) {
     // secondaryOptions ở trên), KHÔNG bắt buộc phải mở modal "Xử lý/Duyệt" trước.
     case 'reassign': openCarProcessModal(id); break;
     case 'cancelTrip': openCancelCarRegModal(id); break;
+    case 'evaluate': openEvaluateCarTripModal(id); break;
   }
+}
+
+// ============ "Đánh Giá" (người đăng ký phiếu) — bắt buộc để phiếu hoàn thành sau khi lái xe Kết
+// Thúc Chuyến. Cho phép chỉnh lại số km lái xe đã nhập (driverReportedKm giữ nguyên làm audit trail ở
+// lib/recordActions.js, chỉ actualKm bị ghi đè) + nhận xét không bắt buộc — xem evaluateCarTrip(). ============
+function openEvaluateCarTripModal(id) {
+  const c = DB.carRegs.find(x => x.id === id);
+  if (!c) return;
+  showConfirmModal({
+    title: '⭐ Đánh Giá Chuyến Đăng Ký Xe',
+    bodyHTML: `
+      <p>Chuyến <b>${escapeHtml(c.code)}</b> — <i>${escapeHtml(c.destination)}</i> đã được lái xe kết thúc.</p>
+      <p class="text-xs text-gray-500 mt-1">Số km lái xe báo cáo: <b>${c.driverReportedKm ?? c.actualKm ?? 0} km</b> (${escapeHtml(c.tripEndedAt || '')})</p>
+      <div class="mt-3">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Số km thực tế (có thể chỉnh lại nếu cần)</label>
+        <input type="number" min="0" step="0.1" id="evalCarKmInput" value="${c.actualKm ?? c.driverReportedKm ?? 0}" class="w-full border p-2 rounded text-sm">
+      </div>
+      <div class="mt-3">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Nhận xét (không bắt buộc)</label>
+        <textarea id="evalCarCommentInput" rows="2" class="w-full border p-2 rounded text-sm" placeholder="Nhận xét về chuyến đi (nếu có)..."></textarea>
+      </div>
+      <p class="mt-2 text-xs text-red-600 font-semibold">Sau khi Đánh Giá, phiếu này sẽ được tính là Hoàn Thành và không thể chỉnh sửa lại.</p>
+    `,
+    confirmLabel: 'Xác Nhận Đánh Giá',
+    onConfirm: async () => {
+      const km = parseFloat(document.getElementById('evalCarKmInput')?.value);
+      if (!Number.isFinite(km) || km < 0) return alert('⛔ Số km không hợp lệ, vui lòng thử lại!');
+      const comment = (document.getElementById('evalCarCommentInput')?.value || '').trim();
+      let result;
+      try {
+        result = await callRecordAction('carRegs', id, 'evaluate', { km, comment });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === id);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'EVALUATE_TRIP', `Đánh giá chuyến đăng ký xe [${result.item.code}] — ${km}km`, 'SUCCESS', result.item.code);
+      alert('✅ Đã đánh giá! Phiếu đăng ký xe đã hoàn thành.');
+      renderCarRegs();
+    }
+  });
 }
 
 function deleteCarRegAction(id) {

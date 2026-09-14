@@ -453,12 +453,39 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   thay vì xe công ty. Đổi qua lại giữa Taxi/không-Taxi (kể cả ở "🔁 Đổi Tài
   Xế-Xe" sau khi phiếu đã duyệt xong) tự động dọn sạch BKS/Hãng Taxi cũ không
   còn phù hợp, tránh để sót dữ liệu gây hiểu nhầm.
+  **"🏁 Kết Thúc Chuyến" (lái xe) + "⭐ Đánh Giá" (người đăng ký, bắt buộc để
+  hoàn thành)**: trước đây phiếu `APPROVED` là trạng thái cuối cùng với xe (chỉ
+  còn Hủy Chuyến/Đổi Tài Xế-Xe). Nay sau khi lái xe đã "✅ Xác Nhận Đăng Ký"
+  (sub-tab "🧑‍✈️ Lái Xe"), nút đó được thay bằng **"🏁 Kết Thúc Chuyến"** —
+  lái xe bấm, nhập **số km thực tế đã đi**, phiếu chuyển **"⏳ Chờ Đánh Giá"**
+  (`AWAITING_EVALUATION`). Lúc này **chỉ đúng người đăng ký phiếu** (không cho
+  admin/Người Điều Hành Xe làm hộ, kể cả khi có quyền) mới thấy nút **"⭐ Đánh
+  Giá (bắt buộc)"** ở dòng danh sách — xem lại số km lái xe báo cáo, **có thể
+  chỉnh lại nếu cần** (VD lái xe đi vòng/tính nhầm), thêm nhận xét (không bắt
+  buộc), xác nhận xong phiếu mới chuyển **"✅ Hoàn Thành"** (`COMPLETED`) —
+  đây là bước bắt buộc, phiếu KHÔNG được tính là hoàn thành nếu chưa qua Đánh
+  Giá. Số km lái xe nhập ban đầu luôn được giữ lại (không bị ghi đè) để đối
+  chiếu về sau, kể cả khi người đăng ký chỉnh lại số km hiển thị chính thức.
+  Bắt buộc phải "Xác Nhận Đăng Ký" trước mới "Kết Thúc Chuyến" được (không thể
+  bỏ qua bước xác nhận). Phiếu Phê Duyệt (xem/tải) vẫn dùng được bình thường ở
+  cả 2 trạng thái mới này, có thêm mục "Kết Thúc Chuyến / Đánh Giá" hiện số km
+  + nhận xét khi đã có.
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
   hiện xung đột. Danh mục phòng họp (tên đầy đủ + tên gọn hiện trên lưới Lịch
   Họp) admin tự thêm/xoá ngay tại khối "🗂️ Danh Mục Phòng Họp" trong tab
   "📝 Đăng Ký" của module.
+  **Xem Lịch Họp — 3 chế độ Ngày/Tuần/Tháng**: chế độ **Ngày** (mặc định) giữ
+  nguyên lưới giờ chi tiết 30 phút/phòng, kéo chuột hoặc giữ Shift bấm ô thứ 2
+  để chọn nhiều khung giờ liên tiếp rồi đổ sẵn sang tab Đăng Ký. Chế độ **Tuần**/
+  **Tháng** chỉ xem TỔNG QUAN — mỗi ô ngày hiện số lịch đã đặt theo từng phòng
+  (hoặc tổng số lịch ở Tháng), KHÔNG chọn giờ trực tiếp được (quá dày để hiện
+  từng khung 30 phút); bấm vào 1 ô ngày bất kỳ sẽ nhảy về đúng chế độ Ngày của
+  ngày đó để xem chi tiết/đặt lịch. Nút ◀ ▶ lùi/tiến đúng 1 đơn vị theo chế độ
+  đang xem (1 ngày/1 tuần/1 tháng), nút "Hôm nay" đưa về ngày hệ thống hiện tại
+  ngay lập tức — giúp lướt xem trước phòng nào còn trống trong cả tuần/tháng
+  tới trước khi quyết định đặt ngày nào, thay vì phải dò từng ngày một.
 - **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
   hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban mặc định** = số nhân
   sự đang hoạt động của phòng × "ngân sách/người" (admin có thể sửa tay lại số

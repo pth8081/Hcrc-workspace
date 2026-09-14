@@ -6040,6 +6040,70 @@ function confirmCarDriverAssignment(user, carReg) {
   return carReg;
 }
 
+// ===================== ĐĂNG KÝ XE > "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" (người đăng ký) =====
+// 2 bước MỚI sau khi lái xe đã "Xác Nhận Đăng Ký" (confirmCarDriverAssignment ở trên) — trước đây
+// APPROVED là trạng thái CUỐI với xe (chỉ Hủy Chuyến/Đổi Tài Xế-Xe), nay thêm luồng "hoàn thành thật":
+// (1) Lái xe kết thúc chuyến (endCarTrip) -> nhập số KM đã đi, chuyển AWAITING_EVALUATION; (2) người
+// đăng ký phiếu (creator, KHÔNG cho admin/carDispatch làm hộ — khác canCancelCarReg() ở dưới, đây là
+// yêu cầu nghiệp vụ riêng: chỉ đúng người đăng ký mới xác nhận "đúng chuyến mình đăng ký") Đánh Giá
+// (evaluateCarTrip) -> bắt buộc, cho phép chỉnh lại KM lái xe nhập, chuyển COMPLETED. driverReportedKm
+// giữ NGUYÊN giá trị lái xe nhập ban đầu (audit trail, không bị ghi đè) trong khi actualKm là giá trị
+// "hiện hành" (= driverReportedKm lúc mới kết thúc chuyến, có thể bị người đánh giá sửa lại).
+function canEndCarTrip(user, carReg) {
+  return !!(carReg?.assignedDriverUsername && user?.username === carReg.assignedDriverUsername);
+}
+
+function endCarTrip(user, carReg, payload) {
+  if (!canEndCarTrip(user, carReg)) {
+    throw new HttpError(403, 'Bạn không phải là lái xe được phân công cho phiếu đăng ký này');
+  }
+  if (carReg.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ kết thúc chuyến được khi phiếu đăng ký đã được phê duyệt xong toàn bộ');
+  }
+  if (!carReg.driverConfirmed) {
+    throw new HttpError(409, 'Bạn cần xác nhận nhận chuyến trước khi kết thúc chuyến');
+  }
+  if (carReg.tripEndedAt) {
+    throw new HttpError(409, 'Chuyến này đã được kết thúc trước đó');
+  }
+  const km = Number(payload?.km);
+  if (!Number.isFinite(km) || km < 0) {
+    throw new HttpError(400, 'Số km đã đi không hợp lệ');
+  }
+  carReg.driverReportedKm = km;
+  carReg.actualKm = km;
+  carReg.tripEndedAt = nowVN();
+  carReg.status = 'AWAITING_EVALUATION';
+  return carReg;
+}
+
+function canEvaluateCarTrip(user, carReg) {
+  return !!(carReg && user?.username === carReg.creator);
+}
+
+function evaluateCarTrip(user, carReg, payload) {
+  if (!canEvaluateCarTrip(user, carReg)) {
+    throw new HttpError(403, 'Chỉ người đăng ký phiếu này mới được đánh giá chuyến đi');
+  }
+  if (carReg.status !== 'AWAITING_EVALUATION') {
+    throw new HttpError(409, 'Chỉ đánh giá được khi lái xe đã kết thúc chuyến, đang chờ đánh giá');
+  }
+  if (payload && payload.km !== undefined && payload.km !== null && payload.km !== '') {
+    const km = Number(payload.km);
+    if (!Number.isFinite(km) || km < 0) {
+      throw new HttpError(400, 'Số km đã đi không hợp lệ');
+    }
+    carReg.actualKm = km;
+  }
+  const comment = String(payload?.comment || '').trim();
+  if (comment) carReg.evaluationComment = comment.slice(0, 2000);
+  carReg.evaluatedAt = nowVN();
+  carReg.evaluatedBy = user.username;
+  carReg.evaluatedByName = user.name;
+  carReg.status = 'COMPLETED';
+  return carReg;
+}
+
 // ===================== ĐĂNG KÝ XE > "Hủy chuyến" / "Đổi tài xế-xe" SAU KHI ĐÃ DUYỆT (Fix 4, đợt rà
 // soát nghiệp vụ) =====================
 // TRƯỚC ĐÂY 1 phiếu đã APPROVED là NGÕ CỤT — không có cách nào huỷ chuyến hay đổi lại tài xế/xe đã
@@ -6348,6 +6412,7 @@ module.exports = {
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
+  canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip,
   canCancelCarReg, cancelCarReg, reassignCarDispatch,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,

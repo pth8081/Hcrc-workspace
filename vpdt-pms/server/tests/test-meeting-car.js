@@ -150,6 +150,35 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // POST /api/records/carRegs/:id/end-trip | /evaluate — luồng "Kết Thúc Chuyến" (lái xe)/"Đánh Giá"
+  // (người đăng ký) MỚI, mirrors routes/records.js.
+  const endTripMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/end-trip$/);
+  if (req.method === 'POST' && endTripMatch) {
+    const id = Number(endTripMatch[1]);
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.endCarTrip(activeServerUser, item, body);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+  const evaluateCarMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/evaluate$/);
+  if (req.method === 'POST' && evaluateCarMatch) {
+    const id = Number(evaluateCarMatch[1]);
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.evaluateCarTrip(activeServerUser, item, body);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
   // POST /api/records/carRegs/:id/cancel — Fix 4 (đợt rà soát nghiệp vụ) "Hủy chuyến" sau khi đã duyệt —
   // mirrors routes/records.js POST /api/records/carRegs/:id/cancel.
   const cancelCarMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/cancel$/);
@@ -479,6 +508,121 @@ async function main() {
     `status=${m7result.status} alerts=${JSON.stringify(m7result.alerts)}`
   );
 
+  // ===================== M8-M13 — "Xem lịch họp nhanh" thêm chế độ Tuần/Tháng (giữ nguyên chế độ Ngày
+  // cũ) — bấm 1 ô ngày ở Tuần/Tháng phải nhảy đúng về chế độ Ngày, ◀▶/"Hôm nay" phải nhảy đúng bước theo
+  // chế độ đang xem. =====================
+  const calWeekMonth = await page.evaluate((room) => {
+    switchTab('meeting');
+    setMeetingSubTab('CALENDAR');
+    document.getElementById('meetingCalDate').value = '2026-09-03'; // Thứ 5 — cùng tuần với raceMeetingA/B (2026-09-03, phòng ROOM)
+    setMeetingCalViewMode('DAY');
+    const dayModeDefaults = {
+      dayGridHidden: document.getElementById('meetingCalendarGrid').classList.contains('hidden'),
+      weekGridHidden: document.getElementById('meetingCalendarWeekGrid').classList.contains('hidden'),
+      monthGridHidden: document.getElementById('meetingCalendarMonthGrid').classList.contains('hidden'),
+      hintHidden: document.getElementById('meetingCalDayHint').classList.contains('hidden')
+    };
+
+    setMeetingCalViewMode('WEEK');
+    const weekModeVisibility = {
+      dayGridHidden: document.getElementById('meetingCalendarGrid').classList.contains('hidden'),
+      weekGridHidden: document.getElementById('meetingCalendarWeekGrid').classList.contains('hidden'),
+      hintHidden: document.getElementById('meetingCalDayHint').classList.contains('hidden')
+    };
+    // 2026-09-03 (Thứ 5) có 2 lịch PENDING cùng phòng ROOM (raceMeetingA/B, seed ở M7) -> ô Thứ 5 phải hiện "2 lịch".
+    const weekCells = Array.from(document.querySelectorAll('#meetingCalendarWeekGrid [data-op="jumpMeetingCalToDay"]'));
+    const thu5Cell = weekCells.find((el) => el.getAttribute('data-arg0') === '2026-09-03');
+    const weekThu5Text = thu5Cell ? thu5Cell.textContent : null;
+
+    setMeetingCalViewMode('MONTH');
+    const monthCell = document.querySelector('#meetingCalendarMonthGrid [data-op="jumpMeetingCalToDay"][data-arg0="2026-09-03"]');
+    const monthThu5Text = monthCell ? monthCell.textContent : null;
+
+    // Bấm ô Thứ 5 ở chế độ Tháng -> phải nhảy về chế độ Ngày, đúng ngày 2026-09-03.
+    monthCell.click();
+    const afterJumpFromMonth = {
+      dateVal: document.getElementById('meetingCalDate').value,
+      dayGridHidden: document.getElementById('meetingCalendarGrid').classList.contains('hidden'),
+      monthGridHidden: document.getElementById('meetingCalendarMonthGrid').classList.contains('hidden'),
+      activeBtnClass: document.getElementById('btnMeetingCalViewDAY').className
+    };
+
+    // ◀▶ nhảy đúng bước theo từng chế độ đang xem.
+    setMeetingCalViewMode('DAY');
+    document.getElementById('meetingCalDate').value = '2026-09-03';
+    shiftMeetingCalDate(1);
+    const dayShiftForward = document.getElementById('meetingCalDate').value;
+    shiftMeetingCalDate(-1);
+    const dayShiftBack = document.getElementById('meetingCalDate').value;
+
+    setMeetingCalViewMode('WEEK');
+    document.getElementById('meetingCalDate').value = '2026-09-03';
+    shiftMeetingCalDate(1);
+    const weekShiftForward = document.getElementById('meetingCalDate').value;
+
+    setMeetingCalViewMode('MONTH');
+    document.getElementById('meetingCalDate').value = '2026-09-03';
+    shiftMeetingCalDate(1);
+    const monthShiftForward = document.getElementById('meetingCalDate').value;
+
+    jumpMeetingCalToToday();
+    const afterToday = document.getElementById('meetingCalDate').value;
+
+    return {
+      dayModeDefaults, weekModeVisibility, weekThu5Text, monthThu5Text, afterJumpFromMonth,
+      dayShiftForward, dayShiftBack, weekShiftForward, monthShiftForward, afterToday
+    };
+  }, ROOM);
+
+  record(
+    'Lịch Họp Nhanh: mặc định chế độ Ngày — lưới Ngày hiện, Tuần/Tháng ẩn, gợi ý kéo/Shift hiện',
+    calWeekMonth.dayModeDefaults.dayGridHidden === false && calWeekMonth.dayModeDefaults.weekGridHidden === true
+      && calWeekMonth.dayModeDefaults.monthGridHidden === true && calWeekMonth.dayModeDefaults.hintHidden === false,
+    JSON.stringify(calWeekMonth.dayModeDefaults)
+  );
+  record(
+    'Lịch Họp Nhanh: chuyển chế độ Tuần — lưới Tuần hiện, lưới Ngày ẩn, gợi ý kéo/Shift ẩn (không áp dụng ở Tuần)',
+    calWeekMonth.weekModeVisibility.dayGridHidden === true && calWeekMonth.weekModeVisibility.weekGridHidden === false
+      && calWeekMonth.weekModeVisibility.hintHidden === true,
+    JSON.stringify(calWeekMonth.weekModeVisibility)
+  );
+  record(
+    'Lịch Họp Nhanh (Tuần): ô Thứ 5 (2026-09-03, có 2 lịch PENDING cùng phòng) hiện đúng "2 lịch"',
+    typeof calWeekMonth.weekThu5Text === 'string' && calWeekMonth.weekThu5Text.includes('2 lịch'),
+    calWeekMonth.weekThu5Text
+  );
+  record(
+    'Lịch Họp Nhanh (Tháng): ô ngày 3 (2026-09-03) hiện đúng "2 lịch"',
+    typeof calWeekMonth.monthThu5Text === 'string' && calWeekMonth.monthThu5Text.includes('2 lịch'),
+    calWeekMonth.monthThu5Text
+  );
+  record(
+    'Lịch Họp Nhanh: bấm ô ngày ở chế độ Tháng -> nhảy đúng về chế độ Ngày của đúng ngày đó',
+    calWeekMonth.afterJumpFromMonth.dateVal === '2026-09-03' && calWeekMonth.afterJumpFromMonth.dayGridHidden === false
+      && calWeekMonth.afterJumpFromMonth.monthGridHidden === true && calWeekMonth.afterJumpFromMonth.activeBtnClass.includes('bg-emerald-700'),
+    JSON.stringify(calWeekMonth.afterJumpFromMonth)
+  );
+  record(
+    'Lịch Họp Nhanh: nút ◀▶ ở chế độ Ngày nhảy đúng 1 ngày',
+    calWeekMonth.dayShiftForward === '2026-09-04' && calWeekMonth.dayShiftBack === '2026-09-03',
+    `forward=${calWeekMonth.dayShiftForward} back=${calWeekMonth.dayShiftBack}`
+  );
+  record(
+    'Lịch Họp Nhanh: nút ◀▶ ở chế độ Tuần nhảy đúng 7 ngày',
+    calWeekMonth.weekShiftForward === '2026-09-10',
+    calWeekMonth.weekShiftForward
+  );
+  record(
+    'Lịch Họp Nhanh: nút ◀▶ ở chế độ Tháng nhảy đúng 1 tháng (giữ nguyên ngày trong tháng)',
+    calWeekMonth.monthShiftForward === '2026-10-03',
+    calWeekMonth.monthShiftForward
+  );
+  record(
+    'Lịch Họp Nhanh: nút "Hôm nay" đưa ô ngày về đúng ngày hệ thống hiện tại',
+    calWeekMonth.afterToday === new Date().toLocaleDateString('en-CA'),
+    `afterToday=${calWeekMonth.afterToday}`
+  );
+
   // ===================== CAR REGISTRATION =====================
   await loginAs(page, bookerUser);
   const c1 = await page.evaluate(async () => {
@@ -730,6 +874,116 @@ async function main() {
     'Car: assigned driver can view the trip across departments; an unassigned driver cannot',
     c12CanDriver1View === true && c12CanDriver2View === false,
     `driver1(assigned)=${c12CanDriver1View} driver2(unassigned)=${c12CanDriver2View}`
+  );
+
+  // ===== "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" (người đăng ký, bắt buộc để hoàn thành) — tính năng
+  // MỚI, tiếp nối trực tiếp c7 (đã APPROVED + driverConfirmed=true ở C11 phía trên). =====
+
+  // Lái xe KHÁC (lx2, chưa được phân công) không kết thúc được chuyến của lx1 -> 403.
+  await loginAs(page, driverUser2);
+  const cEnd1 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'end-trip', { km: 100 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: a driver who is not the assigned one cannot end the trip (403)',
+    cEnd1.ok === false,
+    JSON.stringify(cEnd1)
+  );
+
+  // km không hợp lệ (âm) -> 400.
+  await loginAs(page, driverUser);
+  const cEnd2 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'end-trip', { km: -5 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: ending the trip with an invalid (negative) km value is rejected',
+    cEnd2.ok === false,
+    JSON.stringify(cEnd2)
+  );
+
+  // Lái xe đúng (lx1, đã confirm ở C11) kết thúc chuyến với km hợp lệ -> AWAITING_EVALUATION.
+  const cEnd3 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'end-trip', { km: 123.5 });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    if (idx !== -1) DB.carRegs[idx] = result.item;
+    return { status: result.item.status, driverReportedKm: result.item.driverReportedKm, actualKm: result.item.actualKm, tripEndedAt: result.item.tripEndedAt };
+  }, c7.saved.id);
+  record(
+    'Car: assigned driver ends the trip with km entered -> status AWAITING_EVALUATION',
+    cEnd3.status === 'AWAITING_EVALUATION' && cEnd3.driverReportedKm === 123.5 && cEnd3.actualKm === 123.5 && !!cEnd3.tripEndedAt,
+    JSON.stringify(cEnd3)
+  );
+
+  // Kết thúc chuyến lần 2 -> 409 (đã kết thúc trước đó, guard chống double-submit).
+  const cEnd4 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'end-trip', { km: 200 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: ending an already-ended trip is rejected (idempotency guard)',
+    cEnd4.ok === false,
+    JSON.stringify(cEnd4)
+  );
+
+  // Người KHÁC (admin, không phải creator=bookerUser) không đánh giá được -> 403 (Q1: creator-only, không
+  // cho admin/carDispatch làm hộ, khác canCancelCarReg()).
+  await loginAs(page, adminUser);
+  const cEval1 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'evaluate', { km: 130, comment: 'test' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: only the creator (not admin) can evaluate the trip (creator-only rule, Q1)',
+    cEval1.ok === false,
+    JSON.stringify(cEval1)
+  );
+
+  // Creator (bookerUser) đánh giá, chỉnh lại km + nhận xét không bắt buộc -> COMPLETED, driverReportedKm
+  // giữ nguyên làm audit trail (Q3: cho phép chỉnh KM + nhận xét không bắt buộc).
+  await loginAs(page, bookerUser);
+  const cEval2 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'evaluate', { km: 128, comment: 'Chuyến đi đúng giờ, an toàn.' });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    if (idx !== -1) DB.carRegs[idx] = result.item;
+    return {
+      status: result.item.status, actualKm: result.item.actualKm, driverReportedKm: result.item.driverReportedKm,
+      evaluationComment: result.item.evaluationComment, evaluatedBy: result.item.evaluatedBy
+    };
+  }, c7.saved.id);
+  record(
+    'Car: creator evaluates the trip and adjusts km -> status COMPLETED, driverReportedKm audit trail preserved',
+    cEval2.status === 'COMPLETED' && cEval2.actualKm === 128 && cEval2.driverReportedKm === 123.5 &&
+      cEval2.evaluationComment === 'Chuyến đi đúng giờ, an toàn.' && cEval2.evaluatedBy === bookerUser.username,
+    JSON.stringify(cEval2)
+  );
+
+  // Đánh giá lần 2 (đã COMPLETED) -> 409.
+  const cEval3 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'evaluate', { km: 999 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: evaluating an already-completed trip is rejected',
+    cEval3.ok === false,
+    JSON.stringify(cEval3)
+  );
+
+  // Q2 (sequencing): lái xe KHÔNG kết thúc được chuyến nếu chưa "Xác Nhận Đăng Ký" trước -> 409.
+  const cSeqItem = {
+    id: 900050, code: 'HCRC-DPH-SEQ', dept: 'Phòng Kinh Doanh', status: 'APPROVED', currentStep: 0,
+    history: [], startTime: '2026-09-08T08:00', endTime: '2026-09-08T12:00',
+    creator: bookerUser.username, creatorName: bookerUser.name,
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài', driverConfirmed: false
+  };
+  let cSeqError = null;
+  try { recordActions.endCarTrip(driverUser, cSeqItem, { km: 50 }); }
+  catch (err) { cSeqError = err; }
+  record(
+    'Car: driver cannot end a trip before confirming it first (Q2 sequencing rule)',
+    !!cSeqError && cSeqError.status === 409 && /xác nhận nhận chuyến/.test(cSeqError.message),
+    `error=${cSeqError && cSeqError.message}`
   );
 
   // Đổi sang lái xe khác trên 1 hồ sơ đã từng được xác nhận trước đó -> phải hủy xác nhận cũ, vì trách

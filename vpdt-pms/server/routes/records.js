@@ -854,6 +854,36 @@ router.post('/carRegs/:id/confirm-driver', async (req, res) => {
   }
 });
 
+// "Kết Thúc Chuyến" — CHỈ lái xe được phân công (đã "Xác Nhận Đăng Ký" trước đó), nhập số km đã đi ->
+// chuyển AWAITING_EVALUATION, xem endCarTrip() ở lib/recordActions.js.
+router.post('/carRegs/:id/end-trip', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.endCarTrip(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/end-trip`, err);
+  }
+});
+
+// "Đánh Giá" — CHỈ người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành, cho phép chỉnh lại
+// km lái xe đã nhập -> chuyển COMPLETED, xem evaluateCarTrip() ở lib/recordActions.js.
+router.post('/carRegs/:id/evaluate', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.evaluateCarTrip(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/evaluate`, err);
+  }
+});
+
 // "Hủy chuyến" — CHỈ hồ sơ đang APPROVED (Fix 4, đợt rà soát nghiệp vụ: trước đây phiếu đã duyệt là
 // NGÕ CỤT, chỉ admin xoá cứng được) — mirror POST /api/meetings/:id/cancel (routes/meetingActions.js):
 // tự huỷ được chuyến của chính mình HOẶC carDispatch/admin huỷ được của bất kỳ ai, xem

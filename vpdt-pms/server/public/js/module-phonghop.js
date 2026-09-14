@@ -107,12 +107,92 @@ let meetingCalCurrentDate = null;
 let meetingCalSlots = [];
 let meetingCalDrag = null;            // { roomIdx, anchorRow, currentRow } khi đang giữ chuột kéo chọn
 let meetingCalLastClickedSlot = null; // { roomIdx, rowIdx } của lần bấm gần nhất, dùng cho Shift+bấm
+// meetingCalViewMode (mới) — "xem lịch họp nhanh" giờ có 3 chế độ: DAY (lưới giờ chi tiết theo phòng,
+// hành vi CŨ giữ nguyên y hệt — kéo/Shift+bấm chọn khung giờ để đặt), WEEK/MONTH (mới, chỉ xem TỔNG QUAN
+// — mỗi ô ngày hiện số lịch đã đặt theo từng phòng, KHÔNG chọn giờ trực tiếp được vì quá dày đặc để hiện
+// từng khung 30 phút; bấm vào 1 ô ngày bất kỳ sẽ nhảy về đúng chế độ DAY của ngày đó để xem/đặt chi
+// tiết). Mục đích: cho phép lướt xem trước phòng nào còn trống trong cả tuần/tháng tới trước khi quyết
+// định đặt ngày nào, thay vì phải dò từng ngày một qua ô chọn ngày.
+let meetingCalViewMode = 'DAY';
+
+function setMeetingCalViewMode(mode) {
+  meetingCalViewMode = mode;
+  ['DAY', 'WEEK', 'MONTH'].forEach(m => {
+    const btn = document.getElementById(`btnMeetingCalView${m}`);
+    if (!btn) return;
+    btn.classList.toggle('bg-emerald-700', m === mode);
+    btn.classList.toggle('text-white', m === mode);
+    btn.classList.toggle('bg-gray-200', m !== mode);
+    btn.classList.toggle('text-gray-700', m !== mode);
+  });
+  const hint = document.getElementById('meetingCalDayHint');
+  if (hint) hint.classList.toggle('hidden', mode !== 'DAY');
+  renderMeetingCalendar();
+}
+
+// Nhảy ngày/tuần/tháng (nút ◀ ▶) — bước nhảy tuỳ theo chế độ đang xem, để "Tuần"/"Tháng" lướt nhanh
+// đúng theo đơn vị đang xem thay vì phải lật từng ngày một qua ô chọn ngày.
+function shiftMeetingCalDate(delta) {
+  delta = Number(delta);
+  const dateInput = document.getElementById('meetingCalDate');
+  if (!dateInput || !dateInput.value) return;
+  const d = new Date(`${dateInput.value}T00:00:00`);
+  if (meetingCalViewMode === 'DAY') d.setDate(d.getDate() + delta);
+  else if (meetingCalViewMode === 'WEEK') d.setDate(d.getDate() + delta * 7);
+  else d.setMonth(d.getMonth() + delta);
+  dateInput.value = toDatetimeLocalValue(d).slice(0, 10);
+  renderMeetingCalendar();
+}
+
+// Ngày hôm nay theo giờ ĐỊA PHƯƠNG — KHÔNG dùng new Date().toISOString().slice(0,10) (quy đổi UTC có
+// thể lệch sang ngày hôm TRƯỚC vào rạng sáng giờ Việt Nam, vì UTC+7 đi sau giờ địa phương).
+function meetingCalTodayStr() {
+  return toDatetimeLocalValue(new Date()).slice(0, 10);
+}
+
+function jumpMeetingCalToToday() {
+  document.getElementById('meetingCalDate').value = meetingCalTodayStr();
+  renderMeetingCalendar();
+}
+
+// Bấm 1 ô ngày ở chế độ Tuần/Tháng -> nhảy thẳng về chế độ Ngày của đúng ngày đó để xem chi tiết
+// giờ/đặt lịch (lưới Tuần/Tháng chỉ xem tổng quan, không thao tác chọn giờ trực tiếp được).
+function jumpMeetingCalToDay(dateStr) {
+  document.getElementById('meetingCalDate').value = dateStr;
+  setMeetingCalViewMode('DAY');
+}
+
+// Tổng hợp số lịch (chưa Hủy) theo từng phòng cho 1 NGÀY cụ thể — dùng chung cho ô ngày ở cả chế độ
+// Tuần lẫn Tháng (mirror đúng luật "đang chiếm chỗ" ở renderMeetingCalendarDayView()/findMeetingConflict():
+// chỉ loại CANCELLED, PENDING/APPROVED đều tính).
+function computeMeetingDaySummary(dateStr) {
+  const dayStart = new Date(`${dateStr}T00:00:00`);
+  const dayEnd = new Date(`${dateStr}T23:59:59.999`);
+  const dayMeetings = (DB.meetings || []).filter(m => {
+    if (m.status === 'CANCELLED') return false;
+    const mStart = new Date(m.startTime), mEnd = new Date(m.endTime);
+    return mStart <= dayEnd && mEnd >= dayStart;
+  });
+  const rooms = (DB.meetingRooms || []).map(r => ({
+    short: r.short,
+    count: dayMeetings.filter(m => m.room === r.name).length
+  }));
+  return { totalCount: dayMeetings.length, rooms };
+}
 
 function renderMeetingCalendar() {
   const dateInput = document.getElementById('meetingCalDate');
   if (!dateInput) return;
-  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
-  const dateStr = dateInput.value;
+  if (!dateInput.value) dateInput.value = meetingCalTodayStr();
+  document.getElementById('meetingCalendarGrid').classList.toggle('hidden', meetingCalViewMode !== 'DAY');
+  document.getElementById('meetingCalendarWeekGrid').classList.toggle('hidden', meetingCalViewMode !== 'WEEK');
+  document.getElementById('meetingCalendarMonthGrid').classList.toggle('hidden', meetingCalViewMode !== 'MONTH');
+  if (meetingCalViewMode === 'WEEK') return renderMeetingCalendarWeekView(dateInput.value);
+  if (meetingCalViewMode === 'MONTH') return renderMeetingCalendarMonthView(dateInput.value);
+  renderMeetingCalendarDayView(dateInput.value);
+}
+
+function renderMeetingCalendarDayView(dateStr) {
   const grid = document.getElementById('meetingCalendarGrid');
   if (!grid) return;
 
@@ -153,6 +233,91 @@ function renderMeetingCalendar() {
   html += '</tbody></table></div>';
   grid.innerHTML = html;
   wireMeetingCalendarSelection(grid);
+}
+
+const MEETING_CAL_WEEKDAY_LABELS = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+
+// Trả về 7 Date của tuần (bắt đầu Thứ 2) chứa dateStr.
+function getMeetingCalWeekDates(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDay(); // 0=CN,1=T2..6=T7
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  return Array.from({ length: 7 }, (_, i) => {
+    const dt = new Date(monday);
+    dt.setDate(monday.getDate() + i);
+    return dt;
+  });
+}
+
+function renderMeetingCalendarWeekView(dateStr) {
+  const grid = document.getElementById('meetingCalendarWeekGrid');
+  if (!grid) return;
+  const todayStr = meetingCalTodayStr();
+  const weekDates = getMeetingCalWeekDates(dateStr);
+  const rooms = DB.meetingRooms || [];
+  const html = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+      ${weekDates.map((dt, i) => {
+        const dStr = toDatetimeLocalValue(dt).slice(0, 10);
+        const summary = computeMeetingDaySummary(dStr);
+        const isToday = dStr === todayStr;
+        return `
+        <div data-op="jumpMeetingCalToDay" data-arg0="${dStr}" class="border rounded p-2 bg-white cursor-pointer hover:bg-emerald-50 hover:border-emerald-400 ${isToday ? 'ring-2 ring-emerald-500' : ''}">
+          <div class="text-center font-bold text-gray-700">${MEETING_CAL_WEEKDAY_LABELS[i]}</div>
+          <div class="text-center text-gray-500 mb-1.5">${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}</div>
+          <div class="space-y-1">
+            ${rooms.length ? rooms.map(r => {
+              const c = summary.rooms.find(x => x.short === r.short)?.count || 0;
+              return `<div class="px-1.5 py-1 rounded ${c > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}"><div class="leading-tight break-words">${escapeHtml(r.short)}</div><div class="font-bold">${c > 0 ? c + ' lịch' : 'Trống'}</div></div>`;
+            }).join('') : '<div class="text-gray-400 italic text-center">Chưa có phòng họp</div>'}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  grid.innerHTML = html;
+}
+
+// Trả về đúng 42 ô (6 tuần x 7 ngày, bắt đầu Thứ 2) phủ trọn tháng của dateStr — luôn cố định 42 ô cho
+// bố cục lưới đều nhau, ngày ngoài tháng vẫn hiện (mờ đi) để không bị hụt tuần đầu/cuối.
+function getMeetingCalMonthGridDates(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const year = d.getFullYear(), month = d.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const firstDay = firstOfMonth.getDay();
+  const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+  const gridStart = new Date(year, month, 1 - startOffset);
+  return { month, cells: Array.from({ length: 42 }, (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i)) };
+}
+
+function renderMeetingCalendarMonthView(dateStr) {
+  const grid = document.getElementById('meetingCalendarMonthGrid');
+  if (!grid) return;
+  const todayStr = meetingCalTodayStr();
+  const { month, cells } = getMeetingCalMonthGridDates(dateStr);
+  const html = `
+    <div class="bg-white border rounded overflow-hidden">
+      <div class="grid grid-cols-7 bg-gray-100 text-center font-bold text-gray-600">
+        ${MEETING_CAL_WEEKDAY_LABELS.map(l => `<div class="p-1.5 border">${l}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7">
+        ${cells.map(dt => {
+          const dStr = toDatetimeLocalValue(dt).slice(0, 10);
+          const inMonth = dt.getMonth() === month;
+          const isToday = dStr === todayStr;
+          const summary = computeMeetingDaySummary(dStr);
+          return `
+          <div data-op="jumpMeetingCalToDay" data-arg0="${dStr}" class="border p-1 min-h-[52px] cursor-pointer hover:bg-emerald-50 ${inMonth ? '' : 'opacity-40'} ${isToday ? 'ring-2 ring-emerald-500 ring-inset' : ''}">
+            <div class="font-bold text-gray-700">${dt.getDate()}</div>
+            ${summary.totalCount > 0 ? `<div class="text-red-600 font-bold">${summary.totalCount} lịch</div>` : '<div class="text-emerald-600">Trống</div>'}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  grid.innerHTML = html;
 }
 
 // Gắn sự kiện chọn ô — chỉ 1 lần cho mỗi lần tạo mới #meetingCalendarGrid (bản thân div này không bị

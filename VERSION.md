@@ -1,8 +1,124 @@
 # Phiên bản hiện tại
 
-**21.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.9 (2026-09-14): Đăng Ký Xe — "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" bắt buộc (người đăng ký)
+
+Người dùng yêu cầu: (1) lái xe cần kết thúc chuyến (xác nhận kết thúc + nhập
+số km đã đi) sau khi đã "Xác Nhận Đăng Ký"; (2) sau đó người đăng ký phiếu
+phải có nút "Đánh Giá" — **bắt buộc** để phiếu được tính là hoàn thành — lúc
+xác nhận cho phép chỉnh lại số km lái xe đã nhập.
+
+**Phương án đã chốt với người dùng** (3 câu hỏi xác nhận trước khi làm):
+1. Ai được bấm "Đánh Giá"? → **Chỉ người đăng ký phiếu (creator)**, KHÔNG cho
+   admin/Người Điều Hành Xe (`carDispatch`) làm hộ dù có quyền — khác hẳn quy
+   tắc "Hủy Chuyến" (creator HOẶC carDispatch/admin).
+2. Lái xe có bắt buộc "Xác Nhận Đăng Ký" trước khi "Kết Thúc Chuyến" không? →
+   **Có**, bắt buộc — chưa xác nhận thì chưa kết thúc được.
+3. Nút "Đánh Giá" cần gì? → **Chỉ xác nhận + cho chỉnh lại km** (không có
+   thang điểm/đánh giá chất lượng bắt buộc), kèm 1 ô nhận xét KHÔNG bắt buộc.
+
+**Luồng mới**: `APPROVED` (đã có, chỉ Hủy Chuyến/Đổi Tài Xế-Xe) → lái xe xác
+nhận "Xác Nhận Đăng Ký" (đã có) → **"🏁 Kết Thúc Chuyến"** (mới, CHỈ đúng lái
+xe được phân công, phải đã Xác Nhận Đăng Ký trước, nhập số km thực tế) →
+`AWAITING_EVALUATION` ("⏳ Chờ Đánh Giá") → **"⭐ Đánh Giá"** (mới, CHỈ người
+đăng ký phiếu, xem lại km lái xe báo cáo + có thể chỉnh lại + nhận xét không
+bắt buộc) → `COMPLETED` ("✅ Hoàn Thành").
+
+**Chi tiết kỹ thuật**:
+- `lib/recordActions.js`: 2 cặp hàm mới `canEndCarTrip()`/`endCarTrip()` và
+  `canEvaluateCarTrip()`/`evaluateCarTrip()`, mirror đúng khuôn
+  `canConfirmCarDriverAssignment()`/`confirmCarDriverAssignment()` đã có
+  (permission theo identity, không cần perm flag riêng; kiểm tra trạng thái
+  đầu vào; guard chống lặp/double-submit; ném `HttpError` tiếng Việt). 2
+  trường mới quan trọng: `driverReportedKm` (lái xe nhập, giữ NGUYÊN làm audit
+  trail — KHÔNG bao giờ bị ghi đè) và `actualKm` (giá trị "hiện hành", =
+  `driverReportedKm` lúc mới kết thúc chuyến, có thể bị người đánh giá sửa
+  lại) — tách 2 trường để không mất dấu vết số km gốc lái xe báo cáo dù người
+  đăng ký có chỉnh sửa. Thêm `tripEndedAt`, `evaluatedAt`, `evaluatedBy`,
+  `evaluatedByName`, `evaluationComment` (không bắt buộc).
+- `routes/records.js`: 2 route mới `POST /carRegs/:id/end-trip` và
+  `POST /carRegs/:id/evaluate`, mirror đúng `POST /carRegs/:id/confirm-driver`.
+- `public/js/module-dangkyxe.js`: sub-tab "🧑‍✈️ Lái Xe" — nút "✅ Xác Nhận
+  Đăng Ký" cũ, sau khi xác nhận thì thay bằng nút mới "🏁 Kết Thúc Chuyến"
+  (`endCarTripAction()`, dùng `window.prompt()` nhập km rồi mới hiện modal xác
+  nhận lần cuối — mirror đúng khuôn `openCancelCarRegModal()` đã có, không
+  dựng modal riêng). Danh sách chính (`renderCarRegs()`) — badge trạng thái
+  mới "⏳ Chờ đánh giá (N KM)"/"✅ Hoàn thành (N KM)", 2 thẻ dashboard mới, và
+  nút "⭐ Đánh Giá (bắt buộc)" (chỉ hiện với creator khi `AWAITING_EVALUATION`)
+  mở `openEvaluateCarTripModal()` — modal cho xem/sửa km + nhận xét không bắt
+  buộc. "👁️ Xem Phiếu"/"⬇️ Tải" (Phiếu Phê Duyệt) mở rộng áp dụng cho cả 2
+  trạng thái mới (trước chỉ `APPROVED`) — cả ở `module-dangkyxe.js` lẫn
+  `viewCarApprovalSlip()`/`downloadCarApprovalSlip()`/`buildCarApprovalSlipHTML()`
+  (`core.js`, thêm mục "Kết Thúc Chuyến / Đánh Giá" khi đã có `tripEndedAt`).
+- `public/tailwind.css`: rebuild (`npm run build:css`) — 2 class mới lần đầu
+  dùng (`border-l-emerald-600`, `hover:bg-emerald-700`) chưa từng xuất hiện
+  trước đó nên chưa có rule biên dịch sẵn (cùng lớp lỗi đã ghi chú ở
+  `tailwind.config.js`/VERSION.md v21.8 — luôn phải rebuild khi thêm class
+  Tailwind mới trong JS).
+- `tests/test-meeting-car.js`: thêm route mock `/end-trip`/`/evaluate` +
+  10 kịch bản mới nối tiếp trực tiếp kịch bản driver-confirm đã có (permission
+  lái xe khác/km âm/km hợp lệ → `AWAITING_EVALUATION`/double-submit/permission
+  creator-only/đánh giá thành công → `COMPLETED` giữ nguyên audit trail/
+  double-evaluate/sequencing bắt buộc xác nhận trước) — 89/89 kịch bản pass.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql` (carRegs đã lưu cả bản ghi dạng
+JSON `Payload` — trường mới chỉ là field JSON, không phải cột riêng) và KHÔNG
+thêm biến môi trường/dependency nào — chỉ cần copy code + `pm2 restart` (nhớ
+`public/tailwind.css` đã rebuild sẵn trong commit, không cần chạy lại thủ
+công trừ khi tự sửa thêm class mới sau này).
+
+## v21.8 (2026-09-14): Đặt Phòng Họp — "Xem Lịch Họp Nhanh" thêm chế độ Tuần/Tháng (trước chỉ có Ngày)
+
+Người dùng yêu cầu: phần "Xem lịch họp nhanh" (Đặt Phòng Họp > Lịch Họp)
+đang chỉ xem được theo ngày, muốn xem thêm theo Tuần/Tháng để dễ đặt lịch cho
+tương lai (lướt xem trước phòng nào còn trống trong cả tuần/tháng tới, thay
+vì phải dò từng ngày một qua ô chọn ngày).
+
+**Phương án đã chốt với người dùng**: chế độ **Ngày** (mặc định) giữ NGUYÊN
+hành vi cũ 100% (lưới giờ 30 phút/phòng, kéo chuột/Shift+bấm chọn khung giờ
+liên tiếp để đặt). Chế độ **Tuần**/**Tháng** (mới) chỉ xem TỔNG QUAN — mỗi ô
+ngày hiện số lịch đã đặt theo từng phòng (Tuần) hoặc tổng số lịch cả ngày
+(Tháng), KHÔNG chọn giờ trực tiếp được (quá dày đặc để hiện từng khung 30
+phút ở mức zoom này) — bấm vào 1 ô ngày bất kỳ sẽ nhảy thẳng về đúng chế độ
+Ngày của ngày đó để xem chi tiết/đặt lịch.
+
+**Chi tiết kỹ thuật** (`module-phonghop.js`): `renderMeetingCalendar()` đổi
+thành hàm điều phối theo `meetingCalViewMode` ('DAY'/'WEEK'/'MONTH'), gọi
+đúng 1 trong 3 hàm render con (`renderMeetingCalendarDayView()` — đúng logic
+cũ đổi tên, `renderMeetingCalendarWeekView()`, `renderMeetingCalendarMonthView()`
+— 2 hàm mới). Thêm nút chuyển chế độ + ◀ ▶ (lùi/tiến đúng 1 đơn vị theo chế
+độ đang xem: 1 ngày/1 tuần/1 tháng) + nút "Hôm nay". `computeMeetingDaySummary()`
+tổng hợp số lịch (chưa Hủy — mirror đúng luật "đang chiếm chỗ" ở
+`findMeetingConflict()`) theo từng phòng cho 1 ngày, dùng chung cho cả Tuần
+lẫn Tháng.
+
+**Lưu ý kỹ thuật đáng ghi lại**: `public/tailwind.css` là file CSS ĐÃ BUILD
+SẴN (`npm run build:css`, quét class Tailwind xuất hiện trong `index.html` +
+`public/js/**/*.js` tại THỜI ĐIỂM build — xem `tailwind.config.js`), không
+phải build động lúc chạy — class `grid-cols-7` (dùng cho lưới Tháng, 7 cột)
+CHƯA từng xuất hiện ở bất kỳ đâu trong code trước đợt này nên hoàn toàn không
+có rule biên dịch sẵn, khiến lưới Tháng ban đầu vỡ bố cục (xếp dọc thay vì 7
+cột) dù code JS đúng — đã tự phát hiện qua ảnh demo (không phải qua test tự
+động, vì test không tự kiểm tra bố cục CSS) và chạy lại `npm run build:css`
+để vá. Cùng lớp lỗi đã ghi chú sẵn trong `tailwind.config.js` (tab "Đăng Ký
+Xe"/"Lái Xe" từng gặp y hệt) — bất kỳ ai thêm class Tailwind MỚI trong JS
+(không có sẵn trong `index.html`/code cũ) đều phải chạy lại `npm run
+build:css` trong CÙNG đợt, không thể chỉ dựa vào test JS để phát hiện thiếu
+sót loại này.
+
+**Test**: thêm 9 kịch bản mới vào `tests/test-meeting-car.js` (mặc định
+chế độ Ngày, chuyển Tuần/Tháng ẩn-hiện đúng lưới, tổng hợp số lịch đúng theo
+từng ô ngày ở cả Tuần lẫn Tháng, bấm ô ngày nhảy đúng về chế độ Ngày, nút
+◀ ▶ nhảy đúng bước theo từng chế độ, nút "Hôm nay") — 81/81 PASS (72 kịch
+bản cũ + 9 mới). Chạy lại `test-lazy-load-all-tabs.js` (42/42) — đều PASS.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies —
+thuần sửa giao diện + rebuild `public/tailwind.css` (đã build sẵn, commit
+kèm trong PR — không cần chạy `npm run build:css` lại trên server thật, chỉ
+cần copy code + `pm2 restart` như bình thường).
 
 ## v21.7 (2026-09-14): Vá lỗi thật Checklist báo nhầm "Còn N câu hỏi bắt buộc chưa trả lời" dù đã chọn đủ đáp án
 
