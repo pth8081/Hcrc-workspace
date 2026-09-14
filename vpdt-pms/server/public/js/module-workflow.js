@@ -88,31 +88,38 @@ const WF_MODULE_CONFIG = {
   // OPERATION_REPAIR_ESTIMATE đã xoá khỏi đây.
 };
 
-// ===== "⚡ Áp Dụng Nhanh" — set NHANH cùng 1 mẫu quy trình (workflowId, tức số bước) cho MỌI phòng
-// ban/mức CHƯA từng được admin cấu hình riêng, trên TOÀN BỘ WF_MODULE_CONFIG cùng lúc — chỉ tiện lợi
-// lúc mới cài đặt hệ thống/muốn đồng bộ nhanh số bước mặc định, KHÔNG tự gán người duyệt (approvers
-// rỗng, admin vẫn phải vào từng module gán người duyệt như bình thường) và TUYỆT ĐỐI KHÔNG đụng tới bất
-// kỳ phòng ban/mức nào ĐÃ có cấu hình từ trước (kể cả chỉ có workflowId mà chưa gán người duyệt nào —
-// vẫn coi là "đã cấu hình", không ghi đè) — tránh đúng rủi ro "đổi mẫu quy trình = xoá sạch approvers đã
-// gán" mà renderWorkflowTab()/onWorkflowTemplateChange() vốn có khi admin CHỦ Ý đổi mẫu cho 1 mục cụ thể.
+// ===== "⚡ Áp Dụng Nhanh" (sub-tab riêng "Hệ Thống > Áp Dụng Nhanh") — set NHANH cùng 1 mẫu quy trình
+// (workflowId, tức số bước) cho MỌI phòng ban/mức CHƯA từng được admin cấu hình riêng, trong ĐÚNG phạm
+// vi các module admin chọn cho TỪNG cấu hình (DB.quickApplyConfigs — nhiều cấu hình độc lập, mỗi cấu
+// hình là 1 cặp {mẫu quy trình, danh sách module}, KHÔNG còn bắt buộc 1 mẫu áp cho TOÀN BỘ quy trình
+// như thiết kế cũ) — chỉ tiện lợi lúc mới cài đặt hệ thống/muốn đồng bộ nhanh số bước mặc định, KHÔNG tự
+// gán người duyệt (approvers rỗng, admin vẫn phải vào "Quy Trình & Phê Duyệt" gán người duyệt như bình
+// thường) và TUYỆT ĐỐI KHÔNG đụng tới bất kỳ phòng ban/mức nào ĐÃ có cấu hình từ trước (kể cả chỉ có
+// workflowId mà chưa gán người duyệt nào — vẫn coi là "đã cấu hình", không ghi đè) — tránh đúng rủi ro
+// "đổi mẫu quy trình = xoá sạch approvers đã gán" mà renderWorkflowTab()/onWorkflowTemplateChange() vốn
+// có khi admin CHỦ Ý đổi mẫu cho 1 mục cụ thể.
 //
-// OPERATION_STORE_OPEN/OPERATION_REPAIR (Vận Hành > Siêu Thị) CỐ Ý loại khỏi phạm vi quét — 2 module này
-// KHÔNG còn bước duyệt thật nào (hồ sơ luôn APPROVED ngay, xem chú thích WF_MODULE_CONFIG ở trên), set
-// workflowId ở đó không có tác dụng gì và dễ gây hiểu lầm là đã cấu hình xong.
+// OPERATION_STORE_OPEN/OPERATION_REPAIR (Vận Hành > Siêu Thị) CỐ Ý loại khỏi phạm vi quét/danh sách chọn
+// module — 2 module này KHÔNG còn bước duyệt thật nào (hồ sơ luôn APPROVED ngay, xem chú thích
+// WF_MODULE_CONFIG ở trên), set workflowId ở đó không có tác dụng gì và dễ gây hiểu lầm là đã cấu hình xong.
 const QUICK_APPLY_EXCLUDED_MODULES = new Set(['OPERATION_STORE_OPEN', 'OPERATION_REPAIR']);
 
 // Liệt kê CHÍNH XÁC những "ô" (phòng ban, hoặc phòng ban×loại, hoặc mức/tier) hiện CHƯA có cấu hình
-// riêng — dùng CHUNG cho cả hiện số lượng ảnh hưởng trước (showQuickApplyWorkflowStepsImpact()) lẫn
-// thực thi thật (applyQuickApplyWorkflowSteps()), để không tính 1 đằng áp dụng 1 nẻo. Mỗi target mang
-// theo đúng `dbKey` (AppData key nó sẽ ghi vào) để bên gọi biết cần syncStorage() key nào sau khi áp
-// dụng xong.
-function collectQuickApplyUnconfiguredTargets() {
+// riêng — dùng CHUNG cho cả hiện số lượng ảnh hưởng trước (showQuickApplyConfigImpact()) lẫn thực thi
+// thật (applyQuickApplyConfig()), để không tính 1 đằng áp dụng 1 nẻo. Mỗi target mang theo đúng `dbKey`
+// (AppData key nó sẽ ghi vào) để bên gọi biết cần syncStorage() key nào sau khi áp dụng xong.
+// `moduleKeys` (mảng WF_MODULE_CONFIG key, tuỳ chọn): giới hạn quét ĐÚNG các module này — dùng cho 1 cấu
+// hình Áp Dụng Nhanh cụ thể (cfg.modules). Bỏ trống/không truyền = quét TOÀN BỘ WF_MODULE_CONFIG (vẫn
+// giữ để nơi khác/test có thể xem tổng số mục thiếu cấu hình trên cả hệ thống nếu cần).
+function collectQuickApplyUnconfiguredTargets(moduleKeys) {
   const targets = [];
   const depts = getWorkflowParticipatingDepts();
   const emptyConfig = (workflowId) => ({ workflowId, approvers: {}, approverMode: {}, approversByPosition: {} });
+  const scopeKeys = (moduleKeys && moduleKeys.length) ? new Set(moduleKeys) : null;
 
   Object.entries(WF_MODULE_CONFIG).forEach(([modKey, cfg]) => {
     if (QUICK_APPLY_EXCLUDED_MODULES.has(modKey)) return;
+    if (scopeKeys && !scopeKeys.has(modKey)) return;
 
     if (cfg.pureTier) {
       // Vận Hành > Đặt Hàng Tại Siêu Thị/HO — chỉ có tier, không có dept.
@@ -194,54 +201,161 @@ function collectQuickApplyUnconfiguredTargets() {
   return targets;
 }
 
-// Nạp danh sách mẫu quy trình vào ô chọn của khối "Áp Dụng Nhanh" — gọi mỗi lần vào tab (setSystemSubTab()
-// nhánh WORKFLOW) VÀ mỗi lần danh sách DB.workflows đổi (renderWorkflowTemplatesTable() gọi lại) để luôn
-// khớp mẫu mới nhất, tránh chọn nhầm mẫu vừa bị admin xoá.
-function renderQuickApplyWfSelect() {
-  const sel = document.getElementById('quickApplyWfSelect');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = DB.workflows.map(w => `<option value="${w.id}">${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
-  if (current && DB.workflows.some(w => w.id === current)) sel.value = current;
-  document.getElementById('quickApplyWfImpact')?.classList.add('hidden');
+// editingQuickApplyConfigId: id cấu hình Áp Dụng Nhanh đang Sửa (null = form "+ Thêm Cấu Hình Mới" đang
+// ở chế độ TẠO MỚI) — mirror đúng khuôn editingWfCode (module-itsupport-tier.js) cho form template.
+let editingQuickApplyConfigId = null;
+
+// Gọi mỗi lần vào sub-tab "⚡ Áp Dụng Nhanh" (setSystemSubTab() nhánh QUICKAPPLY) VÀ mỗi lần danh sách
+// DB.workflows đổi (renderWorkflowTemplatesTable() gọi lại) để luôn khớp mẫu mới nhất, tránh chọn nhầm
+// mẫu vừa bị admin xoá — nạp lại cả ô chọn mẫu của form thêm/sửa lẫn danh sách cấu hình đã lưu (tên mẫu
+// hiển thị trong mỗi thẻ cấu hình cũng cần cập nhật theo).
+function renderQuickApplySection() {
+  const sel = document.getElementById('qaTplSelect');
+  if (sel) {
+    const current = sel.value;
+    sel.innerHTML = DB.workflows.map(w => `<option value="${w.id}">${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
+    if (current && DB.workflows.some(w => w.id === current)) sel.value = current;
+  }
+  const grid = document.getElementById('qaModuleGrid');
+  if (grid) {
+    const checked = new Set(Array.from(grid.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value));
+    grid.innerHTML = Object.entries(WF_MODULE_CONFIG)
+      .filter(([modKey]) => !QUICK_APPLY_EXCLUDED_MODULES.has(modKey))
+      .map(([modKey, cfg]) => `
+        <label class="flex items-center gap-1.5 text-xs bg-white border rounded px-2 py-1.5 cursor-pointer hover:bg-gray-50">
+          <input type="checkbox" value="${modKey}" class="qaModuleCheck w-3.5 h-3.5"${checked.has(modKey) ? ' checked' : ''}>
+          <span>${escapeHtml(cfg.label)}</span>
+        </label>
+      `).join('');
+  }
+  renderQuickApplyConfigList();
 }
 
-function showQuickApplyWorkflowStepsImpact() {
-  const targets = collectQuickApplyUnconfiguredTargets();
-  const box = document.getElementById('quickApplyWfImpact');
-  if (!box) return;
+function renderQuickApplyConfigList() {
+  const wrap = document.getElementById('quickApplyConfigList');
+  if (!wrap) return;
+  const configs = DB.quickApplyConfigs || [];
+  if (!configs.length) {
+    wrap.innerHTML = `<div class="text-xs text-gray-500 italic">Chưa có cấu hình Áp Dụng Nhanh nào — tạo cấu hình đầu tiên ở khối bên dưới.</div>`;
+    return;
+  }
+  wrap.innerHTML = configs.map(cfg => {
+    const wf = DB.workflows.find(w => w.id === cfg.workflowId);
+    const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k);
+    return `
+      <div class="bg-gray-50 border rounded-lg p-3 space-y-2">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap text-xs">
+            ${wf
+              ? `<span class="bg-blue-50 border border-blue-200 text-blue-700 font-bold px-2 py-1 rounded-full">${escapeHtml(wf.name)}</span>`
+              : `<span class="bg-red-50 border border-red-200 text-red-700 font-bold px-2 py-1 rounded-full">⚠️ Mẫu quy trình đã bị xoá</span>`}
+            <span class="text-gray-400">→ gắn cho:</span>
+            ${modLabels.map(l => `<span class="bg-white border rounded-full px-2 py-0.5">${escapeHtml(l)}</span>`).join('')}
+          </div>
+          <div class="flex gap-1.5 flex-wrap shrink-0">
+            <button type="button" data-op="showQuickApplyConfigImpact" data-arg0="${cfg.id}" class="bg-white border border-amber-300 text-amber-800 px-2 py-1 rounded text-[11px] font-bold hover:bg-amber-50">🔍 Xem Trước</button>
+            <button type="button" data-op="applyQuickApplyConfig" data-arg0="${cfg.id}" class="bg-amber-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-amber-700"${wf ? '' : ' disabled'}>⚡ Áp Dụng</button>
+            <button type="button" data-op="editQuickApplyConfig" data-arg0="${cfg.id}" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Sửa</button>
+            <button type="button" data-op="deleteQuickApplyConfig" data-arg0="${cfg.id}" class="bg-red-50 text-red-700 border border-red-200 px-2 py-1 rounded text-[11px] font-bold hover:bg-red-100">🗑️ Xoá</button>
+          </div>
+        </div>
+        <div id="qaImpact_${cfg.id}" class="hidden text-xs bg-white border rounded p-2 max-h-40 overflow-y-auto"></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showQuickApplyConfigImpact(configId) {
+  const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
+  const box = document.getElementById(`qaImpact_${configId}`);
+  if (!cfg || !box) return;
   box.classList.remove('hidden');
+  const targets = collectQuickApplyUnconfiguredTargets(cfg.modules);
   if (!targets.length) {
-    box.innerHTML = `<div class="text-emerald-700 font-semibold">✅ Không còn mục nào thiếu cấu hình — mọi phòng ban/mức trên mọi quy trình đều đã được admin gán mẫu quy trình riêng.</div>`;
+    box.innerHTML = `<div class="text-emerald-700 font-semibold">✅ Không còn mục nào thiếu cấu hình trong phạm vi các module đã chọn.</div>`;
     return;
   }
   box.innerHTML = `
-    <div class="font-bold text-gray-700 mb-1">${targets.length} mục đang THIẾU cấu hình (sẽ được set số bước nếu bấm "Áp Dụng Nhanh"):</div>
+    <div class="font-bold text-gray-700 mb-1">${targets.length} mục đang THIẾU cấu hình (sẽ được set số bước nếu bấm "⚡ Áp Dụng"):</div>
     <ul class="list-disc list-inside space-y-0.5 text-gray-600">${targets.map(t => `<li>${escapeHtml(t.label)}</li>`).join('')}</ul>
   `;
 }
 
-function applyQuickApplyWorkflowSteps() {
-  const workflowId = document.getElementById('quickApplyWfSelect')?.value;
-  if (!workflowId) return alert('Chưa có mẫu quy trình nào để áp dụng — vào khối "Định Nghĩa Các Mẫu Bước Phê Duyệt" bên dưới để tạo trước.');
+function applyQuickApplyConfig(configId) {
+  const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
+  if (!cfg) return;
+  const wf = DB.workflows.find(w => w.id === cfg.workflowId);
+  if (!wf) return alert('⚠️ Mẫu quy trình của cấu hình này đã bị xoá — bấm "✏️ Sửa" để chọn lại mẫu khác trước khi áp dụng.');
 
-  const targets = collectQuickApplyUnconfiguredTargets();
-  if (!targets.length) return alert('✅ Không có phòng ban/mức nào đang thiếu cấu hình — không có gì để áp dụng.');
+  const targets = collectQuickApplyUnconfiguredTargets(cfg.modules);
+  if (!targets.length) return alert('✅ Không có phòng ban/mức nào đang thiếu cấu hình trong phạm vi các module đã chọn — không có gì để áp dụng.');
 
-  const wf = DB.workflows.find(w => w.id === workflowId);
+  const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k).join(', ');
   const proceed = confirm(
-    `Sẽ áp dụng mẫu "${wf?.name || workflowId}" (${wf?.steps?.length || '?'} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình trên toàn bộ quy trình phê duyệt — KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.\n\n` +
-    `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào từng module để gán người duyệt cho từng bước sau khi áp dụng.\n\nTiếp tục?`
+    `Sẽ áp dụng mẫu "${wf.name}" (${wf.steps.length} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình, trong phạm vi module: ${modLabels} — KHÔNG đụng tới module ngoài phạm vi này, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.\n\n` +
+    `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước sau khi áp dụng.\n\nTiếp tục?`
   );
   if (!proceed) return;
 
-  targets.forEach(t => t.apply(workflowId));
+  targets.forEach(t => t.apply(cfg.workflowId));
   const dirtyKeys = [...new Set(targets.map(t => t.dbKey))];
   dirtyKeys.forEach(key => syncStorage(key));
 
-  logSystemAction('CONFIG', 'QUICK_APPLY_WORKFLOW_STEPS', `Áp dụng nhanh mẫu quy trình [${workflowId}] cho ${targets.length} mục chưa cấu hình`, 'SUCCESS', workflowId);
-  alert(`✅ Đã áp dụng cho ${targets.length} mục. Vào từng module bên dưới để gán người duyệt cho từng bước.`);
-  document.getElementById('quickApplyWfImpact')?.classList.add('hidden');
-  renderWorkflowTab();
+  logSystemAction('CONFIG', 'QUICK_APPLY_WORKFLOW_STEPS', `Áp dụng cấu hình Áp Dụng Nhanh [${cfg.id}] — mẫu [${cfg.workflowId}] cho ${targets.length} mục (phạm vi module: ${(cfg.modules || []).join(', ')})`, 'SUCCESS', cfg.workflowId);
+  alert(`✅ Đã áp dụng cho ${targets.length} mục. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước.`);
+  document.getElementById(`qaImpact_${configId}`)?.classList.add('hidden');
+}
+
+function saveQuickApplyConfig(e) {
+  e.preventDefault();
+  const workflowId = document.getElementById('qaTplSelect')?.value;
+  if (!workflowId) return alert('Chưa có mẫu quy trình nào — vào "🔄 Quy Trình & Phê Duyệt" để tạo mẫu trước (khối "Định Nghĩa Các Mẫu Bước Phê Duyệt").');
+  const modules = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
+  if (!modules.length) return alert('Chọn ít nhất 1 module để gắn cấu hình này.');
+
+  let configId = editingQuickApplyConfigId;
+  if (configId) {
+    const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
+    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; }
+  } else {
+    configId = Math.max(0, ...(DB.quickApplyConfigs || []).map(c => c.id)) + 1;
+    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules }];
+  }
+  syncStorage('quickApplyConfigs');
+  logSystemAction('CONFIG', editingQuickApplyConfigId ? 'UPDATE_QUICK_APPLY_CONFIG' : 'CREATE_QUICK_APPLY_CONFIG', `${editingQuickApplyConfigId ? 'Sửa' : 'Tạo'} cấu hình Áp Dụng Nhanh [${configId}] — mẫu [${workflowId}] cho module: ${modules.join(', ')}`, 'SUCCESS', String(configId));
+  resetQuickApplyConfigForm();
+  renderQuickApplyConfigList();
+}
+
+function editQuickApplyConfig(configId) {
+  const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
+  if (!cfg) return;
+  editingQuickApplyConfigId = configId;
+  const sel = document.getElementById('qaTplSelect');
+  if (sel) sel.value = cfg.workflowId;
+  document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = (cfg.modules || []).includes(el.value); });
+  const btnSave = document.getElementById('btnSaveQaConfig');
+  if (btnSave) btnSave.textContent = '💾 Lưu Thay Đổi';
+  document.getElementById('btnCancelQaConfig')?.classList.remove('hidden');
+  document.getElementById('quickApplyAddForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function resetQuickApplyConfigForm() {
+  editingQuickApplyConfigId = null;
+  document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = false; });
+  const btnSave = document.getElementById('btnSaveQaConfig');
+  if (btnSave) btnSave.textContent = '💾 Lưu Cấu Hình';
+  document.getElementById('btnCancelQaConfig')?.classList.add('hidden');
+}
+
+function deleteQuickApplyConfig(configId) {
+  const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
+  if (!cfg) return;
+  if (!confirm('Xoá cấu hình Áp Dụng Nhanh này? (Không ảnh hưởng gì tới các mục ĐÃ được áp dụng trước đó — chỉ xoá cấu hình để dùng áp dụng tiếp trong tương lai.)')) return;
+  DB.quickApplyConfigs = (DB.quickApplyConfigs || []).filter(c => c.id !== configId);
+  syncStorage('quickApplyConfigs');
+  logSystemAction('CONFIG', 'DELETE_QUICK_APPLY_CONFIG', `Xoá cấu hình Áp Dụng Nhanh [${configId}]`, 'SUCCESS', String(configId));
+  if (editingQuickApplyConfigId === configId) resetQuickApplyConfigForm();
+  renderQuickApplyConfigList();
 }
 

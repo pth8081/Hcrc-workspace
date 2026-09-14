@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**22.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.3 (2026-09-14): "⚡ Áp Dụng Nhanh" tách sub-tab riêng + đa cấu hình theo module
+
+Người dùng gửi ảnh chụp khối "⚡ Áp Dụng Nhanh Số Bước Cho Toàn Bộ Quy Trình"
+(nằm trong màn "Hệ Thống → Quy Trình & Phê Duyệt") và yêu cầu: tách khối này
+ra 1 sub-tab riêng ngay cạnh "Quy Trình & Phê Duyệt" (các sub-tab khác giữ
+nguyên, không đụng vào), đồng thời thay vì chỉ chọn ĐÚNG 1 mẫu quy trình rồi
+áp dụng cho TOÀN BỘ module cùng lúc, cho phép tạo NHIỀU cấu hình độc lập —
+mỗi cấu hình gắn 1 mẫu quy trình (số bước) vào ĐÚNG các module admin tự chọn
+(VD mẫu 1 bước gắn cho vài module, mẫu 2 bước gắn cho vài module khác).
+Đã gửi demo (Artifact) mockup trước, người dùng xác nhận thiết kế rồi mới
+code + merge (không phải quy trình mặc định "xác nhận xong code luôn" —
+người dùng chủ động yêu cầu xem demo trước cho tính năng này).
+
+**Trước đây**: 1 khối "⚡ Áp Dụng Nhanh" duy nhất nằm ngay trong màn "Quy
+Trình & Phê Duyệt" — chỉ chọn được 1 mẫu quy trình mỗi lần, bấm áp dụng là
+điền vào MỌI phòng ban/mức đang thiếu cấu hình trên TOÀN BỘ 13 module cùng
+lúc (`applyQuickApplyWorkflowSteps()`).
+
+**Bây giờ**: sub-tab riêng "⚡ Áp Dụng Nhanh" (sidebar Hệ Thống, ngay cạnh
+"Quy Trình & Phê Duyệt") quản lý DANH SÁCH nhiều cấu hình (`DB.quickApplyConfigs`,
+mỗi phần tử `{id, workflowId, modules:[...]}`) — mỗi cấu hình có nút riêng
+"🔍 Xem Trước"/"⚡ Áp Dụng"/"✏️ Sửa"/"🗑️ Xoá", chỉ tác động đúng phạm vi
+module đã chọn cho cấu hình đó (`collectQuickApplyUnconfiguredTargets(moduleKeys)`
+nhận thêm tham số phạm vi, `applyQuickApplyConfig(configId)` thay cho hàm
+apply-toàn-bộ cũ). Vẫn giữ nguyên bất biến quan trọng nhất: chỉ điền phòng
+ban/mức CHƯA từng cấu hình, KHÔNG tự gán người duyệt, KHÔNG đụng module
+ngoài phạm vi cấu hình, KHÔNG đụng mục đã cấu hình sẵn — kể cả khi cấu hình
+khác đã điền trước đó (VD Cấu hình A gắn CAR, Cấu hình B gắn ITPRICE: áp
+dụng B không đổi lại CAR đã điền ở A). Khối "🛠️ Định Nghĩa Các Mẫu Bước Phê
+Duyệt" (tạo/sửa/xóa mẫu quy trình `DB.workflows`) và phần gán người duyệt
+theo module vẫn giữ nguyên 100% ở tab "Quy Trình & Phê Duyệt" cũ, không di
+chuyển gì thêm.
+
+Dữ liệu mới `quickApplyConfigs` (AppData key, admin-only — thêm vào
+`ADMIN_ONLY_KEYS` ở `routes/data.js`, seed rỗng ở `defaults.js`). Client:
+`module-workflow.js` (CRUD + preview + apply theo từng cấu hình),
+`module-hethong-tabs.js` (`setSystemSubTab('QUICKAPPLY')`), `index.html`
+(nút sub-tab mới ở cả thanh trong màn Hệ Thống lẫn dropdown sidebar, sub-tab
+mới `#quickApplySection`). Test: viết lại `tests/test-quick-apply-workflow-steps.js`
+(34 kịch bản, bao gồm 5 khuôn dữ liệu module cũ + CRUD cấu hình + đúng phạm
+vi module không lấn nhau) — 34/34 pass; `test-lazy-load-all-tabs.js` (42/42),
+`test-workflow-position-approvers.js` (22/22), `test-preview-workflow-buttons.js`
+(17/17) đều pass, không có regression.
 
 ## v22.2 (2026-09-14): Danh Mục Phòng Họp dời vào Quản Lý Danh Mục + Báo Cáo trong module Phòng Họp + Sửa được mọi danh mục
 

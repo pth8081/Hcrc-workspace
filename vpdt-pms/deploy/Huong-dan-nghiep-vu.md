@@ -310,37 +310,55 @@ giữ đúng vị trí đó chưa (form Sửa Người Dùng có ô Chức danh 
 có người giữ vị trí: người đó đã có quyền "Người duyệt" chưa (3.2) → nếu Theo
 phòng ban: có ai trong phòng đó có quyền "Người duyệt" chưa.
 
-### 3.6. "⚡ Áp Dụng Nhanh Số Bước Cho Toàn Bộ Quy Trình"
+### 3.6. "⚡ Áp Dụng Nhanh" (sub-tab riêng, cạnh "Quy Trình & Phê Duyệt")
 
-Ở đầu màn **Hệ Thống → 🔄 Quy Trình & Phê Duyệt** có khối **"⚡ Áp Dụng Nhanh"**
-— tiện ích để set NHANH **số bước** (chọn 1 mẫu quy trình đã định nghĩa sẵn ở
-khối "🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt" cùng màn) cho MỌI phòng ban/mức
-trên **TẤT CẢ** quy trình phê duyệt (mục 3) cùng lúc, thay vì phải vào từng
-thẻ phòng ban của từng module một để chọn số bước tay.
+**Hệ Thống → ⚡ Áp Dụng Nhanh** là 1 sub-tab RIÊNG (ngang hàng với "🔄 Quy
+Trình & Phê Duyệt", không nằm lồng bên trong nữa từ v22.3) — tiện ích để set
+NHANH **số bước** (chọn 1 mẫu quy trình đã định nghĩa sẵn ở khối "🛠️ Định
+Nghĩa Các Mẫu Bước Phê Duyệt" bên tab "Quy Trình & Phê Duyệt") cho những
+phòng ban/mức đang thiếu cấu hình, thay vì phải vào từng thẻ phòng ban của
+từng module một để chọn số bước tay.
 
-Nguyên tắc quan trọng cần biết trước khi dùng:
+Khác với thiết kế cũ (chỉ chọn được 1 mẫu rồi áp cho TẤT CẢ module cùng
+lúc), từ v22.3 màn này quản lý **danh sách nhiều cấu hình độc lập** — mỗi
+cấu hình là 1 cặp **(mẫu quy trình, danh sách module muốn gắn)**, admin tự
+chọn module nào áp mẫu nào: VD tạo 1 cấu hình gắn "Quy trình 1 bước" cho
+Đăng Ký Xe + Mua Sắm VPP, tạo thêm 1 cấu hình khác gắn "Quy trình 2 bước"
+cho Giá IT + Ngân Sách — không còn bắt buộc chọn 1 mẫu duy nhất áp cho toàn
+bộ hệ thống. Mỗi cấu hình có 4 nút riêng: **"🔍 Xem Trước"** (xem danh sách
+phòng ban/mức sẽ bị điền, chỉ trong phạm vi module của cấu hình đó),
+**"⚡ Áp Dụng"**, **"✏️ Sửa"** (đổi lại mẫu/phạm vi module của cấu hình đã
+tạo), **"🗑️ Xoá"** (chỉ xoá cấu hình, không ảnh hưởng gì tới các mục ĐÃ
+được áp dụng từ trước).
+
+Nguyên tắc quan trọng cần biết trước khi dùng (không đổi so với trước):
 
 - **Chỉ set số bước, KHÔNG tự gán người duyệt** — sau khi áp dụng, mọi bước
   vừa được điền đều CHƯA có người duyệt nào, admin vẫn phải vào từng module
   (Đăng Ký Xe/VPP/Hợp Đồng/...) gán người duyệt cho từng bước như bình
   thường. Đây thuần là đường tắt chọn nhanh SỐ BƯỚC ban đầu, không thay thế
   bước cấu hình người duyệt.
-- **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình** — bất kỳ phòng
-  ban/mức nào ĐÃ được admin cấu hình từ trước (kể cả chỉ mới chọn số bước mà
-  chưa gán người duyệt) đều **được giữ nguyên hoàn toàn**, không bị ghi đè.
-  Bấm **"🔍 Xem Số Mục Ảnh Hưởng"** trước để xem chính xác danh sách phòng
-  ban/mức nào sẽ bị ảnh hưởng, rồi mới bấm **"⚡ Áp Dụng Nhanh"** nếu đồng ý.
-- **Vẫn sửa được từng bước ở từng module bình thường** sau khi áp dụng —
-  tính năng này không khoá hay thay đổi gì cách admin cấu hình chi tiết
-  từng module như trước, chỉ là 1 bước khởi tạo nhanh ban đầu.
+- **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình, trong ĐÚNG phạm
+  vi module của cấu hình đó** — bất kỳ phòng ban/mức nào ĐÃ được admin cấu
+  hình từ trước (kể cả chỉ mới chọn số bước mà chưa gán người duyệt) đều
+  **được giữ nguyên hoàn toàn**, không bị ghi đè; module KHÔNG nằm trong
+  danh sách của cấu hình đang bấm "Áp Dụng" cũng **hoàn toàn không bị đụng
+  tới**, dù đang thiếu cấu hình (dành cho 1 cấu hình KHÁC xử lý riêng). Bấm
+  **"🔍 Xem Trước"** trước để xem chính xác danh sách sẽ bị ảnh hưởng, rồi
+  mới bấm **"⚡ Áp Dụng"** nếu đồng ý.
+- **Vẫn sửa được từng bước ở từng module bình thường** sau khi áp dụng, tại
+  tab "🔄 Quy Trình & Phê Duyệt" — tính năng này không khoá hay thay đổi gì
+  cách admin cấu hình chi tiết từng module như trước, chỉ là 1 bước khởi
+  tạo nhanh ban đầu.
 - **2 module Vận Hành > Mở Mới/Sửa Chữa Siêu Thị không nằm trong phạm vi** —
-  2 module này không còn bước phê duyệt nào cả (xem mục 4.4), nên "Áp Dụng
-  Nhanh" không đụng tới.
+  2 module này không còn bước phê duyệt nào cả (xem mục 4.4), nên không
+  xuất hiện trong danh sách module để chọn khi tạo cấu hình.
 
-**Dùng khi nào**: hữu ích nhất lúc mới triển khai hệ thống (đồng bộ nhanh 1
-số bước chuẩn cho toàn bộ quy trình trước khi đi gán người duyệt từng nơi),
-hoặc khi công ty đổi chính sách chung "từ nay mọi quy trình mới thêm đều
-theo N bước" mà không muốn phá vỡ các quy trình đã cấu hình riêng từ trước.
+**Dùng khi nào**: hữu ích nhất lúc mới triển khai hệ thống (đồng bộ nhanh
+số bước chuẩn cho từng nhóm module trước khi đi gán người duyệt từng nơi),
+hoặc khi công ty đổi chính sách chung "từ nay các module X/Y/Z mới thêm đều
+theo N bước" mà không muốn phá vỡ các quy trình đã cấu hình riêng từ trước,
+và không muốn ảnh hưởng tới các module khác chưa sẵn sàng đổi.
 
 ### 3.7. "🔍 Xem Quy Trình" — xem trước quy trình duyệt ngay trên form tạo hồ sơ
 
