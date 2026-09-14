@@ -608,6 +608,25 @@ async function main() {
         // Người trình (alice) xác nhận KHÔNG đồng ý trước -> về NHÁP, mở luôn modal tự sửa.
         finishLogin(aliceUser);
         openResolveFileProposalModal(troLySub.id);
+
+        // BUG THẬT đã sửa (rà soát theo báo cáo người dùng "khung xem tài liệu bị ẩn xuống dưới các
+        // khung khác"): nút "👁️ Xem" bên trong modal "Xác Nhận Thay Thế Tờ Trình" (genericConfirmModal,
+        // z-[60]) gọi viewFileProposalAttachment() -> openFileProtectedView() -> mở viewDocModal — trước
+        // đây viewDocModal chỉ z-[55], THẤP hơn genericConfirmModal đang mở nó, nên khung xem tài liệu bị
+        // lớp nền tối (backdrop) của modal xác nhận đè lên, coi như ẩn mất dù kỹ thuật vẫn "mở". Xác nhận
+        // bằng z-index CSS THẬT (không chỉ đọc lại giá trị class) để bắt đúng lớp bug này nếu tái phát.
+        const genericConfirmVisibleBeforeView = !document.getElementById('genericConfirmModal').classList.contains('hidden');
+        viewFileProposalAttachment(troLySub.id);
+        const viewDocVisibleOverConfirm = !document.getElementById('viewDocModal').classList.contains('hidden');
+        const genericConfirmZ = parseInt(getComputedStyle(document.getElementById('genericConfirmModal')).zIndex, 10);
+        const viewDocZ = parseInt(getComputedStyle(document.getElementById('viewDocModal')).zIndex, 10);
+        closeViewDocModal();
+        check(
+          'submission TRO_LY_THU_KY: "👁️ Xem" tệp đề xuất thay thế (mở TỪ BÊN TRONG modal xác nhận genericConfirmModal) hiện khung xem tài liệu NỔI TRÊN modal xác nhận (z-index cao hơn), không bị ẩn phía dưới',
+          genericConfirmVisibleBeforeView && viewDocVisibleOverConfirm && Number.isFinite(genericConfirmZ) && Number.isFinite(viewDocZ) && viewDocZ > genericConfirmZ,
+          `genericConfirmVisible=${genericConfirmVisibleBeforeView} viewDocVisible=${viewDocVisibleOverConfirm} genericConfirmZ=${genericConfirmZ} viewDocZ=${viewDocZ}`
+        );
+
         alerts.length = 0;
         await confirmResolveFileProposal(troLySub.id, false);
         const subAfterDecline = DB.submissions.find(s => s.id === troLySub.id);
