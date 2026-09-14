@@ -150,6 +150,35 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // POST /api/records/carRegs/:id/end-trip | /evaluate — luồng "Kết Thúc Chuyến" (lái xe)/"Đánh Giá"
+  // (người đăng ký) MỚI, mirrors routes/records.js.
+  const endTripMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/end-trip$/);
+  if (req.method === 'POST' && endTripMatch) {
+    const id = Number(endTripMatch[1]);
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.endCarTrip(activeServerUser, item, body);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+  const evaluateCarMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/evaluate$/);
+  if (req.method === 'POST' && evaluateCarMatch) {
+    const id = Number(evaluateCarMatch[1]);
+    const body = await readBody(req);
+    const item = store.carRegs.find((c) => c.id === id);
+    if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
+    try {
+      const result = recordActions.evaluateCarTrip(activeServerUser, item, body);
+      return sendJson(res, 200, { ok: true, item: result });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+  }
+
   // POST /api/records/carRegs/:id/cancel — Fix 4 (đợt rà soát nghiệp vụ) "Hủy chuyến" sau khi đã duyệt —
   // mirrors routes/records.js POST /api/records/carRegs/:id/cancel.
   const cancelCarMatch = url.pathname.match(/^\/api\/records\/carRegs\/(\d+)\/cancel$/);
@@ -845,6 +874,116 @@ async function main() {
     'Car: assigned driver can view the trip across departments; an unassigned driver cannot',
     c12CanDriver1View === true && c12CanDriver2View === false,
     `driver1(assigned)=${c12CanDriver1View} driver2(unassigned)=${c12CanDriver2View}`
+  );
+
+  // ===== "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" (người đăng ký, bắt buộc để hoàn thành) — tính năng
+  // MỚI, tiếp nối trực tiếp c7 (đã APPROVED + driverConfirmed=true ở C11 phía trên). =====
+
+  // Lái xe KHÁC (lx2, chưa được phân công) không kết thúc được chuyến của lx1 -> 403.
+  await loginAs(page, driverUser2);
+  const cEnd1 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'end-trip', { km: 100 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: a driver who is not the assigned one cannot end the trip (403)',
+    cEnd1.ok === false,
+    JSON.stringify(cEnd1)
+  );
+
+  // km không hợp lệ (âm) -> 400.
+  await loginAs(page, driverUser);
+  const cEnd2 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'end-trip', { km: -5 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: ending the trip with an invalid (negative) km value is rejected',
+    cEnd2.ok === false,
+    JSON.stringify(cEnd2)
+  );
+
+  // Lái xe đúng (lx1, đã confirm ở C11) kết thúc chuyến với km hợp lệ -> AWAITING_EVALUATION.
+  const cEnd3 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'end-trip', { km: 123.5 });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    if (idx !== -1) DB.carRegs[idx] = result.item;
+    return { status: result.item.status, driverReportedKm: result.item.driverReportedKm, actualKm: result.item.actualKm, tripEndedAt: result.item.tripEndedAt };
+  }, c7.saved.id);
+  record(
+    'Car: assigned driver ends the trip with km entered -> status AWAITING_EVALUATION',
+    cEnd3.status === 'AWAITING_EVALUATION' && cEnd3.driverReportedKm === 123.5 && cEnd3.actualKm === 123.5 && !!cEnd3.tripEndedAt,
+    JSON.stringify(cEnd3)
+  );
+
+  // Kết thúc chuyến lần 2 -> 409 (đã kết thúc trước đó, guard chống double-submit).
+  const cEnd4 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'end-trip', { km: 200 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: ending an already-ended trip is rejected (idempotency guard)',
+    cEnd4.ok === false,
+    JSON.stringify(cEnd4)
+  );
+
+  // Người KHÁC (admin, không phải creator=bookerUser) không đánh giá được -> 403 (Q1: creator-only, không
+  // cho admin/carDispatch làm hộ, khác canCancelCarReg()).
+  await loginAs(page, adminUser);
+  const cEval1 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'evaluate', { km: 130, comment: 'test' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: only the creator (not admin) can evaluate the trip (creator-only rule, Q1)',
+    cEval1.ok === false,
+    JSON.stringify(cEval1)
+  );
+
+  // Creator (bookerUser) đánh giá, chỉnh lại km + nhận xét không bắt buộc -> COMPLETED, driverReportedKm
+  // giữ nguyên làm audit trail (Q3: cho phép chỉnh KM + nhận xét không bắt buộc).
+  await loginAs(page, bookerUser);
+  const cEval2 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'evaluate', { km: 128, comment: 'Chuyến đi đúng giờ, an toàn.' });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    if (idx !== -1) DB.carRegs[idx] = result.item;
+    return {
+      status: result.item.status, actualKm: result.item.actualKm, driverReportedKm: result.item.driverReportedKm,
+      evaluationComment: result.item.evaluationComment, evaluatedBy: result.item.evaluatedBy
+    };
+  }, c7.saved.id);
+  record(
+    'Car: creator evaluates the trip and adjusts km -> status COMPLETED, driverReportedKm audit trail preserved',
+    cEval2.status === 'COMPLETED' && cEval2.actualKm === 128 && cEval2.driverReportedKm === 123.5 &&
+      cEval2.evaluationComment === 'Chuyến đi đúng giờ, an toàn.' && cEval2.evaluatedBy === bookerUser.username,
+    JSON.stringify(cEval2)
+  );
+
+  // Đánh giá lần 2 (đã COMPLETED) -> 409.
+  const cEval3 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'evaluate', { km: 999 }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, c7.saved.id);
+  record(
+    'Car: evaluating an already-completed trip is rejected',
+    cEval3.ok === false,
+    JSON.stringify(cEval3)
+  );
+
+  // Q2 (sequencing): lái xe KHÔNG kết thúc được chuyến nếu chưa "Xác Nhận Đăng Ký" trước -> 409.
+  const cSeqItem = {
+    id: 900050, code: 'HCRC-DPH-SEQ', dept: 'Phòng Kinh Doanh', status: 'APPROVED', currentStep: 0,
+    history: [], startTime: '2026-09-08T08:00', endTime: '2026-09-08T12:00',
+    creator: bookerUser.username, creatorName: bookerUser.name,
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài', driverConfirmed: false
+  };
+  let cSeqError = null;
+  try { recordActions.endCarTrip(driverUser, cSeqItem, { km: 50 }); }
+  catch (err) { cSeqError = err; }
+  record(
+    'Car: driver cannot end a trip before confirming it first (Q2 sequencing rule)',
+    !!cSeqError && cSeqError.status === 409 && /xác nhận nhận chuyến/.test(cSeqError.message),
+    `error=${cSeqError && cSeqError.message}`
   );
 
   // Đổi sang lái xe khác trên 1 hồ sơ đã từng được xác nhận trước đó -> phải hủy xác nhận cũ, vì trách

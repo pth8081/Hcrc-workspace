@@ -7337,6 +7337,17 @@ function buildCarApprovalSlipHTML(car) {
       <tr><td class="as-label">Loại xe cụ thể:</td><td>${escapeHtml(car.assignedVehicleType || '')}</td></tr>
       ${car.assignedTaxiCompany ? `<tr><td class="as-label">Hãng Taxi:</td><td>${escapeHtml(car.assignedTaxiCompany)}</td></tr>` : `<tr><td class="as-label">Biển kiểm soát (BKS):</td><td>${escapeHtml(car.assignedPlate || car.plate || '')}</td></tr>`}
     </table>
+
+    ${car.tripEndedAt ? `
+    <div class="as-section-title">Kết Thúc Chuyến / Đánh Giá</div>
+    <table class="as-field-table">
+      <tr><td class="as-label">Lái xe kết thúc chuyến lúc:</td><td>${escapeHtml(car.tripEndedAt || '')} — ${car.driverReportedKm ?? 0} km</td></tr>
+      ${car.evaluatedAt ? `
+      <tr><td class="as-label">Người đăng ký đánh giá lúc:</td><td>${escapeHtml(car.evaluatedAt || '')} — Số km thực tế: ${car.actualKm ?? 0} km</td></tr>
+      ${car.evaluationComment ? `<tr><td class="as-label">Nhận xét:</td><td>${escapeHtml(car.evaluationComment)}</td></tr>` : ''}
+      ` : `<tr><td class="as-label">Đánh giá:</td><td>⏳ Đang chờ người đăng ký đánh giá</td></tr>`}
+    </table>
+    ` : ''}
   `;
 
   return buildApprovalSlipShellHTML({
@@ -7352,10 +7363,17 @@ function buildCarApprovalSlipHTML(car) {
   });
 }
 
+// isPostApproval: APPROVED và 2 trạng thái sau đó (AWAITING_EVALUATION/COMPLETED, xem endCarTrip()/
+// evaluateCarTrip() ở lib/recordActions.js) đều đã "phê duyệt hoàn tất" — chỉ khác đã Kết Thúc Chuyến/
+// Đánh Giá xong hay chưa, không ảnh hưởng việc xem/tải Phiếu Phê Duyệt.
+function isCarRegPostApproval(c) {
+  return c.status === 'APPROVED' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED';
+}
+
 function viewCarApprovalSlip(carId) {
   const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
-  if (c.status !== 'APPROVED') return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+  if (!isCarRegPostApproval(c)) return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
 
   document.getElementById('viewModalTitle').innerText = `🚗 Phiếu Phê Duyệt Đăng Ký Xe (${c.code})`;
   document.getElementById('viewModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName}`;
@@ -7368,7 +7386,7 @@ function viewCarApprovalSlip(carId) {
 function downloadCarApprovalSlip(carId) {
   const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
-  if (c.status !== 'APPROVED') return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+  if (!isCarRegPostApproval(c)) return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
 
   const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đăng Ký Xe - ${escapeHtml(c.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildCarApprovalSlipHTML(c)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
