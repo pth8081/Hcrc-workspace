@@ -19,44 +19,74 @@ function vppActiveHeadcountForDept(dept) {
   return DB.users.filter(u => u.dept === dept && u.active !== false && !isUserVppExcluded(u)).length;
 }
 
+// Mirror CHÍNH XÁC resolveVppDeptBudget() ở lib/vppCatalog.js (server) — CHỈ dùng để HIỂN THỊ ở báo cáo
+// "Tổng Hợp Theo Phòng Ban" (renderVppReports()), KHÔNG phải nơi chặn thật (chặn thật luôn tính lại ở
+// server dưới khoá vpp_dept_budget:<periodId>:<dept>, xem submitVppRegistration()/routes/records.js).
+function vppResolveDeptBudgetClient(period, dept) {
+  const rateOverride = period?.deptBudgetRates?.[dept];
+  const rate = (typeof rateOverride === 'number' && rateOverride > 0) ? rateOverride : (Number(period?.perPersonBudget) || 0);
+  const headcount = Number(period?.deptHeadcounts?.[dept]) || 0;
+  return { rate, headcount, totalBudget: rate * headcount };
+}
+
 // Dựng bảng "Nhân sự theo phòng ban" — CHỈ dựng 1 lần khi mở form (mỗi dòng input tự có handler riêng
-// onVppHeadcountInput() để chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó, KHÔNG render lại cả
-// bảng mỗi lần gõ — tránh mất focus/con trỏ đang gõ dở giữa chừng).
+// onVppHeadcountInput()/onVppRateInput() để chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó,
+// KHÔNG render lại cả bảng mỗi lần gõ — tránh mất focus/con trỏ đang gõ dở giữa chừng). TỪ v22.5: thêm
+// cột "Mức/Người" RIÊNG cho từng phòng (seed sẵn = mức mặc định đang gõ ở #vppNewPeriodBudget, admin
+// sửa tay lại theo từng phòng — VD phòng A 100.000đ, phòng B 150.000đ) — không còn 1 mức chung áp cứng
+// cho mọi phòng như trước.
 function renderVppDeptHeadcountTable() {
   const tbody = document.getElementById('vppDeptHeadcountBody');
   if (!tbody) return;
-  const budget = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  const defaultRate = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
   tbody.innerHTML = DB.depts.map(dept => {
     const headcount = vppActiveHeadcountForDept(dept);
-    const deptBudget = budget * headcount;
+    const deptBudget = defaultRate * headcount;
     return `
       <tr data-vpp-dept="${escapeHtml(dept)}">
         <td class="border p-1.5">${escapeHtml(dept)}</td>
         <td class="border p-1"><input type="number" min="0" step="1" value="${headcount}" data-op-input="onVppHeadcountInput" data-arg-el="0" class="vpp-headcount-input w-24 border p-1 rounded text-xs text-center"></td>
-        <td class="border p-1.5 text-right font-semibold text-orange-700 vpp-dept-budget-cell">${budget > 0 ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
+        <td class="border p-1"><input type="text" inputmode="numeric" value="${defaultRate > 0 ? defaultRate.toLocaleString('vi-VN') : ''}" placeholder="(mức mặc định)" data-op-input="onVppRateInput" data-arg-el="0" class="vpp-rate-input w-28 border p-1 rounded text-xs text-right money-input"></td>
+        <td class="border p-1.5 text-right font-semibold text-orange-700 vpp-dept-budget-cell">${defaultRate > 0 ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
       </tr>`;
   }).join('');
 }
 
-// Đổi "Ngân sách / người" -> cập nhật lại cột "Ngân Sách Phòng Ban" của MỌI dòng đang có, giữ nguyên
-// số nhân sự đã sửa tay (không render lại toàn bảng).
-function onVppBudgetInput() {
-  const budget = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+// Đọc mức/người của 1 dòng — trống/0 nghĩa là "dùng mức mặc định" (khớp resolveVppDeptBudget() ở server).
+function vppRowRate(tr) {
+  const rateInput = tr?.querySelector('.vpp-rate-input');
+  const raw = rateInput ? getMoneyValue(rateInput) : 0;
+  return raw > 0 ? raw : getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+}
+
+// Bấm "Áp dụng cho tất cả phòng" — ghi ĐÈ mức/người của MỌI dòng bằng giá trị đang gõ ở ô mặc định (tiện
+// lúc mới tạo kỳ, chưa ai cần mức riêng); admin vẫn sửa tay lại từng dòng SAU khi bấm nếu cần.
+function applyDefaultVppRateToAllRows() {
+  const defaultRate = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
   document.querySelectorAll('#vppDeptHeadcountBody tr').forEach(tr => {
-    const hcInput = tr.querySelector('.vpp-headcount-input');
-    const cell = tr.querySelector('.vpp-dept-budget-cell');
-    if (!hcInput || !cell) return;
-    const headcount = Math.max(0, Math.round(Number(hcInput.value) || 0));
-    cell.textContent = budget > 0 ? `${(budget * headcount).toLocaleString('vi-VN')} đ` : '—';
+    const rateInput = tr.querySelector('.vpp-rate-input');
+    if (rateInput) rateInput.value = defaultRate > 0 ? defaultRate.toLocaleString('vi-VN') : '';
+    onVppRateInput(rateInput);
   });
 }
 
 // Sửa tay 1 dòng "Số Nhân Sự" -> chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó.
 function onVppHeadcountInput(input) {
-  const budget = getMoneyValue(document.getElementById('vppNewPeriodBudget'));
+  const rate = vppRowRate(input.closest('tr'));
   const headcount = Math.max(0, Math.round(Number(input.value) || 0));
   const cell = input.closest('tr')?.querySelector('.vpp-dept-budget-cell');
-  if (cell) cell.textContent = budget > 0 ? `${(budget * headcount).toLocaleString('vi-VN')} đ` : '—';
+  if (cell) cell.textContent = rate > 0 ? `${(rate * headcount).toLocaleString('vi-VN')} đ` : '—';
+}
+
+// Sửa tay 1 dòng "Mức/Người" -> chỉ cập nhật đúng ô "Ngân Sách Phòng Ban" của dòng đó.
+function onVppRateInput(input) {
+  if (!input) return;
+  const tr = input.closest('tr');
+  const rate = vppRowRate(tr);
+  const hcInput = tr?.querySelector('.vpp-headcount-input');
+  const headcount = Math.max(0, Math.round(Number(hcInput?.value) || 0));
+  const cell = tr?.querySelector('.vpp-dept-budget-cell');
+  if (cell) cell.textContent = rate > 0 ? `${(rate * headcount).toLocaleString('vi-VN')} đ` : '—';
 }
 
 // Đọc lại bảng "Nhân sự theo phòng ban" thành {dept: headcount} để gửi lên server lúc Tạo Kỳ Đăng Ký.
@@ -67,6 +97,20 @@ function collectVppDeptHeadcounts() {
     const hcInput = tr.querySelector('.vpp-headcount-input');
     if (!dept || !hcInput) return;
     const n = Math.max(0, Math.round(Number(hcInput.value) || 0));
+    if (n > 0) out[dept] = n;
+  });
+  return out;
+}
+
+// Đọc lại bảng "Nhân sự theo phòng ban" thành {dept: mức/người RIÊNG} — CHỈ đưa vào những phòng có ô
+// Mức/Người khác trống/0 (phòng nào để trống thì rơi về mức mặc định ở server, xem resolveVppDeptBudget()).
+function collectVppDeptBudgetRates() {
+  const out = {};
+  document.querySelectorAll('#vppDeptHeadcountBody tr').forEach(tr => {
+    const dept = tr.dataset.vppDept;
+    const rateInput = tr.querySelector('.vpp-rate-input');
+    if (!dept || !rateInput) return;
+    const n = getMoneyValue(rateInput);
     if (n > 0) out[dept] = n;
   });
   return out;
@@ -144,11 +188,35 @@ function findOwnVppRegForPeriod(periodId) {
   return DB.vppRegistrations.find(r => r.periodId === periodId && r.creator === currentUser.username && r.status !== 'REJECTED');
 }
 
-function onVppRegPeriodChange() {
+// vppDeptBudgetStatus: cache trạng thái quỹ ngân sách CỦA PHÒNG BAN currentUser cho kỳ đang mở form
+// (GET /api/vpp/dept-budget-status/:periodId — {rate, headcount, totalBudget, used, remaining}, `used`
+// đã cộng dồn các đăng ký KHÁC cùng phòng đang PENDING/APPROVED, KHÔNG gồm chính bản nháp đang sửa) —
+// nạp 1 LẦN mỗi khi mở/đổi kỳ (refreshVppDeptBudgetStatus() trong onVppRegPeriodChange() bên dưới), rồi
+// updateVppRegTotalDisplay() đọc lại số đã cache này mỗi lần gõ số lượng (KHÔNG gọi lại API mỗi lần gõ).
+// null = kỳ này chưa đặt ngân sách cho phòng (totalBudget=0) hoặc chưa tải xong/lỗi mạng.
+let vppDeptBudgetStatus = null;
+
+async function fetchVppDeptBudgetStatus(periodId) {
+  try {
+    const res = await fetch(`/api/vpp/dept-budget-status/${periodId}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function refreshVppDeptBudgetStatus(periodId) {
+  vppDeptBudgetStatus = periodId ? await fetchVppDeptBudgetStatus(periodId) : null;
+  updateVppRegTotalDisplay();
+}
+
+async function onVppRegPeriodChange() {
   const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
   const wrap = document.getElementById('vppRegItemsWrap');
   const noteEl = document.getElementById('vppRegAlreadySentNote');
   vppFormDraftId = null;
+  vppDeptBudgetStatus = null;
   if (!periodId) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
   const period = DB.vppPeriods.find(p => p.id === periodId);
   if (!period) { wrap.classList.add('hidden'); noteEl.classList.add('hidden'); return; }
@@ -182,6 +250,7 @@ function onVppRegPeriodChange() {
   document.getElementById('vppRegItemsNoMatch').classList.add('hidden');
   wrap.classList.remove('hidden');
   updateVppRegTotalDisplay();
+  refreshVppDeptBudgetStatus(periodId); // async, tự cập nhật lại hiển thị khi tải xong (xem hàm ở trên)
 
   const submitBtn = document.getElementById('btnVppRegSubmitDraft');
   submitBtn.classList.toggle('hidden', !vppFormDraftId);
@@ -227,6 +296,10 @@ function collectVppRegFormItems(period) {
 // Hiện tổng tiền đang chọn realtime mỗi khi đổi số lượng — so với "Ngân sách / người" của kỳ (nếu
 // kỳ có đặt ngân sách). CHỈ hiển thị cảnh báo ở đây, việc CHẶN thật sự nằm ở lúc bấm "Gửi phê duyệt"
 // (xem submitVppRegDraftAction()) — cho phép lưu Nháp thoải mái trong lúc còn đang cân nhắc.
+// TỪ v22.5: so với "Ngân sách phòng ban CÒN LẠI" (vppDeptBudgetStatus.remaining, đã trừ các đăng ký
+// KHÁC cùng phòng đang chờ duyệt/đã duyệt — xem refreshVppDeptBudgetStatus()) thay vì mức trần riêng
+// từng người như trước — không giới hạn số tiền của 1 người, chỉ cảnh báo khi phần CÒN LẠI của quỹ
+// phòng không đủ cho lựa chọn hiện tại.
 function updateVppRegTotalDisplay() {
   const periodId = Number(document.getElementById('vppRegPeriodSelect').value);
   const period = DB.vppPeriods.find(p => p.id === periodId);
@@ -236,11 +309,12 @@ function updateVppRegTotalDisplay() {
     .map((it, idx) => ({ price: it.price, qty: Number(document.getElementById(`vppItemQty_${idx}`)?.value) || 0 }))
     .filter(it => it.qty > 0);
   const total = vppCalcItemsTotal(items);
-  const budget = period.perPersonBudget;
-  const overBudget = budget > 0 && total > budget;
+  const status = vppDeptBudgetStatus;
+  const hasBudget = !!(status && status.totalBudget > 0);
+  const overBudget = hasBudget && total > status.remaining;
   wrap.innerHTML = `Tổng tiền đã chọn: <span class="${overBudget ? 'text-red-600' : 'text-gray-800'}">${total.toLocaleString('vi-VN')} đ</span>` +
-    (budget > 0 ? ` / Ngân sách: ${budget.toLocaleString('vi-VN')} đ` : '') +
-    (overBudget ? ' <span class="text-red-600">⚠️ Vượt ngân sách — vui lòng giảm bớt số lượng trước khi gửi phê duyệt.</span>' : '');
+    (hasBudget ? ` / Ngân sách phòng ban còn lại: ${status.remaining.toLocaleString('vi-VN')} đ (trên tổng ${status.totalBudget.toLocaleString('vi-VN')} đ)` : '') +
+    (overBudget ? ' <span class="text-red-600">⚠️ Vượt ngân sách còn lại của phòng ban — vui lòng giảm bớt số lượng trước khi gửi phê duyệt.</span>' : '');
 }
 
 // "Kết Thúc Chọn (Lưu Nháp)" — tạo hồ sơ NHÁP mới (lần đầu chọn) hoặc cập nhật lại NHÁP đã có (sửa
@@ -289,13 +363,21 @@ async function submitVppRegDraftAction(regId, fromForm) {
   if (!regId) return;
   const r = DB.vppRegistrations.find(x => x.id === regId);
   if (!r) return;
-  // Chặn Gửi khi vượt ngân sách/người của kỳ — kiểm tra ngay ở client cho phản hồi tức thì, server
-  // vẫn tự kiểm tra lại (submitVppRegistration() ở lib/recordActions.js) nên không tin riêng bước này.
+  // Chặn Gửi khi vượt NGÂN SÁCH CÒN LẠI CỦA PHÒNG BAN (không còn theo từng người, xem
+  // updateVppRegTotalDisplay()) — luôn TẢI LẠI số liệu mới nhất ngay trước khi gửi (không dùng cache cũ
+  // từ lúc mở form, tránh báo sai nếu người khác cùng phòng vừa gửi thêm trong lúc này) để phản hồi
+  // tức thì; server vẫn tự kiểm tra lại dưới khoá (submitVppRegistration() ở lib/recordActions.js +
+  // withAppLock ở routes/records.js) nên không tin riêng bước này.
   const period = DB.vppPeriods.find(p => p.id === r.periodId);
-  if (period?.perPersonBudget > 0) {
+  if (period) {
+    const status = await fetchVppDeptBudgetStatus(period.id);
     const total = vppCalcItemsTotal(r.items);
-    if (total > period.perPersonBudget) {
-      return alert(`⛔ Tổng tiền đăng ký (${total.toLocaleString('vi-VN')} đ) vượt quá ngân sách được cấp cho 1 người (${period.perPersonBudget.toLocaleString('vi-VN')} đ) — vui lòng sửa nháp và giảm bớt số lượng trước khi gửi.`);
+    if (status && status.totalBudget > 0 && total > status.remaining) {
+      return alert(
+        `⛔ Ngân sách phòng "${r.dept}" không đủ — đã giữ chỗ ${status.used.toLocaleString('vi-VN')} đ / tổng ${status.totalBudget.toLocaleString('vi-VN')} đ ` +
+        `(đăng ký đang chờ duyệt + đã duyệt khác của phòng), còn lại ${status.remaining.toLocaleString('vi-VN')} đ — đăng ký này (${total.toLocaleString('vi-VN')} đ) sẽ vượt quá. ` +
+        `Vui lòng sửa nháp và giảm bớt số lượng trước khi gửi.`
+      );
     }
   }
   showConfirmModal({
@@ -641,7 +723,7 @@ async function createVppPeriod() {
     name, startDate: startDate || '', endDate: endDate || '',
     catalogItems: vppPendingCatalog.items,
     catalogFileUrl: vppPendingCatalog.fileUrl, catalogFileName: vppPendingCatalog.fileName,
-    perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(),
+    perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(), deptBudgetRates: collectVppDeptBudgetRates(),
     createdAt: new Date().toLocaleString('vi-VN'),
     customData
   };
@@ -786,26 +868,28 @@ function renderVppReports() {
   const regs = DB.vppRegistrations.filter(r => r.periodId === periodId);
 
   // Tổng hợp theo phòng ban — cùng kiểu reducer với computeApprovalStats() (Báo cáo quản trị).
-  // "Đã Dùng" chỉ tính tổng tiền của các đăng ký ĐÃ DUYỆT (khớp đúng nghiệp vụ file xuất Excel ở
-  // lib/vppExport.js — chỉ hồ sơ đã duyệt mới coi là chi tiêu thật). "Ngân Sách Phòng Ban" =
-  // ngân sách/người (period.perPersonBudget) × số nhân sự đã chốt cho phòng đó lúc tạo kỳ
-  // (period.deptHeadcounts) — chỉ mang tính tham khảo, KHÔNG dùng để chặn đăng ký (mức chặn áp
-  // riêng cho từng cá nhân, xem submitVppRegDraftAction()/server).
+  // TỪ v22.5: "Ngân Sách Phòng Ban" đọc mức/người RIÊNG của từng phòng (period.deptBudgetRates[dept],
+  // rơi về period.perPersonBudget mặc định nếu phòng không có mức riêng — xem vppResolveDeptBudgetClient()
+  // ngay dưới, mirror ĐÚNG resolveVppDeptBudget() server). "Đã Duyệt" (tiền) vẫn CHỈ tính đăng ký ĐÃ
+  // DUYỆT (khớp file xuất Excel ở lib/vppExport.js — chỉ hồ sơ đã duyệt mới coi là chi tiêu THẬT). "Còn
+  // Lại" giờ trừ luôn cả đăng ký ĐANG CHỜ DUYỆT (không chỉ đã duyệt) — khớp ĐÚNG số admin sẽ thấy khi hệ
+  // thống CHẶN THẬT lúc nhân viên bấm "Gửi phê duyệt" (xem submitVppRegistration() ở lib/recordActions.js
+  // — chặn theo tổng quỹ CẢ PHÒNG, gồm cả phần đang giữ chỗ chờ duyệt, không còn giới hạn theo từng người).
   const byDept = {};
   regs.forEach(r => {
-    if (!byDept[r.dept]) byDept[r.dept] = { total: 0, pending: 0, approved: 0, rejected: 0, used: 0 };
-    byDept[r.dept].total++;
-    if (r.status === 'PENDING') byDept[r.dept].pending++;
-    else if (r.status === 'APPROVED') { byDept[r.dept].approved++; byDept[r.dept].used += vppCalcItemsTotal(r.items); }
-    else if (r.status === 'REJECTED') byDept[r.dept].rejected++;
+    if (!byDept[r.dept]) byDept[r.dept] = { total: 0, pending: 0, approved: 0, rejected: 0, approvedMoney: 0, heldMoney: 0 };
+    const s = byDept[r.dept];
+    s.total++;
+    if (r.status === 'PENDING') { s.pending++; s.heldMoney += vppCalcItemsTotal(r.items); }
+    else if (r.status === 'APPROVED') { s.approved++; s.approvedMoney += vppCalcItemsTotal(r.items); s.heldMoney += vppCalcItemsTotal(r.items); }
+    else if (r.status === 'REJECTED') s.rejected++;
   });
   const deptRows = Object.entries(byDept);
-  const hasBudget = !!(period?.perPersonBudget > 0);
   byDeptBody.innerHTML = deptRows.length
     ? deptRows.map(([dept, s]) => {
-        const headcount = period?.deptHeadcounts?.[dept] || 0;
-        const deptBudget = hasBudget ? period.perPersonBudget * headcount : null;
-        const remain = deptBudget != null ? deptBudget - s.used : null;
+        const { totalBudget } = vppResolveDeptBudgetClient(period, dept);
+        const deptBudget = totalBudget > 0 ? totalBudget : null;
+        const remain = deptBudget != null ? deptBudget - s.heldMoney : null;
         return `
         <tr>
           <td class="border p-2 font-semibold">${escapeHtml(dept)}</td>
@@ -814,7 +898,7 @@ function renderVppReports() {
           <td class="border p-2 text-center text-green-700">${s.approved}</td>
           <td class="border p-2 text-center text-red-700">${s.rejected}</td>
           <td class="border p-2 text-right">${deptBudget != null ? deptBudget.toLocaleString('vi-VN') + ' đ' : '—'}</td>
-          <td class="border p-2 text-right">${s.used.toLocaleString('vi-VN')} đ</td>
+          <td class="border p-2 text-right">${s.approvedMoney.toLocaleString('vi-VN')} đ</td>
           <td class="border p-2 text-right font-semibold ${remain != null && remain < 0 ? 'text-red-700' : ''}">${remain != null ? remain.toLocaleString('vi-VN') + ' đ' : '—'}</td>
         </tr>
       `;

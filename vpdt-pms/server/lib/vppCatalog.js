@@ -190,7 +190,7 @@ function validateRegistrationItems(rawItems, catalogItems) {
   return cleaned;
 }
 
-// Tổng tiền của 1 đăng ký — dùng chung cho kiểm tra ngân sách/người lúc "Gửi phê duyệt"
+// Tổng tiền của 1 đăng ký — dùng chung cho kiểm tra ngân sách phòng ban lúc "Gửi phê duyệt"
 // (submitVppRegistration() ở lib/recordActions.js) và báo cáo Tổng Hợp Theo Phòng Ban (index.html).
 // items đã snapshot đúng đơn giá của danh mục kỳ (xem validateRegistrationItems ở trên), mặt hàng
 // chưa có đơn giá (price=null) coi như 0đ, không làm hỏng tổng của các mặt hàng khác.
@@ -198,4 +198,18 @@ function calcItemsTotal(items) {
   return (items || []).reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
 }
 
-module.exports = { parseCatalogFile, validateRegistrationItems, calcItemsTotal };
+// Mức/người + tổng ngân sách áp dụng cho 1 phòng ban của 1 kỳ đăng ký — TỪ v22.5: mỗi phòng ban có thể
+// có 1 mức/người RIÊNG (period.deptBudgetRates: {dept: rate}), khác nhau giữa các phòng (VD phòng A
+// 100.000đ/người, phòng B 150.000đ/người) thay vì 1 mức chung áp cho toàn kỳ như trước. Phòng nào KHÔNG
+// có mức riêng (admin để trống dòng đó lúc tạo kỳ) thì rơi về `period.perPersonBudget` (mức mặc định
+// nhập ở đầu form) — vừa để tương thích ngược với các kỳ đăng ký cũ (tạo TRƯỚC khi có deptBudgetRates,
+// chỉ có perPersonBudget phẳng), vừa cho phép admin chỉ cần sửa riêng vài phòng "đặc biệt", còn lại
+// dùng chung 1 mức mặc định mà không phải gõ tay từng dòng.
+function resolveVppDeptBudget(period, dept) {
+  const rateOverride = period?.deptBudgetRates?.[dept];
+  const rate = (typeof rateOverride === 'number' && rateOverride > 0) ? rateOverride : (Number(period?.perPersonBudget) || 0);
+  const headcount = Number(period?.deptHeadcounts?.[dept]) || 0;
+  return { rate, headcount, totalBudget: rate * headcount };
+}
+
+module.exports = { parseCatalogFile, validateRegistrationItems, calcItemsTotal, resolveVppDeptBudget };

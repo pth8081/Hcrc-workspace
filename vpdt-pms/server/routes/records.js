@@ -1628,16 +1628,33 @@ router.post('/submissions/:id/submit', async (req, res) => {
 
 // POST /api/records/vppRegistrations/:id/submit — "Gửi": NHÁP -> CHỜ DUYỆT (bắt đầu bước 1). Chỉ
 // chính người tạo hồ sơ mới gửi được (xem lib/recordActions.js submitVppRegistration).
+// TỪ v22.5: chặn ngân sách chuyển từ "theo từng người" sang "theo tổng quỹ CẢ PHÒNG BAN" — nhiều người
+// CÙNG PHÒNG có thể bấm "Gửi" gần như đồng thời, cùng đọc thấy quỹ còn trống rồi cùng vượt quỹ nếu
+// không khoá — bọc withAppLock('vpp_dept_budget:<periodId>:<dept>', ...) quanh TOÀN BỘ đọc-tính-ghi,
+// cùng khuôn withAppLock('uniform_store:<dept>', ...) đã dùng cho tồn kho Đồng Phục. Đọc bản ghi 1 lần
+// TRƯỚC (peek) chỉ để LẤY TÊN KHOÁ (periodId/dept) — mọi kiểm tra nghiệp vụ thật (kể cả đọc lại danh
+// sách đăng ký cùng phòng) chạy LẠI bên trong, dưới khoá, vì bản ghi có thể đã bị xử lý bởi 1 request
+// khác giữa 2 lần đọc.
 router.post('/vppRegistrations/:id/submit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const periods = await getAllForCollection('vppPeriods');
-    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) => {
-      const period = periods.find(p => p.id === item.periodId);
-      return recordActions.submitVppRegistration(freshUser, item, period);
-    });
+    const peekAll = await getAllForCollection('vppRegistrations');
+    const peek = peekAll.find(r => r.id === itemId);
+    if (!peek) return res.status(404).json({ error: 'Không tìm thấy đăng ký này' });
+
+    const result = await withAppLock(`vpp_dept_budget:${peek.periodId}:${peek.dept}`, () =>
+      withLockedRecordForCollection('vppRegistrations', itemId, async (item) => {
+        const periods = await getAllForCollection('vppPeriods');
+        const period = periods.find(p => p.id === item.periodId);
+        const freshRegs = await getAllForCollection('vppRegistrations');
+        const siblingRegs = freshRegs.filter(r =>
+          r.id !== item.id && r.periodId === item.periodId && r.dept === item.dept &&
+          (r.status === 'PENDING' || r.status === 'APPROVED'));
+        return recordActions.submitVppRegistration(freshUser, item, period, siblingRegs);
+      })
+    );
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `vppRegistrations/${req.params.id}/submit`, err);

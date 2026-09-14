@@ -3159,14 +3159,20 @@
           </div>
         </div>
         <div class="bg-white p-3 rounded border space-y-2">
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Ngân sách Văn phòng phẩm / người (VNĐ) — tuỳ chọn, để trống = không giới hạn</label>
-          <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" data-op-input="onVppBudgetInput" class="w-full md:w-64 border p-1.5 rounded money-input">
-          <p class="text-[11px] text-gray-500 italic">Đây là mức trần áp cho TỪNG NGƯỜI khi đăng ký (tổng tiền các mặt hàng đã chọn không được vượt quá số này). Bảng nhân sự bên dưới chỉ dùng để tính "Ngân sách phòng ban" tham khảo ở Báo Cáo Tổng Hợp, KHÔNG dùng để chặn đăng ký.</p>
+          <div class="flex items-end justify-between gap-2 flex-wrap">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Mức/người MẶC ĐỊNH (VNĐ) — tuỳ chọn, để trống = không giới hạn</label>
+              <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" class="w-full md:w-64 border p-1.5 rounded money-input">
+            </div>
+            <button type="button" data-op="applyDefaultVppRateToAllRows" class="shrink-0 bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↧ Áp Dụng Cho Tất Cả Phòng</button>
+          </div>
+          <p class="text-[11px] text-gray-500 italic">Mỗi phòng ban có thể đặt mức/người RIÊNG ở cột "Mức/Người" trong bảng bên dưới (VD Phòng A 100.000đ/người, Phòng B 150.000đ/người) — để trống 1 dòng = dùng mức mặc định ở trên cho phòng đó. <b>Ngân sách phòng ban = Mức/người × Số nhân sự</b> — khi nhân viên bấm "Gửi phê duyệt", hệ thống chặn theo TỔNG ngân sách của CẢ PHÒNG (cộng dồn mọi đăng ký đang chờ duyệt + đã duyệt của phòng), KHÔNG giới hạn riêng số tiền của từng người.</p>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse text-xs">
               <thead><tr class="bg-gray-100 text-left">
                 <th class="border p-1.5">Phòng Ban</th>
-                <th class="border p-1.5 text-center w-32">Số Nhân Sự</th>
+                <th class="border p-1.5 text-center w-28">Số Nhân Sự</th>
+                <th class="border p-1.5 text-center w-32">Mức/Người</th>
                 <th class="border p-1.5 text-right w-40">Ngân Sách Phòng Ban</th>
               </tr></thead>
               <tbody id="vppDeptHeadcountBody"></tbody>
@@ -3233,6 +3239,7 @@
       </div>
       <div class="bg-white p-4 rounded border space-y-2">
         <h4 class="font-bold text-sm text-gray-800">🏢 Tổng Hợp Theo Phòng Ban</h4>
+        <p class="text-[11px] text-gray-500 italic">"Ngân Sách Phòng Ban" tính theo mức/người RIÊNG của từng phòng (xem "Tạo Kỳ Đăng Ký"). "Còn Lại" đã trừ CẢ đăng ký đang Chờ Duyệt (không chỉ Đã Duyệt) — đúng số hệ thống dùng để chặn khi nhân viên bấm "Gửi phê duyệt".</p>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse text-xs">
             <thead><tr class="bg-gray-100 text-left">
@@ -3243,7 +3250,7 @@
               <th class="border p-2 text-center">Từ Chối</th>
               <th class="border p-2 text-right">Ngân Sách Phòng Ban</th>
               <th class="border p-2 text-right">Đã Dùng (Đã Duyệt)</th>
-              <th class="border p-2 text-right">Còn Lại</th>
+              <th class="border p-2 text-right">Còn Lại (Sau Chờ Duyệt)</th>
             </tr></thead>
             <tbody id="vppReportByDeptBody"></tbody>
           </table>

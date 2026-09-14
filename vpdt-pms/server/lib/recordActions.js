@@ -11,7 +11,7 @@
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES } = require('./createValidation');
-const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal } = require('./vppCatalog');
+const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
 
@@ -3246,7 +3246,11 @@ function closeVppPeriod(user, period) {
 // period: CALLER (routes/records.js) tự đọc trước rồi truyền vào, cùng khuôn với
 // updateVppRegistrationDraft() bên dưới — trước đây hàm này KHÔNG kiểm tra kỳ còn mở hay không (khác
 // updateVppRegistrationDraft đã có), nên NHÁP tạo lúc kỳ còn mở vẫn "Gửi" được sau khi kỳ đã đóng.
-function submitVppRegistration(user, item, period) {
+// siblingRegs (TỪ v22.5): mảng các đăng ký KHÁC cùng kỳ + cùng phòng ban, ĐANG "giữ chỗ" ngân sách
+// (status PENDING hoặc APPROVED — REJECTED/DRAFT không tính, xem CALLER routes/records.js) — CALLER tự
+// đọc lại NGAY TRONG khoá vpp_dept_budget:<periodId>:<dept> (withAppLock) trước khi gọi hàm này, để
+// không đọc thấy số liệu cũ nếu có request khác đang xử lý song song cùng phòng/cùng kỳ.
+function submitVppRegistration(user, item, period, siblingRegs) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được gửi hồ sơ này');
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp (có thể đã gửi hoặc đã bị xử lý)');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
@@ -3258,15 +3262,21 @@ function submitVppRegistration(user, item, period) {
   if (!Array.isArray(item.items) || !item.items.length) {
     throw new HttpError(400, 'Chưa chọn mặt hàng nào — vui lòng chọn ít nhất 1 mặt hàng trước khi gửi');
   }
-  // Ngân sách/người của kỳ (period.perPersonBudget, tuỳ chọn — null/0 = không giới hạn) là mức trần
-  // cho TỪNG NGƯỜI, kiểm tra ở chính bước "Gửi phê duyệt" này (không chặn lúc lưu Nháp, để người
-  // đăng ký thoải mái nháp thử trước khi chỉnh lại cho vừa ngân sách — client đã có cảnh báo realtime
-  // + chặn trước ở đây, xem submitVppRegDraftAction()/updateVppRegTotalDisplay() ở index.html, nhưng
-  // vẫn PHẢI kiểm tra lại ở server, không tin riêng client).
-  if (period.perPersonBudget > 0) {
+  // TỪ v22.5: KHÔNG còn chặn theo mức trần TỪNG NGƯỜI — chặn theo TỔNG NGÂN SÁCH CỦA CẢ PHÒNG BAN
+  // (resolveVppDeptBudget() = mức/người của phòng đó × số nhân sự phòng đó, xem lib/vppCatalog.js).
+  // "Đã dùng" = tổng các đăng ký KHÁC cùng phòng+cùng kỳ đang PENDING hoặc APPROVED (siblingRegs, CALLER
+  // đã lọc sẵn) — DRAFT của người khác chưa gửi thì chưa giữ chỗ gì, REJECTED coi như đã nhả chỗ lại.
+  // Không giới hạn riêng số tiền của 1 người — 1 người có thể đăng ký nhiều, miễn quỹ phòng còn đủ.
+  const { totalBudget } = resolveVppDeptBudget(period, item.dept);
+  if (totalBudget > 0) {
+    const used = (siblingRegs || []).reduce((sum, r) => sum + calcVppItemsTotal(r.items), 0);
     const total = calcVppItemsTotal(item.items);
-    if (total > period.perPersonBudget) {
-      throw new HttpError(400, `Tổng tiền đăng ký (${total.toLocaleString('vi-VN')} đ) vượt quá ngân sách được cấp cho 1 người (${period.perPersonBudget.toLocaleString('vi-VN')} đ) — vui lòng giảm bớt số lượng trước khi gửi.`);
+    if (used + total > totalBudget) {
+      const remaining = Math.max(0, totalBudget - used);
+      throw new HttpError(400,
+        `Ngân sách phòng "${item.dept}" không đủ — đã giữ chỗ ${used.toLocaleString('vi-VN')} đ / tổng ${totalBudget.toLocaleString('vi-VN')} đ ` +
+        `(cộng các đăng ký đang chờ duyệt + đã duyệt khác của phòng), còn lại ${remaining.toLocaleString('vi-VN')} đ. ` +
+        `Đăng ký này (${total.toLocaleString('vi-VN')} đ) sẽ vượt quá — vui lòng giảm bớt số lượng, hoặc chờ có đăng ký khác bị từ chối/kỳ đăng ký sau.`);
     }
   }
   if (!item.history) item.history = [];

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { parseCatalogFile } = require('../lib/vppCatalog');
+const { parseCatalogFile, calcItemsTotal, resolveVppDeptBudget } = require('../lib/vppCatalog');
 const { buildSummaryWorkbook, buildByDeptWorkbook, buildCatalogTemplateWorkbook, buildCatalogWorkbook } = require('../lib/vppExport');
 const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -106,6 +106,34 @@ router.get('/catalog-template', (req, res) => {
     wb.xlsx.write(res).then(() => res.end());
   } catch (err) {
     sendCatchError(res, err, 'GET /api/vpp/catalog-template', 500);
+  }
+});
+
+// GET /api/vpp/dept-budget-status/:periodId — trạng thái quỹ ngân sách CỦA ĐÚNG PHÒNG BAN người gọi
+// (req.freshUser.dept, KHÔNG nhận dept qua tham số — tránh dò xem quỹ phòng khác) cho 1 kỳ đăng ký, để
+// hiển thị realtime "Ngân sách phòng còn lại" ngay trên form chọn mặt hàng (xem
+// refreshVppDeptBudgetStatus() ở module-vpp.js) TRƯỚC khi gửi phê duyệt — không lộ danh sách đăng ký
+// (từng người vẫn giữ riêng tư, xem canViewVppRegistration() ở lib/recordViewScope.js), chỉ trả về số
+// tổng đã cộng dồn. Cho phép MỌI người đã đăng nhập gọi (không cần vppManage) vì đây là quỹ chung của
+// chính phòng ban họ, cần thấy để tự cân đối lúc đăng ký — khác 2 route /export/* bên dưới (chỉ dành
+// cho người quản lý VPP xem TOÀN BỘ các phòng).
+router.get('/dept-budget-status/:periodId', async (req, res) => {
+  const periodId = Number(req.params.periodId);
+  if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'periodId không hợp lệ' });
+  try {
+    const period = await loadPeriodOr404(periodId);
+    const dept = req.freshUser.dept;
+    const { rate, headcount, totalBudget } = resolveVppDeptBudget(period, dept);
+    let used = 0;
+    if (totalBudget > 0) {
+      const regs = await getAllForCollection('vppRegistrations');
+      used = regs
+        .filter(r => r.periodId === periodId && r.dept === dept && (r.status === 'PENDING' || r.status === 'APPROVED'))
+        .reduce((sum, r) => sum + calcItemsTotal(r.items), 0);
+    }
+    res.json({ dept, rate, headcount, totalBudget, used, remaining: Math.max(0, totalBudget - used) });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/vpp/dept-budget-status', 500);
   }
 });
 
