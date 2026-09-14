@@ -259,6 +259,16 @@ const seedDB = {
   jobTitles: ['Nhân viên', 'Quản lý phòng họp', 'Admin'],
   submissionTypes: [], contractTypes: [],
   carTypes: ['Xe 4 chỗ', 'Xe 7 chỗ', 'Xe 16 chỗ'],
+  // carVehicleTypes/carTaxiCompanies: danh mục "Loại xe cụ thể"/"Hãng Taxi" (Phần Dành Cho Phòng Hành
+  // Chính, ô select #carAssignedVehicleType/#carAssignedTaxiCompany) — mock seed đúng khuôn defaults.js
+  // để D2 (approver CÓ carDispatch) chọn được 1 mục thật từ dropdown thay vì gõ tự do (đã đổi từ input
+  // sang select).
+  carVehicleTypes: [
+    { id: 1, name: 'Xe 5 chỗ', bienSo: '30G-012.82', isTaxi: false },
+    { id: 2, name: 'Xe 7 chỗ', bienSo: '30G-468.62', isTaxi: false },
+    { id: 3, name: 'Xe Taxi', bienSo: '', isTaxi: true }
+  ],
+  carTaxiCompanies: ['Mai Linh', 'Vinasun'],
   // carPurposes/meetingRooms: đợt audit "form-fields-6" chuyển 2 danh sách này từ hằng số/hardcode
   // <option> sang dữ liệu DB.* — mock seed đúng khuôn defaults.js để không đổi hành vi các test bên dưới.
   carPurposes: [
@@ -811,7 +821,7 @@ async function main() {
     const sectionHiddenAtOpen = document.getElementById('carDispatchSection').classList.contains('hidden');
     document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
     resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
-    document.getElementById('carAssignedVehicleType').value = 'Ford Transit 16 chỗ';
+    document.getElementById('carAssignedVehicleType').value = 'Xe 5 chỗ';
     document.getElementById('carAssignedPlate').value = '51A-777.77';
     document.getElementById('txtCarComment').value = '';
     await processCarReg('APPROVE');
@@ -828,7 +838,7 @@ async function main() {
   );
   record(
     'CarDispatch: approver WITH carDispatch can approve AND set driver/vehicle/plate in the same action',
-    d2.status === 'APPROVED' && d2.assignedPlate === '51A-777.77' && d2.assignedVehicleType === 'Ford Transit 16 chỗ' && d2.assignedDriverUsername === 'lx1',
+    d2.status === 'APPROVED' && d2.assignedPlate === '51A-777.77' && d2.assignedVehicleType === 'Xe 5 chỗ' && d2.assignedDriverUsername === 'lx1',
     `status=${d2.status} plate=${d2.assignedPlate} type=${d2.assignedVehicleType} driver=${d2.assignedDriverUsername} alerts=${JSON.stringify(d2.alerts)}`
   );
 
@@ -1337,6 +1347,137 @@ async function main() {
     'Lịch Xe: bấm ô đỏ hiện thông tin phiếu qua alert(), vẫn ở lại tab Lịch Xe — không nhảy sang form Đăng Ký (khác Lịch Họp)',
     calClick.alerts.some((a) => a.includes('HCRC-DPH-CAL-PENDING')) && calClick.stillOnCalendarTab && calClick.stillOnRegTab,
     JSON.stringify(calClick)
+  );
+
+  // ===================== "Loại Xe Cụ Thể" (3 lựa chọn select) + auto-fill BKS + "Hãng Taxi" =====================
+  // Yêu cầu người dùng: #carAssignedVehicleType đổi từ input tự do sang <select> 3 mục cố định (Xe 5
+  // chỗ/Xe 7 chỗ/Xe Taxi, xem defaults.js DB.carVehicleTypes), chọn mục thường tự động điền BKS cố định,
+  // chọn "Xe Taxi" ẩn BKS + hiện ô "Hãng Taxi" (DB.carTaxiCompanies) thay vào.
+  const taxiTestItem = {
+    id: 900601, code: 'HCRC-DPH-TAXI1', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
+    type: 'Xe 4 chỗ', km: '15', passengers: '02', purpose: 'Công tác',
+    startTime: '2026-11-01T08:00', endTime: '2026-11-01T12:00', destination: 'HN', reason: 'Kiểm tra loại xe cụ thể/Taxi',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  store.carRegs.push(taxiTestItem);
+  await page.evaluate((item) => { DB.carRegs.push(item); }, taxiTestItem);
+
+  await loginAs(page, dispatchApproverUser);
+  const taxiUi = await page.evaluate(async (carId) => {
+    switchTab('car');
+    openCarProcessModal(carId);
+    const sel = document.getElementById('carAssignedVehicleType');
+    const plateWrap = document.getElementById('carAssignedPlateWrap');
+    const taxiWrap = document.getElementById('carAssignedTaxiCompanyWrap');
+
+    sel.value = 'Xe 5 chỗ';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const after5Cho = {
+      bks: document.getElementById('carAssignedPlate').value,
+      plateHidden: plateWrap.classList.contains('hidden'),
+      taxiHidden: taxiWrap.classList.contains('hidden')
+    };
+
+    sel.value = 'Xe 7 chỗ';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const after7Cho = { bks: document.getElementById('carAssignedPlate').value };
+
+    sel.value = 'Xe Taxi';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const afterTaxi = {
+      bks: document.getElementById('carAssignedPlate').value,
+      plateHidden: plateWrap.classList.contains('hidden'),
+      taxiHidden: taxiWrap.classList.contains('hidden')
+    };
+    document.getElementById('carAssignedTaxiCompany').value = 'Mai Linh';
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return {
+      after5Cho, after7Cho, afterTaxi,
+      status: item.status, assignedVehicleType: item.assignedVehicleType,
+      assignedPlate: item.assignedPlate, assignedTaxiCompany: item.assignedTaxiCompany
+    };
+  }, taxiTestItem.id);
+  record(
+    'Loại Xe Cụ Thể: chọn "Xe 5 chỗ" tự động điền BKS "30G-012.82" + ẩn ô Hãng Taxi',
+    taxiUi.after5Cho.bks === '30G-012.82' && taxiUi.after5Cho.plateHidden === false && taxiUi.after5Cho.taxiHidden === true,
+    JSON.stringify(taxiUi.after5Cho)
+  );
+  record(
+    'Loại Xe Cụ Thể: chọn "Xe 7 chỗ" tự động điền BKS "30G-468.62"',
+    taxiUi.after7Cho.bks === '30G-468.62',
+    JSON.stringify(taxiUi.after7Cho)
+  );
+  record(
+    'Loại Xe Cụ Thể: chọn "Xe Taxi" xóa BKS + ẩn ô BKS + hiện ô Hãng Taxi',
+    taxiUi.afterTaxi.bks === '' && taxiUi.afterTaxi.plateHidden === true && taxiUi.afterTaxi.taxiHidden === false,
+    JSON.stringify(taxiUi.afterTaxi)
+  );
+  record(
+    'Loại Xe Cụ Thể: duyệt với Xe Taxi + Hãng Taxi "Mai Linh" lưu đúng assignedTaxiCompany, KHÔNG còn BKS cũ',
+    taxiUi.status === 'APPROVED' && taxiUi.assignedVehicleType === 'Xe Taxi' && taxiUi.assignedTaxiCompany === 'Mai Linh' && !taxiUi.assignedPlate,
+    JSON.stringify(taxiUi)
+  );
+
+  // Đổi ngược từ Taxi -> loại xe thường (không-Taxi) qua "Đổi Tài Xế-Xe" (reassignCarDispatch) — field đối
+  // lập (assignedTaxiCompany) phải được dọn sạch, không để sót "Mai Linh" cũ.
+  const backToFixed = await page.evaluate(async (carId) => {
+    openCarProcessModal(carId);
+    const sel = document.getElementById('carAssignedVehicleType');
+    sel.value = 'Xe 7 chỗ';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('txtCarComment').value = '';
+    confirmCarReassign();
+    runConfirmedAction();
+    await new Promise((r) => setTimeout(r, 200));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { assignedVehicleType: item.assignedVehicleType, assignedPlate: item.assignedPlate, assignedTaxiCompany: item.assignedTaxiCompany };
+  }, taxiTestItem.id);
+  record(
+    'Loại Xe Cụ Thể: đổi từ Xe Taxi -> Xe 7 chỗ qua Đổi Tài Xế-Xe -> dọn sạch assignedTaxiCompany cũ',
+    backToFixed.assignedVehicleType === 'Xe 7 chỗ' && backToFixed.assignedPlate === '30G-468.62' && !backToFixed.assignedTaxiCompany,
+    JSON.stringify(backToFixed)
+  );
+
+  // Quản Lý Danh Mục (Admin) — thêm/xóa "Loại Xe Cụ Thể" và "Hãng Taxi", cả 2 phải là <select> thuần
+  // (KHÔNG dùng widget tìm-kiếm-gõ-chọn sdd*, theo đúng yêu cầu người dùng).
+  await loginAs(page, adminUser);
+  const catalogUi = await page.evaluate(async () => {
+    const vtSelIsSelect = document.getElementById('carAssignedVehicleType').tagName === 'SELECT';
+    const taxiSelIsSelect = document.getElementById('carAssignedTaxiCompany').tagName === 'SELECT';
+
+    document.getElementById('txtCarVehicleTypeName').value = 'Xe 16 chỗ Test';
+    document.getElementById('txtCarVehicleTypeBienSo').value = '30G-999.99';
+    document.getElementById('chkCarVehicleTypeIsTaxi').checked = false;
+    saveCarVehicleType({ preventDefault() {} });
+    const addedType = DB.carVehicleTypes.find((t) => t.name === 'Xe 16 chỗ Test');
+
+    document.getElementById('txtCarTaxiCompanyName').value = 'Grab';
+    saveCarTaxiCompany({ preventDefault() {} });
+    const addedTaxi = DB.carTaxiCompanies.includes('Grab');
+
+    if (addedType) deleteCarVehicleType(addedType.id);
+    const removedType = !DB.carVehicleTypes.some((t) => t.name === 'Xe 16 chỗ Test');
+    deleteCarTaxiCompany('Grab');
+    const removedTaxi = !DB.carTaxiCompanies.includes('Grab');
+
+    return { vtSelIsSelect, taxiSelIsSelect, addedType: !!addedType, addedTaxi, removedType, removedTaxi };
+  });
+  record(
+    'Quản Lý Danh Mục: #carAssignedVehicleType/#carAssignedTaxiCompany là <select> thuần (không phải ô tìm-kiếm-gõ-chọn)',
+    catalogUi.vtSelIsSelect && catalogUi.taxiSelIsSelect,
+    JSON.stringify(catalogUi)
+  );
+  record(
+    'Quản Lý Danh Mục: thêm được "Loại Xe Cụ Thể" và "Hãng Taxi" mới',
+    catalogUi.addedType && catalogUi.addedTaxi,
+    JSON.stringify(catalogUi)
+  );
+  record(
+    'Quản Lý Danh Mục: xóa được "Loại Xe Cụ Thể" và "Hãng Taxi" vừa thêm',
+    catalogUi.removedType && catalogUi.removedTaxi,
+    JSON.stringify(catalogUi)
   );
 
   await browser.close();

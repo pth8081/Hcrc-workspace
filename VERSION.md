@@ -1,8 +1,79 @@
 # Phiên bản hiện tại
 
-**21.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.5 (2026-09-14): Đăng Ký Xe — "Loại xe cụ thể" chuyển sang chọn 3 mục cố định + tự động điền BKS/"Hãng Taxi"
+
+Người dùng yêu cầu: ô "Loại xe cụ thể" (Đăng Ký Xe → Phần Dành Cho Phòng Hành
+Chính, lúc Phòng Hành Chính xử lý duyệt/phân công xe) đổi từ gõ tự do sang
+CHỌN đúng 3 lựa chọn "Xe 5 chỗ"/"Xe 7 chỗ"/"Xe Taxi"; chọn "Xe 5 chỗ" tự động
+điền Biển Kiểm Soát (BKS) = "30G-012.82", chọn "Xe 7 chỗ" tự động điền BKS =
+"30G-468.62"; chọn "Xe Taxi" thì ẩn BKS, hiện thêm ô "Hãng Taxi" để nhập/chọn
+hãng; đồng thời cho phép Admin tự thêm/xoá danh mục Loại Xe Cụ Thể + Hãng
+Taxi, và MỌI ô chọn mới phải là `<select>` thuần — **không** dùng widget
+tìm-kiếm-gõ-chọn (`sdd*`).
+
+**Thiết kế dữ liệu**: gộp "loại xe" + "biển số cố định" vào 1 danh mục duy
+nhất `DB.carVehicleTypes` (mảng `{id, name, bienSo, isTaxi}`, seed 3 mục mặc
+định trong `server/defaults.js`) — vì hành vi "chọn loại xe → BKS tự nhảy"
+cần biển số neo THEO từng loại xe, không tách được thành 2 danh mục độc lập
+như đề bài liệt kê ban đầu (Loại xe/Biển số xe). `DB.carTaxiCompanies` là
+danh sách phẳng riêng (mirror `DB.stores`), chỉ hiện khi mục đang chọn có
+`isTaxi:true`. Cả 2 catalog thêm vào `ADMIN_ONLY_KEYS` (`routes/data.js`) —
+chỉ Admin (tab "🗂️ Quản Lý Danh Mục") mới sửa được.
+
+**Field mới trên `carRegs`**: `assignedTaxiCompany` (song song
+`assignedVehicleType`/`assignedPlate` đã có) — thêm vào
+`MODULE_CONFIGS.carRegs.extraFields` (`lib/workflowEngine.js`, dùng lại đúng
+cơ chế whitelist chung nên nhánh APPROVE lúc duyệt không cần thêm code gì
+khác), và bổ sung dòng lưu tương ứng trong `reassignCarDispatch()`
+(`lib/recordActions.js`, dùng ở nhánh "Đổi Tài Xế-Xe" sau khi phiếu đã
+APPROVED). Cũng thêm vào khối reset field khi REQUEST_CHANGES (đưa phiếu về
+NHÁP) để không để sót dữ liệu phân công cũ.
+
+**Xử lý "field đối lập"**: đổi qua lại giữa Taxi/không-Taxi phải dọn sạch
+field không còn dùng (chọn "Xe Taxi" → xoá `assignedPlate` cũ; chọn về loại
+xe thường → xoá `assignedTaxiCompany` cũ), nếu không sẽ để sót dữ liệu cũ gây
+hiểu nhầm hoặc khoá nhầm biển số cũ ở `findCarPlateConflict()`. Áp dụng ở CẢ
+2 nhánh ghi (`applyWorkflowAction()` lẫn `reassignCarDispatch()`) — nhánh sau
+cần thêm tham số `carVehicleTypes` (route `/carRegs/:id/reassign`,
+`routes/records.js`, đọc qua `getAppDataValue('carVehicleTypes')`) để tự tra
+`isTaxi` của loại xe vừa chọn, vì hàm này không có sẵn `appData` như
+`applyWorkflowAction()`.
+
+**Client**: `#carAssignedVehicleType` đổi từ `<input>` sang `<select>` (nạp
+từ `DB.carVehicleTypes`), thêm `#carAssignedTaxiCompanyWrap` (ẩn mặc định,
+`<select id="carAssignedTaxiCompany">` nạp từ `DB.carTaxiCompanies`).
+`onCarAssignedVehicleTypeChange()` (`module-dangkyxe.js`) xử lý tự động điền
+BKS/ẩn-hiện Hãng Taxi khi người dùng THẬT sự đổi lựa chọn; gọi lại với
+`userTriggered=false` lúc mở modal (`openCarProcessModal()`) để chỉ đồng bộ
+ẩn/hiện đúng theo giá trị đã lưu, không ghi đè BKS/Hãng Taxi đã có sẵn của
+phiếu. 2 panel quản lý danh mục mới trong "🗂️ Quản Lý Danh Mục"
+(`saveCarVehicleType`/`deleteCarVehicleType`/`saveCarTaxiCompany`/
+`deleteCarTaxiCompany`, đăng ký vào `MODULE_FN_GROUP`/thêm `"dangkyxe"` làm
+dep của cụm `"hethong-tabs"` để tải module đúng lúc dù chưa từng mở tab Đăng
+Ký Xe). "Phiếu Đăng Ký Xe" (`viewCarApprovalSlip()`, `core.js`) và dòng lịch
+sử xử lý trong modal đều thêm dòng "Hãng Taxi" khi có.
+
+**Test**: thêm 8 kịch bản mới vào `tests/test-meeting-car.js` (auto-fill BKS
+theo từng loại xe, ẩn/hiện đúng ô BKS/Hãng Taxi, duyệt với Xe Taxi lưu đúng
+`assignedTaxiCompany`, đổi ngược từ Taxi sang loại xe thường qua "Đổi Tài
+Xế-Xe" dọn sạch field cũ, CRUD danh mục mới, xác nhận 2 ô mới là `<select>`
+thuần) — seed thêm `carVehicleTypes`/`carTaxiCompanies` vào fixture mock, sửa
+1 kịch bản cũ (D2) đổi giá trị gõ tự do "Ford Transit 16 chỗ" sang giá trị
+catalog thật "Xe 5 chỗ" (không còn gõ tự do được nữa, đúng thay đổi hành vi
+lần này) — **72/72 PASS**. Chạy lại `test-lazy-load-all-tabs.js` (42/42),
+`test-preview-workflow-buttons.js` (17/17), `test-quick-apply-workflow-steps.js`
+(24/24), `test-car-regs-scope.js` (7/7), `test-form-fields-6-catalogs.js`
+(13/13), `test-license.js` (15/15), `test-admin-users-permgroups.js` (62/62),
+`test-catalog-rename-locked-accounts.js` (20/20) — đều PASS.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies —
+2 danh mục mới chỉ là 2 key AppData JSON mới (tự seed qua `defaults.js` lúc
+server khởi động lần đầu, giống mọi danh mục AppData khác). Chỉ cần copy code
++ `pm2 restart` như thường lệ.
 
 ## v21.4 (2026-09-14): Phê Duyệt Giá Bán Buôn thêm "Đơn Vị Áp Dụng" + Áp Dụng Nhanh số bước quy trình + Xem Quy Trình cho toàn bộ module
 

@@ -4630,6 +4630,32 @@
         </div>
       </div>
 
+      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+        <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">🚗 Quản Lý Danh Mục Loại Xe Cụ Thể</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Loại xe cụ thể" (Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính) — chọn 1 mục thường sẽ tự động điền Biển Kiểm Soát (BKS); mục đánh dấu "Xe Taxi" sẽ hiện ô "Hãng Taxi" thay vì BKS.</p>
+        <form data-op-submit="saveCarVehicleType" class="grid grid-cols-2 gap-2">
+          <input id="txtCarVehicleTypeName" placeholder="Tên loại xe (VD: Xe 5 chỗ)..." class="border p-1.5 rounded text-xs col-span-2" required>
+          <input id="txtCarVehicleTypeBienSo" placeholder="Biển kiểm soát cố định (VD: 30G-012.82)" class="border p-1.5 rounded text-xs">
+          <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" id="chkCarVehicleTypeIsTaxi"> Là Xe Taxi (hiện "Hãng Taxi" thay BKS)</label>
+          <button type="submit" class="col-span-2 bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="carVehicleTypeList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">🚕 Quản Lý Danh Mục Hãng Taxi</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Hãng Taxi" — chỉ hiện khi chọn "Loại xe cụ thể" = mục đánh dấu Xe Taxi ở trên.</p>
+        <form data-op-submit="saveCarTaxiCompany" class="flex gap-2">
+          <input id="txtCarTaxiCompanyName" placeholder="Tên hãng taxi mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="carTaxiCompanyList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
         <form data-op-submit="saveCat" class="flex gap-2">
@@ -9227,11 +9253,15 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Loại xe cụ thể</label>
-            <input id="carAssignedVehicleType" placeholder="VD: Toyota Innova 7 chỗ" class="w-full border p-1.5 rounded">
+            <select id="carAssignedVehicleType" data-op-change="onCarAssignedVehicleTypeChange" class="w-full border p-1.5 rounded"><option value="">-- Chọn loại xe --</option></select>
           </div>
-          <div>
+          <div id="carAssignedPlateWrap">
             <label class="block font-semibold text-gray-600 mb-1">Biển kiểm soát (BKS)</label>
             <input id="carAssignedPlate" placeholder="VD: 30F-123.45" class="w-full border p-1.5 rounded">
+          </div>
+          <div id="carAssignedTaxiCompanyWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">Hãng Taxi</label>
+            <select id="carAssignedTaxiCompany" class="w-full border p-1.5 rounded"><option value="">-- Chọn hãng taxi --</option></select>
           </div>
         </div>
         <p class="text-[11px] text-indigo-700 italic">Có thể để trống nếu bước này chưa xác định — điền ở bước phê duyệt phù hợp (thường là bước cuối).</p>

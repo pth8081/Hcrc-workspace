@@ -176,6 +176,23 @@ const DEFAULTS = {
     { key: 'Khác', label: 'Khác (đính kèm KH)' }
   ],
 
+  // "Loại Xe Cụ Thể" (Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính, ô #carAssignedVehicleType) — KHÁC
+  // carTypes ở trên (đó là "Đăng Ký Sử Dụng Loại Xe" — sở thích/nhu cầu người ĐĂNG KÝ chọn lúc tạo phiếu;
+  // đây là XE CỤ THỂ công ty có, do Phòng Hành Chính chọn lúc phân công/duyệt). Mỗi mục thường (isTaxi:
+  // false) mang theo đúng 1 biển số cố định (bienSo) — chọn loại xe này ở form xử lý duyệt sẽ TỰ ĐỘNG
+  // điền biển số tương ứng (xem onCarAssignedVehicleTypeChange(), module-dangkyxe.js). Mục "Xe Taxi"
+  // (isTaxi:true) không có biển số cố định — bienSo để rỗng, form đổi sang hiện ô "Hãng Taxi" (chọn từ
+  // carTaxiCompanies ngay dưới đây) thay vì tự điền biển số.
+  carVehicleTypes: [
+    { id: 1, name: 'Xe 5 chỗ', bienSo: '30G-012.82', isTaxi: false },
+    { id: 2, name: 'Xe 7 chỗ', bienSo: '30G-468.62', isTaxi: false },
+    { id: 3, name: 'Xe Taxi', bienSo: '', isTaxi: true }
+  ],
+  // "Hãng Taxi" — chỉ hiện khi #carAssignedVehicleType chọn đúng mục isTaxi:true ở trên. Danh sách phẳng
+  // thuần (không cần key ổn định như carPurposes — tên hãng chính là giá trị lưu thẳng vào
+  // carRegs.assignedTaxiCompany, không có gì tham chiếu tới qua key riêng).
+  carTaxiCompanies: ['Mai Linh', 'Vinasun'],
+
   // "Chủ Đề" (HCRC Đồng Hành — hrFeedback.category, CORE_FIELD_MANIFEST.HR_FEEDBACK.hrFeedbackCategory) —
   // cùng khuôn itTicketCategories ở trên: KHÁC danh sách nhãn hiển thị thuần, key ở đây quyết định trực
   // tiếp giá trị hợp lệ server chấp nhận (xem lib/createValidation.js hrFeedback.extraValidate, ĐỌC từ

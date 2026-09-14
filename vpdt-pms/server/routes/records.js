@@ -891,8 +891,9 @@ router.post('/carRegs/:id/reassign', async (req, res) => {
     const newPlate = req.body?.assignedPlate;
     const runReassign = async () => {
       const existingCarRegs = await getAllForCollection('carRegs');
+      const carVehicleTypes = await getAppDataValue('carVehicleTypes');
       return withLockedRecordForCollection('carRegs', itemId, (item) =>
-        recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users));
+        recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users, carVehicleTypes));
     };
     const result = newPlate ? await withAppLock(`car_plate:${newPlate}`, runReassign) : await runReassign();
     res.json({ ok: true, item: result });

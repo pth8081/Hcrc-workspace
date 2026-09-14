@@ -281,7 +281,7 @@ const MODULE_CONFIGS = {
     // assignedDriver KHÔNG còn nằm trong danh sách này — lái xe giờ bắt buộc là 1 tài khoản hệ thống có
     // thật (xem xử lý riêng ở applyWorkflowAction() bên dưới), server tự tra display name từ user thay
     // vì tin bất kỳ text nào client gửi kèm.
-    extraFields: ['assignedVehicleType', 'assignedPlate'],
+    extraFields: ['assignedVehicleType', 'assignedPlate', 'assignedTaxiCompany'],
     supportsRequestChanges: true
   },
   officeReqs: {
@@ -520,6 +520,7 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (moduleKey === 'carRegs') {
       item.assignedPlate = '';
       item.assignedVehicleType = '';
+      item.assignedTaxiCompany = '';
       item.assignedDriverUsername = '';
       item.assignedDriver = '';
       item.driverConfirmed = false;
@@ -652,6 +653,19 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       if (item.driverConfirmed) {
         item.driverConfirmed = false;
         item.driverConfirmedAt = null;
+      }
+    }
+    // Đổi "Loại xe cụ thể" sang Taxi/không-Taxi -> dọn field "đối lập" (BKS cố định vs Hãng Taxi) để
+    // không để sót dữ liệu cũ (VD đổi từ "Xe 5 chỗ" -> "Xe Taxi" mà vẫn còn assignedPlate cũ treo lại,
+    // dễ gây hiểu nhầm/khoá nhầm biển số cũ ở findCarPlateConflict() cho phiếu khác). Đặt TRƯỚC vòng lặp
+    // extraFields bên dưới để field vừa chọn (nếu client có gửi kèm) vẫn được set lại đúng ngay sau đó.
+    if (moduleKey === 'carRegs' && extraFields?.assignedVehicleType && extraFields.assignedVehicleType !== item.assignedVehicleType) {
+      const vehicleTypeList = Array.isArray(appData?.carVehicleTypes) ? appData.carVehicleTypes : [];
+      const matchedType = vehicleTypeList.find(t => t.name === extraFields.assignedVehicleType);
+      if (matchedType?.isTaxi) {
+        item.assignedPlate = '';
+      } else {
+        item.assignedTaxiCompany = '';
       }
     }
     for (const f of config.extraFields) {
