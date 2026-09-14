@@ -1152,20 +1152,6 @@ function buildSubmissionApprovalSlipHTML(sub) {
     extraFieldsHTML = `<div class="as-section-title">Thông Tin Bổ Sung</div><table class="as-field-table">${rows}</table>`;
   }
 
-  // Ý kiến chỉ đạo của người phê duyệt cuối cùng — chính là bản ghi APPROVED gần nhất trong lịch sử
-  // xử lý (bước hoàn tất quy trình, đưa hồ sơ về trạng thái APPROVED).
-  const finalApprovalEntry = [...(sub.history || [])].reverse().find(h => h.action === 'APPROVED');
-  let finalCommentHTML = '';
-  if (finalApprovalEntry && finalApprovalEntry.comment) {
-    finalCommentHTML = `
-      <div class="as-section-title">Ý Kiến Chỉ Đạo Của Người Phê Duyệt Cuối Cùng</div>
-      <div class="as-comment-box">
-        <p>"${escapeHtml(finalApprovalEntry.comment)}"</p>
-        <div class="as-comment-meta">— ${escapeHtml(finalApprovalEntry.approver)}, ${escapeHtml(finalApprovalEntry.time)}</div>
-      </div>
-    `;
-  }
-
   const bodyHTML = `
     <table class="as-field-table">
       <tr><td class="as-label">Ngày trình:</td><td>${escapeHtml(sub.createdAt || '')}</td></tr>
@@ -1179,7 +1165,6 @@ function buildSubmissionApprovalSlipHTML(sub) {
       ${sub.extraFiles && sub.extraFiles.length ? `<tr><td class="as-label">Tài liệu bổ sung:</td><td>${sub.extraFiles.map(ef => escapeHtml(ef.fileName || '')).join(', ')}</td></tr>` : ''}
     </table>
     ${extraFieldsHTML}
-    ${finalCommentHTML}
   `;
 
   return buildApprovalSlipShellHTML({

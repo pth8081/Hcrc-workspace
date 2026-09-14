@@ -1029,19 +1029,6 @@ function buildOfficeApprovalSlipHTML(o) {
     extraFieldsHTML = `<div class="as-section-title">Thông Tin Bổ Sung</div><table class="as-field-table">${rows}</table>`;
   }
 
-  // Ý kiến chỉ đạo của người phê duyệt cuối cùng — bản ghi APPROVED gần nhất trong lịch sử xử lý.
-  const finalApprovalEntry = [...(o.history || [])].reverse().find(h => h.action === 'APPROVED');
-  let finalCommentHTML = '';
-  if (finalApprovalEntry && finalApprovalEntry.comment) {
-    finalCommentHTML = `
-      <div class="as-section-title">Ý Kiến Chỉ Đạo Của Người Phê Duyệt Cuối Cùng</div>
-      <div class="as-comment-box">
-        <p>"${escapeHtml(finalApprovalEntry.comment)}"</p>
-        <div class="as-comment-meta">— ${escapeHtml(finalApprovalEntry.approver)}, ${escapeHtml(finalApprovalEntry.time)}</div>
-      </div>
-    `;
-  }
-
   // Phân hệ Mua Sắm dùng bảng nhiều hạng mục theo đúng bố cục Mẫu BM-TS01 (Phiếu Đề Nghị Mua Sắm
   // Tài Sản/Cung Cấp Trang Thiết Bị) do người dùng cung cấp — Sửa Chữa/Đầu Tư giữ nguyên 1 dòng vì
   // chưa có mẫu giấy riêng.
@@ -1088,7 +1075,6 @@ function buildOfficeApprovalSlipHTML(o) {
     <div class="as-section-title">Danh Sách Hạng Mục Đề Nghị Mua Sắm</div>
     ${itemsTableHTML}
     ${extraFieldsHTML}
-    ${finalCommentHTML}
   ` : `
     <table class="as-field-table">
       <tr><td class="as-label">Ngày tạo:</td><td>${escapeHtml(o.createdAt || '')}</td></tr>
@@ -1102,7 +1088,6 @@ function buildOfficeApprovalSlipHTML(o) {
       <tr><td class="as-label">Lý do / Diễn giải:</td><td>${escapeHtml(o.reason || '')}</td></tr>
     </table>
     ${extraFieldsHTML}
-    ${finalCommentHTML}
   `;
 
   return buildApprovalSlipShellHTML({
