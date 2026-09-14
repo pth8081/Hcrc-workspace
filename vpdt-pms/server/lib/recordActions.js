@@ -6085,7 +6085,7 @@ function cancelCarReg(user, item, payload) {
 // nên KHÔNG thể tái dùng thẳng hàm đó cho phiếu đã xong toàn bộ quy trình — đây là hàm RIÊNG, cùng logic
 // gán/kiểm tra trùng biển số/reset xác nhận lái xe cũ (mirror ĐÚNG đoạn extraFields ở
 // applyWorkflowAction(), không viết lại cách kiểm tra), chỉ khác điều kiện trạng thái đầu vào.
-function reassignCarDispatch(user, item, payload, existingCarRegs, users) {
+function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVehicleTypes) {
   if (!(user?.perms?.admin || user?.perms?.carDispatch)) {
     throw new HttpError(403, 'Bạn không có quyền phân công lại xe/lái xe (cần quyền Người Điều Hành Xe)');
   }
@@ -6102,6 +6102,7 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users) {
     }
   }
   const assignedVehicleType = String(payload?.assignedVehicleType || '').trim();
+  const assignedTaxiCompany = String(payload?.assignedTaxiCompany || '').trim();
   const assignedDriverUsername = String(payload?.assignedDriverUsername || '').trim();
   const extraSnapshot = {};
   // Lái xe PHẢI là 1 tài khoản hệ thống có thật (mirror applyWorkflowAction()) — server tự tra display
@@ -6121,8 +6122,19 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users) {
       item.driverConfirmedAt = null;
     }
   }
+  // Đổi "Loại xe cụ thể" sang Taxi/không-Taxi -> dọn field "đối lập" (BKS cố định vs Hãng Taxi) để không
+  // để sót dữ liệu cũ (mirror ĐÚNG logic ở applyWorkflowAction(), lib/workflowEngine.js).
+  if (assignedVehicleType && assignedVehicleType !== item.assignedVehicleType) {
+    const matchedType = (carVehicleTypes || []).find(t => t.name === assignedVehicleType);
+    if (matchedType?.isTaxi) {
+      item.assignedPlate = '';
+    } else {
+      item.assignedTaxiCompany = '';
+    }
+  }
   if (newPlate) { item.assignedPlate = newPlate; extraSnapshot.assignedPlate = newPlate; }
   if (assignedVehicleType) { item.assignedVehicleType = assignedVehicleType; extraSnapshot.assignedVehicleType = assignedVehicleType; }
+  if (assignedTaxiCompany) { item.assignedTaxiCompany = assignedTaxiCompany; extraSnapshot.assignedTaxiCompany = assignedTaxiCompany; }
   if (!Object.keys(extraSnapshot).length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 thay đổi (xe/biển số/lái xe)');
   item.history = item.history || [];
   item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'REASSIGNED', comment: String(payload?.comment || '').trim(), time: nowVN(), ...extraSnapshot });

@@ -112,6 +112,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // Họp/Gia Hạn Dịch Vụ CNTT với 2 cái sau) — ghi trực tiếp POST /api/data/<key> phải khoá lại đúng độ
   // mở đó, không mở cho mọi tài khoản đã đăng nhập.
   'submissionPriorities', 'carPurposes', 'hrFeedbackCategories', 'meetingRooms', 'itRenewalCategories',
+  // carVehicleTypes/carTaxiCompanies: danh mục "Loại Xe Cụ Thể"/"Hãng Taxi" (Đăng Ký Xe > Phần Dành Cho
+  // Phòng Hành Chính) — chỉ có màn quản lý dành cho Admin (tab "🗂️ Quản Lý Danh Mục"), cùng lý do
+  // stores/jobTitles ở dưới — không mở cho mọi tài khoản đã đăng nhập.
+  'carVehicleTypes', 'carTaxiCompanies',
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
   'contractExpiryDeptContacts',

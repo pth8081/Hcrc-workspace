@@ -439,6 +439,20 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   phiếu — **không** đặt/kéo-chọn lịch trực tiếp từ đây, biển số/lái xe cụ thể
   vẫn do Phòng Hành Chính phân công khi xử lý duyệt), **🧑‍✈️ Lái Xe** (lái xe
   tự xác nhận chuyến được phân công).
+  **"Phần Dành Cho Phòng Hành Chính" (phân công xe lúc xử lý duyệt)** — CHỈ
+  Người Điều Hành Xe (`perms.carDispatch`)/Admin mới thấy/sửa được mục này khi
+  duyệt (người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường, không
+  đụng được tới các ô dưới đây). Ô **"Loại xe cụ thể"** là `<select>` chọn từ
+  danh mục `carVehicleTypes` (Admin tự thêm/xoá ở "🗂️ Quản Lý Danh Mục" →
+  "🚗 Quản Lý Danh Mục Loại Xe Cụ Thể") — mỗi mục thường gắn sẵn 1 **Biển Kiểm
+  Soát (BKS) cố định**, chọn mục đó sẽ **tự động điền BKS tương ứng** (BKS vẫn
+  có thể sửa tay lại nếu cần, VD dùng xe dự phòng). Mục đánh dấu **"Là Xe
+  Taxi"** không có BKS cố định — chọn mục này sẽ **ẩn ô BKS, hiện thêm ô
+  "Hãng Taxi"** (chọn từ danh mục `carTaxiCompanies`, Admin tự thêm/xoá ở panel
+  "🚕 Quản Lý Danh Mục Hãng Taxi" ngay cạnh) để ghi nhận hãng taxi thuê ngoài
+  thay vì xe công ty. Đổi qua lại giữa Taxi/không-Taxi (kể cả ở "🔁 Đổi Tài
+  Xế-Xe" sau khi phiếu đã duyệt xong) tự động dọn sạch BKS/Hãng Taxi cũ không
+  còn phù hợp, tránh để sót dữ liệu gây hiểu nhầm.
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
@@ -1628,9 +1642,11 @@ của hơn 15 module dùng chung engine phê duyệt.
 ### 7.2. Quản Lý Danh Mục
 
 Nơi admin quản lý các danh mục "lõi" dùng chung toàn hệ thống: Phòng ban,
-Chức danh, Siêu thị, Loại Giấy Phép, Loại Dịch Vụ CNTT, **📲 Phím Tắt PWA**
-(chọn tối đa 4 module hiện nhanh khi cài ứng dụng lên màn hình chính, xem mục
-2.4)... Đa số danh mục **theo từng module riêng** (VD "Độ Khẩn" của Văn Bản
+Chức danh, Siêu thị, Loại Giấy Phép, Loại Dịch Vụ CNTT, **🚗 Loại Xe Cụ Thể**/
+**🚕 Hãng Taxi** (mục "Loại xe cụ thể"/"Hãng Taxi" ở "Phần Dành Cho Phòng Hành
+Chính" của Đăng Ký Xe, xem mục 4.2), **📲 Phím Tắt PWA** (chọn tối đa 4 module
+hiện nhanh khi cài ứng dụng lên màn hình chính, xem mục 2.4)... Đa số danh
+mục **theo từng module riêng** (VD "Độ Khẩn" của Văn Bản
 Trình, "Mục Đích Sử Dụng" của Đăng Ký Xe, "Chủ Đề" của HCRC Đồng Hành) lại cấu
 hình ở màn Biểu Mẫu (mục 7.3) thay vì ở đây — 2 màn có vai trò khác nhau: mục
 này là danh mục LÕI dùng chéo nhiều module, Biểu Mẫu là tuỳ biến RIÊNG của

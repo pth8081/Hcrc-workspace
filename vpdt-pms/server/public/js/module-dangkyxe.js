@@ -56,7 +56,8 @@ async function submitCarReq(e) {
     // thu thập ở bước đăng ký vì người đăng ký thường chưa biết xe/lái xe cụ thể sẽ được xếp.
     assignedDriver: '',
     assignedVehicleType: '',
-    assignedPlate: ''
+    assignedPlate: '',
+    assignedTaxiCompany: ''
   };
 
   let newCar;
@@ -346,6 +347,7 @@ function confirmCarReassign() {
   }
   const assignedVehicleType = document.getElementById('carAssignedVehicleType').value.trim();
   const assignedPlate = document.getElementById('carAssignedPlate').value.trim();
+  const assignedTaxiCompany = document.getElementById('carAssignedTaxiCompany').value.trim();
   const comment = document.getElementById('txtCarComment').value.trim();
   showConfirmModal({
     title: '🔁 Xác Nhận Đổi Tài Xế-Xe',
@@ -354,7 +356,7 @@ function confirmCarReassign() {
     onConfirm: async () => {
       let result;
       try {
-        result = await callRecordAction('carRegs', c.id, 'reassign', { assignedDriverUsername, assignedVehicleType, assignedPlate, comment });
+        result = await callRecordAction('carRegs', c.id, 'reassign', { assignedDriverUsername, assignedVehicleType, assignedPlate, assignedTaxiCompany, comment });
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const idx = DB.carRegs.findIndex(x => x.id === c.id);
       if (idx !== -1) DB.carRegs[idx] = result.item;
@@ -364,6 +366,85 @@ function confirmCarReassign() {
       renderCarRegs();
     }
   });
+}
+
+// ===== Danh Mục "Loại Xe Cụ Thể" (DB.carVehicleTypes) — Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính,
+// xem defaults.js. Mỗi mục thường (isTaxi:false) gắn 1 biển số cố định (bienSo) để tự động điền BKS khi
+// chọn (xem onCarAssignedVehicleTypeChange() ở trên); mục Taxi (isTaxi:true) không có biển số cố định,
+// form đổi sang hiện ô "Hãng Taxi" (DB.carTaxiCompanies, ngay dưới đây) thay vì tự điền biển số. =====
+function saveCarVehicleType(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtCarVehicleTypeName').value.trim();
+  const bienSo = document.getElementById('txtCarVehicleTypeBienSo').value.trim();
+  const isTaxi = document.getElementById('chkCarVehicleTypeIsTaxi').checked;
+  if (!name) return;
+  if (DB.carVehicleTypes.some(t => t.name === name)) return alert('Loại xe đã tồn tại!');
+  const nextId = DB.carVehicleTypes.reduce((max, t) => Math.max(max, t.id || 0), 0) + 1;
+  DB.carVehicleTypes.push({ id: nextId, name, bienSo: isTaxi ? '' : bienSo, isTaxi });
+  syncStorage('carVehicleTypes');
+  logSystemAction('USER_MGM', 'ADD_CAR_VEHICLE_TYPE', `Thêm loại xe cụ thể mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtCarVehicleTypeName').value = '';
+  document.getElementById('txtCarVehicleTypeBienSo').value = '';
+  document.getElementById('chkCarVehicleTypeIsTaxi').checked = false;
+  renderCarVehicleTypeList();
+  populateDropdowns();
+}
+
+function deleteCarVehicleType(id) {
+  const t = DB.carVehicleTypes.find(x => x.id === id);
+  if (!t) return;
+  if (!confirm(`Xóa loại xe "${t.name}"?`)) return;
+  DB.carVehicleTypes = DB.carVehicleTypes.filter(x => x.id !== id);
+  syncStorage('carVehicleTypes');
+  logSystemAction('USER_MGM', 'DELETE_CAR_VEHICLE_TYPE', `Xóa loại xe cụ thể [${t.name}]`, 'SUCCESS', t.name);
+  renderCarVehicleTypeList();
+  populateDropdowns();
+}
+
+function renderCarVehicleTypeList() {
+  const ul = document.getElementById('carVehicleTypeList');
+  if (!ul) return;
+  ul.innerHTML = (DB.carVehicleTypes || []).map(t => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(t.name)} ${t.isTaxi ? '<span class="text-amber-600 font-bold">(Taxi)</span>' : (t.bienSo ? `<span class="text-gray-500">— BKS ${escapeHtml(t.bienSo)}</span>` : '')}</span>
+      <button data-op="deleteCarVehicleType" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+
+// ===== Danh Mục "Hãng Taxi" (DB.carTaxiCompanies) — danh sách phẳng thuần, mirror DB.stores (không
+// cần key ổn định — tên hãng chính là giá trị lưu thẳng vào carRegs.assignedTaxiCompany). =====
+function saveCarTaxiCompany(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtCarTaxiCompanyName').value.trim();
+  if (!name) return;
+  if (DB.carTaxiCompanies.includes(name)) return alert('Hãng taxi đã tồn tại!');
+  DB.carTaxiCompanies.push(name);
+  syncStorage('carTaxiCompanies');
+  logSystemAction('USER_MGM', 'ADD_CAR_TAXI_COMPANY', `Thêm hãng taxi mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtCarTaxiCompanyName').value = '';
+  renderCarTaxiCompanyList();
+  populateDropdowns();
+}
+
+function deleteCarTaxiCompany(name) {
+  if (!confirm(`Xóa hãng taxi "${name}"?`)) return;
+  DB.carTaxiCompanies = DB.carTaxiCompanies.filter(x => x !== name);
+  syncStorage('carTaxiCompanies');
+  logSystemAction('USER_MGM', 'DELETE_CAR_TAXI_COMPANY', `Xóa hãng taxi [${name}]`, 'SUCCESS', name);
+  renderCarTaxiCompanyList();
+  populateDropdowns();
+}
+
+function renderCarTaxiCompanyList() {
+  const ul = document.getElementById('carTaxiCompanyList');
+  if (!ul) return;
+  ul.innerHTML = (DB.carTaxiCompanies || []).map(name => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(name)}</span>
+      <button data-op="deleteCarTaxiCompany" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
 }
 
 function onCarFilterChange() {
@@ -437,7 +518,7 @@ function renderCarRegs() {
 
     // assignedPlate/assignedDriver: do Phòng Hành Chính điền lúc xử lý duyệt (xem processCarReg()).
     // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
-    const displayPlate = c.assignedPlate || c.plate || '';
+    const displayPlate = c.assignedPlate || c.plate || (c.assignedTaxiCompany ? `Taxi ${c.assignedTaxiCompany}` : '');
     const displayDriver = c.assignedDriver || c.driver || '';
     const canDL = c.status === 'APPROVED' && canDownloadFile(currentUser, 'car', c.dept, c.creator);
 
@@ -514,6 +595,27 @@ function resolveCarAssignedDriverInput(rawValue) {
   document.getElementById('carAssignedDriverUsername').value = m ? m[2].trim() : '';
 }
 
+// Chọn "Loại xe cụ thể" (#carAssignedVehicleType, select, xem DB.carVehicleTypes) -> mục thường
+// (isTaxi:false) tự động điền BKS cố định + ẩn ô "Hãng Taxi"; mục Taxi (isTaxi:true) ẩn ô BKS + hiện
+// "Hãng Taxi" thay vào. userTriggered=false khi gọi lại lúc mở modal (openCarProcessModal()) — CHỈ để
+// đồng bộ đúng ẩn/hiện theo giá trị đã lưu của phiếu, KHÔNG được ghi đè BKS/Hãng Taxi đã có sẵn (khác
+// lúc người dùng TỰ TAY đổi lựa chọn, lúc đó auto-fill/xóa field đối lập mới đúng ý).
+function onCarAssignedVehicleTypeChange(userTriggered = true) {
+  const sel = document.getElementById('carAssignedVehicleType');
+  if (!sel) return;
+  const selectedType = (DB.carVehicleTypes || []).find(t => t.name === sel.value);
+  const isTaxi = !!selectedType?.isTaxi;
+  document.getElementById('carAssignedPlateWrap').classList.toggle('hidden', isTaxi);
+  document.getElementById('carAssignedTaxiCompanyWrap').classList.toggle('hidden', !isTaxi);
+  if (!userTriggered) return;
+  if (isTaxi) {
+    document.getElementById('carAssignedPlate').value = '';
+  } else {
+    document.getElementById('carAssignedTaxiCompany').value = '';
+    document.getElementById('carAssignedPlate').value = selectedType?.bienSo || '';
+  }
+}
+
 function openCarProcessModal(carId) {
   currentProcessingCarId = carId;
   const c = DB.carRegs.find(item => item.id === carId);
@@ -544,9 +646,16 @@ function openCarProcessModal(carId) {
     ? `${assignedDriverUser.name} — ${assignedDriverUser.dept || 'Chưa rõ phòng'} (${assignedDriverUser.username})`
     : '';
   document.getElementById('carAssignedDriverUsername').value = c.assignedDriverUsername || '';
+  populateCarAssignedVehicleTypeSelect();
+  populateCarTaxiCompanySelect();
   document.getElementById('carAssignedVehicleType').value = c.assignedVehicleType || '';
   document.getElementById('carAssignedPlate').value = c.assignedPlate || c.plate || '';
+  document.getElementById('carAssignedTaxiCompany').value = c.assignedTaxiCompany || '';
   document.getElementById('txtCarComment').value = '';
+  // false — chỉ đồng bộ ẩn/hiện ô BKS/Hãng Taxi đúng theo giá trị ĐÃ LƯU của phiếu, KHÔNG được tự ý xoá/
+  // điền lại BKS hay Hãng Taxi đã có sẵn (khác lúc người dùng TỰ TAY đổi lựa chọn trong lúc modal đang mở
+  // — lúc đó auto-fill/xoá field đối lập mới đúng ý, xem onCarAssignedVehicleTypeChange()).
+  onCarAssignedVehicleTypeChange(false);
 
   // "Phần Dành Cho Phòng Hành Chính" (phân công lái xe/loại xe/BKS) chỉ hiện cho "Người Điều Hành Xe"
   // (perms.carDispatch) — người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường ở nút bên dưới,
@@ -562,7 +671,7 @@ function openCarProcessModal(carId) {
         <span class="text-gray-400 font-normal">${escapeHtml(h.time)}</span>
       </div>
       <div class="text-gray-600">Hành động: <span class="font-bold text-blue-600">${escapeHtml(h.action)}</span> — Bước ${h.step}${h.stepName ? ` (${escapeHtml(h.stepName)})` : ''}</div>
-      ${h.assignedDriver || h.assignedPlate ? `<div class="text-gray-700">🚘 Phân công: ${escapeHtml(h.assignedDriver || '')} ${h.assignedPlate ? `- BKS ${escapeHtml(h.assignedPlate)}` : ''}</div>` : ''}
+      ${h.assignedDriver || h.assignedPlate || h.assignedTaxiCompany ? `<div class="text-gray-700">🚘 Phân công: ${escapeHtml(h.assignedDriver || '')} ${h.assignedPlate ? `- BKS ${escapeHtml(h.assignedPlate)}` : ''} ${h.assignedTaxiCompany ? `- Hãng Taxi ${escapeHtml(h.assignedTaxiCompany)}` : ''}</div>` : ''}
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
   `).join('');
@@ -648,7 +757,8 @@ async function processCarReg(actionType) {
     extraFields = {
       assignedDriverUsername: carAssignedDriverUsername,
       assignedVehicleType: document.getElementById('carAssignedVehicleType').value.trim(),
-      assignedPlate: document.getElementById('carAssignedPlate').value.trim()
+      assignedPlate: document.getElementById('carAssignedPlate').value.trim(),
+      assignedTaxiCompany: document.getElementById('carAssignedTaxiCompany').value.trim()
     };
   }
 
