@@ -169,7 +169,7 @@ Mỗi bước duyệt (của mỗi phòng ban/tier) chọn đúng 1 trong 3 ch�
 |---|---|---|
 | **Theo người** (PEOPLE — mặc định) | Admin chọn tay 1 hoặc nhiều người cụ thể làm người duyệt bước đó | Không tự tái kiểm tra quyền "Người duyệt" tại thời điểm duyệt — người đã được thêm vẫn duyệt được kể cả nếu sau đó bị rút quyền (hành vi cũ, giữ nguyên) |
 | **Theo phòng ban** | Toàn bộ người có quyền "Người duyệt" (xem 3.2) đang thuộc phòng ban cấu hình cho bước đó | Dùng cho các bước kiểu "ai trong phòng X có quyền duyệt cũng duyệt được" |
-| **Theo vị trí** (POSITION) | Bật toggle "🧭 Theo vị trí" ở bước đó, chọn 1 hoặc nhiều **vị trí** (cặp chức danh + phòng ban, xem 3.3) thay vì chọn tay người cụ thể | Hệ thống **tự tra động** người thật đang giữ đúng vị trí đó mỗi lần cần duyệt — luôn phản ánh đúng ai đang giữ chức vụ hiện tại, không cần admin sửa lại khi nhân sự đổi vị trí |
+| **Theo vị trí** (POSITION) | Bật toggle "🧭 Theo vị trí" ở bước đó, chọn 1 hoặc nhiều **vị trí** (cặp chức danh + phòng ban — phòng ban có thể để trống, xem 3.3) thay vì chọn tay người cụ thể | Hệ thống **tự tra động** người thật đang giữ đúng vị trí đó mỗi lần cần duyệt — luôn phản ánh đúng ai đang giữ chức vụ hiện tại, không cần admin sửa lại khi nhân sự đổi vị trí. Vị trí không ghép phòng ban khớp theo CHỈ chức danh, bất kể người đó thuộc phòng ban nào |
 
 **Điểm bảo mật cốt lõi của chế độ Theo vị trí**: khớp đúng vị trí **chỉ là
 điều kiện lọc bớt** — người đó vẫn phải có quyền "Người duyệt" (`canBeApprover`,
@@ -204,6 +204,18 @@ danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá �
    IT" với "Trưởng phòng Nhân Sự") — mỗi cặp là 1 "vị trí" độc lập, dùng làm
    nguồn chọn cho bước duyệt "Theo vị trí" (3.1). Có thể khai báo trước cả khi
    chưa có ai thực sự giữ đúng vị trí đó.
+
+   **Cách thêm 1 vị trí (từ v22.1)**: gõ/chọn **"Chức danh"** (bắt buộc, ô
+   gõ-tìm-chọn gợi ý theo `DB.jobTitles`/chức danh Siêu Thị) rồi tuỳ chọn ghép
+   thêm **"Phòng ban"** (gõ-tìm-chọn gợi ý theo `DB.depts`/tên siêu thị) — bấm
+   **"➕ Thêm"** để đưa cặp vào danh sách chip bên dưới (xoá bằng nút "×" trên
+   từng chip), xong thì bấm "Lưu" 1 lần. **Để trống ô Phòng Ban** nếu chức
+   danh này áp dụng cho **MỌI** phòng ban/đơn vị (VD "Tổng Giám Đốc" — không
+   cần/không nên ghép riêng 1 phòng ban cụ thể): 1 vị trí như vậy khớp bất kỳ
+   ai đang giữ đúng chức danh đó, bất kể họ thuộc phòng ban nào. (Trước v22.1
+   chỉ chọn được từ 1 danh sách tích chéo dựng sẵn toàn bộ chức danh × phòng
+   ban — vừa sinh ra nhiều tổ hợp không có thật, vừa không cách nào bỏ qua
+   phòng ban cho 1 chức danh — đã đổi hẳn sang cách trên.)
 
    **Tài khoản Siêu Thị (posType=STORE) cũng nằm trong ô chọn này** (từ
    v22.0): ô "🧭 Theo vị trí" ghép sẵn mọi cặp (chức danh Siêu Thị, tên siêu
@@ -1811,11 +1823,21 @@ Workspace mà không cần tự lưu mật khẩu người dùng:
 **Cấp/thu hồi key (admin)**: vào màn quản lý API key (Hệ Thống → Quản Trị) —
 tạo key mới sinh 1 chuỗi ngẫu nhiên dạng `hcrc_` + 64 ký tự hex, **chỉ hiển thị
 đúng 1 lần lúc tạo** (DB chỉ lưu bcrypt hash, không đọc lại được key thật kể cả
-có toàn quyền truy cập DB) — phải copy lại ngay và giao cho bên tích hợp, mất
-thì phải thu hồi key cũ + tạo key mới. Mỗi key có thể khai báo thêm **danh sách
-IP/CIDR được phép gọi** (`allowedIps`, tuỳ chọn) — để trống = không hạn chế IP,
-key đúng gọi từ đâu cũng được; khai báo rồi thì request từ IP ngoài danh sách
-bị chặn (403) dù key đúng.
+có toàn quyền truy cập DB) — phải copy lại ngay (nút "📋 Sao chép") và giao cho
+bên tích hợp. Mỗi key có thể khai báo thêm **danh sách IP/CIDR được phép gọi**
+(`allowedIps`, tuỳ chọn) — để trống = không hạn chế IP, key đúng gọi từ đâu
+cũng được; khai báo rồi thì request từ IP ngoài danh sách bị chặn (403) dù key
+đúng.
+
+4 hành động cho 1 key đang **hoạt động**: **Sửa IP** (đổi `allowedIps`), **🔄
+Tạo lại key** (từ v22.1 — xoay vòng bí mật mà KHÔNG mất lịch sử/allowedIps đã
+cấu hình: key CŨ ngừng hoạt động NGAY LẬP TỨC, hộp hiện key mới bật lại kèm
+nút "📋 Sao chép", phải cập nhật lại cho bên tích hợp ngay), và **Thu hồi**
+(dừng vĩnh viễn, không có "kích hoạt lại"). 1 hành động cho key **đã thu hồi**:
+**🗑️ Xóa** (từ v22.1 — xoá hẳn khỏi bảng hiển thị để dọn dẹp các key cũ tồn
+đọng lâu ngày; Nhật ký hệ thống vẫn còn nguyên, không mất dấu vết) — chỉ xoá
+được key ĐÃ thu hồi, buộc đi qua bước Thu hồi (đã có xác nhận riêng) trước khi
+xoá, tránh bấm nhầm xoá luôn 1 key ứng dụng ngoài đang dùng.
 
 Giới hạn số lần gọi: `EXTERNAL_AUTH_RATE_LIMIT_MAX` trong `.env` (mặc định
 300 lần/15 phút/IP) — xem `Huong-dan-trien-khai-PM2-Nginx.md` để chỉnh khi cần.

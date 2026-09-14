@@ -1,8 +1,59 @@
 # Phiên bản hiện tại
 
-**22.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.1 (2026-09-14): Builder tự chọn "Chức danh + Phòng ban" cho Theo vị trí + Xóa/Tạo lại key API Xác Thực Ngoài + Fix thông báo lỗi kết nối/hết phiên
+
+Người dùng gửi 3 ảnh chụp màn hình báo lỗi/yêu cầu chỉnh sửa:
+
+**(1) BUG THẬT đã sửa — ô "Vị Trí Tham Gia Quy Trình" (khối 17 Phân Quyền) ghép chức danh/phòng ban SAI
+ý muốn**: trước đây CHỈ cho chọn từ 1 danh sách tích chéo dựng sẵn (toàn bộ `DB.jobTitles × DB.depts`)
+— sinh ra rất nhiều tổ hợp KHÔNG có thật (VD "Nhân viên — Ban Giám Đốc"), ĐỒNG THỜI không có cách nào
+chỉ chọn 1 chức danh KHÔNG ghép phòng ban (chức danh cấp cao áp dụng chung toàn công ty, VD "Tổng Giám
+Đốc" — trước đây dept bắt buộc phải có mới khớp được, cặp thiếu dept bị lọc bỏ hẳn ở cả
+`resolvePositionApproverUsernamesClient()` (client) lẫn `resolvePositionApprovers()` (server)). **Fix**:
+đổi hẳn sang widget builder tự dựng — 2 ô gõ-tìm-chọn (sdd*, không dùng `<datalist>` native theo quy
+ước) "Chức danh" (bắt buộc) + "Phòng ban" (TUỲ CHỌN, để trống = áp dụng cho MỌI phòng ban/đơn vị) + nút
+"➕ Thêm", thay cho việc chọn 1 dòng có sẵn trong danh sách tích chéo. Đồng thời sửa cơ chế khớp vị trí
+(client `clientMatchesPositionPair()` + server `matchesPositionPair()`): cặp có `dept` rỗng giờ khớp
+CHỈ theo chức danh, bất kể phòng ban của người dùng là gì — vẫn giữ nguyên yêu cầu bảo mật cốt lõi (phải
+có quyền `canBeApprover`/admin mới được tính là người duyệt, khớp vị trí chỉ là điều kiện lọc bớt).
+`wfPositionPairCatalogItems()` (tích chéo) không đổi, giờ chỉ còn là nguồn FALLBACK cho ô chọn "Theo vị
+trí" ở màn Quy Trình & Phê Duyệt khi danh mục khối 17 còn rỗng — hành vi cũ giữ nguyên 100% cho trường
+hợp đó.
+
+**(2) Tính năng mới — 🔑 API Xác Thực Ngoài, bổ sung "Xóa" + "Tạo lại key"**: trước đây chỉ có "Sửa
+IP"/"Thu hồi", không có cách xoay vòng (rotate) bí mật của 1 key đang dùng mà không mất lịch sử/phải cấu
+hình lại IP cho phép từ đầu, và không có cách dọn dẹp các key đã thu hồi cũ khỏi bảng. Thêm 2 route mới
+(`routes/externalAuthAdmin.js`): `POST .../:id/regenerate` (chỉ áp dụng cho key ĐANG hoạt động — sinh bí
+mật mới, giữ nguyên id/tên/allowedIps, key CŨ ngừng hoạt động ngay lập tức, mở lại hộp hiện key dùng
+CHUNG cơ chế lúc Tạo Key nên đã có sẵn nút "📋 Sao chép") và `DELETE .../:id` (chỉ áp dụng cho key ĐÃ thu
+hồi — xoá vĩnh viễn khỏi danh sách hiển thị, nhật ký hệ thống vẫn còn nguyên).
+
+**(3) BUG THẬT đã sửa — thông báo lỗi khi tải dữ liệu sai bản chất**: `initDatabase()` (core.js, tải
+`/api/data` lúc đăng nhập/làm mới dữ liệu) trước đây gộp CHUNG lỗi 401 (phiên đăng nhập hết hạn) với lỗi
+kết nối/máy chủ thật — luôn hiện "⛔ Không thể kết nối tới máy chủ dữ liệu (MSSQL API)... Chi tiết lỗi:
+HTTP 401", sai bản chất và không đưa người dùng về màn đăng nhập như mọi điểm gọi API khác trong hệ
+thống. **Fix**: tách riêng nhánh 401 gọi `handleSessionExpired()` (đăng xuất + "Phiên đăng nhập đã hết
+hạn, vui lòng đăng nhập lại") TRƯỚC khi throw lỗi chung; đổi nội dung thông báo lỗi chung còn lại thành
+"⛔ Lỗi kết nối đến máy chủ..." (không còn gán chắc là MSSQL). Đồng thời vá 1 bug tiềm ẩn phát sinh từ
+chính fix này: `proceedAfterAuth()` (gọi ngay sau khi đăng nhập) trước đây sẽ tiếp tục chạy
+`finishLogin()` NGAY SAU `initDatabase()` bất kể kết quả — nếu phiên hết hạn đúng lúc đang tải dữ liệu
+lần đầu, `logout()` vừa hiện lại màn đăng nhập thì `finishLogin()` lại lập tức đè giao diện chính (dữ
+liệu rỗng) lên trên. Thêm guard `if (!currentUser) return;` ngay sau `initDatabase()`.
+
+**Test**: thêm test DOM đầy đủ cho builder mới (thêm cặp có/không dept, chặn thiếu chức danh, chặn trùng,
+xoá, lưu) vào `test-bugfix-batch-nav-ui.js`; thêm 3 test đơn vị cho cơ chế khớp dept-rỗng vào
+`test-workflow-position-approvers.js`; thêm 4 test cho regenerate/delete vào `test-external-auth.js`;
+thêm 2 test cho nhánh 401/proceedAfterAuth vào `test-bugfix-batch-nav-ui.js`. Toàn bộ regression liên
+quan (test-admin-users-permgroups 62/62, test-workflow-participating-positions 6/6, test-lazy-load-all-
+tabs 42/42, test-preview-workflow-buttons 17/17, test-quick-apply-workflow-steps 24/24, test-submission
+23/23) chạy lại PASS 100%.
+
+**Deploy-impact**: chỉ đổi code (client + `routes/externalAuthAdmin.js` + `routes/data.js`) — không đổi
+`schema.sql`/`.env.example`/dependencies. Chỉ cần copy code + `pm2 restart`, không cần thao tác gì thêm.
 
 ## v22.0 (2026-09-14): Fix khung xem tài liệu bị ẩn dưới modal xác nhận + Fix danh mục "Theo vị trí" thiếu vị trí Siêu Thị
 

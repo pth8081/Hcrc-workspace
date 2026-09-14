@@ -119,6 +119,34 @@ async function main() {
     assertEqual(resolvePositionApprovers([{ jobTitle: '', dept: 'Phòng IT' }], []).length, 0, 'Cặp thiếu jobTitle bị lọc bỏ');
   });
 
+  // ===== 1c) BUG THẬT đã sửa (rà soát theo yêu cầu người dùng "cho tôi tự chọn ghép chức danh vào phòng
+  // ban, nếu tôi chỉ chọn chức danh không ghép phòng cũng được, vì đơn giản như chức danh Tổng giám đốc
+  // không cần ghép phòng"): trước đây 1 cặp (jobTitle,dept) BẮT BUỘC phải có dept mới khớp được (dept
+  // rỗng bị lọc bỏ hẳn) — không có cách nào cấu hình 1 chức danh áp dụng chung cho MỌI phòng ban. =====
+  await run.run('resolvePositionApprovers(): cặp có dept RỖNG -> khớp CHỈ theo chức danh, bất kể phòng ban của user (VD "Tổng Giám Đốc" không ghép phòng ban)', () => {
+    const users = [
+      makeUser({ username: 'tgd1', jobTitle: 'Tổng Giám Đốc', dept: 'Ban Giám Đốc', perms: { canBeApprover: true } }),
+      makeUser({ username: 'tgd2', jobTitle: 'Tổng Giám Đốc', dept: 'Phòng Khác Hẳn', perms: { canBeApprover: true } }), // dept khác nhưng VẪN khớp vì cặp không ghép dept
+      makeUser({ username: 'nv1', jobTitle: 'Nhân viên', dept: 'Ban Giám Đốc', perms: { canBeApprover: true } }) // đúng dept nhưng SAI chức danh -> không khớp
+    ];
+    const result = resolvePositionApprovers([{ jobTitle: 'Tổng Giám Đốc', dept: '' }], users);
+    assertEqual(JSON.stringify(result.sort()), JSON.stringify(['tgd1', 'tgd2']), 'Cả 2 Tổng Giám Đốc đều khớp dù khác phòng ban, nv1 sai chức danh thì không');
+  });
+
+  await run.run('resolvePositionApprovers(): cặp dept RỖNG cũng khớp qua secondaryPositions (kiêm nhiệm) CHỈ theo jobTitle', () => {
+    const kiemNhiemTgd = makeUser({
+      username: 'kn3', jobTitle: 'Nhân viên', dept: 'Phòng Bất Kỳ', perms: { canBeApprover: true },
+      secondaryPositions: [{ jobTitle: 'Tổng Giám Đốc', dept: 'Ban Giám Đốc' }]
+    });
+    const result = resolvePositionApprovers([{ jobTitle: 'Tổng Giám Đốc', dept: '' }], [kiemNhiemTgd]);
+    assertEqual(JSON.stringify(result), JSON.stringify(['kn3']), 'Kiêm nhiệm "Tổng Giám Đốc" (bất kỳ dept nào) vẫn khớp cặp dept rỗng');
+  });
+
+  await run.run('resolvePositionApprovers(): cặp dept RỖNG vẫn yêu cầu canBeApprover/admin (không phá bất biến bảo mật cốt lõi)', () => {
+    const noPerm = makeUser({ username: 'tgd3', jobTitle: 'Tổng Giám Đốc', dept: 'Ban Giám Đốc', perms: {} });
+    assertEqual(resolvePositionApprovers([{ jobTitle: 'Tổng Giám Đốc', dept: '' }], [noPerm]).length, 0, 'Thiếu canBeApprover/admin -> vẫn KHÔNG được tính dù khớp chức danh');
+  });
+
   await run.run('resolveStepApproverUsernames(): approverMode vắng/khác POSITION -> đọc thẳng approvers[] cũ (KHÔNG đổi hành vi)', () => {
     const configPeople = { approvers: { 1: ['x', 'y'] }, approverMode: { 1: 'PEOPLE' } };
     assertEqual(JSON.stringify(resolveStepApproverUsernames(configPeople, 1, [])), JSON.stringify(['x', 'y']), 'PEOPLE mode tường minh -> đọc thẳng approvers[]');
