@@ -116,6 +116,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // Phòng Hành Chính) — chỉ có màn quản lý dành cho Admin (tab "🗂️ Quản Lý Danh Mục"), cùng lý do
   // stores/jobTitles ở dưới — không mở cho mọi tài khoản đã đăng nhập.
   'carVehicleTypes', 'carTaxiCompanies',
+  // priceZones: danh mục "Vùng Giá Áp Dụng" (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ) — cùng lý do
+  // trên, chỉ Admin (tab "🗂️ Quản Lý Danh Mục") mới sửa được.
+  'priceZones',
   // Người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban (xem jobs/contractExpiryReminder.js)
   // — cùng khuôn quản trị như emailConfig ở trên, không phải danh sách hiển thị thuần.
   'contractExpiryDeptContacts',

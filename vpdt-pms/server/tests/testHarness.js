@@ -96,6 +96,11 @@ function createMockState(seed) {
     // không module nào trong 3 module test dùng testHarness.js (Đồng Phục/Hỗ Trợ IT/Báo Cáo Định Kỳ)
     // chạm tới field liên quan, seed rỗng cho an toàn (khớp lý do "phần không dùng" ở đầu hàm).
     submissionPriorities: [], carPurposes: [], meetingRooms: [],
+    // priceZones: "Vùng Giá Áp Dụng" (#itPriceRetailZone, Phê Duyệt Giá sub-tab Bán Lẻ) — bắt buộc chọn
+    // khi RETAIL (đợt sau v21.5), PHẢI seed thật (khác carPurposes/meetingRooms ở trên) vì
+    // test-it-support.js DÙNG testHarness.js NÀY và gọi submitItPriceApproval() thật cho sub-tab Bán Lẻ
+    // rất nhiều lần — seed đúng 3 giá trị mặc định ở defaults.js để các kịch bản đó chọn được.
+    priceZones: ['Miền Bắc', 'Miền Trung', 'Miền Nam'],
     operationOrders: [], operationOrderStoreTierWorkflows: {}, operationOrderHOTierWorkflows: {},
     operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {},
     operationRepairs: [], operationRepairDeptWorkflows: {},
@@ -118,6 +123,10 @@ function buildAppDataForCreate(moduleKey, state) {
     // thẳng map này qua appData khi item.priceType === 'WHOLESALE', y hệt cách itPriceDeptWorkflows
     // được đọc cho RETAIL ở trên.
     itPriceTierWorkflows: state.itPriceTierWorkflows,
+    // priceZones: "Vùng Giá Áp Dụng" (RETAIL, đợt sau) — itPriceApprovals.extraValidate() đối chiếu
+    // payload.priceZone với danh mục hệ thống này (mirror routes/create.js: getAllAppData() thật LUÔN có
+    // sẵn mọi key AppData, ở đây liệt kê tường minh những gì module cần).
+    priceZones: state.priceZones,
     workflows: state.workflows,
     uniformCatalog: state.uniformCatalog,
     // itTicketCategories: nguồn hợp lệ cho itSupportTickets.category (CORE_FIELD_MANIFEST.IT_TICKET,

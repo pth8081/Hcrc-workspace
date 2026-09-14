@@ -19,10 +19,10 @@ const DEPT = 'Kinh Doanh';
 const GOOD_URL = '/uploads/1717171717171-0123456789abcdef.pdf';
 const PRICE_ITEMS = [{ values: { c0: 'Mặt hàng A', c1: '15000' } }];
 const IT_USER = { username: 'it1', name: 'Người Đề Xuất Giá', dept: DEPT, perms: { itPriceProposeCreate: true } };
-const APP_DATA = { formTemplates: {}, stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'] };
+const APP_DATA = { formTemplates: {}, stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'], priceZones: ['Miền Bắc', 'Miền Trung', 'Miền Nam'] };
 
 const basePayload = (over) => ({
-  dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL', effectiveDate: '2026-09-01',
+  dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL', effectiveDate: '2026-09-01', priceZone: 'Miền Bắc',
   files: [{ fileUrl: GOOD_URL, fileName: 'bang-gia.xlsx', items: PRICE_ITEMS, columnLabels: [] }],
   ...over
 });
@@ -171,6 +171,40 @@ async function main() {
     const rec = validateAndPrepareCreate('itPriceApprovals',
       basePayload({ wholesaleApplyUnit: 'Không nên áp dụng ở đây' }), IT_USER, [], APP_DATA);
     assertEqual(rec.wholesaleApplyUnit, null, 'RETAIL không dùng field này, phải null hoá');
+  });
+
+  // ===================== "Vùng Giá Áp Dụng" (priceZone, đợt sau) — CHỈ áp dụng cho RETAIL, đối xứng
+  // wholesaleApplyUnit (CHỈ áp dụng cho WHOLESALE) nhưng khác ở chỗ phải khớp đúng 1 giá trị trong danh
+  // mục hệ thống appData.priceZones (KHÔNG phải nhập tay tự do như wholesaleApplyUnit). =====================
+  await run.run('RETAIL: thiếu priceZone -> 400', async () => {
+    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceZone: undefined }), IT_USER, [], APP_DATA),
+      400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng');
+  });
+
+  await run.run('RETAIL: priceZone chỉ toàn khoảng trắng -> 400 (coi như rỗng)', async () => {
+    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceZone: '   ' }), IT_USER, [], APP_DATA),
+      400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng');
+  });
+
+  await run.run('RETAIL: priceZone KHÔNG có thật trong danh mục (tự soạn request/DevTools sửa tay) -> 400', async () => {
+    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceZone: 'Vùng Giả Mạo' }), IT_USER, [], APP_DATA),
+      400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng');
+  });
+
+  await run.run('RETAIL: priceZone hợp lệ (đúng danh mục) -> thành công, giữ đúng giá trị', async () => {
+    const rec = validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceZone: 'Miền Trung' }), IT_USER, [], APP_DATA);
+    assertEqual(rec.priceZone, 'Miền Trung', 'phải giữ đúng vùng giá đã chọn');
+  });
+
+  await run.run('WHOLESALE: priceZone LUÔN bị ép về null (không tin giá trị lạ client tự gửi kèm, RETAIL mới dùng field này)', async () => {
+    const rec = validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', wholesaleApplyUnit: 'Đại lý ABC', storeScope: { mode: 'OTHER', stores: ['Siêu thị A'] }, priceZone: 'Miền Bắc' }),
+      IT_USER, [], APP_DATA);
+    assertEqual(rec.priceZone, null, 'WHOLESALE không dùng field này, phải null hoá');
   });
 
   run.summary();

@@ -1,8 +1,64 @@
 # Phiên bản hiện tại
 
-**21.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.6 (2026-09-14): Phê Duyệt Giá Bán Lẻ thêm "Vùng Giá Áp Dụng" + vá lỗi thật DB.carVehicleTypes/DB.carTaxiCompanies không tải được sau khi tải trang
+
+**1. Vá lỗi NGHIÊM TRỌNG vừa phát hiện từ tính năng v21.5** ("Loại xe cụ thể"
+3 lựa chọn + tự động điền BKS/Hãng Taxi): `initDatabase()` (`public/js/core.js`)
+gán field `DB.<key>` từ response `GET /api/data` theo TỪNG DÒNG THỦ CÔNG (không
+phải merge chung `Object.assign(DB, data)`) — 2 dòng `DB.carVehicleTypes =
+data.carVehicleTypes || []`/`DB.carTaxiCompanies = data.carTaxiCompanies || []`
+CHƯA TỪNG được thêm khi tính năng đó ra đời, khiến 2 danh mục này LUÔN rỗng
+ngay sau khi người dùng thật tải lại trang — cả 2 `<select>` "Loại xe cụ
+thể"/"Hãng Taxi" ở Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính đều trống, tính
+năng coi như không hoạt động được trong thực tế dù ảnh demo + toàn bộ
+regression test đều PASS. Lý do né được ở cả demo lẫn test: cả 2 đều seed dữ
+liệu qua `Object.assign(DB, seed)` trực tiếp (tắt qua đúng luồng
+`initDatabase()` thật) — bài học tương tự các lỗi `laborContracts`/
+`hrTaskTemplates` đã từng phát hiện trước đây ở cùng hàm này. Đã thêm đủ 2 dòng
+còn thiếu; phát hiện được lần này nhờ `tests/test-it-support.js` (dùng đúng
+`testHarness.js`, đi qua `initDatabase()` thật) báo lỗi khi làm tính năng bên
+dưới — không phải do rà soát chủ động.
+
+**2. Thêm "🗺️ Vùng Giá Áp Dụng" cho Phê Duyệt Giá Bán Lẻ** (Hỗ Trợ IT) —
+người dùng yêu cầu form Bán Lẻ có thêm trường chọn "Vùng giá áp dụng" từ
+danh mục cấu hình ở Hệ Thống. Đối xứng "Đơn Vị Áp Dụng Giá Bán Buôn" (chỉ
+hiện ở Bán Buôn, v21.4) nhưng KHÁC ở chỗ **bắt buộc chọn từ danh mục hệ
+thống** (`DB.priceZones`, seed 3 giá trị mặc định "Miền Bắc/Miền Trung/Miền
+Nam" trong `defaults.js`) thay vì gõ tay tự do — vì "vùng giá" là khái niệm
+NỘI BỘ công ty tự định nghĩa (khác đối tác/khách hàng ngoài không có danh
+mục cố định), dùng danh mục để tránh gõ sai/không nhất quán giữa các đề
+xuất. Admin tự thêm/xoá ở "🗂️ Quản Lý Danh Mục → 🗺️ Quản Lý Danh Mục Vùng
+Giá Áp Dụng" (`savePriceZone()`/`deletePriceZone()`/`renderPriceZoneList()`,
+`module-itsupport-price.js`). Validate ở cả client
+(`submitItPriceApproval()`) lẫn server (`lib/createValidation.js::
+itPriceApprovals.extraValidate` — đối chiếu đúng `appData.priceZones`,
+không tin giá trị lạ client gửi kèm), null hoá khi Bán Buôn (không dùng
+field này).
+
+**Test**: thêm 5 kịch bản mới vào `tests/test-itprice-scope-dates.js`
+(thiếu/rỗng/không có thật trong danh mục -> 400, hợp lệ -> giữ đúng giá
+trị, WHOLESALE luôn null hoá) — 25/25 PASS. Cập nhật fixture 3 file test
+khác đang tạo đề xuất Bán Lẻ thật (thêm seed `priceZones` +
+chọn giá trị hợp lệ trước khi submit): `tests/testHarness.js`
+(`createMockState()`/`buildAppDataForCreate()` — dùng chung bởi 31 file
+test), `tests/test-it-support.js` (20/23 PASS — 3 FAIL còn lại xác nhận
+ĐÃ có từ trước, không liên quan đợt này), `tests/test-audit-round2-
+cluster2.js` (54/54 PASS). Chạy lại `test-lazy-load-all-tabs.js` (42/42),
+`test-meeting-car.js` (72/72) — đều PASS, xác nhận bản vá lỗi
+carVehicleTypes/carTaxiCompanies không phá vỡ gì thêm.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql`/`.env.example`/dependencies —
+`priceZones` chỉ là 1 key AppData JSON mới (tự seed qua `defaults.js` lúc
+server khởi động lần đầu). Chỉ cần copy code + `pm2 restart`. **Lưu ý quan
+trọng cho bản vá lỗi carVehicleTypes/carTaxiCompanies**: sau khi cập nhật
+code + restart, người dùng cần **tải lại trang (F5)** để nhận đúng 2 danh
+mục "Loại Xe Cụ Thể"/"Hãng Taxi" đã seed sẵn từ v21.5 (dữ liệu AppData
+trong SQL Server không đổi gì — lỗi chỉ nằm ở phía client chưa từng đọc
+đúng field, không phải mất dữ liệu).
 
 ## v21.5 (2026-09-14): Đăng Ký Xe — "Loại xe cụ thể" chuyển sang chọn 3 mục cố định + tự động điền BKS/"Hãng Taxi"
 

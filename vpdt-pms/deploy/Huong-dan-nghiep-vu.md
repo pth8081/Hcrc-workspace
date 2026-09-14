@@ -517,6 +517,13 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     trên (đó là đơn vị NỘI BỘ tạo đề xuất). Không có danh mục hệ thống cho
     đối tác/khách hàng ngoài nên đây là ô gõ tự do, không phải chọn từ danh
     sách có sẵn.
+  - **🗺️ "Vùng Giá Áp Dụng"** (chỉ hiện ở sub-tab Bán Lẻ, đối xứng "Đơn Vị Áp
+    Dụng Giá Bán Buôn" ở trên) — **bắt buộc**, chọn từ danh mục hệ thống
+    (Hệ Thống → 🗂️ Quản Lý Danh Mục → "🗺️ Quản Lý Danh Mục Vùng Giá Áp
+    Dụng", admin tự thêm/xoá), KHÔNG nhập tay tự do như Đơn Vị Áp Dụng Giá
+    Bán Buôn — vì đây là khái niệm NỘI BỘ công ty tự định nghĩa (VD Miền
+    Bắc/Miền Trung/Miền Nam) nên dùng danh mục để tránh gõ sai/không nhất
+    quán giữa các đề xuất.
   - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, **mở cho toàn bộ nhân
     viên** (đúng vai trò "tự phục vụ" của cả mục này), vòng đời Chưa xử lý →
     Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục" admin tự thêm/bớt/đổi
@@ -1644,9 +1651,11 @@ của hơn 15 module dùng chung engine phê duyệt.
 Nơi admin quản lý các danh mục "lõi" dùng chung toàn hệ thống: Phòng ban,
 Chức danh, Siêu thị, Loại Giấy Phép, Loại Dịch Vụ CNTT, **🚗 Loại Xe Cụ Thể**/
 **🚕 Hãng Taxi** (mục "Loại xe cụ thể"/"Hãng Taxi" ở "Phần Dành Cho Phòng Hành
-Chính" của Đăng Ký Xe, xem mục 4.2), **📲 Phím Tắt PWA** (chọn tối đa 4 module
-hiện nhanh khi cài ứng dụng lên màn hình chính, xem mục 2.4)... Đa số danh
-mục **theo từng module riêng** (VD "Độ Khẩn" của Văn Bản
+Chính" của Đăng Ký Xe, xem mục 4.2), **🗺️ Vùng Giá Áp Dụng** (mục "Vùng Giá
+Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ, Hỗ Trợ IT, xem mục 4), **📲 Phím Tắt
+PWA** (chọn tối đa 4 module hiện nhanh khi cài ứng dụng lên màn hình chính,
+xem mục 2.4)... Đa số danh mục **theo từng module riêng** (VD "Độ Khẩn" của
+Văn Bản
 Trình, "Mục Đích Sử Dụng" của Đăng Ký Xe, "Chủ Đề" của HCRC Đồng Hành) lại cấu
 hình ở màn Biểu Mẫu (mục 7.3) thay vì ở đây — 2 màn có vai trò khác nhau: mục
 này là danh mục LÕI dùng chéo nhiều module, Biểu Mẫu là tuỳ biến RIÊNG của

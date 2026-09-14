@@ -135,6 +135,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const p = DB.itPriceApprovals[0];
         return { alerts: window.__alerts, item: p };
@@ -175,6 +176,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return { alerts: window.__alerts, count: DB.itPriceApprovals.length };
       });
@@ -464,6 +466,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return DB.itPriceApprovals[0].id;
       });
@@ -590,6 +593,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const retailItem = DB.itPriceApprovals[0];
 
@@ -613,6 +617,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const wholesaleItem = DB.itPriceApprovals[0];
 
@@ -656,6 +661,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return { alerts: window.__alerts.slice(), count: DB.itPriceApprovals.length, before };
       });
@@ -702,6 +708,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return DB.itPriceApprovals[0];
       });
@@ -875,6 +882,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const item = DB.itPriceApprovals[0];
 
@@ -912,6 +920,7 @@ async function main() {
         // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
         // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
+        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const item = DB.itPriceApprovals[0];
         openItPriceModal(item.id);

@@ -1518,9 +1518,22 @@ const CREATE_MODULE_CONFIGS = {
           throw new CreateError(400, 'Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn');
         }
         payload.wholesaleApplyUnit = wholesaleApplyUnit.slice(0, 300);
+        payload.priceZone = null;
       } else {
         payload.priceTier = null;
         payload.wholesaleApplyUnit = null;
+        // "Vùng Giá Áp Dụng" — CHỈ áp dụng cho Bán Lẻ (đối xứng wholesaleApplyUnit ở nhánh WHOLESALE
+        // trên), chọn từ danh mục hệ thống appData.priceZones (KHÔNG nhập tay tự do như
+        // wholesaleApplyUnit — đối tác/khách hàng ngoài không có danh mục cố định, nhưng vùng giá là
+        // khái niệm NỘI BỘ công ty tự định nghĩa nên dùng danh mục để tránh gõ sai/không nhất quán).
+        // Chặn sớm ở client (submitItPriceApproval(), module-itsupport-price.js) nhưng đây mới là chốt
+        // chặn thật — không tin nguyên văn giá trị client gửi.
+        const validZones = new Set(appData?.priceZones || []);
+        const priceZone = String(payload.priceZone || '').trim();
+        if (!priceZone || !validZones.has(priceZone)) {
+          throw new CreateError(400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng (từ danh mục hệ thống)');
+        }
+        payload.priceZone = priceZone;
       }
       // Tài liệu bổ sung liên quan (#itPriceExtraFiles ở index.html) — mirror ĐÚNG khuôn
       // submissions.extraFiles (~380): chỉ kiểm khuôn URL rồi giữ nguyên payload.extraFiles, hoàn toàn
