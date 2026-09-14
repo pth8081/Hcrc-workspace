@@ -246,12 +246,25 @@ router.post('/submissions/:id/finalize', async (req, res) => {
       const template = templates.find(t => t.id === sub.templateId);
       if (!template) throw new HttpError(404, 'Không tìm thấy checklist gốc của bài làm này');
 
+      // LỖI THẬT vừa phát hiện: trước đây route này CHỈ chấm điểm trên sub.answers/sub.deductions đã lưu
+      // NHÁP SẴN trong DB — nếu người dùng điền form rồi bấm thẳng "✅ Nộp Bài" mà CHƯA từng bấm "💾 Lưu
+      // Nháp" lần nào (finalizeChecklistSubmission(), module-checklist.js, TRƯỚC ĐÂY gửi body rỗng {}),
+      // server chấm điểm trên dữ liệu RỖNG từ lúc tạo bài -> báo nhầm "Còn N câu hỏi bắt buộc chưa trả
+      // lời" dù người dùng đã chọn đúng hết trên màn hình. Nay chấp nhận kèm answers/deductions ngay
+      // trong request finalize (client đã gửi kèm, xem sửa cùng đợt ở module-checklist.js) và tự sanitize
+      // lại y hệt route /answers ở trên trước khi chấm điểm — vừa vá đúng gốc, vừa không bắt buộc client
+      // phải gọi đúng thứ tự 2 lượt request mới ra kết quả đúng. CHỈ ghi đè khi client THỰC SỰ gửi kèm
+      // mảng (Array.isArray) — client cũ/đã lưu nháp sẵn rồi gọi finalize KHÔNG kèm gì (body {}) vẫn phải
+      // giữ nguyên sub.answers/sub.deductions đã có, không được coi "không gửi" là "xoá trắng".
+      const sanitized = template.templateKind === 'DEDUCTION'
+        ? { deductions: Array.isArray(req.body?.deductions) ? checklist.sanitizeChecklistDeductions(req.body.deductions, template, sub.deductions) : sub.deductions }
+        : { answers: Array.isArray(req.body?.answers) ? checklist.sanitizeChecklistAnswers(req.body.answers, template, sub.answers) : sub.answers };
       const scoring = template.templateKind === 'DEDUCTION'
-        ? checklist.computeDeductionScoring(template, sub.deductions)
-        : checklist.computeChecklistScoring(template, sub.answers);
+        ? checklist.computeDeductionScoring(template, sanitized.deductions)
+        : checklist.computeChecklistScoring(template, sanitized.answers);
       checklist.assertReadyToFinalize(scoring);
       return {
-        ...sub, status: 'SUBMITTED', submittedAt: checklist.nowVN(),
+        ...sub, ...sanitized, status: 'SUBMITTED', submittedAt: checklist.nowVN(),
         totalScore: scoring.totalScore, maxPossibleScore: scoring.maxPossibleScore,
         scorePercent: scoring.scorePercent, hasCriticalFail: scoring.hasCriticalFail, isPassed: scoring.isPassed
       };

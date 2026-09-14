@@ -270,6 +270,47 @@ async function main() {
       assertEqual(res.status, 400, 'Chưa trả lời câu bắt buộc thì không nộp bài được');
     });
 
+    // LỖI THẬT vừa phát hiện (người dùng báo qua ảnh chụp): chọn ĐÚNG đáp án trên màn hình rồi bấm thẳng
+    // "Nộp Bài" (KHÔNG bấm "Lưu Nháp" trước) vẫn báo nhầm "Còn N câu hỏi bắt buộc chưa trả lời" — vì
+    // TRƯỚC ĐÂY finalizeChecklistSubmission() (module-checklist.js) gửi body RỖNG {}, route /finalize chỉ
+    // chấm điểm trên sub.answers đã lưu SẴN trong DB (rỗng từ lúc /start, chưa từng gọi /answers). Test
+    // này mô phỏng ĐÚNG luồng lỗi: gọi thẳng /finalize kèm answers[] trong body, KHÔNG gọi /answers trước.
+    await run.run('BUG THẬT: bấm "Nộp Bài" ngay (KHÔNG bấm "Lưu Nháp" trước) với answers gửi kèm thẳng trong /finalize vẫn phải nộp được', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const passOption = t.questions[0].options.find(o => o.isPassing);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      // KHÔNG gọi POST /answers ở đây — mô phỏng đúng người dùng chưa từng bấm "Lưu Nháp".
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`,
+        { answers: [{ questionId: t.questions[0].id, optionIds: [passOption.id], note: '' }] }, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Gửi kèm answers ngay trong request finalize phải nộp bài được, không báo nhầm thiếu câu bắt buộc');
+      assertEqual(res.body.item.isPassed, true, 'Trả lời đầy đủ + không lỗi phải đạt');
+    });
+
+    await run.run('BUG THẬT (mirror DEDUCTION): "Nộp Bài" ngay với deductions gửi kèm thẳng trong /finalize vẫn phải nộp được', async () => {
+      resetRecords();
+      const t = seedDeductionTemplate(); t.status = 'ACTIVE';
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị A' }, AUDITOR);
+      assertEqual(start.status, 200, 'CONTROL_AUDIT đúng phạm vi phải bắt đầu được');
+      const subId = start.body.item.id;
+      // KHÔNG gọi POST /answers ở đây — mô phỏng đúng người dùng chưa từng bấm "Lưu Nháp".
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, { deductions: [] }, AUDITOR);
+      assertEqual(res.status, 200, 'Loại mẫu DEDUCTION không có khái niệm câu bắt buộc — phải nộp được ngay cả khi gửi kèm deductions rỗng');
+    });
+
+    await run.run('Finalize: KHÔNG gửi answers trong body (client cũ) vẫn dùng đúng sub.answers đã lưu nháp sẵn (không bị xoá trắng oan)', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const passOption = t.questions[0].options.find(o => o.isPassing);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
+      const subId = start.body.item.id;
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [passOption.id], note: '' }] }, STORE_A_EMP);
+      const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
+      assertEqual(res.status, 200, 'Đã lưu nháp trước đó, gọi /finalize body rỗng (client cũ) vẫn phải nộp được bình thường như trước nay');
+      assertEqual(res.body.item.isPassed, true, 'Phải dùng đúng answers đã lưu nháp, không bị coi là rỗng');
+    });
+
     await run.run('Finalize: chọn lựa chọn lỗi nghiêm trọng ép isPassed=false bất kể %', async () => {
       resetRecords();
       const t = seedTemplate(); t.status = 'ACTIVE';
