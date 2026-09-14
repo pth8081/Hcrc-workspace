@@ -574,13 +574,19 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   hoạt động của phòng (admin có thể sửa tay lại số nhân sự gợi ý này) ×
   **mức/người**. Chức danh nằm trong danh mục "Chức danh bị loại khỏi VPP"
   (3.3) không được tính vào đầu người/không đăng ký được.
-  **Mức/người RIÊNG theo từng phòng ban (TỪ v22.5)**: bảng "Nhân sự theo
-  phòng ban" ở form "Tạo Kỳ Đăng Ký" có thêm cột **"Mức/Người"** — mỗi phòng
-  tự đặt 1 mức riêng (VD Phòng A 100.000đ/người, Phòng B 150.000đ/người),
-  không còn bắt buộc dùng chung 1 mức cho toàn kỳ như trước. Ô "Mức/người MẶC
-  ĐỊNH" ở trên chỉ để tự điền sẵn cả bảng lúc mới tạo kỳ (nút "↧ Áp Dụng Cho
-  Tất Cả Phòng" ghi đè lại nếu cần); admin sửa tay từng dòng cho phòng nào cần
-  mức khác. Bỏ trống 1 dòng = dùng mức mặc định cho phòng đó.
+  **Mức/người RIÊNG theo từng phòng ban (từ v22.5, đổi cách nhập ở v22.8)**:
+  khối "💰 Ngân Sách Văn Phòng Phẩm / Người" ở form "Tạo Kỳ Đăng Ký" có 2 chế
+  độ chọn qua 2 nút bấm — **"🏢 Toàn công ty"** (mặc định: 1 ô mức tiền áp cho
+  MỌI phòng ban) và **"🎛️ Áp mức khác theo nhóm phòng ban"** (hiện thêm 1 ô
+  "Mức mặc định" cho phòng chưa gán nhóm nào, cùng danh sách **"Nhóm mức
+  riêng"** — mỗi nhóm gồm 1 ô tiền + 1 ô chọn NHIỀU phòng ban áp dụng (gõ tìm
+  + bấm chọn, hiện dạng chip có nút xoá), bấm "+ Thêm Nhóm Mức Riêng" để tạo
+  thêm bao nhiêu nhóm tuỳ ý, mỗi nhóm 1 mức tiền độc lập). Mỗi phòng ban chỉ
+  thuộc ĐÚNG 1 nhóm — phòng đã chọn ở nhóm này sẽ không tìm-chọn được ở nhóm
+  khác nữa. Bảng "Nhân sự theo phòng ban" bên dưới hiện cột "Mức Áp Dụng"
+  (chỉ xem trước, tô màu theo đúng nhóm) — đổi mức thì sửa ở ô mặc định/nhóm
+  phía trên, không sửa trực tiếp trong bảng; cột "Số Nhân Sự" vẫn sửa tay
+  được như trước.
   **Chặn theo TỔNG NGÂN SÁCH CẢ PHÒNG, KHÔNG còn giới hạn riêng từng người (TỪ
   v22.5)**: trước đây hệ thống chặn nếu 1 đăng ký cá nhân vượt quá mức/người —
   nay đổi hẳn sang chặn theo **quỹ chung của cả phòng ban**: khi 1 nhân viên
