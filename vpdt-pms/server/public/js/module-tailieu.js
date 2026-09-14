@@ -1262,9 +1262,14 @@ function renderLicenseTypeList() {
   ul.innerHTML = (DB.licenseTypes || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t)}</span>
+      <button data-op="renameLicenseType" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteLicenseType" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+async function renameLicenseType(name) {
+  const ok = await renameCatalogEntryClient('licenseTypes', name, 'Các Loại Giấy Phép');
+  if (ok) renderLicenseTypeList();
 }
 
 // Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }. moduleKey

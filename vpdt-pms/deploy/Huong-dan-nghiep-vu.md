@@ -502,8 +502,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
   hiện xung đột. Danh mục phòng họp (tên đầy đủ + tên gọn hiện trên lưới Lịch
-  Họp) admin tự thêm/xoá ngay tại khối "🗂️ Danh Mục Phòng Họp" trong tab
-  "📝 Đăng Ký" của module.
+  Họp) admin tự thêm/sửa/xoá tại **Hệ Thống → Quản Trị → Quản Lý Danh Mục →
+  "🗂️ Danh Mục Phòng Họp"** (từ v22.2 — trước đó nằm ngay trong tab "📝 Đăng
+  Ký" của module, nay gom về cùng chỗ với mọi danh mục quản trị khác).
+  **Sub-tab "📊 Báo Cáo" (từ v22.2)** — chỉ hiện cho người có quyền duyệt
+  lịch họp (`meetingApprove`/admin): lọc theo khoảng ngày SỬ DỤNG (không
+  phải ngày tạo phiếu), xem tổng số/đã duyệt/đang chờ/đã hủy + tổng giờ đã
+  sử dụng, mức sử dụng theo từng phòng họp (kể cả phòng chưa có lịch nào,
+  để thấy phòng đang "ế") và theo phòng ban, xu hướng sử dụng theo tháng.
   **Xem Lịch Họp — 3 chế độ Ngày/Tuần/Tháng**: chế độ **Ngày** (mặc định) giữ
   nguyên lưới giờ chi tiết 30 phút/phòng, kéo chuột hoặc giữ Shift bấm ô thứ 2
   để chọn nhiều khung giờ liên tiếp rồi đổ sẵn sang tab Đăng Ký. Chế độ **Tuần**/
@@ -1707,14 +1713,31 @@ Nơi admin quản lý các danh mục "lõi" dùng chung toàn hệ thống: Ph�
 Chức danh, Siêu thị, Loại Giấy Phép, Loại Dịch Vụ CNTT, **🚗 Loại Xe Cụ Thể**/
 **🚕 Hãng Taxi** (mục "Loại xe cụ thể"/"Hãng Taxi" ở "Phần Dành Cho Phòng Hành
 Chính" của Đăng Ký Xe, xem mục 4.2), **🗺️ Vùng Giá Áp Dụng** (mục "Vùng Giá
-Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ, Hỗ Trợ IT, xem mục 4), **📲 Phím Tắt
-PWA** (chọn tối đa 4 module hiện nhanh khi cài ứng dụng lên màn hình chính,
-xem mục 2.4)... Đa số danh mục **theo từng module riêng** (VD "Độ Khẩn" của
-Văn Bản
+Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ, Hỗ Trợ IT, xem mục 4), **🗂️ Danh Mục
+Phòng Họp** (từ v22.2 — trước đó nằm trong module Phòng Họp, xem mục 4),
+**📲 Phím Tắt PWA** (chọn tối đa 4 module hiện nhanh khi cài ứng dụng lên màn
+hình chính, xem mục 2.4)... Đa số danh mục **theo từng module riêng** (VD "Độ
+Khẩn" của Văn Bản
 Trình, "Mục Đích Sử Dụng" của Đăng Ký Xe, "Chủ Đề" của HCRC Đồng Hành) lại cấu
 hình ở màn Biểu Mẫu (mục 7.3) thay vì ở đây — 2 màn có vai trò khác nhau: mục
 này là danh mục LÕI dùng chéo nhiều module, Biểu Mẫu là tuỳ biến RIÊNG của
 từng form.
+
+**Sửa (✏️) một mục danh mục (từ v22.2)** — mọi card trong màn này giờ đều có
+nút Sửa bên cạnh Xóa (trước đó phần lớn chỉ Xóa, phải xóa-tạo-lại nếu gõ sai
+tên):
+- **Phòng Ban/Phân Loại Tài Liệu**: sửa qua route riêng có **cascade** —
+  đổi tên xong, mọi hồ sơ/tài khoản/cấu hình quy trình đang mang tên cũ
+  được server tự cập nhật sang tên mới (cùng cơ chế đã có sẵn cho Siêu
+  Thị/Chức Danh). Sau khi đổi, **tải lại trang** để thấy tên mới hiển thị
+  đầy đủ ở mọi màn hình khác đang mở sẵn trong phiên.
+- **Các Loại Giấy Phép/Hãng Taxi/Vùng Giá Áp Dụng/Loại Đào Tạo**: đổi trực
+  tiếp, KHÔNG cascade sang hồ sơ đã tạo trước đó (hồ sơ cũ giữ nguyên tên cũ
+  làm nhãn hiển thị) — phù hợp vì đây là giá trị hiển thị tự do, không phải
+  khoá phân quyền/định tuyến quy trình như Phòng Ban.
+- **Loại Xe Cụ Thể/Từ Khoá Nhạy Cảm/Danh Mục Phòng Họp** (nhiều field/mục):
+  sửa qua nhiều hộp thoại nhập liên tiếp (tên rồi tới field tiếp theo) thay
+  vì 1 hộp duy nhất, vì mỗi mục ở đây có hơn 1 thông tin cần sửa.
 
 ### 7.3. Biểu Mẫu
 

@@ -190,6 +190,58 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
   });
 }
 
+// deptAbbrs/docCatAbbrs: 2 map {tên -> viết tắt} khoá theo ĐÚNG tên phòng ban/loại tài liệu (xem
+// getDeptAbbr()/getDocCatAbbr() ở core.js) — đổi tên mà không dời KEY của map này sẽ làm viết tắt "rơi
+// mất" (vẫn còn dữ liệu dưới tên CŨ, tra theo tên MỚI ra rỗng, generateDocCode()/generateMaDoc() tự lùi
+// về suy luận mặc định thay vì giữ đúng viết tắt admin đã đặt tay).
+async function renameAbbrMapKey(appDataKey, oldValue, newValue) {
+  await withLockedAppDataValue(appDataKey, (map) => {
+    if (!map || typeof map !== 'object' || !(oldValue in map)) return map;
+    const next = { ...map };
+    next[newValue] = next[oldValue];
+    delete next[oldValue];
+    return next;
+  });
+}
+
+// depts (Phòng Ban, khối Văn Phòng/HO): dùng CHUNG hạ tầng cascade với stores — user.dept/mọi collection
+// ở DEPT_FIELD_COLLECTIONS đều lưu chung 1 field cho CẢ tên phòng ban lẫn tên siêu thị (phân biệt bằng
+// posType, xem chú thích cascadeStoreRename() ở trên) nên tái dùng NGUYÊN cascadeStoreRename(), chỉ thêm
+// bước dời key deptAbbrs (Siêu Thị không có "viết tắt" riêng nên cascadeStoreRename() không cần bước này).
+async function cascadeDeptRename(oldValue, newValue) {
+  await cascadeStoreRename(oldValue, newValue);
+  await renameAbbrMapKey('deptAbbrs', oldValue, newValue);
+}
+
+// cats (Phân Loại Tài Liệu): PHẠM VI HẸP hơn nhiều so với depts/stores — chỉ 1 collection (docs.cat,
+// xem lib/createValidation.js MODULE_CONFIGS.docs) + 1 map viết tắt (docCatAbbrs) tham chiếu tới giá trị
+// này, không lan ra users/*DeptWorkflows/orgChart như phòng ban/siêu thị.
+async function cascadeCatRename(oldValue, newValue) {
+  await renameFieldValueInCollection('docs', (item) => renameSimpleFields(item, ['cat'], oldValue, newValue));
+  await renameAbbrMapKey('docCatAbbrs', oldValue, newValue);
+}
+
+// Factory cho các danh mục CHUỖI PHẲNG đơn giản KHÔNG cần cascade — giá trị hiển thị (KHÔNG phải khoá
+// định danh/FK bắt buộc khớp) có thể được tham chiếu bởi 1-2 collection khác (VD carRegs.assignedTaxiCompany,
+// itPriceApprovals.priceZone) nhưng hồ sơ ĐÃ TẠO trước đó chỉ đơn giản giữ nguyên chuỗi cũ làm nhãn hiển
+// thị (KHÔNG "gãy" tham chiếu gì — không có logic nào so khớp ngược lại danh mục để xác thực), cùng
+// đánh đổi đã áp dụng từ trước cho "cats" cho tới đợt này (docs.cat CŨ cũng không tự cascade cho tới khi
+// thêm hẳn cascadeCatRename() ở trên — nay cats đã lên hẳn cascade đầy đủ, còn 4 danh mục dưới đây vẫn
+// giữ đánh đổi "không cascade" vì phạm vi tham chiếu hẹp/không có ý nghĩa bảo mật-phân quyền như dept).
+function simpleArrayCatalogHandler(dbKey, label) {
+  return {
+    async renameInCatalog(oldValue, newValue) {
+      return withLockedAppDataValue(dbKey, (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        if (!arr.includes(oldValue)) throw new HttpError(404, `Không tìm thấy "${oldValue}" trong ${label}`);
+        if (arr.includes(newValue)) throw new HttpError(400, `"${newValue}" đã có trong ${label}`);
+        return arr.map((v) => (v === oldValue ? newValue : v));
+      });
+    },
+    cascade: async () => {} // không cascade — xem chú thích simpleArrayCatalogHandler() ở trên
+  };
+}
+
 const CATALOG_HANDLERS = {
   stores: {
     async renameInCatalog(oldValue, newValue) {
@@ -202,6 +254,32 @@ const CATALOG_HANDLERS = {
     },
     cascade: cascadeStoreRename
   },
+  depts: {
+    async renameInCatalog(oldValue, newValue) {
+      return withLockedAppDataValue('depts', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        if (!arr.includes(oldValue)) throw new HttpError(404, `Không tìm thấy "${oldValue}" trong Danh Mục Phòng Ban`);
+        if (arr.includes(newValue)) throw new HttpError(400, `"${newValue}" đã có trong Danh Mục Phòng Ban`);
+        return arr.map(d => (d === oldValue ? newValue : d));
+      });
+    },
+    cascade: cascadeDeptRename
+  },
+  cats: {
+    async renameInCatalog(oldValue, newValue) {
+      return withLockedAppDataValue('cats', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        if (!arr.includes(oldValue)) throw new HttpError(404, `Không tìm thấy "${oldValue}" trong Phân Loại Tài Liệu`);
+        if (arr.includes(newValue)) throw new HttpError(400, `"${newValue}" đã có trong Phân Loại Tài Liệu`);
+        return arr.map(c => (c === oldValue ? newValue : c));
+      });
+    },
+    cascade: cascadeCatRename
+  },
+  licenseTypes: simpleArrayCatalogHandler('licenseTypes', 'Các Loại Giấy Phép'),
+  carTaxiCompanies: simpleArrayCatalogHandler('carTaxiCompanies', 'Danh Mục Hãng Taxi'),
+  priceZones: simpleArrayCatalogHandler('priceZones', 'Danh Mục Vùng Giá Áp Dụng'),
+  trainingCategories: simpleArrayCatalogHandler('trainingCategories', 'Danh Mục Loại Đào Tạo'),
   jobTitles: {
     async renameInCatalog(oldValue, newValue) {
       return withLockedAppDataValue('jobTitles', (list) => {

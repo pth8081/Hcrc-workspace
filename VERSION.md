@@ -1,8 +1,73 @@
 # Phiên bản hiện tại
 
-**22.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.2 (2026-09-14): Danh Mục Phòng Họp dời vào Quản Lý Danh Mục + Báo Cáo trong module Phòng Họp + Sửa được mọi danh mục
+
+Người dùng gửi 2 ảnh chụp màn hình yêu cầu: (1) "Danh Mục Phòng Họp" đang
+nằm lẫn trong module Phòng Họp thay vì gom về màn "Quản Lý Danh Mục" chung
+như mọi danh mục khác; (2) hầu hết danh mục trong "Quản Lý Danh Mục" chỉ có
+Thêm/Xóa, muốn sửa phải xóa rồi tạo lại.
+
+**(1) Dời "🗂️ Danh Mục Phòng Họp" vào Hệ Thống → Quản Trị → Quản Lý Danh
+Mục**: trước đây nằm ngay trong màn đăng ký đặt phòng (admin-only, ẩn với
+người thường) — nay gom về đúng 1 chỗ với Phòng Ban/Siêu Thị/Giấy Phép/Loại
+Xe/Hãng Taxi/Vùng Giá, khớp đúng quy ước "mọi danh mục quản trị về 1 màn".
+Hàm render/thêm/sửa/xóa giữ nguyên (module-phonghop.js), chỉ đổi container
+DOM. Kèm theo: đăng ký "phonghop" làm dependency thật của cụm lazy-load
+"hethong-tabs" (trước đây không có — mở "Hệ Thống → Quản Trị" mà chưa từng
+mở "Phòng Họp" trong phiên sẽ ReferenceError khi vẽ card này).
+
+**Thêm subtab "📊 Báo Cáo" ngay trong module Phòng Họp** (không gộp vào
+module Báo Cáo Quản Trị riêng, đúng yêu cầu "để người quản lý có thể xem
+báo cáo ngay trong module phòng họp"): chỉ hiện cho người có quyền duyệt
+lịch họp (`canApproveMeeting()` — admin/`meetingApprove`). Bộ lọc khoảng
+ngày theo thời gian SỬ DỤNG (`startTime`, không phải ngày tạo phiếu); thẻ
+tổng hợp (Tổng số/Đã duyệt/Đang chờ/Đã hủy/Tổng giờ sử dụng); mức sử dụng
+theo từng Phòng Họp (kể cả phòng chưa có lịch nào — vẫn liệt kê 0 giờ, để
+thấy phòng nào đang "ế"); mức sử dụng theo Phòng Ban; xu hướng theo tháng
+(chỉ tính lịch đã duyệt).
+
+**(2) BUG THẬT đã sửa — hầu hết danh mục chỉ Thêm/Xóa, không Sửa**: rà soát
+toàn bộ 11 card trong "Quản Lý Danh Mục" — chỉ 3 (Siêu Thị/Chức Danh Khối
+VP/Chức Danh Siêu Thị) có sẵn "✏️ Sửa"; 8 card còn lại (Phòng Ban, Phân
+Loại Tài Liệu, Các Loại Giấy Phép, Loại Xe Cụ Thể, Hãng Taxi, Vùng Giá Áp
+Dụng, Loại Đào Tạo, Từ Khoá Nhạy Cảm) chỉ Xóa — gõ sai tên lúc tạo phải xóa
+hẳn rồi tạo lại (Phòng Ban còn mất luôn cấu hình quyền/quy trình đã gắn
+theo tên cũ). Đã thêm "✏️ Sửa" cho toàn bộ 8 card, chia 2 nhóm:
+- **CÓ cascade** (`depts`/`cats`, mở rộng route sẵn có
+  `POST /api/admin/renameCatalogEntry`): Phòng Ban tái dùng nguyên cascade
+  của Siêu Thị (`cascadeStoreRename()` — 1 field `.dept` dùng chung cho cả
+  phòng ban/siêu thị ở mọi collection khác) + dời khoá viết tắt
+  (`deptAbbrs`); Phân Loại Tài Liệu cascade `docs.cat` + dời khoá
+  `docCatAbbrs`. Đổi tên xong, mọi hồ sơ/tài khoản liên quan tự cập nhật
+  theo tên mới ở server (client cần tải lại trang để thấy hết, cùng cảnh
+  báo đã có sẵn từ Siêu Thị).
+- **KHÔNG cascade** (Giấy Phép/Hãng Taxi/Vùng Giá/Loại Đào Tạo — giá trị chỉ
+  mang tính nhãn hiển thị, hồ sơ cũ giữ nguyên tên cũ làm nhãn, không "gãy"
+  gì): đổi trực tiếp qua `syncStorage()`, không cần route riêng.
+- **Loại Xe Cụ Thể/Từ Khoá Nhạy Cảm/Danh Mục Phòng Họp** (dữ liệu nhiều
+  field, có `id` — an toàn tuyệt đối vì không tham chiếu ngược theo tên):
+  sửa qua nhiều `prompt()` tuần tự (tên/BKS/cờ Taxi, hoặc từ khoá/phân
+  loại, hoặc tên đầy đủ/tên gọn).
+
+**Test**: thêm `test-catalog-rename-server.js` (15 test server-level MỚI —
+trước đợt này cascade rename CHƯA từng có test ở tầng server, chỉ có test
+client-level mock hẳn fetch); thêm 14 test vào
+`test-catalog-rename-locked-accounts.js` cho toàn bộ 8 hàm Sửa mới; thêm
+`test-meeting-report.js` (7 test — phân quyền tab Báo Cáo + tính đúng số
+liệu/nhóm theo phòng/phòng ban/tháng/bộ lọc ngày). Trong lúc viết test cho
+tab Báo Cáo, bắt được 1 bug thật tự gây ra (nút "📊 Báo Cáo" bị lộ ra cho cả
+người không có quyền do 1 dòng gán `className` phía sau ghi đè mất class
+"hidden" vừa toggle) — đã sửa trước khi merge. Toàn bộ regression liên quan
+(test-lazy-load-all-tabs 42/42, test-meeting-car 89/89,
+test-admin-users-permgroups 62/62, test-bugfix-batch-nav-ui 15/15) PASS.
+
+**Deploy-impact**: chỉ đổi code client + `routes/adminCatalog.js` +
+`lib/catalogRename.js` — không đổi `schema.sql`/`.env.example`/dependencies.
+Chỉ cần copy code + `pm2 restart`.
 
 ## v22.1 (2026-09-14): Builder tự chọn "Chức danh + Phòng ban" cho Theo vị trí + Xóa/Tạo lại key API Xác Thực Ngoài + Fix thông báo lỗi kết nối/hết phiên
 
