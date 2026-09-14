@@ -70,6 +70,92 @@ thực tế 100%.
 thuần đọc lại đúng dữ liệu `carRegs` đã có sẵn (không thêm field CSDL mới,
 không thêm route mới) — chỉ cần copy code + `pm2 restart`.
 
+### Bổ sung (cùng v22.0): tab "📊 Báo Cáo" NGAY TRONG module Đăng Ký Xe + quyền riêng `carReportView`
+
+Người dùng hỏi tiếp: "Trong tab đăng ký xe có báo cáo nữa nhé bạn. Bạn kt có
+chưa? Nếu chưa có thì cần thêm và có quyền cho xem bc ở đăng ký xe nữa" — tức
+là NGOÀI tab "🚗 Đăng Ký Xe" trong module 📊 Báo Cáo tổng hợp (đã làm ở trên),
+người dùng muốn CÓ THÊM 1 tab Báo Cáo NGAY TRONG chính module Đăng Ký Xe
+(`carSection`), gác bằng 1 quyền RIÊNG (không dùng chung quyền nào khác).
+Kiểm tra: **chưa có** — module Đăng Ký Xe trước đây chỉ có 3 sub-tab (🚗 Đăng
+Ký Xe/🗓️ Lịch Xe/🧑‍✈️ Lái Xe), không có tab Báo Cáo nội bộ nào.
+
+**Mirror ĐÚNG khuôn đã có sẵn** cho đúng kiểu yêu cầu này — module Checklist
+Đánh Giá Siêu Thị đã có 1 tab "📊 Báo Cáo" nội bộ RIÊNG, gác bằng 1 quyền
+PHẲNG độc lập `checklistReportView` (không liên quan module Báo Cáo tổng
+hợp) — áp dụng NGUYÊN khuôn đó cho Đăng Ký Xe:
+
+- **Quyền mới `carReportView`** (phẳng, mục "🚗 6. Đăng Ký Xe" trong cây Phân
+  Quyền) — CHỈ mở sub-tab "📊 Báo Cáo" mới này, KHÔNG liên quan gì tới quyền
+  xem tab "🚗 Đăng Ký Xe" của module 📊 Báo Cáo tổng hợp (2 nơi độc lập nhau).
+  Người CHỈ được cấp đúng quyền này (không `carView`/không phải creator/
+  approver/lái xe) vẫn tự vào được module Đăng Ký Xe trên sidebar (mirror
+  `canAccessChecklistModule()`) — chỉ để xem tab Báo Cáo, không thấy/không
+  làm được gì khác trong module.
+- **Sub-tab mới "📊 Báo Cáo"** (`module-dangkyxe.js`, self-contained — module
+  load group "dangkyxe" KHÔNG phụ thuộc "baocaoquantri-preview" nên KHÔNG
+  dùng lại `buildStatBarHTML()`/`computeCarTripStats()` của module Báo Cáo
+  tổng hợp, viết 1 bản riêng gọn cho tab này, CÙNG đúng logic nghiệp vụ đã
+  thống nhất ở trên để 2 nơi không lệch số liệu) — có bộ lọc Từ ngày/Đến
+  ngày/Phòng ban RIÊNG của tab này, hiển thị đủ: Tổng số hồ sơ, Tình Trạng (7
+  trạng thái), Khối Lượng Theo Phòng Ban, Thống Kê Theo Lái Xe, Địa Điểm Đã
+  Đến — người có `carReportView` (không có `carView`) vẫn nhận ĐỦ dữ liệu
+  company-wide qua `GET /api/data` (xem bên dưới), không bị giới hạn đúng
+  phòng ban của mình.
+
+**Bug thật tự phát hiện qua test khi làm tính năng này** (`setCarSubTab()`,
+`module-dangkyxe.js`): dòng `btnCarSubReport.className = ...` (đặt màu nút
+active/inactive) đứng SAU dòng `classList.toggle('hidden', ...)` (ẩn/hiện nút
+theo quyền) — `className =` GHI ĐÈ TOÀN BỘ danh sách class thay vì cộng dồn,
+nên xoá mất luôn class `hidden` vừa thêm, khiến nút "📊 Báo Cáo" LUÔN hiện bất
+kể có quyền `carReportView` hay không. Đã sửa bằng cách đổi thứ tự: gán
+`className` (màu nút) TRƯỚC, `classList.toggle('hidden', ...)` (theo quyền)
+SAU CÙNG.
+
+**Mở rộng phạm vi xem server-side** (để tab Báo Cáo mới không hiển thị sai
+"tổng công ty" chỉ vì thiếu dữ liệu): `canViewCarReg()`
+(`lib/recordViewScope.js`) thêm nhánh `carReportView` (mirror
+`checklistReportView`), và `loadCarRegsScoped()` (`routes/data.js`, Bước 8f)
+thêm `carReportView` vào điều kiện tải company-wide (cùng nhánh
+`admin`/`carView.all`) — nếu không sửa route đọc dữ liệu này, người CHỈ có
+`carReportView` sẽ chỉ nhận đúng phòng ban mình qua `GET /api/data` (nhánh
+dept-narrowing mặc định), khiến báo cáo "toàn công ty" hiển thị thiếu dữ liệu
+dù quyền xem đã đúng.
+
+**Chi tiết kỹ thuật**:
+- `public/js/core.js`: `carReportView: false` (default perms) +
+  `canViewCarReportClient()` (mirror `canViewChecklistReportsClient()`) +
+  `canAccessCarModule()` thêm nhánh `carReportView`.
+- `public/js/module-admin-permtree.js` + `public/index.html`: checkbox
+  "📊 Xem Báo Cáo" mới trong khối "🚗 6. Đăng Ký Xe" của cây Phân Quyền +
+  collect/populate form.
+- `public/js/module-dangkyxe.js`: sub-tab "REPORT" mới (`carSubReport`,
+  `btnCarSubReport`) + `renderCarReportTab()`/`populateCarReportDeptFilter()`/
+  `resetCarReportFilters()` (tự viết riêng, không phụ thuộc module Báo Cáo
+  tổng hợp) + sửa bug `className`/`classList.toggle` nêu trên.
+- `lib/recordViewScope.js` + `routes/data.js`: mở rộng phạm vi xem
+  company-wide cho `carReportView`, nêu trên.
+- `tests/test-car-regs-scope.js`: thêm kịch bản `carReportView` nhận đủ
+  company-wide qua `GET /api/data` — 8/8 pass.
+- `tests/test-meeting-car.js`: thêm 3 kịch bản (nút ẩn/redirect đúng khi
+  KHÔNG có quyền; nút hiện + mở được tab khi CÓ quyền; tab hiển thị đúng dữ
+  liệu company-wide bao gồm phòng ban người xem không thuộc về) — 92/92
+  pass. Test này ban đầu FAIL đúng ở lỗi `className` nêu trên (dấu hiệu tốt —
+  test bắt được bug thật trước khi merge) và 1 lỗi test tự viết sai
+  (`page.evaluate()` của Playwright chỉ nhận 1 tham số dữ liệu, không phải 2
+  như Puppeteer) — đã sửa cả 2, chạy lại xanh hoàn toàn.
+- Chạy lại toàn bộ suite liên quan: `test-lazy-load-all-tabs.js` (42/42),
+  `test-reports.js` (22/22), `test-perm-tree-expand-collapse.js` (6/6),
+  `test-merge-groups-perms.js` (5/5), `test-admin-users-permgroups.js`
+  (62/62) — không ảnh hưởng gì.
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql` (quyền mới chỉ là 1 field JSON
+trong `perms`, không phải cột CSDL riêng) — KHÔNG cần `.env.example`/
+dependencies mới — chỉ cần copy code + `pm2 restart`. Admin cần vào **Hệ
+Thống → Quản Trị → Phân Quyền → 🚗 6. Đăng Ký Xe** để CẤP thủ công quyền
+"📊 Xem Báo Cáo" cho người cần xem (mặc định TẮT cho mọi tài khoản hiện có,
+kể cả tài khoản cũ — không tự động bật cho ai).
+
 ## v21.9 (2026-09-14): Đăng Ký Xe — "Kết Thúc Chuyến" (lái xe) + "Đánh Giá" bắt buộc (người đăng ký)
 
 Người dùng yêu cầu: (1) lái xe cần kết thúc chuyến (xác nhận kết thúc + nhập

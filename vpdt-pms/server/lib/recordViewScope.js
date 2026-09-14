@@ -441,6 +441,12 @@ function filterContractsForUser(contracts, user, appData) {
 function canViewCarReg(user, carReg, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  // carReportView — quyền PHẲNG RIÊNG cho sub-tab "📊 Báo Cáo" nội bộ module Đăng Ký Xe (thống kê toàn
+  // công ty theo lái xe/địa điểm/trạng thái, module-dangkyxe.js renderCarReportTab()) — mirror ĐÚNG
+  // checklistReportView (xem canViewChecklistTemplate() ở trên): người CHỈ được cấp quyền này (không có
+  // carView/không phải creator/approver/lái xe) vẫn cần thấy ĐỦ dữ liệu công ty để báo cáo có ý nghĩa,
+  // không phải tập rỗng do rơi vào các nhánh scope khác bên dưới.
+  if (user.perms?.carReportView) return true;
   if (carReg.creator === user.username) return true;
   // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban với
   // carView — cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).

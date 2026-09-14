@@ -2552,6 +2552,11 @@ function canAccessMeetingModule(user) {
   return scopeHasAny(user, user.perms?.meetingView) || canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user);
 }
 
+// carReportView — mirror ĐÚNG canViewChecklistReportsClient() (module Checklist): quyền PHẲNG riêng, chỉ
+// mở sub-tab "📊 Báo Cáo" NGAY TRONG module Đăng Ký Xe (renderCarReportTab(), module-dangkyxe.js),
+// KHÔNG liên quan gì tới module "📊 Báo Cáo" tổng hợp riêng (canViewReports/REPORT_MODULE_CONFIGS.car).
+function canViewCarReportClient(user) { return !!(user?.perms?.admin || user?.perms?.carReportView); }
+
 function canAccessCarModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -2563,7 +2568,12 @@ function canAccessCarModule(user) {
   // module bị ẩn khỏi sidebar trước đây). Chỉ mở đúng lối vào sidebar + sub-tab đó — không mở thêm
   // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
   const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
-  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere;
+  // carReportView — CŨNG tự mở được vào module (chỉ để xem sub-tab "Báo Cáo"), mirror ĐÚNG
+  // canAccessChecklistModule() cho phép checklistReportView-only tự vào module dù không có quyền quản lý
+  // nào khác — người CHỈ được cấp quyền xem báo cáo (VD cấp quản lý cần số liệu, không trực tiếp đăng
+  // ký/duyệt xe) vẫn cần thấy được module trên sidebar.
+  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) ||
+    isAssignedDriverSomewhere || canViewCarReportClient(user);
 }
 
 // Văn phòng phẩm: KHÔNG có khái niệm quyền "Xem/Tạo" riêng theo phòng ban (khác Xe/Phòng họp) — mọi
@@ -2799,6 +2809,11 @@ function defaultNewUserPerms() {
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(), carDispatch: false,
+    // carReportView — PHẲNG, RIÊNG cho sub-tab "📊 Báo Cáo" NGAY TRONG module Đăng Ký Xe (thống kê theo
+    // lái xe/địa điểm/trạng thái toàn công ty), mirror ĐÚNG khuôn checklistReportView (KHÔNG liên quan
+    // module 📊 Báo Cáo tổng hợp riêng, đã có sẵn tab "🚗 Đăng Ký Xe" của chính nó qua carView/canViewReports
+    // — 2 nơi độc lập nhau, không dùng chung 1 quyền). Xem canViewCarReportClient()/canAccessCarModule().
+    carReportView: false,
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,

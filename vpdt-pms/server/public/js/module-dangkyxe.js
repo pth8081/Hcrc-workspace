@@ -146,15 +146,24 @@ function renderCarRoutePoints() {
 
 function setCarSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  // carReportView — mirror ĐÚNG setVppSubTab() (module-vpp.js): người không có quyền mà lỡ có state cũ
+  // trỏ vào "REPORT" (VD bị thu quyền sau khi đã từng mở) tự động rơi về REG thay vì kẹt ở tab trống.
+  if (subTab === 'REPORT' && !canViewCarReportClient(currentUser)) subTab = 'REG';
   activeCarSubTab = subTab;
   document.getElementById('carSubReg').classList.toggle('hidden', subTab !== 'REG');
   document.getElementById('carSubCalendar').classList.toggle('hidden', subTab !== 'CALENDAR');
   document.getElementById('carSubDriver').classList.toggle('hidden', subTab !== 'DRIVER');
+  document.getElementById('carSubReport').classList.toggle('hidden', subTab !== 'REPORT');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnCarSubReg').className = subTab === 'REG' ? activeCls : inactiveCls;
   document.getElementById('btnCarSubCalendar').className = subTab === 'CALENDAR' ? activeCls : inactiveCls;
   document.getElementById('btnCarSubDriver').className = subTab === 'DRIVER' ? activeCls : inactiveCls;
+  document.getElementById('btnCarSubReport').className = subTab === 'REPORT' ? activeCls : inactiveCls;
+  // PHẢI đứng SAU dòng className= ngay trên — className= GHI ĐÈ TOÀN BỘ danh sách class (không cộng
+  // dồn), nên nếu đặt trước sẽ bị xoá mất ngay class "hidden" vừa thêm, khiến nút LUÔN hiện bất kể quyền
+  // carReportView (bug thật đã tự phát hiện qua test — xem tests/test-meeting-car.js kịch bản D6).
+  document.getElementById('btnCarSubReport').classList.toggle('hidden', !canViewCarReportClient(currentUser));
   if (subTab === 'REG') {
     renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');
     renderCarRegs();
@@ -163,6 +172,7 @@ function setCarSubTab(subTab) {
   }
   if (subTab === 'CALENDAR') renderCarScheduleCalendar();
   if (subTab === 'DRIVER') renderCarDriverTab();
+  if (subTab === 'REPORT') { populateCarReportDeptFilter(); renderCarReportTab(); }
 }
 
 // ============ Sub-tab "Lịch Xe" — lưới CHỈ XEM lịch trống/bận của lái xe (giống Lịch Họp ở
@@ -896,5 +906,147 @@ async function processCarReg(actionType) {
   closeCarProcessModal();
   renderCarRegs();
   refreshApprovalSurfaces();
+}
+
+// ============ Sub-tab: Báo Cáo (carReportView, RIÊNG cho module này — KHÔNG liên quan module "📊 Báo
+// Cáo" tổng hợp riêng, xem canViewCarReportClient()/canAccessCarModule() ở core.js). Người dùng yêu cầu
+// thêm thẳng 1 tab Báo Cáo NGAY TRONG Đăng Ký Xe, gác bằng 1 quyền riêng — mirror ĐÚNG cấu trúc sub-tab
+// "📊 Báo Cáo" của module Checklist Đánh Giá Siêu Thị (checklistReportView, module-checklist.js). module
+// load group "dangkyxe" KHÔNG phụ thuộc "baocaoquantri-preview" (nhóm chứa module Báo Cáo tổng hợp, xem
+// MODULE_LOAD_GROUPS ở core.js) nên KHÔNG dùng lại buildStatBarHTML()/computeCarTripStats() ở
+// module-baocaoquantri(-preview).js (có thể chưa được nạp tại thời điểm vào tab này) — tự viết bản RIÊNG,
+// gọn cho tab này, cùng đúng logic nghiệp vụ đã thống nhất ở module Báo Cáo tổng hợp (chỉ tính chuyến đã
+// duyệt + có tài xế, km ưu tiên actualKm — xem VERSION.md v22.0) để 2 nơi không lệch số liệu. ============
+const CAR_REPORT_STATUS_BUCKETS = [
+  ['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'],
+  ['DRAFT', 'Cần bổ sung', 'bg-orange-500'],
+  ['APPROVED', 'Đã phê duyệt', 'bg-green-500'],
+  ['AWAITING_EVALUATION', 'Chờ đánh giá', 'bg-amber-500'],
+  ['COMPLETED', 'Hoàn thành', 'bg-emerald-600'],
+  ['REJECTED', 'Từ chối', 'bg-red-500'],
+  ['CANCELLED', 'Đã hủy chuyến', 'bg-slate-500']
+];
+// CHỈ tính chuyến đã thực sự được duyệt + phân công tài xế — PENDING/DRAFT chưa từng có
+// assignedDriverUsername (chỉ gán lúc duyệt), REJECTED/CANCELLED không tính dù có thể còn sót field phân
+// công cũ (cancelCarReg() không xoá lại, xem lib/recordActions.js) — tính vào sẽ thổi phồng số liệu.
+const CAR_REPORT_TRIP_HAPPENED_STATUSES = new Set(['APPROVED', 'AWAITING_EVALUATION', 'COMPLETED']);
+
+function buildCarReportBarHTML(label, value, max, colorClass) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return `
+    <div>
+      <div class="flex justify-between mb-0.5 text-xs"><span class="font-semibold text-gray-700">${escapeHtml(label)}</span><span class="font-bold text-gray-800">${(value || 0).toLocaleString('vi-VN')}</span></div>
+      <div class="w-full bg-gray-100 rounded h-2.5 overflow-hidden"><div class="${colorClass} h-2.5 rounded" data-style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
+function populateCarReportDeptFilter() {
+  const sel = document.getElementById('carReportDeptFilter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  if (current) sel.value = current;
+}
+
+function resetCarReportFilters() {
+  document.getElementById('carReportFromDate').value = '';
+  document.getElementById('carReportToDate').value = '';
+  document.getElementById('carReportDeptFilter').value = '';
+  renderCarReportTab();
+}
+
+function renderCarReportTab() {
+  const wrap = document.getElementById('carReportContent');
+  if (!wrap) return;
+  const fromDate = document.getElementById('carReportFromDate')?.value || '';
+  const toDate = document.getElementById('carReportToDate')?.value || '';
+  const deptFilter = document.getElementById('carReportDeptFilter')?.value || '';
+
+  // DB.carRegs: người có carReportView (không carView/không phải creator/approver/lái xe) vẫn nhận ĐỦ
+  // dữ liệu company-wide qua GET /api/data (xem loadCarRegsScoped(), routes/data.js) — không cần tự lọc
+  // phạm vi thêm ở đây, chỉ lọc theo bộ lọc ngày/phòng ban người dùng CHỌN trên chính tab này.
+  const records = (DB.carRegs || []).filter(r => (!deptFilter || r.dept === deptFilter) && isInDateRange(r.createdAt, fromDate, toDate));
+
+  const statusCounts = {};
+  CAR_REPORT_STATUS_BUCKETS.forEach(([key]) => { statusCounts[key] = 0; });
+  records.forEach(r => { if (r.status in statusCounts) statusCounts[r.status]++; });
+
+  const deptTotals = {};
+  records.forEach(r => { if (r.dept) deptTotals[r.dept] = (deptTotals[r.dept] || 0) + 1; });
+  const deptEntries = Object.entries(deptTotals).sort((a, b) => b[1] - a[1]);
+  const maxDept = Math.max(1, ...deptEntries.map(([, c]) => c));
+
+  const happened = records.filter(r => CAR_REPORT_TRIP_HAPPENED_STATUSES.has(r.status) && r.assignedDriverUsername);
+  const byDriver = new Map();
+  happened.forEach(r => {
+    const key = r.assignedDriverUsername;
+    const km = Number(r.actualKm ?? r.km) || 0;
+    if (!byDriver.has(key)) byDriver.set(key, { name: r.assignedDriver || key, trips: 0, km: 0 });
+    const row = byDriver.get(key);
+    row.trips++;
+    row.km += km;
+  });
+  const driverRows = [...byDriver.values()].sort((a, b) => b.km - a.km);
+  const totalKm = driverRows.reduce((s, r) => s + r.km, 0);
+
+  // Đếm mỗi địa điểm 1 lần/chuyến (Set khử trùng lặp trong CÙNG 1 lộ trình — VD khứ hồi "HN -> HP -> HN"
+  // chỉ tính "HN" 1 lần).
+  const destFreq = new Map();
+  happened.forEach(r => {
+    const points = Array.isArray(r.routePoints) && r.routePoints.length ? r.routePoints : (r.destination ? [r.destination] : []);
+    const uniquePoints = new Set(points.map(p => String(p || '').trim()).filter(Boolean));
+    uniquePoints.forEach(p => destFreq.set(p, (destFreq.get(p) || 0) + 1));
+  });
+  const destRows = [...destFreq.entries()].sort((a, b) => b[1] - a[1]);
+  const maxDestCount = Math.max(1, ...destRows.map(([, c]) => c));
+  const TOP_DEST_LIMIT = 15;
+  const topDest = destRows.slice(0, TOP_DEST_LIMIT);
+
+  wrap.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white p-4 rounded border">
+        <div class="text-2xl font-bold text-sky-700">${records.length.toLocaleString('vi-VN')}</div>
+        <div class="text-xs text-gray-600 mt-1">Tổng số hồ sơ trong khoảng đã chọn</div>
+      </div>
+      <div class="bg-white p-4 rounded border">
+        <h4 class="font-bold text-gray-800 mb-3">⏳ Tình Trạng</h4>
+        <div class="space-y-2">${CAR_REPORT_STATUS_BUCKETS.map(([key, label, color]) => buildCarReportBarHTML(label, statusCounts[key], records.length, color)).join('')}</div>
+      </div>
+      <div class="bg-white p-4 rounded border">
+        <h4 class="font-bold text-gray-800 mb-3">🏢 Khối Lượng Theo Phòng Ban</h4>
+        ${deptEntries.length ? `<div class="space-y-2">${deptEntries.map(([d, c]) => buildCarReportBarHTML(d, c, maxDept, 'bg-sky-500')).join('')}</div>` : '<p class="text-xs text-gray-500 italic">Không có dữ liệu.</p>'}
+      </div>
+    </div>
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">🧑‍✈️ Thống Kê Theo Lái Xe (Số Chuyến / Số KM)</h4>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="bg-gray-50 border rounded p-3 text-center">
+          <div class="text-2xl font-bold text-sky-700">${happened.length.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng số chuyến đã thực hiện (đã phân công tài xế)</div>
+        </div>
+        <div class="bg-gray-50 border rounded p-3 text-center">
+          <div class="text-2xl font-bold text-emerald-700">${totalKm.toLocaleString('vi-VN')}</div>
+          <div class="text-[11px] text-gray-500 mt-1">Tổng số KM đã đi (toàn công ty)</div>
+        </div>
+      </div>
+      ${driverRows.length ? `
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100"><th class="border p-2 text-left">Lái xe</th><th class="border p-2">Số chuyến</th><th class="border p-2">Tổng KM</th></tr></thead>
+            <tbody>${driverRows.map(r => `<tr><td class="border p-2">${escapeHtml(r.name)}</td><td class="border p-2 text-center">${r.trips.toLocaleString('vi-VN')}</td><td class="border p-2 text-center font-bold">${r.km.toLocaleString('vi-VN')}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <p class="text-[10px] text-gray-400 italic mt-2">* Số KM dùng số km thực tế (sau khi lái xe "Kết Thúc Chuyến"/người đăng ký "Đánh Giá") nếu đã có; chuyến đã duyệt nhưng chưa kết thúc tạm dùng số km đăng ký dự kiến.</p>
+      ` : '<p class="text-xs text-gray-500 italic">Chưa có chuyến nào được phân công tài xế trong khoảng đã lọc.</p>'}
+    </div>
+    <div class="bg-white p-4 rounded border">
+      <h4 class="font-bold text-gray-800 mb-3">📍 Địa Điểm Đã Đến (theo số chuyến có ghé qua)</h4>
+      ${topDest.length ? `
+        <div class="space-y-2">${topDest.map(([place, count]) => buildCarReportBarHTML(place, count, maxDestCount, 'bg-teal-500')).join('')}</div>
+        ${destRows.length > TOP_DEST_LIMIT ? `<p class="text-[11px] text-gray-400 italic mt-2">Còn ${destRows.length - TOP_DEST_LIMIT} địa điểm khác (đã ẩn bớt để gọn danh sách) trong tổng ${destRows.length} địa điểm.</p>` : ''}
+      ` : '<p class="text-xs text-gray-500 italic">Chưa có dữ liệu lộ trình trong khoảng đã lọc.</p>'}
+    </div>
+  `;
 }
 

@@ -470,6 +470,18 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   bỏ qua bước xác nhận). Phiếu Phê Duyệt (xem/tải) vẫn dùng được bình thường ở
   cả 2 trạng thái mới này, có thêm mục "Kết Thúc Chuyến / Đánh Giá" hiện số km
   + nhận xét khi đã có.
+  **Sub-tab "📊 Báo Cáo" (nội bộ module, quyền RIÊNG `carReportView`)**: ngoài
+  tab "🚗 Đăng Ký Xe" của module 📊 Báo Cáo tổng hợp (mục 5), Đăng Ký Xe còn có
+  1 tab Báo Cáo NGAY TRONG chính module này — bộ lọc Từ ngày/Đến ngày/Phòng
+  ban riêng, hiển thị tổng số hồ sơ, Tình Trạng (đủ 7 trạng thái), Khối Lượng
+  Theo Phòng Ban, Thống Kê Theo Lái Xe (số chuyến/tổng km) và Địa Điểm Đã Đến
+  — cùng nội dung/logic tính với tab Báo Cáo tổng hợp nhưng xem trực tiếp
+  ngay tại module, không cần chuyển sang màn Báo Cáo riêng. Quyền
+  `carReportView` (mục "🚗 6. Đăng Ký Xe" ở Phân Quyền, mirror đúng
+  `checklistReportView` của Checklist Đánh Giá Siêu Thị) — người CHỈ được cấp
+  quyền này (không có Xem/Tạo/Người Điều Hành Xe nào khác) vẫn tự vào được
+  module trên sidebar để xem tab Báo Cáo, và luôn thấy ĐỦ dữ liệu toàn công
+  ty (không giới hạn theo phòng ban của mình).
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát

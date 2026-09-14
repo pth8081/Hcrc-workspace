@@ -2888,6 +2888,7 @@
       <button type="button" data-op="setCarSubTab" data-arg0="REG" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
       <button type="button" data-op="setCarSubTab" data-arg0="CALENDAR" id="btnCarSubCalendar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Xe</button>
       <button type="button" data-op="setCarSubTab" data-arg0="DRIVER" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
+      <button type="button" data-op="setCarSubTab" data-arg0="REPORT" id="btnCarSubReport" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
     </div>
 
     <div id="carSubReg" class="space-y-6">
@@ -3045,6 +3046,28 @@
         <div id="carDriverListWrap" class="space-y-2"></div>
         <div id="carDriverNoneNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Bạn chưa được phân công chuyến xe nào.</div>
       </div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo (carReportView, RIÊNG cho module này — KHÔNG liên quan module 📊 Báo Cáo tổng
+         hợp riêng, xem canViewCarReportClient()/core.js) — mirror ĐÚNG cấu trúc sub-tab "📊 Báo Cáo Tổng
+         Hợp" của Văn Phòng Phẩm (vppSubReports) nhưng tự lọc theo cả phòng ban lẫn ngày (VPP chỉ theo kỳ). -->
+    <div id="carSubReport" class="hidden space-y-4">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Từ ngày</label>
+          <input id="carReportFromDate" type="date" data-op-change="renderCarReportTab" class="border p-1.5 rounded">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Đến ngày</label>
+          <input id="carReportToDate" type="date" data-op-change="renderCarReportTab" class="border p-1.5 rounded">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Phòng ban</label>
+          <select id="carReportDeptFilter" data-op-change="renderCarReportTab" class="border p-1.5 rounded bg-white"></select>
+        </div>
+        <button type="button" data-op="resetCarReportFilters" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
+      </div>
+      <div id="carReportContent" class="space-y-4"></div>
     </div>
   </div>
 
@@ -5178,9 +5201,12 @@
               <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
             </div>
           </div>
-          <div class="px-3 pb-3">
+          <div class="px-3 pb-3 space-y-1.5">
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
               <input type="checkbox" id="pCarDispatch"> 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục "Phần Dành Cho Phòng Hành Chính" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)
+            </label>
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pCarReportView"> 📊 Xem Báo Cáo (mở thêm sub-tab "Báo Cáo" NGAY TRONG module Đăng Ký Xe — thống kê theo lái xe/địa điểm/trạng thái toàn công ty, KHÔNG liên quan module 📊 Báo Cáo tổng hợp riêng — quyền này cũng tự mở được vào module dù không có Xem/Tạo/Người Điều Hành Xe nào khác)
             </label>
           </div>
         </details>

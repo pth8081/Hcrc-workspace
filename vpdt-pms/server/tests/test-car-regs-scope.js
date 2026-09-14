@@ -27,7 +27,13 @@ const APPROVER_D = { username: 'duyet1', name: 'Người Duyệt Xe Phòng D', d
 const DRIVER_B = { username: 'lixe1', name: 'Lái Xe', dept: 'Phòng A', perms: {}, active: true };
 const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng A', perms: { carView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D, DRIVER_B, ALL_VIEW, ADMIN];
+// REPORT_VIEWER — chỉ có carReportView (KHÔNG carView/không phải creator/approver/lái xe) — quyền PHẲNG
+// RIÊNG cho sub-tab "📊 Báo Cáo" nội bộ module Đăng Ký Xe (mirror ĐÚNG checklistReportView), thêm cùng
+// đợt (v22.0) người dùng yêu cầu "cần thêm và có quyền cho xem bc ở đăng ký xe". Phải nhận ĐỦ company-wide
+// giống carView.all/admin (xem canViewCarReg()/lib/recordViewScope.js + loadCarRegsScoped()/routes/data.js)
+// — nếu không, báo cáo "toàn công ty" sẽ hiển thị sai (chỉ đúng phòng ban của chính họ).
+const REPORT_VIEWER = { username: 'reportviewer', name: 'Người Xem Báo Cáo Xe', dept: 'Phòng A', perms: { carReportView: true }, active: true };
+const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D, DRIVER_B, ALL_VIEW, ADMIN, REPORT_VIEWER];
 
 const APP_DATA = {
   // duyet1 là người duyệt CẤU HÌNH của Phòng D (không liên quan phòng ban của chính duyet1, là Phòng A).
@@ -171,6 +177,14 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.carRegs || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 xe');
+    });
+
+    await run.run('carReportView (chỉ quyền xem Báo Cáo, không carView/không phải creator/approver/lái xe): nhận ĐỦ toàn công ty', async () => {
+      resetData(); fullLoadCallCount = 0;
+      const res = await api('GET', '/api/data', undefined, REPORT_VIEWER);
+      const ids = (res.body.carRegs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'carReportView phải thấy đủ cả 4 xe để báo cáo toàn công ty không bị thiếu dữ liệu');
+      assert(fullLoadCallCount >= 1, 'carReportView phải tải theo nhánh company-wide (giống carView.all/admin), không chỉ đúng phòng ban mình');
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterCarRegsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

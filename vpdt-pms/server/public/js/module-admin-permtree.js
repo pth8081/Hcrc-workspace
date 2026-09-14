@@ -146,6 +146,7 @@ function collectPermsFromForm() {
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     carDispatch: document.getElementById('pCarDispatch').checked,
+    carReportView: document.getElementById('pCarReportView').checked,
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
@@ -305,6 +306,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
+  document.getElementById('pCarReportView').checked = !!perms.carReportView;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;

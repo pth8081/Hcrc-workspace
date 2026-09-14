@@ -653,7 +653,12 @@ function computeCarRegsApproverDepts(user, data) {
   return depts;
 }
 async function loadCarRegsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.carView?.all) {
+  // carReportView (quyền PHẲNG RIÊNG cho sub-tab "📊 Báo Cáo" nội bộ module Đăng Ký Xe, mirror ĐÚNG
+  // checklistReportView — xem canViewCarReg() ở lib/recordViewScope.js) cần tải TOÀN BỘ company-wide
+  // giống admin/carView.all — nếu không, người CHỈ được cấp quyền này (không carView/không phải
+  // creator/approver/lái xe) sẽ chỉ nhận đúng phòng ban mình qua nhánh dept bên dưới, khiến báo cáo
+  // "toàn công ty" hiển thị sai (thiếu dữ liệu phòng ban khác) dù canViewCarReg() đã cho phép xem hết.
+  if (user?.perms?.admin || user?.perms?.carView?.all || user?.perms?.carReportView) {
     return getAllForCollectionCached('carRegs');
   }
   const depts = new Set();

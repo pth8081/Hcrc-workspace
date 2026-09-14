@@ -1155,6 +1155,72 @@ async function main() {
     `isAssignedDriverSomewhere=${d5.isAssignedDriverSomewhere}`
   );
 
+  // ===================== D6-D8 — carReportView: quyền PHẲNG RIÊNG cho sub-tab "📊 Báo Cáo" NGAY TRONG
+  // module Đăng Ký Xe (mirror ĐÚNG checklistReportView, module-checklist.js) — người dùng yêu cầu "cần
+  // thêm và có quyền cho xem bc ở đăng ký xe" (v22.0). =====================
+
+  // bookerUser (đã có carCreate nhưng KHÔNG carReportView) — nút "📊 Báo Cáo" phải ẩn, và cố tình ép vào
+  // sub-tab REPORT (VD state cũ từ trước khi bị thu hồi quyền) phải tự rơi về REG thay vì hiện tab trống.
+  await loginAs(page, bookerUser);
+  const d6 = await page.evaluate(() => {
+    // switchTab() là async (await loadTabModuleGroups() bên trong, xem chú thích ngay tại đó) — gọi
+    // KHÔNG await rồi đọc DOM ngay sau đó (như các kịch bản switchTab('car') khác trong file này) sẽ đọc
+    // đúng cảnh báo/state của switchTab, nhưng KHÔNG đảm bảo phần setCarSubTab(activeCarSubTab) ở cuối đã
+    // chạy xong (rơi vào ĐÚNG bug tinh vi switchTab() tự ghi chú). Gọi setCarSubTab('REG') RIÊNG, đồng bộ
+    // (không async) NGAY SAU đó để chốt state xác định trước khi đọc, không phụ thuộc thời điểm continuation
+    // của switchTab() có chạy kịp hay chưa.
+    switchTab('car');
+    setCarSubTab('REG');
+    const btnHiddenBefore = document.getElementById('btnCarSubReport').classList.contains('hidden');
+    setCarSubTab('REPORT');
+    return {
+      btnHiddenBefore, activeSubTabAfterForce: activeCarSubTab,
+      reportSectionHidden: document.getElementById('carSubReport').classList.contains('hidden')
+    };
+  });
+  record(
+    'carReportView: user WITHOUT the permission never sees the "📊 Báo Cáo" button, and forcing the REPORT sub-tab redirects back to REG',
+    d6.btnHiddenBefore === true && d6.activeSubTabAfterForce === 'REG' && d6.reportSectionHidden === true,
+    JSON.stringify(d6)
+  );
+
+  // Seed 1 phiếu ở phòng ban KHÁC (Ban Giám Đốc) mà reportViewerUser không thuộc về (chính họ ở Phòng
+  // Kinh Doanh) — xác nhận họ thấy ĐỦ company-wide qua tab Báo Cáo, mirror kịch bản server-side đã có ở
+  // test-car-regs-scope.js ("carReportView ... nhận ĐỦ toàn công ty").
+  const reportViewerUser = {
+    username: 'xemreport', name: 'Người Xem Báo Cáo Xe', dept: 'Phòng Kinh Doanh', role: 'STAFF',
+    active: true, perms: { carReportView: true }
+  };
+  const otherDeptCar = {
+    id: 900701, code: 'HCRC-DPH-REPORT', dept: 'Ban Giám Đốc', status: 'COMPLETED',
+    assignedDriverUsername: 'lx1', assignedDriver: 'Nguyễn Văn Tài',
+    km: 80, actualKm: 77, routePoints: ['Hà Nội', 'Ninh Bình'], destination: 'Hà Nội → Ninh Bình',
+    createdAt: '01/09/2026 08:00', history: []
+  };
+  // page.evaluate() (Playwright, khác Puppeteer) CHỈ nhận đúng 1 tham số dữ liệu — gộp 2 giá trị vào 1
+  // object thay vì truyền 2 tham số riêng (sẽ ném "Too many arguments").
+  await page.evaluate(({ u, item }) => { DB.users.push(u); DB.carRegs.push(item); }, { u: reportViewerUser, item: otherDeptCar });
+
+  await loginAs(page, reportViewerUser);
+  const d7 = await page.evaluate(() => {
+    switchTab('car');
+    setCarSubTab('REG'); // chốt state đồng bộ trước khi đọc — cùng lý do đã ghi chú ở d6 phía trên.
+    const btnVisible = !document.getElementById('btnCarSubReport').classList.contains('hidden');
+    setCarSubTab('REPORT');
+    const content = document.getElementById('carReportContent').innerHTML;
+    return { btnVisible, activeSubTab: activeCarSubTab, content };
+  });
+  record(
+    'carReportView: user WITH the permission sees the "📊 Báo Cáo" button and can open the REPORT sub-tab',
+    d7.btnVisible === true && d7.activeSubTab === 'REPORT',
+    `btnVisible=${d7.btnVisible} activeSubTab=${d7.activeSubTab}`
+  );
+  record(
+    'carReportView: report tab renders company-wide data, including a dept the report-viewer does NOT belong to (Ban Giám Đốc/Ninh Bình)',
+    d7.content.includes('Ban Giám Đốc') && d7.content.includes('Nguyễn Văn Tài') && d7.content.includes('Ninh Bình'),
+    d7.content.slice(0, 400)
+  );
+
   // ===================== E1-E4 — "Bổ Sung" (REQUEST_CHANGES): approver trả phiếu về NHÁP, người đăng
   // ký SỬA LẠI TOÀN BỘ nội dung (kể cả lộ trình/thời gian) qua modal "Sửa & Gửi Lại"
   // (openBosungEditModal()/confirmBosungResubmit() ở public/index.html, gọi THẬT
