@@ -324,6 +324,18 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     bổ sung"** dạng bình luận thường (không kèm file, chỉ trả hồ sơ về NHÁP
     kèm lý do) — tuỳ người duyệt chọn khi hồ sơ đã tới đúng bước cuối cùng
     của quy trình đã chọn.
+  - **Chọn người phê duyệt cụ thể khi vai trò có nhiều người** (Giám Đốc/Phó
+    Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký, Tổng Giám Đốc — 4 vai
+    trò bắt buộc theo Cấp Phê Duyệt Cuối Cùng) — mỗi vai trò được admin gán
+    thành viên ở **Hệ Thống → Quản Trị → mục 11 "Nhóm Phê Duyệt Trình"**. Nhóm
+    chỉ **đúng 1 người** → hệ thống tự dùng người đó, KHÔNG hiện hộp chọn.
+    Nhóm có **nhiều hơn 1 người** (VD 2 Phó Giám Đốc) → khi tick lớp đó, hiện
+    thêm 1 hộp chọn (dropdown) bắt buộc chọn **đúng 1 người cụ thể** trong
+    nhóm làm người duyệt bước đó (không phải cả nhóm cùng duyệt 1 bước). Nhóm
+    chưa gán ai (0 người) thì không gửi được tờ trình cho tới khi admin gán
+    thành viên. Riêng **Tổng Giám Đốc**: mục 11 chỉ cho gán **tối đa 1 người**
+    (ô chọn dạng danh sách sổ xuống 1 lựa chọn, không phải ô chọn nhiều người
+    như 3 vai trò còn lại) — đúng cơ cấu tổ chức chỉ có 1 TGĐ tại 1 thời điểm.
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
@@ -463,6 +475,17 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
   Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
   tự động ở trạng thái đã duyệt ngay, không qua hàng chờ). Có thể khai Đợt
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
+  - **Chọn người phê duyệt cụ thể khi vai trò có nhiều người** (Giám Đốc/Phó
+    Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký, Tổng Giám Đốc — 4 lớp
+    phê duyệt tuỳ theo Cấp Phê Duyệt Cuối Cùng chọn lúc tạo, sub-tab **Phê
+    Duyệt**) — cùng khuôn với Văn Bản Trình (mục 4.1): admin gán thành viên
+    từng vai trò ở **Hệ Thống → Quản Trị → mục 14 "Nhóm Phê Duyệt HĐ"**. Nhóm
+    chỉ **đúng 1 người** → tự dùng người đó, KHÔNG hiện hộp chọn. Nhóm có
+    **nhiều hơn 1 người** → hiện thêm 1 hộp chọn bắt buộc chọn **đúng 1 người
+    cụ thể** trong nhóm duyệt bước đó. Nhóm chưa gán ai (0 người) thì không
+    tạo được hồ sơ cho tới khi admin gán thành viên. Riêng **Tổng Giám Đốc**:
+    mục 14 chỉ cho gán **tối đa 1 người** (ô chọn dạng danh sách sổ xuống 1
+    lựa chọn, không phải ô chọn nhiều người như 3 vai trò còn lại).
   - **Loại Thanh Toán** (chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh Đợt Thanh
     Toán): **"Thanh toán 1 lần"** (mặc định) hoặc **"Thanh toán định kỳ"**.
     Khi Tài liệu ký đã duyệt xong, nút **"🧾 Lập Thanh Toán"** mở ra; bấm xong

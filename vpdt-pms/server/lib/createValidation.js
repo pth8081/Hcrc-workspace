@@ -251,12 +251,26 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
     const isLocked = rule.locked.includes(layerKey);
     let chosen;
     if (isLocked) {
-      // Lớp bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD): không phải lựa chọn của
-      // người trình, luôn dùng TOÀN BỘ nhóm được admin gán, không cho chọn subset.
+      // Lớp bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) — người trình KHÔNG được tự
+      // chọn nếu nhóm chỉ có 1 người (dùng thẳng người đó, không cần "chọn"); nếu nhóm có NHIỀU người
+      // (vd 2 Phó Giám Đốc) thì bắt buộc phải chọn ĐÚNG 1 người cụ thể trong nhóm đó — không phải cả
+      // nhóm cùng duyệt như trước (yêu cầu người dùng: "người phê duyệt cuối cùng ... chọn tiếp người
+      // phê duyệt" — số ít, không phải nhiều người cùng ký 1 bước).
       if (groupMembers.length === 0) {
         throw new CreateError(400, `Chưa gán thành viên nào cho lớp bắt buộc "${layer.label}"`);
       }
-      chosen = [...groupMembers];
+      if (groupMembers.length === 1) {
+        chosen = [...groupMembers];
+      } else {
+        chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+        if (chosen.length !== 1) {
+          throw new CreateError(400, `Vai trò bắt buộc "${layer.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể`);
+        }
+        const invalid = chosen.filter(u => !groupMembers.includes(u));
+        if (invalid.length) {
+          throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+        }
+      }
     } else {
       chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
       if (chosen.length === 0) {
@@ -347,13 +361,36 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
     if (!layer) throw new CreateError(400, `Lớp không hợp lệ: ${layerKey}`);
 
     const groupMembers = groups[layerKey] || [];
-    const chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
-    if (chosen.length === 0) {
-      throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
-    }
-    const invalid = chosen.filter(u => !groupMembers.includes(u));
-    if (invalid.length) {
-      throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+    const isLocked = rule.locked.includes(layerKey);
+    let chosen;
+    if (isLocked) {
+      // Cùng luật với buildEffectiveSubmissionWorkflowServer() ở trên (LƯU Ý BẢO TRÌ — 2 hàm phải khớp
+      // logic): nhóm chỉ 1 người -> dùng thẳng, không cần chọn; nhóm nhiều người -> bắt buộc chọn ĐÚNG
+      // 1 người cụ thể (không phải cả nhóm cùng duyệt như trước v22.x).
+      if (groupMembers.length === 0) {
+        throw new CreateError(400, `Chưa gán thành viên nào cho lớp bắt buộc "${layer.label}"`);
+      }
+      if (groupMembers.length === 1) {
+        chosen = [...groupMembers];
+      } else {
+        chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+        if (chosen.length !== 1) {
+          throw new CreateError(400, `Vai trò bắt buộc "${layer.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể`);
+        }
+        const invalid = chosen.filter(u => !groupMembers.includes(u));
+        if (invalid.length) {
+          throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+        }
+      }
+    } else {
+      chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+      if (chosen.length === 0) {
+        throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
+      }
+      const invalid = chosen.filter(u => !groupMembers.includes(u));
+      if (invalid.length) {
+        throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+      }
     }
 
     const stepOrder = steps.length + 1;
@@ -362,6 +399,21 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
   });
 
   return { steps, approvers, layerKeys };
+}
+
+// Ép cứng "Tổng Giám Đốc" (TGD) chỉ được gán TỐI ĐA 1 người khi admin lưu Nhóm Phê Duyệt Trình (mục 11,
+// key "submissionApprovalGroups") hoặc Nhóm Phê Duyệt HĐ (mục 14, key "contractApprovalGroups") —
+// KHÁC các vai trò còn lại (Giám Đốc/Phó Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký) vốn cho
+// phép nhiều người cùng giữ 1 vai trò (rồi người trình/tạo hợp đồng chọn đúng 1 người cụ thể lúc tạo hồ
+// sơ, xem buildEffectiveSubmissionWorkflowServer()/buildEffectiveContractApprovalWorkflowServer() ở
+// trên) — Tổng Giám Đốc theo đúng cơ cấu tổ chức chỉ có 1 người duy nhất tại 1 thời điểm, không có khái
+// niệm "chọn 1 trong nhiều TGĐ". Gọi từ routes/data.js's POST /api/data/:key ngay TRƯỚC khi ghi xuống
+// CSDL (client cũng tự chặn ở UI — xem module-admin-submissiongroups.js — nhưng đây mới là chốt chặn
+// THẬT SỰ, phòng request tự soạn bỏ qua UI).
+function assertApprovalGroupsTgdSingle(value, keyLabel) {
+  if (value && typeof value === 'object' && Array.isArray(value.TGD) && value.TGD.length > 1) {
+    throw new CreateError(400, `Vai trò Tổng Giám Đốc (${keyLabel}) chỉ được gán tối đa 1 người — đang cố lưu ${value.TGD.length} người`);
+  }
 }
 
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
@@ -3346,6 +3398,8 @@ module.exports = {
   // trình) — cần dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO khi người trình đổi loại/
   // phòng ban/lớp phê duyệt bổ sung trong lúc sửa.
   SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer,
+  // Export cho routes/data.js POST /api/data/:key — chặn TGĐ >1 người khi admin lưu mục 11/14.
+  assertApprovalGroupsTgdSingle,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

@@ -1,16 +1,40 @@
 // ==========================================
-// NHÓM PHÊ DUYỆT TRÌNH (Văn bản trình) — 3 nhóm CỐ ĐỊNH (SUBMISSION_APPROVAL_LAYERS), admin chỉ gán
+// NHÓM PHÊ DUYỆT TRÌNH (Văn bản trình) — 7 nhóm CỐ ĐỊNH (SUBMISSION_APPROVAL_LAYERS), admin chỉ gán
 // thành viên, không tạo/xoá nhóm mới. Người trình tick chọn nhóm nào khi tạo tờ trình thì nhóm đó
 // được cộng thêm làm 1 bước phê duyệt bổ sung ở cuối quy trình phòng ban (xem
-// buildEffectiveSubmissionWorkflow()).
+// buildEffectiveSubmissionWorkflow()). Vai trò bắt buộc (Giám Đốc/Phó Giám Đốc, Phó Tổng Giám Đốc, Bộ
+// Phận Trợ Lý/Thư Ký, Tổng Giám Đốc) cho phép gán NHIỀU người (người trình chọn cụ thể 1 người lúc tạo
+// hồ sơ nếu nhóm có >1 người — xem renderLockedLayerSingleApproverCard() ở core.js) — RIÊNG Tổng Giám
+// Đốc chỉ được gán TỐI ĐA 1 người (renderTgdSingleSelect() bên dưới, ép cứng ở
+// lib/createValidation.js::assertApprovalGroupsTgdSingle()).
 // ==========================================
+// candidates cho ô chọn Tổng Giám Đốc (TGD) — 1 <select> đơn, KHÁC renderPeopleMultiSelect() (cho phép
+// nhiều người) vì TGD theo đúng cơ cấu tổ chức chỉ có 1 người tại 1 thời điểm (xem
+// lib/createValidation.js::assertApprovalGroupsTgdSingle() — chốt chặn THẬT ở server, đây chỉ là UI).
+// Vẫn hiện đúng người ĐÃ GÁN dù tài khoản đó vừa bị khoá (active:false) — cùng tinh thần
+// renderPeopleMultiSelect() ("thành viên đã gán từ trước không bị ảnh hưởng").
+function renderTgdSingleSelect(pickerId, selectClass, currentUsername) {
+  const el = document.getElementById(pickerId);
+  if (!el) return;
+  const activeUsers = DB.users.filter(u => u.active !== false);
+  const currentUser = DB.users.find(u => u.username === currentUsername);
+  const options = activeUsers.slice();
+  if (currentUsername && currentUser && !options.some(u => u.username === currentUsername)) options.push(currentUser);
+  el.innerHTML = `
+    <select class="${selectClass} w-full border p-1.5 rounded text-xs">
+      <option value="">-- Chưa gán --</option>
+      ${options.map(u => `<option value="${escapeHtml(u.username)}" ${u.username === currentUsername ? 'selected' : ''}>${escapeHtml(u.name)}${u.active === false ? ' (đã khoá)' : ''}</option>`).join('')}
+    </select>
+  `;
+}
+
 function renderSubmissionApprovalGroups() {
   const container = document.getElementById('submissionApprovalGroupsContainer');
   if (!container) return;
 
   container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => `
     <div class="bg-slate-50 p-3 rounded border space-y-2">
-      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
+      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}${layer.key === 'TGD' ? ' <span class="text-[10px] text-sky-600 font-normal">(chỉ 1 người)</span>' : ''}</div>
       <div id="submissionApprovalGroupPicker_${layer.key}"></div>
       <button type="button" data-op="saveSubmissionApprovalGroup" data-arg0="${layer.key}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
     </div>
@@ -18,21 +42,31 @@ function renderSubmissionApprovalGroups() {
 
   SUBMISSION_APPROVAL_LAYERS.forEach(layer => {
     const members = DB.submissionApprovalGroups[layer.key] || [];
-    // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
-    // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
-    renderPeopleMultiSelect(`submissionApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
+    if (layer.key === 'TGD') {
+      renderTgdSingleSelect(`submissionApprovalGroupPicker_${layer.key}`, 'sub-tgd-single-select', members[0] || '');
+    } else {
+      // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
+      // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
+      renderPeopleMultiSelect(`submissionApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
+    }
   });
 }
 
 function saveSubmissionApprovalGroup(layerKey) {
-  // PHẢI scope theo #submissionApprovalGroupsContainer — checkbox ẩn của widget chọn người ở form
-  // TẠO tờ trình (subLayerMemberPicker_*) cũng mang cùng data-layer="${layerKey}" (chỉ khác ở việc có
-  // class "sub-layer-member" hay không); cả 2 khối này luôn cùng tồn tại trong DOM (SPA 1 trang, tab
-  // ẩn bằng CSS chứ không gỡ khỏi DOM) nên querySelectorAll không scope sẽ vô tình gộp cả người đang
-  // được chọn dở trong form tạo tờ trình vào danh sách thành viên nhóm do admin lưu.
-  const checkboxes = document.querySelectorAll(`#submissionApprovalGroupsContainer input[data-layer="${layerKey}"]`);
-  const members = [];
-  checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
+  let members;
+  if (layerKey === 'TGD') {
+    const select = document.querySelector('#submissionApprovalGroupPicker_TGD select.sub-tgd-single-select');
+    members = select && select.value ? [select.value] : [];
+  } else {
+    // PHẢI scope theo #submissionApprovalGroupsContainer — checkbox ẩn của widget chọn người ở form
+    // TẠO tờ trình (subLayerMemberPicker_*) cũng mang cùng data-layer="${layerKey}" (chỉ khác ở việc có
+    // class "sub-layer-member" hay không); cả 2 khối này luôn cùng tồn tại trong DOM (SPA 1 trang, tab
+    // ẩn bằng CSS chứ không gỡ khỏi DOM) nên querySelectorAll không scope sẽ vô tình gộp cả người đang
+    // được chọn dở trong form tạo tờ trình vào danh sách thành viên nhóm do admin lưu.
+    const checkboxes = document.querySelectorAll(`#submissionApprovalGroupsContainer input[data-layer="${layerKey}"]`);
+    members = [];
+    checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
+  }
 
   DB.submissionApprovalGroups[layerKey] = members;
   syncStorage('submissionApprovalGroups');
@@ -50,7 +84,7 @@ function renderContractApprovalGroups() {
 
   container.innerHTML = CONTRACT_APPROVAL_LAYERS.map(layer => `
     <div class="bg-slate-50 p-3 rounded border space-y-2">
-      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}</div>
+      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}${layer.key === 'TGD' ? ' <span class="text-[10px] text-sky-600 font-normal">(chỉ 1 người)</span>' : ''}</div>
       <div id="contractApprovalGroupPicker_${layer.key}"></div>
       <button type="button" data-op="saveContractApprovalGroup" data-arg0="${layer.key}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
     </div>
@@ -58,18 +92,28 @@ function renderContractApprovalGroups() {
 
   CONTRACT_APPROVAL_LAYERS.forEach(layer => {
     const members = DB.contractApprovalGroups[layer.key] || [];
-    // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
-    // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
-    renderPeopleMultiSelect(`contractApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
+    if (layer.key === 'TGD') {
+      renderTgdSingleSelect(`contractApprovalGroupPicker_${layer.key}`, 'contract-tgd-single-select', members[0] || '');
+    } else {
+      // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
+      // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
+      renderPeopleMultiSelect(`contractApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
+    }
   });
 }
 
 function saveContractApprovalGroup(layerKey) {
-  // PHẢI scope theo #contractApprovalGroupsContainer — cùng lý do saveSubmissionApprovalGroup() ở trên
-  // (widget chọn người ở form TẠO hợp đồng, contractLayerMemberPicker_*, cũng mang data-layer trùng key).
-  const checkboxes = document.querySelectorAll(`#contractApprovalGroupsContainer input[data-layer="${layerKey}"]`);
-  const members = [];
-  checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
+  let members;
+  if (layerKey === 'TGD') {
+    const select = document.querySelector('#contractApprovalGroupPicker_TGD select.contract-tgd-single-select');
+    members = select && select.value ? [select.value] : [];
+  } else {
+    // PHẢI scope theo #contractApprovalGroupsContainer — cùng lý do saveSubmissionApprovalGroup() ở trên
+    // (widget chọn người ở form TẠO hợp đồng, contractLayerMemberPicker_*, cũng mang data-layer trùng key).
+    const checkboxes = document.querySelectorAll(`#contractApprovalGroupsContainer input[data-layer="${layerKey}"]`);
+    members = [];
+    checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
+  }
 
   DB.contractApprovalGroups[layerKey] = members;
   syncStorage('contractApprovalGroups');

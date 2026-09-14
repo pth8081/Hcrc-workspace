@@ -13,8 +13,16 @@ function submitSubmissionReq(e) {
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
   for (const layerKey of selectedLayerKeys) {
-    // Lớp bị khoá bắt buộc không có card chọn người (dùng cả nhóm) — chỉ kiểm tra các lớp tuỳ chọn.
-    if (rule.locked.includes(layerKey)) continue;
+    if (rule.locked.includes(layerKey)) {
+      // Lớp bị khoá bắt buộc chỉ có card chọn người khi nhóm admin gán có NHIỀU HƠN 1 người (nhóm chỉ
+      // 1 người thì dùng thẳng, không cần chọn — xem renderSubmissionApprovalLayerCheckboxes()).
+      const groupMembers = DB.submissionApprovalGroups[layerKey] || [];
+      if (groupMembers.length > 1 && (selectedLayerMembers[layerKey] || []).length !== 1) {
+        const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+        return alert(`⛔ Vai trò bắt buộc "${layer?.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể!`);
+      }
+      continue;
+    }
     if ((selectedLayerMembers[layerKey] || []).length === 0) {
       const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
       return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
@@ -177,13 +185,21 @@ function renderSubmissionApprovalLayerCheckboxes() {
       .filter(Boolean);
     const locked = rule.locked.includes(layer.key);
     const disabled = locked || groupUsers.length === 0;
+    // Lớp bắt buộc CHỈ CÓ 1 người trong nhóm -> ghi rõ tên ngay đây (dùng thẳng người đó, không cần
+    // chọn); NHIỀU người -> nhắc "chọn tiếp" ở card riêng bên dưới (xem đoạn rule.locked.forEach() ngay
+    // dưới hàm này).
+    const lockedNote = locked
+      ? (groupUsers.length === 1
+          ? `<span class="block text-[10px] text-emerald-600">Người duyệt: ${escapeHtml(groupUsers[0].name)} (tự động — chỉ có 1 người được cấu hình).</span>`
+          : (groupUsers.length > 1 ? `<span class="block text-[10px] text-sky-600">⚠️ Có ${groupUsers.length} người được cấu hình — chọn cụ thể ở khối bên dưới.</span>` : ''))
+      : '';
 
     return `
       <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-amber-50'}">
         <input type="checkbox" class="sub-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} data-op-change="onSubApprovalLayerToggle" data-arg0="${layer.key}">
         <span>
           <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
-          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>`
+          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>${lockedNote}`
             : (disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : '')}
         </span>
       </label>
@@ -195,8 +211,22 @@ function renderSubmissionApprovalLayerCheckboxes() {
   if (section) section.classList.add('hidden');
   if (container) container.innerHTML = '';
   // Lớp bị khoá bắt buộc (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) là kết quả CHẮC CHẮN của cấp phê duyệt đã
-  // chọn, không phải lựa chọn của người trình — nên KHÔNG hiện card chọn người, luôn dùng cả nhóm được
-  // admin gán (xem buildEffectiveSubmissionWorkflow()). Chỉ các lớp tuỳ chọn (không locked) mới có card.
+  // chọn, không phải lựa chọn của người trình — nên CHỈ hiện card chọn người khi nhóm admin gán có
+  // NHIỀU HƠN 1 người (cần "chọn tiếp" đúng 1 người cụ thể); nhóm chỉ 1 người thì dùng thẳng luôn, xem
+  // lockedNote ở trên (xem buildEffectiveSubmissionWorkflow()). Card chọn ĐÚNG 1 người (không phải
+  // nhiều như lớp tuỳ chọn), xem renderLockedLayerSingleApproverCard() ở core.js.
+  rule.locked.forEach(layerKey => {
+    const layer = visibleLayers.find(l => l.key === layerKey);
+    if (!layer) return;
+    const groupUsers = (DB.submissionApprovalGroups[layerKey] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean)
+      .filter(u => u.active !== false);
+    if (groupUsers.length > 1) {
+      renderLockedLayerSingleApproverCard('subApprovalLayersContainer', layerKey, layer.label, groupUsers, 'sub-layer-single-approver', 'bg-amber-50/60');
+    }
+  });
+  if (section) section.classList.toggle('hidden', container.children.length === 0);
   updateSubApprovalDropdownLabel();
 }
 
@@ -277,13 +307,20 @@ function renderContractApprovalLayerCheckboxes() {
       .filter(Boolean);
     const locked = rule.locked.includes(layer.key);
     const disabled = locked || groupUsers.length === 0;
+    // Lớp bắt buộc CHỈ CÓ 1 người trong nhóm -> ghi rõ tên ngay đây (dùng thẳng người đó, không cần
+    // chọn); NHIỀU người -> nhắc "chọn tiếp" ở card riêng bên dưới (xem rule.locked.forEach() ngay dưới).
+    const lockedNote = locked
+      ? (groupUsers.length === 1
+          ? `<span class="block text-[10px] text-emerald-600">Người duyệt: ${escapeHtml(groupUsers[0].name)} (tự động — chỉ có 1 người được cấu hình).</span>`
+          : (groupUsers.length > 1 ? `<span class="block text-[10px] text-sky-600">⚠️ Có ${groupUsers.length} người được cấu hình — chọn cụ thể ở khối bên dưới.</span>` : ''))
+      : '';
 
     return `
       <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-cyan-50'}">
         <input type="checkbox" class="contract-layer-toggle mt-0.5" value="${layer.key}" ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''} data-op-change="onContractApprovalLayerToggle" data-arg0="${layer.key}">
         <span>
           <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
-          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>`
+          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>${lockedNote}`
             : (disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : '')}
         </span>
       </label>
@@ -294,9 +331,21 @@ function renderContractApprovalLayerCheckboxes() {
   const container = document.getElementById('contractApprovalLayersContainer');
   if (section) section.classList.add('hidden');
   if (container) container.innerHTML = '';
+  // Lớp bị khoá bắt buộc CHỈ hiện card chọn người khi nhóm admin gán có NHIỀU HƠN 1 người (cần "chọn
+  // tiếp" đúng 1 người cụ thể, xem renderLockedLayerSingleApproverCard() ở core.js) — nhóm chỉ 1 người
+  // thì dùng thẳng luôn (xem lockedNote ở trên), KHÔNG còn hiện card cho mọi lớp locked như trước.
   rule.locked.forEach(layerKey => {
-    if (visibleLayers.some(l => l.key === layerKey)) onContractApprovalLayerToggle(layerKey);
+    const layer = visibleLayers.find(l => l.key === layerKey);
+    if (!layer) return;
+    const groupUsers = (DB.contractApprovalGroups[layerKey] || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean)
+      .filter(u => u.active !== false);
+    if (groupUsers.length > 1) {
+      renderLockedLayerSingleApproverCard('contractApprovalLayersContainer', layerKey, layer.label, groupUsers, 'contract-layer-single-approver', 'bg-cyan-50/60');
+    }
   });
+  if (section) section.classList.toggle('hidden', container.children.length === 0);
   updateContractApprovalDropdownLabel();
 }
 
@@ -362,12 +411,13 @@ function onContractApprovalLayerToggle(layerKey) {
 function previewContractApprovalWorkflow() {
   const dept = document.getElementById('contractDept').value;
   if (!dept) return alert('Vui lòng chọn Phòng Ban Quản Lý trước khi xem quy trình!');
+  const approvalLevel = document.getElementById('contractApprovalLevel')?.value || 'KHAC';
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedContractLayers();
 
   document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt Hợp Đồng';
   document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept}`;
   document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi phê duyệt.';
-  document.getElementById('viewModalContent').innerHTML = buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers);
+  document.getElementById('viewModalContent').innerHTML = buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
@@ -1235,10 +1285,12 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   (selectedLayerKeys || []).forEach(layerKey => {
     const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
     if (!layer) return;
-    // Lớp bị khoá bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD): không có card chọn
-    // người (xem renderSubmissionApprovalLayerCheckboxes()) — luôn dùng TOÀN BỘ nhóm admin gán.
-    const chosen = rule.locked.includes(layerKey)
-      ? [...(DB.submissionApprovalGroups[layerKey] || [])]
+    const groupMembers = DB.submissionApprovalGroups[layerKey] || [];
+    // Lớp bị khoá bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) chỉ có 1 người trong
+    // nhóm -> dùng thẳng người đó (không có card chọn, xem renderSubmissionApprovalLayerCheckboxes());
+    // nhiều người -> dùng đúng người đã chọn ở card riêng.
+    const chosen = (rule.locked.includes(layerKey) && groupMembers.length <= 1)
+      ? [...groupMembers]
       : [...(selectedLayerMembers?.[layerKey] || [])];
     if (layer.blocking) {
       const stepOrder = steps.length + 1;
@@ -1288,12 +1340,18 @@ function buildSubmissionWorkflowPreviewHTML(type, dept, selectedLayerKeys, selec
 }
 
 // Đọc lại đúng lớp phê duyệt bổ sung + người đã chọn TỪ FORM HIỆN TẠI — dùng chung ở nhiều nơi
-// (submitSubmissionReq(), previewSubmissionWorkflow()) để không lặp lại cùng 1 đoạn đọc DOM.
+// (submitSubmissionReq(), previewSubmissionWorkflow()) để không lặp lại cùng 1 đoạn đọc DOM. Lớp bắt
+// buộc (locked) có NHIỀU HƠN 1 người trong nhóm dùng <select> đơn (sub-layer-single-approver, xem
+// renderLockedLayerSingleApproverCard() ở core.js) để chọn ĐÚNG 1 người — khác lớp tuỳ chọn (checkbox
+// nhiều, class sub-layer-member).
 function readSelectedSubmissionLayers() {
   const selectedLayerKeys = [...document.querySelectorAll('#subApprovalDropdownPanel input.sub-layer-toggle:checked')].map(cb => cb.value);
   const selectedLayerMembers = {};
   for (const layerKey of selectedLayerKeys) {
-    selectedLayerMembers[layerKey] = [...document.querySelectorAll(`input.sub-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+    const singleSelect = document.querySelector(`select.sub-layer-single-approver[data-layer="${layerKey}"]`);
+    selectedLayerMembers[layerKey] = singleSelect
+      ? (singleSelect.value ? [singleSelect.value] : [])
+      : [...document.querySelectorAll(`input.sub-layer-member[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
   }
   return { selectedLayerKeys, selectedLayerMembers };
 }

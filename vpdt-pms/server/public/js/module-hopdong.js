@@ -507,6 +507,32 @@ async function submitContractReq(e) {
     return alert('Mã hợp đồng đã tồn tại!');
   }
 
+  // Cấp Phê Duyệt Cuối Cùng/lớp bổ sung — chỉ đọc khi KHÔNG phải luồng nhập hồ sơ đã ký sẵn (server tự
+  // bỏ qua các field này ở nhánh isSignedImport, xem lib/createValidation.js). Đọc + kiểm tra NGAY ở
+  // đây (trước khi tải tệp lên) — trước đây chỉ đọc SAU KHI đã tải tệp xong, nên chọn thiếu người
+  // duyệt chỉ bị phát hiện SAU 1 lượt tải tệp tốn công (server mới từ chối) — cùng khuôn
+  // submitSubmissionReq() (module-vanbantrinh.js), kiểm tra sớm trước khi upload.
+  const { selectedLayerKeys, selectedLayerMembers } = isSignedImport ? { selectedLayerKeys: [], selectedLayerMembers: {} } : readSelectedContractLayers();
+  const approvalLevel = isSignedImport ? null : (document.getElementById('contractApprovalLevel').value || 'KHAC');
+  if (!isSignedImport) {
+    const rule = getContractApprovalLevelRule(approvalLevel);
+    for (const layerKey of selectedLayerKeys) {
+      const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+      if (rule.locked.includes(layerKey)) {
+        // Lớp bị khoá bắt buộc chỉ có card chọn người khi nhóm admin gán có NHIỀU HƠN 1 người (nhóm
+        // chỉ 1 người thì dùng thẳng, không cần chọn — xem renderContractApprovalLayerCheckboxes()).
+        const groupMembers = DB.contractApprovalGroups[layerKey] || [];
+        if (groupMembers.length > 1 && (selectedLayerMembers[layerKey] || []).length !== 1) {
+          return alert(`⛔ Vai trò bắt buộc "${layer?.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể!`);
+        }
+        continue;
+      }
+      if ((selectedLayerMembers[layerKey] || []).length === 0) {
+        return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
+      }
+    }
+  }
+
   const file = fileInput.files[0];
   if (!file) {
     const missingLabel = isSignedImport ? (isAddendum ? 'phụ lục hợp đồng đã ký' : 'hợp đồng đã ký') : (isAddendum ? 'phụ lục' : 'hợp đồng / giấy phép');
@@ -520,11 +546,6 @@ async function submitContractReq(e) {
   } catch (err) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
-
-  // Cấp Phê Duyệt Cuối Cùng/lớp bổ sung — chỉ đọc khi KHÔNG phải luồng nhập hồ sơ đã ký sẵn (server tự
-  // bỏ qua các field này ở nhánh isSignedImport, xem lib/createValidation.js).
-  const { selectedLayerKeys, selectedLayerMembers } = isSignedImport ? { selectedLayerKeys: [], selectedLayerMembers: {} } : readSelectedContractLayers();
-  const approvalLevel = isSignedImport ? null : (document.getElementById('contractApprovalLevel').value || 'KHAC');
 
   // Loại Thanh Toán ("Thanh toán 1 lần"/"Thanh toán định kỳ") — chi phối nút "🧾 Lập Thanh Toán" ở tab
   // Quản Lý HĐ có LẶP LẠI được sau khi hoàn tất hay không (xem canManageContractPaymentClient()/

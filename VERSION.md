@@ -1,8 +1,68 @@
 # Phiên bản hiện tại
 
-**21.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**21.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v21.3 (2026-09-14): Văn Bản Trình & Hợp Đồng — chọn CỤ THỂ 1 người khi vai trò phê duyệt cuối cùng có nhiều người + Tổng Giám Đốc chỉ 1 người
+
+Người dùng yêu cầu kiểm tra: ở Văn Bản Trình/Hợp Đồng, khi vai trò phê duyệt cuối cùng (Giám Đốc/Phó
+Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký) được admin gán (mục 11 — `submissionApprovalGroups`,
+mục 14 — `contractApprovalGroups`) NHIỀU HƠN 1 người thì phải hiện hộp chọn tiếp CỤ THỂ 1 người; nhóm chỉ
+1 người thì không hiện hộp chọn (tự dùng người đó); riêng Tổng Giám Đốc thì mục 11/14 chỉ được gán tối đa
+1 người (không có khái niệm "chọn 1 trong nhiều TGĐ").
+
+**Rà soát phát hiện 4 lỗi/khoảng trống** (đối chiếu đúng 2 module với nhau và với yêu cầu):
+1. Tổng Giám Đốc (TGD) chưa từng bị giới hạn số người ở cả 2 mục 11/14 — admin gán được bao nhiêu người
+   cũng được, trái với cơ cấu tổ chức chỉ có 1 TGĐ tại 1 thời điểm.
+2. Không nơi nào có logic "chỉ hiện hộp chọn khi nhóm > 1 người" — Văn Bản Trình trước đây với các lớp
+   bắt buộc (GD_PGD/PTGD/TRO_LY_THU_KY/TGD) **luôn dùng thẳng CẢ NHÓM** làm người duyệt bước đó (nếu admin
+   lỡ gán 2 Phó Giám Đốc, CẢ 2 đều phải duyệt cùng 1 bước, không phải chọn 1 người); Hợp Đồng thì ngược
+   lại, **luôn bắt buộc phải chọn** dù nhóm chỉ có đúng 1 người.
+3. Hai module xử lý KHÔNG NHẤT QUÁN với nhau cho cùng 1 loại lớp phê duyệt (điểm 2), dù nghiệp vụ đáng lẽ
+   phải giống hệt nhau.
+4. Hợp Đồng hoàn toàn CHƯA có bước kiểm tra phía client trước khi nộp hồ sơ cho các lớp phê duyệt đã
+   chọn (Văn Bản Trình đã có) — thiếu chọn người chỉ bị phát hiện SAU khi đã tải tệp lên tốn công.
+
+**Thiết kế thống nhất đã áp dụng cho CẢ 2 module** (xác nhận với người dùng: khi nhóm > 1 người, chọn
+ĐÚNG 1 người, không phải nhiều người cùng duyệt 1 bước):
+- Nhóm 0 người → chặn tạo hồ sơ, báo lỗi rõ ràng cần gán thành viên trước.
+- Nhóm ĐÚNG 1 người → tự động dùng người đó, KHÔNG hiện hộp chọn.
+- Nhóm NHIỀU người → hiện hộp chọn dạng `<select>` (chọn 1), bắt buộc chọn ĐÚNG 1 người thuộc nhóm mới
+  cho nộp hồ sơ.
+- Tổng Giám Đốc: mục 11 và mục 14 chỉ còn là `<select>` đơn (không phải ô chọn nhiều người kiểu chip),
+  và server chặn cứng ngay khi lưu nếu cố gán > 1 người (`assertApprovalGroupsTgdSingle()` —
+  `lib/createValidation.js`, gọi từ `routes/data.js` POST `/api/data/submissionApprovalGroups` và
+  `/api/data/contractApprovalGroups`).
+
+**Đã sửa**: `lib/createValidation.js` (`buildEffectiveSubmissionWorkflowServer()`/
+`buildEffectiveContractApprovalWorkflowServer()` — áp logic 0/1/nhiều người ở trên cho MỌI lớp bắt buộc;
+thêm `assertApprovalGroupsTgdSingle()`), `routes/data.js` (gọi hàm chặn TGĐ khi lưu 2 mục), `public/js/
+core.js` (widget dùng chung `renderLockedLayerSingleApproverCard()` cho hộp chọn 1 người, cập nhật hàm
+dựng quy trình Hợp Đồng để nhận `approvalLevel`), `public/js/module-vanbantrinh.js` (hiện hộp chọn đúng
+điều kiện cho cả Văn Bản Trình lẫn Hợp Đồng — file này chứa logic UI của cả 2 module — + kiểm tra trước
+khi nộp), `public/js/module-hopdong.js` (thêm hẳn bước kiểm tra trước khi nộp, còn thiếu trước đây),
+`public/js/module-admin-submissiongroups.js` (mục 11/14: Tổng Giám Đốc đổi sang `<select>` đơn qua
+`renderTgdSingleSelect()`, các vai trò còn lại giữ nguyên ô chọn nhiều người), `public/index.html` (sửa
+lại đoạn hướng dẫn mục 11/14 cho đúng thực tế 7/6 nhóm và luật chọn người mới, trước đó vẫn còn mô tả cũ
+"3 nhóm cố định").
+
+**Test**: thêm `tests/test-locked-approval-layers.js` (13 kịch bản MỚI, mount thẳng `routes/create.js`
+thật qua HTTP + gọi trực tiếp `assertApprovalGroupsTgdSingle()` — xác nhận đủ nhánh 0/1/nhiều người cho
+CẢ Văn Bản Trình lẫn Hợp Đồng, chọn sai số lượng hoặc chọn người ngoài nhóm đều bị chặn đúng mã lỗi, và
+TGĐ > 1 người bị chặn ở cả 2 mục). Chạy lại TOÀN BỘ regression hiện có: `test-submission.js` (22/22),
+`test-contract.js` (48/48), `test-lazy-load-all-tabs.js` (42/42, không phát sinh lỗi JS ở bất kỳ tab nào)
+— đều PASS không cần sửa gì thêm.
+
+**Lưu ý dữ liệu cũ**: hồ sơ TGD đã lỡ gán > 1 người từ TRƯỚC bản vá này (nếu có) sẽ KHÔNG bị tự động cắt
+bớt — vẫn tiếp tục hoạt động theo đúng luật "nhóm nhiều người → phải chọn 1" cho tới khi admin chủ động mở
+lại mục 11/14 và lưu lại qua giao diện `<select>` đơn mới (khi đó tự nhiên chỉ còn giữ được 1 người). Cố
+ý không xây script di trú tự động để tránh âm thầm xoá bớt lựa chọn admin đã từng gán.
+
+**Deploy-impact**: chỉ sửa code client + server (`lib/createValidation.js`, `routes/data.js`,
+`public/js/core.js`, `public/js/module-vanbantrinh.js`, `public/js/module-hopdong.js`,
+`public/js/module-admin-submissiongroups.js`, `public/index.html`) — KHÔNG đổi `schema.sql`, KHÔNG thêm
+biến `.env` mới, KHÔNG thêm dependency npm mới. Chỉ cần copy code + `pm2 restart`.
 
 ## v21.2 (2026-09-13): FIX LỖI THẬT NGHIÊM TRỌNG — Checklist mẫu/bài nộp CŨ không hiện lại sau khi tải trang
 
