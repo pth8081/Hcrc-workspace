@@ -1218,7 +1218,7 @@ function renderCarReportTrendSVG(buckets) {
   svg += `<rect x="${totalW - 160}" y="0" width="10" height="10" fill="#6366f1"/><text x="${totalW - 146}" y="9" font-size="10" fill="#6b7280">Số chuyến (cột)</text>`;
   svg += `<line x1="${totalW - 160}" y1="22" x2="${totalW - 150}" y2="22" stroke="#059669" stroke-width="2.5"/><text x="${totalW - 146}" y="26" font-size="10" fill="#6b7280">Số KM (đường)</text>`;
 
-  return `<svg viewBox="0 0 ${totalW} ${height}" role="img" aria-label="Biểu đồ xu hướng đăng ký xe" style="width:100%;height:auto;max-width:${totalW}px;display:block;">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${totalW} ${height}" role="img" aria-label="Biểu đồ xu hướng đăng ký xe" class="car-report-trend-svg">${svg}</svg>`;
 }
 
 let carReportGranularity = 'MONTH';

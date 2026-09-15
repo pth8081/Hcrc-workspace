@@ -1,8 +1,59 @@
 # Phiên bản hiện tại
 
-**23.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.7 (2026-09-15): Nghiệp Vụ — vá ĐÚNG nguyên nhân gốc (CSP chặn style nội tuyến), 2 bản trước (v23.5/v23.6) chưa giải quyết triệt để
+
+**Bối cảnh — tự phê bình rõ ràng**: người dùng phản ánh 3 lần liên tiếp rằng màn Nghiệp Vụ trên server
+thật vẫn hiện sai (menu bên trái thành 1 khối chữ phẳng, không bấm được) dù v23.5 đã "sửa xong" theo báo
+cáo trước đó. v23.5 thực chất chỉ sửa NỘI DUNG (văn phong) + dáng vẽ SVG (chữ đè lên nhau) — cả 2 đều
+đúng nhưng KHÔNG PHẢI nguyên nhân gốc của việc "không bấm được gì". Việc tái hiện qua static server
+thường (không áp Content-Security-Policy thật) khiến 2 lần kiểm tra trước ĐỀU BÁO "code đúng, khớp demo"
+— kết luận đó chỉ đúng trong môi trường KHÔNG có CSP, không đúng với server thật của người dùng.
+
+**Nguyên nhân gốc thật sự (tìm ra nhờ người dùng gửi ảnh chụp Console F12)**: ứng dụng này TỰ áp
+Content-Security-Policy qua `lib/securityHeaders.js` (helmet), trong đó `styleSrc` KHÔNG có
+`'unsafe-inline'` — quy tắc này đã được áp dụng nghiêm ngặt cho toàn bộ `public/index.html` từ một đợt
+dọn dẹp trước (xem chú thích đầu `lib/securityHeaders.js`), nhưng module "📘 Nghiệp Vụ"
+(`module-nghiepvu.js`, thêm sau ở v23.1) lại VI PHẠM đúng quy tắc này ở 2 chỗ, khiến CSS + SVG của
+module này bị trình duyệt ÂM THẦM chặn (không báo lỗi rõ ràng cho người dùng thường) trên bất kỳ server
+nào có bật CSP thật — kể cả sau khi deploy đúng bản mới nhất, xoá cache trình duyệt kỹ đến đâu:
+1. `nvInjectStylesOnce()` tự tạo `<style>` bằng `document.createElement('style')` +
+   `document.head.appendChild()` — đúng kiểu "`<style>` nội tuyến qua JS" bị `styleSrc` chặn. Toàn bộ
+   dáng vẻ 2 cột sidebar+nội dung, màu nền mục đang chọn... phụ thuộc CSS này — bị chặn nghĩa là menu
+   render ra HTML đúng (nút bấm vẫn hoạt động được về mặt kỹ thuật) nhưng KHÔNG CÓ style gì cả, giống
+   hệt hiện tượng người dùng mô tả và chụp ảnh gửi.
+2. 2 hàm vẽ sơ đồ (`renderNVFlow()`/`renderNVDaotaoOverview()`) tự gắn thuộc tính
+   `style="width:100%;height:auto;max-width:920px;..."` TRỰC TIẾP lên thẻ `<svg>` — cũng bị chặn tương tự
+   (che dấu bởi `module-dangkyxe.js` có cùng lỗi ở biểu đồ xu hướng Đăng Ký Xe, vá luôn trong đợt này).
+
+**Sửa triệt để**: dời toàn bộ CSS `.nv-*` từ JS sang `public/app.css` (nạp qua `<link>`, không bị
+`styleSrc` chặn — đúng khuôn đã áp dụng cho ~386 dòng CSS tuỳ biến khác của toàn app từ trước); đổi 3 thẻ
+`<svg>` (2 ở `module-nghiepvu.js`, 1 ở `module-dangkyxe.js`) từ `style="..."` sang `class="..."` tham
+chiếu CSS ngoài. Xoá hẳn `nvInjectStylesOnce()` — không còn `<style>` nội tuyến nào trong module này nữa.
+
+**Cải thiện quy trình test — để lớp lỗi này không tái diễn**: bổ sung `test-nghiepvu-csp.js`, KHÁC toàn
+bộ test trước đó ở chỗ dựng app Express THẬT có áp `lib/securityHeaders.js` (helmet CSP thật, đúng cấu
+hình production) thay vì static server thuần không CSP — bắt được đúng lớp lỗi "CSP âm thầm chặn style/
+script nội tuyến" mà mọi bài test cũ đều bỏ sót. Khuyến nghị dùng làm khuôn mẫu bắt buộc cho mọi module
+mới sau này.
+
+Test: `test-nghiepvu-csp.js` (6/6, xác nhận 0 vi phạm CSP + CSS thật sự áp dụng được dưới CSP thật — đo
+bằng `getBoundingClientRect()`/`getComputedStyle()`, không chỉ kiểm class có mặt trong DOM),
+`test-nghiepvu.js` (71/71), `test-car-report-week-month.js` (18/18), `test-car-report-eval-confirm.js`
+(25/25), `test-lazy-load-all-tabs.js` (42/42) — đều PASS.
+
+**(Phát hiện phụ, CHƯA xử lý trong đợt này)**: quá trình điều tra phát hiện 1 vi phạm `style-src` KHÁC,
+độc lập, phát sinh trong `finishLogin()` — không liên quan gì tới Nghiệp Vụ (tái hiện được cả khi không
+mở tab này), không tái hiện ổn định trong môi trường cô lập để xác định chính xác nguồn — cần điều tra
+riêng nếu người dùng thấy ảnh hưởng gì trên các màn khác.
+
+**Deploy-impact**: chỉ đổi 3 file JS + 1 file CSS tĩnh (`module-nghiepvu.js`, `module-dangkyxe.js`,
+`app.css`) — không đổi `schema.sql`, không thêm biến môi trường, không thêm npm dependencies. **Đây là
+bản vá thật sự giải quyết được vấn đề trên server có bật CSP** (khác 2 bản trước, xem lời tự phê bình ở
+trên) — mong người dùng deploy bản này rồi kiểm tra lại, có gì báo lại ngay.
 
 ## v23.6 (2026-09-15): Checklist — vá lỗi thật trùng khoá khi Nhân Bản/Sửa + thêm "Kích Hoạt Lại" cho mẫu Lưu Trữ
 
