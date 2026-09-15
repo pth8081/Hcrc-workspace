@@ -205,6 +205,67 @@ async function run() {
     const aggTryApprove = await recordAction(propose2.item.id, 'approve-proposal');
     check('budgetagg1 (chỉ budgetAggregate, KHÔNG budgetCreate/budgetManage) KHÔNG duyệt được Đề Xuất', !aggTryApprove.ok, aggTryApprove);
 
+    // ============ Kịch bản 16 (v23.3): Vị trí = Siêu Thị -> Khối Phòng Ban TỰ ĐỘNG = đúng tên Siêu Thị
+    // (Zero-Trust, KHÔNG tin giá trị dept client gửi) — cùng cơ chế uPosType/uDept/uStore đã dùng ở màn
+    // Người Dùng, giữ nguyên vẹn permission check addBudgetLineChild() (parent.dept === user.dept) ============
+    h.state.appData.stores.push('Siêu Thị Test Quận 1');
+    // budgetLineFormInitDone chỉ nạp dropdown Vị trí/Khối PB 1 LẦN/phiên (xem initBudgetLineFormIfNeeded())
+    // — đúng tinh thần "đủ đổi danh mục sau khi đăng nhập lại", reset cờ này để mô phỏng 1 phiên MỚI vừa
+    // mở lại form, thay vì phải đăng xuất/đăng nhập lại thật trong bài test.
+    await page.evaluate((stores) => { DB.stores = stores; budgetLineFormInitDone.Propose = false; budgetLineFormInitDone.Approve = false; }, h.state.appData.stores);
+    await loginAs('kd1');
+    const storeLine = await createBudgetLine(baseLine({ location: 'Siêu Thị Test Quận 1', dept: 'GIẢ MẠO — không phải phòng ban thật' }));
+    check('Tạo Đề Xuất với Vị trí = Siêu Thị hợp lệ -> thành công', storeLine.ok, storeLine);
+    check('Khối Phòng Ban TỰ ĐỘNG = đúng tên Siêu Thị (bỏ qua giá trị client gửi)', storeLine.ok && storeLine.item.dept === 'Siêu Thị Test Quận 1', storeLine.item && storeLine.item.dept);
+
+    const storeLineEdit = await recordAction(storeLine.item.id, 'update', baseLine({ location: 'Siêu Thị Test Quận 1', dept: 'Vẫn giả mạo' }));
+    check('Sửa lại dòng Vị trí = Siêu Thị -> dept vẫn tự động đúng = tên Siêu Thị', storeLineEdit.ok && storeLineEdit.item.dept === 'Siêu Thị Test Quận 1', storeLineEdit);
+
+    // Toàn vòng đời Đề Xuất -> Phê Duyệt -> Sử Dụng vẫn giữ dept=location xuyên suốt (buildBudgetLineUsedRow
+    // sao chép nguyên vẹn từ dòng Phê Duyệt nguồn).
+    await loginAs('budgetmgr1');
+    const storeApprovedLine = await createBudgetLine(baseLine({ stage: 'APPROVED', location: 'Siêu Thị Test Quận 1', dept: 'bat-ky' }));
+    check('budgetManage tạo trực tiếp dòng Phê Duyệt Vị trí = Siêu Thị -> dept tự = tên Siêu Thị', storeApprovedLine.ok && storeApprovedLine.item.dept === 'Siêu Thị Test Quận 1', storeApprovedLine);
+    await loginAs('admin');
+    const storeApproveResult = await recordAction(storeApprovedLine.item.id, 'approve');
+    check('Duyệt dòng Phê Duyệt (Siêu Thị) thành công', storeApproveResult.ok, storeApproveResult);
+    const storeUsedParent = h.state.collections.budgetLines.find((l) => l.sourceLineId === storeApprovedLine.item.id);
+    check('Dòng Sử Dụng cha tự sinh vẫn giữ dept = location = tên Siêu Thị', !!storeUsedParent && storeUsedParent.dept === 'Siêu Thị Test Quận 1' && storeUsedParent.location === 'Siêu Thị Test Quận 1', storeUsedParent);
+
+    // ============ Kịch bản 17 (v23.3): UI form Đề Xuất — đổi Vị trí HO/Siêu Thị phải ẩn/hiện đúng ô
+    // Khối Phòng Ban / Siêu Thị (onBudgetLineLocTypeChange(), mirror onUserPosTypeChange() màn Người Dùng)
+    // ============
+    await loginAs('kd1');
+    await goToBudget('PROPOSE');
+    const uiDefaultState = await page.evaluate(() => ({
+      deptHidden: document.getElementById('blProposeDeptWrap').classList.contains('hidden'),
+      storeHidden: document.getElementById('blProposeStoreWrap').classList.contains('hidden'),
+      locValue: document.getElementById('blProposeLocation').value
+    }));
+    check('Mặc định Vị trí = HO -> ô Khối Phòng Ban hiện, ô Siêu Thị ẩn', uiDefaultState.locValue === 'HO' && !uiDefaultState.deptHidden && uiDefaultState.storeHidden, uiDefaultState);
+
+    const uiAfterStore = await page.evaluate(() => {
+      document.getElementById('blProposeLocation').value = 'STORE';
+      onBudgetLineLocTypeChange('Propose');
+      return {
+        deptHidden: document.getElementById('blProposeDeptWrap').classList.contains('hidden'),
+        storeHidden: document.getElementById('blProposeStoreWrap').classList.contains('hidden'),
+        storeOptions: document.getElementById('blProposeStore').options.length
+      };
+    });
+    check('Chọn Vị trí = Siêu Thị -> ô Khối Phòng Ban ẨN, ô Siêu Thị HIỆN', uiAfterStore.deptHidden && !uiAfterStore.storeHidden, uiAfterStore);
+    check('Ô Siêu Thị được nạp đúng từ DB.stores (Danh Mục Siêu Thị, không phải danh mục mới)', uiAfterStore.storeOptions >= 1, uiAfterStore);
+
+    const uiBackToHo = await page.evaluate(() => {
+      document.getElementById('blProposeLocation').value = 'HO';
+      onBudgetLineLocTypeChange('Propose');
+      return {
+        deptHidden: document.getElementById('blProposeDeptWrap').classList.contains('hidden'),
+        storeHidden: document.getElementById('blProposeStoreWrap').classList.contains('hidden')
+      };
+    });
+    check('Đổi lại Vị trí = HO -> ô Khối Phòng Ban hiện lại, ô Siêu Thị ẩn lại', !uiBackToHo.deptHidden && uiBackToHo.storeHidden, uiBackToHo);
+
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {
     fail++;

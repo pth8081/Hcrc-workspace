@@ -6508,10 +6508,23 @@
       <div class="bg-white p-4 rounded-lg border space-y-3">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📝 Đề Xuất Ngân Sách</h3>
         <p id="blProposeNoCreatePermNote" class="hidden text-xs text-gray-500 italic">Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</p>
+        <div id="blProposeExcelWrap" class="border rounded p-3 bg-gray-50 space-y-1.5">
+          <div class="flex items-center gap-3 flex-wrap text-[11px]">
+            <a href="/api/budget-lines/template?stage=PROPOSED" class="text-violet-700 font-bold hover:underline">⬇️ Tải File Excel Mẫu</a>
+            <label class="text-violet-700 font-bold hover:underline cursor-pointer">⬆️ Nhập Excel<input id="blProposeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onBudgetLineImportFileChange" data-arg0="Propose" data-arg-event="1" class="hidden"></label>
+            <button type="button" data-op="exportBudgetLineExcel" data-arg0="PROPOSED" class="text-violet-700 font-bold hover:underline">📤 Xuất Excel</button>
+          </div>
+          <p id="blProposeImportStatus" class="text-[11px] text-gray-500"></p>
+          <div id="blProposeImportPreviewWrap" class="hidden border rounded max-h-48 overflow-y-auto bg-white">
+            <table class="w-full text-[11px]"><tbody id="blProposeImportPreviewBody"></tbody></table>
+          </div>
+          <button type="button" id="blProposeImportConfirmBtn" data-op="confirmBudgetLineImport" data-arg0="Propose" class="hidden w-full bg-violet-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-800">✅ Xác Nhận Nhập</button>
+        </div>
         <div id="blProposeFormWrap" class="border rounded p-3 bg-gray-50 space-y-2">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blProposeLocation" class="w-full border p-1.5 rounded bg-white"></select></div>
-            <div><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blProposeDept" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blProposeLocation" data-op-change="onBudgetLineLocTypeChange" data-arg0="Propose" class="w-full border p-1.5 rounded bg-white"><option value="HO">🏢 Trụ sở chính (HO)</option><option value="STORE">🏬 Siêu Thị</option></select></div>
+            <div id="blProposeDeptWrap"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blProposeDept" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div id="blProposeStoreWrap" class="hidden"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label><select id="blProposeStore" class="w-full border p-1.5 rounded bg-white"></select></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Danh Mục</label><select id="blProposeCategory" class="w-full border p-1.5 rounded bg-white">
               <option value="SOFTWARE">Phần mềm</option><option value="HARDWARE">Phần cứng</option><option value="SERVICE">Dịch vụ</option><option value="SYSTEM">Hệ thống</option>
             </select></div>
@@ -6548,10 +6561,23 @@
       <div class="bg-white p-4 rounded-lg border space-y-3">
         <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">✅ Phê Duyệt Ngân Sách</h3>
         <p id="blApproveNoCreatePermNote" class="hidden text-xs text-gray-500 italic">Bạn không có quyền nhập trực tiếp dòng Phê Duyệt — chỉ xem được danh sách bên dưới.</p>
+        <div id="blApproveExcelWrap" class="border rounded p-3 bg-gray-50 space-y-1.5">
+          <div class="flex items-center gap-3 flex-wrap text-[11px]">
+            <a href="/api/budget-lines/template?stage=APPROVED" class="text-violet-700 font-bold hover:underline">⬇️ Tải File Excel Mẫu</a>
+            <label class="text-violet-700 font-bold hover:underline cursor-pointer">⬆️ Nhập Excel<input id="blApproveImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onBudgetLineImportFileChange" data-arg0="Approve" data-arg-event="1" class="hidden"></label>
+            <button type="button" data-op="exportBudgetLineExcel" data-arg0="APPROVED" class="text-violet-700 font-bold hover:underline">📤 Xuất Excel</button>
+          </div>
+          <p id="blApproveImportStatus" class="text-[11px] text-gray-500"></p>
+          <div id="blApproveImportPreviewWrap" class="hidden border rounded max-h-48 overflow-y-auto bg-white">
+            <table class="w-full text-[11px]"><tbody id="blApproveImportPreviewBody"></tbody></table>
+          </div>
+          <button type="button" id="blApproveImportConfirmBtn" data-op="confirmBudgetLineImport" data-arg0="Approve" class="hidden w-full bg-violet-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-800">✅ Xác Nhận Nhập</button>
+        </div>
         <div id="blApproveFormWrap" class="border rounded p-3 bg-gray-50 space-y-2">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blApproveLocation" class="w-full border p-1.5 rounded bg-white"></select></div>
-            <div><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blApproveDept" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blApproveLocation" data-op-change="onBudgetLineLocTypeChange" data-arg0="Approve" class="w-full border p-1.5 rounded bg-white"><option value="HO">🏢 Trụ sở chính (HO)</option><option value="STORE">🏬 Siêu Thị</option></select></div>
+            <div id="blApproveDeptWrap"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blApproveDept" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div id="blApproveStoreWrap" class="hidden"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label><select id="blApproveStore" class="w-full border p-1.5 rounded bg-white"></select></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Danh Mục</label><select id="blApproveCategory" class="w-full border p-1.5 rounded bg-white">
               <option value="SOFTWARE">Phần mềm</option><option value="HARDWARE">Phần cứng</option><option value="SERVICE">Dịch vụ</option><option value="SYSTEM">Hệ thống</option>
             </select></div>
@@ -6586,7 +6612,10 @@
     <!-- ===== Tab "💳 Sử Dụng" (stage=USED, tự sinh khi duyệt Phê Duyệt) ===== -->
     <div id="blTab_USED" class="hidden space-y-4">
       <div class="bg-white p-4 rounded-lg border space-y-3">
-        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">💳 Sử Dụng Ngân Sách</h3>
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">💳 Sử Dụng Ngân Sách</h3>
+          <button type="button" data-op="exportBudgetLineExcel" data-arg0="USED" class="text-violet-700 font-bold hover:underline text-[11px]">📤 Xuất Excel</button>
+        </div>
         <p class="text-xs text-gray-500 italic">Dòng cha tự sinh khi 1 dòng Phê Duyệt được duyệt. Nội dung/Mô tả/Danh Mục khoá cứng theo dòng Phê Duyệt gốc.</p>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border-collapse">
@@ -6603,7 +6632,10 @@
     <!-- ===== Tab "📊 Báo Cáo" (chỉ budgetAggregate/budgetManage/admin — tổng hợp thuần client-side) ===== -->
     <div id="blTab_REPORT" class="hidden space-y-4">
       <div class="bg-white p-4 rounded-lg border space-y-3">
-        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📊 Báo Cáo Ngân Sách</h3>
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📊 Báo Cáo Ngân Sách</h3>
+          <button type="button" data-op="exportBudgetLineExcel" data-arg0="REPORT" class="text-violet-700 font-bold hover:underline text-[11px]">📤 Xuất Excel</button>
+        </div>
         <div id="blReportWrap"></div>
       </div>
     </div>

@@ -2535,19 +2535,29 @@ const CREATE_MODULE_CONFIGS = {
       }
       payload.stage = stage;
 
-      const dept = String(payload.dept || '').trim();
-      if (!dept || !(appData?.depts || []).includes(dept)) throw new CreateError(400, 'Khối Phòng Ban không hợp lệ');
-      payload.dept = dept;
-
-      // "Vị trí" — sentinel cố định 'HO' (Trụ sở chính, KHÔNG có trong Danh Mục Phòng/Siêu Thị nào, cùng
-      // khuôn renderOperationOrderReceiptScopeCheckboxes() ở public/js/module-admin.js) hoặc đúng 1 tên
-      // trong Danh Mục Siêu Thị (appData.stores) — KHÔNG cho chọn Danh Mục Phòng ở đây (đã là field Dept
-      // riêng phía trên).
+      // "Vị trí" — sentinel cố định 'HO' (Trụ sở chính) hoặc đúng 1 tên trong Danh Mục Siêu Thị
+      // (appData.stores). "Khối Phòng Ban" (dept) PHỤ THUỘC Vị trí — cùng cơ chế uPosType/uDept/uStore đã
+      // dùng ở màn Người Dùng (xem onUserPosTypeChange(), module-admin-submissiongroups.js): Vị trí=HO thì
+      // dept = 1 tên trong Danh Mục Phòng do người dùng chọn; Vị trí=Siêu Thị thì dept TỰ ĐỘNG = đúng tên
+      // Siêu Thị đó (server tự gán, KHÔNG tin giá trị client gửi — Zero-Trust, khớp tinh thần khoá field
+      // khi kế thừa dữ liệu đã áp dụng cho cả module) — vừa khớp UI đã ẩn ô Khối Phòng Ban khi chọn Siêu
+      // Thị, vừa giữ nguyên cơ chế phân quyền addBudgetLineChild() (lib/recordActions.js) vốn so sánh
+      // parent.dept === user.dept, mà user.dept của nhân viên siêu thị vốn đã lưu = tên siêu thị (đúng
+      // khuôn readUserFormState() ở module-admin-submissiongroups.js).
       const location = String(payload.location || '').trim();
       if (location !== 'HO' && !(appData?.stores || []).includes(location)) {
         throw new CreateError(400, 'Vị trí không hợp lệ');
       }
       payload.location = location;
+
+      let dept;
+      if (location === 'HO') {
+        dept = String(payload.dept || '').trim();
+        if (!dept || !(appData?.depts || []).includes(dept)) throw new CreateError(400, 'Khối Phòng Ban không hợp lệ');
+      } else {
+        dept = location;
+      }
+      payload.dept = dept;
 
       normalizeBudgetLineCoreFields(payload);
 
@@ -3322,7 +3332,13 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
 
   if (config.extraValidate) config.extraValidate(payload, existingCollection, user, appData, trashedItems);
 
-  const record = { ...payload, id: Date.now(), dept };
+  // Đọc lại dept SAU KHI extraValidate chạy (không dùng biến "dept" đã chốt ở trên nữa) — cho phép
+  // extraValidate tự CHUẨN HOÁ/GHI ĐÈ payload.dept theo luật riêng của module (VD budgetLines: dept phụ
+  // thuộc Vị trí, server tự gán = tên Siêu Thị khi Vị trí != HO, xem budgetLines.extraValidate) mà vẫn
+  // được ghi nhận đúng vào bản ghi cuối cùng — trước đây "dept" chốt TRƯỚC extraValidate nên mọi thay
+  // đổi payload.dept bên trong extraValidate bị record={...payload, dept} ở dưới ghi đè mất, vô tác dụng.
+  const finalDept = config.forceOwnDept ? user.dept : payload.dept;
+  const record = { ...payload, id: Date.now(), dept: finalDept };
   record[config.creatorField] = user.username;
   if (config.creatorNameField) record[config.creatorNameField] = user.name;
   return record;
