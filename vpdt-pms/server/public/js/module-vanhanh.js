@@ -125,6 +125,12 @@ function setVanHanhSubTab(subTab) {
     // chính tab Đơn Hàng, xem setOperationOrderSubTab() ở trên.
     setOperationOrderSubTab(activeOperationOrderSubTab);
   } else if (subTab === 'STORE') {
+    // updateOperationStoreSubTabVisibility() (v23.10): gọi LẠI ở đây (không chỉ ở finishLogin()) — từ khi
+    // khung HTML của vanHanhSection tải lười, lần gọi ĐẦU (finishLogin(), core.js) chạy TRƯỚC KHI các nút
+    // này có mặt trong DOM nên phải bỏ qua phần tô ẩn/hiện (xem chú thích tại hàm đó); gọi lại đúng lúc
+    // này — sau khi cả module lẫn khung HTML của tab đã chắc chắn sẵn sàng (switchTab()) — để áp đúng
+    // quyền hiện/ẩn từng nút sub-tab thật sự lên DOM.
+    updateOperationStoreSubTabVisibility(currentUser);
     setOperationStoreSubTab(activeOperationStoreSubTab);
   }
 }

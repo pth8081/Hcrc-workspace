@@ -66,7 +66,12 @@ async function main() {
     window.alert = (m) => { window.__alerts.push(String(m)); };
     window.confirm = () => true;
     window.prompt = () => '';
+    // realFetch (v23.10): mirror test-csp-full-audit.js — loadTabSectionHtml() (core.js,
+    // TAB_SECTION_FRAGMENT) fetch() khung HTML tách lười (vd /fragments/vanHanhSection.html) từ CHÍNH
+    // server tĩnh của bài test này, phải đi qua fetch THẬT thay vì bị mock như /api/*.
+    const realFetch = window.fetch.bind(window);
     window.fetch = async (url, opts) => {
+      if (typeof url === 'string' && !url.startsWith('/api/')) return realFetch(url, opts);
       const method = ((opts && opts.method) || 'GET').toUpperCase();
       if (method === 'GET') return { ok: true, status: 200, json: async () => ([]) };
       return { ok: true, status: 200, json: async () => ({ ok: true }) };

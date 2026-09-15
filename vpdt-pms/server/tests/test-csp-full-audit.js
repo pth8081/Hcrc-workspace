@@ -78,7 +78,15 @@ async function main() {
     window.alert = (m) => { window.__alerts.push(String(m)); };
     window.confirm = () => true;
     window.prompt = () => '';
+    // realFetch (v23.10): giữ lại fetch() GỐC TRƯỚC khi ghi đè — loadTabSectionHtml() (core.js,
+    // TAB_SECTION_FRAGMENT) fetch() các khung HTML tách lười (vd /fragments/vanHanhSection.html) từ
+    // CHÍNH server tĩnh của bài test này (file thật, không phải API cần mock) — phải cho đi qua fetch
+    // THẬT thay vì trả dữ liệu giả như /api/*, nếu không section HTML sẽ mãi rỗng (trước đây còn ném lỗi
+    // "r.text is not a function" do stub cũ thiếu hẳn .text(), bị switchTab() bắt+nuốt lặng lẽ — phát
+    // hiện qua chính bài test này khi click qua Vận Hành, sinh pageerror thật ở bước render tiếp theo).
+    const realFetch = window.fetch.bind(window);
     window.fetch = async (url, opts) => {
+      if (typeof url === 'string' && !url.startsWith('/api/')) return realFetch(url, opts);
       const method = ((opts && opts.method) || 'GET').toUpperCase();
       if (method === 'GET') return { ok: true, status: 200, json: async () => ([]), blob: async () => new Blob([]) };
       return { ok: false, status: 404, json: async () => ({ error: 'not found (test stub)' }) };

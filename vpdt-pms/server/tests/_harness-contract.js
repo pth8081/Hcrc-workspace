@@ -75,6 +75,10 @@ async function startHarness({ port } = {}) {
   // module-*.js qua page.evaluate() thay vi luon di qua switchTab() nhu nguoi dung that, nen chu dong nap
   // TOAN BO cum module ngay tu dau (gia lap 1 phien da tung mo het moi tab) - khong doi ket qua test nao.
   await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map(k => loadModuleGroup(k))));
+  // Ha tang: nap lười KHUNG HTML theo tab (v23.10, core.js::TAB_SECTION_FRAGMENT/loadTabSectionHtml) —
+  // CÙNG lý do như eager-load module JS ở TRÊN: nạp trước ngay từ đầu để switchTab() sau này luôn đi
+  // đường ĐỒNG BỘ, giữ đúng giả định "gọi switchTab(x) rồi đọc DOM ngay sau đó không cần await".
+  await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
 
   // Seed DB + chặn mọi network thật (fetch đi qua __mockApi đã expose ở trên, confirm() luôn đồng ý,
   // alert() gom vào window.__alerts thay vì treo hộp thoại thật, prompt() trả lời từ hàng đợi

@@ -1,8 +1,65 @@
 # Phiên bản hiện tại
 
-**23.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.10 (2026-09-15): Thí điểm tải lười khung HTML theo tab — module Vận Hành (giảm dung lượng `index.html`)
+
+Người dùng hỏi "index.html có thật sự lo lắng không, đúng lượng hơi lớn?" (768KB/~10.000 dòng). Trả lời
+lúc đó: chưa cấp bách (đã có nén gzip, còn ~143KB thực tế truyền mạng) nhưng xu hướng đáng theo dõi —
+người dùng yêu cầu làm luôn, cẩn thận và cập nhật tiến độ đều đặn.
+
+**Cơ chế**: mirror ĐÚNG hạ tầng "nạp lười module theo cụm" đã có sẵn (`MODULE_LOAD_GROUPS`/
+`loadModuleGroup()`, core.js) — thêm cặp song song cho HTML: `TAB_SECTION_FRAGMENT`/`loadTabSectionHtml()`.
+Khung HTML (form/bảng) của 1 section được tách ra file `public/fragments/<id>.html` riêng, `index.html`
+chỉ giữ lại vỏ RỖNG `<div id="...Section" class="hidden"></div>` (bắt buộc — `switchTab()` luôn đụng
+`getElementById()` của MỌI section ở MỌI lần chuyển tab, xoá hẳn div sẽ vỡ ngay từ lần đầu). Nội dung thật
+chỉ `fetch()` đúng 1 lần khi người dùng THỰC SỰ vào tab đó lần đầu trong phiên, cùng chọn lọc đồng bộ/bất
+đồng bộ y hệt cơ chế JS: đã nạp rồi thì đường ĐỒNG BỘ (không lùi nhịp nào), lần đầu thì đợi `fetch()` xong
+trước khi render.
+
+**Thí điểm (Phase 1)**: chọn module **Vận Hành** (`vanHanhSection`, ~575 dòng) — lớn, hoàn toàn độc lập
+(xác nhận không module nào khác gọi thẳng hàm của nó), chỉ 1 cổng vào duy nhất (`switchTab('vanHanh')`),
+không có section con nào lồng bên trong (khác `systemSection`/`internalSection` — 2 section lớn nhất nhưng
+có nhiều section con lồng bên trong, độ phức tạp cao hơn hẳn, để dành đợt sau nếu người dùng muốn mở rộng).
+
+**4 lớp lỗi thật phát hiện + vá trong lúc kiểm chứng** (không phải lỗi lý thuyết — đều tái hiện được qua
+test thật):
+1. `updateOperationStoreSubTabVisibility()` (core.js) chạy NGAY LÚC ĐĂNG NHẬP — trước khi người dùng từng
+   mở tab Vận Hành — đụng thẳng DOM bên trong section vốn giờ còn rỗng → vỡ ngay khi đăng nhập. Sửa: bỏ
+   qua an toàn (`?.`) phần tô ẩn/hiện lúc đăng nhập (phần TÍNH biến trạng thái vẫn chạy đúng), gọi lại
+   đúng hàm này ở `setVanHanhSubTab('STORE')` (module-vanhanh.js) khi DOM đã chắc chắn sẵn sàng.
+2. 3 bộ khung dùng chung cho phần lớn bộ test (`tests/_harness.js`, `tests/_harness-contract.js`,
+   `tests/testHarness.js`) đã có sẵn 1 dòng "nạp trước TOÀN BỘ cụm module JS ngay từ đầu phiên" (để các
+   test gọi thẳng hàm module không cần qua `switchTab()` từng bước) — bổ sung dòng song song "nạp trước
+   TOÀN BỘ khung HTML" cho đúng cùng lý do.
+3. 6 file test tự dựng server riêng (không dùng 3 bộ khung trên) có gọi `switchTab('vanHanh')` rồi đọc/thao
+   tác DOM ngay sau đó KHÔNG `await` — thêm dòng nạp trước tương tự vào từng file:
+   `test-approval-hub.js`, `test-forms-batch3.js`.
+4. **Gốc rễ tinh vi nhất**: 5 file test tự định nghĩa `window.fetch` giả lập (để kiểm soát dữ liệu API trả
+   về) — nhưng NUỐT LUÔN mọi request, kể cả request xin khung HTML tĩnh thật (`/fragments/*.html`), trả về
+   object giả không có `.text()` (trước đây không ai cần `.text()` nên stub thiếu hẳn). Hậu quả: `fetch()`
+   ném lỗi "r.text is not a function", bị `switchTab()` bắt+nuốt lặng lẽ (console.error + alert, không
+   crash rõ ràng) — khiến section HTML MÃI RỖNG trong khi code gọi tiếp vẫn chạy tiếp như thể đã xong, vỡ ở
+   bước SAU đó. Sửa: cho mọi request KHÔNG bắt đầu bằng `/api/` đi qua `fetch()` THẬT (đọc đúng file tĩnh
+   từ server test), chỉ mock riêng `/api/*` — `test-csp-full-audit.js`, `test-csp-deep-interaction.js`,
+   `test-lazy-load-all-tabs.js`, `test-preview-workflow-buttons.js`.
+
+**Kết quả đo**: `index.html` 768KB → 724KB (giảm 44KB raw, gzip giảm từ ~143KB xuống ~134KB). Khiêm tốn vì
+Vận Hành không phải module lớn nhất — nhưng cơ chế đã được kiểm chứng vững qua chính những lỗi thật vừa
+tìm ra, sẵn sàng mở rộng sang module khác (VD `systemSection`/`internalSection`, lớn hơn nhiều nhưng có
+section con lồng bên trong, cần thiết kế thêm) nếu người dùng muốn tiếp tục.
+
+Test: chạy lại toàn bộ 18 file test liên quan trực tiếp tới Vận Hành/hạ tầng lazy-load + **full regression
+146 file** trong `tests/` — không có hồi quy mới nào (2 lỗi hiện có từ trước, không liên quan, đã xác nhận
+qua `git stash` đối chiếu baseline).
+
+**Deploy-impact**: có 1 THƯ MỤC MỚI `server/public/fragments/` (chứa `vanHanhSection.html`) — nếu quy
+trình cập nhật của bạn copy TOÀN BỘ mã nguồn (git pull/rsync cả cây thư mục) thì tự động có đủ, không cần
+làm gì thêm; chỉ cần LƯU Ý nếu bạn cherry-pick copy từng file/thư mục thủ công, đừng bỏ sót thư mục này —
+thiếu nó sẽ khiến tab Vận Hành hiện trống trơn không có nút nào. Không đổi `schema.sql`, không thêm biến
+môi trường, không thêm npm dependencies.
 
 ## v23.9 (2026-09-15): Rà soát chuyên sâu lần 2 (5 agent song song) xác nhận sạch CSP/unsafe-inline + bổ sung test crawl tương tác sâu có dữ liệu thật
 
