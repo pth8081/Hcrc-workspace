@@ -444,7 +444,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Tiếp tục dở dang', text: 'bài chấm chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
       { label: 'Nhân bản mẫu', text: 'có thể nhân bản 1 mẫu có sẵn để chỉnh sửa nhanh thay vì dựng lại từ đầu — nhân bản được từ cả mẫu Đang dùng lẫn Lưu trữ.' },
     ], right: [
-      { label: '⏸️ Dừng (Đang dùng → Lưu trữ)', text: 'dừng thủ công 1 mẫu Đang dùng mà không cần kích hoạt bản thay thế ngay — khác "Kích hoạt" (tự lưu trữ các bản Đang dùng cùng mã khi kích hoạt 1 bản mới).' },
+      { label: '⏸️ Dừng (Đang dùng → Lưu trữ)', text: 'dừng thủ công 1 mẫu Đang dùng mà không cần kích hoạt bản thay thế ngay. Muốn dùng lại đúng mẫu vừa Dừng thì bấm "🔄 Kích Hoạt Lại" ngay trên mẫu Lưu trữ đó — không cần Nhân Bản/Sửa gì cả, không tạo phiên bản mới.' },
       { label: '✏️ Sửa (Đang dùng/Lưu trữ)', text: 'không sửa trực tiếp được, để giữ nguyên dữ liệu các bài đã nộp trước đó — bấm "Sửa" sẽ tự nhân bản thành 1 bản Nháp mới rồi mở thẳng form sửa, gộp 2 bước cũ thành 1 lần bấm.' },
       { label: '🗑️ Xoá — chỉ Quản Trị Viên', text: 'nút Xoá chỉ Quản Trị Viên (quyền cao nhất) mới thấy được, ở mọi trạng thái — nếu mẫu đã có người nộp bài thì nút này sẽ bị khoá kèm gợi ý dùng "⏸️ Dừng" thay thế, để không làm mất dữ liệu báo cáo cũ.' },
     ] },

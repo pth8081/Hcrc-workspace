@@ -2006,6 +2006,14 @@ const CREATE_MODULE_CONFIGS = {
       // theo file VSATTP người dùng gửi) — chỉ 1 trong 2 field questions/categories được gán, field còn
       // lại để trống (JSON-blob, không cần schema chung).
       Object.assign(payload, core);
+      // Chặn trùng mã cho mẫu MỚI TẠO (khác Nhân Bản — routes/checklist.js /clone CỐ TÌNH tạo dòng mới
+      // cùng templateCode với dòng nguồn để giữ chung "gia đình phiên bản", KHÔNG đi qua route này nên
+      // không bị chặn ở đây). UNIQUE INDEX thật (sql/schema.sql) từ v23.5 chỉ còn lọc theo Status='ACTIVE'
+      // (để Nhân Bản hoạt động được) — nên khi tạo mẫu HOÀN TOÀN MỚI vẫn cần tự kiểm tra trùng mã với MỌI
+      // trạng thái ở đây, nếu không 2 mẫu không liên quan có thể vô tình trùng mã ở trạng thái Nháp.
+      if ((collection || []).some(t => t.templateCode === core.templateCode)) {
+        throw new CreateError(409, `Mã checklist "${core.templateCode}" đã tồn tại`);
+      }
       if (core.templateKind === 'DEDUCTION') {
         payload.categories = validateChecklistCategories(payload.categories);
       } else {

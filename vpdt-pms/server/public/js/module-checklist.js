@@ -95,6 +95,7 @@ function renderChecklistConfigTab() {
       nonDraftActionsHTML = `<button type="button" data-op="viewChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700">👁️ Xem</button>
           <button type="button" data-op="editViaCloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">✏️ Sửa</button>
           ${t.status === 'ACTIVE' ? `<button type="button" data-op="deactivateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-bold hover:bg-amber-700">⏸️ Dừng</button>` : ''}
+          ${t.status === 'ARCHIVED' ? `<button type="button" data-op="activateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700">🔄 Kích Hoạt Lại</button>` : ''}
           ${isAdmin ? `<button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" ${hasSubmissions ? 'disabled title="Đã có người nộp bài — không thể xoá, dùng Dừng thay thế"' : ''} class="px-2 py-1 rounded text-[11px] font-bold ${hasSubmissions ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}">🗑️ Xoá</button>` : ''}`;
     }
     return `

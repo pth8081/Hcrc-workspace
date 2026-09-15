@@ -1578,15 +1578,53 @@ tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
   cho mọi field tên `depts`) — quyết định auditor được tạo/xem loại checklist
   **Kiểm Soát Viên** cho những siêu thị nào.
 
-**Sửa mẫu ĐANG DÙNG (ACTIVE)**: KHÔNG sửa trực tiếp được (chặn 409) — phải
-bấm **"Nhân Bản"** (tạo 1 bản Nháp `version+1`), sửa nội dung trên bản Nháp
-đó rồi **"Kích Hoạt"** (tự động chuyển bản ACTIVE cũ sang Lưu Trữ cùng
-`templateCode`). Đây là chủ đích, KHÔNG phải thiếu sót: các bài đã làm cũ
-(`checklistSubmissions`) tham chiếu ngược lại `templateId` để tra câu hỏi/lựa
-chọn gốc khi xem lại — sửa thẳng nội dung câu hỏi của bản ACTIVE sẽ làm sai
-lệch/mất ý nghĩa các bài đã chấm điểm trước đó (option đã chọn không còn khớp
-định nghĩa mới). Muốn sửa nội dung mà KHÔNG cần versioning → chỉ sửa được khi
-mẫu còn ở trạng thái Nháp (chưa từng kích hoạt lần nào).
+**Vòng đời mẫu — Nháp → Đang dùng → Lưu trữ, đủ nút theo trạng thái + quyền
+(từ v23.4-v23.5)**: bảng "🛠️ Cấu Hình" hiện nút khác nhau tuỳ trạng thái:
+- **Nháp**: Sửa (trực tiếp) / Kích Hoạt / Xoá (chỉ Admin).
+- **Đang dùng**: Xem / ✏️ Sửa / ⏸️ Dừng / 🗑️ Xoá (chỉ Admin, khoá nếu đã có
+  bài nộp) / Nhân Bản.
+- **Lưu trữ**: Xem / ✏️ Sửa / 🔄 Kích Hoạt Lại / 🗑️ Xoá (chỉ Admin, khoá nếu
+  đã có bài nộp) / Nhân Bản.
+
+**Sửa mẫu ĐANG DÙNG/LƯU TRỮ**: KHÔNG sửa trực tiếp được (chặn 409) — các bài
+đã làm cũ (`checklistSubmissions`) tham chiếu ngược lại `templateId` để tra
+câu hỏi/lựa chọn gốc khi xem lại, sửa thẳng nội dung câu hỏi sẽ làm sai
+lệch/mất ý nghĩa các bài đã chấm điểm trước đó. Nút **"✏️ Sửa"** (từ v23.4)
+gộp sẵn 2 bước cũ thành 1 lần bấm: tự **Nhân Bản** (tạo 1 bản Nháp
+`version+1`, mã `templateCode` giữ nguyên) rồi mở thẳng form sửa trên bản
+Nháp đó — sửa xong bấm **"Kích Hoạt"** để đưa bản mới lên Đang dùng (tự
+chuyển bản Đang dùng cũ sang Lưu Trữ cùng `templateCode`). Muốn sửa nội dung
+mà KHÔNG cần tạo phiên bản mới → chỉ sửa trực tiếp được khi mẫu còn ở trạng
+thái Nháp.
+
+**⏸️ Dừng / 🔄 Kích Hoạt Lại (từ v23.4/v23.5)**: "⏸️ Dừng" chuyển 1 mẫu Đang
+dùng sang Lưu Trữ thủ công mà KHÔNG cần kích hoạt bản thay thế ngay (VD
+ngừng hẳn 1 loại đánh giá không còn áp dụng) — khác "Kích Hoạt" (tự lưu trữ
+mọi bản Đang dùng khác cùng mã khi kích hoạt 1 bản MỚI). Muốn dùng LẠI đúng
+mẫu vừa Dừng (không cần sửa gì) → bấm **"🔄 Kích Hoạt Lại"** ngay trên mẫu
+Lưu Trữ đó — chuyển thẳng về Đang dùng, KHÔNG tạo dòng mới/KHÔNG tăng
+`version` (khác Nhân Bản).
+
+**🗑️ Xoá — chỉ Admin (từ v23.4)**: nút Xoá chỉ Quản Trị Viên (không còn đủ
+`checklistTemplateManage`) mới thấy được, ở MỌI trạng thái. Nếu mẫu đã có
+người nộp bài (`checklistSubmissions` tham chiếu `templateId`) thì bị chặn
+409 (khoá mờ ở UI, kèm gợi ý dùng "⏸️ Dừng" thay thế) — tránh mồ côi dữ liệu
+báo cáo cũ.
+
+**Bug thật đã vá (v23.5)**: `UNIQUE INDEX` của `TemplateCode`
+(`dbo.ChecklistTemplates`) trước đây khoá KHÔNG điều kiện (mọi dòng, mọi
+trạng thái) — trong khi "Nhân Bản" (và "✏️ Sửa" gọi bên trong) CỐ TÌNH tạo
+dòng mới CÙNG `TemplateCode` với dòng nguồn để giữ chung "gia đình phiên
+bản". Hậu quả thật: MỌI lần Nhân Bản/Sửa trên 1 checklist đã tồn tại đều báo
+lỗi `Cannot insert duplicate key row... 'UX_ChecklistTemplates_Code'` trên
+SQL Server thật (sandbox không có SQL Server thật nên bộ test trước đó không
+bắt được). Đã đổi `UNIQUE INDEX` sang **lọc theo `Status='ACTIVE'`** — đúng
+nguyên tắc thật của module ("chỉ 1 bản Đang dùng tại 1 thời điểm cho mỗi
+mã"), đồng thời thêm kiểm tra trùng mã riêng ở tầng ứng dụng cho mẫu MỚI
+TẠO (không phải Nhân Bản) để vẫn chặn 2 mẫu không liên quan trùng mã nhau.
+**Bắt buộc chạy lại `schema.sql`** sau khi cập nhật lên v23.5 (script tự an
+toàn, chỉ đổi đúng 1 index của bảng này) — nếu không chạy lại, lỗi trùng khoá
+này còn tiếp diễn.
 
 **Xem mẫu ĐANG DÙNG/LƯU TRỮ (v17.3)**: mẫu `ACTIVE`/`ARCHIVED` có nút
 **"👁️ Xem"** (thay cho nút "Sửa" chỉ có ở bản Nháp) mở màn hình chỉ đọc, hiển

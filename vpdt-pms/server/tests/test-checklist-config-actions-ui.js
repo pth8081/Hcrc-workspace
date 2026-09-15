@@ -131,6 +131,10 @@ async function main() {
   record('ACTIVE đã có bài nộp (301): vẫn thấy nút Dừng (Dừng không bị chặn bởi việc có bài nộp)', hasOp(htmlAdmin, 'deactivateChecklistTemplate', 301));
   record('ARCHIVED đã có bài nộp (401): KHÔNG có nút Dừng (chỉ ACTIVE mới Dừng được)', !hasOp(htmlAdmin, 'deactivateChecklistTemplate', 401));
   record('ARCHIVED đã có bài nộp (401): ADMIN thấy Xem/Sửa(clone), nút Xoá disabled', hasOp(htmlAdmin, 'viewChecklistTemplate', 401) && hasOp(htmlAdmin, 'editViaCloneChecklistTemplate', 401) && new RegExp(`data-op="deleteChecklistTemplate" data-arg0="401"[^>]*disabled`).test(htmlAdmin));
+  // v23.5: người dùng phản ánh bấm "⏸️ Dừng" xong không có cách nào kích hoạt LẠI — thêm nút "🔄 Kích
+  // Hoạt Lại" cho ARCHIVED (KHÔNG hiện cho ACTIVE, vốn đã đang dùng rồi).
+  record('ARCHIVED (401): CÓ nút "🔄 Kích Hoạt Lại" (activateChecklistTemplate) — v23.5', hasOp(htmlAdmin, 'activateChecklistTemplate', 401));
+  record('ACTIVE (302): KHÔNG có nút Kích Hoạt Lại (đang dùng rồi, không cần)', !hasOp(htmlAdmin, 'activateChecklistTemplate', 302));
   record('Mọi trạng thái đều còn nút "Nhân Bản" chung (cloneChecklistTemplate)', hasOp(htmlAdmin, 'cloneChecklistTemplate', 201) && hasOp(htmlAdmin, 'cloneChecklistTemplate', 302) && hasOp(htmlAdmin, 'cloneChecklistTemplate', 401));
 
   // ===== 2. Ma trận nút — MANAGER (checklistTemplateManage, KHÔNG phải admin) =====

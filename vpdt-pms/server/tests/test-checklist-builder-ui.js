@@ -136,6 +136,34 @@ async function main() {
       assertEqual(saved.questions[0].options[1].scoreValue, 0, 'Server THẬT phải ép scoreValue đáp án Không đạt về 0 dù state JS còn "sót" giá trị -50');
     });
 
+    // v23.5: BUG THẬT phát hiện từ log lỗi production — UNIQUE INDEX thật (sql/schema.sql) trước đây
+    // khoá TemplateCode KHÔNG điều kiện khiến "Nhân Bản" (cố tình tạo dòng mới CÙNG mã để giữ chung
+    // "gia đình phiên bản") luôn phạm lỗi trùng khoá trên SQL Server thật. Đã đổi UNIQUE INDEX sang lọc
+    // theo Status='ACTIVE' — nhưng đồng thời PHẢI tự thêm chặn trùng mã ở app-level cho mẫu MỚI TẠO
+    // (checklistTemplates.extraValidate, lib/createValidation.js) vì UNIQUE INDEX mới không còn chặn 2
+    // mẫu KHÔNG liên quan cùng ở trạng thái Nháp trùng mã nhau nữa.
+    await run.run('Tạo mẫu MỚI trùng mã với mẫu đã có (bất kỳ trạng thái nào) -> server THẬT chặn 409', async () => {
+      const result = await page.evaluate(async () => {
+        closeChecklistTemplateBuilder();
+        openChecklistTemplateBuilder();
+        document.getElementById('checklistBuilderCode').value = 'CL_UI_NEG'; // trùng mã đã lưu ở bài test trước
+        document.getElementById('checklistBuilderName').value = 'Checklist Trùng Mã';
+        document.getElementById('checklistBuilderType').value = 'STORE_SELF';
+        document.getElementById('checklistBuilderScoringMode').value = 'SCORED';
+        onChecklistBuilderScoringModeChange();
+        addChecklistBuilderQuestion();
+        checklistBuilderQuestions[0].text = 'Câu hỏi bất kỳ';
+        window.__resetCapture();
+        await saveChecklistTemplateBuilder();
+        return {
+          alerts: window.__alerts.slice(),
+          countWithCode: DB.checklistTemplates.filter(t => t.templateCode === 'CL_UI_NEG').length
+        };
+      });
+      assertEqual(result.countWithCode, 1, 'KHÔNG được tạo thêm bản ghi thứ 2 trùng mã — vẫn phải đúng 1 bản gốc');
+      assertEqual(result.alerts.some(a => a.includes('đã tồn tại')), true, `Phải báo lỗi trùng mã rõ ràng cho người dùng (alerts: ${JSON.stringify(result.alerts)})`);
+    });
+
     await run.run('Không có ngoại lệ JS chưa bắt nào phát sinh trong suốt bộ test', async () => {
       assertEqual(jsErrors.length, 0, `Phải không có lỗi JS nào (${jsErrors.join('; ')})`);
     });

@@ -1097,9 +1097,16 @@ BEGIN
 END
 GO
 
-/* checklistTemplates — TemplateCode do NGƯỜI DÙNG tự gõ (không phải tự sinh như docs/submissions) —
-   vẫn cần UNIQUE để tránh trùng, nhưng KHÔNG có logic tự tăng số khi trùng (đúng hành vi hiện có, chỉ
-   báo lỗi). */
+/* checklistTemplates — TemplateCode do NGƯỜI DÙNG tự gõ (không phải tự sinh như docs/submissions).
+   BUG THẬT phát hiện qua log lỗi thật trên server production (v23.5): UNIQUE INDEX trước đây khoá
+   TemplateCode KHÔNG ĐIỀU KIỆN (mọi dòng, mọi trạng thái) — nhưng "Nhân Bản" (routes/checklist.js
+   /clone, có từ v23.1) và luồng versioning cả module (Nháp -> Đang dùng -> Lưu trữ, xem NGHIEP_VU_DOCS)
+   CỐ TÌNH tạo dòng MỚI mang CÙNG TemplateCode với dòng nguồn để giữ chung "gia đình phiên bản" — mọi lần
+   Nhân Bản/Sửa (tự nhân bản) trên 1 checklist ĐÃ tồn tại ĐỀU chắc chắn phạm lỗi trùng khoá ngay khi chạy
+   trên SQL Server thật (sandbox test không có SQL Server thật nên không bao giờ bắt được lỗi này). Sửa:
+   đổi UNIQUE INDEX sang LỌC theo Status='ACTIVE' — đúng nguyên tắc thật của ứng dụng ("chỉ 1 bản Đang
+   Dùng tại 1 thời điểm cho mỗi mã", xem routes/checklist.js /activate) thay vì "mỗi mã chỉ 1 dòng duy
+   nhất mãi mãi" — nhiều dòng Nháp/Lưu trữ vẫn được phép dùng chung mã, chỉ chặn 2 dòng CÙNG Đang Dùng. */
 IF OBJECT_ID('dbo.ChecklistTemplates', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ChecklistTemplates (
@@ -1111,7 +1118,22 @@ BEGIN
         Payload       NVARCHAR(MAX)  NOT NULL
     );
     CREATE INDEX IX_ChecklistTemplates_Type_Status ON dbo.ChecklistTemplates (TemplateType, Status);
-    CREATE UNIQUE INDEX UX_ChecklistTemplates_Code ON dbo.ChecklistTemplates (TemplateCode) WHERE TemplateCode IS NOT NULL;
+    CREATE UNIQUE INDEX UX_ChecklistTemplates_ActiveCode ON dbo.ChecklistTemplates (TemplateCode) WHERE Status = 'ACTIVE';
+END
+GO
+-- Nâng cấp CSDL đã tồn tại từ trước v23.5 — bảng đã có sẵn với UNIQUE INDEX cũ (khoá KHÔNG điều kiện,
+-- gây lỗi "Cannot insert duplicate key" mỗi lần Nhân Bản/Sửa 1 checklist đã tồn tại) — xoá index cũ,
+-- tạo lại đúng bản lọc theo Status='ACTIVE'.
+IF OBJECT_ID('dbo.ChecklistTemplates', 'U') IS NOT NULL
+    AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_ChecklistTemplates_Code' AND object_id = OBJECT_ID('dbo.ChecklistTemplates'))
+BEGIN
+    DROP INDEX UX_ChecklistTemplates_Code ON dbo.ChecklistTemplates;
+END
+GO
+IF OBJECT_ID('dbo.ChecklistTemplates', 'U') IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_ChecklistTemplates_ActiveCode' AND object_id = OBJECT_ID('dbo.ChecklistTemplates'))
+BEGIN
+    CREATE UNIQUE INDEX UX_ChecklistTemplates_ActiveCode ON dbo.ChecklistTemplates (TemplateCode) WHERE Status = 'ACTIVE';
 END
 GO
 
