@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**23.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.12 (2026-09-15): Tách module 3 — mở rộng tải lười khung HTML sang 15 module (Hợp Đồng/Checklist/Phòng Họp/Biên Bản Họp/Onboarding-Offboarding/Ngân Sách/Tài Liệu/Văn Bản Trình/Giấy Phép/Cơ Cấu Tổ Chức/Lương/Công Việc/Hồ Sơ NS/Báo Cáo/Hợp Đồng LĐ)
+
+Tiếp nối v23.10/v23.11 (module Vận Hành, rồi 7 module đợt 2) — vẫn theo đúng yêu cầu "tối ưu 100%,
+cẩn thận, không ảnh hưởng giao diện" của người dùng. Đợt này chọn đúng 15 module ĐƠN GIẢN (không có
+section con nào lồng bên trong, khác 2 section còn lại `systemSection`/`internalSection` — để dành đợt
+sau vì có nhiều section con lồng bên trong, cần thiết kế thêm): `contractSection`, `checklistSection`,
+`meetingSection`, `minutesSection`, `hrLifecycleSection`, `budgetSection`, `docSection`,
+`submissionSection`, `licenseSection`, `orgChartSection`, `hrPayrollSection`, `taskSection`,
+`hrProfileSection`, `reportsSection`, `hrContractSection`.
+
+**Rút kinh nghiệm từ v23.11 (lỗi `paymentSection`) — rà soát PHÒNG NGỪA trước khi tách thay vì phát hiện
+qua test SAU khi tách**: viết script đối chiếu TOÀN BỘ danh sách id được `bindCspDelegation()` gọi riêng
+trong `core.js` với phạm vi dòng của cả 15 section sắp tách — xác nhận KHÔNG có id nào khác bị lồng bên
+trong (khác trường hợp `paymentSection` lồng trong `officeSection` ở đợt 2). Đối chiếu tương tự với toàn
+bộ `getElementById()` bên trong `finishLogin()` — không có hit nào rơi vào phạm vi 15 section này. Nhờ
+vậy đợt này KHÔNG phát sinh lỗi mới nào thuộc 2 lớp lỗi từng gặp ở đợt trước.
+
+**Kết quả đo**: `index.html` 579KB → 450KB raw (gzip ~109KB → ~88KB). Tổng cộng từ mốc v23.9 (768KB/
+~143KB gzip): giảm 318KB raw / ~55KB gzip (~62% raw / ~38% gzip).
+
+Test: full regression 146 file — sạch tuyệt đối, không có lỗi mới (2 lỗi có sẵn từ trước — như v23.11 —
+không thuộc phạm vi đợt này).
+
+**Deploy-impact**: 15 file HTML mới trong `server/public/fragments/` (`contractSection.html`,
+`checklistSection.html`, `meetingSection.html`, `minutesSection.html`, `hrLifecycleSection.html`,
+`budgetSection.html`, `docSection.html`, `submissionSection.html`, `licenseSection.html`,
+`orgChartSection.html`, `hrPayrollSection.html`, `taskSection.html`, `hrProfileSection.html`,
+`reportsSection.html`, `hrContractSection.html`) — cùng lưu ý như v23.10/v23.11. Không đổi `schema.sql`,
+không thêm biến môi trường, không thêm npm dependencies.
 
 ## v23.11 (2026-09-15): Tách module 2 — mở rộng tải lười khung HTML sang 7 module (Đồng Phục/Tổng Hợp/Đăng Ký Xe/VPP/Công&Phép/Báo Cáo Định Kỳ/Hỗ Trợ IT)
 

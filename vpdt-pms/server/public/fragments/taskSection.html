@@ -1,0 +1,60 @@
+
+    <div id="dieuHanhTabBar_task" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📋 Quản Lý Công Việc</h3>
+        <button id="btnManualTaskCreate" data-op="openCreateTaskModal" data-arg0="{}" class="hidden bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Giao Việc Thủ Công</button>
+      </div>
+      <p class="text-xs text-violet-800">Theo dõi công việc được giao trực tiếp hoặc từ ý kiến chỉ đạo trong Văn bản trình & Biên bản họp.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-3 rounded border text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterTaskStatus" data-op-change="onTaskFilterChange" class="w-full border p-1.5 rounded bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="TODO">Chưa bắt đầu</option>
+            <option value="DOING">Đang thực hiện</option>
+            <option value="DONE">Đã hoàn thành</option>
+            <option value="CANCELLED">Đã huỷ</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Nguồn Gốc</label>
+          <select id="filterTaskSource" data-op-change="onTaskFilterChange" class="w-full border p-1.5 rounded bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="SUBMISSION">Từ Văn bản trình</option>
+            <option value="MEETING_MINUTES">Từ Biên bản họp</option>
+            <option value="MANUAL">Giao trực tiếp</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Từ Khóa Tìm Kiếm</label>
+          <input id="filterTaskKeyword" data-op-input="onTaskFilterChange" placeholder="Tiêu đề, người nhận, nguồn..." class="w-full border p-1.5 rounded">
+        </div>
+        <div class="flex items-end">
+          <button data-op="resetTaskFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại Bộ Lọc</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Công Việc</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Tiêu Đề & Mô Tả</th>
+              <th class="border p-2">Người Nhận / Người Giao</th>
+              <th class="border p-2">Nguồn Gốc</th>
+              <th class="border p-2">Hạn Hoàn Thành</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2">Gia Hạn / Trễ Hạn</th>
+              <th class="border p-2 text-center min-w-[160px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="taskTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_task"></div>
+    </div>
+  

@@ -1,0 +1,171 @@
+
+    <div id="hanhChinhTabBar_meeting" class="hidden flex gap-2 flex-wrap"></div>
+    <div id="meetingDashboardCards"></div>
+    <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+      <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">📅 Quản Lý & Đặt Lịch Phòng Họp</h3>
+      <p class="text-xs text-emerald-800">Đăng ký lịch sử dụng phòng họp. Phiếu đặt chỉ được xác nhận sau khi được phê duyệt. Hệ thống tự động kiểm tra trùng giờ trong cùng 1 phòng.</p>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" data-op="setMeetingSubTab" data-arg0="REGISTER" id="btnMeetingSubRegister" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">📝 Đăng Ký</button>
+        <button type="button" data-op="setMeetingSubTab" data-arg0="CALENDAR" id="btnMeetingSubCalendar" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Họp</button>
+        <!-- Chỉ hiện cho người CÓ quyền duyệt lịch họp (canApproveMeeting()) — setMeetingSubTab() tự
+             toggle ẩn/hiện đúng lúc mở module, xem module-phonghop.js. -->
+        <button type="button" data-op="setMeetingSubTab" data-arg0="REPORT" id="btnMeetingSubReport" class="hidden px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+      </div>
+    </div>
+
+    <div id="meetingRegisterTabContent" class="space-y-6">
+      <form id="meetingForm" data-op-submit="submitMeetingReq" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đặt Phòng</label>
+            <input id="meetingCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đặt Lịch</label>
+            <select id="meetingDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chọn Phòng Họp</label>
+            <select id="meetingRoom" class="w-full border p-1.5 rounded bg-white" required></select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Chủ Đề Cuộc Họp</label>
+            <input id="meetingTitle" placeholder="Họp giao ban tuần / Họp triển khai dự án..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số Lượng Người Tham Dự</label>
+            <input id="meetingAttendees" type="number" placeholder="10" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
+            <input id="meetingStartTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Kết Thúc</label>
+            <input id="meetingEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thiết Bị Hỗ Trợ Yêu Cầu</label>
+            <input id="meetingEquipment" placeholder="Máy chiếu, Micro không dây, Zoom online..." class="w-full border p-1.5 rounded">
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung / Chương Trình Họp Chi Tiết (Agenda)</label>
+            <textarea id="meetingAgenda" placeholder="1. Đánh giá tuần qua... 2. Kế hoạch tuần tới..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_MEETING_ROOM" class="contents"></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="meetingForm" data-arg1="resetMeetingReqForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>
+        </div>
+      </form>
+
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Lịch Phòng Họp</h4>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+            <select id="filterDeptMeeting" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả phòng ban --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusMeeting" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="APPROVED">Đã Duyệt Lịch</option>
+              <option value="PENDING">Đang Chờ Duyệt</option>
+              <option value="CANCELLED">Đã Hủy Lịch</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+            <input id="filterFromDateMeeting" type="date" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+            <input id="filterToDateMeeting" type="date" data-op-change="onMeetingFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordMeeting" data-op-input="onMeetingFilterChange" placeholder="Mã, chủ đề, người đặt..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Đặt Lịch Phòng Họp & Trạng Thái Phê Duyệt</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã & Phòng Họp</th>
+                <th class="border p-2">Chủ Đề & Số Người</th>
+                <th class="border p-2">Thời Gian Sử Dụng</th>
+                <th class="border p-2">Phòng Ban & Người Đặt</th>
+                <th class="border p-2">Trạng Thái & Phê Duyệt</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="meetingTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_meeting"></div>
+      </div>
+    </div>
+
+    <div id="meetingCalendarTabContent" class="hidden space-y-3">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-1">
+          <button type="button" id="btnMeetingCalViewDAY" data-op="setMeetingCalViewMode" data-arg0="DAY" class="px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white">📅 Ngày</button>
+          <button type="button" id="btnMeetingCalViewWEEK" data-op="setMeetingCalViewMode" data-arg0="WEEK" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Tuần</button>
+          <button type="button" id="btnMeetingCalViewMONTH" data-op="setMeetingCalViewMode" data-arg0="MONTH" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📆 Tháng</button>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" data-op="shiftMeetingCalDate" data-arg0="-1" title="Lùi lại" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">◀</button>
+          <input id="meetingCalDate" type="date" data-op-change="renderMeetingCalendar" class="border p-1.5 rounded">
+          <button type="button" data-op="shiftMeetingCalDate" data-arg0="1" title="Tiến tới" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">▶</button>
+          <button type="button" data-op="jumpMeetingCalToToday" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold text-emerald-700">Hôm nay</button>
+        </div>
+        <span id="meetingCalDayHint" class="text-gray-500 italic">Kéo chuột hoặc giữ Shift rồi bấm ô thứ 2 (cùng cột phòng) để chọn nhiều khung giờ liên tiếp</span>
+        <div class="flex items-center gap-1.5 ml-auto">
+          <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống (bấm để đặt/xem)</span>
+          <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
+        </div>
+      </div>
+      <div id="meetingCalendarGrid"></div>
+      <div id="meetingCalendarWeekGrid" class="hidden"></div>
+      <div id="meetingCalendarMonthGrid" class="hidden"></div>
+    </div>
+
+    <!-- "📊 Báo Cáo" (chỉ người CÓ quyền duyệt lịch họp) — xem renderMeetingReportTab() ở
+         module-phonghop.js. -->
+    <div id="meetingReportTabContent" class="hidden space-y-4">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Từ Ngày (theo thời gian sử dụng)</label>
+          <input id="meetingReportFromDate" type="date" data-op-change="onMeetingReportFilterChange" class="border p-1.5 rounded">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="meetingReportToDate" type="date" data-op-change="onMeetingReportFilterChange" class="border p-1.5 rounded">
+        </div>
+      </div>
+      <div id="meetingReportSummaryCards" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-xs">🏠 Mức Sử Dụng Theo Phòng Họp</h4>
+          <div id="meetingReportRoomBars" class="space-y-2"></div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-xs">🏢 Mức Sử Dụng Theo Phòng Ban</h4>
+          <div id="meetingReportDeptBars" class="space-y-2"></div>
+        </div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">📈 Xu Hướng Theo Tháng (lịch đã duyệt)</h4>
+        <div id="meetingReportMonthlyBars" class="space-y-2"></div>
+      </div>
+    </div>
+  

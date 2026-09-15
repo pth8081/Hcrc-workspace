@@ -1,0 +1,64 @@
+
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex flex-wrap gap-2 mb-4 border-b pb-2">
+        <button type="button" data-op="setHrPayrollView" data-arg0="SELF" id="btnHrpViewSelf" class="px-3 py-1.5 rounded text-xs font-bold">🙋 Phiếu Lương Của Tôi</button>
+        <button type="button" data-op="setHrPayrollView" data-arg0="MANAGE" id="btnHrpViewManage" class="hidden px-3 py-1.5 rounded text-xs font-bold">🛠️ Quản Lý Kỳ Lương</button>
+      </div>
+
+      <!-- ===== "Phiếu Lương Của Tôi" — mọi người có module "hr" (hrPayrollView mặc định true) ===== -->
+      <div id="hrpViewSelf" class="space-y-3">
+        <p id="hrpSelfNoProfile" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+          ℹ️ Tài khoản của bạn chưa liên kết hồ sơ nhân sự nào — vui lòng liên hệ Nhân Sự để được hỗ trợ liên kết.
+        </p>
+        <p id="hrpSelfEmpty" class="hidden text-center text-gray-400 text-xs py-6">Chưa có phiếu lương nào được công bố.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Kỳ Lương</th><th class="p-2 text-right">Thực Lĩnh</th><th class="p-2 text-center">Đã Xem</th><th class="p-2"></th>
+            </tr></thead>
+            <tbody id="hrpSelfTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== "Quản Lý Kỳ Lương" — hrPayrollManage/hrPayrollApprove/admin ===== -->
+      <div id="hrpViewManage" class="hidden space-y-3">
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="btnHrpCreatePeriod" data-op="toggleHrpCreatePeriodForm" class="hidden bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Tạo Kỳ Lương</button>
+          <button type="button" id="btnHrpRateConfig" data-op="openHrpRateConfigModal" class="hidden bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">⚙️ Cấu Hình Lương</button>
+        </div>
+        <form id="hrpCreatePeriodForm" data-op-submit="submitHrpCreatePeriod" data-op-prevent-default="1" class="hidden bg-gray-50 border rounded p-3 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Tháng</label>
+            <select id="hrpNewMonth" class="w-full border rounded p-1.5 text-xs" required>
+              <option value="1">Tháng 1</option><option value="2">Tháng 2</option><option value="3">Tháng 3</option>
+              <option value="4">Tháng 4</option><option value="5">Tháng 5</option><option value="6">Tháng 6</option>
+              <option value="7">Tháng 7</option><option value="8">Tháng 8</option><option value="9">Tháng 9</option>
+              <option value="10">Tháng 10</option><option value="11">Tháng 11</option><option value="12">Tháng 12</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Năm</label>
+            <input id="hrpNewYear" type="number" min="2020" max="2100" class="w-full border rounded p-1.5 text-xs" required>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Tên Kỳ Lương (tuỳ chọn)</label>
+            <input id="hrpNewName" type="text" maxlength="100" placeholder="Để trống sẽ tự đặt 'Lương Tháng MM/YYYY'" class="w-full border rounded p-1.5 text-xs">
+          </div>
+          <div class="md:col-span-4">
+            <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Tạo Kỳ Lương</button>
+          </div>
+        </form>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Kỳ</th><th class="p-2 text-center">Trạng Thái</th><th class="p-2 text-right">Số NV</th>
+              <th class="p-2 text-right">Tổng Chi</th><th class="p-2"></th>
+            </tr></thead>
+            <tbody id="hrpPeriodsTableBody"></tbody>
+          </table>
+          <p id="hrpPeriodsEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có kỳ lương nào.</p>
+        </div>
+      </div>
+    </div>
+  

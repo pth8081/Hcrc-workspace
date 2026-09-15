@@ -1,0 +1,153 @@
+
+    <div id="dieuHanhTabBar_minutes" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+      <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📝 Lập Biên Bản Họp & Ý Kiến Chỉ Đạo</h3>
+      <p class="text-xs text-rose-800">Nhập biên bản trực tiếp trong cuộc họp — ghi lại nội dung và các ý kiến chỉ đạo gán ngay cho từng người. Biên bản là kênh chung, không giới hạn theo phòng ban.</p>
+
+      <form id="minutesForm" data-op-submit="submitMeetingMinutes" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Biên Bản</label>
+            <input id="minutesCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn)</label>
+            <select id="minutesLinkedMeeting" data-op-change="onMinutesLinkedMeetingChange" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Không liên kết --</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Chủ Đề / Tiêu Đề Cuộc Họp</label>
+            <input id="minutesTitle" placeholder="Họp giao ban tuần / Họp triển khai dự án..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Họp</label>
+            <input id="minutesTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Địa Điểm</label>
+            <input id="minutesLocation" placeholder="Phòng họp A / Trực tuyến..." class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chủ Trì</label>
+            <input id="minutesChair" placeholder="Họ tên người chủ trì" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thư Ký</label>
+            <input id="minutesSecretary" placeholder="Họ tên người ghi biên bản" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Biên Bản</label>
+            <textarea id="minutesContent" placeholder="Ghi nội dung trao đổi, kết luận từng phần trong cuộc họp..." class="w-full border p-1.5 rounded h-28" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_MEETING_MINUTES" class="contents"></div>
+        </div>
+
+        <div class="border-t pt-3 space-y-2">
+          <label class="block font-semibold text-gray-600">Thành Phần Tham Dự</label>
+
+          <div class="flex flex-wrap items-center gap-2 bg-rose-50 border border-rose-200 rounded p-2">
+            <span class="text-xs font-semibold text-rose-800">🗂️ Mẫu danh sách tham gia:</span>
+            <select id="minutesAttendeeTemplateSelect" class="border p-1 rounded text-xs bg-white flex-1 min-w-[180px]">
+              <option value="">-- Chọn mẫu đã lưu --</option>
+            </select>
+            <button type="button" data-op="applyMeetingAttendeeTemplateFromSelect" class="bg-rose-700 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-800">▶️ Áp Dụng</button>
+            <button type="button" data-op="saveMeetingAttendeeTemplate" class="bg-rose-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu Từ Danh Sách Này</button>
+            <button type="button" data-op="deleteMeetingAttendeeTemplate" class="bg-gray-400 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-500">🗑️ Xóa Mẫu</button>
+            <button type="button" data-op="openAttendeeTemplateManagerModal" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700">🗂️ Quản Lý Mẫu</button>
+          </div>
+          <p class="text-[11px] text-gray-500 italic">Mẫu dùng chung cho cả công ty — lưu 1 lần, mọi người lập biên bản đều chọn dùng lại được. Áp dụng mẫu xong vẫn sửa/thêm/bớt người tham dự bình thường. Chọn mẫu ở đây rồi bấm "Áp Dụng" hoặc "Xóa Mẫu" tùy ý, chọn xong KHÔNG tự áp dụng ngay. Muốn soạn mẫu mới từ đầu (không cần có sẵn biên bản) hoặc sửa mẫu đã lưu, bấm "Quản Lý Mẫu".</p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead>
+                <tr class="bg-gray-100 text-left text-gray-700">
+                  <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5 w-20">Tài Khoản</th>
+                  <th class="border p-1.5">Họ Và Tên</th>
+                  <th class="border p-1.5">Chức Danh</th>
+                  <th class="border p-1.5">Phòng</th>
+                  <th class="border p-1.5 w-32">Số Điện Thoại</th>
+                  <th class="border p-1.5 w-40">Email</th>
+                  <th class="border p-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody id="minutesAttendeesTableBody"></tbody>
+            </table>
+          </div>
+          <button type="button" data-op="addAttendeeRow" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Người Tham Dự</button>
+          <p class="text-[11px] text-gray-500 italic">Cột "Tài khoản" = Có: gõ Họ và tên sẽ gợi ý đúng tài khoản hệ thống (kèm phòng ban để phân biệt người trùng tên) — chọn xong tự điền Chức danh/Phòng/SĐT/Email từ hệ thống (vẫn sửa tay được). Chọn Không: nhập tự do, không tìm theo tài khoản hệ thống.</p>
+        </div>
+
+        <div class="border-t pt-3 space-y-2">
+          <label class="block font-semibold text-gray-600">Ý Kiến Chỉ Đạo (gán trực tiếp cho người thực hiện)</label>
+          <p class="text-[11px] text-gray-500 italic">Dòng nào có gán sẵn Người thực hiện sẽ TỰ ĐỘNG được tạo thành Công việc ngay khi lưu biên bản.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead>
+                <tr class="bg-gray-100 text-left text-gray-700">
+                  <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5">Nội Dung Chỉ Đạo</th>
+                  <th class="border p-1.5 w-40">Người Thực Hiện</th>
+                  <th class="border p-1.5 w-40">Người Phối Hợp</th>
+                  <th class="border p-1.5 w-36">Hạn Hoàn Thành</th>
+                  <th class="border p-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody id="minutesDirectivesTableBody"></tbody>
+            </table>
+          </div>
+          <button type="button" data-op="addMinutesDirectiveRow" class="bg-rose-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-rose-700">➕ Thêm Ý Kiến Chỉ Đạo</button>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="minutesForm" data-arg1="resetMeetingMinutesForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" id="minutesCancelEditBtn" data-op="cancelEditMeetingMinutes" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="submit" id="minutesSubmitBtn" class="bg-rose-600 text-white px-5 py-2 rounded font-bold hover:bg-rose-700">Lưu Biên Bản Họp</button>
+        </div>
+      </form>
+      <p id="minutesNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền lập biên bản họp — chỉ có thể xem danh sách.</p>
+    </div>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Biên Bản Họp</h4>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chủ Đề Họp</label>
+          <input id="filterTopicMinutes" data-op-input="onMinutesFilterChange" placeholder="Lọc theo tiêu đề cuộc họp..." class="w-full border p-2 rounded text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateMinutes" type="date" data-op-change="onMinutesFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateMinutes" type="date" data-op-change="onMinutesFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordMinutes" data-op-input="onMinutesFilterChange" placeholder="Mã, chủ đề, chủ trì..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Biên Bản Họp</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã & Chủ Đề</th>
+              <th class="border p-2">Thời Gian Họp</th>
+              <th class="border p-2">Chủ Trì / Thư Ký</th>
+              <th class="border p-2">Ý Kiến Chỉ Đạo</th>
+              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="minutesTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_minutes"></div>
+    </div>
+  
