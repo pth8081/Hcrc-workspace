@@ -1,8 +1,65 @@
 # Phiên bản hiện tại
 
-**23.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.13 (2026-09-15): Tách module 4 (ĐỢT CUỐI) — 2 section phức tạp cuối cùng (Hệ Thống + Truyền Thông Nội Bộ), hoàn tất 100% tải lười khung HTML
+
+Đợt cuối cùng trong chuỗi 4 đợt tách khung HTML theo yêu cầu "tối ưu 100%" của người dùng (v23.10→v23.13).
+Khác 15 module đơn giản ở đợt 3, 2 section còn lại là phần PHỨC TẠP NHẤT (lý do để dành đến cuối) — mỗi
+section chứa NHIỀU section con lồng bên trong:
+
+- **`systemSection`** (Hệ Thống, 1731 dòng) — 7 section con: `formSection` (Biểu Mẫu), `adminSection`
+  (Quản Trị), `workflowSection` (Quy Trình), `quickApplySection` (Áp Dụng Nhanh), `uploadTypeSection`
+  (Loại Tệp Upload), `logSection` (Nhật Ký), `trashSection` (Thùng Rác).
+- **`internalSection`** (Truyền Thông Nội Bộ, 1224 dòng) — 3 section con: `internalTrainingLmsSection`
+  (Đào Tạo LMS), `internalRecruitmentSection` (Tuyển Dụng), `internalQnaSection` (HCRC Đồng Hành).
+
+Thiết kế: tách CẢ CỤM (section cha + toàn bộ section con) vào 1 file fragment duy nhất, giữ 1 vỏ rỗng
+DUY NHẤT ở `index.html` cho section cha — khác cách tách `paymentSection` riêng khỏi `officeSection` ở
+v23.11 vì các section con ở đây không cần độc lập tải riêng (luôn cùng vào/ra theo section cha).
+
+**2 lớp lỗi thật phát hiện + vá qua rà soát phòng ngừa TRƯỚC khi tách (tiếp tục thói quen từ v23.12)**:
+
+1. **`formSection`/`adminSection`/`workflowSection`/`logSection` thiếu bảo vệ `?.`** — 4 dòng
+   `document.getElementById(...).classList.toggle(...)` này chạy VÔ ĐIỀU KIỆN ở MỌI lần gọi
+   `switchTab()` (không chỉ khi vào tab "system"), y hệt lớp lỗi gốc ở v23.10 (`vanHanhSection`) nhưng
+   ở quy mô nguy hiểm hơn — sẽ crash ngay LẦN CHUYỂN TAB ĐẦU TIÊN của MỌI phiên đăng nhập, không riêng
+   gì ai vào tab Hệ Thống. Phát hiện qua rà soát code TRƯỚC khi tách (không phải qua test crash), sửa
+   bằng `?.` an toàn — `setSystemSubTab()` (gọi trong `_dispatchTabRender()` sau khi fragment chắc chắn
+   đã nạp) tự áp lại đúng logic ẩn/hiện này.
+2. **6 file test thiếu route `/fragments/*` trong HTTP server tự dựng** — lỗi CÓ SẴN từ v23.11/v23.12
+   (cùng lớp lỗi với 4 file đã vá ở v23.11) nhưng CHƯA từng lộ ra vì `system`/`internal` chưa từng được
+   tải lười — nay mới kích hoạt khi 2 tab này vào `TAB_SECTION_FRAGMENT`. Phát hiện qua chạy thử có mục
+   tiêu (không đợi full regression) các file test liên quan Đào Tạo/Tuyển Dụng/Quản Trị trước khi chạy
+   suite đầy đủ — vá: `test-admin-users-permgroups.js`, `test-approval-hub.js`,
+   `test-catalog-rename-locked-accounts.js`, `test-perm-tree-expand-collapse.js`, `test-auth-login.js`,
+   `demo-approval-email-config.js` (demo, không thuộc bộ hồi quy tự động nhưng vẫn vá vì cùng lớp lỗi).
+   Riêng `demo-approval-email-config.js`: sau khi vá route, demo chạy xa hơn và lộ ra 1 vấn đề nghiệp vụ
+   KHÔNG liên quan (thiếu dòng log SUPPRESSED cho lần gửi phiếu đầu tiên khi tắt "Cần phê duyệt") — GHI
+   NHẬN riêng, KHÔNG sửa trong đợt này vì ngoài phạm vi (tách khung HTML, không phải audit luồng thông
+   báo email).
+
+**`NESTED_CSP_ROOTS_IN_FRAGMENT`** (hạ tầng từ v23.11) mở rộng thêm `internal`: 10 id con
+(`internalTrainingLmsSection`, `internalRecruitmentSection`, 7 modal xử lý riêng của Đào Tạo/Tuyển Dụng,
+`recruitmentReferModal`) đều có `bindCspDelegation()` riêng, bị ảnh hưởng khi `#internalSection` trở
+thành fragment — đã rà soát chéo toàn bộ ~100 lời gọi `bindCspDelegation()` trong code trước khi tách,
+xác nhận danh sách này ĐẦY ĐỦ. `system` KHÔNG cần entry (7 section con không có `bindCspDelegation`
+riêng, dùng chung gốc `#systemSection`).
+
+**Kết quả đo (TOÀN BỘ hành trình v23.9→v23.13)**: `index.html` 768KB → 211KB raw (gzip ~143KB → ~45KB) —
+giảm **~72% raw / ~68% gzip**. File giờ chỉ còn phần khung tĩnh (header/sidebar/modal dùng chung) — toàn
+bộ nội dung 25 module nghiệp vụ đã chuyển sang tải lười theo tab thực sự dùng tới.
+
+Test: full regression 146 file — sạch, không có lỗi mới (3 lỗi có sẵn từ trước — `test-it-support.js`,
+`test-form-reset-file-remove.js` như các đợt trước, cộng `test-approval-hub.js` 2 FAILED liên quan
+`operationOrderReceipt` — đã xác nhận qua `git stash` đối chiếu baseline v23.12, không thuộc phạm vi đợt
+tách khung HTML nào).
+
+**Deploy-impact**: 2 file HTML mới trong `server/public/fragments/` (`systemSection.html`,
+`internalSection.html`) — cùng lưu ý như các đợt trước. Không đổi `schema.sql`, không thêm biến môi
+trường, không thêm npm dependencies.
 
 ## v23.12 (2026-09-15): Tách module 3 — mở rộng tải lười khung HTML sang 15 module (Hợp Đồng/Checklist/Phòng Họp/Biên Bản Họp/Onboarding-Offboarding/Ngân Sách/Tài Liệu/Văn Bản Trình/Giấy Phép/Cơ Cấu Tổ Chức/Lương/Công Việc/Hồ Sơ NS/Báo Cáo/Hợp Đồng LĐ)
 

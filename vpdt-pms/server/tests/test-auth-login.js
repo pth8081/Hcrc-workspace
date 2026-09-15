@@ -42,6 +42,18 @@ function startServer() {
           res.end(data);
         });
       }
+      // /fragments/* (v23.13) - khung HTML tach rieng cho tab lon (system/internal...) - THIEU route nay
+      // se roi vao fallback index.html duoi day, khien loadTabSectionHtml() nhan sai noi dung.
+      if (urlPath.startsWith('/fragments/')) {
+        const PUBLIC_DIR = require('path').join(__dirname, '..', 'public');
+        const filePath = require('path').join(PUBLIC_DIR, urlPath);
+        if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+        return fs.readFile(filePath, (err, data) => {
+          if (err) { res.writeHead(404); return res.end('Not found: ' + urlPath); }
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(data);
+        });
+      }
       // Always re-read from disk (never cache) so we always test the CURRENT code.
       fs.readFile(INDEX_HTML_PATH, (err, data) => {
         if (err) { res.writeHead(500); res.end(String(err)); return; }

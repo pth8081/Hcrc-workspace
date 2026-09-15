@@ -1,0 +1,1731 @@
+
+    <!-- Ghim thanh chuyển tab con (Quản Trị/Biểu Mẫu/Quy Trình/Quản Lý Tệp File/Log) dính ở đầu màn hình khi
+         cuộn. QUAN TRỌNG: sticky chỉ "dính" được trong phạm vi CHIỀU CAO CỦA CHÍNH THẺ CHA trực tiếp của
+         nó — trước đây #systemSection chỉ bọc mỗi thanh này (cao ~41px) trong khi 6 màn nội dung con
+         (formSection/adminSection/workflowSection/uploadTypeSection/logSection/trashSection) lại là ANH
+         EM đứng ngoài, không phải con của #systemSection, nên thanh chỉ "dính" được đúng ~41px rồi cuộn
+         mất hẳn — TRÔNG NHƯ sticky không hoạt động dù có đủ class. Đã sửa: chuyển toàn bộ 6 màn nội dung
+         con đó vào LÀM CON của #systemSection (ngay bên dưới, thẻ đóng của #systemSection giờ nằm sau
+         cùng, sau #uploadTypeSection) — nhờ vậy #systemSection luôn cao bằng đúng nội dung tab con đang
+         hiện, thanh mới thật sự dính suốt quá trình cuộn. top-14 trên điện thoại để tránh đè lên
+         #mobileTopBar (fixed, cao ~56px = pt-14 mà nội dung chính đang chừa sẵn); z-20 thấp hơn
+         #mobileTopBar (z-30) và mọi modal (z-40/z-50) để không che các lớp đó. -->
+    <div id="systemSubTabBar" class="sticky top-14 md:top-0 z-20 bg-white flex gap-2 flex-wrap border-b pb-2 pt-1">
+      <button type="button" data-op="setSystemSubTab" data-arg0="ADMIN" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="FORM" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="WORKFLOW" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="QUICKAPPLY" id="btnSystemSubQuickApply" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚡ Áp Dụng Nhanh</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="UPLOAD" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="LOG" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="TRASH" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
+    </div>
+
+  <!-- Màn hình MODULE QUẢN LÝ BIỂU MẪU (FORM BUILDER) -->
+  <div id="formSection" class="hidden space-y-6">
+    <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-rose-200 pb-3">
+        <div>
+          <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📋 Quản Lý & Tùy Biến Trường Cho Các Biểu Mẫu</h3>
+          <p class="text-xs text-rose-700">Thêm, bớt, cập nhật trường dữ liệu động cho từng loại biểu mẫu.</p>
+        </div>
+        <div id="formTabsBar" class="flex gap-2 flex-wrap"></div>
+      </div>
+      <!-- Hàng tab CON (cấp 2) — chỉ hiện khi nhóm cấp 1 đang chọn có >1 form thật (mirror
+           #wfSubmissionTypeTabs bên màn Quy Trình & Phê Duyệt), xem renderFormSubTabsBar(). -->
+      <div id="formSubTabsBar" class="hidden gap-2 flex-wrap border-t border-rose-200 pt-3"></div>
+
+      <form data-op-submit="addCustomField" class="bg-white p-4 rounded border space-y-3 text-xs">
+        <h4 class="font-bold text-gray-800 text-sm flex items-center gap-1"><span id="lblFormFieldFormMode">➕ Thêm Trường Dữ Liệu Bổ Sung Cho:</span> <span id="lblActiveFormName" class="text-rose-600 font-extrabold">Văn Bản Trình / Tờ Trình</span></h4>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tên Trường (Label)</label>
+            <input id="fldLabel" placeholder="VD: Phạm vi áp dụng..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div id="fldTypeGroup">
+            <label class="block font-semibold text-gray-600 mb-1">Kiểu Dữ Liệu</label>
+            <select id="fldType" data-op-change="toggleOptionsInput" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <option value="text">Văn bản ngắn (Text)</option>
+              <option value="number">Số (Number)</option>
+              <option value="date">Ngày (Date)</option>
+              <option value="datetime-local">Ngày & Giờ (DateTime)</option>
+              <option value="select">Danh sách chọn (Dropdown 1 lựa chọn)</option>
+              <option value="multiselect">Danh sách chọn nhiều (Multi-select)</option>
+              <option value="textarea">Văn bản dài (Textarea)</option>
+              <option value="file">Tải lên 1 tệp (File)</option>
+              <option value="multifile">Tải lên nhiều tệp (Multi-file)</option>
+            </select>
+          </div>
+          <div id="optionsGroup" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">CÁC TÙY CHỌN (Phân cách dấu phẩy)</label>
+            <input id="fldOptions" placeholder="Toàn tập đoàn, Nội bộ phòng..." class="w-full border p-1.5 rounded">
+          </div>
+          <div class="flex items-center pt-5 gap-2">
+            <label class="flex items-center gap-1.5 font-bold text-gray-700 cursor-pointer">
+              <input id="fldRequired" type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+              <span>Bắt buộc nhập</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button type="button" id="btnCancelEditField" data-op="cancelEditCustomField" class="hidden bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300 transition">Hủy Sửa</button>
+          <button type="submit" id="btnSubmitCustomField" class="bg-rose-600 text-white px-4 py-1.5 rounded font-bold hover:bg-rose-700 transition">Thêm Trường Vào Biểu Mẫu</button>
+        </div>
+      </form>
+
+      <div class="bg-white rounded border overflow-hidden">
+        <div class="p-3 bg-gray-50 border-b flex justify-between items-center">
+          <h4 class="font-bold text-gray-800 text-xs">Cấu Trúc Tất Cả Các Trường Đang Áp Dụng</h4>
+          <span class="text-xs text-gray-500 italic">Trường mặc định: bấm Sửa để đổi Nhãn hiển thị / Bắt buộc (riêng vài trường dropdown còn sửa được cả danh sách lựa chọn) — không xóa được. Trường bổ sung: sửa/xóa/sắp xếp tự do.</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs text-left">
+            <thead>
+              <tr class="bg-gray-100 text-gray-700 font-bold border-b">
+                <th class="p-2 border">Mã Trường</th>
+                <th class="p-2 border">Tên Hiển Thị</th>
+                <th class="p-2 border">Loại Dữ Liệu</th>
+                <th class="p-2 border">Options</th>
+                <th class="p-2 border text-center">Bắt Buộc</th>
+                <th class="p-2 border text-center">Phân Loại</th>
+                <th class="p-2 border text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="formFieldsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình 3: Tab Quản Lý Quy Trình & Phê Duyệt Đồng Cấp -->
+  <div id="workflowSection" class="hidden space-y-6">
+    <div class="flex gap-2 border-b pb-2 flex-wrap">
+      <button data-op="switchWfModule" data-arg0="DOC" id="btnWfModDoc" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">📂 QT Tài Liệu</button>
+      <button data-op="switchWfModule" data-arg0="SUBMISSION" id="btnWfModSubmission" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📜 QT Văn Bản Trình</button>
+      <button data-op="switchWfModule" data-arg0="CAR" id="btnWfModCar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🚗 QT Đăng Ký Xe</button>
+      <button data-op="switchWfModule" data-arg0="OFFICE_BUY" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
+      <button data-op="switchWfModule" data-arg0="OFFICE_FIX" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
+      <button data-op="switchWfModule" data-arg0="VPP" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_STORE" id="btnWfModOperationOrderStore" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_HO" id="btnWfModOperationOrderHO" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đặt Hàng Tại HO</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN" id="btnWfModOperationStoreOpen" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 QT Vận Hành - Mở Mới Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_REPAIR" id="btnWfModOperationRepair" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Vận Hành - Sửa Chữa Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="CONTRACT_APPROVAL" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
+      <button data-op="switchWfModule" data-arg0="CONTRACT_MANAGE" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
+      <button data-op="switchWfModule" data-arg0="PAYMENT" id="btnWfModPAYMENT" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 QT Thanh Toán</button>
+      <button data-op="switchWfModule" data-arg0="ITPRICE" id="btnWfModITPRICE" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏷️ QT Hỗ Trợ IT - Duyệt Giá</button>
+    </div>
+
+    <div id="wfSubmissionTypeTabs" class="hidden gap-2 flex-wrap"></div>
+
+    <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+      <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2" id="wfConfigTitle">
+        🏢 Cấu Hình Quy Trình Theo Phòng Ban
+      </h3>
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <p class="text-xs text-emerald-800">💡 Cấu hình luồng duyệt chuyển tiếp theo các cấp thẩm quyền phòng ban. Có thể sửa nhiều phòng ban rồi bấm "Lưu Cấu Hình Tất Cả" 1 lần, hoặc lưu riêng từng phòng ban ở mỗi thẻ bên dưới.</p>
+        <button data-op="saveAllDeptWorkflowConfigs" class="shrink-0 bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">💾 Lưu Cấu Hình Tất Cả</button>
+      </div>
+
+      <div id="deptWorkflowConfigContainer" class="space-y-4"></div>
+    </div>
+
+    <!-- ĐỊNH NGHĨA CÁC MẪU QUY TRÌNH (WORKFLOW TEMPLATES) -->
+    <div class="bg-slate-50 p-4 rounded border space-y-4">
+      <h3 class="font-bold text-slate-800 text-base">🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt</h3>
+
+      <form data-op-submit="saveWorkflowTemplate" class="bg-white p-3 rounded border space-y-3">
+        <input id="editingWfCode" type="hidden">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Quy Trình (tự sinh)</label>
+            <input id="wfCode" readonly placeholder="Mã quy trình (tự sinh)" class="w-full border p-1.5 rounded text-xs bg-gray-100 cursor-not-allowed disabled:bg-gray-100 font-mono font-bold" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Quy Trình</label>
+            <input id="wfName" placeholder="Ví dụ: Quy trình chuẩn 3 bước" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-2">Thêm / Sửa / Xóa Các Bước Theo Thứ Tự:</label>
+          <p class="text-[11px] text-gray-500 italic mb-2">Mỗi bước có 2 ô: <b>Tên bước</b> (ai duyệt, VD "Trưởng Phòng") và <b>Nhãn hành động</b> (chữ hiện trên nút bấm + chân ký khi hoàn tất bước đó — VD "Xác Nhận"/"Thẩm Định"/"Kiểm Duyệt" thay vì mặc định "Phê Duyệt"). Để trống ô nhãn hành động = dùng mặc định "Phê Duyệt".</p>
+          <div id="stepBuilderContainer" class="space-y-2"></div>
+          <button type="button" data-op="addStepRow" class="mt-2 text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-semibold hover:bg-gray-300">+ Thêm Bước Duyệt</button>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button id="btnCancelWf" type="button" data-op="resetWorkflowForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy</button>
+          <button id="btnSaveWf" type="submit" class="bg-emerald-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-emerald-700">Lưu Mẫu Quy Trình</button>
+        </div>
+      </form>
+
+      <div class="overflow-x-auto bg-white rounded border">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-gray-100 text-gray-700 font-bold">
+            <tr>
+              <th class="p-2 border">Mã WF</th>
+              <th class="p-2 border">Tên Quy Trình</th>
+              <th class="p-2 border">Tổng Số Bước</th>
+              <th class="p-2 border">Cấu Trúc Duyệt</th>
+              <th class="p-2 border text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="workflowTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Màn hình 3b: "⚡ Áp Dụng Nhanh" — tách RIÊNG khỏi #workflowSection thành sub-tab của chính nó
+       (trước đây là 1 khối nằm ngay trong màn Quy Trình & Phê Duyệt) — cho phép tạo NHIỀU cấu hình độc
+       lập, mỗi cấu hình gắn 1 mẫu quy trình (số bước) vào ĐÚNG các module admin chọn, thay vì chỉ có 1
+       lượt chọn 1 mẫu áp cho TOÀN BỘ quy trình như thiết kế cũ. Xem module-workflow.js
+       (renderQuickApplySection()/saveQuickApplyConfig()/applyQuickApplyConfig()). -->
+  <div id="quickApplySection" class="hidden space-y-4">
+    <div class="bg-amber-50 p-3 rounded border border-amber-200">
+      <div class="font-bold text-amber-900 text-sm">⚡ Áp Dụng Nhanh Số Bước Cho Quy Trình</div>
+      <div class="text-xs text-amber-900 mt-1">Mỗi cấu hình bên dưới chỉ set SỐ BƯỚC (mẫu quy trình) cho những phòng ban/mức <b>CHƯA từng cấu hình</b>, trong PHẠM VI CÁC MODULE bạn chọn riêng cho cấu hình đó — KHÔNG đụng module ngoài phạm vi, KHÔNG tự gán người duyệt, KHÔNG đụng tới mục đã có cấu hình sẵn. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt/sửa lại sau khi áp dụng.</div>
+    </div>
+
+    <div id="quickApplyConfigList" class="space-y-3"></div>
+
+    <div id="quickApplyAddForm" class="bg-white p-4 rounded border space-y-3">
+      <h3 class="font-bold text-gray-800 text-sm">➕ Thêm / Sửa Cấu Hình Áp Dụng Nhanh</h3>
+      <form data-op-submit="saveQuickApplyConfig" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">1. Chọn mẫu quy trình muốn gắn</label>
+          <select id="qaTplSelect" class="w-full md:w-96 border p-1.5 rounded text-xs bg-white font-bold"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">2. Chọn các module muốn gắn mẫu này (chọn nhiều được, không bắt buộc chọn hết)</label>
+          <div id="qaModuleGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="btnCancelQaConfig" type="button" data-op="resetQuickApplyConfigForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy Sửa</button>
+          <button id="btnSaveQaConfig" type="submit" class="bg-amber-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-amber-700">💾 Lưu Cấu Hình</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="adminSection" class="hidden space-y-6">
+    <!-- Ghim thanh chuyển tab con (Cấu Hình Email/Quản Lý Danh Mục/Phân Quyền/API Xác Thực Ngoài) dính
+         NGAY DƯỚI thanh Hệ Thống ở trên (#systemSubTabBar) khi cuộn — cùng lý do/khuôn với chú thích ở
+         #systemSubTabBar (trước đây thanh này nằm trong dòng chảy trang bình thường nên nội dung cây
+         phân quyền rất dài của tab "Phân Quyền" cuộn xuống là mất luôn thanh chuyển tab con này, phải
+         cuộn ngược lên đầu trang mới đổi được tab khác). `top` được tính động bằng JS
+         (positionAdminSubTabBar(), gọi từ setSystemSubTab() + window resize) vì chiều cao thật của
+         #systemSubTabBar thay đổi theo bề rộng màn hình (6 nút tự xuống dòng khác nhau trên điện
+         thoại/tablet/desktop) — không thể gán cứng 1 giá trị top theo class Tailwind như thanh trên. z-10
+         thấp hơn #systemSubTabBar (z-20) để không đè lên khi cả 2 cùng dính ở đầu. -->
+    <div id="adminSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
+      <button type="button" data-op="setAdminSubTab" data-arg0="EMAIL" id="btnAdminSubEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📧 Cấu Hình Email</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="APPREMAIL" id="btnAdminSubApprovalEmail" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Thông Báo Email Phê Duyệt</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="CATALOG" id="btnAdminSubCatalog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Danh Mục</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="PERMS" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="EXTAUTH" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="OPAPI" id="btnAdminSubOpApi" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔌 Cấu Hình API</button>
+    </div>
+
+    <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
+    <div id="adminSubEmail" class="hidden bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
+      <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">✉️ Cấu Hình Máy Chủ Gửi Email Thông Báo</h3>
+      <p class="text-[11px] text-gray-500 italic">Cấu hình đầy đủ ngay tại đây — kể cả tài khoản/mật khẩu đăng nhập SMTP (nếu máy chủ yêu cầu xác thực), không cần đụng tới server/file .env nữa. Chưa nhập SMTP Server bên dưới thì hệ thống tự chuyển sang chế độ mô phỏng (ghi Nhật ký hệ thống, không gửi hộp thư thật). Muốn TẮT RIÊNG từng loại email phê duyệt (VD email "Cần phê duyệt" bị trùng lặp với Hub Phê Duyệt) theo từng phân hệ, xem tab "🔔 Thông Báo Email Phê Duyệt" bên cạnh.</p>
+      <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
+
+      <form data-op-submit="saveEmailConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>
+            <select id="cfgEmailEnabled" class="w-full border p-1.5 rounded bg-white font-bold text-green-700">
+              <option value="true">Bật (Active)</option>
+              <option value="false">Tắt (Disabled)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">SMTP Server</label>
+            <input id="cfgSmtpHost" placeholder="smtp.gmail.com" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
+            <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
+            <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded" required>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Mã Hoá Kết Nối</label>
+          <div class="flex gap-1.5 flex-wrap">
+            <button type="button" data-op="setSmtpEncryption" data-arg0="NONE" id="encBtn_NONE" class="px-3 py-1.5 rounded border font-semibold">Không mã hoá <span class="font-normal text-gray-400">(port 25)</span></button>
+            <button type="button" data-op="setSmtpEncryption" data-arg0="STARTTLS" id="encBtn_STARTTLS" class="px-3 py-1.5 rounded border font-semibold">TLS <span class="font-normal text-gray-400">(port 587)</span></button>
+            <button type="button" data-op="setSmtpEncryption" data-arg0="SSL" id="encBtn_SSL" class="px-3 py-1.5 rounded border font-semibold">SSL <span class="font-normal text-gray-400">(port 465)</span></button>
+          </div>
+          <input type="hidden" id="cfgSmtpEncryption" value="STARTTLS">
+          <p class="text-[11px] text-gray-400 italic mt-1">Chọn "TLS" hoặc "SSL" sẽ tự chuyển Port sang giá trị chuẩn ở trên — trừ khi Port hiện tại đã là 1 giá trị tuỳ chỉnh khác (sẽ giữ nguyên, sửa tay được như bình thường).</p>
+        </div>
+
+        <div class="border-t pt-2">
+          <label class="flex items-center gap-2 font-semibold text-gray-600 mb-2">
+            <input type="checkbox" id="cfgSmtpAuthEnabled" data-op-change="toggleSmtpAuthFields">
+            Máy chủ SMTP yêu cầu xác thực (tài khoản/mật khẩu đăng nhập)
+          </label>
+          <div id="cfgSmtpAuthFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tài Khoản SMTP</label>
+              <input id="cfgSmtpUser" placeholder="notify@company.com" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mật Khẩu SMTP</label>
+              <input id="cfgSmtpPassPlain" type="password" placeholder="Để trống nếu giữ nguyên mật khẩu đã lưu" class="w-full border p-1.5 rounded" autocomplete="new-password">
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Hợp Đồng — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgContractReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgContractReminderCc" placeholder="bgd@company.com, phaply@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Giấy Phép — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgLicenseReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn Giấy Phép (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgLicenseReminderCc" placeholder="hanhchinh@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo giấy phép + toàn bộ người đang có quyền "Duyệt giấy phép" trong module Giấy Phép, cộng thêm email CC cố định ở trên (không cần khai theo phòng ban như hợp đồng).</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Dịch Vụ CNTT — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgItRenewalReminderDays" placeholder="30, 15, 7" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Hết Hạn Dịch Vụ CNTT (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgItRenewalReminderCc" placeholder="it@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = người tạo mục dịch vụ + toàn bộ người đang có quyền "Quản lý Hỗ Trợ IT" (itManage), cộng thêm email CC cố định ở trên.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Nhắc Hết Hạn Hợp Đồng Lao Động — Trước (số ngày, cách nhau dấu phẩy)</label>
+            <input id="cfgLaborContractReminderDays" placeholder="60, 45, 30" class="w-full border p-1.5 rounded" required>
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận = nhân sự phụ trách hợp đồng lao động (quyền "hrContractManage") + quản lý trực tiếp của nhân viên có hợp đồng sắp hết hạn — không có email CC riêng cho mục này.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Cảnh Báo Ổ Đĩa Máy Chủ — Ngưỡng (% đã dùng)</label>
+            <input id="cfgDiskAlertThreshold" type="number" min="1" max="99" placeholder="85" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Ổ Đĩa (tuỳ chọn, cách nhau dấu phẩy)</label>
+            <input id="cfgDiskAlertCc" placeholder="it@company.com" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = toàn bộ tài khoản đang có quyền Quản Trị Viên (có email), cộng thêm email CC cố định ở trên. Chỉ CẢNH BÁO qua email khi ổ đĩa chứa thư mục tải file lên vượt ngưỡng — hệ thống KHÔNG tự xoá bất kỳ file nào.</p>
+
+        <div class="flex flex-wrap gap-2 items-center border-t pt-2">
+          <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
+          <button type="button" data-op="sendTestEmail" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>
+          <span id="cfgTestEmailResult" class="text-[11px] font-semibold"></span>
+        </div>
+
+        <div class="flex justify-between items-center pt-1 border-t">
+          <span class="text-gray-500 italic text-[11px]">Hệ thống ghi nhận log thông báo email tại cửa sổ console.</span>
+          <button type="submit" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Cấu Hình Email</button>
+        </div>
+      </form>
+
+      <div class="bg-white p-3 rounded border text-xs space-y-2">
+        <h4 class="font-bold text-amber-900 flex items-center gap-1">👥 Người Phụ Trách Nhận Thông Báo Hết Hạn Hợp Đồng Theo Phòng Ban</h4>
+        <p class="text-[11px] text-gray-500 italic">Bổ sung thêm cho "Email CC Cố Định" ở trên (nhận thông báo của MỌI phòng ban) — mỗi phòng ban có thể có người phụ trách riêng, chỉ nhận thông báo hết hạn hợp đồng CỦA phòng đó.</p>
+        <table class="w-full border-collapse">
+          <thead><tr class="border-b text-left text-gray-500"><th class="py-1 pr-2 w-40">Phòng Ban</th><th class="py-1">Người Phụ Trách</th></tr></thead>
+          <tbody id="deptContactsTableBody"></tbody>
+        </table>
+        <button type="button" data-op="saveContractExpiryDeptContacts" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Người Phụ Trách</button>
+      </div>
+    </div>
+
+    <!-- THÔNG BÁO EMAIL PHÊ DUYỆT — bật/tắt từng loại email liên quan phê duyệt theo TỪNG PHÂN HỆ,
+         ĐỘC LẬP với Cấu Hình Email (SMTP) ở trên. Rendering hoàn toàn động qua
+         renderApprovalEmailConfigForm() (public/js/core.js, dựng từ APPROVAL_EMAIL_EVENTS) — 2 vùng
+         cố định dưới đây (#approvalEmailModuleTableBody/#approvalEmailSpecialList) chỉ là khung chứa. -->
+    <div id="adminSubApprovalEmail" class="hidden bg-amber-50 p-4 rounded border border-amber-300 space-y-3">
+      <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">🔔 Bật/Tắt Email Thông Báo Phê Duyệt Theo Phân Hệ</h3>
+      <p class="text-[11px] text-gray-500 italic">Nhiều người đã thấy hồ sơ chờ duyệt qua "Hub Phê Duyệt" nên email <b>"Cần phê duyệt"</b> gửi cho người duyệt thường TRÙNG LẶP/gây spam — có thể tắt riêng theo từng phân hệ (mặc định TẮT). Ngược lại email <b>"Kết quả duyệt"</b> (Duyệt/Từ chối/Yêu cầu bổ sung) gửi cho NGƯỜI TRÌNH — người không hề theo dõi Hub cho hồ sơ của chính mình — vẫn hữu ích nên mặc định BẬT. Tắt 1 ô ở đây KHÔNG xoá lịch sử — Nhật ký hệ thống vẫn ghi lại đầy đủ sự kiện, chỉ email thật không được gửi đi.</p>
+
+      <form data-op-submit="saveApprovalEmailConfig" class="space-y-4">
+        <div class="bg-white p-3 rounded border overflow-x-auto">
+          <table class="w-full border-collapse text-xs min-w-[420px]">
+            <thead>
+              <tr class="border-b bg-gray-50 text-left">
+                <th class="p-2 border">Phân Hệ</th>
+                <th class="p-2 border text-center w-36">Cần Phê Duyệt</th>
+                <th class="p-2 border text-center w-44">Kết Quả Duyệt</th>
+              </tr>
+            </thead>
+            <tbody id="approvalEmailModuleTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-amber-900 text-xs flex items-center gap-1">🧩 Sự Kiện Đặc Thù Riêng Từng Phân Hệ</h4>
+          <p class="text-[11px] text-gray-500 italic">Các sự kiện không thuộc 2 nhóm chính ở trên (VD Văn Bản Trình xin ý kiến, Hỗ Trợ IT huỷ khẩn cấp/ticket) — mặc định giữ nguyên hành vi cũ (BẬT).</p>
+          <div id="approvalEmailSpecialList" class="space-y-2"></div>
+        </div>
+
+        <div class="flex justify-end border-t pt-2">
+          <button type="submit" class="bg-amber-600 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-700">Lưu Cấu Hình</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- API XÁC THỰC NGOÀI (verify-credentials cho ứng dụng khác) -->
+    <div id="adminSubExtAuth" class="hidden bg-cyan-50 p-4 rounded border border-cyan-300 space-y-4">
+      <div>
+        <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🔑 API Xác Thực Tài Khoản Cho Ứng Dụng Ngoài</h3>
+        <p class="text-[11px] text-gray-500 italic mt-1">Cấp API key cho 1 ứng dụng/hệ thống KHÁC, dùng chung 1 key cho 2 việc — mọi lệnh gọi đều kèm header <code class="bg-white px-1 rounded border">Authorization: Bearer &lt;API key&gt;</code>:</p>
+        <ul class="text-[11px] text-gray-500 list-disc pl-5 space-y-1">
+          <li><b>Xác thực tài khoản/mật khẩu:</b> <code class="bg-white px-1 rounded border">POST /api/external/verify-credentials</code>, body <code class="bg-white px-1 rounded border">{"account","password"}</code>, trả về <code class="bg-white px-1 rounded border">{"success": true|false}</code>. Đây KHÔNG phải đăng nhập hộ (không cấp phiên/cookie) — chỉ trả lời đúng/sai.</li>
+          <li><b>Đồng bộ danh bạ nhân sự:</b> <code class="bg-white px-1 rounded border">GET /api/external/users</code> — trả vị trí (Văn phòng/Siêu Thị)/mã nhân viên (username)/tên nhân viên/điện thoại/phòng/chức danh của TOÀN BỘ tài khoản; thêm <code class="bg-white px-1 rounded border">?account=&lt;username&gt;</code> để tra cứu đúng 1 hồ sơ. Không bao giờ kèm mật khẩu.</li>
+        </ul>
+      </div>
+
+      <form data-op-submit="createExternalApiKeyAction" class="flex flex-wrap items-end gap-2 bg-white p-3 rounded border text-xs">
+        <div class="flex-1 min-w-[220px]">
+          <label class="block font-semibold text-gray-600 mb-1">Tên / Mô tả ứng dụng dùng key này</label>
+          <input id="extApiKeyName" placeholder="VD: Ứng dụng chấm công XYZ" class="w-full border p-1.5 rounded" required>
+        </div>
+        <div class="flex-1 min-w-[260px]">
+          <label class="block font-semibold text-gray-600 mb-1">IP cho phép (lớp bảo mật thứ 2 — để trống = mọi IP)</label>
+          <textarea id="extApiKeyAllowedIps" rows="1" placeholder="VD: 203.0.113.10, 203.0.113.0/24 (mỗi dòng hoặc phân tách bằng dấu phẩy)" class="w-full border p-1.5 rounded"></textarea>
+        </div>
+        <button type="submit" class="bg-cyan-700 text-white px-4 py-1.5 rounded font-bold hover:bg-cyan-800">➕ Tạo API Key</button>
+      </form>
+
+      <!-- Hộp hiện key THẬT đúng 1 lần ngay sau khi tạo — ẩn mặc định, KHÔNG có cách nào xem lại sau khi đóng -->
+      <div id="extApiKeyRevealBox" class="hidden bg-amber-50 border-2 border-amber-400 rounded p-3 space-y-2">
+        <p class="text-xs font-bold text-amber-900">⚠️ Đây là API key THẬT — chỉ hiển thị ĐÚNG 1 LẦN DUY NHẤT ngay bây giờ. Hãy sao chép và lưu lại an toàn ngay, đóng hộp này lại sẽ KHÔNG xem lại được nữa (chỉ có thể thu hồi và tạo key mới).</p>
+        <div class="flex items-center gap-2">
+          <code id="extApiKeyRevealValue" class="flex-1 bg-white border rounded px-2 py-1.5 text-xs break-all select-all"></code>
+          <button type="button" data-op="copyExternalApiKeyReveal" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700 whitespace-nowrap">📋 Sao chép</button>
+        </div>
+        <button type="button" data-op="closeExtApiKeyRevealBox" class="text-xs text-gray-600 underline">Tôi đã lưu lại, đóng hộp này</button>
+      </div>
+
+      <table class="w-full border-collapse text-xs bg-white rounded border">
+        <thead><tr class="border-b text-left text-gray-500">
+          <th class="py-1.5 px-2">Tên / Mô tả</th><th class="py-1.5 px-2">Key (tiền tố)</th><th class="py-1.5 px-2">IP cho phép</th><th class="py-1.5 px-2">Trạng thái</th>
+          <th class="py-1.5 px-2">Người tạo</th><th class="py-1.5 px-2">Ngày tạo</th><th class="py-1.5 px-2">Dùng lần cuối</th><th class="py-1.5 px-2">Hành động</th>
+        </tr></thead>
+        <tbody id="extApiKeysTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- CẤU HÌNH API — đồng bộ ĐƠN HÀNG (Vận Hành > Đơn Hàng) ra hệ thống ngoài "dsmart16" (job outbound,
+         xem jobs/operationOrderApiSync.js). Xác thực LINH HOẠT: Base URL + 1 header tuỳ chỉnh tên/giá trị
+         (không cố định Bearer/Basic như "API Xác Thực Ngoài" ở tab bên cạnh — dsmart16 có thể yêu cầu tên
+         header khác). "Mã khoá đối chiếu" mặc định "poNumber" — placeholder trường dùng để đối chiếu bản
+         ghi giữa 2 hệ thống. -->
+    <div id="adminSubOpApi" class="hidden bg-teal-50 p-4 rounded border border-teal-300 space-y-4">
+      <div>
+        <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">🔌 Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16</h3>
+        <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình để hệ thống TỰ ĐỘNG gửi Đơn Hàng (Vận Hành &gt; Đơn Hàng) sang hệ thống ngoài "dsmart16" — mỗi đơn có "Số Đơn NCC" (poNumber) chỉ được gửi 1 lần khi đủ điều kiện. Giá trị header xác thực là write-only (để trống ô khi Sửa = giữ nguyên giá trị đã lưu).</p>
+      </div>
+
+      <form data-op-submit="saveOperationOrderApiConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Trạng thái đồng bộ</label>
+            <select id="opApiEnabled" class="w-full border p-1.5 rounded bg-white font-bold text-green-700">
+              <option value="true">Bật (Active)</option>
+              <option value="false">Tắt (Disabled)</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1">Base URL (endpoint nhận đơn hàng)</label>
+            <input id="opApiBaseUrl" type="url" placeholder="https://dsmart16.example.com/api/orders" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Chu kỳ tự động (phút)</label>
+            <input id="opApiSyncIntervalMinutes" type="number" min="5" placeholder="60" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tên Header Xác Thực</label>
+            <input id="opApiHeaderName" placeholder="VD: X-Api-Key hoặc Authorization" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Giá Trị Header (để trống = giữ nguyên)</label>
+            <input id="opApiHeaderValuePlain" type="password" placeholder="•••••• (write-only)" class="w-full border p-1.5 rounded" autocomplete="new-password">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Khoá Đối Chiếu (matchingKey)</label>
+            <input id="opApiMatchingKey" placeholder="poNumber" class="w-full border p-1.5 rounded">
+          </div>
+        </div>
+        <p id="opApiHeaderStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-gray-50 border"></p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="submit" class="bg-teal-700 text-white px-4 py-1.5 rounded font-bold hover:bg-teal-800">Lưu Cấu Hình API</button>
+          <button type="button" id="opApiSyncNowBtn" data-op="syncOperationOrdersNow" class="bg-cyan-700 text-white px-4 py-1.5 rounded font-bold hover:bg-cyan-800">🔄 Đồng Bộ Ngay</button>
+        </div>
+      </form>
+
+      <p id="opApiLastSyncStatus" class="text-[11px] font-semibold rounded px-2 py-1.5 bg-white border"></p>
+    </div>
+
+    <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
+        <form data-op-submit="saveDept" class="flex gap-2">
+          <input id="txtDeptName" placeholder="Tên phòng ban mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="deptList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">🏬 Quản Lý Danh Mục Siêu Thị</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục RIÊNG cho siêu thị — dùng khi tạo/sửa Người Dùng (chọn Vị Trí = "Siêu Thị") và module Đồng Phục. Nếu tên siêu thị đang nằm sẵn trong Danh Mục Phòng Ban ở trên, bấm "Chuyển" ở dòng đó thay vì gõ lại từ đầu.</p>
+        <form data-op-submit="saveStore" class="flex gap-2">
+          <input id="txtStoreName" placeholder="Tên siêu thị mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="storeList" class="divide-y text-xs"></ul>
+        </div>
+        <div class="border-t pt-2 space-y-1.5">
+          <div class="flex items-center gap-2 flex-wrap text-[11px]">
+            <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">⬇️ Tải Mẫu Excel</a>
+            <input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onStoreImportFileChange" data-arg-event="0" class="text-[11px]">
+          </div>
+          <p id="storeImportStatus" class="text-[11px] text-gray-500"></p>
+          <div id="storeImportPreviewWrap" class="hidden border rounded max-h-32 overflow-y-auto">
+            <table class="w-full text-[11px]">
+              <tbody id="storeImportPreviewBody"></tbody>
+            </table>
+          </div>
+          <button type="button" id="storeImportConfirmBtn" data-op="confirmStoreImport" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Thêm Siêu Thị Mới</button>
+        </div>
+      </div>
+
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục Các Loại Giấy Phép</h3>
+        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Tên giấy phép / Loại giấy phép" ở màn Giấy Phép — tự học thêm khi ai gõ loại mới, ở đây chỉ để dọn/xoá bớt.</p>
+        <form data-op-submit="saveLicenseType" class="flex gap-2">
+          <input id="txtLicenseTypeName" placeholder="Tên loại giấy phép mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="licenseTypeList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+        <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">🚗 Quản Lý Danh Mục Loại Xe Cụ Thể</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Loại xe cụ thể" (Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính) — chọn 1 mục thường sẽ tự động điền Biển Kiểm Soát (BKS); mục đánh dấu "Xe Taxi" sẽ hiện ô "Hãng Taxi" thay vì BKS.</p>
+        <form data-op-submit="saveCarVehicleType" class="grid grid-cols-2 gap-2">
+          <input id="txtCarVehicleTypeName" placeholder="Tên loại xe (VD: Xe 5 chỗ)..." class="border p-1.5 rounded text-xs col-span-2" required>
+          <input id="txtCarVehicleTypeBienSo" placeholder="Biển kiểm soát cố định (VD: 30G-012.82)" class="border p-1.5 rounded text-xs">
+          <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" id="chkCarVehicleTypeIsTaxi"> Là Xe Taxi (hiện "Hãng Taxi" thay BKS)</label>
+          <button type="submit" class="col-span-2 bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="carVehicleTypeList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">🚕 Quản Lý Danh Mục Hãng Taxi</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Hãng Taxi" — chỉ hiện khi chọn "Loại xe cụ thể" = mục đánh dấu Xe Taxi ở trên.</p>
+        <form data-op-submit="saveCarTaxiCompany" class="flex gap-2">
+          <input id="txtCarTaxiCompanyName" placeholder="Tên hãng taxi mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="carTaxiCompanyList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <h3 class="font-bold text-rose-900 text-sm flex items-center gap-1">🗺️ Quản Lý Danh Mục Vùng Giá Áp Dụng</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Vùng Giá Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ (Hỗ Trợ IT).</p>
+        <form data-op-submit="savePriceZone" class="flex gap-2">
+          <input id="txtPriceZoneName" placeholder="Tên vùng giá mới (VD: Miền Bắc)..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="priceZoneList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
+        <form data-op-submit="saveCat" class="flex gap-2">
+          <input id="txtCatName" placeholder="Tên loại tài liệu mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="catList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+        <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🏷️ Viết Tắt Loại Hợp Đồng (dùng sinh Mã Hợp Đồng)</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh sách "Loại Pháp Lý" tự thêm/bớt ở màn Biểu Mẫu (nút Sửa trường mặc định) — ở đây chỉ chỉnh viết tắt dùng sinh Mã Hợp Đồng.</p>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="contractTypeAbbrList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎖️ Quản Lý Danh Sách Chức Danh (Khối Văn Phòng/HO)</h3>
+        <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt. Chỉ dùng cho nhân sự Khối Văn Phòng/HO — nhân viên Siêu Thị dùng danh sách riêng bên dưới.</p>
+        <form data-op-submit="saveJobTitle" class="flex gap-2">
+          <input id="txtJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="jobTitleList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🏪 Danh Sách Chức Danh (Siêu Thị)</h3>
+        <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ.</p>
+        <form data-op-submit="saveStoreJobTitle" class="flex gap-2 items-center flex-wrap">
+          <input id="txtStoreJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-fuchsia-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-800">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="storeJobTitleList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🎓 Quản Lý Loại Đào Tạo</h3>
+        <p class="text-[11px] text-emerald-700">Dùng để phân loại Kho Tài Liệu và Lớp Học ở màn Truyền Thông Nội Bộ &gt; Đào tạo.</p>
+        <form data-op-submit="saveTrainingCategory" class="flex gap-2">
+          <input id="txtTrainingCategoryName" placeholder="Tên loại đào tạo mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="trainingCategoryList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <div class="bg-red-50 p-4 rounded border border-red-200 space-y-3">
+        <h3 class="font-bold text-red-900 text-sm flex items-center gap-1">🚨 Từ Khoá Nhạy Cảm (kiểm duyệt bình luận)</h3>
+        <p class="text-[11px] text-red-700">Dùng để QUÉT (không chặn đăng) bình luận ở Truyền Thông Nội Bộ — khớp thì chỉ gắn cờ cảnh báo cho người có quyền Duyệt Bài Đăng xem xét ở màn Phê Duyệt, không tự động xoá gì.</p>
+        <form data-op-submit="saveSensitiveKeyword" class="flex gap-2">
+          <input id="txtSensitiveKeywordTerm" placeholder="Từ/cụm từ..." class="border p-1.5 rounded text-xs flex-1" required>
+          <select id="selSensitiveKeywordCategory" class="border p-1.5 rounded text-xs bg-white">
+            <option value="TUC_TIU">Tục tĩu</option>
+            <option value="TIEU_CUC">Tiêu cực</option>
+            <option value="CUC_DOAN">Cực đoan</option>
+            <option value="PHAN_DONG">Phản động nhà nước</option>
+          </select>
+          <button type="submit" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">Thêm</button>
+        </form>
+        <div class="max-h-40 overflow-y-auto bg-white rounded border">
+          <ul id="sensitiveKeywordList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <!-- Danh Mục Phòng Họp (DB.meetingRooms) — dời từ trong module Phòng Họp (#meetingSection) sang
+           đây (BUG THẬT đã sửa theo yêu cầu người dùng — mọi danh mục quản trị khác đều gom về đúng 1
+           màn này, riêng danh mục này trước đây lại nằm lẫn trong màn đăng ký đặt phòng). Xem
+           renderMeetingRoomCatalogList()/saveMeetingRoomCatalogItem()/editMeetingRoomCatalogItem()/
+           deleteMeetingRoomCatalogItem() ở module-phonghop.js — cùng cụm lazy-load "phonghop", ĐÃ được
+           nạp sẵn cùng lúc "hethong-tabs" nên gọi trực tiếp an toàn (không cần ensureFnReady()), xem
+           MODULE_LOAD_GROUPS ở core.js. -->
+      <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🗂️ Danh Mục Phòng Họp</h3>
+          <span class="text-[11px] text-gray-500">Thêm/bớt/sửa phòng họp — dùng chung cho ô Chọn Phòng Họp và lưới Lịch Họp (module Phòng Họp).</span>
+        </div>
+        <div id="meetingRoomCatalogAdminForm" class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Phòng Họp Đầy Đủ</label>
+            <input id="meetingRoomCatalogName" placeholder="VD: Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Gọn (cột trên Lịch Họp)</label>
+            <input id="meetingRoomCatalogShort" placeholder="VD: Phòng A (50 người)" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <button type="button" data-op="saveMeetingRoomCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+        </div>
+        <div id="meetingRoomCatalogListWrap" class="max-h-56 overflow-y-auto space-y-1.5"></div>
+      </div>
+
+      <!-- Danh mục nguồn: PWA_SHORTCUT_CATALOG (client, hàm renderPwaShortcutCheckboxes()) — bản sao
+           thủ công của cùng danh mục ở server/routes/pwaManifest.js, phải sửa cùng lúc 2 nơi nếu
+           thêm/bớt module. Tick tối đa 4 mục — hầu hết launcher Android chỉ hiện được từng đó dù khai
+           nhiều hơn (manifest route cũng tự cắt bớt phòng khi ai đó ghi thẳng qua API). -->
+      <div class="bg-blue-50 p-4 rounded border border-blue-200 space-y-3">
+        <h3 class="font-bold text-blue-900 text-sm flex items-center gap-1">📲 Phím Tắt PWA (Android/Chrome)</h3>
+        <p class="text-[11px] text-blue-700">Chọn tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính điện thoại/máy tính Android/Chrome — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. Không hỗ trợ trên iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).</p>
+        <div id="pwaShortcutChecklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-white text-xs"></div>
+        <div class="flex justify-end">
+          <button type="button" data-op="savePwaShortcutModules" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">💾 Lưu Phím Tắt PWA</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CẤU HÌNH USER & PHÂN QUYỀN -->
+    <div id="adminSubPerms" class="bg-slate-50 p-4 rounded border border-slate-300 space-y-4">
+      <div>
+        <h3 class="font-bold text-base text-gray-800">Cấu hình Quyền Hạn, Email, Số Điện Thoại & Phạm Vi Truy Cập Theo Phòng Ban</h3>
+      </div>
+      
+      <form data-op-submit="saveUser" class="space-y-4">
+        <input id="editUserId" type="hidden">
+
+        <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3 bg-white p-3 rounded border">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
+            <select id="uPosType" data-op-change="onUserPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="HO">HO (Văn phòng)</option>
+              <option value="STORE">Siêu Thị</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
+            <input id="uUsername" placeholder="username" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
+            <input id="uPassword" type="password" placeholder="Để trống = giữ nguyên mật khẩu hiện tại" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
+            <input id="uFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+            <input id="uEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Số điện thoại</label>
+            <input id="uPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
+          </div>
+          <div id="uDeptFieldWrap">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
+            <select id="uDept" class="w-full border p-1.5 rounded text-xs"></select>
+          </div>
+          <div id="uStoreFieldWrap" class="hidden">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
+            <select id="uStore" class="w-full border p-1.5 rounded text-xs"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
+            <select id="uJobTitle" class="w-full border p-1.5 rounded text-xs"></select>
+          </div>
+          <div>
+            <!-- Ngày Vào Làm Việc (Đào Tạo Tân Binh Đợt 6) — mốc DUY NHẤT để tính hạn Giai đoạn 1/2/3
+                 (onboardingProgress.startDate SNAPSHOT giá trị này lúc phân công, không đọc sống lại —
+                 xem lib/createValidation.js). Để trống hợp lệ — chỉ chặn ở bước PHÂN CÔNG lộ trình tân
+                 binh cho nhân viên chưa có ngày này (server báo lỗi rõ ràng). -->
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
+            <input id="uStartDate" type="date" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+
+        <!-- Vị Trí Kiêm Nhiệm (u.secondaryPositions[]) — CHỈ dùng để tính là approver "Theo vị trí"
+             (approverMode POSITION) ở CÁC MODULE KHÁC, KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên,
+             KHÔNG ảnh hưởng Quản Lý Trực Tiếp/KPI (Cơ Cấu Tổ Chức) hay mô hình chấm công (Công & Phép) —
+             xem lib/positionApprovers.js. Nguồn chọn = DB.workflowParticipatingPositions (cùng danh mục
+             "Vị Trí Tham Gia Quy Trình" ở khối 17, xem wfPositionPairPickerItems()). -->
+        <div class="bg-white p-3 rounded border">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">🏷️ Vị Trí Kiêm Nhiệm (tuỳ chọn)</label>
+          <div id="uSecondaryPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+          <p class="text-[11px] text-gray-400 mt-1">Chỉ dùng để tính người này là người duyệt/tham gia quy trình "Theo vị trí" ở các module khác cho (các) chức danh/phòng ban được chọn thêm dưới đây — KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên, không ảnh hưởng Quản Lý Trực Tiếp/KPI/Chấm công.</p>
+        </div>
+
+        <!-- Là tài xế: đánh dấu để hiện trong picker "Lái xe được phân công" (Đăng Ký Xe > Xử lý duyệt,
+        #carAssignedDriver) — trước đây picker đó tìm toàn bộ nhân viên công ty vì không có cách nào lọc
+        đúng nhóm tài xế thực tế. Không phải quyền truy cập (không gate action gì) — chỉ là cờ phân loại
+        hồ sơ, khớp mẫu jobTitle (field phẳng trên user, không cần bảng riêng) — audit Đợt 5, Giai đoạn 4.
+        -->
+        <div class="bg-white p-3 rounded border flex items-center gap-2">
+          <input type="checkbox" id="uIsDriver" class="w-4 h-4">
+          <label for="uIsDriver" class="text-xs font-semibold text-gray-600">🚗 Là tài xế (hiện trong picker "Lái xe được phân công" ở Đăng Ký Xe)</label>
+        </div>
+
+        <div class="bg-white p-3 rounded border">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền (chọn được nhiều nhóm cùng lúc)</label>
+          <div id="uPermGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
+        </div>
+
+        <div id="pendingNewUsersSection" class="hidden bg-white p-3 rounded border border-amber-300">
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <h4 class="font-bold text-sm text-amber-800">📋 Danh Sách Người Dùng Chờ Lưu (<span id="pendingNewUsersCount">0</span>)</h4>
+            <button type="button" data-op="commitPendingNewUsers" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Tất Cả Danh Sách</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border-collapse">
+              <thead><tr class="bg-gray-100">
+                <th class="border p-1.5 text-left">Tên đăng nhập</th>
+                <th class="border p-1.5 text-left">Họ và Tên</th>
+                <th class="border p-1.5 text-left">Phòng Ban</th>
+                <th class="border p-1.5 text-left">Nhóm Phân Quyền</th>
+                <th class="border p-1.5 w-24">Thao Tác</th>
+              </tr></thead>
+              <tbody id="pendingNewUsersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="groupIdentityFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded border">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Nhóm Phân Quyền</label>
+            <input id="gGroupName" placeholder="VD: Trưởng phòng, Kế toán viên..." class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Mô Tả</label>
+            <input id="gGroupDesc" placeholder="Mô tả ngắn về nhóm quyền này..." class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">👥 Thành Viên Nhóm (thêm/bớt nhiều người cùng lúc, giống quản lý nhóm AD)</label>
+            <div id="groupMembersPicker"></div>
+            <p class="text-[11px] text-gray-500 italic mt-1">Gõ tên/username để tìm và thêm người vào nhóm. Khi bấm Lưu: người được thêm sẽ nhận quyền của nhóm này (nếu đang ở nhóm khác sẽ được CHUYỂN sang nhóm này); người bị bỏ chọn sẽ ra khỏi nhóm nhưng vẫn giữ nguyên quyền hiện tại làm quyền riêng.</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-op="cancelPermFormEdit" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
+          <button type="button" id="btnAddToStagingList" data-op="addUserToStagingList" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
+          <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
+        </div>
+
+        <div id="permGroupInfoNote" class="hidden bg-blue-50 border border-blue-300 text-blue-800 text-[11px] rounded p-2">
+          ℹ️ Quyền bên dưới đã tự điền theo nhóm phân quyền đã chọn. Bạn vẫn tick thêm/bớt tuỳ ý để cấp riêng cho người này — sau này nhóm đổi quyền vẫn tự cập nhật cho người này, nhưng phần bạn đã tick thêm/bớt riêng sẽ được giữ nguyên.
+        </div>
+
+        <div id="adminPermsLockedNote" class="hidden bg-purple-50 border border-purple-300 text-purple-800 text-[11px] rounded p-2 font-semibold">
+          🔒 Tài khoản "admin" luôn có toàn quyền hệ thống và không thể chỉnh sửa/bớt quyền — đảm bảo hệ thống luôn còn 1 tài khoản toàn quyền không thể bị khoá nhầm.
+        </div>
+
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-2">
+            <input type="text" id="permTreeSearch" data-op-input="filterPermTree" placeholder="🔍 Tìm quyền theo tên (vd: duyệt, xóa, xem)..." class="border rounded px-2 py-1.5 text-xs w-64">
+            <span class="text-[11px] text-gray-500">🟠 Viền cam = khối vừa sửa, chưa lưu</span>
+          </div>
+          <div class="flex gap-2 text-[11px]">
+            <button type="button" data-op="setAllPermTreeNodes" data-arg0="true" class="text-purple-700 font-semibold hover:underline">Mở rộng tất cả</button>
+            <span class="text-gray-300">|</span>
+            <button type="button" data-op="setAllPermTreeNodes" data-arg0="false" class="text-purple-700 font-semibold hover:underline">Thu gọn tất cả</button>
+          </div>
+        </div>
+
+        <div id="permFieldsContainer" class="space-y-2">
+        <details open class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🔑 0. Quyền Truy Cập Module</span></span>
+            <span id="permTreeBadge_module" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Công tắc BẬT/TẮT quyền vào từng module, độc lập với quyền Admin. Tắt module nào thì người dùng không vào được module đó, dù có quyền chi tiết bên dưới. Quyền Admin luôn vào được mọi module. Module nào có tab con (VD Văn Phòng Phẩm, Đồng Phục, Tổng Hợp, Ngân Sách, Báo Cáo Định Kỳ) sẽ hiện thêm dòng tím bên dưới cho biết tab đó ẩn/hiện theo quyền nào — bấm "Đi tới →" để nhảy thẳng xuống đúng khối tick quyền, không phải dò cả cây.</p>
+            <div id="moduleAccessCheckboxes" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
+          </div>
+        </details>
+
+        <!-- Các khối 1-14 xếp dạng lưới 3 cột (desktop) — mỗi <details> tự co giãn theo nội dung riêng,
+             không phụ thuộc chiều cao khối bên cạnh (xem filterPermTree()/setAllPermTreeNodes() vẫn thao
+             tác trực tiếp trên .perm-tree-node nên không cần đổi gì thêm khi chuyển layout). -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>⚙️ 1. Hệ Thống & Chung</span></span>
+            <span id="permTreeBadge_system" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="space-y-2">
+              <span class="font-bold text-purple-800 block text-[11px]">Quyền Admin:</span>
+              <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pAdmin"> Quyền Admin (Trang quản trị)
+              </label>
+            </div>
+            <div class="space-y-2">
+              <span class="font-bold text-emerald-800 block text-[11px]">Người Duyệt:</span>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pCanBeApprover"> ✅ Có thể được chọn làm người duyệt
+              </label>
+              <p class="text-[11px] text-gray-500 italic">Chỉ để LỌC danh sách ứng viên ở màn "Quy trình & Đồng cấp" cho gọn — không tự cấp quyền duyệt. Quyền duyệt thật vẫn do admin tick chọn đích danh ở từng bước.</p>
+              <div>
+                <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực bổ sung khi bấm Duyệt</label>
+                <select id="pApproverAuthLevel" data-op-change="onApproverAuthLevelChange" class="w-full border p-1.5 rounded bg-white text-xs">
+                  <option value="NONE">Không yêu cầu thêm (mặc định)</option>
+                  <option value="PASSWORD">Yêu cầu nhập lại mật khẩu</option>
+                  <option value="OTP_EMAIL">Yêu cầu mã OTP gửi qua email</option>
+                  <option value="PIN">Yêu cầu nhập mã PIN</option>
+                  <option value="WEBAUTHN">Yêu cầu vân tay/Face ID (chỉ khi trình duyệt hỗ trợ)</option>
+                </select>
+                <p class="text-[11px] text-gray-500 italic mt-1">Chỉ áp dụng cho hành động DUYỆT ở Văn bản trình / Đăng ký xe / Văn phòng (không áp dụng Từ chối/Hủy, Tài liệu, Đặt phòng họp). Mã OTP hiện đang ở chế độ mô phỏng giống các email khác của hệ thống (hiện trong log, chưa gửi hộp thư thật) cho tới khi kết nối SMTP thật. "Vân tay/Face ID" chỉ dùng được nếu người đó đã tự đăng ký thiết bị ở "⚙️ Cá Nhân Hóa → 🖐️ Đăng Nhập/Xác Thực Bằng Vân Tay" VÀ máy chủ đang chạy qua HTTPS thật — chọn mức này cho người CHƯA đăng ký thiết bị nào sẽ khiến họ không Duyệt được cho tới khi đăng ký.</p>
+                <div id="uPinWrap" class="hidden mt-2">
+                  <label class="block font-semibold text-gray-700 mb-1">Mã PIN duyệt (tối thiểu 4 số)</label>
+                  <input id="uPin" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Để trống = giữ nguyên mã PIN hiện tại" class="w-full border p-1.5 rounded text-xs">
+                </div>
+                <div id="uWebauthnWrap" class="hidden mt-2">
+                  <label class="block font-semibold text-gray-700 mb-1">🖐️ Thiết bị vân tay/Face ID đã đăng ký</label>
+                  <div id="uWebauthnListWrap" class="space-y-1"></div>
+                  <p class="text-[11px] text-gray-500 italic mt-1">Chỉ Quản Trị Viên gỡ được thiết bị của người khác — dùng khi người đó mất thiết bị (hoặc quên mật khẩu luôn) nên không tự đăng nhập lại để tự gỡ. Gỡ xong họ cần đăng ký lại thiết bị mới nếu muốn tiếp tục dùng vân tay/Face ID.</p>
+                </div>
+                <!-- CHỈ hiện khi target user đang có perms.admin (xem editUser()) — TOTP bắt buộc riêng
+                     cho admin, khác khối vân tay ở trên vốn áp dụng chung mọi tài khoản. -->
+                <div id="uTotpWrap" class="hidden mt-2">
+                  <label class="block font-semibold text-gray-700 mb-1">🔐 Xác thực 2 lớp (TOTP) — bắt buộc cho Quản Trị Viên</label>
+                  <div id="uTotpStatusWrap" class="text-xs"></div>
+                  <p class="text-[11px] text-gray-500 italic mt-1">Chỉ Quản Trị Viên gỡ được TOTP của người khác — dùng khi người đó mất điện thoại (cài Authenticator) nên không tự đăng nhập lại để tự gỡ. Gỡ xong họ sẽ bị bắt thiết lập lại NGAY ở lần đăng nhập kế tiếp, không có ngoại lệ.</p>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <span class="font-bold text-sky-800 block text-[11px]">Báo Cáo Quản Trị:</span>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pCanViewReports"> 📊 Được xem Báo cáo quản trị
+              </label>
+              <p class="text-[11px] text-gray-500 italic">Xem số liệu tổng hợp toàn hệ thống (không phân biệt phòng ban tạo hồ sơ) — Admin luôn xem được mặc định dù không tick.</p>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📂 2. Tài Liệu</span></span>
+            <span id="permTreeBadge_doc" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải lên</span>
+                <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pUploadAll" data-op-change="toggleScopeGroup" data-arg0="pUploadAll" data-arg1="pUploadDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pUploadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem Bản Nháp</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pViewDraftAll" data-op-change="toggleScopeGroup" data-arg0="pViewDraftAll" data-arg1="pViewDraftDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pViewDraftDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem Đã Duyệt</span>
+                <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pViewApprovedAll" data-op-change="toggleScopeGroup" data-arg0="pViewApprovedAll" data-arg1="pViewApprovedDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pViewApprovedDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải Xuống</span>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pDocDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pDocDownloadAll" data-arg1="pDocDownloadDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pDocDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📜 3. Văn Bản Trình</span></span>
+            <span id="permTreeBadge_sub" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pSubViewAll" data-op-change="toggleScopeGroup" data-arg0="pSubViewAll" data-arg1="pSubViewDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pSubViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pSubCreateAll" data-op-change="toggleScopeGroup" data-arg0="pSubCreateAll" data-arg1="pSubCreateDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pSubDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pSubDownloadAll" data-arg1="pSubDownloadDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pSubDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 4. Hợp Đồng & Giấy Phép</span></span>
+            <span id="permTreeBadge_contract" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pContractViewAll" data-op-change="toggleScopeGroup" data-arg0="pContractViewAll" data-arg1="pContractViewDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pContractViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pContractCreateAll" data-op-change="toggleScopeGroup" data-arg0="pContractCreateAll" data-arg1="pContractCreateDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pContractDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pContractDownloadAll" data-arg1="pContractDownloadDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+          </div>
+          <div class="px-3 pb-3">
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+              <input type="checkbox" id="pContractApprove"> ✅ Duyệt hợp đồng (toàn công ty, sub-tab "Phê Duyệt")
+            </label>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📅 5. Phòng Họp</span></span>
+            <span id="permTreeBadge_meeting" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-3">
+            <div class="space-y-1">
+              <span class="font-bold text-emerald-800 block text-[11px]">Toàn công ty (không theo phòng ban):</span>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
+              </label>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pMeetingCancel"> ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pMeetingViewAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingViewAll" data-arg1="pMeetingViewDept"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pMeetingViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Đăng ký (book)</span>
+                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pMeetingBookAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingBookAll" data-arg1="pMeetingBookDept"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pMeetingBookDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚗 6. Đăng Ký Xe</span></span>
+            <span id="permTreeBadge_car" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pCarViewAll" data-op-change="toggleScopeGroup" data-arg0="pCarViewAll" data-arg1="pCarViewDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pCarViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pCarCreateAll" data-op-change="toggleScopeGroup" data-arg0="pCarCreateAll" data-arg1="pCarCreateDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pCarDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pCarDownloadAll" data-arg1="pCarDownloadDept"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+            </div>
+          </div>
+          <div class="px-3 pb-3">
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pCarDispatch"> 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục "Phần Dành Cho Phòng Hành Chính" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)
+            </label>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🏢 7. Văn Phòng (Mua/Sửa)</span></span>
+            <span id="permTreeBadge_office" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Dùng chung cho cả 3 phân hệ VP; bật/tắt từng phân hệ cụ thể ngay dưới đây.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pb-2 border-b">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pOfficeBuy"> 🛒 Mua Bán
+              </label>
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pOfficeFix"> 🔧 Sửa Chữa
+              </label>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
+                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pOfficeViewAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeViewAll" data-arg1="pOfficeViewDept"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pOfficeViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
+                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pOfficeCreateAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeCreateAll" data-arg1="pOfficeCreateDept"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pOfficeCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
+                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="pOfficeDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeDownloadAll" data-arg1="pOfficeDownloadDept"><span>ALL</span>
+                  </label>
+                </div>
+                <div id="pOfficeDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📣 8. Truyền Thông Nội Bộ</span></span>
+            <span id="permTreeBadge_internal" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Mọi người dùng đều XEM và tương tác được (bình luận, thả tim) trên cả 4 phân hệ. 2 quyền dưới đây kiểm soát ai được ĐĂNG BÀI ở Nhịp Sống HCRC; riêng "Góc chia sẻ" ai cũng đăng được nhưng bài chỉ công khai sau khi được người có quyền duyệt bên dưới phê duyệt. Quyền "Đăng Tuyển dụng" cũng dùng chung khối này — người có quyền được đăng tin tuyển dụng và quản lý toàn bộ ứng viên được giới thiệu (xem mục Tuyển Dụng). Quyền đăng bài + quản lý mục Đào Tạo đã tách riêng ở mục 19 "Đào Tạo" bên dưới.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalNewsCreate"> 📰 Đăng Nhịp Sống HCRC
+              </label>
+              <label class="flex items-center gap-2 text-fuchsia-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalRecruitmentCreate"> 💼 Đăng Tuyển dụng
+              </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t">
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pInternalPostApprove"> ✅ Duyệt bài "Góc chia sẻ" (toàn công ty)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📝 9. Biên Bản Họp & 📋 Công Việc</span></span>
+            <span id="permTreeBadge_minutestask" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Mặc định: người TẠO biên bản luôn Xem/Sửa/Xóa/Tải được bản của mình; người có tên trong Thành phần tham dự luôn XEM được (không Tải/Sửa/Xóa). Người NHẬN việc và người GIAO việc luôn xem được công việc liên quan. Các quyền dưới đây mở rộng thêm ra TOÀN BỘ biên bản/công việc của mọi người.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="space-y-1">
+                <span class="font-bold text-rose-800 block text-[11px]">📝 Biên Bản Họp:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesCreate"> ✅ Tạo mới (lập) biên bản
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesView"> 👁️ Xem tất cả biên bản
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesEdit"> ✏️ Sửa tất cả biên bản
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pMinutesDownload"> ⬇️ Tải tất cả biên bản
+                </label>
+                <p class="text-[10px] text-gray-400 italic">Xóa biên bản họp là quyền tối cao, chỉ Quản Trị Viên (quyền Admin) mới xóa được.</p>
+              </div>
+              <div class="space-y-1">
+                <span class="font-bold text-violet-800 block text-[11px]">📋 Công Việc:</span>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskView"> 👁️ Xem tất cả công việc
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskEdit"> ✏️ Tạo mới & Sửa tất cả công việc
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskDelete"> 🗑️ Xóa tất cả công việc
+                </label>
+                <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                  <input type="checkbox" id="pTaskDownload"> ⬇️ Tải phiếu giao việc
+                </label>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>💰 10. Thanh Toán</span></span>
+            <span id="permTreeBadge_payment" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Quản lý toàn bộ module "Thanh toán" (mục con của "Tổng Hợp"): tạo đề nghị thủ công, sửa/duyệt/yêu cầu bổ sung/xoá đề nghị, xác nhận từng đợt đã thanh toán. Cũng là quyền tải "Tài liệu ký" + bấm nút "Thanh toán" ở Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư (dùng chung phạm vi phòng ban với quyền Tạo mới của từng module đó).</p>
+            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+              <input type="checkbox" id="pPaymentManage"> 💰 Quản lý Thanh Toán (toàn công ty)
+            </label>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖋️ 11. Nhóm Phê Duyệt Trình (Văn Bản Trình)</span></span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">7 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 6 nhóm chặn (Đồng trình/Đồng cấp/Giám Đốc-Phó Giám Đốc/Phó Tổng Giám Đốc/Trợ Lý-Thư Ký/Tổng Giám Đốc) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây — nhóm nào có NHIỀU HƠN 1 người thì người trình phải chọn cụ thể 1 người lúc tạo hồ sơ; riêng Tổng Giám Đốc chỉ gán được tối đa 1 người.</p>
+            <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖇️ 12. Văn Phòng Phẩm</span></span>
+            <span id="permTreeBadge_vpp" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Người ĐĂNG KÝ được uỷ quyền theo phòng ban và chịu trách nhiệm đăng ký thay cho cả phòng — cần tick "Người đăng ký" dưới đây mới đăng ký được (kể cả khi kỳ đang mở), người khác trong phòng chỉ xem được. Quyền "Quản lý" dành riêng cho người QUẢN LÝ: tạo/kết thúc kỳ đăng ký, tải lên danh mục, xem báo cáo tổng hợp toàn công ty theo phòng ban & theo mặt hàng.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pVppRegisterCreate"> 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pVppManage"> ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📅 13. Báo Cáo Định Kỳ</span></span>
+            <span id="permTreeBadge_periodicReport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-3">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Báo Cáo Định Kỳ" ở mục 0 mới thấy được các màn dưới đây. "Quản lý" = tạo/đóng kỳ báo cáo. "Tổng hợp" = quyền CHUNG, tổng hợp/sửa/phát hành được MỌI kỳ (không phân biệt ai tạo kỳ đó). "Nộp báo cáo" = ai KHÔNG có quyền này thì không nộp được — có quyền rồi thì CHỈ nộp được cho đúng phòng ban của mình, không chọn phòng ban khác (khoá cứng ở server). Xem danh sách báo cáo vẫn luôn xem được (không cần quyền riêng), nhưng chỉ xem trong phạm vi phòng ban mình — trừ ai có "Quản lý"/"Tổng hợp" ở trên thì xem được mọi phòng ban.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pReportManage"> ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)
+              </label>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pReportAggregate"> ✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành)
+              </label>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pReportEntryCreate"> ✅ Nộp báo cáo (đúng phòng ban mình)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 14. Nhóm Phê Duyệt HĐ (Hợp Đồng)</span></span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">4 nhóm RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở mục 11) — người tạo hợp đồng chọn khi tạo, mỗi nhóm cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"), theo đúng thứ tự Giám Đốc/PGĐ → Phó TGĐ → Trợ lý/Thư ký → TGĐ. Gán thành viên cho từng nhóm ở đây — nhóm nào có NHIỀU HƠN 1 người thì người tạo hợp đồng phải chọn cụ thể 1 người lúc tạo hồ sơ; riêng Tổng Giám Đốc chỉ gán được tối đa 1 người.</p>
+            <div id="contractApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖥️ 15. Hỗ Trợ IT</span></span>
+            <span id="permTreeBadge_itSupport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng. 2 quyền đầu chỉ kiểm soát: ai được ĐỀ XUẤT duyệt giá bán (siêu thị), và ai thuộc đội Hỗ Trợ IT được nhận xử lý ticket/xác nhận đã áp giá sau khi duyệt xong. Quyền thứ 3 xét duyệt riêng nút "🚨 Từ chối khẩn" — khi người đã duyệt bước cuối cùng đổi ý SAU khi duyệt (trước khi IT áp giá thật), người có quyền này quyết định có huỷ hồ sơ hay không.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceProposeCreate"> 🏷️ Đề xuất duyệt giá bán
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket, xác nhận đã áp giá)
+              </label>
+              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceEmergencyRejectApprove"> 🚨 Phê duyệt từ chối khẩn cấp
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>👕 16. Đồng Phục</span></span>
+            <span id="permTreeBadge_uniform" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Đồng Phục" ở mục 0 mới thấy được các màn dưới đây — module này KHÔNG mở sẵn cho toàn bộ nhân viên. "Hành Chính" tạo kỳ cấp phát và phân bổ xuống từng siêu thị (chọn từ Danh Mục Siêu Thị ở tab Danh Mục); "Duyệt Kỳ Cấp Phát" duyệt/từ chối cả kỳ TRƯỚC KHI siêu thị xác nhận được (cũng dùng để duyệt Điều Chuyển Kho giữa các siêu thị); "Giám Đốc Siêu Thị" xác nhận đã nhận rồi cấp cho nhân viên (chỉ xác nhận/cấp phát được cho đúng siêu thị mình — theo Vị Trí đã chọn khi tạo tài khoản).</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformManage"> 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)
+              </label>
+              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformApprove"> ✔️ Duyệt Kỳ Cấp Phát / Điều Chuyển Kho
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pUniformStoreManage"> ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🧩 17. Nhóm Quyền Đặc Biệt</span></span>
+            <span id="permTreeBadge_specialGroups" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-4">
+            <div class="border-b pb-3">
+              <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
+              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban ngay trong ô bên dưới để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Chọn xong thì bấm "Lưu" 1 lần.</p>
+              <div id="workflowParticipatingDeptsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <div class="flex justify-end mt-2">
+                <button type="button" data-op="saveWorkflowParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
+              </div>
+            </div>
+            <div class="border-b pb-3">
+              <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
+              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều chức danh ngay trong ô bên dưới để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Chọn xong thì bấm "Lưu" 1 lần.</p>
+              <div id="vppExcludedJobTitlesMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <div class="flex justify-end mt-2">
+                <button type="button" data-op="saveVppExcludedJobTitles" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Chức Danh</button>
+              </div>
+            </div>
+            <div>
+              <h5 class="font-bold text-gray-700 text-xs mb-1">🧭 Vị Trí Tham Gia Quy Trình</h5>
+              <p class="text-[11px] text-gray-500 italic mb-2">Chọn/nhập "Chức danh" (bắt buộc) và tuỳ chọn ghép thêm "Phòng ban" (để trống nếu chức danh này áp dụng cho MỌI phòng ban/đơn vị, VD "Tổng Giám Đốc") rồi bấm "➕ Thêm" để đưa 1 vị trí vào danh sách bên dưới — đây là danh mục CẶP (chức danh, phòng ban tuỳ chọn) độc lập, dùng làm nguồn chọn cho bước duyệt "Theo vị trí" ở màn "Hệ Thống → Quy Trình & Phê Duyệt" (thay vì chọn tay từng người cụ thể, hệ thống tự tra ai hiện đang giữ đúng vị trí này VÀ có quyền "Người duyệt" mỗi khi cần duyệt). Có thể cấu hình trước cả khi chưa có ai giữ đúng vị trí đó. Thêm xong thì bấm "Lưu" 1 lần.</p>
+              <div id="workflowParticipatingPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <div class="flex justify-end mt-2">
+                <button type="button" data-op="saveWorkflowParticipatingPositions" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Vị Trí Tham Gia Quy Trình</button>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📊 18. Ngân Sách</span></span>
+            <span id="permTreeBadge_budget" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Phải bật ÍT NHẤT 1 trong 3 quyền dưới đây mới vào được module "Ngân Sách" (không có tầng "xem miễn phí" chỉ nhờ mục 0). Từ v23.0 (thiết kế lại theo tài liệu "Ngân sách 2.0"), module KHÔNG còn Kỳ/Mẫu ngân sách và KHÔNG dùng quy trình duyệt theo phòng ban (workflowEngine.js) nữa — chỉ còn 3 tầng permission phẳng: (1) "Xem, tạo ngân sách" (budgetCreate) — lập/sửa/xoá dòng "📝 Đề Xuất" (bất kỳ Khối Phòng Ban nào), duyệt/từ chối Đề Xuất do NGƯỜI KHÁC tạo, ghi nhận "💳 Sử Dụng" cho đúng Khối Phòng Ban mình, xem được dòng thuộc Khối Phòng Ban mình ở mọi tab; (2) "Tổng hợp" (budgetAggregate) — thêm quyền xem HẾT mọi Khối Phòng Ban + vào tab "📊 Báo Cáo"; (3) "Quản lý" (budgetManage) — cấp cao nhất: toàn quyền cả 3 tab "📝 Đề Xuất"/"✅ Phê Duyệt"/"💳 Sử Dụng" ở MỌI Khối Phòng Ban, kể cả nhập trực tiếp + duyệt/từ chối dòng "✅ Phê Duyệt" (chỉ tầng này làm được) và sửa/xoá dòng "💳 Sử Dụng". Không ai tự duyệt/tự từ chối được dòng do chính mình tạo, bất kể tầng quyền nào.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pBudgetManage"> 📅 Quản lý (xem MỌI phòng ban + Tổng Hợp Toàn Công Ty, không sửa được ngân sách phòng khác; tạo/đóng/mở kỳ, quản lý mẫu)
+              </label>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pBudgetCreate"> 📝 Xem, tạo ngân sách (xem/nhập/sửa Phê Duyệt & Thực Hiện + Tổng Hợp — đúng phòng ban mình)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pBudgetAggregate"> 📊 Tổng hợp (xem Tổng Hợp Theo Phòng, mọi phòng ban)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🎓 19. Đào Tạo</span></span>
+            <span id="permTreeBadge_training" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">"Quản lý Đào Tạo" = toàn quyền: đăng bài Đào tạo (Truyền Thông Nội Bộ), tạo/sửa lớp học bất kỳ, quản lý Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Thăng Tiến, quản lý danh sách học viên + kết quả của MỌI lớp — bao gồm cả Lộ Trình/Phân Công Đào Tạo Tân Binh + cấp Chứng Chỉ Hoàn Thành. "Giảng viên (theo lớp được gán)" KHÔNG tạo lớp mới được — chỉ quản lý danh sách học viên/kết quả/nội dung của ĐÚNG (các) lớp mà họ được gán làm Giảng Viên khi tạo/sửa lớp (ô "Giảng Viên / Người Phụ Trách"), không đụng được lớp của giảng viên khác. "Đánh Giá Tân Binh (Giai đoạn 3)" là quyền RIÊNG cho quản lý trực tiếp — CHỈ đánh giá được nhân viên CÙNG phòng ban/siêu thị với mình (không quản lý được toàn bộ Đào Tạo Tân Binh như trainingManage). 3 quyền độc lập, có thể bật nhiều quyền cùng lúc.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pTrainingManage"> 🎓 Quản lý Đào Tạo (toàn quyền)
+              </label>
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pTrainingInstruct"> 👨‍🏫 Giảng viên (theo lớp được gán)
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOnboardingEvaluate"> 🆕 Đánh Giá Tân Binh (Giai đoạn 3, theo đơn vị)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📜 20. Giấy Phép</span></span>
+            <span id="permTreeBadge_license" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Phân quyền hoàn toàn NGAY TRONG module (không đi qua quy trình phòng ban) — phòng ban khác không có bất kỳ quyền nào trong 3 quyền dưới đây thì không thấy/vào được module Giấy Phép. "Tạo/Tải lên" và "Duyệt" là 2 vai trò tách biệt (1 người có thể có cả 2, hoặc chỉ 1); "Xem/Tải" dành cho người chỉ cần tra cứu, không tạo cũng không duyệt.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pLicenseCreate"> 📤 Tạo / Tải Lên Giấy Phép
+              </label>
+              <label class="flex items-center gap-2 text-indigo-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pLicenseApprove"> ✔️ Duyệt Giấy Phép (kể cả Gia Hạn/Thu Hồi)
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pLicenseView"> 👁️ Xem / Tải Giấy Phép
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🤝 21. Nhân Sự</span></span>
+            <span id="permTreeBadge_hr" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến; "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức v2 (sửa cây/áp dụng phiên bản); "Cấu Hình Luồng Đánh Giá KPI" tách riêng cho việc tinh chỉnh luồng đánh giá (Tab "Cấu Hình Đánh Giá KPI") — có thể giao cho vai trò khác không cần đụng tới cây tổ chức; 4 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding/Offboarding" để tạo/quản lý đúng loại quy trình, "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Xem Toàn Bộ" để xem mọi quy trình dù không quản lý — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pNhanSuManage"> 🤝 Quản lý Nhân Sự (quản lý &amp; phản hồi ý kiến)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pOrgChartManage"> 🌳 Quản Lý Cơ Cấu Tổ Chức
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pKpiFlowConfigManage"> 🎯 Cấu Hình Luồng Đánh Giá KPI
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrOnboardingManage"> 🆕 Quản Lý Onboarding
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrOffboardingManage"> 🚪 Quản Lý Offboarding
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrTaskTemplateManage"> 📋 Quản Lý Checklist Mẫu (Onboarding/Offboarding)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrViewAll"> 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding
+            </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">2 quyền dưới đây cho module con "Hồ Sơ Nhân Sự" — mọi tài khoản mặc định tự xem được hồ sơ CHÍNH MÌNH; "Xem Hồ Sơ Cấp Dưới" chỉ mở thêm chế độ xem GIỚI HẠN (không thấy CCCD/tài khoản ngân hàng/BHXH/mã số thuế/người phụ thuộc) cho quản lý trực tiếp; "Quản Lý Hồ Sơ Nhân Sự" (HR) mới xem/sửa được ĐẦY ĐỦ hồ sơ bất kỳ ai + liên kết tài khoản VPDT + đổi trạng thái Nghỉ dài hạn.</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrProfileView"> 👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới (quản lý trực tiếp)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrProfileManage"> 🗂️ Quản Lý Hồ Sơ Nhân Sự (HR — xem/sửa đầy đủ, liên kết tài khoản)
+            </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">Quyền dưới đây cho module con "Hợp Đồng Lao Động" — toàn quyền tạo/sửa/kích hoạt/gia hạn/chấm dứt hợp đồng, không có bước phê duyệt (khác hẳn module "Hợp Đồng" mua bán/nhà cung cấp).</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrContractManage"> 📝 Quản Lý Hợp Đồng Lao Động (HR)
+            </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">4 quyền dưới đây cho module con "Công & Phép" — chấm công chỉ đến từ máy chấm công vật lý + HR sửa tay (không có nút tự bấm trong app); "Quản Lý Chấm Công (HR)" toàn quyền sửa tay chấm công/phép năm + cấu hình giờ hành chính/ngày lễ/API key máy chấm công; "Duyệt Đơn Nghỉ Phép" phải CÓ quyền này VÀ đúng là quản lý trực tiếp mới duyệt được (không tự động theo managerUsername); 2 quyền Siêu Thị theo ĐÚNG siêu thị của người đó (cùng khuôn Đồng Phục — uniformStoreManage).</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrAttendanceManage"> ⏱️ Quản Lý Chấm Công & Phép Năm (HR)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrLeaveApprove"> ✅ Duyệt Đơn Nghỉ Phép (quản lý trực tiếp)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrShiftRosterManage"> 📅 Lập Lịch Phân Ca (Quản Lý Siêu Thị)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrShiftSwapApprove"> 🔁 Duyệt Đổi Ca (Quản Lý Siêu Thị)
+            </label>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">3 quyền dưới đây cho module con "Lương" — "Xem Phiếu Lương Của Mình" mặc định BẬT cho mọi tài khoản (không tắt được, chỉ xem đúng phiếu lương của chính mình — chặn IDOR ở server); "Lập/Tính Lương" (kế toán/HR) tạo kỳ lương, tính lương tự động, điều chỉnh tay từng dòng, gửi duyệt; "Duyệt Lương" (tách biệt hoàn toàn với Lập/Tính, đúng nguyên tắc phân quyền kế toán — không ai vừa lập vừa tự duyệt được) phê duyệt/từ chối/chốt kỳ lương và phát hành phiếu lương cho nhân viên xem. Bảng lương/thuế/BHXH tham khảo hiện là SỐ MẶC ĐỊNH tạm — admin phải vào "Lương → Cấu Hình Tỷ Lệ" xác nhận/sửa lại đúng số thật trước khi chạy lương thật.</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrPayrollManage"> 💰 Lập/Tính Lương (Kế Toán/HR)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrPayrollApprove"> ✅ Duyệt Lương (tách biệt Lập/Tính)
+            </label>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚚 22. Vận Hành</span></span>
+            <span id="permTreeBadge_vanHanh" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">3 luồng ĐỘC LẬP, mỗi luồng 1 quyền tạo riêng — KHÔNG liên quan tới quyền Mua Bán/Sửa Chữa/Đầu Tư của module "Tổng Hợp" (2 module hoàn toàn tách biệt, dữ liệu không dùng chung). Có quyền tạo mới tự động thấy được luồng đó trong module "Vận Hành"; người nằm trong quy trình duyệt của phòng ban (cấu hình ở "Hệ Thống → Quy Trình & Phê Duyệt") cũng tự thấy hồ sơ cần xử lý dù không có quyền tạo. Phải có ÍT NHẤT 1 trong các quyền dưới đây mới vào được module.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-cyan-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationOrderCreate"> 📦 Tạo/Gửi Đơn Hàng
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationStoreOpenCreate"> 🏬 Tạo Đề Xuất Mở Mới Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationRepairCreate"> 🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)
+              </label>
+            </div>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">Vòng đời "dự án nhỏ" trong tab 🏬 Siêu Thị (Mở mới/Sửa chữa): người giữ 1 trong 2 quyền tạo ở trên là "quản lý dự án" — toàn quyền tạo/sửa/xoá đầu mục công việc lớn/con, Danh mục đầu tư, Kỳ Thực Hiện, Xác Nhận Đưa Vào Sử Dụng... nhưng CHỈ trên hồ sơ do CHÍNH mình tạo. Người thực hiện (được gán việc)/người nghiệm thu (được chỉ định) chỉ thao tác ĐÚNG việc của mình, không tạo/sửa/xoá được đầu mục công việc. Quyền dưới đây MỞ RỘNG toàn quyền đó ra MỌI hồ sơ, không phân biệt ai tạo:</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationRecordManageAll"> 🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt Người Tạo)
+              </label>
+            </div>
+            <!-- "🧾 Duyệt Nhập/Hủy Đơn Hàng" (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung") — quyền RIÊNG,
+                 TÁCH KHỎI quần thể duyệt/từ chối đơn hàng nội bộ ở trên (KHÔNG đụng gì cặp Phê Duyệt/Từ
+                 chối). "Tất cả" phần con dưới đây trộn CẢ HO lẫn siêu thị (mirror khuôn {all,depts[]}
+                 dùng chung ở scopeAllows() — "HO" chỉ là 1 giá trị đặc biệt trong danh sách "depts",
+                 xem renderOperationOrderReceiptScopeCheckboxes()/module-admin.js). -->
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">🧾 Duyệt Nhập/Hủy Đơn Hàng (sub-tab riêng trong tab 📦 Đơn Hàng) — quyền RIÊNG, KHÔNG dùng chung quần thể duyệt/từ chối đơn hàng ở trên. Tick "HO" để quản lý mọi đơn Đặt Hàng Tại HO, tick tên 1 siêu thị cụ thể để CHỈ quản lý đơn của đúng siêu thị đó.</p>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Duyệt Nhập/Hủy Đơn Hàng (HO/Siêu Thị)</span>
+                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pOperationOrderReceiptAll" data-op-change="toggleOperationOrderReceiptScopeGroup"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pOperationOrderReceiptDeptContainer" class="grid grid-cols-2 md:grid-cols-3 gap-1 pl-1 max-h-40 overflow-y-auto"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>✅ 23. Checklist Đánh Giá Siêu Thị</span></span>
+            <span id="permTreeBadge_checklist" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Module TOP-LEVEL riêng (xem lib/checklist.js), phân quyền PHẲNG — KHÔNG theo phòng ban. Nhân viên siêu thị (posType Siêu Thị) tự làm checklist "Tự Đánh Giá" (STORE_SELF) của đúng siêu thị mình mà không cần quyền gì thêm ở đây. "Phạm Vi Kiểm Soát" bên dưới CHỈ áp dụng cho checklist "Kiểm Soát" (CONTROL_AUDIT) — kiểm soát viên/khu vực chọn siêu thị mình được phân công đi kiểm tra.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pChecklistTemplateManage"> 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)
+              </label>
+              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pChecklistReportView"> 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)
+              </label>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-semibold text-gray-600 text-[11px]">Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)</span>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pChecklistAuditScopeAll" data-op-change="toggleChecklistAuditScopeGroup"><span>ALL</span>
+                </label>
+              </div>
+              <div id="pChecklistAuditScopeStoreContainer" class="grid grid-cols-2 md:grid-cols-3 gap-1 pl-1 max-h-40 overflow-y-auto"></div>
+            </div>
+          </div>
+        </details>
+        </div>
+        </div>
+      </form>
+
+      <div class="bg-white p-4 rounded border space-y-3">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h4 class="font-bold text-sm text-gray-800">🗂️ Nhóm Phân Quyền</h4>
+            <p class="text-[11px] text-gray-500 italic">Gán người dùng vào 1 nhóm để họ tự động dùng đúng quyền của nhóm. Sửa quyền của nhóm sẽ cập nhật ngay cho mọi thành viên.</p>
+          </div>
+          <button type="button" data-op="startCreateGroup" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">➕ Tạo Nhóm Mới</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead>
+              <tr class="bg-gray-100 text-left">
+                <th class="border p-2">Tên Nhóm</th>
+                <th class="border p-2">Mô Tả</th>
+                <th class="border p-2 text-center">Số Thành Viên</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="permGroupsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
+        <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button type="button" data-op="downloadUserTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
+          <button type="button" data-op="exportUsersExcel" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
+          <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
+            📥 Import Excel <input type="file" accept=".xlsx" data-op-change="importUsersExcel" data-arg-event="0" class="hidden">
+          </label>
+        </div>
+      </div>
+
+      <input id="filterUserKeyword" data-op-input="onUserFilterChange" placeholder="🔍 Tìm theo Username, Họ tên, hoặc Phòng ban..." class="w-full border p-2 rounded text-xs mb-2">
+
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border bg-white text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Username</th>
+              <th class="border p-2">Họ Tên</th>
+              <th class="border p-2">Liên Hệ</th>
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2">Quyền Hạn Chi Tiết</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_user"></div>
+    </div>
+  </div>
+
+  <!-- Màn hình 5: Tab Quản Trị Log Hệ Thống -->
+  <div id="logSection" class="hidden space-y-6">
+    <div class="bg-stone-50 p-4 rounded border border-stone-300 space-y-3">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h3 class="font-bold text-stone-900 text-base flex items-center gap-1">📊 Quản Trị Log Hệ Thống & Giám Sát Hành Vi</h3>
+          <p class="text-xs text-stone-800">Theo dõi toàn bộ nhật ký hệ thống: Email, cấu hình, thay đổi phân quyền và hành vi.</p>
+        </div>
+        <div class="flex gap-2">
+          <button data-op="clearSystemLogs" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
+          <button data-op="exportSystemLogsExcel" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-3 rounded border text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
+          <select id="filterLogModule" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Sự Kiện</label>
+          <select id="filterLogAction" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterLogStatus" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+            <option value="">-- Tất cả --</option>
+            <option value="SUCCESS">Thành công (SUCCESS)</option>
+            <option value="WARNING">Cảnh báo (WARNING)</option>
+            <option value="FAILED">Thất bại (FAILED)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
+          <input id="filterLogKeyword" data-op-input="onLogFilterChange" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
+        </div>
+        <div class="flex items-end">
+          <button data-op="resetLogFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto bg-white rounded border">
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="bg-gray-100 text-left text-gray-700">
+            <th class="border p-2">Thời Gian</th>
+            <th class="border p-2">Người Thực Hiện</th>
+            <th class="border p-2">IP Thiết Bị</th>
+            <th class="border p-2">Phân Hệ</th>
+            <th class="border p-2">Hành Động</th>
+            <th class="border p-2">Mô Tả Chi Tiết</th>
+            <th class="border p-2 text-center">Trạng Thái</th>
+          </tr>
+        </thead>
+        <tbody id="systemLogTableBody"></tbody>
+      </table>
+    </div>
+    <div id="paginationContainer_log"></div>
+  </div>
+
+  <!-- Màn hình 5b: Thùng Rác — mọi lượt "Xóa" ở các module nghiệp vụ (Văn Bản Trình, Tài Liệu, Hợp
+       Đồng, Xe, Văn Phòng, Phòng Họp, Biên Bản Họp, VPP, Ngân Sách, Đồng Phục, Đào Tạo, Tuyển Dụng, Hỗ
+       Trợ IT, Thanh Toán...) giờ CHUYỂN vào đây thay vì mất hẳn ngay — xem lib/recordStore.js
+       moveRecordToTrash(). Khôi phục lại ĐÚNG vị trí gốc (chặn nếu mã đã bị hồ sơ khác dùng lại), hoặc
+       xóa vĩnh viễn (không thể hoàn tác, bắt buộc xác thực lại). Không bao gồm Người dùng/Nhóm phân
+       quyền/danh mục cấu hình (users, permGroups, depts...) — phạm vi khác, xóa thẳng như cũ. -->
+  <div id="trashSection" class="hidden space-y-4">
+    <div class="bg-stone-50 p-4 rounded border border-stone-300 space-y-1">
+      <h3 class="font-bold text-stone-900 text-base flex items-center gap-1">🗑️ Thùng Rác</h3>
+      <p class="text-xs text-stone-800">Hồ sơ đã bị xóa ở bất kỳ module nào — khôi phục lại được nguyên vẹn (đúng vị trí, đúng mã) hoặc xóa vĩnh viễn. Không bao gồm Người dùng/Nhóm phân quyền/danh mục cấu hình ở tab Quản Trị.</p>
+    </div>
+    <div class="overflow-x-auto bg-white rounded border">
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr class="bg-gray-100 text-left text-gray-700">
+            <th class="border p-2">Module</th>
+            <th class="border p-2">Mã / Tiêu Đề</th>
+            <th class="border p-2">Người Xóa</th>
+            <th class="border p-2">Thời Gian Xóa</th>
+            <th class="border p-2 text-center">Hành Động</th>
+          </tr>
+        </thead>
+        <tbody id="trashTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Màn hình 6: Quản Lý Tệp File — loại tệp + giới hạn dung lượng cho phép tải lên (theo từng module nghiệp vụ) -->
+  <div id="uploadTypeSection" class="hidden space-y-4">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200">
+      <h3 class="font-bold text-teal-900 text-base flex items-center gap-1">📎 Quản Lý Tệp File</h3>
+      <p class="text-xs text-teal-800 mt-1">Chọn định dạng tệp được phép tải lên cho từng module nghiệp vụ — server sẽ chặn các định dạng không được tick. Tick lại toàn bộ (giống mặc định) coi như không giới hạn riêng. Có thể đặt thêm giới hạn dung lượng (MB) riêng cho từng module — để trống thì dùng đúng giới hạn chung toàn hệ thống.</p>
+    </div>
+    <div id="uploadTypeConfigList" class="space-y-3"></div>
+  </div>
+  <!-- /#systemSection — thẻ đóng đặt Ở ĐÂY (không phải ngay sau #systemSubTabBar) chính là fix cho lỗi
+       "thanh chuyển tab con Hệ Thống mất khi cuộn": xem chú thích đầy đủ ở đầu #systemSubTabBar. -->
+  

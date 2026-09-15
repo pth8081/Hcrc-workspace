@@ -41,7 +41,9 @@ function startStaticServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-      if (urlPath.startsWith('/js/')) {
+      // /fragments/* (v23.13) - khung HTML tach rieng cho tab lon (system/internal...) - gop chung dieu
+      // kien voi /js/ (contentType() da tu suy ra .html/.js dung) de tranh lap lai route rieng.
+      if (urlPath.startsWith('/js/') || urlPath.startsWith('/fragments/')) {
         const filePath = path.join(PUBLIC_DIR, urlPath);
         if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
         return fs.readFile(filePath, (err, data) => {
