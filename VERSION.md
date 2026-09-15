@@ -1,8 +1,50 @@
 # Phiên bản hiện tại
 
-**23.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.5 (2026-09-15): Nghiệp Vụ — sửa sơ đồ đè chữ + viết lại toàn bộ nội dung theo văn phong nhân viên
+
+Người dùng báo màn Nghiệp Vụ trên server thật của họ hiển thị sai khác hẳn bản demo (menu bên trái ra
+thành 1 dòng chữ phẳng không bấm được gì), kèm ảnh chụp, và cho là lỗi nghiêm trọng. Đã dựng lại y
+nguyên môi trường (Chromium thật + code hiện tại trên `main`) để kiểm tra: menu/nội dung render đúng y
+hệt bản demo, đủ nút bấm được, không có lỗi JS nào — kết luận đây không phải lỗi trong code hiện tại, mà
+nhiều khả năng do server thật của người dùng đang chạy bản code CŨ hơn (trước khi màn Nghiệp Vụ được
+hoàn thiện) hoặc trình duyệt còn giữ bản cache cũ từ trước lần deploy gần nhất — đã báo lại người dùng
+kiểm tra bằng cách tải lại thật kỹ (Ctrl+Shift+R) và đối chiếu đúng bản code mới nhất trên server.
+
+Dù không tìm ra lỗi thật ở phần "không bấm được", quá trình kiểm tra phát hiện 1 lỗi hiển thị THẬT trong
+sơ đồ quy trình (khớp đúng phản ánh "hình vẽ hơi xấu" của người dùng): dòng chú thích phụ dưới mỗi ô khi
+dài (VD "Duyệt theo cấu hình từng phòng ban") bị tràn hẳn ra ngoài khung ô, đè lên mũi tên/ô bên cạnh;
+nhãn trên mũi tên (VD "Duyệt xong") cũng đặt quá sát khung ô nên hay bị đè lên viền ô. Đã sửa cả 2:
+- Chú thích phụ trong ô giờ tự xuống dòng tối đa 2 dòng theo đúng bề rộng ô (cắt bớt + thêm dấu "…" nếu
+  vẫn còn dài), không tràn ra ngoài nữa.
+- Nhãn trên mũi tên đẩy lên cao hơn + thêm viền trắng quanh chữ (halo) để luôn đọc rõ dù có đè lên đường
+  nối hay hình khác.
+- Nới rộng khoảng cách + bề rộng mỗi ô một chút để sơ đồ thoáng hơn, gần với phong cách ảnh tham khảo
+  người dùng gửi (ứng dụng DMS khác).
+
+**Viết lại toàn bộ nội dung mô tả nghiệp vụ** (toàn bộ các mục trong menu Nghiệp Vụ, cả phần Đào Tạo) —
+theo đúng yêu cầu người dùng: văn phong cho nhân viên đọc hiểu ngay, không dùng thuật ngữ kỹ thuật. Cụ
+thể đã đổi:
+- Bỏ hết tên biến/hàm/trường dữ liệu trong ngoặc `<code>` (VD `viewApprovedDepts`, `canManageTasks`,
+  `budgetCreate`, `GET /api/data`...) — viết lại thành câu mô tả bình thường.
+- Đổi các nhãn trạng thái viết tắt bằng tiếng Anh (PENDING/DRAFT/APPROVED/REJECTED/ACTIVE/TERMINATED...)
+  trong sơ đồ thành tiếng Việt dễ hiểu (Chờ duyệt/Nháp/Đã duyệt/Bị từ chối/Đang hiệu lực/Đã kết thúc...).
+- Đổi tên 2 khối ghi chú cuối trang từ "Điểm Chặn Quan Trọng" / "Cơ Chế Đáng Chú Ý" (nghe kỹ thuật) thành
+  "Lưu Ý Quan Trọng" / "Mẹo & Quy Tắc Hay Gặp".
+- **Bỏ hẳn dòng "📎 Xem chi tiết đầy đủ tại `deploy/Huong-dan-nghiep-vu.md`"** ở cuối mỗi trang nội dung
+  — theo đúng yêu cầu không đưa tham chiếu tới tài liệu nghiệp vụ đang lưu trên GitHub vào màn hình cho
+  nhân viên xem.
+
+Regression: `test-nghiepvu.js` (71/71, không cần sửa vì chỉ đổi nội dung text/CSS, không đổi cấu trúc
+DOM mà test dựa vào), `test-lazy-load-all-tabs.js` (42/42) — cả 2 PASS, không phát sinh lỗi JS.
+
+**Deploy-impact**: chỉ đổi 1 file JS (`public/js/module-nghiepvu.js`, nội dung tĩnh + cách vẽ SVG) —
+không đổi `schema.sql`, không thêm biến môi trường, không thêm npm dependencies. **Lưu ý riêng cho đợt
+này**: nếu sau khi deploy bản này mà màn Nghiệp Vụ vẫn hiển thị sai như ảnh người dùng gửi, khả năng cao
+là do cache trình duyệt/PWA — thử tải lại thật kỹ (Ctrl+Shift+R hoặc xoá cache) trước khi báo lại.
 
 ## v23.4 (2026-09-15): Checklist — Dừng/Sửa/Xoá theo trạng thái+quyền · Đăng Ký Xe — Báo Cáo Đánh Giá/Xác Nhận + biểu đồ chọn kỳ
 
