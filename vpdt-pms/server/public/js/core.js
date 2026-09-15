@@ -127,6 +127,53 @@ function loadTabModuleGroups(tabName) {
   return Promise.all(keys.map(loadModuleGroup)).then(() => {});
 }
 
+// Ha tang: nap lười KHUNG HTML theo tab (v23.10) — mirror đúng cơ chế nap cum module-*.js ở TREN (cùng
+// lý do, cùng bảo đảm: idempotent, cache theo Promise, phân biệt "đã bắt đầu nạp" vs "đã nạp XONG thực
+// sự" để switchTab() biết khi nào được đi đường đồng bộ). Khác biệt: đây là NỘI DUNG HTML (form/bảng của
+// 1 section), không phải file .js — trước v23.10 TOÀN BỘ khung HTML của mọi module đều nhúng cứng ngay
+// trong index.html dù đa số phiên làm việc không hề mở tới, khiến file này ngày càng phình theo số module
+// (768KB/~10.000 dòng tính tới v23.9) và không có cách nào giảm ngoài nén mạng (đã làm ở compression(),
+// server.js — xem chú thích ở đó) — đây là bước tiếp theo, giảm cả DUNG LƯỢNG THẬT lẫn số phần tử DOM
+// dựng ngay từ đầu trang cho các module CHƯA MỞ.
+//
+// TAB_SECTION_FRAGMENT: tabName -> id của section có khung HTML đã tách ra public/fragments/<id>.html.
+// CHỈ liệt kê tab nào ĐÃ tách — tab nào KHÔNG có mặt ở đây thì khung HTML của nó vẫn nhúng cứng trong
+// index.html như trước, không đổi hành vi gì cả (isSectionHtmlSettled()/loadTabSectionHtml() trả về
+// "đã sẵn sàng ngay"/no-op cho các tab đó). Bắt đầu thí điểm với 1 module (Vận Hành) trước khi mở rộng —
+// xem VERSION.md v23.10.
+const TAB_SECTION_FRAGMENT = { vanHanh: 'vanHanhSection' };
+
+const _loadedSectionHtml = {}; // tabName -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
+const _settledSectionHtml = new Set(); // tabName co section HTML DA nap xong THUC SU (Promise da resolve)
+
+// true neu section HTML cua tabName KHONG can nap (khong co trong TAB_SECTION_FRAGMENT - van nhung cung
+// nhu truoc) HOAC da nap xong THUC SU - dung CHUNG voi isTabModuleGroupsSettled() de switchTab() biet
+// khi nao duoc goi render dong bo, khong lui nhip nao.
+function isSectionHtmlSettled(tabName) {
+  const sectionId = TAB_SECTION_FRAGMENT[tabName];
+  return !sectionId || _settledSectionHtml.has(tabName);
+}
+
+// Nap khung HTML cho 1 tabName (neu co trong TAB_SECTION_FRAGMENT) - fetch() public/fragments/<id>.html
+// roi gan vao .innerHTML cua CHINH div id do (van la div RONG dat san trong index.html, KHONG xoa han -
+// xem chu thich tai div#vanHanhSection). Loi mang/404 xoa cache de lan goi SAU co the thu lai.
+function loadTabSectionHtml(tabName) {
+  const sectionId = TAB_SECTION_FRAGMENT[tabName];
+  if (!sectionId) return Promise.resolve();
+  if (_loadedSectionHtml[tabName]) return _loadedSectionHtml[tabName];
+  const v = window.__ASSET_VERSION__ ? ("?v=" + encodeURIComponent(window.__ASSET_VERSION__)) : "";
+  const p = fetch("/fragments/" + sectionId + ".html" + v)
+    .then((r) => { if (!r.ok) throw new Error("Khong tai duoc khung " + sectionId); return r.text(); })
+    .then((html) => {
+      const el = document.getElementById(sectionId);
+      if (el) el.innerHTML = html;
+      _settledSectionHtml.add(tabName);
+    });
+  _loadedSectionHtml[tabName] = p;
+  p.catch(() => { delete _loadedSectionHtml[tabName]; });
+  return p;
+}
+
 // Dam bao 1 ham toan cuc (goi qua TEN CHUOI - cspDispatchOp()/window[fnName]()) da san sang truoc
 // khi goi that - neu chua co (chua nap file dinh nghia no), tu dong nap dung cum roi resolve.
 // Tra loi ngay (Promise da resolve) neu ham co san - khong ton chi phi cho duong da nap.
@@ -6411,12 +6458,17 @@ async function switchTab(tabName) {
   // tranh 1 lop bug tinh vi: code goi switchTab(x) roi DOC LAI DOM ngay dong bo sau do (khong await) —
   // nếu luon buoc qua await du chi 1 nhip, phan render se chay CHAM hon code doc sau, doc phai DOM CU
   // (phat hien qua bo test hoi quy — xem VERSION.md).
-  if (isTabModuleGroupsSettled(tabName)) {
+  //
+  // isSectionHtmlSettled()/loadTabSectionHtml() (v23.10): CÙNG CHOKEPOINT, cùng lý do — 1 số tab (xem
+  // TAB_SECTION_FRAGMENT) còn có KHUNG HTML tách riêng chưa nạp (khác file module-*.js, đây là chính nội
+  // dung <div id="xxxSection">), cũng phải nạp xong TRƯỚC _dispatchTabRender() vì hàm render/setXSubTab
+  // bên dưới truy vấn DOM bên trong section đó ngay — nếu section HTML rỗng (chưa fetch) render sẽ lỗi.
+  if (isTabModuleGroupsSettled(tabName) && isSectionHtmlSettled(tabName)) {
     _dispatchTabRender(tabName);
     return;
   }
   try {
-    await loadTabModuleGroups(tabName);
+    await Promise.all([loadTabModuleGroups(tabName), loadTabSectionHtml(tabName)]);
   } catch (err) {
     console.error('switchTab: không tải được mô-đun cho tab', tabName, err);
     alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');
@@ -6863,7 +6915,13 @@ function updateOperationStoreSubTabVisibility(user) {
   let activeStillVisible = false;
   tabs.forEach(([tabKey, btnId, permKind]) => {
     const visible = canAccessOperationSubTab(user, permKind);
-    document.getElementById(btnId).classList.toggle('hidden', !visible);
+    // ?. (v23.10): hàm này gọi từ finishLogin() NGAY SAU đăng nhập, TRƯỚC KHI người dùng từng mở tab
+    // Vận Hành — từ khi khung HTML của vanHanhSection tách ra tải lười (TAB_SECTION_FRAGMENT, core.js),
+    // các nút này CHƯA CHẮC đã có trong DOM ở đúng thời điểm này nữa (chỉ có sau khi vào tab lần đầu).
+    // Phần TÍNH TOÁN activeOperationStoreSubTab bên dưới vẫn PHẢI chạy ngay (biến trạng thái, không phụ
+    // thuộc DOM) — chỉ phần TÔ HIỂN/ẨN nút là an toàn bỏ qua nếu DOM chưa có, vì setVanHanhSubTab('STORE')
+    // (module-vanhanh.js) tự gọi lại ĐÚNG hàm này khi người dùng thực sự vào tab, lúc đó DOM đã sẵn sàng.
+    document.getElementById(btnId)?.classList.toggle('hidden', !visible);
     if (visible && !firstVisible) firstVisible = tabKey;
     if (visible && tabKey === activeOperationStoreSubTab) activeStillVisible = true;
   });

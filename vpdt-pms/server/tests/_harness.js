@@ -72,6 +72,12 @@ async function launchPage(port) {
   // chu dong nap TOAN BO cum module ngay tu dau (gia lap 1 phien da tung mo het moi tab) - dam bao moi
   // ham can toi deu san sang, khong doi ket qua test nao (van goi dung ham that).
   await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map(k => loadModuleGroup(k))));
+  // Ha tang: nap lười KHUNG HTML theo tab (v23.10, core.js::TAB_SECTION_FRAGMENT/loadTabSectionHtml) —
+  // CÙNG lý do như eager-load module JS ở TRÊN: 1 số section (vd vanHanhSection) không còn nhúng cứng
+  // trong index.html, chỉ fetch() khi thực sự vào tab đó — nạp trước TOÀN BỘ ngay từ đầu để switchTab()
+  // sau này luôn đi đường ĐỒNG BỘ (không lùi nhịp nào), giữ đúng giả định "gọi switchTab(x) rồi đọc DOM
+  // ngay sau đó không cần await" mà rất nhiều test ở đây đang dùng.
+  await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
   // Install the mock backend (window.fetch/confirm/alert/prompt stubs + server-logic re-implementation)
   // as a real <script> tag so its top-level `function` declarations land in the SAME global scope as
   // the app's own inline script (needed so bare references like `_pendingConfirmAction` resolve).

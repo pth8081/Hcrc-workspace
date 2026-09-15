@@ -90,7 +90,12 @@ async function main() {
     // loadSystemLogs()/loadTrashItems() - von KHONG lien quan gi toi lazy-load, tach test nay khoi
     // nhieu nhieu khong can thiet); POST/PUT/PATCH/DELETE van tra 404 (khong tao/sua du lieu that trong
     // bai test nay, chi thuan dieu huong).
+    // realFetch (v23.10): mirror test-csp-full-audit.js — loadTabSectionHtml() (core.js,
+    // TAB_SECTION_FRAGMENT) fetch() khung HTML tách lười (vd /fragments/vanHanhSection.html) từ CHÍNH
+    // server tĩnh của bài test này, phải đi qua fetch THẬT thay vì bị mock như /api/*.
+    const realFetch = window.fetch.bind(window);
     window.fetch = async (url, opts) => {
+      if (typeof url === 'string' && !url.startsWith('/api/')) return realFetch(url, opts);
       const method = ((opts && opts.method) || 'GET').toUpperCase();
       if (method === 'GET') return { ok: true, status: 200, json: async () => ([]), blob: async () => new Blob([]) };
       return { ok: false, status: 404, json: async () => ({ error: 'not found (test stub)' }) };
