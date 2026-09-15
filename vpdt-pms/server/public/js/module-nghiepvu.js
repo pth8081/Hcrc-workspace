@@ -293,17 +293,22 @@ const NGHIEP_VU_DOCS = {
     ], right: [] },
   },
   car: {
-    icon: '🚗', title: 'Đăng Ký Xe', badge: 'Hành Chính',
-    desc: 'Đăng ký lịch trình công tác cần xe — sau khi duyệt, bộ phận điều phối gán xe/tài xế cụ thể cho chuyến đi.',
+    icon: '🚗', title: 'Đăng Ký Xe', badge: 'Cập nhật v23.4',
+    desc: 'Đăng ký lịch trình công tác cần xe — sau khi duyệt, bộ phận điều phối gán xe/tài xế cụ thể cho chuyến đi; lái xe nhận chuyến/kết thúc chuyến/báo km, người đăng ký đánh giá lại sau khi kết thúc. Tab Báo Cáo có đủ lịch sử đánh giá + xác nhận + biểu đồ xu hướng chọn kỳ.',
     flow: { ariaLabel: 'Quy trình Đăng Ký Xe', chain: [
       { label: 'Đăng ký lịch trình', sub: 'Điểm đi/đến, thời gian' },
       { label: 'Duyệt', sub: 'Theo cấu hình phòng ban', kind: 'decision' },
       { label: 'Điều phối xe', sub: 'Gán xe + tài xế', kind: 'approved' },
-      { label: 'Hoàn tất chuyến', sub: '' },
+      { label: 'Lái xe xác nhận & kết thúc', sub: 'Nhận chuyến → báo km khi xong' },
+      { label: 'Đánh giá & hoàn tất', sub: 'Người đăng ký xác nhận lại' },
     ], decision: { atIndex: 1, rejectBox: { label: 'REJECTED', sub: 'Nêu lý do' }, loopBackToIndex: 0 } },
     footer: { left: [
       { label: 'Điều phối tách biệt', text: 'người duyệt đăng ký khác với người điều phối xe — điều phối chỉ thao tác sau khi đăng ký đã ở trạng thái duyệt.' },
-    ], right: [] },
+      { label: 'Đánh giá & xác nhận', text: 'lái xe tự xác nhận nhận chuyến (driverConfirmedAt) rồi báo km khi kết thúc (tripEndedAt/driverReportedKm); người đăng ký đánh giá lại sau đó (evaluatedBy/evaluatedAt/actualKm/nhận xét) mới chuyển COMPLETED.' },
+    ], right: [
+      { label: 'Báo Cáo: Lịch Sử Đánh Giá + Xác Nhận', text: 'sub-tab 📊 Báo Cáo có 2 bảng chi tiết "ai đánh giá lái xe nào, phiếu nào, nhận xét gì" và "lái xe xác nhận/kết thúc phiếu nào, lúc nào, báo bao nhiêu km".' },
+      { label: 'Biểu đồ xu hướng chọn kỳ', text: 'biểu đồ số chuyến + số km theo Ngày/Tuần/Tháng/Quý/Năm (pill filter), tách biệt với Lịch Xe (xem lịch trực quan theo Ngày/Tuần/Tháng, không phải biểu đồ thống kê).' },
+    ] },
   },
   vpp: {
     icon: '🖇️', title: 'Văn Phòng Phẩm', badge: 'Hành Chính',
@@ -399,8 +404,8 @@ const NGHIEP_VU_DOCS = {
     ] },
   },
   checklist: {
-    icon: '✅', title: 'Checklist Đánh Giá Siêu Thị', badge: 'Vận Hành',
-    desc: 'Bộ tiêu chí đánh giá (hạng mục/câu hỏi/điểm) do admin cấu hình sẵn thành template — người đánh giá chọn siêu thị rồi chấm theo đúng bộ tiêu chí đã kích hoạt.',
+    icon: '✅', title: 'Checklist Đánh Giá Siêu Thị', badge: 'Cập nhật v23.4',
+    desc: 'Bộ tiêu chí đánh giá (hạng mục/câu hỏi/điểm) do admin cấu hình sẵn thành template — người đánh giá chọn siêu thị rồi chấm theo đúng bộ tiêu chí đã kích hoạt. Vòng đời template: Nháp → Đang dùng → Lưu trữ, với Dừng/Sửa/Xoá theo đúng trạng thái + quyền.',
     flow: { ariaLabel: 'Quy trình Checklist Đánh Giá Siêu Thị', chain: [
       { label: 'Cấu hình template', sub: 'Hạng mục, câu hỏi, điểm (admin)' },
       { label: 'Kích hoạt', sub: 'Chỉ 1 bản ACTIVE mỗi lúc' },
@@ -409,8 +414,11 @@ const NGHIEP_VU_DOCS = {
     ] },
     footer: { left: [
       { label: 'Tiếp tục dở dang', text: 'bài chấm chưa nộp có thể "Tiếp Tục" thay vì làm lại từ đầu (resumeChecklistSubmission).' },
+      { label: 'Nhân bản template', text: 'có thể nhân bản 1 template có sẵn để chỉnh sửa nhanh thay vì dựng lại từ đầu — nhân bản được từ CẢ Đang dùng lẫn Lưu trữ (trước v23.4 chỉ nhân bản được từ Đang dùng).' },
     ], right: [
-      { label: 'Nhân bản template', text: 'có thể nhân bản 1 template có sẵn để chỉnh sửa nhanh thay vì dựng lại từ đầu.' },
+      { label: '⏸️ Dừng (Đang dùng → Lưu trữ)', text: 'dừng thủ công 1 template Đang dùng mà KHÔNG cần kích hoạt bản thay thế — khác "Kích hoạt" (tự lưu trữ các bản Đang dùng cùng mã khi kích hoạt bản MỚI).' },
+      { label: '✏️ Sửa (Đang dùng/Lưu trữ)', text: 'KHÔNG sửa trực tiếp được (bảo toàn dữ liệu bài đã nộp cũ) — bấm "Sửa" sẽ tự Nhân Bản thành 1 bản Nháp mới rồi mở thẳng form sửa (gộp 2 bước cũ thành 1 click).' },
+      { label: '🗑️ Xoá — chỉ Admin', text: 'nút Xoá CHỈ Admin (quyền cao nhất) thấy được, ở MỌI trạng thái — khoá mờ + không xoá được nếu template đã có người nộp bài (checklistSubmissions tham chiếu), dùng "⏸️ Dừng" thay thế để tránh mất dữ liệu báo cáo cũ.' },
     ] },
   },
   orgChart: {

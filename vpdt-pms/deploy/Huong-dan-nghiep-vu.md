@@ -565,8 +565,16 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   (lái xe tự xác nhận chuyến được phân công), **📊 Báo Cáo** (từ v22.6, CHỈ
   người quản lý thấy — admin/quyền xem xe toàn công ty/người duyệt ở bất kỳ
   phòng ban nào — thẻ tổng hợp số phiếu/đã duyệt/đang chờ/bị từ chối/tổng KM,
-  thanh tỷ lệ theo Phòng Ban và theo Lái Xe, xu hướng theo tháng, lọc theo
-  khoảng ngày đi).
+  thanh tỷ lệ theo Phòng Ban và theo Lái Xe, lọc theo khoảng ngày đi). Từ
+  v23.4, tab Báo Cáo có thêm: **biểu đồ xu hướng chọn kỳ** (cột = số chuyến,
+  đường = số km, pill filter chọn 1 trong 5 kỳ **Ngày/Tuần/Tháng/Quý/Năm** —
+  khác Lịch Xe ở trên là lưới xem lịch trực quan, đây là biểu đồ thống kê xu
+  hướng), **bảng "Lịch Sử Đánh Giá Chuyến"** (mã phiếu, lái xe, người đăng ký
+  đã đánh giá, thời điểm đánh giá, số km thực tế, nhận xét) và **bảng "Lịch
+  Sử Xác Nhận Của Lái Xe"** (mã phiếu, lái xe, thời điểm xác nhận nhận
+  chuyến, thời điểm kết thúc chuyến, số km lái xe tự báo cáo) — trả lời trực
+  tiếp câu hỏi "ai đánh giá lái xe nào, ở phiếu nào" và "lái xe xác nhận/kết
+  thúc phiếu nào, lúc nào" mà trước đó chỉ xem được từng phiếu riêng lẻ.
   **"Phần Dành Cho Phòng Hành Chính" (phân công xe lúc xử lý duyệt)** — CHỈ
   Người Điều Hành Xe (`perms.carDispatch`)/Admin mới thấy/sửa được mục này khi
   duyệt (người khác trong luồng duyệt vẫn Duyệt/Từ chối bình thường, không

@@ -3105,8 +3105,33 @@
         </div>
       </div>
       <div class="bg-white p-3 rounded border space-y-2">
-        <h4 class="font-bold text-gray-700 text-xs">📈 Xu Hướng Theo Tháng (phiếu đã duyệt)</h4>
-        <div id="carReportMonthlyBars" class="space-y-2"></div>
+        <h4 class="font-bold text-gray-700 text-xs">📈 Xu Hướng Theo Thời Gian — Số Chuyến &amp; Số KM (phiếu đã duyệt)</h4>
+        <div id="carReportTrendPills" class="flex flex-wrap gap-1.5"></div>
+        <div id="carReportTrendChart" class="overflow-x-auto pt-2"></div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">⭐ Lịch Sử Đánh Giá Chuyến (người đăng ký xác nhận sau khi lái xe kết thúc)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="p-1.5">Mã Phiếu</th><th class="p-1.5">Lái Xe</th><th class="p-1.5">Người Đánh Giá</th>
+              <th class="p-1.5">Thời Gian Đánh Giá</th><th class="p-1.5 text-right">Số KM</th><th class="p-1.5">Nhận Xét</th>
+            </tr></thead>
+            <tbody id="carReportEvalBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">🧑‍✈️ Lịch Sử Xác Nhận Của Lái Xe (nhận chuyến → kết thúc, báo KM)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="p-1.5">Mã Phiếu</th><th class="p-1.5">Lái Xe</th><th class="p-1.5">Xác Nhận Nhận Chuyến</th>
+              <th class="p-1.5">Kết Thúc Chuyến</th><th class="p-1.5 text-right">Số KM Báo Cáo</th>
+            </tr></thead>
+            <tbody id="carReportConfirmBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

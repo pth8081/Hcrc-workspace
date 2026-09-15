@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**23.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.4 (2026-09-15): Checklist — Dừng/Sửa/Xoá theo trạng thái+quyền · Đăng Ký Xe — Báo Cáo Đánh Giá/Xác Nhận + biểu đồ chọn kỳ
+
+Người dùng gửi ảnh lỗi "Đã có lỗi xảy ra" khi bấm Nhân Bản 1 checklist Đang Dùng, và 2 yêu cầu: (1)
+checklist Đang Dùng cần thêm nút Dừng/Sửa/Xóa (Xóa chỉ Admin quyền cao nhất), (2) tab Báo Cáo Đăng Ký Xe
+cần thêm "ai đánh giá lái xe nào, phiếu nào", "lái xe xác nhận/kết thúc phiếu nào, lúc nào", và biểu đồ
+đăng ký xe theo km có filter Ngày/Tuần/Tháng/Quý/Năm. Đã phân tích, demo mockup, và triển khai sau khi
+người dùng xác nhận ("Bạn xử lý đi nhé").
+
+**Checklist — vòng đời template mở rộng** (`routes/checklist.js`, `public/js/module-checklist.js`):
+- Tìm ra 1 lỗi thật liên quan tới ảnh lỗi gửi kèm: nút "Nhân Bản" hiện cho CẢ checklist Lưu Trữ nhưng
+  server route `/clone` cũ chỉ chấp nhận nguồn `ACTIVE` (409 cho Lưu Trữ) — đã nới thành chỉ chặn nguồn
+  `DRAFT` (Nháp sửa trực tiếp được, không cần nhân bản).
+- **Route mới** `POST /templates/:id/deactivate` — Dừng thủ công 1 template Đang Dùng (ACTIVE→ARCHIVED),
+  khác "Kích Hoạt" (tự lưu trữ các bản Đang Dùng cùng mã khi kích hoạt bản MỚI).
+- **`✏️ Sửa` cho Đang Dùng/Lưu Trữ** = tự Nhân Bản thành 1 bản Nháp mới rồi mở thẳng builder trong 1 click
+  (`editViaCloneChecklistTemplate()`) — KHÔNG sửa trực tiếp bản đang dùng, giữ nguyên nguyên tắc bảo toàn
+  dữ liệu bài đã nộp cũ (`checklistSubmissions` tham chiếu `templateId` bản gốc).
+- **`🗑️ Xoá` viết lại hoàn toàn — ĐỔI QUYỀN**: trước đây `checklistTemplateManage` xoá được template
+  Nháp; từ nay **CHỈ Admin** (không còn `checklistTemplateManage`) mới thấy/thực hiện được nút Xoá, ở
+  MỌI trạng thái. Xoá bản Đang Dùng/Lưu Trữ còn bị chặn thêm (409) nếu đã có `checklistSubmissions` tham
+  chiếu (tránh mồ côi dữ liệu báo cáo cũ) — UI khoá mờ + tooltip hướng dẫn dùng "⏸️ Dừng" thay thế.
+- Test: viết lại 6 kịch bản trong `test-checklist.js` (33→38, thay 1 kịch bản đã lỗi thời do đổi quyền
+  có chủ đích) + file mới `test-checklist-config-actions-ui.js` (18 kịch bản, kiểm ma trận nút theo
+  trạng thái/quyền/đã-có-bài-nộp qua UI thật, không chỉ route server).
+
+**Đăng Ký Xe — Báo Cáo mở rộng** (`public/js/module-dangkyxe.js`, `public/index.html`): dữ liệu
+`evaluatedBy(Name)/evaluatedAt/evaluationComment/actualKm` và `driverConfirmedAt/tripEndedAt/
+driverReportedKm` đã có sẵn từ trước (không cần cột SQL mới) — CHỈ CHƯA có màn hiển thị tổng hợp:
+- **Bảng "Lịch Sử Đánh Giá Chuyến"**: mã phiếu, lái xe, người đăng ký đã đánh giá, thời điểm, số km thực
+  tế, nhận xét.
+- **Bảng "Lịch Sử Xác Nhận Của Lái Xe"**: mã phiếu, lái xe, thời điểm xác nhận nhận chuyến, thời điểm kết
+  thúc chuyến (hoặc "Chưa kết thúc"), số km lái xe tự báo cáo.
+- **Biểu đồ xu hướng chọn kỳ**: tổng quát hoá `groupCarRegsByMonth()` cũ thành `groupCarRegsByPeriod()`
+  hỗ trợ Ngày/Tuần/Tháng/Quý/Năm (thêm `isoWeekOf()` tính tuần ISO-8601), vẽ bằng SVG tự dựng
+  `renderCarReportTrendSVG()` (cột = số chuyến, đường = số km) — cùng tinh thần không phụ thuộc thư viện
+  ngoài như `renderNVFlow()` (Nghiệp Vụ)/biểu đồ Ngân Sách. Pill filter chọn kỳ (`setCarReportGranularity()`).
+- Test mới: `test-car-report-eval-confirm.js` (25 kịch bản, kiểm cả 5 kỳ + 2 bảng chi tiết) — chạy lại
+  `test-car-report-week-month.js` (18/18) xác nhận không phá tính năng Lịch Xe/nhãn hành động đã có.
+
+**Nghiệp Vụ** (`public/js/module-nghiepvu.js`): cập nhật entry `checklist` (mô tả Dừng/Sửa/Xoá theo
+trạng thái+quyền) và `car` (mô tả Báo Cáo mở rộng) theo đúng quy tắc CLAUDE.md.
+
+**Deploy-impact**: không đổi `schema.sql` (mọi field dùng đều đã có sẵn), không thêm biến môi trường,
+không thêm npm `dependencies` — chỉ copy code + `pm2 restart`. **Lưu ý đổi quyền**: người dùng chỉ có
+`checklistTemplateManage` (không phải Admin) từ nay **không còn xoá được** checklist Nháp do chính họ tạo
+(trước đây xoá được) — chỉ Admin mới xoá được, ở mọi trạng thái.
 
 ## v23.3 (2026-09-15): Ngân Sách — Vị trí HO/Siêu Thị theo cơ chế màn Người Dùng + Excel Tải Mẫu/Nhập/Xuất
 
