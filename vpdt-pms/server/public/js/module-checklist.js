@@ -79,23 +79,36 @@ function renderChecklistConfigTab() {
   const statusLabel = { DRAFT: 'Nháp', ACTIVE: 'Đang dùng', ARCHIVED: 'Lưu trữ' };
   const typeLabel = { STORE_SELF: 'Tự Đánh Giá', CONTROL_AUDIT: 'Kiểm Soát' };
   const kindLabel = { QA: '📋 Câu hỏi & đáp án', DEDUCTION: '📉 Trừ điểm theo hạng mục' };
+  const isAdmin = !!currentUser?.perms?.admin;
+  const submittedTemplateIds = new Set((DB.checklistSubmissions || []).map(s => s.templateId));
   el.innerHTML = templates.map(t => {
     const isDeduction = t.templateKind === 'DEDUCTION';
     const countLabel = isDeduction
       ? `${(t.categories || []).length} hạng mục lớn`
       : `${(t.questions || []).length} câu hỏi`;
+    // Nút "Xoá" cho ACTIVE/ARCHIVED: CHỈ admin thấy nút, và khoá mờ (disabled) nếu đã có ai nộp bài —
+    // xoá lúc đó sẽ làm mồ côi dữ liệu báo cáo cũ (server chặn lại y hệt, xem routes/checklist.js
+    // templates/:id/delete — đây chỉ là UI phản ánh trước để người dùng khỏi bấm rồi mới biết bị chặn).
+    let nonDraftActionsHTML = '';
+    if (t.status !== 'DRAFT') {
+      const hasSubmissions = submittedTemplateIds.has(t.id);
+      nonDraftActionsHTML = `<button type="button" data-op="viewChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700">👁️ Xem</button>
+          <button type="button" data-op="editViaCloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">✏️ Sửa</button>
+          ${t.status === 'ACTIVE' ? `<button type="button" data-op="deactivateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-bold hover:bg-amber-700">⏸️ Dừng</button>` : ''}
+          ${isAdmin ? `<button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" ${hasSubmissions ? 'disabled title="Đã có người nộp bài — không thể xoá, dùng Dừng thay thế"' : ''} class="px-2 py-1 rounded text-[11px] font-bold ${hasSubmissions ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}">🗑️ Xoá</button>` : ''}`;
+    }
     return `
     <div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
       <div>
         <div class="font-bold text-gray-800 text-sm">${escapeHtml(t.templateName)} <span class="text-gray-400 font-normal">(${escapeHtml(t.templateCode)}, v${t.version || 1})</span></div>
         <div class="text-[11px] text-gray-500">${kindLabel[t.templateKind || 'QA']} · ${typeLabel[t.templateType] || t.templateType} · ${countLabel}${isDeduction ? '' : (t.scoringMode === 'PASS_FAIL_ONLY' ? ' · Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? ` · Ngưỡng đạt ${t.passThreshold}%` : ''))}</div>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${statusBadge[t.status] || ''}">${statusLabel[t.status] || t.status}</span>
         ${t.status === 'DRAFT' ? `<button type="button" data-op="openChecklistTemplateBuilder" data-arg0="${t.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">Sửa</button>
           <button type="button" data-op="activateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700">Kích Hoạt</button>
-          <button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">Xoá</button>`
-          : `<button type="button" data-op="viewChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700">👁️ Xem</button>`}
+          ${isAdmin ? `<button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">Xoá</button>` : ''}`
+          : nonDraftActionsHTML}
         <button type="button" data-op="cloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-gray-500 text-white rounded text-[11px] font-bold hover:bg-gray-600">Nhân Bản</button>
       </div>
     </div>
@@ -605,8 +618,36 @@ async function activateChecklistTemplate(id) {
     alert('✅ Đã kích hoạt.');
   } catch (err) { alert('⛔ ' + err.message); }
 }
+// "✏️ Sửa" cho checklist ĐANG DÙNG/LƯU TRỮ — gộp 2 bước "Nhân Bản" rồi tự tìm bản Nháp mới bấm "Sửa"
+// thành 1 bước: nhân bản NGAY rồi mở thẳng builder trên bản Nháp vừa sinh ra (server /clone giờ nhận cả
+// ACTIVE lẫn ARCHIVED, xem routes/checklist.js). KHÔNG sửa trực tiếp bản đang dùng — vẫn giữ nguyên tắc
+// bảo toàn nội dung các bài đã nộp cũ (checklistSubmissions tham chiếu templateId của bản gốc).
+async function editViaCloneChecklistTemplate(id) {
+  if (!confirm('Nhân bản mẫu checklist này thành 1 bản Nháp mới và mở luôn form sửa?')) return;
+  try {
+    const result = await callWorkflowStyleAction(`/api/checklist/templates/${id}/clone`, {});
+    checklistApplyTemplateUpdate(result.item);
+    renderChecklistConfigTab();
+    openChecklistTemplateBuilder(result.item.id);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+// "⏸️ Dừng" — chuyển ACTIVE -> ARCHIVED thủ công, KHÔNG cần kích hoạt bản khác thay thế (khác
+// activateChecklistTemplate() tự lưu trữ các bản ACTIVE cùng mã khi kích hoạt 1 bản MỚI).
+async function deactivateChecklistTemplate(id) {
+  if (!confirm('Dừng sử dụng mẫu checklist này? Sẽ chuyển sang trạng thái "Lưu trữ" — không ai chấm được checklist này nữa cho tới khi kích hoạt lại 1 bản khác.')) return;
+  try {
+    const result = await callWorkflowStyleAction(`/api/checklist/templates/${id}/deactivate`, {});
+    checklistApplyTemplateUpdate(result.item);
+    renderChecklistConfigTab();
+    alert('✅ Đã dừng sử dụng.');
+  } catch (err) { alert('⛔ ' + err.message); }
+}
 async function deleteChecklistTemplate(id) {
-  if (!confirm('Xoá hẳn mẫu checklist Nháp này?')) return;
+  const t = (DB.checklistTemplates || []).find(x => x.id === Number(id));
+  const confirmMsg = t && t.status !== 'DRAFT'
+    ? `Xoá HẲN mẫu checklist "${t.templateName}" (đang ${t.status === 'ACTIVE' ? 'Đang dùng' : 'Lưu trữ'})? Hành động này KHÔNG thể hoàn tác.`
+    : 'Xoá hẳn mẫu checklist Nháp này?';
+  if (!confirm(confirmMsg)) return;
   try {
     await callWorkflowStyleAction(`/api/checklist/templates/${id}/delete`, {});
     DB.checklistTemplates = (DB.checklistTemplates || []).filter(t => t.id !== Number(id));

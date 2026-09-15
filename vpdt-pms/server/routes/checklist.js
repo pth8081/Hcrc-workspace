@@ -69,7 +69,10 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
     // PHÁT HIỆN (Thấp) ở đợt audit chuyên sâu lần 2: chú thích route này ghi rõ "từ 1 template ACTIVE"
     // nhưng code trước đây không hề kiểm tra — nhân bản được cả từ DRAFT/ARCHIVED, tạo version+1 không
     // đúng ý nghĩa "phiên bản kế tiếp của bản đang dùng thật", dễ gây nhầm lẫn số phiên bản.
-    if (source.status !== 'ACTIVE') return res.status(409).json({ error: 'Chỉ nhân bản được từ checklist đang ở trạng thái Đang dùng' });
+    // Mở rộng (v23.4): cho phép nhân bản từ ARCHIVED nữa (không chỉ ACTIVE) — nút "✏️ Sửa" mới ở client
+    // (module-checklist.js) gọi ĐÚNG route này cho cả 2 trạng thái để mở lại 1 bản cũ/đang dùng thành
+    // bản Nháp sửa tiếp, đúng yêu cầu người dùng "checklist Lưu Trữ cũng sửa/nhân bản được".
+    if (source.status === 'DRAFT') return res.status(409).json({ error: 'Checklist Nháp đã sửa trực tiếp được — không cần nhân bản' });
     const templateKind = source.templateKind || 'QA';
     const clone = {
       id: Date.now(),
@@ -117,14 +120,42 @@ router.post('/templates/:id/activate', requireManage, async (req, res) => {
   } catch (err) { sendCatchError(res, err, `checklistTemplates/${req.params.id}/activate`); }
 });
 
-router.post('/templates/:id/delete', requireManage, async (req, res) => {
+// ===================== TEMPLATE: dừng (ACTIVE -> ARCHIVED, thủ công, KHÔNG cần kích hoạt bản thay thế) =====================
+// Khác activate() ở trên (tự ARCHIVED các bản ACTIVE khác CÙNG mã khi kích hoạt 1 bản MỚI) — route này
+// cho phép dừng hẳn 1 checklist đang dùng mà KHÔNG có bản nào thay thế ngay (VD ngừng hẳn 1 loại đánh
+// giá không còn áp dụng nữa) — người dùng yêu cầu riêng nút "⏸️ Dừng" tách biệt "Nhân Bản rồi Kích Hoạt".
+router.post('/templates/:id/deactivate', requireManage, async (req, res) => {
   const templateId = Number(req.params.id);
   if (!Number.isFinite(templateId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
+    const updated = await withLockedRecordForCollection('checklistTemplates', templateId, (t) => {
+      if (t.status !== 'ACTIVE') throw new HttpError(409, 'Chỉ dừng được checklist đang ở trạng thái Đang dùng');
+      return { ...t, status: 'ARCHIVED' };
+    });
+    res.json({ ok: true, item: updated });
+  } catch (err) { sendCatchError(res, err, `checklistTemplates/${req.params.id}/deactivate`); }
+});
+
+// Xoá template (mọi trạng thái) — người dùng yêu cầu riêng: CHỈ Quản Trị Viên mới xoá được (không phải
+// mọi người có checklistTemplateManage như các hành động khác của module này) — thao tác xoá nặng hơn
+// hẳn sửa/nhân bản/dừng/kích hoạt, nên gác chặt hơn 1 bậc, mirror tinh thần requireAdmin đã dùng cho
+// nhiều thao tác xoá nhạy cảm khác trong app (VD routes/adminExport.js users/import-xlsx).
+router.post('/templates/:id/delete', async (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được xoá mẫu checklist' });
+  }
+  const templateId = Number(req.params.id);
+  if (!Number.isFinite(templateId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    // Đọc trước danh sách bài nộp — dùng để chặn xoá 1 template ACTIVE/ARCHIVED đã có ai nộp bài (mồ côi
+    // dữ liệu báo cáo cũ, checklistSubmissions.templateId không còn tra ra được câu hỏi/lựa chọn gốc).
+    // Template còn DRAFT thì chưa từng kích hoạt nên KHÔNG THỂ có bài nộp — khỏi cần kiểm tra thêm.
+    const submissions = await getAllForCollection('checklistSubmissions');
+    const hasSubmissions = submissions.some(s => s.templateId === templateId);
     await deleteRecordForCollection('checklistTemplates', templateId, (template) => {
-      // Chỉ xoá được template còn DRAFT — ACTIVE/ARCHIVED phải giữ lại để checklistSubmissions cũ còn
-      // tham chiếu đúng (templateId) tra ra được nội dung câu hỏi/lựa chọn gốc, không mồ côi dữ liệu.
-      if (template.status !== 'DRAFT') throw new HttpError(409, 'Chỉ xoá được checklist đang ở trạng thái Nháp');
+      if (template.status !== 'DRAFT' && hasSubmissions) {
+        throw new HttpError(409, 'Checklist này đã có người nộp bài — không thể xoá (sẽ làm mất dữ liệu báo cáo cũ), hãy dùng "⏸️ Dừng" thay thế');
+      }
     }, { username: req.freshUser.username, name: req.freshUser.name });
     res.json({ ok: true });
   } catch (err) { sendCatchError(res, err, `checklistTemplates/${req.params.id}/delete`); }

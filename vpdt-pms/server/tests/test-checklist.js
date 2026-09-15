@@ -209,12 +209,51 @@ async function main() {
       assertEqual(res.body.item.clonedFromTemplateId, t.id, 'Phải ghi lại nguồn nhân bản');
     });
 
-    await run.run('Template: chỉ xoá được khi còn DRAFT', async () => {
+    // v23.4: Xoá template giờ CHỈ Admin mới được (không còn đủ checklistTemplateManage như trước) — và
+    // cho phép xoá cả ACTIVE/ARCHIVED (không chỉ DRAFT) MIỄN LÀ chưa từng có ai nộp bài, tránh mồ côi dữ
+    // liệu báo cáo cũ (checklistSubmissions.templateId tham chiếu về bản đã xoá).
+    await run.run('Template: MANAGER (không phải admin) không xoá được kể cả template còn DRAFT', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      const res = await api('POST', `/api/checklist/templates/${t.id}/delete`, {}, MANAGER);
+      assertEqual(res.status, 403, 'Manager không phải admin thì không xoá được (403)');
+    });
+    await run.run('Template: Admin xoá được ARCHIVED nếu CHƯA có ai nộp bài', async () => {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ARCHIVED';
-      const res = await api('POST', `/api/checklist/templates/${t.id}/delete`, {}, MANAGER);
-      assertEqual(res.status, 409, 'Xoá template ARCHIVED phải bị từ chối (409)');
+      const res = await api('POST', `/api/checklist/templates/${t.id}/delete`, {}, ADMIN);
+      assertEqual(res.status, 200, 'Admin xoá ARCHIVED chưa có bài nộp phải thành công');
+    });
+    await run.run('Template: Admin KHÔNG xoá được ARCHIVED nếu ĐÃ có người nộp bài (tránh mồ côi báo cáo cũ)', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      t.status = 'ARCHIVED';
+      RECORDS.checklistSubmissions.push({ id: idSeq++, templateId: t.id, status: 'SUBMITTED' });
+      const res = await api('POST', `/api/checklist/templates/${t.id}/delete`, {}, ADMIN);
+      assertEqual(res.status, 409, 'Xoá template đã có bài nộp phải bị từ chối (409), gợi ý dùng Dừng thay thế');
+    });
+    await run.run('Template: "Dừng" (deactivate) chuyển ACTIVE -> ARCHIVED, không cần kích hoạt bản khác', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      t.status = 'ACTIVE';
+      const res = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, MANAGER);
+      assertEqual(res.status, 200, 'Dừng phải thành công');
+      assertEqual(res.body.item.status, 'ARCHIVED', 'Sau khi Dừng phải chuyển ARCHIVED');
+    });
+    await run.run('Template: "Dừng" chỉ áp dụng cho ACTIVE — DRAFT/ARCHIVED bị chặn', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      const res = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, MANAGER);
+      assertEqual(res.status, 409, 'Dừng 1 template DRAFT phải bị từ chối (409)');
+    });
+    await run.run('Template: nhân bản giờ CHO PHÉP cả từ ARCHIVED (không chỉ ACTIVE) — phục vụ nút "Sửa" mới', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      t.status = 'ARCHIVED'; t.version = 2;
+      const res = await api('POST', `/api/checklist/templates/${t.id}/clone`, {}, MANAGER);
+      assertEqual(res.status, 200, 'Nhân bản từ ARCHIVED phải thành công');
+      assertEqual(res.body.item.status, 'DRAFT', 'Bản nhân bản phải là DRAFT');
     });
 
     // ===== 2. Bảo mật STORE_SELF (Mục 7.1) =====
