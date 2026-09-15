@@ -66,8 +66,10 @@ function nvRoundedNode(x, y, w, h, opts) {
   if (kind === 'approved') { stroke = '#86efac'; fill = '#f0fdf4'; }
   if (kind === 'rejected') { stroke = '#fca5a5'; fill = '#fef2f2'; }
   if (kind === 'reference') { stroke = '#9ca3af'; fill = '#f9fafb'; }
+  if (kind === 'hub') { stroke = '#7c3aed'; fill = '#f5f3ff'; }
+  if (kind === 'actor') { stroke = '#d97706'; fill = '#fffbeb'; }
   const dash = kind === 'reference' ? ' stroke-dasharray="5,4"' : '';
-  const sw = kind === 'decision' ? 2.5 : 1.5;
+  const sw = (kind === 'decision' || kind === 'hub') ? 2.5 : 1.5;
   let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash}/>`;
   out += `<text x="${x + w / 2}" y="${y + h / 2 - (sub ? 6 : -1)}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111827">${escapeHtml(label)}</text>`;
   if (sub) out += `<text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${escapeHtml(sub)}</text>`;
@@ -143,6 +145,41 @@ function renderNVFlow(spec) {
   }
 
   return `<svg viewBox="0 0 ${totalW} ${height}" role="img" aria-label="${escapeHtml(spec.ariaLabel || 'Sơ đồ quy trình')}" style="width:100%;height:auto;max-width:920px;display:block;margin:0 auto;">${svg}</svg>`;
+}
+
+// Sơ đồ QUAN HỆ (hub) dùng riêng cho trang "Tổng Quan" của Đào Tạo — khác renderNVFlow() (chuỗi tuần
+// tự có hướng): ở đây nhiều chức năng cùng NUÔI vào 1 hub trung tâm (Lớp Học) theo nhiều chiều, nên toạ
+// độ node đặt tay bằng nvRoundedNode()/nvEdge() thay vì auto-layout theo hàng ngang.
+function renderNVDaotaoOverview() {
+  const W = 860, H = 460;
+  const N = {
+    tanbinh:    { x: 16,  y: 16,  w: 176, h: 58, label: 'Lộ Trình Tân Binh', sub: 'Gồm nhiều Chương Trình', kind: 'normal' },
+    thangtien:  { x: 232, y: 16,  w: 176, h: 58, label: 'Lộ Trình Thăng Tiến', sub: 'Mỗi bậc khoá theo Chương Trình', kind: 'normal' },
+    chuongtrinh:{ x: 124, y: 128, w: 176, h: 58, label: 'Chương Trình', sub: 'Khung nội dung tái sử dụng', kind: 'normal' },
+    khotl:      { x: 528, y: 16,  w: 176, h: 58, label: 'Kho Tài Liệu', sub: 'Giáo trình dùng chung', kind: 'reference' },
+    khoch:      { x: 528, y: 128, w: 176, h: 58, label: 'Ngân Hàng Câu Hỏi', sub: 'Đề kiểm tra dùng chung', kind: 'reference' },
+    lophoc:     { x: 332, y: 244, w: 196, h: 62, label: 'Lớp Học', sub: 'Mở theo đợt, gắn 1 Chương Trình', kind: 'hub' },
+    giangvien:  { x: 96,  y: 364, w: 176, h: 58, label: 'Giảng Viên', sub: 'instructorUsername (lớp Offline)', kind: 'actor' },
+    hocvien:    { x: 588, y: 364, w: 176, h: 58, label: 'Học Viên', sub: 'Đăng ký hoặc được mời', kind: 'actor' },
+  };
+  const cx = (k) => N[k].x + N[k].w / 2, cy = (k) => N[k].y + N[k].h / 2;
+  const bottom = (k) => ({ x: cx(k), y: N[k].y + N[k].h });
+  const top = (k) => ({ x: cx(k), y: N[k].y });
+  const side = (k, dir) => ({ x: dir === 'l' ? N[k].x : N[k].x + N[k].w, y: cy(k) });
+
+  let svg = `<defs>${nvArrowMarker('nv-arrow', '#9ca3af')}${nvArrowMarker('nv-arrow-violet', '#7c3aed')}${nvArrowMarker('nv-arrow-amber', '#d97706')}</defs>`;
+
+  svg += nvEdge(bottom('tanbinh').x, bottom('tanbinh').y, top('chuongtrinh').x - 30, top('chuongtrinh').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'gồm nhiều' });
+  svg += nvEdge(bottom('thangtien').x, bottom('thangtien').y, top('chuongtrinh').x + 30, top('chuongtrinh').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'khoá theo bậc' });
+  svg += nvEdge(side('chuongtrinh', 'r').x, side('chuongtrinh', 'r').y, side('lophoc', 'l').x, side('lophoc', 'l').y - 14, { color: '#7c3aed', marker: 'nv-arrow-violet', label: 'mở lớp theo' });
+  svg += nvEdge(bottom('khotl').x, bottom('khotl').y, side('lophoc', 'r').x + 30, top('lophoc').y - 4, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'giáo trình' });
+  svg += nvEdge(bottom('khoch').x, bottom('khoch').y, side('lophoc', 'r').x + 60, top('lophoc').y + 6, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'đề kiểm tra' });
+  svg += nvEdge(top('giangvien').x, top('giangvien').y, side('lophoc', 'l').x, side('lophoc', 'l').y + 14, { color: '#d97706', marker: 'nv-arrow-amber', label: 'đứng lớp (Offline)' });
+  svg += nvEdge(side('lophoc', 'r').x, cy('lophoc'), top('hocvien').x, top('hocvien').y, { color: '#7c3aed', marker: 'nv-arrow-violet', label: 'mời / đăng ký' });
+
+  Object.values(N).forEach(n => { svg += nvRoundedNode(n.x, n.y, n.w, n.h, { label: n.label, sub: n.sub, kind: n.kind }); });
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ quan hệ tổng quan Đào Tạo" style="width:100%;height:auto;max-width:920px;display:block;margin:0 auto;">${svg}</svg>`;
 }
 
 function nvFooterCol(title, items) {
@@ -483,15 +520,27 @@ const NGHIEP_VU_DOCS = {
 // Đào Tạo — module lớn, tách 6 khu vực con (pill sub-nav) thay vì 1 luồng đơn — sống trong module
 // "Truyền Thông Nội Bộ" (internal) chứ KHÔNG phải 1 entry riêng của BUSINESS_MODULES.
 const NGHIEP_VU_DAOTAO_AREAS = [
+  { key: 'overview', label: 'Tổng Quan', icon: '🧭' },
   { key: 'classes', label: 'Lớp Học', icon: '🏫' },
   { key: 'programs', label: 'Chương Trình', icon: '📚' },
   { key: 'plans', label: 'Kế Hoạch Đào Tạo', icon: '🗓️' },
   { key: 'docs', label: 'Kho Tài Liệu', icon: '📦' },
   { key: 'bank', label: 'Ngân Hàng Câu Hỏi', icon: '❓' },
+  { key: 'newhire', label: 'Lộ Trình Tân Binh', icon: '🆕' },
   { key: 'career', label: 'Lộ Trình Thăng Tiến', icon: '🪜' },
 ];
 
 const NGHIEP_VU_DAOTAO_CONTENT = {
+  overview: {
+    desc: 'Sơ đồ quan hệ tổng quan — 8 chức năng của Đào Tạo không đứng độc lập mà nuôi vào nhau: 2 loại Lộ Trình (Tân Binh/Thăng Tiến) đều được XÂY từ nhiều Chương Trình, Chương Trình là khung để MỞ Lớp Học, Lớp Học lấy Giáo Trình từ Kho Tài Liệu + Đề Kiểm Tra từ Ngân Hàng Câu Hỏi, có Giảng Viên đứng lớp (nếu Offline) và mời Học Viên tham gia.',
+    isCustomFlow: true,
+    footer: { left: [
+      { label: 'Lớp Học là trung tâm vận hành', text: 'mọi chức năng khác (Chương Trình, Kho Tài Liệu, Ngân Hàng Câu Hỏi, Giảng Viên) đều tồn tại ĐỂ phục vụ 1 Lớp Học cụ thể — không có Lớp Học thì các danh mục kia chỉ là dữ liệu chờ dùng.' },
+      { label: 'Giảng Viên ≠ Học Viên', text: '"Giảng Viên" là 1 vai trò gán theo <code>instructorUsername</code> trên từng lớp Offline (quyền <code>trainingInstruct</code>, chỉ quản lý/chấm đúng lớp được gán); "Học Viên" không phải hồ sơ riêng — là bất kỳ nhân viên nào đăng ký/được mời vào lớp.' },
+    ], right: [
+      { label: '2 loại Lộ Trình khác nhau', text: '<b>Lộ Trình Tân Binh</b> gán cho nhân viên MỚI (có đánh giá Giai Đoạn 3 + cấp chứng chỉ); <b>Lộ Trình Thăng Tiến</b> áp dụng XUYÊN SUỐT sự nghiệp, khoá theo từng bậc — cả 2 đều tham chiếu tới cùng danh mục Chương Trình, không phải 2 khái niệm trùng nhau.' },
+    ] },
+  },
   classes: {
     desc: 'Lớp học gắn với 1 Chương Trình — học viên đăng ký/được gán vào lớp, học theo tài liệu + làm bài kiểm tra; bài tự luận (essay) cần giảng viên chấm tay thay vì tự động.',
     flow: { ariaLabel: 'Quy trình Lớp Học', chain: [
@@ -502,6 +551,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ], decision: { atIndex: 2, approveLabel: 'Tự động', rejectLabel: 'Có câu tự luận', rejectBox: { label: 'Giảng viên chấm', sub: 'Chấm tay câu essay' }, loopBackToIndex: 2, loopBackLabel: 'Chấm xong → cộng điểm' } },
     footer: { left: [
       { label: 'QR điểm danh/vào bài', text: 'học viên quét QR để vào thẳng màn "Đăng Ký Của Tôi" và mở luôn modal làm bài, không cần điều hướng qua nhiều lớp menu trên điện thoại.' },
+      { label: 'Giảng Viên theo từng lớp', text: 'lớp Offline gán 1 giảng viên qua <code>instructorUsername</code> — người này (<code>trainingInstruct</code>) chỉ quản lý/chấm được ĐÚNG lớp mình được gán, khác <code>trainingManage</code> quản lý được mọi lớp.' },
     ], right: [
       { label: 'Nhập câu hỏi hàng loạt', text: 'có thể tải file mẫu để nhập nhiều câu hỏi cùng lúc thay vì tạo tay từng câu.' },
     ] },
@@ -540,6 +590,20 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
     footer: { left: [], right: [] },
   },
+  newhire: {
+    desc: 'Lộ Trình Tân Binh — khác Lộ Trình Thăng Tiến ở chỗ áp dụng riêng cho nhân viên MỚI: 1 lộ trình gồm nhiều Chương Trình bắt buộc học, phân công cho từng người, kết thúc bằng đánh giá Giai Đoạn 3 và cấp chứng chỉ.',
+    flow: { ariaLabel: 'Quy trình Lộ Trình Tân Binh', chain: [
+      { label: 'Phân công lộ trình', sub: 'Gán 1 lộ trình cho nhân viên mới' },
+      { label: 'Học theo Chương Trình', sub: 'Hoàn thành các Lớp Học liên quan' },
+      { label: 'Đánh Giá GĐ3', sub: '', kind: 'decision' },
+      { label: 'Cấp Chứng Chỉ', sub: 'Hoàn tất lộ trình tân binh', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Đạt', rejectLabel: 'Chưa đạt', rejectBox: { label: 'Học bổ sung', sub: 'Chưa đủ điều kiện GĐ3' }, loopBackToIndex: 1, loopBackLabel: 'Tiếp tục học' } },
+    footer: { left: [
+      { label: 'Khác Onboarding của Nhân Sự', text: 'đây là lộ trình HỌC (nội dung/Chương Trình), khác Onboarding/Offboarding (Nhân Sự) là checklist hành chính theo mốc thời gian — 2 quy trình độc lập, không tự động liên kết với nhau.' },
+    ], right: [
+      { label: 'Không xoá phân công cũ', text: 'xoá 1 lộ trình khỏi danh mục KHÔNG xoá dữ liệu phân công đã gán cho nhân viên trước đó — giữ nguyên lịch sử học tập.' },
+    ] },
+  },
   career: {
     desc: 'Lộ trình thăng tiến theo từng bậc tuần tự — mỗi bậc khoá cho tới khi đạt điều kiện bậc trước, không nhảy cóc bậc.',
     flow: { ariaLabel: 'Quy trình Lộ Trình Thăng Tiến', chain: [
@@ -554,7 +618,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
 };
 
 let nvActiveKey = 'doc';
-let nvActiveDaotaoArea = 'classes';
+let nvActiveDaotaoArea = 'overview';
 
 function setNVActiveKey(key) {
   nvActiveKey = key;
@@ -661,18 +725,20 @@ function renderNghiepVuDaotao(group) {
     <button type="button" class="nv-pill${a.key === nvActiveDaotaoArea ? ' active' : ''}" data-op="setNVDaotaoArea" data-arg0="${a.key}">${a.icon} ${escapeHtml(a.label)}</button>
   `).join('');
   const areaMeta = NGHIEP_VU_DAOTAO_AREAS.find(a => a.key === nvActiveDaotaoArea);
+  const diagramTitle = area.isCustomFlow ? 'Sơ đồ quan hệ' : 'Sơ đồ quy trình';
+  const diagramHtml = area.isCustomFlow ? renderNVDaotaoOverview() : renderNVFlow(area.flow);
   return `
     <div class="text-xs text-gray-400 mb-1">Nghiệp Vụ / ${escapeHtml(group)}</div>
     <div class="flex items-center gap-2 mb-1 flex-wrap">
       <h2 class="text-xl font-bold">🎓 Đào Tạo</h2>
-      <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">6 khu vực nghiệp vụ</span>
+      <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">${NGHIEP_VU_DAOTAO_AREAS.length} khu vực nghiệp vụ</span>
     </div>
-    <div class="text-[13.5px] text-gray-600 leading-relaxed max-w-3xl mb-5">Module lớn nhất trong Truyền Thông Nội Bộ — quản lý toàn bộ vòng đời đào tạo: Chương Trình khung nội dung, Lớp Học mở theo đợt, Kế Hoạch Đào Tạo theo năm, Kho Tài Liệu, Ngân Hàng Câu Hỏi dùng chung, và Lộ Trình Thăng Tiến theo bậc.</div>
+    <div class="text-[13.5px] text-gray-600 leading-relaxed max-w-3xl mb-5">Module lớn nhất trong Truyền Thông Nội Bộ — quản lý toàn bộ vòng đời đào tạo: Chương Trình khung nội dung, Lớp Học mở theo đợt (có Giảng Viên + Học Viên), Kế Hoạch Đào Tạo theo năm, Kho Tài Liệu, Ngân Hàng Câu Hỏi dùng chung, Lộ Trình Tân Binh (nhân viên mới) và Lộ Trình Thăng Tiến (theo bậc) — xem mục "🧭 Tổng Quan" để hiểu mối liên hệ giữa các chức năng này.</div>
     <div class="nv-pill-bar">${pills}</div>
     <h3 class="text-base font-bold mb-1">${areaMeta.icon} ${escapeHtml(areaMeta.label)}</h3>
     <div class="text-[13px] text-gray-600 leading-relaxed max-w-3xl mb-4">${area.desc}</div>
-    <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b">Sơ đồ quy trình</div>
-    ${renderNVFlow(area.flow)}
+    <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b">${diagramTitle}</div>
+    ${diagramHtml}
     <div class="nv-footer-grid">
       ${nvFooterCol('Điểm Chặn Quan Trọng', area.footer.left)}
       ${nvFooterCol('Cơ Chế Đáng Chú Ý', area.footer.right)}
