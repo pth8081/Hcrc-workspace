@@ -12,6 +12,13 @@
 // "Vị trí" (thay "Công ty" trong tài liệu gốc) = 'HO' (sentinel cố định, Trụ sở chính) HOẶC đúng 1 tên
 // trong Danh Mục Siêu Thị (DB.stores). "Khối Phòng Ban" (thay "Đơn vị"/"Khối-Ban-Phòng") = 1 tên trong
 // Danh Mục Phòng (DB.depts) — CẢ 2 lấy trực tiếp từ danh mục đã cấu hình ở Quản Trị, không nhập tay.
+//
+// Từ v23.3: ô "Vị trí" tách thành 2 bước — CÙNG cơ chế uPosType/uDept/uStore đã dùng ở màn Người Dùng
+// (onUserPosTypeChange(), module-admin-submissiongroups.js), KHÔNG tạo danh mục "Vị trí" mới (tránh
+// trùng lặp dữ liệu với Danh Mục Phòng/Danh Mục Siêu Thị đã có CRUD sẵn). Chọn "🏢 HO" -> hiện ô Khối
+// Phòng Ban (DB.depts, như cũ); chọn "🏬 Siêu Thị" -> ẨN Khối Phòng Ban, hiện ô Siêu Thị (DB.stores) —
+// xem onBudgetLineLocTypeChange(). Server tự gán dept = đúng tên Siêu Thị khi Vị trí != HO (Zero-Trust,
+// xem createValidation.js budgetLines.extraValidate) nên client không cần lo giá trị dept lúc ẩn.
 
 const BUDGET_LINE_ITEM_CATEGORY_LABELS = { SOFTWARE: 'Phần mềm', HARDWARE: 'Phần cứng', SERVICE: 'Dịch vụ', SYSTEM: 'Hệ thống' };
 
@@ -57,11 +64,9 @@ function initBudgetLineFormIfNeeded(kind) {
   budgetLineFormInitDone[kind] = true;
   const deptSel = blEl(kind, 'Dept');
   if (deptSel) deptSel.innerHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  const locSel = blEl(kind, 'Location');
-  if (locSel) {
-    locSel.innerHTML = `<option value="HO">🏢 Trụ sở chính (HO)</option>` +
-      (DB.stores || []).map(s => `<option value="${escapeHtml(s)}">🏬 ${escapeHtml(s)}</option>`).join('');
-  }
+  const storeSel = blEl(kind, 'Store');
+  if (storeSel) storeSel.innerHTML = (DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  onBudgetLineLocTypeChange(kind);
   const now = new Date();
   const yearInput = blEl(kind, 'Year');
   if (yearInput && !yearInput.value) yearInput.value = now.getFullYear();
@@ -71,8 +76,20 @@ function initBudgetLineFormIfNeeded(kind) {
   if (vatInput && !vatInput.value) vatInput.value = 10;
 }
 
+// Vị trí = HO -> hiện Khối Phòng Ban (DB.depts, như trước v23.3) / Vị trí = STORE -> ẩn Khối Phòng Ban,
+// hiện Siêu Thị (DB.stores) — mirror ĐÚNG onUserPosTypeChange() (module-admin-submissiongroups.js).
+function onBudgetLineLocTypeChange(kind) {
+  const locType = blEl(kind, 'Location').value;
+  const deptWrap = blEl(kind, 'DeptWrap');
+  const storeWrap = blEl(kind, 'StoreWrap');
+  if (deptWrap) deptWrap.classList.toggle('hidden', locType !== 'HO');
+  if (storeWrap) storeWrap.classList.toggle('hidden', locType !== 'STORE');
+}
+
 function resetBudgetLineForm(kind) {
   budgetLineEditingId[kind] = null;
+  blEl(kind, 'Location').value = 'HO';
+  onBudgetLineLocTypeChange(kind);
   blEl(kind, 'Content').value = '';
   blEl(kind, 'Description').value = '';
   blEl(kind, 'Quantity').value = '';
@@ -89,10 +106,15 @@ function resetBudgetLineFormApprove() { resetBudgetLineForm('Approve'); }
 
 async function addBudgetLineDraft(kind) {
   const stage = kind === 'Approve' ? 'APPROVED' : 'PROPOSED';
+  const locType = blEl(kind, 'Location').value;
+  const location = locType === 'HO' ? 'HO' : blEl(kind, 'Store').value;
+  // dept: server luôn tự gán lại đúng theo Vị trí (Zero-Trust, xem createValidation.js) — gửi giá trị
+  // hợp lý nhất hiện có phía client chỉ để tránh 1 vòng round-trip báo lỗi không cần thiết.
+  const dept = locType === 'HO' ? blEl(kind, 'Dept').value : location;
   const payload = {
     stage,
-    dept: blEl(kind, 'Dept').value,
-    location: blEl(kind, 'Location').value,
+    dept,
+    location,
     content: blEl(kind, 'Content').value.trim(),
     description: blEl(kind, 'Description').value.trim(),
     quantity: Number(blEl(kind, 'Quantity').value),
@@ -104,6 +126,7 @@ async function addBudgetLineDraft(kind) {
     budgetMonth: Number(blEl(kind, 'Month').value),
     note: blEl(kind, 'Note').value.trim()
   };
+  if (locType === 'STORE' && !location) return alert('Vui lòng chọn Siêu Thị!');
   if (!payload.content) return alert('Vui lòng nhập Nội dung!');
   if (!payload.quantity || payload.quantity <= 0) return alert('Số lượng không hợp lệ!');
 
@@ -134,8 +157,11 @@ function editBudgetLineDraft(id, stage) {
   if (!item) return;
   const kind = stage === 'APPROVED' ? 'Approve' : 'Propose';
   budgetLineEditingId[kind] = id;
-  blEl(kind, 'Dept').value = item.dept;
-  blEl(kind, 'Location').value = item.location;
+  const isHo = item.location === 'HO';
+  blEl(kind, 'Location').value = isHo ? 'HO' : 'STORE';
+  onBudgetLineLocTypeChange(kind);
+  if (isHo) blEl(kind, 'Dept').value = item.dept;
+  else blEl(kind, 'Store').value = item.location;
   blEl(kind, 'Content').value = item.content;
   blEl(kind, 'Description').value = item.description || '';
   blEl(kind, 'Quantity').value = item.quantity;
@@ -191,7 +217,7 @@ function renderBudgetLineList(stage) {
     }
     return `<tr class="hover:bg-gray-50">
       <td class="border p-2">${budgetLineLocationLabel(item.location)}</td>
-      <td class="border p-2">${escapeHtml(item.dept)}</td>
+      <td class="border p-2">${item.dept === item.location ? '<span class="text-gray-400">—</span>' : escapeHtml(item.dept)}</td>
       <td class="border p-2">${escapeHtml(item.content)}</td>
       <td class="border p-2">${escapeHtml(BUDGET_LINE_ITEM_CATEGORY_LABELS[item.itemCategory] || item.itemCategory || '')}</td>
       <td class="border p-2">${escapeHtml(item.budgetType || '')}</td>
@@ -781,5 +807,126 @@ function onWfStepApproverModeToggle(stepKey, checkboxEl) {
   const isPosition = !!checkboxEl.checked;
   document.getElementById(`wfPeopleBlock_${stepKey}`)?.classList.toggle('hidden', isPosition);
   document.getElementById(`wfPositionBlock_${stepKey}`)?.classList.toggle('hidden', !isPosition);
+}
+
+// ===================== Excel: Tải Mẫu / Nhập / Xuất (v23.3) =====================
+// "Tải File Excel Mẫu" là 1 thẻ <a href="/api/budget-lines/template?stage=..."> tĩnh (điều hướng trực
+// tiếp, kèm cookie phiên đăng nhập hiện có — không cần JS) — chỉ 2 hàm dưới đây cần viết: đọc file đã
+// điền (xem trước, KHÔNG tự lưu) + xác nhận nhập hàng loạt (đi qua ĐÚNG addBudgetLineDraft()/
+// callCreateAction() validate thật, không có đường tắt nào bỏ qua Zero-Trust).
+let budgetLineImportPreviewItems = { Propose: [], Approve: [] };
+
+async function onBudgetLineImportFileChange(kind, event) {
+  const file = event.target.files[0];
+  budgetLineImportPreviewItems[kind] = [];
+  document.getElementById(`bl${kind}ImportPreviewWrap`).classList.add('hidden');
+  document.getElementById(`bl${kind}ImportConfirmBtn`).classList.add('hidden');
+  const statusEl = document.getElementById(`bl${kind}ImportStatus`);
+  if (!file) { statusEl.innerText = ''; return; }
+
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const stage = kind === 'Approve' ? 'APPROVED' : 'PROPOSED';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch(`/api/budget-lines/parse-import?stage=${stage}`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    budgetLineImportPreviewItems[kind] = data.items;
+    const validCount = data.items.filter(it => it.valid).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng HỢP LỆ.`;
+    document.getElementById(`bl${kind}ImportPreviewBody`).innerHTML = data.items.map(it => `<tr class="border-t">
+      <td class="p-1.5">${it.valid ? '<span class="text-emerald-600">✅</span>' : '<span class="text-red-600">⛔</span>'}</td>
+      <td class="p-1.5">${budgetLineLocationLabel(it.location)}</td>
+      <td class="p-1.5">${escapeHtml(it.content || '')}</td>
+      <td class="p-1.5 text-right">${Number(it.quantity || 0).toLocaleString('vi-VN')} × ${Number(it.unitPrice || 0).toLocaleString('vi-VN')}</td>
+      <td class="p-1.5 text-red-600">${it.errors.join('; ')}</td>
+    </tr>`).join('');
+    document.getElementById(`bl${kind}ImportPreviewWrap`).classList.remove('hidden');
+    if (validCount > 0) document.getElementById(`bl${kind}ImportConfirmBtn`).classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+async function confirmBudgetLineImport(kind) {
+  const stage = kind === 'Approve' ? 'APPROVED' : 'PROPOSED';
+  const validItems = (budgetLineImportPreviewItems[kind] || []).filter(it => it.valid);
+  if (!validItems.length) return;
+  if (!confirm(`Xác nhận nhập ${validItems.length} dòng ngân sách từ file?`)) return;
+
+  let okCount = 0;
+  const failMessages = [];
+  for (const it of validItems) {
+    const payload = {
+      stage, dept: it.dept, location: it.location, content: it.content, description: it.description,
+      quantity: it.quantity, unitPrice: it.unitPrice, vatPercent: it.vatPercent,
+      budgetType: it.budgetType, itemCategory: it.itemCategory,
+      budgetYear: it.budgetYear, budgetMonth: it.budgetMonth, note: it.note
+    };
+    try {
+      const result = await callCreateAction('budgetLines', payload);
+      DB.budgetLines.unshift(result.item);
+      okCount++;
+    } catch (err) {
+      failMessages.push(`${it.content}: ${err.message}`);
+    }
+  }
+  logSystemAction('BUDGET', 'IMPORT_BUDGET_LINES', `Import Excel: thêm ${okCount}/${validItems.length} dòng ngân sách (${stage})`, 'SUCCESS', String(okCount));
+  alert(okCount === validItems.length
+    ? `✅ Đã nhập thành công ${okCount} dòng!`
+    : `⚠️ Nhập được ${okCount}/${validItems.length} dòng — lỗi:\n${failMessages.join('\n')}`);
+  budgetLineImportPreviewItems[kind] = [];
+  document.getElementById(`bl${kind}ImportPreviewWrap`).classList.add('hidden');
+  document.getElementById(`bl${kind}ImportConfirmBtn`).classList.add('hidden');
+  document.getElementById(`bl${kind}ImportStatus`).innerText = '';
+  document.getElementById(`bl${kind}ImportFileInput`).value = '';
+  renderBudgetLineList(stage);
+}
+
+// "Xuất Excel" — dùng lại downloadXlsxFromServer()/POST /api/admin/export-xlsx có sẵn (core.js), KHÔNG
+// cần route riêng: dữ liệu đã có sẵn ở DB.budgetLines (đã qua đúng phạm vi xem của user từ GET /api/data)
+// nên chỉ cần định dạng lại thành {columns, rows} — cùng tinh thần "Báo Cáo hoàn toàn client-side".
+const BUDGET_LINE_STAGE_EXPORT_LABEL = { PROPOSED: 'Ngan_Sach_De_Xuat', APPROVED: 'Ngan_Sach_Phe_Duyet', USED: 'Ngan_Sach_Su_Dung', REPORT: 'Bao_Cao_Ngan_Sach' };
+const BUDGET_LINE_STATUS_LABELS = { SUBMITTED: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Từ chối' };
+
+function exportBudgetLineExcel(stageOrReport) {
+  const fileName = `${BUDGET_LINE_STAGE_EXPORT_LABEL[stageOrReport] || 'Ngan_Sach'}.xlsx`;
+
+  if (stageOrReport === 'REPORT') {
+    const usedParents = (DB.budgetLines || []).filter(l => l.stage === 'USED' && l.parentId == null);
+    const columns = [
+      { header: 'Nội Dung', key: 'content', width: 32 }, { header: 'Đã Duyệt', key: 'approved', width: 16 },
+      { header: 'Đã Dùng', key: 'used', width: 16 }, { header: 'Chênh Lệch', key: 'diff', width: 16 }
+    ];
+    const rows = usedParents.map(p => {
+      const children = (DB.budgetLines || []).filter(l => l.parentId === p.id);
+      const used = children.reduce((s, c) => s + (Number(c.totalAmount) || 0), 0);
+      return { content: p.content, approved: p.totalAmount, used, diff: used - p.totalAmount };
+    });
+    if (!rows.length) return alert('Chưa có dữ liệu để xuất.');
+    return downloadXlsxFromServer(fileName, 'Báo Cáo Ngân Sách', columns, rows);
+  }
+
+  const items = (DB.budgetLines || []).filter(l => l.stage === stageOrReport);
+  if (!items.length) return alert('Chưa có dòng nào để xuất.');
+  const columns = [
+    { header: 'Vị trí', key: 'location', width: 20 }, { header: 'Khối Phòng Ban', key: 'dept', width: 20 },
+    { header: 'Nội Dung', key: 'content', width: 32 }, { header: 'Mô Tả', key: 'description', width: 26 },
+    { header: 'Danh Mục', key: 'category', width: 14 }, { header: 'Loại NS', key: 'budgetType', width: 10 },
+    { header: 'Số Lượng', key: 'quantity', width: 10 }, { header: 'Đơn Giá', key: 'unitPrice', width: 15 },
+    { header: 'VAT (%)', key: 'vat', width: 8 }, { header: 'Thành Tiền', key: 'total', width: 16 },
+    { header: 'Năm NS', key: 'year', width: 8 }, { header: 'Tháng NS', key: 'month', width: 8 },
+    { header: 'Trạng Thái', key: 'status', width: 14 }, { header: 'Ghi Chú', key: 'note', width: 22 }
+  ];
+  const rows = items.map(it => ({
+    location: it.location === 'HO' ? 'HO (Trụ sở chính)' : it.location, dept: it.dept,
+    content: it.content, description: it.description || '',
+    category: BUDGET_LINE_ITEM_CATEGORY_LABELS[it.itemCategory] || it.itemCategory, budgetType: it.budgetType,
+    quantity: it.quantity, unitPrice: it.unitPrice, vat: it.vatPercent, total: it.totalAmount,
+    year: it.budgetYear, month: it.budgetMonth, status: BUDGET_LINE_STATUS_LABELS[it.status] || it.status, note: it.note || ''
+  }));
+  downloadXlsxFromServer(fileName, BUDGET_LINE_STAGE_EXPORT_LABEL[stageOrReport] || 'Ngân Sách', columns, rows);
 }
 

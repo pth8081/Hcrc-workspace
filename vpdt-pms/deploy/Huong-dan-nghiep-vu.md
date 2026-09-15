@@ -892,13 +892,25 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       Đề Xuất/Phê Duyệt/Sử Dụng theo Vị Trí/Khối Phòng Ban/Năm-Tháng, tính
       hoàn toàn ở client từ dữ liệu đã tải, không có bước duyệt.
 
-    **"Vị Trí" thay "Công Ty"**: mỗi dòng chọn **HO** (Trụ sở chính) hoặc
-    **1 Siêu Thị** trong Danh Mục Siêu Thị đã cấu hình ở Quản Trị. **"Khối
-    Phòng Ban"** chọn từ Danh Mục Phòng — cả 2 lấy thẳng từ danh mục, không
-    nhập tay tự do, và **không dùng để chặn quyền xem/sửa theo phòng** (là dữ
-    liệu nghiệp vụ tự do) — quyền truy cập hoàn toàn theo 3 quyền
-    `budgetCreate`/`budgetManage`/`budgetAggregate` ở trên (phải bật ÍT NHẤT
-    1 trong 3 quyền mới thấy module).
+    **"Vị Trí" thay "Công Ty"** (từ v23.3, đổi thành 2 bước — mirror ĐÚNG cơ
+    chế `uPosType`/`uDept`/`uStore` đã dùng ở màn "Quản Trị → Người Dùng"):
+    chọn **🏢 HO** (Trụ sở chính) → hiện ô **Khối Phòng Ban** (Danh Mục Phòng)
+    để chọn; chọn **🏬 Siêu Thị** → ẨN Khối Phòng Ban, hiện ô **Siêu Thị**
+    (Danh Mục Siêu Thị) để chọn — server tự gán `dept` = đúng tên Siêu Thị đó
+    khi Vị Trí khác HO (không nhập tay/không tin giá trị client gửi). Không
+    tạo danh mục "Vị Trí" riêng — dùng lại đúng Danh Mục Phòng/Danh Mục Siêu
+    Thị đã có CRUD sẵn, tránh 2 nơi phải đồng bộ. Cả 2 field **không dùng để
+    chặn quyền xem/sửa theo phòng** (là dữ liệu nghiệp vụ tự do) — quyền truy
+    cập hoàn toàn theo 3 quyền `budgetCreate`/`budgetManage`/`budgetAggregate`
+    ở trên (phải bật ÍT NHẤT 1 trong 3 quyền mới thấy module).
+
+    **Tải File Excel Mẫu / Nhập Excel / Xuất Excel** (từ v23.3) — tab Đề
+    Xuất/Phê Duyệt có đủ 3 nút: tải mẫu → điền → nhập lại, server đọc/xem
+    trước (dòng hợp lệ/lỗi rõ ràng), người dùng xác nhận mới thật sự tạo
+    (mỗi dòng vẫn đi qua đúng luật tạo hồ sơ thật, không có đường tắt). Tab
+    Sử Dụng/Báo Cáo chỉ có Xuất Excel (không có Tải Mẫu/Nhập — dòng Sử Dụng
+    luôn phải gắn với đúng 1 dòng Phê Duyệt cụ thể, không có khuôn "nhập hàng
+    loạt không rõ dòng cha" hợp lý).
 
     **Không ai tự duyệt hồ sơ mình tạo** (kể cả tài khoản admin) — người có
     `budgetManage` chỉ duyệt được hồ sơ do NGƯỜI KHÁC tạo, không có ngoại lệ.

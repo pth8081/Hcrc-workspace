@@ -366,20 +366,21 @@ const NGHIEP_VU_DOCS = {
     ] },
   },
   budget: {
-    icon: '💰', title: 'Ngân Sách 2.0', badge: 'Cập nhật v23.0',
-    desc: '3 giai đoạn ĐỘC LẬP (không phải 1 pipeline tuyến tính) — mỗi dòng ngân sách tự mang Năm/Tháng riêng, không còn khái niệm "Kỳ ngân sách" chung.',
+    icon: '💰', title: 'Ngân Sách 2.0', badge: 'Cập nhật v23.3',
+    desc: '3 giai đoạn ĐỘC LẬP (không phải 1 pipeline tuyến tính) — mỗi dòng ngân sách tự mang Năm/Tháng riêng, không còn khái niệm "Kỳ ngân sách" chung. Vị trí HO/Siêu Thị chọn theo 2 bước (mirror màn Người Dùng), có Tải Mẫu/Nhập/Xuất Excel.',
     flow: { ariaLabel: 'Quy trình Ngân Sách 2.0: 3 giai đoạn độc lập', chain: [
       { label: 'Đề Xuất', sub: 'budgetCreate tạo → SUBMITTED', kind: 'decision' },
       { label: 'Phê Duyệt', sub: 'Tự sinh khi Đề Xuất duyệt xong' },
       { label: 'Sử Dụng', sub: 'Dòng cha hệ thống tự sinh', kind: 'approved' },
     ], decision: { atIndex: 0, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'REJECTED', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
     footer: { left: [
-      { label: 'Zero-trust field locking', text: 'server LUÔN ghi đè content/loại hạng mục từ dòng nguồn khi sinh dòng Sử Dụng — không tin bất kỳ giá trị nào client gửi lên.' },
+      { label: 'Zero-trust field locking', text: 'server LUÔN ghi đè content/loại hạng mục từ dòng nguồn khi sinh dòng Sử Dụng — không tin bất kỳ giá trị nào client gửi lên; Vị trí = Siêu Thị cũng tự gán <code>dept</code> = đúng tên Siêu Thị theo cùng nguyên tắc.' },
       { label: 'Không tự duyệt hồ sơ mình tạo', text: 'áp dụng cho MỌI vai trò kể cả admin, không có ngoại lệ.' },
     ], right: [
-      { label: 'budgetCreate', text: 'tạo/sửa/xoá Đề Xuất của mình · ghi nhận Sử Dụng cho phòng mình.' },
+      { label: 'budgetCreate', text: 'tạo/sửa/xoá Đề Xuất của mình · ghi nhận Sử Dụng cho phòng/siêu thị mình.' },
       { label: 'budgetManage', text: 'toàn quyền: duyệt Đề Xuất, tạo/duyệt Phê Duyệt, sửa/xoá dòng Sử Dụng cha.' },
       { label: 'budgetAggregate', text: 'xem xuyên phòng ban + tab Báo Cáo, không tạo/duyệt được gì.' },
+      { label: 'Excel Tải Mẫu/Nhập/Xuất', text: 'tab Đề Xuất/Phê Duyệt có đủ 3 nút; Sử Dụng/Báo Cáo chỉ có Xuất Excel.' },
     ] },
   },
   vanHanh: {

@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**23.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.3 (2026-09-15): Ngân Sách — Vị trí HO/Siêu Thị theo cơ chế màn Người Dùng + Excel Tải Mẫu/Nhập/Xuất
+
+Người dùng gửi ảnh tham khảo 1 hệ thống khác (DMS v6.82) có nút Tải File Mẫu/Nhập Excel/Xuất Excel ở cả
+3 tab Đề Xuất/Phê Duyệt/Sử Dụng, và đề nghị tạo 1 danh mục "Vị trí" mới quản lý trong Quản Trị, chọn HO
+thì hiện phòng ban để chọn, chọn Siêu Thị thì hiện siêu thị để chọn. Sau khi phân tích, phát hiện đúng cơ
+chế này ĐÃ có sẵn ở màn "Quản Trị → Người Dùng" (`uPosType`/`uDept`/`uStore`) — người dùng xác nhận dùng
+lại thay vì tạo danh mục mới trùng lặp với Danh Mục Phòng/Danh Mục Siêu Thị đã có.
+
+**Vị trí Ngân Sách đổi thành 2 bước, mirror ĐÚNG màn Người Dùng**: chọn "🏢 HO" → hiện ô Khối Phòng Ban
+(Danh Mục Phòng, như cũ); chọn "🏬 Siêu Thị" → ẨN Khối Phòng Ban, hiện ô Siêu Thị (Danh Mục Siêu Thị).
+Server tự gán `dept` = đúng tên Siêu Thị khi Vị trí != HO (Zero-Trust, không tin giá trị client gửi) —
+vừa khớp UI đã ẩn ô, vừa giữ nguyên cơ chế phân quyền `addBudgetLineChild()` (so `parent.dept` với
+`user.dept` — nhân viên siêu thị vốn đã có `user.dept` = tên siêu thị đúng khuôn màn Người Dùng).
+
+**Sửa 1 lỗi thật phát hiện qua test mới**: `validateAndPrepareCreate()` (`lib/createValidation.js`, dùng
+chung cho MỌI module tạo hồ sơ) chốt biến `dept` TRƯỚC KHI gọi `extraValidate()` — mọi thay đổi
+`payload.dept` bên trong `extraValidate()` (như cơ chế mới ở trên) bị ghi đè mất, vô tác dụng. Đã sửa đọc
+lại `dept` SAU khi `extraValidate()` chạy xong — không đổi hành vi module nào khác (chỉ budgetLines mới
+thật sự mutate `payload.dept` bên trong `extraValidate`, xác nhận qua regression toàn bộ module tạo hồ sơ
+khác vẫn PASS).
+
+**Tải File Mẫu/Nhập Excel** (tab Đề Xuất + Phê Duyệt) — route mới `routes/budgetLinesImport.js` +
+`lib/budgetLinesExcel.js` (mirror khuôn `routes/checklistImport.js`: multer + xác minh chữ ký file +
+giới hạn tần suất upload), đọc/xem trước (không tự lưu) — mỗi dòng hợp lệ vẫn phải qua đúng
+`POST /api/create/budgetLines` thật khi xác nhận. **Xuất Excel** (cả 4 tab, gồm Sử Dụng/Báo Cáo) dùng lại
+`downloadXlsxFromServer()`/`POST /api/admin/export-xlsx` có sẵn — không cần route riêng.
+
+Test mới: `test-budget-lines-excel.js` (18 kịch bản) + bổ sung 3 kịch bản vào `test-budget-lines.js`
+(49 kịch bản, tăng từ 39) — toàn bộ PASS, cùng 1 regression sweep rộng xác nhận không phá module khác.
+
+**Deploy-impact**: không đổi `schema.sql`, không thêm biến môi trường, không thêm npm `dependencies`
+(`exceljs`/`csv-parse`/`multer` đã có sẵn) — chỉ copy code + `pm2 restart`.
 
 ## v23.2 (2026-09-15): Nghiệp Vụ > Đào Tạo — thêm "Tổng Quan" (sơ đồ quan hệ) + "Lộ Trình Tân Binh"
 

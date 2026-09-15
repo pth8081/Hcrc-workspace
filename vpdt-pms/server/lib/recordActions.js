@@ -6113,10 +6113,17 @@ function updateBudgetLineDraft(user, item, payload, appData) {
   if (!allowed) throw new HttpError(403, 'Bạn không có quyền sửa dòng ngân sách này');
   if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng này đã được xử lý, không sửa được nữa');
 
-  const dept = String(payload?.dept || '').trim();
-  if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
   const location = String(payload?.location || '').trim();
   if (location !== 'HO' && !(appData?.stores || []).includes(location)) throw new HttpError(400, 'Vị trí không hợp lệ');
+  // dept phụ thuộc Vị trí — cùng cơ chế Zero-Trust ở createValidation.js budgetLines.extraValidate (xem
+  // chú thích đầy đủ ở đó): HO -> dept do người dùng chọn từ Danh Mục Phòng; Siêu Thị -> dept tự = location.
+  let dept;
+  if (location === 'HO') {
+    dept = String(payload?.dept || '').trim();
+    if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
+  } else {
+    dept = location;
+  }
 
   const draft = { ...payload };
   normalizeBudgetLineCoreFields(draft);
@@ -6162,10 +6169,16 @@ function buildBudgetLineUsedRow(user, sourceApprovedLine) {
 function updateBudgetLineUsedParent(user, item, payload, appData) {
   if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa dòng Sử Dụng');
   if (item.stage !== 'USED' || item.parentId != null) throw new HttpError(409, 'Không tìm thấy dòng Sử Dụng cha hợp lệ');
-  const dept = String(payload?.dept || '').trim();
-  if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
   const location = String(payload?.location || '').trim();
   if (location !== 'HO' && !(appData?.stores || []).includes(location)) throw new HttpError(400, 'Vị trí không hợp lệ');
+  // dept phụ thuộc Vị trí — xem chú thích đầy đủ ở createValidation.js budgetLines.extraValidate.
+  let dept;
+  if (location === 'HO') {
+    dept = String(payload?.dept || '').trim();
+    if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
+  } else {
+    dept = location;
+  }
   item.dept = dept;
   item.location = location;
   item.note = String(payload?.note || '').trim().slice(0, 500);

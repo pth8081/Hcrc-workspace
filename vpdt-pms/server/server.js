@@ -48,6 +48,7 @@ const notificationsRoutes = require('./routes/notifications');
 const payrollRoutes = require('./routes/payroll');
 const checklistRoutes = require('./routes/checklist');
 const checklistImportRoutes = require('./routes/checklistImport');
+const budgetLinesImportRoutes = require('./routes/budgetLinesImport');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -191,6 +192,9 @@ app.use('/api/checklist', checklistRoutes);
 // Nhập/tải mẫu Excel câu hỏi checklist (routes/checklistImport.js) — tách riêng vì cần multer, cùng lý do
 // routes/trainingTestImport.js tách khỏi routes/training.js.
 app.use('/api/checklist', checklistImportRoutes);
+// Nhập/tải mẫu Excel Ngân Sách (routes/budgetLinesImport.js) — tách riêng vì cần multer, cùng lý do
+// routes/checklistImport.js tách khỏi routes/checklist.js.
+app.use('/api/budget-lines', budgetLinesImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);
