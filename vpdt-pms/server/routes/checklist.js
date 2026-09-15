@@ -90,7 +90,10 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
   } catch (err) { sendCatchError(res, err, `checklistTemplates/${req.params.id}/clone`); }
 });
 
-// ===================== TEMPLATE: kích hoạt (DRAFT -> ACTIVE, tự lưu trữ bản ACTIVE cũ cùng mã) =====================
+// ===================== TEMPLATE: kích hoạt (DRAFT/ARCHIVED -> ACTIVE, tự lưu trữ bản ACTIVE cũ cùng mã) =====================
+// Mở rộng (v23.5): trước đây chỉ kích hoạt được từ DRAFT — người dùng phản ánh bấm "⏸️ Dừng" xong không
+// có cách nào kích hoạt LẠI đúng bản đó (chỉ có "✏️ Sửa" tạo bản Nháp MỚI, không phải bật lại bản cũ) —
+// nay cho phép kích hoạt thẳng từ ARCHIVED (không tạo dòng mới, không tăng version, chỉ đổi trạng thái).
 router.post('/templates/:id/activate', requireManage, async (req, res) => {
   const templateId = Number(req.params.id);
   if (!Number.isFinite(templateId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -99,21 +102,26 @@ router.post('/templates/:id/activate', requireManage, async (req, res) => {
       const templates = await getAllForCollection('checklistTemplates');
       const target = templates.find(t => t.id === templateId);
       if (!target) throw new HttpError(404, 'Không tìm thấy checklist');
-      if (target.status !== 'DRAFT') throw new HttpError(409, 'Chỉ kích hoạt được checklist đang ở trạng thái Nháp');
+      if (target.status !== 'DRAFT' && target.status !== 'ARCHIVED') {
+        throw new HttpError(409, 'Chỉ kích hoạt được checklist đang ở trạng thái Nháp hoặc Lưu trữ');
+      }
       if (target.templateKind === 'DEDUCTION') {
         if (!(target.categories || []).length) throw new HttpError(400, 'Checklist cần ít nhất 1 hạng mục đánh giá trước khi kích hoạt');
       } else if (!(target.questions || []).length) {
         throw new HttpError(400, 'Checklist cần ít nhất 1 câu hỏi trước khi kích hoạt');
       }
 
-      const activated = await withLockedRecordForCollection('checklistTemplates', templateId, (t) => ({
-        ...t, status: 'ACTIVE', activatedAt: checklist.nowVN()
-      }));
-      // Lưu trữ (ARCHIVED) mọi bản ACTIVE khác CÙNG templateCode — chỉ 1 bản ACTIVE tại 1 thời điểm.
+      // Lưu trữ (ARCHIVED) mọi bản ACTIVE khác CÙNG templateCode TRƯỚC khi kích hoạt bản này — BẮT BUỘC
+      // đúng thứ tự này (không phải kích hoạt trước, lưu trữ sau như bản cũ): UNIQUE INDEX thật lọc theo
+      // Status='ACTIVE' (sql/schema.sql, v23.5) sẽ chặn ngay nếu có khoảnh khắc 2 dòng CÙNG ACTIVE cùng
+      // mã, kể cả chỉ trong 1 câu lệnh UPDATE trung gian.
       const others = templates.filter(t => t.id !== templateId && t.templateCode === target.templateCode && t.status === 'ACTIVE');
       for (const other of others) {
         await withLockedRecordForCollection('checklistTemplates', other.id, (t) => ({ ...t, status: 'ARCHIVED' }));
       }
+      const activated = await withLockedRecordForCollection('checklistTemplates', templateId, (t) => ({
+        ...t, status: 'ACTIVE', activatedAt: checklist.nowVN()
+      }));
       return activated;
     });
     res.json({ ok: true, item: result });

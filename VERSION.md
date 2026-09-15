@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**23.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.6 (2026-09-15): Checklist — vá lỗi thật trùng khoá khi Nhân Bản/Sửa + thêm "Kích Hoạt Lại" cho mẫu Lưu Trữ
+
+Người dùng gửi log lỗi thật từ server production: mọi lần bấm "Nhân Bản"/"✏️ Sửa" trên 1 checklist đã
+tồn tại đều báo lỗi `Cannot insert duplicate key row... 'UX_ChecklistTemplates_Code'`, không thao tác
+sửa/nhân bản/xoá được, và sau khi bấm "⏸️ Dừng" thì không có nút nào kích hoạt lại đúng mẫu đó.
+
+**Nguyên nhân gốc (bug thật, có từ trước v23.4)**: `UNIQUE INDEX` trên `TemplateCode`
+(`dbo.ChecklistTemplates`) khoá KHÔNG điều kiện (mọi dòng, mọi trạng thái) — trong khi tính năng "Nhân
+Bản" (có từ v23.1) CỐ TÌNH tạo dòng MỚI mang CÙNG `TemplateCode` với dòng nguồn để giữ chung "gia đình
+phiên bản" (Nháp → Đang dùng → Lưu trữ). Hậu quả: **mọi lần Nhân Bản/Sửa trên 1 checklist đã tồn tại đều
+chắc chắn phạm lỗi trùng khoá trên SQL Server thật** — sandbox test không có SQL Server thật nên không
+bao giờ bắt được lỗi này dù tính năng đã "PASS" mọi bài test trước đó.
+
+**Sửa** (`sql/schema.sql`): đổi `UNIQUE INDEX` sang lọc theo `Status='ACTIVE'` — đúng nguyên tắc thật của
+module ("chỉ 1 bản Đang dùng tại 1 thời điểm cho mỗi mã", nhiều bản Nháp/Lưu trữ vẫn dùng chung mã được).
+Kèm migration tự động (`DROP INDEX` cũ + `CREATE` index mới) cho CSDL đã triển khai từ trước. Đồng thời
+sửa thứ tự thao tác ở `routes/checklist.js` "/activate" (lưu trữ bản Đang dùng cũ TRƯỚC khi kích hoạt bản
+mới — ngược thứ tự cũ, tránh khoảnh khắc 2 dòng cùng ACTIVE vi phạm ngay index mới), và thêm kiểm tra
+trùng mã riêng ở tầng ứng dụng (`lib/createValidation.js`) cho mẫu MỚI TẠO (không phải Nhân Bản), vì index
+mới không còn tự chặn 2 mẫu Nháp không liên quan trùng mã.
+
+**Tính năng mới "🔄 Kích Hoạt Lại"**: mẫu Lưu Trữ giờ có nút kích hoạt thẳng về Đang dùng (route
+`/activate` mở rộng nhận cả `ARCHIVED`, không chỉ `DRAFT`) — không tạo dòng mới, không tăng `version`,
+khác hẳn Nhân Bản. Đáp ứng đúng phản ánh "tạm dừng thì muốn kích hoạt lại nhưng không có nút".
+
+Test mới: 3 kịch bản trong `test-checklist.js` (kích hoạt lại từ ARCHIVED, tự lưu trữ bản ACTIVE khác cùng
+mã, chặn kích hoạt khi đã ACTIVE sẵn — 41/41), 1 kịch bản trong `test-checklist-builder-ui.js` (chặn trùng
+mã cho mẫu mới tạo qua route thật — 6/6), 2 kịch bản trong `test-checklist-config-actions-ui.js` (nút Kích
+Hoạt Lại hiện đúng cho ARCHIVED, không hiện cho ACTIVE — 20/20). Regression rộng (nghiệp vụ, budget,
+uniform, vpp, license, periodic report, hr lifecycle, lazy-load...) đều PASS.
+
+**Deploy-impact — QUAN TRỌNG, cần chạy lại `schema.sql`**: đây là thay đổi CÓ đổi `schema.sql` (đổi 1
+UNIQUE INDEX của `dbo.ChecklistTemplates`) — **bắt buộc chạy lại `sql/schema.sql` sau khi cập nhật code**,
+nếu không lỗi trùng khoá này còn tiếp diễn. Script tự an toàn (bọc `IF`/`EXISTS` kiểm tra), không mất dữ
+liệu. Không thêm biến môi trường, không thêm npm dependencies.
 
 ## v23.5 (2026-09-15): Nghiệp Vụ — sửa sơ đồ đè chữ + viết lại toàn bộ nội dung theo văn phong nhân viên
 

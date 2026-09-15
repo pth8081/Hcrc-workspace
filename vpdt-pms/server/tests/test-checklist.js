@@ -198,6 +198,37 @@ async function main() {
       assertEqual(refreshedOld.status, 'ARCHIVED', 'Bản ACTIVE cũ cùng mã phải tự chuyển ARCHIVED');
     });
 
+    // v23.5: người dùng phản ánh sau khi bấm "⏸️ Dừng" (ACTIVE -> ARCHIVED) thì không còn cách nào kích
+    // hoạt LẠI đúng bản đó (trước đây /activate CHỈ nhận DRAFT) — mở rộng cho phép kích hoạt thẳng từ
+    // ARCHIVED, không tạo dòng mới/không tăng version, chỉ đổi trạng thái.
+    await run.run('Template: kích hoạt LẠI được từ ARCHIVED (không chỉ DRAFT) — v23.5', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      t.status = 'ARCHIVED';
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      assertEqual(res.status, 200, 'Kích hoạt lại từ ARCHIVED phải thành công');
+      assertEqual(res.body.item.status, 'ACTIVE', 'Phải chuyển đúng về ACTIVE');
+      assertEqual(res.body.item.version, t.version, 'Kích hoạt lại KHÔNG được tăng version (khác Nhân Bản)');
+    });
+    await run.run('Template: kích hoạt lại từ ARCHIVED cũng tự lưu trữ bản ACTIVE khác cùng mã', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      t.status = 'ARCHIVED';
+      const otherActive = seedTemplate({ templateCode: t.templateCode });
+      otherActive.status = 'ACTIVE';
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      assertEqual(res.status, 200, 'Kích hoạt lại phải thành công');
+      const refreshedOther = RECORDS.checklistTemplates.find(x => x.id === otherActive.id);
+      assertEqual(refreshedOther.status, 'ARCHIVED', 'Bản ACTIVE khác cùng mã phải tự chuyển ARCHIVED');
+    });
+    await run.run('Template: KHÔNG kích hoạt được template đang ACTIVE sẵn (chỉ nhận DRAFT/ARCHIVED)', async () => {
+      resetRecords();
+      const t = seedTemplate();
+      t.status = 'ACTIVE';
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      assertEqual(res.status, 409, 'Kích hoạt 1 template đã ACTIVE sẵn phải bị từ chối (409)');
+    });
+
     await run.run('Template: nhân bản tạo bản DRAFT version+1', async () => {
       resetRecords();
       const t = seedTemplate();
