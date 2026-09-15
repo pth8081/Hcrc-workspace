@@ -27,7 +27,7 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterInternalPostsForUser,
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
-  filterTasksForUser, filterUniformIssuancesForUser
+  filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser
 } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -76,6 +76,9 @@ const REPORT_QUERY_CONFIGS = {
   // filter*ForUser() riêng nào ở lib/recordViewScope.js (routes/data.js cũng trả nguyên, không lọc) —
   // filterFn: null nghĩa là chỉ thu hẹp theo dept/ngày ở SQL, không áp thêm bước lọc quyền nào khác.
   budgetPeriods: { filterFn: null, needsAppData: false },
+  // budgetLines (Ngân Sách 2.0, v22.10) — canViewBudgetLine() không cần appData (chỉ 1 cấp gác permission
+  // phẳng, không có approver theo phòng ban), xem lib/recordViewScope.js.
+  budgetLines: { filterFn: filterBudgetLinesForUser, needsAppData: false },
   vppRegistrations: { filterFn: filterVppRegistrationsForUser, needsAppData: true },
   // dbo.Tasks KHÔNG thuộc 55 collection DEDICATED_TABLES (bảng riêng có sẵn từ Bước 6b, xem
   // lib/taskStore.js queryTasksInRange()) — cfg (DEDICATED_TABLES[collection]) sẽ là undefined cho

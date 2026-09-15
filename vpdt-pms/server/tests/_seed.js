@@ -137,7 +137,9 @@ function buildAppData() {
 function buildEmptyCollections() {
   return {
     contracts: [], paymentRequests: [], officeReqs: [],
-    budgetTemplates: [], budgetPeriods: [], budgetEntries: []
+    budgetTemplates: [], budgetPeriods: [], budgetEntries: [],
+    // budgetLines (Ngân Sách 2.0, v22.10) — xem tests/test-budget-lines.js.
+    budgetLines: []
   };
 }
 

@@ -522,6 +522,20 @@ function filterBudgetEntriesForUser(entries, user, appData) {
   return (entries || []).filter(e => canViewBudgetEntry(user, e, appData));
 }
 
+// budgetLines (Ngân Sách 2.0, v22.10) — KHÔNG có approver theo phòng ban (không dùng workflowEngine.js,
+// chỉ 1 cấp gác permission phẳng budgetCreate/budgetManage, xem lib/recordActions.js) nên đơn giản hơn
+// canViewBudgetEntry() ở trên: admin/budgetManage/budgetAggregate xem HẾT, còn lại chỉ xem đúng dòng có
+// Khối Phòng Ban (item.dept) trùng phòng ban của mình — kể cả dòng mình không phải người tạo (Ngân Sách
+// là hồ sơ của ĐƠN VỊ, không phải cá nhân, cùng tinh thần budgetEntries).
+function canViewBudgetLine(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate) return true;
+  return item.dept === user.dept;
+}
+function filterBudgetLinesForUser(items, user) {
+  return (items || []).filter(i => canViewBudgetLine(user, i));
+}
+
 // Vận Hành — 3 luồng độc lập, cùng khuôn canViewBudgetEntry() ở trên (hồ sơ của ĐƠN VỊ, cùng phòng ban
 // xem được kể cả bản NHÁP, admin/approver-ngoài-phòng xem được) — KHÔNG có quyền "xem mọi phòng ban"
 // riêng (không cần thiết cho module mới, giữ đơn giản).
@@ -1112,6 +1126,7 @@ module.exports = {
   canViewUniformStockAdjustment, filterUniformStockAdjustmentsForUser,
   canViewUniformTransfer, filterUniformTransfersForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
+  canViewBudgetLine, filterBudgetLinesForUser,
   canViewOperationOrder, filterOperationOrdersForUser,
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,

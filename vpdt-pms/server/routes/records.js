@@ -1956,6 +1956,186 @@ router.post('/budgetEntries/:id/manager-edit', async (req, res) => {
   }
 });
 
+// ===================== NGÂN SÁCH 2.0 (budgetLines — v22.10) =====
+// POST /api/records/budgetLines/:id/update — sửa Đề Xuất/Phê Duyệt khi còn SUBMITTED.
+router.post('/budgetLines/:id/update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.updateBudgetLineDraft(freshUser, item, req.body, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/update`, err); }
+});
+
+// POST /api/records/budgetLines/:id/delete — xoá Đề Xuất/Phê Duyệt còn SUBMITTED (khác dòng Sử Dụng,
+// xem 2 route riêng /used-parent/delete + /children/:childId/delete bên dưới).
+router.post('/budgetLines/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    await deleteRecordForCollection('budgetLines', itemId,
+      (item) => recordActions.assertCanDeleteBudgetLineDraft(freshUser, item),
+      { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/delete`, err); }
+});
+
+// POST /api/records/budgetLines/:id/approve-proposal — duyệt Đề Xuất TẠI CHỖ (không sinh gì thêm).
+router.post('/budgetLines/:id/approve-proposal', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.approveBudgetLineProposal(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/approve-proposal`, err); }
+});
+// POST /api/records/budgetLines/:id/reject-proposal
+router.post('/budgetLines/:id/reject-proposal', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.rejectBudgetLineProposal(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/reject-proposal`, err); }
+});
+
+// POST /api/records/budgetLines/:id/approve — duyệt dòng Phê Duyệt -> tự sinh 1 dòng USED cha. 2 bước
+// TÁCH RỜI (khoá+sửa dòng Phê Duyệt trước, rồi mới tạo dòng USED) vì withLockedRecordForCollection() chỉ
+// mutate ĐÚNG 1 bản ghi đã khoá — chấp nhận rủi ro cực hiếm (server crash giữa 2 bước) đổi lấy code đơn
+// giản, đúng tinh thần các thao tác "tạo kèm" khác trong hệ thống (không có transaction xuyên 2 bảng).
+router.post('/budgetLines/:id/approve', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const approved = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.approveBudgetLine(freshUser, item));
+    const usedItem = await createForCollection('budgetLines', () => ({
+      ...recordActions.buildBudgetLineUsedRow(freshUser, approved), id: Date.now()
+    }));
+    res.json({ ok: true, item: approved, usedItem });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/approve`, err); }
+});
+// POST /api/records/budgetLines/:id/reject
+router.post('/budgetLines/:id/reject', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.rejectBudgetLine(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/reject`, err); }
+});
+
+// POST /api/records/budgetLines/:id/used-parent-update — sửa Vị trí/Khối Phòng Ban/Ghi chú ở dòng cha
+// Sử Dụng (:id = id dòng cha).
+router.post('/budgetLines/:id/used-parent-update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.updateBudgetLineUsedParent(freshUser, item, req.body, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/used-parent-update`, err); }
+});
+
+// POST /api/records/budgetLines/:id/used-parent-delete — xoá dòng cha Sử Dụng (:id = id dòng cha), CHỈ
+// khi chưa có mục con nào — xoá xong "mở khoá" lại dòng Phê Duyệt gốc (quay về SUBMITTED).
+router.post('/budgetLines/:id/used-parent-delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const all = await getAllForCollection('budgetLines');
+    const parent = all.find(l => l.id === itemId);
+    if (!parent) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    const hasChildren = all.some(l => l.parentId === itemId);
+    if (hasChildren) throw new HttpError(409, 'Dòng này đã có mục con Sử Dụng — không xoá được nữa');
+    await deleteRecordForCollection('budgetLines', itemId,
+      (item) => recordActions.assertCanDeleteBudgetLineUsedParent(freshUser, item),
+      { username: freshUser.username, name: freshUser.name });
+    if (parent.sourceLineId) {
+      await withLockedRecordForCollection('budgetLines', parent.sourceLineId, (item) =>
+        recordActions.reopenBudgetLineAfterUsedParentDeleted(item));
+    }
+    res.json({ ok: true });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/used-parent-delete`, err); }
+});
+
+// POST /api/records/budgetLines/:id/children — thêm 1 mục con Sử Dụng dưới dòng cha :id, rồi tính lại
+// usageStatus của dòng cha ngay (đọc lại đủ danh sách mục con MỚI NHẤT, gồm cả mục vừa tạo).
+router.post('/budgetLines/:id/children', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const all = await getAllForCollection('budgetLines');
+    const parent = all.find(l => l.id === itemId);
+    if (!parent) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    const child = await createForCollection('budgetLines', () => ({
+      ...recordActions.addBudgetLineChild(freshUser, parent, req.body), id: Date.now()
+    }));
+    const siblings = [...all.filter(l => l.parentId === itemId), child];
+    const parentAfter = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.recomputeBudgetLineUsageStatus(item, siblings));
+    res.json({ ok: true, item: child, parentItem: parentAfter });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/children`, err); }
+});
+
+// POST /api/records/budgetLines/:id/child-update — sửa 1 mục con Sử Dụng (:id = id mục con), tính lại
+// usageStatus dòng cha sau khi sửa.
+router.post('/budgetLines/:id/child-update', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const all = await getAllForCollection('budgetLines');
+    const child = all.find(l => l.id === itemId);
+    if (!child || child.parentId == null) throw new HttpError(404, 'Không tìm thấy mục sử dụng');
+    const parent = all.find(l => l.id === child.parentId);
+    if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
+    const updated = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.updateBudgetLineChild(freshUser, item, parent, req.body));
+    const siblings = all.filter(l => l.parentId === parent.id).map(l => (l.id === itemId ? updated : l));
+    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item) =>
+      recordActions.recomputeBudgetLineUsageStatus(item, siblings));
+    res.json({ ok: true, item: updated, parentItem: parentAfter });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/child-update`, err); }
+});
+
+// POST /api/records/budgetLines/:id/child-delete — xoá 1 mục con Sử Dụng (:id = id mục con), tính lại
+// usageStatus dòng cha sau khi xoá.
+router.post('/budgetLines/:id/child-delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const all = await getAllForCollection('budgetLines');
+    const child = all.find(l => l.id === itemId);
+    if (!child || child.parentId == null) throw new HttpError(404, 'Không tìm thấy mục sử dụng');
+    const parent = all.find(l => l.id === child.parentId);
+    if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
+    await deleteRecordForCollection('budgetLines', itemId,
+      (item) => recordActions.assertCanDeleteBudgetLineChild(freshUser, item, parent),
+      { username: freshUser.username, name: freshUser.name });
+    const siblings = all.filter(l => l.parentId === parent.id && l.id !== itemId);
+    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item) =>
+      recordActions.recomputeBudgetLineUsageStatus(item, siblings));
+    res.json({ ok: true, parentItem: parentAfter });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/child-delete`, err); }
+});
+
 // Vận Hành — cùng khuôn officeReqs/carRegs update+submit ở trên (chỉ người tạo sửa được lúc còn NHÁP,
 // "Gửi" đẩy về PENDING bước 1).
 router.post('/operationOrders/:id/update', async (req, res) => {

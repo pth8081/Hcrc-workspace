@@ -1,8 +1,101 @@
 # Phiên bản hiện tại
 
-**22.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**22.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v22.10 (2026-09-15): Ngân Sách 2.0 — thiết kế lại HOÀN TOÀN module Ngân Sách
+
+Người dùng gửi tài liệu phân tích "Module Quản lý Ngân sách (Ngân sách 2.0)"
+mô tả 1 hệ thống khác (bảng `budget2_lines` đơn, 3 giai đoạn độc lập PROPOSED/
+APPROVED/USED, khoá trường kiểu Zero-Trust khi kế thừa dữ liệu, không tự
+duyệt hồ sơ mình tạo) và yêu cầu áp dụng đúng tinh thần tài liệu, đổi "Công
+ty" thành "Vị trí" (HO/Siêu Thị) lấy từ danh mục Quản Trị, bỏ hẳn khái niệm
+"Kỳ ngân sách". Đã phân tích, đưa mockup 4 tab (Đề Xuất/Phê Duyệt/Sử Dụng/
+Báo Cáo) cho người dùng duyệt trước khi triển khai — người dùng xác nhận
+"đồng ý", tiến hành sửa code thật + merge thẳng theo quy ước.
+
+**Bỏ hẳn "Kỳ ngân sách"/"Mẫu ngân sách"**: module Ngân Sách cũ (nhập theo Kỳ,
+chọn Mẫu cột, bảng nhiều dòng/kỳ) được thay bằng module MỚI hoàn toàn —
+**mỗi dòng ngân sách độc lập**, tự mang sẵn Năm/Tháng ngân sách riêng, không
+còn khái niệm "kỳ" gộp nhiều dòng. Bảng `budgetEntries`/`budgetPeriods`/
+`budgetTemplates` cũ **GIỮ NGUYÊN trên server** (không xoá) — chỉ còn là dữ
+liệu lịch sử, không còn màn hình nào đọc/ghi vào nữa.
+
+**Bảng mới `dbo.BudgetLines`** (`server/sql/schema.sql`) — mỗi dòng có
+`Stage` (PROPOSED/APPROVED/USED), `Status` (SUBMITTED/APPROVED/REJECTED),
+`ParentId` (dòng Sử Dụng cha tự sinh khi 1 dòng Phê Duyệt được duyệt) /
+`SourceLineId` (dòng con ghi nhận từng lần dùng thực tế, trỏ về dòng cha),
+`Dept`/`BudgetYear`/`BudgetMonth` để lọc nhanh, còn lại lưu trong `Payload`
+JSON (theo đúng khuôn dữ liệu chung của các collection SQL hoá trước đây).
+
+**"Vị trí" thay "Công ty"**: mỗi dòng chọn **HO** (Trụ sở chính, giá trị cố
+định) hoặc **1 Siêu Thị** trong Danh Mục Siêu Thị đã cấu hình ở Quản Trị —
+cùng với **"Khối Phòng Ban"** chọn từ Danh Mục Phòng — cả 2 field lấy thẳng
+từ danh mục, không nhập tay tự do (dùng lại đúng khuôn sentinel "HO" +
+`DB.depts`/`DB.stores` đã có sẵn ở `renderOperationOrderReceiptScopeCheckboxes()`,
+không phát minh quy ước mới). Khối Phòng Ban là dữ liệu nghiệp vụ tự do
+(không dùng để chặn quyền xem/sửa theo phòng như `budgetEntries` cũ) — quyền
+truy cập hoàn toàn dựa vào 3 quyền bên dưới.
+
+**3 giai đoạn (Stage) độc lập**:
+- **📝 Đề Xuất** (`PROPOSED`): ai có quyền `budgetCreate` tạo/sửa/xoá đề xuất
+  của mình (SUBMITTED); người có `budgetManage` duyệt (✅ tự sinh dòng Phê
+  Duyệt tương ứng) hoặc từ chối.
+- **✅ Phê Duyệt** (`APPROVED`): người có `budgetManage` nhập trực tiếp (bỏ
+  qua bước Đề Xuất nếu muốn) hoặc duyệt từ 1 Đề Xuất; khi 1 dòng Phê Duyệt
+  được duyệt, hệ thống **tự sinh 1 dòng Sử Dụng (Stage=USED) làm "dòng cha"**
+  mang đúng nội dung/số tiền đã duyệt.
+- **💳 Sử Dụng** (`USED`): dòng cha hệ thống tự sinh (không ai nhập tay) +
+  nhiều dòng con ghi nhận từng lần dùng thực tế (người có `budgetCreate`
+  được ghi nhận dùng cho dòng thuộc phòng mình, `budgetManage` ghi nhận cho
+  mọi dòng) — mỗi lần ghi nhận tự cộng dồn, tính lại `usageStatus` (còn dư/
+  đã dùng hết/vượt) trên dòng cha.
+
+**Zero-Trust field locking**: khi tạo dòng Sử Dụng tự sinh từ dòng Phê Duyệt,
+hoặc dòng con ghi nhận sử dụng, server **luôn tự ghi đè** `content`/
+`description`/`itemCategory` từ đúng dòng nguồn — không bao giờ tin giá trị
+client gửi lên cho các trường này (chặn sửa sai lệch nội dung đã duyệt qua
+DevTools/API trực tiếp).
+
+**Không ai tự duyệt hồ sơ mình tạo** (kể cả `admin`) — `budgetManage` chỉ áp
+dụng cho hồ sơ do NGƯỜI KHÁC tạo, đúng tinh thần "no self-approval" của tài
+liệu gốc, không có ngoại lệ cho vai trò quản trị.
+
+**3 quyền giữ nguyên tinh thần cũ** (Hệ Thống → Phân Quyền): `budgetCreate`
+(tạo/quản lý Đề Xuất của mình + ghi nhận Sử Dụng cho phòng mình), `budgetManage`
+(toàn quyền: tạo/duyệt Phê Duyệt, sửa/xoá dòng Sử Dụng cha), `budgetAggregate`
+(xem xuyên phòng ban + tab 📊 Báo Cáo). Phải bật ÍT NHẤT 1 trong 3 quyền mới
+thấy module Ngân Sách.
+
+**📊 Báo Cáo**: tính hoàn toàn ở CLIENT từ dữ liệu `DB.budgetLines` đã tải sẵn
+(không thêm endpoint báo cáo riêng — cùng tinh thần bảng Tổng Hợp cũ), đồng
+thời cập nhật entry `budget` sẵn có trong Báo Cáo Định Kỳ
+(`module-baocaoquantri.js`) đọc theo cấu trúc dữ liệu mới. **📋 Biểu Mẫu**:
+2 entry mới `BUDGET_LINE_PROPOSE`/`BUDGET_LINE_APPROVE` trong
+`CORE_FIELD_MANIFEST`/`FORM_TABS` (`core.js`) thay cho 2 entry
+`BUDGET_PERIOD`/`BUDGET_TEMPLATE` cũ đã bỏ.
+
+Test mới (`tests/test-budget-lines.js`, 39/39): gác quyền theo module, tạo/
+duyệt/từ chối Đề Xuất + Phê Duyệt, chặn tự duyệt hồ sơ mình tạo, tự sinh dòng
+Sử Dụng kèm xác minh kế thừa đúng field khoá, ghi nhận sử dụng có khoá
+Zero-Trust + bắt buộc lý do khi phân bổ lại + tính đúng `usageStatus`, sửa/xoá
+dòng Sử Dụng cha kèm mở lại dòng Phê Duyệt nguồn, lọc hiển thị theo phòng ban
+đúng quyền. Regression liên quan chạy lại sạch sau khi phát hiện + vá 2 lỗi
+hồi quy do xoá nhầm code dùng chung khi viết lại nguyên file
+`module-ngansach.js` (chức năng cấu hình quy trình phê duyệt theo phòng dùng
+chung `renderWorkflowTab()`, và nút "QT Ngân Sách" vốn đã không dùng tới —
+đã gỡ khỏi `module-workflow.js`): `test-lazy-load-all-tabs.js` (42/42),
+`test-office-budget.js` (25/25, trimmed bỏ kịch bản Kỳ/Mẫu cũ),
+`test-preview-workflow-buttons.js` (16/16), `test-forms-batch2.js` (41/41),
+`test-form-reset-file-remove.js` (33/34 — 1 fail còn lại là lỗi VPP tồn tại
+sẵn trên `main`, xác minh qua `git stash`, không liên quan đợt này).
+
+**Deploy-impact**: đổi `server/sql/schema.sql` (thêm bảng mới `dbo.BudgetLines`
++ 4 index) — **BẮT BUỘC chạy lại script schema trên SQL Server thật** sau khi
+cập nhật code (script tự bọc `IF OBJECT_ID(...) IS NULL`, an toàn chạy lại
+nhiều lần). Không thêm biến môi trường mới, không thêm dependency npm mới —
+ngoài chạy lại schema, chỉ cần copy code + `pm2 restart` như thường lệ.
 
 ## v22.9 (2026-09-14): Phiếu phê duyệt — hiện ý kiến của TỪNG bước ký (không chỉ bước cuối)
 

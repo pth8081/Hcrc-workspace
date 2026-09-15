@@ -1065,6 +1065,38 @@ BEGIN
 END
 GO
 
+/* BudgetLines (module "Ngân Sách" thiết kế lại — v22.10, theo tài liệu "Ngân sách 2.0" người dùng cung
+   cấp, điều chỉnh: "Công ty" -> "Vị trí" (HO hoặc tên 1 Siêu Thị, lấy từ Danh Mục Siêu Thị), "Đơn vị"/
+   "Khối-Ban-Phòng" -> "Khối Phòng Ban" (lấy từ Danh Mục Phòng), KHÔNG còn "Kỳ ngân sách" — mỗi dòng tự
+   mang BudgetYear/BudgetMonth. 3 giai đoạn ĐỘC LẬP phân biệt bằng Stage: PROPOSED (Đề Xuất, duyệt/từ
+   chối tại chỗ, không sinh dòng nào) / APPROVED (Phê Duyệt, duyệt xong tự sinh 1 dòng USED cha qua
+   SourceLineId) / USED (Sử Dụng — dòng cha ParentId NULL do hệ thống tự sinh, dòng con ParentId trỏ về
+   dòng cha, ghi nhận từng lần sử dụng thực tế). Nội dung/Mô tả/Danh Mục (trong Payload) khoá cứng khi
+   kế thừa xuống USED (server tự ghi đè, xem lib/recordActions.js) — không cần cột SQL riêng vì chỉ đọc/
+   ghi qua Payload JSON như budgetEntries. BudgetEntries/BudgetPeriods/BudgetTemplates ở trên GIỮ NGUYÊN
+   (không xoá) để không mất dữ liệu ngân sách lịch sử theo kiến trúc cũ — chỉ không còn màn nhập liệu
+   mới nào ghi vào 3 bảng đó nữa. */
+IF OBJECT_ID('dbo.BudgetLines', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.BudgetLines (
+        Id            BIGINT         NOT NULL CONSTRAINT PK_BudgetLines PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Stage         NVARCHAR(10)   NOT NULL,
+        Dept          NVARCHAR(100)  NOT NULL,
+        Status        NVARCHAR(20)   NOT NULL,
+        ParentId      BIGINT         NULL,
+        SourceLineId  BIGINT         NULL,
+        BudgetYear    SMALLINT       NULL,
+        BudgetMonth   TINYINT        NULL,
+        Payload       NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_BudgetLines_Stage_Dept_Status ON dbo.BudgetLines (Stage, Dept, Status, CreatedAt DESC, Id DESC);
+    CREATE INDEX IX_BudgetLines_Parent ON dbo.BudgetLines (ParentId);
+    CREATE INDEX IX_BudgetLines_Source ON dbo.BudgetLines (SourceLineId);
+    CREATE INDEX IX_BudgetLines_Year_Month ON dbo.BudgetLines (BudgetYear, BudgetMonth);
+END
+GO
+
 /* checklistTemplates — TemplateCode do NGƯỜI DÙNG tự gõ (không phải tự sinh như docs/submissions) —
    vẫn cần UNIQUE để tránh trùng, nhưng KHÔNG có logic tự tăng số khi trùng (đúng hành vi hiện có, chỉ
    báo lỗi). */
