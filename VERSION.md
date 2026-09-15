@@ -1,8 +1,51 @@
 # Phiên bản hiện tại
 
-**23.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.9 (2026-09-15): Rà soát chuyên sâu lần 2 (5 agent song song) xác nhận sạch CSP/unsafe-inline + bổ sung test crawl tương tác sâu có dữ liệu thật
+
+Người dùng yêu cầu rà soát lại kỹ hơn sau v23.8: "rà soát chuyên sâu một lần nữa lỗi CSP chặn scripts hoặc
+unsafe inline, cho nhiều agent rà soát để đảm bảo không có lỗi". Đợt này KHÔNG có lỗi thật nào phải vá —
+chỉ xác nhận lại thật kỹ + bổ sung 1 bài test hồi quy mới để phòng lớp lỗi này tái diễn.
+
+**5 agent rà soát song song, mỗi agent 1 mảng riêng biệt**:
+1. Style nội tuyến/CSS injection (grep toàn bộ `public/js/*.js` + `index.html` + `routes/`/`lib/`) — xác
+   nhận 3 chỗ vá ở v23.7 không hồi quy, không có chỗ mới nào.
+2. onclick/inline event handler + `javascript:` URL — không còn markup sống nào, chỉ còn comment lịch sử.
+3. Script nội tuyến/`eval`/`new Function` — xác nhận fix `__ASSET_VERSION__` (v23.8) là chỗ duy nhất từng
+   có; phát hiện 1 điểm đáng lưu ý không phải lỗi (`doc.write()` qua iframe ẩn ở `module-tailieu.js`, hiện
+   an toàn vì nội dung luôn qua `escapeHtml()`).
+4. Đối chiếu cấu hình CSP (`lib/securityHeaders.js`) với tài nguyên thực tế toàn app — khớp hoàn toàn;
+   phát hiện 1 điểm code chết đáng lưu ý (`bgImageUrl` trong template báo cáo trình chiếu luôn `null`,
+   chưa phải rủi ro thật).
+5. Crawl tương tác dưới CSP thật (mở/đóng modal, chuyển sub-tab) trên 21 module tương tác nhiều nhất — 70
+   lượt thao tác, 0 vi phạm CSP, 0 lỗi JS. Ghi nhận hạn chế: seed rỗng nên chưa bấm được nút "Sửa"/"Xem"
+   CẤP DÒNG (chỉ hiện khi có bản ghi khớp trong DB).
+
+**Mở rộng tiếp theo yêu cầu của người dùng**: viết bài test hồi quy mới `test-csp-deep-interaction.js`,
+seed 1 bản ghi thật cho 13 collection tạo hồ sơ chính (Đăng Ký Xe, Ngân Sách, Checklist + bài nộp, Giấy
+Phép, VPP, Phê Duyệt Giá IT, Đơn Hàng, Hợp Đồng, Công Việc, Biên Bản Họp, Tài Liệu, Văn Bản Trình) để các
+nút "Sửa"/"Xem"/"Chi tiết" cấp dòng thực sự render và được click tới — khép lại đúng khoảng trống độ phủ
+mà đợt crawl trước còn bỏ sót. Kết quả: 61 lượt tương tác sâu (mở modal + chuyển sub-tab + đóng) trên 38
+điểm điều hướng, trong đó 23 lượt bấm trúng nút Sửa/Xem/Chi tiết cấp dòng ở 12 module khác nhau — **0 vi
+phạm CSP, 0 lỗi JS**. Phát hiện phụ trong lúc dựng test (đã tự xử lý trong seed, không phải lỗi app): nhịp
+tự poll 20 giây của `startApprovalPolling()` (core.js) có thể tự ghi đè sạch dữ liệu seed giữa chừng bài
+test kéo dài quá 20s do `fetch()` giả lập trả `[]` — test tự gọi `stopApprovalPolling()` ngay sau đăng
+nhập để tránh.
+
+**Kết luận**: codebase xác nhận sạch hoàn toàn khỏi lớp lỗi CSP/unsafe-inline qua 2 đợt rà soát độc lập
+(v23.7 phát hiện+vá, v23.8 rà soát lần 1, v23.9 rà soát lần 2 sâu hơn — đều không tìm thêm lỗi mới).
+
+Test: `test-csp-deep-interaction.js` (mới, 19/19) + xác nhận lại `test-csp-full-audit.js` (3/3),
+`test-asset-version-csp.js` (5/5), `test-nghiepvu-csp.js` (6/6), `test-lazy-load-all-tabs.js` (42/42) đều
+PASS sau khi thêm bài test mới.
+
+**Deploy-impact**: chỉ thêm 1 file test mới (`tests/test-csp-deep-interaction.js`) — không đổi bất kỳ file
+code app nào (`server.js`, `public/js/*`), không đổi `schema.sql`, không thêm biến môi trường, không thêm
+npm dependencies. Copy code + `pm2 restart` là đủ — thực chất bản này không có thay đổi hành vi nào ảnh
+hưởng người dùng cuối, chỉ củng cố thêm lớp bảo vệ hồi quy cho đội phát triển.
 
 ## v23.8 (2026-09-15): Vá lỗi cache "đơ" khi ra bản mới (CSP chặn script gắn version) + rà soát toàn bộ `unsafe-inline`
 
