@@ -1,8 +1,10 @@
 'use strict';
 // Regression test cho Đợt 2 mở rộng "Biểu Mẫu" (Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục — 10
-// tab mới: PAYMENT/BUDGET_PERIOD/BUDGET_TEMPLATE/REPORT_ENTRY/REPORT_PERIOD/UNIFORM_PERIOD/
+// tab mới: PAYMENT/BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE/REPORT_ENTRY/REPORT_PERIOD/UNIFORM_PERIOD/
 // UNIFORM_ISSUE/UNIFORM_ADJUST_STOCK/UNIFORM_ADJUST_EMPLOYEE/UNIFORM_TRANSFER, xem
-// CORE_FIELD_MANIFEST + FORM_TABS trong public/index.html). Cùng khuôn tests/test-forms-batch1.js.
+// CORE_FIELD_MANIFEST + FORM_TABS trong core.js). Cùng khuôn tests/test-forms-batch1.js.
+// (BUDGET_PERIOD/BUDGET_TEMPLATE đã đổi thành BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE — v22.10, module
+// Ngân Sách thiết kế lại không còn Kỳ/Mẫu, xem module-ngansach.js.)
 //
 // Không có backend SQL Server thật trong môi trường này — serve public/index.html tĩnh, boot Chromium
 // thật (Playwright), set thẳng biến toàn cục DB/currentUser rồi gọi ĐÚNG các hàm sản xuất thật
@@ -13,7 +15,7 @@
 //   1. 10 tab mới có mặt trong renderFormTabsBar().
 //   2. PAYMENT: sửa nhãn trường mặc định "paymentTitle" (nhánh <label> thật) -> hiện ngay trên form thật
 //      (#paymentCreateForm).
-//   3. BUDGET_PERIOD: sửa nhãn "budgetPeriodName" -> hiện đúng trên #budgetPeriodTemplateModal.
+//   3. BUDGET_LINE_PROPOSE: sửa nhãn "blProposeContent" -> hiện đúng trên form Đề Xuất Ngân Sách.
 //   4. REPORT_PERIOD: sửa nhãn "prPeriodName" -> hiện đúng trên #prSubPeriods.
 //   5. UNIFORM_ISSUE: sửa nhãn "uniformIssueEmployee" -> hiện đúng trên #uniformSubStore, không lem
 //      sang uniformIssueCode liền kề.
@@ -57,7 +59,7 @@ function startServer() {
 }
 
 const NEW_TABS = [
-  'PAYMENT', 'BUDGET_PERIOD', 'BUDGET_TEMPLATE', 'REPORT_ENTRY', 'REPORT_PERIOD',
+  'PAYMENT', 'BUDGET_LINE_PROPOSE', 'BUDGET_LINE_APPROVE', 'REPORT_ENTRY', 'REPORT_PERIOD',
   'UNIFORM_PERIOD', 'UNIFORM_ISSUE', 'UNIFORM_ADJUST_STOCK', 'UNIFORM_ADJUST_EMPLOYEE', 'UNIFORM_TRANSFER'
 ];
 
@@ -101,7 +103,7 @@ async function main() {
       submissionTypes: [], contractTypes: [], carTypes: [],
       licenseTypes: [], itTicketCategories: [],
       paymentRequests: [], contracts: [], officeReqs: [],
-      budgetTemplates: [], budgetPeriods: [], budgetEntries: [],
+      budgetTemplates: [], budgetPeriods: [], budgetEntries: [], budgetLines: [],
       reportPeriods: [], reportEntries: [],
       uniformCatalog: [], uniformPeriods: [], uniformIssuances: [],
       formTemplates: {}, systemLogs: [], users: []
@@ -151,17 +153,17 @@ async function main() {
         override && override.label === 'Nội Dung Thanh Toán (ĐÃ SỬA)', JSON.stringify(override));
     }
 
-    // ---------- 3) BUDGET_PERIOD: sửa nhãn budgetPeriodName ----------
-    editDefaultFieldLabel('BUDGET_PERIOD', 'BUDGET_PERIOD', 'budgetPeriodName', 'Tên Kỳ NS (ĐÃ SỬA)');
+    // ---------- 3) BUDGET_LINE_PROPOSE: sửa nhãn blProposeContent ----------
+    editDefaultFieldLabel('BUDGET_LINE_PROPOSE', 'BUDGET_LINE_PROPOSE', 'blProposeContent', 'Nội Dung Đề Xuất (ĐÃ SỬA)');
     {
-      const labelEl = document.getElementById('budgetPeriodName').closest('div')?.querySelector('label');
-      check('BUDGET_PERIOD: <label> thật trên form Tạo Kỳ Ngân Sách đã đổi đúng nhãn mới',
-        !!labelEl && labelEl.textContent.includes('Tên Kỳ NS (ĐÃ SỬA)'),
+      const labelEl = document.getElementById('blProposeContent').closest('div')?.querySelector('label');
+      check('BUDGET_LINE_PROPOSE: <label> thật trên form Đề Xuất Ngân Sách đã đổi đúng nhãn mới',
+        !!labelEl && labelEl.textContent.includes('Nội Dung Đề Xuất (ĐÃ SỬA)'),
         labelEl ? labelEl.textContent : 'NO LABEL FOUND');
-      // Trường liền kề budgetPeriodEndTime KHÔNG bị ảnh hưởng
-      const otherLabel = document.getElementById('budgetPeriodEndTime').closest('div')?.querySelector('label');
-      check('BUDGET_PERIOD: sửa 1 trường KHÔNG làm lem nhãn sang budgetPeriodEndTime liền kề',
-        !!otherLabel && otherLabel.textContent.includes('Hạn Chót Lập') && !otherLabel.textContent.includes('ĐÃ SỬA'),
+      // Trường liền kề blProposeDescription KHÔNG bị ảnh hưởng
+      const otherLabel = document.getElementById('blProposeDescription').closest('div')?.querySelector('label');
+      check('BUDGET_LINE_PROPOSE: sửa 1 trường KHÔNG làm lem nhãn sang blProposeDescription liền kề',
+        !!otherLabel && otherLabel.textContent.includes('Mô Tả') && !otherLabel.textContent.includes('ĐÃ SỬA'),
         otherLabel ? otherLabel.textContent : 'NO LABEL FOUND');
     }
 

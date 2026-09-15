@@ -250,6 +250,85 @@ function createMockApi(state) {
       throw new HttpError(400, `Hành động không hợp lệ: ${action}`);
     }
 
+    // budgetLines (Ngân Sách 2.0, v22.10) — khớp ĐÚNG orchestration ở routes/records.js thật: mỗi action
+    // đọc collection trực tiếp từ state (không qua khoá SQL nào, mock không cần mô phỏng tương tranh),
+    // gọi recordActions.js thuần rồi tự cập nhật lại state.collections.budgetLines.
+    if (module1 === 'budgetLines') {
+      const id = Number(idOrAction);
+      const all = state.collections.budgetLines;
+      if (action === 'update') {
+        const item = findOr404(all, id);
+        return { item: recordActions.updateBudgetLineDraft(user, item, payload, state.appData) };
+      }
+      if (action === 'delete') {
+        const item = findOr404(all, id);
+        recordActions.assertCanDeleteBudgetLineDraft(user, item);
+        state.collections.budgetLines = all.filter(x => x.id !== id);
+        return { ok: true };
+      }
+      if (action === 'approve-proposal') {
+        const item = findOr404(all, id);
+        return { item: recordActions.approveBudgetLineProposal(user, item) };
+      }
+      if (action === 'reject-proposal') {
+        const item = findOr404(all, id);
+        return { item: recordActions.rejectBudgetLineProposal(user, item, payload) };
+      }
+      if (action === 'approve') {
+        const item = findOr404(all, id);
+        const approved = recordActions.approveBudgetLine(user, item);
+        const usedItem = Object.assign(recordActions.buildBudgetLineUsedRow(user, approved), { id: Date.now() });
+        state.collections.budgetLines.unshift(usedItem);
+        return { item: approved, usedItem };
+      }
+      if (action === 'reject') {
+        const item = findOr404(all, id);
+        return { item: recordActions.rejectBudgetLine(user, item, payload) };
+      }
+      if (action === 'used-parent-update') {
+        const item = findOr404(all, id);
+        return { item: recordActions.updateBudgetLineUsedParent(user, item, payload, state.appData) };
+      }
+      if (action === 'used-parent-delete') {
+        const parent = findOr404(all, id);
+        const hasChildren = all.some(l => l.parentId === id);
+        if (hasChildren) throw new HttpError(409, 'Dòng này đã có mục con Sử Dụng — không xoá được nữa');
+        recordActions.assertCanDeleteBudgetLineUsedParent(user, parent);
+        state.collections.budgetLines = all.filter(x => x.id !== id);
+        if (parent.sourceLineId) {
+          const src = state.collections.budgetLines.find(l => l.id === parent.sourceLineId);
+          if (src) recordActions.reopenBudgetLineAfterUsedParentDeleted(src);
+        }
+        return { ok: true };
+      }
+      if (action === 'children') {
+        const parent = findOr404(all, id);
+        const child = Object.assign(recordActions.addBudgetLineChild(user, parent, payload), { id: Date.now() });
+        state.collections.budgetLines.unshift(child);
+        const siblings = state.collections.budgetLines.filter(l => l.parentId === id);
+        const parentAfter = recordActions.recomputeBudgetLineUsageStatus(parent, siblings);
+        return { item: child, parentItem: parentAfter };
+      }
+      if (action === 'child-update') {
+        const child = findOr404(all, id);
+        const parent = findOr404(all, child.parentId);
+        const updated = recordActions.updateBudgetLineChild(user, child, parent, payload);
+        const siblings = state.collections.budgetLines.filter(l => l.parentId === parent.id);
+        const parentAfter = recordActions.recomputeBudgetLineUsageStatus(parent, siblings);
+        return { item: updated, parentItem: parentAfter };
+      }
+      if (action === 'child-delete') {
+        const child = findOr404(all, id);
+        const parent = findOr404(all, child.parentId);
+        recordActions.assertCanDeleteBudgetLineChild(user, child, parent);
+        state.collections.budgetLines = all.filter(x => x.id !== id);
+        const siblings = state.collections.budgetLines.filter(l => l.parentId === parent.id);
+        const parentAfter = recordActions.recomputeBudgetLineUsageStatus(parent, siblings);
+        return { parentItem: parentAfter };
+      }
+      throw new HttpError(400, `Hành động không hợp lệ: ${action}`);
+    }
+
     throw new HttpError(404, `Không có route cho module: ${module1}`);
   }
 

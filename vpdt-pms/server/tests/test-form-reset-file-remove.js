@@ -1252,82 +1252,63 @@ async function main() {
       }
     );
 
-    // ================= 28) Ngân Sách > Ngân Sách Phê Duyệt (budgetEntryFormWrap_PLAN, KHÔNG phải <form> thật) =================
+    // ================= 28) Ngân Sách > Đề Xuất (blProposeFormWrap — v22.10, module Ngân Sách thiết kế
+    // lại theo tài liệu "Ngân sách 2.0": 1 dòng/1 form đơn giản, KHÔNG còn bảng nhiều dòng theo Kỳ/Mẫu
+    // như thiết kế cũ) =================
     await check(
-      'Ngân Sách (Phê Duyệt): KHÔNG phải <form> thật — CHƯA có nháp nào lưu -> "Làm Mới" gọi lại onBudgetEntryPeriodChange() có sẵn, collapse bảng hạng mục về ĐÚNG 1 dòng trống theo mẫu cột',
+      'Ngân Sách (Đề Xuất): form đang có dữ liệu CHƯA lưu -> "Làm Mới" hỏi xác nhận rồi trắng lại toàn bộ form',
       async () => {
-        // seedRecord() ghi CẢ VÀO state.collections.budgetPeriods (mock backend đọc lúc validate lưu
-        // nháp qua server thật, xem lib/createValidation.js budgetEntries.extraValidate) LẪN window.DB
-        // (giao diện hiển thị) — kịch bản PLAN này không round-trip server (chỉ collapse dòng ở client)
-        // nên đáng lẽ không bắt buộc, nhưng seed đủ cho nhất quán với kịch bản ACTUAL ngay bên dưới.
-        await h.seedRecord('budgetPeriods', {
-          id: 994001, code: 'NS-TEST-PLAN', name: 'Kỳ kiểm thử reset form (Phê Duyệt)',
-          startTime: '', endTime: '2030-12-31T23:59', status: 'OPEN',
-          deptScope: { all: true, depts: [] }, templateId: null, createdAt: new Date().toLocaleString('vi-VN')
-        });
-        await page.evaluate(() => { switchTab('budget'); setBudgetSubTab('APPROVED'); });
-        await page.selectOption('#budgetEntryPeriodSelect_PLAN', '994001');
-        const rowsBefore = await page.locator('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx]').count();
-        assertTrue(rowsBefore === 1, `Phải có đúng 1 dòng trống mặc định khi chưa có nháp nào lưu, thực tế ${rowsBefore}`);
-        await page.click('#budgetEntryAddRowBtn_PLAN');
-        const rowsAfterAdd = await page.locator('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx]').count();
-        assertTrue(rowsAfterAdd === 2, `Sau khi thêm dòng phải có 2 dòng, thực tế ${rowsAfterAdd}`);
-        await page.fill('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]', 'Hạng mục kiểm thử reset');
-        await page.fill('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="amount"]', '1000000');
-
+        await page.evaluate(() => { switchTab('budget'); setBudgetLineTab('PROPOSE'); });
+        await page.fill('#blProposeContent', 'Nội dung đề xuất kiểm thử reset');
+        await page.fill('#blProposeDescription', 'Mô tả kiểm thử reset');
         await page.evaluate(() => { window.__confirmCalls = []; });
-        await page.click('#budgetEntryFormWrap_PLAN button[data-arg1="resetBudgetEntryFormPLAN"]');
+        await page.click('#blProposeFormWrap button[data-arg1="resetBudgetLineFormPropose"]');
         const state = await page.evaluate(() => ({
-          rows: document.querySelectorAll('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx]').length,
-          name0: document.querySelector('#budgetEntryLinesBody_PLAN tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]')?.value,
+          content: document.getElementById('blProposeContent').value,
+          description: document.getElementById('blProposeDescription').value,
+          editingId: budgetLineEditingId.Propose,
           confirmCalls: window.__confirmCalls.length
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
-        assertTrue(state.rows === 1, `Bảng hạng mục phải collapse lại về ĐÚNG 1 dòng trống (chưa có nháp lưu), thực tế ${state.rows}`);
-        assertTrue(state.name0 === '', `Tên Hạng Mục dòng còn lại phải rỗng, thực tế "${state.name0}"`);
+        assertTrue(state.content === '', `Nội dung phải trắng lại, thực tế "${state.content}"`);
+        assertTrue(state.description === '', `Mô tả phải trắng lại, thực tế "${state.description}"`);
+        assertTrue(state.editingId === null, `budgetLineEditingId.Propose phải về null, thực tế ${JSON.stringify(state.editingId)}`);
       }
     );
 
-    // ================= 29) Ngân Sách > Ngân Sách Thực Hiện (budgetEntryFormWrap_ACTUAL, KHÔNG phải <form> thật) =================
+    // ================= 29) Ngân Sách > Phê Duyệt (blApproveFormWrap) — ĐANG SỬA 1 dòng đã lưu trên
+    // server, sửa dở CHƯA lưu -> "Làm Mới" phải HUỶ sửa dở + THOÁT HẲN chế độ sửa (form trắng để tạo
+    // mới) — khác hẳn thiết kế bảng nhiều dòng cũ (vốn nạp LẠI đúng giá trị đã lưu thay vì trắng hẳn),
+    // vì thiết kế mới không còn khái niệm "nạp lại bản nháp" — mỗi dòng độc lập, sửa dở không lưu thì
+    // mất, đúng tinh thần nút "↺ Làm Mới" ở các form khác trong app (docForm/contractForm/...). ==========
     await check(
-      'Ngân Sách (Thực Hiện): ĐÃ có nháp lưu trên server -> "Làm Mới" hoàn tác sửa dở CHƯA lưu (dòng mới thêm + sửa tên), nạp lại ĐÚNG giá trị đã lưu nháp (không collapse về rỗng)',
+      'Ngân Sách (Phê Duyệt): đang SỬA 1 dòng đã lưu, sửa dở CHƯA lưu -> "Làm Mới" huỷ sửa dở + thoát hẳn chế độ sửa (form trắng, KHÔNG nạp lại giá trị đã lưu)',
       async () => {
-        // seedRecord() BẮT BUỘC ở kịch bản này (khác PLAN ở trên) — saveBudgetEntryDraft('ACTUAL') round-
-        // trip THẬT qua mock backend (POST /api/create/budgetEntries), lib/createValidation.js đọc period
-        // từ appData.budgetPeriods (= state.collections.budgetPeriods phía mock, KHÔNG phải window.DB
-        // phía trình duyệt) — chỉ gán tay DB.budgetPeriods sẽ báo lỗi "Không tìm thấy kỳ ngân sách".
-        await h.seedRecord('budgetPeriods', {
-          id: 994002, code: 'NS-TEST-ACTUAL', name: 'Kỳ kiểm thử reset form (Thực Hiện)',
-          startTime: '', endTime: '2030-12-31T23:59', status: 'OPEN',
-          deptScope: { all: true, depts: [] }, templateId: null, createdAt: new Date().toLocaleString('vi-VN')
+        await h.seedRecord('budgetLines', {
+          id: 994010, stage: 'APPROVED', dept: 'Phòng Kinh Doanh', location: 'HO',
+          content: 'Dòng phê duyệt đã lưu', description: 'Mô tả đã lưu',
+          quantity: 1, unitPrice: 1000000, vatPercent: 0, totalAmount: 1000000,
+          budgetType: 'OPEX', itemCategory: 'SERVICE', budgetYear: 2026, budgetMonth: 10,
+          note: '', status: 'SUBMITTED', parentId: null, sourceLineId: null, usageStatus: null,
+          reallocationReason: '', createdBy: 'admin', createdByName: 'Quản Trị Viên',
+          createdAt: new Date().toLocaleString('vi-VN'), decidedBy: null, decidedByName: null, decidedAt: null
         });
-        await page.evaluate(() => { switchTab('budget'); setBudgetSubTab('ACTUAL'); });
-        await page.selectOption('#budgetEntryPeriodSelect_ACTUAL', '994002');
-        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]', 'Hạng mục đã lưu nháp');
-        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="amount"]', '2000000');
-        await page.evaluate(() => saveBudgetEntryDraft('ACTUAL'));
-        await page.waitForFunction(() => budgetEntryFormDraftId['ACTUAL'] != null);
-
-        // Sửa dở dang CHƯA lưu: đổi lại tên dòng đã lưu + thêm 1 dòng mới — đây là phần PHẢI MẤT khi Làm Mới.
-        await page.click('#budgetEntryAddRowBtn_ACTUAL');
-        const rowsBeforeReset = await page.locator('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx]').count();
-        assertTrue(rowsBeforeReset === 2, `Phải có 2 dòng (1 đã lưu + 1 mới thêm chưa lưu) trước khi Làm Mới, thực tế ${rowsBeforeReset}`);
-        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]', 'Sửa dở CHƯA lưu');
-        await page.fill('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="1"] .budget-line-core[data-core-key="name"]', 'Dòng mới thêm CHƯA lưu');
+        await page.evaluate(() => { switchTab('budget'); setBudgetLineTab('APPROVE'); });
+        await page.evaluate(() => editBudgetLineDraft(994010, 'APPROVED'));
+        const contentBeforeReset = await page.locator('#blApproveContent').inputValue();
+        assertTrue(contentBeforeReset === 'Dòng phê duyệt đã lưu', `Phải nạp đúng giá trị đã lưu vào form để sửa, thực tế "${contentBeforeReset}"`);
+        await page.fill('#blApproveContent', 'Sửa dở CHƯA lưu');
 
         await page.evaluate(() => { window.__confirmCalls = []; });
-        await page.click('#budgetEntryFormWrap_ACTUAL button[data-arg1="resetBudgetEntryFormACTUAL"]');
+        await page.click('#blApproveFormWrap button[data-arg1="resetBudgetLineFormApprove"]');
         const state = await page.evaluate(() => ({
-          rows: document.querySelectorAll('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx]').length,
-          name0: document.querySelector('#budgetEntryLinesBody_ACTUAL tr[data-budget-line-idx="0"] .budget-line-core[data-core-key="name"]')?.value,
+          content: document.getElementById('blApproveContent').value,
+          editingId: budgetLineEditingId.Approve,
           confirmCalls: window.__confirmCalls.length
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
-        assertTrue(state.rows === 1, `Phải quay lại ĐÚNG số dòng đã LƯU NHÁP trên server (1 dòng), bỏ dòng mới thêm chưa lưu, thực tế ${state.rows}`);
-        assertTrue(
-          state.name0 === 'Hạng mục đã lưu nháp',
-          `Dòng còn lại phải về ĐÚNG giá trị đã lưu nháp trên server ("Hạng mục đã lưu nháp"), không giữ sửa dở "Sửa dở CHƯA lưu", thực tế "${state.name0}"`
-        );
+        assertTrue(state.content === '', `Phải trắng lại HẲN (thoát chế độ sửa), không nạp lại giá trị đã lưu, thực tế "${state.content}"`);
+        assertTrue(state.editingId === null, `budgetLineEditingId.Approve phải về null (thoát chế độ sửa), thực tế ${JSON.stringify(state.editingId)}`);
       }
     );
 

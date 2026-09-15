@@ -69,7 +69,12 @@ const { HttpError } = require('./httpErrors');
 // viên/kỳ) — cùng khuôn reportPeriods/reportEntries. notifications: thông báo trong app GENERIC (xem
 // lib/notifications.js) — hệ thống tự sinh liên tục (không qua createValidation.js), cùng khuôn
 // attendanceRecords (tăng trưởng theo thời gian, cần khoá optimistic theo bản ghi khi đánh dấu đã đọc).
-const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress', 'hrProcesses', 'laborContracts',
+// budgetLines (v22.10, "Ngân Sách 2.0" — xem chú thích đầy đủ ở sql/schema.sql ngay trên CREATE TABLE
+// dbo.BudgetLines): thay thế hoàn toàn màn nhập liệu của budgetTemplates/budgetPeriods/budgetEntries ở
+// trên (3 collection đó GIỮ NGUYÊN, không xoá, chỉ không còn ai ghi vào nữa) — 1 bảng duy nhất, phân
+// biệt PROPOSED/APPROVED/USED bằng cột Stage, không còn khái niệm "Kỳ" (BudgetYear/BudgetMonth nằm
+// ngay trên từng dòng).
+const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeReqs', 'contracts', 'meetings', 'meetingMinutes', 'internalPosts', 'paymentRequests', 'vppPeriods', 'vppRegistrations', 'reportPeriods', 'reportEntries', 'trainingDocuments', 'trainingClasses', 'trainingRegistrations', 'careerPaths', 'careerPathConfirmations', 'trainingTests', 'trainingTestSubmissions', 'trainingCourses', 'trainingPlans', 'onboardingPaths', 'onboardingProgress', 'recruitmentJobs', 'recruitmentReferrals', 'itPriceApprovals', 'itSupportTickets', 'uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers', 'budgetTemplates', 'budgetPeriods', 'budgetEntries', 'budgetLines', 'licenses', 'itServiceRenewals', 'hrFeedback', 'operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'trainingDocumentProgress', 'hrProcesses', 'laborContracts',
   'attendanceRecords', 'shiftRoster', 'shiftSwapRequests', 'leaveBalances', 'leaveRequests', 'payrollPeriods', 'payslips', 'notifications',
   // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL mới, xem lib/checklist.js) — checklistTemplates cùng
   // khuôn trainingTests (câu hỏi+lựa chọn nhúng thẳng trong bản ghi); checklistSubmissions cùng khuôn
@@ -358,6 +363,24 @@ const DEDICATED_TABLES = {
       EntryKind:  { sqlType: () => sql.NVarChar(10),  extract: r => r.entryKind || null },
       PeriodId:   { sqlType: () => sql.BigInt,        extract: r => (r.periodId != null ? r.periodId : null) },
       Status:     { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
+    }
+  },
+  // budgetLines (v22.10, "Ngân Sách 2.0") — Dept ở đây là "Khối Phòng Ban" (đổi tên hiển thị, giá trị
+  // vẫn lấy từ Danh Mục Phòng như mọi collection khác dùng Dept). "Vị trí" (HO/tên Siêu Thị) + toàn bộ
+  // field nghiệp vụ khác (content/description/quantity/unitPrice/vatPercent/totalAmount/budgetType/
+  // itemCategory/usageStatus/reallocationReason/note/purchaseMonth...) chỉ nằm trong Payload — không
+  // cần lọc SQL riêng theo Vị trí nên không tách cột (đúng nguyên tắc "chỉ thêm cột cho field cần lọc/
+  // sắp xếp thật", xem các collection khác trong danh sách này).
+  budgetLines: {
+    table: 'BudgetLines', hasCode: false,
+    columns: {
+      Stage:        { sqlType: () => sql.NVarChar(10),  extract: r => r.stage || null },
+      Dept:         { sqlType: () => sql.NVarChar(100), extract: r => r.dept || null },
+      Status:       { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null },
+      ParentId:     { sqlType: () => sql.BigInt,        extract: r => (r.parentId != null ? r.parentId : null) },
+      SourceLineId: { sqlType: () => sql.BigInt,        extract: r => (r.sourceLineId != null ? r.sourceLineId : null) },
+      BudgetYear:   { sqlType: () => sql.SmallInt,      extract: r => (r.budgetYear != null ? r.budgetYear : null) },
+      BudgetMonth:  { sqlType: () => sql.TinyInt,       extract: r => (r.budgetMonth != null ? r.budgetMonth : null) }
     }
   },
   recruitmentReferrals: {

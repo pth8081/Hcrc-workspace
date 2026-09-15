@@ -5572,7 +5572,7 @@
             <span id="permTreeBadge_budget" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Phải bật ÍT NHẤT 1 trong 3 quyền dưới đây mới vào được module "Ngân Sách" (không có tầng "xem miễn phí" chỉ nhờ mục 0) — đúng khuôn các module khác (Tổng Hợp Mua Bán/Sửa Chữa/Đầu Tư cũng đòi 1 trong 3 quyền tương tự). (1) "Xem, tạo ngân sách" (budgetCreate) — quyền NỀN TẢNG: xem/nhập/sửa ngân sách Phê Duyệt & Thực Hiện của ĐÚNG phòng ban mình (nhiều người cùng phòng cùng sửa chung 1 bản nháp, qua Trưởng phòng duyệt), VÀ xem được tab "Tổng Hợp" nhưng CHỈ thấy đúng phòng mình; (2) "Tổng hợp" (budgetAggregate) — thêm quyền thấy khối "Theo Phòng Ban"/"Chi Tiết Hạng Mục" của MỌI phòng ban (không chỉ phòng mình) trong tab Tổng Hợp — KHÔNG thấy khối "📌 Toàn Công Ty" (4 thẻ tổng gộp + OPEX/CAPEX gộp); (3) "Quản lý" (budgetManage) — cấp cao nhất: xem được HẾT các phòng ban khác + thấy thêm khối "Toàn Công Ty" trong tab Tổng Hợp, toàn quyền tạo/đóng/mở lại kỳ + quản lý mẫu (nút "⚙️ Quản Lý Kỳ & Mẫu") — nhưng KHÔNG sửa được ngân sách của phòng ban khác (server chặn cứng, chỉ sửa/gửi được đúng phòng mình nếu cũng có "Xem, tạo ngân sách"). Bước duyệt (Trưởng phòng) cấu hình riêng ở "Hệ Thống → Quy Trình & Phê Duyệt → QT Ngân Sách" — không phải checkbox ở đây; Trưởng phòng cần được bật thêm "Xem, tạo ngân sách" để vào module xử lý được đề xuất chờ duyệt của phòng mình.</p>
+            <p class="text-[11px] text-gray-500 italic">Phải bật ÍT NHẤT 1 trong 3 quyền dưới đây mới vào được module "Ngân Sách" (không có tầng "xem miễn phí" chỉ nhờ mục 0). Từ v22.10 (thiết kế lại theo tài liệu "Ngân sách 2.0"), module KHÔNG còn Kỳ/Mẫu ngân sách và KHÔNG dùng quy trình duyệt theo phòng ban (workflowEngine.js) nữa — chỉ còn 3 tầng permission phẳng: (1) "Xem, tạo ngân sách" (budgetCreate) — lập/sửa/xoá dòng "📝 Đề Xuất" (bất kỳ Khối Phòng Ban nào), duyệt/từ chối Đề Xuất do NGƯỜI KHÁC tạo, ghi nhận "💳 Sử Dụng" cho đúng Khối Phòng Ban mình, xem được dòng thuộc Khối Phòng Ban mình ở mọi tab; (2) "Tổng hợp" (budgetAggregate) — thêm quyền xem HẾT mọi Khối Phòng Ban + vào tab "📊 Báo Cáo"; (3) "Quản lý" (budgetManage) — cấp cao nhất: toàn quyền cả 3 tab "📝 Đề Xuất"/"✅ Phê Duyệt"/"💳 Sử Dụng" ở MỌI Khối Phòng Ban, kể cả nhập trực tiếp + duyệt/từ chối dòng "✅ Phê Duyệt" (chỉ tầng này làm được) và sửa/xoá dòng "💳 Sử Dụng". Không ai tự duyệt/tự từ chối được dòng do chính mình tạo, bất kể tầng quyền nào.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pBudgetManage"> 📅 Quản lý (xem MỌI phòng ban + Tổng Hợp Toàn Công Ty, không sửa được ngân sách phòng khác; tạo/đóng/mở kỳ, quản lý mẫu)
@@ -6479,308 +6479,126 @@
     </div>
   </div>
 
-  <!-- Màn hình MODULE NGÂN SÁCH — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'), 3
-       sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN, budgetCreate, qua Trưởng phòng duyệt), Ngân Sách
-       Thực Hiện (entryKind=ACTUAL, budgetCreate — cùng cấu trúc lập/sửa nháp với tab Phê Duyệt nhưng
-       KHÔNG qua duyệt: "Gửi" là ghi nhận NGAY, budgetManage/admin chỉ xem/kiểm soát + sửa trực tiếp nếu
-       cần — xem submitBudgetEntry() ở lib/recordActions.js), Tổng Hợp (budgetAggregate — so sánh Phê
-       Duyệt vs Thực Hiện). "Tạo Kỳ Ngân Sách + Mẫu Ngân Sách" (budgetManage) không còn là sub-tab — đã
-       chuyển vào modal #budgetPeriodTemplateModal, mở qua nút "⚙️ Quản Lý Kỳ & Mẫu". Xem setBudgetSubTab(). -->
+  <!-- Màn hình MODULE NGÂN SÁCH 2.0 (v22.10) — module con của "Tổng Hợp" (BUSINESS_MODULES parent:'office'),
+       thiết kế lại HOÀN TOÀN theo tài liệu "Ngân sách 2.0" người dùng cung cấp — xem chú thích đầu file
+       public/js/module-ngansach.js cho kiến trúc đầy đủ. 4 tab: 📝 Đề Xuất (stage=PROPOSED, duyệt/từ
+       chối tại chỗ) / ✅ Phê Duyệt (stage=APPROVED, nhập trực tiếp — duyệt xong tự sinh 1 dòng Sử Dụng) /
+       💳 Sử Dụng (stage=USED, dòng cha hệ thống tự sinh + dòng con ghi nhận từng lần dùng thực tế) /
+       📊 Báo Cáo (budgetAggregate/budgetManage/admin, tổng hợp THUẦN CLIENT-SIDE, không gọi API riêng).
+       KHÔNG còn "Kỳ ngân sách"/"Mẫu ngân sách" — mỗi dòng tự mang Năm/Tháng ngân sách, cột CỐ ĐỊNH (Nội
+       dung/Mô tả/Số lượng/Đơn giá/VAT/Loại NS/Danh Mục), không tuỳ biến qua mẫu nữa. "Vị trí" (HO/tên
+       Siêu Thị) + "Khối Phòng Ban" lấy trực tiếp từ Danh Mục Siêu Thị/Danh Mục Phòng đã cấu hình ở Quản
+       Trị. Xem setBudgetLineTab(). -->
   <div id="budgetSection" class="hidden space-y-6">
-    <!-- 3 tab con: Ngân Sách Phê Duyệt (entryKind=PLAN, dept lập/gửi/Trưởng phòng duyệt) / Ngân Sách
-         Thực Hiện (entryKind=ACTUAL, cùng khuôn lập/sửa nháp — dept ghi nhận chi tiêu thực tế, nhưng
-         "Gửi" đi THẲNG APPROVED, không qua Trưởng phòng nữa — chỉ nhân viên tự ghi nhận, quản lý Ngân
-         Sách xem/kiểm soát) / Tổng Hợp (so sánh 2 chiều). "Tạo Kỳ Ngân Sách + Mẫu" trước đây là 1
-         sub-tab riêng — nay gộp vào modal "⚙️ Quản Lý Kỳ & Mẫu" (chỉ budgetManage) để đúng 3 tab, xem
-         openBudgetPeriodTemplateModal(). -->
     <div class="flex flex-wrap gap-2 border-b pb-2 items-center">
-      <button type="button" data-op="setBudgetSubTab" data-arg0="APPROVED" id="btnBudgetSubApproved" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">✅ Ngân Sách Phê Duyệt</button>
-      <button type="button" data-op="setBudgetSubTab" data-arg0="ACTUAL" id="btnBudgetSubActual" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💳 Ngân Sách Thực Hiện</button>
-      <button type="button" data-op="setBudgetSubTab" data-arg0="SUMMARY" id="btnBudgetSubSummary" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Tổng Hợp</button>
-      <button type="button" data-op="openBudgetPeriodTemplateModal" id="btnBudgetManageKinds" class="hidden ml-auto px-3 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700">⚙️ Quản Lý Kỳ &amp; Mẫu</button>
+      <button type="button" data-op="setBudgetLineTab" data-arg0="PROPOSE" id="btnBlTab_PROPOSE" class="px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white">📝 Đề Xuất</button>
+      <button type="button" data-op="setBudgetLineTab" data-arg0="APPROVE" id="btnBlTab_APPROVE" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Phê Duyệt</button>
+      <button type="button" data-op="setBudgetLineTab" data-arg0="USED" id="btnBlTab_USED" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💳 Sử Dụng</button>
+      <button type="button" data-op="setBudgetLineTab" data-arg0="REPORT" id="btnBlTab_REPORT" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
     </div>
 
-    <!-- Sub-tab: Ngân Sách Phê Duyệt (entryKind=PLAN — mọi user có budgetCreate, lập cho ĐÚNG phòng ban mình) -->
-    <div id="budgetSubApproved" class="space-y-4">
-      <div id="budgetDashboardCards_PLAN"></div>
-      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">✅ Ngân Sách Phê Duyệt Đơn Vị</h3>
-        <p class="text-xs text-violet-700">Chọn 1 kỳ ngân sách đang mở thuộc phạm vi phòng ban bạn — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Gửi rồi sẽ chuyển cho Trưởng phòng duyệt, khi APPROVED sẽ là số liệu "Phê Duyệt" ở tab Tổng Hợp.</p>
-        <div id="budgetNoCreatePermNote_PLAN" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</div>
-        <div id="budgetEntryFormWrap_PLAN" class="hidden bg-white p-3 rounded border text-xs space-y-3">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Kỳ Ngân Sách</label>
-              <select id="budgetEntryPeriodSelect_PLAN" data-op-change="onBudgetEntryPeriodChange" data-arg0="PLAN" class="w-full border p-1.5 rounded bg-white"></select>
-            </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
-              <input id="budgetEntryDeptDisplay_PLAN" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
-            </div>
+    <!-- ===== Tab "📝 Đề Xuất" (stage=PROPOSED) ===== -->
+    <div id="blTab_PROPOSE" class="space-y-4">
+      <div class="bg-white p-4 rounded-lg border space-y-3">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📝 Đề Xuất Ngân Sách</h3>
+        <p id="blProposeNoCreatePermNote" class="hidden text-xs text-gray-500 italic">Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</p>
+        <div id="blProposeFormWrap" class="border rounded p-3 bg-gray-50 space-y-2">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blProposeLocation" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blProposeDept" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Danh Mục</label><select id="blProposeCategory" class="w-full border p-1.5 rounded bg-white">
+              <option value="SOFTWARE">Phần mềm</option><option value="HARDWARE">Phần cứng</option><option value="SERVICE">Dịch vụ</option><option value="SYSTEM">Hệ thống</option>
+            </select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Loại NS</label><select id="blProposeBudgetType" class="w-full border p-1.5 rounded bg-white"><option value="OPEX">OPEX</option><option value="CAPEX">CAPEX</option></select></div>
+            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Nội dung *</label><input id="blProposeContent" class="w-full border p-1.5 rounded"></div>
+            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Mô tả</label><input id="blProposeDescription" class="w-full border p-1.5 rounded"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Số lượng</label><input id="blProposeQuantity" type="number" min="0" step="any" class="w-full border p-1.5 rounded text-right" value="1"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Đơn giá</label><input id="blProposeUnitPrice" type="text" inputmode="numeric" class="w-full border p-1.5 rounded money-input text-right"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">VAT (%)</label><input id="blProposeVat" type="number" min="0" max="100" class="w-full border p-1.5 rounded text-right" value="10"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Năm NS</label><input id="blProposeYear" type="number" class="w-full border p-1.5 rounded"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Tháng NS</label><input id="blProposeMonth" type="number" min="1" max="12" class="w-full border p-1.5 rounded"></div>
+            <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Ghi chú</label><input id="blProposeNote" class="w-full border p-1.5 rounded"></div>
           </div>
-          <div id="budgetEntryLinesWrap_PLAN" class="hidden space-y-2">
-            <div id="budgetEntryReadonlyNote_PLAN" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
-            <div class="flex justify-between items-center">
-              <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
-              <button type="button" id="budgetEntryAddRowBtn_PLAN" data-op="addBudgetEntryLine" data-arg0="PLAN" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full border-collapse border text-xs bg-white">
-                <thead id="budgetEntryLinesHead_PLAN" class="bg-gray-100 text-left text-gray-700"></thead>
-                <tbody id="budgetEntryLinesBody_PLAN"></tbody>
-              </table>
-            </div>
-            <div class="flex justify-between items-center pt-2 border-t">
-              <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_PLAN" class="text-violet-700">0 đ</span></div>
-              <div id="budgetEntrySaveActions_PLAN" class="flex gap-2">
-                <button type="button" data-op="confirmAndResetForm" data-arg0="budgetEntryFormWrap_PLAN" data-arg1="resetBudgetEntryFormPLAN" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
-                <!-- Chỉ form "Phê duyệt" (PLAN) mới có nút này — bản "Thực hiện" (ACTUAL) ghi nhận thẳng,
-                     không qua ai duyệt (xem submitCurrentBudgetEntry() ở module-ngansach.js). -->
-                <button type="button" id="budgetPreviewWfBtn" data-op="previewBudgetWorkflow" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
-                <button type="button" data-op="saveBudgetEntryDraft" data-arg0="PLAN" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-                <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="PLAN" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Gửi Duyệt</button>
-              </div>
-            </div>
+          <div class="text-right space-x-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="blProposeFormWrap" data-arg1="resetBudgetLineFormPropose" class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="button" id="blProposeSubmitBtn" data-op="addBudgetLineDraft" data-arg0="Propose" class="px-3 py-1.5 bg-violet-700 text-white rounded text-xs font-bold hover:bg-violet-800">➕ Thêm Đề Xuất</button>
           </div>
-          <p id="budgetEntryNoPeriodNote_PLAN" class="text-gray-500 italic">Chưa có kỳ ngân sách nào đang mở cho phòng ban bạn.</p>
         </div>
-      </div>
-
-      <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
-        <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-        <select id="filterStatusBudget_PLAN" data-op-change="renderBudgetEntryList" data-arg0="PLAN" class="border p-2 rounded text-sm bg-white">
-          <option value="">-- Tất cả trạng thái --</option>
-          <option value="DRAFT">📝 Nháp</option>
-          <option value="PENDING">⏳ Chờ duyệt</option>
-          <option value="APPROVED">✅ Đã duyệt</option>
-          <option value="REJECTED">❌ Từ chối</option>
-        </select>
-      </div>
-
-      <div class="bg-white rounded border overflow-x-auto">
-        <table class="w-full border-collapse text-xs">
-          <thead>
-            <tr class="bg-gray-100 text-left">
-              <th class="border p-2">Mã</th>
-              <th class="border p-2">Kỳ Ngân Sách</th>
-              <th class="border p-2">Phòng Ban</th>
-              <th class="border p-2 text-right">Tổng Tiền</th>
-              <th class="border p-2">Trạng Thái</th>
-              <th class="border p-2 text-center">Thao Tác</th>
-            </tr>
-          </thead>
-          <tbody id="budgetEntryListBody_PLAN"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Sub-tab: Ngân Sách Thực Hiện (entryKind=ACTUAL — cùng cấu trúc/quyền budgetCreate như tab Phê
-         Duyệt, nhưng KHÔNG qua duyệt Trưởng phòng: nhân viên tự ghi nhận chi tiêu THỰC TẾ, "Gửi" là ghi
-         nhận NGAY (APPROVED), người quản lý Ngân Sách (budgetManage/admin) chỉ xem/kiểm soát + sửa trực
-         tiếp qua nút "✏️ Sửa (Quản Lý)" nếu cần đính chính — xem submitBudgetEntry()/
-         updateApprovedActualBudgetEntry() ở lib/recordActions.js. -->
-    <div id="budgetSubActual" class="hidden space-y-4">
-      <div id="budgetDashboardCards_ACTUAL"></div>
-      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">💳 Ngân Sách Thực Hiện Đơn Vị</h3>
-        <p class="text-xs text-violet-700">Ghi nhận chi tiêu THỰC TẾ theo cùng kỳ ngân sách — nhiều người cùng phòng có quyền lập đều sửa chung được 1 bản nháp của đơn vị. Bấm "Ghi Nhận" là LƯU NGAY, không cần ai duyệt — số liệu này sẽ là "Thực Hiện" ở tab Tổng Hợp ngay lập tức. Người quản lý Ngân Sách vẫn xem/kiểm soát được toàn bộ và có thể sửa lại nếu phát hiện sai sót.</p>
-        <div id="budgetNoCreatePermNote_ACTUAL" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</div>
-        <div id="budgetEntryFormWrap_ACTUAL" class="hidden bg-white p-3 rounded border text-xs space-y-3">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Kỳ Ngân Sách</label>
-              <select id="budgetEntryPeriodSelect_ACTUAL" data-op-change="onBudgetEntryPeriodChange" data-arg0="ACTUAL" class="w-full border p-1.5 rounded bg-white"></select>
-            </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
-              <input id="budgetEntryDeptDisplay_ACTUAL" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
-            </div>
-          </div>
-          <div id="budgetEntryLinesWrap_ACTUAL" class="hidden space-y-2">
-            <div id="budgetEntryReadonlyNote_ACTUAL" class="hidden text-[11px] text-amber-700 italic bg-amber-50 p-2 rounded border border-amber-200"></div>
-            <div class="flex justify-between items-center">
-              <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
-              <button type="button" id="budgetEntryAddRowBtn_ACTUAL" data-op="addBudgetEntryLine" data-arg0="ACTUAL" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full border-collapse border text-xs bg-white">
-                <thead id="budgetEntryLinesHead_ACTUAL" class="bg-gray-100 text-left text-gray-700"></thead>
-                <tbody id="budgetEntryLinesBody_ACTUAL"></tbody>
-              </table>
-            </div>
-            <div class="flex justify-between items-center pt-2 border-t">
-              <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetEntryTotalDisplay_ACTUAL" class="text-violet-700">0 đ</span></div>
-              <div id="budgetEntrySaveActions_ACTUAL" class="flex gap-2">
-                <button type="button" data-op="confirmAndResetForm" data-arg0="budgetEntryFormWrap_ACTUAL" data-arg1="resetBudgetEntryFormACTUAL" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
-                <button type="button" data-op="saveBudgetEntryDraft" data-arg0="ACTUAL" class="bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700">💾 Lưu Nháp</button>
-                <button type="button" data-op="submitCurrentBudgetEntry" data-arg0="ACTUAL" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700">📤 Ghi Nhận</button>
-              </div>
-            </div>
-          </div>
-          <p id="budgetEntryNoPeriodNote_ACTUAL" class="text-gray-500 italic">Chưa có kỳ ngân sách nào đang mở cho phòng ban bạn.</p>
-        </div>
-      </div>
-
-      <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
-        <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
-        <select id="filterStatusBudget_ACTUAL" data-op-change="renderBudgetEntryList" data-arg0="ACTUAL" class="border p-2 rounded text-sm bg-white">
-          <option value="">-- Tất cả trạng thái --</option>
-          <option value="DRAFT">📝 Nháp</option>
-          <option value="PENDING">⏳ Chờ duyệt</option>
-          <option value="APPROVED">✅ Đã duyệt</option>
-          <option value="REJECTED">❌ Từ chối</option>
-        </select>
-      </div>
-
-      <div class="bg-white rounded border overflow-x-auto">
-        <table class="w-full border-collapse text-xs">
-          <thead>
-            <tr class="bg-gray-100 text-left">
-              <th class="border p-2">Mã</th>
-              <th class="border p-2">Kỳ Ngân Sách</th>
-              <th class="border p-2">Phòng Ban</th>
-              <th class="border p-2 text-right">Tổng Tiền</th>
-              <th class="border p-2">Trạng Thái</th>
-              <th class="border p-2 text-center">Thao Tác</th>
-            </tr>
-          </thead>
-          <tbody id="budgetEntryListBody_ACTUAL"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Sub-tab: Tổng Hợp (chỉ budgetAggregate/admin) — so sánh Ngân Sách Phê Duyệt vs Ngân Sách Thực Hiện -->
-    <div id="budgetSubSummary" class="hidden space-y-4">
-      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📊 Tổng Hợp Ngân Sách</h3>
-        <p class="text-xs text-violet-700">Đối chiếu Ngân Sách <b>Phê Duyệt</b> với Ngân Sách <b>Thực Hiện</b> của kỳ đã chọn — chỉ tính các bản đã <b>ĐƯỢC DUYỆT</b> của mỗi loại.</p>
-        <div class="flex flex-wrap items-end gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Kỳ Ngân Sách</label>
-            <select id="budgetSummaryPeriodSelect" class="w-full md:w-80 border p-2 rounded text-sm bg-white"></select>
-          </div>
-          <button type="button" data-op="buildBudgetSummary" class="bg-violet-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-violet-700">🔍 Tổng Hợp</button>
-        </div>
-      </div>
-
-      <div id="budgetSummaryResultWrap" class="hidden bg-white p-4 rounded border space-y-4"></div>
-    </div>
-  </div>
-
-  <!-- MODAL "⚙️ Quản Lý Kỳ & Mẫu Ngân Sách" (budgetManage/admin) — nguyên nội dung sub-tab "Tạo Kỳ Ngân
-       Sách + Mẫu" trước đây, chuyển vào modal để module chỉ còn đúng 3 tab con theo yêu cầu. Toàn bộ hàm
-       JS xử lý (renderBudgetPeriodSubTab/createBudgetPeriod/renderBudgetTemplateList/...) GIỮ NGUYÊN tên
-       + id các phần tử bên trong, chỉ đổi cách mở/đóng (modal thay vì sub-tab) — xem
-       openBudgetPeriodTemplateModal()/closeBudgetPeriodTemplateModal(). -->
-  <div id="budgetPeriodTemplateModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
-    <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
-      <div class="flex justify-between items-center bg-violet-800 text-white p-4">
-        <h3 class="font-bold text-base flex items-center gap-2">⚙️ Quản Lý Kỳ &amp; Mẫu Ngân Sách</h3>
-        <button data-op="closeBudgetPeriodTemplateModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
-      </div>
-      <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
-        <form data-op-submit="createBudgetPeriod" class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-          <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">📅 Tạo Kỳ Ngân Sách Mới</h3>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="md:col-span-2">
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Tên Kỳ Ngân Sách</label>
-              <input id="budgetPeriodName" placeholder="VD: Ngân sách Quý 1/2026" class="w-full border p-2 rounded text-sm" required>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Hạn Chót Lập</label>
-              <input id="budgetPeriodEndTime" type="datetime-local" class="w-full border p-2 rounded text-sm" required>
-            </div>
-          </div>
-          <div>
-            <label class="flex items-center gap-2 text-xs font-semibold text-gray-600 mb-1">
-              <input type="checkbox" id="budgetPeriodDeptAll" data-op-change="toggleScopeGroup" data-arg0="budgetPeriodDeptAll" data-arg1="budgetPeriodDept"> Áp dụng cho TẤT CẢ phòng ban
-            </label>
-            <div id="budgetPeriodDeptContainer" class="grid grid-cols-2 md:grid-cols-4 gap-1 pl-1 max-h-32 overflow-y-auto"></div>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Mẫu Ngân Sách (tuỳ chọn — không chọn thì dùng 5 cột mặc định: STT/Tên hạng mục/Mô tả chi tiết/Số tiền/Loại ngân sách)</label>
-            <select id="budgetPeriodTemplateSelect" class="w-full md:w-96 border p-2 rounded text-sm bg-white">
-              <option value="">-- Không chọn mẫu (dùng cột mặc định) --</option>
-            </select>
-          </div>
-          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
-          <div id="dynamicFieldsContainer_BUDGET_PERIOD" class="contents"></div>
-          <div class="flex justify-end">
-            <button type="submit" class="bg-violet-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-violet-700">➕ Tạo Kỳ Ngân Sách</button>
-          </div>
-        </form>
-
-        <div class="bg-white rounded border overflow-x-auto">
-          <table class="w-full border-collapse text-xs">
-            <thead>
-              <tr class="bg-gray-100 text-left">
-                <th class="border p-2">Tên Kỳ</th>
-                <th class="border p-2">Phạm Vi</th>
-                <th class="border p-2">Mẫu</th>
-                <th class="border p-2">Hạn Chót</th>
-                <th class="border p-2">Trạng Thái</th>
-                <th class="border p-2 text-center">Thao Tác</th>
-              </tr>
-            </thead>
-            <tbody id="budgetPeriodListBody"></tbody>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100">
+              <th class="border p-2">Vị trí</th><th class="border p-2">Khối PB</th><th class="border p-2">Nội dung</th>
+              <th class="border p-2">Danh Mục</th><th class="border p-2">Loại</th><th class="border p-2 text-right">Thành tiền</th>
+              <th class="border p-2">Kỳ NS</th><th class="border p-2">Trạng thái</th><th class="border p-2">Thao tác</th>
+            </tr></thead>
+            <tbody id="blProposeListBody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
 
-        <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3">
-          <div class="flex justify-between items-center flex-wrap gap-2">
-            <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧩 Mẫu Ngân Sách</h3>
-            <div class="flex items-center gap-3">
-              <label class="text-violet-700 font-bold hover:underline cursor-pointer text-xs whitespace-nowrap">📎 Từ File Dữ Liệu Thật<input type="file" accept=".xlsx,.xls" class="hidden" data-op-change="createBudgetTemplateFromRealFile" data-arg-event="0"></label>
-              <button type="button" data-op="startNewBudgetTemplate" class="text-violet-700 font-bold hover:underline text-xs whitespace-nowrap">➕ Thêm Mẫu</button>
-            </div>
+    <!-- ===== Tab "✅ Phê Duyệt" (stage=APPROVED, nhập trực tiếp — CHỈ budgetManage/admin) ===== -->
+    <div id="blTab_APPROVE" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-lg border space-y-3">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">✅ Phê Duyệt Ngân Sách</h3>
+        <p id="blApproveNoCreatePermNote" class="hidden text-xs text-gray-500 italic">Bạn không có quyền nhập trực tiếp dòng Phê Duyệt — chỉ xem được danh sách bên dưới.</p>
+        <div id="blApproveFormWrap" class="border rounded p-3 bg-gray-50 space-y-2">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blApproveLocation" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blApproveDept" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Danh Mục</label><select id="blApproveCategory" class="w-full border p-1.5 rounded bg-white">
+              <option value="SOFTWARE">Phần mềm</option><option value="HARDWARE">Phần cứng</option><option value="SERVICE">Dịch vụ</option><option value="SYSTEM">Hệ thống</option>
+            </select></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Loại NS</label><select id="blApproveBudgetType" class="w-full border p-1.5 rounded bg-white"><option value="OPEX">OPEX</option><option value="CAPEX">CAPEX</option></select></div>
+            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Nội dung *</label><input id="blApproveContent" class="w-full border p-1.5 rounded"></div>
+            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Mô tả</label><input id="blApproveDescription" class="w-full border p-1.5 rounded"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Số lượng</label><input id="blApproveQuantity" type="number" min="0" step="any" class="w-full border p-1.5 rounded text-right" value="1"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Đơn giá</label><input id="blApproveUnitPrice" type="text" inputmode="numeric" class="w-full border p-1.5 rounded money-input text-right"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">VAT (%)</label><input id="blApproveVat" type="number" min="0" max="100" class="w-full border p-1.5 rounded text-right" value="10"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Năm NS</label><input id="blApproveYear" type="number" class="w-full border p-1.5 rounded"></div>
+            <div><label class="block font-semibold text-gray-600 mb-1">Tháng NS</label><input id="blApproveMonth" type="number" min="1" max="12" class="w-full border p-1.5 rounded"></div>
+            <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Ghi chú</label><input id="blApproveNote" class="w-full border p-1.5 rounded"></div>
           </div>
-          <div class="bg-white rounded border overflow-x-auto">
-            <table class="w-full border-collapse text-xs">
-              <thead>
-                <tr class="bg-gray-100 text-left">
-                  <th class="border p-2">Tên Mẫu</th>
-                  <th class="border p-2">Số Cột Bổ Sung</th>
-                  <th class="border p-2 text-center">Thao Tác</th>
-                </tr>
-              </thead>
-              <tbody id="budgetTemplateListBody"></tbody>
-            </table>
+          <div class="text-right space-x-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="blApproveFormWrap" data-arg1="resetBudgetLineFormApprove" class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="button" id="blApproveSubmitBtn" data-op="addBudgetLineDraft" data-arg0="Approve" class="px-3 py-1.5 bg-violet-700 text-white rounded text-xs font-bold hover:bg-violet-800">➕ Thêm Phê Duyệt</button>
           </div>
-
-          <form id="budgetTemplateForm" data-op-submit="saveBudgetTemplate" class="hidden bg-white p-3 rounded border text-xs space-y-3">
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">Tên Mẫu</label>
-              <input id="budgetTemplateName" placeholder="VD: Ngân sách Marketing" class="w-full border p-1.5 rounded" required>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1 flex-wrap gap-2">
-                <label class="font-semibold text-gray-600">Danh Sách Cột (đầy đủ — Tên Hạng Mục/Số Tiền/Loại NS bắt buộc có mặt, dùng nút ▲▼ để tự sắp thứ tự)</label>
-                <div class="flex gap-2 items-center text-[11px]">
-                  <a href="/api/budget/template-fields-template" class="text-gray-600 font-bold hover:underline whitespace-nowrap">📥 Tải Mẫu Excel</a>
-                  <label class="text-violet-700 font-bold hover:underline cursor-pointer whitespace-nowrap">📤 Tải Lên Từ Excel<input type="file" accept=".xlsx,.xls" class="hidden" data-op-change="uploadBudgetTemplateFieldsXlsx" data-arg-event="0"></label>
-                  <button type="button" data-op="addBudgetTemplateField" class="text-violet-700 font-bold hover:underline whitespace-nowrap">➕ Thêm cột</button>
-                </div>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="w-full border-collapse border text-xs">
-                  <thead class="bg-gray-100 text-left">
-                    <tr><th class="border p-1.5 w-14">Thứ Tự</th><th class="border p-1.5">Tên Cột</th><th class="border p-1.5">Kiểu</th><th class="border p-1.5">Tuỳ chọn (kiểu Chọn)</th><th class="border p-1.5 text-center">Bắt buộc</th><th class="border p-1.5"></th></tr>
-                  </thead>
-                  <tbody id="budgetTemplateFieldsBody"></tbody>
-                </table>
-              </div>
-            </div>
-            <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
-            <div id="dynamicFieldsContainer_BUDGET_TEMPLATE" class="contents"></div>
-            <div class="flex justify-end gap-2">
-              <button type="button" data-op="cancelBudgetTemplateForm" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
-              <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded font-bold hover:bg-violet-700" id="btnBudgetTemplateSubmit">➕ Tạo Mẫu</button>
-            </div>
-          </form>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100">
+              <th class="border p-2">Vị trí</th><th class="border p-2">Khối PB</th><th class="border p-2">Nội dung</th>
+              <th class="border p-2">Danh Mục</th><th class="border p-2">Loại</th><th class="border p-2 text-right">Thành tiền</th>
+              <th class="border p-2">Kỳ NS</th><th class="border p-2">Trạng thái</th><th class="border p-2">Thao tác</th>
+            </tr></thead>
+            <tbody id="blApproveListBody"></tbody>
+          </table>
         </div>
       </div>
-      <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-        <button data-op="closeBudgetPeriodTemplateModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
+    </div>
+
+    <!-- ===== Tab "💳 Sử Dụng" (stage=USED, tự sinh khi duyệt Phê Duyệt) ===== -->
+    <div id="blTab_USED" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-lg border space-y-3">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">💳 Sử Dụng Ngân Sách</h3>
+        <p class="text-xs text-gray-500 italic">Dòng cha tự sinh khi 1 dòng Phê Duyệt được duyệt. Nội dung/Mô tả/Danh Mục khoá cứng theo dòng Phê Duyệt gốc.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100">
+              <th class="border p-2">Nội dung</th><th class="border p-2 text-right">Đã Duyệt</th>
+              <th class="border p-2 text-right">Đã Dùng</th><th class="border p-2">Tình trạng</th><th class="border p-2" colspan="2">Thao tác</th>
+            </tr></thead>
+            <tbody id="blUsedListBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Tab "📊 Báo Cáo" (chỉ budgetAggregate/budgetManage/admin — tổng hợp thuần client-side) ===== -->
+    <div id="blTab_REPORT" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-lg border space-y-3">
+        <h3 class="font-bold text-violet-900 text-base flex items-center gap-2">📊 Báo Cáo Ngân Sách</h3>
+        <div id="blReportWrap"></div>
       </div>
     </div>
   </div>
@@ -9130,73 +8948,6 @@
     </div>
   </div>
 
-  <!-- MODAL XỬ LÝ/XEM CHI TIẾT NGÂN SÁCH — dùng chung cho cả người lập xem lại lẫn Trưởng phòng duyệt
-       (mở từ Approval Hub hoặc danh sách "Lập Ngân Sách"). Xem openBudgetProcessModal(). -->
-  <div id="budgetProcessModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
-    <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
-      <div class="flex justify-between items-center bg-violet-800 text-white p-4">
-        <div>
-          <h3 id="budgetProcessModalTitle" class="font-bold text-base flex items-center gap-2">📝 Ngân Sách</h3>
-          <p id="budgetProcessModalSub" class="text-xs text-violet-200"></p>
-        </div>
-        <button data-op="closeBudgetProcessModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
-      </div>
-      <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
-        <div id="budgetProcessModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
-        <div class="overflow-x-auto border rounded">
-          <table class="w-full border-collapse text-xs bg-white">
-            <thead id="budgetProcessModalLinesHead" class="bg-gray-100 text-left text-gray-700"></thead>
-            <tbody id="budgetProcessModalLinesBody"></tbody>
-          </table>
-        </div>
-        <div id="budgetProcessModalHistory"></div>
-        <div id="budgetProcessModalControls"></div>
-      </div>
-      <div class="p-3 bg-gray-100 border-t flex justify-end text-xs">
-        <button data-op="closeBudgetProcessModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Đóng</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL "SỬA (QUẢN LÝ)" NGÂN SÁCH THỰC HIỆN — chỉ budgetManage/admin, sửa TRỰC TIẾP 1 bản ACTUAL
-       bất kể trạng thái (không qua phê duyệt Trưởng phòng nữa, xem submitBudgetEntry() ở
-       lib/recordActions.js) — mở từ nút "✏️ Sửa (Quản Lý)" ở danh sách sub-tab "Ngân Sách Thực Hiện",
-       xem openBudgetManagerEditModal(). KHÔNG dùng cho PLAN. -->
-  <div id="budgetManagerEditModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
-    <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
-      <div class="flex justify-between items-center bg-violet-800 text-white p-4">
-        <div>
-          <h3 class="font-bold text-base flex items-center gap-2">✏️ Sửa Ngân Sách Thực Hiện (Quản Lý)</h3>
-          <p id="budgetManagerEditModalSub" class="text-xs text-violet-200"></p>
-        </div>
-        <button data-op="closeBudgetManagerEditModal" class="text-violet-200 hover:text-white font-bold text-xl px-2">✕</button>
-      </div>
-      <div class="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
-        <p class="text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 italic">⚠️ Bản Ngân Sách Thực Hiện không còn qua phê duyệt Trưởng phòng — sửa ở đây áp dụng NGAY, không cần ai duyệt lại. Chỉ dùng khi cần đính chính số liệu đơn vị đã ghi nhận.</p>
-        <div class="flex justify-between items-center">
-          <label class="font-semibold text-gray-600">Danh Sách Hạng Mục</label>
-          <button type="button" data-op="addBudgetManagerEditLine" class="text-violet-700 font-bold hover:underline">➕ Thêm dòng</button>
-        </div>
-        <div class="overflow-x-auto border rounded">
-          <table class="w-full border-collapse text-xs bg-white">
-            <thead id="budgetManagerEditLinesHead" class="bg-gray-100 text-left text-gray-700"></thead>
-            <tbody id="budgetManagerEditLinesBody"></tbody>
-          </table>
-        </div>
-        <div class="flex justify-between items-center pt-2 border-t">
-          <div class="font-bold text-gray-700">Tổng cộng: <span id="budgetManagerEditTotalDisplay" class="text-violet-700">0 đ</span></div>
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Ghi chú sửa đổi (tuỳ chọn, lưu vào lịch sử)</label>
-          <input id="budgetManagerEditComment" placeholder="VD: đính chính hạng mục X theo hoá đơn thực tế..." class="w-full border p-1.5 rounded">
-        </div>
-      </div>
-      <div class="p-3 bg-gray-100 border-t flex justify-end gap-2 text-xs">
-        <button data-op="closeBudgetManagerEditModal" class="bg-gray-500 text-white px-4 py-1.5 rounded font-bold hover:bg-gray-600">Hủy</button>
-        <button data-op="saveBudgetManagerEditEntry" class="bg-violet-600 text-white px-4 py-1.5 rounded font-bold hover:bg-violet-700">💾 Lưu Thay Đổi</button>
-      </div>
-    </div>
-  </div>
 
 <!-- MODAL XEM/XỬ LÝ YÊU CẦU HỖ TRỢ IT -->
 <div id="itTicketModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">

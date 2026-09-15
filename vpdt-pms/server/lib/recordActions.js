@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -6027,6 +6027,252 @@ function updateBudgetTemplate(user, item, payload) {
   return item;
 }
 
+// ===================== NGÂN SÁCH 2.0 (budgetLines — v22.10, thay budgetEntries/budgetPeriods/
+// budgetTemplates cho MỌI màn nhập liệu mới, xem chú thích đầy đủ ở sql/schema.sql) =====
+// 3 giai đoạn ĐỘC LẬP (item.stage): 'PROPOSED' (Đề Xuất — duyệt/từ chối TẠI CHỖ, không sinh gì thêm),
+// 'APPROVED' (Phê Duyệt — duyệt xong tự sinh đúng 1 dòng 'USED' cha, xem buildBudgetLineUsedRow()),
+// 'USED' (dòng cha hệ thống tự sinh, parentId NULL — hoặc dòng con parentId trỏ về dòng cha, ghi nhận
+// từng lần sử dụng thực tế). KHÔNG dùng lib/workflowEngine.js (không có "bước duyệt theo phòng ban") —
+// chỉ 1 cấp gác bằng permission phẳng: budgetCreate lập Đề Xuất (đúng Khối Phòng Ban mình HOẶC bất kỳ,
+// xem lib/createValidation.js budgetLines.extraValidate — Khối Phòng Ban là lựa chọn nghiệp vụ tự do,
+// không phải điều kiện phân quyền), budgetManage/admin toàn quyền (bao gồm cả Phê Duyệt + Sử Dụng).
+// KHÔNG ai tự duyệt/tự từ chối được thứ do chính mình tạo (assertNotSelfDecidingBudgetLine bên dưới) —
+// đúng nguyên tắc mục 7 tài liệu gốc.
+
+function canCreateBudgetLine(user) {
+  return !!(user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetCreate);
+}
+
+function assertNotSelfDecidingBudgetLine(user, item) {
+  if (item.createdBy && item.createdBy === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối đề xuất hoặc phê duyệt do chính mình tạo');
+  }
+}
+
+// Đề Xuất (PROPOSED) — budgetCreate/budgetManage/admin đều xử lý được (khác Phê Duyệt, xem
+// approveBudgetLine() bên dưới chỉ budgetManage/admin) — đúng tinh thần "Đề xuất" là bước sàng lọc nội
+// bộ nhẹ, không nhất thiết cần cấp quản lý.
+function approveBudgetLineProposal(user, item) {
+  if (!canCreateBudgetLine(user)) throw new HttpError(403, 'Bạn không có quyền xử lý đề xuất ngân sách');
+  if (item.stage !== 'PROPOSED') throw new HttpError(409, 'Dòng này không phải Đề Xuất');
+  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Đề xuất này đã được xử lý rồi');
+  assertNotSelfDecidingBudgetLine(user, item);
+  item.status = 'APPROVED';
+  item.decidedBy = user.username;
+  item.decidedByName = user.name;
+  item.decidedAt = nowVN();
+  return item;
+}
+function rejectBudgetLineProposal(user, item, payload) {
+  if (!canCreateBudgetLine(user)) throw new HttpError(403, 'Bạn không có quyền xử lý đề xuất ngân sách');
+  if (item.stage !== 'PROPOSED') throw new HttpError(409, 'Dòng này không phải Đề Xuất');
+  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Đề xuất này đã được xử lý rồi');
+  assertNotSelfDecidingBudgetLine(user, item);
+  item.status = 'REJECTED';
+  item.decidedBy = user.username;
+  item.decidedByName = user.name;
+  item.decidedAt = nowVN();
+  item.rejectReason = String(payload?.reason || '').trim().slice(0, 300);
+  return item;
+}
+
+// Phê Duyệt (APPROVED-stage dòng nhập trực tiếp) — CHỈ budgetManage/admin (khác Đề Xuất ở trên). Route
+// (routes/records.js) tự gọi TIẾP buildBudgetLineUsedRow() + createForCollection() ngay sau khi hàm này
+// trả về thành công — tách riêng vì hàm này chỉ mutate ĐÚNG 1 bản ghi đã khoá, không tự tạo bản ghi mới
+// được (xem withLockedRecordForCollection() ở lib/recordStore.js).
+function approveBudgetLine(user, item) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được duyệt');
+  if (item.stage !== 'APPROVED') throw new HttpError(409, 'Dòng này không phải Phê Duyệt');
+  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng phê duyệt này đã được xử lý rồi');
+  assertNotSelfDecidingBudgetLine(user, item);
+  item.status = 'APPROVED';
+  item.decidedBy = user.username;
+  item.decidedByName = user.name;
+  item.decidedAt = nowVN();
+  return item;
+}
+function rejectBudgetLine(user, item, payload) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được từ chối');
+  if (item.stage !== 'APPROVED') throw new HttpError(409, 'Dòng này không phải Phê Duyệt');
+  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng phê duyệt này đã được xử lý rồi');
+  assertNotSelfDecidingBudgetLine(user, item);
+  item.status = 'REJECTED';
+  item.decidedBy = user.username;
+  item.decidedByName = user.name;
+  item.decidedAt = nowVN();
+  item.rejectReason = String(payload?.reason || '').trim().slice(0, 300);
+  return item;
+}
+
+// Sửa Đề Xuất/Phê Duyệt khi còn SUBMITTED (chưa quyết định) — người tạo (đúng creator) hoặc budgetManage/
+// admin đều sửa được Đề Xuất; riêng dòng stage='APPROVED' chỉ budgetManage/admin (đúng người được tạo
+// dòng đó ngay từ đầu, xem lib/createValidation.js budgetLines.extraValidate).
+function updateBudgetLineDraft(user, item, payload, appData) {
+  const isOwner = item.createdBy && item.createdBy === user.username;
+  const allowed = canManageBudget(user) || (item.stage === 'PROPOSED' && isOwner);
+  if (!allowed) throw new HttpError(403, 'Bạn không có quyền sửa dòng ngân sách này');
+  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng này đã được xử lý, không sửa được nữa');
+
+  const dept = String(payload?.dept || '').trim();
+  if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
+  const location = String(payload?.location || '').trim();
+  if (location !== 'HO' && !(appData?.stores || []).includes(location)) throw new HttpError(400, 'Vị trí không hợp lệ');
+
+  const draft = { ...payload };
+  normalizeBudgetLineCoreFields(draft);
+  item.dept = dept;
+  item.location = location;
+  item.content = draft.content; item.description = draft.description;
+  item.quantity = draft.quantity; item.unitPrice = draft.unitPrice; item.vatPercent = draft.vatPercent;
+  item.totalAmount = draft.totalAmount; item.budgetType = draft.budgetType; item.itemCategory = draft.itemCategory;
+  item.budgetYear = draft.budgetYear; item.budgetMonth = draft.budgetMonth; item.note = draft.note;
+  return item;
+}
+// checkFn cho deleteRecordForCollection() khi xoá Đề Xuất/Phê Duyệt còn SUBMITTED — cùng điều kiện
+// quyền với updateBudgetLineDraft() ở trên.
+function assertCanDeleteBudgetLineDraft(user, item) {
+  const isOwner = item.createdBy && item.createdBy === user.username;
+  const allowed = canManageBudget(user) || (item.stage === 'PROPOSED' && isOwner);
+  if (!allowed) throw new HttpError(403, 'Bạn không có quyền xoá dòng ngân sách này');
+  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng này đã được xử lý, không xoá được nữa');
+}
+
+// Dựng dòng Sử Dụng CHA — gọi NGAY SAU khi approveBudgetLine() đã khoá+lưu dòng Phê Duyệt thành công
+// (route tự createForCollection() bản ghi trả về từ đây). Sao chép NGUYÊN VẸN mọi field nghiệp vụ —
+// Nội dung/Mô tả/Danh Mục KHOÁ CỨNG từ đây trở đi (Zero-Trust, mục 1 tài liệu gốc) — chỉ Vị trí/Khối
+// Phòng Ban/Ghi chú còn sửa được sau ở dòng cha (xem updateBudgetLineUsedParent() bên dưới).
+function buildBudgetLineUsedRow(user, sourceApprovedLine) {
+  return {
+    stage: 'USED', dept: sourceApprovedLine.dept, location: sourceApprovedLine.location, status: 'APPROVED',
+    parentId: null, sourceLineId: sourceApprovedLine.id,
+    content: sourceApprovedLine.content, description: sourceApprovedLine.description,
+    quantity: sourceApprovedLine.quantity, unitPrice: sourceApprovedLine.unitPrice,
+    vatPercent: sourceApprovedLine.vatPercent, totalAmount: sourceApprovedLine.totalAmount,
+    budgetType: sourceApprovedLine.budgetType, itemCategory: sourceApprovedLine.itemCategory,
+    usageStatus: 'NOT_USED', reallocationReason: '', note: '',
+    budgetYear: sourceApprovedLine.budgetYear, budgetMonth: sourceApprovedLine.budgetMonth, purchaseMonth: null,
+    createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
+    decidedBy: null, decidedByName: null, decidedAt: null
+  };
+}
+
+// Sửa dòng cha Sử Dụng — CHỈ Vị trí/Khối Phòng Ban/Ghi chú (Nội dung/Mô tả/Số tiền/Loại/Danh Mục khoá
+// cứng theo dòng Phê Duyệt gốc — mục 3.3 tài liệu gốc), bất kể client cố gửi giá trị khác cho các field
+// khoá (server chỉ đọc payload.location/dept/note, hoàn toàn bỏ qua mọi field khác trong payload).
+function updateBudgetLineUsedParent(user, item, payload, appData) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa dòng Sử Dụng');
+  if (item.stage !== 'USED' || item.parentId != null) throw new HttpError(409, 'Không tìm thấy dòng Sử Dụng cha hợp lệ');
+  const dept = String(payload?.dept || '').trim();
+  if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
+  const location = String(payload?.location || '').trim();
+  if (location !== 'HO' && !(appData?.stores || []).includes(location)) throw new HttpError(400, 'Vị trí không hợp lệ');
+  item.dept = dept;
+  item.location = location;
+  item.note = String(payload?.note || '').trim().slice(0, 500);
+  return item;
+}
+
+// Thêm 1 mục con Sử Dụng — dựng bản ghi MỚI (route tự createForCollection()), KHÔNG mutate dòng cha ở
+// đây (usageStatus dòng cha tính lại RIÊNG bằng recomputeBudgetLineUsageStatus() sau khi route đọc lại
+// đủ danh sách mục con mới nhất, xem routes/records.js) — tránh 2 khái niệm "tạo mới" + "tính lại số
+// tổng phụ thuộc dữ liệu vừa tạo" trộn lẫn trong cùng 1 hàm.
+function addBudgetLineChild(user, parent, payload) {
+  if (!canCreateBudgetLine(user)) throw new HttpError(403, 'Bạn không có quyền ghi nhận sử dụng ngân sách');
+  if (parent.stage !== 'USED' || parent.parentId != null) throw new HttpError(409, 'Không tìm thấy dòng Sử Dụng cha hợp lệ');
+  if (!canManageBudget(user) && parent.dept !== user.dept) {
+    throw new HttpError(403, 'Bạn chỉ ghi nhận sử dụng được cho Khối Phòng Ban của mình');
+  }
+  // Nội dung/Mô tả/Danh Mục khoá cứng theo dòng cha NGAY TỪ ĐẦU (gán trước khi validate) — client gửi gì
+  // cũng không ảnh hưởng, và tự động qua được điều kiện "bắt buộc có nội dung" của normalizeBudgetLineCoreFields().
+  const childPayload = {
+    ...payload,
+    content: parent.content, description: parent.description, itemCategory: parent.itemCategory,
+    budgetYear: parent.budgetYear, budgetMonth: parent.budgetMonth
+  };
+  normalizeBudgetLineCoreFields(childPayload);
+
+  const purchaseMonth = Number(payload?.purchaseMonth);
+  if (!Number.isFinite(purchaseMonth) || purchaseMonth < 1 || purchaseMonth > 12) {
+    throw new HttpError(400, 'Vui lòng nhập Tháng mua thực tế hợp lệ (1-12)');
+  }
+  const reallocationChanged = childPayload.budgetType !== parent.budgetType;
+  const reallocationReason = String(payload?.reallocationReason || '').trim().slice(0, 300);
+  if (reallocationChanged && !reallocationReason) {
+    throw new HttpError(400, 'Loại ngân sách khác dòng cha — vui lòng nhập Lý do tái phân bổ');
+  }
+
+  return {
+    stage: 'USED', dept: parent.dept, location: parent.location, status: 'APPROVED',
+    parentId: parent.id, sourceLineId: null,
+    content: childPayload.content, description: childPayload.description,
+    quantity: childPayload.quantity, unitPrice: childPayload.unitPrice, vatPercent: childPayload.vatPercent,
+    totalAmount: childPayload.totalAmount, budgetType: childPayload.budgetType, itemCategory: childPayload.itemCategory,
+    usageStatus: null, reallocationReason: reallocationChanged ? reallocationReason : '',
+    note: childPayload.note, budgetYear: parent.budgetYear, budgetMonth: parent.budgetMonth, purchaseMonth,
+    createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
+    decidedBy: null, decidedByName: null, decidedAt: null
+  };
+}
+
+// Sửa 1 mục con Sử Dụng đã có (Số lượng/Đơn giá/VAT/Loại/Tháng mua thực tế/Lý do tái phân bổ/Ghi chú) —
+// Nội dung/Mô tả/Danh Mục vẫn khoá cứng (ghi đè lại bằng giá trị SẴN CÓ của chính dòng con, không đổi).
+function updateBudgetLineChild(user, item, parent, payload) {
+  if (!canManageBudget(user) && !(user.perms?.budgetCreate && parent.dept === user.dept)) {
+    throw new HttpError(403, 'Bạn không có quyền sửa mục sử dụng này');
+  }
+  if (item.stage !== 'USED' || item.parentId == null) throw new HttpError(409, 'Không tìm thấy mục sử dụng hợp lệ');
+  const childPayload = { ...payload, content: item.content, description: item.description, itemCategory: item.itemCategory,
+    budgetYear: item.budgetYear, budgetMonth: item.budgetMonth };
+  normalizeBudgetLineCoreFields(childPayload);
+
+  const purchaseMonth = Number(payload?.purchaseMonth);
+  if (!Number.isFinite(purchaseMonth) || purchaseMonth < 1 || purchaseMonth > 12) {
+    throw new HttpError(400, 'Vui lòng nhập Tháng mua thực tế hợp lệ (1-12)');
+  }
+  const reallocationChanged = childPayload.budgetType !== parent.budgetType;
+  const reallocationReason = String(payload?.reallocationReason || '').trim().slice(0, 300);
+  if (reallocationChanged && !reallocationReason) {
+    throw new HttpError(400, 'Loại ngân sách khác dòng cha — vui lòng nhập Lý do tái phân bổ');
+  }
+  item.quantity = childPayload.quantity; item.unitPrice = childPayload.unitPrice; item.vatPercent = childPayload.vatPercent;
+  item.totalAmount = childPayload.totalAmount; item.budgetType = childPayload.budgetType;
+  item.purchaseMonth = purchaseMonth;
+  item.reallocationReason = reallocationChanged ? reallocationReason : '';
+  item.note = childPayload.note;
+  return item;
+}
+
+// Tính lại usageStatus của dòng cha — gọi SAU MỖI lần thêm/sửa/xoá mục con (route tự đọc lại đủ danh
+// sách mục con mới nhất truyền vào đây, xem mục 1.5 tài liệu gốc "số liệu luôn đúng theo thời gian
+// thực"). Trả về BẢN SAO đã cập nhật usageStatus của item cha (caller tự lưu qua withLockedRecordForCollection()).
+function recomputeBudgetLineUsageStatus(parent, children) {
+  const usedTotal = (children || []).reduce((sum, c) => sum + (Number(c.totalAmount) || 0), 0);
+  parent.usageStatus = usedTotal <= 0 ? 'NOT_USED' : (usedTotal >= parent.totalAmount ? 'USED' : 'PARTIALLY_USED');
+  return parent;
+}
+
+// checkFn cho deleteRecordForCollection() khi xoá dòng CHA Sử Dụng — route tự kiểm tra "chưa có mục con
+// nào" TRƯỚC KHI gọi xoá (cần đọc cả collection, checkFn ở đây chỉ gác thêm quyền + đúng loại dòng).
+function assertCanDeleteBudgetLineUsedParent(user, item) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được xoá dòng Sử Dụng');
+  if (item.stage !== 'USED' || item.parentId != null) throw new HttpError(409, 'Không tìm thấy dòng Sử Dụng cha hợp lệ');
+}
+function assertCanDeleteBudgetLineChild(user, item, parent) {
+  if (!canManageBudget(user) && !(user.perms?.budgetCreate && parent && parent.dept === user.dept)) {
+    throw new HttpError(403, 'Bạn không có quyền xoá mục sử dụng này');
+  }
+  if (item.stage !== 'USED' || item.parentId == null) throw new HttpError(409, 'Không tìm thấy mục sử dụng hợp lệ');
+}
+// Xoá dòng cha Sử Dụng xong -> "mở khoá" lại dòng Phê Duyệt gốc (quay về SUBMITTED, xoá decidedBy/
+// decidedAt) để duyệt lại được — dùng cho trường hợp lỡ duyệt nhầm (mục 3.3 tài liệu gốc).
+function reopenBudgetLineAfterUsedParentDeleted(sourceApprovedLine) {
+  sourceApprovedLine.status = 'SUBMITTED';
+  sourceApprovedLine.decidedBy = null;
+  sourceApprovedLine.decidedByName = null;
+  sourceApprovedLine.decidedAt = null;
+  return sourceApprovedLine;
+}
+
 // ===================== ĐĂNG KÝ XE (Lái Xe tự xác nhận) =====
 // Lái xe được phân công (carReg.assignedDriverUsername, gán lúc duyệt — xem applyWorkflowAction() ở
 // lib/workflowEngine.js) tự vào sub-tab "Lái Xe" xác nhận đúng chuyến của mình, giống khuôn tự-xác-nhận
@@ -6421,6 +6667,11 @@ module.exports = {
   canConfirmUniformTransferReceipt, receiveUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
+  canCreateBudgetLine, approveBudgetLineProposal, rejectBudgetLineProposal, approveBudgetLine, rejectBudgetLine,
+  updateBudgetLineDraft, assertCanDeleteBudgetLineDraft,
+  buildBudgetLineUsedRow, updateBudgetLineUsedParent, addBudgetLineChild, updateBudgetLineChild,
+  recomputeBudgetLineUsageStatus, assertCanDeleteBudgetLineUsedParent, assertCanDeleteBudgetLineChild,
+  reopenBudgetLineAfterUsedParentDeleted,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
   canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip,
   canCancelCarReg, cancelCarReg, reassignCarDispatch,

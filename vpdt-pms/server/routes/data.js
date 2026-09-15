@@ -24,7 +24,7 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser, filterTrainingDocumentProgressForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
-  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser,
+  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser, filterBudgetLinesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
@@ -825,6 +825,18 @@ async function loadBudgetEntriesScoped(user, data) {
   return [...byId.values()];
 }
 
+// budgetLines (Ngân Sách 2.0, v22.10) — canViewBudgetLine() (lib/recordViewScope.js) đơn giản hơn hẳn
+// loadBudgetEntriesScoped() ở trên (KHÔNG có approver theo phòng ban — chỉ 1 cấp gác permission phẳng,
+// xem lib/recordActions.js): admin/budgetManage/budgetAggregate tải company-wide, còn lại tải đúng 1
+// lượt theo Dept (= "Khối Phòng Ban") của chính mình.
+function loadBudgetLinesScoped(user) {
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate) {
+    return getAllForCollectionCached('budgetLines');
+  }
+  if (!user?.dept) return [];
+  return getForCollectionByDeptCached('budgetLines', user.dept);
+}
+
 // Bước 8k — docs: canViewDoc() (lib/recordViewScope.js) 4 nhánh — (1) admin xem HẾT, (2) chính người
 // TẢI LÊN (uploader, mọi phòng ban/trạng thái), (3) viewApprovedAll/viewApprovedDepts (chỉ áp dụng hồ sơ
 // APPROVED) HOẶC viewDraftAll/viewDraftDepts (áp dụng hồ sơ KHÁC APPROVED), (4) đang là người duyệt theo
@@ -1008,11 +1020,11 @@ router.get('/', async (req, res) => {
     // Bước 8k/8l/8m — docs/submissions/attendanceRecords tách riêng khỏi vòng lặp tải chung, cùng lý do
     // các collection ở trên: xem chú thích đầy đủ ở loadDocsScoped()/loadSubmissionsScoped()/
     // loadAttendanceRecordsScoped() phía trên.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, budgetLinesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
       canSeeAllPaymentRequests
@@ -1030,6 +1042,7 @@ router.get('/', async (req, res) => {
       loadItPriceApprovalsScoped(req.freshUser, data),
       loadVppRegistrationsScoped(req.freshUser, data),
       loadBudgetEntriesScoped(req.freshUser, data),
+      loadBudgetLinesScoped(req.freshUser),
       loadDocsScoped(req.freshUser, data),
       loadSubmissionsScoped(req.freshUser, data),
       loadAttendanceRecordsScoped(req.freshUser, data),
@@ -1049,6 +1062,7 @@ router.get('/', async (req, res) => {
     data.itPriceApprovals = itPriceApprovalsResult;
     data.vppRegistrations = vppRegistrationsResult;
     data.budgetEntries = budgetEntriesResult;
+    data.budgetLines = budgetLinesResult;
     data.docs = docsResult;
     data.submissions = submissionsResult;
     data.attendanceRecords = attendanceRecordsResult;
@@ -1111,6 +1125,9 @@ router.get('/', async (req, res) => {
     // bản NHÁP đang soạn dở) chỉ nên lộ cho đúng phòng ban mình + người có budgetManage/budgetAggregate/
     // admin — xem lib/recordViewScope.js canViewBudgetEntry().
     if (data.budgetEntries) data.budgetEntries = filterBudgetEntriesForUser(data.budgetEntries, req.freshUser, data);
+    // budgetLines (Ngân Sách 2.0): loadBudgetLinesScoped() ở trên đã thu hẹp qua SQL, filter lại đây theo
+    // đúng quy ước phòng thủ 2 lớp xuyên suốt file này (SQL chỉ thu hẹp, không phải chốt quyền xem).
+    if (data.budgetLines) data.budgetLines = filterBudgetLinesForUser(data.budgetLines, req.freshUser);
     // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs) — cùng khuôn budgetEntries ở
     // trên, xem lib/recordViewScope.js canViewOperationOrder()/canViewOperationStoreOpening()/
     // canViewOperationRepair().

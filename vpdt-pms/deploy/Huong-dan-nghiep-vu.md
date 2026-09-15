@@ -416,8 +416,7 @@ bấm "Gửi phê duyệt" (không tin dữ liệu client hiển thị).
 Văn Phòng Phẩm, Hợp Đồng (**2 nút riêng biệt** — 1 cho sub-tab "Phê Duyệt"
 xem quy trình duyệt hồ sơ hợp đồng, 1 cho sub-tab "Quản Lý HĐ" xem quy trình
 duyệt Tài liệu ký — 2 quy trình hoàn toàn độc lập, nút hiện đúng theo tab
-đang mở), Thanh Toán, Ngân Sách (chỉ form "Phê duyệt" — bản "Thực hiện" ghi
-nhận thẳng, không qua ai duyệt), Phê Duyệt Giá (1 nút dùng chung cho cả Bán
+đang mở), Thanh Toán, Phê Duyệt Giá (1 nút dùng chung cho cả Bán
 Lẻ lẫn Bán Buôn, tự động xem đúng quy trình theo sub-tab đang mở), Vận Hành
 - Đặt Hàng (mức áp dụng suy ra từ tổng giá trị đơn hàng đang nhập dở, cùng
 cách tính server dùng — cần nhập ít nhất 1 hạng mục hoặc Tổng Đợt Thanh Toán
@@ -441,12 +440,13 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   (Cập nhật giữ mã, Nhập mới tạo mã khác); có luồng phê duyệt theo phòng ban.
   - **Định dạng mã tự sinh** — Tài Liệu/Hợp Đồng và 8 module khác (Văn Bản
     Trình/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Biên Bản Họp/Đặt Phòng Họp/Phê
-    Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, cộng thêm Giấy Phép/
-    Ngân Sách) dùng chung 1 khuôn `HCRC-<mã phòng>-<viết tắt phân loại>-<số
+    Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, cộng thêm Giấy Phép)
+    dùng chung 1 khuôn `HCRC-<mã phòng>-<viết tắt phân loại>-<số
     thứ tự>`. **Server tự sinh lại mã mới khi phát hiện trùng** (tối đa vài
     lần thử, lấy đúng số thứ tự lớn nhất từng có +1) thay vì báo lỗi "Mã đã
     tồn tại" bắt người dùng tự bấm lại — áp dụng cho MỌI module có mã tự sinh,
-    kể cả khi 2 người tạo hồ sơ gần như cùng lúc.
+    kể cả khi 2 người tạo hồ sơ gần như cùng lúc. Riêng **Ngân Sách (v22.10)**
+    KHÔNG có mã tự sinh — mỗi dòng chỉ định danh bằng `id` nội bộ.
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
@@ -835,13 +835,50 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     — toàn bộ 1 lần hoặc từng đợt, tuỳ loại ở trên) → Đã thanh toán (khoá
     cứng). officeReqs (Mua Bán/Sửa Chữa) không có khái niệm định kỳ, luôn
     khoá cứng "Đã thanh toán".
-  - **Ngân Sách** — 3 sub-tab dùng chung 1 collection, tham số hoá theo loại
-    bản ghi: **Ngân Sách Phê Duyệt** (bản kế hoạch, qua Trưởng phòng duyệt),
-    **Ngân Sách Thực Hiện** (bản thực chi, KHÔNG qua bước duyệt — "Gửi" đi
-    thẳng vào trạng thái đã duyệt, quản lý ngân sách vẫn xem/sửa/kiểm soát
-    được), **Tổng Hợp** (so sánh Phê Duyệt vs Thực Hiện, phân theo 3 mức
-    quyền: chỉ xem phòng mình / xem mọi phòng ban / xem thêm khối "Toàn Công
-    Ty").
+  - **Ngân Sách (v22.10 — "Ngân Sách 2.0", thiết kế lại HOÀN TOÀN)** — KHÔNG
+    còn khái niệm "Kỳ ngân sách"/"Mẫu ngân sách" như trước: mỗi dòng ngân
+    sách **độc lập**, tự mang sẵn Năm/Tháng ngân sách riêng, quản lý theo 1
+    collection duy nhất `budgetLines` với **3 giai đoạn (Stage) tách biệt**,
+    4 tab:
+    - **📝 Đề Xuất** (`PROPOSED`) — người có quyền **"Tạo/Quản Lý Ngân Sách"**
+      (`budgetCreate`) tạo/sửa/xoá đề xuất của mình (trạng thái Chờ duyệt);
+      người có **"Quản Lý Ngân Sách Toàn Quyền"** (`budgetManage`) duyệt hoặc
+      từ chối — duyệt xong **tự sinh 1 dòng ✅ Phê Duyệt** tương ứng.
+    - **✅ Phê Duyệt** (`APPROVED`) — người có `budgetManage` nhập trực tiếp
+      (không cần qua Đề Xuất trước) hoặc duyệt/từ chối dòng chuyển từ Đề
+      Xuất lên. Khi 1 dòng Phê Duyệt được duyệt, hệ thống **tự sinh 1 dòng
+      💳 Sử Dụng "cha"** mang đúng nội dung/số tiền đã duyệt (không ai nhập
+      tay dòng cha này).
+    - **💳 Sử Dụng** (`USED`) — mỗi dòng cha (tự sinh) có thể có nhiều **dòng
+      con ghi nhận từng lần dùng thực tế** (người có `budgetCreate` ghi nhận
+      cho dòng thuộc phòng/vị trí mình, `budgetManage` ghi nhận cho mọi
+      dòng) — mỗi lần ghi nhận tự cộng dồn vào dòng cha, tự tính lại trạng
+      thái "còn dư / đã dùng hết / vượt ngân sách". Sửa/xoá dòng cha (chỉ
+      `budgetManage`) khi xoá sẽ **mở lại** dòng Phê Duyệt nguồn tương ứng.
+    - **📊 Báo Cáo** — chỉ hiện với quyền **"Xem Báo Cáo Ngân Sách Toàn Công
+      Ty"** (`budgetAggregate`, hoặc `budgetManage`/admin) — tổng hợp
+      Đề Xuất/Phê Duyệt/Sử Dụng theo Vị Trí/Khối Phòng Ban/Năm-Tháng, tính
+      hoàn toàn ở client từ dữ liệu đã tải, không có bước duyệt.
+
+    **"Vị Trí" thay "Công Ty"**: mỗi dòng chọn **HO** (Trụ sở chính) hoặc
+    **1 Siêu Thị** trong Danh Mục Siêu Thị đã cấu hình ở Quản Trị. **"Khối
+    Phòng Ban"** chọn từ Danh Mục Phòng — cả 2 lấy thẳng từ danh mục, không
+    nhập tay tự do, và **không dùng để chặn quyền xem/sửa theo phòng** (là dữ
+    liệu nghiệp vụ tự do) — quyền truy cập hoàn toàn theo 3 quyền
+    `budgetCreate`/`budgetManage`/`budgetAggregate` ở trên (phải bật ÍT NHẤT
+    1 trong 3 quyền mới thấy module).
+
+    **Không ai tự duyệt hồ sơ mình tạo** (kể cả tài khoản admin) — người có
+    `budgetManage` chỉ duyệt được hồ sơ do NGƯỜI KHÁC tạo, không có ngoại lệ.
+
+    **Zero-Trust field locking**: nội dung/mô tả/loại hạng mục của dòng Sử
+    Dụng (cả dòng cha tự sinh lẫn dòng con ghi nhận) luôn do SERVER tự ghi
+    đè từ đúng dòng Phê Duyệt/Sử Dụng-cha nguồn — không bao giờ tin giá trị
+    client gửi lên cho các trường này, chặn sửa sai lệch nội dung đã duyệt.
+
+    Dữ liệu Ngân Sách kiểu cũ (Kỳ/Mẫu/`budgetEntries`) vẫn còn nguyên trên
+    server (không xoá) nhưng không còn màn hình nào đọc/ghi vào — chỉ mang
+    tính lịch sử, tham khảo qua truy vấn SQL trực tiếp nếu cần.
 
 ### 4.4. Vận Hành (Siêu Thị)
 

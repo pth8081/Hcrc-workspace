@@ -2511,6 +2511,58 @@ const CREATE_MODULE_CONFIGS = {
       payload.history = [];
     }
   },
+  // budgetLines (v22.10, "Ngân Sách 2.0" — thay thế budgetEntries ở trên cho MỌI màn nhập liệu mới, xem
+  // chú thích đầy đủ ở sql/schema.sql/lib/recordStore.js). 1 collection DUY NHẤT dùng CHUNG cho cả 2
+  // giai đoạn tạo tay được (payload.stage): 'PROPOSED' (Đề Xuất, ai có budgetCreate/budgetManage/admin
+  // đều tạo được) và 'APPROVED' (Phê Duyệt nhập trực tiếp, CHỈ budgetManage/admin) — giai đoạn 'USED'
+  // KHÔNG tạo qua đây (chỉ tự sinh khi duyệt 1 dòng Phê Duyệt, xem approveBudgetLine() ở lib/recordActions.js).
+  // forceOwnDept: false + getScope trả {all:true} — "Khối Phòng Ban" (Dept) là 1 LỰA CHỌN nghiệp vụ tự
+  // do (đúng tinh thần tài liệu gốc: company/org_unit là field THAM CHIẾU, không phải điều kiện phân
+  // quyền) chứ không phải "chỉ tạo được cho phòng ban của chính mình" như budgetEntries — quyền TẠO được
+  // gác hoàn toàn bằng permission check trong extraValidate bên dưới, không qua scopeAllows().
+  budgetLines: {
+    dbKey: 'budgetLines',
+    forceOwnDept: false,
+    getScope: () => ({ all: true }),
+    creatorField: 'createdBy', creatorNameField: 'createdByName',
+    extraValidate: (payload, collection, user, appData) => {
+      const canManage = !!(user.perms?.admin || user.perms?.budgetManage);
+      if (!canManage && !user.perms?.budgetCreate) throw new CreateError(403, 'Bạn không có quyền lập ngân sách');
+
+      const stage = payload.stage === 'APPROVED' ? 'APPROVED' : 'PROPOSED';
+      if (stage === 'APPROVED' && !canManage) {
+        throw new CreateError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được nhập trực tiếp dòng Phê Duyệt');
+      }
+      payload.stage = stage;
+
+      const dept = String(payload.dept || '').trim();
+      if (!dept || !(appData?.depts || []).includes(dept)) throw new CreateError(400, 'Khối Phòng Ban không hợp lệ');
+      payload.dept = dept;
+
+      // "Vị trí" — sentinel cố định 'HO' (Trụ sở chính, KHÔNG có trong Danh Mục Phòng/Siêu Thị nào, cùng
+      // khuôn renderOperationOrderReceiptScopeCheckboxes() ở public/js/module-admin.js) hoặc đúng 1 tên
+      // trong Danh Mục Siêu Thị (appData.stores) — KHÔNG cho chọn Danh Mục Phòng ở đây (đã là field Dept
+      // riêng phía trên).
+      const location = String(payload.location || '').trim();
+      if (location !== 'HO' && !(appData?.stores || []).includes(location)) {
+        throw new CreateError(400, 'Vị trí không hợp lệ');
+      }
+      payload.location = location;
+
+      normalizeBudgetLineCoreFields(payload);
+
+      payload.status = 'SUBMITTED';
+      payload.parentId = null;
+      payload.sourceLineId = null;
+      payload.usageStatus = null;
+      payload.reallocationReason = '';
+      payload.purchaseMonth = null;
+      payload.decidedBy = null;
+      payload.decidedByName = null;
+      payload.decidedAt = null;
+      payload.createdAt = new Date().toLocaleString('vi-VN');
+    }
+  },
   // "Giấy Phép" (Hành Chính) — quản lý giấy phép kinh doanh/con của công ty theo địa điểm, có versioning
   // giống hệt "Tài Liệu" (docs) NHƯNG duyệt bằng 2 quyền PHẲNG (licenseCreate/licenseApprove), KHÔNG đi
   // qua engine duyệt theo phòng ban (lib/workflowEngine.js) — đúng yêu cầu nghiệp vụ "phân quyền ngay
@@ -3420,6 +3472,50 @@ function normalizeOnboardingPathFields(payload, appData) {
   delete payload.stage2DocumentIds; delete payload.test2Id;
 }
 
+// budgetLines (Ngân Sách 2.0) — "Danh Mục" (item_category, phân loại THEO ĐỐI TƯỢNG CHI, tách biệt hẳn
+// budgetType/OPEX-CAPEX vốn là phân loại kế toán) — đúng 4 giá trị theo tài liệu gốc, KHÔNG cấu hình
+// được thêm/bớt qua admin (khác budgetTemplates cũ đã bỏ hẳn ở thiết kế mới).
+const BUDGET_LINE_ITEM_CATEGORIES = ['SOFTWARE', 'HARDWARE', 'SERVICE', 'SYSTEM'];
+
+// Chuẩn hoá + kiểm tra các field "lõi" (số liệu + phân loại) của 1 dòng budgetLines — DÙNG CHUNG cho
+// tạo mới (extraValidate budgetLines ở trên, cả 2 stage PROPOSED/APPROVED) LẪN thêm/sửa mục con Sử
+// Dụng (addBudgetLineChild()/updateBudgetLineChild(), lib/recordActions.js) — quantity/unitPrice/
+// vatPercent/totalAmount/budgetType/itemCategory/budgetYear/budgetMonth luôn cùng 1 luật bất kể giai
+// đoạn nào. LƯU Ý: content/description/itemCategory trả về từ đây là giá trị NGƯỜI DÙNG vừa nhập — ở
+// nhánh mục con Sử Dụng (content/description/itemCategory phải KHOÁ CỨNG theo dòng cha), caller phải tự
+// ghi đè lại 3 field đó SAU KHI gọi hàm này, không được tin nguyên trạng trả về.
+function normalizeBudgetLineCoreFields(payload) {
+  const content = String(payload.content || '').trim();
+  if (!content) throw new CreateError(400, 'Thiếu nội dung');
+  payload.content = content.slice(0, 300);
+  payload.description = String(payload.description || '').trim().slice(0, 1000);
+
+  const quantity = Number(payload.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new CreateError(400, 'Số lượng không hợp lệ');
+  payload.quantity = quantity;
+
+  const unitPrice = Number(payload.unitPrice);
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new CreateError(400, 'Đơn giá không hợp lệ');
+  payload.unitPrice = unitPrice;
+
+  const vatPercent = (payload.vatPercent === '' || payload.vatPercent == null) ? 0 : Number(payload.vatPercent);
+  if (!Number.isFinite(vatPercent) || vatPercent < 0 || vatPercent > 100) throw new CreateError(400, 'VAT không hợp lệ');
+  payload.vatPercent = vatPercent;
+  payload.totalAmount = Math.round(quantity * unitPrice * (1 + vatPercent / 100));
+
+  if (!['OPEX', 'CAPEX'].includes(payload.budgetType)) throw new CreateError(400, 'Loại ngân sách không hợp lệ');
+  if (!BUDGET_LINE_ITEM_CATEGORIES.includes(payload.itemCategory)) throw new CreateError(400, 'Danh mục không hợp lệ');
+
+  const budgetYear = Number(payload.budgetYear);
+  const budgetMonth = Number(payload.budgetMonth);
+  if (!Number.isFinite(budgetYear) || budgetYear < 2000 || budgetYear > 2100) throw new CreateError(400, 'Năm ngân sách không hợp lệ');
+  if (!Number.isFinite(budgetMonth) || budgetMonth < 1 || budgetMonth > 12) throw new CreateError(400, 'Tháng ngân sách không hợp lệ');
+  payload.budgetYear = budgetYear;
+  payload.budgetMonth = budgetMonth;
+
+  payload.note = String(payload.note || '').trim().slice(0, 500);
+}
+
 module.exports = {
   CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate, scopeAllows, findMeetingConflict,
   validateRequiredCustomData,
@@ -3442,5 +3538,6 @@ module.exports = {
   canManageOperationRecord,
   normalizeTrainingPlanFields,
   normalizeOnboardingPathFields,
-  HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, HR_TASK_DEPARTMENTS
+  HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, HR_TASK_DEPARTMENTS,
+  BUDGET_LINE_ITEM_CATEGORIES, normalizeBudgetLineCoreFields
 };

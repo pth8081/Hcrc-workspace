@@ -2,7 +2,8 @@
 //
 // Regression cho tính năng "🔍 Xem Quy Trình" (preview quy trình phê duyệt trước khi nộp hồ sơ) vừa
 // thêm cho 9 module trước đây KHÔNG có (Tài Liệu, Đăng Ký Xe, Mua Sắm/Sửa Chữa VP, VPP, Hợp Đồng - Quản
-// Lý HĐ, Thanh Toán, Phê Duyệt Giá [Bán Lẻ + Bán Buôn], Ngân Sách, Vận Hành - Đặt Hàng) — cùng cơ chế
+// Lý HĐ, Thanh Toán, Phê Duyệt Giá [Bán Lẻ + Bán Buôn], Ngân Sách [ĐÃ BỎ khỏi bộ test — v22.10, module
+// Ngân Sách thiết kế lại không còn dept-workflow], Vận Hành - Đặt Hàng) — cùng cơ chế
 // `#viewDocModal` mà Văn Bản Trình/Hợp Đồng Phê Duyệt đã có sẵn từ trước (buildGenericDeptWorkflowPreviewHTML()/
 // openGenericWorkflowPreviewModal(), core.js).
 //
@@ -230,20 +231,11 @@ async function main() {
   record('Thanh Toán: modal hiện đúng người duyệt "pay1"', !modal.hidden && modal.content.includes('Người Duyệt Thanh Toán'), JSON.stringify(modal));
   await closeModalAndClearAlerts();
 
-  // ===== 7) Ngân Sách =====
-  await gotoTab('#btnTongHopTab', '#btnBudgetNav');
-  await page.evaluate(() => { const el = document.getElementById('budgetEntryDeptDisplay_PLAN'); if (el) el.value = 'Phòng A'; });
-  const budgetBtnExists = await page.evaluate(() => !!document.getElementById('budgetPreviewWfBtn'));
-  if (budgetBtnExists) {
-    await page.evaluate((fn) => window.ensureFnReady ? ensureFnReady(fn) : null, 'previewBudgetWorkflow');
-    await page.evaluate(() => document.getElementById('budgetPreviewWfBtn')?.click());
-    await page.waitForTimeout(400);
-    modal = await readModal();
-    record('Ngân Sách: modal hiện đúng người duyệt "budget1"', !modal.hidden && modal.content.includes('Người Duyệt Ngân Sách'), JSON.stringify(modal));
-    await closeModalAndClearAlerts();
-  } else {
-    record('Ngân Sách: nút #budgetPreviewWfBtn tồn tại trong DOM', false, 'không tìm thấy nút trong tab hiện tại (có thể do sub-tab PLAN chưa active)');
-  }
+  // ===== 7) Ngân Sách — ĐÃ BỎ (v22.10) =====
+  // Module Ngân Sách thiết kế lại theo tài liệu "Ngân sách 2.0" (xem module-ngansach.js): budgetLines
+  // không còn dùng workflowEngine.js/dept-workflow nữa (chỉ 1 cấp gác permission phẳng budgetCreate/
+  // budgetManage), nên không còn nút "Xem Trước Quy Trình" nào cho Ngân Sách — WF_MODULE_CONFIG.BUDGET
+  // cũng đã bỏ (module-workflow.js). Kịch bản này xoá khỏi bộ test.
 
   // ===== 8+9) Phê Duyệt Giá (Bán Lẻ + Bán Buôn dùng chung 1 nút) =====
   await gotoTab('#btnItSupportTab', 'button[data-op-seq*="setItSupportSubTab(PRICE)"]');
