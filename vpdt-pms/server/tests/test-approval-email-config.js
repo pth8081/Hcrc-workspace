@@ -37,13 +37,18 @@ function startServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-      if (urlPath.startsWith('/js/')) {
+      if (urlPath.startsWith('/js/') || urlPath.startsWith('/fragments/')) {
         const PUBLIC_DIR = path.join(__dirname, '..', 'public');
         const filePath = path.join(PUBLIC_DIR, urlPath);
         if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
         return fs.readFile(filePath, (err, data) => {
           if (err) { res.writeHead(404); return res.end('Not found: ' + urlPath); }
-          res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+          // /fragments/*.html (v23.11): khung HTML tách lười (TAB_SECTION_FRAGMENT/loadTabSectionHtml,
+          // core.js) — THIẾU nhánh này trước đây khiến mọi request rơi vào fallback "trả nguyên
+          // index.html" bên dưới, loadTabSectionHtml() coi là THÀNH CÔNG nhưng gán sai nội dung vào
+          // innerHTML section (bug thật, xem test-meeting-car.js).
+          const contentType = urlPath.startsWith('/js/') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8';
+          res.writeHead(200, { 'Content-Type': contentType });
           res.end(data);
         });
       }

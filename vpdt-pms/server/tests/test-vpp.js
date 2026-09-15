@@ -82,6 +82,21 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // /fragments/*.html (v23.11): khung HTML tách lười (TAB_SECTION_FRAGMENT/loadTabSectionHtml, core.js)
+  // — THIẾU route này khiến mọi request rơi vào nhánh catch-all mặc định (thường trả 200 body rỗng/{}),
+  // loadTabSectionHtml() coi là THÀNH CÔNG (status 200) và gán luôn nội dung sai vào innerHTML section,
+  // khiến section trông như đã nạp xong nhưng thực chất trống rỗng (bug thật, xem test-meeting-car.js).
+  if (req.method === 'GET' && url.pathname.startsWith('/fragments/')) {
+    const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+    const filePath = path.join(PUBLIC_DIR, decodeURIComponent(url.pathname));
+    if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+    return fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); return res.end('Not found: ' + url.pathname); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(data);
+    });
+  }
+
   const createMatch = url.pathname.match(/^\/api\/create\/(vppPeriods|vppRegistrations)$/);
   if (req.method === 'POST' && createMatch) {
     const moduleKey = createMatch[1];
@@ -268,6 +283,8 @@ async function main() {
   // nen chu dong nap TOAN BO cum module ngay tu dau (gia lap 1 phien da tung mo het moi tab) -
   // khong doi ket qua test nao (van goi dung ham that).
   await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map(k => loadModuleGroup(k))));
+  // Ha tang: nap lười KHUNG HTML theo tab (v23.11, core.js::TAB_SECTION_FRAGMENT/loadTabSectionHtml) — mirror dòng trên, cùng lý do (xem _harness.js).
+  await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
   await page.evaluate((seed) => {
     window.__alerts = [];
     window.alert = (m) => { window.__alerts.push(String(m)); };

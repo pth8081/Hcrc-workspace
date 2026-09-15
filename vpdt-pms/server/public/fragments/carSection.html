@@ -1,0 +1,235 @@
+
+    <div id="hanhChinhTabBar_car" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setCarSubTab" data-arg0="REG" id="btnCarSubReg" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🚗 Đăng Ký Xe</button>
+      <button type="button" data-op="setCarSubTab" data-arg0="CALENDAR" id="btnCarSubCalendar" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Lịch Xe</button>
+      <button type="button" data-op="setCarSubTab" data-arg0="DRIVER" id="btnCarSubDriver" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧑‍✈️ Lái Xe</button>
+      <!-- "📊 Báo Cáo" — CHỈ hiện cho người quản lý (admin/carView.all/người duyệt ở BẤT KỲ phòng ban nào
+           trong carDeptWorkflows, xem canSeeCarReportClient() ở core.js), cùng khuôn "📊 Báo Cáo" của
+           Phòng Họp (module-phonghop.js) — ẩn/hiện + tô màu active gộp 1 lần ở setCarSubTab(). -->
+      <button type="button" data-op="setCarSubTab" data-arg0="REPORT" id="btnCarSubReport" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+    </div>
+
+    <div id="carSubReg" class="space-y-6">
+      <div id="carDashboardCards"></div>
+    <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+      <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🚗 Mẫu Biểu Đăng Ký Xe Ô Tô / Phương Tiện</h3>
+      <p class="text-xs text-indigo-700">Tạo phiếu đăng ký lịch trình xe. Luồng duyệt tích hợp phê duyệt đồng cấp.</p>
+      
+      <form id="carForm" data-op-submit="submitCarReq" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Phiếu Đăng Ký</label>
+            <input id="carCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đơn Vị (Phòng/Ban/Bộ phận)</label>
+            <select id="carDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đăng Ký Sử Dụng Loại Xe</label>
+            <select id="carType" class="w-full border p-1.5 rounded bg-white" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số Người Sử Dụng</label>
+            <input id="carPassengers" placeholder="VD: 02 - Nguyễn Văn A, Trần Thị B" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Người Sử Dụng Trực Tiếp</label>
+            <input id="carDirectUser" placeholder="Để trống nếu là chính người đăng ký" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">SĐT Người Sử Dụng Trực Tiếp</label>
+            <input id="carDirectUserPhone" placeholder="09xxxxxxxx" class="w-full border p-1.5 rounded">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mục Đích Sử Dụng</label>
+            <!-- Đổ động từ DB.carPurposes (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, xem
+                 CORE_FIELD_MANIFEST.CAR optionsKey) — populateCarPurposeSelect(). -->
+            <select id="carPurpose" class="w-full border p-1.5 rounded bg-white" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Số KM Dự Kiến (2 chiều)</label>
+            <input id="carKm" type="number" placeholder="150" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu Đi</label>
+            <input id="carStartTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Dự Kiến Về</label>
+            <input id="carEndTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Lộ Trình Di Chuyển <span class="text-red-500">*</span></label>
+            <div id="carRoutePointsWrap" class="space-y-1.5"></div>
+            <button type="button" data-op="addCarRoutePoint" class="mt-1.5 bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Điểm</button>
+            <input id="carDestination" type="hidden" required>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Chi Tiết</label>
+            <textarea id="carReason" placeholder="Diễn giải chi tiết mục đích, công việc cần dùng xe..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_CAR" class="contents"></div>
+        </div>
+        <p class="text-[11px] text-gray-500 italic">💡 Loại xe cụ thể, biển kiểm soát và lái xe được phân công sẽ do Phòng Hành Chính điền khi xử lý duyệt — không cần nhập ở bước đăng ký.</p>
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="carForm" data-arg1="resetCarRegForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" id="carPreviewWfBtn" data-op="previewCarWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+          <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold hover:bg-indigo-700">Gửi phê duyệt</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đăng Ký Xe</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptCar" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusCar" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateCar" type="date" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateCar" type="date" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordCar" data-op-input="onCarFilterChange" placeholder="Mã, điểm đến, người đăng ký..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Phiếu Đăng Ký Xe</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Đăng Ký</th>
+              <th class="border p-2">Phòng Ban / Người Đăng Ký</th>
+              <th class="border p-2">Thông Tin Xe & Lái Xe</th>
+              <th class="border p-2">Thời Gian & Lộ Trình</th>
+              <th class="border p-2">Mục Đích & Trường Tùy Biến</th>
+              <th class="border p-2">Trạng Thái & Lịch Sử Duyệt Đồng Cấp</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="carTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_car"></div>
+    </div>
+    </div>
+
+    <!-- Sub-tab: Lịch Xe — CHỈ XEM lịch trống/bận của từng lái xe (giống Lịch Họp), KHÔNG kéo/bấm đặt
+         lịch trực tiếp từ đây (phương án đã xác nhận với người dùng) — biển số/lái xe cụ thể vẫn do
+         Phòng Hành Chính phân công khi xử lý duyệt phiếu (xem submitCarReq() phía trên). Cột = lái xe
+         (DB.users có isDriver, cùng nguồn dữ liệu populateCarDriversDatalist() ở module-bienbanhop.js),
+         hàng = khung giờ 30 phút 07:00-19:00 (generateCarTimeSlots() ở module-dangkyxe.js). Ô đỏ = có
+         phiếu đăng ký xe PENDING/APPROVED/DRAFT (chưa REJECTED/CANCELLED) trùng khung giờ với lái xe đó —
+         chuyến nhiều ngày hiện đỏ ở MỌI ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu. -->
+    <div id="carSubCalendar" class="hidden space-y-3">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-1">
+          <button type="button" id="btnCarCalViewDAY" data-op="setCarCalViewMode" data-arg0="DAY" class="px-3 py-1 rounded text-xs font-bold bg-indigo-700 text-white">📅 Ngày</button>
+          <button type="button" id="btnCarCalViewWEEK" data-op="setCarCalViewMode" data-arg0="WEEK" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗓️ Tuần</button>
+          <button type="button" id="btnCarCalViewMONTH" data-op="setCarCalViewMode" data-arg0="MONTH" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📆 Tháng</button>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" data-op="shiftCarCalDate" data-arg0="-1" title="Lùi lại" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">◀</button>
+          <input id="carCalDate" type="date" data-op-change="renderCarScheduleCalendar" class="border p-1.5 rounded">
+          <button type="button" data-op="shiftCarCalDate" data-arg0="1" title="Tiến tới" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold">▶</button>
+          <button type="button" data-op="jumpCarCalToToday" class="px-2 py-1 border rounded hover:bg-gray-50 font-bold text-indigo-700">Hôm nay</button>
+        </div>
+        <span id="carCalDayHint" class="text-gray-500 italic">Chỉ xem — bấm ô đỏ để xem thông tin chuyến đang chiếm lịch của lái xe</span>
+        <div class="flex items-center gap-1.5 ml-auto">
+          <span class="inline-block w-4 h-4 bg-white border border-gray-300"></span><span class="text-gray-600">Còn trống</span>
+          <span class="inline-block w-4 h-4 bg-red-500 border border-red-600 ml-3"></span><span class="text-gray-600">Đã có lịch (bấm để xem)</span>
+        </div>
+      </div>
+      <div id="carCalendarGrid"></div>
+      <div id="carCalendarWeekGrid" class="hidden"></div>
+      <div id="carCalendarMonthGrid" class="hidden"></div>
+    </div>
+
+    <!-- Sub-tab: Lái Xe (tự xác nhận chuyến được phân công — assignedDriverUsername === currentUser) -->
+    <div id="carSubDriver" class="hidden space-y-4">
+      <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">🧑‍✈️ Chuyến Xe Được Phân Công Cho Tôi</h3>
+        <p class="text-xs text-indigo-700">Danh sách phiếu đăng ký xe đã phê duyệt xong và phân công bạn làm lái xe — xác nhận để Phòng Hành Chính biết bạn đã nắm thông tin chuyến đi.</p>
+        <div id="carDriverListWrap" class="space-y-2"></div>
+        <div id="carDriverNoneNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Bạn chưa được phân công chuyến xe nào.</div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo (chỉ người quản lý — xem canSeeCarReportClient()/renderCarReportTab() ở
+         module-dangkyxe.js), cùng khuôn Báo Cáo Phòng Họp (module-phonghop.js). -->
+    <div id="carSubReport" class="hidden space-y-4">
+      <div class="bg-white p-3 rounded border text-xs flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Từ Ngày (theo thời gian bắt đầu đi)</label>
+          <input id="carReportFromDate" type="date" data-op-change="onCarReportFilterChange" class="border p-1.5 rounded">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="carReportToDate" type="date" data-op-change="onCarReportFilterChange" class="border p-1.5 rounded">
+        </div>
+      </div>
+      <div id="carReportSummaryCards" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-xs">🏢 Mức Sử Dụng Theo Phòng Ban</h4>
+          <div id="carReportDeptBars" class="space-y-2"></div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <h4 class="font-bold text-gray-700 text-xs">🧑‍✈️ Mức Sử Dụng Theo Lái Xe</h4>
+          <div id="carReportDriverBars" class="space-y-2"></div>
+        </div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">📈 Xu Hướng Theo Thời Gian — Số Chuyến &amp; Số KM (phiếu đã duyệt)</h4>
+        <div id="carReportTrendPills" class="flex flex-wrap gap-1.5"></div>
+        <div id="carReportTrendChart" class="overflow-x-auto pt-2"></div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">⭐ Lịch Sử Đánh Giá Chuyến (người đăng ký xác nhận sau khi lái xe kết thúc)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="p-1.5">Mã Phiếu</th><th class="p-1.5">Lái Xe</th><th class="p-1.5">Người Đánh Giá</th>
+              <th class="p-1.5">Thời Gian Đánh Giá</th><th class="p-1.5 text-right">Số KM</th><th class="p-1.5">Nhận Xét</th>
+            </tr></thead>
+            <tbody id="carReportEvalBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h4 class="font-bold text-gray-700 text-xs">🧑‍✈️ Lịch Sử Xác Nhận Của Lái Xe (nhận chuyến → kết thúc, báo KM)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="p-1.5">Mã Phiếu</th><th class="p-1.5">Lái Xe</th><th class="p-1.5">Xác Nhận Nhận Chuyến</th>
+              <th class="p-1.5">Kết Thúc Chuyến</th><th class="p-1.5 text-right">Số KM Báo Cáo</th>
+            </tr></thead>
+            <tbody id="carReportConfirmBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  

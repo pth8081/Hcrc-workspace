@@ -1,0 +1,222 @@
+
+    <div id="hanhChinhTabBar_vpp" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setVppSubTab" data-arg0="REGISTER" id="btnVppSubRegister" class="px-3 py-1.5 rounded text-xs font-bold bg-orange-700 text-white">📝 Đăng Ký</button>
+      <button type="button" data-op="setVppSubTab" data-arg0="PERIODS" id="btnVppSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📅 Kỳ Đăng Ký</button>
+      <button type="button" data-op="setVppSubTab" data-arg0="REPORTS" id="btnVppSubReports" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo Tổng Hợp</button>
+    </div>
+
+    <!-- Sub-tab: Đăng Ký (ai cũng vào được) -->
+    <div id="vppSubRegister" class="space-y-4">
+      <div id="vppDashboardCards"></div>
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">📝 Đăng Ký Văn Phòng Phẩm</h3>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ đăng ký (đang mở)</label>
+          <select id="vppRegPeriodSelect" data-op-change="onVppRegPeriodChange" class="w-full border p-2 rounded text-sm bg-white"></select>
+        </div>
+        <div id="vppRegNoPermNote" class="hidden text-xs text-red-700 italic bg-red-50 p-3 rounded border border-red-200">⛔ Bạn không có quyền đăng ký Văn phòng phẩm — chỉ người được uỷ quyền đăng ký của phòng mới đăng ký được. Liên hệ người phụ trách đăng ký của phòng mình.</div>
+        <div id="vppRegExcludedNote" class="hidden text-xs text-red-700 italic bg-red-50 p-3 rounded border border-red-200">⛔ Bạn không thuộc diện được cấp Văn phòng phẩm.</div>
+        <div id="vppRegNoPeriodNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Hiện chưa có kỳ đăng ký nào đang mở.</div>
+        <div id="vppRegAlreadySentNote" class="hidden text-xs text-amber-800 italic bg-amber-50 p-3 rounded border border-amber-200"></div>
+        <div id="vppRegItemsWrap" class="hidden space-y-2">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <label class="block text-xs font-semibold text-gray-600">Chọn mặt hàng & số lượng (chỉ mặt hàng nhập Số lượng &gt; 0 mới tính là đã chọn)</label>
+            <input id="vppRegItemSearch" type="text" data-op-input="filterVppRegItemsTable" placeholder="🔍 Tìm theo tên mặt hàng..." class="border p-1.5 rounded text-xs w-56">
+          </div>
+          <div class="max-h-80 overflow-y-auto border rounded bg-white">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100 sticky top-0"><tr>
+                <th class="border p-2 text-left w-24">Mã Hàng</th>
+                <th class="border p-2 text-left">Tên Hàng</th>
+                <th class="border p-2 text-left w-24">Xuất Xứ</th>
+                <th class="border p-2 text-left w-16">ĐVT</th>
+                <th class="border p-2 text-left w-28">Quy Cách</th>
+                <th class="border p-2 text-right w-24">Đơn Giá</th>
+                <th class="border p-2 text-left w-24">Số Lượng</th>
+              </tr></thead>
+              <tbody id="vppRegItemsTableBody"></tbody>
+            </table>
+          </div>
+          <div id="vppRegItemsNoMatch" class="hidden text-xs text-gray-400 italic text-center p-3">Không tìm thấy mặt hàng khớp từ khoá tìm kiếm.</div>
+          <div id="vppRegTotalWrap" class="text-sm font-bold text-right p-2 bg-white rounded border"></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="vppRegItemsWrap" data-arg1="resetVppRegForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="button" id="vppPreviewWfBtn" data-op="previewVppWorkflow" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+            <button type="button" data-op="saveVppRegDraft" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">💾 Kết Thúc Chọn (Lưu Nháp)</button>
+            <button type="button" id="btnVppRegSubmitDraft" class="hidden bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Gửi phê duyệt</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
+        <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
+        <select id="filterStatusVpp" data-op-change="onVppFilterChange" class="border p-2 rounded text-sm bg-white">
+          <option value="">-- Tất cả trạng thái --</option>
+          <option value="DRAFT">📝 Nháp</option>
+          <option value="PENDING">⏳ Chờ duyệt</option>
+          <option value="APPROVED">✅ Đã phê duyệt</option>
+          <option value="REJECTED">❌ Từ chối</option>
+        </select>
+      </div>
+
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Kỳ Đăng Ký</th>
+              <th class="border p-2">Người Đăng Ký</th>
+              <th class="border p-2">Số Mặt Hàng</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="vppRegTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_vppReg"></div>
+    </div>
+
+    <!-- Sub-tab: Kỳ Đăng Ký (chỉ vppManage/admin) -->
+    <div id="vppSubPeriods" class="hidden space-y-4">
+      <div id="vppNewPeriodFormWrap" class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">➕ Tạo Kỳ Đăng Ký Mới</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded border">
+          <div class="md:col-span-3">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tên kỳ đăng ký</label>
+            <input id="vppNewPeriodName" placeholder="VD: Đăng ký Văn phòng phẩm tháng 9/2026" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu (tuỳ chọn)</label>
+            <input id="vppNewPeriodStart" type="date" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc (tuỳ chọn — để trống = không tự đóng theo ngày)</label>
+            <input id="vppNewPeriodEnd" type="date" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <label class="block text-xs font-semibold text-gray-600">💰 Ngân Sách Văn Phòng Phẩm / Người</label>
+          <!-- TỪ v22.8: thay bảng "mỗi phòng 1 ô Mức/Người" (cồng kềnh khi nhiều phòng ban) bằng 2 chế
+               độ — "Toàn công ty" (1 mức chung, mặc định) hoặc "Áp mức khác theo nhóm phòng ban" (nhiều
+               nhóm, mỗi nhóm 1 mức tiền + chọn nhiều phòng ban áp dụng, xem setVppRateMode()/
+               renderVppRateGroupsList() ở module-vpp.js). Bảng bên dưới CHỈ còn để XEM TRƯỚC kết quả +
+               sửa Số Nhân Sự — không còn sửa mức tiền trực tiếp trong bảng nữa. -->
+          <div class="flex rounded-lg border overflow-hidden text-xs font-bold">
+            <button type="button" data-op="setVppRateMode" data-arg0="DEFAULT" id="btnVppRateModeDefault" class="flex-1 py-2 bg-orange-600 text-white">🏢 Toàn công ty (1 mức chung)</button>
+            <button type="button" data-op="setVppRateMode" data-arg0="GROUPS" id="btnVppRateModeGroups" class="flex-1 py-2 bg-gray-100 text-gray-600">🎛️ Áp mức khác theo nhóm phòng ban</button>
+          </div>
+          <div>
+            <label id="vppDefaultRateLabel" class="block text-xs font-semibold text-gray-600 mb-1">Mức/Người (VNĐ) — áp dụng cho TẤT CẢ phòng ban (tuỳ chọn, để trống = không giới hạn)</label>
+            <input id="vppNewPeriodBudget" type="text" inputmode="numeric" placeholder="500.000" value="100.000" data-op-input="renderVppDeptHeadcountTable" class="w-full border p-1.5 rounded money-input">
+          </div>
+          <div id="vppRateGroupsWrap" class="hidden space-y-2">
+            <div id="vppRateGroupsList" class="space-y-2"></div>
+            <button type="button" data-op="addVppRateGroup" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 text-xs font-bold hover:bg-gray-50">+ Thêm Nhóm Mức Riêng</button>
+            <p class="text-[11px] text-gray-500 italic">Mỗi phòng ban chỉ thuộc ĐÚNG 1 nhóm — 1 phòng đã ở nhóm này sẽ KHÔNG chọn được ở nhóm khác nữa (tự loại khỏi danh sách tìm). Phòng chưa vào nhóm nào dùng "Mức mặc định" ở trên.</p>
+          </div>
+          <p class="text-[11px] text-gray-500 italic"><b>Ngân sách phòng ban = Mức/người × Số nhân sự</b> — khi nhân viên bấm "Gửi phê duyệt", hệ thống chặn theo TỔNG ngân sách của CẢ PHÒNG (cộng dồn mọi đăng ký đang chờ duyệt + đã duyệt của phòng), KHÔNG giới hạn riêng số tiền của từng người.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-xs">
+              <thead><tr class="bg-gray-100 text-left">
+                <th class="border p-1.5">Phòng Ban</th>
+                <th class="border p-1.5 text-center w-28">Số Nhân Sự</th>
+                <th class="border p-1.5 text-right w-32">Mức Áp Dụng</th>
+                <th class="border p-1.5 text-right w-40">Ngân Sách Phòng Ban</th>
+              </tr></thead>
+              <tbody id="vppDeptHeadcountBody"></tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-gray-500 italic">Số nhân sự tự điền theo số tài khoản đang hoạt động của từng phòng ban — sửa tay được (VD người đang nghỉ dài hạn, nhân viên mới chưa có tài khoản...). Cột "Mức Áp Dụng" chỉ để xem trước — đổi mức thì sửa ở ô mặc định/nhóm phía trên.</p>
+        </div>
+        <div class="bg-white p-3 rounded border space-y-2">
+          <div class="flex items-start justify-between gap-2 flex-wrap">
+            <label class="block text-xs font-semibold text-gray-600">File danh mục mặt hàng (Excel .xlsx/.xls hoặc CSV — tự nhận diện cột theo tiêu đề: Tên mặt hàng, ĐVT, Mã hàng, Xuất xứ, Quy cách, Đơn giá; nếu không có tiêu đề thì cột 1 = tên, cột 2 = đơn vị)</label>
+            <a href="/api/vpp/catalog-template" class="shrink-0 text-indigo-600 font-bold text-[11px] hover:underline whitespace-nowrap">⬇️ Tải Mẫu Excel</a>
+          </div>
+          <input id="vppCatalogFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onVppCatalogFileChange" data-arg-event="0" class="text-xs">
+          <div id="vppCatalogFileChip" class="mt-1 flex flex-wrap gap-1"></div>
+          <p id="vppCatalogStatus" class="text-[11px] text-gray-500 italic"></p>
+          <div id="vppCatalogPreviewWrap" class="hidden">
+            <p class="text-[11px] font-semibold text-gray-600 mb-1">Xem trước danh mục (<span id="vppCatalogPreviewCount">0</span> mặt hàng):</p>
+            <div class="max-h-48 overflow-y-auto border rounded">
+              <table class="w-full text-[11px]">
+                <thead class="bg-gray-100 sticky top-0"><tr>
+                  <th class="border p-1 text-left">Mã hàng</th><th class="border p-1 text-left">Tên mặt hàng</th>
+                  <th class="border p-1 text-left">Xuất xứ</th><th class="border p-1 text-left">ĐVT</th>
+                  <th class="border p-1 text-left">Quy cách</th><th class="border p-1 text-right">Đơn giá</th>
+                </tr></thead>
+                <tbody id="vppCatalogPreviewBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+        <div id="dynamicFieldsContainer_VPP" class="contents"></div>
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="vppNewPeriodFormWrap" data-arg1="resetVppNewPeriodForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" data-op="createVppPeriod" class="bg-orange-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Tạo Kỳ Đăng Ký</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded border overflow-x-auto">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Tên Kỳ</th>
+              <th class="border p-2">Thời Gian</th>
+              <th class="border p-2">Số Mặt Hàng</th>
+              <th class="border p-2">Số Đăng Ký</th>
+              <th class="border p-2">Trạng Thái</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="vppPeriodsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo Tổng Hợp (chỉ vppManage/admin) -->
+    <div id="vppSubReports" class="hidden space-y-4">
+      <div class="flex flex-wrap items-end gap-2">
+        <div class="flex-1 min-w-[220px]">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn kỳ để xem báo cáo tổng hợp</label>
+          <select id="vppReportPeriodSelect" data-op-change="renderVppReports" class="w-full md:w-96 border p-2 rounded text-sm bg-white"></select>
+        </div>
+        <button type="button" data-op="downloadVppExport" data-arg0="summary" class="bg-emerald-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-700">⬇️ Tải File Tổng Hợp</button>
+        <button type="button" data-op="downloadVppExport" data-arg0="by-dept" class="bg-emerald-700 text-white px-3 py-2 rounded text-xs font-bold hover:bg-emerald-800">⬇️ Tải File Tổng Quát Theo Phòng Ban</button>
+      </div>
+      <div class="bg-white p-4 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-800">🏢 Tổng Hợp Theo Phòng Ban</h4>
+        <p class="text-[11px] text-gray-500 italic">"Ngân Sách Phòng Ban" tính theo mức/người RIÊNG của từng phòng (xem "Tạo Kỳ Đăng Ký"). "Còn Lại" đã trừ CẢ đăng ký đang Chờ Duyệt (không chỉ Đã Duyệt) — đúng số hệ thống dùng để chặn khi nhân viên bấm "Gửi phê duyệt".</p>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2 text-center">Số Người Đăng Ký</th>
+              <th class="border p-2 text-center">Chờ Duyệt</th>
+              <th class="border p-2 text-center">Đã Duyệt</th>
+              <th class="border p-2 text-center">Từ Chối</th>
+              <th class="border p-2 text-right">Ngân Sách Phòng Ban</th>
+              <th class="border p-2 text-right">Đã Dùng (Đã Duyệt)</th>
+              <th class="border p-2 text-right">Còn Lại (Sau Chờ Duyệt)</th>
+            </tr></thead>
+            <tbody id="vppReportByDeptBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white p-4 rounded border space-y-2">
+        <h4 class="font-bold text-sm text-gray-800">📦 Tổng Hợp Theo Mặt Hàng (đã đăng ký, gồm cả chờ duyệt + đã duyệt)</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Đơn Vị</th>
+              <th class="border p-2 text-center">Tổng Số Lượng</th>
+            </tr></thead>
+            <tbody id="vppReportByItemBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  

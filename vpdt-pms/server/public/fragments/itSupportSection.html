@@ -1,0 +1,440 @@
+
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setItSupportSubTab" data-arg0="PRICE" id="btnItSubPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white">🏷️ Phê Duyệt Giá</button>
+      <button type="button" data-op="setItSupportSubTab" data-arg0="TICKET" id="btnItSubTicket" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🎫 Hỗ Trợ Yêu Cầu</button>
+      <button type="button" data-op="setItSupportSubTab" data-arg0="RENEWAL" id="btnItSubRenewal" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Gia Hạn Dịch Vụ</button>
+    </div>
+
+    <!-- Sub-tab: Phê Duyệt Giá -->
+    <div id="itSubPrice" class="space-y-4">
+      <!-- 2 sub-tab con "Bán Lẻ"/"Bán Buôn" (mục 1 kế hoạch) — mỗi loại giá có người duyệt phòng ban
+           RIÊNG (xem resolveItPriceDeptWorkflowConfigClient()), tự động gắn đúng priceType theo sub-tab
+           đang mở lúc gửi đề xuất (KHÔNG có dropdown chọn tay — xem setItPriceSubTab()/
+           submitItPriceApproval()). Class active/inactive được gán lại mỗi lần renderItPriceApprovals(). -->
+      <div class="flex flex-wrap gap-2">
+        <button type="button" data-op="setItPriceSubTab" data-arg0="RETAIL" id="btnItPriceSubRetail" class="px-3 py-1.5 rounded text-xs font-bold bg-sky-600 text-white">🏷️ Bán Lẻ</button>
+        <button type="button" data-op="setItPriceSubTab" data-arg0="WHOLESALE" id="btnItPriceSubWholesale" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏪 Bán Buôn</button>
+      </div>
+      <div id="itPriceDashboardCards"></div>
+      <!-- Chỉ admin thấy được (khớp itPriceMasterLists trong ADMIN_ONLY_KEYS ở routes/data.js) — nạp
+           sẵn 1 hoặc nhiều Mẫu Giá (KHUÔN CỘT của bảng giá bên mua hàng gửi tại từng thời điểm, không
+           còn lưu dữ liệu giá thật/không còn đối chiếu tự động) để người đề xuất chọn đúng mẫu áp dụng
+           khi nộp bảng giá bên dưới — xem onItPriceFileChange()/submitItPriceApproval(). KHÔNG còn bước
+           "gán vai trò cột" — cột nào đọc được từ dòng tiêu đề file mẫu được LẤY NGUYÊN VĂN, việc kiểm
+           tra hợp lệ CHỈ còn là so khớp tên cột file người đề xuất nộp với tên cột của Mẫu Giá đã chọn
+           (xem rowsToPriceItems() ở lib/priceFileParser.js). -->
+      <div id="itPriceMasterListAdminWrap" class="hidden bg-white p-4 rounded border space-y-3">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h4 class="font-bold text-sm text-gray-800">📐 Mẫu Giá (khuôn cột)</h4>
+            <p class="text-[11px] text-gray-500 italic">Nạp file mẫu bên mua hàng gửi tại từng thời điểm — hệ thống CHỈ đọc dòng tiêu đề để lấy NGUYÊN VĂN tên cột (không giới hạn số cột/tên cột), KHÔNG lưu dữ liệu giá thật. Tạo được nhiều mẫu (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng mẫu áp dụng lúc nộp bảng giá, hệ thống chỉ kiểm tra tên cột file nộp có khớp đúng với mẫu không (không phân biệt hoa/thường/dấu).</p>
+          </div>
+          <button type="button" data-op="addItPriceMasterList" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm Mẫu Giá</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead>
+              <tr class="bg-gray-100 text-left">
+                <th class="border p-2">Tên Mẫu Giá</th>
+                <th class="border p-2">Các Cột Trong Mẫu</th>
+                <th class="border p-2">Nạp Bởi</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itPriceMasterListTableBody"></tbody>
+          </table>
+        </div>
+        <input id="itPriceMasterListFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+      </div>
+
+      <!-- Modal dùng chung "Gán vai trò cột" — dùng cho Mẫu Ngân Sách (Hệ Thống → Ngân Sách) khi cần biết
+           cột nào đóng vai trò nghiệp vụ nào (Tên Hạng Mục/Số Tiền...). Mẫu Giá ở TRÊN KHÔNG còn dùng modal
+           này nữa (bỏ hẳn khái niệm "vai trò cột" cho giá — xem ghi chú ở itPriceMasterListAdminWrap) —
+           xem openColumnRoleMappingModal(). -->
+      <div id="colRoleModal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-4 max-w-md w-full space-y-3 text-xs max-h-[90vh] overflow-y-auto">
+          <h3 id="colRoleModalTitle" class="font-bold text-sm text-gray-800"></h3>
+          <p id="colRoleModalHint" class="text-gray-500 italic"></p>
+          <div id="colRoleModalFields" class="space-y-2"></div>
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button type="button" data-op="closeColRoleModal" data-arg0="null" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+            <button type="button" data-op="confirmColRoleModal" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🏷️ Đề Xuất Duyệt Giá Bán (Siêu Thị) <span id="itPriceFormSubTabBadge" class="px-2 py-0.5 rounded-full bg-sky-600 text-white text-[11px] font-bold"></span></h3>
+        <p class="text-xs text-sky-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành — KHÔNG phải mua sắm/chi phí, không sinh đề nghị thanh toán. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành ngay tại đây.</p>
+        <div id="itPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá — chỉ xem được danh sách đề xuất bên dưới.</div>
+        <form id="itPriceCreateForm" data-op-submit="submitItPriceApproval" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label>
+              <input id="itPriceCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đề Xuất</label>
+              <input id="itPriceDeptDisplay" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+          </div>
+          <!-- "Đơn Vị Áp Dụng Giá Bán Buôn" (khác "Phòng Ban Đề Xuất" ở trên — đó là đơn vị NỘI BỘ tạo đề
+               xuất, đây là tên đơn vị/khách hàng mà mức giá bán buôn này áp dụng CHO) — nhập tay tự do
+               (không có danh mục hệ thống cho đối tác/khách hàng ngoài), CHỈ áp dụng cho sub-tab Bán
+               Buôn (xem setItPriceSubTab() ở module-itsupport-price.js). -->
+          <div id="itPriceWholesaleApplyUnitWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">🏢 Đơn Vị Áp Dụng Giá Bán Buôn <span class="text-red-500">*</span></label>
+            <input id="itPriceWholesaleApplyUnit" type="text" maxlength="300" placeholder="VD: Công ty TNHH ABC, Đại lý XYZ..." class="w-full border p-1.5 rounded bg-white">
+            <p class="text-gray-400 mt-1">Tên đơn vị/khách hàng sẽ áp dụng mức giá bán buôn này — khác với Phòng Ban Đề Xuất ở trên (đơn vị NỘI BỘ tạo đề xuất).</p>
+          </div>
+          <!-- "Vùng Giá Áp Dụng" — CHỈ áp dụng cho sub-tab Bán Lẻ (đối xứng với "Đơn Vị Áp Dụng Giá Bán
+               Buôn" ở trên, vốn chỉ áp dụng cho Bán Buôn). Chọn từ danh mục hệ thống DB.priceZones (Hệ
+               Thống > Quản Lý Danh Mục), không nhập tay tự do — xem setItPriceSubTab()/submitItPriceApproval()
+               ở module-itsupport-price.js. -->
+          <div id="itPriceRetailZoneWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">🗺️ Vùng Giá Áp Dụng <span class="text-red-500">*</span></label>
+            <select id="itPriceRetailZone" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn Vùng Giá Áp Dụng --</option>
+            </select>
+          </div>
+          <div id="itPriceMasterListSelectWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
+            <select id="itPriceMasterListSelect" data-op-change="onItPriceMasterListChange" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
+            </select>
+            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
+            <a id="itPriceMasterListDownloadLink" href="#" target="_blank" class="hidden inline-block mt-1 text-sky-600 hover:underline font-semibold">📥 Tải Mẫu Giá này về để làm theo</a>
+          </div>
+          <div id="itPriceTierSelectWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">Mức Margin / Chiết Khấu <span class="text-red-500">*</span></label>
+            <select id="itPriceTier" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn mức áp dụng --</option>
+              <option value="MARGIN_LT5">Margin &lt; 5%</option>
+              <option value="MARGIN_GTE5">Margin ≥ 5%</option>
+              <option value="DISCOUNT_LTE5">Chiết khấu ≤ 5%</option>
+              <option value="DISCOUNT_GT5">Chiết khấu &gt; 5%</option>
+            </select>
+            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mức áp dụng cho đề xuất Bán Buôn này — mỗi mức có quy trình duyệt riêng do admin cấu hình (không còn theo phòng ban).</p>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
+            <input id="itPriceFileInput" type="file" accept=".xlsx,.xls" data-op-change="onItPriceFileChange" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
+            <div id="itPriceFileChip" class="mt-1 flex flex-wrap gap-1"></div>
+            <p id="itPriceFileStatus" class="text-gray-500 mt-1"></p>
+            <p class="text-gray-400 mt-1">Tệp phải có ĐÚNG các cột (tên, không phân biệt hoa/thường/dấu) theo Mẫu Giá đã chọn ở trên — không thiếu, không thừa cột nào (thứ tự cột không quan trọng).</p>
+          </div>
+          <div id="itPriceFilePreviewWrap" class="hidden">
+            <p class="font-semibold text-gray-600 mb-1">Xem trước nội dung tệp (<span id="itPriceFilePreviewCount">0</span> dòng)</p>
+            <div class="overflow-x-auto max-h-48 overflow-y-auto border rounded">
+              <table class="w-full border-collapse text-xs bg-white">
+                <thead id="itPriceFilePreviewHead" class="bg-gray-100 text-left text-gray-700"></thead>
+                <tbody id="itPriceFilePreviewBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <!-- "Siêu thị áp dụng" — CHỈ mang tính thông tin (đã xác nhận với người dùng: không giới hạn
+               ai xem được đề xuất, không tự động xử lý gì thêm — để đội Hỗ Trợ IT tự biết mà áp giá đúng
+               phạm vi). Mặc định "Toàn bộ" — chọn "Khác" mới hiện ô multi-select chọn siêu thị/cửa hàng cụ
+               thể (renderMultiSelectDropdown(), xem onItPriceStoreScopeModeChange() ở
+               module-itsupport-price.js). -->
+          <div>
+            <!-- Bán Lẻ: "Siêu Thị Áp Dụng", có lựa chọn Toàn bộ/Khác (select #itPriceStoreScopeMode).
+                 Bán Buôn: đổi nhãn "Siêu Thị Đề Xuất", KHÔNG có khái niệm "Toàn bộ" (mỗi đề xuất Bán
+                 Buôn luôn gắn 1-nhiều siêu thị/cửa hàng cụ thể) — ẩn hẳn select, ô multi-select LUÔN
+                 hiện sẵn. 2 nhánh hiển thị đổi qua applyItPriceStoreScopeUIForSubTab() (gọi trong
+                 setItPriceSubTab()/resetItPriceForm(), module-itsupport-price.js). -->
+            <label id="itPriceStoreScopeLabelEl" class="block font-semibold text-gray-600 mb-1">🏬 Siêu Thị Áp Dụng</label>
+            <select id="itPriceStoreScopeMode" data-op-change="onItPriceStoreScopeModeChange" class="w-full border p-1.5 rounded bg-white">
+              <option value="ALL">Toàn bộ siêu thị, cửa hàng</option>
+              <option value="OTHER">Khác</option>
+            </select>
+            <div id="itPriceStoreScopeStoresWrap" class="hidden mt-2">
+              <div id="itPriceStoreScopeStoresMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <p class="text-gray-400 mt-1">Chọn 1 hoặc nhiều siêu thị/cửa hàng áp dụng đề xuất giá này.</p>
+            </div>
+          </div>
+          <!-- "Ngày áp dụng"/"Ngày hết hiệu lực" — cùng lý do CHỈ mang tính thông tin ở trên, không có xử
+               lý tự động nào theo ngày (không tự khoá/ẩn đề xuất khi quá hạn). "Vĩnh viễn" là mặc định —
+               chọn "Khác" mới hiện ô nhập ngày hết hiệu lực thật (bắt buộc, xem
+               onItPriceExpiryModeChange()/submitItPriceApproval()). -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">📅 Ngày Áp Dụng <span class="text-red-500">*</span></label>
+              <input id="itPriceEffectiveDate" type="date" required class="w-full border p-1.5 rounded bg-white">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">⏳ Ngày Hết Hiệu Lực</label>
+              <select id="itPriceExpiryMode" data-op-change="onItPriceExpiryModeChange" class="w-full border p-1.5 rounded bg-white">
+                <option value="PERMANENT">Vĩnh viễn</option>
+                <option value="OTHER">Khác</option>
+              </select>
+              <div id="itPriceExpiryDateWrap" class="hidden mt-2">
+                <input id="itPriceExpiryDate" type="date" class="w-full border p-1.5 rounded bg-white">
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lý Do Điều Chỉnh Giá</label>
+            <textarea id="itPriceReason" placeholder="VD: Giá nhập tăng theo nhà cung cấp, điều chỉnh theo mặt bằng thị trường..." class="w-full border p-1.5 rounded h-16"></textarea>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">📎 Tài liệu bổ sung liên quan</label>
+            <input id="itPriceExtraFiles" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="itPriceExtraFilesChip" class="w-full border p-1.5 rounded bg-white">
+            <div id="itPriceExtraFilesChip" class="mt-1 flex flex-wrap gap-1"></div>
+            <p class="text-gray-400 mt-1">Tuỳ chọn — các tài liệu liên quan khác (không phải bảng giá), có thể chọn nhiều tệp cùng lúc.</p>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_IT_PRICE" class="contents"></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="itPriceCreateForm" data-arg1="resetItPriceForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <!-- 1 nút dùng chung cho cả 2 sub-tab con: previewItPriceWorkflow() tự rẽ Bán Lẻ (theo phòng
+                 ban) / Bán Buôn (theo mức Margin/Chiết Khấu) — xem module-itsupport-price.js. -->
+            <button type="button" id="itPricePreviewWfBtn" data-op="previewItPriceWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+            <button type="submit" class="bg-sky-600 text-white px-5 py-2 rounded font-bold hover:bg-sky-700">Gửi phê duyệt</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</h4>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusItPrice" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="APPROVED">Đã Phê Duyệt</option>
+              <option value="PENDING">Đang Chờ Duyệt</option>
+              <option value="REJECTED">Bị Từ Chối</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+            <input id="filterFromDateItPrice" type="date" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+            <input id="filterToDateItPrice" type="date" data-op-change="onItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordItPrice" data-op-input="onItPriceFilterChange" placeholder="Mã, tên hàng, người đề xuất..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Duyệt Giá</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã Đề Xuất</th>
+                <th class="border p-2">Phòng Ban / Người Đề Xuất</th>
+                <th class="border p-2">Tệp Bảng Giá</th>
+                <th class="border p-2">Trạng Thái Duyệt</th>
+                <th class="border p-2">Áp Giá</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itPriceTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itPrice"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Hỗ Trợ Yêu Cầu -->
+    <div id="itSubTicket" class="hidden space-y-4">
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🎫 Gửi Yêu Cầu Hỗ Trợ IT</h3>
+        <p class="text-xs text-emerald-700">Gặp sự cố máy tính, phần mềm, mạng, tài khoản... gửi yêu cầu ngay để đội Hỗ Trợ IT tiếp nhận xử lý. Mở cho toàn bộ nhân viên.</p>
+        <form id="itTicketCreateForm" data-op-submit="submitItTicket" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
+              <input id="itTicketCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề <span class="text-red-500">*</span></label>
+              <input id="itTicketTitle" placeholder="VD: Máy tính không kết nối được mạng" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Danh Mục</label>
+              <!-- Đổ động từ DB.itTicketCategories (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu, xem
+                   CORE_FIELD_MANIFEST.IT_TICKET optionsKey) — populateItTicketCategorySelect(). -->
+              <select id="itTicketCategory" class="w-full border p-1.5 rounded bg-white"></select>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mô Tả Chi Tiết <span class="text-red-500">*</span></label>
+            <textarea id="itTicketDescription" placeholder="Mô tả sự cố/yêu cầu càng chi tiết càng giúp đội IT xử lý nhanh hơn..." class="w-full border p-1.5 rounded h-20" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_IT_TICKET" class="contents"></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="itTicketCreateForm" data-arg1="resetItTicketForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi yêu cầu</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Yêu Cầu Hỗ Trợ</h4>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusItTicket" data-op-change="onItTicketFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="TODO">Chưa Xử Lý</option>
+              <option value="DOING">Đang Xử Lý</option>
+              <option value="DONE">Hoàn Thành</option>
+              <option value="CANCELLED">Đã Hủy</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Danh Mục</label>
+            <!-- Đổ động từ DB.itTicketCategories (admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu) — TRƯỚC
+                 ĐÂY vẫn gõ cứng 5 <option> gốc trong khi #itTicketCategory (form tạo mới) đã đổ động từ
+                 lâu, khiến 2 nơi lệch nhau (đợt audit "form-fields-6") — xem populateItTicketCategoryFilterSelect(). -->
+            <select id="filterCategoryItTicket" data-op-change="onItTicketFilterChange" class="w-full border p-2 rounded text-sm bg-white"></select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordItTicket" data-op-input="onItTicketFilterChange" placeholder="Mã, tiêu đề, người tạo..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Yêu Cầu Hỗ Trợ</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Mã Yêu Cầu</th>
+                <th class="border p-2">Người Tạo / Phòng Ban</th>
+                <th class="border p-2">Tiêu Đề</th>
+                <th class="border p-2">Danh Mục</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2">Người Xử Lý</th>
+                <th class="border p-2 text-center">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itTicketTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itTicket"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Gia Hạn Dịch Vụ CNTT — CHỈ đội IT (itManage/admin) thấy được (ẩn/hiện ở
+         btnItSubRenewal/btnItSupportNavRenewal, xem finishLogin()). Danh mục nội bộ đội IT tự quản lý
+         cho chính mình, KHÔNG qua bước duyệt nào (khác Giấy Phép — hồ sơ pháp lý cần người khác duyệt),
+         xem lib/createValidation.js itServiceRenewals.extraValidate. -->
+    <div id="itSubRenewal" class="hidden space-y-4">
+      <div id="itRenewalDashboardCards"></div>
+
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">🔔 Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn</h3>
+        <p class="text-xs text-sky-700">Phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ SSL, hosting... — hệ thống sẽ tự gửi email nhắc trước khi hết hạn (cấu hình ở Quản Trị → Cấu Hình Email).</p>
+        <form id="itRenewalCreateForm" data-op-submit="submitItServiceRenewal" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <!-- Đợt 3 (audit Biểu Mẫu): itRenewalName/Vendor/Responsible/Cost/File/Note trước đây là con
+               TRỰC TIẾP của <form> (không bọc <div> riêng) — cùng lỗi #licenseForm đã vá ở Đợt 1, khiến
+               applyCoreFieldCustomizations() (input.closest('div')?.querySelector('label')) có thể ghi
+               đè nhầm nhãn "Ngày bắt đầu"/"Ngày hết hạn" (2 <label> thật gần nhất trong div bao ngoài
+               cùng #itSubRenewal) khi sửa bất kỳ field nào trong số này. Đã bọc lại từng field trong
+               <div> riêng trước khi thêm vào CORE_FIELD_MANIFEST.IT_RENEWAL. -->
+          <div class="md:col-span-2"><input id="itRenewalName" placeholder="Tên dịch vụ (VD: Microsoft 365, Domain hcrc.vn...)" class="w-full border p-2 rounded text-sm" required></div>
+          <div class="relative">
+            <input id="itRenewalCategory" data-sdd-list="itRenewalCategoryDatalist" autocomplete="off" placeholder="Loại dịch vụ" class="w-full border p-2 rounded text-sm" required>
+            <div id="itRenewalCategoryDatalist" class="hidden" data-sdd-dropdown></div>
+          </div>
+          <div><input id="itRenewalVendor" placeholder="Nhà cung cấp" class="w-full border p-2 rounded text-sm"></div>
+          <div><input id="itRenewalResponsible" placeholder="Người phụ trách" class="w-full border p-2 rounded text-sm"></div>
+          <div><input id="itRenewalCost" type="text" inputmode="numeric" placeholder="Chi phí gia hạn (đ)" class="money-input w-full border p-2 rounded text-sm"></div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu</label>
+            <input id="itRenewalStartDate" type="date" class="w-full border p-2 rounded text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày hết hạn <span class="text-red-500">*</span></label>
+            <input id="itRenewalExpiryDate" type="date" class="w-full border p-2 rounded text-sm" required>
+          </div>
+          <div class="md:col-span-3">
+            <input id="itRenewalFile" type="file" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="itRenewalFileChip" class="w-full border p-1 bg-white rounded text-sm">
+            <div id="itRenewalFileChip" class="mt-1 flex flex-wrap gap-1"></div>
+          </div>
+          <div class="md:col-span-3"><textarea id="itRenewalNote" placeholder="Ghi chú thêm (nếu có)..." class="w-full border p-2 rounded text-sm h-16"></textarea></div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_IT_RENEWAL" class="contents"></div>
+          <div class="md:col-span-3 flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="itRenewalCreateForm" data-arg1="resetItRenewalForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-sky-700 text-white px-5 py-2 rounded font-bold hover:bg-sky-800 transition">Thêm vào danh mục</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Danh Mục "Loại Dịch Vụ" (chỉ Admin, đợt audit "form-fields-6") — cùng khuôn "Quản Lý Danh Mục
+           Các Loại Giấy Phép" (licenseTypes ở màn Quản Lý Danh Mục) — xem
+           renderItRenewalCategoryList()/saveItRenewalCategory()/deleteItRenewalCategory() bên dưới. -->
+      <div id="itRenewalCategoryAdminBox" class="hidden bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục "Loại Dịch Vụ"</h3>
+        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Loại dịch vụ" ở form thêm dịch vụ phía trên — tự học thêm khi ai gõ loại mới, ở đây chỉ để thêm/dọn/xoá bớt.</p>
+        <form data-op-submit="saveItRenewalCategory" class="flex gap-2">
+          <input id="txtItRenewalCategoryName" placeholder="Tên loại dịch vụ mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="itRenewalCategoryList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Tình Trạng Hiệu Lực</label>
+            <select id="filterItRenewalLifecycle" data-op-change="onItServiceRenewalFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+              <option value="VALID">🟢 Còn hiệu lực</option>
+              <option value="EXPIRING">🟡 Sắp hết hạn (≤30 ngày)</option>
+              <option value="EXPIRED">🔴 Hết hạn</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Dịch Vụ</label>
+            <select id="filterItRenewalCategory" data-op-change="onItServiceRenewalFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả --</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterItRenewalKeyword" data-op-input="onItServiceRenewalFilterChange" placeholder="Tên dịch vụ, nhà cung cấp, người phụ trách..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </details>
+
+      <div>
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-bold text-gray-800">📋 Danh Mục Dịch Vụ CNTT</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-sm">
+            <thead>
+              <tr class="bg-gray-200 text-left text-gray-700">
+                <th class="border p-2">Tên Dịch Vụ</th>
+                <th class="border p-2">Loại</th>
+                <th class="border p-2">Nhà Cung Cấp / Người Phụ Trách</th>
+                <th class="border p-2">Ngày Hết Hạn</th>
+                <th class="border p-2 text-center">Hiệu Lực</th>
+                <th class="border p-2 text-right">Chi Phí Gia Hạn</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="itRenewalTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_itRenewal"></div>
+      </div>
+    </div>
+  

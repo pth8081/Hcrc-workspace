@@ -151,6 +151,8 @@ async function main() {
     await installRoutes(page);
     await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
     await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map((k) => loadModuleGroup(k))));
+    // Ha tang: nap lười KHUNG HTML theo tab (v23.11, core.js::TAB_SECTION_FRAGMENT/loadTabSectionHtml) — mirror dòng trên, cùng lý do (xem _harness.js).
+    await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
     await bootstrapClient(page);
 
     // ===== 1) Khối 17 lúc mới — cả 3 danh mục RỖNG, đã lên widget "chọn nhiều thật" mới =====
@@ -201,6 +203,8 @@ async function main() {
     // minh cả 3 danh mục vẫn còn nguyên vì đã có ở "server", KHÔNG phải vì biến JS cũ chưa bị xoá =====
     await page.reload({ waitUntil: 'load' });
     await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map((k) => loadModuleGroup(k))));
+    // Ha tang: nap lười KHUNG HTML theo tab (v23.11, core.js::TAB_SECTION_FRAGMENT/loadTabSectionHtml) — mirror dòng trên, cùng lý do (xem _harness.js).
+    await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
     await bootstrapClient(page);
     await gotoAdminSpecialPerms(page);
     const afterReload = await page.evaluate(() => ({

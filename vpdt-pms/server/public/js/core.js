@@ -141,10 +141,23 @@ function loadTabModuleGroups(tabName) {
 // index.html như trước, không đổi hành vi gì cả (isSectionHtmlSettled()/loadTabSectionHtml() trả về
 // "đã sẵn sàng ngay"/no-op cho các tab đó). Bắt đầu thí điểm với 1 module (Vận Hành) trước khi mở rộng —
 // xem VERSION.md v23.10.
-const TAB_SECTION_FRAGMENT = { vanHanh: 'vanHanhSection' };
+const TAB_SECTION_FRAGMENT = {
+  vanHanh: 'vanHanhSection',
+  uniform: 'uniformSection', office: 'officeSection', car: 'carSection', vpp: 'vppSection',
+  hrAttendance: 'hrAttendanceSection', periodicReport: 'periodicReportSection', itSupport: 'itSupportSection'
+};
 
 const _loadedSectionHtml = {}; // tabName -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
 const _settledSectionHtml = new Set(); // tabName co section HTML DA nap xong THUC SU (Promise da resolve)
+
+// tabName -> mang id CON nam LONG BEN TRONG fragment cua tabName do (khac voi chinh sectionId - div rong
+// da dat san trong index.html), can bindCspDelegation() lai dung 1 lan NGAY SAU KHI fragment vua duoc bom
+// vao DOM lan dau (xem loadTabSectionHtml()). Rieng #paymentSection long trong #officeSection (v23.11) -
+// moi dot tach module sau nay PHAI ra soat: id con nao duoc bindCspDelegation() rieng (grep
+// "bindCspDelegation('" trong file nay) ma KHONG con la div rong dat san trong index.html (tuc chi ton
+// tai ben trong 1 fragment) thi phai them vao day, neu khong se am tham mat 1 listener click/change/
+// input/submit cho ca phien, rat kho phat hien qua UI thuong (chi lo qua test hoi quy sau nay).
+const NESTED_CSP_ROOTS_IN_FRAGMENT = { office: ['paymentSection'] };
 
 // true neu section HTML cua tabName KHONG can nap (khong co trong TAB_SECTION_FRAGMENT - van nhung cung
 // nhu truoc) HOAC da nap xong THUC SU - dung CHUNG voi isTabModuleGroupsSettled() de switchTab() biet
@@ -154,21 +167,45 @@ function isSectionHtmlSettled(tabName) {
   return !sectionId || _settledSectionHtml.has(tabName);
 }
 
-// Nap khung HTML cho 1 tabName (neu co trong TAB_SECTION_FRAGMENT) - fetch() public/fragments/<id>.html
-// roi gan vao .innerHTML cua CHINH div id do (van la div RONG dat san trong index.html, KHONG xoa han -
-// xem chu thich tai div#vanHanhSection). Loi mang/404 xoa cache de lan goi SAU co the thu lai.
+// Nap khung HTML cho 1 tabName (neu co trong TAB_SECTION_FRAGMENT) - tai public/fragments/<id>.html roi
+// gan vao .innerHTML cua CHINH div id do (van la div RONG dat san trong index.html, KHONG xoa han - xem
+// chu thich tai div#vanHanhSection). Loi mang/404 xoa cache de lan goi SAU co the thu lai.
+//
+// Dung XMLHttpRequest THAY VI fetch() - CO CHU DICH (v23.11, phat hien qua bo test hoi quy sau dot tach
+// module thu 2): rat nhieu file test/tests/*.js tu GHI DE window.fetch (mo phong API /api/* de kiem soat
+// du lieu tra ve trong test) nhung KHONG cho request tinh (vd /fragments/*.html) di qua fetch that, hoac
+// stub thieu han .text() - khien loadTabSectionHtml() nem loi ngay lap tuc, bi switchTab() bat+nuot lang
+// le (console.error + alert, khong crash ro rang), khung HTML mai rong. Da tung vao tay tung file test
+// (5 file, xem VERSION.md v23.10) nhung KHONG BEN VUNG - moi lan tach module moi lai co the vo them file
+// test khac chua ai vas toi. Doi sang XMLHttpRequest o DUY NHAT diem nay giai quyet tan goc: khong file
+// test nao trong bo nay tung ghi de XMLHttpRequest (chi ghi de fetch), nen luon di qua request THAT toi
+// server tinh cua chinh bai test - khong con phu thuoc file test nao co "nho" cho request tinh di qua
+// khong. cac cho dung fetch() THAT (API /api/*) trong toan bo app khong doi gi ca, chi rieng ham nay.
 function loadTabSectionHtml(tabName) {
   const sectionId = TAB_SECTION_FRAGMENT[tabName];
   if (!sectionId) return Promise.resolve();
   if (_loadedSectionHtml[tabName]) return _loadedSectionHtml[tabName];
   const v = window.__ASSET_VERSION__ ? ("?v=" + encodeURIComponent(window.__ASSET_VERSION__)) : "";
-  const p = fetch("/fragments/" + sectionId + ".html" + v)
-    .then((r) => { if (!r.ok) throw new Error("Khong tai duoc khung " + sectionId); return r.text(); })
-    .then((html) => {
+  const p = new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/fragments/' + sectionId + '.html' + v, true);
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) { reject(new Error('Khong tai duoc khung ' + sectionId + ' (status ' + xhr.status + ')')); return; }
       const el = document.getElementById(sectionId);
-      if (el) el.innerHTML = html;
+      if (el) el.innerHTML = xhr.responseText;
+      // Cac id-con NAM LONG BEN TRONG fragment (khac voi chinh sectionId o tren - div RONG da dat san
+      // trong index.html tu truoc) bi bindCspDelegation() (chay 1 lan luc script vua nap, TRUOC khi
+      // fragment nay ton tai) am tham bo qua (root=null -> return som ngay dong dau ham). Phai goi LAI
+      // dung 1 lan o day, NGAY SAU KHI fragment vua duoc bom vao DOM lan dau tien (v23.11 - phat hien
+      // qua bo test hoi quy: #paymentSection long trong #officeSection khien nut "+ Them Dot" chi con 1
+      // listener bat click thay vi 2 nhu truoc khi tach, xem VERSION.md).
+      (NESTED_CSP_ROOTS_IN_FRAGMENT[tabName] || []).forEach(bindCspDelegation);
       _settledSectionHtml.add(tabName);
-    });
+      resolve();
+    };
+    xhr.onerror = () => reject(new Error('Khong tai duoc khung ' + sectionId + ' (loi mang)'));
+    xhr.send();
+  });
   _loadedSectionHtml[tabName] = p;
   p.catch(() => { delete _loadedSectionHtml[tabName]; });
   return p;
@@ -5743,7 +5780,11 @@ function finishLogin(user) {
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
   document.getElementById('btnItSupportNavRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
-  document.getElementById('btnItSubRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
+  // ?. (v23.11): btnItSubRenewal nằm BÊN TRONG itSupportSection (khung HTML tách lười từ đợt này) — có
+  // thể CHƯA có trong DOM ở đúng thời điểm đăng nhập nếu người dùng chưa từng mở tab Hỗ Trợ IT trong
+  // phiên. Áp dụng lại đúng logic này ở setItSupportSubTab() (module-itsupport-price.js) khi DOM đã sẵn
+  // sàng — cùng mẫu đã sửa cho updateOperationStoreSubTabVisibility()/vanHanhSection.
+  document.getElementById('btnItSubRenewal')?.classList.toggle('hidden', !canManageItSupportClient(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();
@@ -6478,6 +6519,25 @@ async function switchTab(tabName) {
 }
 
 function _dispatchTabRender(tabName) {
+  // populateDropdowns() (v23.11): gọi LẠI ở đây — lần gọi ĐẦU (switchTab(), ngay TRƯỚC khi khung HTML tải
+  // lười của tab kịp fetch() xong ở lần đầu vào tab trong phiên) chạy khi các ô dropdown bên trong section
+  // đó (VD contractDept/meetingDept/carDept/uDept...) CHƯA có trong DOM — mỗi lần gán `.innerHTML` đều tự
+  // guard `if (el) {...}` nên KHÔNG lỗi, nhưng nghĩa là dropdown đó BỊ BỎ QUA, mãi mãi trống rỗng nếu không
+  // gọi lại. Gọi lại ở đây (SAU khi cả module lẫn khung HTML đã chắc chắn sẵn sàng) để áp đúng dữ liệu lên
+  // dropdown vừa xuất hiện — chi phí không đáng kể (thuần gán innerHTML từ mảng nhỏ DB.depts/DB.cats...),
+  // an toàn gọi lặp lại cho tab đã tải sẵn từ trước (chỉ ghi đè đúng giá trị cũ, không đổi gì).
+  populateDropdowns();
+  // renderCrossTabBar() (v23.11): CÙNG lý do như populateDropdowns() ở trên — lần gọi ở switchTab() (ngay
+  // TRƯỚC khung HTML tải lười kịp xong ở lần đầu vào tab) có guard `if (!container) return;` nên KHÔNG
+  // lỗi, nhưng thanh điều hướng chéo (VD "📅 Phòng họp | 🚗 Đăng ký xe | 🖇️ VPP" bên trong Hành Chính) sẽ
+  // mãi trống ở lần đầu nếu không gọi lại đúng lúc này.
+  if (['minutes', 'task', 'periodicReport'].includes(tabName)) renderCrossTabBar('dieuHanh', tabName);
+  if (['meeting', 'car', 'vpp', 'uniform', 'license'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
+  // applyUploadAcceptAttrs() (v23.11): CÙNG lý do — trước đây chỉ gọi 1 lần ở finishLogin() (đặt thuộc
+  // tính accept="..." cho ô chọn file docFile/subFile/contractFile/internalFile theo cấu hình admin), lúc
+  // đó các tab doc/submission/contract/internal có thể CHƯA từng mở trong phiên. Gọi lại ở đây để áp đúng
+  // ngay khi ô chọn file thật sự xuất hiện trong DOM lần đầu (guard `if (el)` sẵn có nên gọi lại vô hại).
+  applyUploadAcceptAttrs();
   if (tabName === 'dashboard') { renderDashboard(); }
   if (tabName === 'approvalHub') { renderApprovalHub(); }
   if (tabName === 'doc') {

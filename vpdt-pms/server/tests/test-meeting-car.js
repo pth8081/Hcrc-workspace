@@ -68,6 +68,23 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // /fragments/*.html (v23.11): khung HTML tách lười (TAB_SECTION_FRAGMENT/loadTabSectionHtml, core.js)
+  // — THIẾU route này trước đây khiến mọi request rơi vào nhánh catch-all "sendJson(res, 200, {})" cuối
+  // hàm (200 OK nhưng body "{}" — 2 ký tự), loadTabSectionHtml() coi là THÀNH CÔNG (status 200) và gán
+  // luôn "{}" vào innerHTML section, khiến section "car" trông như đã nạp xong nhưng thực chất trống rỗng
+  // (bug thật phát hiện qua chính bài test này sau khi tách carSection — không phải lỗi treo, chỉ là dữ
+  // liệu sai lặng lẽ, ban đầu tưởng nhầm là hang do các tiến trình debug cũ không dọn sạch cổng).
+  if (req.method === 'GET' && url.pathname.startsWith('/fragments/')) {
+    const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+    const filePath = path.join(PUBLIC_DIR, decodeURIComponent(url.pathname));
+    if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+    return fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); return res.end('Not found: ' + url.pathname); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(data);
+    });
+  }
+
   // POST /api/create/meetings | /api/create/carRegs — same generic module routes/create.js dispatches to.
   const createMatch = url.pathname.match(/^\/api\/create\/(meetings|carRegs)$/);
   if (req.method === 'POST' && createMatch) {
@@ -352,6 +369,8 @@ async function main() {
   // nen chu dong nap TOAN BO cum module ngay tu dau (gia lap 1 phien da tung mo het moi tab) -
   // khong doi ket qua test nao (van goi dung ham that).
   await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map(k => loadModuleGroup(k))));
+  // Ha tang: nap lười KHUNG HTML theo tab (v23.11, core.js::TAB_SECTION_FRAGMENT/loadTabSectionHtml) — mirror dòng trên, cùng lý do (xem _harness.js).
+  await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
   await page.evaluate((seed) => {
     window.__alerts = [];
     window.alert = (m) => { window.__alerts.push(String(m)); };
