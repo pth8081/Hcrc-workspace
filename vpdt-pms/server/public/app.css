@@ -477,3 +477,44 @@ input[data-sdd-list] {
 .pr-pdf-page-card .pr-pdf-src {
   font-size: 9px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* Module "📘 Nghiệp Vụ" (module-nghiepvu.js, từ v23.1) — BUG THẬT phát hiện qua log console thật trên
+   server production (v23.6, kèm ảnh chụp màn hình): các class .nv-* này TRƯỚC ĐÂY được nạp bằng
+   document.createElement('style') + document.head.appendChild() ngay trong module-nghiepvu.js (kiểu
+   "<style> nội tuyến qua JS") — đúng CHÍNH XÁC kiểu đã bị cấm bởi styleSrc của CSP (lib/securityHeaders.js,
+   không có 'unsafe-inline'), nên trên server có bật CSP thật, style KHÔNG BAO GIỜ áp dụng được: menu bên
+   trái Nghiệp Vụ hiện thành text phẳng không style, không phân biệt được đâu là nút bấm được. Sandbox test
+   (Playwright phục vụ qua http.createServer thuần, KHÔNG áp CSP) không bao giờ bắt được lỗi này dù mọi bài
+   test đều PASS — đây là ĐÚNG lý do các bản vá trước (v23.5/v23.6, chỉ sửa nội dung/SVG) không giải quyết
+   được triệt để. Sửa: dời nguyên các class này sang app.css (nạp qua <link>, ngoài phạm vi styleSrc chặn
+   inline) — đúng khuôn ~386 dòng CSS tuỳ biến toàn app đã dời từ lâu (xem chú thích đầu lib/securityHeaders.js). */
+#nghiepVuRoot .nv-app { display:flex; min-height:520px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+#nghiepVuRoot .nv-sidebar { width:270px; flex-shrink:0; background:#f9fafb; border-right:1px solid #e5e7eb; padding:12px 0; overflow-y:auto; max-height:80vh; }
+#nghiepVuRoot .nv-group { padding:10px 16px 4px; font-size:11px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.04em; }
+#nghiepVuRoot .nv-item { display:block; width:100%; text-align:left; padding:8px 16px 8px 26px; font-size:13px; color:#374151; cursor:pointer; border-left:3px solid transparent; background:none; border-top:0; border-right:0; border-bottom:0; }
+#nghiepVuRoot .nv-item.active { background:#f5f3ff; color:#4c1d95; font-weight:700; border-left-color:#7c3aed; }
+#nghiepVuRoot .nv-item:hover:not(.active) { background:#f3f4f6; }
+#nghiepVuRoot .nv-main { flex:1; padding:22px 28px; min-width:0; overflow-x:auto; }
+#nghiepVuRoot .nv-pill-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+#nghiepVuRoot .nv-pill { padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700; background:#f3f4f6; color:#374151; cursor:pointer; border:1px solid #e5e7eb; }
+#nghiepVuRoot .nv-pill.active { background:#7c3aed; color:#fff; border-color:#7c3aed; }
+#nghiepVuRoot .nv-footer-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:18px; }
+@media (max-width: 720px) {
+  #nghiepVuRoot .nv-footer-grid { grid-template-columns:1fr; }
+  #nghiepVuRoot .nv-app { flex-direction:column; }
+  #nghiepVuRoot .nv-sidebar { width:100%; max-height:none; }
+}
+
+/* SVG sơ đồ quy trình/quan hệ (renderNVFlow()/renderNVDaotaoOverview(), module-nghiepvu.js) — CÙNG BUG
+   với khối .nv-* ở trên (đã dời khỏi module-nghiepvu.js sang đây): trước đây 2 hàm này TỰ GẮN
+   style="width:100%;height:auto;max-width:920px;display:block;margin:0 auto;" trực tiếp lên thẻ <svg>
+   khi build chuỗi HTML — bị CSP styleSrc (fallback cho styleSrc-attr, không khai riêng) chặn ÂM THẦM
+   giống hệt <style> nội tuyến, khiến sơ đồ có thể hiện sai kích thước/căn giữa trên server có bật CSP
+   thật. Đổi sang dùng class này thay cho style="..." trực tiếp trên thẻ. */
+.nv-flow-svg { width:100%; height:auto; max-width:920px; display:block; margin:0 auto; }
+
+/* Biểu đồ xu hướng Đăng Ký Xe (renderCarReportTrendSVG(), module-dangkyxe.js) — CÙNG lỗi style="..." nội
+   tuyến trên thẻ <svg> như .nv-flow-svg ở trên (max-width cố định thay cho giá trị ĐỘNG theo totalW cũ —
+   không đáng kể vì <svg> đã tự co giãn đúng tỷ lệ qua viewBox, width:100% mới là yếu tố quyết định độ
+   rộng thực tế hiển thị). */
+.car-report-trend-svg { width:100%; height:auto; max-width:1000px; display:block; }

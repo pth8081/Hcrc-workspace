@@ -172,7 +172,7 @@ function renderNVFlow(spec) {
     svg += nvCurve(boxX, boxY + nodeH / 2, lx, mainY + nodeH, { dip: 30, label: d.loopBackLabel || 'Làm lại' });
   }
 
-  return `<svg viewBox="0 0 ${totalW} ${height}" role="img" aria-label="${escapeHtml(spec.ariaLabel || 'Sơ đồ quy trình')}" style="width:100%;height:auto;max-width:920px;display:block;margin:0 auto;">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${totalW} ${height}" role="img" aria-label="${escapeHtml(spec.ariaLabel || 'Sơ đồ quy trình')}" class="nv-flow-svg">${svg}</svg>`;
 }
 
 // Sơ đồ QUAN HỆ (hub) dùng riêng cho trang "Tổng Quan" của Đào Tạo — khác renderNVFlow() (chuỗi tuần
@@ -207,7 +207,7 @@ function renderNVDaotaoOverview() {
 
   Object.values(N).forEach(n => { svg += nvRoundedNode(n.x, n.y, n.w, n.h, { label: n.label, sub: n.sub, kind: n.kind }); });
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ quan hệ tổng quan Đào Tạo" style="width:100%;height:auto;max-width:920px;display:block;margin:0 auto;">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ quan hệ tổng quan Đào Tạo" class="nv-flow-svg">${svg}</svg>`;
 }
 
 function nvFooterCol(title, items) {
@@ -667,27 +667,6 @@ function setNVDaotaoArea(areaKey) {
   renderNghiepVuContent();
 }
 
-function nvInjectStylesOnce() {
-  if (document.getElementById('nv-inline-styles')) return;
-  const style = document.createElement('style');
-  style.id = 'nv-inline-styles';
-  style.textContent = `
-    #nghiepVuRoot .nv-app { display:flex; min-height:520px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
-    #nghiepVuRoot .nv-sidebar { width:270px; flex-shrink:0; background:#f9fafb; border-right:1px solid #e5e7eb; padding:12px 0; overflow-y:auto; max-height:80vh; }
-    #nghiepVuRoot .nv-group { padding:10px 16px 4px; font-size:11px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.04em; }
-    #nghiepVuRoot .nv-item { display:block; width:100%; text-align:left; padding:8px 16px 8px 26px; font-size:13px; color:#374151; cursor:pointer; border-left:3px solid transparent; background:none; border-top:0; border-right:0; border-bottom:0; }
-    #nghiepVuRoot .nv-item.active { background:#f5f3ff; color:#4c1d95; font-weight:700; border-left-color:#7c3aed; }
-    #nghiepVuRoot .nv-item:hover:not(.active) { background:#f3f4f6; }
-    #nghiepVuRoot .nv-main { flex:1; padding:22px 28px; min-width:0; overflow-x:auto; }
-    #nghiepVuRoot .nv-pill-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
-    #nghiepVuRoot .nv-pill { padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700; background:#f3f4f6; color:#374151; cursor:pointer; border:1px solid #e5e7eb; }
-    #nghiepVuRoot .nv-pill.active { background:#7c3aed; color:#fff; border-color:#7c3aed; }
-    #nghiepVuRoot .nv-footer-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:18px; }
-    @media (max-width: 720px) { #nghiepVuRoot .nv-footer-grid { grid-template-columns:1fr; } #nghiepVuRoot .nv-app { flex-direction:column; } #nghiepVuRoot .nv-sidebar { width:100%; max-height:none; } }
-  `;
-  document.head.appendChild(style);
-}
-
 function nvFindItem(key) {
   for (const g of NGHIEP_VU_NAV) {
     const it = g.items.find(i => i.key === key);
@@ -697,7 +676,6 @@ function nvFindItem(key) {
 }
 
 function renderNghiepVuModule() {
-  nvInjectStylesOnce();
   const root = document.getElementById('nghiepVuRoot');
   if (!root) return;
 
