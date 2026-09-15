@@ -1,8 +1,53 @@
 # Phiên bản hiện tại
 
-**23.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.8 (2026-09-15): Vá lỗi cache "đơ" khi ra bản mới (CSP chặn script gắn version) + rà soát toàn bộ `unsafe-inline`
+
+Người dùng hỏi tiếp sau v23.7: "unsafe inline cần rà soát lại để loại bỏ các lỗi không? và xử lý để mỗi
+lần có bản mới cache tối thiểu nhất được không?". Đợt này xử lý cả 2 ý.
+
+**Ý 2 — lỗi cache thật, khá nghiêm trọng, tìm ra khi rà soát tiếp cùng lớp lỗi CSP ở v23.7**: cơ chế
+"cache-busting" (gắn `?v=<version>` vào cuối URL file JS/CSS để trình duyệt biết bản mới, phải tải lại)
+hoạt động đúng cho `index.html` (gắn cứng phía server, `server.js::renderIndexHtml()`), nhưng với các
+module JS "nạp lười" (chỉ tải khi người dùng mở đúng tab đó — chiếm phần lớn code app, xem
+`_loadModuleScriptTag()` trong `core.js`) thì cơ chế lại dựa vào 1 biến `window.__ASSET_VERSION__` được
+gán qua **1 thẻ `<script>` nội tuyến chèn thẳng vào HTML** — đúng kiểu bị `scriptSrc` (không có
+`'unsafe-inline'`, xem `lib/securityHeaders.js`) ÂM THẦM CHẶN trên mọi server bật CSP thật, y hệt lớp lỗi
+vừa vá ở Nghiệp Vụ (v23.7). Hậu quả: `window.__ASSET_VERSION__` luôn `undefined` → các module nạp lười
+không hề có `?v=...` → trong khi `/js/*` lại được phục vụ với `Cache-Control: max-age=1 năm, immutable`
+(`JS_STATIC_OPTS`, `server.js`) — trình duyệt có thể giữ nguyên bản JS cache **từ cả năm trước** cho phần
+lớn app, không tự kiểm tra lại dù server đã deploy bản mới và người dùng đã tải lại trang nhiều lần. Đây
+chính là nguyên nhân kỹ thuật khớp với phản ánh "cache ảnh hưởng người dùng khi ra bản mới".
+
+Sửa: đổi cách gắn version từ `<script>` nội tuyến sang `<meta name="app-version" content="...">` (dữ liệu
+HTML thuần, trình duyệt chỉ đọc không thực thi, hoàn toàn không bị `scriptSrc` chi phối) — `core.js` đọc
+lại thẻ meta này ngay dòng đầu file để gán `window.__ASSET_VERSION__`. Từ nay mọi module nạp lười đều nhận
+đúng `?v=<version>`, trình duyệt sẽ tải lại đúng bản mới sau mỗi lần deploy.
+
+**Ý 1 — rà soát toàn bộ `unsafe-inline`**: quét lại toàn bộ `public/js/*.js` + `public/index.html` (grep
+`style="`, `on<event>=`, `<script>` nội tuyến chèn qua chuỗi JS, `eval`/`new Function`) — xác nhận KHÔNG
+còn vi phạm nào khác ngoài 3 chỗ đã vá ở v23.7. Xác minh thêm bằng cách dựng app Express thật có áp
+`lib/securityHeaders.js` (CSP thật, không phải static server không CSP như các test cũ) rồi tự động bấm
+qua **38 điểm điều hướng** — toàn bộ tab/section chính của app — ghi nhận **0 vi phạm CSP, 0 lỗi JS**
+trong suốt quá trình.
+
+**Cải thiện quy trình test**: 2 bài test mới, cùng khuôn mẫu "dựng CSP thật" đã mở đầu ở v23.7 —
+`test-asset-version-csp.js` (xác nhận `window.__ASSET_VERSION__` gắn đúng qua meta tag, module nạp lười
+nhận đúng `?v=`, 5/5), `test-csp-full-audit.js` (crawl 38 điểm điều hướng dưới CSP thật, 3/3) — trở thành
+lá chắn thường trực chống lại lớp lỗi "CSP âm thầm chặn inline" tái diễn ở module mới sau này.
+
+Test: `test-asset-version-csp.js` (5/5), `test-csp-full-audit.js` (3/3), cùng regression toàn bộ liên
+quan tới thay đổi ở core.js/server.js (file lõi mọi trang đều tải) — `test-lazy-load-all-tabs.js` (42/42),
+`test-nghiepvu.js` (71/71), `test-nghiepvu-csp.js` (6/6), `test-checklist.js` (41/41),
+`test-budget-lines.js` (49/49), `test-uniform.js` (34/34), `test-vpp.js` (29/29) — đều PASS.
+
+**Deploy-impact**: chỉ đổi 2 file code (`server.js`, `public/js/core.js`) — không đổi `schema.sql`, không
+thêm biến môi trường, không thêm npm dependencies, không cần thao tác thủ công nào khác. Copy code +
+`pm2 restart` là đủ. Sau khi deploy bản này, các lần deploy TIẾP THEO sẽ tự cache-bust đúng cho mọi module
+— người dùng không còn cần xoá cache tay để thấy bản mới nữa.
 
 ## v23.7 (2026-09-15): Nghiệp Vụ — vá ĐÚNG nguyên nhân gốc (CSP chặn style nội tuyến), 2 bản trước (v23.5/v23.6) chưa giải quyết triệt để
 
