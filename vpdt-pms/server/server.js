@@ -326,12 +326,23 @@ function renderIndexHtml() {
     const raw = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
     let versioned = raw.replace(SCRIPT_SRC_RE, (full, pre, name, post) => `${pre}/js/${name}.js?v=${encodeURIComponent(APP_VERSION)}${post}`);
     versioned = versioned.replace(CSS_HREF_RE, (full, pre, name, post) => `${pre}/${name}.css?v=${encodeURIComponent(APP_VERSION)}${post}`);
-    // Gắn version ra window TRƯỚC thẻ <script src="/js/core.js..."> đầu tiên — loadModuleGroup() (core.js)
-    // đọc lại đúng giá trị này để gắn "?v=..." cho các file lazy-load nạp sau, không hardcode version
-    // client-side (khớp đúng bản server đang chạy tại thời điểm request, kể cả khi deploy version mới
-    // mà chưa reload lại toàn trang).
-    const versionScript = `<script>window.__ASSET_VERSION__=${JSON.stringify(APP_VERSION)};</script>\n`;
-    versioned = versioned.replace(/<script\b[^>]*\bsrc="\/js\/core\.js/, (m) => versionScript + m);
+    // Gắn version ra trang TRƯỚC thẻ <script src="/js/core.js..."> đầu tiên — core.js đọc lại đúng giá
+    // trị này để gắn "?v=..." cho các file lazy-load nạp sau, không hardcode version client-side (khớp
+    // đúng bản server đang chạy tại thời điểm request, kể cả khi deploy version mới mà chưa reload lại
+    // toàn trang).
+    // BUG THẬT đã vá (v23.7, phát hiện qua ảnh chụp Console F12 người dùng gửi trên server có bật CSP
+    // thật): TRƯỚC ĐÂY gắn qua <script>window.__ASSET_VERSION__=...</script> — 1 script NỘI TUYẾN, bị
+    // scriptSrc của CSP (lib/securityHeaders.js, không có 'unsafe-inline') CHẶN ÂM THẦM, khiến
+    // window.__ASSET_VERSION__ luôn undefined trên MỌI server có bật CSP thật. Hậu quả nghiêm trọng: TẤT
+    // CẢ các module nạp lười (loadModuleGroup(), gần như toàn bộ app trừ core*.js) mất hẳn cache-busting
+    // "?v=..." — trong khi /js/* lại phục vụ với Cache-Control max-age=1 năm + immutable (JS_STATIC_OPTS
+    // ở trên) — trình duyệt có thể GIỮ NGUYÊN bản JS cache TỪ CẢ NĂM TRƯỚC cho mọi module, không bao giờ
+    // tự kiểm tra lại, kể cả sau khi deploy bản mới + người dùng tải lại trang nhiều lần. Đổi sang
+    // <meta name="app-version" content="..."> — chỉ là DỮ LIỆU được trình duyệt PHÂN TÍCH cú pháp HTML
+    // (không phải script được THỰC THI) nên hoàn toàn không bị scriptSrc chi phối, core.js đọc lại qua
+    // document.querySelector() (xem đầu public/js/core.js).
+    const versionMeta = `<meta name="app-version" content="${String(APP_VERSION).replace(/"/g, '&quot;')}">\n`;
+    versioned = versioned.replace(/<script\b[^>]*\bsrc="\/js\/core\.js/, (m) => versionMeta + m);
     _indexHtmlCache = { mtimeMs: stat.mtimeMs, html: versioned };
   }
   return _indexHtmlCache.html;
