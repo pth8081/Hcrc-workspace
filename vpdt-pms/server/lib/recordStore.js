@@ -69,7 +69,7 @@ const { HttpError } = require('./httpErrors');
 // viên/kỳ) — cùng khuôn reportPeriods/reportEntries. notifications: thông báo trong app GENERIC (xem
 // lib/notifications.js) — hệ thống tự sinh liên tục (không qua createValidation.js), cùng khuôn
 // attendanceRecords (tăng trưởng theo thời gian, cần khoá optimistic theo bản ghi khi đánh dấu đã đọc).
-// budgetLines (v22.10, "Ngân Sách 2.0" — xem chú thích đầy đủ ở sql/schema.sql ngay trên CREATE TABLE
+// budgetLines (v23.0, "Ngân Sách 2.0" — xem chú thích đầy đủ ở sql/schema.sql ngay trên CREATE TABLE
 // dbo.BudgetLines): thay thế hoàn toàn màn nhập liệu của budgetTemplates/budgetPeriods/budgetEntries ở
 // trên (3 collection đó GIỮ NGUYÊN, không xoá, chỉ không còn ai ghi vào nữa) — 1 bảng duy nhất, phân
 // biệt PROPOSED/APPROVED/USED bằng cột Stage, không còn khái niệm "Kỳ" (BudgetYear/BudgetMonth nằm
@@ -365,7 +365,7 @@ const DEDICATED_TABLES = {
       Status:     { sqlType: () => sql.NVarChar(20),  extract: r => r.status || null }
     }
   },
-  // budgetLines (v22.10, "Ngân Sách 2.0") — Dept ở đây là "Khối Phòng Ban" (đổi tên hiển thị, giá trị
+  // budgetLines (v23.0, "Ngân Sách 2.0") — Dept ở đây là "Khối Phòng Ban" (đổi tên hiển thị, giá trị
   // vẫn lấy từ Danh Mục Phòng như mọi collection khác dùng Dept). "Vị trí" (HO/tên Siêu Thị) + toàn bộ
   // field nghiệp vụ khác (content/description/quantity/unitPrice/vatPercent/totalAmount/budgetType/
   // itemCategory/usageStatus/reallocationReason/note/purchaseMonth...) chỉ nằm trong Payload — không

@@ -1956,7 +1956,7 @@ router.post('/budgetEntries/:id/manager-edit', async (req, res) => {
   }
 });
 
-// ===================== NGÂN SÁCH 2.0 (budgetLines — v22.10) =====
+// ===================== NGÂN SÁCH 2.0 (budgetLines — v23.0) =====
 // POST /api/records/budgetLines/:id/update — sửa Đề Xuất/Phê Duyệt khi còn SUBMITTED.
 router.post('/budgetLines/:id/update', async (req, res) => {
   const itemId = Number(req.params.id);

@@ -3,7 +3,7 @@
 // tab mới: PAYMENT/BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE/REPORT_ENTRY/REPORT_PERIOD/UNIFORM_PERIOD/
 // UNIFORM_ISSUE/UNIFORM_ADJUST_STOCK/UNIFORM_ADJUST_EMPLOYEE/UNIFORM_TRANSFER, xem
 // CORE_FIELD_MANIFEST + FORM_TABS trong core.js). Cùng khuôn tests/test-forms-batch1.js.
-// (BUDGET_PERIOD/BUDGET_TEMPLATE đã đổi thành BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE — v22.10, module
+// (BUDGET_PERIOD/BUDGET_TEMPLATE đã đổi thành BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE — v23.0, module
 // Ngân Sách thiết kế lại không còn Kỳ/Mẫu, xem module-ngansach.js.)
 //
 // Không có backend SQL Server thật trong môi trường này — serve public/index.html tĩnh, boot Chromium

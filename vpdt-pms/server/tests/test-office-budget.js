@@ -1,7 +1,7 @@
 // tests/test-office-budget.js — Kiểm thử hồi quy module Tổng Hợp (Mua Bán/Sửa Chữa/Đầu Tư): tạo/duyệt/
 // từ chối đề xuất văn phòng, "Bổ Sung" (REQUEST_CHANGES), tải/thay Tài Liệu Ký trước-sau thanh toán.
 // (Tên file giữ nguyên "-budget" để không đổi các chỗ đang tham chiếu tới file này — xem tests/README.md.
-// Các kịch bản Ngân Sách CŨ (Kỳ/Mẫu/budgetEntries) đã CHUYỂN sang tests/test-budget-lines.js, v22.10 —
+// Các kịch bản Ngân Sách CŨ (Kỳ/Mẫu/budgetEntries) đã CHUYỂN sang tests/test-budget-lines.js, v23.0 —
 // module Ngân Sách thiết kế lại hoàn toàn theo tài liệu "Ngân sách 2.0", không còn Kỳ/Mẫu nữa.)
 'use strict';
 

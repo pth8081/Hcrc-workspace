@@ -125,7 +125,7 @@ function getMyPendingApprovals(user) {
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openItPriceModal', args: [r.id], primary: true }]
   });
 
-  // Ngân Sách (budgetEntries) — mục "📊 Ngân Sách" ở Approval Hub đã BỎ (v22.10, thiết kế lại module Ngân
+  // Ngân Sách (budgetEntries) — mục "📊 Ngân Sách" ở Approval Hub đã BỎ (v23.0, thiết kế lại module Ngân
   // Sách theo tài liệu "Ngân sách 2.0" — không còn workflowEngine.js/dept-workflow nào cho Ngân Sách nữa,
   // chỉ còn 1 cấp gác permission phẳng budgetCreate/budgetManage). budgetEntries GIỮ NGUYÊN ở server
   // (dữ liệu lịch sử, không xoá) nhưng không còn màn xử lý nào ở đây/UI đọc lại nữa — bản PENDING cũ (nếu

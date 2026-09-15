@@ -449,7 +449,7 @@ const REPORT_MODULE_CONFIGS = {
     statusOf: r => r.status,
     statusBuckets: [['PENDING', 'Đang chờ duyệt', 'bg-yellow-500'], ['NEED_INFO', 'Chờ bổ sung', 'bg-orange-500'], ['APPROVED', 'Đã duyệt', 'bg-cyan-500'], ['PAID', 'Đã thanh toán', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
-  // v22.10 — module Ngân Sách thiết kế lại (xem module-ngansach.js), báo cáo đổi sang đọc budgetLines
+  // v23.0 — module Ngân Sách thiết kế lại (xem module-ngansach.js), báo cáo đổi sang đọc budgetLines
   // (dòng Đề Xuất/Phê Duyệt/Sử Dụng) thay vì budgetPeriods (Kỳ ngân sách đã bỏ, không còn dữ liệu mới).
   budget: {
     title: '📊 Báo Cáo Ngân Sách',

@@ -1,4 +1,4 @@
-// tests/test-budget-lines.js — Kiểm thử hồi quy module Ngân Sách (v22.10, thiết kế lại HOÀN TOÀN theo
+// tests/test-budget-lines.js — Kiểm thử hồi quy module Ngân Sách (v23.0, thiết kế lại HOÀN TOÀN theo
 // tài liệu "Ngân sách 2.0" người dùng cung cấp — xem sql/schema.sql/lib/recordActions.js/module-ngansach.js).
 // Thay thế các kịch bản Ngân Sách CŨ đã bỏ khỏi tests/test-office-budget.js (Kỳ/Mẫu/budgetEntries không
 // còn tồn tại). Bao phủ: 3 giai đoạn Đề Xuất/Phê Duyệt/Sử Dụng độc lập, khoá cứng Nội dung/Mô tả/Danh

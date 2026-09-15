@@ -1252,7 +1252,7 @@ async function main() {
       }
     );
 
-    // ================= 28) Ngân Sách > Đề Xuất (blProposeFormWrap — v22.10, module Ngân Sách thiết kế
+    // ================= 28) Ngân Sách > Đề Xuất (blProposeFormWrap — v23.0, module Ngân Sách thiết kế
     // lại theo tài liệu "Ngân sách 2.0": 1 dòng/1 form đơn giản, KHÔNG còn bảng nhiều dòng theo Kỳ/Mẫu
     // như thiết kế cũ) =================
     await check(

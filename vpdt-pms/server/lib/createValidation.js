@@ -2511,7 +2511,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.history = [];
     }
   },
-  // budgetLines (v22.10, "Ngân Sách 2.0" — thay thế budgetEntries ở trên cho MỌI màn nhập liệu mới, xem
+  // budgetLines (v23.0, "Ngân Sách 2.0" — thay thế budgetEntries ở trên cho MỌI màn nhập liệu mới, xem
   // chú thích đầy đủ ở sql/schema.sql/lib/recordStore.js). 1 collection DUY NHẤT dùng CHUNG cho cả 2
   // giai đoạn tạo tay được (payload.stage): 'PROPOSED' (Đề Xuất, ai có budgetCreate/budgetManage/admin
   // đều tạo được) và 'APPROVED' (Phê Duyệt nhập trực tiếp, CHỈ budgetManage/admin) — giai đoạn 'USED'

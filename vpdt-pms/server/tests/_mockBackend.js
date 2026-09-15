@@ -250,7 +250,7 @@ function createMockApi(state) {
       throw new HttpError(400, `Hành động không hợp lệ: ${action}`);
     }
 
-    // budgetLines (Ngân Sách 2.0, v22.10) — khớp ĐÚNG orchestration ở routes/records.js thật: mỗi action
+    // budgetLines (Ngân Sách 2.0, v23.0) — khớp ĐÚNG orchestration ở routes/records.js thật: mỗi action
     // đọc collection trực tiếp từ state (không qua khoá SQL nào, mock không cần mô phỏng tương tranh),
     // gọi recordActions.js thuần rồi tự cập nhật lại state.collections.budgetLines.
     if (module1 === 'budgetLines') {

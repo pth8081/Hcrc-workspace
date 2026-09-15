@@ -555,7 +555,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'paymentDept', label: 'Phòng Ban', required: true },
     { id: 'paymentTitle', label: 'Tiêu Đề / Nội Dung Thanh Toán', required: true }
   ],
-  // BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE (v22.10) — thay BUDGET_PERIOD/BUDGET_TEMPLATE đã bỏ (module
+  // BUDGET_LINE_PROPOSE/BUDGET_LINE_APPROVE (v23.0) — thay BUDGET_PERIOD/BUDGET_TEMPLATE đã bỏ (module
   // Ngân Sách thiết kế lại theo tài liệu "Ngân sách 2.0", không còn Kỳ/Mẫu — 2 form nhập tay THẬT, cùng
   // bộ field lõi nhưng khác id DOM (hậu tố Propose/Approve), xem module-ngansach.js blId()/blEl().
   // Vị trí/Khối Phòng Ban/Danh Mục/Loại NS là dropdown lấy từ danh mục/hằng số cố định — không đưa vào
@@ -1058,7 +1058,7 @@ const FORM_TABS = [
   // Đợt 2 (mở rộng Biểu Mẫu ra thêm Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) — mỗi tab key riêng
   // TRÙNG coreKey (như Đợt 1), trừ Đồng Phục có 5 form thật riêng biệt nên 5 coreKey/tab riêng.
   { key: 'PAYMENT', coreKey: 'PAYMENT', group: 'PAYMENT', label: 'Thanh Toán', icon: '💰', short: 'Thanh Toán' },
-  // BUDGET_PERIOD/BUDGET_TEMPLATE (Tạo Kỳ/Mẫu Ngân Sách) ĐÃ BỎ (v22.10, xem module-ngansach.js) — thay
+  // BUDGET_PERIOD/BUDGET_TEMPLATE (Tạo Kỳ/Mẫu Ngân Sách) ĐÃ BỎ (v23.0, xem module-ngansach.js) — thay
   // bằng 2 form thật mới "Đề Xuất"/"Phê Duyệt" (kiến trúc mới KHÔNG còn bảng dòng động theo mẫu nữa).
   { key: 'BUDGET_LINE_PROPOSE', coreKey: 'BUDGET_LINE_PROPOSE', group: 'BUDGET', label: 'Ngân Sách - Đề Xuất', icon: '📝', short: 'NS - Đề Xuất' },
   { key: 'BUDGET_LINE_APPROVE', coreKey: 'BUDGET_LINE_APPROVE', group: 'BUDGET', label: 'Ngân Sách - Phê Duyệt', icon: '✅', short: 'NS - Phê Duyệt' },

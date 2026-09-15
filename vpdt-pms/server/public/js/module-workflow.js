@@ -49,7 +49,7 @@ const WF_MODULE_CONFIG = {
     ],
     label: 'Hỗ Trợ IT - Duyệt giá', title: '🏷️ Cấu Hình Quy Trình Phê Duyệt Giá Bán (Hỗ Trợ IT) Theo Phòng Ban × Loại Giá'
   },
-  // "Ngân Sách" (BUDGET) — ĐÃ BỎ (v22.10, thiết kế lại module Ngân Sách theo tài liệu "Ngân sách 2.0",
+  // "Ngân Sách" (BUDGET) — ĐÃ BỎ (v23.0, thiết kế lại module Ngân Sách theo tài liệu "Ngân sách 2.0",
   // xem module-ngansach.js) — budgetLines KHÔNG dùng workflowEngine.js/dept-workflow nữa, chỉ còn 1 cấp
   // gác permission phẳng (budgetCreate/budgetManage), nên cấu hình budgetDeptWorkflows không còn nơi nào
   // đọc để áp dụng thật (nút "📊 QT Ngân Sách" vốn cũng chưa từng có trên UI tab list, xem index.html).

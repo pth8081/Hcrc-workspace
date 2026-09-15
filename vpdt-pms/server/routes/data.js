@@ -825,7 +825,7 @@ async function loadBudgetEntriesScoped(user, data) {
   return [...byId.values()];
 }
 
-// budgetLines (Ngân Sách 2.0, v22.10) — canViewBudgetLine() (lib/recordViewScope.js) đơn giản hơn hẳn
+// budgetLines (Ngân Sách 2.0, v23.0) — canViewBudgetLine() (lib/recordViewScope.js) đơn giản hơn hẳn
 // loadBudgetEntriesScoped() ở trên (KHÔNG có approver theo phòng ban — chỉ 1 cấp gác permission phẳng,
 // xem lib/recordActions.js): admin/budgetManage/budgetAggregate tải company-wide, còn lại tải đúng 1
 // lượt theo Dept (= "Khối Phòng Ban") của chính mình.

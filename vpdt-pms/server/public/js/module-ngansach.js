@@ -1,4 +1,4 @@
-// NGÂN SÁCH 2.0 (v22.10) — thiết kế lại HOÀN TOÀN theo tài liệu "Ngân sách 2.0" người dùng cung cấp, xem
+// NGÂN SÁCH 2.0 (v23.0) — thiết kế lại HOÀN TOÀN theo tài liệu "Ngân sách 2.0" người dùng cung cấp, xem
 // sql/schema.sql (bảng dbo.BudgetLines) + lib/recordActions.js (business logic) cho chi tiết kiến trúc
 // server. 4 tab: 📝 Đề Xuất (stage='PROPOSED', duyệt/từ chối TẠI CHỖ) / ✅ Phê Duyệt (stage='APPROVED',
 // nhập trực tiếp, duyệt xong TỰ SINH 1 dòng Sử Dụng) / 💳 Sử Dụng (stage='USED', dòng cha hệ thống tự
@@ -7,7 +7,7 @@
 //
 // KHÔNG CÒN "Kỳ ngân sách"/"Mẫu ngân sách" — mỗi dòng tự mang Năm/Tháng ngân sách (budgetYear/budgetMonth),
 // cột cố định (không tuỳ biến qua mẫu nữa). budgetEntries/budgetPeriods/budgetTemplates GIỮ NGUYÊN ở
-// server (không xoá, không còn màn nào ở đây đọc/ghi vào) — chỉ là dữ liệu lịch sử, xem VERSION.md v22.10.
+// server (không xoá, không còn màn nào ở đây đọc/ghi vào) — chỉ là dữ liệu lịch sử, xem VERSION.md v23.0.
 //
 // "Vị trí" (thay "Công ty" trong tài liệu gốc) = 'HO' (sentinel cố định, Trụ sở chính) HOẶC đúng 1 tên
 // trong Danh Mục Siêu Thị (DB.stores). "Khối Phòng Ban" (thay "Đơn vị"/"Khối-Ban-Phòng") = 1 tên trong

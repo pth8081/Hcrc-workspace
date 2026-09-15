@@ -76,7 +76,7 @@ const REPORT_QUERY_CONFIGS = {
   // filter*ForUser() riêng nào ở lib/recordViewScope.js (routes/data.js cũng trả nguyên, không lọc) —
   // filterFn: null nghĩa là chỉ thu hẹp theo dept/ngày ở SQL, không áp thêm bước lọc quyền nào khác.
   budgetPeriods: { filterFn: null, needsAppData: false },
-  // budgetLines (Ngân Sách 2.0, v22.10) — canViewBudgetLine() không cần appData (chỉ 1 cấp gác permission
+  // budgetLines (Ngân Sách 2.0, v23.0) — canViewBudgetLine() không cần appData (chỉ 1 cấp gác permission
   // phẳng, không có approver theo phòng ban), xem lib/recordViewScope.js.
   budgetLines: { filterFn: filterBudgetLinesForUser, needsAppData: false },
   vppRegistrations: { filterFn: filterVppRegistrationsForUser, needsAppData: true },

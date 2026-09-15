@@ -1,10 +1,10 @@
 # Phiên bản hiện tại
 
-**22.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## v22.10 (2026-09-15): Ngân Sách 2.0 — thiết kế lại HOÀN TOÀN module Ngân Sách
+## v23.0 (2026-09-15): Ngân Sách 2.0 — thiết kế lại HOÀN TOÀN module Ngân Sách
 
 Người dùng gửi tài liệu phân tích "Module Quản lý Ngân sách (Ngân sách 2.0)"
 mô tả 1 hệ thống khác (bảng `budget2_lines` đơn, 3 giai đoạn độc lập PROPOSED/

@@ -6027,7 +6027,7 @@ function updateBudgetTemplate(user, item, payload) {
   return item;
 }
 
-// ===================== NGÂN SÁCH 2.0 (budgetLines — v22.10, thay budgetEntries/budgetPeriods/
+// ===================== NGÂN SÁCH 2.0 (budgetLines — v23.0, thay budgetEntries/budgetPeriods/
 // budgetTemplates cho MỌI màn nhập liệu mới, xem chú thích đầy đủ ở sql/schema.sql) =====
 // 3 giai đoạn ĐỘC LẬP (item.stage): 'PROPOSED' (Đề Xuất — duyệt/từ chối TẠI CHỖ, không sinh gì thêm),
 // 'APPROVED' (Phê Duyệt — duyệt xong tự sinh đúng 1 dòng 'USED' cha, xem buildBudgetLineUsedRow()),

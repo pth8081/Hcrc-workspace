@@ -2,7 +2,7 @@
 //
 // Regression cho tính năng "🔍 Xem Quy Trình" (preview quy trình phê duyệt trước khi nộp hồ sơ) vừa
 // thêm cho 9 module trước đây KHÔNG có (Tài Liệu, Đăng Ký Xe, Mua Sắm/Sửa Chữa VP, VPP, Hợp Đồng - Quản
-// Lý HĐ, Thanh Toán, Phê Duyệt Giá [Bán Lẻ + Bán Buôn], Ngân Sách [ĐÃ BỎ khỏi bộ test — v22.10, module
+// Lý HĐ, Thanh Toán, Phê Duyệt Giá [Bán Lẻ + Bán Buôn], Ngân Sách [ĐÃ BỎ khỏi bộ test — v23.0, module
 // Ngân Sách thiết kế lại không còn dept-workflow], Vận Hành - Đặt Hàng) — cùng cơ chế
 // `#viewDocModal` mà Văn Bản Trình/Hợp Đồng Phê Duyệt đã có sẵn từ trước (buildGenericDeptWorkflowPreviewHTML()/
 // openGenericWorkflowPreviewModal(), core.js).
@@ -231,7 +231,7 @@ async function main() {
   record('Thanh Toán: modal hiện đúng người duyệt "pay1"', !modal.hidden && modal.content.includes('Người Duyệt Thanh Toán'), JSON.stringify(modal));
   await closeModalAndClearAlerts();
 
-  // ===== 7) Ngân Sách — ĐÃ BỎ (v22.10) =====
+  // ===== 7) Ngân Sách — ĐÃ BỎ (v23.0) =====
   // Module Ngân Sách thiết kế lại theo tài liệu "Ngân sách 2.0" (xem module-ngansach.js): budgetLines
   // không còn dùng workflowEngine.js/dept-workflow nữa (chỉ 1 cấp gác permission phẳng budgetCreate/
   // budgetManage), nên không còn nút "Xem Trước Quy Trình" nào cho Ngân Sách — WF_MODULE_CONFIG.BUDGET

@@ -1065,7 +1065,7 @@ BEGIN
 END
 GO
 
-/* BudgetLines (module "Ngân Sách" thiết kế lại — v22.10, theo tài liệu "Ngân sách 2.0" người dùng cung
+/* BudgetLines (module "Ngân Sách" thiết kế lại — v23.0, theo tài liệu "Ngân sách 2.0" người dùng cung
    cấp, điều chỉnh: "Công ty" -> "Vị trí" (HO hoặc tên 1 Siêu Thị, lấy từ Danh Mục Siêu Thị), "Đơn vị"/
    "Khối-Ban-Phòng" -> "Khối Phòng Ban" (lấy từ Danh Mục Phòng), KHÔNG còn "Kỳ ngân sách" — mỗi dòng tự
    mang BudgetYear/BudgetMonth. 3 giai đoạn ĐỘC LẬP phân biệt bằng Stage: PROPOSED (Đề Xuất, duyệt/từ

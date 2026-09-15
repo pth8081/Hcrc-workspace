@@ -445,7 +445,7 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     thứ tự>`. **Server tự sinh lại mã mới khi phát hiện trùng** (tối đa vài
     lần thử, lấy đúng số thứ tự lớn nhất từng có +1) thay vì báo lỗi "Mã đã
     tồn tại" bắt người dùng tự bấm lại — áp dụng cho MỌI module có mã tự sinh,
-    kể cả khi 2 người tạo hồ sơ gần như cùng lúc. Riêng **Ngân Sách (v22.10)**
+    kể cả khi 2 người tạo hồ sơ gần như cùng lúc. Riêng **Ngân Sách (v23.0)**
     KHÔNG có mã tự sinh — mỗi dòng chỉ định danh bằng `id` nội bộ.
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
@@ -835,7 +835,7 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     — toàn bộ 1 lần hoặc từng đợt, tuỳ loại ở trên) → Đã thanh toán (khoá
     cứng). officeReqs (Mua Bán/Sửa Chữa) không có khái niệm định kỳ, luôn
     khoá cứng "Đã thanh toán".
-  - **Ngân Sách (v22.10 — "Ngân Sách 2.0", thiết kế lại HOÀN TOÀN)** — KHÔNG
+  - **Ngân Sách (v23.0 — "Ngân Sách 2.0", thiết kế lại HOÀN TOÀN)** — KHÔNG
     còn khái niệm "Kỳ ngân sách"/"Mẫu ngân sách" như trước: mỗi dòng ngân
     sách **độc lập**, tự mang sẵn Năm/Tháng ngân sách riêng, quản lý theo 1
     collection duy nhất `budgetLines` với **3 giai đoạn (Stage) tách biệt**,

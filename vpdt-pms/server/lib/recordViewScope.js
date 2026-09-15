@@ -522,7 +522,7 @@ function filterBudgetEntriesForUser(entries, user, appData) {
   return (entries || []).filter(e => canViewBudgetEntry(user, e, appData));
 }
 
-// budgetLines (Ngân Sách 2.0, v22.10) — KHÔNG có approver theo phòng ban (không dùng workflowEngine.js,
+// budgetLines (Ngân Sách 2.0, v23.0) — KHÔNG có approver theo phòng ban (không dùng workflowEngine.js,
 // chỉ 1 cấp gác permission phẳng budgetCreate/budgetManage, xem lib/recordActions.js) nên đơn giản hơn
 // canViewBudgetEntry() ở trên: admin/budgetManage/budgetAggregate xem HẾT, còn lại chỉ xem đúng dòng có
 // Khối Phòng Ban (item.dept) trùng phòng ban của mình — kể cả dòng mình không phải người tạo (Ngân Sách
