@@ -11,7 +11,7 @@ mặc định cho mọi việc nữa. Vẫn giữ nguyên các quy tắc khác (
 fetch/log trước khi báo cáo, chạy full regression, báo deploy-impact rõ ràng,
 bump version + cập nhật VERSION.md mỗi lần merge).
 
-## Module mới → bắt buộc thêm vào Báo Cáo + Biểu Mẫu ngay trong cùng đợt merge
+## Module mới → bắt buộc thêm vào Báo Cáo + Biểu Mẫu + Nghiệp Vụ ngay trong cùng đợt merge
 
 Phát hiện từ đợt rà soát chuyên sâu (9/2026): nhiều module nghiệp vụ đã tồn
 tại lâu (Nhân Sự, Vận Hành...) nhưng chưa từng được thêm vào 2 màn dùng
@@ -37,6 +37,19 @@ trong CÙNG đợt merge tạo module đó (không để dành "làm sau"):
   để admin tự đổi nhãn/bắt buộc không cần sửa code. `applyAllCoreFieldCustomizations()`
   đã tự chạy 1 lần lúc đăng nhập — thêm entry vào 3 mảng trên là ĐỦ, không
   cần gọi thêm hàm nào khác.
+- **📘 Nghiệp Vụ** (`public/js/module-nghiepvu.js`, `NGHIEP_VU_NAV` +
+  `NGHIEP_VU_DOCS`, từ v23.1) — module tài liệu tham khảo trực quan (sơ đồ
+  quy trình + diễn giải) cho toàn bộ nghiệp vụ hệ thống. **Bất kỳ module/tính
+  năng nghiệp vụ MỚI nào** (kể cả không tạo collection riêng, VD 1 luồng phê
+  duyệt mới trong module đã có) phải thêm/cập nhật 1 entry `NGHIEP_VU_DOCS`
+  tương ứng (icon, mô tả ngắn, `flow` dùng `renderNVFlow()` có sẵn — xem entry
+  `budget`/`license` làm mẫu cho luồng có nhánh quyết định/khung tham chiếu)
+  NGAY trong cùng đợt merge — mục nào thiếu entry sẽ tự hiện cảnh báo "⚠️ Chưa
+  có tài liệu nghiệp vụ" ngay trên màn thật, đừng để cảnh báo đó lộ ra production.
+  Module con thuộc nhóm nào (Văn Bản & Tác Nghiệp/Truyền Thông Nội Bộ/Điều
+  Hành/Hành Chính/Tổng Hợp/Vận Hành/Nhân Sự/Hỗ Trợ IT) thì thêm vào đúng
+  `group` đó trong `NGHIEP_VU_NAV`; nhóm hoàn toàn mới thì thêm 1 group mới
+  vào cuối mảng.
 
 Không bỏ qua bước này chỉ vì module mới nhỏ — cả 2 màn trên đều tồn tại lâu
 dài, việc bổ sung càng chậm càng dễ bị quên/tích tụ thành nợ kỹ thuật lớn

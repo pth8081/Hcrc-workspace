@@ -139,6 +139,34 @@ vào 1 trong tối đa **4 module** — admin chọn đúng 4 module nào hiện
 (giới hạn của Apple). Cũng cần HTTPS thật để hoạt động đúng chuẩn trên điện
 thoại thật.
 
+### 2.5. 📘 Nghiệp Vụ (tài liệu quy trình trực quan — từ v23.1)
+
+Nút sidebar **"📘 Nghiệp vụ"** (đặt ngay trước "📊 Báo Cáo") — **vai trò**:
+màn tra cứu nhanh "chức năng này hoạt động thế nào" bằng sơ đồ quy trình +
+diễn giải ngắn, thay vì phải đọc hết tài liệu này. Mở mặc định cho **mọi tài
+khoản đã đăng nhập** (giống Tài Liệu/Công Việc — không có sub-quyền riêng).
+
+Nav trái nhóm theo 8 nhóm đúng cách người dùng vận hành thực tế (Văn Bản &
+Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính / Tổng Hợp / Vận
+Hành / Nhân Sự / Hỗ Trợ IT) — khác thứ tự phẳng phân quyền nội bộ, chỉ là
+cách trình bày cho người đọc. Mỗi mục hiện: mô tả ngắn, 1 sơ đồ quy trình
+(node bo góc + mũi tên có hướng; nhánh quyết định viền xanh rẽ 2 màu xanh
+"duyệt"/đỏ "từ chối"; khung tham chiếu danh mục nét đứt nếu có; mũi tên vòng
+lặp cong khi bị từ chối/làm lại), và khối **"Điểm Chặn Quan Trọng"/"Cơ Chế
+Đáng Chú Ý"** 2 cột tóm tắt các ràng buộc/cơ chế đáng lưu ý nhất. Riêng
+**🎓 Đào Tạo** (module lớn nhất) có thêm 1 hàng pill chọn 6 khu vực con (Lớp
+Học/Chương Trình/Kế Hoạch Đào Tạo/Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình
+Thăng Tiến).
+
+Đây là bản **tóm tắt trực quan** — mục 3-7 phía dưới của tài liệu này vẫn là
+nguồn tham khảo **đầy đủ và chi tiết nhất** (mỗi trang Nghiệp Vụ đều có link
+trỏ lại đúng mục tương ứng ở cuối trang). **Quy tắc bắt buộc** (xem
+`CLAUDE.md`): module/tính năng nghiệp vụ mới phải thêm 1 entry vào
+`NGHIEP_VU_DOCS` (`public/js/module-nghiepvu.js`) NGAY trong cùng đợt merge
+tạo module đó — mục nào thiếu entry sẽ tự hiện cảnh báo "⚠️ Chưa có tài liệu
+nghiệp vụ" ngay trên màn thật, dùng chính cảnh báo đó làm tín hiệu chưa cập
+nhật thay vì phải nhớ tay.
+
 ---
 
 ## 3. Mô hình quy trình phê duyệt chung

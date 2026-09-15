@@ -263,6 +263,12 @@
           <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
+      <!-- Nghiệp Vụ — màn tài liệu tham khảo (sơ đồ quy trình + diễn giải), mở cho mọi tài khoản đã đăng
+           nhập (giống Tài Liệu/Công Việc), xem canAccessNghiepVuModule() (core.js). Đặt ngay trước Báo Cáo
+           — cùng nhóm màn tra cứu/tổng hợp, không phải luồng tác nghiệp chủ động. -->
+      <button id="btnNghiepVuTab" data-op="switchTab" data-arg0="nghiepVu" class="hidden sidebar-item">
+        <span class="sidebar-icon">📘</span><span class="sidebar-label">Nghiệp vụ</span>
+      </button>
       <!-- Báo Cáo — CHUYỂN xuống cạnh Hệ Thống (trước đây nằm ngay sau Vận Hành, phía trên Nhân Sự): cả
            2 đều là công cụ đọc/giám sát tổng quan toàn hệ thống, khác nhóm module tác nghiệp hàng ngày
            phía trên — KHÁC "Báo Cáo Định Kỳ" (nhóm Điều Hành, giữ nguyên vị trí cũ): đó là 1 QUY TRÌNH
@@ -7660,6 +7666,15 @@
         <button type="button" data-op="exportChecklistReportByOriginalTemplate" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">📥 Xuất Theo Mẫu Gốc</button>
       </div>
     </div>
+  </div>
+
+  <!-- Màn hình MODULE "Nghiệp Vụ" — thuần tài liệu tham khảo TRỰC QUAN (sơ đồ quy trình + diễn giải),
+       KHÔNG tạo/lưu hồ sơ riêng nên không cần dynamicFieldsContainer/form nào — toàn bộ nav tree + nội
+       dung render bằng JS thuần trong module-nghiepvu.js (renderNghiepVuModule(), gọi từ
+       _dispatchTabRender() ở core.js) vào #nghiepVuRoot. Xem canAccessNghiepVuModule() (core.js) — mở
+       cho MỌI tài khoản đã đăng nhập, không có sub-quyền riêng. -->
+  <div id="nghiepVuSection" class="hidden space-y-4">
+    <div id="nghiepVuRoot"></div>
   </div>
 
   <!-- Màn hình MODULE NHÂN SỰ — top-level, CHỈ còn 1 tab "Quản Lý & Phản Hồi Ý Kiến" (Cơ Cấu Tổ Chức đã
