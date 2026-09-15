@@ -1,0 +1,133 @@
+
+    <div id="docDashboardCards"></div>
+
+    <div id="uploadBox" class="bg-blue-50 p-4 rounded border border-blue-200 hidden">
+      <h3 class="font-bold mb-1 text-blue-900 flex items-center gap-2">
+        📄 Tải Lên Tài Liệu Mới (PDF, Word, Excel, PowerPoint, Hình ảnh)
+      </h3>
+      <p class="text-xs text-amber-700 mb-3 font-semibold">⚠️ Bạn chỉ có thể tải lên tài liệu cho các phòng ban được phân quyền.</p>
+      
+      <form id="docForm" data-op-submit="uploadDoc" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="md:col-span-3 flex items-center gap-2">
+          <label class="font-semibold text-sm text-gray-700 shrink-0">Loại thao tác:</label>
+          <select id="docOpMode" data-op-change="onDocOpModeChange" class="border p-1.5 rounded text-sm bg-white">
+            <option value="NEW">➕ Nhập mới</option>
+            <option value="UPDATE">🔄 Cập nhật (thêm version cho tài liệu đã có)</option>
+          </select>
+        </div>
+        <div id="docUpdateTargetWrap" class="hidden md:col-span-3">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Chọn Mã Tài Liệu Cần Cập Nhật</label>
+          <select id="docUpdateTarget" data-op-change="onDocUpdateTargetChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Chọn tài liệu --</option>
+          </select>
+          <p class="text-[11px] text-gray-500 italic mt-1">Chỉ hiện tài liệu đã phê duyệt xong (version mới nhất) và thuộc phạm vi bạn được phép cập nhật.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Tài Liệu</label>
+          <input id="docCode" readonly placeholder="Mã tài liệu (tự sinh)" class="w-full border p-2 rounded text-sm bg-gray-100 cursor-not-allowed" required>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tên / Tiêu Đề Tài Liệu</label>
+          <input id="docTitle" placeholder="Tên / Tiêu đề tài liệu" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Phiên Bản</label>
+          <input id="docVer" placeholder="Phiên bản (VD: v1.0)" value="v1.0" readonly class="w-full border p-2 rounded text-sm bg-gray-100" required>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
+          <select id="selDept" data-op-change="refreshDocCodePreview" class="w-full border p-2 rounded text-sm" required><option value="">-- Chọn Phòng Ban Trình --</option></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Phân Loại</label>
+          <select id="selCat" data-op-change="refreshDocCodePreview" class="w-full border p-2 rounded text-sm" required><option value="">-- Chọn Phân Loại --</option></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tệp Tài Liệu</label>
+          <input id="docFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="docFileChip" class="w-full border p-1 bg-white rounded text-sm" required>
+          <div id="docFileChip" class="mt-1"></div>
+        </div>
+
+        <div class="md:col-span-3">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Trích Lục / Tóm Tắt Nội Dung</label>
+          <textarea id="docSummary" placeholder="Trích lục / Tóm tắt nội dung tài liệu..." class="w-full border p-2 rounded text-sm h-16" required></textarea>
+        </div>
+
+        <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+        <div id="dynamicFieldsContainer_DOC" class="contents"></div>
+
+        <div class="md:col-span-3 flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="docForm" data-arg1="resetDocUploadForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">↺ Làm Mới</button>
+          <button type="button" id="docPreviewWfBtn" data-op="previewDocWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">🔍 Xem Quy Trình</button>
+          <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
+        </div>
+      </form>
+    </div>
+
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Tài Liệu</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDept" data-op-change="onFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatus" data-op-change="onFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối / Trả Về</option>
+            <option value="DRAFT">✏️ Chờ Chỉnh Sửa</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Phê Duyệt</label>
+          <select id="filterDocType" data-op-change="onFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="NEW">📄 Tài liệu mới</option>
+            <option value="VERSION">🔄 Cập nhật phiên bản</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDate" type="date" data-op-change="onFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDate" type="date" data-op-change="onFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeyword" data-op-input="onFilterChange" placeholder="Tiêu đề, Mã, Nội dung..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </details>
+
+    <div>
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-gray-800">Danh Sách Tài Liệu Trong Hệ Thống</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-sm">
+          <thead>
+            <tr class="bg-gray-200 text-left text-gray-700">
+              <th class="border p-2">Mã Doc</th>
+              <th class="border p-2">Tên & Trích Lục Nội Dung</th>
+              <th class="border p-2">Phòng Ban</th>
+              <th class="border p-2">Phân Loại</th>
+              <th class="border p-2 text-center">Phiên Bản</th>
+              <th class="border p-2">Tiến Trình Phê Duyệt (Tuần Tự)</th>
+              <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="docTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_doc"></div>
+    </div>
+  

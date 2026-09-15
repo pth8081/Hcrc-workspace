@@ -1,0 +1,36 @@
+
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="font-bold text-lg text-gray-800">📝 Hợp Đồng Lao Động</h2>
+        <button type="button" data-op="openHrContractCreateModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-teal-700">➕ Tạo Hợp Đồng Mới</button>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <input type="text" id="hrcFilterEmployeeCode" data-op-input="onHrContractFilterChange" placeholder="🔍 Lọc theo Mã Nhân Viên..." class="border rounded px-2 py-1 text-xs w-56">
+        <select id="hrcFilterStatus" data-op-change="onHrContractFilterChange" class="border rounded px-2 py-1 text-xs">
+          <option value="">-- Tất cả trạng thái --</option>
+          <option value="DRAFT">Nháp</option>
+          <option value="ACTIVE">Đang hiệu lực</option>
+          <option value="EXPIRED">Hết hạn</option>
+          <option value="TERMINATED">Đã chấm dứt</option>
+          <option value="SUPERSEDED">Đã thay thế</option>
+        </select>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b bg-gray-50">
+              <th class="p-2 text-left">Mã HĐ</th>
+              <th class="p-2 text-left">Mã NV</th>
+              <th class="p-2 text-left">Loại HĐ</th>
+              <th class="p-2 text-left">Trạng Thái</th>
+              <th class="p-2 text-left">Ngày Hiệu Lực</th>
+              <th class="p-2 text-left">Ngày Hết Hạn</th>
+              <th class="p-2 text-left">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="hrcTableBody"></tbody>
+        </table>
+        <p id="hrcTableEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có hợp đồng lao động nào.</p>
+      </div>
+    </div>
+  

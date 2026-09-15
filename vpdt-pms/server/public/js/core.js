@@ -144,7 +144,13 @@ function loadTabModuleGroups(tabName) {
 const TAB_SECTION_FRAGMENT = {
   vanHanh: 'vanHanhSection',
   uniform: 'uniformSection', office: 'officeSection', car: 'carSection', vpp: 'vppSection',
-  hrAttendance: 'hrAttendanceSection', periodicReport: 'periodicReportSection', itSupport: 'itSupportSection'
+  hrAttendance: 'hrAttendanceSection', periodicReport: 'periodicReportSection', itSupport: 'itSupportSection',
+  // Dot tach module 3 (v23.12) - 15 section don gian, khong section con long ben trong, da ra soat cheo
+  // bindCspDelegation()/finishLogin() truoc khi tach (xem VERSION.md v23.12) - khong can NESTED_CSP_ROOTS_IN_FRAGMENT.
+  contract: 'contractSection', checklist: 'checklistSection', meeting: 'meetingSection', minutes: 'minutesSection',
+  hrLifecycle: 'hrLifecycleSection', budget: 'budgetSection', doc: 'docSection', submission: 'submissionSection',
+  license: 'licenseSection', orgChart: 'orgChartSection', hrPayroll: 'hrPayrollSection', task: 'taskSection',
+  hrProfile: 'hrProfileSection', reports: 'reportsSection', hrContract: 'hrContractSection'
 };
 
 const _loadedSectionHtml = {}; // tabName -> Promise (cache, idempotent - goi lai khong tai lai qua mang)

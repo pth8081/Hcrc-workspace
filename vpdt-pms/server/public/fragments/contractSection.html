@@ -1,0 +1,209 @@
+
+    <div class="flex gap-2">
+      <button data-op="setContractSubTab" data-arg0="APPROVAL" id="btnContractSubApproval" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">⏳ Phê Duyệt</button>
+      <button data-op="setContractSubTab" data-arg0="MANAGE" id="btnContractSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 Quản Lý Hợp Đồng & Giấy Phép</button>
+    </div>
+
+    <div id="contractDashboardCards"></div>
+
+    <div id="contractManageFormWrap" class="hidden bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+      <h3 id="contractManageFormTitle" class="font-bold text-cyan-900 text-base flex items-center gap-2">➕ Tạo Mới Hợp Đồng / Giấy Phép</h3>
+      <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
+
+      <form id="contractForm" data-op-submit="submitContractReq" class="bg-white p-3 rounded border text-xs space-y-3">
+        <!-- "Loại Thao Tác" — danh sách option đổi theo đúng sub-tab đang đứng (xem setContractSubTab()):
+             tab Phê Duyệt = Tạo Mới/Bổ Sung Phụ Lục (CẦN duyệt, có Đợt Thanh Toán); tab Quản Lý HĐ =
+             Nhập Hợp Đồng/Phụ Lục ĐÃ KÝ (tự động APPROVED ngay, không qua hàng chờ — chỉ hồ sơ được
+             duyệt THẬT qua tab Phê Duyệt mới tự chuyển sang tab này theo luồng thường; 2 nút ở đây thuần
+             là nhập tay hồ sơ đã có chữ ký sẵn ngoài hệ thống, không có bước "chờ duyệt"). -->
+        <div id="contractOpModeWrap">
+          <label class="block font-semibold text-gray-600 mb-1">Loại Thao Tác</label>
+          <select id="contractOpMode" data-op-change="onContractOpModeChange" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold"></select>
+        </div>
+        <!-- v1.32.1 từng đổi <select> gốc sang nút + bảng chọn tự dựng (button+panel tự xử lý click
+             trong JS, absolute positioning + listener "click ra ngoài để đóng") vì native <select> đôi
+             khi không mở được popup ngay khi phần tử vừa hiện ra trong cùng 1 lượt xử lý sự kiện "Loại
+             Thao Tác" — nhưng chính bảng tự dựng đó lại tiếp tục thỉnh thoảng không mở được ở một số
+             trình duyệt/thiết bị thật ngoài production (v1.60.0 vẫn còn báo lại y hệt lỗi gốc: bấm vào ô
+             "Chọn Hợp Đồng..." mà không phản hồi). Đổi hẳn sang <input list="..."> + <datalist> — widget
+             gõ-tìm NATIVE của trình duyệt, không có logic mở/đóng/z-index nào của riêng ứng dụng để có
+             thể lệch trạng thái — cùng khuôn systemUsersDatalist/uniformTransferTargetDeptDatalist đã
+             dùng ổn định trong file này. contractAddendumTarget vẫn còn (input ẩn) để giữ nguyên .value
+             cho onContractAddendumTargetChange()/submitContractReq() đọc, không phải sửa gì thêm ở 2 nơi
+             đó — resolveContractAddendumTargetInput() ghi vào đây sau khi khớp đúng 1 hợp đồng từ ô gõ. -->
+        <div id="contractAddendumTargetWrap" class="hidden">
+          <label id="contractAddendumTargetLabel" class="block font-semibold text-gray-600 mb-1">Chọn Hợp Đồng Để Bổ Sung Phụ Lục</label>
+          <input type="hidden" id="contractAddendumTarget" value="">
+          <input id="contractAddendumTargetInput" data-sdd-list="contractAddendumTargetDatalist" autocomplete="off" data-op-input="resolveContractAddendumTargetInput" data-arg-value="0" placeholder="Gõ mã hoặc tên hợp đồng để tìm..." class="w-full border p-1.5 rounded bg-white">
+          <div id="contractAddendumTargetDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Hợp Đồng / Phụ Lục</label>
+            <input id="contractCode" readonly class="w-full border p-1.5 rounded bg-gray-100 font-mono">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Quản Lý</label>
+            <select id="contractDept" data-op-change="refreshContractCodePreview" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đơn Vị Tiếp Nhận Theo Dõi &amp; Thanh Toán</label>
+            <select id="contractCustodianDept" class="w-full border p-1.5 rounded bg-white"></select>
+            <p class="text-[11px] text-gray-500 italic mt-1">Để trống = mặc định chính phòng ban quản lý ở trên theo dõi &amp; thanh toán. Chọn đơn vị khác thì đơn vị đó được xem hợp đồng/phụ lục và là đơn vị duy nhất tải tài liệu ký, chuyển sang thanh toán.</p>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Loại Pháp Lý</label>
+            <select id="contractType" data-op-change="refreshContractCodePreview" class="w-full border p-1.5 rounded bg-white" required></select>
+          </div>
+          <!-- Cùng khuôn subApprovalLevel ở form Văn Bản Trình — <select> thật thay vì ô tìm-kiếm-gõ-chọn
+               (danh sách CONTRACT_APPROVAL_LEVELS tĩnh chỉ 4 lựa chọn, không cần tìm kiếm; trước đây dùng
+               widget sdd khiến việc chọn không mở ra được panel "Phê Duyệt" ổn định trên di động — chọn
+               qua onchange của <select> đảm bảo renderContractApprovalLayerCheckboxes() LUÔN chạy). -->
+          <div id="contractApprovalLevelWrap">
+            <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
+            <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" data-op-change="renderContractApprovalLayerCheckboxes"></select>
+          </div>
+          <div id="contractApprovalDropdownWrap" class="relative">
+            <label class="block font-semibold text-gray-600 mb-1">Phê Duyệt</label>
+            <button type="button" id="contractApprovalDropdownBtn" data-op="toggleContractApprovalDropdown" data-arg-event="0" class="w-full border p-1.5 rounded bg-white text-left flex justify-between items-center gap-1">
+              <span id="contractApprovalDropdownLabel" class="text-gray-500 truncate">-- Chọn cấp phê duyệt --</span>
+              <span class="text-gray-400 shrink-0">▾</span>
+            </button>
+            <div id="contractApprovalDropdownPanel" class="hidden absolute z-20 mt-1 w-72 right-0 bg-white border rounded shadow-lg p-2 space-y-1 max-h-72 overflow-y-auto"></div>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block font-semibold text-gray-600 mb-1" id="contractTitleLabel">Tên Hợp Đồng / Tên Giấy Phép</label>
+            <input id="contractTitle" placeholder="Hợp đồng cung cấp dịch vụ công nghệ..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Đối Tác / Bên Ký Kết</label>
+            <input id="contractPartner" placeholder="Công ty TNHH ABC..." class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Giá Trị Hợp Đồng (VNĐ)</label>
+            <input id="contractAmount" type="text" inputmode="numeric" placeholder="100.000.000" data-op-input="recalcContractInstallmentAmountsFromPercent" class="w-full border p-1.5 rounded money-input" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Hiệu Lực</label>
+            <input id="contractStartDate" type="date" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Hết Hạn</label>
+            <input id="contractEndDate" type="date" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1" id="contractFileLabel">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
+            <input id="contractFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="contractFileChip" class="w-full border p-1 bg-white rounded" required>
+            <div id="contractFileChip" class="mt-1"></div>
+            <p id="contractFileEditHint" class="hidden text-[11px] text-gray-500 italic mt-1">Để trống nếu không muốn thay tệp đính kèm hiện tại.</p>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Nội Dung Tóm Tắt & Điều Khoản Chính</label>
+            <textarea id="contractContent" placeholder="Ghi chú các điều khoản thanh toán, nghĩa vụ..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_CONTRACT" class="contents"></div>
+        </div>
+        <div id="contractApprovalLayersSection" class="hidden border-t pt-3">
+          <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Bổ Sung</label>
+          <p class="text-[11px] text-gray-500 italic mb-1.5">Chọn CỤ THỂ những ai (trong số người admin đã gán vào nhóm đó, mục "Nhóm Phê Duyệt HĐ") cho từng lớp đã tick ở "Phê duyệt" — mỗi lớp cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban. Các lớp đánh dấu "bắt buộc" do "Cấp Phê Duyệt Cuối Cùng" quyết định, không thể bỏ tick.</p>
+          <div id="contractApprovalLayersContainer" class="flex flex-wrap gap-3"></div>
+        </div>
+        <div id="contractInstallmentsWrap" class="border-t pt-3 space-y-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Loại Thanh Toán</label>
+            <select id="contractPaymentType" class="w-full md:w-64 border p-1.5 rounded bg-white font-semibold">
+              <option value="ONE_TIME">Thanh toán 1 lần</option>
+              <option value="PERIODIC">Thanh toán định kỳ</option>
+            </select>
+            <p class="text-[11px] text-gray-500 italic mt-1">"Thanh toán 1 lần": sau khi hoàn tất thanh toán sẽ KHÔNG "Lập Thanh Toán" được nữa. "Thanh toán định kỳ": sau khi hoàn tất 1 chu kỳ, nút "🧾 Lập Thanh Toán" sẽ mở lại để bắt đầu chu kỳ mới (VD năm sau).</p>
+          </div>
+          <div class="flex justify-between items-center mb-2">
+            <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
+            <button type="button" data-op="addContractInstallmentRow" class="text-cyan-600 font-bold hover:underline">+ Thêm Đợt</button>
+          </div>
+          <div id="contractInstallmentsList" class="space-y-2"></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="contractForm" data-arg1="resetContractForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" id="contractCancelEditBtn" data-op="cancelEditContract" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
+          <button type="button" id="contractPreviewWfBtn" data-op="previewContractApprovalWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+          <!-- Chỉ hiện ở chế độ "Nhập Hợp Đồng/Phụ Lục Đã Ký" (tab Quản Lý HĐ) — quy trình duyệt Tài liệu
+               ký, KHÁC quy trình duyệt hồ sơ hợp đồng ở nút ngay trên (xem onContractOpModeChange()). -->
+          <button type="button" id="contractManagePreviewWfBtn" data-op="previewContractManageWorkflow" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình Duyệt Tài Liệu Ký</button>
+          <button type="submit" id="contractSubmitBtn" class="bg-cyan-600 text-white px-5 py-2 rounded font-bold hover:bg-cyan-700">Gửi phê duyệt</button>
+        </div>
+      </form>
+    </div>
+
+    <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Hợp Đồng</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-7 gap-3 mt-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptContract" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Hồ Sơ</label>
+          <select id="filterContractType" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="NEW">📄 Hợp đồng gốc</option>
+            <option value="ADDENDUM">📎 Bổ sung phụ lục</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tài Liệu Ký (Quản Lý HĐ)</label>
+          <select id="filterSignedStatusContract" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="PENDING">⏳ Chờ duyệt</option>
+            <option value="APPROVED">✅ Đã duyệt</option>
+            <option value="REJECTED">❌ Bị từ chối</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Hiệu Lực</label>
+          <select id="filterExpiryContract" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả --</option>
+            <option value="ACTIVE">✅ Còn hiệu lực</option>
+            <option value="SOON">⏰ Sắp hết hạn (≤ 30 ngày)</option>
+            <option value="EXPIRED">⚠️ Đã hết hạn</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Tạo Từ Ngày</label>
+          <input id="filterFromDateContract" type="date" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateContract" type="date" data-op-change="onContractFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordContract" data-op-input="onContractFilterChange" placeholder="Mã, tên, đối tác..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </details>
+
+    <div class="space-y-3">
+      <h3 id="contractListTitle" class="font-bold text-gray-800">📋 Danh Sách Hợp Đồng Chờ Duyệt</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã & Loại</th>
+              <th class="border p-2">Tên & Đối Tác</th>
+              <th class="border p-2">Giá Trị & Thời Hạn</th>
+              <th class="border p-2">Phòng Ban & Người Tạo</th>
+              <th class="border p-2">Trạng Thái & Cảnh Báo Hết Hạn</th>
+              <th id="contractPaymentColHeader" class="hidden border p-2">Thanh Toán</th>
+              <th class="border p-2 text-center min-w-[100px]">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="contractTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_contract"></div>
+    </div>
+  
