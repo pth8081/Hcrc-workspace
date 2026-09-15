@@ -1,0 +1,252 @@
+
+    <div id="officeDashboardCards"></div>
+    <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">🗂️ Tổng Hợp (Mua Bán - Sửa Chữa - Thanh Toán)</h3>
+        <div class="flex gap-2">
+          <button data-op="setOfficeSubTab" data-arg0="MUA_BAN" id="btnSubBuy" class="px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white">🛒 Mua Bán</button>
+          <button data-op="setOfficeSubTab" data-arg0="SUA_CHUA" id="btnSubFix" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 Sửa Chữa</button>
+          <button data-op="setOfficeSubTab" data-arg0="PAYMENT" id="btnSubPayment" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 Thanh Toán</button>
+        </div>
+      </div>
+      <p class="text-xs text-teal-800" id="officeSubTitle">Phân hệ Mua Sắm Trang Thiết Bị / Vật Tư Văn Phòng.</p>
+    </div>
+
+    <div id="officeReqsContentWrap" class="space-y-6">
+    <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+      <form id="officeForm" data-op-submit="submitOfficeReq" class="bg-white p-3 rounded border text-xs space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Mã Yêu Cầu</label>
+            <input id="offCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Trình</label>
+            <select id="offDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tên Hạng Mục / Nội Dung Trình</label>
+            <input id="offTitle" placeholder="Tên mua sắm / hạng mục sửa chữa / gói đầu tư" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div id="officeQtyField">
+            <label class="block font-semibold text-gray-600 mb-1">Số Lượng / Quy Mô</label>
+            <input id="offQty" placeholder="VD: 5 cái / 10 bộ" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div id="officeAmountField">
+            <label class="block font-semibold text-gray-600 mb-1">Dự Toán / Tổng Chi Phí (VNĐ)</label>
+            <input id="offAmount" type="text" inputmode="numeric" placeholder="50.000.000" class="w-full border p-1.5 rounded money-input" required>
+          </div>
+          <div id="officeSupplierField">
+            <label class="block font-semibold text-gray-600 mb-1">Đối Tác / Nhà Cung Cấp</label>
+            <input id="offSupplier" placeholder="Công ty cung cấp dịch vụ..." class="w-full border p-1.5 rounded">
+          </div>
+          <div id="officeUsageTimeField" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Cần Sử Dụng</label>
+            <input id="offUsageTime" placeholder="VD: Cần luôn / Trong tháng 9..." class="w-full border p-1.5 rounded">
+          </div>
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết / Mục Đích Mua Sắm</label>
+            <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_OFFICE" class="contents"></div>
+        </div>
+
+        <!-- Bảng nhiều hạng mục — chỉ dùng cho phân hệ Mua Sắm, theo đúng Mẫu BM-TS01 (Phiếu Đề Nghị
+             Mua Sắm Tài Sản/Cung Cấp Trang Thiết Bị): mỗi phiếu có thể gồm nhiều tài sản/vật tư, mỗi
+             dòng tự tính Thành tiền = Số lượng × Đơn giá, Dự toán tổng (offAmount) = tổng các dòng. -->
+        <div id="officeItemsSection" class="hidden border-t pt-3 space-y-2">
+          <label class="block font-semibold text-gray-600">Danh Sách Hạng Mục Đề Nghị Mua Sắm</label>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead>
+                <tr class="bg-gray-100 text-left text-gray-700">
+                  <th class="border p-1.5 w-8">STT</th>
+                  <th class="border p-1.5">Tên Tài Sản</th>
+                  <th class="border p-1.5">Model</th>
+                  <th class="border p-1.5 w-20">ĐVT</th>
+                  <th class="border p-1.5 w-20">Số Lượng</th>
+                  <th class="border p-1.5 w-32">Đơn Giá (VNĐ)</th>
+                  <th class="border p-1.5 w-32">Thành Tiền (VNĐ)</th>
+                  <th class="border p-1.5">Ghi Chú</th>
+                  <th class="border p-1.5 w-8"></th>
+                </tr>
+              </thead>
+              <tbody id="officeItemsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="flex justify-between items-center">
+            <button type="button" data-op="addOfficeItemRow" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-teal-700">➕ Thêm Hạng Mục</button>
+            <div class="font-bold text-rose-600">Tổng Dự Toán (chưa VAT): <span id="officeItemsTotalDisplay">0</span> VNĐ</div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" data-op="confirmAndResetForm" data-arg0="officeForm" data-arg1="resetOfficeReqForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+          <button type="button" id="officePreviewWfBtn" data-op="previewOfficeWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+          <button type="submit" class="bg-teal-600 text-white px-5 py-2 rounded font-bold hover:bg-teal-700">Gửi phê duyệt</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
+      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Văn Phòng</h4>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Phòng Ban</label>
+          <select id="filterDeptOffice" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả phòng ban --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusOffice" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="REJECTED">Bị Từ Chối</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+          <input id="filterFromDateOffice" type="date" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+          <input id="filterToDateOffice" type="date" data-op-change="onOfficeFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+          <input id="filterKeywordOffice" data-op-input="onOfficeFilterChange" placeholder="Mã, tên đề xuất, người tạo..." class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Phê Duyệt Văn Phòng</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs bg-white">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Phiếu</th>
+              <th class="border p-2">Phân Hệ</th>
+              <th class="border p-2">Phòng Ban & Người Đề Xuất</th>
+              <th class="border p-2">Tên Hạng Mục & Số Lượng</th>
+              <th class="border p-2">Dự Toán & Trường Tùy Biến</th>
+              <th class="border p-2">Trạng Thái & Lịch Sử Duyệt Đồng Cấp</th>
+              <th class="border p-2">Thanh Toán</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="officeTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_office"></div>
+    </div>
+    </div>
+
+    <!-- Sub-tab "💰 Thanh Toán" — module con của Tổng Hợp, xem lại cả đề nghị thanh toán tự sinh từ
+         Hợp đồng/Mua Bán/Sửa Chữa/Đầu Tư lẫn đề nghị tạo thủ công. -->
+    <div id="paymentSection" class="hidden space-y-6">
+      <div class="flex gap-2">
+        <button data-op="setPaymentSubTab" data-arg0="CREATE" id="btnPaymentSubCreate" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">➕ Tạo Mới</button>
+        <button data-op="setPaymentSubTab" data-arg0="MANAGE" id="btnPaymentSubManage" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗂️ Quản Lý Thanh Toán</button>
+        <button data-op="setPaymentSubTab" data-arg0="APPROVE" id="btnPaymentSubApprove" class="px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white">✅ Xác Nhận Đề Nghị Thanh Toán</button>
+      </div>
+
+      <div id="paymentCreateWrap" class="hidden bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">➕ Tạo Đề Nghị Thanh Toán Thủ Công</h3>
+        <form id="paymentCreateForm" data-op-submit="submitManualPaymentRequest" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div id="paymentSourceTypeWrap">
+              <label class="block font-semibold text-gray-600 mb-1">Loại Đề Nghị</label>
+              <select id="paymentSourceType" data-op-change="onPaymentSourceTypeChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+                <option value="MANUAL">✍️ Thủ công (không gắn nguồn)</option>
+                <option value="CONTRACT">📄 Hợp đồng</option>
+                <option value="MUA_BAN">🛒 Mua Bán</option>
+                <option value="SUA_CHUA">🔧 Sửa Chữa</option>
+              </select>
+            </div>
+            <div id="paymentSourceRecordWrap" class="hidden">
+              <label class="block font-semibold text-gray-600 mb-1">Chọn Hồ Sơ Nguồn</label>
+              <select id="paymentSourceRecord" data-op-change="onPaymentSourceRecordChange" class="w-full border p-1.5 rounded bg-white" required></select>
+              <p class="text-[11px] text-gray-500 italic mt-1">Chỉ liệt kê hồ sơ CHƯA thanh toán và ĐÃ tải Tài liệu ký (hợp đồng còn cần Tài liệu ký đã được DUYỆT XONG) — hồ sơ chưa đủ điều kiện hiện dạng mờ, không chọn được, ngay bên dưới.</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div id="paymentDeptWrap">
+              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban</label>
+              <select id="paymentDept" class="w-full border p-1.5 rounded bg-white font-semibold" required></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tiêu Đề / Nội Dung Thanh Toán</label>
+              <input id="paymentTitle" placeholder="VD: Thanh toán chi phí văn phòng phẩm quý 3" class="w-full border p-1.5 rounded" required>
+            </div>
+          </div>
+          <div class="border-t pt-3">
+            <div class="flex justify-between items-center mb-2">
+              <label class="font-semibold text-gray-600">Các Đợt Thanh Toán</label>
+              <button type="button" data-op="addPaymentCreateInstallmentRow" class="text-amber-600 font-bold hover:underline">+ Thêm Đợt</button>
+            </div>
+            <div id="paymentCreateInstallmentsList" class="space-y-2" data-op-input="updatePaymentCreateInstallmentsSummary"></div>
+            <div id="paymentCreateInstallmentsSummary" class="mt-2 text-[11px]"></div>
+          </div>
+          <div id="paymentCreateRequestFilesWrap" class="border-t pt-3">
+            <label class="block font-semibold text-gray-600 mb-1">📎 Hồ Sơ Đề Nghị Thanh Toán (có thể chọn nhiều tệp)</label>
+            <input id="paymentCreateRequestFiles" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="paymentCreateRequestFilesChips" class="w-full border p-1.5 rounded bg-white">
+            <div id="paymentCreateRequestFilesChips" class="flex flex-wrap gap-1 mt-1"></div>
+            <p class="text-gray-400 mt-1 text-[11px]">Tuỳ chọn ngay lúc tạo — có thể đính kèm sau ở "🗂️ Quản Lý Thanh Toán", nhưng BẮT BUỘC có ít nhất 1 tệp trước khi "Chuyển Xác Nhận Thanh Toán".</p>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_PAYMENT" class="contents"></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="confirmAndResetForm" data-arg0="paymentCreateForm" data-arg1="resetPaymentCreateForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="button" id="paymentPreviewWfBtn" data-op="previewPaymentWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Lập Đề Nghị (Nháp)</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Sub-tab "🗂️ Quản Lý Thanh Toán" — MỚI: lập/sửa các đợt thanh toán của đề nghị NHÁP (số tiền
+           chưa bắt buộc), theo dõi trạng thái/cảnh báo hạn thanh toán từng đợt cho tới khi PAID. Đọc
+           CHUNG DB.paymentRequests với "✅ Xác Nhận Đề Nghị Thanh Toán" bên dưới — không cần đồng bộ
+           riêng, mọi thay đổi trạng thái (duyệt theo bước/xác nhận từng đợt) ở tab kia tự phản ánh sang
+           đây (xem renderPaymentManageTab()/module-thanhtoan.js). -->
+      <div id="paymentManageWrap" class="hidden space-y-3">
+        <h3 class="font-bold text-gray-800">🗂️ Quản Lý Thanh Toán — Lập/Sửa Đợt & Theo Dõi</h3>
+        <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
+          <label class="text-xs font-semibold text-gray-600">Lọc Theo Hồ Sơ Nguồn</label>
+          <select id="paymentManageFilterSource" data-op-change="onPaymentManageFilterChange" class="border p-2 rounded text-sm bg-white"></select>
+        </div>
+        <div id="paymentManageList" class="space-y-3"></div>
+      </div>
+
+      <div id="paymentApproveWrap" class="hidden space-y-3">
+        <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Nghị Thanh Toán</h3>
+        <div id="paymentDashboardCards"></div>
+        <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
+          <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusPayment" data-op-change="onPaymentFilterChange" class="border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="PENDING">⏳ Chờ duyệt</option>
+            <option value="NEED_INFO">📝 Cần bổ sung</option>
+            <option value="APPROVED">✅ Đã duyệt (chờ xác nhận)</option>
+            <option value="PAID">💰 Đã thanh toán</option>
+          </select>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead>
+              <tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Nguồn</th>
+                <th class="border p-2">Phòng Ban & Nội Dung</th>
+                <th class="border p-2">Giá Trị & Các Đợt</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2 text-center min-w-[140px]">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="paymentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  

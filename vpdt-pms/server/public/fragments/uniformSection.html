@@ -1,0 +1,414 @@
+
+    <div id="hanhChinhTabBar_uniform" class="hidden flex gap-2 flex-wrap"></div>
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setUniformSubTab" data-arg0="PERIODS" id="btnUniformSubPeriods" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">📦 Kỳ Cấp Phát</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="STORE" id="btnUniformSubStore" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">✅ Xác Nhận / Cấp Phát</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="STOCK" id="btnUniformSubStock" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Kho Đồng Phục</button>
+      <button type="button" data-op="setUniformSubTab" data-arg0="DASHBOARD" id="btnUniformSubDashboard" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📈 Tổng Quan</button>
+    </div>
+
+    <!-- Sub-tab: Kỳ Cấp Phát (Hành Chính - uniformManage) -->
+    <div id="uniformSubPeriods" class="hidden space-y-4">
+      <div id="uniformPeriodDashboardCards"></div>
+      <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📋 Danh Mục Đồng Phục</h3>
+          <span class="text-xs text-gray-500">Quản Trị Viên / Hành Chính thêm/sửa/xoá được — dùng để chọn khi phân bổ bên dưới. Mỗi mặt hàng+size có 1 Mã SKU riêng, tự sinh lần đầu Giám Đốc Siêu Thị xác nhận nhận.</span>
+        </div>
+        <div id="uniformCatalogAdminForm" class="hidden grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Đồng Phục</label>
+            <input id="uniformCatalogName" placeholder="VD: Áo đồng phục nam" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Các Size (cách nhau bằng dấu phẩy)</label>
+            <input id="uniformCatalogSizes" placeholder="VD: S, M, L, XL" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <button type="button" data-op="saveUniformCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+        </div>
+        <div id="uniformCatalogListWrap" class="space-y-1.5"></div>
+      </div>
+
+      <div id="uniformCreatePeriodBlock" class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+        <h3 class="font-bold text-teal-900 text-base flex items-center gap-2">📦 Tạo Kỳ Cấp Phát Đồng Phục</h3>
+        <p class="text-xs text-teal-700">Mỗi lần phân bổ đồng phục xuống các siêu thị — kể cả cấp bổ sung sau này cho siêu thị đã từng nhận — đều tạo 1 kỳ mới để theo dõi riêng biệt số lượng cấp từng đợt.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Kỳ Cấp Phát <span class="text-red-500">*</span></label>
+            <input id="uniformPeriodName" placeholder="VD: Cấp phát đồng phục hè 2026" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Ghi Chú</label>
+            <input id="uniformPeriodNote" placeholder="Ghi chú thêm (không bắt buộc)" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div id="uniformAllocBlocksWrap" class="space-y-3"></div>
+        <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+        <div id="dynamicFieldsContainer_UNIFORM_PERIOD" class="contents"></div>
+        <div class="flex justify-between items-center">
+          <button type="button" data-op="addUniformAllocationBlock" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Siêu Thị</button>
+          <button type="button" data-op="submitUniformPeriod" class="bg-teal-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-teal-700">Tạo Kỳ Cấp Phát</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Kỳ Cấp Phát</h3>
+        <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
+          <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
+          <select id="filterStatusUniformPeriod" data-op-change="renderUniformPeriodsList" class="border p-2 rounded text-sm bg-white">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="PENDING_APPROVAL">⏳ Chờ duyệt</option>
+            <option value="APPROVED">✅ Đã duyệt</option>
+            <option value="REJECTED">❌ Từ chối</option>
+          </select>
+        </div>
+        <div id="uniformPeriodsListWrap" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Xác Nhận / Cấp Phát (Giám Đốc Siêu Thị - uniformStoreManage) -->
+    <div id="uniformSubStore" class="hidden space-y-4">
+      <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">✅ Xác Nhận Nhận Đồng Phục Từ Hành Chính</h3>
+        <p class="text-xs text-amber-700">Xác nhận số lượng đồng phục siêu thị của bạn đã nhận trong từng kỳ cấp phát — sau khi xác nhận, số lượng mới được tính vào tồn kho để cấp cho nhân viên.</p>
+        <div id="uniformPendingAllocList" class="space-y-2"></div>
+        <div id="uniformNoPendingAllocNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có phần phân bổ nào đang chờ xác nhận.</div>
+      </div>
+
+      <div id="uniformStoreEmployeesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">👕 Cấp Đồng Phục Cho Nhân Viên</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
+            <input id="uniformIssueEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" data-op-input="resolveUniformEmployeeInput" data-arg0="uniformIssueEmployee" data-arg1="uniformIssueEmployeeUsername" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="hidden" id="uniformIssueEmployeeUsername">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Phiếu (không bắt buộc)</label>
+            <input id="uniformIssueCode" placeholder="VD: CP-2026-001" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div id="uniformIssueItemsWrap" class="space-y-2"></div>
+        <button type="button" data-op="addUniformIssueItemRow" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Mặt Hàng</button>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Ghi Chú</label>
+          <input id="uniformIssueNote" class="w-full border p-1.5 rounded text-xs">
+        </div>
+        <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+        <div id="dynamicFieldsContainer_UNIFORM_ISSUE" class="contents"></div>
+        <div class="flex justify-end">
+          <button type="button" data-op="submitUniformIssuance" class="bg-emerald-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-emerald-700">Cấp Phát</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Lịch Sử Cấp Phát Cho Nhân Viên</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Mã Phiếu</th>
+              <th class="border p-2">Nhân Viên</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Ngày Cấp</th>
+              <th class="border p-2">Người Cấp</th>
+              <th class="border p-2 text-center">Xác Nhận Đã Nhận</th>
+            </tr></thead>
+            <tbody id="uniformIssuancesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">🧍 Đồng Phục Nhân Viên Đang Giữ</h3>
+        <p class="text-xs text-gray-500">Thao tác nhanh cho từng dòng — Thu Hồi (về tồn kho), Báo Hỏng, Báo Mất. Số lượng tính gộp từ mọi phiếu cấp cho đúng nhân viên/mặt hàng/size này.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Nhân Viên</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Size</th>
+              <th class="border p-2 text-right">Đang Giữ</th>
+              <th class="border p-2 text-center">Xác Nhận Đã Nhận</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr></thead>
+            <tbody id="uniformHoldingsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">🗑️ Báo Hỏng / Hủy (Từ Kho)</h3>
+        <p class="text-xs text-rose-700">Dùng khi đồng phục còn NẰM TRONG KHO (chưa cấp cho nhân viên) bị hỏng hoặc cần loại bỏ không sử dụng.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Đồng Phục — Size <span class="text-red-500">*</span></label>
+            <select id="uniformAdjStockItemSize" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="">-- Chọn mặt hàng --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+            <input id="uniformAdjStockQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Kết Quả <span class="text-red-500">*</span></label>
+          <div class="flex gap-4 text-xs">
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjStockOutcome" value="HONG" checked> Hỏng</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjStockOutcome" value="HUY"> Hủy không sử dụng</label>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+          <textarea id="uniformAdjStockReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" data-op="submitUniformStockAdjustment" data-arg0="STOCK" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">Báo Hỏng / Hủy</button>
+        </div>
+      </div>
+
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-base flex items-center gap-2">↩️ Thu Hồi Từ Nhân Viên</h3>
+        <p class="text-xs text-orange-700">Dùng khi thu hồi lại đồng phục ĐÃ CẤP cho nhân viên (nghỉ việc, đổi size...). Nếu đồ vẫn còn tốt, chọn "Về Tồn Kho" để nhập lại kho; nếu đã hỏng/không dùng được, chọn Hỏng/Hủy.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Nhân Viên <span class="text-red-500">*</span></label>
+            <input id="uniformAdjEmpEmployee" data-sdd-list="uniformStoreEmployeesDatalist" autocomplete="off" data-op-input="resolveUniformAdjEmpEmployeeInputAndRefresh" data-arg0="uniformAdjEmpEmployee" data-arg1="uniformAdjEmpEmployeeUsername" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="hidden" id="uniformAdjEmpEmployeeUsername">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
+            <select id="uniformAdjEmpItemSize" data-op-change="onUniformAdjEmpItemSizeChange" class="w-full border p-1.5 rounded text-xs bg-white">
+              <option value="">-- Chọn nhân viên trước --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span> <span id="uniformAdjEmpHeldHint" class="text-gray-400 font-normal"></span></label>
+            <input id="uniformAdjEmpQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Kết Quả <span class="text-red-500">*</span></label>
+          <div class="flex gap-4 text-xs">
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="TON" checked> Về Tồn Kho</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="HONG"> Hỏng</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="HUY"> Hủy không sử dụng</label>
+            <label class="flex items-center gap-1"><input type="radio" name="uniformAdjEmpOutcome" value="MAT"> Mất</label>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+          <textarea id="uniformAdjEmpReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Bắt buộc nhập lý do..."></textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" data-op="submitUniformStockAdjustment" data-arg0="EMPLOYEE" class="bg-orange-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-orange-700">Thu Hồi</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Lịch Sử Hỏng / Hủy / Thu Hồi</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Ngày</th>
+              <th class="border p-2">Nguồn</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2 text-right">SL</th>
+              <th class="border p-2">Kết Quả</th>
+              <th class="border p-2">Nhân Viên</th>
+              <th class="border p-2">Lý Do</th>
+              <th class="border p-2">Người Thực Hiện</th>
+            </tr></thead>
+            <tbody id="uniformAdjustmentsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Điều Chuyển Kho Giữa Các Siêu Thị (Phase 2) — yêu cầu: uniformStoreManage (nguồn = siêu thị
+           mình); duyệt: uniformApprove/admin (DÙNG CHUNG quyền duyệt kỳ cấp phát, không tạo quyền riêng);
+           lịch sử: hiện cho cả 2 vai trò, tự lọc theo canViewUniformTransferClient() bên dưới. -->
+      <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+        <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">🔁 Điều Chuyển Kho Giữa Các Siêu Thị</h3>
+        <div id="uniformTransferDashboardCards"></div>
+        <div id="uniformTransferRequestForm" class="hidden space-y-3">
+          <p class="text-xs text-cyan-700">Yêu cầu chuyển bớt tồn kho của siêu thị bạn sang 1 siêu thị khác đang thiếu hàng — cần người có quyền duyệt (Quản Trị Viên / Duyệt Kỳ Cấp Phát) chấp nhận mới có hiệu lực.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị Nhận <span class="text-red-500">*</span></label>
+              <input id="uniformTransferTargetDept" data-sdd-list="uniformTransferTargetDeptDatalist" autocomplete="off" placeholder="Gõ tên siêu thị nhận..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <div id="uniformTransferTargetDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Mặt Hàng — Size <span class="text-red-500">*</span></label>
+              <select id="uniformTransferItemSize" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="">-- Chọn mặt hàng --</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Số Lượng <span class="text-red-500">*</span></label>
+              <input id="uniformTransferQty" type="number" min="1" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do <span class="text-red-500">*</span></label>
+              <input id="uniformTransferReason" placeholder="VD: Siêu thị Đà Nẵng thiếu hàng gấp" class="w-full border p-1.5 rounded text-xs">
+            </div>
+          </div>
+          <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
+          <div id="dynamicFieldsContainer_UNIFORM_TRANSFER" class="contents"></div>
+          <div class="flex justify-end">
+            <button type="button" data-op="submitUniformTransfer" class="bg-cyan-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-cyan-700">Gửi Yêu Cầu Điều Chuyển</button>
+          </div>
+        </div>
+
+        <div id="uniformTransferApprovalWrap" class="hidden space-y-2">
+          <h4 class="font-bold text-sm text-cyan-900">⏳ Chờ Duyệt</h4>
+          <div id="uniformTransferApprovalList" class="space-y-2"></div>
+          <div id="uniformTransferNoPendingNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có yêu cầu điều chuyển nào đang chờ duyệt.</div>
+        </div>
+
+        <!-- Giám Đốc Siêu Thị ĐÍCH xác nhận đã nhận hàng — mô hình "hàng đang vận chuyển" (xem
+             receiveUniformTransfer() ở lib/recordActions.js): kho đích chỉ tăng SAU khi bấm xác nhận ở
+             đây, KHÔNG tăng ngay lúc Hành Chính duyệt như kho nguồn. -->
+        <div id="uniformTransferReceiveWrap" class="hidden space-y-2">
+          <h4 class="font-bold text-sm text-orange-900">📦 Chờ Xác Nhận Nhận Hàng (Siêu Thị Của Bạn)</h4>
+          <div id="uniformTransferReceiveList" class="space-y-2"></div>
+          <div id="uniformTransferNoReceiveNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có lô hàng nào đang chờ siêu thị bạn xác nhận nhận.</div>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">📋 Lịch Sử Điều Chuyển</h4>
+          <div class="bg-gray-50 p-3 rounded-lg border flex items-center gap-2">
+            <label class="text-xs font-semibold text-gray-600">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusUniformTransfer" data-op-change="renderUniformTransfersTable" class="border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="PENDING_APPROVAL">⏳ Chờ duyệt</option>
+              <option value="APPROVED">🚚 Đang vận chuyển</option>
+              <option value="RECEIVED">✅ Đã nhận hàng</option>
+              <option value="REJECTED">❌ Từ chối</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs bg-white">
+              <thead><tr class="bg-gray-100 text-left text-gray-700">
+                <th class="border p-2">Ngày Yêu Cầu</th>
+                <th class="border p-2">Từ Siêu Thị</th>
+                <th class="border p-2">Đến Siêu Thị</th>
+                <th class="border p-2">Mặt Hàng</th>
+                <th class="border p-2 text-right">SL</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2">Người Yêu Cầu</th>
+                <th class="border p-2">Người Duyệt</th>
+                <th class="border p-2">Người Nhận</th>
+              </tr></thead>
+              <tbody id="uniformTransfersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Kho Đồng Phục (xem — uniformManage xem tất cả siêu thị, uniformStoreManage chỉ xem siêu thị mình) -->
+    <div id="uniformSubStock" class="space-y-4">
+      <div class="bg-white p-4 rounded border space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-sm">📊 Tồn Kho Đồng Phục</h3>
+          <div id="uniformStockStoreFilterWrap" class="hidden">
+            <input id="uniformStockStoreFilter" data-sdd-list="uniformStoresFilterDatalist" autocomplete="off" data-op-input="renderUniformStock" placeholder="Gõ tên siêu thị để tìm (để trống = tất cả)..." class="border p-1.5 rounded text-xs bg-white">
+            <div id="uniformStoresFilterDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs bg-white">
+            <thead><tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Siêu Thị</th>
+              <th class="border p-2">Mặt Hàng</th>
+              <th class="border p-2">Size</th>
+              <th class="border p-2 text-right">Đã Nhận (Xác Nhận)</th>
+              <th class="border p-2 text-right">Đã Cấp NV</th>
+              <th class="border p-2 text-right">Hỏng</th>
+              <th class="border p-2 text-right">Hủy</th>
+              <th class="border p-2 text-right">Mất</th>
+              <th class="border p-2 text-right">Mới</th>
+              <th class="border p-2 text-right">Đã Sử Dụng</th>
+              <th class="border p-2 text-right">Tồn Kho</th>
+            </tr></thead>
+            <tbody id="uniformStockTableBody"></tbody>
+          </table>
+        </div>
+        <p class="text-[11px] text-gray-500 italic">Bấm "▸ Chi tiết" ở 1 dòng để xem SL Đã Nhận đến từ (những) kỳ cấp phát nào — mirror "Chi Tiết Tài Liệu" của module Tài Liệu, tính hoàn toàn phía trình duyệt từ dữ liệu đã tải, không gọi thêm API.</p>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Tổng Quan (Dashboard, Phase 2) — uniformManage/admin xem TẤT CẢ siêu thị gộp lại + bảng
+         theo từng siêu thị; uniformStoreManage CHỈ xem số của siêu thị mình (cùng quy ước scoping theo
+         dept đã dùng ở mọi nơi khác của module, xem lib/recordViewScope.js). -->
+    <div id="uniformSubDashboard" class="hidden space-y-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Tổng Tồn Kho</div>
+          <div id="uniformDashStatStock" class="text-2xl font-bold text-emerald-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Đã Cấp NV</div>
+          <div id="uniformDashStatIssued" class="text-2xl font-bold text-sky-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Hỏng / Hủy</div>
+          <div id="uniformDashStatDamaged" class="text-2xl font-bold text-rose-700">0</div>
+        </div>
+        <div class="bg-white p-4 rounded border text-center">
+          <div class="text-[11px] text-gray-500 font-semibold uppercase">Mất</div>
+          <div id="uniformDashStatLost" class="text-2xl font-bold text-orange-700">0</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-4 rounded border space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">👕 Theo Mặt Hàng</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-gray-100 text-left"><th class="border p-1.5">Mặt Hàng</th><th class="border p-1.5 text-right">Tồn Kho</th><th class="border p-1.5 text-right">Đã Cấp</th></tr></thead>
+              <tbody id="uniformDashByItemBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-white p-4 rounded border space-y-2">
+          <h4 class="font-bold text-sm text-gray-800">📏 Theo Size</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-gray-100 text-left"><th class="border p-1.5">Size</th><th class="border p-1.5 text-right">Tồn Kho</th><th class="border p-1.5 text-right">Đã Cấp</th></tr></thead>
+              <tbody id="uniformDashBySizeBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="uniformDashByStoreWrap" class="hidden bg-white p-4 rounded border space-y-2">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h4 class="font-bold text-sm text-gray-800">🏬 Theo Siêu Thị</h4>
+          <button type="button" data-op="exportUniformDashByStoreExcel" class="bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded hover:bg-emerald-700">📥 Xuất Excel</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border text-xs">
+            <thead><tr class="bg-gray-100 text-left">
+              <th class="border p-1.5">Siêu Thị</th>
+              <th class="border p-1.5 text-right">Mới</th>
+              <th class="border p-1.5 text-right">Đã Sử Dụng</th>
+              <th class="border p-1.5 text-right">Tổng Tồn Kho</th>
+              <th class="border p-1.5 text-right">Đã Cấp</th>
+              <th class="border p-1.5 text-right">Hỏng/Hủy</th>
+              <th class="border p-1.5 text-right">Mất</th>
+            </tr></thead>
+            <tbody id="uniformDashByStoreBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  

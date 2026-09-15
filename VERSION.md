@@ -1,8 +1,71 @@
 # Phiên bản hiện tại
 
-**23.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.11 (2026-09-15): Tách module 2 — mở rộng tải lười khung HTML sang 7 module (Đồng Phục/Tổng Hợp/Đăng Ký Xe/VPP/Công&Phép/Báo Cáo Định Kỳ/Hỗ Trợ IT)
+
+Tiếp nối v23.10 (thí điểm 1 module Vận Hành) — người dùng yêu cầu "cứ tiếp tục cho đến khi tối ưu 100%
+thì thôi, làm thật cẩn thận để không bị lỗi, cứ 15 phút cập nhật tiến độ, nhớ là các nút chức năng, các
+giao diện không ảnh hưởng". Đợt này áp dụng đúng cơ chế đã kiểm chứng ở v23.10 (`TAB_SECTION_FRAGMENT`/
+`loadTabSectionHtml()`) cho 7 module tiếp theo: `uniformSection`, `officeSection` (kèm `paymentSection`
+lồng bên trong), `carSection`, `vppSection`, `hrAttendanceSection`, `periodicReportSection` (kèm
+`prAggPdfSection`), `itSupportSection`. Các tab hiện ngay sau đăng nhập (Dashboard/Đăng Nhập/Phê Duyệt
+Hub) giữ nguyên nhúng cứng — tải lười các tab đó sẽ TỰ nó là 1 kiểu giảm trải nghiệm, trái với yêu cầu
+"không ảnh hưởng giao diện".
+
+**3 lớp lỗi thật phát hiện + vá, ngoài 4 lớp đã biết từ v23.10**:
+
+1. **`populateDropdowns()`/`renderCrossTabBar()`/`applyUploadAcceptAttrs()` chạy rỗng lần đầu** — cả 3 hàm
+   này trước đây CHỈ được gọi 1 LẦN, đồng bộ, trong `switchTab()` TRƯỚC khi khung HTML bất đồng bộ tải
+   xong — nên ở lần đầu vào 1 tab mới tách, chúng chạy vào lúc DOM còn rỗng (được `if(el)` chặn an toàn,
+   không vỡ, nhưng dropdown/thanh cross-tab/thuộc tính accept file MÃI rỗng suốt phiên). Sửa TẬN GỐC, áp
+   dụng chung cho MỌI section đã/sẽ tách: gọi lại cả 3 hàm này bên trong `_dispatchTabRender()` — tự bảo
+   vệ cho mọi module hiện tại lẫn tương lai, không cần vá riêng từng module.
+2. **`btnItSubRenewal` trong `finishLogin()`** — hàm chạy 1 lần lúc đăng nhập, đụng thẳng 1 nút thuộc
+   `itSupportSection` (giờ đã rỗng lúc đăng nhập) → vỡ `TypeError` ngay khi đăng nhập. Sửa: `?.` an toàn
+   (logic thật đã tự áp dụng lại đúng khi vào tab Hỗ Trợ IT qua `setItSupportSubTab()` có sẵn, không cần
+   vá thêm).
+3. **`bindCspDelegation('paymentSection')` bị bỏ qua âm thầm** — hạ tầng lắng nghe click/change/input/
+   submit theo từng "root" DOM (dùng chung toàn app, không riêng đợt tách module) chạy 1 lần lúc script
+   vừa nạp; `#paymentSection` lồng bên trong `#officeSection` (khác các section khác — không tự có vỏ
+   rỗng riêng vì không phải chính section được `switchTab()` toggle) nên KHÔNG tồn tại trong DOM lúc đó,
+   khiến hàm bỏ qua sớm — mất hẳn listener của riêng `#paymentSection` cho cả phiên (hành vi nổi bọt qua
+   2 root vốn có từ trước bị giảm còn 1). Phát hiện qua rà soát chéo TOÀN BỘ ~100 lời gọi
+   `bindCspDelegation()` trong code với danh sách id còn tồn tại trong `index.html` sau khi tách — xác
+   nhận `paymentSection` là trường hợp DUY NHẤT bị ảnh hưởng đợt này. Sửa bằng bảng tra cứu chung
+   `NESTED_CSP_ROOTS_IN_FRAGMENT` (tabName → mảng id con cần gọi lại `bindCspDelegation()`), tự động chạy
+   đúng 1 lần ngay sau khi fragment được bơm vào DOM lần đầu — cơ chế dùng được luôn cho các đợt tách
+   sau nếu gặp trường hợp tương tự (section con lồng bên trong 1 section lớn hơn).
+
+**Kiến trúc trên: đổi `loadTabSectionHtml()` từ `fetch()` sang `XMLHttpRequest`** — nhiều file test tự
+ghi đè `window.fetch` (mô phỏng `/api/*`) nhưng không cho request tĩnh (`/fragments/*.html`) đi qua thật,
+khiến khung HTML mãi rỗng mà không có lỗi rõ ràng nào (bị `switchTab()` nuốt lặng lẽ). Ở v23.10 từng vá
+tay 5 file test — KHÔNG BỀN VỮNG vì mỗi đợt tách mới lại có thể vỡ thêm file test khác chưa từng đụng
+tới. Đổi hẳn sang `XMLHttpRequest` (không file test nào trong bộ ghi đè `XMLHttpRequest`) giải quyết tận
+gốc, áp dụng cho mọi đợt tách hiện tại lẫn tương lai.
+
+**Hạ tầng test**: phát hiện 23 file test (không chỉ 5 như v23.10 tưởng) có dòng "nạp trước cụm module JS"
+riêng nhưng thiếu dòng song song "nạp trước khung HTML" — bổ sung 18 file còn thiếu. Riêng 3 file tự dựng
+HTTP server test (`test-meeting-car.js`, `test-minutes.js`, `test-vpp.js`) thiếu hẳn route phục vụ
+`/fragments/*` (rơi vào catch-all trả JSON rỗng `{}` — lỗi khác hẳn, HTTP 200 nhưng nội dung sai, không
+thể phát hiện qua status code) — đã thêm route. `test-approval-email-config.js` có lỗi tương tự (fallback
+trả nguyên `index.html`) tuy chưa kích hoạt (chưa đụng tab nào trong đợt tách) — vá luôn để phòng đợt sau.
+
+**Kết quả đo**: `index.html` 724KB → 579KB raw (gzip ~134KB → ~109KB), tổng cộng từ mốc v23.9 (768KB/
+~143KB gzip): giảm 189KB raw / ~34KB gzip (~24%).
+
+Test: chạy lại toàn bộ 146 file test hồi quy — sạch tuyệt đối, không có lỗi mới nào so với baseline
+v23.10 (2 lỗi thấy trong 1 lần chạy tạm — `test-it-support.js` 3 FAILED, phần "Bán Buôn theo tier" của
+`test-form-reset-file-remove.js` 1 FAILED — đã xác nhận qua `git stash` đối chiếu: tái hiện Y HỆT trên
+baseline v23.10 CHƯA tách module đợt này, là lỗi có sẵn từ trước, không thuộc phạm vi đợt này).
+
+**Deploy-impact**: 7 file HTML mới trong `server/public/fragments/` (`uniformSection.html`,
+`officeSection.html`, `carSection.html`, `vppSection.html`, `hrAttendanceSection.html`,
+`periodicReportSection.html`, `itSupportSection.html`) — cùng lưu ý như v23.10, nếu quy trình cập nhật
+copy toàn bộ cây thư mục thì tự động có đủ; chỉ cần lưu ý nếu cherry-pick copy thủ công từng file. Không
+đổi `schema.sql`, không thêm biến môi trường, không thêm npm dependencies.
 
 ## v23.10 (2026-09-15): Thí điểm tải lười khung HTML theo tab — module Vận Hành (giảm dung lượng `index.html`)
 
