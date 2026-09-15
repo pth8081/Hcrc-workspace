@@ -150,7 +150,15 @@ const TAB_SECTION_FRAGMENT = {
   contract: 'contractSection', checklist: 'checklistSection', meeting: 'meetingSection', minutes: 'minutesSection',
   hrLifecycle: 'hrLifecycleSection', budget: 'budgetSection', doc: 'docSection', submission: 'submissionSection',
   license: 'licenseSection', orgChart: 'orgChartSection', hrPayroll: 'hrPayrollSection', task: 'taskSection',
-  hrProfile: 'hrProfileSection', reports: 'reportsSection', hrContract: 'hrContractSection'
+  hrProfile: 'hrProfileSection', reports: 'reportsSection', hrContract: 'hrContractSection',
+  // Dot tach module 4 (v23.13) - 2 section PHUC TAP CON LAI, moi section co nhieu section con long ben
+  // trong (tach CA CUM vao 1 fragment duy nhat, giu 1 vo rong DUY NHAT o index.html cho chinh no - xem
+  // NESTED_CSP_ROOTS_IN_FRAGMENT ben duoi cho danh sach id con can bind lai rieng):
+  // - system: formSection/adminSection/workflowSection/quickApplySection/uploadTypeSection/logSection/
+  //   trashSection (7 section con, KHONG co bindCspDelegation rieng - dung chung 1 goc systemSection).
+  // - internal: internalTrainingLmsSection/internalRecruitmentSection/internalQnaSection (3 section con,
+  //   2 cai dau CO bindCspDelegation rieng + 7 modal xu ly rieng cung can bind lai - xem danh sach duoi).
+  system: 'systemSection', internal: 'internalSection'
 };
 
 const _loadedSectionHtml = {}; // tabName -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
@@ -163,7 +171,21 @@ const _settledSectionHtml = new Set(); // tabName co section HTML DA nap xong TH
 // "bindCspDelegation('" trong file nay) ma KHONG con la div rong dat san trong index.html (tuc chi ton
 // tai ben trong 1 fragment) thi phai them vao day, neu khong se am tham mat 1 listener click/change/
 // input/submit cho ca phien, rat kho phat hien qua UI thuong (chi lo qua test hoi quy sau nay).
-const NESTED_CSP_ROOTS_IN_FRAGMENT = { office: ['paymentSection'] };
+// 'internal' (v23.13): internalTrainingLmsSection/internalRecruitmentSection (2 section con CO
+// bindCspDelegation rieng) + 7 modal xu ly rieng cua Dao Tao/Tuyen Dung (trainingResultsModal/
+// trainingRosterModal/trainingEditClassModal/trainingTakeTestModal/trainingClassQrModal/
+// trainingJoinClassModal/gradeEssayModal/recruitmentReferModal) - tat ca song "NGOAI section con nhung
+// TRONG #internalSection" (xem chu thich tung bindCspDelegation() o duoi file nay) nen deu bi anh huong
+// khi #internalSection tro thanh fragment. 'system' KHONG can entry rieng - 7 section con cua no
+// (formSection/adminSection/workflowSection/quickApplySection/uploadTypeSection/logSection/trashSection)
+// deu KHONG co bindCspDelegation rieng, chi dung chung goc #systemSection (van duoc bind dung vi chinh
+// no la div vo dat san trong index.html).
+const NESTED_CSP_ROOTS_IN_FRAGMENT = {
+  office: ['paymentSection'],
+  internal: ['internalTrainingLmsSection', 'internalRecruitmentSection', 'trainingResultsModal',
+    'trainingRosterModal', 'trainingEditClassModal', 'trainingTakeTestModal', 'trainingClassQrModal',
+    'trainingJoinClassModal', 'gradeEssayModal', 'recruitmentReferModal']
+};
 
 // true neu section HTML cua tabName KHONG can nap (khong co trong TAB_SECTION_FRAGMENT - van nhung cung
 // nhu truoc) HOAC da nap xong THUC SU - dung CHUNG voi isTabModuleGroupsSettled() de switchTab() biet
@@ -6473,10 +6495,16 @@ async function switchTab(tabName) {
   document.getElementById('periodicReportSection').classList.toggle('hidden', tabName !== 'periodicReport');
   document.getElementById('officeSection').classList.toggle('hidden', tabName !== 'office');
   document.getElementById('systemSection').classList.toggle('hidden', tabName !== 'system');
-  document.getElementById('formSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'FORM'));
-  document.getElementById('adminSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'ADMIN'));
-  document.getElementById('workflowSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'WORKFLOW'));
-  document.getElementById('logSection').classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'LOG'));
+  // formSection/adminSection/workflowSection/logSection (v23.13) - 4 section CON nam LONG BEN TRONG
+  // #systemSection (khac cac section khac o tren - chinh no la div rong dat san, con 4 div nay bi XOA
+  // HAN khoi index.html khi tach ca #systemSection thanh 1 fragment duy nhat) - dung `?.` an toan cho
+  // TOI khi nguoi dung thuc su vao tab "system" lan dau trong phien (fragment nap xong, 4 div nay moi
+  // ton tai) - khong mat gi vi setSystemSubTab() (goi trong _dispatchTabRender() cho tabName==='system',
+  // SAU khi fragment chac chan da nap) tu ap lai dung y het logic an/hien nay.
+  document.getElementById('formSection')?.classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'FORM'));
+  document.getElementById('adminSection')?.classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'ADMIN'));
+  document.getElementById('workflowSection')?.classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'WORKFLOW'));
+  document.getElementById('logSection')?.classList.toggle('hidden', !(tabName === 'system' && activeSystemSubTab === 'LOG'));
   document.getElementById('reportsSection').classList.toggle('hidden', tabName !== 'reports');
   document.getElementById('itSupportSection').classList.toggle('hidden', tabName !== 'itSupport');
   document.getElementById('budgetSection').classList.toggle('hidden', tabName !== 'budget');

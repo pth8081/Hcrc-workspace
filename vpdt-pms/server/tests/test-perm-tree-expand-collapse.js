@@ -48,6 +48,19 @@ function startServer() {
           res.end(data);
         });
       }
+      // /fragments/* (v23.13) - khung HTML tach rieng cho cac tab lon (system/internal...) - THIEU route
+      // nay se roi vao catch-all ben duoi (tra nguyen index.html/JSON rong tuy file), khien
+      // loadTabSectionHtml() nhan noi dung SAI (van HTTP 200 nen khong bao loi ro rang) - xem VERSION.md v23.13.
+      if (urlPath.startsWith('/fragments/')) {
+        const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+        const filePath = path.join(PUBLIC_DIR, urlPath);
+        if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
+        return fs.readFile(filePath, (err, data) => {
+          if (err) { res.writeHead(404); return res.end('Not found: ' + urlPath); }
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(data);
+        });
+      }
       fs.readFile(INDEX_HTML_PATH, (err, data) => {
         if (err) { res.writeHead(500); res.end(String(err)); return; }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
