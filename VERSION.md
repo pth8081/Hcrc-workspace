@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**23.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.1 (2026-09-15): Module mới "📘 Nghiệp Vụ" — tài liệu quy trình trực quan trong app
+
+Người dùng yêu cầu rà soát lại toàn bộ nghiệp vụ (Đào Tạo, Tài Liệu, Văn Bản
+Trình, Hợp Đồng, Điều Hành, Hành Chính, Tổng Hợp, Vận Hành, Nhân Sự, Hỗ Trợ
+IT) và tạo 1 module "Nghiệp Vụ" mô tả tất cả chức năng bằng sơ đồ quy trình +
+diễn giải, với quy tắc module/tính năng mới phải tự động cập nhật vào đây.
+Đã demo 4 mockup mẫu (Tài Liệu, Ngân Sách 2.0, Onboarding/Offboarding, Đào
+Tạo) cho người dùng duyệt trước, người dùng bổ sung yêu cầu thêm Đào Tạo đầy
+đủ + tham khảo 1 kiểu sơ đồ trực quan hơn (node bo góc + mũi tên có hướng +
+khung tham chiếu nét đứt + nhánh quyết định màu + mũi tên vòng lặp cong),
+sau đó xác nhận triển khai thật.
+
+**Module mới, thuần tài liệu tham khảo — KHÔNG tạo/lưu hồ sơ riêng**:
+`public/js/module-nghiepvu.js` — nav trái nhóm theo 8 nhóm nghiệp vụ (Văn Bản
+& Tác Nghiệp/Truyền Thông Nội Bộ/Điều Hành/Hành Chính/Tổng Hợp/Vận Hành/Nhân
+Sự/Hỗ Trợ IT), mỗi mục có mô tả ngắn + 1 sơ đồ quy trình SVG hand-authored
+(không thêm thư viện ngoài — dùng chung hàm `renderNVFlow()` cho toàn bộ 24
+mục, kể cả 6 khu vực con của Đào Tạo) + khối "Điểm Chặn Quan Trọng"/"Cơ Chế
+Đáng Chú Ý" 2 cột bên dưới. Mở mặc định cho MỌI tài khoản đã đăng nhập
+(`canAccessNghiepVuModule()`, giống Tài Liệu/Công Việc) — nút sidebar mới
+`#btnNghiepVuTab` đặt ngay trước "📊 Báo Cáo".
+
+**Cơ chế chống thiếu sót**: mục nào trong `NGHIEP_VU_NAV` chưa có entry
+tương ứng trong `NGHIEP_VU_DOCS` sẽ tự hiện cảnh báo "⚠️ Chưa có tài liệu
+nghiệp vụ" ngay trên màn thật thay vì âm thầm bỏ trống — kèm quy tắc mới
+trong `CLAUDE.md` (song song 2 quy tắc Báo Cáo/Biểu Mẫu đã có): module/tính
+năng nghiệp vụ mới phải thêm entry Nghiệp Vụ ngay trong cùng đợt merge.
+
+**Test mới**: `server/tests/test-nghiepvu.js` (Playwright, 67 kịch bản) —
+quyền truy cập, điều hướng `switchTab`, toàn vẹn dữ liệu (không mục nào thiếu
+entry), render sơ đồ SVG không lỗi cho toàn bộ 24 mục thật (kể cả 6 khu vực
+Đào Tạo), và cơ chế cảnh báo thiếu tài liệu hoạt động đúng khi xoá/phục hồi
+1 entry.
+
+**Deploy-impact**: KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường, KHÔNG
+thêm `dependencies` — chỉ copy code (`server/public/js/module-nghiepvu.js`
+mới, `core.js`/`index.html` sửa) + `pm2 restart` là đủ.
 
 ## v23.0 (2026-09-15): Ngân Sách 2.0 — thiết kế lại HOÀN TOÀN module Ngân Sách
 

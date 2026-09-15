@@ -31,7 +31,7 @@
 // chiếu identifier trực tiếp, không qua ensureFnReady()) nên phải khai ở đây, không phải đoán tay ngẫu
 // nhiên. "phonghop" chỉ deps ["formbuilder-nav"] (đã có sẵn trong deps hethong-tabs) nên thêm cạnh này
 // không kéo theo cụm nào MỚI ngoài chính module-phonghop.js.
-const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash","dangkyxe","phonghop"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]},"checklist":{"files":["module-checklist.js"],"deps":["formbuilder-nav"]}};
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash","dangkyxe","phonghop"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]},"checklist":{"files":["module-checklist.js"],"deps":["formbuilder-nav"]},"nghiepvu":{"files":["module-nghiepvu.js"],"deps":[]}};
 
 // MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
 // duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
@@ -41,7 +41,7 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
 // bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"]};
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"nghiepVu":["nghiepvu"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
@@ -1793,6 +1793,13 @@ const BUSINESS_MODULES = [
   // checklist "Tự Đánh Giá" của đúng siêu thị mình) — xem canAccessChecklistModule() + lib/checklist.js
   // phía server (cùng logic, PHẢI sửa cả 2 bên nếu đổi).
   { key: 'checklist', label: 'Checklist Đánh Giá Siêu Thị' },
+  // "Nghiệp Vụ" — màn tài liệu tham khảo TRỰC QUAN (sơ đồ quy trình + diễn giải) cho toàn bộ module
+  // nghiệp vụ, KHÔNG tạo/lưu hồ sơ riêng (không có form nhập liệu, không cần entry Báo Cáo/Biểu Mẫu
+  // theo quy ước module-mới ở CLAUDE.md). Mở sẵn cho MỌI tài khoản đã đăng nhập (giống 'doc'/'task') —
+  // nội dung do dev/Claude biên soạn trong module-nghiepvu.js (NGHIEP_VU_DOCS), bắt buộc cập nhật ngay
+  // khi có module/tính năng nghiệp vụ mới (xem CLAUDE.md). Đặt ngay trước "Báo Cáo" — cùng nhóm màn
+  // tra cứu/tổng hợp, không phải luồng tác nghiệp chủ động.
+  { key: 'nghiepVu', label: 'Nghiệp Vụ' },
   // "Báo Cáo" — CHUYỂN xuống cuối mảng (đúng vị trí thật trên sidebar, xem #btnReportsTab: nằm ngay
   // trước "Hệ Thống" — mục admin-only không khai ở BUSINESS_MODULES) vì đây là màn TỔNG HỢP/GIÁM SÁT
   // số liệu đọc từ 11 module khác (không có luồng nghiệp vụ chủ động riêng), gần với nhóm công cụ quản
@@ -2445,6 +2452,11 @@ function readSelectedContractLayers() {
 function canAccessDocModule(user) {
   if (!user) return false;
   return hasModuleAccess(user, 'doc');
+}
+
+function canAccessNghiepVuModule(user) {
+  if (!user) return false;
+  return hasModuleAccess(user, 'nghiepVu');
 }
 
 function canAccessTaskModule(user) {
@@ -5711,6 +5723,7 @@ function finishLogin(user) {
   document.getElementById('btnHrAttendanceNav').classList.toggle('hidden', !canAccessHrAttendanceModule(user));
   document.getElementById('btnHrPayrollNav').classList.toggle('hidden', !canAccessHrPayrollModule(user));
   updateHrNavVisibility();
+  document.getElementById('btnNghiepVuTab').classList.toggle('hidden', !canAccessNghiepVuModule(user));
 
   populateDropdowns();
   switchTab('dashboard');
@@ -6328,6 +6341,10 @@ async function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Checklist Đánh Giá Siêu Thị!');
     return;
   }
+  if (tabName === 'nghiepVu' && !canAccessNghiepVuModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Nghiệp Vụ!');
+    return;
+  }
 
   setActiveSidebarTab(tabName); // Tô sáng đúng nút sidebar trái vừa chuyển tới — xem chú thích hàm.
 
@@ -6368,6 +6385,7 @@ async function switchTab(tabName) {
   document.getElementById('hrContractSection').classList.toggle('hidden', tabName !== 'hrContract');
   document.getElementById('hrAttendanceSection').classList.toggle('hidden', tabName !== 'hrAttendance');
   document.getElementById('hrPayrollSection').classList.toggle('hidden', tabName !== 'hrPayroll');
+  document.getElementById('nghiepVuSection').classList.toggle('hidden', tabName !== 'nghiepVu');
 
   populateDropdowns();
   updateApprovalHubBadge();
@@ -6458,6 +6476,7 @@ function _dispatchTabRender(tabName) {
   if (tabName === 'hrContract') { renderHrContractModule(); }
   if (tabName === 'hrAttendance') { renderHrAttendanceModule(); }
   if (tabName === 'checklist') { updateChecklistSubTabVisibility(); }
+  if (tabName === 'nghiepVu') { renderNghiepVuModule(); }
 }
 
 // Quyền vào sub-tab "💰 Thanh Toán" của Tổng Hợp — khác hẳn canAccessOfficeSubTab() (không có khái
