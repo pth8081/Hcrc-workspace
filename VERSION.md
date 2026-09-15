@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**23.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.2 (2026-09-15): Nghiệp Vụ > Đào Tạo — thêm "Tổng Quan" (sơ đồ quan hệ) + "Lộ Trình Tân Binh"
+
+Sau khi demo module Nghiệp Vụ v23.1, người dùng chỉ ra Đào Tạo còn thiếu 1
+góc nhìn TỔNG QUAN thể hiện mối liên hệ giữa Lớp Học/Chương Trình/Học Viên/
+Giảng Viên/Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Tân Binh — rà soát lại
+`module-internalcomms-daotao.js` phát hiện đúng là còn thiếu 1 khu vực thật
+(Lộ Trình Đào Tạo Tân Binh, `onboardingPaths`/`onboardingProgress` — KHÁC
+Lộ Trình Thăng Tiến `careerPaths`, và KHÁC Onboarding hành chính của Nhân Sự).
+
+**Khu vực mới "🧭 Tổng Quan"** (đặt đầu tiên, mặc định mở khi vào Đào Tạo) —
+sơ đồ QUAN HỆ dạng hub (khác kiểu chuỗi tuần tự `renderNVFlow()` của các khu
+vực còn lại): Lớp Học ở trung tâm nhận vào từ Chương Trình/Kho Tài Liệu
+(giáo trình)/Ngân Hàng Câu Hỏi (đề kiểm tra)/Giảng Viên (đứng lớp Offline),
+và mời Học Viên tham gia; Lộ Trình Tân Binh + Lộ Trình Thăng Tiến đều xây từ
+nhiều Chương Trình. Thêm hàm dựng SVG mới `renderNVDaotaoOverview()`
+(`module-nghiepvu.js`) dùng lại đúng các khối vẽ node/mũi tên đã có.
+
+**Khu vực mới "🆕 Lộ Trình Tân Binh"** — sơ đồ quy trình riêng (Phân công →
+Học theo Chương Trình → Đánh Giá GĐ3 → Cấp Chứng Chỉ, có nhánh "chưa đạt"
+quay lại học bổ sung), nêu rõ khác Onboarding/Offboarding hành chính của
+Nhân Sự (2 quy trình độc lập, không tự liên kết).
+
+Đào Tạo giờ có đủ **8 khu vực** (từ 6). Cập nhật `test-nghiepvu.js` (71 kịch
+bản, tăng từ 67) + `deploy/Huong-dan-nghiep-vu.md` mục 2.5.
+
+**Deploy-impact**: không đổi `schema.sql`/biến môi trường/dependency — chỉ
+copy code (`module-nghiepvu.js`) + `pm2 restart`.
 
 ## v23.1 (2026-09-15): Module mới "📘 Nghiệp Vụ" — tài liệu quy trình trực quan trong app
 

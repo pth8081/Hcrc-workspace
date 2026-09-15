@@ -154,9 +154,13 @@ cách trình bày cho người đọc. Mỗi mục hiện: mô tả ngắn, 1 s�
 "duyệt"/đỏ "từ chối"; khung tham chiếu danh mục nét đứt nếu có; mũi tên vòng
 lặp cong khi bị từ chối/làm lại), và khối **"Điểm Chặn Quan Trọng"/"Cơ Chế
 Đáng Chú Ý"** 2 cột tóm tắt các ràng buộc/cơ chế đáng lưu ý nhất. Riêng
-**🎓 Đào Tạo** (module lớn nhất) có thêm 1 hàng pill chọn 6 khu vực con (Lớp
-Học/Chương Trình/Kế Hoạch Đào Tạo/Kho Tài Liệu/Ngân Hàng Câu Hỏi/Lộ Trình
-Thăng Tiến).
+**🎓 Đào Tạo** (module lớn nhất) có thêm 1 hàng pill chọn 8 khu vực con — mở
+đầu bằng **🧭 Tổng Quan** (sơ đồ QUAN HỆ dạng hub, khác kiểu chuỗi tuần tự:
+Lớp Học là trung tâm nhận Chương Trình/Kho Tài Liệu/Ngân Hàng Câu Hỏi/Giảng
+Viên và mời Học Viên, còn Lộ Trình Tân Binh/Lộ Trình Thăng Tiến đều xây từ
+nhiều Chương Trình), rồi tới Lớp Học/Chương Trình/Kế Hoạch Đào Tạo/Kho Tài
+Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Tân Binh (nhân viên mới, có đánh giá GĐ3 +
+cấp chứng chỉ — khác Onboarding hành chính của Nhân Sự)/Lộ Trình Thăng Tiến.
 
 Đây là bản **tóm tắt trực quan** — mục 3-7 phía dưới của tài liệu này vẫn là
 nguồn tham khảo **đầy đủ và chi tiết nhất** (mỗi trang Nghiệp Vụ đều có link
