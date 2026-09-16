@@ -343,6 +343,18 @@ function closeHrProcessDetail() {
   document.getElementById('hrpDetailModal').classList.add('hidden');
 }
 
+// "👤 Xem Hồ Sơ" (nút ở renderHrProcessDetailBody()) — đóng modal Onboarding trước rồi chuyển thẳng
+// sang Hồ Sơ Nhân Sự > Quản Lý Hồ Sơ, mở đúng chi tiết theo employeeCode. await switchTab('hrProfile')
+// đảm bảo cụm module-hrprofile.js đã nạp xong (2 cụm tải lười RIÊNG, không phụ thuộc nhau) trước khi
+// gọi setHrProfileView()/openHrpfDetailModal() — 2 hàm thật của module đó. Mở ở chế độ chỉ xem (readOnly
+// =true, đối xứng nút "👁️ Xem" trong bảng danh sách) — muốn sửa thì tự bấm "✏️ Sửa" trong modal đó.
+async function openHrProfileFromProcess(employeeCode) {
+  closeHrProcessDetail();
+  await switchTab('hrProfile');
+  setHrProfileView('MANAGE');
+  await openHrpfDetailModal(employeeCode, true);
+}
+
 function renderHrProcessDetailBody(item) {
   const employeeLabel = item.processType === 'ONBOARDING' ? `${item.fullName} (${item.employeeCode})` : `${item.fullName} (${item.employeeUsername})`;
   const stages = item.processType === 'ONBOARDING'
@@ -425,13 +437,25 @@ function renderHrProcessDetailBody(item) {
         </div>`
   ) : '';
 
+  // "👤 Xem Hồ Sơ" — theo phản hồi người dùng (9/2026: "làm thế nào để ra được màn hình nhập mã và hồ
+  // sơ? có mục nào liên kết không") — nhảy thẳng sang đúng Hồ Sơ Nhân Sự (theo employeeCode) đã được tự
+  // tạo sẵn NGAY LÚC tạo Onboarding (DRAFT, xem routes/create.js). CHỈ hiện cho ONBOARDING — Offboarding
+  // tra theo employeeUsername của 1 tài khoản CÓ SẴN (không tự sinh employeeCode/hồ sơ mới nào để mở
+  // theo cách này). Gác quyền đối chiếu THẲNG field perms (không gọi hrpfCanFullView() — module-hrprofile.js
+  // là 1 cụm tải lười RIÊNG, có thể CHƯA được nạp lúc render nút này) — cùng đúng logic hrpfCanFullView().
+  const canViewLinkedProfile = item.processType === 'ONBOARDING' &&
+    !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit);
+
   document.getElementById('hrpDetailBody').innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
         <div class="font-bold text-base">${escapeHtml(employeeLabel)}</div>
         <div class="text-xs text-gray-500">${escapeHtml(item.employeeDept || '')}${item.employeeJobTitle ? ' — ' + escapeHtml(item.employeeJobTitle) : ''} — ${item.processType === 'ONBOARDING' ? '🆕 Onboarding' : '🚪 Offboarding'}</div>
       </div>
-      ${HR_PROCESS_STATUS_BADGES[item.status] || ''}
+      <div class="flex items-center gap-2">
+        ${canViewLinkedProfile ? `<button type="button" data-op="openHrProfileFromProcess" data-arg0="${escapeHtml(item.employeeCode)}" class="px-2.5 py-1 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">👤 Xem Hồ Sơ</button>` : ''}
+        ${HR_PROCESS_STATUS_BADGES[item.status] || ''}
+      </div>
     </div>
     ${successorBlock}
     <div class="flex flex-wrap items-center gap-1 my-3">${stepper}</div>

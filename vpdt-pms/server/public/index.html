@@ -241,7 +241,10 @@
           <button id="btnHrFeedbackNav" data-op-seq="closeHrDropdown()|switchTab(hr)" class="hidden sidebar-subitem"><span id="hrFeedbackManageNavLabel">🤝 Quản Lý &amp; Phản Hồi Ý Kiến</span></button>
           <button id="btnOrgChartNav" data-op-seq="closeHrDropdown()|switchTab(orgChart)" class="hidden sidebar-subitem">🌳 Cơ Cấu Tổ Chức</button>
           <button id="btnHrLifecycleNav" data-op-seq="closeHrDropdown()|switchTab(hrLifecycle)" class="hidden sidebar-subitem">🧑‍💼 Onboarding / Offboarding</button>
-          <button id="btnHrProfileNav" data-op-seq="closeHrDropdown()|switchTab(hrProfile)" class="hidden sidebar-subitem">🪪 Hồ Sơ Nhân Sự</button>
+          <!-- 🪪 (thẻ căn cước) render mờ/khó nhận diện trên 1 số máy Android (phản hồi người dùng,
+               9/2026) — đổi sang 👤 (universal, rõ trên mọi thiết bị), cùng icon với entry NGHIEP_VU_NAV
+               'hrProfile' ở module-nghiepvu.js. -->
+          <button id="btnHrProfileNav" data-op-seq="closeHrDropdown()|switchTab(hrProfile)" class="hidden sidebar-subitem">👤 Hồ Sơ Nhân Sự</button>
           <button id="btnHrContractNav" data-op-seq="closeHrDropdown()|switchTab(hrContract)" class="hidden sidebar-subitem">📝 Hợp Đồng Lao Động</button>
           <button id="btnHrAttendanceNav" data-op-seq="closeHrDropdown()|switchTab(hrAttendance)" class="hidden sidebar-subitem">⏱️ Công &amp; Phép</button>
           <button id="btnHrPayrollNav" data-op-seq="closeHrDropdown()|switchTab(hrPayroll)" class="hidden sidebar-subitem">💰 Lương</button>

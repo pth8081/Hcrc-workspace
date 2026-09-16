@@ -514,6 +514,53 @@ async function main() {
       assertEqual(snap.myTasks.myTasksHidden, false, 'View MYTASKS phải hiện #hrpViewMyTasks');
     });
 
+    // ===================== "👤 Xem Hồ Sơ" (đợt 9/2026, theo phản hồi người dùng) — nút liên kết từ chi
+    // tiết quy trình Onboarding sang thẳng Hồ Sơ Nhân Sự theo employeeCode =====================
+
+    await run.run('"👤 Xem Hồ Sơ": KHÔNG hiện nếu người xem thiếu quyền xem/sửa toàn bộ Hồ Sơ Nhân Sự (HR1 chỉ có hrOnboardingManage)', async () => {
+      const html = await page.evaluate((id) => { openHrProcessDetail(id); return document.getElementById('hrpDetailBody').innerHTML; }, onboardId);
+      assert(!html.includes('openHrProfileFromProcess'), 'HR1 thiếu hrProfileManage/hrProfileFullView/hrProfileEdit -> KHÔNG được thấy nút này');
+    });
+
+    await run.run('"👤 Xem Hồ Sơ": CÓ hiện với admin, đúng data-arg0 = employeeCode (NV0001), CHỈ hiện cho ONBOARDING (không hiện ở Offboarding)', async () => {
+      await loginAs(page, ADMIN);
+      const onbHtml = await page.evaluate((id) => { openHrProcessDetail(id); return document.getElementById('hrpDetailBody').innerHTML; }, onboardId);
+      assertIncludes(onbHtml, 'data-op="openHrProfileFromProcess" data-arg0="NV0001"', 'Admin phải thấy nút, đúng employeeCode của quy trình Onboarding');
+
+      const offbHtml = await page.evaluate((id) => { openHrProcessDetail(id); return document.getElementById('hrpDetailBody').innerHTML; }, offboardId);
+      assert(!offbHtml.includes('openHrProfileFromProcess'), 'Offboarding KHÔNG có employeeCode/hồ sơ tự sinh theo cách này -> không hiện nút');
+    });
+
+    await run.run('Real click "👤 Xem Hồ Sơ": đóng modal Onboarding, chuyển sang Hồ Sơ Nhân Sự > Quản Lý Hồ Sơ, mở đúng employeeCode (readOnly)', async () => {
+      await page.evaluate(() => { switchTab('hrLifecycle'); setHrLifecycleView('LIST'); });
+      await page.evaluate((id) => { openHrProcessDetail(id); }, onboardId);
+      // Stub tạm openHrpfDetailModal() (thay vì để gọi thật GET /api/hr-profile/by-code/..., route không
+      // được mock ở testHarness.js — employeeProfiles là nhóm dữ liệu cực nhạy cảm, xem chú thích đầu
+      // file) — chỉ để bắt lại đúng tham số được gọi, không kiểm phần render hồ sơ thật (đã có
+      // test-hr-profile.js riêng cho việc đó).
+      await page.evaluate(() => {
+        window.__origOpenHrpfDetailModal = openHrpfDetailModal;
+        window.__hrpfDetailCalls = [];
+        openHrpfDetailModal = async (code, readOnly) => { window.__hrpfDetailCalls.push({ code, readOnly }); };
+      });
+      await page.click('[data-op="openHrProfileFromProcess"]');
+      await page.waitForTimeout(200);
+      const snap = await page.evaluate(() => ({
+        modalHidden: document.getElementById('hrpDetailModal').classList.contains('hidden'),
+        hrProfileSectionVisible: !document.getElementById('hrProfileSection').classList.contains('hidden'),
+        activeHrProfileView,
+        calls: window.__hrpfDetailCalls
+      }));
+      assertEqual(snap.modalHidden, true, 'Modal chi tiết Onboarding phải tự đóng lại');
+      assertEqual(snap.hrProfileSectionVisible, true, 'Phải chuyển đúng sang tab Hồ Sơ Nhân Sự (#hrProfileSection hiện)');
+      assertEqual(snap.activeHrProfileView, 'MANAGE', 'Phải mở đúng view Quản Lý Hồ Sơ (không phải Hồ Sơ Của Tôi)');
+      assertEqual(snap.calls.length, 1, 'Phải gọi đúng 1 lần openHrpfDetailModal()');
+      assertEqual(snap.calls[0].code, 'NV0001', 'Phải mở đúng employeeCode của quy trình Onboarding');
+      assertEqual(snap.calls[0].readOnly, true, 'Phải mở ở chế độ chỉ xem (đối xứng nút "👁️ Xem" trong danh sách)');
+      await page.evaluate(() => { openHrpfDetailModal = window.__origOpenHrpfDetailModal; });
+      await loginAs(page, HR1);
+    });
+
   } finally {
     await browser.close();
     server.close();

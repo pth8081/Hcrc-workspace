@@ -1261,7 +1261,13 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
 
 - Hồ sơ **tự sinh bản Nháp** ngay khi tạo 1 quy trình Onboarding (khoá theo Mã
   Nhân Viên — lúc này nhân viên CHƯA có tài khoản VPDT), rồi **tự chuyển Đang
-  làm việc/Đã nghỉ việc** khi Onboarding/Offboarding tương ứng hoàn tất.
+  làm việc/Đã nghỉ việc** khi Onboarding/Offboarding tương ứng hoàn tất — bản
+  Nháp này KHÔNG cần thao tác tay nào để tạo, checklist Onboarding (mục 4.5.2)
+  chỉ có 2 nút Hoàn thành/Bỏ qua từng việc, không có bước "nhập mã/hồ sơ"
+  riêng. Đợt 9/2026 (theo phản hồi người dùng), màn chi tiết quy trình
+  Onboarding có thêm nút **"👤 Xem Hồ Sơ"** (chỉ hiện với người có quyền xem/
+  sửa toàn bộ Hồ Sơ Nhân Sự) để nhảy thẳng sang đúng hồ sơ này ở chế độ chỉ
+  xem, không cần tự vào Quản Lý Hồ Sơ rồi gõ lại Mã Nhân Viên.
 - HR/admin (**"🗂️ Quản Lý Hồ Sơ Nhân Sự"**) **liên kết** hồ sơ với 1 tài khoản
   VPDT thật (thường ngay sau khi IT hoàn thành việc "Tạo tài khoản VPDT" ở
   Onboarding) — trước khi liên kết, hồ sơ chỉ HR mới tra cứu được.
