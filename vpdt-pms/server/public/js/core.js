@@ -625,35 +625,45 @@ const CORE_FIELD_MANIFEST = {
     { id: 'licenseIssuingAuthority', label: 'Cơ Quan Cấp Phép', required: true },
     { id: 'licenseFile', label: 'Tệp Đính Kèm Giấy Phép', required: true }
   ],
-  // IT_PRICE: #itPriceCreateForm (Hỗ Trợ IT > Đề Xuất Duyệt Giá Bán). itPriceMasterListSelect/itPriceTier
-  // KHÔNG có optionsKey — mẫu giá (itPriceMasterLists) đã có màn quản trị riêng (chọn KHUÔN CỘT, không
-  // phải nhãn thuần), còn itPriceTier (Margin/Chiết Khấu) là 4 mức CỐ ĐỊNH gắn trực tiếp với cấu hình
-  // quy trình duyệt riêng theo mức (itPriceTierWorkflows) — đổi khoá ở đây sẽ làm mồ côi cấu hình duyệt
-  // đã gán, nên KHÔNG đưa vào diện admin tự thêm/bớt giá trị (chỉ sửa nhãn/bắt buộc như mọi field khác).
-  // itPriceExpiryMode: cùng lý do itPriceTier ở trên (giá trị gắn cứng với logic hiện/ẩn khối "Khác" đi
-  // kèm, KHÔNG đưa optionsKey). itPriceStoreScopeStoresMultiSelect (div chứa renderMultiSelectDropdown())
-  // KHÔNG đưa vào manifest — cùng lý do owiAssignedToPicker/workflowParticipatingDeptsMultiSelect chưa
-  // từng vào diện Biểu Mẫu (div container, không phải input/không có <label> riêng bên trong, xem chú
-  // thích OPERATION_WORK_ITEM). itPriceEffectiveDate/itPriceExpiryMode/itPriceExpiryDate (đợt 9/2026, tách
-  // biểu mẫu Bán Buôn/Bán Lẻ) giờ CHỈ hiện cho Bán Buôn — Bán Lẻ tự gắn mặc định, không đọc 3 input này
-  // (xem submitItPriceApproval()). itPriceExpiryDate chỉ THẬT SỰ bắt buộc khi itPriceExpiryMode="OTHER"
-  // (điều kiện, không tĩnh) — required ở đây chỉ là mặc định ban đầu, đặt false cho đúng bản chất; validate
+  // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE: #itPriceCreateForm (Hỗ Trợ IT > Đề Xuất Duyệt Giá Bán) — TRƯỚC
+  // ĐÂY 1 coreKey 'IT_PRICE' DUY NHẤT liệt kê LẪN LỘN mọi field (kể cả field chỉ áp dụng riêng Bán Lẻ/
+  // Bán Buôn) trong CÙNG 1 danh sách phẳng ở màn Biểu Mẫu, dễ nhầm lẫn (phản hồi người dùng đợt 9/2026:
+  // "cần tách 2 mẫu giá bán lẻ và giá bán buôn ra vì dùng chung dễ dẫn đến nhầm lẫn") — giờ tách THẬT
+  // thành 2 coreKey/2 tab riêng trong FORM_TABS (đối xứng CONTRACT_APPROVAL/CONTRACT_MANAGE, KHÁC ở chỗ
+  // 2 tab đó dùng CHUNG 1 coreKey vì field TRÙNG HỆT nhau, còn ở đây field CHỦ YẾU khác nhau nên phải 2
+  // coreKey riêng — applyCoreFieldCustomizations() set thẳng input.required/label theo id DOM, nếu 1 id
+  // xuất hiện ở CẢ 2 coreKey thì override của bên chạy SAU sẽ đè mất override bên chạy trước, dữ liệu vẫn
+  // đúng nhưng khó lường). QUY ƯỚC: 6 field DÙNG CHUNG thật (Mã/Phòng Ban/Mẫu Giá/Tệp bảng giá/Lý do/Tài
+  // liệu bổ sung — cùng 1 input DOM bất kể sub-tab nào) chỉ khai báo ở IT_PRICE_RETAIL (sửa nhãn/bắt buộc
+  // các field này thì vào tab "Bán Lẻ"), IT_PRICE_WHOLESALE CHỈ liệt kê field RIÊNG của Bán Buôn — tránh
+  // hẳn tình huống 1 id có mặt ở 2 manifest. itPriceMasterListSelect/itPriceTier KHÔNG có optionsKey —
+  // mẫu giá (itPriceMasterLists) đã có màn quản trị riêng (chọn KHUÔN CỘT, không phải nhãn thuần), còn
+  // itPriceTier (Margin/Chiết Khấu) là 4 mức CỐ ĐỊNH gắn trực tiếp với cấu hình quy trình duyệt riêng
+  // theo mức (itPriceTierWorkflows) — đổi khoá ở đây sẽ làm mồ côi cấu hình duyệt đã gán, nên KHÔNG đưa
+  // vào diện admin tự thêm/bớt giá trị (chỉ sửa nhãn/bắt buộc như mọi field khác). itPriceExpiryMode:
+  // cùng lý do itPriceTier ở trên (giá trị gắn cứng với logic hiện/ẩn khối "Khác" đi kèm, KHÔNG đưa
+  // optionsKey). itPriceStoreScopeStoresMultiSelect (div chứa renderMultiSelectDropdown()) KHÔNG đưa vào
+  // manifest — cùng lý do owiAssignedToPicker/workflowParticipatingDeptsMultiSelect chưa từng vào diện
+  // Biểu Mẫu (div container, không phải input/không có <label> riêng bên trong, xem chú thích
+  // OPERATION_WORK_ITEM). itPriceExpiryDate chỉ THẬT SỰ bắt buộc khi itPriceExpiryMode="OTHER" (điều
+  // kiện, không tĩnh) — required ở đây chỉ là mặc định ban đầu, đặt false cho đúng bản chất; validate
   // điều kiện thật nằm ở submitItPriceApproval()/itPriceApprovals.extraValidate (lib/createValidation.js).
-  IT_PRICE: [
+  IT_PRICE_RETAIL: [
     { id: 'itPriceCode', label: 'Mã Đề Xuất', required: false },
     { id: 'itPriceDeptDisplay', label: 'Phòng Ban Đề Xuất', required: false },
     { id: 'itPriceMasterListSelect', label: 'Mẫu Giá Phê Duyệt', required: false },
-    { id: 'itPriceTier', label: 'Mức Margin / Chiết Khấu', required: false },
-    // itPriceWholesaleApplyUnit: chỉ hiện + bắt buộc khi Bán Buôn (cùng điều kiện với itPriceTier ở
-    // trên) — required ở đây là mặc định ban đầu, validate điều kiện thật nằm ở submitItPriceApproval()/
-    // itPriceApprovals.extraValidate như itPriceTier.
-    { id: 'itPriceWholesaleApplyUnit', label: 'Đơn Vị Áp Dụng Giá Bán Buôn', required: false },
     { id: 'itPriceRetailZone', label: 'Vùng Giá Áp Dụng', required: false },
     { id: 'itPriceFileInput', label: 'Tệp Bảng Giá (.xlsx)', required: false },
     { id: 'itPriceReason', label: 'Lý Do Điều Chỉnh Giá', required: false },
-    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false },
-    { id: 'itPriceEffectiveDate', label: 'Ngày Áp Dụng (Bán Buôn)', required: true },
-    { id: 'itPriceExpiryMode', label: 'Ngày Hết Hiệu Lực (Bán Buôn)', required: false },
+    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false }
+  ],
+  IT_PRICE_WHOLESALE: [
+    { id: 'itPriceTier', label: 'Mức Margin / Chiết Khấu', required: false },
+    // itPriceWholesaleApplyUnit: bắt buộc khi Bán Buôn — required ở đây là mặc định ban đầu, validate
+    // điều kiện thật nằm ở submitItPriceApproval()/itPriceApprovals.extraValidate.
+    { id: 'itPriceWholesaleApplyUnit', label: 'Đơn Vị Áp Dụng Giá Bán Buôn', required: false },
+    { id: 'itPriceEffectiveDate', label: 'Ngày Áp Dụng', required: true },
+    { id: 'itPriceExpiryMode', label: 'Ngày Hết Hiệu Lực', required: false },
     { id: 'itPriceExpiryDate', label: 'Ngày Hết Hiệu Lực (Khác)', required: false }
   ],
   // IT_TICKET: #itTicketCreateForm (Hỗ Trợ IT > Hỗ Trợ Yêu Cầu). itTicketCategory optionsKey trỏ DB.
@@ -1179,7 +1189,13 @@ const FORM_TABS = [
   { key: 'TASK', coreKey: 'TASK', group: 'TASK', label: 'Công Việc - Giao Việc', icon: '📌', short: 'Công Việc' },
   { key: 'VPP', coreKey: 'VPP', group: 'VPP', label: 'Văn Phòng Phẩm - Tạo Kỳ Đăng Ký', icon: '🖇️', short: 'VPP' },
   { key: 'LICENSE', coreKey: 'LICENSE', group: 'LICENSE', label: 'Giấy Phép', icon: '📜', short: 'Giấy Phép' },
-  { key: 'IT_PRICE', coreKey: 'IT_PRICE', group: 'IT', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá', icon: '🏷️', short: 'IT - Duyệt Giá' },
+  // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE (đợt 9/2026, tách khỏi 1 tab 'IT_PRICE' chung trước đây — xem chú
+  // thích đầy đủ ở CORE_FIELD_MANIFEST.IT_PRICE_RETAIL/IT_PRICE_WHOLESALE): 2 tab RIÊNG (không TRÙNG
+  // coreKey như đa số entry Đợt 1 khác) vì Bán Lẻ/Bán Buôn có field bắt buộc và cấu hình duyệt khác hẳn
+  // nhau — modKey "Trường Bổ Sung" (renderDynamicInputsForModule()/collectDynamicFieldsData()) cũng tách
+  // theo đúng 2 key này, xem setItPriceSubTab()/submitItPriceApproval() ở module-itsupport-price.js.
+  { key: 'IT_PRICE_RETAIL', coreKey: 'IT_PRICE_RETAIL', group: 'IT', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá (Bán Lẻ)', icon: '🏷️', short: 'IT - Duyệt Giá (Bán Lẻ)' },
+  { key: 'IT_PRICE_WHOLESALE', coreKey: 'IT_PRICE_WHOLESALE', group: 'IT', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá (Bán Buôn)', icon: '🏷️', short: 'IT - Duyệt Giá (Bán Buôn)' },
   { key: 'IT_TICKET', coreKey: 'IT_TICKET', group: 'IT', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' },
   // Đợt 2 (mở rộng Biểu Mẫu ra thêm Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) — mỗi tab key riêng
   // TRÙNG coreKey (như Đợt 1), trừ Đồng Phục có 5 form thật riêng biệt nên 5 coreKey/tab riêng.
@@ -2104,6 +2120,30 @@ function getContractApprovalLevelRule(levelKey) {
 // persisted storage (chỉ thực sự lưu lại khi admin bấm "Lưu Thành Viên" ở màn "Quản Lý Nhóm Phê Duyệt
 // Trình", xem saveSubmissionApprovalGroup()) — để không mất thành viên đã gán trước khi có tính năng
 // "Cấp Phê Duyệt Cuối Cùng". Khớp đúng hàm cùng tên trong lib/createValidation.js (LƯU Ý BẢO TRÌ).
+// Di chuyển "Trường Bổ Sung"/thứ tự trường/override trường mặc định đã cấu hình dưới 1 modKey 'IT_PRICE'
+// CHUNG (trước đợt 9/2026, lúc Biểu Mẫu IT_PRICE chưa tách Bán Lẻ/Bán Buôn) sang CẢ 2 modKey mới
+// ('IT_PRICE_RETAIL'/'IT_PRICE_WHOLESALE') — không suy luận được field nào admin từng thêm chỉ dành
+// riêng cho sub-tab nào, nên sao chép nguyên vẹn sang CẢ 2 bên (an toàn hơn làm rơi mất cấu hình cũ);
+// admin có thể xoá bớt ở tab không cần sau khi thấy trùng lặp. CHỈ chạy 1 lần (bỏ qua nếu đã có key mới)
+// — cùng khuôn migrateSubmissionApprovalGroupKeys() ở trên, thuần trong bộ nhớ, chỉ thật sự lưu lại khi
+// admin thao tác gì đó trên màn Biểu Mẫu (gọi syncStorage('formTemplates')).
+function migrateItPriceFormTemplatesKeys(formTemplates) {
+  const migrated = { ...(formTemplates || {}) };
+  const hasNewKeys = ('IT_PRICE_RETAIL' in migrated) || ('IT_PRICE_WHOLESALE' in migrated)
+    || ('__core__IT_PRICE_RETAIL' in migrated) || ('__core__IT_PRICE_WHOLESALE' in migrated);
+  if (hasNewKeys) return migrated;
+  ['', '__core__', '__order__'].forEach((prefix) => {
+    const oldKey = prefix + 'IT_PRICE';
+    if (!(oldKey in migrated)) return;
+    // Clone RIÊNG cho mỗi bên (JSON an toàn với dữ liệu thuần chuỗi/số/mảng ở đây) — tránh 2 khoá mới
+    // cùng trỏ 1 mảng/object, admin sửa bên này vô tình đổi luôn bên kia.
+    migrated[prefix + 'IT_PRICE_RETAIL'] = JSON.parse(JSON.stringify(migrated[oldKey]));
+    migrated[prefix + 'IT_PRICE_WHOLESALE'] = JSON.parse(JSON.stringify(migrated[oldKey]));
+    delete migrated[oldKey];
+  });
+  return migrated;
+}
+
 function migrateSubmissionApprovalGroupKeys(groups) {
   const migrated = { ...(groups || {}) };
   const RENAME_MAP = { BGD: 'GD_PGD', TGD_CT: 'TGD' };
@@ -3325,7 +3365,7 @@ async function initDatabase(loggingInUser) {
     DB.paymentRequests = data.paymentRequests || [];
     DB.paymentDeptWorkflows = data.paymentDeptWorkflows || {};
     DB.workflows = data.workflows || [];
-    DB.formTemplates = data.formTemplates || {};
+    DB.formTemplates = migrateItPriceFormTemplatesKeys(data.formTemplates || {});
     DB.permGroups = data.permGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];

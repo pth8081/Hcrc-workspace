@@ -1544,14 +1544,14 @@ const CREATE_MODULE_CONFIGS = {
         // trên), chọn từ danh mục hệ thống appData.priceZones (KHÔNG nhập tay tự do như
         // wholesaleApplyUnit — đối tác/khách hàng ngoài không có danh mục cố định, nhưng vùng giá là
         // khái niệm NỘI BỘ công ty tự định nghĩa nên dùng danh mục để tránh gõ sai/không nhất quán).
-        // Chặn sớm ở client (submitItPriceApproval(), module-itsupport-price.js) nhưng đây mới là chốt
-        // chặn thật — không tin nguyên văn giá trị client gửi.
+        // KHÔNG bắt buộc (theo yêu cầu người dùng, đợt 9/2026) — cho phép bỏ trống hoàn toàn, nhưng nếu
+        // CÓ chọn thì vẫn đối chiếu với danh mục hệ thống, không tin nguyên văn giá trị client gửi.
         const validZones = new Set(appData?.priceZones || []);
         const priceZone = String(payload.priceZone || '').trim();
-        if (!priceZone || !validZones.has(priceZone)) {
+        if (priceZone && !validZones.has(priceZone)) {
           throw new CreateError(400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng (từ danh mục hệ thống)');
         }
-        payload.priceZone = priceZone;
+        payload.priceZone = priceZone || null;
       }
       // Tài liệu bổ sung liên quan (#itPriceExtraFiles ở index.html) — mirror ĐÚNG khuôn
       // submissions.extraFiles (~380): chỉ kiểm khuôn URL rồi giữ nguyên payload.extraFiles, hoàn toàn
@@ -1661,7 +1661,11 @@ const CREATE_MODULE_CONFIGS = {
       payload.currentStep = 1;
       payload.autoApproved = false;
       payload.history = [];
-      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'IT_PRICE');
+      // Đợt 9/2026 (tách Biểu Mẫu Bán Lẻ/Bán Buôn theo phản hồi người dùng): "Trường Bổ Sung" giờ lưu
+      // RIÊNG theo modKey 'IT_PRICE_RETAIL'/'IT_PRICE_WHOLESALE' (khớp đúng FORM_TABS.key mới ở core.js),
+      // không còn dùng chung 'IT_PRICE' — xem renderDynamicInputsForModule()/collectDynamicFieldsData()
+      // ở module-itsupport-price.js.
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, priceType === 'WHOLESALE' ? 'IT_PRICE_WHOLESALE' : 'IT_PRICE_RETAIL');
     }
   },
   // 2) "Hỗ Trợ Yêu Cầu" (itSupportTickets): ticket helpdesk IT nội bộ — MỞ CHO TOÀN BỘ NHÂN VIÊN, không

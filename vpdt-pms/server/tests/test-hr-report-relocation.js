@@ -43,6 +43,11 @@ async function main() {
       assert(reportBtnVisible, 'btnHrReportNav phải hiện khi đủ CẢ 2 quyền hrProfileManage+hrContractManage');
     });
 
+    await run.run('"📊 Báo Cáo" phải nằm CUỐI CÙNG trong dropdown Nhân Sự (sau "💰 Lương", theo phản hồi người dùng)', async () => {
+      const lastChildId = await page.evaluate(() => document.getElementById('hrDropdownPanel').lastElementChild.id);
+      assertEqual(lastChildId, 'btnHrReportNav', 'btnHrReportNav phải là phần tử cuối cùng trong #hrDropdownPanel');
+    });
+
     await run.run('Real click "📊 Báo Cáo": chuyển đúng sang #hrReportSection, ẨN hẳn #hrProfileSection/#hrContractSection', async () => {
       await page.click('#btnHrTab');
       await page.waitForTimeout(100);

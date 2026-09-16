@@ -47,7 +47,8 @@ const NGHIEP_VU_NAV = [
     { key: 'hr', icon: '🤝', label: 'Phản Hồi Ý Kiến (HCRC Đồng Hành)' },
   ]},
   { group: 'Hỗ Trợ IT', items: [
-    { key: 'itSupport', icon: '🎫', label: 'Hỗ Trợ Yêu Cầu & Phê Duyệt Giá' },
+    { key: 'itSupport', icon: '🎫', label: 'Hỗ Trợ Yêu Cầu (Ticket)' },
+    { key: 'itPriceApproval', icon: '🏷️', label: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)' },
   ]},
 ];
 
@@ -562,18 +563,44 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [], right: [] },
   },
   itSupport: {
-    icon: '🎫', title: 'Hỗ Trợ Yêu Cầu & Phê Duyệt Giá', badge: 'Hỗ Trợ IT',
-    desc: 'Ticket hỗ trợ hoặc gia hạn thiết bị/phần mềm — nếu có phát sinh chi phí mua/gia hạn thì phải qua bước Phê Duyệt Giá (báo giá → duyệt) trước khi bộ phận IT xử lý.',
-    flow: { ariaLabel: 'Quy trình Hỗ Trợ IT & Phê Duyệt Giá', chain: [
-      { label: 'Tạo ticket', sub: 'Sự cố / gia hạn / mua mới' },
-      { label: 'Phê Duyệt Giá', sub: 'Nếu có chi phí phát sinh', kind: 'decision' },
-      { label: 'IT xử lý', sub: '', kind: 'approved' },
-      { label: 'Đóng ticket', sub: '' },
-    ], decision: { atIndex: 1, approveLabel: 'Duyệt giá', rejectLabel: 'Từ chối giá', rejectBox: { label: 'Bị từ chối', sub: 'Báo giá lại' }, loopBackToIndex: 0 } },
+    icon: '🎫', title: 'Hỗ Trợ Yêu Cầu (Ticket)', badge: 'Hỗ Trợ IT',
+    desc: 'Ticket hỗ trợ sự cố hoặc gia hạn thiết bị/phần mềm — mở cho toàn bộ nhân viên tạo, chỉ đội Hỗ Trợ IT nhận xử lý. KHÁC HẲN "Phê Duyệt Giá Bán" (mục riêng bên dưới, quy trình duyệt bảng giá bán lẻ/bán buôn — không liên quan tới ticket này).',
+    flow: { ariaLabel: 'Quy trình Hỗ Trợ Yêu Cầu (Ticket)', chain: [
+      { label: 'Tạo ticket', sub: 'Sự cố / gia hạn' },
+      { label: 'IT nhận xử lý', sub: 'TODO → DOING' },
+      { label: 'Leo thang phê duyệt?', sub: 'Tuỳ chọn, khi cần người khác duyệt trước khi tiếp tục', kind: 'decision' },
+      { label: 'Hoàn tất', sub: '', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Gửi lại yêu cầu' }, loopBackToIndex: 1 } },
     footer: { left: [
-      { label: 'Không cần Phê Duyệt Giá', text: 'ticket sự cố thuần (không phát sinh chi phí) bỏ qua thẳng bước Phê Duyệt Giá — IT xử lý ngay sau khi ticket được tạo.' },
+      { label: 'Leo thang phê duyệt là tuỳ chọn', text: 'phần lớn ticket không cần bước này — đội IT chỉ gửi khi cần 1 người cụ thể (không nhất thiết có quyền itManage) duyệt trước khi tiếp tục xử lý, VD xin phê duyệt chi phí phát sinh ngoài luồng Phê Duyệt Giá Bán.' },
+      { label: 'Từ chối khẩn cấp', text: 'chỉ đúng người đã duyệt bước leo thang cuối cùng mới gửi được yêu cầu Từ Chối Khẩn Cấp; bị khoá khi ticket đang ở trạng thái "Tôi đang xử lý".' },
     ], right: [
       { label: 'Chống trùng mã', text: 'nếu 2 người cùng tạo phiếu cùng lúc và mã bị trùng, hệ thống tự đổi sang mã kế tiếp — người dùng không thấy lỗi gì cả.' },
+    ] },
+  },
+  // itPriceApproval — Đề Xuất Duyệt Giá Bán (module itPriceApprovals): TRƯỚC ĐÂY gộp chung 1 mô tả mơ hồ
+  // với ticket "itSupport" ở trên (nhãn "Phê Duyệt Giá" bị hiểu nhầm là cùng 1 thứ) — sửa lại thành mục
+  // RIÊNG theo đúng phản hồi người dùng (9/2026): "đây là phê duyệt giá bán buôn và giá bán lẻ khác
+  // nhau", KHÔNG phải 1 quy trình chung — 2 sub-tab Bán Lẻ/Bán Buôn có field khác nhau VÀ đi qua 2 cấu
+  // hình luồng duyệt khác nhau (itPriceDeptWorkflows theo phòng ban cho Bán Lẻ, itPriceTierWorkflows theo
+  // mức Margin/Chiết Khấu cho Bán Buôn) — xem CREATE_MODULE_CONFIGS.itPriceApprovals.extraValidate ở
+  // lib/createValidation.js.
+  itPriceApproval: {
+    icon: '🏷️', title: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)', badge: 'Hỗ Trợ IT',
+    desc: 'Đề xuất duyệt bảng giá bán (tải lên tệp Excel nhiều dòng/mặt hàng) — Bán Lẻ và Bán Buôn là 2 QUY TRÌNH KHÁC NHAU thật sự (khác field bắt buộc, khác cấu hình luồng duyệt), không phải cùng 1 luồng dùng chung.',
+    flow: { ariaLabel: 'Quy trình Phê Duyệt Giá Bán: Bán Lẻ theo phòng ban, Bán Buôn theo mức Margin/Chiết Khấu', chain: [
+      { label: 'Tạo đề xuất', sub: 'Tải tệp bảng giá (.xlsx) + Lý do' },
+      { label: 'Duyệt', sub: 'Bán Lẻ: theo phòng ban · Bán Buôn: theo mức Margin/Chiết Khấu', kind: 'decision' },
+      { label: 'IT áp giá', sub: 'Đội Hỗ Trợ IT nhận & áp giá thật', kind: 'approved' },
+      { label: 'Hoàn tất', sub: '' },
+    ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
+    footer: { left: [
+      { label: 'Bán Lẻ', text: 'chọn "Vùng Giá Áp Dụng" (không bắt buộc, từ danh mục hệ thống) — không có Margin/Chiết Khấu/Đơn Vị Áp Dụng. Tự gắn Ngày Áp Dụng = hôm nay, Vĩnh viễn, áp dụng Toàn bộ siêu thị (không hỏi lại).' },
+      { label: 'Bán Buôn', text: 'BẮT BUỘC chọn Mức Margin/Chiết Khấu + nhập Đơn Vị Áp Dụng (khách hàng/đại lý ngoài) + chọn ít nhất 1 siêu thị/cửa hàng đề xuất + Ngày Áp Dụng (Ngày Hết Hiệu Lực tuỳ chọn, mặc định Vĩnh viễn) — không có Vùng Giá.' },
+    ], right: [
+      { label: 'Luồng duyệt tách biệt', text: 'Bán Lẻ duyệt theo cấu hình từng phòng ban (itPriceDeptWorkflows); Bán Buôn duyệt theo đúng mức Margin/Chiết Khấu đã chọn (itPriceTierWorkflows) — người duyệt mức này KHÔNG duyệt được hồ sơ mức khác.' },
+      { label: 'Mẫu Giá (khuôn cột)', text: 'nếu hệ thống đã có ít nhất 1 Mẫu Giá thì bắt buộc chọn đúng mẫu khớp cột với tệp đang nộp — chỉ dùng để đối chiếu tên cột, không còn đối chiếu giá trị/tự động duyệt.' },
+      { label: 'Yêu Cầu Bổ Sung', text: 'người duyệt hoặc đội IT có thể yêu cầu bổ sung tệp trước khi áp giá — hồ sơ bị khoá áp giá tới khi có tệp bổ sung mới (không ghi đè, chỉ nối thêm).' },
     ] },
   },
 };

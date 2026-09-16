@@ -1188,37 +1188,32 @@ function groupCarRegsByPeriod(approvedList, granularity) {
 // Giữ tên cũ (mirror gọi từ nơi khác nếu có) — mặc định THÁNG, tương đương hành vi trước v23.4.
 function groupCarRegsByMonth(approvedList) { return groupCarRegsByPeriod(approvedList, 'MONTH'); }
 
-// Vẽ SVG cột (số chuyến) + đường (số KM) — hand-rolled, không phụ thuộc thư viện ngoài, cùng tinh thần
-// renderNVFlow() (module-nghiepvu.js)/biểu đồ Ngân Sách. Tự co giãn theo số kỳ (buckets.length).
-function renderCarReportTrendSVG(buckets) {
+// Bảng số liệu Xu Hướng Theo Thời Gian (Số Chuyến & Số KM) — TRƯỚC ĐÂY là biểu đồ SVG cột+đường
+// (renderCarReportTrendSVG(), hand-rolled), nhưng biểu đồ bị vỡ hình (chữ/cột chồng lấn, phóng to bất
+// thường) trên máy người dùng thực tế — theo phản hồi người dùng (đợt 9/2026: "chỉ chỏ thông tin số km
+// thay vì biểu đồ để cho nó gọn lại"), thay hẳn bằng bảng số liệu thuần văn bản, gọn và không phụ thuộc
+// việc render SVG co giãn theo số kỳ (nguồn gốc lỗi vỡ hình).
+function renderCarReportTrendStats(buckets) {
   if (!buckets.length) return '<div class="text-xs text-gray-400 italic p-3">Chưa có phiếu nào đã duyệt trong khoảng lọc này.</div>';
-  const barW = 46, gapX = 34, marginX = 30, chartH = 150, topPad = 34, bottomPad = 36;
-  const totalW = marginX * 2 + buckets.length * (barW + gapX) - gapX;
-  const height = topPad + chartH + bottomPad;
-  const maxCount = Math.max(1, ...buckets.map(b => b.count));
-  const maxKm = Math.max(1, ...buckets.map(b => b.km));
-  const xs = buckets.map((_, i) => marginX + i * (barW + gapX));
-  const barY = (c) => topPad + chartH - (c / maxCount) * chartH;
-  const lineY = (km) => topPad + chartH - (km / maxKm) * chartH;
-
-  let svg = '';
-  buckets.forEach((b, i) => {
-    const y = barY(b.count), h = topPad + chartH - y;
-    svg += `<rect x="${xs[i]}" y="${y}" width="${barW}" height="${h}" rx="4" fill="#6366f1"/>`;
-    svg += `<text x="${xs[i] + barW / 2}" y="${y - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">${b.count}</text>`;
-    svg += `<text x="${xs[i] + barW / 2}" y="${topPad + chartH + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${escapeHtml(b.label)}</text>`;
-  });
-  const linePoints = buckets.map((b, i) => `${xs[i] + barW / 2},${lineY(b.km)}`).join(' ');
-  svg += `<polyline points="${linePoints}" fill="none" stroke="#059669" stroke-width="2.5"/>`;
-  buckets.forEach((b, i) => {
-    const cx = xs[i] + barW / 2, cy = lineY(b.km);
-    svg += `<circle cx="${cx}" cy="${cy}" r="3.5" fill="#059669"/>`;
-    svg += `<text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="9.5" fill="#059669">${Math.round(b.km * 10) / 10}km</text>`;
-  });
-  svg += `<rect x="${totalW - 160}" y="0" width="10" height="10" fill="#6366f1"/><text x="${totalW - 146}" y="9" font-size="10" fill="#6b7280">Số chuyến (cột)</text>`;
-  svg += `<line x1="${totalW - 160}" y1="22" x2="${totalW - 150}" y2="22" stroke="#059669" stroke-width="2.5"/><text x="${totalW - 146}" y="26" font-size="10" fill="#6b7280">Số KM (đường)</text>`;
-
-  return `<svg viewBox="0 0 ${totalW} ${height}" role="img" aria-label="Biểu đồ xu hướng đăng ký xe" class="car-report-trend-svg">${svg}</svg>`;
+  const rows = buckets.map(b => `
+    <tr class="border-b last:border-0">
+      <td class="py-1.5 pr-3 text-gray-700">${escapeHtml(b.label)}</td>
+      <td class="py-1.5 pr-3 text-right font-bold text-indigo-700">${b.count.toLocaleString('vi-VN')}</td>
+      <td class="py-1.5 text-right font-bold text-emerald-700">${(Math.round(b.km * 10) / 10).toLocaleString('vi-VN')} km</td>
+    </tr>
+  `).join('');
+  return `
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="border-b-2 border-gray-200 text-gray-500 font-semibold">
+          <th class="py-1.5 pr-3 text-left">Kỳ</th>
+          <th class="py-1.5 pr-3 text-right">Số Chuyến</th>
+          <th class="py-1.5 text-right">Số KM</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 let carReportGranularity = 'MONTH';
@@ -1292,7 +1287,7 @@ function renderCarReportTab() {
   }
   const trendBuckets = groupCarRegsByPeriod(approved, carReportGranularity);
   const trendEl = document.getElementById('carReportTrendChart');
-  if (trendEl) trendEl.innerHTML = renderCarReportTrendSVG(trendBuckets);
+  if (trendEl) trendEl.innerHTML = renderCarReportTrendStats(trendBuckets);
 
   // Lịch Sử Đánh Giá Chuyến — người ĐĂNG KÝ xác nhận sau khi lái xe kết thúc (evaluatedBy/evaluatedAt/
   // evaluationComment/actualKm, xem evaluateCarTrip() ở lib/recordActions.js) — dữ liệu đã có sẵn từ

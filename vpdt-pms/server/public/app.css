@@ -513,8 +513,3 @@ input[data-sdd-list] {
    thật. Đổi sang dùng class này thay cho style="..." trực tiếp trên thẻ. */
 .nv-flow-svg { width:100%; height:auto; max-width:920px; display:block; margin:0 auto; }
 
-/* Biểu đồ xu hướng Đăng Ký Xe (renderCarReportTrendSVG(), module-dangkyxe.js) — CÙNG lỗi style="..." nội
-   tuyến trên thẻ <svg> như .nv-flow-svg ở trên (max-width cố định thay cho giá trị ĐỘNG theo totalW cũ —
-   không đáng kể vì <svg> đã tự co giãn đúng tỷ lệ qua viewBox, width:100% mới là yếu tố quyết định độ
-   rộng thực tế hiển thị). */
-.car-report-trend-svg { width:100%; height:auto; max-width:1000px; display:block; }

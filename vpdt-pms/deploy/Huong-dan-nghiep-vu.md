@@ -566,10 +566,13 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   người quản lý thấy — admin/quyền xem xe toàn công ty/người duyệt ở bất kỳ
   phòng ban nào — thẻ tổng hợp số phiếu/đã duyệt/đang chờ/bị từ chối/tổng KM,
   thanh tỷ lệ theo Phòng Ban và theo Lái Xe, lọc theo khoảng ngày đi). Từ
-  v23.4, tab Báo Cáo có thêm: **biểu đồ xu hướng chọn kỳ** (cột = số chuyến,
-  đường = số km, pill filter chọn 1 trong 5 kỳ **Ngày/Tuần/Tháng/Quý/Năm** —
-  khác Lịch Xe ở trên là lưới xem lịch trực quan, đây là biểu đồ thống kê xu
-  hướng), **bảng "Lịch Sử Đánh Giá Chuyến"** (mã phiếu, lái xe, người đăng ký
+  v23.4, tab Báo Cáo có thêm: **bảng số liệu xu hướng theo kỳ** (mỗi dòng =
+  1 kỳ, cột Số Chuyến + Số KM, pill filter chọn 1 trong 5 kỳ **Ngày/Tuần/
+  Tháng/Quý/Năm** — khác Lịch Xe ở trên là lưới xem lịch trực quan, đây là
+  bảng thống kê xu hướng; đợt 9/2026 đổi từ biểu đồ SVG cột+đường sang bảng
+  số liệu thuần văn bản theo phản hồi người dùng — biểu đồ cũ bị vỡ hình khi
+  số kỳ hiển thị nhiều, bảng số liệu gọn và không phụ thuộc việc render đồ
+  hoạ co giãn), **bảng "Lịch Sử Đánh Giá Chuyến"** (mã phiếu, lái xe, người đăng ký
   đã đánh giá, thời điểm đánh giá, số km thực tế, nhận xét) và **bảng "Lịch
   Sử Xác Nhận Của Lái Xe"** (mã phiếu, lái xe, thời điểm xác nhận nhận
   chuyến, thời điểm kết thúc chuyến, số km lái xe tự báo cáo) — trả lời trực
@@ -733,12 +736,26 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     đối tác/khách hàng ngoài nên đây là ô gõ tự do, không phải chọn từ danh
     sách có sẵn.
   - **🗺️ "Vùng Giá Áp Dụng"** (chỉ hiện ở sub-tab Bán Lẻ, đối xứng "Đơn Vị Áp
-    Dụng Giá Bán Buôn" ở trên) — **bắt buộc**, chọn từ danh mục hệ thống
-    (Hệ Thống → 🗂️ Quản Lý Danh Mục → "🗺️ Quản Lý Danh Mục Vùng Giá Áp
-    Dụng", admin tự thêm/xoá), KHÔNG nhập tay tự do như Đơn Vị Áp Dụng Giá
-    Bán Buôn — vì đây là khái niệm NỘI BỘ công ty tự định nghĩa (VD Miền
-    Bắc/Miền Trung/Miền Nam) nên dùng danh mục để tránh gõ sai/không nhất
-    quán giữa các đề xuất.
+    Dụng Giá Bán Buôn" ở trên) — **KHÔNG bắt buộc** (đợt 9/2026, theo yêu cầu
+    người dùng — trước đó bắt buộc, nay bỏ trống vẫn gửi đề xuất được bình
+    thường), chọn từ danh mục hệ thống (Hệ Thống → 🗂️ Quản Lý Danh Mục →
+    "🗺️ Quản Lý Danh Mục Vùng Giá Áp Dụng", admin tự thêm/xoá), KHÔNG nhập
+    tay tự do như Đơn Vị Áp Dụng Giá Bán Buôn — vì đây là khái niệm NỘI BỘ
+    công ty tự định nghĩa (VD Miền Bắc/Miền Trung/Miền Nam) nên dùng danh mục
+    để tránh gõ sai/không nhất quán giữa các đề xuất, NHƯNG nếu có chọn thì
+    vẫn phải khớp đúng 1 giá trị trong danh mục (server đối chiếu lại, không
+    tin nguyên văn giá trị client gửi).
+  - **Biểu Mẫu (Hệ Thống → 📋 Biểu Mẫu)**: "IT - Duyệt Giá" trước đây gộp
+    CHUNG 1 danh sách field Bán Lẻ + Bán Buôn dễ nhầm lẫn (đợt 9/2026, theo
+    phản hồi người dùng) — nay tách hẳn thành 2 tab con riêng ("IT - Duyệt
+    Giá (Bán Lẻ)"/"IT - Duyệt Giá (Bán Buôn)"), mỗi tab chỉ liệt kê đúng field
+    của sub-tab đó. 6 field dùng chung thật (Mã Đề Xuất/Phòng Ban Đề Xuất/Mẫu
+    Giá Phê Duyệt/Tệp Bảng Giá/Lý Do Điều Chỉnh Giá/Tài Liệu Bổ Sung) chỉ sửa
+    được từ tab "Bán Lẻ" (cùng 1 ô nhập trên form thật, không tách 2 bản
+    riêng). "Trường Bổ Sung" (field admin tự thêm) từ nay cũng TÁCH RIÊNG
+    theo từng tab — field thêm cho Bán Lẻ không hiện ở Bán Buôn và ngược lại;
+    cấu hình cũ (từ trước đợt tách) tự động chuyển sang cả 2 tab mới khi tải
+    lại trang, không bị mất.
   - **🎫 Hỗ Trợ Yêu Cầu** — ticket helpdesk IT nội bộ, **mở cho toàn bộ nhân
     viên** (đúng vai trò "tự phục vụ" của cả mục này), vòng đời Chưa xử lý →
     Đang xử lý → Hoàn thành/Đã huỷ. Danh sách "Danh Mục" admin tự thêm/bớt/đổi
@@ -1447,7 +1464,9 @@ Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được.
 
 **Nhân Sự → 📊 Báo Cáo** (9/2026, dời từ tab lồng bên trong "Hồ Sơ Nhân Sự" ra
 **module con RIÊNG cấp Nhân Sự** — ngang hàng Hồ Sơ Nhân Sự/Hợp Đồng Lao Động
-trong menu sidebar, không lồng bên trong Hồ Sơ Nhân Sự nữa) — **vai trò**: số
+trong menu sidebar, không lồng bên trong Hồ Sơ Nhân Sự nữa; đợt sau (cùng
+9/2026, theo phản hồi người dùng) dời tiếp xuống **VỊ TRÍ CUỐI CÙNG** trong
+danh sách dropdown Nhân Sự, sau "💰 Lương") — **vai trò**: số
 liệu tổng hợp nhân sự, lọc theo khoảng thời gian (Từ ngày/Đến ngày) + tình
 trạng HĐLĐ, ra 8 chỉ số cơ bản — nhân sự vào làm/nghỉ việc, hợp đồng mới/gia
 hạn, tăng lương, thay đổi HĐLĐ khác, thăng chức/đổi chức danh, và **"HĐ sắp

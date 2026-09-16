@@ -175,17 +175,18 @@ async function main() {
 
   // ===================== "Vùng Giá Áp Dụng" (priceZone, đợt sau) — CHỈ áp dụng cho RETAIL, đối xứng
   // wholesaleApplyUnit (CHỈ áp dụng cho WHOLESALE) nhưng khác ở chỗ phải khớp đúng 1 giá trị trong danh
-  // mục hệ thống appData.priceZones (KHÔNG phải nhập tay tự do như wholesaleApplyUnit). =====================
-  await run.run('RETAIL: thiếu priceZone -> 400', async () => {
-    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
-      basePayload({ priceZone: undefined }), IT_USER, [], APP_DATA),
-      400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng');
+  // mục hệ thống appData.priceZones (KHÔNG phải nhập tay tự do như wholesaleApplyUnit). KHÔNG BẮT BUỘC
+  // (đợt 9/2026, theo yêu cầu người dùng) — bỏ trống vẫn tạo được, chỉ validate khi CÓ chọn. =====================
+  await run.run('RETAIL: thiếu priceZone -> vẫn thành công (không bắt buộc), giữ null', async () => {
+    const rec = validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceZone: undefined }), IT_USER, [], APP_DATA);
+    assertEqual(rec.priceZone, null, 'không chọn vùng giá vẫn phải tạo được, priceZone = null');
   });
 
-  await run.run('RETAIL: priceZone chỉ toàn khoảng trắng -> 400 (coi như rỗng)', async () => {
-    expectHttpError(() => validateAndPrepareCreate('itPriceApprovals',
-      basePayload({ priceZone: '   ' }), IT_USER, [], APP_DATA),
-      400, 'Vui lòng chọn đúng Vùng Giá Áp Dụng');
+  await run.run('RETAIL: priceZone chỉ toàn khoảng trắng -> coi như rỗng, vẫn thành công (giữ null)', async () => {
+    const rec = validateAndPrepareCreate('itPriceApprovals',
+      basePayload({ priceZone: '   ' }), IT_USER, [], APP_DATA);
+    assertEqual(rec.priceZone, null, 'khoảng trắng coi như chưa chọn, priceZone = null');
   });
 
   await run.run('RETAIL: priceZone KHÔNG có thật trong danh mục (tự soạn request/DevTools sửa tay) -> 400', async () => {

@@ -94,7 +94,7 @@ async function main() {
       assert(!hasQuickAddBtn, 'Người không phải admin không được thấy nút thêm nhanh Vùng Giá (priceZones chỉ Admin ghi được)');
     });
 
-    await run.run('Real click Gửi (Bán Lẻ, danh mục Vùng Giá rỗng): báo lỗi RÕ RÀNG, không phải alert mơ hồ cũ', async () => {
+    await run.run('Real click Gửi (Bán Lẻ, danh mục Vùng Giá rỗng): "Vùng Giá Áp Dụng" không bắt buộc, vẫn tạo được hồ sơ', async () => {
       await page.selectOption('#itPriceMasterListSelect', '1');
       await page.fill('#itPriceReason', 'Test retail — chưa có vùng giá');
       await seedPendingFile(page, 'retail-empty-zone');
@@ -102,8 +102,9 @@ async function main() {
       await page.click('#itPriceCreateForm button[type="submit"]');
       await page.waitForTimeout(200);
       const alerts = await page.evaluate(() => window.__alerts);
-      assert(alerts.some(a => a.includes('Vùng Giá Áp Dụng')), 'Phải chặn gửi + báo đúng lý do khi chưa chọn được Vùng Giá Áp Dụng');
-      assertEqual(state.itPriceApprovals.length, 0, 'KHÔNG được tạo hồ sơ nào khi bị chặn');
+      assert(!alerts.some(a => a.includes('Vùng Giá Áp Dụng')), 'Không được báo lỗi thiếu Vùng Giá — trường này không bắt buộc');
+      assertEqual(state.itPriceApprovals.length, 1, 'Phải tạo được hồ sơ dù chưa chọn Vùng Giá Áp Dụng');
+      assertEqual(state.itPriceApprovals[0].priceZone, null, 'priceZone phải là null khi không chọn');
     });
 
     await run.run('Admin: real click "+ Thêm ngay tại đây" tạo Vùng Giá mới NGAY trong form Phê Duyệt Giá (không cần rời sang Quản Lý Danh Mục)', async () => {
@@ -170,6 +171,56 @@ async function main() {
       assertEqual(created.effectiveDate, '2026-10-01', 'Bán Buôn vẫn đọc đúng Ngày Áp Dụng người dùng nhập tay');
       assertEqual(created.storeScope.mode, 'OTHER', 'Bán Buôn vẫn bắt buộc storeScope=OTHER với siêu thị cụ thể');
       assert(created.storeScope.stores.includes('Siêu thị Demo'), 'Phải lưu đúng siêu thị đã chọn');
+    });
+
+    // ===== "Trường Bổ Sung" (dynamic custom fields) giờ TÁCH RIÊNG theo modKey IT_PRICE_RETAIL/
+    // IT_PRICE_WHOLESALE (trước đây dùng chung 1 modKey 'IT_PRICE') — xem itPriceDynamicModKey() ở
+    // module-itsupport-price.js. Field admin thêm riêng cho 1 sub-tab KHÔNG được lộ sang sub-tab kia. =====
+    await run.run('"Trường Bổ Sung" tách riêng: field thêm cho Bán Lẻ KHÔNG hiện ở Bán Buôn và ngược lại', async () => {
+      await page.evaluate(() => {
+        DB.formTemplates.IT_PRICE_RETAIL = [{ id: 'f_cust_retail1', label: 'Ghi chú riêng Bán Lẻ', type: 'text', options: [], required: false, isDefault: false }];
+        DB.formTemplates.IT_PRICE_WHOLESALE = [{ id: 'f_cust_wholesale1', label: 'Ghi chú riêng Bán Buôn', type: 'text', options: [], required: false, isDefault: false }];
+      });
+      await page.click('#btnItPriceSubRetail');
+      await page.waitForTimeout(150);
+      let html = await page.evaluate(() => document.getElementById('dynamicFieldsContainer_IT_PRICE').innerHTML);
+      assert(html.includes('Ghi chú riêng Bán Lẻ'), 'Bán Lẻ phải thấy đúng field Trường Bổ Sung của mình');
+      assert(!html.includes('Ghi chú riêng Bán Buôn'), 'Bán Lẻ KHÔNG được thấy field Trường Bổ Sung của Bán Buôn');
+
+      await page.click('#btnItPriceSubWholesale');
+      await page.waitForTimeout(150);
+      html = await page.evaluate(() => document.getElementById('dynamicFieldsContainer_IT_PRICE').innerHTML);
+      assert(html.includes('Ghi chú riêng Bán Buôn'), 'Bán Buôn phải thấy đúng field Trường Bổ Sung của mình');
+      assert(!html.includes('Ghi chú riêng Bán Lẻ'), 'Bán Buôn KHÔNG được thấy field Trường Bổ Sung của Bán Lẻ');
+
+      await page.click('#btnItPriceSubRetail');
+      await page.waitForTimeout(150);
+    });
+
+    // ===== Migration: dữ liệu formTemplates cũ (1 modKey 'IT_PRICE' chung, từ TRƯỚC đợt tách) phải tự
+    // chuyển sang CẢ 2 modKey mới khi tải lại — không mất cấu hình admin đã có, xem
+    // migrateItPriceFormTemplatesKeys() ở core.js. =====
+    await run.run('migrateItPriceFormTemplatesKeys(): dữ liệu cũ IT_PRICE (chung) tự tách sang CẢ 2 modKey mới', async () => {
+      const result = await page.evaluate(() => migrateItPriceFormTemplatesKeys({
+        IT_PRICE: [{ id: 'f_old1', label: 'Trường bổ sung cũ', type: 'text', options: [], required: false }],
+        __core__IT_PRICE: { itPriceCode: { label: 'Mã Đề Xuất (đã đổi)', required: true } },
+        __order__IT_PRICE: ['itPriceCode', 'f_old1'],
+        SOME_OTHER_KEY: ['giữ nguyên không đụng tới']
+      }));
+      assert(Array.isArray(result.IT_PRICE_RETAIL) && result.IT_PRICE_RETAIL.length === 1 && result.IT_PRICE_RETAIL[0].label === 'Trường bổ sung cũ', 'Phải copy đúng field cũ sang IT_PRICE_RETAIL');
+      assert(Array.isArray(result.IT_PRICE_WHOLESALE) && result.IT_PRICE_WHOLESALE.length === 1 && result.IT_PRICE_WHOLESALE[0].label === 'Trường bổ sung cũ', 'Phải copy đúng field cũ sang IT_PRICE_WHOLESALE');
+      assert(result.IT_PRICE_RETAIL !== result.IT_PRICE_WHOLESALE, 'Không được dùng chung 1 tham chiếu mảng (tránh sửa 1 bên ảnh hưởng bên kia)');
+      assertEqual(result.__core__IT_PRICE_RETAIL.itPriceCode.label, 'Mã Đề Xuất (đã đổi)', 'Phải copy đúng override __core__ sang IT_PRICE_RETAIL');
+      assertEqual(result.__core__IT_PRICE_WHOLESALE.itPriceCode.label, 'Mã Đề Xuất (đã đổi)', 'Phải copy đúng override __core__ sang IT_PRICE_WHOLESALE');
+      assert(!('IT_PRICE' in result) && !('__core__IT_PRICE' in result) && !('__order__IT_PRICE' in result), 'Phải xoá hẳn 3 khoá cũ sau khi migrate');
+      assert(Array.isArray(result.SOME_OTHER_KEY), 'Không được đụng tới khoá không liên quan');
+    });
+
+    await run.run('migrateItPriceFormTemplatesKeys(): đã có khoá mới rồi thì KHÔNG migrate lại (idempotent)', async () => {
+      const input = { IT_PRICE: [{ id: 'f_old1', label: 'Cũ', type: 'text', required: false }], IT_PRICE_RETAIL: [{ id: 'f_new1', label: 'Đã cấu hình riêng rồi', type: 'text', required: false }] };
+      const result = await page.evaluate((inp) => migrateItPriceFormTemplatesKeys(inp), input);
+      assertEqual(result.IT_PRICE_RETAIL[0].label, 'Đã cấu hình riêng rồi', 'Không được ghi đè cấu hình MỚI đã có bằng dữ liệu cũ');
+      assert('IT_PRICE' in result, 'Không migrate thì khoá cũ vẫn còn nguyên (không tự xoá nhầm)');
     });
 
     run.summary();

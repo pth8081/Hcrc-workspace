@@ -255,7 +255,11 @@ router.post('/:module', async (req, res) => {
     res.json({ ok: true, item: record });
   } catch (err) {
     if (err instanceof CreateError) return res.status(err.status).json({ error: err.message });
-    console.error(`POST /api/create/${moduleKey} lỗi:`, err.message);
+    // In đủ err.stack (trước đây chỉ err.message) — lỗi không mong đợi (không phải CreateError/HttpError)
+    // rơi vào đây nghĩa là 1 exception THẬT (TypeError/lỗi SQL...), chỉ có .message thường không đủ để
+    // tìm ra dòng code gây lỗi, nhất là khi không tái hiện được cục bộ (dữ liệu/trạng thái DB thật khác
+    // môi trường test) — xem log PM2 ngay sau khi gặp "Không thể tạo hồ sơ" để tra tiếp.
+    console.error(`POST /api/create/${moduleKey} lỗi:`, err.stack || err.message);
     res.status(500).json({ error: 'Không thể tạo hồ sơ' });
   }
 });

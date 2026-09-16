@@ -110,7 +110,7 @@ async function main() {
     // renderFormTabsBar()/renderFormSubTabsBar()/switchFormGroup()) ----------
     activeFormTab = 'SUBMISSION';
     switchFormTab('SUBMISSION');
-    ['TASK', 'VPP', 'LICENSE', 'IT_PRICE', 'IT_TICKET'].forEach(key => {
+    ['TASK', 'VPP', 'LICENSE', 'IT_PRICE_RETAIL', 'IT_PRICE_WHOLESALE', 'IT_TICKET'].forEach(key => {
       const group = getFormGroupForTab(key);
       switchFormGroup(group);
       const entries = getFormTabsInGroup(group);
@@ -209,7 +209,7 @@ async function main() {
     }
 
     // ---------- 6) Không có nút/thao tác XOÁ nào cho trường mặc định ở cả 5 tab mới ----------
-    ['TASK', 'VPP', 'LICENSE', 'IT_PRICE', 'IT_TICKET'].forEach(key => {
+    ['TASK', 'VPP', 'LICENSE', 'IT_PRICE_RETAIL', 'IT_PRICE_WHOLESALE', 'IT_TICKET'].forEach(key => {
       activeFormTab = key;
       switchFormTab(key);
       const html = document.getElementById('formFieldsTableBody').innerHTML;

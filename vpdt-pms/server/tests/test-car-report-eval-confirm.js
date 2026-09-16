@@ -7,7 +7,8 @@
 //      evaluatedAt/actualKm/evaluationComment (đã có sẵn từ evaluateCarTrip(), CHỈ MỚI có màn hiển thị).
 //   2. Bảng "Lịch Sử Xác Nhận Của Lái Xe" (#carReportConfirmBody) — nguồn driverConfirmedAt/tripEndedAt/
 //      driverReportedKm.
-//   3. Biểu đồ xu hướng SVG (#carReportTrendChart) đổi đúng theo kỳ chọn qua pill filter
+//   3. Bảng số liệu xu hướng (#carReportTrendChart, TRƯỚC ĐÂY là biểu đồ SVG — đổi sang bảng thuần văn
+//      bản đợt 9/2026 vì SVG bị vỡ hình trên máy người dùng thật) đổi đúng theo kỳ chọn qua pill filter
 //      (setCarReportGranularity()/groupCarRegsByPeriod()) — đối chứng cả 5 kỳ Ngày/Tuần/Tháng/Quý/Năm.
 //
 // Dựng lại đúng khuôn tests/test-car-report-week-month.js (static server phục vụ public/ + Chromium
@@ -179,10 +180,10 @@ async function main() {
   ]) {
     const state = await page.evaluate((gran) => {
       setCarReportGranularity(gran);
-      return { gran: carReportGranularity, svg: document.getElementById('carReportTrendChart').innerHTML, pillsHTML: document.getElementById('carReportTrendPills').innerHTML };
+      return { gran: carReportGranularity, trendHTML: document.getElementById('carReportTrendChart').innerHTML, pillsHTML: document.getElementById('carReportTrendPills').innerHTML };
     }, g);
-    const allFound = expectSubstrings.every(s => state.svg.includes(s));
-    record(`Biểu đồ: chọn kỳ "${g}" -> SVG hiện đúng nhãn kỳ (${expectSubstrings.join(', ')})`, state.gran === g && allFound, state.svg);
+    const allFound = expectSubstrings.every(s => state.trendHTML.includes(s));
+    record(`Biểu đồ: chọn kỳ "${g}" -> bảng số liệu hiện đúng nhãn kỳ (${expectSubstrings.join(', ')})`, state.gran === g && allFound, state.trendHTML);
     const activePillOk = new RegExp(`data-arg0="${g}"[^>]*bg-indigo-700`).test(state.pillsHTML);
     record(`Biểu đồ: pill "${g}" được đánh dấu đang chọn (bg-indigo-700)`, activePillOk, state.pillsHTML);
   }

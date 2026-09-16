@@ -5,6 +5,11 @@
 // duyệt). 2 sub-module tách biệt hoàn toàn dữ liệu (xem lib/createValidation.js, không chung 1 công
 // việc nghiệp vụ nào).
 // ==========================================
+// modKey "Trường Bổ Sung" (renderDynamicInputsForModule()/collectDynamicFieldsData()) của Phê Duyệt Giá
+// — đợt 9/2026 tách khỏi 1 key 'IT_PRICE' chung thành 2 key riêng theo đúng FORM_TABS mới ở core.js
+// (IT_PRICE_RETAIL/IT_PRICE_WHOLESALE), khớp field bắt buộc khác nhau thật sự giữa Bán Lẻ/Bán Buôn.
+function itPriceDynamicModKey() { return activeItPriceSubTab === 'WHOLESALE' ? 'IT_PRICE_WHOLESALE' : 'IT_PRICE_RETAIL'; }
+
 let activeItSupportSubTab = 'PRICE';
 
 function setItSupportSubTab(subTab) {
@@ -35,7 +40,7 @@ function setItSupportSubTab(subTab) {
       if (fileInput) fileInput.value = '';
       renderItPriceMasterListSelect();
     }
-    renderDynamicInputsForModule('IT_PRICE', 'dynamicFieldsContainer_IT_PRICE');
+    renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
     renderItPriceApprovals();
   }
   if (subTab === 'TICKET') {
@@ -456,12 +461,9 @@ async function submitItPriceApproval(e) {
   if (activeItPriceSubTab === 'WHOLESALE' && !wholesaleApplyUnit) {
     return alert('⛔ Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn.');
   }
-  // "Vùng Giá Áp Dụng" — bắt buộc cho Bán Lẻ, chặn sớm cho trải nghiệm mượt (server tự xác minh lại y
-  // hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi).
+  // "Vùng Giá Áp Dụng" — không bắt buộc cho Bán Lẻ (theo yêu cầu người dùng); nếu có chọn thì server vẫn
+  // đối chiếu với danh mục hệ thống ở itPriceApprovals.extraValidate.
   const priceZone = document.getElementById('itPriceRetailZone').value;
-  if (activeItPriceSubTab === 'RETAIL' && !priceZone) {
-    return alert('⛔ Vui lòng chọn Vùng Giá Áp Dụng.');
-  }
   // "Siêu thị đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — CHỈ còn áp dụng cho Bán Buôn (đợt 9/2026,
   // tách biểu mẫu theo yêu cầu người dùng: Bán Lẻ đã có "Vùng Giá Áp Dụng" đủ khoanh phạm vi, không cần
   // chọn thêm). Bán Lẻ tự gắn mặc định storeScope=ALL/ngày áp dụng=hôm nay/hết hiệu lực=Vĩnh viễn, KHÔNG
@@ -499,7 +501,7 @@ async function submitItPriceApproval(e) {
   }
   let customData;
   try {
-    customData = await collectDynamicFieldsData('IT_PRICE');
+    customData = await collectDynamicFieldsData(itPriceDynamicModKey());
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
@@ -510,7 +512,7 @@ async function submitItPriceApproval(e) {
     priceType: activeItPriceSubTab,
     priceTier: activeItPriceSubTab === 'WHOLESALE' ? document.getElementById('itPriceTier').value : null,
     wholesaleApplyUnit: activeItPriceSubTab === 'WHOLESALE' ? wholesaleApplyUnit : null,
-    priceZone: activeItPriceSubTab === 'RETAIL' ? priceZone : null,
+    priceZone: activeItPriceSubTab === 'RETAIL' && priceZone ? priceZone : null,
     masterListId: masterListId ? Number(masterListId) : null,
     files: [{
       fileUrl: itPricePendingFile.fileUrl, fileName: itPricePendingFile.fileName,
@@ -680,6 +682,9 @@ function setItPriceSubTab(subTab) {
   if (retailZoneWrap) retailZoneWrap.classList.toggle('hidden', activeItPriceSubTab !== 'RETAIL');
   applyItPriceStoreScopeUIForSubTab();
   checkItPriceMarginConsistency(); // rời khỏi Bán Buôn -> tự ẩn cảnh báo (hàm tự kiểm tra activeItPriceSubTab).
+  // "Trường Bổ Sung" giờ khác nhau giữa Bán Lẻ/Bán Buôn (2 modKey riêng, xem itPriceDynamicModKey()) —
+  // phải vẽ lại đúng bộ field của sub-tab vừa chuyển tới, không còn dùng chung 1 bộ như trước.
+  renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
   resetListPage('itPrice');
   renderItPriceApprovals();
 }
