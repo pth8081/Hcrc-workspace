@@ -42,6 +42,19 @@ const { filterNotificationsForUser } = require('../lib/notifications');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
+// Collection CỰC NHẠY CẢM đã chuyển hẳn sang bảng riêng + route riêng có strip field/lọc theo vai trò
+// (routes/employeeProfile.js, routes/payroll.js, lib/attendance.js) — route debug chung /api/data/:key
+// TUYỆT ĐỐI không được đọc/ghi các key này. `employeeProfiles` đã có chặn TƯỜNG MINH riêng ở dưới từ
+// trước; 4 key này (laborContracts/payslips/attendanceRecords/payrollPeriods) trước đây "an toàn" chỉ
+// nhờ HỆ QUẢ GIÁN TIẾP là không có mặt trong defaults.js (nên VALID_KEYS.has() luôn false, tự bị chặn ở
+// dòng "Key không hợp lệ" bên dưới) — rà soát bảo mật trước golive (9/2026, mức Trung bình) chỉ ra đây
+// là kiểm soát MONG MANH: nếu sau này ai đó vô tình thêm 1 stub cho 1 trong 4 key này vào defaults.js
+// (VD tiện ích di trú/tính năng mới dùng lại tên) thì route debug này sẽ ÂM THẦM trả/ghi NGUYÊN VĂN
+// không lọc gì — chặn TƯỜNG MINH ở đây (không phụ thuộc VALID_KEYS) để không còn phụ thuộc "tình cờ".
+const SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE = new Set([
+  'employeeProfiles', 'laborContracts', 'payslips', 'attendanceRecords', 'payrollPeriods'
+]);
+
 // Các collection chỉ Quản Trị Viên mới được GHI — đều là màn hình "Quản trị" trong admin panel
 // (quản lý user/quyền, cấu hình quy trình phê duyệt theo phòng ban/loại, cấu hình SMTP). systemLogs
 // không còn ở đây/không còn trong VALID_KEYS — từ Bước 6a có route + bảng riêng (routes/systemLog.js,
@@ -1257,6 +1270,10 @@ router.get('/', async (req, res) => {
 // đang cầm bản ứng với version nào mà gửi lại đúng If-Match cho lượt lưu tiếp theo.
 router.get('/:key', async (req, res) => {
   const { key } = req.params;
+  // Chặn TƯỜNG MINH trước cả VALID_KEYS — xem SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE ở đầu file.
+  if (SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE.has(key)) {
+    return res.status(403).json({ error: 'Vui lòng dùng route riêng (đã lọc theo quyền xem) cho dữ liệu này' });
+  }
   if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
 
   try {
@@ -1269,10 +1286,6 @@ router.get('/:key', async (req, res) => {
     if (key === 'operationOrderApiConfig') return res.json(sanitizeOperationOrderApiConfig(value));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
     if (key === 'attendanceClockApiKeys') return res.json(sanitizeAttendanceClockApiKeys(value, !!req.freshUser?.perms?.admin));
-    // employeeProfiles: cùng lý do vừa vá ở GET /api/data chung ở trên — hồ sơ nhân sự đầy đủ chỉ nên
-    // lộ qua route riêng có strip field theo vai trò (/api/hr-profile/*), route debug chung này không có
-    // cơ chế đó nên chặn hẳn thay vì trả nguyên mảng.
-    if (key === 'employeeProfiles') return res.status(403).json({ error: 'Vui lòng dùng /api/hr-profile/* để đọc hồ sơ nhân sự (đã lọc theo quyền xem)' });
     res.json(value);
   } catch (err) {
     sendServerError(res, 500, err, `GET /api/data/${key}`, 'Không thể tải dữ liệu từ SQL Server');
@@ -1286,15 +1299,16 @@ router.get('/:key', async (req, res) => {
 // theo dõi version — không phá hành vi hiện có).
 router.post('/:key', async (req, res) => {
   const { key } = req.params;
-  if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
-  // employeeProfiles: PHÁT HIỆN NGHIÊM TRỌNG ở đợt audit chuyên sâu lần 2 — route generic này hoàn
-  // toàn KHÔNG có gate quyền cho key này (không nằm trong ADMIN_ONLY_KEYS lẫn NON_ADMIN_GATED_KEYS),
-  // trong khi GET đã chặn hẳn ở dòng ~800 (cùng lý do). Bất kỳ ai đã đăng nhập gọi thẳng route này đều
-  // ghi đè/xoá trắng được TOÀN BỘ hồ sơ nhân sự thật (CCCD/tài khoản ngân hàng/BHXH/người phụ thuộc)
-  // — chặn hẳn, bắt buộc đi qua `/api/hr-profile/*` (đã validate cấu trúc + quyền theo vai trò).
-  if (key === 'employeeProfiles') {
-    return res.status(403).json({ error: 'Vui lòng dùng /api/hr-profile/* để ghi Hồ Sơ Nhân Sự (có kiểm tra quyền theo vai trò)' });
+  // Chặn TƯỜNG MINH trước cả VALID_KEYS — xem SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE ở đầu
+  // file. PHÁT HIỆN NGHIÊM TRỌNG ban đầu ở đợt audit chuyên sâu lần 2 (employeeProfiles): route generic
+  // này hoàn toàn KHÔNG có gate quyền cho các key này (không nằm trong ADMIN_ONLY_KEYS lẫn
+  // NON_ADMIN_GATED_KEYS) — bất kỳ ai đã đăng nhập gọi thẳng route này đều ghi đè/xoá trắng được TOÀN
+  // BỘ dữ liệu thật (CCCD/tài khoản ngân hàng/BHXH/người phụ thuộc, lương, chấm công, hợp đồng lao
+  // động...) — chặn hẳn, bắt buộc đi qua route riêng đã validate cấu trúc + quyền theo vai trò.
+  if (SENSITIVE_KEYS_BLOCKED_FROM_GENERIC_DATA_ROUTE.has(key)) {
+    return res.status(403).json({ error: 'Vui lòng dùng route riêng (có kiểm tra quyền theo vai trò) để ghi dữ liệu này' });
   }
+  if (!VALID_KEYS.has(key)) return res.status(400).json({ error: `Key không hợp lệ: ${key}` });
 
   let value = req.body;
   if (value === undefined) return res.status(400).json({ error: 'Thiếu dữ liệu (body) cần lưu' });

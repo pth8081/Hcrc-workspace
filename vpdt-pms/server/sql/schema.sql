@@ -230,6 +230,32 @@ GO
    CreatedAt: cột SQL dùng SYSUTCDATETIME() (giờ ghi thật, sắp xếp được) — KHÁC với field "createdAt"
    bên trong Payload (chuỗi hiển thị theo giờ Việt Nam dạng toLocaleString('vi-VN'), không sort được bằng
    SQL) — Payload["createdAt"] giữ nguyên để hiển thị, không dùng làm cột sắp xếp. */
+/* UploadedFiles (lib/uploadedFiles.js) — ghi nhận CHÍNH CHỦ đã tải lên mỗi file qua POST /api/upload
+   (rà soát bảo mật trước golive, 9/2026, phát hiện Cao): trước đây bất kỳ field fileUrl nào trong 1
+   payload TẠO MỚI chỉ được kiểm ĐÚNG KHUÔN "/uploads/<tên-file>" (chống scheme javascript:/path
+   traversal — xem UPLOADED_FILE_URL_RE ở lib/createValidation.js) mà KHÔNG kiểm CHÍNH NGƯỜI GỌI có
+   thật sự là người vừa tải file đó lên hay không — 1 tài khoản có quyền TẠO ở module bất kỳ (VD Tài
+   Liệu/Văn Bản Trình) có thể tự đặt fileUrl = đường dẫn THẬT của nạn nhân ở module khác (nếu biết/lộ
+   URL) để giả làm chủ sở hữu, vượt qua toàn bộ phân quyền Xem/Tải theo hồ sơ mà lib/fileAuthz.js dựng
+   (do findOwningRecord() ở đó lấy bản ghi ĐẦU TIÊN khớp fileUrl theo thứ tự cố định, không phân biệt
+   bản ghi thật hay giả). Bảng này là NGUỒN SỰ THẬT duy nhất "ai đã tải file nào lên" — mỗi lần
+   POST /api/upload thành công ghi đúng 1 dòng; assertPayloadFileUrlsOwnedByUser() (lib/uploadedFiles.js)
+   quét lại MỌI field fileUrl trong payload TẠO MỚI (routes/create.js) và từ chối nếu file đó được ghi
+   nhận thuộc về NGƯỜI KHÁC (không phải người đang gọi) — file KHÔNG có trong bảng (VD dữ liệu cũ trước
+   khi có bảng này) vẫn được cho qua để không phá hồ sơ đang có, chỉ chặn đúng kịch bản giả mạo có bằng
+   chứng rõ ràng. FileUrl vốn đã duy nhất toàn hệ thống (tên file random 16 hex + timestamp, xem
+   routes/upload.js) nên dùng thẳng làm khoá chính, không cần cột Id riêng. */
+IF OBJECT_ID('dbo.UploadedFiles', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.UploadedFiles (
+        FileUrl     NVARCHAR(300)  NOT NULL CONSTRAINT PK_UploadedFiles PRIMARY KEY,
+        UploadedBy  NVARCHAR(100)  NOT NULL,
+        CreatedAt   DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+    CREATE INDEX IX_UploadedFiles_UploadedBy ON dbo.UploadedFiles (UploadedBy);
+END
+GO
+
 IF OBJECT_ID('dbo.Notifications', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Notifications (

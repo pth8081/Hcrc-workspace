@@ -755,7 +755,14 @@ async function insertDedicatedRecord(collection, record) {
   }
 }
 
-async function withLockedDedicatedRecordById(collection, id, mutatorFn) {
+// opts.childrenByColumn (tuỳ chọn): tên cột đã tách (VD 'ParentId') để đọc kèm TOÀN BỘ bản ghi con có
+// cột đó = id, NGAY TRONG CÙNG giao dịch/phiên SQL đang giữ UPDLOCK+HOLDLOCK dòng cha — tránh race
+// "đọc danh sách con TRƯỚC khi khoá cha rồi mới ghi" (2 request sửa/thêm/xoá con cùng lúc, request nào
+// khoá cha sau vẫn dùng snapshot con đã cũ chụp từ trước khi khoá). Đọc qua request MỚI nhưng CÙNG tx
+// (cùng phiên SQL với dòng đang bị khoá) nên không tự chặn chính mình như khi dùng getPool() mới (sẽ
+// treo vô thời hạn chờ đúng khoá mà transaction này đang giữ). mutatorFn nhận thêm tham số 2 là mảng
+// con (đã parse) khi có opts.childrenByColumn, giữ nguyên chữ ký cũ (chỉ nhận item) cho mọi caller khác.
+async function withLockedDedicatedRecordById(collection, id, mutatorFn, opts) {
   const cfg = DEDICATED_TABLES[collection];
   const table = dedicatedTableName(collection);
   const pool = await getPool();
@@ -771,7 +778,16 @@ async function withLockedDedicatedRecordById(collection, id, mutatorFn) {
     }
     const item = toRecord(readResult.recordset[0]);
 
-    const updated = await mutatorFn(item);
+    let children;
+    if (opts && opts.childrenByColumn) {
+      const childReq = new sql.Request(tx);
+      const childResult = await childReq
+        .input('parentId', sql.BigInt, id)
+        .query(`SELECT Payload FROM ${table} WHERE ${opts.childrenByColumn} = @parentId`);
+      children = childResult.recordset.map(toRecord);
+    }
+
+    const updated = children !== undefined ? await mutatorFn(item, children) : await mutatorFn(item);
 
     const writeReq = new sql.Request(tx);
     writeReq.input('id', sql.BigInt, id);
@@ -1167,6 +1183,52 @@ async function unlinkUnreferencedUploads(fileUrls) {
   return { removed, kept };
 }
 
+// Quét TOÀN BỘ thư mục uploads/ tìm file "mồ côi" (chống đầy ổ đĩa, xem chú thích jobs/diskSpaceMonitor.js
+// — job đó CHỈ cảnh báo, không tự xoá; hàm này là phần "tự xoá AN TOÀN" bổ sung sau, xem
+// jobs/orphanedUploadsCleanup.js). Khác unlinkUnreferencedUploads() (chỉ nhận DANH SÁCH fileUrl có sẵn
+// từ 1 bản ghi vừa xoá vĩnh viễn), hàm này tự liệt kê MỌI file vật lý trong uploads/ rồi lọc theo 2 điều
+// kiện: (1) đã tồn tại LÂU HƠN graceHours (mtime, không phải ngày tạo — đủ để loại trừ file vừa tải lên
+// còn đang dở dang giữa lúc bấm "Tải lên" và lúc bấm "Lưu" hồ sơ, có thể kéo dài vài phút tới vài giờ nếu
+// người dùng soạn form lâu) VÀ (2) KHÔNG còn bản ghi nào (đang sống hay trong Thùng Rác) hay AppData nào
+// tham chiếu tới (isFileUrlStillReferenced() — cùng hàm dùng khi xoá vĩnh viễn, quét LIKE trên mọi bảng
+// nên không bỏ sót collection nào). File không khớp 2 điều kiện trên (mới hơn graceHours HOẶC còn được
+// tham chiếu) đều được GIỮ NGUYÊN — an toàn hơn là xoá nhầm.
+async function sweepOrphanedUploads({ graceHours = 48 } = {}) {
+  const result = { removed: [], kept: 0, errored: [] };
+  let entries;
+  try {
+    entries = await fs.promises.readdir(UPLOAD_DIR);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return result;
+    console.error('⛔ [Dọn file mồ côi] Không đọc được thư mục uploads/:', err.message);
+    return result;
+  }
+  let pool;
+  try {
+    pool = await getPool();
+  } catch (err) {
+    console.error('⛔ [Dọn file mồ côi] Không kết nối được CSDL để kiểm tra tham chiếu, bỏ qua đợt này:', err.message);
+    return result;
+  }
+  const cutoffMs = Date.now() - graceHours * 60 * 60 * 1000;
+  for (const fileName of entries) {
+    const fileUrl = `/uploads/${fileName}`;
+    const fullPath = path.join(UPLOAD_DIR, fileName);
+    try {
+      const stat = await fs.promises.stat(fullPath);
+      if (!stat.isFile() || stat.mtimeMs > cutoffMs) { result.kept++; continue; }
+      if (await isFileUrlStillReferenced(pool, fileUrl)) { result.kept++; continue; }
+      await fs.promises.unlink(fullPath);
+      result.removed.push(fileUrl);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      console.error(`⛔ [Dọn file mồ côi] Lỗi khi xử lý "${fileUrl}":`, err.message);
+      result.errored.push(fileUrl);
+    }
+  }
+  return result;
+}
+
 // Xóa vĩnh viễn — xoá dòng ở dbo.TrashBin (dữ liệu đã không còn ở dbo.Records từ lúc chuyển vào thùng
 // rác) VÀ dọn luôn file vật lý trong uploads/, không thể hoàn tác. Route gọi hàm này (routes/trash.js)
 // bắt buộc xác thực lại (withApprovalAuth/consumeApprovalGrant) trước khi tới đây, khớp mức độ nghiêm
@@ -1330,9 +1392,15 @@ async function createForCollection(collection, builderFn) {
     return insertDedicatedRecord(collection, record);
   }
   let record;
-  await withLockedAppDataValue(collection, (list) => {
+  // `await` builderFn(arr) — builderFn giờ có thể là async (routes/create.js dùng để chờ
+  // assertPayloadFileUrlsOwnedByUser() — lib/uploadedFiles.js, vá lỗ hổng giả mạo quyền sở hữu file,
+  // rà soát bảo mật 9/2026). withLockedAppDataValue() đã tự await mutatorFn (lambda này) nên KHÔNG cần
+  // đổi gì ở đó — chỉ cần lambda ở đây là async để builderFn's Promise được chờ đúng TRƯỚC khi
+  // arr.unshift(record) (trước đây gán thẳng Promise vào record nếu builderFn là async sẽ sai, không ai
+  // gặp phải vì builderFn từ trước tới nay luôn đồng bộ).
+  await withLockedAppDataValue(collection, async (list) => {
     const arr = Array.isArray(list) ? list : [];
-    record = builderFn(arr);
+    record = await builderFn(arr);
     arr.unshift(record);
     return arr;
   });
@@ -1441,8 +1509,8 @@ async function withAppLock(lockKeyOrKeys, fn) {
 }
 
 // mutatorFn(item) -> bản ghi đã sửa (hoặc throw HttpError, ví dụ 404/403/409, để huỷ giao dịch).
-async function withLockedRecordForCollection(collection, id, mutatorFn) {
-  if (DEDICATED_TABLES[collection]) return withLockedDedicatedRecordById(collection, id, mutatorFn);
+async function withLockedRecordForCollection(collection, id, mutatorFn, opts) {
+  if (DEDICATED_TABLES[collection]) return withLockedDedicatedRecordById(collection, id, mutatorFn, opts);
   if (MIGRATED_COLLECTIONS.has(collection)) return withLockedRecordById(collection, id, mutatorFn);
   let result;
   await withLockedAppDataValue(collection, (list) => {
@@ -1481,6 +1549,6 @@ module.exports = {
   getAllForCollection, getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
-  collectRecordFileUrls, unlinkUnreferencedUploads,
+  collectRecordFileUrls, unlinkUnreferencedUploads, sweepOrphanedUploads,
   DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords
 };

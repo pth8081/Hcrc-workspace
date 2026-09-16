@@ -255,7 +255,13 @@ router.post('/:id/download-marked', async (req, res) => {
       }
     }
 
-    const outName = `${(file.fileName || 'bang-gia').replace(/\.xlsx?$/i, '')}-danh-dau.xlsx`;
+    // .replace(/[\r\n"]/g, '') — chặn dấu " (phá khuôn chuỗi trong filename="...") lẫn \r\n (đề phòng
+    // thêm 1 lớp, dù Node http đã tự chặn CR/LF thô trong giá trị header) trước khi dựng outName, khớp
+    // ĐÚNG cách routes/download.js đã làm với downloadName — rà soát bảo mật trước golive (9/2026, mức
+    // Thấp) phát hiện chỗ này thiếu bước sanitize dù cùng khuôn Content-Disposition. file.fileName gốc
+    // do client tự đặt tên lúc tải file lên (originalname), không qua kiểm soát nào khác.
+    const safeFileName = String(file.fileName || 'bang-gia').replace(/[\r\n"]/g, '');
+    const outName = `${safeFileName.replace(/\.xlsx?$/i, '')}-danh-dau.xlsx`;
     const asciiFallback = outName.replace(/[^\x20-\x7E]/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(outName)}`);

@@ -13,6 +13,7 @@
 // Cáo (module-baocaoquantri.js REPORT_MODULE_CONFIGS) — mở rộng REPORT_QUERY_CONFIGS bên dưới khi có
 // thêm collection khác cần lọc SQL.
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { queryDedicatedRecords, DEDICATED_TABLES } = require('../lib/recordStore');
@@ -31,6 +32,21 @@ const {
 } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
+// Rà soát bảo mật trước golive (9/2026, mức Trung bình): truy vấn báo cáo tốn tài nguyên SQL hơn hẳn
+// CRUD thường (quét/lọc theo dept + khoảng ngày trên nhiều bảng), trước đây chỉ dựa vào giới hạn CHUNG
+// toàn /api (globalApiRateLimiter, 600 req/phút, xem server.js) — vẫn đủ dư địa để 1 phiên đã đăng nhập
+// (không cần chọc thủng gì thêm) dội liên tục truy vấn báo cáo nặng. Siết riêng chặt hơn ở ĐÚNG router
+// này (chỉ có 2 route, đều là "báo cáo", không đụng CRUD nơi khác) — khoá theo username khi có phiên
+// hợp lệ (không tính chung theo IP, cùng lý do globalApiRateLimiter ở server.js).
+const reportsRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang truy vấn báo cáo quá nhiều, vui lòng thử lại sau ít phút.' },
+  keyGenerator: (req) => req.freshUser?.username || req.ip
+});
+router.use(reportsRateLimiter);
 
 // filterFn khớp ĐÚNG chữ ký hàm thật ở lib/recordViewScope.js (không viết lại logic) — needsAppData:
 // true khi canView*()/filter*ForUser() của collection đó cần tra thêm appData (VD 3 collection Vận

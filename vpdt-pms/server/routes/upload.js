@@ -11,6 +11,7 @@ const { getAppDataValueCached } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { recordUploadedFile } = require('../lib/uploadedFiles');
 
 const router = express.Router();
 
@@ -147,8 +148,19 @@ router.post('/', uploadRateLimiter, (req, res) => {
       return res.status(400).json({ error: 'Không thể kiểm tra nội dung tệp vừa tải lên.' });
     }
 
+    const fileUrl = `/uploads/${req.file.filename}`;
+    // Ghi nhận CHÍNH CHỦ đã tải file này lên (dbo.UploadedFiles) — nguồn sự thật để
+    // assertPayloadFileUrlsOwnedByUser() (lib/uploadedFiles.js, gọi ở routes/create.js) chặn việc tự
+    // đặt fileUrl = tệp của người khác khi tạo hồ sơ. Lỗi ghi KHÔNG được chặn lượt tải lên đã thành công
+    // (file vật lý đã lưu xong, trả lỗi ở đây sẽ làm mồ côi file mà không có cách nào dọn) — chỉ log lại.
+    try {
+      await recordUploadedFile(fileUrl, req.freshUser.username);
+    } catch (e) {
+      console.error('⛔ Không ghi được UploadedFiles cho', fileUrl, ':', e.message);
+    }
+
     res.json({
-      fileUrl: `/uploads/${req.file.filename}`,
+      fileUrl,
       fileName: req.file.originalname,
       fileType: req.file.mimetype,
       size: req.file.size

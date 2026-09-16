@@ -8044,13 +8044,16 @@ bindCspDelegation('trainingTakeTestModal');
 bindCspDelegation('trainingClassQrModal');
 bindCspDelegation('trainingJoinClassModal');
 bindCspDelegation('gradeEssayModal');
-// Ngân Sách — 3 sub-tab (Phê Duyệt/Thực Hiện/Tổng Hợp) + danh sách bản ngân sách đều render trong
-// #budgetSection — nhưng modal "⚙️ Quản Lý Kỳ & Mẫu" (#budgetPeriodTemplateModal, CRUD kỳ ngân sách +
-// mẫu cột) và modal Xử Lý/Xem Chi Tiết (#budgetProcessModal, nút Duyệt/Từ Chối/Yêu Cầu Bổ Sung) đều
-// sống NGOÀI section (giống Xe/Vận Hành/Đào Tạo) nên mỗi modal cần thêm 1 gốc riêng — 3 gốc tổng cộng.
+// Ngân Sách 2.0 (budgetLines) — 4 tab (Đề Xuất/Phê Duyệt/Sử Dụng/Báo Cáo) + mọi modal xử lý (thêm/sửa
+// dòng, Quản Lý Kỳ & Mẫu...) đều dùng chung #genericConfirmModal/showConfirmModal() (bind riêng ở dưới)
+// thay vì modal tĩnh riêng của module — 1 gốc #budgetSection là đủ. 2 dòng bindCspDelegation() cho
+// '#budgetPeriodTemplateModal'/'#budgetProcessModal' (module Ngân Sách CŨ, đã thay hẳn bằng budgetLines)
+// đã bị xoá ở đây — rà soát bảo mật trước golive (9/2026, mức Thấp) phát hiện 2 id này không còn tồn tại
+// ở bất kỳ đâu trong index.html/fragments (dead code còn sót lại), vô hại (bindCspDelegation() tự no-op
+// khi không tìm thấy phần tử) nhưng dễ gây hiểu nhầm cho lần tách module HTML sau này (tưởng đã có sẵn
+// bind cho 2 id đó nên quên thêm vào NESTED_CSP_ROOTS_IN_FRAGMENT nếu sau này thật sự có module con mới
+// dùng đúng 2 tên này).
 bindCspDelegation('budgetSection');
-bindCspDelegation('budgetPeriodTemplateModal');
-bindCspDelegation('budgetProcessModal');
 
 // Nhân Sự — #hrFeedbackManageContainer (renderHrFeedbackManage()) render TRONG #hrSection, 1 gốc là đủ.
 bindCspDelegation('hrSection');

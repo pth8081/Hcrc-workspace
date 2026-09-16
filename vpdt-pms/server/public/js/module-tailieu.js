@@ -1521,7 +1521,7 @@ function buildProtectedViewerHTML(fileSrc, fileType, fileName, altLabel) {
     // scan (hợp đồng/giấy phép chụp ảnh...) xem được nguyên vẹn không dấu vết nếu chụp lại màn hình.
     return `
       <div class="relative flex flex-col items-center justify-center p-4 w-full protected-view-container" data-no-ctxmenu>
-        <img src="${fileSrc}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" data-no-ctxmenu />
+        <img src="${escapeHtml(fileSrc)}" alt="${escapeHtml(altLabel || '')}" class="max-h-[65vh] max-w-full rounded border shadow-md object-contain pointer-events-none select-none" data-no-ctxmenu />
         <div data-style="${PROTECTED_VIEW_WATERMARK_STYLE}">${escapeHtml(PROTECTED_VIEW_WATERMARK_COMPANY)}</div>
       </div>
     `;

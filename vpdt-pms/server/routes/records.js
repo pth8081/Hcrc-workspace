@@ -2074,7 +2074,12 @@ router.post('/budgetLines/:id/used-parent-delete', async (req, res) => {
 });
 
 // POST /api/records/budgetLines/:id/children — thêm 1 mục con Sử Dụng dưới dòng cha :id, rồi tính lại
-// usageStatus của dòng cha ngay (đọc lại đủ danh sách mục con MỚI NHẤT, gồm cả mục vừa tạo).
+// usageStatus của dòng cha ngay. Danh sách mục con dùng để tính lại được ĐỌC LẠI TỪ DB, NGAY TRONG cùng
+// giao dịch đang khoá dòng cha (opts.childrenByColumn ở withLockedRecordForCollection, xem chú thích ở
+// withLockedDedicatedRecordById/lib/recordStore.js) — KHÔNG dùng "all" (đọc trước khi khoá cha) nữa, vì
+// 2 request thêm/sửa/xoá mục con CÙNG 1 dòng cha gần như đồng thời có thể khiến request khoá cha sau vẫn
+// cầm 1 snapshot mục con đã cũ (chưa thấy mục vừa được request kia tạo/sửa/xoá xong), dẫn tới usageStatus
+// sai cho tới lần thao tác con TIẾP THEO mới tự sửa lại đúng.
 router.post('/budgetLines/:id/children', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2086,15 +2091,15 @@ router.post('/budgetLines/:id/children', async (req, res) => {
     const child = await createForCollection('budgetLines', () => ({
       ...recordActions.addBudgetLineChild(freshUser, parent, req.body), id: Date.now()
     }));
-    const siblings = [...all.filter(l => l.parentId === itemId), child];
-    const parentAfter = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.recomputeBudgetLineUsageStatus(item, siblings));
+    const parentAfter = await withLockedRecordForCollection('budgetLines', itemId, (item, children) =>
+      recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
     res.json({ ok: true, item: child, parentItem: parentAfter });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/children`, err); }
 });
 
 // POST /api/records/budgetLines/:id/child-update — sửa 1 mục con Sử Dụng (:id = id mục con), tính lại
-// usageStatus dòng cha sau khi sửa.
+// usageStatus dòng cha sau khi sửa (đọc lại danh sách con từ DB trong CÙNG giao dịch khoá cha, xem chú
+// thích ở route /children ngay trên).
 router.post('/budgetLines/:id/child-update', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2107,15 +2112,15 @@ router.post('/budgetLines/:id/child-update', async (req, res) => {
     if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
     const updated = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
       recordActions.updateBudgetLineChild(freshUser, item, parent, req.body));
-    const siblings = all.filter(l => l.parentId === parent.id).map(l => (l.id === itemId ? updated : l));
-    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item) =>
-      recordActions.recomputeBudgetLineUsageStatus(item, siblings));
+    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item, children) =>
+      recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
     res.json({ ok: true, item: updated, parentItem: parentAfter });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/child-update`, err); }
 });
 
 // POST /api/records/budgetLines/:id/child-delete — xoá 1 mục con Sử Dụng (:id = id mục con), tính lại
-// usageStatus dòng cha sau khi xoá.
+// usageStatus dòng cha sau khi xoá (đọc lại danh sách con từ DB trong CÙNG giao dịch khoá cha, xem chú
+// thích ở route /children ngay trên).
 router.post('/budgetLines/:id/child-delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2129,9 +2134,8 @@ router.post('/budgetLines/:id/child-delete', async (req, res) => {
     await deleteRecordForCollection('budgetLines', itemId,
       (item) => recordActions.assertCanDeleteBudgetLineChild(freshUser, item, parent),
       { username: freshUser.username, name: freshUser.name });
-    const siblings = all.filter(l => l.parentId === parent.id && l.id !== itemId);
-    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item) =>
-      recordActions.recomputeBudgetLineUsageStatus(item, siblings));
+    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item, children) =>
+      recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
     res.json({ ok: true, parentItem: parentAfter });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/child-delete`, err); }
 });

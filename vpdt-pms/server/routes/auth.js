@@ -4,7 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword, hashPassword, validatePin, signToken, setAuthCookie, clearAuthCookie, requireAuth } = require('../lib/auth');
+const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
@@ -293,7 +293,37 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
   }
 });
 
-router.post('/logout', (req, res) => {
+// Trước đây logout CHỈ xoá cookie phía trình duyệt gọi request này — nếu token đã bị lộ (XSS, thiết bị
+// dùng chung, cache/lịch sử proxy...), kẻ có token đó vẫn dùng được BÌNH THƯỜNG sau khi chủ tài khoản
+// bấm "Đăng xuất" ở máy của họ, cho tới khi token tự hết hạn (tối đa 1h, có thể lâu hơn do trượt hạn
+// theo hoạt động — xem lib/auth.js) — rà soát bảo mật trước golive (9/2026, mức Trung bình). Vá bằng
+// CÙNG cơ chế sessionVersion đã dùng cho đổi mật khẩu/PIN/gỡ TOTP (lib/auth.js requireAuth() so payload.sv
+// với DB): tăng sessionVersion của CHÍNH người vừa đăng xuất -> mọi token đã ký trước đó (kể cả token bị
+// lộ ở nơi khác) đều hết hiệu lực ngay lập tức ở lượt request tiếp theo, KHÔNG chỉ token của trình duyệt
+// đang gọi /logout này. Không dùng requireAuth làm middleware ở đây (route này PHẢI luôn xoá được cookie
+// + trả về ok ngay cả khi token đã hết hạn/không hợp lệ/user không còn tồn tại — logout không được phép
+// tự thất bại) — tự đọc + xác minh token MỘT CÁCH KHOAN DUNG (bỏ qua mọi lỗi) chỉ để suy ra username cần
+// tăng sessionVersion.
+router.post('/logout', async (req, res) => {
+  try {
+    const token = req.cookies && req.cookies[COOKIE_NAME];
+    if (token) {
+      let payload = null;
+      try { payload = verifyToken(token); } catch (e) { /* token đã hết hạn/không hợp lệ — không có gì để vô hiệu hoá thêm */ }
+      if (payload && payload.sub) {
+        await withLockedAppDataValue('users', (collection) => {
+          const list = Array.isArray(collection) ? collection : [];
+          const idx = list.findIndex(u => u.username === payload.sub);
+          if (idx === -1) return list;
+          list[idx] = { ...list[idx], sessionVersion: (list[idx].sessionVersion || 0) + 1 };
+          return list;
+        });
+      }
+    }
+  } catch (err) {
+    // Không được để lỗi ở bước tăng sessionVersion chặn việc đăng xuất thật (xoá cookie) — chỉ log lại.
+    console.error('POST /api/auth/logout: không tăng được sessionVersion:', err.message);
+  }
   clearAuthCookie(res);
   res.json({ ok: true });
 });

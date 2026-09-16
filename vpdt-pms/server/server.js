@@ -55,6 +55,7 @@ const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
 const { checkLaborContractExpiryReminders } = require('./jobs/laborContractExpiryReminder');
 const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalReminder');
 const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
+const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 
@@ -408,6 +409,11 @@ async function start() {
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.
       checkDiskSpace();
       setInterval(checkDiskSpace, 60 * 60 * 1000);
+      // Dọn file mồ côi trong uploads/ (đã tải lên nhưng không hồ sơ nào tham chiếu, VD bỏ dở form sau
+      // khi tải file) — chạy mỗi 6h, đủ thưa để không tốn tài nguyên quét toàn bộ thư mục liên tục, đủ
+      // dày để không tích tụ quá nhiều trước khi được dọn (job tự có graceHours=48h bảo vệ file đang dở
+      // dang, xem jobs/orphanedUploadsCleanup.js).
+      setInterval(cleanupOrphanedUploads, 6 * 60 * 60 * 1000);
       // Đồng bộ Đơn Hàng ra dsmart16: tick cố định mỗi 5 phút, nhưng syncOperationOrdersToDsmart16()
       // (force=false) tự quyết định có thực sự cần gọi hệ thống ngoài ở tick đó không (so lastSyncAt với
       // operationOrderApiConfig.syncIntervalMinutes admin đã cấu hình) — không đợi khởi động lại server

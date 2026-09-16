@@ -414,7 +414,15 @@ const MODULE_CONFIGS = {
   paymentRequests: {
     dbKey: 'paymentRequests',
     resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.paymentDeptWorkflows?.[item.dept], appData),
-    disallowReject: true
+    disallowReject: true,
+    // NGOẠI LỆ đã CHỐT với người dùng từ trước (xác nhận qua bộ test tests/test-payment.js, kịch bản
+    // 10/18 — "ketoan1 (approver bước 1 dept 'Phòng Kế Toán') duyệt được đề nghị thủ công của chính
+    // mình"): đề nghị thanh toán "thủ công" (sourceModule='MANUAL', không gắn nguồn nào từ module khác)
+    // do CHÍNH kế toán phòng ban tự lập rồi tự xác nhận là nghiệp vụ BÌNH THƯỜNG (khác các module còn
+    // lại — luôn có 1 NGƯỜI KHÁC đứng ra đề xuất, phê duyệt cần độc lập với người đó) — KHÔNG áp dụng
+    // assertNotSelfDecidingWorkflowItem() (mục Cao, rà soát bảo mật trước golive 9/2026) cho module này,
+    // để không phá vỡ luồng nghiệp vụ đã có từ trước.
+    allowSelfDeciding: true
   }
 };
 
@@ -426,9 +434,48 @@ const { HttpError: WorkflowError } = require('./httpErrors');
 // PROPOSE_FILE_REPLACEMENT bên dưới). Lưu ý: đây KHÔNG mâu thuẫn với "LƯU Ý BẢO TRÌ" ở đầu file — ghi
 // chú đó nói về việc không import chung được với public/index.html (trình duyệt), không phải giữa 2
 // module server với nhau; không có phụ thuộc vòng vì createValidation.js không require file này.
-const { assertUploadedFileUrl } = require('./createValidation');
+const { assertUploadedFileUrl, CREATE_MODULE_CONFIGS } = require('./createValidation');
 
 const nowVN = () => new Date().toLocaleString('vi-VN');
+
+// Chặn TỰ DUYỆT/TỰ XỬ LÝ hồ sơ do chính mình tạo — vá lỗ hổng mức Cao phát hiện ở đợt rà soát bảo mật
+// trước golive (9/2026): canApproveStep() (đầu file) chỉ kiểm "có tên trong danh sách approver bước
+// hiện tại + chưa từng duyệt bước này" — KHÔNG loại trừ chính người tạo/trình hồ sơ, nên 1 trưởng phòng
+// vừa tạo vừa là approver DUY NHẤT bước 1 của phòng mình (khá phổ biến ở phòng nhỏ) tự duyệt được luôn,
+// không ai kiểm soát độc lập — ảnh hưởng MỌI module đi qua applyWorkflowAction() (docs/submissions/
+// carRegs/officeReqs/contracts/contractsSignedFile/itPriceApprovals/budgetEntries/operationOrders/
+// paymentRequests). Module budgetLines (Ngân Sách 2.0, KHÔNG dùng engine này) đã có cơ chế riêng
+// tương tự từ trước (assertNotSelfDecidingBudgetLine(), lib/recordActions.js) — hàm này mirror ĐÚNG
+// tinh thần đó cho cụm module còn lại, TÁCH RIÊNG khỏi canApproveStep() (không đổi chữ ký hàm đó — nó
+// được dùng ở ~10 file public/js/*.js CHỈ để ẩn/hiện nút, đổi chữ ký sẽ đụng quá rộng, rủi ro hồi quy
+// cao ngay trước golive) để CHỈ chặn ở ĐÚNG 1 điểm gác thật (applyWorkflowAction(), nơi hành động THẬT
+// SỰ ghi xuống DB) — client vẫn hiện nút Duyệt bình thường cho tới khi bấm mới bị chặn 403 kèm thông
+// điệp rõ ràng, chấp nhận được vì đây là tình huống hiếm (tự tạo + tự là approver duy nhất).
+//
+// Dùng LẠI creatorField đã có sẵn trong CREATE_MODULE_CONFIGS (lib/createValidation.js — mỗi module
+// khai đúng 1 lần khi TẠO hồ sơ, xem `record[config.creatorField] = user.username;`) thay vì tự khai
+// lại field tên gì cho từng module ở ĐÂY — 1 nguồn sự thật duy nhất, tự động đúng nếu sau này có module
+// mới thêm vào MODULE_CONFIGS. "contractsSignedFile" (module ẢO, dbKey='contracts') tự động tra đúng
+// sang creatorField của "contracts" qua dbKey, không cần khai riêng.
+//
+// Admin KHÔNG bị chặn (giữ nguyên đặc quyền vượt mọi cấu hình approver, nhất quán với canApproveStep()/
+// isStepApprovalComplete() ở trên và toàn bộ phần còn lại của hệ thống) — khác budgetLines (chặn CẢ
+// admin), vì đây là quyết định phạm vi hẹp của riêng module budgetLines, không áp dụng ngược lại đây.
+//
+// MODULE_CONFIGS[moduleKey].allowSelfDeciding — cờ ngoại lệ cho module đã có SẴN nghiệp vụ hợp lệ tự
+// tạo + tự xử lý (hiện chỉ paymentRequests — xem chú thích ngay tại entry đó ở MODULE_CONFIGS phía
+// trên). Phát hiện ĐÚNG lúc chạy full regression sau khi thêm hàm này lần đầu: tests/test-payment.js đã
+// có sẵn 2 kịch bản (10/18) xác nhận đây là hành vi ĐÃ CHỐT, không phải lỗ hổng — không phải MỌI module
+// dùng chung engine này đều cần cùng 1 luật tự duyệt.
+function assertNotSelfDecidingWorkflowItem(moduleKey, item, user) {
+  if (user?.perms?.admin) return;
+  if (MODULE_CONFIGS[moduleKey]?.allowSelfDeciding) return;
+  const dbKey = MODULE_CONFIGS[moduleKey]?.dbKey || moduleKey;
+  const creatorField = CREATE_MODULE_CONFIGS[dbKey]?.creatorField;
+  if (creatorField && item[creatorField] && item[creatorField] === user.username) {
+    throw new WorkflowError(403, 'Bạn không thể tự xử lý (duyệt/từ chối/yêu cầu bổ sung) hồ sơ do chính mình tạo hoặc trình');
+  }
+}
 
 // Thực hiện HÀNH ĐỘNG (APPROVE/REJECT) trên 1 hồ sơ — mọi kiểm tra quyền đều dựa vào approver list
 // đã resolve từ đúng cấu hình quy trình của module đó, KHÔNG tin bất kỳ trường status/currentStep
@@ -474,6 +521,7 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi');
     }
+    assertNotSelfDecidingWorkflowItem(moduleKey, item, user);
     if (!item.infoRequests) item.infoRequests = [];
     const reqEntry = {
       id: Date.now(), step: currentStep,
@@ -496,6 +544,7 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền yêu cầu bổ sung ở bước hiện tại, hoặc đã xử lý bước này rồi');
     }
+    assertNotSelfDecidingWorkflowItem(moduleKey, item, user);
     // Hồ sơ quay lại NHÁP để sửa & GỬI LẠI TỪ ĐẦU (currentStep về 0) — mọi lượt "APPROVED" đã ghi ở
     // vòng nộp TRƯỚC không còn giá trị cho vòng MỚI (nội dung đã đổi), nhưng vẫn giữ nguyên trong lịch
     // sử để tra cứu — đánh dấu invalidated để getStepApprovedUsernames() không tính nhầm là "đã duyệt
@@ -550,6 +599,7 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');
     }
+    assertNotSelfDecidingWorkflowItem(moduleKey, item, user);
     const { fileUrl, fileName, fileType } = extraFields || {};
     if (!fileUrl || !fileName) throw new WorkflowError(400, 'Thiếu tệp thay thế tờ trình');
     // Tệp thay thế đi thẳng vào item.fileUrl khi người trình đồng ý (RESOLVE_FILE_PROPOSAL bên dưới),
@@ -608,6 +658,7 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
     throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');
   }
+  assertNotSelfDecidingWorkflowItem(moduleKey, item, user);
 
   // Field phụ theo module (vd. CarReg: assignedDriver/assignedVehicleType/assignedPlate) — ghi cả
   // vào hồ sơ lẫn snapshot trong dòng lịch sử (khớp hiển thị "🚘 Phân công" theo từng bước ở client).

@@ -674,6 +674,13 @@ const CREATE_MODULE_CONFIGS = {
       if (newStart >= newEnd) {
         throw new CreateError(400, 'Thời gian kết thúc phải sau thời gian bắt đầu');
       }
+      // Số người tham dự — trước đây chỉ client tự làm tròn về 1 khi rỗng/lỗi (parseInt(...)||1,
+      // module-phonghop.js), server nhận nguyên giá trị không kiểm gì — 1 request tự soạn gửi được số 0/
+      // âm/thập phân/chuỗi không phải số. Chưa có tính năng giới hạn sức chứa phòng nào đọc field này
+      // (chỉ hiển thị), nên đây thuần là chặn dữ liệu vô lý, không phải lỗ hổng bỏ qua kiểm tra nghiệp vụ
+      // thật — rà soát bảo mật trước golive (9/2026, mức Thấp).
+      const attendees = Number(payload.attendees);
+      payload.attendees = Number.isFinite(attendees) && attendees >= 1 ? Math.floor(attendees) : 1;
       const conflict = findMeetingConflict(collection, payload.room, payload.startTime, payload.endTime);
       if (conflict) {
         throw new CreateError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${conflict.code})`);

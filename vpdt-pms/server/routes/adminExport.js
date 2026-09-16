@@ -12,6 +12,7 @@
 // từng người nữa. lib/orgChartImport.js cũng đã xoá theo — không còn nơi nào dùng.)
 const express = require('express');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildGenericWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -20,6 +21,18 @@ const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
+// Rà soát bảo mật trước golive (9/2026, mức Trung bình) — cùng lý do reportsRateLimiter (routes/reports.js):
+// dựng file Excel (export-xlsx tới 50.000 dòng)/đọc file Excel tải lên (import-xlsx) tốn tài nguyên hơn
+// hẳn CRUD thường, trước đây chỉ dựa vào giới hạn CHUNG 600 req/phút toàn /api.
+const adminExportRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang xuất/nhập dữ liệu quá nhiều, vui lòng thử lại sau ít phút.' },
+  keyGenerator: (req) => req.freshUser?.username || req.ip
+});
+router.use(adminExportRateLimiter);
 
 const MAX_ROWS = 50000; // chặn payload export vô lý lớn (vượt xa quy mô dữ liệu thực tế của app)
 

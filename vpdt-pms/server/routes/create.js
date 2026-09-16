@@ -9,6 +9,9 @@ const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 const employeeProfile = require('../lib/employeeProfile');
 const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS } = require('../lib/recordViewScope');
+// assertPayloadFileUrlsOwnedByUser() — vá lỗ hổng giả mạo quyền sở hữu file (rà soát bảo mật 9/2026,
+// mức Cao): xem chú thích đầy đủ ở lib/uploadedFiles.js + sql/schema.sql (bảng UploadedFiles).
+const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 
 // Đảo ngược MODULE_ACCESS_GATED_COLLECTIONS (moduleKey -> [collection,...]) thành collection -> moduleKey
 // để tra cứu 1 chiều tại đây — PQ-01 (đợt test chuyên sâu 9/2026) phát hiện Khối 0 (moduleAccess) TRƯỚC
@@ -173,7 +176,16 @@ router.post('/:module', async (req, res) => {
     // cũ sau khi xoá) — không phải điều kiện đua chính mà createForCollection(Serialized) đã khoá chặt
     // cho trường hợp phổ biến (2 người tạo cùng code cùng lúc trong collection ĐANG SỐNG).
     const trashedItems = await getTrashItems(config.dbKey);
-    const builderFn = (list) => validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData, trashedItems);
+    // async — chờ được assertPayloadFileUrlsOwnedByUser() (kiểm DB) SAU khi validateAndPrepareCreate()
+    // (đồng bộ) dựng xong payload cuối cùng, TRƯỚC KHI trả về cho createForCollection(Serialized) ghi
+    // xuống DB — record giả mạo bị chặn ở đây không bao giờ được ghi. createForCollection()/
+    // createForCollectionSerialized() (lib/recordStore.js) đều đã `await builderFn(...)` sẵn, an toàn
+    // với builderFn async.
+    const builderFn = async (list) => {
+      const record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData, trashedItems);
+      await assertPayloadFileUrlsOwnedByUser(record, freshUser);
+      return record;
+    };
     // docs (version mới)/contracts (phụ lục mới): khoá theo ID GỐC của cả "họ" — cùng khoá mà
     // routes/records.js dùng khi XOÁ family này (doc_family:<rootDocId>/contract_family:<rootContractId>)
     // — trước đây tạo version/phụ lục mới chỉ tự kiểm tra root còn tồn tại tại thời điểm đọc mà không

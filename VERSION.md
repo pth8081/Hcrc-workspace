@@ -1,8 +1,94 @@
 # Phiên bản hiện tại
 
-**23.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.15 (2026-09-16): Vá 12/13 phát hiện từ đợt rà soát bảo mật + nghiệp vụ chuyên sâu (9 agent song song) trước go-live
+
+Trước go-live, chạy 9 agent song song rà soát chuyên sâu độc lập (đọc, không sửa) theo 9 mảng: xác thực/
+phiên đăng nhập, phân quyền/IDOR, SQL Injection/XSS, upload/download file, security headers/rate-limit,
+luồng nghiệp vụ tài chính (Ngân Sách/Thanh Toán/Hợp Đồng/Văn Bản Trình/Giá IT), dữ liệu nhạy cảm Nhân Sự,
+logic nghiệp vụ Vận Hành, và Admin/Hệ Thống + tái xác minh đợt tách khung HTML (v23.10-23.13) không hồi
+quy. Kết quả: 2 Cao, 7 Trung bình, ~10 Thấp. Đã vá theo đúng thứ tự ưu tiên 12/13 phát hiện (còn 1 phát
+hiện Trung bình cần NGƯỜI DÙNG quyết định phương án nghiệp vụ trước khi sửa — xem mục cuối):
+
+**Cao:**
+1. **Giả mạo quyền sở hữu file giữa các module** — server trước đây chỉ kiểm tra ĐỊNH DẠNG đường dẫn
+   `/uploads/...` khi tạo hồ sơ (`assertUploadedFileUrl()`), không xác minh người tạo hồ sơ CÓ PHẢI là
+   người đã tải file đó lên hay không — 1 người dùng có thể lấy URL file người khác tải lên (đoán được
+   qua timestamp, hoặc thấy trong 1 hồ sơ công khai khác) rồi gắn vào hồ sơ của mình. Vá: thêm bảng
+   `dbo.UploadedFiles` (ghi `FileUrl` + `UploadedBy` ngay lúc tải lên, `routes/upload.js`) và chặn ở
+   ĐÚNG 1 chỗ — `routes/create.js` (dispatcher chung `POST /api/create/:module` cho ~30 module) — đối
+   chiếu MỌI đường dẫn `/uploads/...` xuất hiện bất kỳ đâu trong payload (kể cả lồng trong customData)
+   với người tải lên thật, chặn 403 nếu khác người tạo hồ sơ. **Giới hạn đã biết**: chỉ phủ đường TẠO MỚI
+   hồ sơ, CHƯA phủ đường SỬA hồ sơ đã có (~16 điểm gọi trong `lib/recordActions.js`) — để lại làm việc
+   tiếp theo do phạm vi/rủi ro hồi quy của việc sửa đồng loạt nhiều luồng edit trong 1 đợt.
+2. **Tự duyệt hồ sơ do chính mình tạo/trình** — 1 số luồng phê duyệt không có kiểm tra "người duyệt ≠
+   người tạo" ở server (chỉ dựa vào UI ẩn nút), nên có thể gọi thẳng API duyệt hồ sơ do chính mình tạo.
+   Vá: `assertNotSelfDecidingWorkflowItem()` mới trong `lib/workflowEngine.js`, áp dụng cho REQUEST_INFO/
+   REQUEST_CHANGES/PROPOSE_FILE_REPLACEMENT/APPROVE/REJECT của mọi module (trừ `paymentRequests` — đã xác
+   nhận qua `tests/test-payment.js` đây là quy tắc nghiệp vụ có chủ đích cho phiếu thủ công, giữ nguyên
+   qua cờ `allowSelfDeciding`), admin vẫn được miễn như thiết kế hiện có.
+
+**Trung bình:**
+3. **Đăng xuất không vô hiệu hoá JWT phía server** — token cũ vẫn dùng được tới khi hết hạn dù đã bấm
+   "Đăng xuất" (nếu bị đánh cắp trước đó). Vá: `POST /api/auth/logout` tăng `sessionVersion` của user
+   (tái dùng cơ chế đã có sẵn để vô hiệu hoá token khi đổi mật khẩu/gỡ thiết bị WebAuthn).
+4. **4 collection cực nhạy cảm (employeeProfiles/laborContracts/payslips/attendanceRecords) chưa chặn
+   tường minh ở `GET/POST /api/data/:key`** — trước đây dựa vào việc các collection này "không có trong
+   `VALID_KEYS`" một cách gián tiếp; vá bằng danh sách chặn tường minh, trả 403 rõ ràng, đặt TRƯỚC kiểm
+   tra `VALID_KEYS` để chắc chắn không lọt qua nếu danh sách đó thay đổi sau này.
+5. **`/api/reports` và admin export/import chưa có rate-limit riêng** — có thể bị dò/kéo dữ liệu hàng
+   loạt qua các route này dù đã có rate-limit chung toàn API. Vá: thêm `express-rate-limit` riêng cho
+   từng nhóm (120 req/5 phút cho reports, 60 req/5 phút cho admin export/import), khoá theo username.
+6. **Ticket IT Support có thể bị đưa ngược về TODO qua gọi API trực tiếp** — route cập nhật trạng thái
+   nhận mọi giá trị trong `IT_TICKET_STATUSES` thay vì chỉ 2 trạng thái đích hợp lệ của thao tác "cập
+   nhật" (DONE/CANCELLED). Vá: tách hằng số riêng `IT_TICKET_UPDATE_TARGET_STATUSES`.
+7. **Race condition khi tính `usageStatus` của dòng Ngân Sách cha** — 3 route thêm/sửa/xoá mục con Sử
+   Dụng đọc danh sách mục con TRƯỚC khi khoá dòng cha, nên 2 request sửa mục con cùng lúc có thể khiến
+   request khoá sau vẫn dùng danh sách mục con đã cũ (tự sửa đúng lại ở lần thao tác con TIẾP THEO,
+   không mất dữ liệu nhưng hiển thị sai tạm thời). Vá: `withLockedRecordForCollection()` (`lib/recordStore.js`)
+   nay hỗ trợ đọc kèm bản ghi con NGAY TRONG CÙNG giao dịch/phiên SQL đang giữ khoá dòng cha
+   (`opts.childrenByColumn`), thay vì snapshot lấy trước khi khoá.
+8. **Chưa có cơ chế dọn file tải lên bị bỏ dở (mồ côi)** — nguy cơ đầy ổ đĩa dần theo thời gian nếu người
+   dùng tải file lên rồi không lưu hồ sơ. Vá: `jobs/orphanedUploadsCleanup.js` (job mới, chạy mỗi 6h) +
+   `sweepOrphanedUploads()` (`lib/recordStore.js`) — quét `uploads/`, chỉ xoá file đã tồn tại > 48h VÀ xác
+   minh KHÔNG còn hồ sơ/Thùng Rác/AppData nào tham chiếu (tái dùng đúng cơ chế kiểm tra tham chiếu đã có
+   ở luồng xoá vĩnh viễn Thùng Rác) — file mới hơn 48h hoặc còn nghi ngờ đều được GIỮ NGUYÊN.
+
+**Thấp:**
+9. Số người dự họp (`attendees`) chưa chặn giá trị âm/0 ở server (chỉ chặn ở client) — vá ở
+   `meetings.extraValidate` (`lib/createValidation.js`).
+10. 2 dòng `bindCspDelegation(...)` trỏ tới id modal không còn tồn tại (budgetLines dùng chung
+    `#genericConfirmModal`) — dọn dead code + chú thích rõ trong `public/js/core.js`.
+11. Tên file trong header `Content-Disposition` khi tải bảng giá đã đánh dấu chưa được lọc ký tự
+    `\r\n"` (nguy cơ header injection nếu tên file chứa ký tự đặc biệt) — vá ở `routes/priceFile.js`.
+12. `<img src="${...}">` nội suy trực tiếp không qua `escapeHtml()` ở vài chỗ hiển thị file/ảnh
+    (`module-tailieu.js`, `module-baocaodinhky-trinhchieu.js`) — vá phòng ngừa dù chưa xác định được
+    đường khai thác thực tế trong luồng hiện tại.
+
+**Chưa sửa, cần NGƯỜI DÙNG xác nhận phương án trước khi làm (Trung bình)**: mức phê duyệt "Bán Buôn" ở
+Giá IT hiện do người tạo TỰ KHAI, không đối chiếu số liệu — cần chọn giữa (a) thêm cột biên độ/chiết khấu
+chuẩn hoá bắt buộc trong file mẫu giá để server tự đối chiếu, hoặc (b) khoá việc chọn mức "Bán Buôn" theo
+1 quyền riêng chặt hơn. Chưa tự ý chọn phương án vì ảnh hưởng tới cách người dùng nhập liệu hiện có.
+
+**Giới hạn đã biết của đợt vá này (khuyến nghị kiểm tra thêm trên môi trường thật trước khi coi là đã xác
+minh đầy đủ)**: sandbox làm việc không có SQL Server thật đang chạy, nên phát hiện #1 (bảng `UploadedFiles`
++ đối chiếu quyền sở hữu file ở `routes/create.js`) chỉ kiểm tra được cú pháp/logic đơn vị, CHƯA chạy được
+tích hợp thật với DB — khuyến nghị tự kiểm thử luồng tải file + tạo hồ sơ, và luồng tự duyệt (#2) trên môi
+trường staging/production thật trước khi yên tâm hoàn toàn. Phát hiện #2 ĐÃ chạy qua bộ hồi quy Playwright
+thật (`tests/_mockBackend.js` require thẳng `lib/workflowEngine.js` thật) nên đã có xác minh tự động.
+
+**Deploy-impact**:
+- `server/sql/schema.sql` có thêm bảng mới `dbo.UploadedFiles` (FileUrl PK, UploadedBy, CreatedAt) — cần
+  chạy lại script (an toàn, tự bọc `IF OBJECT_ID(...) IS NULL`, không ảnh hưởng dữ liệu hiện có).
+- Không thêm biến môi trường mới, không thêm npm dependencies mới (`express-rate-limit` đã có sẵn trong
+  `package.json` từ trước, chỉ dùng lại).
+- Không cần thao tác migrate dữ liệu thủ công nào khác. File cũ đã tồn tại trong `uploads/` trước khi
+  bảng `UploadedFiles` có dữ liệu sẽ KHÔNG có chủ sở hữu ghi nhận (owner rỗng) — luồng đối chiếu quyền sở
+  hữu chỉ chặn khi phát hiện chủ sở hữu KHÁC người tạo hồ sơ, nên file cũ (chưa có chủ ghi nhận) vẫn dùng
+  được bình thường, không bị chặn nhầm.
 
 ## v23.14 (2026-09-16): Sửa lỗi có sẵn trong demo Thông Báo Email Phê Duyệt (KHÔNG phải lỗi nghiệp vụ)
 

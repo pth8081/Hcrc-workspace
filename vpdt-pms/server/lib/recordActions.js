@@ -4890,8 +4890,8 @@ function submitPriceSupplementFile(user, item, payload) {
 
 // "Hỗ Trợ Yêu Cầu" — ticket helpdesk IT nội bộ, ai cũng tạo được (xem itSupportTickets ở
 // lib/createValidation.js), chỉ người có itManage/admin mới xử lý được. State machine đơn giản:
-// TODO -> DOING (khi có người nhận) -> DONE, hoặc CANCELLED bất kỳ lúc nào trước khi DONE.
-const IT_TICKET_STATUSES = new Set(['TODO', 'DOING', 'DONE', 'CANCELLED']);
+// TODO -> DOING (khi có người nhận, xem claimItTicket()) -> DONE, hoặc CANCELLED bất kỳ lúc nào trước
+// khi DONE (xem IT_TICKET_UPDATE_TARGET_STATUSES ở updateItTicketStatus() bên dưới).
 
 function claimItTicket(user, ticket) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý yêu cầu hỗ trợ IT');
@@ -4910,10 +4910,19 @@ function claimItTicket(user, ticket) {
   return ticket;
 }
 
+// Chỉ 2 trạng thái ĐÍCH hợp lệ qua route cập nhật tiến độ này — KHÔNG dùng nguyên IT_TICKET_STATUSES
+// (4 giá trị) như trước: 'TODO'/'DOING' KHÔNG phải đích hợp lệ ở đây (TODO->DOING đã có claimItTicket()
+// riêng; DOING->DOING vô nghĩa). Rà soát bảo mật trước golive (9/2026, mức Thấp) phát hiện: trước đây
+// gọi trực tiếp API với status:'TODO' (giao diện chưa từng cho chọn, chỉ 1 request tự soạn mới làm
+// được) đưa được 1 ticket đang DOING NGƯỢC về TODO mà KHÔNG xoá ticket.assignee/assigneeName — hồ sơ
+// coi như "chưa ai nhận" (đúng điều kiện claimItTicket() yêu cầu) trong khi vẫn còn nguyên tên người cũ,
+// khiến 1 người KHÁC nhận tiếp được, để lại 2 người cùng tưởng mình đang phụ trách 1 ticket.
+const IT_TICKET_UPDATE_TARGET_STATUSES = new Set(['DONE', 'CANCELLED']);
+
 function updateItTicketStatus(user, ticket, payload) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền cập nhật yêu cầu hỗ trợ IT');
   const status = payload?.status;
-  if (!IT_TICKET_STATUSES.has(status)) throw new HttpError(400, 'Trạng thái không hợp lệ');
+  if (!IT_TICKET_UPDATE_TARGET_STATUSES.has(status)) throw new HttpError(400, 'Trạng thái không hợp lệ');
   if (ticket.status === 'DONE' || ticket.status === 'CANCELLED') {
     throw new HttpError(409, 'Yêu cầu này đã kết thúc, không thể cập nhật thêm');
   }

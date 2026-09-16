@@ -485,7 +485,7 @@ function renderPrAggCompilation() {
       // trình chiếu). Ảnh (embedded/bảng/đồ thị — bảng và đồ thị đã được vẽ lại thành ảnh lúc đọc file,
       // xem parsePptxToSlideContents()) CHỈ ĐỌC, không sửa lại được nội dung bên trong ảnh.
       const imagesHTML = (s.images || []).length
-        ? `<div class="flex flex-wrap gap-2 mt-1.5">${(s.images || []).map(im => `<img src="${im.dataUrl}" class="h-20 rounded border" data-no-ctxmenu>`).join('')}</div>`
+        ? `<div class="flex flex-wrap gap-2 mt-1.5">${(s.images || []).map(im => `<img src="${escapeHtml(im.dataUrl)}" class="h-20 rounded border" data-no-ctxmenu>`).join('')}</div>`
         : '';
       bodyHTML = `
         <textarea data-op-input="updatePrAggPptxBodyLines" data-arg0="${idx}" data-arg-value="1" placeholder="Nội dung (mỗi dòng là 1 gạch đầu dòng)" class="w-full border p-1.5 rounded text-xs h-24" ${isPublished ? 'disabled' : ''}>${escapeHtml((s.bodyLines || []).join('\n'))}</textarea>
@@ -816,7 +816,7 @@ function buildPrFileBlockHTML(s, colors) {
   const c = colors || getPrSlideTemplateColors(prSlideshowTemplate);
   const kind = getFileKind(s.fileType, s.fileName);
   if (kind === 'image') {
-    return `<img src="${s.fileUrl}" class="max-h-96 mx-auto mt-3 block" data-style="border-radius:6px;border:1px solid ${c.tableBorder};" data-no-ctxmenu>`;
+    return `<img src="${escapeHtml(s.fileUrl)}" class="max-h-96 mx-auto mt-3 block" data-style="border-radius:6px;border:1px solid ${c.tableBorder};" data-no-ctxmenu>`;
   }
   return `<button type="button" data-op="viewPrCurrentSlideFile" class="mt-3 text-sm px-3 py-1.5 rounded" data-style="background:${c.navBtnBg};color:${c.navBtnText};">📎 Xem tệp: ${escapeHtml(s.fileName || 'tệp đính kèm')}</button>`;
 }
@@ -851,7 +851,7 @@ function buildPrPptxSlideBodyHTML(s, c) {
     : '';
   const imagesHTML = (s.images || []).length
     ? `<div class="flex flex-wrap gap-3 justify-center mt-3">
-        ${(s.images || []).map(im => `<img src="${im.dataUrl}" class="max-h-72 max-w-full" data-style="border-radius:6px;border:1px solid ${c.tableBorder};" data-no-ctxmenu>`).join('')}
+        ${(s.images || []).map(im => `<img src="${escapeHtml(im.dataUrl)}" class="max-h-72 max-w-full" data-style="border-radius:6px;border:1px solid ${c.tableBorder};" data-no-ctxmenu>`).join('')}
       </div>`
     : '';
   return (linesHTML + imagesHTML) || `<p data-style="font-style:italic;color:#9ca3af;">Không có nội dung.</p>`;
