@@ -9,6 +9,48 @@ const HRC_STATUS_LABELS = {
   TERMINATED: '⛔ Đã chấm dứt', SUPERSEDED: '🔄 Đã thay thế'
 };
 
+// Cảnh báo hợp đồng sắp/đã hết hiệu lực (9/2026, theo yêu cầu người dùng) — chỉ áp dụng cho hợp đồng
+// ĐANG ACTIVE có ngày hết hạn (Vô thời hạn/DRAFT/TERMINATED/SUPERSEDED không cần cảnh báo). Ngưỡng:
+// ≤7 ngày hoặc đã qua hạn = ĐỎ (khẩn cấp), ≤30 ngày = VÀNG (sắp tới), còn lại = không cảnh báo.
+function hrcDaysUntilExpiry(endDate) {
+  if (!endDate) return null;
+  const end = new Date(endDate + 'T00:00:00');
+  if (isNaN(end.getTime())) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((end - today) / 86400000);
+}
+function hrcExpiryBadgeHtml(c) {
+  if (c.status !== 'ACTIVE' || !c.endDate) return '';
+  const days = hrcDaysUntilExpiry(c.endDate);
+  if (days == null) return '';
+  if (days < 0) return `<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">⛔ Đã hết hạn ${Math.abs(days)} ngày</span>`;
+  if (days <= 7) return `<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">🔴 Còn ${days} ngày</span>`;
+  if (days <= 30) return `<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">⚠️ Còn ${days} ngày</span>`;
+  return '';
+}
+
+// Amendment "Giá trị cũ/mới" (9/2026, theo yêu cầu người dùng — sửa lỗi số tiền không có dấu chấm phân
+// cách hàng nghìn) — "Loại thay đổi" là ô gõ TỰ DO (không phải mọi phụ lục đều liên quan lương, VD đổi
+// chức danh/phòng ban), nên KHÔNG gắn cứng class "money-input" — tự bật/tắt định dạng tiền theo nội
+// dung "Loại thay đổi" đang gõ (chứa "lương", không phân biệt dấu) qua sự kiện input, xem HTML gọi hàm
+// này ở buildHrContractDetailHTML().
+function toggleHrcAmendmentMoneyMode(typeValue) {
+  const isSalary = String(typeValue || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes('luong');
+  const oldEl = document.getElementById('hrcNewAmendmentOld');
+  const newEl = document.getElementById('hrcNewAmendmentNew');
+  if (!oldEl || !newEl) return;
+  for (const el of [oldEl, newEl]) {
+    if (isSalary) {
+      el.classList.add('money-input');
+      el.value = formatMoneyDisplay(el.value);
+    } else {
+      el.classList.remove('money-input');
+    }
+  }
+  oldEl.placeholder = isSalary ? 'Lương cũ (đ)' : 'Giá trị cũ';
+  newEl.placeholder = isSalary ? 'Lương mới (đ)' : 'Giá trị mới';
+}
+
 function renderHrContractModule() {
   renderHrContractTable();
 }
@@ -35,7 +77,7 @@ function renderHrContractTable() {
       <td class="p-2">${escapeHtml(HRC_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType)}</td>
       <td class="p-2">${escapeHtml(HRC_STATUS_LABELS[c.status] || c.status)}</td>
       <td class="p-2">${escapeHtml(c.startDate || '')}</td>
-      <td class="p-2">${escapeHtml(c.endDate || '(Vô thời hạn)')}</td>
+      <td class="p-2 whitespace-nowrap">${escapeHtml(c.endDate || '(Vô thời hạn)')}${hrcExpiryBadgeHtml(c)}</td>
       <td class="p-2">
         <button type="button" data-op="openHrContractDetailModal" data-arg0="${c.id}" class="bg-teal-600 text-white px-2 py-1 rounded text-[11px] hover:bg-teal-700">Chi Tiết</button>
       </td>
@@ -184,8 +226,12 @@ function buildHrContractDetailHTML(c) {
     ? `<a href="${attachmentDownloadUrl(c.fileUrl, null, c.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(c.fileName || 'Tệp hợp đồng')}</a>`
     : '<span class="text-gray-400">Chưa có tệp</span>';
 
-  const amendmentsHTML = (c.amendments || []).length
-    ? (c.amendments || []).map(a => `
+  // Mới nhất lên đầu (9/2026, theo yêu cầu người dùng) — dùng parseVNDateTime() (core.js) vì createdAt
+  // là chuỗi "HH:mm:ss d/M/yyyy" (nowVN()), không sort đúng bằng so sánh chuỗi trực tiếp.
+  const sortedAmendments = (c.amendments || []).slice().sort((x, y) =>
+    (parseVNDateTime(y.createdAt)?.getTime() || 0) - (parseVNDateTime(x.createdAt)?.getTime() || 0));
+  const amendmentsHTML = sortedAmendments.length
+    ? sortedAmendments.map(a => `
         <div class="border rounded p-2 bg-gray-50">
           <div class="font-semibold">${escapeHtml(a.amendmentType)} — hiệu lực ${escapeHtml(a.effectiveDate)}</div>
           ${a.oldValue || a.newValue ? `<div class="text-gray-600">${escapeHtml(a.oldValue || '')} → ${escapeHtml(a.newValue || '')}</div>` : ''}
@@ -213,7 +259,7 @@ function buildHrContractDetailHTML(c) {
       <div><span class="text-gray-500">Loại HĐ:</span> ${escapeHtml(HRC_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType)}</div>
       <div><span class="text-gray-500">Trạng thái:</span> ${escapeHtml(HRC_STATUS_LABELS[c.status] || c.status)}</div>
       <div><span class="text-gray-500">Ngày hiệu lực:</span> ${escapeHtml(c.startDate || '')}</div>
-      <div><span class="text-gray-500">Ngày hết hạn:</span> ${escapeHtml(c.endDate || '(Vô thời hạn)')}</div>
+      <div><span class="text-gray-500">Ngày hết hạn:</span> ${escapeHtml(c.endDate || '(Vô thời hạn)')}${hrcExpiryBadgeHtml(c)}</div>
       <div><span class="text-gray-500">Lương cơ bản:</span> ${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) + 'đ' : '(chưa điền)'}</div>
       <div><span class="text-gray-500">Tệp:</span> ${fileRow}</div>
       ${c.status === 'TERMINATED' ? `<div class="col-span-2"><span class="text-gray-500">Lý do chấm dứt:</span> ${escapeHtml(c.terminationReason || '')} (${escapeHtml(c.terminationDate || '')})</div>` : ''}
@@ -235,7 +281,7 @@ function buildHrContractDetailHTML(c) {
       <div class="font-semibold mb-1">📋 Lịch Sử Thay Đổi (Phụ Lục)</div>
       <div class="space-y-1 mb-2">${amendmentsHTML}</div>
       <div class="grid grid-cols-2 gap-2">
-        <input type="text" id="hrcNewAmendmentType" placeholder="Loại thay đổi (VD: Tăng lương)" class="border p-1.5 rounded">
+        <input type="text" id="hrcNewAmendmentType" placeholder="Loại thay đổi (VD: Tăng lương)" data-op-input="toggleHrcAmendmentMoneyMode" data-arg-value="0" class="border p-1.5 rounded">
         <input type="date" id="hrcNewAmendmentDate" class="border p-1.5 rounded">
         <input type="text" id="hrcNewAmendmentOld" placeholder="Giá trị cũ" class="border p-1.5 rounded">
         <input type="text" id="hrcNewAmendmentNew" placeholder="Giá trị mới" class="border p-1.5 rounded">

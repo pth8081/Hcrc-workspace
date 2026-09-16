@@ -58,6 +58,8 @@ function showHrCreateForm(type) {
     populateHrpOnboardingDeptDropdowns();
     document.getElementById('hrpOnbPosType').value = 'HO';
     onHrpOnboardingPosTypeChange();
+    document.getElementById('hrpOnbRehirePanel')?.classList.add('hidden');
+    document.getElementById('hrpOnbRehireResultsWrap')?.classList.add('hidden');
     renderDynamicInputsForModule('HR_ONBOARDING', 'dynamicFieldsContainer_HR_ONBOARDING');
   } else if (type === 'OFFBOARDING') {
     populateSystemUsersDatalist();
@@ -141,6 +143,49 @@ function updateHrpOffboardingSubmitState() {
   const hasLastWorkingDate = !!document.getElementById('hrpOffbLastWorkingDate').value;
   const btn = document.getElementById('btnSubmitHrpOffboarding');
   if (btn) btn.disabled = !(hasEmployee && hasLastWorkingDate);
+}
+
+// ===== "🔍 Kiểm Tra Nhân Sự Cũ" ở form Tạo Onboarding (9/2026, theo yêu cầu người dùng) — xem chú thích
+// đầy đủ ở hrLifecycleSection.html. Chọn 1 kết quả CHỈ điền lại Mã Nhân Viên (+Họ tên nếu form đang
+// trống) vào form, không gọi API nào khác — hồ sơ cũ tự chuyển ACTIVE khi Onboarding NÀY hoàn tất. =====
+function toggleHrpOnbRehirePanel() {
+  document.getElementById('hrpOnbRehirePanel')?.classList.toggle('hidden');
+}
+async function searchHrpOnbInactiveForRehire() {
+  const nationalId = (document.getElementById('hrpOnbRehireNationalId')?.value || '').trim();
+  const dateOfBirth = document.getElementById('hrpOnbRehireDateOfBirth')?.value || '';
+  if (!nationalId && !dateOfBirth) return alert('⛔ Vui lòng nhập Số CCCD/CMND hoặc Ngày sinh để tìm.');
+  const qs = new URLSearchParams();
+  if (nationalId) qs.set('nationalId', nationalId);
+  if (dateOfBirth) qs.set('dateOfBirth', dateOfBirth);
+  const wrap = document.getElementById('hrpOnbRehireResultsWrap');
+  try {
+    const res = await fetch(`/api/hr-profile/search-inactive?${qs.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Có lỗi xảy ra');
+    const results = data.results || [];
+    wrap.innerHTML = results.length
+      ? results.map(p => `
+          <div class="border rounded p-2 flex items-start justify-between gap-2 bg-white">
+            <div>
+              <div class="font-bold text-xs">${escapeHtml(p.fullName || '(chưa rõ tên)')} <span class="text-gray-400 font-normal">— ${escapeHtml(p.employeeCode)}</span></div>
+              <div class="text-[10px] text-gray-500">${escapeHtml(p.positionLabel || p.jobTitle || '')}${p.dept ? ' · ' + escapeHtml(p.dept) : ''}</div>
+              <div class="text-[10px] text-red-600 mt-0.5">🚪 Đã nghỉ việc — cập nhật lần cuối ${escapeHtml(p.updatedAt || '')}</div>
+            </div>
+            <button type="button" data-op="pickHrpOnbRehireCandidate" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="${escapeHtml(p.fullName || '')}" class="px-2 py-1 rounded text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 whitespace-nowrap">Dùng mã này</button>
+          </div>
+        `).join('')
+      : '<p class="text-[11px] text-gray-400 italic p-1">Không tìm thấy hồ sơ đã nghỉ việc nào khớp — tạo Onboarding mới bình thường bên dưới (để trống Mã Nhân Viên để tự sinh).</p>';
+    wrap.classList.remove('hidden');
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+function pickHrpOnbRehireCandidate(employeeCode, fullName) {
+  document.getElementById('hrpOnbEmployeeCode').value = employeeCode;
+  const fullNameInput = document.getElementById('hrpOnbFullName');
+  if (fullNameInput && !fullNameInput.value.trim() && fullName) fullNameInput.value = fullName;
+  document.getElementById('hrpOnbRehirePanel')?.classList.add('hidden');
 }
 
 async function submitHrpOnboarding(e) {

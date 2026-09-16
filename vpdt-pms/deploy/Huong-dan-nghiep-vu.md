@@ -1272,6 +1272,29 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   bỏ qua không ảnh hưởng dòng hợp lệ khác; chưa hỗ trợ nhập Người phụ thuộc/
   Học vấn qua Excel, bổ sung sau ở Chi tiết từng hồ sơ) cùng **"📊 Xuất Excel"**
   (xuất toàn bộ danh sách).
+- **Mã Nhân Viên tự sinh** (9/2026): để trống khi tạo (tay/Onboarding) sẽ tự
+  cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
+  tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo
+  gần như cùng lúc (đặt chỗ mã ngay trong cùng 1 giao dịch khoá).
+- **"🔍 Kiểm Tra Nhân Sự Cũ" (Tái Tuyển)**: nút ở cả màn "➕ Tạo Hồ Sơ Mới" lẫn
+  màn "Tạo Onboarding mới" — tra theo CCCD/CMND + Ngày sinh, tìm đúng hồ sơ
+  ĐÃ NGHỈ VIỆC. Chọn đúng người → **giữ NGUYÊN Mã Nhân Viên cũ** (không cấp mã
+  mới), nhập "Ngày bắt đầu làm việc lại" (chỉ để ghi vào lịch sử tái tuyển —
+  thâm niên/thời hạn đề xuất tăng lương tính theo **Ngày hiệu lực hợp đồng lao
+  động MỚI** sẽ tạo, không phải field riêng này), hồ sơ chuyển thẳng lại Đang
+  làm việc.
+- **3 quyền chi tiết Tạo/Xem toàn bộ/Sửa** (9/2026, ở Hệ Thống > Phân Quyền,
+  cạnh quyền "🗂️ Quản Lý Hồ Sơ Nhân Sự" gộp sẵn có đủ cả 3): **"➕ Tạo Mới"**
+  (chỉ tạo hồ sơ + Kiểm Tra Nhân Sự Cũ, KHÔNG tự kéo theo xem được danh sách
+  hồ sơ khác), **"👁️ Xem Toàn Bộ"** (xem đủ mọi hồ sơ kể cả field nhạy cảm,
+  KHÔNG sửa được), **"✏️ Sửa"** (sửa được, và TỰ ĐỘNG xem được luôn — không
+  sửa được cái mình không thấy). Kết hợp tự do (VD chỉ tick "Tạo Mới" cho vị
+  trí thuần nhập liệu).
+- **Cấu hình trường xem của quản lý trực tiếp** (9/2026, nút "⚙️" trong Quản
+  Lý Hồ Sơ — chỉ hrProfileManage/admin cấu hình): mặc định quản lý trực tiếp
+  KHÔNG thấy 9 trường nhạy cảm (CCCD, địa chỉ, tài khoản ngân hàng, BHXH, mã
+  số thuế, người phụ thuộc, học vấn...) — admin tự tick chọn trường nào muốn
+  MỞ THÊM cho họ xem, áp dụng chung toàn hệ thống.
 - **Chức Vụ (chọn từ Cơ Cấu Tổ Chức)**: HR/admin gán/đổi "Chức Vụ" ngay trên
   Hồ Sơ Nhân Sự (ở màn "➕ Tạo Hồ Sơ Mới" — tuỳ chọn — lẫn ở Chi tiết hồ sơ đã
   có, nút **"🏷️ Gán/Đổi Chức Vụ"**) bằng cách **CHỌN từ bản Cơ Cấu Tổ Chức
@@ -1309,15 +1332,26 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     gắn "Vị Trí Làm Việc", đồng bộ diễn ra tự động cùng lúc với Phòng Ban/Chức
     Danh khi gán chức vụ.
 - **Lịch Sử Nhân Sự** (khối cuối Chi tiết hồ sơ, chỉ hiện ở chế độ "Quản Lý
-  Hồ Sơ"): gộp hiển thị theo thời gian **cả 3 nguồn** — lịch sử chức vụ (mục
-  trên), lịch sử hợp đồng lao động (mục 4.5.4 bên dưới: tạo/kích hoạt/thay
-  hợp đồng mới/chấm dứt/sửa tay), và Phụ Lục hợp đồng (tăng lương, đổi vị
-  trí...) — xem đủ "ai tăng lương/thăng chức/đổi hợp đồng khi nào" mà không
-  phải mở nhiều màn khác nhau. **Yêu cầu CẢ 2 quyền** "🗂️ Quản Lý Hồ Sơ Nhân
-  Sự" **VÀ** "📝 Quản Lý Hợp Đồng Lao Động" (hoặc admin) — chặt hơn từng
-  module riêng lẻ, vì dữ liệu gộp có cả lương/hợp đồng (vốn chỉ người có
-  quyền Hợp Đồng Lao Động được xem) lẫn chức vụ; người chỉ có 1 trong 2
-  quyền sẽ không thấy khối này.
+  Hồ Sơ"): gộp hiển thị theo thời gian **5 nguồn** — lịch sử chức vụ (mục
+  trên), **Lịch Sử Thay Đổi & Chỉnh Sửa Hồ Sơ** (9/2026 — mỗi lần tạo mới/sửa
+  hồ sơ, liệt kê đúng tên trường đã đổi, chỉ ghi khi THỰC SỰ có giá trị thay
+  đổi), **Tái Tuyển** (9/2026 — mục trên), lịch sử hợp đồng lao động (mục
+  4.5.4 bên dưới: tạo/kích hoạt/thay hợp đồng mới/chấm dứt/sửa tay), và Phụ
+  Lục hợp đồng (tăng lương, đổi vị trí...) — xem đủ "ai tăng lương/thăng
+  chức/đổi hồ sơ/tái tuyển khi nào" mà không phải mở nhiều màn khác nhau,
+  **luôn sắp mới nhất lên đầu** (tính theo thời gian thực, không phải so sánh
+  chuỗi ngày giờ). **Yêu cầu CẢ 2 quyền** "🗂️ Quản Lý Hồ Sơ Nhân Sự" **VÀ**
+  "📝 Quản Lý Hợp Đồng Lao Động" (hoặc admin) — chặt hơn từng module riêng
+  lẻ, vì dữ liệu gộp có cả lương/hợp đồng (vốn chỉ người có quyền Hợp Đồng
+  Lao Động được xem) lẫn chức vụ; người chỉ có 1 trong 2 quyền sẽ không thấy
+  khối này.
+- **"📊 Báo Cáo"** (9/2026, tab riêng cạnh "Quản Lý Hồ Sơ" — cùng yêu cầu CẢ 2
+  quyền như Lịch Sử Nhân Sự ở trên, vì employeeProfiles/laborContracts là
+  nhóm dữ liệu cực nhạy cảm KHÔNG đi qua màn Báo Cáo dùng chung — mục 4.9):
+  lọc theo khoảng thời gian (Từ ngày/Đến ngày) + tình trạng HĐLĐ, ra 8 chỉ số
+  cơ bản — nhân sự vào làm/nghỉ việc, hợp đồng mới/gia hạn, tăng lương, thay
+  đổi HĐLĐ khác, thăng chức/đổi chức danh, và **"HĐ sắp hết hạn (≤30 ngày)"**
+  (mục này LUÔN tính từ ngày hiện tại, không phụ thuộc bộ lọc thời gian).
 
 #### 4.5.4. Hợp Đồng Lao Động
 
@@ -1362,11 +1396,21 @@ Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được.
   cũ/cộng tác viên chưa có hồ sơ trong hệ thống.
 - Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
   hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
-  hạn số lần, giữ nguyên lịch sử. Có thể **đính kèm Quyết định** (tệp
-  PDF/Word/ảnh, tuỳ chọn) ngay khi thêm thay đổi — hiển thị lại kèm liên kết
-  tải ở từng dòng Phụ Lục và ở khối "Lịch Sử Nhân Sự" gộp (mục 4.5.3), giúp
-  tra soát có văn bản quyết định gốc đi kèm mỗi lần tăng lương/đổi vị trí giữa
-  kỳ hợp đồng (v17.6).
+  hạn số lần, giữ nguyên lịch sử, **luôn hiển thị mới nhất lên đầu** (9/2026).
+  Có thể **đính kèm Quyết định** (tệp PDF/Word/ảnh, tuỳ chọn) ngay khi thêm
+  thay đổi — hiển thị lại kèm liên kết tải ở từng dòng Phụ Lục và ở khối
+  "Lịch Sử Nhân Sự" gộp (mục 4.5.3), giúp tra soát có văn bản quyết định gốc
+  đi kèm mỗi lần tăng lương/đổi vị trí giữa kỳ hợp đồng (v17.6).
+  - **Định dạng tiền cho phụ lục liên quan lương** (9/2026): ô "Loại thay
+    đổi" nếu có chữ **"lương"** (VD "Tăng lương", "Điều chỉnh lương cơ bản")
+    thì 2 ô Giá trị cũ/mới TỰ ĐỘNG hiện dấu chấm phân cách hàng nghìn khi gõ
+    (giống ô Lương cơ bản) — loại thay đổi khác (đổi chức danh, ca làm...)
+    giữ nguyên ô nhập chữ tự do (không ép định dạng tiền lên nội dung không
+    phải số).
+- **Cảnh báo hết hạn màu sắc trên màn hình** (9/2026, khác hẳn job email
+  60/45/30 ngày ở mục dưới — đây là badge hiển thị TRỰC TIẾP ở danh sách LẪN
+  chi tiết hợp đồng): hợp đồng đang **Đang hiệu lực** còn **≤30 ngày** hiện
+  badge **🟡 vàng**, **≤7 ngày hoặc đã quá hạn** hiện badge **🔴 đỏ**.
 - **Sửa tay trực tiếp trên hợp đồng** (loại HĐ, ngày bắt đầu/hết hạn, lương cơ
   bản, phòng ban, tệp đính kèm) giờ cũng **tự ghi 1 dòng lịch sử** (giá trị cũ
   → mới từng trường thực sự đổi, người sửa, thời điểm) — trước đây chỉ các

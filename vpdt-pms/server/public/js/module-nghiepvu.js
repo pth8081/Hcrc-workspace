@@ -480,15 +480,20 @@ const NGHIEP_VU_DOCS = {
   },
   hrProfile: {
     icon: '👤', title: 'Hồ Sơ Nhân Sự', badge: 'Dữ liệu nhạy cảm',
-    desc: 'Hồ sơ cá nhân từng nhân viên (thông tin, giấy tờ đính kèm) — liên kết với Hợp Đồng Lao Động, Lương và Công/Phép của cùng người.',
+    desc: 'Hồ sơ cá nhân từng nhân viên (thông tin, giấy tờ đính kèm) — liên kết với Hợp Đồng Lao Động, Lương và Công/Phép của cùng người. Mã Nhân Viên tự sinh (tiền tố "BL" + số tuần tự, chống trùng khi 2 người tạo cùng lúc) — vẫn gõ tay được nếu muốn.',
     flow: { ariaLabel: 'Quy trình Hồ Sơ Nhân Sự', chain: [
       { label: 'Tạo hồ sơ', sub: 'Từ Onboarding hoặc tạo tay' },
       { label: 'Cập nhật thông tin', sub: 'Giấy tờ, liên hệ, quá trình' },
       { label: 'Lưu trữ', sub: 'Xuyên suốt vòng đời nhân sự', kind: 'approved' },
     ] },
     footer: { left: [
-      { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — không hiện trong màn Báo Cáo như các mục khác.' },
-    ], right: [] },
+      { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có màn "📊 Báo Cáo" RIÊNG ngay trong module này (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
+      { label: 'Tái Tuyển', text: 'nút "Kiểm Tra Nhân Sự Cũ" (khi tạo hồ sơ mới hoặc mở Onboarding) tra theo CCCD+ngày sinh — nhân viên cũ quay lại giữ NGUYÊN Mã Nhân Viên cũ, chỉ ghi thêm 1 dòng lịch sử tái tuyển.' },
+      { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
+      { label: 'Trường xem của quản lý trực tiếp', text: 'admin tự chọn field nhạy cảm nào (CCCD, địa chỉ, người phụ thuộc...) mở thêm cho quản lý trực tiếp xem, qua nút "⚙️" trong Quản Lý Hồ Sơ.' },
+    ], right: [
+      { label: 'Lịch Sử Thay Đổi & Chỉnh Sửa', text: 'mọi lần tạo mới/sửa hồ sơ (liệt kê đúng field đã đổi) được ghi lại, gộp chung vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng/tái tuyển — luôn sắp mới nhất lên đầu.' },
+    ] },
   },
   hrContract: {
     icon: '📄', title: 'Hợp Đồng Lao Động', badge: 'Nhân Sự',
@@ -500,8 +505,11 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đã kết thúc', sub: 'Tự động khi nghỉ việc xong' },
     ], decision: { atIndex: 1, approveLabel: 'Ký', rejectLabel: 'Không đạt/gia hạn thêm', rejectBox: { label: 'Gia hạn thử việc', sub: 'Kéo dài thời gian thử việc' }, loopBackToIndex: 0 } },
     footer: { left: [
-      { label: 'Không hiện ở Báo Cáo chung', text: 'cùng nhóm dữ liệu nhạy cảm với Hồ Sơ Nhân Sự, Lương và Công/Phép — không đưa vào báo cáo tổng hợp dùng chung.' },
-    ], right: [] },
+      { label: 'Không hiện ở Báo Cáo chung', text: 'cùng nhóm dữ liệu nhạy cảm với Hồ Sơ Nhân Sự, Lương và Công/Phép — thay vào đó có số liệu tổng hợp trong "📊 Báo Cáo" của Hồ Sơ Nhân Sự (hợp đồng mới/gia hạn/sắp hết hạn, tăng lương).' },
+      { label: 'Cảnh báo sắp hết hạn', text: 'hợp đồng đang hiệu lực còn ≤30 ngày hiện badge vàng, ≤7 ngày hoặc đã quá hạn hiện badge đỏ — cả ở danh sách lẫn chi tiết hợp đồng.' },
+    ], right: [
+      { label: 'Phụ lục "Giá trị cũ/mới"', text: 'tự nhận diện phụ lục liên quan lương (gõ chữ "lương" trong Loại thay đổi) để bật định dạng tiền có dấu chấm phân cách hàng nghìn; loại thay đổi khác (chức danh, ca làm...) giữ nguyên ô nhập chữ tự do. Danh sách phụ lục luôn sắp mới nhất lên đầu.' },
+    ] },
   },
   hrAttendance: {
     icon: '🕒', title: 'Công / Phép', badge: 'Nhân Sự',

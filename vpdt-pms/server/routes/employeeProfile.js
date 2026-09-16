@@ -19,12 +19,51 @@ const employeeProfileImport = require('../lib/employeeProfileImport');
 const { canManageContracts } = require('../lib/laborContract');
 const orgChart = require('../lib/orgChart');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { parseVNDateTime } = require('../lib/recordActions');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
 
+// nowVN()/toLocaleString('vi-VN') sinh chuỗi "HH:mm:ss d/M/yyyy" — KHÔNG sort được bằng so sánh chuỗi
+// (localeCompare/</>). 2 helper dưới đây dùng CHUNG cho GET .../history (gộp "Lịch Sử Nhân Sự") để vừa
+// lấy đúng mốc thời gian thật (sort) vừa tách đúng phần "ngày" (hiển thị) từ các trường time dạng này
+// (VD laborContracts[].history[].time, profile.profileEditHistory[].createdAt).
+function vnTime(str) {
+  const d = parseVNDateTime(str);
+  return d ? d.getTime() : 0;
+}
+function vnDateOnly(str) {
+  const d = parseVNDateTime(str);
+  return d ? d.toISOString().slice(0, 10) : (str || '').slice(0, 10);
+}
+
 function requireProfileManage(req, res, next) {
   if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền quản lý Hồ Sơ Nhân Sự' });
+  next();
+}
+// 3 middleware CHI TIẾT (9/2026, theo yêu cầu người dùng) — xem chú thích đầy đủ ở
+// canCreateProfiles()/canEditProfiles()/canFullViewProfiles() (lib/employeeProfile.js). requireProfileManage
+// ở trên GIỮ NGUYÊN, dùng cho action "quản lý tổng quát" không rơi gọn vào đúng 1 trong 3 nhóm dưới (hiện
+// chỉ còn GET .../history — cố ý CHẶT hơn, xem chú thích riêng tại đó).
+function requireProfileCreate(req, res, next) {
+  if (!employeeProfile.canCreateProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền tạo Hồ Sơ Nhân Sự' });
+  next();
+}
+function requireProfileEdit(req, res, next) {
+  if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền sửa Hồ Sơ Nhân Sự' });
+  next();
+}
+function requireProfileFullView(req, res, next) {
+  if (!employeeProfile.canFullViewProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền xem danh sách Hồ Sơ Nhân Sự' });
+  next();
+}
+// search-inactive/rehire (Tái Tuyển, task đã làm trước) — dùng được bởi CẢ người chỉ có quyền Tạo LẪN
+// người có quyền Sửa (2 nhóm khác nhau đều hợp lý cần tính năng này: người tạo hồ sơ mới cần tránh tạo
+// trùng, người sửa hồ sơ cần xử lý tiếp 1 hồ sơ cũ).
+function requireProfileCreateOrEdit(req, res, next) {
+  if (!employeeProfile.canCreateProfiles(req.freshUser) && !employeeProfile.canEditProfiles(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền tạo hoặc sửa Hồ Sơ Nhân Sự' });
+  }
   next();
 }
 
@@ -94,7 +133,7 @@ router.patch('/me', async (req, res) => {
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfileByUsername(list, req.freshUser.username);
       if (!profile) throw new HttpError(404, 'Bạn chưa có Hồ Sơ Nhân Sự');
-      employeeProfile.applyProfileEdit(profile, req.body, employeeProfile.SELF_EDITABLE_FIELDS, req.freshUser.username);
+      employeeProfile.applyProfileEdit(profile, req.body, employeeProfile.SELF_EDITABLE_FIELDS, req.freshUser.username, req.freshUser.name);
       updated = profile;
       return list;
     });
@@ -105,7 +144,7 @@ router.patch('/me', async (req, res) => {
 // GET /api/hr-profile — danh sách nhẹ (HR/admin only) — dùng cho màn quản lý, không lộ field nhạy cảm.
 router.get('/', async (req, res) => {
   try {
-    if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền xem danh sách Hồ Sơ Nhân Sự' });
+    if (!employeeProfile.canFullViewProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền xem danh sách Hồ Sơ Nhân Sự' });
     const list = (await getAppDataValue('employeeProfiles')) || [];
     res.json({ profiles: list.map(stripForList) });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile'); }
@@ -135,7 +174,7 @@ router.get('/employee-directory', async (req, res) => {
 // GET /api/hr-profile/position-options — danh sách phẳng mọi vị trí (node POSITION) của bản Cơ Cấu Tổ
 // Chức ĐANG ÁP DỤNG — dùng cho ô tìm-kiếm-gõ-chọn "Chức Vụ" ở Hồ Sơ Nhân Sự (module-hrprofile.js). Chỉ
 // HR/admin (canManageProfiles) — trùng quyền được phép gán chức vụ (POST .../set-position bên dưới).
-router.get('/position-options', requireProfileManage, async (req, res) => {
+router.get('/position-options', requireProfileEdit, async (req, res) => {
   try {
     const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
     const applied = orgChart.getAppliedVersion(orgChartVersions);
@@ -161,7 +200,7 @@ router.get('/position-options', requireProfileManage, async (req, res) => {
 // SHIFT_BASED — xem chú thích tại lib/orgChart.js mục 5.
 router.post('/by-code/:employeeCode/set-position', async (req, res) => {
   try {
-    if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới gán chức vụ' });
+    if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới gán chức vụ' });
     const positionKey = String(req.body?.positionKey || '').trim();
     if (!positionKey) return res.status(400).json({ error: 'Vui lòng chọn chức vụ từ Cơ Cấu Tổ Chức' });
     const effectiveDate = req.body?.effectiveDate ? String(req.body.effectiveDate).trim() : null;
@@ -189,7 +228,8 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
 });
 
 // GET /api/hr-profile/by-code/:employeeCode/history — "Lịch Sử Nhân Sự" gộp xuyên suốt hồ sơ: chức vụ
-// (profile.positionHistory[]) + toàn bộ hợp đồng lao động của nhân viên này (mã hợp đồng ký MỚI/kích
+// (profile.positionHistory[]) + tạo mới/chỉnh sửa hồ sơ (profile.profileEditHistory[], 9/2026) + tái
+// tuyển (profile.rehireHistory[]) + toàn bộ hợp đồng lao động của nhân viên này (mã hợp đồng ký MỚI/kích
 // hoạt/thay thế/chấm dứt từ laborContracts[].history[] + các dòng "Bổ Sung Phụ Lục" từ amendments[]) —
 // xem yêu cầu "muốn có lịch sử này xuyên suốt hồ sơ nhân sự" đã xác nhận với người dùng. Quyền: CẦN CẢ
 // hrProfileManage LẪN hrContractManage (hoặc admin) — cố ý CHẶT hơn từng route riêng lẻ ở trên, vì dữ
@@ -211,10 +251,24 @@ router.get('/by-code/:employeeCode/history', async (req, res) => {
         fileUrl: h.fileUrl || null, fileName: h.fileName || null
       });
     }
+    for (const h of (profile.profileEditHistory || [])) {
+      events.push({
+        type: h.type === 'CREATE' ? 'PROFILE_CREATE' : 'PROFILE_EDIT', time: h.createdAt, date: vnDateOnly(h.createdAt),
+        title: h.type === 'CREATE' ? 'Tạo mới hồ sơ nhân sự' : `Chỉnh sửa hồ sơ: ${(h.changedFields || []).join(', ')}`,
+        detail: null, by: h.byName || h.by
+      });
+    }
+    for (const h of (profile.rehireHistory || [])) {
+      events.push({
+        type: 'REHIRE', time: h.rehiredAt, date: h.newStartDate,
+        title: `Tái tuyển — bắt đầu làm việc lại từ ${h.newStartDate}`,
+        detail: null, by: h.rehiredByName || h.rehiredBy
+      });
+    }
     const contracts = (await getAllForCollection('laborContracts')).filter(c => c.employeeCode === profile.employeeCode);
     for (const c of contracts) {
       for (const h of (c.history || [])) {
-        events.push({ type: 'CONTRACT', time: h.time, date: (h.time || '').slice(0, 10), title: `Hợp đồng ${c.code}: ${h.detail || h.action}`, detail: null, by: h.byName || h.by });
+        events.push({ type: 'CONTRACT', time: h.time, date: vnDateOnly(h.time), title: `Hợp đồng ${c.code}: ${h.detail || h.action}`, detail: null, by: h.byName || h.by });
       }
       for (const a of (c.amendments || [])) {
         events.push({
@@ -226,9 +280,65 @@ router.get('/by-code/:employeeCode/history', async (req, res) => {
         });
       }
     }
-    events.sort((x, y) => (y.time || '').localeCompare(x.time || ''));
+    // Sắp mới nhất lên đầu — SO SÁNH THEO THỜI GIAN THỰC (parseVNDateTime), KHÔNG localeCompare() chuỗi
+    // "HH:mm:ss d/M/yyyy" (định dạng nowVN() — so sánh chuỗi trực tiếp cho kết quả SAI, VD "9:00:00 5/1"
+    // > "8:00:00 15/1" theo thứ tự chuỗi dù 15/1 diễn ra SAU 5/1).
+    events.sort((x, y) => vnTime(y.time) - vnTime(x.time));
     res.json({ events });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}/history`); }
+});
+
+// GET/PUT /api/hr-profile/manager-field-config — cấu hình field nhạy cảm nào (subset SENSITIVE_FIELDS)
+// được MỞ THÊM cho quản lý trực tiếp xem (9/2026, theo yêu cầu người dùng — "để tôi linh động cấu hình
+// các trường thông tin nhân viên và quản lý trực tiếp được phép xem"). CHỈ hrProfileManage/admin cấu
+// hình được (requireProfileManage — đây là cấu hình BẢO MẬT áp dụng CHUNG cho toàn bộ quản lý trực tiếp
+// trong hệ thống, không rơi vào phạm vi 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa 1 hồ sơ cụ thể).
+router.get('/manager-field-config', requireProfileManage, async (req, res) => {
+  try {
+    const saved = (await getAppDataValue('hrProfileManagerVisibleFields')) || [];
+    res.json({
+      visibleFields: employeeProfile.sanitizeManagerVisibleFields(saved),
+      availableFields: employeeProfile.SENSITIVE_FIELDS.map(f => ({ field: f, label: employeeProfile.SENSITIVE_FIELD_LABELS[f] || f }))
+    });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/manager-field-config'); }
+});
+router.put('/manager-field-config', requireProfileManage, async (req, res) => {
+  try {
+    const visibleFields = employeeProfile.sanitizeManagerVisibleFields(req.body?.visibleFields);
+    await withLockedAppDataValue('hrProfileManagerVisibleFields', () => visibleFields);
+    res.json({ ok: true, visibleFields });
+  } catch (err) { sendCatchError(res, err, 'PUT /api/hr-profile/manager-field-config'); }
+});
+
+// GET /api/hr-profile/reports — Báo Cáo Nhân Sự (9/2026, theo yêu cầu người dùng) — employeeProfiles/
+// laborContracts bị chặn hẳn khỏi GET /api/reports chung (dữ liệu cực nhạy cảm, xem CLAUDE.md +
+// routes/data.js) nên KHÔNG đi qua khuôn báo cáo module thường (module-baocaoquantri.js) — route riêng
+// tại đây, tính THUẦN ở employeeProfile.computeHrReportSummary() (test được không cần HTTP). Quyền: CẦN
+// CẢ hrProfileManage LẪN hrContractManage (hoặc admin) — CÙNG mức chặt như GET .../history (vẫn lộ số
+// liệu lương qua mục tăng lương). rate-limit riêng (cùng khuôn routes/reports.js) — phòng truy vấn quá
+// nhiều dội liên tục.
+const hrReportsRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang truy vấn báo cáo quá nhiều, vui lòng thử lại sau ít phút.' },
+  keyGenerator: (req) => req.freshUser?.username || req.ip
+});
+router.get('/reports', hrReportsRateLimiter, async (req, res) => {
+  try {
+    const canFull = employeeProfile.canManageProfiles(req.freshUser) && canManageContracts(req.freshUser);
+    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc admin) để xem Báo Cáo Nhân Sự' });
+    const from = req.query?.from ? String(req.query.from).trim() : '';
+    const to = req.query?.to ? String(req.query.to).trim() : '';
+    const contractStatus = req.query?.contractStatus ? String(req.query.contractStatus).trim() : '';
+    const [profiles, contracts] = await Promise.all([
+      getAppDataValue('employeeProfiles').then(v => v || []),
+      getAllForCollection('laborContracts')
+    ]);
+    const summary = employeeProfile.computeHrReportSummary(profiles, contracts, { from, to, contractStatus });
+    res.json(summary);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports'); }
 });
 
 // GET /api/hr-profile/by-code/:employeeCode — HR/admin (đủ) hoặc quản lý trực tiếp (giới hạn, xem
@@ -240,7 +350,7 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     const list = appData.employeeProfiles || [];
     const profile = employeeProfile.findProfile(list, req.params.employeeCode);
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || []);
+    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     res.json({ profile: viewable });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}`); }
@@ -257,7 +367,7 @@ router.get('/by-username/:username', async (req, res) => {
     const list = appData.employeeProfiles || [];
     const profile = employeeProfile.findProfileByUsername(list, req.params.username);
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || []);
+    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     res.json({ profile: viewable });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-username/${req.params.username}`); }
@@ -266,13 +376,13 @@ router.get('/by-username/:username', async (req, res) => {
 // PATCH /api/hr-profile/by-code/:employeeCode — HR/admin sửa TOÀN BỘ trường (kể cả HR_ONLY_EDITABLE_FIELDS).
 router.patch('/by-code/:employeeCode', async (req, res) => {
   try {
-    if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới sửa được hồ sơ người khác' });
+    if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới sửa được hồ sơ người khác' });
     let updated;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
       const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
-      employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username);
+      employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name);
       updated = profile;
       return list;
     });
@@ -283,7 +393,7 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
 // PATCH /api/hr-profile/by-code/:employeeCode/status — HR/admin đổi tay ACTIVE<->ON_LEAVE.
 router.patch('/by-code/:employeeCode/status', async (req, res) => {
   try {
-    if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới đổi trạng thái hồ sơ' });
+    if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới đổi trạng thái hồ sơ' });
     let updated;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
@@ -304,7 +414,7 @@ router.patch('/by-code/:employeeCode/status', async (req, res) => {
 // email công ty & tài khoản VPDT" ở quy trình Onboarding — xem đầu file lib/employeeProfile.js).
 router.post('/by-code/:employeeCode/link-account', async (req, res) => {
   try {
-    if (!employeeProfile.canManageProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới liên kết tài khoản VPDT' });
+    if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới liên kết tài khoản VPDT' });
     const username = String(req.body?.username || '').trim();
     if (!username) return res.status(400).json({ error: 'Vui lòng chọn tài khoản VPDT cần liên kết' });
     const appData = await getAllAppData();
@@ -323,7 +433,7 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
 // Onboarding nên chưa có hồ sơ) — xem lib/employeeProfile.js::createManualProfile(). payload.positionKey
 // (tuỳ chọn) — chức vụ BAN ĐẦU chọn ngay từ Cơ Cấu Tổ Chức lúc tạo, áp dụng NGAY trong cùng giao dịch
 // (chính là lần đầu tiên của positionHistory[], không cần thao tác riêng "gán chức vụ" ngay sau đó).
-router.post('/', requireProfileManage, async (req, res) => {
+router.post('/', requireProfileCreate, async (req, res) => {
   try {
     const username = req.body?.username ? String(req.body.username).trim() : null;
     const positionKey = req.body?.positionKey ? String(req.body.positionKey).trim() : null;
@@ -332,7 +442,7 @@ router.post('/', requireProfileManage, async (req, res) => {
     const applied = positionKey ? orgChart.getAppliedVersion((await getAppDataValue('orgChartVersions')) || []) : null;
     let created, syncTarget = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
-      created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username);
+      created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username, req.freshUser.name);
       if (positionKey) {
         const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
         if (created.username) syncTarget = { username: created.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
@@ -348,8 +458,48 @@ router.post('/', requireProfileManage, async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile'); }
 });
 
+// GET /api/hr-profile/search-inactive?nationalId=...&dateOfBirth=... — "Kiểm Tra Nhân Sự Cũ" (9/2026,
+// theo yêu cầu người dùng): tìm hồ sơ ĐÃ NGHỈ VIỆC theo CCCD/Ngày sinh trước khi HR tạo hồ sơ/Onboarding
+// mới, để phát hiện đúng trường hợp TÁI TUYỂN thay vì tạo trùng 1 người thành 2 hồ sơ khác nhau. Trả về
+// field TỐI THIỂU đủ để HR nhận diện đúng người (không phải toàn bộ hồ sơ nhạy cảm) — cùng mức thông tin
+// với GET /employee-directory ở trên.
+router.get('/search-inactive', requireProfileCreateOrEdit, async (req, res) => {
+  try {
+    const nationalId = req.query?.nationalId ? String(req.query.nationalId).trim() : '';
+    const dateOfBirth = req.query?.dateOfBirth ? String(req.query.dateOfBirth).trim() : '';
+    if (!nationalId && !dateOfBirth) return res.json({ results: [] });
+    const appData = await getAllAppData();
+    const matches = employeeProfile.searchInactiveProfilesForRehire(appData.employeeProfiles || [], nationalId, dateOfBirth);
+    // resolveProfileDisplayName() cần cả hrProcesses để suy tên khi hồ sơ CHƯA liên kết username — nhưng
+    // hồ sơ INACTIVE (đường DUY NHẤT tới trạng thái này là Offboarding hoàn tất, luôn tra theo
+    // employeeUsername — xem applyProcessCompletion()) LUÔN đã có username từ trước, nên chỉ cần tra
+    // users là đủ, không cần đọc thêm hrProcesses (bảng SQL riêng, tránh 1 round-trip không cần thiết).
+    const results = matches.slice(0, 20).map(p => ({
+      employeeCode: p.employeeCode,
+      fullName: employeeProfile.resolveProfileDisplayName(p, appData.users || [], []),
+      dept: p.dept, jobTitle: p.jobTitle, positionLabel: p.positionLabel,
+      dateOfBirth: p.dateOfBirth, updatedAt: p.updatedAt
+    }));
+    res.json({ results });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/search-inactive'); }
+});
+
+// POST /api/hr-profile/by-code/:employeeCode/rehire — xác nhận Tái Tuyển: kích hoạt lại ĐÚNG hồ sơ đã
+// tìm thấy ở trên (giữ nguyên Mã NV + toàn bộ lịch sử/hợp đồng cũ, chỉ đổi status + ghi 1 dòng lịch sử
+// tái tuyển — xem lib/employeeProfile.js::reactivateForRehire()). Body: { newStartDate }.
+router.post('/by-code/:employeeCode/rehire', requireProfileCreateOrEdit, async (req, res) => {
+  try {
+    let updated;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      updated = employeeProfile.reactivateForRehire(list, req.params.employeeCode, req.body?.newStartDate, req.freshUser.username, req.freshUser.name);
+      return list;
+    });
+    res.json({ ok: true, profile: updated });
+  } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/rehire`); }
+});
+
 // GET /api/hr-profile/import-template — mẫu Excel để HR điền hàng loạt hồ sơ nhân viên cũ.
-router.get('/import-template', requireProfileManage, async (req, res) => {
+router.get('/import-template', requireProfileCreate, async (req, res) => {
   try {
     const wb = await employeeProfileImport.buildImportTemplateWorkbook();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -364,7 +514,7 @@ router.get('/import-template', requireProfileManage, async (req, res) => {
 
 // POST /api/hr-profile/parse-import — đọc file đã điền, trả về xem trước kèm cờ hợp lệ từng dòng (đối
 // chiếu trùng Mã NV/Tài khoản với dữ liệu THẬT ngay lúc này) — HR xác nhận nhập thật ở POST /bulk-import.
-router.post('/parse-import', uploadRateLimiter, requireProfileManage, (req, res) => {
+router.post('/parse-import', uploadRateLimiter, requireProfileCreate, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
@@ -392,7 +542,7 @@ router.post('/parse-import', uploadRateLimiter, requireProfileManage, (req, res)
 // tạo từng hồ sơ 1 request riêng như N lần gọi POST / để tránh nửa chừng lỗi giữa chừng để lại dữ liệu
 // vênh). Body: { items: [{employeeCode, username, ...}] } — LUÔN kiểm tra lại từ đầu bên trong transaction
 // (không tin cờ "valid" của bước xem trước, dữ liệu có thể đã đổi từ lúc đó).
-router.post('/bulk-import', requireProfileManage, async (req, res) => {
+router.post('/bulk-import', requireProfileCreate, async (req, res) => {
   try {
     const rows = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!rows.length) return res.status(400).json({ error: 'Không có hồ sơ nào để nhập' });
@@ -404,7 +554,7 @@ router.post('/bulk-import', requireProfileManage, async (req, res) => {
     await withLockedAppDataValue('employeeProfiles', (list) => {
       for (const row of rows) {
         try {
-          const created = employeeProfile.createManualProfile(list, row, req.freshUser.username);
+          const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name);
           results.created.push(created.employeeCode);
         } catch (rowErr) {
           results.skipped.push({ employeeCode: row?.employeeCode || '(thiếu Mã NV)', reason: rowErr.message });
@@ -417,7 +567,7 @@ router.post('/bulk-import', requireProfileManage, async (req, res) => {
 });
 
 // GET /api/hr-profile/export-xlsx — HR/admin xuất toàn bộ danh sách hồ sơ hiện có ra Excel.
-router.get('/export-xlsx', requireProfileManage, async (req, res) => {
+router.get('/export-xlsx', requireProfileFullView, async (req, res) => {
   try {
     const appData = await getAllAppData();
     const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || []);

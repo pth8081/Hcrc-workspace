@@ -1595,9 +1595,36 @@
       </div>
       <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
         ℹ️ Dùng cho nhân viên CŨ đã đang làm việc, chưa có hồ sơ trong hệ thống (chưa qua Onboarding). Hồ sơ tạo ra sẽ ở trạng thái "Đang làm việc" ngay.</p>
+
+      <!-- "Kiểm Tra Nhân Sự Cũ" (Tái Tuyển, 9/2026) — kiểm tra TRƯỚC khi tạo mới, tránh 1 người bị tạo
+           trùng 2 hồ sơ khi quay lại làm việc. Toàn bộ input/select trong #hrpfCreateModal bị
+           openHrpfCreateModal() reset trắng mỗi lần mở nên không cần tự dọn ở đây. -->
+      <button type="button" data-op="toggleHrpfRehirePanel" class="w-full mb-3 bg-sky-50 border border-sky-300 text-sky-800 rounded-lg py-2 text-sm font-bold hover:bg-sky-100">
+        🔍 Kiểm Tra Nhân Sự Cũ (nhân viên tái tuyển?)</button>
+      <div id="hrpfRehirePanel" class="hidden mb-4 border border-sky-200 bg-sky-50 rounded-lg p-3 space-y-2">
+        <p class="text-[11px] text-sky-800">Nhập đúng 1 trong 2 để tra cứu hồ sơ nhân viên <b>đã nghỉ việc</b> trong hệ thống, tránh tạo hồ sơ mới trùng người.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>
+            <input id="hrpfRehireNationalId" class="w-full border p-1.5 rounded text-sm"></div>
+          <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày sinh</label>
+            <input type="date" id="hrpfRehireDateOfBirth" class="w-full border p-1.5 rounded text-sm"></div>
+        </div>
+        <button type="button" data-op="searchHrpfInactiveForRehire" class="bg-sky-700 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-sky-800">Tìm kiếm</button>
+        <div id="hrpfRehireResultsWrap" class="hidden space-y-1.5 mt-1"></div>
+        <div id="hrpfRehireConfirmWrap" class="hidden border-2 border-dashed border-teal-400 rounded-lg p-3 mt-2 bg-white">
+          <div class="text-sm font-bold text-teal-800 mb-1">↩️ Tái tuyển — <span id="hrpfRehireConfirmLabel"></span></div>
+          <p class="text-[11px] text-gray-500 mb-2">Mã Nhân Viên, thông tin cá nhân, lịch sử hợp đồng cũ đều được <b>giữ nguyên</b> — chỉ cần xác nhận mốc làm việc lại.</p>
+          <input type="hidden" id="hrpfRehireConfirmCode">
+          <label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày bắt đầu làm việc lại <span class="text-red-500">*</span></label>
+          <input type="date" id="hrpfRehireNewStartDate" class="w-full border p-1.5 rounded text-sm mb-2">
+          <button type="button" data-op="confirmHrpfRehire" class="w-full bg-teal-700 text-white text-sm font-bold py-2 rounded hover:bg-teal-800">✅ Xác Nhận Tái Tuyển</button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã Nhân Viên <span class="text-red-500">*</span></label>
-          <input id="hrpfCF_employeeCode" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã Nhân Viên</label>
+          <input id="hrpfCF_employeeCode" placeholder="Để trống để tự sinh (BL0001, BL0002...)" class="w-full border p-1.5 rounded text-sm">
+          <p class="text-[10px] text-gray-400 mt-0.5">Chỉ gõ tay nếu nhân viên đã có mã theo hệ thống cũ (VD dữ liệu chuyển từ HR khác) — bình thường để trống, hệ thống tự sinh.</p></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Liên Kết Tài Khoản VPDT (tuỳ chọn — chỉ để liên hệ đăng nhập/tra cứu chéo module)</label>
           <input id="hrpfCF_usernameInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfCreateUsernameInput" data-arg-value="0" placeholder="Gõ tên/tài khoản..." class="w-full border p-1.5 rounded text-sm">
           <input type="hidden" id="hrpfCF_username"></div>
@@ -1664,6 +1691,24 @@
         </table>
       </div>
       <button type="button" id="hrpfImportConfirmBtn" data-op="confirmHrpfImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Xác Nhận Nhập Các Dòng Hợp Lệ</button>
+    </div>
+  </div>
+
+  <!-- Cấu hình trường xem của quản lý trực tiếp (9/2026) — chọn field NHẠY CẢM nào (subset
+       lib/employeeProfile.js::SENSITIVE_FIELDS) mở thêm cho hrProfileView (KHÔNG có hrProfileManage) xem
+       khi tra hồ sơ nhân viên mình quản lý — xem GET/PUT /api/hr-profile/manager-field-config. -->
+  <div id="hrpfFieldConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">⚙️ Trường Xem Của Quản Lý Trực Tiếp</h3>
+        <button type="button" data-op="closeHrpfFieldConfigModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-3">Mặc định, quản lý trực tiếp (quyền "Xem Hồ Sơ Nhân Sự Cấp Dưới") KHÔNG thấy các trường nhạy cảm dưới đây. Tick chọn trường nào muốn MỞ THÊM cho họ xem.</p>
+      <div id="hrpfFieldConfigList" class="space-y-1.5 max-h-72 overflow-y-auto"></div>
+      <div class="flex justify-end gap-2 mt-3 pt-2 border-t">
+        <button type="button" data-op="closeHrpfFieldConfigModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>
+        <button type="button" data-op="saveHrpfFieldConfig" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu</button>
+      </div>
     </div>
   </div>
 

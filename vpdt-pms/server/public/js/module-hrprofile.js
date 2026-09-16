@@ -57,18 +57,31 @@ function hrpfIdentitySnapshot(profile) {
   return { fullName: '', dept: profile.dept || '', jobTitle: profile.jobTitle || '', email: '', phone: '' };
 }
 
+// 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa (9/2026, xem lib/employeeProfile.js canCreateProfiles/
+// canFullViewProfiles/canEditProfiles) — mirror ĐÚNG logic OR-chain phía server để ẩn/hiện nút đúng,
+// KHÔNG phải tầng bảo vệ thật (server luôn enforce lại) chỉ để UI gọn/không gọi API thừa rồi bị 403.
+function hrpfCanCreate() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileCreate); }
+function hrpfCanEdit() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileEdit); }
+function hrpfCanFullView() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit); }
+
+// Báo Cáo Nhân Sự (9/2026) — khớp đúng quyền GET /api/hr-profile/reports (CẦN CẢ hrProfileManage LẪN
+// hrContractManage/admin), cùng mức chặt như GET .../history (Lịch Sử Nhân Sự).
+function hrpfCanViewReports() { return !!(currentUser.perms?.admin || (currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage)); }
+
 function renderHrProfileModule() {
-  document.getElementById('btnHrpfViewManage').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage));
-  if (activeHrProfileView === 'MANAGE' && !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage)) activeHrProfileView = 'ME';
+  document.getElementById('btnHrpfViewManage').classList.toggle('hidden', !(hrpfCanCreate() || hrpfCanFullView()));
+  document.getElementById('btnHrpfViewReports').classList.toggle('hidden', !hrpfCanViewReports());
+  if (activeHrProfileView === 'MANAGE' && !(hrpfCanCreate() || hrpfCanFullView())) activeHrProfileView = 'ME';
+  if (activeHrProfileView === 'REPORTS' && !hrpfCanViewReports()) activeHrProfileView = 'ME';
   // "Xem Hồ Sơ Nhân Viên (Quản Lý Trực Tiếp)" — riêng cho quyền hrProfileView (KHÔNG có hrProfileManage,
   // vốn đã thấy đủ toàn bộ hồ sơ qua "Quản Lý Hồ Sơ" rồi, không cần khối này) — hrProfileView là tầng
   // "quản lý trực tiếp xem giới hạn" của getProfileForViewer() (lib/employeeProfile.js), không tự tra được
   // GET /api/hr-profile (403, chỉ HR/admin) nên cần lối tra cứu riêng theo username qua
   // /api/hr-profile/by-username/:username (xem viewHrpfSubordinateProfile()).
   document.getElementById('hrpfSubordinateSearchWrap').classList.toggle('hidden',
-    !(currentUser.perms?.hrProfileView && !currentUser.perms?.hrProfileManage && !currentUser.perms?.admin));
+    !(currentUser.perms?.hrProfileView && !hrpfCanFullView()));
   populateSystemUsersDatalist();
-  if (currentUser.perms?.admin || currentUser.perms?.hrProfileManage) populateHrpfPositionDatalist();
+  if (hrpfCanCreate() || hrpfCanEdit()) populateHrpfPositionDatalist();
   setHrProfileView(activeHrProfileView);
 }
 
@@ -127,7 +140,10 @@ async function confirmHrpfAssignPosition() {
 // ===================== Lịch Sử Nhân Sự (xuyên suốt: chức vụ + hợp đồng lao động) =====================
 // Cần CẢ hrProfileManage LẪN hrContractManage (hoặc admin) — xem chú thích quyền ở route GET .../history
 // (routes/employeeProfile.js). Người chỉ có 1 trong 2 quyền sẽ nhận 403 — ẩn khối này thay vì hiện lỗi.
-const HRPF_HISTORY_TYPE_ICON = { POSITION: '🏷️', CONTRACT: '📄', CONTRACT_AMENDMENT: '📋' };
+const HRPF_HISTORY_TYPE_ICON = {
+  POSITION: '🏷️', CONTRACT: '📄', CONTRACT_AMENDMENT: '📋',
+  PROFILE_CREATE: '🆕', PROFILE_EDIT: '✏️', REHIRE: '↩️'
+};
 async function loadHrpfHistory(employeeCode) {
   const box = document.getElementById('hrpfHistoryBox');
   if (!box) return;
@@ -200,12 +216,25 @@ function setHrProfileView(view) {
   activeHrProfileView = view;
   document.getElementById('hrpfViewMe').classList.toggle('hidden', view !== 'ME');
   document.getElementById('hrpfViewManage').classList.toggle('hidden', view !== 'MANAGE');
+  document.getElementById('hrpfViewReports').classList.toggle('hidden', view !== 'REPORTS');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
   document.getElementById('btnHrpfViewMe').className = view === 'ME' ? activeCls : inactiveCls;
   document.getElementById('btnHrpfViewManage').className = view === 'MANAGE' ? activeCls : inactiveCls;
-  if (view === 'ME') loadHrpfMyProfile();
-  else loadHrProfileManageList();
+  document.getElementById('btnHrpfViewReports').className = view === 'REPORTS' ? activeCls : inactiveCls;
+  if (view === 'ME') { loadHrpfMyProfile(); return; }
+  if (view === 'REPORTS') { loadHrpfReports(); return; }
+
+  // MANAGE: nút Tạo/Nhập Excel cần hrProfileCreate; Xuất Excel + xem DANH SÁCH cần hrProfileFullView (hoặc
+  // Edit/Manage/admin, xem hrpfCanFullView()) — người CHỈ có hrProfileCreate không gọi GET / được (403).
+  document.getElementById('hrpfManageCreateBtn').classList.toggle('hidden', !hrpfCanCreate());
+  document.getElementById('hrpfManageImportBtn').classList.toggle('hidden', !hrpfCanCreate());
+  document.getElementById('hrpfManageExportBtn').classList.toggle('hidden', !hrpfCanFullView());
+  document.getElementById('hrpfManageFieldConfigBtn').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage));
+  document.getElementById('hrpfManageListWrap').classList.toggle('hidden', !hrpfCanFullView());
+  document.getElementById('hrpfManageSearch').classList.toggle('hidden', !hrpfCanFullView());
+  document.getElementById('hrpfManageNoListMsg').classList.toggle('hidden', hrpfCanFullView());
+  if (hrpfCanFullView()) loadHrProfileManageList();
 }
 
 // ===================== Hồ Sơ Của Tôi =====================
@@ -269,7 +298,7 @@ function renderHrProfileManageList() {
       <td class="p-2 text-gray-500">${escapeHtml(p.updatedAt || '')}</td>
       <td class="p-2 space-x-1 whitespace-nowrap">
         <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="true" class="px-2 py-1 rounded text-[11px] font-bold bg-gray-500 text-white hover:bg-gray-600">👁️ Xem</button>
-        <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✏️ Sửa</button>
+        ${hrpfCanEdit() ? `<button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✏️ Sửa</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -353,10 +382,80 @@ async function confirmHrpfLinkAccount() {
 // ===================== Tạo Hồ Sơ Nhân Sự Mới (thủ công, cho nhân viên CŨ chưa qua Onboarding) =====================
 function openHrpfCreateModal() {
   document.getElementById('hrpfCreateModal').querySelectorAll('input, select').forEach(el => { el.value = ''; });
+  closeHrpfRehirePanel();
   document.getElementById('hrpfCreateModal').classList.remove('hidden');
 }
 function closeHrpfCreateModal() {
   document.getElementById('hrpfCreateModal').classList.add('hidden');
+}
+
+// ===================== "🔍 Kiểm Tra Nhân Sự Cũ" — Tái Tuyển (9/2026, theo yêu cầu người dùng) =====================
+// Tìm hồ sơ ĐÃ NGHỈ VIỆC theo CCCD/Ngày sinh trước khi tạo hồ sơ mới, tránh 1 người bị tạo trùng 2 hồ sơ.
+// Xác nhận xong -> gọi thẳng POST .../rehire (không đi qua createManualProfile/submitHrpfCreateProfile ở
+// trên, vì đây là kích hoạt lại hồ sơ CÓ SẴN, không phải tạo mới — xem reactivateForRehire() ở server).
+let _hrpfRehireCandidates = [];
+function toggleHrpfRehirePanel() {
+  const panel = document.getElementById('hrpfRehirePanel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+}
+function closeHrpfRehirePanel() {
+  document.getElementById('hrpfRehirePanel')?.classList.add('hidden');
+  document.getElementById('hrpfRehireResultsWrap')?.classList.add('hidden');
+  document.getElementById('hrpfRehireConfirmWrap')?.classList.add('hidden');
+  _hrpfRehireCandidates = [];
+}
+async function searchHrpfInactiveForRehire() {
+  const nationalId = (document.getElementById('hrpfRehireNationalId')?.value || '').trim();
+  const dateOfBirth = document.getElementById('hrpfRehireDateOfBirth')?.value || '';
+  if (!nationalId && !dateOfBirth) return alert('⛔ Vui lòng nhập Số CCCD/CMND hoặc Ngày sinh để tìm.');
+  document.getElementById('hrpfRehireConfirmWrap')?.classList.add('hidden');
+  const qs = new URLSearchParams();
+  if (nationalId) qs.set('nationalId', nationalId);
+  if (dateOfBirth) qs.set('dateOfBirth', dateOfBirth);
+  try {
+    const data = await hrProfileApiCall('GET', `/api/hr-profile/search-inactive?${qs.toString()}`);
+    _hrpfRehireCandidates = data.results || [];
+    renderHrpfRehireResults();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+function renderHrpfRehireResults() {
+  const wrap = document.getElementById('hrpfRehireResultsWrap');
+  if (!wrap) return;
+  wrap.innerHTML = _hrpfRehireCandidates.length
+    ? _hrpfRehireCandidates.map(p => `
+        <div class="border rounded p-2 flex items-start justify-between gap-2 bg-white">
+          <div>
+            <div class="font-bold text-sm">${escapeHtml(p.fullName || '(chưa rõ tên)')} <span class="text-gray-400 font-normal">— ${escapeHtml(p.employeeCode)}</span></div>
+            <div class="text-[11px] text-gray-500">${escapeHtml(p.positionLabel || p.jobTitle || '')}${p.dept ? ' · ' + escapeHtml(p.dept) : ''}</div>
+            <div class="text-[11px] text-red-600 mt-0.5">🚪 Đã nghỉ việc — cập nhật lần cuối ${escapeHtml(p.updatedAt || '')}</div>
+          </div>
+          <button type="button" data-op="startHrpfRehire" data-arg0="${escapeHtml(p.employeeCode)}" class="px-2 py-1.5 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800 whitespace-nowrap">↩️ Tái sử dụng hồ sơ</button>
+        </div>
+      `).join('')
+    : '<p class="text-xs text-gray-400 italic p-2">Không tìm thấy hồ sơ đã nghỉ việc nào khớp — có thể tạo hồ sơ mới bình thường bên dưới.</p>';
+  wrap.classList.remove('hidden');
+}
+function startHrpfRehire(employeeCode) {
+  document.getElementById('hrpfRehireConfirmCode').value = employeeCode;
+  document.getElementById('hrpfRehireConfirmLabel').innerText = employeeCode;
+  document.getElementById('hrpfRehireNewStartDate').value = '';
+  document.getElementById('hrpfRehireConfirmWrap').classList.remove('hidden');
+}
+async function confirmHrpfRehire() {
+  const employeeCode = document.getElementById('hrpfRehireConfirmCode').value;
+  const newStartDate = document.getElementById('hrpfRehireNewStartDate').value;
+  if (!newStartDate) return alert('⛔ Vui lòng nhập Ngày bắt đầu làm việc lại.');
+  try {
+    await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}/rehire`, { newStartDate });
+    alert(`✅ Đã tái tuyển hồ sơ ${employeeCode} — chuyển lại "Đang làm việc", giữ nguyên Mã NV + lịch sử cũ.\n\nNhớ vào Hợp Đồng Lao Động tạo hợp đồng MỚI (Thử việc) với đúng Ngày hiệu lực = ${newStartDate} để thâm niên/mốc tăng lương tính đúng từ đợt làm việc mới.`);
+    closeHrpfCreateModal();
+    loadHrProfileManageList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
 }
 // Cùng khuôn resolveHrpfLinkAccountInput() ở trên — dùng chung #systemUsersDatalist.
 function resolveHrpfCreateUsernameInput(rawValue) {
@@ -365,8 +464,10 @@ function resolveHrpfCreateUsernameInput(rawValue) {
 }
 async function submitHrpfCreateProfile() {
   const val = (id) => document.getElementById(id)?.value || null;
-  const employeeCode = (val('hrpfCF_employeeCode') || '').trim();
-  if (!employeeCode) return alert('⛔ Vui lòng nhập Mã Nhân Viên.');
+  // Mã Nhân Viên (9/2026, theo yêu cầu người dùng): TUỲ CHỌN từ nay — để trống thì server tự sinh
+  // (tiền tố "BL" + số tuần tự, xem employeeProfile.generateEmployeeCode() ở lib/employeeProfile.js),
+  // gõ tay vẫn được (hồ sơ nhân viên đã có mã theo hệ thống cũ) — không còn chặn ở client nữa.
+  const employeeCode = (val('hrpfCF_employeeCode') || '').trim() || null;
   const payload = {
     employeeCode, username: val('hrpfCF_username'), positionKey: val('hrpfCF_positionKey'),
     dateOfBirth: val('hrpfCF_dateOfBirth'), gender: val('hrpfCF_gender'),
@@ -399,6 +500,102 @@ function openHrpfImportModal() {
 }
 function closeHrpfImportModal() {
   document.getElementById('hrpfImportModal').classList.add('hidden');
+}
+
+// ===================== Cấu hình trường xem của quản lý trực tiếp (9/2026) =====================
+async function openHrpfManagerFieldConfigModal() {
+  const listEl = document.getElementById('hrpfFieldConfigList');
+  listEl.innerHTML = '<p class="text-xs text-gray-400">Đang tải...</p>';
+  document.getElementById('hrpfFieldConfigModal').classList.remove('hidden');
+  try {
+    const data = await hrProfileApiCall('GET', '/api/hr-profile/manager-field-config');
+    const visible = new Set(data.visibleFields || []);
+    listEl.innerHTML = (data.availableFields || []).map(f => `
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" class="hrpf-field-config-cb" value="${escapeHtml(f.field)}" ${visible.has(f.field) ? 'checked' : ''}>
+        ${escapeHtml(f.label)}
+      </label>`).join('');
+  } catch (err) {
+    listEl.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+  }
+}
+function closeHrpfFieldConfigModal() {
+  document.getElementById('hrpfFieldConfigModal').classList.add('hidden');
+}
+async function saveHrpfFieldConfig() {
+  const visibleFields = Array.from(document.querySelectorAll('.hrpf-field-config-cb:checked')).map(cb => cb.value);
+  try {
+    await hrProfileApiCall('PUT', '/api/hr-profile/manager-field-config', { visibleFields });
+    alert('✅ Đã lưu cấu hình trường xem của quản lý trực tiếp.');
+    closeHrpfFieldConfigModal();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+// ===================== Báo Cáo Nhân Sự (9/2026) =====================
+// Nhãn trạng thái HĐLĐ — KHÔNG dùng thẳng HRC_STATUS_LABELS (module-hopdonglaodong.js): 2 module thuộc 2
+// group nạp lười RIÊNG BIỆT (xem MODULE_LOAD_GROUPS ở core.js, "hrprofile" không phụ thuộc
+// "hopdonglaodong") — vào thẳng tab Hồ Sơ Nhân Sự mà chưa từng mở tab Hợp Đồng Lao Động trong phiên thì
+// biến đó CHƯA TỒN TẠI (ReferenceError), nên khai 1 bản riêng nhỏ gọn tại đây thay vì phụ thuộc chéo.
+const HRPF_REPORT_CONTRACT_STATUS_LABELS = {
+  DRAFT: '📝 Nháp', ACTIVE: '✅ Đang hiệu lực', EXPIRED: '⌛ Hết hạn',
+  TERMINATED: '⛔ Đã chấm dứt', SUPERSEDED: '🔄 Đã thay thế'
+};
+const HRPF_REPORT_CARDS = [
+  { key: 'joiners', icon: '🆕', label: 'Nhân sự vào làm' },
+  { key: 'leavers', icon: '🚪', label: 'Nhân sự nghỉ việc' },
+  { key: 'newContracts', icon: '📄', label: 'Hợp đồng mới' },
+  { key: 'renewedContracts', icon: '🔄', label: 'Hợp đồng gia hạn' },
+  { key: 'expiringSoon', icon: '⚠️', label: 'HĐ sắp hết hạn (≤30 ngày)' },
+  { key: 'salaryIncreases', icon: '💰', label: 'Tăng lương' },
+  { key: 'otherAmendments', icon: '📋', label: 'Thay đổi HĐLĐ khác' },
+  { key: 'positionChanges', icon: '🏷️', label: 'Thăng chức / đổi chức danh' }
+];
+async function loadHrpfReports() {
+  const body = document.getElementById('hrpfReportBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  const from = document.getElementById('hrpfReportFrom').value || '';
+  const to = document.getElementById('hrpfReportTo').value || '';
+  const contractStatus = document.getElementById('hrpfReportContractStatus').value || '';
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  if (contractStatus) qs.set('contractStatus', contractStatus);
+  try {
+    const data = await hrProfileApiCall('GET', `/api/hr-profile/reports?${qs.toString()}`);
+    body.innerHTML = renderHrpfReportBody(data);
+  } catch (err) {
+    body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+  }
+}
+function renderHrpfReportBody(data) {
+  const cardsHtml = HRPF_REPORT_CARDS.map(c => `
+    <div class="bg-white border rounded-lg p-3 text-center">
+      <div class="text-2xl">${c.icon}</div>
+      <div class="text-2xl font-bold text-teal-700">${data.counts?.[c.key] ?? 0}</div>
+      <div class="text-[11px] text-gray-500">${c.label}</div>
+    </div>`).join('');
+
+  const listSection = (title, items, renderRow) => `
+    <div class="bg-white border rounded-lg p-3">
+      <div class="font-semibold text-sm mb-1.5">${title} (${items.length})</div>
+      ${items.length ? `<div class="space-y-1 max-h-48 overflow-y-auto text-xs">${items.map(renderRow).join('')}</div>` : '<p class="text-xs text-gray-400 italic">Không có dữ liệu.</p>'}
+    </div>`;
+
+  return `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">${cardsHtml}</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      ${listSection('🆕 Nhân sự vào làm', data.joiners || [], j => `<div class="border-b py-1">${escapeHtml(j.employeeCode)} — ${escapeHtml(j.date || '')}</div>`)}
+      ${listSection('🚪 Nhân sự nghỉ việc', data.leavers || [], j => `<div class="border-b py-1">${escapeHtml(j.employeeCode)} — ${escapeHtml(j.date || '')}</div>`)}
+      ${listSection('💰 Tăng lương', data.salaryIncreases || [], a => `<div class="border-b py-1">${escapeHtml(a.employeeCode)} (${escapeHtml(a.code)}): ${escapeHtml(a.oldValue || '')} → ${escapeHtml(a.newValue || '')} — ${escapeHtml(a.date || '')}</div>`)}
+      ${listSection('🏷️ Thăng chức / đổi chức danh', data.positionChanges || [], p => `<div class="border-b py-1">${escapeHtml(p.employeeCode)}: ${p.isNewAppointment ? 'Bổ nhiệm mới' : escapeHtml(p.oldPositionLabel || '') + ' → '}${escapeHtml(p.newPositionLabel || '')} — ${escapeHtml(p.date || '')}</div>`)}
+      ${listSection('⚠️ Hợp đồng sắp hết hạn', data.expiringSoon || [], c => `<div class="border-b py-1">${escapeHtml(c.employeeCode)} (${escapeHtml(c.code)}) — hết hạn ${escapeHtml(c.endDate || '')}</div>`)}
+      ${listSection('🔄 Hợp đồng gia hạn', data.renewedContracts || [], c => `<div class="border-b py-1">${escapeHtml(c.employeeCode)} (${escapeHtml(c.code)}, lần ${c.renewalIndex}) — ${escapeHtml(c.date || '')}</div>`)}
+    </div>
+    ${listSection('📋 Danh sách hợp đồng theo tình trạng đã lọc', data.contractsByStatus || [],
+      c => `<div class="border-b py-1">${escapeHtml(c.employeeCode)} (${escapeHtml(c.code)}) — ${escapeHtml(HRPF_REPORT_CONTRACT_STATUS_LABELS[c.status] || c.status)} — ${escapeHtml(c.startDate || '')} → ${escapeHtml(c.endDate || 'Vô thời hạn')}</div>`)}
+  `;
 }
 async function onHrpfImportFileChange(event) {
   const file = event.target.files[0];

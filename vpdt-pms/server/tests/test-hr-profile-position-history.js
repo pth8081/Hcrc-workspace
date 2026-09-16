@@ -295,6 +295,57 @@ async function main() {
       assertIncludes(types.join(','), 'CONTRACT', 'Có sự kiện CONTRACT');
       assertIncludes(types.join(','), 'CONTRACT_AMENDMENT', 'Có sự kiện CONTRACT_AMENDMENT');
     });
+
+    await run.run('GET /by-code/:code/history — gộp thêm PROFILE_CREATE/PROFILE_EDIT/REHIRE (9/2026), sắp ĐÚNG mới nhất trước theo THỜI GIAN THẬT (không phải so sánh chuỗi)', async () => {
+      resetAppData();
+      // 4 mốc thời gian CỐ Ý không theo thứ tự chuỗi (localeCompare) để phân biệt rõ với sort đúng theo
+      // thời gian thật: "09:00:00 5/1/2026" đứng SAU "08:00:00 20/1/2026" theo lịch thật (20/1 sau 5/1),
+      // nhưng "0" < "2" nên so sánh CHUỖI trực tiếp sẽ xếp SAI thứ tự nếu còn dùng localeCompare cũ.
+      const profile = seedProfile({
+        employeeCode: 'NV100',
+        profileEditHistory: [
+          { id: 'h1', type: 'CREATE', changedFields: [], by: 'hr1', byName: 'Nhân Sự Trưởng', createdAt: '08:00:00 5/1/2026' },
+          { id: 'h2', type: 'EDIT', changedFields: ['Tên ngân hàng'], by: 'emp1', byName: 'Nhân Viên Một', createdAt: '09:00:00 20/1/2026' }
+        ],
+        rehireHistory: [
+          { id: 'h3', newStartDate: '2026-02-10', rehiredAt: '10:00:00 10/2/2026', rehiredBy: 'hr1', rehiredByName: 'Nhân Sự Trưởng' }
+        ]
+      });
+      LABOR_CONTRACTS = [];
+      const res = await api('GET', '/api/hr-profile/by-code/NV100/history', undefined, HR_FULL);
+      assertEqual(res.status, 200, 'Xem được');
+      assertEqual(res.body.events.length, 3, 'Đủ 3 sự kiện (CREATE + EDIT + REHIRE)');
+      const types = res.body.events.map(e => e.type);
+      assertEqual(types[0], 'REHIRE', 'Mới nhất (10/2/2026) phải đứng ĐẦU');
+      assertEqual(types[1], 'PROFILE_EDIT', 'Kế tiếp (20/1/2026) đứng thứ 2');
+      assertEqual(types[2], 'PROFILE_CREATE', 'Cũ nhất (5/1/2026) đứng CUỐI — xác nhận sort theo THỜI GIAN THẬT, không phải so sánh chuỗi');
+      assertIncludes(res.body.events[1].title, 'Tên ngân hàng', 'Sự kiện PROFILE_EDIT phải liệt kê đúng field đã đổi trong tiêu đề');
+      assertIncludes(res.body.events[0].title, '2026-02-10', 'Sự kiện REHIRE phải nêu đúng ngày bắt đầu làm việc lại');
+    });
+
+    await run.run('GET /reports — Báo Cáo Nhân Sự (9/2026): CẦN CẢ hrProfileManage LẪN hrContractManage, tính đúng số liệu cơ bản', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'NV100', status: 'ACTIVE' });
+      LABOR_CONTRACTS = [laborContract.defaultContract({
+        employeeCode: 'NV100', code: 'HDLD-NV100-1', renewalIndex: 0, status: 'ACTIVE',
+        startDate: '2026-02-01', endDate: null, createdAt: '09:00:00 1/2/2026',
+        history: [{ action: 'CREATED', by: 'hr1', byName: 'Nhân Sự Trưởng', time: '09:00:00 1/2/2026', detail: 'Tạo tay' }],
+        amendments: [{ amendmentType: 'Tăng lương', effectiveDate: '2026-02-15', oldValue: '10.000.000', newValue: '12.000.000', createdAt: '09:00:00 15/2/2026', createdBy: 'hr1', createdByName: 'Nhân Sự Trưởng' }]
+      })];
+
+      const denied = await api('GET', '/api/hr-profile/reports', undefined, HR_PROFILE_ONLY);
+      assertEqual(denied.status, 403, 'Chỉ hrProfileManage (thiếu hrContractManage) -> 403 — cùng mức chặt như GET .../history');
+
+      const res = await api('GET', `/api/hr-profile/reports?from=2026-02-01&to=2026-02-28`, undefined, HR_FULL);
+      assertEqual(res.status, 200, 'Đủ cả 2 quyền -> 200');
+      assertEqual(res.body.counts.joiners, 1, 'Đúng 1 người vào làm trong kỳ (hợp đồng renewalIndex=0)');
+      assertEqual(res.body.counts.newContracts, 1, 'Đúng 1 hợp đồng mới trong kỳ');
+      assertEqual(res.body.counts.salaryIncreases, 1, 'Đúng 1 phụ lục tăng lương trong kỳ');
+
+      const outOfRange = await api('GET', '/api/hr-profile/reports?from=2020-01-01&to=2020-01-31', undefined, HR_FULL);
+      assertEqual(outOfRange.status, 200, 'Vẫn 200 dù không có dữ liệu nào khớp khoảng thời gian');
+      assertEqual(outOfRange.body.counts.joiners, 0, 'Ngoài khoảng thời gian -> 0 kết quả');
+    });
   } finally {
     server.close();
   }

@@ -178,6 +178,9 @@ function collectPermsFromForm() {
     hrViewAll: document.getElementById('pHrViewAll').checked,
     hrProfileView: document.getElementById('pHrProfileView').checked,
     hrProfileManage: document.getElementById('pHrProfileManage').checked,
+    hrProfileCreate: document.getElementById('pHrProfileCreate').checked,
+    hrProfileFullView: document.getElementById('pHrProfileFullView').checked,
+    hrProfileEdit: document.getElementById('pHrProfileEdit').checked,
     hrContractManage: document.getElementById('pHrContractManage').checked,
     hrAttendanceManage: document.getElementById('pHrAttendanceManage').checked,
     hrLeaveApprove: document.getElementById('pHrLeaveApprove').checked,
@@ -263,6 +266,9 @@ function populatePermsForm(permsInput) {
   document.getElementById('pHrViewAll').checked = !!perms.hrViewAll;
   document.getElementById('pHrProfileView').checked = !!perms.hrProfileView;
   document.getElementById('pHrProfileManage').checked = !!perms.hrProfileManage;
+  document.getElementById('pHrProfileCreate').checked = !!perms.hrProfileCreate;
+  document.getElementById('pHrProfileFullView').checked = !!perms.hrProfileFullView;
+  document.getElementById('pHrProfileEdit').checked = !!perms.hrProfileEdit;
   document.getElementById('pHrContractManage').checked = !!perms.hrContractManage;
   document.getElementById('pHrAttendanceManage').checked = !!perms.hrAttendanceManage;
   document.getElementById('pHrLeaveApprove').checked = !!perms.hrLeaveApprove;

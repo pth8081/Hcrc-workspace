@@ -42,12 +42,63 @@ function todayISO() {
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 
-// Trường nhạy cảm — chỉ chính chủ (username đã liên kết) / hrProfileManage / admin xem được; quản lý
-// trực tiếp (view-only theo hrProfileView mặc định) KHÔNG được xem dù có quyền xem hồ sơ nói chung.
+// Trường nhạy cảm — chỉ chính chủ (username đã liên kết) / hrProfileManage / admin xem được MẶC ĐỊNH;
+// quản lý trực tiếp (view-only theo hrProfileView) KHÔNG được xem dù có quyền xem hồ sơ nói chung, TRỪ
+// KHI admin chủ động mở thêm qua "Quản Lý Hồ Sơ > Cấu hình trường xem của quản lý trực tiếp" (9/2026,
+// theo yêu cầu người dùng — xem hrManagerVisibleFields ở getProfileForViewer() dưới đây).
 const SENSITIVE_FIELDS = [
   'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName',
   'socialInsuranceNo', 'taxCode', 'dependents', 'education'
 ];
+// Nhãn hiển thị tiếng Việt cho từng trường nhạy cảm — dùng cho màn cấu hình admin (checkbox chọn trường
+// nào mở cho quản lý trực tiếp) lẫn client hiển thị danh sách trường đang cấu hình.
+const SENSITIVE_FIELD_LABELS = {
+  nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
+  taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn'
+};
+// Lọc input admin gửi lên chỉ giữ đúng các field NẰM TRONG SENSITIVE_FIELDS (chặn gửi field lạ/field
+// không nhạy cảm — không có ý nghĩa gì để "mở thêm" vì các field khác vốn đã luôn hiện sẵn).
+function sanitizeManagerVisibleFields(input) {
+  const set = new Set(SENSITIVE_FIELDS);
+  return Array.from(new Set((Array.isArray(input) ? input : []).filter(f => set.has(f))));
+}
+
+// Mã Nhân Viên TỰ SINH (9/2026, theo yêu cầu người dùng) — tiền tố "BL" + số tăng tuần tự, 4 chữ số
+// (BL0001, BL0002...; vượt quá 9999 vẫn ra số đúng, chỉ không còn đệm 0 — không giới hạn cứng). Lấy số
+// LỚN NHẤT từng dùng (không phải đếm số hồ sơ còn lại) — cùng nguyên lý computeNextSeqForPrefix() ở
+// lib/recordStore.js (mã phiếu các module khác), viết riêng ở đây vì employeeProfiles là AppData (mảng
+// JSON thô), không phải DEDICATED_TABLES nên không tái dùng thẳng được hàm đó (khác nguồn dữ liệu đọc).
+const EMPLOYEE_CODE_PREFIX = 'BL';
+const EMPLOYEE_CODE_RE = /^BL(\d+)$/;
+function computeNextEmployeeCodeSeq(list) {
+  let maxSeq = 0;
+  for (const p of list || []) {
+    const m = EMPLOYEE_CODE_RE.exec(String(p?.employeeCode || ''));
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  }
+  return maxSeq + 1;
+}
+// Sinh 1 Mã NV CHƯA từng dùng trong `list` — nhảy qua số kế tiếp nếu số vừa tính vẫn trùng (phòng hờ dữ
+// liệu cũ có mã "BL..." không theo đúng tuần tự, hoặc gọi lại nhiều lần liên tiếp trong CÙNG 1 khoá khi
+// nhập hàng loạt — xem createManualProfile()/routes/create.js). PHẢI gọi hàm này NGAY TRONG
+// withLockedAppDataValue('employeeProfiles', ...) của caller để "list" luôn là bản mới nhất, và PHẢI ghi
+// (push) hồ sơ mới vào mảng TRƯỚC KHI khoá được nhả — đây là cách DUY NHẤT đảm bảo 2 yêu cầu tạo hồ sơ
+// gần như cùng lúc không bao giờ nhận trùng mã (yêu cầu thứ 2 chỉ vào được khoá SAU khi yêu cầu thứ nhất
+// đã ghi xong, nhìn thấy đúng mã vừa dùng, tự nhảy số kế tiếp).
+function generateEmployeeCode(list) {
+  const used = new Set((list || []).map(p => p?.employeeCode).filter(Boolean));
+  let seq = computeNextEmployeeCodeSeq(list);
+  let code = `${EMPLOYEE_CODE_PREFIX}${String(seq).padStart(4, '0')}`;
+  while (used.has(code)) {
+    seq += 1;
+    code = `${EMPLOYEE_CODE_PREFIX}${String(seq).padStart(4, '0')}`;
+  }
+  return code;
+}
 
 function findProfile(list, employeeCode) {
   return (list || []).find(p => p.employeeCode === employeeCode) || null;
@@ -74,10 +125,29 @@ function defaultProfile(employeeCode) {
     // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
     positionKey: null, jobTitle: null, dept: null, positionLabel: null, posType: null,
     positionHistory: [],
+    // profileEditHistory — "Lịch Sử Thay Đổi & Chỉnh Sửa Hồ Sơ" (9/2026, theo yêu cầu người dùng) — ghi
+    // lại MỌI lần tạo mới (type CREATE) + sửa (type EDIT, chỉ khi THỰC SỰ có field đổi giá trị — xem
+    // applyProfileEdit()) — gộp vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng, xem GET .../history.
+    profileEditHistory: [],
     processId: null,
     createdAt: nowVN(), createdBy: 'system',
     updatedAt: nowVN(), updatedBy: 'system'
   };
+}
+
+// Gọi khi đặt chỗ 1 hồ sơ DRAFT rỗng lúc tạo Onboarding (routes/create.js) — bọc defaultProfile() +
+// ghi luôn 1 dòng lịch sử "tạo mới" (type CREATE) ngay từ đầu, để "Lịch Sử Thay Đổi & Chỉnh Sửa Hồ Sơ"
+// không có hồ sơ nào "từ trên trời rơi xuống" không rõ ai/lúc nào tạo.
+function createDraftProfileForOnboarding(employeeCode, actorUsername, actorName) {
+  const profile = defaultProfile(employeeCode);
+  profile.createdBy = actorUsername || 'system';
+  profile.updatedBy = actorUsername || 'system';
+  profile.profileEditHistory = [{
+    id: randomUUID(), type: 'CREATE', changedFields: [],
+    by: actorUsername || 'system', byName: actorName || actorUsername || 'system',
+    createdAt: nowVN()
+  }];
+  return profile;
 }
 
 // Gọi ngay khi 1 quy trình ONBOARDING được tạo (giai đoạn PRE_BOARDING) — idempotent, không tạo trùng
@@ -129,10 +199,15 @@ function applyProcessCompletion(list, hrProcessItem) {
 // username tuỳ chọn — HR có thể tạo hồ sơ trước rồi liên kết tài khoản VPDT sau (linkAccount()) như luồng
 // Onboarding, hoặc liên kết luôn nếu đã biết đúng tài khoản; caller (route) chịu trách nhiệm xác nhận
 // username thật sự là 1 tài khoản VPDT đang hoạt động TRƯỚC khi gọi hàm này (cùng cách /link-account làm).
-function createManualProfile(list, payload, actorUsername) {
+// employeeCode: TUỲ CHỌN từ 9/2026 — để trống thì tự sinh (generateEmployeeCode(), tiền tố "BL") ngay
+// TRONG hàm này (gọi trong đúng withLockedAppDataValue('employeeProfiles', ...) của caller nên vẫn khoá
+// đúng, không trùng khi 2 request/2 dòng import hàng loạt chạm cùng lúc). Vẫn cho phép gõ tay 1 mã khác
+// (VD nhân viên cũ đã có mã theo hệ thống HR khác từ trước, hoặc luồng Tái Tuyển muốn GIỮ NGUYÊN đúng mã
+// cũ — xem reactivateForRehire() bên dưới).
+function createManualProfile(list, payload, actorUsername, actorName) {
   const arr = list || [];
-  const employeeCode = String(payload?.employeeCode || '').trim();
-  if (!employeeCode) throw new HttpError(400, 'Vui lòng nhập Mã Nhân Viên');
+  const rawEmployeeCode = String(payload?.employeeCode || '').trim();
+  const employeeCode = rawEmployeeCode || generateEmployeeCode(arr);
   if (employeeCode.length > 50) throw new HttpError(400, 'Mã Nhân Viên quá dài (tối đa 50 ký tự)');
   if (findProfile(arr, employeeCode)) {
     throw new HttpError(400, `Mã Nhân Viên "${employeeCode}" đã có hồ sơ — vui lòng vào "Chi tiết" để sửa thay vì tạo mới`);
@@ -146,13 +221,67 @@ function createManualProfile(list, payload, actorUsername) {
   profile.username = username;
   profile.createdBy = actorUsername || 'system';
   profile.updatedBy = actorUsername || 'system';
-  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername);
+  // skipHistory: true — điền dữ liệu payload ban đầu là 1 phần của "tạo mới" (ghi CREATE riêng ngay
+  // dưới đây), không phải 1 lượt "sửa" cần liệt kê từng field trong profileEditHistory.
+  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, { skipHistory: true });
+  profile.profileEditHistory = [{
+    id: randomUUID(), type: 'CREATE', changedFields: [],
+    by: actorUsername || 'system', byName: actorName || actorUsername || 'system',
+    createdAt: nowVN()
+  }];
   arr.push(profile);
   return profile;
 }
 
+// ===== Tái Tuyển (9/2026, theo yêu cầu người dùng) =====
+// Tìm hồ sơ ĐÃ NGHỈ VIỆC (INACTIVE) theo CCCD/CMND + Ngày sinh — đối chiếu nhân thân, KHÔNG theo
+// employeeCode (nhân viên tái tuyển không nhớ/không cần biết mã cũ). Khớp field nào có nhập field đó
+// (cả 2 -> phải khớp CẢ 2; chỉ 1 -> khớp đúng field đó là đủ) — vẫn có thể trả về NHIỀU kết quả (VD chỉ
+// gõ ngày sinh, trùng ngày với người khác), HR tự chọn đúng người trong danh sách trả về.
+function searchInactiveProfilesForRehire(list, nationalId, dateOfBirth) {
+  const nid = String(nationalId || '').trim();
+  const dob = String(dateOfBirth || '').trim();
+  if (!nid && !dob) return [];
+  return (list || []).filter(p => {
+    if (p.status !== 'INACTIVE') return false;
+    if (nid && p.nationalId !== nid) return false;
+    if (dob && p.dateOfBirth !== dob) return false;
+    return true;
+  });
+}
+
+// Kích hoạt lại hồ sơ INACTIVE cho đợt làm việc MỚI — KHÁC HẲN assertValidManualStatusTransition() (cố ý
+// khoá cứng, không cho đổi tay INACTIVE) vì đây là 1 nghiệp vụ RIÊNG có chủ đích rõ ràng (không phải sửa
+// nhầm trạng thái), luôn ghi lại lịch sử tái tuyển (rehireHistory[] — gộp vào khối "Lịch Sử Nhân Sự"
+// cùng chức vụ/hợp đồng/chỉnh sửa hồ sơ ở client, xem module-hrprofile.js). employeeCode + TOÀN BỘ dữ
+// liệu/lịch sử CŨ giữ NGUYÊN (đã xác nhận với người dùng: giữ mã cũ, không cấp mã mới) — chỉ đổi status
+// + ghi thêm 1 dòng lịch sử, KHÔNG xoá/reset field nào khác. Mốc "Ngày bắt đầu làm việc lại" KHÔNG lưu
+// thành field riêng trên hồ sơ (đã xác nhận: tính thâm niên theo Ngày hiệu lực hợp đồng lao động MỚI sẽ
+// tạo, không phải field riêng ở đây) — chỉ lưu lại trong rehireHistory để tra soát.
+function reactivateForRehire(list, employeeCode, newStartDate, actorUsername, actorName) {
+  const arr = list || [];
+  const profile = findProfile(arr, employeeCode);
+  if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ nhân sự');
+  if (profile.status !== 'INACTIVE') {
+    throw new HttpError(400, 'Chỉ tái tuyển được hồ sơ đang ở trạng thái "Đã nghỉ việc"');
+  }
+  const startDate = String(newStartDate || '').trim();
+  if (!startDate || Number.isNaN(new Date(startDate).getTime())) {
+    throw new HttpError(400, 'Vui lòng nhập Ngày bắt đầu làm việc lại hợp lệ');
+  }
+  profile.status = 'ACTIVE';
+  profile.rehireHistory = profile.rehireHistory || [];
+  profile.rehireHistory.push({
+    id: randomUUID(), newStartDate: startDate,
+    rehiredAt: nowVN(), rehiredBy: actorUsername || 'system', rehiredByName: actorName || actorUsername || 'system'
+  });
+  profile.updatedAt = nowVN(); profile.updatedBy = actorUsername || 'system';
+  return profile;
+}
+
 function canViewFullProfile(user, profile) {
-  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || (profile.username && user.username === profile.username));
+  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit
+    || (profile.username && user.username === profile.username));
 }
 function canViewLimitedProfile(user, profile, allUsers) {
   if (canViewFullProfile(user, profile)) return true;
@@ -162,6 +291,33 @@ function canViewLimitedProfile(user, profile, allUsers) {
 }
 function canManageProfiles(user) {
   return !!(user?.perms?.admin || user?.perms?.hrProfileManage);
+}
+
+// ===== Phân quyền chi tiết Tạo/Xem/Sửa (9/2026, theo yêu cầu người dùng) =====
+// TRƯỚC ĐÂY chỉ có 1 quyền PHẲNG "hrProfileManage" (= xem+sửa+tạo+liên kết TK+đổi trạng thái, tất cả
+// hoặc không gì cả) — không tách được VD "chỉ nhập liệu tạo hồ sơ, không xem/sửa được hồ sơ người khác".
+// Thêm 3 quyền RIÊNG có thể kết hợp tự do (admin tick trong 1 box nhỏ riêng, xem systemSection.html):
+//   hrProfileCreate   — CHỈ tạo hồ sơ mới (tay + Excel hàng loạt) + tra cứu "Kiểm Tra Nhân Sự Cũ"
+//                       (task Tái Tuyển) để tránh tạo trùng — KHÔNG tự động xem được danh sách/chi tiết
+//                       hồ sơ người khác.
+//   hrProfileFullView — xem TOÀN BỘ hồ sơ (danh sách + chi tiết đầy đủ, không giới hạn như quản lý trực
+//                       tiếp) nhưng KHÔNG sửa được gì.
+//   hrProfileEdit     — sửa được hồ sơ đã có (kéo theo xem được, không sửa được cái mình chưa thấy) +
+//                       các thao tác "quản lý" khác (đổi trạng thái tay, liên kết tài khoản, gán chức
+//                       vụ, tái tuyển) — nhưng KHÔNG tự tạo hồ sơ MỚI nếu không có hrProfileCreate.
+// hrProfileManage GIỮ NGUYÊN ý nghĩa cũ (= có ĐỦ CẢ 3 quyền trên, tương thích ngược 100% với tài khoản
+// đã cấu hình sẵn trước đây — không cần migrate dữ liệu quyền nào).
+function canCreateProfiles(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileCreate);
+}
+function canEditProfiles(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit);
+}
+// Sửa được thì đương nhiên xem được (không sửa được cái mình không thấy) — hrProfileCreate KHÔNG kéo
+// theo xem toàn bộ (đúng thiết kế "chỉ nhập liệu", xem chú thích ở trên) — muốn cả tạo LẪN xem thì admin
+// tick CẢ 2 ô, không tự động gộp.
+function canFullViewProfiles(user) {
+  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit);
 }
 
 // Gán/đổi chức vụ hiện tại của 1 hồ sơ — LUÔN chọn từ 1 node POSITION có thật trong bản Cơ Cấu Tổ Chức
@@ -230,13 +386,16 @@ function resolveProfileDisplayName(profile, users, hrProcesses) {
 }
 
 // Trả về đúng bản hồ sơ theo vai trò người xem — KHÔNG bao giờ trả nguyên object gốc cho vai trò
-// "quản lý trực tiếp xem giới hạn" (xem SENSITIVE_FIELDS ở trên).
-function getProfileForViewer(profile, viewer, allUsers) {
+// "quản lý trực tiếp xem giới hạn" (xem SENSITIVE_FIELDS ở trên). managerVisibleFields: mảng field
+// (subset SENSITIVE_FIELDS) admin đã cấu hình MỞ THÊM cho quản lý trực tiếp (9/2026) — mặc định [] (giữ
+// nguyên hành vi cũ: ẩn HẾT field nhạy cảm) nếu caller không truyền/chưa cấu hình gì.
+function getProfileForViewer(profile, viewer, allUsers, managerVisibleFields) {
   if (!profile) return null;
   if (canViewFullProfile(viewer, profile)) return profile;
   if (canViewLimitedProfile(viewer, profile, allUsers)) {
+    const visible = new Set(sanitizeManagerVisibleFields(managerVisibleFields));
     const limited = Object.assign({}, profile);
-    for (const f of SENSITIVE_FIELDS) delete limited[f];
+    for (const f of SENSITIVE_FIELDS) { if (!visible.has(f)) delete limited[f]; }
     return limited;
   }
   return null;
@@ -251,6 +410,17 @@ const SELF_EDITABLE_FIELDS = [
 ];
 // HR (hrProfileManage/admin) sửa thêm được cả trường định danh pháp lý.
 const HR_ONLY_EDITABLE_FIELDS = ['nationalId', 'socialInsuranceNo', 'taxCode'];
+// Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
+// "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
+const PROFILE_FIELD_LABELS = {
+  dateOfBirth: 'Ngày sinh', gender: 'Giới tính', permanentAddress: 'Địa chỉ thường trú',
+  currentAddress: 'Địa chỉ hiện tại', personalEmail: 'Email cá nhân',
+  emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
+  emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng',
+  dependents: 'Người phụ thuộc', education: 'Học vấn',
+  nationalId: 'CCCD/CMND', socialInsuranceNo: 'Số BHXH', taxCode: 'Mã số thuế'
+};
 
 function assertValidDependent(dep, idx) {
   if (!dep || typeof dep !== 'object') throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1} không hợp lệ`);
@@ -267,8 +437,20 @@ function assertValidEducation(edu, idx) {
 // từng loại field cụ thể. Không cho sửa employeeCode/username/status/processId/createdAt/createdBy qua
 // đường này (username chỉ đổi qua linkAccount(), status chỉ đổi qua applyProcessCompletion()/
 // assertValidManualStatusTransition()).
-function applyProfileEdit(profile, payload, allowedFields, actorUsername) {
+// actorName + options.skipHistory (9/2026, theo yêu cầu người dùng — "Lịch Sử Thay Đổi & Chỉnh Sửa Hồ
+// Sơ") — ghi 1 dòng vào profile.profileEditHistory[] (type EDIT) liệt kê ĐÚNG field nào THỰC SỰ đổi giá
+// trị (so sánh trước/sau, KHÔNG ghi nếu payload gửi field nhưng giá trị y hệt cũ — tránh spam lịch sử
+// mỗi lần bấm Lưu dù không đổi gì). options.skipHistory=true dành cho createManualProfile() gọi hàm này
+// để ĐIỀN dữ liệu ban đầu lúc mới tạo — đó là 1 phần của sự kiện "tạo mới" (đã tự ghi riêng, xem
+// createManualProfile()), không phải 1 lượt "sửa" cần liệt kê field.
+function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorName, options) {
   const body = payload || {};
+  const skipHistory = !!(options && options.skipHistory);
+  const touchedFields = allowedFields.filter(f => f in body);
+  const before = {};
+  if (!skipHistory) {
+    for (const f of touchedFields) before[f] = profile[f];
+  }
   for (const field of allowedFields) {
     if (!(field in body)) continue;
     const val = body[field];
@@ -315,6 +497,18 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername) {
         profile[field] = val == null ? null : String(val).trim().slice(0, 300);
     }
   }
+  if (!skipHistory && touchedFields.length) {
+    const changed = touchedFields.filter(f => JSON.stringify(before[f]) !== JSON.stringify(profile[f]));
+    if (changed.length) {
+      profile.profileEditHistory = profile.profileEditHistory || [];
+      profile.profileEditHistory.push({
+        id: randomUUID(), type: 'EDIT',
+        changedFields: changed.map(f => PROFILE_FIELD_LABELS[f] || f),
+        by: actorUsername || 'system', byName: actorName || actorUsername || 'system',
+        createdAt: nowVN()
+      });
+    }
+  }
   profile.updatedAt = nowVN();
   profile.updatedBy = actorUsername;
 }
@@ -331,9 +525,121 @@ function assertValidManualStatusTransition(currentStatus, nextStatus) {
   if (currentStatus === 'INACTIVE') throw new HttpError(400, 'Hồ sơ đã nghỉ việc — không đổi trạng thái tay được');
 }
 
+// ===== Báo Cáo Nhân Sự (9/2026, theo yêu cầu người dùng) =====
+// employeeProfiles/laborContracts bị chặn hẳn khỏi GET /api/reports chung (dữ liệu CỰC NHẠY CẢM — xem
+// CLAUDE.md + routes/data.js) nên KHÔNG đi theo khuôn báo cáo module thường — route thống kê RIÊNG (GET
+// /api/hr-profile/reports), tính THUẦN ở đây (test được không cần HTTP) để route chỉ còn việc gọi hàm +
+// gác quyền (CẦN CẢ hrProfileManage LẪN hrContractManage/admin — CÙNG mức chặt như GET .../history, vì
+// vẫn lộ số liệu lương qua đường tăng lương/hợp đồng).
+//
+// nowVN()/createdAt/updatedAt là chuỗi "HH:mm:ss d/M/yyyy" (KHÔNG sort/so sánh khoảng ngày được bằng
+// chuỗi trực tiếp) — 2 helper dưới đây tách phần ngày thật (YYYY-MM-DD) để lọc theo from/to, bản sao
+// tối giản của parseVNDateTime() (lib/recordActions.js/public/js/core.js) — KHÔNG require thẳng
+// lib/recordActions.js (file rất lớn, không cần vòng phụ thuộc mới chỉ vì 1 hàm parse ngày).
+function parseVNDateTimeLocal(str) {
+  if (!str || typeof str !== 'string') return null;
+  const parts = str.trim().split(' ');
+  if (parts.length !== 2) return null;
+  const [timePart, datePart] = parts;
+  const timeBits = timePart.split(':').map(Number);
+  const dateBits = datePart.split('/').map(Number);
+  if (dateBits.length !== 3 || dateBits.some(isNaN)) return null;
+  const [h, mi, s] = timeBits;
+  const [d, mo, y] = dateBits;
+  const dt = new Date(y, mo - 1, d, h || 0, mi || 0, s || 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+function vnDateOnlyLocal(str) {
+  const d = parseVNDateTimeLocal(str);
+  return d ? d.toISOString().slice(0, 10) : '';
+}
+function isInDateRange(dateStr, from, to) {
+  if (!dateStr) return false;
+  if (from && dateStr < from) return false;
+  if (to && dateStr > to) return false;
+  return true;
+}
+function isSalaryAmendmentType(amendmentType) {
+  return String(amendmentType || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes('luong');
+}
+
+// Gộp employeeProfiles + laborContracts thành các chỉ số thống kê cơ bản người dùng yêu cầu: nhân sự
+// vào làm/nghỉ việc, tăng lương, thay đổi HĐLĐ khác, hợp đồng mới/gia hạn/sắp hết hạn, thăng chức/đổi
+// chức danh — lọc theo khoảng thời gian [from, to] (chuỗi "YYYY-MM-DD", bỏ trống 1 hoặc cả 2 = không
+// giới hạn đầu đó) áp dụng cho MỌI mục (trừ "sắp hết hạn" — luôn tính từ HÔM NAY, không phụ thuộc
+// from/to, vì đây là cảnh báo thời điểm hiện tại chứ không phải thống kê quá khứ). contractStatus (tuỳ
+// chọn): lọc riêng phần liệt kê hợp đồng theo đúng 1 trạng thái.
+function computeHrReportSummary(profiles, contracts, filters) {
+  const from = filters?.from || '';
+  const to = filters?.to || '';
+  const contractStatus = filters?.contractStatus || '';
+  const profileList = profiles || [];
+  const contractList = contracts || [];
+
+  const joiners = contractList
+    .filter(c => (c.renewalIndex || 0) === 0 && isInDateRange(c.startDate, from, to))
+    .map(c => ({ employeeCode: c.employeeCode, date: c.startDate }));
+
+  const leavers = profileList
+    .filter(p => p.status === 'INACTIVE' && isInDateRange(vnDateOnlyLocal(p.updatedAt), from, to))
+    .map(p => ({ employeeCode: p.employeeCode, date: vnDateOnlyLocal(p.updatedAt) }));
+
+  const newContracts = contractList
+    .filter(c => isInDateRange(vnDateOnlyLocal(c.createdAt), from, to))
+    .map(c => ({ employeeCode: c.employeeCode, code: c.code, contractType: c.contractType, date: vnDateOnlyLocal(c.createdAt) }));
+
+  const renewedContracts = contractList
+    .filter(c => (c.renewalIndex || 0) > 0 && isInDateRange(vnDateOnlyLocal(c.createdAt), from, to))
+    .map(c => ({ employeeCode: c.employeeCode, code: c.code, renewalIndex: c.renewalIndex, date: vnDateOnlyLocal(c.createdAt) }));
+
+  const today = todayISO();
+  const expiringSoon = contractList
+    .filter(c => c.status === 'ACTIVE' && c.endDate && c.endDate >= today && c.endDate <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
+    .map(c => ({ employeeCode: c.employeeCode, code: c.code, endDate: c.endDate }));
+
+  const salaryIncreases = [];
+  const otherAmendments = [];
+  for (const c of contractList) {
+    for (const a of (c.amendments || [])) {
+      if (!isInDateRange(a.effectiveDate, from, to)) continue;
+      const entry = { employeeCode: c.employeeCode, code: c.code, amendmentType: a.amendmentType, oldValue: a.oldValue, newValue: a.newValue, date: a.effectiveDate };
+      if (isSalaryAmendmentType(a.amendmentType)) salaryIncreases.push(entry); else otherAmendments.push(entry);
+    }
+  }
+
+  const positionChanges = [];
+  for (const p of profileList) {
+    for (const h of (p.positionHistory || [])) {
+      if (!isInDateRange(h.effectiveDate, from, to)) continue;
+      positionChanges.push({
+        employeeCode: p.employeeCode, date: h.effectiveDate,
+        isNewAppointment: !h.oldPositionKey,
+        oldPositionLabel: h.oldPositionLabel, newPositionLabel: h.newPositionLabel
+      });
+    }
+  }
+
+  const contractsByStatus = contractStatus ? contractList.filter(c => c.status === contractStatus) : contractList;
+
+  return {
+    joiners, leavers, newContracts, renewedContracts, expiringSoon, salaryIncreases, otherAmendments, positionChanges,
+    contractsByStatus: contractsByStatus.map(c => ({ employeeCode: c.employeeCode, code: c.code, status: c.status, contractType: c.contractType, startDate: c.startDate, endDate: c.endDate })),
+    counts: {
+      joiners: joiners.length, leavers: leavers.length, newContracts: newContracts.length,
+      renewedContracts: renewedContracts.length, expiringSoon: expiringSoon.length,
+      salaryIncreases: salaryIncreases.length, otherAmendments: otherAmendments.length,
+      positionChanges: positionChanges.length, contractsByStatus: contractsByStatus.length
+    }
+  };
+}
+
 module.exports = {
-  STATUSES, SENSITIVE_FIELDS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS,
-  findProfile, findProfileByUsername, defaultProfile, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
+  STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  sanitizeManagerVisibleFields,
+  generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
+  findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
-  applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName
+  canCreateProfiles, canEditProfiles, canFullViewProfiles,
+  applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
+  computeHrReportSummary
 };

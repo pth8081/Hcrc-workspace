@@ -550,6 +550,12 @@ const DEFAULTS = {
   // thủ, không phải đường ghi chính thức). Đọc mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage/admin.
   orgChartVersions: [],
   employeeProfiles: [],
+  // hrProfileManagerVisibleFields (9/2026, theo yêu cầu người dùng) — mảng field NHẠY CẢM (subset
+  // lib/employeeProfile.js::SENSITIVE_FIELDS) admin chủ động MỞ THÊM cho "quản lý trực tiếp xem giới
+  // hạn" (hrProfileView, KHÔNG có hrProfileManage) — xem getProfileForViewer(). Mặc định [] (giữ nguyên
+  // hành vi cũ: ẩn HẾT). Chỉ hrProfileManage/admin cấu hình được, qua GET/PUT
+  // /api/hr-profile/manager-field-config.
+  hrProfileManagerVisibleFields: [],
 
   // Nhân Sự > Công & Phép (Phần E tài liệu thiết kế, Đợt 3/4) — xem lib/attendance.js đầu file giải
   // thích các điều chỉnh so với tài liệu gốc. 3 collection nhỏ dưới đây là AppData thường (không tăng

@@ -200,6 +200,32 @@ router.post('/:module', async (req, res) => {
     // INDEX như Code) — dùng đường khoá nghiêm túc theo phòng họp thay vì createForCollection() thường
     // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.meetings.getLockKey +
     // lib/recordStore.js createForCollectionSerialized).
+    // hrProcesses/ONBOARDING (9/2026, theo yêu cầu người dùng): Mã Nhân Viên TỰ SINH ("BL" + số tuần
+    // tự, employeeProfile.generateEmployeeCode()) thay vì HR gõ tay — sinh + ĐẶT CHỖ (push ngay 1 hồ sơ
+    // DRAFT) TRONG CÙNG 1 khoá employeeProfiles, NGAY TRƯỚC KHI tạo hrProcesses, để 2 request tạo
+    // Onboarding gần như cùng lúc không bao giờ nhận trùng mã (xem chú thích generateEmployeeCode()).
+    // Ghi thẳng vào req.body.employeeCode — builderFn ở trên đọc req.body qua closure nên vẫn thấy giá
+    // trị mới này khi validateAndPrepareCreate() chạy ngay sau đây, không cần đổi gì ở
+    // lib/createValidation.js (check "thiếu Mã Nhân Viên" vẫn qua bình thường vì đã có giá trị).
+    // Nếu tạo hrProcesses THẤT BẠI ngay sau đó (lỗi field khác) thì hồ sơ DRAFT vừa đặt chỗ trở thành mồ
+    // côi (processId=null, không ai dùng mã đó nữa) — chấp nhận được (hiếm, không hỏng dữ liệu, chỉ lãng
+    // phí 1 số thứ tự) vì client đã tự kiểm tra các field bắt buộc khác trước khi gửi.
+    //
+    // NGOẠI LỆ — luồng Tái Tuyển (task Kiểm Tra Nhân Sự Cũ, routes/employeeProfile.js reactivateForRehire()):
+    // client CHỦ ĐỘNG gửi kèm employeeCode = mã CŨ của hồ sơ vừa được tái kích hoạt (đã tồn tại sẵn,
+    // KHÔNG phải mã mới) — KHÔNG được tự sinh/đặt chỗ đè lên trong trường hợp này, giữ nguyên client gửi.
+    const isOnboarding = moduleKey === 'hrProcesses' && req.body?.processType === 'ONBOARDING';
+    const clientProvidedEmployeeCode = isOnboarding && req.body?.employeeCode ? String(req.body.employeeCode).trim() : '';
+    if (isOnboarding && !clientProvidedEmployeeCode) {
+      await withLockedAppDataValue('employeeProfiles', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        const code = employeeProfile.generateEmployeeCode(arr);
+        req.body.employeeCode = code;
+        arr.push(employeeProfile.createDraftProfileForOnboarding(code, freshUser.username, freshUser.name));
+        return arr;
+      });
+    }
+
     const record = config.getLockKey
       ? await createForCollectionSerialized(config.dbKey, config.getLockKey(req.body, freshUser), builderFn)
       : familyLockKey
@@ -210,12 +236,20 @@ router.post('/:module', async (req, res) => {
     if (moduleKey === 'licenses') await learnLicenseType(record.licenseType);
     // Tự học "Loại Dịch Vụ" mới vào danh mục gợi ý — xem learnItRenewalCategory() ở đầu file.
     if (moduleKey === 'itServiceRenewals') await learnItRenewalCategory(record.category);
-    // Onboarding mới tạo (giai đoạn PRE_BOARDING) -> tự khởi tạo hồ sơ nhân sự DRAFT khoá theo
-    // employeeCode (chưa có username lúc này — xem đầu file lib/employeeProfile.js). Offboarding KHÔNG
-    // cần hook ở đây vì hồ sơ chắc chắn đã tồn tại từ Onboarding trước đó.
+    // Onboarding mới tạo (giai đoạn PRE_BOARDING) -> hồ sơ (DRAFT vừa đặt chỗ tự sinh mã, HOẶC hồ sơ vừa
+    // được tái kích hoạt qua luồng Tái Tuyển với mã CŨ giữ nguyên — cả 2 trường hợp đều đã tồn tại đúng
+    // employeeCode trong employeeProfiles tại đây) -> gắn/ghi đè processId = id hrProcesses vừa tạo xong
+    // (chưa biết trước lúc đặt chỗ/tái kích hoạt) — LUÔN ghi đè (không chỉ khi trống) vì Tái Tuyển tạo
+    // Onboarding MỚI cho hồ sơ cũ, processId phải trỏ đúng quy trình đang thực hiện HIỆN TẠI, không giữ
+    // processId của đợt làm việc trước. Offboarding KHÔNG cần hook ở đây vì hồ sơ chắc chắn đã tồn tại từ
+    // Onboarding trước đó.
     if (moduleKey === 'hrProcesses' && record.processType === 'ONBOARDING') {
-      await withLockedAppDataValue('employeeProfiles', (list) =>
-        employeeProfile.ensureDraftProfile(list, record.employeeCode, record.id, freshUser.username));
+      await withLockedAppDataValue('employeeProfiles', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        const idx = arr.findIndex(p => p.employeeCode === record.employeeCode);
+        if (idx !== -1) arr[idx] = { ...arr[idx], processId: record.id };
+        return arr;
+      });
     }
 
     res.json({ ok: true, item: record });

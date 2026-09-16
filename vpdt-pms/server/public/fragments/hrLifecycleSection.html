@@ -37,10 +37,32 @@
             <button type="button" data-op="hideHrCreateForms" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
           </div>
           <p class="text-xs text-teal-800">Khai báo thông tin nhân viên mới — hệ thống tự sinh checklist các việc cần làm theo từng giai đoạn (Chuẩn bị trước ngày đi làm → Ngày đầu tiên → Tuần/Tháng đầu → Kết thúc thử việc).</p>
+
+          <!-- "Kiểm Tra Nhân Sự Cũ" (Tái Tuyển, 9/2026) — cùng API /api/hr-profile/search-inactive với
+               modal "Tạo Hồ Sơ Nhân Sự Mới" (module-hrprofile.js), viết riêng hàm ở module-hrlifecycle.js
+               vì 2 module thuộc 2 nhóm tải lười KHÁC nhau (hrprofile/hrlifecycle). Chọn 1 kết quả chỉ
+               ĐIỀN LẠI Mã Nhân Viên vào form (KHÔNG gọi API kích hoạt lại ngay) — hồ sơ cũ tự chuyển
+               ACTIVE khi quy trình Onboarding NÀY hoàn tất, giống hệt luồng nhân viên mới bình thường
+               (xem applyProcessCompletion() ở lib/employeeProfile.js) — không cần đường riêng ở đây. -->
+          <button type="button" data-op="toggleHrpOnbRehirePanel" class="w-full bg-sky-50 border border-sky-300 text-sky-800 rounded-lg py-2 text-xs font-bold hover:bg-sky-100">
+            🔍 Kiểm Tra Nhân Sự Cũ (nhân viên tái tuyển?)</button>
+          <div id="hrpOnbRehirePanel" class="hidden border border-sky-200 bg-sky-50 rounded-lg p-3 space-y-2">
+            <p class="text-[11px] text-sky-800">Nhập đúng 1 trong 2 để tra cứu hồ sơ nhân viên <b>đã nghỉ việc</b> trong hệ thống — chọn đúng người sẽ tự điền lại Mã Nhân Viên cũ (giữ nguyên lịch sử/hợp đồng) thay vì tạo hồ sơ trùng.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>
+                <input id="hrpOnbRehireNationalId" class="w-full border p-1.5 rounded text-xs"></div>
+              <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày sinh</label>
+                <input type="date" id="hrpOnbRehireDateOfBirth" class="w-full border p-1.5 rounded text-xs"></div>
+            </div>
+            <button type="button" data-op="searchHrpOnbInactiveForRehire" class="bg-sky-700 text-white text-[11px] font-bold px-3 py-1.5 rounded hover:bg-sky-800">Tìm kiếm</button>
+            <div id="hrpOnbRehireResultsWrap" class="hidden space-y-1.5 mt-1"></div>
+          </div>
+
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Mã Nhân Viên</label>
-              <input id="hrpOnbEmployeeCode" placeholder="VD: NV0012" class="w-full border p-1.5 rounded text-xs" required>
+              <input id="hrpOnbEmployeeCode" placeholder="Để trống để tự sinh (BL0001, BL0002...)" class="w-full border p-1.5 rounded text-xs">
+              <p class="text-[10px] text-gray-400 mt-0.5">Bình thường để trống — hệ thống tự sinh. Chỉ điền tay khi Tái Tuyển (giữ nguyên mã cũ, xem "🔍 Kiểm Tra Nhân Sự Cũ").</p>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>

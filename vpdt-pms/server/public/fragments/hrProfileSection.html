@@ -2,6 +2,9 @@
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" id="btnHrpfViewMe" data-op="setHrProfileView" data-arg0="ME" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🪪 Hồ Sơ Của Tôi</button>
       <button type="button" id="btnHrpfViewManage" data-op="setHrProfileView" data-arg0="MANAGE" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">📋 Quản Lý Hồ Sơ</button>
+      <!-- CẦN CẢ hrProfileManage LẪN hrContractManage/admin (khớp đúng GET /api/hr-profile/reports phía
+           server — vẫn lộ số liệu lương qua mục tăng lương, cùng mức chặt GET .../history). -->
+      <button type="button" id="btnHrpfViewReports" data-op="setHrProfileView" data-arg0="REPORTS" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">📊 Báo Cáo</button>
     </div>
 
     <!-- Hồ Sơ Của Tôi -->
@@ -23,17 +26,26 @@
       </div>
     </div>
 
-    <!-- Quản Lý Hồ Sơ (HR/admin) -->
+    <!-- Quản Lý Hồ Sơ (HR/admin, hoặc 1 trong 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa — 9/2026) -->
     <div id="hrpfViewManage" class="hidden space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <input id="hrpfManageSearch" data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Tìm theo Mã NV / Họ tên / Tài khoản..." class="border p-1.5 rounded text-xs w-72 bg-white">
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" data-op="openHrpfCreateModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">➕ Tạo Hồ Sơ Mới</button>
-          <button type="button" data-op="openHrpfImportModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">📤 Nhập Excel</button>
-          <a href="/api/hr-profile/export-xlsx" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700 inline-block">📊 Xuất Excel</a>
+          <button type="button" id="hrpfManageCreateBtn" data-op="openHrpfCreateModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">➕ Tạo Hồ Sơ Mới</button>
+          <button type="button" id="hrpfManageImportBtn" data-op="openHrpfImportModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">📤 Nhập Excel</button>
+          <a id="hrpfManageExportBtn" href="/api/hr-profile/export-xlsx" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-600 text-white hover:bg-gray-700 inline-block">📊 Xuất Excel</a>
+          <!-- CHỈ hrProfileManage/admin (khớp đúng quyền PUT /api/hr-profile/manager-field-config phía
+               server, xem toggle trong renderHrProfileModule()). -->
+          <button type="button" id="hrpfManageFieldConfigBtn" data-op="openHrpfManagerFieldConfigModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">⚙️ Trường Xem Của Quản Lý Trực Tiếp</button>
         </div>
       </div>
-      <div class="overflow-x-auto bg-white border rounded-lg">
+      <!-- Chỉ ai có hrProfileFullView/hrProfileEdit/hrProfileManage/admin mới xem được danh sách — người
+           CHỈ có hrProfileCreate (không có 3 quyền trên) không gọi GET / được (403), hiện thông báo này
+           thay vì bảng trống/alert lỗi mỗi lần vào tab. -->
+      <div id="hrpfManageNoListMsg" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded p-3">
+        ℹ️ Bạn chỉ có quyền <b>tạo mới</b> hồ sơ nhân sự — không xem được danh sách hồ sơ đã có. Dùng nút "➕ Tạo Hồ Sơ Mới" ở trên.
+      </div>
+      <div id="hrpfManageListWrap" class="overflow-x-auto bg-white border rounded-lg">
         <table class="w-full text-xs">
           <thead class="bg-gray-50 text-gray-600">
             <tr>
@@ -51,4 +63,25 @@
         <p id="hrpfManageEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có hồ sơ nào.</p>
       </div>
     </div>
-  
+
+    <!-- Báo Cáo Nhân Sự (9/2026, theo yêu cầu người dùng) — CẦN CẢ hrProfileManage LẪN hrContractManage -->
+    <div id="hrpfViewReports" class="hidden space-y-3">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày</label>
+          <input type="date" id="hrpfReportFrom" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày</label>
+          <input type="date" id="hrpfReportTo" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng HĐLĐ (lọc riêng danh sách hợp đồng)</label>
+          <select id="hrpfReportContractStatus" class="border p-1.5 rounded text-xs bg-white">
+            <option value="">— Tất cả —</option>
+            <option value="DRAFT">📝 Nháp</option>
+            <option value="ACTIVE">✅ Đang hiệu lực</option>
+            <option value="EXPIRED">⌛ Hết hạn</option>
+            <option value="TERMINATED">⛔ Đã chấm dứt</option>
+            <option value="SUPERSEDED">🔄 Đã thay thế</option>
+          </select>
+        </div>
+        <button type="button" data-op="loadHrpfReports" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem Báo Cáo</button>
+      </div>
+      <div id="hrpfReportBody" class="space-y-3"></div>
+    </div>
