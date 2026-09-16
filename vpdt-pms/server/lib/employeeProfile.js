@@ -42,26 +42,61 @@ function todayISO() {
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 
-// Trường nhạy cảm — chỉ chính chủ (username đã liên kết) / hrProfileManage / admin xem được MẶC ĐỊNH;
-// quản lý trực tiếp (view-only theo hrProfileView) KHÔNG được xem dù có quyền xem hồ sơ nói chung, TRỪ
-// KHI admin chủ động mở thêm qua "Quản Lý Hồ Sơ > Cấu hình trường xem của quản lý trực tiếp" (9/2026,
-// theo yêu cầu người dùng — xem hrManagerVisibleFields ở getProfileForViewer() dưới đây).
+// Trường nhạy cảm/cá nhân — chỉ chính chủ (username đã liên kết) / hrProfileManage / admin xem được
+// MẶC ĐỊNH; quản lý trực tiếp (view-only theo hrProfileView) KHÔNG được xem dù có quyền xem hồ sơ nói
+// chung, TRỪ KHI admin chủ động mở thêm qua "Quản Lý Hồ Sơ > Cấu hình trường xem của quản lý trực tiếp"
+// (9/2026, theo yêu cầu người dùng — xem hrManagerVisibleFields ở getProfileForViewer() dưới đây). Đợt
+// sau (cùng 9/2026, theo phản hồi người dùng — "liệt kê tất cả các trường... kể cả trường mặc định"):
+// mở rộng từ 9 lên ĐỦ 15 trường (thêm 6 trường TRƯỚC ĐÂY coi là "cơ bản, luôn hiện" — ngày sinh/giới
+// tính/email cá nhân/3 trường liên hệ khẩn cấp) VÀ áp dụng CƠ CHẾ NÀY CHO CẢ "Hồ Sơ Của Tôi" (chính chủ
+// tự xem hồ sơ mình — xem sanitizeSelfVisibleFields()/stripSelfHiddenFields() dưới đây), KHÔNG chỉ quản
+// lý trực tiếp xem hồ sơ người khác như trước. Field ĐỊNH DANH/HỆ THỐNG (employeeCode/status/positionKey/
+// jobTitle/dept/positionLabel/posType/positionHistory/username) KHÔNG nằm trong danh sách này — luôn hiện
+// (cần thiết để biết đang xem hồ sơ CỦA AI, không có ý nghĩa "ẩn/hiện tuỳ chọn").
 const SENSITIVE_FIELDS = [
+  'dateOfBirth', 'gender', 'personalEmail',
+  'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
   'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName',
   'socialInsuranceNo', 'taxCode', 'dependents', 'education'
 ];
-// Nhãn hiển thị tiếng Việt cho từng trường nhạy cảm — dùng cho màn cấu hình admin (checkbox chọn trường
-// nào mở cho quản lý trực tiếp) lẫn client hiển thị danh sách trường đang cấu hình.
+// Nhãn hiển thị tiếng Việt cho từng trường — dùng cho màn cấu hình admin (checkbox chọn trường nào mở
+// cho quản lý trực tiếp/chính chủ) lẫn client hiển thị danh sách trường đang cấu hình. Khớp ĐÚNG
+// PROFILE_FIELD_LABELS bên dưới cho 6 trường thêm mới (dùng chung 1 nhãn, không đặt tên khác nhau).
 const SENSITIVE_FIELD_LABELS = {
+  dateOfBirth: 'Ngày sinh', gender: 'Giới tính', personalEmail: 'Email cá nhân',
+  emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
+  emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
   bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn'
 };
 // Lọc input admin gửi lên chỉ giữ đúng các field NẰM TRONG SENSITIVE_FIELDS (chặn gửi field lạ/field
-// không nhạy cảm — không có ý nghĩa gì để "mở thêm" vì các field khác vốn đã luôn hiện sẵn).
+// định danh-hệ thống — không có ý nghĩa gì để "mở thêm" vì các field đó vốn đã luôn hiện sẵn).
 function sanitizeManagerVisibleFields(input) {
   const set = new Set(SENSITIVE_FIELDS);
   return Array.from(new Set((Array.isArray(input) ? input : []).filter(f => set.has(f))));
+}
+
+// sanitizeSelfVisibleFields(input) — cùng khuôn sanitizeManagerVisibleFields() ở trên nhưng dùng cho cấu
+// hình "Trường Xem Của Chính Mình" (9/2026, theo yêu cầu người dùng — áp dụng cho "Hồ Sơ Của Tôi", KHÁC
+// hẳn managerVisibleFields ở trên vốn áp dụng cho quản lý trực tiếp xem hồ sơ NGƯỜI KHÁC). Cùng subset
+// SENSITIVE_FIELDS VÀ CÙNG NGUYÊN TẮC MẶC ĐỊNH (theo phản hồi người dùng: "quyền được xem chỉ được xem
+// khi tôi chọn trường ở đây" — mặc định KHÔNG trường nào hiện cho tới khi admin chủ động tick chọn, y hệt
+// managerVisibleFields, KHÔNG còn "mặc định hiện hết" như thiết kế ban đầu) — caller (route) tự áp dụng
+// fallback `[]` này, hàm ở đây chỉ lọc input hợp lệ.
+function sanitizeSelfVisibleFields(input) {
+  const set = new Set(SENSITIVE_FIELDS);
+  return Array.from(new Set((Array.isArray(input) ? input : []).filter(f => set.has(f))));
+}
+
+// Lọc bỏ field nhạy cảm KHÔNG nằm trong selfVisibleFields khỏi hồ sơ trả về cho GET /api/hr-profile/me —
+// mirror đúng nhánh "quản lý trực tiếp xem giới hạn" ở getProfileForViewer() dưới đây nhưng áp dụng cho
+// CHÍNH CHỦ (không cần kiểm quan hệ quản lý/quyền gì thêm — /me luôn là hồ sơ của chính req.freshUser).
+function stripSelfHiddenFields(profile, selfVisibleFields) {
+  const visible = new Set(sanitizeSelfVisibleFields(selfVisibleFields));
+  const limited = Object.assign({}, profile);
+  for (const f of SENSITIVE_FIELDS) { if (!visible.has(f)) delete limited[f]; }
+  return limited;
 }
 
 // Mã Nhân Viên TỰ SINH (9/2026, theo yêu cầu người dùng) — tiền tố "BL" + số tăng tuần tự, 4 chữ số
@@ -635,7 +670,7 @@ function computeHrReportSummary(profiles, contracts, filters) {
 
 module.exports = {
   STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
-  sanitizeManagerVisibleFields,
+  sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,

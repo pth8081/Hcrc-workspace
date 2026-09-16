@@ -556,6 +556,14 @@ const DEFAULTS = {
   // hành vi cũ: ẩn HẾT). Chỉ hrProfileManage/admin cấu hình được, qua GET/PUT
   // /api/hr-profile/manager-field-config.
   hrProfileManagerVisibleFields: [],
+  // hrProfileSelfVisibleFields (9/2026, theo yêu cầu người dùng) — đối xứng hrProfileManagerVisibleFields
+  // ở trên nhưng áp dụng cho "Hồ Sơ Của Tôi" (nhân viên tự xem hồ sơ CHÍNH MÌNH thay vì quản lý trực tiếp
+  // xem hồ sơ người khác) — mảng field (subset lib/employeeProfile.js::SENSITIVE_FIELDS, nay đã mở rộng
+  // lên 15 trường) nhân viên được phép THẤY trên hồ sơ của chính họ. Mặc định [] — CÙNG NGUYÊN TẮC với
+  // hrProfileManagerVisibleFields ở trên (theo phản hồi người dùng: "quyền được xem chỉ được xem khi tôi
+  // chọn trường ở đây" — KHÔNG trường nào hiện cho tới khi admin chủ động chọn). Chỉ hrProfileManage/
+  // admin cấu hình được, qua GET/PUT /api/hr-profile/self-field-config.
+  hrProfileSelfVisibleFields: [],
 
   // Nhân Sự > Công & Phép (Phần E tài liệu thiết kế, Đợt 3/4) — xem lib/attendance.js đầu file giải
   // thích các điều chỉnh so với tài liệu gốc. 3 collection nhỏ dưới đây là AppData thường (không tăng

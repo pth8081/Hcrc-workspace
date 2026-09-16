@@ -12,12 +12,29 @@
 //            khoản — quyền thật là hrProfileManage (đã enforce server-side, ẩn nút ở client chỉ để gọn).
 let activeHrProfileView = 'ME';
 let _hrpfMyProfile = null; // cache hồ sơ /me đang xem (để applyProfileEdit tại chỗ khi lưu form)
+let _hrpfMySelfVisibleFields = []; // cache tín hiệu field nhạy cảm được phép hiển thị ở "Hồ Sơ Của Tôi"
+  // (GET/PATCH /api/hr-profile/me trả kèm, xem sanitizeSelfVisibleFields()/stripSelfHiddenFields() ở
+  // lib/employeeProfile.js) — mặc định [] (opt-in, 9/2026, xem renderHrpfProfileForm() canSee()).
 let _hrpfManageList = [];  // cache danh sách nhẹ (employeeCode/username/status/updatedAt) của GET /
 let _hrpfManageDetailCode = null; // employeeCode đang mở trong #hrpfDetailModal
 let _hrpfManageDetailReadOnly = false; // true = đang mở #hrpfDetailModal ở chế độ "👁️ Xem" (chỉ đọc,
   // KHÔNG phải 1 tầng quyền mới — cùng quyền hrProfileManage như "✏️ Sửa", chỉ khác cách hiển thị)
 
 const HRPF_GENDERS = ['Nam', 'Nữ', 'Khác'];
+// Mirror ĐÚNG SENSITIVE_FIELD_LABELS (lib/employeeProfile.js) — dùng để render động
+// renderHrpfProfileReadOnly() (xem "quản lý trực tiếp xem giới hạn" bên dưới) theo đúng field admin đã mở
+// qua managerVisibleFields (server trả kèm, xem GET /by-code|/by-username), KHÔNG hardcode cứng 8 field
+// như trước 9/2026 (lúc đó bỏ sót hẳn 7 field: nationalId/permanentAddress/currentAddress/bankAccountNo/
+// bankName/socialInsuranceNo/taxCode/dependents/education dù admin có mở managerVisibleFields cũng không
+// bao giờ hiện — xem lịch sử lỗi ở chú thích renderHrpfProfileReadOnly()).
+const HRPF_SENSITIVE_FIELD_LABELS = {
+  dateOfBirth: 'Ngày sinh', gender: 'Giới tính', personalEmail: 'Email cá nhân',
+  emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
+  emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
+  nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
+  taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn'
+};
 const HRPF_STATUS_BADGES = {
   DRAFT: '<span class="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold">🕓 Chuẩn bị (chưa hoàn tất Onboarding)</span>',
   ACTIVE: '<span class="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-bold">✅ Đang làm việc</span>',
@@ -180,7 +197,7 @@ async function viewHrpfSubordinateProfile() {
   if (!username) return alert('⛔ Vui lòng gõ và chọn đúng 1 nhân viên từ gợi ý.');
   try {
     const data = await hrProfileApiCall('GET', `/api/hr-profile/by-username/${encodeURIComponent(username)}`);
-    resultBox.innerHTML = renderHrpfProfileReadOnly(data.profile);
+    resultBox.innerHTML = renderHrpfProfileReadOnly(data.profile, data.managerVisibleFields || []);
     resultBox.classList.remove('hidden');
   } catch (err) {
     resultBox.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
@@ -189,13 +206,36 @@ async function viewHrpfSubordinateProfile() {
 }
 // Render CHỈ ĐỌC — dùng riêng cho "quản lý trực tiếp xem giới hạn" (KHÁC renderHrpfProfileForm() ở dưới,
 // vốn luôn có input/nút Lưu cho chính chủ hoặc HR/admin) — profile ở đây LUÔN là bản đã bị strip field
-// nhạy cảm (server trả về, xem getProfileForViewer()), không có 'nationalId'/'dependents'/'education'.
-function renderHrpfProfileReadOnly(profile) {
+// nhạy cảm (server trả về, xem getProfileForViewer()).
+// managerVisibleFields: mảng field admin đã mở qua "🛠️ Trường Xem Của Quản Lý Trực Tiếp" (server trả kèm
+// profile, xem GET /by-code|/by-username) — LỖI ĐÃ VÁ (9/2026): trước đây hàm này HARDCODE cứng chỉ 3
+// field nhạy cảm (dateOfBirth/gender/personalEmail), NGÓ LƠ HOÀN TOÀN cấu hình admin đã chọn cho 12 field
+// còn lại (nationalId/permanentAddress/currentAddress/bankAccountNo/bankName/socialInsuranceNo/taxCode/
+// dependents/education/emergencyContact...) — nghĩa là tính năng cấu hình trường xem CHƯA TỪNG có tác
+// dụng thật ở màn "quản lý trực tiếp xem giới hạn" dù server đã strip/trả đúng dữ liệu. Nay render ĐỘNG
+// theo đúng managerVisibleFields nhận từ server, dùng chung HRPF_SENSITIVE_FIELD_LABELS + 2 renderer dòng
+// CHỈ ĐỌC có sẵn (hrpfDependentRowReadOnlyHtml/hrpfEducationRowReadOnlyHtml) cho 2 field dạng mảng.
+function renderHrpfProfileReadOnly(profile, managerVisibleFields) {
   const idn = hrpfIdentitySnapshot(profile);
+  const visible = new Set(managerVisibleFields || []);
   const roField = (label, val) => `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>
     <p class="text-sm text-gray-800">${escapeHtml(val || '—')}</p></div>`;
+  const SIMPLE_FIELDS = ['dateOfBirth', 'gender', 'personalEmail', 'emergencyContactName', 'emergencyContactPhone',
+    'emergencyContactRelationship', 'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo',
+    'bankName', 'socialInsuranceNo', 'taxCode'];
+  const simpleFieldsHtml = SIMPLE_FIELDS.filter(f => visible.has(f))
+    .map(f => roField(HRPF_SENSITIVE_FIELD_LABELS[f], profile[f])).join('');
+  const dependentsHtml = !visible.has('dependents') ? '' : `<div class="mt-3 pt-3 border-t">
+    <label class="block text-[11px] font-semibold text-gray-500 mb-1">👨‍👩‍👧 Người phụ thuộc</label>
+    <div class="space-y-1">${(profile.dependents || []).length ? (profile.dependents || []).map(hrpfDependentRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>'}</div>
+  </div>`;
+  const educationHtml = !visible.has('education') ? '' : `<div class="mt-3 pt-3 border-t">
+    <label class="block text-[11px] font-semibold text-gray-500 mb-1">🎓 Học vấn</label>
+    <div class="space-y-1">${(profile.education || []).length ? (profile.education || []).map(hrpfEducationRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>'}</div>
+  </div>`;
   return `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
-      ℹ️ Xem với tư cách "quản lý trực tiếp" — chỉ hiển thị thông tin cơ bản.</p>
+      ℹ️ Xem với tư cách "quản lý trực tiếp" — chỉ hiển thị thông tin cơ bản + trường HR/Admin đã cấu hình
+      mở ở "🛠️ Trường Xem Của Quản Lý Trực Tiếp".</p>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
       ${roField('Mã Nhân Viên', profile.employeeCode)}
       ${roField('Họ và Tên', idn.fullName)}
@@ -204,10 +244,8 @@ function renderHrpfProfileReadOnly(profile) {
       ${roField('Số điện thoại', idn.phone)}
       <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Trạng Thái</label>
         <p>${HRPF_STATUS_BADGES[profile.status] || profile.status}</p></div>
-      ${roField('Ngày sinh', profile.dateOfBirth)}
-      ${roField('Giới tính', profile.gender)}
-      ${roField('Email cá nhân', profile.personalEmail)}
-    </div>`;
+      ${simpleFieldsHtml}
+    </div>${dependentsHtml}${educationHtml}`;
 }
 
 function setHrProfileView(view) {
@@ -226,6 +264,7 @@ function setHrProfileView(view) {
   document.getElementById('hrpfManageImportBtn').classList.toggle('hidden', !hrpfCanCreate());
   document.getElementById('hrpfManageExportBtn').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageFieldConfigBtn').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage));
+  document.getElementById('hrpfSelfFieldConfigBtn').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage));
   document.getElementById('hrpfManageListWrap').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageSearch').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageNoListMsg').classList.toggle('hidden', hrpfCanFullView());
@@ -241,7 +280,8 @@ async function loadHrpfMyProfile() {
   try {
     const data = await hrProfileApiCall('GET', '/api/hr-profile/me');
     _hrpfMyProfile = data.profile;
-    container.innerHTML = renderHrpfProfileForm(_hrpfMyProfile, { scope: 'ME' });
+    _hrpfMySelfVisibleFields = data.selfVisibleFields || [];
+    container.innerHTML = renderHrpfProfileForm(_hrpfMyProfile, { scope: 'ME', selfVisibleFields: _hrpfMySelfVisibleFields });
     container.classList.remove('hidden');
   } catch (err) {
     notFoundBox.textContent = '⛔ ' + err.message;
@@ -254,8 +294,9 @@ async function saveHrpfMyProfile() {
   try {
     const data = await hrProfileApiCall('PATCH', '/api/hr-profile/me', payload);
     _hrpfMyProfile = data.profile;
+    _hrpfMySelfVisibleFields = data.selfVisibleFields || [];
     alert('✅ Đã lưu Hồ Sơ Nhân Sự của bạn.');
-    document.getElementById('hrpfMeContainer').innerHTML = renderHrpfProfileForm(_hrpfMyProfile, { scope: 'ME' });
+    document.getElementById('hrpfMeContainer').innerHTML = renderHrpfProfileForm(_hrpfMyProfile, { scope: 'ME', selfVisibleFields: _hrpfMySelfVisibleFields });
   } catch (err) {
     alert('⛔ ' + err.message);
   }
@@ -528,6 +569,41 @@ async function saveHrpfFieldConfig() {
   }
 }
 
+// ===================== Cấu hình trường xem của chính mình — "Hồ Sơ Của Tôi" (9/2026) =====================
+// Mirror ĐÚNG trio openHrpfManagerFieldConfigModal/closeHrpfFieldConfigModal/saveHrpfFieldConfig ở trên,
+// trỏ sang route /self-field-config riêng (xem routes/employeeProfile.js) — theo yêu cầu người dùng: chính
+// chủ tự xem hồ sơ mình CŨNG bị giới hạn opt-in y hệt "quản lý trực tiếp", CHỈ HR/admin (hrProfileManage)
+// mới cấu hình được (nút/modal này KHÔNG dành cho người dùng thường tự mở rộng quyền xem của chính họ).
+async function openHrpfSelfFieldConfigModal() {
+  const listEl = document.getElementById('hrpfSelfFieldConfigList');
+  listEl.innerHTML = '<p class="text-xs text-gray-400">Đang tải...</p>';
+  document.getElementById('hrpfSelfFieldConfigModal').classList.remove('hidden');
+  try {
+    const data = await hrProfileApiCall('GET', '/api/hr-profile/self-field-config');
+    const visible = new Set(data.visibleFields || []);
+    listEl.innerHTML = (data.availableFields || []).map(f => `
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" class="hrpf-self-field-config-cb" value="${escapeHtml(f.field)}" ${visible.has(f.field) ? 'checked' : ''}>
+        ${escapeHtml(f.label)}
+      </label>`).join('');
+  } catch (err) {
+    listEl.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+  }
+}
+function closeHrpfSelfFieldConfigModal() {
+  document.getElementById('hrpfSelfFieldConfigModal').classList.add('hidden');
+}
+async function saveHrpfSelfFieldConfig() {
+  const visibleFields = Array.from(document.querySelectorAll('.hrpf-self-field-config-cb:checked')).map(cb => cb.value);
+  try {
+    await hrProfileApiCall('PUT', '/api/hr-profile/self-field-config', { visibleFields });
+    alert('✅ Đã lưu cấu hình trường xem của "Hồ Sơ Của Tôi".');
+    closeHrpfSelfFieldConfigModal();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
 // ===================== Báo Cáo Nhân Sự (9/2026) =====================
 // Nhãn trạng thái HĐLĐ — KHÔNG dùng thẳng HRC_STATUS_LABELS (module-hopdonglaodong.js): 2 module thuộc 2
 // group nạp lười RIÊNG BIỆT (xem MODULE_LOAD_GROUPS ở core.js, "hrprofile" không phụ thuộc
@@ -651,7 +727,7 @@ async function confirmHrpfImport() {
 // scope 'ME': chính chủ tự sửa — chỉ SELF_EDITABLE_FIELDS (xem lib/employeeProfile.js), không đổi được
 // nationalId/socialInsuranceNo/taxCode/status/username.
 // scope 'MANAGE': HR/admin — sửa thêm được HR_ONLY_EDITABLE_FIELDS + đổi trạng thái tay + liên kết TK.
-function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
+function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } = {}) {
   const idn = hrpfIdentitySnapshot(profile);
   // readOnly: chế độ "👁️ Xem" ở "Quản Lý Hồ Sơ" (KHÁC hẳn scope — scope vẫn là 'MANAGE', chỉ đổi cách
   // hiển thị: mọi input/select/date-picker đổi thành chữ tĩnh, ẩn hết các nút mutate (đổi trạng thái/
@@ -659,6 +735,17 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
   // vẫn cùng quyền hrProfileManage như "✏️ Sửa" (server route GET/PATCH không phân biệt 2 chế độ này).
   const isReadOnly = !!readOnly;
   const editableHrOnly = scope === 'MANAGE' && !isReadOnly;
+  // scope MANAGE (HR/admin xem/sửa đầy đủ qua "Quản Lý Hồ Sơ") LUÔN thấy toàn bộ 15 field nhạy cảm —
+  // cấu hình "Trường Xem Của Tôi" (hrProfileSelfVisibleFields) KHÔNG áp dụng cho vai trò này, chỉ áp dụng
+  // cho scope ME (chính chủ tự xem, xem GET/PATCH /api/hr-profile/me trả về `selfVisibleFields` cùng
+  // profile ĐÃ strip sẵn — client chỉ cần biết field nào ĐƯỢC PHÉP hiển thị để không hiện input/label rỗng
+  // cho field còn lại, KHÔNG dùng `'field' in profile` để suy đoán như trước 9/2026 — xem lỗi đã vá ở
+  // dependentsBlock/educationBlock bên dưới, đúng lỗi tương tự nhưng nay áp dụng cho MỌI field nhạy cảm).
+  // Mặc định [] (chưa cấu hình gì) — CHƯA field nào hiển thị, kể cả field "vốn luôn thấy" trước đây
+  // (CCCD/BHXH/MST/ngân hàng...) theo đúng yêu cầu người dùng: "quyền được xem chỉ được xem khi tôi chọn
+  // trường ở đây".
+  const selfVisible = new Set(selfVisibleFields || []);
+  const canSee = (field) => scope !== 'ME' || selfVisible.has(field);
   const roField = (label, val) => `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>
     <p class="text-sm text-gray-800">${escapeHtml(val || '—')}</p></div>`;
   const dateInput = (id, val) => `<input type="date" id="${id}" value="${escapeHtml((val || '').slice(0, 10))}" class="w-full border p-1.5 rounded text-sm">`;
@@ -713,42 +800,36 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
   </div>`;
 
   const personalBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-    ${dateField('Ngày sinh', 'hrpfF_dateOfBirth', profile.dateOfBirth)}
-    ${isReadOnly ? roField('Giới tính', profile.gender) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Giới tính</label>
+    ${canSee('dateOfBirth') ? dateField('Ngày sinh', 'hrpfF_dateOfBirth', profile.dateOfBirth) : ''}
+    ${canSee('gender') ? (isReadOnly ? roField('Giới tính', profile.gender) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Giới tính</label>
       <select id="hrpfF_gender" class="w-full border p-1.5 rounded text-sm bg-white">
         <option value="">-- Chọn --</option>
         ${HRPF_GENDERS.map(g => `<option value="${g}" ${profile.gender === g ? 'selected' : ''}>${g}</option>`).join('')}
-      </select></div>`}
-    <div></div>
-    ${textField('Địa chỉ thường trú', 'hrpfF_permanentAddress', profile.permanentAddress)}
-    ${textField('Địa chỉ hiện tại', 'hrpfF_currentAddress', profile.currentAddress)}
-    ${textField('Email cá nhân', 'hrpfF_personalEmail', profile.personalEmail)}
-  </div>
-  <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-    ${textField('Người liên hệ khẩn cấp', 'hrpfF_emergencyContactName', profile.emergencyContactName)}
-    ${textField('SĐT liên hệ khẩn cấp', 'hrpfF_emergencyContactPhone', profile.emergencyContactPhone)}
-    ${textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship)}
-    ${textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo)}
-    ${textField('Ngân hàng', 'hrpfF_bankName', profile.bankName)}
+      </select></div>`) : ''}
+    ${canSee('permanentAddress') ? textField('Địa chỉ thường trú', 'hrpfF_permanentAddress', profile.permanentAddress) : ''}
+    ${canSee('currentAddress') ? textField('Địa chỉ hiện tại', 'hrpfF_currentAddress', profile.currentAddress) : ''}
+    ${canSee('personalEmail') ? textField('Email cá nhân', 'hrpfF_personalEmail', profile.personalEmail) : ''}
+    ${canSee('emergencyContactName') ? textField('Người liên hệ khẩn cấp', 'hrpfF_emergencyContactName', profile.emergencyContactName) : ''}
+    ${canSee('emergencyContactPhone') ? textField('SĐT liên hệ khẩn cấp', 'hrpfF_emergencyContactPhone', profile.emergencyContactPhone) : ''}
+    ${canSee('emergencyContactRelationship') ? textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship) : ''}
+    ${canSee('bankAccountNo') ? textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo) : ''}
+    ${canSee('bankName') ? textField('Ngân hàng', 'hrpfF_bankName', profile.bankName) : ''}
   </div>`;
 
-  const hrOnlyBlock = !('nationalId' in profile) ? '' : `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t">
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>${editableHrOnly ? textInput('hrpfF_nationalId', profile.nationalId) : roField('', profile.nationalId)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số Sổ BHXH</label>${editableHrOnly ? textInput('hrpfF_socialInsuranceNo', profile.socialInsuranceNo) : roField('', profile.socialInsuranceNo)}</div>
-    <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>
-  </div>`;
+  const hrOnlyFieldsHtml = [
+    canSee('nationalId') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>${editableHrOnly ? textInput('hrpfF_nationalId', profile.nationalId) : roField('', profile.nationalId)}</div>` : '',
+    canSee('socialInsuranceNo') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số Sổ BHXH</label>${editableHrOnly ? textInput('hrpfF_socialInsuranceNo', profile.socialInsuranceNo) : roField('', profile.socialInsuranceNo)}</div>` : '',
+    canSee('taxCode') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>` : ''
+  ].filter(Boolean).join('');
+  const hrOnlyBlock = !hrOnlyFieldsHtml ? '' : `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t">${hrOnlyFieldsHtml}</div>`;
 
-  // LỖI ĐÃ VÁ (9/2026): trước đây 2 khối dưới dùng ĐÚNG `!('dependents' in profile)`/`!('education' in
-  // profile)` làm điều kiện hiện/ẩn — coi việc THIẾU HẲN key này là "không có quyền xem" (dùng để giấu
-  // đúng 2 field này khỏi "quản lý trực tiếp" xem hồ sơ giới hạn, xem getProfileForViewer()/SENSITIVE_FIELDS
-  // ở lib/employeeProfile.js). Nhưng đây KHÔNG phải tín hiệu đáng tin: hồ sơ TẠO TRƯỚC KHI tính năng
-  // Người phụ thuộc/Học vấn ra đời (hoặc nhập Excel hàng loạt cũ hơn) cũng thiếu hẳn 2 key này dù người
-  // xem CÓ ĐỦ quyền (kể cả admin) — khiến CẢ KHỐI (gồm nút "+ Thêm dòng") biến mất vĩnh viễn, không ai
-  // thêm được nữa. Đổi sang dùng CHUNG đúng 1 tín hiệu phân biệt "hồ sơ đầy đủ / hồ sơ giới hạn" đã có sẵn
-  // ở nơi khác trong file này (hrOnlyBlock/limitedNote ngay trên — `'nationalId' in profile`, field LUÔN
-  // bị xoá/giữ ĐỒNG THỜI với dependents/education ở SENSITIVE_FIELDS nên tin cậy y hệt), còn nội dung
-  // mảng vẫn fallback `|| []` như cũ (đã đúng từ trước, không đổi).
-  const dependentsBlock = !('nationalId' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
+  // scope MANAGE: LUÔN hiện (HR/admin xem/sửa đầy đủ, không phụ thuộc cấu hình trường xem). scope ME:
+  // chỉ hiện khi admin đã mở field 'dependents'/'education' ở "🛠️ Trường Xem Của Tôi" — dùng ĐÚNG tín
+  // hiệu canSee() tường minh nhận từ server (selfVisibleFields), KHÔNG suy đoán qua key có/thiếu trong
+  // object profile nữa (lỗi ĐÃ VÁ trước đây ở đây khi còn dùng `'nationalId' in profile`/`'dependents' in
+  // profile` làm tín hiệu — hồ sơ cũ tạo trước khi 2 field này ra đời thiếu key này một cách TỰ NHIÊN,
+  // không liên quan gì tới quyền xem, khiến khối "+ Thêm dòng" biến mất nhầm cho người CÓ đủ quyền).
+  const dependentsBlock = !canSee('dependents') ? '' : `<div class="mt-3 pt-3 border-t">
     <div class="flex items-center justify-between mb-1">
       <label class="block text-[11px] font-semibold text-gray-500">👨‍👩‍👧 Người phụ thuộc</label>
       ${isReadOnly ? '' : '<button type="button" data-op="addHrpfDependentRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
@@ -758,7 +839,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
       : (profile.dependents || []).map(hrpfDependentRowHtml).join('')}</div>
   </div>`;
 
-  const educationBlock = !('nationalId' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
+  const educationBlock = !canSee('education') ? '' : `<div class="mt-3 pt-3 border-t">
     <div class="flex items-center justify-between mb-1">
       <label class="block text-[11px] font-semibold text-gray-500">🎓 Học vấn</label>
       ${isReadOnly ? '' : '<button type="button" data-op="addHrpfEducationRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
@@ -772,10 +853,14 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
     ? `<button type="button" data-op="saveHrpfMyProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`
     : `<button type="button" data-op="saveHrpfManageProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`);
 
-  const limitedNote = ('nationalId' in profile) ? '' : `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
-    ℹ️ Bạn đang xem hồ sơ này với tư cách "quản lý trực tiếp" — chỉ hiển thị thông tin cơ bản, không hiển thị CCCD/ngân hàng/BHXH/người phụ thuộc/học vấn.</p>`;
+  // 9/2026: cấu hình "🛠️ Trường Xem Của Tôi" (hrProfileSelfVisibleFields) — mặc định CHƯA field nhạy cảm
+  // nào hiển thị (opt-in, cùng nguyên tắc quản lý trực tiếp) — chỉ hiện ghi chú này ở scope ME.
+  const selfHiddenNote = scope !== 'ME' ? '' : `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+    ℹ️ Các trường thông tin cá nhân/nhạy cảm (ngày sinh, giới tính, địa chỉ, liên hệ khẩn cấp, CCCD, ngân
+    hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
+    "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${limitedNote}${identityBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${historyBlock}`;
 }
 
@@ -838,18 +923,23 @@ function removeHrpfRow(kind, btnEl) {
 // HR_ONLY_EDITABLE_FIELDS ở lib/employeeProfile.js, nên gửi dư field HR-only khi scope=ME vô hại).
 function collectHrpfProfileFormValues(scope) {
   const val = (id) => document.getElementById(id)?.value ?? undefined;
-  const payload = {
-    dateOfBirth: val('hrpfF_dateOfBirth') || null,
-    gender: val('hrpfF_gender') || null,
-    permanentAddress: val('hrpfF_permanentAddress') || null,
-    currentAddress: val('hrpfF_currentAddress') || null,
-    personalEmail: val('hrpfF_personalEmail') || null,
-    emergencyContactName: val('hrpfF_emergencyContactName') || null,
-    emergencyContactPhone: val('hrpfF_emergencyContactPhone') || null,
-    emergencyContactRelationship: val('hrpfF_emergencyContactRelationship') || null,
-    bankAccountNo: val('hrpfF_bankAccountNo') || null,
-    bankName: val('hrpfF_bankName') || null
-  };
+  // 9/2026: MỖI field dưới đây giờ có thể bị ẨN KHỎI DOM (scope ME, field chưa được mở ở "🛠️ Trường Xem
+  // Của Tôi", xem renderHrpfProfileForm()/canSee()) — PHẢI bọc `document.getElementById(id)` trước khi gán
+  // vào payload, nếu không applyProfileEdit() (lib/employeeProfile.js, xét `field in body` chứ không xét
+  // giá trị) sẽ hiểu nhầm là "người dùng chủ động xoá trắng" và GHI ĐÈ mất giá trị đã lưu trước đó ngay cả
+  // khi field chỉ đang bị ẩn tạm thời, không phải bị xoá — cùng lỗi/cách vá đã áp dụng cho nationalId/
+  // socialInsuranceNo/taxCode bên dưới từ trước.
+  const payload = {};
+  if (document.getElementById('hrpfF_dateOfBirth')) payload.dateOfBirth = val('hrpfF_dateOfBirth') || null;
+  if (document.getElementById('hrpfF_gender')) payload.gender = val('hrpfF_gender') || null;
+  if (document.getElementById('hrpfF_permanentAddress')) payload.permanentAddress = val('hrpfF_permanentAddress') || null;
+  if (document.getElementById('hrpfF_currentAddress')) payload.currentAddress = val('hrpfF_currentAddress') || null;
+  if (document.getElementById('hrpfF_personalEmail')) payload.personalEmail = val('hrpfF_personalEmail') || null;
+  if (document.getElementById('hrpfF_emergencyContactName')) payload.emergencyContactName = val('hrpfF_emergencyContactName') || null;
+  if (document.getElementById('hrpfF_emergencyContactPhone')) payload.emergencyContactPhone = val('hrpfF_emergencyContactPhone') || null;
+  if (document.getElementById('hrpfF_emergencyContactRelationship')) payload.emergencyContactRelationship = val('hrpfF_emergencyContactRelationship') || null;
+  if (document.getElementById('hrpfF_bankAccountNo')) payload.bankAccountNo = val('hrpfF_bankAccountNo') || null;
+  if (document.getElementById('hrpfF_bankName')) payload.bankName = val('hrpfF_bankName') || null;
   if (document.getElementById('hrpfDependentsRows')) {
     payload.dependents = Array.from(document.querySelectorAll('.hrpf-dependent-row')).map(row => ({
       id: row.dataset.id || undefined,

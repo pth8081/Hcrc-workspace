@@ -34,6 +34,10 @@
           <!-- CHỈ hrProfileManage/admin (khớp đúng quyền PUT /api/hr-profile/manager-field-config phía
                server, xem toggle trong renderHrProfileModule()). -->
           <button type="button" id="hrpfManageFieldConfigBtn" data-op="openHrpfManagerFieldConfigModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">⚙️ Trường Xem Của Quản Lý Trực Tiếp</button>
+          <!-- Đối xứng nút trên (9/2026, theo yêu cầu người dùng) — cấu hình field nhạy cảm nào chính chủ
+               tự xem được ở "Hồ Sơ Của Tôi" (GET/PUT /api/hr-profile/self-field-config), CÙNG nguyên tắc
+               opt-in mặc định KHÔNG field nào. -->
+          <button type="button" id="hrpfSelfFieldConfigBtn" data-op="openHrpfSelfFieldConfigModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">⚙️ Trường Xem Của Tôi</button>
         </div>
       </div>
       <!-- Chỉ ai có hrProfileFullView/hrProfileEdit/hrProfileManage/admin mới xem được danh sách — người

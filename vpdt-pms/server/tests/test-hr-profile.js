@@ -155,22 +155,73 @@ async function main() {
       assertEqual(res.status, 404, 'Chưa liên kết hồ sơ -> 404');
     });
 
-    await run.run('GET /me — chính chủ xem ĐỦ (kể cả field nhạy cảm) khi đã liên kết', async () => {
+    await run.run('GET /me — mặc định OPT-IN, KHÔNG field nhạy cảm nào hiện tới khi HR/admin cấu hình mở (9/2026)', async () => {
       resetAppData();
-      seedLinkedProfile({ nationalId: '079123456789' });
+      seedLinkedProfile({ nationalId: '079123456789', dateOfBirth: '1990-01-01' });
       const res = await api('GET', '/api/hr-profile/me', undefined, EMP1);
       assertEqual(res.status, 200, 'Đã liên kết -> 200');
-      assertEqual(res.body.profile.nationalId, '079123456789', 'Chính chủ phải xem được field nhạy cảm');
+      assertEqual('nationalId' in res.body.profile, false, 'Mặc định KHÔNG cấu hình gì -> chính chủ KHÔNG thấy nationalId (opt-in, kể cả field vốn "luôn thấy" trước đây)');
+      assertEqual('dateOfBirth' in res.body.profile, false, 'Mặc định KHÔNG cấu hình gì -> chính chủ KHÔNG thấy dateOfBirth');
+      assertEqual(res.body.selfVisibleFields.length, 0, 'Tín hiệu selfVisibleFields trả kèm phải rỗng khi chưa cấu hình');
+      assertEqual(res.body.profile.employeeCode, 'NV001', 'Field định danh/hệ thống (không nằm trong SENSITIVE_FIELDS) vẫn LUÔN hiện, không bị opt-in chi phối');
+
+      // Sau khi HR/admin mở field 'dateOfBirth' qua PUT /self-field-config: chính chủ THẤY dateOfBirth
+      // nhưng VẪN KHÔNG thấy nationalId (chỉ field được tick mới mở, không mở tất cả).
+      await api('PUT', '/api/hr-profile/self-field-config', { visibleFields: ['dateOfBirth'] }, HR_MGR);
+      const afterCfg = await api('GET', '/api/hr-profile/me', undefined, EMP1);
+      assertEqual(afterCfg.body.profile.dateOfBirth, '1990-01-01', 'Sau khi cấu hình mở: chính chủ phải thấy dateOfBirth');
+      assertEqual('nationalId' in afterCfg.body.profile, false, 'Sau khi cấu hình: VẪN không thấy nationalId (chưa mở field này)');
+      assertEqual(afterCfg.body.selfVisibleFields[0], 'dateOfBirth', 'Tín hiệu selfVisibleFields phải khớp đúng cấu hình vừa lưu');
     });
 
-    await run.run('PATCH /me — chính chủ sửa SELF_EDITABLE_FIELDS, field HR-only bị bỏ qua', async () => {
+    await run.run('PATCH /me — field ĐANG BỊ ẨN (chưa mở qua selfVisibleFields) KHÔNG tự sửa được, đối xứng đúng phần không xem được ở GET /me (9/2026)', async () => {
       resetAppData();
-      seedLinkedProfile({ nationalId: '079123456789' });
-      const res = await api('PATCH', '/api/hr-profile/me',
+      seedLinkedProfile({ nationalId: '079123456789', permanentAddress: 'Địa chỉ cũ' });
+      // Chưa cấu hình gì -> permanentAddress (dù nằm trong SELF_EDITABLE_FIELDS) đang bị ẩn -> gửi lên vẫn
+      // bị bỏ qua ÂM THẦM, giữ nguyên giá trị cũ (phòng request tự soạn/DevTools sửa tay field đã ẩn khỏi UI).
+      const blocked = await api('PATCH', '/api/hr-profile/me',
         { permanentAddress: '123 Đường ABC', nationalId: '000000000000' }, EMP1);
-      assertEqual(res.status, 200, 'Chính chủ sửa hồ sơ mình phải thành công');
-      assertEqual(res.body.profile.permanentAddress, '123 Đường ABC', 'Địa chỉ phải được cập nhật');
-      assertEqual(res.body.profile.nationalId, '079123456789', 'nationalId (HR-only) KHÔNG được đổi qua PATCH /me');
+      assertEqual(blocked.status, 200, 'Chính chủ PATCH hồ sơ mình vẫn trả 200 dù field bị bỏ qua (không lỗi)');
+      const hrCheckBefore = await api('GET', '/api/hr-profile/by-code/NV001', undefined, HR_MGR);
+      assertEqual(hrCheckBefore.body.profile.permanentAddress, 'Địa chỉ cũ', 'permanentAddress chưa được mở cho chính chủ -> KHÔNG được sửa qua PATCH /me, giữ nguyên giá trị cũ');
+      assertEqual(hrCheckBefore.body.profile.nationalId, '079123456789', 'nationalId (HR-only) KHÔNG được đổi qua PATCH /me');
+
+      // Sau khi HR/admin mở field 'permanentAddress' cho chính chủ: PATCH /me giờ mới sửa được field này.
+      await api('PUT', '/api/hr-profile/self-field-config', { visibleFields: ['permanentAddress'] }, HR_MGR);
+      const allowed = await api('PATCH', '/api/hr-profile/me', { permanentAddress: '123 Đường ABC' }, EMP1);
+      assertEqual(allowed.status, 200, 'Sau khi mở field: PATCH /me phải thành công');
+      assertEqual(allowed.body.profile.permanentAddress, '123 Đường ABC', 'Field đã mở -> phải sửa được VÀ thấy lại đúng giá trị mới trong response');
+      const hrCheckAfter = await api('GET', '/api/hr-profile/by-code/NV001', undefined, HR_MGR);
+      assertEqual(hrCheckAfter.body.profile.permanentAddress, '123 Đường ABC', 'Giá trị mới phải được lưu thật xuống hồ sơ');
+    });
+
+    await run.run('GET/PUT /self-field-config — cấu hình trường nhạy cảm chính chủ tự xem được ở "Hồ Sơ Của Tôi" (9/2026)', async () => {
+      resetAppData();
+      seedLinkedProfile({ nationalId: '079123456789', dependents: [{ id: 'd1', fullName: 'Con A', relationship: 'Con' }] });
+
+      const deniedGet = await api('GET', '/api/hr-profile/self-field-config', undefined, EMP1);
+      assertEqual(deniedGet.status, 403, 'Nhân viên thường (chính chủ) KHÔNG được tự xem/sửa cấu hình này');
+      const deniedPut = await api('PUT', '/api/hr-profile/self-field-config', { visibleFields: ['dependents'] }, DIRECT_MGR);
+      assertEqual(deniedPut.status, 403, 'Quản lý trực tiếp (chỉ hrProfileView) không được sửa cấu hình');
+
+      const defaultGet = await api('GET', '/api/hr-profile/self-field-config', undefined, HR_MGR);
+      assertEqual(defaultGet.status, 200, 'HR phải xem được cấu hình');
+      assertEqual(defaultGet.body.visibleFields.length, 0, 'Mặc định chưa cấu hình gì -> rỗng (opt-in)');
+      assertEqual(defaultGet.body.availableFields.length, 15, 'Phải liệt kê đủ 15 field nhạy cảm khả dụng (đã mở rộng 9/2026, kể cả field vốn "luôn thấy" trước đây)');
+
+      const putRes = await api('PUT', '/api/hr-profile/self-field-config',
+        { visibleFields: ['dependents', 'khong-hop-le-loai-bo'] }, HR_MGR);
+      assertEqual(putRes.status, 200, 'HR lưu cấu hình phải thành công');
+      assertEqual(putRes.body.visibleFields.length, 1, 'Field không hợp lệ phải bị lọc bỏ, chỉ giữ dependents');
+
+      const afterCfg = await api('GET', '/api/hr-profile/me', undefined, EMP1);
+      assertEqual('dependents' in afterCfg.body.profile, true, 'Sau khi cấu hình: chính chủ phải thấy dependents (đã mở)');
+      assertEqual('nationalId' in afterCfg.body.profile, false, 'Sau khi cấu hình: VẪN không thấy nationalId (chưa mở field này)');
+
+      // Cấu hình self-field-config KHÔNG được lẫn sang managerVisibleFields (2 cấu hình độc lập) — quản lý
+      // trực tiếp vẫn KHÔNG thấy dependents dù self-field-config đã mở field này cho CHÍNH CHỦ.
+      const mgrView = await api('GET', '/api/hr-profile/by-code/NV001', undefined, DIRECT_MGR);
+      assertEqual('dependents' in mgrView.body.profile, false, 'self-field-config KHÔNG được ảnh hưởng tới quyền xem của quản lý trực tiếp (2 cấu hình tách biệt)');
     });
 
     await run.run('GET / — chỉ hrProfileManage/admin, chặn quản lý trực tiếp/nhân viên thường', async () => {
@@ -454,7 +505,7 @@ async function main() {
       const defaultGet = await api('GET', '/api/hr-profile/manager-field-config', undefined, HR_MGR);
       assertEqual(defaultGet.status, 200, 'HR phải xem được cấu hình');
       assertEqual(defaultGet.body.visibleFields.length, 0, 'Mặc định chưa cấu hình gì -> rỗng (giữ nguyên hành vi cũ: ẩn hết)');
-      assertEqual(defaultGet.body.availableFields.length, 9, 'Phải liệt kê đủ 9 field nhạy cảm khả dụng');
+      assertEqual(defaultGet.body.availableFields.length, 15, 'Phải liệt kê đủ 15 field nhạy cảm khả dụng (đã mở rộng 9/2026)');
 
       // Trước khi cấu hình: quản lý trực tiếp KHÔNG thấy nationalId/dependents.
       const beforeCfg = await api('GET', '/api/hr-profile/by-code/NV001', undefined, DIRECT_MGR);

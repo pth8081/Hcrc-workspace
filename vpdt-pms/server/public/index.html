@@ -1745,6 +1745,22 @@
     </div>
   </div>
 
+  <!-- Đối xứng modal trên (9/2026) — cấu hình trường xem của CHÍNH CHỦ ở "Hồ Sơ Của Tôi". -->
+  <div id="hrpfSelfFieldConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">⚙️ Trường Xem Của Tôi</h3>
+        <button type="button" data-op="closeHrpfSelfFieldConfigModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-3">Mặc định, nhân viên tự xem hồ sơ mình ở "Hồ Sơ Của Tôi" KHÔNG thấy các trường nhạy cảm dưới đây. Tick chọn trường nào muốn MỞ THÊM cho họ tự xem.</p>
+      <div id="hrpfSelfFieldConfigList" class="space-y-1.5 max-h-72 overflow-y-auto"></div>
+      <div class="flex justify-end gap-2 mt-3 pt-2 border-t">
+        <button type="button" data-op="closeHrpfSelfFieldConfigModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Huỷ</button>
+        <button type="button" data-op="saveHrpfSelfFieldConfig" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Thêm/Sửa node cây tổ chức — dùng chung cho cả 2 loại (Phòng Ban/Vị Trí), field hiện/ẩn theo
        nodeType đang chọn (chỉ chọn được khi THÊM mới — sửa giữ nguyên loại node). Xem
        openOrgChartAddNodeModal()/openOrgChartEditNodeModal() (module-orgchart.js). -->

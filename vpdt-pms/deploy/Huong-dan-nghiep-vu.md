@@ -1271,12 +1271,19 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
 - HR/admin (**"🗂️ Quản Lý Hồ Sơ Nhân Sự"**) **liên kết** hồ sơ với 1 tài khoản
   VPDT thật (thường ngay sau khi IT hoàn thành việc "Tạo tài khoản VPDT" ở
   Onboarding) — trước khi liên kết, hồ sơ chỉ HR mới tra cứu được.
-- **3 tầng xem**: chính chủ (đã liên kết) và HR/admin xem/sửa đủ mọi trường;
-  quản lý trực tiếp (**"👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới"**, đi ngược cây Quản Lý
-  Trực Tiếp — mục 4.5.1) chỉ xem bản đã ẩn CCCD/tài khoản ngân hàng/BHXH/mã số
-  thuế/người phụ thuộc/học vấn; người không liên quan không tra được (kể cả
-  báo lỗi cũng không phân biệt "không tồn tại" hay "không có quyền", tránh dò
-  mã nhân viên).
+- **3 tầng xem**: HR/admin (`hrProfileManage`/`hrProfileFullView`/
+  `hrProfileEdit`) xem/sửa đủ mọi trường KHÔNG bị giới hạn; **chính chủ** (đã
+  liên kết, mục "Hồ Sơ Của Tôi") và **quản lý trực tiếp** (**"👁️ Xem Hồ Sơ
+  Nhân Sự Cấp Dưới"**, đi ngược cây Quản Lý Trực Tiếp — mục 4.5.1) đều CHỈ xem
+  được 15 trường nhạy cảm (ngày sinh, giới tính, email cá nhân, liên hệ khẩn
+  cấp, CCCD, địa chỉ, tài khoản ngân hàng, BHXH, mã số thuế, người phụ thuộc,
+  học vấn) khi HR/admin đã **chủ động mở từng trường** ở 2 màn cấu hình riêng
+  (xem bên dưới) — **mặc định KHÔNG trường nào hiển thị** cho cả 2 vai trò
+  này, kể cả trường vốn "luôn thấy" trước 9/2026 (ngày sinh/giới tính/email cá
+  nhân); người không liên quan không tra được (kể cả báo lỗi cũng không phân
+  biệt "không tồn tại" hay "không có quyền", tránh dò mã nhân viên). Sửa hồ sơ
+  qua "Hồ Sơ Của Tôi" cũng chỉ sửa được đúng trường ĐANG được mở xem (đối
+  xứng, chặn cả DevTools gửi tay field đã ẩn khỏi UI).
 - Mọi nhân viên đã đăng nhập đều **tự xem/sửa được hồ sơ CHÍNH MÌNH** (mục
   **"Hồ Sơ Của Tôi"**) — không cần quyền gì thêm; **"Quản Lý Hồ Sơ"** (danh
   sách toàn bộ, sửa mọi trường, đổi trạng thái tay Đang làm việc ↔ Nghỉ dài
@@ -1319,11 +1326,22 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   KHÔNG sửa được), **"✏️ Sửa"** (sửa được, và TỰ ĐỘNG xem được luôn — không
   sửa được cái mình không thấy). Kết hợp tự do (VD chỉ tick "Tạo Mới" cho vị
   trí thuần nhập liệu).
-- **Cấu hình trường xem của quản lý trực tiếp** (9/2026, nút "⚙️" trong Quản
-  Lý Hồ Sơ — chỉ hrProfileManage/admin cấu hình): mặc định quản lý trực tiếp
-  KHÔNG thấy 9 trường nhạy cảm (CCCD, địa chỉ, tài khoản ngân hàng, BHXH, mã
-  số thuế, người phụ thuộc, học vấn...) — admin tự tick chọn trường nào muốn
-  MỞ THÊM cho họ xem, áp dụng chung toàn hệ thống.
+- **Cấu hình trường xem — 2 màn riêng, cùng nguyên tắc OPT-IN** (9/2026, 2 nút
+  "⚙️" trong Quản Lý Hồ Sơ — CHỈ `hrProfileManage`/admin xem/sửa được, kể cả
+  `hrProfileFullView` cũng không được sửa 2 cấu hình này): mặc định **KHÔNG
+  trường nhạy cảm nào hiển thị** cho tới khi admin chủ động tick chọn —
+  **"⚙️ Trường Xem Của Quản Lý Trực Tiếp"** áp dụng cho quản lý xem hồ sơ CẤP
+  DƯỚI, **"⚙️ Trường Xem Của Tôi"** áp dụng cho chính nhân viên tự xem hồ sơ
+  MÌNH ở "Hồ Sơ Của Tôi" — 2 cấu hình HOÀN TOÀN ĐỘC LẬP (mở trường nào ở màn
+  này không tự động mở cho màn kia). Cả 2 liệt kê ĐỦ 15 trường nhạy cảm (ngày
+  sinh, giới tính, email cá nhân, người liên hệ khẩn cấp + SĐT + quan hệ,
+  CCCD, địa chỉ thường trú, địa chỉ hiện tại, số tài khoản ngân hàng, tên ngân
+  hàng, số BHXH, mã số thuế, người phụ thuộc, học vấn) để admin tick chọn mở
+  từng trường, áp dụng chung toàn hệ thống. Trước 9/2026 chỉ có cấu hình quản
+  lý trực tiếp (9 trường, mặc định vẫn hiện sẵn 1 số trường "cơ bản" như ngày
+  sinh/giới tính/email cá nhân) — nay đổi hẳn sang opt-in triệt để cho CẢ 2
+  vai trò, theo đúng yêu cầu người dùng ("quyền được xem chỉ được xem khi tôi
+  chọn trường ở đây").
 - **Chức Vụ (chọn từ Cơ Cấu Tổ Chức)**: HR/admin gán/đổi "Chức Vụ" ngay trên
   Hồ Sơ Nhân Sự (ở màn "➕ Tạo Hồ Sơ Mới" — tuỳ chọn — lẫn ở Chi tiết hồ sơ đã
   có, nút **"🏷️ Gán/Đổi Chức Vụ"**) bằng cách **CHỌN từ bản Cơ Cấu Tổ Chức

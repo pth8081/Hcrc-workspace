@@ -8189,6 +8189,7 @@ bindCspDelegation('hrpfImportModal');
 // trên nếu quên: sống ngoài #hrProfileSection trong DOM (anh em, không phải con), phải đăng ký root
 // riêng ngay khi thêm mới, không thì mọi nút bên trong (Huỷ/Lưu) âm thầm không phản hồi.
 bindCspDelegation('hrpfFieldConfigModal');
+bindCspDelegation('hrpfSelfFieldConfigModal');
 // Nhân Sự > Báo Cáo (#hrReportSection, 9/2026) — dời từ view lồng trong #hrProfileSection (đã có gốc
 // CSP riêng ở trên) ra module con riêng cấp Nhân Sự — CẦN gốc CSP RIÊNG của chính nó (nút "🔍 Xem Báo
 // Cáo" data-op="loadHrpfReports" giờ sống trong #hrReportSection, KHÔNG còn trong #hrProfileSection nữa),

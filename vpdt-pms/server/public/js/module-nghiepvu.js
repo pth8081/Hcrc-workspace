@@ -493,7 +493,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có module con "📊 Báo Cáo" RIÊNG cấp Nhân Sự (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
       { label: 'Tái Tuyển', text: 'nút "Kiểm Tra Nhân Sự Cũ" (khi tạo hồ sơ mới hoặc mở Onboarding) tra theo CCCD+ngày sinh — nhân viên cũ quay lại giữ NGUYÊN Mã Nhân Viên cũ, chỉ ghi thêm 1 dòng lịch sử tái tuyển.' },
       { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
-      { label: 'Trường xem của quản lý trực tiếp', text: 'admin tự chọn field nhạy cảm nào (CCCD, địa chỉ, người phụ thuộc...) mở thêm cho quản lý trực tiếp xem, qua nút "⚙️" trong Quản Lý Hồ Sơ.' },
+      { label: 'Cấu hình trường xem (opt-in)', text: '2 nút "⚙️" riêng trong Quản Lý Hồ Sơ, cùng nguyên tắc: MẶC ĐỊNH KHÔNG trường nhạy cảm nào hiển thị (đủ 15 field: ngày sinh, giới tính, email cá nhân, liên hệ khẩn cấp, CCCD, địa chỉ, ngân hàng, BHXH, mã số thuế, người phụ thuộc, học vấn) tới khi admin chủ động mở — "Trường Xem Của Quản Lý Trực Tiếp" áp dụng khi quản lý xem hồ sơ cấp dưới, "Trường Xem Của Tôi" áp dụng khi chính nhân viên tự xem/sửa hồ sơ mình — 2 cấu hình độc lập, mở ở màn này không tự mở cho màn kia.' },
     ], right: [
       { label: 'Lịch Sử Thay Đổi & Chỉnh Sửa', text: 'mọi lần tạo mới/sửa hồ sơ (liệt kê đúng field đã đổi) được ghi lại, gộp chung vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng/tái tuyển — luôn sắp mới nhất lên đầu.' },
     ] },

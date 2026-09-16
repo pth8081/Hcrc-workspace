@@ -106,7 +106,13 @@ function stripForList(profile) {
   };
 }
 
-// GET /api/hr-profile/me — hồ sơ của chính người đang đăng nhập (luôn xem đủ — chính chủ).
+// GET /api/hr-profile/me — hồ sơ của chính người đang đăng nhập (luôn xem đủ — chính chủ — TRỪ field
+// admin đã chủ động ẨN qua "Trường Xem Của Chính Mình", 9/2026 theo yêu cầu người dùng — xem GET/PUT
+// .../self-field-config bên dưới; mặc định [] = KHÔNG trường nào hiện tới khi admin chủ động chọn, xem
+// defaults.js::hrProfileSelfVisibleFields). Trả kèm selfVisibleFields để client biết field nào đang bị ẩn
+// mà KHÔNG cần đoán qua việc field đó có mặt hay không trong `profile` (hồ sơ CŨ tạo trước khi có tính
+// năng Người phụ thuộc/Học vấn cũng thiếu tự nhiên 2 key này — lẫn lộn 2 nguyên nhân sẽ sai, xem chú
+// thích dài ở renderHrpfProfileForm()/module-hrprofile.js).
 router.get('/me', async (req, res) => {
   try {
     // Khối 0: employeeProfiles không qua GET /api/data chung (field nhạy cảm, xem đầu file) nên
@@ -119,25 +125,33 @@ router.get('/me', async (req, res) => {
     const list = (await getAppDataValue('employeeProfiles')) || [];
     const profile = employeeProfile.findProfileByUsername(list, req.freshUser.username);
     if (!profile) return res.status(404).json({ error: 'Bạn chưa có Hồ Sơ Nhân Sự (có thể tài khoản chưa được liên kết với hồ sơ Onboarding)' });
-    res.json({ profile });
+    const selfVisibleFields = employeeProfile.sanitizeSelfVisibleFields(
+      (await getAppDataValue('hrProfileSelfVisibleFields')) || []);
+    res.json({ profile: employeeProfile.stripSelfHiddenFields(profile, selfVisibleFields), selfVisibleFields });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/me'); }
 });
 
-// PATCH /api/hr-profile/me — tự sửa trường tự phục vụ (SELF_EDITABLE_FIELDS).
+// PATCH /api/hr-profile/me — tự sửa trường tự phục vụ (SELF_EDITABLE_FIELDS) — field đang bị ẩn
+// (selfVisibleFields) cũng KHÔNG tự sửa được qua đường này (đối xứng đúng phần không xem được ở GET
+// /me — phòng request tự soạn/DevTools sửa tay gửi kèm field đã bị ẩn khỏi UI).
 router.patch('/me', async (req, res) => {
   try {
     if (!hasModuleAccessServer(req.freshUser, 'hrProfile')) {
       return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
     }
+    const selfVisibleFields = employeeProfile.sanitizeSelfVisibleFields(
+      (await getAppDataValue('hrProfileSelfVisibleFields')) || []);
+    const editableFields = employeeProfile.SELF_EDITABLE_FIELDS.filter(
+      f => !employeeProfile.SENSITIVE_FIELDS.includes(f) || selfVisibleFields.includes(f));
     let updated;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfileByUsername(list, req.freshUser.username);
       if (!profile) throw new HttpError(404, 'Bạn chưa có Hồ Sơ Nhân Sự');
-      employeeProfile.applyProfileEdit(profile, req.body, employeeProfile.SELF_EDITABLE_FIELDS, req.freshUser.username, req.freshUser.name);
+      employeeProfile.applyProfileEdit(profile, req.body, editableFields, req.freshUser.username, req.freshUser.name);
       updated = profile;
       return list;
     });
-    res.json({ ok: true, profile: updated });
+    res.json({ ok: true, profile: employeeProfile.stripSelfHiddenFields(updated, selfVisibleFields), selfVisibleFields });
   } catch (err) { sendCatchError(res, err, 'PATCH /api/hr-profile/me'); }
 });
 
@@ -310,6 +324,30 @@ router.put('/manager-field-config', requireProfileManage, async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'PUT /api/hr-profile/manager-field-config'); }
 });
 
+// GET/PUT /api/hr-profile/self-field-config — cấu hình field nào (SENSITIVE_FIELDS, nay đã mở rộng lên
+// 15 trường) nhân viên được phép TỰ XEM trên hồ sơ CHÍNH MÌNH ("Hồ Sơ Của Tôi", 9/2026 theo yêu cầu
+// người dùng — đối xứng manager-field-config ở trên nhưng áp dụng cho chính chủ thay vì quản lý trực
+// tiếp). CHỈ hrProfileManage/admin cấu hình được (requireProfileManage — cùng lý do manager-field-config:
+// cấu hình bảo mật áp dụng CHUNG cho toàn bộ nhân viên trong hệ thống). Fallback [] khi chưa cấu hình —
+// CÙNG NGUYÊN TẮC manager-field-config (mặc định ẩn hết tới khi admin chủ động chọn), xem chú thích
+// defaults.js::hrProfileSelfVisibleFields.
+router.get('/self-field-config', requireProfileManage, async (req, res) => {
+  try {
+    const saved = (await getAppDataValue('hrProfileSelfVisibleFields')) || [];
+    res.json({
+      visibleFields: employeeProfile.sanitizeSelfVisibleFields(saved),
+      availableFields: employeeProfile.SENSITIVE_FIELDS.map(f => ({ field: f, label: employeeProfile.SENSITIVE_FIELD_LABELS[f] || f }))
+    });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/self-field-config'); }
+});
+router.put('/self-field-config', requireProfileManage, async (req, res) => {
+  try {
+    const visibleFields = employeeProfile.sanitizeSelfVisibleFields(req.body?.visibleFields);
+    await withLockedAppDataValue('hrProfileSelfVisibleFields', () => visibleFields);
+    res.json({ ok: true, visibleFields });
+  } catch (err) { sendCatchError(res, err, 'PUT /api/hr-profile/self-field-config'); }
+});
+
 // GET /api/hr-profile/reports — Báo Cáo Nhân Sự (9/2026, theo yêu cầu người dùng) — employeeProfiles/
 // laborContracts bị chặn hẳn khỏi GET /api/reports chung (dữ liệu cực nhạy cảm, xem CLAUDE.md +
 // routes/data.js) nên KHÔNG đi qua khuôn báo cáo module thường (module-baocaoquantri.js) — route riêng
@@ -352,7 +390,8 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    res.json({ profile: viewable });
+    const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
+    res.json({ profile: viewable, viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}`); }
 });
 
@@ -369,7 +408,8 @@ router.get('/by-username/:username', async (req, res) => {
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    res.json({ profile: viewable });
+    const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
+    res.json({ profile: viewable, viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-username/${req.params.username}`); }
 });
 
