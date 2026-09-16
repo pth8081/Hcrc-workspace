@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**23.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.14 (2026-09-16): Sửa lỗi có sẵn trong demo Thông Báo Email Phê Duyệt (KHÔNG phải lỗi nghiệp vụ)
+
+Đợt tách module 4 (v23.13) từng ghi nhận demo `tests/demo-approval-email-config.js` báo lỗi "thiếu dòng
+log SUPPRESSED cho lần gửi phiếu đầu tiên" — lúc đó chưa rõ nguyên nhân, tạm ghi nhận riêng ngoài phạm
+vi. Điều tra kỹ hơn xác nhận: đây là lỗi CÓ SẴN trong chính file demo (không phải lỗi nghiệp vụ thật, và
+không liên quan gì tới việc tách module HTML) — `#carPurpose` (Mục Đích Sử Dụng) là `<select required>`
+nhưng `bootstrapClient()` không seed `DB.carPurposes` và `submitRealCarRegistration()` không chọn giá
+trị cho ô này, khiến trình duyệt CHẶN SUBMIT âm thầm ở tầng validation HTML gốc (không alert, không
+console, không request nào) — `submitCarReq()` chưa từng chạy tới dòng nào, kể cả `CREATE_CAR_REG`.
+
+Sửa: thêm `DB.carPurposes = [{ key: 'CONG_TAC', label: 'Công tác' }]` vào `bootstrapClient()` + thêm
+`page.selectOption('#carPurpose', 'CONG_TAC')` vào `submitRealCarRegistration()`. Demo chạy sạch trở
+lại, đúng bằng chứng "trước/sau" như thiết kế ban đầu.
+
+**Deploy-impact**: chỉ sửa 1 file demo (`tests/demo-approval-email-config.js`, không thuộc bộ hồi quy tự
+động, không ảnh hưởng production). Không đổi `schema.sql`, không thêm biến môi trường, không thêm npm
+dependencies.
 
 ## v23.13 (2026-09-15): Tách module 4 (ĐỢT CUỐI) — 2 section phức tạp cuối cùng (Hệ Thống + Truyền Thông Nội Bộ), hoàn tất 100% tải lười khung HTML
 

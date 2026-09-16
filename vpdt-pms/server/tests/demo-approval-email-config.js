@@ -130,6 +130,11 @@ async function bootstrapClient(page) {
     DB.depts = ['Kế Toán'];
     DB.stores = [];
     DB.carTypes = ['Xe 4 chỗ', 'Xe 7 chỗ', 'Xe 16 chỗ'];
+    // #carPurpose (Mục Đích Sử Dụng) là <select required> đọc DB.carPurposes (CORE_FIELD_MANIFEST.CAR.
+    // carPurpose) — thiếu seed này khiến dropdown rỗng, chọn giá trị ở submitRealCarRegistration() sẽ
+    // không có gì để chọn. populateCarPurposeSelect() (core.js) đọc value=p.key/label=p.label, không
+    // phải chuỗi thô.
+    DB.carPurposes = [{ key: 'CONG_TAC', label: 'Công tác' }];
     DB.carDeptWorkflows = {
       'Kế Toán': { approvers: { 1: ['duyet1'] }, steps: [{ name: 'Trưởng phòng duyệt' }] }
     };
@@ -169,6 +174,11 @@ async function submitRealCarRegistration(page) {
   await page.waitForFunction(() => document.getElementById('carDept')?.options.length > 0);
   await page.selectOption('#carDept', 'Kế Toán');
   await page.selectOption('#carType', 'Xe 4 chỗ');
+  // #carPurpose (Mục Đích Sử Dụng) là <select required> (CORE_FIELD_MANIFEST.CAR.carPurpose) — thiếu
+  // dòng chọn này khiến trình duyệt CHẶN SUBMIT ngay ở tầng validation HTML gốc (constraint validation),
+  // hoàn toàn ÂM THẦM phía JS (không alert/console/network nào) — đây chính là nguyên nhân demo trước đó
+  // "0 dòng log" sau khi gửi phiếu lần 1 (submitCarReq() chưa từng chạy tới dòng nào cả).
+  await page.selectOption('#carPurpose', 'CONG_TAC');
   await page.fill('#carPassengers', '02 - Nguyễn Văn A, Trần Thị B');
   await page.fill('#carKm', '120');
   await page.fill('#carStartTime', '2026-09-10T08:00');
