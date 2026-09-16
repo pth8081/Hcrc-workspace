@@ -1093,6 +1093,12 @@ chung nhóm khác.
     Nghiệm Thu, Trạng Thái Công Việc, Trạng Thái Hạn, Ngày Bắt Đầu/Hạn Chót/
     Ngày Nghiệm Thu — có 2 filter riêng (Trạng Thái Công Việc/Trạng Thái Hạn)
     và nút **"📥 Xuất Excel"** xuất đúng bảng đang xem (áp dụng mọi filter).
+  - **"👁️ Xem Nhanh" theo số liệu (9/2026)**: bảng rollup cấp hồ sơ ở tab
+    "📊 Báo Cáo" (cột Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu) giờ
+    **bấm được trực tiếp vào từng số liệu** — mở modal liệt kê ĐÚNG các công
+    việc thuộc nhóm vừa bấm (tên việc, trạng thái, người thực hiện, hạn), không
+    cần mở "Xem/Lập Danh Mục Đầu Tư" đầy đủ chỉ để xem nhanh 1 nhóm công việc
+    của 1 hồ sơ.
 
 ### 4.5. Nhân Sự
 

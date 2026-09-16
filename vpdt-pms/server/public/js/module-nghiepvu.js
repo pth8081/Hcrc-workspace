@@ -427,6 +427,7 @@ const NGHIEP_VU_DOCS = {
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: '' }, loopBackToIndex: 0 } },
     footer: { left: [
       { label: 'Lịch sử theo mốc', text: 'mỗi mốc tiến độ có lịch sử cập nhật và tệp đính kèm riêng — không bị ghi đè, xem lại được toàn bộ diễn biến của dự án.' },
+      { label: '👁️ Xem Nhanh (9/2026)', text: 'ở tab Báo Cáo, bấm vào số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu của 1 hồ sơ để mở nhanh danh sách đúng nhóm công việc đó (tiến độ/trạng thái/người thực hiện), không cần mở "Xem/Lập Danh Mục Đầu Tư" đầy đủ.' },
     ], right: [
       { label: 'Đơn Hàng', text: 'là luồng tách biệt — tạo đơn, duyệt, xử lý rồi hoàn tất, không đi qua các mốc tiến độ của dự án.' },
     ] },

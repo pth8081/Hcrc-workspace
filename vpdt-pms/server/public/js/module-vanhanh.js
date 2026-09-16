@@ -3153,6 +3153,43 @@ function buildOperationStoreReportComputed() {
     return { kind, o, items, total, done, doing, notStarted, pct, progressKey, progressLabel };
   }).filter(r => !filterProgress || r.progressKey === filterProgress);
 }
+// "👁️ Xem Nhanh" (9/2026, theo yêu cầu người dùng) — bấm vào số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực
+// Hiện/Chưa Bắt Đầu ở bảng dưới đây mở modal #operationWorkItemQuickViewModal, liệt kê ĐÚNG các công
+// việc thuộc nhóm vừa bấm (tiến độ + trạng thái + người thực hiện) — không cần mở "Xem/Lập Danh Mục Đầu
+// Tư" đầy đủ chỉ để xem nhanh. filterKey: 'ALL' | 'DA_NGHIEM_THU' | 'DOING' (gộp DANG_THUC_HIEN +
+// DANG_NGHIEM_THU, khớp đúng cách r.doing tính ở buildOperationStoreReportComputed()) | 'CHUA_BAT_DAU'.
+const OPERATION_QUICK_VIEW_FILTER_LABELS = {
+  ALL: 'Tất cả công việc', DA_NGHIEM_THU: 'Đã nghiệm thu', DOING: 'Đang thực hiện', CHUA_BAT_DAU: 'Chưa bắt đầu'
+};
+function openOperationWorkItemQuickViewModal(kind, recordId, filterKey) {
+  const o = (DB[kind] || []).find(x => x.id === recordId);
+  if (!o) return;
+  const meta = OPERATION_KIND_META[kind];
+  const allItems = getOperationWorkItemsForRecord(kind, recordId);
+  const items = filterKey === 'ALL' ? allItems
+    : filterKey === 'DOING' ? allItems.filter(w => w.status === 'DANG_THUC_HIEN' || w.status === 'DANG_NGHIEM_THU')
+    : allItems.filter(w => w.status === filterKey);
+
+  document.getElementById('operationWorkItemQuickViewModalTitle').textContent =
+    `👁️ ${OPERATION_QUICK_VIEW_FILTER_LABELS[filterKey] || filterKey} — ${meta.titleField(o)} (${o.code})`;
+
+  const tbody = document.getElementById('operationWorkItemQuickViewModalBody');
+  tbody.innerHTML = items.length ? items.map(w => {
+    const assignedTo = (Array.isArray(w.assignedToName) ? w.assignedToName : (w.assignedToName ? [w.assignedToName] : [])).join(', ');
+    return `<tr class="hover:bg-gray-50">
+      <td class="border p-1.5">${escapeHtml(w.title)}</td>
+      <td class="border p-1.5">${operationWorkItemStatusBadge(w.status)}</td>
+      <td class="border p-1.5">${escapeHtml(assignedTo || '(chưa gán)')}</td>
+      <td class="border p-1.5">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN') : ''}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Không có công việc nào trong nhóm này.</td></tr>`;
+
+  document.getElementById('operationWorkItemQuickViewModal').classList.remove('hidden');
+}
+function closeOperationWorkItemQuickViewModal() {
+  document.getElementById('operationWorkItemQuickViewModal').classList.add('hidden');
+}
+
 function renderOperationStoreReport() {
   const tbody = document.getElementById('operationStoreReportTableBody');
   if (!tbody) return;
@@ -3178,10 +3215,10 @@ function renderOperationStoreReport() {
       <td class="border p-2">${kindLabel}</td>
       <td class="border p-2">${escapeHtml(meta.titleField(r.o))}</td>
       <td class="border p-2">${operationEstimateStatusBadge(r.o)}</td>
-      <td class="border p-2 text-center">${r.total}</td>
-      <td class="border p-2 text-center">${r.done}</td>
-      <td class="border p-2 text-center">${r.doing}</td>
-      <td class="border p-2 text-center">${r.notStarted}</td>
+      <td class="border p-2 text-center"><button type="button" data-op="openOperationWorkItemQuickViewModal" data-kind="${r.kind}" data-id="${r.o.id}" data-filter="ALL" class="font-bold text-cyan-700 hover:underline">${r.total}</button></td>
+      <td class="border p-2 text-center"><button type="button" data-op="openOperationWorkItemQuickViewModal" data-kind="${r.kind}" data-id="${r.o.id}" data-filter="DA_NGHIEM_THU" class="font-bold text-green-700 hover:underline">${r.done}</button></td>
+      <td class="border p-2 text-center"><button type="button" data-op="openOperationWorkItemQuickViewModal" data-kind="${r.kind}" data-id="${r.o.id}" data-filter="DOING" class="font-bold text-blue-700 hover:underline">${r.doing}</button></td>
+      <td class="border p-2 text-center"><button type="button" data-op="openOperationWorkItemQuickViewModal" data-kind="${r.kind}" data-id="${r.o.id}" data-filter="CHUA_BAT_DAU" class="font-bold text-gray-700 hover:underline">${r.notStarted}</button></td>
       <td class="border p-2 text-center font-bold">${r.pct}%</td>
       <td class="border p-2">${r.progressLabel}</td>
     </tr>`;
@@ -3455,7 +3492,10 @@ const OP_CLICK_ACTIONS = {
   previewOperationOrderWorkflow: () => previewOperationOrderWorkflow(),
   filterOperationOrderByCard: el => filterOperationOrderByCard(el.dataset.arg0),
   filterOperationStoreOpenByCard: el => filterOperationStoreOpenByCard(el.dataset.arg0),
-  filterOperationRepairByCard: el => filterOperationRepairByCard(el.dataset.arg0)
+  filterOperationRepairByCard: el => filterOperationRepairByCard(el.dataset.arg0),
+  // "👁️ Xem Nhanh" (9/2026) — 4 số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu ở bảng Báo Cáo.
+  openOperationWorkItemQuickViewModal: el => openOperationWorkItemQuickViewModal(el.dataset.kind, Number(el.dataset.id), el.dataset.filter),
+  closeOperationWorkItemQuickViewModal: () => closeOperationWorkItemQuickViewModal()
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -3549,5 +3589,5 @@ function bindOperationDelegation(rootId) {
 // modal vẫn mở ra bình thường — chỉ các thao tác BÊN TRONG modal mới bị "chết"). Cùng lớp lỗi với
 // hrLifecycleSection (CSP-delegation) đã phát hiện ở Đợt E — xem chú thích ở đó. Thêm modal này vào danh
 // sách là fix DUY NHẤT cần thiết, không cần đổi gì ở HTML/logic khác.
-['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal'].forEach(bindOperationDelegation);
+['vanHanhSection', 'operationEstimateModal', 'operationWorkItemModal', 'operationWorkItemFormModal', 'operationAcceptanceActionModal', 'operationProcessModal', 'operationWorkItemProgressModal', 'operationOrderReceiptModal', 'operationWorkItemHistoryModal', 'operationWorkItemDependencyModal', 'operationWorkItemQuickViewModal'].forEach(bindOperationDelegation);
 

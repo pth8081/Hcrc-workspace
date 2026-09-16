@@ -8340,6 +8340,15 @@ bindCspDelegation('genericConfirmModal');
 bindCspDelegation('dashboardSection');
 bindCspDelegation('dashboardCustomizeModal');
 
+// #nghiepVuSection — BỊ BỎ SÓT từ lúc dựng module (v23.1, task #58-65), phát hiện qua báo lỗi thật
+// (9/2026): bấm vào bất kỳ mục nào trong cây điều hướng ("nv-item", setNVActiveKey()) hay pill khu vực
+// Đào Tạo ("nv-pill", setNVDaotaoArea()) đều ÂM THẦM không phản hồi trên CẢ desktop lẫn mobile — 2 nút
+// này render bằng data-op nhưng KHÔNG gốc nào bọc chúng từng được đăng ký CSP delegation, nên click
+// không tới tay cspDispatchOp() bao giờ. Bộ test cũ (test-nghiepvu.js) không bắt được vì gọi thẳng
+// setNVActiveKey()/setNVDaotaoArea() qua page.evaluate() (bỏ qua hẳn bước click DOM thật) — xem
+// test-nghiepvu-click.js (mới) mô phỏng click DOM thật để không lặp lại lỗ hổng kiểm thử này.
+bindCspDelegation('nghiepVuSection');
+
 // CSP hạ tầng dùng chung (đợt D) — #approvalHubSection: hộp thư duyệt tổng hợp gộp hồ sơ chờ duyệt từ
 // GẦN NHƯ MỌI module nghiệp vụ (xem getMyPendingApprovals()/getMyProcessedApprovals()). 4 điểm tĩnh
 // (bộ lọc Trạng Thái/Khoảng Thời Gian/Loại + ô tìm kiếm, đều gọi renderApprovalHub()) cộng 1 sink động
