@@ -8088,6 +8088,10 @@ bindCspDelegation('hrProfileSection');
 bindCspDelegation('hrpfDetailModal');
 bindCspDelegation('hrpfCreateModal');
 bindCspDelegation('hrpfImportModal');
+// #hrpfFieldConfigModal (9/2026, "Cấu hình trường xem của quản lý trực tiếp") — CÙNG LỖI y hệt 3 modal
+// trên nếu quên: sống ngoài #hrProfileSection trong DOM (anh em, không phải con), phải đăng ký root
+// riêng ngay khi thêm mới, không thì mọi nút bên trong (Huỷ/Lưu) âm thầm không phản hồi.
+bindCspDelegation('hrpfFieldConfigModal');
 bindCspDelegation('hrContractSection');
 bindCspDelegation('hrContractCreateModal');
 bindCspDelegation('hrContractDetailModal');
