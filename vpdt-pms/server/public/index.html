@@ -243,6 +243,9 @@
           <button id="btnHrLifecycleNav" data-op-seq="closeHrDropdown()|switchTab(hrLifecycle)" class="hidden sidebar-subitem">🧑‍💼 Onboarding / Offboarding</button>
           <button id="btnHrProfileNav" data-op-seq="closeHrDropdown()|switchTab(hrProfile)" class="hidden sidebar-subitem">🪪 Hồ Sơ Nhân Sự</button>
           <button id="btnHrContractNav" data-op-seq="closeHrDropdown()|switchTab(hrContract)" class="hidden sidebar-subitem">📝 Hợp Đồng Lao Động</button>
+          <!-- 9/2026: dời từ 1 view lồng trong Hồ Sơ Nhân Sự ra module con riêng cấp Nhân Sự (theo phản
+               hồi người dùng) — xem hrpfCanViewReports() ở core.js. -->
+          <button id="btnHrReportNav" data-op-seq="closeHrDropdown()|switchTab(hrReport)" class="hidden sidebar-subitem">📊 Báo Cáo</button>
           <button id="btnHrAttendanceNav" data-op-seq="closeHrDropdown()|switchTab(hrAttendance)" class="hidden sidebar-subitem">⏱️ Công &amp; Phép</button>
           <button id="btnHrPayrollNav" data-op-seq="closeHrDropdown()|switchTab(hrPayroll)" class="hidden sidebar-subitem">💰 Lương</button>
         </div>
@@ -1168,6 +1171,12 @@
        HỆ THỐNG tự tạo qua hook Onboarding (xem lib/laborContract.js phía server) — màn này để HR xem
        danh sách + tạo tay khi cần + hoàn thiện/kích hoạt bản nháp tự tạo + bổ sung thay đổi/đóng hợp đồng. -->
   <div id="hrContractSection" class="hidden space-y-4"></div>
+
+  <!-- Nhân Sự > Báo Cáo (9/2026) — module con RIÊNG, ngang hàng Hồ Sơ Nhân Sự/Hợp Đồng Lao Động (DỜI từ
+       view lồng bên trong Hồ Sơ Nhân Sự theo phản hồi người dùng). Không có tầng "tự xem" như hrProfile —
+       cần CẢ hrProfileManage LẪN hrContractManage/admin, xem hrpfCanViewReports() ở core.js. Nội dung
+       render ĐỘNG bằng JS (module-hrprofile.js::renderHrReportModule()) vào container rỗng bên dưới. -->
+  <div id="hrReportSection" class="hidden space-y-4"></div>
 
   <!-- "Công & Phép" (Đợt 3/4 module Nhân Sự, Phần E tài liệu thiết kế gốc) — xem lib/attendance.js đầu
        file phía server cho toàn bộ điều chỉnh so với tài liệu gốc. MỞ CHO MỌI NGƯỜI có quyền vào module

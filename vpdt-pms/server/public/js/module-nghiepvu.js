@@ -41,6 +41,7 @@ const NGHIEP_VU_NAV = [
     { key: 'hrLifecycle', icon: '🆕', label: 'Onboarding / Offboarding' },
     { key: 'hrProfile', icon: '👤', label: 'Hồ Sơ Nhân Sự' },
     { key: 'hrContract', icon: '📄', label: 'Hợp Đồng Lao Động' },
+    { key: 'hrReport', icon: '📊', label: 'Báo Cáo' },
     { key: 'hrAttendance', icon: '🕒', label: 'Công / Phép' },
     { key: 'hrPayroll', icon: '💴', label: 'Lương' },
     { key: 'hr', icon: '🤝', label: 'Phản Hồi Ý Kiến (HCRC Đồng Hành)' },
@@ -488,7 +489,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Lưu trữ', sub: 'Xuyên suốt vòng đời nhân sự', kind: 'approved' },
     ] },
     footer: { left: [
-      { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có màn "📊 Báo Cáo" RIÊNG ngay trong module này (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
+      { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có module con "📊 Báo Cáo" RIÊNG cấp Nhân Sự (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
       { label: 'Tái Tuyển', text: 'nút "Kiểm Tra Nhân Sự Cũ" (khi tạo hồ sơ mới hoặc mở Onboarding) tra theo CCCD+ngày sinh — nhân viên cũ quay lại giữ NGUYÊN Mã Nhân Viên cũ, chỉ ghi thêm 1 dòng lịch sử tái tuyển.' },
       { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
       { label: 'Trường xem của quản lý trực tiếp', text: 'admin tự chọn field nhạy cảm nào (CCCD, địa chỉ, người phụ thuộc...) mở thêm cho quản lý trực tiếp xem, qua nút "⚙️" trong Quản Lý Hồ Sơ.' },
@@ -506,10 +507,24 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đã kết thúc', sub: 'Tự động khi nghỉ việc xong' },
     ], decision: { atIndex: 1, approveLabel: 'Ký', rejectLabel: 'Không đạt/gia hạn thêm', rejectBox: { label: 'Gia hạn thử việc', sub: 'Kéo dài thời gian thử việc' }, loopBackToIndex: 0 } },
     footer: { left: [
-      { label: 'Không hiện ở Báo Cáo chung', text: 'cùng nhóm dữ liệu nhạy cảm với Hồ Sơ Nhân Sự, Lương và Công/Phép — thay vào đó có số liệu tổng hợp trong "📊 Báo Cáo" của Hồ Sơ Nhân Sự (hợp đồng mới/gia hạn/sắp hết hạn, tăng lương).' },
+      { label: 'Không hiện ở Báo Cáo chung', text: 'cùng nhóm dữ liệu nhạy cảm với Hồ Sơ Nhân Sự, Lương và Công/Phép — thay vào đó có số liệu tổng hợp trong module con "📊 Báo Cáo" cấp Nhân Sự (hợp đồng mới/gia hạn/sắp hết hạn, tăng lương).' },
       { label: 'Cảnh báo sắp hết hạn', text: 'hợp đồng đang hiệu lực còn ≤30 ngày hiện badge vàng, ≤7 ngày hoặc đã quá hạn hiện badge đỏ — cả ở danh sách lẫn chi tiết hợp đồng.' },
     ], right: [
-      { label: 'Phụ lục "Giá trị cũ/mới"', text: 'tự nhận diện phụ lục liên quan lương (gõ chữ "lương" trong Loại thay đổi) để bật định dạng tiền có dấu chấm phân cách hàng nghìn; loại thay đổi khác (chức danh, ca làm...) giữ nguyên ô nhập chữ tự do. Danh sách phụ lục luôn sắp mới nhất lên đầu.' },
+      { label: 'Phụ lục "Ngày áp dụng" + "Giá trị cũ/mới"', text: '2 mốc thời gian riêng khi bổ sung thay đổi: "Ngày áp dụng" (tuỳ chọn) và "Ngày hiệu lực" (bắt buộc, có thể trễ hơn). Checkbox "💰 Giá trị tiền" (mặc định BẬT) tự định dạng dấu chấm phân cách hàng nghìn cho 2 ô Giá trị cũ/mới khi gõ — tắt khi cần gõ chữ tự do (đổi chức danh...). Danh sách phụ lục luôn sắp mới nhất lên đầu.' },
+    ] },
+  },
+  hrReport: {
+    icon: '📊', title: 'Báo Cáo (Nhân Sự)', badge: 'Nhân Sự',
+    desc: 'Số liệu tổng hợp nhân sự (vào làm/nghỉ việc/tăng lương/thăng chức/tình trạng hợp đồng), lọc theo khoảng thời gian — module con RIÊNG cấp Nhân Sự (9/2026, trước đó từng nằm lồng bên trong Hồ Sơ Nhân Sự). KHÔNG tạo collection/route mới — vẫn đọc từ Hồ Sơ Nhân Sự + Hợp Đồng Lao Động, chỉ đổi nơi hiển thị cho đúng cấp module.',
+    flow: { ariaLabel: 'Quy trình xem Báo Cáo Nhân Sự', chain: [
+      { label: 'Chọn khoảng thời gian', sub: 'Từ ngày / Đến ngày (tuỳ chọn)' },
+      { label: 'Lọc tình trạng HĐLĐ', sub: 'Tuỳ chọn, riêng cho danh sách hợp đồng' },
+      { label: 'Xem số liệu', sub: '8 chỉ số + 6 danh sách chi tiết', kind: 'approved' },
+    ] },
+    footer: { left: [
+      { label: 'Cần đủ 2 quyền', text: 'CẦN CẢ "Quản Lý Hồ Sơ Nhân Sự" LẪN "Quản Lý Hợp Đồng Lao Động" (hoặc admin) — chỉ có 1 trong 2 sẽ không thấy mục này, vì số liệu gộp cả 2 nguồn (kể cả tăng lương, vốn chỉ Quản Lý Hợp Đồng Lao Động mới xem được).' },
+    ], right: [
+      { label: 'Không phải báo cáo tổng hợp chung', text: 'tách biệt hoàn toàn khỏi màn "📊 Báo Cáo" (module Báo Cáo & Biểu Mẫu dùng chung) — dữ liệu nhân sự cực nhạy cảm nên có route + màn hình thống kê RIÊNG, gác đúng quyền của module Nhân Sự.' },
     ] },
   },
   hrAttendance: {

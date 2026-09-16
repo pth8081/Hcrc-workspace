@@ -269,6 +269,10 @@ function applyActivateManual(contract, actorUsername) {
 function assertValidAmendment(payload) {
   if (!payload?.amendmentType || !String(payload.amendmentType).trim()) throw new HttpError(400, 'Vui lòng nhập Loại thay đổi');
   if (!payload?.effectiveDate || isNaN(new Date(payload.effectiveDate).getTime())) throw new HttpError(400, 'Vui lòng nhập Ngày hiệu lực thay đổi hợp lệ');
+  // applyDate ("Ngày áp dụng") — TUỲ CHỌN, KHÁC effectiveDate ("Ngày hiệu lực": thời điểm thay đổi THẬT
+  // SỰ có hiệu lực) — VD quyết định tăng lương ký/áp dụng 1 ngày nhưng hiệu lực từ đầu tháng sau, 2 mốc
+  // thời gian riêng theo yêu cầu người dùng (9/2026). Chỉ validate khi CÓ gửi kèm (không bắt buộc).
+  if (payload?.applyDate && isNaN(new Date(payload.applyDate).getTime())) throw new HttpError(400, 'Ngày áp dụng không hợp lệ');
 }
 // fileUrl/fileName ("Quyết định" đính kèm) — bổ sung theo yêu cầu người dùng: mỗi thay đổi lương/chức
 // vụ giữa kỳ hợp đồng (addAmendment(), KHÁC applyManualEdit() chỉ dùng lúc còn DRAFT trước khi kích
@@ -284,6 +288,7 @@ function addAmendment(contract, payload, actorUsername, actorName) {
     id: randomUUID(),
     amendmentType: String(payload.amendmentType).trim().slice(0, 100),
     effectiveDate: String(payload.effectiveDate).trim(),
+    applyDate: payload.applyDate ? String(payload.applyDate).trim().slice(0, 10) : null,
     oldValue: payload.oldValue ? String(payload.oldValue).trim().slice(0, 300) : null,
     newValue: payload.newValue ? String(payload.newValue).trim().slice(0, 300) : null,
     note: payload.note ? String(payload.note).trim().slice(0, 500) : null,

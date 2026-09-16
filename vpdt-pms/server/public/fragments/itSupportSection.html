@@ -101,6 +101,13 @@
             <select id="itPriceRetailZone" class="w-full border p-1.5 rounded bg-white">
               <option value="">-- Chọn Vùng Giá Áp Dụng --</option>
             </select>
+            <!-- Hiện khi DB.priceZones rỗng (chưa ai cấu hình danh mục) — trước đây người đề xuất bị chặn
+                 gửi với thông báo mơ hồ "Vui lòng chọn Vùng Giá Áp Dụng" không rõ vì sao không chọn được
+                 gì (dropdown không có lựa chọn nào). Admin thấy thêm nút thêm nhanh ngay tại đây (không
+                 cần rời form qua Hệ Thống > Quản Lý Danh Mục); người không phải admin chỉ thấy hướng dẫn
+                 nhờ admin thêm trước — xem populateItPriceRetailZoneSelect()/quickAddPriceZoneFromItPriceForm()
+                 ở core.js/module-itsupport-price.js (priceZones chỉ Admin mới ghi được, xem routes/data.js). -->
+            <p id="itPriceRetailZoneEmptyHint" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-1"></p>
           </div>
           <div id="itPriceMasterListSelectWrap" class="hidden">
             <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
@@ -144,44 +151,34 @@
               </table>
             </div>
           </div>
-          <!-- "Siêu thị áp dụng" — CHỈ mang tính thông tin (đã xác nhận với người dùng: không giới hạn
-               ai xem được đề xuất, không tự động xử lý gì thêm — để đội Hỗ Trợ IT tự biết mà áp giá đúng
-               phạm vi). Mặc định "Toàn bộ" — chọn "Khác" mới hiện ô multi-select chọn siêu thị/cửa hàng cụ
-               thể (renderMultiSelectDropdown(), xem onItPriceStoreScopeModeChange() ở
-               module-itsupport-price.js). -->
-          <div>
-            <!-- Bán Lẻ: "Siêu Thị Áp Dụng", có lựa chọn Toàn bộ/Khác (select #itPriceStoreScopeMode).
-                 Bán Buôn: đổi nhãn "Siêu Thị Đề Xuất", KHÔNG có khái niệm "Toàn bộ" (mỗi đề xuất Bán
-                 Buôn luôn gắn 1-nhiều siêu thị/cửa hàng cụ thể) — ẩn hẳn select, ô multi-select LUÔN
-                 hiện sẵn. 2 nhánh hiển thị đổi qua applyItPriceStoreScopeUIForSubTab() (gọi trong
-                 setItPriceSubTab()/resetItPriceForm(), module-itsupport-price.js). -->
-            <label id="itPriceStoreScopeLabelEl" class="block font-semibold text-gray-600 mb-1">🏬 Siêu Thị Áp Dụng</label>
-            <select id="itPriceStoreScopeMode" data-op-change="onItPriceStoreScopeModeChange" class="w-full border p-1.5 rounded bg-white">
-              <option value="ALL">Toàn bộ siêu thị, cửa hàng</option>
-              <option value="OTHER">Khác</option>
-            </select>
-            <div id="itPriceStoreScopeStoresWrap" class="hidden mt-2">
+          <!-- "Siêu thị đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — đợt 9/2026 (tách biểu mẫu Bán Buôn/
+               Bán Lẻ theo yêu cầu người dùng): CHỈ còn áp dụng cho Bán Buôn, ẩn hẳn khỏi Bán Lẻ (Bán Lẻ đã
+               có "Vùng Giá Áp Dụng" đủ để khoanh phạm vi, không cần chọn thêm siêu thị/ngày cụ thể nữa).
+               Toggle hiện/ẩn ở setItPriceSubTab()/resetItPriceForm() (module-itsupport-price.js) — nộp
+               Bán Lẻ giờ tự gắn storeScope={mode:'ALL'}/ngày áp dụng=hôm nay/hết hiệu lực=Vĩnh viễn,
+               KHÔNG đọc từ input nào (xem submitItPriceApproval()). -->
+          <div id="itPriceWholesaleScopeDateWrap" class="hidden space-y-3">
+            <div>
+              <!-- Bán Buôn KHÔNG có khái niệm "Toàn bộ" (mỗi đề xuất luôn gắn 1-nhiều siêu thị/cửa hàng cụ
+                   thể) — ô multi-select LUÔN hiện sẵn, không có select Toàn bộ/Khác. -->
+              <label class="block font-semibold text-gray-600 mb-1">🏬 Siêu Thị Đề Xuất <span class="text-red-500">*</span></label>
               <div id="itPriceStoreScopeStoresMultiSelect" class="border rounded p-2 bg-gray-50"></div>
-              <p class="text-gray-400 mt-1">Chọn 1 hoặc nhiều siêu thị/cửa hàng áp dụng đề xuất giá này.</p>
+              <p class="text-gray-400 mt-1">Chọn 1 hoặc nhiều siêu thị/cửa hàng đề xuất giá này.</p>
             </div>
-          </div>
-          <!-- "Ngày áp dụng"/"Ngày hết hiệu lực" — cùng lý do CHỈ mang tính thông tin ở trên, không có xử
-               lý tự động nào theo ngày (không tự khoá/ẩn đề xuất khi quá hạn). "Vĩnh viễn" là mặc định —
-               chọn "Khác" mới hiện ô nhập ngày hết hiệu lực thật (bắt buộc, xem
-               onItPriceExpiryModeChange()/submitItPriceApproval()). -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">📅 Ngày Áp Dụng <span class="text-red-500">*</span></label>
-              <input id="itPriceEffectiveDate" type="date" required class="w-full border p-1.5 rounded bg-white">
-            </div>
-            <div>
-              <label class="block font-semibold text-gray-600 mb-1">⏳ Ngày Hết Hiệu Lực</label>
-              <select id="itPriceExpiryMode" data-op-change="onItPriceExpiryModeChange" class="w-full border p-1.5 rounded bg-white">
-                <option value="PERMANENT">Vĩnh viễn</option>
-                <option value="OTHER">Khác</option>
-              </select>
-              <div id="itPriceExpiryDateWrap" class="hidden mt-2">
-                <input id="itPriceExpiryDate" type="date" class="w-full border p-1.5 rounded bg-white">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">📅 Ngày Áp Dụng <span class="text-red-500">*</span></label>
+                <input id="itPriceEffectiveDate" type="date" class="w-full border p-1.5 rounded bg-white">
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">⏳ Ngày Hết Hiệu Lực</label>
+                <select id="itPriceExpiryMode" data-op-change="onItPriceExpiryModeChange" class="w-full border p-1.5 rounded bg-white">
+                  <option value="PERMANENT">Vĩnh viễn</option>
+                  <option value="OTHER">Khác</option>
+                </select>
+                <div id="itPriceExpiryDateWrap" class="hidden mt-2">
+                  <input id="itPriceExpiryDate" type="date" class="w-full border p-1.5 rounded bg-white">
+                </div>
               </div>
             </div>
           </div>

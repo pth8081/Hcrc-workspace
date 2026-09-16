@@ -605,6 +605,10 @@ async function main() {
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing';
         document.getElementById('itPriceTier').value = 'MARGIN_LT5';
+        // itPriceWholesaleApplyUnit bắt buộc cho Bán Buôn (trước đây test bỏ sót field này, khiến
+        // submitItPriceApproval() bị chặn sớm ở alert riêng và DB.itPriceApprovals[0] vẫn là hồ sơ Bán
+        // Lẻ vừa tạo ở trên, làm sai lệch cả kịch bản này lẫn kịch bản "Bán Buôn theo tier" phía dưới).
+        document.getElementById('itPriceWholesaleApplyUnit').value = 'Công ty TNHH ABC';
         itPricePendingFile = {
           fileUrl: '/uploads/gia-mkt-wholesale.xlsx', fileName: 'gia-mkt-wholesale.xlsx',
           items: [{ values: { code: 'MK001', name: 'Sản phẩm MKT', oldPrice: '900', newPrice: '1000' } }],
@@ -696,6 +700,7 @@ async function main() {
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
         document.getElementById('itPriceTier').value = 'DISCOUNT_GT5';
+        document.getElementById('itPriceWholesaleApplyUnit').value = 'Công ty TNHH XYZ';
         itPricePendingFile = {
           fileUrl: '/uploads/gia-mkt-wholesale-tierb.xlsx', fileName: 'gia-mkt-wholesale-tierb.xlsx',
           items: [{ values: { code: 'MK002', name: 'Sản phẩm MKT 2', oldPrice: '800', newPrice: '900' } }],

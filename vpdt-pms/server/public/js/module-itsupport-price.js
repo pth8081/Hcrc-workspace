@@ -398,43 +398,27 @@ function renderItPriceMasterListSelect() {
   updateItPriceMasterListDownloadLink();
 }
 
-// "Siêu thị áp dụng" — chọn "Khác" mới hiện ô multi-select (renderMultiSelectDropdown(), lấy từ
-// DB.stores — danh mục siêu thị, xem module-admin.js::saveStore()) để chọn cụ thể siêu thị/cửa hàng áp
-// dụng. CHỈ mang tính thông tin (đã xác nhận với người dùng) — không giới hạn ai xem được đề xuất.
-function onItPriceStoreScopeModeChange() {
-  const mode = document.getElementById('itPriceStoreScopeMode').value;
-  const wrap = document.getElementById('itPriceStoreScopeStoresWrap');
-  wrap.classList.toggle('hidden', mode !== 'OTHER');
-  if (mode === 'OTHER') {
-    renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], [], {
-      placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',
-      emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
-    });
-  }
-}
-
-// Áp dụng đúng hiển thị "Siêu thị áp dụng/đề xuất" theo sub-tab con đang mở (RETAIL/WHOLESALE) — gọi
-// lại mỗi lần đổi sub-tab (setItPriceSubTab()) HOẶC làm mới form (resetItPriceForm()), vì 2 sub-tab có
-// ngữ nghĩa khác hẳn nhau (mục 2 đợt 9/2026, xác nhận với người dùng): Bán Lẻ giữ khái niệm "Toàn bộ/
-// Khác" như cũ; Bán Buôn KHÔNG còn "Toàn bộ" — mỗi đề xuất Bán Buôn luôn phải gắn rõ 1-nhiều siêu thị/
-// cửa hàng cụ thể ("Siêu Thị Đề Xuất"), nên ẩn hẳn select, ô multi-select LUÔN hiện sẵn và LUÔN bắt
-// buộc (xem submitItPriceApproval()/itPriceApprovals.extraValidate ở lib/createValidation.js — server
-// tự ép priceType==='WHOLESALE' về storeScope.mode='OTHER', không tin nguyên văn client gửi).
+// Bán Buôn KHÔNG có khái niệm "Toàn bộ" — mỗi đề xuất luôn phải gắn rõ 1-nhiều siêu thị/cửa hàng cụ
+// thể ("Siêu Thị Đề Xuất"), ô multi-select LUÔN hiện sẵn và LUÔN bắt buộc (xem submitItPriceApproval()/
+// itPriceApprovals.extraValidate ở lib/createValidation.js). Bán Lẻ (đợt 9/2026, tách biểu mẫu theo yêu
+// cầu người dùng) KHÔNG còn khái niệm này nữa — đã có "Vùng Giá Áp Dụng" đủ khoanh phạm vi, khối
+// #itPriceWholesaleScopeDateWrap (gồm cả Ngày Áp Dụng/Ngày Hết Hiệu Lực) ẩn hẳn khỏi Bán Lẻ, xem
+// setItPriceSubTab()/resetItPriceForm() ở dưới.
 function applyItPriceStoreScopeUIForSubTab() {
   const isWholesale = activeItPriceSubTab === 'WHOLESALE';
-  const label = document.getElementById('itPriceStoreScopeLabelEl');
-  const modeSelect = document.getElementById('itPriceStoreScopeMode');
-  const wrap = document.getElementById('itPriceStoreScopeStoresWrap');
-  if (label) label.innerText = isWholesale ? '🏬 Siêu Thị Đề Xuất' : '🏬 Siêu Thị Áp Dụng';
-  if (modeSelect) modeSelect.classList.toggle('hidden', isWholesale);
+  const wrap = document.getElementById('itPriceWholesaleScopeDateWrap');
+  if (wrap) wrap.classList.toggle('hidden', !isWholesale);
+  // itPriceEffectiveDate có thể mang thuộc tính HTML "required" (mặc định TRUE ở CORE_FIELD_MANIFEST.
+  // IT_PRICE, admin có thể bật/tắt qua màn Biểu Mẫu) — PHẢI gỡ khi ẩn (Bán Lẻ), nếu không trình duyệt tự
+  // chặn hẳn sự kiện submit (input required+ẩn không focus được) TRƯỚC KHI submitItPriceApproval() kịp
+  // chạy, khiến Bán Lẻ không gửi được gì mà không rõ lý do (lỗi thật đã gặp lúc viết test click thật).
+  const effDate = document.getElementById('itPriceEffectiveDate');
+  if (effDate) effDate.required = isWholesale;
   if (isWholesale) {
-    wrap.classList.remove('hidden');
     renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], getMultiSelectValues('itPriceStoreScopeStoresMultiSelect'), {
       placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',
       emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
     });
-  } else {
-    wrap.classList.toggle('hidden', modeSelect.value !== 'OTHER');
   }
 }
 
@@ -478,25 +462,29 @@ async function submitItPriceApproval(e) {
   if (activeItPriceSubTab === 'RETAIL' && !priceZone) {
     return alert('⛔ Vui lòng chọn Vùng Giá Áp Dụng.');
   }
-  // "Siêu thị áp dụng/đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — chặn sớm cho trải nghiệm mượt,
-  // server tự xác minh lại y hệt ở itPriceApprovals.extraValidate (không tin giá trị client gửi). Bán
-  // Buôn KHÔNG có khái niệm "Toàn bộ" — luôn ép OTHER (server cũng tự ép lại y hệt, bỏ qua giá trị
-  // client claim nếu có, xem chú thích applyItPriceStoreScopeUIForSubTab()).
+  // "Siêu thị đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — CHỈ còn áp dụng cho Bán Buôn (đợt 9/2026,
+  // tách biểu mẫu theo yêu cầu người dùng: Bán Lẻ đã có "Vùng Giá Áp Dụng" đủ khoanh phạm vi, không cần
+  // chọn thêm). Bán Lẻ tự gắn mặc định storeScope=ALL/ngày áp dụng=hôm nay/hết hiệu lực=Vĩnh viễn, KHÔNG
+  // đọc từ input nào (3 input đó đã ẩn hẳn khỏi form Bán Lẻ — xem itSupportSection.html). Server vẫn tự
+  // xác minh lại y hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi.
   const isWholesale = activeItPriceSubTab === 'WHOLESALE';
-  const storeScopeMode = isWholesale || document.getElementById('itPriceStoreScopeMode').value === 'OTHER' ? 'OTHER' : 'ALL';
-  const storeScopeStores = storeScopeMode === 'OTHER' ? getMultiSelectValues('itPriceStoreScopeStoresMultiSelect') : [];
-  if (storeScopeMode === 'OTHER' && storeScopeStores.length === 0) {
-    return alert(isWholesale
-      ? '⛔ Vui lòng chọn ít nhất 1 siêu thị/cửa hàng đề xuất.'
-      : '⛔ Vui lòng chọn ít nhất 1 siêu thị/cửa hàng áp dụng (hoặc chọn lại "Toàn bộ siêu thị, cửa hàng").');
-  }
-  const effectiveDate = document.getElementById('itPriceEffectiveDate').value;
-  if (!effectiveDate) return alert('⛔ Vui lòng chọn Ngày Áp Dụng.');
-  const expiryMode = document.getElementById('itPriceExpiryMode').value === 'OTHER' ? 'OTHER' : 'PERMANENT';
-  const expiryDate = expiryMode === 'OTHER' ? document.getElementById('itPriceExpiryDate').value : null;
-  if (expiryMode === 'OTHER') {
-    if (!expiryDate) return alert('⛔ Vui lòng chọn Ngày Hết Hiệu Lực (hoặc chọn lại "Vĩnh viễn").');
-    if (expiryDate < effectiveDate) return alert('⛔ Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi.');
+  let storeScopeMode = 'ALL', storeScopeStores = [], effectiveDate, expiryMode = 'PERMANENT', expiryDate = null;
+  if (isWholesale) {
+    storeScopeMode = 'OTHER';
+    storeScopeStores = getMultiSelectValues('itPriceStoreScopeStoresMultiSelect');
+    if (storeScopeStores.length === 0) {
+      return alert('⛔ Vui lòng chọn ít nhất 1 siêu thị/cửa hàng đề xuất.');
+    }
+    effectiveDate = document.getElementById('itPriceEffectiveDate').value;
+    if (!effectiveDate) return alert('⛔ Vui lòng chọn Ngày Áp Dụng.');
+    expiryMode = document.getElementById('itPriceExpiryMode').value === 'OTHER' ? 'OTHER' : 'PERMANENT';
+    expiryDate = expiryMode === 'OTHER' ? document.getElementById('itPriceExpiryDate').value : null;
+    if (expiryMode === 'OTHER') {
+      if (!expiryDate) return alert('⛔ Vui lòng chọn Ngày Hết Hiệu Lực (hoặc chọn lại "Vĩnh viễn").');
+      if (expiryDate < effectiveDate) return alert('⛔ Ngày Hết Hiệu Lực phải từ Ngày Áp Dụng trở đi.');
+    }
+  } else {
+    effectiveDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD theo múi giờ máy chủ, khớp DATE_RE server.
   }
   // Tài liệu bổ sung liên quan (mục A, mirror ĐÚNG extraFilesInput/extraFiles của doSubmitSubmissionReq())
   // — hoàn toàn TUỲ CHỌN, mảng rỗng nếu không chọn tệp nào.
@@ -612,10 +600,9 @@ function resetItPriceForm() {
   renderItPriceMasterListSelect();
   clearSingleFileInput('itPriceFileInput', 'itPriceFileChip');
   clearMultiFileInput('itPriceExtraFiles', 'itPriceExtraFilesChip');
-  // "Siêu thị áp dụng"/"Ngày hết hiệu lực" — form.reset() ở trên đã tự đưa 2 <select> về lại giá trị
-  // mặc định (option đầu tiên = ALL/PERMANENT), chỉ cần xoá lựa chọn multi-select đã chọn trước đó rồi
-  // gọi lại applyItPriceStoreScopeUIForSubTab() để hiện/ẩn ĐÚNG theo sub-tab con đang mở (form.reset()
-  // không đụng gì tới class "hidden", và Bán Buôn không có khái niệm ẩn khối multi-select như Bán Lẻ).
+  // "Ngày hết hiệu lực" — form.reset() ở trên đã tự đưa <select> về lại giá trị mặc định (PERMANENT),
+  // chỉ cần xoá lựa chọn multi-select đã chọn trước đó rồi gọi lại applyItPriceStoreScopeUIForSubTab()
+  // để hiện/ẩn ĐÚNG khối Bán Buôn theo sub-tab con đang mở (form.reset() không đụng gì tới class "hidden").
   document.getElementById('itPriceExpiryDateWrap').classList.add('hidden');
   renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], [], {
     placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',

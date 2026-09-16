@@ -5,8 +5,9 @@
 // + thêm cảnh báo màu sắc khi hợp đồng sắp/đã hết hiệu lực):
 //   - hrcDaysUntilExpiry(endDate): số ngày còn lại tới hạn (âm = đã quá hạn).
 //   - hrcExpiryBadgeHtml(c): badge màu (đỏ/vàng) theo hrcDaysUntilExpiry(), chỉ áp dụng hợp đồng ACTIVE.
-//   - toggleHrcAmendmentMoneyMode(typeValue): bật/tắt class "money-input" cho 2 ô Giá trị cũ/mới của
-//     phụ lục theo nội dung ô "Loại thay đổi" có chứa "lương" hay không (không phân biệt dấu/hoa-thường).
+//   - toggleHrcAmendmentMoneyMode(): bật/tắt class "money-input" cho 2 ô Giá trị cũ/mới của phụ lục theo
+//     checkbox tường minh #hrcNewAmendmentIsMoney (9/2026 — thay cho đoán theo nội dung "Loại thay đổi",
+//     không đáng tin vì người dùng có thể gõ Giá trị cũ/mới TRƯỚC khi gõ Loại thay đổi).
 //
 // module-hopdonglaodong.js là script trình duyệt THUẦN (không module.exports, phụ thuộc DOM/window toàn
 // cục) — KHÔNG require() thẳng được. Nạp qua vm.runInContext() với 1 "document" giả tối thiểu (chỉ
@@ -31,7 +32,12 @@ function makeFakeElement() {
       _set: new Set(),
       add(c) { this._set.add(c); },
       remove(c) { this._set.delete(c); },
-      contains(c) { return this._set.has(c); }
+      contains(c) { return this._set.has(c); },
+      toggle(c, force) {
+        const on = force !== undefined ? force : !this._set.has(c);
+        if (on) this._set.add(c); else this._set.delete(c);
+        return on;
+      }
     }
   };
 }
@@ -96,30 +102,29 @@ async function main() {
     assertEqual(redExpiredBadge.includes('Đã hết hạn'), true, 'Đã quá hạn -> phải ghi rõ "Đã hết hạn"');
   });
 
-  await run.run('toggleHrcAmendmentMoneyMode(): bật money-input khi "Loại thay đổi" nhắc tới lương, tắt khi không', () => {
+  await run.run('toggleHrcAmendmentMoneyMode(): bật/tắt money-input theo checkbox tường minh (không đoán theo "Loại thay đổi" nữa)', () => {
     const { sandbox, elements } = loadSandbox();
     const oldEl = elements['hrcNewAmendmentOld'] = makeFakeElement();
     const newEl = elements['hrcNewAmendmentNew'] = makeFakeElement();
+    const checkboxEl = elements['hrcNewAmendmentIsMoney'] = makeFakeElement();
     oldEl.value = '10000000';
     newEl.value = '12000000';
 
-    sandbox.toggleHrcAmendmentMoneyMode('Tăng lương');
-    assertEqual(oldEl.classList.contains('money-input'), true, '"Tăng lương" -> bật money-input cho ô Giá trị cũ');
-    assertEqual(newEl.classList.contains('money-input'), true, '"Tăng lương" -> bật money-input cho ô Giá trị mới');
+    // Checkbox BẬT (mặc định) -> money-input bật cho CẢ 2 ô, dù "Loại thay đổi" chưa gõ gì/không liên
+    // quan lương -> đúng bug người dùng báo cáo (gõ Giá trị TRƯỚC khi gõ Loại thay đổi vẫn được định
+    // dạng ngay, không còn phụ thuộc thứ tự gõ).
+    checkboxEl.checked = true;
+    sandbox.toggleHrcAmendmentMoneyMode();
+    assertEqual(oldEl.classList.contains('money-input'), true, 'Checkbox bật -> money-input bật cho ô Giá trị cũ');
+    assertEqual(newEl.classList.contains('money-input'), true, 'Checkbox bật -> money-input bật cho ô Giá trị mới');
     assertEqual(oldEl.value, '10.000.000', 'Phải tự định dạng lại giá trị đang có sẵn khi bật money mode');
-    assertEqual(oldEl.placeholder, 'Lương cũ (đ)', 'Placeholder phải đổi thành gợi ý tiền tệ');
+    assertEqual(oldEl.placeholder, 'Giá trị cũ (đ)', 'Placeholder phải gợi ý đơn vị tiền tệ');
 
-    // Không dấu (gõ không bỏ dấu tiếng Việt) vẫn phải nhận diện đúng.
-    sandbox.toggleHrcAmendmentMoneyMode('dieu chinh luong co ban');
-    assertEqual(oldEl.classList.contains('money-input'), true, 'Không dấu ("luong") vẫn phải nhận diện đúng là liên quan lương');
-
-    // Loại thay đổi KHÔNG liên quan lương -> tắt money-input, giữ nguyên giá trị đã gõ.
-    sandbox.toggleHrcAmendmentMoneyMode('Thay đổi chức danh');
-    assertEqual(oldEl.classList.contains('money-input'), false, '"Thay đổi chức danh" -> KHÔNG bật money-input (tránh phá dữ liệu chữ)');
+    // Người dùng tự TẮT checkbox (VD cần gõ chữ tự do như đổi chức danh) -> tắt money-input.
+    checkboxEl.checked = false;
+    sandbox.toggleHrcAmendmentMoneyMode();
+    assertEqual(oldEl.classList.contains('money-input'), false, 'Checkbox tắt -> KHÔNG còn money-input (cho phép gõ chữ tự do)');
     assertEqual(oldEl.placeholder, 'Giá trị cũ', 'Placeholder phải trở lại trung tính');
-
-    sandbox.toggleHrcAmendmentMoneyMode('');
-    assertEqual(oldEl.classList.contains('money-input'), false, 'Loại thay đổi rỗng -> mặc định KHÔNG bật money-input');
   });
 
   run.summary();

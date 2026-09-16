@@ -1351,13 +1351,13 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   lẻ, vì dữ liệu gộp có cả lương/hợp đồng (vốn chỉ người có quyền Hợp Đồng
   Lao Động được xem) lẫn chức vụ; người chỉ có 1 trong 2 quyền sẽ không thấy
   khối này.
-- **"📊 Báo Cáo"** (9/2026, tab riêng cạnh "Quản Lý Hồ Sơ" — cùng yêu cầu CẢ 2
-  quyền như Lịch Sử Nhân Sự ở trên, vì employeeProfiles/laborContracts là
-  nhóm dữ liệu cực nhạy cảm KHÔNG đi qua màn Báo Cáo dùng chung — mục 4.9):
-  lọc theo khoảng thời gian (Từ ngày/Đến ngày) + tình trạng HĐLĐ, ra 8 chỉ số
-  cơ bản — nhân sự vào làm/nghỉ việc, hợp đồng mới/gia hạn, tăng lương, thay
-  đổi HĐLĐ khác, thăng chức/đổi chức danh, và **"HĐ sắp hết hạn (≤30 ngày)"**
-  (mục này LUÔN tính từ ngày hiện tại, không phụ thuộc bộ lọc thời gian).
+- **"📊 Báo Cáo"** — số liệu tổng hợp trên dựa vào Hồ Sơ Nhân Sự + Hợp Đồng Lao
+  Động, nhưng bản thân màn xem báo cáo **KHÔNG** nằm lồng trong "Hồ Sơ Nhân
+  Sự" — từ 9/2026 đã dời thành **module con RIÊNG cấp Nhân Sự** ("Nhân Sự →
+  📊 Báo Cáo" trong menu sidebar, ngang hàng Hồ Sơ Nhân Sự/Hợp Đồng Lao Động),
+  xem mục 4.5.5 bên dưới — cùng yêu cầu CẢ 2 quyền như Lịch Sử Nhân Sự ở trên,
+  vì employeeProfiles/laborContracts là nhóm dữ liệu cực nhạy cảm KHÔNG đi
+  qua màn Báo Cáo dùng chung (mục 4.9).
 
 #### 4.5.4. Hợp Đồng Lao Động
 
@@ -1400,19 +1400,25 @@ Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được.
   chặn cả ở server, không chỉ ở giao diện) — tick **"Không lấy từ hồ sơ (nhập
   mã ngoài hệ thống)"** mới chuyển sang ô nhập tay tự do, dùng cho nhân viên
   cũ/cộng tác viên chưa có hồ sơ trong hệ thống.
-- Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, ngày
-  hiệu lực, giá trị cũ/mới, ghi chú (VD tăng lương, đổi vị trí) — không giới
-  hạn số lần, giữ nguyên lịch sử, **luôn hiển thị mới nhất lên đầu** (9/2026).
-  Có thể **đính kèm Quyết định** (tệp PDF/Word/ảnh, tuỳ chọn) ngay khi thêm
-  thay đổi — hiển thị lại kèm liên kết tải ở từng dòng Phụ Lục và ở khối
-  "Lịch Sử Nhân Sự" gộp (mục 4.5.3), giúp tra soát có văn bản quyết định gốc
-  đi kèm mỗi lần tăng lương/đổi vị trí giữa kỳ hợp đồng (v17.6).
-  - **Định dạng tiền cho phụ lục liên quan lương** (9/2026): ô "Loại thay
-    đổi" nếu có chữ **"lương"** (VD "Tăng lương", "Điều chỉnh lương cơ bản")
-    thì 2 ô Giá trị cũ/mới TỰ ĐỘNG hiện dấu chấm phân cách hàng nghìn khi gõ
-    (giống ô Lương cơ bản) — loại thay đổi khác (đổi chức danh, ca làm...)
-    giữ nguyên ô nhập chữ tự do (không ép định dạng tiền lên nội dung không
-    phải số).
+- Mỗi hợp đồng có thể **bổ sung thay đổi** (Phụ Lục) — loại thay đổi, **2 mốc
+  thời gian riêng** ("Ngày áp dụng" — TUỲ CHỌN, khi quyết định được áp
+  dụng/ban hành; và "Ngày hiệu lực" — BẮT BUỘC, khi thay đổi thật sự có hiệu
+  lực, có thể trễ hơn ngày áp dụng), giá trị cũ/mới, ghi chú (VD tăng lương,
+  đổi vị trí) — không giới hạn số lần, giữ nguyên lịch sử, **luôn hiển thị mới
+  nhất lên đầu** (9/2026). Có thể **đính kèm Quyết định** (tệp PDF/Word/ảnh,
+  tuỳ chọn) ngay khi thêm thay đổi — hiển thị lại kèm liên kết tải ở từng
+  dòng Phụ Lục và ở khối "Lịch Sử Nhân Sự" gộp (mục 4.5.3), giúp tra soát có
+  văn bản quyết định gốc đi kèm mỗi lần tăng lương/đổi vị trí giữa kỳ hợp
+  đồng (v17.6).
+  - **Định dạng tiền cho phụ lục** (9/2026, cập nhật lại theo phản hồi người
+    dùng — đợt trước tự đoán theo nội dung ô "Loại thay đổi" có chứa chữ
+    "lương" hay không, KHÔNG đáng tin vì người dùng có thể gõ Giá trị cũ/mới
+    TRƯỚC khi gõ Loại thay đổi, giá trị gõ trước không được tự định dạng
+    lại): thay bằng checkbox tường minh **"💰 Giá trị tiền"** ngay cạnh 2 ô
+    Giá trị cũ/mới — **mặc định BẬT** (đa số phụ lục liên quan lương), gõ số
+    vào là TỰ ĐỘNG hiện dấu chấm phân cách hàng nghìn ngay lập tức (giống ô
+    Lương cơ bản), không phụ thuộc thứ tự gõ/nội dung ô Loại thay đổi nữa —
+    tick TẮT khi thật sự cần gõ chữ tự do (VD đổi chức danh, ca làm...).
 - **Cảnh báo hết hạn màu sắc trên màn hình** (9/2026, khác hẳn job email
   60/45/30 ngày ở mục dưới — đây là badge hiển thị TRỰC TIẾP ở danh sách LẪN
   chi tiết hợp đồng): hợp đồng đang **Đang hiệu lực** còn **≤30 ngày** hiện
@@ -1437,7 +1443,23 @@ Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được.
   hiện hành trước khi cứng hoá — xem mục 4.5.2, chỉ là mốc HIỂN THỊ tham
   khảo, không phải ràng buộc validate).
 
-#### 4.5.5. Công & Phép
+#### 4.5.5. Báo Cáo (Nhân Sự)
+
+**Nhân Sự → 📊 Báo Cáo** (9/2026, dời từ tab lồng bên trong "Hồ Sơ Nhân Sự" ra
+**module con RIÊNG cấp Nhân Sự** — ngang hàng Hồ Sơ Nhân Sự/Hợp Đồng Lao Động
+trong menu sidebar, không lồng bên trong Hồ Sơ Nhân Sự nữa) — **vai trò**: số
+liệu tổng hợp nhân sự, lọc theo khoảng thời gian (Từ ngày/Đến ngày) + tình
+trạng HĐLĐ, ra 8 chỉ số cơ bản — nhân sự vào làm/nghỉ việc, hợp đồng mới/gia
+hạn, tăng lương, thay đổi HĐLĐ khác, thăng chức/đổi chức danh, và **"HĐ sắp
+hết hạn (≤30 ngày)"** (mục này LUÔN tính từ ngày hiện tại, không phụ thuộc bộ
+lọc thời gian). **KHÔNG tạo collection/route mới** — vẫn đọc từ Hồ Sơ Nhân Sự
++ Hợp Đồng Lao Động qua route thống kê riêng `GET /api/hr-profile/reports`,
+chỉ đổi nơi hiển thị cho đúng cấp module. **Yêu cầu CẢ 2 quyền** "🗂️ Quản Lý
+Hồ Sơ Nhân Sự" **VÀ** "📝 Quản Lý Hợp Đồng Lao Động" (hoặc admin) — cùng mức
+chặt như Lịch Sử Nhân Sự (mục 4.5.3), vì employeeProfiles/laborContracts là
+nhóm dữ liệu cực nhạy cảm KHÔNG đi qua màn Báo Cáo dùng chung (mục 4.9).
+
+#### 4.5.6. Công & Phép
 
 **Nhân Sự → Công & Phép** — **vai trò**: chấm công (qua máy chấm công vật lý)
 + quản lý phép năm + lịch phân ca/đổi ca cho nhân viên Siêu Thị. **Mở cho MỌI
@@ -1512,7 +1534,7 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   hoán đổi chéo 2 dòng); không tự động sinh lịch phân ca tuần đầu từ checklist
   Onboarding — Quản Lý Siêu Thị/HR tự lập lịch thủ công.
 
-#### 4.5.6. Quản Lý & Phản Hồi Ý Kiến
+#### 4.5.7. Quản Lý & Phản Hồi Ý Kiến
 
 Phía Nhân Sự của **🤝 HCRC Đồng Hành** (mục 4.1) — **vai trò**: nơi Nhân Sự
 trả lời câu hỏi nhân viên gửi qua HCRC Đồng Hành, đúng khuôn **1 hỏi–1 đáp**
@@ -1568,7 +1590,7 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   bố) ra file PDF ngay tại trình duyệt (không qua server), giữ lại làm hồ sơ
   cá nhân.
 - **Liên kết Offboarding**: khi hoàn tất việc "Tính lương, phép năm chưa nghỉ"
-  trong checklist Offboarding (mục 4.5.2/4.5.5), số tiền quy đổi phép chưa
+  trong checklist Offboarding (mục 4.5.2/4.5.6), số tiền quy đổi phép chưa
   nghỉ hiện thị tham khảo ngay trên dòng công việc đó — kế toán tự thêm vào
   phiếu lương kỳ cuối của nhân viên (dòng "Thưởng khác") nếu công ty quyết
   định chi trả, hệ thống không tự động ghi thẳng vào phiếu lương.

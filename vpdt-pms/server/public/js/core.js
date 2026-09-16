@@ -51,7 +51,7 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
 // bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"nghiepVu":["nghiepvu"]};
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrReport":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"nghiepVu":["nghiepvu"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
@@ -151,6 +151,9 @@ const TAB_SECTION_FRAGMENT = {
   hrLifecycle: 'hrLifecycleSection', budget: 'budgetSection', doc: 'docSection', submission: 'submissionSection',
   license: 'licenseSection', orgChart: 'orgChartSection', hrPayroll: 'hrPayrollSection', task: 'taskSection',
   hrProfile: 'hrProfileSection', reports: 'reportsSection', hrContract: 'hrContractSection',
+  // hrReport (9/2026): dời từ 1 view lồng bên trong hrProfile ra module con riêng cấp Nhân Sự — xem
+  // chú thích entry 'hrReport' ở BUSINESS_MODULES.
+  hrReport: 'hrReportSection',
   // Dot tach module 4 (v23.13) - 2 section PHUC TAP CON LAI, moi section co nhieu section con long ben
   // trong (tach CA CUM vao 1 fragment duy nhat, giu 1 vo rong DUY NHAT o index.html cho chinh no - xem
   // NESTED_CSP_ROOTS_IN_FRAGMENT ben duoi cho danh sach id con can bind lai rieng):
@@ -627,14 +630,15 @@ const CORE_FIELD_MANIFEST = {
   // phải nhãn thuần), còn itPriceTier (Margin/Chiết Khấu) là 4 mức CỐ ĐỊNH gắn trực tiếp với cấu hình
   // quy trình duyệt riêng theo mức (itPriceTierWorkflows) — đổi khoá ở đây sẽ làm mồ côi cấu hình duyệt
   // đã gán, nên KHÔNG đưa vào diện admin tự thêm/bớt giá trị (chỉ sửa nhãn/bắt buộc như mọi field khác).
-  // itPriceStoreScopeMode/itPriceExpiryMode: cùng lý do itPriceTier ở trên (giá trị gắn cứng với logic
-  // hiện/ẩn khối "Khác" đi kèm, KHÔNG đưa optionsKey). itPriceStoreScopeStoresMultiSelect (div chứa
-  // renderMultiSelectDropdown()) KHÔNG đưa vào manifest — cùng lý do owiAssignedToPicker/
-  // workflowParticipatingDeptsMultiSelect chưa từng vào diện Biểu Mẫu (div container, không phải input/
-  // không có <label> riêng bên trong, xem chú thích OPERATION_WORK_ITEM). itPriceExpiryDate chỉ THẬT SỰ
-  // bắt buộc khi itPriceExpiryMode="OTHER" (điều kiện, không tĩnh) — required ở đây chỉ là mặc định ban
-  // đầu, đặt false cho đúng bản chất; validate điều kiện thật nằm ở submitItPriceApproval()/
-  // itPriceApprovals.extraValidate (lib/createValidation.js), không đổi khi admin bật required ở đây.
+  // itPriceExpiryMode: cùng lý do itPriceTier ở trên (giá trị gắn cứng với logic hiện/ẩn khối "Khác" đi
+  // kèm, KHÔNG đưa optionsKey). itPriceStoreScopeStoresMultiSelect (div chứa renderMultiSelectDropdown())
+  // KHÔNG đưa vào manifest — cùng lý do owiAssignedToPicker/workflowParticipatingDeptsMultiSelect chưa
+  // từng vào diện Biểu Mẫu (div container, không phải input/không có <label> riêng bên trong, xem chú
+  // thích OPERATION_WORK_ITEM). itPriceEffectiveDate/itPriceExpiryMode/itPriceExpiryDate (đợt 9/2026, tách
+  // biểu mẫu Bán Buôn/Bán Lẻ) giờ CHỈ hiện cho Bán Buôn — Bán Lẻ tự gắn mặc định, không đọc 3 input này
+  // (xem submitItPriceApproval()). itPriceExpiryDate chỉ THẬT SỰ bắt buộc khi itPriceExpiryMode="OTHER"
+  // (điều kiện, không tĩnh) — required ở đây chỉ là mặc định ban đầu, đặt false cho đúng bản chất; validate
+  // điều kiện thật nằm ở submitItPriceApproval()/itPriceApprovals.extraValidate (lib/createValidation.js).
   IT_PRICE: [
     { id: 'itPriceCode', label: 'Mã Đề Xuất', required: false },
     { id: 'itPriceDeptDisplay', label: 'Phòng Ban Đề Xuất', required: false },
@@ -644,12 +648,12 @@ const CORE_FIELD_MANIFEST = {
     // trên) — required ở đây là mặc định ban đầu, validate điều kiện thật nằm ở submitItPriceApproval()/
     // itPriceApprovals.extraValidate như itPriceTier.
     { id: 'itPriceWholesaleApplyUnit', label: 'Đơn Vị Áp Dụng Giá Bán Buôn', required: false },
+    { id: 'itPriceRetailZone', label: 'Vùng Giá Áp Dụng', required: false },
     { id: 'itPriceFileInput', label: 'Tệp Bảng Giá (.xlsx)', required: false },
     { id: 'itPriceReason', label: 'Lý Do Điều Chỉnh Giá', required: false },
     { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false },
-    { id: 'itPriceStoreScopeMode', label: 'Siêu Thị Áp Dụng', required: false },
-    { id: 'itPriceEffectiveDate', label: 'Ngày Áp Dụng', required: true },
-    { id: 'itPriceExpiryMode', label: 'Ngày Hết Hiệu Lực', required: false },
+    { id: 'itPriceEffectiveDate', label: 'Ngày Áp Dụng (Bán Buôn)', required: true },
+    { id: 'itPriceExpiryMode', label: 'Ngày Hết Hiệu Lực (Bán Buôn)', required: false },
     { id: 'itPriceExpiryDate', label: 'Ngày Hết Hiệu Lực (Khác)', required: false }
   ],
   // IT_TICKET: #itTicketCreateForm (Hỗ Trợ IT > Hỗ Trợ Yêu Cầu). itTicketCategory optionsKey trỏ DB.
@@ -1894,6 +1898,13 @@ const BUSINESS_MODULES = [
   // người có quyền hrContractManage/admin (không có tầng "tự xem hợp đồng của mình" ở đợt này, đúng
   // khuôn "vanHanh"/"budget": module không mở sẵn cho ai), xem canAccessHrContractModule().
   { key: 'hrContract', label: 'Hợp Đồng Lao Động', parent: 'hr' },
+  // "Báo Cáo" (9/2026) — TRƯỚC ĐÂY nằm lồng bên trong "Hồ Sơ Nhân Sự" (1 trong 3 view của
+  // setHrProfileView()), người dùng phản hồi đúng ra phải là module con RIÊNG ở cấp "Nhân Sự" (ngang
+  // hàng Hồ Sơ Nhân Sự/Hợp Đồng Lao Động), không lồng bên trong Hồ Sơ Nhân Sự — dời hẳn ra đây, KHÔNG
+  // tạo collection/route mới (vẫn GET /api/hr-profile/reports, chỉ đổi nơi hiển thị). Cùng mức quyền
+  // CHẶT như trước (CẦN CẢ hrProfileManage LẪN hrContractManage/admin — vẫn lộ số liệu lương qua mục
+  // tăng lương), xem hrpfCanViewReports() ở module-hrprofile.js.
+  { key: 'hrReport', label: 'Báo Cáo', parent: 'hr' },
   // "Công & Phép" — module con MỚI của "Nhân Sự" (Đợt 3/4, xem lib/attendance.js đầu file phía server).
   // MỞ CHO MỌI NGƯỜI (cùng khuôn hrProfile, KHÁC hrContract) vì mọi nhân viên đều cần tự xem chấm công/
   // phép năm/nộp đơn nghỉ phép của CHÍNH MÌNH — các khối quản lý (HR/Quản lý trực tiếp/Quản Lý Siêu Thị)
@@ -5846,6 +5857,7 @@ function finishLogin(user) {
   document.getElementById('btnHrLifecycleNav').classList.toggle('hidden', !canAccessHrLifecycleModule(user));
   document.getElementById('btnHrProfileNav').classList.toggle('hidden', !canAccessHrProfileModule(user));
   document.getElementById('btnHrContractNav').classList.toggle('hidden', !canAccessHrContractModule(user));
+  document.getElementById('btnHrReportNav').classList.toggle('hidden', !hrpfCanViewReports());
   document.getElementById('btnHrAttendanceNav').classList.toggle('hidden', !canAccessHrAttendanceModule(user));
   document.getElementById('btnHrPayrollNav').classList.toggle('hidden', !canAccessHrPayrollModule(user));
   updateHrNavVisibility();
@@ -6234,8 +6246,9 @@ function updateHrNavVisibility() {
   const lifecycleVisible = !document.getElementById('btnHrLifecycleNav').classList.contains('hidden');
   const profileVisible = !document.getElementById('btnHrProfileNav').classList.contains('hidden');
   const contractVisible = !document.getElementById('btnHrContractNav').classList.contains('hidden');
+  const reportVisible = !document.getElementById('btnHrReportNav').classList.contains('hidden');
   const attendanceVisible = !document.getElementById('btnHrAttendanceNav').classList.contains('hidden');
-  document.getElementById('hrNavWrap').classList.toggle('hidden', !feedbackVisible && !orgChartVisible && !lifecycleVisible && !profileVisible && !contractVisible && !attendanceVisible);
+  document.getElementById('hrNavWrap').classList.toggle('hidden', !feedbackVisible && !orgChartVisible && !lifecycleVisible && !profileVisible && !contractVisible && !reportVisible && !attendanceVisible);
 }
 function toggleHrDropdown(e) {
   e.stopPropagation();
@@ -6447,6 +6460,12 @@ async function switchTab(tabName) {
     alert('⛔ Bạn không có quyền truy cập Module Hợp Đồng Lao Động!');
     return;
   }
+  // hrReport (9/2026, dời từ view lồng trong hrProfile ra module con riêng) — cùng mức quyền CHẶT như
+  // trước (CẦN CẢ hrProfileManage LẪN hrContractManage/admin), xem hrpfCanViewReports() ở module-hrprofile.js.
+  if (tabName === 'hrReport' && !hrpfCanViewReports()) {
+    alert('⛔ Bạn không có quyền truy cập Báo Cáo Nhân Sự!');
+    return;
+  }
   if (tabName === 'hrAttendance' && !canAccessHrAttendanceModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Công & Phép!');
     return;
@@ -6515,6 +6534,7 @@ async function switchTab(tabName) {
   document.getElementById('hrLifecycleSection').classList.toggle('hidden', tabName !== 'hrLifecycle');
   document.getElementById('hrProfileSection').classList.toggle('hidden', tabName !== 'hrProfile');
   document.getElementById('hrContractSection').classList.toggle('hidden', tabName !== 'hrContract');
+  document.getElementById('hrReportSection').classList.toggle('hidden', tabName !== 'hrReport');
   document.getElementById('hrAttendanceSection').classList.toggle('hidden', tabName !== 'hrAttendance');
   document.getElementById('hrPayrollSection').classList.toggle('hidden', tabName !== 'hrPayroll');
   document.getElementById('nghiepVuSection').classList.toggle('hidden', tabName !== 'nghiepVu');
@@ -6630,6 +6650,7 @@ function _dispatchTabRender(tabName) {
   if (tabName === 'hrProfile') { renderHrProfileModule(); }
   if (tabName === 'hrPayroll') { renderHrPayrollModule(); }
   if (tabName === 'hrContract') { renderHrContractModule(); }
+  if (tabName === 'hrReport') { renderHrReportModule(); }
   if (tabName === 'hrAttendance') { renderHrAttendanceModule(); }
   if (tabName === 'checklist') { updateChecklistSubTabVisibility(); }
   if (tabName === 'nghiepVu') { renderNghiepVuModule(); }
@@ -6782,6 +6803,13 @@ function canAccessHrContractModule(user) {
   if (!hasModuleAccess(user, 'hrContract')) return false;
   return !!user.perms?.hrContractManage;
 }
+
+// Báo Cáo Nhân Sự (9/2026, dời từ view lồng trong hrProfile ra module con riêng "hrReport") — khớp đúng
+// quyền GET /api/hr-profile/reports (CẦN CẢ hrProfileManage LẪN hrContractManage/admin), cùng mức chặt
+// như GET .../history (Lịch Sử Nhân Sự). PHẢI sống ở core.js (không phải module-hrprofile.js, lazy-load
+// theo tab) vì finishLogin() gọi hàm này để hiện/ẩn nút điều hướng NGAY LÚC ĐĂNG NHẬP — trước khi người
+// dùng từng mở tab Hồ Sơ Nhân Sự/Báo Cáo lần nào (module-hrprofile.js lúc đó CHƯA được nạp).
+function hrpfCanViewReports() { return !!(currentUser.perms?.admin || (currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage)); }
 
 // Công & Phép — mở cho MỌI người có module cha "hr" (cùng khuôn hrProfile) vì ai cũng cần tự xem
 // chấm công/phép năm/nộp đơn của chính mình; các khối quản lý bên trong tự ẩn theo quyền riêng.
@@ -7210,6 +7238,35 @@ function populateItPriceRetailZoneSelect() {
   sel.innerHTML = '<option value="">-- Chọn Vùng Giá Áp Dụng --</option>' +
     list.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
   if (list.includes(current)) sel.value = current;
+  // Danh mục rỗng -> trước đây người đề xuất bị chặn gửi với alert mơ hồ không rõ vì sao không chọn
+  // được gì. priceZones chỉ Admin mới ghi được (xem routes/data.js ADMIN_ONLY_KEYS) nên admin thấy nút
+  // thêm nhanh ngay tại đây, người khác chỉ thấy hướng dẫn nhờ admin thêm trước.
+  const hint = document.getElementById('itPriceRetailZoneEmptyHint');
+  if (hint) {
+    hint.classList.toggle('hidden', list.length > 0);
+    if (!list.length) {
+      hint.innerHTML = currentUser?.perms?.admin
+        ? `⚠️ Chưa có Vùng Giá Áp Dụng nào trong hệ thống. <button type="button" data-op="quickAddPriceZoneFromItPriceForm" class="text-amber-900 font-bold underline">+ Thêm ngay tại đây</button>`
+        : '⚠️ Chưa có Vùng Giá Áp Dụng nào trong hệ thống — vui lòng nhờ Admin vào Hệ Thống > Quản Lý Danh Mục để thêm trước khi gửi đề xuất Bán Lẻ.';
+    }
+  }
+}
+
+// Thêm nhanh 1 "Vùng Giá Áp Dụng" NGAY từ form tạo đề xuất (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ)
+// khi danh mục đang rỗng — chỉ admin thấy nút này (xem populateItPriceRetailZoneSelect()), mirror ĐÚNG
+// logic savePriceZone() ở module-itsupport-price.js (màn Quản Lý Danh Mục) để 2 nơi luôn nhất quán,
+// không tạo hàm dùng chung vì savePriceZone() đọc trực tiếp từ 1 <form> khác (submit event riêng).
+async function quickAddPriceZoneFromItPriceForm() {
+  const name = (prompt('Nhập tên Vùng Giá Áp Dụng mới (VD: Miền Bắc):') || '').trim();
+  if (!name) return;
+  if ((DB.priceZones || []).includes(name)) return alert('Vùng giá đã tồn tại!');
+  DB.priceZones.push(name);
+  const ok = await syncStorage('priceZones');
+  if (!ok) { DB.priceZones = DB.priceZones.filter(x => x !== name); return; }
+  logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}] (từ form Phê Duyệt Giá)`, 'SUCCESS', name);
+  if (typeof renderPriceZoneList === 'function') renderPriceZoneList();
+  populateItPriceRetailZoneSelect();
+  document.getElementById('itPriceRetailZone').value = name;
 }
 
 // Đổ danh sách "Chủ Đề" cho #hrFeedbackCategory (HCRC Đồng Hành, xem CORE_FIELD_MANIFEST.HR_FEEDBACK.
@@ -8092,6 +8149,11 @@ bindCspDelegation('hrpfImportModal');
 // trên nếu quên: sống ngoài #hrProfileSection trong DOM (anh em, không phải con), phải đăng ký root
 // riêng ngay khi thêm mới, không thì mọi nút bên trong (Huỷ/Lưu) âm thầm không phản hồi.
 bindCspDelegation('hrpfFieldConfigModal');
+// Nhân Sự > Báo Cáo (#hrReportSection, 9/2026) — dời từ view lồng trong #hrProfileSection (đã có gốc
+// CSP riêng ở trên) ra module con riêng cấp Nhân Sự — CẦN gốc CSP RIÊNG của chính nó (nút "🔍 Xem Báo
+// Cáo" data-op="loadHrpfReports" giờ sống trong #hrReportSection, KHÔNG còn trong #hrProfileSection nữa),
+// đúng bài học "1 gốc thiếu là mọi thao tác trong toàn bộ section im lặng không chạy" ở các chú thích trên.
+bindCspDelegation('hrReportSection');
 bindCspDelegation('hrContractSection');
 bindCspDelegation('hrContractCreateModal');
 bindCspDelegation('hrContractDetailModal');

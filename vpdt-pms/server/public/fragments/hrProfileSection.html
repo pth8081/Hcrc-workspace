@@ -2,9 +2,6 @@
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" id="btnHrpfViewMe" data-op="setHrProfileView" data-arg0="ME" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🪪 Hồ Sơ Của Tôi</button>
       <button type="button" id="btnHrpfViewManage" data-op="setHrProfileView" data-arg0="MANAGE" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">📋 Quản Lý Hồ Sơ</button>
-      <!-- CẦN CẢ hrProfileManage LẪN hrContractManage/admin (khớp đúng GET /api/hr-profile/reports phía
-           server — vẫn lộ số liệu lương qua mục tăng lương, cùng mức chặt GET .../history). -->
-      <button type="button" id="btnHrpfViewReports" data-op="setHrProfileView" data-arg0="REPORTS" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">📊 Báo Cáo</button>
     </div>
 
     <!-- Hồ Sơ Của Tôi -->
@@ -62,26 +59,4 @@
         </table>
         <p id="hrpfManageEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có hồ sơ nào.</p>
       </div>
-    </div>
-
-    <!-- Báo Cáo Nhân Sự (9/2026, theo yêu cầu người dùng) — CẦN CẢ hrProfileManage LẪN hrContractManage -->
-    <div id="hrpfViewReports" class="hidden space-y-3">
-      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3">
-        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày</label>
-          <input type="date" id="hrpfReportFrom" class="border p-1.5 rounded text-xs"></div>
-        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày</label>
-          <input type="date" id="hrpfReportTo" class="border p-1.5 rounded text-xs"></div>
-        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng HĐLĐ (lọc riêng danh sách hợp đồng)</label>
-          <select id="hrpfReportContractStatus" class="border p-1.5 rounded text-xs bg-white">
-            <option value="">— Tất cả —</option>
-            <option value="DRAFT">📝 Nháp</option>
-            <option value="ACTIVE">✅ Đang hiệu lực</option>
-            <option value="EXPIRED">⌛ Hết hạn</option>
-            <option value="TERMINATED">⛔ Đã chấm dứt</option>
-            <option value="SUPERSEDED">🔄 Đã thay thế</option>
-          </select>
-        </div>
-        <button type="button" data-op="loadHrpfReports" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem Báo Cáo</button>
-      </div>
-      <div id="hrpfReportBody" class="space-y-3"></div>
     </div>

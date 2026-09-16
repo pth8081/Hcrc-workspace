@@ -64,15 +64,13 @@ function hrpfCanCreate() { return !!(currentUser.perms?.admin || currentUser.per
 function hrpfCanEdit() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileEdit); }
 function hrpfCanFullView() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit); }
 
-// Báo Cáo Nhân Sự (9/2026) — khớp đúng quyền GET /api/hr-profile/reports (CẦN CẢ hrProfileManage LẪN
-// hrContractManage/admin), cùng mức chặt như GET .../history (Lịch Sử Nhân Sự).
-function hrpfCanViewReports() { return !!(currentUser.perms?.admin || (currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage)); }
+// hrpfCanViewReports() ĐÃ DỜI sang core.js (9/2026, cùng đợt dời "Báo Cáo" ra module con riêng
+// "hrReport" — xem chú thích tại đó): finishLogin() cần gọi hàm này để hiện/ẩn nút điều hướng NGAY LÚC
+// ĐĂNG NHẬP, trước khi module-hrprofile.js (lazy-load theo tab) từng được nạp.
 
 function renderHrProfileModule() {
   document.getElementById('btnHrpfViewManage').classList.toggle('hidden', !(hrpfCanCreate() || hrpfCanFullView()));
-  document.getElementById('btnHrpfViewReports').classList.toggle('hidden', !hrpfCanViewReports());
   if (activeHrProfileView === 'MANAGE' && !(hrpfCanCreate() || hrpfCanFullView())) activeHrProfileView = 'ME';
-  if (activeHrProfileView === 'REPORTS' && !hrpfCanViewReports()) activeHrProfileView = 'ME';
   // "Xem Hồ Sơ Nhân Viên (Quản Lý Trực Tiếp)" — riêng cho quyền hrProfileView (KHÔNG có hrProfileManage,
   // vốn đã thấy đủ toàn bộ hồ sơ qua "Quản Lý Hồ Sơ" rồi, không cần khối này) — hrProfileView là tầng
   // "quản lý trực tiếp xem giới hạn" của getProfileForViewer() (lib/employeeProfile.js), không tự tra được
@@ -216,14 +214,11 @@ function setHrProfileView(view) {
   activeHrProfileView = view;
   document.getElementById('hrpfViewMe').classList.toggle('hidden', view !== 'ME');
   document.getElementById('hrpfViewManage').classList.toggle('hidden', view !== 'MANAGE');
-  document.getElementById('hrpfViewReports').classList.toggle('hidden', view !== 'REPORTS');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
   document.getElementById('btnHrpfViewMe').className = view === 'ME' ? activeCls : inactiveCls;
   document.getElementById('btnHrpfViewManage').className = view === 'MANAGE' ? activeCls : inactiveCls;
-  document.getElementById('btnHrpfViewReports').className = view === 'REPORTS' ? activeCls : inactiveCls;
   if (view === 'ME') { loadHrpfMyProfile(); return; }
-  if (view === 'REPORTS') { loadHrpfReports(); return; }
 
   // MANAGE: nút Tạo/Nhập Excel cần hrProfileCreate; Xuất Excel + xem DANH SÁCH cần hrProfileFullView (hoặc
   // Edit/Manage/admin, xem hrpfCanFullView()) — người CHỈ có hrProfileCreate không gọi GET / được (403).
@@ -552,6 +547,13 @@ const HRPF_REPORT_CARDS = [
   { key: 'otherAmendments', icon: '📋', label: 'Thay đổi HĐLĐ khác' },
   { key: 'positionChanges', icon: '🏷️', label: 'Thăng chức / đổi chức danh' }
 ];
+// Nhân Sự > Báo Cáo (9/2026, top-level module con riêng — dời từ view lồng trong Hồ Sơ Nhân Sự, xem
+// chú thích entry 'hrReport' ở BUSINESS_MODULES/core.js). switchTab() đã tự chặn 403 trước khi gọi hàm
+// này (xem hrpfCanViewReports() ở core.js) — chỉ còn việc nạp báo cáo.
+function renderHrReportModule() {
+  loadHrpfReports();
+}
+
 async function loadHrpfReports() {
   const body = document.getElementById('hrpfReportBody');
   body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';

@@ -529,6 +529,17 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/priceZones — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (priceZones chỉ
+      // Admin mới ghi được, xem chú thích tại đó) — cùng lý do KHÔNG mô phỏng toàn bộ generic
+      // POST /api/data/:key như 2 nhánh uniformCatalog/hrTaskTemplates ở trên.
+      if (pathName === '/api/data/priceZones' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.priceZones = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/workflow/:module/:id/:action — mirror routes/workflow.js's generic dept-workflow
       // approve/reject route (dùng chung lib/workflowEngine.js's MODULE_CONFIGS + applyWorkflowAction()
       // thật, KHÔNG tự đoán lại logic duyệt). Cần cho các module bỏ auto-approve (vd itPriceApprovals

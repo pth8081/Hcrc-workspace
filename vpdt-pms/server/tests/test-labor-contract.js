@@ -110,6 +110,17 @@ async function partA() {
     laborContract.addAmendment(contract, { amendmentType: 'Tăng lương', effectiveDate: '2026-02-01', oldValue: '10tr', newValue: '12tr' }, 'hr1', 'HR One');
     assert.strictEqual(contract.amendments.length, 1);
     assert.strictEqual(contract.amendments[0].amendmentType, 'Tăng lương');
+    assert.strictEqual(contract.amendments[0].applyDate, null, 'Không gửi applyDate -> lưu null (tuỳ chọn)');
+  });
+
+  // 9/2026: "Ngày áp dụng" (applyDate) — TUỲ CHỌN, KHÁC "Ngày hiệu lực" (effectiveDate, bắt buộc), theo
+  // yêu cầu người dùng (2 mốc thời gian riêng: quyết định áp dụng từ ngày nào vs. thay đổi thật sự có
+  // hiệu lực từ ngày nào).
+  await test('addAmendment() lưu đúng applyDate khi có gửi kèm, chặn applyDate không hợp lệ', () => {
+    const contract = { amendments: [], history: [] };
+    laborContract.addAmendment(contract, { amendmentType: 'Tăng lương', effectiveDate: '2026-02-01', applyDate: '2026-01-15', oldValue: '10.000.000', newValue: '12.000.000' }, 'hr1', 'HR One');
+    assert.strictEqual(contract.amendments[0].applyDate, '2026-01-15');
+    assert.throws(() => laborContract.addAmendment(contract, { amendmentType: 'X', effectiveDate: '2026-02-01', applyDate: 'không-phải-ngày' }, 'hr1', 'HR One'), /Ngày áp dụng/);
   });
 
   await test('canManageContracts() chỉ true với hrContractManage hoặc admin', () => {
@@ -279,9 +290,10 @@ async function partB() {
     });
 
     await test('POST /api/records/laborContracts/:id/add-amendment — bổ sung thay đổi', async () => {
-      const r = await call('hr1', 'POST', `/api/records/laborContracts/${created.id}/add-amendment`, { amendmentType: 'Đổi vị trí', effectiveDate: '2026-03-01' });
+      const r = await call('hr1', 'POST', `/api/records/laborContracts/${created.id}/add-amendment`, { amendmentType: 'Đổi vị trí', effectiveDate: '2026-03-01', applyDate: '2026-02-20' });
       assert.strictEqual(r.status, 200, JSON.stringify(r.json));
       assert.strictEqual(r.json.item.amendments.length, 1);
+      assert.strictEqual(r.json.item.amendments[0].applyDate, '2026-02-20', 'Ngày áp dụng phải được lưu qua đúng route HTTP');
     });
 
     await test('POST /api/records/laborContracts/:id/status — người không có quyền bị chặn 403', async () => {

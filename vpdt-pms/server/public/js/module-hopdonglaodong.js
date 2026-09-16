@@ -29,26 +29,23 @@ function hrcExpiryBadgeHtml(c) {
   return '';
 }
 
-// Amendment "Giá trị cũ/mới" (9/2026, theo yêu cầu người dùng — sửa lỗi số tiền không có dấu chấm phân
-// cách hàng nghìn) — "Loại thay đổi" là ô gõ TỰ DO (không phải mọi phụ lục đều liên quan lương, VD đổi
-// chức danh/phòng ban), nên KHÔNG gắn cứng class "money-input" — tự bật/tắt định dạng tiền theo nội
-// dung "Loại thay đổi" đang gõ (chứa "lương", không phân biệt dấu) qua sự kiện input, xem HTML gọi hàm
-// này ở buildHrContractDetailHTML().
-function toggleHrcAmendmentMoneyMode(typeValue) {
-  const isSalary = String(typeValue || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes('luong');
+// Amendment "Giá trị cũ/mới" (9/2026, theo phản hồi người dùng: đợt trước tự đoán bằng cách "Loại thay
+// đổi" có chứa chữ 'lương' hay không — KHÔNG đáng tin, vì người dùng có thể gõ Giá trị cũ/mới TRƯỚC khi
+// gõ Loại thay đổi (giá trị gõ trước không được tự định dạng lại), hoặc Loại thay đổi không chứa đúng
+// chữ "lương" dù vẫn là số tiền (VD "Điều chỉnh thu nhập"). Thay bằng 1 checkbox tường minh
+// #hrcNewAmendmentIsMoney (mặc định BẬT — đa số phụ lục liên quan lương) — người dùng tự TẮT khi thật
+// sự cần gõ chữ tự do (VD đổi chức danh/phòng ban), không đoán mò theo nội dung field khác nữa.
+function toggleHrcAmendmentMoneyMode() {
+  const isMoney = !!document.getElementById('hrcNewAmendmentIsMoney')?.checked;
   const oldEl = document.getElementById('hrcNewAmendmentOld');
   const newEl = document.getElementById('hrcNewAmendmentNew');
   if (!oldEl || !newEl) return;
   for (const el of [oldEl, newEl]) {
-    if (isSalary) {
-      el.classList.add('money-input');
-      el.value = formatMoneyDisplay(el.value);
-    } else {
-      el.classList.remove('money-input');
-    }
+    el.classList.toggle('money-input', isMoney);
+    if (isMoney) el.value = formatMoneyDisplay(el.value);
   }
-  oldEl.placeholder = isSalary ? 'Lương cũ (đ)' : 'Giá trị cũ';
-  newEl.placeholder = isSalary ? 'Lương mới (đ)' : 'Giá trị mới';
+  oldEl.placeholder = isMoney ? 'Giá trị cũ (đ)' : 'Giá trị cũ';
+  newEl.placeholder = isMoney ? 'Giá trị mới (đ)' : 'Giá trị mới';
 }
 
 function renderHrContractModule() {
@@ -233,7 +230,7 @@ function buildHrContractDetailHTML(c) {
   const amendmentsHTML = sortedAmendments.length
     ? sortedAmendments.map(a => `
         <div class="border rounded p-2 bg-gray-50">
-          <div class="font-semibold">${escapeHtml(a.amendmentType)} — hiệu lực ${escapeHtml(a.effectiveDate)}</div>
+          <div class="font-semibold">${escapeHtml(a.amendmentType)}${a.applyDate ? ` — áp dụng ${escapeHtml(a.applyDate)}` : ''} — hiệu lực ${escapeHtml(a.effectiveDate)}</div>
           ${a.oldValue || a.newValue ? `<div class="text-gray-600">${escapeHtml(a.oldValue || '')} → ${escapeHtml(a.newValue || '')}</div>` : ''}
           ${a.note ? `<div class="text-gray-500 italic">${escapeHtml(a.note)}</div>` : ''}
           ${a.fileUrl ? `<div><a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(a.fileName || 'Quyết định')}</a></div>` : ''}
@@ -280,11 +277,25 @@ function buildHrContractDetailHTML(c) {
     <div class="border-t pt-2">
       <div class="font-semibold mb-1">📋 Lịch Sử Thay Đổi (Phụ Lục)</div>
       <div class="space-y-1 mb-2">${amendmentsHTML}</div>
+      <input type="text" id="hrcNewAmendmentType" placeholder="Loại thay đổi (VD: Tăng lương)" class="w-full border p-1.5 rounded mb-2">
+      <!-- "Ngày áp dụng" (quyết định được áp dụng/ban hành từ ngày nào) KHÁC "Ngày hiệu lực" (thời điểm
+           thay đổi THẬT SỰ có hiệu lực — có thể trễ hơn ngày áp dụng, VD quyết định tăng lương ký/áp
+           dụng 1 ngày nhưng hiệu lực từ đầu tháng sau) — 2 khái niệm riêng theo yêu cầu người dùng
+           (9/2026), cả 2 đều TUỲ CHỌN trừ Ngày hiệu lực (bắt buộc, xem assertValidAmendment() ở
+           lib/laborContract.js). -->
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <div><label class="block text-[11px] text-gray-500 mb-0.5">Ngày áp dụng</label><input type="date" id="hrcNewAmendmentApplyDate" class="w-full border p-1.5 rounded"></div>
+        <div><label class="block text-[11px] text-gray-500 mb-0.5">Ngày hiệu lực <span class="text-red-500">*</span></label><input type="date" id="hrcNewAmendmentDate" class="w-full border p-1.5 rounded"></div>
+      </div>
+      <!-- Checkbox tường minh (9/2026, thay cho đoán theo nội dung "Loại thay đổi" — không đáng tin, xem
+           chú thích toggleHrcAmendmentMoneyMode()) — mặc định BẬT vì đa số phụ lục liên quan lương. -->
+      <label class="flex items-center gap-1.5 text-[11px] text-gray-600 mb-1">
+        <input type="checkbox" id="hrcNewAmendmentIsMoney" checked data-op-change="toggleHrcAmendmentMoneyMode">
+        💰 Giá trị tiền (tự định dạng dấu chấm phân cách hàng nghìn khi gõ — bỏ tick nếu gõ chữ tự do, VD đổi chức danh)
+      </label>
       <div class="grid grid-cols-2 gap-2">
-        <input type="text" id="hrcNewAmendmentType" placeholder="Loại thay đổi (VD: Tăng lương)" data-op-input="toggleHrcAmendmentMoneyMode" data-arg-value="0" class="border p-1.5 rounded">
-        <input type="date" id="hrcNewAmendmentDate" class="border p-1.5 rounded">
-        <input type="text" id="hrcNewAmendmentOld" placeholder="Giá trị cũ" class="border p-1.5 rounded">
-        <input type="text" id="hrcNewAmendmentNew" placeholder="Giá trị mới" class="border p-1.5 rounded">
+        <input type="text" inputmode="numeric" id="hrcNewAmendmentOld" placeholder="Giá trị cũ (đ)" class="border p-1.5 rounded money-input">
+        <input type="text" inputmode="numeric" id="hrcNewAmendmentNew" placeholder="Giá trị mới (đ)" class="border p-1.5 rounded money-input">
       </div>
       <textarea id="hrcNewAmendmentNote" placeholder="Ghi chú" class="w-full border p-1.5 rounded mt-2"></textarea>
       <div class="mt-2">
@@ -335,6 +346,7 @@ async function submitHrContractAmendment(id) {
   const amendmentType = document.getElementById('hrcNewAmendmentType').value.trim();
   const effectiveDate = document.getElementById('hrcNewAmendmentDate').value;
   if (!amendmentType || !effectiveDate) return alert('⛔ Vui lòng nhập Loại thay đổi và Ngày hiệu lực.');
+  const applyDate = document.getElementById('hrcNewAmendmentApplyDate').value || null;
   const oldValue = document.getElementById('hrcNewAmendmentOld').value.trim();
   const newValue = document.getElementById('hrcNewAmendmentNew').value.trim();
   const note = document.getElementById('hrcNewAmendmentNote').value.trim();
@@ -351,7 +363,7 @@ async function submitHrContractAmendment(id) {
     }
   }
   try {
-    const result = await callRecordAction('laborContracts', id, 'add-amendment', { amendmentType, effectiveDate, oldValue, newValue, note, fileUrl, fileName });
+    const result = await callRecordAction('laborContracts', id, 'add-amendment', { amendmentType, effectiveDate, applyDate, oldValue, newValue, note, fileUrl, fileName });
     hrcApplyUpdate(result.item);
     openHrContractDetailModal(id);
   } catch (err) {
