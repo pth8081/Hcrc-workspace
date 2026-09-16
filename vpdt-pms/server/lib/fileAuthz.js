@@ -308,7 +308,7 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     ]);
     return canViewTrainingTestQuestionImage(user, owning.item, { trainingClasses, trainingRegistrations });
   }
-  if (owning.laborContract) return canViewLaborContract(user);
+  if (owning.laborContract) return canViewLaborContract(user, owning.item);
   if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item);
   if (owning.hrProcess) return canViewHrProcess(user, owning.item);
   if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item);

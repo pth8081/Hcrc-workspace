@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**23.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.16 (2026-09-16): Giải quyết phát hiện Trung bình còn lại (task #82) + xác nhận thêm quyền tự xem Hợp Đồng Lao Động
+
+Người dùng xác nhận phương án cho phát hiện Trung bình còn lại của đợt audit v23.15 (mức phê duyệt "Bán
+Buôn" ở Giá IT tự khai không đối chiếu số liệu), và nhân tiện xác nhận luôn 1 thay đổi phân quyền cho
+Hợp Đồng Lao Động.
+
+**1) Phê Duyệt Giá (Hỗ Trợ IT) — Bán Buôn: đối chiếu Margin/Chiết Khấu (CHỈ cảnh báo, không chặn/không
+ràng buộc người duyệt — đúng phương án người dùng chọn):**
+- Mẫu Giá (`itPriceMasterLists`) có thêm 1 trường tuỳ chọn `marginColumnKey` — admin chỉ định cột nào
+  trong file mẫu là "Margin/Chiết Khấu (%)" (dùng lại modal "Gán vai trò cột" sẵn có, trước đó không còn
+  ai gọi tới sau khi bỏ khái niệm vai trò cột cho Mẫu Giá — nay dùng lại đúng 1 vai trò, không bắt buộc).
+  Nút "🎯 Cột Margin/CK" cho phép đổi lại riêng cột này mà không cần nạp lại cả file mẫu.
+- Khi người đề xuất chọn sub-tab Bán Buôn + chọn mức Margin/Chiết Khấu + tải file bảng giá: nếu Mẫu Giá
+  đã chọn có gán `marginColumnKey`, hệ thống tự tính trung bình cộng số liệu thật trong cột đó và so với
+  mức đã chọn — nếu có vẻ KHÔNG khớp, hiện cảnh báo màu vàng ngay dưới ô chọn mức (`checkItPriceMarginConsistency()`,
+  `public/js/module-itsupport-price.js`). Cảnh báo CHỈ mang tính thông báo cho người gửi tự kiểm tra lại —
+  KHÔNG chặn gửi đề xuất, KHÔNG ràng buộc gì tới người duyệt (người duyệt vẫn xử lý tự do như thiết kế cũ,
+  hoàn toàn không đụng gì tới `lib/workflowEngine.js`/server). Toàn bộ tính toán chạy client-side dựa trên
+  dữ liệu đã có sẵn (không thêm route/field mới ở server).
+
+**2) Hợp Đồng Lao Động (Nhân Sự) — thêm quyền "chính chủ tự xem":**
+- Trước đây `canViewLaborContract()` là quyền PHẲNG tuyệt đối: CHỈ `hrContractManage`/admin xem được, kể
+  cả chính nhân viên liên quan cũng KHÔNG xem được hồ sơ hợp đồng của mình (quyết định thiết kế gốc, xem
+  chú thích cũ ở `lib/recordViewScope.js`). Theo yêu cầu người dùng (bảo mật + đúng kỳ vọng nghiệp vụ):
+  thêm nhánh nhân viên tự xem ĐÚNG hợp đồng của CHÍNH MÌNH (đối chiếu `item.employeeUsername === user.username`,
+  cột đã tách sẵn ở `dbo.LaborContracts`), `hrContractManage`/admin vẫn xem TOÀN BỘ như cũ. Áp dụng cho cả
+  lọc danh sách (`GET /api/data`) lẫn tải file đính kèm (`lib/fileAuthz.js`). Hợp đồng của nhân viên NGOÀI
+  hệ thống (nhập mã ngoài, không có tài khoản) không áp dụng được nhánh tự xem (không có ai để tự xem) —
+  vẫn chỉ HR xem được, không phải lỗ hổng.
+
+**Xác minh**: viết thêm test tự xem trong `tests/test-uploads-file-authz.js` (chính chủ xem/tải được,
+người cùng phòng nhưng khác username vẫn bị chặn) — 20/20 pass. `test-labor-contract.js` 26/26 pass,
+`test-it-support.js`/`test-it-price-approvals-scope.js`/`test-itprice-download.js`/`test-itprice-scope-dates.js`
+đều pass (3 fail còn lại ở `test-it-support.js` đã xác nhận có sẵn từ trước, không liên quan đợt này —
+xem changelog v23.15).
+
+**Deploy-impact**: không đổi `schema.sql` (cột `EmployeeUsername` đã có sẵn từ trước), không thêm biến môi
+trường/npm dependency mới. Không cần thao tác thủ công nào khác ngoài copy code + `pm2 restart`.
 
 ## v23.15 (2026-09-16): Vá 12/13 phát hiện từ đợt rà soát bảo mật + nghiệp vụ chuyên sâu (9 agent song song) trước go-live
 

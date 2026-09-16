@@ -927,14 +927,23 @@ function filterPaymentRequestsForUser(items, user) {
 // TỪNG được lọc lại ở GET /api/data (cùng lớp lỗ hổng đã vá cho itServiceRenewals/paymentRequests ở
 // trên), nghĩa là BẤT KỲ tài khoản đã đăng nhập nào (kể cả không có hrContractManage) gọi thẳng API đều
 // đọc được TOÀN BỘ hợp đồng lao động của MỌI nhân viên (lương cơ bản, loại hợp đồng, ngày hết hạn...) dù
-// giao diện chỉ mở module này cho hrContractManage/admin (canAccessHrContractModule() ở core.js). Vá
-// ngay tại đây — cùng khuôn itServiceRenewals: quyền PHẲNG, không có nhánh "chính chủ tự xem" (Phần D
-// tài liệu thiết kế đã xác nhận đợt đó KHÔNG làm tầng tự xem cho nhân viên).
-function canViewLaborContract(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrContractManage);
+// giao diện chỉ mở module này cho hrContractManage/admin (canAccessHrContractModule() ở core.js).
+//
+// CẬP NHẬT 9/2026 (task #82, xác nhận trực tiếp với người dùng): thêm lại nhánh "chính chủ tự xem" —
+// nhân viên xem được ĐÚNG hợp đồng của CHÍNH MÌNH (đối chiếu item.employeeUsername === user.username,
+// cột đã tách sẵn ở dbo.LaborContracts — xem sql/schema.sql), hrContractManage/admin vẫn thấy TOÀN BỘ
+// như cũ. Đảo NGƯỢC quyết định "KHÔNG làm tầng tự xem" ở Phần D tài liệu thiết kế gốc (Đợt 2/4) — người
+// dùng xác nhận đây là chủ đích bảo mật mới, không phải sơ suất. item.employeeUsername có thể null với
+// hợp đồng NGOÀI hệ thống (useExternalCode=true lúc tạo, xem lib/createValidation.js) — nhân viên đó
+// KHÔNG có tài khoản trong hệ thống nên không có ai để "tự xem" cả, giữ nguyên chỉ hrContractManage/admin
+// xem được (không có lỗ hổng, chỉ đơn thuần không áp dụng được nhánh tự xem).
+function canViewLaborContract(user, item) {
+  if (user?.perms?.admin || user?.perms?.hrContractManage) return true;
+  return !!(item?.employeeUsername && user?.username && item.employeeUsername === user.username);
 }
 function filterLaborContractsForUser(items, user) {
-  return canViewLaborContract(user) ? (items || []) : [];
+  if (user?.perms?.admin || user?.perms?.hrContractManage) return items || [];
+  return (items || []).filter(it => canViewLaborContract(user, it));
 }
 
 // ===== Công & Phép (Nhân Sự, Đợt 3/4 — Phần E tài liệu thiết kế, xem lib/attendance.js) =====

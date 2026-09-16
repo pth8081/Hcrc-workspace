@@ -62,7 +62,7 @@ const IT_PRICE_ITEM = {
 
 // 4 collection PHÁT HIỆN THIẾU ở đợt audit chuyên sâu — trước bản vá, fileUrl của cả 4 loại này rơi
 // thẳng vào FAIL-OPEN (mục 5 dưới) dù bản ghi đã bị giới hạn theo quyền ở GET /api/data.
-const LABOR_CONTRACT = { id: 'lc-1', fileUrl: '/uploads/labor-contract.pdf', dept: DEPT_A };
+const LABOR_CONTRACT = { id: 'lc-1', fileUrl: '/uploads/labor-contract.pdf', dept: DEPT_A, employeeUsername: 'nv_chinh_chu' };
 const PAYMENT_REQUEST = {
   id: 'pr-1', dept: DEPT_A,
   requestFiles: [{ fileUrl: '/uploads/payment-request.pdf' }],
@@ -229,12 +229,21 @@ async function main() {
   });
 
   // ===== 4c) laborContracts/paymentRequests/hrProcesses/checklistSubmissions (đợt audit chuyên sâu) =====
-  await run('laborContracts: quyền PHẲNG hrContractManage/admin — CÙNG PHÒNG BAN KHÔNG đủ để xem', async () => {
-    // OWNER_ITP cùng DEPT_A với LABOR_CONTRACT nhưng không có hrContractManage -> canViewLaborContract()
-    // bỏ qua dept hoàn toàn, phải bị chặn (khác các module "theo phòng ban" khác).
+  await run('laborContracts: hrContractManage/admin xem toàn bộ — CÙNG PHÒNG BAN (không phải chính chủ) KHÔNG đủ để xem', async () => {
+    // OWNER_ITP cùng DEPT_A với LABOR_CONTRACT nhưng không có hrContractManage VÀ không phải chính chủ
+    // (employeeUsername khác) -> canViewLaborContract() bỏ qua dept hoàn toàn, phải bị chặn (khác các
+    // module "theo phòng ban" khác).
     assert.strictEqual(await authorizeFileAccess(OWNER_ITP, LABOR_CONTRACT.fileUrl, 'view'), false);
     assert.strictEqual(await authorizeFileAccess({ username: 'hr1', dept: DEPT_A, perms: { hrContractManage: true } }, LABOR_CONTRACT.fileUrl, 'view'), true);
     assert.strictEqual(await authorizeFileAccess(ADMIN, LABOR_CONTRACT.fileUrl, 'download'), true);
+  });
+
+  await run('laborContracts: CHÍNH CHỦ (employeeUsername khớp) tự xem/tải được hợp đồng của mình (9/2026, task #82)', async () => {
+    const self = { username: 'nv_chinh_chu', dept: DEPT_A, perms: {} };
+    assert.strictEqual(await authorizeFileAccess(self, LABOR_CONTRACT.fileUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(self, LABOR_CONTRACT.fileUrl, 'download'), true);
+    // Cùng tên đăng nhập nhưng KHÔNG phải bản ghi của mình (username khác nhau dù cùng phòng) vẫn bị chặn.
+    assert.strictEqual(await authorizeFileAccess({ username: 'nv_khac', dept: DEPT_A, perms: {} }, LABOR_CONTRACT.fileUrl, 'view'), false);
   });
 
   await run('paymentRequests: đúng phòng ban xem được, phòng ban khác bị chặn, paymentManage luôn qua', async () => {

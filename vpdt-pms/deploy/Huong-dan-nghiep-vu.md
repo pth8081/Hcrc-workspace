@@ -709,7 +709,15 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   - **🏷️ Phê Duyệt Giá** — dành cho người tạo/duyệt giá bán mặt hàng siêu thị
     (thực chất là 1 luồng tài chính, xem thêm mục 4.3): **Bán Lẻ** theo phòng
     ban (dùng chung engine quy trình phòng ban ở mục 3), **Bán Buôn** theo 4
-    mức Margin/Chiết khấu cố định (không theo phòng ban). Form nộp có thêm 3
+    mức Margin/Chiết khấu cố định (không theo phòng ban). Mức người đề xuất
+    chọn vẫn **TỰ KHAI** (server không ép server-side), nhưng từ 9/2026 admin
+    có thể (tuỳ chọn, không bắt buộc) gán 1 cột trong **Mẫu Giá** (Hệ Thống →
+    Hỗ Trợ IT → "📐 Mẫu Giá", nút "🎯 Cột Margin/CK") làm cột "Margin/Chiết
+    Khấu (%)" — khi đã gán, hệ thống tự đối chiếu số liệu THẬT trong file bảng
+    giá vừa tải lên với mức người đề xuất chọn, **CHỈ hiện cảnh báo màu vàng**
+    cho người gửi nếu có vẻ không khớp để họ tự kiểm tra lại (không chặn gửi,
+    không ràng buộc gì tới người duyệt — người duyệt vẫn tự do xử lý như cũ).
+    Form nộp có thêm 3
     trường **CHỈ mang tính thông tin** cho đội Hỗ Trợ IT biết phạm vi/thời hạn
     áp giá khi xử lý (không giới hạn ai xem được đề xuất, không có xử lý tự
     động nào theo ngày hết hiệu lực — IT tự theo dõi thủ công): **"Siêu Thị Áp
@@ -1316,9 +1324,14 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
 **Nhân Sự → Hợp Đồng Lao Động** — **vai trò**: theo dõi vòng đời hợp đồng lao
 động (Thử việc → Xác định thời hạn → Vô thời hạn) của từng nhân viên. **KHÁC
 HẲN** module "Hợp Đồng" ở mục 4.3 (hợp đồng mua bán/nhà cung cấp) — 2 khái
-niệm hoàn toàn tách biệt, không chung dữ liệu/màn hình. Module này **HR-only**
-(quyền **"📝 Quản Lý Hợp Đồng Lao Động"**/admin) — chưa có tầng nhân viên tự
-xem hợp đồng của chính mình ở đợt này.
+niệm hoàn toàn tách biệt, không chung dữ liệu/màn hình. **Tạo/sửa/kích hoạt/
+chấm dứt hợp đồng vẫn HR-only** (quyền **"📝 Quản Lý Hợp Đồng Lao Động"**/
+admin) — không đổi. Riêng **XEM** thì từ 9/2026 có thêm 1 tầng: nhân viên
+được tự xem (chỉ xem, không sửa) ĐÚNG hợp đồng của CHÍNH MÌNH (đối chiếu theo
+tài khoản đăng nhập gắn với hồ sơ), HR/admin vẫn xem được TOÀN BỘ hợp đồng
+của mọi nhân viên như cũ — hợp đồng của nhân sự "ngoài hệ thống" (nhập mã
+không gắn tài khoản đăng nhập nào, dùng cho trường hợp phát sinh ngoài luồng
+Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được.
 
 - **Đa số hợp đồng do hệ thống TỰ TẠO** theo đúng 3 mốc trong checklist
   Onboarding (mục 4.5.2), HR không cần tạo tay:
