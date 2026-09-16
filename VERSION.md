@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**23.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.17 (2026-09-16): Vá lỗi Hồ Sơ Nhân Sự — hồ sơ cũ không thêm được Người phụ thuộc/Học vấn
+
+Người dùng báo (đăng nhập admin): vào "Nhân Sự → Hồ Sơ Nhân Sự → Chi tiết" một số hồ sơ thì không thêm
+được Người phụ thuộc/Học vấn — nút "+ Thêm dòng" không hiện ra.
+
+**Nguyên nhân**: `renderHrpfProfileForm()` (`public/js/module-hrprofile.js`) dùng đúng
+`!('dependents' in profile)`/`!('education' in profile)` (còn key hay không) làm điều kiện ẩn/hiện 2
+khối này — vốn thiết kế để giấu 2 field khỏi "quản lý trực tiếp" xem hồ sơ giới hạn (`getProfileForViewer()`/
+`SENSITIVE_FIELDS` xoá field ở `lib/employeeProfile.js`). Vấn đề: hồ sơ **TẠO TRƯỚC KHI** tính năng Người
+phụ thuộc/Học vấn ra đời (hoặc nhập Excel hàng loạt ở phiên bản cũ hơn) cũng **thiếu hẳn 2 key này** dù
+người xem có ĐỦ quyền (kể cả admin) — bị hiểu nhầm thành "không có quyền xem", ẩn luôn cả nút "+ Thêm
+dòng", không ai thêm được nữa cho những hồ sơ đó.
+
+**Vá**: đổi điều kiện sang dùng `!('nationalId' in profile)` — tín hiệu đã dùng sẵn ở khối CCCD/BHXH/MST
+và dòng cảnh báo "đang xem giới hạn" ngay trong cùng file, đáng tin cậy hơn hẳn vì `nationalId` LUÔN bị
+xoá/giữ ĐỒNG THỜI với `dependents`/`education` ở `SENSITIVE_FIELDS` (không phụ thuộc việc 2 field mới có
+tồn tại sẵn trên bản ghi CŨ hay không). Nội dung mảng vẫn fallback `|| []` như cũ (không đổi).
+
+**Xác minh**: viết test Playwright thật mới `tests/test-hr-profile-legacy-fields.js` (mở trình duyệt
+thật + `module-hrprofile.js` thật + server Express thật mount `routes/employeeProfile.js`) — dựng đúng 1
+hồ sơ "cũ" thiếu 2 key này, xác nhận: (1) nút "+ Thêm dòng" hiện đúng cho cả 2 khối, (2) thêm dòng + Lưu
+round-trip qua server THẬT lưu đúng dữ liệu, (3) hồ sơ bình thường (đủ field) vẫn hoạt động như cũ (không
+phá hành vi hiện có). `test-hr-profile.js` (17/17) và `test-hr-profile-position-history.js` (17/17) vẫn
+pass nguyên vẹn.
+
+**Deploy-impact**: chỉ sửa 1 file client (`public/js/module-hrprofile.js`), không đổi `schema.sql`, không
+thêm biến môi trường/npm dependency. **Không cần thao tác dữ liệu nào** — các hồ sơ cũ bị ảnh hưởng sẽ tự
+hiện đúng nút "+ Thêm dòng" ngay sau khi cập nhật code + `pm2 restart`, không cần chạy script sửa dữ liệu.
 
 ## v23.16 (2026-09-16): Giải quyết phát hiện Trung bình còn lại (task #82) + xác nhận thêm quyền tự xem Hợp Đồng Lao Động
 

@@ -539,7 +539,17 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
     <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>
   </div>`;
 
-  const dependentsBlock = !('dependents' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
+  // LỖI ĐÃ VÁ (9/2026): trước đây 2 khối dưới dùng ĐÚNG `!('dependents' in profile)`/`!('education' in
+  // profile)` làm điều kiện hiện/ẩn — coi việc THIẾU HẲN key này là "không có quyền xem" (dùng để giấu
+  // đúng 2 field này khỏi "quản lý trực tiếp" xem hồ sơ giới hạn, xem getProfileForViewer()/SENSITIVE_FIELDS
+  // ở lib/employeeProfile.js). Nhưng đây KHÔNG phải tín hiệu đáng tin: hồ sơ TẠO TRƯỚC KHI tính năng
+  // Người phụ thuộc/Học vấn ra đời (hoặc nhập Excel hàng loạt cũ hơn) cũng thiếu hẳn 2 key này dù người
+  // xem CÓ ĐỦ quyền (kể cả admin) — khiến CẢ KHỐI (gồm nút "+ Thêm dòng") biến mất vĩnh viễn, không ai
+  // thêm được nữa. Đổi sang dùng CHUNG đúng 1 tín hiệu phân biệt "hồ sơ đầy đủ / hồ sơ giới hạn" đã có sẵn
+  // ở nơi khác trong file này (hrOnlyBlock/limitedNote ngay trên — `'nationalId' in profile`, field LUÔN
+  // bị xoá/giữ ĐỒNG THỜI với dependents/education ở SENSITIVE_FIELDS nên tin cậy y hệt), còn nội dung
+  // mảng vẫn fallback `|| []` như cũ (đã đúng từ trước, không đổi).
+  const dependentsBlock = !('nationalId' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
     <div class="flex items-center justify-between mb-1">
       <label class="block text-[11px] font-semibold text-gray-500">👨‍👩‍👧 Người phụ thuộc</label>
       ${isReadOnly ? '' : '<button type="button" data-op="addHrpfDependentRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
@@ -549,7 +559,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly } = {}) {
       : (profile.dependents || []).map(hrpfDependentRowHtml).join('')}</div>
   </div>`;
 
-  const educationBlock = !('education' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
+  const educationBlock = !('nationalId' in profile) ? '' : `<div class="mt-3 pt-3 border-t">
     <div class="flex items-center justify-between mb-1">
       <label class="block text-[11px] font-semibold text-gray-500">🎓 Học vấn</label>
       ${isReadOnly ? '' : '<button type="button" data-op="addHrpfEducationRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
