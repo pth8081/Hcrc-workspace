@@ -435,6 +435,63 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // PHÁT HIỆN theo yêu cầu người dùng (đợt rà soát tiếp theo): itPriceApprovals (Bán Buôn/Bán Lẻ) và
+  // operationOrders (Đặt Hàng Tại HO/Siêu Thị) trước đây dùng CHUNG 1 typeLabel tĩnh trong Approval Hub
+  // ("Hỗ Trợ IT - Duyệt giá" / "QLDA - Đơn hàng") — người duyệt không phân biệt được ngay tại danh sách
+  // đang xử lý đúng luồng nào (Bán Buôn hay Bán Lẻ, HO hay Siêu Thị) mà phải mở từng dòng ra mới biết.
+  // getMyPendingApprovals() giờ tự chọn đúng nhãn theo priceType/orderLocationType của TỪNG bản ghi
+  // (resolveTypeLabel(), core-approvalhub.js).
+  // ==========================================================================
+  await scenario('Approval Hub phân biệt rõ Bán Buôn/Bán Lẻ (itPrice) và Đặt Hàng Tại HO/Siêu Thị (operationOrder) ngay trong danh sách', async () => {
+    const r = await page.evaluate(() => {
+      // RETAIL đi qua itPriceDeptWorkflows[dept].RETAIL; WHOLESALE đi qua map RIÊNG itPriceTierWorkflows
+      // (khoá theo priceTier Margin/Chiết khấu, KHÔNG theo phòng ban — xem resolveItPriceWorkflowConfigForItemClient()).
+      DB.itPriceDeptWorkflows = {
+        'Kế Toán': { RETAIL: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } }
+      };
+      DB.itPriceTierWorkflows = { MARGIN_LT5: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } };
+      DB.itPriceApprovals = [
+        { id: 801, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], priceType: 'RETAIL',
+          code: 'ITPG-801', productName: 'Giá bán lẻ chờ duyệt', creator: 'someone.else', creatorName: 'Người Đề Xuất',
+          createdAt: '2026-08-24', files: [], infoRequests: [] },
+        { id: 802, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5',
+          code: 'ITPG-802', productName: 'Giá bán buôn chờ duyệt', creator: 'someone.else', creatorName: 'Người Đề Xuất',
+          createdAt: '2026-08-24', files: [], infoRequests: [] }
+      ];
+      DB.operationOrderHOTierWorkflows = { LT100M: { approvers: { 1: ['duyet1'] } } };
+      DB.operationOrderStoreTierWorkflows = { LT10M: { approvers: { 1: ['duyet1'] } } };
+      DB.operationOrders = [
+        { id: 811, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], code: 'DH-811',
+          title: 'Đơn hàng tại HO', orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0,
+          creator: 'someone.else', creatorName: 'Người Mua Hàng', createdAt: '2026-08-25' },
+        { id: 812, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], code: 'DH-812',
+          title: 'Đơn hàng tại Siêu Thị', orderLocationType: 'STORE', amount: 5000000, paymentTotalAmount: 0,
+          creator: 'someone.else', creatorName: 'Người Mua Hàng', createdAt: '2026-08-25' }
+      ];
+
+      const items = getMyPendingApprovals(currentUser);
+      const labelOf = code => items.find(it => it.code === code)?.typeLabel;
+      const result = {
+        retail: labelOf('ITPG-801'), wholesale: labelOf('ITPG-802'),
+        ho: labelOf('DH-811'), store: labelOf('DH-812')
+      };
+
+      delete DB.itPriceDeptWorkflows['Kế Toán'];
+      delete DB.itPriceTierWorkflows;
+      DB.itPriceApprovals = [];
+      delete DB.operationOrderHOTierWorkflows;
+      delete DB.operationOrderStoreTierWorkflows;
+      DB.operationOrders = [];
+      renderApprovalHub();
+      return result;
+    });
+    record('itPriceApprovals priceType=RETAIL -> nhãn ghi rõ "Bán Lẻ"', /Bán Lẻ/.test(r.retail || ''), JSON.stringify(r));
+    record('itPriceApprovals priceType=WHOLESALE -> nhãn ghi rõ "Bán Buôn"', /Bán Buôn/.test(r.wholesale || ''), JSON.stringify(r));
+    record('operationOrders orderLocationType=HO -> nhãn ghi rõ "Tại HO"', /Tại HO/.test(r.ho || ''), JSON.stringify(r));
+    record('operationOrders orderLocationType=STORE -> nhãn ghi rõ "Tại Siêu Thị"', /Tại Siêu Thị/.test(r.store || ''), JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // Access gating: a user in NO approval flow at all cannot open the hub.
   // ==========================================================================
   await scenario('canAccessApprovalHub()/switchTab() gate out a user with no approval flow at all', async () => {

@@ -361,6 +361,13 @@ lập tức. Nút Duyệt/Từ chối ở đây gọi thẳng lại đúng hàm 
 không có rủi ro lệch hành vi (email thông báo, chuyển bước, tự tạo Công việc
 liên quan... vẫn chạy đầy đủ như duyệt tại module gốc).
 
+Cột "Phân hệ" ở danh sách tự phân biệt rõ luồng con cho các module gộp chung
+nhiều luồng phê duyệt khác nhau trong 1 collection, không hiện chung 1 nhãn mơ
+hồ: Hỗ Trợ IT - Duyệt Giá hiện đúng "Duyệt giá Bán Buôn"/"Duyệt giá Bán Lẻ"
+(theo `priceType`); QLDA - Đơn Hàng hiện đúng "Đặt Hàng Tại HO"/"Đặt Hàng Tại
+Siêu Thị" (theo `orderLocationType`), kể cả mục "Chờ Nhập Hàng" và "Từ chối
+khẩn cấp" của 2 module này.
+
 ### 3.5. Ví dụ cấu hình cụ thể
 
 **Yêu cầu**: "Trưởng phòng Pháp Chế duyệt bước 2 của quy trình Hợp Đồng."

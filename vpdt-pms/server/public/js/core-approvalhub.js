@@ -47,6 +47,18 @@ function approvalHubNeedInfoBadge() {
   return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ Bổ Sung</span>`;
 }
 
+// cfg.typeLabel (dùng ở addDeptWorkflowItems()/scan() bên dưới): chuỗi tĩnh (đa số module) HOẶC hàm
+// (rec) => chuỗi — PHÁT HIỆN theo yêu cầu người dùng: 1 "type" ở Hub có thể gộp chung NHIỀU luồng phê
+// duyệt khác nhau thật sự (VD itPriceApprovals gộp Bán Buôn/Bán Lẻ theo priceType, operationOrders gộp
+// Đặt Hàng Tại HO/Siêu Thị theo orderLocationType) — nhãn tĩnh khiến người duyệt không phân biệt được
+// đang xử lý đúng luồng nào ngay tại danh sách, phải mở từng dòng ra mới biết. Cho phép cfg.typeLabel là
+// hàm nhận `rec` để tự chọn đúng nhãn theo dữ liệu bản ghi, không đổi hành vi các lời gọi đang dùng chuỗi
+// tĩnh. Đặt ở module scope (không lồng trong getMyPendingApprovals()) để findPendingApprovalsForUsername()
+// dùng chung được.
+function resolveTypeLabel(typeLabel, rec) {
+  return typeof typeLabel === 'function' ? typeLabel(rec) : typeLabel;
+}
+
 function getMyPendingApprovals(user) {
   if (!user) return [];
   const items = [];
@@ -64,7 +76,7 @@ function getMyPendingApprovals(user) {
       const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, step);
       if (!canApproveStep(user, currentStepApprovers, rec[f.history], step)) return;
       items.push({
-        type: cfg.type, typeLabel: cfg.typeLabel,
+        type: cfg.type, typeLabel: resolveTypeLabel(cfg.typeLabel, rec),
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
         stepLabel: buildStepLabelForHub(wfConfig, step),
         createdAt: rec.createdAt,
@@ -114,7 +126,7 @@ function getMyPendingApprovals(user) {
   });
 
   addDeptWorkflowItems(DB.itPriceApprovals, p => resolveItPriceWorkflowConfigForItemClient(p), {
-    type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá',
+    type: 'itPrice', typeLabel: p => p.priceType === 'WHOLESALE' ? '🏷️ Hỗ Trợ IT - Duyệt giá Bán Buôn' : '🏷️ Hỗ Trợ IT - Duyệt giá Bán Lẻ',
     codeOf: r => r.code, titleOf: r => r.productName,
     statusBadgeOf: r => itPriceHasUnresolvedInfoRequest(r) ? approvalHubNeedInfoBadge() : approvalHubPendingBadge(),
     // Duyệt giá LUÔN cần mở bảng chi tiết (bảng giá/file đính kèm) trước khi quyết định — không thể duyệt
@@ -255,7 +267,8 @@ function getMyPendingApprovals(user) {
   if (canApproveItPriceEmergencyRejectClient(user)) {
     (DB.itPriceApprovals || []).filter(p => p.emergencyRejectStatus === 'PENDING').forEach(p => {
       items.push({
-        type: 'itPriceEmergencyReject', typeLabel: '🚨 Hỗ Trợ IT - Từ chối khẩn',
+        type: 'itPriceEmergencyReject',
+        typeLabel: `🚨 Hỗ Trợ IT - Từ chối khẩn (${p.priceType === 'WHOLESALE' ? 'Bán Buôn' : 'Bán Lẻ'})`,
         code: p.code, title: p.productName, dept: p.dept, stepLabel: '',
         createdAt: p.emergencyRejectRequestedAt,
         statusBadge: approvalHubPendingBadge(),
@@ -280,7 +293,7 @@ function getMyPendingApprovals(user) {
   // item.orderLocationType, cùng khuôn resolveSubmissionWorkflow(sub) ngay trên (resolver theo TỪNG hồ
   // sơ, không phải map phẳng theo dept nữa).
   addDeptWorkflowItems(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
-    type: 'operationOrder', typeLabel: '📦 QLDA - Đơn hàng',
+    type: 'operationOrder', typeLabel: o => o.orderLocationType === 'HO' ? '📦 QLDA - Đặt Hàng Tại HO' : '📦 QLDA - Đặt Hàng Tại Siêu Thị',
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   });
@@ -298,7 +311,8 @@ function getMyPendingApprovals(user) {
   if (typeof canManageOperationOrderReceiptClient === 'function') {
     (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
       items.push({
-        type: 'operationOrderReceipt', typeLabel: '📦 QLDA - Đơn hàng (Chờ Nhập Hàng)',
+        type: 'operationOrderReceipt',
+        typeLabel: `📦 QLDA - ${o.orderLocationType === 'HO' ? 'Đặt Hàng Tại HO' : 'Đặt Hàng Tại Siêu Thị'} (Chờ Nhập Hàng)`,
         code: o.code, title: o.title, dept: o.dept,
         stepLabel: '📥 Chờ xác nhận nhập hàng', createdAt: o.approvedAt || o.createdAt,
         statusBadge: `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ Nhập Hàng</span>`,
@@ -343,7 +357,7 @@ function findPendingApprovalsForUsername(username) {
       const currentStepApprovers = normalizeApproversList(resolveEffectiveStepApprovers(wfConfig, step));
       if (!currentStepApprovers.includes(username)) return;
       results.push({
-        typeLabel: cfg.typeLabel, code: cfg.codeOf(rec), title: cfg.titleOf(rec),
+        typeLabel: resolveTypeLabel(cfg.typeLabel, rec), code: cfg.codeOf(rec), title: cfg.titleOf(rec),
         stepLabel: buildStepLabelForHub(wfConfig, step)
       });
     });
@@ -375,7 +389,8 @@ function findPendingApprovalsForUsername(username) {
   });
 
   scan(DB.itPriceApprovals, p => resolveItPriceWorkflowConfigForItemClient(p), {
-    typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName
+    typeLabel: p => p.priceType === 'WHOLESALE' ? '🏷️ Hỗ Trợ IT - Duyệt giá Bán Buôn' : '🏷️ Hỗ Trợ IT - Duyệt giá Bán Lẻ',
+    codeOf: r => r.code, titleOf: r => r.productName
   });
 
   scan(DB.budgetEntries, b => DB.budgetDeptWorkflows[b.dept], {
@@ -440,7 +455,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
       const lastMine = mine[mine.length - 1];
       if (!inWindow(lastMine.time)) return;
       items.push({
-        type: cfg.type, typeLabel: cfg.typeLabel,
+        type: cfg.type, typeLabel: resolveTypeLabel(cfg.typeLabel, rec),
         code: cfg.codeOf(rec), title: cfg.titleOf(rec), dept: rec.dept,
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
         createdAt: lastMine.time,
@@ -462,10 +477,13 @@ function getMyProcessedApprovals(user, status, sinceMs) {
   });
 
   addProcessedItems(DB.vppRegistrations, { type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
-  addProcessedItems(DB.itPriceApprovals, { type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName });
+  addProcessedItems(DB.itPriceApprovals, {
+    type: 'itPrice', typeLabel: r => r.priceType === 'WHOLESALE' ? '🏷️ Hỗ Trợ IT - Duyệt giá Bán Buôn' : '🏷️ Hỗ Trợ IT - Duyệt giá Bán Lẻ',
+    codeOf: r => r.code, titleOf: r => r.productName
+  });
   addProcessedItems(DB.budgetEntries, { type: 'budget', typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
   addProcessedItems(DB.operationOrders, {
-    type: 'operationOrders', typeLabel: '📦 QLDA - Đơn Hàng', codeOf: r => r.code, titleOf: r => r.title,
+    type: 'operationOrders', typeLabel: r => r.orderLocationType === 'HO' ? '📦 QLDA - Đặt Hàng Tại HO' : '📦 QLDA - Đặt Hàng Tại Siêu Thị', codeOf: r => r.code, titleOf: r => r.title,
     // Xem chú thích matchStatuses ở định nghĩa addProcessedItems() phía trên — REJECTED không cần override
     // (hồ sơ bị từ chối luôn dừng hẳn ở đó, không có giai đoạn tiếp theo nào khác).
     matchStatuses: status === 'APPROVED' ? ['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED'] : null
