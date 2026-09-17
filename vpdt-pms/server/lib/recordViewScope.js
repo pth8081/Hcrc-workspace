@@ -937,12 +937,16 @@ function filterPaymentRequestsForUser(items, user) {
 // hợp đồng NGOÀI hệ thống (useExternalCode=true lúc tạo, xem lib/createValidation.js) — nhân viên đó
 // KHÔNG có tài khoản trong hệ thống nên không có ai để "tự xem" cả, giữ nguyên chỉ hrContractManage/admin
 // xem được (không có lỗ hổng, chỉ đơn thuần không áp dụng được nhánh tự xem).
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Hợp Đồng Lao Động là dữ liệu nhạy cảm nhân sự — admin
+// KHÔNG còn tự động xem được TOÀN BỘ chỉ vì có cờ `admin`, phải được cấp riêng hrContractManage (xem chú
+// thích đầy đủ ở lib/employeeProfile.js::canManageProfiles()). Admin vẫn tự xem được hợp đồng CỦA CHÍNH
+// MÌNH như mọi nhân viên khác qua nhánh employeeUsername === user.username bên dưới.
 function canViewLaborContract(user, item) {
-  if (user?.perms?.admin || user?.perms?.hrContractManage) return true;
+  if (user?.perms?.hrContractManage) return true;
   return !!(item?.employeeUsername && user?.username && item.employeeUsername === user.username);
 }
 function filterLaborContractsForUser(items, user) {
-  if (user?.perms?.admin || user?.perms?.hrContractManage) return items || [];
+  if (user?.perms?.hrContractManage) return items || [];
   return (items || []).filter(it => canViewLaborContract(user, it));
 }
 
@@ -1026,8 +1030,11 @@ function filterShiftSwapRequestsForUser(items, user, appData) {
 // /api/data chung. payslips ĐẶC BIỆT NHẠY CẢM (Mục 11 tài liệu gốc — "mức độ nghiêm ngặt cao nhất") nên
 // ẩn HOÀN TOÀN khỏi GET /api/data với người không có 1 trong 2 quyền quản lý/duyệt lương, kể cả chính
 // chủ (họ dùng route riêng ở trên, không phải route chung này).
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Lương là dữ liệu nhạy cảm nhân sự — admin KHÔNG còn tự
+// động xem được (kể cả qua GET /api/data) chỉ vì có cờ `admin`, phải được cấp riêng hrPayrollManage/
+// hrPayrollApprove (xem chú thích đầy đủ ở lib/employeeProfile.js::canManageProfiles()).
 function canViewAllPayrollData(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove);
+  return !!(user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove);
 }
 function filterPayrollPeriodsForUser(items, user) {
   return canViewAllPayrollData(user) ? (items || []) : [];

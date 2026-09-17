@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**23.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+> **Lưu ý**: file này đã bị bỏ lỡ cập nhật ở nhiều lần merge liên tiếp trước đó (v23.18 → v23.27 không
+> có mục riêng ở đây dù `server/package.json` đã tăng đúng) — xem lịch sử commit/PR trên GitHub cho các
+> bản đó, không lặp lại ở đây. Ghi chú dưới đây bắt đầu lại từ v23.28.
+
+## v23.28 (2026-09-17): Bỏ quyền admin mặc định ở Hồ Sơ Nhân Sự/HĐLĐ/Lương + audit log + phân quyền theo mục ở Nghiệp Vụ/Báo Cáo
+
+Theo yêu cầu người dùng (10/2026): (1) admin không còn tự động có quyền vào
+**Hồ Sơ Nhân Sự/Hợp Đồng Lao Động/Lương** — phải cấp đúng quyền cụ thể; (2)
+mọi thao tác thay đổi ở 3 khu vực này được ghi **Nhật Ký Hệ Thống** để đối
+chiếu; (3) mỗi mục trong **📘 Nghiệp Vụ** và mỗi tab trong **📊 Báo Cáo** chỉ
+hiện theo đúng quyền module thật tương ứng, có thêm quyền admin-grant "xem
+toàn bộ" và "mở thêm từng mục cụ thể" cho cả 2 màn.
+
+**Chi tiết đầy đủ**: xem mục 6.1 và phần đầu mục 2.5/5 ở
+`deploy/Huong-dan-nghiep-vu.md`.
+
+**File đã sửa** — server: `lib/employeeProfile.js`, `lib/laborContract.js`,
+`lib/payroll.js`, `lib/recordViewScope.js` (bỏ nhánh `|| perms.admin`),
+`routes/employeeProfile.js`, `routes/records.js`, `routes/payroll.js` (thêm
+`insertSystemLog`), `routes/data.js` (2 quyền mới `nghiepVuViewAll`/
+`reportViewAll` + 2 field mới `nghiepVuExtraKeys`/`reportExtraKeys` trên
+user, sanitize ở `prepareUsersForSave()`); client:
+`public/js/core.js`/`module-hrprofile.js`/`module-luong.js` (mirror UI),
+`module-nghiepvu.js` (`canViewNVItem()`/`NV_KEY_ACCESS_FN`),
+`module-baocaoquantri.js`/`module-baocaoquantri-preview.js`
+(`isReportKeyVisible()`), `module-admin-permtree.js`/
+`module-admin-userstaging.js`/`module-admin-submissiongroups.js` (2 checkbox
++ 2 multi-select mới ở cây phân quyền), `public/fragments/systemSection.html`
+(khối "24. Nghiệp Vụ & Báo Cáo" + 2 widget "Mở Thêm Mục/Tab").
+
+**Test**: cập nhật fixture cũ giả định admin tự động có quyền HR/HĐLĐ/Lương ở
+`tests/test-hr-profile.js`, `tests/test-labor-contract.js`,
+`tests/test-hr-profile-field-visibility.js`, `tests/test-hr-profile-legacy-fields.js`
+(admin không còn bypass mặc định); thêm fixture `nghiepVuViewAll` vào
+`tests/test-nghiepvu.js` để tách bạch test nội dung khỏi test phân quyền. Toàn
+bộ regression liên quan (HR/HĐLĐ/Lương/Nghiệp Vụ/Báo Cáo/admin-users) đã chạy
+lại và pass.
+
+**Deploy-impact quan trọng**: tài khoản `admin` mặc định (username đúng là
+`"admin"`) **KHÔNG THỂ** được cấp 4 quyền `hrProfileManage`/
+`hrContractManage`/`hrPayrollManage`/`hrPayrollApprove` qua bất kỳ đường nào
+(khoá cứng cả UI lẫn server, thiết kế cố ý từ trước) — sau khi deploy, tài
+khoản `admin` sẽ **mất quyền vào 3 module này ngay lập tức**. Cần tạo/dùng 1
+tài khoản khác và cấp đúng quyền cụ thể nếu cần quản lý các module này. Không
+đổi `schema.sql`, không thêm biến môi trường/npm dependency mới — chỉ cần
+copy code + `pm2 restart`.
 
 ## v23.17 (2026-09-16): Vá lỗi Hồ Sơ Nhân Sự — hồ sơ cũ không thêm được Người phụ thuộc/Học vấn
 

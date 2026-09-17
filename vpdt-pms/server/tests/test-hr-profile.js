@@ -224,26 +224,30 @@ async function main() {
       assertEqual('dependents' in mgrView.body.profile, false, 'self-field-config KHÔNG được ảnh hưởng tới quyền xem của quản lý trực tiếp (2 cấu hình tách biệt)');
     });
 
-    await run.run('GET / — chỉ hrProfileManage/admin, chặn quản lý trực tiếp/nhân viên thường', async () => {
+    await run.run('GET / — chỉ hrProfileManage, KHÔNG bypass admin, chặn quản lý trực tiếp/nhân viên thường', async () => {
       resetAppData();
       seedLinkedProfile({});
-      for (const u of [ADMIN, HR_MGR]) {
-        const ok = await api('GET', '/api/hr-profile', undefined, u);
-        assertEqual(ok.status, 200, `${u.username} phải xem được danh sách`);
-      }
+      const ok = await api('GET', '/api/hr-profile', undefined, HR_MGR);
+      assertEqual(ok.status, 200, `${HR_MGR.username} phải xem được danh sách`);
+      // PHÁT HIỆN theo yêu cầu người dùng (10/2026): dữ liệu Hồ Sơ Nhân Sự nhạy cảm — admin KHÔNG còn
+      // tự động bypass, phải được cấp cụ thể hrProfileManage mới xem được (xem lib/employeeProfile.js).
+      const deniedAdmin = await api('GET', '/api/hr-profile', undefined, ADMIN);
+      assertEqual(deniedAdmin.status, 403, 'admin KHÔNG có hrProfileManage -> vẫn bị chặn (không còn bypass mặc định)');
       const deniedMgr = await api('GET', '/api/hr-profile', undefined, DIRECT_MGR);
       assertEqual(deniedMgr.status, 403, 'Quản lý trực tiếp (chỉ hrProfileView) không được xem danh sách đầy đủ');
       const deniedEmp = await api('GET', '/api/hr-profile', undefined, EMP1);
       assertEqual(deniedEmp.status, 403, 'Nhân viên thường không được xem danh sách');
     });
 
-    await run.run('GET /employee-directory — mở quyền RỘNG HƠN GET / (thêm hrContractManage), chỉ trả employeeCode+tên, loại INACTIVE', async () => {
+    await run.run('GET /employee-directory — mở quyền RỘNG HƠN GET / (thêm hrContractManage), KHÔNG bypass admin, chỉ trả employeeCode+tên, loại INACTIVE', async () => {
       resetAppData();
       seedLinkedProfile({}); // NV001, liên kết emp1 -> tên tra qua DB.users
       APP_DATA.hrProcesses.push({ id: 200, fullName: 'Nguyễn Văn Chưa Liên Kết' });
       APP_DATA.employeeProfiles.push(Object.assign(employeeProfile.defaultProfile('NV002'), { status: 'ACTIVE', processId: 200 }));
       APP_DATA.employeeProfiles.push(Object.assign(employeeProfile.defaultProfile('NV003'), { status: 'INACTIVE' }));
-      for (const u of [ADMIN, HR_MGR, HR_CONTRACT_MGR]) {
+      const deniedAdmin = await api('GET', '/api/hr-profile/employee-directory', undefined, ADMIN);
+      assertEqual(deniedAdmin.status, 403, 'admin KHÔNG có hrProfileManage/hrContractManage -> vẫn bị chặn (không còn bypass mặc định)');
+      for (const u of [HR_MGR, HR_CONTRACT_MGR]) {
         const ok = await api('GET', '/api/hr-profile/employee-directory', undefined, u);
         assertEqual(ok.status, 200, `${u.username} (hrProfileManage hoặc hrContractManage) phải tra được`);
         const codes = ok.body.directory.map(d => d.employeeCode);

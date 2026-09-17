@@ -143,8 +143,18 @@ thoại thật.
 
 Nút sidebar **"📘 Nghiệp vụ"** (đặt ngay trước "📊 Báo Cáo") — **vai trò**:
 màn tra cứu nhanh "chức năng này hoạt động thế nào" bằng sơ đồ quy trình +
-diễn giải ngắn, thay vì phải đọc hết tài liệu này. Mở mặc định cho **mọi tài
-khoản đã đăng nhập** (giống Tài Liệu/Công Việc — không có sub-quyền riêng).
+diễn giải ngắn, thay vì phải đọc hết tài liệu này. Mở được (vào được cả màn)
+cho **mọi tài khoản đã đăng nhập**, nhưng từ **v23.28** mỗi MỤC bên trong chỉ
+hiện cho người ĐÃ có đúng quyền vào module THẬT tương ứng (VD chỉ thấy mục
+"Lương" nếu có quyền vào module Lương thật — xem `canViewNVItem()`/
+`NV_KEY_ACCESS_FN` ở `module-nghiepvu.js`, tái dùng thẳng các hàm
+`canAccessXModule()` đã có, không tạo lớp quyền song song). 2 cách mở rộng
+thêm (cây phân quyền, khối "24. Nghiệp Vụ & Báo Cáo"):
+- **"👁️ Xem Toàn Bộ Mục Nghiệp Vụ"** (`perms.nghiepVuViewAll`) — bỏ qua giới
+  hạn trên, xem được TẤT CẢ mục dù không có quyền module tương ứng.
+- **"📘 Mở Thêm Mục Nghiệp Vụ"** (`user.nghiepVuExtraKeys`, ở màn Sửa Người
+  Dùng, KHÔNG gán qua Nhóm Phân Quyền được vì là field riêng của từng
+  người) — mở thêm TỪNG mục cụ thể mà không cần bật cả quyền module thật.
 
 Nav trái nhóm theo 8 nhóm đúng cách người dùng vận hành thực tế (Văn Bản &
 Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính / Tổng Hợp / Vận
@@ -1975,6 +1985,20 @@ collection tương ứng luôn rỗng phía client). Checklist Đánh Giá Siêu
 **cố ý không** có ở đây — module đó đã có tab "📊 Báo Cáo" nội bộ riêng, tách
 biệt hoàn toàn (xem mục 4.7).
 
+**Phân quyền hiện tab (từ v23.28)**: mỗi tab trong nav trái (`REPORT_NAV_TREE`,
+`module-baocaoquantri.js`) chỉ hiện cho người ĐÃ có đúng quyền vào module thật
+tương ứng (`isReportKeyVisible()`, tái dùng `hasModuleAccess()` như trước —
+không đổi cơ chế phân quyền, chỉ đổi CÁCH GỌI). 2 cách mở rộng thêm (cây phân
+quyền, khối "24. Nghiệp Vụ & Báo Cáo"): **"👁️ Xem Toàn Bộ Tab Báo Cáo"**
+(`perms.reportViewAll`, bỏ qua giới hạn trên) và **"📊 Mở Thêm Tab Báo Cáo"**
+(`user.reportExtraKeys`, ở màn Sửa Người Dùng — mở thêm TỪNG tab cụ thể).
+**Lưu ý quan trọng**: 2 quyền này CHỈ ảnh hưởng tab nào HIỆN trên nav — dữ
+liệu THẬT trả về vẫn luôn qua đúng `filter*ForUser()`/`canView*()` thật ở
+`routes/reports.js` như trước (không bypass phạm vi phòng ban/quyền sở hữu
+bản ghi thật của từng collection); người được mở thêm 1 tab qua
+`reportExtraKeys` mà chưa có quyền xem dữ liệu module đó theo đúng nghĩa sẽ
+thấy tab nhưng dữ liệu trống/thiếu, không phải lỗi.
+
 - **Thống kê chung theo module** — với 4 module có luồng phê duyệt nhiều bước
   (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng): tổng số hồ sơ, phân theo trạng
   thái/phòng ban, và **thời gian xử lý trung bình** mỗi bước + mỗi hồ sơ hoàn
@@ -2037,8 +2061,9 @@ X/Y" ngay trên tiêu đề):
 7. Văn Phòng (Mua/Sửa)           19. Đào Tạo
 8. Truyền Thông Nội Bộ           20. Giấy Phép
 9. Biên Bản Họp & Công Việc      21. Nhân Sự
-10. Thanh Toán                   22. Vận Hành
-11. Nhóm Phê Duyệt Trình (Văn Bản Trình)
+10. Thanh Toán                   22. QLDA
+11. Nhóm Phê Duyệt Trình         23. Checklist Đánh Giá Siêu Thị
+    (Văn Bản Trình)               24. Nghiệp Vụ & Báo Cáo
 ```
 
 Mỗi checkbox 1 quyền cụ thể (đọc/tạo/sửa/duyệt/quản lý theo module) — nhiều
@@ -2069,6 +2094,42 @@ quản lý nhiều người cùng vai trò.
 4. Muốn người này **duyệt được** hồ sơ ở 1 bước cụ thể qua chế độ Theo phòng
    ban/Theo vị trí → nhớ tick quyền **"Người duyệt"** (khối 1) — bước dễ quên
    nhất, xem cảnh báo ở mục 3.2.
+
+### 6.1. Dữ liệu nhạy cảm Nhân Sự — admin KHÔNG tự động có quyền (từ v23.28)
+
+Theo yêu cầu người dùng (10/2026): **Hồ Sơ Nhân Sự**, **Hợp Đồng Lao Động**,
+**Lương** là 3 khu vực nhạy cảm nhất hệ thống — từ v23.28, quyền `perms.admin`
+(tick "Quản Trị Viên") **không còn tự động mở** 3 khu vực này nữa (trước đây
+mọi hàm `canManage*`/`canApprove*` liên quan đều có nhánh `|| perms.admin`).
+Phải cấp đúng quyền cụ thể mới quản lý được:
+
+- **Hồ Sơ Nhân Sự**: `hrProfileManage` (toàn quyền), hoặc tách nhỏ
+  `hrProfileCreate`/`hrProfileFullView`/`hrProfileEdit` (khối 21, xem mục
+  6 ở trên).
+- **Hợp Đồng Lao Động**: `hrContractManage` (khối 21).
+- **Lương**: `hrPayrollManage` (lập/tính) và/hoặc `hrPayrollApprove` (duyệt —
+  tách biệt hoàn toàn với lập/tính, đúng nguyên tắc phân quyền kế toán,
+  khối 21).
+
+**Lưu ý quan trọng — tài khoản `admin` mặc định**: tài khoản có `username`
+đúng là `"admin"` (id=1, xem `defaults.js`) bị **khoá cứng vĩnh viễn** ở CẢ
+UI lẫn server (`routes/data.js::prepareUsersForSave()`) — quyền của tài
+khoản này LUÔN CHỈ là `{ admin: true }`, không thể gán thêm
+`hrProfileManage`/`hrContractManage`/`hrPayrollManage`/`hrPayrollApprove`
+(hay bất kỳ quyền nào khác) qua bất kỳ đường nào, kể cả gán Nhóm Phân Quyền —
+đây là thiết kế CỐ Ý để luôn còn đúng 1 tài khoản không thể bị khoá nhầm.
+**Hệ quả**: tài khoản `admin` sẽ **KHÔNG BAO GIỜ** vào được 3 module trên kể
+từ bản này. Nếu cần người thật sự quản lý các module này, hãy tạo/dùng 1 tài
+khoản KHÁC (username khác `"admin"`) và cấp đúng quyền cụ thể ở trên —
+kể cả tài khoản đó có tick thêm `perms.admin` (VD 1 "admin phụ") vẫn cấp
+được bình thường vì không bị khoá cứng như tài khoản `admin` gốc.
+
+**Nhật ký hệ thống (audit log)**: mọi thao tác THAY ĐỔI (không phải xem) ở 3
+khu vực trên đều được ghi vào **Hệ Thống → Nhật Ký Hệ Thống** để đối chiếu —
+Hồ Sơ Nhân Sự (tạo/sửa/đổi trạng thái/liên kết tài khoản/tái tuyển + log truy
+cập lịch sử/báo cáo), Hợp Đồng Lao Động (sửa/kích hoạt/bổ sung/đổi trạng
+thái), Lương (cấu hình tỷ lệ/tính lương/điều chỉnh phiếu/nộp-duyệt-từ chối-
+chốt-mở lại kỳ/công bố).
 
 ---
 

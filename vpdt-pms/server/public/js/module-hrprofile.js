@@ -77,9 +77,12 @@ function hrpfIdentitySnapshot(profile) {
 // 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa (9/2026, xem lib/employeeProfile.js canCreateProfiles/
 // canFullViewProfiles/canEditProfiles) — mirror ĐÚNG logic OR-chain phía server để ẩn/hiện nút đúng,
 // KHÔNG phải tầng bảo vệ thật (server luôn enforce lại) chỉ để UI gọn/không gọi API thừa rồi bị 403.
-function hrpfCanCreate() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileCreate); }
-function hrpfCanEdit() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileEdit); }
-function hrpfCanFullView() { return !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit); }
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Hồ Sơ Nhân Sự là dữ liệu nhạy cảm — admin KHÔNG còn tự
+// động bypass 3 hàm dưới, phải có riêng đúng quyền hrProfileManage/hrProfileCreate/hrProfileEdit/
+// hrProfileFullView (mirror đúng lib/employeeProfile.js — đã bỏ nhánh admin ở đó).
+function hrpfCanCreate() { return !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileCreate); }
+function hrpfCanEdit() { return !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileEdit); }
+function hrpfCanFullView() { return !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit); }
 
 // hrpfCanViewReports() ĐÃ DỜI sang core.js (9/2026, cùng đợt dời "Báo Cáo" ra module con riêng
 // "hrReport" — xem chú thích tại đó): finishLogin() cần gọi hàm này để hiện/ẩn nút điều hướng NGAY LÚC
@@ -162,7 +165,7 @@ const HRPF_HISTORY_TYPE_ICON = {
 async function loadHrpfHistory(employeeCode) {
   const box = document.getElementById('hrpfHistoryBox');
   if (!box) return;
-  if (!(currentUser.perms?.admin || (currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage))) {
+  if (!(currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage)) {
     box.classList.add('hidden');
     return;
   }
@@ -263,8 +266,8 @@ function setHrProfileView(view) {
   document.getElementById('hrpfManageCreateBtn').classList.toggle('hidden', !hrpfCanCreate());
   document.getElementById('hrpfManageImportBtn').classList.toggle('hidden', !hrpfCanCreate());
   document.getElementById('hrpfManageExportBtn').classList.toggle('hidden', !hrpfCanFullView());
-  document.getElementById('hrpfManageFieldConfigBtn').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage));
-  document.getElementById('hrpfSelfFieldConfigBtn').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrProfileManage));
+  document.getElementById('hrpfManageFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
+  document.getElementById('hrpfSelfFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
   document.getElementById('hrpfManageListWrap').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageSearch').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageNoListMsg').classList.toggle('hidden', hrpfCanFullView());

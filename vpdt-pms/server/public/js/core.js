@@ -3055,6 +3055,9 @@ function defaultNewUserPerms() {
     // soát cho loại CONTROL_AUDIT — dùng TÊN 'depts' dù chứa mã siêu thị, để mergeGroupsBasePerms() tự
     // union đúng theo cơ chế field-name 'depts' đã có sẵn, xem mergeGroupsBasePerms() bên dưới).
     checklistTemplateManage: false, checklistReportView: false, checklistAuditScope: emptyScope(),
+    // Nghiệp Vụ/Báo Cáo (10/2026): mở RỘNG THÊM (xem toàn bộ mục/tab, bỏ qua giới hạn theo quyền module
+    // thật) — mặc định TẮT, mỗi mục vẫn tự gác theo đúng quyền module tương ứng.
+    nghiepVuViewAll: false, reportViewAll: false,
     approverAuthLevel: 'NONE'
   };
 }
@@ -6837,9 +6840,11 @@ function canAccessHrProfileModule(user) {
 // nhân viên tự xem hợp đồng của chính mình — module HR-only, giống vanHanh/budget), cần CẢ module cha
 // "hr" bật LẪN quyền hrContractManage thật (server enforce lại toàn bộ ở lib/laborContract.js::
 // canManageContracts(), đây chỉ ẩn/hiện nav cho gọn UI).
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Hợp Đồng Lao Động là dữ liệu nhạy cảm nhân sự — admin
+// KHÔNG còn tự động vào được, phải được cấp riêng hrContractManage (mirror đúng server, xem
+// lib/laborContract.js::canManageContracts()).
 function canAccessHrContractModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'hrContract')) return false;
   return !!user.perms?.hrContractManage;
 }
@@ -6849,7 +6854,10 @@ function canAccessHrContractModule(user) {
 // như GET .../history (Lịch Sử Nhân Sự). PHẢI sống ở core.js (không phải module-hrprofile.js, lazy-load
 // theo tab) vì finishLogin() gọi hàm này để hiện/ẩn nút điều hướng NGAY LÚC ĐĂNG NHẬP — trước khi người
 // dùng từng mở tab Hồ Sơ Nhân Sự/Báo Cáo lần nào (module-hrprofile.js lúc đó CHƯA được nạp).
-function hrpfCanViewReports() { return !!(currentUser.perms?.admin || (currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage)); }
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Báo Cáo Nhân Sự lộ số liệu Lương/Hợp Đồng — admin KHÔNG
+// còn tự động xem được, phải có ĐỦ CẢ hrProfileManage LẪN hrContractManage (mirror đúng server, xem
+// GET /api/hr-profile/reports ở routes/employeeProfile.js).
+function hrpfCanViewReports() { return !!(currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage); }
 
 // Công & Phép — mở cho MỌI người có module cha "hr" (cùng khuôn hrProfile) vì ai cũng cần tự xem
 // chấm công/phép năm/nộp đơn của chính mình; các khối quản lý bên trong tự ẩn theo quyền riêng.

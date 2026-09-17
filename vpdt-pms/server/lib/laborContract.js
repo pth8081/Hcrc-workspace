@@ -44,8 +44,11 @@ const STATUSES = new Set(['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED', 'SUPERSEDE
 // hạn trước đó). TERMINATE: không tiếp tục sử dụng lao động sau thử việc.
 const POST_PROBATION_DECISIONS = new Set(['SIGN_OFFICIAL', 'TERMINATE']);
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Hợp Đồng Lao Động là 1 trong 3 dữ liệu nhạy cảm nhân sự
+// (cùng Hồ Sơ Nhân Sự/Lương) admin KHÔNG còn tự động quản lý được — xem chú thích đầy đủ ở
+// lib/employeeProfile.js::canManageProfiles().
 function canManageContracts(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrContractManage);
+  return !!user?.perms?.hrContractManage;
 }
 
 function findContractsByEmployeeCode(list, employeeCode) {

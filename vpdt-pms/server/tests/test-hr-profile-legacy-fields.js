@@ -79,6 +79,13 @@ async function main() {
   };
 
   try {
+    // PHÁT HIỆN theo yêu cầu người dùng (10/2026): admin KHÔNG còn tự động bypass hrProfileManage — bài
+    // test này xác minh lỗi hồ sơ CŨ (không phải test bypass), nên cấp thêm hrProfileManage cho "admin"
+    // mặc định của harness (tests/_seed.js, vốn chỉ có perms.admin) để vẫn vào được màn Quản Lý.
+    await page.evaluate(() => {
+      const admin = DB.users.find((u) => u.username === 'admin');
+      if (admin) admin.perms = Object.assign({}, admin.perms, { hrProfileManage: true });
+    });
     const seedUsers = await page.evaluate(() => DB.users.map(u => ({
       username: u.username, name: u.name, dept: u.dept, jobTitle: u.jobTitle, email: u.email, phone: u.phone, perms: u.perms, active: true
     })));

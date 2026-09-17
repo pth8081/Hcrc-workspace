@@ -765,6 +765,21 @@
           <p class="text-[11px] text-gray-400 mt-1">Chỉ dùng để tính người này là người duyệt/tham gia quy trình "Theo vị trí" ở các module khác cho (các) chức danh/phòng ban được chọn thêm dưới đây — KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên, không ảnh hưởng Quản Lý Trực Tiếp/KPI/Chấm công.</p>
         </div>
 
+        <!-- Mở thêm TỪNG mục cụ thể ở Nghiệp Vụ/Báo Cáo, ngoài phạm vi quyền module hiện có của người này
+             (xem thêm 2 quyền "Xem Toàn Bộ" ở khối 24 phía trên nếu muốn mở HẲN toàn bộ thay vì chọn từng
+             mục) — mảng string lưu thẳng trên user (user.nghiepVuExtraKeys/reportExtraKeys), KHÔNG phải
+             perms, nên chỉ áp dụng cho TỪNG NGƯỜI, không gán qua Nhóm Phân Quyền được. -->
+        <div class="bg-white p-3 rounded border">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">📘 Mở Thêm Mục Nghiệp Vụ (tuỳ chọn)</label>
+          <div id="uNghiepVuExtraKeysMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+          <p class="text-[11px] text-gray-400 mt-1">Cho phép xem thêm các mục cụ thể trong "📘 Nghiệp Vụ" mà người này chưa có quyền module thật tương ứng.</p>
+        </div>
+        <div class="bg-white p-3 rounded border">
+          <label class="block text-xs font-semibold text-gray-600 mb-1">📊 Mở Thêm Tab Báo Cáo (tuỳ chọn)</label>
+          <div id="uReportExtraKeysMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+          <p class="text-[11px] text-gray-400 mt-1">Cho phép xem thêm các tab cụ thể trong "📊 Báo Cáo" mà người này chưa có quyền module thật tương ứng.</p>
+        </div>
+
         <!-- Là tài xế: đánh dấu để hiện trong picker "Lái xe được phân công" (Đăng Ký Xe > Xử lý duyệt,
         #carAssignedDriver) — trước đây picker đó tìm toàn bộ nhân viên công ty vì không có cách nào lọc
         đúng nhóm tài xế thực tế. Không phải quyền truy cập (không gate action gì) — chỉ là cờ phân loại
@@ -1575,6 +1590,22 @@
               </div>
               <div id="pChecklistAuditScopeStoreContainer" class="grid grid-cols-2 md:grid-cols-3 gap-1 pl-1 max-h-40 overflow-y-auto"></div>
             </div>
+          </div>
+        </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📘 24. Nghiệp Vụ &amp; Báo Cáo</span></span>
+            <span id="permTreeBadge_nghiepvubaocao" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Mặc định, mỗi mục trong "📘 Nghiệp Vụ" (tài liệu tham khảo) và mỗi tab trong "📊 Báo Cáo" chỉ hiện cho người ĐÃ có đúng quyền vào module thật tương ứng (VD chỉ thấy mục "Lương" trong Nghiệp Vụ nếu có quyền vào module Lương thật). 2 quyền dưới đây mở RỘNG THÊM, không thay thế quyền module thật.</p>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pNghiepVuViewAll"> 👁️ Xem Toàn Bộ Mục Nghiệp Vụ (bỏ qua giới hạn theo quyền module)
+            </label>
+            <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pReportViewAll"> 👁️ Xem Toàn Bộ Tab Báo Cáo (bỏ qua giới hạn theo quyền module)
+            </label>
           </div>
         </details>
         </div>

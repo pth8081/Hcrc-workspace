@@ -28,6 +28,42 @@ function renderSecondaryPositionsWidget(existingPositions) {
     });
   }
 }
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): "mở thêm TỪNG mục cụ thể" ngoài phạm vi quyền module
+// hiện có, cho Nghiệp Vụ (NGHIEP_VU_NAV, module-nghiepvu.js) + Báo Cáo (REPORT_NAV_TREE,
+// module-baocaoquantri.js) — 2 cụm này nạp LƯỜI theo tab (xem MODULE_LOAD_GROUPS ở core.js), nên phải tự
+// nạp trước khi đọc được 2 hằng số này (người quản trị có thể chưa từng mở tab Nghiệp Vụ/Báo Cáo trong
+// phiên làm việc). Không await ở nơi gọi (fire-and-forget) — khớp cách renderSecondaryPositionsWidget()
+// tự phục hồi khi lỗi, ô chỉ tạm trống cho tới khi nạp xong rồi tự vẽ lại.
+async function renderNVReportExtraKeysWidgets(user) {
+  try {
+    await loadModuleGroup('nghiepvu');
+    const items = (typeof NGHIEP_VU_NAV !== 'undefined')
+      ? NGHIEP_VU_NAV.flatMap(g => g.items.map(it => ({ value: it.key, label: `${it.icon} ${it.label}` })))
+      : [];
+    renderMultiSelectDropdown('uNghiepVuExtraKeysMultiSelect', items, user?.nghiepVuExtraKeys || [], {
+      placeholder: '🔍 Tìm mục Nghiệp Vụ để mở thêm...',
+      emptyText: 'Chưa mở thêm mục nào.'
+    });
+  } catch (err) {
+    console.error('renderNVReportExtraKeysWidgets() lỗi (Nghiệp Vụ):', err);
+  }
+  try {
+    await loadModuleGroup('baocaoquantri-preview');
+    const seen = new Set();
+    const items = [];
+    (typeof REPORT_NAV_TREE !== 'undefined' ? REPORT_NAV_TREE : []).forEach(n => {
+      if (n.key === 'SUMMARY') return;
+      (n.children || [n]).forEach(c => { if (!seen.has(c.key)) { seen.add(c.key); items.push({ value: c.key, label: c.label }); } });
+    });
+    renderMultiSelectDropdown('uReportExtraKeysMultiSelect', items, user?.reportExtraKeys || [], {
+      placeholder: '🔍 Tìm tab Báo Cáo để mở thêm...',
+      emptyText: 'Chưa mở thêm tab nào.'
+    });
+  } catch (err) {
+    console.error('renderNVReportExtraKeysWidgets() lỗi (Báo Cáo):', err);
+  }
+}
+
 function addUserToStagingList() {
   const editId = document.getElementById('editUserId').value;
   if (editId) return alert('⛔ Đang sửa 1 người dùng có sẵn — không thể thêm vào danh sách chờ. Bấm "Hủy" trước nếu muốn tạo người dùng mới.');
@@ -101,6 +137,7 @@ function editPendingNewUser(idx) {
   else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
   renderSecondaryPositionsWidget(u.secondaryPositions);
+  renderNVReportExtraKeysWidgets(u);
   document.getElementById('uIsDriver').checked = !!u.isDriver;
   document.getElementById('uStartDate').value = u.startDate || '';
   renderUPermGroupsChecklist(u.groupIds || []);
@@ -159,6 +196,7 @@ function resetUserForm() {
   onUserPosTypeChange();
   document.getElementById('uJobTitle').value = '';
   renderSecondaryPositionsWidget([]);
+  renderNVReportExtraKeysWidgets(null);
   document.getElementById('uIsDriver').checked = false;
   document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
@@ -304,6 +342,7 @@ function editUser(id) {
   else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
   renderSecondaryPositionsWidget(user.secondaryPositions);
+  renderNVReportExtraKeysWidgets(user);
   document.getElementById('uIsDriver').checked = !!user.isDriver;
   document.getElementById('uStartDate').value = user.startDate || '';
   // User cũ chưa từng có groupIds (tạo trước khi có tính năng multi-select, chỉ có groupId đơn) — quy

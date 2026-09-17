@@ -438,7 +438,7 @@ function renderReportsSummary(container) {
   // tab con khác (xem renderReportsNavPicker()), nên phải lọc riêng TỪNG khối bên dưới theo đúng module
   // đang bật ở mục 0, tái dùng thẳng hasModuleAccess() — nếu không, người tắt module ở mục 0 (vd không
   // được vào Hợp Đồng) vẫn thấy được số lượng/giá trị Hợp Đồng lộ ra qua tab Tổng Hợp này.
-  const canSee = (key) => hasModuleAccess(currentUser, key);
+  const canSee = (key) => isReportKeyVisible(key);
 
   const docStats = computeApprovalStats(DB.docs, deptFilter, fromDate, toDate);
   const subStats = computeApprovalStats(DB.submissions, deptFilter, fromDate, toDate);
@@ -689,7 +689,7 @@ function exportReportsSummaryExcel() {
 
   // Khớp đúng bản vá module-access ở renderReportsSummary() (cùng số liệu, cùng màn hình) — mỗi nhóm
   // dòng chỉ xuất nếu module tương ứng đang bật ở mục 0, không thì file Excel lộ số liệu màn hình đã ẩn.
-  const canSee = (key) => hasModuleAccess(currentUser, key);
+  const canSee = (key) => isReportKeyVisible(key);
   const rows = [
     ...(canSee('doc') ? [['Tổng Tài liệu', docStats.total], ['Tài liệu - Đang chờ', docStats.pending], ['Tài liệu - Đã duyệt', docStats.approved], ['Tài liệu - Từ chối', docStats.rejected]] : []),
     ...(canSee('submission') ? [['Tổng Văn bản trình', subStats.total], ['Văn bản trình - Đang chờ', subStats.pending], ['Văn bản trình - Đã duyệt', subStats.approved], ['Văn bản trình - Từ chối', subStats.rejected]] : []),

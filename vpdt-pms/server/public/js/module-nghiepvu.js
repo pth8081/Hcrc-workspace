@@ -718,6 +718,42 @@ function setNVDaotaoArea(areaKey) {
   renderNghiepVuContent();
 }
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): mỗi mục Nghiệp Vụ chỉ hiện cho người ĐÃ có đúng quyền
+// vào module THẬT tương ứng — tái dùng lại chính các hàm canAccessXModule()/hasModuleAccess() đã có
+// (core.js), KHÔNG tạo lớp quyền song song mới. "daotao" mượn quyền module "internal" (Đào Tạo là nội
+// dung con của Truyền Thông Nội Bộ, không phải module/tab riêng); "itPriceApproval" mượn quyền module
+// "itSupport" (cùng 1 module thật, 2 nghiệp vụ con). Tên hàm ghi dạng STRING (tra qua window[...]) thay
+// vì tham chiếu thẳng để không phụ thuộc thứ tự nạp file core.js/module-nghiepvu.js.
+const NV_KEY_ACCESS_FN = {
+  doc: 'canAccessDocModule', submission: 'canAccessSubmissionModule', contract: 'canAccessContractModule',
+  daotao: 'canAccessInternalModule',
+  minutes: 'canAccessMeetingMinutesModule', task: 'canAccessTaskModule', periodicReport: 'canAccessPeriodicReportModule',
+  meeting: 'canAccessMeetingModule', car: 'canAccessCarModule', vpp: 'canAccessVppModule', uniform: 'canAccessUniformModule', license: 'canAccessLicenseModule',
+  office: 'canAccessOfficeModule', budget: 'canAccessBudgetModule',
+  vanHanh: 'canAccessOperationModule', checklist: 'canAccessChecklistModule',
+  orgChart: 'canAccessOrgChartModule', hrLifecycle: 'canAccessHrLifecycleModule', hrProfile: 'canAccessHrProfileModule',
+  hrContract: 'canAccessHrContractModule', hrReport: 'hrpfCanViewReports', hrAttendance: 'canAccessHrAttendanceModule',
+  hrPayroll: 'canAccessHrPayrollModule', hr: 'canAccessHrModule',
+  itSupport: 'canAccessItSupportModule', itPriceApproval: 'canAccessItSupportModule',
+};
+
+// Quyền admin-grant riêng (checkbox "Xem Toàn Bộ Mục Nghiệp Vụ", xem systemSection.html mục 24) bỏ qua
+// toàn bộ giới hạn dưới đây; user.nghiepVuExtraKeys (mảng key, sanitize ở routes/data.js) mở thêm TỪNG
+// mục cụ thể ngoài phạm vi quyền module hiện có, không cần bật cả quyền module thật tương ứng.
+function canViewNVItem(key) {
+  if (!currentUser) return false;
+  if (currentUser.perms?.nghiepVuViewAll) return true;
+  if ((currentUser.nghiepVuExtraKeys || []).includes(key)) return true;
+  const fn = window[NV_KEY_ACCESS_FN[key]];
+  return typeof fn === 'function' ? !!fn(currentUser) : true;
+}
+
+function visibleNVGroups() {
+  return NGHIEP_VU_NAV
+    .map(g => ({ group: g.group, items: g.items.filter(it => canViewNVItem(it.key)) }))
+    .filter(g => g.items.length > 0);
+}
+
 function nvFindItem(key) {
   for (const g of NGHIEP_VU_NAV) {
     const it = g.items.find(i => i.key === key);
@@ -730,7 +766,12 @@ function renderNghiepVuModule() {
   const root = document.getElementById('nghiepVuRoot');
   if (!root) return;
 
-  const navHtml = NGHIEP_VU_NAV.map(g => `
+  const groups = visibleNVGroups();
+  if (!groups.some(g => g.items.some(it => it.key === nvActiveKey))) {
+    nvActiveKey = groups[0]?.items[0]?.key || null;
+  }
+
+  const navHtml = groups.map(g => `
     <div class="nv-group">${escapeHtml(g.group)}</div>
     ${g.items.map(it => `
       <button type="button" class="nv-item${it.key === nvActiveKey ? ' active' : ''}" data-op="setNVActiveKey" data-arg0="${it.key}">${it.icon} ${escapeHtml(it.label)}</button>
@@ -749,6 +790,10 @@ function renderNghiepVuModule() {
 function renderNghiepVuContent() {
   const main = document.getElementById('nghiepVuMain');
   if (!main) return;
+  if (!nvActiveKey) {
+    main.innerHTML = `<div class="p-4 bg-gray-50 border rounded text-gray-500 text-sm">Bạn chưa có quyền xem mục nào trong Nghiệp Vụ.</div>`;
+    return;
+  }
   const found = nvFindItem(nvActiveKey);
   if (!found) { main.innerHTML = ''; return; }
   const { group, item } = found;

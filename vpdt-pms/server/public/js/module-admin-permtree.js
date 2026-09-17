@@ -207,7 +207,12 @@ function collectPermsFromForm() {
     // renderChecklistAuditScopeCheckboxes() ở module-admin.js.
     checklistTemplateManage: document.getElementById('pChecklistTemplateManage').checked,
     checklistReportView: document.getElementById('pChecklistReportView').checked,
-    checklistAuditScope: scopeFromForm('pChecklistAuditScopeAll', 'pChecklistAuditScopeStore')
+    checklistAuditScope: scopeFromForm('pChecklistAuditScopeAll', 'pChecklistAuditScopeStore'),
+    // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
+    // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
+    // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
+    nghiepVuViewAll: document.getElementById('pNghiepVuViewAll').checked,
+    reportViewAll: document.getElementById('pReportViewAll').checked
   };
 }
 
@@ -286,6 +291,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
   document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;
   setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
+  document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
+  document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;

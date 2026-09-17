@@ -17,7 +17,18 @@ const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../l
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
 const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer } = require('../lib/recordViewScope');
+const { insertSystemLog } = require('../lib/systemLogStore');
 router.use(requireAuth, blockIfMustChangePassword);
+
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026, "dữ liệu nhạy cảm nhân sự"): Hợp Đồng Lao Động trước đây
+// không ghi gì vào "Nhật ký hệ thống" — cùng với việc bỏ nhánh admin ở lib/laborContract.js, thêm log
+// SERVER-SIDE cho mọi thao tác quản lý (sửa/kích hoạt/bổ sung phụ lục/đổi trạng thái) để đối chiếu.
+function logLaborContractAction(req, freshUser, actionType, targetObject, description) {
+  insertSystemLog({
+    username: freshUser.username, fullName: freshUser.name || freshUser.username, ipAddress: req.ip,
+    module: 'LABOR_CONTRACT', actionType, targetObject, description, status: 'SUCCESS'
+  }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Hợp Đồng Lao Động):', e.message));
+}
 
 // requireAuth đã tự xác định lại CHÍNH XÁC người dùng hiện tại từ DB (kể cả trạng thái active) và gắn
 // sẵn vào req.freshUser/req.allUsers — không cần đọc lại DB thêm 1 lần nữa cho cùng mục đích.
@@ -3569,6 +3580,7 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
       laborContract.applyManualEdit(item, req.body, freshUser.username, freshUser.name);
       return item;
     });
+    logLaborContractAction(req, freshUser, 'EDIT', result.code || String(itemId), `Sửa hợp đồng lao động [${result.code || itemId}]`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `laborContracts/${req.params.id}/edit`, err);
@@ -3596,6 +3608,7 @@ router.post('/laborContracts/:id/activate', async (req, res) => {
         return item;
       });
     }
+    logLaborContractAction(req, freshUser, 'ACTIVATE', result.code || String(itemId), `Kích hoạt hợp đồng lao động [${result.code || itemId}]`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `laborContracts/${req.params.id}/activate`, err);
@@ -3613,6 +3626,7 @@ router.post('/laborContracts/:id/add-amendment', async (req, res) => {
       amendment = laborContract.addAmendment(item, req.body, freshUser.username, freshUser.name);
       return item;
     });
+    logLaborContractAction(req, freshUser, 'ADD_AMENDMENT', result.code || String(itemId), `Bổ sung phụ lục hợp đồng [${result.code || itemId}]: ${amendment?.amendmentType || ''}`);
     res.json({ ok: true, item: result, amendment });
   } catch (err) {
     handleError(res, `laborContracts/${req.params.id}/add-amendment`, err);
@@ -3636,6 +3650,7 @@ router.post('/laborContracts/:id/status', async (req, res) => {
       item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
       return item;
     });
+    logLaborContractAction(req, freshUser, 'STATUS_CHANGE', result.code || String(itemId), `Đổi trạng thái hợp đồng [${result.code || itemId}] -> ${result.status}`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `laborContracts/${req.params.id}/status`, err);

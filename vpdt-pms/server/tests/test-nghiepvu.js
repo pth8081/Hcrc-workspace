@@ -73,7 +73,11 @@ async function main() {
       window.confirm = () => true;
 
       const normalUser = { username: 'nv1', name: 'Nhân Viên', dept: 'Phòng Hành Chính', perms: {} };
-      const adminUser = { username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng Hành Chính', perms: { admin: true } };
+      // PHÁT HIỆN theo yêu cầu người dùng (10/2026): mỗi mục Nghiệp Vụ giờ chỉ hiện theo đúng quyền
+      // module THẬT tương ứng (xem canViewNVItem()/NV_KEY_ACCESS_FN ở module-nghiepvu.js) — user này
+      // dùng để lặp qua TOÀN BỘ item kiểm tra render nội dung (mục 4-5 bên dưới), không phải để test
+      // permission-gating (đã test riêng ở mục 1), nên cấp thẳng nghiepVuViewAll để không bị lọc mất.
+      const adminUser = { username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng Hành Chính', perms: { admin: true, nghiepVuViewAll: true } };
 
       // ---------- 1) Quyền truy cập: mở mặc định cho mọi tài khoản đã đăng nhập ----------
       check('canAccessNghiepVuModule: user thường được vào (mở mặc định)',

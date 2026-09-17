@@ -123,10 +123,12 @@ async function partA() {
     assert.throws(() => laborContract.addAmendment(contract, { amendmentType: 'X', effectiveDate: '2026-02-01', applyDate: 'không-phải-ngày' }, 'hr1', 'HR One'), /Ngày áp dụng/);
   });
 
-  await test('canManageContracts() chỉ true với hrContractManage hoặc admin', () => {
+  // PHÁT HIỆN theo yêu cầu người dùng (10/2026): Hợp Đồng Lao Động là dữ liệu nhạy cảm — admin KHÔNG
+  // còn tự động bypass, phải được cấp cụ thể hrContractManage mới quản lý được.
+  await test('canManageContracts() CHỈ true với hrContractManage, KHÔNG bypass admin', () => {
     assert.strictEqual(laborContract.canManageContracts({ perms: {} }), false);
     assert.strictEqual(laborContract.canManageContracts({ perms: { hrContractManage: true } }), true);
-    assert.strictEqual(laborContract.canManageContracts({ perms: { admin: true } }), true);
+    assert.strictEqual(laborContract.canManageContracts({ perms: { admin: true } }), false);
   });
 }
 

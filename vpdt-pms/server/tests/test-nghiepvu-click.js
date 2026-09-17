@@ -43,7 +43,11 @@ async function main() {
       window.fetch = async () => ({ ok: true, status: 200, json: async () => ([]) });
       Object.assign(DB, {
         depts: [], stores: [], cats: [],
-        users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'X', jobTitle: 'Admin', email: 'a@t', phone: '0', perms: { admin: true }, active: true, groupIds: [], permOverrides: null }]
+        // nghiepVuViewAll: true — bài test này click qua CÁC MỤC BẤT KỲ (hrContract/hrProfile/daotao) để
+        // xác nhận đúng lớp click-wiring (CSP delegation), không phải test phân quyền theo mục (đã test
+        // riêng ở nơi khác) — thiếu quyền này, các mục KHÔNG có quyền module thật tương ứng sẽ không còn
+        // render trên nav (canViewNVItem(), module-nghiepvu.js), khiến page.click() chờ hết timeout.
+        users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'X', jobTitle: 'Admin', email: 'a@t', phone: '0', perms: { admin: true, nghiepVuViewAll: true }, active: true, groupIds: [], permOverrides: null }]
       });
       finishLogin(DB.users[0]);
     });

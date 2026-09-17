@@ -70,7 +70,10 @@ async function main() {
     if (cond) { console.log(`PASS: ${label}`); } else { console.log(`FAIL: ${label}`); failures++; }
   };
 
-  const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
+  // PHÁT HIỆN theo yêu cầu người dùng (10/2026): admin KHÔNG còn tự động bypass hrProfileManage — bài
+  // test này xác minh tính năng cấu hình trường xem (không phải test bypass), nên tài khoản dùng để mở
+  // màn cấu hình cần được cấp cụ thể hrProfileManage.
+  const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true, hrProfileManage: true }, active: true };
   const MGR1 = { username: 'qltt01', name: 'Trưởng Phòng Kinh Doanh', dept: 'Phòng Kinh Doanh', perms: { hrProfileView: true }, active: true };
   const EMP1 = { username: 'nv001emp', name: 'Nhân Viên Một', dept: 'Phòng Kinh Doanh', managerUsername: 'qltt01', perms: {}, active: true };
 
@@ -86,7 +89,16 @@ async function main() {
 
     // Seed 3 user vào DB.users PHÍA CLIENT (finishLogin() đọc từ đây) — song song với APP_DATA.users phía
     // server giả (route auth đọc từ đó) — 2 mảng độc lập, cùng khuôn test-hr-profile-legacy-fields.js.
-    await page.evaluate((users) => { users.forEach(u => DB.users.push(u)); }, [ADMIN, MGR1, EMP1]);
+    // Upsert (không push trùng) — hạ tầng harness (tests/_seed.js) đã có sẵn 1 bản ghi username "admin"
+    // (perms: {admin:true} thôi) trước khi bài test này chạy; push thêm 1 bản "admin" khác sẽ để lại 2
+    // phần tử trùng username, và DB.users.find() (xem loginAs() ở _harness-contract.js) luôn khớp bản
+    // ĐẦU TIÊN (bản seed mặc định, KHÔNG có hrProfileManage) — ghi đè thay vì push mới sửa đúng bản.
+    await page.evaluate((users) => {
+      users.forEach((u) => {
+        const idx = DB.users.findIndex((x) => x.username === u.username);
+        if (idx >= 0) DB.users[idx] = u; else DB.users.push(u);
+      });
+    }, [ADMIN, MGR1, EMP1]);
 
     await page.exposeFunction('__hrProfileFetch', async (method, urlPath, bodyStr, username) => {
       const res = await fetch(`http://127.0.0.1:${epServer.port}${urlPath}`, {

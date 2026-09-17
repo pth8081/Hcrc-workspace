@@ -138,12 +138,23 @@ const REPORT_NAV_TREE = [
   }
 ];
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): quyền admin-grant riêng "Xem Toàn Bộ Tab Báo Cáo"
+// (perms.reportViewAll, xem systemSection.html mục 24) bỏ qua giới hạn theo quyền module bên dưới;
+// user.reportExtraKeys mở thêm TỪNG tab cụ thể. Đây CHỈ ảnh hưởng tab nào HIỆN trên nav — dữ liệu THẬT
+// trả về vẫn luôn qua đúng filter*ForUser()/canView*() thật ở routes/reports.js (không đổi, không bypass
+// phạm vi phòng ban/quyền sở hữu bản ghi thật của từng collection).
+function isReportKeyVisible(key) {
+  if (currentUser?.perms?.reportViewAll) return true;
+  if ((currentUser?.reportExtraKeys || []).includes(key)) return true;
+  return hasModuleAccess(currentUser, key);
+}
+
 // Node cấp 1 hiện được nếu là "Tổng Hợp", hoặc còn quyền vào module đó, hoặc (với node có children)
 // còn ÍT NHẤT 1 module con bên trong còn quyền — ẩn hẳn node cha nếu tắt sạch mọi module con của nó.
 function isReportNavNodeVisible(node) {
   if (node.key === 'SUMMARY') return true;
-  if (node.children) return node.children.some(c => hasModuleAccess(currentUser, c.key));
-  return hasModuleAccess(currentUser, node.key);
+  if (node.children) return node.children.some(c => isReportKeyVisible(c.key));
+  return isReportKeyVisible(node.key);
 }
 
 function findReportNavNode(key) {
@@ -175,7 +186,7 @@ function renderReportsNavPicker() {
   const activeNode = findReportNavNode(reportsNavL1);
   if (activeNode && activeNode.children) {
     l2Wrap.classList.remove('hidden');
-    l2Bar.innerHTML = activeNode.children.filter(c => hasModuleAccess(currentUser, c.key)).map(c => {
+    l2Bar.innerHTML = activeNode.children.filter(c => isReportKeyVisible(c.key)).map(c => {
       const cls = c.key === reportsNavL2
         ? 'px-3 py-1 rounded text-xs font-bold bg-indigo-600 text-white'
         : 'px-3 py-1 rounded text-xs font-bold bg-gray-100 text-gray-700';
@@ -193,7 +204,7 @@ function selectReportsNavL1(key) {
   const node = findReportNavNode(key);
   // Vào 1 module có children luôn cần chọn sẵn 1 module con để có báo cáo để xem ngay (không bắt
   // người dùng phải tự bấm thêm 1 lần nữa mới thấy nội dung) — ưu tiên module con đầu tiên còn quyền.
-  reportsNavL2 = (node && node.children) ? (node.children.find(c => hasModuleAccess(currentUser, c.key))?.key || null) : null;
+  reportsNavL2 = (node && node.children) ? (node.children.find(c => isReportKeyVisible(c.key))?.key || null) : null;
   repopulateReportsDeptFilterOptions(getActiveReportLeafKey());
   renderReports();
 }

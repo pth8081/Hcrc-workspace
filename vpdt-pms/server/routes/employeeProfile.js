@@ -20,6 +20,19 @@ const { canManageContracts } = require('../lib/laborContract');
 const orgChart = require('../lib/orgChart');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { parseVNDateTime } = require('../lib/recordActions');
+const { insertSystemLog } = require('../lib/systemLogStore');
+
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026, "dữ liệu nhạy cảm nhân sự"): Hồ Sơ Nhân Sự trước đây không
+// ghi gì vào "Nhật ký hệ thống" — cùng với việc bỏ nhánh admin ở lib/employeeProfile.js, thêm log SERVER-
+// SIDE (không phụ thuộc client có gọi POST /api/log hay không) cho MỌI thao tác ghi (tạo/sửa/đổi trạng
+// thái/gán chức vụ/liên kết tài khoản/tái tuyển) để admin đối chiếu ai đã xem/sửa gì. Fire-and-forget
+// (không chặn response chính, lỗi ghi log không được phép làm hỏng thao tác chính đã thành công).
+function logHrProfileAction(req, actionType, targetObject, description) {
+  insertSystemLog({
+    username: req.user.username, fullName: req.freshUser?.name || req.user.username, ipAddress: req.ip,
+    module: 'HR', actionType, targetObject, description, status: 'SUCCESS'
+  }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Hồ Sơ Nhân Sự):', e.message));
+}
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -237,6 +250,7 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
         u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
       ));
     }
+    logHrProfileAction(req, 'SET_POSITION', req.params.employeeCode, `Gán chức vụ cho hồ sơ [${req.params.employeeCode}]: ${updated.positionLabel || positionKey}`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/set-position`); }
 });
@@ -246,13 +260,13 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
 // tuyển (profile.rehireHistory[]) + toàn bộ hợp đồng lao động của nhân viên này (mã hợp đồng ký MỚI/kích
 // hoạt/thay thế/chấm dứt từ laborContracts[].history[] + các dòng "Bổ Sung Phụ Lục" từ amendments[]) —
 // xem yêu cầu "muốn có lịch sử này xuyên suốt hồ sơ nhân sự" đã xác nhận với người dùng. Quyền: CẦN CẢ
-// hrProfileManage LẪN hrContractManage (hoặc admin) — cố ý CHẶT hơn từng route riêng lẻ ở trên, vì dữ
+// hrProfileManage LẪN hrContractManage — cố ý CHẶT hơn từng route riêng lẻ ở trên, vì dữ
 // liệu hợp đồng gộp vào đây có LƯƠNG (trường vốn chỉ admin/hrContractManage được đọc, xem
 // canViewLaborContract() ở lib/recordViewScope.js) — không nới lỏng biên giới đó chỉ vì gộp chung 1 màn.
 router.get('/by-code/:employeeCode/history', async (req, res) => {
   try {
     const canFull = employeeProfile.canManageProfiles(req.freshUser) && canManageContracts(req.freshUser);
-    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc admin) để xem Lịch Sử Nhân Sự đầy đủ' });
+    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động để xem Lịch Sử Nhân Sự đầy đủ' });
     const list = (await getAppDataValue('employeeProfiles')) || [];
     const profile = employeeProfile.findProfile(list, req.params.employeeCode);
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
@@ -298,6 +312,9 @@ router.get('/by-code/:employeeCode/history', async (req, res) => {
     // "HH:mm:ss d/M/yyyy" (định dạng nowVN() — so sánh chuỗi trực tiếp cho kết quả SAI, VD "9:00:00 5/1"
     // > "8:00:00 15/1" theo thứ tự chuỗi dù 15/1 diễn ra SAU 5/1).
     events.sort((x, y) => vnTime(y.time) - vnTime(x.time));
+    // Ghi log TRUY CẬP (không chỉ ghi/sửa) — Lịch Sử Nhân Sự gộp cả lương/hợp đồng, mức nhạy cảm cao
+    // nhất theo comment ở trên, người dùng yêu cầu có log để đối chiếu ai đã xem.
+    logHrProfileAction(req, 'VIEW_HISTORY', req.params.employeeCode, `Xem Lịch Sử Nhân Sự đầy đủ [${req.params.employeeCode}]`);
     res.json({ events });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}/history`); }
 });
@@ -352,7 +369,7 @@ router.put('/self-field-config', requireProfileManage, async (req, res) => {
 // laborContracts bị chặn hẳn khỏi GET /api/reports chung (dữ liệu cực nhạy cảm, xem CLAUDE.md +
 // routes/data.js) nên KHÔNG đi qua khuôn báo cáo module thường (module-baocaoquantri.js) — route riêng
 // tại đây, tính THUẦN ở employeeProfile.computeHrReportSummary() (test được không cần HTTP). Quyền: CẦN
-// CẢ hrProfileManage LẪN hrContractManage (hoặc admin) — CÙNG mức chặt như GET .../history (vẫn lộ số
+// CẢ hrProfileManage LẪN hrContractManage — CÙNG mức chặt như GET .../history (vẫn lộ số
 // liệu lương qua mục tăng lương). rate-limit riêng (cùng khuôn routes/reports.js) — phòng truy vấn quá
 // nhiều dội liên tục.
 const hrReportsRateLimiter = rateLimit({
@@ -366,7 +383,7 @@ const hrReportsRateLimiter = rateLimit({
 router.get('/reports', hrReportsRateLimiter, async (req, res) => {
   try {
     const canFull = employeeProfile.canManageProfiles(req.freshUser) && canManageContracts(req.freshUser);
-    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc admin) để xem Báo Cáo Nhân Sự' });
+    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động để xem Báo Cáo Nhân Sự' });
     const from = req.query?.from ? String(req.query.from).trim() : '';
     const to = req.query?.to ? String(req.query.to).trim() : '';
     const contractStatus = req.query?.contractStatus ? String(req.query.contractStatus).trim() : '';
@@ -375,6 +392,7 @@ router.get('/reports', hrReportsRateLimiter, async (req, res) => {
       getAllForCollection('laborContracts')
     ]);
     const summary = employeeProfile.computeHrReportSummary(profiles, contracts, { from, to, contractStatus });
+    logHrProfileAction(req, 'VIEW_REPORT', '', 'Xem Báo Cáo Nhân Sự');
     res.json(summary);
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports'); }
 });
@@ -426,6 +444,7 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       updated = profile;
       return list;
     });
+    logHrProfileAction(req, 'EDIT', req.params.employeeCode, `Sửa hồ sơ [${req.params.employeeCode}]`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `PATCH /api/hr-profile/by-code/${req.params.employeeCode}`); }
 });
@@ -445,6 +464,7 @@ router.patch('/by-code/:employeeCode/status', async (req, res) => {
       updated = profile;
       return list;
     });
+    logHrProfileAction(req, 'STATUS_CHANGE', req.params.employeeCode, `Đổi trạng thái hồ sơ [${req.params.employeeCode}] -> ${updated.status}`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `PATCH /api/hr-profile/by-code/${req.params.employeeCode}/status`); }
 });
@@ -465,6 +485,7 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
       updated = employeeProfile.linkAccount(list, req.params.employeeCode, username, req.freshUser.username);
       return list;
     });
+    logHrProfileAction(req, 'LINK_ACCOUNT', req.params.employeeCode, `Liên kết hồ sơ [${req.params.employeeCode}] với tài khoản "${username}"`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/link-account`); }
 });
@@ -494,6 +515,7 @@ router.post('/', requireProfileCreate, async (req, res) => {
         u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
       ));
     }
+    logHrProfileAction(req, 'CREATE', created.employeeCode, `Tạo mới hồ sơ nhân sự [${created.employeeCode}]`);
     res.json({ ok: true, profile: created });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile'); }
 });
@@ -534,6 +556,7 @@ router.post('/by-code/:employeeCode/rehire', requireProfileCreateOrEdit, async (
       updated = employeeProfile.reactivateForRehire(list, req.params.employeeCode, req.body?.newStartDate, req.freshUser.username, req.freshUser.name);
       return list;
     });
+    logHrProfileAction(req, 'REHIRE', req.params.employeeCode, `Tái tuyển hồ sơ [${req.params.employeeCode}]`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/rehire`); }
 });

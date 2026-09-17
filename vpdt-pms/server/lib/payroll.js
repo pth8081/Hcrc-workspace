@@ -97,11 +97,14 @@ function defaultRateConfig() {
   };
 }
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Lương là 1 trong 3 dữ liệu nhạy cảm nhân sự (cùng Hồ Sơ
+// Nhân Sự/Hợp Đồng Lao Động) admin KHÔNG còn tự động quản lý/duyệt được — xem chú thích đầy đủ ở
+// lib/employeeProfile.js::canManageProfiles().
 function canManagePayroll(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrPayrollManage);
+  return !!user?.perms?.hrPayrollManage;
 }
 function canApprovePayroll(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrPayrollApprove);
+  return !!user?.perms?.hrPayrollApprove;
 }
 // Xem toàn bộ (danh sách kỳ, mọi payslip trong kỳ) — KHÔNG gồm hrPayrollView (mặc định mọi người, chỉ
 // xem CỦA CHÍNH MÌNH qua route /my-payslips riêng, xem điều chỉnh IDOR ở routes/payroll.js).

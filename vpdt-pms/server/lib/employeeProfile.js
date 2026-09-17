@@ -314,8 +314,15 @@ function reactivateForRehire(list, employeeCode, newStartDate, actorUsername, ac
   return profile;
 }
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026, "dữ liệu nhạy cảm nhân sự"): Hồ Sơ Nhân Sự/Hợp Đồng Lao
+// Động/Lương là 3 mảng dữ liệu người dùng xác nhận muốn CHẶN HẲN quyền admin mặc định — admin KHÔNG còn
+// tự động xem/quản lý được chỉ vì có cờ `admin`, phải được cấp RIÊNG đúng quyền cụ thể (hrProfileManage/
+// hrProfileFullView/hrProfileEdit/hrContractManage/hrPayrollManage/hrPayrollApprove...) như bất kỳ tài
+// khoản thường nào khác — KHÁC với mọi module còn lại trong hệ thống (admin vẫn bypass bình thường ở nơi
+// khác, đây là 3 NGOẠI LỆ CÓ CHỦ ĐÍCH). Xem thêm lib/laborContract.js::canManageContracts()/
+// lib/payroll.js::canManagePayroll()/canApprovePayroll() (2 module còn lại áp dụng cùng nguyên tắc).
 function canViewFullProfile(user, profile) {
-  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit
+  return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit
     || (profile.username && user.username === profile.username));
 }
 function canViewLimitedProfile(user, profile, allUsers) {
@@ -325,7 +332,7 @@ function canViewLimitedProfile(user, profile, allUsers) {
   return isManagerOf(user.username, profile.username, allUsers);
 }
 function canManageProfiles(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrProfileManage);
+  return !!user?.perms?.hrProfileManage;
 }
 
 // ===== Phân quyền chi tiết Tạo/Xem/Sửa (9/2026, theo yêu cầu người dùng) =====
@@ -343,16 +350,16 @@ function canManageProfiles(user) {
 // hrProfileManage GIỮ NGUYÊN ý nghĩa cũ (= có ĐỦ CẢ 3 quyền trên, tương thích ngược 100% với tài khoản
 // đã cấu hình sẵn trước đây — không cần migrate dữ liệu quyền nào).
 function canCreateProfiles(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileCreate);
+  return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileCreate);
 }
 function canEditProfiles(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit);
+  return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileEdit);
 }
 // Sửa được thì đương nhiên xem được (không sửa được cái mình không thấy) — hrProfileCreate KHÔNG kéo
 // theo xem toàn bộ (đúng thiết kế "chỉ nhập liệu", xem chú thích ở trên) — muốn cả tạo LẪN xem thì admin
 // tick CẢ 2 ô, không tự động gộp.
 function canFullViewProfiles(user) {
-  return !!(user?.perms?.admin || user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit);
+  return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit);
 }
 
 // Gán/đổi chức vụ hiện tại của 1 hồ sơ — LUÔN chọn từ 1 node POSITION có thật trong bản Cơ Cấu Tổ Chức

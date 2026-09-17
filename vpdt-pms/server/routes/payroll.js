@@ -17,6 +17,7 @@ const { findProfileByUsername } = require('../lib/employeeProfile');
 const { notifyUsers } = require('../lib/notifications');
 const payroll = require('../lib/payroll');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -27,6 +28,16 @@ function requireManage(req, res, next) {
 function requireViewAll(req, res, next) {
   if (!payroll.canViewAllPayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền xem dữ liệu Lương' });
   next();
+}
+
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026, dữ liệu lương là nhạy cảm nhất hệ thống): ghi log mọi thao
+// tác THAY ĐỔI (không log các GET xem) để đối chiếu khi cần — song song với việc bỏ quyền admin mặc định
+// khỏi hrPayrollManage/hrPayrollApprove (xem lib/payroll.js).
+function logPayrollAction(req, actionType, targetObject, description) {
+  insertSystemLog({
+    username: req.freshUser.username, fullName: req.freshUser.name || req.freshUser.username, ipAddress: req.ip,
+    module: 'PAYROLL', actionType, targetObject, description, status: 'SUCCESS'
+  }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Lương):', e.message));
 }
 
 async function buildComputationAppData(req) {
@@ -71,6 +82,7 @@ router.put('/rate-config', requireManage, async (req, res) => {
       if (b.upTo !== null && (!Number.isFinite(b.upTo) || b.upTo <= 0)) return res.status(400).json({ error: 'Ngưỡng bậc thuế TNCN không hợp lệ' });
     }
     await withLockedAppDataValue('payrollRateConfig', () => next);
+    logPayrollAction(req, 'RATE_CONFIG_UPDATE', 'payrollRateConfig', 'Cập nhật cấu hình tính lương (BHXH/BHYT/BHTN/thuế TNCN)');
     res.json({ ok: true, config: next });
   } catch (err) { sendCatchError(res, err, 'PUT /api/payroll/rate-config'); }
 });
@@ -139,6 +151,7 @@ router.post('/periods/:id/calculate', requireManage, async (req, res) => {
       p.updatedAt = new Date().toLocaleString('vi-VN'); p.updatedBy = req.freshUser.username;
       return p;
     });
+    logPayrollAction(req, 'CALCULATE', String(periodId), `Tính lương tự động kỳ #${periodId}: ${computedList.length} nhân viên${skipped.length ? `, bỏ qua ${skipped.length} người` : ''}`);
     res.json({ ok: true, item: updated, skipped });
   } catch (err) { sendCatchError(res, err, `payroll/periods/${req.params.id}/calculate`); }
 });
@@ -155,6 +168,7 @@ router.patch('/payslips/:id/details', requireManage, async (req, res) => {
       if (!period || period.status !== 'DRAFT') throw new HttpError(409, 'Chỉ điều chỉnh được khi kỳ lương đang ở trạng thái Nháp');
       return payroll.applyAdjustPayslipDetail(payslip, req.body || {}, req.freshUser.username);
     });
+    logPayrollAction(req, 'ADJUST_PAYSLIP', String(payslipId), 'Điều chỉnh dòng lương nhập tay của phiếu lương');
     res.json({ ok: true, item: result });
   } catch (err) { sendCatchError(res, err, `payroll/payslips/${req.params.id}/details`); }
 });
@@ -168,7 +182,7 @@ router.get('/periods/:id/payslips', requireViewAll, async (req, res) => {
   } catch (err) { sendCatchError(res, err, `payroll/periods/${req.params.id}/payslips`); }
 });
 
-function periodTransitionRoute(path, guard, applyFn, historyNoteRequired) {
+function periodTransitionRoute(path, guard, applyFn, historyNoteRequired, actionType) {
   router.post(path, guard, async (req, res) => {
     const periodId = Number(req.params.id);
     if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -179,15 +193,16 @@ function periodTransitionRoute(path, guard, applyFn, historyNoteRequired) {
       const updated = await withLockedRecordForCollection('payrollPeriods', periodId, (period) =>
         applyFn(period, req.freshUser.username, req.freshUser.name, req.body?.reason)
       );
+      logPayrollAction(req, actionType, String(periodId), `${actionType} kỳ lương #${periodId}${req.body?.reason ? ` — Lý do: ${req.body.reason}` : ''}`);
       res.json({ ok: true, item: updated });
     } catch (err) { sendCatchError(res, err, `payroll${path.replace(':id', req.params.id)}`); }
   });
 }
-periodTransitionRoute('/periods/:id/submit', requireManage, (p, u, n) => payroll.applySubmitForApproval(p, u, n));
+periodTransitionRoute('/periods/:id/submit', requireManage, (p, u, n) => payroll.applySubmitForApproval(p, u, n), false, 'SUBMIT');
 periodTransitionRoute('/periods/:id/approve', (req, res, next) => {
   if (!payroll.canApprovePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền duyệt kỳ lương' });
   next();
-}, (p, u, n) => payroll.applyApprove(p, u, n));
+}, (p, u, n) => payroll.applyApprove(p, u, n), false, 'APPROVE');
 // PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, LUONG-04): route này TRƯỚC ĐÂY thiếu tham số
 // `historyNoteRequired=true` (khác /reopen ngay dưới) — periodTransitionRoute() chỉ bắt buộc `reason`
 // khi cờ này bật, nên Từ Chối một kỳ lương KHÔNG cần nhập lý do gì cả, dù applyReject() (lib/payroll.js)
@@ -196,9 +211,9 @@ periodTransitionRoute('/periods/:id/approve', (req, res, next) => {
 periodTransitionRoute('/periods/:id/reject', (req, res, next) => {
   if (!payroll.canApprovePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền duyệt kỳ lương' });
   next();
-}, (p, u, n, reason) => payroll.applyReject(p, u, n, reason), true);
-periodTransitionRoute('/periods/:id/finalize', requireViewAll, (p, u, n) => payroll.applyFinalize(p, u, n));
-periodTransitionRoute('/periods/:id/reopen', requireManage, (p, u, n, reason) => payroll.applyReopen(p, u, n, reason), true);
+}, (p, u, n, reason) => payroll.applyReject(p, u, n, reason), true, 'REJECT');
+periodTransitionRoute('/periods/:id/finalize', requireViewAll, (p, u, n) => payroll.applyFinalize(p, u, n), false, 'FINALIZE');
+periodTransitionRoute('/periods/:id/reopen', requireManage, (p, u, n, reason) => payroll.applyReopen(p, u, n, reason), true, 'REOPEN');
 
 // Công bố — RIÊNG (không dùng periodTransitionRoute) vì cần tạo Notifications cho từng nhân viên có
 // payslip trong kỳ SAU KHI period đã publish thành công (Mục 8 tài liệu gốc).
@@ -213,6 +228,7 @@ router.post('/periods/:id/publish', requireViewAll, async (req, res) => {
     const usernames = payslips.map(p => p.employeeUsername).filter(Boolean);
     await notifyUsers(usernames, 'PAYSLIP_PUBLISHED', 'Có phiếu lương mới',
       `Phiếu lương ${updated.periodName} đã được công bố — bấm để xem chi tiết.`, `/payroll/my-payslips/${periodId}`);
+    logPayrollAction(req, 'PUBLISH', String(periodId), `Công bố kỳ lương #${periodId} — thông báo ${usernames.length} nhân viên`);
     res.json({ ok: true, item: updated, notified: usernames.length });
   } catch (err) { sendCatchError(res, err, `payroll/periods/${req.params.id}/publish`); }
 });

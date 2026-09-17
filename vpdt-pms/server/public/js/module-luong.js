@@ -31,9 +31,11 @@ function fmtMoney(n) {
   return Math.round(Number(n) || 0).toLocaleString('vi-VN') + 'đ';
 }
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): Lương là dữ liệu nhạy cảm — admin KHÔNG còn tự động
+// bypass, phải có riêng hrPayrollManage/hrPayrollApprove (mirror đúng lib/payroll.js — đã bỏ nhánh admin).
 function renderHrPayrollModule() {
-  const canManage = !!(currentUser?.perms?.admin || currentUser?.perms?.hrPayrollManage);
-  const canApprove = !!(currentUser?.perms?.admin || currentUser?.perms?.hrPayrollApprove);
+  const canManage = !!currentUser?.perms?.hrPayrollManage;
+  const canApprove = !!currentUser?.perms?.hrPayrollApprove;
   document.getElementById('btnHrpViewManage').classList.toggle('hidden', !(canManage || canApprove));
   document.getElementById('btnHrpCreatePeriod').classList.toggle('hidden', !canManage);
   document.getElementById('btnHrpRateConfig').classList.toggle('hidden', !(canManage || canApprove));
@@ -139,8 +141,8 @@ function hrpApplyPeriodUpdate(item) {
 }
 
 function hrpPeriodActionButtons(p) {
-  const canManage = !!(currentUser?.perms?.admin || currentUser?.perms?.hrPayrollManage);
-  const canApprove = !!(currentUser?.perms?.admin || currentUser?.perms?.hrPayrollApprove);
+  const canManage = !!currentUser?.perms?.hrPayrollManage;
+  const canApprove = !!currentUser?.perms?.hrPayrollApprove;
   const btns = [`<button type="button" data-op="openHrpPeriodDetailModal" data-arg0="${p.id}" class="bg-blue-600 text-white px-2 py-1 rounded text-[11px] hover:bg-blue-700">Chi Tiết</button>`];
   if (canManage && p.status === 'DRAFT') btns.push(`<button type="button" data-op="hrpCalculate" data-arg0="${p.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] hover:bg-emerald-700">Tính Lương</button>`);
   if (canManage && p.status === 'DRAFT' && p.employeeCount > 0) btns.push(`<button type="button" data-op="hrpSubmit" data-arg0="${p.id}" class="bg-indigo-600 text-white px-2 py-1 rounded text-[11px] hover:bg-indigo-700">Gửi Duyệt</button>`);

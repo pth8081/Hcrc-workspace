@@ -410,6 +410,17 @@ function sanitizeSecondaryPositions(list) {
     .map(p => ({ jobTitle: p.jobTitle.trim().slice(0, 200), dept: p.dept.trim().slice(0, 200) }));
 }
 
+// user.nghiepVuExtraKeys/reportExtraKeys (10/2026) — mở thêm TỪNG mục Nghiệp Vụ/tab Báo Cáo cụ thể
+// ngoài phạm vi quyền module hiện có (xem module-nghiepvu.js/module-baocaoquantri.js) — chỉ dùng để
+// HIỆN/ẨN mục trên nav phía client, không tự cấp thêm quyền xem dữ liệu thật nào (dữ liệu Báo Cáo vẫn
+// luôn qua đúng filter*ForUser()/canView*() thật ở routes/reports.js, không đổi) — sanitize NHẸ hình
+// dạng (mảng string) giống sanitizeSecondaryPositions(), không cần đối chiếu whitelist đúng key thật vì
+// key lạ chỉ đơn giản không khớp mục nào, không mở ra rủi ro gì.
+function sanitizeExtraKeys(list) {
+  if (!Array.isArray(list)) return [];
+  return [...new Set(list.filter(k => typeof k === 'string' && k.trim()).map(k => k.trim().slice(0, 60)))].slice(0, 50);
+}
+
 function assertAtLeastOneAdmin(users) {
   if (!(users || []).some(u => u.perms?.admin && u.active !== false)) {
     throw new HttpError(400, 'Không thể lưu: thao tác này sẽ khiến hệ thống không còn tài khoản nào có quyền Quản Trị Viên (Admin) đang hoạt động.');
@@ -478,6 +489,8 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     let record = { ...u, ...preserved };
     delete record.pin; // KHÔNG BAO GIỜ lưu PIN dạng plaintext — chỉ lưu pinHash bên dưới.
     record.secondaryPositions = sanitizeSecondaryPositions(u.secondaryPositions);
+    record.nghiepVuExtraKeys = sanitizeExtraKeys(u.nghiepVuExtraKeys);
+    record.reportExtraKeys = sanitizeExtraKeys(u.reportExtraKeys);
 
     // Tài khoản "admin" mặc định (xem defaults.js) LUÔN có toàn quyền và KHÔNG bị sửa quyền bởi bất kỳ
     // ai — kể cả từ form phân quyền hay gán vào nhóm phân quyền — đảm bảo hệ thống luôn còn đúng 1 tài
