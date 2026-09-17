@@ -26,7 +26,7 @@ const NGHIEP_VU_NAV = [
     { key: 'car', icon: '🚗', label: 'Đăng Ký Xe' },
     { key: 'vpp', icon: '🖇️', label: 'Văn Phòng Phẩm' },
     { key: 'uniform', icon: '👕', label: 'Đồng Phục' },
-    { key: 'license', icon: '🔑', label: 'Bản Quyền Phần Mềm' },
+    { key: 'license', icon: '📜', label: 'Giấy Phép' },
   ]},
   { group: 'Tổng Hợp', items: [
     { key: 'office', icon: '🛒', label: 'Mua Bán / Sửa Chữa / Thanh Toán' },
@@ -417,21 +417,20 @@ const NGHIEP_VU_DOCS = {
     ], right: [] },
   },
   license: {
-    icon: '🔑', title: 'Bản Quyền Phần Mềm (License)', badge: 'Hành Chính',
-    desc: 'Danh mục nền tảng → Kỳ mua → Đăng ký mua → Phát hành → Phân bổ/Cấp phát → Gia hạn hoặc Thu hồi.',
-    flow: { ariaLabel: 'Quy trình Bản Quyền Phần Mềm', chain: [
-      { label: 'Kỳ mua', sub: 'Theo năm/đợt ngân sách' },
-      { label: 'Đăng ký mua', sub: 'Số lượng, nền tảng' },
+    icon: '📜', title: 'Giấy Phép', badge: 'Hành Chính',
+    desc: 'Tải lên giấy phép/đăng ký kinh doanh của từng công ty/địa điểm (Nhập mới hoặc Cập nhật thêm phiên bản cho giấy phép đã có), gửi duyệt — sau khi duyệt hệ thống tự theo dõi hiệu lực theo Ngày hết hạn, tách biệt hoàn toàn với trạng thái duyệt.',
+    flow: { ariaLabel: 'Quy trình Giấy Phép', chain: [
+      { label: 'Tải lên', sub: 'Nhập mới hoặc Cập nhật phiên bản' },
       { label: 'Duyệt?', sub: '', kind: 'decision' },
-      { label: 'Phát hành', sub: 'Sinh mã/số lượng dùng' },
-      { label: 'Phân bổ / Cấp phát', sub: 'Gán cho người dùng cuối', kind: 'approved' },
-    ], decision: { atIndex: 2, approveLabel: 'duyệt', rejectLabel: 'từ chối', rejectBox: { label: 'Từ chối mua', sub: 'Nêu lý do' }, loopBackToIndex: 1, loopBackLabel: 'Đăng ký lại' },
-      reference: { atIndex: 0, label: 'Danh Mục Nền Tảng', sub: 'Tên phần mềm, NCC' } },
+      { label: 'Đã duyệt', sub: 'Bắt đầu theo dõi hiệu lực', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'duyệt', rejectLabel: 'từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Nêu lý do' }, loopBackToIndex: 0, loopBackLabel: 'Tải lên lại' },
+      reference: { atIndex: 0, label: 'Loại Giấy Phép', sub: 'Danh mục tự học từ giá trị mới gõ' } },
     footer: { left: [
-      { label: 'Giới hạn số người dùng', text: 'mỗi bản quyền chỉ được gán cho tối đa 1 số người nhất định cùng lúc — hệ thống tự chặn nếu gán vượt quá số lượng đã mua.' },
-      { label: 'Thu hồi khi nghỉ việc', text: 'khi 1 nhân sự hoàn tất thủ tục nghỉ việc, bản quyền đang gán cho họ tự chuyển về trạng thái "sẵn sàng cấp lại", không cần thao tác tay riêng.' },
+      { label: 'Cập nhật = thêm phiên bản mới', text: 'chọn "Cập nhật" để thêm 1 phiên bản mới cho giấy phép đã có (mã tự sinh dạng <mã gốc>-V<số thứ tự>) — chỉ thực hiện được khi phiên bản mới nhất KHÔNG đang chờ duyệt.' },
+      { label: 'Hiệu lực tách biệt với duyệt', text: '"Đang gia hạn"/"Đã thu hồi" là trạng thái RIÊNG, chỉ đánh dấu được cho giấy phép ĐÃ duyệt và chưa bị thu hồi — không đụng tới lịch sử duyệt.' },
     ], right: [
-      { label: 'Gia hạn', text: 'bản quyền sắp hết hạn được nhắc trước để tạo kỳ mua gia hạn kịp thời, tránh gián đoạn phần mềm đang dùng.' },
+      { label: 'Tự tính hiệu lực', text: 'Còn hiệu lực / Sắp hết hạn (≤30 ngày) / Hết hạn tự tính theo Ngày hết hạn, có nhắc tự động trước khi hết hạn.' },
+      { label: 'Thu hồi', text: 'bắt buộc nhập lý do; sau khi thu hồi không đánh dấu "Đang gia hạn" được nữa — huỷ đánh dấu thu hồi được nếu thao tác nhầm.' },
     ] },
   },
   office: {
