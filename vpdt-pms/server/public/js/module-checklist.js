@@ -461,6 +461,14 @@ function renderChecklistBuilderQuestions() {
 // Ngân Hàng Câu Hỏi Đào Tạo (module-internalcomms-daotao.js::onTrainingTestImportFileChange()/
 // confirmTrainingTestImport()) — parse-questions CHỈ đọc/xem trước (routes/checklistImport.js), KHÔNG tự
 // lưu gì; vẫn phải bấm "💾 Lưu Mẫu" như thường sau khi nạp để server xác minh lại toàn bộ. =====================
+// So trùng Nội Dung Câu Hỏi với checklistBuilderQuestions[] đang soạn dở — cùng công thức chuẩn hoá với
+// normalizeDedupKey() (lib/importDedup.js) nhưng viết lại tại client vì trình duyệt không import được
+// module phía server; route parse-questions không biết đang sửa template nào nên chỉ tự đánh dấu
+// duplicateInFile (2 dòng trùng NGAY TRONG file), duplicateExisting phải tự tính ở đây.
+function checklistImportNormalizeText(s) {
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 let checklistImportPreviewItems = [];
 async function onChecklistImportFileChange(event) {
   const file = event.target.files[0];
@@ -477,18 +485,35 @@ async function onChecklistImportFileChange(event) {
     const res = await fetch('/api/checklist/parse-questions', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // duplicateExisting: so với DANH SÁCH CÂU HỎI ĐANG SOẠN DỞ (checklistBuilderQuestions) — server
+    // không biết đang sửa template nào nên chỉ gắn được duplicateInFile (lib/checklistImport.js).
+    const existingTexts = new Set(checklistBuilderQuestions.map(q => checklistImportNormalizeText(q.text)));
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      if (!it.duplicateExisting) it.duplicateExisting = existingTexts.has(checklistImportNormalizeText(it.text));
+      // Mặc định BỎ CHỌN checkbox "Nhập câu này" cho câu nghi trùng (an toàn hơn), người dùng tự tick
+      // lại nếu vẫn muốn thêm — mirror ĐÚNG khuôn Budget Lines (không có khái niệm "ghi đè" ở đây, mỗi
+      // câu hỏi là 1 phần tử độc lập trong danh sách đang soạn, không phải bản ghi đã lưu).
+      it.include = it.valid && !it.duplicateInFile && !it.duplicateExisting;
+    });
     checklistImportPreviewItems = data.items;
     const validCount = data.items.filter(it => it.valid).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ.`;
-    document.getElementById('checklistImportPreviewBody').innerHTML = data.items.map((it, idx) => `
-      <tr>
-        <td class="p-1 text-center">${idx + 1}</td>
+    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ`
+      + (dupCount ? `, ${dupCount} câu NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.');
+    document.getElementById('checklistImportPreviewBody').innerHTML = data.items.map((it) => {
+      const dupNote = it.duplicateInFile ? '⚠️ Trùng câu khác trong file này'
+        : (it.duplicateExisting ? '⚠️ Trùng câu hỏi đã có trong danh sách đang soạn' : '');
+      return `<tr class="${dupNote ? 'bg-amber-50' : ''}">
+        <td class="p-1 text-center">${it.valid
+          ? `<input type="checkbox" data-op-change="toggleChecklistImportRow" data-arg0="${it._idx}" ${it.include ? 'checked' : ''}>`
+          : '<span class="text-red-600">⛔</span>'}</td>
         <td class="p-1">${escapeHtml(it.text)}</td>
         <td class="p-1">${it.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}</td>
         <td class="p-1">${(it.options || []).length} đáp án</td>
-        <td class="p-1">${it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml((it.errors || []).join(', '))}</span>`}</td>
-      </tr>
-    `).join('');
+        <td class="p-1 text-red-600">${escapeHtml([...(it.errors || []), dupNote].filter(Boolean).join('; '))}</td>
+      </tr>`;
+    }).join('');
     document.getElementById('checklistImportPreviewWrap').classList.remove('hidden');
     if (validCount > 0) document.getElementById('checklistImportConfirmBtn').classList.remove('hidden');
   } catch (err) {
@@ -496,11 +521,19 @@ async function onChecklistImportFileChange(event) {
     event.target.value = '';
   }
 }
-// Nạp câu hỏi HỢP LỆ vào checklistBuilderQuestions[] đang soạn — showIfOptionId LUÔN null (Excel không
-// có cột điều kiện phân nhánh, cấu hình thủ công lại qua dropdown "Chỉ hiện khi..." sau khi nạp nếu cần).
+// Tick/bỏ tick 1 câu hỏi xem trước trước khi nạp (VD câu bị đánh dấu nghi trùng, người dùng vẫn muốn
+// thêm) — chỉ đổi cờ include, không render lại toàn bộ bảng, cùng khuôn toggleBudgetLineImportRow().
+function toggleChecklistImportRow(idxStr) {
+  const idx = Number(idxStr);
+  const it = checklistImportPreviewItems.find(x => x._idx === idx);
+  if (it) it.include = !it.include;
+}
+// Nạp câu hỏi HỢP LỆ (và ĐƯỢC TICK CHỌN) vào checklistBuilderQuestions[] đang soạn — showIfOptionId LUÔN
+// null (Excel không có cột điều kiện phân nhánh, cấu hình thủ công lại qua dropdown "Chỉ hiện khi..."
+// sau khi nạp nếu cần).
 function confirmChecklistImport() {
-  const validItems = checklistImportPreviewItems.filter(it => it.valid);
-  if (!validItems.length) return alert('Không có câu hỏi hợp lệ nào để nạp.');
+  const validItems = checklistImportPreviewItems.filter(it => it.valid && it.include);
+  if (!validItems.length) return alert('Chưa có câu hỏi nào được chọn để nạp.');
   validItems.forEach(it => {
     checklistBuilderQuestions.push({
       text: it.text, type: it.type, isRequired: it.isRequired, maxScore: it.maxScore, note: '', showIfOptionId: null,

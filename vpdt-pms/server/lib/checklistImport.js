@@ -22,6 +22,7 @@ const ExcelJS = require('exceljs'); // chỉ dùng để SINH file mẫu tải x
 const { parse: parseCsv } = require('csv-parse/sync');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 const MAX_QUESTIONS_PER_IMPORT = 200; // khớp trần validateChecklistQuestions() (lib/checklist.js)
 
@@ -162,6 +163,14 @@ function groupToQuestionItem(group) {
   return { qno: group.qno, text, type, isRequired, maxScore, options, valid: errors.length === 0, errors };
 }
 
+// Khoá so trùng: chỉ theo Nội Dung Câu Hỏi (text) — đây là danh sách câu hỏi đang SOẠN DỞ ở client
+// (checklistBuilderQuestions, module-checklist.js), route này không biết đang sửa template nào nên CHỈ
+// tự so trùng NGAY TRONG file đang đọc (existingKeys truyền []) — client tự so thêm với danh sách đang
+// soạn dở bằng cùng công thức chuẩn hoá (xem onChecklistImportFileChange()).
+function checklistQuestionDedupKey(item) {
+  return normalizeDedupKey(item.text);
+}
+
 function assertColumnsFound(cols) {
   if (cols.text === undefined || cols.optionText === undefined) {
     throw new HttpError(400, 'Không tìm thấy đủ cột "Nội Dung Câu Hỏi"/"Nội Dung Đáp Án" trong file — vui lòng dùng đúng mẫu tải xuống');
@@ -190,7 +199,7 @@ async function parseChecklistImportExcelBuffer(buffer) {
     throw new HttpError(400, `File quá nhiều câu hỏi (tối đa ${MAX_QUESTIONS_PER_IMPORT} câu/lần, khớp giới hạn của 1 checklist)`);
   }
   if (!grouper.groups.length) throw new HttpError(400, 'Không đọc được câu hỏi hợp lệ nào từ file (thiếu cột STT Câu Hỏi/Nội Dung Đáp Án ở mọi dòng?)');
-  return grouper.groups.map(groupToQuestionItem);
+  return markDuplicateItems(grouper.groups.map(groupToQuestionItem), checklistQuestionDedupKey, []);
 }
 
 function parseChecklistImportCsvBuffer(buffer) {
@@ -206,7 +215,7 @@ function parseChecklistImportCsvBuffer(buffer) {
     }
   }
   if (!grouper.groups.length) throw new HttpError(400, 'Không đọc được câu hỏi hợp lệ nào từ file (thiếu cột STT Câu Hỏi/Nội Dung Đáp Án ở mọi dòng?)');
-  return grouper.groups.map(groupToQuestionItem);
+  return markDuplicateItems(grouper.groups.map(groupToQuestionItem), checklistQuestionDedupKey, []);
 }
 
 async function parseChecklistImportFile(buffer, ext) {

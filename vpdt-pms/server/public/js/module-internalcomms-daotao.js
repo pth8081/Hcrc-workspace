@@ -1933,6 +1933,14 @@ function removeTrainingTestImportImageStaged(idx) {
   renderTrainingTestImportImagesStagedList();
 }
 
+// So trùng Nội Dung Câu Hỏi với tbQuestions[] đang soạn dở — cùng công thức chuẩn hoá với
+// normalizeDedupKey() (lib/importDedup.js) nhưng viết lại tại client vì trình duyệt không import được
+// module phía server; route parse-test-questions không biết đang sửa bài test nào nên chỉ tự đánh dấu
+// duplicateInFile (2 dòng trùng NGAY TRONG file), duplicateExisting phải tự tính ở đây.
+function ttNormalizeQuestionText(s) {
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 // Bước 3: tải file Excel/CSV đã điền — server (routes/trainingTestImport.js) chỉ đọc/tách THÔ, không xác
 // minh cột "Ảnh" (client tự đối chiếu ở confirmTrainingTestImport() bên dưới).
 let ttImportPreviewItems = [];
@@ -1951,19 +1959,36 @@ async function onTrainingTestImportFileChange(event) {
     const res = await fetch('/api/training/parse-test-questions', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // duplicateExisting: so với DANH SÁCH CÂU HỎI ĐANG SOẠN DỞ (tbQuestions) — server không biết đang
+    // sửa bài test nào nên chỉ gắn được duplicateInFile (lib/trainingTestImport.js).
+    const existingTexts = new Set(tbQuestions.map(q => ttNormalizeQuestionText(q.text)));
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      if (!it.duplicateExisting) it.duplicateExisting = existingTexts.has(ttNormalizeQuestionText(it.text));
+      // Mặc định BỎ CHỌN checkbox "Nhập câu này" cho câu nghi trùng (an toàn hơn), người dùng tự tick
+      // lại nếu vẫn muốn thêm — mirror ĐÚNG khuôn Budget Lines (không có khái niệm "ghi đè" ở đây, mỗi
+      // câu hỏi là 1 phần tử độc lập trong danh sách đang soạn, không phải bản ghi đã lưu).
+      it.include = it.valid && !it.duplicateInFile && !it.duplicateExisting;
+    });
     ttImportPreviewItems = data.items;
     const validCount = data.items.filter(it => it.valid).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ.`;
-    document.getElementById('ttImportPreviewBody').innerHTML = data.items.map((it, idx) => {
+    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ`
+      + (dupCount ? `, ${dupCount} câu NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.');
+    document.getElementById('ttImportPreviewBody').innerHTML = data.items.map((it) => {
       const imgMatch = resolveTrainingTestImportImageRef(it.imageRef);
       const imgStatusHTML = !it.imageRef ? '' : (imgMatch ? ' <span class="text-emerald-600">✅ đã có ảnh</span>' : ' <span class="text-amber-600">⚠️ không khớp ảnh nào đã tải</span>');
-      return `<tr>
-        <td class="p-1 text-center">${idx + 1}</td>
+      const dupNote = it.duplicateInFile ? '⚠️ Trùng câu khác trong file này'
+        : (it.duplicateExisting ? '⚠️ Trùng câu hỏi đã có trong danh sách đang soạn' : '');
+      return `<tr class="${dupNote ? 'bg-amber-50' : ''}">
+        <td class="p-1 text-center">${it.valid
+          ? `<input type="checkbox" data-op-change="toggleTrainingTestImportRow" data-arg0="${it._idx}" ${it.include ? 'checked' : ''}>`
+          : '<span class="text-red-600">⛔</span>'}</td>
         <td class="p-1">${escapeHtml(it.text)}</td>
         <td class="p-1">${it.type === 'MULTI' ? 'Nhiều đáp án' : '1 đáp án'}</td>
         <td class="p-1 text-center">${it.points}</td>
         <td class="p-1">${it.options.length} đáp án${it.imageRef ? `<br><span class="text-gray-400">Ảnh: ${escapeHtml(it.imageRef)}${imgStatusHTML}</span>` : ''}</td>
-        <td class="p-1">${it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml((it.errors || []).join(', '))}</span>`}</td>
+        <td class="p-1 text-red-600">${escapeHtml([...(it.errors || []), dupNote].filter(Boolean).join('; '))}</td>
       </tr>`;
     }).join('');
     document.getElementById('ttImportPreviewWrap').classList.remove('hidden');
@@ -1972,6 +1997,13 @@ async function onTrainingTestImportFileChange(event) {
     statusEl.innerText = `⛔ ${err.message}`;
     event.target.value = '';
   }
+}
+// Tick/bỏ tick 1 câu hỏi xem trước trước khi nạp (VD câu bị đánh dấu nghi trùng, người dùng vẫn muốn
+// thêm) — chỉ đổi cờ include, không render lại toàn bộ bảng, cùng khuôn toggleBudgetLineImportRow().
+function toggleTrainingTestImportRow(idxStr) {
+  const idx = Number(idxStr);
+  const it = ttImportPreviewItems.find(x => x._idx === idx);
+  if (it) it.include = !it.include;
 }
 
 // Khớp ĐÚNG khuôn "/uploads/<tên-file>" mà routes/upload.js sinh ra (mirror UPLOADED_FILE_URL_RE ở
@@ -1988,12 +2020,12 @@ function resolveTrainingTestImportImageRef(imageRef) {
   return found ? found.fileUrl : '';
 }
 
-// Nạp các câu hỏi HỢP LỆ (valid) vào danh sách đang soạn dở (tbQuestions) — KHÔNG tự tạo bài test, người
-// dùng vẫn bấm "Tạo Bài Test" như bình thường sau đó (server xác minh lại toàn bộ, cùng khuôn mọi field
-// khác của form này).
+// Nạp các câu hỏi HỢP LỆ và ĐƯỢC TICK CHỌN vào danh sách đang soạn dở (tbQuestions) — KHÔNG tự tạo bài
+// test, người dùng vẫn bấm "Tạo Bài Test" như bình thường sau đó (server xác minh lại toàn bộ, cùng
+// khuôn mọi field khác của form này).
 function confirmTrainingTestImport() {
-  const validItems = ttImportPreviewItems.filter(it => it.valid);
-  if (!validItems.length) return alert('Không có câu hỏi hợp lệ nào để nạp.');
+  const validItems = ttImportPreviewItems.filter(it => it.valid && it.include);
+  if (!validItems.length) return alert('Chưa có câu hỏi nào được chọn để nạp.');
   validItems.forEach(it => {
     tbQuestions.push({
       text: it.text, type: it.type, points: it.points,

@@ -19,6 +19,7 @@ const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu t�
 const { parse: parseCsv } = require('csv-parse/sync');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -131,6 +132,14 @@ function rowToQuestionItem(cells, cols) {
   };
 }
 
+// Khoá so trùng: chỉ theo Nội Dung Câu Hỏi (text) — đây là danh sách câu hỏi đang SOẠN DỞ ở client
+// (tbQuestions, module-internalcomms-daotao.js), route này không biết đang sửa bài test nào nên CHỈ tự
+// so trùng NGAY TRONG file đang đọc (existingKeys truyền []) — client tự so thêm với danh sách đang soạn
+// dở bằng cùng công thức chuẩn hoá (xem onTrainingTestImportFileChange()).
+function testQuestionDedupKey(item) {
+  return normalizeDedupKey(item.text);
+}
+
 function rowsToQuestionItems(rows) {
   if (!rows.length) throw new HttpError(400, 'File câu hỏi trống, không có dữ liệu');
   const cols = detectColumns(rows[0]);
@@ -145,7 +154,7 @@ function rowsToQuestionItems(rows) {
     if (items.length > 100) throw new HttpError(400, 'File quá nhiều câu hỏi (tối đa 100 câu/lần, khớp giới hạn của 1 bài test)');
   }
   if (!items.length) throw new HttpError(400, 'Không đọc được câu hỏi hợp lệ nào từ file (thiếu cột Nội Dung Câu Hỏi ở mọi dòng?)');
-  return items;
+  return markDuplicateItems(items, testQuestionDedupKey, []);
 }
 
 // raw:true — giữ nguyên giá trị GỐC của ô (số/chuỗi), khớp cùng lý do lib/trainingPlanImport.js.
@@ -173,7 +182,7 @@ async function parseTestImportExcelBuffer(buffer) {
   if (!sawAnyRow) throw new HttpError(400, 'File câu hỏi trống, không có dữ liệu');
   if (overLimit) throw new HttpError(400, 'File quá nhiều câu hỏi (tối đa 100 câu/lần, khớp giới hạn của 1 bài test)');
   if (!items.length) throw new HttpError(400, 'Không đọc được câu hỏi hợp lệ nào từ file (thiếu cột Nội Dung Câu Hỏi ở mọi dòng?)');
-  return items;
+  return markDuplicateItems(items, testQuestionDedupKey, []);
 }
 
 function parseTestImportCsvBuffer(buffer) {
