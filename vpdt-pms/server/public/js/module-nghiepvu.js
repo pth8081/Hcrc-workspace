@@ -53,6 +53,9 @@ const NGHIEP_VU_NAV = [
   { group: 'Mua Hàng', items: [
     { key: 'muaHang', icon: '🛒', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
   ]},
+  { group: 'Hệ Thống', items: [
+    { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
+  ]},
 ];
 
 // ===================== SVG flow renderer (dùng chung, không phụ thuộc thư viện ngoài) =====================
@@ -200,7 +203,12 @@ function renderNVDaotaoOverview() {
   const top = (k) => ({ x: cx(k), y: N[k].y });
   const side = (k, dir) => ({ x: dir === 'l' ? N[k].x : N[k].x + N[k].w, y: cy(k) });
 
-  let svg = `<defs>${nvArrowMarker('nv-arrow', '#9ca3af')}${nvArrowMarker('nv-arrow-violet', '#7c3aed')}${nvArrowMarker('nv-arrow-amber', '#d97706')}</defs>`;
+  // nv-arrow-gray: PHÁT HIỆN lúc thêm renderNVSystemArchitectureOverview() — 4 cạnh nét đứt bên dưới
+  // tham chiếu marker "nv-arrow-gray" nhưng defs cũ chỉ khai 3 marker (nv-arrow/nv-arrow-violet/
+  // nv-arrow-amber), thiếu đúng cái này nên trước đây 4 mũi tên nét đứt không hiện đầu mũi tên (marker
+  // id không tồn tại trong CHÍNH svg này — mỗi lần gọi hàm renderNVFlow()/renderNVDaotaoOverview() tạo
+  // 1 gốc <svg> riêng, defs không dùng chung được giữa các lần gọi khác nhau). Bổ sung cho đủ.
+  let svg = `<defs>${nvArrowMarker('nv-arrow', '#9ca3af')}${nvArrowMarker('nv-arrow-violet', '#7c3aed')}${nvArrowMarker('nv-arrow-amber', '#d97706')}${nvArrowMarker('nv-arrow-gray', '#9ca3af')}</defs>`;
 
   svg += nvEdge(bottom('tanbinh').x, bottom('tanbinh').y, top('chuongtrinh').x - 30, top('chuongtrinh').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'gồm nhiều' });
   svg += nvEdge(bottom('thangtien').x, bottom('thangtien').y, top('chuongtrinh').x + 30, top('chuongtrinh').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'khoá theo bậc' });
@@ -213,6 +221,44 @@ function renderNVDaotaoOverview() {
   Object.values(N).forEach(n => { svg += nvRoundedNode(n.x, n.y, n.w, n.h, { label: n.label, sub: n.sub, kind: n.kind }); });
 
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ quan hệ tổng quan Đào Tạo" class="nv-flow-svg">${svg}</svg>`;
+}
+
+// Sơ Đồ Kiến Trúc Hệ Thống (10/2026, theo yêu cầu người dùng) — toàn cảnh Trình duyệt ↔ Server ↔ SQL
+// Server + các hệ thống NGOÀI đang tích hợp thật (xác nhận từng cái bằng cách đọc code, không đoán):
+// lib/mailer.js (SMTP, nodemailer), lib/dsmartApiClient.js + routes/purchasing.js (DSmart API — module
+// Mua Hàng > BAS, CHỈ KÉO dữ liệu Chiết Khấu/Thưởng NCC vào, cấu hình qua .env DSMART_API_BASE_URL/
+// DSMART_API_KEY), jobs/operationOrderApiSync.js (dsmart16 — module Vận Hành, CHỈ ĐẨY dữ liệu Đơn Hàng
+// đã tạo ra ngoài, cấu hình qua màn Admin/Cấu Hình API, có assertSafeExternalUrl() chống SSRF). Đây là
+// 2 điểm tích hợp TÁCH BIỆT hoàn toàn (2 chiều dữ liệu ngược nhau, 2 nguồn cấu hình khác nhau) dù cùng
+// nhắc tới tên "DSmart" — cố tình vẽ thành 2 node riêng để không gây hiểu lầm là 1 kết nối duy nhất.
+function renderNVSystemArchitectureOverview() {
+  const W = 940, H = 400;
+  const N = {
+    client:    { x: 20,  y: 168, w: 190, h: 68, label: 'Trình Duyệt (SPA)', sub: 'index.html + JS modules', kind: 'actor' },
+    server:    { x: 340, y: 142, w: 250, h: 96, label: 'Server Node.js / Express', sub: 'PM2 cluster mode, xác thực JWT', kind: 'hub' },
+    sqlServer: { x: 340, y: 288, w: 180, h: 64, label: 'SQL Server', sub: 'AppData, Records, Users', kind: 'approved' },
+    localDisk: { x: 550, y: 288, w: 180, h: 64, label: 'Ổ Đĩa Cục Bộ', sub: 'Thư mục uploads/', kind: 'approved' },
+    smtp:      { x: 740, y: 16,  w: 180, h: 64, label: 'Máy Chủ SMTP', sub: 'Gửi email thông báo/OTP', kind: 'reference' },
+    dsmartBas: { x: 740, y: 142, w: 180, h: 64, label: 'DSmart API (BAS)', sub: 'Chiết Khấu/Thưởng NCC', kind: 'reference' },
+    dsmart16:  { x: 740, y: 268, w: 180, h: 64, label: 'dsmart16 (bên ngoài)', sub: 'Nhận Đơn Hàng (Vận Hành)', kind: 'reference' },
+  };
+  const cx = (k) => N[k].x + N[k].w / 2, cy = (k) => N[k].y + N[k].h / 2;
+  const bottom = (k) => ({ x: cx(k), y: N[k].y + N[k].h });
+  const top = (k) => ({ x: cx(k), y: N[k].y });
+  const side = (k, dir) => ({ x: dir === 'l' ? N[k].x : N[k].x + N[k].w, y: cy(k) });
+
+  let svg = `<defs>${nvArrowMarker('nv-arrow', '#9ca3af')}${nvArrowMarker('nv-arrow-violet', '#7c3aed')}${nvArrowMarker('nv-arrow-gray', '#9ca3af')}</defs>`;
+
+  svg += nvEdge(side('client', 'r').x, side('client', 'r').y, side('server', 'l').x, side('server', 'l').y, { color: '#9ca3af', marker: 'nv-arrow', label: 'HTTPS · API (JWT)' });
+  svg += nvEdge(bottom('server').x - 60, bottom('server').y, top('sqlServer').x, top('sqlServer').y, { color: '#7c3aed', marker: 'nv-arrow-violet', label: 'Đọc / Ghi dữ liệu' });
+  svg += nvEdge(bottom('server').x + 20, bottom('server').y, top('localDisk').x, top('localDisk').y, { color: '#7c3aed', marker: 'nv-arrow-violet', label: 'Lưu file đính kèm' });
+  svg += nvEdge(side('server', 'r').x, side('server', 'r').y - 30, side('smtp', 'l').x, side('smtp', 'l').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'Gửi email (SMTP)' });
+  svg += nvEdge(side('dsmartBas', 'l').x, side('dsmartBas', 'l').y, side('server', 'r').x, side('server', 'r').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'Kéo Chiết Khấu NCC' });
+  svg += nvEdge(side('server', 'r').x, side('server', 'r').y + 30, side('dsmart16', 'l').x, side('dsmart16', 'l').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'Đẩy Đơn Hàng (định kỳ)' });
+
+  Object.values(N).forEach(n => { svg += nvRoundedNode(n.x, n.y, n.w, n.h, { label: n.label, sub: n.sub, kind: n.kind }); });
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ kiến trúc tổng thể hệ thống và liên kết bên ngoài" class="nv-flow-svg">${svg}</svg>`;
 }
 
 function nvFooterCol(title, items) {
@@ -628,6 +674,18 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đối chiếu/Phê duyệt Sổ Cái — chưa triển khai', text: '2 quyền Đối Chiếu/Phê Duyệt đã khai báo sẵn trong cây phân quyền cho Giai đoạn 2-3 (Sổ Cái ACCRUED→CONFIRMED→SETTLED, đối chiếu với NCC) — hiện chưa có luồng nghiệp vụ nào dùng tới.' },
     ] },
   },
+  systemArchitecture: {
+    icon: '🗺️', title: 'Sơ Đồ Kiến Trúc Hệ Thống', badge: 'Chỉ Quản Trị Viên (Admin)',
+    isCustomFlow: true, customFlowRenderer: 'renderNVSystemArchitectureOverview', diagramTitle: 'Sơ đồ kiến trúc & liên kết ngoài',
+    desc: 'Toàn cảnh kiến trúc ứng dụng — Trình duyệt (SPA, thuần HTML/JS, không có app di động riêng) gọi API tới 1 Server Node.js/Express duy nhất (chạy PM2 cluster mode), server đọc/ghi toàn bộ dữ liệu ở SQL Server + lưu file đính kèm trên ổ đĩa cục bộ, cùng 2 điểm tích hợp hệ thống ngoài đang có thật.',
+    footer: { left: [
+      { label: 'Không SSO/LDAP', text: 'xác thực hoàn toàn nội bộ qua JWT (lib/auth.js) — không đồng bộ tài khoản với Active Directory hay hệ thống đăng nhập nào khác.' },
+      { label: 'Hạ tầng lõi', text: 'Server Node.js/Express (PM2 cluster mode nhiều tiến trình) + SQL Server (toàn bộ dữ liệu, kể cả cấu hình quy trình duyệt) + ổ đĩa cục bộ (thư mục uploads/ cho file đính kèm) — không dùng dịch vụ lưu trữ đám mây nào.' },
+    ], right: [
+      { label: '2 điểm tích hợp DSmart TÁCH BIỆT', text: 'DSmart API (module Mua Hàng, BAS) chỉ KÉO dữ liệu Chiết Khấu/Thưởng NCC vào, cấu hình qua .env (DSMART_API_BASE_URL/DSMART_API_KEY); dsmart16 (module Vận Hành) chỉ ĐẨY dữ liệu Đơn Hàng đã tạo ra ngoài, cấu hình qua màn Admin (Base URL + header xác thực tuỳ chỉnh, mã hoá khi lưu) — 2 luồng độc lập hoàn toàn, không dùng chung cấu hình dù cùng nhắc tới tên "DSmart".' },
+      { label: 'An toàn khi gọi ra ngoài', text: 'Base URL do admin tự nhập cho dsmart16 được kiểm tra chống SSRF (assertSafeExternalUrl) trước mỗi lần gọi; mật khẩu SMTP và header xác thực dsmart16 đều mã hoá khi lưu trong DB, không hiện lại giá trị thật sau khi đã lưu.' },
+    ] },
+  },
 };
 
 // Đào Tạo — module lớn, tách 6 khu vực con (pill sub-nav) thay vì 1 luồng đơn — sống trong module
@@ -762,11 +820,20 @@ const NV_KEY_ACCESS_FN = {
   itSupport: 'canAccessItSupportModule', itPriceApproval: 'canAccessItSupportModule',
 };
 
+// Mục Nghiệp Vụ CHỈ Quản Trị Viên (perms.admin) xem được, BỎ QUA CẢ 2 cơ chế mở rộng thông thường của
+// canViewNVItem() bên dưới (nghiepVuViewAll — "Xem Toàn Bộ Mục Nghiệp Vụ", và nghiepVuExtraKeys — mở
+// riêng từng mục) — nội dung lộ ra chi tiết hạ tầng/kết nối hệ thống ngoài (DB, thư mục lưu file, SMTP,
+// API bên thứ 3...), không phải nội dung nghiệp vụ business thông thường nên không nên mở rộng qua 2
+// cơ chế đó như các mục khác. Dùng cho "Sơ Đồ Kiến Trúc Hệ Thống" (theo yêu cầu người dùng "chỉ admin
+// xem được") — thêm key khác vào đây nếu sau này có thêm nội dung hạ tầng tương tự.
+const NV_ADMIN_ONLY_KEYS = new Set(['systemArchitecture']);
+
 // Quyền admin-grant riêng (checkbox "Xem Toàn Bộ Mục Nghiệp Vụ", xem systemSection.html mục 24) bỏ qua
 // toàn bộ giới hạn dưới đây; user.nghiepVuExtraKeys (mảng key, sanitize ở routes/data.js) mở thêm TỪNG
 // mục cụ thể ngoài phạm vi quyền module hiện có, không cần bật cả quyền module thật tương ứng.
 function canViewNVItem(key) {
   if (!currentUser) return false;
+  if (NV_ADMIN_ONLY_KEYS.has(key)) return !!currentUser.perms?.admin;
   if (currentUser.perms?.nghiepVuViewAll) return true;
   if ((currentUser.nghiepVuExtraKeys || []).includes(key)) return true;
   const fn = window[NV_KEY_ACCESS_FN[key]];
@@ -845,8 +912,8 @@ function renderNghiepVuContent() {
       ${doc.badge ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">${escapeHtml(doc.badge)}</span>` : ''}
     </div>
     <div class="text-[13.5px] text-gray-600 leading-relaxed max-w-3xl mb-5">${doc.desc}</div>
-    <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b">Sơ đồ quy trình</div>
-    ${renderNVFlow(doc.flow)}
+    <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b">${escapeHtml(doc.diagramTitle || 'Sơ đồ quy trình')}</div>
+    ${doc.isCustomFlow ? (typeof window[doc.customFlowRenderer] === 'function' ? window[doc.customFlowRenderer]() : '') : renderNVFlow(doc.flow)}
     <div class="nv-footer-grid">
       ${nvFooterCol('Lưu Ý Quan Trọng', doc.footer.left)}
       ${nvFooterCol('Mẹo & Quy Tắc Hay Gặp', doc.footer.right)}
