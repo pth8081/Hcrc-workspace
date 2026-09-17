@@ -206,10 +206,14 @@ function collectPermsFromForm() {
     // operationRecordManageAll (mọi hồ sơ, không phân biệt người tạo) — xem lib/createValidation.js
     // canManageOperationRecord().
     operationRecordManageAll: document.getElementById('pOperationRecordManageAll').checked,
-    // operationOrderReceiptManage — quyền RIÊNG cho "🧾 Duyệt Nhập/Hủy Đơn Hàng" (tách khỏi quần thể
-    // duyệt/từ chối đơn hàng nội bộ) — scopeFromForm() đọc theo cb.value nên tự nhận đúng cả mục 'HO'
-    // đặc biệt lẫn tên siêu thị/phòng ban thật, không cần đổi gì thêm.
-    operationOrderReceiptManage: scopeFromForm('pOperationOrderReceiptAll', 'pOperationOrderReceiptDept'),
+    // operationOrderReceiptManageHO/operationOrderReceiptManageStore — quyền RIÊNG cho "🧾 Duyệt Nhập/Hủy
+    // Đơn Hàng" (tách khỏi quần thể duyệt/từ chối đơn hàng nội bộ), TÁCH thành 2 quyền độc lập từ đợt
+    // "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026) — HO là 1 checkbox đơn (không còn field
+    // operationOrderReceiptManage gộp chung cũ); luôn ghi CẢ 2 field mới nên user được admin re-save qua
+    // UI này sẽ tự "dọn sạch" khỏi field cũ (server vẫn đọc field cũ cho user CHƯA re-save, xem
+    // lib/recordActions.js isApproverForOperationOrderReceipt()).
+    operationOrderReceiptManageHO: document.getElementById('pOperationOrderReceiptHO').checked,
+    operationOrderReceiptManageStore: scopeFromForm('pOperationOrderReceiptAll', 'pOperationOrderReceiptDept'),
     // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — checklistAuditScope dùng scopeFromForm() như
     // các scope {all,depts} khác, chỉ khác nguồn checkbox là DB.stores (siêu thị) thay vì DB.depts, xem
     // renderChecklistAuditScopeCheckboxes() ở module-admin.js.
@@ -297,8 +301,19 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
-  document.getElementById('pOperationOrderReceiptAll').checked = !!perms.operationOrderReceiptManage?.all;
-  setOperationOrderReceiptScopeCheckboxes(perms.operationOrderReceiptManage?.depts);
+  // Tương thích ngược: user chưa được re-save qua UI mới vẫn còn field operationOrderReceiptManage cũ
+  // (gộp chung HO + siêu thị trong 1 danh sách depts[]) — tự tách ra để hiện đúng, admin bấm Lưu là dọn
+  // sạch về 2 field mới (xem chú thích đầy đủ ở lib/recordActions.js isApproverForOperationOrderReceipt()).
+  const legacyReceipt = perms.operationOrderReceiptManage;
+  const receiptHO = perms.operationOrderReceiptManageHO !== undefined
+    ? perms.operationOrderReceiptManageHO
+    : !!(legacyReceipt?.all || (legacyReceipt?.depts || []).includes('HO'));
+  const receiptStore = perms.operationOrderReceiptManageStore !== undefined
+    ? perms.operationOrderReceiptManageStore
+    : { all: !!legacyReceipt?.all, depts: (legacyReceipt?.depts || []).filter(d => d !== 'HO') };
+  document.getElementById('pOperationOrderReceiptHO').checked = !!receiptHO;
+  document.getElementById('pOperationOrderReceiptAll').checked = !!receiptStore?.all;
+  setOperationOrderReceiptScopeCheckboxes(receiptStore?.depts);
   document.getElementById('pChecklistTemplateManage').checked = !!perms.checklistTemplateManage;
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
   document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;

@@ -1213,7 +1213,7 @@ const FORM_TABS = [
   { key: 'UNIFORM_TRANSFER', coreKey: 'UNIFORM_TRANSFER', group: 'UNIFORM', label: 'Đồng Phục - Điều Chuyển Kho', icon: '🔁', short: 'ĐP - Điều Chuyển' },
   // Đợt 3 (mở rộng Biểu Mẫu ra thêm Vận Hành/Đào Tạo/Tuyển Dụng + 1 gap-fill HCRC Đồng Hành phát hiện
   // qua audit BUSINESS_MODULES) — mỗi tab key riêng TRÙNG coreKey, cùng khuôn Đợt 1/2.
-  { key: 'OPERATION_ORDER', coreKey: 'OPERATION_ORDER', group: 'OPERATION', label: 'QLDA - Phê Duyệt Đơn Hàng', icon: '📦', short: 'QLDA - Đơn Hàng' },
+  { key: 'OPERATION_ORDER', coreKey: 'OPERATION_ORDER', group: 'OPERATION', label: 'Vận Hành - Phê Duyệt Đơn Hàng', icon: '📦', short: 'Vận Hành - Đơn Hàng' },
   { key: 'OPERATION_STORE_OPEN', coreKey: 'OPERATION_STORE_OPEN', group: 'OPERATION', label: 'QLDA - Mở Mới Siêu Thị', icon: '🏬', short: 'QLDA - Mở Mới' },
   { key: 'OPERATION_REPAIR', coreKey: 'OPERATION_REPAIR', group: 'OPERATION', label: 'QLDA - Sửa Chữa Siêu Thị', icon: '🔧', short: 'QLDA - Sửa Chữa' },
   { key: 'OPERATION_WORK_ITEM', coreKey: 'OPERATION_WORK_ITEM', group: 'OPERATION', label: 'QLDA - Thêm Công Việc (Thực Hiện/Nghiệm Thu)', icon: '🛠️', short: 'QLDA - Công Việc' },
@@ -1285,7 +1285,7 @@ const FORM_GROUPS = [
   { key: 'BUDGET', label: 'Ngân Sách', icon: '📊' },
   { key: 'REPORT', label: 'Báo Cáo Định Kỳ', icon: '📈' },
   { key: 'UNIFORM', label: 'Đồng Phục', icon: '👕' },
-  { key: 'OPERATION', label: 'QLDA', icon: '🛠️' },
+  { key: 'OPERATION', label: 'Vận Hành', icon: '🛠️' },
   { key: 'TRAINING', label: 'Đào Tạo', icon: '🎓' },
   { key: 'RECRUITMENT', label: 'Tuyển Dụng', icon: '💼' },
   { key: 'HR_FEEDBACK', label: 'HCRC Đồng Hành', icon: '🤝' },
@@ -1935,7 +1935,7 @@ const BUSINESS_MODULES = [
   // "Vận Hành" — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu với officeReqs của "Tổng
   // Hợp"): quyền thật nằm ở operationOrderCreate/operationStoreOpenCreate/operationRepairCreate (khối
   // phân quyền riêng), đúng khuôn "Đồng Phục"/"Giấy Phép" — module không mở sẵn cho ai.
-  { key: 'vanHanh', label: 'QLDA' },
+  { key: 'vanHanh', label: 'Vận Hành' },
   // "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL mới, đúng khuôn "Đồng Phục"/"Giấy Phép"/"Vận Hành":
   // module không mở sẵn cho ai, quyền thật nằm ở checklistTemplateManage/checklistReportView/
   // checklistAuditScope (khối 23 cây phân quyền) HOẶC tự động đủ điều kiện nếu posType===STORE (tự làm
@@ -4164,7 +4164,7 @@ const APPROVAL_EMAIL_EVENTS = [
     { key: 'ticketEscalationDenied', label: 'Ticket leo thang bị từ chối', actionTypes: ['NOTIFY_TICKET_ESCALATION_DENIED'] },
     { key: 'ticketDone', label: 'Ticket hoàn tất', actionTypes: ['NOTIFY_TICKET_DONE'] }
   ] },
-  { configModule: 'OPERATION', label: '🏬 QLDA (Đơn Hàng / Mở Mới / Sửa Chữa Siêu Thị)', families: [
+  { configModule: 'OPERATION', label: '🏬 Vận Hành (Đơn Hàng / Mở Mới / Sửa Chữa Siêu Thị)', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
     { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
   ], moduleAliases: ['OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'] }
@@ -6542,7 +6542,7 @@ async function switchTab(tabName) {
     return;
   }
   if (tabName === 'vanHanh' && !canAccessOperationModule(currentUser)) {
-    alert('⛔ Bạn không có quyền truy cập Module QLDA!');
+    alert('⛔ Bạn không có quyền truy cập Module Vận Hành!');
     return;
   }
   if (tabName === 'checklist' && !canAccessChecklistModule(currentUser)) {

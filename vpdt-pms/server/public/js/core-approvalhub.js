@@ -294,7 +294,7 @@ function getMyPendingApprovals(user) {
   // item.orderLocationType, cùng khuôn resolveSubmissionWorkflow(sub) ngay trên (resolver theo TỪNG hồ
   // sơ, không phải map phẳng theo dept nữa).
   addDeptWorkflowItems(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
-    type: 'operationOrder', typeLabel: o => o.orderLocationType === 'HO' ? '📦 QLDA - Đặt Hàng Tại HO' : '📦 QLDA - Đặt Hàng Tại Siêu Thị',
+    type: 'operationOrder', typeLabel: o => o.orderLocationType === 'HO' ? '📦 Vận Hành - Đặt Hàng Tại HO' : '📦 Vận Hành - Đặt Hàng Tại Siêu Thị',
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   });
@@ -313,7 +313,7 @@ function getMyPendingApprovals(user) {
     (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
       items.push({
         type: 'operationOrderReceipt',
-        typeLabel: `📦 QLDA - ${o.orderLocationType === 'HO' ? 'Đặt Hàng Tại HO' : 'Đặt Hàng Tại Siêu Thị'} (Chờ Nhập Hàng)`,
+        typeLabel: `📦 Vận Hành - ${o.orderLocationType === 'HO' ? 'Đặt Hàng Tại HO' : 'Đặt Hàng Tại Siêu Thị'} (Chờ Nhập Hàng)`,
         code: o.code, title: o.title, dept: o.dept,
         stepLabel: '📥 Chờ xác nhận nhập hàng', createdAt: o.approvedAt || o.createdAt,
         statusBadge: `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ Nhập Hàng</span>`,
@@ -484,7 +484,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
   });
   addProcessedItems(DB.budgetEntries, { type: 'budget', typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
   addProcessedItems(DB.operationOrders, {
-    type: 'operationOrders', typeLabel: r => r.orderLocationType === 'HO' ? '📦 QLDA - Đặt Hàng Tại HO' : '📦 QLDA - Đặt Hàng Tại Siêu Thị', codeOf: r => r.code, titleOf: r => r.title,
+    type: 'operationOrders', typeLabel: r => r.orderLocationType === 'HO' ? '📦 Vận Hành - Đặt Hàng Tại HO' : '📦 Vận Hành - Đặt Hàng Tại Siêu Thị', codeOf: r => r.code, titleOf: r => r.title,
     // Xem chú thích matchStatuses ở định nghĩa addProcessedItems() phía trên — REJECTED không cần override
     // (hồ sơ bị từ chối luôn dừng hẳn ở đó, không có giai đoạn tiếp theo nào khác).
     matchStatuses: status === 'APPROVED' ? ['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED'] : null

@@ -554,12 +554,19 @@ function submitOperationOrderDraft(user, item) {
 // ĐỢT "Duyệt Nhập/Hủy Đơn Hàng tập trung": TRƯỚC ĐÂY quần thể được phép y hệt quần thể duyệt/từ chối đơn
 // hàng (approver của dept-workflow) — giờ TÁCH RIÊNG thành 1 quyền scope MỚI, độc lập với quy trình duyệt
 // nội bộ (canApproveStep ở buildOperationRowHTML/lib/workflowEngine.js — cặp "✅ Phê Duyệt"/"❌ Từ chối"
-// GIỮ NGUYÊN không đổi gì): operationOrderReceiptManage mirror ĐÚNG khuôn {all, depts[]} dùng chung ở
-// scopeAllows() (contractCreate/officeCreate...) — "depts" ở đây là danh sách CÁC SCOPE KEY được cấp,
-// mỗi phần tử HOẶC là 1 tên siêu thị thật (đối chiếu item.dept — dept của NGƯỜI TẠO đơn STORE chính là
-// tên siêu thị đó) HOẶC literal chuỗi 'HO' (đơn orderLocationType==='HO', không có siêu thị cụ thể nào để
-// so — dùng 1 sentinel cố định, không đụng chạm danh sách phòng ban/siêu thị thật nào). appData không
-// còn cần dùng (không còn tra dept-workflow) — giữ tham số thứ 3 cho tương thích chữ ký cũ nhưng bỏ qua.
+// GIỮ NGUYÊN không đổi gì). appData không còn cần dùng (không còn tra dept-workflow) — giữ tham số thứ 3
+// cho tương thích chữ ký cũ nhưng bỏ qua.
+//
+// ĐỢT "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026, theo yêu cầu người dùng): quyền phẳng
+// operationOrderReceiptManage {all, depts[]} (mixed 'HO' sentinel + tên siêu thị thật trong CÙNG 1 danh
+// sách) đã TÁCH thành 2 quyền độc lập, mỗi quyền 1 admin checkbox riêng biệt (systemSection.html):
+//   - operationOrderReceiptManageHO: boolean đơn giản (HO là 1 thực thể duy nhất, không cần scope con).
+//   - operationOrderReceiptManageStore: {all, depts[]} y hệt khuôn cũ nhưng KHÔNG còn lẫn 'HO' trong
+//     depts[] — chỉ còn tên siêu thị thật (giữ tên field "depts" để renameDeptInUserPerms()/
+//     lib/catalogRename.js tiếp tục tự đổi tên khi siêu thị bị đổi tên, không cần sửa gì thêm ở đó).
+// TƯƠNG THÍCH NGƯỢC: user chưa được admin re-save qua UI mới vẫn còn field operationOrderReceiptManage
+// cũ — đọc field mới TRƯỚC (kiểm bằng !== undefined, phân biệt "admin tick lại thành false" với "chưa hề
+// tồn tại"), chỉ rơi về field cũ khi field mới THẬT SỰ chưa tồn tại, để không lặng lẽ tước quyền của ai.
 function isApproverForOperationOrderReceipt(user, item) {
   // PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, DH-09): scopeAllows() dùng chung (contractCreate/
   // officeCreate...) có nhánh "user.dept === dept -> luôn cho qua" — ĐÚNG cho các quyền theo-phòng-ban
@@ -569,10 +576,15 @@ function isApproverForOperationOrderReceipt(user, item) {
   // được xác nhận/huỷ nhập hàng dù không có quyền nào cả — không dùng scopeAllows() chung ở đây nữa, chỉ
   // xét đúng cấu trúc {all, depts[]} của quyền RIÊNG này.
   if (user?.perms?.admin) return true;
-  const scope = user?.perms?.operationOrderReceiptManage;
+  const perms = user?.perms || {};
+  const legacy = perms.operationOrderReceiptManage;
+  if (item.orderLocationType === 'HO') {
+    if (perms.operationOrderReceiptManageHO !== undefined) return !!perms.operationOrderReceiptManageHO;
+    return !!(legacy?.all || (Array.isArray(legacy?.depts) && legacy.depts.includes('HO')));
+  }
+  const scope = perms.operationOrderReceiptManageStore !== undefined ? perms.operationOrderReceiptManageStore : legacy;
   if (scope?.all) return true;
-  const scopeKey = item.orderLocationType === 'HO' ? 'HO' : item.dept;
-  return !!(Array.isArray(scope?.depts) && scope.depts.includes(scopeKey));
+  return !!(Array.isArray(scope?.depts) && scope.depts.includes(item.dept));
 }
 function receiveOperationOrderGoods(user, item, appData) {
   if (item.status !== 'AWAITING_RECEIPT') {

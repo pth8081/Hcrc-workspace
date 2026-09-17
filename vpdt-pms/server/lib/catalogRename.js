@@ -91,9 +91,12 @@ async function cascadeDeptWorkflowMaps(oldValue, newValue) {
 // — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2, cascadeStoreRename() trước đây bỏ sót hẳn users.perms:
 //  1) mảng chuỗi phẳng, tên quyền kết thúc bằng "Depts" (viewApprovedDepts/viewDraftDepts/uploadDepts...).
 //  2) object {all, depts:[...]} (contractCreate/officeCreate/carCreate/submissionCreate/meetingBookScope/
-//     operationOrderReceiptManage..., xem scopeAllows() ở lib/recordActions.js) — "depts" ở khuôn này có
-//     thể lẫn sentinel không phải tên phòng ban thật (VD 'HO' của operationOrderReceiptManage) nhưng so
-//     trực tiếp === oldValue vẫn an toàn (không trùng bất kỳ tên phòng ban/siêu thị thật nào).
+//     operationOrderReceiptManageStore..., xem scopeAllows() ở lib/recordActions.js) — hàm này generic
+//     theo CẤU TRÚC (bất kỳ field nào có .depts là mảng), không cần biết tên field cụ thể, nên đợt "Tách
+//     quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026, operationOrderReceiptManage cũ → tách thành
+//     operationOrderReceiptManageHO boolean + operationOrderReceiptManageStore {all,depts[]}) tự động vẫn
+//     đúng không cần sửa gì ở đây — field HO giờ là boolean đơn (không có .depts), không rơi vào nhánh
+//     này nữa, còn field Store dùng đúng tên "depts" nên vẫn được cascade-rename như trước.
 function renameDeptInUserPerms(perms, oldValue, newValue) {
   if (!perms || typeof perms !== 'object') return perms;
   let changed = false;

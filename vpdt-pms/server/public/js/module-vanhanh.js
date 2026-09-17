@@ -202,13 +202,13 @@ function operationStatusBadge(o) {
 }
 // Quần thể được phép Nhập Hàng/Hủy Nhập ở sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" — MIRROR đúng
 // lib/recordActions.js isApproverForOperationOrderReceipt() (server luôn tự kiểm lại, đây chỉ là lớp UI
-// ẩn/hiện): quyền RIÊNG operationOrderReceiptManage ({all, depts[]} — "depts" là danh sách scope key được
-// cấp, mỗi phần tử HOẶC 1 tên siêu thị thật (đối chiếu o.dept của đơn STORE) HOẶC literal 'HO' cho đơn
-// orderLocationType==='HO') — TÁCH RIÊNG hoàn toàn khỏi quần thể duyệt/từ chối đơn hàng nội bộ (đã đổi từ
-// đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung", KHÔNG còn dùng chung isApproverForDeptWorkflow() như trước).
+// ẩn/hiện) — TÁCH RIÊNG hoàn toàn khỏi quần thể duyệt/từ chối đơn hàng nội bộ (đã đổi từ đợt "Duyệt
+// Nhập/Hủy Đơn Hàng tập trung", KHÔNG còn dùng chung isApproverForDeptWorkflow() như trước).
 // DH-09: mirror ĐÚNG lib/recordActions.js isApproverForOperationOrderReceipt() — KHÔNG dùng scopeAllows()
-// chung (có nhánh dept-fallback sai cho quyền này, xem chú thích đầy đủ ở hàm server) — chỉ xét đúng cấu
-// trúc {all, depts[]} của operationOrderReceiptManage.
+// chung (có nhánh dept-fallback sai cho quyền này, xem chú thích đầy đủ ở hàm server).
+// ĐỢT "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026): operationOrderReceiptManage cũ đã tách
+// thành operationOrderReceiptManageHO (boolean) + operationOrderReceiptManageStore ({all, depts[]}) — mirror
+// ĐÚNG logic tương thích ngược ở server (đọc field mới trước, rơi về field cũ nếu field mới chưa tồn tại).
 // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: hàm này trước đây LUÔN đọc thẳng biến toàn cục `currentUser`,
 // bỏ qua tham số `user` mà getMyPendingApprovals(user) ở core-approvalhub.js truyền vào — khiến mục "Chờ
 // Nhập Hàng" không bao giờ vào đúng danh sách chờ duyệt của người được phân quyền khi hàm đó được gọi
@@ -216,10 +216,15 @@ function operationStatusBadge(o) {
 // cũ (không truyền `user`, tự đọc currentUser) không đổi hành vi.
 function canManageOperationOrderReceiptClient(o, user = currentUser) {
   if (user?.perms?.admin) return true;
-  const scope = user?.perms?.operationOrderReceiptManage;
+  const perms = user?.perms || {};
+  const legacy = perms.operationOrderReceiptManage;
+  if (o.orderLocationType === 'HO') {
+    if (perms.operationOrderReceiptManageHO !== undefined) return !!perms.operationOrderReceiptManageHO;
+    return !!(legacy?.all || (Array.isArray(legacy?.depts) && legacy.depts.includes('HO')));
+  }
+  const scope = perms.operationOrderReceiptManageStore !== undefined ? perms.operationOrderReceiptManageStore : legacy;
   if (scope?.all) return true;
-  const scopeKey = o.orderLocationType === 'HO' ? 'HO' : o.dept;
-  return !!(Array.isArray(scope?.depts) && scope.depts.includes(scopeKey));
+  return !!(Array.isArray(scope?.depts) && scope.depts.includes(o.dept));
 }
 
 // Đổ danh sách "Nơi Nhận" (siêu thị/kho) cho ô lọc — dùng chung cho cả Danh Sách (filterLocationOperationOrder)
@@ -1389,7 +1394,7 @@ async function processOperation(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
       `[VPDT] ${meta.subLabel} ${updated.code} cần bổ sung/chỉnh sửa`,
-      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục QLDA để sửa và gửi lại.`);
+      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Vận Hành để sửa và gửi lại.`);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người tạo sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_REJECTED', updated.code, [updated.creator],

@@ -204,6 +204,47 @@ test('receiveOperationOrderGoods(): nhân viên CÙNG siêu thị (dept khớp) 
   assertThrows(() => recordActions.receiveOperationOrderGoods(sameStoreNoPerm, item, appData), 403, 'không có quyền', 'cùng siêu thị nhưng không có operationOrderReceiptManage vẫn phải bị chặn');
 });
 
+// Đợt "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026): operationOrderReceiptManage {all,depts[]}
+// cũ đã tách thành operationOrderReceiptManageHO (boolean) + operationOrderReceiptManageStore
+// ({all,depts[]}) — 4 test dưới đây khoá đúng hành vi field MỚI (test cũ ở trên vẫn còn để khoá tương
+// thích ngược với field CŨ cho user chưa được admin re-save qua UI).
+test('receiveOperationOrderGoods(): operationOrderReceiptManageHO=true được phép nhận/hủy nhập đơn HO nhưng KHÔNG được phép đơn Siêu Thị', () => {
+  const hoOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO' });
+  const storeOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Siêu Thị Quận 1' });
+  const hoManager = makeUser('nv.ho', { perms: { operationOrderReceiptManageHO: true } });
+  const result = recordActions.receiveOperationOrderGoods(hoManager, hoOrder, appData);
+  assert.strictEqual(result.status, 'RECEIVED');
+  assertThrows(() => recordActions.receiveOperationOrderGoods(hoManager, storeOrder, appData), 403, 'không có quyền', 'operationOrderReceiptManageHO không được lấn sang đơn Siêu Thị');
+});
+
+test('receiveOperationOrderGoods(): operationOrderReceiptManageStore.depts=["Siêu Thị Quận 1"] được phép đúng siêu thị đó nhưng KHÔNG được phép đơn HO', () => {
+  const storeOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Siêu Thị Quận 1' });
+  const hoOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO' });
+  const storeManager = makeUser('nv.st2', { perms: { operationOrderReceiptManageStore: { all: false, depts: ['Siêu Thị Quận 1'] } } });
+  const result = recordActions.receiveOperationOrderGoods(storeManager, storeOrder, appData);
+  assert.strictEqual(result.status, 'RECEIVED');
+  assertThrows(() => recordActions.receiveOperationOrderGoods(storeManager, hoOrder, appData), 403, 'không có quyền', 'operationOrderReceiptManageStore không được lấn sang đơn HO');
+});
+
+test('receiveOperationOrderGoods(): operationOrderReceiptManageStore.all=true được phép mọi siêu thị nhưng KHÔNG được phép đơn HO', () => {
+  const storeOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Bất Kỳ Siêu Thị Nào' });
+  const hoOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO' });
+  const storeManagerAll = makeUser('nv.st3', { perms: { operationOrderReceiptManageStore: { all: true, depts: [] } } });
+  const result = recordActions.receiveOperationOrderGoods(storeManagerAll, storeOrder, appData);
+  assert.strictEqual(result.status, 'RECEIVED');
+  assertThrows(() => recordActions.receiveOperationOrderGoods(storeManagerAll, hoOrder, appData), 403, 'không có quyền', 'operationOrderReceiptManageStore.all không được lấn sang đơn HO');
+});
+
+test('receiveOperationOrderGoods(): field MỚI operationOrderReceiptManageHO=false ưu tiên hơn field CŨ operationOrderReceiptManage còn sót (chặn đúng)', () => {
+  const hoOrder = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO' });
+  const reSaved = makeUser('nv.resaved', { perms: {
+    operationOrderReceiptManage: { all: false, depts: ['HO'] }, // field CŨ còn sót, lẽ ra cho qua nếu đọc field này
+    operationOrderReceiptManageHO: false, // nhưng admin đã re-save qua UI mới và tắt hẳn quyền HO
+    operationOrderReceiptManageStore: { all: false, depts: [] }
+  } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(reSaved, hoOrder, appData), 403, 'không có quyền', 'field mới (đã re-save) phải được ưu tiên hơn field cũ còn sót lại');
+});
+
 test('receiveOperationOrderGoods(): sai trạng thái nguồn (PENDING) -> 409, không đổi gì', () => {
   const item = freshOrder({ status: 'PENDING' });
   const admin = makeUser('admin', { perms: { admin: true } });

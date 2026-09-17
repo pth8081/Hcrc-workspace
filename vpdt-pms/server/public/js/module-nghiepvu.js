@@ -32,7 +32,7 @@ const NGHIEP_VU_NAV = [
     { key: 'office', icon: '🛒', label: 'Mua Bán / Sửa Chữa / Thanh Toán' },
     { key: 'budget', icon: '💰', label: 'Ngân Sách 2.0' },
   ]},
-  { group: 'QLDA', items: [
+  { group: 'Vận Hành', items: [
     { key: 'vanHanh', icon: '📦', label: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị' },
     { key: 'checklist', icon: '✅', label: 'Checklist Đánh Giá Siêu Thị' },
   ]},
@@ -419,7 +419,7 @@ const NGHIEP_VU_DOCS = {
     ] },
   },
   vanHanh: {
-    icon: '📦', title: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị', badge: 'QLDA',
+    icon: '📦', title: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị', badge: 'Vận Hành',
     desc: 'Hai luồng: Đơn Hàng (mua hàng vận hành theo đợt) và Mở Mới/Sửa Chữa Siêu Thị (dự án nhiều mốc tiến độ, có lịch sử cập nhật từng mốc).',
     flow: { ariaLabel: 'Quy trình Mở Mới/Sửa Chữa Siêu Thị', chain: [
       { label: 'Đề xuất dự án', sub: 'Mở mới hoặc sửa chữa' },

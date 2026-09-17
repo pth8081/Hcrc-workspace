@@ -614,17 +614,17 @@ function toggleScopeGroup(allCheckId, deptCheckPrefix) {
   });
 }
 
-// "🧾 Duyệt Nhập/Hủy Đơn Hàng" (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung") — quyền operationOrderReceiptManage
-// mirror ĐÚNG khuôn {all,depts[]} nhưng KHÔNG dùng chung renderDeptCheckboxes()/toggleScopeGroup() ở trên
-// (chỉ liệt kê thẳng DB.depts theo INDEX): danh sách này cần chèn thêm 1 mục ĐẶC BIỆT "🏢 Trụ sở chính
-// (HO)" ở đầu (value='HO', không phải tên phòng ban/siêu thị thật nào trong DB.depts — sentinel cố định
-// khớp đúng lib/recordActions.js isApproverForOperationOrderReceipt()) — 2 hàm riêng dưới đây tự quản lý
-// theo VALUE thay vì index để không phải đổi setGroupCheckboxes()/scopeFromForm() dùng chung (scopeFromForm()
-// đọc theo cb.value nên đã tự hoạt động đúng không cần sửa gì).
+// "🧾 Duyệt Nhập/Hủy Đơn Hàng" — quyền RIÊNG, TÁCH thành 2 quyền độc lập từ đợt "Tách quyền Duyệt
+// Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026): "HO" giờ là 1 checkbox đơn (pOperationOrderReceiptHO, xem
+// systemSection.html) KHÔNG còn render động ở đây — hàm này giờ CHỈ liệt kê DB.depts (siêu thị/phòng ban)
+// cho quyền operationOrderReceiptManageStore, không chèn mục 'HO' đặc biệt nữa. KHÔNG dùng chung
+// renderDeptCheckboxes()/toggleScopeGroup() ở trên (chỉ liệt kê thẳng DB.depts theo INDEX) — 2 hàm riêng
+// dưới đây tự quản lý theo VALUE thay vì index để không phải đổi setGroupCheckboxes()/scopeFromForm() dùng
+// chung (scopeFromForm() đọc theo cb.value nên đã tự hoạt động đúng không cần sửa gì).
 function renderOperationOrderReceiptScopeCheckboxes() {
   const el = document.getElementById('pOperationOrderReceiptDeptContainer');
   if (!el) return;
-  const items = [{ value: 'HO', label: '🏢 Trụ sở chính (HO)' }, ...DB.depts.map(d => ({ value: d, label: d }))];
+  const items = DB.depts.map(d => ({ value: d, label: d }));
   el.innerHTML = items.map((it, idx) => `
     <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
       <input type="checkbox" id="pOperationOrderReceiptDept_${idx}" value="${escapeHtml(it.value)}">
