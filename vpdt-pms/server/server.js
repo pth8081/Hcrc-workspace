@@ -49,6 +49,7 @@ const payrollRoutes = require('./routes/payroll');
 const checklistRoutes = require('./routes/checklist');
 const checklistImportRoutes = require('./routes/checklistImport');
 const budgetLinesImportRoutes = require('./routes/budgetLinesImport');
+const purchasingRoutes = require('./routes/purchasing');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
@@ -190,6 +191,7 @@ app.use('/api/payroll', payrollRoutes);
 // Module TOP-LEVEL "Checklist Đánh Giá Siêu Thị" — xem lib/checklist.js cho toàn bộ thiết kế (kiến trúc
 // JSON-blob + phân quyền phẳng, không phải theo phòng ban).
 app.use('/api/checklist', checklistRoutes);
+app.use('/api/purchasing', purchasingRoutes);
 // Nhập/tải mẫu Excel câu hỏi checklist (routes/checklistImport.js) — tách riêng vì cần multer, cùng lý do
 // routes/trainingTestImport.js tách khỏi routes/training.js.
 app.use('/api/checklist', checklistImportRoutes);

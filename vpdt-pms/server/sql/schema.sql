@@ -1349,5 +1349,118 @@ BEGIN
 END
 GO
 
+/* ==========================================================================
+   Module "🛒 Mua Hàng" > BAS (Basis — Cơ Sở Tính Chiết Khấu/Thưởng NCC), v23.30
+   Giai đoạn 1 theo tài liệu người dùng cung cấp (vendor_rebate_full.md) — Schema Vendor/RebateTerms
+   (Tiers/Scopes NHÚNG thẳng trong Payload, không tách bảng riêng — mảng nhỏ có giới hạn, cùng khuôn
+   dependents[]/answers[] đã dùng ở các module khác, xem lib/vendorRebate.js) + VendorPurchaseTransactions
+   (staging từ DSmart) + PurchaseDataSyncLog + RebateCalculations (snapshot TÍNH ƯỚC TÍNH, KHÔNG PHẢI Sổ
+   Cái đầy đủ ACCRUED/CONFIRMED/SETTLED — đó là Giai đoạn 2, chưa làm ở đợt này, xem VERSION.md v23.30).
+   ========================================================================== */
+
+/* Vendors — NCC, VendorCode là mã DOANH NGHIỆP TỰ CHỌN (không phải mã tự sinh tuần tự như phần lớn
+   collection khác) — validate trùng mã rõ ràng ở lib/createValidation.js (KHÔNG dùng cơ chế hasCode tự
+   sinh mã mới khi trùng, vì đổi ngầm mã 1 NCC là sai nghiệp vụ) — UNIQUE INDEX bên dưới chỉ là lớp chắn
+   thứ 2 phòng race condition, không phải đường xử lý chính. */
+IF OBJECT_ID('dbo.Vendors', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Vendors (
+        Id            BIGINT         NOT NULL CONSTRAINT PK_Vendors PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        VendorCode    NVARCHAR(30)   NOT NULL,
+        Status        NVARCHAR(20)   NOT NULL,
+        Payload       NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_Vendors_VendorCode ON dbo.Vendors (VendorCode);
+    CREATE INDEX IX_Vendors_Status ON dbo.Vendors (Status, CreatedAt DESC, Id DESC);
+END
+GO
+
+/* RebateTerms — nhiều điều khoản độc lập/1 NCC (mục 0.2 tài liệu), mỗi điều khoản tự có Tiers[]/
+   Scopes[]/kỳ tính/công thức riêng trong Payload. TermCode duy nhất TRONG PHẠM VI 1 VendorId (không phải
+   toàn hệ thống — 2 NCC khác nhau có thể trùng TermCode, VD cả 2 đều đặt "VOL-2026"). */
+IF OBJECT_ID('dbo.RebateTerms', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.RebateTerms (
+        Id            BIGINT         NOT NULL CONSTRAINT PK_RebateTerms PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        VendorId      BIGINT         NOT NULL,
+        Status        NVARCHAR(20)   NOT NULL,   -- DRAFT / ACTIVE / EXPIRED / ARCHIVED
+        TermType      NVARCHAR(30)   NOT NULL,   -- VOLUME_REBATE / GROWTH_REBATE / TRADE_SPEND / LISTING_FEE / EARLY_PAYMENT / DAMAGE_ALLOWANCE / NEW_STORE_SUPPORT
+        Payload       NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_RebateTerms_Vendor_Status ON dbo.RebateTerms (VendorId, Status, CreatedAt DESC, Id DESC);
+END
+GO
+
+/* VendorPurchaseTransactions — bảng trung gian DUY NHẤT engine tính rebate đọc vào (mục 1 tài liệu:
+   "engine tính toán không được biết/quan tâm dữ liệu tới từ đâu"), staging từ DSmart (Giai đoạn 1: nạp
+   qua route đồng bộ thủ công/định kỳ, xem lib/dsmartApiClient.js). Bảng QUAN HỆ THUẦN (không Payload
+   JSON) vì dữ liệu có cấu trúc cố định từ API ngoài + cần lọc/gộp hiệu năng cao trên khối lượng lớn —
+   khác khuôn Payload-JSON của phần lớn collection khác trong hệ thống (đúng như SystemLogs/Tasks đã làm
+   trước đó cho lý do tương tự). IDENTITY PK (không phải app tự sinh id) vì import HÀNG LOẠT, không cần
+   client biết trước id. UNIQUE lọc SourceRefId chống nạp trùng khi đồng bộ lặp lại (cửa sổ ngày chồng
+   lấn ở biên "sinceDate") — NULL được phép trùng thoải mái (giao dịch không có mã tham chiếu gốc). */
+IF OBJECT_ID('dbo.VendorPurchaseTransactions', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.VendorPurchaseTransactions (
+        TransId         BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        VendorCode      NVARCHAR(30)   NOT NULL,
+        StoreCode       NVARCHAR(50)   NOT NULL,
+        StoreFormat     NVARCHAR(20)   NULL,     -- 'MART' / 'MINIMART' — suy ra lúc đồng bộ, dùng lọc Scope
+        CategoryCode    NVARCHAR(50)   NULL,
+        PurchaseDate    DATE           NOT NULL,
+        Amount          DECIMAL(18,2)  NOT NULL,
+        IsReturn        BIT            NOT NULL DEFAULT 0,
+        SourceSystem    NVARCHAR(30)   NOT NULL DEFAULT 'DSMART',
+        SourceRefId     NVARCHAR(100)  NULL,
+        DataConfidence  NVARCHAR(20)   NOT NULL DEFAULT 'PROVISIONAL',  -- 'PROVISIONAL' (DSmart) / 'OFFICIAL' (module chính thức sau này)
+        SyncedAt        DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+    CREATE INDEX IX_VendorPurchase_Basis ON dbo.VendorPurchaseTransactions (VendorCode, PurchaseDate, StoreFormat);
+    CREATE UNIQUE INDEX UX_VendorPurchase_SourceRef ON dbo.VendorPurchaseTransactions (SourceSystem, SourceRefId) WHERE SourceRefId IS NOT NULL;
+END
+GO
+
+/* PurchaseDataSyncLog — nhật ký mỗi lượt đồng bộ DSmart (cùng khuôn dbo.SystemLogs: IDENTITY PK, cột
+   quan hệ thuần, không phải collection Payload-JSON — log KHÔNG BAO GIỜ sửa/xoá từng dòng qua UI thường,
+   chỉ đọc danh sách + tự dọn cũ nếu cần sau này). */
+IF OBJECT_ID('dbo.PurchaseDataSyncLog', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PurchaseDataSyncLog (
+        LogId           BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StartedAt       DATETIME2(3)   NOT NULL,
+        FinishedAt      DATETIME2(3)   NULL,
+        SourceSystem    NVARCHAR(30)   NOT NULL,
+        Status          NVARCHAR(20)   NOT NULL,   -- SUCCESS / FAILED / PARTIAL
+        RowsFetched     INT            NULL,
+        RowsInserted    INT            NULL,
+        PagesFetched    INT            NULL,
+        TriggeredBy     NVARCHAR(100)  NULL,        -- username bấm "Đồng Bộ Ngay", NULL nếu chạy tự động theo lịch
+        ErrorMessage    NVARCHAR(MAX)  NULL
+    );
+    CREATE INDEX IX_PurchaseDataSyncLog_StartedAt ON dbo.PurchaseDataSyncLog (StartedAt DESC, LogId DESC);
+END
+GO
+
+/* RebateCalculations — snapshot 1 lượt TÍNH ƯỚC TÍNH (aggregator + tieredCalculator) cho 1 điều khoản +
+   1 kỳ cụ thể, phục vụ Báo Cáo có số liệu lịch sử ngay từ Giai đoạn 1. CỐ Ý ĐƠN GIẢN HƠN dbo.RebateLedger
+   thiết kế đầy đủ trong tài liệu (mục 2.2) — CHƯA có trạng thái CONFIRMED/SETTLED, chưa gắn đối chiếu NCC/
+   phê duyệt (Giai đoạn 2-3, xem VERSION.md v23.30) — mỗi lần bấm "Tính Lại" chỉ THÊM 1 dòng mới (không
+   sửa dòng cũ), giữ đúng nguyên tắc append-only làm nền tảng khi nâng cấp lên Sổ Cái đầy đủ sau này. */
+IF OBJECT_ID('dbo.RebateCalculations', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.RebateCalculations (
+        Id            BIGINT         NOT NULL CONSTRAINT PK_RebateCalculations PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        TermId        BIGINT         NOT NULL,
+        VendorId      BIGINT         NOT NULL,
+        Payload       NVARCHAR(MAX)  NOT NULL
+    );
+    CREATE INDEX IX_RebateCalculations_Term ON dbo.RebateCalculations (TermId, CreatedAt DESC, Id DESC);
+    CREATE INDEX IX_RebateCalculations_Vendor ON dbo.RebateCalculations (VendorId, CreatedAt DESC, Id DESC);
+END
+GO
+
 PRINT 'Schema VPDT_DMS đã sẵn sàng.';
 GO

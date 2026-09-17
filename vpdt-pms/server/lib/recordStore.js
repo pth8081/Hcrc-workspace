@@ -79,7 +79,12 @@ const MIGRATED_COLLECTIONS = new Set(['submissions', 'docs', 'carRegs', 'officeR
   // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL mới, xem lib/checklist.js) — checklistTemplates cùng
   // khuôn trainingTests (câu hỏi+lựa chọn nhúng thẳng trong bản ghi); checklistSubmissions cùng khuôn
   // trainingTestSubmissions (route tự quản lý, không qua createValidation.js).
-  'checklistTemplates', 'checklistSubmissions']);
+  'checklistTemplates', 'checklistSubmissions',
+  // Mua Hàng > BAS (v23.30, xem lib/vendorRebate.js + sql/schema.sql) — vendors/rebateTerms quản lý qua
+  // route riêng đơn giản (routes/purchasing.js), KHÔNG qua engine chung createValidation.js (VendorCode/
+  // TermCode validate trùng thủ công, không phải mã tự sinh); rebateCalculations là snapshot server tự
+  // ghi mỗi lượt tính (route riêng, không có form nhập tay).
+  'vendors', 'rebateTerms', 'rebateCalculations']);
 
 function toRecord(row) {
   return JSON.parse(row.Payload);
@@ -381,6 +386,29 @@ const DEDICATED_TABLES = {
       SourceLineId: { sqlType: () => sql.BigInt,        extract: r => (r.sourceLineId != null ? r.sourceLineId : null) },
       BudgetYear:   { sqlType: () => sql.SmallInt,      extract: r => (r.budgetYear != null ? r.budgetYear : null) },
       BudgetMonth:  { sqlType: () => sql.TinyInt,       extract: r => (r.budgetMonth != null ? r.budgetMonth : null) }
+    }
+  },
+  // Mua Hàng > BAS (v23.30) — xem chú thích đầy đủ ngay trên CREATE TABLE tương ứng ở sql/schema.sql.
+  vendors: {
+    table: 'Vendors', hasCode: false,
+    columns: {
+      VendorCode: { sqlType: () => sql.NVarChar(30), extract: r => r.vendorCode || null },
+      Status:     { sqlType: () => sql.NVarChar(20), extract: r => r.status || null }
+    }
+  },
+  rebateTerms: {
+    table: 'RebateTerms', hasCode: false,
+    columns: {
+      VendorId: { sqlType: () => sql.BigInt,       extract: r => (r.vendorId != null ? r.vendorId : null) },
+      Status:   { sqlType: () => sql.NVarChar(20), extract: r => r.status || null },
+      TermType: { sqlType: () => sql.NVarChar(30), extract: r => r.termType || null }
+    }
+  },
+  rebateCalculations: {
+    table: 'RebateCalculations', hasCode: false,
+    columns: {
+      TermId:   { sqlType: () => sql.BigInt, extract: r => (r.termId != null ? r.termId : null) },
+      VendorId: { sqlType: () => sql.BigInt, extract: r => (r.vendorId != null ? r.vendorId : null) }
     }
   },
   recruitmentReferrals: {

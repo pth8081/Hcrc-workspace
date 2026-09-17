@@ -1,0 +1,169 @@
+
+    <div class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setPurchasingSubTab" data-arg0="BAS" id="btnMhSubBas" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white">🧮 BAS</button>
+      <button type="button" data-op="setPurchasingSubTab" data-arg0="REPORT" id="btnMhSubReport" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+    </div>
+
+    <!-- Sub-tab: BAS (rebateTermManage/rebateTermActivate) — quản lý NCC/Điều Khoản, đồng bộ DSmart, tính ước tính. -->
+    <div id="mhSubBas" class="hidden space-y-6">
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">🏢 Nhà Cung Cấp</h3>
+          <button type="button" data-op="openMhVendorForm" id="btnMhVendorNew" class="hidden bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Thêm NCC</button>
+        </div>
+        <div id="mhVendorFormWrap" class="hidden bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <h4 class="font-bold text-emerald-900 text-sm" id="mhVendorFormTitle">Thêm Nhà Cung Cấp</h4>
+            <button type="button" data-op="closeMhVendorForm" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✕ Đóng</button>
+          </div>
+          <form data-op-submit="submitMhVendorForm" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-bold text-gray-600">Mã NCC *</label>
+              <input type="text" id="mhVendorCode" class="w-full border rounded px-2 py-1.5 text-sm" maxlength="30" placeholder="VD: NCC001">
+            </div>
+            <div>
+              <label class="text-xs font-bold text-gray-600">Tên NCC *</label>
+              <input type="text" id="mhVendorName" class="w-full border rounded px-2 py-1.5 text-sm" maxlength="200">
+            </div>
+            <div>
+              <label class="text-xs font-bold text-gray-600">Mã Số Thuế</label>
+              <input type="text" id="mhVendorTaxCode" class="w-full border rounded px-2 py-1.5 text-sm" maxlength="20">
+            </div>
+            <div>
+              <label class="text-xs font-bold text-gray-600">Người Phụ Trách (username)</label>
+              <input type="text" id="mhVendorOwner" class="w-full border rounded px-2 py-1.5 text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <button type="submit" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu</button>
+            </div>
+          </form>
+        </div>
+        <div id="mhVendorListWrap" class="space-y-2"></div>
+      </div>
+
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📜 Điều Khoản Chiết Khấu / Thưởng NCC</h3>
+          <button type="button" data-op="openMhTermForm" id="btnMhTermNew" class="hidden bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Tạo Điều Khoản</button>
+        </div>
+        <div id="mhTermFormWrap" class="hidden bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <h4 class="font-bold text-indigo-900 text-sm" id="mhTermFormTitle">Tạo Điều Khoản Chiết Khấu</h4>
+            <button type="button" data-op="closeMhTermForm" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✕ Đóng</button>
+          </div>
+          <form data-op-submit="submitMhTermForm" class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="text-xs font-bold text-gray-600">Nhà Cung Cấp *</label>
+                <select id="mhTermVendorId" class="w-full border rounded px-2 py-1.5 text-sm"></select>
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Mã Điều Khoản *</label>
+                <input type="text" id="mhTermCode" class="w-full border rounded px-2 py-1.5 text-sm" maxlength="50">
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Tên Điều Khoản *</label>
+                <input type="text" id="mhTermName" class="w-full border rounded px-2 py-1.5 text-sm" maxlength="200">
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Loại Điều Khoản</label>
+                <select id="mhTermType" class="w-full border rounded px-2 py-1.5 text-sm">
+                  <option value="VOLUME_REBATE">Chiết Khấu Theo Doanh Số</option>
+                  <option value="GROWTH_REBATE">Chiết Khấu Theo Tăng Trưởng</option>
+                  <option value="TRADE_SPEND">Trade Spend</option>
+                  <option value="LISTING_FEE">Phí Lên Kệ</option>
+                  <option value="EARLY_PAYMENT">Chiết Khấu Thanh Toán Sớm</option>
+                  <option value="DAMAGE_ALLOWANCE">Bù Hao Hụt</option>
+                  <option value="NEW_STORE_SUPPORT">Hỗ Trợ Mở Siêu Thị Mới</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Căn Cứ Tính</label>
+                <select id="mhTermCalcBasis" class="w-full border rounded px-2 py-1.5 text-sm">
+                  <option value="PURCHASE_VALUE">Giá Trị Mua Hàng</option>
+                  <option value="SELL_OUT_VALUE">Giá Trị Bán Ra</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Chế Độ Bậc Thang</label>
+                <select id="mhTermTierMode" class="w-full border rounded px-2 py-1.5 text-sm">
+                  <option value="GRADUATED">Luỹ Tiến (từng phần theo bậc)</option>
+                  <option value="CLIFF">Toàn Bộ Theo Bậc Đạt Được</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Kỳ Tính</label>
+                <select id="mhTermPeriodType" class="w-full border rounded px-2 py-1.5 text-sm">
+                  <option value="MONTHLY">Hàng Tháng</option>
+                  <option value="QUARTERLY">Hàng Quý</option>
+                  <option value="YEARLY">Hàng Năm</option>
+                  <option value="ONE_TIME">Một Lần</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Hiệu Lực Từ *</label>
+                <input type="date" id="mhTermFrom" class="w-full border rounded px-2 py-1.5 text-sm">
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Hiệu Lực Đến</label>
+                <input type="date" id="mhTermTo" class="w-full border rounded px-2 py-1.5 text-sm">
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-xs font-bold text-gray-600">
+              <input type="checkbox" id="mhTermRetroactive"> Áp dụng hồi tố (tính lại từ đầu kỳ khi đạt bậc cao hơn)
+            </label>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold text-gray-700">Bậc Thang (Tiers) *</label>
+                <button type="button" data-op="mhAddTierRow" class="bg-indigo-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Bậc</button>
+              </div>
+              <div id="mhTierRowsWrap" class="space-y-1"></div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold text-gray-700">Phạm Vi Áp Dụng (để trống = toàn hệ thống)</label>
+                <button type="button" data-op="mhAddScopeRow" class="bg-indigo-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Phạm Vi</button>
+              </div>
+              <div id="mhScopeRowsWrap" class="space-y-1"></div>
+            </div>
+
+            <button type="submit" class="bg-indigo-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">💾 Lưu Điều Khoản</button>
+          </form>
+        </div>
+        <div id="mhTermListWrap" class="space-y-2"></div>
+      </div>
+
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">🔄 Đồng Bộ Dữ Liệu Mua Hàng (DSmart)</h3>
+          <button type="button" data-op="triggerDSmartSync" id="btnMhSync" class="hidden bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">🔄 Đồng Bộ Ngay</button>
+        </div>
+        <div id="mhSyncLogWrap" class="space-y-1 text-xs"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Báo Cáo (rebateViewReport) — số liệu ước tính đã tính (rebateCalculations). -->
+    <div id="mhSubReport" class="hidden space-y-4">
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="text-xs font-bold text-gray-600 block">Nhà Cung Cấp</label>
+            <select id="mhReportVendorFilter" data-op-change="renderMhReportTab" class="border rounded px-2 py-1.5 text-sm">
+              <option value="">-- Tất cả --</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600 block">Từ Ngày</label>
+            <input type="date" id="mhReportFrom" data-op-change="renderMhReportTab" class="border rounded px-2 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600 block">Đến Ngày</label>
+            <input type="date" id="mhReportTo" data-op-change="renderMhReportTab" class="border rounded px-2 py-1.5 text-sm">
+          </div>
+        </div>
+        <div id="mhReportSummaryWrap" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+        <div id="mhReportTableWrap" class="overflow-x-auto"></div>
+      </div>
+    </div>

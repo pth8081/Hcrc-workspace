@@ -39,7 +39,10 @@ const VALID_LOG_MODULES = new Set([
   // KHÔNG dùng chung token "OPERATION" đã có sẵn — thiếu 3 token này khiến MỌI hành động ghi log của Vận
   // Hành (tạo/xử lý/xoá đơn hàng, đề xuất mở mới/sửa chữa siêu thị) bị 400, mất log âm thầm (gọi
   // fire-and-forget, không ai chờ/hiển thị lỗi).
-  'OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'
+  'OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR',
+  // PURCHASING: module "🛒 Mua Hàng" > BAS (v23.30, xem routes/purchasing.js) — thêm sẵn dù hiện chỉ
+  // gọi insertSystemLog() thẳng từ server (không qua route này), cùng lý do nhóm token ở trên.
+  'PURCHASING'
 ]);
 const ACTION_TYPE_RE = /^[A-Z][A-Z0-9_]{1,59}$/;
 const STATUS_RE = /^[A-Z][A-Z0-9_]{1,29}$/;

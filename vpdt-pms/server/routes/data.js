@@ -1048,7 +1048,12 @@ router.get('/', async (req, res) => {
     // Bước 8k/8l/8m — docs/submissions/attendanceRecords tách riêng khỏi vòng lặp tải chung, cùng lý do
     // các collection ở trên: xem chú thích đầy đủ ở loadDocsScoped()/loadSubmissionsScoped()/
     // loadAttendanceRecordsScoped() phía trên.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords');
+    // Mua Hàng > BAS (v23.30) — vendors/rebateTerms/rebateCalculations loại khỏi vòng phát TOÀN BỘ cho
+    // MỌI người dùng đã đăng nhập (khác checklistTemplates/danh mục chung — dữ liệu ở đây là điều khoản
+    // chiết khấu/số tiền thật với NCC, đúng tinh thần "dữ liệu nhạy cảm" đã áp dụng cho payslips/
+    // employeeProfiles). Phục vụ riêng qua routes/purchasing.js, gác đúng canManageVendors/
+    // canManageTerms/canViewReport (lib/vendorRebate.js) thay vì để lọt company-wide qua đường này.
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations');
     const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);

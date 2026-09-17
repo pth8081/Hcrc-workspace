@@ -30,6 +30,7 @@ const { resolveStepApproverUsernames } = require('./positionApprovers');
 // assertTemplateCoreFields() dùng ở extraValidate bên dưới, phần còn lại (scoring/store-resolution)
 // dùng ở routes/checklist.js.
 const { canManageChecklistTemplates, validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields } = require('./checklist');
+const { canManageVendors, canManageTerms, validateVendorPayload, defaultVendor, validateRebateTermPayload, checkDuplicateTermCode, defaultRebateTerm } = require('./vendorRebate');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -2038,6 +2039,58 @@ const CREATE_MODULE_CONFIGS = {
       payload.version = 1;
       payload.clonedFromTemplateId = null;
       payload.activatedAt = null;
+    }
+  },
+  // Mua Hàng > BAS (v23.30, xem lib/vendorRebate.js đầu file cho toàn bộ thiết kế) — vendors/rebateTerms
+  // PHẲNG (không theo phòng ban, cùng khuôn checklistTemplates ở trên: forceOwnDept + getScope rỗng chỉ
+  // để thoả mãn khung chung, "dept" không mang ý nghĩa phạm vi xem gì cả). Sửa/kích hoạt/nhân bản/lưu
+  // trữ/đồng bộ DSmart/tính toán đều đi qua routes/purchasing.js riêng (cần đọc lại bản ghi cũ để enforce
+  // vòng đời, không hợp với đường tạo-mới 1 chiều ở đây).
+  vendors: {
+    dbKey: 'vendors',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'createdBy',
+    extraValidate: (payload, collection, user) => {
+      if (!canManageVendors(user)) throw new CreateError(403, 'Bạn không có quyền quản lý Nhà Cung Cấp');
+      const err = validateVendorPayload(payload, collection, null);
+      if (err) throw new CreateError(err.includes('đã tồn tại') ? 409 : 400, err);
+      const seeded = defaultVendor(payload.vendorCode);
+      Object.assign(payload, seeded, {
+        vendorCode: String(payload.vendorCode).trim(),
+        vendorName: String(payload.vendorName).trim(),
+        taxCode: payload.taxCode ? String(payload.taxCode).trim().slice(0, 20) : '',
+        contactOwnerUsername: payload.contactOwnerUsername || null,
+        status: 'ACTIVE'
+      });
+      delete payload.id; // id thật do validateAndPrepareCreate() gán ở bước sau, tránh đè nhầm giá trị defaultVendor() tự sinh tạm
+    }
+  },
+  rebateTerms: {
+    dbKey: 'rebateTerms',
+    forceOwnDept: true,
+    getScope: () => ({}),
+    creatorField: 'createdBy',
+    extraValidate: (payload, collection, user) => {
+      if (!canManageTerms(user)) throw new CreateError(403, 'Bạn không có quyền tạo Điều Khoản Chiết Khấu');
+      const vendorId = Number(payload.vendorId);
+      if (!Number.isFinite(vendorId)) throw new CreateError(400, 'Thiếu NCC cho điều khoản này');
+      const err = validateRebateTermPayload(payload);
+      if (err) throw new CreateError(400, err);
+      const dupErr = checkDuplicateTermCode(String(payload.termCode).trim(), vendorId, collection, null);
+      if (dupErr) throw new CreateError(409, dupErr);
+      const seeded = defaultRebateTerm(vendorId);
+      Object.assign(payload, seeded, {
+        vendorId,
+        termCode: String(payload.termCode).trim(),
+        termName: String(payload.termName).trim(),
+        termType: payload.termType, calcBasis: payload.calcBasis, tierMode: payload.tierMode, periodType: payload.periodType,
+        effectiveFrom: payload.effectiveFrom, effectiveTo: payload.effectiveTo || null,
+        isRetroactive: !!payload.isRetroactive,
+        tiers: payload.tiers, scopes: payload.scopes,
+        status: 'DRAFT', version: 1, clonedFromTermId: null, history: []
+      });
+      delete payload.id;
     }
   },
   // Chương Trình (trainingCourses, Đợt 4) — catalog "Chương Trình" TÁI SỬ DỤNG được cho nhiều LỚP HỌC

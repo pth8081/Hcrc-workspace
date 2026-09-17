@@ -270,6 +270,12 @@
           <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
+      <!-- Mua Hàng — module TOP-LEVEL mới (v23.30), module không mở sẵn cho ai (đúng khuôn Checklist Đánh
+           Giá/QLDA), xem canAccessPurchasingModule() (core.js). 2 module con BAS/Báo Cáo là tab NỘI BỘ
+           (setPurchasingSubTab(), module-muahang.js render toàn bộ vào #muaHangSection). -->
+      <button id="btnMuaHangTab" data-op="switchTab" data-arg0="muaHang" class="hidden sidebar-item">
+        <span class="sidebar-icon">🛒</span><span class="sidebar-label">Mua hàng</span>
+      </button>
       <!-- Nghiệp Vụ — màn tài liệu tham khảo (sơ đồ quy trình + diễn giải), mở cho mọi tài khoản đã đăng
            nhập (giống Tài Liệu/Công Việc), xem canAccessNghiepVuModule() (core.js). Đặt ngay trước Báo Cáo
            — cùng nhóm màn tra cứu/tổng hợp, không phải luồng tác nghiệp chủ động. -->
@@ -1114,6 +1120,13 @@
        switchTab(checklist) như cũ) — xem updateVanHanhNavVisibility() ở core.js. 4 tab nội bộ tự quản lý
        qua setChecklistSubTab(). -->
   <div id="checklistSection" class="hidden space-y-4"></div>
+
+  <!-- Màn hình MODULE TOP-LEVEL "Mua Hàng" > BAS (v23.30) — module ĐỘC LẬP hoàn toàn về dữ liệu/quyền/
+       route (xem lib/vendorRebate.js + routes/purchasing.js phía server, public/js/module-muahang.js
+       phía client), khung HTML tách lười qua public/fragments/muaHangSection.html (xem
+       TAB_SECTION_FRAGMENT ở core.js) — cùng khuôn checklistSection ở trên. 2 tab nội bộ BAS/Báo Cáo tự
+       quản lý qua setPurchasingSubTab(). -->
+  <div id="muaHangSection" class="hidden space-y-4"></div>
 
   <!-- Màn hình MODULE "Nghiệp Vụ" — thuần tài liệu tham khảo TRỰC QUAN (sơ đồ quy trình + diễn giải),
        KHÔNG tạo/lưu hồ sơ riêng nên không cần dynamicFieldsContainer/form nào — toàn bộ nav tree + nội
