@@ -400,6 +400,40 @@ async function main() {
     await assert.rejects(() => parseOperationEstimateImportXlsx(buf), /Không đọc được hạng mục/);
   });
 
+  // Chống trùng lặp (đợt 10/2026) — route đọc file này KHÔNG có sourceId cụ thể (xem chú thích
+  // routes/operationImport.js) nên CHỈ tự đánh dấu được duplicateInFile (trùng ngay trong file), KHÔNG
+  // bao giờ tự loại dòng nào (client tự tính thêm duplicateExisting + hỏi người dùng chọn).
+  await testAsync('operationImport: Danh Mục Đầu Tư — 2 dòng cùng Nội Dung (khác hoa/thường + khoảng trắng thừa) -> dòng 2 bị đánh dấu duplicateInFile, dòng 1 thì không, duplicateExisting luôn false (server không biết đang sửa hồ sơ nào)', async () => {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Sheet1');
+    sheet.addRow(['Nội Dung', 'Mô Tả', 'Chi Phí (VNĐ)', 'Lưu Ý']);
+    sheet.addRow(['Kệ trưng bày', '', 1000000, '']);
+    sheet.addRow(['  kệ   trưng bày ', '', 2000000, '']); // cùng nội dung, khác hoa/thường + khoảng trắng thừa
+    sheet.addRow(['Sơn tường', '', 500000, '']);
+    const buf = await bufferOf(wb);
+    const items = await parseOperationEstimateImportXlsx(buf);
+    assert.strictEqual(items.length, 3);
+    assert.strictEqual(items[0].duplicateInFile, false, 'dòng ĐẦU TIÊN trùng không bị coi là trùng (nó là bản "gốc")');
+    assert.strictEqual(items[1].duplicateInFile, true, 'dòng THỨ 2 cùng Nội Dung (chuẩn hoá) phải bị đánh dấu duplicateInFile');
+    assert.strictEqual(items[2].duplicateInFile, false, 'Sơn tường không trùng ai');
+    assert.deepStrictEqual(items.map(it => it.duplicateExisting), [false, false, false], 'duplicateExisting luôn false ở bước server (không có sourceId để so)');
+  });
+
+  await testAsync('operationImport: Danh Sách Công Việc — 2 dòng cùng Tên Công Việc -> dòng 2 bị đánh dấu duplicateInFile', async () => {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Sheet1');
+    sheet.addRow(['Tên Công Việc', 'Mô Tả', 'Người Phụ Trách (username, cách nhau dấu phẩy)', 'Người Nghiệm Thu (username)', 'Hạn Hoàn Thành (YYYY-MM-DD)']);
+    sheet.addRow(['Thi công mặt bằng', '', '', '', '']);
+    sheet.addRow(['THI CÔNG MẶT BẰNG', '', '', '', '']);
+    const buf = await bufferOf(wb);
+    const rows = await parseOperationWorkItemImportXlsx(buf);
+    assert.strictEqual(rows.length, 2);
+    assert.strictEqual(rows[0].duplicateInFile, false);
+    assert.strictEqual(rows[1].duplicateInFile, true, 'cùng Tên Công Việc (chỉ khác hoa/thường) phải bị đánh dấu duplicateInFile');
+  });
+
   // ===== 5) seedDefaults.migrateStuckOperationApprovalStatuses() =====
   await testAsync('migrateStuckOperationApprovalStatuses(): hồ sơ CŨ kẹt DRAFT (Yêu Cầu Bổ Sung, trước Mục H) -> APPROVED, ghi SYSTEM_MIGRATION, KHÔNG đụng estimateStatus đã đúng', async () => {
     const seed = {

@@ -74,6 +74,11 @@ function parseUploadedFile(req, res, onOk) {
 // creator theo đúng hồ sơ — chỉ chặn "chắc chắn không thể" (không giữ BẤT KỲ quyền quản lý hồ sơ nào cả),
 // còn creator-scoping thật sự do route ghi thật (submitOperationEstimate()/createOperationWorkItem())
 // tự đối chiếu lại theo canManageOperationRecord(), đúng nguyên tắc "không tin lớp kiểm tra ở đây là đủ".
+// Chống trùng lặp (đợt 10/2026): vì lý do trên KHÔNG có sourceId ở bước parse này, 2 hàm parse
+// (lib/operationImport.js) chỉ tự đánh dấu duplicateInFile (markDuplicateItems(rows, keyFn, [])) — cờ
+// duplicateExisting (so với dữ liệu ĐÃ CÓ của đúng hồ sơ đang sửa) do CLIENT tự tính thêm, vì chỉ client
+// mới biết đang mở hồ sơ nào (xem onOperationEstimateImportFileChange()/onOperationWorkItemImportFileChange()
+// ở module-vanhanh.js).
 function hasAnyOperationRecordManagePerm(user) {
   return !!(user?.perms?.admin || user?.perms?.operationRecordManageAll || user?.perms?.operationStoreOpenCreate || user?.perms?.operationRepairCreate);
 }

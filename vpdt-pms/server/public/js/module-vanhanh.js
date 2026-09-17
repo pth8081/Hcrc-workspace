@@ -1883,8 +1883,21 @@ async function exportOperationEstimateItems() {
   });
   await downloadXlsxFromServer('Danh_Muc_Dau_Tu.xlsx', 'Danh Mục Đầu Tư', columns, rows);
 }
+// So trùng Nội Dung với operationEstimateItems ĐANG SỬA (bảng hạng mục hiện tại trên màn) — cùng công
+// thức chuẩn hoá với normalizeDedupKey() (lib/importDedup.js) nhưng viết lại tại client vì trình duyệt
+// không import được module phía server; route parse-import không biết đang sửa hồ sơ nào (không có
+// sourceId cụ thể ở bước đọc file, xem chú thích routes/operationImport.js) nên chỉ tự đánh dấu được
+// duplicateInFile, còn duplicateExisting phải tự tính ở đây.
+function operationEstimateImportNormalizeText(s) {
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+let operationEstimateImportPreviewItems = [];
 async function onOperationEstimateImportFileChange(event) {
   const file = event.target.files[0];
+  operationEstimateImportPreviewItems = [];
+  document.getElementById('operationEstimateImportPreviewWrap').classList.add('hidden');
+  document.getElementById('operationEstimateImportConfirmBtn').classList.add('hidden');
   const statusEl = document.getElementById('operationEstimateImportStatus');
   if (!file) { statusEl.innerText = ''; return; }
   statusEl.innerText = '⏳ Đang đọc file...';
@@ -1894,19 +1907,65 @@ async function onOperationEstimateImportFileChange(event) {
     const res = await fetch('/api/operation/estimate-parse-import', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    // Gộp thêm vào cuối bảng đang sửa (không thay thế) — người dùng tự xoá dòng trống mẫu/dòng thừa
-    // trước khi bấm Lưu, cùng UX addOperationEstimateItemRow() đã quen thuộc. Import chưa hỗ trợ đọc cột
-    // "Danh Mục Cha" (Mục "Danh mục đầu tư 2 cấp") — mọi dòng nhập từ Excel LUÔN vào làm danh mục lớn mới
-    // (parentId null, kèm id TẠM để dòng con thêm tay SAU đó có thể chọn làm cha qua dropdown).
-    operationEstimateItems = operationEstimateItems.filter(it => (it.content || '').trim());
-    operationEstimateItems.push(...data.items.map(it => ({ ...it, id: nextEstimateTempId(), parentId: null })));
-    renderOperationEstimateItemsTable(true);
-    statusEl.innerText = `✅ Đã đọc "${data.fileName}": thêm ${data.items.length} hạng mục — kiểm tra lại rồi bấm Lưu Danh Mục Đầu Tư.`;
+    // duplicateExisting: so với CHÍNH bảng operationEstimateItems đang sửa trên màn (server không biết
+    // đang sửa hồ sơ nào ở bước đọc file, chỉ tự đánh dấu được duplicateInFile).
+    const existingTexts = new Set(operationEstimateItems.filter(it => (it.content || '').trim())
+      .map(it => operationEstimateImportNormalizeText(it.content)));
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      if (!it.duplicateExisting) it.duplicateExisting = existingTexts.has(operationEstimateImportNormalizeText(it.content));
+      // Mặc định BỎ CHỌN checkbox "Nhập" cho hạng mục nghi trùng (an toàn hơn), người dùng tự tick lại
+      // nếu vẫn muốn thêm — không có khái niệm "ghi đè" ở đây (mỗi hạng mục là 1 dòng độc lập trong
+      // bảng đang sửa), mirror ĐÚNG khuôn Budget Lines/Ngân Hàng Câu Hỏi Checklist.
+      it.include = !it.duplicateInFile && !it.duplicateExisting;
+    });
+    operationEstimateImportPreviewItems = data.items;
+    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${data.items.length} hạng mục`
+      + (dupCount ? `, ${dupCount} hạng mục NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.') + ' Chọn dòng cần gộp rồi bấm nút bên dưới.';
+    document.getElementById('operationEstimateImportPreviewBody').innerHTML = data.items.map((it) => {
+      const dupNote = it.duplicateInFile ? '⚠️ Trùng dòng khác trong file này'
+        : (it.duplicateExisting ? '⚠️ Trùng Nội Dung đã có trong bảng đang sửa' : '');
+      return `<tr class="border-t${dupNote ? ' bg-amber-50' : ''}">
+        <td class="p-1"><input type="checkbox" data-op-change="toggleOperationEstimateImportRow" data-idx="${it._idx}" ${it.include ? 'checked' : ''}></td>
+        <td class="p-1">${escapeHtml(it.content)}</td>
+        <td class="p-1">${escapeHtml(it.description || '')}</td>
+        <td class="p-1 text-right">${Number(it.amount || 0).toLocaleString('vi-VN')}</td>
+        <td class="p-1 text-amber-700">${escapeHtml([it.note, dupNote].filter(Boolean).join(' — '))}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('operationEstimateImportPreviewWrap').classList.remove('hidden');
+    if (data.items.length) document.getElementById('operationEstimateImportConfirmBtn').classList.remove('hidden');
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
   } finally {
     event.target.value = '';
   }
+}
+// Tick/bỏ tick 1 hạng mục xem trước (VD hạng mục bị đánh dấu nghi trùng, người dùng vẫn muốn thêm) — chỉ
+// đổi cờ include, không render lại toàn bộ bảng, cùng khuôn toggleBudgetLineImportRow()/toggleChecklistImportRow().
+function toggleOperationEstimateImportRow(idxStr) {
+  const idx = Number(idxStr);
+  const it = operationEstimateImportPreviewItems.find(x => x._idx === idx);
+  if (it) it.include = !it.include;
+}
+// Gộp các hạng mục ĐƯỢC TICK CHỌN vào cuối bảng đang sửa (không thay thế) — người dùng vẫn phải bấm "💾
+// Lưu Danh Mục Đầu Tư" như thêm tay bình thường sau đó (route parse-import CHƯA lưu gì, xem chú thích
+// đầu file). Import chưa hỗ trợ đọc cột "Danh Mục Cha" — mọi dòng nhập từ Excel LUÔN vào làm danh mục
+// lớn mới (parentId null, kèm id TẠM để dòng con thêm tay SAU đó có thể chọn làm cha qua dropdown).
+function confirmOperationEstimateImport() {
+  const selected = operationEstimateImportPreviewItems.filter(it => it.include);
+  if (!selected.length) return alert('Chưa có hạng mục nào được chọn để gộp.');
+  operationEstimateItems = operationEstimateItems.filter(it => (it.content || '').trim());
+  operationEstimateItems.push(...selected.map(it => ({
+    content: it.content, description: it.description, amount: it.amount, note: it.note,
+    id: nextEstimateTempId(), parentId: null
+  })));
+  renderOperationEstimateItemsTable(true);
+  document.getElementById('operationEstimateImportPreviewWrap').classList.add('hidden');
+  document.getElementById('operationEstimateImportConfirmBtn').classList.add('hidden');
+  document.getElementById('operationEstimateImportStatus').innerText = `✅ Đã gộp ${selected.length} hạng mục — kiểm tra lại rồi bấm Lưu Danh Mục Đầu Tư.`;
+  operationEstimateImportPreviewItems = [];
 }
 
 // Lập lại dự toán sau khi bị Từ chối (REJECTED -> DRAFT) — khớp resetOperationEstimateToDraft() ở
@@ -2120,7 +2179,27 @@ function renderOperationWorkItemModalBody() {
         <input type="file" accept=".xlsx" data-op-change="onOperationWorkItemImportFileChange" class="hidden">
       </label>
     </div>
-    <div id="operationWorkItemImportStatus" class="text-xs mt-1"></div>`;
+    <div id="operationWorkItemImportStatus" class="text-xs mt-1"></div>
+    <!-- Xem trước + chọn dòng trước khi tạo (chống trùng lặp, đợt 10/2026) — mirror ĐÚNG khuôn
+         #operationEstimateImportPreviewWrap: server chỉ đánh dấu duplicateInFile (không có sourceId cụ
+         thể ở bước đọc file), client tự tính thêm duplicateExisting so với các công việc GỐC đang tải
+         của ĐÚNG hồ sơ đang mở. -->
+    <div id="operationWorkItemImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto mt-1">
+      <table class="w-full text-xs">
+        <thead class="bg-gray-100 sticky top-0">
+          <tr>
+            <th class="p-1 text-left w-10">Tạo</th>
+            <th class="p-1 text-left">Tên Công Việc</th>
+            <th class="p-1 text-left">Người Phụ Trách</th>
+            <th class="p-1 text-left">Người Nghiệm Thu</th>
+            <th class="p-1 text-left">Hạn</th>
+            <th class="p-1 text-left">Ghi Chú</th>
+          </tr>
+        </thead>
+        <tbody id="operationWorkItemImportPreviewBody"></tbody>
+      </table>
+    </div>
+    <button type="button" id="operationWorkItemImportConfirmBtn" data-op="confirmOperationWorkItemImport" class="hidden mt-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Tạo Các Công Việc Được Chọn</button>`;
   } else {
     rootBox.innerHTML = '';
   }
@@ -2708,27 +2787,84 @@ async function exportOperationWorkItems() {
 const OPERATION_WORK_ITEM_STATUS_LABELS = {
   CHUA_BAT_DAU: 'Chưa bắt đầu', DANG_THUC_HIEN: 'Đang thực hiện', DANG_NGHIEM_THU: 'Đang nghiệm thu', DA_NGHIEM_THU: 'Đã nghiệm thu'
 };
+// So trùng Tên Công Việc với các công việc GỐC (parentWorkItemId null — đúng phạm vi "chỉ công việc
+// GỐC" của cả tính năng này, xem chú thích WORKITEM_COLUMNS ở lib/operationImport.js) đang tải của
+// ĐÚNG hồ sơ đang mở (currentWorkItemModalKind/currentWorkItemModalRecordId) — cùng công thức chuẩn hoá
+// với normalizeDedupKey() (lib/importDedup.js) nhưng viết lại tại client vì trình duyệt không import
+// được module phía server; route parse-import không có sourceId cụ thể ở bước đọc file nên chỉ tự đánh
+// dấu được duplicateInFile, còn duplicateExisting phải tự tính ở đây.
+function operationWorkItemImportNormalizeText(s) {
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+let operationWorkItemImportPreviewItems = [];
 async function onOperationWorkItemImportFileChange(event) {
   const file = event.target.files[0];
+  operationWorkItemImportPreviewItems = [];
+  const previewWrap = document.getElementById('operationWorkItemImportPreviewWrap');
+  const confirmBtn = document.getElementById('operationWorkItemImportConfirmBtn');
+  if (previewWrap) previewWrap.classList.add('hidden');
+  if (confirmBtn) confirmBtn.classList.add('hidden');
   const statusEl = document.getElementById('operationWorkItemImportStatus');
   if (!file) { if (statusEl) statusEl.innerText = ''; return; }
   if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
   const formData = new FormData();
   formData.append('file', file);
-  let rows;
   try {
     const res = await fetch('/api/operation/workitem-parse-import', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    rows = data.items;
+    // duplicateExisting: so với các công việc GỐC đang tải của ĐÚNG hồ sơ đang mở (server không biết
+    // đang sửa hồ sơ nào ở bước đọc file, chỉ tự đánh dấu được duplicateInFile).
+    const existingTitles = new Set(getOperationWorkItemsForRecord(currentWorkItemModalKind, currentWorkItemModalRecordId)
+      .filter(w => w.parentWorkItemId == null).map(w => operationWorkItemImportNormalizeText(w.title)));
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      if (!it.duplicateExisting) it.duplicateExisting = existingTitles.has(operationWorkItemImportNormalizeText(it.title));
+      // Mặc định BỎ CHỌN checkbox "Tạo" cho công việc nghi trùng (an toàn hơn), người dùng tự tick lại
+      // nếu vẫn muốn thêm — mirror ĐÚNG khuôn Budget Lines/Danh Mục Đầu Tư ở trên.
+      it.include = !it.duplicateInFile && !it.duplicateExisting;
+    });
+    operationWorkItemImportPreviewItems = data.items;
+    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+    if (statusEl) statusEl.innerText = `✅ Đọc file "${data.fileName}": ${data.items.length} công việc gốc`
+      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.') + ' Chọn dòng cần tạo rồi bấm nút bên dưới.';
+    const previewBody = document.getElementById('operationWorkItemImportPreviewBody');
+    if (previewBody) previewBody.innerHTML = data.items.map((it) => {
+      const dupNote = it.duplicateInFile ? '⚠️ Trùng dòng khác trong file này'
+        : (it.duplicateExisting ? '⚠️ Trùng Tên Công Việc đã có (công việc gốc)' : '');
+      return `<tr class="border-t${dupNote ? ' bg-amber-50' : ''}">
+        <td class="p-1"><input type="checkbox" data-op-change="toggleOperationWorkItemImportRow" data-idx="${it._idx}" ${it.include ? 'checked' : ''}></td>
+        <td class="p-1">${escapeHtml(it.title)}</td>
+        <td class="p-1">${escapeHtml((it.assignedTo || []).join(', '))}</td>
+        <td class="p-1">${escapeHtml(it.acceptorUsername || '')}</td>
+        <td class="p-1">${escapeHtml(it.deadline || '')}</td>
+        <td class="p-1 text-amber-700">${escapeHtml([it.description, dupNote].filter(Boolean).join(' — '))}</td>
+      </tr>`;
+    }).join('');
+    if (previewWrap) previewWrap.classList.remove('hidden');
+    if (confirmBtn && data.items.length) confirmBtn.classList.remove('hidden');
   } catch (err) {
     if (statusEl) statusEl.innerText = `⛔ ${err.message}`;
+  } finally {
     event.target.value = '';
-    return;
   }
-  event.target.value = '';
+}
+// Tick/bỏ tick 1 công việc xem trước (VD dòng bị đánh dấu nghi trùng, người dùng vẫn muốn thêm) — chỉ
+// đổi cờ include, không render lại toàn bộ bảng, cùng khuôn toggleOperationEstimateImportRow().
+function toggleOperationWorkItemImportRow(idxStr) {
+  const idx = Number(idxStr);
+  const it = operationWorkItemImportPreviewItems.find(x => x._idx === idx);
+  if (it) it.include = !it.include;
+}
+// Tạo THẬT các công việc gốc ĐƯỢC TICK CHỌN — lần lượt gọi callRecordCreate('operationWorkItems', ...)
+// như thêm tay, server (createOperationWorkItem(), lib/recordActions.js) mới là nơi xác thực thật.
+async function confirmOperationWorkItemImport() {
+  const selected = operationWorkItemImportPreviewItems.filter(it => it.include);
+  if (!selected.length) return alert('Chưa có công việc nào được chọn để tạo.');
+  const statusEl = document.getElementById('operationWorkItemImportStatus');
   let created = 0, failed = 0;
-  for (const row of rows) {
+  for (const row of selected) {
     try {
       const result = await callRecordCreate('operationWorkItems', {
         sourceType: operationSourceType(currentWorkItemModalKind), sourceId: currentWorkItemModalRecordId,
@@ -2739,10 +2875,12 @@ async function onOperationWorkItemImportFileChange(event) {
       created += 1;
     } catch (err) { failed += 1; }
   }
+  operationWorkItemImportPreviewItems = [];
   renderOperationWorkItemModalBody();
   renderOperationExecutionList();
   renderOperationAcceptanceList();
-  if (statusEl) statusEl.innerText = `✅ Đã tạo ${created}/${rows.length} công việc gốc từ file.${failed ? ` ⚠️ ${failed} dòng lỗi (kiểm tra đúng username Người Phụ Trách/Người Nghiệm Thu).` : ''}`;
+  const newStatusEl = document.getElementById('operationWorkItemImportStatus') || statusEl;
+  if (newStatusEl) newStatusEl.innerText = `✅ Đã tạo ${created}/${selected.length} công việc gốc từ file.${failed ? ` ⚠️ ${failed} dòng lỗi (kiểm tra đúng username Người Phụ Trách/Người Nghiệm Thu).` : ''}`;
 }
 
 async function updateOperationWorkItemProgressAction(id, newStatus, note) {
@@ -3512,7 +3650,11 @@ const OP_CLICK_ACTIONS = {
   filterOperationRepairByCard: el => filterOperationRepairByCard(el.dataset.arg0),
   // "👁️ Xem Nhanh" (9/2026) — 4 số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu ở bảng Báo Cáo.
   openOperationWorkItemQuickViewModal: el => openOperationWorkItemQuickViewModal(el.dataset.kind, Number(el.dataset.id), el.dataset.filter),
-  closeOperationWorkItemQuickViewModal: () => closeOperationWorkItemQuickViewModal()
+  closeOperationWorkItemQuickViewModal: () => closeOperationWorkItemQuickViewModal(),
+  // Chống trùng lặp Excel import (đợt 10/2026) — nút "Gộp"/"Tạo" ở bảng xem trước Danh Mục Đầu Tư/Danh
+  // Sách Công Việc, cùng khuôn confirmOperationEstimateImport()/confirmOperationWorkItemImport() ở trên.
+  confirmOperationEstimateImport: () => confirmOperationEstimateImport(),
+  confirmOperationWorkItemImport: () => confirmOperationWorkItemImport()
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -3528,6 +3670,10 @@ const OP_CHANGE_ACTIONS = {
   syncOwiDateBounds: () => syncOwiDateBounds(),
   onOperationEstimateImportFileChange: (el, e) => onOperationEstimateImportFileChange(e),
   onOperationWorkItemImportFileChange: (el, e) => onOperationWorkItemImportFileChange(e),
+  // Tick/bỏ tick 1 dòng xem trước trước khi gộp/tạo (đợt 10/2026, chống trùng lặp) — cùng khuôn
+  // toggleOperationEstimateImportRow()/toggleOperationWorkItemImportRow() ở trên.
+  toggleOperationEstimateImportRow: el => toggleOperationEstimateImportRow(el.dataset.idx),
+  toggleOperationWorkItemImportRow: el => toggleOperationWorkItemImportRow(el.dataset.idx),
   handleOperationOrderPdfUpload: (el, e) => handleOperationOrderPdfUpload(e),
   // handleActionCellDispatch() (core.js) — dropdown "Khác ▾" dùng chung cho MỌI bảng danh sách nghiệp vụ
   // (buildActionCell()), đọc data-arg-el="0"/data-arg1/data-arg2 để gọi lại đúng hàm điều phối của module

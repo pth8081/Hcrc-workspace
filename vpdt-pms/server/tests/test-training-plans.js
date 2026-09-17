@@ -17,7 +17,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { setup, teardown, makeRunner, assert, assertEqual, baseCatalogSeed, makeUser } = require('./_harness');
-const { buildPlanImportTemplateWorkbook, parsePlanImportFile } = require('../lib/trainingPlanImport');
+const { buildPlanImportTemplateWorkbook, parsePlanImportFile, existingPlanKeys } = require('../lib/trainingPlanImport');
 
 const PORT = 8998;
 
@@ -86,6 +86,35 @@ async function runParserUnitTests(run) {
       await parsePlanImportFile(Buffer.from(csv, 'utf8'), '.csv', []);
     } catch (err) { errMsg = err.message; }
     assert(errMsg && errMsg.includes('Tháng'), `expected a missing-month-column error, got: ${errMsg}`);
+  });
+
+  // Chống trùng lặp (đợt 10/2026) — route NÀY đọc được trainingPlans đã có sẵn thật (khác Danh Mục Đầu
+  // Tư/Danh Sách Công Việc Vận Hành, không có sourceId ở bước parse) nên tự tính được duplicateExisting
+  // THẬT ở server, không cần client tự so thêm.
+  await run('[parser] 2 dòng cùng Tháng+Chương Trình+Đơn Vị -> dòng 2 duplicateInFile; existingPlanKeys() so đúng với trainingPlans đã có (qua courseId tra ngược tên) -> duplicateExisting', async () => {
+    const courses = [{ id: 42, name: 'Kỹ Năng Bán Hàng Cơ Bản' }, { id: 43, name: 'Không Tên Nào Khớp' }];
+    const csv = [
+      'Tháng,Chương Trình,Đơn Vị,Đối Tượng,Số Lớp,Số Học Viên,Thời Lượng',
+      '2026-09,Kỹ Năng Bán Hàng Cơ Bản,Phòng Kinh Doanh,Nhân viên mới,2,40,16',
+      '2026-09,  kỹ năng   bán hàng cơ bản , Phòng Kinh Doanh ,Ca khác,1,10,8'
+    ].join('\n');
+    const itemsNoExisting = await parsePlanImportFile(Buffer.from(csv, 'utf8'), '.csv', courses);
+    assertEqual(itemsNoExisting[0].duplicateInFile, false, 'dòng đầu không trùng ai trong file');
+    assertEqual(itemsNoExisting[1].duplicateInFile, true, 'dòng 2 cùng Tháng+Chương Trình (chuẩn hoá)+Đơn Vị với dòng 1 phải bị đánh dấu duplicateInFile');
+    assertEqual(itemsNoExisting[0].duplicateExisting, false, 'chưa truyền existingKeys -> không có gì để so');
+
+    // existingPlanKeys(): bản ghi ĐÃ CÓ chỉ lưu courseId (không lưu lại courseName dạng chữ tự do) nên
+    // phải tra ngược tên qua courses trước khi ghép khoá — bản ghi courseId=null bị BỎ QUA (không đủ dữ
+    // liệu đáng tin để so, xem chú thích existingPlanKeys()).
+    const existingPlans = [
+      { id: 1, month: '2026-09', courseId: 42, targetDept: 'Phòng Kinh Doanh' },
+      { id: 2, month: '2026-10', courseId: null, targetDept: 'Phòng Kinh Doanh' } // không gắn chương trình -> bị bỏ qua khỏi keys
+    ];
+    const keys = existingPlanKeys(existingPlans, courses);
+    assertEqual(keys.length, 1, 'chỉ bản ghi đã gắn đúng 1 chương trình có sẵn mới tạo được khoá so trùng');
+    const itemsWithExisting = await parsePlanImportFile(Buffer.from(csv, 'utf8'), '.csv', courses, keys);
+    assertEqual(itemsWithExisting[0].duplicateExisting, true, 'dòng đầu (2026-09, đúng chương trình 42, đúng đơn vị) phải khớp bản ghi đã có');
+    assertEqual(itemsWithExisting[1].duplicateExisting, true, 'dòng 2 cũng cùng khoá (khác hoa/thường+khoảng trắng) nên cũng phải khớp');
   });
 }
 

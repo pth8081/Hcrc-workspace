@@ -13,6 +13,7 @@
 const ExcelJS = require('exceljs');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -90,6 +91,15 @@ function parseAmount(raw) {
 
 const MAX_ESTIMATE_IMPORT_ROWS = 500;
 
+// Khoá so trùng: Nội Dung — route đọc file này KHÔNG có sourceId cụ thể (xem chú thích "Không có
+// sourceId cụ thể..." ở routes/operationImport.js) nên KHÔNG lấy được danh sách hạng mục đang có sẵn của
+// ĐÚNG hồ sơ đang sửa; ở đây CHỈ đánh dấu duplicateInFile (trùng ngay trong file) — client tự tính thêm
+// duplicateExisting bằng cách so với bảng operationEstimateItems đang hiển thị trên màn (xem
+// onOperationEstimateImportFileChange() ở module-vanhanh.js).
+function estimateItemDedupKey(item) {
+  return normalizeDedupKey(item.content);
+}
+
 // Trả về mảng {content, description, amount, note} — CHƯA lưu gì, client vẫn phải bấm "Lưu Danh Mục Đầu
 // Tư" như bình thường (đi qua đúng submitOperationEstimate(), giữ nguyên toàn bộ validate/quyền hiện
 // có) — route này CHỈ đọc/trả JSON, cùng nguyên tắc routes/adminExport.js route (2)/(3).
@@ -119,7 +129,7 @@ async function parseOperationEstimateImportXlsx(buffer) {
 
   if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_ESTIMATE_IMPORT_ROWS} hạng mục/lần)`);
   if (!rows.length) throw new HttpError(400, 'Không đọc được hạng mục hợp lệ nào từ file (thiếu cột Nội Dung)');
-  return rows;
+  return markDuplicateItems(rows, estimateItemDedupKey, []);
 }
 
 // ================= Danh Sách Công Việc (operationWorkItems, CHỈ công việc GỐC) =================
@@ -148,6 +158,14 @@ async function buildOperationWorkItemTemplateWorkbook() {
 }
 
 const MAX_WORKITEM_IMPORT_ROWS = 300;
+
+// Khoá so trùng: Tên Công Việc — cùng lý do estimateItemDedupKey() ở trên (route đọc file này cũng KHÔNG
+// có sourceId cụ thể), CHỈ đánh dấu duplicateInFile ở đây; client tự tính duplicateExisting bằng cách so
+// với danh sách công việc GỐC (parentWorkItemId null) đang tải của ĐÚNG hồ sơ đang mở (xem
+// onOperationWorkItemImportFileChange() ở module-vanhanh.js).
+function workItemDedupKey(item) {
+  return normalizeDedupKey(item.title);
+}
 
 // Trả về mảng {title, description, assignedTo: string[], acceptorUsername, deadline} — CHƯA tạo gì.
 // Client tự đối chiếu assignedTo/acceptorUsername với DB.users đang active để cảnh báo TRƯỚC (UX), rồi
@@ -183,7 +201,7 @@ async function parseOperationWorkItemImportXlsx(buffer) {
 
   if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_WORKITEM_IMPORT_ROWS} công việc/lần)`);
   if (!rows.length) throw new HttpError(400, 'Không đọc được công việc hợp lệ nào từ file (thiếu cột Tên Công Việc)');
-  return rows;
+  return markDuplicateItems(rows, workItemDedupKey, []);
 }
 
 module.exports = {

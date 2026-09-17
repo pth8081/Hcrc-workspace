@@ -1271,10 +1271,23 @@ async function onTrainingPlanImportFileChange(event) {
     const res = await fetch('/api/training/parse-plan-import', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // duplicateInFile/duplicateExisting (lib/importDedup.js, gắn sẵn ở server — route NÀY đọc được đúng
+    // trainingPlans đã có nên tự tính được cả 2 cờ thật, KHÔNG cần client tự so thêm như Danh Mục Đầu
+    // Tư/Danh Sách Công Việc Vận Hành). Mặc định BỎ CHỌN checkbox "Nhập dòng này" cho dòng nghi trùng
+    // (an toàn hơn), người dùng tự tick lại nếu vẫn muốn thêm — mirror ĐÚNG khuôn Budget Lines.
+    data.items.forEach((it, idx) => { it._idx = idx; it.include = it.monthValid && !it.duplicateInFile && !it.duplicateExisting; });
     trainingPlanImportPreviewItems = data.items;
     const validCount = data.items.filter(it => it.monthValid).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ.`;
-    document.getElementById('tpImportPreviewBody').innerHTML = data.items.map(it => `<tr>
+    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ`
+      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.');
+    document.getElementById('tpImportPreviewBody').innerHTML = data.items.map((it) => {
+      const dupNote = it.duplicateInFile ? '⚠️ Trùng dòng khác trong file này'
+        : (it.duplicateExisting ? '⚠️ Trùng kế hoạch đã có (cùng Tháng/Chương trình/Đơn vị)' : '');
+      return `<tr class="${dupNote ? 'bg-amber-50' : ''}">
+      <td class="p-1">${it.monthValid
+        ? `<input type="checkbox" data-op-change="toggleTrainingPlanImportRow" data-arg0="${it._idx}" ${it.include ? 'checked' : ''}>`
+        : '<span class="text-red-600">⛔</span>'}</td>
       <td class="p-1">${escapeHtml(it.month)}</td>
       <td class="p-1">${escapeHtml(it.courseName || '')}${it.courseName ? (it.courseMatched ? ' <span class="text-emerald-600">✅ khớp</span>' : ' <span class="text-amber-600">⚠️ không khớp</span>') : ''}</td>
       <td class="p-1">${escapeHtml(it.targetDept || '')}</td>
@@ -1282,8 +1295,9 @@ async function onTrainingPlanImportFileChange(event) {
       <td class="p-1 text-center">${it.plannedClasses}</td>
       <td class="p-1 text-center">${it.plannedTrainees}</td>
       <td class="p-1 text-center">${it.plannedHours}</td>
-      <td class="p-1">${it.monthValid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : '<span class="text-red-600">⛔ Tháng không hợp lệ</span>'}</td>
-    </tr>`).join('');
+      <td class="p-1">${it.monthValid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : '<span class="text-red-600">⛔ Tháng không hợp lệ</span>'}${dupNote ? ` <span class="text-amber-700">${dupNote}</span>` : ''}</td>
+    </tr>`;
+    }).join('');
     document.getElementById('tpImportPreviewWrap').classList.remove('hidden');
     if (validCount > 0) document.getElementById('tpImportConfirmBtn').classList.remove('hidden');
   } catch (err) {
@@ -1292,9 +1306,17 @@ async function onTrainingPlanImportFileChange(event) {
   }
 }
 
+// Tick/bỏ tick 1 dòng xem trước trước khi xác nhận nhập (VD dòng bị đánh dấu nghi trùng, người dùng vẫn
+// muốn thêm) — chỉ đổi cờ include, không render lại toàn bộ bảng, cùng khuôn toggleBudgetLineImportRow().
+function toggleTrainingPlanImportRow(idxStr) {
+  const idx = Number(idxStr);
+  const it = trainingPlanImportPreviewItems.find(x => x._idx === idx);
+  if (it) it.include = !it.include;
+}
+
 async function confirmTrainingPlanImport() {
-  const validItems = trainingPlanImportPreviewItems.filter(it => it.monthValid);
-  if (!validItems.length) return alert('Không có dòng hợp lệ nào để nhập.');
+  const validItems = trainingPlanImportPreviewItems.filter(it => it.monthValid && it.include);
+  if (!validItems.length) return alert('Chưa chọn dòng nào để nhập.');
   let successCount = 0;
   const failed = [];
   for (const it of validItems) {

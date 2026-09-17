@@ -8,6 +8,7 @@ const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu t�
 const { parse: parseCsv } = require('csv-parse/sync');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -144,6 +145,31 @@ function rowToPlanItem(cells, cols, courses) {
   };
 }
 
+// Khoá so trùng: Tháng+Chương Trình+Đơn Vị — 1 dòng kế hoạch nghĩa là "chương trình NÀY, dự kiến mở
+// THÁNG này, cho ĐƠN VỊ/đối tượng này", trùng khi cả 3 giống nhau. Dùng NGUYÊN VĂN courseName đã gõ
+// trong file (không ép phải courseMatched) để so trùng NGAY TRONG file — 2 dòng gõ cùng 1 tên chương
+// trình (dù có khớp được danh mục hay không) trong cùng tháng/đơn vị vẫn coi là nghi trùng.
+function planItemDedupKey(item) {
+  return normalizeDedupKey(item.month, item.courseName, item.targetDept);
+}
+
+// existingKeys so với trainingPlans ĐÃ CÓ (do CALLER đọc sẵn qua getAllForCollection('trainingPlans'),
+// xem routes/trainingPlanImport.js) — bản ghi đã lưu CHỈ có courseId (không lưu lại courseName dạng chữ
+// tự do, xem lib/createValidation.js normalizeTrainingPlanFields()), nên phải tra ngược tên chương trình
+// qua courseId trước khi ghép khoá cho ĐÚNG cùng công thức với planItemDedupKey(). Bản ghi có
+// courseId=null (kế hoạch không gắn đúng 1 chương trình có sẵn) BỎ QUA khỏi existingKeys — không có tên
+// chữ đáng tin cậy để so, tránh đánh dấu nhầm.
+function existingPlanKeys(existingPlans, courses) {
+  const courseNameById = new Map((courses || []).map(c => [c.id, c.name]));
+  return (existingPlans || [])
+    .map(p => {
+      const courseName = p.courseId != null ? courseNameById.get(p.courseId) : null;
+      if (!courseName) return null;
+      return normalizeDedupKey(p.month, courseName, p.targetDept);
+    })
+    .filter(Boolean);
+}
+
 // Chỉ còn nhánh CSV dùng hàm này (CSV không nén nên không có nguy cơ "zip bomb"); nhánh Excel đọc theo
 // dòng ở parsePlanImportExcelBuffer() bên dưới với ĐÚNG các bước xử lý này.
 function rowsToPlanItems(rows, courses) {
@@ -202,9 +228,13 @@ function parsePlanImportCsvBuffer(buffer, courses) {
 
 // ext: '.xlsx' | '.xls' | '.csv' (đã kiểm tra hợp lệ ở multer fileFilter trước khi gọi hàm này, xem
 // routes/trainingPlanImport.js). courses: DB.trainingCourses thật do CALLER đọc sẵn (đối chiếu tên).
-async function parsePlanImportFile(buffer, ext, courses) {
-  if (ext === '.csv') return parsePlanImportCsvBuffer(buffer, courses);
-  return parsePlanImportExcelBuffer(buffer, courses);
+// existingKeys: Set/mảng khoá trainingPlans ĐÃ CÓ (existingPlanKeys(), CALLER tự tính từ
+// getAllForCollection('trainingPlans')) — gắn cờ duplicateInFile/duplicateExisting cho từng dòng
+// (markDuplicateItems(), lib/importDedup.js) CHỈ CẢNH BÁO, không tự loại dòng nào, cùng chính sách chung
+// đã chốt với người dùng (10/2026) ở mọi chỗ dùng helper này.
+async function parsePlanImportFile(buffer, ext, courses, existingKeys) {
+  const items = ext === '.csv' ? parsePlanImportCsvBuffer(buffer, courses) : await parsePlanImportExcelBuffer(buffer, courses);
+  return markDuplicateItems(items, planItemDedupKey, existingKeys || []);
 }
 
-module.exports = { buildPlanImportTemplateWorkbook, parsePlanImportFile };
+module.exports = { buildPlanImportTemplateWorkbook, parsePlanImportFile, existingPlanKeys };

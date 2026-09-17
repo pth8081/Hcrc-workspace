@@ -848,6 +848,25 @@
           </div>
         </div>
         <div id="operationEstimateImportStatus" class="text-xs"></div>
+        <!-- Xem trước + chọn dòng trước khi gộp vào bảng (chống trùng lặp, đợt 10/2026) — mirror ĐÚNG
+             khuôn #checklistImportPreviewWrap (module-checklist.js): server chỉ đánh dấu duplicateInFile
+             (không có sourceId cụ thể ở bước đọc file, xem chú thích routes/operationImport.js), client tự
+             tính thêm duplicateExisting so với CHÍNH bảng operationEstimateItems đang sửa trên màn. -->
+        <div id="operationEstimateImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 sticky top-0">
+              <tr>
+                <th class="p-1 text-left w-10">Nhập</th>
+                <th class="p-1 text-left">Nội Dung</th>
+                <th class="p-1 text-left">Mô Tả</th>
+                <th class="p-1 text-right">Chi Phí</th>
+                <th class="p-1 text-left">Ghi Chú</th>
+              </tr>
+            </thead>
+            <tbody id="operationEstimateImportPreviewBody"></tbody>
+          </table>
+        </div>
+        <button type="button" id="operationEstimateImportConfirmBtn" data-op="confirmOperationEstimateImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Gộp Các Hạng Mục Được Chọn Vào Bảng</button>
         <div class="border-t pt-3">
           <div class="font-semibold text-xs mb-1">Lịch sử xử lý:</div>
           <div id="operationEstimateModalHistory" class="space-y-2 max-h-40 overflow-y-auto"></div>

@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { buildPlanImportTemplateWorkbook, parsePlanImportFile } = require('../lib/trainingPlanImport');
+const { buildPlanImportTemplateWorkbook, parsePlanImportFile, existingPlanKeys } = require('../lib/trainingPlanImport');
 const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
@@ -82,6 +82,9 @@ router.get('/plan-template', requireTrainingManage, async (req, res) => {
 // trainingCourses thật để trả về xem trước (khớp được chương trình nào, dòng nào thiếu/sai tháng...) —
 // HR/Đào Tạo xác nhận tạo thật ở bước sau qua POST /api/create/trainingPlans cho TỪNG dòng (route đó tự
 // kiểm tra lại toàn bộ, không tin nguyên danh sách "đã xem trước" ở bước này).
+// Chống trùng lặp (đợt 10/2026): route này CÓ đọc được trainingPlans đã có sẵn (khác Danh Mục Đầu Tư/
+// Danh Sách Công Việc Vận Hành — 2 chỗ đó không có sourceId cụ thể ở bước parse) nên tự tính được
+// existingPlanKeys() thật, gắn cờ duplicateExisting NGAY tại server, client không cần tự so thêm.
 router.post('/parse-plan-import', uploadRateLimiter, requireTrainingManage, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
@@ -100,7 +103,8 @@ router.post('/parse-plan-import', uploadRateLimiter, requireTrainingManage, (req
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
       const courses = await getAllForCollection('trainingCourses');
-      const items = await parsePlanImportFile(buffer, ext, courses);
+      const existingPlans = await getAllForCollection('trainingPlans');
+      const items = await parsePlanImportFile(buffer, ext, courses, existingPlanKeys(existingPlans, courses));
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/training/parse-plan-import');
