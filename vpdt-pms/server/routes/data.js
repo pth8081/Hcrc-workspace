@@ -676,6 +676,39 @@ function isApproverForAnyOperationOrderTier(user, data) {
 // getForCollectionByDeptCached, nhiều người cùng phòng ban vẫn dùng chung 1 lượt đọc) + 1 lượt riêng theo
 // AssignedDriverUsername cho nhánh (2), rồi gộp + khử trùng theo id. carView.all (số ít) vẫn tải
 // company-wide như admin.
+// paymentRequests: canViewPaymentRequest() (lib/recordViewScope.js) giờ có thêm nhánh "đang là người
+// duyệt theo paymentDeptWorkflows" (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026 — trước đây module này là
+// DUY NHẤT trong cả cụm dept-workflow KHÔNG có nhánh này, khiến approver khác phòng ban với đề nghị
+// không bao giờ tải được hồ sơ cần duyệt) — mirror ĐÚNG khuôn computeCarRegsApproverDepts()/
+// loadCarRegsScoped() ở trên: gộp {phòng ban mình} ∪ {phòng ban mình đang là approver theo
+// paymentDeptWorkflows} rồi tải riêng từng phòng ban trong tập đó, admin/paymentManage vẫn tải
+// company-wide như cũ.
+function computePaymentRequestsApproverDepts(user, data) {
+  const depts = [];
+  for (const [dept, wfConfig] of Object.entries(data.paymentDeptWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(wfConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user?.username) : list === user?.username);
+    if (isApproverHere) depts.push(dept);
+  }
+  return depts;
+}
+async function loadPaymentRequestsScoped(user, data) {
+  if (user?.perms?.admin || user?.perms?.paymentManage) {
+    return getAllForCollectionCached('paymentRequests');
+  }
+  const depts = new Set();
+  if (user?.dept) depts.add(user.dept);
+  computePaymentRequestsApproverDepts(user, data).forEach(d => depts.add(d));
+
+  const byId = new Map();
+  await Promise.all([...depts].map(async (dept) => {
+    const items = await getForCollectionByDeptCached('paymentRequests', dept);
+    for (const r of items) byId.set(r.id, r);
+  }));
+  return [...byId.values()];
+}
+
 function computeCarRegsApproverDepts(user, data) {
   const depts = [];
   for (const [dept, wfConfig] of Object.entries(data.carDeptWorkflows || {})) {
@@ -1029,15 +1062,14 @@ router.get('/', async (req, res) => {
     // nối tiếp nhau, cộng dồn độ trễ mạng/DB của từng lượt (đây là nguyên nhân chính khiến lần tải dữ
     // liệu đầu tiên sau khi đăng nhập mất nhiều giây) — các collection này độc lập nhau, pool kết nối
     // (db.js, mặc định 20) thừa sức phục vụ song song, không có lý do gì phải chờ tuần tự.
-    // Bước 8b — paymentRequests tách riêng khỏi vòng lặp tải chung ở dưới: canViewPaymentRequest()
-    // (lib/recordViewScope.js) chỉ có ĐÚNG 2 nhánh phẳng — admin/paymentManage xem HẾT, còn lại CHỈ đúng
-    // phòng ban mình, không có quản lý cấp trên/cấp dưới hay ngoại lệ nào khác. Với phần lớn người dùng
-    // (không có paymentManage), tải qua SQL where.Dept ngay từ đầu (getForCollectionByDeptCached(), Bước
-    // 7d) thay vì luôn tải TOÀN BỘ collection company-wide rồi mới lọc bớt ở Node — giảm đúng phần việc
-    // nặng nhất đã đo được ở load test (dựng lại + parse JSON + lọc quyền cho khối dữ liệu ngày càng
-    // lớn, MỖI request). admin/paymentManage (số ít) vẫn tải như cũ (dùng chung getAllForCollectionCached,
-    // không đổi). filterPaymentRequestsForUser() bên dưới VẪN được áp lại y hệt trước — SQL chỉ thu hẹp,
-    // không thay cho lớp chốt quyền xem thật.
+    // Bước 8b — paymentRequests tách riêng khỏi vòng lặp tải chung ở dưới: loadPaymentRequestsScoped()
+    // (định nghĩa cùng khuôn computeCarRegsApproverDepts()/loadCarRegsScoped() ở trên) tải qua SQL
+    // where.Dept cho {phòng ban mình} ∪ {phòng ban đang là approver theo paymentDeptWorkflows} — LỖI ĐÃ
+    // VÁ (đợt rà soát chuyên sâu 10/2026): trước đây chỉ tải đúng 1 phòng ban CHÍNH MÌNH, bỏ sót hẳn
+    // trường hợp approver khác phòng ban với đề nghị (canViewPaymentRequest() lúc đó cũng chưa có nhánh
+    // approver nên "khớp" nhau về mặt bug — nay cả 2 đã đồng bộ sửa cùng lúc). admin/paymentManage (số
+    // ít) vẫn tải company-wide như cũ. filterPaymentRequestsForUser() bên dưới VẪN được áp lại y hệt
+    // trước — SQL chỉ thu hẹp, không thay cho lớp chốt quyền xem thật.
     // Bước 8c — trainingDocumentProgress cùng lý do: filterTrainingDocumentProgressForUser() chỉ có
     // đúng 2 nhánh phẳng — canManageTraining (admin/trainingManage) xem HẾT, còn lại CHỈ đúng tiến độ của
     // CHÍNH MÌNH (p.username === user.username, không có OR nào khác) — tải qua where.Username ngay ở
@@ -1054,15 +1086,12 @@ router.get('/', async (req, res) => {
     // employeeProfiles). Phục vụ riêng qua routes/purchasing.js, gác đúng canManageVendors/
     // canManageTerms/canViewReport (lib/vendorRebate.js) thay vì để lọt company-wide qua đường này.
     const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations');
-    const canSeeAllPaymentRequests = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.paymentManage);
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
     const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, budgetLinesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
-      canSeeAllPaymentRequests
-        ? getAllForCollectionCached('paymentRequests')
-        : getForCollectionByDeptCached('paymentRequests', req.freshUser?.dept),
+      loadPaymentRequestsScoped(req.freshUser, data),
       canManageTrainingFlat
         ? getAllForCollectionCached('trainingDocumentProgress')
         : getForCollectionByUsernameCached('trainingDocumentProgress', req.freshUser?.username),
@@ -1104,8 +1133,8 @@ router.get('/', async (req, res) => {
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
     // lib/recordViewScope.js) — ai gọi thẳng GET /api/data cũng không còn đọc được hồ sơ ngoài phạm vi
     // phòng ban/quyền xem của mình nữa.
-    if (data.docs) data.docs = await filterDocsForUser(data.docs, req.freshUser);
-    if (data.submissions) data.submissions = await filterSubmissionsForUser(data.submissions, req.freshUser);
+    if (data.docs) data.docs = filterDocsForUser(data.docs, req.freshUser, data);
+    if (data.submissions) data.submissions = filterSubmissionsForUser(data.submissions, req.freshUser, data);
     if (data.internalPosts) data.internalPosts = filterInternalPostsForUser(data.internalPosts, req.freshUser);
     if (data.reportPeriods) data.reportPeriods = sanitizeReportPeriodsForUser(data.reportPeriods, req.freshUser);
     // trainingTests: đáp án đúng (correctOptionIds) chỉ để người quản lý đào tạo thấy — xem lý do đầy
@@ -1199,7 +1228,7 @@ router.get('/', async (req, res) => {
     if (data.itServiceRenewals) data.itServiceRenewals = filterItServiceRenewalsForUser(data.itServiceRenewals, req.freshUser);
     // paymentRequests (Tổng Hợp — Thanh Toán): collection TÀI CHÍNH duy nhất còn lại chưa lọc lại ở
     // server — xem lib/recordViewScope.js canViewPaymentRequest().
-    if (data.paymentRequests) data.paymentRequests = filterPaymentRequestsForUser(data.paymentRequests, req.freshUser);
+    if (data.paymentRequests) data.paymentRequests = filterPaymentRequestsForUser(data.paymentRequests, req.freshUser, data);
     // hrFeedback (Nhân Sự — "HCRC Đồng Hành"): RIÊNG TƯ hơn MỌI collection ở trên — chỉ chính người
     // hỏi + bộ phận Nhân Sự đọc được, không có nhánh phòng ban nào. Lọc ngay tại đây là chỗ DUY NHẤT
     // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)

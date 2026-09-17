@@ -85,6 +85,16 @@ function computeMyPendingApprovalKeys(user, appData) {
   pushDeptWorkflowKeys(keys, 'contracts', contractsNonAddendum, appData, user, 'contract');
   pushDeptWorkflowKeys(keys, 'contractsSignedFile', contractsNonAddendum, appData, user, 'contractSigned');
   pushDeptWorkflowKeys(keys, 'operationOrders', appData.operationOrders, appData, user, 'operationOrder');
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): paymentRequests PENDING trước đây chỉ đẩy khoá qua
+  // cờ phẳng canManagePaymentRequests() (mục "2) Module theo 1 QUYỀN PHẲNG" bên dưới) — sai 2 chiều:
+  // (a) approver được cấu hình RIÊNG theo bước ở paymentDeptWorkflows nhưng KHÔNG có cờ phẳng
+  // paymentManage sẽ KHÔNG BAO GIỜ nhận được khoá "payment:<id>" (không có thông báo "hồ sơ mới cần
+  // duyệt"); (b) ngược lại, ai có paymentManage sẽ nhận khoá cho MỌI đề nghị company-wide kể cả khi
+  // KHÔNG được liệt kê ở đúng bước duyệt của phòng ban đó — bấm vào sẽ bị 403 (thông báo giả). Client
+  // (public/js/core-approvalhub.js, dòng ~244-256) đã tách đúng từ trước: PENDING đi qua
+  // addDeptWorkflowItems() (mirror pushDeptWorkflowKeys() ở đây), CHỈ NEED_INFO còn giữ nguyên cờ phẳng
+  // canManagePaymentRequestsClient() (xem nhánh giữ nguyên bên dưới, mục 2) — nay đồng bộ lại server.
+  pushDeptWorkflowKeys(keys, 'paymentRequests', appData.paymentRequests, appData, user, 'payment');
   // operationStoreOpeningEstimate/operationRepairEstimate ĐÃ XOÁ khỏi MODULE_CONFIGS (lib/workflowEngine.js)
   // — chủ ứng dụng xác nhận Vận Hành > Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả Dự toán. Khớp việc xoá
   // 2 lời gọi addDeptWorkflowItems() tương ứng ở getMyPendingApprovals() (core-approvalhub.js).
@@ -107,8 +117,12 @@ function computeMyPendingApprovalKeys(user, appData) {
   if (canApproveLicense(user)) {
     (appData.licenses || []).filter(l => l.status === 'PENDING').forEach(l => keys.push(`license:${l.id}`));
   }
+  // NEED_INFO (yêu cầu bổ sung, KHÔNG đi qua applyWorkflowAction()/pushDeptWorkflowKeys() — xem
+  // lib/recordActions.js requestPaymentInfo()) giữ nguyên cờ phẳng canManagePaymentRequests(), khớp
+  // đúng canManagePaymentRequestsClient() ở core-approvalhub.js — quyết định đã chốt với người dùng,
+  // không đổi. PENDING đã chuyển sang pushDeptWorkflowKeys() ở mục 1) phía trên.
   if (canManagePaymentRequests(user)) {
-    (appData.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO')
+    (appData.paymentRequests || []).filter(pr => pr.status === 'NEED_INFO')
       .forEach(pr => keys.push(`payment:${pr.id}`));
   }
   // "Từ chối khẩn cấp" (Phê Duyệt Giá) — quyền phẳng itPriceEmergencyRejectApproveWholesale/Retail

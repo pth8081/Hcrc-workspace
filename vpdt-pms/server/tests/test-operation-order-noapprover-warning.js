@@ -1,0 +1,169 @@
+// server/tests/test-operation-order-noapprover-warning.js
+//
+// Regression test cho lỗi ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): tác dụng phụ của bản
+// vá "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (filterOperationOrderStoreApprovers(),
+// lib/workflowEngine.js) — lọc approver theo đúng siêu thị (item.dept) có thể vô tình lọc RỖNG danh
+// sách duyệt bước 1 nếu admin cấu hình approver cho mức giá trị đó nhưng KHÔNG ai trong số họ có
+// dept/secondaryPositions khớp đúng siêu thị vừa đặt hàng — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng
+// không một người duyệt "thường" nào thấy được để xử lý (chỉ admin bypass mới duyệt được) — trước đây
+// KHÔNG có cảnh báo gì, đơn "treo" âm thầm.
+// Đã vá: routes/create.js sau khi tạo THÀNH CÔNG 1 operationOrders STORE, tự tính lại danh sách approver
+// bước 1 (dùng đúng MODULE_CONFIGS.operationOrders.resolveWfConfig() — cùng hàm applyWorkflowAction()
+// dùng khi duyệt, không viết lại luật riêng) — nếu rỗng thì trả kèm `warning` cho client + ghi 1 dòng
+// Nhật Ký Hệ Thống mức WARNING, KHÔNG chặn việc tạo đơn.
+//
+// Test này gọi thẳng router THẬT (routes/create.js) với lib/appData/lib/recordStore/lib/systemLogStore
+// đều giả lập tối thiểu.
+//
+// Chạy: node server/tests/test-operation-order-noapprover-warning.js
+'use strict';
+
+const http = require('http');
+const path = require('path');
+
+function stubModule(relPath, exportsObj) {
+  const full = require.resolve(path.join(__dirname, '..', relPath));
+  require.cache[full] = {
+    id: full, filename: full, path: path.dirname(full),
+    loaded: true, exports: exportsObj, children: [], paths: []
+  };
+  return exportsObj;
+}
+
+let pass = 0, fail = 0;
+function check(name, cond, detail) {
+  if (cond) { pass++; console.log(`PASS: ${name}`); }
+  else { fail++; console.log(`FAIL: ${name}${detail !== undefined ? ' -- got: ' + JSON.stringify(detail) : ''}`); }
+}
+
+// gd.a: Giám Đốc Siêu Thị A — CHỈ được cấu hình làm approver tier LT10M, KHÔNG hề gắn dept/secondaryPositions
+// nào khớp "Siêu Thị B" -> đơn STORE của Siêu Thị B ở mức LT10M sẽ lọc approver về RỖNG (kịch bản lỗi).
+const GD_A = { username: 'gd.a', name: 'Giám Đốc Siêu Thị A', dept: 'Siêu Thị A', perms: { operationOrderCreate: true }, active: true };
+// gd.b: đúng dept Siêu Thị B, CŨNG được cấu hình approver tier LT10M -> lọc ra ĐÚNG 1 người, không rỗng.
+const GD_B = { username: 'gd.b', name: 'Giám Đốc Siêu Thị B', dept: 'Siêu Thị B', perms: { operationOrderCreate: true }, active: true };
+const CREATOR_B = { username: 'nv.b', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu Thị B', perms: { operationOrderCreate: true }, active: true };
+const USERS = [GD_A, GD_B, CREATOR_B];
+
+const APP_DATA = {
+  users: USERS,
+  workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  operationOrderStoreTierWorkflows: {
+    LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [GD_A.username] } }
+  },
+  operationOrderHOTierWorkflows: {}
+};
+
+const systemLogEntries = [];
+stubModule('lib/appData', {
+  getAllAppData: async () => JSON.parse(JSON.stringify(APP_DATA)),
+  withLockedAppDataValue: async (key, fn) => fn([])
+});
+stubModule('lib/systemLogStore', {
+  insertSystemLog: async (entry) => { systemLogEntries.push(entry); }
+});
+
+let RECORDS = { operationOrders: [] };
+function resetRecords() { RECORDS = { operationOrders: [] }; }
+
+stubModule('lib/recordStore', {
+  MIGRATED_COLLECTIONS: new Set(['operationOrders']),
+  getAllForCollection: async (c) => (RECORDS[c] || []).slice(),
+  getTrashItems: async () => [],
+  createForCollection: async (c, builderFn) => {
+    const record = await builderFn((RECORDS[c] || []).slice());
+    RECORDS[c].push(record);
+    return record;
+  },
+  createForCollectionSerialized: async (c, lockKey, builderFn) => {
+    const record = await builderFn((RECORDS[c] || []).slice());
+    RECORDS[c].push(record);
+    return record;
+  },
+  withAppLock: async (key, fn) => fn()
+});
+stubModule('lib/auth', {
+  requireAuth: (req, res, next) => {
+    const username = req.headers['x-test-user'];
+    const fresh = USERS.find((u) => u.username === username);
+    if (!fresh) return res.status(401).json({ error: 'Chưa đăng nhập' });
+    req.user = { username: fresh.username, name: fresh.name };
+    req.freshUser = fresh;
+    req.allUsers = USERS;
+    next();
+  },
+  blockIfMustChangePassword: (req, res, next) => next()
+});
+
+const express = require('express');
+const createRoutes = require('../routes/create');
+
+async function startApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/create', createRoutes);
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(app);
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
+
+async function api(server, method, urlPath, body, asUser) {
+  const port = server.address().port;
+  const res = await fetch(`http://127.0.0.1:${port}${urlPath}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'x-test-user': asUser.username },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  let payload = null;
+  try { payload = await res.json(); } catch (e) { payload = null; }
+  return { status: res.status, body: payload };
+}
+
+function orderPayload(overrides) {
+  return Object.assign({
+    title: 'Đặt hàng NCC cảnh báo approver', orderLocationType: 'STORE',
+    items: [{ name: 'Hàng A', qty: 1, unitPrice: 1000000 }] // amount = 1tr -> tier LT10M
+  }, overrides);
+}
+
+async function main() {
+  const server = await startApp();
+  try {
+    // ===== Kịch bản 1: đơn STORE của Siêu Thị B — approver duy nhất được cấu hình (gd.a) không khớp
+    // dept nào của Siêu Thị B -> filterOperationOrderStoreApprovers() lọc RỖNG -> PHẢI có warning. =====
+    resetRecords();
+    systemLogEntries.length = 0;
+    const r1 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ }), CREATOR_B);
+    check('Tạo đơn vẫn THÀNH CÔNG dù approver lọc rỗng (KHÔNG chặn tạo)', r1.status === 200, r1.body);
+    check('Response PHẢI kèm warning đúng nội dung "chưa có người duyệt"',
+      typeof r1.body?.warning === 'string' && /chưa có người duyệt/i.test(r1.body.warning), r1.body);
+    check('Phải ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING (CREATE_NO_APPROVER_WARNING)',
+      systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING' && systemLogEntries[0].actionType === 'CREATE_NO_APPROVER_WARNING',
+      systemLogEntries);
+
+    // ===== Kịch bản 2: đơn STORE của Siêu Thị A — approver gd.a khớp đúng dept -> KHÔNG warning. =====
+    resetRecords();
+    systemLogEntries.length = 0;
+    const gdACreator = { ...GD_A }; // gd.a tự tạo đơn cho chính siêu thị mình
+    const r2 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ }), gdACreator);
+    check('Đơn Siêu Thị A (approver khớp dept) -> KHÔNG có warning',
+      r2.status === 200 && (r2.body?.warning === null || r2.body?.warning === undefined), r2.body);
+    check('KHÔNG ghi Nhật Ký Hệ Thống nào khi approver hợp lệ', systemLogEntries.length === 0, systemLogEntries);
+
+    // ===== Kịch bản 3: đơn HO (không áp dụng filter theo siêu thị) -> KHÔNG bao giờ warning, kể cả khi
+    // approver không có dept khớp gì (HO vốn không có khái niệm "siêu thị"). =====
+    resetRecords();
+    systemLogEntries.length = 0;
+    const r3 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ orderLocationType: 'HO' }), CREATOR_B);
+    check('Đơn HO -> KHÔNG bao giờ có warning (filter chỉ áp dụng cho STORE)',
+      r3.status === 200 && (r3.body?.warning === null || r3.body?.warning === undefined), r3.body);
+  } finally {
+    server.close();
+  }
+
+  console.log(`\n==== ${pass}/${pass + fail} scenario(s) passed ====`);
+  process.exitCode = fail ? 1 : 0;
+}
+
+main().catch((e) => { console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });

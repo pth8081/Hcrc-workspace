@@ -658,6 +658,28 @@ async function main() {
     assertEqual(created.profileEditHistory[0].byName, 'Nhân Sự Trưởng', 'Ghi đúng tên người tạo');
   });
 
+  await run.run('createManualProfile(): LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026) — chặn CỨNG trùng CCCD/CMND, không còn chỉ advisory', () => {
+    const list = [employeeProfile.createManualProfile([], { nationalId: '079123456789', dateOfBirth: '1990-01-01' }, 'hr1', 'Nhân Sự')];
+
+    let threwDupActive = false;
+    try { employeeProfile.createManualProfile(list, { nationalId: '079123456789', dateOfBirth: '1991-02-02' }, 'hr1'); }
+    catch (e) { threwDupActive = true; assertEqual(e.status, 409, 'Phải trả đúng mã lỗi 409'); assertIncludes(e.message, '079123456789'); }
+    assertEqual(threwDupActive, true, 'Trùng CCCD với hồ sơ ACTIVE đang có phải bị chặn, không được tạo thêm hồ sơ thứ 2');
+    assertEqual(list.length, 1, 'Hồ sơ trùng bị chặn -> KHÔNG được lọt vào collection');
+
+    list[0].status = 'INACTIVE';
+    let threwDupInactive = false;
+    try { employeeProfile.createManualProfile(list, { nationalId: '079123456789', dateOfBirth: '1990-01-01' }, 'hr1'); }
+    catch (e) { threwDupInactive = true; assertIncludes(e.message, 'Tái Tuyển'); }
+    assertEqual(threwDupInactive, true, 'Trùng CCCD với hồ sơ INACTIVE cũng phải chặn — đúng luồng là Tái Tuyển (reactivateForRehire), không tạo hồ sơ mới mất lịch sử');
+
+    const noNationalId = employeeProfile.createManualProfile(list, { dateOfBirth: '2000-01-01' }, 'hr1');
+    assertEqual(!!noNationalId.employeeCode, true, 'Không nhập CCCD/CMND -> vẫn tạo bình thường (field tuỳ chọn, không có gì để đối chiếu)');
+
+    const otherNationalId = employeeProfile.createManualProfile(list, { nationalId: '079999999999', dateOfBirth: '2001-01-01' }, 'hr1');
+    assertEqual(otherNationalId.nationalId, '079999999999', 'CCCD KHÁC hẳn (không trùng ai) vẫn tạo bình thường');
+  });
+
   await run.run('applyProfileEdit(): chỉ ghi profileEditHistory (type=EDIT) khi field THỰC SỰ đổi giá trị, liệt kê đúng field đã đổi (9/2026)', () => {
     const profile = employeeProfile.defaultProfile('NV900');
     profile.bankName = 'Vietcombank';

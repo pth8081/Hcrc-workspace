@@ -8,7 +8,6 @@
 // Phủ đủ mọi collection có "xView" scope theo phòng ban: docs, submissions, contracts, carRegs,
 // officeReqs, meetings, meetingMinutes (internalPosts/reportPeriods/reportEntries dùng khuôn quyền
 // khác, xem các hàm riêng bên dưới).
-const { getAppDataValue } = require('./appData');
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3, workItemAssignees, isWorkItemAssignee } = require('./recordActions');
 const { HttpError } = require('./httpErrors');
@@ -104,16 +103,6 @@ function scopeAllows(user, scope, dept) {
   return !!(dept && Array.isArray(scope?.depts) && scope.depts.includes(dept));
 }
 
-// Khớp đúng cấu hình quy trình Tài liệu ở lib/workflowEngine.js MODULE_CONFIGS.docs
-// (flatWorkflowConfigToSteps(appData.deptWorkflows?.[doc.dept], appData)) — tài liệu, cũng như Văn Bản
-// Trình, đi qua quy trình duyệt theo BƯỚC/phòng ban, người được gán làm người duyệt (ở BẤT KỲ bước
-// nào trong quy trình, không chỉ đúng bước hiện tại — khớp isApproverForApproversMap() dùng chung ở
-// dưới) có thể không nằm trong viewDraftDepts/viewApprovedDepts của phòng ban đó.
-async function resolveDocApproversServer(doc) {
-  const deptWorkflows = await getAppDataValue('deptWorkflows');
-  return (deptWorkflows || {})[doc.dept]?.approvers || {};
-}
-
 // Khớp đúng khối lọc trong renderDocs() (public/index.html) — Xem Bản Nháp (PENDING/REJECTED) và Xem
 // Đã Duyệt (APPROVED) là 2 quyền TÁCH RIÊNG, không dùng chung scopeAllows (không tự cho phòng ban của
 // chính mình trừ khi nằm trong danh sách depts được cấp). Bổ sung nhánh "đang là người duyệt của quy
@@ -122,7 +111,20 @@ async function resolveDocApproversServer(doc) {
 // gọi thẳng GET /api/data vẫn KHÔNG đọc được tài liệu cần duyệt, dù giao diện (renderDocs() ở
 // index.html) chưa từng có logic tương đương để họ dựa vào — đây là lỗ hổng CHẶN NHẦM người có quyền
 // hợp pháp, khác các lỗ hổng "lộ dữ liệu" khác đã vá ở file này.
-async function canViewDoc(user, doc) {
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): nhánh "đang là người duyệt" ở trên trước đây tự đọc THẲNG
+// `deptWorkflows[doc.dept].approvers` (field TĨNH, qua hàm resolveDocApproversServer() đã gỡ) thay vì đi
+// qua MODULE_CONFIGS.docs.resolveWfConfig() như 5 module chị em còn lại (carRegs/officeReqs/contracts/
+// itPriceApprovals/budgetEntries) — khi admin cấu hình bước duyệt Tài Liệu theo "Theo vị trí" (POSITION
+// mode, xem lib/positionApprovers.js), approver hợp lệ theo cấu hình đó nằm ở `approversByPosition`,
+// KHÔNG nằm trong field `approvers` tĩnh (luôn rỗng ở bước đó) — nhánh cũ luôn trả false cho đúng người
+// có quyền duyệt thật, hồ sơ KHÔNG XUẤT HIỆN ở tab Tài Liệu lẫn Hộp Thư Phê Duyệt (bị lọc mất ngay từ
+// GET /api/data), kẹt vĩnh viễn không ai nhìn thấy để duyệt. Đổi sang gọi resolveWfConfig() (đã tự xử lý
+// đúng cả PEOPLE lẫn POSITION mode qua resolveStepApproverUsernames(), điểm tra cứu DUY NHẤT) — đồng thời
+// đổi hẳn sang ĐỒNG BỘ (không còn async) vì resolveWfConfig() không cần await, khớp đúng khuôn
+// canViewCarReg()/canViewOfficeReq()/canViewContract() ở trên (đều nhận appData qua tham số, không tự
+// getAppDataValue() riêng).
+function canViewDoc(user, doc, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (doc.uploader === user.username) return true;
@@ -131,32 +133,13 @@ async function canViewDoc(user, doc) {
   } else if (user.perms?.viewDraftAll || (user.perms?.viewDraftDepts || []).includes(doc.dept)) {
     return true;
   }
-  const approvers = await resolveDocApproversServer(doc);
-  return isApproverForApproversMap(approvers, user.username);
+  return isApproverForApproversMap(MODULE_CONFIGS.docs.resolveWfConfig(doc, appData).approvers, user.username);
 }
 
 function isApproverForApproversMap(approversMap, username) {
   if (!approversMap) return false;
   return Object.values(approversMap).some(list =>
     Array.isArray(list) ? list.includes(username) : list === username);
-}
-
-// Khớp getSubmissionDeptWorkflowConfig()/resolveSubmissionWorkflow() ở public/index.html — mọi tờ
-// trình tạo qua routes/create.js đã snapshot effectiveApprovers lúc tạo (lib/createValidation.js) nên
-// nhánh dưới (tra cứu lại theo phòng ban/loại) chỉ còn dùng cho hồ sơ cũ trước khi có snapshot.
-async function resolveSubmissionApproversServer(sub) {
-  if (sub.effectiveApprovers) return sub.effectiveApprovers;
-  const [submissionTypes, submissionTypeDeptWorkflows, submissionDeptWorkflows] = await Promise.all([
-    getAppDataValue('submissionTypes'),
-    getAppDataValue('submissionTypeDeptWorkflows'),
-    getAppDataValue('submissionDeptWorkflows')
-  ]);
-  const typeEntry = (submissionTypes || []).find(t => t.label === sub.type);
-  const typeKey = typeEntry ? typeEntry.key : 'KHAC';
-  const typeMap = (submissionTypeDeptWorkflows || {})[typeKey];
-  const fromType = typeMap ? typeMap[sub.dept] : null;
-  const cfg = fromType || (submissionDeptWorkflows || {})[sub.dept] || { approvers: { 1: ['admin'] } };
-  return cfg.approvers || {};
 }
 
 // Khớp khối lọc trong renderSubmissionReqs() (public/index.html): scopeAllows(submissionView) HOẶC
@@ -166,27 +149,29 @@ async function resolveSubmissionApproversServer(sub) {
 // admin chỉ định xin ý kiến nhưng ngoài phạm vi Xem/không phải approver không thấy được tờ trình ở bất
 // kỳ đâu (kể cả gọi thẳng GET /api/data), không có cách nào mở modal nhập ý kiến dù được chính admin
 // chỉ định.
-async function canViewSubmission(user, sub) {
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, cùng lớp lỗi với canViewDoc() ở trên): nhánh "đang là
+// người duyệt" trước đây tự tra `submissionDeptWorkflows`/`submissionTypeDeptWorkflows` (field TĨNH,
+// qua hàm resolveSubmissionApproversServer() đã gỡ) chỉ cho hồ sơ CHƯA có snapshot `effectiveApprovers`
+// (hồ sơ mới luôn có snapshot nên trước đây vô tình "an toàn" — chỉ hồ sơ CŨ trước khi có cơ chế snapshot
+// mới bị ảnh hưởng) — đổi sang gọi MODULE_CONFIGS.submissions.resolveWfConfig() = resolveSubmissionWorkflow()
+// (đã tự ưu tiên đọc snapshot NẾU CÓ, chỉ mới tra cứu động qua resolveStepApproverUsernames() — có xử lý
+// đúng POSITION mode — khi CHƯA có snapshot), khớp đúng khuôn 5 module chị em, đồng thời đổi sang ĐỒNG BỘ.
+function canViewSubmission(user, sub, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
   if (scopeAllows(user, user.perms?.submissionView, sub.dept)) return true;
   if ((sub.opinionRequestees || []).includes(user.username)) return true;
-  const approvers = await resolveSubmissionApproversServer(sub);
-  return isApproverForApproversMap(approvers, user.username);
+  return isApproverForApproversMap(MODULE_CONFIGS.submissions.resolveWfConfig(sub, appData).approvers, user.username);
 }
 
-async function filterDocsForUser(docs, user) {
-  // canViewDoc() giờ là async (cần tra cứu deptWorkflows để xét nhánh "đang là người duyệt") — không
-  // thể dùng .filter() đồng bộ trực tiếp như trước (predicate trả về Promise luôn truthy, coi như mọi
-  // tài liệu đều qua được), phải resolve từng phần tử rồi mới lọc, cùng khuôn filterSubmissionsForUser().
-  const flags = await Promise.all((docs || []).map(d => canViewDoc(user, d)));
-  return (docs || []).filter((_, i) => flags[i]);
+function filterDocsForUser(docs, user, appData) {
+  return (docs || []).filter(d => canViewDoc(user, d, appData));
 }
 
-async function filterSubmissionsForUser(submissions, user) {
-  const flags = await Promise.all((submissions || []).map(s => canViewSubmission(user, s)));
-  return (submissions || []).filter((_, i) => flags[i]);
+function filterSubmissionsForUser(submissions, user, appData) {
+  return (submissions || []).filter(s => canViewSubmission(user, s, appData));
 }
 
 // Khớp khối lọc trong render bài Truyền Thông Nội Bộ (public/index.html, ~dòng 19311-19317) — bài
@@ -918,14 +903,25 @@ function filterItServiceRenewalsForUser(items, user) {
 // phòng ban mình — cùng khuôn so sánh dept như canViewBudgetEntry() ở trên (hồ sơ của cả ĐƠN VỊ, không
 // phải cá nhân, nên không có nhánh "chính người tạo"). dept của đề nghị luôn là đơn vị custodian/đơn vị
 // đề xuất nguồn, xem startContractPayment()/startOfficePayment() ở lib/recordActions.js.
-function canViewPaymentRequest(user, item) {
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): paymentRequests là module DUY NHẤT trong toàn bộ engine
+// dept-workflow (docs/submissions/carRegs/officeReqs/contracts/itPriceApprovals/budgetEntries/
+// operationOrders) CHƯA từng có nhánh "đang là người duyệt theo quy trình" ở đây — trong khi
+// paymentDeptWorkflows[dept] hoàn toàn có thể cấu hình 1 người duyệt KHÁC phòng ban với đề nghị (VD kế
+// toán trung tâm duyệt hộ nhiều phòng ban khác — dept của đề nghị = phòng ban ĐỀ XUẤT/custodian, không
+// phải phòng ban của người duyệt, xem startContractPayment()/startOfficePayment() ở lib/recordActions.js).
+// Người chỉ được liệt kê tên ở bước duyệt (KHÔNG có cờ phẳng paymentManage) sẽ KHÔNG BAO GIỜ thấy được
+// đề nghị cần duyệt — hồ sơ kẹt vĩnh viễn dù applyWorkflowAction()/canApproveStep() vẫn cho họ duyệt nếu
+// gọi thẳng API. public/js/core.js (canAccessPaymentModule())/core-approvalhub.js đã sẵn sàng cho kịch
+// bản "approver khác phòng ban không có paymentManage" từ trước — server giờ mới theo kịp.
+function canViewPaymentRequest(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.paymentManage) return true;
-  return !!(item.dept && item.dept === user.dept);
+  if (item.dept && item.dept === user.dept) return true;
+  return isApproverForApproversMap(MODULE_CONFIGS.paymentRequests.resolveWfConfig(item, appData).approvers, user.username);
 }
 
-function filterPaymentRequestsForUser(items, user) {
-  return (items || []).filter(pr => canViewPaymentRequest(user, pr));
+function filterPaymentRequestsForUser(items, user, appData) {
+  return (items || []).filter(pr => canViewPaymentRequest(user, pr, appData));
 }
 
 // laborContracts (Nhân Sự > Hợp Đồng Lao Động, Đợt 2/4): PHÁT HIỆN khi làm Đợt 3 — collection này CHƯA

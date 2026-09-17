@@ -18,7 +18,7 @@
 const dns = require('dns').promises;
 const { getPool, sql } = require('../db');
 const { decryptSecret } = require('../lib/emailCrypto');
-const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
+const { getAllForCollection, withLockedRecordById, withAppLock } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
 const SYNC_FETCH_TIMEOUT_MS = 15000;
@@ -152,6 +152,49 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
 
   const matchingKey = config.matchingKey || 'poNumber';
 
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): trước đây không có gì ngăn job cron định
+  // kỳ (server.js, theo syncIntervalMinutes) và nút "🔄 Đồng Bộ Ngay" (force=true, xem
+  // routes/operationOrderApiSync.js) chạy CHỒNG LÊN NHAU — nếu 1 đợt tick tự động đang giữa chừng gửi
+  // cho hệ thống ngoài (mỗi request có thể mất tới 15s) đúng lúc admin bấm "Đồng Bộ Ngay", cả 2 lượt gọi
+  // CÙNG đọc candidates = "chưa dsmart16Synced" từ 1 SNAPSHOT không khoá gì, CÙNG gửi trùng y hệt các đơn
+  // hàng đó ra hệ thống ngoài (dsmart16Synced chỉ được set=true SAU KHI response.ok — quá muộn để chặn
+  // lượt thứ 2 đã đọc snapshot cũ từ trước đó). Production chạy PM2 cluster (nhiều tiến trình Node, xem
+  // ecosystem.config.js) nên 1 cờ in-memory KHÔNG đủ (2 lượt gọi có thể rơi vào 2 tiến trình khác nhau)
+  // — dùng CỜ TRONG DB (operationOrderApiConfig.dsmart16SyncInProgress) đặt/đọc NGUYÊN TỬ qua withAppLock
+  // (sp_getapplock, cross-process thật) để lượt thứ 2 tự bỏ qua ngay khi phát hiện lượt đầu đang chạy —
+  // CHỈ khoá đúng bước đọc-kiểm tra-đặt cờ (nhanh, không gọi mạng ngoài), KHÔNG giữ khoá/transaction
+  // xuyên suốt cả đợt gửi HTTP (tốn 1 connection pool có thể nhiều phút không cần thiết).
+  // dsmart16SyncStartedAt + STALE_LOCK_MS: tự coi cờ là "treo" (cho chạy lại) nếu đã bật quá 20 phút —
+  // phòng trường hợp tiến trình trước đó crash giữa chừng (VD pm2 restart) không kịp chạy nhánh finally
+  // dọn cờ bên dưới, tránh khoá cứng vĩnh viễn mọi lượt đồng bộ sau đó.
+  const STALE_SYNC_LOCK_MS = 20 * 60 * 1000;
+  const acquired = await withAppLock('dsmart16_sync', async () => {
+    const latest = await getCollection(pool, 'operationOrderApiConfig', {});
+    const startedAt = latest.dsmart16SyncStartedAt ? new Date(latest.dsmart16SyncStartedAt).getTime() : 0;
+    const stale = !startedAt || (Date.now() - startedAt) > STALE_SYNC_LOCK_MS;
+    if (latest.dsmart16SyncInProgress === true && !stale) return false;
+    await setCollection(pool, 'operationOrderApiConfig', {
+      ...latest, dsmart16SyncInProgress: true, dsmart16SyncStartedAt: new Date().toISOString()
+    });
+    return true;
+  });
+  if (!acquired) {
+    return { ok: true, skipped: true, message: 'Một lượt đồng bộ dsmart16 khác đang chạy — bỏ qua lượt này (chống gửi trùng khi job tự động và nút "Đồng Bộ Ngay" chồng nhau).' };
+  }
+
+  try {
+    return await runSyncBatch(pool, config, matchingKey, headerValue);
+  } finally {
+    await withAppLock('dsmart16_sync', async () => {
+      const latest = await getCollection(pool, 'operationOrderApiConfig', {});
+      await setCollection(pool, 'operationOrderApiConfig', { ...latest, dsmart16SyncInProgress: false });
+    }).catch((err) => {
+      console.error('⛔ [Đồng bộ dsmart16] Không giải phóng được cờ dsmart16SyncInProgress:', err.message);
+    });
+  }
+}
+
+async function runSyncBatch(pool, config, matchingKey, headerValue) {
   const orders = await getAllForCollection('operationOrders');
   const candidates = (orders || []).filter(o => o && o.poNumber && o.dsmart16Synced !== true);
 
@@ -166,6 +209,15 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
 
   for (const o of candidates) {
     try {
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp): assertSafeExternalUrl() ở trên chỉ phân
+      // giải DNS + kiểm tra IP nội bộ MỘT LẦN duy nhất trước khi vào vòng lặp — nếu domain baseUrl thay
+      // đổi bản ghi DNS (TTL ngắn) NGAY SAU lượt kiểm tra đó nhưng TRƯỚC 1 fetch() nào đó ở giữa/cuối đợt
+      // đồng bộ (DNS rebinding), request đó sẽ tự resolve lại DNS ở tầng fetch()/OS và có thể gọi thẳng
+      // tới 1 IP nội bộ mà không qua lại kiểm tra nào — vá bằng cách kiểm tra lại NGAY TRƯỚC MỖI request
+      // (không chỉ 1 lần đầu batch), thu hẹp cửa sổ rebinding xuống còn đúng khoảng giữa 1 lượt kiểm tra
+      // và 1 fetch() ngay sau nó cho từng đơn hàng, thay vì cả batch (có thể hàng chục đơn, vài phút).
+      await assertSafeExternalUrl(config.baseUrl);
+
       const headers = { 'Content-Type': 'application/json' };
       if (config.headerName && headerValue) headers[config.headerName] = headerValue;
 

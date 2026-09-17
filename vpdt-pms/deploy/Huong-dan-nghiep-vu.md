@@ -1067,6 +1067,16 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     duyệt được, không ai khác thấy), dễ bị bỏ sót không ai để ý cấu hình còn
     thiếu. Thấy cảnh báo này thì vào cấu hình bổ sung người duyệt cho đúng mức
     đang thiếu.
+  - **Cảnh báo "chưa có người duyệt khớp đúng siêu thị" (10/2026, đợt rà soát
+    chuyên sâu)**: khác cảnh báo ở trên (trường hợp đó là mức giá trị CHƯA hề
+    cấu hình ai) — trường hợp này admin ĐÃ cấu hình người duyệt cho mức giá
+    trị, nhưng sau khi lọc theo đúng siêu thị ("Duyệt Đặt Hàng Tại Siêu Thị tự
+    khớp đúng siêu thị" ở trên) không còn ai khớp (VD quên gắn "Vị Trí Kiêm
+    Nhiệm" cho người phụ trách siêu thị đó). Khi gặp trường hợp này lúc tạo
+    đơn, hệ thống báo ngay bằng 1 thông báo (⚠️) cho người tạo, đồng thời ghi 1
+    dòng Nhật Ký Hệ Thống mức Cảnh Báo để Quản Trị Viên tra cứu được kể cả khi
+    bỏ lỡ thông báo lúc tạo — đơn vẫn tạo được bình thường, chỉ Quản Trị Viên
+    duyệt được cho tới khi cấu hình lại đúng người duyệt cho siêu thị đó.
   - **Đọc PDF phiếu đặt hàng NCC tự động điền form** — chọn file PDF ở "File
     Đơn Hàng" tự đọc và điền Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã
     NCC/MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục
@@ -1423,6 +1433,15 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   thâm niên/thời hạn đề xuất tăng lương tính theo **Ngày hiệu lực hợp đồng lao
   động MỚI** sẽ tạo, không phải field riêng này), hồ sơ chuyển thẳng lại Đang
   làm việc.
+  - **Chặn CỨNG trùng CCCD/CMND khi tạo hồ sơ mới (10/2026, đợt rà soát chuyên
+    sâu)**: trước đây "Kiểm Tra Nhân Sự Cũ" chỉ là GỢI Ý — bỏ qua bước tra cứu
+    (vô ý hoặc cố ý) vẫn tạo được hồ sơ mới trùng CCCD/CMND với 1 hồ sơ khác.
+    Từ nay hệ thống **tự chặn** (cả tạo tay lẫn Nhập Excel hàng loạt) nếu
+    CCCD/CMND đã có ở BẤT KỲ hồ sơ nào khác — kể cả hồ sơ ĐÃ NGHỈ VIỆC (trường
+    hợp đó đúng ra phải dùng "Kiểm Tra Nhân Sự Cũ"/Tái Tuyển ở trên để GIỮ
+    NGUYÊN lịch sử cũ, không phải tạo hồ sơ mới mất hết lịch sử). Nhập Excel
+    hàng loạt: dòng trùng CCCD bị **bỏ qua kèm lý do rõ ràng**, không chặn cả
+    đợt nhập.
 - **3 quyền chi tiết Tạo/Xem toàn bộ/Sửa** (9/2026, ở Hệ Thống > Phân Quyền,
   cạnh quyền "🗂️ Quản Lý Hồ Sơ Nhân Sự" gộp sẵn có đủ cả 3): **"➕ Tạo Mới"**
   (chỉ tạo hồ sơ + Kiểm Tra Nhân Sự Cũ, KHÔNG tự kéo theo xem được danh sách
@@ -1516,7 +1535,13 @@ admin) — không đổi. Riêng **XEM** thì từ 9/2026 có thêm 1 tầng: nh
 tài khoản đăng nhập gắn với hồ sơ), HR/admin vẫn xem được TOÀN BỘ hợp đồng
 của mọi nhân viên như cũ — hợp đồng của nhân sự "ngoài hệ thống" (nhập mã
 không gắn tài khoản đăng nhập nào, dùng cho trường hợp phát sinh ngoài luồng
-Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được.
+Onboarding chuẩn) không có ai để tự xem, vẫn chỉ HR xem được. **Xoá hợp đồng**
+(10/2026, đợt rà soát chuyên sâu — trước đây lỡ gác bằng cờ Quản Trị Viên
+chung, KHÔNG nhất quán với sửa/kích hoạt/bổ sung/đổi trạng thái) từ nay cũng
+gác đúng **CHỈ bằng quyền "📝 Quản Lý Hợp Đồng Lao Động"** giống mọi thao tác
+khác của module này — 1 tài khoản Quản Trị Viên KHÔNG được cấp riêng quyền
+này (đúng nguyên tắc 3 ngoại lệ dữ liệu nhân sự nhạy cảm, xem mục 6) sẽ KHÔNG
+còn tự động xoá được hợp đồng lao động nữa.
 
 - **Đa số hợp đồng do hệ thống TỰ TẠO** theo đúng 3 mốc trong checklist
   Onboarding (mục 4.5.2), HR không cần tạo tay:

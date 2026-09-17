@@ -26,7 +26,17 @@ const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng Kinh D
 const REGULAR_B = { username: 'ntb', name: 'Nhân Viên B', dept: 'Phòng Kế Toán', perms: {}, active: true };
 const PAYMENT_MGR = { username: 'ketoan1', name: 'Kế Toán Trưởng', dept: 'Phòng Kế Toán', perms: { paymentManage: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, REGULAR_B, PAYMENT_MGR, ADMIN];
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): paymentRequests là module DUY NHẤT trong cụm dept-workflow
+// trước đây KHÔNG có nhánh "đang là người duyệt" — approver_kd2 duyệt bước 1 của Phòng Kinh Doanh theo
+// paymentDeptWorkflows, nhưng CHÍNH MÌNH thuộc Phòng Kế Toán (kịch bản thật: kế toán trung tâm duyệt hộ
+// nhiều phòng ban khác) — KHÔNG có cờ phẳng paymentManage.
+const APPROVER_CROSS_DEPT = { username: 'ketoan_duyet_kd', name: 'Kế Toán Duyệt Hộ KD', dept: 'Phòng Kế Toán', perms: {}, active: true };
+const USERS = [REGULAR_A, REGULAR_B, PAYMENT_MGR, ADMIN, APPROVER_CROSS_DEPT];
+const APP_DATA = {
+  paymentDeptWorkflows: {
+    'Phòng Kinh Doanh': { approvers: { 1: ['ketoan_duyet_kd'] } }
+  }
+};
 
 // paymentRequests toàn công ty (mô phỏng bảng thật dbo.PaymentRequests) — nguồn DUY NHẤT cho cả 2 nhánh
 // tải (getAllForCollectionCached giả lập trả NGUYÊN mảng; getForCollectionByDeptCached giả lập tự lọc
@@ -45,7 +55,7 @@ let byDeptCallCount = 0;
 let fullLoadCallCount = 0;
 
 stubModule('lib/appData', {
-  getAllAppDataWithVersionsCached: async () => ({ data: {}, versions: {} })
+  getAllAppDataWithVersionsCached: async () => ({ data: APP_DATA, versions: {} })
 });
 
 stubModule('lib/taskStore', { getAllTasksCached: async () => [] });
@@ -136,6 +146,15 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, REGULAR_B);
       const ids = (res.body.paymentRequests || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '2', 'Phòng Kế Toán (B) chỉ thấy đúng 1 hồ sơ của phòng mình');
+    });
+
+    await run.run('LỖI ĐÃ VÁ 10/2026: người duyệt theo paymentDeptWorkflows KHÁC phòng ban với đề nghị (KHÔNG có paymentManage) PHẢI thấy hồ sơ cần duyệt', async () => {
+      resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
+      const res = await api('GET', '/api/data', undefined, APPROVER_CROSS_DEPT);
+      const ids = (res.body.paymentRequests || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3', 'ketoan_duyet_kd (Phòng Kế Toán) phải thấy id2 (phòng ban chính mình) CỘNG id1+id3 (Phòng Kinh Doanh, qua nhánh approver) — không có paymentManage nhưng vẫn thấy đủ nhờ nhánh approver mới thêm');
+      assertEqual(fullLoadCallCount, 0, 'approver khác phòng ban vẫn KHÔNG được tải company-wide (chỉ tải đúng tập phòng ban liên quan)');
+      assert(byDeptCallCount >= 1, 'phải đi qua nhánh tải theo-phòng-ban (đã mở rộng thêm phòng ban approver)');
     });
 
     await run.run('GET /api/data: paymentManage vẫn nhận ĐỦ toàn công ty (không mất dữ liệu so với trước)', async () => {

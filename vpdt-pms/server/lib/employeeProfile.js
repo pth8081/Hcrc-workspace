@@ -251,6 +251,21 @@ function createManualProfile(list, payload, actorUsername, actorName) {
   if (username && findProfileByUsername(arr, username)) {
     throw new HttpError(400, 'Tài khoản VPDT này đã được liên kết với 1 hồ sơ nhân sự khác');
   }
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): "Kiểm Tra Nhân Sự Cũ" (searchInactiveProfilesForRehire(),
+  // GET /api/hr-profile/search-inactive) trước đây CHỈ LÀ GỢI Ý — HR tự tra cứu CCCD/CMND trước khi tạo,
+  // nhưng KHÔNG có gì chặn thật sự nếu bỏ qua bước tra cứu (vô ý, hoặc cố ý bỏ qua để tạo nhanh) — tạo
+  // được 2 hồ sơ (kể cả 2 hồ sơ ACTIVE) cùng 1 CCCD/CMND, hoặc tạo hồ sơ MỚI trùng CCCD với 1 hồ sơ
+  // INACTIVE đáng lẽ phải đi qua reactivateForRehire() (giữ nguyên lịch sử cũ) thay vì tạo hồ sơ mới mất
+  // hết lịch sử. Chặn CỨNG ở đây (áp dụng cho CẢ 2 lối tạo — form tay lẫn Excel import hàng loạt, vì cả
+  // 2 đều gọi chung hàm này) khi CCCD/CMND đã có ở BẤT KỲ hồ sơ nào khác (ACTIVE lẫn INACTIVE — hồ sơ
+  // INACTIVE trùng CCCD nghĩa là phải Tái Tuyển, không phải tạo mới).
+  const nationalId = String(payload?.nationalId || '').trim();
+  if (nationalId) {
+    const dup = arr.find(p => p.nationalId === nationalId);
+    if (dup) {
+      throw new HttpError(409, `CCCD/CMND "${nationalId}" đã có hồ sơ [${dup.employeeCode}]${dup.status === 'INACTIVE' ? ' (ĐÃ NGHỈ VIỆC — dùng chức năng "Kiểm Tra Nhân Sự Cũ"/Tái Tuyển thay vì tạo mới)' : ''} — vui lòng kiểm tra lại trước khi tạo hồ sơ mới`);
+    }
+  }
   const profile = defaultProfile(employeeCode);
   profile.status = 'ACTIVE';
   profile.username = username;

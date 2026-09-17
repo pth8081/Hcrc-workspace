@@ -161,6 +161,18 @@ async function partB() {
       STORE[c].push(item);
       return item;
     },
+    // Cần thêm — bản vá "mã hợp đồng tự sinh chống trùng khi tạo đồng thời" (đợt rà soát chuyên sâu
+    // 10/2026, xem lib/createValidation.js CREATE_MODULE_CONFIGS.laborContracts.getLockKey) khiến
+    // routes/create.js chuyển từ createForCollection() sang createForCollectionSerialized() cho module
+    // này — không có hàm này trong stub thì request tạo hợp đồng lỗi 500 ngay (đã xảy ra thật, xem lịch
+    // sử sửa file này). lockKey không cần dùng thật ở đây (test không kiểm chứng race — đã có
+    // tests/test-labor-contract-code-race.js riêng cho việc đó), chỉ cần đúng hành vi tạo bản ghi.
+    createForCollectionSerialized: async (c, lockKey, builderFn) => {
+      const draft = await builderFn();
+      const item = Object.assign({ id: nextId++ }, draft);
+      STORE[c].push(item);
+      return item;
+    },
     withLockedRecordForCollection: async (c, id, mutatorFn) => {
       const idx = STORE[c].findIndex(x => x.id === Number(id));
       if (idx === -1) { const { HttpError } = require('../lib/httpErrors'); throw new HttpError(404, 'Không tìm thấy bản ghi'); }
@@ -309,11 +321,18 @@ async function partB() {
       assert.strictEqual(r.json.item.status, 'TERMINATED');
     });
 
-    await test('POST /api/records/laborContracts/:id/delete — chỉ admin mới xoá được', async () => {
-      const r1 = await call('hr1', 'POST', `/api/records/laborContracts/${created.id}/delete`, {});
-      assert.strictEqual(r1.status, 403, 'HR (không phải admin) không được xoá');
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): trước đây route này gác bằng cờ admin chung
+    // (assertAdminForDelete) thay vì hrContractManage như MỌI route thao tác khác của laborContracts —
+    // hành vi ĐÚNG phải nhất quán: đúng hrContractManage mới xoá được, admin THƯỜNG (không có
+    // hrContractManage — 1 trong 3 ngoại lệ "dữ liệu nhân sự nhạy cảm" đã xác nhận, xem canManageContracts())
+    // KHÔNG còn tự động bypass, giống hệt các route edit/activate/status ở trên.
+    await test('POST /api/records/laborContracts/:id/delete — gác bằng hrContractManage (KHÔNG còn admin tự bypass)', async () => {
+      const r1 = await call('emp1', 'POST', `/api/records/laborContracts/${created.id}/delete`, {});
+      assert.strictEqual(r1.status, 403, 'Nhân viên thường (không quyền gì) không được xoá');
       const r2 = await call('admin', 'POST', `/api/records/laborContracts/${created.id}/delete`, {});
-      assert.strictEqual(r2.status, 200, JSON.stringify(r2.json));
+      assert.strictEqual(r2.status, 403, 'LỖI ĐÃ VÁ: admin KHÔNG có hrContractManage KHÔNG còn tự bypass xoá được hợp đồng lao động');
+      const r3 = await call('hr1', 'POST', `/api/records/laborContracts/${created.id}/delete`, {});
+      assert.strictEqual(r3.status, 200, JSON.stringify(r3.json));
     });
   } finally {
     server.close();

@@ -797,6 +797,22 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): trước đây collection này KHÔNG có getLockKey nên đi qua
+    // createForCollection() thường (không khoá gì) — 2 request tạo đơn hàng gần như đồng thời, CÙNG
+    // orderLocationType + CÙNG poNumber (VD đọc trùng 1 phiếu PDF NCC gửi 2 lần, hoặc double-click) đều
+    // đọc được collection "chưa có đơn nào trùng số" TRƯỚC khi cái nào kịp ghi, cả 2 đều qua được check
+    // dupe bên dưới rồi cùng tạo — vi phạm bất biến "1 poNumber/orderLocationType chỉ ứng với 1 đơn đang
+    // hiệu lực". Khoá theo đúng cặp trường mà check dupe bên dưới dùng để so khớp; đơn không có poNumber
+    // (field tùy chọn, không phải phiếu NCC nào cũng đọc được) thì không có gì cần chống trùng — dùng
+    // khoá riêng biệt mỗi lần gọi (không tranh chấp với ai) để vẫn đi qua chung 1 đường ghi
+    // createForCollectionSerialized thay vì phải rẽ thêm 1 nhánh ghi khác nhau chỉ vì 1 field tùy chọn.
+    getLockKey: (payload) => {
+      const poNumber = String(payload?.poNumber || '').trim();
+      const orderLocationType = payload?.orderLocationType === 'STORE' ? 'STORE' : 'HO';
+      return poNumber
+        ? `operation_order_po:${orderLocationType}:${poNumber}`
+        : `operation_order_po:none:${Date.now()}:${Math.random()}`;
+    },
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.operationOrderCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo đơn hàng');
@@ -2953,6 +2969,18 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): generateContractCode() (lib/laborContract.js)
+    // sinh mã kiểu "HDLD-<employeeCode>-<đếm số hợp đồng đã có của người đó>+1" — thuần đếm SNAPSHOT
+    // collection đọc lúc gọi, không có UNIQUE INDEX/retry nào đứng sau (khác hẳn generateEmployeeCode()
+    // ở employeeProfile.js đã có retry, hay generateOperationOrderCode()... vốn được bọc khoá). 2 request
+    // tạo tay hợp đồng gần như đồng thời CHO CÙNG 1 employeeCode (HR double-click, hoặc 2 người cùng thao
+    // tác 1 nhân viên) đều đếm được CÙNG số lượng hợp đồng hiện có, cùng sinh ra CÙNG 1 mã "HDLD-...-N" —
+    // 2 hợp đồng trùng mã. getLockKey theo employeeCode -> route tạo tự chuyển sang
+    // createForCollectionSerialized() (routes/create.js), khoá NGHIÊM TÚC toàn bộ đọc-sinh mã-ghi, cùng
+    // khuôn operationOrders.getLockKey/meetings.getLockKey ở trên. Hồ sơ tự sinh qua hook Onboarding/
+    // Offboarding (lib/laborContract.js, không đi qua đường tạo chung này) không cần sửa gì thêm — luôn
+    // chạy TRONG withLockedRecordForCollection('hrProcesses', ...) của caller nên vốn đã tuần tự.
+    getLockKey: (payload) => `labor_contract_code:${String(payload?.employeeCode || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
       const { canManageContracts, CONTRACT_TYPES, generateContractCode } = require('./laborContract');
       const { findProfile } = require('./employeeProfile');
