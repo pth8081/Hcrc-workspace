@@ -3,7 +3,7 @@
 // Regression test cho GET /api/data (routes/data.js) sau Bước 8h: itPriceApprovals tách riêng khỏi vòng
 // lặp tải chung qua loadItPriceApprovalsScoped(). canViewItPriceApproval() (lib/recordViewScope.js) KHÁC
 // carRegs/officeReqs — KHÔNG có nhánh "phòng ban mình" nào (người thường KHÔNG tự động thấy đề xuất giá
-// của phòng ban mình, dù cùng dept). Chỉ: admin/itManage xem hết; chính người tạo (Creator); người có
+// của phòng ban mình, dù cùng dept). Chỉ: admin/itPriceSupport xem hết (10/2026 tách khỏi itManage); chính người tạo (Creator); người có
 // itPriceEmergencyRejectApproveWholesale/Retail (điều kiện theo DỮ LIỆU emergencyRejectStatus/emergencyRejectDecidedBy,
 // không theo phòng ban); người duyệt RETAIL theo phòng ban (itPriceDeptWorkflows) HOẶC người duyệt
 // WHOLESALE theo 1 trong 4 mức cố định (itPriceTierWorkflows, không theo phòng ban).
@@ -26,7 +26,7 @@ const CREATOR_A = { username: 'nva', name: 'Người Tạo A', dept: 'Phòng A',
 const RETAIL_APPROVER_B = { username: 'duyet_b', name: 'Người Duyệt Bán Lẻ Phòng B', dept: 'Phòng Z', perms: {}, active: true };
 const WHOLESALE_APPROVER = { username: 'duyet_wholesale', name: 'Người Duyệt Bán Buôn TIER1', dept: 'Phòng Z', perms: {}, active: true };
 const EMERGENCY_USER = { username: 'khancap1', name: 'Người Xét Từ Chối Khẩn Cấp', dept: 'Phòng Z', perms: { itPriceEmergencyRejectApproveRetail: true }, active: true };
-const IT_MANAGER = { username: 'itmgr', name: 'Trưởng Nhóm Hỗ Trợ IT', dept: 'Phòng IT', perms: { itManage: true }, active: true };
+const IT_MANAGER = { username: 'itmgr', name: 'Trưởng Nhóm Hỗ Trợ IT', dept: 'Phòng IT', perms: { itManage: true, itPriceSupport: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 const USERS = [CREATOR_A, RETAIL_APPROVER_B, WHOLESALE_APPROVER, EMERGENCY_USER, IT_MANAGER, ADMIN];
 
@@ -158,11 +158,11 @@ async function main() {
       assert(fullLoadCallCount >= 1, 'người có quyền xét khẩn cấp phải tải company-wide (điều kiện không theo phòng ban)');
     });
 
-    await run.run('itManage: nhận ĐỦ toàn bộ', async () => {
+    await run.run('itPriceSupport (đội hỗ trợ giá): nhận ĐỦ toàn bộ', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, IT_MANAGER);
       const ids = (res.body.itPriceApprovals || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3,4', 'itManage phải thấy đủ cả 4 đề xuất');
+      assertEqual(ids.join(','), '1,2,3,4', 'itPriceSupport phải thấy đủ cả 4 đề xuất (itManage một mình không còn đủ, 10/2026)');
     });
 
     await run.run('admin: nhận ĐỦ toàn bộ', async () => {

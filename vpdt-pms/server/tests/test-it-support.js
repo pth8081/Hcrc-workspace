@@ -23,16 +23,18 @@ const {
 const PORT = 8982;
 
 // ===================== Seed dữ liệu =====================
-const STAFF_KD = { username: 'staff_kd', name: 'Ngô Văn Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceProposeCreate: true }, active: true };
-const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true }, active: true };
+const STAFF_KD = { username: 'staff_kd', name: 'Ngô Văn Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceProposeCreateRetail: true }, active: true };
+// itPriceSupport (10/2026, tách khỏi itManage): IT1 nhận xử lý/áp giá/yêu cầu bổ sung ở module
+// itPriceApprovals trong bài test này — itManage giờ CHỈ còn nghĩa xử lý ticket itSupportTickets.
+const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true, itPriceSupport: true }, active: true };
 const APPROVER1 = { username: 'approver1', name: 'Trưởng Phòng Duyệt', dept: 'Ban Giám Đốc', perms: {}, active: true };
 const PLAIN = { username: 'plain', name: 'Nhân Viên Thường', dept: 'Kinh Doanh', perms: {}, active: true };
-const EMERGENCY_APPROVER = { username: 'emg1', name: 'Người Xét Từ Chối Khẩn', dept: 'Ban Giám Đốc', perms: { itPriceEmergencyRejectApprove: true }, active: true };
+const EMERGENCY_APPROVER = { username: 'emg1', name: 'Người Xét Từ Chối Khẩn', dept: 'Ban Giám Đốc', perms: { itPriceEmergencyRejectApproveRetail: true }, active: true };
 // ===== Bổ sung cho mục 1/5/6 kế hoạch (2 sub-tab loại giá + khoá khẩn cấp lúc IT đang xử lý) =====
 // Phòng "Marketing" dùng cấu hình itPriceDeptWorkflows LỒNG MỚI (RETAIL/WHOLESALE tách riêng người
 // duyệt) — khác "Kinh Doanh" ở trên CỐ Ý giữ NGUYÊN dạng phẳng CŨ để làm bằng chứng cho test tương
 // thích ngược (mục 6: cấu hình cũ phải resolve đúng thành RETAIL, không throw, không cần migrate).
-const STAFF_MKT = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreate: true }, active: true };
+const STAFF_MKT = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true }, active: true };
 const RETAIL_APPROVER_MKT = { username: 'retail_appr_mkt', name: 'Người Duyệt Bán Lẻ MKT', dept: 'Marketing', perms: {}, active: true };
 const WHOLESALE_APPROVER_MKT = { username: 'wholesale_appr_mkt', name: 'Người Duyệt Bán Buôn MKT', dept: 'Marketing', perms: {}, active: true };
 // admin KHÔNG bật TOTP (mock, không đi qua luồng TOTP thật) — dùng riêng cho kịch bản xác nhận khoá

@@ -136,7 +136,7 @@ const DUYET1 = {
   username: 'duyet1', name: 'Người Duyệt Một', dept: 'Kế Toán',
   perms: {
     admin: false, meetingApprove: true, internalPostApprove: true, licenseApprove: true,
-    paymentManage: true, itPriceEmergencyRejectApprove: true,
+    paymentManage: true, itPriceEmergencyRejectApproveRetail: true,
     // operationOrderReceiptManage: quyền RIÊNG (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung"), KHÔNG còn mirror
     // quần thể duyệt/từ chối dept-workflow của đơn hàng nữa — xem isApproverForOperationOrderReceipt()
     // (lib/recordActions.js). Chỉ cấp scope 'HO' (KHÔNG all:true) để bài test dưới còn phân biệt được
@@ -146,7 +146,7 @@ const DUYET1 = {
 };
 const OUTSIDER = {
   username: 'khong.duyet', name: 'Người Ngoài Cuộc', dept: 'Nhân Sự',
-  perms: { admin: false, meetingApprove: false, internalPostApprove: false, licenseApprove: false, paymentManage: false, itPriceEmergencyRejectApprove: false }
+  perms: { admin: false, meetingApprove: false, internalPostApprove: false, licenseApprove: false, paymentManage: false, itPriceEmergencyRejectApproveRetail: false, itPriceEmergencyRejectApproveWholesale: false }
 };
 
 async function runPartA(run) {
