@@ -2240,11 +2240,16 @@ function resolvePositionApproverUsernamesClient(positionPairs) {
 // `wfConfig.approvers[stepOrder]`/`wfConfig.approvers?.[stepOrder] || []` PHẢI đổi qua gọi hàm này thay
 // vì đọc trực tiếp, để bước "Theo vị trí" tự động có nút Duyệt hiện đúng mà không cần sửa riêng từng
 // module. Vắng approverMode (undefined) hoặc khác 'POSITION' -> giữ NGUYÊN hành vi cũ 100%.
-function resolveEffectiveStepApprovers(wfConfig, stepOrder) {
-  if (wfConfig?.approverMode?.[stepOrder] === 'POSITION') {
-    return resolvePositionApproverUsernamesClient(wfConfig.approversByPosition?.[stepOrder]);
-  }
-  return wfConfig?.approvers ? (wfConfig.approvers[stepOrder] || []) : [];
+// extraFilter (TUỲ CHỌN, mặc định không lọc gì thêm — 100% hành vi cũ cho MỌI lời gọi hiện có không
+// truyền tham số này): hàm (username) => boolean, áp lên KẾT QUẢ SAU CÙNG (dù PEOPLE hay POSITION mode).
+// Chỗ dùng duy nhất hiện tại: operationOrderStoreApproverFilterFor() (module-vanhanh.js) — đơn "Đặt
+// Hàng Tại Siêu Thị" cần lọc thêm "chỉ approver CÙNG siêu thị với đơn" (xem chú thích đầy đủ ở đó +
+// mirror ĐÚNG filterOperationOrderStoreApprovers() phía server lib/workflowEngine.js).
+function resolveEffectiveStepApprovers(wfConfig, stepOrder, extraFilter) {
+  const list = wfConfig?.approverMode?.[stepOrder] === 'POSITION'
+    ? resolvePositionApproverUsernamesClient(wfConfig.approversByPosition?.[stepOrder])
+    : (wfConfig?.approvers ? (wfConfig.approvers[stepOrder] || []) : []);
+  return extraFilter ? list.filter(extraFilter) : list;
 }
 
 // Người dùng có được liệt kê làm người duyệt ở BẤT KỲ bước nào trong 1 cấu hình quy trình
@@ -2252,14 +2257,15 @@ function resolveEffectiveStepApprovers(wfConfig, stepOrder) {
 // kể cả khi phạm vi Xem theo phòng ban của họ không bao gồm phòng ban đó. Đi qua
 // resolveEffectiveStepApprovers() theo TỪNG stepOrder (gộp cả 2 nguồn approvers{}/approverMode{}, vì 1
 // bước "Theo vị trí" có thể KHÔNG có key nào trong approvers{} nhưng vẫn cần tính) để 1 approver "Theo
-// vị trí" cũng được coi là approver của cấu hình này, giống hệt PEOPLE mode.
-function isApproverForDeptWorkflow(wfConfig, username) {
+// vị trí" cũng được coi là approver của cấu hình này, giống hệt PEOPLE mode. extraFilter: xem chú thích
+// resolveEffectiveStepApprovers() ở trên.
+function isApproverForDeptWorkflow(wfConfig, username, extraFilter) {
   if (!wfConfig) return false;
   const stepOrders = new Set([
     ...Object.keys(wfConfig.approvers || {}),
     ...Object.keys(wfConfig.approverMode || {})
   ]);
-  return [...stepOrders].some(stepOrder => resolveEffectiveStepApprovers(wfConfig, stepOrder).includes(username));
+  return [...stepOrders].some(stepOrder => resolveEffectiveStepApprovers(wfConfig, stepOrder, extraFilter).includes(username));
 }
 
 // Quét toàn bộ map cấu hình quy trình theo phòng ban (vd DB.submissionDeptWorkflows) xem người
@@ -2381,6 +2387,22 @@ function resolveOperationOrderWorkflowConfigForItemClient(o) {
   const tierMap = locationType === 'STORE' ? DB.operationOrderStoreTierWorkflows : DB.operationOrderHOTierWorkflows;
   const tier = computeOperationOrderTierClient(locationType, computeOperationOrderAmountClient(o));
   return (tierMap || {})[tier] || null;
+}
+// Mirror ĐÚNG filterOperationOrderStoreApprovers() phía server (lib/workflowEngine.js) — đơn "Đặt Hàng
+// Tại Siêu Thị" chỉ approver CÙNG siêu thị (user.dept, hoặc 1 trong secondaryPositions — "Vị Trí Kiêm
+// Nhiệm") với đơn mới thực sự tính là approver, dù họ được cấu hình theo chức danh KHÔNG gắn siêu thị cụ
+// thể (VD "Giám Đốc" áp dụng chung mọi siêu thị). Trả về `null` cho đơn HO/hồ sơ khác kind (operationStoreOpenings/
+// operationRepairs, không có orderLocationType) — extraFilter=null giữ NGUYÊN hành vi cũ ở
+// resolveEffectiveStepApprovers()/isApproverForDeptWorkflow(). Đây CHỈ là lớp UI ẩn/hiện nút — server
+// (lib/workflowEngine.js) luôn tự kiểm tra lại, đây không phải điểm quyết định thật.
+function operationOrderStoreApproverFilterFor(o) {
+  if (o?.orderLocationType !== 'STORE') return null;
+  return (username) => {
+    const u = (DB.users || []).find(x => x.username === username);
+    if (!u) return false;
+    if (u.dept === o.dept) return true;
+    return (u.secondaryPositions || []).some(sp => sp.dept === o.dept);
+  };
 }
 
 // ==========================================

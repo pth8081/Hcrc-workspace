@@ -115,8 +115,16 @@ test('computeOperationOrderAmount(): cả 2 field đều thiếu -> 0, không th
 // ===================== 3) Siêu Thị/HO ĐỘC LẬP HOÀN TOÀN — approver 1 bên không duyệt được bên kia =====================
 const STORE_APPROVER = 'tp.sieuthi';
 const HO_APPROVER = 'tp.ho';
+// users: bắt buộc từ đợt "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (10/2026, xem
+// lib/workflowEngine.js::filterOperationOrderStoreApprovers()) — đơn STORE giờ chỉ giữ approver có
+// dept KHỚP đúng dept của đơn (mặc định 'Phòng Vận Hành' ở freshOrder() bên dưới). HO không lọc theo
+// dept nên HO_APPROVER không cần khớp gì (test cố tình để dept khác hẳn, xác nhận không bị đụng tới).
 const appData = {
   workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  users: [
+    { username: STORE_APPROVER, name: 'Trưởng Phòng Siêu Thị', dept: 'Phòng Vận Hành', perms: {} },
+    { username: HO_APPROVER, name: 'Trưởng Phòng HO', dept: 'Ban Giám Đốc', perms: {} }
+  ],
   operationOrderStoreTierWorkflows: {
     LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [STORE_APPROVER] } }
   },
@@ -269,6 +277,13 @@ test('STORE: paymentTotalAmount giả mạo THẤP KHÔNG né được tier cao 
 const TIER1_APPROVER = 'duyet.tier1', TIER2_APPROVER = 'duyet.tier2', TIER3_APPROVER = 'duyet.tier3';
 const appDataFieldDriven = {
   workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  // dept khớp đúng freshOrder() mặc định ('Phòng Vận Hành') — bắt buộc từ đợt lọc theo siêu thị (xem
+  // chú thích ở khối 3 phía trên), nếu không cả 3 approver đều bị lọc hết dù đúng tier.
+  users: [
+    { username: TIER1_APPROVER, name: 'Duyệt Tier 1', dept: 'Phòng Vận Hành', perms: {} },
+    { username: TIER2_APPROVER, name: 'Duyệt Tier 2', dept: 'Phòng Vận Hành', perms: {} },
+    { username: TIER3_APPROVER, name: 'Duyệt Tier 3', dept: 'Phòng Vận Hành', perms: {} }
+  ],
   operationOrderStoreTierWorkflows: {
     LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER1_APPROVER] } },
     FROM10M_TO100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER2_APPROVER] } },

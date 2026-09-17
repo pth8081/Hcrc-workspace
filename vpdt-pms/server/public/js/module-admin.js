@@ -61,17 +61,39 @@ async function renameDept(name) {
 // ===== Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), cùng khuôn CRUD
 // đơn giản với Phòng Ban ở trên (không kiểm tra usage trước khi xóa) — dùng cho Vị Trí "Siêu Thị" ở
 // form Người Dùng và module Đồng Phục (xem renderUniformAllocationBlocks()). =====
+// Lõi thêm 1 siêu thị vào Danh Mục — TÁCH RIÊNG khỏi saveStore() (đọc thẳng ô #txtStoreName của màn
+// Quản Lý Danh Mục) để dùng chung được cho nút "+ Thêm siêu thị mới" ngay tại form Người Dùng (Vị Trí
+// "Siêu Thị", xem promptAddStoreInline() — theo yêu cầu người dùng 10/2026: đang tạo/sửa 1 người Siêu
+// Thị mà siêu thị họ thuộc về CHƯA có trong Danh Mục thì không phải rời form đi thêm trước). Trả về
+// true/false (đã tự alert lý do khi false) để caller biết có nên tiếp tục chọn giá trị đó hay không.
+function addStoreToCatalog(name) {
+  if (!name) return false;
+  if (DB.stores.includes(name)) { alert('Siêu thị đã tồn tại!'); return false; }
+  DB.stores.push(name);
+  syncStorage('stores');
+  logSystemAction('USER_MGM', 'ADD_STORE', `Thêm siêu thị mới [${name}]`, 'SUCCESS', name);
+  return true;
+}
+
 function saveStore(e) {
   e.preventDefault();
   const name = document.getElementById('txtStoreName').value.trim();
   if (!name) return;
-  if (DB.stores.includes(name)) return alert('Siêu thị đã tồn tại!');
-  DB.stores.push(name);
-  syncStorage('stores');
-  logSystemAction('USER_MGM', 'ADD_STORE', `Thêm siêu thị mới [${name}]`, 'SUCCESS', name);
+  if (!addStoreToCatalog(name)) return;
   document.getElementById('txtStoreName').value = '';
   renderStoreList();
   populateDropdowns();
+}
+
+// "+ Thêm siêu thị mới" ngay tại ô "Siêu Thị" của form Người Dùng — gõ tên mới, tự thêm vào Danh Mục
+// Siêu Thị (addStoreToCatalog() ở trên) + populateDropdowns() nạp lại toàn bộ dropdown (kể cả #uStore)
+// + tự CHỌN LUÔN giá trị vừa thêm, không phải rời form đi Quản Lý Danh Mục thêm trước rồi quay lại.
+function promptAddStoreInline() {
+  const name = String(prompt('Tên siêu thị mới:') || '').trim();
+  if (!name) return;
+  if (!addStoreToCatalog(name)) return;
+  populateDropdowns();
+  document.getElementById('uStore').value = name;
 }
 
 function deleteStore(name) {

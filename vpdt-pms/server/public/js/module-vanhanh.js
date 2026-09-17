@@ -1004,7 +1004,7 @@ function resetOperationRepairForm() {
 function notifyOperationApprovalNeeded(kind, item) {
   const meta = OPERATION_KIND_META[kind];
   const wfConfig = meta.resolveWfConfigForItem(item);
-  const approvers = resolveEffectiveStepApprovers(wfConfig, 1);
+  const approvers = resolveEffectiveStepApprovers(wfConfig, 1, operationOrderStoreApproverFilterFor(item));
   if (approvers.length) {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVAL_NEEDED', item.code, approvers,
       `[VPDT] ${meta.subLabel} ${item.code} cần bạn phê duyệt`,
@@ -1044,7 +1044,7 @@ function renderOperationList(kind) {
   // lọc gì (an toàn, không cần if riêng). Xem populateOperationOrderLocationOptions() ngay dưới đây.
   const locationFilter = kind === 'operationOrders' ? (document.getElementById('filterLocationOperationOrder')?.value || '') : '';
 
-  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(meta.resolveWfConfigForItem(o), currentUser.username);
+  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(meta.resolveWfConfigForItem(o), currentUser.username, operationOrderStoreApproverFilterFor(o));
   let scoped = meta.list().filter(canView);
   // Đơn Hàng (operationOrders) — TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đợt "Tách Đơn
   // Hàng Siêu Thị/HO"): sub-tab đang mở (activeOperationOrderSubTab, module-scope) quyết định chỉ hiện
@@ -1114,7 +1114,7 @@ function buildOperationRowHTML(kind, o) {
   const rawWfConfig = OPERATION_KIND_META[kind].resolveWfConfigForItem(o);
   const wfConfigMissing = !rawWfConfig && o.status === 'PENDING';
   const wfConfig = rawWfConfig || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep, operationOrderStoreApproverFilterFor(o));
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
   const wfMissingWarningHTML = wfConfigMissing
     ? `<div class="text-[10px] font-bold text-red-600 mt-0.5" title="Chưa cấu hình quy trình phê duyệt cho mức/phòng ban này — chỉ Quản Trị Viên mới duyệt được">⚠️ Chưa cấu hình duyệt</div>`
@@ -1325,7 +1325,7 @@ function openOperationProcessModal(kind, id) {
 
   const wfConfig = meta.resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
-  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep, operationOrderStoreApproverFilterFor(o));
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
   const controls = document.getElementById('operationProcessModalControls');
   if (canApprove) {
@@ -3157,7 +3157,7 @@ function renderOperationOrderReport() {
   // hồ sơ đó), KHÔNG đọc thẳng DB.operationOrders để tránh lộ số liệu của hồ sơ người dùng này vốn
   // không được xem. Báo Cáo giờ luôn hiện CẢ Siêu Thị lẫn HO (không lọc theo sub-tab đang mở của Danh
   // Sách như trước — đúng yêu cầu "Tổng Chuỗi" phải gộp cả 2 loại).
-  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), currentUser.username);
+  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), currentUser.username, operationOrderStoreApproverFilterFor(o));
   const scoped = (DB.operationOrders || []).filter(canView);
   populateOperationOrderLocationOptions(scoped, 'opReportFilterLocation');
 

@@ -5,9 +5,20 @@
 // TIER giá trị đơn hàng" (không theo phòng ban) — routes/data.js dùng
 // isApproverForAnyOperationOrderTier(user, data) để quyết định TRƯỚC khi tải: nếu user là approver ở
 // BẤT KỲ tier nào (operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows), tải company-wide
-// (như admin); còn lại tải qua where.Dept ở SQL. Đây là kịch bản CÓ RỦI RO NGHIỆP VỤ THẬT nếu sai (người
-// duyệt không thấy đơn hàng cần duyệt), nên test kỹ cả 2 chiều: người duyệt PHẢI thấy đủ, người thường
-// KHÔNG được tải thừa.
+// (như admin) TRƯỚC (over-inclusive CÓ CHỦ Ý, chỉ để quyết định nhánh SQL nào — vẫn gọi
+// flatWorkflowConfigToSteps() thẳng, KHÔNG qua resolveOperationOrderWorkflow() nên KHÔNG bị lọc theo
+// siêu thị ở bước này); còn lại tải qua where.Dept ở SQL. Đây là kịch bản CÓ RỦI RO NGHIỆP VỤ THẬT nếu
+// sai (người duyệt không thấy đơn hàng cần duyệt), nên test kỹ cả 2 chiều: người duyệt PHẢI thấy đủ,
+// người thường KHÔNG được tải thừa.
+//
+// ĐỢT "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (10/2026): filterOperationOrdersForUser() (lớp
+// chắn thứ 2, canViewOperationOrder() -> resolveWfConfig() = resolveOperationOrderWorkflow() CÓ lọc
+// theo siêu thị cho đơn STORE, xem lib/workflowEngine.js) giờ CHỐT LẠI đúng phạm vi thật sau khi tải
+// company-wide — gd1 (dept "Siêu Thị A") vẫn được TẢI company-wide (tối ưu, không đổi) nhưng CHỈ còn
+// THẤY đơn của đúng siêu thị mình sau lọc, không còn thấy đơn Siêu Thị B nữa dù cùng được liệt kê
+// approver ở tier đó — test bên dưới đã cập nhật đúng theo hành vi MỚI này (test riêng cho
+// resolveOperationOrderWorkflow()/filterOperationOrderStoreApprovers() ở
+// test-operation-order-store-approver-scope.js).
 //
 // Chạy: node server/tests/test-operation-orders-dept-scope.js
 'use strict';
@@ -135,13 +146,13 @@ async function main() {
       assert(byDeptCallCount >= 1, 'phải đi qua nhánh tải theo-phòng-ban');
     });
 
-    await run.run('Người duyệt tier LT10M (gd1, KHÔNG phải admin): PHẢI thấy đơn hàng của MỌI siêu thị (không chỉ siêu thị mình) — quan trọng nhất, tránh lỗi "người duyệt không thấy hồ sơ cần duyệt"', async () => {
+    await run.run('Người duyệt tier LT10M (gd1, dept "Siêu Thị A", KHÔNG phải admin): vẫn được TẢI company-wide (tối ưu, tránh lỗi "người duyệt không thấy hồ sơ cần duyệt" ở lớp SQL) nhưng CHỈ CÒN THẤY đơn của ĐÚNG siêu thị mình sau lọc — "siêu thị nào tự duyệt siêu thị đó" (không thấy đơn Siêu Thị B dù được liệt kê approver ở tier đó)', async () => {
       resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
       const res = await api('GET', '/api/data', undefined, TIER_APPROVER);
       const ids = (res.body.operationOrders || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3', 'gd1 (approver tier 2) phải thấy ĐỦ cả 3 đơn hàng, kể cả của Siêu Thị B');
-      assertEqual(byDeptCallCount, 0, 'người duyệt tier KHÔNG được đi qua nhánh theo-phòng-ban (sẽ thiếu dữ liệu)');
-      assert(fullLoadCallCount >= 1, 'người duyệt tier phải tải theo nhánh company-wide');
+      assertEqual(ids.join(','), '1,3', 'gd1 (dept Siêu Thị A) chỉ còn thấy 2 đơn hàng của Siêu Thị A, không còn thấy đơn Siêu Thị B (id 2) dù cùng tier approver');
+      assertEqual(byDeptCallCount, 0, 'người duyệt tier KHÔNG được đi qua nhánh theo-phòng-ban ở tầng SQL (vẫn phải tải company-wide rồi lọc ở tầng ứng dụng, tránh thiếu dữ liệu nếu sau này có thêm siêu thị khác trong secondaryPositions)');
+      assert(fullLoadCallCount >= 1, 'người duyệt tier phải tải theo nhánh company-wide (tối ưu tải, lọc đúng phạm vi ở bước sau)');
     });
 
     await run.run('admin: vẫn nhận ĐỦ toàn công ty', async () => {
