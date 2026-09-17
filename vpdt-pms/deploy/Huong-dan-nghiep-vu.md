@@ -374,9 +374,9 @@ liên quan... vẫn chạy đầy đủ như duyệt tại module gốc).
 Cột "Phân hệ" ở danh sách tự phân biệt rõ luồng con cho các module gộp chung
 nhiều luồng phê duyệt khác nhau trong 1 collection, không hiện chung 1 nhãn mơ
 hồ: Hỗ Trợ IT - Duyệt Giá hiện đúng "Duyệt giá Bán Buôn"/"Duyệt giá Bán Lẻ"
-(theo `priceType`); QLDA - Đơn Hàng hiện đúng "Đặt Hàng Tại HO"/"Đặt Hàng Tại
-Siêu Thị" (theo `orderLocationType`), kể cả mục "Chờ Nhập Hàng" và "Từ chối
-khẩn cấp" của 2 module này.
+(theo `priceType`); Vận Hành - Đơn Hàng hiện đúng "Đặt Hàng Tại HO"/"Đặt Hàng
+Tại Siêu Thị" (theo `orderLocationType`), kể cả mục "Chờ Nhập Hàng" và "Từ
+chối khẩn cấp" của 2 module này.
 
 ### 3.5. Ví dụ cấu hình cụ thể
 
@@ -1005,6 +1005,14 @@ gì với "Tổng Hợp" ở mục 4.3), phục vụ đội Vận Hành quản l
 đây là module lớn/phức tạp nhất hệ thống nên trình bày riêng thay vì gộp
 chung nhóm khác.
 
+**Đặt tên trên sidebar (từ 10/2026)**: dropdown module lớn ở sidebar hiện
+**"⚙️ Vận Hành"** (bọc cả 3 luồng: Đơn Hàng, Mở Mới/Sửa Chữa Siêu Thị, Checklist
+Đánh Giá — luồng cuối chỉ gộp chung vị trí điều hướng, dữ liệu/quyền hoàn toàn
+tách biệt, xem mục 4.7); tab con bên trong (Mở Mới/Sửa Chữa Siêu Thị + vòng
+đời "dự án nhỏ" của nó) hiện **"🏬 QLDA"**. Nhãn "QLDA - ..." ở các màn khác
+(cấu hình quy trình, Approval Hub, Biểu Mẫu...) CHỈ dùng cho phần Mở Mới/Sửa
+Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
+
 - **Đơn Hàng** (Đặt Hàng Tại Siêu Thị / Đặt Hàng Tại HO) — duyệt theo **mức
   giá trị đơn hàng** (tier cố định), không theo phòng ban, 2 quy trình tách
   riêng hoàn toàn: **Đặt Hàng Tại Siêu Thị** 3 mức **≤ 10 triệu / > 10 triệu
@@ -1043,13 +1051,23 @@ chung nhóm khác.
     theo mức giá trị ở trên) **không còn nằm lẫn trong bảng danh sách Đơn
     Hàng chính nữa** — chuyển hẳn sang 1 sub-tab con riêng **"📦 Duyệt Nhập/Hủy
     Đơn Hàng"**, gác bởi quyền **RIÊNG, độc lập hoàn toàn** với quyền duyệt nội
-    bộ theo mức giá trị: **"📦 Duyệt Nhập/Hủy Đơn Hàng"**
-    (`operationOrderReceiptManage`, khối cây phân quyền 22 "Vận Hành") — mô
-    hình phạm vi giống các quyền theo-phạm-vi khác (toàn quyền HOẶC giới hạn
-    đúng 1/nhiều siêu thị cụ thể/HO). Mục đích: cho phép giao việc "nhận hàng
-    thực tế tại kho/siêu thị" cho 1 nhóm người khác hẳn nhóm phê duyệt ngân
-    sách đơn hàng (VD thủ kho xác nhận nhập hàng, không cần và không nên có
-    quyền duyệt chi tiêu).
+    bộ theo mức giá trị (khối cây phân quyền 22 "Vận Hành"). **Từ 10/2026,
+    quyền này TÁCH thành 2 checkbox độc lập** (trước đó là 1 quyền gộp chung
+    `operationOrderReceiptManage {all, depts[]}` với `'HO'` là 1 giá trị đặc
+    biệt lẫn trong `depts[]`):
+    - **"🏢 Quyền Phê Duyệt Đặt Hàng HO"** (`operationOrderReceiptManageHO`) —
+      1 công tắc BẬT/TẮT đơn giản (KHÔNG có phạm vi con — HO là 1 thực thể duy
+      nhất, không chia theo phòng ban).
+    - **"Quyền Phê Duyệt Đặt Hàng Siêu Thị"** (`operationOrderReceiptManageStore`,
+      `{all, depts[]}`) — toàn quyền HOẶC giới hạn đúng 1/nhiều siêu thị cụ
+      thể, y hệt mô hình phạm vi của các quyền theo-phạm-vi khác.
+
+    User đã được cấp quyền cũ trước 10/2026 vẫn hoạt động đúng như trước (server
+    tự đọc field cũ nếu 2 field mới chưa từng tồn tại) — admin chỉ cần vào lại
+    Hệ Thống → Phân Quyền của user đó, bấm Lưu 1 lần là chuyển hẳn sang 2 quyền
+    mới. Mục đích: cho phép giao việc "nhận hàng thực tế tại kho/siêu thị" cho
+    1 nhóm người khác hẳn nhóm phê duyệt ngân sách đơn hàng (VD thủ kho xác
+    nhận nhập hàng, không cần và không nên có quyền duyệt chi tiêu).
 - **Cấu Hình API (đồng bộ đơn hàng ra hệ thống dsmart16)** — Hệ Thống → Quản
   Trị (admin), sub-tab **"🔌 Cấu Hình API"**: bật/tắt đồng bộ, Base URL hệ
   thống dsmart16, tên + giá trị header xác thực (giá trị nhập 1 lần, sau đó ẩn
@@ -1747,8 +1765,8 @@ tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
 **"Xem chéo" ở màn Báo Cáo tổng hợp (từ v23.29)**: theo yêu cầu người dùng —
 cho phép người KHÔNG thuộc module này (không tự nộp bài, không
 `checklistReportView`) vẫn xem được báo cáo TÓM TẮT (tổng số/trạng thái/Đạt-
-Chưa đạt) qua đúng màn **📊 Báo Cáo** (nhóm QLDA, mục "✅ Checklist Đánh Giá
-Siêu Thị"), bằng quyền `perms.reportViewAll` hoặc `reportExtraKeys` chứa
+Chưa đạt) qua đúng màn **📊 Báo Cáo** (nhóm Vận Hành, mục "✅ Checklist Đánh
+Giá Siêu Thị"), bằng quyền `perms.reportViewAll` hoặc `reportExtraKeys` chứa
 `'checklist'` (xem mục 5 "Mở Thêm Tab Báo Cáo") — **KHÔNG cấp thêm quyền vào
 module Checklist thật** (không vào được 4 tab nội bộ ở trên). Đây là NGOẠI LỆ
 DUY NHẤT trong cơ chế "xem chéo" chung: thấy TOÀN BỘ bài nộp mọi siêu thị
@@ -2021,8 +2039,8 @@ Báo Cáo (cần thiết kế route thống kê riêng, gác đúng quyền qu�
 của từng module, không đọc thẳng qua `DB.<collection>` như các module khác vì
 collection tương ứng luôn rỗng phía client). Checklist Đánh Giá Siêu Thị
 **cũng có tab Báo Cáo NỘI BỘ riêng, tách biệt hoàn toàn** (xem mục 4.7) —
-nhưng từ v23.29 có thêm 1 mục TÓM TẮT ở màn Báo Cáo tổng hợp này (nhóm QLDA)
-dành riêng cho nhu cầu "xem chéo" (xem chi tiết cơ chế + ngoại lệ bảo mật ở
+nhưng từ v23.29 có thêm 1 mục TÓM TẮT ở màn Báo Cáo tổng hợp này (nhóm Vận
+Hành) dành riêng cho nhu cầu "xem chéo" (xem chi tiết cơ chế + ngoại lệ bảo mật ở
 mục 4.7), không thay thế tab nội bộ.
 
 **Phân quyền hiện tab (từ v23.28)**: mỗi tab trong nav trái (`REPORT_NAV_TREE`,
@@ -2149,7 +2167,7 @@ X/Y" ngay trên tiêu đề):
 7. Văn Phòng (Mua/Sửa)           19. Đào Tạo
 8. Truyền Thông Nội Bộ           20. Giấy Phép
 9. Biên Bản Họp & Công Việc      21. Nhân Sự
-10. Thanh Toán                   22. QLDA
+10. Thanh Toán                   22. Vận Hành
 11. Nhóm Phê Duyệt Trình         23. Checklist Đánh Giá Siêu Thị
     (Văn Bản Trình)               24. Nghiệp Vụ & Báo Cáo
 ```
