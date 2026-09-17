@@ -2021,6 +2021,75 @@ bảng phẳng ở trên):
 
 ---
 
+### 4.8. Mua Hàng (BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC)
+
+Module top-level riêng (`purchasing`, sidebar **"🛒 Mua Hàng"**), Giai Đoạn 1
+(10/2026) — quản lý **Nhà Cung Cấp (Vendors)** + **Điều Khoản Chiết Khấu/
+Thưởng (RebateTerms)** ký với từng NCC, tính **ƯỚC TÍNH** số tiền chiết khấu
+dựa trên dữ liệu mua hàng đồng bộ từ hệ thống ngoài **DSmart**. Đây là bước
+**ước tính tham khảo**, KHÔNG PHẢI Sổ Cái đầy đủ theo dõi vòng đời ACCRUED →
+CONFIRMED → SETTLED (đối chiếu/phê duyệt/ghi nhận chính thức) — phần đó là
+Giai Đoạn 2, chưa triển khai.
+
+- **Nhà Cung Cấp (Vendors)** — `vendorCode` do người dùng tự đặt (KHÔNG tự
+  sinh mã như phần lớn module khác vì đổi ngầm mã 1 NCC là sai nghiệp vụ),
+  duy nhất toàn hệ thống; có thể Ngừng/Kích Hoạt lại. Quyền: `rebateTermManage`
+  (gộp chung quản lý Vendors + Terms, xem bên dưới).
+- **Điều Khoản Chiết Khấu (RebateTerms)** — nhiều điều khoản độc lập/1 NCC,
+  mỗi điều khoản tự mang:
+  - **Loại** (`termType`): Chiết Khấu Theo Doanh Số (VOLUME_REBATE), Chiết
+    Khấu Tăng Trưởng (GROWTH_REBATE), Trade Spend, Phí Niêm Yết (LISTING_FEE),
+    Thanh Toán Sớm (EARLY_PAYMENT), Bồi Thường Hư Hỏng (DAMAGE_ALLOWANCE), Hỗ
+    Trợ Mở Siêu Thị Mới (NEW_STORE_SUPPORT).
+  - **Cơ sở tính** (`calcBasis`): trên Giá Trị Mua Hàng (PURCHASE_VALUE) hoặc
+    Giá Trị Bán Ra (SELL_OUT_VALUE).
+  - **Bậc thang (Tiers[], tối đa 20 bậc/điều khoản)** theo 2 chế độ hay bị
+    nhầm lẫn trong thực tế hợp đồng NCC — **`tierMode`**:
+    - **GRADUATED (lũy tiến từng phần)** — mỗi bậc chỉ tính % trên PHẦN doanh
+      số nằm trong đúng bậc đó (giống thuế luỹ tiến).
+    - **CLIFF (đạt mốc tính cả)** — đạt tới bậc nào thì % của bậc đó áp dụng
+      cho TOÀN BỘ doanh số, không chỉ phần vượt. Quy ước ranh giới: đạt ĐÚNG
+      BẰNG mốc dưới của 1 bậc coi là đã vào bậc đó (`>=`, không phải `>`).
+  - **Phạm vi (Scopes[])**: giới hạn theo Định Dạng Siêu Thị (STORE_FORMAT —
+    MART/MINIMART), 1 Siêu Thị cụ thể (STORE), hoặc Ngành Hàng (CATEGORY) —
+    để trống Scopes = áp dụng toàn bộ giao dịch của NCC đó.
+  - **Kỳ tính** (`periodType`): Tháng/Quý/Năm/1 Lần.
+  - **Vòng đời**: Nháp (DRAFT) → Đang Hoạt Động (ACTIVE) → Hết Hạn (EXPIRED)/
+    Lưu Trữ (ARCHIVED). **Nhân bản** 1 điều khoản ACTIVE tạo ra 1 bản DRAFT
+    mới cùng `termCode` (tăng `version`) để sửa mà không đụng bản đang chạy.
+  - **Tách biệt nhiệm vụ (mục 8 tài liệu gốc)**: người TẠO/sửa điều khoản
+    (`rebateTermManage`) KHÔNG tự động có quyền KÍCH HOẠT (`rebateTermActivate`,
+    quyền riêng) — vì liên quan trực tiếp số tiền lớn, tách 2 vai trò cố ý.
+- **Đồng Bộ Dữ Liệu Mua Hàng (DSmart)** — nút "🔄 Đồng Bộ Ngay" (quyền
+  `rebateTermManage`, có rate-limit riêng): gọi API DSmart thật (baseURL/API
+  key CHỈ đọc từ biến môi trường `DSMART_API_BASE_URL`/`DSMART_API_KEY` phía
+  server, KHÔNG BAO GIỜ nhận từ input người dùng — chống SSRF, OWASP A10), tự
+  phân trang tới khi hết dữ liệu, tự retry lỗi tạm thời, nạp vào bảng trung
+  gian `VendorPurchaseTransactions` (đánh dấu `DataConfidence='PROVISIONAL'`
+  vì là dữ liệu tạm/chưa đối chiếu chính thức). Chưa cấu hình 2 biến môi
+  trường trên thì nút này báo lỗi rõ ràng (503), các phần khác của module vẫn
+  dùng bình thường. Mỗi lượt đồng bộ ghi 1 dòng vào **Nhật Ký Đồng Bộ**
+  (`PurchaseDataSyncLog` — thời điểm, số dòng lấy/nạp, người bấm, lỗi nếu có).
+- **Tính Ước Tính Chiết Khấu** — chọn 1 điều khoản ACTIVE + khoảng ngày, hệ
+  thống tự lọc đúng giao dịch khớp Scopes của điều khoản đó
+  (`purchaseBasisAggregator.js`) rồi áp bậc thang (`tieredCalculator.js`) ra
+  số tiền ước tính, lưu snapshot vào `RebateCalculations` (append-only, không
+  sửa/xoá — muốn tính lại thì tính ước tính mới, không ghi đè). Quyền:
+  `rebateTermManage`.
+- **Báo Cáo** (tab riêng trong module + entry ở 📊 Báo Cáo tổng hợp) — liệt
+  kê mọi lượt tính ước tính (lọc theo NCC/khoảng ngày), tổng doanh số căn cứ +
+  tổng ước tính chiết khấu. Quyền xem: `rebateViewReport` (không cần
+  `rebateTermManage` — đúng người chỉ cần xem báo cáo, không sửa điều khoản).
+- **5 quyền phẳng** (khối cây phân quyền 25 "Mua Hàng"): `rebateTermManage`
+  (quản lý NCC + Điều Khoản), `rebateTermActivate` (kích hoạt điều khoản),
+  `rebateViewReport` (xem báo cáo), `rebateReconcile`/`rebateApprove` (khai
+  báo sẵn cho Giai Đoạn 2 — đối chiếu/phê duyệt chính thức, CHƯA có luồng
+  nghiệp vụ nào dùng ở Giai Đoạn 1). Có ít nhất 1 trong 5 quyền mới vào được
+  module (đọc danh sách NCC/Điều Khoản cần cho mọi vai trò, kể cả người chỉ
+  xem báo cáo).
+
+---
+
 ## 5. Báo Cáo (Reports — dashboard tổng hợp)
 
 Module **📊 Báo Cáo** (`reports`) là màn **tổng hợp/giám sát số liệu**, đọc dữ
@@ -2170,6 +2239,7 @@ X/Y" ngay trên tiêu đề):
 10. Thanh Toán                   22. Vận Hành
 11. Nhóm Phê Duyệt Trình         23. Checklist Đánh Giá Siêu Thị
     (Văn Bản Trình)               24. Nghiệp Vụ & Báo Cáo
+                                  25. Mua Hàng
 ```
 
 Mỗi checkbox 1 quyền cụ thể (đọc/tạo/sửa/duyệt/quản lý theo module) — nhiều
