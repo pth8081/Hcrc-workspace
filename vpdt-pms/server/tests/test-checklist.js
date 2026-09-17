@@ -287,6 +287,35 @@ async function main() {
       assertEqual(res.body.item.status, 'DRAFT', 'Bản nhân bản phải là DRAFT');
     });
 
+    // ===== LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): submissions/:id/delete trước đây
+    // không có gì gọi tới từ client + hoàn toàn KHÔNG state-gating (checkFn rỗng `() => {}`) — xoá được
+    // BẤT KỲ bài nào ở BẤT KỲ trạng thái nào, kể cả bài đã SUBMITTED/đã tính điểm/đã có phản hồi siêu
+    // thị, nếu bị gọi trực tiếp qua API. Đã thêm state gating mirror templates/:id/delete: CHỈ xoá được
+    // khi còn DRAFT. =====
+    await run.run('Submission: xoá được bài còn DRAFT (chưa nộp)', async () => {
+      resetRecords();
+      const sub = { id: idSeq++, templateId: 1, status: 'DRAFT' };
+      RECORDS.checklistSubmissions.push(sub);
+      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, MANAGER);
+      assertEqual(res.status, 200, 'Xoá bài DRAFT phải thành công');
+      assertEqual(RECORDS.checklistSubmissions.length, 0, 'Bài DRAFT phải bị xoá khỏi collection');
+    });
+    await run.run('Submission: KHÔNG xoá được bài đã SUBMITTED (LỖI ĐÃ VÁ — trước đây xoá được, mất dữ liệu báo cáo/kiểm soát)', async () => {
+      resetRecords();
+      const sub = { id: idSeq++, templateId: 1, status: 'SUBMITTED', totalScore: 90, isPassed: true };
+      RECORDS.checklistSubmissions.push(sub);
+      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, MANAGER);
+      assertEqual(res.status, 409, 'Xoá bài đã nộp phải bị chặn (409)');
+      assertEqual(RECORDS.checklistSubmissions.length, 1, 'Bài đã nộp KHÔNG được xoá khỏi collection');
+    });
+    await run.run('Submission: người không có checklistTemplateManage (requireManage) bị chặn 403 kể cả bài DRAFT', async () => {
+      resetRecords();
+      const sub = { id: idSeq++, templateId: 1, status: 'DRAFT' };
+      RECORDS.checklistSubmissions.push(sub);
+      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, STORE_A_EMP);
+      assertEqual(res.status, 403, 'Không có quyền quản lý thì không xoá được (403)');
+    });
+
     // ===== 2. Bảo mật STORE_SELF (Mục 7.1) =====
     await run.run('STORE_SELF: storeCode LUÔN suy từ user.dept, bỏ qua storeCode client gửi lên', async () => {
       resetRecords();

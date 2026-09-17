@@ -332,11 +332,25 @@ router.post('/submissions/:id/store-response', async (req, res) => {
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/store-response`); }
 });
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): route này KHÔNG có gì gọi tới từ client
+// (xác nhận grep public/js/module-checklist.js — mọi thao tác submission khác đều gọi qua
+// callWorkflowStyleAction(), route này thì không), nhưng vẫn tồn tại + gác quyền requireManage với
+// checkFn RỖNG (`() => {}`) — xoá được BẤT KỲ bài nào ở BẤT KỲ trạng thái nào, kể cả bài đã SUBMITTED/
+// đã tính điểm/đã có phản hồi siêu thị (storeResponse), nếu bị gọi trực tiếp (Postman/script) sẽ xoá mất
+// dữ liệu báo cáo/kiểm soát đã hoàn tất mà không có cảnh báo gì — khác hẳn tinh thần chặn xoá của
+// templates/:id/delete (chặn xoá khi "đã có người nộp bài", xem ngay phía trên). Giữ route (không xoá
+// hẳn — có thể phục vụ dọn dẹp DRAFT bỏ dở qua API/Postman) nhưng thêm ĐÚNG state gating mirror tinh thần
+// đó: CHỈ xoá được bài còn DRAFT (chưa nộp — chưa có điểm/phản hồi nào để mất), mirror
+// templates.status!=='DRAFT' bị chặn ở trên.
 router.post('/submissions/:id/delete', requireManage, async (req, res) => {
   const submissionId = Number(req.params.id);
   if (!Number.isFinite(submissionId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    await deleteRecordForCollection('checklistSubmissions', submissionId, () => {}, { username: req.freshUser.username, name: req.freshUser.name });
+    await deleteRecordForCollection('checklistSubmissions', submissionId, (sub) => {
+      if (sub.status !== 'DRAFT') {
+        throw new HttpError(409, 'Chỉ xoá được bài đang ở trạng thái Nháp (chưa nộp) — bài đã nộp giữ lại phục vụ báo cáo/kiểm soát, không thể xoá');
+      }
+    }, { username: req.freshUser.username, name: req.freshUser.name });
     res.json({ ok: true });
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/delete`); }
 });

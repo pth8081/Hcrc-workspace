@@ -789,11 +789,23 @@ async function assertNoReferencingPaymentRequests(sourceModule, itemId, label) {
   }
 }
 async function deleteAdminOnly(req, res, collection) {
+  return deleteWithGuard(req, res, collection, (freshUser) => assertAdminForDelete(freshUser));
+}
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): laborContracts trước đây xoá qua deleteAdminOnly()
+// (gác bằng cờ chung user.perms.admin) — nhưng Hợp Đồng Lao Động là 1 trong 3 mảng dữ liệu nhân sự nhạy
+// cảm được người dùng xác nhận CHẶN HẲN quyền admin mặc định (xem canManageContracts()/
+// assertContractManage() ở dưới — mọi route sửa/kích hoạt/bổ sung phụ lục/đổi trạng thái của
+// laborContracts ĐÃ gác đúng bằng hrContractManage, CHỈ riêng route xoá bị sót lại dùng cờ admin cũ) —
+// 1 admin thường KHÔNG được cấp hrContractManage (theo đúng chủ đích "3 ngoại lệ" ở trên) vẫn xoá được
+// hợp đồng lao động, ngược hẳn với việc họ bị chặn mọi thao tác sửa/kích hoạt khác trên CÙNG hồ sơ đó.
+// Tách hàm chung deleteWithGuard() (nhận thẳng guard tuỳ ý thay vì luôn hardcode assertAdminForDelete)
+// để dùng lại được TOÀN BỘ logic xoá (log/kiểm tra tham chiếu...) mà không phải chép lại.
+async function deleteWithGuard(req, res, collection, guardFn) {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await deleteRecordForCollection(collection, itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection(collection, itemId, () => guardFn(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `${collection}/${req.params.id}/delete`, err);
@@ -3699,7 +3711,10 @@ router.post('/laborContracts/:id/status', async (req, res) => {
   }
 });
 
-router.post('/laborContracts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'laborContracts'));
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): trước đây dùng deleteAdminOnly() (gác bằng cờ
+// admin chung) — giờ gác bằng ĐÚNG assertContractManage()/hrContractManage như mọi route thao tác khác
+// của laborContracts ở trên (edit/activate/add-amendment/status), xem chú thích đầy đủ ở deleteWithGuard().
+router.post('/laborContracts/:id/delete', (req, res) => deleteWithGuard(req, res, 'laborContracts', assertContractManage));
 
 // ===================== NHÂN SỰ > Công & Phép (Đợt 3/4 — xem lib/attendance.js) =====================
 

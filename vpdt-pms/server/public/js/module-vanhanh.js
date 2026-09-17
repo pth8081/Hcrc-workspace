@@ -752,7 +752,7 @@ async function handleOperationOrderMultiFilePdfUpload(event) {
       DB.operationOrders.unshift(result.item);
       logSystemAction(OPERATION_KIND_META.operationOrders.logModule, 'CREATE', `Tạo đơn hàng [${result.item.code} - ${title}] (${OPERATION_ORDER_SUBTAB_LABELS[orderLocationType]}) — nhập hàng loạt`, 'SUCCESS', result.item.code);
       notifyOperationApprovalNeeded('operationOrders', result.item);
-      created.push({ fileName: file.name, code: result.item.code, poNumber: payload.poNumber });
+      created.push({ fileName: file.name, code: result.item.code, poNumber: payload.poNumber, warning: result.warning });
     } catch (err) {
       skipped.push({ fileName: file.name, reason: err.message });
     }
@@ -767,6 +767,13 @@ async function handleOperationOrderMultiFilePdfUpload(event) {
   if (skipped.length) {
     lines2.push(`⏭️ Bỏ qua ${skipped.length} file:`);
     lines2.push(...skipped.map(s => `  • ${s.fileName}: ${s.reason}`));
+  }
+  // warning (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026) — cùng lý do submitOperationOrder(): cảnh báo
+  // ngay nếu 1 đơn tạo hàng loạt lọc approver theo siêu thị ra danh sách RỖNG, tránh treo âm thầm.
+  const warned = created.filter(c => c.warning);
+  if (warned.length) {
+    lines2.push(`⚠️ ${warned.length} đơn CHƯA có người duyệt khớp đúng siêu thị (chỉ Admin duyệt được cho tới khi cấu hình lại):`);
+    lines2.push(...warned.map(c => `  • ${c.code}`));
   }
   alert(lines2.join('\n'));
 }
@@ -831,17 +838,22 @@ async function submitOperationOrder(e) {
     discountAmount, vatAmount, afterDiscountAmount, paymentTotalAmount,
     customData
   };
-  let newItem;
+  let newItem, warning;
   try {
     const result = await callCreateAction('operationOrders', payload);
     newItem = result.item;
+    warning = result.warning;
   } catch (err) { return alert(`⛔ ${err.message}`); }
 
   DB.operationOrders.unshift(newItem);
   logSystemAction(OPERATION_KIND_META.operationOrders.logModule, 'CREATE', `Tạo đơn hàng [${newItem.code} - ${title}] (${OPERATION_ORDER_SUBTAB_LABELS[orderLocationType]})`, 'SUCCESS', newItem.code);
   notifyOperationApprovalNeeded('operationOrders', newItem);
 
-  alert('✅ Đã gửi đơn hàng thành công!');
+  // warning (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026): server trả kèm cảnh báo nếu lọc approver theo
+  // đúng siêu thị (filterOperationOrderStoreApprovers(), lib/workflowEngine.js) ra danh sách RỖNG — đơn
+  // vẫn tạo được nhưng chưa ai (ngoài admin) duyệt được, cần báo ngay để người tạo/admin biết mà xử lý
+  // cấu hình Người Duyệt, không để đơn "treo" âm thầm.
+  alert(warning ? `⚠️ ${warning}` : '✅ Đã gửi đơn hàng thành công!');
   resetOperationOrderForm();
   renderOperationOrderList();
 }

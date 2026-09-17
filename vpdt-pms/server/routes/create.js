@@ -9,6 +9,8 @@ const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 const employeeProfile = require('../lib/employeeProfile');
 const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS } = require('../lib/recordViewScope');
+const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS } = require('../lib/workflowEngine');
+const { insertSystemLog } = require('../lib/systemLogStore');
 // assertPayloadFileUrlsOwnedByUser() — vá lỗ hổng giả mạo quyền sở hữu file (rà soát bảo mật 9/2026,
 // mức Cao): xem chú thích đầy đủ ở lib/uploadedFiles.js + sql/schema.sql (bảng UploadedFiles).
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
@@ -252,7 +254,32 @@ router.post('/:module', async (req, res) => {
       });
     }
 
-    res.json({ ok: true, item: record });
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): tác dụng phụ của bản vá "Duyệt Đơn
+    // Hàng Siêu Thị tự khớp đúng siêu thị" (filterOperationOrderStoreApprovers(), lib/workflowEngine.js)
+    // — lọc approver theo đúng siêu thị (item.dept) có thể vô tình lọc RỖNG danh sách duyệt bước 1 nếu
+    // admin cấu hình approver cho mức giá trị đó nhưng KHÔNG ai trong số họ có dept/secondaryPositions
+    // khớp đúng siêu thị vừa đặt hàng (VD quên gắn "Vị Trí Kiêm Nhiệm" cho quản lý vùng phụ trách siêu
+    // thị đó) — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng KHÔNG một người duyệt "thường" nào thấy được
+    // để xử lý (chỉ admin bypass mới duyệt được, xem applyWorkflowAction()) — im lặng "treo" vô thời hạn
+    // nếu admin không tình cờ phát hiện. Vá bằng cách CẢNH BÁO NGAY khi tạo (không chặn tạo — hồ sơ vẫn
+    // hợp lệ, admin vẫn duyệt được bình thường): trả kèm `warning` cho người tạo thấy ngay + ghi 1 dòng
+    // Nhật Ký Hệ Thống mức WARNING để admin tra cứu được kể cả khi bỏ lỡ alert lúc tạo.
+    let warning = null;
+    if (moduleKey === 'operationOrders' && record.orderLocationType === 'STORE') {
+      const resolved = WORKFLOW_MODULE_CONFIGS.operationOrders.resolveWfConfig(record, appData);
+      const step1Approvers = resolved?.approvers?.[record.currentStep] || [];
+      if (!step1Approvers.length) {
+        warning = `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${record.dept}" ở mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
+        await insertSystemLog({
+          username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
+          module: 'OPERATION_ORDER', actionType: 'CREATE_NO_APPROVER_WARNING',
+          targetObject: record.code || String(record.id),
+          description: warning, status: 'WARNING'
+        });
+      }
+    }
+
+    res.json({ ok: true, item: record, warning });
   } catch (err) {
     if (err instanceof CreateError) return res.status(err.status).json({ error: err.message });
     // In đủ err.stack (trước đây chỉ err.message) — lỗi không mong đợi (không phải CreateError/HttpError)
