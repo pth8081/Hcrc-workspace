@@ -28,7 +28,8 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterInternalPostsForUser,
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
-  filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser
+  filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser,
+  filterChecklistSubmissionsForReportCrossView
 } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -103,7 +104,14 @@ const REPORT_QUERY_CONFIGS = {
   // Đồng Phục dùng bộ lọc CHỌN NHIỀU siêu thị (không phải dept đơn) — client cố tình KHÔNG truyền dept
   // (xem module-baocaoquantri.js), nên where.Dept ở đây luôn bỏ qua; lọc theo danh sách đã chọn vẫn làm
   // ở JS sau khi nhận về, chỉ phần thu hẹp theo ngày là đẩy xuống SQL.
-  uniformIssuances: { filterFn: filterUniformIssuancesForUser, needsAppData: false }
+  uniformIssuances: { filterFn: filterUniformIssuancesForUser, needsAppData: false },
+  // Checklist Đánh Giá Siêu Thị (v23.29) — CỐ Ý dùng filterFn RIÊNG (filterChecklistSubmissionsForReportCrossView,
+  // không phải filterChecklistSubmissionsForUser dùng chung ở GET /api/data) — theo yêu cầu người dùng: cho
+  // phép "xem chéo" báo cáo Checklist qua ĐÚNG màn Báo Cáo tổng hợp (perms.reportViewAll/reportExtraKeys)
+  // mà KHÔNG cấp thêm quyền vào module Checklist thật (canAccessChecklistModule() không đổi). Bảng
+  // ChecklistSubmissions không có cột Dept (chỉ StoreCode, phân quyền PHẲNG — xem sql/schema.sql) nên
+  // where.Dept ở route bên dưới tự bỏ qua (cfg.columns.Dept undefined), không cần ignoreDept.
+  checklistSubmissions: { filterFn: filterChecklistSubmissionsForReportCrossView, needsAppData: false }
 };
 
 router.get('/:collection', async (req, res) => {

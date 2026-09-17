@@ -133,7 +133,13 @@ const REPORT_NAV_TREE = [
     key: 'vanHanh', label: '🛠️ QLDA', children: [
       { key: 'vanHanh', label: '📦 Đơn Hàng' },
       { key: 'operationStoreOpen', label: '🏬 Mở Mới Siêu Thị' },
-      { key: 'operationRepair', label: '🔧 Sửa Chữa Siêu Thị' }
+      { key: 'operationRepair', label: '🔧 Sửa Chữa Siêu Thị' },
+      // Checklist Đánh Giá Siêu Thị (v23.29) — module ĐỘC LẬP HOÀN TOÀN về dữ liệu/quyền (không dùng
+      // chung gì với Vận Hành), gộp chung nhóm nav này chỉ vì cùng nằm dưới dropdown sidebar "⚙️ Vận
+      // Hành ▾" (thuần UI, xem mục 4.7 tài liệu). Quyền hiện tab MẶC ĐỊNH = checklistReportView (xem
+      // REPORT_KEY_ACCESS_FN ở isReportKeyVisible() trên), KHÔNG PHẢI hasModuleAccess() phẳng như 3 leaf
+      // còn lại — cố tình chặt hơn vì đây là dữ liệu đánh giá/VSATTP của siêu thị.
+      { key: 'checklist', label: '✅ Checklist Đánh Giá Siêu Thị' }
     ]
   }
 ];
@@ -142,10 +148,23 @@ const REPORT_NAV_TREE = [
 // (perms.reportViewAll, xem systemSection.html mục 24) bỏ qua giới hạn theo quyền module bên dưới;
 // user.reportExtraKeys mở thêm TỪNG tab cụ thể. Đây CHỈ ảnh hưởng tab nào HIỆN trên nav — dữ liệu THẬT
 // trả về vẫn luôn qua đúng filter*ForUser()/canView*() thật ở routes/reports.js (không đổi, không bypass
-// phạm vi phòng ban/quyền sở hữu bản ghi thật của từng collection).
+// phạm vi phòng ban/quyền sở hữu bản ghi thật của từng collection) — NGOẠI LỆ DUY NHẤT là "checklist"
+// (xem REPORT_KEY_ACCESS_FN + filterChecklistSubmissionsForReportCrossView ở lib/recordViewScope.js):
+// module đó phân quyền PHẲNG dựa trên "có tham gia hay không" (tự nộp bài/được phân công kiểm soát), nên
+// "xem chéo" ĐÚNG NGHĨA phải thấy được TOÀN BỘ báo cáo dù không tham gia gì — không có khái niệm "phạm vi
+// phòng ban" nào để giữ nguyên như các module khác.
+//
+// Một số key KHÔNG dùng hasModuleAccess() làm mặc định được — "checklist" có tab Báo Cáo RIÊNG bên trong
+// chính module đó (module-checklist tách biệt hoàn toàn khỏi Báo Cáo tổng hợp, xem mục 4.7 tài liệu),
+// quyền thật là checklistReportView (KHÔNG PHẢI quyền "vào module" phẳng như đa số module khác) — tái
+// dùng canViewChecklistReportsClient() để mặc định (chưa có reportViewAll/reportExtraKeys) chỉ hiện cho
+// đúng người có quyền xem báo cáo checklist thật, không mở tràn cho mọi người có quyền module 0.
+const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient' };
 function isReportKeyVisible(key) {
   if (currentUser?.perms?.reportViewAll) return true;
   if ((currentUser?.reportExtraKeys || []).includes(key)) return true;
+  const fnName = REPORT_KEY_ACCESS_FN[key];
+  if (fnName) { const fn = window[fnName]; return typeof fn === 'function' ? !!fn(currentUser) : false; }
   return hasModuleAccess(currentUser, key);
 }
 
@@ -226,8 +245,12 @@ function repopulateReportsDeptFilterOptions(key) {
   const el = document.getElementById('reportsDeptFilter');
   if (!el) return;
   const prevValue = el.value;
-  const source = key === 'uniform' ? (DB.stores || []) : (DB.depts || []);
-  const label = key === 'uniform' ? '-- Tất cả siêu thị --' : '-- Tất cả phòng ban --';
+  // "checklist" (v23.29) — phân quyền PHẲNG theo SIÊU THỊ (storeCode), không có khái niệm phòng ban —
+  // dùng chung danh mục DB.stores với "uniform" nhưng KHÔNG bật khối multi-select riêng của uniform bên
+  // dưới (vẫn dùng select đơn #reportsDeptFilter bình thường).
+  const isStoreScoped = key === 'uniform' || key === 'checklist';
+  const source = isStoreScoped ? (DB.stores || []) : (DB.depts || []);
+  const label = isStoreScoped ? '-- Tất cả siêu thị --' : '-- Tất cả phòng ban --';
   el.innerHTML = `<option value="">${label}</option>` + source.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   if (source.includes(prevValue)) el.value = prevValue; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
 
@@ -537,6 +560,34 @@ const REPORT_MODULE_CONFIGS = {
       () => DB.operationRepairs.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.estimateStatus,
     statusBuckets: [['DRAFT', 'Chưa lập dự toán', 'bg-gray-400'], ['APPROVED', 'Đã lập dự toán', 'bg-green-500'], ['REJECTED', 'Dự toán bị từ chối (dữ liệu cũ)', 'bg-red-500']]
+  },
+  // Checklist Đánh Giá Siêu Thị (v23.29, "xem chéo" theo yêu cầu người dùng) — quyền hiện tab dùng
+  // canViewChecklistReportsClient() thay vì hasModuleAccess() phẳng (xem REPORT_KEY_ACCESS_FN ở
+  // isReportKeyVisible() trên) + filterFn RIÊNG ở server (filterChecklistSubmissionsForReportCrossView,
+  // lib/recordViewScope.js) cho phép reportViewAll/reportExtraKeys thấy TOÀN BỘ bài nộp dù không tham
+  // gia — bản ghi KHÔNG có "createdAt"/"dept" (phân quyền phẳng theo storeCode, xem sql/schema.sql), dùng
+  // submittedAt/startedAt cho ngày và storeCode cho bộ lọc "phòng ban" (thật ra là siêu thị, xem
+  // repopulateReportsDeptFilterOptions() ở trên). Đây là bản TÓM TẮT chung (tổng số/trạng thái/đạt-chưa
+  // đạt) — báo cáo VSATTP chi tiết (cây hạng mục/điểm trừ) vẫn CHỈ có ở tab Báo Cáo nội bộ của module
+  // Checklist (checklistReportView thật, xem mục 4.7 tài liệu), không lặp lại ở đây.
+  checklist: {
+    title: '✅ Báo Cáo Checklist Đánh Giá Siêu Thị',
+    getRecords: (dept, from, to) => fetchReportRecords('checklistSubmissions', '', from, to,
+      () => DB.checklistSubmissions.filter(r => isInDateRange(r.submittedAt || r.startedAt, from, to))
+    ).then(items => items.filter(r => !dept || r.storeCode === dept)),
+    statusOf: r => r.status,
+    statusBuckets: [['DRAFT', 'Đang làm', 'bg-gray-400'], ['SUBMITTED', 'Đã nộp', 'bg-green-500']],
+    // Bản ghi dùng field "storeCode" (siêu thị), không phải "dept" (phòng ban) như đa số module khác —
+    // tắt khối "Khối Lượng Theo Phòng Ban" mặc định (đọc thẳng r.dept, sẽ luôn rỗng) thay vì hiện 1 khối
+    // trống vô nghĩa; bộ lọc siêu thị + cột storeCode ở bảng chi tiết bên dưới vẫn đủ dùng để xem theo
+    // từng siêu thị.
+    deptBreakdown: false,
+    extraRows: records => {
+      const submitted = records.filter(r => r.status === 'SUBMITTED');
+      const passed = submitted.filter(r => r.isPassed === true).length;
+      const failed = submitted.filter(r => r.isPassed === false).length;
+      return [['Đã nộp — Đạt', passed], ['Đã nộp — Chưa đạt', failed]];
+    }
   }
 };
 

@@ -45,7 +45,14 @@ function seedReportData() {
     meetingMinutes: [
       { id: 1, dept: 'Phòng Kế Toán', createdAt: '2026-03-01T09:00:00' }
     ],
-    vppRegistrations: [], uniformIssuances: [] // not exercised by these scenarios, seeded empty for safety
+    vppRegistrations: [], uniformIssuances: [], // not exercised by these scenarios, seeded empty for safety
+    // "checklist" cross-view (v23.29) — none submitted by the viewer/noAccess test users, simulating a
+    // true outsider who must rely on reportExtraKeys/reportViewAll to see anything at all.
+    checklistSubmissions: [
+      { id: 1, submittedByUsername: 'other1', storeCode: 'Siêu Thị A', status: 'SUBMITTED', isPassed: true, submittedAt: '2026-03-01T09:00:00' },
+      { id: 2, submittedByUsername: 'other2', storeCode: 'Siêu Thị B', status: 'SUBMITTED', isPassed: false, submittedAt: '2026-03-02T09:00:00' },
+      { id: 3, submittedByUsername: 'other1', storeCode: 'Siêu Thị A', status: 'DRAFT', startedAt: '2026-03-03T09:00:00' }
+    ]
   };
 }
 
@@ -299,7 +306,7 @@ async function main() {
       const hrNode = nav.find((n) => n.key === 'hr');
       const vanHanhNode = nav.find((n) => n.key === 'vanHanh');
       assert(hrNode && JSON.stringify(hrNode.children) === JSON.stringify(['hr', 'hrLifecycle']), `node "hr" phải có đúng 2 con [hr, hrLifecycle], got: ${JSON.stringify(hrNode)}`);
-      assert(vanHanhNode && JSON.stringify(vanHanhNode.children) === JSON.stringify(['vanHanh', 'operationStoreOpen', 'operationRepair']), `node "vanHanh" phải có đúng 3 con, got: ${JSON.stringify(vanHanhNode)}`);
+      assert(vanHanhNode && JSON.stringify(vanHanhNode.children) === JSON.stringify(['vanHanh', 'operationStoreOpen', 'operationRepair', 'checklist']), `node "vanHanh" phải có đúng 4 con (thêm "checklist" từ v23.29), got: ${JSON.stringify(vanHanhNode)}`);
     });
 
     await run('Báo Cáo HCRC Đồng Hành: đếm đúng PENDING/ANSWERED, không lộ nội dung câu hỏi ngoài phạm vi', async () => {
@@ -342,6 +349,38 @@ async function main() {
       });
       assertEqual(stats.orders, 3, 'operationOrders total mismatch'); assertEqual(stats.storeOpen, 2, 'operationStoreOpenings total mismatch'); assertEqual(stats.repair, 1, 'operationRepairs total mismatch');
       assertEqual(stats.ordersAwaiting, 1, 'AWAITING_RECEIPT count mismatch'); assertEqual(stats.storeOpenApproved, 1, 'estimateStatus APPROVED count mismatch');
+    });
+
+    await run('Báo Cáo Checklist (v23.29, "xem chéo"): ẩn theo mặc định, hiện sau khi cấp reportExtraKeys, đếm đúng theo siêu thị', async () => {
+      await page.evaluate(() => { DB.stores = ['Siêu Thị A', 'Siêu Thị B']; });
+
+      // "viewer" có canViewReports (vào được màn Báo Cáo) nhưng KHÔNG có checklistReportView — mặc định
+      // KHÔNG được thấy tab "checklist" (isReportKeyVisible() dùng canViewChecklistReportsClient() làm
+      // baseline cho key này, không phải hasModuleAccess() phẳng như đa số module khác).
+      const hiddenByDefault = await page.evaluate(() => isReportKeyVisible('checklist'));
+      assert(!hiddenByDefault, '"checklist" phải ẩn mặc định cho người không có checklistReportView');
+
+      // Cấp "mở thêm" đúng tab này (mirror thao tác admin tick ở ô "Mở Thêm Tab Báo Cáo", xem
+      // module-admin-userstaging.js) — không đụng gì tới quyền module Checklist thật.
+      await page.evaluate(() => { currentUser.reportExtraKeys = ['checklist']; });
+      const visibleAfterExtraKey = await page.evaluate(() => isReportKeyVisible('checklist'));
+      assert(visibleAfterExtraKey, '"checklist" phải hiện sau khi cấp reportExtraKeys=["checklist"]');
+
+      const stats = await page.evaluate(async () => {
+        const all = await REPORT_MODULE_CONFIGS.checklist.getRecords('', '2026-01-01', '2026-12-31');
+        const storeA = await REPORT_MODULE_CONFIGS.checklist.getRecords('Siêu Thị A', '2026-01-01', '2026-12-31');
+        return {
+          total: all.length, storeA: storeA.length,
+          submitted: all.filter((r) => r.status === 'SUBMITTED').length,
+          extraRows: REPORT_MODULE_CONFIGS.checklist.extraRows(all)
+        };
+      });
+      assertEqual(stats.total, 3, 'checklistSubmissions total mismatch');
+      assertEqual(stats.storeA, 2, 'checklistSubmissions Siêu Thị A-only mismatch (SUBMITTED+DRAFT của A)');
+      assertEqual(stats.submitted, 2, 'SUBMITTED count mismatch');
+      assertEqual(JSON.stringify(stats.extraRows), JSON.stringify([['Đã nộp — Đạt', 1], ['Đã nộp — Chưa đạt', 1]]), `extraRows mismatch: ${JSON.stringify(stats.extraRows)}`);
+
+      await page.evaluate(() => { currentUser.reportExtraKeys = []; });
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);

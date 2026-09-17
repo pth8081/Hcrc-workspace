@@ -1080,6 +1080,21 @@ function filterChecklistSubmissionsForUser(items, user) {
   return (items || []).filter(s => canViewChecklistSubmission(user, s));
 }
 
+// PHÁT HIỆN theo yêu cầu người dùng (10/2026): "xem chéo Báo Cáo" — người KHÔNG thuộc module Checklist
+// (không có checklistReportView/checklistTemplateManage, không tự nộp bài nào) vẫn cần xem được TOÀN BỘ
+// báo cáo Checklist qua màn "📊 Báo Cáo" tổng hợp (perms.reportViewAll hoặc reportExtraKeys chứa
+// 'checklist', xem isReportKeyVisible() ở module-baocaoquantri.js) — KHÔNG cấp thêm quyền vào module
+// Checklist thật (canAccessChecklistModule() không đổi, vẫn đòi đúng checklistReportView/quản lý mẫu/
+// phạm vi kiểm soát/tự đánh giá siêu thị như cũ). CHỈ dùng riêng cho route GET /api/reports/checklistSubmissions
+// (routes/reports.js) — KHÔNG áp dụng cho GET /api/data (routes/data.js vẫn gọi filterChecklistSubmissionsForUser()
+// nguyên bản ở trên), nên quyền xem chéo này không rò rỉ sang bất kỳ màn nào khác ngoài Báo Cáo.
+function filterChecklistSubmissionsForReportCrossView(items, user) {
+  if (!user) return [];
+  if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return items || [];
+  if (user.perms?.reportViewAll || (user.reportExtraKeys || []).includes('checklist')) return items || [];
+  return filterChecklistSubmissionsForUser(items, user);
+}
+
 // PQ-01: "Khối 0" (user.perms.moduleAccess, xem BUSINESS_MODULES/hasModuleAccess() ở public/js/core.js)
 // là gate cấp module TOÀN BỘ (admin có thể tắt hẳn 1 module cho 1 user cụ thể, độc lập với mọi quyền
 // chi tiết khác) — trước đây CHỈ được thực thi ở CLIENT (ẩn tab/route điều hướng), không hề có gate
@@ -1166,7 +1181,7 @@ module.exports = {
   canViewShiftSwapRequest, filterShiftSwapRequestsForUser,
   canViewAllPayrollData, filterPayrollPeriodsForUser, filterPayslipsForUser,
   canViewChecklistTemplate, filterChecklistTemplatesForUser,
-  canViewChecklistSubmission, filterChecklistSubmissionsForUser,
+  canViewChecklistSubmission, filterChecklistSubmissionsForUser, filterChecklistSubmissionsForReportCrossView,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS

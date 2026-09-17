@@ -1,12 +1,57 @@
 # Phiên bản hiện tại
 
-**23.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
 > **Lưu ý**: file này đã bị bỏ lỡ cập nhật ở nhiều lần merge liên tiếp trước đó (v23.18 → v23.27 không
 > có mục riêng ở đây dù `server/package.json` đã tăng đúng) — xem lịch sử commit/PR trên GitHub cho các
 > bản đó, không lặp lại ở đây. Ghi chú dưới đây bắt đầu lại từ v23.28.
+
+## v23.29 (2026-09-17): "Xem chéo" Báo Cáo Checklist Đánh Giá Siêu Thị (VSATTP) qua đúng màn Báo Cáo tổng hợp
+
+Theo yêu cầu người dùng: cần cho 1 người KHÔNG thuộc module Checklist Đánh
+Giá Siêu Thị (không tự nộp bài, không `checklistReportView`) xem được báo
+cáo của module đó, nhưng phân quyền phải nằm Ở ĐÚNG màn "📊 Báo Cáo" tổng hợp
+(quyền `reportExtraKeys`/`reportViewAll` đã làm ở v23.28) — KHÔNG cấp thêm
+quyền vào module Checklist thật (tránh mở luôn cả 4 tab nội bộ/cấu hình mẫu).
+
+Trước đó module Checklist bị loại HẲN khỏi màn Báo Cáo tổng hợp (có tab Báo
+Cáo nội bộ riêng, xem v17.9 note trong `Huong-dan-nghiep-vu.md` mục 5) nên
+`reportExtraKeys`/`reportViewAll` không có tác dụng gì với nó. Bản này thêm
+1 mục TÓM TẮT (tổng số/trạng thái/Đạt-Chưa đạt) cho Checklist trong màn Báo
+Cáo tổng hợp (nhóm QLDA), với 2 điểm khác biệt so với 19 module còn lại:
+- Quyền hiện tab MẶC ĐỊNH (chưa có `reportExtraKeys`/`reportViewAll`) là
+  `checklistReportView` thật, không phải `hasModuleAccess()` phẳng như các
+  module khác (Checklist vốn gác chặt hơn).
+- Filter dữ liệu dùng hàm RIÊNG `filterChecklistSubmissionsForReportCrossView()`
+  (mới, `lib/recordViewScope.js`) thay vì `filterChecklistSubmissionsForUser()`
+  dùng chung — cho phép người có `reportExtraKeys`/`reportViewAll` thấy TOÀN
+  BỘ bài nộp dù không tham gia gì (ngoại lệ so với các module khác, vốn giữ
+  nguyên phạm vi phòng ban/quyền sở hữu — Checklist không có khái niệm đó vì
+  phân quyền phẳng theo "có tham gia hay không"). Hàm này CHỈ dùng ở
+  `GET /api/reports/checklistSubmissions` — route `GET /api/data` (module
+  Checklist thật) không đổi, vẫn `filterChecklistSubmissionsForUser()` gốc.
+
+Báo cáo VSATTP chi tiết (cây hạng mục/điểm trừ, xuất Excel nhiều sheet) vẫn
+CHỈ có ở tab Báo Cáo nội bộ thật của module Checklist — không lặp lại ở màn
+Báo Cáo tổng hợp.
+
+**File đã sửa**: `lib/recordViewScope.js` (hàm mới
+`filterChecklistSubmissionsForReportCrossView`), `routes/reports.js` (thêm
+entry `checklistSubmissions` vào `REPORT_QUERY_CONFIGS`),
+`public/js/module-baocaoquantri.js` (`REPORT_KEY_ACCESS_FN`, entry `checklist`
+trong `REPORT_NAV_TREE`/`REPORT_MODULE_CONFIGS`, bộ lọc siêu thị thay phòng
+ban cho mục này). **Test**: `tests/test-checklist-report-crossview.js` (mới,
+8 kịch bản thuần cho hàm filter), cập nhật `tests/test-reports.js` (assertion
+số con của node "vanHanh" + 1 kịch bản mới cho nav-visibility/getRecords của
+"checklist"). Toàn bộ regression Checklist/Báo Cáo/Nghiệp Vụ liên quan đã
+chạy lại và pass.
+
+**Deploy-impact**: không đổi `schema.sql`, không thêm biến môi trường/npm
+dependency mới — chỉ cần copy code + `pm2 restart`. Cần admin tự cấp
+`reportExtraKeys: ['checklist']` (hoặc `reportViewAll`) cho người cần "xem
+chéo" — mặc định KHÔNG ai được cấp thêm gì so với trước.
 
 ## v23.28 (2026-09-17): Bỏ quyền admin mặc định ở Hồ Sơ Nhân Sự/HĐLĐ/Lương + audit log + phân quyền theo mục ở Nghiệp Vụ/Báo Cáo
 

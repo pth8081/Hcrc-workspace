@@ -1720,6 +1720,20 @@ dropdown sidebar `"⚙️ Vận Hành ▾"` cho gọn (thuần UI, không đổi
 Quả & Phản Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này,
 tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
 
+**"Xem chéo" ở màn Báo Cáo tổng hợp (từ v23.29)**: theo yêu cầu người dùng —
+cho phép người KHÔNG thuộc module này (không tự nộp bài, không
+`checklistReportView`) vẫn xem được báo cáo TÓM TẮT (tổng số/trạng thái/Đạt-
+Chưa đạt) qua đúng màn **📊 Báo Cáo** (nhóm QLDA, mục "✅ Checklist Đánh Giá
+Siêu Thị"), bằng quyền `perms.reportViewAll` hoặc `reportExtraKeys` chứa
+`'checklist'` (xem mục 5 "Mở Thêm Tab Báo Cáo") — **KHÔNG cấp thêm quyền vào
+module Checklist thật** (không vào được 4 tab nội bộ ở trên). Đây là NGOẠI LỆ
+DUY NHẤT trong cơ chế "xem chéo" chung: thấy TOÀN BỘ bài nộp mọi siêu thị
+(không giữ nguyên phạm vi như các module khác) vì bản chất phân quyền
+Checklist là PHẲNG theo "có tham gia hay không", không có khái niệm phạm vi
+phòng ban để giữ nguyên. Báo cáo VSATTP chi tiết (cây hạng mục/điểm trừ) vẫn
+CHỈ có ở tab Báo Cáo nội bộ (`checklistReportView` thật) — bản tóm tắt ở màn
+Báo Cáo tổng hợp không lặp lại phần này.
+
 **3 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
 - `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist
   (tab Cấu Hình).
@@ -1981,9 +1995,11 @@ liệu cực nhạy cảm đã bị chặn hẳn khỏi `GET /api/data` chung (H
 Hợp Đồng Lao Động, Lương, Công & Phép) — 4 module Nhân Sự này **CHƯA có** ở
 Báo Cáo (cần thiết kế route thống kê riêng, gác đúng quyền quản lý hiện có
 của từng module, không đọc thẳng qua `DB.<collection>` như các module khác vì
-collection tương ứng luôn rỗng phía client). Checklist Đánh Giá Siêu Thị cũng
-**cố ý không** có ở đây — module đó đã có tab "📊 Báo Cáo" nội bộ riêng, tách
-biệt hoàn toàn (xem mục 4.7).
+collection tương ứng luôn rỗng phía client). Checklist Đánh Giá Siêu Thị
+**cũng có tab Báo Cáo NỘI BỘ riêng, tách biệt hoàn toàn** (xem mục 4.7) —
+nhưng từ v23.29 có thêm 1 mục TÓM TẮT ở màn Báo Cáo tổng hợp này (nhóm QLDA)
+dành riêng cho nhu cầu "xem chéo" (xem chi tiết cơ chế + ngoại lệ bảo mật ở
+mục 4.7), không thay thế tab nội bộ.
 
 **Phân quyền hiện tab (từ v23.28)**: mỗi tab trong nav trái (`REPORT_NAV_TREE`,
 `module-baocaoquantri.js`) chỉ hiện cho người ĐÃ có đúng quyền vào module thật
@@ -1997,7 +2013,10 @@ liệu THẬT trả về vẫn luôn qua đúng `filter*ForUser()`/`canView*()` 
 `routes/reports.js` như trước (không bypass phạm vi phòng ban/quyền sở hữu
 bản ghi thật của từng collection); người được mở thêm 1 tab qua
 `reportExtraKeys` mà chưa có quyền xem dữ liệu module đó theo đúng nghĩa sẽ
-thấy tab nhưng dữ liệu trống/thiếu, không phải lỗi.
+thấy tab nhưng dữ liệu trống/thiếu, không phải lỗi. **Ngoại lệ DUY NHẤT**:
+mục "checklist" (xem mục 4.7) — do bản chất phân quyền PHẲNG (không có phạm
+vi phòng ban để giữ), `reportExtraKeys`/`reportViewAll` ở mục này thật sự
+mở ra TOÀN BỘ dữ liệu (không phải tab rỗng), CỐ Ý khác các mục còn lại.
 
 - **Thống kê chung theo module** — với 4 module có luồng phê duyệt nhiều bước
   (Tài Liệu/Văn Bản Trình/Xe/Văn Phòng): tổng số hồ sơ, phân theo trạng
