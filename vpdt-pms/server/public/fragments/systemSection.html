@@ -108,10 +108,10 @@
       <button data-op="switchWfModule" data-arg0="OFFICE_BUY" id="btnWfModOfficeBuy" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🛒 QT Mua Bán</button>
       <button data-op="switchWfModule" data-arg0="OFFICE_FIX" id="btnWfModOfficeFix" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Sửa Chữa</button>
       <button data-op="switchWfModule" data-arg0="VPP" id="btnWfModVpp" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖇️ QT Văn Phòng Phẩm</button>
-      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_STORE" id="btnWfModOperationOrderStore" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị</button>
-      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_HO" id="btnWfModOperationOrderHO" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT Vận Hành - Đặt Hàng Tại HO</button>
-      <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN" id="btnWfModOperationStoreOpen" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 QT Vận Hành - Mở Mới Siêu Thị</button>
-      <button data-op="switchWfModule" data-arg0="OPERATION_REPAIR" id="btnWfModOperationRepair" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT Vận Hành - Sửa Chữa Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_STORE" id="btnWfModOperationOrderStore" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT QLDA - Đặt Hàng Tại Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_ORDER_HO" id="btnWfModOperationOrderHO" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📦 QT QLDA - Đặt Hàng Tại HO</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_STORE_OPEN" id="btnWfModOperationStoreOpen" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏬 QT QLDA - Mở Mới Siêu Thị</button>
+      <button data-op="switchWfModule" data-arg0="OPERATION_REPAIR" id="btnWfModOperationRepair" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔧 QT QLDA - Sửa Chữa Siêu Thị</button>
       <button data-op="switchWfModule" data-arg0="CONTRACT_APPROVAL" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
       <button data-op="switchWfModule" data-arg0="CONTRACT_MANAGE" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
       <button data-op="switchWfModule" data-arg0="PAYMENT" id="btnWfModPAYMENT" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 QT Thanh Toán</button>
@@ -450,7 +450,7 @@
     <div id="adminSubOpApi" class="hidden bg-teal-50 p-4 rounded border border-teal-300 space-y-4">
       <div>
         <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">🔌 Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16</h3>
-        <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình để hệ thống TỰ ĐỘNG gửi Đơn Hàng (Vận Hành &gt; Đơn Hàng) sang hệ thống ngoài "dsmart16" — mỗi đơn có "Số Đơn NCC" (poNumber) chỉ được gửi 1 lần khi đủ điều kiện. Giá trị header xác thực là write-only (để trống ô khi Sửa = giữ nguyên giá trị đã lưu).</p>
+        <p class="text-[11px] text-gray-500 italic mt-1">Cấu hình để hệ thống TỰ ĐỘNG gửi Đơn Hàng (QLDA &gt; Đơn Hàng) sang hệ thống ngoài "dsmart16" — mỗi đơn có "Số Đơn NCC" (poNumber) chỉ được gửi 1 lần khi đủ điều kiện. Giá trị header xác thực là write-only (để trống ô khi Sửa = giữ nguyên giá trị đã lưu).</p>
       </div>
 
       <form data-op-submit="saveOperationOrderApiConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
@@ -1511,11 +1511,11 @@
 
         <details class="perm-tree-node bg-white rounded border text-xs">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
-            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚚 22. Vận Hành</span></span>
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚚 22. QLDA</span></span>
             <span id="permTreeBadge_vanHanh" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">3 luồng ĐỘC LẬP, mỗi luồng 1 quyền tạo riêng — KHÔNG liên quan tới quyền Mua Bán/Sửa Chữa/Đầu Tư của module "Tổng Hợp" (2 module hoàn toàn tách biệt, dữ liệu không dùng chung). Có quyền tạo mới tự động thấy được luồng đó trong module "Vận Hành"; người nằm trong quy trình duyệt của phòng ban (cấu hình ở "Hệ Thống → Quy Trình & Phê Duyệt") cũng tự thấy hồ sơ cần xử lý dù không có quyền tạo. Phải có ÍT NHẤT 1 trong các quyền dưới đây mới vào được module.</p>
+            <p class="text-[11px] text-gray-500 italic">3 luồng ĐỘC LẬP, mỗi luồng 1 quyền tạo riêng — KHÔNG liên quan tới quyền Mua Bán/Sửa Chữa/Đầu Tư của module "Tổng Hợp" (2 module hoàn toàn tách biệt, dữ liệu không dùng chung). Có quyền tạo mới tự động thấy được luồng đó trong module "QLDA"; người nằm trong quy trình duyệt của phòng ban (cấu hình ở "Hệ Thống → Quy Trình & Phê Duyệt") cũng tự thấy hồ sơ cần xử lý dù không có quyền tạo. Phải có ÍT NHẤT 1 trong các quyền dưới đây mới vào được module.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-cyan-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pOperationOrderCreate"> 📦 Tạo/Gửi Đơn Hàng

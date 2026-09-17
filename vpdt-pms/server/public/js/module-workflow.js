@@ -72,7 +72,7 @@ const WF_MODULE_CONFIG = {
       { key: 'FROM10M_TO100M', label: '> 10 triệu - ≤ 100 triệu' },
       { key: 'GTE100M', label: '> 100 triệu' }
     ],
-    label: 'Vận Hành - Đặt Hàng Tại Siêu Thị', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại Siêu Thị Theo Mức Giá Trị'
+    label: 'QLDA - Đặt Hàng Tại Siêu Thị', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại Siêu Thị Theo Mức Giá Trị'
   },
   OPERATION_ORDER_HO: {
     pureTier: true,
@@ -81,10 +81,10 @@ const WF_MODULE_CONFIG = {
       { key: 'LT100M', label: '≤ 100 triệu' },
       { key: 'GTE100M', label: '> 100 triệu' }
     ],
-    label: 'Vận Hành - Đặt Hàng Tại HO', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại HO Theo Mức Giá Trị'
+    label: 'QLDA - Đặt Hàng Tại HO', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại HO Theo Mức Giá Trị'
   },
-  OPERATION_STORE_OPEN: { dbKey: 'operationStoreOpenDeptWorkflows', label: 'Vận Hành - Mở Mới Siêu Thị', title: '🏬 Cấu Hình Quy Trình Phê Duyệt Mở Mới Siêu Thị Theo Phòng Ban' },
-  OPERATION_REPAIR: { dbKey: 'operationRepairDeptWorkflows', label: 'Vận Hành - Sửa Chữa Siêu Thị', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa Siêu Thị Theo Phòng Ban' }
+  OPERATION_STORE_OPEN: { dbKey: 'operationStoreOpenDeptWorkflows', label: 'QLDA - Mở Mới Siêu Thị', title: '🏬 Cấu Hình Quy Trình Phê Duyệt Mở Mới Siêu Thị Theo Phòng Ban' },
+  OPERATION_REPAIR: { dbKey: 'operationRepairDeptWorkflows', label: 'QLDA - Sửa Chữa Siêu Thị', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa Siêu Thị Theo Phòng Ban' }
   // Giai đoạn Dự toán (tab "🏬 Siêu Thị") ĐÃ BỎ HẲN phê duyệt — chủ ứng dụng xác nhận Vận Hành > Siêu Thị
   // không có bước duyệt nào cả, kể cả Dự toán — 2 entry OPERATION_STORE_OPEN_ESTIMATE/
   // OPERATION_REPAIR_ESTIMATE đã xoá khỏi đây.

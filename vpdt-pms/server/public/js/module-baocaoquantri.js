@@ -130,7 +130,7 @@ const REPORT_NAV_TREE = [
   // trả true, an toàn vì dữ liệu client nhận được đã lọc sẵn theo quyền xem thật). Node cha "Vận Hành"
   // vẫn ẩn đúng cho người bị tắt hẳn module (còn ít nhất 1 child = "vanHanh", key thật, tự gác đúng).
   {
-    key: 'vanHanh', label: '🛠️ Vận Hành', children: [
+    key: 'vanHanh', label: '🛠️ QLDA', children: [
       { key: 'vanHanh', label: '📦 Đơn Hàng' },
       { key: 'operationStoreOpen', label: '🏬 Mở Mới Siêu Thị' },
       { key: 'operationRepair', label: '🔧 Sửa Chữa Siêu Thị' }
@@ -502,7 +502,7 @@ const REPORT_MODULE_CONFIGS = {
   // thân hồ sơ đi thẳng "đã duyệt" ngay lúc tạo (Mục H, xem lib/workflowEngine.js), chỉ giai đoạn Dự
   // toán (estimateStatus) mới có quy trình duyệt thật nên dùng field đó làm statusOf thay vì status.
   vanHanh: {
-    title: '📦 Báo Cáo Đơn Hàng (Vận Hành)',
+    title: '📦 Báo Cáo Đơn Hàng (QLDA)',
     getRecords: (dept, from, to) => fetchReportRecords('operationOrders', dept, from, to,
       () => DB.operationOrders.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.status,

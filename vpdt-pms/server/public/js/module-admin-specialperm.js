@@ -109,8 +109,8 @@ const PWA_SHORTCUT_CATALOG_CLIENT = {
   'office:MUA_BAN': 'Tổng Hợp - Mua Bán', 'office:SUA_CHUA': 'Tổng Hợp - Sửa Chữa',
   'office:PAYMENT': 'Thanh Toán',
   budget: 'Ngân Sách',
-  'vanHanh:ORDERS': 'Vận Hành - Phê Duyệt Đơn Hàng', 'vanHanh:STORE_OPEN': 'Vận Hành - Mở Mới Siêu Thị',
-  'vanHanh:REPAIR': 'Vận Hành - Sửa Chữa Siêu Thị',
+  'vanHanh:ORDERS': 'QLDA - Phê Duyệt Đơn Hàng', 'vanHanh:STORE_OPEN': 'QLDA - Mở Mới Siêu Thị',
+  'vanHanh:REPAIR': 'QLDA - Sửa Chữa Siêu Thị',
   'itSupport:PRICE': 'Hỗ Trợ IT - Phê Duyệt Giá', 'itSupport:TICKET': 'Hỗ Trợ IT - Hỗ Trợ Yêu Cầu',
   periodicReport: 'Báo Cáo Định Kỳ', reports: 'Báo Cáo'
 };

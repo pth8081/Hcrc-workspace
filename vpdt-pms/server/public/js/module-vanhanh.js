@@ -1389,7 +1389,7 @@ async function processOperation(actionType) {
   if (transition.type === 'REQUEST_CHANGES') {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_REQUEST_CHANGES', updated.code, [updated.creator],
       `[VPDT] ${meta.subLabel} ${updated.code} cần bổ sung/chỉnh sửa`,
-      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục Vận Hành để sửa và gửi lại.`);
+      `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) của bạn cần được sửa lại. Lý do: ${comment}. Vui lòng vào mục QLDA để sửa và gửi lại.`);
     msg = '✅ Đã yêu cầu bổ sung — hồ sơ đã chuyển về NHÁP để người tạo sửa lại!';
   } else if (transition.type === 'REJECTED') {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_REJECTED', updated.code, [updated.creator],

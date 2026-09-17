@@ -280,7 +280,7 @@ function getMyPendingApprovals(user) {
   // item.orderLocationType, cùng khuôn resolveSubmissionWorkflow(sub) ngay trên (resolver theo TỪNG hồ
   // sơ, không phải map phẳng theo dept nữa).
   addDeptWorkflowItems(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
-    type: 'operationOrder', typeLabel: '📦 Vận Hành - Đơn hàng',
+    type: 'operationOrder', typeLabel: '📦 QLDA - Đơn hàng',
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
   });
@@ -298,7 +298,7 @@ function getMyPendingApprovals(user) {
   if (typeof canManageOperationOrderReceiptClient === 'function') {
     (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
       items.push({
-        type: 'operationOrderReceipt', typeLabel: '📦 Vận Hành - Đơn hàng (Chờ Nhập Hàng)',
+        type: 'operationOrderReceipt', typeLabel: '📦 QLDA - Đơn hàng (Chờ Nhập Hàng)',
         code: o.code, title: o.title, dept: o.dept,
         stepLabel: '📥 Chờ xác nhận nhập hàng', createdAt: o.approvedAt || o.createdAt,
         statusBadge: `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ Nhập Hàng</span>`,
@@ -465,13 +465,13 @@ function getMyProcessedApprovals(user, status, sinceMs) {
   addProcessedItems(DB.itPriceApprovals, { type: 'itPrice', typeLabel: '🏷️ Hỗ Trợ IT - Duyệt giá', codeOf: r => r.code, titleOf: r => r.productName });
   addProcessedItems(DB.budgetEntries, { type: 'budget', typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code });
   addProcessedItems(DB.operationOrders, {
-    type: 'operationOrders', typeLabel: '📦 Vận Hành - Đơn Hàng', codeOf: r => r.code, titleOf: r => r.title,
+    type: 'operationOrders', typeLabel: '📦 QLDA - Đơn Hàng', codeOf: r => r.code, titleOf: r => r.title,
     // Xem chú thích matchStatuses ở định nghĩa addProcessedItems() phía trên — REJECTED không cần override
     // (hồ sơ bị từ chối luôn dừng hẳn ở đó, không có giai đoạn tiếp theo nào khác).
     matchStatuses: status === 'APPROVED' ? ['APPROVED', 'AWAITING_RECEIPT', 'RECEIVED', 'RECEIPT_CANCELLED'] : null
   });
-  addProcessedItems(DB.operationStoreOpenings, { type: 'operationStoreOpenings', typeLabel: '🏬 Vận Hành - Mở Mới Siêu Thị', codeOf: r => r.code, titleOf: r => r.storeName });
-  addProcessedItems(DB.operationRepairs, { type: 'operationRepairs', typeLabel: '🔧 Vận Hành - Sửa Chữa Siêu Thị', codeOf: r => r.code, titleOf: r => r.storeName });
+  addProcessedItems(DB.operationStoreOpenings, { type: 'operationStoreOpenings', typeLabel: '🏬 QLDA - Mở Mới Siêu Thị', codeOf: r => r.code, titleOf: r => r.storeName });
+  addProcessedItems(DB.operationRepairs, { type: 'operationRepairs', typeLabel: '🔧 QLDA - Sửa Chữa Siêu Thị', codeOf: r => r.code, titleOf: r => r.storeName });
 
   addProcessedItems(
     (DB.contracts || []).filter(c => !c.isAddendum),

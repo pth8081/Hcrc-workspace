@@ -590,7 +590,7 @@ function renderReportsSummary(container) {
   ` : '';
   const operationsHTML = (canSeeCar || canSeeMeeting) ? `
     <div class="bg-white p-4 rounded border">
-      <h4 class="font-bold text-gray-800 mb-3">🚗 Vận Hành</h4>
+      <h4 class="font-bold text-gray-800 mb-3">🚗 QLDA</h4>
       <div class="grid grid-cols-1 ${(canSeeCar && canSeeMeeting) ? 'md:grid-cols-2' : ''} gap-4">
         ${opsCarHTML}${opsMeetingHTML}
       </div>
