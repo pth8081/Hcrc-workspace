@@ -101,7 +101,8 @@ const VIEWER_NO_DOWNLOAD = {
 // Người ngoài hoàn toàn: đã đăng nhập nhưng không được cấp quyền gì — chính là kẻ tấn công trong lỗ
 // hổng cũ (biết URL là đọc được file).
 const OUTSIDER = { username: 'outsider', dept: DEPT_B, perms: {} };
-const IT_MANAGER = { username: 'it_mgr', dept: 'CNTT', perms: { itManage: true } };
+// itServiceRenewalManage (10/2026, tách khỏi itManage): canViewItServiceRenewal() giờ đòi hỏi cờ này.
+const IT_MANAGER = { username: 'it_mgr', dept: 'CNTT', perms: { itManage: true, itServiceRenewalManage: true } };
 const OWNER_ITP = { username: 'owner_itp', dept: DEPT_A, perms: {} };
 
 // ===================== Cắm bản giả cho recordStore + appData =====================
@@ -189,7 +190,7 @@ async function main() {
   // lib/recordViewScope.js nhưng QUÊN xuất ra module.exports -> routes/download.js require về
   // `undefined` và ném TypeError ("is not a function") -> 500 cho MỌI lượt tải file Gia Hạn Dịch Vụ
   // CNTT. Nếu export bị bỏ lại lần nữa, 2 assert dưới đây sẽ vỡ ngay (ném TypeError, không phải false).
-  await run('Gia Hạn Dịch Vụ CNTT: chỉ itManage/admin xem được (khoá lỗi thiếu export canViewItServiceRenewal)', async () => {
+  await run('Gia Hạn Dịch Vụ CNTT: chỉ itServiceRenewalManage/admin xem được (khoá lỗi thiếu export canViewItServiceRenewal)', async () => {
     assert.strictEqual(await authorizeFileAccess(OUTSIDER, IT_RENEWAL.fileUrl, 'view'), false);
     assert.strictEqual(await authorizeFileAccess(IT_MANAGER, IT_RENEWAL.fileUrl, 'view'), true);
     assert.strictEqual(await authorizeFileAccess(IT_MANAGER, IT_RENEWAL.fileUrl, 'download'), true);

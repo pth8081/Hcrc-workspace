@@ -34,7 +34,10 @@ function stubModule(relPath, exportsObj) {
 
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 const PLAIN_KD = { username: 'plain_kd', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', perms: {}, active: true };
-const IT_MANAGE_USER = { username: 'it1', name: 'Nhân Viên IT', dept: 'IT', perms: { itManage: true }, active: true };
+// itServiceRenewalManage (10/2026, tách khỏi itManage): cần cho các bài test tạo itServiceRenewals dưới
+// đây (mục 3) — itManage vẫn giữ để bài test ADMIN_ONLY_KEYS (mục ngay dưới) khẳng định đúng itManage
+// KHÔNG mở khoá ghi trực tiếp danh mục itRenewalCategories.
+const IT_MANAGE_USER = { username: 'it1', name: 'Nhân Viên IT', dept: 'IT', perms: { itManage: true, itServiceRenewalManage: true }, active: true };
 const USERS = [ADMIN, PLAIN_KD, IT_MANAGE_USER];
 
 // Giá trị gốc (khớp defaults.js) — dùng để khẳng định lượt ghi bị từ chối KHÔNG làm đổi dữ liệu.

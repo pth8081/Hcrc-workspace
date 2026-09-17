@@ -53,7 +53,9 @@ function stubModule(relPath, exportsObj) {
 // ===================== Seed =====================
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 const PLAIN_KD = { username: 'plain_kd', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', perms: { carCreate: { all: false, depts: [] }, officeCreate: { all: false, depts: [] }, officeBuy: true }, active: true };
-const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true }, active: true };
+// itServiceRenewalManage (10/2026, tách khỏi itManage): IT1 vẫn cần thấy được itServiceRenewals ở các
+// bài test Fix 3a/3b dưới đây — itManage một mình giờ chỉ còn nghĩa xử lý ticket itSupportTickets.
+const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true, itServiceRenewalManage: true }, active: true };
 const ACCOUNTANT = { username: 'ketoan', name: 'Kế Toán Thanh Toán', dept: 'Tài Chính', perms: { paymentManage: true }, active: true };
 const MODERATOR = { username: 'mod1', name: 'Người Kiểm Duyệt Bài', dept: 'Hành Chính', perms: { internalPostApprove: true }, active: true };
 const OTHER = { username: 'other', name: 'Người Bình Luận Khác', dept: 'Kinh Doanh', perms: {}, active: true };
@@ -315,17 +317,17 @@ async function main() {
         'canViewItServiceRenewal phải nằm trong module.exports — routes/download.js import và GỌI nó ở mọi request tải file');
       assertEqual(typeof recordViewScope.filterItServiceRenewalsForUser, 'function',
         'filterItServiceRenewalsForUser phải nằm trong module.exports — routes/data.js cần nó để lọc GET /api/data');
-      // Đúng luật phạm vi: quyền PHẲNG itManage/admin, KHÔNG có nhánh "chính chủ luôn xem được".
-      assertEqual(recordViewScope.canViewItServiceRenewal(IT1), true, 'itManage phải xem được');
+      // Đúng luật phạm vi: quyền PHẲNG itServiceRenewalManage/admin, KHÔNG có nhánh "chính chủ luôn xem được".
+      assertEqual(recordViewScope.canViewItServiceRenewal(IT1), true, 'itServiceRenewalManage phải xem được');
       assertEqual(recordViewScope.canViewItServiceRenewal(ADMIN), true, 'admin phải xem được');
-      assertEqual(recordViewScope.canViewItServiceRenewal(PLAIN_KD), false, 'Người không có itManage KHÔNG được xem');
+      assertEqual(recordViewScope.canViewItServiceRenewal(PLAIN_KD), false, 'Người không có itServiceRenewalManage KHÔNG được xem');
     });
 
     await run.run('Fix 3b — GET /api/data: người KHÔNG có itManage không còn nhận được itServiceRenewals nào', async () => {
       const asPlain = await api('GET', '/api/data', undefined, PLAIN_KD);
       assertEqual(asPlain.status, 200, 'GET /api/data phải trả 200 (không còn 500)');
       assertEqual(asPlain.body.itServiceRenewals.length, 0,
-        'Người không có itManage phải nhận mảng RỖNG — trước đây nhận nguyên danh mục (nhà cung cấp/chi phí/ngày hết hạn)');
+        'Người không có itServiceRenewalManage phải nhận mảng RỖNG — trước đây nhận nguyên danh mục (nhà cung cấp/chi phí/ngày hết hạn)');
 
       const asIt = await api('GET', '/api/data', undefined, IT1);
       assertEqual(asIt.body.itServiceRenewals.length, 2, 'Đội Hỗ Trợ IT vẫn phải thấy đủ 2 mục (không chặn nhầm người có quyền)');

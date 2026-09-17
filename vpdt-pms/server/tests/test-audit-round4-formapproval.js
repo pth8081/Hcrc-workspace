@@ -109,13 +109,15 @@ function testContractsSignedFileSelfDeciding() {
 
 // ===== 4) itPriceApprovals — bước "IT áp giá" chặn tự xử lý =====
 function testItPriceApplySelfDealing() {
-  const proposer = { username: 'dexuat1', name: 'Người Đề Xuất', perms: { itManage: true } };
-  const otherIt = { username: 'it2', name: 'IT Khác', perms: { itManage: true } };
+  // itPriceSupport (10/2026, tách khỏi itManage): claimPriceApply/applyPriceApproval/requestPriceInfoFromIt
+  // giờ đòi hỏi itPriceSupport, không còn tự động theo itManage nữa — proposer/otherIt phải có cờ này.
+  const proposer = { username: 'dexuat1', name: 'Người Đề Xuất', perms: { itPriceSupport: true } };
+  const otherIt = { username: 'it2', name: 'IT Khác', perms: { itPriceSupport: true } };
   const admin = { username: 'admin', name: 'Admin', perms: { admin: true } };
   const makeItem = () => ({ id: 1, status: 'APPROVED', applied: false, creator: 'dexuat1', applyClaimedBy: null, infoRequests: [] });
 
   expectThrow(() => recordActions.claimPriceApply(proposer, makeItem()), 'tự xử lý',
-    'itPriceApprovals: người tạo đề xuất (cũng có itManage) KHÔNG tự nhận xử lý áp giá được (LỖI ĐÃ VÁ)');
+    'itPriceApprovals: người tạo đề xuất (cũng có itPriceSupport) KHÔNG tự nhận xử lý áp giá được (LỖI ĐÃ VÁ)');
   expectNoThrow(() => recordActions.claimPriceApply(otherIt, makeItem()),
     'itPriceApprovals: nhân sự IT khác (không phải người tạo) vẫn nhận xử lý được bình thường');
 

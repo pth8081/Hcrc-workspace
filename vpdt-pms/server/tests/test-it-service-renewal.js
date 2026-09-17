@@ -1,9 +1,10 @@
 // server/tests/test-it-service-renewal.js
 //
 // Regression test cho module con "Gia Hạn Dịch Vụ CNTT" (Hỗ Trợ IT, sub-tab RENEWAL):
-//   - Quyền HOÀN TOÀN phẳng (itManage/admin) — KHÔNG qua duyệt (khác Giấy Phép), tạo xong hiệu lực ngay.
-//   - CHỈ itManage/admin thấy được sub-tab này (khác Phê Duyệt Giá/Hỗ Trợ Yêu Cầu mở cho toàn bộ nhân
-//     viên) — xem canManageItSupportClient() ở public/index.html.
+//   - Quyền HOÀN TOÀN phẳng (itServiceRenewalManage/admin, 10/2026 tách khỏi itManage) — KHÔNG qua
+//     duyệt (khác Giấy Phép), tạo xong hiệu lực ngay.
+//   - CHỈ itServiceRenewalManage/admin thấy được sub-tab này (khác Phê Duyệt Giá/Hỗ Trợ Yêu Cầu mở cho toàn bộ nhân
+//     viên) — xem canManageItRenewalClient() ở public/js/core.js.
 //   - Action "Sửa" (editItServiceRenewal) cho phép sửa mọi field kể cả lùi ngày hết hạn (fix nhập sai).
 //   - Action "Gia Hạn" (renewItServiceRenewal) BẮT BUỘC ngày hết hạn mới lớn hơn ngày hiện tại, reset
 //     notifiedThresholds, ghi lịch sử RENEWED riêng.
@@ -19,8 +20,8 @@ const {
 const PORT = 8984;
 
 // ===================== Seed dữ liệu =====================
-const IT_STAFF = { username: 'it1', name: 'Nguyễn Văn IT', dept: 'Hỗ Trợ IT', perms: { itManage: true }, active: true };
-const IT_STAFF2 = { username: 'it2', name: 'Trần Thị IT', dept: 'Hỗ Trợ IT', perms: { itManage: true }, active: true };
+const IT_STAFF = { username: 'it1', name: 'Nguyễn Văn IT', dept: 'Hỗ Trợ IT', perms: { itServiceRenewalManage: true }, active: true };
+const IT_STAFF2 = { username: 'it2', name: 'Trần Thị IT', dept: 'Hỗ Trợ IT', perms: { itServiceRenewalManage: true }, active: true };
 const EMP_NOPERM = { username: 'emp_noperm', name: 'Người Không Quyền', dept: 'Kinh Doanh', perms: {}, active: true };
 // totpEnabled:true — admin bắt buộc xác thực 2 lớp (xem lib/totp.js/proceedAfterAuth() ở index.html);
 // thiếu field này khiến loginAs() (gọi thẳng proceedAfterAuth()) bị chặn ở màn bắt buộc thiết lập TOTP.
@@ -51,20 +52,20 @@ async function main() {
 
   try {
     // ===== 1) Sub-tab "Gia Hạn Dịch Vụ" chỉ hiện cho itManage/admin =====
-    await run.run('Sub-tab "Gia Hạn Dịch Vụ" ẨN với người không có itManage/admin', async () => {
+    await run.run('Sub-tab "Gia Hạn Dịch Vụ" ẨN với người không có itServiceRenewalManage/admin', async () => {
       await loginAs(page, EMP_NOPERM);
       const hidden = await page.evaluate(() => document.getElementById('btnItSubRenewal').classList.contains('hidden'));
-      assert(hidden, 'btnItSubRenewal phải ẩn với người không có itManage/admin');
+      assert(hidden, 'btnItSubRenewal phải ẩn với người không có itServiceRenewalManage/admin');
     });
-    await run.run('Sub-tab "Gia Hạn Dịch Vụ" HIỆN với itManage', async () => {
+    await run.run('Sub-tab "Gia Hạn Dịch Vụ" HIỆN với itServiceRenewalManage', async () => {
       await loginAs(page, IT_STAFF);
       const hidden = await page.evaluate(() => document.getElementById('btnItSubRenewal').classList.contains('hidden'));
-      assert(!hidden, 'btnItSubRenewal phải hiện với người có itManage');
+      assert(!hidden, 'btnItSubRenewal phải hiện với người có itServiceRenewalManage');
     });
 
-    // ===== 2) Happy path: itManage thêm dịch vụ mới, hiệu lực ngay (không qua duyệt) =====
+    // ===== 2) Happy path: itServiceRenewalManage thêm dịch vụ mới, hiệu lực ngay (không qua duyệt) =====
     let firstItemId;
-    await run.run('itManage thêm dịch vụ CNTT mới (happy path, không qua duyệt)', async () => {
+    await run.run('itServiceRenewalManage thêm dịch vụ CNTT mới (happy path, không qua duyệt)', async () => {
       const result = await page.evaluate(async (expiry) => {
         switchTab('itSupport');
         setItSupportSubTab('RENEWAL');
@@ -108,8 +109,8 @@ async function main() {
       assertEqual(result.count, before, 'Không được tạo thêm bản ghi khi validation thất bại');
     });
 
-    // ===== 4) Permission: người không có itManage bị server chặn khi tạo =====
-    await run.run('Permission: người không có itManage bị server chặn khi tạo dịch vụ', async () => {
+    // ===== 4) Permission: người không có itServiceRenewalManage bị server chặn khi tạo =====
+    await run.run('Permission: người không có itServiceRenewalManage bị server chặn khi tạo dịch vụ', async () => {
       await loginAs(page, EMP_NOPERM);
       const before = await page.evaluate(() => DB.itServiceRenewals.length);
       const result = await page.evaluate(async (expiry) => {
@@ -124,8 +125,8 @@ async function main() {
       assertEqual(result.count, before, 'Không được tạo thêm bản ghi khi không có quyền');
     });
 
-    // ===== 5) Sửa: itManage sửa được thông tin, kể cả lùi ngày hết hạn để fix nhập sai =====
-    await run.run('Sửa: itManage sửa được thông tin dịch vụ (kể cả lùi ngày hết hạn)', async () => {
+    // ===== 5) Sửa: itServiceRenewalManage sửa được thông tin, kể cả lùi ngày hết hạn để fix nhập sai =====
+    await run.run('Sửa: itServiceRenewalManage sửa được thông tin dịch vụ (kể cả lùi ngày hết hạn)', async () => {
       await loginAs(page, IT_STAFF2);
       const result = await page.evaluate(async (args) => {
         const [id, earlierExpiry] = args;
@@ -155,7 +156,7 @@ async function main() {
       assertEqual(result.item.expiryDate, todayPlusDays(200), 'Ngày hết hạn không được đổi khi bị chặn');
     });
 
-    await run.run('Gia Hạn: itManage gia hạn thành công, reset notifiedThresholds + ghi lịch sử RENEWED', async () => {
+    await run.run('Gia Hạn: itServiceRenewalManage gia hạn thành công, reset notifiedThresholds + ghi lịch sử RENEWED', async () => {
       // Giả lập đã từng gửi nhắc (notifiedThresholds có dữ liệu) để kiểm chứng bị reset về rỗng.
       await page.evaluate((id) => {
         const item = DB.itServiceRenewals.find(x => x.id === id);
@@ -191,7 +192,7 @@ async function main() {
     });
 
     // ===== 8) Xóa: chỉ admin mới xóa được =====
-    await run.run('Permission: itManage (không phải admin) KHÔNG xóa được', async () => {
+    await run.run('Permission: itServiceRenewalManage (không phải admin) KHÔNG xóa được', async () => {
       const before = await page.evaluate(() => DB.itServiceRenewals.length);
       await page.evaluate(async () => {
         window.__resetCapture();
@@ -199,7 +200,7 @@ async function main() {
         deleteItServiceRenewalAction(DB.itServiceRenewals[0].id);
       });
       const after = await page.evaluate(() => DB.itServiceRenewals.length);
-      assertEqual(after, before, 'itManage không phải admin thì không xóa được');
+      assertEqual(after, before, 'itServiceRenewalManage không phải admin thì không xóa được');
     });
 
     await run.run('Xóa dịch vụ CNTT chỉ admin mới thực hiện được', async () => {
