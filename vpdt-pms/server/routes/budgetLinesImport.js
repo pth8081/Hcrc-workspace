@@ -100,7 +100,8 @@ router.post('/parse-import', uploadRateLimiter, requireCreate, (req, res) => {
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
       const appData = await getAllAppData();
-      const items = await parseBudgetLinesImportFile(buffer, ext, appData);
+      const stage = req.query.stage === 'APPROVED' ? 'APPROVED' : 'PROPOSED';
+      const items = await parseBudgetLinesImportFile(buffer, ext, appData, stage);
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/budget-lines/parse-import');

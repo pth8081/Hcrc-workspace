@@ -832,16 +832,28 @@ async function onBudgetLineImportFileChange(kind, event) {
     const res = await fetch(`/api/budget-lines/parse-import?stage=${stage}`, { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // duplicateInFile/duplicateExisting (lib/importDedup.js, gắn sẵn ở server): CHỈ cảnh báo, KHÔNG tự
+    // loại dòng nào — mặc định BỎ CHỌN checkbox "Nhập dòng này" cho dòng trùng (an toàn hơn), người dùng
+    // tự tick lại nếu vẫn muốn thêm (VD thật sự phát sinh thêm 1 khoản CÙNG nội dung trong CÙNG kỳ).
+    data.items.forEach((it, idx) => { it.include = it.valid && !it.duplicateInFile && !it.duplicateExisting; it._idx = idx; });
     budgetLineImportPreviewItems[kind] = data.items;
     const validCount = data.items.filter(it => it.valid).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng HỢP LỆ.`;
-    document.getElementById(`bl${kind}ImportPreviewBody`).innerHTML = data.items.map(it => `<tr class="border-t">
-      <td class="p-1.5">${it.valid ? '<span class="text-emerald-600">✅</span>' : '<span class="text-red-600">⛔</span>'}</td>
+    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng HỢP LỆ`
+      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.');
+    document.getElementById(`bl${kind}ImportPreviewBody`).innerHTML = data.items.map((it) => {
+      const dupNote = it.duplicateInFile ? '⚠️ Trùng dòng khác trong file này'
+        : (it.duplicateExisting ? '⚠️ Trùng dữ liệu đã có (cùng Năm/Tháng/Vị trí/Danh mục/Nội dung)' : '');
+      return `<tr class="border-t${dupNote ? ' bg-amber-50' : ''}">
+      <td class="p-1.5">${it.valid
+        ? `<input type="checkbox" data-op-change="toggleBudgetLineImportRow" data-arg0="${kind}" data-arg1="${it._idx}" ${it.include ? 'checked' : ''}>`
+        : '<span class="text-red-600">⛔</span>'}</td>
       <td class="p-1.5">${budgetLineLocationLabel(it.location)}</td>
       <td class="p-1.5">${escapeHtml(it.content || '')}</td>
       <td class="p-1.5 text-right">${Number(it.quantity || 0).toLocaleString('vi-VN')} × ${Number(it.unitPrice || 0).toLocaleString('vi-VN')}</td>
-      <td class="p-1.5 text-red-600">${it.errors.join('; ')}</td>
-    </tr>`).join('');
+      <td class="p-1.5 text-red-600">${escapeHtml([...it.errors, dupNote].filter(Boolean).join('; '))}</td>
+    </tr>`;
+    }).join('');
     document.getElementById(`bl${kind}ImportPreviewWrap`).classList.remove('hidden');
     if (validCount > 0) document.getElementById(`bl${kind}ImportConfirmBtn`).classList.remove('hidden');
   } catch (err) {
@@ -850,9 +862,17 @@ async function onBudgetLineImportFileChange(kind, event) {
   }
 }
 
+// Tick/bỏ tick 1 dòng xem trước trước khi xác nhận nhập (VD dòng bị đánh dấu nghi trùng, người dùng vẫn
+// muốn thêm) — chỉ đổi cờ include, không render lại toàn bộ bảng.
+function toggleBudgetLineImportRow(kind, idxStr) {
+  const idx = Number(idxStr);
+  const it = (budgetLineImportPreviewItems[kind] || []).find(x => x._idx === idx);
+  if (it) it.include = !it.include;
+}
+
 async function confirmBudgetLineImport(kind) {
   const stage = kind === 'Approve' ? 'APPROVED' : 'PROPOSED';
-  const validItems = (budgetLineImportPreviewItems[kind] || []).filter(it => it.valid);
+  const validItems = (budgetLineImportPreviewItems[kind] || []).filter(it => it.valid && it.include);
   if (!validItems.length) return;
   if (!confirm(`Xác nhận nhập ${validItems.length} dòng ngân sách từ file?`)) return;
 

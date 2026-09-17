@@ -57,7 +57,7 @@ async function buildImportTemplateWorkbook() {
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 100;
-  noteSheet.addRow(['"Mã Nhân Viên" bắt buộc và phải DUY NHẤT — trùng với hồ sơ đã có sẽ bị báo lỗi và bỏ qua dòng đó khi xác nhận nhập.']);
+  noteSheet.addRow(['"Mã Nhân Viên" bắt buộc — trùng với hồ sơ đã có hoặc trùng ngay trong file sẽ được CẢNH BÁO ở bước xem trước, HR tự chọn Ghi đè thông tin/Bỏ qua từng dòng, không tự động chặn.']);
   noteSheet.addRow(['"Tài Khoản VPDT" tuỳ chọn — nếu điền, phải khớp ĐÚNG 1 tài khoản đang hoạt động đã có sẵn trong hệ thống; để trống nếu chưa biết, liên kết sau qua nút "🔗 Liên Kết Tài Khoản VPDT" ở Chi tiết hồ sơ.']);
   noteSheet.addRow(['Chưa hỗ trợ nhập "Người phụ thuộc"/"Học vấn" qua Excel — bổ sung sau khi import xong, qua Chi tiết từng hồ sơ.']);
   noteSheet.eachRow(row => { row.font = { italic: true, color: { argb: 'FFDC2626' } }; });
@@ -122,13 +122,18 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
 
   const errors = [];
   if (employeeCode.length > 50) errors.push('Mã Nhân Viên quá dài (tối đa 50 ký tự)');
-  if ((existingProfiles || []).some(p => p.employeeCode === employeeCode)) errors.push('Mã Nhân Viên đã có hồ sơ trong hệ thống');
-  if (seenCodes.has(employeeCode)) errors.push('Mã Nhân Viên bị trùng lặp ngay trong file này');
+  // Mã NV trùng (đã có hồ sơ, hoặc trùng ngay trong file) — đợt 10/2026: đổi từ CHẶN CỨNG sang CẢNH BÁO
+  // (duplicateExisting/duplicateInFile) để HR tự chọn "Ghi đè thông tin"/"Bỏ qua" ở bước xác nhận
+  // (confirmHrpfImport(), module-hrprofile.js) thay vì luôn bị loại khỏi lượt nhập. Chỉ dòng ĐẦU TIÊN
+  // trùng trong file được coi là "gốc" (duplicateInFile=false) — các dòng lặp lại SAU đó mới bị đánh dấu,
+  // khớp đúng ngữ nghĩa markDuplicateItems() (lib/importDedup.js).
+  const duplicateExisting = (existingProfiles || []).some(p => p.employeeCode === employeeCode);
+  const duplicateInFile = seenCodes.has(employeeCode);
   seenCodes.add(employeeCode);
   if (username) {
     const account = (existingUsers || []).find(u => u.username === username && u.active !== false);
     if (!account) errors.push('Tài Khoản VPDT không tồn tại hoặc đã bị khoá');
-    if ((existingProfiles || []).some(p => p.username === username)) errors.push('Tài Khoản VPDT đã liên kết với 1 hồ sơ khác');
+    if ((existingProfiles || []).some(p => p.username === username && p.employeeCode !== employeeCode)) errors.push('Tài Khoản VPDT đã liên kết với 1 hồ sơ khác');
     if (seenUsernames.has(username)) errors.push('Tài Khoản VPDT bị trùng lặp ngay trong file này');
     seenUsernames.add(username);
   }
@@ -148,6 +153,7 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
     bankName: String(get('bankName') || '').trim() || null,
     socialInsuranceNo: String(get('socialInsuranceNo') || '').trim() || null,
     taxCode: String(get('taxCode') || '').trim() || null,
+    duplicateExisting, duplicateInFile,
     valid: errors.length === 0,
     errors
   };

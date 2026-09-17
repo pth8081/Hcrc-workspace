@@ -840,32 +840,35 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
-  // (k)/(l)/(m) BUG THẬT đã sửa: importUsersExcel() gán id kiểu SỐ THẬP PHÂN (`Date.now() +
-  //     Math.random()`) cho mỗi user import — khác hẳn MỌI đường tạo user khác trong hệ thống (số
-  //     NGUYÊN). cspCoerceArg() (core.js) chỉ ép chuỗi SỐ NGUYÊN (`/^-?\d+$/`) sang Number khi đọc
-  //     `data-arg0="${user.id}"` trên các nút Sửa/Khoá/Xoá (module-admin-userstaging.js renderUsers()) —
-  //     chuỗi có dấu chấm thập phân bị BỎ QUA, giữ STRING. So `u.id === id` giữa NUMBER thật và STRING
-  //     đọc từ nút luôn false (strict equality) -> cả 3 nút ÂM THẦM không làm gì cho BẤT KỲ user nào tạo
-  //     qua import Excel, đúng như người dùng phản ánh thực tế ("import Excel thì không thao tác/sửa/
-  //     khoá/xoá được, trong khi user cũ vẫn bình thường"). Đã sửa 2 phần: (1) importUsersExcel() đổi
-  //     sang id SỐ NGUYÊN cùng khuôn `Date.now() + count` như buildNewUserFromState(); (2)
-  //     initDatabase() (core.js) tự động sửa lại id cho user ĐÃ bị lỗi từ TRƯỚC khi bản vá này lên
-  //     (dữ liệu cũ trên server thật), lưu ngầm lại 1 lần khi admin đăng nhập.
+  // (k)/(l)/(m) BUG THẬT đã sửa: import Excel gán id kiểu SỐ THẬP PHÂN (`Date.now() + Math.random()`)
+  //     cho mỗi user import — khác hẳn MỌI đường tạo user khác trong hệ thống (số NGUYÊN). cspCoerceArg()
+  //     (core.js) chỉ ép chuỗi SỐ NGUYÊN (`/^-?\d+$/`) sang Number khi đọc `data-arg0="${user.id}"` trên
+  //     các nút Sửa/Khoá/Xoá (module-admin-userstaging.js renderUsers()) — chuỗi có dấu chấm thập phân bị
+  //     BỎ QUA, giữ STRING. So `u.id === id` giữa NUMBER thật và STRING đọc từ nút luôn false (strict
+  //     equality) -> cả 3 nút ÂM THẦM không làm gì cho BẤT KỲ user nào tạo qua import Excel, đúng như
+  //     người dùng phản ánh thực tế ("import Excel thì không thao tác/sửa/khoá/xoá được, trong khi user
+  //     cũ vẫn bình thường"). Đã sửa 2 phần: (1) đổi sang id SỐ NGUYÊN cùng khuôn `Date.now() + count`
+  //     như buildNewUserFromState(); (2) initDatabase() (core.js) tự động sửa lại id cho user ĐÃ bị lỗi
+  //     từ TRƯỚC khi bản vá này lên (dữ liệu cũ trên server thật), lưu ngầm lại 1 lần khi admin đăng nhập.
+  // Đợt 10/2026: import Excel đổi từ 1 hàm duy nhất (importUsersExcel(), tự ghi luôn) sang 2 pha —
+  // onUsersImportFileChange() (đọc + xem trước) rồi confirmUsersImport() (thật sự ghi, sau khi người
+  // dùng xác nhận từng dòng) — xem cảnh báo/chọn ghi đè-bỏ qua dòng trùng ở module-admin-userstaging.js.
   // ==========================================================================
-  await scenario('(k) importUsersExcel() gán id SỐ NGUYÊN cho mọi user mới (không còn Math.random())', async () => {
+  await scenario('(k) import Excel gán id SỐ NGUYÊN cho mọi user mới (không còn Math.random())', async () => {
     const r = await page.evaluate(async () => {
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         if (url === '/api/admin/users/import-xlsx') {
           return { ok: true, status: 200, json: async () => ({ rows: [
-            { username: 'nv.excel1', pass: 'Passw0rd!23', name: 'Excel Một', email: 'e1@hcrc.local', phone: '0966666661', dept: 'Kế Toán', jobTitle: 'Nhân viên' },
-            { username: 'nv.excel2', pass: 'Passw0rd!23', name: 'Excel Hai', email: 'e2@hcrc.local', phone: '0966666662', dept: 'Kế Toán', jobTitle: 'Nhân viên' },
+            { username: 'nv.excel1', pass: 'Passw0rd!23', name: 'Excel Một', email: 'e1@hcrc.local', phone: '0966666661', dept: 'Kế Toán', jobTitle: 'Nhân viên', duplicateInFile: false },
+            { username: 'nv.excel2', pass: 'Passw0rd!23', name: 'Excel Hai', email: 'e2@hcrc.local', phone: '0966666662', dept: 'Kế Toán', jobTitle: 'Nhân viên', duplicateInFile: false },
           ] }) };
         }
         return savedFetch(url, opts);
       };
       const usersBefore = DB.users.length;
-      await importUsersExcel({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      await confirmUsersImport();
       window.fetch = savedFetch;
       const created = DB.users.filter(u => u.username === 'nv.excel1' || u.username === 'nv.excel2');
       return {

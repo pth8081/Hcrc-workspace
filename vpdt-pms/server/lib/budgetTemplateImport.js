@@ -7,6 +7,7 @@ const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file mẫu t�
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 const { BUDGET_FIELD_TYPES } = require('./createValidation');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 const TYPE_LABEL_VN = { text: 'Văn bản', number: 'Số', money: 'Tiền', select: 'Danh sách chọn', date: 'Ngày' };
 
@@ -108,7 +109,10 @@ async function parseBudgetTemplateFieldsExcelBuffer(buffer) {
 
   if (!sawAnyRow) throw new HttpError(400, 'File trống, không có dữ liệu cột nào');
   if (!fields.length) throw new HttpError(400, 'Không đọc được cột hợp lệ nào từ file');
-  return fields;
+  // Chỉ so trùng TRONG CHÍNH file đang đọc (2 dòng cùng khai 1 "Tên Cột") — không so với cột đã có sẵn
+  // của mẫu đang sửa (route này không nhận templateId, xem routes/budgetTemplateImport.js), CHỈ cảnh
+  // báo (client tự quyết định vẫn thêm hay bỏ dòng nào, không tự loại bỏ ở đây).
+  return markDuplicateItems(fields, f => normalizeDedupKey(f.label), []);
 }
 
 // Đọc CHỈ dòng tiêu đề của 1 file Excel BẤT KỲ (không theo khuôn định nghĩa cột Tên Cột/Kiểu/Bắt Buộc ở

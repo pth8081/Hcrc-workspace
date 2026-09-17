@@ -16,6 +16,7 @@ const ExcelJS = require('exceljs');
 const { parse: parseCsv } = require('csv-parse/sync');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 const MAX_ROWS_PER_IMPORT = 300;
 
@@ -153,7 +154,19 @@ function assertColumnsFound(cols) {
   }
 }
 
-async function parseBudgetLinesExcelBuffer(buffer, appData) {
+// Khoá so trùng: Năm+Tháng+Vị trí+Danh Mục+Nội Dung — CHỈ so trong CÙNG chức năng đang nhập (đúng
+// stage đang import, VD tab "Đề Xuất" chỉ so với dòng Đề Xuất có sẵn, KHÔNG so chéo sang "Phê Duyệt"; và
+// CHỈ so với dòng GỐC parentId==null, không tính dòng con "Ghi nhận Sử Dụng").
+function budgetLineDedupKey(item) {
+  return normalizeDedupKey(item.budgetYear, item.budgetMonth, item.location, item.itemCategory, item.content);
+}
+function existingBudgetLineKeys(appData, stage) {
+  return (appData?.budgetLines || [])
+    .filter(l => l.stage === stage && l.parentId == null)
+    .map(l => normalizeDedupKey(l.budgetYear, l.budgetMonth, l.location, l.itemCategory, l.content));
+}
+
+async function parseBudgetLinesExcelBuffer(buffer, appData, stage) {
   let cols = null;
   let sawAnyRow = false;
   const items = [];
@@ -176,10 +189,10 @@ async function parseBudgetLinesExcelBuffer(buffer, appData) {
   if (!sawAnyRow) throw new HttpError(400, 'File trống, không có dữ liệu');
   if (items.length > MAX_ROWS_PER_IMPORT) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_ROWS_PER_IMPORT} dòng/lần)`);
   if (!items.length) throw new HttpError(400, 'Không đọc được dòng hợp lệ nào từ file');
-  return items;
+  return markDuplicateItems(items, budgetLineDedupKey, existingBudgetLineKeys(appData, stage));
 }
 
-function parseBudgetLinesCsvBuffer(buffer, appData) {
+function parseBudgetLinesCsvBuffer(buffer, appData, stage) {
   const records = parseCsv(buffer, { skip_empty_lines: true, relax_column_count: true, bom: true });
   if (!records.length) throw new HttpError(400, 'File trống, không có dữ liệu');
   const cols = detectColumns(records[0]);
@@ -189,12 +202,12 @@ function parseBudgetLinesCsvBuffer(buffer, appData) {
     .map(cells => rowToBudgetLineItem(cells, cols, appData));
   if (items.length > MAX_ROWS_PER_IMPORT) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_ROWS_PER_IMPORT} dòng/lần)`);
   if (!items.length) throw new HttpError(400, 'Không đọc được dòng hợp lệ nào từ file');
-  return items;
+  return markDuplicateItems(items, budgetLineDedupKey, existingBudgetLineKeys(appData, stage));
 }
 
-async function parseBudgetLinesImportFile(buffer, ext, appData) {
-  if (ext === '.csv') return parseBudgetLinesCsvBuffer(buffer, appData);
-  return parseBudgetLinesExcelBuffer(buffer, appData);
+async function parseBudgetLinesImportFile(buffer, ext, appData, stage) {
+  if (ext === '.csv') return parseBudgetLinesCsvBuffer(buffer, appData, stage);
+  return parseBudgetLinesExcelBuffer(buffer, appData, stage);
 }
 
 module.exports = { buildBudgetLinesTemplateWorkbook, parseBudgetLinesImportFile };

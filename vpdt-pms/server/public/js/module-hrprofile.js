@@ -692,16 +692,40 @@ async function onHrpfImportFileChange(event) {
     const res = await fetch('/api/hr-profile/parse-import', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // action (đợt 10/2026, chống trùng lặp): 'add' (mặc định cho dòng không trùng gì) | 'skip' (mặc định
+    // cho dòng trùng — an toàn hơn, HR tự đổi nếu vẫn muốn) | 'overwrite' (chỉ hiện được cho dòng
+    // duplicateExisting — ghi đè hồ sơ đã có, xem updateProfileFromImport() ở lib/employeeProfile.js).
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      it.action = it.valid ? ((it.duplicateExisting || it.duplicateInFile) ? 'skip' : 'add') : 'skip';
+    });
     hrpfImportPreviewItems = data.items;
     const validCount = data.items.filter(it => it.valid).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ.`;
-    document.getElementById('hrpfImportPreviewBody').innerHTML = data.items.map(it => `<tr>
+    const dupCount = data.items.filter(it => it.duplicateExisting || it.duplicateInFile).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ`
+      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã chọn "Bỏ qua" sẵn, tự đổi nếu muốn ghi đè/vẫn thêm).` : '.');
+    document.getElementById('hrpfImportPreviewBody').innerHTML = data.items.map((it) => {
+      let actionCell;
+      if (!it.valid) {
+        actionCell = `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
+      } else if (it.duplicateExisting) {
+        actionCell = `<select data-op-change="onHrpfImportRowActionChange" data-arg0="${it._idx}" data-arg-value="1" class="border rounded text-xs p-0.5">
+          <option value="skip" selected>Bỏ qua</option>
+          <option value="overwrite">Ghi đè thông tin</option>
+        </select> <span class="text-amber-700">⚠️ Đã có hồ sơ</span>`;
+      } else if (it.duplicateInFile) {
+        actionCell = `<label class="text-xs"><input type="checkbox" data-op-change="onHrpfImportRowToggle" data-arg0="${it._idx}"> Vẫn thêm</label> <span class="text-amber-700">⚠️ Trùng dòng khác trong file</span>`;
+      } else {
+        actionCell = '<span class="text-emerald-600">✅ Sẽ thêm mới</span>';
+      }
+      return `<tr class="${it.duplicateExisting || it.duplicateInFile ? 'bg-amber-50' : ''}">
       <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
       <td class="p-1">${escapeHtml(it.username || '')}</td>
       <td class="p-1">${escapeHtml(it.dateOfBirth || '')}</td>
       <td class="p-1">${escapeHtml(it.gender || '')}</td>
-      <td class="p-1">${it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`}</td>
-    </tr>`).join('');
+      <td class="p-1">${actionCell}</td>
+    </tr>`;
+    }).join('');
     document.getElementById('hrpfImportPreviewWrap').classList.remove('hidden');
     if (validCount > 0) document.getElementById('hrpfImportConfirmBtn').classList.remove('hidden');
   } catch (err) {
@@ -709,12 +733,22 @@ async function onHrpfImportFileChange(event) {
     event.target.value = '';
   }
 }
+// Tick/bỏ tick dòng trùng-ngay-trong-file (đợt 10/2026) — mặc định KHÔNG thêm, HR tự chọn nếu vẫn muốn.
+function onHrpfImportRowToggle(idxStr) {
+  const it = hrpfImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = it.action === 'add' ? 'skip' : 'add';
+}
+function onHrpfImportRowActionChange(idxStr, value) {
+  const it = hrpfImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = value === 'overwrite' ? 'overwrite' : 'skip';
+}
+
 async function confirmHrpfImport() {
-  const validItems = hrpfImportPreviewItems.filter(it => it.valid);
-  if (!validItems.length) return alert('Không có dòng hợp lệ nào để nhập.');
+  const submitItems = hrpfImportPreviewItems.filter(it => it.valid && (it.action === 'add' || it.action === 'overwrite'));
+  if (!submitItems.length) return alert('Chưa chọn dòng nào để nhập.');
   try {
-    const data = await hrProfileApiCall('POST', '/api/hr-profile/bulk-import', { items: validItems });
-    let msg = `✅ Đã nhập ${data.created.length}/${validItems.length} hồ sơ.`;
+    const data = await hrProfileApiCall('POST', '/api/hr-profile/bulk-import', { items: submitItems });
+    let msg = `✅ Đã thêm mới ${data.created.length} + ghi đè ${data.updated.length}/${submitItems.length} hồ sơ.`;
     if (data.skipped.length) {
       msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
     }

@@ -268,6 +268,22 @@ function createManualProfile(list, payload, actorUsername, actorName) {
   return profile;
 }
 
+// Ghi đè thông tin 1 hồ sơ ĐÃ CÓ từ 1 dòng import Excel trùng Mã Nhân Viên (đợt 10/2026, người dùng chọn
+// "Ghi đè thông tin" thay vì "Bỏ qua" ở bước xem trước — xem confirmHrpfImport() ở module-hrprofile.js).
+// Dùng lại ĐÚNG applyProfileEdit() (không viết lại logic validate riêng) — CHỈ đụng tới các field mà
+// import Excel thu thập được (khớp rowToPreviewItem() ở lib/employeeProfileImport.js: dateOfBirth/
+// gender/nationalId/permanentAddress/currentAddress/personalEmail/emergencyContact*/bankAccountNo/
+// bankName/socialInsuranceNo/taxCode) — KHÔNG bao giờ đụng employeeCode/username/status/dependents/
+// education/chức vụ hay bất kỳ field nào khác của hồ sơ đang có (payload từ Excel không chứa các field
+// đó nên applyProfileEdit() tự bỏ qua, đúng cơ chế "chỉ field có mặt trong payload mới bị đổi").
+function updateProfileFromImport(list, employeeCode, payload, actorUsername, actorName) {
+  const arr = list || [];
+  const profile = findProfile(arr, String(employeeCode || '').trim());
+  if (!profile) throw new HttpError(404, `Không tìm thấy hồ sơ ứng với Mã Nhân Viên "${employeeCode}" để ghi đè`);
+  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, {});
+  return profile;
+}
+
 // ===== Tái Tuyển (9/2026, theo yêu cầu người dùng) =====
 // Tìm hồ sơ ĐÃ NGHỈ VIỆC (INACTIVE) theo CCCD/CMND + Ngày sinh — đối chiếu nhân thân, KHÔNG theo
 // employeeCode (nhân viên tái tuyển không nhớ/không cần biết mã cũ). Khớp field nào có nhập field đó
@@ -679,7 +695,7 @@ module.exports = {
   STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
-  findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, createManualProfile, applyProcessCompletion,
+  findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,

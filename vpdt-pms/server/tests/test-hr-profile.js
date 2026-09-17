@@ -430,6 +430,29 @@ async function main() {
       assertEqual(listAfter.body.profiles.length, 3, 'Tổng số hồ sơ phải là 3 (1 cũ + 2 mới tạo, KHÔNG có bản ghi vênh từ dòng lỗi)');
     });
 
+    await run.run('POST /bulk-import — action:"overwrite" ghi đè đúng hồ sơ đã có, không tạo bản ghi mới, không đụng employeeCode/username', async () => {
+      resetAppData();
+      const existing = employeeProfile.defaultProfile('NV820');
+      existing.permanentAddress = 'Địa chỉ CŨ';
+      existing.username = 'nv820acc';
+      APP_DATA.employeeProfiles.push(existing);
+      APP_DATA.users.push({ id: 999, username: 'nv820acc', name: 'NV 820', active: true });
+
+      const res = await api('POST', '/api/hr-profile/bulk-import', {
+        items: [{ employeeCode: 'NV820', permanentAddress: 'Địa chỉ MỚI', action: 'overwrite' }]
+      }, HR_MGR);
+      assertEqual(res.status, 200, 'Bulk-import ghi đè phải trả 200');
+      assertEqual(res.body.updated.length, 1, 'Phải ghi nhận đúng 1 hồ sơ được ghi đè (không tính vào created)');
+      assertEqual(res.body.created.length, 0, 'KHÔNG được tạo thêm bản ghi mới khi action là overwrite');
+
+      const listAfter = await api('GET', '/api/hr-profile', undefined, HR_MGR);
+      assertEqual(listAfter.body.profiles.length, 1, 'Tổng số hồ sơ vẫn là 1 (ghi đè, không nhân đôi)');
+      // GET / dùng stripForList() (bản rút gọn cho danh sách) — tra lại hồ sơ ĐẦY ĐỦ qua /by-code/:code.
+      const full = await api('GET', '/api/hr-profile/by-code/NV820', undefined, HR_MGR);
+      assertEqual(full.body.profile.permanentAddress, 'Địa chỉ MỚI', 'Field import thu thập được (permanentAddress) phải được ghi đè đúng');
+      assertEqual(full.body.profile.username, 'nv820acc', 'Ghi đè KHÔNG được đụng tới username đã liên kết');
+    });
+
     await run.run('GET /import-template, POST /parse-import (file thật), GET /export-xlsx', async () => {
       resetAppData();
       const deniedTemplate = await api('GET', '/api/hr-profile/import-template', undefined, DIRECT_MGR);
@@ -451,7 +474,11 @@ async function main() {
 
       APP_DATA.employeeProfiles.push(employeeProfile.defaultProfile('NV1001'));
       const parsedAfterDup = await apiUpload('/api/hr-profile/parse-import', buffer, 'mau.xlsx', HR_MGR);
-      assertEqual(parsedAfterDup.body.items[0].valid, false, 'Sau khi NV1001 đã có hồ sơ, dòng ví dụ (cùng mã) phải báo KHÔNG hợp lệ');
+      // Đợt 10/2026: trùng employeeCode với hồ sơ đã có KHÔNG còn tự động báo "không hợp lệ" — chỉ gắn
+      // cờ duplicateExisting để HR tự chọn Ghi đè/Bỏ qua ở bước xác nhận (xem confirmHrpfImport() ở
+      // module-hrprofile.js); dòng vẫn "valid" vì bản thân dữ liệu không có lỗi nào khác.
+      assertEqual(parsedAfterDup.body.items[0].valid, true, 'Trùng Mã NV không còn tự động báo KHÔNG hợp lệ, chỉ cảnh báo');
+      assertEqual(parsedAfterDup.body.items[0].duplicateExisting, true, 'Phải gắn cờ duplicateExisting=true khi Mã NV đã có hồ sơ');
 
       const okTemplate = await api('GET', '/api/hr-profile/import-template', undefined, HR_MGR);
       assertEqual(okTemplate.status, 200, 'HR phải tải được mẫu Excel');

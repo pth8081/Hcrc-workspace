@@ -574,7 +574,13 @@ function exportUsersExcel() {
   downloadXlsxFromServer('dms_users_export.xlsx', 'Người Dùng', columns, rows);
 }
 
-async function importUsersExcel(evt) {
+// Import Excel Người Dùng — đợt 10/2026: đổi từ "âm thầm bỏ qua username trùng" sang "cảnh báo trước,
+// người dùng tự chọn ghi đè/bỏ qua từng dòng" (cùng chính sách đã áp dụng cho Hồ Sơ Nhân Sự/Ngân Sách).
+// 2 pha: onUsersImportFileChange() chỉ đọc + hiện bảng xem trước (KHÔNG ghi gì), confirmUsersImport()
+// mới thật sự ghi sau khi người dùng xác nhận từng dòng.
+let usersImportPreviewItems = [];
+
+async function onUsersImportFileChange(evt) {
   const file = evt.target.files[0];
   if (!file) return;
   evt.target.value = ''; // cho phép chọn lại đúng cùng 1 file lần sau nếu cần import lại
@@ -592,42 +598,103 @@ async function importUsersExcel(evt) {
     return alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
 
-  // Chờ server xác nhận thật rồi mới báo thành công — cùng lỗi đã vá ở commitPendingNewUsers(): route
-  // import-xlsx chỉ PARSE file (comment routes/adminExport.js xác nhận không ghi DB), việc ghi thật vẫn
-  // đi qua syncStorage('users') như bình thường — trước đây gọi không await, báo "Đã import thành
-  // công..." ngay bất kể server sau đó có từ chối (400 do 1 dòng thiếu/sai mật khẩu — từ chối NGUYÊN
-  // mảng, hoặc 409 xung đột version).
-  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
-  let count = 0;
-  // BUG THẬT đã sửa: id trước đây dùng `Date.now() + Math.random()` — ra 1 SỐ THẬP PHÂN (vd
-  // 1735000000000.4837), khác hẳn kiểu id nguyên dùng ở MỌI đường tạo user khác trong file này
-  // (`Date.now() + pendingNewUsers.length` ở buildNewUserFromState(), số NGUYÊN). Hậu quả: nút Sửa/Khoá/
-  // Xoá trên mỗi dòng gọi editUser(id)/deleteUser(id)/toggleUserActive(id) với `id` đọc từ
-  // `data-arg0="${user.id}"` qua cspCoerceArg() (core.js) — hàm này CHỈ ép chuỗi có dạng SỐ NGUYÊN
-  // (`/^-?\d+$/`) sang kiểu Number, chuỗi có dấu chấm thập phân (id của user import Excel) bị BỎ QUA,
-  // giữ nguyên dạng STRING. So sánh `u.id === id` trong editUser()/deleteUser()/toggleUserActive() giữa
-  // NUMBER (u.id thật) và STRING (id truyền vào) luôn cho kết quả false (strict equality, không ép kiểu)
-  // — cả 3 nút ÂM THẦM không làm gì (không lỗi, không thông báo) cho BẤT KỲ user nào tạo qua import Excel,
-  // trong khi user tạo qua form/staging (id nguyên) vẫn hoạt động bình thường — đúng triệu chứng người
-  // dùng phản ánh. Đổi sang cùng khuôn số NGUYÊN như mọi nơi khác (`Date.now() + count`, count là thứ tự
-  // dòng đã thêm thành công trong đợt import này, bắt đầu từ 0 — cùng cách buildNewUserFromState() dùng
-  // `pendingNewUsers.length`).
-  rows.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
-    if (!DB.users.some(u => u.username === username)) {
-      DB.users.push({
-        id: Date.now() + count,
-        username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
-        perms: defaultNewUserPerms()
-      });
-      count++;
-    }
+  // duplicateInFile (gắn sẵn ở server, lib/importDedup.js): 2 dòng trùng username NGAY TRONG file này.
+  // duplicateExisting: tự tính ở client (đã có sẵn DB.users, không cần round-trip) — khớp ĐÚNG 1 tài
+  // khoản đang có, cho phép chọn "Ghi đè thông tin" (chỉ họ tên/email/SĐT/phòng ban — KHÔNG bao giờ đụng
+  // tới username/mật khẩu/quyền hạn của tài khoản đã có) thay vì chỉ bỏ qua.
+  const existingByUsername = new Map(DB.users.map(u => [String(u.username).trim().toLowerCase(), u]));
+  usersImportPreviewItems = rows.map((r, idx) => {
+    const existing = existingByUsername.get(String(r.username).trim().toLowerCase());
+    return {
+      ...r, _idx: idx,
+      duplicateExisting: !!existing,
+      // 'add' (mặc định, không trùng gì) | 'skip' (mặc định cho dòng trùng) | 'overwrite'
+      action: (r.duplicateInFile || existing) ? 'skip' : 'add'
+    };
   });
+  renderUsersImportPreview();
+}
+
+function renderUsersImportPreview() {
+  const items = usersImportPreviewItems;
+  const dupCount = items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+  document.getElementById('uImportStatus').innerText = `Đọc được ${items.length} dòng`
+    + (dupCount ? `, ${dupCount} dòng TRÙNG (đã chọn "Bỏ qua" sẵn — tự đổi nếu muốn ghi đè/vẫn thêm).` : '.');
+  document.getElementById('uImportPreviewBody').innerHTML = items.map((it) => {
+    const dupNote = it.duplicateExisting ? '⚠️ Username đã có tài khoản'
+      : (it.duplicateInFile ? '⚠️ Trùng dòng khác trong file này' : '');
+    let actionControl;
+    if (it.duplicateExisting) {
+      actionControl = `<select data-op-change="onUsersImportRowActionChange" data-arg0="${it._idx}" data-arg-value="1" class="border rounded text-xs p-0.5">
+        <option value="skip" ${it.action === 'skip' ? 'selected' : ''}>Bỏ qua</option>
+        <option value="overwrite" ${it.action === 'overwrite' ? 'selected' : ''}>Ghi đè thông tin</option>
+      </select>`;
+    } else {
+      actionControl = `<input type="checkbox" data-op-change="onUsersImportRowToggle" data-arg0="${it._idx}" ${it.action === 'add' ? 'checked' : ''}>`;
+    }
+    return `<tr class="border-t${dupNote ? ' bg-amber-50' : ''}">
+      <td class="p-1.5">${actionControl}</td>
+      <td class="p-1.5">${escapeHtml(it.username || '')}</td>
+      <td class="p-1.5">${escapeHtml(it.name || '')}</td>
+      <td class="p-1.5">${escapeHtml(it.dept || '')}</td>
+      <td class="p-1.5 text-amber-700">${dupNote}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('uImportPreviewWrap').classList.remove('hidden');
+}
+
+function onUsersImportRowToggle(idxStr) {
+  const it = usersImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = it.action === 'add' ? 'skip' : 'add';
+}
+function onUsersImportRowActionChange(idxStr, value) {
+  const it = usersImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = value === 'overwrite' ? 'overwrite' : 'skip';
+}
+
+function cancelUsersImport() {
+  usersImportPreviewItems = [];
+  document.getElementById('uImportPreviewWrap').classList.add('hidden');
+  document.getElementById('uImportPreviewBody').innerHTML = '';
+}
+
+async function confirmUsersImport() {
+  const items = usersImportPreviewItems;
+  const toAdd = items.filter(it => it.action === 'add');
+  const toOverwrite = items.filter(it => it.action === 'overwrite');
+  if (!toAdd.length && !toOverwrite.length) return alert('Chưa chọn dòng nào để nhập.');
+  if (!confirm(`Xác nhận: thêm mới ${toAdd.length} tài khoản + ghi đè thông tin ${toOverwrite.length} tài khoản đã có?`)) return;
+
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  let addCount = 0, overwriteCount = 0;
+  // BUG THẬT đã sửa (trước đây id = Date.now() + Math.random(), số thập phân khiến cspCoerceArg() không
+  // ép được sang Number nên nút Sửa/Khoá/Xoá của user tạo qua import Excel không hoạt động) — dùng cùng
+  // khuôn số NGUYÊN Date.now() + count như buildNewUserFromState().
+  toAdd.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
+    DB.users.push({
+      id: Date.now() + addCount,
+      username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
+      perms: defaultNewUserPerms()
+    });
+    addCount++;
+  });
+  // Ghi đè: CHỈ họ tên/email/SĐT/phòng ban/chức danh — KHÔNG BAO GIỜ đụng username/pass/perms/groupIds
+  // của tài khoản đã có (tránh 1 file Excel vô tình/cố ý reset mật khẩu hay quyền hạn người khác).
+  toOverwrite.forEach(({ username, name, email, phone, dept, jobTitle }) => {
+    const existing = DB.users.find(u => String(u.username).trim().toLowerCase() === String(username).trim().toLowerCase());
+    if (!existing) return;
+    existing.name = name; existing.email = email; existing.phone = phone; existing.dept = dept;
+    existing.jobTitle = jobTitle || null;
+    overwriteCount++;
+  });
+
   const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
   if (!saved) {
     DB.users = usersSnapshot;
     return;
   }
-  alert(`✅ Đã import thành công ${count} người dùng mới!`);
+  alert(`✅ Đã thêm mới ${addCount} + ghi đè ${overwriteCount} tài khoản!`);
+  cancelUsersImport();
   renderUsers();
 }
 

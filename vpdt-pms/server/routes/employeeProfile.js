@@ -603,8 +603,10 @@ router.post('/parse-import', uploadRateLimiter, requireProfileCreate, (req, res)
 
 // POST /api/hr-profile/bulk-import — HR xác nhận nhập thật (1 giao dịch khoá DUY NHẤT, atomic — không
 // tạo từng hồ sơ 1 request riêng như N lần gọi POST / để tránh nửa chừng lỗi giữa chừng để lại dữ liệu
-// vênh). Body: { items: [{employeeCode, username, ...}] } — LUÔN kiểm tra lại từ đầu bên trong transaction
-// (không tin cờ "valid" của bước xem trước, dữ liệu có thể đã đổi từ lúc đó).
+// vênh). Body: { items: [{employeeCode, username, action, ...}] } — LUÔN kiểm tra lại từ đầu bên trong
+// transaction (không tin cờ "valid"/"duplicateExisting" của bước xem trước, dữ liệu có thể đã đổi từ lúc
+// đó). row.action (đợt 10/2026, chống trùng lặp): 'overwrite' -> ghi đè hồ sơ đã có (chỉ các field import
+// thu thập được, xem updateProfileFromImport()); còn lại (kể cả thiếu/rỗng) -> tạo hồ sơ MỚI như trước.
 router.post('/bulk-import', requireProfileCreate, async (req, res) => {
   try {
     const rows = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -613,12 +615,17 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
     const appData = await getAllAppData();
     for (const row of rows) assertActiveAccountIfGiven(row?.username ? String(row.username).trim() : null, appData.users || []);
 
-    const results = { created: [], skipped: [] };
+    const results = { created: [], updated: [], skipped: [] };
     await withLockedAppDataValue('employeeProfiles', (list) => {
       for (const row of rows) {
         try {
-          const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name);
-          results.created.push(created.employeeCode);
+          if (row?.action === 'overwrite') {
+            const updated = employeeProfile.updateProfileFromImport(list, row.employeeCode, row, req.freshUser.username, req.freshUser.name);
+            results.updated.push(updated.employeeCode);
+          } else {
+            const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name);
+            results.created.push(created.employeeCode);
+          }
         } catch (rowErr) {
           results.skipped.push({ employeeCode: row?.employeeCode || '(thiếu Mã NV)', reason: rowErr.message });
         }

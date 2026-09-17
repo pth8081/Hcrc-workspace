@@ -1653,8 +1653,30 @@
           <button type="button" data-op="downloadUserTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
           <button type="button" data-op="exportUsersExcel" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
           <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import Excel <input type="file" accept=".xlsx" data-op-change="importUsersExcel" data-arg-event="0" class="hidden">
+            📥 Import Excel <input id="uImportExcelInput" type="file" accept=".xlsx" data-op-change="onUsersImportFileChange" data-arg-event="0" class="hidden">
           </label>
+        </div>
+      </div>
+
+      <!-- Xem trước Import Excel Người Dùng — cảnh báo + để tự chọn ghi đè/bỏ qua từng dòng trùng
+           (đợt 10/2026, theo yêu cầu chống trùng lặp dữ liệu import). Ẩn sẵn tới khi có file được đọc. -->
+      <div id="uImportPreviewWrap" class="hidden border rounded p-2 mb-2 bg-gray-50">
+        <div id="uImportStatus" class="text-xs font-semibold mb-1"></div>
+        <div class="overflow-x-auto max-h-64 overflow-y-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-200 text-left">
+              <th class="p-1.5 w-10">Nhập?</th>
+              <th class="p-1.5">Username</th>
+              <th class="p-1.5">Họ Tên</th>
+              <th class="p-1.5">Phòng Ban</th>
+              <th class="p-1.5">Ghi chú</th>
+            </tr></thead>
+            <tbody id="uImportPreviewBody"></tbody>
+          </table>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button type="button" data-op="confirmUsersImport" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Import</button>
+          <button type="button" data-op="cancelUsersImport" class="bg-gray-400 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-gray-500">Hủy</button>
         </div>
       </div>
 

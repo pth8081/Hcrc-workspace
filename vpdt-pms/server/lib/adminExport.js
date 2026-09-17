@@ -7,6 +7,7 @@
 const ExcelJS = require('exceljs'); // chỉ còn dùng để SINH file .xlsx xuất ra; đọc file upload đi qua lib/xlsxSafeRead.js
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+const { markDuplicateItems, normalizeDedupKey } = require('./importDedup');
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -122,7 +123,10 @@ async function parseUsersImportXlsx(buffer) {
   });
 
   if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_USER_IMPORT_ROWS} người dùng/lần)`);
-  return rows;
+  // Chỉ đánh dấu trùng NGAY TRONG file đang đọc (2 dòng cùng username) — so trùng với tài khoản đã có
+  // sẵn trong hệ thống do CLIENT tự làm (đã có sẵn DB.users, không cần round-trip thêm — xem
+  // importUsersExcel() ở module-admin-userstaging.js), CHỈ cảnh báo, không tự loại bỏ dòng nào ở đây.
+  return markDuplicateItems(rows, r => normalizeDedupKey(r.username), []);
 }
 
 // excelFormulaGuard/sanitizeRowForFormulaInjection export thêm ở đợt audit chuyên sâu lần 2 — trước đây
