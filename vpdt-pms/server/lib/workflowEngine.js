@@ -216,11 +216,35 @@ function computeOperationOrderTier(locationType, amount) {
 // giá trị theo sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" đang mở, KHÔNG có dropdown chọn tay —
 // cùng cơ chế priceType RETAIL/WHOLESALE của itPriceApprovals). Hồ sơ CŨ trước đợt tách này không có
 // field -> coi như 'HO' (migrateOperationOrdersDefaultLocationType(), seedDefaults.js di trú 1 lần).
+// ĐỢT "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (10/2026, theo yêu cầu người dùng — có nhiều siêu
+// thị, không muốn tạo riêng 1 cấu hình approver cho từng siêu thị): với đơn STORE, sau khi
+// flatWorkflowConfigToSteps() tính ra danh sách approver hợp lệ CHUNG của 1 mức giá trị (dù admin chọn
+// tay từng người hay chọn "Theo vị trí" — VD chức danh "Giám Đốc" KHÔNG gắn siêu thị cụ thể, áp dụng
+// chung mọi siêu thị), LỌC LẠI chỉ giữ đúng những approver có `dept` (hoặc 1 trong `secondaryPositions` —
+// "Vị Trí Kiêm Nhiệm", VD quản lý vùng phụ trách nhiều siêu thị) TRÙNG đúng siêu thị (item.dept) của đơn
+// đang xét — tức "siêu thị nào tự duyệt siêu thị đó", nhận biết HOÀN TOÀN qua phân quyền phẳng
+// (jobTitle/dept trên hồ sơ Người Dùng), KHÔNG đọc/phụ thuộc gì vào Cơ Cấu Tổ Chức (lib/orgChart.js) —
+// tách biệt 2 cơ chế theo đúng yêu cầu "không phá vỡ" cơ cấu tổ chức. HO KHÔNG áp dụng lọc này (giữ
+// nguyên như cũ — thuần theo mức giá trị, không có khái niệm "siêu thị" nào để so).
+function filterOperationOrderStoreApprovers(resolved, item, users) {
+  const filteredApprovers = {};
+  Object.keys(resolved.approvers).forEach(stepOrder => {
+    filteredApprovers[stepOrder] = (resolved.approvers[stepOrder] || []).filter(username => {
+      const u = (users || []).find(x => x.username === username);
+      if (!u) return false;
+      if (u.dept === item.dept) return true;
+      return (u.secondaryPositions || []).some(sp => sp.dept === item.dept);
+    });
+  });
+  return { steps: resolved.steps, approvers: filteredApprovers };
+}
 function resolveOperationOrderWorkflow(item, appData) {
   const locationType = item.orderLocationType === 'STORE' ? 'STORE' : 'HO';
   const tierMap = locationType === 'STORE' ? appData.operationOrderStoreTierWorkflows : appData.operationOrderHOTierWorkflows;
   const tier = computeOperationOrderTier(locationType, computeOperationOrderAmount(item));
-  return flatWorkflowConfigToSteps(tierMap?.[tier] || null, appData);
+  const resolved = flatWorkflowConfigToSteps(tierMap?.[tier] || null, appData);
+  if (locationType === 'STORE') return filterOperationOrderStoreApprovers(resolved, item, appData.users);
+  return resolved;
 }
 
 // ===== Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi contracts (khớp index.html) =====

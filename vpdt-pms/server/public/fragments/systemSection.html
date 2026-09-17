@@ -738,7 +738,10 @@
           </div>
           <div id="uStoreFieldWrap" class="hidden">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
-            <select id="uStore" class="w-full border p-1.5 rounded text-xs"></select>
+            <div class="flex gap-1">
+              <select id="uStore" class="flex-1 min-w-0 border p-1.5 rounded text-xs"></select>
+              <button type="button" data-op="promptAddStoreInline" title="Thêm siêu thị mới vào Danh Mục" class="shrink-0 bg-gray-100 border px-2 rounded text-xs font-bold hover:bg-gray-200">+</button>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>

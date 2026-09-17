@@ -1022,6 +1022,28 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   `MAX(amount, "Tổng Giá Trị Thanh Toán (VNĐ)")` — số lớn hơn giữa tổng hạng
   mục hệ thống tự tính và số người dùng tự gõ/đọc từ PDF phiếu đặt hàng NCC,
   để field tự gõ không thể khai thấp hơn nhằm né bớt lớp duyệt.
+  - **Duyệt Đặt Hàng Tại Siêu Thị tự khớp đúng siêu thị (10/2026)**: cấu hình
+    người duyệt theo mức giá trị (tier) ở trên vẫn dùng chung 1 danh sách cho
+    MỌI siêu thị (không cần tạo riêng 1 cấu hình cho từng siêu thị — hệ thống
+    có nhiều siêu thị, tạo riêng từng cấu hình sẽ rất cồng kềnh), nhưng khi 1
+    đơn hàng cụ thể cần duyệt, hệ thống **tự lọc lại chỉ giữ đúng người thuộc
+    ĐÚNG siêu thị của đơn đó** — nhận biết hoàn toàn qua **Vị Trí (Siêu Thị)**
+    của người dùng (Hệ Thống → Quản Lý Người Dùng, field Phòng Ban/Siêu Thị
+    trên hồ sơ, hoặc "Vị Trí Kiêm Nhiệm" nếu 1 người phụ trách thêm siêu thị
+    khác), **KHÔNG đọc/phụ thuộc gì vào Cơ Cấu Tổ Chức**. VD: gán chức danh
+    "Giám Đốc" làm người duyệt tier ≤ 10 triệu mà **không cần chọn siêu thị cụ
+    thể** (áp dụng chung mọi siêu thị) — khi nhân viên Siêu Thị A tạo đơn, hệ
+    thống tự khớp và chỉ Giám Đốc **đang thuộc Siêu Thị A** (theo Vị Trí trên
+    hồ sơ người đó) mới thấy/duyệt được đơn này; Giám Đốc của Siêu Thị B/C dù
+    cùng chức danh, cùng được liệt kê ở cấu hình, vẫn KHÔNG thấy/duyệt được.
+    Người có "Vị Trí Kiêm Nhiệm" thêm 1 siêu thị khác (VD quản lý vùng phụ
+    trách nhiều siêu thị) sẽ duyệt được TẤT CẢ các siêu thị mình phụ trách
+    (dept chính + mọi dept trong Vị Trí Kiêm Nhiệm). Quy tắc này CHỈ áp dụng
+    cho **Đặt Hàng Tại Siêu Thị** — **Đặt Hàng Tại HO** không có khái niệm
+    "siêu thị" nên giữ nguyên như cũ (thuần theo mức giá trị). Khi tạo/sửa
+    User chọn Vị Trí = Siêu Thị, nếu siêu thị cần gán chưa có trong danh mục,
+    bấm nút **"+"** ngay cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không
+    cần rời form (Hệ Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
   - **Cảnh báo "⚠️ Chưa cấu hình duyệt"** (9/2026, đợt rà soát chuyên sâu): nếu
     admin CHƯA cấu hình người duyệt cho 1 mức giá trị nào đó (Hệ Thống > Phân
     Quyền > cấu hình quy trình theo mức), đơn hàng rơi vào mức đó sẽ hiện rõ

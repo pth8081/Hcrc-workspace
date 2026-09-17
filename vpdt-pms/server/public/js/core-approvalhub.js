@@ -67,13 +67,17 @@ function getMyPendingApprovals(user) {
   // Hợp đồng cần khai riêng vì 1 bản ghi contracts mang 2 quy trình độc lập (Phê Duyệt gốc dùng tên mặc
   // định, Tài liệu ký dùng signedFileStatus/signedFileCurrentStep/signedFileHistory — khớp
   // lib/workflowEngine.js MODULE_CONFIGS.contracts/contractsSignedFile).
-  function addDeptWorkflowItems(records, wfConfigFor, cfg, fields) {
+  // extraFilterFor (TUỲ CHỌN, mặc định không lọc gì thêm — 100% hành vi cũ cho MỌI lời gọi hiện có không
+  // truyền tham số này): (rec) => filterFn|null, áp thêm lên resolveEffectiveStepApprovers() theo TỪNG
+  // hồ sơ. Chỗ dùng duy nhất hiện tại: operationOrders (xem lời gọi bên dưới) — đơn "Đặt Hàng Tại Siêu
+  // Thị" cần lọc thêm "chỉ approver CÙNG siêu thị với đơn" (operationOrderStoreApproverFilterFor(), core.js).
+  function addDeptWorkflowItems(records, wfConfigFor, cfg, fields, extraFilterFor) {
     const f = { status: 'status', currentStep: 'currentStep', history: 'history', ...(fields || {}) };
     (records || []).forEach(rec => {
       if (rec[f.status] !== 'PENDING') return;
       const wfConfig = wfConfigFor(rec) || {};
       const step = rec[f.currentStep];
-      const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, step);
+      const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, step, extraFilterFor ? extraFilterFor(rec) : null);
       if (!canApproveStep(user, currentStepApprovers, rec[f.history], step)) return;
       items.push({
         type: cfg.type, typeLabel: resolveTypeLabel(cfg.typeLabel, rec),
@@ -297,7 +301,7 @@ function getMyPendingApprovals(user) {
     type: 'operationOrder', typeLabel: o => o.orderLocationType === 'HO' ? '📦 Vận Hành - Đặt Hàng Tại HO' : '📦 Vận Hành - Đặt Hàng Tại Siêu Thị',
     codeOf: r => r.code, titleOf: r => r.title,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOperationProcessModal', args: ['operationOrders', r.id], primary: true }]
-  });
+  }, undefined, o => operationOrderStoreApproverFilterFor(o));
   // Đơn hàng đang "Chờ Nhập Hàng" (AWAITING_RECEIPT) — người dùng đã xác nhận đưa vào Hub ("Có, đưa vào
   // Hub"): người chịu trách nhiệm vẫn cần HÀNH ĐỘNG (xác nhận nhập hàng/hủy nhập), dù đây KHÔNG phải
   // quyết định duyệt/từ chối nên KHÔNG dùng addDeptWorkflowItems() (hàm đó chỉ bắt status==='PENDING') —
