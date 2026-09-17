@@ -169,18 +169,32 @@ async function createPaymentRequestsFromDraft(draft) {
 // ngay sau khi khoá hợp đồng nhả ra (cùng khuôn insertMinutesTasks() ở /minutes/:id/assign-tasks bên
 // dưới) — 1 request duy nhất vừa cập nhật hợp đồng vừa sinh đề nghị thanh toán, không tách 2 lượt gọi
 // API để tránh client tự ý bỏ qua bước tạo đề nghị.
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): allPaymentRequests trước đây đọc TRƯỚC khi khoá hợp
+// đồng/đề xuất nguồn — hasActiveRequestForSource() (lib/recordActions.js) chỉ chặn "đang có 1 chu kỳ
+// thanh toán chưa PAID" dựa vào SNAPSHOT đã đọc từ trước, không có khoá nào bọc quanh toàn bộ
+// đọc-kiểm tra-ghi (khác hẳn car_plate:/meeting_room:/vpp_dept_budget:/uniform_store: đã có ở nơi
+// khác trong CHÍNH file này) — 2 request "Chuyển Sang Thanh Toán" cho CÙNG 1 nguồn gửi gần như đồng
+// thời (double-click, hoặc 2 kế toán viên cùng bấm) đều đọc snapshot "chưa có đề nghị nào", đều qua
+// được hasActiveRequestForSource()===false, đều tạo 1 đề nghị DRAFT riêng cùng trỏ về 1 nguồn — vi
+// phạm bất biến "1 chu kỳ thanh toán/nguồn tại 1 thời điểm", rủi ro thanh toán trùng. Bọc
+// withAppLock(`payment_source:<module>:<id>`, ...) quanh TOÀN BỘ đọc allPaymentRequests + khoá dòng
+// nguồn + tạo bản ghi (đọc allPaymentRequests LẠI bên trong closure, sau khi đã có khoá) — cùng khuôn
+// đã áp dụng cho car_plate:/meeting_room:/vpp_dept_budget:/uniform_store:.
 router.post('/contracts/:id/start-payment', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const allPaymentRequests = await getAllForCollection('paymentRequests');
-    let draft = null;
-    const result = await withLockedRecordForCollection('contracts', itemId, (item) => {
-      draft = recordActions.startContractPayment(freshUser, item, undefined, allPaymentRequests);
-      return item;
+    let result = null;
+    const paymentRequests = await withAppLock(`payment_source:CONTRACT:${itemId}`, async () => {
+      const allPaymentRequests = await getAllForCollection('paymentRequests');
+      let draft = null;
+      result = await withLockedRecordForCollection('contracts', itemId, (item) => {
+        draft = recordActions.startContractPayment(freshUser, item, undefined, allPaymentRequests);
+        return item;
+      });
+      return createPaymentRequestsFromDraft(draft);
     });
-    const paymentRequests = await createPaymentRequestsFromDraft(draft);
     res.json({ ok: true, item: result, paymentRequest: paymentRequests[0], paymentRequests });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/start-payment`, err);
@@ -218,18 +232,23 @@ router.post('/officeReqs/:id/upload-signed', async (req, res) => {
   }
 });
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026) — cùng race condition đã vá ở /contracts/:id/start-payment
+// phía trên, xem chú thích đầy đủ tại đó.
 router.post('/officeReqs/:id/start-payment', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const allPaymentRequests = await getAllForCollection('paymentRequests');
-    let draft = null;
-    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => {
-      draft = recordActions.startOfficePayment(freshUser, item, undefined, allPaymentRequests);
-      return item;
+    let result = null;
+    const paymentRequests = await withAppLock(`payment_source:OFFICE:${itemId}`, async () => {
+      const allPaymentRequests = await getAllForCollection('paymentRequests');
+      let draft = null;
+      result = await withLockedRecordForCollection('officeReqs', itemId, (item) => {
+        draft = recordActions.startOfficePayment(freshUser, item, undefined, allPaymentRequests);
+        return item;
+      });
+      return createPaymentRequestsFromDraft(draft);
     });
-    const paymentRequests = await createPaymentRequestsFromDraft(draft);
     res.json({ ok: true, item: result, paymentRequest: paymentRequests[0], paymentRequests });
   } catch (err) {
     handleError(res, `officeReqs/${req.params.id}/start-payment`, err);
@@ -265,23 +284,32 @@ router.post('/paymentRequests/from-source', async (req, res) => {
       skipManageGate: true
     };
 
-    const allPaymentRequests = await getAllForCollection('paymentRequests');
-    let draft = null;
-    let result;
-    if (sourceModule === 'CONTRACT') {
-      result = await withLockedRecordForCollection('contracts', sourceId, (item) => {
-        draft = recordActions.startContractPayment(freshUser, item, overrides, allPaymentRequests);
-        return item;
-      });
-    } else if (['MUA_BAN', 'SUA_CHUA'].includes(sourceModule)) {
-      result = await withLockedRecordForCollection('officeReqs', sourceId, (item) => {
-        draft = recordActions.startOfficePayment(freshUser, item, overrides, allPaymentRequests);
-        return item;
-      });
-    } else {
+    if (sourceModule !== 'CONTRACT' && !['MUA_BAN', 'SUA_CHUA'].includes(sourceModule)) {
       return res.status(400).json({ error: 'Loại đề nghị không hợp lệ' });
     }
-    const paymentRequests = await createPaymentRequestsFromDraft(draft);
+    // Cùng khoá `payment_source:<CONTRACT|OFFICE>:<id>` với 2 route /contracts/:id/start-payment và
+    // /officeReqs/:id/start-payment ở trên (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026, xem chú thích đầy
+    // đủ tại /contracts/:id/start-payment) — BẮT BUỘC dùng chung tên khoá dù route khác nhau, vì cùng 1
+    // nguồn (contract/officeReq) có thể được tạo đề nghị thanh toán từ CẢ 2 đường (route riêng của
+    // module đó, hoặc route chung này do kế toán tự khởi tạo) — khoá khác tên sẽ không loại trừ lẫn nhau.
+    const lockKey = sourceModule === 'CONTRACT' ? `payment_source:CONTRACT:${sourceId}` : `payment_source:OFFICE:${sourceId}`;
+    let result = null;
+    const paymentRequests = await withAppLock(lockKey, async () => {
+      const allPaymentRequests = await getAllForCollection('paymentRequests');
+      let draft = null;
+      if (sourceModule === 'CONTRACT') {
+        result = await withLockedRecordForCollection('contracts', sourceId, (item) => {
+          draft = recordActions.startContractPayment(freshUser, item, overrides, allPaymentRequests);
+          return item;
+        });
+      } else {
+        result = await withLockedRecordForCollection('officeReqs', sourceId, (item) => {
+          draft = recordActions.startOfficePayment(freshUser, item, overrides, allPaymentRequests);
+          return item;
+        });
+      }
+      return createPaymentRequestsFromDraft(draft);
+    });
     res.json({ ok: true, item: result, paymentRequest: paymentRequests[0], paymentRequests });
   } catch (err) {
     handleError(res, 'paymentRequests/from-source', err);
@@ -939,19 +967,31 @@ router.post('/carRegs/:id/cancel', async (req, res) => {
 // approve) sang CÙNG 1 biển số chạy gần như đồng thời — đúng race condition đã vá ở nhánh kia nhưng bỏ
 // sót ở đây. Bọc withAppLock CÙNG khoá `car_plate:<biển số>` quanh TOÀN BỘ đọc+ghi (đọc existingCarRegs
 // lại BÊN TRONG closure, sau khi đã có khoá) để khớp đúng mẫu đã dùng cho APPROVE.
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, 2 điểm):
+//   1. `newPlate` ở đây trước đây đọc THẲNG req.body.assignedPlate KHÔNG trim — trong khi
+//      reassignCarDispatch() (lib/recordActions.js) tự trim giá trị thật trước khi so sánh/lưu, nên 2
+//      biển số thật giống hệt nhau nhưng lệch khoảng trắng (VD "51A-111.11" vs " 51A-111.11") dựng ra 2
+//      khoá withAppLock KHÁC NHAU → mất tác dụng mutex, đúng lớp lỗi đã công bố "đã vá" ở nhánh APPROVE
+//      (routes/workflow.js) nhưng bỏ sót đúng chỗ này. Trim ngay tại đây để khớp giá trị dùng dựng khoá.
+//   2. reassignCarDispatch() giờ đã kiểm tra trùng TÀI XẾ (findCarDriverConflict()) — khoá thêm theo
+//      GIÁ TRỊ TÀI XẾ đang gán (cùng lý do/cùng khuôn khoá biển số ở trên).
 router.post('/carRegs/:id/reassign', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const newPlate = req.body?.assignedPlate;
+    const newPlate = String(req.body?.assignedPlate || '').trim() || null;
+    const newDriverUsername = String(req.body?.assignedDriverUsername || '').trim() || null;
+    const lockKeys = [];
+    if (newPlate) lockKeys.push(`car_plate:${newPlate}`);
+    if (newDriverUsername) lockKeys.push(`car_driver:${newDriverUsername}`);
     const runReassign = async () => {
       const existingCarRegs = await getAllForCollection('carRegs');
       const carVehicleTypes = await getAppDataValue('carVehicleTypes');
       return withLockedRecordForCollection('carRegs', itemId, (item) =>
         recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users, carVehicleTypes));
     };
-    const result = newPlate ? await withAppLock(`car_plate:${newPlate}`, runReassign) : await runReassign();
+    const result = lockKeys.length ? await withAppLock(lockKeys, runReassign) : await runReassign();
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/reassign`, err);

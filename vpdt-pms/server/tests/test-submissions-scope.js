@@ -29,17 +29,23 @@ const APPROVER_TYPE = { username: 'duyet_type', name: 'Người Duyệt Loại R
 const APPROVER_DEFAULT = { username: 'duyet_default', name: 'Người Duyệt Mặc Định', dept: 'Phòng X', perms: {}, active: true };
 const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng X', perms: { submissionView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_TYPE, APPROVER_DEFAULT, ALL_VIEW, ADMIN];
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): trước đây canViewSubmission() (cho hồ sơ CŨ chưa có
+// snapshot effectiveApprovers) tự đọc THẲNG submissionDeptWorkflows[dept].approvers (field TĨNH), bỏ
+// qua hẳn approverMode/approversByPosition ("Theo vị trí" — POSITION mode).
+const APPROVER_POSITION_I = { username: 'truongphong_i', name: 'Trưởng Phòng I', dept: 'Phòng I', jobTitle: 'Trưởng phòng I', perms: { canBeApprover: true }, active: true };
+const USERS = [REGULAR_A, SCOPE_USER, APPROVER_TYPE, APPROVER_DEFAULT, ALL_VIEW, ADMIN, APPROVER_POSITION_I];
 
 const APP_DATA = {
   submissionDeptWorkflows: {
-    'Phòng E': { approvers: { 1: ['duyet_default'] } }
+    'Phòng E': { approvers: { 1: ['duyet_default'] } },
+    'Phòng I': { approverMode: { 1: 'POSITION' }, approversByPosition: { 1: [{ jobTitle: 'Trưởng phòng I', dept: 'Phòng I' }] } }
   },
   submissionTypeDeptWorkflows: {
     KHAC: {
       'Phòng F': { approvers: { 1: ['duyet_type'] } }
     }
-  }
+  },
+  users: USERS
 };
 
 let ALL_SUBS;
@@ -56,7 +62,10 @@ function resetData() {
     { id: 6, dept: 'Phòng G', creator: 'nvg', status: 'PENDING', opinionRequestees: [] },
     // id7: PENDING, nva được mời "Xin ý kiến" — dept/creator không liên quan gì tới nva, CHỈ lọt qua nhờ
     // nhánh PENDING company-wide + canViewSubmission() nhánh opinionRequestees.
-    { id: 7, dept: 'Phòng H', creator: 'nvh', status: 'PENDING', opinionRequestees: ['nva'] }
+    { id: 7, dept: 'Phòng H', creator: 'nvh', status: 'PENDING', opinionRequestees: ['nva'] },
+    // id8: Phòng I, "Theo vị trí" (POSITION mode), REJECTED (KHÔNG PENDING — tránh lẫn với nhánh tải
+    // thêm PENDING company-wide, để test ĐÚNG nhánh approver POSITION mode đang cần kiểm).
+    { id: 8, dept: 'Phòng I', creator: 'nvi', status: 'REJECTED', opinionRequestees: [] }
   ];
 }
 resetData();
@@ -172,11 +181,18 @@ async function main() {
       assertEqual(ids.join(','), '5', 'duyet_type phải thấy id5 (Phòng F, đang duyệt theo cấu hình riêng loại KHAC)');
     });
 
+    await run.run('LỖI ĐÃ VÁ 10/2026: người duyệt "Theo vị trí" (POSITION mode, hồ sơ CŨ chưa snapshot) PHẢI thấy hồ sơ Phòng I dù đã REJECTED', async () => {
+      resetData();
+      const res = await api('GET', '/api/data', undefined, APPROVER_POSITION_I);
+      const ids = (res.body.submissions || []).map(r => r.id).sort((a, b) => a - b);
+      assertEqual(ids.join(','), '8', 'truongphong_i phải thấy id8 (Phòng I, POSITION mode) — đây chính là lỗi đã vá (trước đây luôn rỗng cho mọi POSITION mode)');
+    });
+
     await run.run('submissionView.all: nhận ĐỦ toàn công ty', async () => {
       resetData(); fullLoadCallCount = 0;
       const res = await api('GET', '/api/data', undefined, ALL_VIEW);
       const ids = (res.body.submissions || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7', 'submissionView.all phải thấy đủ cả 7 hồ sơ');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8', 'submissionView.all phải thấy đủ cả 8 hồ sơ');
       assert(fullLoadCallCount >= 1, 'submissionView.all phải tải theo nhánh company-wide');
     });
 
@@ -184,7 +200,7 @@ async function main() {
       resetData();
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.submissions || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7', 'admin phải thấy đủ cả 7 hồ sơ');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8', 'admin phải thấy đủ cả 8 hồ sơ');
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterSubmissionsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

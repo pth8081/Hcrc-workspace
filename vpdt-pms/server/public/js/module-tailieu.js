@@ -286,12 +286,20 @@ function renderDocs() {
   // Kiểm tra quyền xem — tài liệu đã APPROVED xét quyền Xem Đã Duyệt, còn tài liệu đang xử lý / bị từ
   // chối (PENDING/REJECTED = "bản nháp") xét quyền Xem Bản Nháp; người tải lên luôn xem được bài của
   // chính mình.
+  //
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): thiếu hẳn nhánh "đang là người duyệt của quy trình hồ
+  // sơ này" mà module-vanbantrinh.js/module-hopdong.js đều đã có (isApproverForDeptWorkflow()) — server
+  // (canViewDoc(), lib/recordViewScope.js) đã có nhánh này từ trước, nên trước đây approver ngoài phạm
+  // vi viewDraftDepts/viewApprovedDepts của phòng ban đó VẪN được server trả về hồ sơ (nhất là sau khi
+  // vá thêm lỗi POSITION mode ở server), nhưng bị bộ lọc CLIENT này giấu mất khỏi tab Tài Liệu — chỉ còn
+  // thấy được qua Hộp Thư Phê Duyệt (buộc phải duyệt "mù" không xem trước được nội dung file).
   const canViewDoc = doc => currentUser.perms.admin ||
     (doc.status === 'APPROVED'
       ? (currentUser.perms.viewApprovedAll || (currentUser.perms.viewApprovedDepts || []).includes(doc.dept))
       : (currentUser.perms.viewDraftAll || (currentUser.perms.viewDraftDepts || []).includes(doc.dept))
     ) ||
-    (doc.uploader === currentUser.username);
+    (doc.uploader === currentUser.username) ||
+    isApproverForDeptWorkflow(DB.deptWorkflows[doc.dept], currentUser.username);
 
   // Thẻ dashboard — đếm khớp CHÍNH XÁC những gì sẽ hiện ra khi bấm từng thẻ (xem filterDocByCard()).
   // "Tổng/Đã duyệt/Từ chối" đếm trên tài liệu GỐC (đúng những gì list hiện mặc định); "Chờ duyệt: Cập

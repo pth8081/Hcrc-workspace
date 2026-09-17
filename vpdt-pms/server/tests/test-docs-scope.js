@@ -24,15 +24,27 @@ const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng A', pe
 const VIEW_APPROVED_B = { username: 'xemduyet', name: 'Xem Đã Duyệt Phòng B', dept: 'Phòng X', perms: { viewApprovedDepts: ['Phòng B'] }, active: true };
 const VIEW_DRAFT_C = { username: 'xemnhap', name: 'Xem Nháp Phòng C', dept: 'Phòng X', perms: { viewDraftDepts: ['Phòng C'] }, active: true };
 const APPROVER_D = { username: 'duyet_doc', name: 'Người Duyệt Phòng D', dept: 'Phòng X', perms: {}, active: true };
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): trước đây canViewDoc() tự đọc THẲNG deptWorkflows[dept].approvers
+// (field TĨNH), bỏ qua hẳn approverMode/approversByPosition ("Theo vị trí" — POSITION mode) — người
+// duyệt hợp lệ theo cấu hình POSITION mode KHÔNG BAO GIỜ thấy được tài liệu cần duyệt. approver_pos có
+// jobTitle "Trưởng phòng E" ĐÚNG phòng "Phòng E", canBeApprover=true (bắt buộc với POSITION mode).
+const APPROVER_POSITION_E = { username: 'truongphong_e', name: 'Trưởng Phòng E', dept: 'Phòng E', jobTitle: 'Trưởng phòng E', perms: { canBeApprover: true }, active: true };
+const NOT_APPROVER_SAME_JOBTITLE_OTHER_DEPT = { username: 'truongphong_f', name: 'Trưởng Phòng F', dept: 'Phòng F', jobTitle: 'Trưởng phòng E', perms: { canBeApprover: true }, active: true };
 const VIEW_ALL = { username: 'xemhet', name: 'Xem Toàn Bộ', dept: 'Phòng X', perms: { viewDraftAll: true }, active: true };
 const VIEW_TRUE_ALL = { username: 'xemhethet', name: 'Xem Trọn Vẹn', dept: 'Phòng X', perms: { viewDraftAll: true, viewApprovedAll: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, VIEW_APPROVED_B, VIEW_DRAFT_C, APPROVER_D, VIEW_ALL, VIEW_TRUE_ALL, ADMIN];
+const USERS = [
+  REGULAR_A, VIEW_APPROVED_B, VIEW_DRAFT_C, APPROVER_D, VIEW_ALL, VIEW_TRUE_ALL, ADMIN,
+  APPROVER_POSITION_E, NOT_APPROVER_SAME_JOBTITLE_OTHER_DEPT
+];
 
 const APP_DATA = {
   deptWorkflows: {
-    'Phòng D': { approvers: { 1: ['duyet_doc'] } }
-  }
+    'Phòng D': { approvers: { 1: ['duyet_doc'] } },
+    // "Theo vị trí" (POSITION mode) — GẮN đúng dept ('Phòng E') vào cặp (jobTitle,dept), khác dept-less.
+    'Phòng E': { approverMode: { 1: 'POSITION' }, approversByPosition: { 1: [{ jobTitle: 'Trưởng phòng E', dept: 'Phòng E' }] } }
+  },
+  users: USERS
 };
 
 let ALL_DOCS;
@@ -45,7 +57,8 @@ function resetData() {
     { id: 5, dept: 'Phòng C', status: 'APPROVED', uploader: 'other4' },
     { id: 6, dept: 'Phòng D', status: 'APPROVED', uploader: 'other5' },
     { id: 7, dept: 'Phòng D', status: 'PENDING', uploader: 'other6' },
-    { id: 8, dept: 'Phòng Z', status: 'REJECTED', uploader: 'nva' }
+    { id: 8, dept: 'Phòng Z', status: 'REJECTED', uploader: 'nva' },
+    { id: 9, dept: 'Phòng E', status: 'PENDING', uploader: 'other7' }
   ];
 }
 resetData();
@@ -162,7 +175,7 @@ async function main() {
       resetData(); fullLoadCallCount = 0;
       const res = await api('GET', '/api/data', undefined, VIEW_ALL);
       const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,3,4,7,8', 'viewDraftAll chỉ thấy hồ sơ KHÁC APPROVED (id2/5/6 đã duyệt phải bị loại, không có viewApprovedAll/Depts nào)');
+      assertEqual(ids.join(','), '1,3,4,7,8,9', 'viewDraftAll chỉ thấy hồ sơ KHÁC APPROVED (id2/5/6 đã duyệt phải bị loại, không có viewApprovedAll/Depts nào)');
       assert(fullLoadCallCount >= 1, 'viewDraftAll phải tải theo nhánh company-wide (để không bỏ sót phòng ban nào)');
     });
 
@@ -170,15 +183,29 @@ async function main() {
       resetData(); fullLoadCallCount = 0;
       const res = await api('GET', '/api/data', undefined, VIEW_TRUE_ALL);
       const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8', 'có cả 2 quyền All thì thấy đủ cả 8 tài liệu bất kể trạng thái');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8,9', 'có cả 2 quyền All thì thấy đủ cả 9 tài liệu bất kể trạng thái');
       assert(fullLoadCallCount >= 1, 'phải tải theo nhánh company-wide');
+    });
+
+    await run.run('LỖI ĐÃ VÁ 10/2026: người duyệt "Theo vị trí" (POSITION mode, đúng jobTitle+dept) PHẢI thấy tài liệu cần duyệt của Phòng E', async () => {
+      resetData();
+      const res = await api('GET', '/api/data', undefined, APPROVER_POSITION_E);
+      const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
+      assertEqual(ids.join(','), '9', 'truongphong_e phải thấy id9 (Phòng E, POSITION mode) — đây chính là lỗi đã vá (trước đây luôn rỗng cho mọi POSITION mode)');
+    });
+
+    await run.run('Cùng chức danh nhưng KHÁC phòng ban (không khớp cặp jobTitle+dept) KHÔNG được coi là approver — không rò rỉ chéo phòng ban', async () => {
+      resetData();
+      const res = await api('GET', '/api/data', undefined, NOT_APPROVER_SAME_JOBTITLE_OTHER_DEPT);
+      const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
+      assertEqual(ids.join(','), '', 'truongphong_f (Phòng F, cùng jobTitle nhưng cấu hình POSITION mode yêu cầu ĐÚNG dept Phòng E) KHÔNG được thấy id9');
     });
 
     await run.run('admin: nhận ĐỦ toàn công ty', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.docs || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8', 'admin phải thấy đủ cả 8 tài liệu');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8,9', 'admin phải thấy đủ cả 9 tài liệu');
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterDocsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

@@ -735,6 +735,28 @@ async function main() {
     `status=${c4.status} alerts=${JSON.stringify(c4.alerts)}`
   );
 
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): duyệt phiếu 2 với biển số KHÁC (không trùng) nhưng gán
+  // TRÙNG TÀI XẾ với phiếu 1 (lx1, đã bận đúng khung giờ chồng lấn từ c3) — trước đây hoàn toàn KHÔNG có
+  // kiểm tra này (chỉ có findCarPlateConflict()), 1 tài xế có thể lái 2 xe cùng lúc. Giờ phải bị chặn
+  // ngay lúc DUYỆT (applyWorkflowAction()/findCarDriverConflict()), không chỉ ở "Đổi tài xế-xe" sau đó.
+  const c4b = await page.evaluate(async (carId) => {
+    window.__alerts = [];
+    currentProcessingCarId = carId;
+    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
+    document.getElementById('carAssignedVehicleType').value = 'Toyota Innova 7 chỗ';
+    document.getElementById('carAssignedPlate').value = '30F-999.99'; // biển số KHÁC, không trùng
+    document.getElementById('txtCarComment').value = '';
+    await processCarReg('APPROVE');
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { alerts: window.__alerts.slice(), status: item.status, plate: item.assignedPlate };
+  }, c2.saved.id);
+  record(
+    'Car (rà soát 10/2026): duyệt gán TRÙNG TÀI XẾ (dù biển số khác) cho khung giờ chồng lấn bị chặn ngay lúc Duyệt',
+    c4b.alerts.some((a) => a.includes('Tài xế') && a.includes('trùng khung giờ')) && c4b.status === 'PENDING',
+    `status=${c4b.status} alerts=${JSON.stringify(c4b.alerts)}`
+  );
+
   // Từ chối phiếu 2 với lý do — state transition thứ 2 (REJECTED), sau khi đổi biển số để không còn xung đột.
   const c5 = await page.evaluate(async (carId) => {
     window.__alerts = [];
@@ -1414,6 +1436,26 @@ async function main() {
     JSON.stringify(f7b)
   );
   record('Fix 4: "Đổi tài xế-xe" ghi đúng dòng lịch sử REASSIGNED', (f7b.history || []).some((h) => h.action === 'REASSIGNED'), JSON.stringify(f7b.history));
+
+  // F7c/F7d — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): trước đây "Đổi tài xế-xe" CHỈ kiểm tra trùng
+  // BIỂN SỐ (F7a ở trên), hoàn toàn KHÔNG kiểm tra trùng TÀI XẾ — 1 tài xế có thể bị gán lái 2 xe khác
+  // biển số cùng khung giờ chồng lấn. carF2 (từ F7b) hiện gán tài xế 'lx2', khung giờ 21/09 08:00-12:00.
+  // carF3Conflict (900403) trùng khung giờ (21/09 09:00-11:00) nhưng KHÁC biển số — thử gán CÙNG tài xế
+  // 'lx2' cho carF3Conflict phải bị chặn (mirror findCarDriverConflict() mới thêm).
+  const f7c = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'reassign', { assignedDriverUsername: 'lx2' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF3Conflict.id);
+  record('Fix 4 (rà soát 10/2026): "Đổi tài xế-xe" chặn gán TRÙNG TÀI XẾ đang lái 1 chuyến APPROVED khác trùng khung giờ, dù biển số khác nhau (409)', !f7c.ok, JSON.stringify(f7c));
+
+  // F7d — tài xế KHÁC (chưa bận đúng khung giờ này) gán được bình thường, xác nhận check không chặn oan.
+  const f7d = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'reassign', { assignedDriverUsername: 'lx1', comment: 'Gán tài xế rảnh' });
+    const idx = DB.carRegs.findIndex((c) => c.id === carId);
+    DB.carRegs[idx] = result.item;
+    return result.item;
+  }, carF3Conflict.id);
+  record('Fix 4 (rà soát 10/2026): gán tài xế KHÁC (không trùng khung giờ với chuyến nào của tài xế đó) thành công bình thường', f7d.assignedDriverUsername === 'lx1', JSON.stringify(f7d));
 
   // F8 — "Đổi tài xế-xe" bị chặn trên chuyến KHÔNG còn APPROVED nữa (vd đã CANCELLED — carF1 từ F2).
   const f8 = await page.evaluate(async (carId) => {

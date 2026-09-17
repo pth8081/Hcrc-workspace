@@ -549,6 +549,67 @@ async function main() {
       );
     }
 
+    // ===================== LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): tab Tài Liệu (client) thiếu
+    // hẳn nhánh "đang là người duyệt của quy trình hồ sơ này" mà module-vanbantrinh.js/module-hopdong.js
+    // đều đã có (isApproverForDeptWorkflow()) — kể cả sau khi server đã trả đúng hồ sơ về (canViewDoc()
+    // ở lib/recordViewScope.js), bộ lọc CLIENT vẫn giấu mất khỏi danh sách nếu approver ngoài phạm vi
+    // viewDraftDepts/viewApprovedDepts/không phải uploader. Test qua "Theo vị trí" (POSITION mode, cùng
+    // lớp lỗi với phần server đã vá) — dùng lại đúng khuôn cấu hình approverMode/approversByPosition.
+    // =====================
+    {
+      const approverPos = {
+        username: 'truongphong_hc2', name: 'Trưởng Phòng Hành Chính 2', dept: 'Phòng Hành Chính',
+        jobTitle: 'Trưởng Phòng', role: 'staff', email: 'tphc2@hcrc.vn', phone: '0900000099',
+        perms: { canBeApprover: true }
+      };
+      DB.users.push(approverPos);
+      DB.deptWorkflows['Phòng Hành Chính'] = {
+        workflowId: 'WF_1STEP',
+        approverMode: { 1: 'POSITION' },
+        approversByPosition: { 1: [{ jobTitle: 'Trưởng Phòng', dept: 'Phòng Hành Chính' }] }
+      };
+      const docNeedsPositionApproval = {
+        id: 9001, code: 'HC-POS-001', dept: 'Phòng Hành Chính', cat: 'Biểu Mẫu', title: 'Tài liệu cần duyệt Theo vị trí',
+        ver: 'v1.0', status: 'PENDING', currentStep: 1, history: [], uploader: 'nguoi_khac', uploaderName: 'Người Khác',
+        fileName: 'a.pdf', fileType: 'application/pdf', fileUrl: '/uploads/a.pdf', rootDocId: null
+      };
+      DB.docs.push(docNeedsPositionApproval);
+
+      finishLogin(approverPos);
+      switchTab('doc');
+      // Reset mọi bộ lọc còn sót lại từ các scenario trước (deptFilter/statusFilter/keyword...) — chỉ
+      // muốn cô lập ĐÚNG phép kiểm quyền canViewDoc(), không để lẫn với filter UI đang giữ giá trị cũ.
+      ['filterKeyword', 'filterDept', 'filterStatus', 'filterDocType', 'filterFromDate', 'filterToDate'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      renderDocs();
+      const rowsAfterApproverLogin = document.getElementById('docTableBody').innerHTML;
+      check(
+        'doc (rà soát 10/2026): người duyệt "Theo vị trí" (POSITION mode, KHÔNG phải uploader/viewDraftDepts) THẤY được tài liệu cần duyệt trong tab Tài Liệu',
+        rowsAfterApproverLogin.includes('HC-POS-001'),
+        rowsAfterApproverLogin.slice(0, 300)
+      );
+
+      // Người CÙNG chức danh nhưng KHÁC phòng ban (không khớp cặp jobTitle+dept) KHÔNG được coi là approver.
+      const notApproverPos = {
+        username: 'truongphong_khac', name: 'Trưởng Phòng Khác Phòng', dept: 'Phòng Kỹ Thuật',
+        jobTitle: 'Trưởng Phòng', role: 'staff', email: 'tpk@hcrc.vn', phone: '0900000098',
+        perms: { canBeApprover: true }
+      };
+      DB.users.push(notApproverPos);
+      finishLogin(notApproverPos);
+      renderDocs();
+      const rowsAfterOtherLogin = document.getElementById('docTableBody').innerHTML;
+      check(
+        'doc (rà soát 10/2026): trưởng phòng KHÁC (cùng chức danh nhưng khác phòng ban, không khớp cặp jobTitle+dept) KHÔNG thấy tài liệu này — không rò rỉ chéo phòng ban',
+        !rowsAfterOtherLogin.includes('HC-POS-001'),
+        rowsAfterOtherLogin.slice(0, 300)
+      );
+
+      finishLogin(adminUser);
+    }
+
     return results;
   });
 

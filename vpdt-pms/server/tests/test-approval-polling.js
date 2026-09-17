@@ -46,6 +46,10 @@ function buildFixtureAppData() {
     budgetDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
     contractApprovalDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
     contractManageDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): paymentRequests PENDING giờ đi qua pushDeptWorkflowKeys()
+    // (paymentDeptWorkflows) như 7 module dept-workflow còn lại, thay vì cờ phẳng paymentManage — thêm
+    // cấu hình cùng khuôn để test khớp đúng hành vi MỚI.
+    paymentDeptWorkflows: { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
     operationOrderStoreTierWorkflows: {},
     operationOrderHOTierWorkflows: { LT100M: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } },
 
@@ -110,8 +114,12 @@ function buildFixtureAppData() {
       { id: 101, dept: 'Kế Toán', status: 'PENDING' }
     ],
     paymentRequests: [
-      { id: 111, dept: 'Kế Toán', status: 'PENDING' },
-      { id: 112, dept: 'Kế Toán', status: 'NEED_INFO' }
+      // currentStep/history: bắt buộc từ khi PENDING chuyển qua pushDeptWorkflowKeys() (đọc
+      // rec[currentStepField]/rec[historyField] như 7 module dept-workflow còn lại) — hồ sơ thật luôn
+      // có 2 field này (submitPaymentRequest(), lib/recordActions.js), fixture cũ thiếu vì trước đây
+      // PENDING chỉ dùng cờ phẳng, không cần đọc bước hiện tại.
+      { id: 111, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [] },
+      { id: 112, dept: 'Kế Toán', status: 'NEED_INFO', currentStep: 1, history: [] }
     ],
     operationOrders: [
       { id: 121, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [],
@@ -169,6 +177,10 @@ async function runPartA(run) {
     assert(keys.includes('contractSigned:71'), 'phải gồm contractSigned:71 (luồng Tài liệu ký, field riêng)');
     assert(!keys.includes('contract:72') && !keys.includes('contractSigned:72'), 'PHẢI loại phụ lục (isAddendum:true) khỏi CẢ 2 luồng hợp đồng');
     assert(keys.includes('operationOrder:121'), 'phải gồm operationOrder:121 (mức HO/LT100M, duyet1 có tên)');
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): payment:111 (PENDING) giờ đi qua paymentDeptWorkflows
+    // (dept-workflow, mirror pushDeptWorkflowKeys() như 7 module ở trên) — trước đây chỉ dựa vào cờ phẳng
+    // paymentManage, khiến approver theo bước KHÔNG có cờ đó không bao giờ nhận được khoá này.
+    assert(keys.includes('payment:111'), 'phải gồm payment:111 (PENDING, đúng phòng ban + đúng approver theo paymentDeptWorkflows)');
   });
 
   await run.run('computeMyPendingApprovalKeys(): 6 module/nhánh QUYỀN PHẲNG (không theo bước) đều đúng', async () => {
@@ -179,7 +191,9 @@ async function runPartA(run) {
     assert(keys.includes('internalShare:91'), 'phải gồm internalShare:91 (SHARE + PENDING, internalPostApprove=true)');
     assert(keys.includes('flaggedComment:92:9201'), 'phải gồm flaggedComment:92:9201 (bình luận bị gắn cờ, DÙ bài viết đã APPROVED)');
     assert(keys.includes('license:101'), 'phải gồm license:101 (licenseApprove=true)');
-    assert(keys.includes('payment:111') && keys.includes('payment:112'), 'phải gồm CẢ payment:111 (PENDING) và payment:112 (NEED_INFO)');
+    // payment:111 (PENDING) đã chuyển sang test "7 module dept-workflow" ở trên (paymentDeptWorkflows).
+    // Chỉ payment:112 (NEED_INFO) còn giữ nguyên cờ phẳng paymentManage ở đây.
+    assert(keys.includes('payment:112'), 'phải gồm payment:112 (NEED_INFO, vẫn dùng cờ phẳng paymentManage)');
     assert(keys.includes('itPriceEmergencyReject:52'), 'phải gồm itPriceEmergencyReject:52 (mục riêng, KHÔNG lệ thuộc status chính APPROVED)');
     assert(keys.includes('operationOrderReceipt:122'), 'phải gồm operationOrderReceipt:122 (đơn HO, duyet1 có scope HO trong operationOrderReceiptManage)');
     assert(!keys.includes('operationOrderReceipt:123'), 'PHẢI loại operationOrderReceipt:123 (đơn STORE, duyet1 không có scope siêu thị đó)');
@@ -209,6 +223,29 @@ async function runPartA(run) {
   await run.run('computeMyPendingApprovalKeys(user=null hoặc appData rỗng) không throw, trả về mảng rỗng', async () => {
     assertEqual(computeMyPendingApprovalKeys(null, buildFixtureAppData()).length, 0, 'user null -> rỗng');
     assertEqual(computeMyPendingApprovalKeys(DUYET1, {}).length, 0, 'appData rỗng (mọi collection undefined) không được throw');
+  });
+
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026) — kiểm cả 2 chiều của bug cũ:
+  //   (a) approver được liệt kê ĐÚNG theo paymentDeptWorkflows nhưng KHÔNG có cờ phẳng paymentManage ->
+  //       trước đây KHÔNG BAO GIỜ nhận khoá "payment:<id>" (không có thông báo hồ sơ mới cần duyệt).
+  //   (b) người có cờ phẳng paymentManage nhưng KHÔNG được liệt kê ở đúng bước duyệt của phòng ban đó ->
+  //       trước đây VẪN nhận khoá cho MỌI đề nghị company-wide (thông báo giả — bấm vào sẽ bị 403).
+  await run.run('computeMyPendingApprovalKeys(): approver theo bước (KHÔNG có paymentManage) PHẢI nhận khoá payment:<id> cho hồ sơ PENDING đúng phòng ban', async () => {
+    const appData = buildFixtureAppData();
+    const stepOnlyApprover = { username: 'ketoan.buoc', name: 'Kế Toán Chỉ Theo Bước', dept: 'Kế Toán', perms: {} };
+    appData.paymentDeptWorkflows = { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['ketoan.buoc'] } } };
+    const keys = computeMyPendingApprovalKeys(stepOnlyApprover, appData);
+    assert(keys.includes('payment:111'), 'approver chỉ được liệt kê theo bước (không có paymentManage) vẫn phải nhận khoá payment:111');
+    assert(!keys.includes('payment:112'), 'PHẢI KHÔNG nhận payment:112 (NEED_INFO chỉ dành cho cờ phẳng paymentManage, người này không có)');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): có paymentManage nhưng KHÔNG đúng phòng ban/không được liệt kê ở bước duyệt -> KHÔNG nhận khoá payment:<id> PENDING (tránh thông báo giả)', async () => {
+    const appData = buildFixtureAppData();
+    appData.paymentDeptWorkflows = { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['ai.do.khac'] } } };
+    const flatOnlyManager = { username: 'ketoan.co.quyen', name: 'Có Quyền Nhưng Không Đúng Bước', dept: 'Nhân Sự', perms: { paymentManage: true } };
+    const keys = computeMyPendingApprovalKeys(flatOnlyManager, appData);
+    assert(!keys.includes('payment:111'), 'PHẢI KHÔNG nhận payment:111 — có paymentManage nhưng khác phòng ban VÀ không được liệt kê ở bước duyệt (tránh thông báo giả dẫn tới bấm vào bị 403)');
+    assert(keys.includes('payment:112'), 'vẫn nhận payment:112 (NEED_INFO) vì có cờ phẳng paymentManage, không đổi hành vi cũ cho nhánh này');
   });
 }
 

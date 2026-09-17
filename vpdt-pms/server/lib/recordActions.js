@@ -6510,8 +6510,9 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
   if (item.status !== 'APPROVED') {
     throw new HttpError(409, 'Chỉ đổi tài xế/xe được cho chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
   }
-  const { findCarPlateConflict } = require('./workflowEngine'); // require trễ (bên trong hàm) — tránh
-  // vòng lặp require ở mức module (workflowEngine.js không require lại recordActions.js nên an toàn).
+  const { findCarPlateConflict, findCarDriverConflict } = require('./workflowEngine'); // require trễ
+  // (bên trong hàm) — tránh vòng lặp require ở mức module (workflowEngine.js không require lại
+  // recordActions.js nên an toàn).
   const newPlate = String(payload?.assignedPlate || '').trim();
   if (newPlate && newPlate !== item.assignedPlate) {
     const conflict = findCarPlateConflict(existingCarRegs, item.id, newPlate, item.startTime, item.endTime);
@@ -6528,6 +6529,10 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
   if (assignedDriverUsername && assignedDriverUsername !== item.assignedDriverUsername) {
     const driverUser = (users || []).find(u => u.username === assignedDriverUsername && u.active !== false);
     if (!driverUser) throw new HttpError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
+    const driverConflict = findCarDriverConflict(existingCarRegs, item.id, driverUser.username, item.startTime, item.endTime);
+    if (driverConflict) {
+      throw new HttpError(409, `Tài xế "${driverUser.name}" đã được phân công cho phiếu "${driverConflict.code}" trùng khung giờ này`);
+    }
     item.assignedDriverUsername = driverUser.username;
     item.assignedDriver = driverUser.name;
     extraSnapshot.assignedDriverUsername = driverUser.username;

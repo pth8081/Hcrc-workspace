@@ -802,10 +802,14 @@ async function run() {
       const plainKtUser = { username: 'kt1', dept: 'Phòng Kế Toán', perms: {} };
       const prKinhDoanh = { dept: 'Phòng Kinh Doanh', sourcePaymentType: 'ONE_TIME' };
       const prKeToan = { dept: 'Phòng Kế Toán', sourcePaymentType: null };
-      check('paymentManage/admin -> nhìn được MỌI phòng ban (không đổi bởi requestFiles mới)', recordViewScope.canViewPaymentRequest(paymentManageUser, prKinhDoanh) === true && recordViewScope.canViewPaymentRequest(adminUser, prKinhDoanh) === true, null);
-      check('Người dùng thường CÙNG phòng ban -> nhìn được', recordViewScope.canViewPaymentRequest(plainKtUser, prKeToan) === true, null);
-      check('Người dùng thường KHÁC phòng ban -> KHÔNG nhìn được (dept-scope vẫn nguyên vẹn)', recordViewScope.canViewPaymentRequest(plainKdUser, prKeToan) === false, null);
-      const filtered = recordViewScope.filterPaymentRequestsForUser([prKinhDoanh, prKeToan], plainKdUser);
+      // appData: {} — canViewPaymentRequest() giờ cần appData cho nhánh approver theo paymentDeptWorkflows
+      // (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026, xem lib/recordViewScope.js) — {} = không cấu hình gì
+      // (đúng ý kịch bản này, chỉ test riêng dept-scope, không có approver nào khác phòng ban).
+      const noApproverConfig = {};
+      check('paymentManage/admin -> nhìn được MỌI phòng ban (không đổi bởi requestFiles mới)', recordViewScope.canViewPaymentRequest(paymentManageUser, prKinhDoanh, noApproverConfig) === true && recordViewScope.canViewPaymentRequest(adminUser, prKinhDoanh, noApproverConfig) === true, null);
+      check('Người dùng thường CÙNG phòng ban -> nhìn được', recordViewScope.canViewPaymentRequest(plainKtUser, prKeToan, noApproverConfig) === true, null);
+      check('Người dùng thường KHÁC phòng ban -> KHÔNG nhìn được (dept-scope vẫn nguyên vẹn)', recordViewScope.canViewPaymentRequest(plainKdUser, prKeToan, noApproverConfig) === false, null);
+      const filtered = recordViewScope.filterPaymentRequestsForUser([prKinhDoanh, prKeToan], plainKdUser, noApproverConfig);
       check('filterPaymentRequestsForUser() — người "Phòng Kinh Doanh" chỉ thấy đúng 1/2 đề nghị (của phòng mình)', filtered.length === 1 && filtered[0] === prKinhDoanh, filtered);
     })();
 

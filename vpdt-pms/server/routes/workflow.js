@@ -137,6 +137,15 @@ router.post('/:module/:id/:action', async (req, res) => {
     if (moduleKey === 'carRegs' && extraFields && typeof extraFields.assignedPlate === 'string') {
       extraFields.assignedPlate = extraFields.assignedPlate.trim();
     }
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): applyWorkflowAction() giờ đã kiểm tra trùng TÀI XẾ
+    // (findCarDriverConflict(), mirror findCarPlateConflict() — trước đó module này hoàn toàn KHÔNG có
+    // kiểm tra này, 1 tài xế có thể bị gán lái 2 xe khác biển số cùng khung giờ) — khoá thêm theo GIÁ
+    // TRỊ TÀI XẾ đang gán (cùng lý do/cùng khuôn khoá biển số ở trên) để 2 lượt duyệt gán CÙNG 1 tài xế
+    // cho 2 phiếu KHÁC NHAU gần như đồng thời không cùng đọc snapshot "chưa ai gán" trước khi cả hai ghi.
+    const newDriverUsername = moduleKey === 'carRegs' ? String(extraFields?.assignedDriverUsername || '').trim() || null : null;
+    const lockKeys = [];
+    if (newPlate) lockKeys.push(`car_plate:${newPlate}`);
+    if (newDriverUsername) lockKeys.push(`car_driver:${newDriverUsername}`);
     const runApprove = async () => {
       const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
       return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
@@ -147,8 +156,8 @@ router.post('/:module/:id/:action', async (req, res) => {
         return outcome.item;
       });
     };
-    const resultItem = newPlate
-      ? await withAppLock(`car_plate:${newPlate}`, runApprove)
+    const resultItem = lockKeys.length
+      ? await withAppLock(lockKeys, runApprove)
       : await runApprove();
 
     // Tờ trình được phê duyệt HOÀN TẤT (bước cuối cùng) kèm ý kiến chỉ đạo -> tự tạo 1 Công việc theo

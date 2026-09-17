@@ -60,6 +60,28 @@ function findCarPlateConflict(existingCarRegs, itemId, plate, startTime, endTime
   });
 }
 
+// LỖI THẬT phát hiện đợt rà soát chuyên sâu (10/2026): chỉ có findCarPlateConflict() (kiểm tra trùng
+// BIỂN SỐ) — hoàn toàn KHÔNG kiểm tra trùng TÀI XẾ. Người Điều Hành Xe duyệt phiếu A (08:00-10:00, xe 1,
+// gán tài xế "nva") rồi duyệt phiếu B (09:00-11:00, xe 2 KHÁC, cũng gán tài xế "nva") — 2 biển số khác
+// nhau nên findCarPlateConflict() không phát hiện gì, cả 2 phiếu đều được duyệt bình thường (chỉ cần 2
+// thao tác tuần tự qua UI, KHÔNG cần race condition) — 1 tài xế bị phân công lái 2 xe cùng lúc, chỉ lộ
+// ra khi tài xế/người đăng ký phát hiện thủ công. Mirror y hệt findCarPlateConflict() (cùng quy ước bỏ
+// qua REJECTED/CANCELLED, coi ngày lỗi định dạng là CÓ trùng), chỉ đổi field so khớp.
+function findCarDriverConflict(existingCarRegs, itemId, driverUsername, startTime, endTime) {
+  if (!driverUsername) return null;
+  const newStart = new Date(startTime).getTime();
+  const newEnd = new Date(endTime).getTime();
+  if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) return null;
+  return (existingCarRegs || []).find(c => {
+    if (c.id === itemId || c.assignedDriverUsername !== driverUsername) return false;
+    if (c.status === 'REJECTED' || c.status === 'CANCELLED') return false;
+    const cStart = new Date(c.startTime).getTime();
+    const cEnd = new Date(c.endTime).getTime();
+    if (!Number.isFinite(cStart) || !Number.isFinite(cEnd)) return true;
+    return newStart < cEnd && cStart < newEnd;
+  });
+}
+
 // ===== Văn Bản Trình: quy trình theo loại + lớp phê duyệt bổ sung (khớp index.html) =====
 const SUBMISSION_TYPES = [
   { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
@@ -757,6 +779,12 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (moduleKey === 'carRegs' && extraFields?.assignedDriverUsername) {
       const driverUser = (users || []).find(u => u.username === extraFields.assignedDriverUsername && u.active !== false);
       if (!driverUser) throw new WorkflowError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
+      if (driverUser.username !== item.assignedDriverUsername) {
+        const driverConflict = findCarDriverConflict(existingCollection, item.id, driverUser.username, item.startTime, item.endTime);
+        if (driverConflict) {
+          throw new WorkflowError(409, `Tài xế "${driverUser.name}" đã được phân công cho phiếu "${driverConflict.code}" trùng khung giờ này`);
+        }
+      }
       item.assignedDriverUsername = driverUser.username;
       item.assignedDriver = driverUser.name;
       extraSnapshot.assignedDriverUsername = driverUser.username;
@@ -905,6 +933,7 @@ module.exports = {
   resolveItPriceTierWorkflowConfig,
   resolveOperationOrderWorkflow,
   findCarPlateConflict,
+  findCarDriverConflict,
   computeOperationOrderAmount,
   computeOperationOrderTier,
   OPERATION_ORDER_STORE_TIERS,

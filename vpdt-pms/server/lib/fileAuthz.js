@@ -310,7 +310,10 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     return canViewTrainingTestQuestionImage(user, owning.item, { trainingClasses, trainingRegistrations });
   }
   if (owning.laborContract) return canViewLaborContract(user, owning.item);
-  if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item);
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): canViewPaymentRequest() giờ cần appData (nhánh approver
+  // theo paymentDeptWorkflows mới thêm, xem lib/recordViewScope.js) — trước đây gọi thiếu appData nên
+  // nhánh đó (nếu có) sẽ luôn coi như rỗng.
+  if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item, await getAllAppData());
   if (owning.hrProcess) return canViewHrProcess(user, owning.item);
   if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item);
   // employeeProfile (Quyết định gán/đổi chức vụ): CHỈ chính chủ hồ sơ/hrProfileManage/admin xem được —
@@ -331,11 +334,12 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   }
 
   // mode 'view' — dùng đúng khuôn canView* của từng module (KHÔNG dùng cờ Download, xem đầu file).
-  // appData chỉ cần cho 3 module có quy trình duyệt theo phòng ban, đọc muộn để 2 module còn lại
-  // (doc/submission) không phải tải cả khối cấu hình.
+  // Cả 5 module đều cần appData (LỖI ĐÃ VÁ 10/2026: doc/submission trước đây tự getAppDataValue() riêng
+  // theo field tĩnh, bỏ sót POSITION mode — nay dùng chung resolveWfConfig() như 3 module còn lại, xem
+  // lib/recordViewScope.js).
   switch (owning.moduleKey) {
-    case 'doc': return await canViewDoc(user, owning.record);
-    case 'submission': return await canViewSubmission(user, owning.record);
+    case 'doc': return canViewDoc(user, owning.record, await getAllAppData());
+    case 'submission': return canViewSubmission(user, owning.record, await getAllAppData());
     case 'contract': return canViewContract(user, owning.record, await getAllAppData());
     case 'car': return canViewCarReg(user, owning.record, await getAllAppData());
     case 'office': return canViewOfficeReq(user, owning.record, await getAllAppData());

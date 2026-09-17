@@ -57,9 +57,15 @@ router.use(reportsRateLimiter);
 // ignoreDept (tuỳ chọn): bỏ qua where.Dept dù bảng có cột Dept — dùng khi module Báo Cáo tương ứng vốn
 // không lọc theo phòng ban (VD Truyền Thông Nội Bộ — kênh dùng chung toàn công ty).
 const REPORT_QUERY_CONFIGS = {
-  docs: { filterFn: filterDocsForUser, needsAppData: false },
-  submissions: { filterFn: filterSubmissionsForUser, needsAppData: false },
-  paymentRequests: { filterFn: filterPaymentRequestsForUser, needsAppData: false },
+  // needsAppData: true (10/2026) — filterDocsForUser()/filterSubmissionsForUser() giờ gọi
+  // MODULE_CONFIGS.docs/submissions.resolveWfConfig() (đồng bộ, có xử lý đúng POSITION mode qua
+  // resolveStepApproverUsernames()) thay vì tự getAppDataValue() riêng theo field tĩnh như trước — cần
+  // appData như mọi filterFn needsAppData:true khác.
+  docs: { filterFn: filterDocsForUser, needsAppData: true },
+  submissions: { filterFn: filterSubmissionsForUser, needsAppData: true },
+  // needsAppData: true (10/2026) — filterPaymentRequestsForUser() giờ cần appData (nhánh approver theo
+  // paymentDeptWorkflows mới thêm, xem lib/recordViewScope.js).
+  paymentRequests: { filterFn: filterPaymentRequestsForUser, needsAppData: true },
   operationOrders: { filterFn: filterOperationOrdersForUser, needsAppData: true },
   operationStoreOpenings: { filterFn: filterOperationStoreOpeningsForUser, needsAppData: true },
   operationRepairs: { filterFn: filterOperationRepairsForUser, needsAppData: true },
