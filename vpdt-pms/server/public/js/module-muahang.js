@@ -6,6 +6,11 @@
 // tính, rebateTermManage/rebateTermActivate) / Báo Cáo (đọc RebateCalculations, rebateViewReport).
 
 let mhSubTab = 'BAS';
+// Sub-tab con BÊN TRONG tab BAS (theo yêu cầu người dùng 10/2026) — tách 3 khối Nhà Cung Cấp/Điều Khoản/
+// Đồng Bộ DSmart trước đây xếp chồng dọc trong cùng 1 màn thành 3 tab riêng, mirror ĐÚNG khuôn
+// setPurchasingSubTab() ở trên (chỉ ẩn/hiện panel + đổi màu nút, KHÔNG lazy-load lại — cả 3 panel vẫn
+// được renderMhBasTab() render dữ liệu ngay khi mở BAS, y hệt trước khi tách tab).
+let mhBasSubTab = 'VENDOR';
 let mhVendors = [], mhTerms = [], mhCalculations = [], mhSyncLogs = [];
 let mhDataLoaded = false;
 let mhEditingVendorId = null;
@@ -93,6 +98,21 @@ function renderMhBasTab() {
   renderMhVendorList();
   renderMhTermList();
   renderMhSyncLogList();
+  setMhBasSubTab(mhBasSubTab);
+}
+
+function setMhBasSubTab(tab) {
+  mhBasSubTab = tab;
+  ['VENDOR', 'TERM', 'SYNC'].forEach(t => {
+    const panelId = t === 'VENDOR' ? 'mhBasSubVendor' : t === 'TERM' ? 'mhBasSubTerm' : 'mhBasSubSync';
+    document.getElementById(panelId).classList.toggle('hidden', t !== tab);
+    const btnId = t === 'VENDOR' ? 'btnMhBasSubVendor' : t === 'TERM' ? 'btnMhBasSubTerm' : 'btnMhBasSubSync';
+    const btn = document.getElementById(btnId);
+    btn.classList.toggle('bg-emerald-700', t === tab);
+    btn.classList.toggle('text-white', t === tab);
+    btn.classList.toggle('bg-gray-200', t !== tab);
+    btn.classList.toggle('text-gray-700', t !== tab);
+  });
 }
 
 function renderMhVendorList() {
