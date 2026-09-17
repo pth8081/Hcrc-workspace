@@ -2087,6 +2087,51 @@ tốc độ trong đúng lúc đó.
 
 ---
 
+## 5b. Chống trùng lặp dữ liệu khi Nhập Excel (10/2026)
+
+Theo yêu cầu người dùng: các màn "Nhập Excel"/"Import" (tải file .xlsx/.csv
+lên để nhập hàng loạt, KHÁC hẳn upload file đính kèm thông thường của 1 hồ sơ
+đơn lẻ) đều phải cảnh báo nếu dòng dữ liệu trong file có vẻ TRÙNG với dữ liệu
+đã có sẵn, rồi để người dùng tự quyết định "vẫn nhập"/"ghi đè"/"bỏ qua" —
+KHÔNG được âm thầm bỏ qua (dễ để lọt dòng dữ liệu quan trọng) và cũng KHÔNG
+tự động chặn cứng (một số trường hợp người dùng cố ý muốn nhập lại). Cơ chế
+dùng chung `server/lib/importDedup.js` (`markDuplicateItems()`/
+`normalizeDedupKey()`), so trùng LUÔN giới hạn trong ĐÚNG 1 chức năng đang
+nhập (không so chéo sang module khác) — mỗi màn xem trước hiện rõ dòng nghi
+trùng (tô màu vàng nhạt) kèm 1 trong 2 kiểu điều khiển:
+
+- **Checkbox "Nhập dòng này"** (Ngân Sách Đề Xuất/Phê Duyệt, Checklist Đánh
+  Giá Siêu Thị, Ngân Hàng Câu Hỏi Đào Tạo, Vận Hành > Siêu Thị — Danh Mục Đầu
+  Tư/Danh Sách Công Việc, Kế Hoạch Đào Tạo theo tháng) — dùng khi mỗi dòng là
+  1 mục độc lập (không có "bản ghi đã có" cụ thể để ghi đè), mặc định BỎ CHỌN
+  cho dòng nghi trùng, người dùng tự tick lại nếu vẫn muốn thêm.
+- **Chọn "Bỏ qua"/"Ghi đè thông tin"** (Hồ Sơ Nhân Sự, Quản Lý Người Dùng) —
+  dùng khi trùng đúng 1 bản ghi đã có sẵn (Mã Nhân Viên/Username) — "Ghi đè"
+  CHỈ cập nhật đúng các field mà file Excel thu thập được (VD Hồ Sơ Nhân Sự:
+  địa chỉ/SĐT khẩn cấp/ngân hàng..., KHÔNG BAO GIỜ đụng Mã Nhân Viên/Tài
+  khoản VPDT/trạng thái; Người Dùng: chỉ họ tên/email/SĐT/phòng ban/chức
+  danh, KHÔNG BAO GIỜ đụng username/mật khẩu/quyền hạn) — mặc định "Bỏ qua".
+
+Khoá so trùng theo từng module (đều chuẩn hoá bỏ dấu-hoa/thường-khoảng trắng
+thừa qua `normalizeDedupKey()`):
+
+| Module | Khoá so trùng | Phạm vi so "đã có" |
+|---|---|---|
+| Hồ Sơ Nhân Sự | Mã Nhân Viên | Toàn bộ `employeeProfiles` |
+| Quản Lý Người Dùng | Username | Toàn bộ `DB.users` (client tự so, không cần round-trip) |
+| Ngân Sách (Đề Xuất/Phê Duyệt) | Năm+Tháng+Vị trí+Danh mục+Nội dung | CHỈ đúng stage (tab) đang nhập, dòng gốc |
+| Checklist Đánh Giá Siêu Thị | Nội dung câu hỏi | Danh sách câu hỏi đang soạn dở trên màn (client tự so) |
+| Ngân Hàng Câu Hỏi Đào Tạo | Nội dung câu hỏi | Danh sách câu hỏi đang soạn dở trên màn (client tự so) |
+| Vận Hành — Danh Mục Đầu Tư | Nội dung hạng mục | Bảng hạng mục đang sửa của ĐÚNG hồ sơ (client tự so — route đọc file không biết đang sửa hồ sơ nào) |
+| Vận Hành — Danh Sách Công Việc | Tên công việc | Danh sách công việc GỐC đang có của ĐÚNG hồ sơ (client tự so) |
+| Kế Hoạch Đào Tạo (theo tháng) | Tháng+Chương Trình+Đơn Vị | Toàn bộ `trainingPlans` đã có (server tự so, route đã sẵn dữ liệu) |
+
+Cột "Ghi Chú"/dòng "Mẫu Ngân Sách" (khai cột tuỳ biến) chỉ so trùng NGAY
+TRONG file đang đọc (tên cột trùng lặp) — không có khái niệm "đã có sẵn" vì
+đây là cấu hình khuôn cột, không phải dữ liệu nghiệp vụ tích luỹ.
+
+---
+
 ## 6. Phân quyền (permission model)
 
 **Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**
