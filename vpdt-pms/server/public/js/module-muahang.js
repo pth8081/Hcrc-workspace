@@ -215,8 +215,8 @@ function mhRenderTierRows() {
   document.getElementById('mhTierRowsWrap').innerHTML = mhTierRows.map((r, idx) => `
     <div class="flex items-center gap-2">
       <span class="text-[11px] text-gray-500 w-6">#${idx + 1}</span>
-      <input type="text" inputmode="numeric" placeholder="Từ số tiền (VNĐ)" value="${r.fromAmount ?? ''}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="fromAmount" data-arg-value="2" class="flex-1 border rounded px-2 py-1 text-xs">
-      <input type="text" inputmode="decimal" placeholder="Tỷ lệ %" value="${r.ratePct ?? ''}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="ratePct" data-arg-value="2" class="w-24 border rounded px-2 py-1 text-xs">
+      <input type="text" inputmode="numeric" placeholder="Từ số tiền (VNĐ)" value="${escapeHtml(r.fromAmount ?? '')}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="fromAmount" data-arg-value="2" class="flex-1 border rounded px-2 py-1 text-xs">
+      <input type="text" inputmode="decimal" placeholder="Tỷ lệ %" value="${escapeHtml(r.ratePct ?? '')}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="ratePct" data-arg-value="2" class="w-24 border rounded px-2 py-1 text-xs">
       <button type="button" data-op="mhRemoveTierRow" data-arg0="${idx}" class="text-red-500 text-xs">✕</button>
     </div>`).join('') || '<div class="text-[11px] text-gray-400 italic">Chưa có bậc nào — bấm "+ Thêm Bậc".</div>';
 }

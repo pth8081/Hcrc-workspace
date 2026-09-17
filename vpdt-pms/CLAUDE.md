@@ -55,6 +55,42 @@ Không bỏ qua bước này chỉ vì module mới nhỏ — cả 2 màn trên 
 dài, việc bổ sung càng chậm càng dễ bị quên/tích tụ thành nợ kỹ thuật lớn
 (đợt rà soát vừa rồi phát hiện 8 module thiếu ở Báo Cáo cùng lúc).
 
+## Module mới → bắt buộc tuân thủ CSP chuẩn của hệ thống (không unsafe-inline) + HTML gọn
+
+Toàn hệ thống đã siết CSP KHÔNG có `unsafe-inline` cho cả `script-src` lẫn
+`style-src`, và `script-src-attr: 'none'` chặn thật mọi thuộc tính
+event-handler nội tuyến (xem `lib/securityHeaders.js`). **Bất kỳ HTML/JS mới
+nào (module mới hay sửa module cũ) đều phải tuân thủ đúng khuôn này, không
+có ngoại lệ:**
+
+- **Không** `onclick=`/`onchange=`/`oninput=`/`onsubmit=`/... nội tuyến —
+  dùng `data-op`/`data-op-change`/`data-op-input`/`data-op-submit` +
+  `bindCspDelegation()` (xem `public/js/core.js`, `cspDispatchOp()`/
+  `cspCollectArgs()` cho cách truyền tham số qua `data-arg0`/`data-argN`/
+  `data-arg-value`/`data-arg-el`/`data-arg-event`).
+- **Không** `style="..."` nội tuyến với giá trị ĐỘNG — dùng `data-style="..."`
+  + gọi `applyDataStyles(root)` đúng 1 lần sau khi gán `.innerHTML` (xem chú
+  thích đầy đủ tại `applyDataStyles()` ở core.js). Style tĩnh thì dùng class
+  Tailwind có sẵn, không viết `style="..."` tĩnh cũng không cần thiết.
+- **Luôn** `escapeHtml()` cho MỌI giá trị không phải hằng số tĩnh khi chèn
+  vào HTML string — kể cả trong thuộc tính `value="..."` của input động
+  (dòng nhập lặp lại kiểu bậc thang/hạng mục — xem
+  `updateChecklistBuilderCategoryField()` ở module-checklist.js làm mẫu).
+  Bỏ sót ở đúng những input BÊN TRONG 1 danh sách dòng lặp (render lại khi
+  thêm/xoá dòng) là lỗi hay gặp nhất — tự kiểm tra kỹ từng ô trong nhóm này.
+- **HTML gọn**: mảnh HTML mới tách ra `public/fragments/<key>Section.html`
+  (tải lười qua `TAB_SECTION_FRAGMENT`, xem chú thích tại `div#vanHanhSection`
+  trong `index.html`) đúng khuôn các module gần đây — không nhúng cứng khối
+  HTML lớn thẳng vào `index.html` nữa. Không lặp lại cấu trúc/class dài dòng
+  không cần thiết — tái dùng đúng pattern bảng/form/nút đã có (checklist,
+  budget...) thay vì tự nghĩ ra khuôn mới cho mỗi module.
+
+Sau khi viết xong, chủ động `grep` lại chính file mới cho `on[a-z]+="`,
+` style="` (trừ `data-style`), `javascript:`, `eval(`/`new Function(` — xác
+nhận không khớp gì trước khi báo cáo hoàn tất, đừng chỉ dựa vào trực giác đã
+"viết đúng khuôn". Việc này áp dụng cho MỌI module mới từ nay, không chỉ khi
+người dùng nhắc lại.
+
 ## 3 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
 
 Có 3 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:
