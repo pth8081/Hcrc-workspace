@@ -161,8 +161,16 @@ async function partA() {
   });
 
   await test('deductLeaveBalance() cộng dồn usedDays', () => {
-    const updated = attendance.deductLeaveBalance({ usedDays: 2 }, 3);
+    // totalDays đủ chỗ cho cả 2 lượt cộng — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026): hàm này giờ CHẶN
+    // nếu usedDays sau khi cộng vượt totalDays (xem test riêng "chặn vượt quỹ phép" bên dưới), nên fixture
+    // ở đây cần đủ hạn mức thay vì bỏ trống totalDays như trước.
+    const updated = attendance.deductLeaveBalance({ usedDays: 2, totalDays: 10 }, 3);
     assert.strictEqual(updated.usedDays, 5);
+  });
+
+  await test('deductLeaveBalance() CHẶN nếu duyệt tiếp sẽ vượt quá quỹ phép còn lại (LỖI ĐÃ VÁ 9/2026)', () => {
+    assert.throws(() => attendance.deductLeaveBalance({ usedDays: 8, totalDays: 10 }, 8), /vượt quá quỹ phép/);
+    assert.doesNotThrow(() => attendance.deductLeaveBalance({ usedDays: 8, totalDays: 10 }, 2));
   });
 
   await test('assertNoRosterConflict() chặn phân ca trùng ngày cho cùng nhân viên', () => {
@@ -379,6 +387,31 @@ async function partB() {
       assert.strictEqual(balance.usedDays, 2, 'Phải trừ đúng 2 ngày (02-03 đến 03-03)');
       const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.recordType === 'LEAVE_PAID');
       assert.strictEqual(attRecords.length, 2, 'Phải sinh 2 bản ghi công LEAVE_PAID cho 2 ngày nghỉ');
+    });
+
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, theo phản hồi người dùng): 2 đơn KHÔNG trùng ngày đều hợp
+    // lệ RIÊNG LẺ lúc tạo (usedDays=2/12 tại thời điểm tạo cả 2), nhưng duyệt CẢ 2 thì vượt quỹ phép
+    // (2+6+6=14 > 12) — TRƯỚC ĐÂY không hề bị chặn ở bước duyệt thứ 2, âm thầm ghi usedDays=14.
+    let overQuotaLeaveId1, overQuotaLeaveId2;
+    await test('POST /api/create/leaveRequests — 2 đơn 6 ngày không trùng ngày, đều hợp lệ RIÊNG LẺ lúc tạo (còn 10/12 ngày)', async () => {
+      const r1 = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-06-01', toDate: '2026-06-06', reason: 'Đơn 1' });
+      assert.strictEqual(r1.status, 200, JSON.stringify(r1.json));
+      overQuotaLeaveId1 = r1.json.item.id;
+      const r2 = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-07-01', toDate: '2026-07-06', reason: 'Đơn 2' });
+      assert.strictEqual(r2.status, 200, JSON.stringify(r2.json));
+      overQuotaLeaveId2 = r2.json.item.id;
+    });
+    await test('POST /api/records/leaveRequests/:id/approve — duyệt đơn 1 (6 ngày) thành công, usedDays 2 -> 8', async () => {
+      const r = await call('mgr1', 'POST', `/api/records/leaveRequests/${overQuotaLeaveId1}/approve`, {});
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(STORE.leaveBalances.find(b => b.id === leaveBalanceId).usedDays, 8);
+    });
+    await test('POST /api/records/leaveRequests/:id/approve — duyệt đơn 2 (6 ngày) BỊ CHẶN vì sẽ vượt quỹ phép (8+6=14 > 12)', async () => {
+      const r = await call('mgr1', 'POST', `/api/records/leaveRequests/${overQuotaLeaveId2}/approve`, {});
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+      assert.strictEqual(STORE.leaveBalances.find(b => b.id === leaveBalanceId).usedDays, 8, 'usedDays KHÔNG được đổi khi đơn 2 bị chặn');
+      const req2 = STORE.leaveRequests.find(x => x.id === overQuotaLeaveId2);
+      assert.strictEqual(req2.status, 'PENDING', 'Đơn 2 phải GIỮ NGUYÊN PENDING (chưa hề bị đổi sang APPROVED) vì bị chặn TRƯỚC khi cập nhật trạng thái');
     });
 
     let cancelableLeaveId;

@@ -1094,9 +1094,21 @@ function renderOperationStoreOpeningList() { renderOperationList('operationStore
 function renderOperationRepairList() { renderOperationList('operationRepairs'); }
 
 function buildOperationRowHTML(kind, o) {
-  const wfConfig = OPERATION_KIND_META[kind].resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt — theo phản hồi người dùng
+  // "Cảnh báo nhé"): resolveWfConfigForItem(o) trả về null khi mức/phòng ban CHƯA được admin cấu hình
+  // quy trình phê duyệt nào — hồ sơ đó kẹt PENDING vĩnh viễn (chỉ admin duyệt được, canApproveStep()
+  // luôn cho admin bỏ qua mọi cấu hình). Trước đây fallback `{approvers:{1:['admin']}}` NGAY LẬP TỨC
+  // (chỉ để tính đúng canApprove cho admin, không đổi hành vi) khiến admin không hề biết đây là 1 hồ sơ
+  // "mồ côi" quy trình — hiện y hệt 1 hồ sơ đang chờ duyệt bình thường. Giữ nguyên rawWfConfig để phân
+  // biệt, chỉ fallback SAU khi đã ghi nhận cờ cảnh báo.
+  const rawWfConfig = OPERATION_KIND_META[kind].resolveWfConfigForItem(o);
+  const wfConfigMissing = !rawWfConfig && o.status === 'PENDING';
+  const wfConfig = rawWfConfig || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
+  const wfMissingWarningHTML = wfConfigMissing
+    ? `<div class="text-[10px] font-bold text-red-600 mt-0.5" title="Chưa cấu hình quy trình phê duyệt cho mức/phòng ban này — chỉ Quản Trị Viên mới duyệt được">⚠️ Chưa cấu hình duyệt</div>`
+    : '';
 
   let primaryBtnHTML;
   const secondaryOptions = [];
@@ -1132,7 +1144,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.title)}</div><div class="text-xs text-gray-500">NCC: ${escapeHtml(o.supplier || 'N/A')} — ${(o.items || []).length} hạng mục</div></td>
       <td class="border p-2 font-bold text-rose-600">${(o.amount || 0).toLocaleString('vi-VN')} VNĐ<div class="text-[11px] font-normal text-gray-400">${escapeHtml(operationOrderTierLabel((o.orderLocationType === 'STORE' ? 'STORE' : 'HO'), computeOperationOrderTierClient((o.orderLocationType === 'STORE' ? 'STORE' : 'HO'), computeOperationOrderAmountClient(o))))}</div></td>
-      <td class="border p-2">${operationStatusBadge(o)}</td>
+      <td class="border p-2">${operationStatusBadge(o)}${wfMissingWarningHTML}</td>
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
     </tr>`;
   }
@@ -1142,7 +1154,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.address || '')}</div></td>
       <td class="border p-2"><div class="font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div><div class="text-xs text-gray-500">${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div></td>
-      <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}</td>
+      <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}${wfMissingWarningHTML}</td>
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
     </tr>`;
   }
@@ -1151,7 +1163,7 @@ function buildOperationRowHTML(kind, o) {
     <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
     <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.title)}</div></td>
     <td class="border p-2 font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</td>
-    <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}</td>
+    <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}${wfMissingWarningHTML}</td>
     <td class="border p-2 text-center space-x-1">${actionCell}</td>
   </tr>`;
 }

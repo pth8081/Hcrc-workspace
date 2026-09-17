@@ -315,7 +315,17 @@ const MODULE_CONFIGS = {
     // uploadContractSignedFile() (lib/recordActions.js) ĐÃ tự đưa signedFileStatus về PENDING/bước 1 mỗi
     // lần tải lại tệp — chỉ còn thiếu hành động REQUEST_CHANGES để người duyệt chủ động trả về NHÁP
     // (khác Từ chối hẳn) trước khi người phụ trách tải lại Tài liệu ký.
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): assertNotSelfDecidingWorkflowItem()
+    // mặc định chặn theo creatorField của dbKey ('contracts' -> 'creator') — tức người TẠO HỢP ĐỒNG GỐC.
+    // Nhưng "Tài liệu ký" là 1 quy trình RIÊNG (custodianDept có thể KHÁC hẳn phòng ban tạo hợp đồng,
+    // xem createValidation.js) — người thực sự "trình" 1 lượt duyệt của quy trình NÀY là người vừa TẢI
+    // TÀI LIỆU KÝ LÊN (contract.signedUploadedBy, ghi ở uploadContractSignedFile()), không phải người tạo
+    // hợp đồng gốc. Trước đây chỉ chặn đúng creator -> người tải tài liệu ký lên (thường 1 nhân sự phòng
+    // custodianDept khác) vẫn tự duyệt được tài liệu do chính mình vừa tải, nếu họ cũng nằm trong danh
+    // sách approver phòng ban đó. extraSelfDecidingField bổ sung field THỨ 2 cần chặn (CÙNG VỚI creator,
+    // không thay thế) — xem assertNotSelfDecidingWorkflowItem() bên dưới.
+    extraSelfDecidingField: 'signedUploadedBy'
   },
   // "Phê Duyệt Giá" (Hỗ Trợ IT) — duyệt giá bán mặt hàng siêu thị theo phòng ban, cùng khuôn docs/
   // carRegs/officeReqs ở trên (không snapshot, tra cấu hình admin MỚI NHẤT mỗi lần duyệt). Bước "IT áp
@@ -422,7 +432,14 @@ const MODULE_CONFIGS = {
     // lại — luôn có 1 NGƯỜI KHÁC đứng ra đề xuất, phê duyệt cần độc lập với người đó) — KHÔNG áp dụng
     // assertNotSelfDecidingWorkflowItem() (mục Cao, rà soát bảo mật trước golive 9/2026) cho module này,
     // để không phá vỡ luồng nghiệp vụ đã có từ trước.
-    allowSelfDeciding: true
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): allowSelfDeciding TRƯỚC ĐÂY
+    // là cờ PHẲNG áp dụng cho TOÀN BỘ module bất kể sourceModule — nới lỏng oan sang CẢ đề nghị phát sinh
+    // từ Hợp Đồng/Mua Bán/Sửa Chữa (sourceModule='CONTRACT'/'MUA_BAN'/'SUA_CHUA', xem
+    // startContractPayment()/startOfficePayment() ở lib/recordActions.js) — những đề nghị đó VẪN CẦN tách
+    // biệt người đề xuất/duyệt như mọi module khác, KHÔNG nằm trong ngoại lệ đã chốt. Đổi allowSelfDeciding
+    // thành HÀM (item) => boolean thay vì cờ tĩnh — assertNotSelfDecidingWorkflowItem() bên dưới gọi ĐÚNG
+    // hàm này với item cụ thể, chỉ true khi sourceModule THẬT SỰ là 'MANUAL'.
+    allowSelfDeciding: (item) => (item.sourceModule || 'MANUAL') === 'MANUAL'
   }
 };
 
@@ -462,17 +479,31 @@ const nowVN = () => new Date().toLocaleString('vi-VN');
 // isStepApprovalComplete() ở trên và toàn bộ phần còn lại của hệ thống) — khác budgetLines (chặn CẢ
 // admin), vì đây là quyết định phạm vi hẹp của riêng module budgetLines, không áp dụng ngược lại đây.
 //
-// MODULE_CONFIGS[moduleKey].allowSelfDeciding — cờ ngoại lệ cho module đã có SẴN nghiệp vụ hợp lệ tự
-// tạo + tự xử lý (hiện chỉ paymentRequests — xem chú thích ngay tại entry đó ở MODULE_CONFIGS phía
-// trên). Phát hiện ĐÚNG lúc chạy full regression sau khi thêm hàm này lần đầu: tests/test-payment.js đã
-// có sẵn 2 kịch bản (10/18) xác nhận đây là hành vi ĐÃ CHỐT, không phải lỗ hổng — không phải MỌI module
-// dùng chung engine này đều cần cùng 1 luật tự duyệt.
+// MODULE_CONFIGS[moduleKey].allowSelfDeciding — ngoại lệ cho module đã có SẴN nghiệp vụ hợp lệ tự tạo +
+// tự xử lý (hiện chỉ paymentRequests — xem chú thích ngay tại entry đó ở MODULE_CONFIGS phía trên). Phát
+// hiện ĐÚNG lúc chạy full regression sau khi thêm hàm này lần đầu: tests/test-payment.js đã có sẵn 2 kịch
+// bản (10/18) xác nhận đây là hành vi ĐÃ CHỐT, không phải lỗ hổng — không phải MỌI module dùng chung
+// engine này đều cần cùng 1 luật tự duyệt. Có thể là boolean (áp dụng CẢ item) hoặc hàm (item) => boolean
+// (áp dụng CÓ ĐIỀU KIỆN theo từng bản ghi — xem paymentRequests: chỉ đúng sourceModule==='MANUAL', LỖI ĐÃ
+// VÁ đợt rà soát 9/2026: trước đây là boolean tĩnh nên nới lỏng oan sang CẢ đề nghị phát sinh từ Hợp
+// Đồng/Mua Bán/Sửa Chữa, vốn KHÔNG nằm trong phạm vi ngoại lệ đã chốt với người dùng).
+//
+// MODULE_CONFIGS[moduleKey].extraSelfDecidingField — field THỨ 2 (ngoài creatorField suy từ dbKey) cần
+// chặn tự xử lý, cho module mà "người tạo bản ghi gốc" KHÁC "người trình lượt duyệt này" (hiện chỉ
+// contractsSignedFile — signedUploadedBy, xem chú thích tại entry đó).
 function assertNotSelfDecidingWorkflowItem(moduleKey, item, user) {
   if (user?.perms?.admin) return;
-  if (MODULE_CONFIGS[moduleKey]?.allowSelfDeciding) return;
+  const allowSelfDeciding = MODULE_CONFIGS[moduleKey]?.allowSelfDeciding;
+  const allowed = typeof allowSelfDeciding === 'function' ? allowSelfDeciding(item) : !!allowSelfDeciding;
+  if (allowed) return;
   const dbKey = MODULE_CONFIGS[moduleKey]?.dbKey || moduleKey;
   const creatorField = CREATE_MODULE_CONFIGS[dbKey]?.creatorField;
-  if (creatorField && item[creatorField] && item[creatorField] === user.username) {
+  const extraField = MODULE_CONFIGS[moduleKey]?.extraSelfDecidingField;
+  const blockedUsernames = [
+    creatorField ? item[creatorField] : null,
+    extraField ? item[extraField] : null
+  ].filter(Boolean);
+  if (blockedUsernames.includes(user.username)) {
     throw new WorkflowError(403, 'Bạn không thể tự xử lý (duyệt/từ chối/yêu cầu bổ sung) hồ sơ do chính mình tạo hoặc trình');
   }
 }
@@ -492,8 +523,15 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   if (item[statusField] !== 'PENDING') throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý (có thể đã được xử lý ở nơi khác)');
 
   // Hook tuỳ chọn theo module (itPriceApprovals: yêu cầu bổ sung treo; budgetEntries: kỳ đã đóng sổ) —
-  // chặn APPROVE/REJECT khi hồ sơ đang có điều kiện riêng chưa thoả. Không đụng tới module khác.
-  if (config.blockApproveIf && (action === 'APPROVE' || action === 'REJECT')) {
+  // chặn MỌI hành động THAY ĐỔI TRẠNG THÁI hồ sơ (Duyệt/Từ chối/Yêu cầu bổ sung) khi hồ sơ đang có điều
+  // kiện riêng chưa thoả. Không đụng tới module khác.
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): trước đây CHỈ gate cho
+  // APPROVE/REJECT — REQUEST_CHANGES (và REQUEST_INFO, nếu module nào sau này bật cả 2) đi thẳng qua mà
+  // KHÔNG kiểm tra blockApproveIf. Với budgetEntries cụ thể: người duyệt vẫn "Yêu Cầu Bổ Sung" được 1 bản
+  // ghi PENDING của kỳ ngân sách ĐÃ ĐÓNG SỔ dù Duyệt/Từ Chối bị chặn đúng lý do đó — đưa hồ sơ về NHÁP rồi
+  // kẹt vĩnh viễn (updateBudgetEntryDraft()/submitBudgetEntry() cũng chặn sửa/gửi lại khi kỳ đã đóng, xem
+  // lib/recordActions.js), không còn đường quay lại PENDING/APPROVED.
+  if (config.blockApproveIf && ['APPROVE', 'REJECT', 'REQUEST_CHANGES', 'REQUEST_INFO'].includes(action)) {
     const blockedReason = config.blockApproveIf(item, appData);
     if (blockedReason) throw new WorkflowError(409, blockedReason);
   }
@@ -831,6 +869,7 @@ module.exports = {
   MODULE_CONFIGS,
   WorkflowError,
   applyWorkflowAction,
+  assertNotSelfDecidingWorkflowItem,
   canApproveStep,
   isStepApprovalComplete,
   resolveStepApproverUsernames,

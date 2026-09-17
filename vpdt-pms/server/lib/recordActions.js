@@ -283,6 +283,15 @@ function approveContractPaymentTypeChange(user, contract, appData) {
   if (!isApproverForContractManageWorkflow(user, contract, appData)) {
     throw new HttpError(403, 'Bạn không có quyền duyệt đổi hình thức thanh toán cho hợp đồng này');
   }
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): kênh phụ này (KHÁC hẳn
+  // approvalStatus/signedFileStatus, đi qua thẳng 2 hàm này chứ KHÔNG qua applyWorkflowAction()) trước
+  // đây HOÀN TOÀN không kiểm tra tự xử lý — người tạo hợp đồng (bắt buộc là requestContractPaymentTypeChange()
+  // ở trên, chỉ đúng contract.creator gọi được) nếu cũng là approver DUY NHẤT của phòng ban mình
+  // (contractManageDeptWorkflows) tự duyệt được luôn yêu cầu do chính mình gửi. Dùng lại ĐÚNG hàm chặn
+  // tự xử lý dùng chung ở nơi khác trong hệ thống (workflowEngine.js), moduleKey 'contracts' vì
+  // contract.creator (field bị chặn) là field của bản ghi contracts gốc.
+  const { assertNotSelfDecidingWorkflowItem } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  assertNotSelfDecidingWorkflowItem('contracts', contract, user);
   const req = contract.pendingPaymentTypeChange;
   contract.paymentTypeChangeHistory = Array.isArray(contract.paymentTypeChangeHistory) ? contract.paymentTypeChangeHistory : [];
   contract.paymentTypeChangeHistory.push({
@@ -304,6 +313,9 @@ function rejectContractPaymentTypeChange(user, contract, payload, appData) {
   if (!isApproverForContractManageWorkflow(user, contract, appData)) {
     throw new HttpError(403, 'Bạn không có quyền từ chối yêu cầu đổi hình thức thanh toán cho hợp đồng này');
   }
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026) — xem chú thích ĐÚNG khối này ở approveContractPaymentTypeChange() trên.
+  const { assertNotSelfDecidingWorkflowItem } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  assertNotSelfDecidingWorkflowItem('contracts', contract, user);
   const reason = String(payload?.reason || '').trim().slice(0, 500);
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
   const req = contract.pendingPaymentTypeChange;
@@ -4669,10 +4681,24 @@ function hasPendingItPriceEmergencyReject(item) {
   return item.emergencyRejectStatus === 'PENDING';
 }
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): bước "IT áp giá" nằm NGOÀI
+// applyWorkflowAction() (xem chú thích entry itPriceApprovals ở lib/workflowEngine.js) nên KHÔNG tự động
+// được assertNotSelfDecidingWorkflowItem() bảo vệ như bước duyệt theo phòng ban/tier — quyết định giá đã
+// được người KHÁC duyệt độc lập, nhưng lượt "tự xác nhận đã áp giá đúng vào hệ thống ngoài app" thì
+// không có ai kiểm tra chéo nếu người tạo đề xuất (itPriceProposeCreate) cũng có quyền itManage. Chặn
+// tường minh ở CẢ 3 hàm dưới đây (nhận xử lý/xác nhận áp giá/yêu cầu bổ sung), admin vẫn được bỏ qua
+// (nhất quán với mọi chỗ khác dùng assertNotSelfDecidingWorkflowItem()).
+function assertNotSelfHandlingItPriceApply(user, item) {
+  if (user?.perms?.admin) return;
+  if (item.creator && item.creator === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự xử lý bước áp giá cho đề xuất do chính mình tạo');
+  }
+}
 function claimPriceApply(user, item) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  assertNotSelfHandlingItPriceApply(user, item);
   if (hasPendingItPriceEmergencyReject(item)) throw new HttpError(409, 'Đang có yêu cầu từ chối khẩn cấp chờ xử lý, chưa thể nhận xử lý áp giá');
   if (item.applyClaimedBy) {
     throw new HttpError(409, `Đề xuất này đã có người nhận xử lý (${item.applyClaimedByName || item.applyClaimedBy})`);
@@ -4702,6 +4728,7 @@ function applyPriceApproval(user, item) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
+  assertNotSelfHandlingItPriceApply(user, item);
   // Bắt buộc phải bấm "Tôi đang xử lý" trước — chặn cả trường hợp chưa ai nhận (tránh xác nhận "tắt")
   // lẫn trường hợp người KHÁC đã nhận (chỉ đúng người đó mới xác nhận hoàn thành được, theo đúng yêu
   // cầu nghiệp vụ: không cho người khác xác nhận hộ việc mình không trực tiếp xử lý). Quản Trị Viên
@@ -4735,6 +4762,7 @@ function requestPriceInfoFromIt(user, item, payload) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung ở đây');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi, không thể yêu cầu bổ sung thêm');
+  assertNotSelfHandlingItPriceApply(user, item);
   if (hasUnresolvedPriceInfoRequest(item)) throw new HttpError(409, 'Đã có 1 yêu cầu bổ sung đang chờ xử lý');
   if (hasPendingItPriceEmergencyReject(item)) throw new HttpError(409, 'Đang có yêu cầu từ chối khẩn cấp chờ xử lý, chưa thể yêu cầu bổ sung');
   const reason = (payload?.reason || '').trim();

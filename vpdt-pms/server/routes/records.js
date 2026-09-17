@@ -2052,23 +2052,31 @@ router.post('/budgetLines/:id/used-parent-update', async (req, res) => {
 
 // POST /api/records/budgetLines/:id/used-parent-delete — xoá dòng cha Sử Dụng (:id = id dòng cha), CHỈ
 // khi chưa có mục con nào — xoá xong "mở khoá" lại dòng Phê Duyệt gốc (quay về SUBMITTED).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, race condition): trước đây "hasChildren" đọc từ 1 snapshot
+// KHÔNG khoá (`all`), rồi mới gọi deleteRecordForCollection() — giữa 2 bước đó, POST .../children (thêm
+// mục con mới) có thể chen vào (route đó cũng đọc `all` KHÔNG khoá trước khi tạo con), khiến dòng con vừa
+// tạo bị "mồ côi" (parentId trỏ vào dòng cha vừa bị xoá) mà route delete không hề biết để chặn lại. Bọc
+// TOÀN BỘ đọc-kiểm tra-xoá bằng withAppLock cùng khoá `budget_line_used_parent:<id cha>` mà route
+// /children bên dưới CŨNG dùng — 2 request chạm cùng 1 dòng cha giờ luôn tuần tự, không còn chen được.
 router.post('/budgetLines/:id/used-parent-delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const all = await getAllForCollection('budgetLines');
-    const parent = all.find(l => l.id === itemId);
-    if (!parent) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    const hasChildren = all.some(l => l.parentId === itemId);
-    if (hasChildren) throw new HttpError(409, 'Dòng này đã có mục con Sử Dụng — không xoá được nữa');
-    await deleteRecordForCollection('budgetLines', itemId,
-      (item) => recordActions.assertCanDeleteBudgetLineUsedParent(freshUser, item),
-      { username: freshUser.username, name: freshUser.name });
-    if (parent.sourceLineId) {
-      await withLockedRecordForCollection('budgetLines', parent.sourceLineId, (item) =>
-        recordActions.reopenBudgetLineAfterUsedParentDeleted(item));
-    }
+    await withAppLock(`budget_line_used_parent:${itemId}`, async () => {
+      const all = await getAllForCollection('budgetLines');
+      const parent = all.find(l => l.id === itemId);
+      if (!parent) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      const hasChildren = all.some(l => l.parentId === itemId);
+      if (hasChildren) throw new HttpError(409, 'Dòng này đã có mục con Sử Dụng — không xoá được nữa');
+      await deleteRecordForCollection('budgetLines', itemId,
+        (item) => recordActions.assertCanDeleteBudgetLineUsedParent(freshUser, item),
+        { username: freshUser.username, name: freshUser.name });
+      if (parent.sourceLineId) {
+        await withLockedRecordForCollection('budgetLines', parent.sourceLineId, (item) =>
+          recordActions.reopenBudgetLineAfterUsedParentDeleted(item));
+      }
+    });
     res.json({ ok: true });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/used-parent-delete`, err); }
 });
@@ -2080,19 +2088,24 @@ router.post('/budgetLines/:id/used-parent-delete', async (req, res) => {
 // 2 request thêm/sửa/xoá mục con CÙNG 1 dòng cha gần như đồng thời có thể khiến request khoá cha sau vẫn
 // cầm 1 snapshot mục con đã cũ (chưa thấy mục vừa được request kia tạo/sửa/xoá xong), dẫn tới usageStatus
 // sai cho tới lần thao tác con TIẾP THEO mới tự sửa lại đúng.
+// Cùng khoá `budget_line_used_parent:<id cha>` với /used-parent-delete ở trên — xem chú thích tại đó
+// (chặn race "thêm mục con" chen giữa lúc dòng cha đang bị xoá).
 router.post('/budgetLines/:id/children', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const all = await getAllForCollection('budgetLines');
-    const parent = all.find(l => l.id === itemId);
-    if (!parent) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-    const child = await createForCollection('budgetLines', () => ({
-      ...recordActions.addBudgetLineChild(freshUser, parent, req.body), id: Date.now()
-    }));
-    const parentAfter = await withLockedRecordForCollection('budgetLines', itemId, (item, children) =>
-      recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
+    const { child, parentAfter } = await withAppLock(`budget_line_used_parent:${itemId}`, async () => {
+      const all = await getAllForCollection('budgetLines');
+      const parent = all.find(l => l.id === itemId);
+      if (!parent) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      const childRec = await createForCollection('budgetLines', () => ({
+        ...recordActions.addBudgetLineChild(freshUser, parent, req.body), id: Date.now()
+      }));
+      const parentRec = await withLockedRecordForCollection('budgetLines', itemId, (item, children) =>
+        recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
+      return { child: childRec, parentAfter: parentRec };
+    });
     res.json({ ok: true, item: child, parentItem: parentAfter });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/children`, err); }
 });
@@ -3648,6 +3661,22 @@ router.post('/leaveRequests/:id/approve', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
     const profileList = (await getAppDataValue('employeeProfiles')) || [];
+
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026): kiểm tra SỚM (đọc không khoá) quỹ phép còn lại nếu là
+    // ANNUAL — chặn TRƯỚC KHI chuyển đơn sang APPROVED, tránh trạng thái dở dang (đơn đã APPROVED nhưng
+    // quỹ phép không trừ được) ở đúng trường hợp phổ biến nhất (2 đơn không trùng ngày, duyệt TUẦN TỰ).
+    // Điểm chặn THẬT SỰ đáng tin cậy (atomic, phòng trường hợp duyệt gần như đồng thời hiếm gặp mà lượt
+    // kiểm tra sơ bộ này bỏ lọt) vẫn là deductLeaveBalance() bên dưới, chạy bên trong khoá bản ghi
+    // leaveBalances.
+    const pendingList = await getAllForCollection('leaveRequests');
+    const pendingItem = pendingList.find(r => r.id === itemId);
+    if (pendingItem?.leaveType === 'ANNUAL') {
+      const year = new Date(pendingItem.fromDate).getFullYear();
+      const balancePre = (await getAllForCollection('leaveBalances'))
+        .find(b => b.employeeCode === pendingItem.employeeCode && b.year === year);
+      if (balancePre) attendance.deductLeaveBalance(Object.assign({}, balancePre), pendingItem.daysCount);
+    }
+
     let affectedRosterIds = [];
     const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
       const empUsername = employeeProfile.findProfile(profileList, item.employeeCode)?.username;

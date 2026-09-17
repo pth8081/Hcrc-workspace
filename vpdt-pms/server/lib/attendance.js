@@ -331,7 +331,15 @@ function defaultLeaveRequest(employeeCode, valid, workModel) {
 
 // allUsers: toàn bộ users (để xác định quản lý trực tiếp qua isManagerOf).
 function canApproveLeaveRequest(approver, allUsers, employeeProfileUsername) {
-  if (approver?.perms?.admin || approver?.perms?.hrAttendanceManage) return true;
+  if (approver?.perms?.admin) return true;
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): hrAttendanceManage cho phép
+  // duyệt TOÀN CÔNG TY (không cần đúng cây quản lý trực tiếp) nên trước đây return true NGAY, bỏ qua
+  // hoàn toàn khả năng approver chính là người xin nghỉ — khác nhánh hrLeaveApprove thường bên dưới, vốn
+  // tự động được isManagerOf() chặn (không ai là "quản lý trực tiếp của chính mình", xem
+  // assertNoManagerCycle() ở routes/data.js). Admin vẫn giữ nguyên đặc quyền vượt mọi cấu hình (nhất
+  // quán với quy ước "admin override" xuyên suốt hệ thống, xem assertNotSelfDecidingWorkflowItem() ở
+  // lib/workflowEngine.js) — chỉ thu hẹp đúng nhánh hrAttendanceManage.
+  if (approver?.perms?.hrAttendanceManage) return approver.username !== employeeProfileUsername;
   if (!approver?.perms?.hrLeaveApprove) return false;
   if (!employeeProfileUsername) return false;
   return isManagerOf(approver.username, employeeProfileUsername, allUsers);
@@ -372,8 +380,19 @@ function applyCancelLeaveRequest(request, actorUsername) {
 
 // Cộng dồn UsedDays vào LeaveBalance đúng năm khi đơn được duyệt (chỉ tính đơn ANNUAL — UNPAID/SICK
 // không trừ vào phép năm, xem AttendanceRecords.recordType tương ứng ở createLeaveAttendanceRecords()).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, form có điều kiện phê duyệt): hàm này TRƯỚC ĐÂY trừ VÔ ĐIỀU
+// KIỆN, không hề so lại với totalDays — chỉ createValidation.js (extraValidate của leaveRequests) kiểm
+// tra "còn đủ ngày" lúc TẠO đơn, dùng usedDays TẠI THỜI ĐIỂM ĐÓ. 2 đơn nghỉ phép không trùng ngày (nên
+// qua được kiểm tra chồng lấn PENDING) đều hợp lệ RIÊNG LẺ lúc tạo (usedDays=0 cả 2 lần) nhưng nếu quản
+// lý duyệt CẢ 2 thì tổng số ngày trừ vượt quá quỹ phép mà không có cảnh báo/chặn nào. Gọi hàm này BÊN
+// TRONG khoá bản ghi leaveBalances (withLockedRecordForCollection, xem routes/records.js) nên việc chặn
+// ở đây là ATOMIC — điểm gác THẬT duy nhất, không chỉ dựa vào 1 lượt kiểm tra sơ bộ trước đó.
 function deductLeaveBalance(balance, daysCount) {
-  return Object.assign({}, balance, { usedDays: Math.round(((balance.usedDays || 0) + daysCount) * 10) / 10, updatedAt: nowVN() });
+  const usedDays = Math.round(((balance.usedDays || 0) + daysCount) * 10) / 10;
+  if (usedDays > (balance.totalDays || 0) + 0.01) {
+    throw new HttpError(409, `Duyệt đơn này sẽ vượt quá quỹ phép năm còn lại (đã dùng ${balance.usedDays || 0}/${balance.totalDays || 0} ngày, đơn này xin thêm ${daysCount} ngày) — kiểm tra lại các đơn khác đang chờ duyệt của nhân viên này trước khi duyệt tiếp.`);
+  }
+  return Object.assign({}, balance, { usedDays, updatedAt: nowVN() });
 }
 
 // Sinh các dòng AttendanceRecords loại LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho từng ngày trong khoảng
