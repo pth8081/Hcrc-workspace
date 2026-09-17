@@ -1628,6 +1628,33 @@
             </label>
           </div>
         </details>
+
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🛒 25. Mua Hàng &gt; BAS</span></span>
+            <span id="permTreeBadge_muahang" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Module TOP-LEVEL riêng (xem lib/vendorRebate.js), phân quyền PHẲNG — KHÔNG theo phòng ban. TÁCH BIỆT NHIỆM VỤ: người Quản Lý Điều Khoản KHÔNG tự động Kích Hoạt được — cần người khác có quyền Kích Hoạt riêng, vì liên quan trực tiếp số tiền chiết khấu lớn với NCC. Đối Chiếu/Phê Duyệt Sổ Cái khai báo sẵn cho Giai đoạn 2-3 (chưa có luồng nghiệp vụ dùng tới hiện tại).</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pRebateTermManage"> 🛠️ Quản Lý NCC &amp; Điều Khoản (tạo/sửa/nhân bản/lưu trữ/đồng bộ DSmart/tính ước tính)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pRebateTermActivate"> ▶️ Kích Hoạt Điều Khoản (tách biệt khỏi Quản Lý)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pRebateReconcile"> 🔄 Đối Chiếu (dự phòng Giai đoạn 2 — Sổ Cái)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pRebateApprove"> ✅ Phê Duyệt (dự phòng Giai đoạn 2 — Sổ Cái)
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pRebateViewReport"> 📊 Xem Báo Cáo Mua Hàng (tab Báo Cáo trong module này — cũng là điều kiện đủ để vào được module)
+              </label>
+            </div>
+          </div>
+        </details>
         </div>
         </div>
       </form>

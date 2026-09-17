@@ -29,7 +29,7 @@ const {
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
   filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser,
-  filterChecklistSubmissionsForReportCrossView
+  filterChecklistSubmissionsForReportCrossView, filterRebateCalculationsForReportView
 } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -111,7 +111,12 @@ const REPORT_QUERY_CONFIGS = {
   // mà KHÔNG cấp thêm quyền vào module Checklist thật (canAccessChecklistModule() không đổi). Bảng
   // ChecklistSubmissions không có cột Dept (chỉ StoreCode, phân quyền PHẲNG — xem sql/schema.sql) nên
   // where.Dept ở route bên dưới tự bỏ qua (cfg.columns.Dept undefined), không cần ignoreDept.
-  checklistSubmissions: { filterFn: filterChecklistSubmissionsForReportCrossView, needsAppData: false }
+  checklistSubmissions: { filterFn: filterChecklistSubmissionsForReportCrossView, needsAppData: false },
+  // Mua Hàng > BAS (v23.30) — CÙNG khuôn checklistSubmissions ngay trên: filterFn RIÊNG
+  // (filterRebateCalculationsForReportView) cho phép xem chéo qua reportViewAll/reportExtraKeys mà KHÔNG
+  // cấp quyền vào module Mua Hàng thật (canAccessPurchasingModule() ở client không đổi). Bảng
+  // RebateCalculations không có cột Dept (xem sql/schema.sql) nên where.Dept tự bỏ qua.
+  rebateCalculations: { filterFn: filterRebateCalculationsForReportView, needsAppData: false }
 };
 
 router.get('/:collection', async (req, res) => {

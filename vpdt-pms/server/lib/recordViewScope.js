@@ -13,6 +13,7 @@ const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWo
 const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3, workItemAssignees, isWorkItemAssignee } = require('./recordActions');
 const { HttpError } = require('./httpErrors');
 const { canManageChecklistTemplates, canViewChecklistReports, hasChecklistAuditScope, isEligibleForStoreSelf } = require('./checklist');
+const { canManageVendors, canManageTerms, canActivateTerm, canViewReport: canViewRebateReport } = require('./vendorRebate');
 
 // Khớp canManageVpp() ở public/index.html.
 function canManageVpp(user) {
@@ -1099,6 +1100,19 @@ function filterChecklistSubmissionsForReportCrossView(items, user) {
   return filterChecklistSubmissionsForUser(items, user);
 }
 
+// Mua Hàng > BAS (v23.30, module TOP-LEVEL riêng — xem lib/vendorRebate.js) — RebateCalculations (số liệu
+// ƯỚC TÍNH chiết khấu đã tính, không phải Sổ Cái chính thức). Đúng khuôn checklist ở trên: BẤT KỲ quyền
+// nào trong 5 quyền module (quản lý/kích hoạt/đối chiếu/phê duyệt/xem báo cáo) đều xem được TOÀN BỘ (dữ
+// liệu không chia theo phòng ban/NCC riêng cho từng người) — người NGOÀI module này chỉ xem được qua
+// reportViewAll/reportExtraKeys, KHÔNG được cấp quyền vào module Mua Hàng thật (đúng nguyên tắc "xem chéo
+// báo cáo không phân quyền vào module nghiệp vụ" người dùng đã chốt ở checklist).
+function filterRebateCalculationsForReportView(items, user) {
+  if (!user) return [];
+  if (user.perms?.admin || canManageVendors(user) || canManageTerms(user) || canActivateTerm(user) || canViewRebateReport(user)) return items || [];
+  if (user.perms?.reportViewAll || (user.reportExtraKeys || []).includes('muaHang')) return items || [];
+  return [];
+}
+
 // PQ-01: "Khối 0" (user.perms.moduleAccess, xem BUSINESS_MODULES/hasModuleAccess() ở public/js/core.js)
 // là gate cấp module TOÀN BỘ (admin có thể tắt hẳn 1 module cho 1 user cụ thể, độc lập với mọi quyền
 // chi tiết khác) — trước đây CHỈ được thực thi ở CLIENT (ẩn tab/route điều hướng), không hề có gate
@@ -1186,6 +1200,7 @@ module.exports = {
   canViewAllPayrollData, filterPayrollPeriodsForUser, filterPayslipsForUser,
   canViewChecklistTemplate, filterChecklistTemplatesForUser,
   canViewChecklistSubmission, filterChecklistSubmissionsForUser, filterChecklistSubmissionsForReportCrossView,
+  filterRebateCalculationsForReportView,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS

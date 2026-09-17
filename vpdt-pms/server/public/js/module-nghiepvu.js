@@ -50,6 +50,9 @@ const NGHIEP_VU_NAV = [
     { key: 'itSupport', icon: '🎫', label: 'Hỗ Trợ Yêu Cầu (Ticket)' },
     { key: 'itPriceApproval', icon: '🏷️', label: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)' },
   ]},
+  { group: 'Mua Hàng', items: [
+    { key: 'muaHang', icon: '🛒', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
+  ]},
 ];
 
 // ===================== SVG flow renderer (dùng chung, không phụ thuộc thư viện ngoài) =====================
@@ -603,6 +606,26 @@ const NGHIEP_VU_DOCS = {
       { label: 'Mẫu Giá (khuôn cột)', text: 'nếu hệ thống đã có ít nhất 1 Mẫu Giá thì bắt buộc chọn đúng mẫu khớp cột với tệp đang nộp — chỉ dùng để đối chiếu tên cột, không còn đối chiếu giá trị/tự động duyệt.' },
       { label: 'Yêu Cầu Bổ Sung', text: 'người duyệt hoặc đội IT có thể yêu cầu bổ sung tệp trước khi áp giá — hồ sơ bị khoá áp giá tới khi có tệp bổ sung mới (không ghi đè, chỉ nối thêm).' },
       { label: 'Cây phân quyền (10/2026)', text: 'trước đây 3 quyền gộp — nay tách 7 quyền riêng: Đề xuất Bán Buôn/Bán Lẻ tách 2 cờ (itPriceProposeCreateWholesale/Retail — ai chỉ phụ trách 1 loại chỉ đề xuất đúng loại đó); "Đội Hỗ Trợ IT" (itManage) giờ CHỈ còn xử lý ticket "Hỗ Trợ Yêu Cầu", KHÔNG còn tự động áp giá/xem hết Phê Duyệt Giá; áp giá sau khi duyệt + xem toàn bộ hồ sơ Phê Duyệt Giá chuyển sang quyền riêng itPriceSupport (vẫn gộp chung Bán Buôn/Bán Lẻ); Gia Hạn Dịch Vụ CNTT chuyển sang quyền riêng itServiceRenewalManage; Từ chối khẩn cấp tách 2 cờ theo đúng loại giá (itPriceEmergencyRejectApproveWholesale/Retail). Việc DUYỆT thật sự (bước "Duyệt" ở sơ đồ trên) không đổi — vẫn theo cấu hình phòng ban/mức Margin-Chiết Khấu ở "Hệ Thống → Quy Trình & Phê Duyệt".' },
+    ] },
+  },
+  muaHang: {
+    icon: '🛒', title: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC', badge: 'Mua Hàng, Giai đoạn 1',
+    desc: 'Quản lý Nhà Cung Cấp + Điều Khoản Chiết Khấu/Thưởng (mỗi điều khoản tự mang bậc thang % + phạm vi áp dụng riêng), đồng bộ dữ liệu mua hàng thực tế từ hệ thống DSmart, rồi tính ƯỚC TÍNH số tiền chiết khấu theo đúng bậc thang đã cấu hình. Giai đoạn 1 dừng ở mức ƯỚC TÍNH — chưa có Sổ Cái đối chiếu/phê duyệt chính thức với NCC (Giai đoạn 2-3, chưa triển khai).',
+    flow: { ariaLabel: 'Quy trình BAS: Điều Khoản → Kích Hoạt → Đồng Bộ → Tính Ước Tính', chain: [
+      { label: 'Tạo Điều Khoản', sub: 'Bậc thang % + phạm vi áp dụng, trạng thái Nháp' },
+      { label: 'Kích Hoạt', sub: 'Người khác thực hiện, tách biệt nhiệm vụ', kind: 'decision' },
+      { label: 'Đồng Bộ DSmart', sub: 'Dữ liệu mua hàng thực tế', kind: 'approved' },
+      { label: 'Tính Ước Tính', sub: 'Theo đúng bậc thang tại thời điểm tính' },
+    ], decision: { atIndex: 1, approveLabel: 'Kích hoạt', rejectLabel: 'Lưu trữ', rejectBox: { label: 'Lưu Trữ', sub: 'Ngừng áp dụng' }, loopBackToIndex: 0 } },
+    footer: { left: [
+      { label: 'Tách biệt nhiệm vụ (mục 8 tài liệu)', text: 'người TẠO/SỬA điều khoản (quyền Quản Lý) KHÔNG tự động KÍCH HOẠT được — phải người khác có quyền Kích Hoạt riêng mới bật điều khoản sang Đang Hoạt Động, vì liên quan trực tiếp số tiền chiết khấu lớn với NCC.' },
+      { label: 'Không sửa trực tiếp điều khoản đã Kích Hoạt', text: 'phải "Nhân Bản" thành bản Nháp mới (version+1) rồi sửa/kích hoạt lại — giữ nguyên bản cũ để không làm sai lệch các lần Tính Ước Tính đã thực hiện trước đó (mỗi lần tính LUÔN lưu lại đúng bậc thang tại thời điểm tính, không tham chiếu ngược điều khoản hiện tại).' },
+      { label: 'Đồng bộ DSmart tự chống trùng', text: 'mỗi lần Đồng Bộ tự loại bỏ dòng đã có từ lần trước (theo mã tham chiếu gốc) — chạy lặp lại/chồng lấn khoảng ngày không tạo dữ liệu trùng.' },
+    ], right: [
+      { label: 'Quyền quản lý (Tạo/Sửa/Nhân Bản/Đồng Bộ/Tính)', text: 'quản lý Nhà Cung Cấp và Điều Khoản, kích hoạt Đồng Bộ DSmart, bấm Tính Ước Tính cho điều khoản đang Hoạt Động.' },
+      { label: 'Quyền kích hoạt (riêng)', text: 'CHỈ chuyển điều khoản từ Nháp sang Đang Hoạt Động — không tự động có quyền quản lý/sửa nội dung.' },
+      { label: 'Quyền xem Báo Cáo', text: 'xem module con "📊 Báo Cáo" nội bộ Mua Hàng (số liệu đã tính) — là điều kiện đủ để vào được module, không cần quyền quản lý/kích hoạt nào khác. Người NGOÀI module này vẫn xem được số liệu qua module 📊 Báo Cáo tổng hợp (mục riêng ở đó, gác bằng cơ chế Mở Thêm Mục đã có — KHÔNG cần vào module Mua Hàng).' },
+      { label: 'Đối chiếu/Phê duyệt Sổ Cái — chưa triển khai', text: '2 quyền Đối Chiếu/Phê Duyệt đã khai báo sẵn trong cây phân quyền cho Giai đoạn 2-3 (Sổ Cái ACCRUED→CONFIRMED→SETTLED, đối chiếu với NCC) — hiện chưa có luồng nghiệp vụ nào dùng tới.' },
     ] },
   },
 };

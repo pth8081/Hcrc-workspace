@@ -224,7 +224,14 @@ function collectPermsFromForm() {
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
     nghiepVuViewAll: document.getElementById('pNghiepVuViewAll').checked,
-    reportViewAll: document.getElementById('pReportViewAll').checked
+    reportViewAll: document.getElementById('pReportViewAll').checked,
+    // Mua Hàng > BAS (v23.30, xem lib/vendorRebate.js) — phân quyền PHẲNG, KHÔNG có scope theo phòng
+    // ban/siêu thị (khác checklistAuditScope ở trên).
+    rebateTermManage: document.getElementById('pRebateTermManage').checked,
+    rebateTermActivate: document.getElementById('pRebateTermActivate').checked,
+    rebateReconcile: document.getElementById('pRebateReconcile').checked,
+    rebateApprove: document.getElementById('pRebateApprove').checked,
+    rebateViewReport: document.getElementById('pRebateViewReport').checked
   };
 }
 
@@ -320,6 +327,11 @@ function populatePermsForm(permsInput) {
   setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
+  document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;
+  document.getElementById('pRebateTermActivate').checked = !!perms.rebateTermActivate;
+  document.getElementById('pRebateReconcile').checked = !!perms.rebateReconcile;
+  document.getElementById('pRebateApprove').checked = !!perms.rebateApprove;
+  document.getElementById('pRebateViewReport').checked = !!perms.rebateViewReport;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;

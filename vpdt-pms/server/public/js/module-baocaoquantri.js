@@ -141,7 +141,12 @@ const REPORT_NAV_TREE = [
       // còn lại — cố tình chặt hơn vì đây là dữ liệu đánh giá/VSATTP của siêu thị.
       { key: 'checklist', label: '✅ Checklist Đánh Giá Siêu Thị' }
     ]
-  }
+  },
+  // Mua Hàng > BAS (v23.30) — module TOP-LEVEL riêng (không nằm dưới dropdown nào, xem BUSINESS_MODULES
+  // entry 'muaHang' ở core.js), CÙNG khuôn "checklist" ngay trên: quyền hiện tab MẶC ĐỊNH = rebateViewReport
+  // (KHÔNG PHẢI quyền module 0 phẳng, xem REPORT_KEY_ACCESS_FN), dữ liệu là RebateCalculations (số liệu
+  // ƯỚC TÍNH chiết khấu đã tính, không có khái niệm phòng ban) nên "xem chéo" đúng nghĩa thấy TOÀN BỘ.
+  { key: 'muaHang', label: '🛒 Mua Hàng (BAS)' }
 ];
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): quyền admin-grant riêng "Xem Toàn Bộ Tab Báo Cáo"
@@ -159,7 +164,7 @@ const REPORT_NAV_TREE = [
 // quyền thật là checklistReportView (KHÔNG PHẢI quyền "vào module" phẳng như đa số module khác) — tái
 // dùng canViewChecklistReportsClient() để mặc định (chưa có reportViewAll/reportExtraKeys) chỉ hiện cho
 // đúng người có quyền xem báo cáo checklist thật, không mở tràn cho mọi người có quyền module 0.
-const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient' };
+const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient', muaHang: 'canViewPurchasingReportClient' };
 function isReportKeyVisible(key) {
   if (currentUser?.perms?.reportViewAll) return true;
   if ((currentUser?.reportExtraKeys || []).includes(key)) return true;
@@ -587,6 +592,25 @@ const REPORT_MODULE_CONFIGS = {
       const passed = submitted.filter(r => r.isPassed === true).length;
       const failed = submitted.filter(r => r.isPassed === false).length;
       return [['Đã nộp — Đạt', passed], ['Đã nộp — Chưa đạt', failed]];
+    }
+  },
+  // Mua Hàng > BAS (v23.30) — CÙNG khuôn "checklist" ngay trên: "xem chéo" thấy TOÀN BỘ (dept='' luôn),
+  // RebateCalculations không có field Dept/status (mỗi bản ghi là 1 lần TÍNH XONG, không có vòng đời
+  // trạng thái riêng như checklist) — bỏ statusOf/statusBuckets, dùng extraRows() hiện tổng doanh số căn
+  // cứ + tổng ước tính chiết khấu (bản TÓM TẮT chung — chi tiết đầy đủ theo NCC/điều khoản vẫn ở tab Báo
+  // Cáo nội bộ của module Mua Hàng, rebateViewReport thật, không lặp lại ở đây).
+  muaHang: {
+    title: '🛒 Báo Cáo Chiết Khấu/Thưởng NCC (Mua Hàng)',
+    getRecords: (dept, from, to) => fetchReportRecords('rebateCalculations', '', from, to,
+      () => (DB.rebateCalculations || []).filter(r => isInDateRange(r.periodStart, from, to))),
+    deptBreakdown: false,
+    extraRows: records => {
+      const totalBasis = records.reduce((s, r) => s + Number(r.basisAmount || 0), 0);
+      const totalRebate = records.reduce((s, r) => s + Number(r.rebateAmount || 0), 0);
+      return [
+        ['Tổng Doanh Số Căn Cứ (trong khoảng lọc)', totalBasis.toLocaleString('vi-VN') + 'đ'],
+        ['Tổng Ước Tính Chiết Khấu (trong khoảng lọc)', totalRebate.toLocaleString('vi-VN') + 'đ']
+      ];
     }
   }
 };
