@@ -156,10 +156,25 @@ thêm (cây phân quyền, khối "24. Nghiệp Vụ & Báo Cáo"):
   Dùng, KHÔNG gán qua Nhóm Phân Quyền được vì là field riêng của từng
   người) — mở thêm TỪNG mục cụ thể mà không cần bật cả quyền module thật.
 
-Nav trái nhóm theo 8 nhóm đúng cách người dùng vận hành thực tế (Văn Bản &
+**Ngoại lệ CHỈ ADMIN xem được, bỏ qua CẢ 2 quyền mở rộng trên (10/2026)**:
+mục **"🗺️ Sơ Đồ Kiến Trúc Hệ Thống"** (nhóm mới **"Hệ Thống"**, cuối danh
+sách) lộ ra chi tiết hạ tầng (Server/SQL Server/ổ đĩa lưu file/hệ thống
+ngoài đang tích hợp) nên KHÔNG dùng cơ chế `NV_KEY_ACCESS_FN`/
+`nghiepVuViewAll`/`nghiepVuExtraKeys` như mọi mục khác — chỉ
+`user.perms.admin === true` mới xem được (`NV_ADMIN_ONLY_KEYS` ở
+`module-nghiepvu.js`, kiểm tra TRƯỚC cả 2 cơ chế mở rộng nên dù admin cấp
+"Xem Toàn Bộ"/"Mở Thêm Mục" cho 1 tài khoản thường, mục này vẫn ẩn). Nội
+dung: sơ đồ Trình Duyệt (SPA) ↔ Server Node.js/Express (PM2 cluster) ↔ SQL
+Server + ổ đĩa cục bộ (file đính kèm), cùng 2 điểm tích hợp hệ thống ngoài
+đang có thật — Máy Chủ SMTP (gửi email/OTP) và **2 luồng DSmart tách biệt**:
+DSmart API (module Mua Hàng, BAS — chỉ KÉO dữ liệu Chiết Khấu/Thưởng NCC
+vào, cấu hình qua `.env`) và dsmart16 (module Vận Hành — chỉ ĐẨY dữ liệu Đơn
+Hàng đã tạo ra ngoài, cấu hình qua màn Admin, có chống SSRF).
+
+Nav trái nhóm theo 10 nhóm đúng cách người dùng vận hành thực tế (Văn Bản &
 Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính / Tổng Hợp / Vận
-Hành / Nhân Sự / Hỗ Trợ IT) — khác thứ tự phẳng phân quyền nội bộ, chỉ là
-cách trình bày cho người đọc. Mỗi mục hiện: mô tả ngắn, 1 sơ đồ quy trình
+Hành / Nhân Sự / Hỗ Trợ IT / Mua Hàng / Hệ Thống) — khác thứ tự phẳng phân
+quyền nội bộ, chỉ là cách trình bày cho người đọc. Mỗi mục hiện: mô tả ngắn, 1 sơ đồ quy trình
 (node bo góc + mũi tên có hướng; nhánh quyết định viền xanh rẽ 2 màu xanh
 "duyệt"/đỏ "từ chối"; khung tham chiếu danh mục nét đứt nếu có; mũi tên vòng
 lặp cong khi bị từ chối/làm lại), và khối **"Điểm Chặn Quan Trọng"/"Cơ Chế

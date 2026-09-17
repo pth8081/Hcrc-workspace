@@ -148,6 +148,43 @@ async function main() {
       check('Phục hồi entry -> render lại bình thường (không còn cảnh báo)',
         !!mainRestored && !mainRestored.innerHTML.includes('Chưa có tài liệu nghiệp vụ') && mainRestored.querySelector('svg') !== null);
 
+      // ---------- 7) "Sơ Đồ Kiến Trúc Hệ Thống" (systemArchitecture) — CHỈ admin xem được, kể cả khi
+      // non-admin có nghiepVuViewAll/nghiepVuExtraKeys (khác mọi mục khác, xem NV_ADMIN_ONLY_KEYS) ----------
+      check('canViewNVItem: admin xem được systemArchitecture',
+        (() => { currentUser = adminUser; return canViewNVItem('systemArchitecture'); })());
+      const nonAdminNoGrant = { username: 'nv2', name: 'Nhân Viên 2', dept: 'Phòng Hành Chính', perms: {} };
+      currentUser = nonAdminNoGrant;
+      check('canViewNVItem: non-admin KHÔNG có quyền mở rộng -> KHÔNG xem được systemArchitecture',
+        canViewNVItem('systemArchitecture') === false);
+      const nonAdminViewAll = { username: 'nv3', name: 'Nhân Viên 3', dept: 'Phòng Hành Chính', perms: { nghiepVuViewAll: true } };
+      currentUser = nonAdminViewAll;
+      check('canViewNVItem: non-admin dù có "Xem Toàn Bộ Mục Nghiệp Vụ" (nghiepVuViewAll) vẫn KHÔNG xem được systemArchitecture',
+        canViewNVItem('systemArchitecture') === false);
+      check('canViewNVItem: non-admin có nghiepVuViewAll vẫn xem được mục thường khác (VD "doc")',
+        canViewNVItem('doc') === true);
+      const nonAdminExtraKey = { username: 'nv4', name: 'Nhân Viên 4', dept: 'Phòng Hành Chính', perms: {}, nghiepVuExtraKeys: ['systemArchitecture'] };
+      currentUser = nonAdminExtraKey;
+      check('canViewNVItem: non-admin dù được mở riêng qua nghiepVuExtraKeys vẫn KHÔNG xem được systemArchitecture',
+        canViewNVItem('systemArchitecture') === false);
+
+      // Nav trái: non-admin không thấy nhóm "Hệ Thống"/mục "Sơ Đồ Kiến Trúc Hệ Thống" trong danh sách hiện ra.
+      currentUser = nonAdminNoGrant;
+      const visibleForNonAdmin = visibleNVGroups();
+      check('visibleNVGroups(): non-admin KHÔNG thấy nhóm "Hệ Thống" trong nav',
+        !visibleForNonAdmin.some(g => g.items.some(it => it.key === 'systemArchitecture')));
+
+      // Ngay cả khi cố tình gọi setNVActiveKey('systemArchitecture') trực tiếp (bỏ qua nav), render
+      // lại tự rơi về mục đầu tiên NGƯỜI ĐÓ được xem (cùng cơ chế bảo vệ renderNghiepVuModule() đã áp
+      // dụng cho mọi mục bị gác quyền khác, không phải cơ chế riêng mới cho mục này).
+      await switchTab('nghiepVu');
+      setNVActiveKey('systemArchitecture');
+      const mainAfterForcedKey = document.getElementById('nghiepVuMain');
+      check('setNVActiveKey("systemArchitecture") bởi non-admin -> KHÔNG render nội dung kiến trúc hệ thống',
+        !!mainAfterForcedKey && !mainAfterForcedKey.textContent.includes('Sơ Đồ Kiến Trúc Hệ Thống'),
+        mainAfterForcedKey ? mainAfterForcedKey.textContent.slice(0, 150) : 'NO MAIN');
+
+      currentUser = adminUser;
+
       return results;
     });
   } finally {
