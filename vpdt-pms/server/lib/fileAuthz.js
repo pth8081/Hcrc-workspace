@@ -164,7 +164,8 @@ async function findOwningRecord(fileUrl) {
     // licenses (Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/licenseView), khác
     // hẳn canDownloadRecordFile theo phòng ban — trả owning riêng để caller gọi canViewLicense().
     { records: licenses, fixed: l => l.fileUrl === fileUrl, build: l => ({ license: true, item: l }) },
-    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itManage, cùng khuôn licenses.
+    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền phẳng itServiceRenewalManage (10/2026
+    // tách khỏi itManage), cùng khuôn licenses.
     { records: itServiceRenewals, fixed: r => r.fileUrl === fileUrl, build: r => ({ itServiceRenewal: true, item: r }) },
     // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs): dùng canView* trực tiếp cho cả
     // 2 mode (xem canViewOperationOrder()/canViewOperationStoreOpening()/canViewOperationRepair(),

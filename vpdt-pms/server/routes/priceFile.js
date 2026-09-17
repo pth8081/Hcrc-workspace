@@ -59,14 +59,19 @@ const upload = multer({
   }
 });
 
-// POST /api/it-price/parse-file — chỉ người có quyền itPriceProposeCreate (hoặc admin) mới gọi được:
-// dùng cho cả lúc tạo đề xuất mới lẫn tải lên tệp bổ sung (Yêu Cầu Bổ Sung) của chính đề xuất đang có.
-// Trường form "masterListId" (tuỳ chọn) — nếu gửi kèm, dò cột file bảng giá thật theo ĐÚNG tên cột của
-// Mẫu Giá đó (đọc thẳng DB.itPriceMasterLists ở server, KHÔNG gửi nguyên khuôn cột ra ngoài khi chưa
-// chọn) thay vì bộ từ khoá chung — báo lỗi rõ ràng nếu thiếu cột bắt buộc theo mẫu. Mẫu Giá giờ CHỈ là
-// khuôn cột (không còn dữ liệu giá thật để đối chiếu/tự động duyệt — xem lib/createValidation.js).
+// POST /api/it-price/parse-file — chỉ người có quyền đề xuất Bán Buôn hoặc Bán Lẻ (itPriceProposeCreate
+// Wholesale/Retail, tách riêng 10/2026 — cần ÍT NHẤT 1 trong 2, hoặc admin) mới gọi được: dùng cho cả
+// lúc tạo đề xuất mới lẫn tải lên tệp bổ sung (Yêu Cầu Bổ Sung) của chính đề xuất đang có. Route này
+// KHÔNG biết priceType cụ thể (form chưa gửi kèm) nên chỉ chặn thô ở đây — quyền đúng theo ĐÚNG loại giá
+// đang tạo được kiểm tra chặt chẽ lúc submit hồ sơ thật ở lib/createValidation.js (itPriceApprovals.
+// extraValidate). Trường form "masterListId" (tuỳ chọn) — nếu gửi kèm, dò cột file bảng giá thật theo
+// ĐÚNG tên cột của Mẫu Giá đó (đọc thẳng DB.itPriceMasterLists ở server, KHÔNG gửi nguyên khuôn cột ra
+// ngoài khi chưa chọn) thay vì bộ từ khoá chung — báo lỗi rõ ràng nếu thiếu cột bắt buộc theo mẫu. Mẫu
+// Giá giờ CHỈ là khuôn cột (không còn dữ liệu giá thật để đối chiếu/tự động duyệt — xem
+// lib/createValidation.js).
 router.post('/parse-file', uploadRateLimiter, (req, res) => {
-  if (!req.freshUser.perms?.admin && !req.freshUser.perms?.itPriceProposeCreate) {
+  const canProposeEitherType = req.freshUser.perms?.itPriceProposeCreateWholesale || req.freshUser.perms?.itPriceProposeCreateRetail;
+  if (!req.freshUser.perms?.admin && !canProposeEitherType) {
     return res.status(403).json({ error: 'Bạn không có quyền đề xuất duyệt giá' });
   }
   upload.single('file')(req, res, async (err) => {

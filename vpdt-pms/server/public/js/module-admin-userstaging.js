@@ -245,9 +245,13 @@ function resetUserForm() {
   document.getElementById('pTaskEdit').checked = !!defaults.taskEdit;
   document.getElementById('pTaskDelete').checked = !!defaults.taskDelete;
   document.getElementById('pTaskDownload').checked = !!defaults.taskDownload;
-  document.getElementById('pItPriceProposeCreate').checked = !!defaults.itPriceProposeCreate;
+  document.getElementById('pItPriceProposeCreateWholesale').checked = !!defaults.itPriceProposeCreateWholesale;
+  document.getElementById('pItPriceProposeCreateRetail').checked = !!defaults.itPriceProposeCreateRetail;
   document.getElementById('pItManage').checked = !!defaults.itManage;
-  document.getElementById('pItPriceEmergencyRejectApprove').checked = !!defaults.itPriceEmergencyRejectApprove;
+  document.getElementById('pItPriceSupport').checked = !!defaults.itPriceSupport;
+  document.getElementById('pItServiceRenewalManage').checked = !!defaults.itServiceRenewalManage;
+  document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked = !!defaults.itPriceEmergencyRejectApproveWholesale;
+  document.getElementById('pItPriceEmergencyRejectApproveRetail').checked = !!defaults.itPriceEmergencyRejectApproveRetail;
   document.getElementById('pUniformManage').checked = !!defaults.uniformManage;
   document.getElementById('pUniformApprove').checked = !!defaults.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!defaults.uniformStoreManage;

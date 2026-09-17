@@ -261,11 +261,12 @@ function getMyPendingApprovals(user) {
     });
   }
 
-  // "Từ chối khẩn cấp" (Phê Duyệt Giá) — quyền phẳng itPriceEmergencyRejectApprove, không phải bước
-  // duyệt theo phòng ban nên không đi qua addDeptWorkflowItems() ở trên, xem
-  // requestItPriceEmergencyReject() ở lib/recordActions.js.
-  if (canApproveItPriceEmergencyRejectClient(user)) {
-    (DB.itPriceApprovals || []).filter(p => p.emergencyRejectStatus === 'PENDING').forEach(p => {
+  // "Từ chối khẩn cấp" (Phê Duyệt Giá) — quyền phẳng itPriceEmergencyRejectApproveWholesale/Retail
+  // (10/2026 tách theo priceType), không phải bước duyệt theo phòng ban nên không đi qua
+  // addDeptWorkflowItems() ở trên, xem requestItPriceEmergencyReject() ở lib/recordActions.js. Kiểm tra
+  // TỪNG hồ sơ theo đúng priceType của hồ sơ đó, không còn 1 cờ chung cho cả 2 loại như trước.
+  {
+    (DB.itPriceApprovals || []).filter(p => p.emergencyRejectStatus === 'PENDING' && canApproveItPriceEmergencyRejectClient(user, p.priceType)).forEach(p => {
       items.push({
         type: 'itPriceEmergencyReject',
         typeLabel: `🚨 Hỗ Trợ IT - Từ chối khẩn (${p.priceType === 'WHOLESALE' ? 'Bán Buôn' : 'Bán Lẻ'})`,

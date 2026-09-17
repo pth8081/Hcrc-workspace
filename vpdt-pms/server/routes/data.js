@@ -748,13 +748,14 @@ async function loadOfficeReqsScoped(user, data) {
 
 // Bước 8h — itPriceApprovals: canViewItPriceApproval() (lib/recordViewScope.js) KHÁC hẳn carRegs/
 // officeReqs — KHÔNG có nhánh "phòng ban mình" nào cả (người thường không tự động thấy đề xuất giá của
-// phòng ban mình) — chỉ: (1) admin/itManage xem HẾT, (2) chính người TẠO (Creator), (3)
-// itPriceEmergencyRejectApprove xem hồ sơ đang/đã tự mình xét "Từ chối khẩn cấp" (điều kiện theo DỮ LIỆU
-// emergencyRejectStatus/emergencyRejectDecidedBy, KHÔNG theo phòng ban — coi như "canSeeAll" cho số ít
-// người có quyền này, để filterItPriceApprovalsForUser() lọc lại đúng phạm vi hẹp thật sau đó), (4) đang
-// là người duyệt — NHƯNG cấu hình duyệt tách 2 nhánh theo priceType: RETAIL tra theo PHÒNG BAN
-// (itPriceDeptWorkflows), WHOLESALE tra theo 1 trong 4 MỨC cố định (itPriceTierWorkflows, không theo
-// phòng ban — giống operationOrders, coi như "canSeeAll" nếu approver ở bất kỳ mức nào).
+// phòng ban mình) — chỉ: (1) admin/itPriceSupport xem HẾT (tách khỏi itManage 10/2026), (2) chính người
+// TẠO (Creator), (3) itPriceEmergencyRejectApproveWholesale/Retail xem hồ sơ đang/đã tự mình xét "Từ
+// chối khẩn cấp" (điều kiện theo DỮ LIỆU emergencyRejectStatus/emergencyRejectDecidedBy, KHÔNG theo
+// phòng ban — coi như "canSeeAll" cho số ít người có 1 trong 2 quyền này, để filterItPriceApprovalsForUser()
+// lọc lại đúng phạm vi hẹp thật sau đó), (4) đang là người duyệt — NHƯNG cấu hình duyệt tách 2 nhánh
+// theo priceType: RETAIL tra theo PHÒNG BAN (itPriceDeptWorkflows), WHOLESALE tra theo 1 trong 4 MỨC cố
+// định (itPriceTierWorkflows, không theo phòng ban — giống operationOrders, coi như "canSeeAll" nếu
+// approver ở bất kỳ mức nào).
 function isApproverForAnyItPriceWholesaleTier(user, data) {
   if (!user?.username) return false;
   for (const tierConfig of Object.values(data.itPriceTierWorkflows || {})) {
@@ -777,7 +778,8 @@ function computeItPriceApprovalsApproverDepts(user, data) {
   return depts;
 }
 async function loadItPriceApprovalsScoped(user, data) {
-  const canSeeAll = !!(user?.perms?.admin || user?.perms?.itManage || user?.perms?.itPriceEmergencyRejectApprove
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.itPriceSupport
+    || user?.perms?.itPriceEmergencyRejectApproveWholesale || user?.perms?.itPriceEmergencyRejectApproveRetail
     || isApproverForAnyItPriceWholesaleTier(user, data));
   if (canSeeAll) return getAllForCollectionCached('itPriceApprovals');
 
@@ -1184,10 +1186,11 @@ router.get('/', async (req, res) => {
     // licenses (Hành Chính — Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/
     // licenseView), KHÔNG theo phòng ban — xem lib/recordViewScope.js canViewLicense().
     if (data.licenses) data.licenses = filterLicensesForUser(data.licenses, req.freshUser);
-    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itManage, cùng khuôn licenses ở
-    // trên — hàm lọc đã có sẵn ở lib/recordViewScope.js từ đầu nhưng CHƯA TỪNG được gọi ở đây (cũng chưa
-    // được export, xem chú thích ở khối module.exports của file đó), nên toàn bộ danh mục dịch vụ CNTT
-    // (nhà cung cấp, chi phí, ngày hết hạn) vẫn lộ nguyên cho mọi tài khoản đã đăng nhập.
+    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itServiceRenewalManage (10/2026
+    // tách khỏi itManage), cùng khuôn licenses ở trên — hàm lọc đã có sẵn ở lib/recordViewScope.js từ đầu
+    // nhưng CHƯA TỪNG được gọi ở đây (cũng chưa được export, xem chú thích ở khối module.exports của file
+    // đó), nên toàn bộ danh mục dịch vụ CNTT (nhà cung cấp, chi phí, ngày hết hạn) vẫn lộ nguyên cho mọi
+    // tài khoản đã đăng nhập.
     if (data.itServiceRenewals) data.itServiceRenewals = filterItServiceRenewalsForUser(data.itServiceRenewals, req.freshUser);
     // paymentRequests (Tổng Hợp — Thanh Toán): collection TÀI CHÍNH duy nhất còn lại chưa lọc lại ở
     // server — xem lib/recordViewScope.js canViewPaymentRequest().

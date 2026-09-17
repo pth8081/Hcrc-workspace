@@ -2647,7 +2647,8 @@ router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
 });
 
 // "Từ chối khẩn cấp" — người đã duyệt bước cuối cùng đổi ý SAU khi đã duyệt (APPROVED), TRƯỚC khi IT
-// áp giá thật — gửi yêu cầu cho người có quyền itPriceEmergencyRejectApprove xét duyệt (xem
+// áp giá thật — gửi yêu cầu cho người có quyền itPriceEmergencyRejectApproveWholesale/Retail (đúng
+// priceType, tách riêng 10/2026) xét duyệt (xem
 // requestItPriceEmergencyReject()/approveItPriceEmergencyReject()/denyItPriceEmergencyReject() ở
 // lib/recordActions.js). Được duyệt -> hồ sơ REJECTED giống hệt bị từ chối bước thường.
 router.post('/itPriceApprovals/:id/request-emergency-reject', async (req, res) => {
@@ -3533,7 +3534,8 @@ router.post('/licenses/:id/unrevoke', async (req, res) => {
   }
 });
 
-// ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itManage) =====================
+// ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itServiceRenewalManage, 10/2026
+// tách khỏi itManage thành quyền riêng) =====================
 router.post('/itServiceRenewals/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itServiceRenewals'));
 
 router.post('/itServiceRenewals/:id/edit', async (req, res) => {

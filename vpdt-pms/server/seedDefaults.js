@@ -23,6 +23,7 @@ async function seedDefaults() {
   const pool = await getPool();
   await migrateItRenewalCategories(pool);
   await migrateHrLifecycleV2Perms(pool);
+  await migrateItSupportPermsSplit(pool);
   for (const key of Object.keys(DEFAULTS)) {
     const existing = await pool.request()
       .input('k', sql.NVarChar(100), key)
@@ -187,6 +188,57 @@ async function migrateHrLifecycleV2Perms(pool) {
   });
   await setAppDataValue('hrLifecycleV2PermsSeeded', true);
   console.log(`   ↳ Cấp sẵn quyền hrOnboardingManage/hrOffboardingManage/hrTaskTemplateManage/hrViewAll cho ${changedGroups} nhóm phân quyền + ${changedUsers} tài khoản (kế thừa từ hrOnboardingCreate/hrOffboardingCreate/nhanSuManage).`);
+}
+
+// Hỗ Trợ IT (10/2026) — chia nhỏ 3 quyền phẳng cũ thành 7 quyền (theo yêu cầu người dùng, tách Bán
+// Buôn/Bán Lẻ riêng cho Đề xuất + Từ chối khẩn, tách "Hỗ trợ giá"/"Gia Hạn Dịch Vụ" ra khỏi itManage —
+// itManage giờ CHỈ còn nghĩa "nhận xử lý ticket Hỗ Trợ Yêu Cầu"). Di trú 1 LẦN DUY NHẤT: cấp sẵn quyền
+// mới cho ai ĐANG có quyền cũ tương ứng, để không ai bị MẤT quyền khi nâng cấp — cùng khuôn
+// migrateHrLifecycleV2Perms() ở trên (marker "itSupportPermsV2SplitSeeded").
+async function migrateItSupportPermsSplit(pool) {
+  const existing = await pool.request()
+    .input('k', sql.NVarChar(100), 'itSupportPermsV2SplitSeeded')
+    .query('SELECT 1 FROM dbo.AppData WHERE DataKey = @k');
+  if (existing.recordset.length > 0) return; // đã di trú rồi, không chạy lại
+
+  const grantFor = (p) => {
+    let changed = 0;
+    if (p.itPriceProposeCreate) {
+      if (!p.itPriceProposeCreateWholesale) { p.itPriceProposeCreateWholesale = true; changed++; }
+      if (!p.itPriceProposeCreateRetail) { p.itPriceProposeCreateRetail = true; changed++; }
+    }
+    // itManage GIỮ NGUYÊN (vẫn nhận xử lý ticket Hỗ Trợ Yêu Cầu như trước) — chỉ THÊM 2 quyền mới đã
+    // tách ra khỏi phạm vi của nó trước đây, để không ai mất khả năng áp giá/xem Phê Duyệt Giá/quản lý
+    // Gia Hạn Dịch Vụ đang có.
+    if (p.itManage) {
+      if (!p.itPriceSupport) { p.itPriceSupport = true; changed++; }
+      if (!p.itServiceRenewalManage) { p.itServiceRenewalManage = true; changed++; }
+    }
+    if (p.itPriceEmergencyRejectApprove) {
+      if (!p.itPriceEmergencyRejectApproveWholesale) { p.itPriceEmergencyRejectApproveWholesale = true; changed++; }
+      if (!p.itPriceEmergencyRejectApproveRetail) { p.itPriceEmergencyRejectApproveRetail = true; changed++; }
+    }
+    return changed;
+  };
+  let changedUsers = 0, changedGroups = 0;
+  await withLockedAppDataValue('permGroups', (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    for (const g of arr) {
+      if (!g?.perms) continue;
+      if (grantFor(g.perms) > 0) changedGroups++;
+    }
+    return arr;
+  });
+  await withLockedAppDataValue('users', (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    for (const u of arr) {
+      if (!u?.perms) continue;
+      if (grantFor(u.perms) > 0) changedUsers++;
+    }
+    return arr;
+  });
+  await setAppDataValue('itSupportPermsV2SplitSeeded', true);
+  console.log(`   ↳ Chia nhỏ quyền Hỗ Trợ IT: cấp sẵn quyền mới cho ${changedGroups} nhóm phân quyền + ${changedUsers} tài khoản (kế thừa từ itPriceProposeCreate/itManage/itPriceEmergencyRejectApprove).`);
 }
 
 // Ngân Sách "Thực Hiện" (entryKind==='ACTUAL') không còn qua bước phê duyệt Trưởng phòng nữa — chỉ

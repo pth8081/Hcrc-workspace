@@ -1320,16 +1320,28 @@
             <span id="permTreeBadge_itSupport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng. 2 quyền đầu chỉ kiểm soát: ai được ĐỀ XUẤT duyệt giá bán (siêu thị), và ai thuộc đội Hỗ Trợ IT được nhận xử lý ticket/xác nhận đã áp giá sau khi duyệt xong. Quyền thứ 3 xét duyệt riêng nút "🚨 Từ chối khẩn" — khi người đã duyệt bước cuối cùng đổi ý SAU khi duyệt (trước khi IT áp giá thật), người có quyền này quyết định có huỷ hồ sơ hay không.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng — "Đội Hỗ Trợ IT" bên dưới chỉ kiểm soát ai NHẬN XỬ LÝ ticket đó. Đề xuất/Từ chối khẩn tách riêng Bán Buôn/Bán Lẻ (10/2026, theo yêu cầu chia nhỏ) — ai chỉ phụ trách 1 loại thì chỉ cần tick đúng quyền loại đó. Việc DUYỆT thật sự (không nằm ở đây) vẫn theo cấu hình phòng ban (Bán Lẻ)/mức Margin-Chiết Khấu (Bán Buôn) ở màn "Hệ Thống → Quy Trình & Phê Duyệt", không đổi.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItPriceProposeCreate"> 🏷️ Đề xuất duyệt giá bán
+                <input type="checkbox" id="pItPriceProposeCreateWholesale"> 🏷️ Đề xuất duyệt giá Bán Buôn
+              </label>
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceProposeCreateRetail"> 🏷️ Đề xuất duyệt giá Bán Lẻ
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket, xác nhận đã áp giá)
+                <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket Hỗ Trợ Yêu Cầu)
+              </label>
+              <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceSupport"> 💲 Hỗ trợ giá Bán Buôn/Bán Lẻ (áp giá sau khi duyệt, xem toàn bộ Phê Duyệt Giá)
+              </label>
+              <label class="flex items-center gap-2 text-violet-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItServiceRenewalManage"> 🔔 Sử dụng Gia Hạn Dịch Vụ
               </label>
               <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItPriceEmergencyRejectApprove"> 🚨 Phê duyệt từ chối khẩn cấp
+                <input type="checkbox" id="pItPriceEmergencyRejectApproveWholesale"> 🚨 Phê duyệt từ chối khẩn cấp Bán Buôn
+              </label>
+              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceEmergencyRejectApproveRetail"> 🚨 Phê duyệt từ chối khẩn cấp Bán Lẻ
               </label>
             </div>
           </div>

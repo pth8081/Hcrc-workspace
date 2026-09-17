@@ -338,7 +338,7 @@ function filterTrainingDocumentProgressForUser(list, user) {
 // username đang giữ 1 cờ đã biết trước tên, không phải toàn bộ ma trận quyền), thay thế hẳn việc client
 // tự quét DB.users[].perms của người khác (đường duy nhất trước đây khiến "users" không thể ẩn bớt
 // perms cho non-admin — xem sanitizeUsersPermsForViewer()).
-const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApprove', 'licenseApprove'];
+const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove'];
 function computeModuleApproverUsernames(users) {
   const result = {};
   APPROVER_FLAG_KEYS.forEach(flag => {
@@ -468,17 +468,20 @@ function filterOfficeReqsForUser(officeReqs, user, appData) {
   return (officeReqs || []).filter(o => canViewOfficeReq(user, o, appData));
 }
 
-// Khớp canViewItPriceApproval() (public/index.html): admin/itManage (đội Hỗ Trợ IT) xem hết, người đề
-// xuất xem đề xuất của mình, người duyệt xem hồ sơ nằm trong đúng luồng duyệt phòng ban của họ.
+// Khớp canViewItPriceApproval() (public/js/module-itsupport-price.js): admin/itPriceSupport (đội hỗ trợ
+// giá, 10/2026 tách khỏi itManage) xem hết, người đề xuất xem đề xuất của mình, người duyệt xem hồ sơ
+// nằm trong đúng luồng duyệt phòng ban của họ.
 function canViewItPriceApproval(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.itManage) return true;
+  if (user.perms?.admin || user.perms?.itPriceSupport) return true;
   if (item.creator === user.username) return true;
-  // Người có quyền itPriceEmergencyRejectApprove nhưng KHÔNG phải người duyệt phòng ban của đề xuất
-  // này vẫn cần xem được ĐÚNG hồ sơ đang có yêu cầu "Từ chối khẩn cấp" chờ họ xét (hoặc đã tự mình
-  // quyết định trước đó, để tra cứu lại) — không mở rộng ra xem TOÀN BỘ đề xuất giá, cùng nguyên tắc
-  // phạm vi hẹp đã áp dụng cho approvalApprover ở canViewItSupportTicket() bên dưới.
-  if (user.perms?.itPriceEmergencyRejectApprove && (item.emergencyRejectStatus === 'PENDING' || item.emergencyRejectDecidedBy === user.username)) {
+  // Người có quyền itPriceEmergencyRejectApprove(Wholesale/Retail) đúng priceType nhưng KHÔNG phải
+  // người duyệt phòng ban của đề xuất này vẫn cần xem được ĐÚNG hồ sơ đang có yêu cầu "Từ chối khẩn
+  // cấp" chờ họ xét (hoặc đã tự mình quyết định trước đó, để tra cứu lại) — không mở rộng ra xem TOÀN
+  // BỘ đề xuất giá, cùng nguyên tắc phạm vi hẹp đã áp dụng cho approvalApprover ở
+  // canViewItSupportTicket() bên dưới.
+  const emergencyPerm = item.priceType === 'WHOLESALE' ? user.perms?.itPriceEmergencyRejectApproveWholesale : user.perms?.itPriceEmergencyRejectApproveRetail;
+  if (emergencyPerm && (item.emergencyRejectStatus === 'PENDING' || item.emergencyRejectDecidedBy === user.username)) {
     return true;
   }
   return isApproverForApproversMap(MODULE_CONFIGS.itPriceApprovals.resolveWfConfig(item, appData).approvers, user.username);
@@ -893,11 +896,12 @@ function filterCareerPathConfirmationsForUser(items, user) {
   return (items || []).filter(c => canViewCareerPathConfirmation(user, c));
 }
 
-// itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itManage, KHÔNG có nhánh "chính
-// chủ luôn xem được" như licenses ở trên — đây là danh mục nội bộ đội IT dùng CHUNG cho cả đội (mọi
-// mục do bất kỳ ai trong đội tạo đều phải thấy được bởi cả đội), không phải hồ sơ cá nhân từng người.
+// itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itServiceRenewalManage (10/2026 tách
+// khỏi itManage), KHÔNG có nhánh "chính chủ luôn xem được" như licenses ở trên — đây là danh mục nội bộ
+// đội IT dùng CHUNG cho cả đội (mọi mục do bất kỳ ai trong đội tạo đều phải thấy được bởi cả đội), không
+// phải hồ sơ cá nhân từng người.
 function canViewItServiceRenewal(user) {
-  return !!(user?.perms?.admin || user?.perms?.itManage);
+  return !!(user?.perms?.admin || user?.perms?.itServiceRenewalManage);
 }
 
 function filterItServiceRenewalsForUser(items, user) {

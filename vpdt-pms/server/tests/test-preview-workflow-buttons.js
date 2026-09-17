@@ -143,7 +143,7 @@ async function main() {
     const adminUser = {
       id: 1, username: 'admin', name: 'Quản Trị Viên Test', dept: 'Phòng A', jobTitle: 'Nhân viên',
       email: 'admin@test.local', phone: '0900000000',
-      perms: { admin: true, itPriceProposeCreate: true }, groupIds: [], permOverrides: null
+      perms: { admin: true, itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true }, groupIds: [], permOverrides: null
     };
     DB.users.push(adminUser);
     finishLogin(adminUser);

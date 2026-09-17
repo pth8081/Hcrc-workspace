@@ -47,7 +47,7 @@ function stubModule(relPath, exportsObj) {
 
 // ===================== Người dùng =====================
 const DEPT = 'Kinh Doanh';
-const CREATOR = { username: 'staff_kd', name: 'Người Đề Xuất', dept: DEPT, perms: { itPriceProposeCreate: true } };
+const CREATOR = { username: 'staff_kd', name: 'Người Đề Xuất', dept: DEPT, perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true } };
 const IT_MANAGER = { username: 'it_mgr', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true } };
 const APPROVER = { username: 'approver1', name: 'Người Duyệt', dept: 'Ban Giám Đốc', perms: {} };
 const OUTSIDER = { username: 'outsider', name: 'Người Ngoài', dept: 'Marketing', perms: {} };

@@ -63,7 +63,7 @@ const CONTRACT_USER = { username: 'ct1', name: 'Người Tạo HĐ', dept: DEPT,
 const CAR_USER = { username: 'car1', name: 'Người Đăng Ký Xe', dept: DEPT, perms: { carCreate: { all: true, depts: [] } } };
 const OFFICE_USER = { username: 'of1', name: 'Người Đề Xuất VP', dept: DEPT, perms: { officeCreate: { all: true, depts: [] }, officeBuy: true } };
 const SUB_USER = { username: 'sub1', name: 'Người Trình', dept: DEPT, perms: { submissionCreate: { all: true, depts: [] } } };
-const IT_USER = { username: 'it1', name: 'Người Đề Xuất Giá', dept: DEPT, perms: { itPriceProposeCreate: true } };
+const IT_USER = { username: 'it1', name: 'Người Đề Xuất Giá', dept: DEPT, perms: { itPriceProposeCreateRetail: true } };
 // Bộ phận Trợ Lý/Thư Ký — người DUY NHẤT được PROPOSE_FILE_REPLACEMENT (xem lib/workflowEngine.js).
 const TLTK_USER = { username: 'tltk1', name: 'Trợ Lý Thư Ký', dept: 'Ban Giám Đốc', perms: {} };
 

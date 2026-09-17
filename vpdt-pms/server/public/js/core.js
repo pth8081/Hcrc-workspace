@@ -2644,14 +2644,30 @@ function canAccessItSupportModule(user) {
   if (!user) return false;
   return hasModuleAccess(user, 'itSupport');
 }
-function canProposeItPrice(user) {
-  return !!(user?.perms?.admin || user?.perms?.itPriceProposeCreate);
+// Hỗ Trợ IT (10/2026, chia nhỏ theo yêu cầu người dùng) — mirror ĐÚNG lib/recordActions.js/
+// lib/createValidation.js phía server, sửa 1 bên PHẢI sửa cả 2 bên. itPriceProposeCreate/
+// itPriceEmergencyRejectApprove cũ tách riêng Bán Buôn/Bán Lẻ (priceType); itManage GIỮ NGUYÊN tên
+// nhưng THU HẸP nghĩa (chỉ còn nhận xử lý ticket "Hỗ Trợ Yêu Cầu") — 2 quyền mới itPriceSupport
+// (áp giá sau khi duyệt + xem toàn bộ Phê Duyệt Giá, GỘP chung Bán Buôn/Bán Lẻ theo đúng yêu cầu) và
+// itServiceRenewalManage (Gia Hạn Dịch Vụ) tách ra khỏi phạm vi cũ của itManage.
+function canProposeItPriceType(user, priceType) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(priceType === 'WHOLESALE' ? user.perms?.itPriceProposeCreateWholesale : user.perms?.itPriceProposeCreateRetail);
 }
 function canManageItSupportClient(user) {
   return !!(user?.perms?.admin || user?.perms?.itManage);
 }
-function canApproveItPriceEmergencyRejectClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.itPriceEmergencyRejectApprove);
+function canSupportItPriceClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.itPriceSupport);
+}
+function canManageItRenewalClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.itServiceRenewalManage);
+}
+function canApproveItPriceEmergencyRejectClient(user, priceType) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(priceType === 'WHOLESALE' ? user.perms?.itPriceEmergencyRejectApproveWholesale : user.perms?.itPriceEmergencyRejectApproveRetail);
 }
 // Đúng người đã bấm Duyệt ở bước cuối cùng (item.currentStep khi status đã APPROVED, engine không tăng
 // currentStep nữa sau bước cuối) — chỉ họ (hoặc admin) mới thấy nút "🚨 Từ chối khẩn", khớp lib/recordActions.js::isFinalStepApproverOfItPrice().
@@ -3026,7 +3042,9 @@ function defaultNewUserPerms() {
     officeBuy: true, officeFix: true,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
-    itPriceProposeCreate: false, itManage: false, itPriceEmergencyRejectApprove: false,
+    itPriceProposeCreateWholesale: false, itPriceProposeCreateRetail: false,
+    itManage: false, itPriceSupport: false, itServiceRenewalManage: false,
+    itPriceEmergencyRejectApproveWholesale: false, itPriceEmergencyRejectApproveRetail: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
     licenseCreate: false, licenseApprove: false, licenseView: false,
@@ -4736,10 +4754,12 @@ function getInternalPostApproverUsernames() {
   return DB.moduleApproverUsernames?.internalPostApprove || [];
 }
 
-// Toàn bộ user có quyền xét duyệt "Từ chối khẩn cấp" (Phê Duyệt Giá) — dùng để xác định người nhận
-// thông báo email khi có yêu cầu mới chờ xử lý, cùng khuôn getInternalPostApproverUsernames() ở trên.
-function getItPriceEmergencyRejectApproverUsernames() {
-  return DB.moduleApproverUsernames?.itPriceEmergencyRejectApprove || [];
+// Toàn bộ user có quyền xét duyệt "Từ chối khẩn cấp" (Phê Duyệt Giá), đúng priceType (Wholesale/Retail
+// tách riêng 10/2026) — dùng để xác định người nhận thông báo email khi có yêu cầu mới chờ xử lý, cùng
+// khuôn getInternalPostApproverUsernames() ở trên.
+function getItPriceEmergencyRejectApproverUsernames(priceType) {
+  const key = priceType === 'WHOLESALE' ? 'itPriceEmergencyRejectApproveWholesale' : 'itPriceEmergencyRejectApproveRetail';
+  return DB.moduleApproverUsernames?.[key] || [];
 }
 
 // Parse "30, 15, 7" -> [30, 15, 7] (số nguyên không âm, loại trùng, sắp giảm dần)
@@ -5861,12 +5881,12 @@ function finishLogin(user) {
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
-  document.getElementById('btnItSupportNavRenewal').classList.toggle('hidden', !canManageItSupportClient(user));
+  document.getElementById('btnItSupportNavRenewal').classList.toggle('hidden', !canManageItRenewalClient(user));
   // ?. (v23.11): btnItSubRenewal nằm BÊN TRONG itSupportSection (khung HTML tách lười từ đợt này) — có
   // thể CHƯA có trong DOM ở đúng thời điểm đăng nhập nếu người dùng chưa từng mở tab Hỗ Trợ IT trong
   // phiên. Áp dụng lại đúng logic này ở setItSupportSubTab() (module-itsupport-price.js) khi DOM đã sẵn
   // sàng — cùng mẫu đã sửa cho updateOperationStoreSubTabVisibility()/vanHanhSection.
-  document.getElementById('btnItSubRenewal')?.classList.toggle('hidden', !canManageItSupportClient(user));
+  document.getElementById('btnItSubRenewal')?.classList.toggle('hidden', !canManageItRenewalClient(user));
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();

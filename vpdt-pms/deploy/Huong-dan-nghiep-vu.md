@@ -792,6 +792,30 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng
     khuôn Giấy Phép. "Loại Dịch Vụ" là danh mục admin-editable, vẫn tự học
     thêm khi ai gõ loại mới lúc thêm dịch vụ.
+  - **Cây phân quyền (khối 15, chia nhỏ 10/2026)** — trước đây chỉ 3 quyền gộp
+    (`itPriceProposeCreate`/`itManage`/`itPriceEmergencyRejectApprove`), nay
+    tách thành **7 quyền riêng** để đúng với thực tế nhiều người chỉ phụ trách
+    1 mảng: **Đề xuất duyệt giá Bán Buôn**/**Đề xuất duyệt giá Bán Lẻ** (2 cờ
+    riêng — ai chỉ được đề xuất 1 loại thì chỉ tick đúng quyền loại đó, form
+    tạo tự ẩn/hiện theo đúng sub-tab đang mở); **🛠️ Đội Hỗ Trợ IT** (`itManage`,
+    GIỮ NGUYÊN tên nhưng thu hẹp lại — giờ CHỈ còn điều khiển ai **nhận xử lý
+    ticket "🎫 Hỗ Trợ Yêu Cầu"**, không còn tự động áp giá/xem hết Phê Duyệt
+    Giá/quản lý Gia Hạn Dịch Vụ như trước); **💲 Hỗ trợ giá Bán Buôn/Bán Lẻ**
+    (quyền MỚI `itPriceSupport` — áp giá sau khi duyệt xong + xem toàn bộ hồ
+    sơ Phê Duyệt Giá, vẫn GỘP CHUNG cho cả 2 loại giá theo đúng yêu cầu người
+    dùng khi chia nhỏ); **🔔 Sử dụng Gia Hạn Dịch Vụ** (quyền MỚI
+    `itServiceRenewalManage`, tách hẳn khỏi `itManage`); **Phê duyệt từ chối
+    khẩn cấp Bán Buôn**/**Bán Lẻ** (2 cờ riêng theo đúng loại giá của hồ sơ).
+    Việc **DUYỆT thật sự** (bước chính trong quy trình Phê Duyệt Giá, KHÔNG
+    nằm trong 7 quyền trên) hoàn toàn không đổi — vẫn theo cấu hình phòng ban
+    (Bán Lẻ)/mức Margin-Chiết Khấu (Bán Buôn) ở **Hệ Thống → Quy Trình & Phê
+    Duyệt**. Có migrate 1 lần khi khởi động server (server-side, không mất
+    quyền tài khoản cũ): ai đang có `itPriceProposeCreate` được cấp sẵn CẢ 2
+    quyền đề xuất mới; ai đang có `itManage` được cấp sẵn thêm `itPriceSupport`
+    + `itServiceRenewalManage`; ai đang có `itPriceEmergencyRejectApprove`
+    được cấp sẵn CẢ 2 quyền từ chối khẩn cấp mới — chạy đúng 1 lần, admin có
+    thể vào cây phân quyền thu hẹp lại sau nếu muốn tách đúng theo vai trò
+    thực tế của từng người.
 
 ### 4.3. Tài Chính & Hợp Đồng
 

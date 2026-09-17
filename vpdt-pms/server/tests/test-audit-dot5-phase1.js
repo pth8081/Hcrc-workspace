@@ -5,8 +5,8 @@
 //     NGƯỜI KHÁC khỏi GET /api/data cho viewer không phải admin, giữ nguyên cho admin và cho chính
 //     bản ghi của người gọi.
 //   - lib/recordViewScope.js computeModuleApproverUsernames() — danh sách username giữ 1 cờ quyền
-//     phê duyệt cụ thể (meetingApprove/internalPostApprove/itPriceEmergencyRejectApprove/
-//     licenseApprove), tính từ perms ĐẦY ĐỦ trước khi bị ẩn, để client vẫn dựng được danh sách nhận
+//     phê duyệt cụ thể (meetingApprove/internalPostApprove/itPriceEmergencyRejectApproveWholesale/
+//     itPriceEmergencyRejectApproveRetail/licenseApprove), tính từ perms ĐẦY ĐỦ trước khi bị ẩn, để client vẫn dựng được danh sách nhận
 //     email mà không cần đọc perms của người khác.
 //   - lib/recordViewScope.js filterTrainingTestSubmissionsForUser()/
 //     filterTrainingRegistrationsForUser() — chỉ chính chủ/giảng viên đúng lớp/trainingManage mới
@@ -26,7 +26,7 @@ async function main() {
 const USERS = [
   { username: 'admin1', name: 'Admin', perms: { admin: true }, permOverrides: {}, groupIds: ['g1'] },
   { username: 'nv1', name: 'Nhân Viên 1', perms: { meetingApprove: true }, permOverrides: { foo: true }, groupIds: ['g2'] },
-  { username: 'nv2', name: 'Nhân Viên 2', perms: { licenseApprove: true, itPriceEmergencyRejectApprove: true } },
+  { username: 'nv2', name: 'Nhân Viên 2', perms: { licenseApprove: true, itPriceEmergencyRejectApproveRetail: true } },
   { username: 'nv3', name: 'Nhân Viên 3', perms: { internalPostApprove: true } },
 ];
 
@@ -71,7 +71,8 @@ await run.run('computeModuleApproverUsernames(): gộp đúng admin + cờ quy�
   assert(result.meetingApprove.includes('admin1') && result.meetingApprove.includes('nv1'), 'meetingApprove phải gồm admin + nv1');
   assertEqual(result.meetingApprove.length, 2);
   assert(result.licenseApprove.includes('admin1') && result.licenseApprove.includes('nv2'), 'licenseApprove phải gồm admin + nv2');
-  assert(result.itPriceEmergencyRejectApprove.includes('nv2'), 'itPriceEmergencyRejectApprove phải gồm nv2');
+  assert(result.itPriceEmergencyRejectApproveRetail.includes('nv2'), 'itPriceEmergencyRejectApproveRetail phải gồm nv2');
+  assert(!result.itPriceEmergencyRejectApproveWholesale.includes('nv2'), 'nv2 chỉ có cờ Retail, không được lọt vào danh sách Wholesale');
   assert(result.internalPostApprove.includes('nv3'), 'internalPostApprove phải gồm nv3');
   assert(!result.internalPostApprove.includes('nv1'), 'nv1 không có cờ internalPostApprove, không được lọt vào danh sách');
 });

@@ -157,9 +157,17 @@ function collectPermsFromForm() {
     taskEdit: document.getElementById('pTaskEdit').checked,
     taskDelete: document.getElementById('pTaskDelete').checked,
     taskDownload: document.getElementById('pTaskDownload').checked,
-    itPriceProposeCreate: document.getElementById('pItPriceProposeCreate').checked,
+    // Hỗ Trợ IT (10/2026, chia nhỏ) — itPriceProposeCreate/itPriceEmergencyRejectApprove cũ đã tách
+    // Bán Buôn/Bán Lẻ riêng; itManage giữ nguyên tên nhưng THU HẸP nghĩa (chỉ còn ticket Hỗ Trợ Yêu
+    // Cầu) — itPriceSupport/itServiceRenewalManage là 2 quyền mới tách ra khỏi phạm vi cũ của itManage.
+    // Di trú dữ liệu cũ xem migrateItSupportPermsSplit() ở seedDefaults.js.
+    itPriceProposeCreateWholesale: document.getElementById('pItPriceProposeCreateWholesale').checked,
+    itPriceProposeCreateRetail: document.getElementById('pItPriceProposeCreateRetail').checked,
     itManage: document.getElementById('pItManage').checked,
-    itPriceEmergencyRejectApprove: document.getElementById('pItPriceEmergencyRejectApprove').checked,
+    itPriceSupport: document.getElementById('pItPriceSupport').checked,
+    itServiceRenewalManage: document.getElementById('pItServiceRenewalManage').checked,
+    itPriceEmergencyRejectApproveWholesale: document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked,
+    itPriceEmergencyRejectApproveRetail: document.getElementById('pItPriceEmergencyRejectApproveRetail').checked,
     uniformManage: document.getElementById('pUniformManage').checked,
     uniformApprove: document.getElementById('pUniformApprove').checked,
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
@@ -250,9 +258,13 @@ function populatePermsForm(permsInput) {
   document.getElementById('pTaskEdit').checked = !!perms.taskEdit;
   document.getElementById('pTaskDelete').checked = !!perms.taskDelete;
   document.getElementById('pTaskDownload').checked = !!perms.taskDownload;
-  document.getElementById('pItPriceProposeCreate').checked = !!perms.itPriceProposeCreate;
+  document.getElementById('pItPriceProposeCreateWholesale').checked = !!perms.itPriceProposeCreateWholesale;
+  document.getElementById('pItPriceProposeCreateRetail').checked = !!perms.itPriceProposeCreateRetail;
   document.getElementById('pItManage').checked = !!perms.itManage;
-  document.getElementById('pItPriceEmergencyRejectApprove').checked = !!perms.itPriceEmergencyRejectApprove;
+  document.getElementById('pItPriceSupport').checked = !!perms.itPriceSupport;
+  document.getElementById('pItServiceRenewalManage').checked = !!perms.itServiceRenewalManage;
+  document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked = !!perms.itPriceEmergencyRejectApproveWholesale;
+  document.getElementById('pItPriceEmergencyRejectApproveRetail').checked = !!perms.itPriceEmergencyRejectApproveRetail;
   document.getElementById('pUniformManage').checked = !!perms.uniformManage;
   document.getElementById('pUniformApprove').checked = !!perms.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;

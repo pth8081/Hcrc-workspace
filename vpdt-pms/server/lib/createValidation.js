@@ -1498,8 +1498,9 @@ const CREATE_MODULE_CONFIGS = {
   // 1) "Phê Duyệt Giá" (itPriceApprovals): duyệt giá bán MẶT HÀNG TẠI SIÊU THỊ — KHÔNG phải phê duyệt
   //    mua sắm/chi phí (khác hẳn Đề Xuất Văn Phòng/Hợp Đồng, không sinh đề nghị Thanh Toán). Quy trình
   //    duyệt theo phòng ban dùng lại NGUYÊN engine chung ở lib/workflowEngine.js (giống docs/carRegs/
-  //    officeReqs — xem itPriceDeptWorkflows). Sau khi APPROVED, người Hỗ Trợ IT (itManage) tự áp giá
-  //    vào hệ thống bán hàng NGOÀI app này rồi bấm xác nhận hoàn thành ngay tại đây (field applied) —
+  //    officeReqs — xem itPriceDeptWorkflows). Sau khi APPROVED, người có quyền itPriceSupport (tách
+  //    riêng khỏi itManage 10/2026) tự áp giá vào hệ thống bán hàng NGOÀI app này rồi bấm xác nhận hoàn
+  //    thành ngay tại đây (field applied) —
   //    KHÔNG phải 1 bước duyệt thêm, chỉ là đánh dấu đã thực hiện xong (xem applyPriceApproval() ở
   //    lib/recordActions.js).
   itPriceApprovals: {
@@ -1508,15 +1509,18 @@ const CREATE_MODULE_CONFIGS = {
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
-      if (!user.perms?.admin && !user.perms?.itPriceProposeCreate) {
-        throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá');
-      }
       // priceType (RETAIL/WHOLESALE) — bắt buộc, client tự gắn đúng giá trị theo sub-tab "Bán Lẻ"/"Bán
       // Buôn" đang mở lúc gửi (KHÔNG có dropdown chọn tay, xem submitItPriceApproval() ở index.html),
       // không tin nguyên văn giá trị lạ nào khác client gửi kèm. Dùng để lọc đúng sub-tab hiển thị VÀ để
       // resolveWfConfig() (lib/workflowEngine.js) tra đúng nhánh approver theo cặp (dept, priceType).
       const priceType = payload.priceType === 'WHOLESALE' ? 'WHOLESALE' : (payload.priceType === 'RETAIL' ? 'RETAIL' : null);
       if (!priceType) throw new CreateError(400, 'Vui lòng chọn đúng loại giá (Bán Lẻ/Bán Buôn)');
+      // Quyền đề xuất tách riêng theo priceType (itPriceProposeCreateWholesale/Retail, 10/2026) — ai chỉ
+      // phụ trách 1 loại thì chỉ đề xuất được đúng loại đó.
+      const canProposeThisType = priceType === 'WHOLESALE' ? user.perms?.itPriceProposeCreateWholesale : user.perms?.itPriceProposeCreateRetail;
+      if (!user.perms?.admin && !canProposeThisType) {
+        throw new CreateError(403, 'Bạn không có quyền đề xuất duyệt giá loại này');
+      }
       payload.priceType = priceType;
       // Bán Buôn: bỏ quy trình theo phòng ban, chuyển sang theo 1 trong 4 mức Margin/Chiết Khấu cố định
       // (đã chốt với người dùng — danh sách PHẲNG, không lồng nhau). RETAIL không dùng field này — không
@@ -2665,21 +2669,22 @@ const CREATE_MODULE_CONFIGS = {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'LICENSE');
     }
   },
-  // "Gia Hạn Dịch Vụ CNTT" (module con của Hỗ Trợ IT, itManage) — danh mục dịch vụ/hợp đồng CNTT cần
-  // theo dõi ngày hết hạn để gia hạn (phần mềm/bản quyền, đường truyền Internet, tên miền, chứng chỉ
-  // SSL...) — công cụ NỘI BỘ đội IT tự quản lý cho chính mình, KHÔNG qua bước duyệt nào (khác Giấy Phép
-  // ở trên vốn là hồ sơ pháp lý cần người khác duyệt) — tạo xong hiệu lực ngay, sửa/gia hạn/xoá qua route
-  // riêng (xem lib/recordActions.js + routes/records.js). forceOwnDept + getScope rỗng (cùng khuôn
-  // licenses/internalPosts ở trên) vì field "dept" chỉ mang tính hiển thị, quyền thật là itManage phẳng,
-  // không theo phòng ban. KHÔNG bắt buộc "code" (khác mọi module khác) — đây là danh mục nội bộ nhỏ,
-  // không cần mã tra cứu chính thức, chỉ cần tên dịch vụ là đủ nhận diện.
+  // "Gia Hạn Dịch Vụ CNTT" (module con của Hỗ Trợ IT, itServiceRenewalManage — 10/2026 tách khỏi itManage
+  // thành quyền riêng) — danh mục dịch vụ/hợp đồng CNTT cần theo dõi ngày hết hạn để gia hạn (phần mềm/
+  // bản quyền, đường truyền Internet, tên miền, chứng chỉ SSL...) — công cụ NỘI BỘ đội IT tự quản lý cho
+  // chính mình, KHÔNG qua bước duyệt nào (khác Giấy Phép ở trên vốn là hồ sơ pháp lý cần người khác
+  // duyệt) — tạo xong hiệu lực ngay, sửa/gia hạn/xoá qua route riêng (xem lib/recordActions.js +
+  // routes/records.js). forceOwnDept + getScope rỗng (cùng khuôn licenses/internalPosts ở trên) vì field
+  // "dept" chỉ mang tính hiển thị, quyền thật là itServiceRenewalManage phẳng, không theo phòng ban.
+  // KHÔNG bắt buộc "code" (khác mọi module khác) — đây là danh mục nội bộ nhỏ, không cần mã tra cứu
+  // chính thức, chỉ cần tên dịch vụ là đủ nhận diện.
   itServiceRenewals: {
     dbKey: 'itServiceRenewals',
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
-      if (!user.perms?.admin && !user.perms?.itManage) {
+      if (!user.perms?.admin && !user.perms?.itServiceRenewalManage) {
         throw new CreateError(403, 'Bạn không có quyền quản lý danh mục gia hạn dịch vụ CNTT');
       }
       const requiredStringFields = [['name', 'Tên dịch vụ'], ['category', 'Loại dịch vụ']];

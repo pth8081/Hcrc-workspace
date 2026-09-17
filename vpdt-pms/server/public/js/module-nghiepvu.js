@@ -584,7 +584,8 @@ const NGHIEP_VU_DOCS = {
   // nhau", KHÔNG phải 1 quy trình chung — 2 sub-tab Bán Lẻ/Bán Buôn có field khác nhau VÀ đi qua 2 cấu
   // hình luồng duyệt khác nhau (itPriceDeptWorkflows theo phòng ban cho Bán Lẻ, itPriceTierWorkflows theo
   // mức Margin/Chiết Khấu cho Bán Buôn) — xem CREATE_MODULE_CONFIGS.itPriceApprovals.extraValidate ở
-  // lib/createValidation.js.
+  // lib/createValidation.js. Cây phân quyền "Hỗ Trợ IT" (10/2026) đã tách nhỏ từ 3 quyền gộp thành 7 quyền
+  // riêng biệt — xem "Cây phân quyền" ở footer bên dưới cho đầy đủ ánh xạ cũ→mới.
   itPriceApproval: {
     icon: '🏷️', title: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)', badge: 'Hỗ Trợ IT',
     desc: 'Đề xuất duyệt bảng giá bán (tải lên tệp Excel nhiều dòng/mặt hàng) — Bán Lẻ và Bán Buôn là 2 QUY TRÌNH KHÁC NHAU thật sự (khác field bắt buộc, khác cấu hình luồng duyệt), không phải cùng 1 luồng dùng chung.',
@@ -601,6 +602,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Luồng duyệt tách biệt', text: 'Bán Lẻ duyệt theo cấu hình từng phòng ban (itPriceDeptWorkflows); Bán Buôn duyệt theo đúng mức Margin/Chiết Khấu đã chọn (itPriceTierWorkflows) — người duyệt mức này KHÔNG duyệt được hồ sơ mức khác.' },
       { label: 'Mẫu Giá (khuôn cột)', text: 'nếu hệ thống đã có ít nhất 1 Mẫu Giá thì bắt buộc chọn đúng mẫu khớp cột với tệp đang nộp — chỉ dùng để đối chiếu tên cột, không còn đối chiếu giá trị/tự động duyệt.' },
       { label: 'Yêu Cầu Bổ Sung', text: 'người duyệt hoặc đội IT có thể yêu cầu bổ sung tệp trước khi áp giá — hồ sơ bị khoá áp giá tới khi có tệp bổ sung mới (không ghi đè, chỉ nối thêm).' },
+      { label: 'Cây phân quyền (10/2026)', text: 'trước đây 3 quyền gộp — nay tách 7 quyền riêng: Đề xuất Bán Buôn/Bán Lẻ tách 2 cờ (itPriceProposeCreateWholesale/Retail — ai chỉ phụ trách 1 loại chỉ đề xuất đúng loại đó); "Đội Hỗ Trợ IT" (itManage) giờ CHỈ còn xử lý ticket "Hỗ Trợ Yêu Cầu", KHÔNG còn tự động áp giá/xem hết Phê Duyệt Giá; áp giá sau khi duyệt + xem toàn bộ hồ sơ Phê Duyệt Giá chuyển sang quyền riêng itPriceSupport (vẫn gộp chung Bán Buôn/Bán Lẻ); Gia Hạn Dịch Vụ CNTT chuyển sang quyền riêng itServiceRenewalManage; Từ chối khẩn cấp tách 2 cờ theo đúng loại giá (itPriceEmergencyRejectApproveWholesale/Retail). Việc DUYỆT thật sự (bước "Duyệt" ở sơ đồ trên) không đổi — vẫn theo cấu hình phòng ban/mức Margin-Chiết Khấu ở "Hệ Thống → Quy Trình & Phê Duyệt".' },
     ] },
   },
 };

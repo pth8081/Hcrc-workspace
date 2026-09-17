@@ -61,7 +61,7 @@ const BUDGET_KD_2 = { username: 'ns_kd2', name: 'Người Lập Ngân Sách KD 2
 const BUDGET_IT = { username: 'ns_it', name: 'Người Lập Ngân Sách IT', dept: 'IT', perms: { budgetCreate: true }, active: true };
 const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true }, active: true };
 const PROPOSER = { username: 'kd_dexuat', name: 'Người Đề Xuất Giá', dept: 'Kinh Doanh', perms: {}, active: true };
-const TP_APPROVER = { username: 'tp_kd', name: 'Trưởng Phòng Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceEmergencyRejectApprove: true }, active: true };
+const TP_APPROVER = { username: 'tp_kd', name: 'Trưởng Phòng Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceEmergencyRejectApproveWholesale: true, itPriceEmergencyRejectApproveRetail: true }, active: true };
 const ACCOUNTANT = { username: 'ketoan', name: 'Kế Toán Thanh Toán', dept: 'Tài Chính', perms: { paymentManage: true }, active: true };
 const OUTSIDER = { username: 'nguoi_khac', name: 'Người Ngoài Cuộc', dept: 'Hành Chính', perms: { itManage: true }, active: true };
 

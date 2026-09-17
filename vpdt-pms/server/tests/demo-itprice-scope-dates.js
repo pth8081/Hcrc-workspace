@@ -19,7 +19,7 @@ const { startStaticServer, createMockState, launchPage } = require('./testHarnes
 const PORT = 8993;
 const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'itprice-scope-dates');
 
-const STAFF_KD = { username: 'staff_kd', name: 'Ngô Văn Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceProposeCreate: true }, active: true };
+const STAFF_KD = { username: 'staff_kd', name: 'Ngô Văn Kinh Doanh', dept: 'Kinh Doanh', perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true }, active: true };
 const APPROVER1 = { username: 'approver1', name: 'Trưởng Phòng Duyệt', dept: 'Ban Giám Đốc', perms: {}, active: true };
 
 const state = createMockState({

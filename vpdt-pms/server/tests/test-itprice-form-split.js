@@ -14,7 +14,7 @@ const {
 } = require('./testHarness');
 
 const PORT = 8993;
-const STAFF_MKT = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreate: true }, active: true };
+const STAFF_MKT = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true }, active: true };
 // totpEnabled:true để bỏ qua "tường chặn" bắt thiết lập 2FA (totpSetupWallModal, xem core.js:5698) —
 // không phải trọng tâm bài test này, chỉ cần admin vào được thẳng màn hệ thống.
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true, totpEnabled: true };

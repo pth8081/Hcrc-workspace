@@ -18,7 +18,7 @@ const { validateAndPrepareCreate } = require('../lib/createValidation');
 const DEPT = 'Kinh Doanh';
 const GOOD_URL = '/uploads/1717171717171-0123456789abcdef.pdf';
 const PRICE_ITEMS = [{ values: { c0: 'Mặt hàng A', c1: '15000' } }];
-const IT_USER = { username: 'it1', name: 'Người Đề Xuất Giá', dept: DEPT, perms: { itPriceProposeCreate: true } };
+const IT_USER = { username: 'it1', name: 'Người Đề Xuất Giá', dept: DEPT, perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true } };
 const APP_DATA = { formTemplates: {}, stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'], priceZones: ['Miền Bắc', 'Miền Trung', 'Miền Nam'] };
 
 const basePayload = (over) => ({

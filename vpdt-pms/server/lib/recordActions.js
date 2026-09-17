@@ -4649,11 +4649,19 @@ function setRecruitmentReferralStatus(payload, user, referral) {
 }
 
 // ===================== HỖ TRỢ IT =====================
-// Cờ quyền chung cho cả 2 sub-module: xử lý ticket helpdesk + xác nhận đã áp giá xong. Việc DUYỆT giá
-// (Phê Duyệt Giá) không dùng cờ này — đi qua quy trình theo phòng ban ở lib/workflowEngine.js
-// (itPriceDeptWorkflows), giống hệt docs/carRegs/officeReqs.
+// Cờ quyền xử lý ticket helpdesk (module con "🎫 Hỗ Trợ Yêu Cầu"). Việc DUYỆT giá (Phê Duyệt Giá) không
+// dùng cờ này — đi qua quy trình theo phòng ban ở lib/workflowEngine.js (itPriceDeptWorkflows), giống
+// hệt docs/carRegs/officeReqs.
 function canManageItSupport(user) {
   return !!(user?.perms?.admin || user?.perms?.itManage);
+}
+
+// Cờ quyền "Hỗ trợ giá Bán Buôn/Bán Lẻ" (itPriceSupport, 10/2026 tách khỏi itManage) — áp giá sau khi
+// duyệt xong + xác nhận hoàn thành + yêu cầu bổ sung ở sub-module Phê Duyệt Giá. Vẫn để GIỮ NGUYÊN gộp
+// chung cho cả Bán Buôn lẫn Bán Lẻ (không tách theo priceType như itPriceProposeCreate/
+// itPriceEmergencyRejectApprove) theo đúng yêu cầu người dùng lúc chia nhỏ khối quyền Hỗ Trợ IT.
+function canSupportItPrice(user) {
+  return !!(user?.perms?.admin || user?.perms?.itPriceSupport);
 }
 
 // "Phê Duyệt Giá" — sau khi duyệt xong (status=APPROVED qua workflowEngine), người Hỗ Trợ IT áp giá vào
@@ -4708,7 +4716,8 @@ function hasPendingItPriceEmergencyReject(item) {
 // applyWorkflowAction() (xem chú thích entry itPriceApprovals ở lib/workflowEngine.js) nên KHÔNG tự động
 // được assertNotSelfDecidingWorkflowItem() bảo vệ như bước duyệt theo phòng ban/tier — quyết định giá đã
 // được người KHÁC duyệt độc lập, nhưng lượt "tự xác nhận đã áp giá đúng vào hệ thống ngoài app" thì
-// không có ai kiểm tra chéo nếu người tạo đề xuất (itPriceProposeCreate) cũng có quyền itManage. Chặn
+// không có ai kiểm tra chéo nếu người tạo đề xuất (itPriceProposeCreateWholesale/Retail) cũng có quyền
+// itPriceSupport. Chặn
 // tường minh ở CẢ 3 hàm dưới đây (nhận xử lý/xác nhận áp giá/yêu cầu bổ sung), admin vẫn được bỏ qua
 // (nhất quán với mọi chỗ khác dùng assertNotSelfDecidingWorkflowItem()).
 function assertNotSelfHandlingItPriceApply(user, item) {
@@ -4718,7 +4727,7 @@ function assertNotSelfHandlingItPriceApply(user, item) {
   }
 }
 function claimPriceApply(user, item) {
-  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý áp giá');
+  if (!canSupportItPrice(user)) throw new HttpError(403, 'Bạn không có quyền nhận xử lý áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
   assertNotSelfHandlingItPriceApply(user, item);
@@ -4736,7 +4745,7 @@ function claimPriceApply(user, item) {
 // nhận không xử lý tiếp được nữa (nghỉ phép, bận việc khác...). Chỉ chính người đã nhận hoặc admin gọi
 // được — người khác trong đội không tự ý huỷ giúp người đã nhận.
 function releasePriceApplyClaim(user, item) {
-  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền huỷ nhận xử lý áp giá');
+  if (!canSupportItPrice(user)) throw new HttpError(403, 'Bạn không có quyền huỷ nhận xử lý áp giá');
   if (!item.applyClaimedBy) throw new HttpError(409, 'Đề xuất này chưa có ai nhận xử lý');
   if (item.applyClaimedBy !== user.username && !user.perms?.admin) {
     throw new HttpError(403, 'Chỉ người đã nhận xử lý (hoặc Quản Trị Viên) mới huỷ được');
@@ -4748,7 +4757,7 @@ function releasePriceApplyClaim(user, item) {
 }
 
 function applyPriceApproval(user, item) {
-  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận áp giá');
+  if (!canSupportItPrice(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận áp giá');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi');
   assertNotSelfHandlingItPriceApply(user, item);
@@ -4782,7 +4791,7 @@ function applyPriceApproval(user, item) {
 // 1 mảng item.infoRequests với nhánh REQUEST_INFO của người duyệt phòng ban trong lúc còn PENDING (xem
 // lib/workflowEngine.js) — cùng 1 chỗ kiểm tra "còn yêu cầu bổ sung chưa xử lý" ở cả 2 nhánh.
 function requestPriceInfoFromIt(user, item, payload) {
-  if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung ở đây');
+  if (!canSupportItPrice(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung ở đây');
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Đề xuất này chưa được phê duyệt xong');
   if (item.applied) throw new HttpError(409, 'Đề xuất này đã được áp giá rồi, không thể yêu cầu bổ sung thêm');
   assertNotSelfHandlingItPriceApply(user, item);
@@ -4815,8 +4824,12 @@ function isFinalStepApproverOfItPrice(user, item) {
   );
 }
 
-function canApproveItPriceEmergencyReject(user) {
-  return !!(user?.perms?.admin || user?.perms?.itPriceEmergencyRejectApprove);
+// priceType (RETAIL/WHOLESALE) — tách riêng thành 2 quyền itPriceEmergencyRejectApproveWholesale/
+// Retail (10/2026), ai chỉ phụ trách 1 loại thì chỉ xét duyệt được đúng loại đó.
+function canApproveItPriceEmergencyReject(user, priceType) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(priceType === 'WHOLESALE' ? user.perms?.itPriceEmergencyRejectApproveWholesale : user.perms?.itPriceEmergencyRejectApproveRetail);
 }
 
 function requestItPriceEmergencyReject(user, item, payload) {
@@ -4861,7 +4874,7 @@ function requestItPriceEmergencyReject(user, item, payload) {
 }
 
 function approveItPriceEmergencyReject(user, item) {
-  if (!canApproveItPriceEmergencyReject(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
+  if (!canApproveItPriceEmergencyReject(user, item.priceType)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
   if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
   item.emergencyRejectStatus = 'APPROVED';
   item.emergencyRejectDecidedBy = user.username;
@@ -4878,7 +4891,7 @@ function approveItPriceEmergencyReject(user, item) {
 }
 
 function denyItPriceEmergencyReject(user, item, payload) {
-  if (!canApproveItPriceEmergencyReject(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
+  if (!canApproveItPriceEmergencyReject(user, item.priceType)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
   if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
   const comment = (payload?.comment || '').trim();
   if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối yêu cầu này');
@@ -6611,14 +6624,15 @@ function unrevokeLicense(user, item) {
   return item;
 }
 
-// ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itManage) =====================
+// ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itServiceRenewalManage, 10/2026
+// tách khỏi itManage thành quyền riêng) =====================
 // Công cụ NỘI BỘ đội IT tự theo dõi ngày hết hạn dịch vụ/hợp đồng CNTT (phần mềm, đường truyền, tên
 // miền, SSL...) — KHÔNG có bước duyệt (khác Giấy Phép ở trên), chỉ 3 hành động: Sửa (sửa mọi trường,
 // không đổi lịch sử nhắc hạn trừ khi NGÀY HẾT HẠN thực sự đổi), Gia Hạn (nút riêng — LUÔN đổi ngày hết
 // hạn + reset lại chu kỳ nhắc email từ đầu, ghi rõ 1 dòng lịch sử "đã gia hạn"), Xoá (qua deleteAdminOnly
 // dùng chung ở routes/records.js, không cần hàm riêng ở đây).
 function canManageItServiceRenewal(user) {
-  return !!(user?.perms?.admin || user?.perms?.itManage);
+  return !!(user?.perms?.admin || user?.perms?.itServiceRenewalManage);
 }
 
 function editItServiceRenewal(user, item, payload) {
@@ -6721,7 +6735,7 @@ module.exports = {
   startTrainingTestAttempt, evaluateTrainingTestTiming,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
-  canManageItSupport, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
+  canManageItSupport, canSupportItPrice, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   resolveApprovedFileId, resolveApprovedFileUrl,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,

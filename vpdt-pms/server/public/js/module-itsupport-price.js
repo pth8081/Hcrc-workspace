@@ -22,10 +22,10 @@ function setItSupportSubTab(subTab) {
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnItSubPrice').className = subTab === 'PRICE' ? activeCls : inactiveCls;
   document.getElementById('btnItSubTicket').className = subTab === 'TICKET' ? activeCls : inactiveCls;
-  document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canManageItSupportClient(currentUser) ? '' : ' hidden');
+  document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canManageItRenewalClient(currentUser) ? '' : ' hidden');
 
   if (subTab === 'PRICE') {
-    const canCreate = canProposeItPrice(currentUser);
+    const canCreate = canProposeItPriceType(currentUser, activeItPriceSubTab);
     document.getElementById('itPriceCreateForm').classList.toggle('hidden', !canCreate);
     document.getElementById('itPriceNoCreatePermNote').classList.toggle('hidden', canCreate);
     document.getElementById('itPriceMasterListAdminWrap').classList.toggle('hidden', !currentUser.perms?.admin);
@@ -685,6 +685,12 @@ function setItPriceSubTab(subTab) {
   // "Trường Bổ Sung" giờ khác nhau giữa Bán Lẻ/Bán Buôn (2 modKey riêng, xem itPriceDynamicModKey()) —
   // phải vẽ lại đúng bộ field của sub-tab vừa chuyển tới, không còn dùng chung 1 bộ như trước.
   renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
+  // Quyền đề xuất giờ tách riêng theo priceType (itPriceProposeCreateWholesale/Retail, 10/2026) — một
+  // người có thể chỉ được đề xuất 1 trong 2 loại, nên form tạo phải ẩn/hiện lại MỖI LẦN đổi sub-tab,
+  // không chỉ 1 lần lúc vào tab PRICE như trước (lúc đó còn dùng chung 1 flag).
+  const canCreateSub = canProposeItPriceType(currentUser, activeItPriceSubTab);
+  document.getElementById('itPriceCreateForm').classList.toggle('hidden', !canCreateSub);
+  document.getElementById('itPriceNoCreatePermNote').classList.toggle('hidden', canCreateSub);
   resetListPage('itPrice');
   renderItPriceApprovals();
 }
@@ -709,16 +715,17 @@ function resolveApprovedFileUrlClient(p) {
   return f ? f.fileUrl : null;
 }
 
-// Phạm vi Xem: admin/itManage (đội Hỗ Trợ IT) xem hết, người đề xuất xem đề xuất của mình, người
-// duyệt xem hồ sơ nằm trong luồng duyệt của họ — không có quyền "Xem" riêng như carView/docView vì
-// module này chưa cần phân biệt xem-rộng theo phòng ban.
+// Phạm vi Xem: admin/itPriceSupport (đội hỗ trợ giá, 10/2026 tách khỏi itManage) xem hết, người đề
+// xuất xem đề xuất của mình, người duyệt xem hồ sơ nằm trong luồng duyệt của họ — không có quyền
+// "Xem" riêng như carView/docView vì module này chưa cần phân biệt xem-rộng theo phòng ban.
 function canViewItPriceApproval(user, p) {
-  if (user.perms?.admin || user.perms?.itManage) return true;
+  if (user.perms?.admin || user.perms?.itPriceSupport) return true;
   if (p.creator === user.username) return true;
-  // Người có quyền itPriceEmergencyRejectApprove nhưng không phải người duyệt phòng ban vẫn cần xem
-  // được hồ sơ đang có yêu cầu "Từ chối khẩn cấp" chờ họ xét (hoặc đã tự mình quyết định trước đó) —
-  // khớp canViewItPriceApproval() ở lib/recordViewScope.js.
-  if (user.perms?.itPriceEmergencyRejectApprove && (p.emergencyRejectStatus === 'PENDING' || p.emergencyRejectDecidedBy === user.username)) {
+  // Người có quyền itPriceEmergencyRejectApprove(Wholesale/Retail) đúng priceType nhưng không phải
+  // người duyệt phòng ban vẫn cần xem được hồ sơ đang có yêu cầu "Từ chối khẩn cấp" chờ họ xét (hoặc
+  // đã tự mình quyết định trước đó) — khớp canViewItPriceApproval() ở lib/recordViewScope.js.
+  const emergencyPerm = p.priceType === 'WHOLESALE' ? user.perms?.itPriceEmergencyRejectApproveWholesale : user.perms?.itPriceEmergencyRejectApproveRetail;
+  if (emergencyPerm && (p.emergencyRejectStatus === 'PENDING' || p.emergencyRejectDecidedBy === user.username)) {
     return true;
   }
   return isApproverForDeptWorkflow(resolveItPriceWorkflowConfigForItemClient(p), user.username);
@@ -1306,7 +1313,7 @@ function renderItPriceModalControls(p) {
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
   const canApprove = p.status === 'PENDING' && canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
   const emergencyPending = p.emergencyRejectStatus === 'PENDING';
-  const canApply = p.status === 'APPROVED' && !p.applied && canManageItSupportClient(currentUser);
+  const canApply = p.status === 'APPROVED' && !p.applied && canSupportItPriceClient(currentUser);
   let html = '';
 
   // Băng thông báo hiển thị cho MỌI người xem hồ sơ (người đề xuất, người duyệt, đội IT) khi đang có 1
@@ -1323,8 +1330,8 @@ function renderItPriceModalControls(p) {
     </div>`;
   }
 
-  // Người có quyền itPriceEmergencyRejectApprove xét duyệt trực tiếp ngay tại đây.
-  if (emergencyPending && canApproveItPriceEmergencyRejectClient(currentUser)) {
+  // Người có quyền itPriceEmergencyRejectApprove(Wholesale/Retail) đúng priceType xét duyệt trực tiếp ngay tại đây.
+  if (emergencyPending && canApproveItPriceEmergencyRejectClient(currentUser, p.priceType)) {
     html += `<div class="flex gap-2 flex-wrap mt-2">
       <button type="button" data-op="approveItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✅ Duyệt Huỷ Hồ Sơ</button>
       <button type="button" data-op="denyItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">❌ Từ Chối Yêu Cầu Này</button>
@@ -1455,7 +1462,7 @@ async function requestItPriceEmergencyRejectAction(id) {
   const idx = DB.itPriceApprovals.findIndex(x => x.id === id);
   if (idx !== -1) DB.itPriceApprovals[idx] = updated;
   logSystemAction('IT_SUPPORT', 'REQUEST_IT_PRICE_EMERGENCY_REJECT', `Gửi yêu cầu Từ chối khẩn cấp đề xuất giá [${updated.code}]`, 'SUCCESS', updated.code);
-  const approverUsernames = getItPriceEmergencyRejectApproverUsernames();
+  const approverUsernames = getItPriceEmergencyRejectApproverUsernames(updated.priceType);
   if (approverUsernames.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST', updated.code, approverUsernames,
       `[VPDT] Yêu cầu Từ chối khẩn cấp cho ${updated.code} cần xét duyệt`,

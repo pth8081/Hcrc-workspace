@@ -111,12 +111,12 @@ function computeMyPendingApprovalKeys(user, appData) {
     (appData.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO')
       .forEach(pr => keys.push(`payment:${pr.id}`));
   }
-  // "Từ chối khẩn cấp" (Phê Duyệt Giá) — quyền phẳng itPriceEmergencyRejectApprove, KHÔNG đi qua bước
-  // duyệt theo phòng ban (khớp requestItPriceEmergencyReject() ở lib/recordActions.js).
-  if (canApproveItPriceEmergencyReject(user)) {
-    (appData.itPriceApprovals || []).filter(p => p.emergencyRejectStatus === 'PENDING')
-      .forEach(p => keys.push(`itPriceEmergencyReject:${p.id}`));
-  }
+  // "Từ chối khẩn cấp" (Phê Duyệt Giá) — quyền phẳng itPriceEmergencyRejectApproveWholesale/Retail
+  // (10/2026 tách theo priceType), KHÔNG đi qua bước duyệt theo phòng ban (khớp
+  // requestItPriceEmergencyReject() ở lib/recordActions.js) — kiểm tra TỪNG hồ sơ theo đúng priceType
+  // của hồ sơ đó, không còn 1 cờ chung cho cả 2 loại như trước.
+  (appData.itPriceApprovals || []).filter(p => p.emergencyRejectStatus === 'PENDING' && canApproveItPriceEmergencyReject(user, p.priceType))
+    .forEach(p => keys.push(`itPriceEmergencyReject:${p.id}`));
   // Đơn hàng đang "Chờ Nhập Hàng" (AWAITING_RECEIPT) — KHÔNG phải quyết định duyệt/từ chối nên không đi
   // qua pushDeptWorkflowKeys() (chỉ bắt status==='PENDING'), quyền dùng ĐÚNG
   // isApproverForOperationOrderReceipt() (lib/recordActions.js — hàm này đã tự bao gồm nhánh
