@@ -209,9 +209,14 @@ function operationStatusBadge(o) {
 // DH-09: mirror ĐÚNG lib/recordActions.js isApproverForOperationOrderReceipt() — KHÔNG dùng scopeAllows()
 // chung (có nhánh dept-fallback sai cho quyền này, xem chú thích đầy đủ ở hàm server) — chỉ xét đúng cấu
 // trúc {all, depts[]} của operationOrderReceiptManage.
-function canManageOperationOrderReceiptClient(o) {
-  if (currentUser?.perms?.admin) return true;
-  const scope = currentUser?.perms?.operationOrderReceiptManage;
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 3: hàm này trước đây LUÔN đọc thẳng biến toàn cục `currentUser`,
+// bỏ qua tham số `user` mà getMyPendingApprovals(user) ở core-approvalhub.js truyền vào — khiến mục "Chờ
+// Nhập Hàng" không bao giờ vào đúng danh sách chờ duyệt của người được phân quyền khi hàm đó được gọi
+// với 1 user khác currentUser hiện tại. Thêm tham số `user` tuỳ chọn, mặc định currentUser để 2 lời gọi
+// cũ (không truyền `user`, tự đọc currentUser) không đổi hành vi.
+function canManageOperationOrderReceiptClient(o, user = currentUser) {
+  if (user?.perms?.admin) return true;
+  const scope = user?.perms?.operationOrderReceiptManage;
   if (scope?.all) return true;
   const scopeKey = o.orderLocationType === 'HO' ? 'HO' : o.dept;
   return !!(Array.isArray(scope?.depts) && scope.depts.includes(scopeKey));

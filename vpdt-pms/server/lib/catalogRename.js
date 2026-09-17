@@ -40,7 +40,18 @@ const DEPT_FIELD_COLLECTIONS = [
   // paymentRequests/laborContracts ở trên (meetings.dept: phòng ban đặt phòng họp; hrProcesses.employeeDept:
   // snapshot phòng ban của nhân viên lúc tạo quy trình Onboarding/Offboarding).
   { collection: 'meetings', fields: ['dept'] },
-  { collection: 'hrProcesses', fields: ['employeeDept'] }
+  { collection: 'hrProcesses', fields: ['employeeDept'] },
+  // operationOrders/operationStoreOpenings/operationRepairs/operationExecutionPeriods: PHÁT HIỆN THIẾU ở
+  // đợt audit chuyên sâu lần 3 — cả 4 collection Vận Hành đều forceOwnDept (snapshot .dept từ người tạo,
+  // xem lib/createValidation.js) nhưng bị bỏ sót khỏi danh sách này. 3 collection đầu còn dùng .dept để
+  // XÉT QUYỀN XEM (canViewOperationOrder/canViewOperationStoreOpening/canViewOperationRepair ở
+  // lib/recordViewScope.js so trực tiếp item.dept === user.dept) — đổi tên phòng ban mà không cascade sẽ
+  // làm nhân viên phòng ban đó (không phải người tạo/không phải approver) mất quyền xem hồ sơ vận hành
+  // của chính phòng mình sau khi đổi tên.
+  { collection: 'operationOrders', fields: ['dept'] },
+  { collection: 'operationStoreOpenings', fields: ['dept'] },
+  { collection: 'operationRepairs', fields: ['dept'] },
+  { collection: 'operationExecutionPeriods', fields: ['dept'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
@@ -143,6 +154,16 @@ async function cascadeEmployeeProfilesJobTitle(oldValue, newValue, isStore) {
   }));
 }
 
+// reportPeriods.deptScope/budgetPeriods.deptScope: {all, depts:[<tên phòng ban thô>]} đặt 1 lần lúc tạo
+// kỳ (xem lib/createValidation.js dòng ~1434/2451) — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 3: đổi
+// tên 1 phòng ban KHÔNG cascade field này, nên 1 kỳ báo cáo/ngân sách đang mở đã giới hạn theo phòng ban
+// cụ thể (không phải "all") sẽ âm thầm chặn (403) nhân viên phòng đó nộp/xem dữ liệu ngay sau khi đổi
+// tên, dù kỳ không hề bị admin sửa gì.
+function renameDeptScopeDepts(item, oldValue, newValue) {
+  if (!item.deptScope || !Array.isArray(item.deptScope.depts) || !item.deptScope.depts.includes(oldValue)) return item;
+  return { ...item, deptScope: { ...item.deptScope, depts: item.deptScope.depts.map(d => (d === oldValue ? newValue : d)) } };
+}
+
 async function cascadeStoreRename(oldValue, newValue) {
   // user.dept dùng CHUNG 1 field cho cả tên phòng ban (HO) lẫn tên siêu thị (phân biệt bằng posType) —
   // so trực tiếp giá trị, không cần lọc posType (1 dept/store name không thể vừa là tên phòng ban vừa
@@ -155,6 +176,8 @@ async function cascadeStoreRename(oldValue, newValue) {
     await renameFieldValueInCollection(collection, (item) => renameSimpleFields(item, fields, oldValue, newValue));
   }
   await renameFieldValueInCollection('uniformPeriods', (item) => renameUniformPeriodAllocations(item, oldValue, newValue));
+  await renameFieldValueInCollection('reportPeriods', (item) => renameDeptScopeDepts(item, oldValue, newValue));
+  await renameFieldValueInCollection('budgetPeriods', (item) => renameDeptScopeDepts(item, oldValue, newValue));
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameDepartmentRefInAllVersions } = require('./orgChart'); // require trễ — tránh vòng lặp require
     return renameDepartmentRefInAllVersions(list, oldValue, newValue);

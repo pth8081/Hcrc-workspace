@@ -380,6 +380,11 @@ async function scenario(name, fn) {
     const r = await page.evaluate(() => {
       DB.operationOrderHOTierWorkflows = { LT100M: { approvers: { 1: ['duyet1'] } } };
       DB.operationOrderStoreTierWorkflows = {};
+      // "Chờ Nhập Hàng"/canManageOperationOrderReceiptClient() dùng quyền RIÊNG operationOrderReceiptManage
+      // (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung" — KHÔNG còn dùng chung quần thể duyệt/từ chối nội bộ ở
+      // operationOrderHOTierWorkflows/StoreTierWorkflows nữa, xem chú thích renderOperationOrderReceiptApprovalTab()
+      // ở module-vanhanh.js) — cấp thẳng quyền này cho duyet1 để đúng vai "người được phép Nhập Hàng/Hủy Nhập".
+      currentUser.perms.operationOrderReceiptManage = { all: true };
       DB.operationOrders = [
         { id: 701, dept: 'Kế Toán', status: 'AWAITING_RECEIPT', currentStep: 1, history: [], code: 'DH-001',
           title: 'Đơn hàng chờ nhập kho của tôi', orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0,

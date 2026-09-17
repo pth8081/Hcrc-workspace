@@ -2660,7 +2660,7 @@ function unhideInternalPost(user, post) {
 // luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
 // giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
 const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training', 'customData'];
-function editInternalPost(payload, user, post) {
+function editInternalPost(payload, user, post, appData) {
   if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
   // "attachment" nằm trong INTERNAL_POST_EDITABLE_FIELDS nên đi thẳng từ payload client vào bản ghi —
@@ -2670,8 +2670,31 @@ function editInternalPost(payload, user, post) {
   if (payload && payload.attachment !== undefined) {
     assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
   }
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: client LUÔN tự dựng lại nguyên object "training" mới (không
+  // đọc lại registeredUsers cũ) mỗi lần gửi sửa, nên sửa 1 bài ĐÀO TẠO đã có người đăng ký (đăng ký được
+  // trong lúc còn DRAFT, trước khi tác giả sửa lại ngày/địa điểm/sĩ số) sẽ ÂM THẦM XOÁ SẠCH danh sách đã
+  // đăng ký. Giữ nguyên registeredUsers cũ nếu payload không tự gửi kèm danh sách này.
+  if (payload && payload.training && typeof payload.training === 'object' && !Array.isArray(payload.training.registeredUsers)) {
+    payload.training = {
+      ...payload.training,
+      registeredUsers: Array.isArray(post.training?.registeredUsers) ? post.training.registeredUsers : []
+    };
+  }
   for (const field of INTERNAL_POST_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) post[field] = payload[field];
+  }
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: sửa bài NEWS/SHARE trước đây không đối chiếu lại postCategory
+  // theo danh mục hiện có hay validate lại customData bắt buộc — khác đường TẠO (createValidation.js
+  // internalPosts.extraValidate làm cả 2 việc này), khiến 1 request sửa thẳng có thể đặt postCategory
+  // thành chuỗi không nằm trong danh mục hoặc bỏ trống trường bắt buộc.
+  if (post.type === 'NEWS' || post.type === 'SHARE') {
+    validateRequiredCustomData(post.customData, appData?.formTemplates, 'INTERNAL_POST');
+    const catList = post.type === 'NEWS' ? (appData?.internalNewsCategories || []) : (appData?.internalShareCategories || []);
+    const catKey = (post.postCategory || '').trim();
+    if (!catKey || !catList.some(c => c.key === catKey)) {
+      throw new HttpError(400, 'Vui lòng chọn chuyên đề hợp lệ cho bài viết');
+    }
+    post.postCategory = catKey;
   }
   if (post.type === 'NEWS' && post.publishAt) {
     const ts = new Date(post.publishAt).getTime();

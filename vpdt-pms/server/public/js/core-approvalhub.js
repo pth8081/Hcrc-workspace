@@ -296,7 +296,7 @@ function getMyPendingApprovals(user) {
   // LẦN GỌI NÀY (không throw ReferenceError làm hỏng toàn bộ Hub) + âm thầm nạp nền rồi tự làm mới lại
   // Hub/badge ngay khi xong, không bao giờ bỏ sót vĩnh viễn.
   if (typeof canManageOperationOrderReceiptClient === 'function') {
-    (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o)).forEach(o => {
+    (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
       items.push({
         type: 'operationOrderReceipt', typeLabel: '📦 Vận Hành - Đơn hàng (Chờ Nhập Hàng)',
         code: o.code, title: o.title, dept: o.dept,

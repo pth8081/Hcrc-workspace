@@ -15,10 +15,71 @@
 // bộ thành công ("dsmart16Synced" chưa true) — gửi 1 lần duy nhất mỗi đơn khi đủ điều kiện, không gửi
 // lại định kỳ cho đơn đã đồng bộ xong (khớp kỳ vọng "đồng bộ 1 lần khi có poNumber", không phải "đồng bộ
 // mọi thay đổi" — nếu sau này cần đồng bộ lại khi đơn đổi trạng thái, sẽ cần mở rộng điều kiện này).
+const dns = require('dns').promises;
 const { getPool, sql } = require('../db');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
+
+const SYNC_FETCH_TIMEOUT_MS = 15000;
+
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 3 (OWASP A10 - SSRF): baseUrl do admin tự cấu hình (Cấu Hình API
+// dsmart16), trước đây gọi fetch() thẳng không kiểm tra đích đến — nếu tài khoản admin bị chiếm/bị lừa
+// dán nhầm 1 URL nội bộ, server sẽ gửi dữ liệu đơn hàng thật tới đó và lộ trạng thái phản hồi (HTTP
+// status/message) ra màn "Cấu Hình API", tạo ra 1 kênh dò quét (port-scan/SSRF oracle) dù không đọc được
+// nội dung response. Vá theo hướng chặn IP nội bộ/loopback/link-local (kể cả sau khi DNS resolve, chống
+// domain trỏ về IP nội bộ) + ép http(s) only + timeout (trước đây không giới hạn, 1 endpoint treo vô hạn
+// sẽ chặn job đồng bộ mãi).
+function isPrivateOrReservedIp(ip) {
+  if (!ip) return true;
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d) — kiểm tra theo phần IPv4 nhúng bên trong.
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) ip = mapped[1];
+  if (ip.includes('.')) {
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(n => Number.isNaN(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    if (a === 127) return true; // loopback
+    if (a === 10) return true; // private
+    if (a === 172 && b >= 16 && b <= 31) return true; // private
+    if (a === 192 && b === 168) return true; // private
+    if (a === 169 && b === 254) return true; // link-local (bao gồm 169.254.169.254 metadata cloud)
+    if (a === 0) return true; // "this network"
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    return false;
+  }
+  const lower = ip.toLowerCase();
+  if (lower === '::1') return true; // loopback
+  if (lower === '::') return true;
+  if (/^fe80:/i.test(lower)) return true; // link-local
+  if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return true; // unique local (fc00::/7)
+  return false;
+}
+
+async function assertSafeExternalUrl(urlString) {
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch (e) {
+    throw new Error('Base URL không hợp lệ');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Base URL phải dùng giao thức http/https');
+  }
+  const hostname = parsed.hostname;
+  if (!hostname || hostname.toLowerCase() === 'localhost') {
+    throw new Error('Base URL không được trỏ về localhost/máy nội bộ');
+  }
+  let addresses;
+  try {
+    addresses = await dns.lookup(hostname, { all: true });
+  } catch (e) {
+    throw new Error(`Không phân giải được tên miền Base URL: ${e.message}`);
+  }
+  if (!addresses.length || addresses.some(a => isPrivateOrReservedIp(a.address))) {
+    throw new Error('Base URL trỏ tới địa chỉ IP nội bộ/dành riêng — không được phép đồng bộ tới đích này');
+  }
+}
 
 async function getCollection(pool, key, fallback) {
   const result = await pool.request()
@@ -65,6 +126,11 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
   }
   if (!config.baseUrl) {
     return { ok: false, message: 'Thiếu Base URL trong Cấu Hình API — vui lòng cấu hình trước khi đồng bộ' };
+  }
+  try {
+    await assertSafeExternalUrl(config.baseUrl);
+  } catch (err) {
+    return { ok: false, message: err.message };
   }
   if (!force && config.lastSyncAt) {
     const intervalMs = (Number(config.syncIntervalMinutes) || 60) * 60 * 1000;
@@ -117,7 +183,14 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
         receivedAt: o.receivedAt || null
       };
 
-      const response = await fetch(config.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SYNC_FETCH_TIMEOUT_MS);
+      let response;
+      try {
+        response = await fetch(config.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
@@ -156,4 +229,4 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
   return { ok: true, ...summary, message };
 }
 
-module.exports = { syncOperationOrdersToDsmart16 };
+module.exports = { syncOperationOrdersToDsmart16, isPrivateOrReservedIp, assertSafeExternalUrl };

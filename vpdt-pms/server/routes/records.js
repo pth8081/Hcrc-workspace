@@ -603,8 +603,23 @@ router.post('/internalPosts/:id/unhide', (req, res) =>
 
 // POST /api/records/internalPosts/:id/edit — sửa bài Nháp/bài "Yêu cầu bổ sung" (NEED_INFO) rồi tự gửi
 // lại theo đúng luật gán status lúc tạo (chỉ tác giả/admin, kiểm tra ở lib/recordActions.js).
-router.post('/internalPosts/:id/edit', (req, res) =>
-  withInternalPostAction(req, res, 'edit', recordActions.editInternalPost));
+// appData: đối chiếu lại postCategory theo danh mục + customData bắt buộc, cùng khuôn /docs/:id/update —
+// PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 3 (xem chú thích editInternalPost() ở lib/recordActions.js).
+router.post('/internalPosts/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => {
+      assertCanViewInternalPost(freshUser, item);
+      return recordActions.editInternalPost(req.body, freshUser, item, appData);
+    });
+    res.json({ ok: true, item: sanitizeInternalPostCommentsForUser(result, freshUser) });
+  } catch (err) {
+    handleError(res, `internalPosts/${req.params.id}/edit`, err);
+  }
+});
 
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại

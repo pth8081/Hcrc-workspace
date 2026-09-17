@@ -116,6 +116,14 @@ stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(Object.keys(RECORDS)),
   getAllForCollectionCached: async (c) => RECORDS[c] || [],
   getAllForCollection: async (c) => RECORDS[c] || [],
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: routes/data.js (GET /api/data, kịch bản Fix 3e) gọi thẳng
+  // getForCollectionByDeptCached()/getForCollectionByUsernameCached()/getForCollectionByColumnCached()
+  // (Bước 7d/8b/8c) mà stub này trước đây chưa từng khai — gọi hàm undefined ném lỗi 500 NGAY, không
+  // liên quan gì tới bản vá đang kiểm (isMeetingMinutesAttendeeServer) — thêm bản giả lập lọc thuần
+  // trong bộ nhớ từ RECORDS để khớp đúng chữ ký hàm thật (lib/recordStore.js).
+  getForCollectionByDeptCached: async (c, dept) => (RECORDS[c] || []).filter(x => x.dept === dept),
+  getForCollectionByUsernameCached: async (c, username) => (RECORDS[c] || []).filter(x => x.username === username),
+  getForCollectionByColumnCached: async (c, column, value) => (RECORDS[c] || []).filter(x => x[column] === value),
   // routes/create.js đọc trash trước khi tạo (kiểm trùng mã với hồ sơ đã xoá, xem
   // lib/createValidation.js) — bài test này không có kịch bản nào liên quan Thùng Rác, luôn trả rỗng.
   getTrashItems: async () => [],
@@ -147,6 +155,21 @@ stubModule('lib/taskStore', {
   withLockedTaskById: async () => { throw new Error('không dùng trong bài test này'); },
   deleteTaskById: async () => { throw new Error('không dùng trong bài test này'); },
   migrateDirectiveTaskLinks: async () => 0
+});
+
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 3: routes/data.js (GET /api/data) cũng đọc getAllWorkItemsCached()
+// (Vận Hành > cây công việc, lib/operationWorkItemStore.js — bảng riêng dbo.OperationWorkItems) —
+// module này trước đây không được stub, để lọt tới getPool() thật (không có ở sandbox test).
+stubModule('lib/operationWorkItemStore', { getAllWorkItemsCached: async () => [] });
+
+// PHÁT HIỆN ở đợt audit chuyên sâu lần 3: routes/create.js gọi assertPayloadFileUrlsOwnedByUser() (Vá
+// "giả mạo quyền sở hữu file") cho MỌI module tạo mới có fileUrl (kể cả "licenses") — hàm đó tra
+// dbo.UploadedFiles qua getPool() thật, cũng chưa từng được stub ở bài test này.
+stubModule('lib/uploadedFiles', {
+  recordUploadedFile: async () => {},
+  getFileUrlOwners: async () => new Map(),
+  assertPayloadFileUrlsOwnedByUser: async () => {},
+  collectFileUrlsDeep: () => {}
 });
 
 stubModule('lib/auth', {

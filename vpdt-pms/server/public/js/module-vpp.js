@@ -846,6 +846,13 @@ function resetVppNewPeriodForm() {
   vppPendingCatalog = null;
   clearSingleFileInput('vppCatalogFileInput', 'vppCatalogFileChip');
   vppRateGroups = [];
+  // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: renderVppDeptHeadcountTable() CỐ TÌNH đọc lại giá trị "Số
+  // Nhân Sự" đang có sẵn trong DOM (prevHeadcounts) để giữ nguyên chỉnh sửa tay khi đổi chế độ mức/nhóm
+  // (setVppRateMode/addVppRateGroup/removeVppRateGroup) — nhưng "Làm Mới" gọi lại ĐÚNG hàm này nên cũng
+  // vô tình giữ luôn số đã sửa tay thay vì tính lại từ nhân sự thật đang hoạt động. Xoá trắng bảng trước
+  // để renderVppDeptHeadcountTable() không tìm thấy dòng cũ nào, buộc tính lại từ vppActiveHeadcountForDept().
+  const headcountBody = document.getElementById('vppDeptHeadcountBody');
+  if (headcountBody) headcountBody.innerHTML = '';
   setVppRateMode('DEFAULT'); // tự gọi lại renderVppDeptHeadcountTable()
 }
 
