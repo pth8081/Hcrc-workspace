@@ -922,141 +922,77 @@ function deleteMeetingMinutes(id) {
   });
 }
 
-function viewMeetingMinutesDetails(id) {
-  const m = DB.meetingMinutes.find(x => x.id === id);
-  if (!m) return;
-  if (!canViewMeetingMinutesRecord(currentUser, m)) {
-    return alert('⛔ Bạn không có quyền xem biên bản họp này!');
-  }
-
-  document.getElementById('viewModalTitle').innerText = `📝 ${m.title} (${m.code})`;
-  document.getElementById('viewModalSub').innerText = `Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
-  document.getElementById('viewModalFooterInfo').innerText = `Người lập: ${m.creator}${m.lastEditedBy ? ` | Sửa lần cuối bởi: ${m.lastEditedBy} lúc ${m.lastEditedAt}` : ''}`;
-
+// Mục 5 (yêu cầu nghiệp vụ 9/2026, "in phiếu phải khớp xem phiếu"): buildMeetingMinutesCoreHTML() là
+// hàm DUY NHẤT dựng nội dung "lõi" của Biên Bản Họp — dùng CHUNG cho cả Xem (viewMeetingMinutesDetails,
+// hiện SỐNG trong #viewModalContent, có thêm nút "Giao việc"/trạng thái việc) LẪN Tải/In
+// (buildMeetingMinutesDocumentHTML, file .html độc lập/khung in — KHÔNG có nút thao tác). Trước đây 2
+// đường này tự dựng HTML riêng, lệch cả nội dung (Xem thiếu chân ký, Tải thiếu Giao việc) lẫn class CSS
+// (Xem dùng Tailwind thô, Tải dùng .md-*) — nay dùng chung ĐÚNG 1 bộ class .minutes-doc/.md-* cho cả
+// 2 nơi. CSS .minutes-doc/.md-* SỐNG Ở 2 CHỖ (mirror .approval-slip/.as-* — xem chú thích app.css):
+// bản trong app.css (nạp global) phục vụ Xem trực tiếp trong app (CSP style-src chặn <style> nội tuyến
+// nên KHÔNG thể nhúng <style> vào #viewModalContent); bản nhúng qua <style> ở buildMeetingMinutesDocumentHTML()
+// bên dưới phục vụ file tải về/khung in (mở qua file://, không load được app.css của app).
+// interactive=true (Xem): thêm cột "Tình trạng giao việc" (nút Giao việc/trạng thái Công Việc realtime)
+// vào bảng Ý Kiến Chỉ Đạo. interactive=false (Tải/In): bỏ cột đó, thêm khối chân ký ngang (mirror ĐÚNG
+// bố cục .as-sign-row/.as-sign-col — flex căn giữa, cân đối — theo yêu cầu người dùng, KHÔNG dùng bảng
+// 2 cột cứng 50/50 như cũ) — chân ký chỉ có ý nghĩa trên bản chính thức, không cần hiện khi đang Xem
+// tạm trong app.
+function buildMeetingMinutesCoreHTML(m, { interactive }) {
   const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
-  const attendeesHTML = attendeesRows.length ? `
-    <table class="w-full border-collapse border text-xs mt-2">
-      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Họ và tên</th><th class="border p-1">Chức danh</th><th class="border p-1">Phòng</th><th class="border p-1">SĐT</th></tr></thead>
-      <tbody>
-        ${attendeesRows.map((a, idx) => `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(a.name)}</td><td class="border p-1">${escapeHtml(a.title || '')}</td><td class="border p-1">${escapeHtml(a.dept || '')}</td><td class="border p-1">${escapeHtml(a.phone || '')}</td></tr>`).join('')}
-      </tbody>
-    </table>
-  ` : '<p class="text-gray-400 italic">Không có thành phần tham dự nào được ghi nhận.</p>';
+  const attendeeRowsHTML = attendeesRows.map((a, idx) => `
+    <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
+  `).join('') || `<tr><td colspan="5" class="md-empty-note">Không có thành phần tham dự</td></tr>`;
 
   // Tra đúng Công việc đã sinh ra từ TỪNG dòng chỉ đạo (Task.sourceDirectiveId khớp d.id, hoặc chỉ số
   // mảng cho biên bản cũ chưa có id — xem buildTasksFromDirectives() ở lib/recordActions.js) để hiện
   // trực tiếp trạng thái/tiến độ/gia hạn/huỷ MỚI NHẤT ngay tại đây, không cần mở thêm màn hình khác
   // (modal Chi tiết Công việc dùng chung id "taskDetailModal" z-50 sẽ bị che khuất phía sau modal Chi
   // tiết Biên bản đang mở ở z-[55] — xem quy ước z-index chung của hệ thống — nên KHÔNG mở lồng ở đây).
-  const directivesHTML = (m.directives || []).length ? `
-    <table class="w-full border-collapse border text-xs mt-2">
-      <thead><tr class="bg-gray-100"><th class="border p-1">STT</th><th class="border p-1">Nội dung chỉ đạo</th><th class="border p-1">Người thực hiện</th><th class="border p-1">Người phối hợp</th><th class="border p-1">Hạn hoàn thành</th><th class="border p-1">Tình trạng giao việc</th></tr></thead>
-      <tbody>
-        ${m.directives.map((d, idx) => {
-          const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
-          const collaboratorNames = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
-            .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean);
-          const task = DB.tasks.find(t => t.sourceType === 'MEETING_MINUTES' && t.sourceCode === m.code && t.sourceDirectiveId === (d.id != null ? d.id : idx));
-
-          let statusCell;
-          if (task) {
-            const recentHistory = (task.history || []).slice(-3).reverse()
-              .map(h => `<li>${escapeHtml(h.time)} — ${escapeHtml(h.byName)}: ${escapeHtml(h.action)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`).join('');
-            statusCell = `
-              <div class="text-left space-y-1">
-                <div><b>${TASK_STATUS_LABELS[task.status] || task.status}</b>${task.extensionCount ? ` <span class="text-orange-700">(gia hạn ${task.extensionCount} lần)</span>` : ''}</div>
-                ${task.pendingExtension ? `<div class="bg-orange-50 border border-orange-200 p-1 rounded text-[10px]">⏳ Đang chờ duyệt gia hạn tới <b>${escapeHtml(task.pendingExtension.newDeadline)}</b> — Lý do: ${escapeHtml(task.pendingExtension.reason)}</div>` : ''}
-                ${task.pendingCancellation ? `<div class="bg-red-50 border border-red-200 p-1 rounded text-[10px]">⏳ Đang chờ duyệt huỷ — Lý do: ${escapeHtml(task.pendingCancellation.reason)}</div>` : ''}
-                ${recentHistory ? `<ul class="text-[10px] text-gray-500 list-disc list-inside">${recentHistory}</ul>` : ''}
-              </div>`;
-          } else if (d.assignedToAttendeeId) {
-            // Nút "Giao việc" theo TỪNG dòng chỉ đạo — dùng CHUNG đúng 1 đường tạo việc với nút "Giao
-            // việc" hàng loạt (confirmAssignMinutesTasks()/assignMinutesTasksAction(), xem trên) thay
-            // vì mở modal Giao Việc thủ công riêng như trước đây: đường cũ không set
-            // sourceType/sourceCode/sourceDirectiveId (server createTask() ép cứng sourceType='MANUAL'),
-            // nên nút không bao giờ tự ẩn (lookup task theo sourceDirectiveId ở trên luôn thất bại) và
-            // có thể bấm lại nhiều lần tạo trùng việc; việc tạo ra cũng khởi động ở TODO thay vì DOING,
-            // và d.taskCreated/m.tasksAssigned không được set nên biên bản không khoá lại như thiết kế.
-            // assign-tasks ở server xử lý theo LÔ (mọi chỉ đạo đã gán người còn thiếu việc trong CÙNG 1
-            // biên bản, xem buildTasksFromDirectives()) rồi khoá cả biên bản — không có API tạo riêng
-            // lẻ 1 chỉ đạo, nên bấm ở bất kỳ dòng nào cũng tạo đủ việc còn thiếu + khoá biên bản, đúng
-            // ĐÚNG NHƯ nút "Giao việc" hàng loạt ở danh sách đã làm — không phải hành vi mới.
-            statusCell = m.tasksAssigned
-              ? '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>'
-              : (canManageTasks(currentUser) ? `<button data-op="confirmAssignMinutesTasks" data-arg0="${m.id}" class="bg-violet-600 text-white px-2 py-0.5 rounded text-[11px] font-bold hover:bg-violet-700">📌 Giao việc</button>` : '<span class="text-gray-400 italic text-[11px]">Chưa giao việc</span>');
-          } else {
-            statusCell = '<span class="text-gray-400 italic text-[11px]">Chưa gán</span>';
-          }
-
-          return `<tr><td class="border p-1 text-center">${idx + 1}</td><td class="border p-1">${escapeHtml(d.content)}</td><td class="border p-1">${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td class="border p-1">${collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : '<span class="text-gray-400 italic">Không có</span>'}</td><td class="border p-1">${escapeHtml(d.deadline || '')}</td><td class="border p-1 text-center">${statusCell}</td></tr>`;
-        }).join('')}
-      </tbody>
-    </table>
-  ` : '<p class="text-gray-400 italic">Không có ý kiến chỉ đạo nào.</p>';
-
-  document.getElementById('viewModalContent').innerHTML = `
-    <div class="w-full bg-white p-6 rounded shadow border overflow-y-auto text-sm">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div><b>Thời gian họp:</b> ${escapeHtml(m.time)}</div>
-        <div><b>Địa điểm:</b> ${escapeHtml(m.location || 'N/A')}</div>
-        <div><b>Chủ trì:</b> ${escapeHtml(m.chair)}</div>
-        <div><b>Thư ký:</b> ${escapeHtml(m.secretary)}</div>
-      </div>
-      <div class="border-t mt-3 pt-3">
-        <b>Thành phần tham dự:</b>
-        ${attendeesHTML}
-      </div>
-      <div class="border-t mt-3 pt-3">
-        <b>Nội dung biên bản:</b>
-        <div class="bg-gray-50 p-3 rounded border mt-1 whitespace-pre-wrap text-gray-800">${escapeHtml(m.content)}</div>
-      </div>
-      <div class="border-t mt-3 pt-3">
-        <b>Ý kiến chỉ đạo:</b>
-        ${directivesHTML}
-      </div>
-    </div>
-  `;
-  document.getElementById('viewDocModal').classList.remove('hidden');
-}
-
-// Dựng văn bản Biên Bản Họp hoàn chỉnh để in/tải — tự thân (không phụ thuộc Tailwind của trang
-// chính) vì file tải về / khung in không load Tailwind, theo đúng cách đã làm cho Phiếu Phê Duyệt.
-function buildMeetingMinutesDocumentHTML(m) {
-  const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
-  const attendeeRowsHTML = attendeesRows.map((a, idx) => `
-    <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
-  `).join('') || `<tr><td colspan="5" data-style="text-align:center;color:#888;">Không có thành phần tham dự</td></tr>`;
-
+  // CHỈ tính/hiện khi interactive=true — bản Tải/In không cần cột này.
   const directiveRows = (m.directives || []).map((d, idx) => {
     const resolved = resolveDirectiveAttendee(m.attendees, d.assignedToAttendeeId);
     const collaboratorNames = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : [])
-      .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean).join(', ');
-    return `<tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td>${escapeHtml(collaboratorNames)}</td><td>${escapeHtml(d.deadline || '')}</td></tr>`;
-  }).join('') || `<tr><td colspan="5" data-style="text-align:center;color:#888;">Không có ý kiến chỉ đạo</td></tr>`;
+      .map(id => resolveDirectiveAttendee(m.attendees, id)?.name).filter(Boolean);
+    const collaboratorsHTML = collaboratorNames.length ? escapeHtml(collaboratorNames.join(', ')) : (interactive ? '<span class="md-empty-note">Không có</span>' : '');
+
+    let statusCell = '';
+    if (interactive) {
+      const task = DB.tasks.find(t => t.sourceType === 'MEETING_MINUTES' && t.sourceCode === m.code && t.sourceDirectiveId === (d.id != null ? d.id : idx));
+      if (task) {
+        const recentHistory = (task.history || []).slice(-3).reverse()
+          .map(h => `<li>${escapeHtml(h.time)} — ${escapeHtml(h.byName)}: ${escapeHtml(h.action)}${h.note ? ` (${escapeHtml(h.note)})` : ''}</li>`).join('');
+        statusCell = `
+          <div class="md-task-status">
+            <div><b>${TASK_STATUS_LABELS[task.status] || task.status}</b>${task.extensionCount ? ` <span class="md-task-extension">(gia hạn ${task.extensionCount} lần)</span>` : ''}</div>
+            ${task.pendingExtension ? `<div class="md-task-pending-note">⏳ Đang chờ duyệt gia hạn tới <b>${escapeHtml(task.pendingExtension.newDeadline)}</b> — Lý do: ${escapeHtml(task.pendingExtension.reason)}</div>` : ''}
+            ${task.pendingCancellation ? `<div class="md-task-pending-note md-task-pending-cancel">⏳ Đang chờ duyệt huỷ — Lý do: ${escapeHtml(task.pendingCancellation.reason)}</div>` : ''}
+            ${recentHistory ? `<ul class="md-task-history">${recentHistory}</ul>` : ''}
+          </div>`;
+      } else if (d.assignedToAttendeeId) {
+        // Nút "Giao việc" theo TỪNG dòng chỉ đạo — dùng CHUNG đúng 1 đường tạo việc với nút "Giao
+        // việc" hàng loạt (confirmAssignMinutesTasks()/assignMinutesTasksAction(), xem trên) thay
+        // vì mở modal Giao Việc thủ công riêng như trước đây: đường cũ không set
+        // sourceType/sourceCode/sourceDirectiveId (server createTask() ép cứng sourceType='MANUAL'),
+        // nên nút không bao giờ tự ẩn (lookup task theo sourceDirectiveId ở trên luôn thất bại) và
+        // có thể bấm lại nhiều lần tạo trùng việc; việc tạo ra cũng khởi động ở TODO thay vì DOING,
+        // và d.taskCreated/m.tasksAssigned không được set nên biên bản không khoá lại như thiết kế.
+        // assign-tasks ở server xử lý theo LÔ (mọi chỉ đạo đã gán người còn thiếu việc trong CÙNG 1
+        // biên bản, xem buildTasksFromDirectives()) rồi khoá cả biên bản — không có API tạo riêng
+        // lẻ 1 chỉ đạo, nên bấm ở bất kỳ dòng nào cũng tạo đủ việc còn thiếu + khoá biên bản, đúng
+        // ĐÚNG NHƯ nút "Giao việc" hàng loạt ở danh sách đã làm — không phải hành vi mới.
+        statusCell = m.tasksAssigned
+          ? '<span class="md-empty-note">Chưa giao việc</span>'
+          : (canManageTasks(currentUser) ? `<button data-op="confirmAssignMinutesTasks" data-arg0="${m.id}" class="md-assign-btn">📌 Giao việc</button>` : '<span class="md-empty-note">Chưa giao việc</span>');
+      } else {
+        statusCell = '<span class="md-empty-note">Chưa gán</span>';
+      }
+    }
+
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(d.content)}</td><td>${escapeHtml(resolved ? resolved.name : 'Chưa gán')}</td><td>${collaboratorsHTML}</td><td>${escapeHtml(d.deadline || '')}</td>${interactive ? `<td class="md-items-center">${statusCell}</td>` : ''}</tr>`;
+  }).join('') || `<tr><td colspan="${interactive ? 6 : 5}" class="md-empty-note">Không có ý kiến chỉ đạo</td></tr>`;
 
   return `
     <div class="minutes-doc">
-      <style>
-        .minutes-doc { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.6; }
-        .minutes-doc .md-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 28px; font-weight: bold; color: rgba(0,0,0,0.06); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
-        .minutes-doc .md-content { position: relative; z-index: 1; }
-        .minutes-doc .md-header { text-align: center; margin-bottom: 10px; }
-        .minutes-doc .md-code { font-size: 11px; color: #555; }
-        .minutes-doc .md-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
-        .minutes-doc table.md-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-        .minutes-doc table.md-field-table td { padding: 3px 4px; vertical-align: top; }
-        .minutes-doc .md-label { font-weight: bold; width: 160px; white-space: nowrap; }
-        .minutes-doc .md-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
-        .minutes-doc .md-body-text { white-space: pre-wrap; }
-        .minutes-doc table.md-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
-        .minutes-doc table.md-items-table th, .minutes-doc table.md-items-table td { border: 1px solid #999; padding: 4px 6px; }
-        .minutes-doc table.md-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
-        .minutes-doc .md-sign-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-        .minutes-doc .md-sign-table td { text-align: center; vertical-align: top; padding: 8px 6px; width: 50%; }
-        .minutes-doc .md-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 44px; }
-        .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
-        @media print { .minutes-doc { padding: 0; } }
-      </style>
       <div class="md-watermark">HCRC WORKSPACE</div>
       <div class="md-content">
         <div class="md-header">
@@ -1083,21 +1019,71 @@ function buildMeetingMinutesDocumentHTML(m) {
 
         <div class="md-section-title">Ý Kiến Chỉ Đạo</div>
         <table class="md-items-table">
-          <thead><tr><th>STT</th><th>Nội dung chỉ đạo</th><th>Người thực hiện</th><th>Người phối hợp</th><th>Hạn hoàn thành</th></tr></thead>
+          <thead><tr><th>STT</th><th>Nội dung chỉ đạo</th><th>Người thực hiện</th><th>Người phối hợp</th><th>Hạn hoàn thành</th>${interactive ? '<th>Tình trạng giao việc</th>' : ''}</tr></thead>
           <tbody>${directiveRows}</tbody>
         </table>
 
-        <table class="md-sign-table">
-          <tr>
-            <td><span class="md-sign-role">Thư Ký</span>${escapeHtml(m.secretary)}</td>
-            <td><span class="md-sign-role">Chủ Trì</span>${escapeHtml(m.chair)}</td>
-          </tr>
-        </table>
-
+        <div class="md-sign-row">
+          <div class="md-sign-col"><span class="md-sign-role">Thư Ký</span>${escapeHtml(m.secretary)}</div>
+          <div class="md-sign-col"><span class="md-sign-role">Chủ Trì</span>${escapeHtml(m.chair)}</div>
+        </div>
         <div class="md-footer-note">Biên bản được lập trên Hệ thống Văn phòng điện tử (VPĐT) lúc ${escapeHtml(m.createdAt)}.</div>
       </div>
     </div>
   `;
+}
+
+function viewMeetingMinutesDetails(id) {
+  const m = DB.meetingMinutes.find(x => x.id === id);
+  if (!m) return;
+  if (!canViewMeetingMinutesRecord(currentUser, m)) {
+    return alert('⛔ Bạn không có quyền xem biên bản họp này!');
+  }
+
+  document.getElementById('viewModalTitle').innerText = `📝 ${m.title} (${m.code})`;
+  document.getElementById('viewModalSub').innerText = `Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
+  document.getElementById('viewModalFooterInfo').innerText = `Người lập: ${m.creator}${m.lastEditedBy ? ` | Sửa lần cuối bởi: ${m.lastEditedBy} lúc ${m.lastEditedAt}` : ''}`;
+
+  document.getElementById('viewModalContent').innerHTML = buildMeetingMinutesCoreHTML(m, { interactive: true });
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+// Dựng văn bản Biên Bản Họp hoàn chỉnh để in/tải — tự thân (không phụ thuộc app.css của trang chính)
+// vì file tải về/khung in không load được app.css, theo đúng cách đã làm cho Phiếu Phê Duyệt
+// (APPROVAL_SLIP_CSS ở core.js). Nội dung lõi dùng CHUNG buildMeetingMinutesCoreHTML() ở trên — CSS
+// .minutes-doc/.md-* ở đây PHẢI giữ nguyên y hệt bản trong app.css (xem chú thích ở app.css).
+function buildMeetingMinutesDocumentHTML(m) {
+  const css = `
+        .minutes-doc { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.6; }
+        .minutes-doc .md-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 28px; font-weight: bold; color: rgba(0,0,0,0.06); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+        .minutes-doc .md-content { position: relative; z-index: 1; }
+        .minutes-doc .md-header { text-align: center; margin-bottom: 10px; }
+        .minutes-doc .md-code { font-size: 11px; color: #555; }
+        .minutes-doc .md-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+        .minutes-doc table.md-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .minutes-doc table.md-field-table td { padding: 3px 4px; vertical-align: top; }
+        .minutes-doc .md-label { font-weight: bold; width: 160px; white-space: nowrap; }
+        .minutes-doc .md-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
+        .minutes-doc .md-body-text { white-space: pre-wrap; }
+        .minutes-doc table.md-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+        .minutes-doc table.md-items-table th, .minutes-doc table.md-items-table td { border: 1px solid #999; padding: 4px 6px; }
+        .minutes-doc table.md-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+        .minutes-doc .md-items-center { text-align: center; }
+        .minutes-doc .md-empty-note { text-align: center; color: #888; font-style: italic; }
+        .minutes-doc .md-task-status { text-align: left; }
+        .minutes-doc .md-task-status ul { margin: 0; }
+        .minutes-doc .md-task-extension { color: #c2410c; }
+        .minutes-doc .md-task-pending-note { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 4px; padding: 3px 5px; font-size: 10px; margin-top: 2px; }
+        .minutes-doc .md-task-pending-cancel { background: #fef2f2; border-color: #fecaca; }
+        .minutes-doc .md-task-history { font-size: 10px; color: #6b7280; list-style: disc; padding-left: 14px; margin-top: 2px; }
+        .minutes-doc .md-assign-btn { background: #7c3aed; color: #fff; border: none; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
+        .minutes-doc .md-sign-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 36px; margin-top: 30px; padding-top: 18px; border-top: 1px solid #ddd; }
+        .minutes-doc .md-sign-col { flex: 0 1 150px; max-width: 170px; text-align: center; vertical-align: top; }
+        .minutes-doc .md-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 44px; }
+        .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+        @media print { .minutes-doc { padding: 0; } }
+  `;
+  return `<style>${css}</style>${buildMeetingMinutesCoreHTML(m, { interactive: false })}`;
 }
 
 function downloadMeetingMinutes(id) {

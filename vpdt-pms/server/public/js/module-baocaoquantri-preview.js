@@ -566,8 +566,10 @@ function renderReportsSummary(container) {
 
   // --- Vận hành ---
   // Chỉ cộng dồn km của chuyến ĐÃ DUYỆT — trước đây cộng cả PENDING/REJECTED, khiến 1 chuyến bị từ
-  // chối vẫn tính vào "Tổng số km đăng ký xe" dù chuyến đó không thực sự diễn ra.
-  const approvedCars = visibleCars.filter(c => c.status === 'APPROVED');
+  // chối vẫn tính vào "Tổng số km đăng ký xe" dù chuyến đó không thực sự diễn ra. IN_PROGRESS (mục 2,
+  // yêu cầu nghiệp vụ 9/2026) vẫn là chuyến đã duyệt xong, chỉ thêm bước lái xe đã xác nhận nhận
+  // chuyến — vẫn tính vào tổng như APPROVED.
+  const approvedCars = visibleCars.filter(c => c.status === 'APPROVED' || c.status === 'IN_PROGRESS');
   const totalKm = approvedCars.reduce((sum, c) => sum + (c.km || 0), 0);
   const meetingApproved = visibleMeetings.filter(m => m.status === 'APPROVED').length;
   const meetingPending = visibleMeetings.filter(m => m.status === 'PENDING').length;
@@ -685,7 +687,7 @@ function exportReportsSummaryExcel() {
   const expiredContractValue = approvedContracts.filter(c => new Date(c.endDate) < now).reduce((sum, c) => sum + (c.amount || 0), 0);
   const officeBySubType = { MUA_BAN: 0, SUA_CHUA: 0 };
   visibleOffice.filter(o => o.status === 'APPROVED').forEach(o => { officeBySubType[o.subType] = (officeBySubType[o.subType] || 0) + (o.amount || 0); });
-  const totalKm = visibleCars.filter(c => c.status === 'APPROVED').reduce((sum, c) => sum + (c.km || 0), 0);
+  const totalKm = visibleCars.filter(c => c.status === 'APPROVED' || c.status === 'IN_PROGRESS').reduce((sum, c) => sum + (c.km || 0), 0);
 
   // Khớp đúng bản vá module-access ở renderReportsSummary() (cùng số liệu, cùng màn hình) — mỗi nhóm
   // dòng chỉ xuất nếu module tương ứng đang bật ở mục 0, không thì file Excel lộ số liệu màn hình đã ẩn.

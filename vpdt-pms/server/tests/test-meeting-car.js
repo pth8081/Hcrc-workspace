@@ -222,7 +222,9 @@ const server = http.createServer(async (req, res) => {
     const item = store.carRegs.find((c) => c.id === id);
     if (!item) return sendJson(res, 404, { error: 'Không tìm thấy hồ sơ' });
     try {
-      const result = recordActions.reassignCarDispatch(activeServerUser, item, body, store.carRegs, store.users);
+      // carVehicleTypes SỐNG ở seedDB (không phải store) — cùng khuôn appData.carVehicleTypes thật ở
+      // routes/records.js (đọc từ getAppDataValue('carVehicleTypes'), KHÔNG PHẢI 1 collection carRegs).
+      const result = recordActions.reassignCarDispatch(activeServerUser, item, body, store.carRegs, store.users, seedDB.carVehicleTypes);
       return sendJson(res, 200, { ok: true, item: result });
     } catch (err) {
       return sendJson(res, err.status || 500, { error: err.message });
@@ -898,13 +900,31 @@ async function main() {
     runConfirmedAction();
     await new Promise((r) => setTimeout(r, 200));
     const item = DB.carRegs.find((c) => c.id === carId);
-    return { alerts: window.__alerts.slice(), listedBeforeConfirm, confirmed: item.driverConfirmed, confirmedAt: item.driverConfirmedAt };
+    return { alerts: window.__alerts.slice(), listedBeforeConfirm, confirmed: item.driverConfirmed, confirmedAt: item.driverConfirmedAt, status: item.status };
   }, c7.saved.id);
   record(
     'Car: assigned driver self-confirms their trip from the "Lái Xe" sub-tab',
     c11.listedBeforeConfirm && c11.confirmed === true && !!c11.confirmedAt,
     `listedBeforeConfirm=${c11.listedBeforeConfirm} confirmed=${c11.confirmed} confirmedAt=${c11.confirmedAt} alerts=${JSON.stringify(c11.alerts)}`
   );
+  // Mục 2 (yêu cầu nghiệp vụ 9/2026): xác nhận nhận chuyến giờ chuyển status APPROVED -> IN_PROGRESS
+  // (trước đây giữ nguyên APPROVED, chỉ set cờ driverConfirmed ngầm) — để danh sách phân biệt được đã
+  // có ai nhận chuyến hay chưa mà không cần mở chi tiết.
+  record(
+    'Mục 2: xác nhận nhận chuyến chuyển status sang IN_PROGRESS',
+    c11.status === 'IN_PROGRESS',
+    `status=${c11.status}`
+  );
+  // Mục 2: phiếu vẫn còn hiện trong sub-tab "Lái Xe" của chính lái xe đó SAU khi xác nhận (để còn thấy
+  // nút "Kết Thúc Chuyến") — trước đây renderCarDriverTab() chỉ lọc status==='APPROVED', nếu quên nới
+  // sang IN_PROGRESS thì phiếu sẽ "biến mất" khỏi danh sách ngay sau khi xác nhận.
+  const c11b = await page.evaluate((carId) => {
+    switchTab('car');
+    setCarSubTab('DRIVER');
+    return document.getElementById('carDriverListWrap').innerHTML.includes(String(carId)) &&
+      document.getElementById('carDriverListWrap').innerHTML.includes('Kết Thúc Chuyến');
+  }, c7.saved.id);
+  record('Mục 2: sau khi xác nhận, phiếu vẫn hiện ở sub-tab Lái Xe kèm nút "Kết Thúc Chuyến"', c11b === true, `stillListed=${c11b}`);
 
   // Lái xe được phân công luôn xem được phiếu của mình dù khác phòng ban và không có quyền carView; lái
   // xe KHÁC (chưa được phân công) thì không (canViewCarReg() — xem lib/recordViewScope.js).
@@ -1337,9 +1357,19 @@ async function main() {
     startTime: '2026-09-22T08:00', endTime: '2026-09-22T12:00', destination: 'HCM', reason: 'Fix 4 dispatcher-cancel test',
     creator: bookerUser.username, creatorName: bookerUser.name
   };
-  const carF5Pending = {
-    id: 900405, code: 'HCRC-DPH-F5', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
+  // Mục 1 (yêu cầu nghiệp vụ 9/2026) đổi hẳn ý nghĩa quyền hủy khi PENDING: bước 1 (chưa ai duyệt) nay
+  // CHO hủy, chỉ chặn khi đã qua ÍT NHẤT 1 bước duyệt (currentStep>1) — fixture này đại diện đúng
+  // trường hợp CÒN CHẶN: đã duyệt xong bước 1, đang chờ bước 2.
+  const carF5PendingStep2 = {
+    id: 900405, code: 'HCRC-DPH-F5', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 2,
+    history: [{ step: 1, approver: 'Sếp bước 1', username: 'admin', action: 'APPROVED', comment: '', time: '08:00 20/9/2026' }],
     startTime: '2026-09-23T08:00', endTime: '2026-09-23T12:00', destination: 'HCM', reason: 'Fix 4 pending guard',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  // Trường hợp MỚI (mục 1) — PENDING bước 1, chưa ai duyệt gì cả -> người tạo tự hủy được.
+  const carF10PendingStep1 = {
+    id: 900410, code: 'HCRC-DPH-F10', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
+    startTime: '2026-09-25T08:00', endTime: '2026-09-25T12:00', destination: 'HCM', reason: 'Fix 4 step1 self-cancel',
     creator: bookerUser.username, creatorName: bookerUser.name
   };
   const carF9 = {
@@ -1348,8 +1378,8 @@ async function main() {
     startTime: '2026-09-24T08:00', endTime: '2026-09-24T12:00', destination: 'HCM', reason: 'Fix 4 UI gating test',
     creator: bookerUser.username, creatorName: bookerUser.name, assignedPlate: '', assignedDriverUsername: ''
   };
-  store.carRegs.push(carF1, carF2, carF3Conflict, carF4, carF5Pending, carF9);
-  await page.evaluate((items) => { items.forEach((c) => DB.carRegs.push(c)); }, [carF1, carF2, carF3Conflict, carF4, carF5Pending, carF9]);
+  store.carRegs.push(carF1, carF2, carF3Conflict, carF4, carF5PendingStep2, carF9, carF10PendingStep1);
+  await page.evaluate((items) => { items.forEach((c) => DB.carRegs.push(c)); }, [carF1, carF2, carF3Conflict, carF4, carF5PendingStep2, carF9, carF10PendingStep1]);
 
   // F1 — người KHÔNG phải người tạo VÀ KHÔNG có carDispatch KHÔNG huỷ được chuyến của người khác.
   await loginAs(page, noDispatchApproverUser);
@@ -1390,14 +1420,40 @@ async function main() {
   }, carF4.id);
   record('Fix 4: carDispatch (Người Điều Hành Xe) HỦY được BẤT KỲ chuyến nào, không chỉ của chính mình', f4.status === 'CANCELLED', JSON.stringify(f4));
 
-  // F5 — chuyến còn PENDING (chưa duyệt xong) không hủy được qua kênh "Hủy chuyến" này (dùng Từ chối ở
-  // bước duyệt, hoặc admin xóa cứng, như trước đây).
+  // F5 — chuyến PENDING đã qua ít nhất 1 bước duyệt (currentStep>1) không hủy được qua kênh "Hủy
+  // chuyến" này nữa (dùng Từ chối ở bước duyệt hiện tại, hoặc admin xóa cứng) — mục 1 (9/2026) chỉ mở
+  // thêm đúng trường hợp PENDING BƯỚC 1 (xem F10 ngay dưới), không mở tràn cho mọi PENDING.
   await loginAs(page, bookerUser);
   const f5 = await page.evaluate(async (carId) => {
     try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'x' }); return { ok: true }; }
     catch (err) { return { ok: false, message: err.message }; }
-  }, carF5Pending.id);
-  record('Fix 4: "Hủy chuyến" bị chặn trên 1 phiếu còn PENDING (chưa APPROVED) (409)', !f5.ok, JSON.stringify(f5));
+  }, carF5PendingStep2.id);
+  record('Fix 4: "Hủy chuyến" bị chặn trên 1 phiếu PENDING đã qua bước 1 (409)', !f5.ok, JSON.stringify(f5));
+
+  // F10 — mục 1 (yêu cầu nghiệp vụ 9/2026): PENDING bước 1 (chưa ai duyệt gì cả) -> người tạo tự hủy
+  // được, ĐÚNG như "sau khi phê bước cuối cùng vẫn hủy được" ở đầu kia của yêu cầu.
+  const f10 = await page.evaluate(async (carId) => {
+    const result = await callRecordAction('carRegs', carId, 'cancel', { reason: 'Đổi ý trước khi ai duyệt' });
+    return result.item;
+  }, carF10PendingStep1.id);
+  record('Mục 1: người tạo tự hủy được phiếu đang PENDING bước 1 (chưa ai duyệt)', f10.status === 'CANCELLED', JSON.stringify(f10));
+
+  // F11 — người KHÔNG phải chủ chuyến và KHÔNG có carDispatch KHÔNG hủy được 1 phiếu PENDING bước 1
+  // của người khác (mirror ĐÚNG quyền F1, chỉ khác trạng thái nguồn) — dùng phiếu carF4 (status
+  // APPROVED) đã CANCELLED ở F4 phía trên nên tạo phiếu PENDING bước 1 riêng cho test này.
+  const carF11PendingStep1 = {
+    id: 900411, code: 'HCRC-DPH-F11', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
+    startTime: '2026-09-26T08:00', endTime: '2026-09-26T12:00', destination: 'HCM', reason: 'Fix 4 step1 guard-others',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  store.carRegs.push(carF11PendingStep1);
+  await page.evaluate((c) => { DB.carRegs.push(c); }, carF11PendingStep1);
+  await loginAs(page, noDispatchApproverUser);
+  const f11 = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'x' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF11PendingStep1.id);
+  record('Mục 1: người khác (không phải chủ, không carDispatch) không hủy được phiếu PENDING bước 1 của người khác (403)', !f11.ok, JSON.stringify(f11));
 
   // F6 — người tạo (KHÔNG có carDispatch) KHÔNG đổi được tài xế-xe, kể cả trên chuyến của chính mình.
   const f6 = await page.evaluate(async (carId) => {
@@ -1753,6 +1809,102 @@ async function main() {
     'Loại Xe Cụ Thể: đổi từ Xe Taxi -> Xe 7 chỗ qua Đổi Tài Xế-Xe -> dọn sạch assignedTaxiCompany cũ',
     backToFixed.assignedVehicleType === 'Xe 7 chỗ' && backToFixed.assignedPlate === '30G-468.62' && !backToFixed.assignedTaxiCompany,
     JSON.stringify(backToFixed)
+  );
+
+  // Mục 3 (yêu cầu nghiệp vụ 9/2026): "lúc này không có tài xế" — trước đây chuyển sang Taxi chỉ xoá
+  // BKS, ĐỂ SÓT tài xế đã gán (xe giờ là taxi ngoài, không thuộc đội xe công ty). taxiTestItem hiện
+  // đang APPROVED/Xe 7 chỗ/không tài xế (từ backToFixed ở trên) — gán tài xế lx1 trước, rồi đổi sang
+  // Taxi, kiểm tra CẢ lớp hiển thị (ô tài xế bị khoá/xoá trắng ngay khi chọn Taxi) LẪN dữ liệu server
+  // thật sự lưu lại (không chỉ ẩn ở UI).
+  const assignDriverFirst = await page.evaluate(async (carId) => {
+    openCarProcessModal(carId);
+    document.getElementById('carAssignedDriver').value = 'Nguyễn Văn Tài — Phòng Hành Chính (lx1)';
+    resolveCarAssignedDriverInput(document.getElementById('carAssignedDriver').value);
+    document.getElementById('txtCarComment').value = '';
+    confirmCarReassign();
+    runConfirmedAction();
+    await new Promise((r) => setTimeout(r, 200));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return { assignedDriverUsername: item.assignedDriverUsername, assignedDriver: item.assignedDriver };
+  }, taxiTestItem.id);
+  record(
+    'Mục 3: gán tài xế lx1 cho phiếu Xe 7 chỗ (chuẩn bị kiểm tra chuyển sang Taxi)',
+    assignDriverFirst.assignedDriverUsername === 'lx1',
+    JSON.stringify(assignDriverFirst)
+  );
+
+  const switchToTaxiClearsDriver = await page.evaluate(async (carId) => {
+    openCarProcessModal(carId);
+    const driverInputBefore = document.getElementById('carAssignedDriver').value;
+    const sel = document.getElementById('carAssignedVehicleType');
+    sel.value = 'Xe Taxi';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const driverInputAfter = document.getElementById('carAssignedDriver').value;
+    const driverInputDisabled = document.getElementById('carAssignedDriver').disabled;
+    const driverUsernameFieldAfter = document.getElementById('carAssignedDriverUsername').value;
+    document.getElementById('carAssignedTaxiCompany').value = 'Mai Linh';
+    document.getElementById('txtCarComment').value = '';
+    confirmCarReassign();
+    runConfirmedAction();
+    await new Promise((r) => setTimeout(r, 200));
+    const item = DB.carRegs.find((c) => c.id === carId);
+    return {
+      driverInputBefore, driverInputAfter, driverInputDisabled, driverUsernameFieldAfter,
+      serverAssignedDriverUsername: item.assignedDriverUsername, serverAssignedDriver: item.assignedDriver,
+      serverAssignedTaxiCompany: item.assignedTaxiCompany, serverAssignedPlate: item.assignedPlate
+    };
+  }, taxiTestItem.id);
+  record(
+    'Mục 3: chuyển sang Xe Taxi tự xoá ô tài xế ngay ở lớp hiển thị (khoá ô + xoá trắng)',
+    switchToTaxiClearsDriver.driverInputBefore !== '' && switchToTaxiClearsDriver.driverInputAfter === '' && switchToTaxiClearsDriver.driverInputDisabled === true && switchToTaxiClearsDriver.driverUsernameFieldAfter === '',
+    JSON.stringify(switchToTaxiClearsDriver)
+  );
+  record(
+    'Mục 3: chuyển sang Xe Taxi xoá SẠCH tài xế đã gán ở server (không chỉ ẩn UI) — vá lỗ hổng thật',
+    !switchToTaxiClearsDriver.serverAssignedDriverUsername && !switchToTaxiClearsDriver.serverAssignedDriver && switchToTaxiClearsDriver.serverAssignedTaxiCompany === 'Mai Linh' && !switchToTaxiClearsDriver.serverAssignedPlate,
+    JSON.stringify(switchToTaxiClearsDriver)
+  );
+
+  // ===== Mục 4 (yêu cầu nghiệp vụ 9/2026): "Xem/Tải Phiếu Phê Duyệt" Đăng Ký Xe CHỈ dành cho người
+  // đăng ký/admin/tài xế được gán/người duyệt — HẸP HƠN canDownloadFile() dùng chung (vốn có fallback
+  // "cùng phòng ban" mặc định). taxiTestItem hiện đã APPROVED (đủ điều kiện isPostApproval) — dùng lại
+  // luôn để kiểm tra canAccessCarApprovalSlip() thuần (không phụ thuộc trạng thái xe/tài xế cụ thể). =====
+  const slipAccess = await page.evaluate((c) => {
+    const admin = { username: 'admin', perms: { admin: true } };
+    const creator = { username: c.creator };
+    const sameDeptStranger = { username: 'la_ai_do_cung_phong', dept: c.dept };
+    const randomOtherDept = { username: 'nguoi_phong_khac', dept: 'Phòng Khác Không Liên Quan' };
+    return {
+      admin: canAccessCarApprovalSlip(admin, c),
+      creator: canAccessCarApprovalSlip(creator, c),
+      sameDeptStranger: canAccessCarApprovalSlip(sameDeptStranger, c),
+      randomOtherDept: canAccessCarApprovalSlip(randomOtherDept, c),
+      assignedDriver: canAccessCarApprovalSlip({ username: c.assignedDriverUsername }, c)
+    };
+  }, taxiTestItem);
+  record(
+    'Mục 4: admin/người đăng ký/tài xế được gán XEM-TẢI được Phiếu Phê Duyệt; người cùng phòng ban (không liên quan) KHÔNG còn được nữa (xiết hẹp hơn canDownloadFile() mặc định)',
+    slipAccess.admin === true && slipAccess.creator === true && slipAccess.assignedDriver === true && slipAccess.sameDeptStranger === false && slipAccess.randomOtherDept === false,
+    JSON.stringify(slipAccess)
+  );
+
+  // ===== Mục 5a (yêu cầu nghiệp vụ 9/2026, "in phiếu phải khớp xem phiếu"): nút 🖨️ In (printViewModalContent
+  // -> printHtmlViaHiddenIframe) giờ phải nhúng kèm APPROVAL_SLIP_CSS — trước đây in ra hoàn toàn không
+  // có style. Spy printHtmlViaHiddenIframe() để bắt đúng HTML sắp đưa vào iframe in, không cần đợi
+  // window.print() thật (headless không hiện hộp thoại in). =====
+  const printCapture = await page.evaluate((carId) => {
+    viewCarApprovalSlip(carId);
+    let captured = null;
+    const orig = window.printHtmlViaHiddenIframe;
+    window.printHtmlViaHiddenIframe = (html) => { captured = html; };
+    printViewModalContent();
+    window.printHtmlViaHiddenIframe = orig;
+    return captured;
+  }, taxiTestItem.id);
+  record(
+    'Mục 5a: In Phiếu Phê Duyệt (Đăng Ký Xe) giờ nhúng kèm APPROVAL_SLIP_CSS (.approval-slip/.as-sign-row) — trước đây in ra không có style nào',
+    !!printCapture && printCapture.includes('approval-slip') && printCapture.includes('as-sign-row') && printCapture.includes('<style>'),
+    printCapture ? printCapture.slice(0, 200) + '...' : 'null'
   );
 
   // Quản Lý Danh Mục (Admin) — thêm/xóa "Loại Xe Cụ Thể" và "Hãng Taxi", cả 2 phải là <select> thuần

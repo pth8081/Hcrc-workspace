@@ -44,6 +44,40 @@
 .approval-slip .as-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
 @media print { .approval-slip { padding: 0; } }
 
+/* .minutes-doc — khung "Biên Bản Họp" dùng chung cho cả Xem (viewMeetingMinutesDetails) lẫn Tải/In
+   (buildMeetingMinutesDocumentHTML), xem buildMeetingMinutesCoreHTML() ở public/js/module-bienbanhop.js
+   — mirror ĐÚNG cách .approval-slip ở trên: giữ 2 bản NỘI DUNG Y HỆT NHAU — bản này phục vụ Xem trực
+   tiếp qua app.css đã load sẵn; bản nhúng qua <style> trong buildMeetingMinutesDocumentHTML() phục vụ
+   file .html tải về/khung in độc lập, không load được app.css này. */
+.minutes-doc { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.6; }
+.minutes-doc .md-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 28px; font-weight: bold; color: rgba(0,0,0,0.06); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
+.minutes-doc .md-content { position: relative; z-index: 1; }
+.minutes-doc .md-header { text-align: center; margin-bottom: 10px; }
+.minutes-doc .md-code { font-size: 11px; color: #555; }
+.minutes-doc .md-title { font-size: 19px; font-weight: bold; text-transform: uppercase; margin: 6px 0; }
+.minutes-doc table.md-field-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.minutes-doc table.md-field-table td { padding: 3px 4px; vertical-align: top; }
+.minutes-doc .md-label { font-weight: bold; width: 160px; white-space: nowrap; }
+.minutes-doc .md-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
+.minutes-doc .md-body-text { white-space: pre-wrap; }
+.minutes-doc table.md-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+.minutes-doc table.md-items-table th, .minutes-doc table.md-items-table td { border: 1px solid #999; padding: 4px 6px; }
+.minutes-doc table.md-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
+.minutes-doc .md-items-center { text-align: center; }
+.minutes-doc .md-empty-note { text-align: center; color: #888; font-style: italic; }
+.minutes-doc .md-task-status { text-align: left; }
+.minutes-doc .md-task-status ul { margin: 0; }
+.minutes-doc .md-task-extension { color: #c2410c; }
+.minutes-doc .md-task-pending-note { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 4px; padding: 3px 5px; font-size: 10px; margin-top: 2px; }
+.minutes-doc .md-task-pending-cancel { background: #fef2f2; border-color: #fecaca; }
+.minutes-doc .md-task-history { font-size: 10px; color: #6b7280; list-style: disc; padding-left: 14px; margin-top: 2px; }
+.minutes-doc .md-assign-btn { background: #7c3aed; color: #fff; border: none; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
+.minutes-doc .md-sign-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 36px; margin-top: 30px; padding-top: 18px; border-top: 1px solid #ddd; }
+.minutes-doc .md-sign-col { flex: 0 1 150px; max-width: 170px; text-align: center; vertical-align: top; }
+.minutes-doc .md-sign-role { font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 44px; }
+.minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
+@media print { .minutes-doc { padding: 0; } }
+
 .boot-splash-bg {
   background: linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
 }

@@ -835,11 +835,24 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     // không để sót dữ liệu cũ (VD đổi từ "Xe 5 chỗ" -> "Xe Taxi" mà vẫn còn assignedPlate cũ treo lại,
     // dễ gây hiểu nhầm/khoá nhầm biển số cũ ở findCarPlateConflict() cho phiếu khác). Đặt TRƯỚC vòng lặp
     // extraFields bên dưới để field vừa chọn (nếu client có gửi kèm) vẫn được set lại đúng ngay sau đó.
+    // Mục 3 (yêu cầu nghiệp vụ 9/2026): chuyển sang Taxi thì xe không còn thuộc đội xe công ty nữa —
+    // XOÁ LUÔN tài xế đã gán (trước đây chỉ dọn biển số, để sót tài xế cũ treo lại dù xe giờ là taxi
+    // ngoài — mirror ĐÚNG lỗ hổng vừa vá ở reassignCarDispatch()/lib/recordActions.js).
     if (moduleKey === 'carRegs' && extraFields?.assignedVehicleType && extraFields.assignedVehicleType !== item.assignedVehicleType) {
       const vehicleTypeList = Array.isArray(appData?.carVehicleTypes) ? appData.carVehicleTypes : [];
       const matchedType = vehicleTypeList.find(t => t.name === extraFields.assignedVehicleType);
       if (matchedType?.isTaxi) {
         item.assignedPlate = '';
+        if (item.assignedDriverUsername || item.assignedDriver) {
+          item.assignedDriverUsername = '';
+          item.assignedDriver = '';
+          extraSnapshot.assignedDriverUsername = '';
+          extraSnapshot.assignedDriver = '';
+          if (item.driverConfirmed) {
+            item.driverConfirmed = false;
+            item.driverConfirmedAt = null;
+          }
+        }
       } else {
         item.assignedTaxiCompany = '';
       }

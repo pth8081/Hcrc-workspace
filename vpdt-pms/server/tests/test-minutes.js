@@ -524,6 +524,48 @@ async function main() {
     JSON.stringify({ alerts: s5SecondAlerts, tasksBeforeS5, tasksAfterSecondAttempt })
   );
 
+  // ===== Mục 5b (yêu cầu nghiệp vụ 9/2026, "in phiếu phải khớp xem phiếu"): Xem và Tải/In giờ dùng
+  // CHUNG buildMeetingMinutesCoreHTML() — kiểm tra cả 2 đường ra đều có khối chân ký ngang mới
+  // (.md-sign-row/.md-sign-col, mirror .as-sign-row/.as-sign-col của Phiếu Phê Duyệt), và bản Tải vẫn
+  // tự chứa <style> (mở qua file://, không load được app.css) trong khi bản Xem CSP-safe (không có
+  // <style>/style="..." nội tuyến nào, chỉ dùng class ăn CSS từ app.css đã nạp sẵn). =====
+  await page.evaluate((id) => viewMeetingMinutesDetails(id), minutesId2);
+  const viewSignBlock = await page.evaluate(() => {
+    const el = document.getElementById('viewModalContent');
+    return {
+      hasSignRow: el.innerHTML.includes('md-sign-row'),
+      hasSignRole: el.innerHTML.includes('md-sign-role'),
+      hasInlineStyleTag: /<style[\s>]/.test(el.innerHTML),
+      hasInlineStyleAttr: /\sstyle="/.test(el.innerHTML),
+      hasGiaoViecCol: el.innerHTML.includes('Tình trạng giao việc')
+    };
+  });
+  record(
+    'Mục 5b: bản Xem có khối chân ký ngang (.md-sign-row) + KHÔNG chứa <style>/style="..." nội tuyến (CSP-safe, ăn CSS từ app.css)',
+    viewSignBlock.hasSignRow && viewSignBlock.hasSignRole && !viewSignBlock.hasInlineStyleTag && !viewSignBlock.hasInlineStyleAttr && viewSignBlock.hasGiaoViecCol,
+    JSON.stringify(viewSignBlock)
+  );
+
+  const downloadHtml = await page.evaluate((id) => {
+    const m = DB.meetingMinutes.find((x) => x.id === id);
+    return buildMeetingMinutesDocumentHTML(m);
+  }, minutesId2);
+  const downloadCheck = {
+    hasSignRow: downloadHtml.includes('md-sign-row'),
+    hasSignRole: downloadHtml.includes('md-sign-role'),
+    hasEmbeddedStyleTag: /<style>/.test(downloadHtml),
+    hasGiaoViecCol: downloadHtml.includes('Tình trạng giao việc'),
+    // Chỉ tìm THẺ <button> thật trong nội dung, KHÔNG PHẢI chuỗi "md-assign-btn" nói chung — tên class
+    // này còn xuất hiện trong chính khối <style> nhúng kèm (định nghĩa CSS luôn có, dù không có phần tử
+    // nào dùng tới khi interactive=false), match thẳng chuỗi sẽ luôn ra true dương tính giả.
+    hasGiaoViecBtn: /<button[^>]*class="md-assign-btn"/.test(downloadHtml)
+  };
+  record(
+    'Mục 5b: bản Tải/In có khối chân ký ngang (.md-sign-row) + tự nhúng <style> (file:// không load app.css) + KHÔNG có cột/nút "Giao việc" (không phải thao tác trên bản chính thức)',
+    downloadCheck.hasSignRow && downloadCheck.hasSignRole && downloadCheck.hasEmbeddedStyleTag && !downloadCheck.hasGiaoViecCol && !downloadCheck.hasGiaoViecBtn,
+    JSON.stringify(downloadCheck)
+  );
+
   await browser.close();
   server.close();
 

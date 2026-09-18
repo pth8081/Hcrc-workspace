@@ -1739,10 +1739,20 @@ function closeDocDetailModal() {
 // In trực tiếp nội dung đang hiển thị trong Protected Viewer (tệp đính kèm hoặc phiếu/chứng từ
 // dựng động như Phiếu Phê Duyệt Đăng Ký Xe) — dùng 1 iframe ẩn để chỉ in đúng phần nội dung, không
 // in kèm khung modal/nút bấm xung quanh.
+// Mục 5 (yêu cầu nghiệp vụ 9/2026, "in phiếu phải khớp xem phiếu"): #viewModalContent dùng CHUNG cho
+// nhiều loại nội dung, trong đó Phiếu Phê Duyệt (Đăng Ký Xe/Văn Bản Trình/Đề Xuất Văn Phòng — xem
+// buildApprovalSlipShellHTML()/APPROVAL_SLIP_CSS ở core.js) chỉ được style qua app.css NẠP TOÀN TRANG
+// (cho khung xem trực tiếp) — iframe in bên dưới là 1 document HOÀN TOÀN MỚI, không load app.css, nên
+// trước đây in ra mất sạch style (chữ dồn 1 khối, không bảng/khung, không giống bản Xem). Nhúng thẳng
+// APPROVAL_SLIP_CSS vào <style> của iframe in — ĐÚNG cách 3 hàm downloadXxxApprovalSlip() đã làm cho
+// bản Tải (vốn đã in đúng từ trước) — vô hại với nội dung KHÔNG dùng class .approval-slip (CSS chỉ áp
+// dụng bên trong .approval-slip). standaloneHtmlRestoreStyles() phòng hờ data-style nào đó (nếu có)
+// chưa kịp qua applyDataStyles() (MutationObserver) tại thời điểm bấm In.
 function printViewModalContent() {
   const container = document.getElementById('viewModalContent');
   if (!container || !container.innerHTML.trim()) return alert('Không có nội dung để in.');
-  printHtmlViaHiddenIframe(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title></head><body>${container.innerHTML}</body></html>`);
+  const printHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${container.innerHTML}</body></html>`);
+  printHtmlViaHiddenIframe(printHtml);
 }
 
 // In qua iframe ẩn (KHÔNG thêm thư viện tạo PDF nào — người dùng chọn "Save as PDF" ở hộp thoại In của

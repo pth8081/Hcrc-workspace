@@ -7880,17 +7880,34 @@ function buildCarApprovalSlipHTML(car) {
   });
 }
 
-// isPostApproval: APPROVED và 2 trạng thái sau đó (AWAITING_EVALUATION/COMPLETED, xem endCarTrip()/
-// evaluateCarTrip() ở lib/recordActions.js) đều đã "phê duyệt hoàn tất" — chỉ khác đã Kết Thúc Chuyến/
-// Đánh Giá xong hay chưa, không ảnh hưởng việc xem/tải Phiếu Phê Duyệt.
+// isPostApproval: APPROVED và 3 trạng thái sau đó (IN_PROGRESS/AWAITING_EVALUATION/COMPLETED, xem
+// confirmCarDriverAssignment()/endCarTrip()/evaluateCarTrip() ở lib/recordActions.js) đều đã "phê
+// duyệt hoàn tất" — chỉ khác đã Xác Nhận/Kết Thúc Chuyến/Đánh Giá xong hay chưa, không ảnh hưởng việc
+// xem/tải Phiếu Phê Duyệt.
 function isCarRegPostApproval(c) {
-  return c.status === 'APPROVED' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED';
+  return c.status === 'APPROVED' || c.status === 'IN_PROGRESS' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED';
+}
+
+// Mục 4 (yêu cầu nghiệp vụ 9/2026): "Xem/Tải Phiếu Phê Duyệt" (bản chính thức, có watermark/lịch sử
+// duyệt) CHỈ dành cho người đăng ký (creator), admin, tài xế được gán (assignedDriverUsername), hoặc
+// người đã/đang duyệt hồ sơ này (isApproverForDeptWorkflow) — HẸP HƠN quyền XEM ĐƯỢC DÒNG trong danh
+// sách (canViewCarReg() ở server, đã bao gồm cả người có quyền carView theo phòng ban dù không liên
+// quan trực tiếp tới chuyến này) và HẸP HƠN canDownloadFile() dùng chung cho MỌI module (vốn có
+// fallback ngầm "cùng phòng ban" mặc định) — CHỈ riêng Phiếu Đăng Ký Xe áp dụng giới hạn chặt hơn này
+// theo đúng yêu cầu người dùng, không đổi hành vi canDownloadFile() cho các module khác.
+function canAccessCarApprovalSlip(user, c) {
+  if (!user || !c) return false;
+  if (user.perms?.admin) return true;
+  if (c.creator === user.username) return true;
+  if (c.assignedDriverUsername === user.username) return true;
+  return isApproverForDeptWorkflow(DB.carDeptWorkflows?.[c.dept], user.username);
 }
 
 function viewCarApprovalSlip(carId) {
   const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
   if (!isCarRegPostApproval(c)) return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+  if (!canAccessCarApprovalSlip(currentUser, c)) return alert('⛔ Bạn không có quyền xem Phiếu Phê Duyệt của chuyến này (chỉ người đăng ký, tài xế được gán, người duyệt hoặc admin).');
 
   document.getElementById('viewModalTitle').innerText = `🚗 Phiếu Phê Duyệt Đăng Ký Xe (${c.code})`;
   document.getElementById('viewModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName}`;
@@ -7904,6 +7921,7 @@ function downloadCarApprovalSlip(carId) {
   const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
   if (!isCarRegPostApproval(c)) return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+  if (!canAccessCarApprovalSlip(currentUser, c)) return alert('⛔ Bạn không có quyền tải Phiếu Phê Duyệt của chuyến này (chỉ người đăng ký, tài xế được gán, người duyệt hoặc admin).');
 
   const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đăng Ký Xe - ${escapeHtml(c.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildCarApprovalSlipHTML(c)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });

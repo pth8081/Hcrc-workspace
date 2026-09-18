@@ -6395,6 +6395,11 @@ function confirmCarDriverAssignment(user, carReg) {
   }
   carReg.driverConfirmed = true;
   carReg.driverConfirmedAt = nowVN();
+  // Mục 2 (yêu cầu nghiệp vụ 9/2026): trạng thái phải PHẢN ÁNH đúng đã có lái xe nhận chuyến hay chưa
+  // — trước đây driverConfirmed chỉ là cờ ngầm, status vẫn hiện y hệt "Đã Duyệt" nên không phân biệt
+  // được qua danh sách/badge. IN_PROGRESS là trạng thái TRUNG GIAN mới, nằm giữa APPROVED và
+  // AWAITING_EVALUATION (xem endCarTrip() ngay dưới — điều kiện đầu vào đã đổi theo).
+  carReg.status = 'IN_PROGRESS';
   return carReg;
 }
 
@@ -6415,8 +6420,8 @@ function endCarTrip(user, carReg, payload) {
   if (!canEndCarTrip(user, carReg)) {
     throw new HttpError(403, 'Bạn không phải là lái xe được phân công cho phiếu đăng ký này');
   }
-  if (carReg.status !== 'APPROVED') {
-    throw new HttpError(409, 'Chỉ kết thúc chuyến được khi phiếu đăng ký đã được phê duyệt xong toàn bộ');
+  if (carReg.status !== 'IN_PROGRESS') {
+    throw new HttpError(409, 'Chỉ kết thúc chuyến được khi đã xác nhận nhận chuyến (đang thực hiện)');
   }
   if (!carReg.driverConfirmed) {
     throw new HttpError(409, 'Bạn cần xác nhận nhận chuyến trước khi kết thúc chuyến');
@@ -6478,18 +6483,24 @@ function canCancelCarReg(user, carReg) {
   return !!(carReg && carReg.creator === user.username);
 }
 
-// action mới, CHỈ áp dụng cho phiếu ĐÃ APPROVED (chưa CANCELLED) — phiếu đang PENDING/DRAFT đã có kênh
-// riêng để dừng lại (Từ chối ở bước duyệt, hoặc admin xoá cứng), không cần thêm "Hủy chuyến" ở đây.
-// CANCELLED là trạng thái KẾT THÚC mới cho carRegs (trước đây chưa từng tồn tại — findCarPlateConflict()
-// ở lib/workflowEngine.js đã SẴN loại trừ 'CANCELLED' khỏi kiểm tra trùng biển số dù trạng thái này chưa
-// từng đạt tới qua bất kỳ đường nào, nên chuyến bị huỷ tự động "nhả" lại biển số/khung giờ cho phiếu
-// khác mà không cần sửa gì thêm ở đó).
+// action mới, áp dụng cho phiếu ĐÃ APPROVED/IN_PROGRESS (đã duyệt xong, kể cả lái xe đã xác nhận nhận
+// chuyến nhưng CHƯA thực sự kết thúc chuyến — xem confirmCarDriverAssignment()/endCarTrip() ở trên)
+// HOẶC đang PENDING ở đúng bước 1 (chưa ai duyệt gì cả — người đăng ký có quyền rút lại phiếu của
+// chính mình trước khi bất kỳ ai xử lý). Phiếu đang PENDING nhưng đã qua ít nhất 1 bước duyệt
+// (currentStep > 1) thì KHÔNG cho tự hủy ở đây nữa — tránh phá quy trình đang dở; người duyệt bước
+// hiện tại có thể Từ Chối thay. Phiếu đã AWAITING_EVALUATION/COMPLETED (chuyến đã thực sự kết thúc)
+// cũng KHÔNG cho hủy nữa — không thể "hủy" 1 chuyến đã đi xong. CANCELLED là trạng thái KẾT THÚC cho
+// carRegs — findCarPlateConflict() ở lib/workflowEngine.js đã SẴN loại trừ 'CANCELLED' khỏi kiểm tra
+// trùng biển số nên chuyến bị huỷ tự động "nhả" lại biển số/khung giờ cho phiếu khác mà không cần sửa
+// gì thêm ở đó.
 function cancelCarReg(user, item, payload) {
   if (!canCancelCarReg(user, item)) {
     throw new HttpError(403, 'Bạn không có quyền hủy chuyến đăng ký xe này');
   }
-  if (item.status !== 'APPROVED') {
-    throw new HttpError(409, 'Chỉ hủy được chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
+  const cancellableAtStep1 = item.status === 'PENDING' && (item.currentStep || 1) <= 1;
+  const cancellablePostApproval = item.status === 'APPROVED' || item.status === 'IN_PROGRESS';
+  if (!cancellablePostApproval && !cancellableAtStep1) {
+    throw new HttpError(409, 'Chỉ hủy được chuyến chưa ai duyệt (bước 1), đã phê duyệt xong, hoặc đang chờ thực hiện (có thể đã hủy/kết thúc chuyến/xử lý ở nơi khác)');
   }
   const reason = String(payload?.reason || '').trim();
   item.status = 'CANCELLED';
@@ -6501,17 +6512,20 @@ function cancelCarReg(user, item, payload) {
   return item;
 }
 
-// "Đổi tài xế-xe" — CHỈ Người Điều Hành Xe (carDispatch)/admin, CHỈ áp dụng cho phiếu ĐÃ APPROVED —
-// applyWorkflowAction() (lib/workflowEngine.js) chỉ cho gán/đổi tài xế-xe TRONG LÚC còn PENDING (mỗi
-// lần Duyệt/Từ chối ở 1 bước), khoá cứng ngay dòng đầu (`item[statusField] !== 'PENDING'` -> throw 409)
-// nên KHÔNG thể tái dùng thẳng hàm đó cho phiếu đã xong toàn bộ quy trình — đây là hàm RIÊNG, cùng logic
-// gán/kiểm tra trùng biển số/reset xác nhận lái xe cũ (mirror ĐÚNG đoạn extraFields ở
-// applyWorkflowAction(), không viết lại cách kiểm tra), chỉ khác điều kiện trạng thái đầu vào.
+// "Đổi tài xế-xe" — CHỈ Người Điều Hành Xe (carDispatch)/admin, áp dụng cho phiếu ĐÃ APPROVED hoặc
+// IN_PROGRESS (đã duyệt xong, kể cả sau khi lái xe đã xác nhận nhận chuyến nhưng chưa thực sự kết
+// thúc chuyến — mục 2 thêm trạng thái IN_PROGRESS ở giữa, dispatcher vẫn cần đổi được tài xế/xe lúc
+// này, VD tài xế cũ đột xuất không đi được) — applyWorkflowAction() (lib/workflowEngine.js) chỉ cho
+// gán/đổi tài xế-xe TRONG LÚC còn PENDING (mỗi lần Duyệt/Từ chối ở 1 bước), khoá cứng ngay dòng đầu
+// (`item[statusField] !== 'PENDING'` -> throw 409) nên KHÔNG thể tái dùng thẳng hàm đó cho phiếu đã
+// xong toàn bộ quy trình — đây là hàm RIÊNG, cùng logic gán/kiểm tra trùng biển số/reset xác nhận lái
+// xe cũ (mirror ĐÚNG đoạn extraFields ở applyWorkflowAction(), không viết lại cách kiểm tra), chỉ khác
+// điều kiện trạng thái đầu vào.
 function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVehicleTypes) {
   if (!(user?.perms?.admin || user?.perms?.carDispatch)) {
     throw new HttpError(403, 'Bạn không có quyền phân công lại xe/lái xe (cần quyền Người Điều Hành Xe)');
   }
-  if (item.status !== 'APPROVED') {
+  if (item.status !== 'APPROVED' && item.status !== 'IN_PROGRESS') {
     throw new HttpError(409, 'Chỉ đổi tài xế/xe được cho chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
   }
   const { findCarPlateConflict, findCarDriverConflict } = require('./workflowEngine'); // require trễ
@@ -6550,11 +6564,23 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
     }
   }
   // Đổi "Loại xe cụ thể" sang Taxi/không-Taxi -> dọn field "đối lập" (BKS cố định vs Hãng Taxi) để không
-  // để sót dữ liệu cũ (mirror ĐÚNG logic ở applyWorkflowAction(), lib/workflowEngine.js).
+  // để sót dữ liệu cũ (mirror ĐÚNG logic ở applyWorkflowAction(), lib/workflowEngine.js). Mục 3 (yêu cầu
+  // nghiệp vụ 9/2026): chuyển sang Taxi thì xe không còn thuộc đội xe công ty nữa — XOÁ LUÔN tài xế đã
+  // gán (trước đây chỉ dọn biển số, để sót tài xế cũ treo lại dù xe giờ là taxi ngoài).
   if (assignedVehicleType && assignedVehicleType !== item.assignedVehicleType) {
     const matchedType = (carVehicleTypes || []).find(t => t.name === assignedVehicleType);
     if (matchedType?.isTaxi) {
       item.assignedPlate = '';
+      if (item.assignedDriverUsername || item.assignedDriver) {
+        item.assignedDriverUsername = '';
+        item.assignedDriver = '';
+        extraSnapshot.assignedDriverUsername = '';
+        extraSnapshot.assignedDriver = '';
+        if (item.driverConfirmed) {
+          item.driverConfirmed = false;
+          item.driverConfirmedAt = null;
+        }
+      }
     } else {
       item.assignedTaxiCompany = '';
     }

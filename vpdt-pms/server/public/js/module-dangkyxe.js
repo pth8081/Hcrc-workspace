@@ -429,7 +429,7 @@ function wireCarCalendarClick(grid) {
 function showCarScheduleSlotInfo(id) {
   const c = DB.carRegs.find(x => x.id === id);
   if (!c) return;
-  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành' }[c.status] || c.status;
+  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', IN_PROGRESS: 'Đang thực hiện', DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy chuyến', REJECTED: 'Từ chối' }[c.status] || c.status;
   alert(`🚗 ${c.code}\nLái xe: ${c.assignedDriver || ''}\nBiển số: ${c.assignedPlate || '(chưa gán)'}\nĐiểm đến: ${c.destination || ''}\nThời gian: ${c.startTime} ➔ ${c.endTime}\nTrạng thái: ${statusLabel}`);
 }
 
@@ -438,7 +438,10 @@ function renderCarDriverTab() {
   const wrap = document.getElementById('carDriverListWrap');
   const noneNote = document.getElementById('carDriverNoneNote');
   if (!wrap) return;
-  const myTrips = DB.carRegs.filter(c => c.assignedDriverUsername === currentUser.username && c.status === 'APPROVED');
+  // APPROVED (chưa xác nhận) + IN_PROGRESS (đã xác nhận, chưa kết thúc chuyến) — cả 2 trạng thái đều
+  // cần hiện ở đây để lái xe còn thấy nút "Kết Thúc Chuyến" sau khi đã xác nhận (mục 2, yêu cầu nghiệp
+  // vụ 9/2026: xác nhận nhận chuyến giờ chuyển status sang IN_PROGRESS thay vì giữ nguyên APPROVED).
+  const myTrips = DB.carRegs.filter(c => c.assignedDriverUsername === currentUser.username && (c.status === 'APPROVED' || c.status === 'IN_PROGRESS'));
   noneNote.classList.toggle('hidden', myTrips.length > 0);
   wrap.innerHTML = myTrips.map(c => `
     <div class="bg-white p-3 rounded border space-y-1">
@@ -728,6 +731,9 @@ function renderCarRegs() {
     { key: '', label: 'Tổng Đăng Ký', count: scopedCarRegs.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedCarRegs.filter(c => c.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedCarRegs.filter(c => c.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
+    // IN_PROGRESS — trạng thái TRUNG GIAN mới (mục 2, yêu cầu nghiệp vụ 9/2026): lái xe đã xác nhận
+    // nhận chuyến nhưng chưa kết thúc, xem confirmCarDriverAssignment()/endCarTrip() ở lib/recordActions.js.
+    { key: 'IN_PROGRESS', label: '🚗 Đang Thực Hiện', count: scopedCarRegs.filter(c => c.status === 'IN_PROGRESS').length, colorClass: 'border-l-indigo-500' },
     { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedCarRegs.filter(c => c.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
     // CANCELLED — trạng thái KẾT THÚC mới (Fix 4, đợt rà soát nghiệp vụ: "Hủy chuyến" sau khi đã duyệt,
     // xem canCancelCarReg()/cancelCarReg() ở lib/recordActions.js).
@@ -767,6 +773,7 @@ function renderCarRegs() {
 
     let statusBadge = '';
     if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+    else if (c.status === 'IN_PROGRESS') statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">🚗 Đang thực hiện</span>`;
     else if (c.status === 'AWAITING_EVALUATION') statusBadge = `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ đánh giá (${c.driverReportedKm ?? c.actualKm ?? 0} KM)</span>`;
     else if (c.status === 'COMPLETED') statusBadge = `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Hoàn thành (${c.actualKm ?? 0} KM)</span>`;
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
@@ -778,10 +785,14 @@ function renderCarRegs() {
     // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
     const displayPlate = c.assignedPlate || c.plate || (c.assignedTaxiCompany ? `Taxi ${c.assignedTaxiCompany}` : '');
     const displayDriver = c.assignedDriver || c.driver || '';
-    // canDL/viewSlip: hồ sơ đã qua APPROVED thì luôn xem/tải được phiếu, bất kể đã Kết Thúc Chuyến/Đánh
-    // Giá xong hay chưa (AWAITING_EVALUATION/COMPLETED vẫn là "đã phê duyệt", chỉ thêm bước sau đó).
-    const isPostApproval = c.status === 'APPROVED' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED';
-    const canDL = isPostApproval && canDownloadFile(currentUser, 'car', c.dept, c.creator);
+    // canAccessSlip: hồ sơ đã qua APPROVED thì luôn xem/tải được phiếu, bất kể đã Kết Thúc Chuyến/Đánh
+    // Giá xong hay chưa (IN_PROGRESS/AWAITING_EVALUATION/COMPLETED vẫn là "đã phê duyệt", chỉ thêm bước
+    // sau đó — IN_PROGRESS là trạng thái trung gian mới, mục 2 yêu cầu nghiệp vụ 9/2026). Mục 4 (yêu
+    // cầu nghiệp vụ 9/2026): dùng canAccessCarApprovalSlip() (core.js) THAY vì canDownloadFile() dùng
+    // chung — chỉ người đăng ký/tài xế được gán/người duyệt/admin mới xem-tải được Phiếu, bỏ fallback
+    // "cùng phòng ban" mặc định (riêng carRegs, không đổi canDownloadFile() cho module khác).
+    const isPostApproval = c.status === 'APPROVED' || c.status === 'IN_PROGRESS' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED';
+    const canDL = isPostApproval && canAccessCarApprovalSlip(currentUser, c);
 
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -800,16 +811,25 @@ function renderCarRegs() {
               ? `<button data-op="runCarAction" data-arg0="${c.id}" data-arg1="process" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
               : `<button data-op="runCarAction" data-arg0="${c.id}" data-arg1="process" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
             const secondaryOptions = [];
-            if (isPostApproval) {
+            if (canDL) {
+              // Mục 4: "Xem Phiếu" trước đây không có lớp quyền riêng nào (chỉ cần isPostApproval) —
+              // nay gộp chung điều kiện với "Tải" (canDL = canAccessCarApprovalSlip()).
               secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
-              if (canDL) secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
+              secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải' });
             }
-            if (c.status === 'APPROVED') {
+            if (c.status === 'APPROVED' || c.status === 'IN_PROGRESS') {
               // Fix 4 (đợt rà soát nghiệp vụ, người dùng xác nhận "Thêm nút Hủy/Đổi sau duyệt") — trước
               // đây 1 phiếu đã APPROVED là ngõ cụt, chỉ admin xóa cứng được. "Đổi Tài Xế-Xe" mở modal xử
               // lý sẵn có (đã có UI phân công) để tái dùng, "Hủy Chuyến" mở thẳng modal xác nhận riêng.
+              // IN_PROGRESS (mục 2) vẫn cho đổi/hủy tương tự APPROVED, mirror đúng điều kiện đã nới ở
+              // reassignCarDispatch()/cancelCarReg() (lib/recordActions.js).
               if (canDispatchCarClient()) secondaryOptions.push({ value: 'reassign', label: '🔁 Đổi Tài Xế-Xe' });
               if (canCancelCarRegClient(c)) secondaryOptions.push({ value: 'cancelTrip', label: '🚫 Hủy Chuyến' });
+            }
+            // Mục 1 (yêu cầu nghiệp vụ 9/2026) — người đăng ký rút lại phiếu của chính mình khi CHƯA ai
+            // duyệt gì cả (còn ở đúng bước 1), mirror ĐÚNG điều kiện ở openCarProcessModal().
+            if (c.status === 'PENDING' && (c.currentStep || 1) <= 1 && canCancelCarRegClient(c)) {
+              secondaryOptions.push({ value: 'cancelTrip', label: '🚫 Hủy Đăng Ký' });
             }
             // "Đánh Giá" — CHỈ người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành, xem
             // canEvaluateCarTrip()/evaluateCarTrip() ở lib/recordActions.js.
@@ -915,9 +935,19 @@ function onCarAssignedVehicleTypeChange(userTriggered = true) {
   const isTaxi = !!selectedType?.isTaxi;
   document.getElementById('carAssignedPlateWrap').classList.toggle('hidden', isTaxi);
   document.getElementById('carAssignedTaxiCompanyWrap').classList.toggle('hidden', !isTaxi);
+  // Mục 3 (yêu cầu nghiệp vụ 9/2026): xe Taxi không thuộc đội xe công ty -> không còn tài xế công ty
+  // đi kèm nữa. Mirror ĐÚNG server (reassignCarDispatch()/applyWorkflowAction() ở lib/recordActions.js
+  // và lib/workflowEngine.js) — chỉ là lớp hiển thị, server luôn tự xoá lại field này dù client bị can
+  // thiệp cố gửi kèm.
+  const driverInput = document.getElementById('carAssignedDriver');
+  driverInput.disabled = isTaxi;
+  driverInput.placeholder = isTaxi ? '— Không áp dụng (xe taxi) —' : 'Gõ tên hoặc tài khoản tài xế để tìm...';
+  document.getElementById('carAssignedDriverWrap').classList.toggle('opacity-50', isTaxi);
   if (!userTriggered) return;
   if (isTaxi) {
     document.getElementById('carAssignedPlate').value = '';
+    driverInput.value = '';
+    document.getElementById('carAssignedDriverUsername').value = '';
   } else {
     document.getElementById('carAssignedTaxiCompany').value = '';
     document.getElementById('carAssignedPlate').value = selectedType?.bienSo || '';
@@ -987,24 +1017,35 @@ function openCarProcessModal(carId) {
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
   const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);
+  // Mục 1 (yêu cầu nghiệp vụ 9/2026): người đăng ký được rút lại phiếu của CHÍNH MÌNH khi chưa ai duyệt
+  // gì cả (còn ở đúng bước 1) — mirror canCancelCarReg() ở server (creator/admin/carDispatch), nhưng
+  // GIỚI HẠN thêm điều kiện currentStep<=1 chỉ ở lớp hiển thị này (server là nơi chặn thật).
+  const canCancelAtStep1 = c.status === 'PENDING' && (c.currentStep || 1) <= 1 && canCancelCarRegClient(c);
 
   const actionBtns = document.getElementById('carModalActionBtns');
   if (canApprove) {
     const stepActionLabel = resolveStepActionLabel(wf, c.currentStep);
-    actionBtns.innerHTML = `
-      <button data-op="confirmProcessCarReg" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>
-      <button data-op="confirmProcessCarReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>
-      <button data-op="confirmProcessCarReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)} & Chuyển Bước</button>
-    `;
-  } else if (c.status === 'APPROVED' && (canDispatchCar || canCancelCarRegClient(c))) {
-    // Fix 4 — phiếu đã APPROVED KHÔNG còn nút Duyệt/Từ chối nào (quy trình đã xong), nhưng vẫn có thể
-    // "Đổi Tài Xế-Xe" (canDispatchCar — TÁI DÙNG nguyên carDispatchSection ở trên, không dựng form
-    // riêng) và/hoặc "Hủy Chuyến" (chính người tạo HOẶC canDispatchCar, mirror canCancelCarReg() ở
-    // server) thay vì chỉ hiện dòng "chỉ có quyền xem" như trước đây.
+    const btns = [
+      `<button data-op="confirmProcessCarReg" data-arg0="REJECT" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">❌ Từ Chối</button>`,
+      `<button data-op="confirmProcessCarReg" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs">🔄 Bổ Sung</button>`,
+      `<button data-op="confirmProcessCarReg" data-arg0="APPROVE" class="bg-green-600 text-white px-5 py-1.5 rounded font-bold hover:bg-green-700 text-xs">✅ ${escapeHtml(stepActionLabel)} & Chuyển Bước</button>`
+    ];
+    // Người tạo có thể ĐỒNG THỜI là người duyệt bước 1 (đơn vị nhỏ) — vẫn cho rút lại phiếu thay vì
+    // phải tự duyệt/từ chối phiếu của chính mình.
+    if (canCancelAtStep1) btns.push(`<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Đăng Ký</button>`);
+    actionBtns.innerHTML = btns.join(' ');
+  } else if ((c.status === 'APPROVED' || c.status === 'IN_PROGRESS') && (canDispatchCar || canCancelCarRegClient(c))) {
+    // Fix 4 — phiếu đã APPROVED/IN_PROGRESS KHÔNG còn nút Duyệt/Từ chối nào (quy trình đã xong), nhưng
+    // vẫn có thể "Đổi Tài Xế-Xe" (canDispatchCar — TÁI DÙNG nguyên carDispatchSection ở trên, không dựng
+    // form riêng) và/hoặc "Hủy Chuyến" (chính người tạo HOẶC canDispatchCar, mirror canCancelCarReg() ở
+    // server) thay vì chỉ hiện dòng "chỉ có quyền xem" như trước đây. IN_PROGRESS (mục 2) mirror đúng
+    // điều kiện đã nới ở reassignCarDispatch()/cancelCarReg().
     const btns = [];
     if (canDispatchCar) btns.push(`<button data-op="confirmCarReassign" class="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold hover:bg-indigo-700 text-xs">🔁 Đổi Tài Xế-Xe</button>`);
     if (canCancelCarRegClient(c)) btns.push(`<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Chuyến</button>`);
     actionBtns.innerHTML = btns.join(' ');
+  } else if (canCancelAtStep1) {
+    actionBtns.innerHTML = `<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Đăng Ký</button>`;
   } else {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
   }
@@ -1230,7 +1271,7 @@ function renderCarReportTab() {
   // Lọc theo ngày ĐI (startTime) — đúng câu hỏi "phòng ban/lái xe nào dùng nhiều trong khoảng này",
   // khác bộ lọc "Từ Khóa/Trạng Thái" ở tab Đăng Ký (lọc Danh Sách theo ngày TẠO phiếu).
   const filtered = DB.carRegs.filter(c => isInDateRange(c.startTime, fromDate, toDate));
-  const approved = filtered.filter(c => c.status === 'APPROVED' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED');
+  const approved = filtered.filter(c => c.status === 'APPROVED' || c.status === 'IN_PROGRESS' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED');
   const pending = filtered.filter(c => c.status === 'PENDING');
   const rejected = filtered.filter(c => c.status === 'REJECTED');
   const totalKm = Math.round(approved.reduce((sum, c) => sum + (Number(c.km) || 0), 0) * 10) / 10;

@@ -329,6 +329,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Quyền tạo', text: 'chỉ người được cấp quyền tạo biên bản họp mới thấy được form tạo — người khác chỉ xem nội dung.' },
     ], right: [
       { label: 'Mẫu điểm danh', text: 'có thể lưu sẵn danh sách người tham dự thường xuyên thành 1 mẫu, để không phải chọn lại từ đầu mỗi lần họp định kỳ.' },
+      { label: 'Xem/Tải/In khớp nội dung (9/2026)', text: 'màn Xem và file Tải/khung In nay dùng chung 1 bộ nội dung (kể cả chân ký Thư Ký/Chủ Trì), chỉ khác bản Xem có thêm nút "Giao việc" theo từng đầu việc.' },
     ] },
   },
   task: {
@@ -372,21 +373,24 @@ const NGHIEP_VU_DOCS = {
     ], right: [] },
   },
   car: {
-    icon: '🚗', title: 'Đăng Ký Xe', badge: 'Cập nhật v23.4',
+    icon: '🚗', title: 'Đăng Ký Xe', badge: 'Cập nhật 9/2026',
     desc: 'Đăng ký lịch trình công tác cần xe — sau khi duyệt, bộ phận điều phối gán xe và tài xế cụ thể cho chuyến đi; lái xe xác nhận nhận chuyến rồi báo số km khi kết thúc, người đăng ký đánh giá lại chuyến đi sau cùng.',
     flow: { ariaLabel: 'Quy trình Đăng Ký Xe', chain: [
       { label: 'Đăng ký lịch trình', sub: 'Điểm đi/đến, thời gian' },
       { label: 'Duyệt', sub: 'Theo cấu hình phòng ban', kind: 'decision' },
       { label: 'Điều phối xe', sub: 'Gán xe + tài xế', kind: 'approved' },
-      { label: 'Lái xe xác nhận & kết thúc', sub: 'Nhận chuyến → báo km khi xong' },
+      { label: 'Lái xe xác nhận & kết thúc', sub: 'Nhận chuyến (🚗 Đang Thực Hiện) → báo km khi xong' },
       { label: 'Đánh giá & hoàn tất', sub: 'Người đăng ký xác nhận lại' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: 'Nêu lý do' }, loopBackToIndex: 0 } },
     footer: { left: [
       { label: 'Điều phối tách biệt', text: 'người duyệt đăng ký khác với người điều phối xe — bộ phận điều phối chỉ thao tác sau khi đăng ký đã được duyệt.' },
-      { label: 'Đánh giá & xác nhận', text: 'lái xe tự xác nhận đã nhận chuyến, rồi báo số km thực đi khi kết thúc; sau đó người đăng ký xem lại và đánh giá chuyến đi — xong bước này chuyến mới được tính là hoàn tất.' },
+      { label: 'Đánh giá & xác nhận', text: 'lái xe tự xác nhận đã nhận chuyến (chuyển trạng thái "🚗 Đang Thực Hiện"), rồi báo số km thực đi khi kết thúc; sau đó người đăng ký xem lại và đánh giá chuyến đi — xong bước này chuyến mới được tính là hoàn tất.' },
+      { label: 'Hủy đăng ký', text: 'người đăng ký tự hủy được đăng ký của mình khi CHƯA ai duyệt (còn ở bước 1), hoặc bất kỳ lúc nào SAU khi đã duyệt xong (kể cả khi lái xe đã xác nhận nhưng chưa kết thúc chuyến) — chỉ không hủy được khi đang dở dang giữa các bước duyệt, hoặc chuyến đã thực sự kết thúc.' },
+      { label: 'Chuyển sang Taxi', text: 'chọn loại xe cụ thể đánh dấu "Là Xe Taxi" (lúc duyệt hay lúc "Đổi Tài Xế-Xe" sau này) tự xoá luôn tài xế công ty đã gán, vì xe giờ là taxi thuê ngoài.' },
     ], right: [
       { label: 'Báo Cáo: lịch sử đánh giá + xác nhận', text: 'mục 📊 Báo Cáo có 2 bảng chi tiết: "ai đánh giá lái xe nào, ở phiếu nào, nhận xét gì" và "lái xe xác nhận/kết thúc phiếu nào, lúc nào, báo bao nhiêu km".' },
       { label: 'Biểu đồ xu hướng chọn kỳ', text: 'biểu đồ số chuyến + số km theo Ngày/Tuần/Tháng/Quý/Năm, tách biệt với mục Lịch Xe (xem lịch trực quan theo ngày/tuần/tháng, không phải biểu đồ thống kê).' },
+      { label: 'Quyền xem/tải Phiếu Phê Duyệt', text: 'chỉ người đăng ký, tài xế được gán, người duyệt hồ sơ đó, hoặc admin — không còn mở rộng theo phòng ban như các file tải khác trong hệ thống.' },
     ] },
   },
   vpp: {

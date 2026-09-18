@@ -982,10 +982,11 @@ router.post('/carRegs/:id/evaluate', async (req, res) => {
   }
 });
 
-// "Hủy chuyến" — CHỈ hồ sơ đang APPROVED (Fix 4, đợt rà soát nghiệp vụ: trước đây phiếu đã duyệt là
-// NGÕ CỤT, chỉ admin xoá cứng được) — mirror POST /api/meetings/:id/cancel (routes/meetingActions.js):
-// tự huỷ được chuyến của chính mình HOẶC carDispatch/admin huỷ được của bất kỳ ai, xem
-// canCancelCarReg()/cancelCarReg() ở lib/recordActions.js.
+// "Hủy chuyến" — hồ sơ đang PENDING bước 1 (chưa ai duyệt), APPROVED, hoặc IN_PROGRESS (Fix 4, đợt rà
+// soát nghiệp vụ: trước đây phiếu đã duyệt là NGÕ CỤT, chỉ admin xoá cứng được; mục 1/2 đợt 9/2026 mở
+// rộng thêm cho cả trước-duyệt và sau-khi-lái-xe-xác-nhận) — mirror POST /api/meetings/:id/cancel
+// (routes/meetingActions.js): tự huỷ được chuyến của chính mình HOẶC carDispatch/admin huỷ được của
+// bất kỳ ai, xem canCancelCarReg()/cancelCarReg() ở lib/recordActions.js.
 router.post('/carRegs/:id/cancel', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -999,7 +1000,7 @@ router.post('/carRegs/:id/cancel', async (req, res) => {
   }
 });
 
-// "Đổi tài xế-xe" — CHỈ Người Điều Hành Xe (carDispatch)/admin, CHỈ hồ sơ đang APPROVED — reassignCarDispatch()
+// "Đổi tài xế-xe" — CHỈ Người Điều Hành Xe (carDispatch)/admin, hồ sơ đang APPROVED hoặc IN_PROGRESS — reassignCarDispatch()
 // (lib/recordActions.js) cần đọc TOÀN BỘ carRegs hiện có để tái kiểm tra trùng biển số (mirror đúng
 // applyWorkflowAction() ở lib/workflowEngine.js/findCarPlateConflict()) + danh sách users để đối chiếu
 // tài khoản lái xe mới — đọc TRƯỚC khi khoá bản ghi (cùng khuôn allMeetings ở routes/meetingActions.js).

@@ -259,6 +259,14 @@ thêm:
 chỉ đổi CHỮ hiển thị trên nút/chân ký, mọi logic phân quyền/chuyển bước giữ
 nguyên 100%.
 
+**Nút "🖨️ In" khớp đúng format "👁️ Xem Phiếu" (từ 9/2026)** — trước đây nút In
+ngay trong màn Xem (dùng chung cho mọi module, kể cả Phiếu Phê Duyệt) in ra
+HOÀN TOÀN không có định dạng (chữ dồn 1 khối, mất hết bảng/khung/chân ký) do
+khung in không nạp được CSS của trang chính. Đã vá 1 chỗ dùng chung, khắc phục
+đồng thời cho cả 3 module có Phiếu Phê Duyệt (Đăng Ký Xe, Văn Bản Trình, VPP/
+Văn Phòng) — nút "⬇️ Tải Phiếu" (tải file riêng) không bị ảnh hưởng, đã đúng từ
+trước.
+
 ### 3.1b. Ý kiến từng bước hiện trên phiếu in (từ v22.9)
 
 Mỗi bước duyệt đều có ô ghi chú/ý kiến (nhập lúc bấm nút hành động, VD "Cho Ý
@@ -561,7 +569,14 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
-  tự điền thông tin cơ bản.
+  tự điền thông tin cơ bản. **Xem/Tải/In khớp nội dung (từ 9/2026)** — trước
+  đây màn "Xem" và file Tải/khung In dựng HTML riêng biệt, lệch cả nội dung
+  (bản Xem thiếu chân ký Thư Ký/Chủ Trì, bản Tải thiếu cột "Giao việc") lẫn
+  định dạng; nay dùng chung đúng 1 bộ nội dung, chỉ khác bản Xem có thêm cột
+  trạng thái/nút "📌 Giao việc" (không có ý nghĩa trên bản chính thức nên bản
+  Tải/In bỏ cột này), cả 2 đều có khối chân ký "Thư Ký"/"Chủ Trì" xếp ngang
+  hàng, căn giữa cân đối (cùng kiểu bố cục với Phiếu Phê Duyệt của Đăng Ký
+  Xe/Văn Bản Trình/Văn Phòng).
 - **Truyền Thông Nội Bộ** — 5 sub-tab dùng chung 1 collection bài đăng, phân
   biệt bằng loại: 📰 Nhịp Sống HCRC (tin tức công ty), 🎓 Đào Tạo (thông báo
   lớp học, liên kết LMS bên dưới), 💼 Tuyển Dụng (đăng tin + nhân viên giới
@@ -657,6 +672,38 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   bỏ qua bước xác nhận). Phiếu Phê Duyệt (xem/tải) vẫn dùng được bình thường ở
   cả 2 trạng thái mới này, có thêm mục "Kết Thúc Chuyến / Đánh Giá" hiện số km
   + nhận xét khi đã có.
+  **Trạng thái "🚗 Đang Thực Hiện" (`IN_PROGRESS`, từ 9/2026)** — trước đây lái
+  xe bấm "✅ Xác Nhận Đăng Ký" chỉ ghi nhận cờ ngầm, nhãn trạng thái ở danh sách
+  vẫn hiện y hệt "Đã Phê Duyệt" nên không phân biệt được đã có ai nhận chuyến
+  hay chưa nếu không mở chi tiết. Nay "Xác Nhận Đăng Ký" chuyển hẳn trạng thái
+  sang **"🚗 Đang Thực Hiện"** (nằm giữa "Đã Phê Duyệt" và "Chờ Đánh Giá" trong
+  luồng), có thẻ riêng ở "📊 Báo Cáo" và filter riêng ở danh sách. "🔁 Đổi Tài
+  Xế-Xe"/"🚫 Hủy Chuyến" vẫn dùng được bình thường ở cả 2 trạng thái Đã Phê
+  Duyệt lẫn Đang Thực Hiện.
+  **"🚫 Hủy Đăng Ký" khi chưa ai duyệt (từ 9/2026)** — trước đây 1 phiếu đang
+  chờ duyệt (`PENDING`) hoàn toàn không có cách rút lại, chỉ "Hủy Chuyến" được
+  sau khi đã phê duyệt xong. Nay người đăng ký có thể tự hủy đăng ký của chính
+  mình ngay khi **còn ở đúng bước duyệt đầu tiên** (chưa ai xử lý gì cả) —
+  KHÔNG áp dụng khi phiếu đã qua ít nhất 1 bước duyệt (đang dở dang giữa
+  chừng), lúc đó người duyệt bước hiện tại dùng "❌ Từ Chối" thay. Kết hợp với
+  "🚫 Hủy Chuyến" sau duyệt đã có sẵn, người đăng ký nay hủy được đăng ký của
+  mình ở bất kỳ giai đoạn nào TRƯỚC KHI chuyến thực sự kết thúc (bước 1 chưa
+  duyệt, đã duyệt xong, hoặc lái xe đã xác nhận nhưng chưa kết thúc chuyến) —
+  chỉ không hủy được khi đang dở dang giữa các bước duyệt, hoặc chuyến đã thực
+  sự kết thúc (đang/đã Đánh Giá).
+  **Chuyển sang Taxi tự xoá tài xế đã gán (từ 9/2026)** — ở "Phần Dành Cho
+  Phòng Hành Chính", khi đổi "Loại xe cụ thể" sang 1 mục đánh dấu "Là Xe Taxi"
+  (dù lúc duyệt hay ở "🔁 Đổi Tài Xế-Xe" sau này), hệ thống nay **tự xoá luôn
+  cả tài xế đã gán** (trước đây chỉ dọn BKS, để sót tài xế cũ treo lại dù xe
+  giờ là taxi thuê ngoài, không còn tài xế công ty đi kèm) — ô "Lái xe được
+  phân công" tự khoá/xoá trắng ngay khi chọn Taxi.
+  **Quyền Xem/Tải Phiếu Phê Duyệt siết hẹp hơn (từ 9/2026)** — trước đây bất kỳ
+  ai xem được dòng đăng ký (kể cả chỉ có quyền xem theo phòng ban, không liên
+  quan trực tiếp tới chuyến) đều xem/tải được Phiếu Phê Duyệt chính thức; nay
+  **chỉ người đăng ký, tài xế được gán, người đã/đang duyệt hồ sơ đó, hoặc
+  admin** mới xem/tải được — bỏ hẳn fallback "cùng phòng ban" mặc định (CHỈ áp
+  dụng riêng cho Phiếu Đăng Ký Xe, không đổi hành vi tải file chung của các
+  module khác).
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
