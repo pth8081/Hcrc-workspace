@@ -1740,27 +1740,34 @@ function closeDocDetailModal() {
 // dựng động như Phiếu Phê Duyệt Đăng Ký Xe) — dùng 1 iframe ẩn để chỉ in đúng phần nội dung, không
 // in kèm khung modal/nút bấm xung quanh.
 // Mục 5 (yêu cầu nghiệp vụ 9/2026, "in phiếu phải khớp xem phiếu"): #viewModalContent dùng CHUNG cho
-// nhiều loại nội dung, trong đó Phiếu Phê Duyệt (Đăng Ký Xe/Văn Bản Trình/Đề Xuất Văn Phòng — xem
-// buildApprovalSlipShellHTML()/APPROVAL_SLIP_CSS ở core.js) chỉ được style qua app.css NẠP TOÀN TRANG
-// (cho khung xem trực tiếp) — iframe in bên dưới là 1 document HOÀN TOÀN MỚI, không load app.css, nên
-// trước đây in ra mất sạch style (chữ dồn 1 khối, không bảng/khung, không giống bản Xem). Nhúng thẳng
-// APPROVAL_SLIP_CSS vào <style> của iframe in — ĐÚNG cách 3 hàm downloadXxxApprovalSlip() đã làm cho
-// bản Tải (vốn đã in đúng từ trước) — vô hại với nội dung KHÔNG dùng class .approval-slip (CSS chỉ áp
-// dụng bên trong .approval-slip). standaloneHtmlRestoreStyles() phòng hờ data-style nào đó (nếu có)
-// chưa kịp qua applyDataStyles() (MutationObserver) tại thời điểm bấm In.
+// nhiều loại nội dung, trong đó Phiếu Phê Duyệt (Đăng Ký Xe/Văn Bản Trình/Đề Xuất Văn Phòng) và Biên
+// Bản Họp chỉ được style qua app.css NẠP TOÀN TRANG (cho khung xem trực tiếp) — iframe in bên dưới là
+// 1 document HOÀN TOÀN MỚI, không load app.css, nên trước đây in ra mất sạch style. LƯU Ý QUAN TRỌNG
+// (phát hiện qua tests/test-csp-deep-interaction.js): nhúng CSS qua khối `<style>` nội tuyến ở ĐÂY BỊ
+// CHẶN bởi CSP — khác hẳn 3 hàm downloadXxxApprovalSlip()/buildMeetingMinutesDocumentHTML() (file .html
+// tải về mở qua file://, ngoài phạm vi CSP của app) — iframe same-origin dựng qua document.write() vẫn
+// KẾ THỪA style-src của trang chính (không có 'unsafe-inline'), nên đã thử `<style>` là bị Refused
+// ngay, coi như KHÔNG có style nào cả (回 lại đúng lỗi cũ). Sửa đúng: dùng `<link rel="stylesheet"
+// href="/app.css">` (external stylesheet, HỢP LỆ theo style-src 'self') — nhưng phải ĐỢI stylesheet tải
+// xong mới gọi print() (khác nội dung HTML viết đồng bộ qua doc.write(), 1 file .css tải qua mạng
+// KHÔNG đồng bộ), xem printHtmlViaHiddenIframe() ngay dưới.
 function printViewModalContent() {
   const container = document.getElementById('viewModalContent');
   if (!container || !container.innerHTML.trim()) return alert('Không có nội dung để in.');
-  const printHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${container.innerHTML}</body></html>`);
+  const printHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>In</title><link rel="stylesheet" href="/app.css"></head><body>${container.innerHTML}</body></html>`);
   printHtmlViaHiddenIframe(printHtml);
 }
 
 // In qua iframe ẩn (KHÔNG thêm thư viện tạo PDF nào — người dùng chọn "Save as PDF" ở hộp thoại In của
-// trình duyệt). QUAN TRỌNG: gọi print() NGAY SAU doc.close(), KHÔNG chờ sự kiện "load" của iframe — nội
-// dung ghi bằng document.write()/close() đã có sẵn NGAY LÚC close() trả về (đồng bộ), trong khi "load"
-// của 1 iframe rỗng thường bắn ra NGAY LÚC appendChild (trước khi kịp gán onload ở dưới) nên callback
-// gán SAU dễ không bao giờ chạy — bấm nút không thấy gì cả, không báo lỗi (bug thật đã gặp ở nút "Tải
-// PDF" Báo Cáo Định Kỳ, cùng 1 khuôn mẫu này bị sao chép qua nên sửa chung ở đây).
+// trình duyệt). QUAN TRỌNG: gọi print() NGAY SAU doc.close() khi HTML KHÔNG có <link rel="stylesheet">
+// (nội dung ghi bằng document.write()/close() đã có sẵn NGAY LÚC close() trả về, đồng bộ) — nhưng nếu
+// CÓ <link rel="stylesheet"> (mục 5, printViewModalContent() ở trên) thì phải đợi đúng sự kiện
+// load/error của thẻ <link> đó trước khi in, vì file .css tải qua mạng KHÔNG đồng bộ như nội dung HTML
+// (in ngay lúc chưa tải xong thì vẫn ra kết quả không style, y hệt lỗi cũ). "load" của CHÍNH iframe rỗng
+// thường bắn ra NGAY LÚC appendChild (trước khi kịp gán onload) nên callback gán SAU dễ không bao giờ
+// chạy — bug thật đã gặp ở nút "Tải PDF" Báo Cáo Định Kỳ, cùng 1 khuôn mẫu này bị sao chép qua — đây là
+// lý do KHÔNG dùng sự kiện "load" của iframe, mà dùng sự kiện của riêng thẻ <link> (gán TRƯỚC khi
+// doc.write() nên không bị lỡ nhịp như iframe).
 function printHtmlViaHiddenIframe(html) {
   const printFrame = document.createElement('iframe');
   printFrame.style.position = 'fixed';
@@ -1776,8 +1783,24 @@ function printHtmlViaHiddenIframe(html) {
   doc.write(html);
   doc.close();
 
-  printFrame.contentWindow.focus();
-  printFrame.contentWindow.print();
-  setTimeout(() => document.body.removeChild(printFrame), 1000);
+  const doPrint = () => {
+    printFrame.contentWindow.focus();
+    printFrame.contentWindow.print();
+    setTimeout(() => document.body.removeChild(printFrame), 1000);
+  };
+
+  // Thẻ <link rel="stylesheet"> (nếu html có, xem printViewModalContent()) đã CÓ SẴN trong DOM ngay
+  // sau doc.close() (parse đồng bộ) — khác iframe rỗng ở chú thích trên, KHÔNG bị lỡ nhịp sự kiện vì
+  // gắn listener ngay tại đây trước khi việc tải file .css (bất đồng bộ) kịp hoàn tất.
+  const stylesheetLink = doc.querySelector('link[rel="stylesheet"]');
+  if (stylesheetLink) {
+    let printed = false;
+    const safePrint = () => { if (printed) return; printed = true; doPrint(); };
+    stylesheetLink.addEventListener('load', safePrint);
+    stylesheetLink.addEventListener('error', safePrint);
+    setTimeout(safePrint, 800); // phòng hờ hiếm khi sự kiện load/error không bắn — không để treo mãi
+  } else {
+    doPrint();
+  }
 }
 

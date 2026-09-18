@@ -1889,9 +1889,14 @@ async function main() {
   );
 
   // ===== Mục 5a (yêu cầu nghiệp vụ 9/2026, "in phiếu phải khớp xem phiếu"): nút 🖨️ In (printViewModalContent
-  // -> printHtmlViaHiddenIframe) giờ phải nhúng kèm APPROVAL_SLIP_CSS — trước đây in ra hoàn toàn không
-  // có style. Spy printHtmlViaHiddenIframe() để bắt đúng HTML sắp đưa vào iframe in, không cần đợi
-  // window.print() thật (headless không hiện hộp thoại in). =====
+  // -> printHtmlViaHiddenIframe) giờ phải nhúng kèm CSS — trước đây in ra hoàn toàn không có style.
+  // LỖI THẬT phát hiện qua test-csp-deep-interaction.js: bản vá ĐẦU TIÊN nhúng CSS qua <style> nội tuyến
+  // trong iframe bị chính CSP của trang chặn (iframe same-origin dựng qua document.write() vẫn kế thừa
+  // style-src của trang, không có 'unsafe-inline') — coi như VẪN không có style nào, y hệt lỗi cũ, chỉ
+  // khác là giờ còn bắn thêm lỗi CSP trong console. Sửa đúng: dùng <link rel="stylesheet" href="/app.css">
+  // (external stylesheet, hợp lệ với style-src 'self'). Test này xác nhận CẢ 2 vế: (a) spy
+  // printHtmlViaHiddenIframe() bắt đúng HTML dùng <link>, KHÔNG dùng <style>; (b) chạy THẬT (không mock)
+  // và bắt console CSP-violation thật sự — chỉ mock HTML string không đủ phát hiện lỗi loại này. =====
   const printCapture = await page.evaluate((carId) => {
     viewCarApprovalSlip(carId);
     let captured = null;
@@ -1902,9 +1907,23 @@ async function main() {
     return captured;
   }, taxiTestItem.id);
   record(
-    'Mục 5a: In Phiếu Phê Duyệt (Đăng Ký Xe) giờ nhúng kèm APPROVAL_SLIP_CSS (.approval-slip/.as-sign-row) — trước đây in ra không có style nào',
-    !!printCapture && printCapture.includes('approval-slip') && printCapture.includes('as-sign-row') && printCapture.includes('<style>'),
+    'Mục 5a: In Phiếu Phê Duyệt (Đăng Ký Xe) dùng <link rel="stylesheet" href="/app.css"> (CSP-safe), KHÔNG còn <style> nội tuyến (bị CSP chặn)',
+    !!printCapture && printCapture.includes('<link rel="stylesheet" href="/app.css">') && !printCapture.includes('<style>'),
     printCapture ? printCapture.slice(0, 200) + '...' : 'null'
+  );
+
+  const cspErrors = [];
+  const consoleListener = (msg) => {
+    if (msg.type() === 'error' && /Content Security Policy|Refused to apply/i.test(msg.text())) cspErrors.push(msg.text());
+  };
+  page.on('console', consoleListener);
+  await page.evaluate((carId) => { viewCarApprovalSlip(carId); printViewModalContent(); }, taxiTestItem.id);
+  await page.waitForTimeout(1200);
+  page.off('console', consoleListener);
+  record(
+    'Mục 5a: bấm 🖨️ In THẬT (không mock) — KHÔNG phát sinh vi phạm CSP nào trong console (bug thật đã bắt được ở test-csp-deep-interaction.js)',
+    cspErrors.length === 0,
+    JSON.stringify(cspErrors)
   );
 
   // Quản Lý Danh Mục (Admin) — thêm/xóa "Loại Xe Cụ Thể" và "Hãng Taxi", cả 2 phải là <select> thuần
