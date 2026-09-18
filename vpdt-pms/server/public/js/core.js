@@ -5896,7 +5896,11 @@ function closeMobileSidebar() {
 // này NGAY SAU đăng nhập, trước khi mở bất kỳ tab nào, nên không thể để nằm ở 1 module-*.js nạp lười.
 function applyUploadAcceptAttrs() {
   const STATIC_INPUTS = {
-    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'], internal: ['internalFile']
+    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'], internal: ['internalFile'],
+    // internalImage (LỖI ĐÃ VÁ — xem chú thích MODULE_DEFAULT_ALLOWED_EXT.internalImage ở
+    // routes/upload.js): banner tin tuyển dụng, KHÔNG gồm tdFile (Truyền Thông Nội Bộ > Tài Liệu) vì
+    // field đó ĐỘNG (dùng chung cho cả nhánh IMAGE lẫn văn bản tuỳ docType, không có 1 accept cố định).
+    internalImage: ['rjBannerFile']
   };
   const config = DB.uploadFileTypeConfig || {};
   for (const moduleKey in STATIC_INPUTS) {
@@ -7954,18 +7958,32 @@ function cspRunSeq(seqStr) {
   }
   return runFromCurrentIndex();
 }
+// runCspOp() — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Thấp — "double-submit"): bấm 2 lần
+// liên tiếp thật nhanh vào ĐÚNG 1 nút submit/thao tác (VD do double-click hoặc mạng chậm) trước khi
+// request đầu hoàn tất có thể gửi 2 lần (tạo trùng bản ghi, tải trùng file...). Khoá lại CHÍNH el đó
+// (data-op-in-flight) trong lúc promise fn trả về CHƯA resolve/reject rồi tự mở lại — chỉ chặn bấm LẶP
+// LẠI trên cùng 1 phần tử, KHÔNG ảnh hưởng bấm nút khác hay thao tác đồng bộ (fn không trả Promise coi
+// như xong ngay, không cần khoá).
+function runCspOp(el, fn, args) {
+  const result = fn.apply(null, args);
+  if (result && typeof result.then === 'function') {
+    el.dataset.opInFlight = '1';
+    result.finally(() => { delete el.dataset.opInFlight; });
+  }
+}
 function cspDispatchOp(el, evt, attrName) {
   const fnName = el.getAttribute(attrName);
   if (!fnName) return;
   if (el.dataset.opPreventDefault === '1') evt.preventDefault();
+  if (el.dataset.opInFlight === '1') return;
   const args = cspCollectArgs(el, evt);
   const fn = window[fnName];
-  if (typeof fn === 'function') { fn.apply(null, args); return; }
+  if (typeof fn === 'function') { runCspOp(el, fn, args); return; }
   // Nhanh hiem: ham chua nap (cum module-*.js chua tung mo trong phien) — nap xong roi goi lai.
   ensureFnReady(fnName).then(() => {
     const fn2 = window[fnName];
     if (typeof fn2 !== 'function') { console.error('CSP dispatch: không tìm thấy hàm', fnName); return; }
-    fn2.apply(null, args);
+    runCspOp(el, fn2, args);
   }).catch(err => reportCspDispatchFailure('CSP dispatch: không tải được mô-đun cho hàm', fnName, err));
 }
 // applyDataStyles(root) — thay cho thuộc tính HTML style="..." có nội dung ĐỘNG (màu/kích thước đổi

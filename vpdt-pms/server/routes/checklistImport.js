@@ -10,11 +10,12 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const rateLimit = require('express-rate-limit');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildChecklistImportTemplateWorkbook, parseChecklistImportFile } = require('../lib/checklistImport');
 const { canManageChecklistTemplates } = require('../lib/checklist');
 const { verifyFileSignature } = require('../lib/fileSignature');
+const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 
 const router = express.Router();
@@ -27,13 +28,6 @@ function requireManage(req, res, next) {
   next();
 }
 
-const uploadRateLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
-});
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
@@ -56,7 +50,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new Error(`Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
+      return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls) hoặc CSV, không hỗ trợ: ${ext || '(không rõ)'}`));
     }
     cb(null, true);
   }
@@ -87,7 +81,7 @@ router.post('/parse-questions', uploadRateLimiter, requireManage, (req, res) => 
       }
       return res.status(400).json({ error: err.message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendCatchError(res, err, req.originalUrl);
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp câu hỏi cần tải lên' });
 
     try {

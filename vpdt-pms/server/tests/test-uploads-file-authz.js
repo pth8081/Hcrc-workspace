@@ -74,7 +74,11 @@ const HR_PROCESS = {
 };
 const CHECKLIST_SUBMISSION = {
   id: 'cs-1', submittedByUsername: 'owner_cs', storeCode: DEPT_A, status: 'SUBMITTED',
-  answers: [{ questionId: 1, attachments: [{ fileUrl: '/uploads/checklist-proof.jpg' }] }]
+  answers: [{ questionId: 1, attachments: [{ fileUrl: '/uploads/checklist-proof.jpg' }] }],
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026): checklist loại DEDUCTION ("Trừ điểm theo hạng
+  // mục", v21.0) lưu ảnh minh chứng ở đây, KHÔNG phải answers[].attachments — trước đây findOwningRecord()
+  // không quét field này, rơi vào fail-open cho BẤT KỲ ai đã đăng nhập.
+  deductions: [{ criteriaId: 1, deductedPoints: 5, attachments: [{ fileUrl: '/uploads/checklist-deduction-proof.jpg' }] }]
 };
 
 const COLLECTIONS = {
@@ -118,15 +122,20 @@ function stubModule(relPath, exportsObj) {
 // đã xoá không được để file của nó lộ rộng hơn lúc chưa xoá — xem findOwningTrashItem()). Ở bộ test này
 // thùng rác luôn rỗng, để mọi kịch bản bên dưới giữ nguyên ý nghĩa cũ; kịch bản Thùng Rác được kiểm
 // riêng ở tests/test-audit-round2-cluster6.js.
+// getAllForCollectionCached: findOwningRecord() (lib/fileAuthz.js) đổi sang bản *Cached() (đợt rà soát
+// chuyên sâu upload 10/2026, mức Thấp — vá N+1) — test này không cần cache thật, trỏ thẳng về cùng hàm
+// getAllForCollection() phía trên là đủ (COLLECTIONS đọc lại mỗi lần gọi, không có gì để cache sai).
 stubModule('../lib/recordStore', {
   getAllForCollection: async (name) => COLLECTIONS[name] || [],
+  getAllForCollectionCached: async (name) => COLLECTIONS[name] || [],
   getAllTrashItemsCached: async () => []
 });
 // deptWorkflows rỗng -> resolveDocApproversServer() trả {} -> nhánh "đang là người duyệt" của
 // canViewDoc() không cho ai qua, để test chỉ xét đúng nhánh phạm vi phòng ban đang cần khoá.
 stubModule('../lib/appData', {
   getAllAppData: async () => ({ deptWorkflows: {} }),
-  getAppDataValue: async () => ({})
+  getAppDataValue: async () => ({}),
+  getAppDataValueCached: async () => ({})
 });
 
 const { authorizeFileAccess, parseUploadsFileUrl, uploadsAuthz } = require('../lib/fileAuthz');
@@ -264,6 +273,16 @@ async function main() {
     assert.strictEqual(await authorizeFileAccess({ username: 'gs_b', posType: 'STORE', dept: DEPT_B, perms: {} }, url, 'view'), false);
     assert.strictEqual(await authorizeFileAccess({ username: 'owner_cs', perms: {} }, url, 'view'), true);
     assert.strictEqual(await authorizeFileAccess({ username: 'gs_a', posType: 'STORE', dept: DEPT_A, perms: {} }, url, 'view'), true);
+  });
+
+  await run('checklistSubmissions: LỖI ĐÃ VÁ — ảnh trừ điểm (deductions[].attachments) PHẢI được gác quyền y hệt ảnh answers[].attachments, KHÔNG rơi vào fail-open', async () => {
+    const url = CHECKLIST_SUBMISSION.deductions[0].attachments[0].fileUrl;
+    assert.strictEqual(await authorizeFileAccess({ username: 'gs_b', posType: 'STORE', dept: DEPT_B, perms: {} }, url, 'view'), false,
+      'Người ngoài phạm vi (khác siêu thị, không có quyền báo cáo) KHÔNG được xem ảnh trừ điểm');
+    assert.strictEqual(await authorizeFileAccess({ username: 'owner_cs', perms: {} }, url, 'view'), true,
+      'Người nộp bài phải tự xem được ảnh trừ điểm của chính mình');
+    assert.strictEqual(await authorizeFileAccess({ username: 'gs_a', posType: 'STORE', dept: DEPT_A, perms: {} }, url, 'view'), true,
+      'Cùng siêu thị vẫn xem được, đúng luật như answers[].attachments');
   });
 
   // ===== 5) Fail-open có chủ ý cho file không tra ra hồ sơ nào =====

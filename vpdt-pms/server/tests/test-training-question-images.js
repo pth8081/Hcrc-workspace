@@ -75,11 +75,13 @@ const EMPTY_COLLECTIONS = ['docs', 'submissions', 'contracts', 'carRegs', 'offic
 
 stubModule('../lib/recordStore', {
   getAllForCollection: async (name) => COLLECTIONS[name] || (EMPTY_COLLECTIONS.includes(name) ? [] : []),
+  getAllForCollectionCached: async (name) => COLLECTIONS[name] || (EMPTY_COLLECTIONS.includes(name) ? [] : []),
   getAllTrashItemsCached: async () => []
 });
 stubModule('../lib/appData', {
   getAllAppData: async () => ({}),
-  getAppDataValue: async () => ({})
+  getAppDataValue: async () => ({}),
+  getAppDataValueCached: async () => ({})
 });
 
 const { authorizeFileAccess } = require('../lib/fileAuthz');

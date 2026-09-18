@@ -62,9 +62,15 @@ router.post('/contracts/:id/edit', async (req, res) => {
     // dept (chỉ hợp đồng gốc mới đổi được) VÀ đối chiếu trường bắt buộc của Biểu Mẫu (formTemplates) —
     // việc thứ 2 áp dụng cho CẢ phụ lục nên KHÔNG còn bỏ qua lượt đọc này khi isAddendum như trước.
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
-      recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept)
-    );
+    const result = await withLockedRecordForCollection('contracts', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file"):
+      // trước đây route này chỉ xác minh ĐÚNG KHUÔN URL (assertUploadedFileUrl trong editContract()),
+      // không xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới lên hay không.
+      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+      const updated = recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/edit`, err);
@@ -97,8 +103,13 @@ router.post('/contracts/:id/upload-signed', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const allPaymentRequests = await getAllForCollection('paymentRequests');
-    const result = await withLockedRecordForCollection('contracts', itemId, (item) =>
-      recordActions.uploadContractSignedFile(req.body, freshUser, item, allPaymentRequests));
+    const result = await withLockedRecordForCollection('contracts', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file").
+      const exemptFileUrls = item.signedFileUrl ? [item.signedFileUrl] : [];
+      const updated = recordActions.uploadContractSignedFile(req.body, freshUser, item, allPaymentRequests);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.signedFileUrl }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/upload-signed`, err);
@@ -225,8 +236,13 @@ router.post('/officeReqs/:id/upload-signed', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const allPaymentRequests = await getAllForCollection('paymentRequests');
-    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) =>
-      recordActions.uploadOfficeSignedFile(req.body, freshUser, item, allPaymentRequests));
+    const result = await withLockedRecordForCollection('officeReqs', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file").
+      const exemptFileUrls = item.signedFileUrl ? [item.signedFileUrl] : [];
+      const updated = recordActions.uploadOfficeSignedFile(req.body, freshUser, item, allPaymentRequests);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.signedFileUrl }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `officeReqs/${req.params.id}/upload-signed`, err);
@@ -330,8 +346,23 @@ async function withPaymentAction(req, res, action, mutator) {
   }
 }
 
-router.post('/paymentRequests/:id/edit', (req, res) =>
-  withPaymentAction(req, res, 'edit', recordActions.editPaymentRequest));
+router.post('/paymentRequests/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('paymentRequests', itemId, async (item) => {
+      const exemptFileUrls = [
+        ...(item.requestFiles || []).map(f => f?.fileUrl).filter(Boolean),
+        ...(item.installments || []).flatMap(it => (it.files || []).map(f => f?.fileUrl).filter(Boolean)),
+      ];
+      const updated = recordActions.editPaymentRequest(req.body, freshUser, item);
+      await assertPayloadFileUrlsOwnedByUser({ requestFiles: updated.requestFiles, installments: updated.installments }, freshUser, { exemptFileUrls });
+      return updated;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `paymentRequests/${req.params.id}/edit`, err); }
+});
 
 // "Chuyển Xác Nhận Thanh Toán" (DRAFT -> PENDING) — ĐÚNG thời điểm số tiền từng đợt bị bắt buộc > 0 (xem
 // submitPaymentRequest() ở lib/recordActions.js). "Duyệt đề nghị" (PENDING -> APPROVED) KHÔNG còn route
@@ -1628,7 +1659,12 @@ router.post('/docs/:id/update', async (req, res) => {
     // xem lib/recordActions.js editDocDraft(). Đọc TRƯỚC khi khoá bản ghi (cùng khuôn route
     // /submissions/:id/update bên dưới, không giữ khoá trong lúc chờ I/O khác).
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.editDocDraft(req.body, freshUser, item, appData));
+    const result = await withLockedRecordForCollection('docs', itemId, async (item) => {
+      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+      const updated = recordActions.editDocDraft(req.body, freshUser, item, appData);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `docs/${req.params.id}/update`, err); }
 });
@@ -1691,7 +1727,15 @@ router.post('/submissions/:id/update', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('submissions', itemId, (item) => recordActions.editSubmissionDraft(req.body, freshUser, item, appData));
+    const result = await withLockedRecordForCollection('submissions', itemId, async (item) => {
+      const exemptFileUrls = [
+        ...(item.fileUrl ? [item.fileUrl] : []),
+        ...((item.extraFiles || []).map(f => f?.fileUrl).filter(Boolean)),
+      ];
+      const updated = recordActions.editSubmissionDraft(req.body, freshUser, item, appData);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, extraFiles: updated.extraFiles }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `submissions/${req.params.id}/update`, err); }
 });
@@ -1937,9 +1981,12 @@ router.post('/reportEntries/:id/update', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const periods = await getAllForCollection('reportPeriods');
-    const result = await withLockedRecordForCollection('reportEntries', itemId, (item) => {
+    const result = await withLockedRecordForCollection('reportEntries', itemId, async (item) => {
       const period = periods.find(p => p.id === item.periodId);
-      return recordActions.updateReportEntryDraft(freshUser, item, req.body, period);
+      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+      const updated = recordActions.updateReportEntryDraft(freshUser, item, req.body, period);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+      return updated;
     });
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -2691,8 +2738,12 @@ router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.submitPriceSupplementFile(freshUser, item, req.body));
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, async (item) => {
+      const exemptFileUrls = (item.files || []).map(f => f?.fileUrl).filter(Boolean);
+      const updated = recordActions.submitPriceSupplementFile(freshUser, item, req.body);
+      await assertPayloadFileUrlsOwnedByUser({ files: updated.files }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/submit-supplement`, err);
@@ -3225,8 +3276,12 @@ router.post('/hrProcesses/:id/attachments', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
-      recordActions.addHrProcessAttachment(freshUser, item, req.body));
+    const result = await withLockedRecordForCollection('hrProcesses', itemId, async (item) => {
+      const exemptFileUrls = (item.attachments || []).map(a => a?.fileUrl).filter(Boolean);
+      const updated = recordActions.addHrProcessAttachment(freshUser, item, req.body);
+      await assertPayloadFileUrlsOwnedByUser({ attachments: updated.attachments }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/attachments`, err);
@@ -3692,8 +3747,11 @@ router.post('/laborContracts/:id/add-amendment', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     assertContractManage(freshUser);
     let amendment = null;
-    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+    const result = await withLockedRecordForCollection('laborContracts', itemId, async (item) => {
       amendment = laborContract.addAmendment(item, req.body, freshUser.username, freshUser.name);
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file"):
+      // mỗi phụ lục là 1 "Tệp quyết định" MỚI hoàn toàn (không có tệp cũ để giữ nguyên/exempt).
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: amendment.fileUrl }, freshUser);
       return item;
     });
     logLaborContractAction(req, freshUser, 'ADD_AMENDMENT', result.code || String(itemId), `Bổ sung phụ lục hợp đồng [${result.code || itemId}]: ${amendment?.amendmentType || ''}`);

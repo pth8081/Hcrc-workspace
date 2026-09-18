@@ -2736,8 +2736,10 @@ async function submitTrainingDocument(e) {
     const file = document.getElementById('tdFile').files[0];
     if (!file) return alert(docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên!' : 'Vui lòng chọn tệp tài liệu!');
     let uploaded;
+    // moduleKey 'internalImage' khi docType==='IMAGE' (LỖI ĐÃ VÁ — trước đây dùng chung 'internal' với
+    // tệp văn bản, xem chú thích ở submitRecruitmentJob()/MODULE_DEFAULT_ALLOWED_EXT.internalImage).
     try {
-      uploaded = await uploadFileToServer(file, 'internal');
+      uploaded = await uploadFileToServer(file, docType === 'IMAGE' ? 'internalImage' : 'internal');
     } catch (err) { return alert(`⛔ Tải tệp thất bại: ${err.message}`); }
     payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
   }

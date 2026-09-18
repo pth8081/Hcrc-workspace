@@ -493,13 +493,15 @@ function renderRecruitment() {
 async function submitRecruitmentJob(e) {
   e.preventDefault();
   if (!canManageRecruitmentLocal(currentUser)) return alert('⛔ Bạn không có quyền đăng tin tuyển dụng!');
-  // Banner (tuỳ chọn) — đi qua đúng uploadFileToServer('internal') như CV giới thiệu ứng viên ở
-  // submitRecruitmentReferral() bên dưới, KHÔNG dựng đường upload riêng.
+  // Banner (tuỳ chọn) — đi qua uploadFileToServer(), KHÔNG dựng đường upload riêng. moduleKey
+  // 'internalImage' (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu upload 10/2026 — trước đây dùng chung 'internal'
+  // với CV giới thiệu ứng viên/tệp văn bản khác, đụng độ với cấu hình "Loại Tệp Cho Phép" của admin cho
+  // 'internal' — xem MODULE_DEFAULT_ALLOWED_EXT.internalImage ở routes/upload.js).
   const bannerFile = document.getElementById('rjBannerFile').files[0];
   let bannerUrl = '', bannerFileName = '';
   if (bannerFile) {
     try {
-      const uploadedBanner = await uploadFileToServer(bannerFile, 'internal');
+      const uploadedBanner = await uploadFileToServer(bannerFile, 'internalImage');
       bannerUrl = uploadedBanner.fileUrl;
       bannerFileName = uploadedBanner.fileName;
     } catch (err) {

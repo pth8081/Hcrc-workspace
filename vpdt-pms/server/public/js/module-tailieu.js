@@ -1343,7 +1343,12 @@ const UPLOAD_MODULE_LIST = [
   { key: 'payment', label: '💳 Thanh Toán (Tệp đề nghị đã phê duyệt)' },
   // extUniverse riêng (ảnh, không phải .pdf/.docx/.xlsx) — mọi module KHÔNG có field này dùng mặc định
   // chung UPLOAD_EXT_UNIVERSE (giữ nguyên hành vi 8 module ở trên).
-  { key: 'trainingTestImage', label: '🧪 Ngân Hàng Câu Hỏi (Ảnh Minh Hoạ)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE }
+  { key: 'trainingTestImage', label: '🧪 Ngân Hàng Câu Hỏi (Ảnh Minh Hoạ)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE },
+  // internalImage (LỖI ĐÃ VÁ, tách khỏi 'internal' — xem chú thích MODULE_DEFAULT_ALLOWED_EXT.
+  // internalImage ở routes/upload.js): banner tin tuyển dụng (rjBannerFile) + ảnh tài liệu Truyền Thông
+  // Nội Bộ (tdFile khi docType==='IMAGE') — mục cấu hình riêng để đổi loại tệp 'internal' (văn bản)
+  // không còn vô tình chặn nhầm 2 nhánh ảnh này.
+  { key: 'internalImage', label: '📣 Truyền Thông Nội Bộ (Ảnh/Banner)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE }
 ];
 
 function renderUploadTypeConfig() {

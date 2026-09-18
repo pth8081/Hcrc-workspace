@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
-const rateLimit = require('express-rate-limit');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parsePriceFile, parsePriceTemplateColumns, normalizeHeader } = require('../lib/priceFileParser');
 const { getAppDataValueCached, getAllAppData } = require('../lib/appData');
@@ -25,13 +25,6 @@ const { recordUploadedFile } = require('../lib/uploadedFiles');
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
 
-const uploadRateLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
-});
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);

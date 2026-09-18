@@ -64,11 +64,15 @@ const APP_DATA = {
 let ITEMS = [];
 stubModule('../lib/recordStore', {
   getAllForCollection: async (name) => (name === 'itPriceApprovals' ? ITEMS : []),
+  // getAllForCollectionCached: findOwningRecord() (lib/fileAuthz.js) đổi sang bản *Cached() (đợt rà soát
+  // chuyên sâu upload 10/2026, mức Thấp — vá N+1) — test không cần cache thật, trỏ thẳng về cùng hàm trên.
+  getAllForCollectionCached: async (name) => (name === 'itPriceApprovals' ? ITEMS : []),
   getAllTrashItemsCached: async () => []
 });
 stubModule('../lib/appData', {
   getAllAppData: async () => APP_DATA,
-  getAppDataValue: async () => ({})
+  getAppDataValue: async () => ({}),
+  getAppDataValueCached: async () => ({})
 });
 
 const { authorizeFileAccess } = require('../lib/fileAuthz');

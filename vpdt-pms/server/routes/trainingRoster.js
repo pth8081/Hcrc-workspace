@@ -8,7 +8,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const rateLimit = require('express-rate-limit');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const QRCode = require('qrcode');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildRosterTemplateWorkbook, parseRosterFile } = require('../lib/trainingRoster');
@@ -35,13 +35,6 @@ function requireTrainingManage(req, res, next) {
   next();
 }
 
-const uploadRateLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
-});
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);

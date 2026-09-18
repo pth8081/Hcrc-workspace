@@ -25,8 +25,8 @@
 // Các module có khuôn quyền PHẲNG/riêng (Góc Chia Sẻ, bảng giá IT, Báo Cáo Định Kỳ, CV ứng viên, Giấy
 // Phép, Gia Hạn Dịch Vụ CNTT) dùng CHUNG một phép kiểm canView* cho cả 2 mode — vì bản thân các module
 // đó không có khái niệm quyền "tải riêng", ai xem được thì tải được.
-const { getAllForCollection, getAllTrashItemsCached } = require('./recordStore');
-const { getAllAppData, getAppDataValue } = require('./appData');
+const { getAllForCollection, getAllForCollectionCached, getAllTrashItemsCached } = require('./recordStore');
+const { getAllAppData, getAppDataValue, getAppDataValueCached } = require('./appData');
 const { canViewFullProfile } = require('./employeeProfile');
 const {
   canDownloadRecordFile, canViewInternalPost,
@@ -92,41 +92,49 @@ function customDataHasFileUrl(record, fileUrl) {
   return false;
 }
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Thấp — hiệu năng N+1): hàm này chạy ở MỌI request
+// /uploads/<file> không khớp Thùng Rác (xem getAllTrashItemsCached() ở lib/recordStore.js — CÙNG lý do,
+// avatar/logo là trường hợp thường gặp nhất), nên trước đây MỖI request quét lại nguyên 21 collection —
+// tốn cùng 1 lượt round-trip DB cho hàng chục request/giây khi nhiều người cùng mở màn hình có avatar.
+// Đổi toàn bộ getAllForCollection()/getAppDataValue() bên dưới sang bản *Cached() đã có sẵn (cùng TTL vài
+// giây, invalidate tự động khi có ghi mới — xem RECORDS_CACHE_TTL_MS/invalidateCollectionCache() ở
+// lib/recordStore.js) — nhiều request /uploads liên tiếp trong cùng TTL dùng chung 1 lượt đọc, độ trễ tối
+// đa lệch vài giây (vô hại, cùng tinh thần getAllTrashItemsCached()).
 async function findOwningRecord(fileUrl) {
   const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles] = await Promise.all([
-    getAllForCollection('docs'),
-    getAllForCollection('submissions'),
-    getAllForCollection('contracts'),
-    getAllForCollection('carRegs'),
-    getAllForCollection('officeReqs'),
-    getAllForCollection('internalPosts'),
-    getAllForCollection('itPriceApprovals'),
-    getAllForCollection('reportEntries'),
-    getAllForCollection('reportPeriods'),
-    getAllForCollection('recruitmentReferrals'),
-    getAllForCollection('licenses'),
-    getAllForCollection('itServiceRenewals'),
-    getAllForCollection('operationOrders'),
-    getAllForCollection('operationStoreOpenings'),
-    getAllForCollection('operationRepairs'),
+    getAllForCollectionCached('docs'),
+    getAllForCollectionCached('submissions'),
+    getAllForCollectionCached('contracts'),
+    getAllForCollectionCached('carRegs'),
+    getAllForCollectionCached('officeReqs'),
+    getAllForCollectionCached('internalPosts'),
+    getAllForCollectionCached('itPriceApprovals'),
+    getAllForCollectionCached('reportEntries'),
+    getAllForCollectionCached('reportPeriods'),
+    getAllForCollectionCached('recruitmentReferrals'),
+    getAllForCollectionCached('licenses'),
+    getAllForCollectionCached('itServiceRenewals'),
+    getAllForCollectionCached('operationOrders'),
+    getAllForCollectionCached('operationStoreOpenings'),
+    getAllForCollectionCached('operationRepairs'),
     // trainingTests (Ngân Hàng Câu Hỏi hỗ trợ ảnh minh hoạ câu hỏi): questions[].imageUrl là 1 file
     // /uploads/... như mọi field khác — thiếu nhánh này thì ảnh câu hỏi rơi thẳng vào FAIL-OPEN bên dưới,
     // đọc được bởi BẤT KỲ ai đã đăng nhập dù bài test có thể đang gán cho lớp giới hạn theo danh sách mời.
-    getAllForCollection('trainingTests'),
+    getAllForCollectionCached('trainingTests'),
     // laborContracts/paymentRequests/hrProcesses/checklistSubmissions — 4 collection PHÁT HIỆN THIẾU ở
     // đợt audit chuyên sâu (fileUrl của Hợp Đồng Lao Động/chứng từ Thanh Toán/tài liệu Onboarding-Offboarding/
     // ảnh minh chứng Checklist đều rơi vào FAIL-OPEN dù bản ghi đã bị giới hạn theo quyền ở GET /api/data)
     // — vá cùng đợt, dùng ĐÚNG hàm canView* đã có sẵn của mỗi module (lib/recordViewScope.js).
-    getAllForCollection('laborContracts'),
-    getAllForCollection('paymentRequests'),
-    getAllForCollection('hrProcesses'),
-    getAllForCollection('checklistSubmissions'),
+    getAllForCollectionCached('laborContracts'),
+    getAllForCollectionCached('paymentRequests'),
+    getAllForCollectionCached('hrProcesses'),
+    getAllForCollectionCached('checklistSubmissions'),
     // employeeProfiles: KHÁC 19 collection ở trên (dbo.Records) — collection này ở dbo.AppData (mảng
-    // phẳng 1 key duy nhất, xem lib/employeeProfile.js), đọc qua getAppDataValue() thay vì getAllForCollection().
+    // phẳng 1 key duy nhất, xem lib/employeeProfile.js), đọc qua getAppDataValueCached() thay vì getAllForCollectionCached().
     // Thêm vào đây cùng đợt bổ sung "Quyết định" đính kèm cho positionHistory[] (applyPositionAssignment())
     // — không có nhánh này, fileUrl của Quyết định gán/đổi chức vụ sẽ rơi vào FAIL-OPEN (đọc được bởi BẤT
     // KỲ ai đã đăng nhập) dù Hồ Sơ Nhân Sự vốn là dữ liệu nhạy cảm nhất hệ thống.
-    getAppDataValue('employeeProfiles')
+    getAppDataValueCached('employeeProfiles')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp (xem
   // validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG owning-info như khi khớp field
@@ -182,13 +190,25 @@ async function findOwningRecord(fileUrl) {
     { records: laborContracts, fixed: l => l.fileUrl === fileUrl || (l.amendments || []).some(a => a.fileUrl === fileUrl), build: l => ({ laborContract: true, item: l }) },
     { records: paymentRequests, fixed: p => (p.requestFiles || []).some(f => f.fileUrl === fileUrl) || (p.installments || []).some(i => i.confirmFileUrl === fileUrl), build: p => ({ paymentRequest: true, item: p }) },
     { records: hrProcesses, fixed: h => (h.attachments || []).some(a => a.fileUrl === fileUrl), build: h => ({ hrProcess: true, item: h }) },
-    // checklistSubmissions: không có customData, chỉ tham gia lượt 1 (fixed).
-    { records: checklistSubmissions, fixed: s => (s.answers || []).some(a => (a.attachments || []).some(att => att.fileUrl === fileUrl)), build: s => ({ checklistSubmission: true, item: s }) },
+    // checklistSubmissions: không có customData, chỉ tham gia lượt 1 (fixed). LỖI ĐÃ VÁ (đợt rà soát
+    // chuyên sâu upload 10/2026, mức Trung bình): trước đây chỉ quét answers[].attachments — checklist
+    // loại DEDUCTION (v21.0, "Trừ điểm theo hạng mục") lưu ảnh minh chứng ở deductions[].attachments,
+    // KHÔNG bao giờ khớp ở đây -> rơi vào nhánh fail-open có chủ ý bên dưới (authorizeFileAccess(), coi
+    // "không tìm thấy hồ sơ sở hữu" là "chưa rà, tạm cho qua") -> bất kỳ ai đã đăng nhập đều xem/tải
+    // được ảnh bằng chứng vi phạm (thường nhạy cảm), vô hiệu hoá hẳn quyền checklistReportView/
+    // checklistAuditScope đã có cho đúng loại ảnh này.
+    { records: checklistSubmissions, fixed: s => (s.answers || []).some(a => (a.attachments || []).some(att => att.fileUrl === fileUrl)) || (s.deductions || []).some(d => (d.attachments || []).some(att => att.fileUrl === fileUrl)), build: s => ({ checklistSubmission: true, item: s }) },
     // employeeProfiles.positionHistory[].fileUrl ("Quyết định" đính kèm khi gán/đổi chức vụ — xem
     // lib/employeeProfile.js::applyPositionAssignment()) — không có customData, chỉ tham gia lượt 1
     // (fixed). getAppDataValue() (khác getAllForCollection() ở mọi checker khác) trả về GIÁ TRỊ THÔ của
     // key AppData — Array.isArray() phòng thân trường hợp key chưa từng seed/mock trả về không phải mảng.
     { records: Array.isArray(employeeProfiles) ? employeeProfiles : [], fixed: p => (p.positionHistory || []).some(h => h.fileUrl === fileUrl), build: p => ({ employeeProfile: true, item: p }) }
+    // recruitmentJobs.bannerUrl (banner/ảnh tin tuyển dụng) — CỐ Ý KHÔNG có checker riêng ở đây, rơi
+    // thẳng vào nhánh FAIL-OPEN chung (coi như ảnh đại diện/logo, xem chú thích ở đầu file) — banner tin
+    // tuyển dụng vốn dùng để QUẢNG BÁ (thu hút ứng viên), không phải dữ liệu nội bộ nhạy cảm, nên cho mọi
+    // người đã đăng nhập xem được là đúng ý định, KHÔNG phải lỗ hổng sót checker như các collection khác
+    // trong mảng này (đợt rà soát chuyên sâu upload 10/2026, mức Thấp — xác nhận lại chủ đích, tránh
+    // nhầm với 1 checker còn thiếu thật sự).
   ];
 
   // Lượt 1 — CHỈ field cố định, thứ tự không còn ý nghĩa an ninh (mỗi file /uploads/... thật sự chỉ

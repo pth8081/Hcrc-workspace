@@ -176,11 +176,13 @@ async function main() {
     'itServiceRenewals', 'operationOrders', 'operationStoreOpenings', 'operationRepairs'];
   stubModule('../lib/recordStore', {
     getAllForCollection: async (name) => COLLECTIONS[name] || (EMPTY_COLLECTIONS.includes(name) ? [] : []),
+    getAllForCollectionCached: async (name) => COLLECTIONS[name] || (EMPTY_COLLECTIONS.includes(name) ? [] : []),
     getAllTrashItemsCached: async () => []
   });
   stubModule('../lib/appData', {
     getAllAppData: async () => ({}),
-    getAppDataValue: async () => ({})
+    getAppDataValue: async () => ({}),
+    getAppDataValueCached: async () => ({})
   });
   const { authorizeFileAccess } = require('../lib/fileAuthz');
   const optImgUrl = TEST_WITH_OPTION_IMAGES.questions[0].options[0].imageUrl;

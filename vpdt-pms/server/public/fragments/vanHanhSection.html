@@ -34,7 +34,7 @@
                    mỗi file tự parse + tự tạo NGAY 1 đơn hàng riêng (không cần rà soát tay) — chỉ chọn ĐÚNG
                    1 file mới giữ hành vi cũ (tự điền form, tự bấm Gửi phê duyệt sau khi kiểm tra), xem
                    nhánh rẽ ở đầu handleOperationOrderPdfUpload(). -->
-              <input type="file" id="voFile" multiple data-op-change="handleOperationOrderPdfUpload" class="w-full border p-1.5 rounded bg-white">
+              <input type="file" id="voFile" multiple accept=".pdf" data-op-change="handleOperationOrderPdfUpload" class="w-full border p-1.5 rounded bg-white">
               <p class="text-gray-400 mt-1">Chọn 1 file: tự điền form để kiểm tra trước khi gửi. Chọn NHIỀU file cùng lúc: mỗi file tự tạo NGAY 1 đơn hàng riêng, số đơn NCC (Số Đơn) trùng sẽ tự bỏ qua file đó và báo rõ.</p>
               <div id="voFileChip" class="mt-1 flex flex-wrap gap-1"></div>
               <div id="voPdfParseStatus" class="hidden"></div>
@@ -272,7 +272,7 @@
             <div><label class="block font-semibold text-gray-600 mb-1">Ngân Sách Phê Duyệt — Danh Mục Đầu Tư (VNĐ)</label><input id="vsoApprovedBudget" type="text" inputmode="numeric" placeholder="0" class="w-full border p-1.5 rounded money-input" required></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Ngày Dự Kiến Khai Trương</label><input id="vsoOpenDate" type="date" class="w-full border p-1.5 rounded"></div>
             <div class="relative"><label class="block font-semibold text-gray-600 mb-1">Người Phụ Trách Hồ Sơ (chỉ để lưu thông tin, không cấp quyền thao tác)</label><input id="vsoPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveVsoPersonInChargeInput" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded"><input type="hidden" id="vsoPersonInChargeUsername"></div>
-            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (khảo sát/phương án kinh doanh...)</label><input type="file" id="vsoFile" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="vsoFileChip" class="w-full border p-1.5 rounded bg-white"><div id="vsoFileChip" class="mt-1 flex flex-wrap gap-1"></div></div>
+            <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (khảo sát/phương án kinh doanh...)</label><input type="file" id="vsoFile" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="vsoFileChip" class="w-full border p-1.5 rounded bg-white"><div id="vsoFileChip" class="mt-1 flex flex-wrap gap-1"></div></div>
             <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label><textarea id="vsoNote" class="w-full border p-1.5 rounded h-16" placeholder="Ghi chú thêm (nếu có)..."></textarea></div>
           </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
@@ -339,7 +339,7 @@
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Nhà Cung Cấp / Đơn Vị Thi Công</label><input id="vrSupplier" placeholder="Công ty thi công/sửa chữa..." class="w-full border p-1.5 rounded"></div>
             <div class="relative"><label class="block font-semibold text-gray-600 mb-1">Người Phụ Trách Hồ Sơ (chỉ để lưu thông tin, không cấp quyền thao tác)</label><input id="vrPersonInChargeInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-change="resolveVrPersonInChargeInput" placeholder="Gõ tên hoặc tài khoản..." class="w-full border p-1.5 rounded"><input type="hidden" id="vrPersonInChargeUsername"></div>
             <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Mô Tả Chi Tiết Hiện Trạng &amp; Lý Do Sửa Chữa</label><textarea id="vrDescription" class="w-full border p-1.5 rounded h-16" placeholder="Mô tả hiện trạng hư hỏng, lý do cần sửa chữa..."></textarea></div>
-            <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (hình ảnh hiện trạng/báo giá...)</label><input type="file" id="vrFile" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="vrFileChip" class="w-full border p-1.5 rounded bg-white"><div id="vrFileChip" class="mt-1 flex flex-wrap gap-1"></div></div>
+            <div class="md:col-span-3"><label class="block font-semibold text-gray-600 mb-1">Tài Liệu Đính Kèm (hình ảnh hiện trạng/báo giá...)</label><input type="file" id="vrFile" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="vrFileChip" class="w-full border p-1.5 rounded bg-white"><div id="vrFileChip" class="mt-1 flex flex-wrap gap-1"></div></div>
           </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_OPERATION_REPAIR" class="contents"></div>

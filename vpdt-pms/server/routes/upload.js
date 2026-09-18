@@ -6,7 +6,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const rateLimit = require('express-rate-limit');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { getAppDataValueCached } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
@@ -17,13 +17,6 @@ const router = express.Router();
 
 // Giới hạn riêng cho tải file (ghi ra ổ đĩa, tốn tài nguyên hơn API JSON thường) — chặt hơn giới hạn
 // chung toàn /api (xem server.js) để tránh 1 tài khoản làm đầy ổ đĩa bằng cách tải liên tục.
-const uploadRateLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
-});
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
@@ -41,11 +34,20 @@ const MODULE_DEFAULT_ALLOWED_EXT = {
   trainingTestImage: ['.jpg', '.jpeg', '.png', '.webp'],
   // checklistAnswerPhoto (ảnh bằng chứng đính kèm câu trả lời Checklist Đánh Giá Siêu Thị) — cùng lý do
   // trainingTestImage ở trên, chỉ nên nhận ảnh ngay từ đầu.
-  checklistAnswerPhoto: ['.jpg', '.jpeg', '.png', '.webp']
+  checklistAnswerPhoto: ['.jpg', '.jpeg', '.png', '.webp'],
+  // internalImage (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "đụng độ
+  // moduleKey"): trước đây banner tin tuyển dụng (rjBannerFile) + ảnh tài liệu Truyền Thông Nội Bộ
+  // (tdFile khi docType==='IMAGE') dùng CHUNG moduleKey 'internal' với tệp văn bản (internalFile/
+  // rrCvFile, admin cấu hình "Loại Tệp Cho Phép" cho 'internal' chỉ gồm .pdf/.docx/.xlsx — xem
+  // UPLOAD_EXT_UNIVERSE ở module-tailieu.js) — nếu admin cấu hình đúng như nhãn "Truyền Thông Nội Bộ"
+  // gợi ý (chỉ văn bản), mọi banner/ảnh tài liệu bị chặn tải lên dù đây là tính năng hợp lệ, KHÔNG hề
+  // liên quan tới cấu hình loại tệp văn bản admin vừa chỉnh. Tách hẳn moduleKey riêng cho nhánh ảnh.
+  internalImage: ['.jpg', '.jpeg', '.png', '.webp']
 };
 const MODULE_DEFAULT_MAX_MB = {
   trainingTestImage: 5,
-  checklistAnswerPhoto: 5
+  checklistAnswerPhoto: 5,
+  internalImage: 5
 };
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });

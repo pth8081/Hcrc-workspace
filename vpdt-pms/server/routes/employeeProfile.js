@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
 const { getAllForCollection } = require('../lib/recordStore');
@@ -21,6 +22,7 @@ const orgChart = require('../lib/orgChart');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { parseVNDateTime } = require('../lib/recordActions');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026, "dữ liệu nhạy cảm nhân sự"): Hồ Sơ Nhân Sự trước đây không
 // ghi gì vào "Nhật ký hệ thống" — cùng với việc bỏ nhánh admin ở lib/employeeProfile.js, thêm log SERVER-
@@ -88,10 +90,6 @@ function assertActiveAccountIfGiven(username, allUsers) {
   if (!account) throw new HttpError(400, `Tài khoản VPDT "${username}" không tồn tại hoặc đã bị khoá`);
 }
 
-const uploadRateLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Bạn đang tải lên quá nhiều tệp, vui lòng thử lại sau ít phút.' }
-});
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -237,10 +235,11 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
     const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
     const applied = orgChart.getAppliedVersion(orgChartVersions);
     let updated, syncTarget = null;
-    await withLockedAppDataValue('employeeProfiles', (list) => {
+    await withLockedAppDataValue('employeeProfiles', async (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
       const result = employeeProfile.applyPositionAssignment(profile, applied, positionKey, effectiveDate, req.freshUser.username, req.freshUser.name, note, fileUrl, fileName);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl }, req.freshUser);
       updated = profile;
       if (profile.username) syncTarget = { username: profile.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
       return list;
