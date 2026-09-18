@@ -167,10 +167,10 @@ async function scenario(name, fn) {
     DB.vppExcludeGroups = [];
     DB.workflows = [{ id: 'WF_1STEP', name: '1 bước', steps: [{ order: 1, name: 'Phê duyệt 1' }] }];
     DB.deptWorkflows = { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['locked_approver'] } } };
-    DB.submissionDeptWorkflows = {}; DB.submissionTypeDeptWorkflows = {}; DB.submissionApprovalGroups = {};
+    DB.submissionDeptWorkflows = {}; DB.submissionTypeDeptWorkflows = {}; DB.submissionApprovalGroups = [];
     DB.carDeptWorkflows = {}; DB.officeBuyDeptWorkflows = {}; DB.officeFixDeptWorkflows = {}; DB.officeInvestDeptWorkflows = {};
     DB.vppDeptWorkflows = {}; DB.itPriceDeptWorkflows = {}; DB.budgetDeptWorkflows = {};
-    DB.contractApprovalDeptWorkflows = {}; DB.contractApprovalGroups = {}; DB.contractManageDeptWorkflows = {};
+    DB.contractApprovalDeptWorkflows = {}; DB.contractApprovalGroups = []; DB.contractManageDeptWorkflows = {};
     DB.docs = [{
       id: 101, code: 'DOC-1', displayCode: 'DOC-1', title: 'Tài liệu test', dept: 'Phòng IT',
       status: 'PENDING', currentStep: 1, history: []

@@ -47,7 +47,9 @@ function resetRecords() {
 resetRecords();
 
 // appData dùng chung cho mọi test — clone sâu (JSON) mỗi lần cần chỉnh 1 nhóm riêng, tránh 1 test làm
-// lệch dữ liệu của test khác (submissionApprovalGroups/contractApprovalGroups là object lồng nhau).
+// lệch dữ liệu của test khác. Shape MẢNG (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — khớp đúng
+// defaults.js submissionApprovalGroups/Levels + contractApprovalGroups/Levels (cùng id, chỉ khác
+// members test-riêng để bài test xác minh đúng THỨ TỰ/ĐÚNG NGƯỜI từng bước).
 function baseAppData() {
   return {
     users: USERS,
@@ -59,19 +61,33 @@ function baseAppData() {
     submissionTypeDeptWorkflows: {},
     contractApprovalDeptWorkflows: {},
     formTemplates: {},
-    submissionApprovalGroups: {
-      DONG_TRINH: [], DONG_CAP: [], XIN_Y_KIEN: [],
-      GD_PGD: ['gd1'],           // đúng 1 người -> tự chọn
-      PTGD: ['ptgd1', 'ptgd2'],  // nhiều người -> phải chọn đúng 1
-      TRO_LY_THU_KY: [],         // 0 người -> chặn
-      TGD: ['tgd1']
-    },
-    contractApprovalGroups: {
-      GD_PGD: ['gd1'],
-      PTGD: ['ptgd1', 'ptgd2'],
-      TRO_LY_THU_KY: [],
-      TGD: ['tgd1']
-    }
+    submissionApprovalGroups: [
+      { id: 'DONG_TRINH', label: 'Đồng trình', order: 1, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'DONG_CAP', label: 'Phê duyệt đồng cấp', order: 2, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'XIN_Y_KIEN', label: 'Xin ý kiến', order: 3, blocking: false, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 4, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: ['gd1'] }, // đúng 1 người -> tự chọn
+      { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 5, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: ['ptgd1', 'ptgd2'] }, // nhiều người -> phải chọn đúng 1
+      { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 6, blocking: true, singleApprover: false, allowFileReplacementProposal: true, members: [] }, // 0 người -> chặn
+      { id: 'TGD', label: 'Tổng Giám Đốc', order: 7, blocking: true, singleApprover: true, allowFileReplacementProposal: false, members: ['tgd1'] }
+    ],
+    submissionApprovalLevels: [
+      { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+      { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+      { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+      { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+    ],
+    contractApprovalGroups: [
+      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 1, singleApprover: false, members: ['gd1'] },
+      { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 2, singleApprover: false, members: ['ptgd1', 'ptgd2'] },
+      { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 3, singleApprover: false, members: [] },
+      { id: 'TGD', label: 'Tổng Giám Đốc', order: 4, singleApprover: true, members: ['tgd1'] }
+    ],
+    contractApprovalLevels: [
+      { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+      { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+      { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+      { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+    ]
   };
 }
 
@@ -126,7 +142,7 @@ stubModule('lib/auth', {
 const express = require('express');
 const { createRunner, assertEqual, assertIncludes } = require('./testHarness');
 const createRoutes = require('../routes/create');
-const { assertApprovalGroupsTgdSingle } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps } = require('../lib/createValidation');
 
 let PORT = 0;
 function startApp() {
@@ -274,30 +290,39 @@ async function main() {
     assertIncludes(res.body.error, 'Chưa gán thành viên', 'Thông báo lỗi phải nêu rõ chưa gán ai cho lớp bắt buộc');
   });
 
-  // ===================== TGD single-choice cap (assertApprovalGroupsTgdSingle) =====================
-  // Gọi trực tiếp hàm thật (cùng hàm routes/data.js POST /api/data/:key dùng để chặn TGĐ >1 người khi
-  // admin lưu mục 11/mục 14) — không cần dựng thêm HTTP layer cho 1 hàm thuần kiểm tra dữ liệu.
-
-  await runner.run('assertApprovalGroupsTgdSingle: TGD 0 hoặc 1 người -> KHÔNG lỗi (mục 11 và mục 14)', () => {
-    assertApprovalGroupsTgdSingle({ TGD: [] }, 'mục 11');
-    assertApprovalGroupsTgdSingle({ TGD: ['tgd1'] }, 'mục 11');
-    assertApprovalGroupsTgdSingle({ TGD: ['tgd1'] }, 'mục 14');
-    assertApprovalGroupsTgdSingle({}, 'mục 11');
-    assertApprovalGroupsTgdSingle(null, 'mục 11');
+  // ===================== singleApprover cap (assertApprovalGroupsSingleApproverCaps) =====================
+  // Gọi trực tiếp hàm thật (cùng hàm routes/data.js POST /api/data/:key dùng để chặn nhóm bật cờ
+  // singleApprover:true có >1 người khi admin lưu mục 11/mục 14) — không cần dựng thêm HTTP layer cho 1
+  // hàm thuần kiểm tra dữ liệu. TRƯỚC ĐÂY hardcode riêng khoá "TGD" (assertApprovalGroupsTgdSingle()),
+  // nay là cờ chung cho BẤT KỲ nhóm nào (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — test dùng lại
+  // đúng nhóm "TGD" làm ví dụ (vẫn bật singleApprover:true theo mặc định ở defaults.js) để giữ nguyên ý
+  // nghĩa bài test cũ.
+  await runner.run('assertApprovalGroupsSingleApproverCaps: nhóm singleApprover 0/1 người -> KHÔNG lỗi (mục 11 và mục 14)', () => {
+    assertApprovalGroupsSingleApproverCaps([{ id: 'TGD', label: 'Tổng Giám Đốc', singleApprover: true, members: [] }], 'mục 11');
+    assertApprovalGroupsSingleApproverCaps([{ id: 'TGD', label: 'Tổng Giám Đốc', singleApprover: true, members: ['tgd1'] }], 'mục 11');
+    assertApprovalGroupsSingleApproverCaps([{ id: 'TGD', label: 'Tổng Giám Đốc', singleApprover: true, members: ['tgd1'] }], 'mục 14');
+    assertApprovalGroupsSingleApproverCaps([], 'mục 11');
   });
 
-  await runner.run('assertApprovalGroupsTgdSingle: TGD 2+ người -> throw (mục 11)', () => {
+  await runner.run('assertApprovalGroupsSingleApproverCaps: nhóm singleApprover 2+ người -> throw (mục 11)', () => {
     let threw = false;
-    try { assertApprovalGroupsTgdSingle({ TGD: ['tgd1', 'tgd2'] }, 'mục 11 — Nhóm Phê Duyệt Trình'); }
+    try { assertApprovalGroupsSingleApproverCaps([{ id: 'TGD', label: 'Tổng Giám Đốc', singleApprover: true, members: ['tgd1', 'tgd2'] }], 'mục 11 — Nhóm Phê Duyệt Trình'); }
     catch (err) { threw = true; assertIncludes(err.message, 'Tổng Giám Đốc', 'Thông báo lỗi phải nêu rõ vai trò Tổng Giám Đốc'); }
-    if (!threw) throw new Error('Phải throw khi TGD có 2+ người (mục 11)');
+    if (!threw) throw new Error('Phải throw khi nhóm singleApprover có 2+ người (mục 11)');
   });
 
-  await runner.run('assertApprovalGroupsTgdSingle: TGD 2+ người -> throw (mục 14)', () => {
+  await runner.run('assertApprovalGroupsSingleApproverCaps: nhóm singleApprover 2+ người -> throw (mục 14)', () => {
     let threw = false;
-    try { assertApprovalGroupsTgdSingle({ TGD: ['tgd1', 'tgd2'] }, 'mục 14 — Nhóm Phê Duyệt HĐ'); }
+    try { assertApprovalGroupsSingleApproverCaps([{ id: 'TGD', label: 'Tổng Giám Đốc', singleApprover: true, members: ['tgd1', 'tgd2'] }], 'mục 14 — Nhóm Phê Duyệt HĐ'); }
     catch (err) { threw = true; }
-    if (!threw) throw new Error('Phải throw khi TGD có 2+ người (mục 14)');
+    if (!threw) throw new Error('Phải throw khi nhóm singleApprover có 2+ người (mục 14)');
+  });
+
+  await runner.run('assertApprovalGroupsSingleApproverCaps: value không phải mảng (shape cũ/request giả mạo) -> throw', () => {
+    let threw = false;
+    try { assertApprovalGroupsSingleApproverCaps(null, 'mục 11'); }
+    catch (err) { threw = true; }
+    if (!threw) throw new Error('Phải throw khi value không phải mảng');
   });
 
   runner.summary();

@@ -1318,9 +1318,14 @@
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖋️ 11. Nhóm Phê Duyệt Trình (Văn Bản Trình)</span></span>
           </summary>
-          <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">7 nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình. 6 nhóm chặn (Đồng trình/Đồng cấp/Giám Đốc-Phó Giám Đốc/Phó Tổng Giám Đốc/Trợ Lý-Thư Ký/Tổng Giám Đốc) cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; riêng "Xin ý kiến" chỉ là kênh tham khảo song song, không chặn quy trình. Gán thành viên cho từng nhóm ở đây — nhóm nào có NHIỀU HƠN 1 người thì người trình phải chọn cụ thể 1 người lúc tạo hồ sơ; riêng Tổng Giám Đốc chỉ gán được tối đa 1 người.</p>
-            <div id="submissionApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          <div class="p-3 pt-0 space-y-4">
+            <p class="text-[11px] text-gray-500 italic">Nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình, mỗi nhóm chặn quy trình cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; nhóm KHÔNG chặn quy trình (VD "Xin ý kiến") chỉ là kênh tham khảo song song. Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo tờ trình. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người trình phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
+            <div id="submissionApprovalGroupsAdminWrap"></div>
+            <div class="border-t pt-3">
+              <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Văn Bản Trình)</p>
+              <p class="text-[11px] text-gray-500 italic mb-2">Người trình chọn 1 trong các cấp dưới đây khi tạo tờ trình — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn. Đổi tên/thêm/xoá cấp tự do; cấp có khoá 🔒 là mặc định hệ thống, không xoá được (đảm bảo luôn có 1 cấp dự phòng) nhưng vẫn đổi tên được.</p>
+              <div id="submissionApprovalLevelsAdminWrap"></div>
+            </div>
           </div>
         </details>
 
@@ -1367,9 +1372,14 @@
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 14. Nhóm Phê Duyệt HĐ (Hợp Đồng)</span></span>
           </summary>
-          <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">4 nhóm RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở mục 11) — người tạo hợp đồng chọn khi tạo, mỗi nhóm cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"), theo đúng thứ tự Giám Đốc/PGĐ → Phó TGĐ → Trợ lý/Thư ký → TGĐ. Gán thành viên cho từng nhóm ở đây — nhóm nào có NHIỀU HƠN 1 người thì người tạo hợp đồng phải chọn cụ thể 1 người lúc tạo hồ sơ; riêng Tổng Giám Đốc chỉ gán được tối đa 1 người.</p>
-            <div id="contractApprovalGroupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          <div class="p-3 pt-0 space-y-4">
+            <p class="text-[11px] text-gray-500 italic">Nhóm RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở mục 11) — người tạo hợp đồng chọn khi tạo, mỗi nhóm cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"). Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo hợp đồng. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người tạo hợp đồng phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
+            <div id="contractApprovalGroupsAdminWrap"></div>
+            <div class="border-t pt-3">
+              <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Hợp Đồng)</p>
+              <p class="text-[11px] text-gray-500 italic mb-2">Người tạo hợp đồng chọn 1 trong các cấp dưới đây khi tạo hồ sơ — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn. Đổi tên/thêm/xoá cấp tự do; cấp có khoá 🔒 là mặc định hệ thống, không xoá được (đảm bảo luôn có 1 cấp dự phòng) nhưng vẫn đổi tên được.</p>
+              <div id="contractApprovalLevelsAdminWrap"></div>
+            </div>
           </div>
         </details>
 

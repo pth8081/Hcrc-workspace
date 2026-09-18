@@ -149,74 +149,49 @@ const SUBMISSION_TYPES_FALLBACK = [
   { key: 'KHAC', label: 'Tờ trình khác' }
 ];
 
-// blocking:true = lớp trở thành 1 BƯỚC DUYỆT thật trong effectiveSteps (chặn quy trình, phải xử lý
-// xong mới qua bước sau, theo ĐÚNG thứ tự xuất hiện trong mảng này). blocking:false (XIN_Y_KIEN) =
-// kênh tham khảo song song — người được chọn để lại ý kiến vào opinionRequestees/opinionResponses
-// của hồ sơ, KHÔNG tham gia effectiveSteps, KHÔNG có hành động Duyệt/Từ chối (xem
-// buildEffectiveSubmissionWorkflowServer bên dưới).
-const SUBMISSION_APPROVAL_LAYERS = [
-  { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
-  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
-  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
-  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', blocking: true },
-  { key: 'PTGD', label: 'Phó Tổng Giám Đốc', blocking: true },
-  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', blocking: true },
-  { key: 'TGD', label: 'Tổng Giám Đốc', blocking: true }
-];
-
-// Khớp đúng SUBMISSION_APPROVAL_LEVELS/SUBMISSION_APPROVAL_LEVEL_RULES trong index.html — xem "LƯU Ý
-// BẢO TRÌ" ở đầu file. "Cấp Phê Duyệt Cuối Cùng" người trình chọn quyết định lớp nào được PHÉP tick
-// (visible) và trong số đó lớp nào bị KHOÁ BẮT BUỘC (locked, con của visible) — server PHẢI tự áp lại
-// đúng luật này, không tin approvalLevel/selectedApprovalLayers client gửi lên: từ chối tạo nếu có lớp
-// ngoài visible, hoặc thiếu 1 lớp locked nào đó (xem buildEffectiveSubmissionWorkflowServer bên dưới).
-const SUBMISSION_APPROVAL_LEVELS = ['TGD', 'PTGD', 'GD_PGD', 'KHAC'];
-const SUBMISSION_APPROVAL_LEVEL_RULES = {
-  TGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
-  PTGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], locked: ['PTGD'] },
-  GD_PGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], locked: ['GD_PGD'] },
-  KHAC: { visible: SUBMISSION_APPROVAL_LAYERS.map(l => l.key), locked: [] }
-};
-
-// Di chuyển thành viên nhóm phê duyệt admin đã gán TRƯỚC KHI đổi tên lớp (khoá "BGD" -> "GD_PGD",
-// "TGD_CT" -> "TGD") sang đúng khoá mới — khớp đúng hàm cùng tên trong index.html (LƯU Ý BẢO TRÌ). Áp
-// dụng ngay trong buildEffectiveSubmissionWorkflowServer() để không mất quyền của thành viên đã gán
-// trước khi có tính năng "Cấp Phê Duyệt Cuối Cùng" (appData luôn đọc trực tiếp từ DB, chưa qua migrate
-// nào khác ở tầng lưu trữ).
-function migrateSubmissionApprovalGroupKeys(groups) {
-  const migrated = { ...(groups || {}) };
-  const RENAME_MAP = { BGD: 'GD_PGD', TGD_CT: 'TGD' };
-  Object.entries(RENAME_MAP).forEach(([oldKey, newKey]) => {
-    if (Array.isArray(migrated[oldKey]) && migrated[oldKey].length) {
-      migrated[newKey] = [...new Set([...(migrated[newKey] || []), ...migrated[oldKey]])];
-    }
-    delete migrated[oldKey];
-  });
-  return migrated;
+// "Nhóm Phê Duyệt Trình"/"Cấp Phê Duyệt Cuối Cùng" (đợt "Nhóm Phê Duyệt Trình/HĐ tự cấu hình", 10/2026):
+// ĐỔI HẲN từ 2 hằng số cố định (SUBMISSION_APPROVAL_LAYERS/SUBMISSION_APPROVAL_LEVEL_RULES kiểu cũ,
+// trùng lặp y hệt ở public/js/core.js — LƯU Ý BẢO TRÌ cũ đã XOÁ) sang ĐỌC THẲNG dữ liệu admin tự cấu
+// hình trong appData.submissionApprovalGroups (mảng {id,label,order,blocking,singleApprover,
+// allowFileReplacementProposal,members}) + appData.submissionApprovalLevels (mảng {id,label,order,
+// visibleGroupIds,lockedGroupIds}) — xem defaults.js cho shape đầy đủ + lý do đổi. Admin đổi tên/thêm/
+// xoá nhóm hoặc cấp tự do ở màn "Quản Lý Nhóm Phê Duyệt Trình" (mục 11), KHÔNG cần sửa code — hàm dưới
+// đây là điểm DUY NHẤT thật sự áp luật này lúc tạo hồ sơ (không tin approvalLevel/selectedApprovalLayers
+// client gửi lên).
+function resolveApprovalLevelRule(levels, levelId, groups) {
+  const level = (levels || []).find(l => l.id === levelId);
+  if (!level) return null;
+  const allGroupIds = (groups || []).map(g => g.id);
+  return {
+    visible: Array.isArray(level.visibleGroupIds) ? level.visibleGroupIds : allGroupIds,
+    locked: Array.isArray(level.lockedGroupIds) ? level.lockedGroupIds : []
+  };
 }
 
 // Tự dựng lại TOÀN BỘ quy trình hiệu lực (steps/approvers) của 1 tờ trình mới từ dữ liệu ĐÃ XÁC MINH
 // trong DB (quy trình phòng ban theo loại + thành viên nhóm phê duyệt do admin gán) — KHÔNG dùng
 // effectiveSteps/effectiveApprovers client tự gửi lên (trước đây tin nguyên client, ai đó tự soạn
-// request có thể nhét bất kỳ ai làm "người duyệt"). selectedLayerMembers[layerKey] là danh sách người
-// người trình chọn cho lớp đó — bắt buộc phải là TẬP CON của DB.submissionApprovalGroups[layerKey],
-// không thì từ chối tạo. approvalLevel bắt buộc phải là 1 trong SUBMISSION_APPROVAL_LEVELS, và
-// selectedLayerKeys phải khớp đúng luật visible/locked của cấp đó (xem SUBMISSION_APPROVAL_LEVEL_RULES
-// ở trên) — request tự soạn tick lớp ngoài phạm vi cho phép, hoặc bỏ bớt 1 lớp bắt buộc, đều bị từ
-// chối ở đây. Khớp đúng buildEffectiveSubmissionWorkflow() + getSubmissionDeptWorkflowConfig() trong
-// index.html.
+// request có thể nhét bất kỳ ai làm "người duyệt"). selectedLayerMembers[groupId] là danh sách người
+// người trình chọn cho nhóm đó — bắt buộc phải là TẬP CON của đúng nhóm trong
+// appData.submissionApprovalGroups, không thì từ chối tạo. approvalLevel bắt buộc phải khớp 1 id trong
+// appData.submissionApprovalLevels, và selectedLayerKeys phải khớp đúng luật visible/locked của cấp đó
+// — request tự soạn tick nhóm ngoài phạm vi cho phép, hoặc bỏ bớt 1 nhóm bắt buộc, đều bị từ chối ở
+// đây. Khớp đúng buildEffectiveSubmissionWorkflow() + getSubmissionDeptWorkflowConfig() ở core.js.
 function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, selectedLayerMembers, appData, approvalLevel) {
-  if (!SUBMISSION_APPROVAL_LEVELS.includes(approvalLevel)) {
+  const groups = (appData.submissionApprovalGroups || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const levels = appData.submissionApprovalLevels || [];
+  const rule = resolveApprovalLevelRule(levels, approvalLevel, groups);
+  if (!rule) {
     throw new CreateError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
   }
-  const rule = SUBMISSION_APPROVAL_LEVEL_RULES[approvalLevel];
   const layerKeysInput = Array.isArray(selectedLayerKeys) ? [...new Set(selectedLayerKeys)] : [];
   const outOfScope = layerKeysInput.filter(k => !rule.visible.includes(k));
   if (outOfScope.length) {
-    throw new CreateError(403, `Lớp phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
+    throw new CreateError(403, `Nhóm phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
   }
   const missingLocked = rule.locked.filter(k => !layerKeysInput.includes(k));
   if (missingLocked.length) {
-    throw new CreateError(400, `Thiếu lớp phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
+    throw new CreateError(400, `Thiếu nhóm phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
   }
   const submissionTypes = (appData.submissionTypes && appData.submissionTypes.length) ? appData.submissionTypes : SUBMISSION_TYPES_FALLBACK;
   const typeEntry = submissionTypes.find(t => t.label === type);
@@ -235,30 +210,28 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
   // với PEOPLE mode, xem lib/positionApprovers.js).
   baseWf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(baseConfig, s.order, appData.users); });
 
-  const groups = migrateSubmissionApprovalGroupKeys(appData.submissionApprovalGroups || {});
-  // Sắp lại ĐÚNG thứ tự chuẩn SUBMISSION_APPROVAL_LAYERS (Đồng trình -> Đồng cấp -> ... -> TGĐ) — trước
-  // đây ghép bước duyệt theo đúng thứ tự MẢNG client gửi lên, không tự sắp lại: giao diện bình thường
-  // luôn gửi đúng thứ tự (checkbox render sẵn theo thứ tự chuẩn) nhưng request tự soạn có thể đảo thứ
-  // tự (vd TGĐ trước Đồng trình/Đồng cấp), khiến TGĐ duyệt trước, ngược thứ bậc quy định.
-  const canonicalOrder = SUBMISSION_APPROVAL_LAYERS.map(l => l.key);
+  // Sắp lại ĐÚNG thứ tự chuẩn (theo field `order` admin cấu hình, KHÔNG tin thứ tự mảng client gửi) —
+  // request tự soạn có thể đảo thứ tự (vd TGĐ trước Đồng trình/Đồng cấp), khiến TGĐ duyệt trước, ngược
+  // thứ bậc quy định.
+  const canonicalOrder = groups.map(g => g.id);
   const layerKeys = [...layerKeysInput].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b));
   const opinionRequestees = [];
 
   layerKeys.forEach(layerKey => {
-    const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
-    if (!layer) throw new CreateError(400, `Lớp không hợp lệ: ${layerKey}`);
+    const layer = groups.find(g => g.id === layerKey);
+    if (!layer) throw new CreateError(400, `Nhóm không hợp lệ: ${layerKey}`);
 
-    const groupMembers = groups[layerKey] || [];
+    const groupMembers = layer.members || [];
     const isLocked = rule.locked.includes(layerKey);
     let chosen;
     if (isLocked) {
-      // Lớp bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) — người trình KHÔNG được tự
+      // Nhóm bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) — người trình KHÔNG được tự
       // chọn nếu nhóm chỉ có 1 người (dùng thẳng người đó, không cần "chọn"); nếu nhóm có NHIỀU người
       // (vd 2 Phó Giám Đốc) thì bắt buộc phải chọn ĐÚNG 1 người cụ thể trong nhóm đó — không phải cả
       // nhóm cùng duyệt như trước (yêu cầu người dùng: "người phê duyệt cuối cùng ... chọn tiếp người
       // phê duyệt" — số ít, không phải nhiều người cùng ký 1 bước).
       if (groupMembers.length === 0) {
-        throw new CreateError(400, `Chưa gán thành viên nào cho lớp bắt buộc "${layer.label}"`);
+        throw new CreateError(400, `Chưa gán thành viên nào cho nhóm bắt buộc "${layer.label}"`);
       }
       if (groupMembers.length === 1) {
         chosen = [...groupMembers];
@@ -269,30 +242,30 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
         }
         const invalid = chosen.filter(u => !groupMembers.includes(u));
         if (invalid.length) {
-          throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+          throw new CreateError(403, `Người được chọn cho nhóm "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
         }
       }
     } else {
       chosen = Array.isArray(selectedLayerMembers?.[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
       if (chosen.length === 0) {
-        throw new CreateError(400, `Chưa chọn người cho lớp "${layer.label}"`);
+        throw new CreateError(400, `Chưa chọn người cho nhóm "${layer.label}"`);
       }
       const invalid = chosen.filter(u => !groupMembers.includes(u));
       if (invalid.length) {
-        throw new CreateError(403, `Người được chọn cho lớp "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+        throw new CreateError(403, `Người được chọn cho nhóm "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
       }
     }
 
     if (layer.blocking) {
       const stepOrder = steps.length + 1;
-      // layerKey: khớp đúng index.html buildEffectiveSubmissionWorkflow() — dùng ở client để hiện
-      // cảnh báo "còn người chưa cho ý kiến" cho các bước nằm sau lớp Xin ý kiến.
-      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+      // layerKey: khớp đúng core.js buildEffectiveSubmissionWorkflow() — dùng ở client để hiện cảnh báo
+      // "còn người chưa cho ý kiến" cho các bước nằm sau nhóm không-chặn (VD "Xin ý kiến").
+      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id });
       approvers[stepOrder] = chosen;
     } else {
-      // XIN_Y_KIEN (hoặc lớp không chặn khác trong tương lai): KHÔNG trở thành bước duyệt — chỉ ghi
-      // nhận danh sách người được xin ý kiến, để lại comment tham khảo qua opinionResponses, không
-      // ảnh hưởng tới effectiveSteps/effectiveApprovers và không có hành động Duyệt/Từ chối.
+      // Nhóm blocking:false (VD "Xin ý kiến"): KHÔNG trở thành bước duyệt — chỉ ghi nhận danh sách
+      // người được xin ý kiến, để lại comment tham khảo qua opinionResponses, không ảnh hưởng tới
+      // effectiveSteps/effectiveApprovers và không có hành động Duyệt/Từ chối.
       opinionRequestees.push(...chosen);
     }
   });
@@ -300,44 +273,34 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
   return { steps, approvers, layerKeys, opinionRequestees: [...new Set(opinionRequestees)] };
 }
 
-// Quy trình Phê Duyệt HĐ — CHẠY ĐỘNG giống Văn Bản Trình (quy trình gốc theo phòng ban + tối đa 4 lớp
-// bổ sung tuỳ chọn theo "Cấp Phê Duyệt Cuối Cùng") nhưng TÁCH RIÊNG hoàn toàn: bỏ 3 lớp Đồng
-// trình/Xin ý kiến/Phê duyệt đồng cấp (chỉ giữ lại 4 lớp cấp bậc), và dùng nhóm phê duyệt RIÊNG
-// (appData.contractApprovalGroups, KHÔNG dùng chung DB.submissionApprovalGroups của Văn Bản Trình).
-// Quy trình "Quản Lý HĐ" (Tài liệu ký) đơn giản hơn — theo phòng ban như Xe/Mua Bán/VPP, không có lớp
-// tuỳ chọn, không snapshot lúc tạo (xem lib/workflowEngine.js resolveContractManageWorkflow).
-const CONTRACT_APPROVAL_LAYERS = [
-  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc' },
-  { key: 'PTGD', label: 'Phó Tổng Giám Đốc' },
-  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký' },
-  { key: 'TGD', label: 'Tổng Giám Đốc' }
-];
-const CONTRACT_APPROVAL_LEVELS = ['TGD', 'PTGD', 'GD_PGD', 'KHAC'];
-const CONTRACT_APPROVAL_LEVEL_RULES = {
-  TGD: { visible: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
-  PTGD: { visible: ['GD_PGD', 'PTGD'], locked: ['PTGD'] },
-  GD_PGD: { visible: ['GD_PGD'], locked: ['GD_PGD'] },
-  KHAC: { visible: CONTRACT_APPROVAL_LAYERS.map(l => l.key), locked: [] }
-};
-
+// Quy trình Phê Duyệt HĐ — CHẠY ĐỘNG giống Văn Bản Trình (quy trình gốc theo phòng ban + lớp bổ sung
+// tuỳ chọn theo "Cấp Phê Duyệt Cuối Cùng") nhưng TÁCH RIÊNG hoàn toàn: KHÔNG có nhóm không-chặn kiểu
+// "Xin ý kiến" (mọi nhóm đều là 1 bước duyệt), và dùng nhóm phê duyệt RIÊNG
+// (appData.contractApprovalGroups/contractApprovalLevels, KHÔNG dùng chung
+// submissionApprovalGroups/Levels của Văn Bản Trình — xem defaults.js). Quy trình "Quản Lý HĐ" (Tài
+// liệu ký) đơn giản hơn — theo phòng ban như Xe/Mua Bán/VPP, không có lớp tuỳ chọn, không snapshot lúc
+// tạo (xem lib/workflowEngine.js resolveContractManageWorkflow).
+//
 // Tự dựng lại quy trình Phê Duyệt HĐ hiệu lực (steps/approvers) cho 1 hợp đồng/phụ lục mới — cùng
 // khuôn xác minh với buildEffectiveSubmissionWorkflowServer() ở trên (approvalLevel hợp lệ ->
-// selectedLayerKeys đúng luật visible/locked -> mỗi lớp chọn phải là tập con của
-// appData.contractApprovalGroups[layerKey]) nhưng KHÔNG có nhánh "Xin ý kiến" (cả 4 lớp đều chặn quy
-// trình, không có opinionRequestees).
+// selectedLayerKeys đúng luật visible/locked -> mỗi nhóm chọn phải là tập con của thành viên đã gán
+// trong appData.contractApprovalGroups) nhưng KHÔNG có nhánh "Xin ý kiến" (mọi nhóm đều chặn quy trình,
+// không có opinionRequestees).
 function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, selectedLayerMembers, appData, approvalLevel) {
-  if (!CONTRACT_APPROVAL_LEVELS.includes(approvalLevel)) {
+  const groups = (appData.contractApprovalGroups || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const levels = appData.contractApprovalLevels || [];
+  const rule = resolveApprovalLevelRule(levels, approvalLevel, groups);
+  if (!rule) {
     throw new CreateError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
   }
-  const rule = CONTRACT_APPROVAL_LEVEL_RULES[approvalLevel];
   const layerKeysInput = Array.isArray(selectedLayerKeys) ? [...new Set(selectedLayerKeys)] : [];
   const outOfScope = layerKeysInput.filter(k => !rule.visible.includes(k));
   if (outOfScope.length) {
-    throw new CreateError(403, `Lớp phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
+    throw new CreateError(403, `Nhóm phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
   }
   const missingLocked = rule.locked.filter(k => !layerKeysInput.includes(k));
   if (missingLocked.length) {
-    throw new CreateError(400, `Thiếu lớp phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
+    throw new CreateError(400, `Thiếu nhóm phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
   }
 
   const deptMap = appData.contractApprovalDeptWorkflows || {};
@@ -351,17 +314,15 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
   // POSITION mode ngay lúc dựng snapshot, effectiveApprovers đông cứng từ đây).
   baseWf.steps.forEach(s => { approvers[s.order] = resolveStepApproverUsernames(baseConfig, s.order, appData.users); });
 
-  const groups = appData.contractApprovalGroups || {};
-  // Cùng lỗi/cùng cách sửa với buildEffectiveSubmissionWorkflowServer() ở trên — sắp lại đúng thứ tự
-  // chuẩn CONTRACT_APPROVAL_LAYERS thay vì tin thứ tự mảng client gửi.
-  const canonicalOrder = CONTRACT_APPROVAL_LAYERS.map(l => l.key);
+  // Sắp lại đúng thứ tự chuẩn (theo field `order` admin cấu hình) thay vì tin thứ tự mảng client gửi.
+  const canonicalOrder = groups.map(g => g.id);
   const layerKeys = [...layerKeysInput].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b));
 
   layerKeys.forEach(layerKey => {
-    const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
-    if (!layer) throw new CreateError(400, `Lớp không hợp lệ: ${layerKey}`);
+    const layer = groups.find(g => g.id === layerKey);
+    if (!layer) throw new CreateError(400, `Nhóm không hợp lệ: ${layerKey}`);
 
-    const groupMembers = groups[layerKey] || [];
+    const groupMembers = layer.members || [];
     const isLocked = rule.locked.includes(layerKey);
     let chosen;
     if (isLocked) {
@@ -395,25 +356,32 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
     }
 
     const stepOrder = steps.length + 1;
-    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id });
     approvers[stepOrder] = chosen;
   });
 
   return { steps, approvers, layerKeys };
 }
 
-// Ép cứng "Tổng Giám Đốc" (TGD) chỉ được gán TỐI ĐA 1 người khi admin lưu Nhóm Phê Duyệt Trình (mục 11,
-// key "submissionApprovalGroups") hoặc Nhóm Phê Duyệt HĐ (mục 14, key "contractApprovalGroups") —
-// KHÁC các vai trò còn lại (Giám Đốc/Phó Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký) vốn cho
-// phép nhiều người cùng giữ 1 vai trò (rồi người trình/tạo hợp đồng chọn đúng 1 người cụ thể lúc tạo hồ
-// sơ, xem buildEffectiveSubmissionWorkflowServer()/buildEffectiveContractApprovalWorkflowServer() ở
-// trên) — Tổng Giám Đốc theo đúng cơ cấu tổ chức chỉ có 1 người duy nhất tại 1 thời điểm, không có khái
-// niệm "chọn 1 trong nhiều TGĐ". Gọi từ routes/data.js's POST /api/data/:key ngay TRƯỚC khi ghi xuống
-// CSDL (client cũng tự chặn ở UI — xem module-admin-submissiongroups.js — nhưng đây mới là chốt chặn
-// THẬT SỰ, phòng request tự soạn bỏ qua UI).
-function assertApprovalGroupsTgdSingle(value, keyLabel) {
-  if (value && typeof value === 'object' && Array.isArray(value.TGD) && value.TGD.length > 1) {
-    throw new CreateError(400, `Vai trò Tổng Giám Đốc (${keyLabel}) chỉ được gán tối đa 1 người — đang cố lưu ${value.TGD.length} người`);
+// Ép "chỉ 1 người" cho BẤT KỲ nhóm nào admin đánh dấu `singleApprover:true` (đợt "Nhóm Phê Duyệt Trình
+// tự cấu hình", 10/2026 — TRƯỚC ĐÂY hardcode CỐ ĐỊNH riêng cho khoá "TGD"/Tổng Giám Đốc, nay là CỜ
+// admin tự gán được cho nhóm bất kỳ, xem defaults.js) khi lưu Nhóm Phê Duyệt Trình (mục 11, key
+// "submissionApprovalGroups") hoặc Nhóm Phê Duyệt HĐ (mục 14, key "contractApprovalGroups") — nhóm
+// KHÔNG bật cờ này (mặc định) vẫn cho phép nhiều người cùng giữ 1 vai trò (rồi người trình/tạo hợp đồng
+// chọn đúng 1 người cụ thể lúc tạo hồ sơ, xem buildEffectiveSubmissionWorkflowServer()/
+// buildEffectiveContractApprovalWorkflowServer() ở trên). Gọi từ routes/data.js's POST /api/data/:key
+// ngay TRƯỚC khi ghi xuống CSDL (client cũng tự chặn ở UI — xem module-admin-submissiongroups.js —
+// nhưng đây mới là chốt chặn THẬT SỰ, phòng request tự soạn bỏ qua UI). value PHẢI là mảng (shape mới,
+// xem defaults.js) — value không phải mảng (shape cũ còn sót/request giả mạo) bị từ chối thẳng, không
+// âm thầm bỏ qua kiểm tra.
+function assertApprovalGroupsSingleApproverCaps(value, keyLabel) {
+  if (!Array.isArray(value)) {
+    throw new CreateError(400, `Dữ liệu ${keyLabel} không hợp lệ — phải là danh sách nhóm (mảng)`);
+  }
+  for (const g of value) {
+    if (g && g.singleApprover && Array.isArray(g.members) && g.members.length > 1) {
+      throw new CreateError(400, `Vai trò "${g.label || g.id}" (${keyLabel}) chỉ được gán tối đa 1 người — đang cố lưu ${g.members.length} người`);
+    }
   }
 }
 
@@ -3644,14 +3612,18 @@ module.exports = {
   // phải kiểm tra ĐÚNG luật như lúc tạo, nếu không lỗ hổng scheme "javascript:" chỉ bị vá 1 nửa.
   UPLOADED_FILE_URL_RE, UPLOADED_FILE_URL_MAX_LEN, assertUploadedFileUrl, assertUploadedFileUrlList,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
-  CONTRACT_APPROVAL_LAYERS, CONTRACT_APPROVAL_LEVELS, CONTRACT_APPROVAL_LEVEL_RULES,
   buildEffectiveContractApprovalWorkflowServer,
   // Export thêm cho lib/recordActions.js editSubmissionDraft() (nút "Bổ Sung" -> sửa lại + gửi lại tờ
   // trình) — cần dựng lại effectiveSteps/effectiveApprovers giống hệt lúc TẠO khi người trình đổi loại/
-  // phòng ban/lớp phê duyệt bổ sung trong lúc sửa.
-  SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer,
+  // phòng ban/lớp phê duyệt bổ sung trong lúc sửa. CONTRACT_APPROVAL_LAYERS/LEVELS/RULES +
+  // SUBMISSION_APPROVAL_LEVELS hardcode cũ đã bỏ hẳn (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) —
+  // danh sách nhóm/cấp giờ nằm trong AppData (submissionApprovalGroups/Levels,
+  // contractApprovalGroups/Levels), không còn hằng số nào để export nữa. resolveApprovalLevelRule cũng
+  // export sẵn phòng khi module khác cần tra lại luật visible/locked của 1 cấp mà không muốn tự dựng cả
+  // effective workflow.
+  buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule,
   // Export cho routes/data.js POST /api/data/:key — chặn TGĐ >1 người khi admin lưu mục 11/14.
-  assertApprovalGroupsTgdSingle,
+  assertApprovalGroupsSingleApproverCaps,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

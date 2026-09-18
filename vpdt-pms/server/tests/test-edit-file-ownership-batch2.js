@@ -149,7 +149,12 @@ stubModule('lib/recordStore', {
   withAppLock: async (key, fn) => fn()
 });
 stubModule('lib/appData', {
-  getAllAppData: async () => ({}),
+  // submissionApprovalGroups/Levels (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — editSubmissionDraft()
+  // (lib/recordActions.js) gọi buildEffectiveSubmissionWorkflowServer() cần appData.submissionApprovalLevels
+  // có ĐÚNG id "KHAC" (approvalLevel mặc định của hồ sơ test ở trên) để resolveApprovalLevelRule() không
+  // ném lỗi "Cấp phê duyệt cuối cùng không hợp lệ" — trước đây kiểm tra này là hằng số hardcode không phụ
+  // thuộc appData, nay đọc thẳng từ đây nên phải seed tối thiểu 1 cấp hợp lệ.
+  getAllAppData: async () => ({ submissionApprovalGroups: [], submissionApprovalLevels: [{ id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }] }),
   getAppDataValue: async (key) => APPDATA_STORE[key],
   withLockedAppDataValue: async (key, mutatorFn) => {
     const snapshot = JSON.parse(JSON.stringify(APPDATA_STORE[key]));

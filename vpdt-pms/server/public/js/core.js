@@ -409,8 +409,8 @@ const DB = {
   jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [], uniformCatalog: [], itTicketCategories: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
-  submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
-  contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
+  submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [], submissionApprovalLevels: [],
+  contracts: [], contractApprovalGroups: [], contractApprovalLevels: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
   meetings: [],
   carRegs: [], carDeptWorkflows: {},
   officeReqs: [],
@@ -2066,81 +2066,81 @@ function jumpToPermField(badgeKey) {
 // người được xin ý kiến chưa phản hồi (xem isSubmissionLayerAfterOpinion() + openProcessSubmissionModal()).
 // buildEffectiveSubmissionWorkflow() bên dưới + lib/createValidation.js (LƯU Ý BẢO TRÌ, 2 bản độc lập,
 // phải sửa đồng thời).
-const SUBMISSION_APPROVAL_LAYERS = [
-  { key: 'DONG_TRINH', label: 'Đồng trình', blocking: true },
-  { key: 'DONG_CAP', label: 'Phê duyệt đồng cấp', blocking: true },
-  { key: 'XIN_Y_KIEN', label: 'Xin ý kiến', blocking: false },
-  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', blocking: true },
-  { key: 'PTGD', label: 'Phó Tổng Giám Đốc', blocking: true },
-  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', blocking: true },
-  { key: 'TGD', label: 'Tổng Giám Đốc', blocking: true }
-];
+// getSubmissionApprovalLayers()/getSubmissionApprovalLevels() — đọc TRỰC TIẾP từ
+// DB.submissionApprovalGroups/DB.submissionApprovalLevels (mảng {id,label,order,blocking,
+// singleApprover,allowFileReplacementProposal,members}/{id,label,order,visibleGroupIds,lockedGroupIds,
+// isSystemDefault} — xem defaults.js), KHÔNG còn hardcode cố định 7 lớp/4 cấp — đợt "Nhóm Phê Duyệt
+// Trình tự cấu hình" (10/2026): admin đổi tên/thêm/xoá nhóm và cấp tự do ở màn "Quản Lý Nhóm Phê Duyệt
+// Trình" (mục 11, module-admin-submissiongroups.js), KHÔNG cần sửa code. Trả về đúng shape cũ
+// {key,label,blocking} (key = alias của id) để mọi điểm gọi sẵn có (module-vanbantrinh.js, ...) không
+// phải sửa lại field name. Server (lib/createValidation.js::resolveApprovalLevelRule()) là nơi DUY
+// NHẤT thật sự áp luật này lúc tạo hồ sơ — hàm dưới đây chỉ phục vụ UI/preview (LƯU Ý BẢO TRÌ — 2 bản
+// độc lập, phải sửa đồng thời).
+function getSubmissionApprovalLayers() {
+  return [...(DB.submissionApprovalGroups || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(g => ({ key: g.id, label: g.label, blocking: g.blocking !== false, singleApprover: !!g.singleApprover, allowFileReplacementProposal: !!g.allowFileReplacementProposal }));
+}
 
-// "Cấp Phê Duyệt Cuối Cùng" — người trình chọn 1 trong 4 mức này (gắn với chức danh người duyệt cuối
-// cùng), quyết định trong số 7 lớp ở trên, lớp nào được PHÉP hiện ra để tick (visible), lớp nào trong
-// số đó bị KHOÁ BẮT BUỘC luôn tick sẵn không được bỏ (locked, con của visible), lớp nào ẨN HẲN không
-// hiện trong dropdown "Phê duyệt" (mọi lớp không thuộc visible). "Phê duyệt khác" (KHAC) = hành vi cũ,
-// đủ cả 7 lớp và không khoá lớp nào — ĐẶT MẶC ĐỊNH cho <select> để không phá luồng thao tác quen thuộc
-// hiện tại nếu người trình không chủ động chọn cấp cao hơn. Server (lib/createValidation.js) tự áp lại
-// đúng luật này từ appData, không tin approvalLevel/selectedApprovalLayers client tự gửi lên (LƯU Ý BẢO
-// TRÌ, 2 bản độc lập, phải sửa đồng thời).
-const SUBMISSION_APPROVAL_LEVELS = [
-  { key: 'TGD', label: 'Tổng giám đốc phê duyệt' },
-  { key: 'PTGD', label: 'Phó tổng giám đốc phê duyệt' },
-  { key: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt' },
-  { key: 'KHAC', label: 'Phê duyệt khác' }
-];
+function getSubmissionApprovalLevels() {
+  return [...(DB.submissionApprovalLevels || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(l => ({ key: l.id, label: l.label, isSystemDefault: !!l.isSystemDefault }));
+}
 
-const SUBMISSION_APPROVAL_LEVEL_RULES = {
-  TGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
-  PTGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], locked: ['PTGD'] },
-  GD_PGD: { visible: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], locked: ['GD_PGD'] },
-  KHAC: { visible: SUBMISSION_APPROVAL_LAYERS.map(l => l.key), locked: [] }
-};
+// resolveApprovalLevelRuleClient() — mirror ĐÚNG resolveApprovalLevelRule() ở lib/createValidation.js
+// (LƯU Ý BẢO TRÌ, 2 bản độc lập): visibleGroupIds rỗng/null = MỌI nhóm hiện tại đều visible (hành vi
+// "Phê duyệt khác" cũ); lockedGroupIds rỗng/null = không khoá nhóm nào. Dùng chung cho CẢ Văn Bản
+// Trình lẫn Hợp Đồng (2 bộ levels/groups độc lập, truyền đúng cặp tương ứng).
+function resolveApprovalLevelRuleClient(levels, levelId, groups) {
+  const level = (levels || []).find(l => l.id === levelId);
+  if (!level) return null;
+  const allGroupIds = (groups || []).map(g => g.id);
+  return {
+    visible: Array.isArray(level.visibleGroupIds) ? level.visibleGroupIds : allGroupIds,
+    locked: Array.isArray(level.lockedGroupIds) ? level.lockedGroupIds : []
+  };
+}
 
 function getSubmissionApprovalLevelRule(levelKey) {
-  return SUBMISSION_APPROVAL_LEVEL_RULES[levelKey] || SUBMISSION_APPROVAL_LEVEL_RULES.KHAC;
+  const levels = DB.submissionApprovalLevels || [];
+  const groups = DB.submissionApprovalGroups || [];
+  return resolveApprovalLevelRuleClient(levels, levelKey, groups) ||
+    resolveApprovalLevelRuleClient(levels, levels.find(l => l.isSystemDefault)?.id, groups) ||
+    { visible: groups.map(g => g.id), locked: [] };
 }
 
 // Quy trình Phê Duyệt HĐ (module Hợp đồng) — CHẠY ĐỘNG giống Văn Bản Trình (quy trình gốc theo phòng
-// ban + lớp bổ sung tuỳ chọn theo "Cấp Phê Duyệt Cuối Cùng") nhưng TÁCH RIÊNG hoàn toàn: chỉ giữ 4 lớp
-// cấp bậc (bỏ Đồng trình/Phê duyệt đồng cấp/Xin ý kiến), và dùng nhóm phê duyệt RIÊNG
-// (DB.contractApprovalGroups, KHÔNG dùng chung DB.submissionApprovalGroups). Khớp đúng
-// CONTRACT_APPROVAL_LAYERS/LEVELS/RULES ở lib/createValidation.js (LƯU Ý BẢO TRÌ — 2 cài đặt độc lập).
-const CONTRACT_APPROVAL_LAYERS = [
-  { key: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc' },
-  { key: 'PTGD', label: 'Phó Tổng Giám Đốc' },
-  { key: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký' },
-  { key: 'TGD', label: 'Tổng Giám Đốc' }
-];
-const CONTRACT_APPROVAL_LEVELS = [
-  { key: 'TGD', label: 'Tổng giám đốc phê duyệt' },
-  { key: 'PTGD', label: 'Phó tổng giám đốc phê duyệt' },
-  { key: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt' },
-  { key: 'KHAC', label: 'Phê duyệt khác' }
-];
-const CONTRACT_APPROVAL_LEVEL_RULES = {
-  TGD: { visible: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], locked: ['TRO_LY_THU_KY', 'TGD'] },
-  PTGD: { visible: ['GD_PGD', 'PTGD'], locked: ['PTGD'] },
-  GD_PGD: { visible: ['GD_PGD'], locked: ['GD_PGD'] },
-  KHAC: { visible: CONTRACT_APPROVAL_LAYERS.map(l => l.key), locked: [] }
-};
+// ban + lớp bổ sung tuỳ chọn theo "Cấp Phê Duyệt Cuối Cùng") nhưng TÁCH RIÊNG hoàn toàn: dùng nhóm/cấp
+// phê duyệt RIÊNG (DB.contractApprovalGroups/DB.contractApprovalLevels, KHÔNG dùng chung
+// DB.submissionApprovalGroups/Levels). Cùng khuôn getSubmissionApprovalLayers()/Levels() ở trên — đọc
+// trực tiếp từ DB, không hardcode. Khớp đúng buildEffectiveContractApprovalWorkflowServer() ở
+// lib/createValidation.js (LƯU Ý BẢO TRÌ — 2 cài đặt độc lập).
+function getContractApprovalLayers() {
+  return [...(DB.contractApprovalGroups || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(g => ({ key: g.id, label: g.label, singleApprover: !!g.singleApprover }));
+}
+function getContractApprovalLevels() {
+  return [...(DB.contractApprovalLevels || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(l => ({ key: l.id, label: l.label, isSystemDefault: !!l.isSystemDefault }));
+}
 function getContractApprovalLevelRule(levelKey) {
-  return CONTRACT_APPROVAL_LEVEL_RULES[levelKey] || CONTRACT_APPROVAL_LEVEL_RULES.KHAC;
+  const levels = DB.contractApprovalLevels || [];
+  const groups = DB.contractApprovalGroups || [];
+  return resolveApprovalLevelRuleClient(levels, levelKey, groups) ||
+    resolveApprovalLevelRuleClient(levels, levels.find(l => l.isSystemDefault)?.id, groups) ||
+    { visible: groups.map(g => g.id), locked: [] };
 }
 
-// Di chuyển thành viên nhóm phê duyệt admin đã gán TRƯỚC KHI đổi tên lớp (khoá "BGD" -> "GD_PGD",
-// "TGD_CT" -> "TGD") sang đúng khoá mới — CHỈ áp dụng trong bộ nhớ lúc tải dữ liệu, không tự ghi đè
-// persisted storage (chỉ thực sự lưu lại khi admin bấm "Lưu Thành Viên" ở màn "Quản Lý Nhóm Phê Duyệt
-// Trình", xem saveSubmissionApprovalGroup()) — để không mất thành viên đã gán trước khi có tính năng
-// "Cấp Phê Duyệt Cuối Cùng". Khớp đúng hàm cùng tên trong lib/createValidation.js (LƯU Ý BẢO TRÌ).
 // Di chuyển "Trường Bổ Sung"/thứ tự trường/override trường mặc định đã cấu hình dưới 1 modKey 'IT_PRICE'
 // CHUNG (trước đợt 9/2026, lúc Biểu Mẫu IT_PRICE chưa tách Bán Lẻ/Bán Buôn) sang CẢ 2 modKey mới
 // ('IT_PRICE_RETAIL'/'IT_PRICE_WHOLESALE') — không suy luận được field nào admin từng thêm chỉ dành
 // riêng cho sub-tab nào, nên sao chép nguyên vẹn sang CẢ 2 bên (an toàn hơn làm rơi mất cấu hình cũ);
 // admin có thể xoá bớt ở tab không cần sau khi thấy trùng lặp. CHỈ chạy 1 lần (bỏ qua nếu đã có key mới)
-// — cùng khuôn migrateSubmissionApprovalGroupKeys() ở trên, thuần trong bộ nhớ, chỉ thật sự lưu lại khi
-// admin thao tác gì đó trên màn Biểu Mẫu (gọi syncStorage('formTemplates')).
+// — thuần trong bộ nhớ, chỉ thật sự lưu lại khi admin thao tác gì đó trên màn Biểu Mẫu (gọi
+// syncStorage('formTemplates')).
 function migrateItPriceFormTemplatesKeys(formTemplates) {
   const migrated = { ...(formTemplates || {}) };
   const hasNewKeys = ('IT_PRICE_RETAIL' in migrated) || ('IT_PRICE_WHOLESALE' in migrated)
@@ -2158,25 +2158,16 @@ function migrateItPriceFormTemplatesKeys(formTemplates) {
   return migrated;
 }
 
-function migrateSubmissionApprovalGroupKeys(groups) {
-  const migrated = { ...(groups || {}) };
-  const RENAME_MAP = { BGD: 'GD_PGD', TGD_CT: 'TGD' };
-  Object.entries(RENAME_MAP).forEach(([oldKey, newKey]) => {
-    if (Array.isArray(migrated[oldKey]) && migrated[oldKey].length) {
-      migrated[newKey] = [...new Set([...(migrated[newKey] || []), ...migrated[oldKey]])];
-    }
-    delete migrated[oldKey];
-  });
-  return migrated;
-}
-
-// Vị trí lớp `layerKey` có nằm SAU lớp "Xin ý kiến" trong thứ tự chuẩn ở trên hay không — dùng để
-// quyết định có cảnh báo "còn người chưa cho ý kiến" cho bước phê duyệt đó hay không. Lớp không có
-// trong mảng (vd bước "Phòng ban" gốc, không đến từ 1 layer nào) luôn coi là KHÔNG nằm sau.
+// Vị trí lớp `layerKey` có nằm SAU nhóm blocking:false ĐẦU TIÊN (kiểu "Xin ý kiến") trong thứ tự
+// admin cấu hình (DB.submissionApprovalGroups, field `order`) hay không — dùng để quyết định có cảnh
+// báo "còn người chưa cho ý kiến" cho bước phê duyệt đó hay không. Lớp không có trong mảng (vd bước
+// "Phòng ban" gốc, không đến từ 1 layer nào) luôn coi là KHÔNG nằm sau. TRƯỚC ĐÂY hardcode đúng khoá
+// 'XIN_Y_KIEN' — nay tìm ĐỘNG nhóm không-chặn ĐẦU TIÊN theo thứ tự, vì admin có thể đổi tên/id nhóm đó.
 function isSubmissionLayerAfterOpinion(layerKey) {
   if (!layerKey) return false;
-  const idx = SUBMISSION_APPROVAL_LAYERS.findIndex(l => l.key === layerKey);
-  const opinionIdx = SUBMISSION_APPROVAL_LAYERS.findIndex(l => l.key === 'XIN_Y_KIEN');
+  const layers = getSubmissionApprovalLayers();
+  const idx = layers.findIndex(l => l.key === layerKey);
+  const opinionIdx = layers.findIndex(l => !l.blocking);
   if (idx === -1 || opinionIdx === -1) return false;
   return idx > opinionIdx;
 }
@@ -2573,12 +2564,12 @@ function canApprovePaymentRequestStepClient(user, pr) {
 }
 
 // Dựng quy trình HIỆU LỰC cho 1 hợp đồng/phụ lục MỚI (lúc tạo) — cùng khuôn buildEffectiveSubmissionWorkflow()
-// nhưng dùng CONTRACT_APPROVAL_LAYERS/DB.contractApprovalGroups/DB.contractApprovalDeptWorkflows riêng,
-// và KHÔNG có nhánh không-chặn (cả 4 lớp đều blocking, không có opinionRequestees).
-// approvalLevel: THÊM MỚI — cần biết lớp nào đang LOCKED (bắt buộc theo cấp phê duyệt) để áp đúng luật
-// "nhóm chỉ 1 người -> dùng thẳng, nhóm nhiều người -> dùng đúng 1 người người tạo đã chọn ở card
-// riêng" (xem renderContractApprovalLayerCheckboxes() ở module-vanbantrinh.js) — KHÁC lớp tuỳ chọn
-// (không locked, vẫn cho chọn nhiều người cùng duyệt như trước).
+// nhưng dùng getContractApprovalLayers()/DB.contractApprovalGroups/DB.contractApprovalDeptWorkflows
+// riêng, và KHÔNG có nhánh không-chặn (mọi nhóm Hợp Đồng đều blocking, không có opinionRequestees).
+// approvalLevel: cần biết lớp nào đang LOCKED (bắt buộc theo cấp phê duyệt) để áp đúng luật "nhóm chỉ 1
+// người -> dùng thẳng, nhóm nhiều người -> dùng đúng 1 người người tạo đã chọn ở card riêng" (xem
+// renderContractApprovalLayerCheckboxes() ở module-vanbantrinh.js) — KHÁC lớp tuỳ chọn (không locked,
+// vẫn cho chọn nhiều người cùng duyệt như trước).
 function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   const baseConfig = DB.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
@@ -2588,10 +2579,12 @@ function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selecte
   baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(baseConfig, s.order); });
 
   const rule = getContractApprovalLevelRule(approvalLevel);
+  const layers = getContractApprovalLayers();
   (selectedLayerKeys || []).forEach(layerKey => {
-    const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    const layer = layers.find(l => l.key === layerKey);
     if (!layer) return;
-    const groupMembers = DB.contractApprovalGroups[layerKey] || [];
+    const group = (DB.contractApprovalGroups || []).find(g => g.id === layerKey);
+    const groupMembers = group?.members || [];
     // Lớp bắt buộc (locked) chỉ có 1 người trong nhóm -> dùng thẳng người đó (không có card chọn, xem
     // renderContractApprovalLayerCheckboxes()); nhiều người -> dùng đúng người đã chọn ở card riêng.
     const chosen = (rule.locked.includes(layerKey) && groupMembers.length <= 1)
@@ -3494,7 +3487,12 @@ async function initDatabase(loggingInUser) {
     DB.deptWorkflows = data.deptWorkflows || {};
     DB.submissionDeptWorkflows = data.submissionDeptWorkflows || {};
     DB.submissionTypeDeptWorkflows = data.submissionTypeDeptWorkflows || {};
-    DB.submissionApprovalGroups = migrateSubmissionApprovalGroupKeys(data.submissionApprovalGroups || {});
+    // Shape mới (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026): mảng {id,label,order,blocking,
+    // singleApprover,allowFileReplacementProposal,members} — migrateApprovalGroupsToConfigurable() ở
+    // server/seedDefaults.js đã tự chuyển đổi 1 lần từ shape flat-map cũ lúc khởi động server, client
+    // không còn cần tự migrate nữa.
+    DB.submissionApprovalGroups = Array.isArray(data.submissionApprovalGroups) ? data.submissionApprovalGroups : [];
+    DB.submissionApprovalLevels = Array.isArray(data.submissionApprovalLevels) ? data.submissionApprovalLevels : [];
     DB.carDeptWorkflows = data.carDeptWorkflows || {};
 
     DB.officeBuyDeptWorkflows = data.officeBuyDeptWorkflows || {};
@@ -3508,7 +3506,10 @@ async function initDatabase(loggingInUser) {
     // truy cập DB.contractApprovalGroups[key] trên giá trị undefined, ném lỗi và dừng cả vòng lặp render
     // giữa chừng), và cấu hình quy trình Hợp Đồng theo phòng ban (mục 13, 2 khối "Hợp đồng - Phê duyệt"/
     // "Hợp đồng - Quản Lý HĐ") luôn hiện lại như chưa cấu hình gì mỗi lần tải lại trang.
-    DB.contractApprovalGroups = data.contractApprovalGroups || {};
+    // Shape mới — cùng khuôn DB.submissionApprovalGroups ở trên (mảng {id,label,order,singleApprover,
+    // members}, không có blocking/allowFileReplacementProposal — Hợp Đồng không có khái niệm đó).
+    DB.contractApprovalGroups = Array.isArray(data.contractApprovalGroups) ? data.contractApprovalGroups : [];
+    DB.contractApprovalLevels = Array.isArray(data.contractApprovalLevels) ? data.contractApprovalLevels : [];
     DB.contractApprovalDeptWorkflows = data.contractApprovalDeptWorkflows || {};
     DB.contractManageDeptWorkflows = data.contractManageDeptWorkflows || {};
 
@@ -7618,11 +7619,14 @@ function populateDropdowns() {
   // (catList.some(c => c.key === catKey)), khác submissionTypes lịch sử vẫn lưu payload.type = label.
   populateInternalPostCategorySelects();
 
-  // "Cấp Phê Duyệt Cuối Cùng" — KHAC ("Phê duyệt khác") đặt ĐẦU danh sách nên là option mặc định
-  // (kể cả sau khi form.reset() trả select về option đầu tiên, không có thuộc tính selected riêng).
+  // "Cấp Phê Duyệt Cuối Cùng" — cấp isSystemDefault ("Phê duyệt khác") đặt ĐẦU danh sách nên là option
+  // mặc định (kể cả sau khi form.reset() trả select về option đầu tiên, không có thuộc tính selected
+  // riêng). Đọc ĐỘNG từ DB.submissionApprovalLevels (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026,
+  // admin tự đổi tên/thêm/xoá cấp) thay vì hardcode.
   const subApprovalLevelSel = document.getElementById('subApprovalLevel');
   if (subApprovalLevelSel && !subApprovalLevelSel.options.length) {
-    const ordered = [SUBMISSION_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...SUBMISSION_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
+    const allLevels = getSubmissionApprovalLevels();
+    const ordered = [allLevels.find(l => l.isSystemDefault), ...allLevels.filter(l => !l.isSystemDefault)].filter(Boolean);
     subApprovalLevelSel.innerHTML = ordered.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('');
   }
 
@@ -7633,10 +7637,11 @@ function populateDropdowns() {
     if (DB.contractTypes.includes(current)) contractTypeSel.value = current;
   }
 
-  // Cùng khuôn subApprovalLevelSel ở trên — KHAC ("Phê duyệt khác") đặt đầu danh sách làm mặc định.
+  // Cùng khuôn subApprovalLevelSel ở trên — cấp isSystemDefault đặt đầu danh sách làm mặc định.
   const contractApprovalLevelSel = document.getElementById('contractApprovalLevel');
   if (contractApprovalLevelSel && !contractApprovalLevelSel.options.length) {
-    const orderedC = [CONTRACT_APPROVAL_LEVELS.find(l => l.key === 'KHAC'), ...CONTRACT_APPROVAL_LEVELS.filter(l => l.key !== 'KHAC')];
+    const allLevelsC = getContractApprovalLevels();
+    const orderedC = [allLevelsC.find(l => l.isSystemDefault), ...allLevelsC.filter(l => !l.isSystemDefault)].filter(Boolean);
     contractApprovalLevelSel.innerHTML = orderedC.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('');
   }
 

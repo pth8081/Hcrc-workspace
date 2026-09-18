@@ -47,6 +47,7 @@ async function seedDefaults() {
   await migrateApprovedOperationOrdersToAwaitingReceipt();
   await migrateOperationOrdersDefaultLocationType();
   await migratePaymentRequestsMissingCurrentStep();
+  await migrateApprovalGroupsToConfigurable();
   await seedVsattpChecklistTemplateIfMissing();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
 }
@@ -408,6 +409,44 @@ async function migrateOperationOrdersDefaultLocationType() {
   }
 }
 
+// submissionApprovalGroups/contractApprovalGroups — đợt "Nhóm Phê Duyệt Trình/HĐ tự cấu hình" (10/2026):
+// ĐỔI HẲN shape từ map phẳng khoá cố định {khoá: [usernames]} sang MẢNG nhóm {id,label,order,...,members}
+// admin tự đổi tên/thêm/xoá được (xem defaults.js) — hồ sơ cài đặt CŨ trước đợt này còn lưu ĐÚNG shape cũ
+// trong dbo.AppData (vòng lặp seed ở đầu seedDefaults() chỉ chèn key HOÀN TOÀN THIẾU, không đụng key đã
+// có, nên tự nó KHÔNG chuyển đổi được shape cũ→mới) — hàm này quét 1 LẦN DUY NHẤT, phát hiện value còn ở
+// dạng object phẳng (không phải mảng) thì chuyển sang mảng theo đúng 7/4 nhóm mặc định gốc
+// (DEFAULTS.submissionApprovalGroups/contractApprovalGroups), giữ NGUYÊN VẸN thành viên (`members`) đã
+// gán trước đó — áp lại đúng luật đổi tên khoá cũ (BGD->GD_PGD, TGD_CT->TGD, trước đây là
+// migrateSubmissionApprovalGroupKeys() lặp lại ở CẢ 3 nơi core.js/lib/createValidation.js/ở đây — sau
+// đợt di trú 1 lần này, dữ liệu LUÔN ở shape mới nên đã XOÁ hẳn 2 bản lặp ở core.js/createValidation.js,
+// không cần đọc lại migrate mỗi request nữa). "submissionApprovalLevels"/"contractApprovalLevels" (Cấp
+// Phê Duyệt Cuối Cùng, TRƯỚC ĐÂY thuần hằng số, CHƯA từng là key AppData) KHÔNG cần di trú riêng — vòng
+// lặp seed ở đầu seedDefaults() tự chèn đúng 4 cấp mặc định cho MỌI hồ sơ (cả cũ lẫn mới) vì key này
+// hoàn toàn chưa tồn tại trước đợt này.
+function migrateOneApprovalGroupsKey(oldValue, canonicalDefaults) {
+  const RENAME_MAP = { BGD: 'GD_PGD', TGD_CT: 'TGD' };
+  const oldMap = { ...(oldValue && typeof oldValue === 'object' && !Array.isArray(oldValue) ? oldValue : {}) };
+  Object.entries(RENAME_MAP).forEach(([oldKey, newKey]) => {
+    if (Array.isArray(oldMap[oldKey]) && oldMap[oldKey].length) {
+      oldMap[newKey] = [...new Set([...(oldMap[newKey] || []), ...oldMap[oldKey]])];
+    }
+    delete oldMap[oldKey];
+  });
+  return canonicalDefaults.map(g => ({ ...g, members: Array.isArray(oldMap[g.id]) ? [...oldMap[g.id]] : [] }));
+}
+async function migrateApprovalGroupsToConfigurable() {
+  const submissionGroups = await getAppDataValue('submissionApprovalGroups');
+  if (submissionGroups !== null && !Array.isArray(submissionGroups)) {
+    await setAppDataValue('submissionApprovalGroups', migrateOneApprovalGroupsKey(submissionGroups, DEFAULTS.submissionApprovalGroups));
+    console.log('   ↳ Đã di trú "Nhóm Phê Duyệt Trình" (submissionApprovalGroups) sang shape mảng tự cấu hình được, giữ nguyên thành viên đã gán.');
+  }
+  const contractGroups = await getAppDataValue('contractApprovalGroups');
+  if (contractGroups !== null && !Array.isArray(contractGroups)) {
+    await setAppDataValue('contractApprovalGroups', migrateOneApprovalGroupsKey(contractGroups, DEFAULTS.contractApprovalGroups));
+    console.log('   ↳ Đã di trú "Nhóm Phê Duyệt HĐ" (contractApprovalGroups) sang shape mảng tự cấu hình được, giữ nguyên thành viên đã gán.');
+  }
+}
+
 // paymentRequests — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đổi hẳn từ quyền phẳng
 // canManagePaymentRequests() sang quy trình duyệt THEO BƯỚC/PHÒNG BAN (paymentDeptWorkflows, xem
 // lib/workflowEngine.js MODULE_CONFIGS.paymentRequests + applyWorkflowAction()) — engine này đọc
@@ -468,5 +507,6 @@ function nowVNForMigration() {
 module.exports = {
   seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
   migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep,
+  migrateApprovalGroupsToConfigurable,
   seedVsattpChecklistTemplateIfMissing
 };

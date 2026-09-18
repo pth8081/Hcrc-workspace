@@ -56,9 +56,11 @@
             <select id="contractType" data-op-change="refreshContractCodePreview" class="w-full border p-1.5 rounded bg-white" required></select>
           </div>
           <!-- Cùng khuôn subApprovalLevel ở form Văn Bản Trình — <select> thật thay vì ô tìm-kiếm-gõ-chọn
-               (danh sách CONTRACT_APPROVAL_LEVELS tĩnh chỉ 4 lựa chọn, không cần tìm kiếm; trước đây dùng
-               widget sdd khiến việc chọn không mở ra được panel "Phê Duyệt" ổn định trên di động — chọn
-               qua onchange của <select> đảm bảo renderContractApprovalLayerCheckboxes() LUÔN chạy). -->
+               (danh sách đọc động từ DB.contractApprovalLevels — admin tự cấu hình ở mục 14, xem
+               getContractApprovalLevels() ở core.js — thường chỉ vài lựa chọn, không cần tìm kiếm; trước
+               đây dùng widget sdd khiến việc chọn không mở ra được panel "Phê Duyệt" ổn định trên di
+               động — chọn qua onchange của <select> đảm bảo renderContractApprovalLayerCheckboxes() LUÔN
+               chạy). -->
           <div id="contractApprovalLevelWrap">
             <label class="block font-semibold text-gray-600 mb-1">Cấp Phê Duyệt Cuối Cùng</label>
             <select id="contractApprovalLevel" class="w-full border p-1.5 rounded bg-white font-semibold" data-op-change="renderContractApprovalLayerCheckboxes"></select>

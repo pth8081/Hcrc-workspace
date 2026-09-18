@@ -99,11 +99,11 @@ async function main() {
       ],
       quickApplyConfigs: [],
       deptWorkflows: {},
-      docs: [], submissions: [], submissionApprovalGroups: {},
+      docs: [], submissions: [], submissionApprovalGroups: [],
       // (2) hasTypes — Phòng A đã có cấu hình LEGACY (áp dụng mọi loại qua fallback), Phòng B trống hẳn.
       submissionTypeDeptWorkflows: {},
       submissionDeptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['legacy_approver'] } } },
-      contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
+      contracts: [], contractApprovalGroups: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
       meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
       // (1) phẳng thường — Phòng A đã cấu hình (PHẢI giữ nguyên), Phòng B trống.
       carRegs: [], carDeptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['car_approver'] } } },

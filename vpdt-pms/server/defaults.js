@@ -463,7 +463,40 @@ const DEFAULTS = {
   deptWorkflows: DEFAULT_MAP,
   submissionDeptWorkflows: DEFAULT_MAP,
   submissionTypeDeptWorkflows: {},
-  submissionApprovalGroups: {},
+  // submissionApprovalGroups/submissionApprovalLevels (đợt "Nhóm Phê Duyệt Trình tự cấu hình", 10/2026):
+  // ĐỔI HẲN từ map phẳng cố định 7 khoá cứng {khoá: [usernames]} sang MẢNG nhóm admin tự đổi tên/thêm/
+  // xoá được (id ổn định dùng tra cứu nội bộ, KHÔNG đổi khi admin sửa label hiển thị — xem
+  // migrateApprovalGroupsToConfigurable() ở seedDefaults.js cho hồ sơ cài đặt CŨ trước đợt này, và
+  // lib/createValidation.js buildEffectiveSubmissionWorkflowServer() cho cách dùng). "Cấp Phê Duyệt Cuối
+  // Cùng" (levels, TRƯỚC ĐÂY thuần hằng số client/server, CHƯA từng là dữ liệu AppData) nay CŨNG thành
+  // danh mục riêng: mỗi cấp trỏ tới visibleGroupIds (nhóm được PHÉP tick — null = TẤT CẢ nhóm hiện có,
+  // tự động gồm cả nhóm mới thêm sau này) + lockedGroupIds (nhóm BẮT BUỘC tick sẵn, luôn ⊆ visible).
+  // - blocking:true = nhóm trở thành 1 BƯỚC DUYỆT thật (chặn quy trình); false (mặc định "Xin ý kiến") =
+  //   kênh tham khảo song song, không chặn, không có nút Duyệt/Từ chối.
+  // - singleApprover:true = nhóm chỉ được gán TỐI ĐA 1 người (TRƯỚC ĐÂY hardcode riêng cho "TGD" —
+  //   assertApprovalGroupsTgdSingle() cũ — nay là CỜ chung admin gán được cho BẤT KỲ nhóm nào, xem
+  //   assertApprovalGroupsSingleApproverCaps() ở lib/createValidation.js).
+  // - allowFileReplacementProposal:true = nhóm được phép "Đề xuất thay thế toàn bộ file" khi xử lý tờ
+  //   trình (TRƯỚC ĐÂY hardcode riêng cho khoá 'TRO_LY_THU_KY' — action PROPOSE_FILE_REPLACEMENT ở
+  //   lib/workflowEngine.js — nay là CỜ chung, mặc định chỉ bật cho nhóm "Bộ Phận Trợ Lý/Thư Ký" cũ để
+  //   giữ nguyên hành vi, admin gán thêm được cho nhóm khác).
+  // isSystemDefault:true (chỉ "KHAC"/"Phê duyệt khác") = cấp mặc định hệ thống, KHÔNG xoá được (đảm bảo
+  // luôn có ít nhất 1 cấp fallback hợp lệ) — đổi tên vẫn được.
+  submissionApprovalGroups: [
+    { id: 'DONG_TRINH', label: 'Đồng trình', order: 1, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+    { id: 'DONG_CAP', label: 'Phê duyệt đồng cấp', order: 2, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+    { id: 'XIN_Y_KIEN', label: 'Xin ý kiến', order: 3, blocking: false, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+    { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 4, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+    { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 5, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+    { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 6, blocking: true, singleApprover: false, allowFileReplacementProposal: true, members: [] },
+    { id: 'TGD', label: 'Tổng Giám Đốc', order: 7, blocking: true, singleApprover: true, allowFileReplacementProposal: false, members: [] }
+  ],
+  submissionApprovalLevels: [
+    { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+    { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+    { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+    { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+  ],
   carDeptWorkflows: DEFAULT_MAP,
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {},
@@ -548,10 +581,24 @@ const DEFAULTS = {
   // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows đã xoá khỏi đây.
   // Hợp đồng — 2 quy trình TÁCH RIÊNG (xem lib/workflowEngine.js/lib/createValidation.js): "Phê Duyệt"
   // (contractApprovalDeptWorkflows, cùng khuôn deptWorkflows/carDeptWorkflows) + tối đa 4 lớp bổ sung
-  // tuỳ chọn (contractApprovalGroups, cùng khuôn submissionApprovalGroups nhưng RIÊNG, không dùng
-  // chung dữ liệu); "Quản Lý HĐ" (contractManageDeptWorkflows) đơn giản theo phòng ban, không có lớp.
+  // tuỳ chọn (contractApprovalGroups/contractApprovalLevels — cùng khuôn submissionApprovalGroups/
+  // submissionApprovalLevels ở trên nhưng RIÊNG, không dùng chung dữ liệu, và KHÔNG có field
+  // blocking/allowFileReplacementProposal — Hợp Đồng không có khái niệm nhóm không-chặn kiểu "Xin ý
+  // kiến" của Văn Bản Trình, mọi nhóm đều là 1 bước duyệt); "Quản Lý HĐ" (contractManageDeptWorkflows)
+  // đơn giản theo phòng ban, không có lớp.
   contractApprovalDeptWorkflows: DEFAULT_MAP,
-  contractApprovalGroups: {},
+  contractApprovalGroups: [
+    { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 1, singleApprover: false, members: [] },
+    { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 2, singleApprover: false, members: [] },
+    { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 3, singleApprover: false, members: [] },
+    { id: 'TGD', label: 'Tổng Giám Đốc', order: 4, singleApprover: true, members: [] }
+  ],
+  contractApprovalLevels: [
+    { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+    { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+    { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+    { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+  ],
   contractManageDeptWorkflows: DEFAULT_MAP,
 
   // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (đề nghị PENDING) giờ đi qua quy trình duyệt THEO PHÒNG

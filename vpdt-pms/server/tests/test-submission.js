@@ -249,7 +249,25 @@ async function main() {
         contractTypes: [], carTypes: [],
         workflows: [], deptWorkflows: {},
         submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {},
-        submissionApprovalGroups: { DONG_TRINH: ['alice'] },
+        // Shape MẢNG (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — khớp đúng defaults.js, đủ cả 7
+        // nhóm + 4 cấp để Scenario 6 (kiểm tra visible/locked theo "Cấp Phê Duyệt Cuối Cùng") và Scenario
+        // 8 (TRO_LY_THU_KY cần allowFileReplacementProposal:true — xem openProcessSubmissionModal() ở
+        // module-vanbantrinh.js) chạy đúng như hành vi cũ.
+        submissionApprovalGroups: [
+          { id: 'DONG_TRINH', label: 'Đồng trình', order: 1, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: ['alice'] },
+          { id: 'DONG_CAP', label: 'Phê duyệt đồng cấp', order: 2, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+          { id: 'XIN_Y_KIEN', label: 'Xin ý kiến', order: 3, blocking: false, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+          { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 4, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+          { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 5, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+          { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 6, blocking: true, singleApprover: false, allowFileReplacementProposal: true, members: [] },
+          { id: 'TGD', label: 'Tổng Giám Đốc', order: 7, blocking: true, singleApprover: true, allowFileReplacementProposal: false, members: [] }
+        ],
+        submissionApprovalLevels: [
+          { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+          { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+          { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+          { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+        ],
         permGroups: [],
         submissions: []
       });

@@ -206,7 +206,7 @@ async function main() {
       deptAbbrs: {}, docCatAbbrs: {},
       submissionTypes: [], contractTypes: [], carTypes: [],
       workflows: [], deptWorkflows: {},
-      submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
+      submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [],
       permGroups: [],
       docs: []
     });

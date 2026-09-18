@@ -87,8 +87,8 @@ async function main() {
       ],
       // Tài liệu: Phòng A cấu hình 1 bước với người duyệt "doc1"; Phòng B chưa cấu hình gì.
       deptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['doc1'] } } },
-      docs: [], submissions: [], submissionApprovalGroups: {}, submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {},
-      contracts: [], contractApprovalGroups: {},
+      docs: [], submissions: [], submissionApprovalGroups: [], submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {},
+      contracts: [], contractApprovalGroups: [],
       // Hợp Đồng: Phê Duyệt (Phòng A, 1 bước, "hd_approval1") KHÁC HẲN Quản Lý HĐ (Phòng A, 2 bước, "hd_manage1").
       contractApprovalDeptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['hd_approval1'] } } },
       contractManageDeptWorkflows: { 'Phòng A': { workflowId: 'WF_2STEP', approvers: { 1: ['hd_manage1'], 2: ['hd_manage2'] } } },

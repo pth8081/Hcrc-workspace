@@ -1,19 +1,43 @@
 // ==========================================
-// NHÓM PHÊ DUYỆT TRÌNH (Văn bản trình) — 7 nhóm CỐ ĐỊNH (SUBMISSION_APPROVAL_LAYERS), admin chỉ gán
-// thành viên, không tạo/xoá nhóm mới. Người trình tick chọn nhóm nào khi tạo tờ trình thì nhóm đó
-// được cộng thêm làm 1 bước phê duyệt bổ sung ở cuối quy trình phòng ban (xem
-// buildEffectiveSubmissionWorkflow()). Vai trò bắt buộc (Giám Đốc/Phó Giám Đốc, Phó Tổng Giám Đốc, Bộ
-// Phận Trợ Lý/Thư Ký, Tổng Giám Đốc) cho phép gán NHIỀU người (người trình chọn cụ thể 1 người lúc tạo
-// hồ sơ nếu nhóm có >1 người — xem renderLockedLayerSingleApproverCard() ở core.js) — RIÊNG Tổng Giám
-// Đốc chỉ được gán TỐI ĐA 1 người (renderTgdSingleSelect() bên dưới, ép cứng ở
-// lib/createValidation.js::assertApprovalGroupsTgdSingle()).
+// NHÓM PHÊ DUYỆT TRÌNH (Văn Bản Trình) + NHÓM PHÊ DUYỆT HĐ (Hợp Đồng) — đợt "Nhóm Phê Duyệt Trình tự
+// cấu hình" (10/2026): TRƯỚC ĐÂY mỗi bên là 7/4 nhóm CỐ ĐỊNH trong code (SUBMISSION_APPROVAL_LAYERS/
+// CONTRACT_APPROVAL_LAYERS), admin chỉ gán được thành viên, không đổi tên/thêm/xoá nhóm được. NAY dữ
+// liệu nhóm (DB.submissionApprovalGroups/DB.contractApprovalGroups, mảng {id,label,order,blocking?,
+// singleApprover,allowFileReplacementProposal?,members}) VÀ "Cấp Phê Duyệt Cuối Cùng" (DB.
+// submissionApprovalLevels/DB.contractApprovalLevels, mảng {id,label,order,visibleGroupIds,
+// lockedGroupIds,isSystemDefault?}) đều nằm trong AppData — admin tự đổi tên/thêm/xoá cả 2 ở đây, và
+// đây chính là NGUỒN DỮ LIỆU trực tiếp cho trường "Phê duyệt"/"Cấp Phê Duyệt Cuối Cùng" ở form tạo Văn
+// Bản Trình/Hợp Đồng (xem getSubmissionApprovalLayers()/getContractApprovalLayers()/
+// getSubmissionApprovalLevels()/getContractApprovalLevels() ở core.js). `id` là khoá ỔN ĐỊNH — đổi
+// `label` (tên hiển thị) không ảnh hưởng gì tới hồ sơ đã tạo trước đó (effectiveSteps/effectiveApprovers
+// là snapshot bất biến, xem lib/createValidation.js). Server (routes/data.js -> lib/createValidation.js
+// assertApprovalGroupsSingleApproverCaps()/resolveApprovalLevelRule()) là chốt xác minh THẬT — mọi kiểm
+// tra ở đây chỉ là UX, không phải bảo mật.
 // ==========================================
-// candidates cho ô chọn Tổng Giám Đốc (TGD) — 1 <select> đơn, KHÁC renderPeopleMultiSelect() (cho phép
-// nhiều người) vì TGD theo đúng cơ cấu tổ chức chỉ có 1 người tại 1 thời điểm (xem
-// lib/createValidation.js::assertApprovalGroupsTgdSingle() — chốt chặn THẬT ở server, đây chỉ là UI).
-// Vẫn hiện đúng người ĐÃ GÁN dù tài khoản đó vừa bị khoá (active:false) — cùng tinh thần
-// renderPeopleMultiSelect() ("thành viên đã gán từ trước không bị ảnh hưởng").
-function renderTgdSingleSelect(pickerId, selectClass, currentUsername) {
+const APPROVAL_GROUPS_ADMIN_CONFIG = {
+  submission: {
+    groupsKey: 'submissionApprovalGroups', levelsKey: 'submissionApprovalLevels',
+    groupsWrapId: 'submissionApprovalGroupsAdminWrap', levelsWrapId: 'submissionApprovalLevelsAdminWrap',
+    hasBlocking: true, hasFileReplacement: true, logTag: 'SUBMISSION',
+    groupIdPrefix: 'subgrp', levelIdPrefix: 'sublvl'
+  },
+  contract: {
+    groupsKey: 'contractApprovalGroups', levelsKey: 'contractApprovalLevels',
+    groupsWrapId: 'contractApprovalGroupsAdminWrap', levelsWrapId: 'contractApprovalLevelsAdminWrap',
+    hasBlocking: false, hasFileReplacement: false, logTag: 'CONTRACT',
+    groupIdPrefix: 'ctrgrp', levelIdPrefix: 'ctrlvl'
+  }
+};
+
+function approvalGroupsGenId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`;
+}
+
+// Ô chọn ĐÚNG 1 người — dùng cho nhóm bật cờ "Chỉ 1 người" (singleApprover). 1 <select> đơn, KHÁC
+// renderPeopleMultiSelect() (cho phép nhiều người). Vẫn hiện đúng người ĐÃ GÁN dù tài khoản đó vừa bị
+// khoá (active:false) — cùng tinh thần renderPeopleMultiSelect() ("thành viên đã gán từ trước không bị
+// ảnh hưởng").
+function renderSingleApproverSelect(pickerId, selectClass, currentUsername) {
   const el = document.getElementById(pickerId);
   if (!el) return;
   const activeUsers = DB.users.filter(u => u.active !== false);
@@ -28,99 +52,346 @@ function renderTgdSingleSelect(pickerId, selectClass, currentUsername) {
   `;
 }
 
+// ===== Bảng NHÓM PHÊ DUYỆT (groups) =====
+function renderApprovalGroupsTable(moduleKind) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const wrap = document.getElementById(cfg.groupsWrapId);
+  if (!wrap) return;
+  const groups = (DB[cfg.groupsKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  const rowsHTML = groups.map((g, idx) => {
+    const pickerId = `apgMemberPicker_${moduleKind}_${g.id}`;
+    return `
+      <tr class="border-b align-top">
+        <td class="p-1.5 border text-center whitespace-nowrap">
+          <div class="flex flex-col items-center gap-0.5">
+            <button type="button" ${idx === 0 ? 'disabled' : ''} data-op="moveApprovalGroup" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg2="-1" class="text-gray-500 hover:text-gray-800 disabled:opacity-20 leading-none">▲</button>
+            <span class="text-[10px] text-gray-400">${idx + 1}</span>
+            <button type="button" ${idx === groups.length - 1 ? 'disabled' : ''} data-op="moveApprovalGroup" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg2="1" class="text-gray-500 hover:text-gray-800 disabled:opacity-20 leading-none">▼</button>
+          </div>
+        </td>
+        <td class="p-1.5 border min-w-[140px]">
+          <input type="text" value="${escapeHtml(g.label || '')}" data-op-change="renameApprovalGroup" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg-value="2" class="w-full border p-1 rounded text-[11px] font-semibold">
+        </td>
+        ${cfg.hasBlocking ? `
+        <td class="p-1.5 border text-center">
+          <input type="checkbox" ${g.blocking !== false ? 'checked' : ''} data-op-change="toggleApprovalGroupFlag" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg2="blocking" data-arg-el="3">
+        </td>` : ''}
+        <td class="p-1.5 border text-center">
+          <input type="checkbox" ${g.singleApprover ? 'checked' : ''} data-op-change="toggleApprovalGroupFlag" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg2="singleApprover" data-arg-el="3">
+        </td>
+        ${cfg.hasFileReplacement ? `
+        <td class="p-1.5 border text-center">
+          <input type="checkbox" ${g.allowFileReplacementProposal ? 'checked' : ''} data-op-change="toggleApprovalGroupFlag" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg2="allowFileReplacementProposal" data-arg-el="3">
+        </td>` : ''}
+        <td class="p-1.5 border min-w-[220px]">
+          <div id="${pickerId}"></div>
+          <button type="button" data-op="saveApprovalGroupMembers" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" class="w-full mt-1 bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">💾 Lưu Thành Viên</button>
+        </td>
+        <td class="p-1.5 border text-center">
+          <button type="button" data-op="deleteApprovalGroup" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const colCount = 4 + (cfg.hasBlocking ? 1 : 0) + (cfg.hasFileReplacement ? 1 : 0);
+  wrap.innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px] border-collapse">
+        <thead>
+          <tr class="bg-slate-100 text-gray-600">
+            <th class="p-1.5 border">Thứ Tự</th>
+            <th class="p-1.5 border text-left">Tên Nhóm</th>
+            ${cfg.hasBlocking ? '<th class="p-1.5 border" title="Nhóm KHÔNG chặn quy trình chỉ là kênh tham khảo song song (VD Xin ý kiến), không cộng thêm bước duyệt nào">Chặn Quy Trình?</th>' : ''}
+            <th class="p-1.5 border" title="Nhóm chỉ được gán tối đa 1 thành viên">Chỉ 1 Người?</th>
+            ${cfg.hasFileReplacement ? '<th class="p-1.5 border" title="Người duyệt ở bước của nhóm này có thêm lựa chọn đề xuất thay thế toàn bộ tệp tờ trình">Đề Xuất Thay File?</th>' : ''}
+            <th class="p-1.5 border text-left">Thành Viên</th>
+            <th class="p-1.5 border">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHTML || `<tr><td colspan="${colCount}" class="p-3 text-center text-gray-400 italic">Chưa có nhóm nào — bấm "+ Thêm Nhóm" bên dưới.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <button type="button" data-op="addApprovalGroup" data-arg0="${moduleKind}" class="mt-2 bg-emerald-600 text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-emerald-700">+ Thêm Nhóm</button>
+  `;
+
+  groups.forEach(g => {
+    const pickerId = `apgMemberPicker_${moduleKind}_${g.id}`;
+    if (g.singleApprover) {
+      renderSingleApproverSelect(pickerId, 'apg-single-select', (g.members || [])[0] || '');
+    } else {
+      // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa — thành viên đã gán từ trước
+      // (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
+      renderPeopleMultiSelect(pickerId, DB.users.filter(u => u.active !== false), g.members || [], '', {});
+    }
+  });
+}
+
+function renameApprovalGroup(moduleKind, groupId, newLabel) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
+  if (!group) return;
+  const trimmed = String(newLabel || '').trim();
+  if (!trimmed) { alert('Tên nhóm không được để trống!'); renderApprovalGroupsTable(moduleKind); return; }
+  group.label = trimmed;
+  syncStorage(cfg.groupsKey);
+  logSystemAction(cfg.logTag, 'RENAME_APPROVAL_GROUP', `Đổi tên nhóm phê duyệt [${groupId}] -> "${trimmed}"`, 'SUCCESS', groupId);
+}
+
+// el = chính checkbox vừa đổi (data-arg-el) — đọc el.checked thay vì el.value (checkbox không dùng
+// data-arg-value vì el.value luôn là "on", không phản ánh trạng thái tick).
+function toggleApprovalGroupFlag(moduleKind, groupId, flagName, el) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
+  if (!group) return;
+  // Chặn bật "Chỉ 1 người" khi nhóm đang có >1 thành viên — mirror ĐÚNG chốt chặn thật ở server
+  // (lib/createValidation.js::assertApprovalGroupsSingleApproverCaps()), báo lỗi sớm ở UI thay vì để
+  // request bị 400 sau khi bấm lưu.
+  if (flagName === 'singleApprover' && el.checked && (group.members || []).length > 1) {
+    alert(`⛔ Nhóm "${group.label}" hiện có ${group.members.length} thành viên — vui lòng bớt xuống còn tối đa 1 người (nút "💾 Lưu Thành Viên") trước khi bật "Chỉ 1 người".`);
+    el.checked = false;
+    return;
+  }
+  group[flagName] = el.checked;
+  syncStorage(cfg.groupsKey);
+  logSystemAction(cfg.logTag, 'UPDATE_APPROVAL_GROUP_FLAG', `Đổi cờ "${flagName}" nhóm [${group.label}] = ${el.checked}`, 'SUCCESS', groupId);
+  // Vẽ lại cả bảng — đổi "Chỉ 1 người" cần đổi LOẠI widget cột Thành Viên (select đơn <-> chọn nhiều).
+  renderApprovalGroupsTable(moduleKind);
+}
+
+function saveApprovalGroupMembers(moduleKind, groupId) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
+  if (!group) return;
+  const pickerId = `apgMemberPicker_${moduleKind}_${groupId}`;
+  let members;
+  if (group.singleApprover) {
+    const select = document.querySelector(`#${pickerId} select`);
+    members = select && select.value ? [select.value] : [];
+  } else {
+    // Container ID đã riêng theo đúng moduleKind+groupId (không dùng chung data-layer với form TẠO tờ
+    // trình/hợp đồng như trước) — querySelectorAll trong ĐÚNG picker này là đủ, không cần scope thêm.
+    members = [...document.querySelectorAll(`#${pickerId} input[type="checkbox"]`)].map(cb => cb.value);
+  }
+  group.members = members;
+  syncStorage(cfg.groupsKey);
+  logSystemAction(cfg.logTag, 'SAVE_APPROVAL_GROUP', `Cập nhật thành viên nhóm [${group.label}]: ${members.length} người`, 'SUCCESS', groupId);
+  alert(`✅ Đã lưu thành viên nhóm "${group.label}"!`);
+}
+
+function deleteApprovalGroup(moduleKind, groupId) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
+  if (!group) return;
+  if (!confirm(`Xoá nhóm "${group.label}"? Hồ sơ ĐÃ TẠO trước đó không bị ảnh hưởng (quy trình của hồ sơ cũ đã chốt cố định lúc tạo, không đổi theo cấu hình sau này) — chỉ ảnh hưởng lựa chọn cho hồ sơ MỚI từ giờ trở đi. Nếu nhóm này đang được đặt "bắt buộc"/"hiển thị" ở 1 Cấp Phê Duyệt Cuối Cùng nào đó, cấp đó sẽ tự bỏ qua nhóm này.`)) return;
+  DB[cfg.groupsKey] = (DB[cfg.groupsKey] || []).filter(g => g.id !== groupId);
+  syncStorage(cfg.groupsKey);
+  logSystemAction(cfg.logTag, 'DELETE_APPROVAL_GROUP', `Xoá nhóm phê duyệt [${group.label}]`, 'SUCCESS', groupId);
+  renderApprovalGroupsTable(moduleKind);
+}
+
+function addApprovalGroup(moduleKind) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const label = String(prompt('Tên nhóm phê duyệt mới:') || '').trim();
+  if (!label) return;
+  const groups = DB[cfg.groupsKey] || (DB[cfg.groupsKey] = []);
+  const order = Math.max(-1, ...groups.map(g => g.order ?? 0)) + 1;
+  const newGroup = { id: approvalGroupsGenId(cfg.groupIdPrefix), label, order, singleApprover: false, members: [] };
+  if (cfg.hasBlocking) newGroup.blocking = true;
+  if (cfg.hasFileReplacement) newGroup.allowFileReplacementProposal = false;
+  groups.push(newGroup);
+  syncStorage(cfg.groupsKey);
+  logSystemAction(cfg.logTag, 'ADD_APPROVAL_GROUP', `Thêm nhóm phê duyệt mới [${label}]`, 'SUCCESS', newGroup.id);
+  renderApprovalGroupsTable(moduleKind);
+}
+
+function moveApprovalGroup(moduleKind, groupId, direction) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const groups = (DB[cfg.groupsKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const idx = groups.findIndex(g => g.id === groupId);
+  const swapIdx = idx + direction;
+  if (idx === -1 || swapIdx < 0 || swapIdx >= groups.length) return;
+  [groups[idx], groups[swapIdx]] = [groups[swapIdx], groups[idx]];
+  groups.forEach((g, i) => { g.order = i; });
+  DB[cfg.groupsKey] = groups;
+  syncStorage(cfg.groupsKey);
+  renderApprovalGroupsTable(moduleKind);
+}
+
+// ===== Bảng CẤP PHÊ DUYỆT CUỐI CÙNG (levels) =====
+function renderApprovalLevelsTable(moduleKind) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const wrap = document.getElementById(cfg.levelsWrapId);
+  if (!wrap) return;
+  const levels = (DB[cfg.levelsKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const groupItems = (DB[cfg.groupsKey] || []).map(g => ({ value: g.id, label: g.label }));
+
+  const rowsHTML = levels.map((lv, idx) => {
+    const isAll = !Array.isArray(lv.visibleGroupIds);
+    const allCbId = `aplVisibleAllCb_${moduleKind}_${lv.id}`;
+    const visibleWrapId = `aplVisiblePickerWrap_${moduleKind}_${lv.id}`;
+    const visiblePickerId = `aplVisiblePicker_${moduleKind}_${lv.id}`;
+    const lockedPickerId = `aplLockedPicker_${moduleKind}_${lv.id}`;
+    return `
+      <tr class="border-b align-top">
+        <td class="p-1.5 border text-center whitespace-nowrap">
+          <div class="flex flex-col items-center gap-0.5">
+            <button type="button" ${idx === 0 ? 'disabled' : ''} data-op="moveApprovalLevel" data-arg0="${moduleKind}" data-arg1="${escapeHtml(lv.id)}" data-arg2="-1" class="text-gray-500 hover:text-gray-800 disabled:opacity-20 leading-none">▲</button>
+            <span class="text-[10px] text-gray-400">${idx + 1}</span>
+            <button type="button" ${idx === levels.length - 1 ? 'disabled' : ''} data-op="moveApprovalLevel" data-arg0="${moduleKind}" data-arg1="${escapeHtml(lv.id)}" data-arg2="1" class="text-gray-500 hover:text-gray-800 disabled:opacity-20 leading-none">▼</button>
+          </div>
+        </td>
+        <td class="p-1.5 border min-w-[140px]">
+          <input type="text" value="${escapeHtml(lv.label || '')}" data-op-change="renameApprovalLevel" data-arg0="${moduleKind}" data-arg1="${escapeHtml(lv.id)}" data-arg-value="2" class="w-full border p-1 rounded text-[11px] font-semibold">
+          ${lv.isSystemDefault ? '<span class="block text-[10px] text-sky-600 mt-0.5">🔒 Mặc định hệ thống</span>' : ''}
+        </td>
+        <td class="p-1.5 border min-w-[200px]">
+          <label class="flex items-center gap-1 text-[10px] text-gray-600 mb-1 cursor-pointer">
+            <input type="checkbox" id="${allCbId}" ${isAll ? 'checked' : ''} data-op-change="onLevelVisibleAllToggle" data-arg0="${moduleKind}" data-arg1="${escapeHtml(lv.id)}" data-arg-el="2"> Tất cả nhóm (mặc định)
+          </label>
+          <div id="${visibleWrapId}" class="${isAll ? 'hidden' : ''}">
+            <div id="${visiblePickerId}"></div>
+          </div>
+        </td>
+        <td class="p-1.5 border min-w-[200px]">
+          <div id="${lockedPickerId}"></div>
+        </td>
+        <td class="p-1.5 border text-center whitespace-nowrap">
+          <button type="button" data-op="saveApprovalLevelGroups" data-arg0="${moduleKind}" data-arg1="${escapeHtml(lv.id)}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700 mb-1">💾 Lưu Phạm Vi</button>
+          ${lv.isSystemDefault
+            ? '<span class="text-gray-400 text-[11px]" title="Cấp mặc định hệ thống — không xoá được">🔒</span>'
+            : `<button type="button" data-op="deleteApprovalLevel" data-arg0="${moduleKind}" data-arg1="${escapeHtml(lv.id)}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button>`}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px] border-collapse">
+        <thead>
+          <tr class="bg-slate-100 text-gray-600">
+            <th class="p-1.5 border">Thứ Tự</th>
+            <th class="p-1.5 border text-left">Tên Cấp</th>
+            <th class="p-1.5 border text-left">Nhóm Được Chọn (hiển thị)</th>
+            <th class="p-1.5 border text-left">Nhóm Bắt Buộc (khoá sẵn)</th>
+            <th class="p-1.5 border">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHTML || `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic">Chưa có cấp nào — bấm "+ Thêm Cấp" bên dưới.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <button type="button" data-op="addApprovalLevel" data-arg0="${moduleKind}" class="mt-2 bg-emerald-600 text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-emerald-700">+ Thêm Cấp</button>
+  `;
+
+  levels.forEach(lv => {
+    const isAll = !Array.isArray(lv.visibleGroupIds);
+    renderMultiSelectDropdown(`aplVisiblePicker_${moduleKind}_${lv.id}`, groupItems, isAll ? [] : lv.visibleGroupIds, {
+      placeholder: '🔍 Tìm nhóm để thêm vào phạm vi hiển thị...', emptyText: 'Chưa chọn nhóm nào.',
+      chipClass: 'bg-sky-100 text-sky-700', hoverClass: 'hover:bg-sky-50'
+    });
+    renderMultiSelectDropdown(`aplLockedPicker_${moduleKind}_${lv.id}`, groupItems, lv.lockedGroupIds || [], {
+      placeholder: '🔍 Tìm nhóm để khoá bắt buộc...', emptyText: 'Không khoá nhóm nào.',
+      chipClass: 'bg-amber-100 text-amber-700', hoverClass: 'hover:bg-amber-50'
+    });
+  });
+}
+
+function renameApprovalLevel(moduleKind, levelId, newLabel) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const level = (DB[cfg.levelsKey] || []).find(l => l.id === levelId);
+  if (!level) return;
+  const trimmed = String(newLabel || '').trim();
+  if (!trimmed) { alert('Tên cấp không được để trống!'); renderApprovalLevelsTable(moduleKind); return; }
+  level.label = trimmed;
+  syncStorage(cfg.levelsKey);
+  logSystemAction(cfg.logTag, 'RENAME_APPROVAL_LEVEL', `Đổi tên cấp phê duyệt [${levelId}] -> "${trimmed}"`, 'SUCCESS', levelId);
+}
+
+// Chỉ đổi hiển thị (ẩn/hiện khối chọn nhóm cụ thể) — KHÔNG tự lưu, chờ bấm "💾 Lưu Phạm Vi" (xem
+// saveApprovalLevelGroups() đọc lại đúng trạng thái checkbox này tại thời điểm lưu).
+function onLevelVisibleAllToggle(moduleKind, levelId, el) {
+  const wrap = document.getElementById(`aplVisiblePickerWrap_${moduleKind}_${levelId}`);
+  if (wrap) wrap.classList.toggle('hidden', el.checked);
+}
+
+function saveApprovalLevelGroups(moduleKind, levelId) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const level = (DB[cfg.levelsKey] || []).find(l => l.id === levelId);
+  if (!level) return;
+  const isAll = !!document.getElementById(`aplVisibleAllCb_${moduleKind}_${levelId}`)?.checked;
+  const visibleGroupIds = isAll ? null : getMultiSelectValues(`aplVisiblePicker_${moduleKind}_${levelId}`);
+  const lockedGroupIds = getMultiSelectValues(`aplLockedPicker_${moduleKind}_${levelId}`);
+  // Nhóm bắt buộc (locked) PHẢI nằm trong phạm vi hiển thị (visible) — nếu không, form tạo hồ sơ sẽ
+  // KHÔNG BAO GIỜ render checkbox cho nhóm đó (renderSubmissionApprovalLayerCheckboxes() lọc theo
+  // rule.visible), khiến server luôn từ chối vì "thiếu nhóm phê duyệt bắt buộc" mà người dùng không
+  // thấy được lý do — chặn sớm ở đây thay vì để lỗi khó hiểu xảy ra lúc tạo hồ sơ thật.
+  if (!isAll) {
+    const missing = lockedGroupIds.filter(id => !visibleGroupIds.includes(id));
+    if (missing.length) {
+      const names = missing.map(id => (DB[cfg.groupsKey] || []).find(g => g.id === id)?.label || id).join(', ');
+      return alert(`⛔ Nhóm bắt buộc "${names}" phải nằm trong danh sách "Nhóm Được Chọn (hiển thị)" — hoặc bật "Tất cả nhóm".`);
+    }
+  }
+  level.visibleGroupIds = visibleGroupIds;
+  level.lockedGroupIds = lockedGroupIds;
+  syncStorage(cfg.levelsKey);
+  logSystemAction(cfg.logTag, 'SAVE_APPROVAL_LEVEL_SCOPE', `Cập nhật phạm vi cấp phê duyệt [${level.label}]`, 'SUCCESS', levelId);
+  alert(`✅ Đã lưu phạm vi cấp "${level.label}"!`);
+}
+
+function deleteApprovalLevel(moduleKind, levelId) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const level = (DB[cfg.levelsKey] || []).find(l => l.id === levelId);
+  if (!level) return;
+  if (level.isSystemDefault) return alert('Đây là cấp mặc định hệ thống — không xoá được (đảm bảo luôn có 1 cấp dự phòng), chỉ đổi tên được.');
+  if (!confirm(`Xoá cấp "${level.label}"? Hồ sơ ĐÃ TẠO trước đó không bị ảnh hưởng (quy trình của hồ sơ cũ đã chốt cố định lúc tạo, không đổi theo cấu hình sau này) — chỉ ảnh hưởng lựa chọn cho hồ sơ MỚI từ giờ trở đi.`)) return;
+  DB[cfg.levelsKey] = (DB[cfg.levelsKey] || []).filter(l => l.id !== levelId);
+  syncStorage(cfg.levelsKey);
+  logSystemAction(cfg.logTag, 'DELETE_APPROVAL_LEVEL', `Xoá cấp phê duyệt [${level.label}]`, 'SUCCESS', levelId);
+  renderApprovalLevelsTable(moduleKind);
+}
+
+function addApprovalLevel(moduleKind) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const label = String(prompt('Tên cấp phê duyệt cuối cùng mới:') || '').trim();
+  if (!label) return;
+  const levels = DB[cfg.levelsKey] || (DB[cfg.levelsKey] = []);
+  const order = Math.max(-1, ...levels.map(l => l.order ?? 0)) + 1;
+  const newLevel = { id: approvalGroupsGenId(cfg.levelIdPrefix), label, order, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: false };
+  levels.push(newLevel);
+  syncStorage(cfg.levelsKey);
+  logSystemAction(cfg.logTag, 'ADD_APPROVAL_LEVEL', `Thêm cấp phê duyệt mới [${label}]`, 'SUCCESS', newLevel.id);
+  renderApprovalLevelsTable(moduleKind);
+}
+
+function moveApprovalLevel(moduleKind, levelId, direction) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const levels = (DB[cfg.levelsKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const idx = levels.findIndex(l => l.id === levelId);
+  const swapIdx = idx + direction;
+  if (idx === -1 || swapIdx < 0 || swapIdx >= levels.length) return;
+  [levels[idx], levels[swapIdx]] = [levels[swapIdx], levels[idx]];
+  levels.forEach((l, i) => { l.order = i; });
+  DB[cfg.levelsKey] = levels;
+  syncStorage(cfg.levelsKey);
+  renderApprovalLevelsTable(moduleKind);
+}
+
+// Giữ nguyên 2 tên hàm cũ (gọi từ module-hethong-tabs.js switchSystemSubTab() — không cần sửa nơi gọi)
+// — mỗi hàm vẽ CẢ bảng Nhóm lẫn bảng Cấp của đúng module đó.
 function renderSubmissionApprovalGroups() {
-  const container = document.getElementById('submissionApprovalGroupsContainer');
-  if (!container) return;
-
-  container.innerHTML = SUBMISSION_APPROVAL_LAYERS.map(layer => `
-    <div class="bg-slate-50 p-3 rounded border space-y-2">
-      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}${layer.key === 'TGD' ? ' <span class="text-[10px] text-sky-600 font-normal">(chỉ 1 người)</span>' : ''}</div>
-      <div id="submissionApprovalGroupPicker_${layer.key}"></div>
-      <button type="button" data-op="saveSubmissionApprovalGroup" data-arg0="${layer.key}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
-    </div>
-  `).join('');
-
-  SUBMISSION_APPROVAL_LAYERS.forEach(layer => {
-    const members = DB.submissionApprovalGroups[layer.key] || [];
-    if (layer.key === 'TGD') {
-      renderTgdSingleSelect(`submissionApprovalGroupPicker_${layer.key}`, 'sub-tgd-single-select', members[0] || '');
-    } else {
-      // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
-      // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
-      renderPeopleMultiSelect(`submissionApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
-    }
-  });
+  renderApprovalGroupsTable('submission');
+  renderApprovalLevelsTable('submission');
 }
-
-function saveSubmissionApprovalGroup(layerKey) {
-  let members;
-  if (layerKey === 'TGD') {
-    const select = document.querySelector('#submissionApprovalGroupPicker_TGD select.sub-tgd-single-select');
-    members = select && select.value ? [select.value] : [];
-  } else {
-    // PHẢI scope theo #submissionApprovalGroupsContainer — checkbox ẩn của widget chọn người ở form
-    // TẠO tờ trình (subLayerMemberPicker_*) cũng mang cùng data-layer="${layerKey}" (chỉ khác ở việc có
-    // class "sub-layer-member" hay không); cả 2 khối này luôn cùng tồn tại trong DOM (SPA 1 trang, tab
-    // ẩn bằng CSS chứ không gỡ khỏi DOM) nên querySelectorAll không scope sẽ vô tình gộp cả người đang
-    // được chọn dở trong form tạo tờ trình vào danh sách thành viên nhóm do admin lưu.
-    const checkboxes = document.querySelectorAll(`#submissionApprovalGroupsContainer input[data-layer="${layerKey}"]`);
-    members = [];
-    checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
-  }
-
-  DB.submissionApprovalGroups[layerKey] = members;
-  syncStorage('submissionApprovalGroups');
-
-  const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
-  logSystemAction('SUBMISSION', 'SAVE_APPROVAL_GROUP', `Cập nhật nhóm phê duyệt trình [${layer?.label}]: ${members.length} thành viên`, 'SUCCESS', layerKey);
-  alert(`✅ Đã lưu thành viên nhóm "${layer?.label}"!`);
-}
-
-// Nhóm Phê Duyệt HĐ (Hợp Đồng) — cùng khuôn renderSubmissionApprovalGroups()/saveSubmissionApprovalGroup()
-// ở trên nhưng dữ liệu RIÊNG (DB.contractApprovalGroups, KHÔNG dùng chung DB.submissionApprovalGroups).
 function renderContractApprovalGroups() {
-  const container = document.getElementById('contractApprovalGroupsContainer');
-  if (!container) return;
-
-  container.innerHTML = CONTRACT_APPROVAL_LAYERS.map(layer => `
-    <div class="bg-slate-50 p-3 rounded border space-y-2">
-      <div class="font-bold text-gray-800 text-xs">${escapeHtml(layer.label)}${layer.key === 'TGD' ? ' <span class="text-[10px] text-sky-600 font-normal">(chỉ 1 người)</span>' : ''}</div>
-      <div id="contractApprovalGroupPicker_${layer.key}"></div>
-      <button type="button" data-op="saveContractApprovalGroup" data-arg0="${layer.key}" class="w-full bg-rose-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-rose-700">Lưu Thành Viên</button>
-    </div>
-  `).join('');
-
-  CONTRACT_APPROVAL_LAYERS.forEach(layer => {
-    const members = DB.contractApprovalGroups[layer.key] || [];
-    if (layer.key === 'TGD') {
-      renderTgdSingleSelect(`contractApprovalGroupPicker_${layer.key}`, 'contract-tgd-single-select', members[0] || '');
-    } else {
-      // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — thành viên đã gán từ
-      // trước (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
-      renderPeopleMultiSelect(`contractApprovalGroupPicker_${layer.key}`, DB.users.filter(u => u.active !== false), members, '', { 'data-layer': layer.key });
-    }
-  });
-}
-
-function saveContractApprovalGroup(layerKey) {
-  let members;
-  if (layerKey === 'TGD') {
-    const select = document.querySelector('#contractApprovalGroupPicker_TGD select.contract-tgd-single-select');
-    members = select && select.value ? [select.value] : [];
-  } else {
-    // PHẢI scope theo #contractApprovalGroupsContainer — cùng lý do saveSubmissionApprovalGroup() ở trên
-    // (widget chọn người ở form TẠO hợp đồng, contractLayerMemberPicker_*, cũng mang data-layer trùng key).
-    const checkboxes = document.querySelectorAll(`#contractApprovalGroupsContainer input[data-layer="${layerKey}"]`);
-    members = [];
-    checkboxes.forEach(cb => { if (cb.checked) members.push(cb.value); });
-  }
-
-  DB.contractApprovalGroups[layerKey] = members;
-  syncStorage('contractApprovalGroups');
-
-  const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
-  logSystemAction('CONTRACT', 'SAVE_APPROVAL_GROUP', `Cập nhật nhóm phê duyệt HĐ [${layer?.label}]: ${members.length} thành viên`, 'SUCCESS', layerKey);
-  alert(`✅ Đã lưu thành viên nhóm "${layer?.label}"!`);
+  renderApprovalGroupsTable('contract');
+  renderApprovalLevelsTable('contract');
 }
 
 function cancelPermFormEdit() {
@@ -279,4 +550,3 @@ async function saveUser(e) {
     rowEl.classList.add('admin-row-saved-highlight');
   }
 }
-

@@ -240,7 +240,10 @@ async function main() {
   await run.run('buildEffectiveSubmissionWorkflowServer(): resolve đúng POSITION mode NGAY LÚC dựng snapshot effectiveApprovers', () => {
     const appData = {
       workflows: WORKFLOWS, users: POS_USERS, submissionTypes: [], submissionTypeDeptWorkflows: {},
-      submissionDeptWorkflows: { 'Phòng IT': positionConfig() }, submissionApprovalGroups: {}
+      submissionDeptWorkflows: { 'Phòng IT': positionConfig() }, submissionApprovalGroups: [],
+      // submissionApprovalLevels (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — cần ít nhất 1 cấp
+      // "KHAC" hợp lệ để resolveApprovalLevelRule() không ném lỗi (trước đây hardcode không phụ thuộc appData).
+      submissionApprovalLevels: [{ id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }]
     };
     const wf = buildEffectiveSubmissionWorkflowServer('Bất kỳ', 'Phòng IT', [], {}, appData, 'KHAC');
     assertEqual(JSON.stringify(wf.approvers[1]), JSON.stringify(['pos_ok']), 'effectiveApprovers[1] phải là username đã resolve (pos_ok), không phải mảng rỗng/config thô');
@@ -249,7 +252,8 @@ async function main() {
   await run.run('buildEffectiveContractApprovalWorkflowServer(): resolve đúng POSITION mode NGAY LÚC dựng snapshot effectiveApprovers', () => {
     const appData = {
       workflows: WORKFLOWS, users: POS_USERS,
-      contractApprovalDeptWorkflows: { 'Phòng IT': positionConfig() }, contractApprovalGroups: {}
+      contractApprovalDeptWorkflows: { 'Phòng IT': positionConfig() }, contractApprovalGroups: [],
+      contractApprovalLevels: [{ id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }]
     };
     const wf = buildEffectiveContractApprovalWorkflowServer('Phòng IT', [], {}, appData, 'KHAC');
     assertEqual(JSON.stringify(wf.approvers[1]), JSON.stringify(['pos_ok']), 'effectiveApprovers[1] phải là username đã resolve (pos_ok)');

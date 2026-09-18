@@ -517,15 +517,16 @@ async function submitContractReq(e) {
   // duyệt chỉ bị phát hiện SAU 1 lượt tải tệp tốn công (server mới từ chối) — cùng khuôn
   // submitSubmissionReq() (module-vanbantrinh.js), kiểm tra sớm trước khi upload.
   const { selectedLayerKeys, selectedLayerMembers } = isSignedImport ? { selectedLayerKeys: [], selectedLayerMembers: {} } : readSelectedContractLayers();
-  const approvalLevel = isSignedImport ? null : (document.getElementById('contractApprovalLevel').value || 'KHAC');
+  const approvalLevel = isSignedImport ? null : document.getElementById('contractApprovalLevel').value;
   if (!isSignedImport) {
     const rule = getContractApprovalLevelRule(approvalLevel);
+    const contractLayers = getContractApprovalLayers();
     for (const layerKey of selectedLayerKeys) {
-      const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+      const layer = contractLayers.find(l => l.key === layerKey);
       if (rule.locked.includes(layerKey)) {
         // Lớp bị khoá bắt buộc chỉ có card chọn người khi nhóm admin gán có NHIỀU HƠN 1 người (nhóm
         // chỉ 1 người thì dùng thẳng, không cần chọn — xem renderContractApprovalLayerCheckboxes()).
-        const groupMembers = DB.contractApprovalGroups[layerKey] || [];
+        const groupMembers = (DB.contractApprovalGroups || []).find(g => g.id === layerKey)?.members || [];
         if (groupMembers.length > 1 && (selectedLayerMembers[layerKey] || []).length !== 1) {
           return alert(`⛔ Vai trò bắt buộc "${layer?.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể!`);
         }

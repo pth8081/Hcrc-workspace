@@ -12,19 +12,20 @@ function submitSubmissionReq(e) {
   const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
 
+  const submissionLayers = getSubmissionApprovalLayers();
   for (const layerKey of selectedLayerKeys) {
     if (rule.locked.includes(layerKey)) {
       // Lớp bị khoá bắt buộc chỉ có card chọn người khi nhóm admin gán có NHIỀU HƠN 1 người (nhóm chỉ
       // 1 người thì dùng thẳng, không cần chọn — xem renderSubmissionApprovalLayerCheckboxes()).
-      const groupMembers = DB.submissionApprovalGroups[layerKey] || [];
+      const groupMembers = (DB.submissionApprovalGroups || []).find(g => g.id === layerKey)?.members || [];
       if (groupMembers.length > 1 && (selectedLayerMembers[layerKey] || []).length !== 1) {
-        const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+        const layer = submissionLayers.find(l => l.key === layerKey);
         return alert(`⛔ Vai trò bắt buộc "${layer?.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể!`);
       }
       continue;
     }
     if ((selectedLayerMembers[layerKey] || []).length === 0) {
-      const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+      const layer = submissionLayers.find(l => l.key === layerKey);
       return alert(`⛔ Đã tick lớp "${layer?.label}" nhưng chưa chọn người nào duyệt — vui lòng chọn ít nhất 1 người!`);
     }
   }
@@ -175,12 +176,12 @@ function resetSubmissionForm() {
 function renderSubmissionApprovalLayerCheckboxes() {
   const panel = document.getElementById('subApprovalDropdownPanel');
   if (!panel) return;
-  const levelKey = document.getElementById('subApprovalLevel')?.value || 'KHAC';
+  const levelKey = document.getElementById('subApprovalLevel')?.value;
   const rule = getSubmissionApprovalLevelRule(levelKey);
-  const visibleLayers = SUBMISSION_APPROVAL_LAYERS.filter(l => rule.visible.includes(l.key));
+  const visibleLayers = getSubmissionApprovalLayers().filter(l => rule.visible.includes(l.key));
 
   panel.innerHTML = visibleLayers.map(layer => {
-    const groupUsers = (DB.submissionApprovalGroups[layer.key] || [])
+    const groupUsers = ((DB.submissionApprovalGroups || []).find(g => g.id === layer.key)?.members || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean);
     const locked = rule.locked.includes(layer.key);
@@ -218,7 +219,7 @@ function renderSubmissionApprovalLayerCheckboxes() {
   rule.locked.forEach(layerKey => {
     const layer = visibleLayers.find(l => l.key === layerKey);
     if (!layer) return;
-    const groupUsers = (DB.submissionApprovalGroups[layerKey] || [])
+    const groupUsers = ((DB.submissionApprovalGroups || []).find(g => g.id === layerKey)?.members || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean)
       .filter(u => u.active !== false);
@@ -250,7 +251,7 @@ function updateSubApprovalDropdownLabel() {
     labelEl.textContent = '-- Chọn cấp phê duyệt --';
     labelEl.className = 'text-gray-500 truncate';
   } else {
-    const labels = checked.map(cb => SUBMISSION_APPROVAL_LAYERS.find(l => l.key === cb.value)?.label || cb.value);
+    const labels = checked.map(cb => getSubmissionApprovalLayers().find(l => l.key === cb.value)?.label || cb.value);
     labelEl.textContent = checked.length <= 2 ? labels.join(', ') : `Đã chọn ${checked.length} lớp`;
     labelEl.className = 'text-gray-800 font-semibold truncate';
   }
@@ -261,14 +262,14 @@ function updateSubApprovalDropdownLabel() {
 function onSubApprovalLayerToggle(layerKey) {
   const toggle = document.querySelector(`.sub-layer-toggle[value="${layerKey}"]`);
   const checked = !!toggle?.checked;
-  const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+  const layer = getSubmissionApprovalLayers().find(l => l.key === layerKey);
   const container = document.getElementById('subApprovalLayersContainer');
   const section = document.getElementById('subApprovalLayersSection');
 
   if (checked) {
     // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — không ảnh hưởng người
     // đã được gán từ trước (DB.submissionApprovalGroups vẫn giữ nguyên username cũ, chỉ ẩn ở đây).
-    const groupUsers = (DB.submissionApprovalGroups[layerKey] || [])
+    const groupUsers = ((DB.submissionApprovalGroups || []).find(g => g.id === layerKey)?.members || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean)
       .filter(u => u.active !== false);
@@ -292,17 +293,17 @@ function onSubApprovalLayerToggle(layerKey) {
 
 // Cùng khuôn renderSubmissionApprovalLayerCheckboxes()/toggleSubApprovalDropdown()/
 // updateSubApprovalDropdownLabel()/onSubApprovalLayerToggle() ở trên nhưng cho form Hợp đồng — dùng
-// CONTRACT_APPROVAL_LAYERS/DB.contractApprovalGroups riêng, không có nhánh "Xin ý kiến" (cả 4 lớp đều
-// blocking).
+// getContractApprovalLayers()/DB.contractApprovalGroups riêng, không có nhánh "Xin ý kiến" (mọi nhóm
+// Hợp Đồng đều blocking).
 function renderContractApprovalLayerCheckboxes() {
   const panel = document.getElementById('contractApprovalDropdownPanel');
   if (!panel) return;
-  const levelKey = document.getElementById('contractApprovalLevel')?.value || 'KHAC';
+  const levelKey = document.getElementById('contractApprovalLevel')?.value;
   const rule = getContractApprovalLevelRule(levelKey);
-  const visibleLayers = CONTRACT_APPROVAL_LAYERS.filter(l => rule.visible.includes(l.key));
+  const visibleLayers = getContractApprovalLayers().filter(l => rule.visible.includes(l.key));
 
   panel.innerHTML = visibleLayers.map(layer => {
-    const groupUsers = (DB.contractApprovalGroups[layer.key] || [])
+    const groupUsers = ((DB.contractApprovalGroups || []).find(g => g.id === layer.key)?.members || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean);
     const locked = rule.locked.includes(layer.key);
@@ -337,7 +338,7 @@ function renderContractApprovalLayerCheckboxes() {
   rule.locked.forEach(layerKey => {
     const layer = visibleLayers.find(l => l.key === layerKey);
     if (!layer) return;
-    const groupUsers = (DB.contractApprovalGroups[layerKey] || [])
+    const groupUsers = ((DB.contractApprovalGroups || []).find(g => g.id === layerKey)?.members || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean)
       .filter(u => u.active !== false);
@@ -369,7 +370,7 @@ function updateContractApprovalDropdownLabel() {
     labelEl.textContent = '-- Chọn cấp phê duyệt --';
     labelEl.className = 'text-gray-500 truncate';
   } else {
-    const labels = checked.map(cb => CONTRACT_APPROVAL_LAYERS.find(l => l.key === cb.value)?.label || cb.value);
+    const labels = checked.map(cb => getContractApprovalLayers().find(l => l.key === cb.value)?.label || cb.value);
     labelEl.textContent = checked.length <= 2 ? labels.join(', ') : `Đã chọn ${checked.length} lớp`;
     labelEl.className = 'text-gray-800 font-semibold truncate';
   }
@@ -378,14 +379,14 @@ function updateContractApprovalDropdownLabel() {
 function onContractApprovalLayerToggle(layerKey) {
   const toggle = document.querySelector(`.contract-layer-toggle[value="${layerKey}"]`);
   const checked = !!toggle?.checked;
-  const layer = CONTRACT_APPROVAL_LAYERS.find(l => l.key === layerKey);
+  const layer = getContractApprovalLayers().find(l => l.key === layerKey);
   const container = document.getElementById('contractApprovalLayersContainer');
   const section = document.getElementById('contractApprovalLayersSection');
 
   if (checked) {
     // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa (Yêu cầu 1) — không ảnh hưởng người
     // đã được gán từ trước (DB.contractApprovalGroups vẫn giữ nguyên username cũ, chỉ ẩn ở đây).
-    const groupUsers = (DB.contractApprovalGroups[layerKey] || [])
+    const groupUsers = ((DB.contractApprovalGroups || []).find(g => g.id === layerKey)?.members || [])
       .map(un => DB.users.find(u => u.username === un))
       .filter(Boolean)
       .filter(u => u.active !== false);
@@ -707,12 +708,16 @@ function openProcessSubmissionModal(subId) {
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, sub.currentStep);
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
-  // Lớp Bộ phận Trợ Lý/Thư Ký (luôn ngay TRƯỚC TGD) có thêm lựa chọn "Thay thế toàn bộ tờ trình" khi
-  // ấn Yêu Cầu Bổ Sung — xem openTroLyThuKyBoSungChoice()/lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
-  // v15.8 — GIỮ NGUYÊN 100% hành vi này cho TRO_LY_THU_KY, CHỈ THÊM lựa chọn tương tự ở ĐÚNG bước phê
-  // duyệt CUỐI CÙNG của quy trình (isFinalStep, bất kể layerKey là gì — TGD/PTGD/GD_PGD tuỳ mức "Cấp Phê
-  // Duyệt Cuối Cùng" người trình đã chọn), khớp gate server ở lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
+  // Nhóm được admin cấp cờ "Cho phép đề xuất thay thế file" (allowFileReplacementProposal — đợt "Nhóm
+  // Phê Duyệt Trình tự cấu hình" 10/2026, TRƯỚC ĐÂY hardcode cố định riêng cho khoá "TRO_LY_THU_KY"/Bộ
+  // Phận Trợ Lý-Thư Ký, nay admin tự gán được cho nhóm bất kỳ — xem defaults.js) có thêm lựa chọn "Thay
+  // thế toàn bộ tờ trình" khi ấn Yêu Cầu Bổ Sung — xem openTroLyThuKyBoSungChoice()/
+  // lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT. v15.8 — GIỮ NGUYÊN hành vi này cho nhóm được cấp
+  // cờ, CỘNG THÊM lựa chọn tương tự ở ĐÚNG bước phê duyệt CUỐI CÙNG của quy trình (isFinalStep, bất kể
+  // nhóm nào — TGD/PTGD/GD_PGD tuỳ mức "Cấp Phê Duyệt Cuối Cùng" người trình đã chọn), khớp gate server
+  // ở lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT.
   const currentLayerKey = wfConfig.steps?.[sub.currentStep - 1]?.layerKey;
+  const currentLayerGroup = (DB.submissionApprovalGroups || []).find(g => g.id === currentLayerKey);
   const isFinalStep = sub.currentStep === wfConfig.steps?.length;
   const currentStepLabel = wfConfig.steps?.[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
   const currentStepActionLabel = resolveStepActionLabel(wfConfig, sub.currentStep);
@@ -723,7 +728,7 @@ function openProcessSubmissionModal(subId) {
     // không ai được Duyệt/Từ chối/Yêu cầu bổ sung thêm lúc này (khớp guard ở server).
     actionBtns.innerHTML = `<span class="text-amber-600 italic text-xs font-semibold">⏳ Đang chờ người trình (${escapeHtml(sub.creatorName)}) xác nhận đề xuất thay thế tờ trình của ${escapeHtml(sub.pendingFileProposal.proposedByName)} (${escapeHtml(sub.pendingFileProposal.proposedAt)}).</span>`;
   } else if (canApprove) {
-    const boSungBtnHTML = (currentLayerKey === 'TRO_LY_THU_KY' || isFinalStep)
+    const boSungBtnHTML = (currentLayerGroup?.allowFileReplacementProposal || isFinalStep)
       ? `<button data-op="openTroLyThuKyBoSungChoice" data-arg0="${sub.id}" data-arg1="${escapeHtml(currentStepLabel)}" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="${escapeHtml(currentStepLabel)}: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
       : `<button data-op="confirmProcessSubmission" data-arg0="REQUEST_CHANGES" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="Đưa hồ sơ về NHÁP để người trình sửa lại TOÀN BỘ nội dung + tệp rồi gửi lại từ bước 1">🔄 Yêu Cầu Bổ Sung</button>`;
     actionBtns.innerHTML = `
@@ -738,18 +743,19 @@ function openProcessSubmissionModal(subId) {
   document.getElementById('submissionProcessModal').classList.remove('hidden');
 }
 
-// ===== Trợ Lý/Thư Ký (+ bước phê duyệt cuối cùng, v15.8) — đề xuất thay thế toàn bộ tệp tờ trình (thay
-// vì chỉ bình luận bổ sung) =====
-// Hiện ở lớp TRO_LY_THU_KY HOẶC ở ĐÚNG bước phê duyệt cuối cùng của quy trình (xem
-// openProcessSubmissionModal() ở trên + gate tương ứng lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT).
-// stepLabel — tên bước hiện tại (VD "Bộ Phận Trợ Lý/Thư Ký"/"Tổng Giám Đốc"/"Phó Tổng Giám Đốc"...),
-// dùng để hiển thị đúng ngữ cảnh thay vì hard-code "Trợ Lý/Thư Ký" (đợt này áp dụng cho cả bước khác).
-// Dùng chung khung showConfirmModal() nhưng đặt 2 nút lựa chọn NGAY TRONG bodyHTML (thay vì nút Đồng Ý/
-// Hủy mặc định của modal) — vì "Hủy" ở đây phải TỰ THỰC HIỆN luồng REQUEST_CHANGES cũ (đóng modal này rồi
-// gọi confirmProcessSubmission('REQUEST_CHANGES'), dùng lại ô Ý kiến chỉ đạo có sẵn ở modal Bút Phê phía
+// ===== Nhóm được cấp cờ allowFileReplacementProposal (+ bước phê duyệt cuối cùng, v15.8) — đề xuất
+// thay thế toàn bộ tệp tờ trình (thay vì chỉ bình luận bổ sung) =====
+// Hiện ở nhóm được admin cấp cờ "Cho phép đề xuất thay thế file" HOẶC ở ĐÚNG bước phê duyệt cuối cùng
+// của quy trình (xem openProcessSubmissionModal() ở trên + gate tương ứng
+// lib/workflowEngine.js PROPOSE_FILE_REPLACEMENT). stepLabel — tên bước hiện tại (VD "Bộ Phận Trợ Lý/
+// Thư Ký"/"Tổng Giám Đốc"/"Phó Tổng Giám Đốc"..., LUÔN được truyền từ openProcessSubmissionModal, đọc
+// động từ tên nhóm admin đã đặt — không còn hardcode "Trợ Lý/Thư Ký"). Dùng chung khung
+// showConfirmModal() nhưng đặt 2 nút lựa chọn NGAY TRONG bodyHTML (thay vì nút Đồng Ý/Hủy mặc định của
+// modal) — vì "Hủy" ở đây phải TỰ THỰC HIỆN luồng REQUEST_CHANGES cũ (đóng modal này rồi gọi
+// confirmProcessSubmission('REQUEST_CHANGES'), dùng lại ô Ý kiến chỉ đạo có sẵn ở modal Bút Phê phía
 // sau) chứ không đơn thuần đóng modal như nút "Hủy" mặc định.
 function openTroLyThuKyBoSungChoice(subId, stepLabel) {
-  const label = stepLabel || 'Bộ Phận Trợ Lý/Thư Ký';
+  const label = stepLabel || 'bước hiện tại';
   showConfirmModal({
     title: `🔄 Yêu Cầu Bổ Sung — ${label}`,
     bodyHTML: `
@@ -1024,8 +1030,9 @@ async function processSubmission(actionType) {
   refreshApprovalSurfaces();
 }
 
-// "XIN Ý KIẾN" — kênh tham khảo song song (blocking:false trong SUBMISSION_APPROVAL_LAYERS), KHÔNG
-// gắn với bước duyệt nào nên hiện bất kể tờ trình đang ở bước/trạng thái nào, KHÔNG có nút Duyệt/Từ
+// "XIN Ý KIẾN" — kênh tham khảo song song (nhóm có blocking:false trong DB.submissionApprovalGroups,
+// xem getSubmissionApprovalLayers() ở core.js), KHÔNG gắn với bước duyệt nào nên hiện bất kể tờ trình
+// đang ở bước/trạng thái nào, KHÔNG có nút Duyệt/Từ
 // chối — chỉ 1 ô nhập ý kiến cho đúng người có tên trong opinionRequestees của hồ sơ này.
 function renderSubModalOpinions(sub) {
   const container = document.getElementById('subModalOpinions');
@@ -1248,16 +1255,17 @@ function downloadSubmissionApprovalSlip(subId) {
 // được module Văn Bản Trình gọi (đã rà toàn bộ public/js/*.js + index.html để xác nhận, không module
 // nào khác đụng tới) — khác với getSubmissionDeptWorkflowConfig()/resolveSubmissionWorkflow() (vẫn ở
 // core.js vì Dashboard/Approval Hub dùng chung). Thuần cơ học, không đổi 1 dòng logic — vẫn gọi
-// getSubmissionDeptWorkflowConfig()/getSubmissionApprovalLevelRule()/SUBMISSION_APPROVAL_LAYERS/
+// getSubmissionDeptWorkflowConfig()/getSubmissionApprovalLevelRule()/getSubmissionApprovalLayers()/
 // escapeHtml() ở core.js (nạp TRƯỚC module này) bình thường.
 // ==========================================
 
 // Dựng quy trình HIỆU LỰC cho 1 tờ trình MỚI (lúc tạo) = quy trình phòng ban (gốc, theo đúng loại) +
-// các lớp phê duyệt bổ sung tuỳ chọn người trình đã tick, nối vào SAU theo đúng thứ tự cố định ở
-// SUBMISSION_APPROVAL_LAYERS. selectedLayerMembers: { layerKey: [username,...] } — CHỈ những người
-// người trình đã chọn cụ thể cho lớp đó (trong số thành viên admin gán), KHÔNG phải cả nhóm — snapshot
-// ngay lúc tạo nên sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình đang xử lý dở. Server
-// (lib/createValidation.js) tự dựng lại y hệt và xác minh lại từ DB, không tin kết quả này của client.
+// các lớp phê duyệt bổ sung tuỳ chọn người trình đã tick, nối vào SAU theo đúng thứ tự do admin cấu
+// hình (xem getSubmissionApprovalLayers() ở core.js). selectedLayerMembers: { layerKey: [username,...] }
+// — CHỈ những người người trình đã chọn cụ thể cho lớp đó (trong số thành viên admin gán), KHÔNG phải
+// cả nhóm — snapshot ngay lúc tạo nên sau này admin đổi thành viên nhóm không ảnh hưởng tới tờ trình
+// đang xử lý dở. Server (lib/createValidation.js) tự dựng lại y hệt và xác minh lại từ DB, không tin
+// kết quả này của client.
 function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   const baseConfig = getSubmissionDeptWorkflowConfig(type, dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
@@ -1272,9 +1280,9 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
   const rule = getSubmissionApprovalLevelRule(approvalLevel);
   const opinionRequestees = [];
   (selectedLayerKeys || []).forEach(layerKey => {
-    const layer = SUBMISSION_APPROVAL_LAYERS.find(l => l.key === layerKey);
+    const layer = getSubmissionApprovalLayers().find(l => l.key === layerKey);
     if (!layer) return;
-    const groupMembers = DB.submissionApprovalGroups[layerKey] || [];
+    const groupMembers = (DB.submissionApprovalGroups || []).find(g => g.id === layerKey)?.members || [];
     // Lớp bị khoá bắt buộc theo cấp phê duyệt (vd. TGD, Trợ Lý/Thư Ký ở cấp TGD) chỉ có 1 người trong
     // nhóm -> dùng thẳng người đó (không có card chọn, xem renderSubmissionApprovalLayerCheckboxes());
     // nhiều người -> dùng đúng người đã chọn ở card riêng.

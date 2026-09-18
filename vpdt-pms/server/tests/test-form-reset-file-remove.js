@@ -183,8 +183,11 @@ async function main() {
       async () => {
         await page.evaluate(() => {
           // Gán 1 thành viên cho lớp "Đồng trình" — DONG_TRINH mặc định rỗng ở _seed.js, checkbox lớp sẽ
-          // bị disabled nếu không có thành viên nào (xem renderSubmissionApprovalLayerCheckboxes()).
-          DB.submissionApprovalGroups = { DONG_TRINH: ['admin'] };
+          // bị disabled nếu không có thành viên nào (xem renderSubmissionApprovalLayerCheckboxes()). Shape
+          // MẢNG (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — tìm đúng nhóm theo id thay vì gán đè
+          // nguyên object như trước.
+          const dongTrinhGroup = (DB.submissionApprovalGroups || []).find(g => g.id === 'DONG_TRINH');
+          if (dongTrinhGroup) dongTrinhGroup.members = ['admin'];
           switchTab('submission');
         });
         // subDept KHÔNG có option rỗng đặt trước (cùng lý do contractDept ở kịch bản Hợp Đồng bên dưới)

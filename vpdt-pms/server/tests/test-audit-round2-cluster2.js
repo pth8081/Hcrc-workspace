@@ -49,13 +49,25 @@ const TOO_LONG_URL = `/uploads/${'a'.repeat(UPLOADED_FILE_URL_MAX_LEN + 50)}.pdf
 
 // priceZones: "Vùng Giá Áp Dụng" (RETAIL, đợt sau) — itPriceApprovals.extraValidate() bắt buộc chọn
 // đúng 1 giá trị từ danh mục này, seed 1 giá trị để itPricePayload() (RETAIL mặc định) qua được.
-const APP_DATA_EMPTY = { formTemplates: {}, priceZones: ['Miền Bắc'] };
+// submissionApprovalLevels/contractApprovalLevels (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) —
+// contractPayload()/subPayload() ở dưới đều gửi approvalLevel: 'KHAC', và buildEffectiveSubmissionWorkflowServer()/
+// buildEffectiveContractApprovalWorkflowServer() (lib/createValidation.js) tra id "KHAC" thẳng trong
+// appData.submissionApprovalLevels/contractApprovalLevels — trước đây đây là hằng số hardcode không phụ
+// thuộc appData, nay phải seed tối thiểu 1 cấp hợp lệ để không bị 400 "Cấp phê duyệt cuối cùng không hợp lệ".
+const APPROVAL_LEVEL_KHAC = { id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true };
+const APP_DATA_EMPTY = {
+  formTemplates: {}, priceZones: ['Miền Bắc'],
+  submissionApprovalGroups: [], submissionApprovalLevels: [APPROVAL_LEVEL_KHAC],
+  contractApprovalGroups: [], contractApprovalLevels: [APPROVAL_LEVEL_KHAC]
+};
 // Biểu Mẫu có trường BẮT BUỘC — dùng cho nhóm kịch bản 3.
 const APP_DATA_REQUIRED = {
   formTemplates: {
     DOC: [{ id: 1, label: 'Số Quyết Định', required: true }],
     SUBMISSION: [{ id: 2, label: 'Mã Dự Án', required: true }]
-  }
+  },
+  submissionApprovalGroups: [], submissionApprovalLevels: [APPROVAL_LEVEL_KHAC],
+  contractApprovalGroups: [], contractApprovalLevels: [APPROVAL_LEVEL_KHAC]
 };
 
 const UPLOADER = { username: 'up1', name: 'Người Tải Lên', dept: DEPT, perms: { uploadAll: true, uploadDepts: [] } };

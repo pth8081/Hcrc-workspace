@@ -106,7 +106,24 @@ function buildAppData() {
     deptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     submissionDeptWorkflows: {},
     submissionTypeDeptWorkflows: {},
-    submissionApprovalGroups: {},
+    // Shape MẢNG (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — khớp đúng defaults.js
+    // submissionApprovalGroups/Levels (id/order/rule giống hệt, KHÔNG gán thành viên nào — các test dùng
+    // module Văn Bản Trình tự thêm members riêng nếu cần qua state.appData trực tiếp).
+    submissionApprovalGroups: [
+      { id: 'DONG_TRINH', label: 'Đồng trình', order: 1, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'DONG_CAP', label: 'Phê duyệt đồng cấp', order: 2, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'XIN_Y_KIEN', label: 'Xin ý kiến', order: 3, blocking: false, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 4, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 5, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
+      { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 6, blocking: true, singleApprover: false, allowFileReplacementProposal: true, members: [] },
+      { id: 'TGD', label: 'Tổng Giám Đốc', order: 7, blocking: true, singleApprover: true, allowFileReplacementProposal: false, members: [] }
+    ],
+    submissionApprovalLevels: [
+      { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+      { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+      { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['DONG_TRINH', 'DONG_CAP', 'XIN_Y_KIEN', 'GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+      { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+    ],
     carDeptWorkflows: {},
     officeBuyDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     officeFixDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
@@ -115,9 +132,21 @@ function buildAppData() {
     itPriceDeptWorkflows: {},
     budgetDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     contractApprovalDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
-    // 4 lớp phê duyệt bổ sung tuỳ chọn của Hợp Đồng — mỗi lớp 1 người phụ trách RIÊNG để bài test xác
-    // minh đúng THỨ TỰ/ĐÚNG NGƯỜI từng bước, không dùng chung 1 người (che mất lỗi thứ tự nếu có).
-    contractApprovalGroups: { GD_PGD: ['gd1'], PTGD: ['ptgd1'], TRO_LY_THU_KY: ['tls1'], TGD: ['tgd1'] },
+    // Lớp phê duyệt bổ sung tuỳ chọn của Hợp Đồng — mỗi lớp 1 người phụ trách RIÊNG để bài test xác
+    // minh đúng THỨ TỰ/ĐÚNG NGƯỜI từng bước, không dùng chung 1 người (che mất lỗi thứ tự nếu có). Shape
+    // MẢNG (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026) — khớp đúng defaults.js contractApprovalGroups.
+    contractApprovalGroups: [
+      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 1, singleApprover: false, members: ['gd1'] },
+      { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 2, singleApprover: false, members: ['ptgd1'] },
+      { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 3, singleApprover: false, members: ['tls1'] },
+      { id: 'TGD', label: 'Tổng Giám Đốc', order: 4, singleApprover: true, members: ['tgd1'] }
+    ],
+    contractApprovalLevels: [
+      { id: 'TGD', label: 'Tổng giám đốc phê duyệt', order: 1, visibleGroupIds: ['GD_PGD', 'PTGD', 'TRO_LY_THU_KY', 'TGD'], lockedGroupIds: ['TRO_LY_THU_KY', 'TGD'] },
+      { id: 'PTGD', label: 'Phó tổng giám đốc phê duyệt', order: 2, visibleGroupIds: ['GD_PGD', 'PTGD'], lockedGroupIds: ['PTGD'] },
+      { id: 'GD_PGD', label: 'Giám đốc/phó giám đốc phê duyệt', order: 3, visibleGroupIds: ['GD_PGD'], lockedGroupIds: ['GD_PGD'] },
+      { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
+    ],
     contractManageDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     // paymentDeptWorkflows — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt
     // theo bước/phòng ban (xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests), THAY cho quyền

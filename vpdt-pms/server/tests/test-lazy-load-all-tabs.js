@@ -115,8 +115,8 @@ async function main() {
       // Duyệt" bằng click DOM thật, nên lỗ hổng seed này chưa lộ ra).
       workflows: [{ id: 'WF_1STEP', name: 'Quy trình 1 bước (Sếp duyệt)', steps: [{ order: 1, name: 'Phê duyệt 1' }] }],
       deptWorkflows: {},
-      docs: [], submissions: [], submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {}, submissionApprovalGroups: {},
-      contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
+      docs: [], submissions: [], submissionDeptWorkflows: {}, submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [],
+      contracts: [], contractApprovalGroups: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
       meetings: [], meetingMinutes: [], meetingAttendeeTemplates: [],
       carRegs: [], carDeptWorkflows: {},
       officeReqs: [], officeBuyDeptWorkflows: {}, officeFixDeptWorkflows: {},

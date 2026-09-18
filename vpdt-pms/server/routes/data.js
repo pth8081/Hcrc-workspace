@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsTgdSingle } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -67,6 +67,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // module mình muốn (dù không tự gán được người duyệt, vẫn là thao tác quản trị quy trình).
   'quickApplyConfigs',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
+  // submissionApprovalLevels ("Cấp Phê Duyệt Cuối Cùng", đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026)
+  // — cùng lý do bảo mật với submissionApprovalGroups: không cho user thường tự ghi thẳng qua POST
+  // /api/data/submissionApprovalLevels và tự đổi luật visible/locked để mở khoá 1 nhóm cho chính mình.
+  'submissionApprovalLevels',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người dùng —
   // 2 luồng "Siêu Thị" của module Vận Hành không có bước phê duyệt nào cả, xem chú thích ở
@@ -101,7 +105,7 @@ const ADMIN_ONLY_KEYS = new Set([
   // nên phải admin-only ghi, cùng lý do bảo mật với emailConfig (không cho user thường tự ghi thẳng
   // qua POST /api/data/operationOrderApiConfig và tự đổi Base URL/header trỏ tới máy chủ khác).
   'operationOrderApiConfig',
-  'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractManageDeptWorkflows',
+  'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractApprovalLevels', 'contractManageDeptWorkflows',
   // paymentDeptWorkflows: cấu hình người duyệt theo BƯỚC quy trình phòng ban cho đề nghị thanh toán
   // (thay cho quyền phẳng paymentManage khi "Chuyển Xác Nhận Thanh Toán") — cùng lý do bảo mật với
   // contractManageDeptWorkflows ở trên: không cho user thường tự ghi thẳng qua POST
@@ -1402,12 +1406,13 @@ router.post('/:key', async (req, res) => {
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
-    // submissionApprovalGroups (mục 11)/contractApprovalGroups (mục 14) — Tổng Giám Đốc chỉ được gán
-    // tối đa 1 người (xem lib/createValidation.js::assertApprovalGroupsTgdSingle()); client cũng tự
-    // chặn ở UI (module-admin-submissiongroups.js) nhưng đây mới là chốt chặn thật, phòng request tự
-    // soạn bỏ qua UI.
-    if (key === 'submissionApprovalGroups') assertApprovalGroupsTgdSingle(value, 'mục 11 — Nhóm Phê Duyệt Trình');
-    if (key === 'contractApprovalGroups') assertApprovalGroupsTgdSingle(value, 'mục 14 — Nhóm Phê Duyệt HĐ');
+    // submissionApprovalGroups (mục 11)/contractApprovalGroups (mục 14) — nhóm nào admin bật cờ
+    // "Chỉ 1 người" (singleApprover) chỉ được gán tối đa 1 thành viên (xem
+    // lib/createValidation.js::assertApprovalGroupsSingleApproverCaps() — đợt "Nhóm Phê Duyệt Trình tự
+    // cấu hình" 10/2026, TRƯỚC ĐÂY hardcode cố định riêng cho "TGD"); client cũng tự chặn ở UI
+    // (module-admin-submissiongroups.js) nhưng đây mới là chốt chặn thật, phòng request tự soạn bỏ qua UI.
+    if (key === 'submissionApprovalGroups') assertApprovalGroupsSingleApproverCaps(value, 'mục 11 — Nhóm Phê Duyệt Trình');
+    if (key === 'contractApprovalGroups') assertApprovalGroupsSingleApproverCaps(value, 'mục 14 — Nhóm Phê Duyệt HĐ');
 
     const ifMatch = req.get('If-Match');
     let savedVersion = null;

@@ -516,13 +516,14 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
   (Bình thường/Gấp/Thượng khẩn) ở màn Biểu Mẫu (mục 7.3). Có bản xem trước quy
   trình duyệt ngay trước khi gửi.
-  - **Đề xuất thay thế file** (lớp Bộ phận Trợ Lý/Thư Ký, ngay trước TGĐ khi
-    chọn Cấp Phê Duyệt Cuối Cùng = TGĐ) — thay vì chỉ duyệt/từ chối, người
-    duyệt ở lớp này có thể **đề xuất thay thế hẳn file tờ trình** (tải file
-    mới kèm ghi chú) — hồ sơ "treo" lại (khoá mọi thao tác khác) cho tới khi
-    người tạo tờ trình **Đồng ý** (file mới được áp dụng, gửi duyệt lại từ
-    bước 1) hoặc **Không đồng ý** (huỷ đề xuất, hồ sơ về NHÁP như bị "Yêu cầu
-    bổ sung" thường).
+  - **Đề xuất thay thế file** (nhóm bật cờ "Đề xuất thay thế file?" ở mục 11
+    — mặc định chỉ "Bộ Phận Trợ Lý/Thư Ký", ngay trước TGĐ khi chọn Cấp Phê
+    Duyệt Cuối Cùng = TGĐ, nhưng admin gán được cho nhóm bất kỳ) — thay vì chỉ
+    duyệt/từ chối, người duyệt ở bước của nhóm này có thể **đề xuất thay thế
+    hẳn file tờ trình** (tải file mới kèm ghi chú) — hồ sơ "treo" lại (khoá
+    mọi thao tác khác) cho tới khi người tạo tờ trình **Đồng ý** (file mới
+    được áp dụng, gửi duyệt lại từ bước 1) hoặc **Không đồng ý** (huỷ đề
+    xuất, hồ sơ về NHÁP như bị "Yêu cầu bổ sung" thường).
   - **Ở bước phê duyệt CUỐI CÙNG** (bước có `currentStep === steps.length` —
     có thể là TGĐ, hoặc bước cuối của cấp GD_PGD/PTGD/Khác nếu tờ trình không
     đi qua lớp Trợ Lý/Thư Ký), người duyệt cũng có lựa chọn tương tự: **"Đề
@@ -530,18 +531,33 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     bổ sung"** dạng bình luận thường (không kèm file, chỉ trả hồ sơ về NHÁP
     kèm lý do) — tuỳ người duyệt chọn khi hồ sơ đã tới đúng bước cuối cùng
     của quy trình đã chọn.
-  - **Chọn người phê duyệt cụ thể khi vai trò có nhiều người** (Giám Đốc/Phó
-    Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký, Tổng Giám Đốc — 4 vai
-    trò bắt buộc theo Cấp Phê Duyệt Cuối Cùng) — mỗi vai trò được admin gán
-    thành viên ở **Hệ Thống → Quản Trị → mục 11 "Nhóm Phê Duyệt Trình"**. Nhóm
-    chỉ **đúng 1 người** → hệ thống tự dùng người đó, KHÔNG hiện hộp chọn.
-    Nhóm có **nhiều hơn 1 người** (VD 2 Phó Giám Đốc) → khi tick lớp đó, hiện
-    thêm 1 hộp chọn (dropdown) bắt buộc chọn **đúng 1 người cụ thể** trong
-    nhóm làm người duyệt bước đó (không phải cả nhóm cùng duyệt 1 bước). Nhóm
-    chưa gán ai (0 người) thì không gửi được tờ trình cho tới khi admin gán
-    thành viên. Riêng **Tổng Giám Đốc**: mục 11 chỉ cho gán **tối đa 1 người**
-    (ô chọn dạng danh sách sổ xuống 1 lựa chọn, không phải ô chọn nhiều người
-    như 3 vai trò còn lại) — đúng cơ cấu tổ chức chỉ có 1 TGĐ tại 1 thời điểm.
+  - **Nhóm Phê Duyệt Trình & Cấp Phê Duyệt Cuối Cùng tự cấu hình** (10/2026) —
+    ở **Hệ Thống → Quản Trị → mục 11 "Nhóm Phê Duyệt Trình"**, admin tự
+    **đổi tên/thêm/xoá** các nhóm phê duyệt bổ sung (trước đây cố định 7 nhóm
+    Đồng trình/Đồng cấp/Xin ý kiến/Giám Đốc-Phó Giám Đốc/Phó Tổng Giám Đốc/Bộ
+    Phận Trợ Lý-Thư Ký/Tổng Giám Đốc, giờ tuỳ ý) — tên nhóm ở đây chính là
+    nguồn dữ liệu cho danh sách "Phê duyệt" ở form tạo Văn Bản Trình. Mỗi nhóm
+    có 3 cờ admin bật/tắt tự do: **"Chặn quy trình?"** (bật = cộng thêm 1 bước
+    duyệt thật; tắt = chỉ là kênh "xin ý kiến" tham khảo song song, không có
+    nút Duyệt/Từ chối), **"Chỉ 1 người?"** (nhóm chỉ được gán tối đa 1 thành
+    viên — ô chọn dạng danh sách sổ xuống 1 lựa chọn), **"Đề xuất thay thế
+    file?"** (người duyệt ở bước của nhóm này có thêm lựa chọn đề xuất thay
+    thế toàn bộ tệp tờ trình, xem bên dưới). Cùng màn còn có bảng **"Cấp Phê
+    Duyệt Cuối Cùng"** — admin tự đổi tên/thêm/xoá các cấp (trước đây cố định
+    Tổng giám đốc/Phó tổng giám đốc/Giám đốc-phó giám đốc/Khác), mỗi cấp gán
+    "Nhóm Được Chọn" (nhóm nào hiện ra để tick khi người trình chọn cấp này —
+    để trống = mọi nhóm hiện có) và "Nhóm Bắt Buộc" (nhóm nào tự động khoá
+    tick sẵn, không được bỏ). Cấp "Phê duyệt khác" có khoá 🔒 (mặc định hệ
+    thống, không xoá được, vẫn đổi tên được) để luôn có ít nhất 1 cấp dự
+    phòng. Đổi tên/thêm nhóm-cấp KHÔNG ảnh hưởng hồ sơ đã tạo trước đó (quy
+    trình mỗi hồ sơ đã chốt cố định lúc tạo).
+  - **Chọn người phê duyệt cụ thể khi nhóm có nhiều người** — nhóm chỉ **đúng
+    1 người** → hệ thống tự dùng người đó, KHÔNG hiện hộp chọn. Nhóm có
+    **nhiều hơn 1 người** (VD 2 Phó Giám Đốc, nhóm không bật "Chỉ 1 người") →
+    khi tick lớp đó, hiện thêm 1 hộp chọn (dropdown) bắt buộc chọn **đúng 1
+    người cụ thể** trong nhóm làm người duyệt bước đó (không phải cả nhóm
+    cùng duyệt 1 bước). Nhóm chưa gán ai (0 người) thì không gửi được tờ
+    trình cho tới khi admin gán thành viên (gán ở đúng dòng nhóm đó, mục 11).
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
@@ -843,17 +859,24 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
   Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
   tự động ở trạng thái đã duyệt ngay, không qua hàng chờ). Có thể khai Đợt
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
-  - **Chọn người phê duyệt cụ thể khi vai trò có nhiều người** (Giám Đốc/Phó
-    Giám Đốc, Phó Tổng Giám Đốc, Bộ Phận Trợ Lý/Thư Ký, Tổng Giám Đốc — 4 lớp
-    phê duyệt tuỳ theo Cấp Phê Duyệt Cuối Cùng chọn lúc tạo, sub-tab **Phê
-    Duyệt**) — cùng khuôn với Văn Bản Trình (mục 4.1): admin gán thành viên
-    từng vai trò ở **Hệ Thống → Quản Trị → mục 14 "Nhóm Phê Duyệt HĐ"**. Nhóm
-    chỉ **đúng 1 người** → tự dùng người đó, KHÔNG hiện hộp chọn. Nhóm có
-    **nhiều hơn 1 người** → hiện thêm 1 hộp chọn bắt buộc chọn **đúng 1 người
-    cụ thể** trong nhóm duyệt bước đó. Nhóm chưa gán ai (0 người) thì không
-    tạo được hồ sơ cho tới khi admin gán thành viên. Riêng **Tổng Giám Đốc**:
-    mục 14 chỉ cho gán **tối đa 1 người** (ô chọn dạng danh sách sổ xuống 1
-    lựa chọn, không phải ô chọn nhiều người như 3 vai trò còn lại).
+  - **Nhóm Phê Duyệt HĐ & Cấp Phê Duyệt Cuối Cùng tự cấu hình** (10/2026, sub-tab
+    **Phê Duyệt**) — cùng khuôn với Văn Bản Trình (mục 4.1), ở **Hệ Thống →
+    Quản Trị → mục 14 "Nhóm Phê Duyệt HĐ"** admin tự **đổi tên/thêm/xoá** các
+    nhóm phê duyệt bổ sung (trước đây cố định 4 nhóm Giám Đốc-Phó Giám Đốc/
+    Phó Tổng Giám Đốc/Bộ Phận Trợ Lý-Thư Ký/Tổng Giám Đốc, giờ tuỳ ý — Hợp
+    Đồng không có khái niệm nhóm "không chặn quy trình" như Văn Bản Trình, mọi
+    nhóm đều là 1 bước duyệt thật) — tên nhóm ở đây là nguồn dữ liệu cho danh
+    sách "Phê duyệt" ở form tạo Hợp Đồng. Mỗi nhóm có cờ **"Chỉ 1 người?"**
+    (nhóm chỉ được gán tối đa 1 thành viên). Cùng màn có bảng **"Cấp Phê
+    Duyệt Cuối Cùng"** — admin tự đổi tên/thêm/xoá cấp, mỗi cấp gán "Nhóm
+    Được Chọn" (hiện ra để tick) và "Nhóm Bắt Buộc" (tự động khoá tick sẵn);
+    cấp "Phê duyệt khác" có khoá 🔒 (mặc định hệ thống, không xoá được). Đổi
+    tên/thêm nhóm-cấp KHÔNG ảnh hưởng hồ sơ đã tạo trước đó.
+  - **Chọn người phê duyệt cụ thể khi nhóm có nhiều người** — nhóm chỉ **đúng
+    1 người** → tự dùng người đó, KHÔNG hiện hộp chọn. Nhóm có **nhiều hơn 1
+    người** (không bật "Chỉ 1 người") → hiện thêm 1 hộp chọn bắt buộc chọn
+    **đúng 1 người cụ thể** trong nhóm duyệt bước đó. Nhóm chưa gán ai (0
+    người) thì không tạo được hồ sơ cho tới khi admin gán thành viên.
   - **Loại Thanh Toán** (chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh Đợt Thanh
     Toán): **"Thanh toán 1 lần"** (mặc định) hoặc **"Thanh toán định kỳ"**.
     Khi Tài liệu ký đã duyệt xong, nút **"🧾 Lập Thanh Toán"** mở ra; bấm xong

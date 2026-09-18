@@ -619,8 +619,8 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
 
   if (!item[historyField]) item[historyField] = [];
 
-  // Bộ phận Trợ Lý/Thư Ký (lớp TRO_LY_THU_KY, chỉ Văn Bản Trình, luôn ngay TRƯỚC TGD — xem
-  // SUBMISSION_APPROVAL_LAYERS/SUBMISSION_APPROVAL_LEVEL_RULES ở public/index.html) có thể đề xuất
+  // Nhóm được admin cấp cờ allowFileReplacementProposal (chỉ Văn Bản Trình — xem
+  // appData.submissionApprovalGroups ở defaults.js) có thể đề xuất
   // THAY THẾ TOÀN BỘ tệp tờ trình thay vì chỉ ghi bình luận bổ sung (PROPOSE_FILE_REPLACEMENT bên
   // dưới) — trong lúc đề xuất đó CHƯA được người trình xác nhận (RESOLVE_FILE_PROPOSAL), hồ sơ vẫn
   // PENDING nhưng "treo" — chặn mọi hành động Duyệt/Từ chối/Yêu cầu bổ sung/đề xuất mới khác để tránh
@@ -692,23 +692,28 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     return { item, transition: { type: 'REQUEST_CHANGES' } };
   }
 
-  // PROPOSE_FILE_REPLACEMENT — chỉ Văn Bản Trình, chỉ người duyệt ở ĐÚNG bước lớp TRO_LY_THU_KY (luôn
-  // ngay trước TGD): thay vì đưa thẳng về NHÁP như REQUEST_CHANGES, đề xuất 1 tệp thay thế hoàn toàn
-  // nội dung tờ trình cũ và CHỜ người trình xác nhận (RESOLVE_FILE_PROPOSAL bên dưới) — hồ sơ vẫn
-  // PENDING ở bước hiện tại, KHÔNG đổi status/currentStep ngay (khác REQUEST_CHANGES) — đúng yêu cầu
-  // nghiệp vụ: nút "Yêu Cầu Bổ Sung" ở lớp Trợ Lý/Thư Ký có thêm lựa chọn thay vì luôn là REQUEST_CHANGES.
+  // PROPOSE_FILE_REPLACEMENT — chỉ Văn Bản Trình, chỉ người duyệt ở ĐÚNG bước của 1 nhóm được admin bật
+  // cờ "Cho phép đề xuất thay thế file" (allowFileReplacementProposal, xem defaults.js
+  // submissionApprovalGroups — đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026, TRƯỚC ĐÂY hardcode cố
+  // định riêng cho khoá "TRO_LY_THU_KY"/"Bộ Phận Trợ Lý/Thư Ký", nay là CỜ admin gán được cho nhóm bất
+  // kỳ — mặc định chỉ bật cho nhóm đó để giữ nguyên hành vi cũ): thay vì đưa thẳng về NHÁP như
+  // REQUEST_CHANGES, đề xuất 1 tệp thay thế hoàn toàn nội dung tờ trình cũ và CHỜ người trình xác nhận
+  // (RESOLVE_FILE_PROPOSAL bên dưới) — hồ sơ vẫn PENDING ở bước hiện tại, KHÔNG đổi status/currentStep
+  // ngay (khác REQUEST_CHANGES) — đúng yêu cầu nghiệp vụ: nút "Yêu Cầu Bổ Sung" ở nhóm được cấp cờ này
+  // có thêm lựa chọn thay vì luôn là REQUEST_CHANGES.
   if (action === 'PROPOSE_FILE_REPLACEMENT') {
     if (moduleKey !== 'submissions') throw new WorkflowError(400, 'Chỉ áp dụng cho Văn Bản Trình');
     const layerKey = steps[currentStep - 1]?.layerKey;
+    const layerGroup = (appData?.submissionApprovalGroups || []).find(g => g.id === layerKey);
     // v15.8 — mở rộng thêm cho ĐÚNG bước phê duyệt CUỐI CÙNG của quy trình (currentStep === steps.length),
-    // bất kể layerKey là gì (TGD/PTGD/GD_PGD tuỳ mức "Cấp Phê Duyệt Cuối Cùng" người trình chọn) — TRƯỚC
-    // ĐÂY chỉ đúng lớp TRO_LY_THU_KY mới có lựa chọn này, nhưng lớp đó KHÔNG PHẢI LÚC NÀO cũng là bước
-    // cuối (với mức "Tổng giám đốc phê duyệt", TRO_LY_THU_KY luôn đứng NGAY TRƯỚC bước TGD — bước cuối
-    // thật sự vẫn là TGD). Giữ NGUYÊN 100% hành vi cũ cho TRO_LY_THU_KY (không đổi gì cả), chỉ THÊM điều
-    // kiện OR cho bước cuối cùng — theo đúng yêu cầu nghiệp vụ mới, không đụng tới lối cũ.
+    // bất kể nhóm nào (TGD/PTGD/GD_PGD tuỳ mức "Cấp Phê Duyệt Cuối Cùng" người trình chọn) — TRƯỚC ĐÂY
+    // chỉ đúng nhóm được cấp cờ mới có lựa chọn này, nhưng nhóm đó KHÔNG PHẢI LÚC NÀO cũng là bước cuối
+    // (với mức "Tổng giám đốc phê duyệt", nhóm "Bộ Phận Trợ Lý/Thư Ký" mặc định luôn đứng NGAY TRƯỚC
+    // bước TGD — bước cuối thật sự vẫn là TGD). Giữ NGUYÊN 100% hành vi cũ, chỉ THÊM điều kiện OR cho
+    // bước cuối cùng.
     const isFinalStep = currentStep === steps.length;
-    if (layerKey !== 'TRO_LY_THU_KY' && !isFinalStep) {
-      throw new WorkflowError(403, 'Chỉ bước Bộ phận Trợ Lý/Thư Ký hoặc bước phê duyệt cuối cùng mới có thể đề xuất thay thế tệp tờ trình');
+    if (!layerGroup?.allowFileReplacementProposal && !isFinalStep) {
+      throw new WorkflowError(403, 'Chỉ bước được cấp quyền "Đề xuất thay thế file" hoặc bước phê duyệt cuối cùng mới có thể đề xuất thay thế tệp tờ trình');
     }
     if (!canApproveStep(user, currentStepApprovers, item[historyField], currentStep)) {
       throw new WorkflowError(403, 'Bạn không có quyền xử lý ở bước hiện tại, hoặc đã xử lý bước này rồi');

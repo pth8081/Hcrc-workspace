@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, SUBMISSION_APPROVAL_LEVELS, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -1523,7 +1523,11 @@ function editSubmissionDraft(payload, user, item, appData) {
   const approvalLevel = payload.approvalLevel !== undefined ? payload.approvalLevel : item.approvalLevel;
   const selectedLayerKeys = payload.selectedApprovalLayers !== undefined ? payload.selectedApprovalLayers : item.selectedApprovalLayers;
   const selectedLayerMembers = payload.selectedLayerMembers !== undefined ? payload.selectedLayerMembers : item.selectedLayerMembers;
-  if (!SUBMISSION_APPROVAL_LEVELS.includes(approvalLevel)) throw new HttpError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
+  // buildEffectiveSubmissionWorkflowServer() tự xác minh approvalLevel khớp 1 id trong
+  // appData.submissionApprovalLevels (ném HttpError 400 nếu không hợp lệ — xem resolveApprovalLevelRule()
+  // ở lib/createValidation.js) — TRƯỚC ĐÂY có 1 lớp kiểm tra riêng bằng hằng số SUBMISSION_APPROVAL_LEVELS
+  // hardcode ở đây, nay bỏ vì hằng số đó không còn tồn tại (đợt "Nhóm Phê Duyệt Trình tự cấu hình" 10/2026,
+  // danh sách cấp giờ nằm trong AppData) — không cần lớp kiểm tra thừa, hàm dưới đây đã đủ chặt.
   const effectiveWf = buildEffectiveSubmissionWorkflowServer(item.type, item.dept, selectedLayerKeys, selectedLayerMembers, appData || {}, approvalLevel);
   item.approvalLevel = approvalLevel;
   item.selectedApprovalLayers = effectiveWf.layerKeys;

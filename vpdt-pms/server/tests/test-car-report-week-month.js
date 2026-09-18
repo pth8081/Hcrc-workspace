@@ -87,8 +87,8 @@ async function main() {
         ] }
       ],
       quickApplyConfigs: [], deptWorkflows: {},
-      docs: [], submissions: [], submissionApprovalGroups: {}, submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {},
-      contracts: [], contractApprovalGroups: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
+      docs: [], submissions: [], submissionApprovalGroups: [], submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {},
+      contracts: [], contractApprovalGroups: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
       meetings: [], meetingRooms: [], meetingMinutes: [], meetingAttendeeTemplates: [],
       carDeptWorkflows: {
         'Phòng Kinh Doanh': { workflowId: 'WF_2STEP', approvers: { 1: ['qlxe1'], 2: ['tp_kd'] } },
