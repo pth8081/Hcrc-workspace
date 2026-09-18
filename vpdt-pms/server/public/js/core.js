@@ -3303,8 +3303,14 @@ function migrateLegacyPerms(perms) {
 // một lần duy nhất ở phía Server (xem file server/seedDefaults.js), không còn seed ở Client.
 // ==========================================
 async function initDatabase(loggingInUser) {
+  // Đo tốc độ tải (task #133, điều tra "màn hình load có vẻ lâu sau đăng nhập") — TẠM THỜI, chỉ log ra
+  // console (không hiện gì cho người dùng, không đổi hành vi) để xác định đúng phần nào chiếm nhiều thời
+  // gian nhất trước khi quyết định hướng tối ưu tiếp theo (tách initDatabase() thành 2 lượt tải chỉ thật
+  // sự có ý nghĩa nếu phần "gán field vào DB.*" chiếm tỷ trọng đáng kể — cần đo trước, không đoán).
+  const __t0 = performance.now();
   try {
     const res = await fetch('/api/data');
+    const __tFetch = performance.now();
     // BUG THẬT đã sửa (rà soát theo báo cáo người dùng "lỗi tương tự chỉ nên ghi Lỗi kết nối đến máy chủ
     // hoặc Hết phiên làm việc"): trước đây MỌI lỗi ở đây (kể cả 401 — phiên đăng nhập hết hạn/cookie hết
     // hạn) đều rơi vào catch chung bên dưới, hiện alert "Không thể kết nối tới máy chủ dữ liệu (MSSQL
@@ -3315,6 +3321,7 @@ async function initDatabase(loggingInUser) {
     if (res.status === 401) { handleSessionExpired(); return; }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    const __tParse = performance.now();
 
     DB.depts = data.depts || [];
     DB.stores = data.stores || [];
@@ -3583,7 +3590,15 @@ async function initDatabase(loggingInUser) {
 
     DB._versions = data._versions || {};
 
+    const __tAssign = performance.now();
     applyAllCoreFieldCustomizations();
+    const __tCustom = performance.now();
+    console.log(
+      `⏱️ initDatabase(): fetch(mạng+server)=${(__tFetch - __t0).toFixed(0)}ms, ` +
+      `JSON.parse=${(__tParse - __tFetch).toFixed(0)}ms, gán DB.*=${(__tAssign - __tParse).toFixed(0)}ms, ` +
+      `applyAllCoreFieldCustomizations=${(__tCustom - __tAssign).toFixed(0)}ms, TỔNG=${(__tCustom - __t0).toFixed(0)}ms ` +
+      `(kích thước phản hồi: ${res.headers?.get?.('content-length') ? (Number(res.headers.get('content-length')) / 1024).toFixed(0) + 'KB' : 'không rõ (đã nén/chunked)'})`
+    );
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
     alert('⛔ Lỗi kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại, hoặc liên hệ Quản trị viên nếu vẫn không được.\n\nChi tiết lỗi: ' + e.message);

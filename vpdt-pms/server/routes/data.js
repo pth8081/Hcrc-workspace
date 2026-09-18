@@ -1021,6 +1021,11 @@ function loadAttendanceRecordsScoped(user, data) {
 // If-Match khi ghi (syncStorage()) để server phát hiện xung đột ghi đồng thời (xem POST /:key bên
 // dưới + lib/appData.js setAppDataValueIfVersionMatches()).
 router.get('/', async (req, res) => {
+  // Đo tốc độ (task #133, điều tra "màn hình load có vẻ lâu sau đăng nhập") — TẠM THỜI, chỉ log khi
+  // TỔNG thời gian xử lý vượt 300ms (tránh spam log ở các lượt cache-hit vốn đã rất nhanh), giúp xác
+  // định đúng phần nào chiếm nhiều thời gian nhất: đọc cache AppData, 15 truy vấn con song song
+  // (Promise.all), hay bước lọc quyền tuần tự sau đó.
+  const __t0 = Date.now();
   try {
     // Đọc phần "thô" (giống hệt nhau cho MỌI người dùng, khác nhau chỉ ở bước lọc quyền xem bên dưới)
     // qua các hàm CÓ CACHE ngắn hạn vài giây (lib/appData.js/taskStore.js/recordStore.js) — phát hiện
@@ -1034,6 +1039,7 @@ router.get('/', async (req, res) => {
     // getAllAppDataWithVersionsCached() trả object DÙNG CHUNG giữa các request — PHẢI shallow-clone
     // trước khi gán đè property lên `data` (nếu không, request khác đang đọc cùng cache sẽ thấy sai).
     const cachedAppData = await getAllAppDataWithVersionsCached();
+    const __t1 = Date.now();
     const data = { ...cachedAppData.data };
     const versions = cachedAppData.versions;
     if (data.users) {
@@ -1107,6 +1113,7 @@ router.get('/', async (req, res) => {
       loadAttendanceRecordsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
+    const __t2 = Date.now();
     data.tasks = tasksResult;
     // operationWorkItems: cây công việc Thực hiện/Nghiệm thu của Vận Hành — nguồn riêng
     // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
@@ -1304,6 +1311,12 @@ router.get('/', async (req, res) => {
     }
 
     data._versions = versions;
+    const __tNow = Date.now();
+    const __tTotal = __tNow - __t0;
+    if (__tTotal > 300) {
+      console.log(`⏱️ GET /api/data (${req.freshUser?.username || '?'}): đọc cache AppData=${__t1 - __t0}ms, ` +
+        `15 truy vấn con song song=${__t2 - __t1}ms, lọc quyền + dựng JSON=${__tNow - __t2}ms, TỔNG=${__tTotal}ms`);
+    }
     res.json(data);
   } catch (err) {
     sendServerError(res, 500, err, 'GET /api/data', 'Không thể tải dữ liệu từ SQL Server');
