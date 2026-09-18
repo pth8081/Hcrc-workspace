@@ -651,7 +651,7 @@ function toggleScopeGroup(allCheckId, deptCheckPrefix) {
 function renderOperationOrderReceiptScopeCheckboxes() {
   const el = document.getElementById('pOperationOrderReceiptDeptContainer');
   if (!el) return;
-  const items = DB.stores.map(d => ({ value: d, label: d }));
+  const items = (DB.stores || []).map(d => ({ value: d, label: d }));
   el.innerHTML = items.map((it, idx) => `
     <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
       <input type="checkbox" id="pOperationOrderReceiptDept_${idx}" value="${escapeHtml(it.value)}">

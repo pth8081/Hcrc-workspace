@@ -404,7 +404,7 @@ function itPriceHasUnresolvedInfoRequest(p) {
 
 // --- KHỞI TẠO DỮ LIỆU DB v6.0 ---
 const DB = {
-  depts: [], cats: [], users: [], docs: [],
+  depts: [], cats: [], stores: [], users: [], docs: [],
   deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
   jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [], uniformCatalog: [], itTicketCategories: [],
   workflows: [], deptWorkflows: {},
