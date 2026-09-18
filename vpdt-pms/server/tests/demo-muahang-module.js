@@ -145,6 +145,11 @@ async function main() {
           mock.syncLogs.unshift(log);
           return ok({ rowsFetched: 42, rowsInserted: 40, rowsSkippedDuplicate: 2, pagesFetched: 1 });
         }
+        if (url === '/api/purchasing/manual-import' && method === 'POST') {
+          const log = { logId: nextId++, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), sourceSystem: 'MANUAL', status: 'SUCCESS', rowsFetched: 3, rowsInserted: 3, triggeredBy: 'admin' };
+          mock.syncLogs.unshift(log);
+          return ok({ rowsFetched: 3, rowsInserted: 3, rowsSkippedDuplicate: 0, rowErrors: [], fileName: 'giao-dich.xlsx' });
+        }
         return { ok: true, status: 200, json: async () => ({ ok: true }) };
       };
 
@@ -210,6 +215,22 @@ async function main() {
       // ---- Scenario 5: DSmart sync ----
       await triggerDSmartSync();
       check('muaHang: DSmart sync completed and logged', mock.syncLogs.length === 1 && document.getElementById('mhSyncLogWrap').innerHTML.includes('SUCCESS'));
+
+      // ---- Scenario 5b: manual import (upload thủ công) ----
+      check('muaHang: manual import wrap visible for admin', !document.getElementById('mhManualImportWrap').classList.contains('hidden'));
+      const fakeFile = new File(['dummy xlsx content'], 'giao-dich.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      await onMhManualImportFileChange({ target: { files: [fakeFile], value: '' } });
+      check('muaHang: manual import logged with MANUAL source, sync log shows "Thủ công" + "DSmart" rows',
+        mock.syncLogs.length === 2 && document.getElementById('mhSyncLogWrap').innerHTML.includes('Thủ công') && document.getElementById('mhSyncLogWrap').innerHTML.includes('DSmart'));
+
+      // ---- Scenario 5c: export thủ công (mở tab mới đúng URL) ----
+      let openedUrl = null;
+      window.open = (u) => { openedUrl = u; return null; };
+      document.getElementById('mhExportFrom').value = '2026-01-01';
+      document.getElementById('mhExportTo').value = '2026-09-01';
+      await exportMhManualData();
+      check('muaHang: export opens correct URL with from/to query params',
+        openedUrl === '/api/purchasing/manual-import-export?from=2026-01-01&to=2026-09-01', String(openedUrl));
 
       // ---- Scenario 6: calculate rebate estimate ----
       alerts.length = 0;

@@ -156,6 +156,31 @@
         </div>
         <div id="mhSyncLogWrap" class="space-y-1 text-xs"></div>
       </div>
+
+      <!-- Nhập/Xuất dữ liệu THỦ CÔNG — phương án thay thế khi DSmart tạm không sẵn sàng hoặc cần bổ sung
+           tay 1 vài giao dịch lẻ (yêu cầu người dùng, 9/2026). Ghi cùng bảng dbo.VendorPurchaseTransactions
+           với SourceSystem='MANUAL' (tự dedup qua UNIQUE INDEX như DSmart, xem lib/purchasingManualImport.js),
+           nên hiện chung trong bảng lịch sử ở trên (cột Nguồn phân biệt DSMART/MANUAL). -->
+      <div id="mhManualImportWrap" class="hidden bg-white rounded border p-4 space-y-3">
+        <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📤 Nhập/Xuất Dữ Liệu Thủ Công</h3>
+        <p class="text-xs text-gray-500">Dùng khi chưa/không đồng bộ được DSmart — tải file mẫu, điền tay rồi nhập lên, hoặc xuất lại dữ liệu đang có để chỉnh sửa/bổ sung.</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="/api/purchasing/manual-import-template" target="_blank" class="bg-gray-100 text-gray-700 border px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-200">📥 Tải File Mẫu</a>
+          <label class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 cursor-pointer">📤 Nhập File<input id="mhManualImportFileInput" type="file" accept=".xlsx" data-op-change="onMhManualImportFileChange" data-arg-event="0" class="hidden"></label>
+          <span id="mhManualImportStatus" class="text-xs text-gray-600"></span>
+        </div>
+        <div class="flex flex-wrap items-end gap-2 pt-2 border-t">
+          <div>
+            <label class="text-xs font-bold text-gray-600 block">Từ Ngày</label>
+            <input type="date" id="mhExportFrom" class="border rounded px-2 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600 block">Đến Ngày</label>
+            <input type="date" id="mhExportTo" class="border rounded px-2 py-1.5 text-sm">
+          </div>
+          <button type="button" data-op="exportMhManualData" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất File</button>
+        </div>
+      </div>
       </div>
     </div>
 

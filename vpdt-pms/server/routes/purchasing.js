@@ -9,6 +9,10 @@
 // routes/data.js) — MỌI đường đọc dữ liệu ở module này đều đi qua route có gác quyền bên dưới, không có
 // đường nào phát company-wide không kiểm tra quyền (OWASP A01 — Broken Access Control).
 const express = require('express');
+const multer = require('multer');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
@@ -19,9 +23,14 @@ const { insertSystemLog } = require('../lib/systemLogStore');
 const vendorRebate = require('../lib/vendorRebate');
 const { fetchAllPurchases } = require('../lib/dsmartApiClient');
 const {
-  bulkInsertPurchaseTransactions, queryPurchaseTransactionsForVendor,
+  bulkInsertPurchaseTransactions, queryPurchaseTransactionsForVendor, queryPurchaseTransactionsForExport,
   insertPurchaseSyncLog, getRecentPurchaseSyncLogs, getLastSuccessfulSyncStart
 } = require('../lib/vendorPurchaseStore');
+const {
+  buildPurchaseTransactionTemplateWorkbook, parsePurchaseTransactionImportXlsx, buildPurchaseTransactionExportWorkbook
+} = require('../lib/purchasingManualImport');
+const { verifyFileSignature } = require('../lib/fileSignature');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -314,6 +323,98 @@ router.get('/sync-logs', async (req, res) => {
     const logs = await getRecentPurchaseSyncLogs(50);
     res.json({ ok: true, items: logs });
   } catch (err) { sendServerError(res, 500, err, 'GET /api/purchasing/sync-logs'); }
+});
+
+// ===================== Nhập/Xuất dữ liệu mua hàng THỦ CÔNG (thay thế đồng bộ DSmart khi cần) =====================
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const manualImportStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.xlsx`)
+});
+const manualImportUpload = multer({
+  storage: manualImportStorage,
+  limits: { fileSize: MAX_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!/\.xlsx$/i.test(file.originalname)) return cb(new HttpError(400, 'Chỉ chấp nhận file Excel (.xlsx)'));
+    cb(null, true);
+  }
+});
+
+// GET /api/purchasing/manual-import-template — file mẫu Excel để nhập tay giao dịch mua hàng.
+router.get('/manual-import-template', requireManageTerms, async (req, res) => {
+  try {
+    const wb = await buildPurchaseTransactionTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Giao_Dich_Mua_Hang.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/purchasing/manual-import-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /api/purchasing/manual-import — đọc file đã điền, GHI THẲNG vào dbo.VendorPurchaseTransactions
+// (cùng cách POST /sync ở trên xử lý dữ liệu DSmart, KHÔNG phải luồng preview-rồi-client-tự-gộp).
+router.post('/manual-import', requireManageTerms, uploadRateLimiter, (req, res) => {
+  manualImportUpload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/purchasing/manual-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+
+    const startedAt = new Date();
+    try {
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, '.xlsx');
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const { rows, rowErrors } = await parsePurchaseTransactionImportXlsx(buffer);
+      const { rowsInserted, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
+
+      await insertPurchaseSyncLog({
+        startedAt, finishedAt: new Date(), sourceSystem: 'MANUAL', status: rowErrors.length ? 'PARTIAL' : 'SUCCESS',
+        rowsFetched: rows.length, rowsInserted, triggeredBy: req.freshUser.username,
+        errorMessage: rowErrors.length ? rowErrors.map(e => e.message).join('; ') : null
+      });
+      logPurchasing(req, 'MANUAL_IMPORT', 'MANUAL', `Nhập file thủ công: ${rows.length} dòng hợp lệ, ${rowsInserted} dòng mới, ${rowsSkippedDuplicate} trùng bỏ qua, ${rowErrors.length} dòng lỗi`);
+      res.json({ ok: true, rowsFetched: rows.length, rowsInserted, rowsSkippedDuplicate, rowErrors, fileName: req.file.originalname });
+    } catch (parseErr) {
+      await insertPurchaseSyncLog({
+        startedAt, finishedAt: new Date(), sourceSystem: 'MANUAL', status: 'FAILED',
+        triggeredBy: req.freshUser.username, errorMessage: parseErr.message
+      }).catch(() => {});
+      sendCatchError(res, parseErr, 'POST /api/purchasing/manual-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
+// GET /api/purchasing/manual-import-export?from&to — xuất lại dữ liệu đang có (mọi nguồn, trừ khi lọc
+// sourceSystem) để chỉnh sửa/bổ sung rồi tải lên lại qua Nhập File — mirror module-vpp.js "Xuất Excel".
+router.get('/manual-import-export', requireManageTerms, async (req, res) => {
+  const from = String(req.query.from || '').trim();
+  const to = String(req.query.to || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ error: 'Thiếu/sai định dạng khoảng ngày (from/to, dạng YYYY-MM-DD)' });
+  }
+  try {
+    const sourceSystem = req.query.sourceSystem ? String(req.query.sourceSystem).trim() : null;
+    const transactions = await queryPurchaseTransactionsForExport({ from, to, sourceSystem });
+    const wb = await buildPurchaseTransactionExportWorkbook(transactions);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Giao_Dich_Mua_Hang_${from}_${to}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/purchasing/manual-import-export lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xuất file' });
+  }
 });
 
 module.exports = router;

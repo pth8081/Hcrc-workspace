@@ -2139,6 +2139,22 @@ bộ mô tả bên dưới.
   trường trên thì nút này báo lỗi rõ ràng (503), các phần khác của module vẫn
   dùng bình thường. Mỗi lượt đồng bộ ghi 1 dòng vào **Nhật Ký Đồng Bộ**
   (`PurchaseDataSyncLog` — thời điểm, số dòng lấy/nạp, người bấm, lỗi nếu có).
+- **Nhập/Xuất Dữ Liệu Thủ Công** (9/2026) — phương án THAY THẾ khi DSmart tạm
+  không sẵn sàng hoặc cần bổ sung tay 1 vài giao dịch lẻ, đặt ngay cạnh "Đồng
+  Bộ Ngay" (cùng quyền `rebateTermManage`):
+  - **📥 Tải File Mẫu** — file Excel mẫu đúng khuôn cột (Mã NCC/Mã Siêu Thị/
+    Định Dạng/Mã Ngành Hàng/Ngày Mua/Số Tiền/Hàng Trả Lại).
+    - **📤 Nhập File** — đọc file đã điền, ghi thẳng vào cùng bảng
+    `VendorPurchaseTransactions` với `SourceSystem='MANUAL'` (khác `'DSMART'`)
+    — TỰ SINH 1 khoá dedup ổn định (hash các trường nghiệp vụ then chốt) nên
+    lỡ tải trùng nguyên 1 file cũ lên lần nữa KHÔNG tạo double-count giao
+    dịch. Dòng lỗi (thiếu Mã NCC/Mã Siêu Thị, Ngày Mua/Số Tiền không hợp lệ)
+    bị bỏ qua nhưng KHÔNG chặn cả file — các dòng hợp lệ khác vẫn được nạp,
+    danh sách lỗi hiện ngay trong thông báo kết quả. Cũng ghi 1 dòng vào
+    **Nhật Ký Đồng Bộ** (cột "Nguồn" phân biệt 🔄 DSmart / 📤 Thủ công).
+  - **📊 Xuất File** — xuất lại dữ liệu đang có trong khoảng Từ Ngày/Đến Ngày
+    chọn (mọi nguồn, tối đa 5000 dòng/lần) ra đúng khuôn cột file mẫu, để
+    chỉnh sửa/bổ sung rồi tải lên lại qua Nhập File.
 - **Tính Ước Tính Chiết Khấu** — chọn 1 điều khoản ACTIVE + khoảng ngày, hệ
   thống tự lọc đúng giao dịch khớp Scopes của điều khoản đó
   (`purchaseBasisAggregator.js`) rồi áp bậc thang (`tieredCalculator.js`) ra

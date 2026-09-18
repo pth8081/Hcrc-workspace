@@ -91,6 +91,25 @@ async function queryPurchaseTransactionsForVendor(vendorCode, periodStart, perio
   return result.recordset.map(toTransaction);
 }
 
+// Xuất dữ liệu (nút "Xuất File" cạnh Nhập File thủ công) — giới hạn khoảng ngày bắt buộc để tránh kéo
+// nguyên bảng (khối lượng lớn theo thời gian). Mặc định gọi từ route với from/to do client chọn.
+const EXPORT_MAX_ROWS = 5000;
+async function queryPurchaseTransactionsForExport({ from, to, sourceSystem }) {
+  const pool = await getPool();
+  const req = pool.request()
+    .input('from', sql.Date, new Date(from))
+    .input('to', sql.Date, new Date(to))
+    .input('limit', sql.Int, EXPORT_MAX_ROWS);
+  let where = 'PurchaseDate >= @from AND PurchaseDate <= @to';
+  if (sourceSystem) { req.input('sourceSystem', sql.NVarChar(30), sourceSystem); where += ' AND SourceSystem = @sourceSystem'; }
+  const result = await req.query(`
+    SELECT TOP (@limit) * FROM dbo.VendorPurchaseTransactions
+    WHERE ${where}
+    ORDER BY PurchaseDate DESC, TransId DESC;
+  `);
+  return result.recordset.map(toTransaction);
+}
+
 // ===================== PurchaseDataSyncLog =====================
 function toSyncLogEntry(row) {
   return {
@@ -142,6 +161,6 @@ async function getLastSuccessfulSyncStart(sourceSystem) {
 }
 
 module.exports = {
-  bulkInsertPurchaseTransactions, queryPurchaseTransactionsForVendor,
+  bulkInsertPurchaseTransactions, queryPurchaseTransactionsForVendor, queryPurchaseTransactionsForExport,
   insertPurchaseSyncLog, getRecentPurchaseSyncLogs, getLastSuccessfulSyncStart
 };

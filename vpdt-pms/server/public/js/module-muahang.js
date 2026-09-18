@@ -95,6 +95,7 @@ function renderMhBasTab() {
   document.getElementById('btnMhVendorNew').classList.toggle('hidden', !canManageV);
   document.getElementById('btnMhTermNew').classList.toggle('hidden', !canManageT);
   document.getElementById('btnMhSync').classList.toggle('hidden', !canManageT);
+  document.getElementById('mhManualImportWrap').classList.toggle('hidden', !canManageT);
   renderMhVendorList();
   renderMhTermList();
   renderMhSyncLogList();
@@ -378,14 +379,52 @@ function renderMhSyncLogList() {
   const wrap = document.getElementById('mhSyncLogWrap');
   if (!mhSyncLogs.length) { wrap.innerHTML = '<div class="text-gray-400 italic">Chưa có lượt đồng bộ nào.</div>'; return; }
   wrap.innerHTML = `<table class="w-full border-collapse"><thead><tr class="bg-gray-50 text-left text-gray-600">
-    <th class="p-1.5 border-b">Bắt Đầu</th><th class="p-1.5 border-b">Kết Thúc</th><th class="p-1.5 border-b">Trạng Thái</th>
+    <th class="p-1.5 border-b">Bắt Đầu</th><th class="p-1.5 border-b">Kết Thúc</th><th class="p-1.5 border-b">Nguồn</th><th class="p-1.5 border-b">Trạng Thái</th>
     <th class="p-1.5 border-b">Lấy Về</th><th class="p-1.5 border-b">Thêm Mới</th><th class="p-1.5 border-b">Người Chạy</th></tr></thead>
     <tbody>${mhSyncLogs.slice(0, 20).map(l => `<tr class="border-b">
       <td class="p-1.5 whitespace-nowrap">${l.startedAt ? new Date(l.startedAt).toLocaleString('vi-VN') : ''}</td>
       <td class="p-1.5 whitespace-nowrap">${l.finishedAt ? new Date(l.finishedAt).toLocaleString('vi-VN') : ''}</td>
+      <td class="p-1.5">${l.sourceSystem === 'MANUAL' ? '📤 Thủ công' : '🔄 DSmart'}</td>
       <td class="p-1.5"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${l.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800' : l.status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}">${escapeHtml(l.status)}</span></td>
       <td class="p-1.5">${l.rowsFetched ?? ''}</td><td class="p-1.5">${l.rowsInserted ?? ''}</td><td class="p-1.5">${escapeHtml(l.triggeredBy || '')}</td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+async function onMhManualImportFileChange(event) {
+  const file = event.target.files[0];
+  const statusEl = document.getElementById('mhManualImportStatus');
+  const input = event.target;
+  if (!file) { statusEl.textContent = ''; return; }
+  if (!confirm(`Nhập file "${file.name}" vào dữ liệu mua hàng ngay bây giờ?`)) { input.value = ''; return; }
+  statusEl.textContent = '⏳ Đang nhập file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/purchasing/manual-import', { method: 'POST', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    let msg = `✅ Nhập xong: ${data.rowsFetched} dòng hợp lệ, ${data.rowsInserted} dòng mới, ${data.rowsSkippedDuplicate} dòng trùng bỏ qua.`;
+    if (data.rowErrors && data.rowErrors.length) {
+      msg += `\n⚠️ ${data.rowErrors.length} dòng lỗi (đã bỏ qua, các dòng khác vẫn được nhập):\n` + data.rowErrors.slice(0, 10).map(e => e.message).join('\n');
+      if (data.rowErrors.length > 10) msg += `\n... và ${data.rowErrors.length - 10} dòng lỗi khác.`;
+    }
+    alert(msg);
+    const syncRes = await mhApi('/api/purchasing/sync-logs');
+    mhSyncLogs = syncRes.items || [];
+    renderMhSyncLogList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  } finally {
+    statusEl.textContent = '';
+    input.value = '';
+  }
+}
+
+async function exportMhManualData() {
+  const from = document.getElementById('mhExportFrom').value;
+  const to = document.getElementById('mhExportTo').value;
+  if (!from || !to) { alert('⛔ Chọn khoảng Từ Ngày / Đến Ngày trước khi xuất file'); return; }
+  window.open(`/api/purchasing/manual-import-export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, '_blank');
 }
 
 // ===================== Báo Cáo tab (nội bộ Mua Hàng) =====================
