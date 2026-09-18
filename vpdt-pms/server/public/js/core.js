@@ -5962,9 +5962,8 @@ function finishLogin(user) {
   document.getElementById('btnOperationOrderNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'ORDER'));
   document.getElementById('btnOperationStoreNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'STORE'));
   document.getElementById('btnChecklistNav').classList.toggle('hidden', !canAccessChecklistModule(user));
-  document.getElementById('btnMuaHangBasNav').classList.toggle('hidden', !canAccessPurchasingModule(user));
-  document.getElementById('btnMuaHangReportNav').classList.toggle('hidden', !canAccessPurchasingModule(user));
   updateVanHanhNavVisibility();
+  document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   updateOperationStoreSubTabVisibility(user);
   document.getElementById('btnHrFeedbackNav').classList.toggle('hidden', !canAccessHrModule(user));
   document.getElementById('btnOrgChartNav').classList.toggle('hidden', !canAccessOrgChartModule(user));
@@ -6322,19 +6321,17 @@ document.addEventListener('click', (ev) => {
 // "Vận Hành" — cùng khuôn "Tổng Hợp" ở trên, bọc 3 luồng ĐỘC LẬP Phê Duyệt Đơn Hàng/Mở Mới Siêu Thị/
 // Sửa Chữa Siêu Thị (module "vanHanh", xem HTML #vanHanhNavWrap). LƯU Ý ĐẶT TÊN: KHÔNG dùng tiền tố
 // "dieuHanh" (module "Điều Hành" — Biên Bản Họp/Công Việc/Báo Cáo Định Kỳ — đã tồn tại sẵn, dễ nhầm lẫn
-// khi đọc code vì phát âm gần giống "Vận Hành"). "Checklist Đánh Giá Siêu Thị" (nút btnChecklistNav) VÀ
-// "Mua Hàng" (nút btnMuaHangBasNav/btnMuaHangReportNav, 9/2026) GỘP CHUNG dropdown này (theo yêu cầu
-// người dùng) nhưng vẫn là module ĐỘC LẬP hoàn toàn về quyền/dữ liệu (canAccessChecklistModule()/
-// canAccessPurchasingModule() không liên quan canAccessOperationModule()) — do đó dropdown cha phải mở
-// khi có BẤT KỲ quyền nào trong 4 nhánh (Đơn Hàng/Siêu Thị/Checklist/Mua Hàng), KHÔNG được bắt buộc có
-// quyền Vận Hành mới thấy Checklist/Mua Hàng (nếu không, người chỉ có 1 trong các quyền đó sẽ mất luôn
-// quyền truy cập vì cả dropdown cha bị ẩn).
+// khi đọc code vì phát âm gần giống "Vận Hành"). "Checklist Đánh Giá Siêu Thị" (nút btnChecklistNav) GỘP
+// CHUNG dropdown này (theo yêu cầu người dùng) nhưng vẫn là module "checklist" ĐỘC LẬP hoàn toàn về
+// quyền/dữ liệu (canAccessChecklistModule() không liên quan canAccessOperationModule()) — do đó dropdown
+// cha phải mở khi có BẤT KỲ quyền nào trong 3 nhánh (Đơn Hàng/Siêu Thị/Checklist), KHÔNG được bắt buộc
+// có quyền Vận Hành mới thấy Checklist (nếu không, Kiểm Soát Viên/Giám Đốc Siêu Thị chỉ có quyền
+// Checklist sẽ mất luôn quyền truy cập vì cả dropdown cha bị ẩn).
 function updateVanHanhNavVisibility() {
   const orderVisible = !document.getElementById('btnOperationOrderNav').classList.contains('hidden');
   const storeVisible = !document.getElementById('btnOperationStoreNav').classList.contains('hidden');
   const checklistVisible = !document.getElementById('btnChecklistNav').classList.contains('hidden');
-  const muaHangVisible = !document.getElementById('btnMuaHangBasNav').classList.contains('hidden');
-  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !muaHangVisible);
+  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible);
 }
 function toggleVanHanhDropdown(e) {
   e.stopPropagation();
@@ -6346,6 +6343,25 @@ function closeVanHanhDropdown() {
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('vanHanhDropdownPanel');
   const btn = document.getElementById('btnVanHanhTab');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+});
+
+// "Mua Hàng" — cùng khuôn dropdown "Hỗ Trợ IT" ở dưới: module TOP-LEVEL riêng (module "muaHang", xem HTML
+// #muaHangNavWrap), đặt ngay dưới Vận Hành trên sidebar (9/2026, theo yêu cầu người dùng — mua hàng tập
+// trung cho CHUỖI siêu thị). Không có hàm updateXNavVisibility riêng vì 2 sub-item BAS/Báo Cáo dùng
+// CHUNG 1 điều kiện quyền canAccessPurchasingModule() (không phân quyền riêng theo từng sub-item, giống
+// itSupport) — cả nav wrap lẫn 2 sub-item đều toggle theo đúng 1 điều kiện này trong finishLogin().
+function toggleMuaHangDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('muaHangDropdownPanel')?.classList.toggle('hidden');
+}
+function closeMuaHangDropdown() {
+  document.getElementById('muaHangDropdownPanel')?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('muaHangDropdownPanel');
+  const btn = document.getElementById('btnMuaHangTab');
   if (!panel || panel.classList.contains('hidden')) return;
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });

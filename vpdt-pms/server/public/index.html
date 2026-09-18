@@ -211,14 +211,13 @@
       </div>
 
       <!-- Vận Hành — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu officeReqs của "Tổng
-           Hợp"), cùng khuôn dropdown #tongHopNavWrap ở trên. "Checklist Đánh Giá Siêu Thị" VÀ "Mua Hàng"
-           ĐƯỢC GỘP CHUNG dropdown này (cùng nhóm điều hướng theo yêu cầu người dùng — Mua Hàng là mua hàng
-           tập trung cho CHUỖI siêu thị, 9/2026) NHƯNG VẪN LÀ module ĐỘC LẬP hoàn toàn về dữ liệu/quyền/
-           route (checklistTemplates/checklistSubmissions xem lib/checklist.js; muaHang xem
-           canAccessPurchasingModule()) — bấm vào vẫn switchTab(checklist)/switchTab(muaHang) y hệt trước
-           đây, chỉ đổi vị trí nút trên sidebar. KHÔNG nhập chung permission gate với
-           canAccessOperationModule() — xem updateVanHanhNavVisibility() (mở dropdown khi có BẤT KỲ quyền
-           nào trong 4 nhánh Đơn Hàng/Siêu Thị/Checklist/Mua Hàng, không bắt buộc đủ cả 4). -->
+           Hợp"), cùng khuôn dropdown #tongHopNavWrap ở trên. "Checklist Đánh Giá Siêu Thị" (nút
+           btnChecklistNav) GỘP CHUNG dropdown này (theo yêu cầu người dùng) nhưng vẫn là module "checklist"
+           ĐỘC LẬP hoàn toàn về dữ liệu/quyền/route (checklistTemplates/checklistSubmissions, xem
+           lib/checklist.js) — bấm vào vẫn switchTab(checklist) y hệt trước đây, chỉ đổi vị trí nút trên
+           sidebar. KHÔNG nhập chung permission gate với canAccessOperationModule() — xem
+           updateVanHanhNavVisibility() (mở dropdown khi có quyền Đơn Hàng/Siêu Thị HOẶC quyền Checklist,
+           không bắt buộc cả hai). -->
       <div id="vanHanhNavWrap" class="hidden">
         <button id="btnVanHanhTab" data-op="toggleVanHanhDropdown" data-arg-event="0" class="sidebar-item">
           <span class="sidebar-icon">⚙️</span><span class="sidebar-label flex-1">Vận Hành</span><span class="sidebar-label text-[10px]">▾</span>
@@ -227,13 +226,25 @@
           <button id="btnOperationOrderNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(ORDERS)" class="hidden sidebar-subitem">📦 Phê Duyệt Đơn Hàng</button>
           <button id="btnOperationStoreNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(STORE)" class="hidden sidebar-subitem">🏬 QLDA</button>
           <button id="btnChecklistNav" data-op-seq="closeVanHanhDropdown()|switchTab(checklist)" class="hidden sidebar-subitem">✅ Checklist Đánh Giá</button>
-          <!-- Mua Hàng — trước là 1 nút top-level riêng (icon 🛒, dễ nhầm với "🛒 Mua Bán" của Văn Phòng
-               Tổng Hợp), nay gộp vào đây làm 2 sub-item BAS/Báo Cáo (đổi từ 2 tab NỘI BỘ trong
-               #muaHangSection, xem setPurchasingSubTab() module-muahang.js), đổi icon sang 🔗 (chuỗi —
-               mua hàng tập trung toàn chuỗi siêu thị, tránh trùng 🛒 đã dùng cho Mua Bán/📦 Đơn Hàng/🏬
-               QLDA/🧮📊 2 tab nội bộ cũ). -->
-          <button id="btnMuaHangBasNav" data-op-seq="closeVanHanhDropdown()|switchTab(muaHang)|setPurchasingSubTab(BAS)" class="hidden sidebar-subitem">🔗 Mua Hàng - BAS</button>
-          <button id="btnMuaHangReportNav" data-op-seq="closeVanHanhDropdown()|switchTab(muaHang)|setPurchasingSubTab(REPORT)" class="hidden sidebar-subitem">🔗 Mua Hàng - Báo Cáo</button>
+        </div>
+      </div>
+
+      <!-- Mua Hàng — module TOP-LEVEL riêng (v23.30), đặt NGAY DƯỚI Vận Hành trên sidebar (9/2026, theo
+           yêu cầu người dùng: mua hàng tập trung cho CHUỖI siêu thị) — cùng khuôn dropdown
+           #vanHanhNavWrap/#itSupportNavWrap ở trên, KHÔNG gộp chung với dropdown Vận Hành (vẫn là 1 mục
+           top-level riêng, chỉ đổi VỊ TRÍ trong danh sách sidebar). 2 module con BAS/Báo Cáo trước là tab
+           NỘI BỘ (setPurchasingSubTab(), #muaHangSection) nay ĐỒNG THỜI cũng là 2 sub-item dạng "slide
+           bar" ở đây — bấm sub-item nào thì mở đúng module + set đúng tab đó, tab nội bộ trong
+           #muaHangSection vẫn giữ nguyên không đổi. Icon đổi từ 🛒 (trùng "🛒 Mua Bán" của Văn Phòng Tổng
+           Hợp) sang 🔗 (chuỗi — mua hàng tập trung toàn chuỗi, không trùng icon nào khác trong hệ thống).
+           Xem canAccessPurchasingModule() (core.js). -->
+      <div id="muaHangNavWrap" class="hidden">
+        <button id="btnMuaHangTab" data-op="toggleMuaHangDropdown" data-arg-event="0" class="sidebar-item">
+          <span class="sidebar-icon">🔗</span><span class="sidebar-label flex-1">Mua Hàng</span><span class="sidebar-label text-[10px]">▾</span>
+        </button>
+        <div id="muaHangDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
+          <button id="btnMuaHangBasNav" data-op-seq="closeMuaHangDropdown()|switchTab(muaHang)|setPurchasingSubTab(BAS)" class="sidebar-subitem">🧮 BAS</button>
+          <button id="btnMuaHangReportNav" data-op-seq="closeMuaHangDropdown()|switchTab(muaHang)|setPurchasingSubTab(REPORT)" class="sidebar-subitem">📊 Báo Cáo</button>
         </div>
       </div>
 
@@ -279,10 +290,6 @@
           <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
-      <!-- Mua Hàng — trước là nút top-level riêng (v23.30), nay (9/2026, theo yêu cầu người dùng: "mua
-           hàng tập trung cho chuỗi st") ĐÃ DỜI vào dropdown "Vận Hành" ở trên (#btnMuaHangBasNav/
-           #btnMuaHangReportNav trong #vanHanhDropdownPanel) — không còn nút top-level riêng nữa. Vẫn là
-           module ĐỘC LẬP hoàn toàn về dữ liệu/quyền/route, xem canAccessPurchasingModule() (core.js). -->
       <!-- Nghiệp Vụ — màn tài liệu tham khảo (sơ đồ quy trình + diễn giải), mở cho mọi tài khoản đã đăng
            nhập (giống Tài Liệu/Công Việc), xem canAccessNghiepVuModule() (core.js). Đặt ngay trước Báo Cáo
            — cùng nhóm màn tra cứu/tổng hợp, không phải luồng tác nghiệp chủ động. -->

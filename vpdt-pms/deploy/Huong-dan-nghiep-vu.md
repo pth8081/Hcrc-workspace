@@ -2093,12 +2093,12 @@ dựa trên dữ liệu mua hàng đồng bộ từ hệ thống ngoài **DSmart
 CONFIRMED → SETTLED (đối chiếu/phê duyệt/ghi nhận chính thức) — phần đó là
 Giai Đoạn 2, chưa triển khai.
 
-**Vị trí trên sidebar (từ 9/2026):** không còn là nút top-level riêng — đã
-dời vào dropdown **"⚙️ Vận Hành"** (mua hàng tập trung cho toàn chuỗi siêu
-thị, cùng nhóm điều hướng với Vận Hành/QLDA/Checklist Đánh Giá cho gọn), hiện
-2 mục con **"🔗 Mua Hàng - BAS"** và **"🔗 Mua Hàng - Báo Cáo"** — bấm vào vẫn
-mở đúng 2 tab nội bộ BAS/Báo Cáo mô tả bên dưới. Vẫn là module ĐỘC LẬP hoàn
-toàn về dữ liệu/quyền với Vận Hành, chỉ gộp chung vị trí điều hướng.
+**Vị trí trên sidebar (từ 9/2026):** vẫn là 1 dropdown TOP-LEVEL riêng (icon
+🔗 — chuỗi, mua hàng tập trung toàn chuỗi siêu thị, thay cho 🛒 cũ vì trùng
+"🛒 Mua Bán" của Văn Phòng Tổng Hợp), đặt ngay dưới **"⚙️ Vận Hành"** trong
+danh sách sidebar (cùng khuôn dropdown Vận Hành/Hỗ Trợ IT). Bấm vào mở ra 2
+mục con dạng "slide bar": **"🧮 BAS"** và **"📊 Báo Cáo"** — mở đúng 2 tab nội
+bộ mô tả bên dưới.
 
 - **Nhà Cung Cấp (Vendors)** — `vendorCode` do người dùng tự đặt (KHÔNG tự
   sinh mã như phần lớn module khác vì đổi ngầm mã 1 NCC là sai nghiệp vụ),

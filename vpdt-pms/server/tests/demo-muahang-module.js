@@ -159,7 +159,7 @@ async function main() {
       switchTab('muaHang');
       await new Promise(r => setTimeout(r, 30));
 
-      check('muaHang: sidebar sub-item visible for admin', !document.getElementById('btnMuaHangBasNav').classList.contains('hidden'));
+      check('muaHang: sidebar dropdown visible for admin', !document.getElementById('muaHangNavWrap').classList.contains('hidden'));
       check('muaHang: BAS tab visible by default', !document.getElementById('mhSubBas').classList.contains('hidden'));
 
       // ---- Scenario 1: create vendor ----
@@ -238,7 +238,7 @@ async function main() {
       const staffUser = { username: 'staff1', name: 'Nhân Viên A', dept: 'Phòng Mua Hàng', role: 'user', jobTitle: 'Nhân Viên', perms: {} };
       DB.users.push(staffUser);
       finishLogin(staffUser);
-      check('muaHang: sidebar sub-item hidden for user without any rebate perm', document.getElementById('btnMuaHangBasNav').classList.contains('hidden'));
+      check('muaHang: sidebar dropdown hidden for user without any rebate perm', document.getElementById('muaHangNavWrap').classList.contains('hidden'));
       alerts.length = 0;
       await switchTab('muaHang');
       check('muaHang: switchTab blocked with explicit alert for unauthorized user, section stays hidden',
