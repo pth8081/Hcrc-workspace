@@ -381,6 +381,36 @@ function mixedApprovalResolvePersonInput(rawValue) {
   return m ? ((DB.users || []).find(u => u.username === m[2].trim()) || null) : null;
 }
 
+// LỌC HỖN HỢP chức danh HO lẫn Siêu Thị (theo yêu cầu người dùng, đúng kịch bản "Bước 3 duyệt bởi Phó
+// TGĐ ở HO" cho đơn Siêu Thị >100tr — trước đó ô này CHỈ gõ tìm được DB.storeJobTitles, không thấy được
+// chức danh HO). Khớp người duyệt (resolveOperationOrderStoreMixedApprovers() server + mirror client)
+// vẫn CHỈ so sánh phẳng user.jobTitle === rule.jobTitle — không cần biết chức danh đến từ danh mục nào,
+// nên đây THUẦN là mở rộng nguồn gợi ý ở ô nhập, KHÔNG đụng gì tới cơ chế khớp. Nhãn gợi ý gắn hậu tố
+// " — HO"/" — Siêu Thị" (mirror đúng quy ước nhãn người "${name} (${username}) - ${dept}" ở trên — LUÔN
+// gắn kèm 1 chuỗi phân biệt cố định rồi parse ngược bằng regex khi lưu) để phân biệt khi 2 danh mục lỡ
+// trùng tên, đồng thời giữ chức năng gõ-tìm hoạt động bình thường qua đúng cơ chế sddSetOptions() chung
+// (KHÔNG sửa core.js — chỉ đổi danh sách item truyền vào, giữ nguyên cơ chế sdd* dùng chung toàn hệ thống).
+function mixedApprovalJobTitleOptions() {
+  return [
+    ...(DB.jobTitles || []).map(l => `${l} — HO`),
+    ...(DB.storeJobTitles || []).map(j => `${j.label} — Siêu Thị`)
+  ];
+}
+function mixedApprovalResolveJobTitleInput(rawValue) {
+  const m = String(rawValue || '').match(/^(.*) — (HO|Siêu Thị)$/);
+  if (!m) return null;
+  const plain = m[1].trim();
+  const isValid = m[2] === 'HO' ? (DB.jobTitles || []).includes(plain) : (DB.storeJobTitles || []).some(j => j.label === plain);
+  return isValid ? plain : null;
+}
+// Badge nguồn cho DÒNG ĐÃ LƯU (chỉ có jobTitle THUẦN, không còn hậu tố — tự tra lại đúng danh mục để hiện
+// nhãn tham khảo, không lưu thêm field "nguồn" nào vào data vì bản chất khớp không cần biết nguồn).
+function mixedApprovalJobTitleSourceBadgeHTML(jobTitle) {
+  if ((DB.storeJobTitles || []).some(j => j.label === jobTitle)) return ' <span class="text-[10px] bg-emerald-100 text-emerald-700 px-1 rounded">🏬 Siêu Thị</span>';
+  if ((DB.jobTitles || []).includes(jobTitle)) return ' <span class="text-[10px] bg-sky-100 text-sky-700 px-1 rounded">🏢 HO</span>';
+  return '';
+}
+
 function renderMixedApprovalSection() {
   const wrap = document.getElementById('mixedApprovalSection');
   if (!wrap) return;
@@ -391,6 +421,7 @@ function renderMixedApprovalSection() {
     tbody.innerHTML = rules.length ? rules.slice().sort((a, b) => a.step - b.step || a.id - b.id).map(row => {
       const person = row.mode === 'PERSON' ? (DB.users || []).find(u => u.username === row.username) : null;
       const nameLabel = row.mode === 'JOBTITLE' ? row.jobTitle : (person ? mixedApprovalPersonLabel(person) : row.username);
+      const nameBadge = row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '';
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
@@ -401,7 +432,7 @@ function renderMixedApprovalSection() {
           <td class="p-2 border">${row.mode === 'JOBTITLE'
             ? '<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Chức danh</span>'
             : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
-          <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}</td>
+          <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}</td>
           <td class="p-2 border text-xs">${storesLabel}</td>
           <td class="p-2 border text-center"><button type="button" data-op="deleteMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button></td>
         </tr>
@@ -424,7 +455,7 @@ function renderMixedApprovalSection() {
     if (current && Number(current) <= topKnown + 1) stepSel.value = current;
   }
 
-  sddSetOptions('maNewJobTitleDatalist', (DB.storeJobTitles || []).map(j => j.label));
+  sddSetOptions('maNewJobTitleDatalist', mixedApprovalJobTitleOptions());
   sddSetOptions('maNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
 
   renderMultiSelectDropdown('maNewStoresPicker', DB.stores || [], [], {
@@ -451,11 +482,12 @@ function addMixedApprovalRule() {
 
   let jobTitle = null, username = null;
   if (mode === 'JOBTITLE') {
-    const raw = (document.getElementById('maNewJobTitleInput')?.value || '').trim();
-    if (!raw || !(DB.storeJobTitles || []).some(j => j.label === raw)) {
-      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh Siêu Thị).');
+    const raw = document.getElementById('maNewJobTitleInput')?.value;
+    const plain = mixedApprovalResolveJobTitleInput(raw);
+    if (!plain) {
+      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh, hoặc Chức Danh Siêu Thị).');
     }
-    jobTitle = raw;
+    jobTitle = plain;
   } else {
     const u = mixedApprovalResolvePersonInput(document.getElementById('maNewPersonInput')?.value);
     if (!u) return alert('Gõ và CHỌN đúng 1 người có sẵn trong danh sách gợi ý.');

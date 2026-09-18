@@ -1048,8 +1048,12 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
       cho ≤ 10 triệu, 2 bước cho mức giữa, 3 bước cho > 100 triệu). Có thể
       thêm nhiều dòng cho CÙNG 1 bước.
     - **Kiểu**: **"Chức danh"** (áp dụng cho TẤT CẢ người đang giữ đúng chức
-      danh đó, gõ tìm từ danh mục "Chức Danh Siêu Thị") hoặc **"Người cụ
-      thể"** (đúng 1 người, gõ tìm theo tên/username).
+      danh đó — **gõ tìm HỖN HỢP cả 2 danh mục "Chức Danh" (HO) lẫn "Chức
+      Danh Siêu Thị"**, mỗi gợi ý gắn nhãn nguồn để phân biệt khi 2 danh mục
+      trùng tên; VD gán "Phó Tổng Giám Đốc" — chức danh HO — làm người duyệt
+      Bước 3 cho đơn Siêu Thị > 100 triệu, đúng kịch bản "NV siêu thị → Quản
+      lý ST → Quản lý vùng → Phó TGĐ ở HO duyệt") hoặc **"Người cụ thể"**
+      (đúng 1 người, gõ tìm theo tên/username).
     - **Siêu Thị Phụ Trách**: để TRỐNG = **Mặc định** (áp dụng MỌI siêu thị);
       chọn 1 hoặc nhiều siêu thị (gõ tìm, chọn nhiều) = **Ngoại lệ** (chỉ áp
       dụng đúng các siêu thị đã chọn).
