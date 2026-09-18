@@ -30,6 +30,7 @@
 //      cho endDate của hợp đồng thử việc — KHÔNG thêm ràng buộc cứng theo loại vị trí ở đợt này.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
+const { assertUploadedFileUrl } = require('./createValidation');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -234,6 +235,15 @@ function applyManualEdit(contract, payload, actorUsername, actorName) {
       case 'startDate': case 'endDate':
         if (val != null && val !== '' && isNaN(new Date(val).getTime())) throw new HttpError(400, 'Ngày không hợp lệ');
         newVal = val || null;
+        break;
+      case 'fileUrl':
+        // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): field này trước đây rơi vào nhánh
+        // "default" bên dưới — chỉ trim/cắt độ dài, KHÔNG hề xác minh đúng khuôn "/uploads/<tên-file>"
+        // (mở lại nguy cơ scheme javascript:/URL ngoài hệ thống mà assertUploadedFileUrl() đã chặn ở
+        // MỌI field file khác trong hệ thống) — và cũng không có gì xác minh CHÍNH CHỦ đã tải file lên
+        // (xem bước gọi assertPayloadFileUrlsOwnedByUser() ở routes/records.js ngay sau applyManualEdit()).
+        newVal = val == null || val === '' ? null : String(val).trim().slice(0, 300);
+        assertUploadedFileUrl(newVal, 'Tệp hợp đồng');
         break;
       default:
         newVal = val == null ? null : String(val).trim().slice(0, 300);

@@ -20,6 +20,7 @@ const { assertDecompressedSizeWithinBudget } = require('../lib/xlsxSafeRead');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { recordUploadedFile } = require('../lib/uploadedFiles');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -102,11 +103,25 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
       }
       const { items, columnLabels } = await parsePriceFile(buffer, template);
 
+      const fileUrl = `/uploads/${req.file.filename}`;
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): route này
+      // (khác routes/upload.js chung) trước đây KHÔNG ghi nhận chủ sở hữu vào dbo.UploadedFiles dù file
+      // vẫn được LƯU THẬT trên đĩa (không xoá sau khi đọc xong, khác các route parse-only khác) và
+      // fileUrl trả về được client gắn thẳng vào itPriceApprovals.files[]/extraFiles[] khi tạo/bổ sung
+      // hồ sơ — assertPayloadFileUrlsOwnedByUser() (routes/create.js) coi file "không có trong bảng" là
+      // "không rõ chủ, cho qua", nên bất kỳ ai biết fileUrl bảng giá của người khác đều gắn được vào hồ
+      // sơ của chính mình mà không bị chặn. Ghi nhận ngay tại đây, cùng khuôn routes/upload.js.
+      try {
+        await recordUploadedFile(fileUrl, req.freshUser.username);
+      } catch (e) {
+        console.error('⛔ Không ghi được UploadedFiles cho', fileUrl, ':', e.message);
+      }
+
       res.json({
         items,
         columnLabels,
         masterListName,
-        fileUrl: `/uploads/${req.file.filename}`,
+        fileUrl,
         fileName: req.file.originalname,
         size: req.file.size
       });
@@ -146,9 +161,18 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
         return res.status(400).json({ error: check.reason });
       }
       const columns = await parsePriceTemplateColumns(buffer);
+      const fileUrl = `/uploads/${req.file.filename}`;
+      // Cùng lý do đã vá ở /parse-file phía trên — ghi nhận chủ sở hữu ngay khi file được giữ lại thật
+      // trên đĩa, dù Mẫu Giá hiện chỉ lưu khuôn cột (không lưu lại fileUrl) — tránh để sót nếu sau này
+      // có nơi khác gắn fileUrl này vào 1 bản ghi.
+      try {
+        await recordUploadedFile(fileUrl, req.freshUser.username);
+      } catch (e) {
+        console.error('⛔ Không ghi được UploadedFiles cho', fileUrl, ':', e.message);
+      }
       res.json({
         columns,
-        fileUrl: `/uploads/${req.file.filename}`,
+        fileUrl,
         fileName: req.file.originalname,
         size: req.file.size
       });

@@ -14,6 +14,7 @@ const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { recordUploadedFile } = require('../lib/uploadedFiles');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -78,9 +79,22 @@ router.post('/parse-catalog', uploadRateLimiter, (req, res) => {
         return res.status(400).json({ error: check.reason });
       }
       const items = await parseCatalogFile(buffer, ext);
+      const fileUrl = `/uploads/${req.file.filename}`;
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): route này
+      // (khác routes/upload.js chung) trước đây KHÔNG ghi nhận chủ sở hữu vào dbo.UploadedFiles dù file
+      // vẫn được LƯU THẬT trên đĩa và fileUrl trả về được client gắn vào vppPeriods.catalogFileUrl khi
+      // tạo kỳ đăng ký — assertPayloadFileUrlsOwnedByUser() (routes/create.js) coi file "không có trong
+      // bảng" là "không rõ chủ, cho qua", nên bất kỳ ai biết fileUrl danh mục VPP của người khác đều gắn
+      // được vào kỳ đăng ký của chính mình mà không bị chặn. Ghi nhận ngay tại đây, cùng khuôn
+      // routes/upload.js.
+      try {
+        await recordUploadedFile(fileUrl, req.freshUser.username);
+      } catch (e) {
+        console.error('⛔ Không ghi được UploadedFiles cho', fileUrl, ':', e.message);
+      }
       res.json({
         items,
-        fileUrl: `/uploads/${req.file.filename}`,
+        fileUrl,
         fileName: req.file.originalname,
         fileType: req.file.mimetype,
         size: req.file.size

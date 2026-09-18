@@ -6685,6 +6685,11 @@ function editItServiceRenewal(user, item, payload) {
   if (payload?.fileUrl !== undefined) {
     item.fileUrl = payload.fileUrl ? String(payload.fileUrl).trim().slice(0, 300) : '';
     item.fileName = payload.fileUrl ? String(payload.fileName || '').trim().slice(0, 200) : '';
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): trước đây field này KHÔNG được xác minh gì
+    // cả (không cả assertUploadedFileUrl() đã áp dụng cho mọi field file khác trong hệ thống) — mở lại
+    // nguy cơ scheme javascript:/URL ngoài hệ thống. Xác minh quyền sở hữu (chặn gắn tệp của người
+    // khác) thực hiện ở routes/records.js ngay sau lời gọi hàm này.
+    assertUploadedFileUrl(item.fileUrl, 'Tệp đính kèm');
   }
   item.history = item.history || [];
   item.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });

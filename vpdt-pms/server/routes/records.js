@@ -13,6 +13,7 @@ const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDire
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
@@ -3595,8 +3596,15 @@ router.post('/itServiceRenewals/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itServiceRenewals', itemId, (item) =>
-      recordActions.editItServiceRenewal(freshUser, item, req.body));
+    const result = await withLockedRecordForCollection('itServiceRenewals', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): cùng lý do
+      // đã vá ở laborContracts/:id/edit — trước đây route này không xác minh ai thực sự tải tệp đính
+      // kèm mới lên. exemptFileUrls giữ nguyên tệp ĐANG CÓ trước khi sửa.
+      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+      const updated = recordActions.editItServiceRenewal(freshUser, item, req.body);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itServiceRenewals/${req.params.id}/edit`, err);
@@ -3630,8 +3638,16 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     assertContractManage(freshUser);
-    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+    const result = await withLockedRecordForCollection('laborContracts', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): trước đây
+      // route này KHÔNG xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới lên hay không
+      // — cho phép tự đặt fileUrl = đường dẫn tệp THẬT của hồ sơ khác (đoán/thấy được) để gắn vào hợp
+      // đồng lao động của người khác. exemptFileUrls giữ nguyên fileUrl ĐANG CÓ trước khi sửa (không bắt
+      // xác minh lại tệp cũ đã qua đúng bước duyệt hồ sơ này rồi) — chỉ chặn khi gắn tệp MỚI thuộc về ai
+      // khác.
+      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
       laborContract.applyManualEdit(item, req.body, freshUser.username, freshUser.name);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: item.fileUrl }, freshUser, { exemptFileUrls });
       return item;
     });
     logLaborContractAction(req, freshUser, 'EDIT', result.code || String(itemId), `Sửa hợp đồng lao động [${result.code || itemId}]`);

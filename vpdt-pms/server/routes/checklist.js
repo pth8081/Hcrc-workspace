@@ -13,6 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { getAllForCollection, insertRecord, withLockedRecordForCollection, withAppLock, deleteRecordForCollection } = require('../lib/recordStore');
 const { assertUploadedFileUrl } = require('../lib/createValidation');
+const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 const checklist = require('../lib/checklist');
 const { buildQaReportWorkbook, buildDeductionReportWorkbook } = require('../lib/checklistReportExport');
 
@@ -241,6 +242,14 @@ router.post('/submissions/:id/attachments', async (req, res) => {
     const fileUrl = String(req.body?.fileUrl || '').trim();
     assertUploadedFileUrl(fileUrl, 'Ảnh minh chứng');
     if (!fileUrl) return res.status(400).json({ error: 'Thiếu tệp ảnh' });
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): trước đây route
+    // này chỉ xác minh ĐÚNG KHUÔN "/uploads/<tên-file>" (assertUploadedFileUrl ở trên), KHÔNG xác minh
+    // người gọi có thật sự là người vừa tải ảnh này lên hay không — cho phép tự đặt fileUrl = đường dẫn
+    // ảnh THẬT của người khác (đoán/thấy được từ 1 bài checklist khác) để "nhận vơ" làm ảnh minh chứng
+    // của chính mình, đúng lớp lỗi đã vá cho luồng tạo mới chung (routes/create.js) nhưng route riêng
+    // này (không đi qua routes/create.js) bị bỏ sót. assertPayloadFileUrlsOwnedByUser() ném 403 nếu
+    // fileUrl đã được ghi nhận (dbo.UploadedFiles) thuộc về người KHÁC.
+    await assertPayloadFileUrlsOwnedByUser({ fileUrl }, req.freshUser);
     const fileName = req.body?.fileName ? String(req.body.fileName).trim().slice(0, 255) : '';
     const fileType = req.body?.fileType ? String(req.body.fileType).trim().slice(0, 100) : '';
 
