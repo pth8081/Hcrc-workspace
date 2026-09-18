@@ -2085,13 +2085,20 @@ bảng phẳng ở trên):
 
 ### 4.8. Mua Hàng (BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC)
 
-Module top-level riêng (`purchasing`, sidebar **"🛒 Mua Hàng"**), Giai Đoạn 1
+Module riêng về dữ liệu/quyền (`purchasing`), Giai Đoạn 1
 (10/2026) — quản lý **Nhà Cung Cấp (Vendors)** + **Điều Khoản Chiết Khấu/
 Thưởng (RebateTerms)** ký với từng NCC, tính **ƯỚC TÍNH** số tiền chiết khấu
 dựa trên dữ liệu mua hàng đồng bộ từ hệ thống ngoài **DSmart**. Đây là bước
 **ước tính tham khảo**, KHÔNG PHẢI Sổ Cái đầy đủ theo dõi vòng đời ACCRUED →
 CONFIRMED → SETTLED (đối chiếu/phê duyệt/ghi nhận chính thức) — phần đó là
 Giai Đoạn 2, chưa triển khai.
+
+**Vị trí trên sidebar (từ 9/2026):** không còn là nút top-level riêng — đã
+dời vào dropdown **"⚙️ Vận Hành"** (mua hàng tập trung cho toàn chuỗi siêu
+thị, cùng nhóm điều hướng với Vận Hành/QLDA/Checklist Đánh Giá cho gọn), hiện
+2 mục con **"🔗 Mua Hàng - BAS"** và **"🔗 Mua Hàng - Báo Cáo"** — bấm vào vẫn
+mở đúng 2 tab nội bộ BAS/Báo Cáo mô tả bên dưới. Vẫn là module ĐỘC LẬP hoàn
+toàn về dữ liệu/quyền với Vận Hành, chỉ gộp chung vị trí điều hướng.
 
 - **Nhà Cung Cấp (Vendors)** — `vendorCode` do người dùng tự đặt (KHÔNG tự
   sinh mã như phần lớn module khác vì đổi ngầm mã 1 NCC là sai nghiệp vụ),
