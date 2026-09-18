@@ -485,12 +485,14 @@ const DEFAULTS = {
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
   // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   budgetDeptWorkflows: {},
-  // Vận Hành — Mở Mới Siêu Thị/Sửa Chữa Siêu Thị: mỗi luồng 1 map riêng, cùng khuôn
-  // officeBuyDeptWorkflows/budgetDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   // ("operationOrderDeptWorkflows" — quy trình duyệt Đơn Hàng theo phòng ban — đã bị XOÁ HẲN, thay bằng
-  // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.)
-  operationStoreOpenDeptWorkflows: {},
-  operationRepairDeptWorkflows: {},
+  // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.
+  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows — Mở Mới/Sửa Chữa Siêu Thị — CŨNG ĐÃ
+  // XOÁ khỏi đây, yêu cầu người dùng: 2 luồng "Siêu Thị" không có bước phê duyệt nào ở module Vận Hành
+  // cả, hồ sơ đi thẳng APPROVED ngay lúc tạo, xem chú thích ở lib/workflowEngine.js MODULE_CONFIGS. Bản
+  // ghi cũ (nếu có, từ trước khi xoá) vẫn còn nguyên trong dbo.AppData ở các hệ thống đã cài từ trước,
+  // vô hại vì không còn route/logic nào đọc tới, cùng tinh thần operationStoreOpenEstimateDeptWorkflows/
+  // operationRepairEstimateDeptWorkflows đã xoá trước đó.)
   // Vận Hành > Đơn Hàng — đợt "Tách Đơn Hàng Siêu Thị/HO": bỏ hẳn quy trình duyệt theo phòng ban, tách
   // thành 2 quy trình ĐỘC LẬP theo MỨC GIÁ TRỊ đơn hàng (khớp resolveOperationOrderWorkflow()/
   // OPERATION_ORDER_STORE_TIERS/OPERATION_ORDER_HO_TIERS ở lib/workflowEngine.js) — cùng khuôn phẳng

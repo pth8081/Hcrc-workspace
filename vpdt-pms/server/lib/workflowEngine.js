@@ -440,10 +440,12 @@ const MODULE_CONFIGS = {
   // này chỉ còn ném lỗi 409 "không ở trạng thái chờ xử lý" — dọn hẳn cấu hình thay vì để lại 1 route
   // chết). Bản ghi CŨ (trước Mục H) còn kẹt PENDING/DRAFT được migrateStuckOperationApprovalStatuses()
   // (seedDefaults.js) tự chuyển sang APPROVED mỗi lúc khởi động. dept-workflow map
-  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows GIỮ NGUYÊN trong AppData (không xoá dữ
-  // liệu cấu hình cũ của admin, đơn giản không còn nơi nào đọc tới) — canViewOperationStoreOpening()/
-  // canViewOperationRepair() (lib/recordViewScope.js) đã bỏ nhánh "đang là approver" tương ứng, chỉ còn
-  // dept/hasOwnWorkItemInSource/approver của Danh mục đầu tư (vẫn giữ nguyên object bên dưới).
+  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows ĐÃ XOÁ HẲN khỏi defaults.js/VALID_KEYS
+  // (yêu cầu người dùng, đợt sau — trước đó vẫn giữ trong AppData cho màn cấu hình cũ xem lại, nhưng màn
+  // đó ("QT QLDA - Mở Mới/Sửa Chữa Siêu Thị" ở tab "Quy Trình & Phê Duyệt") cũng đã bị gỡ luôn, xem
+  // WF_MODULE_CONFIG ở module-workflow.js) — canViewOperationStoreOpening()/canViewOperationRepair()
+  // (lib/recordViewScope.js) đã bỏ nhánh "đang là approver" tương ứng, chỉ còn dept/hasOwnWorkItemInSource/
+  // approver của Danh mục đầu tư (vẫn giữ nguyên object bên dưới).
   //
   // Giai đoạn "Dự toán" (Danh Mục Đầu Tư) của 2 luồng "Siêu Thị" CŨNG ĐÃ BỊ XOÁ khỏi đây — chủ ứng dụng
   // xác nhận: KHÔNG có bước phê duyệt nào ở Vận Hành > Siêu Thị cả (kể cả Dự Toán), để người quản lý

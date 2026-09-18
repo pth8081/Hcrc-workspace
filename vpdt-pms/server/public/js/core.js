@@ -3516,8 +3516,10 @@ async function initDatabase(loggingInUser) {
     // GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/HO (xem resolveOperationOrderWorkflowConfigForItemClient() bên dưới).
     DB.operationOrderStoreTierWorkflows = data.operationOrderStoreTierWorkflows || {};
     DB.operationOrderHOTierWorkflows = data.operationOrderHOTierWorkflows || {};
-    DB.operationStoreOpenDeptWorkflows = data.operationStoreOpenDeptWorkflows || {};
-    DB.operationRepairDeptWorkflows = data.operationRepairDeptWorkflows || {};
+    // DB.operationStoreOpenDeptWorkflows/DB.operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người
+    // dùng — 2 luồng "Siêu Thị" không có bước phê duyệt nào ở module Vận Hành cả, xem chú thích ở
+    // WF_MODULE_CONFIG, module-workflow.js) — OPERATION_KIND_META.wfMap() (module-vanhanh.js) đã tự
+    // fallback về {} khi DB.<key> không tồn tại, không cần gán rỗng tường minh ở đây nữa.
     // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ra dsmart16 (xem
     // jobs/operationOrderApiSync.js). headerValueEnc đã bị server strip (sanitizeOperationOrderApiConfig()
     // ở routes/data.js), chỉ còn cờ "hasHeaderValue" — xem loadOperationOrderApiConfigToForm().

@@ -61,18 +61,15 @@ const DEPT_FIELD_COLLECTIONS = [
 // được hồ sơ nữa, vì hồ sơ mới tạo mang tên MỚI) cho tới khi admin tự tay cấu hình lại từ đầu. Cấu trúc
 // BÊN TRONG mỗi map khác nhau (itPriceDeptWorkflows còn lồng thêm cấp RETAIL/WHOLESALE) nhưng TẦNG NGOÀI
 // CÙNG luôn là {[dept]: <cấu hình>} nên chỉ cần đổi tên KEY, không cần biết cấu trúc bên trong.
-// operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: 2 map CŨ không còn route/logic nào đọc
-// tới (xem chú thích ở lib/workflowEngine.js — quy trình duyệt hồ sơ chính operationStoreOpenings/
-// operationRepairs đã bỏ hẳn phê duyệt) — vẫn cascade cho ĐỒNG BỘ dữ liệu (admin vẫn xem lại được ở màn
-// cấu hình cũ), không có tác dụng phụ nào khác vì không route nào tiêu thụ.
-// operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows ĐÃ XOÁ khỏi danh sách này
-// — Vận Hành > Siêu Thị không còn bước phê duyệt Dự toán nào cả, 2 map cấu hình đó không còn tồn tại
-// trong defaults.js nữa (xem lib/workflowEngine.js MODULE_CONFIGS).
+// operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows/operationStoreOpenEstimateDeptWorkflows/
+// operationRepairEstimateDeptWorkflows ĐÃ XOÁ khỏi danh sách này — Vận Hành > Siêu Thị (Mở Mới/Sửa Chữa,
+// cả 2 giai đoạn Dự toán lẫn hồ sơ chính) không còn bước phê duyệt nào cả, các map cấu hình đó không còn
+// tồn tại trong defaults.js nữa (xem lib/workflowEngine.js MODULE_CONFIGS + WF_MODULE_CONFIG ở
+// module-workflow.js) — không còn màn cấu hình nào đọc lại dữ liệu này để cần cascade đổi tên nữa.
 const DEPT_WORKFLOW_MAP_KEYS = [
   'submissionDeptWorkflows', 'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
-  'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows',
-  'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows'
+  'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows'
 ];
 
 async function cascadeDeptWorkflowMaps(oldValue, newValue) {

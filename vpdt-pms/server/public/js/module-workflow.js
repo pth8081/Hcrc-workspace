@@ -82,9 +82,11 @@ const WF_MODULE_CONFIG = {
       { key: 'GTE100M', label: '> 100 triệu' }
     ],
     label: 'Vận Hành - Đặt Hàng Tại HO', title: '📦 Cấu Hình Quy Trình Phê Duyệt Đặt Hàng Tại HO Theo Mức Giá Trị'
-  },
-  OPERATION_STORE_OPEN: { dbKey: 'operationStoreOpenDeptWorkflows', label: 'QLDA - Mở Mới Siêu Thị', title: '🏬 Cấu Hình Quy Trình Phê Duyệt Mở Mới Siêu Thị Theo Phòng Ban' },
-  OPERATION_REPAIR: { dbKey: 'operationRepairDeptWorkflows', label: 'QLDA - Sửa Chữa Siêu Thị', title: '🔧 Cấu Hình Quy Trình Phê Duyệt Sửa Chữa Siêu Thị Theo Phòng Ban' }
+  }
+  // OPERATION_STORE_OPEN/OPERATION_REPAIR (QLDA - Mở Mới/Sửa Chữa Siêu Thị) ĐÃ XOÁ khỏi đây (yêu cầu
+  // người dùng — 2 luồng "Siêu Thị" này KHÔNG có bước phê duyệt nào ở module Vận Hành cả, hồ sơ đi thẳng
+  // APPROVED ngay lúc tạo, xem chú thích ở lib/workflowEngine.js MODULE_CONFIGS — 2 mục "QT QLDA..." vẫn
+  // còn trên màn "Quy Trình & Phê Duyệt" trước đây chỉ là giàn giáo chết, không còn tác dụng gì).
   // Giai đoạn Dự toán (tab "🏬 Siêu Thị") ĐÃ BỎ HẲN phê duyệt — chủ ứng dụng xác nhận Vận Hành > Siêu Thị
   // không có bước duyệt nào cả, kể cả Dự toán — 2 entry OPERATION_STORE_OPEN_ESTIMATE/
   // OPERATION_REPAIR_ESTIMATE đã xoá khỏi đây.
@@ -101,10 +103,8 @@ const WF_MODULE_CONFIG = {
 // "đổi mẫu quy trình = xoá sạch approvers đã gán" mà renderWorkflowTab()/onWorkflowTemplateChange() vốn
 // có khi admin CHỦ Ý đổi mẫu cho 1 mục cụ thể.
 //
-// OPERATION_STORE_OPEN/OPERATION_REPAIR (Vận Hành > Siêu Thị) CỐ Ý loại khỏi phạm vi quét/danh sách chọn
-// module — 2 module này KHÔNG còn bước duyệt thật nào (hồ sơ luôn APPROVED ngay, xem chú thích
-// WF_MODULE_CONFIG ở trên), set workflowId ở đó không có tác dụng gì và dễ gây hiểu lầm là đã cấu hình xong.
-const QUICK_APPLY_EXCLUDED_MODULES = new Set(['OPERATION_STORE_OPEN', 'OPERATION_REPAIR']);
+// QUICK_APPLY_EXCLUDED_MODULES (loại OPERATION_STORE_OPEN/OPERATION_REPAIR khỏi phạm vi quét) ĐÃ XOÁ —
+// 2 entry đó không còn trong WF_MODULE_CONFIG nữa (xem chú thích ở đó), nên hết cần loại trừ riêng.
 
 // Liệt kê CHÍNH XÁC những "ô" (phòng ban, hoặc phòng ban×loại, hoặc mức/tier) hiện CHƯA có cấu hình
 // riêng — dùng CHUNG cho cả hiện số lượng ảnh hưởng trước (showQuickApplyConfigImpact()) lẫn thực thi
@@ -120,7 +120,6 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
   const scopeKeys = (moduleKeys && moduleKeys.length) ? new Set(moduleKeys) : null;
 
   Object.entries(WF_MODULE_CONFIG).forEach(([modKey, cfg]) => {
-    if (QUICK_APPLY_EXCLUDED_MODULES.has(modKey)) return;
     if (scopeKeys && !scopeKeys.has(modKey)) return;
 
     if (cfg.pureTier) {
@@ -222,7 +221,6 @@ function renderQuickApplySection() {
   if (grid) {
     const checked = new Set(Array.from(grid.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value));
     grid.innerHTML = Object.entries(WF_MODULE_CONFIG)
-      .filter(([modKey]) => !QUICK_APPLY_EXCLUDED_MODULES.has(modKey))
       .map(([modKey, cfg]) => `
         <label class="flex items-center gap-1.5 text-xs bg-white border rounded px-2 py-1.5 cursor-pointer hover:bg-gray-50">
           <input type="checkbox" value="${modKey}" class="qaModuleCheck w-3.5 h-3.5"${checked.has(modKey) ? ' checked' : ''}>

@@ -68,15 +68,12 @@ const ADMIN_ONLY_KEYS = new Set([
   'quickApplyConfigs',
   'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows', 'submissionApprovalGroups',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
-  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows: cấu hình người duyệt theo phòng ban
-  // cho 2 luồng "Siêu Thị" của module Vận Hành — cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên
-  // nhưng BỊ BỎ SÓT khỏi danh sách này khi thêm module Vận Hành, khiến bất kỳ tài khoản đã đăng nhập nào
-  // (kể cả người chỉ có quyền tạo hồ sơ operationStoreOpenCreate/operationRepairCreate) cũng ghi trực
-  // tiếp được qua POST /api/data/<key> và tự đặt mình làm người duyệt bước 1 phòng ban mình.
-  'operationStoreOpenDeptWorkflows', 'operationRepairDeptWorkflows',
-  // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows ĐÃ XOÁ khỏi đây — Vận
-  // Hành > Siêu Thị KHÔNG còn bước phê duyệt Dự toán nào cả (chủ ứng dụng xác nhận), không còn map cấu
-  // hình nào cần bảo vệ ở đây nữa.
+  // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người dùng —
+  // 2 luồng "Siêu Thị" của module Vận Hành không có bước phê duyệt nào cả, xem chú thích ở
+  // lib/workflowEngine.js MODULE_CONFIGS) — cùng lý do operationStoreOpenEstimateDeptWorkflows/
+  // operationRepairEstimateDeptWorkflows đã xoá trước đó, không còn map cấu hình nào cần bảo vệ ở đây
+  // nữa. VALID_KEYS (Object.keys(DEFAULTS)) cũng đã hết 2 key này (xem defaults.js) nên
+  // POST /api/data/<key> tự chặn ở bước kiểm VALID_KEYS trước khi tới được đây.
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows: cấu hình người duyệt Đơn Hàng (Vận
   // Hành) theo MỨC GIÁ TRỊ đơn hàng, TÁCH RIÊNG "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (đã thay hẳn
   // cho operationOrderDeptWorkflows theo phòng ban trước đây — xem lib/workflowEngine.js) — cùng lý do
