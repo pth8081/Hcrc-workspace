@@ -35,6 +35,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
   document.getElementById('quickApplySection').classList.toggle('hidden', subTab !== 'QUICKAPPLY');
+  document.getElementById('mixedApprovalSection').classList.toggle('hidden', subTab !== 'MIXEDAPPROVAL');
   document.getElementById('uploadTypeSection').classList.toggle('hidden', subTab !== 'UPLOAD');
   document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
   document.getElementById('trashSection').classList.toggle('hidden', subTab !== 'TRASH');
@@ -45,6 +46,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubQuickApply').className = subTab === 'QUICKAPPLY' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubMixedApproval').className = subTab === 'MIXEDAPPROVAL' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubUpload').className = subTab === 'UPLOAD' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
@@ -65,6 +67,9 @@ function setSystemSubTab(subTab) {
   // QUICKAPPLY: sub-tab riêng tách từ khối "⚡ Áp Dụng Nhanh" cũ trong WORKFLOW ra (xem module-workflow.js) —
   // nhiều cấu hình độc lập (mẫu quy trình + danh sách module) thay vì 1 mẫu áp cho toàn bộ.
   if (subTab === 'QUICKAPPLY') { renderQuickApplySection(); }
+  // MIXEDAPPROVAL: "⚙️ Quy Trình Hỗn Hợp" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu
+  // Thị" (xem module-workflow.js renderMixedApprovalSection()), thay hẳn cơ chế tự khớp dept cũ.
+  if (subTab === 'MIXEDAPPROVAL') { renderMixedApprovalSection(); }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
   if (subTab === 'TRASH') { loadTrashItems(); }

@@ -238,34 +238,62 @@ function computeOperationOrderTier(locationType, amount) {
 // giá trị theo sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" đang mở, KHÔNG có dropdown chọn tay —
 // cùng cơ chế priceType RETAIL/WHOLESALE của itPriceApprovals). Hồ sơ CŨ trước đợt tách này không có
 // field -> coi như 'HO' (migrateOperationOrdersDefaultLocationType(), seedDefaults.js di trú 1 lần).
-// ĐỢT "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (10/2026, theo yêu cầu người dùng — có nhiều siêu
-// thị, không muốn tạo riêng 1 cấu hình approver cho từng siêu thị): với đơn STORE, sau khi
-// flatWorkflowConfigToSteps() tính ra danh sách approver hợp lệ CHUNG của 1 mức giá trị (dù admin chọn
-// tay từng người hay chọn "Theo vị trí" — VD chức danh "Giám Đốc" KHÔNG gắn siêu thị cụ thể, áp dụng
-// chung mọi siêu thị), LỌC LẠI chỉ giữ đúng những approver có `dept` (hoặc 1 trong `secondaryPositions` —
-// "Vị Trí Kiêm Nhiệm", VD quản lý vùng phụ trách nhiều siêu thị) TRÙNG đúng siêu thị (item.dept) của đơn
-// đang xét — tức "siêu thị nào tự duyệt siêu thị đó", nhận biết HOÀN TOÀN qua phân quyền phẳng
-// (jobTitle/dept trên hồ sơ Người Dùng), KHÔNG đọc/phụ thuộc gì vào Cơ Cấu Tổ Chức (lib/orgChart.js) —
-// tách biệt 2 cơ chế theo đúng yêu cầu "không phá vỡ" cơ cấu tổ chức. HO KHÔNG áp dụng lọc này (giữ
-// nguyên như cũ — thuần theo mức giá trị, không có khái niệm "siêu thị" nào để so).
-function filterOperationOrderStoreApprovers(resolved, item, users) {
-  const filteredApprovers = {};
-  Object.keys(resolved.approvers).forEach(stepOrder => {
-    filteredApprovers[stepOrder] = (resolved.approvers[stepOrder] || []).filter(username => {
-      const u = (users || []).find(x => x.username === username);
-      if (!u) return false;
-      if (u.dept === item.dept) return true;
-      return (u.secondaryPositions || []).some(sp => sp.dept === item.dept);
+//
+// ĐỢT "Quy Trình Hỗn Hợp" (10/2026, thay THẾ HẲN cơ chế "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị"
+// trước đó — filterOperationOrderStoreApprovers(), nay đã xoá): người dùng không muốn tiếp tục phụ thuộc
+// đúng 1 chức danh hardcode kiểu "Giám Đốc siêu thị" cho Bước 1, và muốn tự cấu hình linh động người/chức
+// danh duyệt cho TỪNG bước qua màn admin mới "⚙️ Quy Trình Hỗn Hợp" (appData.operationOrderStoreMixed-
+// ApprovalRules, mỗi dòng: {step, mode:'JOBTITLE'|'PERSON', jobTitle|username, stores[]}). Từ đợt này:
+// - SỐ BƯỚC (steps) của đơn STORE vẫn lấy nguyên từ màn CŨ (operationOrderStoreTierWorkflows theo tier
+//   giá trị đơn hàng) — người dùng xác nhận rõ "giữ màn hình cũ vì điều kiện mức tiền đã đúng rồi".
+// - NGƯỜI DUYỆT (approvers) của mỗi bước KHÔNG còn lấy từ operationOrderStoreTierWorkflows[...].approvers
+//   nữa (field approvers/approverMode/approversByPosition trong tier config STORE giờ chỉ còn tác dụng
+//   hiển thị tham khảo ở màn cũ nếu còn, hoàn toàn không được đọc ở đây) — thay vào đó tra từ
+//   resolveOperationOrderStoreMixedApprovers() bên dưới, dựa 100% vào operationOrderStoreMixedApprovalRules.
+// - Được liệt kê ở đây (theo tên NGƯỜI hoặc CHỨC DANH) là ĐỦ điều kiện duyệt — KHÔNG cần bật thêm gì ở
+//   "Quyền Đặc Biệt" (canBeApprover, khác hẳn cơ chế "Theo vị trí" cũ ở lib/positionApprovers.js vẫn dùng
+//   cho các module KHÁC — Văn Phòng Phẩm/Thanh Toán/Xe/Giá IT/Hợp Đồng, xem yêu cầu người dùng nguyên văn
+//   "sẽ ko lọc ở mục 17 quyền đặc biết trong admin").
+// HO KHÔNG áp dụng cơ chế này (giữ nguyên như cũ — thuần theo mức giá trị, không có khái niệm "siêu thị").
+function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, users) {
+  const hasExplicitStores = !!(rule.stores && rule.stores.length);
+  // Dòng KHÔNG khai "Siêu Thị Phụ Trách" (mặc định) áp dụng cho MỌI siêu thị; dòng CÓ khai (ngoại lệ) chỉ
+  // áp dụng đúng những siêu thị liệt kê. Cả 2 loại có thể cùng khớp 1 (bước, siêu thị) — không loại trừ
+  // nhau, HỢP (UNION) lại ở resolveOperationOrderStoreMixedApprovers() bên dưới (phương án B, đã chốt).
+  if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
+  if (rule.mode === 'PERSON') return rule.username ? [rule.username] : [];
+  // mode 'JOBTITLE': dòng MẶC ĐỊNH (không khai siêu thị) tự khớp theo dept CHÍNH/"Vị Trí Kiêm Nhiệm" của
+  // từng người giữ đúng chức danh với ĐÚNG siêu thị trên đơn — giữ nguyên đúng tiện lợi "GĐST tự khớp
+  // đúng siêu thị mình", không cần liệt kê tay hàng chục siêu thị, đồng thời AN TOÀN (GĐST siêu thị A
+  // không vô tình duyệt được đơn của siêu thị B). Dòng NGOẠI LỆ (có khai siêu thị, VD "Quản Lý Vùng" phụ
+  // trách nhiều siêu thị không thuộc đúng 1 dept cố định nào) thì KHÔNG so dept — bản thân danh sách
+  // "Siêu Thị Phụ Trách" của dòng đã là căn cứ duy nhất, không thể tự động khớp dept được.
+  return (users || [])
+    .filter(u => u.jobTitle === rule.jobTitle)
+    .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
+    .map(u => u.username);
+}
+function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepOrders) {
+  const approvers = {};
+  (stepOrders || []).forEach(stepOrder => {
+    const usernames = new Set();
+    (rules || []).filter(r => Number(r.step) === Number(stepOrder)).forEach(r => {
+      resolveOperationOrderStoreMixedApprovalRuleUsernames(r, storeDept, users).forEach(u => usernames.add(u));
     });
+    approvers[stepOrder] = [...usernames];
   });
-  return { steps: resolved.steps, approvers: filteredApprovers };
+  return approvers;
 }
 function resolveOperationOrderWorkflow(item, appData) {
   const locationType = item.orderLocationType === 'STORE' ? 'STORE' : 'HO';
   const tierMap = locationType === 'STORE' ? appData.operationOrderStoreTierWorkflows : appData.operationOrderHOTierWorkflows;
   const tier = computeOperationOrderTier(locationType, computeOperationOrderAmount(item));
   const resolved = flatWorkflowConfigToSteps(tierMap?.[tier] || null, appData);
-  if (locationType === 'STORE') return filterOperationOrderStoreApprovers(resolved, item, appData.users);
+  if (locationType === 'STORE') {
+    const stepOrders = resolved.steps.map(s => s.order);
+    const approvers = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, item.dept, appData.users, stepOrders);
+    return { steps: resolved.steps, approvers };
+  }
   return resolved;
 }
 
@@ -934,6 +962,7 @@ module.exports = {
   resolveItPriceDeptWorkflowConfig,
   resolveItPriceTierWorkflowConfig,
   resolveOperationOrderWorkflow,
+  resolveOperationOrderStoreMixedApprovers,
   findCarPlateConflict,
   findCarDriverConflict,
   computeOperationOrderAmount,

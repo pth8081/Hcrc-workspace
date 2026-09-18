@@ -132,8 +132,12 @@ async function main() {
       budgetEntries: [], budgetDeptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['budget1'] } } },
       budgetTemplates: [], budgetPeriods: [],
       reportPeriods: [], reportEntries: [], licenses: [], licenseTypes: [],
-      operationOrders: [], operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP', approvers: { 1: ['oostore1'] } } },
+      // Người duyệt "Đặt Hàng Tại Siêu Thị" nay tra từ operationOrderStoreMixedApprovalRules ("Quy Trình
+      // Hỗn Hợp", đợt 10/2026) — operationOrderStoreTierWorkflows[...].approvers KHÔNG còn được đọc cho
+      // STORE nữa, chỉ workflowId (số bước) là còn tác dụng.
+      operationOrders: [], operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
       operationOrderHOTierWorkflows: {},
+      operationOrderStoreMixedApprovalRules: [{ id: 1, step: 1, mode: 'PERSON', username: 'oostore1', stores: [] }],
       operationStoreOpenings: [], operationStoreOpenDeptWorkflows: {},
       operationRepairs: [], operationRepairDeptWorkflows: {},
       operationWorkItems: [], operationExecutionPeriods: [], orgChartManagerOverrides: {},

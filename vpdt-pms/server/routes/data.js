@@ -80,6 +80,12 @@ const ADMIN_ONLY_KEYS = new Set([
   // bảo mật với itPriceTierWorkflows bên dưới: không cho user thường tự ghi thẳng qua POST
   // /api/data/<key> và tự phong mình làm approver.
   'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows',
+  // operationOrderStoreMixedApprovalRules: "⚙️ Quy Trình Hỗn Hợp" — cấu hình người/chức danh duyệt từng
+  // bước của đơn "Đặt Hàng Tại Siêu Thị" (thay hẳn cơ chế dept-auto-match cũ, xem defaults.js/
+  // lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers()) — cùng lý do bảo mật với
+  // operationOrderStoreTierWorkflows ở trên: không cho user thường tự ghi thẳng qua POST
+  // /api/data/operationOrderStoreMixedApprovalRules và tự phong mình làm approver.
+  'operationOrderStoreMixedApprovalRules',
   // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
   // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng

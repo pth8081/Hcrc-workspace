@@ -638,15 +638,20 @@ function toggleScopeGroup(allCheckId, deptCheckPrefix) {
 
 // "🧾 Duyệt Nhập/Hủy Đơn Hàng" — quyền RIÊNG, TÁCH thành 2 quyền độc lập từ đợt "Tách quyền Duyệt
 // Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026): "HO" giờ là 1 checkbox đơn (pOperationOrderReceiptHO, xem
-// systemSection.html) KHÔNG còn render động ở đây — hàm này giờ CHỈ liệt kê DB.depts (siêu thị/phòng ban)
-// cho quyền operationOrderReceiptManageStore, không chèn mục 'HO' đặc biệt nữa. KHÔNG dùng chung
-// renderDeptCheckboxes()/toggleScopeGroup() ở trên (chỉ liệt kê thẳng DB.depts theo INDEX) — 2 hàm riêng
+// systemSection.html) KHÔNG còn render động ở đây — hàm này giờ CHỈ liệt kê DB.stores (siêu thị) cho
+// quyền operationOrderReceiptManageStore, không chèn mục 'HO' đặc biệt nữa. KHÔNG dùng chung
+// renderDeptCheckboxes()/toggleScopeGroup() ở trên (chỉ liệt kê thẳng DB.stores theo INDEX) — 2 hàm riêng
 // dưới đây tự quản lý theo VALUE thay vì index để không phải đổi setGroupCheckboxes()/scopeFromForm() dùng
 // chung (scopeFromForm() đọc theo cb.value nên đã tự hoạt động đúng không cần sửa gì).
+// BUG THẬT đã sửa (rà soát theo yêu cầu người dùng 9/2026): trước đây đọc nhầm DB.depts (danh mục
+// Phòng/Ban khối văn phòng) thay vì DB.stores (danh mục Siêu Thị thật) — đơn "Đặt Hàng Tại Siêu Thị" luôn
+// gắn `dept` = TÊN SIÊU THỊ (xem forceOwnDept ở lib/createValidation.js), nên tick chọn tên phòng ban ở
+// đây KHÔNG BAO GIỜ khớp được với đơn hàng thật — quyền giới hạn theo từng siêu thị coi như luôn vô hiệu.
+// Mirror ĐÚNG renderChecklistAuditScopeCheckboxes() (cũng dùng DB.stores) ngay bên dưới.
 function renderOperationOrderReceiptScopeCheckboxes() {
   const el = document.getElementById('pOperationOrderReceiptDeptContainer');
   if (!el) return;
-  const items = DB.depts.map(d => ({ value: d, label: d }));
+  const items = DB.stores.map(d => ({ value: d, label: d }));
   el.innerHTML = items.map((it, idx) => `
     <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
       <input type="checkbox" id="pOperationOrderReceiptDept_${idx}" value="${escapeHtml(it.value)}">

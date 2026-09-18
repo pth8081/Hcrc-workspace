@@ -254,12 +254,13 @@ router.post('/:module', async (req, res) => {
       });
     }
 
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): tác dụng phụ của bản vá "Duyệt Đơn
-    // Hàng Siêu Thị tự khớp đúng siêu thị" (filterOperationOrderStoreApprovers(), lib/workflowEngine.js)
-    // — lọc approver theo đúng siêu thị (item.dept) có thể vô tình lọc RỖNG danh sách duyệt bước 1 nếu
-    // admin cấu hình approver cho mức giá trị đó nhưng KHÔNG ai trong số họ có dept/secondaryPositions
-    // khớp đúng siêu thị vừa đặt hàng (VD quên gắn "Vị Trí Kiêm Nhiệm" cho quản lý vùng phụ trách siêu
-    // thị đó) — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng KHÔNG một người duyệt "thường" nào thấy được
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): việc lọc approver theo đúng siêu thị
+    // của đơn "Đặt Hàng Tại Siêu Thị" (nay tra từ appData.operationOrderStoreMixedApprovalRules — "Quy
+    // Trình Hỗn Hợp", xem lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers(), đã thay hẳn
+    // cơ chế cũ filterOperationOrderStoreApprovers()) có thể vô tình lọc RỖNG danh sách duyệt bước 1 nếu
+    // admin cấu hình người/chức danh cho bước đó nhưng KHÔNG ai/dòng nào khớp đúng siêu thị vừa đặt hàng
+    // (VD quên khai siêu thị đó vào "Siêu Thị Phụ Trách") — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng
+    // KHÔNG một người duyệt "thường" nào thấy được
     // để xử lý (chỉ admin bypass mới duyệt được, xem applyWorkflowAction()) — im lặng "treo" vô thời hạn
     // nếu admin không tình cờ phát hiện. Vá bằng cách CẢNH BÁO NGAY khi tạo (không chặn tạo — hồ sơ vẫn
     // hợp lệ, admin vẫn duyệt được bình thường): trả kèm `warning` cho người tạo thấy ngay + ghi 1 dòng

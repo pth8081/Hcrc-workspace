@@ -2379,30 +2379,55 @@ function operationOrderTierLabel(locationType, tier) {
   const tiers = locationType === 'STORE' ? OPERATION_ORDER_STORE_TIERS : OPERATION_ORDER_HO_TIERS;
   return (tiers.find(t => t.key === tier) || {}).label || tier || '—';
 }
+// ĐỢT "Quy Trình Hỗn Hợp" (10/2026): MIRROR ĐÚNG resolveOperationOrderStoreMixedApprovers()/
+// resolveOperationOrderStoreMixedApprovalRuleUsernames() phía server (lib/workflowEngine.js) — người
+// duyệt của đơn "Đặt Hàng Tại Siêu Thị" giờ tra HOÀN TOÀN từ DB.operationOrderStoreMixedApprovalRules,
+// KHÔNG còn đọc approvers/approverMode/approversByPosition của tierMap nữa (tierMap chỉ còn dùng lấy
+// workflowId để biết SỐ BƯỚC, xem resolveOperationOrderWorkflowConfigForItemClient() bên dưới).
+function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept) {
+  const hasExplicitStores = !!(rule.stores && rule.stores.length);
+  if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
+  if (rule.mode === 'PERSON') return rule.username ? [rule.username] : [];
+  return (DB.users || [])
+    .filter(u => u.jobTitle === rule.jobTitle)
+    .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
+    .map(u => u.username);
+}
+function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders) {
+  const approvers = {};
+  (stepOrders || []).forEach(stepOrder => {
+    const usernames = new Set();
+    (DB.operationOrderStoreMixedApprovalRules || []).filter(r => Number(r.step) === Number(stepOrder)).forEach(r => {
+      resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(r, storeDept).forEach(u => usernames.add(u));
+    });
+    approvers[stepOrder] = [...usernames];
+  });
+  return approvers;
+}
 // Điểm CHUNG duy nhất mọi nơi hiển thị/kiểm quyền của 1 hồ sơ operationOrders CỤ THỂ nên gọi (mirror
 // resolveItPriceWorkflowConfigForItemClient() ở trên) — thay cho mọi chỗ trước đây tra thẳng
-// DB.operationOrderDeptWorkflows[o.dept] (đã xoá hẳn).
+// DB.operationOrderDeptWorkflows[o.dept] (đã xoá hẳn). STORE: `.workflowId` vẫn lấy nguyên từ tierMap cũ
+// (biết đúng SỐ BƯỚC/tên bước qua DB.workflows) nhưng `.approvers` giờ tính lại HOÀN TOÀN từ
+// computeOperationOrderStoreMixedApproversClient() ở trên — o.dept BẮT BUỘC phải có giá trị đúng (mọi
+// nơi gọi hàm này với 1 đơn STORE thật/nháp đều đã có field dept, xem forceOwnDept ở
+// lib/createValidation.js + previewOperationOrderWorkflow() tự gán currentUser.dept cho bản nháp).
 function resolveOperationOrderWorkflowConfigForItemClient(o) {
   const locationType = o.orderLocationType === 'STORE' ? 'STORE' : 'HO';
   const tierMap = locationType === 'STORE' ? DB.operationOrderStoreTierWorkflows : DB.operationOrderHOTierWorkflows;
   const tier = computeOperationOrderTierClient(locationType, computeOperationOrderAmountClient(o));
-  return (tierMap || {})[tier] || null;
+  const tierCfg = (tierMap || {})[tier] || null;
+  if (!tierCfg) return null;
+  if (locationType !== 'STORE') return tierCfg;
+  const baseWf = DB.workflows.find(w => w.id === tierCfg.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  return { workflowId: tierCfg.workflowId, approvers: computeOperationOrderStoreMixedApproversClient(o.dept, baseWf.steps.map(s => s.order)) };
 }
-// Mirror ĐÚNG filterOperationOrderStoreApprovers() phía server (lib/workflowEngine.js) — đơn "Đặt Hàng
-// Tại Siêu Thị" chỉ approver CÙNG siêu thị (user.dept, hoặc 1 trong secondaryPositions — "Vị Trí Kiêm
-// Nhiệm") với đơn mới thực sự tính là approver, dù họ được cấu hình theo chức danh KHÔNG gắn siêu thị cụ
-// thể (VD "Giám Đốc" áp dụng chung mọi siêu thị). Trả về `null` cho đơn HO/hồ sơ khác kind (operationStoreOpenings/
-// operationRepairs, không có orderLocationType) — extraFilter=null giữ NGUYÊN hành vi cũ ở
-// resolveEffectiveStepApprovers()/isApproverForDeptWorkflow(). Đây CHỈ là lớp UI ẩn/hiện nút — server
-// (lib/workflowEngine.js) luôn tự kiểm tra lại, đây không phải điểm quyết định thật.
+// operationOrderStoreApproverFilterFor() — TRƯỚC ĐÂY lọc lại approvers theo dept của đơn (mirror
+// filterOperationOrderStoreApprovers() cũ). ĐỢT "Quy Trình Hỗn Hợp": việc lọc theo siêu thị giờ nằm
+// NGAY TRONG resolveOperationOrderWorkflowConfigForItemClient() ở trên rồi (approvers trả về đã đúng
+// phạm vi siêu thị), nên hàm này thành NO-OP (trả `null` cho MỌI đơn, kể cả STORE) — GIỮ LẠI hàm (không
+// xoá) để không phải sửa lại toàn bộ ~5 điểm gọi ở module-vanhanh.js, chỉ đổi hành vi bên trong.
 function operationOrderStoreApproverFilterFor(o) {
-  if (o?.orderLocationType !== 'STORE') return null;
-  return (username) => {
-    const u = (DB.users || []).find(x => x.username === username);
-    if (!u) return false;
-    if (u.dept === o.dept) return true;
-    return (u.secondaryPositions || []).some(sp => sp.dept === o.dept);
-  };
+  return null;
 }
 
 // ==========================================

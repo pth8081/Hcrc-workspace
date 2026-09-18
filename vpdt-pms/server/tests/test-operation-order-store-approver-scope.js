@@ -1,27 +1,32 @@
 // server/tests/test-operation-order-store-approver-scope.js
 //
-// Test THUẦN Node (không Playwright/SQL Server) cho đợt "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị"
-// (10/2026, theo yêu cầu người dùng nguyên văn: "siêu thị nào tự duyệt siêu thị đó nhận biêt bằng phân
-// quyền phòng , siêu thị" — VD gán chức danh "Giám Đốc" KHÔNG gắn siêu thị cụ thể cho 1 người đang có
-// dept = "Siêu Thị A" thì mặc định chỉ được duyệt đơn của Siêu Thị A, không phải mọi siêu thị).
+// Test THUẦN Node (không Playwright/SQL Server) cho cơ chế "Quy Trình Hỗn Hợp" (10/2026, THAY HẲN cơ chế
+// cũ "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" — filterOperationOrderStoreApprovers(), đã xoá) —
+// người duyệt của đơn "Đặt Hàng Tại Siêu Thị" giờ tra 100% từ appData.operationOrderStoreMixedApprovalRules,
+// KHÔNG còn đọc approvers/approverMode/approversByPosition của operationOrderStoreTierWorkflows nữa (tier
+// config chỉ còn quyết định SỐ BƯỚC qua workflowId).
 //
-// Xem lib/workflowEngine.js::filterOperationOrderStoreApprovers()/resolveOperationOrderWorkflow() cho
-// cơ chế đầy đủ + lý do thiết kế (KHÔNG đọc/phụ thuộc Cơ Cấu Tổ Chức — thuần phân quyền phẳng
-// jobTitle/dept trên hồ sơ Người Dùng, dùng CHUNG applyWorkflowAction() nên test qua đây phủ luôn nhánh
-// approve/reject thật, không chỉ hàm resolve).
+// Xem lib/workflowEngine.js::resolveOperationOrderStoreMixedApprovers()/
+// resolveOperationOrderStoreMixedApprovalRuleUsernames()/resolveOperationOrderWorkflow() cho cơ chế đầy
+// đủ + lý do thiết kế (KHÔNG đọc/phụ thuộc Cơ Cấu Tổ Chức — thuần phân quyền phẳng jobTitle/dept trên hồ
+// sơ Người Dùng + cấu hình dòng Quy Trình Hỗn Hợp, dùng CHUNG applyWorkflowAction() nên test qua đây phủ
+// luôn nhánh approve/reject thật, không chỉ hàm resolve).
 //
 // Phủ:
-//   1. PEOPLE mode (chọn tay username): approver có dept KHỚP đơn -> duyệt được; dept KHÔNG khớp và
-//      không có secondaryPositions khớp -> bị chặn 403, dù được liệt kê approver hợp lệ ở tier đó.
-//   2. secondaryPositions ("Vị Trí Kiêm Nhiệm"): approver có dept CHÍNH khác đơn nhưng có 1 secondaryPositions
-//      khớp đúng dept của đơn -> vẫn duyệt được (mở rộng phạm vi, không thay đổi danh tính chính thức).
-//   3. POSITION mode dept-less pair (VD {jobTitle:'Giám Đốc'} không gắn dept — áp dụng CHUNG mọi siêu thị
-//      ở bước resolvePositionApprovers()): sau khi resolve ra MỌI giám đốc siêu thị, lọc lại CHỈ còn giữ
-//      đúng giám đốc của ĐÚNG siêu thị đang xét — đây là kịch bản chính người dùng mô tả.
-//   4. HO hoàn toàn KHÔNG bị lọc: approver tier HO (dept bất kỳ, kể cả khác hẳn dept của đơn — HO vốn
-//      không có khái niệm siêu thị) vẫn duyệt được bình thường, không đổi hành vi cũ.
-//   5. admin vẫn duyệt được mọi đơn STORE bất kể dept (nhánh admin bypass ở applyWorkflowAction()/
-//      canApproveStep(), không đi qua filter này — regression tránh vô tình khoá luôn cả admin).
+//   1. PERSON mode, stores CÓ giá trị (ngoại lệ): chỉ đúng siêu thị liệt kê mới duyệt được, KHÔNG phụ
+//      thuộc dept của chính người đó (khác PEOPLE mode cũ) — 1 người CÓ THỂ phụ trách nhiều siêu thị nếu
+//      liệt kê nhiều.
+//   2. JOBTITLE mode, stores RỖNG (mặc định) + secondaryPositions ("Vị Trí Kiêm Nhiệm"): tự khớp theo
+//      dept CHÍNH hoặc 1 secondaryPositions của TỪNG người giữ đúng chức danh với ĐÚNG siêu thị đơn.
+//   3. JOBTITLE mode, stores RỖNG: kịch bản chính người dùng mô tả — nhiều người cùng giữ 1 chức danh,
+//      chỉ đúng người có dept khớp siêu thị đơn mới duyệt được, KHÔNG cần liệt kê tay từng siêu thị.
+//   4. Option B (đã chốt với người dùng): 1 dòng MẶC ĐỊNH (JOBTITLE, stores rỗng) + 1 dòng NGOẠI LỆ
+//      (JOBTITLE khác, có stores) cùng khớp 1 (bước, siêu thị) -> HỢP (UNION) người duyệt lại, không loại
+//      trừ nhau.
+//   5. HO hoàn toàn KHÔNG đi qua Quy Trình Hỗn Hợp: approver tier HO (dept bất kỳ) vẫn đọc thẳng
+//      operationOrderHOTierWorkflows như cũ, không đổi hành vi.
+//   6. admin vẫn duyệt được mọi đơn STORE bất kể dept (nhánh admin bypass ở applyWorkflowAction()/
+//      canApproveStep(), không đi qua Quy Trình Hỗn Hợp — regression tránh vô tình khoá luôn cả admin).
 //
 // Chạy: node server/tests/test-operation-order-store-approver-scope.js
 'use strict';
@@ -60,68 +65,69 @@ function freshOrder(overrides) {
   }, overrides);
 }
 
-// ===================== 1) PEOPLE mode: dept phải khớp mới duyệt được =====================
+// ===================== 1) PERSON mode, stores CÓ giá trị: chỉ đúng siêu thị liệt kê mới duyệt được =====================
 {
   const gdA = { username: 'gd.a', name: 'Giám Đốc A', dept: 'Siêu Thị A', perms: {} };
   const gdB = { username: 'gd.b', name: 'Giám Đốc B', dept: 'Siêu Thị B', perms: {} };
   const appData = {
     workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
     users: [gdA, gdB],
-    operationOrderStoreTierWorkflows: {
-      LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [gdA.username, gdB.username] } }
-    },
-    operationOrderHOTierWorkflows: {}
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    operationOrderHOTierWorkflows: {},
+    // gd.a chỉ được gán phụ trách "Siêu Thị A" (ngoại lệ) — gd.b hoàn toàn không có dòng nào.
+    operationOrderStoreMixedApprovalRules: [
+      { id: 1, step: 1, mode: 'PERSON', username: gdA.username, stores: ['Siêu Thị A'] }
+    ]
   };
 
-  test('PEOPLE mode: đơn Siêu Thị A, gd.a (dept khớp) duyệt được dù gd.b cũng được liệt kê chung tier', () => {
+  test('PERSON mode: đơn Siêu Thị A, gd.a (đúng siêu thị được gán) duyệt được', () => {
     const item = freshOrder({ dept: 'Siêu Thị A' });
     const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: gdA, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');
   });
-  test('PEOPLE mode: đơn Siêu Thị A, gd.b (dept KHÔNG khớp, dù được liệt kê approver tier LT10M) PHẢI bị chặn 403', () => {
+  test('PERSON mode: đơn Siêu Thị A, gd.b (không có dòng cấu hình nào) PHẢI bị chặn 403', () => {
     const item = freshOrder({ dept: 'Siêu Thị A' });
     assertThrows(
       () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: gdB, comment: '', appData }),
       403, 'Bạn không có quyền', 'gd.b duyệt nhầm đơn Siêu Thị A'
     );
   });
-  test('PEOPLE mode: resolveOperationOrderWorkflow() cho đơn Siêu Thị A chỉ trả về đúng gd.a, không có gd.b', () => {
+  test('PERSON mode: resolveOperationOrderWorkflow() cho đơn Siêu Thị A chỉ trả về đúng gd.a, không có gd.b', () => {
     const item = freshOrder({ dept: 'Siêu Thị A' });
     const resolved = resolveOperationOrderWorkflow(item, appData);
-    assert.deepStrictEqual(resolved.approvers['1'], [gdA.username]);
+    assert.deepStrictEqual(resolved.approvers[1], [gdA.username]);
   });
-  test('PEOPLE mode: đảo lại — đơn Siêu Thị B thì gd.b duyệt được, gd.a bị chặn', () => {
-    const item = freshOrder({ dept: 'Siêu Thị B' });
-    const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: gdB, comment: '', appData });
-    assert.strictEqual(transition.type, 'COMPLETED');
+  test('PERSON mode: đơn Siêu Thị B (ngoài phạm vi "stores" của gd.a) -> gd.a KHÔNG duyệt được, dù dept của chính gd.a là Siêu Thị A', () => {
+    const item = freshOrder({ id: 2, dept: 'Siêu Thị B' });
     assertThrows(
-      () => applyWorkflowAction({ moduleKey: 'operationOrders', item: freshOrder({ dept: 'Siêu Thị B' }), action: 'APPROVE', user: gdA, comment: '', appData }),
-      403, 'Bạn không có quyền', 'gd.a duyệt nhầm đơn Siêu Thị B'
+      () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: gdA, comment: '', appData }),
+      403, 'Bạn không có quyền', 'gd.a duyệt nhầm đơn Siêu Thị B ngoài phạm vi được gán'
     );
   });
 }
 
-// ===================== 2) secondaryPositions mở rộng phạm vi duyệt sang siêu thị khác =====================
+// ===================== 2) JOBTITLE mode, stores rỗng (mặc định) + secondaryPositions mở rộng phạm vi =====================
 {
   const gdVung = {
-    username: 'gd.vung', name: 'Giám Đốc Vùng', dept: 'Siêu Thị A', perms: {},
+    username: 'gd.vung', name: 'Giám Đốc Vùng', jobTitle: 'Giám Đốc', dept: 'Siêu Thị A', perms: {},
     secondaryPositions: [{ jobTitle: 'Giám Đốc', dept: 'Siêu Thị B' }]
   };
   const appData = {
     workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
     users: [gdVung],
-    operationOrderStoreTierWorkflows: {
-      LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [gdVung.username] } }
-    },
-    operationOrderHOTierWorkflows: {}
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    operationOrderHOTierWorkflows: {},
+    operationOrderStoreMixedApprovalRules: [
+      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc', stores: [] }
+    ]
   };
-  test('secondaryPositions: gd.vung (dept chính = Siêu Thị A, kiêm nhiệm Siêu Thị B) duyệt được CẢ 2 siêu thị', () => {
+  test('JOBTITLE mặc định + secondaryPositions: gd.vung (dept chính = Siêu Thị A, kiêm nhiệm Siêu Thị B) duyệt được CẢ 2 siêu thị', () => {
     const itemA = freshOrder({ dept: 'Siêu Thị A' });
     const itemB = freshOrder({ id: 2, dept: 'Siêu Thị B' });
     assert.strictEqual(applyWorkflowAction({ moduleKey: 'operationOrders', item: itemA, action: 'APPROVE', user: gdVung, comment: '', appData }).transition.type, 'COMPLETED');
     assert.strictEqual(applyWorkflowAction({ moduleKey: 'operationOrders', item: itemB, action: 'APPROVE', user: gdVung, comment: '', appData }).transition.type, 'COMPLETED');
   });
-  test('secondaryPositions: gd.vung KHÔNG duyệt được Siêu Thị C (không phải dept chính lẫn kiêm nhiệm)', () => {
+  test('JOBTITLE mặc định + secondaryPositions: gd.vung KHÔNG duyệt được Siêu Thị C (không phải dept chính lẫn kiêm nhiệm)', () => {
     const itemC = freshOrder({ id: 3, dept: 'Siêu Thị C' });
     assertThrows(
       () => applyWorkflowAction({ moduleKey: 'operationOrders', item: itemC, action: 'APPROVE', user: gdVung, comment: '', appData }),
@@ -130,38 +136,24 @@ function freshOrder(overrides) {
   });
 }
 
-// ===================== 3) POSITION mode dept-less pair — kịch bản chính người dùng mô tả =====================
+// ===================== 3) JOBTITLE mode, stores rỗng — kịch bản chính người dùng mô tả =====================
 {
-  // Chức danh "Giám Đốc" gán KHÔNG kèm siêu thị cụ thể (pair.dept rỗng) -> resolvePositionApprovers()
-  // trả về MỌI user có jobTitle "Giám Đốc" (bất kể dept) làm approver "hợp lệ chung" của tier — bước lọc
-  // filterOperationOrderStoreApprovers() PHẢI thu hẹp lại đúng theo dept của TỪNG đơn cụ thể.
-  const gdA = { username: 'gd.a2', name: 'Giám Đốc Siêu Thị A', jobTitle: 'Giám Đốc', dept: 'Siêu Thị A', perms: { canBeApprover: true } };
-  const gdB = { username: 'gd.b2', name: 'Giám Đốc Siêu Thị B', jobTitle: 'Giám Đốc', dept: 'Siêu Thị B', perms: { canBeApprover: true } };
-  const gdC = { username: 'gd.c2', name: 'Giám Đốc Siêu Thị C', jobTitle: 'Giám Đốc', dept: 'Siêu Thị C', perms: { canBeApprover: true } };
+  // Chức danh "Giám Đốc" cấu hình 1 dòng DUY NHẤT, KHÔNG kèm siêu thị cụ thể (stores rỗng = mặc định) ->
+  // TỰ ĐỘNG khớp theo dept của TỪNG người giữ đúng chức danh — không cần liệt kê tay từng siêu thị.
+  const gdA = { username: 'gd.a2', name: 'Giám Đốc Siêu Thị A', jobTitle: 'Giám Đốc', dept: 'Siêu Thị A', perms: {} };
+  const gdB = { username: 'gd.b2', name: 'Giám Đốc Siêu Thị B', jobTitle: 'Giám Đốc', dept: 'Siêu Thị B', perms: {} };
+  const gdC = { username: 'gd.c2', name: 'Giám Đốc Siêu Thị C', jobTitle: 'Giám Đốc', dept: 'Siêu Thị C', perms: {} };
   const appData = {
     workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
     users: [gdA, gdB, gdC],
-    operationOrderStoreTierWorkflows: {
-      LT10M: {
-        workflowId: 'WF_1STEP',
-        approverMode: { 1: 'POSITION' },
-        approversByPosition: { 1: [{ jobTitle: 'Giám Đốc' }] } // KHÔNG gắn dept -> áp dụng mọi siêu thị
-      }
-    },
-    operationOrderHOTierWorkflows: {}
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    operationOrderHOTierWorkflows: {},
+    operationOrderStoreMixedApprovalRules: [
+      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc', stores: [] }
+    ]
   };
 
-  test('POSITION mode dept-less "Giám Đốc": resolvePositionApprovers() thô trả về CẢ 3 giám đốc (chưa lọc theo siêu thị)', () => {
-    const { resolveStepApproverUsernames } = require('../lib/positionApprovers');
-    const raw = resolveStepApproverUsernames(appData.operationOrderStoreTierWorkflows.LT10M, 1, appData.users);
-    assert.deepStrictEqual(raw.sort(), [gdA.username, gdB.username, gdC.username].sort());
-  });
-  test('POSITION mode dept-less "Giám Đốc": SAU lọc siêu thị, đơn Siêu Thị A chỉ còn đúng gd.a2', () => {
-    const item = freshOrder({ dept: 'Siêu Thị A' });
-    const resolved = resolveOperationOrderWorkflow(item, appData);
-    assert.deepStrictEqual(resolved.approvers['1'], [gdA.username]);
-  });
-  test('POSITION mode dept-less "Giám Đốc": nv siêu thị A lập đơn -> gd.a2 mặc định được duyệt (đúng kịch bản người dùng mô tả), gd.b2/gd.c2 bị chặn dù cùng chức danh', () => {
+  test('JOBTITLE mặc định "Giám Đốc": nv siêu thị A lập đơn -> gd.a2 mặc định được duyệt, gd.b2/gd.c2 bị chặn dù cùng chức danh', () => {
     const item = freshOrder({ dept: 'Siêu Thị A' });
     const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: gdA, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');
@@ -174,14 +166,53 @@ function freshOrder(overrides) {
       403, 'Bạn không có quyền', 'gd.c2 (Giám Đốc Siêu Thị C) duyệt nhầm đơn Siêu Thị A'
     );
   });
-  test('POSITION mode dept-less "Giám Đốc": đổi sang đơn Siêu Thị B thì CHỈ gd.b2 duyệt được', () => {
+  test('JOBTITLE mặc định "Giám Đốc": đổi sang đơn Siêu Thị B thì CHỈ gd.b2 duyệt được', () => {
     const item = freshOrder({ id: 4, dept: 'Siêu Thị B' });
     const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: gdB, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');
   });
+  test('resolveOperationOrderWorkflow(): đơn Siêu Thị A chỉ trả về đúng gd.a2', () => {
+    const item = freshOrder({ dept: 'Siêu Thị A' });
+    const resolved = resolveOperationOrderWorkflow(item, appData);
+    assert.deepStrictEqual(resolved.approvers[1], [gdA.username]);
+  });
 }
 
-// ===================== 4) HO hoàn toàn KHÔNG bị lọc theo dept =====================
+// ===================== 4) Phương án B: dòng MẶC ĐỊNH + dòng NGOẠI LỆ cùng khớp -> HỢP (UNION) =====================
+{
+  const gdSt = { username: 'gd.st', name: 'Giám Đốc ST', jobTitle: 'Giám Đốc siêu thị', dept: 'Siêu Thị Q3', perms: {} };
+  const pgdSt = { username: 'pgd.st', name: 'Phó Giám Đốc ST', jobTitle: 'Phó Giám Đốc siêu thị', dept: 'Siêu Thị Q3', perms: {} };
+  const appData = {
+    workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+    users: [gdSt, pgdSt],
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    operationOrderHOTierWorkflows: {},
+    operationOrderStoreMixedApprovalRules: [
+      // Mặc định: Giám Đốc siêu thị áp dụng MỌI siêu thị.
+      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc siêu thị', stores: [] },
+      // Ngoại lệ: RIÊNG "Siêu Thị Q3" thêm Phó Giám Đốc siêu thị cũng được duyệt (KHÔNG thay thế dòng trên).
+      { id: 2, step: 1, mode: 'JOBTITLE', jobTitle: 'Phó Giám Đốc siêu thị', stores: ['Siêu Thị Q3'] }
+    ]
+  };
+  test('Phương án B: đơn Siêu Thị Q3 -> CẢ gd.st (mặc định) LẪN pgd.st (ngoại lệ) đều duyệt được', () => {
+    const resolved = resolveOperationOrderWorkflow(freshOrder({ dept: 'Siêu Thị Q3' }), appData);
+    assert.deepStrictEqual(resolved.approvers[1].sort(), [gdSt.username, pgdSt.username].sort());
+  });
+  test('Phương án B: đơn Siêu Thị Q3 -> pgd.st (ngoại lệ) duyệt được thật (không bị 403) — bước có 2 approver (gd.st + pgd.st) nên cần ĐỒNG PHÊ DUYỆT cả 2, 1 lượt duyệt đầu trả về PARTIAL_APPROVE chứ chưa COMPLETED', () => {
+    const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: freshOrder({ dept: 'Siêu Thị Q3' }), action: 'APPROVE', user: pgdSt, comment: '', appData });
+    assert.strictEqual(transition.type, 'PARTIAL_APPROVE');
+  });
+  test('Phương án B: đơn Siêu Thị Q5 (ngoài phạm vi ngoại lệ) -> CHỈ gd.st (mặc định) duyệt được, pgd.st bị chặn', () => {
+    const resolved = resolveOperationOrderWorkflow(freshOrder({ id: 5, dept: 'Siêu Thị Q5' }), appData);
+    assert.deepStrictEqual(resolved.approvers[1], []); // gd.st có dept Siêu Thị Q3 (không khớp Q5) -> mặc định cũng rỗng ở đây
+    assertThrows(
+      () => applyWorkflowAction({ moduleKey: 'operationOrders', item: freshOrder({ id: 6, dept: 'Siêu Thị Q5' }), action: 'APPROVE', user: pgdSt, comment: '', appData }),
+      403, 'Bạn không có quyền', 'pgd.st duyệt nhầm Siêu Thị Q5 ngoài phạm vi ngoại lệ'
+    );
+  });
+}
+
+// ===================== 5) HO hoàn toàn KHÔNG đi qua Quy Trình Hỗn Hợp =====================
 {
   const hoApprover = { username: 'ho.duyet', name: 'Duyệt HO', dept: 'Ban Giám Đốc', perms: {} };
   const appData = {
@@ -190,7 +221,8 @@ function freshOrder(overrides) {
     operationOrderStoreTierWorkflows: {},
     operationOrderHOTierWorkflows: {
       LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [hoApprover.username] } }
-    }
+    },
+    operationOrderStoreMixedApprovalRules: [] // rỗng — HO không đọc field này nên không ảnh hưởng gì.
   };
   test('HO: approver dept "Ban Giám Đốc" duyệt được đơn HO dept "Phòng Vận Hành" (khác hẳn dept) — không có khái niệm siêu thị, KHÔNG bị lọc', () => {
     const item = freshOrder({ dept: 'Phòng Vận Hành', orderLocationType: 'HO', amount: 5000000 });
@@ -200,20 +232,21 @@ function freshOrder(overrides) {
   test('HO: resolveOperationOrderWorkflow() KHÔNG lọc approvers theo dept (trả về nguyên approver dù dept khác)', () => {
     const item = freshOrder({ dept: 'Phòng Vận Hành', orderLocationType: 'HO', amount: 5000000 });
     const resolved = resolveOperationOrderWorkflow(item, appData);
-    assert.deepStrictEqual(resolved.approvers['1'], [hoApprover.username]);
+    assert.deepStrictEqual(resolved.approvers[1], [hoApprover.username]);
   });
 }
 
-// ===================== 5) admin bypass vẫn hoạt động bình thường (không bị filter này chặn nhầm) =====================
+// ===================== 6) admin bypass vẫn hoạt động bình thường (không bị Quy Trình Hỗn Hợp chặn nhầm) =====================
 {
   const admin = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true } };
   const appData = {
     workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
     users: [admin],
-    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [] } } },
-    operationOrderHOTierWorkflows: {}
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    operationOrderHOTierWorkflows: {},
+    operationOrderStoreMixedApprovalRules: []
   };
-  test('admin: vẫn duyệt được đơn Siêu Thị bất kỳ dù không nằm trong danh sách approvers[] nào (nhánh admin bypass ở applyWorkflowAction())', () => {
+  test('admin: vẫn duyệt được đơn Siêu Thị bất kỳ dù không nằm trong Quy Trình Hỗn Hợp nào (nhánh admin bypass ở applyWorkflowAction())', () => {
     const item = freshOrder({ dept: 'Siêu Thị Bất Kỳ' });
     const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: admin, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');

@@ -1,12 +1,12 @@
 // server/tests/test-operation-order-noapprover-warning.js
 //
-// Regression test cho lỗi ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): tác dụng phụ của bản
-// vá "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (filterOperationOrderStoreApprovers(),
-// lib/workflowEngine.js) — lọc approver theo đúng siêu thị (item.dept) có thể vô tình lọc RỖNG danh
-// sách duyệt bước 1 nếu admin cấu hình approver cho mức giá trị đó nhưng KHÔNG ai trong số họ có
-// dept/secondaryPositions khớp đúng siêu thị vừa đặt hàng — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng
-// không một người duyệt "thường" nào thấy được để xử lý (chỉ admin bypass mới duyệt được) — trước đây
-// KHÔNG có cảnh báo gì, đơn "treo" âm thầm.
+// Regression test cho lỗi ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): lọc approver theo đúng
+// siêu thị của đơn "Đặt Hàng Tại Siêu Thị" có thể vô tình lọc RỖNG danh sách duyệt bước 1 nếu admin cấu
+// hình 1 dòng "Quy Trình Hỗn Hợp" (operationOrderStoreMixedApprovalRules, xem lib/workflowEngine.js
+// resolveOperationOrderStoreMixedApprovers() — đợt "Quy Trình Hỗn Hợp" 10/2026 đã thay hẳn cơ chế cũ
+// filterOperationOrderStoreApprovers()) nhưng người/chức danh đó KHÔNG áp dụng cho đúng siêu thị vừa đặt
+// hàng — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng không một người duyệt "thường" nào thấy được để xử
+// lý (chỉ admin bypass mới duyệt được) — trước đây KHÔNG có cảnh báo gì, đơn "treo" âm thầm.
 // Đã vá: routes/create.js sau khi tạo THÀNH CÔNG 1 operationOrders STORE, tự tính lại danh sách approver
 // bước 1 (dùng đúng MODULE_CONFIGS.operationOrders.resolveWfConfig() — cùng hàm applyWorkflowAction()
 // dùng khi duyệt, không viết lại luật riêng) — nếu rỗng thì trả kèm `warning` cho client + ghi 1 dòng
@@ -36,21 +36,28 @@ function check(name, cond, detail) {
   else { fail++; console.log(`FAIL: ${name}${detail !== undefined ? ' -- got: ' + JSON.stringify(detail) : ''}`); }
 }
 
-// gd.a: Giám Đốc Siêu Thị A — CHỈ được cấu hình làm approver tier LT10M, KHÔNG hề gắn dept/secondaryPositions
-// nào khớp "Siêu Thị B" -> đơn STORE của Siêu Thị B ở mức LT10M sẽ lọc approver về RỖNG (kịch bản lỗi).
+// gd.a: Giám Đốc Siêu Thị A — CHỈ được cấu hình ở Quy Trình Hỗn Hợp phụ trách ĐÚNG "Siêu Thị A" (dòng
+// PERSON mode, stores=['Siêu Thị A'], xem APP_DATA bên dưới) -> đơn STORE của Siêu Thị B sẽ lọc approver
+// bước 1 về RỖNG (kịch bản lỗi).
 const GD_A = { username: 'gd.a', name: 'Giám Đốc Siêu Thị A', dept: 'Siêu Thị A', perms: { operationOrderCreate: true }, active: true };
-// gd.b: đúng dept Siêu Thị B, CŨNG được cấu hình approver tier LT10M -> lọc ra ĐÚNG 1 người, không rỗng.
 const GD_B = { username: 'gd.b', name: 'Giám Đốc Siêu Thị B', dept: 'Siêu Thị B', perms: { operationOrderCreate: true }, active: true };
 const CREATOR_B = { username: 'nv.b', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu Thị B', perms: { operationOrderCreate: true }, active: true };
 const USERS = [GD_A, GD_B, CREATOR_B];
 
 const APP_DATA = {
   users: USERS,
-  workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  // workflowId vẫn cần (xác định SỐ BƯỚC/tên bước) — approvers/approverMode/approversByPosition của tier
+  // KHÔNG còn được đọc cho STORE nữa (xem resolveOperationOrderWorkflow(), lib/workflowEngine.js).
   operationOrderStoreTierWorkflows: {
-    LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [GD_A.username] } }
+    LT10M: { workflowId: 'WF_1STEP' }
   },
-  operationOrderHOTierWorkflows: {}
+  operationOrderHOTierWorkflows: {},
+  workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  // Quy Trình Hỗn Hợp: 1 dòng PERSON mode duy nhất, CHỈ áp dụng "Siêu Thị A" (ngoại lệ, stores có giá
+  // trị) — mirror đúng kịch bản gốc "approver duy nhất không khớp siêu thị của đơn -> lọc rỗng".
+  operationOrderStoreMixedApprovalRules: [
+    { id: 1, step: 1, mode: 'PERSON', username: GD_A.username, stores: ['Siêu Thị A'] }
+  ]
 };
 
 const systemLogEntries = [];
@@ -130,8 +137,8 @@ function orderPayload(overrides) {
 async function main() {
   const server = await startApp();
   try {
-    // ===== Kịch bản 1: đơn STORE của Siêu Thị B — approver duy nhất được cấu hình (gd.a) không khớp
-    // dept nào của Siêu Thị B -> filterOperationOrderStoreApprovers() lọc RỖNG -> PHẢI có warning. =====
+    // ===== Kịch bản 1: đơn STORE của Siêu Thị B — approver duy nhất được cấu hình (gd.a, Quy Trình Hỗn
+    // Hợp chỉ phụ trách "Siêu Thị A") không khớp Siêu Thị B -> lọc RỖNG -> PHẢI có warning. =====
     resetRecords();
     systemLogEntries.length = 0;
     const r1 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ }), CREATOR_B);

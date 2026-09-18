@@ -115,10 +115,12 @@ test('computeOperationOrderAmount(): cả 2 field đều thiếu -> 0, không th
 // ===================== 3) Siêu Thị/HO ĐỘC LẬP HOÀN TOÀN — approver 1 bên không duyệt được bên kia =====================
 const STORE_APPROVER = 'tp.sieuthi';
 const HO_APPROVER = 'tp.ho';
-// users: bắt buộc từ đợt "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (10/2026, xem
-// lib/workflowEngine.js::filterOperationOrderStoreApprovers()) — đơn STORE giờ chỉ giữ approver có
-// dept KHỚP đúng dept của đơn (mặc định 'Phòng Vận Hành' ở freshOrder() bên dưới). HO không lọc theo
-// dept nên HO_APPROVER không cần khớp gì (test cố tình để dept khác hẳn, xác nhận không bị đụng tới).
+// users: đợt "Quy Trình Hỗn Hợp" (10/2026, xem lib/workflowEngine.js::
+// resolveOperationOrderStoreMixedApprovers()) — người duyệt của đơn STORE giờ tra từ
+// operationOrderStoreMixedApprovalRules (KHÔNG còn theo dept/tier như filterOperationOrderStoreApprovers()
+// cũ đã xoá) — dept của user không còn ảnh hưởng gì tới việc STORE_APPROVER có duyệt được hay không ở
+// khối test này (đã có test riêng cho scoping theo siêu thị, xem test-operation-order-store-approver-scope.js).
+// HO vẫn giữ NGUYÊN cơ chế cũ (operationOrderHOTierWorkflows[...].approvers, theo TỪNG tier) — không đổi.
 const appData = {
   workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
   users: [
@@ -126,11 +128,16 @@ const appData = {
     { username: HO_APPROVER, name: 'Trưởng Phòng HO', dept: 'Ban Giám Đốc', perms: {} }
   ],
   operationOrderStoreTierWorkflows: {
-    LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [STORE_APPROVER] } }
+    LT10M: { workflowId: 'WF_1STEP' }
   },
   operationOrderHOTierWorkflows: {
     LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [HO_APPROVER] } }
-  }
+  },
+  // Quy Trình Hỗn Hợp: 1 dòng PERSON mode, stores rỗng -> áp dụng Bước 1 cho MỌI siêu thị/MỌI tier STORE
+  // (đúng thiết kế mới: approver không còn phân biệt theo tier, chỉ theo BƯỚC — số bước mới phụ thuộc tier).
+  operationOrderStoreMixedApprovalRules: [
+    { id: 1, step: 1, mode: 'PERSON', username: STORE_APPROVER, stores: [] }
+  ]
 };
 function freshOrder(overrides) {
   return Object.assign({
@@ -166,30 +173,32 @@ test('Đơn HO (5tr, tier LT100M): approver Siêu Thị KHÔNG được quyền 
     403, 'Bạn không có quyền', 'HO order approved by STORE approver'
   );
 });
-test('Cùng 1 số tiền (50 triệu) nhưng khác orderLocationType -> rơi vào 2 tier KHÁC NHAU (STORE: mức giữa, HO: mức thấp) -> 2 tập approver khác nhau', () => {
+test('Cùng 1 số tiền (50 triệu) nhưng khác orderLocationType -> rơi vào 2 tier KHÁC NHAU (STORE: mức giữa, HO: mức thấp)', () => {
   const storeItem = freshOrder({ orderLocationType: 'STORE', amount: 50000000 });
   const hoItem = freshOrder({ orderLocationType: 'HO', amount: 50000000 });
-  // STORE 50tr rơi vào FROM10M_TO100M — CHƯA cấu hình approver nào (appData chỉ có LT10M) -> approvers rỗng -> 403 với cả STORE_APPROVER lẫn HO_APPROVER (không ai trong danh sách rỗng).
-  assertThrows(
-    () => applyWorkflowAction({ moduleKey: 'operationOrders', item: storeItem, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData }),
-    403, 'Bạn không có quyền', 'STORE 50tr (tier FROM10M_TO100M chưa cấu hình) phải chặn mọi người kể cả approver LT10M'
-  );
-  // HO 50tr rơi vào LT100M (ĐÃ cấu hình HO_APPROVER) -> duyệt được bình thường.
+  // STORE 50tr rơi vào tier FROM10M_TO100M — tier này CHƯA có entry riêng trong operationOrderStoreTierWorkflows
+  // (chỉ có LT10M) nên rơi về mẫu quy trình mặc định 1 bước (flatWorkflowConfigToSteps(null,...)) — ĐÚNG
+  // THIẾT KẾ MỚI (đợt "Quy Trình Hỗn Hợp"): người duyệt Bước 1 KHÔNG còn phụ thuộc tier, STORE_APPROVER
+  // (cấu hình ở Quy Trình Hỗn Hợp, áp dụng mọi siêu thị/mọi tier) vẫn duyệt được bình thường dù tier khác
+  // hẳn LT10M — khác hẳn hành vi CŨ (mỗi tier có 1 tập approver riêng, xem git history bản trước đợt này).
+  const { transition: storeTransition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: storeItem, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData });
+  assert.strictEqual(storeTransition.type, 'COMPLETED', 'STORE 50tr vẫn duyệt được (Quy Trình Hỗn Hợp không phân biệt theo tier, chỉ theo Bước)');
+  // HO 50tr rơi vào LT100M (ĐÃ cấu hình HO_APPROVER) -> duyệt được bình thường — HO GIỮ NGUYÊN cơ chế cũ
+  // (approver riêng theo TỪNG tier), không đổi.
   const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: hoItem, action: 'APPROVE', user: makeUser(HO_APPROVER), comment: '', appData });
   assert.strictEqual(transition.type, 'COMPLETED', 'HO 50tr (tier LT100M đã cấu hình) phải duyệt được bình thường');
 });
 
 // ===================== 4) Server LUÔN tự tính lại tier — KHÔNG tin field lạ client tự gắn =====================
 test('Tamper: item mang field lạ mô phỏng tier THẤP (vd client tự gắn orderTier:"LT10M") nhưng amount thật rơi vào GTE100M -> server vẫn tính lại ĐÚNG theo amount thật, KHÔNG đọc field lạ đó', () => {
-  // 250 triệu, orderLocationType STORE -> tier THẬT phải là GTE100M — appData CHƯA cấu hình approver nào
-  // cho GTE100M (chỉ có LT10M), nên STORE_APPROVER (chỉ được gán ở LT10M) PHẢI bị chặn — nếu server lỡ
-  // tin field "orderTier" giả client gắn thêm (LT10M) thay vì tự tính lại, STORE_APPROVER sẽ bị duyệt
-  // NHẦM được (lỗ hổng leo thang quyền) — test này xác nhận điều đó KHÔNG xảy ra.
+  // 250 triệu, orderLocationType STORE -> tier THẬT phải là GTE100M (server tự tính lại, KHÔNG đọc field
+  // lạ "orderTier"/"tier" client tự gắn) — computeOperationOrderTier() là điểm quyết định thật, xác nhận
+  // ngay dưới. Người duyệt của STORE giờ theo Quy Trình Hỗn Hợp (không phân biệt tier, xem test HO tương
+  // đương ngay bên dưới cho phần "approver bị chặn đúng tier" — HO vẫn giữ approver riêng theo tier).
   const item = freshOrder({ orderLocationType: 'STORE', amount: 250000000, orderTier: 'LT10M', tier: 'LT10M' });
-  assertThrows(
-    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData }),
-    403, 'Bạn không có quyền', 'Field lạ "orderTier" client tự gắn KHÔNG được server tin — vẫn phải chặn đúng theo amount thật (GTE100M, chưa cấu hình approver)'
-  );
+  assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'GTE100M', 'Field lạ client tự gắn KHÔNG được server tin — vẫn phải tính đúng GTE100M theo amount thật');
+  const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData });
+  assert.strictEqual(transition.type, 'COMPLETED', 'STORE_APPROVER (Quy Trình Hỗn Hợp, áp dụng mọi tier) vẫn duyệt được — field giả không ảnh hưởng gì, chỉ minh hoạ tier vẫn tính đúng');
 });
 test('paymentTotalAmount CAO hơn amount (VD gồm VAT/phụ phí) hợp lệ đẩy tier LÊN cao hơn — đúng thiết kế công khai (max(amount, paymentTotalAmount))', () => {
   // paymentTotalAmount (250tr) > amount (5tr) -> max = 250tr -> tier HO phải là GTE100M (chưa cấu hình approver nào ở appData) -> chặn cả HO_APPROVER (chỉ được gán ở LT100M).
@@ -210,11 +219,10 @@ test('Tamper STORE: amount thật 200 triệu (GTE100M) + paymentTotalAmount gi�
   const item = freshOrder({ orderLocationType: 'STORE', amount: 200000000, paymentTotalAmount: 5000000 });
   assert.strictEqual(computeOperationOrderAmount(item), 200000000, 'max(200tr, 5tr) phải = 200tr, không được kéo xuống 5tr');
   assert.strictEqual(computeOperationOrderTier('STORE', computeOperationOrderAmount(item)), 'GTE100M');
-  // GTE100M chưa cấu hình approver nào ở appData (chỉ có LT10M) -> STORE_APPROVER (chỉ gán ở LT10M) PHẢI bị chặn dù paymentTotalAmount khai giả 5tr rơi đúng mức của họ.
-  assertThrows(
-    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData }),
-    403, 'Bạn không có quyền', 'STORE: paymentTotalAmount giả thấp không được né tier cao của amount thật'
-  );
+  // Người duyệt STORE không còn tier-scoped (Quy Trình Hỗn Hợp) — phần "approver bị chặn đúng tier" đã
+  // chuyển hẳn sang test HO tương đương ngay bên dưới (HO vẫn giữ approver riêng theo TỪNG tier).
+  const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData });
+  assert.strictEqual(transition.type, 'COMPLETED');
 });
 test('Tamper HO: amount thật 200 triệu (GTE100M) + paymentTotalAmount giả mạo THẤP 5 triệu -> tier vẫn phải tính theo 200tr (GTE100M), KHÔNG rơi xuống LT100M', () => {
   const item = freshOrder({ orderLocationType: 'HO', amount: 200000000, paymentTotalAmount: 5000000 });
@@ -272,49 +280,38 @@ test('STORE: paymentTotalAmount giả mạo THẤP KHÔNG né được tier cao 
 });
 
 // ===================== 4c) "Tổng Giá Trị Thanh Toán (VNĐ)" (paymentTotalAmount) THỰC SỰ là field lái
-// tier + quyền duyệt — thay đổi CHỈ field này (amount giữ nguyên thấp) qua từng mốc phải đổi hẳn tập
-// approver hợp lệ, chạy qua applyWorkflowAction() thật (không mock) =====================
-const TIER1_APPROVER = 'duyet.tier1', TIER2_APPROVER = 'duyet.tier2', TIER3_APPROVER = 'duyet.tier3';
+// tier + quyền duyệt — thay đổi CHỈ field này (amount giữ nguyên thấp) qua mốc phải đổi hẳn tập approver
+// hợp lệ, chạy qua applyWorkflowAction() thật (không mock). CHUYỂN sang test HO (thay vì STORE như trước
+// đợt "Quy Trình Hỗn Hợp"): người duyệt STORE giờ theo BƯỚC (không còn theo TỪNG tier riêng, xem chú
+// thích ở khối 3 phía trên) nên không còn "đổi tier = đổi hẳn tập approver" cho STORE — HO vẫn GIỮ
+// NGUYÊN cơ chế approver riêng theo từng tier (operationOrderHOTierWorkflows), đúng khuôn cũ 100%. =====================
+const TIER1_APPROVER = 'duyet.tier1', TIER2_APPROVER = 'duyet.tier2';
 const appDataFieldDriven = {
   workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
-  // dept khớp đúng freshOrder() mặc định ('Phòng Vận Hành') — bắt buộc từ đợt lọc theo siêu thị (xem
-  // chú thích ở khối 3 phía trên), nếu không cả 3 approver đều bị lọc hết dù đúng tier.
   users: [
-    { username: TIER1_APPROVER, name: 'Duyệt Tier 1', dept: 'Phòng Vận Hành', perms: {} },
-    { username: TIER2_APPROVER, name: 'Duyệt Tier 2', dept: 'Phòng Vận Hành', perms: {} },
-    { username: TIER3_APPROVER, name: 'Duyệt Tier 3', dept: 'Phòng Vận Hành', perms: {} }
+    { username: TIER1_APPROVER, name: 'Duyệt Tier 1', dept: 'Ban Giám Đốc', perms: {} },
+    { username: TIER2_APPROVER, name: 'Duyệt Tier 2', dept: 'Ban Giám Đốc', perms: {} }
   ],
-  operationOrderStoreTierWorkflows: {
-    LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER1_APPROVER] } },
-    FROM10M_TO100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER2_APPROVER] } },
-    GTE100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER3_APPROVER] } }
-  },
-  operationOrderHOTierWorkflows: {}
+  operationOrderStoreTierWorkflows: {},
+  operationOrderHOTierWorkflows: {
+    LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER1_APPROVER] } },
+    GTE100M: { workflowId: 'WF_1STEP', approvers: { 1: [TIER2_APPROVER] } }
+  }
 };
-test('"Tổng Giá Trị Thanh Toán (VNĐ)" là field lái tier: amount=1tr (thấp) + paymentTotalAmount=1tr (chưa vượt mốc nào) -> tier LT10M, chỉ TIER1_APPROVER duyệt được', () => {
-  const item = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 1000000 });
+test('"Tổng Giá Trị Thanh Toán (VNĐ)" là field lái tier (HO): amount=1tr (thấp) + paymentTotalAmount=1tr (chưa vượt mốc) -> tier LT100M, chỉ TIER1_APPROVER duyệt được', () => {
+  const item = freshOrder({ orderLocationType: 'HO', amount: 1000000, paymentTotalAmount: 1000000 });
   const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(TIER1_APPROVER), comment: '', appData: appDataFieldDriven });
   assert.strictEqual(transition.type, 'COMPLETED');
 });
-test('Đổi CHỈ paymentTotalAmount (amount giữ nguyên 1tr) lên 50 triệu -> vượt mốc 10tr -> tier đổi sang FROM10M_TO100M -> TIER1_APPROVER bị chặn 403, TIER2_APPROVER duyệt được', () => {
-  const itemDenied = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 50000000 });
+test('Đổi CHỈ paymentTotalAmount (amount giữ nguyên 1tr) lên 150 triệu -> vượt mốc 100tr -> tier đổi sang GTE100M -> TIER1_APPROVER bị chặn 403, TIER2_APPROVER duyệt được', () => {
+  const itemDenied = freshOrder({ orderLocationType: 'HO', amount: 1000000, paymentTotalAmount: 150000000 });
   assertThrows(
     () => applyWorkflowAction({ moduleKey: 'operationOrders', item: itemDenied, action: 'APPROVE', user: makeUser(TIER1_APPROVER), comment: '', appData: appDataFieldDriven }),
-    403, 'Bạn không có quyền', 'paymentTotalAmount=50tr phải đẩy sang tier giữa, chặn approver tier thấp'
+    403, 'Bạn không có quyền', 'paymentTotalAmount=150tr phải đẩy sang tier cao, chặn approver tier thấp'
   );
-  const itemAllowed = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 50000000 });
+  const itemAllowed = freshOrder({ orderLocationType: 'HO', amount: 1000000, paymentTotalAmount: 150000000 });
   const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: itemAllowed, action: 'APPROVE', user: makeUser(TIER2_APPROVER), comment: '', appData: appDataFieldDriven });
-  assert.strictEqual(transition.type, 'COMPLETED', 'TIER2_APPROVER phải duyệt được đúng tier FROM10M_TO100M');
-});
-test('Đổi CHỈ paymentTotalAmount (amount giữ nguyên 1tr) lên 150 triệu -> vượt mốc 100tr -> tier đổi sang GTE100M -> TIER2_APPROVER bị chặn 403, TIER3_APPROVER duyệt được', () => {
-  const itemDenied = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 150000000 });
-  assertThrows(
-    () => applyWorkflowAction({ moduleKey: 'operationOrders', item: itemDenied, action: 'APPROVE', user: makeUser(TIER2_APPROVER), comment: '', appData: appDataFieldDriven }),
-    403, 'Bạn không có quyền', 'paymentTotalAmount=150tr phải đẩy sang tier cao nhất, chặn approver tier giữa'
-  );
-  const itemAllowed = freshOrder({ orderLocationType: 'STORE', amount: 1000000, paymentTotalAmount: 150000000 });
-  const { transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item: itemAllowed, action: 'APPROVE', user: makeUser(TIER3_APPROVER), comment: '', appData: appDataFieldDriven });
-  assert.strictEqual(transition.type, 'COMPLETED', 'TIER3_APPROVER phải duyệt được đúng tier GTE100M');
+  assert.strictEqual(transition.type, 'COMPLETED', 'TIER2_APPROVER phải duyệt được đúng tier GTE100M');
 });
 
 // ===================== 5) migrateOperationOrdersDefaultLocationType() (seedDefaults.js) =====================

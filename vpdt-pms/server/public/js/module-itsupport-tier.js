@@ -13,9 +13,19 @@ function renderItPriceTierWorkflowTab(container) {
   // cần container đã tồn tại trong DOM, nên gom danh sách cần render widget vào đây rồi render THẬT SAU
   // khi container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()), thay vì dựng checkbox
   // ngay trong lúc build chuỗi HTML như trước.
+  // OPERATION_ORDER_STORE (đợt "Quy Trình Hỗn Hợp", 10/2026): danh sách approver/"Theo vị trí" cấu hình
+  // ở CÁC THẺ BÊN DƯỚI của module này KHÔNG còn được đọc để xác định người duyệt nữa — chỉ còn "Chọn
+  // mẫu quy trình" (số bước) là có tác dụng thật. Người duyệt của đơn "Đặt Hàng Tại Siêu Thị" giờ tra
+  // hoàn toàn từ appData.operationOrderStoreMixedApprovalRules (xem lib/workflowEngine.js
+  // resolveOperationOrderStoreMixedApprovers()) — cấu hình ở sub-tab "⚙️ Quy Trình Hỗn Hợp" riêng. Banner
+  // này CHỈ hiện cho đúng module STORE (HO và các module khác vẫn đọc approvers ở đây như cũ).
+  const mixedApprovalNoticeHTML = activeWfMod === 'OPERATION_ORDER_STORE'
+    ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Danh sách người duyệt/"Theo vị trí" cấu hình ở các thẻ bên dưới <b>KHÔNG còn tác dụng</b> — người duyệt "Đặt Hàng Tại Siêu Thị" nay cấu hình ở sub-tab <b>"⚙️ Quy Trình Hỗn Hợp"</b> (Hệ Thống). Ở đây chỉ còn "Chọn mẫu quy trình" (số bước theo mức giá trị) là có tác dụng thật.</div>`
+    : '';
+
   const wfPickersToRender = [];
   const wfPositionPickersToRender = [];
-  container.innerHTML = modConfig.fixedTiers.map(tier => {
+  container.innerHTML = mixedApprovalNoticeHTML + modConfig.fixedTiers.map(tier => {
     const savedConfig = tierWfMap[tier.key] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
     const pendingKey = `TIER_${tier.key}`;
     const isPending = pendingWfTemplate[pendingKey] !== undefined && pendingWfTemplate[pendingKey] !== savedConfig.workflowId;

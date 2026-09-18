@@ -420,7 +420,11 @@ function previewOperationOrderWorkflow() {
   if (!amount && !paymentTotalAmount) {
     return alert('Vui lòng nhập ít nhất 1 hạng mục (có Số lượng và Đơn giá) để xác định mức giá trị áp dụng quy trình!');
   }
-  const draft = { orderLocationType: activeOperationOrderSubTab, amount, paymentTotalAmount };
+  // dept: đơn STORE luôn forceOwnDept (lib/createValidation.js) nên siêu thị của đơn LUÔN là
+  // currentUser.dept — cần gán ở đây để resolveOperationOrderWorkflowConfigForItemClient() (core.js)
+  // tính đúng người duyệt theo Quy Trình Hỗn Hợp (đợt 10/2026, trước đây bản nháp không cần field này vì
+  // approver hiện thẳng nguyên tierMap chưa lọc theo siêu thị).
+  const draft = { orderLocationType: activeOperationOrderSubTab, amount, paymentTotalAmount, dept: currentUser.dept };
   const effectiveAmount = computeOperationOrderAmountClient(draft);
   const tier = computeOperationOrderTierClient(activeOperationOrderSubTab, effectiveAmount);
   openGenericWorkflowPreviewModal(
@@ -850,9 +854,9 @@ async function submitOperationOrder(e) {
   notifyOperationApprovalNeeded('operationOrders', newItem);
 
   // warning (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026): server trả kèm cảnh báo nếu lọc approver theo
-  // đúng siêu thị (filterOperationOrderStoreApprovers(), lib/workflowEngine.js) ra danh sách RỖNG — đơn
-  // vẫn tạo được nhưng chưa ai (ngoài admin) duyệt được, cần báo ngay để người tạo/admin biết mà xử lý
-  // cấu hình Người Duyệt, không để đơn "treo" âm thầm.
+  // đúng siêu thị (resolveOperationOrderStoreMixedApprovers(), lib/workflowEngine.js — "Quy Trình Hỗn
+  // Hợp") ra danh sách RỖNG — đơn vẫn tạo được nhưng chưa ai (ngoài admin) duyệt được, cần báo ngay để
+  // người tạo/admin biết mà xử lý cấu hình Người Duyệt, không để đơn "treo" âm thầm.
   alert(warning ? `⚠️ ${warning}` : '✅ Đã gửi đơn hàng thành công!');
   resetOperationOrderForm();
   renderOperationOrderList();

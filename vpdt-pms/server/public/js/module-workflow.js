@@ -359,3 +359,130 @@ function deleteQuickApplyConfig(configId) {
   renderQuickApplyConfigList();
 }
 
+// ===== "⚙️ Quy Trình Hỗn Hợp" (10/2026) — sub-tab riêng của Hệ Thống, THAY THẾ HẲN cách xác định NGƯỜI
+// DUYỆT của đơn "Đặt Hàng Tại Siêu Thị" (trước đây tự khớp dept qua filterOperationOrderStoreApprovers(),
+// đã xoá — xem chú thích đầy đủ ở lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers()/
+// defaults.js operationOrderStoreMixedApprovalRules). SỐ BƯỚC vẫn lấy nguyên từ màn "🔄 Quy Trình & Phê
+// Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị", WF_MODULE_CONFIG.OPERATION_ORDER_STORE ở trên —
+// KHÔNG đổi) — màn NÀY chỉ cấu hình AI duyệt từng bước, theo yêu cầu người dùng "sẽ ko lọc ở mục 17
+// quyền đặc biệt trong admin": được liệt kê ở đây (tên NGƯỜI hoặc CHỨC DANH) là ĐỦ điều kiện duyệt.
+// Thiết kế TỔNG QUÁT có chủ đích để sau này tái dùng cho Hợp Đồng/Văn Bản Trình (module selector ở đầu
+// màn hiện chỉ có "🏬 Đặt Hàng Tại Siêu Thị" hoạt động được, 2 module kia disabled "sắp có").
+//
+// Format nhãn người "${name} (${username}) - ${dept}" + parse ngược bằng regex — MIRROR đúng quy ước
+// resolveTplRowAccountInput() (module-bienbanhop.js, nhãn "${name} — ${dept} (${username})", chỉ khác
+// thứ tự) để không tạo thêm 1 kiểu định dạng nhãn người khác trong cùng hệ thống, chỉ đổi đúng vị trí
+// (username) để không cần sửa lại toàn bộ regex chung — giữ độc lập theo đúng field maNewPersonInput.
+function mixedApprovalPersonLabel(u) {
+  return `${u.name} (${u.username}) - ${u.dept || 'Chưa rõ phòng'}`;
+}
+function mixedApprovalResolvePersonInput(rawValue) {
+  const m = String(rawValue || '').match(/^(.*) \(([^()]+)\) - .*$/);
+  return m ? ((DB.users || []).find(u => u.username === m[2].trim()) || null) : null;
+}
+
+function renderMixedApprovalSection() {
+  const wrap = document.getElementById('mixedApprovalSection');
+  if (!wrap) return;
+  const rules = DB.operationOrderStoreMixedApprovalRules || (DB.operationOrderStoreMixedApprovalRules = []);
+
+  const tbody = document.getElementById('mixedApprovalTableBody');
+  if (tbody) {
+    tbody.innerHTML = rules.length ? rules.slice().sort((a, b) => a.step - b.step || a.id - b.id).map(row => {
+      const person = row.mode === 'PERSON' ? (DB.users || []).find(u => u.username === row.username) : null;
+      const nameLabel = row.mode === 'JOBTITLE' ? row.jobTitle : (person ? mixedApprovalPersonLabel(person) : row.username);
+      const hasStores = !!(row.stores && row.stores.length);
+      const storesLabel = hasStores
+        ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
+        : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi siêu thị</span>`;
+      return `
+        <tr class="border-b${hasStores ? ' bg-amber-50' : ''}">
+          <td class="p-2 border"><span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[11px] font-bold">Bước ${row.step}</span></td>
+          <td class="p-2 border">${row.mode === 'JOBTITLE'
+            ? '<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Chức danh</span>'
+            : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
+          <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}</td>
+          <td class="p-2 border text-xs">${storesLabel}</td>
+          <td class="p-2 border text-center"><button type="button" data-op="deleteMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button></td>
+        </tr>
+      `;
+    }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
+  }
+
+  // Bước 1..N: luôn cho chọn tới ít nhất Bước 3 (mức cao nhất của QT Vận Hành - Đặt Hàng Tại Siêu Thị
+  // hiện tại) + 1 bước kế tiếp còn trống để dự phòng mở rộng sau này (nhãn "+ Bước N"), không hardcode
+  // đúng 3 — nếu admin đã lỡ cấu hình bước cao hơn (mẫu quy trình nhiều bước hơn) vẫn hiện đủ.
+  const usedSteps = rules.map(r => r.step);
+  const topKnown = Math.max(3, ...usedSteps, 0);
+  const stepSel = document.getElementById('maNewStep');
+  if (stepSel) {
+    const current = stepSel.value;
+    const opts = [];
+    for (let s = 1; s <= topKnown; s++) opts.push(`<option value="${s}">Bước ${s}</option>`);
+    opts.push(`<option value="${topKnown + 1}">+ Bước ${topKnown + 1}</option>`);
+    stepSel.innerHTML = opts.join('');
+    if (current && Number(current) <= topKnown + 1) stepSel.value = current;
+  }
+
+  sddSetOptions('maNewJobTitleDatalist', (DB.storeJobTitles || []).map(j => j.label));
+  sddSetOptions('maNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
+
+  renderMultiSelectDropdown('maNewStoresPicker', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
+    emptyText: 'Mặc định — mọi siêu thị.'
+  });
+
+  onMixedApprovalNewModeChange();
+}
+
+// Bật/tắt khối "Chức danh"/"Người cụ thể" của dòng THÊM MỚI — cùng cơ chế onWfStepApproverModeToggle()
+// ở trên (ẩn/hiện khối, không render lại toàn bộ form, tránh mất giá trị đang gõ dở ở khối kia).
+function onMixedApprovalNewModeChange() {
+  const mode = document.getElementById('maNewMode')?.value || 'JOBTITLE';
+  document.getElementById('maNewJobTitleWrap')?.classList.toggle('hidden', mode !== 'JOBTITLE');
+  document.getElementById('maNewPersonWrap')?.classList.toggle('hidden', mode !== 'PERSON');
+}
+
+function addMixedApprovalRule() {
+  const step = Number(document.getElementById('maNewStep')?.value);
+  const mode = document.getElementById('maNewMode')?.value === 'PERSON' ? 'PERSON' : 'JOBTITLE';
+  const stores = getMultiSelectValues('maNewStoresPicker');
+  if (!step || step < 1) return alert('Chưa chọn Bước hợp lệ.');
+
+  let jobTitle = null, username = null;
+  if (mode === 'JOBTITLE') {
+    const raw = (document.getElementById('maNewJobTitleInput')?.value || '').trim();
+    if (!raw || !(DB.storeJobTitles || []).some(j => j.label === raw)) {
+      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh Siêu Thị).');
+    }
+    jobTitle = raw;
+  } else {
+    const u = mixedApprovalResolvePersonInput(document.getElementById('maNewPersonInput')?.value);
+    if (!u) return alert('Gõ và CHỌN đúng 1 người có sẵn trong danh sách gợi ý.');
+    username = u.username;
+  }
+
+  const id = Math.max(0, ...(DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id)) + 1;
+  DB.operationOrderStoreMixedApprovalRules = [...(DB.operationOrderStoreMixedApprovalRules || []), { id, step, mode, jobTitle, username, stores }];
+  syncStorage('operationOrderStoreMixedApprovalRules');
+  logSystemAction(
+    'CONFIG', 'ADD_MIXED_APPROVAL_RULE',
+    `Thêm dòng Quy Trình Hỗn Hợp [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    'SUCCESS', String(id)
+  );
+
+  const jt = document.getElementById('maNewJobTitleInput'); if (jt) jt.value = '';
+  const pn = document.getElementById('maNewPersonInput'); if (pn) pn.value = '';
+  renderMixedApprovalSection();
+}
+
+function deleteMixedApprovalRule(id) {
+  const rule = (DB.operationOrderStoreMixedApprovalRules || []).find(r => r.id === id);
+  if (!rule) return;
+  if (!confirm(`Xoá dòng cấu hình Bước ${rule.step} này?`)) return;
+  DB.operationOrderStoreMixedApprovalRules = (DB.operationOrderStoreMixedApprovalRules || []).filter(r => r.id !== id);
+  syncStorage('operationOrderStoreMixedApprovalRules');
+  logSystemAction('CONFIG', 'DELETE_MIXED_APPROVAL_RULE', `Xoá dòng Quy Trình Hỗn Hợp [${id}]`, 'SUCCESS', String(id));
+  renderMixedApprovalSection();
+}
+

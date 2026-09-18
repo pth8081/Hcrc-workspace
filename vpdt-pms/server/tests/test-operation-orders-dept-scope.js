@@ -11,14 +11,14 @@
 // sai (người duyệt không thấy đơn hàng cần duyệt), nên test kỹ cả 2 chiều: người duyệt PHẢI thấy đủ,
 // người thường KHÔNG được tải thừa.
 //
-// ĐỢT "Duyệt Đơn Hàng Siêu Thị tự khớp đúng siêu thị" (10/2026): filterOperationOrdersForUser() (lớp
-// chắn thứ 2, canViewOperationOrder() -> resolveWfConfig() = resolveOperationOrderWorkflow() CÓ lọc
-// theo siêu thị cho đơn STORE, xem lib/workflowEngine.js) giờ CHỐT LẠI đúng phạm vi thật sau khi tải
-// company-wide — gd1 (dept "Siêu Thị A") vẫn được TẢI company-wide (tối ưu, không đổi) nhưng CHỈ còn
-// THẤY đơn của đúng siêu thị mình sau lọc, không còn thấy đơn Siêu Thị B nữa dù cùng được liệt kê
-// approver ở tier đó — test bên dưới đã cập nhật đúng theo hành vi MỚI này (test riêng cho
-// resolveOperationOrderWorkflow()/filterOperationOrderStoreApprovers() ở
-// test-operation-order-store-approver-scope.js).
+// ĐỢT "Quy Trình Hỗn Hợp" (10/2026): filterOperationOrdersForUser() (lớp chắn thứ 2,
+// canViewOperationOrder() -> resolveWfConfig() = resolveOperationOrderWorkflow() nay tra người duyệt
+// STORE từ operationOrderStoreMixedApprovalRules, xem lib/workflowEngine.js) CHỐT LẠI đúng phạm vi thật
+// sau khi tải company-wide — gd1 (dept "Siêu Thị A") vẫn được TẢI company-wide (tối ưu, không đổi) và
+// vẫn CHỈ THẤY đơn của đúng siêu thị mình sau lọc, KHÔNG thấy đơn Siêu Thị B, nhưng ở test NÀY là nhờ
+// nhánh `item.dept === user.dept` của canViewOperationOrder() (gd1 cùng dept với item 1/3), KHÔNG phải
+// nhờ được liệt kê approver tier — cơ chế approver theo Quy Trình Hỗn Hợp có test RIÊNG (dept/siêu thị
+// không khớp nhau vẫn có thể là approver) ở test-operation-order-store-approver-scope.js.
 //
 // Chạy: node server/tests/test-operation-orders-dept-scope.js
 'use strict';

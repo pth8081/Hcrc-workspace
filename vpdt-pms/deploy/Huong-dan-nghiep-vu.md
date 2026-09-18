@@ -1037,46 +1037,68 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   `MAX(amount, "Tổng Giá Trị Thanh Toán (VNĐ)")` — số lớn hơn giữa tổng hạng
   mục hệ thống tự tính và số người dùng tự gõ/đọc từ PDF phiếu đặt hàng NCC,
   để field tự gõ không thể khai thấp hơn nhằm né bớt lớp duyệt.
-  - **Duyệt Đặt Hàng Tại Siêu Thị tự khớp đúng siêu thị (10/2026)**: cấu hình
-    người duyệt theo mức giá trị (tier) ở trên vẫn dùng chung 1 danh sách cho
-    MỌI siêu thị (không cần tạo riêng 1 cấu hình cho từng siêu thị — hệ thống
-    có nhiều siêu thị, tạo riêng từng cấu hình sẽ rất cồng kềnh), nhưng khi 1
-    đơn hàng cụ thể cần duyệt, hệ thống **tự lọc lại chỉ giữ đúng người thuộc
-    ĐÚNG siêu thị của đơn đó** — nhận biết hoàn toàn qua **Vị Trí (Siêu Thị)**
-    của người dùng (Hệ Thống → Quản Lý Người Dùng, field Phòng Ban/Siêu Thị
-    trên hồ sơ, hoặc "Vị Trí Kiêm Nhiệm" nếu 1 người phụ trách thêm siêu thị
-    khác), **KHÔNG đọc/phụ thuộc gì vào Cơ Cấu Tổ Chức**. VD: gán chức danh
-    "Giám Đốc" làm người duyệt tier ≤ 10 triệu mà **không cần chọn siêu thị cụ
-    thể** (áp dụng chung mọi siêu thị) — khi nhân viên Siêu Thị A tạo đơn, hệ
-    thống tự khớp và chỉ Giám Đốc **đang thuộc Siêu Thị A** (theo Vị Trí trên
-    hồ sơ người đó) mới thấy/duyệt được đơn này; Giám Đốc của Siêu Thị B/C dù
-    cùng chức danh, cùng được liệt kê ở cấu hình, vẫn KHÔNG thấy/duyệt được.
-    Người có "Vị Trí Kiêm Nhiệm" thêm 1 siêu thị khác (VD quản lý vùng phụ
-    trách nhiều siêu thị) sẽ duyệt được TẤT CẢ các siêu thị mình phụ trách
-    (dept chính + mọi dept trong Vị Trí Kiêm Nhiệm). Quy tắc này CHỈ áp dụng
-    cho **Đặt Hàng Tại Siêu Thị** — **Đặt Hàng Tại HO** không có khái niệm
-    "siêu thị" nên giữ nguyên như cũ (thuần theo mức giá trị). Khi tạo/sửa
-    User chọn Vị Trí = Siêu Thị, nếu siêu thị cần gán chưa có trong danh mục,
-    bấm nút **"+"** ngay cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không
-    cần rời form (Hệ Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
+  - **"⚙️ Quy Trình Hỗn Hợp" — người duyệt Đặt Hàng Tại Siêu Thị (10/2026, thay
+    hẳn cơ chế "tự khớp đúng siêu thị" trước đó)**: màn "🔄 Quy Trình & Phê
+    Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") giờ **CHỈ còn quyết
+    định SỐ BƯỚC** (theo mức giá trị 3 tier ở trên) — **NGƯỜI DUYỆT từng bước
+    chuyển hẳn sang cấu hình ở sub-tab riêng "⚙️ Quy Trình Hỗn Hợp"** (Hệ Thống
+    → cạnh "🔄 Quy Trình & Phê Duyệt"/"⚡ Áp Dụng Nhanh"). Màn này là **1 bảng
+    duy nhất**, mỗi dòng gồm:
+    - **Bước**: 1/2/3... (khớp đúng số bước của tier đơn hàng rơi vào — 1 bước
+      cho ≤ 10 triệu, 2 bước cho mức giữa, 3 bước cho > 100 triệu). Có thể
+      thêm nhiều dòng cho CÙNG 1 bước.
+    - **Kiểu**: **"Chức danh"** (áp dụng cho TẤT CẢ người đang giữ đúng chức
+      danh đó, gõ tìm từ danh mục "Chức Danh Siêu Thị") hoặc **"Người cụ
+      thể"** (đúng 1 người, gõ tìm theo tên/username).
+    - **Siêu Thị Phụ Trách**: để TRỐNG = **Mặc định** (áp dụng MỌI siêu thị);
+      chọn 1 hoặc nhiều siêu thị (gõ tìm, chọn nhiều) = **Ngoại lệ** (chỉ áp
+      dụng đúng các siêu thị đã chọn).
+    Ý nghĩa khớp: 1 dòng "Chức danh" + **Mặc định** (không chọn siêu thị) thì
+    **tự khớp theo Phòng Ban/Vị Trí Kiêm Nhiệm** của TỪNG người giữ đúng chức
+    danh với ĐÚNG siêu thị của đơn (VD "Giám Đốc siêu thị" mặc định → nhân
+    viên Siêu Thị A tạo đơn thì chỉ Giám Đốc **đang thuộc Siêu Thị A** thấy/
+    duyệt được, Giám Đốc Siêu Thị B/C dù cùng chức danh vẫn KHÔNG thấy) —
+    người có "Vị Trí Kiêm Nhiệm" thêm siêu thị khác (VD quản lý vùng) duyệt
+    được TẤT CẢ siêu thị mình phụ trách. 1 dòng có khai **Siêu Thị Phụ Trách**
+    (ngoại lệ) thì áp dụng cho MỌI người giữ đúng chức danh/đúng người đó, **
+    KHÔNG so Phòng Ban** — dùng để gán 1 "Quản Lý Vùng"/1 người cụ thể phụ
+    trách nhiều siêu thị không thuộc đúng 1 phòng ban cố định nào. Nhiều dòng
+    cùng khớp 1 (Bước, Siêu Thị) thì **HỢP LẠI** (union) danh sách người duyệt,
+    KHÔNG loại trừ nhau (VD 1 dòng Mặc định "Giám Đốc siêu thị" + 1 dòng Ngoại
+    lệ "Phó Giám Đốc siêu thị" cho riêng vài siêu thị → những siêu thị đó có
+    CẢ 2 chức danh cùng duyệt được Bước 1). Được liệt kê ở màn này (theo tên
+    NGƯỜI hoặc CHỨC DANH) là **ĐỦ điều kiện duyệt ngay** — KHÔNG cần bật thêm
+    quyền "Người duyệt" (`canBeApprover`, khối 17 "Quyền Đặc Biệt") như cơ chế
+    "Theo vị trí" của các quy trình theo phòng ban khác (Văn Phòng Phẩm/Thanh
+    Toán/Xe/Giá IT/Hợp Đồng...). Quy tắc này CHỈ áp dụng cho **Đặt Hàng Tại
+    Siêu Thị** — **Đặt Hàng Tại HO** không có khái niệm "siêu thị" nên giữ
+    nguyên cơ chế cũ (cấu hình người duyệt thẳng theo mức giá trị ở màn "🔄
+    Quy Trình & Phê Duyệt", không qua Quy Trình Hỗn Hợp). Thiết kế mang tính
+    tổng quát để về sau có thể mở rộng dùng chung cho Hợp Đồng/Văn Bản Trình
+    (ô "Áp dụng cho" ở đầu màn hiện chỉ có "🏬 Đặt Hàng Tại Siêu Thị" hoạt động
+    được, 2 module kia hiện "sắp có"). Khi tạo/sửa User chọn Vị Trí = Siêu
+    Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
+    cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
+    Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
   - **Cảnh báo "⚠️ Chưa cấu hình duyệt"** (9/2026, đợt rà soát chuyên sâu): nếu
-    admin CHƯA cấu hình người duyệt cho 1 mức giá trị nào đó (Hệ Thống > Phân
-    Quyền > cấu hình quy trình theo mức), đơn hàng rơi vào mức đó sẽ hiện rõ
-    cảnh báo này ngay ở cột Trạng Thái trong danh sách — trước đây hồ sơ dạng
-    này hiện y hệt 1 đơn đang chờ duyệt bình thường (chỉ Quản Trị Viên mới
-    duyệt được, không ai khác thấy), dễ bị bỏ sót không ai để ý cấu hình còn
-    thiếu. Thấy cảnh báo này thì vào cấu hình bổ sung người duyệt cho đúng mức
-    đang thiếu.
-  - **Cảnh báo "chưa có người duyệt khớp đúng siêu thị" (10/2026, đợt rà soát
-    chuyên sâu)**: khác cảnh báo ở trên (trường hợp đó là mức giá trị CHƯA hề
-    cấu hình ai) — trường hợp này admin ĐÃ cấu hình người duyệt cho mức giá
-    trị, nhưng sau khi lọc theo đúng siêu thị ("Duyệt Đặt Hàng Tại Siêu Thị tự
-    khớp đúng siêu thị" ở trên) không còn ai khớp (VD quên gắn "Vị Trí Kiêm
-    Nhiệm" cho người phụ trách siêu thị đó). Khi gặp trường hợp này lúc tạo
-    đơn, hệ thống báo ngay bằng 1 thông báo (⚠️) cho người tạo, đồng thời ghi 1
-    dòng Nhật Ký Hệ Thống mức Cảnh Báo để Quản Trị Viên tra cứu được kể cả khi
-    bỏ lỡ thông báo lúc tạo — đơn vẫn tạo được bình thường, chỉ Quản Trị Viên
-    duyệt được cho tới khi cấu hình lại đúng người duyệt cho siêu thị đó.
+    admin CHƯA cấu hình mẫu quy trình (số bước) cho 1 mức giá trị nào đó (màn
+    "🔄 Quy Trình & Phê Duyệt"), đơn hàng rơi vào mức đó sẽ hiện rõ cảnh báo
+    này ngay ở cột Trạng Thái trong danh sách — trước đây hồ sơ dạng này hiện
+    y hệt 1 đơn đang chờ duyệt bình thường (chỉ Quản Trị Viên mới duyệt được,
+    không ai khác thấy), dễ bị bỏ sót không ai để ý cấu hình còn thiếu. Thấy
+    cảnh báo này thì vào cấu hình bổ sung mẫu quy trình cho đúng mức đang
+    thiếu.
+  - **Cảnh báo "chưa có người duyệt khớp đúng siêu thị" (10/2026)**: khác cảnh
+    báo ở trên (trường hợp đó là CHƯA hề cấu hình mẫu quy trình) — trường hợp
+    này mẫu quy trình đã có (biết đúng số bước), nhưng ở màn "⚙️ Quy Trình Hỗn
+    Hợp" không có dòng nào khớp đúng siêu thị của đơn ở Bước 1 (VD quên khai
+    thêm siêu thị đó vào 1 dòng "Ngoại lệ", hoặc quên gắn "Vị Trí Kiêm Nhiệm"
+    cho người phụ trách siêu thị đó ở dòng "Mặc định"). Khi gặp trường hợp
+    này lúc tạo đơn, hệ thống báo ngay bằng 1 thông báo (⚠️) cho người tạo,
+    đồng thời ghi 1 dòng Nhật Ký Hệ Thống mức Cảnh Báo để Quản Trị Viên tra
+    cứu được kể cả khi bỏ lỡ thông báo lúc tạo — đơn vẫn tạo được bình thường,
+    chỉ Quản Trị Viên duyệt được cho tới khi bổ sung đúng dòng cấu hình còn
+    thiếu ở "⚙️ Quy Trình Hỗn Hợp".
   - **Đọc PDF phiếu đặt hàng NCC tự động điền form** — chọn file PDF ở "File
     Đơn Hàng" tự đọc và điền Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã
     NCC/MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục
@@ -1107,7 +1129,17 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
       nhất, không chia theo phòng ban).
     - **"Quyền Phê Duyệt Đặt Hàng Siêu Thị"** (`operationOrderReceiptManageStore`,
       `{all, depts[]}`) — toàn quyền HOẶC giới hạn đúng 1/nhiều siêu thị cụ
-      thể, y hệt mô hình phạm vi của các quyền theo-phạm-vi khác.
+      thể, y hệt mô hình phạm vi của các quyền theo-phạm-vi khác. **⚠️ Quyền
+      này CHỈ để xác nhận NHẬN HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong hết —
+      KHÔNG liên quan gì tới việc phê duyệt chi tiêu đơn hàng** (xem "⚙️ Quy
+      Trình Hỗn Hợp" ở trên cho việc đó). **Lỗi ĐÃ VÁ (đợt rà soát 10/2026)**:
+      danh sách chọn phạm vi siêu thị của quyền này trước đây lấy nhầm nguồn
+      từ danh mục **Phòng Ban (HO)** thay vì danh mục **Siêu Thị** — khiến
+      chọn giới hạn 1/nhiều siêu thị cụ thể không bao giờ khớp được đơn hàng
+      thật (đơn STORE luôn ghi nhận theo tên siêu thị, không phải tên phòng
+      ban HO) — đã sửa để hiện đúng danh mục Siêu Thị. User đã lỡ chọn nhầm
+      "siêu thị" từ trước bản vá này cần vào lại cấu hình quyền, chọn lại
+      đúng tên siêu thị thật.
 
     User đã được cấp quyền cũ trước 10/2026 vẫn hoạt động đúng như trước (server
     tự đọc field cũ nếu 2 field mới chưa từng tồn tại) — admin chỉ cần vào lại

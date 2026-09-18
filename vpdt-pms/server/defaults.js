@@ -502,6 +502,26 @@ const DEFAULTS = {
   // TOÀN riêng biệt ở tab "Quy Trình & Phê Duyệt" (không dùng chung người duyệt nào giữa 2 luồng).
   operationOrderStoreTierWorkflows: {},
   operationOrderHOTierWorkflows: {},
+  // Vận Hành > Đơn Hàng > "⚙️ Quy Trình Hỗn Hợp" (10/2026) — THAY THẾ HẲN cách xác định NGƯỜI DUYỆT của
+  // đơn "Đặt Hàng Tại Siêu Thị" (operationOrderStoreTierWorkflows[...].approvers không còn được đọc cho
+  // mục đích này nữa, xem resolveOperationOrderWorkflow()/resolveOperationOrderStoreMixedApprovers() ở
+  // lib/workflowEngine.js — SỐ BƯỚC vẫn lấy từ operationOrderStoreTierWorkflows như cũ, chỉ NGƯỜI DUYỆT
+  // đổi sang tra ở đây). Mỗi phần tử 1 "dòng" cấu hình:
+  //   { id, step: number, mode: 'JOBTITLE'|'PERSON', jobTitle: string|null, username: string|null,
+  //     stores: string[] }
+  // - stores RỖNG = "Mặc định" (áp dụng MỌI siêu thị); stores CÓ giá trị = "Ngoại lệ" (chỉ áp dụng đúng
+  //   các siêu thị liệt kê). Nhiều dòng cùng khớp 1 (bước, siêu thị) thì HỢP (UNION) người duyệt lại,
+  //   không loại trừ nhau (phương án B, đã chốt với người dùng).
+  // - mode 'JOBTITLE' + stores rỗng: tự khớp theo dept CHÍNH/"Vị Trí Kiêm Nhiệm" của từng người giữ đúng
+  //   chức danh với ĐÚNG siêu thị trên đơn (an toàn, không cần liệt kê tay từng siêu thị).
+  // - mode 'JOBTITLE' + stores có giá trị: áp dụng cho MỌI người giữ đúng chức danh đó, KHÔNG so dept
+  //   (dùng cho vai trò phụ trách nhiều siêu thị không thuộc đúng 1 dept cố định, VD "Quản Lý Vùng").
+  // - mode 'PERSON': 1 người cụ thể, áp dụng theo đúng "stores" (rỗng = mọi siêu thị).
+  // Được liệt kê ở đây là ĐỦ điều kiện duyệt — KHÔNG cần bật thêm quyền "canBeApprover" (Quyền Đặc Biệt,
+  // mục 17 admin) như cơ chế "Theo vị trí" (lib/positionApprovers.js) của các module KHÁC. Thiết kế
+  // TỔNG QUÁT có chủ đích (theo yêu cầu người dùng) để sau này tái dùng cho Hợp Đồng/Văn Bản Trình — hiện
+  // tại CHỈ operationOrders/STORE thực sự đọc field này.
+  operationOrderStoreMixedApprovalRules: [],
   // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ĐƠN HÀNG (operationOrders) ra hệ thống
   // ngoài "dsmart16" (job outbound, xem jobs/operationOrderApiSync.js). Cùng khuôn admin-config phẳng
   // với emailConfig (xác thực linh hoạt: Base URL + 1 header tuỳ chỉnh tên/giá trị, KHÔNG cố định kiểu

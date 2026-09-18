@@ -459,7 +459,10 @@ async function scenario(name, fn) {
           createdAt: '2026-08-24', files: [], infoRequests: [] }
       ];
       DB.operationOrderHOTierWorkflows = { LT100M: { approvers: { 1: ['duyet1'] } } };
-      DB.operationOrderStoreTierWorkflows = { LT10M: { approvers: { 1: ['duyet1'] } } };
+      // Người duyệt STORE nay tra từ operationOrderStoreMixedApprovalRules ("Quy Trình Hỗn Hợp", đợt
+      // 10/2026) — operationOrderStoreTierWorkflows[...].approvers KHÔNG còn được đọc cho STORE.
+      DB.operationOrderStoreTierWorkflows = { LT10M: {} };
+      DB.operationOrderStoreMixedApprovalRules = [{ id: 1, step: 1, mode: 'PERSON', username: 'duyet1', stores: [] }];
       DB.operationOrders = [
         { id: 811, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], code: 'DH-811',
           title: 'Đơn hàng tại HO', orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0,
@@ -481,6 +484,7 @@ async function scenario(name, fn) {
       DB.itPriceApprovals = [];
       delete DB.operationOrderHOTierWorkflows;
       delete DB.operationOrderStoreTierWorkflows;
+      delete DB.operationOrderStoreMixedApprovalRules;
       DB.operationOrders = [];
       renderApprovalHub();
       return result;
