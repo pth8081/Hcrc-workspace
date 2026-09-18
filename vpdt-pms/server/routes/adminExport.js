@@ -12,7 +12,7 @@
 // từng người nữa. lib/orgChartImport.js cũng đã xoá theo — không còn nơi nào dùng.)
 const express = require('express');
 const multer = require('multer');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildGenericWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -30,7 +30,7 @@ const adminExportRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Bạn đang xuất/nhập dữ liệu quá nhiều, vui lòng thử lại sau ít phút.' },
-  keyGenerator: (req) => req.freshUser?.username || req.ip
+  keyGenerator: (req) => req.freshUser?.username || ipKeyGenerator(req.ip)
 });
 router.use(adminExportRateLimiter);
 

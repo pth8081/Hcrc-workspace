@@ -13,7 +13,7 @@
 // Cáo (module-baocaoquantri.js REPORT_MODULE_CONFIGS) — mở rộng REPORT_QUERY_CONFIGS bên dưới khi có
 // thêm collection khác cần lọc SQL.
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { queryDedicatedRecords, DEDICATED_TABLES } = require('../lib/recordStore');
@@ -45,7 +45,7 @@ const reportsRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Bạn đang truy vấn báo cáo quá nhiều, vui lòng thử lại sau ít phút.' },
-  keyGenerator: (req) => req.freshUser?.username || req.ip
+  keyGenerator: (req) => req.freshUser?.username || ipKeyGenerator(req.ip)
 });
 router.use(reportsRateLimiter);
 

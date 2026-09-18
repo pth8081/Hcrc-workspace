@@ -7,7 +7,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
@@ -377,7 +377,7 @@ const hrReportsRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Bạn đang truy vấn báo cáo quá nhiều, vui lòng thử lại sau ít phút.' },
-  keyGenerator: (req) => req.freshUser?.username || req.ip
+  keyGenerator: (req) => req.freshUser?.username || ipKeyGenerator(req.ip)
 });
 router.get('/reports', hrReportsRateLimiter, async (req, res) => {
   try {
