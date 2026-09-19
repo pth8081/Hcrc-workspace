@@ -24,17 +24,38 @@ function toTransaction(row) {
   };
 }
 
-// Nạp hàng loạt — TỰ ĐỘNG loại bỏ dòng đã tồn tại (cùng SourceSystem+SourceRefId, xem UNIQUE INDEX ở
-// sql/schema.sql) để đồng bộ lặp lại (cửa sổ "sinceDate" chồng lấn ở biên) không tạo trùng. Dòng thiếu
-// SourceRefId (không có mã tham chiếu gốc) LUÔN được chèn thêm (không dedup được, chấp nhận theo đúng
-// hành vi UNIQUE INDEX WHERE SourceRefId IS NOT NULL).
+// So sánh 1 dòng mới đọc từ DSmart với bản ghi ĐANG CÓ (cùng SourceSystem+SourceRefId) — trả về true nếu
+// có ít nhất 1 field nghiệp vụ thực sự khác, dùng để quyết định có cần UPDATE hay bỏ qua (dòng y hệt lần
+// trước, đỡ ghi thừa). So theo giá trị đã CHUẨN HOÁ (Number/chuỗi ngày) để không báo "khác" giả do lệch
+// kiểu dữ liệu JS<->SQL (VD Decimal trả về string, Date trả về đối tượng Date).
+function purchaseTransactionChanged(incoming, existing) {
+  const existingPurchaseDate = existing.PurchaseDate instanceof Date ? existing.PurchaseDate.toISOString().slice(0, 10) : String(existing.PurchaseDate);
+  return (
+    incoming.vendorCode !== existing.VendorCode ||
+    incoming.storeCode !== existing.StoreCode ||
+    (incoming.storeFormat || null) !== (existing.StoreFormat || null) ||
+    (incoming.categoryCode || null) !== (existing.CategoryCode || null) ||
+    String(incoming.purchaseDate) !== existingPurchaseDate ||
+    Math.round(Number(incoming.amount) * 100) !== Math.round(Number(existing.Amount) * 100) ||
+    !!incoming.isReturn !== !!existing.IsReturn
+  );
+}
+
+// Nạp hàng loạt — UPSERT theo (SourceSystem, SourceRefId, xem UNIQUE INDEX ở sql/schema.sql): dòng CHƯA
+// có thì CHÈN THÊM, dòng ĐÃ có thì CẬP NHẬT LẠI nếu nội dung thực sự khác (bỏ qua nếu y hệt, đỡ ghi thừa).
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Vận Hành/Mua Hàng, 9/2026, xác nhận với người dùng — DSmart CÓ sửa lại
+// giao dịch mua hàng đã phát sinh mà vẫn giữ nguyên mã tham chiếu gốc): trước đây dòng đã tồn tại luôn bị
+// BỎ QUA vô điều kiện — nếu DSmart sửa lại số tiền/ngày mua của 1 giao dịch đã đồng bộ trước đó, lần đồng
+// bộ lại KHÔNG BAO GIỜ cập nhật, số tiền CŨ (sai) nằm vĩnh viễn trong bảng, ảnh hưởng trực tiếp mọi lần
+// "Tính Ước Tính" sau này. Dòng thiếu SourceRefId (không có mã tham chiếu gốc) LUÔN được chèn thêm (không
+// dedup/upsert được, chấp nhận theo đúng hành vi UNIQUE INDEX WHERE SourceRefId IS NOT NULL).
 async function bulkInsertPurchaseTransactions(rows) {
-  if (!rows || !rows.length) return { rowsInserted: 0 };
+  if (!rows || !rows.length) return { rowsInserted: 0, rowsUpdated: 0, rowsSkippedDuplicate: 0 };
   const pool = await getPool();
 
   const withRef = rows.filter(r => r.sourceRefId);
   const refPairs = [...new Set(withRef.map(r => `${r.sourceSystem}|||${r.sourceRefId}`))];
-  const existingRefs = new Set();
+  const existingByRef = new Map(); // "sourceSystem|||sourceRefId" -> bản ghi đầy đủ đang có trong DB
   for (let i = 0; i < refPairs.length; i += INSERT_CHUNK_SIZE) {
     const chunk = refPairs.slice(i, i + INSERT_CHUNK_SIZE);
     const req = pool.request();
@@ -44,11 +65,21 @@ async function bulkInsertPurchaseTransactions(rows) {
       req.input(`sr${idx}`, sql.NVarChar(100), sourceRefId);
       return `(SourceSystem = @ss${idx} AND SourceRefId = @sr${idx})`;
     });
-    const result = await req.query(`SELECT SourceSystem, SourceRefId FROM dbo.VendorPurchaseTransactions WHERE ${conditions.join(' OR ')}`);
-    result.recordset.forEach(r => existingRefs.add(`${r.SourceSystem}|||${r.SourceRefId}`));
+    const result = await req.query(`SELECT * FROM dbo.VendorPurchaseTransactions WHERE ${conditions.join(' OR ')}`);
+    result.recordset.forEach(r => existingByRef.set(`${r.SourceSystem}|||${r.SourceRefId}`, r));
   }
 
-  const toInsert = rows.filter(r => !r.sourceRefId || !existingRefs.has(`${r.sourceSystem}|||${r.sourceRefId}`));
+  const toInsert = [];
+  const toUpdate = []; // { row, transId }
+  let rowsSkippedDuplicate = 0;
+  for (const r of rows) {
+    if (!r.sourceRefId) { toInsert.push(r); continue; }
+    const existing = existingByRef.get(`${r.sourceSystem}|||${r.sourceRefId}`);
+    if (!existing) { toInsert.push(r); continue; }
+    if (purchaseTransactionChanged(r, existing)) toUpdate.push({ row: r, transId: existing.TransId });
+    else rowsSkippedDuplicate++;
+  }
+
   let rowsInserted = 0;
   for (let i = 0; i < toInsert.length; i += INSERT_CHUNK_SIZE) {
     const chunk = toInsert.slice(i, i + INSERT_CHUNK_SIZE);
@@ -73,7 +104,31 @@ async function bulkInsertPurchaseTransactions(rows) {
     `);
     rowsInserted += chunk.length;
   }
-  return { rowsInserted, rowsSkippedDuplicate: rows.length - toInsert.length };
+
+  // Cập nhật từng dòng ĐÃ có nhưng nội dung đổi — số lượng thường nhỏ (chỉ đúng những giao dịch DSmart
+  // thật sự sửa lại), không cần gộp nhiều dòng/lệnh như nhánh CHÈN THÊM ở trên.
+  let rowsUpdated = 0;
+  for (const { row: r, transId } of toUpdate) {
+    const req = pool.request();
+    req.input('id', sql.BigInt, transId);
+    req.input('vc', sql.NVarChar(30), r.vendorCode);
+    req.input('sc', sql.NVarChar(50), r.storeCode);
+    req.input('sf', sql.NVarChar(20), r.storeFormat || null);
+    req.input('cc', sql.NVarChar(50), r.categoryCode || null);
+    req.input('pd', sql.Date, new Date(r.purchaseDate));
+    req.input('am', sql.Decimal(18, 2), r.amount);
+    req.input('ir', sql.Bit, !!r.isReturn);
+    req.input('dc', sql.NVarChar(20), r.dataConfidence || 'PROVISIONAL');
+    await req.query(`
+      UPDATE dbo.VendorPurchaseTransactions
+      SET VendorCode = @vc, StoreCode = @sc, StoreFormat = @sf, CategoryCode = @cc,
+          PurchaseDate = @pd, Amount = @am, IsReturn = @ir, DataConfidence = @dc, SyncedAt = SYSUTCDATETIME()
+      WHERE TransId = @id;
+    `);
+    rowsUpdated++;
+  }
+
+  return { rowsInserted, rowsUpdated, rowsSkippedDuplicate };
 }
 
 // vendorCode: bắt buộc (aggregator lọc đúng theo 1 NCC/lần gọi) — periodStart/periodEnd: DATE string.

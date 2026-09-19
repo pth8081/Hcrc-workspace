@@ -69,6 +69,23 @@ async function checkLicenseExpiryReminders() {
     const licenses = await getAllForCollection('licenses');
     if (!Array.isArray(licenses) || licenses.length === 0) return;
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu Hành Chính, 9/2026): giấy phép dùng versioning "cộng thêm phiên bản"
+    // (rootLicenseId/versionNumber — cùng khuôn Tài Liệu, xem getLicenseFamily()/getLicenseFamilyLatest()
+    // ở public/js/module-tailieu.js) — khi duyệt 1 phiên bản MỚI, approveLicense() (lib/recordActions.js)
+    // KHÔNG hề đụng tới các phiên bản CŨ trong cùng family: bản CŨ vẫn giữ nguyên status='APPROVED',
+    // expiryDate cũ, không có cờ "đã bị thay thế". Job này trước đây quét ĐỘC LẬP từng bản ghi -> nếu ai
+    // đó gia hạn SỚM (thêm phiên bản mới trước khi bản cũ hết hạn), bản CŨ đã lỗi thời vẫn tiếp tục được
+    // coi là "còn hiệu lực/sắp hết hạn" và tiếp tục kích hoạt các ngưỡng nhắc riêng của nó — gửi email
+    // nhắc hạn trùng lặp/gây nhiễu về 1 bản ghi không còn là "giấy phép hiện hành" nữa, trong khi UI client
+    // (dashboard/badge) đã khôn khéo chỉ tính theo bản MỚI NHẤT. Chỉ xét ĐÚNG bản mới nhất mỗi family.
+    const latestByRoot = new Map();
+    for (const l of licenses) {
+      if (!l) continue;
+      const rootId = l.rootLicenseId == null ? l.id : l.rootLicenseId;
+      const cur = latestByRoot.get(rootId);
+      if (!cur || (Number(l.versionNumber) || 1) > (Number(cur.versionNumber) || 1)) latestByRoot.set(rootId, l);
+    }
+
     const users = await getCollection(pool, 'users', []);
     const approverEmails = users
       .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.licenseApprove))
@@ -76,6 +93,8 @@ async function checkLicenseExpiryReminders() {
 
     for (const l of licenses) {
       if (!l || !l.expiryDate) continue;
+      const rootId = l.rootLicenseId == null ? l.id : l.rootLicenseId;
+      if (latestByRoot.get(rootId)?.id !== l.id) continue; // không phải bản mới nhất -> bỏ qua, đã "lỗi thời"
       // Chỉ nhắc hạn giấy phép đã duyệt xong (còn hiệu lực hoặc đang gia hạn) — hồ sơ đang chờ duyệt/bị
       // từ chối/đã thu hồi không cần nhắc (khớp status/lifecycleStatus gán ở lib/createValidation.js +
       // lib/recordActions.js revokeLicense()).

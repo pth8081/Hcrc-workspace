@@ -230,6 +230,16 @@ router.post('/terms/:id/calculate', requireManageTerms, async (req, res) => {
     const term = terms.find(t => t.id === termId);
     if (!term) return res.status(404).json({ error: 'Không tìm thấy điều khoản' });
     if (term.status !== 'ACTIVE') return res.status(409).json({ error: 'Chỉ tính được cho điều khoản đang Hoạt động' });
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu Vận Hành/Mua Hàng, 9/2026): trước đây KHÔNG hề đối chiếu kỳ tính với
+    // effectiveFrom/effectiveTo của điều khoản — nếu chọn kỳ bao trùm cả những tháng NGOÀI thời hạn hiệu
+    // lực thật (VD điều khoản chỉ áp dụng Q1 nhưng tính cho cả năm), hệ thống vẫn tính ước tính dựa trên
+    // TOÀN BỘ doanh số mua hàng trong khoảng đó, ra số sai lệch với thoả thuận thật mà không cảnh báo gì.
+    if (term.effectiveFrom && periodStart < term.effectiveFrom) {
+      return res.status(400).json({ error: `Kỳ tính bắt đầu trước Ngày Hiệu Lực Từ của điều khoản (${term.effectiveFrom}) — vui lòng chọn lại kỳ tính nằm trong thời hạn hiệu lực` });
+    }
+    if (term.effectiveTo && periodEnd > term.effectiveTo) {
+      return res.status(400).json({ error: `Kỳ tính kết thúc sau Ngày Hiệu Lực Đến của điều khoản (${term.effectiveTo}) — vui lòng chọn lại kỳ tính nằm trong thời hạn hiệu lực` });
+    }
     const vendor = vendors.find(v => v.id === term.vendorId);
     if (!vendor) return res.status(404).json({ error: 'Không tìm thấy NCC của điều khoản này' });
 
@@ -301,14 +311,14 @@ router.post('/sync', requireManageTerms, syncRateLimiter, async (req, res) => {
       purchaseDate: it.purchaseDate, amount: it.amount, isReturn: !!it.isReturn,
       sourceSystem: 'DSMART', sourceRefId: it.refId || it.id || null, dataConfidence: 'PROVISIONAL'
     }));
-    const { rowsInserted, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
+    const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
 
     await insertPurchaseSyncLog({
       startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: 'SUCCESS',
       rowsFetched: items.length, rowsInserted, pagesFetched, triggeredBy: req.freshUser.username
     });
-    logPurchasing(req, 'SYNC_DSMART', 'DSMART', `Đồng bộ DSmart: ${items.length} dòng lấy về, ${rowsInserted} dòng mới, ${rowsSkippedDuplicate} trùng bỏ qua`);
-    res.json({ ok: true, rowsFetched: items.length, rowsInserted, rowsSkippedDuplicate, pagesFetched });
+    logPurchasing(req, 'SYNC_DSMART', 'DSMART', `Đồng bộ DSmart: ${items.length} dòng lấy về, ${rowsInserted} dòng mới, ${rowsUpdated} dòng cập nhật lại (DSmart sửa dữ liệu cũ), ${rowsSkippedDuplicate} trùng bỏ qua`);
+    res.json({ ok: true, rowsFetched: items.length, rowsInserted, rowsUpdated, rowsSkippedDuplicate, pagesFetched });
   } catch (err) {
     await insertPurchaseSyncLog({
       startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: 'FAILED',
@@ -374,15 +384,15 @@ router.post('/manual-import', requireManageTerms, uploadRateLimiter, (req, res) 
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
       const { rows, rowErrors } = await parsePurchaseTransactionImportXlsx(buffer);
-      const { rowsInserted, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
+      const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
 
       await insertPurchaseSyncLog({
         startedAt, finishedAt: new Date(), sourceSystem: 'MANUAL', status: rowErrors.length ? 'PARTIAL' : 'SUCCESS',
         rowsFetched: rows.length, rowsInserted, triggeredBy: req.freshUser.username,
         errorMessage: rowErrors.length ? rowErrors.map(e => e.message).join('; ') : null
       });
-      logPurchasing(req, 'MANUAL_IMPORT', 'MANUAL', `Nhập file thủ công: ${rows.length} dòng hợp lệ, ${rowsInserted} dòng mới, ${rowsSkippedDuplicate} trùng bỏ qua, ${rowErrors.length} dòng lỗi`);
-      res.json({ ok: true, rowsFetched: rows.length, rowsInserted, rowsSkippedDuplicate, rowErrors, fileName: req.file.originalname });
+      logPurchasing(req, 'MANUAL_IMPORT', 'MANUAL', `Nhập file thủ công: ${rows.length} dòng hợp lệ, ${rowsInserted} dòng mới, ${rowsUpdated} dòng cập nhật lại, ${rowsSkippedDuplicate} trùng bỏ qua, ${rowErrors.length} dòng lỗi`);
+      res.json({ ok: true, rowsFetched: rows.length, rowsInserted, rowsUpdated, rowsSkippedDuplicate, rowErrors, fileName: req.file.originalname });
     } catch (parseErr) {
       await insertPurchaseSyncLog({
         startedAt, finishedAt: new Date(), sourceSystem: 'MANUAL', status: 'FAILED',

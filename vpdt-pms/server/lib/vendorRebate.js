@@ -142,8 +142,15 @@ function checkDuplicateTermCode(termCode, vendorId, existingTerms, excludeId) {
   return dup ? `Mã Điều Khoản "${termCode}" đã tồn tại cho NCC này` : null;
 }
 
-// Vòng đời: DRAFT -> ACTIVE (rebateTermActivate riêng) -> EXPIRED (tự động khi qua effectiveTo, hoặc admin
-// đánh dấu) / ARCHIVED (ngừng dùng thủ công). KHÔNG cho sửa Tiers/Scopes của điều khoản đã ACTIVE trực
+// Vòng đời: DRAFT -> ACTIVE (rebateTermActivate riêng) -> EXPIRED (CHỈ admin tự đánh dấu qua
+// POST /terms/:id/expire) / ARCHIVED (ngừng dùng thủ công).
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Vận Hành/Mua Hàng, 9/2026): comment cũ ở đây từng ghi nhầm "EXPIRED tự
+// động khi qua effectiveTo" nhưng KHÔNG hề có job/cron nào làm việc này — điều khoản qua effectiveTo vẫn
+// giữ nguyên status ACTIVE vô thời hạn tới khi người quản lý tự bấm "⏳ Hết Hạn". Để bù lại việc KHÔNG
+// tự chuyển trạng thái, POST /terms/:id/calculate (routes/purchasing.js) tự chặn/từ chối nếu kỳ tính
+// (periodStart/periodEnd) nằm NGOÀI effectiveFrom/effectiveTo của điều khoản — không phụ thuộc status
+// ACTIVE có còn đúng hay đã bị bỏ quên chưa đánh dấu hết hạn.
+// KHÔNG cho sửa Tiers/Scopes của điều khoản đã ACTIVE trực
 // tiếp — phải "Nhân Bản" (Version+1, DRAFT) rồi kích hoạt bản mới, GIỮ NGUYÊN bản cũ để không làm sai
 // lệch RebateCalculations đã tính trước đó (BasisAmountAtCalc/breakdown snapshot theo đúng Tiers tại thời
 // điểm tính — sửa ngược Tiers của điều khoản cũ sẽ làm sai ý nghĩa các lần tính trước, cùng nguyên tắc đã

@@ -1,8 +1,86 @@
 # Phiên bản hiện tại
 
-**23.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.57 (2026-09-19): Rà soát chuyên sâu đợt 2 (4 agent song song) — vá 11 khoảng trống nghiệp vụ (Văn Bản/Tác Nghiệp/Điều Hành/Hành Chính/Truyền Thông Nội Bộ/Tổng Hợp/Vận Hành/Mua Hàng/Hỗ Trợ IT)
+
+Tiếp nối đợt rà soát Nhân Sự (v23.56), lần này rà soát 4 agent chuyên sâu
+song song trên toàn bộ module nghiệp vụ còn lại (trừ Nhân Sự đã xong, trừ
+Hệ Thống chỉ có sơ đồ kiến trúc), phát hiện và vá 11 khoảng trống nghiệp vụ
+thật (không phải lỗ hổng bảo mật), ưu tiên mức Cao trước theo đúng yêu cầu
+người dùng:
+
+1. **[Cao]** Công Việc: `editTask()` cho phép đổi `assignedTo` của 1 việc
+   đang DOING mà KHÔNG reset lại trạng thái — người mới được gán thừa hưởng
+   ngầm tiến độ/lịch sử của người cũ, chưa từng bấm "Nhận việc". Nay tự động
+   reset về TODO + xoá subtask + ghi 1 dòng lịch sử `REASSIGNED_RESET` khi
+   phát hiện đổi người trong lúc đang DOING (`lib/recordActions.js`).
+2. **[Cao]** Đào Tạo: chấm bài tự luận (`grade-essay`) tra cứu đề thi qua
+   `cls.testId` (đề GẮN VỚI LỚP tại thời điểm chấm) thay vì `sub.testId` (đề
+   THẬT SỰ học viên đã làm) — sửa đề của lớp sau khi học viên đã nộp bài sẽ
+   chấm SAI đề. Nay tra đúng `sub.testId`, báo lỗi rõ nếu đề đã bị xoá thay
+   vì âm thầm tính sai (`routes/records.js`).
+3. **[Trung bình-Cao]** Ngân Sách: ghi nhận "Sử Dụng" vượt quá `totalAmount`
+   dòng ngân sách cha vẫn hiện badge "✅ Đã dùng hết" (xanh) y hệt dùng vừa
+   đủ — không cảnh báo gì trừ khi vào tận tab Báo Cáo (cần quyền riêng). Thêm
+   trạng thái `usageStatus` mới `OVER_BUDGET` (badge đỏ "⚠️ Vượt ngân sách"
+   riêng), không chặn ghi nhận (tiền đã chi không thể "huỷ").
+4. **[Trung bình-Cao]** Hỗ Trợ IT: tài liệu Nghiệp Vụ ghi sai — nói ticket hỗ
+   trợ có "Từ chối khẩn cấp" (thực ra tính năng đó chỉ có ở Phê Duyệt Giá, do
+   copy-paste khi tách tài liệu) — sửa lại đúng nội dung tài liệu, không xây
+   thêm tính năng không có yêu cầu thật.
+5. **[Trung bình-Cao]** Báo Cáo Định Kỳ: không có job nào tự nhắc phòng ban
+   CHƯA nộp báo cáo khi sắp/đã qua hạn — chỉ có nhắc hạn cho Giấy Phép/Hợp
+   Đồng, thiếu hẳn cho kỳ báo cáo. Thêm job mới
+   `jobs/reportPeriodDeadlineReminder.js` (quét mỗi 24h, nhắc theo ngưỡng còn
+   3/1/0 ngày, đúng người có quyền `reportEntryCreate` của từng phòng ban còn
+   thiếu).
+6. **[Trung bình]** Ngân Sách: dòng đề xuất bị REJECTED không có đường quay
+   lại — không sửa được, không gửi lại được, kẹt vĩnh viễn phải tạo dòng mới.
+   Nay cho phép Sửa & Gửi Lại dòng REJECTED (tự chuyển về SUBMITTED, xoá lý
+   do từ chối cũ) và xoá được như dòng SUBMMITTED.
+7. **[Trung bình-Cao]** Phê Duyệt Giá: "Yêu Cầu Bổ Sung" giữa chừng (bước >
+   1, còn PENDING) không vô hiệu hoá các bước ĐÃ DUYỆT TRƯỚC — nếu tệp bảng
+   giá bổ sung sau đó thực sự đổi số liệu, các bước trước vẫn coi như đã
+   duyệt xong dựa trên số liệu CŨ, không ai xét lại. Nay khi phản hồi yêu
+   cầu bổ sung từ người duyệt (không phải từ đội IT sau khi đã duyệt xong)
+   mà hồ sơ đã có bước APPROVED trước đó, các bước này bị đánh dấu
+   `invalidated=true` và quy trình reset về Bước 1 để duyệt lại từ đầu với
+   tệp mới (`lib/recordActions.js::submitPriceSupplementFile()`).
+8. **[Trung bình]** Giấy Phép: job nhắc hạn quét ĐỘC LẬP từng bản ghi, không
+   loại trừ các phiên bản CŨ đã bị thay thế bởi phiên bản MỚI hơn trong cùng
+   1 family (`rootLicenseId`/`versionNumber`) — gia hạn sớm vẫn khiến bản cũ
+   tiếp tục nhắc hạn riêng. `jobs/licenseExpiryReminder.js` nay chỉ nhắc bản
+   MỚI NHẤT trong mỗi family.
+9. **[Trung bình]** Đào Tạo: đăng ký hàng loạt (`bulk-register`) và tự đăng
+   ký dùng 2 khoá `withAppLock()` KHÁC NHAU cho cùng 1 lớp — 2 luồng chạy
+   đồng thời không loại trừ nhau, có thể vượt sĩ số lớp. Nay dùng chung đúng
+   1 khoá `training_registration:<id>`.
+10. **[Trung bình]** Mua Hàng (BAS): "Tính Ước Tính" không đối chiếu kỳ tính
+    (Từ ngày–Đến ngày) với Ngày Hiệu Lực Từ/Đến của điều khoản — chọn kỳ bao
+    trùm cả các tháng ngoài hiệu lực vẫn tính ra số ước tính dựa trên toàn bộ
+    doanh số trong khoảng đó. Nay chặn (400) nếu kỳ tính lấn ra ngoài phạm vi
+    hiệu lực điều khoản (`routes/purchasing.js`).
+11. **[Thấp]** Mua Hàng (BAS): đồng bộ DSmart bỏ qua VÔ ĐIỀU KIỆN mọi dòng đã
+    có từ lần đồng bộ trước — nếu DSmart sửa lại số liệu 1 giao dịch đã đồng
+    bộ (đã xác nhận với người dùng: DSmart CÓ sửa lại), số liệu CŨ nằm vĩnh
+    viễn trong bảng, sai lệch mọi lần Tính Ước Tính sau đó. Nay UPSERT thật:
+    dòng đã có nhưng nội dung khác thì cập nhật lại tại chỗ, y hệt thì bỏ qua
+    (`lib/vendorPurchaseStore.js::bulkInsertPurchaseTransactions()`), kết quả
+    đồng bộ hiện đủ 3 số "dòng mới / dòng cập nhật lại / trùng bỏ qua".
+
+**File đã sửa**: `server/lib/recordActions.js`, `server/routes/records.js`,
+`server/routes/purchasing.js`, `server/lib/vendorPurchaseStore.js`,
+`server/lib/vendorRebate.js`, `server/lib/createValidation.js`,
+`server/jobs/reportPeriodDeadlineReminder.js` (mới),
+`server/jobs/licenseExpiryReminder.js`, `server/server.js`,
+`server/public/js/module-ngansach.js`, `server/public/js/module-nghiepvu.js`.
+
+**Deploy-impact**: KHÔNG cần chạy lại `schema.sql` (mọi bảng liên quan đã có
+sẵn cột cần dùng), KHÔNG thêm biến `.env` mới, KHÔNG thêm dependency npm mới
+— chỉ copy code + `pm2 restart`.
 
 ## v23.56 (2026-09-19): Rà soát chuyên sâu Nhân Sự — vá 6 khoảng trống nghiệp vụ (Hợp Đồng/Công-Phép/Lương)
 

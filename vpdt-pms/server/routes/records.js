@@ -1327,12 +1327,20 @@ router.post('/trainingRegistrations/:id/set-result', async (req, res) => {
 // cả 2 cách client đều gửi lên đúng { usernames: [...] }). Khoá theo classId trong SUỐT lúc đọc-kiểm
 // tra-ghi (khác withLockedRecordForCollection chỉ khoá đúng 1 dòng) vì ở đây ghi NHIỀU bản ghi mới cùng
 // lúc, cần đọc "ảnh chụp" trainingRegistrations hiện có ổn định suốt quá trình kiểm tra trùng/còn chỗ.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Truyền Thông Nội Bộ, 9/2026): trước đây dùng khoá RIÊNG
+// `training_class_roster:<id>` — khác hẳn namespace `training_registration:<id>` mà luồng học viên TỰ
+// đăng ký dùng (lib/createValidation.js, getLockKey của trainingRegistrations — đã có comment giải
+// thích rõ đây là fix cho race "2 người cùng giữ chỗ trống cuối cùng"). withAppLock() chỉ loại trừ lẫn
+// nhau giữa các request dùng CÙNG 1 chuỗi khoá — 2 namespace khác tên khiến "1 học viên tự đăng ký" và
+// "HR bấm Thêm Học Viên hàng loạt" chạy gần như đồng thời vào đúng lớp gần đầy hoàn toàn KHÔNG loại trừ
+// nhau, lớp có thể vượt sĩ số dù capacity đã cấu hình. Đổi về ĐÚNG CÙNG namespace để 2 luồng ghi cùng 1
+// tài nguyên (số đăng ký active của classId) luôn xếp hàng chờ chung 1 khoá.
 router.post('/trainingClasses/:id/bulk-register', async (req, res) => {
   const classId = Number(req.params.id);
   if (!Number.isFinite(classId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const result = await withAppLock(`training_class_roster:${classId}`, async () => {
+    const result = await withAppLock(`training_registration:${classId}`, async () => {
       const classes = await getAllForCollection('trainingClasses');
       const cls = classes.find(c => c.id === classId);
       if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học');
@@ -1539,12 +1547,19 @@ router.post('/trainingClasses/:classId/submissions/:submissionId/grade-essay', a
       const cls = classes.find(c => c.id === classId);
       if (!cls) throw new HttpError(404, 'Không tìm thấy lớp học');
 
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu Truyền Thông Nội Bộ, 9/2026): trước đây tra đề theo cls.testId
+      // (đề đang gán CHO LỚP tại thời điểm CHẤM) thay vì sub.testId (đề THẬT SỰ đã gán lúc học viên
+      // NỘP BÀI, lưu sẵn trên chính bài nộp) — nếu ai đó đổi đề của lớp SAU khi học viên đã nộp nhưng
+      // TRƯỚC khi giảng viên chấm, câu hỏi Nghị Luận tra ra thuộc đề MỚI trong khi câu trả lời
+      // (sub.answers[].questionId) là của đề CŨ: hoặc bài nộp kẹt vĩnh viễn ở PENDING_ESSAY_GRADING
+      // (đề mới không có câu Nghị Luận nào) hoặc điểm bị cộng sai lệch hoàn toàn theo questionId của đề
+      // mới. Tra `tests` sau khi đã khoá đọc được đúng bản ghi nộp bài, dùng ĐÚNG sub.testId.
       const tests = await getAllForCollection('trainingTests');
-      const test = tests.find(t => t.id === cls.testId);
-      if (!test) throw new HttpError(404, 'Không tìm thấy bài test được gán cho lớp học này');
 
       const updatedSubmission = await withLockedRecordForCollection('trainingTestSubmissions', submissionId, (sub) => {
         if (sub.classId !== classId) throw new HttpError(404, 'Bài làm này không thuộc lớp học đang thao tác');
+        const test = tests.find(t => t.id === sub.testId);
+        if (!test) throw new HttpError(404, 'Không tìm thấy bài test tương ứng với bài làm này (đề có thể đã bị xoá)');
         return recordActions.gradeTrainingTestEssayAnswers(freshUser, sub, test, cls, req.body?.essayGrades);
       });
 

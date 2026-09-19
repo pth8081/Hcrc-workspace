@@ -581,6 +581,11 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     trình cho tới khi admin gán thành viên (gán ở đúng dòng nhóm đó, mục 11).
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
+  **Đổi người thực hiện khi đang "Đang thực hiện" (từ 9/2026)**: sửa lại
+  "Người Thực Hiện" của 1 việc đang ở trạng thái Đang thực hiện sẽ tự động
+  đưa việc về lại Cần làm + xoá các việc con đã tạo dở — người MỚI được gán
+  phải tự bấm "Nhận việc" lại từ đầu, không thừa hưởng ngầm tiến độ của
+  người cũ.
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
   tự điền thông tin cơ bản. **Xem/Tải/In khớp nội dung (từ 9/2026)** — trước
   đây màn "Xem" và file Tải/khung In dựng HTML riêng biệt, lệch cả nội dung
@@ -823,9 +828,11 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
 - **Giấy Phép** — hồ sơ pháp lý (giấy phép kinh doanh, chứng chỉ...), phân
   quyền hoàn toàn riêng ngay trong module (tạo/duyệt/xem tách biệt), không đi
   qua quy trình duyệt theo phòng ban ở mục 3. Có theo dõi hiệu lực + nhắc hết
-  hạn qua email. Danh sách các phiên bản gia hạn của cùng 1 giấy phép (cả ở
-  bảng con khi mở rộng 1 hồ sơ lẫn màn "Chi Tiết Giấy Phép") hiện **mới nhất
-  lên trước**.
+  hạn qua email — **chỉ nhắc đúng phiên bản MỚI NHẤT trong 1 family gia hạn
+  (từ 9/2026)**: gia hạn sớm (thêm phiên bản mới trước khi bản cũ hết hạn)
+  không còn khiến bản CŨ tiếp tục kích hoạt nhắc hạn riêng của nó song song.
+  Danh sách các phiên bản gia hạn của cùng 1 giấy phép (cả ở bảng con khi mở
+  rộng 1 hồ sơ lẫn màn "Chi Tiết Giấy Phép") hiện **mới nhất lên trước**.
 - **Hỗ Trợ IT** — module 3 sub-tab, mỗi tab phục vụ 1 nhóm người khác nhau
   dù cùng nằm 1 chỗ:
   - **🏷️ Phê Duyệt Giá** — dành cho người tạo/duyệt giá bán mặt hàng siêu thị
@@ -911,7 +918,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     Việc **DUYỆT thật sự** (bước chính trong quy trình Phê Duyệt Giá, KHÔNG
     nằm trong 7 quyền trên) hoàn toàn không đổi — vẫn theo cấu hình phòng ban
     (Bán Lẻ)/mức Margin-Chiết Khấu (Bán Buôn) ở **Hệ Thống → Quy Trình & Phê
-    Duyệt**. Có migrate 1 lần khi khởi động server (server-side, không mất
+    Duyệt**. **Yêu Cầu Bổ Sung giữa chừng tự reset lại từ Bước 1 (từ 9/2026)**:
+    nếu người duyệt bấm "Yêu Cầu Bổ Sung" khi hồ sơ ĐÃ có ít nhất 1 bước
+    duyệt xong trước đó (Bán Lẻ nhiều bước theo phòng ban), khi người đề xuất
+    nộp tệp bảng giá bổ sung, các bước đã duyệt trước đó tự động mất hiệu lực
+    và quy trình quay lại Bước 1 để duyệt lại toàn bộ với tệp mới — tránh
+    tình huống các bước trước duyệt dựa trên số liệu giá đã lỗi thời. Yêu cầu
+    bổ sung từ đội Hỗ Trợ IT (sau khi đã duyệt xong, trước khi áp giá) không
+    áp dụng luật này. Có migrate 1 lần khi khởi động server (server-side, không mất
     quyền tài khoản cũ): ai đang có `itPriceProposeCreate` được cấp sẵn CẢ 2
     quyền đề xuất mới; ai đang có `itManage` được cấp sẵn thêm `itPriceSupport`
     + `itServiceRenewalManage`; ai đang có `itPriceEmergencyRejectApprove`
@@ -1058,7 +1072,10 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     - **📝 Đề Xuất** (`PROPOSED`) — người có quyền **"Tạo/Quản Lý Ngân Sách"**
       (`budgetCreate`) tạo/sửa/xoá đề xuất của mình (trạng thái Chờ duyệt);
       người có **"Quản Lý Ngân Sách Toàn Quyền"** (`budgetManage`) duyệt hoặc
-      từ chối — duyệt xong **tự sinh 1 dòng ✅ Phê Duyệt** tương ứng.
+      từ chối — duyệt xong **tự sinh 1 dòng ✅ Phê Duyệt** tương ứng. Dòng bị
+      **Từ chối** (từ 9/2026) sửa được và tự chuyển lại về Chờ duyệt ngay khi
+      lưu (nút "Sửa & gửi lại", xoá lý do từ chối cũ) — không còn kẹt vĩnh
+      viễn phải tạo dòng mới.
     - **✅ Phê Duyệt** (`APPROVED`) — người có `budgetManage` nhập trực tiếp
       (không cần qua Đề Xuất trước) hoặc duyệt/từ chối dòng chuyển từ Đề
       Xuất lên. Khi 1 dòng Phê Duyệt được duyệt, hệ thống **tự sinh 1 dòng
@@ -1070,6 +1087,11 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       dòng) — mỗi lần ghi nhận tự cộng dồn vào dòng cha, tự tính lại trạng
       thái "còn dư / đã dùng hết / vượt ngân sách". Sửa/xoá dòng cha (chỉ
       `budgetManage`) khi xoá sẽ **mở lại** dòng Phê Duyệt nguồn tương ứng.
+      **Vượt ngân sách (từ 9/2026)**: ghi nhận Sử Dụng KHÔNG bị chặn dù tổng
+      đã vượt số tiền dòng cha được duyệt (tiền thực chi không thể "huỷ") —
+      badge dòng cha tự đổi thành **"⚠️ Vượt ngân sách"** (đỏ) thay vì
+      "✅ Đã dùng hết" (xanh) để không còn bị âm thầm bỏ sót, không cần vào
+      tận tab Báo Cáo mới thấy.
     - **📊 Báo Cáo** — chỉ hiện với quyền **"Xem Báo Cáo Ngân Sách Toàn Công
       Ty"** (`budgetAggregate`, hoặc `budgetManage`/admin) — tổng hợp
       Đề Xuất/Phê Duyệt/Sử Dụng theo Vị Trí/Khối Phòng Ban/Năm-Tháng, tính
@@ -1967,6 +1989,15 @@ file PDF đã có sẵn. **Lưu ý phân biệt**: đây là 1 quy trình nghi�
 là màn tổng hợp/giám sát số liệu đọc từ các module khác, không có luồng nghiệp
 vụ riêng của nó.
 
+**Nhắc hạn nộp báo cáo qua email (từ 9/2026)**: job nền quét mỗi 24h các kỳ
+đang MỞ (`OPEN`) còn/đã qua hạn nộp (`endTime`) đúng ngưỡng **còn 3 ngày / còn
+1 ngày / đã tới hạn** — với mỗi ngưỡng, gửi email tới đúng người có quyền
+"Tạo/Nộp Báo Cáo" (`reportEntryCreate`) của TỪNG phòng ban còn thiếu báo cáo
+(chưa có bản nộp `SUBMITTED` cho kỳ đó), không nhắc lại phòng đã nộp đủ. Trước
+đây chỉ Giấy Phép/Hợp Đồng/Gia Hạn CNTT có nhắc hạn tự động, Báo Cáo Định Kỳ
+hoàn toàn không có gì nhắc — người tổng hợp chỉ biết thiếu báo cáo khi tự vào
+kiểm tra thủ công.
+
 Ngoài bản tổng hợp CHÍNH THỨC (chọn+sắp+merge báo cáo con nhân viên tự nộp) còn
 có box riêng **"🗂️ Đối Chiếu Theo Công Việc"** (sub-tab Tổng Hợp) — tự sinh 1
 bản đối chiếu CHỈ XEM từ công việc thật ghi nhận trong module Công Việc
@@ -2305,7 +2336,13 @@ bộ mô tả bên dưới.
   gian `VendorPurchaseTransactions` (đánh dấu `DataConfidence='PROVISIONAL'`
   vì là dữ liệu tạm/chưa đối chiếu chính thức). Chưa cấu hình 2 biến môi
   trường trên thì nút này báo lỗi rõ ràng (503), các phần khác của module vẫn
-  dùng bình thường. Mỗi lượt đồng bộ ghi 1 dòng vào **Nhật Ký Đồng Bộ**
+  dùng bình thường. **UPSERT thật (từ 9/2026)**: đối chiếu theo mã tham
+  chiếu gốc — dòng CHƯA có thì thêm mới, dòng ĐÃ có nhưng DSmart sửa lại nội
+  dung (VD sửa số tiền/ngày mua của giao dịch đã đồng bộ trước đó) thì CẬP
+  NHẬT LẠI tại chỗ, dòng y hệt lần trước thì bỏ qua (không ghi thừa) — trước
+  đây dòng đã có luôn bị bỏ qua vô điều kiện, số liệu DSmart sửa lại sau khi
+  đã đồng bộ lần đầu sẽ không bao giờ cập nhật, làm sai lệch vĩnh viễn kết
+  quả Tính Ước Tính. Mỗi lượt đồng bộ ghi 1 dòng vào **Nhật Ký Đồng Bộ**
   (`PurchaseDataSyncLog` — thời điểm, số dòng lấy/nạp, người bấm, lỗi nếu có).
 - **Nhập/Xuất Dữ Liệu Thủ Công** (9/2026) — phương án THAY THẾ khi DSmart tạm
   không sẵn sàng hoặc cần bổ sung tay 1 vài giao dịch lẻ, đặt ngay cạnh "Đồng
@@ -2328,7 +2365,14 @@ bộ mô tả bên dưới.
   (`purchaseBasisAggregator.js`) rồi áp bậc thang (`tieredCalculator.js`) ra
   số tiền ước tính, lưu snapshot vào `RebateCalculations` (append-only, không
   sửa/xoá — muốn tính lại thì tính ước tính mới, không ghi đè). Quyền:
-  `rebateTermManage`.
+  `rebateTermManage`. **Kỳ tính phải nằm trong hiệu lực điều khoản (từ
+  9/2026)**: kỳ tính (Từ ngày–Đến ngày) chọn lấn ra ngoài Ngày Hiệu Lực Từ/
+  Đến của điều khoản bị từ chối (400), tránh gộp nhầm doanh số của các tháng
+  KHÔNG thuộc phạm vi thoả thuận vào số ước tính. Lưu ý: điều khoản hết hiệu
+  lực (qua Ngày Hiệu Lực Đến) KHÔNG tự chuyển sang "Hết Hạn" — người quản lý
+  vẫn phải tự bấm "⏳ Hết Hạn"; guard kỳ tính ở trên hoạt động độc lập, không
+  phụ thuộc việc đã đánh dấu hết hạn hay chưa, nên đây vẫn là lớp bảo vệ
+  chính chống tính sai dù điều khoản chưa được đánh dấu Hết Hạn.
 - **Báo Cáo** (tab riêng trong module + entry ở 📊 Báo Cáo tổng hợp) — liệt
   kê mọi lượt tính ước tính (lọc theo NCC/khoảng ngày), tổng doanh số căn cứ +
   tổng ước tính chiết khấu. Quyền xem: `rebateViewReport` (không cần

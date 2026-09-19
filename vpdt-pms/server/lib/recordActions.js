@@ -2897,9 +2897,21 @@ function editTask(payload, user, task, usersList) {
     }
   }
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu Điều Hành, 9/2026): assignTask() đã chặn hẳn việc gán lại người nhận
+  // cho 1 công việc ĐÃ có người nhận (409, xem chú thích ở đó) — nhưng editTask() (nút "✏️ Sửa", cho
+  // đổi Người Nhận tự do kể cả khi đang DOING) không hề có kiểm tra tương tự: đổi người nhận 1 việc
+  // đang "Đang thực hiện" khiến người MỚI thấy việc NGAY LẬP TỨC ở trạng thái DOING dù chưa từng bấm
+  // "Nhận việc" (task.startedAt vẫn là thời điểm người CŨ nhận), lịch sử vẫn còn dòng ACCEPTED của
+  // người cũ, và canManageSubtasks() (so task.assignedTo === username hiện tại) lập tức trao toàn
+  // quyền thêm/tick/xoá các subtask do người CŨ tạo cho người MỚI hoàn toàn không liên quan. Đổi người
+  // nhận lúc đang DOING nay bắt buộc reset về TODO (yêu cầu người mới tự "Nhận việc" lại từ đầu) và
+  // xoá subtask cũ (đã gắn tiến độ/ngữ cảnh của người cũ, không còn ý nghĩa với người mới) — ghi rõ vào
+  // lịch sử để không mất dấu vết.
+  const reassignedWhileDoing = task.assignedTo && task.assignedTo !== payload.assignedTo && task.status === 'DOING';
   task.title = payload.title;
   task.description = payload.description || '';
   task.deadline = newDeadline;
+  const previousAssignedTo = task.assignedTo;
   task.assignedTo = payload.assignedTo;
   task.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
   // Cùng kiểm tra như assignTask() — collaborators cũng phải là tài khoản hệ thống đang hoạt động.
@@ -2908,6 +2920,16 @@ function editTask(payload, user, task, usersList) {
   task.collaborators = [...new Set(editCollaborators)];
   task.history = Array.isArray(task.history) ? task.history : [];
   task.history.push({ action: 'EDITED', by: user.username, byName: user.name, time: nowVN() });
+  if (reassignedWhileDoing) {
+    const droppedSubtaskCount = (task.subtasks || []).length;
+    task.status = 'TODO';
+    task.startedAt = null;
+    task.subtasks = [];
+    task.history.push({
+      action: 'REASSIGNED_RESET', by: user.username, byName: user.name, time: nowVN(),
+      note: `Đổi người nhận từ ${previousAssignedTo} sang ${payload.assignedTo} lúc đang Đang thực hiện — tự đưa về Chưa nhận việc, xoá ${droppedSubtaskCount} công việc nhỏ cũ (thuộc về người nhận trước)`
+    });
+  }
   return task;
 }
 
@@ -4965,6 +4987,28 @@ function submitPriceSupplementFile(user, item, payload) {
     step: item.currentStep, approver: user.name, username: user.username,
     action: 'SUBMIT_SUPPLEMENT', comment: openReq.response, time: openReq.respondedAt
   });
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu Hỗ Trợ IT, 9/2026): yêu cầu bổ sung giữa chừng (byRole:'approver', xem
+  // nhánh REQUEST_INFO ở lib/workflowEngine.js) chỉ đính kèm thêm tệp mà KHÔNG đối chiếu lại với các bước
+  // ĐÃ DUYỆT TRƯỚC bước hiện tại — nếu tệp bổ sung thực sự thay đổi số liệu giá (khác lý do IT yêu cầu
+  // bổ sung SAU khi đã APPROVED xong, xem requestPriceInfoFromIt() ở trên — đó chỉ là chỉnh sửa/hoàn
+  // thiện tệp trước khi áp giá, không phải "duyệt lại"), các approver bước TRƯỚC vẫn coi như đã duyệt
+  // xong dựa trên tệp CŨ, không ai xét lại dựa trên tệp bảng giá MỚI. Cùng cách REQUEST_CHANGES đã xử lý
+  // (đánh dấu invalidated=true), khác ở chỗ itPriceApprovals KHÔNG dùng supportsRequestChanges (đưa về
+  // NHÁP) mà giữ nguyên PENDING + reset về Bước 1 để duyệt lại ngay — đúng khuôn RESOLVE_FILE_PROPOSAL
+  // nhánh "Đồng ý" của Văn Bản Trình (submissions) đã áp dụng cho đúng tình huống người trình tự xác nhận
+  // nội dung thay thế, không cần qua NHÁP.
+  if (openReq.byRole === 'approver' && item.status === 'PENDING') {
+    const hadPriorApproved = item.history.some(h => h.action === 'APPROVED' && !h.invalidated);
+    if (hadPriorApproved) {
+      item.history.forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
+      item.currentStep = 1;
+      item.history.push({
+        step: 1, approver: user.name, username: user.username, action: 'SUPPLEMENT_RESTART',
+        comment: 'Tệp bảng giá bổ sung có thể làm thay đổi nội dung — các bước đã duyệt trước đó không còn hiệu lực, quy trình duyệt lại từ Bước 1.',
+        time: nowVN()
+      });
+    }
+  }
   return item;
 }
 
@@ -6193,14 +6237,26 @@ function rejectBudgetLine(user, item, payload) {
   return item;
 }
 
-// Sửa Đề Xuất/Phê Duyệt khi còn SUBMITTED (chưa quyết định) — người tạo (đúng creator) hoặc budgetManage/
-// admin đều sửa được Đề Xuất; riêng dòng stage='APPROVED' chỉ budgetManage/admin (đúng người được tạo
-// dòng đó ngay từ đầu, xem lib/createValidation.js budgetLines.extraValidate).
+// Sửa Đề Xuất/Phê Duyệt khi còn SUBMITTED (chưa quyết định) HOẶC đã REJECTED (sửa lại & gửi lại) — người
+// tạo (đúng creator) hoặc budgetManage/admin đều sửa được Đề Xuất; riêng dòng stage='APPROVED' chỉ
+// budgetManage/admin (đúng người được tạo dòng đó ngay từ đầu, xem lib/createValidation.js
+// budgetLines.extraValidate).
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây hàm này CHỈ cho sửa khi status==='SUBMITTED'
+// — 1 dòng bị Từ Chối (REJECTED) là NGÕ CỤT VĨNH VIỄN (không sửa/xoá được nữa), trái với sơ đồ tài liệu
+// Nghiệp Vụ tự vẽ "Bị từ chối -> Sửa & gửi lại" (module-nghiepvu.js, entry budget). So sánh với officeReqs
+// (module CÙNG nhóm "Tổng Hợp") vốn đã có đúng cơ chế "Bị từ chối/Yêu cầu bổ sung -> về Nháp sửa & gửi
+// lại" (editOfficeReqDraft()/submitOfficeReqDraft() ở trên) — đây là thiếu sót áp dụng lại cơ chế đã có,
+// không phải thiết kế cố ý. Ngân Sách 2.0 không dùng workflowEngine nhiều bước (chỉ 1 cấp quyết định
+// phẳng, xem chú thích đầu khối NGÂN SÁCH 2.0) nên gộp thẳng "sửa" + "gửi lại" làm 1 bước duy nhất
+// (không cần 2 hành động DRAFT->PENDING riêng như officeReqs).
 function updateBudgetLineDraft(user, item, payload, appData) {
   const isOwner = item.createdBy && item.createdBy === user.username;
   const allowed = canManageBudget(user) || (item.stage === 'PROPOSED' && isOwner);
   if (!allowed) throw new HttpError(403, 'Bạn không có quyền sửa dòng ngân sách này');
-  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng này đã được xử lý, không sửa được nữa');
+  if (item.status !== 'SUBMITTED' && item.status !== 'REJECTED') {
+    throw new HttpError(409, 'Dòng này đã được xử lý, không sửa được nữa');
+  }
+  const wasRejected = item.status === 'REJECTED';
 
   const location = String(payload?.location || '').trim();
   if (location !== 'HO' && !(appData?.stores || []).includes(location)) throw new HttpError(400, 'Vị trí không hợp lệ');
@@ -6222,15 +6278,23 @@ function updateBudgetLineDraft(user, item, payload, appData) {
   item.quantity = draft.quantity; item.unitPrice = draft.unitPrice; item.vatPercent = draft.vatPercent;
   item.totalAmount = draft.totalAmount; item.budgetType = draft.budgetType; item.itemCategory = draft.itemCategory;
   item.budgetYear = draft.budgetYear; item.budgetMonth = draft.budgetMonth; item.note = draft.note;
+  if (wasRejected) {
+    // Sửa xong thì coi như GỬI LẠI ngay — quay về SUBMITTED, xoá sạch dấu vết quyết định Từ Chối cũ để
+    // không hiển thị nhầm lý do/thời điểm từ chối của VÒNG TRƯỚC lên nội dung đã sửa của vòng MỚI.
+    item.status = 'SUBMITTED';
+    item.decidedBy = null; item.decidedByName = null; item.decidedAt = null; item.rejectReason = '';
+  }
   return item;
 }
-// checkFn cho deleteRecordForCollection() khi xoá Đề Xuất/Phê Duyệt còn SUBMITTED — cùng điều kiện
-// quyền với updateBudgetLineDraft() ở trên.
+// checkFn cho deleteRecordForCollection() khi xoá Đề Xuất/Phê Duyệt còn SUBMITTED hoặc REJECTED (không
+// muốn sửa lại nữa, xoá hẳn) — cùng điều kiện quyền với updateBudgetLineDraft() ở trên.
 function assertCanDeleteBudgetLineDraft(user, item) {
   const isOwner = item.createdBy && item.createdBy === user.username;
   const allowed = canManageBudget(user) || (item.stage === 'PROPOSED' && isOwner);
   if (!allowed) throw new HttpError(403, 'Bạn không có quyền xoá dòng ngân sách này');
-  if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng này đã được xử lý, không xoá được nữa');
+  if (item.status !== 'SUBMITTED' && item.status !== 'REJECTED') {
+    throw new HttpError(409, 'Dòng này đã được xử lý, không xoá được nữa');
+  }
 }
 
 // Dựng dòng Sử Dụng CHA — gọi NGAY SAU khi approveBudgetLine() đã khoá+lưu dòng Phê Duyệt thành công
@@ -6347,9 +6411,16 @@ function updateBudgetLineChild(user, item, parent, payload) {
 // Tính lại usageStatus của dòng cha — gọi SAU MỖI lần thêm/sửa/xoá mục con (route tự đọc lại đủ danh
 // sách mục con mới nhất truyền vào đây, xem mục 1.5 tài liệu gốc "số liệu luôn đúng theo thời gian
 // thực"). Trả về BẢN SAO đã cập nhật usageStatus của item cha (caller tự lưu qua withLockedRecordForCollection()).
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây usedTotal VƯỢT parent.totalAmount vẫn bị
+// gộp chung vào 'USED' (badge xanh "✅ Đã dùng hết") y hệt trường hợp dùng ĐÚNG 100% — không có tín hiệu
+// nào phân biệt "đã dùng hết đúng ngân sách" với "đã chi VƯỢT ngân sách đã duyệt", người ghi nhận chỉ
+// cần quyền budgetCreate (không cần budgetManage) đã ghi được bao nhiêu tuỳ ý mà không ai cảnh báo, chỉ
+// lộ ra ở tab Báo Cáo (cột "Chênh Lệch", cần quyền xem báo cáo riêng). Thêm trạng thái OVER_BUDGET riêng
+// để badge hiển thị TRỰC TIẾP ngay trên tab Sử Dụng (nơi phần lớn người dùng thao tác hàng ngày).
 function recomputeBudgetLineUsageStatus(parent, children) {
   const usedTotal = (children || []).reduce((sum, c) => sum + (Number(c.totalAmount) || 0), 0);
-  parent.usageStatus = usedTotal <= 0 ? 'NOT_USED' : (usedTotal >= parent.totalAmount ? 'USED' : 'PARTIALLY_USED');
+  parent.usageStatus = usedTotal <= 0 ? 'NOT_USED'
+    : (usedTotal > parent.totalAmount ? 'OVER_BUDGET' : (usedTotal >= parent.totalAmount ? 'USED' : 'PARTIALLY_USED'));
   return parent;
 }
 

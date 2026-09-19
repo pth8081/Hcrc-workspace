@@ -93,6 +93,34 @@ async function run() {
     const rejectProposal = await recordAction(propose2.item.id, 'reject-proposal', { reason: 'Không đủ ngân sách quý này' });
     check('Từ chối Đề Xuất thành công -> REJECTED, lưu lại lý do', rejectProposal.ok && rejectProposal.item.status === 'REJECTED' && rejectProposal.item.rejectReason.includes('Không đủ ngân sách'), rejectProposal);
 
+    // ============ Kịch bản 5b (rà soát chuyên sâu Tổng Hợp, 9/2026): Đề Xuất bị Từ Chối KHÔNG còn là
+    // ngõ cụt — người tạo sửa lại nội dung -> tự động quay về Chờ duyệt (SUBMITTED), xoá sạch dấu vết
+    // quyết định Từ Chối cũ, để người khác duyệt lại được bình thường ============
+    await loginAs('gd1'); // không phải creator, không có budgetManage -> phải bị chặn sửa dòng REJECTED
+    const gd1TryEditRejected = await recordAction(propose2.item.id, 'update', baseLine({ content: 'Sửa trộm nội dung' }));
+    check('Người KHÔNG phải chủ/không có budgetManage KHÔNG sửa được dòng REJECTED của người khác', !gd1TryEditRejected.ok, gd1TryEditRejected);
+
+    await loginAs('kd1'); // đúng người tạo Đề Xuất bị từ chối
+    const editRejected = await recordAction(propose2.item.id, 'update', baseLine({ content: 'Thuê ngoài kiểm toán quý (đã bổ sung hồ sơ)' }));
+    check('Người tạo SỬA được Đề Xuất đã bị Từ Chối (không còn ngõ cụt)', editRejected.ok, editRejected);
+    check('Sửa xong -> tự động quay về SUBMITTED (Chờ duyệt)', editRejected.ok && editRejected.item.status === 'SUBMITTED', editRejected.item);
+    check('Nội dung mới được lưu đúng', editRejected.ok && editRejected.item.content === 'Thuê ngoài kiểm toán quý (đã bổ sung hồ sơ)', editRejected.item);
+    check('Xoá sạch dấu vết quyết định Từ Chối cũ (decidedBy/decidedAt/rejectReason)', editRejected.ok && !editRejected.item.decidedBy && !editRejected.item.decidedAt && !editRejected.item.rejectReason, editRejected.item);
+
+    await loginAs('tp_kd');
+    const approveAfterResubmit = await recordAction(propose2.item.id, 'approve-proposal');
+    check('Sau khi gửi lại, người khác duyệt lại được bình thường -> APPROVED', approveAfterResubmit.ok && approveAfterResubmit.item.status === 'APPROVED', approveAfterResubmit);
+
+    // ============ Kịch bản 5c: Đề Xuất bị Từ Chối cũng XOÁ được thẳng nếu không muốn sửa lại nữa ============
+    await loginAs('kd1');
+    const propose3 = await createBudgetLine(baseLine({ content: 'Mua bàn ghế văn phòng mới' }));
+    check('Tạo Đề Xuất thứ 3 thành công', propose3.ok, propose3);
+    await loginAs('tp_kd');
+    await recordAction(propose3.item.id, 'reject-proposal', { reason: 'Không cần thiết' });
+    await loginAs('kd1');
+    const deleteRejected = await recordAction(propose3.item.id, 'delete');
+    check('Người tạo XOÁ được thẳng Đề Xuất đã bị Từ Chối (không bắt buộc phải sửa lại)', deleteRejected.ok, deleteRejected);
+
     // ============ Kịch bản 6: budgetCreate (kd1) KHÔNG tạo được dòng Phê Duyệt trực tiếp (chỉ
     // budgetManage/admin) ============
     await loginAs('kd1');
@@ -157,6 +185,14 @@ async function run() {
       quantity: 1, unitPrice: 5000000, vatPercent: 0, budgetType: 'CAPEX', purchaseMonth: 11
     });
     check('budgetCreate (kd1) ghi nhận Sử Dụng được cho dòng cha ĐÚNG Khối Phòng Ban của mình', kd1AddChildOwnDept.ok, kd1AddChildOwnDept);
+    // ============ LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây ghi nhận Sử Dụng VƯỢT số
+    // tiền dòng cha đã Phê Duyệt (185.000.000 > 180.000.000 ở đây) vẫn được chấp nhận vô điều kiện và
+    // usageStatus vẫn gộp chung vào 'USED' như dùng ĐÚNG 100% — không ai được cảnh báo ngay trên tab Sử
+    // Dụng. recomputeBudgetLineUsageStatus() nay phải trả về 'OVER_BUDGET' riêng cho đúng trường hợp
+    // này (hệ thống vẫn KHÔNG chặn ghi nhận — tiền đã thực chi không thể "huỷ" — chỉ đổi tín hiệu hiển
+    // thị để không còn im lặng). ============
+    check('Ghi nhận thêm 5.000.000 -> tổng 185.000.000 VƯỢT 180.000.000 đã Phê Duyệt -> vẫn cho ghi nhận (không chặn)', kd1AddChildOwnDept.ok, kd1AddChildOwnDept);
+    check('Vượt số tiền đã Phê Duyệt -> usageStatus dòng cha PHẢI chuyển OVER_BUDGET (không còn gộp chung vào USED)', kd1AddChildOwnDept.ok && kd1AddChildOwnDept.parentItem.usageStatus === 'OVER_BUDGET', kd1AddChildOwnDept.parentItem);
 
     // ============ Kịch bản 13: Sửa/Xoá dòng cha Sử Dụng — CHỈ budgetManage/admin, chỉ Vị trí/Khối
     // Phòng Ban/Ghi chú (Nội dung/Danh Mục vẫn khoá cứng) ============

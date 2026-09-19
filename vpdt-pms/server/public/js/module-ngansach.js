@@ -201,18 +201,24 @@ function renderBudgetLineList(stage) {
   tbody.innerHTML = items.map(item => {
     const isOwner = item.createdBy === currentUser.username;
     const canDecide = item.status === 'SUBMITTED' && !isOwner && (stage === 'APPROVED' ? canManage : canCreateBudgetLineClient(currentUser));
-    const canEdit = item.status === 'SUBMITTED' && (canManage || isOwner);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây dòng REJECTED không có canEdit nào cả
+    // (chỉ hiện "Đã xử lý bởi ...", không nút gì khác) — NGÕ CỤT VĨNH VIỄN, trái sơ đồ Nghiệp Vụ tự vẽ
+    // "Bị từ chối -> Sửa & gửi lại". Server (updateBudgetLineDraft()) nay đã cho sửa cả khi REJECTED
+    // (lưu lại tự động chuyển về Chờ duyệt) — mở lại đúng nút Sửa/Xoá ở đây.
+    const canEdit = (item.status === 'SUBMITTED' || item.status === 'REJECTED') && (canManage || isOwner);
     let actionsHTML = '';
     if (canDecide) {
       actionsHTML += `<button data-op="approveBudgetLineDraft" data-arg0="${item.id}" data-arg1="${stage}" class="px-2 py-0.5 bg-emerald-600 text-white rounded text-xs font-bold">✔ Duyệt</button> ` +
         `<button data-op="rejectBudgetLineDraft" data-arg0="${item.id}" data-arg1="${stage}" class="px-2 py-0.5 bg-red-600 text-white rounded text-xs font-bold">✖ Từ chối</button>`;
     } else if (item.status === 'SUBMITTED') {
       actionsHTML = `<span class="text-gray-400 italic text-[11px]">${isOwner ? 'Chờ người khác duyệt' : 'Chưa xử lý'}</span>`;
+    } else if (item.status === 'REJECTED') {
+      actionsHTML = `<span class="text-gray-400 italic text-[11px]" title="${escapeHtml(item.rejectReason || '')}">Bị từ chối bởi ${escapeHtml(item.decidedByName || '')}${item.rejectReason ? ` — ${escapeHtml(item.rejectReason)}` : ''}</span>`;
     } else {
       actionsHTML = `<span class="text-gray-400 italic text-[11px]">Đã xử lý bởi ${escapeHtml(item.decidedByName || '')}</span>`;
     }
     if (canEdit) {
-      actionsHTML += ` <button data-op="editBudgetLineDraft" data-arg0="${item.id}" data-arg1="${stage}" class="px-2 py-0.5 bg-gray-600 text-white rounded text-xs font-bold">✏️</button>` +
+      actionsHTML += ` <button data-op="editBudgetLineDraft" data-arg0="${item.id}" data-arg1="${stage}" class="px-2 py-0.5 bg-gray-600 text-white rounded text-xs font-bold" title="${item.status === 'REJECTED' ? 'Sửa & gửi lại' : 'Sửa'}">✏️</button>` +
         ` <button data-op="deleteBudgetLineDraft" data-arg0="${item.id}" class="px-2 py-0.5 bg-gray-300 text-gray-700 rounded text-xs font-bold">🗑️</button>`;
     }
     return `<tr class="hover:bg-gray-50">
@@ -290,7 +296,13 @@ function deleteBudgetLineDraft(id) {
 }
 
 // ============ TAB "SỬ DỤNG" (stage='USED') ============
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây ghi nhận Sử Dụng vượt số tiền dòng cha đã
+// Phê Duyệt vẫn hiện badge xanh "✅ Đã dùng hết" y hệt trường hợp dùng ĐÚNG 100% — không có cảnh báo nào
+// ngay trên tab Sử Dụng (chỉ lộ ra ở tab Báo Cáo, cần quyền riêng). recomputeBudgetLineUsageStatus()
+// (lib/recordActions.js) nay trả về 'OVER_BUDGET' riêng khi usedTotal > totalAmount — thêm badge đỏ
+// tương ứng ở đây.
 function budgetLineUsageStatusBadge(status) {
+  if (status === 'OVER_BUDGET') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">⚠️ Vượt ngân sách</span>`;
   if (status === 'USED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã dùng hết</span>`;
   if (status === 'PARTIALLY_USED') return `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">🟡 Dùng 1 phần</span>`;
   return `<span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded font-bold text-xs">⚪ Chưa dùng</span>`;

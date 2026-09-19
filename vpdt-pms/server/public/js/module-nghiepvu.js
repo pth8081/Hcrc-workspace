@@ -418,7 +418,7 @@ const NGHIEP_VU_DOCS = {
       { text: 'Xem lại bản đã gộp: tab <b>"📣 Đã Phát Hành"</b>.' },
     ],
     footer: { left: [
-      { label: 'Nhắc hạn', text: 'hệ thống tự nhắc các phòng ban chưa nộp khi gần tới hạn kỳ báo cáo, tránh thiếu số liệu lúc tổng hợp.' },
+      { label: 'Nhắc hạn (9/2026, job nền chạy thật)', text: 'hệ thống tự quét mỗi 24h, gửi email nhắc TỪNG phòng ban còn thuộc phạm vi kỳ mà CHƯA nộp báo cáo (Nháp chưa gửi vẫn tính là chưa nộp) — nhắc ở các mốc còn khoảng 3/1 ngày và ngay ngày hết hạn/đã quá hạn, mỗi mốc chỉ nhắc đúng 1 lần cho phòng ban đó. Người nhận là người của đúng phòng ban đang thiếu, có quyền "Nộp Báo Cáo Định Kỳ".' },
     ], right: [
       { label: 'Khác mục "Báo Cáo"', text: 'đây là quy trình chủ động — từng phòng ban tự nhập và nộp số liệu theo kỳ; mục "📊 Báo Cáo" ở cuối menu chỉ để xem lại số liệu đã tổng hợp, không có thao tác riêng.' },
     ] },
@@ -541,7 +541,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Cập nhật = thêm phiên bản mới', text: 'chọn "Cập nhật" để thêm 1 phiên bản mới cho giấy phép đã có (mã tự sinh dạng <mã gốc>-V<số thứ tự>) — chỉ thực hiện được khi phiên bản mới nhất KHÔNG đang chờ duyệt.' },
       { label: 'Hiệu lực tách biệt với duyệt', text: '"Đang gia hạn"/"Đã thu hồi" là trạng thái RIÊNG, chỉ đánh dấu được cho giấy phép ĐÃ duyệt và chưa bị thu hồi — không đụng tới lịch sử duyệt.' },
     ], right: [
-      { label: 'Tự tính hiệu lực', text: 'Còn hiệu lực / Sắp hết hạn (≤30 ngày) / Hết hạn tự tính theo Ngày hết hạn, có nhắc tự động trước khi hết hạn.' },
+      { label: 'Tự tính hiệu lực', text: 'Còn hiệu lực / Sắp hết hạn (≤30 ngày) / Hết hạn tự tính theo Ngày hết hạn, có nhắc tự động trước khi hết hạn — job nhắc hạn (9/2026) chỉ xét ĐÚNG phiên bản MỚI NHẤT của mỗi giấy phép, tự bỏ qua các phiên bản CŨ đã bị thay thế (trước đây gia hạn sớm vẫn khiến bản cũ tiếp tục gửi nhắc hạn trùng lặp).' },
       { label: 'Thu hồi', text: 'bắt buộc nhập lý do; sau khi thu hồi không đánh dấu "Đang gia hạn" được nữa — huỷ đánh dấu thu hồi được nếu thao tác nhầm.' },
     ] },
   },
@@ -594,6 +594,8 @@ const NGHIEP_VU_DOCS = {
       { label: 'Quyền quản lý toàn bộ', text: 'duyệt đề xuất, tạo và duyệt phần Phê Duyệt, sửa/xoá được dòng Sử Dụng gốc — quyền cao nhất trong mục này.' },
       { label: 'Quyền xem báo cáo', text: 'xem được số liệu của mọi phòng ban/siêu thị và tab Báo Cáo, nhưng không tạo hay duyệt được gì.' },
       { label: 'Excel Tải Mẫu/Nhập/Xuất', text: 'tab Đề Xuất/Phê Duyệt có đủ cả 3 nút; tab Sử Dụng/Báo Cáo chỉ có nút Xuất Excel.' },
+      { label: 'Cảnh báo Vượt Ngân Sách (9/2026)', text: 'ghi nhận Sử Dụng KHÔNG bị chặn dù vượt số tiền dòng cha đã Phê Duyệt (tiền đã thực chi không thể "huỷ") — nhưng badge dòng cha ở tab Sử Dụng sẽ đổi thành "⚠️ Vượt ngân sách" (đỏ) thay vì "✅ Đã dùng hết" (xanh) như trước, để không còn bị âm thầm — trước đây chỉ phát hiện được qua cột "Chênh Lệch" ở tab Báo Cáo (cần quyền riêng).' },
+      { label: 'Đề Xuất/Phê Duyệt bị Từ Chối không còn là ngõ cụt (9/2026)', text: 'bấm nút "✏️" trên 1 dòng ❌ Từ chối để sửa lại nội dung — lưu xong hệ thống TỰ ĐỘNG chuyển lại về ⏳ Chờ duyệt (xoá sạch lý do/người từ chối cũ) để người khác duyệt lại, đúng đường "Sửa & gửi lại" ở sơ đồ trên; không muốn sửa nữa thì bấm "🗑️" xoá thẳng cũng được.' },
     ] },
   },
   vanHanh: {
@@ -843,7 +845,7 @@ const NGHIEP_VU_DOCS = {
     ],
     footer: { left: [
       { label: 'Leo thang phê duyệt là tuỳ chọn', text: 'phần lớn ticket không cần bước này — đội IT chỉ gửi khi cần 1 người cụ thể (không nhất thiết có quyền itManage) duyệt trước khi tiếp tục xử lý, VD xin phê duyệt chi phí phát sinh ngoài luồng Phê Duyệt Giá Bán.' },
-      { label: 'Từ chối khẩn cấp', text: 'chỉ đúng người đã duyệt bước leo thang cuối cùng mới gửi được yêu cầu Từ Chối Khẩn Cấp; bị khoá khi ticket đang ở trạng thái "Tôi đang xử lý".' },
+      { label: 'Không có "Từ chối khẩn cấp" cho ticket (9/2026, sửa lại tài liệu)', text: 'người được xin ý kiến leo thang chỉ Duyệt hoặc Từ chối NGAY LÚC ĐƯỢC HỎI (sơ đồ trên) — sau khi đã bấm Duyệt thì KHÔNG có cách nào đổi ý/chặn khẩn cấp lại giữa chừng nữa (khác hẳn "Phê Duyệt Giá Bán" — mục riêng bên dưới — CÓ cơ chế Từ Chối Khẩn Cấp thật sự, vì rủi ro tài chính lớn hơn); tài liệu bản trước ghi nhầm ticket cũng có tính năng này, đã sửa lại cho đúng thực tế.' },
     ], right: [
       { label: 'Chống trùng mã', text: 'nếu 2 người cùng tạo phiếu cùng lúc và mã bị trùng, hệ thống tự đổi sang mã kế tiếp — người dùng không thấy lỗi gì cả.' },
     ] },
@@ -876,7 +878,7 @@ const NGHIEP_VU_DOCS = {
     ], right: [
       { label: 'Luồng duyệt tách biệt', text: 'Bán Lẻ duyệt theo cấu hình từng phòng ban (itPriceDeptWorkflows); Bán Buôn duyệt theo đúng mức Margin/Chiết Khấu đã chọn (itPriceTierWorkflows) — người duyệt mức này KHÔNG duyệt được hồ sơ mức khác.' },
       { label: 'Mẫu Giá (khuôn cột)', text: 'nếu hệ thống đã có ít nhất 1 Mẫu Giá thì bắt buộc chọn đúng mẫu khớp cột với tệp đang nộp — chỉ dùng để đối chiếu tên cột, không còn đối chiếu giá trị/tự động duyệt.' },
-      { label: 'Yêu Cầu Bổ Sung', text: 'người duyệt hoặc đội IT có thể yêu cầu bổ sung tệp trước khi áp giá — hồ sơ bị khoá áp giá tới khi có tệp bổ sung mới (không ghi đè, chỉ nối thêm).' },
+      { label: 'Yêu Cầu Bổ Sung', text: 'người duyệt hoặc đội IT có thể yêu cầu bổ sung tệp trước khi áp giá — hồ sơ bị khoá áp giá/duyệt tới khi có tệp bổ sung mới (không ghi đè, chỉ nối thêm). Nếu yêu cầu đến từ người duyệt GIỮA CHỪNG (không phải bước cuối) và hồ sơ đã có bước nào đó DUYỆT XONG trước đó, nộp tệp bổ sung sẽ VÔ HIỆU HOÁ các bước đã duyệt cũ và đưa quy trình về lại Bước 1 để duyệt lại từ đầu với tệp mới (9/2026) — tránh tình huống các bước trước duyệt dựa trên số liệu giá đã lỗi thời. Yêu cầu bổ sung đến từ đội IT SAU KHI đã duyệt xong (trước khi áp giá) thì KHÔNG áp dụng luật này — đó chỉ là hoàn thiện tệp trước khi áp giá, không phải duyệt lại.' },
       { label: 'Cây phân quyền (10/2026)', text: 'trước đây 3 quyền gộp — nay tách 7 quyền riêng: Đề xuất Bán Buôn/Bán Lẻ tách 2 cờ (itPriceProposeCreateWholesale/Retail — ai chỉ phụ trách 1 loại chỉ đề xuất đúng loại đó); "Đội Hỗ Trợ IT" (itManage) giờ CHỈ còn xử lý ticket "Hỗ Trợ Yêu Cầu", KHÔNG còn tự động áp giá/xem hết Phê Duyệt Giá; áp giá sau khi duyệt + xem toàn bộ hồ sơ Phê Duyệt Giá chuyển sang quyền riêng itPriceSupport (vẫn gộp chung Bán Buôn/Bán Lẻ); Gia Hạn Dịch Vụ CNTT chuyển sang quyền riêng itServiceRenewalManage; Từ chối khẩn cấp tách 2 cờ theo đúng loại giá (itPriceEmergencyRejectApproveWholesale/Retail). Việc DUYỆT thật sự (bước "Duyệt" ở sơ đồ trên) không đổi — vẫn theo cấu hình phòng ban/mức Margin-Chiết Khấu ở "Hệ Thống → Quy Trình & Phê Duyệt".' },
     ] },
   },
@@ -900,7 +902,8 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Tách biệt nhiệm vụ (mục 8 tài liệu)', text: 'người TẠO/SỬA điều khoản (quyền Quản Lý) KHÔNG tự động KÍCH HOẠT được — phải người khác có quyền Kích Hoạt riêng mới bật điều khoản sang Đang Hoạt Động, vì liên quan trực tiếp số tiền chiết khấu lớn với NCC.' },
       { label: 'Không sửa trực tiếp điều khoản đã Kích Hoạt', text: 'phải "Nhân Bản" thành bản Nháp mới (version+1) rồi sửa/kích hoạt lại — giữ nguyên bản cũ để không làm sai lệch các lần Tính Ước Tính đã thực hiện trước đó (mỗi lần tính LUÔN lưu lại đúng bậc thang tại thời điểm tính, không tham chiếu ngược điều khoản hiện tại).' },
-      { label: 'Đồng bộ DSmart tự chống trùng', text: 'mỗi lần Đồng Bộ tự loại bỏ dòng đã có từ lần trước (theo mã tham chiếu gốc) — chạy lặp lại/chồng lấn khoảng ngày không tạo dữ liệu trùng.' },
+      { label: 'Đồng bộ DSmart tự chống trùng VÀ tự cập nhật (9/2026)', text: 'mỗi lần Đồng Bộ đối chiếu theo mã tham chiếu gốc — dòng CHƯA có thì thêm mới, dòng ĐÃ có nhưng DSmart sửa lại nội dung (VD sửa số tiền/ngày mua) thì CẬP NHẬT LẠI ngay tại dòng cũ, dòng y hệt lần trước thì bỏ qua (không ghi thừa); kết quả mỗi lần đồng bộ hiện đủ 3 số "dòng mới / dòng cập nhật lại / trùng bỏ qua". Trước đây dòng đã có luôn bị bỏ qua vô điều kiện — số liệu DSmart sửa lại sau khi đã đồng bộ lần đầu sẽ không bao giờ cập nhật, làm sai lệch vĩnh viễn kết quả Tính Ước Tính.' },
+      { label: 'Tính Ước Tính phải nằm trong hiệu lực điều khoản (9/2026)', text: 'kỳ tính (Từ ngày–Đến ngày) chọn ra ngoài Ngày Hiệu Lực Từ/Đến của điều khoản sẽ bị từ chối — tránh gộp nhầm doanh số của các tháng KHÔNG thuộc phạm vi thoả thuận vào số ước tính. Điều khoản hết hiệu lực (qua Ngày Hiệu Lực Đến) KHÔNG tự chuyển sang "Hết Hạn" — vẫn phải người quản lý tự bấm "⏳ Hết Hạn"; guard kỳ tính ở trên hoạt động độc lập, không phụ thuộc việc đã đánh dấu hết hạn hay chưa.' },
     ], right: [
       { label: 'Quyền quản lý (Tạo/Sửa/Nhân Bản/Đồng Bộ/Tính)', text: 'quản lý Nhà Cung Cấp và Điều Khoản, kích hoạt Đồng Bộ DSmart, bấm Tính Ước Tính cho điều khoản đang Hoạt Động.' },
       { label: 'Quyền kích hoạt (riêng)', text: 'CHỈ chuyển điều khoản từ Nháp sang Đang Hoạt Động — không tự động có quyền quản lý/sửa nội dung.' },

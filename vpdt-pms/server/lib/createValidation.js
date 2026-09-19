@@ -2208,7 +2208,11 @@ const CREATE_MODULE_CONFIGS = {
     // Khoá theo LỚP (không phải lớp+người) — tuần tự hoá TOÀN BỘ lượt đăng ký cùng 1 lớp, không chỉ
     // chặn 1 người tự gửi trùng. Trước đây khoá theo cặp lớp+người: 2 người KHÁC NHAU cùng bấm đăng ký
     // vào chỗ trống cuối cùng gần như đồng thời đều đọc activeRegs.length < capacity trước khi bên nào
-    // kịp ghi, cả 2 đều tạo thành công, lớp vượt sĩ số.
+    // kịp ghi, cả 2 đều tạo thành công, lớp vượt sĩ số. CÙNG namespace khoá này còn được
+    // POST /trainingClasses/:id/bulk-register (routes/records.js, HR thêm học viên hàng loạt) dùng lại
+    // NGUYÊN VĂN từ 9/2026 — 2 route trước đây khoá theo 2 tên khác nhau (`training_class_roster:<id>`),
+    // khiến đúng race trên vẫn xảy ra được giữa "1 học viên tự đăng ký" và "HR bấm Thêm Học Viên hàng
+    // loạt" chạy gần như đồng thời — đổi về dùng chung khoá này để loại trừ lẫn nhau thật sự.
     getLockKey: (payload) => `training_registration:${payload.classId}`,
     extraValidate: (payload, collection, user, appData) => {
       const classId = Number(payload.classId);

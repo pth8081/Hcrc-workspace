@@ -515,6 +515,55 @@ async function main() {
     });
 
     // ===================================================================================
+    // Fix 8 (rà soát chuyên sâu Điều Hành, 9/2026) — editTask() đổi người nhận lúc đang DOING phải
+    // reset về TODO + xoá subtask cũ, đúng khuôn bảo vệ assignTask() đã có (không cho gán lại việc đã
+    // có người nhận) — trước đây editTask() cho đổi người nhận tự do kể cả khi DOING, người mới thừa
+    // kế ngay trạng thái/subtask của người cũ mà chưa từng "Nhận việc".
+    // ===================================================================================
+    await run.run('Fix 8a — đổi người nhận lúc DOING: tự đưa về TODO, xoá startedAt, xoá subtask cũ', async () => {
+      resetState();
+      const task = seedTask({
+        id: 5400, assignedTo: WORKER.username, assignedToName: WORKER.name, status: 'DOING', startedAt: '01/09/2026 08:00',
+        subtasks: [{ id: 1, title: 'Bước của người cũ', dueDate: '2026-12-01', done: false }],
+        history: [{ action: 'ACCEPTED', by: WORKER.username, byName: WORKER.name, time: '01/09/2026 08:00' }]
+      });
+
+      const res = await api('POST', '/api/records/tasks/5400/edit', { title: 'Công việc thử nghiệm', assignedTo: PLAIN.username }, TASKMAN);
+      assertEqual(res.status, 200, 'Đổi người nhận hợp lệ vẫn phải thành công');
+      assertEqual(res.body.item.assignedTo, PLAIN.username, 'Người nhận mới phải được ghi đúng');
+      assertEqual(res.body.item.status, 'TODO', 'Đổi người nhận lúc DOING phải tự đưa việc về TODO — bắt người mới tự Nhận việc lại');
+      assertEqual(res.body.item.startedAt, null, 'startedAt của người cũ phải bị xoá, không được để người mới "thừa kế" mốc thời gian nhận việc cũ');
+      assertEqual(res.body.item.subtasks.length, 0, 'Subtask do người cũ tạo phải bị xoá, không để người mới toàn quyền quản lý ngay lập tức');
+      const resetEntry = res.body.item.history.find(h => h.action === 'REASSIGNED_RESET');
+      assertIncludes([true], !!resetEntry, 'Phải ghi 1 dòng lịch sử REASSIGNED_RESET để không mất dấu vết việc đổi người nhận + reset');
+    });
+
+    await run.run('Fix 8b — sửa việc KHÔNG đổi người nhận (chỉ đổi tiêu đề) thì KHÔNG bị reset trạng thái/xoá subtask', async () => {
+      resetState();
+      const task = seedTask({
+        id: 5401, assignedTo: WORKER.username, assignedToName: WORKER.name, status: 'DOING', startedAt: '01/09/2026 08:00',
+        subtasks: [{ id: 1, title: 'Bước đang làm', dueDate: '2026-12-01', done: false }]
+      });
+
+      const res = await api('POST', '/api/records/tasks/5401/edit', { title: 'Đổi tên việc', assignedTo: WORKER.username }, TASKMAN);
+      assertEqual(res.status, 200, 'Sửa việc không đổi người nhận vẫn phải thành công như cũ');
+      assertEqual(res.body.item.status, 'DOING', 'KHÔNG đổi người nhận thì KHÔNG được reset trạng thái');
+      assertEqual(res.body.item.startedAt, '01/09/2026 08:00', 'startedAt phải giữ nguyên khi không đổi người nhận');
+      assertEqual(res.body.item.subtasks.length, 1, 'Subtask phải giữ nguyên khi không đổi người nhận');
+      assertEqual((res.body.item.history || []).some(h => h.action === 'REASSIGNED_RESET'), false, 'Không được ghi REASSIGNED_RESET khi không thực sự đổi người nhận');
+    });
+
+    await run.run('Fix 8c — đổi người nhận lúc còn TODO (chưa ai nhận việc) KHÔNG cần reset gì thêm', async () => {
+      resetState();
+      seedTask({ id: 5402, assignedTo: WORKER.username, assignedToName: WORKER.name, status: 'TODO', startedAt: null, subtasks: [] });
+
+      const res = await api('POST', '/api/records/tasks/5402/edit', { title: 'Công việc thử nghiệm', assignedTo: PLAIN.username }, TASKMAN);
+      assertEqual(res.status, 200, 'Đổi người nhận lúc TODO vẫn phải thành công');
+      assertEqual(res.body.item.status, 'TODO', 'Vẫn ở TODO như cũ (chưa từng DOING nên không có gì để reset)');
+      assertEqual((res.body.item.history || []).some(h => h.action === 'REASSIGNED_RESET'), false, 'Việc chưa từng DOING thì không cần ghi REASSIGNED_RESET');
+    });
+
+    // ===================================================================================
     // Fix 6 — requestExtension(): không cho ghi đè yêu cầu gia hạn đang chờ duyệt
     // ===================================================================================
     await run.run('Fix 6a — yêu cầu gia hạn thứ HAI khi yêu cầu cũ chưa được xử lý bị chặn 409', async () => {
