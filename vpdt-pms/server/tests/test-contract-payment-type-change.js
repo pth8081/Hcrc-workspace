@@ -148,5 +148,30 @@ check('rejectContractPaymentTypeChange(): CHỈ xoá pendingPaymentTypeChange, K
   assert.strictEqual(result.paymentTypeChangeHistory[0].rejectReason, 'Không đồng ý');
 });
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): startContractPayment() trước đây KHÔNG kiểm tra
+// contract.pendingPaymentTypeChange — "Lập Thanh Toán" vẫn tạo được đề nghị thanh toán theo hình thức
+// CŨ trong lúc đang có 1 yêu cầu đổi hình thức thanh toán treo chờ duyệt, khiến hợp đồng và đề nghị
+// thanh toán lệch hẳn hình thức nếu yêu cầu đó sau đó được duyệt.
+check('startContractPayment(): CHẶN 409 khi hợp đồng đang có pendingPaymentTypeChange treo chờ duyệt', () => {
+  const c = freshContract();
+  c.signedFileUrl = '/uploads/tailieu-ky.pdf';
+  c.signedFileStatus = 'APPROVED';
+  c.paymentStatus = 'CHUA_THANH_TOAN';
+  recordActions.requestContractPaymentTypeChange(CREATOR, c, { newPaymentType: 'PERIODIC', newPaymentInstallments: [{ description: 'Đợt 1', amount: 1000000, dueDate: '' }] }, appData, []);
+  assert.ok(c.pendingPaymentTypeChange, 'Fixture phải có pendingPaymentTypeChange sau khi gửi yêu cầu');
+  assert.throws(() => recordActions.startContractPayment(ADMIN, c, { skipManageGate: true }, []),
+    (err) => err.status === 409 && /đổi hình thức thanh toán/.test(err.message));
+});
+
+check('startContractPayment(): vẫn hoạt động bình thường khi KHÔNG có pendingPaymentTypeChange (không đổi hành vi cũ)', () => {
+  const c = freshContract();
+  c.signedFileUrl = '/uploads/tailieu-ky.pdf';
+  c.signedFileStatus = 'APPROVED';
+  c.paymentStatus = 'CHUA_THANH_TOAN';
+  c.amount = 1000000;
+  const result = recordActions.startContractPayment(ADMIN, c, { skipManageGate: true }, []);
+  assert.ok(result, 'Phải tạo/trả về được đối tượng đề nghị thanh toán như bình thường');
+});
+
 console.log(`\n=== test-contract-payment-type-change.js: ${pass} pass, ${fail} fail ===`);
 process.exit(fail ? 1 : 0);

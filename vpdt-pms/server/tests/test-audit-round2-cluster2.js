@@ -283,6 +283,34 @@ run('editDocDraft: hồ sơ KHÔNG bị sửa gì khi tệp bị từ chối (ch
   assert.strictEqual(item.fileUrl, GOOD_URL, 'fileUrl cũ phải giữ nguyên');
 });
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): 1 PHIÊN BẢN "Cập nhật" (rootDocId != null) lúc TẠO bị ép
+// cứng cat=root.cat + chặn dept khác root.dept (createValidation.js) — nhưng editDocDraft() (dùng khi
+// phiên bản bị trả về DRAFT sau "Yêu Cầu Bổ Sung") trước đây KHÔNG biết gì về rootDocId, cho sửa tự do
+// cả dept lẫn cat, phá vỡ tính nhất quán "gia đình" + có thể né quy trình duyệt của phòng ban khác (docs
+// tra động resolveWfConfig theo item.dept hiện tại mỗi lần duyệt).
+run('editDocDraft: PHIÊN BẢN (rootDocId != null) KHÔNG được đổi Phòng Ban khác tài liệu gốc', () => {
+  const item = Object.assign(makeDocDraft(), { rootDocId: 100, cat: 'QUYET_DINH' });
+  expectHttpError(() => recordActions.editDocDraft({ dept: 'Phòng Kế Toán' }, UPLOADER, item, APP_DATA_EMPTY),
+    409, 'không được đổi Phòng Ban');
+  assert.strictEqual(item.dept, DEPT, 'dept cũ phải giữ nguyên, không bị đổi dù request bị từ chối');
+});
+run('editDocDraft: PHIÊN BẢN (rootDocId != null) KHÔNG được đổi Phân Loại khác tài liệu gốc', () => {
+  const item = Object.assign(makeDocDraft(), { rootDocId: 100, cat: 'QUYET_DINH' });
+  expectHttpError(() => recordActions.editDocDraft({ cat: 'CONG_VAN' }, UPLOADER, item, APP_DATA_EMPTY),
+    409, 'không được đổi Phân Loại');
+  assert.strictEqual(item.cat, 'QUYET_DINH', 'cat cũ phải giữ nguyên');
+});
+run('editDocDraft: PHIÊN BẢN gửi ĐÚNG dept/cat hiện tại (không đổi gì) vẫn sửa các field khác bình thường', () => {
+  const item = Object.assign(makeDocDraft(), { rootDocId: 100, cat: 'QUYET_DINH' });
+  recordActions.editDocDraft({ dept: DEPT, cat: 'QUYET_DINH', title: 'Sửa lại tiêu đề' }, UPLOADER, item, APP_DATA_EMPTY);
+  assert.strictEqual(item.title, 'Sửa lại tiêu đề');
+});
+run('editDocDraft: TÀI LIỆU GỐC (rootDocId == null) vẫn đổi dept được bình thường như cũ (không bị ảnh hưởng bởi bản vá)', () => {
+  const item = makeDocDraft(); // rootDocId == null (mặc định)
+  recordActions.editDocDraft({ dept: 'Phòng Kế Toán' }, UPLOADER, item, APP_DATA_EMPTY);
+  assert.strictEqual(item.dept, 'Phòng Kế Toán');
+});
+
 run('editContract: javascript: URI ở fileUrl bị từ chối', () => {
   expectHttpError(() => recordActions.editContract({ fileName: 'x.pdf', fileUrl: XSS_URL }, CONTRACT_USER, makeContractDraft(), false, undefined, APP_DATA_EMPTY),
     400, 'Tệp hợp đồng không hợp lệ');

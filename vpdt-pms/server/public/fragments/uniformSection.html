@@ -272,6 +272,15 @@
           <div id="uniformTransferNoPendingNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có yêu cầu điều chuyển nào đang chờ duyệt.</div>
         </div>
 
+        <!-- "Hủy Điều Chuyển" (LỖI ĐÃ VÁ, rà soát chuyên sâu đợt 3, 9/2026) — CÙNG quyền với Chờ Duyệt ở
+             trên (canApproveUniformClient), cho phép hủy khi ĐANG "vận chuyển" (APPROVED) nhưng CHƯA
+             được siêu thị đích xác nhận nhận — xem cancelUniformTransfer() ở lib/recordActions.js. -->
+        <div id="uniformTransferCancelWrap" class="hidden space-y-2">
+          <h4 class="font-bold text-sm text-slate-700">🚚 Đang Vận Chuyển — Hủy Nếu Cần</h4>
+          <div id="uniformTransferCancelList" class="space-y-2"></div>
+          <div id="uniformTransferNoCancelNote" class="hidden text-xs text-gray-500 italic bg-white p-3 rounded border">Không có lô hàng nào đang vận chuyển.</div>
+        </div>
+
         <!-- Giám Đốc Siêu Thị ĐÍCH xác nhận đã nhận hàng — mô hình "hàng đang vận chuyển" (xem
              receiveUniformTransfer() ở lib/recordActions.js): kho đích chỉ tăng SAU khi bấm xác nhận ở
              đây, KHÔNG tăng ngay lúc Hành Chính duyệt như kho nguồn. -->
@@ -291,6 +300,7 @@
               <option value="APPROVED">🚚 Đang vận chuyển</option>
               <option value="RECEIVED">✅ Đã nhận hàng</option>
               <option value="REJECTED">❌ Từ chối</option>
+              <option value="CANCELLED">🚫 Đã hủy</option>
             </select>
           </div>
           <div class="overflow-x-auto">

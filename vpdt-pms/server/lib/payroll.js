@@ -50,6 +50,23 @@ function nowVN() {
   return new Date().toLocaleString('vi-VN');
 }
 
+// Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do nowVN() sinh ra — bản sao độc lập của parseVNDateTime() ở
+// lib/recordActions.js (LƯU Ý BẢO TRÌ: sửa 1 bên phải sửa cả 2 bên, cùng lý do lib/ không dùng chung
+// code với nhau — xem chú thích gốc ở lib/recordActions.js). Dùng để tra history[].time của hợp đồng.
+function parseVNDateTime(str) {
+  if (!str || typeof str !== 'string') return null;
+  const parts = str.trim().split(' ');
+  if (parts.length !== 2) return null;
+  const [timePart, datePart] = parts;
+  const timeBits = timePart.split(':').map(Number);
+  const dateBits = datePart.split('/').map(Number);
+  if (dateBits.length !== 3 || dateBits.some(isNaN)) return null;
+  const [h, mi, s] = timeBits;
+  const [d, mo, y] = dateBits;
+  const dt = new Date(y, mo - 1, d, h || 0, mi || 0, s || 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
 const PERIOD_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'FINALIZED', 'PUBLISHED'];
 
 // Danh mục tham khảo Mục 4 tài liệu gốc — xem điều chỉnh #2/#3 đầu file. INCOME/DEDUCTION quyết định
@@ -195,6 +212,27 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
     if (earliestHireDate && earliestHireDate > pStart && earliestHireDate <= pEnd) hireDateInPeriod = earliestHireDate;
   }
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): 2 nhánh cảnh báo BASIC_SALARY ở trên (nghỉ/vào làm
+  // giữa kỳ) xử lý biến động THEO NGÀY CÔNG, nhưng còn 1 nguồn biến động khác chưa được cảnh báo: HR
+  // "💰 Cập Nhật Lương Cơ Bản" trực tiếp trên hợp đồng đang ACTIVE (applyManualEdit(), lib/laborContract.js,
+  // ghi history action='MANUAL_EDIT', flow thêm ở v23.56) NGAY TRONG kỳ đang tính lương — baseSalary đọc
+  // ở dòng dưới LUÔN là mức SAU khi đổi, nên nếu đổi giữa kỳ (VD tăng lương từ ngày 20) thì CẢ KỲ vẫn
+  // tính theo mức MỚI dù nửa đầu kỳ nhân viên còn hưởng mức CŨ — kế toán dễ trả dư/thiếu nếu không được
+  // nhắc để tự "Điều chỉnh dòng lương" bù/trừ đúng phần chênh lệch theo ngày hiệu lực thật. Không có
+  // field "ngày hiệu lực" tách riêng cho MANUAL_EDIT (chỉ có `time` = lúc HR bấm lưu) — dùng `time` làm
+  // mốc gần đúng, đúng nguyên tắc "chỉ cảnh báo, không tự bịa công thức chia tỷ lệ" đã áp dụng cho 2
+  // nhánh nghỉ/vào làm ở trên. Nhiều lần đổi trong cùng kỳ -> giữ mốc GẦN NHẤT (dễ đối chiếu với payslip
+  // hiện tại, vốn phản ánh mức lương SAU LẦN ĐỔI CUỐI).
+  let baseSalaryChangedDateInPeriod = null;
+  for (const h of (contract.history || [])) {
+    if (!h || h.action !== 'MANUAL_EDIT' || !h.detail || !h.detail.includes('Lương cơ bản:')) continue;
+    const editTime = parseVNDateTime(h.time);
+    if (!editTime) continue;
+    const editDateStr = `${editTime.getFullYear()}-${String(editTime.getMonth() + 1).padStart(2, '0')}-${String(editTime.getDate()).padStart(2, '0')}`;
+    if (editDateStr < pStart || editDateStr > pEnd) continue;
+    if (!baseSalaryChangedDateInPeriod || editDateStr > baseSalaryChangedDateInPeriod) baseSalaryChangedDateInPeriod = editDateStr;
+  }
+
   let workModelInfo = resolveWorkModelForEmployeeCode(employeeCode, appData);
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: resolveWorkModelForEmployeeCode() CHẶN HẲN hồ sơ INACTIVE
   // (đúng ý — chặn máy chấm công/tạo công tay cho người đã nghỉ, xem lib/attendance.js) — nhưng payroll
@@ -231,7 +269,9 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
       ? `Theo hợp đồng lao động — nghỉ việc ngày ${offboardingLastWorkingDate} giữa kỳ, CHƯA trừ tương ứng số ngày không làm việc, kế toán cần rà soát + Điều chỉnh dòng lương`
       : hireDateInPeriod
         ? `Theo hợp đồng lao động — vào làm ngày ${hireDateInPeriod} giữa kỳ, CHƯA trừ tương ứng số ngày chưa vào làm trước đó, kế toán cần rà soát + Điều chỉnh dòng lương`
-        : 'Theo hợp đồng lao động đang hiệu lực',
+        : baseSalaryChangedDateInPeriod
+          ? `Theo hợp đồng lao động — lương cơ bản được cập nhật ngày ${baseSalaryChangedDateInPeriod} giữa kỳ (mức ${baseSalary.toLocaleString('vi-VN')}đ hiện tại là mức SAU khi đổi), CHƯA chia tỷ lệ theo ngày hiệu lực thật, kế toán cần rà soát + Điều chỉnh dòng lương`
+          : 'Theo hợp đồng lao động đang hiệu lực',
     false);
 
   let ot150 = 0, ot200 = 0, ot300 = 0;

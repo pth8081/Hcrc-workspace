@@ -61,7 +61,7 @@ function setUniformSubTab(subTab) {
   if (subTab === 'STORE') {
     renderUniformPendingAllocations(); renderUniformIssueEmployeeOptions(); resetUniformIssueForm(); renderUniformIssuancesTable();
     renderUniformHoldingsTable(); resetUniformAdjustForms(); renderUniformAdjustmentsTable();
-    resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransferReceiveQueue(); renderUniformTransfersTable();
+    resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransferCancelQueue(); renderUniformTransferReceiveQueue(); renderUniformTransfersTable();
     renderDynamicInputsForModule('UNIFORM_ISSUE', 'dynamicFieldsContainer_UNIFORM_ISSUE');
     renderDynamicInputsForModule('UNIFORM_TRANSFER', 'dynamicFieldsContainer_UNIFORM_TRANSFER');
   }
@@ -1342,6 +1342,7 @@ function uniformTransferStatusBadge(status) {
   if (status === 'RECEIVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✔️ Đã nhận hàng</span>`;
   if (status === 'APPROVED') return `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[11px]">🚚 Đang vận chuyển</span>`;
   if (status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px]">⛔ Đã từ chối</span>`;
+  if (status === 'CANCELLED') return `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-[11px]">🚫 Đã hủy</span>`;
   return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">⏳ Chờ duyệt</span>`;
 }
 
@@ -1385,6 +1386,66 @@ function approveUniformTransferAction(id) {
       logSystemAction('UNIFORM', 'APPROVE_UNIFORM_TRANSFER', `Duyệt điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
       alert('✅ Đã duyệt điều chuyển kho! Hàng đang vận chuyển, chờ siêu thị đích xác nhận đã nhận.');
       renderUniformTransferApprovalQueue();
+      renderUniformTransferCancelQueue();
+      renderUniformTransferReceiveQueue();
+      renderUniformTransfersTable();
+      renderUniformStock();
+      renderUniformIssueItems();
+    }
+  });
+}
+
+// "Hủy Điều Chuyển" — LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): CÙNG quyền với Chờ Duyệt ở trên
+// (canApproveUniformClient) — cho phép hủy khi ĐANG "vận chuyển" (APPROVED) nhưng CHƯA được siêu thị
+// đích xác nhận nhận, xem canCancelUniformTransfer()/cancelUniformTransfer() ở lib/recordActions.js.
+function renderUniformTransferCancelQueue() {
+  const wrap = document.getElementById('uniformTransferCancelList');
+  const noNote = document.getElementById('uniformTransferNoCancelNote');
+  const box = document.getElementById('uniformTransferCancelWrap');
+  if (!wrap || !box) return;
+  const canCancel = canApproveUniformClient(currentUser);
+  box.classList.toggle('hidden', !canCancel);
+  if (!canCancel) return;
+  const inTransit = (DB.uniformTransfers || []).filter(t => t.status === 'APPROVED');
+  noNote.classList.toggle('hidden', inTransit.length > 0);
+  wrap.innerHTML = inTransit.map(t => `
+    <div class="bg-white p-3 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div class="text-xs">
+        <div class="font-bold text-slate-700">${escapeHtml(t.sourceDept)} → ${escapeHtml(t.targetDept)}</div>
+        <div class="text-gray-600">${formatUniformLabel(t.itemName, t.size, uniformSkuFor(t.itemName, t.size))}: ${t.qty} — ${escapeHtml(t.reason)}</div>
+        <div class="text-[11px] text-gray-400">Đã duyệt bởi ${escapeHtml(t.approvedByName || '')} lúc ${escapeHtml(t.approvedAt || '')}</div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" data-op="cancelUniformTransferAction" data-arg0="${t.id}" class="bg-slate-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-700">🚫 Hủy Điều Chuyển</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function cancelUniformTransferAction(id) {
+  showConfirmModal({
+    title: 'Hủy Điều Chuyển Kho',
+    bodyHTML: `
+      <div class="space-y-2">
+        <div class="text-xs text-gray-600">Hủy lô hàng đang vận chuyển này? Tồn kho siêu thị NGUỒN sẽ được "nhả lại" ngay (coi như chưa từng xuất kho). Chỉ hủy được khi siêu thị đích CHƯA xác nhận đã nhận.</div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Lý Do</label>
+          <textarea id="uniformTransferCancelReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Không bắt buộc..."></textarea>
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Hủy Điều Chuyển',
+    onConfirm: async () => {
+      const reason = document.getElementById('uniformTransferCancelReason').value.trim();
+      let result;
+      try {
+        result = await callRecordAction('uniformTransfers', id, 'cancel', { reason });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformTransfers.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformTransfers[idx] = result.item;
+      logSystemAction('UNIFORM', 'CANCEL_UNIFORM_TRANSFER', `Hủy điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
+      alert('✅ Đã hủy điều chuyển kho! Tồn kho siêu thị nguồn đã được nhả lại.');
+      renderUniformTransferCancelQueue();
       renderUniformTransferReceiveQueue();
       renderUniformTransfersTable();
       renderUniformStock();
@@ -1433,6 +1494,7 @@ function receiveUniformTransferAction(id) {
       if (idx !== -1) DB.uniformTransfers[idx] = result.item;
       logSystemAction('UNIFORM', 'RECEIVE_UNIFORM_TRANSFER', `Xác nhận đã nhận điều chuyển [${result.item.itemName}] ${result.item.sourceDept} → ${result.item.targetDept}`, 'SUCCESS', result.item.itemName);
       alert('✅ Đã xác nhận nhận hàng, tồn kho siêu thị bạn đã cập nhật!');
+      renderUniformTransferCancelQueue();
       renderUniformTransferReceiveQueue();
       renderUniformTransfersTable();
       renderUniformStock();
@@ -1485,7 +1547,8 @@ function renderUniformTransfersTable() {
     { key: 'PENDING_APPROVAL', label: 'Đang Chờ Duyệt', count: scopedTransfers.filter(t => t.status === 'PENDING_APPROVAL').length, colorClass: 'border-l-yellow-500' },
     { key: 'APPROVED', label: 'Đang Vận Chuyển', count: scopedTransfers.filter(t => t.status === 'APPROVED').length, colorClass: 'border-l-orange-500' },
     { key: 'RECEIVED', label: 'Đã Nhận Hàng', count: scopedTransfers.filter(t => t.status === 'RECEIVED').length, colorClass: 'border-l-green-500' },
-    { key: 'REJECTED', label: 'Từ Chối', count: scopedTransfers.filter(t => t.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    { key: 'REJECTED', label: 'Từ Chối', count: scopedTransfers.filter(t => t.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
+    { key: 'CANCELLED', label: 'Đã Hủy', count: scopedTransfers.filter(t => t.status === 'CANCELLED').length, colorClass: 'border-l-slate-500' }
   ];
   const dashEl = document.getElementById('uniformTransferDashboardCards');
   if (dashEl) dashEl.innerHTML = buildDashboardCardsHTML(uniformTransferDashCards, statusFilter, 'filterUniformTransferByCard');

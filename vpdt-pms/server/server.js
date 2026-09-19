@@ -61,6 +61,7 @@ const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
+const { checkPaymentDeadlineReminders } = require('./jobs/paymentDeadlineReminder');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -416,6 +417,11 @@ async function start() {
       // tính năng này nhưng chưa từng được cài đặt) — xem jobs/reportPeriodDeadlineReminder.js.
       checkReportPeriodDeadlineReminders();
       setInterval(checkReportPeriodDeadlineReminders, 24 * 60 * 60 * 1000);
+      // Nhắc hạn từng ĐỢT thanh toán đã duyệt (status APPROVED, "đang chờ thanh toán") sắp/đã quá hạn
+      // (vá lỗ hổng thật — trước đây chỉ có badge cảnh báo trên giao diện, không job nào chủ động nhắc)
+      // — xem jobs/paymentDeadlineReminder.js.
+      checkPaymentDeadlineReminders();
+      setInterval(checkPaymentDeadlineReminders, 24 * 60 * 60 * 1000);
       // Giám sát ổ đĩa: chạy dày hơn 3 job nhắc hạn ở trên (mỗi giờ thay vì mỗi 24h) vì dung lượng đĩa
       // có thể tăng nhanh bất thường (VD bị lạm dụng tải file dồn dập) — bản thân job có cơ chế
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.

@@ -1,8 +1,111 @@
 # Phiên bản hiện tại
 
-**23.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.58 (2026-09-19): Rà soát chuyên sâu đợt 3 (4 agent song song) — vá 16 khoảng trống nghiệp vụ (Đăng Ký Xe/Nhân Sự/Hồ Sơ/Đào Tạo/Hợp Đồng/Ngân Sách/Mua Hàng/Văn Bản/Công Việc/Văn Phòng/Đồng Phục/Thanh Toán/Cơ Cấu Tổ Chức/Lương/Vận Hành)
+
+Tiếp nối 2 đợt rà soát chuyên sâu trước (v23.56 Nhân Sự, v23.57 các module
+còn lại), lần này rà soát lại 4 agent song song trên TOÀN BỘ hệ thống (đã
+loại trừ 17 gap đã vá ở 2 đợt trước để tránh trùng lặp), phát hiện và vá 16
+khoảng trống nghiệp vụ thật (không phải lỗ hổng bảo mật), ưu tiên mức Cao
+trước theo đúng yêu cầu người dùng:
+
+**Mức Cao:**
+1. Đăng Ký Xe: đổi tài xế cho 1 chuyến đang `IN_PROGRESS` không đưa status
+   quay lại `APPROVED` — chuyến kẹt vĩnh viễn (tài xế mới không xác nhận
+   được, tài xế cũ không kết thúc được). Nay tự động reset về `APPROVED`
+   khi đổi tài xế lúc đang `IN_PROGRESS` (`lib/recordActions.js::reassignCarDispatch()`).
+2. Nghỉ Phép: hủy 1 đơn phép ĐÃ DUYỆT (còn trong tương lai) không hoàn lại
+   ngày phép đã trừ, cũng không dọn lại các `attendanceRecords` đã sinh theo
+   đơn đó. Nay tự hoàn phép + dọn lại bản ghi công về trạng thái trống
+   (`lib/attendance.js::refundLeaveBalance()`/`buildLeaveCancelAttendanceReverts()`).
+3. Hồ Sơ Nhân Sự: liên kết tài khoản đăng nhập cho hồ sơ (`link-account`)
+   không đồng bộ `positionKey` sang tài khoản mới liên kết — tài khoản mới
+   không thừa hưởng đúng chức danh/phòng ban đã cấu hình ở hồ sơ. Nay tự
+   đồng bộ ngay lúc liên kết (`routes/employeeProfile.js`).
+
+**Mức Trung bình-Cao:**
+4. Biên Bản Họp: viết lại sâu toàn bộ tài liệu Nghiệp Vụ cho module `minutes`
+   (nội dung cũ sơ sài, thiếu nhiều quy tắc thật).
+5. Đào Tạo: chấm bài tự luận dùng `passScore` HIỆN TẠI của lớp thay vì
+   `passScoreAtSubmit` (ngưỡng lúc nộp bài) — sửa điểm đạt của lớp SAU khi
+   học viên đã nộp bài sẽ tính sai Đạt/Không Đạt cho bài đã nộp trước đó. Nay
+   lưu snapshot `passScoreAtSubmit` ngay lúc nộp, chấm luôn theo snapshot đó.
+6. Hợp Đồng: lập đề nghị thanh toán mới (`startContractPayment`) không kiểm
+   tra hợp đồng đang có 1 yêu cầu đổi hình thức thanh toán (`pendingPaymentTypeChange`)
+   chờ duyệt — có thể tạo đề nghị theo hình thức CŨ trong khi yêu cầu đổi
+   đang treo. Nay chặn 409 cho tới khi yêu cầu đó được xử lý xong.
+7. Ngân Sách: sửa Vị Trí/Khối Phòng Ban của 1 dòng Sử Dụng gốc SAU KHI đã có
+   mục con ghi nhận — làm lệch quyền xem/sửa của các mục con đã ghi nhận
+   theo dept cũ. Nay chặn đổi 2 field này khi dòng đã có mục con (chỉ còn
+   sửa được Ghi chú), phải tạo dòng Sử Dụng mới nếu cần chuyển hẳn phòng ban.
+8. Mua Hàng (BAS): kích hoạt 1 bản Nhân Bản (điều khoản chiết khấu) không tự
+   lưu trữ bản ACTIVE cũ cùng NCC+Mã Điều Khoản — 2 bản cùng ACTIVE song
+   song, "Tính Ước Tính" có thể chọn nhầm bản cũ đã lỗi thời. Nay tự động
+   lưu trữ (ARCHIVED) mọi bản ACTIVE khác cùng vendorId+termCode trước khi
+   kích hoạt bản mới, đúng khuôn `templates/:id/activate` của Checklist.
+
+**Mức Trung bình:**
+9. Tài Liệu: sửa 1 phiên bản của tài liệu đã có (`rootDocId != null`) vẫn
+   cho đổi Phòng Ban/Phân Loại khác với tài liệu gốc — phá vỡ tính nhất quán
+   "gia đình" tài liệu, có thể dùng để né quy trình duyệt của phòng ban thật.
+   Nay khoá 2 field này cho phiên bản (root document không bị ảnh hưởng).
+10. Công Việc: giao việc thay người khác lúc đang "Đang thực hiện" không dọn
+    các yêu cầu Xin Gia Hạn/Xin Huỷ còn treo của người nhận CŨ — người nhận
+    MỚI bị chặn "Hoàn thành" vô cớ vì 1 yêu cầu không còn liên quan tới
+    mình. Nay tự huỷ các yêu cầu đó khi đổi người nhận lúc đang thực hiện.
+11. Mua Bán/Sửa Chữa (officeReqs) + Văn Phòng Phẩm (vppRegistrations): thiếu
+    hành động "Hủy" khi hồ sơ đang PENDING bước 1 (chưa ai duyệt) — carRegs
+    đã có sẵn tính năng này (v23.57) nhưng 2 module còn lại thì chưa. Nay
+    thêm `cancelOfficeReq()`/`cancelVppRegistration()`, mirror đúng
+    `cancelCarReg()` (chỉ người tạo/admin, chỉ khi CHƯA qua bước duyệt nào).
+12. Đồng Phục: `rejectUniformTransfer()` chỉ xử lý được lúc `PENDING_APPROVAL`
+    — 1 điều chuyển đã APPROVED (hàng "đang vận chuyển", tồn kho nguồn đã
+    trừ) nhưng CHƯA được siêu thị đích xác nhận nhận thì KHÔNG có cách nào
+    huỷ, tồn kho nguồn bị "giam" vĩnh viễn. Nay thêm `cancelUniformTransfer()`
+    (cùng quyền duyệt/từ chối), tồn kho nguồn tự "nhả lại" ngay khi hủy.
+13. Thanh Toán: không có job nào chủ động nhắc hạn từng ĐỢT thanh toán đã
+    duyệt (status APPROVED) sắp/đã quá hạn — chỉ có badge cảnh báo trên giao
+    diện. Nay thêm `jobs/paymentDeadlineReminder.js` (quét mỗi 24h, ngưỡng
+    3/1/0 ngày, nhắc người tạo đề nghị + mọi người giữ quyền `paymentManage`).
+14. Cơ Cấu Tổ Chức: `seedKpiFlowGaps()` chỉ THÊM quan hệ KPI Flow còn thiếu
+    khi Áp Dụng, chưa từng XOÁ quan hệ tự sinh đã lỗi thời khi 1 vị trí bị
+    đổi cha — quản lý CŨ tiếp tục đánh giá KPI nhân viên đã chuyển sang quản
+    lý khác ("2 người cùng chấm 1 người"). Nay thêm `pruneStaleAutoKpiFlow()`,
+    tự dọn dòng tự sinh lỗi thời TRƯỚC khi thêm dòng mới; dòng thủ công
+    không bao giờ bị đụng vào.
+15. Lương: `computeEmployeePayslip()` đã cảnh báo mid-period cho nghỉ việc/
+    vào làm giữa kỳ nhưng chưa cảnh báo khi lương cơ bản được HR "💰 Cập Nhật
+    Lương Cơ Bản" trực tiếp trên hợp đồng NGAY TRONG kỳ đang tính (v23.56) —
+    payslip vẫn tính đủ tháng theo mức MỚI dù đổi giữa kỳ, không ghi chú gì.
+    Nay dò `history[]` (action `MANUAL_EDIT` đổi `baseSalary`) rơi trong kỳ,
+    ghi chú tương tự 2 nhánh nghỉ/vào làm ở trên.
+
+**Mức Thấp:**
+16. Vận Hành: `jobs/operationOrderApiSync.js` chỉ đồng bộ 1 đơn hàng ra
+    dsmart16 ĐÚNG 1 LẦN duy nhất — đơn đổi trạng thái sau đó (Chờ duyệt →
+    Đã duyệt → Đã nhận) không bao giờ được đồng bộ lại, hệ thống ngoài giữ
+    mãi bản ghi cũ. Nay lưu snapshot payload của lần gửi thành công gần
+    nhất, tự so sánh và gửi lại khi khác — cùng khuôn UPSERT đã áp dụng cho
+    BAS (`lib/vendorPurchaseStore.js::bulkInsertPurchaseTransactions()`).
+
+**Không có thay đổi `sql/schema.sql`** — toàn bộ field mới (cờ hủy/snapshot
+đồng bộ/ngưỡng đã nhắc...) đều nằm trong cột `Payload NVARCHAR(MAX)` (JSON
+blob) của các bảng liên quan, không cần cột/bảng mới.
+
+**File đã sửa**: `server/lib/recordActions.js`, `server/lib/attendance.js`,
+`server/lib/orgChart.js`, `server/lib/payroll.js`,
+`server/routes/records.js`, `server/routes/employeeProfile.js`,
+`server/routes/purchasing.js`, `server/jobs/paymentDeadlineReminder.js`
+(mới), `server/jobs/operationOrderApiSync.js`, `server/server.js`,
+`server/public/js/module-office.js`, `server/public/js/module-vpp.js`,
+`server/public/js/module-dongphuc.js`, `server/public/js/module-hopdong.js`,
+`server/public/js/module-nghiepvu.js`,
+`server/public/fragments/officeSection.html`,
+`server/public/fragments/vppSection.html`,
+`server/public/fragments/uniformSection.html`.
 
 ## v23.57 (2026-09-19): Rà soát chuyên sâu đợt 2 (4 agent song song) — vá 11 khoảng trống nghiệp vụ (Văn Bản/Tác Nghiệp/Điều Hành/Hành Chính/Truyền Thông Nội Bộ/Tổng Hợp/Vận Hành/Mua Hàng/Hỗ Trợ IT)
 

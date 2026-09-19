@@ -307,7 +307,7 @@ const NGHIEP_VU_DOCS = {
     ],
     footer: { left: [
       { label: 'Ai xem được gì', text: 'quản trị viên xem được tất cả; người tải tài liệu lên luôn xem được bài của mình dù đang ở bước nào; một số người chỉ được xem bản đã duyệt, một số khác chỉ xem bản chưa duyệt — 2 quyền này tách biệt, không cộng dồn; người phê duyệt xem đúng hồ sơ thuộc phòng ban mình phụ trách.' },
-      { label: 'Tạo phiên bản mới', text: 'không tạo được phiên bản mới nếu bản mới nhất đang chờ duyệt hoặc còn là bản nháp; nếu bản mới nhất bị từ chối thì vẫn tạo phiên bản mới bình thường.' },
+      { label: 'Tạo phiên bản mới', text: 'không tạo được phiên bản mới nếu bản mới nhất đang chờ duyệt hoặc còn là bản nháp; nếu bản mới nhất bị từ chối thì vẫn tạo phiên bản mới bình thường. Mọi phiên bản trong 1 "gia đình" tài liệu LUÔN cùng Phòng Ban/Phân Loại với bản gốc (server tự khoá cứng) — kể cả khi 1 phiên bản bị người duyệt yêu cầu bổ sung rồi "Sửa & Gửi Lại" (từ 9/2026) cũng không đổi được Phòng Ban/Phân Loại khác bản gốc, tránh né nhầm sang quy trình duyệt của phòng ban khác.' },
     ], right: [
       { label: 'Mã trùng', text: 'nếu 2 người cùng tạo tài liệu cùng lúc và mã bị trùng, hệ thống tự đổi sang mã kế tiếp — người dùng không thấy lỗi gì cả.' },
     ] },
@@ -352,25 +352,28 @@ const NGHIEP_VU_DOCS = {
       { label: 'Cảnh báo hết hạn', text: 'hợp đồng đang hiệu lực mà gần tới ngày hết hạn sẽ được nhắc trước, để chủ động gia hạn hoặc thanh lý thay vì để hết hạn lúc nào không hay.' },
       { label: 'Nhóm Phê Duyệt bổ sung (10/2026)', text: 'cùng cơ chế với Văn Bản Trình — chọn 1 "Cấp Phê Duyệt Cuối Cùng" để xác định "Nhóm Phê Duyệt" nào bắt buộc/tuỳ chọn thêm, mỗi nhóm chọn nối thêm 1 bước duyệt vào CUỐI quy trình gốc theo phòng ban (không thay thế). KHÁC Văn Bản Trình: Hợp Đồng KHÔNG có loại nhóm "không chặn/Xin Ý Kiến" — mọi nhóm được chọn thêm đều là bước duyệt thật, không có kênh tham khảo song song.' },
     ], right: [
-      { label: 'Thanh Toán liên kết', text: 'chi phí thực tế phát sinh từ hợp đồng được ghi nhận qua mục Thanh Toán (Tổng Hợp), liên kết ngược về đúng hợp đồng gốc — cần tải "Tài liệu ký" và tài liệu đó được duyệt xong mới lập được đề nghị thanh toán từ hợp đồng.' },
+      { label: 'Thanh Toán liên kết', text: 'chi phí thực tế phát sinh từ hợp đồng được ghi nhận qua mục Thanh Toán (Tổng Hợp), liên kết ngược về đúng hợp đồng gốc — cần tải "Tài liệu ký" và tài liệu đó được duyệt xong mới lập được đề nghị thanh toán từ hợp đồng. **Khoá chéo với Đổi Hình Thức Thanh Toán (từ 9/2026)**: không "Lập Thanh Toán" được trong lúc hợp đồng đang có 1 yêu cầu Đổi Hình Thức Thanh Toán treo chờ duyệt — tránh tạo đề nghị theo hình thức CŨ ngay trước khi hình thức đó bị đổi.' },
     ] },
   },
   minutes: {
     icon: '📝', title: 'Biên Bản Họp', badge: 'Điều Hành',
-    desc: 'Ghi nhận nội dung và điểm danh cuộc họp, có thể liên kết tới 1 lịch đặt phòng (nếu có), và sinh Công Việc trực tiếp từ các đầu việc đã thống nhất trong biên bản.',
+    desc: 'Ghi nhận nội dung và điểm danh cuộc họp, có thể liên kết tới 1 lịch đặt phòng (nếu có) — Công Việc CHỈ sinh ra khi người lập biên bản chủ động bấm "Giao việc", không tự động khi lưu.',
     flow: { ariaLabel: 'Quy trình Biên Bản Họp', chain: [
       { label: 'Tạo biên bản', sub: 'Liên kết cuộc họp (tuỳ chọn)' },
       { label: 'Điểm danh + nội dung', sub: 'Ghi nhận thảo luận, quyết nghị' },
-      { label: 'Chốt & lưu', sub: 'Sinh Công Việc cho đầu việc', kind: 'approved' },
+      { label: 'Lưu biên bản', sub: 'CHỈ lưu nội dung, chưa sinh Công Việc' },
+      { label: 'Giao việc (thủ công)', sub: 'Bấm "Giao việc" trên màn Xem để thực sự sinh Công Việc', kind: 'approved' },
     ] },
     steps: [
       { role: 'Người lập biên bản', text: 'vào mục 📝 Biên Bản Họp (sidebar) → điền form: Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn), Chủ Đề/Tiêu Đề, Thời Gian Họp, Địa Điểm, Chủ Trì, Thư Ký, Nội Dung Biên Bản.' },
       { text: 'Thêm Thành Phần Tham Dự: bấm "➕ Thêm Người Tham Dự" cho từng dòng, hoặc chọn 1 mẫu có sẵn ở "🗂️ Mẫu danh sách tham gia" rồi bấm "▶️ Áp Dụng" thay vì nhập lại từ đầu.' },
-      { text: 'Ghi Ý Kiến Chỉ Đạo: bấm "➕ Thêm Ý Kiến Chỉ Đạo" cho từng đầu việc — dòng nào gán sẵn "Người thực hiện" sẽ TỰ ĐỘNG tạo thành Công Việc ngay khi lưu.' },
-      { text: 'Bấm <b>"Lưu Biên Bản Họp"</b> để hoàn tất — không có bước phê duyệt, lưu xong là xong.' },
+      { text: 'Ghi Ý Kiến Chỉ Đạo: bấm "➕ Thêm Ý Kiến Chỉ Đạo" cho từng đầu việc, gán sẵn "Người thực hiện" nếu có.' },
+      { text: 'Bấm <b>"Lưu Biên Bản Họp"</b> để hoàn tất — không có bước phê duyệt, nhưng CŨNG CHƯA sinh Công Việc nào (khác điều dễ nhầm: lưu KHÔNG tự động giao việc).' },
+      { role: 'Người lập biên bản', text: 'muốn các Ý Kiến Chỉ Đạo đã gán người thực hiện thực sự thành Công Việc theo dõi được: mở lại biên bản (màn Xem) → bấm <b>"Giao việc"</b> cho từng đầu việc (hoặc toàn bộ) — làm xong biên bản tự khoá sửa (trừ admin xử lý khẩn cấp).' },
     ],
     footer: { left: [
       { label: 'Quyền tạo', text: 'chỉ người được cấp quyền tạo biên bản họp mới thấy được form tạo — người khác chỉ xem nội dung.' },
+      { label: 'Đừng quên bấm "Giao việc" (9/2026)', text: 'lưu biên bản KHÔNG tự sinh Công Việc — Ý Kiến Chỉ Đạo dù đã gán "Người thực hiện" vẫn chỉ nằm trong nội dung biên bản tới khi có người chủ động bấm "Giao việc" trên màn Xem; quên bước này thì đầu việc không có gì để theo dõi tiến độ/nhắc hạn.' },
     ], right: [
       { label: 'Mẫu điểm danh', text: 'có thể lưu sẵn danh sách người tham dự thường xuyên thành 1 mẫu, để không phải chọn lại từ đầu mỗi lần họp định kỳ.' },
       { label: 'Xem/Tải/In khớp nội dung (9/2026)', text: 'màn Xem và file Tải/khung In nay dùng chung 1 bộ nội dung (kể cả chân ký Thư Ký/Chủ Trì), chỉ khác bản Xem có thêm nút "Giao việc" theo từng đầu việc.' },
@@ -393,7 +396,7 @@ const NGHIEP_VU_DOCS = {
       { text: 'Lọc nhanh danh sách: dùng 3 ô "Lọc Theo Trạng Thái"/"Lọc Theo Nguồn Gốc"/"Từ Khóa Tìm Kiếm" ngay trên đầu danh sách — bấm "Đặt Lại Bộ Lọc" để xoá hết bộ lọc đang áp dụng.' },
     ],
     footer: { left: [
-      { label: 'Giao việc thay người khác', text: 'tạo/sửa (đổi tiêu đề, mô tả, hạn, người nhận) BẤT KỲ việc nào cần quyền quản lý công việc (hoặc admin); riêng "gán người nhận" cho 1 việc CHƯA có người nhận (VD việc tự sinh từ Văn Bản Trình) hẹp hơn — chỉ admin hoặc đúng người đã tạo/giao việc đó mới gán được, không dùng chung quyền Sửa. Nhân viên thường chỉ tự cập nhật tiến độ việc của mình.' },
+      { label: 'Giao việc thay người khác', text: 'tạo/sửa (đổi tiêu đề, mô tả, hạn, người nhận) BẤT KỲ việc nào cần quyền quản lý công việc (hoặc admin); riêng "gán người nhận" cho 1 việc CHƯA có người nhận (VD việc tự sinh từ Văn Bản Trình) hẹp hơn — chỉ admin hoặc đúng người đã tạo/giao việc đó mới gán được, không dùng chung quyền Sửa. Nhân viên thường chỉ tự cập nhật tiến độ việc của mình. **Đổi người nhận khi đang "Đang thực hiện"**: việc tự đưa về "Chưa bắt đầu" (người mới phải tự Nhận việc lại từ đầu), xoá sạch công việc nhỏ cũ, và (từ 9/2026) tự huỷ luôn mọi yêu cầu Xin Gia Hạn/Xin Huỷ còn treo của người nhận CŨ — tránh người nhận MỚI bị chặn "Hoàn thành" vô cớ vì 1 yêu cầu không còn liên quan tới mình.' },
       { label: 'Xin Gia Hạn / Xin Huỷ — phải được duyệt', text: 'người NHẬN việc xin gia hạn hoặc xin huỷ đều phải chờ người GIAO việc (hoặc admin) Đồng ý/Từ chối, chưa có hiệu lực ngay khi xin. Mỗi lần gia hạn ĐƯỢC DUYỆT (không phải lúc xin) cộng thêm cả "số lần gia hạn" lẫn "số lần trễ hạn" — hệ thống không tự tính trễ hạn theo ngày hệ thống, chỉ tăng khi có xin gia hạn được duyệt. Ngược lại, người GIAO việc (hoặc admin) huỷ trực tiếp thì có hiệu lực NGAY, không cần ai duyệt.' },
       { label: 'Người phối hợp: nội bộ và ngoài hệ thống', text: 'chọn nội bộ từ danh sách tài khoản đang hoạt động, hoặc tự sinh "ngoài hệ thống" (có tên/email nhưng không đăng nhập được) khi Thành Phần Tham Dự trong Biên Bản Họp không khớp tài khoản nào — người ngoài hệ thống không tự bấm "Nhận việc"/"Xác nhận tham gia" được, người giao việc hoặc admin phải xác nhận thay.' },
     ], right: [
@@ -467,7 +470,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Điều phối tách biệt', text: 'người duyệt đăng ký khác với người điều phối xe — bộ phận điều phối (quyền "Người Điều Hành Xe") chỉ thao tác sau khi đăng ký đã được duyệt.' },
       { label: 'Đánh giá & xác nhận', text: 'lái xe tự xác nhận đã nhận chuyến (chuyển trạng thái "🚗 Đang Thực Hiện"), rồi báo số km thực đi khi kết thúc; sau đó người đăng ký xem lại và đánh giá chuyến đi — xong bước này chuyến mới được tính là hoàn tất.' },
       { label: 'Hủy đăng ký', text: 'người đăng ký tự hủy được đăng ký của mình khi CHƯA ai duyệt (còn ở bước 1), hoặc bất kỳ lúc nào SAU khi đã duyệt xong (kể cả khi lái xe đã xác nhận nhưng chưa kết thúc chuyến) — chỉ không hủy được khi đang dở dang giữa các bước duyệt, hoặc chuyến đã thực sự kết thúc.' },
-      { label: '🔁 Đổi Tài Xế-Xe', text: 'sau khi đã duyệt (Đã duyệt hoặc Đang thực hiện), người điều phối bấm "🔁 Đổi Tài Xế-Xe" để đổi lái xe VÀ/HOẶC loại xe-biển số — đổi ĐỘC LẬP từng phần, không bắt buộc đổi cả hai, có hiệu lực NGAY, không quay lại quy trình duyệt. Đổi lái xe: hệ thống tự kiểm tra người được gán mới có đang bận chuyến khác trùng giờ không (chặn nếu trùng); nếu chuyến đã được tài xế cũ xác nhận, trạng thái xác nhận tự reset về "chưa xác nhận" cho tài xế mới.' },
+      { label: '🔁 Đổi Tài Xế-Xe', text: 'sau khi đã duyệt (Đã duyệt hoặc Đang thực hiện), người điều phối bấm "🔁 Đổi Tài Xế-Xe" để đổi lái xe VÀ/HOẶC loại xe-biển số — đổi ĐỘC LẬP từng phần, không bắt buộc đổi cả hai, có hiệu lực NGAY, không quay lại quy trình duyệt. Đổi lái xe: hệ thống tự kiểm tra người được gán mới có đang bận chuyến khác trùng giờ không (chặn nếu trùng); nếu chuyến đã được tài xế cũ xác nhận, trạng thái xác nhận tự reset về "chưa xác nhận" cho tài xế mới. **Đổi tài xế khi chuyến đang "🚗 Đang Thực Hiện" (từ 9/2026)**: phiếu tự quay LẠI trạng thái "Đã duyệt" (không còn giữ nguyên "Đang Thực Hiện" với cờ xác nhận đã bị xoá) — để tài xế MỚI bấm xác nhận nhận chuyến lại từ đầu; trước đây phiếu bị KẸT vĩnh viễn ở tình huống này (không ai xác nhận/kết thúc chuyến được nữa, chỉ còn cách Hủy Chuyến).' },
       { label: 'Chuyển sang Taxi (trường hợp riêng của Đổi Tài Xế-Xe)', text: 'chọn loại xe cụ thể đánh dấu "Là Xe Taxi" (lúc duyệt hay lúc "Đổi Tài Xế-Xe" sau này) tự xoá luôn tài xế công ty đã gán, vì xe giờ là taxi thuê ngoài; đổi ngược lại từ Taxi sang xe công ty thì tự xoá "Hãng Taxi" đã ghi.' },
     ], right: [
       { label: 'Báo Cáo: lịch sử đánh giá + xác nhận', text: 'mục 📊 Báo Cáo có 2 bảng chi tiết: "ai đánh giá lái xe nào, ở phiếu nào, nhận xét gì" và "lái xe xác nhận/kết thúc phiếu nào, lúc nào, báo bao nhiêu km".' },
@@ -486,13 +489,14 @@ const NGHIEP_VU_DOCS = {
       reference: { atIndex: 0, label: 'Danh Mục Mặt Hàng', sub: 'Đơn giá, hạn mức' } },
     steps: [
       { role: 'Người đăng ký', text: 'vào mục 🖇️ Văn Phòng Phẩm (sidebar) → tab <b>"📝 Đăng Ký"</b> → chọn kỳ đăng ký đang mở → tick chọn mặt hàng và nhập Số Lượng cho từng dòng cần (chỉ dòng nhập số lượng > 0 mới tính là đã chọn, có ô tìm nhanh theo tên mặt hàng) → theo dõi tổng tiền ở khung dưới bảng.' },
-      { text: 'Bấm "💾 Kết Thúc Chọn (Lưu Nháp)" để lưu tạm, sửa lại được sau; khi đã ưng thì bấm <b>"Gửi phê duyệt"</b> để gửi chính thức.' },
+      { text: 'Bấm "💾 Kết Thúc Chọn (Lưu Nháp)" để lưu tạm, sửa lại được sau; khi đã ưng thì bấm <b>"Gửi phê duyệt"</b> để gửi chính thức. Lỡ gửi nhầm mà CHƯA ai duyệt (còn ở bước 1) thì bấm <b>"🚫 Hủy Đăng Ký"</b> ngay ở danh sách để rút lại.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ VPP đang chờ → bấm Duyệt hoặc Từ chối, hoặc "Yêu Cầu Bổ Sung" để trả về Nháp cho người đăng ký sửa lại.' },
       { role: 'Quản trị', text: 'tab <b>"📅 Kỳ Đăng Ký"</b> để mở/kết thúc từng kỳ; tab <b>"📊 Báo Cáo Tổng Hợp"</b> để xem tổng hợp toàn công ty theo kỳ.' },
     ],
     footer: { left: [
       { label: 'Ngân sách theo phòng ban', text: 'quản trị có thể cấu hình mức riêng cho từng người, hoặc chặn theo tổng ngân sách cả phòng — 2 kiểu này không dùng cùng lúc cho 1 phòng ban. Cảnh báo LIVE ngay khi đang chọn mặt hàng nếu vượt phần còn lại, nhưng CHẶN THẬT chỉ xảy ra lúc bấm "Gửi phê duyệt" (tải lại số liệu mới nhất rồi mới chặn — server cũng tự kiểm tra lại lần nữa).' },
-      { label: 'Không sửa trực tiếp, không có nút huỷ', text: 'đã gửi (Chờ duyệt) thì không tự sửa được — chỉ khi người duyệt bấm "Yêu Cầu Bổ Sung" mới đưa hồ sơ về Nháp để sửa lại rồi gửi lại; không có hành động huỷ/rút — hồ sơ Bị Từ Chối coi như kết thúc, muốn đăng ký lại thì tạo bản Nháp mới.' },
+      { label: 'Không sửa trực tiếp sau khi Gửi', text: 'đã gửi (Chờ duyệt) thì không tự sửa được — chỉ khi người duyệt bấm "Yêu Cầu Bổ Sung" mới đưa hồ sơ về Nháp để sửa lại rồi gửi lại; hồ sơ Bị Từ Chối coi như kết thúc, muốn đăng ký lại thì tạo bản Nháp mới.' },
+      { label: 'Hủy Đăng Ký (từ 9/2026)', text: 'chỉ hủy được khi ĐANG chờ duyệt bước 1 (chưa ai duyệt gì cả) — người tạo hoặc admin bấm "🚫 Hủy Đăng Ký" ở danh sách. Hồ sơ đã qua ít nhất 1 bước duyệt thì KHÔNG tự hủy được nữa (nhờ người duyệt bước hiện tại Từ Chối thay); hủy rồi tự "nhả chỗ" ngân sách phòng ban ngay (không còn tính vào "đã giữ chỗ" khi phòng khác đăng ký).' },
     ], right: [
       { label: 'Xuất Excel danh mục', text: 'quản trị có thể tải file mẫu và xuất Excel toàn bộ danh mục mặt hàng để đối chiếu ngoài hệ thống.' },
       { label: 'Theo từng Kỳ Đăng Ký', text: 'chỉ đăng ký được khi có ít nhất 1 kỳ đang Mở; quản lý có thể "Kết Thúc Kỳ" sớm để khoá đăng ký thêm. Mỗi kỳ tự chọn ngân sách/người dùng CHUNG 1 mức toàn công ty, hoặc CHIA NHIỀU NHÓM mức khác nhau theo phòng ban.' },
@@ -513,6 +517,7 @@ const NGHIEP_VU_DOCS = {
       { role: 'Giám Đốc Siêu Thị', text: 'vẫn ở tab đó, mục "👕 Cấp Đồng Phục Cho Nhân Viên" → bấm "+ Thêm Mặt Hàng" chọn từng mặt hàng/size cấp cho nhân viên cụ thể → bấm <b>"Cấp Phát"</b>.' },
       { role: 'Nhân viên', text: 'tự xác nhận đã nhận đồng phục ở Hồ Sơ Cá Nhân — bước này khép lại vòng cấp phát cho người đó.' },
       { text: 'Xem tồn kho hiện tại: tab <b>"📊 Kho Đồng Phục"</b> (tự tính động, không lưu số liệu riêng); xem tổng quan toàn công ty: tab <b>"📈 Tổng Quan"</b>.' },
+      { role: 'Hành Chính', text: 'Điều Chuyển Kho Giữa Các Siêu Thị: vẫn ở tab "✅ Xác Nhận / Cấp Phát" → mục "⏳ Chờ Duyệt" để Duyệt/Từ Chối yêu cầu điều chuyển của siêu thị; lỡ duyệt nhầm thì bấm <b>"🚫 Hủy Điều Chuyển"</b> ở mục "🚚 Đang Vận Chuyển — Hủy Nếu Cần" ngay bên dưới (chỉ hủy được TRƯỚC KHI siêu thị đích xác nhận đã nhận).' },
     ],
     footer: { left: [
       { label: 'Mô hình đẩy xuống, không phải đăng ký', text: 'nhân viên KHÔNG tự đăng ký đồng phục — Hành Chính (quyền "uniformManage") phân bổ xuống từng siêu thị trước, Giám Đốc Siêu Thị (quyền "uniformStoreManage") xác nhận nhận hàng rồi mới cấp phát cho từng người; nhân viên chỉ tự xác nhận ĐÃ NHẬN (ở Hồ Sơ Cá Nhân), không tự chọn/yêu cầu được mặt hàng.' },
@@ -520,6 +525,7 @@ const NGHIEP_VU_DOCS = {
     ], right: [
       { label: 'Kho tính động, không lưu số liệu riêng', text: 'tồn kho mỗi siêu thị = tổng đã xác nhận nhận trừ đi đã cấp phát cho nhân viên — không có bảng tồn kho lưu sẵn, luôn tính lại theo dữ liệu thật.' },
       { label: 'Mã SKU tự sinh lần đầu', text: 'mỗi cặp (mặt hàng, size) chỉ sinh mã 1 LẦN đầu tiên khi được bất kỳ siêu thị nào xác nhận nhận, dùng lại mãi về sau — không sinh lại mỗi kỳ.' },
+      { label: 'Điều Chuyển Kho Giữa Các Siêu Thị (Phase 2)', text: 'Giám Đốc Siêu Thị tự yêu cầu chuyển hàng sang siêu thị khác (đủ tồn kho mới gửi được) → Hành Chính/người có quyền duyệt (uniformApprove/uniformManage) Duyệt hoặc Từ Chối → duyệt xong hàng coi như "đang vận chuyển" (tồn kho NGUỒN giảm ngay) → siêu thị ĐÍCH tự "Xác Nhận Đã Nhận" thì tồn kho đích mới thật sự tăng. Lỡ duyệt nhầm mà siêu thị đích CHƯA xác nhận nhận thì người có quyền duyệt bấm <b>"🚫 Hủy Điều Chuyển"</b> (từ 9/2026) ngay ở mục "🚚 Đang Vận Chuyển — Hủy Nếu Cần" — tồn kho siêu thị nguồn tự nhả lại ngay, không cần thao tác gì thêm.' },
     ] },
   },
   license: {
@@ -555,7 +561,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Thanh Toán', sub: 'Nháp → Chờ duyệt → Đã duyệt → Đã thanh toán' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối / Yêu cầu bổ sung', sub: 'Bổ sung → về Nháp sửa & gửi lại' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Người đề xuất', text: 'vào mục 🗂️ Tổng Hợp (sidebar) → chọn tab <b>"🛒 Mua Bán"</b> hoặc <b>"🔧 Sửa Chữa"</b> → điền form: Phòng Ban Trình, Tên Hạng Mục, Số Lượng/Quy Mô, Dự Toán/Tổng Chi Phí, Đối Tác/Nhà Cung Cấp (Mua Sắm có thêm bảng hạng mục con để khai chi tiết từng tài sản) → gửi phê duyệt.' },
+      { role: 'Người đề xuất', text: 'vào mục 🗂️ Tổng Hợp (sidebar) → chọn tab <b>"🛒 Mua Bán"</b> hoặc <b>"🔧 Sửa Chữa"</b> → điền form: Phòng Ban Trình, Tên Hạng Mục, Số Lượng/Quy Mô, Dự Toán/Tổng Chi Phí, Đối Tác/Nhà Cung Cấp (Mua Sắm có thêm bảng hạng mục con để khai chi tiết từng tài sản) → gửi phê duyệt. Lỡ gửi nhầm mà CHƯA ai duyệt (còn ở bước 1) thì bấm <b>"🚫 Hủy Đề Xuất"</b> ngay ở danh sách để rút lại.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ Mua Sắm/Sửa Chữa đang chờ ở đúng phòng ban → bấm Duyệt, Từ chối, hoặc Yêu Cầu Bổ Sung (trả về Nháp cho người đề xuất sửa lại).' },
       { role: 'Người đề xuất', text: 'sau khi duyệt xong, tải "Tài liệu ký" ngay trên đề xuất đó — bắt buộc phải có tài liệu này mới hiện được nút chuyển sang Thanh Toán.' },
       { role: 'Người lập thanh toán', text: 'vào tab <b>"💰 Thanh Toán"</b> → mục <b>"➕ Tạo Mới"</b> → tạo đề nghị thanh toán từ đề xuất đã có Tài liệu ký (hoặc tạo thủ công), kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" → gửi duyệt.' },
@@ -565,9 +571,11 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Hạng mục chi tiết — CHỈ ở Mua Sắm', text: 'phân hệ Mua Sắm có bảng hạng mục con (tên tài sản/model/ĐVT/số lượng/đơn giá/thành tiền tự tính); phân hệ Sửa Chữa KHÔNG dùng bảng hạng mục — chỉ 1 dòng tổng (số lượng/giá trị dự kiến/nhà cung cấp).' },
       { label: 'Thanh Toán: 5 trạng thái + chia đợt', text: 'Nháp (chưa gửi) → Chờ duyệt → (Cần bổ sung) → Đã duyệt (đang chờ thanh toán) → Đã thanh toán (khoá cứng, không sửa/xoá được nữa). Chia được nhiều đợt thanh toán, mỗi đợt có hạn riêng; tạo THỦ CÔNG (không từ Hợp Đồng/Office) với nhiều đợt thì MỖI đợt tách thành 1 hồ sơ riêng, tự đi hết quy trình duyệt/xác nhận độc lập.' },
+      { label: 'Hủy Đề Xuất (từ 9/2026)', text: 'chỉ hủy được khi ĐANG chờ duyệt bước 1 (chưa ai duyệt gì cả) — người tạo hoặc admin bấm "🚫 Hủy Đề Xuất" ở danh sách. Đề xuất đã qua ít nhất 1 bước duyệt/đã Phê Duyệt xong thì KHÔNG tự hủy được nữa qua nút này (khác Đăng Ký Xe không mở rộng huỷ sau duyệt cho Mua Sắm/Sửa Chữa — chưa có khái niệm "đang thực hiện giữa chừng" cần huỷ).' },
     ], right: [
       { label: 'Người duyệt Thanh Toán', text: 'ghi nhận/quản lý 1 đề xuất Mua Sắm/Sửa Chữa cần CẢ quyền phạm vi phòng ban (tạo đề xuất theo đúng phòng ban đó) LẪN quyền riêng theo phân hệ ("officeBuy" cho Mua Sắm / "officeFix" cho Sửa Chữa); việc DUYỆT (Chờ duyệt → Đã duyệt) đi qua workflow theo phòng ban riêng, còn xác nhận ĐÃ THANH TOÁN là quyền quản lý thanh toán khác (kế toán), không phải người duyệt bước.' },
       { label: 'Tài liệu ký là điều kiện bắt buộc', text: 'đề xuất đã duyệt phải tải "Tài liệu ký" thì mới hiện nút chuyển sang Thanh Toán; nộp Thanh Toán cũng bắt buộc kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" trước khi gửi duyệt — xác nhận Đã Thanh Toán thì KHÔNG còn bắt buộc tải thêm tệp nữa (đã đủ điều kiện từ 2 bước trên).' },
+      { label: 'Tự động nhắc hạn từng đợt (từ 9/2026)', text: 'với đề nghị Đã duyệt (đang chờ thanh toán), hệ thống tự quét mỗi ngày và gửi email nhắc khi 1 đợt còn khoảng 3/1/0 ngày là tới hạn (hoặc đã quá hạn) — gửi tới người tạo đề nghị VÀ mọi người đang giữ quyền quản lý Thanh Toán (paymentManage). Mỗi đợt chỉ nhắc 1 lần cho mỗi ngưỡng đã vượt qua; đợt đã xác nhận thanh toán thì không còn bị nhắc nữa.' },
     ] },
   },
   budget: {
@@ -591,7 +599,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Không tự duyệt hồ sơ mình tạo', text: 'áp dụng cho mọi vai trò, kể cả quản trị viên, không có ngoại lệ.' },
     ], right: [
       { label: 'Quyền đề xuất & ghi nhận', text: 'tự tạo/sửa/xoá đề xuất của mình, và ghi nhận phần Sử Dụng cho đúng phòng ban/siêu thị mình phụ trách.' },
-      { label: 'Quyền quản lý toàn bộ', text: 'duyệt đề xuất, tạo và duyệt phần Phê Duyệt, sửa/xoá được dòng Sử Dụng gốc — quyền cao nhất trong mục này.' },
+      { label: 'Quyền quản lý toàn bộ', text: 'duyệt đề xuất, tạo và duyệt phần Phê Duyệt, sửa/xoá được dòng Sử Dụng gốc — quyền cao nhất trong mục này. **Từ 9/2026**: chỉ sửa được Vị Trí/Khối Phòng Ban của dòng Sử Dụng gốc khi dòng đó CHƯA có mục con nào ghi nhận — đã có mục con thì chỉ sửa được Ghi chú (đổi Vị Trí/Khối Phòng Ban lúc này sẽ làm lệch quyền xem/sửa của các mục con đã ghi nhận), muốn chuyển hẳn sang phòng ban khác thì tạo 1 dòng Sử Dụng mới.' },
       { label: 'Quyền xem báo cáo', text: 'xem được số liệu của mọi phòng ban/siêu thị và tab Báo Cáo, nhưng không tạo hay duyệt được gì.' },
       { label: 'Excel Tải Mẫu/Nhập/Xuất', text: 'tab Đề Xuất/Phê Duyệt có đủ cả 3 nút; tab Sử Dụng/Báo Cáo chỉ có nút Xuất Excel.' },
       { label: 'Cảnh báo Vượt Ngân Sách (9/2026)', text: 'ghi nhận Sử Dụng KHÔNG bị chặn dù vượt số tiền dòng cha đã Phê Duyệt (tiền đã thực chi không thể "huỷ") — nhưng badge dòng cha ở tab Sử Dụng sẽ đổi thành "⚠️ Vượt ngân sách" (đỏ) thay vì "✅ Đã dùng hết" (xanh) như trước, để không còn bị âm thầm — trước đây chỉ phát hiện được qua cột "Chênh Lệch" ở tab Báo Cáo (cần quyền riêng).' },
@@ -620,6 +628,7 @@ const NGHIEP_VU_DOCS = {
       { label: '👁️ Xem Nhanh (9/2026)', text: 'ở tab Báo Cáo, bấm vào số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu của 1 hồ sơ để mở nhanh danh sách đúng nhóm công việc đó (tiến độ/trạng thái/người thực hiện), không cần mở "Xem/Lập Danh Mục Đầu Tư" đầy đủ.' },
     ], right: [
       { label: 'Đơn Hàng', text: 'là luồng tách biệt — tạo đơn, duyệt, xử lý rồi hoàn tất, không đi qua các mốc tiến độ của dự án.' },
+      { label: 'Tự đồng bộ ra dsmart16 (từ 9/2026: tự gửi lại khi đổi trạng thái)', text: 'đơn hàng đã có Mã PO tự đẩy dữ liệu sang hệ thống ngoài dsmart16 (job định kỳ hoặc admin bấm "🔄 Đồng Bộ Ngay" ở Cấu Hình API) — trước đây chỉ gửi ĐÚNG 1 LẦN, đơn đổi trạng thái sau đó (VD Chờ duyệt → Đã duyệt → Đã nhận) KHÔNG được đồng bộ lại, dsmart16 giữ mãi bản ghi cũ. Nay hệ thống tự so sánh nội dung với lần gửi thành công gần nhất, phát hiện khác (đổi trạng thái/ngày duyệt/ngày nhận/số tiền...) thì tự gửi lại — y hệt không đổi thì bỏ qua, không gửi thừa.' },
     ] },
   },
   checklist: {
@@ -668,6 +677,7 @@ const NGHIEP_VU_DOCS = {
     ], right: [
       { label: 'Người giữ vị trí được tra động, không lưu cố định', text: 'hệ thống KHÔNG lưu "ai giữ chức gì" trong phiên bản — mà lọc động theo đúng phòng ban/chức danh đang có trên hồ sơ user. Cây chỉ PHẢN ÁNH hồ sơ, không ghi ngược — TRỪ field "Quản Lý Trực Tiếp" được tự động cập nhật khi Áp Dụng (hoặc bấm "Đồng Bộ Lại" riêng khi chỉ vừa đổi phòng ban/chức danh 1-2 người).' },
       { label: 'So sánh phiên bản', text: 'xem được bảng so sánh (Thêm mới/Đã xoá/Đổi tên-chuyển cấp) giữa 1 phiên bản Lưu Trữ và phiên bản đang Áp Dụng, chỉ để đối chiếu, không sửa được từ màn so sánh.' },
+      { label: 'Luồng KPI tự sinh theo cấp bậc tự "dọn dẹp" khi đổi cha (từ 9/2026)', text: 'mỗi lần Áp Dụng, hệ thống KHÔNG chỉ tự thêm quan hệ đánh giá còn thiếu theo cây mới (cấp trên trực tiếp đánh giá cấp dưới) mà còn tự XOÁ quan hệ tự sinh đã lỗi thời khi 1 vị trí bị đổi sang cấp trên khác giữa 2 lần Áp Dụng — tránh cả quản lý CŨ lẫn quản lý MỚI cùng có quyền đánh giá 1 người ("2 người cùng chấm 1 nhân viên"). Quan hệ tự thêm TAY qua "Thêm Quan Hệ" (không theo cây) không bao giờ bị đụng vào dù cây đổi thế nào.' },
     ] },
   },
   hrLifecycle: {
@@ -710,6 +720,7 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có module con "📊 Báo Cáo" RIÊNG cấp Nhân Sự (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
       { label: 'Tái Tuyển', text: 'nút "Kiểm Tra Nhân Sự Cũ" (khi tạo hồ sơ mới hoặc mở Onboarding) tra theo CCCD+ngày sinh — nhân viên cũ quay lại giữ NGUYÊN Mã Nhân Viên cũ, chỉ ghi thêm 1 dòng lịch sử tái tuyển.' },
+      { label: 'Liên Kết Tài Khoản VPDT', text: 'hồ sơ tạo tay có thể chưa có tài khoản VPDT ngay (tick "Liên Kết Tài Khoản" ở màn hồ sơ khi tài khoản đã có sau) — nếu hồ sơ ĐÃ được gán Chức Vụ TRƯỚC lúc liên kết, hệ thống tự đồng bộ NGAY Phòng Ban/Chức Danh/Vị Trí xuống tài khoản vừa liên kết (từ 9/2026, cùng cơ chế đồng bộ khi gán Chức Vụ cho hồ sơ ĐÃ có tài khoản) — không cần vào gán lại Chức Vụ 1 lần nữa chỉ để kích hoạt đồng bộ.' },
       { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
       { label: 'Cấu hình trường xem (opt-in)', text: '2 nút "⚙️" riêng trong Quản Lý Hồ Sơ, cùng nguyên tắc: MẶC ĐỊNH KHÔNG trường nhạy cảm nào hiển thị (đủ 15 field: ngày sinh, giới tính, email cá nhân, liên hệ khẩn cấp, CCCD, địa chỉ, ngân hàng, BHXH, mã số thuế, người phụ thuộc, học vấn) tới khi admin chủ động mở — "Trường Xem Của Quản Lý Trực Tiếp" áp dụng khi quản lý xem hồ sơ cấp dưới, "Trường Xem Của Tôi" áp dụng khi chính nhân viên tự xem/sửa hồ sơ mình — 2 cấu hình độc lập, mở ở màn này không tự mở cho màn kia.' },
     ], right: [
@@ -773,7 +784,7 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu chấm công/phép không đưa vào báo cáo tổng hợp dùng chung, như các dữ liệu nhạy cảm khác của Nhân Sự.' },
       { label: '5 loại phép, chỉ Phép Năm trừ quỹ', text: 'Phép năm / Nghỉ không lương / Nghỉ ốm / Nghỉ việc riêng / Nghỉ theo giờ (nghỉ 1 phần ngày, tự quy đổi ra ngày lẻ theo giờ hành chính) — CHỈ Phép Năm trừ vào quỹ phép còn lại, các loại còn lại chỉ ghi nhận chấm công.' },
-      { label: 'Huỷ đơn — CHÚ Ý không tự hoàn quỹ', text: 'nhân viên tự huỷ đơn của mình khi đang Chờ duyệt, hoặc đã Duyệt nhưng NGÀY BẮT ĐẦU CÒN Ở TƯƠNG LAI. Huỷ đơn Phép Năm đã duyệt (đã trừ quỹ) KHÔNG tự cộng lại số ngày — Nhân Sự phải tự vào "Quản Lý & Cấu Hình" sửa bảng phép năm cộng lại tay nếu cần.' },
+      { label: 'Huỷ đơn — tự hoàn quỹ + dọn chấm công (từ 9/2026)', text: 'nhân viên tự huỷ đơn của mình khi đang Chờ duyệt, hoặc đã Duyệt nhưng NGÀY BẮT ĐẦU CÒN Ở TƯƠNG LAI. Huỷ đơn Phép Năm đã duyệt (đã trừ quỹ) tự CỘNG LẠI đúng số ngày vào quỹ phép năm, đồng thời dọn lại các bản ghi chấm công những ngày đó về "chưa chấm công" (không còn ghi "nghỉ phép có lương" nữa) — không cần Nhân Sự vào sửa tay. Trước đây phải tự vào "Quản Lý & Cấu Hình" cộng lại tay nếu cần.' },
     ], right: [
       { label: 'Ai duyệt được', text: 'quản lý trực tiếp HOẶC bất kỳ cấp quản lý nào cao hơn theo Cơ Cấu Tổ Chức (đệ quy, không chỉ đúng 1 cấp) đều duyệt được, hoặc Nhân Sự (duyệt được toàn công ty, chỉ chặn tự duyệt đơn của chính mình) — không phải cấu hình luồng nhiều bước như các module khác.' },
       { label: 'Quỹ phép năm', text: '12 ngày cơ bản + 1 ngày cho mỗi 5 năm thâm niên (tính theo ngày hợp đồng lao động CŨ NHẤT của nhân viên = ngày vào làm thật). Tạo lần đầu khi Onboarding hoàn tất; từ 9/2026, hệ thống còn tự quét lại mỗi ngày (job nền) để tự tạo bù quỹ phép năm hiện tại cho MỌI nhân viên đang hoạt động chưa có — không cần Nhân Sự nhớ tạo tay mỗi khi sang năm mới nữa. Khi hoàn tất nghỉ việc, hệ thống tự huỷ mọi đơn còn Chờ duyệt của người đó.' },
@@ -804,6 +815,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Các khoản phải nhập tay', text: 'phụ cấp ăn trưa/điện thoại/chức vụ/ca đêm/ngày lễ, KPI, thưởng khác, khấu trừ tạm ứng/phạt đều KHÔNG tự tính (hệ thống chưa có nguồn dữ liệu cho các khoản này) — kế toán tự thêm qua "Điều Chỉnh", chỉ làm được khi kỳ còn Nháp.' },
       { label: 'Xem của mình', text: 'mọi nhân viên có hồ sơ nhân sự tự xem phiếu lương của mình (tab "Của Tôi") không cần quyền gì thêm, và tự xuất PDF phiếu lương; xem TOÀN BỘ kỳ lương của mọi người cần quyền quản lý hoặc duyệt lương.' },
       { label: 'Nghỉ việc / vào làm giữa kỳ (từ 9/2026)', text: 'hệ thống KHÔNG tự trừ/cộng theo số ngày lẻ — nhân viên nghỉ việc HOẶC mới vào làm giữa kỳ vẫn được tính ĐỦ 1 tháng lương cơ bản, chỉ ghi CHÚ THÍCH ngay ở dòng "Lương cơ bản" nêu rõ ngày nghỉ/ngày vào làm để kế toán tự rà soát + bấm "Điều Chỉnh" trừ/bù đúng số ngày (đúng nguyên tắc hệ thống không tự bịa công thức khi chưa có chính sách proration chính thức).' },
+      { label: 'Đổi lương cơ bản giữa kỳ (từ 9/2026)', text: 'nếu HR dùng "💰 Cập Nhật Lương Cơ Bản" sửa thẳng lương trên hợp đồng đang hiệu lực NGAY TRONG kỳ đang tính (ở module Hợp Đồng Lao Động — xem entry đó), dòng "Lương cơ bản" cũng tự ghi CHÚ THÍCH nêu rõ ngày đổi, nhắc mức đang hiển thị LÀ MỨC SAU KHI ĐỔI (chưa chia tỷ lệ theo ngày hiệu lực thật) — cùng nguyên tắc "chỉ cảnh báo, không tự chia tỷ lệ" như nhánh nghỉ việc/vào làm ở trên; kế toán tự "Điều Chỉnh" bù/trừ đúng phần chênh lệch nếu cần.' },
       { label: 'Chặn lương thực nhận ÂM (từ 9/2026)', text: 'nếu 1 phiếu lương trong kỳ có "Thực nhận" ÂM (thường do khấu trừ tạm ứng/phạt nhập tay ở "Điều Chỉnh" lớn hơn cả lương gộp), bấm "Gửi Duyệt" sẽ bị chặn (400, nêu rõ mã nhân viên bị âm) — kế toán phải vào "Điều Chỉnh" sửa lại đúng số tiền trước khi gửi duyệt được, tránh lương âm lọt qua tới tận lúc Công Bố mới phát hiện.' },
     ] },
   },
@@ -901,7 +913,7 @@ const NGHIEP_VU_DOCS = {
     ],
     footer: { left: [
       { label: 'Tách biệt nhiệm vụ (mục 8 tài liệu)', text: 'người TẠO/SỬA điều khoản (quyền Quản Lý) KHÔNG tự động KÍCH HOẠT được — phải người khác có quyền Kích Hoạt riêng mới bật điều khoản sang Đang Hoạt Động, vì liên quan trực tiếp số tiền chiết khấu lớn với NCC.' },
-      { label: 'Không sửa trực tiếp điều khoản đã Kích Hoạt', text: 'phải "Nhân Bản" thành bản Nháp mới (version+1) rồi sửa/kích hoạt lại — giữ nguyên bản cũ để không làm sai lệch các lần Tính Ước Tính đã thực hiện trước đó (mỗi lần tính LUÔN lưu lại đúng bậc thang tại thời điểm tính, không tham chiếu ngược điều khoản hiện tại).' },
+      { label: 'Không sửa trực tiếp điều khoản đã Kích Hoạt', text: 'phải "Nhân Bản" thành bản Nháp mới (version+1) rồi sửa/kích hoạt lại — giữ nguyên bản cũ để không làm sai lệch các lần Tính Ước Tính đã thực hiện trước đó (mỗi lần tính LUÔN lưu lại đúng bậc thang tại thời điểm tính, không tham chiếu ngược điều khoản hiện tại). **Kích hoạt bản Nhân Bản tự Lưu Trữ bản cũ (từ 9/2026)**: bấm Kích Hoạt cho bản Nháp mới sẽ tự chuyển bản ACTIVE CŨ cùng Nhà Cung Cấp + Mã Điều Khoản sang "🗄️ Lưu Trữ" ngay lập tức — không còn 2 bản cùng Hoạt Động song song để chọn nhầm bản cũ (bậc thang lỗi thời) khi Tính Ước Tính.' },
       { label: 'Đồng bộ DSmart tự chống trùng VÀ tự cập nhật (9/2026)', text: 'mỗi lần Đồng Bộ đối chiếu theo mã tham chiếu gốc — dòng CHƯA có thì thêm mới, dòng ĐÃ có nhưng DSmart sửa lại nội dung (VD sửa số tiền/ngày mua) thì CẬP NHẬT LẠI ngay tại dòng cũ, dòng y hệt lần trước thì bỏ qua (không ghi thừa); kết quả mỗi lần đồng bộ hiện đủ 3 số "dòng mới / dòng cập nhật lại / trùng bỏ qua". Trước đây dòng đã có luôn bị bỏ qua vô điều kiện — số liệu DSmart sửa lại sau khi đã đồng bộ lần đầu sẽ không bao giờ cập nhật, làm sai lệch vĩnh viễn kết quả Tính Ước Tính.' },
       { label: 'Tính Ước Tính phải nằm trong hiệu lực điều khoản (9/2026)', text: 'kỳ tính (Từ ngày–Đến ngày) chọn ra ngoài Ngày Hiệu Lực Từ/Đến của điều khoản sẽ bị từ chối — tránh gộp nhầm doanh số của các tháng KHÔNG thuộc phạm vi thoả thuận vào số ước tính. Điều khoản hết hiệu lực (qua Ngày Hiệu Lực Đến) KHÔNG tự chuyển sang "Hết Hạn" — vẫn phải người quản lý tự bấm "⏳ Hết Hạn"; guard kỳ tính ở trên hoạt động độc lập, không phụ thuộc việc đã đánh dấu hết hạn hay chưa.' },
     ], right: [
@@ -963,7 +975,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { role: 'Học viên', text: 'vào tab <b>📝 Đăng Ký Của Tôi</b>, tìm đúng lớp cần học → bấm <b>"Đăng Ký"</b>.' },
       { role: 'Học viên', text: 'lớp Online có tài liệu bắt buộc: bấm <b>"📚 Vào Lớp Học"</b> → xem hết từng tài liệu bắt buộc (video/PDF) — xem đủ hệ thống tự hiện nút "📝 Vào Làm Bài Test". Lớp Offline thì phải chờ giảng viên/quản lý đào tạo bấm <b>"⏹️ Kết Thúc Lớp"</b> mới hiện nút làm bài test.' },
       { role: 'Học viên', text: 'bấm <b>"📝 Vào Làm Bài Test"</b> → trả lời từng câu → nộp bài → có kết quả/điểm ngay (riêng câu Nghị Luận thì chờ giảng viên chấm tay, điểm cuối chốt sau khi chấm xong).' },
-      { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận: vào tab Ngân Hàng Câu Hỏi, mục <b>"📝 Cần Chấm Nghị Luận"</b> → chấm điểm từng câu — chấm xong hệ thống tự cộng dồn và chốt Đạt/Không Đạt.' },
+      { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận: vào tab Ngân Hàng Câu Hỏi, mục <b>"📝 Cần Chấm Nghị Luận"</b> → chấm điểm từng câu — chấm xong hệ thống tự cộng dồn và chốt Đạt/Không Đạt theo đúng Điểm Đạt Yêu Cầu TẠI THỜI ĐIỂM học viên nộp bài (từ 9/2026, không bị ảnh hưởng nếu quản lý đào tạo lỡ sửa Điểm Đạt của lớp trong lúc bài đang chờ chấm).' },
       { role: 'Quản lý đào tạo/Giảng viên', text: 'muốn thêm học viên thủ công sau khi lớp đã mở: bấm <b>"➕ Thêm Học Viên"</b> ngay trên danh sách lớp — nếu lớp có gắn Chương Trình trùng với lớp trước đó, khối gợi ý màu vàng tự hiện học viên chưa hoàn thành để thêm nhanh, bấm từng người hoặc "+ Thêm tất cả" rồi "✅ Xác Nhận Thêm Vào Lớp".' },
     ],
     footer: { left: [

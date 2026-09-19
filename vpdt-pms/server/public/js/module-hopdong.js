@@ -1061,9 +1061,13 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   // giờ chỉ đổi CHO_THANH_TOAN SAU KHI đề nghị duyệt xong (không còn ngay lúc tạo NHÁP) nên phải kiểm tra
   // thêm hasActivePaymentRequestForSourceClient() (core.js) — trong lúc đề nghị đang DRAFT/PENDING/
   // NEED_INFO, paymentStatus vẫn còn CHUA_THANH_TOAN.
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): thiếu !c.pendingPaymentTypeChange — nút vẫn hiện được
+  // trong lúc đang có yêu cầu đổi hình thức thanh toán chờ duyệt, khớp gate MỚI thêm ở
+  // startContractPayment() (lib/recordActions.js), tránh tạo đề nghị thanh toán theo hình thức SẮP bị
+  // đổi rồi bị server từ chối 409.
   const canStartPaymentCycle = (c.paymentStatus === 'CHUA_THANH_TOAN'
     || (c.paymentType === 'PERIODIC' && c.paymentStatus === 'DA_THANH_TOAN'))
-    && !hasActivePaymentRequestForSourceClient('CONTRACT', c.id);
+    && !hasActivePaymentRequestForSourceClient('CONTRACT', c.id) && !c.pendingPaymentTypeChange;
   if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'APPROVED' && canStartPaymentCycle && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'startPayment', label: '🧾 Lập Thanh Toán' });
   }

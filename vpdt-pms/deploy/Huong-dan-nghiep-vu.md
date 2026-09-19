@@ -523,6 +523,13 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
 
 - **Tài Liệu** — quản lý văn bản nội bộ theo mã tự sinh + quản lý phiên bản
   (Cập nhật giữ mã, Nhập mới tạo mã khác); có luồng phê duyệt theo phòng ban.
+  - **Phiên bản khoá Phòng Ban/Phân Loại theo tài liệu gốc (từ 9/2026)** — 1
+    phiên bản của tài liệu đã có (`rootDocId` khác null) khi sửa (Cập nhật)
+    KHÔNG còn đổi được Phòng Ban/Phân Loại khác với tài liệu GỐC — trước đây
+    có thể đổi lệch, phá vỡ tính nhất quán "gia đình" tài liệu (các phiên bản
+    lẽ ra phải cùng 1 phòng ban/phân loại) và có thể bị dùng để né quy trình
+    duyệt của phòng ban thật. Tài liệu GỐC (chưa từng có phiên bản nào) vẫn
+    đổi Phòng Ban/Phân Loại tự do như trước.
   - **Định dạng mã tự sinh** — Tài Liệu/Hợp Đồng và 8 module khác (Văn Bản
     Trình/Đăng Ký Xe/Mua Bán-Sửa Chữa-Đầu Tư/Biên Bản Họp/Đặt Phòng Họp/Phê
     Duyệt Giá IT/Ticket Hỗ Trợ IT/Vận Hành > Đặt Hàng, cộng thêm Giấy Phép)
@@ -585,7 +592,10 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   "Người Thực Hiện" của 1 việc đang ở trạng thái Đang thực hiện sẽ tự động
   đưa việc về lại Cần làm + xoá các việc con đã tạo dở — người MỚI được gán
   phải tự bấm "Nhận việc" lại từ đầu, không thừa hưởng ngầm tiến độ của
-  người cũ.
+  người cũ. **Từ 9/2026 (bổ sung)**: đổi người nhận lúc này còn tự HUỶ LUÔN
+  mọi yêu cầu Xin Gia Hạn/Xin Huỷ còn đang treo của người nhận CŨ — trước đó
+  các yêu cầu này vẫn tồn tại sau khi đổi người, khiến người nhận MỚI bị
+  chặn "Hoàn thành" vô cớ vì 1 yêu cầu không còn liên quan gì tới mình nữa.
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
   tự điền thông tin cơ bản. **Xem/Tải/In khớp nội dung (từ 9/2026)** — trước
   đây màn "Xem" và file Tải/khung In dựng HTML riêng biệt, lệch cả nội dung
@@ -625,6 +635,12 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       điểm từng câu — lúc đó điểm mới cộng dồn và Đạt/Không Đạt mới chốt
       (so với Điểm Đạt của lớp). Bài test không có câu Nghị Luận nào thì
       không đổi gì — vẫn có kết quả ngay như trước.
+      **Chốt Điểm Đạt ngay lúc nộp bài (từ 9/2026)**: hệ thống lưu lại
+      snapshot Điểm Đạt của lớp TẠI THỜI ĐIỂM học viên nộp bài — nếu giảng
+      viên sửa Điểm Đạt của lớp SAU KHI đã có bài nộp nhưng TRƯỚC KHI chấm
+      xong câu Nghị Luận, Đạt/Không Đạt vẫn tính đúng theo ngưỡng lúc nộp
+      bài (không bị tính nhầm theo ngưỡng mới). Bài nộp từ trước bản vá này
+      (chưa có snapshot) tự dùng lại Điểm Đạt hiện tại của lớp, không lỗi.
     - **Gợi ý học viên chưa hoàn thành khi tổ chức lại lớp** (từ v23.53):
       lớp mới gắn cùng Chương Trình (`courseId`) với 1/nhiều lớp cũ đã có
       học viên KHÔNG ĐẠT — mở modal "➕ Thêm Học Viên" của lớp mới sẽ tự
@@ -708,7 +724,11 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   sang **"🚗 Đang Thực Hiện"** (nằm giữa "Đã Phê Duyệt" và "Chờ Đánh Giá" trong
   luồng), có thẻ riêng ở "📊 Báo Cáo" và filter riêng ở danh sách. "🔁 Đổi Tài
   Xế-Xe"/"🚫 Hủy Chuyến" vẫn dùng được bình thường ở cả 2 trạng thái Đã Phê
-  Duyệt lẫn Đang Thực Hiện.
+  Duyệt lẫn Đang Thực Hiện. **Từ 9/2026**: đổi tài xế cho 1 chuyến ĐANG THỰC
+  HIỆN nay tự đưa trạng thái QUAY LẠI "Đã Phê Duyệt" (để tài xế mới xác nhận
+  lại được từ đầu) — trước đây phiếu vẫn giữ nguyên "Đang Thực Hiện" dù chưa
+  ai xác nhận, kẹt vĩnh viễn (tài xế mới không xác nhận được, tài xế cũ cũng
+  không kết thúc được chuyến).
   **"🚫 Hủy Đăng Ký" khi chưa ai duyệt (từ 9/2026)** — trước đây 1 phiếu đang
   chờ duyệt (`PENDING`) hoàn toàn không có cách rút lại, chỉ "Hủy Chuyến" được
   sau khi đã phê duyệt xong. Nay người đăng ký có thể tự hủy đăng ký của chính
@@ -787,6 +807,12 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đã giữ chỗ cho người khác trong phòng dùng tiếp. Màn "Báo Cáo Tổng Hợp" (chỉ
   vppManage/admin) hiện cột "Còn Lại (Sau Chờ Duyệt)" đúng bằng số hệ thống
   dùng để chặn (trừ cả Chờ Duyệt, không chỉ Đã Duyệt).
+  **"🚫 Hủy Đăng Ký" khi chưa ai duyệt (từ 9/2026)** — cùng cơ chế "Hủy Đăng
+  Ký" đã có ở Đăng Ký Xe (xem mục trên): đăng ký đang Chờ Duyệt mà CHƯA ai xử
+  lý gì cả (còn đúng bước duyệt đầu tiên) thì người tạo (hoặc admin) tự hủy
+  được ngay ở danh sách — hủy rồi tự "nhả" lại phần quỹ ngân sách phòng ban
+  đã giữ chỗ ngay lập tức. Đã qua ít nhất 1 bước duyệt thì không hủy được
+  qua nút này nữa (nhờ người duyệt bước hiện tại Từ Chối thay).
   **Danh mục mặt hàng — mẫu/nhập/xuất Excel** (form "Tạo Kỳ Đăng Ký"): nút
   **"⬇️ Tải Mẫu Excel"** ngay cạnh ô chọn file tải về 1 file mẫu rỗng (kèm 1
   dòng ví dụ in nghiêng) đúng 6 cột hệ thống nhận diện được (**Mã Hàng/Tên Mặt
@@ -820,6 +846,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   sang `RECEIVED` và tồn kho B mới cộng thêm (server tự xác thực lại quyền
   theo `user.dept === transfer.targetDept`, không ai xác nhận thay siêu thị
   khác được).
+  **"🚫 Hủy Điều Chuyển" khi đang "vận chuyển" (từ 9/2026)**: lỡ duyệt nhầm
+  1 yêu cầu điều chuyển mà siêu thị đích CHƯA xác nhận nhận, người có quyền
+  duyệt (Hành Chính/`uniformManage`) bấm "🚫 Hủy Điều Chuyển" ở mục "🚚 Đang
+  Vận Chuyển — Hủy Nếu Cần" — tồn kho siêu thị NGUỒN tự "nhả lại" ngay lập
+  tức. Trước đây không có cách nào hủy 1 điều chuyển đã duyệt, tồn kho
+  nguồn bị "giam" vĩnh viễn cho tới khi (lỡ tay) có ai đó xác nhận nhận.
+  Chỉ hủy được TRƯỚC KHI siêu thị đích xác nhận nhận — sau đó hàng coi như
+  đã thật sự chuyển, không "hủy ngược" được nữa.
   **Báo cáo Đồng Phục theo siêu thị**: bộ lọc siêu thị của riêng báo cáo Đồng
   Phục là **chọn nhiều** (tick chọn một nhóm siêu thị bất kỳ, có nút "Chọn Tất
   Cả"/"Bỏ Chọn Hết") — báo cáo hiện dòng "Tổng Cộng (N siêu thị đã chọn)" cộng
@@ -985,9 +1019,18 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     liệu ký" của phòng ban đó (Hệ Thống > Quy Trình & Phê Duyệt > "Hợp đồng -
     Quản Lý HĐ") bấm Duyệt/Từ chối. Duyệt xong mới thật sự đổi Loại/Đợt Thanh
     Toán + ghi lại lịch sử ai yêu cầu/ai duyệt/đổi từ gì sang gì; Từ chối thì
-    chỉ xoá yêu cầu, giữ nguyên hình thức cũ.
+    chỉ xoá yêu cầu, giữ nguyên hình thức cũ. **Từ 9/2026**: khi có 1 yêu cầu
+    đổi hình thức đang "⏳ Chờ duyệt", nút **"🧾 Lập Thanh Toán"** bị CHẶN
+    (409) cho tới khi yêu cầu đó được xử lý xong — trước đây vẫn lập được
+    đề nghị thanh toán theo hình thức CŨ trong lúc yêu cầu đổi đang treo,
+    có thể tạo đề nghị sai hình thức nếu yêu cầu đổi được duyệt ngay sau đó.
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
+  **"🚫 Hủy Đề Xuất" khi chưa ai duyệt (từ 9/2026)** — cùng cơ chế đã có ở
+  Đăng Ký Xe/Văn Phòng Phẩm: đề xuất Mua Sắm/Sửa Chữa/Đầu Tư đang Chờ Duyệt
+  mà CHƯA ai xử lý gì (còn đúng bước duyệt đầu tiên) thì người tạo (hoặc
+  admin) tự hủy được ngay ở danh sách; đã qua ít nhất 1 bước duyệt/đã Phê
+  Duyệt xong thì không dùng nút này được nữa.
   - **Thanh Toán** — tổng hợp đề nghị thanh toán tự sinh từ Hợp Đồng/Mua
     Bán/Sửa Chữa (nút "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán") hoặc tạo
     thủ công. **3 sub-tab**:
@@ -1029,6 +1072,13 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       `PAID` không biến mất khỏi sub-tab này, vẫn hiện đầy đủ kèm link "📎 Xem
       tệp") — đọc CHUNG 1 danh sách với sub-tab "Xác Nhận" bên dưới nên mọi
       thay đổi trạng thái tự hiện ngay ở đây.
+      **Tự động nhắc hạn qua email (từ 9/2026)** — job định kỳ (mỗi 24h,
+      `jobs/paymentDeadlineReminder.js`) quét mọi đề nghị Đã duyệt ("⏳ Đang
+      chờ thanh toán") có đợt còn khoảng 3/1/0 ngày là tới hạn (hoặc đã quá
+      hạn), gửi email tới người tạo đề nghị VÀ mọi người đang giữ quyền quản
+      lý Thanh Toán (`paymentManage`) — trước đây chỉ có badge cảnh báo trên
+      giao diện, không ai chủ động được nhắc. Mỗi đợt chỉ nhắc 1 lần cho mỗi
+      ngưỡng đã vượt qua; đợt đã xác nhận thanh toán thì không còn bị nhắc.
     - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — chỉ còn hiện đề nghị đã duyệt
       XONG bước/phòng ban ở trên (hiển thị **"⏳ Đang chờ thanh toán"** thay vì
       nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
@@ -1092,6 +1142,12 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       badge dòng cha tự đổi thành **"⚠️ Vượt ngân sách"** (đỏ) thay vì
       "✅ Đã dùng hết" (xanh) để không còn bị âm thầm bỏ sót, không cần vào
       tận tab Báo Cáo mới thấy.
+      **Khoá Vị Trí/Khối Phòng Ban khi đã có mục con (từ 9/2026)**: dòng cha
+      CHỈ sửa được Vị Trí/Khối Phòng Ban khi CHƯA có mục con nào ghi nhận —
+      đã có mục con thì chỉ còn sửa được Ghi chú (đổi Vị Trí/Khối Phòng Ban
+      lúc này sẽ làm lệch quyền xem/sửa của các mục con đã ghi nhận theo
+      phòng ban cũ); cần chuyển hẳn sang phòng ban khác thì tạo 1 dòng Sử
+      Dụng mới.
     - **📊 Báo Cáo** — chỉ hiện với quyền **"Xem Báo Cáo Ngân Sách Toàn Công
       Ty"** (`budgetAggregate`, hoặc `budgetManage`/admin) — tổng hợp
       Đề Xuất/Phê Duyệt/Sử Dụng theo Vị Trí/Khối Phòng Ban/Năm-Tháng, tính
@@ -1274,10 +1330,17 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   đối chiếu đơn hàng phía dsmart16 (mặc định Số Đơn NCC), chu kỳ đồng bộ (phút).
   Có nút **"🔄 Đồng Bộ Ngay"** để kích hoạt thủ công ngoài chu kỳ tự động. Job
   nền chạy mỗi 5 phút (tự bỏ qua nếu chưa tới chu kỳ đã cấu hình hoặc tính
-  năng đang tắt), lấy các đơn hàng chưa từng đồng bộ, gửi từng đơn qua API
-  dsmart16 (Base URL + header tuỳ chỉnh), đánh dấu đơn đã đồng bộ khi thành
-  công — lỗi ở 1 đơn không chặn các đơn còn lại trong cùng lượt chạy. Trạng
-  thái/thông báo lần đồng bộ gần nhất hiện ngay trên màn Cấu Hình API.
+  năng đang tắt), lấy các đơn hàng cần gửi, gửi từng đơn qua API dsmart16
+  (Base URL + header tuỳ chỉnh), đánh dấu đơn đã đồng bộ khi thành công —
+  lỗi ở 1 đơn không chặn các đơn còn lại trong cùng lượt chạy. Trạng thái/
+  thông báo lần đồng bộ gần nhất hiện ngay trên màn Cấu Hình API.
+  **Tự đồng bộ lại khi đơn đổi trạng thái (từ 9/2026)** — trước đây 1 đơn
+  hàng chỉ đồng bộ ĐÚNG 1 LẦN duy nhất (thường lúc còn Chờ duyệt); đơn đổi
+  trạng thái sau đó (Chờ duyệt → Đã duyệt → Đã nhận, ngày duyệt/nhận được
+  gán, số tiền sửa lại...) KHÔNG bao giờ được gửi lại, dsmart16 giữ mãi bản
+  ghi cũ đã lỗi thời. Nay hệ thống lưu lại nội dung của lần gửi thành công
+  gần nhất, tự so sánh mỗi lượt quét và gửi lại khi phát hiện khác — y hệt
+  thì bỏ qua, không gửi thừa.
 - **Mở Mới / Sửa Chữa Siêu Thị** — pipeline 4 giai đoạn **Dự toán → Thực hiện
   → Nghiệm thu → Báo cáo**:
   - **Hồ sơ Mở Mới/Sửa Chữa (bản thân bản ghi)** — đi thẳng trạng thái đã
@@ -1446,6 +1509,13 @@ theo đúng vị trí trong cây**.
   công** ngoài cây báo cáo hành chính và **xoá bất kỳ quan hệ nào**. Tra cứu
   nhanh "ai đang đánh giá KPI cho 1 nhân viên" qua ô tìm kiếm ngay trong màn
   này.
+  **Tự dọn quan hệ tự sinh lỗi thời khi đổi cha (từ 9/2026)**: mỗi lần Áp
+  Dụng, ngoài việc thêm quan hệ còn thiếu như trên, hệ thống nay còn tự
+  **XOÁ** quan hệ tự sinh đã lỗi thời khi 1 vị trí bị chuyển sang cấp trên
+  khác giữa 2 lần Áp Dụng — trước đây quan hệ CŨ vẫn tồn tại song song với
+  quan hệ MỚI, khiến quản lý CŨ tiếp tục có quyền đánh giá KPI của nhân viên
+  đã chuyển sang quản lý khác ("2 người cùng chấm 1 người"). Quan hệ thêm
+  THỦ CÔNG (không theo cây báo cáo hành chính) không bao giờ bị đụng vào.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa dựng bảng
   lịch sử "ai giữ vị trí nào từ ngày nào"; danh sách Phòng Ban toàn hệ thống
   (`DB.depts`) chưa gắn động theo cây; chưa có cảnh báo tự động khi Offboarding
@@ -1635,7 +1705,12 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     Phòng Ban + Chức Danh của tài khoản đó** theo chức vụ vừa gán (đã xác
     nhận với người dùng, có ảnh hưởng tới phân quyền/hiển thị theo phòng ban
     ở nhiều module khác dùng `dept`/`jobTitle` của tài khoản — đây là hành vi
-    **có chủ đích**, không phải tác dụng phụ ngoài ý muốn).
+    **có chủ đích**, không phải tác dụng phụ ngoài ý muốn). **Từ 9/2026**:
+    đồng bộ này cũng tự chạy ngay lúc **Liên Kết Tài Khoản** (thao tác riêng,
+    khác "Gán/Đổi Chức Vụ") cho 1 hồ sơ ĐÃ có sẵn Chức Vụ nhưng CHƯA từng
+    liên kết tài khoản trước đó — trước đây chỉ đồng bộ đúng lúc gán/đổi chức
+    vụ, tài khoản mới liên kết không thừa hưởng đúng Chức Vụ/Phòng Ban đã có
+    sẵn trên hồ sơ cho tới khi HR gán lại chức vụ 1 lần nữa.
   - **Liên kết tài khoản VPDT giờ chỉ còn vai trò MỐI LIÊN HỆ** (để tra cứu
     chéo/đăng nhập xem "Hồ Sơ Của Tôi"), KHÔNG còn là nguồn xác định chức
     vụ/phòng ban nữa — nguồn xác định chức vụ/phòng ban chính thức từ nay là
@@ -1823,7 +1898,12 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   từ chối; đơn được duyệt **tự động trừ phép năm** (chỉ loại Phép năm) và
   **tự sinh bản ghi chấm công loại nghỉ phép** cho từng ngày trong khoảng nghỉ
   (không ghi đè nếu ngày đó đã có loại nghỉ khác). Nhân viên tự huỷ được đơn
-  đang chờ duyệt hoặc đã duyệt nhưng chưa tới ngày nghỉ.
+  đang chờ duyệt hoặc đã duyệt nhưng chưa tới ngày nghỉ. **Từ 9/2026**: huỷ 1
+  đơn phép năm ĐÃ DUYỆT (còn trong tương lai) nay tự **hoàn lại đúng số ngày**
+  đã trừ vào quỹ phép năm VÀ tự dọn lại các bản ghi chấm công đã sinh theo
+  đơn đó về trạng thái trống — trước đây huỷ chỉ đổi trạng thái đơn, số ngày
+  phép đã trừ và bản ghi chấm công vẫn còn nguyên, nhân viên mất oan ngày
+  phép dù chưa hề nghỉ.
 - **Phép năm** — số ngày chuẩn 12 ngày/năm (+ 1 ngày mỗi 5 năm thâm niên),
   tính theo tỷ lệ số tháng còn lại nếu vào làm giữa năm; HR **tạo/điều chỉnh
   tay** ở "Quản Lý & Cấu Hình" (carry-over, quyết định riêng của công ty).
@@ -1954,6 +2034,14 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   giữa kỳ) rơi vào giữa kỳ đang tính, dòng Lương cơ bản tự ghi chú rõ ngày vào
   làm để kế toán tự rà soát + dùng "Điều chỉnh dòng lương" trừ đúng phần chưa
   vào làm nếu cần — hệ thống vẫn KHÔNG tự trừ.
+- **Đổi Lương Cơ Bản GIỮA kỳ lương đang tính** (9/2026, cùng tinh thần 2 mục
+  ở trên): nếu HR dùng "💰 Cập Nhật Lương Cơ Bản" sửa thẳng lương trên hợp
+  đồng đang hiệu lực NGAY TRONG kỳ đang tính (thay vì tạo hợp đồng mới/phụ
+  lục), dòng Lương cơ bản cũng tự ghi chú rõ ngày đổi, nhắc rằng mức đang
+  hiển thị LÀ MỨC SAU KHI ĐỔI (chưa chia tỷ lệ theo ngày hiệu lực thật) —
+  trước đây không có cảnh báo nào, phiếu lương vẫn tính đủ tháng theo mức
+  MỚI dù đổi giữa kỳ. Hệ thống vẫn KHÔNG tự chia tỷ lệ — kế toán tự "Điều
+  chỉnh dòng lương" nếu cần bù/trừ đúng phần chênh lệch.
 - **Chặn Gửi Duyệt nếu có phiếu lương "Thực nhận" ÂM** (9/2026): thường do
   khấu trừ tạm ứng/phạt nhập tay ở "Điều chỉnh dòng lương" lớn hơn cả lương
   gộp — trước đây lọt qua được toàn bộ luồng Gửi Duyệt → Duyệt → Chốt → Công
@@ -2325,6 +2413,11 @@ bộ mô tả bên dưới.
   - **Vòng đời**: Nháp (DRAFT) → Đang Hoạt Động (ACTIVE) → Hết Hạn (EXPIRED)/
     Lưu Trữ (ARCHIVED). **Nhân bản** 1 điều khoản ACTIVE tạo ra 1 bản DRAFT
     mới cùng `termCode` (tăng `version`) để sửa mà không đụng bản đang chạy.
+    **Kích Hoạt bản Nhân Bản tự lưu trữ bản cũ (từ 9/2026)**: kích hoạt 1
+    bản Nhân Bản (DRAFT) sẽ tự chuyển mọi bản ACTIVE khác cùng NCC+Mã Điều
+    Khoản sang Lưu Trữ (ARCHIVED) TRƯỚC — trước đây có thể tồn tại 2 bản
+    cùng ACTIVE song song, "Tính Ước Tính" có thể vô tình chọn nhầm bản CŨ
+    đã lỗi thời; nay luôn chỉ đúng 1 bản ACTIVE cho mỗi NCC+Mã Điều Khoản.
   - **Tách biệt nhiệm vụ (mục 8 tài liệu gốc)**: người TẠO/sửa điều khoản
     (`rebateTermManage`) KHÔNG tự động có quyền KÍCH HOẠT (`rebateTermActivate`,
     quyền riêng) — vì liên quan trực tiếp số tiền lớn, tách 2 vai trò cố ý.

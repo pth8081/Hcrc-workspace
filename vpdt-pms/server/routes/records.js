@@ -1505,6 +1505,11 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
         // applyAutoGradedTestResult() ngay bên dưới (xem nhánh if), phải chờ
         // POST .../submissions/:id/grade-essay (recordActions.gradeTrainingTestEssayAnswers()) chốt lại.
         gradingStatus: graded.gradingStatus,
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): snapshot Điểm Đạt của lớp NGAY LÚC NỘP BÀI — nếu
+        // bài có câu Nghị Luận (gradingStatus PENDING_ESSAY_GRADING), gradeTrainingTestEssayAnswers()
+        // (chấm SAU, có thể vài ngày) dùng lại ĐÚNG giá trị này thay vì đọc cls.passScore SỐNG tại thời
+        // điểm chấm (có thể đã bị sửa giữa chừng, xem lib/recordActions.js).
+        passScoreAtSubmit: cls.passScore,
         essayGradedBy: null, essayGradedByName: null, essayGradedAt: null,
         startedAt: timing?.startedAt || null,
         elapsedSeconds: timing ? timing.elapsedSeconds : null,
@@ -1733,6 +1738,18 @@ router.post('/officeReqs/:id/submit', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `officeReqs/${req.params.id}/submit`, err); }
 });
+// "Hủy đề xuất" — hồ sơ đang PENDING bước 1 (chưa ai duyệt) — mirror POST /carRegs/:id/cancel, xem
+// canCancelOfficeReq()/cancelOfficeReq() ở lib/recordActions.js (LỖI ĐÃ VÁ, rà soát chuyên sâu đợt 3, 9/2026).
+router.post('/officeReqs/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) =>
+      recordActions.cancelOfficeReq(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `officeReqs/${req.params.id}/cancel`, err); }
+});
 
 // submissions: editSubmissionDraft() cần appData (dựng lại effectiveSteps/effectiveApprovers nếu loại/
 // phòng ban/lớp phê duyệt bổ sung đổi khi sửa) — đọc 1 lần trước khi khoá bản ghi, cùng khuôn route
@@ -1817,6 +1834,21 @@ router.post('/vppRegistrations/:id/update', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `vppRegistrations/${req.params.id}/update`, err);
+  }
+});
+// "Hủy đăng ký" — hồ sơ đang PENDING bước 1 (chưa ai duyệt) — mirror POST /officeReqs/:id/cancel, xem
+// canCancelVppRegistration()/cancelVppRegistration() ở lib/recordActions.js (LỖI ĐÃ VÁ, rà soát chuyên
+// sâu đợt 3, 9/2026).
+router.post('/vppRegistrations/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) =>
+      recordActions.cancelVppRegistration(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `vppRegistrations/${req.params.id}/cancel`, err);
   }
 });
 
@@ -2179,15 +2211,21 @@ router.post('/budgetLines/:id/reject', async (req, res) => {
 });
 
 // POST /api/records/budgetLines/:id/used-parent-update — sửa Vị trí/Khối Phòng Ban/Ghi chú ở dòng cha
-// Sử Dụng (:id = id dòng cha).
+// Sử Dụng (:id = id dòng cha). Cùng khoá `budget_line_used_parent:<id cha>` với /children +
+// /used-parent-delete ở trên/dưới — chặn race giữa "thêm dòng con" và "đổi Vị trí/Khối Phòng Ban dòng
+// cha" (xem chú thích hasChildren ở lib/recordActions.js::updateBudgetLineUsedParent()).
 router.post('/budgetLines/:id/used-parent-update', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.updateBudgetLineUsedParent(freshUser, item, req.body, appData));
+    const result = await withAppLock(`budget_line_used_parent:${itemId}`, async () => {
+      const all = await getAllForCollection('budgetLines');
+      const hasChildren = all.some(l => l.parentId === itemId);
+      return withLockedRecordForCollection('budgetLines', itemId, (item) =>
+        recordActions.updateBudgetLineUsedParent(freshUser, item, req.body, appData, hasChildren));
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/used-parent-update`, err); }
 });
@@ -3590,6 +3628,25 @@ router.post('/uniformTransfers/:id/receive', async (req, res) => {
   }
 });
 
+// "Hủy điều chuyển" — chỉ khi ĐANG APPROVED (đã duyệt, hàng "trên đường đi") nhưng CHƯA được siêu thị
+// đích xác nhận nhận (LỖI ĐÃ VÁ, rà soát chuyên sâu đợt 3, 9/2026: trước đây không có cách nào huỷ,
+// tồn kho nguồn bị "giam" vĩnh viễn) — xem canCancelUniformTransfer()/cancelUniformTransfer() ở
+// lib/recordActions.js. KHÔNG cần khoá kép uniform_store như /approve: hành động này chỉ đổi status
+// (CANCELLED), không tự đọc/tính lại tồn kho nào cả — computeUniformStock() ở nơi khác tự đọc status
+// mới nhất mỗi lần gọi, không có state trung gian nào cần khoá thêm ở đây.
+router.post('/uniformTransfers/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformTransfers', itemId, (item) =>
+      recordActions.cancelUniformTransfer(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformTransfers/${req.params.id}/cancel`, err);
+  }
+});
+
 // ===================== GIẤY PHÉP (module con của Hành Chính) =====================
 router.post('/licenses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'licenses'));
 
@@ -3816,10 +3873,32 @@ router.post('/leaveRequests/:id/cancel', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const profileList = (await getAppDataValue('employeeProfiles')) || [];
     const profile = employeeProfile.findProfileByUsername(profileList, freshUser.username);
+    let wasApproved = false;
     const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
       if (!profile || item.employeeCode !== profile.employeeCode) throw new HttpError(403, 'Bạn chỉ được huỷ đơn nghỉ phép của chính mình');
+      wasApproved = item.status === 'APPROVED';
       return attendance.applyCancelLeaveRequest(item, freshUser.username);
     });
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): huỷ 1 đơn ANNUAL ĐÃ DUYỆT (chỉ huỷ được khi ngày nghỉ
+    // chưa tới) phải hoàn lại quỹ phép + dọn AttendanceRecords LEAVE_* đã sinh lúc duyệt — đối xứng đúng
+    // deductLeaveBalance()/buildLeaveAttendanceRecords() đã chạy ở route approve phía trên, nếu không
+    // nhân viên mất vĩnh viễn số ngày phép "xin rồi huỷ" dù chưa hề nghỉ ngày nào, và chấm công những
+    // ngày đó vẫn ghi "nghỉ phép có lương" dù thực tế đi làm bình thường.
+    if (wasApproved && result.leaveType === 'ANNUAL') {
+      const year = new Date(result.fromDate).getFullYear();
+      const balanceList = await getAllForCollection('leaveBalances');
+      const balance = balanceList.find(b => b.employeeCode === result.employeeCode && b.year === year);
+      if (balance) {
+        await withLockedRecordForCollection('leaveBalances', balance.id, (item) => attendance.refundLeaveBalance(item, result.daysCount));
+      }
+    }
+    if (wasApproved) {
+      const attendanceList = await getAllForCollection('attendanceRecords');
+      const toRevert = attendance.buildLeaveCancelAttendanceReverts(result, attendanceList);
+      for (const record of toRevert) {
+        await withLockedRecordForCollection('attendanceRecords', record.id, () => record);
+      }
+    }
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `leaveRequests/${req.params.id}/cancel`, err);

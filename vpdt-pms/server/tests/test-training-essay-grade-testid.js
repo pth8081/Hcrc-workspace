@@ -150,6 +150,52 @@ async function main() {
     assertEqual(res.status, 404, 'Đề gốc của bài nộp không còn tồn tại phải báo lỗi rõ ràng, không được âm thầm chấm nhầm theo đề khác');
   });
 
+  console.log('\n== gradeTrainingTestEssayAnswers(): phải chấm theo Điểm Đạt SNAPSHOT lúc nộp bài (passScoreAtSubmit), không phải cls.passScore SỐNG tại thời điểm chấm ==');
+
+  await test('LỖI ĐÃ VÁ (đợt 3, 9/2026): sửa Điểm Đạt của lớp SAU khi học viên nộp bài, TRƯỚC khi chấm nghị luận -> vẫn tính Đạt/Không Đạt theo ngưỡng lúc NỘP BÀI', async () => {
+    resetState();
+    const testA = { id: 1, title: 'Đề A', totalPoints: 10, questions: [{ id: 1, type: 'ESSAY', text: 'Trình bày...', points: 10 }] };
+    STORE.trainingTests = [testA];
+    // Lớp BAN ĐẦU passScore=70 lúc học viên nộp bài (snapshot ghi lại đúng 70), SAU ĐÓ quản lý đào tạo
+    // sửa lại passScore của lớp thành 90 (siết chặt hơn) TRƯỚC khi giảng viên kịp chấm nghị luận.
+    STORE.trainingClasses = [{ id: 10, title: 'Lớp Test', testId: 1, instructorUsername: TRAINER.username, passScore: 90 }];
+    STORE.trainingTestSubmissions = [{
+      id: 20, testId: 1, classId: 10, username: STUDENT.username, name: STUDENT.name,
+      answers: [{ questionId: 1, essayPointsAwarded: null }],
+      score: 0, totalPoints: 10, percentage: null, passed: null,
+      passScoreAtSubmit: 70, // <-- snapshot lúc nộp bài, KHÔNG PHẢI 90 (giá trị hiện tại của lớp)
+      gradingStatus: 'PENDING_ESSAY_GRADING', essayGradedBy: null, essayGradedByName: null, essayGradedAt: null
+    }];
+    STORE.trainingRegistrations = [{ id: 30, classId: 10, creator: STUDENT.username, result: 'REGISTERED' }];
+
+    // Chấm 8/10 = 80% -> ĐẠT theo ngưỡng 70 (lúc nộp bài), nhưng KHÔNG ĐẠT theo ngưỡng 90 (hiện tại của lớp).
+    const res = await api(port, 'POST', '/api/records/trainingClasses/10/submissions/20/grade-essay',
+      { essayGrades: [{ questionId: 1, pointsAwarded: 8 }] }, TRAINER);
+    assertEqual(res.status, 200, JSON.stringify(res.body));
+    assertEqual(res.body.submission.percentage, 80);
+    assertEqual(res.body.submission.passed, true, 'Phải ĐẠT theo ngưỡng 70 lúc nộp bài (passScoreAtSubmit), không phải 90 hiện tại của lớp');
+  });
+
+  await test('Bài nộp CŨ chưa có passScoreAtSubmit (nộp trước khi có bản vá) -> fallback về cls.passScore hiện tại, không lỗi', async () => {
+    resetState();
+    const testA = { id: 1, title: 'Đề A', totalPoints: 10, questions: [{ id: 1, type: 'ESSAY', text: 'Trình bày...', points: 10 }] };
+    STORE.trainingTests = [testA];
+    STORE.trainingClasses = [{ id: 12, title: 'Lớp Test 3', testId: 1, instructorUsername: TRAINER.username, passScore: 70 }];
+    STORE.trainingTestSubmissions = [{
+      id: 22, testId: 1, classId: 12, username: STUDENT.username, name: STUDENT.name,
+      answers: [{ questionId: 1, essayPointsAwarded: null }],
+      score: 0, totalPoints: 10, percentage: null, passed: null,
+      gradingStatus: 'PENDING_ESSAY_GRADING', essayGradedBy: null, essayGradedByName: null, essayGradedAt: null
+      // Cố ý KHÔNG có field passScoreAtSubmit — mô phỏng bài nộp từ TRƯỚC khi có bản vá này.
+    }];
+    STORE.trainingRegistrations = [{ id: 31, classId: 12, creator: STUDENT.username, result: 'REGISTERED' }];
+
+    const res = await api(port, 'POST', '/api/records/trainingClasses/12/submissions/22/grade-essay',
+      { essayGrades: [{ questionId: 1, pointsAwarded: 8 }] }, TRAINER);
+    assertEqual(res.status, 200, JSON.stringify(res.body));
+    assertEqual(res.body.submission.passed, true, 'Fallback đúng theo cls.passScore=70 hiện tại khi bài nộp không có snapshot');
+  });
+
   console.log(`\n${passed} passed, ${failed} failed`);
   server.close();
   if (failed > 0) process.exitCode = 1;

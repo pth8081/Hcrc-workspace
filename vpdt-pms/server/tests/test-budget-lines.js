@@ -199,9 +199,17 @@ async function run() {
     const kd1TryEditParent = await recordAction(usedParentId, 'used-parent-update', { dept: 'Phòng Kế Toán', location: 'HO', note: 'test' });
     check('budgetCreate (kd1, không có budgetManage) KHÔNG sửa được dòng cha Sử Dụng', !kd1TryEditParent.ok, kd1TryEditParent);
     await loginAs('budgetmgr1');
-    const editParent = await recordAction(usedParentId, 'used-parent-update', { dept: 'Phòng Kế Toán', location: 'HO', note: 'Chuyển theo dõi sang Kế Toán' });
-    check('budgetManage sửa được Vị trí/Khối Phòng Ban/Ghi chú của dòng cha Sử Dụng', editParent.ok && editParent.item.dept === 'Phòng Kế Toán' && editParent.item.note.includes('Chuyển theo dõi'), editParent);
-    check('Nội dung/Danh Mục VẪN khoá cứng sau khi sửa (server không đổi 2 field này)', editParent.ok && editParent.item.content === 'Nâng cấp máy chủ nội bộ' && editParent.item.itemCategory === 'SYSTEM', editParent.item);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): usedParentId ĐÃ có mục con (Kịch bản 10-12 ở trên) —
+    // đổi Vị trí/Khối Phòng Ban lúc này trước đây ÂM THẦM thành công, khiến dept SNAPSHOT của các mục con
+    // đã tạo (vẫn 'Phòng Kinh Doanh') lệch với parent.dept MỚI ('Phòng Kế Toán') mà updateBudgetLineChild()/
+    // assertCanDeleteBudgetLineChild() dùng để tra quyền sửa/xoá — người Phòng Kinh Doanh mất quyền với
+    // đúng mục con mình tạo, người Phòng Kế Toán lại có quyền với dữ liệu không phải của mình. Nay phải
+    // CHẶN hẳn (409) khi đã có mục con.
+    const editParentBlocked = await recordAction(usedParentId, 'used-parent-update', { dept: 'Phòng Kế Toán', location: 'HO', note: 'Chuyển theo dõi sang Kế Toán' });
+    check('Đổi Vị trí/Khối Phòng Ban dòng cha ĐÃ có mục con -> bị CHẶN 409', !editParentBlocked.ok && editParentBlocked.message.includes('mục con'), editParentBlocked);
+    const editParentNoteOnly = await recordAction(usedParentId, 'used-parent-update', { dept: 'Phòng Kinh Doanh', location: 'HO', note: 'Chỉ sửa ghi chú, giữ nguyên Vị trí/Khối Phòng Ban' });
+    check('Sửa CHỈ Ghi chú (giữ nguyên Vị trí/Khối Phòng Ban) dòng cha ĐÃ có mục con -> vẫn thành công bình thường', editParentNoteOnly.ok && editParentNoteOnly.item.note.includes('Chỉ sửa ghi chú') && editParentNoteOnly.item.dept === 'Phòng Kinh Doanh', editParentNoteOnly);
+    check('Nội dung/Danh Mục VẪN khoá cứng sau khi sửa ghi chú (server không đổi 2 field này)', editParentNoteOnly.ok && editParentNoteOnly.item.content === 'Nâng cấp máy chủ nội bộ' && editParentNoteOnly.item.itemCategory === 'SYSTEM', editParentNoteOnly.item);
 
     const deleteParentWithChildren = await recordAction(usedParentId, 'used-parent-delete');
     check('KHÔNG xoá được dòng cha Sử Dụng đã có mục con', !deleteParentWithChildren.ok && deleteParentWithChildren.message.includes('mục con'), deleteParentWithChildren);
@@ -217,6 +225,10 @@ async function run() {
     check('Duyệt dòng Phê Duyệt thứ 2 thành công, tự sinh dòng Sử Dụng chưa có mục con', approveLine2Result.ok && !!approveLine2Result.usedItem, approveLine2Result);
     const usedParent2Id = approveLine2Result.usedItem.id;
     await loginAs('budgetmgr1');
+    // Đối chứng cho bản vá ở Kịch bản 13: dòng cha CHƯA có mục con nào -> đổi Vị trí/Khối Phòng Ban vẫn
+    // được phép bình thường (không bị chặn oan — chỉ chặn khi ĐÃ có mục con).
+    const editParent2NoChildren = await recordAction(usedParent2Id, 'used-parent-update', { dept: 'Phòng Kế Toán', location: 'HO', note: 'Đổi ngay khi chưa có mục con nào' });
+    check('Dòng cha CHƯA có mục con -> vẫn đổi được Vị trí/Khối Phòng Ban bình thường (không bị chặn oan)', editParent2NoChildren.ok && editParent2NoChildren.item.dept === 'Phòng Kế Toán', editParent2NoChildren);
     const deleteParent2 = await recordAction(usedParent2Id, 'used-parent-delete');
     check('Xoá dòng cha Sử Dụng CHƯA có mục con -> thành công', deleteParent2.ok, deleteParent2);
     // Đọc thẳng state (Node, phía "server" mock) — bài test này gọi callRecordAction()/callCreateAction()
@@ -225,6 +237,13 @@ async function run() {
     // thật (state.collections, nơi mock backend ghi) thay vì DB.budgetLines phía client.
     const sourceAfterDelete = h.state.collections.budgetLines.find((l) => l.id === approveLine2.item.id);
     check('Xoá dòng cha xong -> dòng Phê Duyệt gốc "mở khoá" lại về SUBMITTED', !!sourceAfterDelete && sourceAfterDelete.status === 'SUBMITTED' && sourceAfterDelete.decidedBy == null, sourceAfterDelete);
+
+    // Fixture riêng cho dept diversity của Kịch bản 15 bên dưới — kể từ bản vá Kịch bản 13 (chặn đổi Vị
+    // trí/Khối Phòng Ban dòng cha ĐÃ có mục con), test không còn tạo được dept khác 'Phòng Kinh Doanh'
+    // qua đường "sửa dòng cha" nữa, nên tạo thẳng 1 Đề Xuất mới ở Khối Phòng Ban khác để giữ đúng ý nghĩa
+    // kiểm chứng "thấy nhiều Khối Phòng Ban" của Kịch bản 15.
+    const deptDiversityLine = await createBudgetLine(baseLine({ dept: 'Phòng Kế Toán' }));
+    check('Fixture dept diversity: tạo Đề Xuất ở Khối Phòng Ban khác (Phòng Kế Toán) thành công', deptDiversityLine.ok, deptDiversityLine);
 
     // ============ Kịch bản 15: Phạm vi xem — budgetagg1 (chỉ budgetAggregate, KHÔNG budgetManage) xem
     // được TOÀN BỘ mọi Khối Phòng Ban nhưng KHÔNG được duyệt/sửa gì. filterBudgetLinesForUser() (server)

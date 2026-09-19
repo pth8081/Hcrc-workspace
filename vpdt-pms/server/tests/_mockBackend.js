@@ -287,7 +287,8 @@ function createMockApi(state) {
       }
       if (action === 'used-parent-update') {
         const item = findOr404(all, id);
-        return { item: recordActions.updateBudgetLineUsedParent(user, item, payload, state.appData) };
+        const hasChildren = all.some(l => l.parentId === id);
+        return { item: recordActions.updateBudgetLineUsedParent(user, item, payload, state.appData, hasChildren) };
       }
       if (action === 'used-parent-delete') {
         const parent = findOr404(all, id);

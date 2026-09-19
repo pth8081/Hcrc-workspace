@@ -274,9 +274,36 @@ function computeValidationIssues(candidate, appliedVersion, users) {
   return issues;
 }
 
+// ===== Xoá dòng KPI Flow TỰ SINH đã lỗi thời (LỖI ĐÃ VÁ, rà soát chuyên sâu đợt 3, 9/2026) =====
+// seedKpiFlowGaps() bên dưới TRƯỚC ĐÂY chỉ THÊM dòng còn thiếu, không bao giờ XOÁ dòng
+// isAutoFromHierarchy:true đã lỗi thời khi 1 node bị ĐỔI CHA (reparent) giữa 2 lần Áp Dụng — dòng KPI
+// Flow tự sinh CŨ (evaluatorNodeId = cha CŨ) vẫn tồn tại nguyên vẹn, khiến quản lý CŨ tiếp tục nhận KPI
+// đánh giá của nhân viên đã chuyển sang quản lý khác, CHẠY SONG SONG với dòng MỚI (evaluatorNodeId =
+// cha MỚI) mà seedKpiFlowGaps() thêm vào — 2 người cùng đánh giá 1 người ("double vote"), không ai biết
+// dòng cũ cần xoá tay. Chỉ xoá dòng TỰ SINH (isAutoFromHierarchy:true) — dòng THỦ CÔNG (admin tự thêm/
+// sửa tay qua addKpiFlowRow() bên dưới, isAutoFromHierarchy:false) LUÔN giữ nguyên, đúng nguyên tắc
+// "seed chỉ điền chỗ trống, không đụng dòng đã có" của cả module này.
+function pruneStaleAutoKpiFlow(version) {
+  version.kpiFlow = version.kpiFlow || [];
+  const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
+  const before = version.kpiFlow.length;
+  version.kpiFlow = version.kpiFlow.filter(f => {
+    if (!f.isAutoFromHierarchy) return true;
+    const evaluatee = byId.get(f.evaluateeNodeId);
+    // Node đã bị xoá khỏi cây, hoặc cha THẬT SỰ hiện tại không còn khớp evaluatorNodeId của dòng này
+    // (đã đổi cha) -> dòng tự sinh này đã lỗi thời, xoá.
+    if (!evaluatee || evaluatee.parentNodeId !== f.evaluatorNodeId) return false;
+    return true;
+  });
+  return before - version.kpiFlow.length;
+}
+
 // ===== Seed KPI Flow (auto, chỉ điền chỗ trống — giữ nguyên mọi dòng đã có, kể cả thủ công) =====
+// Từ 9/2026: LUÔN gọi pruneStaleAutoKpiFlow() TRƯỚC khi thêm — dọn dòng tự sinh lỗi thời TRƯỚC, để
+// không có khoảng trống nào giữa "xoá dòng cũ" và "thêm dòng mới" cho cùng 1 node bị đổi cha.
 function seedKpiFlowGaps(version) {
   version.kpiFlow = version.kpiFlow || [];
+  pruneStaleAutoKpiFlow(version);
   const existing = new Set(version.kpiFlow.map(f => `${f.evaluatorNodeId}:${f.evaluateeNodeId}`));
   const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
   let added = 0;
@@ -473,7 +500,7 @@ module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
   buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, findPositionNodeForUser,
   addNode, editNode, deleteNodeCascade,
-  computeValidationIssues, seedKpiFlowGaps,
+  computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
   bootstrapFirstVersion, cloneVersion, applyVersionInPlace,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
   addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions,

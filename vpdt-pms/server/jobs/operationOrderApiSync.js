@@ -11,10 +11,19 @@
 // — CÙNG 1 hàm exportSyncOperationOrdersToDsmart16(), khác nhau ở nơi gọi và exports trả về summary để
 // route trả JSON ngay cho client (job tự động chỉ log, không ai chờ response).
 //
-// Phạm vi đồng bộ: chỉ đơn hàng đã có "poNumber" (không có gì để đối chiếu nếu thiếu) VÀ chưa từng đồng
-// bộ thành công ("dsmart16Synced" chưa true) — gửi 1 lần duy nhất mỗi đơn khi đủ điều kiện, không gửi
-// lại định kỳ cho đơn đã đồng bộ xong (khớp kỳ vọng "đồng bộ 1 lần khi có poNumber", không phải "đồng bộ
-// mọi thay đổi" — nếu sau này cần đồng bộ lại khi đơn đổi trạng thái, sẽ cần mở rộng điều kiện này).
+// Phạm vi đồng bộ: chỉ đơn hàng đã có "poNumber" (không có gì để đối chiếu nếu thiếu) VÀ (chưa từng đồng
+// bộ thành công HOẶC nội dung đã thay đổi so với lần đồng bộ gần nhất — xem buildSyncPayload()/
+// hasPayloadChangedSinceLastSync() bên dưới, cùng khuôn UPSERT "chỉ ghi lại khi nội dung thực sự khác"
+// đã dùng cho vendorPurchaseStore.js bulkInsertPurchaseTransactions()).
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): TRƯỚC ĐÂY chỉ điều kiện "dsmart16Synced chưa true" —
+// đơn hàng đồng bộ THÀNH CÔNG 1 lần (thường lúc còn PENDING, lúc vừa có poNumber) thì KHÔNG BAO GIỜ
+// đồng bộ lại nữa dù sau đó đổi trạng thái (PENDING -> APPROVED -> RECEIVED, approvedAt/receivedAt được
+// gán, amount/dept có thể sửa...) — hệ thống dsmart16 phía ngoài giữ mãi bản ghi "đơn đang chờ duyệt" dù
+// đơn đã hoàn tất từ lâu, không có cách nào tự nhận biết cần gửi lại ngoài admin tự xoá cờ dsmart16Synced
+// thủ công qua DB. Nay lưu lại `dsmart16SyncedPayload` (snapshot JSON của lần gửi THÀNH CÔNG gần nhất) —
+// so sánh lại payload MỚI với snapshot này mỗi lượt quét, tự đồng bộ lại khi khác, bỏ qua khi y hệt (đỡ
+// gửi thừa cho hệ thống ngoài).
 const dns = require('dns').promises;
 const { getPool, sql } = require('../db');
 const { decryptSecret } = require('../lib/emailCrypto');
@@ -194,9 +203,33 @@ async function syncOperationOrdersToDsmart16({ force = false } = {}) {
   }
 }
 
+// Payload gửi cho dsmart16 — TÁCH RIÊNG thành hàm dùng chung để so sánh với snapshot lần gửi trước
+// (hasPayloadChangedSinceLastSync() bên dưới) VÀ để gửi thật trong vòng lặp, tránh 2 nơi tính khác nhau.
+function buildSyncPayload(o, matchingKey) {
+  return {
+    [matchingKey]: o.poNumber,
+    code: o.code,
+    title: o.title,
+    supplier: o.supplier || null,
+    amount: o.amount,
+    status: o.status,
+    orderLocationType: o.orderLocationType,
+    dept: o.dept,
+    createdAt: o.createdAt || null,
+    approvedAt: o.approvedAt || null,
+    receivedAt: o.receivedAt || null
+  };
+}
+
+function hasPayloadChangedSinceLastSync(o, matchingKey) {
+  if (o.dsmart16Synced !== true) return true; // chưa từng đồng bộ -> luôn cần gửi
+  if (!o.dsmart16SyncedPayload) return true; // đã đồng bộ (dữ liệu cũ trước bản vá này) nhưng chưa có snapshot -> gửi lại 1 lần để có snapshot đối chiếu từ nay
+  return JSON.stringify(buildSyncPayload(o, matchingKey)) !== o.dsmart16SyncedPayload;
+}
+
 async function runSyncBatch(pool, config, matchingKey, headerValue) {
   const orders = await getAllForCollection('operationOrders');
-  const candidates = (orders || []).filter(o => o && o.poNumber && o.dsmart16Synced !== true);
+  const candidates = (orders || []).filter(o => o && o.poNumber && hasPayloadChangedSinceLastSync(o, matchingKey));
 
   const summary = { total: candidates.length, synced: 0, failed: 0, errors: [] };
   if (!candidates.length) {
@@ -221,19 +254,8 @@ async function runSyncBatch(pool, config, matchingKey, headerValue) {
       const headers = { 'Content-Type': 'application/json' };
       if (config.headerName && headerValue) headers[config.headerName] = headerValue;
 
-      const payload = {
-        [matchingKey]: o.poNumber,
-        code: o.code,
-        title: o.title,
-        supplier: o.supplier || null,
-        amount: o.amount,
-        status: o.status,
-        orderLocationType: o.orderLocationType,
-        dept: o.dept,
-        createdAt: o.createdAt || null,
-        approvedAt: o.approvedAt || null,
-        receivedAt: o.receivedAt || null
-      };
+      const payload = buildSyncPayload(o, matchingKey);
+      const payloadSnapshot = JSON.stringify(payload);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SYNC_FETCH_TIMEOUT_MS);
@@ -250,6 +272,7 @@ async function runSyncBatch(pool, config, matchingKey, headerValue) {
       await withLockedRecordById('operationOrders', o.id, (item) => {
         item.dsmart16Synced = true;
         item.dsmart16SyncedAt = new Date().toISOString();
+        item.dsmart16SyncedPayload = payloadSnapshot;
         return item;
       });
       summary.synced++;
@@ -281,4 +304,4 @@ async function runSyncBatch(pool, config, matchingKey, headerValue) {
   return { ok: true, ...summary, message };
 }
 
-module.exports = { syncOperationOrdersToDsmart16, isPrivateOrReservedIp, assertSafeExternalUrl };
+module.exports = { syncOperationOrdersToDsmart16, isPrivateOrReservedIp, assertSafeExternalUrl, buildSyncPayload, hasPayloadChangedSinceLastSync };

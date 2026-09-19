@@ -510,6 +510,7 @@ function vppRegStatusBadge(r) {
   if (r.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
   if (r.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
   if (r.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+  if (r.status === 'CANCELLED') return `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy</span>`;
   return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`;
 }
 
@@ -535,7 +536,8 @@ function renderVppRegistrations() {
     { key: '', label: 'Tổng Đăng Ký', count: scopedVppRegs.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedVppRegs.filter(r => r.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedVppRegs.filter(r => r.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
-    { key: 'REJECTED', label: 'Từ Chối', count: scopedVppRegs.filter(r => r.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    { key: 'REJECTED', label: 'Từ Chối', count: scopedVppRegs.filter(r => r.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
+    { key: 'CANCELLED', label: 'Đã Hủy', count: scopedVppRegs.filter(r => r.status === 'CANCELLED').length, colorClass: 'border-l-slate-500' }
   ];
   const dashEl = document.getElementById('vppDashboardCards');
   if (dashEl) dashEl.innerHTML = buildDashboardCardsHTML(vppDashCards, statusFilter, 'filterVppByCard');
@@ -566,6 +568,11 @@ function renderVppRegistrations() {
         ? `<button data-op="openVppRegModal" data-arg0="${r.id}" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">✍️ Xử lý / Duyệt</button>`
         : `<button data-op="openVppRegModal" data-arg0="${r.id}" class="px-2.5 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem chi tiết</button>`;
     }
+    // "Hủy đăng ký" — chỉ khi ĐANG chờ duyệt bước 1 (chưa ai duyệt gì), người tạo hoặc admin — mirror
+    // canCancelOfficeReq() ở module-office.js/lib/recordActions.js.
+    if (r.status === 'PENDING' && (r.currentStep || 1) <= 1 && (currentUser.perms?.admin || r.creator === currentUser.username)) {
+      secondaryOptions.push({ value: 'cancelReg', label: '🚫 Hủy Đăng Ký' });
+    }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
     return `
       <tr class="hover:bg-gray-50 border-b">
@@ -592,8 +599,35 @@ function editVppRegDraft(id) {
 function runVppRegAction(id, action) {
   switch (action) {
     case 'submit': submitVppRegDraftAction(id, false); break;
+    case 'cancelReg': openCancelVppRegModal(id); break;
     case 'delete': deleteVppRegAction(id); break;
   }
+}
+
+// "Hủy đăng ký" (PENDING bước 1) — mirror ĐÚNG openCancelOfficeReqModal() ở module-office.js. reason
+// KHÔNG bắt buộc, cùng khuôn Đăng Ký Xe/Phòng Họp/Văn Phòng.
+function openCancelVppRegModal(id) {
+  const r = DB.vppRegistrations.find(x => x.id === id);
+  if (!r) return;
+  const reason = prompt('Lý do hủy đăng ký (không bắt buộc):', '');
+  if (reason === null) return;
+  showConfirmModal({
+    title: '🚫 Xác Nhận Hủy Đăng Ký',
+    bodyHTML: `<p>Hủy đăng ký Văn phòng phẩm <b>${escapeHtml(r.code)}</b> (${escapeHtml(r.periodName || '')})?</p>${reason.trim() ? `<p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>` : ''}<p class="mt-2 text-red-600 font-semibold">Đăng ký đã hủy không thể phục hồi lại.</p>`,
+    confirmLabel: 'Hủy Đăng Ký',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('vppRegistrations', id, 'cancel', { reason: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.vppRegistrations.findIndex(x => x.id === id);
+      if (idx !== -1) DB.vppRegistrations[idx] = result.item;
+      logSystemAction('VPP', 'CANCEL_VPP_REG', `Hủy đăng ký Văn phòng phẩm [${result.item.code}]`, 'SUCCESS', result.item.code);
+      alert('✅ Đã hủy đăng ký!');
+      renderVppRegistrations();
+      refreshApprovalSurfaces();
+    }
+  });
 }
 
 function deleteVppRegAction(id) {

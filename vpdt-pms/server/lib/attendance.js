@@ -395,6 +395,16 @@ function deductLeaveBalance(balance, daysCount) {
   return Object.assign({}, balance, { usedDays, updatedAt: nowVN() });
 }
 
+// Hoàn lại UsedDays vào LeaveBalance khi HUỶ 1 đơn ANNUAL đã DUYỆT (chỉ huỷ được khi ngày nghỉ CHƯA tới,
+// xem applyCancelLeaveRequest()) — đối xứng với deductLeaveBalance() ở trên.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): trước đây route huỷ CHỈ đổi status='CANCELLED' trên
+// leaveRequest, không hề đụng tới leaveBalances — nhân viên "xin rồi huỷ" (chưa nghỉ ngày nào) mất vĩnh
+// viễn đúng số ngày phép đã trừ lúc duyệt, vì quỹ phép năm là tài nguyên hữu hạn không tự "quay vòng".
+function refundLeaveBalance(balance, daysCount) {
+  const usedDays = Math.max(0, Math.round(((balance.usedDays || 0) - daysCount) * 10) / 10);
+  return Object.assign({}, balance, { usedDays, updatedAt: nowVN() });
+}
+
 // Sinh các dòng AttendanceRecords loại LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho từng ngày trong khoảng
 // nghỉ đã duyệt — GHI ĐÈ bản ghi WORK (nếu máy chấm công đã lỡ ghi ngày đó) vì đơn đã duyệt là nguồn sự
 // thật cao hơn; KHÔNG ghi đè nếu ngày đó đã có bản ghi nghỉ phép khác (tránh đơn chồng đơn).
@@ -417,6 +427,33 @@ function buildLeaveAttendanceRecords(request, existingList) {
     base.note = `Nghỉ phép theo đơn đã duyệt (${request.fromDate} → ${request.toDate})`;
     base.updatedAt = nowVN();
     results.push({ record: base, isNew: !existing });
+  }
+  return results;
+}
+
+// Dọn lại các AttendanceRecords LEAVE_* đã sinh bởi buildLeaveAttendanceRecords() ở trên khi 1 đơn ĐÃ
+// DUYỆT bị HUỶ — đối xứng, cùng nhận diện đúng ngày trong khoảng fromDate–toDate của đơn này. Chỉ trả về
+// bản ghi TỰ TẠO/GHI ĐÈ bởi đúng đơn này (nhận diện qua field `note` đúng chữ ký đã ghi lúc duyệt) —
+// tránh đụng vào bản ghi của đơn nghỉ phép KHÁC (dù về lý thuyết không thể chồng ngày vì đã chặn trùng
+// lịch lúc tạo/duyệt). An toàn để revert về "chưa chấm công" (WORK rỗng) vì applyCancelLeaveRequest()
+// CHỈ cho huỷ đơn ĐÃ DUYỆT khi ngày nghỉ CÒN Ở TƯƠNG LAI (fromDate > hôm nay) — không thể có dữ liệu
+// chấm công THẬT (máy chấm công) đã ghi đè lên những ngày này.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): trước đây huỷ đơn không dọn các bản ghi này — chấm công
+// những ngày đó vẫn ghi "nghỉ phép có lương" dù nhân viên thực tế đi làm bình thường.
+function buildLeaveCancelAttendanceReverts(request, existingList) {
+  if (request.leaveType === 'HOURLY') return [];
+  const expectedNote = `Nghỉ phép theo đơn đã duyệt (${request.fromDate} → ${request.toDate})`;
+  const dates = listDatesInRange(request.fromDate, request.toDate);
+  const results = [];
+  for (const workDate of dates) {
+    const existing = (existingList || []).find(r => r.employeeCode === request.employeeCode && r.workDate === workDate);
+    if (!existing || existing.note !== expectedNote) continue;
+    results.push(Object.assign({}, existing, {
+      recordType: 'WORK', checkInTime: null, checkOutTime: null, hoursWorked: null,
+      isLate: false, isEarlyLeave: false,
+      note: `Đơn nghỉ phép đã bị huỷ (${request.fromDate} → ${request.toDate})`,
+      updatedAt: nowVN()
+    }));
   }
   return results;
 }
@@ -529,7 +566,7 @@ module.exports = {
   computeAnnualLeaveDays, defaultLeaveBalance, ensureLeaveBalanceForYear, computeLeavePayoutInfo,
   assertValidLeaveRequest, defaultLeaveRequest, canApproveLeaveRequest,
   applyApproveLeaveRequest, applyRejectLeaveRequest, applyCancelLeaveRequest, deductLeaveBalance,
-  buildLeaveAttendanceRecords, listDatesInRange,
+  refundLeaveBalance, buildLeaveAttendanceRecords, buildLeaveCancelAttendanceReverts, listDatesInRange,
   assertValidShiftTemplate, assertValidRosterAssignment, defaultShiftRoster, assertNoRosterConflict, applyCancelRoster,
   defaultShiftSwapRequest, applyApproveShiftSwap, applyRejectShiftSwap,
   cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding

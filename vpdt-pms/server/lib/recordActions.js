@@ -375,7 +375,26 @@ function editDocDraft(payload, user, item, appData) {
   if (payload.customData !== undefined) {
     validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
   }
-  if (payload.dept !== undefined && payload.dept !== item.dept) {
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): lúc TẠO 1 phiên bản "Cập nhật" (rootDocId != null),
+  // createValidation.js (docs.extraValidate) ép cứng cat=root.cat và CHẶN dept khác root.dept — đảm bảo
+  // mọi phiên bản trong 1 "gia đình" tài liệu luôn cùng phòng ban/phân loại với bản gốc (code/displayCode
+  // tính 1 lần từ đúng cat+dept đó). Nhưng khi 1 phiên bản bị trả về DRAFT ("Yêu Cầu Bổ Sung") rồi người
+  // tải lên sửa lại qua editDocDraft(), hàm này KHÔNG hề biết tới khái niệm rootDocId — cho sửa tự do cả
+  // dept lẫn cat, phá vỡ tính nhất quán "gia đình" mà giao diện/lọc theo phòng ban dựa vào, và (nghiêm
+  // trọng hơn) vì docs KHÔNG snapshot quy trình duyệt (luôn tra động theo item.dept hiện tại mỗi lần
+  // duyệt — xem MODULE_CONFIGS.docs.resolveWfConfig ở lib/workflowEngine.js), đổi dept ngay trong lúc
+  // "Sửa & Gửi Lại" sẽ khiến hồ sơ gửi lại đi qua HẲN quy trình duyệt của phòng ban khác — né được chính
+  // người vừa yêu cầu bổ sung. Với phiên bản (rootDocId != null): chặn hẳn đổi dept/cat, ép giữ nguyên
+  // theo tài liệu gốc giống hệt lúc tạo. Tài liệu GỐC (rootDocId == null) không bị ảnh hưởng — vẫn giữ
+  // nguyên hành vi cũ (assertDeptScopeAllowed bên dưới).
+  if (item.rootDocId != null) {
+    if (payload.dept !== undefined && payload.dept !== item.dept) {
+      throw new HttpError(409, 'Phiên bản của 1 tài liệu đã có không được đổi Phòng Ban khác với tài liệu gốc');
+    }
+    if (payload.cat !== undefined && payload.cat !== item.cat) {
+      throw new HttpError(409, 'Phiên bản của 1 tài liệu đã có không được đổi Phân Loại khác với tài liệu gốc');
+    }
+  } else if (payload.dept !== undefined && payload.dept !== item.dept) {
     assertDeptScopeAllowed(user, { all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }, payload.dept);
   }
   for (const f of DOC_DRAFT_EDITABLE_FIELDS) {
@@ -505,6 +524,37 @@ function submitOfficeReqDraft(user, item) {
   item.history = item.history || [];
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
   resetForResubmit(item, {});
+  return item;
+}
+
+// "Hủy đề xuất" — LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): trước đây officeReqs KHÔNG có cách nào
+// rút lại 1 đề xuất đã "Gửi" (PENDING) ngoài admin xoá cứng — kể cả khi CHƯA AI DUYỆT GÌ (currentStep
+// vẫn ở bước 1), người tạo lỡ gửi nhầm/muốn huỷ vẫn phải chờ người duyệt Từ Chối hộ. Mirror ĐÚNG
+// canCancelCarReg()/cancelCarReg() ở trên (nhánh "PENDING bước 1"), CHỈ áp dụng khi CHƯA qua bước duyệt
+// nào — đề xuất đã APPROVED/đang thanh toán vẫn phải xử lý qua các luồng riêng đã có (không mở rộng
+// sang huỷ sau duyệt như carRegs vì officeReqs không có khái niệm "chuyến đang chạy" cần huỷ giữa
+// chừng).
+function canCancelOfficeReq(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(item && item.creator === user.username);
+}
+
+function cancelOfficeReq(user, item, payload) {
+  if (!canCancelOfficeReq(user, item)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy đề xuất văn phòng này');
+  }
+  const cancellableAtStep1 = item.status === 'PENDING' && (item.currentStep || 1) <= 1;
+  if (!cancellableAtStep1) {
+    throw new HttpError(409, 'Chỉ hủy được đề xuất chưa ai duyệt (bước 1) — có thể đã được duyệt/từ chối/xử lý ở nơi khác');
+  }
+  const reason = String(payload?.reason || '').trim();
+  item.status = 'CANCELLED';
+  item.cancelledAt = nowVN();
+  item.cancelledBy = user.username;
+  item.cancelledByName = user.name;
+  item.history = item.history || [];
+  item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'CANCELLED', comment: reason, time: nowVN() });
   return item;
 }
 
@@ -1696,6 +1746,15 @@ function startContractPayment(user, contract, overrides, allPaymentRequests) {
   if (!overrides?.skipManageGate && !canManageContractPayment(user, contract)) throw new HttpError(403, 'Bạn không có quyền chuyển hợp đồng này sang thanh toán');
   if (!contract.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
   if (contract.signedFileStatus !== 'APPROVED') throw new HttpError(409, 'Tài liệu ký cần được phê duyệt trước khi chuyển sang thanh toán');
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): requestContractPaymentTypeChange() ở trên chỉ chặn GỬI
+  // yêu cầu đổi hình thức thanh toán MỚI khi đã có đề nghị thanh toán, nhưng KHÔNG có chiều ngược lại —
+  // "Lập Thanh Toán" vẫn tạo được đề nghị thanh toán mới trong lúc đang có 1 yêu cầu đổi hình thức thanh
+  // toán TREO CHỜ DUYỆT. Nếu yêu cầu đó sau đó được duyệt (approveContractPaymentTypeChange() ghi đè
+  // contract.paymentType/paymentInstallments), đề nghị thanh toán vừa tạo vẫn giữ nguyên hình thức CŨ —
+  // hợp đồng và đề nghị thanh toán đang chạy dở lệch hẳn hình thức thanh toán với nhau.
+  if (contract.pendingPaymentTypeChange) {
+    throw new HttpError(409, 'Hợp đồng đang có 1 yêu cầu đổi hình thức thanh toán chờ duyệt — vui lòng xử lý xong yêu cầu đó trước khi lập thanh toán');
+  }
   // "Thanh toán định kỳ" — sau khi 1 chu kỳ đã HOÀN TẤT (DA_THANH_TOAN), cho phép bắt đầu chu kỳ MỚI
   // (contract.paymentType === 'PERIODIC', xem confirmPaymentInstallment()/routes/records.js ghi ngược
   // paymentStatus về CHUA_THANH_TOAN thay vì DA_THANH_TOAN như "Thanh toán 1 lần"). VẪN chặn cứng khi
@@ -2925,9 +2984,23 @@ function editTask(payload, user, task, usersList) {
     task.status = 'TODO';
     task.startedAt = null;
     task.subtasks = [];
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): bản vá REASSIGNED_RESET ở trên (v23.57) reset
+    // status/subtasks nhưng bỏ sót pendingExtension/pendingCancellation — nếu người nhận CŨ đã gửi 1
+    // yêu cầu xin gia hạn/xin huỷ đang chờ người giao việc duyệt (task vẫn DOING lúc đó, 2 field này
+    // không đổi status), rồi bị đổi sang người nhận MỚI, object treo đó vẫn còn nguyên (ghi requestedBy
+    // = người CŨ không còn liên quan tới việc này nữa). Người MỚI "Nhận việc" lại, làm xong, bấm "Hoàn
+    // thành" sẽ bị updateTaskStatusAction() chặn 409 vì "còn yêu cầu chờ duyệt" — không có gợi ý nào
+    // trên giao diện giải thích vì sao bị chặn. Dọn sạch cả 2 field, giống cách cancelOrRequestCancelTask()
+    // đã làm khi huỷ trực tiếp.
+    const droppedPendingNote = [];
+    if (task.pendingExtension) droppedPendingNote.push('yêu cầu xin gia hạn');
+    if (task.pendingCancellation) droppedPendingNote.push('yêu cầu xin huỷ');
+    task.pendingExtension = null;
+    task.pendingCancellation = null;
     task.history.push({
       action: 'REASSIGNED_RESET', by: user.username, byName: user.name, time: nowVN(),
       note: `Đổi người nhận từ ${previousAssignedTo} sang ${payload.assignedTo} lúc đang Đang thực hiện — tự đưa về Chưa nhận việc, xoá ${droppedSubtaskCount} công việc nhỏ cũ (thuộc về người nhận trước)`
+        + (droppedPendingNote.length ? `, tự huỷ ${droppedPendingNote.join(' và ')} còn treo của người nhận trước` : '')
     });
   }
   return task;
@@ -3356,6 +3429,37 @@ function submitVppRegistration(user, item, period, siblingRegs) {
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'SUBMITTED', comment: '', time: nowVN() });
   item.status = 'PENDING';
   item.currentStep = 1;
+  return item;
+}
+
+// "Hủy đăng ký" — LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): cùng lỗ hổng nghiệp vụ như officeReqs ở
+// trên — sau khi "Gửi" (PENDING), người tạo không có cách nào rút lại đăng ký lỡ gửi nhầm/muốn huỷ dù
+// CHƯA AI DUYỆT GÌ. Mirror ĐÚNG cancelOfficeReq()/cancelCarReg() (nhánh "PENDING bước 1"). Hủy ở đây tự
+// "nhả chỗ" ngân sách phòng ban — submitVppRegistration() ở trên chỉ tính tổng các đăng ký khác đang
+// PENDING/APPROVED (siblingRegs, CALLER routes/records.js tự lọc lại mỗi lần Gửi), CANCELLED không nằm
+// trong 2 trạng thái đó nên tự động không còn bị tính vào "đã giữ chỗ" của phòng nữa — không cần sửa gì
+// thêm ở resolveVppDeptBudget()/submitVppRegistration().
+function canCancelVppRegistration(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(item && item.creator === user.username);
+}
+
+function cancelVppRegistration(user, item, payload) {
+  if (!canCancelVppRegistration(user, item)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy đăng ký Văn phòng phẩm này');
+  }
+  const cancellableAtStep1 = item.status === 'PENDING' && (item.currentStep || 1) <= 1;
+  if (!cancellableAtStep1) {
+    throw new HttpError(409, 'Chỉ hủy được đăng ký chưa ai duyệt (bước 1) — có thể đã được duyệt/từ chối/xử lý ở nơi khác');
+  }
+  const reason = String(payload?.reason || '').trim();
+  item.status = 'CANCELLED';
+  item.cancelledAt = nowVN();
+  item.cancelledBy = user.username;
+  item.cancelledByName = user.name;
+  item.history = item.history || [];
+  item.history.push({ step: item.currentStep || 0, approver: user.name, username: user.username, action: 'CANCELLED', comment: reason, time: nowVN() });
   return item;
 }
 
@@ -4461,7 +4565,15 @@ function gradeTrainingTestEssayAnswers(user, sub, test, cls, rawEssayGrades) {
     : a);
   sub.score = (Number(sub.score) || 0) + essayScore;
   sub.percentage = sub.totalPoints > 0 ? Math.round((sub.score / sub.totalPoints) * 100) : 0;
-  sub.passed = sub.percentage >= resolveTrainingTestPassThreshold(cls?.passScore);
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): dùng cls.passScore SỐNG (tại thời điểm CHẤM, có thể
+  // vài ngày sau khi nộp bài) thay vì snapshot tại thời điểm NỘP BÀI — cùng bản chất lỗi với "chấm tự
+  // luận tra sai đề" đã vá ở v23.57 (đọc field từ bản ghi CHA/CONTAINER hiện tại thay vì snapshot đã lưu
+  // trong chính bản ghi con). Nếu quản lý đào tạo sửa Điểm Đạt của lớp trong lúc bài đang chờ chấm nghị
+  // luận, kết quả Đạt/Không Đạt cuối cùng sẽ tính theo ngưỡng MỚI chứ không phải ngưỡng học viên biết
+  // lúc làm bài. Ưu tiên `sub.passScoreAtSubmit` (snapshot ghi lúc nộp bài, xem submit-test route ở
+  // routes/records.js) — fallback về cls?.passScore cho các bài đã nộp TRƯỚC khi có field snapshot này.
+  const passScoreRef = sub.passScoreAtSubmit != null ? sub.passScoreAtSubmit : cls?.passScore;
+  sub.passed = sub.percentage >= resolveTrainingTestPassThreshold(passScoreRef);
   sub.gradingStatus = 'COMPLETE';
   sub.essayGradedBy = user.username;
   sub.essayGradedByName = user.name;
@@ -6011,6 +6123,35 @@ function receiveUniformTransfer(user, transfer) {
   return transfer;
 }
 
+// "Hủy điều chuyển" — LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): trước đây transfer đã APPROVED (hàng
+// đã "xuất kho" nguồn — transferOut tính ngay, xem computeUniformStock() ở trên) nhưng CHƯA được siêu
+// thị đích xác nhận nhận (RECEIVED) là NGÕ CỤT — không có cách nào huỷ nếu phát hiện điều chuyển sai/
+// hàng không đi được nữa, tồn kho nguồn bị "giam" vĩnh viễn (trừ transferOut nhưng không bao giờ cộng
+// lại) cho tới khi 1 Giám Đốc Siêu Thị đích nào đó lỡ tay xác nhận nhận (dù thực tế chưa hề nhận hàng).
+// Nay cho phép Hủy khi ĐANG ở APPROVED (trước RECEIVED), CÙNG quyền với approveUniformTransfer()/
+// rejectUniformTransfer() (canApproveUniformTransfer — Hành Chính/admin, bên duyệt/quản lý điều chuyển,
+// không phải bên siêu thị đích) — chuyển sang status CANCELLED (TERMINAL riêng, giữ nguyên lịch sử,
+// KHÔNG xoá bản ghi). computeUniformStock() CHỈ cộng transferOut cho status 'APPROVED'/'RECEIVED' —
+// CANCELLED tự động rơi ra khỏi phép tính, tồn kho nguồn tự "nhả lại" ngay, không cần sửa gì thêm ở đó.
+function canCancelUniformTransfer(user) {
+  return canApproveUniformTransfer(user);
+}
+
+function cancelUniformTransfer(user, transfer, payload) {
+  if (!canCancelUniformTransfer(user)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy điều chuyển kho này');
+  }
+  if (transfer.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ hủy được điều chuyển đã duyệt nhưng CHƯA được xác nhận nhận hàng (có thể đã bị từ chối/hủy/xác nhận nhận ở nơi khác)');
+  }
+  transfer.status = 'CANCELLED';
+  transfer.cancelledBy = user.username;
+  transfer.cancelledByName = user.name;
+  transfer.cancelledAt = nowVN();
+  transfer.cancelReason = String(payload?.reason || '').trim().slice(0, 500);
+  return transfer;
+}
+
 // ===================== NGÂN SÁCH (kỳ: đóng sớm/mở lại — bản ngân sách phòng ban: nháp/gửi/duyệt) =====
 // Vòng đời kỳ: OPEN (nhận lập ngân sách, tới khi qua endTime HOẶC budgetManage/admin đóng sớm) -> CLOSED
 // -> có thể MỞ LẠI (budgetManage/admin, bắt buộc nhập hạn chót mới) -> OPEN trở lại.
@@ -6319,7 +6460,7 @@ function buildBudgetLineUsedRow(user, sourceApprovedLine) {
 // Sửa dòng cha Sử Dụng — CHỈ Vị trí/Khối Phòng Ban/Ghi chú (Nội dung/Mô tả/Số tiền/Loại/Danh Mục khoá
 // cứng theo dòng Phê Duyệt gốc — mục 3.3 tài liệu gốc), bất kể client cố gửi giá trị khác cho các field
 // khoá (server chỉ đọc payload.location/dept/note, hoàn toàn bỏ qua mọi field khác trong payload).
-function updateBudgetLineUsedParent(user, item, payload, appData) {
+function updateBudgetLineUsedParent(user, item, payload, appData, hasChildren) {
   if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được sửa dòng Sử Dụng');
   if (item.stage !== 'USED' || item.parentId != null) throw new HttpError(409, 'Không tìm thấy dòng Sử Dụng cha hợp lệ');
   const location = String(payload?.location || '').trim();
@@ -6331,6 +6472,17 @@ function updateBudgetLineUsedParent(user, item, payload, appData) {
     if (!dept || !(appData?.depts || []).includes(dept)) throw new HttpError(400, 'Khối Phòng Ban không hợp lệ');
   } else {
     dept = location;
+  }
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): dòng con Sử Dụng snapshot `dept` từ dòng cha NGAY LÚC
+  // TẠO (addBudgetLineChild()), không tự cập nhật lại khi dòng cha đổi Vị trí/Khối Phòng Ban sau đó —
+  // trong khi quyền sửa/xoá từng dòng con (updateBudgetLineChild()/assertCanDeleteBudgetLineChild()) lại
+  // tra theo `parent.dept` HIỆN TẠI, và bộ lọc hiển thị (canViewBudgetLine()) tra theo `item.dept` riêng
+  // của dòng con (snapshot cũ). Đổi Vị trí/Khối Phòng Ban dòng cha ĐÃ có dòng con sẽ khiến người phòng
+  // CŨ mất quyền xem/sửa đúng dữ liệu mình tạo, người phòng MỚI lại có quyền với dữ liệu không phải của
+  // mình. Chặn hẳn thay vì cascade-update xuống dòng con — giữ đúng triết lý "khoá cứng nội dung dòng
+  // con lúc tạo" đã áp dụng cho content/description/itemCategory ở addBudgetLineChild().
+  if (hasChildren && (item.dept !== dept || item.location !== location)) {
+    throw new HttpError(409, 'Dòng này đã có mục con Sử Dụng — không đổi được Vị trí/Khối Phòng Ban nữa (tạo 1 dòng Sử Dụng khác nếu cần chuyển sang Vị trí/Khối Phòng Ban khác)');
   }
   item.dept = dept;
   item.location = location;
@@ -6629,9 +6781,18 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
     // Đổi sang lái xe khác -> hủy xác nhận cũ (nếu phiếu đã được lái xe cũ xác nhận) — trách nhiệm
     // chuyến đi đã chuyển sang người khác, không thể giữ "đã xác nhận" hộ người cũ (mirror
     // applyWorkflowAction()).
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): trước đây chỉ reset driverConfirmed mà KHÔNG đưa
+    // status về lại APPROVED khi đổi tài xế lúc đang IN_PROGRESS — phiếu bị KẸT VĨNH VIỄN vì
+    // confirmCarDriverAssignment() (tài xế MỚI xác nhận) yêu cầu status==='APPROVED', còn endCarTrip()
+    // (tài xế CŨ kết thúc chuyến) yêu cầu driverConfirmed===true — cả 2 điều kiện không thể cùng đúng
+    // sau khi reset, không ai xử lý tiếp được ngoài Hủy Chuyến hẳn. Nay đưa status về APPROVED để tài
+    // xế mới xác nhận lại từ đầu, đúng đúng ý nghĩa "chuyến đang chờ tài xế xác nhận".
     if (item.driverConfirmed) {
       item.driverConfirmed = false;
       item.driverConfirmedAt = null;
+    }
+    if (item.status === 'IN_PROGRESS') {
+      item.status = 'APPROVED';
     }
   }
   // Đổi "Loại xe cụ thể" sang Taxi/không-Taxi -> dọn field "đối lập" (BKS cố định vs Hãng Taxi) để không
@@ -6827,7 +6988,7 @@ module.exports = {
   editContract,
   editDocDraft, submitDocDraft,
   editCarRegDraft, submitCarRegDraft,
-  editOfficeReqDraft, submitOfficeReqDraft,
+  editOfficeReqDraft, submitOfficeReqDraft, canCancelOfficeReq, cancelOfficeReq,
   editSubmissionDraft, submitSubmissionDraft,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
@@ -6846,7 +7007,7 @@ module.exports = {
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction,
   addSubtask, toggleSubtask, deleteSubtask,
-  closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft,
+  closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft, canCancelVppRegistration, cancelVppRegistration,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   mergeReportPeriodPdf, publishReportPeriodPdf, unpublishReportPeriodPdf,
@@ -6875,6 +7036,7 @@ module.exports = {
   confirmUniformAllocation, buildUniformIssuance, acknowledgeUniformIssuance, buildUniformStockAdjustment,
   canApproveUniformTransfer, buildUniformTransfer, approveUniformTransfer, rejectUniformTransfer,
   canConfirmUniformTransferReceipt, receiveUniformTransfer,
+  canCancelUniformTransfer, cancelUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
   canCreateBudgetLine, approveBudgetLineProposal, rejectBudgetLineProposal, approveBudgetLine, rejectBudgetLine,

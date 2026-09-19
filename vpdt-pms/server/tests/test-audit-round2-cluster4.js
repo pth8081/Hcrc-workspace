@@ -563,6 +563,46 @@ async function main() {
       assertEqual((res.body.item.history || []).some(h => h.action === 'REASSIGNED_RESET'), false, 'Việc chưa từng DOING thì không cần ghi REASSIGNED_RESET');
     });
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): Fix 8a ở trên (v23.57) reset status/subtasks nhưng bỏ
+    // sót pendingExtension/pendingCancellation — người nhận CŨ có 1 yêu cầu xin gia hạn/xin huỷ còn treo
+    // (chưa được người giao việc duyệt) lúc bị đổi sang người MỚI thì object treo đó vẫn còn nguyên, khiến
+    // người MỚI làm xong bị chặn "Hoàn thành" (409) vô cớ vì 1 yêu cầu không liên quan tới mình.
+    await run.run('Fix 8d — đổi người nhận lúc DOING còn treo pendingExtension: phải dọn sạch, người mới KHÔNG bị chặn Hoàn thành vô cớ', async () => {
+      resetState();
+      seedTask({
+        id: 5403, assignedTo: WORKER.username, assignedToName: WORKER.name, status: 'DOING', startedAt: '01/09/2026 08:00',
+        subtasks: [],
+        pendingExtension: { newDeadline: '2026-12-31', reason: 'Xin thêm thời gian', requestedBy: WORKER.username, requestedByName: WORKER.name, requestedAt: '01/09/2026 08:00' }
+      });
+
+      const res = await api('POST', '/api/records/tasks/5403/edit', { title: 'Công việc thử nghiệm', assignedTo: PLAIN.username }, TASKMAN);
+      assertEqual(res.status, 200, 'Đổi người nhận hợp lệ vẫn phải thành công');
+      assertEqual(res.body.item.pendingExtension, null, 'pendingExtension của người CŨ phải bị dọn sạch khi đổi người nhận');
+      const resetEntry = res.body.item.history.find(h => h.action === 'REASSIGNED_RESET');
+      assertIncludes([true], (resetEntry?.note || '').includes('xin gia hạn'), 'Ghi chú lịch sử phải nêu rõ đã tự huỷ yêu cầu xin gia hạn còn treo');
+
+      // Người MỚI nhận việc, làm xong, bấm Hoàn thành -> KHÔNG còn bị chặn vì yêu cầu của người cũ đã dọn.
+      const accept = await api('POST', '/api/records/tasks/5403/status', { newStatus: 'DOING' }, PLAIN);
+      assertEqual(accept.status, 200, 'Người mới tự Nhận việc lại phải thành công');
+      const finish = await api('POST', '/api/records/tasks/5403/status', { newStatus: 'DONE' }, PLAIN);
+      assertEqual(finish.status, 200, `Người mới hoàn thành việc KHÔNG được bị chặn bởi yêu cầu gia hạn của người cũ đã bị dọn — thực tế: ${JSON.stringify(finish.body)}`);
+    });
+
+    await run.run('Fix 8e — đổi người nhận lúc DOING còn treo pendingCancellation: phải dọn sạch tương tự', async () => {
+      resetState();
+      seedTask({
+        id: 5404, assignedTo: WORKER.username, assignedToName: WORKER.name, status: 'DOING', startedAt: '01/09/2026 08:00',
+        subtasks: [],
+        pendingCancellation: { reason: 'Không còn cần thiết', requestedBy: WORKER.username, requestedByName: WORKER.name, requestedAt: '01/09/2026 08:00' }
+      });
+
+      const res = await api('POST', '/api/records/tasks/5404/edit', { title: 'Công việc thử nghiệm', assignedTo: PLAIN.username }, TASKMAN);
+      assertEqual(res.status, 200);
+      assertEqual(res.body.item.pendingCancellation, null, 'pendingCancellation của người CŨ phải bị dọn sạch khi đổi người nhận');
+      const resetEntry = res.body.item.history.find(h => h.action === 'REASSIGNED_RESET');
+      assertIncludes([true], (resetEntry?.note || '').includes('xin huỷ'), 'Ghi chú lịch sử phải nêu rõ đã tự huỷ yêu cầu xin huỷ còn treo');
+    });
+
     // ===================================================================================
     // Fix 6 — requestExtension(): không cho ghi đè yêu cầu gia hạn đang chờ duyệt
     // ===================================================================================

@@ -484,6 +484,18 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
       updated = employeeProfile.linkAccount(list, req.params.employeeCode, username, req.freshUser.username);
       return list;
     });
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): nếu hồ sơ đã được gán Chức Vụ TRƯỚC KHI liên kết tài
+    // khoản (VD tạo hồ sơ tay, gán chức vụ ngay, chưa có tài khoản VPDT nên tick liên kết sau) — trước
+    // đây linkAccount() chỉ set profile.username, không hề đẩy dept/jobTitle/posType đã có xuống tài
+    // khoản vừa liên kết, khác hẳn set-position() ở trên (chỉ sync khi profile.username ĐÃ CÓ SẴN từ
+    // trước, bỏ sót đúng chiều ngược lại này) — tài khoản giữ nguyên dept/jobTitle cũ (thường trống/sai)
+    // cho tới khi HR vô tình gán lại chức vụ 1 lần nữa mới kích hoạt sync. Nay đồng bộ luôn ngay khi liên
+    // kết nếu hồ sơ đã có positionKey.
+    if (updated.positionKey) {
+      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+        u.username === username ? { ...u, jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : u
+      ));
+    }
     logHrProfileAction(req, 'LINK_ACCOUNT', req.params.employeeCode, `Liên kết hồ sơ [${req.params.employeeCode}] với tài khoản "${username}"`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/link-account`); }

@@ -203,7 +203,8 @@ function renderOfficeReqs() {
     { key: '', label: 'Tổng Đề Xuất', count: scopedOfficeReqs.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedOfficeReqs.filter(o => o.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedOfficeReqs.filter(o => o.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
-    { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedOfficeReqs.filter(o => o.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedOfficeReqs.filter(o => o.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
+    { key: 'CANCELLED', label: 'Đã Hủy', count: scopedOfficeReqs.filter(o => o.status === 'CANCELLED').length, colorClass: 'border-l-slate-500' }
   ];
   document.getElementById('officeDashboardCards').innerHTML = buildDashboardCardsHTML(officeDashCards, statusFilter, 'filterOfficeByCard');
 
@@ -238,6 +239,7 @@ function renderOfficeReqs() {
     if (o.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
     else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
     else if (o.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
+    else if (o.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
@@ -288,6 +290,11 @@ function renderOfficeReqs() {
             if (o.status === 'DRAFT' && o.creator === currentUser.username) {
               secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
             }
+            // "Hủy đề xuất" — chỉ khi ĐANG chờ duyệt bước 1 (chưa ai duyệt gì), người tạo hoặc admin —
+            // mirror canCancelCarRegClient() ở module-dangkyxe.js, xem canCancelOfficeReq() ở server.
+            if (o.status === 'PENDING' && (o.currentStep || 1) <= 1 && (currentUser.perms?.admin || o.creator === currentUser.username)) {
+              secondaryOptions.push({ value: 'cancelReq', label: '🚫 Hủy Đề Xuất' });
+            }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
             return buildActionCell(o.id, primaryBtnHTML, secondaryOptions, 'runOfficeAction');
           })()}
@@ -307,8 +314,35 @@ function runOfficeAction(id, action) {
     case 'uploadSigned': openSignedUploadModal('officeReqs', id); break;
     case 'viewSigned': viewOfficeSignedFile(id); break;
     case 'startPayment': startOfficePaymentAction(id); break;
+    case 'cancelReq': openCancelOfficeReqModal(id); break;
     case 'delete': deleteOfficeReqAction(id); break;
   }
+}
+
+// "Hủy đề xuất" (PENDING bước 1) — mirror ĐÚNG openCancelCarRegModal() ở module-dangkyxe.js. reason
+// KHÔNG bắt buộc, cùng khuôn Đăng Ký Xe/Phòng Họp.
+function openCancelOfficeReqModal(id) {
+  const o = DB.officeReqs.find(x => x.id === id);
+  if (!o) return;
+  const reason = prompt('Lý do hủy đề xuất (không bắt buộc):', '');
+  if (reason === null) return;
+  showConfirmModal({
+    title: '🚫 Xác Nhận Hủy Đề Xuất',
+    bodyHTML: `<p>Hủy đề xuất <b>${escapeHtml(o.code)}</b> — <i>${escapeHtml(o.title)}</i>?</p>${reason.trim() ? `<p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>` : ''}<p class="mt-2 text-red-600 font-semibold">Đề xuất đã hủy không thể phục hồi lại.</p>`,
+    confirmLabel: 'Hủy Đề Xuất',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('officeReqs', id, 'cancel', { reason: reason.trim() });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.officeReqs.findIndex(x => x.id === id);
+      if (idx !== -1) DB.officeReqs[idx] = result.item;
+      logSystemAction('OFFICE', 'CANCEL_OFFICE_REQ', `Hủy đề xuất văn phòng [${result.item.code}]`, 'SUCCESS', result.item.code);
+      alert('✅ Đã hủy đề xuất!');
+      renderOfficeReqs();
+      refreshApprovalSurfaces();
+    }
+  });
 }
 
 function deleteOfficeReqAction(id) {

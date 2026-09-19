@@ -173,6 +173,12 @@ router.post('/terms/:id/clone', requireManageTerms, async (req, res) => {
   } catch (err) { sendCatchError(res, err, `terms/${req.params.id}/clone`); }
 });
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): kích hoạt 1 bản Nhân Bản (DRAFT, clonedFromTermId trỏ về
+// bản gốc) trước đây KHÔNG hề đụng tới bản ACTIVE cũ cùng NCC+Mã Điều Khoản — 2 bản cùng ACTIVE song
+// song, "Tính Ước Tính" chọn nhầm bản CŨ (bậc thang đã lỗi thời) vẫn chạy bình thường không cảnh báo gì.
+// Nay tự LƯU TRỮ (ARCHIVED) mọi bản ACTIVE khác CÙNG vendorId+termCode TRƯỚC khi kích hoạt bản này —
+// đúng khuôn checklistTemplates (routes/checklist.js, templates/:id/activate) đã áp dụng cho tình huống
+// giống hệt.
 router.post('/terms/:id/activate', requireActivateTerm, async (req, res) => {
   const termId = Number(req.params.id);
   if (!Number.isFinite(termId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -182,6 +188,13 @@ router.post('/terms/:id/activate', requireActivateTerm, async (req, res) => {
       const target = terms.find(t => t.id === termId);
       if (!target) throw new HttpError(404, 'Không tìm thấy điều khoản');
       vendorRebate.assertValidTermTransition(target, 'ACTIVE');
+      const others = terms.filter(t => t.id !== termId && t.vendorId === target.vendorId && t.termCode === target.termCode && t.status === 'ACTIVE');
+      for (const other of others) {
+        await withLockedRecordForCollection('rebateTerms', other.id, (t) => ({
+          ...t, status: 'ARCHIVED',
+          history: [...(t.history || []), { action: 'ARCHIVED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN'), detail: `Tự lưu trữ khi kích hoạt bản mới hơn (#${termId})` }]
+        }));
+      }
       return withLockedRecordForCollection('rebateTerms', termId, (t) => ({
         ...t, status: 'ACTIVE',
         history: [...(t.history || []), { action: 'ACTIVATED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN') }]

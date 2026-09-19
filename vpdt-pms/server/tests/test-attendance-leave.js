@@ -160,6 +160,24 @@ async function partA() {
     assert.strictEqual(results[0].isNew, true);
   });
 
+  await test('LỖI ĐÃ VÁ (đợt 3, 9/2026): buildLeaveCancelAttendanceReverts() dọn ĐÚNG bản ghi do đơn này tạo về WORK rỗng, bỏ qua bản ghi KHÔNG khớp chữ ký note', () => {
+    const request = { employeeCode: 'NV1', leaveType: 'ANNUAL', fromDate: '2026-03-02', toDate: '2026-03-03' };
+    const existing = [
+      { id: 10, employeeCode: 'NV1', workDate: '2026-03-02', recordType: 'LEAVE_PAID', note: 'Nghỉ phép theo đơn đã duyệt (2026-03-02 → 2026-03-03)' },
+      { id: 11, employeeCode: 'NV1', workDate: '2026-03-03', recordType: 'LEAVE_PAID', note: 'Nghỉ phép theo đơn đã duyệt (2026-03-02 → 2026-03-03)' },
+      { id: 12, employeeCode: 'NV1', workDate: '2026-03-04', recordType: 'SICK_LEAVE', note: 'Ghi chú của 1 đơn nghỉ phép KHÁC hoàn toàn' }
+    ];
+    const reverts = attendance.buildLeaveCancelAttendanceReverts(request, existing);
+    assert.strictEqual(reverts.length, 2, 'Chỉ 2 bản ghi 03-02/03-03 khớp đúng chữ ký note của đơn này');
+    assert.ok(reverts.every(r => r.recordType === 'WORK' && r.checkInTime === null && r.hoursWorked === null));
+    assert.ok(!reverts.some(r => r.id === 12), 'Không được đụng vào bản ghi của đơn KHÁC (id 12)');
+  });
+
+  await test('refundLeaveBalance() trừ ngược usedDays, không cho âm', () => {
+    assert.strictEqual(attendance.refundLeaveBalance({ usedDays: 5 }, 2).usedDays, 3);
+    assert.strictEqual(attendance.refundLeaveBalance({ usedDays: 1 }, 5).usedDays, 0, 'Không được âm dù hoàn nhiều hơn đã dùng');
+  });
+
   await test('deductLeaveBalance() cộng dồn usedDays', () => {
     // totalDays đủ chỗ cho cả 2 lượt cộng — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026): hàm này giờ CHẶN
     // nếu usedDays sau khi cộng vượt totalDays (xem test riêng "chặn vượt quỹ phép" bên dưới), nên fixture
@@ -451,6 +469,37 @@ async function partB() {
       const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'UNPAID', fromDate: '2026-06-01', toDate: '2026-06-01', reason: 'x' });
       const r = await call('mgr1', 'POST', `/api/records/leaveRequests/${create.json.item.id}/cancel`, {});
       assert.strictEqual(r.status, 403);
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): huỷ 1 đơn ANNUAL ĐÃ DUYỆT (ngày nghỉ chưa tới) trước
+    // đây chỉ đổi status='CANCELLED', không hoàn quỹ phép/dọn AttendanceRecords LEAVE_PAID đã sinh — NV
+    // mất vĩnh viễn 2 ngày phép "xin rồi huỷ" dù chưa hề nghỉ. Dùng năm 2099 (bảng phép năm riêng) để
+    // chắc chắn ngày nghỉ "chưa tới" bất kể thời điểm CHẠY test là khi nào.
+    let approvedThenCancelledLeaveId, futureBalanceId;
+    await test('POST /api/create/leaveBalances — HR tạo bảng phép năm 2099 cho NV1 (để test huỷ đơn đã duyệt)', async () => {
+      const r = await call('hr1', 'POST', '/api/create/leaveBalances', { employeeCode: 'NV1', year: 2099, totalDays: 12 });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      futureBalanceId = r.json.item.id;
+    });
+    await test('POST /api/create/leaveRequests + approve — đơn ANNUAL 2 ngày trong tương lai xa (2099)', async () => {
+      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2099-01-10', toDate: '2099-01-11', reason: 'Test huỷ sau duyệt' });
+      assert.strictEqual(create.status, 200, JSON.stringify(create.json));
+      approvedThenCancelledLeaveId = create.json.item.id;
+      const approve = await call('mgr1', 'POST', `/api/records/leaveRequests/${approvedThenCancelledLeaveId}/approve`, {});
+      assert.strictEqual(approve.status, 200, JSON.stringify(approve.json));
+      assert.strictEqual(STORE.leaveBalances.find(b => b.id === futureBalanceId).usedDays, 2);
+      const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.workDate >= '2099-01-10' && r.workDate <= '2099-01-11');
+      assert.strictEqual(attRecords.length, 2);
+      assert.ok(attRecords.every(r => r.recordType === 'LEAVE_PAID'));
+    });
+    await test('POST /api/records/leaveRequests/:id/cancel — huỷ đơn ĐÃ DUYỆT: hoàn quỹ phép + dọn AttendanceRecords về WORK', async () => {
+      const cancel = await call('staff1', 'POST', `/api/records/leaveRequests/${approvedThenCancelledLeaveId}/cancel`, {});
+      assert.strictEqual(cancel.status, 200, JSON.stringify(cancel.json));
+      assert.strictEqual(cancel.json.item.status, 'CANCELLED');
+      assert.strictEqual(STORE.leaveBalances.find(b => b.id === futureBalanceId).usedDays, 0, 'Phải hoàn lại đúng 2 ngày (2 -> 0)');
+      const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.workDate >= '2099-01-10' && r.workDate <= '2099-01-11');
+      assert.strictEqual(attRecords.length, 2);
+      assert.ok(attRecords.every(r => r.recordType === 'WORK' && r.checkInTime === null), 'Phải dọn về WORK rỗng, không còn ghi "nghỉ phép có lương"');
     });
 
     let rosterId;

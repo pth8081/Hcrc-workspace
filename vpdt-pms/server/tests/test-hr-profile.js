@@ -321,6 +321,23 @@ async function main() {
       assertEqual(dupUsername.status, 400, 'username đã được hồ sơ khác liên kết rồi không dùng lại được');
     });
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): gán Chức Vụ TRƯỚC KHI liên kết tài khoản VPDT (hồ sơ
+    // tạo tay, chưa có username) — trước đây linkAccount() chỉ set profile.username, KHÔNG đẩy
+    // dept/jobTitle/posType đã có xuống tài khoản vừa liên kết, để tài khoản giữ nguyên dept cũ sai lệch.
+    await run.run('POST /by-code/:code/link-account — hồ sơ ĐÃ CÓ Chức Vụ trước khi liên kết -> đồng bộ dept/jobTitle/posType xuống tài khoản NGAY lúc liên kết', async () => {
+      resetAppData();
+      const profile = employeeProfile.defaultProfile('NV004');
+      Object.assign(profile, { positionKey: 'POS_KD_TRUONGPHONG', jobTitle: 'Trưởng Phòng Kinh Doanh', dept: 'Phòng Kinh Doanh', posType: 'HO' });
+      APP_DATA.employeeProfiles.push(profile);
+      // nv2 (OUTSIDER) hiện dept='Kế Toán' — khác hẳn dept của hồ sơ NV004 ('Phòng Kinh Doanh').
+      const link = await api('POST', '/api/hr-profile/by-code/NV004/link-account', { username: 'nv2' }, HR_MGR);
+      assertEqual(link.status, 200, 'Liên kết phải thành công');
+      const account = APP_DATA.users.find(u => u.username === 'nv2');
+      assertEqual(account.dept, 'Phòng Kinh Doanh', 'dept tài khoản phải đồng bộ theo hồ sơ ngay lúc liên kết');
+      assertEqual(account.jobTitle, 'Trưởng Phòng Kinh Doanh', 'jobTitle tài khoản phải đồng bộ theo hồ sơ');
+      assertEqual(account.posType, 'HO', 'posType tài khoản phải đồng bộ theo hồ sơ');
+    });
+
     await run.run('GET /by-username/:username — cùng quyền/hành vi như /by-code (đường tra cứu khác)', async () => {
       resetAppData();
       seedLinkedProfile({ nationalId: '079123456789' });
