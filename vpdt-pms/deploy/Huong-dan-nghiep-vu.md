@@ -187,6 +187,16 @@ nhiều Chương Trình), rồi tới Lớp Học/Chương Trình/Kế Hoạch �
 Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Tân Binh (nhân viên mới, có đánh giá GĐ3 +
 cấp chứng chỉ — khác Onboarding hành chính của Nhân Sự)/Lộ Trình Thăng Tiến.
 
+**Khối "🛠️ Cách Thao Tác" (từ v23.54)**: nằm giữa sơ đồ quy trình và khối
+"Lưu Ý/Mẹo" — hướng dẫn CLICK-BY-CLICK (bấm nút gì, tab nào, theo đúng thứ tự
+thao tác thật trên giao diện), khác `flow`/footer vốn giải thích NGHIỆP VỤ/
+quy tắc chứ không nói thao tác cụ thể. Mỗi bước có thể gắn nhãn vai trò (VD
+"Người đăng ký"/"Người duyệt") nếu bước đó do 1 vai trò cụ thể thực hiện.
+Trình bày THUẦN TEXT (không kèm ảnh chụp màn hình, để không lạc hậu khi UI
+đổi) và là field TUỲ CHỌN theo từng mục — mục nào chưa viết thì khối này tự
+ẩn. Mới làm mẫu cho 3 mục (🚗 Đăng Ký Xe / 💰 Ngân Sách 2.0 / 🎓 Đào Tạo >
+Lớp Học), các mục còn lại sẽ bổ sung dần theo yêu cầu.
+
 Đây là bản **tóm tắt trực quan** — mục 3-7 phía dưới của tài liệu này vẫn là
 nguồn tham khảo **đầy đủ và chi tiết nhất** (mỗi trang Nghiệp Vụ đều có link
 trỏ lại đúng mục tương ứng ở cuối trang). **Quy tắc bắt buộc** (xem

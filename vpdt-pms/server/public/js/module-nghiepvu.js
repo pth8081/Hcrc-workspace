@@ -267,6 +267,26 @@ function nvFooterCol(title, items) {
   return `<div><div class="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">${escapeHtml(title)}</div><ul class="text-[12.5px] text-gray-700 leading-snug list-none">${li}</ul></div>`;
 }
 
+// "Cách Thao Tác" — hướng dẫn CLICK-BY-CLICK (khác `flow`/`footer` vốn giải thích NGHIỆP VỤ/quy tắc,
+// không nói "bấm nút gì, tab nào"). `steps` là mảng {role?, text} theo ĐÚNG thứ tự thao tác thật trên
+// UI — role gắn nhãn "ai làm bước này" (Người đăng ký/Người duyệt/...), để trống nếu bước không gắn
+// riêng 1 vai trò cụ thể (VD bước xem báo cáo, ai có quyền cũng làm được). Chỉ viết dạng TEXT (không
+// kèm ảnh chụp màn hình) — tên tab/nút/field id phải khớp ĐÚNG với HTML/JS thật tại thời điểm viết, để
+// không lạc hậu ngay khi UI đổi thì phải cập nhật lại đoạn text tương ứng (rẻ hơn nhiều so với chụp lại
+// ảnh). Optional trên từng entry — entry nào chưa có `steps` thì khối này tự ẩn, không hiện rỗng.
+function renderNVSteps(steps) {
+  if (!steps || !steps.length) return '';
+  const li = steps.map((s, idx) => `
+    <li class="flex gap-3 py-2 border-t first:border-t-0 border-gray-100">
+      <div class="shrink-0 w-6 h-6 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center">${idx + 1}</div>
+      <div class="flex-1 text-[13px] text-gray-700 leading-relaxed">${s.role ? `<span class="inline-block text-[10px] font-bold uppercase tracking-wide text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 mr-1.5 align-middle">${escapeHtml(s.role)}</span>` : ''}${s.text}</div>
+    </li>`).join('');
+  return `
+    <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b mt-6">🛠️ Cách Thao Tác</div>
+    <ul class="list-none mb-2">${li}</ul>
+  `;
+}
+
 // ===================== Nội dung nghiệp vụ =====================
 // text.text trong footer items được phép chứa HTML tối giản (<code>, <b>) — nội dung TĨNH do dev tự viết,
 // không phải input người dùng, nên không cần escape ở đây (khác escapeHtml() dùng cho label trong SVG).
@@ -395,6 +415,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Lái xe xác nhận & kết thúc', sub: 'Nhận chuyến (🚗 Đang Thực Hiện) → báo km khi xong' },
       { label: 'Đánh giá & hoàn tất', sub: 'Người đăng ký xác nhận lại' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: 'Nêu lý do' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người đăng ký', text: 'vào <b>🚗 Đăng Ký Xe</b> (tab đầu tiên của mục Đăng Ký Xe) → điền form: Đơn Vị, Loại Xe, Số Người Sử Dụng, Mục Đích Sử Dụng, Số KM Dự Kiến, Thời Gian Bắt Đầu/Dự Kiến Về, Lộ Trình Di Chuyển (bấm "+ Thêm Điểm" để thêm từng điểm dừng), Nội Dung Chi Tiết → bấm <b>"Gửi phê duyệt"</b>. Chưa cần chọn biển số/lái xe cụ thể ở bước này.' },
+      { role: 'Người duyệt', text: 'mở đúng phiếu đang "Chờ duyệt" theo cấu hình luồng duyệt của phòng ban đăng ký → bấm Duyệt hoặc Từ chối (bắt buộc nêu lý do khi từ chối).' },
+      { role: 'Người điều hành xe', text: 'sau khi phiếu đã duyệt, mở phiếu → gán Loại Xe cụ thể + Biển Số + Lái Xe (nếu chọn xe đánh dấu "Là Xe Taxi" thì điền thêm Hãng Taxi thay vì tài xế công ty) → lưu lại.' },
+      { role: 'Lái xe', text: 'vào tab <b>🧑‍✈️ Lái Xe</b> → xem các chuyến được phân công cho mình → bấm xác nhận nhận chuyến (phiếu chuyển trạng thái "🚗 Đang Thực Hiện") → khi kết thúc chuyến, báo lại số KM thực đi.' },
+      { role: 'Người đăng ký', text: 'sau khi lái xe báo kết thúc, mở lại phiếu để đánh giá chuyến đi (nhận xét về lái xe/chuyến đi) — làm xong bước này phiếu mới tính là hoàn tất.' },
+      { text: 'Muốn xem lái xe nào đang rảnh trước khi đăng ký: vào tab <b>🗓️ Lịch Xe</b>, chọn chế độ Ngày/Tuần/Tháng để xem lịch trống/bận theo từng lái xe.' },
+    ],
     footer: { left: [
       { label: 'Điều phối tách biệt', text: 'người duyệt đăng ký khác với người điều phối xe — bộ phận điều phối (quyền "Người Điều Hành Xe") chỉ thao tác sau khi đăng ký đã được duyệt.' },
       { label: 'Đánh giá & xác nhận', text: 'lái xe tự xác nhận đã nhận chuyến (chuyển trạng thái "🚗 Đang Thực Hiện"), rồi báo số km thực đi khi kết thúc; sau đó người đăng ký xem lại và đánh giá chuyến đi — xong bước này chuyến mới được tính là hoàn tất.' },
@@ -483,6 +511,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Phê Duyệt', sub: 'Tự sinh khi Đề Xuất duyệt xong' },
       { label: 'Sử Dụng', sub: 'Dòng cha hệ thống tự sinh', kind: 'approved' },
     ], decision: { atIndex: 0, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người đề xuất', text: 'vào tab <b>📝 Đề Xuất</b> → chọn Vị Trí (🏢 Trụ sở chính (HO) hoặc 🏬 Siêu Thị — chọn xong tự hiện đúng ô Khối Phòng Ban hoặc Siêu Thị tương ứng) → điền Danh Mục, Nội Dung, VAT (%), Năm NS/Tháng NS, số tiền → bấm <b>"➕ Thêm Đề Xuất"</b>.' },
+      { role: 'Người quản lý ngân sách', text: 'vẫn ở tab 📝 Đề Xuất, chọn dòng đang chờ trong danh sách → Duyệt hoặc Từ chối. Duyệt xong hệ thống TỰ SINH 1 dòng tương ứng bên tab <b>✅ Phê Duyệt</b> — không tự tạo tay dòng này.' },
+      { role: 'Người quản lý ngân sách', text: 'qua tab <b>✅ Phê Duyệt</b>, xử lý tiếp dòng vừa tự sinh — duyệt xong hệ thống lại TỰ SINH tiếp 1 dòng cha bên tab <b>💳 Sử Dụng</b>.' },
+      { role: 'Người phụ trách phòng ban/siêu thị', text: 'qua tab 💳 Sử Dụng, chọn đúng dòng cha vừa sinh → ghi nhận từng lần sử dụng thực tế (dòng con) — nội dung/loại hạng mục của dòng cha giữ nguyên từ nguồn, không sửa được ở đây.' },
+      { text: 'Xem tổng hợp: vào tab <b>📊 Báo Cáo</b> (chỉ hiện cho người có quyền xem báo cáo) để xem số liệu theo phòng ban/siêu thị, bấm "📤 Xuất Excel" nếu cần tải ra ngoài.' },
+      { text: 'Nhập nhanh hàng loạt (thay vì nhập tay từng dòng): ở tab Đề Xuất/Phê Duyệt bấm "⬇️ Tải File Excel Mẫu", điền vào file rồi bấm "⬆️ Nhập Excel" để nạp lại.' },
+    ],
     footer: { left: [
       { label: 'Không cho sửa nội dung nguồn', text: 'khi hệ thống tự sinh dòng Sử Dụng, nội dung và loại hạng mục luôn lấy nguyên từ dòng gốc — không ai chỉnh sửa được ở bước này. Nếu chọn Vị trí là Siêu Thị, hệ thống cũng tự gán đúng tên siêu thị đó cho dòng ngân sách.' },
       { label: 'Không tự duyệt hồ sơ mình tạo', text: 'áp dụng cho mọi vai trò, kể cả quản trị viên, không có ngoại lệ.' },
@@ -767,6 +803,15 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Làm bài kiểm tra', sub: 'Trắc nghiệm tự chấm', kind: 'decision' },
       { label: 'Hoàn thành lớp', sub: 'Đạt điểm yêu cầu', kind: 'approved' },
     ], decision: { atIndex: 2, approveLabel: 'Tự động', rejectLabel: 'Có câu tự luận', rejectBox: { label: 'Giảng viên chấm', sub: 'Chấm tay câu tự luận' }, loopBackToIndex: 2, loopBackLabel: 'Chấm xong → cộng điểm' } },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🔥 Lớp Học</b> → điền form "➕ Tạo Lớp Học Mới": Loại Đào Tạo, Tên Lớp Học, Chương Trình (tuỳ chọn — để trống nếu lớp không thuộc chương trình nào), Kiểu Lớp Học (Online/Offline), Thời Gian Bắt Đầu/Kết Thúc, Bài Test Gán Cho Lớp (tuỳ chọn, phải tạo sẵn ở tab Ngân Hàng Câu Hỏi), Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều) → bấm nút Tạo.' },
+      { role: 'Quản lý đào tạo', text: 'muốn giới hạn ai được đăng ký: điền ô "Danh Sách Được Mời" ngay trên form tạo lớp (gõ tên/tài khoản từng người, hoặc tải mẫu Excel điền rồi upload lại) — để trống thì mọi người tự đăng ký được.' },
+      { role: 'Học viên', text: 'vào tab <b>📝 Đăng Ký Của Tôi</b>, tìm đúng lớp cần học → bấm <b>"Đăng Ký"</b>.' },
+      { role: 'Học viên', text: 'lớp Online có tài liệu bắt buộc: bấm <b>"📚 Vào Lớp Học"</b> → xem hết từng tài liệu bắt buộc (video/PDF) — xem đủ hệ thống tự hiện nút "📝 Vào Làm Bài Test". Lớp Offline thì phải chờ giảng viên/quản lý đào tạo bấm <b>"⏹️ Kết Thúc Lớp"</b> mới hiện nút làm bài test.' },
+      { role: 'Học viên', text: 'bấm <b>"📝 Vào Làm Bài Test"</b> → trả lời từng câu → nộp bài → có kết quả/điểm ngay (riêng câu Nghị Luận thì chờ giảng viên chấm tay, điểm cuối chốt sau khi chấm xong).' },
+      { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận: vào tab Ngân Hàng Câu Hỏi, mục <b>"📝 Cần Chấm Nghị Luận"</b> → chấm điểm từng câu — chấm xong hệ thống tự cộng dồn và chốt Đạt/Không Đạt.' },
+      { role: 'Quản lý đào tạo/Giảng viên', text: 'muốn thêm học viên thủ công sau khi lớp đã mở: bấm <b>"➕ Thêm Học Viên"</b> ngay trên danh sách lớp — nếu lớp có gắn Chương Trình trùng với lớp trước đó, khối gợi ý màu vàng tự hiện học viên chưa hoàn thành để thêm nhanh, bấm từng người hoặc "+ Thêm tất cả" rồi "✅ Xác Nhận Thêm Vào Lớp".' },
+    ],
     footer: { left: [
       { label: 'Quét mã để vào bài', text: 'học viên quét mã QR để vào thẳng màn "Đăng Ký Của Tôi" và mở luôn bài làm, không cần dò tìm qua nhiều menu trên điện thoại.' },
       { label: 'Giảng Viên theo từng lớp', text: 'lớp Offline gán riêng 1 giảng viên — người này chỉ quản lý/chấm được đúng lớp mình được gán, khác người quản lý đào tạo chung (quản lý được mọi lớp).' },
@@ -962,6 +1007,7 @@ function renderNghiepVuContent() {
     <div class="text-[13.5px] text-gray-600 leading-relaxed max-w-3xl mb-5">${doc.desc}</div>
     <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b">${escapeHtml(doc.diagramTitle || 'Sơ đồ quy trình')}</div>
     ${doc.isCustomFlow ? (typeof window[doc.customFlowRenderer] === 'function' ? window[doc.customFlowRenderer]() : '') : renderNVFlow(doc.flow)}
+    ${renderNVSteps(doc.steps)}
     <div class="nv-footer-grid">
       ${nvFooterCol('Lưu Ý Quan Trọng', doc.footer.left)}
       ${nvFooterCol('Mẹo & Quy Tắc Hay Gặp', doc.footer.right)}
@@ -989,6 +1035,7 @@ function renderNghiepVuDaotao(group) {
     <div class="text-[13px] text-gray-600 leading-relaxed max-w-3xl mb-4">${area.desc}</div>
     <div class="text-[13px] font-bold uppercase tracking-wide text-gray-700 mb-3 pb-1.5 border-b">${diagramTitle}</div>
     ${diagramHtml}
+    ${renderNVSteps(area.steps)}
     <div class="nv-footer-grid">
       ${nvFooterCol('Lưu Ý Quan Trọng', area.footer.left)}
       ${nvFooterCol('Mẹo & Quy Tắc Hay Gặp', area.footer.right)}

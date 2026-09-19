@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**23.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.54 (2026-09-19): Nghiệp Vụ — thêm khối "🛠️ Cách Thao Tác" (hướng dẫn click-by-click), làm mẫu 3 module
+
+Theo yêu cầu người dùng: phát triển màn 📘 Nghiệp Vụ thành guideline đầy đủ
+hơn cho người dùng — không chỉ giúp HIỂU NGHIỆP VỤ (mô tả + sơ đồ quy trình
+đã có từ trước) mà còn HIỂU THAO TÁC (bấm nút gì, ở tab nào, theo đúng thứ tự
+nào trên giao diện thật). Đã hỏi và được xác nhận: (1) chỉ trình bày dạng TEXT
+các bước, không kèm ảnh chụp màn hình (ảnh dễ lỗi thời khi UI đổi, tốn công
+bảo trì); (2) làm mẫu trước 2-3 module để duyệt cách trình bày, chưa làm loạt
+cho toàn bộ ~40 mục ngay.
+
+Thêm 1 field mới `steps` (mảng `{role?, text}`) cho từng entry `NGHIEP_VU_DOCS`/
+`NGHIEP_VU_DAOTAO_CONTENT`, và hàm `renderNVSteps()` hiển thị khối "🛠️ CÁCH
+THAO TÁC" (danh sách bước đánh số, có nhãn vai trò màu xanh ngọc khi bước gắn
+riêng 1 vai trò cụ thể) — đặt giữa sơ đồ quy trình và phần "Lưu Ý/Mẹo" đã có.
+`steps` là field TUỲ CHỌN — entry nào chưa viết thì khối này tự ẩn, không hiện
+rỗng, nên không ảnh hưởng ~40 mục còn lại.
+
+Đã viết mẫu đầy đủ cho 3 module (đại diện cả 2 khuôn dữ liệu khác nhau trong
+file — `NGHIEP_VU_DOCS` và `NGHIEP_VU_DAOTAO_CONTENT`):
+- **🚗 Đăng Ký Xe**: 6 bước, từ người đăng ký điền form → người duyệt → người
+  điều hành xe gán xe/lái xe → lái xe xác nhận/báo KM → người đăng ký đánh
+  giá → cách xem lịch trống ở Lịch Xe.
+- **💰 Ngân Sách 2.0**: 6 bước qua đúng 3 tab tách biệt (Đề Xuất → Phê Duyệt
+  → Sử Dụng, 2 lần tự sinh dòng không cần tạo tay) + cách xem Báo Cáo + Excel
+  Tải Mẫu/Nhập hàng loạt.
+- **🎓 Đào Tạo > Lớp Học**: 7 bước, từ quản lý đào tạo tạo lớp → mời học viên
+  → học viên đăng ký/xem tài liệu/làm bài test (phân biệt rõ điều kiện mở
+  khoá bài test ONLINE vs OFFLINE) → giảng viên chấm Nghị Luận → dùng khối
+  gợi ý học viên chưa hoàn thành (tính năng v23.53) khi thêm học viên.
+
+Tất cả nội dung bước đối chiếu ĐÚNG field id/tên tab/nhãn nút thật trong HTML/
+JS hiện tại (không đoán tay) — xác nhận qua ảnh chụp Chromium thật.
 
 ## v23.53 (2026-09-19): Đào Tạo — gợi ý học viên chưa hoàn thành khi tổ chức lại lớp (theo Chương Trình)
 
