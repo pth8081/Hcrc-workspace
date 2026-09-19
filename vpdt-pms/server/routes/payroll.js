@@ -198,7 +198,10 @@ function periodTransitionRoute(path, guard, applyFn, historyNoteRequired, action
     } catch (err) { sendCatchError(res, err, `payroll${path.replace(':id', req.params.id)}`); }
   });
 }
-periodTransitionRoute('/periods/:id/submit', requireManage, (p, u, n) => payroll.applySubmitForApproval(p, u, n), false, 'SUBMIT');
+periodTransitionRoute('/periods/:id/submit', requireManage, async (p, u, n) => {
+  const payslips = (await getAllForCollection('payslips')).filter(s => s.periodId === p.id);
+  return payroll.applySubmitForApproval(p, u, n, payslips);
+}, false, 'SUBMIT');
 periodTransitionRoute('/periods/:id/approve', (req, res, next) => {
   if (!payroll.canApprovePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền duyệt kỳ lương' });
   next();
@@ -213,7 +216,20 @@ periodTransitionRoute('/periods/:id/reject', (req, res, next) => {
   next();
 }, (p, u, n, reason) => payroll.applyReject(p, u, n, reason), true, 'REJECT');
 periodTransitionRoute('/periods/:id/finalize', requireViewAll, (p, u, n) => payroll.applyFinalize(p, u, n), false, 'FINALIZE');
-periodTransitionRoute('/periods/:id/reopen', requireManage, (p, u, n, reason) => payroll.applyReopen(p, u, n, reason), true, 'REOPEN');
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): mở lại kỳ ĐÃ CÔNG BỐ phải xoá cờ "đã xem" trên từng
+// payslip — xem chú thích đầy đủ tại applyReopen() (lib/payroll.js) — để nhân viên thấy lại đúng trạng
+// thái "chưa xem" khi kế toán Công Bố lại số liệu đã sửa.
+periodTransitionRoute('/periods/:id/reopen', requireManage, async (p, u, n, reason) => {
+  const wasPublished = p.status === 'PUBLISHED';
+  const updated = payroll.applyReopen(p, u, n, reason);
+  if (wasPublished) {
+    const payslips = (await getAllForCollection('payslips')).filter(s => s.periodId === p.id && s.viewedByEmployeeAt);
+    for (const slip of payslips) {
+      await withLockedRecordById('payslips', slip.id, (item) => { item.viewedByEmployeeAt = null; return item; });
+    }
+  }
+  return updated;
+}, true, 'REOPEN');
 
 // Công bố — RIÊNG (không dùng periodTransitionRoute) vì cần tạo Notifications cho từng nhân viên có
 // payslip trong kỳ SAU KHI period đã publish thành công (Mục 8 tài liệu gốc).

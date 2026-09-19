@@ -59,6 +59,7 @@ const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
+const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -406,6 +407,10 @@ async function start() {
       setInterval(checkHrTaskOverdueReminders, 24 * 60 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
+      // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc
+      // Onboarding hoàn tất, không có gì tự tạo lại cho năm sau) — xem jobs/leaveBalanceYearRollover.js.
+      ensureLeaveBalancesForCurrentYear();
+      setInterval(ensureLeaveBalancesForCurrentYear, 24 * 60 * 60 * 1000);
       // Giám sát ổ đĩa: chạy dày hơn 3 job nhắc hạn ở trên (mỗi giờ thay vì mỗi 24h) vì dung lượng đĩa
       // có thể tăng nhanh bất thường (VD bị lạm dụng tải file dồn dập) — bản thân job có cơ chế
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.

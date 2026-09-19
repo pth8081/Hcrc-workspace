@@ -127,6 +127,52 @@ async function main() {
     assertEqual(oldEl.placeholder, 'Giá trị cũ', 'Placeholder phải trở lại trung tính');
   });
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): saveHrContractEdit() trước đây LUÔN đọc cả
+  // #hrcEditEndDate lẫn #hrcEditBaseSalary bất kể form đang hiện đang có ô nào — an toàn khi cả 2 ô
+  // cùng tồn tại (khối DRAFT "Hoàn thiện trước khi kích hoạt"), nhưng nếu tái dùng hàm cho 1 form CHỈ
+  // có ô Lương cơ bản (khối ACTIVE mới thêm "💰 Cập Nhật Lương Cơ Bản") thì endDate bị đọc ra null rồi
+  // GỬI LÊN payload — applyManualEdit() coi field có mặt trong payload (dù null) là lệnh xoá field đó,
+  // nghĩa là mỗi lần HR chỉ định cập nhật lương cho hợp đồng ACTIVE sẽ vô tình XOÁ MẤT Ngày hết hạn hợp
+  // đồng. Test này xác nhận payload gửi lên CHỈ chứa đúng field có mặt trên form.
+  await run.run('saveHrContractEdit(): chỉ gửi field ĐANG CÓ trên form — không vô tình gửi endDate=null khi form chỉ có ô Lương cơ bản (khối ACTIVE)', async () => {
+    const { sandbox, elements } = loadSandbox();
+    // loadSandbox()'s document.getElementById() TỰ TẠO 1 element giả rỗng cho id chưa có (auto-vivify)
+    // — khác hành vi document.getElementById() THẬT (trả về null nếu element không tồn tại trên trang).
+    // Ghi đè lại ĐÚNG hành vi thật ở riêng bài test này để mô phỏng chính xác trường hợp khối ACTIVE
+    // không render input #hrcEditEndDate ra DOM (không chỉ là "input rỗng").
+    sandbox.document.getElementById = (id) => (id in elements ? elements[id] : null);
+    const calls = [];
+    sandbox.callRecordAction = async (collection, id, action, payload) => {
+      calls.push({ collection, id, action, payload });
+      return { item: { id, code: 'HD-TEST' } };
+    };
+    sandbox.getMoneyValue = (input) => {
+      if (!input) return 0;
+      return Number(String(input.value || '').replace(/\D/g, '')) || 0;
+    };
+    // Stub 2 hàm sau khi đã nạp module (ghi đè function declaration) để cô lập, không cần DOM/DB thật.
+    sandbox.hrcApplyUpdate = () => {};
+    sandbox.openHrContractDetailModal = () => {};
+
+    // Kịch bản 1: form ACTIVE — CHỈ có ô Lương cơ bản, KHÔNG có ô Ngày hết hạn trên trang.
+    elements['hrcEditBaseSalary'] = makeFakeElement();
+    elements['hrcEditBaseSalary'].value = '15000000';
+    await sandbox.saveHrContractEdit(42);
+    assertEqual(calls.length, 1, 'phải gọi callRecordAction đúng 1 lần');
+    assertEqual('endDate' in calls[0].payload, false, 'payload KHÔNG được có key "endDate" khi form không có ô Ngày hết hạn (tránh vô tình xoá)');
+    assertEqual(calls[0].payload.baseSalary, 15000000, 'payload phải có đúng Lương cơ bản mới');
+    assertEqual(calls[0].action, 'edit', 'phải gọi đúng action "edit"');
+
+    // Kịch bản 2: form DRAFT — có CẢ 2 ô, cả 2 đều phải có mặt trong payload như hành vi cũ.
+    calls.length = 0;
+    elements['hrcEditEndDate'] = makeFakeElement();
+    elements['hrcEditEndDate'].value = '2027-01-01';
+    await sandbox.saveHrContractEdit(42);
+    assertEqual('endDate' in calls[0].payload, true, 'form DRAFT có ô Ngày hết hạn -> payload phải có key "endDate"');
+    assertEqual(calls[0].payload.endDate, '2027-01-01', 'endDate gửi lên phải đúng giá trị đã nhập');
+    assertEqual(calls[0].payload.baseSalary, 15000000, 'baseSalary vẫn đúng khi cả 2 ô cùng có mặt');
+  });
+
   run.summary();
 }
 

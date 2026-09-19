@@ -726,7 +726,8 @@ const NGHIEP_VU_DOCS = {
     steps: [
       { text: 'Hợp đồng thử việc TỰ SINH ngay khi tạo Onboarding cho nhân viên mới (mục 🆕 Onboarding/Offboarding) — không cần tạo tay ở đây.' },
       { role: 'Người quản lý hợp đồng', text: 'vào mục 📄 Hợp Đồng Lao Động (sidebar) → bấm <b>"➕ Tạo Hợp Đồng Mới"</b> nếu cần tạo tay (VD hợp đồng không qua Onboarding).' },
-      { text: 'Ghi nhận thay đổi (tăng lương/đổi chức danh/gia hạn...): mở đúng hợp đồng → thêm 1 dòng phụ lục mới, điền "Ngày áp dụng" (tuỳ chọn)/"Ngày hiệu lực" (bắt buộc) + Giá trị cũ/mới (bật checkbox "💰 Giá trị tiền" nếu là số tiền để tự định dạng).' },
+      { text: 'Tăng lương THẬT (đổi số dùng để tính Lương hàng tháng): mở hợp đồng ACTIVE của nhân viên → khối "💰 Cập Nhật Lương Cơ Bản" → nhập Lương cơ bản mới → bấm "💾 Lưu Lương Cơ Bản".' },
+      { text: 'Ghi nhận thay đổi khác chỉ để LƯU LỊCH SỬ (đổi chức danh, gia hạn, quyết định kèm theo...): thêm 1 dòng phụ lục mới, điền "Ngày áp dụng" (tuỳ chọn)/"Ngày hiệu lực" (bắt buộc) + Giá trị cũ/mới (bật checkbox "💰 Giá trị tiền" nếu là số tiền để tự định dạng) — phần này KHÔNG tự cập nhật Lương cơ bản, chỉ để tra cứu.' },
       { text: 'Hợp đồng tự chuyển "Đã kết thúc" khi hoàn tất thủ tục nghỉ việc ở Onboarding/Offboarding — không cần đóng tay.' },
     ],
     footer: { left: [
@@ -773,7 +774,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Huỷ đơn — CHÚ Ý không tự hoàn quỹ', text: 'nhân viên tự huỷ đơn của mình khi đang Chờ duyệt, hoặc đã Duyệt nhưng NGÀY BẮT ĐẦU CÒN Ở TƯƠNG LAI. Huỷ đơn Phép Năm đã duyệt (đã trừ quỹ) KHÔNG tự cộng lại số ngày — Nhân Sự phải tự vào "Quản Lý & Cấu Hình" sửa bảng phép năm cộng lại tay nếu cần.' },
     ], right: [
       { label: 'Ai duyệt được', text: 'quản lý trực tiếp HOẶC bất kỳ cấp quản lý nào cao hơn theo Cơ Cấu Tổ Chức (đệ quy, không chỉ đúng 1 cấp) đều duyệt được, hoặc Nhân Sự (duyệt được toàn công ty, chỉ chặn tự duyệt đơn của chính mình) — không phải cấu hình luồng nhiều bước như các module khác.' },
-      { label: 'Quỹ phép năm', text: '12 ngày cơ bản + 1 ngày cho mỗi 5 năm thâm niên (tính theo ngày vào làm ở Onboarding). Chỉ tự tạo bảng phép 1 LẦN duy nhất khi Onboarding hoàn tất — các năm sau Nhân Sự phải tự tạo bảng phép mới. Khi hoàn tất nghỉ việc, hệ thống tự huỷ mọi đơn còn Chờ duyệt của người đó.' },
+      { label: 'Quỹ phép năm', text: '12 ngày cơ bản + 1 ngày cho mỗi 5 năm thâm niên (tính theo ngày hợp đồng lao động CŨ NHẤT của nhân viên = ngày vào làm thật). Tạo lần đầu khi Onboarding hoàn tất; từ 9/2026, hệ thống còn tự quét lại mỗi ngày (job nền) để tự tạo bù quỹ phép năm hiện tại cho MỌI nhân viên đang hoạt động chưa có — không cần Nhân Sự nhớ tạo tay mỗi khi sang năm mới nữa. Khi hoàn tất nghỉ việc, hệ thống tự huỷ mọi đơn còn Chờ duyệt của người đó.' },
     ] },
   },
   hrPayroll: {
@@ -795,11 +796,13 @@ const NGHIEP_VU_DOCS = {
     ],
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu lương cực kỳ nhạy cảm nên không đưa vào báo cáo tổng hợp dùng chung theo cách thông thường.' },
-      { label: '5 trạng thái kỳ lương', text: 'Nháp → Chờ Duyệt → Đã Duyệt → Đã Chốt → Đã Công Bố. Còn có "Mở Lại" (từ Đã Chốt/Đã Công Bố, bắt buộc nhập lý do) khi cần sửa lại kỳ đã khoá.' },
+      { label: '5 trạng thái kỳ lương', text: 'Nháp → Chờ Duyệt → Đã Duyệt → Đã Chốt → Đã Công Bố. Còn có "Mở Lại" (từ Đã Chốt/Đã Công Bố, bắt buộc nhập lý do) khi cần sửa lại kỳ đã khoá — Mở Lại 1 kỳ ĐÃ CÔNG BỐ (từ 9/2026) còn tự xoá cờ "đã xem" trên mọi phiếu lương của kỳ đó, để nhân viên thấy lại đúng trạng thái "chưa xem" khi kế toán sửa xong và Công Bố lại.' },
       { label: 'Tính lại sẽ GHI ĐÈ', text: 'bấm "Tính Lương" lại khi kỳ còn Nháp sẽ ghi đè TOÀN BỘ, kể cả các dòng đã điều chỉnh tay trước đó — hệ thống cảnh báo rõ trước khi tính lại. Sau khi Gửi Duyệt thì không điều chỉnh tay được nữa (trừ khi bị Từ chối về Nháp).' },
     ], right: [
       { label: 'Các khoản phải nhập tay', text: 'phụ cấp ăn trưa/điện thoại/chức vụ/ca đêm/ngày lễ, KPI, thưởng khác, khấu trừ tạm ứng/phạt đều KHÔNG tự tính (hệ thống chưa có nguồn dữ liệu cho các khoản này) — kế toán tự thêm qua "Điều Chỉnh", chỉ làm được khi kỳ còn Nháp.' },
       { label: 'Xem của mình', text: 'mọi nhân viên có hồ sơ nhân sự tự xem phiếu lương của mình (tab "Của Tôi") không cần quyền gì thêm, và tự xuất PDF phiếu lương; xem TOÀN BỘ kỳ lương của mọi người cần quyền quản lý hoặc duyệt lương.' },
+      { label: 'Nghỉ việc / vào làm giữa kỳ (từ 9/2026)', text: 'hệ thống KHÔNG tự trừ/cộng theo số ngày lẻ — nhân viên nghỉ việc HOẶC mới vào làm giữa kỳ vẫn được tính ĐỦ 1 tháng lương cơ bản, chỉ ghi CHÚ THÍCH ngay ở dòng "Lương cơ bản" nêu rõ ngày nghỉ/ngày vào làm để kế toán tự rà soát + bấm "Điều Chỉnh" trừ/bù đúng số ngày (đúng nguyên tắc hệ thống không tự bịa công thức khi chưa có chính sách proration chính thức).' },
+      { label: 'Chặn lương thực nhận ÂM (từ 9/2026)', text: 'nếu 1 phiếu lương trong kỳ có "Thực nhận" ÂM (thường do khấu trừ tạm ứng/phạt nhập tay ở "Điều Chỉnh" lớn hơn cả lương gộp), bấm "Gửi Duyệt" sẽ bị chặn (400, nêu rõ mã nhân viên bị âm) — kế toán phải vào "Điều Chỉnh" sửa lại đúng số tiền trước khi gửi duyệt được, tránh lương âm lọt qua tới tận lúc Công Bố mới phát hiện.' },
     ] },
   },
   hr: {

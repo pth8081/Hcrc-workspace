@@ -270,6 +270,59 @@ async function main() {
       assertIncludes([true], basic.note.includes('nghỉ việc'), 'Dòng Lương cơ bản phải có ghi chú ngày nghỉ việc để kế toán tự rà soát/điều chỉnh');
     });
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): chiều NGƯỢC LẠI với LUONG-07/08 ở trên — nhân viên
+    // MỚI VÀO LÀM giữa kỳ trước đây KHÔNG có cảnh báo tương tự, vẫn cộng đủ 1 tháng BASIC_SALARY mà không
+    // ai biết cần rà soát/điều chỉnh.
+    await run.run('Nhân viên MỚI VÀO LÀM giữa kỳ: vẫn tính đủ 1 tháng lương, có ghi chú để kế toán rà soát', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      USERS.push({ username: 'emp4', name: 'Nhân Viên Bốn', dept: 'Phòng Kinh Doanh', posType: 'OFFICE', perms: {}, active: true });
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV004', username: 'emp4', status: 'ACTIVE', dependents: [] });
+      RECORDS.laborContracts.push({ id: 4, employeeCode: 'NV004', status: 'ACTIVE', startDate: '2025-01-20', baseSalary: 10000000, dept: 'Phòng Kinh Doanh' });
+
+      const res = await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      assertEqual(res.status, 200, 'Tính lương phải thành công');
+
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV004');
+      assertIncludes([true], !!slip, 'NV004 (vào làm giữa kỳ) phải có payslip trong kỳ');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.amount, 10000000, 'Lương cơ bản phải tính ĐỦ 1 tháng — KHÔNG tự trừ theo số ngày chưa vào làm');
+      assertIncludes([true], basic.note.includes('vào làm ngày 2025-01-20'), 'Dòng Lương cơ bản phải có ghi chú ngày vào làm để kế toán tự rà soát/điều chỉnh');
+    });
+
+    await run.run('Nhân viên vào làm ĐÚNG ngày đầu kỳ: KHÔNG bị coi là vào làm giữa kỳ, không có ghi chú cảnh báo', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      USERS.push({ username: 'emp5', name: 'Nhân Viên Năm', dept: 'Phòng Kinh Doanh', posType: 'OFFICE', perms: {}, active: true });
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV005', username: 'emp5', status: 'ACTIVE', dependents: [] });
+      RECORDS.laborContracts.push({ id: 5, employeeCode: 'NV005', status: 'ACTIVE', startDate: '2025-01-01', baseSalary: 9000000, dept: 'Phòng Kinh Doanh' });
+
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV005');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.note, 'Theo hợp đồng lao động đang hiệu lực', 'Vào làm đúng ngày 01 đầu kỳ (làm đủ tháng) -> không phải ghi chú cảnh báo giữa kỳ');
+    });
+
+    await run.run('Nhân viên có hợp đồng thử việc CŨ trước kỳ, mới ký lại hợp đồng CHÍNH THỨC giữa kỳ: KHÔNG bị coi là vào làm giữa kỳ (dùng ngày hợp đồng SỚM NHẤT)', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      USERS.push({ username: 'emp6', name: 'Nhân Viên Sáu', dept: 'Phòng Kinh Doanh', posType: 'OFFICE', perms: {}, active: true });
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV006', username: 'emp6', status: 'ACTIVE', dependents: [] });
+      // Vào làm thật từ 2024 (hợp đồng thử việc SUPERSEDED) — hợp đồng ACTIVE hiện tại chỉ là chuyển loại
+      // hợp đồng giữa kỳ lương này, KHÔNG phải ngày vào làm thật.
+      RECORDS.laborContracts.push({ id: 6, employeeCode: 'NV006', status: 'SUPERSEDED', startDate: '2024-06-01', baseSalary: 8000000, dept: 'Phòng Kinh Doanh' });
+      RECORDS.laborContracts.push({ id: 7, employeeCode: 'NV006', status: 'ACTIVE', startDate: '2025-01-10', baseSalary: 9500000, dept: 'Phòng Kinh Doanh' });
+
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV006');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.note, 'Theo hợp đồng lao động đang hiệu lực', 'Đã vào làm thật từ trước kỳ (hợp đồng thử việc cũ) -> chuyển loại hợp đồng giữa kỳ KHÔNG phải cảnh báo vào làm giữa kỳ');
+      assertEqual(basic.amount, 9500000, 'Vẫn phải lấy đúng baseSalary của hợp đồng ACTIVE hiện tại');
+    });
+
     await run.run('Điều chỉnh dòng tay: chặn mã thành phần không thuộc danh mục nhập tay', async () => {
       resetAppData();
       const period = seedDraftPeriod();
@@ -303,6 +356,40 @@ async function main() {
       await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
       const res = await api('PATCH', `/api/payroll/payslips/${slipId}/details`, { componentCode: 'BONUS_OTHER', amount: 100000 }, HR_MGR);
       assertEqual(res.status, 409, 'Kỳ đã PENDING_APPROVAL -> không điều chỉnh tay được nữa');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): trước đây netPay ÂM (VD khấu trừ/tạm ứng/phạt nhập
+    // tay lớn hơn cả lương gộp) vẫn Gửi Duyệt được bình thường, đi xuyên suốt cả luồng mà không ai cảnh
+    // báo — công ty không thể "trả lương âm".
+    await run.run('Gửi duyệt: CHẶN nếu có phiếu lương netPay ÂM (khấu trừ tay lớn hơn lương gộp)', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slipId = payslips.body.payslips[0].id;
+      // NV001 lương gộp ~15tr — trừ tạm ứng nhập tay 20tr -> netPay ÂM.
+      await api('PATCH', `/api/payroll/payslips/${slipId}/details`, { componentCode: 'ADVANCE_DEDUCT', amount: 20000000, note: 'Trừ tạm ứng lớn' }, HR_MGR);
+
+      const res = await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
+      assertEqual(res.status, 400, 'Có phiếu lương netPay âm -> phải chặn Gửi Duyệt');
+      assertIncludes([true], res.body.error.includes('NV001'), 'Thông báo lỗi phải nêu đúng mã nhân viên bị âm lương');
+
+      const periodsAfter = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      assertIncludes([true], periodsAfter.body.payslips.length >= 0, 'Vẫn đọc được payslips bình thường (kỳ chưa chuyển trạng thái)');
+    });
+
+    await run.run('Gửi duyệt: cho phép bình thường nếu SAU KHI sửa lại, netPay không còn âm', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slipId = payslips.body.payslips[0].id;
+      await api('PATCH', `/api/payroll/payslips/${slipId}/details`, { componentCode: 'ADVANCE_DEDUCT', amount: 20000000, note: 'Trừ tạm ứng lớn (nhầm)' }, HR_MGR);
+      // Kế toán phát hiện nhầm, sửa lại số tiền hợp lý hơn.
+      await api('PATCH', `/api/payroll/payslips/${slipId}/details`, { componentCode: 'ADVANCE_DEDUCT', amount: 1000000, note: 'Sửa lại đúng số tạm ứng' }, HR_MGR);
+
+      const res = await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
+      assertEqual(res.status, 200, 'Sau khi sửa lại hết âm -> Gửi Duyệt phải thành công');
     });
 
     await run.run('Phân tách nhiệm vụ: hrPayrollManage KHÔNG được tự duyệt (chỉ hrPayrollApprove)', async () => {
@@ -364,6 +451,43 @@ async function main() {
       const withReason = await api('POST', `/api/payroll/periods/${period.id}/reopen`, { reason: 'Phát hiện sai sót cần sửa lại' }, HR_MGR);
       assertEqual(withReason.status, 200, 'Có lý do -> thành công');
       assertEqual(withReason.body.item.status, 'DRAFT', 'Mở lại phải đưa kỳ về DRAFT');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): mở lại kỳ ĐÃ CÔNG BỐ trước đây không xoá cờ
+    // viewedByEmployeeAt — nhân viên xem phiếu (đánh dấu đã xem), kế toán phát hiện sai sót -> Mở Lại ->
+    // sửa lại -> Công Bố lại, nhưng phiếu vẫn hiện "đã xem" dù nhân viên chưa xem bản ĐÃ SỬA.
+    await run.run('reopen: MỞ LẠI kỳ ĐÃ CÔNG BỐ (nhân viên đã xem) phải xoá cờ viewedByEmployeeAt để nhân viên thấy "chưa xem" khi công bố lại', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
+      await api('POST', `/api/payroll/periods/${period.id}/approve`, {}, APPROVER);
+      await api('POST', `/api/payroll/periods/${period.id}/finalize`, {}, HR_MGR);
+      await api('POST', `/api/payroll/periods/${period.id}/publish`, {}, HR_MGR);
+      // emp1 xem phiếu của mình -> đánh dấu viewedByEmployeeAt.
+      await api('GET', `/api/payroll/my-payslips/${period.id}`, undefined, EMP1);
+      const payslipsBefore = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      assertIncludes([true], !!payslipsBefore.body.payslips.find(p => p.employeeCode === 'NV001').viewedByEmployeeAt, 'Trước khi mở lại, phiếu NV001 phải đang đánh dấu đã xem');
+
+      const reopen = await api('POST', `/api/payroll/periods/${period.id}/reopen`, { reason: 'Phát hiện sai sót, sửa lại số liệu' }, HR_MGR);
+      assertEqual(reopen.status, 200, 'Mở lại kỳ đã công bố phải thành công');
+
+      const payslipsAfter = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slipAfter = payslipsAfter.body.payslips.find(p => p.employeeCode === 'NV001');
+      assertEqual(slipAfter.viewedByEmployeeAt, null, 'Sau khi mở lại kỳ đã công bố, cờ đã xem PHẢI được xoá về null');
+    });
+
+    await run.run('reopen: MỞ LẠI kỳ CHỈ ĐÃ CHỐT (chưa từng công bố) thì KHÔNG có gì để xoá (không lỗi, không side-effect thừa)', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
+      await api('POST', `/api/payroll/periods/${period.id}/approve`, {}, APPROVER);
+      await api('POST', `/api/payroll/periods/${period.id}/finalize`, {}, HR_MGR);
+      // Chưa publish -> chưa ai xem được, mở lại thẳng từ FINALIZED.
+      const reopen = await api('POST', `/api/payroll/periods/${period.id}/reopen`, { reason: 'Sửa lại trước khi công bố' }, HR_MGR);
+      assertEqual(reopen.status, 200, 'Mở lại kỳ chỉ mới Chốt (chưa Công Bố) vẫn phải thành công bình thường');
+      assertEqual(reopen.body.item.status, 'DRAFT', 'Mở lại phải đưa kỳ về DRAFT như cũ');
     });
 
     await run.run('Phiếu Lương Của Tôi (IDOR-safe): chỉ thấy phiếu CHÍNH MÌNH, chỉ khi kỳ đã PUBLISHED', async () => {

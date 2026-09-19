@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**23.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.56 (2026-09-19): Rà soát chuyên sâu Nhân Sự — vá 6 khoảng trống nghiệp vụ (Hợp Đồng/Công-Phép/Lương)
+
+Đợt rà soát chuyên sâu module Nhân Sự (theo yêu cầu người dùng), phát hiện và
+vá 6 khoảng trống nghiệp vụ thật (không phải lỗ hổng bảo mật):
+
+1. **[Cao]** "Tăng lương" qua phụ lục hợp đồng (➕ Thêm Thay Đổi) chỉ ghi log
+   văn bản, KHÔNG cập nhật `contract.baseSalary` mà Lương thực sự dùng để
+   tính — HR tưởng đã tăng lương nhưng mọi kỳ Lương sau đó vẫn tính theo
+   lương cũ vô thời hạn. Thêm khối "💰 Cập Nhật Lương Cơ Bản" riêng cho hợp
+   đồng ACTIVE (server vốn đã hỗ trợ, chỉ thiếu UI) +
+   `public/js/module-hopdonglaodong.js`.
+2. **[Cao]** Quỹ Phép Năm chỉ được tạo đúng 1 lần lúc Onboarding hoàn tất,
+   không có gì tự tạo lại cho năm sau — nhân viên bị chặn xin nghỉ Phép Năm
+   từ 1/1 hàng năm tới khi HR thủ công tạo lại từng người. Thêm job nền mới
+   `jobs/leaveBalanceYearRollover.js` (quét mỗi 24h, tự tạo quỹ phép năm hiện
+   tại còn thiếu cho MỌI nhân viên ACTIVE có hợp đồng, dùng ngày hợp đồng
+   SỚM NHẤT để tính thâm niên).
+3. **[Trung bình]** Duyệt đổi ca không kiểm tra người NHẬN ca có đang trùng
+   lịch phân ca ngày đó không — có thể gán 2 ca chồng nhau cho cùng 1 nhân
+   viên. `applyApproveShiftSwap()` (`lib/attendance.js`) nay gọi
+   `assertNoRosterConflict()` (vốn có sẵn, dùng lúc tạo phân ca) trước khi
+   duyệt.
+4. **[Trung bình]** Nhân viên MỚI VÀO LÀM giữa kỳ Lương vẫn được cộng đủ 1
+   tháng lương cơ bản mà không có cảnh báo nào (bất đối xứng với nhánh Offboarding
+   giữa kỳ đã có sẵn cảnh báo). `computeEmployeePayslip()` (`lib/payroll.js`)
+   nay ghi chú rõ ngày vào làm ở dòng Lương cơ bản khi hợp đồng SỚM NHẤT của
+   nhân viên rơi vào giữa kỳ đang tính, để kế toán tự rà soát/điều chỉnh.
+5. **[Trung bình]** Không có gì chặn phiếu lương "Thực nhận" ÂM (thường do
+   khấu trừ tạm ứng/phạt nhập tay lớn hơn lương gộp) — có thể lọt qua toàn
+   bộ luồng Gửi Duyệt → Duyệt → Chốt → Công Bố. `applySubmitForApproval()`
+   (`lib/payroll.js`) nay chặn Gửi Duyệt (400, nêu rõ mã nhân viên) nếu còn
+   phiếu lương nào netPay âm trong kỳ.
+6. **[Thấp]** Mở lại 1 kỳ lương ĐÃ CÔNG BỐ không xoá cờ `viewedByEmployeeAt`
+   trên các payslip — sau khi kế toán sửa lại và Công Bố lại, phiếu vẫn hiện
+   "đã xem" dù nhân viên chưa xem bản đã sửa. `POST /periods/:id/reopen`
+   (`routes/payroll.js`) nay tự xoá cờ này trên mọi payslip của kỳ khi mở lại
+   từ trạng thái PUBLISHED.
+
+**File đã sửa**: `server/lib/attendance.js`, `server/lib/payroll.js`,
+`server/routes/records.js`, `server/routes/payroll.js`, `server/server.js`,
+`server/public/js/module-hopdonglaodong.js`, `server/public/js/module-nghiepvu.js`
+(cập nhật nội dung nghiệp vụ tương ứng cả 6 mục). **File mới**:
+`server/jobs/leaveBalanceYearRollover.js`.
+
+**Deploy impact**: không cần thao tác gì thêm ngoài copy code + `pm2 restart`
+(job mới tự chạy ngay khi khởi động theo đúng khuôn các job nền hiện có,
+không cần biến môi trường/migration nào).
+
+Đã kiểm thử: `test-attendance-leave.js` 53/53, `test-payroll.js` 22/22,
+`test-hr-contract-amendment-ui.js` 4/4, `test-leave-balance-year-rollover.js`
+(mới) 6/6, `test-nghiepvu.js` 86/86 — tất cả PASS, không hồi quy.
+
 
 ## v23.55 (2026-09-19): Nghiệp Vụ — viết "🛠️ Cách Thao Tác" cho toàn bộ ~30 mục còn lại
 

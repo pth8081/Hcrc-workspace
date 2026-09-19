@@ -181,8 +181,8 @@ async function partA() {
 
   await test('applyApproveShiftSwap() gán lại employeeCode của dòng roster, đánh dấu SWAPPED', () => {
     const swapRequest = { requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', status: 'PENDING' };
-    const roster = { id: 1, employeeCode: 'NV1', status: 'SCHEDULED' };
-    const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(swapRequest, roster, 'mgr', 'Manager');
+    const roster = { id: 1, employeeCode: 'NV1', workDate: '2026-03-02', status: 'SCHEDULED' };
+    const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(swapRequest, roster, [roster], 'mgr', 'Manager');
     assert.strictEqual(updatedSwap.status, 'APPROVED');
     assert.strictEqual(updatedRoster.employeeCode, 'NV2');
     assert.strictEqual(updatedRoster.status, 'SWAPPED');
@@ -190,7 +190,30 @@ async function partA() {
 
   await test('applyApproveShiftSwap() chặn nếu roster đã bị huỷ', () => {
     const swapRequest = { requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', status: 'PENDING' };
-    assert.throws(() => attendance.applyApproveShiftSwap(swapRequest, { status: 'CANCELLED' }, 'mgr', 'Manager'), /đã bị huỷ/);
+    assert.throws(() => attendance.applyApproveShiftSwap(swapRequest, { status: 'CANCELLED' }, [], 'mgr', 'Manager'), /đã bị huỷ/);
+  });
+
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): duyệt đổi ca trước đây KHÔNG kiểm tra người NHẬN ca
+  // (targetEmployeeCode) có đang trùng lịch phân ca ngày đó không — có thể tạo ra 2 ca chồng nhau cho
+  // cùng 1 người mà không ai biết.
+  await test('applyApproveShiftSwap() CHẶN nếu người nhận ca (targetEmployeeCode) đã có lịch phân ca khác trùng đúng ngày đó', () => {
+    const swapRequest = { requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', status: 'PENDING' };
+    const roster = { id: 1, employeeCode: 'NV1', workDate: '2026-03-02', status: 'SCHEDULED' };
+    // NV2 (người nhận ca) đã độc lập có 1 dòng roster KHÁC trùng đúng ngày 2026-03-02.
+    const nv2ConflictingRoster = { id: 99, employeeCode: 'NV2', workDate: '2026-03-02', status: 'SCHEDULED' };
+    assert.throws(
+      () => attendance.applyApproveShiftSwap(swapRequest, roster, [roster, nv2ConflictingRoster], 'mgr', 'Manager'),
+      /đã có lịch phân ca/,
+      'phải chặn duyệt đổi ca vì người nhận ca sẽ bị trùng lịch 2 ca cùng ngày'
+    );
+  });
+
+  await test('applyApproveShiftSwap() vẫn duyệt được bình thường nếu người nhận ca chỉ trùng ca đã CANCELLED (không tính là xung đột)', () => {
+    const swapRequest = { requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', status: 'PENDING' };
+    const roster = { id: 1, employeeCode: 'NV1', workDate: '2026-03-02', status: 'SCHEDULED' };
+    const nv2CancelledRoster = { id: 99, employeeCode: 'NV2', workDate: '2026-03-02', status: 'CANCELLED' };
+    const { updatedRoster } = attendance.applyApproveShiftSwap(swapRequest, roster, [roster, nv2CancelledRoster], 'mgr', 'Manager');
+    assert.strictEqual(updatedRoster.employeeCode, 'NV2', 'ca CANCELLED không tính là xung đột, vẫn duyệt đổi ca bình thường');
   });
 
   await test('cancelFutureRosterAfterOffboarding() chỉ huỷ ca TƯƠNG LAI (sau lastWorkingDate)', () => {

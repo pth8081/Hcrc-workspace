@@ -3977,7 +3977,7 @@ router.post('/shiftSwapRequests/:id/approve', async (req, res) => {
     const result = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
       const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
       assertShiftSwapApprover(freshUser, targetRoster);
-      const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(item, targetRoster, freshUser.username, freshUser.name);
+      const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(item, targetRoster, rosterList, freshUser.username, freshUser.name);
       updatedRosterId = updatedRoster.id; updatedRosterPatch = updatedRoster;
       return updatedSwap;
     });

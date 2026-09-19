@@ -178,6 +178,23 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   }
   if (!contract || !contract.baseSalary) return { skipped: true, reason: 'Không có hợp đồng lao động đang hiệu lực kèm lương cơ bản' };
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): nhánh Offboarding ở trên đã tự cảnh báo kế toán khi
+  // nhân viên NGHỈ giữa kỳ (dòng BASIC_SALARY nêu rõ "CHƯA trừ tương ứng"), nhưng chiều NGƯỢC LẠI — nhân
+  // viên MỚI VÀO LÀM giữa kỳ — trước đây không có cảnh báo tương tự nào: BASIC_SALARY vẫn cộng đủ 1 tháng
+  // lương dù người đó chỉ thực làm vài ngày cuối kỳ, kế toán dễ trả dư mà không hay biết (không có nguồn
+  // dữ liệu chấm công NÀO trước ngày vào làm để hệ thống tự trừ — đúng nguyên tắc "không tự bịa công thức
+  // chưa có nguồn dữ liệu xác nhận" nêu ở đầu file, nên chỉ CẢNH BÁO để kế toán tự "Điều chỉnh dòng lương",
+  // không tự động trừ). Dùng NGÀY HỢP ĐỒNG SỚM NHẤT (mọi trạng thái, không riêng hợp đồng ACTIVE hiện tại)
+  // làm mốc "ngày vào làm thật" — đúng khuôn đã áp dụng ở jobs/leaveBalanceYearRollover.js — để không nhầm
+  // lẫn với ngày hợp đồng ACTIVE hiện tại (có thể chỉ là ngày ký lại/chuyển loại hợp đồng, không phải ngày
+  // vào làm thật).
+  let hireDateInPeriod = null;
+  if (!offboardingLastWorkingDate) {
+    const allContractsForEmployee = findContractsByEmployeeCode(appData.laborContracts, employeeCode);
+    const earliestHireDate = allContractsForEmployee.reduce((min, c) => (c.startDate && (!min || c.startDate < min) ? c.startDate : min), null);
+    if (earliestHireDate && earliestHireDate > pStart && earliestHireDate <= pEnd) hireDateInPeriod = earliestHireDate;
+  }
+
   let workModelInfo = resolveWorkModelForEmployeeCode(employeeCode, appData);
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: resolveWorkModelForEmployeeCode() CHẶN HẲN hồ sơ INACTIVE
   // (đúng ý — chặn máy chấm công/tạo công tay cho người đã nghỉ, xem lib/attendance.js) — nhưng payroll
@@ -212,7 +229,9 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   addDetail(details, 'BASIC_SALARY', baseSalary,
     offboardingLastWorkingDate
       ? `Theo hợp đồng lao động — nghỉ việc ngày ${offboardingLastWorkingDate} giữa kỳ, CHƯA trừ tương ứng số ngày không làm việc, kế toán cần rà soát + Điều chỉnh dòng lương`
-      : 'Theo hợp đồng lao động đang hiệu lực',
+      : hireDateInPeriod
+        ? `Theo hợp đồng lao động — vào làm ngày ${hireDateInPeriod} giữa kỳ, CHƯA trừ tương ứng số ngày chưa vào làm trước đó, kế toán cần rà soát + Điều chỉnh dòng lương`
+        : 'Theo hợp đồng lao động đang hiệu lực',
     false);
 
   let ot150 = 0, ot200 = 0, ot300 = 0;
@@ -306,9 +325,21 @@ function pushHistory(period, action, actorUsername, actorName, detail) {
   period.updatedAt = nowVN(); period.updatedBy = actorUsername;
 }
 
-function applySubmitForApproval(period, actorUsername, actorName) {
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): trước đây netPay ÂM (VD kế toán lỡ nhập khấu trừ tạm
+// ứng/phạt nhập tay lớn hơn cả lương gộp) vẫn đi xuyên suốt được cả luồng Gửi Duyệt -> Duyệt -> Chốt ->
+// Công Bố mà không ai cảnh báo gì — công ty không thể "trả lương âm" cho nhân viên, đây luôn là dấu hiệu
+// sai sót cần kế toán sửa lại TRƯỚC khi gửi duyệt (không tự động sửa hộ, đúng nguyên tắc "không tự bịa
+// cách xử lý chưa có chính sách xác nhận" nêu ở đầu file) — chặn NGAY tại bước Gửi Duyệt (cửa duy nhất bắt
+// buộc phải qua trước khi kỳ lương rời khỏi trạng thái còn sửa được tự do) thay vì để lọt sâu hơn vào quy
+// trình rồi mới phát hiện lúc Công Bố, khi đã khó sửa hơn nhiều (phải Mở Lại).
+function applySubmitForApproval(period, actorUsername, actorName, payslips) {
   assertTransition(period, ['DRAFT'], 'Gửi duyệt');
   if (!period.employeeCount) throw new HttpError(400, 'Vui lòng tính lương trước khi gửi duyệt');
+  const negativeSlips = (payslips || []).filter(s => Number(s.netPay) < 0);
+  if (negativeSlips.length) {
+    const codes = negativeSlips.slice(0, 5).map(s => s.employeeCode).join(', ');
+    throw new HttpError(400, `Có ${negativeSlips.length} phiếu lương bị ÂM (${codes}${negativeSlips.length > 5 ? '...' : ''}) — vui lòng vào "Điều Chỉnh" sửa lại (thường do khấu trừ/tạm ứng/phạt nhập tay lớn hơn lương gộp) trước khi gửi duyệt`);
+  }
   period.status = 'PENDING_APPROVAL';
   pushHistory(period, 'SUBMITTED', actorUsername, actorName, 'Gửi duyệt kỳ lương');
   return period;
@@ -341,6 +372,13 @@ function applyPublish(period, actorUsername, actorName) {
   pushHistory(period, 'PUBLISHED', actorUsername, actorName, 'Công bố phiếu lương cho nhân viên');
   return period;
 }
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): mở lại 1 kỳ ĐÃ CÔNG BỐ (VD phát hiện sai sót sau khi
+// nhân viên đã xem) trước đây KHÔNG xoá cờ viewedByEmployeeAt trên các payslip — sau khi kế toán sửa lại
+// số liệu + Công Bố lại, phiếu lương vẫn hiện "đã xem" dù nhân viên chưa hề xem BẢN ĐÃ SỬA, dễ khiến kế
+// toán tưởng nhầm nhân viên đã biết số liệu mới. Việc xoá cờ này chạm tới NHIỀU bản ghi payslips (không
+// chỉ 1 period) nên đặt ở route (routes/payroll.js, có getAllForCollection/withLockedRecordById) — hàm
+// applyReopen() ở đây CHỈ xử lý ĐÚNG 1 bản ghi period (giữ nguyên khuôn "pure, 1 record" của các hàm
+// applyXxx() khác trong file này).
 function applyReopen(period, actorUsername, actorName, reason) {
   assertTransition(period, ['FINALIZED', 'PUBLISHED'], 'Mở lại');
   if (!reason || !String(reason).trim()) throw new HttpError(400, 'Vui lòng nhập lý do mở lại kỳ lương (bắt buộc ghi log)');

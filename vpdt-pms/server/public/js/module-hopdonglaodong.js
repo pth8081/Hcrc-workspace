@@ -272,10 +272,27 @@ function buildHrContractDetailHTML(c) {
       <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Thay Đổi</button>
     </div>` : ''}
 
+    <!-- LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): trước đây field "Lương cơ bản" CHỈ sửa được
+         lúc hợp đồng còn DRAFT — hợp đồng ACTIVE (đa số thời gian sống thật của 1 hợp đồng) không có
+         cách nào cập nhật lại baseSalary ngoài "➕ Thêm Thay Đổi" bên dưới, nhưng phụ lục đó CHỈ ghi
+         log văn bản (amendments[]), KHÔNG đụng vào contract.baseSalary — HR tưởng đã "tăng lương" vì
+         thấy phụ lục hiện ra, nhưng mọi kỳ Lương sau đó vẫn tính theo baseSalary CŨ vô thời hạn, không
+         cảnh báo gì (xem lib/payroll.js::computeEmployeePayslip() đọc thẳng contract.baseSalary). Server
+         (applyManualEdit()/route POST .../edit) vốn đã hỗ trợ sửa baseSalary ở BẤT KỲ trạng thái nào và
+         tự ghi history — chỉ thiếu đúng 1 khối UI này để dùng tới. -->
+    ${c.status === 'ACTIVE' ? `
+    <div class="border border-blue-300 rounded p-2 bg-blue-50">
+      <div class="font-semibold mb-1 text-blue-900">💰 Cập Nhật Lương Cơ Bản</div>
+      <p class="text-[11px] text-blue-800 mb-1.5">Đây là cách DUY NHẤT thay đổi số tiền hệ thống dùng để tính Lương hàng tháng — mục "➕ Thêm Thay Đổi" bên dưới chỉ ghi lại lịch sử/văn bản, KHÔNG tự cập nhật số này.</p>
+      <div><label class="block text-gray-600 mb-1">Lương cơ bản mới (đ)</label><input type="text" inputmode="numeric" id="hrcEditBaseSalary" value="${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) : ''}" class="w-full border p-1.5 rounded money-input"></div>
+      <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Lương Cơ Bản</button>
+    </div>` : ''}
+
     <div class="flex flex-wrap gap-2">${activateBtn}${closeBtn}${deleteBtn}</div>
 
     <div class="border-t pt-2">
       <div class="font-semibold mb-1">📋 Lịch Sử Thay Đổi (Phụ Lục)</div>
+      <p class="text-[11px] text-gray-500 mb-1.5">Phần này chỉ LƯU LẠI văn bản/lịch sử thay đổi để tra cứu — không tự cập nhật Lương cơ bản hay bất kỳ field nào khác của hợp đồng. Muốn đổi Lương cơ bản thật sự dùng để tính Lương, dùng khối "💰 Cập Nhật Lương Cơ Bản" ở trên.</p>
       <div class="space-y-1 mb-2">${amendmentsHTML}</div>
       <input type="text" id="hrcNewAmendmentType" placeholder="Loại thay đổi (VD: Tăng lương)" class="w-full border p-1.5 rounded mb-2">
       <!-- "Ngày áp dụng" (quyết định được áp dụng/ban hành từ ngày nào) KHÁC "Ngày hiệu lực" (thời điểm
@@ -307,11 +324,18 @@ function buildHrContractDetailHTML(c) {
   `;
 }
 
+// Chỉ gửi lên đúng field ĐANG CÓ trên form hiện tại (khối DRAFT có cả 2 ô, khối ACTIVE chỉ có riêng
+// Lương cơ bản) — trước đây luôn gửi cả "endDate", nếu tái dùng hàm này cho form chỉ có 1 ô sẽ vô tình
+// gửi endDate=null và XOÁ MẤT ngày hết hạn hợp đồng đang có (applyManualEdit() coi field có mặt trong
+// payload, dù giá trị null, là "xoá field đó" — xem MANUAL_EDITABLE_FIELDS).
 async function saveHrContractEdit(id) {
-  const endDate = document.getElementById('hrcEditEndDate')?.value || null;
-  const baseSalary = getMoneyValue(document.getElementById('hrcEditBaseSalary'));
+  const payload = {};
+  const endDateEl = document.getElementById('hrcEditEndDate');
+  if (endDateEl) payload.endDate = endDateEl.value || null;
+  const baseSalaryEl = document.getElementById('hrcEditBaseSalary');
+  if (baseSalaryEl) payload.baseSalary = getMoneyValue(baseSalaryEl);
   try {
-    const result = await callRecordAction('laborContracts', id, 'edit', { endDate, baseSalary });
+    const result = await callRecordAction('laborContracts', id, 'edit', payload);
     hrcApplyUpdate(result.item);
     openHrContractDetailModal(id);
   } catch (err) {

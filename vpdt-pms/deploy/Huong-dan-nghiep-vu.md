@@ -1719,6 +1719,13 @@ còn tự động xoá được hợp đồng lao động nữa.
     vào là TỰ ĐỘNG hiện dấu chấm phân cách hàng nghìn ngay lập tức (giống ô
     Lương cơ bản), không phụ thuộc thứ tự gõ/nội dung ô Loại thay đổi nữa —
     tick TẮT khi thật sự cần gõ chữ tự do (VD đổi chức danh, ca làm...).
+- **Tăng lương THẬT khác Phụ Lục ghi log** (9/2026, rà soát chuyên sâu — trước
+  đây dễ nhầm lẫn: thêm 1 dòng Phụ Lục "tăng lương" chỉ LƯU LẠI văn bản/lịch
+  sử để tra cứu, KHÔNG tự cập nhật số tiền hệ thống dùng để tính Lương hàng
+  tháng, khiến kỳ Lương sau đó vẫn tính theo lương CŨ vô thời hạn dù HR tưởng
+  đã tăng): hợp đồng **Đang hiệu lực** có thêm khối riêng **"💰 Cập Nhật Lương
+  Cơ Bản"** — đây mới là cách DUY NHẤT đổi số tiền thật sự dùng để tính Lương
+  (module 4.5.8), tách biệt hẳn với "➕ Thêm Thay Đổi" (chỉ ghi log).
 - **Cảnh báo hết hạn màu sắc trên màn hình** (9/2026, khác hẳn job email
   60/45/30 ngày ở mục dưới — đây là badge hiển thị TRỰC TIẾP ở danh sách LẪN
   chi tiết hợp đồng): hợp đồng đang **Đang hiệu lực** còn **≤30 ngày** hiện
@@ -1798,6 +1805,14 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
 - **Phép năm** — số ngày chuẩn 12 ngày/năm (+ 1 ngày mỗi 5 năm thâm niên),
   tính theo tỷ lệ số tháng còn lại nếu vào làm giữa năm; HR **tạo/điều chỉnh
   tay** ở "Quản Lý & Cấu Hình" (carry-over, quyết định riêng của công ty).
+  **Tự động tạo bù sang năm mới** (9/2026, rà soát chuyên sâu — trước đây quỹ
+  Phép Năm CHỈ được tạo đúng 1 lần lúc Onboarding hoàn tất, không có gì tự
+  tạo lại cho năm sau, nhân viên bị chặn xin nghỉ Phép Năm từ 1/1 hàng năm
+  tới khi HR nhớ tạo tay từng người): job nền chạy mỗi 24h tự quét MỌI nhân
+  viên đang hoạt động (có hợp đồng lao động) chưa có quỹ phép năm hiện tại,
+  tự tạo bù — dùng ngày hợp đồng SỚM NHẤT (kể cả hợp đồng thử việc cũ đã
+  chuyển trạng thái) để tính đúng thâm niên, không phải ngày hợp đồng đang
+  hiệu lực hiện tại (có thể chỉ là ngày ký lại/chuyển loại hợp đồng).
   Khi Offboarding hoàn tất, hệ thống tự tính **số tiền quy đổi phép chưa nghỉ
   tham khảo** (đơn giá ngày công × số ngày còn lại) gắn vào đúng việc "Tính
   lương, phép năm chưa nghỉ, khấu trừ" trong checklist (mục 4.5.2), hiển thị
@@ -1812,7 +1827,10 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   không hoán đổi 2 chiều — 2 người muốn hoán đổi cho nhau thì mỗi người tự
   nộp 1 đơn xin đổi đúng ca của mình), Quản Lý Siêu Thị đúng siêu thị đó (quyền
   **"🔄 Duyệt Đổi Ca"**, tách riêng khỏi quyền lập lịch — 1 người có thể chỉ có
-  1 trong 2) hoặc HR duyệt.
+  1 trong 2) hoặc HR duyệt — duyệt đổi ca (9/2026) tự kiểm tra thêm người
+  **NHẬN** ca có đang trùng lịch phân ca ngày đó không (trước đây chỉ chặn
+  trùng lịch lúc TẠO phân ca, chưa chặn ở bước duyệt đổi ca), tránh 1 nhân
+  viên vô tình bị gán 2 ca chồng nhau cùng ngày.
 - **API Máy Chấm Công** (`POST /api/attendance/clock-punch`, xác thực bằng
   **API key RIÊNG** cấp ở "Quản Lý & Cấu Hình" — **KHÔNG dùng chung** API Xác
   Thực Ngoài ở Hệ Thống, mục 7.9 — tách riêng để giảm phạm vi ảnh hưởng nếu 1
@@ -1906,6 +1924,26 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   trừ tương ứng số ngày không làm việc sau khi nghỉ (vẫn tính đủ 1 tháng lương
   cơ bản theo hợp đồng) — kế toán BẮT BUỘC tự rà soát và dùng "Điều chỉnh dòng
   lương" để trừ đúng phần chưa làm việc trước khi duyệt.
+- **Nhân viên MỚI VÀO LÀM giữa kỳ lương** (9/2026, chiều NGƯỢC LẠI với mục
+  "Nhân viên nghỉ việc GIỮA kỳ" ở trên — trước đây KHÔNG có cảnh báo tương tự,
+  người mới vào làm giữa tháng vẫn được cộng đủ 1 tháng Lương cơ bản mà không
+  ai biết cần rà soát): nếu ngày hợp đồng SỚM NHẤT của nhân viên (không phải
+  hợp đồng ACTIVE hiện tại — tránh nhầm với ngày ký lại/chuyển loại hợp đồng
+  giữa kỳ) rơi vào giữa kỳ đang tính, dòng Lương cơ bản tự ghi chú rõ ngày vào
+  làm để kế toán tự rà soát + dùng "Điều chỉnh dòng lương" trừ đúng phần chưa
+  vào làm nếu cần — hệ thống vẫn KHÔNG tự trừ.
+- **Chặn Gửi Duyệt nếu có phiếu lương "Thực nhận" ÂM** (9/2026): thường do
+  khấu trừ tạm ứng/phạt nhập tay ở "Điều chỉnh dòng lương" lớn hơn cả lương
+  gộp — trước đây lọt qua được toàn bộ luồng Gửi Duyệt → Duyệt → Chốt → Công
+  Bố mà không ai cảnh báo (công ty không thể trả lương âm cho nhân viên). Từ
+  nay bấm "Gửi Duyệt" sẽ bị chặn, nêu rõ (các) mã nhân viên đang bị âm lương,
+  kế toán phải sửa lại đúng số tiền ở "Điều Chỉnh" trước khi gửi duyệt được.
+- **Mở Lại kỳ đã Công Bố tự xoá cờ "đã xem"** (9/2026): trước đây mở lại 1 kỳ
+  ĐÃ CÔNG BỐ (VD phát hiện sai sót sau khi nhân viên đã xem phiếu) không xoá
+  cờ "đã xem" trên các phiếu lương — sau khi kế toán sửa lại số liệu và Công
+  Bố lại, phiếu vẫn hiện "đã xem" dù nhân viên chưa hề xem bản ĐÃ SỬA. Từ nay
+  Mở Lại 1 kỳ đã Công Bố tự xoá cờ này trên mọi phiếu lương của kỳ đó, để
+  nhân viên thấy lại đúng trạng thái "chưa xem" khi số liệu mới được Công Bố.
 - **Tính lại 1 kỳ KHÔNG còn xoá mất phụ cấp/thưởng/tạm ứng/phạt đã nhập tay
   cho người khác** (v17.6): trước đây bấm "Tính Lương" lại (VD chỉ để bổ sung
   1 nhân viên mới sót/sửa lỗi chấm công của 1 người) xoá HẲN mọi phiếu lương

@@ -481,10 +481,17 @@ function defaultShiftSwapRequest(payload, requesterEmployeeCode) {
 // Áp dụng duyệt đổi ca — đổi 1 CHIỀU (xem ghi chú đầu file mục 4): gán lại employeeCode của ĐÚNG dòng
 // roster người xin đổi sang targetEmployeeCode, giữ nguyên workDate/shiftTemplateId/storeCode, đánh dấu
 // Status='SWAPPED' để phân biệt với 'SCHEDULED' gốc (vẫn có thể truy vết ai đã từng đứng ca này).
-function applyApproveShiftSwap(swapRequest, targetRoster, actorUsername, actorName) {
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): trước đây hàm này KHÔNG kiểm tra người NHẬN ca
+// (targetEmployeeCode) có đang trùng lịch ngày đó không — assertNoRosterConflict() vốn đã có sẵn và
+// được dùng lúc TẠO phân ca (lib/createValidation.js), nhưng chưa từng được gọi ở đây. Hệ quả: duyệt
+// đổi ca có thể gán 2 dòng phân ca trùng ngày cho cùng 1 nhân viên (targetEmployeeCode) mà không ai
+// hay biết. rosterList (tham số mới) cần TOÀN BỘ shiftRoster hiện có để kiểm tra đúng.
+function applyApproveShiftSwap(swapRequest, targetRoster, rosterList, actorUsername, actorName) {
   if (swapRequest.status !== 'PENDING') throw new HttpError(400, 'Yêu cầu đổi ca không còn ở trạng thái chờ duyệt');
   if (!targetRoster) throw new HttpError(404, 'Không tìm thấy dòng phân ca cần đổi (có thể đã bị huỷ)');
   if (targetRoster.status === 'CANCELLED') throw new HttpError(400, 'Dòng phân ca này đã bị huỷ, không thể đổi ca');
+  assertNoRosterConflict(rosterList, swapRequest.targetEmployeeCode, targetRoster.workDate, targetRoster.id);
   const updatedSwap = Object.assign({}, swapRequest, {
     status: 'APPROVED', approverUsername: actorUsername, approverName: actorName, decidedAt: nowVN(), updatedAt: nowVN()
   });
