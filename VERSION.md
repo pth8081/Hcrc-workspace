@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**23.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.52 (2026-09-19): Test kịch bản nghiệp vụ đầy đủ module Đào Tạo (LMS) + xác nhận 2 khoảng trống tính năng
+
+Theo yêu cầu người dùng: test chuyên sâu kịch bản Đào Tạo đầy đủ — tạo câu
+hỏi, tạo tài liệu, gán vào lớp học, học viên đăng ký (huỷ phải được quản lý
+đào tạo duyệt), học xong tài liệu mới hiện bài test (ONLINE) / giáo viên
+phải kết thúc buổi mới hiện bài test (OFFLINE), làm bài xong báo điểm ngay,
+tài khoản bị khoá không hiện trong danh sách chọn thêm học viên, học viên
+phải có tài khoản + đã đăng ký mới thấy được bài test.
+
+Rà soát cho thấy 10/12 điểm đã có sẵn và hoạt động đúng — xác nhận lại bằng
+157 kịch bản test hiện có (`test-internal-training.js` 49, cộng 8 file
+test-training-*.js khác 108) chạy lại toàn bộ PASS, cộng thêm 4 kịch bản
+MỚI viết vào `test-training-scenario-roleplay.js` (đóng vai đầy đủ, bấm
+THẬT qua UI, không gọi tắt qua hàm nội bộ):
+- Tài khoản đã khoá (active:false) không hiện trong danh sách gợi ý "Thêm
+  Học Viên" (populateSystemUsersDatalist dùng chung) + server chặn cứng
+  (skipped NOT_FOUND) dù cố gửi thẳng username bỏ qua UI.
+- Học viên có tài khoản, đã đăng nhập nhưng CHƯA đăng ký lớp bị chặn 403
+  ngay ở cả start-test lẫn submit-test.
+
+**2 khoảng trống tính năng xác nhận rõ ràng (KHÔNG tự chế, gọi thẳng action
+không tồn tại và xác nhận bị từ chối)** — theo đúng tinh thần kịch bản
+"[KHOẢNG TRỐNG]" đã có sẵn từ trước trong file này (mục "GĐ Siêu Thị đánh
+giá sau khi thi"):
+- **Chứng nhận hoàn thành lớp học**: sau khi ĐẠT bài test, hệ thống KHÔNG
+  tự cấp "chứng nhận hoàn thành lớp học XXX" nào cho `trainingRegistrations`
+  — tính năng cấp chứng chỉ (`issueOnboardingCertificate`) CHỈ tồn tại cho
+  `onboardingProgress` (Lộ Trình Tân Binh, đòi đủ 3 giai đoạn), hoàn toàn
+  khác nghiệp vụ lớp học/bài test thường.
+- **Gợi ý học viên chưa hoàn thành khi tổ chức lớp lại**: mở 1 lớp mới
+  cùng Chương Trình, modal "Thêm Học Viên" KHÔNG tự gợi ý các học viên
+  FAILED của lớp cũ cùng chương trình để thêm vào — không có route/hàm/
+  cấu trúc dữ liệu nào cho việc này trong `recordActions.js`.
+
+Không sửa code ứng dụng ở đợt này (chỉ thêm test + xác nhận khoảng trống) —
+2 tính năng trên cần được người dùng xác nhận phạm vi/thiết kế trước khi
+triển khai (VD chứng nhận hiện dạng PDF tải về như Onboarding hay chỉ đánh
+dấu trong hệ thống; gợi ý học viên chưa hoàn thành dựa theo courseId hay
+theo đúng tên lớp).
+
+**File đã thêm/sửa**: `server/tests/test-training-scenario-roleplay.js`
+(+4 kịch bản, 13→17).
+
+**Deploy impact**: không đổi `schema.sql`/biến môi trường/`dependencies` —
+chỉ copy code (không bắt buộc, `server/tests/` không chạy production) +
+`pm2 restart` như bình thường.
 
 ## v23.51 (2026-09-19): Test xác nhận yêu cầu nghiệp vụ Đặt Hàng/Phê Duyệt Giá Bán + nút khẩn cấp + format file
 

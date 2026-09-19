@@ -275,6 +275,122 @@ async function main() {
       setResultErr = await page.evaluate(() => window.__lastCreateErr);
       assert(setResultErr, 'set-result cũng phải bị chặn cho lớp đã gắn bài test — không có đường vòng nào để "đánh giá" thủ công');
     });
+
+    // ===== 10) Tài khoản bị khoá KHÔNG hiện trong danh sách gợi ý "Thêm Học Viên" =====
+    const lockedUser = makeUser({ username: 'nv_locked_rp', name: 'Nhân Viên Đã Khoá', dept: 'Siêu Thị A', perms: {}, active: false });
+    await run('10) Tài khoản đã khoá (active:false) KHÔNG hiện trong danh sách gợi ý khi mở modal "Thêm Học Viên"', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate((u) => { DB.users.push(u); }, lockedUser);
+      await page.evaluate((cid) => { openTrainingRosterModal(cid); }, classId);
+      const items = await page.evaluate(() => (document.getElementById('systemUsersDatalist')._sddItems || []).map((it) => it.label));
+      assert(!items.some((label) => label.includes('nv_locked_rp')), 'danh sách gợi ý KHÔNG được chứa tài khoản đã khoá');
+      assert(items.some((label) => label.includes('nv_rp')), 'danh sách gợi ý vẫn phải chứa tài khoản đang hoạt động (đối chứng — không phải danh sách rỗng do lỗi khác)');
+      // Phòng thủ 2 lớp: kể cả cố tình gửi thẳng username bị khoá lên server (bỏ qua dropdown/DevTools),
+      // vẫn phải bị BỎ QUA (skipped, KHÔNG 200 OK giả) — xem bulkRegisterTrainingClass() lib/recordActions.js.
+      const bulkResult = await page.evaluate(async (cid) => {
+        return await callRecordAction('trainingClasses', cid, 'bulk-register', { usernames: ['nv_locked_rp'] });
+      }, classId);
+      assertEqual(bulkResult.added.length, 0, 'server KHÔNG được thêm tài khoản đã khoá vào lớp dù gửi thẳng username, bỏ qua UI');
+      assertEqual(bulkResult.skipped[0]?.reason, 'NOT_FOUND', 'lý do bỏ qua phải đúng NOT_FOUND (tài khoản đã khoá coi như không hợp lệ)');
+      await page.evaluate(() => { closeTrainingRosterModal(); });
+    });
+
+    // ===== 11) Học viên CHƯA đăng ký lớp (có tài khoản, đã đăng nhập) KHÔNG thấy/làm được bài test =====
+    const notRegistered = makeUser({ username: 'nv_notreg_rp', name: 'Nhân Viên Chưa Đăng Ký', dept: 'Siêu Thị A', perms: {} });
+    await run('11) Học viên có tài khoản + đã đăng nhập nhưng CHƯA đăng ký lớp -> KHÔNG mở/nộp được bài test', async () => {
+      await page.evaluate((u) => { DB.users.push(u); }, notRegistered);
+      await page.evaluate((u) => { currentUser = u; }, notRegistered);
+      let startErr = null;
+      await page.evaluate(async (cid) => {
+        try { await callRecordAction('trainingClasses', cid, 'start-test', {}); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, classId);
+      startErr = await page.evaluate(() => window.__lastCreateErr);
+      assert(startErr && startErr.includes('chưa đăng ký'), `học viên chưa đăng ký phải bị chặn ngay ở start-test, thực tế: ${startErr}`);
+      let submitErr = null;
+      await page.evaluate(async (cid) => {
+        try { await callRecordAction('trainingClasses', cid, 'submit-test', { answers: [] }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, classId);
+      submitErr = await page.evaluate(() => window.__lastCreateErr);
+      assert(submitErr && submitErr.includes('chưa đăng ký'), `học viên chưa đăng ký phải bị chặn ở submit-test dù cố gọi thẳng, thực tế: ${submitErr}`);
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+    });
+
+    // ===== 12) [KHOẢNG TRỐNG] Chứng nhận hoàn thành LỚP HỌC (không phải Onboarding) sau khi ĐẠT =====
+    await run('12) [KHOẢNG TRỐNG] Sau khi ĐẠT bài test, hệ thống KHÔNG tự cấp "chứng nhận hoàn thành lớp học XXX" — chỉ có ở Onboarding (onboardingProgress), không có cho trainingClasses/trainingRegistrations thường', async () => {
+      // 12a) Đăng ký đã PASSED ở kịch bản 8 (nv_rp) — xác nhận KHÔNG có field nào ghi nhận đã cấp chứng
+      // nhận trên chính bản ghi trainingRegistrations (khác onboardingProgress.certificateIssued).
+      const reg = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.id === id), regId);
+      assert(reg.result === 'PASSED', 'tiền đề: đăng ký phải đang ở trạng thái ĐẠT (kế thừa từ kịch bản 8)');
+      assert(reg.certificateIssued === undefined, 'trainingRegistrations không có field certificateIssued nào cả — không có khái niệm "đã cấp chứng nhận" cho lớp học thường');
+      // 12b) Gọi thẳng action "issue-certificate" (tên action THẬT của Onboarding, xem
+      // issueOnboardingCertificate()/routes/records.js) lên collection trainingRegistrations — xác nhận
+      // bị từ chối rõ ràng (route đó CHỈ đăng ký cho collection onboardingProgress), không phải 200 OK giả.
+      let certErr = null;
+      await page.evaluate(async (id) => {
+        try { await callRecordAction('trainingRegistrations', id, 'issue-certificate', {}); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, regId);
+      certErr = await page.evaluate(() => window.__lastCreateErr);
+      assert(certErr, 'action "issue-certificate" không tồn tại cho trainingRegistrations — phải bị từ chối, không được âm thầm thành công');
+    });
+
+    // ===== 13) [KHOẢNG TRỐNG] Gợi ý học viên CHƯA hoàn thành (FAILED) khi tổ chức lại lớp cùng nội dung =====
+    let classId2;
+    await run('13) [KHOẢNG TRỐNG] Mở Lớp Học mới cùng Chương Trình -> hệ thống KHÔNG gợi ý các học viên FAILED của lớp cũ để thêm vào lớp mới', async () => {
+      // Chuẩn bị tiền đề: nv2_rp làm bài SAI hết -> FAILED ở lớp gốc, để có ít nhất 1 học viên "chưa
+      // hoàn thành" thật sự đúng kịch bản người dùng mô tả ("tổ chức lớp học lại").
+      const nv2 = makeUser({ username: 'nv2_rp', name: 'Học Viên Thi Trượt', dept: 'Siêu Thị A', perms: {} });
+      await page.evaluate((u) => { DB.users.push(u); }, nv2);
+      await page.evaluate((u) => { currentUser = u; }, nv2);
+      await page.evaluate((id) => registerForTrainingClass(id), classId);
+      const reg2 = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv2_rp'), classId);
+      // Lớp gốc có tài liệu bắt buộc (docId) -> phải đánh dấu đã xem trước, không thì submit-test sẽ bị
+      // chặn 409 "chưa xem hết tài liệu" thay vì chấm điểm thật (đúng luật đã xác nhận ở kịch bản đầu).
+      await page.evaluate((id) => openTrainingJoinClassModal(id), reg2.id);
+      await page.evaluate((did) => markTrainingDocumentViewedAction(did), docId);
+      // Đi qua ĐÚNG modal "Vào Làm Bài Test" thật (như kịch bản 8) nhưng KHÔNG chọn đáp án nào -> sai
+      // hết -> FAILED (passScore 70%) — dùng luồng client thật để DB.trainingRegistrations được cập
+      // nhật đúng (gọi thẳng callRecordAction không tự đồng bộ lại state cục bộ).
+      await page.evaluate((id) => openTakeTestModal(id), classId);
+      await page.evaluate(async () => {
+        const total = ttTakeQuestions.length;
+        for (let i = 0; i < total; i++) { await ttTakeGoNext(); }
+      });
+      const reg2After = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.id === id), reg2.id);
+      assertEqual(reg2After.result, 'FAILED', 'tiền đề: nv2_rp phải KHÔNG ĐẠT để đúng kịch bản "học viên chưa hoàn thành"');
+
+      // Người quản lý đào tạo mở lớp MỚI, CÙNG courseId với lớp cũ (đúng kịch bản "tổ chức lớp học lại").
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => { setTrainingLmsTab('CLASSES'); });
+      await page.evaluate((cid) => {
+        document.getElementById('tcCategory').value = 'Nghiệp vụ';
+        document.getElementById('tcTitle').value = 'Lớp Đào Tạo Nội Quy & An Toàn Siêu Thị A (Tổ chức lại)';
+        document.getElementById('tcCourseId').value = String(cid);
+        document.getElementById('tcStart').value = '2020-02-01T08:00';
+        document.getElementById('tcEnd').value = '2020-02-01T10:00';
+        document.getElementById('tcMode').value = 'ONLINE';
+        onTrainingClassModeChange();
+      }, courseId);
+      await page.evaluate(() => submitTrainingClass({ preventDefault() {}, target: { reset() {} } }));
+      const cls2 = await page.evaluate(() => DB.trainingClasses.find((c) => c.title === 'Lớp Đào Tạo Nội Quy & An Toàn Siêu Thị A (Tổ chức lại)'));
+      assert(cls2, 'phải tạo được lớp học mới cùng chương trình');
+      classId2 = cls2.id;
+
+      // Mở modal "Thêm Học Viên" của lớp mới -> xác nhận KHÔNG có bất kỳ khối gợi ý/badge nào liệt kê
+      // "học viên chưa hoàn thành lớp cùng chương trình trước đó" — khảo sát toàn bộ HTML modal, không
+      // chỉ dò 1 chuỗi cụ thể để tránh bỏ sót cách diễn đạt khác.
+      await page.evaluate((cid) => { openTrainingRosterModal(cid); }, classId2);
+      const modalHTML = await page.evaluate(() => document.getElementById('trainingRosterModal').innerHTML);
+      assert(!/chưa hoàn thành|gợi ý.*(FAILED|trượt|rớt)|học viên.*lớp cũ/i.test(modalHTML),
+        'modal "Thêm Học Viên" của lớp mới KHÔNG được tự gợi ý học viên FAILED của lớp cũ cùng chương trình — tính năng này chưa tồn tại');
+      // Đối chứng bằng dữ liệu: server không hề trả về/tính toán danh sách "học viên chưa hoàn thành
+      // theo courseId" ở bất kỳ đâu trong DB phía client tại thời điểm này.
+      const hasSuggestionField = await page.evaluate(() => 'suggestedIncompleteStudents' in DB || 'trainingFailedSuggestions' in window);
+      assert(!hasSuggestionField, 'không có cấu trúc dữ liệu nào cho tính năng gợi ý học viên chưa hoàn thành — xác nhận đây thực sự là khoảng trống, không phải chỉ thiếu UI');
+      await page.evaluate(() => { closeTrainingRosterModal(); });
+    });
   } finally {
     await teardown({ server, browser });
   }
