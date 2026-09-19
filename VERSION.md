@@ -1,12 +1,93 @@
 # Phiên bản hiện tại
 
-**23.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-> **Lưu ý**: file này đã bị bỏ lỡ cập nhật ở nhiều lần merge liên tiếp trước đó (v23.18 → v23.27 không
-> có mục riêng ở đây dù `server/package.json` đã tăng đúng) — xem lịch sử commit/PR trên GitHub cho các
-> bản đó, không lặp lại ở đây. Ghi chú dưới đây bắt đầu lại từ v23.28.
+> **Lưu ý**: file này lại bị bỏ lỡ cập nhật ở nhiều lần merge liên tiếp (v23.30 → v23.49 không có mục
+> riêng ở đây dù `server/package.json` đã tăng đúng từng bước — gồm Mua Hàng > BAS, chia nhỏ quyền Hỗ
+> Trợ IT, Quy Trình Hỗn Hợp cho Đặt Hàng Siêu Thị, Nhóm Phê Duyệt Trình/Hợp Đồng, và đợt 5 điểm Đăng Ký
+> Xe/Biên Bản Họp/in phiếu) — xem lịch sử commit trên GitHub cho các bản đó, không lặp lại ở đây. Ghi chú
+> dưới đây bắt đầu lại từ v23.50.
+
+## v23.51 (2026-09-19): Test xác nhận yêu cầu nghiệp vụ Đặt Hàng/Phê Duyệt Giá Bán + nút khẩn cấp + format file
+
+Theo yêu cầu người dùng (kiểm thử 5 kịch bản): Đặt Hàng Tại Siêu Thị (GĐST
+duyệt đúng siêu thị/nhiều siêu thị ở các bước sau, check trùng Số Đơn NCC,
+upload nhiều đơn tạo nhiều phiếu, duyệt theo giá trị đơn hàng), Đặt Hàng Tại
+HO (check trùng mã, duyệt theo giá trị đơn hàng), Phê Duyệt Giá Bán Lẻ/Bán
+Buôn (kiểm tra format file, các bước duyệt theo phòng ban/theo Mức Margin-
+Chiết Khấu, nút "Từ chối khẩn cấp" trước/sau khi IT áp giá), và trùng mã ở
+cùng 1 thời điểm cho cả 4 khu vực.
+
+Rà soát cho thấy phần lớn đã có test hiện hữu (chạy lại xác nhận PASS toàn
+bộ, không phát hiện bug thật nào) — riêng Phê Duyệt Giá Bán còn thiếu 3
+mảng, viết mới 3 file test:
+- `tests/test-itprice-approval-and-emergency.js` (17 kịch bản): các bước
+  duyệt Bán Lẻ theo phòng ban (nhiều bước) vs Bán Buôn theo 1 trong 4 Mức
+  Margin/Chiết Khấu (tách biệt hoàn toàn khỏi phòng ban), và nút "Từ chối
+  khẩn cấp" — chỉ gửi được SAU khi duyệt xong nhưng TRƯỚC khi đội Hỗ Trợ IT
+  áp giá xong (`applied=false`), bị chặn hẳn 409 SAU khi đã áp giá.
+- `tests/test-itprice-file-format-reject.js` (6 kịch bản): chặn đúng cả lớp
+  đuôi file (.xlsx/.xls) lẫn lớp nội dung nhị phân thật (magic bytes, chống
+  đổi tên file giả dạng Excel).
+- `tests/test-itprice-margin-warning.js` (7 kịch bản, Playwright): cảnh báo
+  (không chặn gửi) khi số liệu thật ở cột đã gán "Margin/Chiết Khấu" của
+  Mẫu Giá lệch với Mức đã chọn — ẩn đúng khi chưa gán cột hoặc đang ở
+  sub-tab Bán Lẻ.
+
+Không sửa code ứng dụng ở đợt này — toàn bộ hành vi thật đã đúng theo yêu
+cầu, chỉ bổ sung test để xác nhận + làm hồ sơ regression lâu dài.
+
+**File đã thêm**: 3 file test kể trên (`server/tests/`).
+
+**Deploy impact**: không đổi `schema.sql`, không thêm biến môi trường, không
+thêm/đổi `dependencies` — chỉ copy code (thực chất không bắt buộc vì
+`server/tests/` không chạy trên production) + `pm2 restart` như bình thường.
+
+Đã kiểm thử: cả 3 file test mới + 14 file test liên quan đã có từ trước
+(Đặt Hàng Siêu Thị/HO, Phê Duyệt Giá) chạy lại — toàn bộ PASS.
+
+## v23.50 (2026-09-19): Nghiệp Vụ — viết sâu lại nội dung tham khảo cho 12 module còn sơ sài
+
+Theo phản hồi người dùng: nội dung màn "📘 Nghiệp Vụ" (tài liệu tham khảo
+trực quan trong app) ở nhiều module quá sơ sài, ví dụ Đăng Ký Xe chưa nhắc
+tới hủy chuyến/xác nhận/điều phối/đổi tài xế dù các tính năng này đã có.
+
+Rà soát qua CODE THẬT (không suy đoán, dùng 4 agent song song đọc trực tiếp
+`module-congviec.js`, `module-phonghop.js`, `module-conghop.js`,
+`module-luong.js`, `module-orgchart.js`, `module-hcrcdonghanh.js`,
+`module-vpp.js`, `module-dongphuc.js`, `module-office.js`,
+`module-thanhtoan.js`, `module-admin-submissiongroups.js`,
+`module-vanbantrinh.js`, `lib/recordActions.js`...) rồi viết lại 12 mục
+trong `NGHIEP_VU_DOCS` (`public/js/module-nghiepvu.js`) với thông tin thao
+tác cụ thể — nút bấm thật, quyền thật, quy tắc nghiệp vụ thật:
+
+- **Đăng Ký Xe**: thêm bullet "🔁 Đổi Tài Xế-Xe" còn thiếu (đổi độc lập lái
+  xe/loại xe, có hiệu lực ngay không qua lại duyệt, tự kiểm tra trùng lịch
+  tài xế).
+- **Văn Bản Trình / Hợp Đồng**: giải thích cơ chế "Nhóm Phê Duyệt" bổ sung
+  (Cấp Phê Duyệt Cuối Cùng quyết định nhóm nào bắt buộc/tuỳ chọn, nhóm nối
+  thêm bước SAU quy trình gốc, khác biệt "Xin Ý Kiến" không chặn).
+- **Công Việc**: sửa lại sơ đồ (tài liệu cũ mô tả SAI có bước "nghiệm thu/
+  người giao xác nhận" — thực tế người nhận việc tự đóng việc, không ai
+  duyệt lại), thêm gia hạn/huỷ phải chờ duyệt, người phối hợp ngoài hệ
+  thống, cách tự sinh việc từ Văn Bản Trình/Biên Bản Họp.
+- **Đặt Phòng Họp**: sửa sơ đồ (tài liệu cũ bỏ sót — thực ra CÓ bước duyệt,
+  chỉ là 1 quyền phẳng không theo phòng ban), thêm quy tắc không sửa được
+  chỉ huỷ, ai duyệt/huỷ được.
+- **Công/Phép, Lương, Cơ Cấu Tổ Chức, HCRC Đồng Hành, Văn Phòng Phẩm, Đồng
+  Phục, Mua Bán/Sửa Chữa/Thanh Toán**: bổ sung đầy đủ trạng thái, quyền cụ
+  thể, và các quy tắc dễ hiểu nhầm (VD huỷ phép năm đã duyệt KHÔNG tự hoàn
+  quỹ; Đồng Phục là mô hình đẩy xuống chứ không phải nhân viên tự đăng ký).
+
+**File đã sửa**: `server/public/js/module-nghiepvu.js`.
+
+**Deploy impact**: chỉ đổi nội dung hiển thị (JS thuần), không đổi
+`schema.sql`/biến môi trường/`dependencies` — copy code + `pm2 restart`.
+
+Đã kiểm thử: `test-nghiepvu.js` (86/86), `test-nghiepvu-csp.js` (6/6),
+`test-nghiepvu-click.js` (5/5), `test-asset-version-csp.js` (5/5) — pass.
 
 ## v23.29 (2026-09-17): "Xem chéo" Báo Cáo Checklist Đánh Giá Siêu Thị (VSATTP) qua đúng màn Báo Cáo tổng hợp
 
