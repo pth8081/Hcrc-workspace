@@ -4,12 +4,6 @@
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-> **Lưu ý**: file này lại bị bỏ lỡ cập nhật ở nhiều lần merge liên tiếp (v23.30 → v23.49 không có mục
-> riêng ở đây dù `server/package.json` đã tăng đúng từng bước — gồm Mua Hàng > BAS, chia nhỏ quyền Hỗ
-> Trợ IT, Quy Trình Hỗn Hợp cho Đặt Hàng Siêu Thị, Nhóm Phê Duyệt Trình/Hợp Đồng, và đợt 5 điểm Đăng Ký
-> Xe/Biên Bản Họp/in phiếu) — xem lịch sử commit trên GitHub cho các bản đó, không lặp lại ở đây. Ghi chú
-> dưới đây bắt đầu lại từ v23.50.
-
 ## v23.51 (2026-09-19): Test xác nhận yêu cầu nghiệp vụ Đặt Hàng/Phê Duyệt Giá Bán + nút khẩn cấp + format file
 
 Theo yêu cầu người dùng (kiểm thử 5 kịch bản): Đặt Hàng Tại Siêu Thị (GĐST
@@ -88,6 +82,312 @@ tác cụ thể — nút bấm thật, quyền thật, quy tắc nghiệp vụ t
 
 Đã kiểm thử: `test-nghiepvu.js` (86/86), `test-nghiepvu-csp.js` (6/6),
 `test-nghiepvu-click.js` (5/5), `test-asset-version-csp.js` (5/5) — pass.
+
+## v23.49 (2026-09-18): Đăng Ký Xe — hủy trước duyệt, trạng thái Đang Thực Hiện, vá lỗ hổng Taxi/tài xế, xiết quyền phiếu, sửa in phiếu khớp xem phiếu
+
+5 điểm theo yêu cầu người dùng cho module Đăng Ký Xe:
+- Cho phép người đăng ký tự hủy khi đăng ký còn PENDING bước 1 (chưa ai
+  duyệt) — trước đây chỉ hủy được sau khi đã duyệt xong.
+- Thêm trạng thái `IN_PROGRESS` khi lái xe xác nhận nhận chuyến (trước đây
+  giữ nguyên `APPROVED`, không phân biệt được "đã duyệt" với "đang chạy
+  chuyến" qua danh sách).
+- Vá lỗ hổng: chuyển loại xe sang Taxi giờ tự xoá LUÔN tài xế công ty đã
+  gán (trước chỉ xoá biển số, để sót tài xế dù xe đã là taxi thuê ngoài) —
+  áp dụng cả lúc duyệt lẫn "Đổi Tài Xế-Xe" sau này.
+- Xiết quyền Xem/Tải Phiếu Phê Duyệt Đăng Ký Xe chỉ còn người đăng ký/tài
+  xế được gán/người duyệt hồ sơ đó/admin — bỏ fallback "cùng phòng ban"
+  mặc định như các file tải khác trong hệ thống (chỉ riêng module này).
+- Sửa lỗi CSP thật ở nút "🖨️ In" dùng chung mọi module: trước đây nhúng
+  `<style>` nội tuyến vào iframe in bị chặn hẳn (không có `unsafe-inline`)
+  nên in ra mất sạch định dạng phiếu — đổi sang `<link rel="stylesheet"
+  href="/app.css">`, đợi tải xong stylesheet mới gọi `print()`.
+- Hợp nhất Xem/Tải Biên Bản Họp dùng chung đúng 1 nội dung (trước đây 2
+  nguồn HTML tách rời, có thể lệch nhau), thêm chân ký ngang căn giữa
+  (Thư Ký/Chủ Trì) mirror đúng phiếu phê duyệt các module khác.
+
+Không đổi `schema.sql`/biến môi trường/`dependencies`.
+
+## v23.48 (2026-09-18): Nhóm Phê Duyệt Trình/Hợp Đồng — admin tự đổi tên/thêm/xoá nhóm + Cấp Phê Duyệt Cuối Cùng
+
+Chuyển `submissionApprovalGroups`/`contractApprovalGroups` từ map phẳng
+7/4 khoá CỐ ĐỊNH (admin chỉ gán được thành viên, không đổi tên/thêm/xoá
+được) sang mảng nhóm `{id,label,order,blocking?,singleApprover,
+allowFileReplacementProposal?,members}` admin tự quản lý đầy đủ ở mục
+11/14 (Hệ Thống > Quản Trị). Thêm mới khái niệm "Cấp Phê Duyệt Cuối Cùng"
+(`submissionApprovalLevels`/`contractApprovalLevels`, trước đây thuần hằng
+số client/server) — mỗi cấp gán `visibleGroupIds`/`lockedGroupIds` quyết
+định nhóm nào hiện ra để chọn thêm/nhóm nào bắt buộc, cũng admin tự đổi
+tên/thêm/xoá được (trừ cấp mặc định hệ thống "Phê duyệt khác" không xoá
+được, đảm bảo luôn có cấp dự phòng).
+
+**File chính đã sửa**: `defaults.js` (shape mới, giữ hành vi mặc định cũ),
+`seedDefaults.js` (migrate 1 lần dữ liệu cũ sang shape mới, không mất
+thành viên đã gán), `lib/createValidation.js` (đọc động từ AppData thay
+vì hằng số hardcode), `lib/workflowEngine.js`, `core.js`/
+`module-vanbantrinh.js`/`module-hopdong.js` (mirror client), viết lại UI
+`module-admin-submissiongroups.js` thành 2 bảng (Nhóm + Cấp Phê Duyệt
+Cuối Cùng).
+
+Cập nhật fixture cho 12 file test dùng shape cũ; full regression xác nhận
+không phát sinh hồi quy mới. Không đổi `schema.sql`/biến môi trường.
+
+## v23.47 (2026-09-18): Quy Trình Hỗn Hợp — ô Chức Danh lọc hỗn hợp cả chức danh HO lẫn Siêu Thị
+
+Ô "Người / Chức Danh" (Kiểu "Chức danh") ở cấu hình Quy Trình Hỗn Hợp
+trước đây chỉ gõ-tìm được `DB.storeJobTitles`, không thấy chức danh HO —
+chặn đúng kịch bản người dùng nêu: "Phó TGĐ ở HO duyệt Bước 3 cho đơn Siêu
+Thị giá trị >100tr". Gộp thêm `DB.jobTitles` vào nguồn gợi ý, nhãn gắn hậu
+tố nguồn để phân biệt khi trùng tên, thêm badge nguồn cho dòng đã lưu.
+Không đổi cơ chế khớp người duyệt phía server (vẫn so phẳng
+`user.jobTitle`).
+
+## v23.46 (2026-09-18): Thêm Quy Trình Hỗn Hợp — cấu hình linh động người duyệt Đặt Hàng Tại Siêu Thị
+
+Thay HẲN cơ chế tự khớp siêu thị cũ (`filterOperationOrderStoreApprovers()`,
+hardcode 1 chức danh kiểu "Giám Đốc Siêu Thị" cho Bước 1) bằng 1 sub-tab
+quản trị mới "⚙️ Quy Trình Hỗn Hợp": mỗi dòng cấu hình Bước + Kiểu (Chức
+danh/Người cụ thể) + Siêu Thị Phụ Trách (trống = mặc định mọi siêu thị, có
+giá trị = ngoại lệ) — nhiều dòng khớp cùng 1 (bước, siêu thị) HỢP LẠI
+(union) thay vì loại trừ nhau. Số bước vẫn lấy từ màn Quy Trình & Phê
+Duyệt cũ theo mức giá trị đơn hàng, chỉ nguồn người duyệt đổi. Sửa kèm 1
+bug: filter "Quyền Phê Duyệt Đặt Hàng Siêu Thị" đọc nhầm `DB.depts` thay
+vì `DB.stores`.
+
+## v23.45 (2026-09-18): Đo thời gian tải initDatabase()/GET /api/data (chẩn đoán, chưa đổi hành vi)
+
+Bước đầu điều tra phản hồi "màn hình load có vẻ lâu sau đăng nhập" — TẠM
+THỜI chỉ log ra console (client, mọi lần) và pm2 log (server, chỉ khi tổng
+thời gian xử lý > 300ms, tránh spam log ở các lượt cache-hit), KHÔNG đổi
+hành vi/UX gì cho người dùng ở bản này. Mục đích: xác định đúng phần nào
+chiếm nhiều thời gian nhất (mạng+server vs JSON.parse vs gán `DB.*` phía
+client; đọc cache AppData vs 15 truy vấn con song song vs lọc quyền phía
+server) bằng số đo THẬT trên môi trường thật, trước khi quyết định hướng
+tối ưu (VD tách `initDatabase()` thành 2 lượt tải).
+
+Sau khi deploy: đăng nhập vài lần trên server thật rồi xem dòng "⏱️ GET
+/api/data" trong pm2 log + dòng "⏱️ initDatabase()" trong Console trình
+duyệt (F12) để có số liệu thật.
+
+## v23.44 (2026-09-18): Mua Hàng — thêm Nhập/Xuất dữ liệu mua hàng thủ công cạnh Đồng Bộ DSmart
+
+Theo yêu cầu người dùng: bổ sung phương án THAY THẾ khi DSmart tạm không
+sẵn sàng hoặc cần thêm tay vài giao dịch lẻ — "Tải File Mẫu" (Excel đúng
+khuôn cột Mã NCC/Mã Siêu Thị/Định Dạng/Mã Ngành Hàng/Ngày Mua/Số Tiền/
+Hàng Trả Lại), "Nhập File" (ghi thẳng vào `dbo.VendorPurchaseTransactions`
+với `SourceSystem='MANUAL'`, cùng cách xử lý dữ liệu như POST /sync của
+DSmart), "Xuất File" (xuất lại dữ liệu đang có theo khoảng ngày, tối đa
+5000 dòng, đúng khuôn cột file mẫu).
+
+Dòng nhập tay tự sinh 1 khoá dedup ổn định (hash các trường nghiệp vụ then
+chốt) — tận dụng UNIQUE INDEX `(SourceSystem, SourceRefId)` đã có sẵn, lỡ
+tải trùng nguyên 1 file cũ lên lần nữa không tạo double-count giao dịch.
+Dòng lỗi (thiếu trường bắt buộc/không hợp lệ) bị bỏ qua nhưng KHÔNG chặn
+cả file. Nhật Ký Đồng Bộ thêm cột "Nguồn" (🔄 DSmart / 📤 Thủ công).
+
+**File mới**: `lib/purchasingManualImport.js` (đọc qua `lib/xlsxSafeRead.js`
+chống zip-bomb, cùng khuôn `lib/operationImport.js`). Không cần đổi
+`schema.sql`/`.env` (dùng lại bảng/biến sẵn có).
+
+## v23.43 (2026-09-18): Sửa lại Mua Hàng — vẫn là dropdown TOP-LEVEL riêng, đặt ngay dưới Vận Hành
+
+Bản v23.41 hiểu sai yêu cầu người dùng — gộp 2 sub-item BAS/Báo Cáo của
+Mua Hàng vào BÊN TRONG dropdown Vận Hành. Người dùng phản hồi (kèm ảnh
+chụp màn hình): muốn Mua Hàng vẫn là module riêng, chỉ đặt VỊ TRÍ ngay
+dưới Vận Hành trong sidebar — bấm vào Mua Hàng tự mở dropdown riêng của
+nó gồm 2 mục BAS/Báo Cáo, đúng khuôn dropdown Vận Hành/Hỗ Trợ IT đang có
+(KHÔNG lồng vào dropdown Vận Hành).
+
+Revert `updateVanHanhNavVisibility()` về nguyên bản, tạo
+`#muaHangNavWrap`/`#muaHangDropdownPanel` riêng (own toggle/close/
+outside-click). Đã chụp demo gửi người dùng xác nhận trước khi merge.
+
+## v23.42 (2026-09-18): Fix crash ERR_ERL_KEY_GEN_IPV6 — 3 rate-limiter thiếu bọc ipKeyGenerator()
+
+**Lỗi nghiêm trọng đã vá**: server sập ngay khi khởi động (`require('./routes/employeeProfile')`
+ở `server.js` gọi `rateLimit({...})` ở module scope, throw ngay lập tức) —
+`express-rate-limit` v8 bắt buộc mọi `keyGenerator` tuỳ biến có fallback về
+`req.ip` phải bọc qua `ipKeyGenerator()` để chuẩn hoá đúng IPv4/IPv6, tránh
+1 địa chỉ IPv6 có nhiều dạng biểu diễn lách qua giới hạn.
+
+`routes/reports.js`, `routes/adminExport.js`, `routes/employeeProfile.js`
+vẫn dùng pattern cũ `req.freshUser?.username || req.ip` (thiếu bọc) trong
+khi `server.js`/`routes/purchasing.js` đã dùng đúng `ipKeyGenerator(req.ip)`
+— sửa lại 3 file này theo đúng pattern có sẵn, verify bằng repro trực tiếp
+(throw trước khi sửa, `next()` chạy bình thường sau khi sửa).
+
+## v23.41 (2026-09-18): Dời Mua Hàng vào dropdown Vận Hành, đổi icon, tách 2 mục sidebar BAS/Báo Cáo
+
+*(Bị revert lại ở v23.43 ngay sau đó do hiểu sai yêu cầu — xem ghi chú ở
+mục v23.43 phía trên; giữ lại mục này để đủ lịch sử.)* Mua Hàng là mua
+hàng tập trung cho toàn chuỗi siêu thị — gộp vào cùng nhóm điều hướng với
+Vận Hành (đúng khuôn đã dùng cho Checklist Đánh Giá Siêu Thị: module ĐỘC
+LẬP hoàn toàn về dữ liệu/quyền/route, chỉ gộp chung vị trí sidebar). Bỏ
+nút top-level riêng (icon 🛒 dễ nhầm với "🛒 Mua Bán" của Văn Phòng Tổng
+Hợp), thay bằng 2 mục con trong `#vanHanhDropdownPanel`.
+
+## v23.40 (2026-09-18): Gỡ bỏ hoàn toàn quy trình QLDA Mở Mới/Sửa Chữa Siêu Thị khỏi màn cấu hình
+
+2 luồng "Siêu Thị" (Mở Mới/Sửa Chữa) không có bước phê duyệt nào ở module
+Vận Hành — logic phê duyệt phía server đã được gỡ từ trước, nhưng 2 entry
+cấu hình trên màn Quy Trình & Phê Duyệt vẫn còn tồn tại như UI chết (bấm
+vào không có tác dụng gì). Xoá luôn 2 entry này khỏi `WF_MODULE_CONFIG`,
+2 nút tab tương ứng, key `operationStoreOpenDeptWorkflows`/
+`operationRepairDeptWorkflows` khỏi `defaults.js` (tự động loại khỏi
+`VALID_KEYS`), `ADMIN_ONLY_KEYS`, `DEPT_WORKFLOW_MAP_KEYS`.
+
+## v23.39 (2026-09-18): Vá 7 lỗ hổng/vấn đề Trung bình + Thấp phát hiện ở đợt rà soát chuyên sâu upload 10/2026
+
+Tiếp nối đợt rà soát upload toàn hệ thống (v23.38 đã vá 4 lỗi Cao), vá
+tiếp nhóm Trung bình/Thấp:
+- Thêm `assertPayloadFileUrlsOwnedByUser()` cho **11 route SỬA hồ sơ** còn
+  thiếu (contracts edit/upload-signed, officeReqs upload-signed,
+  laborContracts add-amendment, hr-profile set-position, docs/submissions/
+  reportEntries update, paymentRequests edit, itPriceApprovals submit-
+  supplement, hrProcesses attachments) — trước đây chỉ kiểm định dạng URL,
+  không xác minh người sửa có thật sự vừa tải file mới lên hay không.
+- Gộp **12 rate-limiter upload độc lập** (mỗi route tự `new` 1 instance,
+  giới hạn 30/10 phút không thực sự áp dụng toàn hệ thống) thành 1 module
+  dùng chung `lib/uploadRateLimiter.js`.
+- Tách `moduleKey` `'internalImage'` khỏi `'internal'` cho banner tin
+  tuyển dụng + ảnh tài liệu Truyền Thông Nội Bộ, tránh đụng độ với cấu
+  hình "Loại Tệp Cho Phép" (chỉ .pdf/.docx/.xlsx) của `'internal'`.
+- Sửa 2 route Excel import (budgetLinesImport, checklistImport) còn dùng
+  `Error`/`err.message` trần thay vì `HttpError`/`sendCatchError`.
+- Xác nhận `recruitmentJobs.bannerUrl` fail-open là có chủ đích (banner
+  quảng bá, không nhạy cảm); bổ sung `accept=""` cho 5 ô chọn tệp thiếu.
+- Chặn double-submit: khoá tạm phần tử vừa bấm trong lúc thao tác async
+  đang chạy.
+- Đổi `findOwningRecord()` (`lib/fileAuthz.js`, chạy ở mọi request
+  `/uploads`) sang dùng cache đã có sẵn thay vì quét thẳng 21+ collection
+  mỗi lần — giảm N+1 cho ảnh đại diện/logo.
+
+Kèm test mới `tests/test-edit-file-ownership-batch2.js` (45 kịch bản).
+
+## v23.38 (2026-09-18): Vá 4 lỗ hổng Cao "giả mạo quyền sở hữu file" phát hiện ở đợt rà soát upload toàn hệ thống (6 agent song song)
+
+Đợt rà soát chuyên sâu riêng cho logic upload file (6 agent song song, phủ
+tuyến upload chính, ownership lúc tạo/sửa hồ sơ, quyền xem/tải file, job
+dọn file mồ côi, luồng nhiều file, client-side wiring) phát hiện 18 vấn đề
+— vá 4 lỗi mức **Cao** theo yêu cầu người dùng, nhóm Trung bình/Thấp để
+đợt sau (đã vá ở v23.39):
+
+- `POST /api/checklist/submissions/:id/attachments`: trước đây chỉ xác
+  minh đúng khuôn `/uploads/<tên-file>`, không xác minh người gọi có thật
+  sự tải ảnh minh chứng đó lên hay không — cho phép "nhận vơ" ảnh của
+  người khác vào bài checklist của mình.
+- `routes/priceFile.js` (parse-file + master-list/parse-file) và
+  `routes/vppCatalog.js` (parse-catalog): 2 route này LƯU FILE THẬT ra
+  đĩa (khác các route parse-only khác đều xoá sau khi đọc) nhưng chưa
+  từng ghi nhận chủ sở hữu vào `dbo.UploadedFiles` — fileUrl trả về luôn
+  bị coi "không rõ chủ, cho qua" khi gắn vào hồ sơ.
+- `POST /api/records/laborContracts/:id/edit` và
+  `POST /api/records/itServiceRenewals/:id/edit`: field `fileUrl` trước
+  đây KHÔNG được xác minh gì cả (mất cả bước kiểm đúng khuôn URL, mở lại
+  nguy cơ scheme `javascript:`).
+
+Full regression 168 file test (chỉ 4 lỗi môi trường không liên quan, đã
+xác nhận từ trước). Không đổi `schema.sql`/env/`dependencies`.
+
+## v23.37 (2026-09-17): Sửa nội dung sai ở Nghiệp Vụ > Hành Chính > "Giấy Phép" (trước ghi nhầm "Bản Quyền Phần Mềm")
+
+Mục nav + tài liệu tham khảo (`module-nghiepvu.js`, key `'license'`) trước
+đây mô tả 1 quy trình mua/cấp phát bản quyền phần mềm cho người dùng cuối
+(Kỳ mua → Đăng ký mua → Phát hành → Phân bổ/Cấp phát) — quy trình này
+**KHÔNG tồn tại** trong hệ thống. Nghiệp vụ THẬT của module (tải lên Nhập
+mới/Cập nhật thêm phiên bản → duyệt → sau khi duyệt tự theo dõi hiệu lực
+theo Ngày hết hạn) đã bị mô tả sai hoàn toàn. Đổi nhãn nav "Bản Quyền Phần
+Mềm" → "Giấy Phép" (icon 🔑 → 📜), viết lại toàn bộ sơ đồ quy trình + ghi
+chú cho đúng nghiệp vụ thật. Đã xác nhận qua ảnh chụp màn hình người dùng
+gửi + kiểm tra trực quan Playwright sau khi sửa.
+
+## v23.36 (2026-09-17): Vá 8 lỗi còn lại đợt rà soát chuyên sâu 10/2026 (findings #4,7-11,14,15)
+
+Hoàn tất toàn bộ 15 lỗi phát hiện từ đợt rà soát chuyên sâu (5 agent song
+song), tiếp nối bản trước đã vá #1-3,5,6,12,13:
+- **#4 (Cao)**: `operationOrders` race condition trùng Số Đơn NCC — thêm
+  `getLockKey` theo `orderLocationType+poNumber`.
+- **#7 (Cao)**: "Kiểm Tra Nhân Sự Cũ" giờ chặn CỨNG server-side (không còn
+  chỉ advisory) trùng CCCD/CMND, áp dụng cả tạo tay lẫn Nhập Excel.
+- **#8 (Cao)**: `laborContracts` delete route đổi từ cờ admin chung sang
+  đúng `hrContractManage`.
+- **#9 (Trung bình)**: dsmart16 sync job thêm cờ khoá cross-process chống
+  cron job và nút "Đồng Bộ Ngay" chạy chồng nhau gửi trùng đơn hàng.
+- **#10 (Trung bình)**: checklist submissions delete (route mồ côi) thêm
+  state gating — chỉ xoá được bài còn DRAFT.
+- **#11 (Trung bình)**: cảnh báo "chưa có người duyệt khớp siêu thị" khi
+  tạo đơn STORE mà filter theo siêu thị lọc rỗng approver.
+- **#14 (Trung bình)**: `laborContracts` thêm `getLockKey` theo
+  `employeeCode` chống sinh trùng mã hợp đồng khi tạo đồng thời.
+- **#15 (Thấp)**: dsmart16 SSRF guard kiểm tra lại DNS trước MỖI request
+  trong batch thay vì chỉ 1 lần đầu batch.
+
+Full regression 165 file test. Cập nhật `Huong-dan-nghiep-vu.md` cho 3
+thay đổi có tác động nghiệp vụ (#7, #8, #11).
+
+## v23.35 (2026-09-17): Thêm Sơ Đồ Kiến Trúc Hệ Thống vào Nghiệp Vụ (chỉ Quản Trị Viên xem được)
+
+Mục mới "🗺️ Sơ Đồ Kiến Trúc Hệ Thống" (nhóm "Hệ Thống", cuối danh sách
+Nghiệp Vụ) vẽ toàn cảnh Trình Duyệt (SPA) ↔ Server Node.js/Express (PM2
+cluster) ↔ SQL Server + ổ đĩa cục bộ, cùng 2 điểm tích hợp hệ thống ngoài
+đang có thật: Máy Chủ SMTP (gửi email/OTP) và 2 luồng DSmart tách biệt
+(DSmart API kéo dữ liệu Chiết Khấu/Thưởng NCC vào cho Mua Hàng > BAS,
+dsmart16 đẩy dữ liệu Đơn Hàng ra ngoài cho Vận Hành). Chỉ `perms.admin`
+xem được — nội dung lộ chi tiết hạ tầng, không phải nghiệp vụ business
+thường.
+
+## v23.34 (2026-09-17): Duyệt Đặt Hàng Tại Siêu Thị tự khớp đúng siêu thị + nút thêm nhanh Siêu Thị ở form Người Dùng
+
+Approver cấu hình theo mức giá trị (PEOPLE hoặc POSITION mode, kể cả chức
+danh không gắn siêu thị cụ thể như "Giám Đốc" áp dụng chung) được lọc lại
+tự động chỉ giữ đúng người có dept (hoặc Vị Trí Kiêm Nhiệm) khớp với siêu
+thị của đơn hàng đang xét — "siêu thị nào tự duyệt siêu thị đó", nhận biết
+hoàn toàn qua phân quyền phẳng (jobTitle/dept), không đọc/phụ thuộc Cơ Cấu
+Tổ Chức. Đặt Hàng Tại HO không có khái niệm siêu thị nên giữ nguyên.
+*(Cơ chế này bị THAY HẲN ở v23.46 bằng "Quy Trình Hỗn Hợp" sau khi người
+dùng muốn cấu hình linh động hơn — xem mục v23.46 phía trên.)*
+
+Form Người Dùng: thêm nút "+" cạnh ô Vị Trí = Siêu Thị để thêm nhanh siêu
+thị mới vào danh mục ngay tại form.
+
+## v23.33 (2026-09-17): Module Mua Hàng > BAS Giai Đoạn 1
+
+Ra mắt module "Mua Hàng — Cơ Sở Tính Chiết Khấu/Thưởng NCC" (BAS Giai Đoạn
+1): quản lý Nhà Cung Cấp + Điều Khoản Chiết Khấu/Thưởng, đồng bộ dữ liệu
+mua hàng thực tế từ DSmart, tính ƯỚC TÍNH số tiền chiết khấu theo bậc
+thang đã cấu hình (dừng ở mức ước tính — chưa có Sổ Cái đối chiếu/phê
+duyệt chính thức với NCC, để dành Giai đoạn 2-3). Đã xác minh: 14/14 test
+riêng (`test-muahang-permtree.js`) pass, 11/11 kịch bản demo pass + ảnh
+chụp thật, CSP compliant, routes gác quyền đầy đủ (OWASP A01), DSmart
+config chỉ đọc từ `.env` server-side (chống SSRF, OWASP A10). Regression
+158 file test-*.js: chỉ 4 lỗi có sẵn từ trước (không liên quan).
+
+## v23.32 (2026-09-17): Đồng bộ Huong-dan-nghiep-vu.md với đợt đổi nhãn Vận Hành/QLDA
+
+Đồng bộ tài liệu với đợt đổi nhãn Vận Hành/QLDA + tách quyền Duyệt Nhập/
+Hủy Đơn Hàng HO/Siêu Thị (bản trước) — sửa 4 chỗ còn ghi "QLDA" cho nhãn
+Đơn Hàng/nhóm Báo Cáo/khối phân quyền 22, thêm đoạn giải thích quy ước đặt
+tên sidebar mới, cập nhật mô tả `operationOrderReceiptManage` thành 2
+field `operationOrderReceiptManageHO`/`operationOrderReceiptManageStore`.
+
+## v23.31 (2026-09-17): Chống trùng lặp Excel import cho 8 module
+
+Bổ sung mô tả đầy đủ cơ chế chống trùng lặp Excel import (8 module: Hồ Sơ
+Nhân Sự, Người Dùng, Ngân Sách x2, Checklist, Ngân Hàng Câu Hỏi, Vận Hành
+x2, Kế Hoạch Đào Tạo) vào `Huong-dan-nghiep-vu.md` — khoá so trùng theo
+từng module, 2 kiểu điều khiển (checkbox include/exclude vs chọn Bỏ qua/
+Ghi đè).
+
+## v23.30 (2026-09-17): Chia nhỏ quyền Hỗ Trợ IT thành 7 cờ riêng (Đề xuất/Hỗ trợ giá/Gia hạn/Từ chối khẩn cấp)
+
+Trước đây 3 quyền gộp (`itPriceProposeCreate`/`itManage`/
+`itPriceEmergencyRejectApprove`) gây khó khăn khi 1 người chỉ phụ trách 1
+mảng cụ thể. Tách thành 7 quyền: `itPriceProposeCreateWholesale/Retail`,
+`itManage` (thu hẹp còn ticket), `itPriceSupport` (áp giá sau duyệt + xem
+toàn bộ), `itServiceRenewalManage`, `itPriceEmergencyRejectApproveWholesale/Retail`.
+Việc DUYỆT giá thật sự không đổi, vẫn theo cấu hình phòng ban/mức
+Margin-Chiết Khấu. Có migrate 1 lần server-side, không mất quyền tài
+khoản cũ. Cập nhật toàn bộ client/server liên quan + docs nghiệp vụ +
+test.
 
 ## v23.29 (2026-09-17): "Xem chéo" Báo Cáo Checklist Đánh Giá Siêu Thị (VSATTP) qua đúng màn Báo Cáo tổng hợp
 
