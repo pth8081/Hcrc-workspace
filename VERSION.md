@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**23.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.55 (2026-09-19): Nghiệp Vụ — viết "🛠️ Cách Thao Tác" cho toàn bộ ~30 mục còn lại
+
+Tiếp nối v23.54 (làm mẫu 3 module Đăng Ký Xe/Ngân Sách 2.0/Đào Tạo > Lớp Học,
+người dùng duyệt cách trình bày) — viết tiếp `steps` cho TOÀN BỘ các mục còn
+lại trong `NGHIEP_VU_DOCS` và `NGHIEP_VU_DAOTAO_CONTENT`: Tài Liệu, Văn bản
+trình, Hợp Đồng, Biên Bản Họp, Công Việc, Báo Cáo Định Kỳ, Đặt Phòng Họp, Văn
+Phòng Phẩm, Đồng Phục, Giấy Phép, Mua Bán/Sửa Chữa/Thanh Toán, Đơn Hàng & Mở
+Mới/Sửa Chữa Siêu Thị, Checklist Đánh Giá Siêu Thị, Cơ Cấu Tổ Chức, Onboarding/
+Offboarding, Hồ Sơ Nhân Sự, Hợp Đồng Lao Động, Báo Cáo (Nhân Sự), Công/Phép,
+Lương, Phản Hồi Ý Kiến (HCRC Đồng Hành), Hỗ Trợ Yêu Cầu (Ticket), Phê Duyệt
+Giá Bán, BAS (Mua Hàng), cùng 5 khu vực còn lại của Đào Tạo (Chương Trình, Kế
+Hoạch Đào Tạo, Kho Tài Liệu, Ngân Hàng Câu Hỏi, Lộ Trình Tân Binh, Lộ Trình
+Thăng Tiến) — tổng cộng 33 mục có "Cách Thao Tác" sau đợt này (30 mục mới +
+3 mục mẫu của v23.54). Chủ động BỎ QUA 2 mục thuần xem/sơ đồ tham khảo, không
+có thao tác thật để hướng dẫn: "🗺️ Sơ Đồ Kiến Trúc Hệ Thống" (admin-only, chỉ
+xem) và "🧭 Tổng Quan" của Đào Tạo (sơ đồ quan hệ tổng quan giữa các khu vực
+con, không phải 1 quy trình thao tác).
+
+Toàn bộ nội dung bước đối chiếu ĐÚNG field id/tên tab/nhãn nút thật trong HTML/
+JS hiện tại tại thời điểm viết (không đoán tay) — xác nhận qua ảnh chụp
+Chromium thật cho nhiều mục đại diện (BAS, Công/Phép, Văn bản trình, Cơ Cấu Tổ
+Chức). Không thêm route/bảng/quyền mới — thuần nội dung tham khảo tĩnh.
+
+**File đã sửa**: `server/public/js/module-nghiepvu.js` (chỉ thêm field
+`steps` vào các entry đã có sẵn, không đổi cấu trúc/hành vi nào khác).
+
+**Deploy impact**: không cần thao tác gì thêm ngoài copy code + `pm2 restart`.
+
+Đã kiểm thử: `test-nghiepvu.js` 86/86, `test-nghiepvu-csp.js` 6/6,
+`test-nghiepvu-click.js` 5/5 — tất cả PASS, không hồi quy.
+
 
 ## v23.54 (2026-09-19): Nghiệp Vụ — thêm khối "🛠️ Cách Thao Tác" (hướng dẫn click-by-click), làm mẫu 3 module
 

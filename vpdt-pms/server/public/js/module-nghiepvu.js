@@ -300,6 +300,11 @@ const NGHIEP_VU_DOCS = {
       { label: 'Chờ duyệt', sub: 'Duyệt theo cấu hình từng phòng ban', kind: 'decision' },
       { label: 'Đã duyệt', sub: 'Có thể tạo phiên bản mới', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Duyệt xong', rejectLabel: 'Từ chối', rejectBox: { label: 'Trả về sửa', sub: 'Về "Sửa & Gửi Lại"' }, loopBackToIndex: 1, loopBackLabel: 'Sửa & gửi lại → chờ duyệt' } },
+    steps: [
+      { role: 'Người tải lên', text: 'vào tab <b>📂 Tài liệu</b> → điền form "📄 Tải Lên Tài Liệu Mới": chọn Loại thao tác "➕ Nhập mới", Phòng Ban Trình, Phân Loại (mã tài liệu tự sinh theo 2 mục này), Tên/Tiêu Đề, Tệp Tài Liệu, Trích Lục/Tóm Tắt Nội Dung → bấm <b>"Gửi phê duyệt"</b>.' },
+      { role: 'Người duyệt', text: 'vào mục <b>✅ Phê Duyệt</b> (sidebar, ngay dưới Trang chủ) → tìm đúng hồ sơ Tài Liệu đang chờ mình duyệt (theo cấu hình luồng duyệt của phòng ban) → bấm Duyệt hoặc Từ chối.' },
+      { role: 'Người tải lên', text: 'muốn thêm phiên bản mới cho tài liệu đã có (không xoá bản cũ): chọn Loại thao tác "🔄 Cập nhật (thêm version cho tài liệu đã có)" → chọn đúng tài liệu ở "Chọn Mã Tài Liệu Cần Cập Nhật" (chỉ hiện tài liệu đã duyệt xong) → tải file mới → gửi lại như bước 1.' },
+    ],
     footer: { left: [
       { label: 'Ai xem được gì', text: 'quản trị viên xem được tất cả; người tải tài liệu lên luôn xem được bài của mình dù đang ở bước nào; một số người chỉ được xem bản đã duyệt, một số khác chỉ xem bản chưa duyệt — 2 quyền này tách biệt, không cộng dồn; người phê duyệt xem đúng hồ sơ thuộc phòng ban mình phụ trách.' },
       { label: 'Tạo phiên bản mới', text: 'không tạo được phiên bản mới nếu bản mới nhất đang chờ duyệt hoặc còn là bản nháp; nếu bản mới nhất bị từ chối thì vẫn tạo phiên bản mới bình thường.' },
@@ -315,6 +320,11 @@ const NGHIEP_VU_DOCS = {
       { label: 'Chờ duyệt', sub: 'Duyệt tuần tự từng lớp', kind: 'decision' },
       { label: 'Đã duyệt', sub: 'Ban hành / lưu trữ', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Đủ các lớp', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Bắt buộc nêu lý do' }, loopBackToIndex: 0, loopBackLabel: 'Sửa & trình lại' } },
+    steps: [
+      { role: 'Người trình', text: 'vào mục <b>📜 Văn bản trình</b> (sidebar) → điền form: Phòng Ban Trình, Loại Tờ Trình, Cấp Phê Duyệt Cuối Cùng, Tên/Trích Yếu Tờ Trình, Độ Khẩn, Tờ Trình (file) → nếu cần chọn thêm Nhóm Phê Duyệt bổ sung/Xin Ý Kiến thì bấm ô "Phê Duyệt" chọn cụ thể từng nhóm → điền Nội Dung Trình Chi Tiết → bấm <b>"Gửi phê duyệt"</b>.' },
+      { text: 'Muốn xem trước cả chuỗi các bước duyệt sẽ đi qua (bao gồm cả nhóm bổ sung vừa chọn) trước khi gửi: bấm <b>"🔍 Xem Quy Trình"</b> ngay trên form.' },
+      { role: 'Người duyệt', text: 'vào mục <b>✅ Phê Duyệt</b> (sidebar) → tìm đúng hồ sơ đang chờ mình duyệt ở đúng lớp hiện tại → bấm Duyệt hoặc Từ chối (bắt buộc nêu lý do khi từ chối) — duyệt xong lớp này mới chuyển sang lớp kế tiếp.' },
+    ],
     footer: { left: [
       { label: 'Lớp duyệt độc lập', text: 'quy trình gốc theo phòng ban có sẵn danh sách người duyệt riêng từng lớp — duyệt xong lớp trước mới hiện ra lớp sau, không thể "duyệt tắt" bỏ qua lớp nào.' },
       { label: 'Nhóm Phê Duyệt bổ sung (10/2026)', text: 'ngoài quy trình gốc, người trình chọn 1 "Cấp Phê Duyệt Cuối Cùng" để xác định những "Nhóm Phê Duyệt" nào được phép chọn thêm — nhóm bị cấp đó khoá thì tự bắt buộc (tick sẵn, không bỏ được), nhóm còn lại tự chọn tuỳ ý. Mỗi nhóm được chọn nối thêm ĐÚNG 1 bước duyệt vào CUỐI quy trình gốc (không thay thế bước nào). Quản lý danh sách nhóm/cấp ở Hệ Thống → Quản Trị → Quản Lý Nhóm Phê Duyệt Trình.' },
@@ -333,6 +343,11 @@ const NGHIEP_VU_DOCS = {
       { label: 'Hết hạn / Thanh lý', sub: 'Kết thúc hiệu lực' },
     ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Trả về sửa', sub: 'Sửa lại điều khoản' }, loopBackToIndex: 0 },
       reference: { atIndex: 0, label: 'Danh Mục Đối Tác', sub: 'Loại hợp đồng, đơn vị' } },
+    steps: [
+      { role: 'Người soạn hợp đồng', text: 'vào mục 📄 Hợp Đồng (sidebar) → tab <b>"⏳ Phê Duyệt"</b> → chọn Loại Thao Tác (Tạo Mới hoặc Bổ Sung Phụ Lục cho hợp đồng đã có) → điền Phòng Ban Quản Lý, Loại Pháp Lý, Cấp Phê Duyệt Cuối Cùng, Tên Hợp Đồng, Đối Tác/Bên Ký Kết, Giá Trị Hợp Đồng, Ngày Hiệu Lực → bấm <b>"Gửi phê duyệt"</b>.' },
+      { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ Hợp Đồng đang chờ ở đúng lớp hiện tại → bấm Duyệt hoặc Từ chối.' },
+      { text: 'Sau khi duyệt xong, hồ sơ tự chuyển sang tab <b>"📄 Quản Lý Hợp Đồng & Giấy Phép"</b> để theo dõi hiệu lực. Tab này cũng dùng để nhập tay hồ sơ ĐÃ KÝ sẵn ngoài hệ thống (tự APPROVED ngay, không qua hàng chờ) — không phải đường tắt cho hồ sơ cần trình duyệt thật.' },
+    ],
     footer: { left: [
       { label: 'Cảnh báo hết hạn', text: 'hợp đồng đang hiệu lực mà gần tới ngày hết hạn sẽ được nhắc trước, để chủ động gia hạn hoặc thanh lý thay vì để hết hạn lúc nào không hay.' },
       { label: 'Nhóm Phê Duyệt bổ sung (10/2026)', text: 'cùng cơ chế với Văn Bản Trình — chọn 1 "Cấp Phê Duyệt Cuối Cùng" để xác định "Nhóm Phê Duyệt" nào bắt buộc/tuỳ chọn thêm, mỗi nhóm chọn nối thêm 1 bước duyệt vào CUỐI quy trình gốc theo phòng ban (không thay thế). KHÁC Văn Bản Trình: Hợp Đồng KHÔNG có loại nhóm "không chặn/Xin Ý Kiến" — mọi nhóm được chọn thêm đều là bước duyệt thật, không có kênh tham khảo song song.' },
@@ -348,6 +363,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Điểm danh + nội dung', sub: 'Ghi nhận thảo luận, quyết nghị' },
       { label: 'Chốt & lưu', sub: 'Sinh Công Việc cho đầu việc', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Người lập biên bản', text: 'vào mục 📝 Biên Bản Họp (sidebar) → điền form: Liên Kết Lịch Đặt Phòng Họp (tuỳ chọn), Chủ Đề/Tiêu Đề, Thời Gian Họp, Địa Điểm, Chủ Trì, Thư Ký, Nội Dung Biên Bản.' },
+      { text: 'Thêm Thành Phần Tham Dự: bấm "➕ Thêm Người Tham Dự" cho từng dòng, hoặc chọn 1 mẫu có sẵn ở "🗂️ Mẫu danh sách tham gia" rồi bấm "▶️ Áp Dụng" thay vì nhập lại từ đầu.' },
+      { text: 'Ghi Ý Kiến Chỉ Đạo: bấm "➕ Thêm Ý Kiến Chỉ Đạo" cho từng đầu việc — dòng nào gán sẵn "Người thực hiện" sẽ TỰ ĐỘNG tạo thành Công Việc ngay khi lưu.' },
+      { text: 'Bấm <b>"Lưu Biên Bản Họp"</b> để hoàn tất — không có bước phê duyệt, lưu xong là xong.' },
+    ],
     footer: { left: [
       { label: 'Quyền tạo', text: 'chỉ người được cấp quyền tạo biên bản họp mới thấy được form tạo — người khác chỉ xem nội dung.' },
     ], right: [
@@ -364,6 +385,13 @@ const NGHIEP_VU_DOCS = {
       { label: 'Cập nhật tiến độ', sub: 'Ghi chú nhiều lần, không cần đổi trạng thái' },
       { label: 'Hoàn thành', sub: 'Người nhận TỰ đóng — không ai duyệt lại', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Người giao việc', text: 'vào mục 📋 Công Việc (sidebar) → bấm <b>"➕ Giao Việc Thủ Công"</b> → điền tiêu đề, mô tả, người nhận, hạn hoàn thành → lưu — việc mới ở trạng thái "Chưa bắt đầu" (TODO).' },
+      { role: 'Người nhận việc', text: 'mở đúng việc của mình trong danh sách → bấm nhận việc để chuyển sang "Đang thực hiện" (DOING) → ghi chú cập nhật tiến độ nhiều lần trong lúc làm (không cần đổi trạng thái mỗi lần ghi chú).' },
+      { role: 'Người nhận việc', text: 'làm xong tự bấm đóng việc thành "Đã hoàn thành" (DONE) — không cần ai duyệt lại.' },
+      { role: 'Người nhận việc', text: 'cần dời hạn hoặc huỷ việc: bấm xin Gia Hạn/xin Huỷ trên đúng việc đó → chờ người giao việc Đồng ý/Từ chối (chưa có hiệu lực ngay khi xin, phải đợi duyệt).' },
+      { text: 'Lọc nhanh danh sách: dùng 3 ô "Lọc Theo Trạng Thái"/"Lọc Theo Nguồn Gốc"/"Từ Khóa Tìm Kiếm" ngay trên đầu danh sách — bấm "Đặt Lại Bộ Lọc" để xoá hết bộ lọc đang áp dụng.' },
+    ],
     footer: { left: [
       { label: 'Giao việc thay người khác', text: 'tạo/sửa (đổi tiêu đề, mô tả, hạn, người nhận) BẤT KỲ việc nào cần quyền quản lý công việc (hoặc admin); riêng "gán người nhận" cho 1 việc CHƯA có người nhận (VD việc tự sinh từ Văn Bản Trình) hẹp hơn — chỉ admin hoặc đúng người đã tạo/giao việc đó mới gán được, không dùng chung quyền Sửa. Nhân viên thường chỉ tự cập nhật tiến độ việc của mình.' },
       { label: 'Xin Gia Hạn / Xin Huỷ — phải được duyệt', text: 'người NHẬN việc xin gia hạn hoặc xin huỷ đều phải chờ người GIAO việc (hoặc admin) Đồng ý/Từ chối, chưa có hiệu lực ngay khi xin. Mỗi lần gia hạn ĐƯỢC DUYỆT (không phải lúc xin) cộng thêm cả "số lần gia hạn" lẫn "số lần trễ hạn" — hệ thống không tự tính trễ hạn theo ngày hệ thống, chỉ tăng khi có xin gia hạn được duyệt. Ngược lại, người GIAO việc (hoặc admin) huỷ trực tiếp thì có hiệu lực NGAY, không cần ai duyệt.' },
@@ -383,6 +411,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Nộp báo cáo', sub: 'Đúng hạn kỳ báo cáo' },
       { label: 'Tổng hợp & trình chiếu', sub: 'Gộp toàn bộ phòng ban', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Quản trị', text: 'mở mục 📅 Báo Cáo Định Kỳ (sidebar) → tab <b>"📅 Kỳ Báo Cáo"</b> → tạo kỳ mới (mẫu, tần suất, hạn chót) để mở đợt nhập cho các phòng ban.' },
+      { role: 'Người phụ trách phòng ban', text: 'ở tab <b>"📝 Nhập Báo Cáo"</b> → chọn kỳ báo cáo đang mở cho phòng ban mình → điền Tiêu Đề báo cáo → tải lên 1 hoặc nhiều file PDF (hệ thống tự ghép thành 1 file duy nhất, giữ nguyên định dạng từng trang) → bấm <b>"💾 Lưu Nháp"</b> để lưu tạm hoặc <b>"📤 Gửi Báo Cáo"</b> để nộp chính thức đúng hạn.' },
+      { role: 'Quản trị', text: 'tab <b>"🧩 Tổng Hợp"</b> → gộp báo cáo PDF của toàn bộ phòng ban đã nộp trong kỳ thành 1 bản trình chiếu chung.' },
+      { text: 'Xem lại bản đã gộp: tab <b>"📣 Đã Phát Hành"</b>.' },
+    ],
     footer: { left: [
       { label: 'Nhắc hạn', text: 'hệ thống tự nhắc các phòng ban chưa nộp khi gần tới hạn kỳ báo cáo, tránh thiếu số liệu lúc tổng hợp.' },
     ], right: [
@@ -397,6 +431,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Chờ duyệt', sub: 'Người có quyền duyệt xác nhận', kind: 'decision' },
       { label: 'Đã duyệt', sub: 'Sử dụng đúng lịch đã đặt', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Huỷ', sub: 'Người đặt tự huỷ, hoặc người quản lý phòng họp/admin huỷ bất kỳ lịch nào' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người đặt lịch', text: 'vào mục 📅 Đặt Phòng Họp (sidebar) → tab <b>"📝 Đăng Ký"</b> → điền form: Phòng Ban Đặt Lịch, Chọn Phòng Họp, Chủ Đề, Số Lượng Người Tham Dự, Thời Gian Bắt Đầu/Kết Thúc, Thiết Bị Hỗ Trợ Yêu Cầu, Nội Dung/Agenda → bấm <b>"Gửi phê duyệt"</b> (hệ thống tự chặn nếu trùng phòng + khung giờ với lịch đang chờ/đã duyệt khác).' },
+      { role: 'Người quản lý phòng họp', text: 'vẫn ở tab 📝 Đăng Ký, tìm phiếu đang chờ duyệt trong danh sách → bấm Duyệt hoặc Huỷ (quyền này duyệt được mọi phòng/phòng ban, không cần đúng phòng ban mình).' },
+      { text: 'Xem lịch trống/bận trực quan trước khi đặt: tab <b>"🗓️ Lịch Họp"</b>.' },
+      { text: 'Đặt sai giờ/phòng: không sửa được, phải Huỷ lịch đó rồi đăng ký lại từ đầu.' },
+    ],
     footer: { left: [
       { label: 'Chặn trùng lịch', text: 'chỉ chặn khi trùng ĐÚNG 1 phòng và khung giờ giao nhau — tính cả lịch đang "Chờ duyệt" lẫn "Đã duyệt" là đang chiếm chỗ (chặn ngay từ lúc đăng ký, không đợi tới lúc duyệt), chỉ bỏ qua lịch đã Huỷ; khoá theo tên phòng để 2 người bấm giữ cùng lúc không bao giờ trùng nhau.' },
       { label: 'Không có nút Sửa, chỉ Huỷ rồi đặt lại', text: 'đặt sai giờ/phòng thì phải Huỷ lịch đó rồi tạo lịch mới — không có chức năng chỉnh sửa lịch đã đặt.' },
@@ -444,6 +484,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Duyệt & cấp phát', sub: '', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Đủ hạn mức', rejectLabel: 'Vượt hạn mức', rejectBox: { label: 'Chặn gửi', sub: 'Không cho vượt mức' }, loopBackToIndex: 0, loopBackLabel: 'Giảm số lượng' },
       reference: { atIndex: 0, label: 'Danh Mục Mặt Hàng', sub: 'Đơn giá, hạn mức' } },
+    steps: [
+      { role: 'Người đăng ký', text: 'vào mục 🖇️ Văn Phòng Phẩm (sidebar) → tab <b>"📝 Đăng Ký"</b> → chọn kỳ đăng ký đang mở → tick chọn mặt hàng và nhập Số Lượng cho từng dòng cần (chỉ dòng nhập số lượng > 0 mới tính là đã chọn, có ô tìm nhanh theo tên mặt hàng) → theo dõi tổng tiền ở khung dưới bảng.' },
+      { text: 'Bấm "💾 Kết Thúc Chọn (Lưu Nháp)" để lưu tạm, sửa lại được sau; khi đã ưng thì bấm <b>"Gửi phê duyệt"</b> để gửi chính thức.' },
+      { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ VPP đang chờ → bấm Duyệt hoặc Từ chối, hoặc "Yêu Cầu Bổ Sung" để trả về Nháp cho người đăng ký sửa lại.' },
+      { role: 'Quản trị', text: 'tab <b>"📅 Kỳ Đăng Ký"</b> để mở/kết thúc từng kỳ; tab <b>"📊 Báo Cáo Tổng Hợp"</b> để xem tổng hợp toàn công ty theo kỳ.' },
+    ],
     footer: { left: [
       { label: 'Ngân sách theo phòng ban', text: 'quản trị có thể cấu hình mức riêng cho từng người, hoặc chặn theo tổng ngân sách cả phòng — 2 kiểu này không dùng cùng lúc cho 1 phòng ban. Cảnh báo LIVE ngay khi đang chọn mặt hàng nếu vượt phần còn lại, nhưng CHẶN THẬT chỉ xảy ra lúc bấm "Gửi phê duyệt" (tải lại số liệu mới nhất rồi mới chặn — server cũng tự kiểm tra lại lần nữa).' },
       { label: 'Không sửa trực tiếp, không có nút huỷ', text: 'đã gửi (Chờ duyệt) thì không tự sửa được — chỉ khi người duyệt bấm "Yêu Cầu Bổ Sung" mới đưa hồ sơ về Nháp để sửa lại rồi gửi lại; không có hành động huỷ/rút — hồ sơ Bị Từ Chối coi như kết thúc, muốn đăng ký lại thì tạo bản Nháp mới.' },
@@ -461,6 +507,13 @@ const NGHIEP_VU_DOCS = {
       { label: 'Siêu thị xác nhận đã nhận', sub: 'Chỉ làm được sau khi kỳ đã duyệt' },
       { label: 'Cấp phát cho nhân viên', sub: 'Nhân viên tự xác nhận đã nhận', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Từ chối', sub: 'QUYẾT ĐỊNH CUỐI CÙNG — kỳ này không làm lại được nữa' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Hành Chính', text: 'vào mục 👕 Đồng Phục (sidebar) → tab <b>"📦 Kỳ Cấp Phát"</b> → bấm "+ Thêm Siêu Thị" để phân bổ mặt hàng/size/số lượng cho từng siêu thị → bấm <b>"Tạo Kỳ Cấp Phát"</b>.' },
+      { role: 'Giám Đốc Siêu Thị', text: 'vào tab <b>"✅ Xác Nhận / Cấp Phát"</b> → mục "✅ Xác Nhận Nhận Đồng Phục Từ Hành Chính" → xác nhận đã nhận đúng số lượng kỳ vừa phân bổ cho siêu thị mình (chỉ làm được sau khi kỳ đã duyệt).' },
+      { role: 'Giám Đốc Siêu Thị', text: 'vẫn ở tab đó, mục "👕 Cấp Đồng Phục Cho Nhân Viên" → bấm "+ Thêm Mặt Hàng" chọn từng mặt hàng/size cấp cho nhân viên cụ thể → bấm <b>"Cấp Phát"</b>.' },
+      { role: 'Nhân viên', text: 'tự xác nhận đã nhận đồng phục ở Hồ Sơ Cá Nhân — bước này khép lại vòng cấp phát cho người đó.' },
+      { text: 'Xem tồn kho hiện tại: tab <b>"📊 Kho Đồng Phục"</b> (tự tính động, không lưu số liệu riêng); xem tổng quan toàn công ty: tab <b>"📈 Tổng Quan"</b>.' },
+    ],
     footer: { left: [
       { label: 'Mô hình đẩy xuống, không phải đăng ký', text: 'nhân viên KHÔNG tự đăng ký đồng phục — Hành Chính (quyền "uniformManage") phân bổ xuống từng siêu thị trước, Giám Đốc Siêu Thị (quyền "uniformStoreManage") xác nhận nhận hàng rồi mới cấp phát cho từng người; nhân viên chỉ tự xác nhận ĐÃ NHẬN (ở Hồ Sơ Cá Nhân), không tự chọn/yêu cầu được mặt hàng.' },
       { label: 'Theo đợt (Kỳ Cấp Phát)', text: 'mỗi kỳ tách riêng, mỗi siêu thị chỉ xuất hiện 1 lần/kỳ — không gộp lẫn số liệu giữa các kỳ khác nhau khi tra lịch sử. Từ chối 1 kỳ là quyết định cuối cùng, không sửa/gửi duyệt lại được kỳ đó.' },
@@ -478,6 +531,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đã duyệt', sub: 'Bắt đầu theo dõi hiệu lực', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'duyệt', rejectLabel: 'từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Nêu lý do' }, loopBackToIndex: 0, loopBackLabel: 'Tải lên lại' },
       reference: { atIndex: 0, label: 'Loại Giấy Phép', sub: 'Danh mục tự học từ giá trị mới gõ' } },
+    steps: [
+      { role: 'Người tải lên', text: 'vào mục 📜 Giấy Phép (sidebar) → điền form "📜 Tải Lên Giấy Phép": chọn Loại thao tác "➕ Nhập mới", Tên công ty chủ quản, Tên địa điểm, Tình trạng hoạt động, Tên/Loại Giấy Phép, Số giấy phép, Ngày cấp/Ngày hết hạn, Cơ quan cấp phép, tệp đính kèm → bấm gửi.' },
+      { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ Giấy Phép đang chờ → bấm Duyệt hoặc Từ chối (nêu lý do).' },
+      { role: 'Người tải lên', text: 'thêm phiên bản mới cho giấy phép đã có: chọn Loại thao tác "🔄 Cập nhật (thêm phiên bản cho giấy phép đã có)" → chọn đúng giấy phép ở "Chọn Giấy Phép Cần Cập Nhật" (chỉ hiện giấy phép mà phiên bản mới nhất không đang chờ duyệt) → gửi lại như bước 1 (mã tự sinh dạng &lt;mã gốc&gt;-V&lt;số thứ tự&gt;).' },
+      { text: 'Sau khi duyệt, hệ thống tự tính hiệu lực (Còn hiệu lực/Sắp hết hạn/Hết hạn) theo Ngày hết hạn — đánh dấu "Đang gia hạn"/"Đã thu hồi" trực tiếp trên giấy phép đã duyệt khi cần.' },
+    ],
     footer: { left: [
       { label: 'Cập nhật = thêm phiên bản mới', text: 'chọn "Cập nhật" để thêm 1 phiên bản mới cho giấy phép đã có (mã tự sinh dạng <mã gốc>-V<số thứ tự>) — chỉ thực hiện được khi phiên bản mới nhất KHÔNG đang chờ duyệt.' },
       { label: 'Hiệu lực tách biệt với duyệt', text: '"Đang gia hạn"/"Đã thu hồi" là trạng thái RIÊNG, chỉ đánh dấu được cho giấy phép ĐÃ duyệt và chưa bị thu hồi — không đụng tới lịch sử duyệt.' },
@@ -495,6 +554,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Tải Tài Liệu Ký', sub: 'Bắt buộc trước khi chuyển sang Thanh Toán', kind: 'approved' },
       { label: 'Thanh Toán', sub: 'Nháp → Chờ duyệt → Đã duyệt → Đã thanh toán' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối / Yêu cầu bổ sung', sub: 'Bổ sung → về Nháp sửa & gửi lại' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người đề xuất', text: 'vào mục 🗂️ Tổng Hợp (sidebar) → chọn tab <b>"🛒 Mua Bán"</b> hoặc <b>"🔧 Sửa Chữa"</b> → điền form: Phòng Ban Trình, Tên Hạng Mục, Số Lượng/Quy Mô, Dự Toán/Tổng Chi Phí, Đối Tác/Nhà Cung Cấp (Mua Sắm có thêm bảng hạng mục con để khai chi tiết từng tài sản) → gửi phê duyệt.' },
+      { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ Mua Sắm/Sửa Chữa đang chờ ở đúng phòng ban → bấm Duyệt, Từ chối, hoặc Yêu Cầu Bổ Sung (trả về Nháp cho người đề xuất sửa lại).' },
+      { role: 'Người đề xuất', text: 'sau khi duyệt xong, tải "Tài liệu ký" ngay trên đề xuất đó — bắt buộc phải có tài liệu này mới hiện được nút chuyển sang Thanh Toán.' },
+      { role: 'Người lập thanh toán', text: 'vào tab <b>"💰 Thanh Toán"</b> → mục <b>"➕ Tạo Mới"</b> → tạo đề nghị thanh toán từ đề xuất đã có Tài liệu ký (hoặc tạo thủ công), kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" → gửi duyệt.' },
+      { role: 'Người duyệt thanh toán (kế toán)', text: 'mục <b>"✅ Xác Nhận Đề Nghị Thanh Toán"</b> → Duyệt xong đợt chuyển "Đã duyệt" (đang chờ thanh toán) → xác nhận đã chi tiền để chuyển "Đã thanh toán" (khoá cứng, không sửa/xoá được nữa).' },
+      { text: 'Theo dõi/sửa các đợt thanh toán: mục "🗂️ Quản Lý Thanh Toán".' },
+    ],
     footer: { left: [
       { label: 'Hạng mục chi tiết — CHỈ ở Mua Sắm', text: 'phân hệ Mua Sắm có bảng hạng mục con (tên tài sản/model/ĐVT/số lượng/đơn giá/thành tiền tự tính); phân hệ Sửa Chữa KHÔNG dùng bảng hạng mục — chỉ 1 dòng tổng (số lượng/giá trị dự kiến/nhà cung cấp).' },
       { label: 'Thanh Toán: 5 trạng thái + chia đợt', text: 'Nháp (chưa gửi) → Chờ duyệt → (Cần bổ sung) → Đã duyệt (đang chờ thanh toán) → Đã thanh toán (khoá cứng, không sửa/xoá được nữa). Chia được nhiều đợt thanh toán, mỗi đợt có hạn riêng; tạo THỦ CÔNG (không từ Hợp Đồng/Office) với nhiều đợt thì MỖI đợt tách thành 1 hồ sơ riêng, tự đi hết quy trình duyệt/xác nhận độc lập.' },
@@ -538,6 +605,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Các mốc tiến độ', sub: 'Theo mẫu mốc đã cấu hình', kind: 'approved' },
       { label: 'Hoàn tất', sub: 'Đủ mốc bắt buộc' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: '' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người đề xuất', text: 'vào mục 📦 Vận Hành (sidebar) → tab <b>"🏬 QLDA"</b> → chọn "🏬 Mở mới" hoặc "🔧 Sửa chữa" → điền form đề xuất dự án → gửi phê duyệt.' },
+      { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ đang chờ → bấm Duyệt hoặc Từ chối.' },
+      { role: 'Người thực hiện dự án', text: 'sau khi duyệt, vào tab "📁 Danh mục đầu tư" xem các mốc tiến độ theo mẫu đã cấu hình → tab "🛠️ Thực hiện" cập nhật tiến độ từng mốc (kèm tệp đính kèm riêng, không ghi đè lịch sử).' },
+      { role: 'Người nghiệm thu', text: 'tab "✅ Nghiệm thu" → xác nhận hoàn tất từng mốc bắt buộc — đủ mốc thì dự án coi là hoàn tất.' },
+      { text: 'Xem tổng hợp tiến độ toàn bộ dự án: tab "📈 Báo cáo" — bấm vào số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu để mở nhanh đúng nhóm công việc đó.' },
+      { role: 'Người đặt hàng', text: 'luồng riêng — vào tab <b>"📦 Đơn Hàng"</b> → chọn "🏬 Đặt Hàng Tại Siêu Thị" hoặc "🏢 Đặt Hàng Tại HO" → tạo đơn → mục "🧾 Duyệt Nhập/Hủy Đơn Hàng" để duyệt nhập/huỷ đơn, không đi qua các mốc tiến độ dự án.' },
+    ],
     footer: { left: [
       { label: 'Lịch sử theo mốc', text: 'mỗi mốc tiến độ có lịch sử cập nhật và tệp đính kèm riêng — không bị ghi đè, xem lại được toàn bộ diễn biến của dự án.' },
       { label: '👁️ Xem Nhanh (9/2026)', text: 'ở tab Báo Cáo, bấm vào số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu của 1 hồ sơ để mở nhanh danh sách đúng nhóm công việc đó (tiến độ/trạng thái/người thực hiện), không cần mở "Xem/Lập Danh Mục Đầu Tư" đầy đủ.' },
@@ -554,6 +629,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Chấm điểm', sub: 'Chọn siêu thị, trả lời từng mục', kind: 'approved' },
       { label: 'Nộp & tổng hợp', sub: 'Tự tính điểm/xếp loại' },
     ] },
+    steps: [
+      { role: 'Quản trị', text: 'vào mục ✅ Checklist Đánh Giá Siêu Thị (sidebar) → tab <b>"🛠️ Cấu Hình"</b> → "🛠️ Tạo Mẫu Checklist Mới" → chọn Loại Mẫu, thêm hạng mục/câu hỏi/điểm → lưu ở trạng thái Nháp, rồi kích hoạt để chuyển thành "Đang dùng" (chỉ 1 mẫu đang dùng mỗi lúc).' },
+      { role: 'Người đánh giá', text: 'tab <b>"✅ Thực Hiện"</b> → chọn siêu thị cần đánh giá → trả lời từng mục theo đúng mẫu đang dùng → nộp bài (hệ thống tự tính điểm/xếp loại). Bài chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
+      { text: 'Xem kết quả và phản hồi: tab "📣 Kết Quả & Phản Hồi"; xem tổng hợp nhiều đợt: tab "📊 Báo Cáo".' },
+      { role: 'Quản trị', text: 'muốn đổi mẫu đang dùng: bấm "⏸️ Dừng" trên mẫu hiện tại (chuyển sang Lưu trữ) rồi kích hoạt mẫu khác; muốn sửa nội dung mẫu Đang dùng/Lưu trữ thì bấm "✏️ Sửa" (tự nhân bản thành 1 bản Nháp mới, không sửa trực tiếp để giữ nguyên dữ liệu bài đã nộp).' },
+    ],
     footer: { left: [
       { label: 'Tiếp tục dở dang', text: 'bài chấm chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
       { label: 'Nhân bản mẫu', text: 'có thể nhân bản 1 mẫu có sẵn để chỉnh sửa nhanh thay vì dựng lại từ đầu — nhân bản được từ cả mẫu Đang dùng lẫn Lưu trữ.' },
@@ -571,6 +652,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Sửa cây (bản Nháp)', sub: 'Thêm/sửa/xoá vị trí, gắn phòng ban' },
       { label: 'Áp Dụng', sub: 'Có hiệu lực NGAY, không qua ai duyệt lần 2', kind: 'approved' },
     ] },
+    steps: [
+      { text: 'Lần đầu chưa có sơ đồ nào: vào mục 🗂️ Cơ Cấu Tổ Chức (sidebar) → bấm <b>"Khởi Tạo"</b> ở khung "🌱 Khởi Tạo Cơ Cấu Tổ Chức".' },
+      { text: 'Sửa tiếp: bấm <b>"+ Tạo Bản Nháp Mới"</b> (luôn sao chép từ bản đang áp dụng) → sửa cây ngay trên tab "🌳 Sơ Đồ Tổ Chức" (thêm/sửa/xoá vị trí, gắn phòng ban).' },
+      { text: 'Trước khi áp dụng, có thể bấm "🔍 Kiểm Tra Hợp Lệ" (tuỳ chọn, chỉ cảnh báo lỗi) hoặc "🔀 So Sánh Với Bản Đang Áp Dụng" để đối chiếu.' },
+      { text: 'Bấm <b>"✅ Áp Dụng Phiên Bản Này"</b> để có hiệu lực ngay — bản đang áp dụng cũ tự chuyển sang Lưu trữ, không cần ai duyệt lần 2.' },
+      { text: 'Chỉ vừa đổi phòng ban/chức danh 1-2 người mà chưa muốn áp dụng cả phiên bản mới: bấm riêng "🔄 Đồng Bộ Quản Lý Trực Tiếp" để cập nhật ngay field này.' },
+      { text: 'Cấu hình luồng KPI theo cấp bậc: tab "🎯 Cấu Hình Đánh Giá KPI" → bấm "Thêm Quan Hệ".' },
+    ],
     footer: { left: [
       { label: 'Không sửa phiên bản cũ', text: 'sửa node (thêm/sửa/xoá vị trí) là sửa TRỰC TIẾP trên bản Nháp hiện có, không tự tạo phiên bản mới mỗi lần sửa — chỉ khi bấm "Sao Chép" mới sinh phiên bản mới; phiên bản Đã áp dụng/Lưu trữ chỉ xem, không sửa lại được.' },
       { label: 'Áp Dụng = có hiệu lực ngay, không có bước duyệt thứ 2', text: '1 người có quyền bấm "Áp Dụng" là xong — bản đang áp dụng cũ tự động chuyển sang Lưu Trữ. Có thể chạy "Kiểm Tra Hợp Lệ" trước (tuỳ chọn, chỉ cảnh báo lỗi, không bắt buộc phải chạy).' },
@@ -588,6 +677,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Tuần/Tháng đầu', sub: '' },
       { label: 'Kết thúc thử việc', sub: '', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Nhân Sự', text: 'vào mục 🆕 Onboarding / Offboarding (sidebar) → bấm <b>"+ Tạo Onboarding"</b> (nhân viên mới) hoặc <b>"+ Tạo Offboarding"</b> (nhân viên nghỉ việc) → điền thông tin → bấm <b>"📨 Tạo Quy Trình"</b> — hệ thống tự sinh danh sách việc cần làm theo mẫu, gán đúng bộ phận phụ trách từng việc.' },
+      { role: 'Người phụ trách từng việc', text: 'vào tab <b>"✅ Việc Của Tôi"</b> để xem đúng việc được gán cho mình (theo bộ phận Nhân Sự/IT/Hành Chính/Kế Toán/Quản Lý trực tiếp) → đánh dấu hoàn tất từng việc.' },
+      { text: 'Theo dõi toàn bộ tiến độ: tab <b>"📋 Danh Sách Quy Trình"</b> — quy trình tự chuyển trạng thái hoàn tất khi đã xong hết việc bắt buộc (riêng Offboarding còn chờ chỉ định người kế nhiệm nếu người nghỉ đang quản lý trực tiếp ai đó).' },
+      { role: 'Quản trị', text: 'chuẩn bị sẵn danh sách việc theo mốc thời gian: tab "🗂️ Checklist Mẫu".' },
+    ],
     footer: { left: [
       { label: 'Hoàn tất nghỉ việc tự động', text: 'khi hoàn tất thủ tục nghỉ việc, hệ thống tự khoá tài khoản đăng nhập, huỷ mọi phiên đang mở và chuyển hợp đồng lao động sang trạng thái đã kết thúc — không cần thao tác tay.' },
       { label: 'Chờ chỉ định người kế nhiệm', text: 'nếu người sắp nghỉ còn đang là quản lý trực tiếp của ai, quy trình nghỉ việc sẽ dừng lại ở bước "Chờ chỉ định người kế nhiệm" dù đã xong hết việc khác — Nhân Sự chỉ định xong mới tự hoàn tất.' },
@@ -604,6 +699,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Cập nhật thông tin', sub: 'Giấy tờ, liên hệ, quá trình' },
       { label: 'Lưu trữ', sub: 'Xuyên suốt vòng đời nhân sự', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Nhân viên', text: 'vào mục 👤 Hồ Sơ Nhân Sự (sidebar) → tab <b>"👤 Hồ Sơ Của Tôi"</b> để xem/tự cập nhật hồ sơ mình (trong phạm vi trường đã được mở xem, xem mục "Cấu hình trường xem" bên dưới).' },
+      { role: 'Người quản lý hồ sơ', text: 'tab <b>"📋 Quản Lý Hồ Sơ"</b> → bấm <b>"➕ Tạo Hồ Sơ Mới"</b> để tạo tay (Mã Nhân Viên tự sinh), hoặc <b>"📤 Nhập Excel"</b> để nhập hàng loạt.' },
+      { text: 'Cấu hình trường nhạy cảm nào được hiển thị: bấm "⚙️ Trường Xem Của Quản Lý Trực Tiếp" (áp dụng khi quản lý xem hồ sơ cấp dưới) hoặc "⚙️ Trường Xem Của Tôi" (áp dụng khi nhân viên tự xem hồ sơ mình) — 2 cấu hình độc lập, mặc định KHÔNG trường nào hiện tới khi admin chủ động mở.' },
+      { role: 'Quản lý trực tiếp', text: 'xem hồ sơ cấp dưới ngay trong tab "👤 Hồ Sơ Của Tôi" (danh sách cấp dưới hiện sẵn) → bấm "Xem" trên đúng người cần xem.' },
+    ],
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có module con "📊 Báo Cáo" RIÊNG cấp Nhân Sự (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
       { label: 'Tái Tuyển', text: 'nút "Kiểm Tra Nhân Sự Cũ" (khi tạo hồ sơ mới hoặc mở Onboarding) tra theo CCCD+ngày sinh — nhân viên cũ quay lại giữ NGUYÊN Mã Nhân Viên cũ, chỉ ghi thêm 1 dòng lịch sử tái tuyển.' },
@@ -622,6 +723,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đang hiệu lực', sub: 'Theo dõi hiệu lực', kind: 'approved' },
       { label: 'Đã kết thúc', sub: 'Tự động khi nghỉ việc xong' },
     ], decision: { atIndex: 1, approveLabel: 'Ký', rejectLabel: 'Không đạt/gia hạn thêm', rejectBox: { label: 'Gia hạn thử việc', sub: 'Kéo dài thời gian thử việc' }, loopBackToIndex: 0 } },
+    steps: [
+      { text: 'Hợp đồng thử việc TỰ SINH ngay khi tạo Onboarding cho nhân viên mới (mục 🆕 Onboarding/Offboarding) — không cần tạo tay ở đây.' },
+      { role: 'Người quản lý hợp đồng', text: 'vào mục 📄 Hợp Đồng Lao Động (sidebar) → bấm <b>"➕ Tạo Hợp Đồng Mới"</b> nếu cần tạo tay (VD hợp đồng không qua Onboarding).' },
+      { text: 'Ghi nhận thay đổi (tăng lương/đổi chức danh/gia hạn...): mở đúng hợp đồng → thêm 1 dòng phụ lục mới, điền "Ngày áp dụng" (tuỳ chọn)/"Ngày hiệu lực" (bắt buộc) + Giá trị cũ/mới (bật checkbox "💰 Giá trị tiền" nếu là số tiền để tự định dạng).' },
+      { text: 'Hợp đồng tự chuyển "Đã kết thúc" khi hoàn tất thủ tục nghỉ việc ở Onboarding/Offboarding — không cần đóng tay.' },
+    ],
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'cùng nhóm dữ liệu nhạy cảm với Hồ Sơ Nhân Sự, Lương và Công/Phép — thay vào đó có số liệu tổng hợp trong module con "📊 Báo Cáo" cấp Nhân Sự (hợp đồng mới/gia hạn/sắp hết hạn, tăng lương).' },
       { label: 'Cảnh báo sắp hết hạn', text: 'hợp đồng đang hiệu lực còn ≤30 ngày hiện badge vàng, ≤7 ngày hoặc đã quá hạn hiện badge đỏ — cả ở danh sách lẫn chi tiết hợp đồng.' },
@@ -637,6 +744,9 @@ const NGHIEP_VU_DOCS = {
       { label: 'Lọc tình trạng HĐLĐ', sub: 'Tuỳ chọn, riêng cho danh sách hợp đồng' },
       { label: 'Xem số liệu', sub: '8 chỉ số + 6 danh sách chi tiết', kind: 'approved' },
     ] },
+    steps: [
+      { text: 'Vào mục 📊 Báo Cáo (Nhân Sự) (sidebar) → chọn khoảng thời gian Từ ngày/Đến ngày (tuỳ chọn), lọc tình trạng hợp đồng nếu cần → bấm <b>"🔍 Xem Báo Cáo"</b> để hệ thống tính lại số liệu theo bộ lọc vừa chọn.' },
+    ],
     footer: { left: [
       { label: 'Cần đủ 2 quyền', text: 'CẦN CẢ "Quản Lý Hồ Sơ Nhân Sự" LẪN "Quản Lý Hợp Đồng Lao Động" (hoặc admin) — chỉ có 1 trong 2 sẽ không thấy mục này, vì số liệu gộp cả 2 nguồn (kể cả tăng lương, vốn chỉ Quản Lý Hợp Đồng Lao Động mới xem được).' },
     ], right: [
@@ -651,6 +761,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Duyệt', sub: 'Quản lý trực tiếp (hoặc cấp cao hơn) / Nhân Sự', kind: 'decision' },
       { label: 'Trừ quỹ phép', sub: 'CHỈ Phép Năm mới trừ quỹ, lúc DUYỆT chứ không phải lúc nộp', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: 'Không trừ quỹ (chưa từng trừ)' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Nhân viên', text: 'vào mục 🕒 Công / Phép (sidebar) → tab <b>"🙋 Của Tôi"</b> → bấm <b>"📝 Nộp Đơn Nghỉ Phép"</b> → chọn loại phép + số ngày/giờ → gửi.' },
+      { role: 'Quản lý trực tiếp / Nhân Sự', text: 'tab <b>"✅ Duyệt Nghỉ Phép"</b> → tìm đơn đang chờ (của nhân viên thuộc quyền quản lý, đệ quy mọi cấp dưới) → Duyệt hoặc Từ chối — Duyệt Phép Năm mới trừ quỹ phép, các loại phép khác chỉ ghi nhận chấm công.' },
+      { role: 'Quản lý siêu thị', text: 'phân ca cho nhân viên: tab <b>"📅 Phân Ca Siêu Thị"</b> → bấm <b>"➕ Phân Ca Mới"</b>.' },
+      { role: 'Nhân Sự', text: 'tab <b>"🛠️ Quản Lý & Cấu Hình"</b> để: bổ sung bản ghi công thủ công ("➕ Bổ Sung Bản Ghi Công"), tạo/sửa phép năm từng người ("➕ Tạo/Sửa Phép Năm"), cấu hình giờ hành chính, ngày lễ, mẫu ca làm việc, hoặc tạo API Key cho máy chấm công.' },
+    ],
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu chấm công/phép không đưa vào báo cáo tổng hợp dùng chung, như các dữ liệu nhạy cảm khác của Nhân Sự.' },
       { label: '5 loại phép, chỉ Phép Năm trừ quỹ', text: 'Phép năm / Nghỉ không lương / Nghỉ ốm / Nghỉ việc riêng / Nghỉ theo giờ (nghỉ 1 phần ngày, tự quy đổi ra ngày lẻ theo giờ hành chính) — CHỈ Phép Năm trừ vào quỹ phép còn lại, các loại còn lại chỉ ghi nhận chấm công.' },
@@ -669,6 +785,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Duyệt → Chốt', sub: 'Chốt xong khoá sửa hoàn toàn' },
       { label: 'Công Bố', sub: 'Thông báo trong app cho từng nhân viên', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Từ chối', sub: 'Quay về Nháp để sửa lại' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Nhân viên', text: 'vào mục 💴 Lương (sidebar) → tab <b>"🙋 Phiếu Lương Của Tôi"</b> để xem phiếu lương từng kỳ.' },
+      { role: 'Kế toán/Nhân Sự', text: 'tab <b>"🛠️ Quản Lý Kỳ Lương"</b> → bấm <b>"+ Tạo Kỳ Lương"</b> → hệ thống tự tính lương (Nháp) từ Hợp Đồng Lao Động + Công/Phép; có thể bấm "Tính Lương" lại nhiều lần khi còn Nháp (mỗi lần tính lại GHI ĐÈ toàn bộ, kể cả điều chỉnh tay trước đó).' },
+      { text: 'Thêm phụ cấp/KPI/thưởng/khấu trừ (không tự tính được): bấm "Điều Chỉnh" trên từng dòng — chỉ làm được khi kỳ còn Nháp.' },
+      { text: 'Bấm "Gửi Duyệt" → người duyệt Duyệt (chuyển "Đã Duyệt" rồi "Đã Chốt", khoá sửa hoàn toàn) hoặc Từ chối (quay về Nháp để sửa lại).' },
+      { text: 'Bấm "Công Bố" để thông báo trong app cho từng nhân viên. Cần sửa lại kỳ đã khoá: bấm "Mở Lại" (từ Đã Chốt/Đã Công Bố, bắt buộc nhập lý do).' },
+      { role: 'Quản trị', text: 'cấu hình mức phụ cấp/hệ số mặc định: bấm "⚙️ Cấu Hình Lương".' },
+    ],
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu lương cực kỳ nhạy cảm nên không đưa vào báo cáo tổng hợp dùng chung theo cách thông thường.' },
       { label: '5 trạng thái kỳ lương', text: 'Nháp → Chờ Duyệt → Đã Duyệt → Đã Chốt → Đã Công Bố. Còn có "Mở Lại" (từ Đã Chốt/Đã Công Bố, bắt buộc nhập lý do) khi cần sửa lại kỳ đã khoá.' },
@@ -686,6 +810,11 @@ const NGHIEP_VU_DOCS = {
       { label: 'Nhân Sự tiếp nhận & trả lời', sub: '', kind: 'approved' },
       { label: 'Kết thúc', sub: '1 hỏi – 1 đáp, không mở lại/hỏi tiếp được' },
     ] },
+    steps: [
+      { role: 'Nhân viên', text: 'vào 🚀 Truyền thông → tab <b>"🤝 HCRC Đồng Hành"</b> → điền form "🤝 Gửi Câu Hỏi Tới Nhân Sự": chọn Chủ Đề (tuỳ chọn) + Nội Dung Câu Hỏi → bấm <b>"Gửi Câu Hỏi"</b>.' },
+      { text: 'Xem lại câu hỏi và câu trả lời của mình: mục "📨 Câu Hỏi Của Tôi" ngay bên dưới form.' },
+      { role: 'Nhân Sự', text: 'vào mục 🤝 Quản Lý & Phản Hồi Ý Kiến (sidebar, dưới Nhân Sự) → xem toàn bộ câu hỏi của công ty → trả lời từng câu — trả lời xong câu đó KHÔNG sửa/trả lời thêm được nữa, nhân viên phải gửi câu mới nếu cần hỏi tiếp.' },
+    ],
     footer: { left: [
       { label: 'Không ẩn danh, không mở lại', text: 'mỗi câu hỏi gắn sẵn người gửi (hệ thống tự gán, không chọn ẩn danh được); mô hình 1 hỏi-1 đáp rồi kết thúc — sau khi Nhân Sự trả lời thì không sửa/trả lời tiếp được ở đúng câu đó, muốn hỏi thêm phải gửi câu mới. Không có bước đánh giá mức độ hài lòng.' },
       { label: '4 danh mục', text: 'Chế độ/Phúc lợi, Chính sách/Quy định, Lương/Thưởng, Khác.' },
@@ -703,6 +832,12 @@ const NGHIEP_VU_DOCS = {
       { label: 'Leo thang phê duyệt?', sub: 'Tuỳ chọn, khi cần người khác duyệt trước khi tiếp tục', kind: 'decision' },
       { label: 'Hoàn tất', sub: '', kind: 'approved' },
     ], decision: { atIndex: 2, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Gửi lại yêu cầu' }, loopBackToIndex: 1 } },
+    steps: [
+      { role: 'Nhân viên', text: 'vào mục 🎫 Hỗ Trợ IT (sidebar) → tab <b>"🎫 Hỗ Trợ Yêu Cầu"</b> → điền form "🎫 Gửi Yêu Cầu Hỗ Trợ IT" → bấm <b>"Gửi yêu cầu"</b> (mã ticket tự sinh, tự đổi mã kế tiếp nếu trùng).' },
+      { role: 'Đội Hỗ Trợ IT', text: 'mở đúng ticket trong danh sách → bấm nhận xử lý (chuyển "Tôi đang xử lý") → xử lý xong đánh dấu hoàn tất.' },
+      { text: 'Cần 1 người cụ thể duyệt trước khi tiếp tục xử lý (VD chi phí phát sinh ngoài luồng Phê Duyệt Giá Bán): gửi yêu cầu leo thang phê duyệt ngay trên ticket — bước này tuỳ chọn, phần lớn ticket không cần.' },
+      { text: 'Theo dõi dịch vụ CNTT sắp hết hạn: tab "🔔 Gia Hạn Dịch Vụ".' },
+    ],
     footer: { left: [
       { label: 'Leo thang phê duyệt là tuỳ chọn', text: 'phần lớn ticket không cần bước này — đội IT chỉ gửi khi cần 1 người cụ thể (không nhất thiết có quyền itManage) duyệt trước khi tiếp tục xử lý, VD xin phê duyệt chi phí phát sinh ngoài luồng Phê Duyệt Giá Bán.' },
       { label: 'Từ chối khẩn cấp', text: 'chỉ đúng người đã duyệt bước leo thang cuối cùng mới gửi được yêu cầu Từ Chối Khẩn Cấp; bị khoá khi ticket đang ở trạng thái "Tôi đang xử lý".' },
@@ -727,6 +862,11 @@ const NGHIEP_VU_DOCS = {
       { label: 'IT áp giá', sub: 'Đội Hỗ Trợ IT nhận & áp giá thật', kind: 'approved' },
       { label: 'Hoàn tất', sub: '' },
     ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người đề xuất', text: 'vào mục 🏷️ Phê Duyệt Giá (sidebar) → chọn tab <b>"🏷️ Bán Lẻ"</b> hoặc <b>"🏪 Bán Buôn"</b> (2 quy trình khác nhau thật sự) → tải lên tệp bảng giá (.xlsx, khớp đúng Mẫu Giá nếu hệ thống đã có mẫu) + Lý do → Bán Buôn phải chọn thêm Mức Margin/Chiết Khấu, Đơn Vị Áp Dụng, ít nhất 1 siêu thị/cửa hàng đề xuất, Ngày Áp Dụng → bấm <b>"Gửi phê duyệt"</b>.' },
+      { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ đang chờ (Bán Lẻ duyệt theo phòng ban, Bán Buôn duyệt theo đúng mức Margin/Chiết Khấu đã chọn — không duyệt lẫn được) → bấm Duyệt, Từ chối, hoặc Yêu Cầu Bổ Sung (khoá áp giá tới khi có tệp bổ sung mới).' },
+      { role: 'Đội Hỗ Trợ IT (quyền itPriceSupport)', text: 'sau khi duyệt, mở hồ sơ → áp giá thật vào hệ thống → đánh dấu hoàn tất.' },
+    ],
     footer: { left: [
       { label: 'Bán Lẻ', text: 'chọn "Vùng Giá Áp Dụng" (không bắt buộc, từ danh mục hệ thống) — không có Margin/Chiết Khấu/Đơn Vị Áp Dụng. Tự gắn Ngày Áp Dụng = hôm nay, Vĩnh viễn, áp dụng Toàn bộ siêu thị (không hỏi lại).' },
       { label: 'Bán Buôn', text: 'BẮT BUỘC chọn Mức Margin/Chiết Khấu + nhập Đơn Vị Áp Dụng (khách hàng/đại lý ngoài) + chọn ít nhất 1 siêu thị/cửa hàng đề xuất + Ngày Áp Dụng (Ngày Hết Hiệu Lực tuỳ chọn, mặc định Vĩnh viễn) — không có Vùng Giá.' },
@@ -746,6 +886,14 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đồng Bộ DSmart', sub: 'Dữ liệu mua hàng thực tế', kind: 'approved' },
       { label: 'Tính Ước Tính', sub: 'Theo đúng bậc thang tại thời điểm tính' },
     ], decision: { atIndex: 1, approveLabel: 'Kích hoạt', rejectLabel: 'Lưu trữ', rejectBox: { label: 'Lưu Trữ', sub: 'Ngừng áp dụng' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người quản lý', text: 'vào mục 🛒 Mua Hàng (sidebar) → tab <b>"🧮 BAS"</b> → tab con <b>"🏢 Nhà Cung Cấp"</b> → bấm <b>"+ Thêm NCC"</b> nếu chưa có nhà cung cấp cần dùng.' },
+      { role: 'Người quản lý', text: 'tab con <b>"📜 Điều Khoản Chiết Khấu / Thưởng NCC"</b> → bấm <b>"+ Tạo Điều Khoản"</b> → bấm "+ Thêm Bậc" để khai bậc thang %, "+ Thêm Phạm Vi" để khai phạm vi áp dụng → bấm <b>"💾 Lưu Điều Khoản"</b> (trạng thái Nháp).' },
+      { role: 'Người có quyền kích hoạt', text: 'mở đúng điều khoản Nháp → bấm Kích Hoạt để chuyển sang Đang Hoạt Động — quyền này TÁCH RIÊNG khỏi quyền tạo/sửa (tách biệt nhiệm vụ).' },
+      { role: 'Người quản lý', text: 'tab con <b>"🔄 Đồng Bộ DSmart"</b> → bấm <b>"🔄 Đồng Bộ Ngay"</b> để kéo dữ liệu mua hàng thực tế (tự chống trùng theo mã tham chiếu gốc), sau đó bấm Tính Ước Tính trên điều khoản đang Hoạt Động để ra số tiền chiết khấu ước tính.' },
+      { text: 'Sửa điều khoản đã Kích Hoạt: không sửa trực tiếp được — bấm "Nhân Bản" thành 1 bản Nháp mới (version+1) rồi sửa/kích hoạt lại.' },
+      { text: 'Xem số liệu đã tính: tab "📊 Báo Cáo" (chỉ cần quyền xem báo cáo, không cần quyền quản lý/kích hoạt).' },
+    ],
     footer: { left: [
       { label: 'Tách biệt nhiệm vụ (mục 8 tài liệu)', text: 'người TẠO/SỬA điều khoản (quyền Quản Lý) KHÔNG tự động KÍCH HOẠT được — phải người khác có quyền Kích Hoạt riêng mới bật điều khoản sang Đang Hoạt Động, vì liên quan trực tiếp số tiền chiết khấu lớn với NCC.' },
       { label: 'Không sửa trực tiếp điều khoản đã Kích Hoạt', text: 'phải "Nhân Bản" thành bản Nháp mới (version+1) rồi sửa/kích hoạt lại — giữ nguyên bản cũ để không làm sai lệch các lần Tính Ước Tính đã thực hiện trước đó (mỗi lần tính LUÔN lưu lại đúng bậc thang tại thời điểm tính, không tham chiếu ngược điều khoản hiện tại).' },
@@ -827,6 +975,11 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Gắn tài liệu + câu hỏi', sub: 'Từ Kho Tài Liệu / Ngân Hàng Câu Hỏi' },
       { label: 'Mở lớp theo chương trình', sub: 'Tái sử dụng nhiều lần', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🎓 Chương Trình</b> → điền Tên Chương Trình + mục tiêu/nội dung khung → lưu.' },
+      { text: 'Gắn tài liệu và câu hỏi có sẵn vào Chương Trình khi tạo Tài Liệu (tab Kho Tài Liệu) hoặc tạo Lớp Học (tab Lớp Học) — chọn đúng Chương Trình này ở ô "Chương Trình".' },
+      { text: 'Mở nhiều lớp tái sử dụng cùng 1 Chương Trình: tạo Lớp Học mới, chọn lại đúng Chương Trình đã có ở ô "Chương Trình" thay vì để trống.' },
+    ],
     footer: { left: [], right: [] },
   },
   plans: {
@@ -836,6 +989,10 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Import / nhập tay', sub: 'Danh sách chương trình dự kiến' },
       { label: 'Theo dõi thực hiện', sub: 'Đối chiếu lớp đã mở thực tế', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>📋 Kế Hoạch Đào Tạo</b> → điền Tháng, Đơn Vị/Đối Tượng, Số Lớp/Số Học Viên/Số Giờ Dự Kiến → lưu; hoặc nhập hàng loạt từ file có sẵn thay vì gõ tay từng dòng.' },
+      { text: 'Đối chiếu thực tế: xem danh sách Lớp Học đã mở thực sự (tab Lớp Học) so với kế hoạch đã lập.' },
+    ],
     footer: { left: [], right: [] },
   },
   docs: {
@@ -844,6 +1001,11 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Tải tài liệu lên', sub: 'Gắn vào chương trình' },
       { label: 'Học viên xem', sub: 'Theo dõi tiến độ đọc', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>📁 Kho Tài Liệu</b> → điền Tên Tài Liệu, chọn Loại Tài Liệu (VIDEO/IMAGE/PDF/DOCUMENT), tick "Bắt buộc xem" nếu cần, chọn Chương Trình (tuỳ chọn) → tải file hoặc dán link → lưu.' },
+      { text: 'Gắn tài liệu này vào 1 lớp cụ thể: khi tạo/sửa Lớp Học, chọn tài liệu ở ô "Giáo Trình Đọc Bắt Buộc" (giữ Ctrl/Cmd để chọn nhiều).' },
+      { role: 'Học viên', text: 'mở lớp qua "📚 Vào Lớp Học" → xem từng tài liệu bắt buộc — hệ thống tự theo dõi tiến độ đọc/xem (video/PDF theo % đã xem).' },
+    ],
     footer: { left: [], right: [] },
   },
   bank: {
@@ -852,6 +1014,11 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Soạn câu hỏi', sub: 'Trắc nghiệm hoặc tự luận' },
       { label: 'Gắn vào bài kiểm tra', sub: 'Của 1 hoặc nhiều lớp', kind: 'approved' },
     ] },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🧪 Ngân Hàng Câu Hỏi</b> → điền Tiêu Đề bài test, Điểm Đạt Yêu Cầu → thêm từng câu hỏi (SINGLE/MULTI/ESSAY/IMAGE_DRAG_DROP) kèm đáp án đúng → lưu. Có thể tải file mẫu để nhập hàng loạt câu hỏi SINGLE/MULTI thay vì tạo tay từng câu (ESSAY/IMAGE_DRAG_DROP chỉ tạo được qua giao diện).' },
+      { text: 'Gắn bài test vào 1 lớp cụ thể: khi tạo/sửa Lớp Học, chọn bài test ở ô "Bài Test Gán Cho Lớp".' },
+      { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận, vào mục "📝 Cần Chấm Nghị Luận" ngay trong tab này để chấm tay sau khi học viên nộp bài.' },
+    ],
     footer: { left: [], right: [] },
   },
   newhire: {
@@ -862,6 +1029,12 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Đánh giá cuối kỳ', sub: '', kind: 'decision' },
       { label: 'Cấp Chứng Chỉ', sub: 'Hoàn tất lộ trình tân binh', kind: 'approved' },
     ], decision: { atIndex: 2, approveLabel: 'Đạt', rejectLabel: 'Chưa đạt', rejectBox: { label: 'Học bổ sung', sub: 'Chưa đủ điều kiện' }, loopBackToIndex: 1, loopBackLabel: 'Tiếp tục học' } },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🆕 Đào Tạo Tân Binh</b> → khối "🆕 Quản Lý Lộ Trình" → điền Tên Lộ Trình, chọn Chương Trình bắt buộc Giai Đoạn 1 (Ngày 1-7) và Giai Đoạn 2 (Ngày 8-21), nhập Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59) → bấm <b>"Tạo Lộ Trình"</b>.' },
+      { role: 'Quản lý đào tạo', text: 'khối "📋 Phân Công Lộ Trình Cho Nhân Viên Mới" → gõ tìm Nhân Viên, chọn Lộ Trình → bấm <b>"Phân Công"</b>.' },
+      { role: 'Nhân viên mới', text: 'tự đăng ký + học các lớp thuộc đúng Chương Trình được chọn (ở tab Lớp Học, lớp PHẢI gán bài test) — % hoàn thành Giai đoạn 1/2 tự động cập nhật theo kết quả làm bài.' },
+      { role: 'Nhân Sự', text: 'bấm <b>"Xác Nhận"</b> từng giai đoạn khi đã đủ điều kiện — Giai đoạn 3 do quản lý trực tiếp đánh giá theo tiêu chí đã khai, không có bài test.' },
+    ],
     footer: { left: [
       { label: 'Khác Onboarding của Nhân Sự', text: 'đây là lộ trình HỌC (nội dung/Chương Trình), khác Onboarding/Offboarding (Nhân Sự) vốn là các việc hành chính theo mốc thời gian — 2 quy trình độc lập, không tự động liên kết với nhau.' },
     ], right: [
@@ -875,6 +1048,10 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Bậc 2', sub: 'Khoá tới khi đạt Bậc 1', kind: 'decision' },
       { label: 'Bậc 3', sub: 'Khoá tới khi đạt Bậc 2', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Đạt', rejectLabel: 'Chưa đạt', rejectBox: { label: 'Giữ nguyên bậc', sub: 'Chưa mở khoá bậc kế' }, loopBackToIndex: 0, loopBackLabel: 'Tiếp tục tích luỹ' } },
+    steps: [
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🪜 Lộ Trình Thăng Tiến</b> → bấm "+ Thêm Cấp Bậc" cho từng bậc theo đúng thứ tự thăng tiến, mỗi bậc chọn ít nhất 1 Chương Trình bắt buộc (giữ Ctrl/Cmd để chọn nhiều) → điền Tên Lộ Trình, Chức Danh Mục Tiêu (tuỳ chọn) → bấm <b>"Tạo Lộ Trình"</b>.' },
+      { text: 'Nhân viên học và hoàn thành các lớp thuộc Chương Trình của từng bậc — chỉ xác nhận được bậc sau khi bậc liền trước đã được xác nhận Đạt, không nhảy cóc bậc.' },
+    ],
     footer: { left: [
       { label: 'Khoá tuần tự', text: 'mỗi bậc chỉ mở khi bậc liền trước đã đạt — không thể đăng ký thẳng lên bậc cao hơn để "đi tắt".' },
     ], right: [] },

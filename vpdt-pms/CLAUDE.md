@@ -49,7 +49,13 @@ trong CÙNG đợt merge tạo module đó (không để dành "làm sau"):
   Module con thuộc nhóm nào (Văn Bản & Tác Nghiệp/Truyền Thông Nội Bộ/Điều
   Hành/Hành Chính/Tổng Hợp/Vận Hành/Nhân Sự/Hỗ Trợ IT) thì thêm vào đúng
   `group` đó trong `NGHIEP_VU_NAV`; nhóm hoàn toàn mới thì thêm 1 group mới
-  vào cuối mảng.
+  vào cuối mảng. **Từ v23.55**: entry còn phải có thêm field `steps` (mảng
+  `{role?, text}`, hiển thị qua `renderNVSteps()`) — hướng dẫn CLICK-BY-CLICK
+  thật (bấm nút gì, tab nào, đúng field id/nhãn nút hiện có, không đoán tay),
+  khác hẳn `flow`/`footer` vốn giải thích nghiệp vụ/quy tắc chứ không nói thao
+  tác cụ thể. Xem bất kỳ entry nào trong `NGHIEP_VU_DOCS`/`NGHIEP_VU_DAOTAO_CONTENT`
+  làm mẫu — chỉ bỏ qua `steps` cho mục THUẦN xem/sơ đồ tham khảo không có thao
+  tác thật (VD `systemArchitecture`, `overview` của Đào Tạo).
 
 Không bỏ qua bước này chỉ vì module mới nhỏ — cả 2 màn trên đều tồn tại lâu
 dài, việc bổ sung càng chậm càng dễ bị quên/tích tụ thành nợ kỹ thuật lớn

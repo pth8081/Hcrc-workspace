@@ -194,8 +194,11 @@ quy tắc chứ không nói thao tác cụ thể. Mỗi bước có thể gắn 
 "Người đăng ký"/"Người duyệt") nếu bước đó do 1 vai trò cụ thể thực hiện.
 Trình bày THUẦN TEXT (không kèm ảnh chụp màn hình, để không lạc hậu khi UI
 đổi) và là field TUỲ CHỌN theo từng mục — mục nào chưa viết thì khối này tự
-ẩn. Mới làm mẫu cho 3 mục (🚗 Đăng Ký Xe / 💰 Ngân Sách 2.0 / 🎓 Đào Tạo >
-Lớp Học), các mục còn lại sẽ bổ sung dần theo yêu cầu.
+ẩn. **Từ v23.55: đã có ở toàn bộ 33 mục nghiệp vụ thao tác thật** (chỉ 2 mục
+thuần xem/sơ đồ tham khảo không có, không cần "Cách Thao Tác": "🗺️ Sơ Đồ
+Kiến Trúc Hệ Thống" và "🧭 Tổng Quan" của Đào Tạo). Module/tính năng nghiệp
+vụ MỚI về sau vẫn nên viết thêm `steps` ngay khi thêm entry `NGHIEP_VU_DOCS`,
+theo đúng quy tắc ở mục "Module mới → bắt buộc cập nhật Nghiệp Vụ" (CLAUDE.md).
 
 Đây là bản **tóm tắt trực quan** — mục 3-7 phía dưới của tài liệu này vẫn là
 nguồn tham khảo **đầy đủ và chi tiết nhất** (mỗi trang Nghiệp Vụ đều có link
