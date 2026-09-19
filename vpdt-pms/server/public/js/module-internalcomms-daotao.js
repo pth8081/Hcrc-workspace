@@ -1542,7 +1542,80 @@ function openTrainingRosterModal(classId) {
   document.getElementById('trRosterFilePreviewWrap').classList.add('hidden');
   document.getElementById('trRosterFileAddBtn').classList.add('hidden');
   renderTrainingRosterStagedList();
+  renderTrainingRosterSuggestions();
   document.getElementById('trainingRosterModal').classList.remove('hidden');
+}
+
+// ---------- Gợi ý học viên CHƯA hoàn thành khoá học (theo Chương Trình/courseId) ----------
+// Yêu cầu người dùng (9/2026): "tổ chức lớp học lại sẽ gợi ý các học viên chưa hoàn thành để add vào
+// lớp" — khớp theo KHOÁ HỌC (courseId), không phải theo đúng tên/nội dung lớp (1 khoá học có thể mở
+// nhiều lớp khác nhau qua các đợt). "Chưa hoàn thành" = có ít nhất 1 lần KHÔNG ĐẠT (FAILED) ở 1 lớp
+// khác CÙNG courseId, và CHƯA TỪNG đạt (PASSED) ở bất kỳ lớp nào khác cùng courseId (ai đã có 1 lần
+// PASSED thì coi như đã xong khoá học đó, dù trước đó có thể từng trượt 1 lớp khác). Đăng ký CANCELLED
+// không tính (không phải kết quả thật). Chỉ dựa vào DB.trainingRegistrations đã tải sẵn theo đúng
+// phạm vi xem của người dùng hiện tại (filterTrainingRegistrationsForUser() ở server — trainingManage/
+// admin thấy toàn bộ nên gợi ý đầy đủ; trainingInstruct chỉ thấy đúng lớp mình quản lý nên gợi ý có thể
+// thiếu học viên của lớp giảng viên khác — chấp nhận được vì CHỈ trainingManage/admin tạo được lớp mới,
+// xem canManageTraining() ở lib/recordActions.js).
+function computeTrainingRosterSuggestions(cls) {
+  if (!cls?.courseId) return [];
+  const otherClassIds = new Set((DB.trainingClasses || [])
+    .filter(c => c.courseId === cls.courseId && c.id !== cls.id)
+    .map(c => c.id));
+  if (!otherClassIds.size) return [];
+
+  const byUser = new Map(); // username -> { hasPassed, hasFailed, name, dept }
+  (DB.trainingRegistrations || []).forEach(r => {
+    if (!otherClassIds.has(r.classId) || r.result === 'CANCELLED') return;
+    const entry = byUser.get(r.creator) || { hasPassed: false, hasFailed: false, name: r.creatorName, dept: r.dept };
+    if (r.result === 'PASSED') entry.hasPassed = true;
+    if (r.result === 'FAILED') entry.hasFailed = true;
+    byUser.set(r.creator, entry);
+  });
+
+  const currentlyActive = new Set((DB.trainingRegistrations || [])
+    .filter(r => r.classId === cls.id && r.result !== 'CANCELLED')
+    .map(r => r.creator));
+  const alreadyStaged = new Set(trainingRosterStaged.map(p => p.username));
+
+  const out = [];
+  byUser.forEach((entry, username) => {
+    if (entry.hasPassed || !entry.hasFailed) return; // đã ĐẠT rồi, hoặc chưa từng trượt lần nào -> không gợi ý
+    if (currentlyActive.has(username) || alreadyStaged.has(username)) return;
+    const u = (DB.users || []).find(x => x.username === username);
+    if (!u || u.active === false) return; // tài khoản không còn/đã khoá -> không gợi ý (cùng luật picker chung)
+    out.push({ username, name: u.name || entry.name || username, dept: u.dept || entry.dept || '' });
+  });
+  return out.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+}
+
+function renderTrainingRosterSuggestions() {
+  const wrap = document.getElementById('trRosterSuggestWrap');
+  if (!wrap) return;
+  const cls = DB.trainingClasses.find(c => c.id === trainingRosterModalClassId);
+  const suggestions = computeTrainingRosterSuggestions(cls);
+  if (!suggestions.length) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  document.getElementById('trRosterSuggestCount').innerText = suggestions.length;
+  document.getElementById('trRosterSuggestList').innerHTML = suggestions.map(p => `
+    <span class="inline-flex items-center gap-1 bg-white border border-amber-300 text-amber-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
+      ${escapeHtml(p.name)}${p.dept ? ` <span class="text-amber-500">(${escapeHtml(p.dept)})</span>` : ''}
+      <button type="button" data-op="addTrainingRosterSuggestion" data-arg0="${escapeHtml(p.username)}" class="text-amber-600 hover:text-emerald-700 font-bold leading-none px-1" title="Thêm vào danh sách tạm">+</button>
+    </span>`).join('');
+}
+
+function addTrainingRosterSuggestion(username) {
+  const cls = DB.trainingClasses.find(c => c.id === trainingRosterModalClassId);
+  const suggestion = computeTrainingRosterSuggestions(cls).find(p => p.username === username);
+  if (!suggestion) return;
+  stageTrainingRosterUser(suggestion.username, suggestion.name, suggestion.dept);
+  renderTrainingRosterStagedList();
+}
+
+function addAllTrainingRosterSuggestions() {
+  const cls = DB.trainingClasses.find(c => c.id === trainingRosterModalClassId);
+  computeTrainingRosterSuggestions(cls).forEach(p => stageTrainingRosterUser(p.username, p.name, p.dept));
+  renderTrainingRosterStagedList();
 }
 
 function closeTrainingRosterModal() {
@@ -1560,13 +1633,14 @@ function renderTrainingRosterStagedList() {
   const wrap = document.getElementById('trRosterStagedList');
   if (!trainingRosterStaged.length) {
     wrap.innerHTML = `<span class="text-gray-400 italic text-xs">Chưa chọn học viên nào.</span>`;
-    return;
+  } else {
+    wrap.innerHTML = trainingRosterStaged.map(p => `
+      <span class="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
+        ${escapeHtml(p.name)}${p.dept ? ` <span class="text-teal-500">(${escapeHtml(p.dept)})</span>` : ''}
+        <button type="button" data-op="removeTrainingRosterStaged" data-arg0="${escapeHtml(p.username)}" class="text-teal-500 hover:text-red-600 font-bold leading-none px-1">&times;</button>
+      </span>`).join('');
   }
-  wrap.innerHTML = trainingRosterStaged.map(p => `
-    <span class="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-full pl-2 pr-1 py-0.5 text-xs">
-      ${escapeHtml(p.name)}${p.dept ? ` <span class="text-teal-500">(${escapeHtml(p.dept)})</span>` : ''}
-      <button type="button" data-op="removeTrainingRosterStaged" data-arg0="${escapeHtml(p.username)}" class="text-teal-500 hover:text-red-600 font-bold leading-none px-1">&times;</button>
-    </span>`).join('');
+  renderTrainingRosterSuggestions();
 }
 
 function removeTrainingRosterStaged(username) {

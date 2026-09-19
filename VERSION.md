@@ -1,8 +1,60 @@
 # Phiên bản hiện tại
 
-**23.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.53 (2026-09-19): Đào Tạo — gợi ý học viên chưa hoàn thành khi tổ chức lại lớp (theo Chương Trình)
+
+Theo yêu cầu người dùng ("Làm gợi ý học viên chưa hoàn thành thôi nhé. Theo
+khoá học"): xây tính năng gợi ý học viên CHƯA hoàn thành khi mở lớp mới cùng
+Chương Trình — đây là 1 trong 2 khoảng trống xác nhận ở v23.52, chỉ làm phần
+này (KHÔNG làm chứng nhận hoàn thành lớp học — khoảng trống còn lại).
+
+Khi người quản lý đào tạo mở modal "➕ Thêm Học Viên" của 1 lớp có gắn
+`courseId`, hệ thống tự tính và hiện 1 khối gợi ý (màu vàng, phân biệt với
+danh sách "đã chọn" màu xanh) liệt kê những học viên **CHƯA TỪNG ĐẠT** ở bất
+kỳ lớp nào khác CÙNG Chương Trình (có ít nhất 1 lần KHÔNG ĐẠT và chưa từng có
+lần ĐẠT nào — ai đã ĐẠT 1 lần thì coi như xong khoá học đó, không gợi ý lại
+dù từng trượt 1 lớp khác trước đó). Bấm "+" từng người hoặc "+ Thêm tất cả"
+để đưa vào danh sách tạm, dùng chung luồng xác nhận thêm vào lớp đã có sẵn
+(`bulk-register`). Tài khoản đã bị khoá (`active: false`) vẫn bị loại khỏi
+gợi ý dù có kết quả KHÔNG ĐẠT thật — khớp đúng luật loại tài khoản khoá dùng
+chung toàn hệ thống.
+
+Tính năng thuần phía client — chỉ tính từ `DB.trainingClasses`/
+`DB.trainingRegistrations`/`DB.users` đã tải sẵn theo đúng phạm vi xem hiện
+tại của người dùng, không thêm route/bảng/quyền mới. An toàn vì chỉ
+`trainingManage`/`admin` (đã có toàn bộ `trainingRegistrations`, xem
+`filterTrainingRegistrationsForUser()`) mới tạo được lớp học mới.
+
+**File đã sửa**:
+- `server/public/js/module-internalcomms-daotao.js` — thêm
+  `computeTrainingRosterSuggestions()`/`renderTrainingRosterSuggestions()`/
+  `addTrainingRosterSuggestion()`/`addAllTrainingRosterSuggestions()`, gọi từ
+  `openTrainingRosterModal()` + `renderTrainingRosterStagedList()` để luôn
+  đồng bộ dù thêm qua tìm-chọn/Excel/gợi ý.
+- `server/public/fragments/internalSection.html` — thêm khối
+  `#trRosterSuggestWrap` trong modal "Thêm Học Viên".
+- `server/public/js/core.js` — thêm 2 entry `MODULE_FN_GROUP` cho 2 hàm mới
+  (`addTrainingRosterSuggestion`/`addAllTrainingRosterSuggestions`).
+- `server/public/js/module-nghiepvu.js` — thêm footer mô tả tính năng vào
+  entry `classes` (Nghiệp Vụ > Đào Tạo > Lớp Học).
+- `deploy/Huong-dan-nghiep-vu.md` — thêm đoạn mô tả tính năng vào mục 4.1
+  Đào Tạo (LMS).
+- `server/tests/test-training-scenario-roleplay.js` — viết lại kịch bản 13
+  (trước đây xác nhận khoảng trống) thành kịch bản xác nhận tính năng hoạt
+  động đúng: gợi ý đúng học viên FAILED, loại PASSED, loại tài khoản khoá,
+  "+ Thêm tất cả" hoạt động, add vào lớp thành công qua `bulk-register`.
+
+**Deploy impact**: không cần thao tác gì thêm ngoài copy code + `pm2
+restart` — không đổi schema SQL, không thêm biến môi trường, không thêm
+dependency npm.
+
+Đã kiểm thử: `test-training-scenario-roleplay.js` 17/17, cộng regression
+`test-internal-training.js` 49/49, `test-training-essay-dragdrop-ui.js`
+16/16, `test-training-video-pdf-progress.js` 12/12 — tất cả PASS, không có
+hồi quy.
 
 ## v23.52 (2026-09-19): Test kịch bản nghiệp vụ đầy đủ module Đào Tạo (LMS) + xác nhận 2 khoảng trống tính năng
 

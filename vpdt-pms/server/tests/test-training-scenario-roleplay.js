@@ -336,9 +336,9 @@ async function main() {
       assert(certErr, 'action "issue-certificate" không tồn tại cho trainingRegistrations — phải bị từ chối, không được âm thầm thành công');
     });
 
-    // ===== 13) [KHOẢNG TRỐNG] Gợi ý học viên CHƯA hoàn thành (FAILED) khi tổ chức lại lớp cùng nội dung =====
+    // ===== 13) Gợi ý học viên CHƯA hoàn thành (FAILED) khi tổ chức lại lớp cùng Chương Trình =====
     let classId2;
-    await run('13) [KHOẢNG TRỐNG] Mở Lớp Học mới cùng Chương Trình -> hệ thống KHÔNG gợi ý các học viên FAILED của lớp cũ để thêm vào lớp mới', async () => {
+    await run('13) Mở Lớp Học mới cùng Chương Trình -> hệ thống gợi ý đúng học viên FAILED của lớp cũ, loại PASSED và tài khoản đã khoá', async () => {
       // Chuẩn bị tiền đề: nv2_rp làm bài SAI hết -> FAILED ở lớp gốc, để có ít nhất 1 học viên "chưa
       // hoàn thành" thật sự đúng kịch bản người dùng mô tả ("tổ chức lớp học lại").
       const nv2 = makeUser({ username: 'nv2_rp', name: 'Học Viên Thi Trượt', dept: 'Siêu Thị A', perms: {} });
@@ -361,6 +361,17 @@ async function main() {
       const reg2After = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.id === id), reg2.id);
       assertEqual(reg2After.result, 'FAILED', 'tiền đề: nv2_rp phải KHÔNG ĐẠT để đúng kịch bản "học viên chưa hoàn thành"');
 
+      // Thêm 1 đăng ký FAILED khác gắn với tài khoản ĐÃ KHOÁ (nv_locked_rp, tạo ở kịch bản 10) ở CHÍNH
+      // lớp gốc -> phải chứng minh dù có FAILED thật, tài khoản khoá vẫn KHÔNG được gợi ý (khớp đúng
+      // luật loại trừ tài khoản khoá dùng chung toàn hệ thống — seed thẳng vào DB vì mục đích chỉ để
+      // kiểm tra logic lọc phía client, không cần đi lại toàn bộ luồng đăng ký/thi thật lần nữa).
+      await page.evaluate((cid) => {
+        DB.trainingRegistrations.push({
+          id: 'reg_locked_rp_fail', classId: cid, creator: 'nv_locked_rp', creatorName: 'Nhân Viên Đã Khoá',
+          dept: 'Siêu Thị A', result: 'FAILED', score: 0, viewedDocumentIds: [], createdAt: new Date().toISOString()
+        });
+      }, classId);
+
       // Người quản lý đào tạo mở lớp MỚI, CÙNG courseId với lớp cũ (đúng kịch bản "tổ chức lớp học lại").
       await page.evaluate((u) => { currentUser = u; }, trainer);
       await page.evaluate(() => { setTrainingLmsTab('CLASSES'); });
@@ -378,17 +389,32 @@ async function main() {
       assert(cls2, 'phải tạo được lớp học mới cùng chương trình');
       classId2 = cls2.id;
 
-      // Mở modal "Thêm Học Viên" của lớp mới -> xác nhận KHÔNG có bất kỳ khối gợi ý/badge nào liệt kê
-      // "học viên chưa hoàn thành lớp cùng chương trình trước đó" — khảo sát toàn bộ HTML modal, không
-      // chỉ dò 1 chuỗi cụ thể để tránh bỏ sót cách diễn đạt khác.
+      // Mở modal "Thêm Học Viên" của lớp mới -> khối gợi ý phải hiện ra, đúng 1 người (nv2_rp), KHÔNG
+      // chứa nv_rp (đã PASSED ở kịch bản 8) và KHÔNG chứa nv_locked_rp (FAILED thật nhưng tài khoản khoá).
       await page.evaluate((cid) => { openTrainingRosterModal(cid); }, classId2);
-      const modalHTML = await page.evaluate(() => document.getElementById('trainingRosterModal').innerHTML);
-      assert(!/chưa hoàn thành|gợi ý.*(FAILED|trượt|rớt)|học viên.*lớp cũ/i.test(modalHTML),
-        'modal "Thêm Học Viên" của lớp mới KHÔNG được tự gợi ý học viên FAILED của lớp cũ cùng chương trình — tính năng này chưa tồn tại');
-      // Đối chứng bằng dữ liệu: server không hề trả về/tính toán danh sách "học viên chưa hoàn thành
-      // theo courseId" ở bất kỳ đâu trong DB phía client tại thời điểm này.
-      const hasSuggestionField = await page.evaluate(() => 'suggestedIncompleteStudents' in DB || 'trainingFailedSuggestions' in window);
-      assert(!hasSuggestionField, 'không có cấu trúc dữ liệu nào cho tính năng gợi ý học viên chưa hoàn thành — xác nhận đây thực sự là khoảng trống, không phải chỉ thiếu UI');
+      const suggestWrapHidden = await page.evaluate(() => document.getElementById('trRosterSuggestWrap').classList.contains('hidden'));
+      assert(!suggestWrapHidden, 'khối gợi ý phải hiện ra vì có ít nhất 1 học viên chưa hoàn thành hợp lệ (nv2_rp)');
+      const suggestListHTML = await page.evaluate(() => document.getElementById('trRosterSuggestList').innerHTML);
+      assert(/Học Viên Thi Trượt/.test(suggestListHTML), 'gợi ý phải hiện đúng tên học viên FAILED (nv2_rp)');
+      assert(!/Học Viên Đóng Vai/.test(suggestListHTML), 'gợi ý KHÔNG được chứa nv_rp (đã ĐẠT/PASSED ở kịch bản 8)');
+      assert(!/Nhân Viên Đã Khoá/.test(suggestListHTML), 'gợi ý KHÔNG được chứa tài khoản đã khoá dù có FAILED thật');
+      const suggestCount = await page.evaluate(() => document.getElementById('trRosterSuggestCount').innerText);
+      assertEqual(suggestCount, '1', 'phải đúng 1 người được gợi ý (chỉ nv2_rp hợp lệ)');
+
+      // Bấm "+ Thêm tất cả" -> nv2_rp phải được đưa vào danh sách tạm (staged), và khối gợi ý tự ẩn đi
+      // vì không còn ai để gợi ý nữa (đã được thêm hết).
+      await page.evaluate(() => { addAllTrainingRosterSuggestions(); });
+      const stagedAfter = await page.evaluate(() => trainingRosterStaged.map((p) => p.username));
+      assert(stagedAfter.includes('nv2_rp'), 'sau khi bấm "+ Thêm tất cả", nv2_rp phải nằm trong danh sách tạm để add vào lớp mới');
+      const suggestWrapHiddenAfter = await page.evaluate(() => document.getElementById('trRosterSuggestWrap').classList.contains('hidden'));
+      assert(suggestWrapHiddenAfter, 'sau khi đã thêm hết, khối gợi ý phải tự ẩn (không còn ai để gợi ý)');
+
+      // Xác nhận luồng thêm vào lớp thật hoạt động end-to-end: bulk-register với đúng danh sách staged.
+      const bulkResult = await page.evaluate(async (cid) => {
+        return await callRecordAction('trainingClasses', cid, 'bulk-register', { usernames: trainingRosterStaged.map((p) => p.username) });
+      }, classId2);
+      assertEqual(bulkResult.added.length, 1, 'phải thêm được đúng 1 học viên (nv2_rp) vào lớp mới qua danh sách tạm từ gợi ý');
+      assertEqual(bulkResult.added[0].creator, 'nv2_rp', 'người được thêm phải đúng là nv2_rp');
       await page.evaluate(() => { closeTrainingRosterModal(); });
     });
   } finally {

@@ -607,6 +607,17 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       điểm từng câu — lúc đó điểm mới cộng dồn và Đạt/Không Đạt mới chốt
       (so với Điểm Đạt của lớp). Bài test không có câu Nghị Luận nào thì
       không đổi gì — vẫn có kết quả ngay như trước.
+    - **Gợi ý học viên chưa hoàn thành khi tổ chức lại lớp** (từ v23.53):
+      lớp mới gắn cùng Chương Trình (`courseId`) với 1/nhiều lớp cũ đã có
+      học viên KHÔNG ĐẠT — mở modal "➕ Thêm Học Viên" của lớp mới sẽ tự
+      hiện khối gợi ý màu vàng liệt kê đúng những học viên **chưa từng ĐẠT**
+      ở bất kỳ lớp nào cùng Chương Trình đó (đã ĐẠT 1 lần thì coi như xong,
+      không gợi ý lại dù có lần KHÔNG ĐẠT khác trước đó), bấm "+" từng người
+      hoặc "+ Thêm tất cả" để đưa vào danh sách tạm rồi xác nhận thêm vào lớp
+      như bình thường. Tài khoản đã bị khoá vẫn bị loại khỏi gợi ý (khớp đúng
+      luật loại tài khoản khoá dùng chung toàn hệ thống). Tính năng thuần
+      phía giao diện — chỉ tính từ dữ liệu Lớp Học/Đăng Ký đã tải sẵn, không
+      thêm route/quyền mới.
 
 ### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
 

@@ -757,6 +757,13 @@
           <button data-op="closeTrainingRosterModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
         </div>
         <div class="p-4 space-y-4">
+          <div id="trRosterSuggestWrap" class="hidden bg-amber-50 border border-amber-200 rounded p-2">
+            <div class="flex items-center justify-between mb-1 gap-2 flex-wrap">
+              <label class="font-semibold text-amber-800 text-xs">💡 Học viên chưa hoàn thành khoá học này (<span id="trRosterSuggestCount">0</span> người, từ các lớp trước cùng Chương Trình)</label>
+              <button type="button" data-op="addAllTrainingRosterSuggestions" class="text-[11px] bg-amber-500 hover:bg-amber-600 text-white px-2 py-0.5 rounded font-bold whitespace-nowrap">+ Thêm tất cả</button>
+            </div>
+            <div id="trRosterSuggestList" class="flex flex-wrap gap-1.5"></div>
+          </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Cách 1 — Tìm và chọn từng người</label>
             <div class="flex gap-2">

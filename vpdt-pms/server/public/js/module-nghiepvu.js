@@ -772,6 +772,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Giảng Viên theo từng lớp', text: 'lớp Offline gán riêng 1 giảng viên — người này chỉ quản lý/chấm được đúng lớp mình được gán, khác người quản lý đào tạo chung (quản lý được mọi lớp).' },
     ], right: [
       { label: 'Nhập câu hỏi hàng loạt', text: 'có thể tải file mẫu để nhập nhiều câu hỏi cùng lúc thay vì tạo tay từng câu.' },
+      { label: 'Gợi ý học viên chưa hoàn thành', text: 'khi mở "Thêm Học Viên" cho 1 lớp mới, hệ thống tự gợi ý những học viên KHÔNG ĐẠT (chưa từng đạt) ở các lớp khác CÙNG Chương Trình, để dễ thêm lại vào đợt tổ chức lại — tài khoản đã khoá không được gợi ý.' },
     ] },
   },
   programs: {
