@@ -284,7 +284,24 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     // hồ sơ đã bị xoá vẫn còn nguyên payload (kèm fileUrl) ở dbo.TrashBin, và khu vực đó là admin-only.
     // Xem findOwningTrashItem() ở trên để biết vì sao thiếu bước này là "xoá xong thì file lộ rộng hơn".
     const trashed = await findOwningTrashItem(fileUrl);
-    if (trashed) return !!user?.perms?.admin;
+    if (trashed) {
+      if (!user?.perms?.admin) return false;
+      // PHÁT HIỆN NGHIÊM TRỌNG (đợt audit chuyên sâu 12 cụm, 9/2026): trước đây `return !!user?.perms?.admin`
+      // — bypass đúng luật "admin không tự động xem dữ liệu HR nhạy cảm" (v23.28, xem canViewLaborContract()/
+      // canViewFullProfile()/canViewAllPayroll() ở lib/recordViewScope.js + lib/employeeProfile.js) cho 4
+      // collection dưới đây ngay khi hồ sơ bị xoá — admin CHỈ có cờ `admin` (không có hrContractManage) tải
+      // được file (VD PDF Quyết định tăng lương) của 1 HĐLĐ đã xoá dù bị chặn đúng luật ở bản ghi còn sống.
+      // Cùng gốc dữ liệu với SENSITIVE_TRASH_COLLECTION_CHECKS ở routes/trash.js — copy tối giản ở đây
+      // (không require routes/ vào lib/ để tránh vòng phụ thuộc route -> lib). attendanceRecords giữ
+      // NGUYÊN admin bypass vì bản thân canViewAttendanceRecordsForUser() đã cho phép admin xem.
+      const sensitiveTrashCheck = {
+        laborContracts: () => !!user.perms?.hrContractManage,
+        employeeProfiles: () => canViewFullProfile(user, trashed.item),
+        payslips: () => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove),
+        payrollPeriods: () => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove)
+      }[trashed.collection];
+      return sensitiveTrashCheck ? sensitiveTrashCheck() : true;
+    }
     return true; // FAIL-OPEN có chủ ý — xem ghi chú ở trên.
   }
 

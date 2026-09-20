@@ -164,6 +164,38 @@ function renameDeptScopeDepts(item, oldValue, newValue) {
   return { ...item, deptScope: { ...item.deptScope, depts: item.deptScope.depts.map(d => (d === oldValue ? newValue : d)) } };
 }
 
+// operationOrderStoreMixedApprovalRules[].stores[]: "🏬 Quy Trình Đặt Hàng Siêu Thị" (module-workflow.js,
+// xem lib/workflowEngine.js resolveOperationOrderStoreMixedApprovalRuleUsernames()) — mỗi dòng NGOẠI LỆ
+// (rule.stores không rỗng) khai rõ danh sách siêu thị/phòng ban phụ trách, so khớp CHUỖI THÔ với
+// item.dept của đơn hàng — PHÁT HIỆN NGHIÊM TRỌNG ở đợt audit chuyên sâu 12 cụm: trước đây cascade rename
+// bỏ sót hẳn field này, nên đổi tên 1 siêu thị/phòng ban làm người phụ trách theo dòng ngoại lệ đó MẤT
+// quyền duyệt đơn của đúng siêu thị/phòng ban vừa đổi tên (rule.stores vẫn giữ TÊN CŨ, không còn khớp
+// item.dept mang TÊN MỚI).
+function renameMixedApprovalRuleStores(rule, oldValue, newValue) {
+  if (!Array.isArray(rule.stores) || !rule.stores.includes(oldValue)) return rule;
+  return { ...rule, stores: rule.stores.map(s => (s === oldValue ? newValue : s)) };
+}
+async function cascadeMixedApprovalRuleStores(oldValue, newValue) {
+  await withLockedAppDataValue('operationOrderStoreMixedApprovalRules', (list) =>
+    (list || []).map(r => renameMixedApprovalRuleStores(r, oldValue, newValue)));
+}
+
+// operationOrderStoreMixedApprovalRules[].jobTitle: dòng mode 'JOBTITLE' — jobTitle có thể đến từ CẢ 2
+// danh mục (HO lẫn Siêu Thị, xem mixedApprovalJobTitleOptions() ở module-workflow.js: "🔀 lọc hỗn hợp
+// chức danh HO/Siêu Thị"), so khớp phẳng bằng CHUỖI, không phân biệt nguồn — PHÁT HIỆN NGHIÊM TRỌNG ở đợt
+// audit chuyên sâu 12 cụm: trước đây cascadeJobTitleRename()/cascadeStoreJobTitleRename() bỏ sót hẳn field
+// này, nên đổi tên 1 chức danh (HO hoặc Siêu Thị) làm rule.jobTitle tra ra TÊN CŨ -> 0 approver -> mọi đơn
+// "Đặt Hàng Tại Siêu Thị" PENDING/mới tạo ở bước đó không ai (ngoài Admin) duyệt được. Dùng CHUNG 1 hàm
+// cho cả 2 danh mục (không cần biết jobTitle thuộc HO hay Siêu Thị — resolver cũng không phân biệt).
+function renameMixedApprovalRuleJobTitle(rule, oldValue, newValue) {
+  if (rule.mode !== 'JOBTITLE' || rule.jobTitle !== oldValue) return rule;
+  return { ...rule, jobTitle: newValue };
+}
+async function cascadeMixedApprovalRuleJobTitle(oldValue, newValue) {
+  await withLockedAppDataValue('operationOrderStoreMixedApprovalRules', (list) =>
+    (list || []).map(r => renameMixedApprovalRuleJobTitle(r, oldValue, newValue)));
+}
+
 async function cascadeStoreRename(oldValue, newValue) {
   // user.dept dùng CHUNG 1 field cho cả tên phòng ban (HO) lẫn tên siêu thị (phân biệt bằng posType) —
   // so trực tiếp giá trị, không cần lọc posType (1 dept/store name không thể vừa là tên phòng ban vừa
@@ -178,6 +210,7 @@ async function cascadeStoreRename(oldValue, newValue) {
   await renameFieldValueInCollection('uniformPeriods', (item) => renameUniformPeriodAllocations(item, oldValue, newValue));
   await renameFieldValueInCollection('reportPeriods', (item) => renameDeptScopeDepts(item, oldValue, newValue));
   await renameFieldValueInCollection('budgetPeriods', (item) => renameDeptScopeDepts(item, oldValue, newValue));
+  await cascadeMixedApprovalRuleStores(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameDepartmentRefInAllVersions } = require('./orgChart'); // require trễ — tránh vòng lặp require
     return renameDepartmentRefInAllVersions(list, oldValue, newValue);
@@ -195,6 +228,7 @@ async function cascadeJobTitleRename(oldValue, newValue) {
   ));
   await withLockedAppDataValue('vppExcludedJobTitles', (list) => (list || []).map(jt => (jt === oldValue ? newValue : jt)));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, false);
+  await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, false);
@@ -207,6 +241,7 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
     (u.jobTitle === oldValue && u.posType === 'STORE') ? { ...u, jobTitle: newValue } : u
   ));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, true);
+  await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, true);

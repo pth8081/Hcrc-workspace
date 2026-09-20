@@ -981,6 +981,20 @@ async function getAllTrashItemsCached() {
   return value;
 }
 
+// Tra CHỈ tên collection của 1 mục Thùng Rác theo trashId — dùng khi cần biết collection TRƯỚC khi cho
+// phục hồi/xoá vĩnh viễn (xem assertTrashCollectionAllowed() ở routes/trash.js, PHÁT HIỆN NGHIÊM TRỌNG
+// đợt audit chuyên sâu 12 cụm: trước đây restore/xoá vĩnh viễn không hề kiểm collection, cho phép admin
+// KHÔNG có quyền chuyên biệt (hrContractManage...) vẫn phục hồi/xoá được — và response restore còn trả
+// nguyên payload). Không dùng getTrashItems()/getAllTrashItemsCached() (tốn hơn nhiều, JSON.parse cả
+// Payload) vì ở đây chỉ cần đúng 1 cột.
+async function getTrashItemCollection(trashId) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('trashId', sql.BigInt, trashId)
+    .query('SELECT Collection FROM dbo.TrashBin WHERE Id = @trashId');
+  return result.recordset.length ? result.recordset[0].Collection : null;
+}
+
 async function getTrashItems(collection) {
   const pool = await getPool();
   const req = pool.request();
@@ -1576,7 +1590,7 @@ module.exports = {
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById,
   getAllForCollection, getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
-  moveRecordToTrash, getTrashItems, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
+  moveRecordToTrash, getTrashItems, getTrashItemCollection, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
   collectRecordFileUrls, unlinkUnreferencedUploads, sweepOrphanedUploads,
   DEDICATED_TABLES, dedicatedTableName, bindExtractedColumns, getAllDedicatedRecords, queryDedicatedRecords
 };

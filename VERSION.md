@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**23.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.67 (2026-09-20): Vá 4 lỗi Nghiêm trọng từ đợt audit chuyên sâu 12 cụm module
+
+Theo yêu cầu người dùng, vá ngay 4 phát hiện mức **Nghiêm trọng** từ đợt rà
+soát chuyên sâu (nhiều agent song song, 114 phát hiện) trước khi xử lý các
+mục Cao/Trung bình/Thấp còn lại:
+
+1. **[Nhân Sự] Thùng Rác lộ nguyên văn HĐLĐ/dữ liệu HR nhạy cảm cho mọi tài
+   khoản `admin`** — `routes/trash.js` (GET/restore/delete), `lib/fileAuthz.js`
+   (fallback tra Thùng Rác của `authorizeFileAccess()`). Trước đây chỉ cần cờ
+   `admin` là xem/khôi phục/xoá vĩnh viễn được TOÀN BỘ Thùng Rác, kể cả
+   `laborContracts`/`employeeProfiles`/`payslips`/`payrollPeriods` — bypass
+   hoàn toàn luật v23.28 ("admin không tự động xem dữ liệu HR nhạy cảm", vốn
+   đã áp dụng cho dữ liệu SỐNG qua `canViewLaborContract()`/`canViewFullProfile()`/
+   `canViewAllPayroll()`). Nay đòi thêm đúng quyền chuyên biệt
+   (`hrContractManage`/`hrProfileManage`/`hrPayrollManage`/`hrPayrollApprove`)
+   cho 4 collection này; `attendanceRecords` giữ nguyên hành vi cũ (admin vẫn
+   xem được, đúng luật riêng của module Công & Phép). Thêm
+   `getTrashItemCollection()` ở `lib/recordStore.js` để route kiểm tra được
+   collection TRƯỚC khi cho khôi phục/xoá.
+2. **[Truyền Thông Nội Bộ] `POST /api/records/internalPosts/:id/edit` thiếu
+   xác minh chủ sở hữu file** — route SỬA bài "Góc Chia Sẻ" là route SỬA DUY
+   NHẤT còn thiếu `assertPayloadFileUrlsOwnedByUser()` (khác 13 route sửa
+   khác đã vá cùng lớp từ trước). Một bài Nháp Góc Chia Sẻ (ai cũng tạo được)
+   có thể bị sửa `attachment.fileUrl` trỏ tới file THẬT của người khác
+   (HĐLĐ, Quyết định lương, chứng từ thanh toán, CV ứng viên...) rồi tự đọc
+   được trọn vẹn, vì `internalPosts` đứng khá sớm trong thứ tự quét của
+   `findOwningRecord()` (`lib/fileAuthz.js`). Đã thêm đúng bước xác minh này.
+3-4. **[Vận Hành] `catalogRename.js` thiếu cascade vào
+   `operationOrderStoreMixedApprovalRules`** ("🏬 Quy Trình Đặt Hàng Siêu
+   Thị") — đổi tên 1 Chức Danh (HO hoặc Siêu Thị) không cascade vào
+   `rule.jobTitle`, và đổi tên 1 Siêu Thị/Phòng Ban không cascade vào
+   `rule.stores[]` (danh sách ngoại lệ). Cả 2 khiến rule tra ra TÊN CŨ → 0
+   approver → mọi đơn "Đặt Hàng Tại Siêu Thị" ở bước đó không ai (ngoài
+   Admin) duyệt được, không có cảnh báo nào. Đã thêm
+   `cascadeMixedApprovalRuleJobTitle()`/`cascadeMixedApprovalRuleStores()`
+   vào cả 3 hàm cascade liên quan (`cascadeJobTitleRename`/
+   `cascadeStoreJobTitleRename`/`cascadeStoreRename`).
+
+Test mới: `test-trash-sensitive-collections.js` (21/21),
+`test-edit-file-ownership-batch3.js` (7/7), 3 kịch bản cascade mới trong
+`test-catalog-rename-server.js` (tổng 18/18). Regression liên quan vẫn xanh:
+`test-catalog-rename-locked-accounts.js` (35/35), `test-mixed-approval-jobtitle-mix.js`
+(16/16), `test-operation-order-store-approver-scope.js` (15/15),
+`test-uploads-file-authz.js`, `test-edit-file-ownership.js`/`-batch2.js`,
+`test-internalpost-comment-own-edit-delete.js`, `test-audit-round3-internalposts-edit.js`,
+`test-lazy-load-all-tabs.js` (46/46), `test-csp-full-audit.js` (3/3). Ghi chú:
+1 kịch bản trong `test-uploads-file-authz.js` (`laborContracts: hrContractManage/admin
+xem toàn bộ...`) đã FAIL từ trước đợt vá này (xác nhận qua `git stash` — không
+liên quan tới 4 lỗi vá ở đây), để lại xử lý riêng.
+
+110 phát hiện còn lại (31 Cao / 45 Trung bình / 34 Thấp) chưa vá — chờ người
+dùng chọn thứ tự ưu tiên tiếp theo.
 
 ## v23.66 (2026-09-20): Đổi tên "⚙️ Quy Trình Hỗn Hợp" thành "🏬 Quy Trình Đặt Hàng Siêu Thị"
 

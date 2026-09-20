@@ -54,7 +54,14 @@ function resetState() {
     storeJobTitles: [{ label: 'Giám Đốc Siêu Thị' }],
     users: [{ username: 'u1', dept: 'Phòng IT', jobTitle: 'Trưởng phòng', posType: 'HO', perms: {} }],
     vppExcludedJobTitles: [],
-    orgChartVersions: []
+    orgChartVersions: [],
+    // "🏬 Quy Trình Đặt Hàng Siêu Thị" — PHÁT HIỆN NGHIÊM TRỌNG đợt audit chuyên sâu 12 cụm: đổi tên chức
+    // danh/siêu thị trước đây KHÔNG cascade vào đây (xem lib/catalogRename.js cascadeMixedApprovalRule*()).
+    operationOrderStoreMixedApprovalRules: [
+      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Trưởng phòng', username: null, stores: [] },
+      { id: 2, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', username: null, stores: ['Siêu Thị A'] },
+      { id: 3, step: 2, mode: 'PERSON', jobTitle: null, username: 'u1', stores: [] }
+    ]
   };
   RECORDS = {
     docs: [{ id: 1, dept: 'Phòng IT', cat: 'Nội bộ' }],
@@ -193,6 +200,34 @@ async function run(name, fn) {
       assert.deepStrictEqual(APP_DATA[key].sort(), [oldValue, otherExisting].sort());
     });
   }
+
+  await run('jobTitles: đổi tên -> cascade operationOrderStoreMixedApprovalRules[].jobTitle (chỉ dòng mode JOBTITLE khớp đúng chuỗi, KHÔNG đụng PERSON/dòng Siêu Thị khác)', async () => {
+    resetState();
+    const res = await renameApi('jobTitles', 'Trưởng phòng', 'Trưởng Phòng Ban');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const rules = APP_DATA.operationOrderStoreMixedApprovalRules;
+    assert.strictEqual(rules.find(r => r.id === 1).jobTitle, 'Trưởng Phòng Ban', 'LỖI ĐÃ VÁ: rename chức danh HO phải cascade vào rule.jobTitle');
+    assert.strictEqual(rules.find(r => r.id === 2).jobTitle, 'Giám Đốc Siêu Thị', 'Dòng chức danh Siêu Thị khác KHÔNG được đụng tới');
+    assert.strictEqual(rules.find(r => r.id === 3).username, 'u1', 'Dòng mode PERSON không được đụng tới');
+  });
+
+  await run('storeJobTitles: đổi tên -> cascade operationOrderStoreMixedApprovalRules[].jobTitle (dòng mode JOBTITLE nguồn Siêu Thị)', async () => {
+    resetState();
+    const res = await renameApi('storeJobTitles', 'Giám Đốc Siêu Thị', 'Giám Đốc Siêu Thị (Mới)');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const rules = APP_DATA.operationOrderStoreMixedApprovalRules;
+    assert.strictEqual(rules.find(r => r.id === 2).jobTitle, 'Giám Đốc Siêu Thị (Mới)', 'LỖI ĐÃ VÁ: rename chức danh Siêu Thị phải cascade vào rule.jobTitle');
+    assert.strictEqual(rules.find(r => r.id === 1).jobTitle, 'Trưởng phòng', 'Dòng chức danh HO khác KHÔNG được đụng tới');
+  });
+
+  await run('stores: đổi tên -> cascade operationOrderStoreMixedApprovalRules[].stores[] (danh sách ngoại lệ)', async () => {
+    resetState();
+    const res = await renameApi('stores', 'Siêu Thị A', 'Siêu Thị A Mới');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const rules = APP_DATA.operationOrderStoreMixedApprovalRules;
+    assert.deepStrictEqual(rules.find(r => r.id === 2).stores, ['Siêu Thị A Mới'], 'LỖI ĐÃ VÁ: rename siêu thị phải cascade vào rule.stores[] (danh sách ngoại lệ)');
+    assert.deepStrictEqual(rules.find(r => r.id === 1).stores, [], 'Dòng không khai ngoại lệ không bị đụng tới');
+  });
 
   await run('Route: khoá danh mục không hợp lệ -> 400', async () => {
     resetState();

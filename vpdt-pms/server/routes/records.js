@@ -702,9 +702,18 @@ router.post('/internalPosts/:id/edit', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => {
+    const result = await withLockedRecordForCollection('internalPosts', itemId, async (item) => {
       assertCanViewInternalPost(freshUser, item);
-      return recordActions.editInternalPost(req.body, freshUser, item, appData);
+      // PHÁT HIỆN NGHIÊM TRỌNG (đợt audit chuyên sâu 12 cụm, 9/2026): route này là route SỬA DUY NHẤT còn
+      // thiếu assertPayloadFileUrlsOwnedByUser() (khác 13 route sửa khác đã vá cùng lớp — xem
+      // lib/uploadedFiles.js). Bài Nháp "Góc Chia Sẻ" mở cho MỌI tài khoản sửa attachment.fileUrl trỏ tới
+      // file THẬT của người khác (HĐLĐ, Quyết định lương, chứng từ thanh toán, CV ứng viên...) rồi tự đọc
+      // được trọn vẹn — internalPosts là checker thứ 6 trong findOwningRecord() (lib/fileAuthz.js), thắng
+      // trước nhiều checker khác đứng sau. exemptFileUrls giữ nguyên tệp ĐANG CÓ trước khi sửa.
+      const exemptFileUrls = item.attachment?.fileUrl ? [item.attachment.fileUrl] : [];
+      const updated = recordActions.editInternalPost(req.body, freshUser, item, appData);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.attachment?.fileUrl }, freshUser, { exemptFileUrls });
+      return updated;
     });
     res.json({ ok: true, item: sanitizeInternalPostCommentsForUser(result, freshUser) });
   } catch (err) {

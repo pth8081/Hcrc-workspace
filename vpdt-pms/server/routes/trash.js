@@ -10,13 +10,39 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
-const { getTrashItems, restoreTrashItemWithFamily, permanentlyDeleteTrashItem } = require('../lib/recordStore');
+const { getTrashItems, getTrashItemCollection, restoreTrashItemWithFamily, permanentlyDeleteTrashItem } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
 function assertAdmin(user) {
   if (!user.perms?.admin) throw new HttpError(403, 'Chỉ Quản Trị Viên mới có quyền truy cập Thùng Rác');
+}
+
+// PHÁT HIỆN NGHIÊM TRỌNG (đợt audit chuyên sâu 12 cụm, 9/2026): assertAdmin() (chỉ cờ `admin`) từng là ĐỦ
+// để xem/khôi phục/xoá vĩnh viễn TOÀN BỘ Thùng Rác, kể cả 5 collection cực nhạy cảm dưới đây — trong khi
+// dữ liệu SỐNG của các collection này đã bị khoá theo ĐÚNG quyền chuyên biệt từ v23.28, KHÔNG còn admin tự
+// bypass (xem canViewLaborContract() lib/recordViewScope.js:945, canViewFullProfile()
+// lib/employeeProfile.js:380, canViewAllPayroll() lib/recordViewScope.js:1038). Một tài khoản chỉ có cờ
+// `admin` (không có hrContractManage) xoá xong 1 HĐLĐ lại đọc được nguyên payload (lương cơ bản, lịch sử
+// tăng lương ở amendments[]) qua GET /api/trash — bypass hoàn toàn luật đó, và restore còn trả nguyên item
+// đó trong response. attendanceRecords CỐ Ý không có mặt trong map dưới đây — canViewAttendanceRecordsForUser()
+// (lib/recordViewScope.js) bản thân đã cho phép `admin` xem (không thuộc nhóm "admin không tự bypass"
+// như 4 collection còn lại), nên assertAdmin() ở trên là ĐỦ, giữ nguyên hành vi cũ cho collection này.
+const SENSITIVE_TRASH_COLLECTION_CHECKS = {
+  laborContracts: (user) => !!user.perms?.hrContractManage,
+  employeeProfiles: (user) => !!(user.perms?.hrProfileManage || user.perms?.hrProfileFullView || user.perms?.hrProfileEdit),
+  payslips: (user) => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove),
+  payrollPeriods: (user) => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove)
+};
+
+// Gọi SAU assertAdmin() — chỉ xiết THÊM cho 5 collection nhạy cảm, các collection khác giữ nguyên
+// admin-only như trước.
+function assertSensitiveTrashCollectionAllowed(user, collection) {
+  const check = SENSITIVE_TRASH_COLLECTION_CHECKS[collection];
+  if (check && !check(user)) {
+    throw new HttpError(403, 'Bạn không có quyền quản lý riêng của dữ liệu nhân sự này (hrContractManage/hrProfileManage/hrPayrollManage/hrAttendanceManage) nên không được thao tác với mục này trong Thùng Rác');
+  }
 }
 
 function handleError(res, action, err) {
@@ -29,8 +55,21 @@ function handleError(res, action, err) {
 router.get('/', async (req, res) => {
   try {
     assertAdmin(req.freshUser);
-    const items = await getTrashItems(req.query.collection || null);
-    res.json({ items });
+    const collection = req.query.collection || null;
+    if (collection) {
+      assertSensitiveTrashCollectionAllowed(req.freshUser, collection);
+      const items = await getTrashItems(collection);
+      return res.json({ items });
+    }
+    // Không lọc theo 1 collection cụ thể -> liệt kê MỌI collection, nhưng phải TỰ LỌC BỚT các collection
+    // nhạy cảm mà người gọi không đủ quyền chuyên biệt (xem SENSITIVE_TRASH_COLLECTION_CHECKS ở trên) —
+    // không để lẫn vào danh sách chung "mọi collection".
+    const items = await getTrashItems(null);
+    const allowedItems = items.filter(it => {
+      const check = SENSITIVE_TRASH_COLLECTION_CHECKS[it.collection];
+      return !check || check(req.freshUser);
+    });
+    res.json({ items: allowedItems });
   } catch (err) {
     handleError(res, 'GET /', err);
   }
@@ -51,6 +90,8 @@ router.post('/:id/restore', async (req, res) => {
   if (!Number.isFinite(trashId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     assertAdmin(req.freshUser);
+    const collection = await getTrashItemCollection(trashId);
+    if (collection) assertSensitiveTrashCollectionAllowed(req.freshUser, collection);
     const result = await restoreTrashItemWithFamily(trashId);
     res.json({
       ok: true, collection: result.collection, item: result.item,
@@ -71,6 +112,8 @@ router.delete('/:id', async (req, res) => {
   if (!Number.isFinite(trashId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     assertAdmin(req.freshUser);
+    const collection = await getTrashItemCollection(trashId);
+    if (collection) assertSensitiveTrashCollectionAllowed(req.freshUser, collection);
     const level = req.freshUser.perms?.approverAuthLevel || 'NONE';
     if (level !== 'NONE' && !(await consumeApprovalGrant(req.freshUser.username))) {
       return res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN/vân tay) trước khi xóa vĩnh viễn' });
