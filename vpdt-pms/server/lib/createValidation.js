@@ -2278,6 +2278,13 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'createdBy',
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #5): TRƯỚC ĐÂY KHÔNG có
+    // getLockKey nên đi qua createForCollection() thường (không khoá gì) — 2 request tạo điều khoản gần
+    // như đồng thời, CÙNG vendorId + CÙNG termCode, đều đọc được collection "chưa có mã nào trùng" TRƯỚC
+    // khi cái nào kịp ghi, cả 2 đều qua được checkDuplicateTermCode() bên dưới rồi cùng tạo — 2 bản DRAFT
+    // trùng mã cùng NCC. Khoá theo đúng cặp trường mà checkDuplicateTermCode() dùng để so khớp (cùng khuôn
+    // operationOrders.getLockKey theo poNumber/labor_contract_code theo employeeCode ở trên).
+    getLockKey: (payload) => `rebate_term_code:${Number(payload?.vendorId) || 0}:${String(payload?.termCode || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
       if (!canManageTerms(user)) throw new CreateError(403, 'Bạn không có quyền tạo Điều Khoản Chiết Khấu');
       const vendorId = Number(payload.vendorId);

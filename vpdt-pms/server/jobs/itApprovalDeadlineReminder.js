@@ -95,7 +95,13 @@ async function checkItApprovalDeadlineReminders() {
           : `[${logTarget}] chưa có người nhận hợp lệ (chưa có email hợp lệ)`,
         status: recipients.length ? (totalSendFailure ? 'WARNING' : 'SUCCESS') : 'WARNING'
       });
-      return !totalSendFailure;
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Thấp — phát hiện #13): TRƯỚC ĐÂY trả về `!totalSendFailure`
+      // — totalSendFailure LUÔN false khi recipients.length === 0 (điều kiện đầu tiên của nó yêu cầu
+      // recipients.length > 0), nên hàm gọi ở dưới coi "chưa có ai nhận" là "đã gửi thành công", set cờ
+      // *ReminderSent = true VĨNH VIỄN dù chưa từng gửi được cho ai. Nếu người được leo thang/duyệt sau
+      // đó mới có email hợp lệ hoặc được kích hoạt lại, job sẽ KHÔNG BAO GIỜ thử nhắc lại nữa (cờ đã true).
+      // Chỉ coi là "đã nhắc" khi THỰC SỰ có ít nhất 1 người nhận hợp lệ VÀ gửi không lỗi toàn bộ.
+      return recipients.length > 0 && !totalSendFailure;
     }
 
     // ===== 1. itSupportTickets: leo thang phê duyệt treo quá lâu =====

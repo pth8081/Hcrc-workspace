@@ -79,19 +79,29 @@ router.get('/vendors', async (req, res) => {
   } catch (err) { sendServerError(res, 500, err, 'GET /api/purchasing/vendors'); }
 });
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Thấp — phát hiện #12): getAllForCollection('vendors') +
+// validateVendorPayload() (kiểm trùng Mã Số Thuế) TRƯỚC ĐÂY chạy TRƯỚC withLockedRecordForCollection() —
+// đọc XONG rồi mới khoá, nên 2 request sửa 2 NCC KHÁC NHAU thành CÙNG 1 taxCode gần như đồng thời đều đọc
+// được danh sách "chưa ai trùng MST này" trước khi cái nào kịp ghi, cả 2 đều qua được check rồi cùng ghi
+// -> 2 NCC trùng MST (không có UNIQUE INDEX cấp DB cho TaxCode vì field này optional, nhiều NCC có thể để
+// trống). Di chuyển kiểm tra trùng MST vào BÊN TRONG 1 khoá ghi chung (withAppLock('vendors_write')) —
+// đọc lại danh sách vendors FRESH ngay trong khoá trước khi validate trùng, khoá này giữ tới hết khi ghi
+// xong (withLockedRecordForCollection lồng bên trong dùng khoá khác theo id, không xung đột resource).
 router.post('/vendors/:id/edit', requireManageVendors, async (req, res) => {
   const vendorId = Number(req.params.id);
   if (!Number.isFinite(vendorId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const vendors = await getAllForCollection('vendors');
-    const err = vendorRebate.validateVendorPayload(req.body, vendors, vendorId);
-    if (err) return res.status(err.includes('đã tồn tại') || err.includes('đã gán') ? 409 : 400).json({ error: err });
-    const updated = await withLockedRecordForCollection('vendors', vendorId, (v) => ({
-      ...v,
-      vendorName: String(req.body.vendorName).trim(),
-      taxCode: req.body.taxCode ? String(req.body.taxCode).trim().slice(0, 20) : '',
-      contactOwnerUsername: req.body.contactOwnerUsername || null
-    }));
+    const updated = await withAppLock('vendors_write', async () => {
+      const vendors = await getAllForCollection('vendors');
+      const err = vendorRebate.validateVendorPayload(req.body, vendors, vendorId);
+      if (err) throw new HttpError(err.includes('đã tồn tại') || err.includes('đã gán') ? 409 : 400, err);
+      return withLockedRecordForCollection('vendors', vendorId, (v) => ({
+        ...v,
+        vendorName: String(req.body.vendorName).trim(),
+        taxCode: req.body.taxCode ? String(req.body.taxCode).trim().slice(0, 20) : '',
+        contactOwnerUsername: req.body.contactOwnerUsername || null
+      }));
+    });
     logPurchasing(req, 'EDIT_VENDOR', updated.vendorCode, `Sửa thông tin NCC ${updated.vendorCode}`);
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, `vendors/${req.params.id}/edit`); }
@@ -183,11 +193,30 @@ router.post('/terms/:id/activate', requireActivateTerm, async (req, res) => {
   const termId = Number(req.params.id);
   if (!Number.isFinite(termId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const updated = await withAppLock(`rebate_term_activate:${termId}`, async () => {
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #5): khoá TRƯỚC ĐÂY đặt theo
+    // termId của bản ĐANG kích hoạt (`rebate_term_activate:${termId}`) — nhưng bất biến cần bảo vệ là
+    // "chỉ 1 bản ACTIVE cho mỗi cặp (vendorId, termCode)", KHÔNG phải theo từng termId riêng lẻ. 2 request
+    // kích hoạt 2 bản DRAFT KHÁC id nhưng CÙNG vendorId+termCode (VD 2 lượt Nhân Bản khác nhau của cùng 1
+    // điều khoản, hoặc 2 tab cùng bấm kích hoạt 2 bản nháp khác nhau gần như đồng thời) sẽ nhận 2 khoá
+    // KHÁC NHAU (khác termId) -> chạy song song, cả 2 đều đọc "chưa có bản ACTIVE khác" trước khi bản kia
+    // kịp lưu trữ (ARCHIVED) các bản ACTIVE cũ -> có thể ra 2 bản ACTIVE cùng lúc cho cùng vendorId+termCode.
+    // Đổi khoá theo ĐÚNG cặp vendorId+termCode (đọc trước khi vào khoá để biết cặp này — không đổi hành vi
+    // đọc lại "chưa có bản ACTIVE nào khác" vẫn BÊN TRONG khoá mới như cũ).
+    const preTerms = await getAllForCollection('rebateTerms');
+    const preTarget = preTerms.find(t => t.id === termId);
+    if (!preTarget) throw new HttpError(404, 'Không tìm thấy điều khoản');
+    const updated = await withAppLock(`rebate_term_activate:${preTarget.vendorId}:${preTarget.termCode}`, async () => {
       const terms = await getAllForCollection('rebateTerms');
       const target = terms.find(t => t.id === termId);
       if (!target) throw new HttpError(404, 'Không tìm thấy điều khoản');
       vendorRebate.assertValidTermTransition(target, 'ACTIVE');
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3): phòng vệ SÂU cho các bản DRAFT
+      // đã lỡ tạo TRƯỚC bản vá validateRebateTermPayload() (nay đã chặn calcBasis='SELL_OUT_VALUE'/
+      // termType='GROWTH_REBATE' ngay từ lúc tạo/sửa) — không cho KÍCH HOẠT các bản còn sót giá trị chưa
+      // được hỗ trợ tính tự động, tránh 1 điều khoản ACTIVE mà không ai tính được (hoặc tệ hơn, ai đó sau
+      // này gỡ tạm bản vá validate mà quên gỡ luôn chỗ này).
+      const unsupportedErr = vendorRebate.assertCalcBasisAndTermTypeSupported(target.calcBasis, target.termType);
+      if (unsupportedErr) throw new HttpError(409, unsupportedErr);
       const others = terms.filter(t => t.id !== termId && t.vendorId === target.vendorId && t.termCode === target.termCode && t.status === 'ACTIVE');
       for (const other of others) {
         await withLockedRecordForCollection('rebateTerms', other.id, (t) => ({
@@ -261,6 +290,16 @@ router.post('/terms/:id/calculate', requireManageTerms, async (req, res) => {
     if (term.effectiveTo && periodEnd > term.effectiveTo) {
       return res.status(400).json({ error: `Kỳ tính kết thúc sau Ngày Hiệu Lực Đến của điều khoản (${term.effectiveTo}) — vui lòng chọn lại kỳ tính nằm trong thời hạn hiệu lực` });
     }
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3): (a) đối chiếu periodType với ĐỘ
+    // DÀI periodStart/periodEnd — trước đây không hề kiểm; (b) phòng vệ SÂU (defense-in-depth) chặn tính
+    // cho các điều khoản ACTIVE TỪ TRƯỚC bản vá này mà calcBasis/termType chưa được hỗ trợ tính tự động
+    // (validate ở tạo/sửa đã chặn TỪ NAY, nhưng điều khoản cũ đã lỡ ACTIVE trước đó vẫn có thể gọi thẳng
+    // route này) — xem assertCalcBasisAndTermTypeSupported()/validatePeriodMatchesPeriodType() ở
+    // lib/vendorRebate.js cho lý do đầy đủ.
+    const unsupportedErr = vendorRebate.assertCalcBasisAndTermTypeSupported(term.calcBasis, term.termType);
+    if (unsupportedErr) return res.status(409).json({ error: unsupportedErr });
+    const periodTypeErr = vendorRebate.validatePeriodMatchesPeriodType(term.periodType, periodStart, periodEnd);
+    if (periodTypeErr) return res.status(400).json({ error: periodTypeErr });
     const vendor = vendors.find(v => v.id === term.vendorId);
     if (!vendor) return res.status(404).json({ error: 'Không tìm thấy NCC của điều khoản này' });
 
@@ -337,19 +376,48 @@ router.post('/sync', requireManageTerms, syncRateLimiter, async (req, res) => {
       const sinceDate = lastSuccess ? new Date(new Date(lastSuccess).getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10) : null;
 
       const { items, pagesFetched } = await fetchAllPurchases({ baseUrl, apiKey, sinceDate });
-      const rows = items.map(it => ({
-        vendorCode: it.vendorCode, storeCode: it.storeCode, storeFormat: it.storeFormat, categoryCode: it.categoryCode,
-        purchaseDate: it.purchaseDate, amount: it.amount, isReturn: !!it.isReturn,
-        sourceSystem: 'DSMART', sourceRefId: it.refId || it.id || null, dataConfidence: 'PROVISIONAL'
-      }));
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #7): items.map() TRƯỚC ĐÂY bê
+      // thẳng field từ DSmart vào INSERT theo lô 200 dòng (bulkInsertPurchaseTransactions(), INSERT_CHUNK_SIZE
+      // ở lib/vendorPurchaseStore.js) dù VendorCode/StoreCode/PurchaseDate/Amount là cột NOT NULL (xem
+      // sql/schema.sql) — 1 item DSmart trả về thiếu field (API ngoài không đảm bảo tuyệt đối sạch dữ
+      // liệu) sẽ làm SQL báo lỗi constraint cho CẢ LÔ 200 dòng đó, có thể fail cả lượt đồng bộ dù đa số
+      // dòng hợp lệ. Validate TỪNG DÒNG trước khi đưa vào batch insert — dòng lỗi thì SKIP + ghi vào
+      // rowErrors, các dòng khác vẫn nạp bình thường — cùng khuôn cô lập lỗi đã có ở
+      // parsePurchaseTransactionImportXlsx() (lib/purchasingManualImport.js, Nhập File thủ công) và vòng
+      // lặp try/catch từng đơn hàng ở jobs/operationOrderApiSync.js.
+      const DATE_RE_ROW = /^\d{4}-\d{2}-\d{2}$/;
+      const rows = [];
+      const rowErrors = [];
+      items.forEach((it, idx) => {
+        const vendorCode = String(it?.vendorCode || '').trim();
+        const storeCode = String(it?.storeCode || '').trim();
+        const purchaseDate = it?.purchaseDate != null ? String(it.purchaseDate).slice(0, 10) : '';
+        const amount = Number(it?.amount);
+        const refLabel = it?.refId || it?.id || '(không có refId)';
+        const errs = [];
+        if (!vendorCode) errs.push('thiếu vendorCode');
+        if (!storeCode) errs.push('thiếu storeCode');
+        if (!DATE_RE_ROW.test(purchaseDate) || Number.isNaN(new Date(purchaseDate).getTime())) errs.push('purchaseDate không hợp lệ/thiếu');
+        if (!Number.isFinite(amount) || amount < 0) errs.push('amount không hợp lệ/thiếu');
+        if (errs.length) {
+          rowErrors.push({ rowIndex: idx, refId: refLabel, message: `Dòng ${idx + 1} (refId ${refLabel}): ${errs.join(', ')} — đã bỏ qua` });
+          return;
+        }
+        rows.push({
+          vendorCode, storeCode, storeFormat: it.storeFormat, categoryCode: it.categoryCode,
+          purchaseDate, amount, isReturn: !!it.isReturn,
+          sourceSystem: 'DSMART', sourceRefId: it.refId || it.id || null, dataConfidence: 'PROVISIONAL'
+        });
+      });
       const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
 
       await insertPurchaseSyncLog({
-        startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: 'SUCCESS',
-        rowsFetched: items.length, rowsInserted, pagesFetched, triggeredBy: req.freshUser.username
+        startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: rowErrors.length ? 'PARTIAL' : 'SUCCESS',
+        rowsFetched: items.length, rowsInserted, pagesFetched, triggeredBy: req.freshUser.username,
+        errorMessage: rowErrors.length ? rowErrors.map(e => e.message).join('; ') : null
       });
-      logPurchasing(req, 'SYNC_DSMART', 'DSMART', `Đồng bộ DSmart: ${items.length} dòng lấy về, ${rowsInserted} dòng mới, ${rowsUpdated} dòng cập nhật lại (DSmart sửa dữ liệu cũ), ${rowsSkippedDuplicate} trùng bỏ qua`);
-      res.json({ ok: true, rowsFetched: items.length, rowsInserted, rowsUpdated, rowsSkippedDuplicate, pagesFetched });
+      logPurchasing(req, 'SYNC_DSMART', 'DSMART', `Đồng bộ DSmart: ${items.length} dòng lấy về, ${rowsInserted} dòng mới, ${rowsUpdated} dòng cập nhật lại (DSmart sửa dữ liệu cũ), ${rowsSkippedDuplicate} trùng bỏ qua, ${rowErrors.length} dòng lỗi bị bỏ qua`);
+      res.json({ ok: true, rowsFetched: items.length, rowsInserted, rowsUpdated, rowsSkippedDuplicate, rowErrors, pagesFetched });
     });
   } catch (err) {
     // Không lấy được khoá (đang có lượt đồng bộ khác chạy) -> KHÔNG ghi nhật ký FAILED (lượt này chưa
@@ -365,10 +433,27 @@ router.post('/sync', requireManageTerms, syncRateLimiter, async (req, res) => {
   }
 });
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #8): route này chỉ gác bởi
+// requireAnyPurchasingAccess (router.use() ở đầu file — CHO PHÉP bất kỳ quyền nào trong 5 quyền module,
+// kể cả CHỈ có rebateViewReport/rebateReconcile/rebateApprove, KHÔNG được phép đồng bộ) — nhưng
+// toSyncLogEntry() (lib/vendorPurchaseStore.js) trả nguyên errorMessage (có thể chứa hostname/IP nội bộ,
+// phản hồi thô từ hệ thống DSmart ngoài) cho MỌI người xem được log, không phân biệt có quyền đồng bộ
+// thật hay không. Cùng khuôn sanitizeOperationOrderApiConfig() (routes/data.js) đã đóng cho
+// operationOrderApiConfig ở vòng rà soát 1: chỉ trả errorMessage chi tiết cho người CÓ quyền đồng bộ thật
+// (canManageTerms — admin/rebateTermManage, đúng quyền gác POST /sync ở trên), người khác chỉ thấy trạng
+// thái chung chung.
+function sanitizePurchaseSyncLogs(logs, canSeeDetail) {
+  if (canSeeDetail) return logs;
+  return logs.map(({ errorMessage, ...rest }) => ({
+    ...rest,
+    errorMessage: errorMessage ? 'Đồng bộ/nhập dữ liệu thất bại — liên hệ người có quyền quản lý Điều Khoản Chiết Khấu để xem chi tiết' : null
+  }));
+}
 router.get('/sync-logs', async (req, res) => {
   try {
     const logs = await getRecentPurchaseSyncLogs(50);
-    res.json({ ok: true, items: logs });
+    const canSeeDetail = vendorRebate.canManageTerms(req.freshUser);
+    res.json({ ok: true, items: sanitizePurchaseSyncLogs(logs, canSeeDetail) });
   } catch (err) { sendServerError(res, 500, err, 'GET /api/purchasing/sync-logs'); }
 });
 
@@ -405,6 +490,13 @@ router.get('/manual-import-template', requireManageTerms, async (req, res) => {
 
 // POST /api/purchasing/manual-import — đọc file đã điền, GHI THẲNG vào dbo.VendorPurchaseTransactions
 // (cùng cách POST /sync ở trên xử lý dữ liệu DSmart, KHÔNG phải luồng preview-rồi-client-tự-gộp).
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #6): route này TRƯỚC ĐÂY hoàn toàn
+// KHÔNG có khoá chống chạy chồng — trong khi /sync (DSmart) ĐÃ có withAppLock('purchasing_dsmart_sync')
+// đúng lý do 2 lượt ghi cùng lúc vào bulkInsertPurchaseTransactions() có thể đâm nhau ở UNIQUE index
+// (SourceSystem, SourceRefId). Route này ghi vào CÙNG hàm bulkInsertPurchaseTransactions() (chỉ khác
+// sourceSystem='MANUAL') nên chịu ĐÚNG rủi ro y hệt nếu 2 lượt Nhập File thủ công chạy chồng, HOẶC 1 lượt
+// Nhập File chạy chồng với 1 lượt Đồng Bộ DSmart đang chạy — dùng CHUNG đúng 1 khoá 'purchasing_dsmart_sync'
+// với /sync để chặn chồng chéo giữa CẢ 2 route (không phải 2 khoá riêng biệt — cả 2 cùng ghi 1 bảng).
 router.post('/manual-import', requireManageTerms, uploadRateLimiter, (req, res) => {
   manualImportUpload.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
@@ -421,7 +513,16 @@ router.post('/manual-import', requireManageTerms, uploadRateLimiter, (req, res) 
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
       const { rows, rowErrors } = await parsePurchaseTransactionImportXlsx(buffer);
-      const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
+      let result;
+      try {
+        result = await withAppLock('purchasing_dsmart_sync', async () => bulkInsertPurchaseTransactions(rows));
+      } catch (lockErr) {
+        if (lockErr instanceof HttpError && lockErr.status === 409) {
+          return res.status(409).json({ error: 'Một lượt đồng bộ/nhập dữ liệu mua hàng khác đang chạy — vui lòng đợi lượt đó xong rồi thử lại.' });
+        }
+        throw lockErr;
+      }
+      const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = result;
 
       await insertPurchaseSyncLog({
         startedAt, finishedAt: new Date(), sourceSystem: 'MANUAL', status: rowErrors.length ? 'PARTIAL' : 'SUCCESS',

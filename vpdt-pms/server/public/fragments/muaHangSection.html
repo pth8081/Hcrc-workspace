@@ -81,7 +81,11 @@
                 <label class="text-xs font-bold text-gray-600">Loại Điều Khoản</label>
                 <select id="mhTermType" class="w-full border rounded px-2 py-1.5 text-sm">
                   <option value="VOLUME_REBATE">Chiết Khấu Theo Doanh Số</option>
-                  <option value="GROWTH_REBATE">Chiết Khấu Theo Tăng Trưởng</option>
+                  <!-- LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3): GROWTH_REBATE CHƯA
+                       được server tính đúng (thiếu so sánh với kỳ trước) — disabled để không ai âm thầm
+                       chọn 1 lựa chọn tính SAI (server cũng đã chặn ở validateRebateTermPayload(), đây là
+                       lớp UX cho người dùng thấy rõ NGAY khi chọn, xem lib/vendorRebate.js). -->
+                  <option value="GROWTH_REBATE" disabled>Chiết Khấu Theo Tăng Trưởng (chưa hỗ trợ tính tự động)</option>
                   <option value="TRADE_SPEND">Trade Spend</option>
                   <option value="LISTING_FEE">Phí Lên Kệ</option>
                   <option value="EARLY_PAYMENT">Chiết Khấu Thanh Toán Sớm</option>
@@ -93,7 +97,11 @@
                 <label class="text-xs font-bold text-gray-600">Căn Cứ Tính</label>
                 <select id="mhTermCalcBasis" class="w-full border rounded px-2 py-1.5 text-sm">
                   <option value="PURCHASE_VALUE">Giá Trị Mua Hàng</option>
-                  <option value="SELL_OUT_VALUE">Giá Trị Bán Ra</option>
+                  <!-- LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3): hệ thống CHƯA có
+                       nguồn dữ liệu "Giá Trị Bán Ra" (chỉ có VendorPurchaseTransactions = dữ liệu MUA
+                       HÀNG) — chọn SELL_OUT_VALUE trước đây âm thầm tính bằng dữ liệu MUA HÀNG (SAI ý
+                       nghĩa). Disabled cho tới khi hệ thống có nguồn dữ liệu bán ra thật. -->
+                  <option value="SELL_OUT_VALUE" disabled>Giá Trị Bán Ra (chưa hỗ trợ — chưa có nguồn dữ liệu)</option>
                 </select>
               </div>
               <div>
@@ -163,7 +171,7 @@
            nên hiện chung trong bảng lịch sử ở trên (cột Nguồn phân biệt DSMART/MANUAL). -->
       <div id="mhManualImportWrap" class="hidden bg-white rounded border p-4 space-y-3">
         <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📤 Nhập/Xuất Dữ Liệu Thủ Công</h3>
-        <p class="text-xs text-gray-500">Dùng khi chưa/không đồng bộ được DSmart — tải file mẫu, điền tay rồi nhập lên, hoặc xuất lại dữ liệu đang có để chỉnh sửa/bổ sung.</p>
+        <p class="text-xs text-gray-500">Dùng khi chưa/không đồng bộ được DSmart — tải file mẫu, điền tay rồi nhập lên, hoặc xuất lại dữ liệu Thủ Công đang có để chỉnh sửa/bổ sung rồi nhập lại. <b>Lưu ý:</b> "📊 Xuất File" bên dưới CHỈ xuất đúng dữ liệu nguồn Thủ Công (không kèm dữ liệu 🔄 Đồng Bộ DSmart) — xuất rồi nhập lại đúng luồng này để tránh nhân đôi giao dịch; muốn xem/báo cáo TOÀN BỘ dữ liệu (cả 2 nguồn) hãy dùng bảng Nhật Ký Đồng Bộ hoặc màn 📊 Báo Cáo.</p>
         <div class="flex flex-wrap items-center gap-2">
           <a href="/api/purchasing/manual-import-template" target="_blank" class="bg-gray-100 text-gray-700 border px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-200">📥 Tải File Mẫu</a>
           <label class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 cursor-pointer">📤 Nhập File<input id="mhManualImportFileInput" type="file" accept=".xlsx" data-op-change="onMhManualImportFileChange" data-arg-event="0" class="hidden"></label>
@@ -178,7 +186,7 @@
             <label class="text-xs font-bold text-gray-600 block">Đến Ngày</label>
             <input type="date" id="mhExportTo" class="border rounded px-2 py-1.5 text-sm">
           </div>
-          <button type="button" data-op="exportMhManualData" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất File</button>
+          <button type="button" data-op="exportMhManualData" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất File Thủ Công (để sửa &amp; nhập lại)</button>
         </div>
       </div>
       </div>

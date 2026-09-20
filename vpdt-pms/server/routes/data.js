@@ -843,14 +843,29 @@ async function loadChecklistSubmissionsScoped(user) {
 // nếu không (đa số người dùng thường — chỉ xem đơn hàng phòng ban mình), tải qua where.Dept ở SQL.
 function isApproverForAnyOperationOrderTier(user, data) {
   if (!user?.username) return false;
-  const tierMaps = [data.operationOrderStoreTierWorkflows, data.operationOrderHOTierWorkflows];
-  for (const tierMap of tierMaps) {
-    for (const tierConfig of Object.values(tierMap || {})) {
-      const { approvers } = flatWorkflowConfigToSteps(tierConfig, data);
-      const isApproverHere = Object.values(approvers || {}).some(list =>
-        Array.isArray(list) ? list.includes(user.username) : list === user.username);
-      if (isApproverHere) return true;
-    }
+  // HO: giữ nguyên như cũ — thuần theo tierConfig.approvers (đơn HO KHÔNG áp dụng "Quy Trình Hỗn Hợp").
+  for (const tierConfig of Object.values(data.operationOrderHOTierWorkflows || {})) {
+    const { approvers } = flatWorkflowConfigToSteps(tierConfig, data);
+    const isApproverHere = Object.values(approvers || {}).some(list =>
+      Array.isArray(list) ? list.includes(user.username) : list === user.username);
+    if (isApproverHere) return true;
+  }
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao): từ đợt "Quy Trình Hỗn Hợp"
+  // (resolveOperationOrderWorkflow() ở lib/workflowEngine.js), approver đơn STORE KHÔNG còn lấy từ
+  // operationOrderStoreTierWorkflows[...].approvers nữa (field đó giờ chỉ còn tham khảo, không được đọc) —
+  // 100% từ operationOrderStoreMixedApprovalRules. Bộ lọc tải trước này trước đây vẫn chỉ quét tier config
+  // cũ nên approver dòng NGOẠI LỆ (rule.stores[]) hoặc dòng JOBTITLE mặc định qua secondaryPositions[].dept
+  // không bao giờ được coi là "đang là approver" -> không thấy đơn cần duyệt ở Hộp Thư Duyệt. Đây CHỈ là
+  // quyết định TRƯỚC KHI TẢI "có nên tải company-wide không" (an toàn khi over-inclusive — vẫn lọc lại đúng
+  // sau đó ở filterOperationOrdersForUser()), nên không cần resolve đúng theo TỪNG siêu thị cụ thể như
+  // resolveOperationOrderStoreMixedApprovalRuleUsernames() (lib/workflowEngine.js:286) — chỉ cần biết user
+  // CÓ THỂ là approver ở BẤT KỲ siêu thị nào theo rule hay không: mode PERSON khớp đúng username, mode
+  // JOBTITLE khớp đúng chức danh (đủ điều kiện ở siêu thị của chính họ hoặc ở danh sách "Siêu Thị Phụ
+  // Trách" ngoại lệ — cả 2 trường hợp đều chỉ cần jobTitle khớp, không cần biết đúng siêu thị nào).
+  for (const rule of data.operationOrderStoreMixedApprovalRules || []) {
+    if (!rule) continue;
+    if (rule.mode === 'PERSON' && rule.username === user.username) return true;
+    if (rule.mode === 'JOBTITLE' && user.jobTitle && user.jobTitle === rule.jobTitle) return true;
   }
   return false;
 }
@@ -1696,3 +1711,7 @@ module.exports = router;
 // tests/test-merge-groups-perms.js gọi thẳng, kiểm PQ-02 (union quyền nhiều nhóm) mà không phải chép
 // lại logic hàm này ra 1 bản riêng (dễ lệch dần với bản thật theo thời gian).
 module.exports.mergeGroupsBasePermsServer = mergeGroupsBasePermsServer;
+// Cùng lý do mergeGroupsBasePermsServer ở trên — CHỈ để tests/test-operation-order-mixed-approver-preload.js
+// gọi thẳng, kiểm phát hiện #2 (đợt audit chuyên sâu 12 cụm, mức Cao: bộ lọc tải trước "user này có đang
+// là approver ở BẤT KỲ tier nào không" trước đây bỏ sót operationOrderStoreMixedApprovalRules hoàn toàn).
+module.exports.isApproverForAnyOperationOrderTier = isApproverForAnyOperationOrderTier;

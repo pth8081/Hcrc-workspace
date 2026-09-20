@@ -110,8 +110,18 @@ function parseIsReturn(raw) {
   return s === 'co' || s === 'true' || s === '1' || s === 'x';
 }
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #4, mục phụ): hash dedup TRƯỚC ĐÂY thiếu
+// storeFormat — 2 dòng giao dịch THẬT SỰ KHÁC NHAU (cùng NCC/siêu thị/ngành hàng/ngày/số tiền/hàng trả
+// lại nhưng khác Định Dạng, VD 1 dòng ghi nhầm 'MART' và 1 dòng đúng 'MINIMART' của cùng chuỗi/siêu thị,
+// hoặc 2 giao dịch trùng số tiền ngẫu nhiên ở 2 định dạng khác nhau) sẽ ra CÙNG 1 sourceRefId -> lượt nhập
+// sau bị coi là "dòng đã có, bỏ qua" (rowsSkippedDuplicate) dù là 2 giao dịch khác nhau, MẤT dữ liệu.
+// LƯU Ý VẬN HÀNH: đổi công thức hash này làm sourceRefId của các dòng MANUAL cũ (đã nhập TRƯỚC bản vá)
+// và dòng MANUAL mới (SAU bản vá, có storeFormat) LỆCH NHAU — lỡ nhập lại NGUYÊN 1 file cũ đã nhập trước
+// bản vá sẽ không còn nhận diện được là trùng nữa (tạo dòng mới thay vì bỏ qua). Chấp nhận được (nhất
+// quán với các lần sửa thuật toán hash/dedup khác trong hệ thống) vì đây là sửa đúng bản chất nghiệp vụ
+// (2 dòng khác Định Dạng PHẢI được coi là 2 giao dịch khác nhau).
 function buildManualSourceRefId(row) {
-  const canon = [row.vendorCode, row.storeCode, row.categoryCode || '', row.purchaseDate, row.amount, row.isReturn ? '1' : '0'].join('|');
+  const canon = [row.vendorCode, row.storeCode, row.storeFormat || '', row.categoryCode || '', row.purchaseDate, row.amount, row.isReturn ? '1' : '0'].join('|');
   return 'MANUAL-' + crypto.createHash('sha1').update(canon).digest('hex').slice(0, 24);
 }
 

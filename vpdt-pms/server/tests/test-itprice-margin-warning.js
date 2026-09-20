@@ -4,7 +4,15 @@
 // báo nếu sai"): checkItPriceMarginConsistency() (public/js/module-itsupport-price.js) đối chiếu mức
 // Margin/Chiết Khấu người đề xuất TỰ CHỌN (#itPriceTier) với số liệu THẬT trong cột đã gán vai trò
 // "Margin/Chiết Khấu" (marginColumnKey, admin gán 1 lần cho Mẫu Giá qua "🎯 Cột Margin/CK") của file bảng
-// giá vừa tải lên — CHỈ CẢNH BÁO (không chặn gửi) khi trung bình cộng số liệu thật KHÔNG khớp mức đã chọn.
+// giá vừa tải lên — CHỈ CẢNH BÁO (không chặn gửi) khi TRUNG BÌNH CỘNG số liệu thật KHÔNG khớp mức đã
+// chọn.
+//
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): dùng THUẦN trung bình cộng có
+// thể bị vài dòng margin cao che mất khi trung bình hoá cùng nhiều dòng thấp (dòng đó đáng ra thuộc mức
+// MARGIN_GTE5, đi quy trình duyệt khác). Đã sửa checkItPriceMarginConsistency() để cảnh báo nếu BẤT KỲ
+// dòng nào (không chỉ trung bình) sai phía so với mức đã chọn — xem 2 kịch bản "straddle" bên dưới. Cũng
+// sửa parseItPriceMarginNumber() để đọc đúng số dạng "1.234,5" (dấu chấm phân cách nghìn, dấu phẩy thập
+// phân) — trước đây .replace(',', '.') chỉ thay dấu phẩy ĐẦU TIÊN, ra NaN, âm thầm bị lọc khỏi tính toán.
 //
 // Gọi qua REAL app thật (Playwright + public/index.html + module-itsupport-price.js thật) — không chép
 // lại logic đối chiếu.
@@ -111,6 +119,36 @@ async function main() {
       await seedPendingFileWithMargins(page, ['7%', '8%', '9%']); // avg = 8, KHÔNG khớp DISCOUNT_LTE5 (<=5)
       const s = await warningState(page);
       assertEqual(s.hidden, false, 'Chiết khấu 8% trung bình vượt mức DISCOUNT_LTE5 (<=5%): cảnh báo phải hiện');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: mức MARGIN_LT5, đa số dòng THẤP nhưng 1 dòng margin CAO (30%) bị trung bình hoá che mất -> vẫn PHẢI cảnh báo (trước đây avg=8.75<... thực ra avg vẫn >=5 ở đây; dùng bộ số khiến avg < 5 nhưng có dòng >= 5)', async () => {
+      await page.selectOption('#itPriceMasterListSelect', String(MASTER_LIST_WITH_MARGIN.id));
+      await page.waitForTimeout(100);
+      await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+      // 9 dòng 1% (thấp) + 1 dòng 30% (cao) -> avg = (9*1+30)/10 = 3.9% -- vẫn < 5% nên TRUNG BÌNH CỘNG cũ
+      // sẽ ẩn cảnh báo dù có 1 dòng (30%) rõ ràng thuộc mức MARGIN_GTE5 (đi quy trình duyệt khác).
+      await seedPendingFileWithMargins(page, ['1%', '1%', '1%', '1%', '1%', '1%', '1%', '1%', '1%', '30%']);
+      const s = await warningState(page);
+      assertEqual(s.hidden, false, 'LỖI ĐÃ VÁ: dù trung bình (3.9%) vẫn khớp MARGIN_LT5, có 1 dòng (30%) sai phía -> PHẢI cảnh báo, không được ẩn theo trung bình như bản cũ');
+      assert(/1\/10|30\.0%/.test(s.text), `Nội dung cảnh báo nên nêu số dòng sai phía hoặc giá trị lớn nhất 30.0% -- thực tế: "${s.text}"`);
+    });
+
+    await run.run('Đối chứng: TẤT CẢ dòng đều khớp MARGIN_LT5 (không dòng nào sai phía) -> cảnh báo ẨN như cũ (không cảnh báo oan)', async () => {
+      await seedPendingFileWithMargins(page, ['1%', '2%', '3%', '4%', '4.5%']);
+      const s = await warningState(page);
+      assertEqual(s.hidden, true, 'Không dòng nào sai phía -> không được cảnh báo oan');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: parseItPriceMarginNumber đọc đúng số dạng "1.234,5%" (dấu chấm phân cách nghìn, dấu phẩy thập phân) -> không bị NaN/bỏ sót khỏi tính toán', async () => {
+      // Chọn MARGIN_LT5 (không phải GTE5) để PHÂN BIỆT được 2 khả năng: (a) parse ĐÚNG thành 1234.5 (>=5,
+      // SAI PHÍA so với MARGIN_LT5) -> cảnh báo PHẢI HIỆN; (b) parse LỖI ra NaN (bug cũ, .replace(',', '.')
+      // chỉ thay dấu phẩy ĐẦU TIÊN -> "1.234.5" -> Number() = NaN) -> bị lọc khỏi nums[], nums rỗng ->
+      // return sớm (!nums.length) -> cảnh báo ẨN. 2 khả năng cho kết quả HIỂN THỊ khác hẳn nhau, phân biệt
+      // được rõ ràng (khác hẳn khi test bằng MARGIN_GTE5 ở trên, cả 2 khả năng đều cho cùng kết quả "ẩn").
+      await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+      await seedPendingFileWithMargins(page, ['1.234,5%']);
+      const s = await warningState(page);
+      assertEqual(s.hidden, false, 'Giá trị "1.234,5%" phải đọc đúng thành 1234.5 (>=5%, sai phía MARGIN_LT5) -> cảnh báo PHẢI HIỆN; nếu ẩn nghĩa là parse ra NaN rồi bị lọc mất (lỗi CŨ chưa vá)');
     });
 
     await run.run('Chuyển sang sub-tab Bán Lẻ (RETAIL) -> cảnh báo LUÔN ẩn (chỉ áp dụng Bán Buôn)', async () => {
