@@ -1362,7 +1362,30 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     đồng thời ghi 1 dòng Nhật Ký Hệ Thống mức Cảnh Báo để Quản Trị Viên tra
     cứu được kể cả khi bỏ lỡ thông báo lúc tạo — đơn vẫn tạo được bình thường,
     chỉ Quản Trị Viên duyệt được cho tới khi bổ sung đúng dòng cấu hình còn
-    thiếu ở "🏬 Quy Trình Đặt Hàng Siêu Thị".
+    thiếu ở "🏬 Quy Trình Đặt Hàng Siêu Thị". **Từ đợt rà soát 9/2026 (12 cụm):
+    cảnh báo này kiểm TẤT CẢ các bước của quy trình**, không chỉ Bước 1 — quy
+    trình 2-3 bước mà quên cấu hình người duyệt cho bước sau trước đây vẫn tạo
+    đơn im lặng rồi mới treo giữa chừng; nay thông báo nêu rõ đang thiếu người
+    duyệt ở BƯỚC NÀO.
+  - **Người duyệt đã nghỉ việc/bị khoá tài khoản KHÔNG còn được tính** (rà soát
+    9/2026): dòng cấu hình (cả kiểu "Chức danh" lẫn "Người cụ thể") trỏ tới tài
+    khoản đã ngừng hoạt động sẽ được bỏ qua — trước đây người đã nghỉ vẫn nằm
+    trong danh sách đồng phê duyệt nên bước **treo vĩnh viễn** (luật đồng phê
+    duyệt đòi TẤT CẢ người trong danh sách bấm Duyệt). Nếu sau khi bỏ qua mà
+    bước không còn ai, đơn hiện cảnh báo "chưa có người duyệt" như trên.
+  - **Cảnh báo khi XOÁ dòng cấu hình** (màn "🏬 Quy Trình Đặt Hàng Siêu Thị",
+    rà soát 9/2026): xoá dòng CUỐI CÙNG của 1 bước sẽ hỏi lại kèm cảnh báo rõ
+    "Bước X sẽ KHÔNG CÒN AI DUYỆT"; xoá dòng "Mặc định" duy nhất (chỉ còn các
+    dòng "Ngoại lệ") cảnh báo các siêu thị không được khai sẽ mất người duyệt.
+    Mỗi dòng trên bảng còn hiện **số người đang thực sự khớp** ("👤 N người",
+    hoặc "⚠️ 0 người khớp" màu đỏ khi chức danh chưa ai giữ/người đã nghỉ).
+  - **Đổi tên Phòng Ban/Chức Danh/Siêu Thị tự cập nhật cả cấu hình duyệt "Theo
+    vị trí"** (rà soát 9/2026): ngoài các nơi đã cascade từ trước, nay còn tự
+    đổi tên bên trong cấu hình từng bước của MỌI màn quy trình (Tài Liệu, Văn
+    Bản Trình, Xe, Mua Bán/Sửa Chữa VP, VPP, Hợp Đồng, Thanh Toán, Ngân Sách,
+    Hỗ Trợ IT Bán Lẻ/Bán Buôn, Vận Hành Đặt Hàng Siêu Thị/HO) và trong danh mục
+    "Vị Trí Tham Gia Quy Trình" (Quyền Đặc Biệt) — trước đây các bước "Theo vị
+    trí" trỏ tên CŨ sẽ tra ra 0 người duyệt sau khi đổi tên.
   - **Đọc PDF phiếu đặt hàng NCC tự động điền form** — chọn file PDF ở "File
     Đơn Hàng" tự đọc và điền Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã
     NCC/MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục
@@ -1372,6 +1395,12 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     PDF thành công**: các field vừa tự điền được từ PDF chuyển xám/không sửa
     được nữa (tránh gõ đè nhầm) — Tiêu Đề/Nhà Cung Cấp/Ghi Chú vẫn luôn sửa tự
     do. Bấm **"🔄 Nhập Lại Từ Đầu"** để mở khoá + xoá file PDF đã chọn.
+    **Ngày Giao không được TRƯỚC Ngày Đặt (từ 9/2026)**: gõ nhầm (hoặc PDF đọc
+    nhầm năm) 2 ngày ngược thứ tự sẽ bị chặn ngay lúc tạo, kèm thông báo rõ —
+    giao trong CÙNG NGÀY đặt vẫn hợp lệ bình thường (chỉ so theo ngày, không so
+    theo giờ). **Giữ nguyên Mã hàng/Mã vạch/Thực nhận của từng hạng mục khi
+    "Sửa & Gửi Lại"** sau khi bị Yêu Cầu Bổ Sung — trước đây 3 field này bị mất
+    mỗi vòng sửa lại nếu form có gửi kèm danh sách hạng mục.
   - **Tạo hàng loạt từ nhiều file PDF cùng lúc**: ô "File Đơn Hàng" nhận
     **NHIỀU** tệp PDF 1 lượt (không còn giới hạn 1 file/lượt) — mỗi file được
     đọc/điền form/kiểm tra trùng Số Đơn NCC **độc lập**, tạo thành **từng đơn
@@ -1422,6 +1451,10 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   (Base URL + header tuỳ chỉnh), đánh dấu đơn đã đồng bộ khi thành công —
   lỗi ở 1 đơn không chặn các đơn còn lại trong cùng lượt chạy. Trạng thái/
   thông báo lần đồng bộ gần nhất hiện ngay trên màn Cấu Hình API.
+  **Chỉ Quản Trị Viên ĐỌC được cấu hình này (từ 9/2026)**: trước đây giá trị
+  header xác thực đã được giấu kỹ, nhưng Base URL/tên header/thông báo lỗi đồng
+  bộ vẫn phát cho mọi tài khoản đã đăng nhập (lộ thông tin hạ tầng nội bộ) —
+  nay tài khoản không phải admin đọc về rỗng, không đổi gì với admin.
   **Tự đồng bộ lại khi đơn đổi trạng thái (từ 9/2026)** — trước đây 1 đơn
   hàng chỉ đồng bộ ĐÚNG 1 LẦN duy nhất (thường lúc còn Chờ duyệt); đơn đổi
   trạng thái sau đó (Chờ duyệt → Đã duyệt → Đã nhận, ngày duyệt/nhận được
@@ -2527,6 +2560,16 @@ bộ mô tả bên dưới.
     MART/MINIMART), 1 Siêu Thị cụ thể (STORE), hoặc Ngành Hàng (CATEGORY) —
     để trống Scopes = áp dụng toàn bộ giao dịch của NCC đó.
   - **Kỳ tính** (`periodType`): Tháng/Quý/Năm/1 Lần.
+  - **Ngày Hiệu Lực Từ/Đến bắt buộc đúng khuôn `YYYY-MM-DD`** (rà soát 9/2026):
+    nhập sai khuôn (VD `1/3/2026`, `2026-3-1`, chữ tự do) hoặc ngày không có
+    thật (`2026-02-30`) bị chặn ngay khi Tạo/Sửa — vì mọi phép đối chiếu kỳ
+    tính với thời hạn hiệu lực so sánh theo CHUỖI, chỉ cho kết quả đúng khi cả
+    2 vế cùng khuôn này (trước đây lưu sai khuôn vẫn được, rồi âm thầm chặn/mở
+    nhầm kỳ tính ở bước "Tính Ước Tính").
+  - **NCC của điều khoản phải tồn tại và đang Hoạt động** (rà soát 9/2026):
+    không tạo được điều khoản mới cho 1 NCC đã bị xoá hoặc đã Ngừng hoạt động —
+    trước đây tạo được bình thường rồi mới báo lỗi muộn ở bước "Tính Ước Tính"
+    (sau khi đã kích hoạt).
   - **Vòng đời**: Nháp (DRAFT) → Đang Hoạt Động (ACTIVE) → Hết Hạn (EXPIRED)/
     Lưu Trữ (ARCHIVED). **Nhân bản** 1 điều khoản ACTIVE tạo ra 1 bản DRAFT
     mới cùng `termCode` (tăng `version`) để sửa mà không đụng bản đang chạy.
@@ -2546,7 +2589,12 @@ bộ mô tả bên dưới.
   gian `VendorPurchaseTransactions` (đánh dấu `DataConfidence='PROVISIONAL'`
   vì là dữ liệu tạm/chưa đối chiếu chính thức). Chưa cấu hình 2 biến môi
   trường trên thì nút này báo lỗi rõ ràng (503), các phần khác của module vẫn
-  dùng bình thường. **UPSERT thật (từ 9/2026)**: đối chiếu theo mã tham
+  dùng bình thường. **Chống chạy chồng (từ 9/2026)**: chỉ 1 lượt đồng bộ chạy
+  tại 1 thời điểm trên toàn hệ thống — 2 người (hoặc 2 tab) bấm gần như cùng
+  lúc thì lượt thứ 2 nhận thông báo "đang có lượt đồng bộ khác chạy, vui lòng
+  đợi" thay vì chạy song song rồi đâm nhau khi ghi dữ liệu. **Dữ liệu trả về
+  sai khuôn từ DSmart** (thiếu/không phải danh sách) nay được coi là trang
+  rỗng thay vì làm hỏng cả lượt đồng bộ. **UPSERT thật (từ 9/2026)**: đối chiếu theo mã tham
   chiếu gốc — dòng CHƯA có thì thêm mới, dòng ĐÃ có nhưng DSmart sửa lại nội
   dung (VD sửa số tiền/ngày mua của giao dịch đã đồng bộ trước đó) thì CẬP
   NHẬT LẠI tại chỗ, dòng y hệt lần trước thì bỏ qua (không ghi thừa) — trước

@@ -170,6 +170,10 @@ router.post('/:module', async (req, res) => {
     }
     if (moduleKey === 'leaveRequests') appData.leaveBalances = await getAllForCollection('leaveBalances');
     if (moduleKey === 'shiftSwapRequests') appData.shiftRoster = await getAllForCollection('shiftRoster');
+    // rebateTerms (Mua Hàng > BAS): cần danh sách NCC để kiểm vendorId có thật + còn ACTIVE không (xem
+    // rebateTerms.extraValidate ở lib/createValidation.js) — vendors là dbo.Records, cùng lý do các
+    // nhánh cross-lookup ở trên.
+    if (moduleKey === 'rebateTerms') appData.vendors = await getAllForCollection('vendors');
 
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     // Đọc Thùng Rác của ĐÚNG collection này trước khi tạo — validateAndPrepareCreate() dùng để chặn
@@ -293,12 +297,18 @@ router.post('/:module', async (req, res) => {
     // nếu admin không tình cờ phát hiện. Vá bằng cách CẢNH BÁO NGAY khi tạo (không chặn tạo — hồ sơ vẫn
     // hợp lệ, admin vẫn duyệt được bình thường): trả kèm `warning` cho người tạo thấy ngay + ghi 1 dòng
     // Nhật Ký Hệ Thống mức WARNING để admin tra cứu được kể cả khi bỏ lỡ alert lúc tạo.
+    //
+    // PHÁT HIỆN BỔ SUNG (đợt audit chuyên sâu 12 cụm, mức Trung bình): bản vá đầu chỉ kiểm ĐÚNG BƯỚC
+    // HIỆN TẠI (record.currentStep — luôn = 1 lúc vừa tạo), nên 1 quy trình 2-3 bước mà admin quên cấu
+    // hình người duyệt cho bước 2/3 vẫn im lặng như cũ: đơn chạy bình thường qua bước 1 rồi mới treo ở
+    // bước sau, lúc đó người tạo đã quên hẳn đơn này. Nay quét TẤT CẢ các bước của quy trình áp dụng.
     let warning = null;
     if (moduleKey === 'operationOrders' && record.orderLocationType === 'STORE') {
       const resolved = WORKFLOW_MODULE_CONFIGS.operationOrders.resolveWfConfig(record, appData);
-      const step1Approvers = resolved?.approvers?.[record.currentStep] || [];
-      if (!step1Approvers.length) {
-        warning = `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${record.dept}" ở mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
+      const emptySteps = (resolved?.steps || []).filter(s => !((resolved?.approvers?.[s.order]) || []).length);
+      if (emptySteps.length) {
+        const stepsLabel = emptySteps.map(s => `Bước ${s.order}${s.name ? ` (${s.name})` : ''}`).join(', ');
+        warning = `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepsLabel} của mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
         await insertSystemLog({
           username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
           module: 'OPERATION_ORDER', actionType: 'CREATE_NO_APPROVER_WARNING',

@@ -84,6 +84,85 @@ async function cascadeDeptWorkflowMaps(oldValue, newValue) {
   }
 }
 
+// ===== CẶP (jobTitle, dept) LỒNG BÊN TRONG cấu hình quy trình — "Theo vị trí" (POSITION mode) =====
+// PHÁT HIỆN mức Cao ở đợt audit chuyên sâu 12 cụm: cascadeDeptWorkflowMaps() ở trên CHỈ đổi KEY NGOÀI
+// CÙNG của các map {[dept]: <cấu hình>} — hoàn toàn KHÔNG đi vào BÊN TRONG cấu hình, nơi bước "Theo vị
+// trí" lưu `approversByPosition[stepOrder] = [{jobTitle, dept}]` (xem lib/positionApprovers.js
+// resolvePositionApprovers() — so khớp CHUỖI THÔ cả 2 field với u.jobTitle/u.dept). Hậu quả: đổi tên 1
+// Phòng Ban/Chức Danh làm mọi bước "Theo vị trí" đang trỏ tới tên CŨ tra ra 0 approver -> bước treo, chỉ
+// admin duyệt được (ảnh hưởng nhiều module: Hỗ Trợ IT (Bán Lẻ/Bán Buôn), Ngân Sách, Vận Hành HO/Siêu
+// Thị, Tài Liệu, Văn Bản Trình, Xe, VPP, Hợp Đồng, Thanh Toán...). Cùng lớp lỗi ở danh mục
+// `workflowParticipatingPositions` ("Vị Trí Tham Gia Quy Trình", khối 17 Quyền Đặc Biệt — mảng
+// {jobTitle, dept} admin tự dựng, là NGUỒN CHỌN của chính các picker "Theo vị trí" đó, xem
+// module-admin-specialperm.js): không cascade thì cặp cũ biến mất khỏi danh sách gợi ý sau khi đổi tên.
+//
+// Cấu trúc BÊN TRONG mỗi map KHÁC NHAU tuỳ module (dept -> cfg; dept -> {RETAIL,WHOLESALE} -> cfg;
+// typeKey -> dept -> cfg; tierKey -> cfg) nên KHÔNG hardcode đường đi — quét ĐỆ QUY, đổi tên trong MỌI
+// map `approversByPosition` tìm thấy ở bất kỳ độ sâu nào (tự đúng luôn cho cấu trúc mới thêm sau này).
+const POSITION_PAIR_CONFIG_MAP_KEYS = [
+  ...DEPT_WORKFLOW_MAP_KEYS,
+  // deptWorkflows (Tài Liệu) KHÔNG có trong DEPT_WORKFLOW_MAP_KEYS (khoảng trống RIÊNG, nằm ngoài phạm
+  // vi đợt vá này — đổi tên phòng ban hiện vẫn không DỜI KEY của map này; đã nêu trong báo cáo audit)
+  // nhưng cặp "Theo vị trí" bên trong nó vẫn phải được đổi tên như mọi module khác.
+  'deptWorkflows',
+  'submissionTypeDeptWorkflows',        // {typeKey: {dept: cfg}} — lồng SÂU hơn 1 cấp so với các map trên
+  'itPriceTierWorkflows',               // {tierKey: cfg} — Hỗ Trợ IT > Bán Buôn (4 mức Margin/Chiết Khấu)
+  'operationOrderStoreTierWorkflows',   // {tierKey: cfg} — Vận Hành > Đặt Hàng Tại Siêu Thị
+  'operationOrderHOTierWorkflows'       // {tierKey: cfg} — Vận Hành > Đặt Hàng Tại HO
+];
+
+// {stepOrder: [{jobTitle, dept}]} — đổi đúng 1 field (jobTitle HOẶC dept) của mọi cặp khớp tên cũ.
+// Giữ NGUYÊN reference nếu không có gì đổi (để nhánh đệ quy bên dưới biết có cần clone lên trên không).
+function renamePositionPairsMap(map, field, oldValue, newValue) {
+  let changed = false;
+  const next = {};
+  for (const [stepOrder, pairs] of Object.entries(map)) {
+    if (!Array.isArray(pairs)) { next[stepOrder] = pairs; continue; }
+    let pairChanged = false;
+    const nextPairs = pairs.map(p => {
+      if (p && typeof p === 'object' && p[field] === oldValue) { pairChanged = true; return { ...p, [field]: newValue }; }
+      return p;
+    });
+    if (pairChanged) changed = true;
+    next[stepOrder] = pairChanged ? nextPairs : pairs;
+  }
+  return changed ? next : map;
+}
+
+function renamePositionPairsDeep(node, field, oldValue, newValue) {
+  if (!node || typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    let changed = false;
+    const next = node.map(child => {
+      const renamed = renamePositionPairsDeep(child, field, oldValue, newValue);
+      if (renamed !== child) changed = true;
+      return renamed;
+    });
+    return changed ? next : node;
+  }
+  let changed = false;
+  const next = {};
+  for (const [key, val] of Object.entries(node)) {
+    const renamed = (key === 'approversByPosition' && val && typeof val === 'object' && !Array.isArray(val))
+      ? renamePositionPairsMap(val, field, oldValue, newValue)
+      : renamePositionPairsDeep(val, field, oldValue, newValue);
+    if (renamed !== val) changed = true;
+    next[key] = renamed;
+  }
+  return changed ? next : node;
+}
+
+// field: 'jobTitle' (đổi tên Chức Danh HO/Siêu Thị) hoặc 'dept' (đổi tên Phòng Ban/Siêu Thị).
+async function cascadePositionPairs(field, oldValue, newValue) {
+  for (const mapKey of POSITION_PAIR_CONFIG_MAP_KEYS) {
+    await withLockedAppDataValue(mapKey, (map) => renamePositionPairsDeep(map, field, oldValue, newValue));
+  }
+  await withLockedAppDataValue('workflowParticipatingPositions', (list) => {
+    if (!Array.isArray(list)) return list;
+    return list.map(p => (p && typeof p === 'object' && p[field] === oldValue ? { ...p, [field]: newValue } : p));
+  });
+}
+
 // users[].perms.*: nhiều quyền phẳng giới hạn theo danh sách phòng ban/siêu thị, dưới 2 khuôn khác nhau
 // — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2, cascadeStoreRename() trước đây bỏ sót hẳn users.perms:
 //  1) mảng chuỗi phẳng, tên quyền kết thúc bằng "Depts" (viewApprovedDepts/viewDraftDepts/uploadDepts...).
@@ -204,6 +283,7 @@ async function cascadeStoreRename(oldValue, newValue) {
   await cascadeEmployeeProfilesDept(oldValue, newValue);
   await cascadeUserPermsDepts(oldValue, newValue);
   await cascadeDeptWorkflowMaps(oldValue, newValue);
+  await cascadePositionPairs('dept', oldValue, newValue);
   for (const { collection, fields } of DEPT_FIELD_COLLECTIONS) {
     await renameFieldValueInCollection(collection, (item) => renameSimpleFields(item, fields, oldValue, newValue));
   }
@@ -229,6 +309,7 @@ async function cascadeJobTitleRename(oldValue, newValue) {
   await withLockedAppDataValue('vppExcludedJobTitles', (list) => (list || []).map(jt => (jt === oldValue ? newValue : jt)));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, false);
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
+  await cascadePositionPairs('jobTitle', oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, false);
@@ -242,6 +323,9 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
   ));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, true);
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
+  // Cặp "Theo vị trí" lưu jobTitle THUẦN (không phân biệt nguồn HO/Siêu Thị, cùng lý do
+  // cascadeMixedApprovalRuleJobTitle() ở trên) — dùng chung 1 hàm cho cả 2 danh mục chức danh.
+  await cascadePositionPairs('jobTitle', oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, true);

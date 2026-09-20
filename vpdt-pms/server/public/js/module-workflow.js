@@ -423,6 +423,12 @@ function renderMixedApprovalSection() {
       const person = row.mode === 'PERSON' ? (DB.users || []).find(u => u.username === row.username) : null;
       const nameLabel = row.mode === 'JOBTITLE' ? row.jobTitle : (person ? mixedApprovalPersonLabel(person) : row.username);
       const nameBadge = row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '';
+      // Xem trước số người đang khớp dòng này — 0 người = cấu hình "chết" (chức danh chưa ai giữ/người
+      // đã nghỉ việc), hiện đỏ để admin thấy ngay thay vì chỉ phát hiện khi đơn bị treo.
+      const matchCount = mixedApprovalRuleMatchCount(row);
+      const matchBadge = matchCount > 0
+        ? ` <span class="text-[10px] bg-gray-100 text-gray-600 px-1 rounded font-normal">👤 ${matchCount} người</span>`
+        : ` <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold" title="Không có tài khoản nào đang hoạt động khớp dòng này — bước sẽ không có người duyệt">⚠️ 0 người khớp</span>`;
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
@@ -433,7 +439,7 @@ function renderMixedApprovalSection() {
           <td class="p-2 border">${row.mode === 'JOBTITLE'
             ? '<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Chức danh</span>'
             : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
-          <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}</td>
+          <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}${matchBadge}</td>
           <td class="p-2 border text-xs">${storesLabel}</td>
           <td class="p-2 border text-center"><button type="button" data-op="deleteMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button></td>
         </tr>
@@ -509,11 +515,39 @@ function addMixedApprovalRule() {
   renderMixedApprovalSection();
 }
 
+// Số người ĐANG THỰC SỰ khớp 1 dòng cấu hình (chỉ để XEM TRƯỚC trên bảng — server luôn tự tra lại khi
+// duyệt, xem resolveOperationOrderStoreMixedApprovalRuleUsernames() ở lib/workflowEngine.js). Dòng
+// MẶC ĐỊNH (không khai siêu thị) khớp theo TỪNG siêu thị của đơn nên không có 1 con số duy nhất — đếm
+// tổng số người đang giữ đúng chức danh (chính hoặc kiêm nhiệm) để admin thấy ngay dòng "0 người" (gõ
+// đúng chức danh nhưng chưa ai giữ/đã nghỉ việc), là trường hợp lỗi cấu hình hay gặp nhất.
+function mixedApprovalRuleMatchCount(rule) {
+  if (rule.mode === 'PERSON') {
+    return (DB.users || []).some(u => u && u.username === rule.username && u.active !== false) ? 1 : 0;
+  }
+  return (DB.users || []).filter(u => u && u.active !== false && (
+    u.jobTitle === rule.jobTitle || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle)
+  )).length;
+}
+
 function deleteMixedApprovalRule(id) {
-  const rule = (DB.operationOrderStoreMixedApprovalRules || []).find(r => r.id === id);
+  const rules = DB.operationOrderStoreMixedApprovalRules || [];
+  const rule = rules.find(r => r.id === id);
   if (!rule) return;
-  if (!confirm(`Xoá dòng cấu hình Bước ${rule.step} này?`)) return;
-  DB.operationOrderStoreMixedApprovalRules = (DB.operationOrderStoreMixedApprovalRules || []).filter(r => r.id !== id);
+  // PHÁT HIỆN (đợt audit chuyên sâu 12 cụm, mức Trung bình): xoá dòng cấu hình trước đây chỉ hỏi 1 câu
+  // trung tính, KHÔNG hề cảnh báo khi đó là dòng CUỐI CÙNG của 1 bước — bước đó lập tức không còn ai
+  // duyệt (mọi đơn "Đặt Hàng Tại Siêu Thị" tới bước này treo, chỉ admin duyệt được) mà admin không hay.
+  const remainingSameStep = rules.filter(r => r.id !== id && Number(r.step) === Number(rule.step));
+  const isDefaultRow = !(rule.stores && rule.stores.length);
+  let message = `Xoá dòng cấu hình Bước ${rule.step} này?`;
+  if (!remainingSameStep.length) {
+    message = `⚠️ CẢNH BÁO: đây là dòng cấu hình DUY NHẤT của Bước ${rule.step}.\n\n`
+      + `Xoá xong, Bước ${rule.step} sẽ KHÔNG CÒN AI DUYỆT — mọi đơn "Đặt Hàng Tại Siêu Thị" đi tới bước này sẽ treo lại (chỉ Quản Trị Viên duyệt được).\n\nVẫn xoá?`;
+  } else if (isDefaultRow && !remainingSameStep.some(r => !(r.stores && r.stores.length))) {
+    message = `⚠️ CẢNH BÁO: đây là dòng MẶC ĐỊNH (áp dụng mọi siêu thị) duy nhất của Bước ${rule.step}.\n\n`
+      + `Xoá xong, Bước ${rule.step} chỉ còn ${remainingSameStep.length} dòng NGOẠI LỆ (chỉ áp dụng đúng các siêu thị đã khai) — những siêu thị KHÔNG được khai ở các dòng đó sẽ không còn ai duyệt ở bước này.\n\nVẫn xoá?`;
+  }
+  if (!confirm(message)) return;
+  DB.operationOrderStoreMixedApprovalRules = rules.filter(r => r.id !== id);
   syncStorage('operationOrderStoreMixedApprovalRules');
   logSystemAction('CONFIG', 'DELETE_MIXED_APPROVAL_RULE', `Xoá dòng Quy Trình Đặt Hàng Siêu Thị [${id}]`, 'SUCCESS', String(id));
   renderMixedApprovalSection();

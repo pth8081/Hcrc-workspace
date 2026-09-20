@@ -165,6 +165,37 @@ async function main() {
     const r3 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ orderLocationType: 'HO' }), CREATOR_B);
     check('Đơn HO -> KHÔNG bao giờ có warning (filter chỉ áp dụng cho STORE)',
       r3.status === 200 && (r3.body?.warning === null || r3.body?.warning === undefined), r3.body);
+
+    // ===== Kịch bản 4 (BỔ SUNG, đợt audit chuyên sâu 12 cụm — mức Trung bình): quy trình NHIỀU BƯỚC,
+    // bước 1 có người duyệt đầy đủ nhưng BƯỚC 2 chưa ai khớp. Bản vá đầu chỉ kiểm record.currentStep
+    // (luôn = 1 lúc vừa tạo) nên trường hợp này lọt qua im lặng: đơn duyệt xong bước 1 rồi mới treo ở
+    // bước 2, lúc đó người tạo đã quên hẳn đơn. Nay kiểm TẤT CẢ các bước của quy trình. =====
+    resetRecords();
+    systemLogEntries.length = 0;
+    APP_DATA.workflows.push({ id: 'WF_2STEP', steps: [{ order: 1, name: 'GĐ Siêu Thị' }, { order: 2, name: 'Quản Lý Vùng' }] });
+    APP_DATA.operationOrderStoreTierWorkflows.LT10M = { workflowId: 'WF_2STEP' };
+    APP_DATA.operationOrderStoreMixedApprovalRules = [
+      { id: 1, step: 1, mode: 'PERSON', username: GD_B.username, stores: ['Siêu Thị B'] }
+      // KHÔNG có dòng nào cho bước 2 -> bước 2 không ai duyệt được.
+    ];
+    const r4 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({}), CREATOR_B);
+    check('LỖI ĐÃ VÁ: bước 1 có người duyệt nhưng BƯỚC 2 trống -> vẫn PHẢI cảnh báo (kiểm mọi bước, không chỉ bước hiện tại)',
+      r4.status === 200 && typeof r4.body?.warning === 'string' && /chưa có người duyệt/i.test(r4.body.warning), r4.body);
+    check('Cảnh báo nêu ĐÚNG bước đang thiếu người duyệt (Bước 2), không nêu nhầm bước 1',
+      typeof r4.body?.warning === 'string' && r4.body.warning.includes('Bước 2') && !r4.body.warning.includes('Bước 1'), r4.body?.warning);
+    check('Ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING cho trường hợp thiếu người duyệt ở bước sau',
+      systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING', systemLogEntries);
+
+    // Bước 1 VÀ bước 2 đều có người -> không cảnh báo gì (tránh cảnh báo oan sau khi mở rộng phạm vi kiểm).
+    resetRecords();
+    systemLogEntries.length = 0;
+    APP_DATA.operationOrderStoreMixedApprovalRules = [
+      { id: 1, step: 1, mode: 'PERSON', username: GD_B.username, stores: ['Siêu Thị B'] },
+      { id: 2, step: 2, mode: 'PERSON', username: GD_A.username, stores: ['Siêu Thị B'] }
+    ];
+    const r5 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({}), CREATOR_B);
+    check('Quy trình 2 bước đủ người duyệt cả 2 bước -> KHÔNG cảnh báo oan',
+      r5.status === 200 && (r5.body?.warning === null || r5.body?.warning === undefined), r5.body);
   } finally {
     server.close();
   }

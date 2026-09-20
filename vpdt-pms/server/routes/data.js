@@ -336,7 +336,16 @@ function sanitizeExternalApiKeys(list, isAdmin) {
 // operationOrderApiConfig.headerValueEnc (giá trị header xác thực gửi tới dsmart16, VD API key/Bearer
 // token) — KHÔNG bao giờ trả ra ngoài, kể cả cho admin, cùng khuôn sanitizeEmailConfig() ở trên (chỉ
 // cần biết "đã cấu hình hay chưa" qua hasHeaderValue, ô trên form luôn hiện trống khi Sửa).
-function sanitizeOperationOrderApiConfig(config) {
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Thấp): bí mật (headerValueEnc) vốn đã an toàn, NHƯNG phần
+// còn lại (baseUrl/headerName/syncIntervalMinutes/lastSyncMessage...) trước đây phát cho MỌI tài khoản đã
+// đăng nhập qua GET /api/data — lộ thông tin hạ tầng nội bộ (địa chỉ hệ thống dsmart16, tên header xác
+// thực, thông điệp lỗi đồng bộ) cho người không có việc gì tới đó. Cả màn đọc/ghi cấu hình này đều là
+// màn admin (sub-tab "Cấu Hình API", module-hethong-tabs.js) và ghi đã gác ADMIN_ONLY_KEYS — nay ẩn hẳn
+// với người không phải admin, cùng khuôn sanitizeExternalApiKeys()/sanitizeAttendanceClockApiKeys() ở trên
+// (trả rỗng thay vì lọc từng field). Client đọc `DB.operationOrderApiConfig = data.operationOrderApiConfig || {}`
+// nên object rỗng là giá trị hợp lệ, không nơi nào khác đọc key này.
+function sanitizeOperationOrderApiConfig(config, isAdmin) {
+  if (!isAdmin) return {};
   if (!config || typeof config !== 'object') return config;
   const { headerValueEnc, ...rest } = config;
   return { ...rest, hasHeaderValue: !!headerValueEnc };
@@ -1061,7 +1070,7 @@ router.get('/', async (req, res) => {
     // sanitizePermGroupsForViewer() ở lib/recordViewScope.js), ẩn hẳn với người khác.
     if (data.permGroups) data.permGroups = sanitizePermGroupsForViewer(data.permGroups, !!req.freshUser?.perms?.admin);
     if (data.emailConfig) data.emailConfig = sanitizeEmailConfig(data.emailConfig);
-    if (data.operationOrderApiConfig) data.operationOrderApiConfig = sanitizeOperationOrderApiConfig(data.operationOrderApiConfig);
+    if (data.operationOrderApiConfig) data.operationOrderApiConfig = sanitizeOperationOrderApiConfig(data.operationOrderApiConfig, !!req.freshUser?.perms?.admin);
     if (data.externalApiKeys) data.externalApiKeys = sanitizeExternalApiKeys(data.externalApiKeys, !!req.freshUser?.perms?.admin);
     if (data.attendanceClockApiKeys) data.attendanceClockApiKeys = sanitizeAttendanceClockApiKeys(data.attendanceClockApiKeys, !!req.freshUser?.perms?.admin);
     // tasks (Bước 6b) và mọi collection trong MIGRATED_COLLECTIONS (Bước 6c trở đi — hiện tại:
@@ -1361,7 +1370,7 @@ router.get('/:key', async (req, res) => {
     if (key === 'users') return res.json(sanitizeUsersPermsForViewer(stripPasswords(value), req.freshUser?.username, !!req.freshUser?.perms?.admin));
     if (key === 'permGroups') return res.json(sanitizePermGroupsForViewer(value, !!req.freshUser?.perms?.admin));
     if (key === 'emailConfig') return res.json(sanitizeEmailConfig(value));
-    if (key === 'operationOrderApiConfig') return res.json(sanitizeOperationOrderApiConfig(value));
+    if (key === 'operationOrderApiConfig') return res.json(sanitizeOperationOrderApiConfig(value, !!req.freshUser?.perms?.admin));
     if (key === 'externalApiKeys') return res.json(sanitizeExternalApiKeys(value, !!req.freshUser?.perms?.admin));
     if (key === 'attendanceClockApiKeys') return res.json(sanitizeAttendanceClockApiKeys(value, !!req.freshUser?.perms?.admin));
     res.json(value);

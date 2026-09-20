@@ -125,7 +125,14 @@ async function checkItApprovalDeadlineReminders() {
     const priceApprovals = await getAllForCollection('itPriceApprovals');
     for (const item of (priceApprovals || [])) {
       try {
-        let changed = false;
+        // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — lost update): trước đây nhánh ghi bên dưới
+        // gán NGUYÊN mảng `rec.infoRequests = item.infoRequests` bằng SNAPSHOT đọc TRƯỚC khi lấy khoá
+        // (getAllForCollection() ở trên) — mọi phản hồi/yêu cầu bổ sung phát sinh trong lúc job đang gửi
+        // mail (submitPriceSupplementFile()/requestPriceInfoFromIt(), có thể mất vài giây vì gọi SMTP
+        // thật) bị ghi đè mất trắng. Nay CHỈ ghi đúng 2 cờ nhắc (reminderSent của ĐÚNG phần tử theo id +
+        // emergencyRejectReminderSent), tra lại trên bản ghi MỚI NHẤT bên trong khoá.
+        let infoReqReminderKey = null;  // khoá nhận diện phần tử infoRequests[] cần đánh dấu đã nhắc
+        let emergencyReminderSent = false;
         const openInfoReq = (item.infoRequests || []).find(r => !r.response && !r.reminderSent);
         if (openInfoReq) {
           const days = daysSince(openInfoReq.requestedAt);
@@ -135,7 +142,7 @@ async function checkItApprovalDeadlineReminders() {
             const subject = `[VPDT] Đề xuất giá "${item.code || item.id}" đang chờ bạn bổ sung quá ${PENDING_REMINDER_DAYS} ngày`;
             const body = `Đề xuất giá của bạn (${item.code || item.id}) có yêu cầu bổ sung từ ${openInfoReq.requestedByName} (từ ${openInfoReq.requestedAt}) chưa được phản hồi: ${openInfoReq.reason}`;
             const ok = await sendReminder(subject, body, recipients, `Đề xuất giá ${item.code || item.id} — yêu cầu bổ sung`);
-            if (ok) { openInfoReq.reminderSent = true; changed = true; }
+            if (ok) infoReqReminderKey = { id: openInfoReq.id, requestedAt: openInfoReq.requestedAt, requestedBy: openInfoReq.requestedBy };
           }
         }
         if (item.emergencyRejectStatus === 'PENDING' && !item.emergencyRejectReminderSent) {
@@ -147,13 +154,25 @@ async function checkItApprovalDeadlineReminders() {
             const subject = `[VPDT] Yêu cầu từ chối khẩn cấp đề xuất giá "${item.code || item.id}" đang chờ xử lý quá ${PENDING_REMINDER_DAYS} ngày`;
             const body = `Yêu cầu từ chối khẩn cấp cho đề xuất giá (${item.code || item.id}) gửi từ ${item.emergencyRejectRequestedByName} (từ ${item.emergencyRejectRequestedAt}) vẫn chưa được xử lý. Lý do: ${item.emergencyRejectReason || ''}.`;
             const ok = await sendReminder(subject, body, recipients, `Đề xuất giá ${item.code || item.id} — từ chối khẩn cấp`);
-            if (ok) { item.emergencyRejectReminderSent = true; changed = true; }
+            if (ok) emergencyReminderSent = true;
           }
         }
-        if (changed) {
+        if (infoReqReminderKey || emergencyReminderSent) {
           await withLockedRecordById('itPriceApprovals', item.id, (rec) => {
-            rec.infoRequests = item.infoRequests;
-            rec.emergencyRejectReminderSent = item.emergencyRejectReminderSent;
+            if (infoReqReminderKey) {
+              // Tìm LẠI đúng phần tử theo id trên bản ghi mới nhất — phần tử có thể đã được phản hồi
+              // xong trong lúc gửi mail (response != null): vẫn đánh dấu reminderSent để không nhắc
+              // lại lần sau, KHÔNG đụng gì tới response/respondedAt vừa ghi, và KHÔNG đụng tới các
+              // phần tử khác (kể cả yêu cầu bổ sung MỚI vừa được thêm vào).
+              const target = (rec.infoRequests || []).find(r => r && (
+                infoReqReminderKey.id !== undefined && r.id !== undefined
+                  ? r.id === infoReqReminderKey.id
+                  // Dữ liệu CŨ không có id (nếu có) — nhận diện bằng cặp (người yêu cầu, thời điểm yêu cầu).
+                  : (r.requestedAt === infoReqReminderKey.requestedAt && r.requestedBy === infoReqReminderKey.requestedBy)
+              ));
+              if (target) target.reminderSent = true;
+            }
+            if (emergencyReminderSent) rec.emergencyRejectReminderSent = true;
             return rec;
           });
         }

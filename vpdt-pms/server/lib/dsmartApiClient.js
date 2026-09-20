@@ -75,7 +75,12 @@ async function fetchAllPurchases({ baseUrl, apiKey, pageSize = 100, sinceDate = 
     const fullUrl = `${baseUrl}/api/purchases?${query.toString()}`;
 
     const data = await requestWithRetry(fullUrl, headers);
-    allItems = allItems.concat(data.items);
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình): trước đây concat THẲNG data.items mà
+    // không kiểm kiểu — DSmart trả thiếu field (items undefined -> concat(undefined) chèn 1 phần tử
+    // `undefined` vào giữa danh sách, vỡ ở bước map() phía routes/purchasing.js) hoặc trả 1 object/chuỗi
+    // thay vì mảng (concat chèn nguyên giá trị rác thành 1 "dòng giao dịch"). Coi trang trả sai kiểu là
+    // trang RỖNG, giữ nguyên vòng phân trang (hasMore vẫn quyết định dừng hay không).
+    allItems = allItems.concat(Array.isArray(data.items) ? data.items : []);
     pagesFetched++;
 
     if (!data.hasMore) break;

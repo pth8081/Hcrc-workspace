@@ -867,6 +867,16 @@ const CREATE_MODULE_CONFIGS = {
         const d = new Date(payload.deliveryDate);
         payload.deliveryDate = Number.isNaN(d.getTime()) ? '' : d.toISOString();
       } else payload.deliveryDate = '';
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Thấp): 2 field trên trước đây hoàn toàn độc lập,
+      // không hề đối chiếu nhau — gõ nhầm Ngày Giao TRƯỚC Ngày Đặt (hoặc parser PDF đọc nhầm năm) vẫn
+      // lưu bình thường, đi thẳng vào báo cáo/phiếu nhập hàng. So sánh theo NGÀY (cắt 10 ký tự đầu của
+      // chuỗi ISO), KHÔNG theo mốc giờ: #voOrderDate là datetime-local (có giờ) còn #voDeliveryDate là
+      // date (00:00) nên giao HÀNG TRONG NGÀY sẽ luôn "nhỏ hơn" nếu so nguyên mốc thời gian — chỉ chặn
+      // khác ngày thật sự. Chỉ kiểm khi CẢ 2 field đọc được hợp lệ (giữ nguyên tinh thần "không chặn cả
+      // đơn hàng vì 1 field tuỳ chọn sai định dạng" ở khối trên).
+      if (payload.orderDate && payload.deliveryDate && payload.deliveryDate.slice(0, 10) < payload.orderDate.slice(0, 10)) {
+        throw new CreateError(400, 'Ngày Giao không được trước Ngày Đặt — vui lòng kiểm tra lại 2 ngày này trên phiếu đặt hàng');
+      }
       // Chặn trùng Số Đơn NCC (poNumber) — TÁCH RIÊNG theo orderLocationType (1 STORE + 1 HO cùng số vẫn
       // hợp lệ, vì 2 quy trình duyệt hoàn toàn độc lập theo mức giá trị riêng — xem
       // resolveOperationOrderWorkflow() ở lib/workflowEngine.js). Bỏ qua khi poNumber rỗng (field tùy
@@ -2081,10 +2091,23 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'createdBy',
-    extraValidate: (payload, collection, user) => {
+    extraValidate: (payload, collection, user, appData) => {
       if (!canManageTerms(user)) throw new CreateError(403, 'Bạn không có quyền tạo Điều Khoản Chiết Khấu');
       const vendorId = Number(payload.vendorId);
       if (!Number.isFinite(vendorId)) throw new CreateError(400, 'Thiếu NCC cho điều khoản này');
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình): trước đây chỉ kiểm vendorId là SỐ —
+      // không hề đối chiếu NCC đó có thật/còn hoạt động không. Điều khoản trỏ tới 1 vendorId không tồn
+      // tại (client cũ/stale, hoặc gọi API tay) tạo được bình thường rồi mới vỡ muộn ở
+      // POST /terms/:id/calculate ("Không tìm thấy NCC của điều khoản này", 404) sau khi đã kích hoạt;
+      // trỏ tới NCC đã NGỪNG HOẠT ĐỘNG (status INACTIVE, xem POST /vendors/:id/deactivate) thì vẫn
+      // tính rebate bình thường cho 1 NCC đã ngừng giao dịch. appData.vendors do routes/create.js đọc
+      // sẵn (vendors là dbo.Records, không nằm trong AppData mặc định — cùng khuôn budgetPeriods/
+      // operationStoreOpenings ở đó).
+      const vendor = (appData?.vendors || []).find(v => Number(v.id) === vendorId);
+      if (!vendor) throw new CreateError(400, 'NCC của điều khoản này không tồn tại (có thể vừa bị xoá) — vui lòng chọn lại Nhà Cung Cấp');
+      if (vendor.status !== 'ACTIVE') {
+        throw new CreateError(400, `NCC "${vendor.vendorName || vendor.vendorCode}" đang Ngừng hoạt động — không tạo được Điều Khoản Chiết Khấu mới cho NCC này`);
+      }
       const err = validateRebateTermPayload(payload);
       if (err) throw new CreateError(400, err);
       const dupErr = checkDuplicateTermCode(String(payload.termCode).trim(), vendorId, collection, null);
