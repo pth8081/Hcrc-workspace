@@ -48,8 +48,17 @@
 // điều khiển) gần như không bao giờ xuất hiện trong chức danh/tên phòng ban người dùng gõ tay, nên an
 // toàn ghép/tách lại mà không cần thêm bước escape nào.
 const WF_POSITION_PAIR_SEP = '\u001F';
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Thấp): "gần như không bao giờ
+// xuất hiện" KHÔNG phải là "không thể" — 2 ô nhập chức danh/phòng ban ở widget dựng danh mục là ô text
+// tự do, dán nhầm nội dung từ file CSV/xuất dữ liệu khác có lẫn ký tự điều khiển 0x1F là ghép/tách sai
+// cặp (decodeWfPositionPair() cắt ở dấu phân cách ĐẦU TIÊN -> jobTitle/dept lệch hẳn, và cặp lưu ra
+// AppData cũng sai). Làm sạch chính giá trị TRƯỚC khi ghép (áp ngay trong encode, dùng chung cho mọi
+// nơi gọi) thay vì thêm 1 lớp escape/unescape mới.
+function stripWfPositionPairSep(value) {
+  return String(value == null ? '' : value).split(WF_POSITION_PAIR_SEP).join('');
+}
 function encodeWfPositionPair(pair) {
-  return `${pair.jobTitle}${WF_POSITION_PAIR_SEP}${pair.dept}`;
+  return `${stripWfPositionPairSep(pair.jobTitle)}${WF_POSITION_PAIR_SEP}${stripWfPositionPairSep(pair.dept)}`;
 }
 function decodeWfPositionPair(value) {
   const idx = String(value == null ? '' : value).indexOf(WF_POSITION_PAIR_SEP);
@@ -289,8 +298,10 @@ function addWfPositionPairFromBuilder() {
   if (!container || !container._wfposSelected) return;
   const jobTitleInput = document.getElementById('wfPosBuilderJobTitle');
   const deptInput = document.getElementById('wfPosBuilderDept');
-  const jobTitle = (jobTitleInput?.value || '').trim();
-  const dept = (deptInput?.value || '').trim();
+  // stripWfPositionPairSep(): loại ký tự phân cách 0x1F ngay từ giá trị người dùng gõ/dán vào (xem chú
+  // thích ở WF_POSITION_PAIR_SEP) — không để 1 ký tự điều khiển dán nhầm phá cấu trúc ghép cặp.
+  const jobTitle = stripWfPositionPairSep(jobTitleInput?.value || '').trim();
+  const dept = stripWfPositionPairSep(deptInput?.value || '').trim();
   if (!jobTitle) return alert('⛔ Vui lòng chọn/nhập Chức Danh trước khi thêm.');
   const value = encodeWfPositionPair({ jobTitle, dept });
   if (container._wfposSelected.has(value)) {

@@ -261,13 +261,14 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // áp dụng đúng những siêu thị liệt kê. Cả 2 loại có thể cùng khớp 1 (bước, siêu thị) — không loại trừ
   // nhau, HỢP (UNION) lại ở resolveOperationOrderStoreMixedApprovers() bên dưới (phương án B, đã chốt).
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
-  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao): trước đây KHÔNG lọc tài khoản đã bị khoá/nghỉ việc
-  // (u.active === false) ở CẢ 2 nhánh — khác hẳn resolvePositionApprovers() (lib/positionApprovers.js,
-  // đã lọc `u.active !== false` từ đầu). Hậu quả: 1 approver nghỉ việc vẫn nằm trong danh sách
-  // approvers[] của bước -> isStepApprovalComplete() (đồng phê duyệt: TẤT CẢ phải duyệt) không bao giờ
-  // đủ điều kiện, bước treo VĨNH VIỄN (chỉ admin bypass được). Lọc ngay tại đây (điểm tra cứu DUY NHẤT
-  // của cả 2 mode) — mirror đúng bản client resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()
-  // ở public/js/core.js, sửa 1 bên PHẢI sửa cả 2 bên.
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao/Trung bình — phát hiện độc lập ở cả cụm Vận Hành lẫn
+  // cụm Hệ Thống): trước đây KHÔNG lọc tài khoản đã bị khoá/nghỉ việc (u.active === false) ở CẢ 2 nhánh —
+  // khác hẳn resolvePositionApprovers() (lib/positionApprovers.js, đã lọc `u.active !== false` từ đầu).
+  // Hậu quả: 1 approver nghỉ việc vẫn nằm trong danh sách approvers[] của bước -> isStepApprovalComplete()
+  // (đồng phê duyệt: TẤT CẢ phải duyệt) không bao giờ đủ điều kiện, bước treo VĨNH VIỄN (chỉ admin bypass
+  // được). Lọc ngay tại đây (điểm tra cứu DUY NHẤT của cả 2 mode) — mirror đúng bản client
+  // resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() ở public/js/core.js, sửa 1 bên PHẢI sửa
+  // cả 2 bên; màn cấu hình cũng cảnh báo rõ dòng không còn tác dụng (module-workflow.js).
   const isActiveUsername = (username) => (users || []).some(u => u && u.username === username && u.active !== false);
   if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
   // mode 'JOBTITLE': dòng MẶC ĐỊNH (không khai siêu thị) tự khớp theo dept CHÍNH/"Vị Trí Kiêm Nhiệm" của

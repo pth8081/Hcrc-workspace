@@ -40,6 +40,7 @@ const {
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS
 } = require('../lib/recordViewScope');
 const { filterNotificationsForUser } = require('../lib/notifications');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -226,6 +227,51 @@ const ADMIN_ONLY_KEYS = new Set([
   'diskSpaceMonitorState'
 ]);
 
+// ===== Nhật ký hệ thống SERVER-SIDE cho thao tác quản trị nhạy cảm (đợt audit chuyên sâu cụm "Hệ
+// Thống/Admin/Cấu Hình", mức Cao) =====
+// LỖI ĐÃ VÁ: routes/data.js TRƯỚC ĐÂY không ghi BẤT KỲ dòng nhật ký nào — toàn bộ "Nhật ký hệ thống"
+// của các thao tác quản trị (đổi quyền/đổi nhóm của 1 người, xoá nhóm phê duyệt, đổi cấu hình SMTP/API
+// dsmart16, đổi quy trình duyệt...) đều do CHÍNH client tự nguyện gọi POST /api/log sau khi lưu. Hệ
+// quả: (1) mọi thao tác gọi thẳng API (bỏ qua giao diện) không để lại dấu vết nào; (2) ngược lại client
+// vẫn ghi được log "SUCCESS" cho 1 thao tác mà server ĐÃ TỪ CHỐI. Nay ghi log NGAY tại điểm ghi CSDL
+// thật, SAU KHI chắc chắn lưu thành công — độc lập hoàn toàn với việc client có tự ghi hay không (2
+// dòng log cho cùng 1 thao tác qua giao diện là CHẤP NHẬN ĐƯỢC và có chủ đích: dòng của client mô tả
+// nghiệp vụ chi tiết hơn, dòng của server là bằng chứng không thể bỏ qua/giả mạo).
+const ADMIN_SENSITIVE_KEYS = new Set([
+  // Người dùng & phân quyền
+  'users', 'permGroups',
+  // Nhóm/Cấp phê duyệt (Văn Bản Trình + Hợp Đồng)
+  'submissionApprovalGroups', 'submissionApprovalLevels', 'contractApprovalGroups', 'contractApprovalLevels',
+  // Cấu hình quy trình duyệt (mẫu bước + gán người duyệt theo phòng ban/loại/mức)
+  'workflows', 'quickApplyConfigs', 'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows',
+  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
+  'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows', 'paymentDeptWorkflows', 'budgetDeptWorkflows',
+  'itPriceDeptWorkflows', 'itPriceTierWorkflows',
+  'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows', 'operationOrderStoreMixedApprovalRules',
+  // Tích hợp/bí mật + nhóm quyền đặc biệt
+  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'externalApiKeys', 'attendanceClockApiKeys',
+  'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
+  // Cấu hình ảnh hưởng toàn hệ thống (tệp tải lên/lương/chính sách kiểm duyệt)
+  'uploadFileTypeConfig', 'uploadSizeLimitConfig', 'payrollRateConfig', 'sensitiveKeywords'
+]);
+
+// Fire-and-forget: lỗi ghi log KHÔNG được phép làm hỏng thao tác chính đã lưu thành công (cùng khuôn
+// logHrProfileAction() ở routes/employeeProfile.js).
+function logAdminSensitiveDataWrite(req, key) {
+  if (!ADMIN_SENSITIVE_KEYS.has(key)) return;
+  const size = Array.isArray(req.body) ? `${req.body.length} mục` : 'cấu hình';
+  insertSystemLog({
+    username: req.freshUser?.username || req.user?.username,
+    fullName: req.freshUser?.name || req.user?.username,
+    ipAddress: req.ip,
+    module: 'CONFIG',
+    actionType: 'ADMIN_DATA_WRITE',
+    targetObject: key,
+    description: `Ghi đè collection quản trị "${key}" (${size}) qua POST /api/data/${key}`,
+    status: 'SUCCESS'
+  }).catch(e => console.error(`Lỗi ghi nhật ký hệ thống (POST /api/data/${key}):`, e.message));
+}
+
 // Các collection KHÔNG phải admin-only nhưng cũng KHÔNG mở cho mọi tài khoản đã đăng nhập — mỗi key ở
 // đây kèm 1 hàm kiểm tra quyền RIÊNG, hẹp đúng bằng độ mở của màn hình quản lý nó ở giao diện.
 //
@@ -336,12 +382,13 @@ function sanitizeExternalApiKeys(list, isAdmin) {
 // operationOrderApiConfig.headerValueEnc (giá trị header xác thực gửi tới dsmart16, VD API key/Bearer
 // token) — KHÔNG bao giờ trả ra ngoài, kể cả cho admin, cùng khuôn sanitizeEmailConfig() ở trên (chỉ
 // cần biết "đã cấu hình hay chưa" qua hasHeaderValue, ô trên form luôn hiện trống khi Sửa).
-// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Thấp): bí mật (headerValueEnc) vốn đã an toàn, NHƯNG phần
-// còn lại (baseUrl/headerName/syncIntervalMinutes/lastSyncMessage...) trước đây phát cho MỌI tài khoản đã
-// đăng nhập qua GET /api/data — lộ thông tin hạ tầng nội bộ (địa chỉ hệ thống dsmart16, tên header xác
-// thực, thông điệp lỗi đồng bộ) cho người không có việc gì tới đó. Cả màn đọc/ghi cấu hình này đều là
-// màn admin (sub-tab "Cấu Hình API", module-hethong-tabs.js) và ghi đã gác ADMIN_ONLY_KEYS — nay ẩn hẳn
-// với người không phải admin, cùng khuôn sanitizeExternalApiKeys()/sanitizeAttendanceClockApiKeys() ở trên
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm — phát hiện độc lập ở cả cụm Vận Hành lẫn cụm Hệ Thống, mức
+// Thấp/Trung bình): bí mật (headerValueEnc) vốn đã an toàn, NHƯNG phần còn lại
+// (baseUrl/headerName/syncIntervalMinutes/lastSyncMessage...) trước đây phát cho MỌI tài khoản đã đăng
+// nhập qua GET /api/data — lộ thông tin hạ tầng nội bộ (địa chỉ hệ thống dsmart16, tên header xác thực,
+// thông điệp lỗi đồng bộ) cho người không có việc gì tới đó. Cả màn đọc/ghi cấu hình này đều là màn
+// admin (sub-tab "Cấu Hình API", module-hethong-tabs.js) và ghi đã gác ADMIN_ONLY_KEYS — nay ẩn hẳn với
+// người không phải admin, cùng khuôn sanitizeExternalApiKeys()/sanitizeAttendanceClockApiKeys() ở trên
 // (trả rỗng thay vì lọc từng field). Client đọc `DB.operationOrderApiConfig = data.operationOrderApiConfig || {}`
 // nên object rỗng là giá trị hợp lệ, không nơi nào khác đọc key này.
 function sanitizeOperationOrderApiConfig(config, isAdmin) {
@@ -378,6 +425,25 @@ function mergeGroupsBasePermsServer(groupsPerms) {
     if (key === 'approverAuthLevel') {
       result[key] = values.reduce((best, v) =>
         (APPROVER_AUTH_LEVEL_RANK_SERVER[v] || 0) > (APPROVER_AUTH_LEVEL_RANK_SERVER[best] || 0) ? v : best, 'NONE');
+      return;
+    }
+    // PQ-02b (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): moduleAccess là object LỒNG
+    // {moduleKey: boolean} (xem defaultModuleAccess()/hasModuleAccess() ở public/js/core.js) — không
+    // phải boolean, không phải {all,depts}, không phải mảng — nên TRƯỚC ĐÂY rơi xuống nhánh else cuối
+    // cùng và lấy nguyên object của NHÓM CUỐI (last-write-wins): 1 người thuộc 2 nhóm, nhóm A mở module
+    // X còn nhóm B tắt X, thì chỉ cần thứ tự tick khác đi là mất/được quyền vào module X — đúng lớp lỗi
+    // đã vá cho uploadDepts/viewDraftDepts ở nhánh mảng bên dưới nhưng bỏ sót key này. Gộp theo đúng
+    // nguyên tắc "nhóm quyền là OVERLAY cộng thêm": OR TỪNG KEY con — module bị chặn CHỈ KHI MỌI nhóm
+    // đều chặn. Nhóm không khai moduleAccess (undefined) = mở hết (khớp hasModuleAccess(): !ma -> true),
+    // key con thiếu trong 1 nhóm cũng là mở (ma[k] !== false).
+    if (key === 'moduleAccess') {
+      const subKeys = new Set();
+      values.forEach(v => { if (v && typeof v === 'object') Object.keys(v).forEach(k => subKeys.add(k)); });
+      const merged = {};
+      subKeys.forEach(k => {
+        merged[k] = values.some(v => (v && typeof v === 'object') ? v[k] !== false : true);
+      });
+      result[key] = merged;
       return;
     }
     const sample = values.find(v => v !== undefined && v !== null);
@@ -514,8 +580,23 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     // khoản toàn quyền không thể bị khoá/gỡ quyền nhầm, tránh tình huống không còn ai đủ quyền tự sửa
     // lại. Ép ở ĐÂY (điểm ghi CSDL duy nhất cho collection "users") thay vì chỉ ở client để không phụ
     // thuộc việc giao diện có khoá đúng hay không.
-    if (record.username === 'admin') {
+    //
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): điều kiện trước đây so
+    // theo record.username — tức username MỚI do client gửi lên — nên chỉ cần ĐỔI TÊN tài khoản admin
+    // gốc ngay trong CÙNG 1 request (username: "admin" -> "quantri" kèm perms: {}) là nhánh ép quyền bị
+    // bỏ qua hoàn toàn và perms rỗng được ghi thẳng. Mặt trái đối xứng cũng có thật: sau khi tài khoản
+    // gốc đã đổi tên, BẤT KỲ ai tự đổi username của mình thành "admin" đều được TỰ ĐỘNG phong toàn
+    // quyền. Nay xét theo bản ghi CŨ trong CSDL (prior.username, bất biến trong lượt ghi này) và KHOÁ
+    // luôn cả việc đổi tên tài khoản gốc — giữ đúng bất biến "luôn tồn tại 1 tài khoản tên 'admin' có
+    // toàn quyền". Bản ghi MỚI (không có prior) đặt tên "admin" vẫn được ép toàn quyền như trước (chỉ
+    // xảy ra khi CSDL chưa hề có tài khoản nào tên "admin" — kiểm tra trùng username ở dưới đã chặn
+    // trường hợp tạo thêm 1 "admin" thứ hai).
+    const isProtectedAdminRecord = prior ? prior.username === 'admin' : record.username === 'admin';
+    if (isProtectedAdminRecord) {
+      record.username = 'admin';
       record.perms = { admin: true };
+      record.groupIds = [];
+      record.permOverrides = null;
     } else {
       // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
       const groupIds = record.groupIds || (record.groupId ? [record.groupId] : []);
@@ -568,6 +649,23 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     seenUsernames.set(u.username, true);
   }
 
+  // USER-BULK-03 (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Thấp): "id" do CLIENT tự sinh
+  // (buildNewUserFromState() ở module-admin-submissiongroups.js: Date.now() + số người đang chờ trong
+  // danh sách) — 2 admin ngồi 2 máy tạo người dùng trong cùng mili-giây, hoặc 1 request tự soạn, đều có
+  // thể tạo ra 2 bản ghi TRÙNG id. Mọi thao tác khớp theo id (prepareUsersForSave() ở trên giữ lại
+  // mật khẩu/PIN/vân tay theo existingById, deleteUser()/toggleUserActive() ở client) khi đó sẽ chạm
+  // NHẦM tài khoản kia — âm thầm hợp nhất/xoá nhầm 2 tài khoản khác nhau. Chặn cùng khuôn kiểm tra
+  // trùng username ngay trên (chỉ từ chối lượt ghi, không tự đổi id của ai — client chỉ cần bấm lưu
+  // lại là có id mới theo Date.now()).
+  const seenIds = new Map();
+  for (const u of prepared) {
+    if (u.id === undefined || u.id === null) continue;
+    if (seenIds.has(u.id)) {
+      throw new HttpError(400, `Mã tài khoản (id) "${u.id}" đã bị trùng giữa nhiều tài khoản — vui lòng tải lại trang rồi lưu lại (mỗi tài khoản phải có id duy nhất).`);
+    }
+    seenIds.set(u.id, true);
+  }
+
   assertAtLeastOneAdmin(prepared);
   assertNoManagerCycle(prepared);
   return prepared;
@@ -600,6 +698,80 @@ async function syncUsersWithPermGroupsChange(newGroups) {
     assertAtLeastOneAdmin(updated);
     return updated;
   });
+}
+
+// ===== Toàn vẹn tham chiếu giữa "Nhóm Phê Duyệt" và "Cấp Phê Duyệt Cuối Cùng" (Văn Bản Trình + Hợp
+// Đồng) — đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình" =====
+// LỖI ĐÃ VÁ (mức Cao): xoá 1 Nhóm Phê Duyệt KHÔNG hề dọn id của nhóm đó khỏi visibleGroupIds/
+// lockedGroupIds của các Cấp — nếu nhóm vừa xoá đang bị đặt BẮT BUỘC (locked) ở 1 Cấp thì mọi hồ sơ
+// chọn Cấp đó bị từ chối VĨNH VIỄN ở server ("Thiếu nhóm phê duyệt bắt buộc...", xem
+// buildEffectiveSubmissionWorkflowServer() ở lib/createValidation.js) mà giao diện KHÔNG có cách nào
+// tick lại (form chỉ render checkbox cho nhóm còn tồn tại) — khoá cứng việc tạo hồ sơ ở cấp đó, trong
+// khi hộp thoại xác nhận lúc xoá lại khẳng định SAI rằng "cấp đó sẽ tự bỏ qua nhóm này".
+// LỖI ĐÃ VÁ (mức Trung bình): ràng buộc lockedGroupIds ⊆ visibleGroupIds trước đây CHỈ có ở client
+// (saveApprovalLevelGroups()) — 1 request tự soạn POST thẳng /api/data/submissionApprovalLevels đặt
+// được 1 nhóm bắt buộc NGOÀI phạm vi hiển thị, gây ra đúng tình trạng bế tắc như trên.
+const APPROVAL_GROUPS_TO_LEVELS_KEY = {
+  submissionApprovalGroups: 'submissionApprovalLevels',
+  contractApprovalGroups: 'contractApprovalLevels'
+};
+const APPROVAL_LEVELS_TO_GROUPS_KEY = {
+  submissionApprovalLevels: 'submissionApprovalGroups',
+  contractApprovalLevels: 'contractApprovalGroups'
+};
+
+// visibleGroupIds === null/không phải mảng = "TẤT CẢ nhóm hiện có" (xem resolveApprovalLevelRule() ở
+// lib/createValidation.js) — giữ nguyên null, KHÔNG quy đổi thành danh sách cụ thể (sẽ chặn mất các
+// nhóm thêm mới sau này).
+function sanitizeApprovalLevelsAgainstGroups(levels, groups) {
+  if (!Array.isArray(levels)) return levels;
+  const existingIds = new Set((groups || []).map(g => g && g.id).filter(Boolean));
+  return levels.map(lv => {
+    if (!lv || typeof lv !== 'object') return lv;
+    const next = { ...lv };
+    if (Array.isArray(next.visibleGroupIds)) next.visibleGroupIds = next.visibleGroupIds.filter(id => existingIds.has(id));
+    if (Array.isArray(next.lockedGroupIds)) next.lockedGroupIds = next.lockedGroupIds.filter(id => existingIds.has(id));
+    return next;
+  });
+}
+
+function assertApprovalLevelsLockedWithinVisible(levels) {
+  if (!Array.isArray(levels)) return;
+  levels.forEach(lv => {
+    if (!lv || typeof lv !== 'object') return;
+    if (!Array.isArray(lv.visibleGroupIds)) return; // null = tất cả nhóm -> locked luôn là tập con
+    const locked = Array.isArray(lv.lockedGroupIds) ? lv.lockedGroupIds : [];
+    const missing = locked.filter(id => !lv.visibleGroupIds.includes(id));
+    if (missing.length) {
+      throw new HttpError(400, `Cấp phê duyệt "${lv.label || lv.id}": nhóm bắt buộc (${missing.join(', ')}) phải nằm trong danh sách nhóm được chọn/hiển thị của chính cấp đó.`);
+    }
+  });
+}
+
+async function prepareApprovalLevelsForSave(key, value) {
+  const groups = (await getAppDataValue(APPROVAL_LEVELS_TO_GROUPS_KEY[key])) || [];
+  const sanitized = sanitizeApprovalLevelsAgainstGroups(value, groups);
+  assertApprovalLevelsLockedWithinVisible(sanitized);
+  return sanitized;
+}
+
+// Gọi NGAY SAU khi ghi thành công 1 trong 2 collection nhóm phê duyệt — tự dọn mọi id nhóm không còn
+// tồn tại khỏi các Cấp, cùng tinh thần syncUsersWithPermGroupsChange() (không phụ thuộc việc client có
+// tự gửi thêm 1 lượt POST levels hay không).
+async function syncApprovalLevelsWithGroupsChange(groupsKey, newGroups) {
+  const levelsKey = APPROVAL_GROUPS_TO_LEVELS_KEY[groupsKey];
+  if (!levelsKey) return;
+  const { value: currentLevels } = await getAppDataValueWithVersion(levelsKey);
+  if (currentLevels === null) {
+    // Cấp phê duyệt chưa từng được ghi -> vẫn đang dùng nguyên DEFAULTS; chỉ ghi ra AppData khi việc
+    // dọn thực sự làm thay đổi dữ liệu mặc định (tránh tạo row thừa không cần thiết).
+    const sanitizedDefaults = sanitizeApprovalLevelsAgainstGroups(DEFAULTS[levelsKey], newGroups);
+    if (JSON.stringify(sanitizedDefaults) !== JSON.stringify(DEFAULTS[levelsKey])) {
+      await setAppDataValue(levelsKey, sanitizedDefaults);
+    }
+    return;
+  }
+  await withLockedAppDataValue(levelsKey, (levels) => sanitizeApprovalLevelsAgainstGroups(levels, newGroups));
 }
 
 // Mật khẩu SMTP là write-only ở giao diện (ô luôn hiện trống, xem index.html) — client gửi lên field
@@ -1430,6 +1602,10 @@ router.post('/:key', async (req, res) => {
     // (module-admin-submissiongroups.js) nhưng đây mới là chốt chặn thật, phòng request tự soạn bỏ qua UI.
     if (key === 'submissionApprovalGroups') assertApprovalGroupsSingleApproverCaps(value, 'mục 11 — Nhóm Phê Duyệt Trình');
     if (key === 'contractApprovalGroups') assertApprovalGroupsSingleApproverCaps(value, 'mục 14 — Nhóm Phê Duyệt HĐ');
+    // Cấp Phê Duyệt Cuối Cùng: tự loại id nhóm KHÔNG còn tồn tại + bắt buộc lockedGroupIds ⊆
+    // visibleGroupIds ngay tại server (xem sanitizeApprovalLevelsAgainstGroups()/
+    // assertApprovalLevelsLockedWithinVisible() ở trên).
+    if (APPROVAL_LEVELS_TO_GROUPS_KEY[key]) value = await prepareApprovalLevelsForSave(key, value);
 
     const ifMatch = req.get('If-Match');
     let savedVersion = null;
@@ -1463,11 +1639,25 @@ router.post('/:key', async (req, res) => {
       usersVersion = (await getAppDataValueWithVersion('users')).version;
     }
 
+    // Nhóm Phê Duyệt vừa đổi (đặc biệt là XOÁ 1 nhóm) -> dọn ngay mọi tham chiếu treo ở "Cấp Phê Duyệt
+    // Cuối Cùng", cùng lý do/khuôn syncUsersWithPermGroupsChange() ngay trên. syncedVersions: version
+    // MỚI của collection bị sửa như TÁC DỤNG PHỤ, trả về để client cập nhật DB._versions và không bị
+    // 409 giả ở lượt lưu kế tiếp (cùng cơ chế usersVersion của permGroups).
+    let syncedVersions;
+    if (APPROVAL_GROUPS_TO_LEVELS_KEY[key]) {
+      const levelsKey = APPROVAL_GROUPS_TO_LEVELS_KEY[key];
+      await syncApprovalLevelsWithGroupsChange(key, value);
+      syncedVersions = { [levelsKey]: (await getAppDataValueWithVersion(levelsKey)).version };
+    }
+
+    // Nhật ký hệ thống SERVER-SIDE cho các key QUẢN TRỊ NHẠY CẢM — xem ADMIN_SENSITIVE_KEYS ở đầu file.
+    logAdminSensitiveDataWrite(req, key);
+
     if (ifMatch) {
       res.set('ETag', savedVersion);
-      return res.json({ ok: true, version: savedVersion, usersVersion });
+      return res.json({ ok: true, version: savedVersion, usersVersion, syncedVersions });
     }
-    res.json({ ok: true, usersVersion });
+    res.json({ ok: true, usersVersion, syncedVersions });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, `POST /api/data/${key}`, 'Không thể lưu dữ liệu vào SQL Server');

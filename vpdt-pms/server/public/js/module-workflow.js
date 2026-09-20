@@ -281,7 +281,13 @@ function showQuickApplyConfigImpact(configId) {
   `;
 }
 
-function applyQuickApplyConfig(configId) {
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Trung bình): "⚡ Áp Dụng Nhanh"
+// ghi vào NHIỀU collection khác nhau (mỗi module 1 dbKey riêng) bằng các lượt syncStorage() "bắn và
+// quên" — không await, không kiểm kết quả — rồi LUÔN báo "✅ Đã áp dụng cho N mục" cho toàn bộ. Nếu 1
+// phần các lượt ghi đó bị từ chối (409 xung đột, 403 hết phiên, mất mạng) thì admin vẫn tin là đã áp
+// dụng xong hết, trong khi thực tế chỉ 1 phần được lưu và màn hình thì hiển thị như đã lưu tất. Nay
+// await TỪNG lượt, hoàn tác đúng những collection ghi hỏng, và báo CHÍNH XÁC phần nào lưu được/không.
+async function applyQuickApplyConfig(configId) {
   const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
   if (!cfg) return;
   const wf = DB.workflows.find(w => w.id === cfg.workflowId);
@@ -297,22 +303,47 @@ function applyQuickApplyConfig(configId) {
   );
   if (!proceed) return;
 
-  targets.forEach(t => t.apply(cfg.workflowId));
   const dirtyKeys = [...new Set(targets.map(t => t.dbKey))];
-  dirtyKeys.forEach(key => syncStorage(key));
+  const snapshot = JSON.parse(JSON.stringify(Object.fromEntries(dirtyKeys.map(k => [k, DB[k] || {}]))));
+  targets.forEach(t => t.apply(cfg.workflowId));
 
-  logSystemAction('CONFIG', 'QUICK_APPLY_WORKFLOW_STEPS', `Áp dụng cấu hình Áp Dụng Nhanh [${cfg.id}] — mẫu [${cfg.workflowId}] cho ${targets.length} mục (phạm vi module: ${(cfg.modules || []).join(', ')})`, 'SUCCESS', cfg.workflowId);
-  alert(`✅ Đã áp dụng cho ${targets.length} mục. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước.`);
+  const savedKeys = [];
+  const failedKeys = [];
+  for (const key of dirtyKeys) {
+    const saved = await syncStorage(key);
+    if (saved) {
+      savedKeys.push(key);
+    } else {
+      DB[key] = snapshot[key]; // hoàn tác đúng collection ghi hỏng, giữ nguyên các collection đã lưu được
+      failedKeys.push(key);
+    }
+  }
+  const appliedCount = targets.filter(t => savedKeys.includes(t.dbKey)).length;
+  const failedCount = targets.length - appliedCount;
+
+  logSystemAction(
+    'CONFIG', 'QUICK_APPLY_WORKFLOW_STEPS',
+    `Áp dụng cấu hình Áp Dụng Nhanh [${cfg.id}] — mẫu [${cfg.workflowId}]: lưu thành công ${appliedCount}/${targets.length} mục${failedCount ? ` (THẤT BẠI ${failedCount} mục ở: ${failedKeys.join(', ')})` : ''} (phạm vi module: ${(cfg.modules || []).join(', ')})`,
+    failedCount ? 'WARNING' : 'SUCCESS', cfg.workflowId
+  );
+  if (failedCount) {
+    alert(`⚠️ Áp dụng KHÔNG trọn vẹn: đã lưu ${appliedCount}/${targets.length} mục.\n\nCác nhóm cấu hình lưu THẤT BẠI (đã hoàn tác trên màn hình, KHÔNG có gì được ghi): ${failedKeys.join(', ')}.\n\nVui lòng tải lại trang rồi bấm "⚡ Áp Dụng" lại cho phần còn thiếu.`);
+  } else {
+    alert(`✅ Đã áp dụng cho ${appliedCount} mục. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước.`);
+  }
   document.getElementById(`qaImpact_${configId}`)?.classList.add('hidden');
 }
 
-function saveQuickApplyConfig(e) {
+async function saveQuickApplyConfig(e) {
   e.preventDefault();
   const workflowId = document.getElementById('qaTplSelect')?.value;
   if (!workflowId) return alert('Chưa có mẫu quy trình nào — vào "🔄 Quy Trình & Phê Duyệt" để tạo mẫu trước (khối "Định Nghĩa Các Mẫu Bước Phê Duyệt").');
   const modules = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
   if (!modules.length) return alert('Chọn ít nhất 1 module để gắn cấu hình này.');
 
+  // Chụp lại TRƯỚC khi sửa DB — phục hồi nếu server từ chối (xem khuôn saveUser() ở
+  // module-admin-submissiongroups.js), không báo thành công/ghi log khi chưa chắc đã lưu.
+  const snapshot = JSON.parse(JSON.stringify(DB.quickApplyConfigs || []));
   let configId = editingQuickApplyConfigId;
   if (configId) {
     const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
@@ -321,7 +352,11 @@ function saveQuickApplyConfig(e) {
     configId = Math.max(0, ...(DB.quickApplyConfigs || []).map(c => c.id)) + 1;
     DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules }];
   }
-  syncStorage('quickApplyConfigs');
+  if (!await syncStorage('quickApplyConfigs')) {
+    DB.quickApplyConfigs = snapshot;
+    renderQuickApplyConfigList();
+    return;
+  }
   logSystemAction('CONFIG', editingQuickApplyConfigId ? 'UPDATE_QUICK_APPLY_CONFIG' : 'CREATE_QUICK_APPLY_CONFIG', `${editingQuickApplyConfigId ? 'Sửa' : 'Tạo'} cấu hình Áp Dụng Nhanh [${configId}] — mẫu [${workflowId}] cho module: ${modules.join(', ')}`, 'SUCCESS', String(configId));
   resetQuickApplyConfigForm();
   renderQuickApplyConfigList();
@@ -348,12 +383,17 @@ function resetQuickApplyConfigForm() {
   document.getElementById('btnCancelQaConfig')?.classList.add('hidden');
 }
 
-function deleteQuickApplyConfig(configId) {
+async function deleteQuickApplyConfig(configId) {
   const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
   if (!cfg) return;
   if (!confirm('Xoá cấu hình Áp Dụng Nhanh này? (Không ảnh hưởng gì tới các mục ĐÃ được áp dụng trước đó — chỉ xoá cấu hình để dùng áp dụng tiếp trong tương lai.)')) return;
+  const snapshot = JSON.parse(JSON.stringify(DB.quickApplyConfigs || []));
   DB.quickApplyConfigs = (DB.quickApplyConfigs || []).filter(c => c.id !== configId);
-  syncStorage('quickApplyConfigs');
+  if (!await syncStorage('quickApplyConfigs')) {
+    DB.quickApplyConfigs = snapshot;
+    renderQuickApplyConfigList();
+    return;
+  }
   logSystemAction('CONFIG', 'DELETE_QUICK_APPLY_CONFIG', `Xoá cấu hình Áp Dụng Nhanh [${configId}]`, 'SUCCESS', String(configId));
   if (editingQuickApplyConfigId === configId) resetQuickApplyConfigForm();
   renderQuickApplyConfigList();
@@ -422,13 +462,27 @@ function renderMixedApprovalSection() {
     tbody.innerHTML = rules.length ? rules.slice().sort((a, b) => a.step - b.step || a.id - b.id).map(row => {
       const person = row.mode === 'PERSON' ? (DB.users || []).find(u => u.username === row.username) : null;
       const nameLabel = row.mode === 'JOBTITLE' ? row.jobTitle : (person ? mixedApprovalPersonLabel(person) : row.username);
-      const nameBadge = row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '';
       // Xem trước số người đang khớp dòng này — 0 người = cấu hình "chết" (chức danh chưa ai giữ/người
       // đã nghỉ việc), hiện đỏ để admin thấy ngay thay vì chỉ phát hiện khi đơn bị treo.
       const matchCount = mixedApprovalRuleMatchCount(row);
       const matchBadge = matchCount > 0
         ? ` <span class="text-[10px] bg-gray-100 text-gray-600 px-1 rounded font-normal">👤 ${matchCount} người</span>`
         : ` <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold" title="Không có tài khoản nào đang hoạt động khớp dòng này — bước sẽ không có người duyệt">⚠️ 0 người khớp</span>`;
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Trung bình): dòng PERSON chỉ
+      // hiển thị lại username đã lưu, KHÔNG hề kiểm tra tài khoản đó còn tồn tại/còn hoạt động hay
+      // không — người đã nghỉ việc (active:false) hoặc tài khoản đã bị xoá vẫn hiện như 1 người duyệt
+      // bình thường, trong khi họ KHÔNG đăng nhập được nữa: đơn hàng dừng vĩnh viễn ở bước đó mà admin
+      // không hề biết vì sao. Nay cảnh báo rõ ngay tại màn cấu hình (khớp với việc
+      // resolveOperationOrderStoreMixedApprovalRuleUsernames() ở lib/workflowEngine.js + bản mirror
+      // client đã bỏ qua tài khoản không hợp lệ khi tính người duyệt thật).
+      const personInvalidBadge = row.mode === 'PERSON'
+        ? (!person
+            ? ' <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold">⛔ Tài khoản không còn tồn tại — dòng này KHÔNG có tác dụng</span>'
+            : (person.active === false
+                ? ' <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold">⛔ Tài khoản đã bị khoá — dòng này KHÔNG có tác dụng</span>'
+                : ''))
+        : '';
+      const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '') + personInvalidBadge;
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
@@ -481,7 +535,7 @@ function onMixedApprovalNewModeChange() {
   document.getElementById('maNewPersonWrap')?.classList.toggle('hidden', mode !== 'PERSON');
 }
 
-function addMixedApprovalRule() {
+async function addMixedApprovalRule() {
   const step = Number(document.getElementById('maNewStep')?.value);
   const mode = document.getElementById('maNewMode')?.value === 'PERSON' ? 'PERSON' : 'JOBTITLE';
   const stores = getMultiSelectValues('maNewStoresPicker');
@@ -502,8 +556,13 @@ function addMixedApprovalRule() {
   }
 
   const id = Math.max(0, ...(DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id)) + 1;
+  const snapshot = JSON.parse(JSON.stringify(DB.operationOrderStoreMixedApprovalRules || []));
   DB.operationOrderStoreMixedApprovalRules = [...(DB.operationOrderStoreMixedApprovalRules || []), { id, step, mode, jobTitle, username, stores }];
-  syncStorage('operationOrderStoreMixedApprovalRules');
+  if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
+    DB.operationOrderStoreMixedApprovalRules = snapshot;
+    renderMixedApprovalSection();
+    return;
+  }
   logSystemAction(
     'CONFIG', 'ADD_MIXED_APPROVAL_RULE',
     `Thêm dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
@@ -529,7 +588,7 @@ function mixedApprovalRuleMatchCount(rule) {
   )).length;
 }
 
-function deleteMixedApprovalRule(id) {
+async function deleteMixedApprovalRule(id) {
   const rules = DB.operationOrderStoreMixedApprovalRules || [];
   const rule = rules.find(r => r.id === id);
   if (!rule) return;
@@ -547,8 +606,16 @@ function deleteMixedApprovalRule(id) {
       + `Xoá xong, Bước ${rule.step} chỉ còn ${remainingSameStep.length} dòng NGOẠI LỆ (chỉ áp dụng đúng các siêu thị đã khai) — những siêu thị KHÔNG được khai ở các dòng đó sẽ không còn ai duyệt ở bước này.\n\nVẫn xoá?`;
   }
   if (!confirm(message)) return;
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): trước đây ghi thẳng vào DB
+  // rồi bắn syncStorage() không await/không rollback — nếu server từ chối (409...), client vẫn coi như
+  // đã xoá thành công. Nay snapshot trước, chỉ log SUCCESS + render lại SAU KHI xác nhận lưu thành công.
+  const snapshot = JSON.parse(JSON.stringify(rules));
   DB.operationOrderStoreMixedApprovalRules = rules.filter(r => r.id !== id);
-  syncStorage('operationOrderStoreMixedApprovalRules');
+  if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
+    DB.operationOrderStoreMixedApprovalRules = snapshot;
+    renderMixedApprovalSection();
+    return;
+  }
   logSystemAction('CONFIG', 'DELETE_MIXED_APPROVAL_RULE', `Xoá dòng Quy Trình Đặt Hàng Siêu Thị [${id}]`, 'SUCCESS', String(id));
   renderMixedApprovalSection();
 }

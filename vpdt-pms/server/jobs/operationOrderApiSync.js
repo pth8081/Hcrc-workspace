@@ -227,14 +227,33 @@ function hasPayloadChangedSinceLastSync(o, matchingKey) {
   return JSON.stringify(buildSyncPayload(o, matchingKey)) !== o.dsmart16SyncedPayload;
 }
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Trung bình): 2 lượt ghi kết quả
+// đồng bộ bên dưới trước đây dùng `{ ...config }` — tức SNAPSHOT đọc từ ĐẦU hàm
+// syncOperationOrdersToDsmart16(), TRƯỚC cả khi lấy khoá và trước cả đợt gửi HTTP có thể kéo dài nhiều
+// phút. Admin sửa Cấu Hình API (đổi Base URL/tên header/chu kỳ, hoặc TẮT đồng bộ) trong lúc job đang
+// chạy sẽ bị ghi đè lặng lẽ về giá trị CŨ ngay khi job kết thúc — thay đổi biến mất, không báo gì. Nay
+// đọc lại bản MỚI NHẤT ngay trước khi ghi (trong cùng khoá 'dsmart16_sync' mà cơ chế chống chạy chồng
+// đang dùng) và CHỈ đặt đúng 3 trường trạng thái lastSync* của lượt chạy này, không đụng phần cấu hình
+// do admin sở hữu.
+async function writeSyncStatus(pool, statusFields) {
+  try {
+    await withAppLock('dsmart16_sync', async () => {
+      const latest = await getCollection(pool, 'operationOrderApiConfig', {});
+      await setCollection(pool, 'operationOrderApiConfig', { ...latest, ...statusFields });
+    });
+  } catch (err) {
+    console.error('⛔ [Đồng bộ dsmart16] Không ghi được trạng thái lần đồng bộ gần nhất:', err.message);
+  }
+}
+
 async function runSyncBatch(pool, config, matchingKey, headerValue) {
   const orders = await getAllForCollection('operationOrders');
   const candidates = (orders || []).filter(o => o && o.poNumber && hasPayloadChangedSinceLastSync(o, matchingKey));
 
   const summary = { total: candidates.length, synced: 0, failed: 0, errors: [] };
   if (!candidates.length) {
-    await setCollection(pool, 'operationOrderApiConfig', {
-      ...config, lastSyncAt: new Date().toISOString(), lastSyncStatus: 'SUCCESS',
+    await writeSyncStatus(pool, {
+      lastSyncAt: new Date().toISOString(), lastSyncStatus: 'SUCCESS',
       lastSyncMessage: 'Không có đơn hàng nào cần đồng bộ (đã đồng bộ hết hoặc chưa có poNumber).'
     });
     return { ok: true, ...summary, message: 'Không có đơn hàng nào cần đồng bộ.' };
@@ -286,8 +305,8 @@ async function runSyncBatch(pool, config, matchingKey, headerValue) {
   const status = summary.failed === 0 ? 'SUCCESS' : (summary.synced > 0 ? 'PARTIAL' : 'FAILED');
   const message = `Đã đồng bộ ${summary.synced}/${summary.total} đơn hàng${summary.failed ? `, LỖI ${summary.failed} đơn: ${summary.errors.slice(0, 5).join('; ')}${summary.errors.length > 5 ? '...' : ''}` : ''}.`;
 
-  await setCollection(pool, 'operationOrderApiConfig', {
-    ...config, lastSyncAt: new Date().toISOString(), lastSyncStatus: status, lastSyncMessage: message
+  await writeSyncStatus(pool, {
+    lastSyncAt: new Date().toISOString(), lastSyncStatus: status, lastSyncMessage: message
   });
 
   await insertSystemLog({

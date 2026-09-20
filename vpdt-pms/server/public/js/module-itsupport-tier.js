@@ -410,26 +410,51 @@ function editWorkflowTemplate(code) {
   document.getElementById('btnCancelWf').classList.remove('hidden');
 }
 
+// Quét ĐỆ QUY 1 map cấu hình quy trình để tìm mọi "ô" đang gán đúng mẫu `code`. Các map này KHÔNG cùng
+// hình dạng (xem WF_MODULE_CONFIG ở module-workflow.js):
+//   - phẳng           : {phòng ban: config} (DOC/CAR/OFFICE_*/VPP/CONTRACT_*/PAYMENT...) hoặc
+//                       {mức tier: config} (tierDbKeyForWholesale) hoặc legacyDbKey (cấu hình chung cũ)
+//   - hasTypes        : {loại tờ trình: {phòng ban: config}} (SUBMISSION)
+//   - priceTypeNested : {phòng ban: {loại giá: config}} (ITPRICE — NGƯỢC thứ tự lồng với hasTypes)
+// Nhận diện 1 "ô cấu hình" bằng chính sự có mặt của field workflowId (không đoán theo tên khoá/độ sâu),
+// nên tự đúng cho cả 3 dạng trên lẫn dạng lồng mới phát sinh sau này.
+function collectWorkflowUsagesInConfigMap(map, code, labelPrefix, usages, maxDepth) {
+  if (!map || typeof map !== 'object') return;
+  Object.keys(map).forEach(key => {
+    const node = map[key];
+    if (!node || typeof node !== 'object') return;
+    if (typeof node.workflowId === 'string') {
+      if (node.workflowId === code) usages.push(`${labelPrefix} — ${key}`);
+      return;
+    }
+    if (maxDepth > 0) collectWorkflowUsagesInConfigMap(node, code, `${labelPrefix} — ${key}`, usages, maxDepth - 1);
+  });
+}
+
 function deleteWorkflowTemplate(code) {
   // CẬP NHẬT: chặn xoá nếu mẫu quy trình đang được gán cho phòng ban nào đó ở BẤT KỲ module nào —
   // trước đây xoá vô điều kiện, để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo).
   // Khi đó hệ thống âm thầm rơi về 1 quy trình giả 1 bước không có người duyệt thật lúc xử lý hồ sơ.
+  //
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): vòng quét cũ chỉ đọc ĐÚNG
+  // 1 tầng (map[dept]?.workflowId) nên BỎ SÓT hoàn toàn 2 dạng cấu hình LỒNG đang dùng thật —
+  // SUBMISSION (hasTypes: {loại: {phòng ban: config}}) và ITPRICE (priceTypeNested: {phòng ban: {loại
+  // giá: config}}) — lẫn legacyDbKey (submissionDeptWorkflows, cấu hình chung cũ vẫn có hiệu lực qua
+  // fallback). Xoá 1 mẫu đang được các cấu hình đó dùng vẫn "thành công": quy trình N bước của những
+  // phòng ban/loại ấy ÂM THẦM co về 1 bước giả "Sếp duyệt" với người duyệt mặc định (xem
+  // flatWorkflowConfigToSteps() ở lib/workflowEngine.js) — bỏ qua toàn bộ các cấp duyệt đã cấu hình.
   const usages = [];
   Object.values(WF_MODULE_CONFIG).forEach(cfg => {
-    const map = DB[cfg.dbKey] || {};
-    Object.keys(map).forEach(dept => {
-      if (map[dept]?.workflowId === code) usages.push(`${cfg.label} — ${dept}`);
-    });
+    // maxDepth=1: đủ cho 2 tầng lồng (hasTypes/priceTypeNested); map phẳng tự dừng ngay ở tầng đầu.
+    if (cfg.dbKey) collectWorkflowUsagesInConfigMap(DB[cfg.dbKey], code, cfg.label, usages, 1);
+    // legacyDbKey: cấu hình chung cũ (chỉ theo phòng ban) vẫn được dùng làm fallback khi loại đang chọn
+    // chưa cấu hình riêng — xoá mẫu nó đang trỏ tới cũng làm hỏng quy trình thật.
+    if (cfg.legacyDbKey) collectWorkflowUsagesInConfigMap(DB[cfg.legacyDbKey], code, `${cfg.label} (cấu hình chung cũ)`, usages, 1);
     // Module theo TIER (fixedTiers/tierDbKeyForWholesale, vd ITPRICE Bán Buôn + 2 module MỚI Vận Hành >
     // Đặt Hàng Tại Siêu Thị/HO) lưu cấu hình ở collection RIÊNG (cfg.dbKey ở trên KHÔNG trỏ tới đây) —
     // trước đây bị bỏ sót khỏi vòng quét này, khiến xoá 1 mẫu quy trình đang được gán cho 1 mức tier vẫn
     // "thành công", để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo).
-    if (cfg.tierDbKeyForWholesale) {
-      const tierMap = DB[cfg.tierDbKeyForWholesale] || {};
-      Object.keys(tierMap).forEach(tierKey => {
-        if (tierMap[tierKey]?.workflowId === code) usages.push(`${cfg.label} — ${tierKey}`);
-      });
-    }
+    if (cfg.tierDbKeyForWholesale) collectWorkflowUsagesInConfigMap(DB[cfg.tierDbKeyForWholesale], code, cfg.label, usages, 1);
   });
 
   if (usages.length > 0) {

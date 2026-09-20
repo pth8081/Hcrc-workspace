@@ -12,6 +12,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { getTrashItems, getTrashItemCollection, restoreTrashItemWithFamily, permanentlyDeleteTrashItem } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -93,6 +94,19 @@ router.post('/:id/restore', async (req, res) => {
     const collection = await getTrashItemCollection(trashId);
     if (collection) assertSensitiveTrashCollectionAllowed(req.freshUser, collection);
     const result = await restoreTrashItemWithFamily(trashId);
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Thấp): khôi phục 1 hồ sơ từ
+    // Thùng Rác KHÔNG để lại dấu vết nào ở Nhật ký hệ thống (client cũng không tự ghi) — 1 hồ sơ đã bị
+    // xoá bỗng xuất hiện trở lại mà không ai truy được ai khôi phục, lúc nào. Ghi log SERVER-SIDE ngay
+    // tại đây (fire-and-forget, không làm hỏng lượt khôi phục đã thành công nếu ghi log lỗi).
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'TRASH_RESTORE',
+      targetObject: `${result.collection}#${result.item?.id ?? trashId}`,
+      description: `Khôi phục từ Thùng Rác: ${result.collection} [${result.item?.code || result.item?.title || result.item?.id || trashId}]`
+        + (result.restoredFamilyMembers?.length ? ` (kèm ${result.restoredFamilyMembers.length} bản ghi cùng họ)` : '')
+        + (result.familyRestoreErrors?.length ? ` — ${result.familyRestoreErrors.length} bản ghi cùng họ KHÔNG khôi phục được` : ''),
+      status: result.familyRestoreErrors?.length ? 'WARNING' : 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (khôi phục Thùng Rác):', e.message));
     res.json({
       ok: true, collection: result.collection, item: result.item,
       restoredFamilyMembers: result.restoredFamilyMembers,
