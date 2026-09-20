@@ -726,7 +726,15 @@ function openProcessSubmissionModal(subId) {
   if (sub.pendingFileProposal) {
     // Đang có đề xuất thay thế tệp CHỜ người trình xác nhận (RESOLVE_FILE_PROPOSAL) — hồ sơ "treo",
     // không ai được Duyệt/Từ chối/Yêu cầu bổ sung thêm lúc này (khớp guard ở server).
-    actionBtns.innerHTML = `<span class="text-amber-600 italic text-xs font-semibold">⏳ Đang chờ người trình (${escapeHtml(sub.creatorName)}) xác nhận đề xuất thay thế tờ trình của ${escapeHtml(sub.pendingFileProposal.proposedByName)} (${escapeHtml(sub.pendingFileProposal.proposedAt)}).</span>`;
+    // LỐI THOÁT cho hồ sơ bị khoá cứng (LỖI ĐÃ VÁ, đợt audit chuyên sâu cụm Văn Bản Trình/...): nếu
+    // người trình nghỉ việc/khoá tài khoản/đi vắng dài ngày thì KHÔNG ai gỡ được đề xuất này (chỉ
+    // item.creator mới RESOLVE được) -> tờ trình kẹt vĩnh viễn. Admin hoặc CHÍNH người đã đề xuất được
+    // huỷ đề xuất để giải phóng hồ sơ — khớp gate CANCEL_FILE_PROPOSAL ở lib/workflowEngine.js.
+    const canCancelProposal = !!(currentUser.perms?.admin || sub.pendingFileProposal.proposedBy === currentUser.username);
+    actionBtns.innerHTML = `<span class="text-amber-600 italic text-xs font-semibold">⏳ Đang chờ người trình (${escapeHtml(sub.creatorName)}) xác nhận đề xuất thay thế tờ trình của ${escapeHtml(sub.pendingFileProposal.proposedByName)} (${escapeHtml(sub.pendingFileProposal.proposedAt)}).</span>`
+      + (canCancelProposal
+        ? `<button data-op="confirmCancelFileProposal" data-arg0="${sub.id}" class="ml-2 bg-gray-600 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-700 text-xs" title="Gỡ đề xuất thay thế đang treo để tờ trình quay lại xử lý bình thường ở bước hiện tại">🚫 Huỷ Đề Xuất Thay Thế</button>`
+        : '');
   } else if (canApprove) {
     const boSungBtnHTML = (currentLayerGroup?.allowFileReplacementProposal || isFinalStep)
       ? `<button data-op="openTroLyThuKyBoSungChoice" data-arg0="${sub.id}" data-arg1="${escapeHtml(currentStepLabel)}" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold hover:bg-amber-600 text-xs" title="${escapeHtml(currentStepLabel)}: có thể gửi bình luận bổ sung như cũ, hoặc đề xuất thay thế toàn bộ tệp tờ trình">🔄 Yêu Cầu Bổ Sung</button>`
@@ -826,9 +834,15 @@ async function confirmTroLyThuKyProposeFile(subId) {
   const idx = DB.submissions.findIndex(s => s.id === subId);
   if (idx !== -1) DB.submissions[idx] = updatedSub;
 
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/…", mức Thấp): nội dung email trước đây HARDCODE
+  // "Bộ phận Trợ Lý/Thư Ký" — từ đợt "Nhóm Phê Duyệt Trình tự cấu hình" (10/2026), cờ
+  // allowFileReplacementProposal gán được cho nhóm BẤT KỲ và còn mở thêm cho ĐÚNG bước phê duyệt cuối
+  // cùng (TGĐ/PTGĐ/GĐ-PGĐ), nên email báo SAI người đề xuất. Modal trên màn hình đã dùng đúng
+  // pendingFileProposal.proposedByName từ trước — chỉ email bị sót.
+  const proposerName = updatedSub.pendingFileProposal?.proposedByName || currentUser.name;
   notifyUsersByEmail('SUBMISSION', 'NOTIFY_FILE_PROPOSAL', updatedSub.code, [updatedSub.creator],
     `[VPDT] Tờ trình ${updatedSub.code} có đề xuất thay thế tệp cần bạn xác nhận`,
-    `Bộ phận Trợ Lý/Thư Ký đã đề xuất thay thế toàn bộ tệp tờ trình "${updatedSub.title}" (${updatedSub.code}). Vui lòng vào mục Văn Bản Trình để xem và xác nhận.`);
+    `${proposerName} đã đề xuất thay thế toàn bộ tệp tờ trình "${updatedSub.title}" (${updatedSub.code}). Vui lòng vào mục Văn Bản Trình để xem và xác nhận.`);
 
   logSystemAction('SUBMISSION', 'PROPOSE_FILE_REPLACEMENT', `Đề xuất thay thế tệp tờ trình [${updatedSub.code}]`, 'SUCCESS', updatedSub.code);
   alert('✅ Đã gửi đề xuất thay thế tờ trình cho người trình xác nhận!');
@@ -891,6 +905,9 @@ function confirmResolveFileProposalDisagree(subId) { confirmResolveFileProposal(
 async function confirmResolveFileProposal(subId, agree) {
   const comment = document.getElementById('resolveFileProposalComment').value.trim();
   if (agree && !comment) return alert('Vui lòng nhập lý do đồng ý thay thế tờ trình!');
+  // Đọc đề xuất TRƯỚC khi gọi server — server xoá hẳn pendingFileProposal trong cùng lượt xử lý
+  // (RESOLVE_FILE_PROPOSAL, lib/workflowEngine.js) nên bản ghi trả về không còn proposedBy/proposedByName.
+  const proposalBefore = DB.submissions.find(s => s.id === subId)?.pendingFileProposal || null;
 
   let result;
   try {
@@ -911,15 +928,52 @@ async function confirmResolveFileProposal(subId, agree) {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_FILE_PROPOSAL_ACCEPTED', updatedSub.code,
       (currentStepApproversFor(updatedSub) || []),
       `[VPDT] Tờ trình ${updatedSub.code} đã được thay thế nội dung và gửi lại`,
-      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) đã được thay thế nội dung theo đề xuất của Trợ Lý/Thư Ký và gửi lại phê duyệt từ bước 1.`);
+      `Tờ trình "${updatedSub.title}" (${updatedSub.code}) đã được thay thế nội dung theo đề xuất của ${proposalBefore?.proposedByName || 'người duyệt'} và gửi lại phê duyệt từ bước 1.`);
     alert('✅ Đã đồng ý thay thế — tờ trình đã gửi lại từ bước 1!');
     renderSubmissionReqs();
     refreshApprovalSurfaces();
   } else {
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/…", mức Thấp): nhánh TỪ CHỐI trước đây chỉ
+    // alert cho chính người trình, KHÔNG hề báo lại cho người đã đề xuất (trong khi nhánh ĐỒNG Ý ở trên
+    // CÓ gửi email) — người đề xuất không biết đề xuất của mình bị từ chối, hồ sơ lại vừa rơi về NHÁP
+    // nên cũng biến mất khỏi hàng chờ duyệt của họ.
+    if (proposalBefore?.proposedBy) {
+      notifyUsersByEmail('SUBMISSION', 'NOTIFY_FILE_PROPOSAL_DECLINED', updatedSub.code, [proposalBefore.proposedBy],
+        `[VPDT] Đề xuất thay thế tệp tờ trình ${updatedSub.code} đã bị từ chối`,
+        `Người trình (${updatedSub.creatorName}) KHÔNG đồng ý đề xuất thay thế tệp tờ trình "${updatedSub.title}" (${updatedSub.code}).`
+        + (comment ? ` Lý do: ${comment}.` : '')
+        + ' Tờ trình đã chuyển về NHÁP để người trình tự tải lên tệp thay thế khác rồi gửi lại phê duyệt từ bước 1.');
+    }
     alert('Tờ trình đã chuyển về NHÁP — vui lòng tự tải lên tệp trình thay thế.');
     renderSubmissionReqs();
     openBosungEditModal('submissions', subId);
   }
+}
+
+// Huỷ/gỡ 1 đề xuất thay thế tệp đang TREO (admin hoặc chính người đã đề xuất) — giải phóng tờ trình bị
+// khoá cứng khi người trình không còn xác nhận được (nghỉ việc/khoá tài khoản/đi vắng dài ngày). Hồ sơ
+// giữ NGUYÊN bước duyệt hiện tại, chỉ xoá đề xuất — xem CANCEL_FILE_PROPOSAL ở lib/workflowEngine.js.
+async function confirmCancelFileProposal(subId) {
+  const sub = DB.submissions.find(s => s.id === subId);
+  if (!sub || !sub.pendingFileProposal) return;
+  if (!confirm(`Huỷ đề xuất thay thế tờ trình của ${sub.pendingFileProposal.proposedByName}?\nTờ trình sẽ quay lại xử lý bình thường ở bước hiện tại.`)) return;
+
+  let result;
+  try {
+    result = await callWorkflowAction('submissions', subId, 'cancel-file-proposal', { comment: '' });
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const updatedSub = result.item;
+  const idx = DB.submissions.findIndex(s => s.id === subId);
+  if (idx !== -1) DB.submissions[idx] = updatedSub;
+
+  logSystemAction('SUBMISSION', 'FILE_PROPOSAL_CANCELLED',
+    `Huỷ đề xuất thay thế tệp tờ trình [${updatedSub.code}]`, 'SUCCESS', updatedSub.code);
+  alert('✅ Đã huỷ đề xuất thay thế — tờ trình quay lại xử lý bình thường.');
+  closeProcessSubmissionModal();
+  renderSubmissionReqs();
+  refreshApprovalSurfaces();
 }
 
 // Danh sách approver bước 1 của tờ trình (dùng để báo lại khi tờ trình gửi lại từ đầu sau khi đồng ý

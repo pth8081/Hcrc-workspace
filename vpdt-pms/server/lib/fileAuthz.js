@@ -160,7 +160,16 @@ async function findOwningRecord(fileUrl) {
   // ngay tại /api/upload (xem đề xuất ở báo cáo audit), chưa làm trong đợt vá này.
   const checkers = [
     { records: docs, fixed: d => d.fileUrl === fileUrl, build: d => ({ moduleKey: 'doc', dept: d.dept, ownerUsername: d.uploader, record: d }) },
-    { records: submissions, fixed: s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl), build: s => ({ moduleKey: 'submission', dept: s.dept, ownerUsername: s.creator, record: s }) },
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu", mức
+    // Cao): trước đây checker này CHỈ soi s.fileUrl + s.extraFiles[] — tệp "Đề xuất thay thế tờ trình"
+    // (PROPOSE_FILE_REPLACEMENT, xem lib/workflowEngine.js) chỉ được tham chiếu ở
+    // item.pendingFileProposal.fileUrl và history[].fileUrl (dòng PROPOSE_FILE_REPLACEMENT/
+    // FILE_PROPOSAL_ACCEPTED/FILE_PROPOSAL_DECLINED), nên KHÔNG checker nào khớp -> rơi thẳng vào nhánh
+    // FAIL-OPEN ở authorizeFileAccess(): bất kỳ ai đã đăng nhập cũng đọc/tải được nội dung tờ trình được
+    // đề xuất thay thế, dù chính tờ trình đó bị giới hạn chặt theo phòng ban.
+    { records: submissions, fixed: s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl)
+        || s.pendingFileProposal?.fileUrl === fileUrl || (s.history || []).some(h => h.fileUrl === fileUrl),
+      build: s => ({ moduleKey: 'submission', dept: s.dept, ownerUsername: s.creator, record: s }) },
     { records: contracts, fixed: c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl, build: c => ({ moduleKey: 'contract', dept: c.dept, custodianDept: c.custodianDept, ownerUsername: c.creator, record: c }) },
     { records: carRegs, fixed: c => c.fileUrl === fileUrl, build: c => ({ moduleKey: 'car', dept: c.dept, ownerUsername: c.creator, record: c }) },
     { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl, build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
@@ -188,7 +197,14 @@ async function findOwningRecord(fileUrl) {
     // amendments[].fileUrl ("Quyết định" đính kèm khi Bổ Sung Thay Đổi — xem lib/laborContract.js::addAmendment())
     // — bổ sung cùng đợt thêm tính năng đính kèm quyết định lương/chức vụ.
     { records: laborContracts, fixed: l => l.fileUrl === fileUrl || (l.amendments || []).some(a => a.fileUrl === fileUrl), build: l => ({ laborContract: true, item: l }) },
-    { records: paymentRequests, fixed: p => (p.requestFiles || []).some(f => f.fileUrl === fileUrl) || (p.installments || []).some(i => i.confirmFileUrl === fileUrl), build: p => ({ paymentRequest: true, item: p }) },
+    // LỖI ĐÃ VÁ (cùng đợt audit với submissions ở trên, mức Cao): "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG theo
+    // TỪNG ĐỢT được lưu ở installments[].files[] (xem buildPaymentInstallments()/editPaymentRequest() ở
+    // lib/recordActions.js + paymentRequests.extraValidate ở lib/createValidation.js) — checker cũ chỉ
+    // soi requestFiles[] (hồ sơ dùng chung) và installments[].confirmFileUrl (chứng từ XÁC NHẬN chi), bỏ
+    // sót hẳn nhóm tệp này -> FAIL-OPEN, mọi tài khoản đã đăng nhập đọc được chứng từ thanh toán.
+    { records: paymentRequests, fixed: p => (p.requestFiles || []).some(f => f.fileUrl === fileUrl)
+        || (p.installments || []).some(i => i.confirmFileUrl === fileUrl || (i.files || []).some(f => f.fileUrl === fileUrl)),
+      build: p => ({ paymentRequest: true, item: p }) },
     { records: hrProcesses, fixed: h => (h.attachments || []).some(a => a.fileUrl === fileUrl), build: h => ({ hrProcess: true, item: h }) },
     // checklistSubmissions: không có customData, chỉ tham gia lượt 1 (fixed). LỖI ĐÃ VÁ (đợt rà soát
     // chuyên sâu upload 10/2026, mức Trung bình): trước đây chỉ quét answers[].attachments — checklist

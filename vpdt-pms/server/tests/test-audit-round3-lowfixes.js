@@ -188,9 +188,16 @@ const UPLOADER = { username: 'up1', name: 'Người Tải Lên', dept: DEPT, per
 const APP_DATA_EMPTY = { formTemplates: {} };
 const docPayload = (over) => ({ dept: DEPT, title: 'Quy trình ISO', cat: 'Quy trình', ver: '1.0', fileUrl: '/uploads/1717171717171-abc.pdf', ...over });
 
-run('Không truyền trashedItems (caller cũ) -> hành vi y hệt trước đây, không bị chặn oan', () => {
+// CẬP NHẬT (đợt audit chuyên sâu cụm "Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu", mục 10):
+// docs/submissions/contracts/licenses nay SINH LẠI `code` Ở SERVER (lib/recordCodeGen.js) và BỎ QUA
+// hẳn giá trị client gửi — 4 kịch bản dưới đây vì vậy không còn kỳ vọng "giữ nguyên mã client gửi" nữa,
+// nhưng vẫn khoá đúng cơ chế cần khoá ở mục này: dup-check + TỰ ĐỘNG tăng số khi trùng (cả hồ sơ ĐANG
+// SỐNG lẫn hồ sơ trong Thùng Rác). Mã server sinh cho (cat 'Quy trình', dept 'Kinh Doanh') là
+// "QT-KD-<số 3 chữ số>" (APP_DATA_EMPTY không cấu hình deptAbbrs/docCatAbbrs -> deriveAbbr tự suy).
+run('Mã do SERVER sinh, KHÔNG dùng mã client gửi (mục 10 đợt audit cụm VBT/HĐ/GP/TT/TL)', () => {
   const rec = validateAndPrepareCreate('docs', docPayload({ code: 'TL-001' }), UPLOADER, [], APP_DATA_EMPTY);
-  assert.strictEqual(rec.code, 'TL-001');
+  assert.strictEqual(rec.code, 'QT-KD-001');
+  assert.strictEqual(rec.displayCode, 'QT-KD-001');
 });
 
 // ĐỔI HÀNH VI có chủ đích (đợt "4 yêu cầu 1 khối", Yêu cầu 4 — server tự retry khi trùng mã): 2 kịch
@@ -199,21 +206,24 @@ run('Không truyền trashedItems (caller cũ) -> hành vi y hệt trước đâ
 // vì bắt người dùng tự bấm lại. Xem tests/test-code-autogen-retry.js để kiểm thử đầy đủ cơ chế này (kể
 // cả trường hợp KHÔNG có chữ số ở cuối vẫn ném 409 như cũ, không đoán mò).
 run('Mã trùng với hồ sơ ĐANG SỐNG -> TỰ ĐỘNG sinh mã mới (không ném lỗi, không tái dùng nguyên mã cũ)', () => {
-  const existing = [{ id: 1, code: 'TL-002' }];
+  // Bản ghi sống mang mã "QT-KD-002" nhưng rootDocId khác null -> generateDocCode() (chỉ đếm bản GỐC)
+  // vẫn sinh ra QT-KD-001... nên dùng bản GỐC để mã server sinh ra đúng bằng mã đang tồn tại, ép
+  // dup-check phải tự tăng số.
+  const existing = [{ id: 1, code: 'QT-KD-001', displayCode: 'QT-KD-001', rootDocId: null }];
   const rec = validateAndPrepareCreate('docs', docPayload({ code: 'TL-002' }), UPLOADER, existing, APP_DATA_EMPTY);
-  assert.strictEqual(rec.code, 'TL-003');
+  assert.strictEqual(rec.code, 'QT-KD-002');
 });
 
 run('Mã trùng với hồ sơ ĐÃ XOÁ (Thùng Rác) -> TỰ ĐỘNG sinh mã mới, không cho tái dùng nguyên mã đã xoá', () => {
-  const trashedItems = [{ trashId: 9, collection: 'docs', originalId: 5, code: 'TL-003', item: { id: 5, code: 'TL-003' } }];
+  const trashedItems = [{ trashId: 9, collection: 'docs', originalId: 5, code: 'QT-KD-001', item: { id: 5, code: 'QT-KD-001' } }];
   const rec = validateAndPrepareCreate('docs', docPayload({ code: 'TL-003' }), UPLOADER, [], APP_DATA_EMPTY, trashedItems);
-  assert.strictEqual(rec.code, 'TL-004');
+  assert.strictEqual(rec.code, 'QT-KD-002');
 });
 
 run('Mã hoàn toàn mới (không trùng sống lẫn Thùng Rác) -> qua bình thường', () => {
   const trashedItems = [{ trashId: 9, collection: 'docs', originalId: 5, code: 'TL-999', item: { id: 5, code: 'TL-999' } }];
   const rec = validateAndPrepareCreate('docs', docPayload({ code: 'TL-NEW-1' }), UPLOADER, [], APP_DATA_EMPTY, trashedItems);
-  assert.strictEqual(rec.code, 'TL-NEW-1');
+  assert.strictEqual(rec.code, 'QT-KD-001');
 });
 
 run('Nhánh phiên bản tài liệu (rootDocId != null): mã V2 trùng phiên bản đã xoá -> bị chặn', () => {

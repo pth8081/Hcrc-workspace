@@ -14,11 +14,31 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
 const { parseUploadsFileUrl, authorizeFileAccess } = require('../lib/fileAuthz');
 
 const router = express.Router();
+
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/…/Tài Liệu", mức Trung bình): mỗi lượt tải 1 PDF ở
+// route này đọc TOÀN BỘ file vào RAM rồi PDFDocument.load() + embedFont() + save() (đóng dấu watermark)
+// — tốn CPU/RAM hơn hẳn 1 request CRUD thường, mà trước đây chỉ dựa vào giới hạn CHUNG toàn /api
+// (globalApiRateLimiter, 600 req/phút — xem server.js): 1 phiên đăng nhập hợp lệ vẫn dội được hàng trăm
+// lượt đóng dấu/phút trên các PDF lớn. Siết riêng ở ĐÚNG router này (chỉ 1 route "tải tệp"), cùng khuôn
+// reportsRateLimiter/hrReportsRateLimiter (routes/reports.js, routes/employeeProfile.js) — khoá theo
+// USERNAME khi có phiên hợp lệ (không gộp chung theo IP: cả 1 văn phòng thường ra Internet qua 1 IP NAT
+// duy nhất, tính theo IP sẽ chặn oan cả phòng). 60 lượt/phút vẫn dư cho thao tác tải thật (kể cả nút
+// "Tải tất cả tệp" gửi nhiều request liên tiếp), nhưng chặn được kiểu dội tự động.
+const downloadRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang tải tệp quá nhiều, vui lòng thử lại sau ít phút.' },
+  keyGenerator: (req) => req.freshUser?.username || ipKeyGenerator(req.ip)
+});
+router.use(downloadRateLimiter);
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const FONT_PATH = path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans.ttf');

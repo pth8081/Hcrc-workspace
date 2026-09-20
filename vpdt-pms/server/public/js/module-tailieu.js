@@ -825,6 +825,9 @@ function toggleLicenseFamily(rootId) {
 }
 
 function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChild = false, canApprove = false } = {}) {
+  // Không tự xử lý giấy phép do CHÍNH MÌNH tải lên (trừ admin) — khớp assertNotSelfDecidingLicense() ở
+  // lib/recordActions.js (điểm gác THẬT), ẩn nút ở đây để không mời người dùng bấm rồi nhận 403.
+  canApprove = canApprove && !!(currentUser.perms?.admin || item.creator !== currentUser.username);
   const approvalBadge = item.status === 'APPROVED'
     ? `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt</span>`
     : item.status === 'REJECTED'

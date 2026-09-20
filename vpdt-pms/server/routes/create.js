@@ -199,8 +199,13 @@ router.post('/:module', async (req, res) => {
     // mới vừa ghi xong với rootDocId trỏ vào id đã không còn tồn tại — mồ côi vĩnh viễn, không xoá/sửa
     // tiếp được (xem đầu file lib/recordActions.js hoặc báo cáo audit). Việc khoá đảm bảo 1 trong 2 phía
     // luôn chờ phía kia hoàn tất trước khi đọc lại trạng thái mới nhất.
+    // licenses (phiên bản mới): CÙNG cơ chế/cùng lý do — licenses cũng có versioning theo rootLicenseId
+    // (xem licenses.extraValidate ở lib/createValidation.js) nhưng TRƯỚC ĐÂY bị bỏ sót khỏi danh sách
+    // này, nên tạo phiên bản mới có thể đan xen với 1 lượt xoá cả họ đang chạy song song -> phiên bản
+    // mồ côi (đợt audit chuyên sâu cụm "…/Giấy Phép", mức Trung bình).
     const familyLockKey = moduleKey === 'docs' && req.body?.rootDocId != null ? `doc_family:${req.body.rootDocId}`
       : moduleKey === 'contracts' && req.body?.rootContractId != null ? `contract_family:${req.body.rootContractId}`
+      : moduleKey === 'licenses' && req.body?.rootLicenseId != null ? `license_family:${req.body.rootLicenseId}`
       : null;
     // meetings: điều kiện trùng lặp là khoảng thời gian chồng lấn (không diễn đạt được bằng UNIQUE
     // INDEX như Code) — dùng đường khoá nghiêm túc theo phòng họp thay vì createForCollection() thường

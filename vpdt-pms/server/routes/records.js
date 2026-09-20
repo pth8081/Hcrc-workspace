@@ -351,12 +351,14 @@ router.post('/paymentRequests/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    // appData — đối chiếu 'dept' MỚI với danh mục phòng ban/siêu thị thật (xem editPaymentRequest()).
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('paymentRequests', itemId, async (item) => {
       const exemptFileUrls = [
         ...(item.requestFiles || []).map(f => f?.fileUrl).filter(Boolean),
         ...(item.installments || []).flatMap(it => (it.files || []).map(f => f?.fileUrl).filter(Boolean)),
       ];
-      const updated = recordActions.editPaymentRequest(req.body, freshUser, item);
+      const updated = recordActions.editPaymentRequest(req.body, freshUser, item, appData);
       await assertPayloadFileUrlsOwnedByUser({ requestFiles: updated.requestFiles, installments: updated.installments }, freshUser, { exemptFileUrls });
       return updated;
     });
@@ -373,8 +375,12 @@ router.post('/paymentRequests/:id/edit', async (req, res) => {
 // route generic ở routes/workflow.js đã tự có lớp xác thực lại (mật khẩu/OTP/PIN theo
 // perms.approverAuthLevel) cho MỌI module trong MODULE_CONFIGS, bao gồm paymentRequests, nên không mất
 // lớp bảo vệ này khi gỡ route cũ.
-router.post('/paymentRequests/:id/submit', (req, res) =>
-  withPaymentAction(req, res, 'submit', (payload, user, item) => recordActions.submitPaymentRequest(user, item)));
+// appData đọc sẵn ở đây (ngoài khoá bản ghi) — submitPaymentRequest() cần tra paymentDeptWorkflows để
+// CHẶN gửi đề nghị vào ngõ cụt khi bước 1 của phòng ban không resolve ra người duyệt nào.
+router.post('/paymentRequests/:id/submit', async (req, res) => {
+  const appData = await getAllAppData().catch(() => null);
+  return withPaymentAction(req, res, 'submit', (payload, user, item) => recordActions.submitPaymentRequest(user, item, appData));
+});
 
 router.post('/paymentRequests/:id/request-info', (req, res) =>
   withPaymentAction(req, res, 'request-info', recordActions.requestPaymentInfo));
@@ -3918,7 +3924,39 @@ router.post('/uniformTransfers/:id/cancel', async (req, res) => {
 });
 
 // ===================== GIẤY PHÉP (module con của Hành Chính) =====================
-router.post('/licenses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'licenses'));
+// Xoá 1 "họ" giấy phép (bản gốc + toàn bộ phiên bản con) khi xoá bản GỐC — LỖI ĐÃ VÁ (đợt audit chuyên
+// sâu cụm "…/Giấy Phép", mức Trung bình): licenses có versioning y hệt docs/contracts (rootLicenseId,
+// xem licenses.extraValidate ở lib/createValidation.js) nhưng route xoá lại dùng deleteAdminOnly() PHẲNG
+// — xoá bản gốc để lại các phiên bản con với rootLicenseId trỏ vào id không còn tồn tại (mồ côi:
+// getLicenseFamily()/getLicenseFamilyLatest() ở client vẫn gom theo rootLicenseId, còn nhánh "Cập nhật"
+// luôn báo "Giấy phép gốc không tồn tại" cho cả họ đó). Cùng khoá `license_family:<rootId>` mà
+// routes/create.js dùng khi tạo phiên bản mới — chặn race "tạo phiên bản" đan xen "xoá cả họ".
+router.post('/licenses/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const preLicenses = await getAllForCollection('licenses');
+    const preTarget = preLicenses.find(l => l.id === itemId);
+    if (!preTarget) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+    const familyRootId = preTarget.rootLicenseId == null ? itemId : preTarget.rootLicenseId;
+    await withAppLock(`license_family:${familyRootId}`, async () => {
+      const licenses = await getAllForCollection('licenses');
+      const target = licenses.find(l => l.id === itemId);
+      if (!target) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      const memberIds = target.rootLicenseId == null
+        ? licenses.filter(l => l.id === itemId || l.rootLicenseId === itemId).map(l => l.id)
+        : [itemId];
+      for (const id of memberIds) {
+        await deleteRecordForCollection('licenses', id, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+      }
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/delete`, err);
+  }
+});
 
 router.post('/licenses/:id/approve', async (req, res) => {
   const itemId = Number(req.params.id);

@@ -18,7 +18,13 @@ function setContractSubTab(subTab) {
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnContractSubApproval').className = subTab === 'APPROVAL' ? activeCls : inactiveCls;
   document.getElementById('btnContractSubManage').className = subTab === 'MANAGE' ? activeCls : inactiveCls;
-  document.getElementById('contractManageFormWrap').classList.remove('hidden');
+  // "Nhập Hợp Đồng/Phụ Lục Đã Ký" (chỉ có ở sub-tab Quản Lý HĐ) tạo hồ sơ ĐÃ DUYỆT ngay, bỏ qua toàn bộ
+  // quy trình Phê Duyệt — từ nay cần quyền RIÊNG `contractImportSigned` (trước đây dùng chung
+  // contractCreate: ai tạo được hợp đồng thường cũng tự nhập được hợp đồng "đã ký" không cần ai duyệt).
+  // Điểm gác THẬT ở server (contracts.extraValidate, lib/createValidation.js) — ẩn form ở đây để không
+  // mời người dùng điền xong mới nhận 403.
+  const canImportSigned = !!(currentUser.perms?.admin || currentUser.perms?.contractImportSigned);
+  document.getElementById('contractManageFormWrap').classList.toggle('hidden', subTab === 'MANAGE' && !canImportSigned);
   document.getElementById('contractPaymentColHeader').classList.toggle('hidden', subTab !== 'MANAGE');
   document.getElementById('contractListTitle').innerText = subTab === 'APPROVAL' ? '📋 Danh Sách Hợp Đồng Chờ Duyệt' : '📋 Danh Sách Hợp Đồng & Giấy Phép';
   document.getElementById('contractManageFormTitle').innerText = subTab === 'APPROVAL' ? '➕ Tạo Mới / Bổ Sung Phụ Lục Hợp Đồng' : '📥 Nhập Hợp Đồng / Phụ Lục Đã Ký';
