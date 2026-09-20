@@ -1,8 +1,197 @@
 # Phiên bản hiện tại
 
-**23.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.70 (2026-09-20): Vá 96 phát hiện đợt rà soát chuyên sâu vòng 2 (7 cụm module, 7 agent song song)
+
+Tiếp nối đợt vá 110 phát hiện ở v23.68, người dùng yêu cầu rà soát lại một
+lần nữa toàn bộ module nghiệp vụ + module Hướng Dẫn. 7 agent audit-only rà
+soát song song (không trùng lặp với danh sách đã vá ở v23.68), phát hiện 96
+lỗi/khoảng trống mới (0 Nghiêm trọng / 23 Cao / 45 Trung bình / 46 Thấp,
+gồm cả sai lệch tài liệu). Sau khi người dùng xác nhận, 7 agent khác (mỗi
+agent 1 worktree riêng) vá toàn bộ, viết/cập nhật test, rồi gộp tuần tự vào
+main (2 cụm chạm cùng gốc rễ ở `catalogRename.js`/`routes/reports.js` được
+gộp việc sửa vào 1 agent duy nhất để tránh trùng/xung đột).
+
+### Cụm Nhân Sự (Hồ Sơ/Onboarding/Chấm Công/Lương/Cơ Cấu Tổ Chức) — 15/15
+- **Cao**: nhập Excel "Ghi đè" ở Hồ Sơ Nhân Sự đòi thêm quyền `hrProfileEdit`
+  tương đương + ghi Nhật Ký; tạo hồ sơ tay kèm `positionKey` ghi đè
+  `dept/jobTitle/posType` của tài khoản khác nay đòi `canEditProfiles`; đơn
+  nghỉ phép (Cả ngày/Không lương) nay **loại Thứ 7/CN/ngày lễ** khi trừ quỹ
+  phép và khi trừ lương (trước tính cả — trừ sai, đã sửa cả `daysCount`
+  lẫn bản ghi `attendanceRecords` sinh ra); quyền "👁️ Xem Toàn Bộ Onboarding/
+  Offboarding" (`hrViewAll`) trước đây thực chất là quyền GHI đầy đủ — tách
+  ra quyền ghi mới **`hrProcessManage`**, `hrViewAll` giờ chỉ còn tác dụng
+  xem (KHÔNG tự migrate — cần bổ sung quyền cho tài khoản nào cần ghi tiếp,
+  xem mục "Cần làm thêm" bên dưới); máy chấm công tính ngày công theo UTC
+  (lệch múi giờ VN) → sửa dùng giờ local thống nhất toàn `lib/attendance.js`.
+- **Trung bình**: khoá "kỳ lương đã Chốt/Công Bố" nay áp dụng đồng bộ cho cả
+  3 đường ghi công (trước chỉ máy chấm công); 2 lượt "Tính Lương" đồng thời
+  không còn nhân đôi phiếu (khoá `withAppLock`); hợp đồng quá `endDate` vẫn
+  ACTIVE thì payslip nay có dòng cảnh báo; Cơ Cấu Tổ Chức không còn coi
+  người đã Offboard (hồ sơ INACTIVE) là đang giữ vị trí; route Lương
+  (`routes/payroll.js`) nay có gate `moduleAccess`.
+- **Thấp**: sửa câu cảnh báo "Tính Lương lại" cho đúng hành vi (giữ điều
+  chỉnh tay); hướng dẫn rõ hơn khi Tái Tuyển gặp hồ sơ đã ACTIVE; sửa chú
+  thích sai về "Nghỉ theo giờ" + hết chặn nhầm 2 đơn theo giờ khác khung
+  trong cùng ngày; **chặn tự duyệt kỳ lương** kể cả admin (module Lương cố
+  ý không có ngoại lệ admin, khác các module khác); hướng dẫn tách đơn khi
+  nghỉ phép vắt qua năm dương lịch thiếu quỹ.
+
+### Cụm Hệ Thống / Admin / Cấu Hình — 14/14 (gộp thêm 2 mục từ cụm khác)
+- **Cao**: `GET /api/reports/:collection` nay có gate `moduleAccess` giống
+  `/api/data` (7 collection); `hrFeedback` (dùng chung module Truyền Thông
+  Nội Bộ + màn Nhân Sự "Quản Lý & Phản Hồi Ý Kiến") gác bằng điều kiện OR
+  mới **`canAccessHrFeedbackModuleServer()`** — tắt module Truyền Thông Nội
+  Bộ không còn làm chết màn Nhân Sự nữa; `budgetPeriods` ở Báo Cáo nay có
+  bộ lọc quyền (trước không lọc); cascade đổi tên Phòng Ban/Siêu Thị bổ sung
+  `submissionTypeDeptWorkflows` (khoá cấp 2); xoá vĩnh viễn ở Thùng Rác nay
+  ghi Nhật Ký kèm collection/mã hồ sơ; sửa "Mẫu Quy Trình" đổi số bước nay
+  cảnh báo số phòng ban đang dùng trước khi lưu.
+- **Trung bình**: bước "Theo vị trí" (POSITION) nay cũng được cảnh báo "0
+  người duyệt"; cascade đổi tên Phòng Ban bổ sung `contractExpiryDeptContacts`
+  + `workflowParticipatingDepts` (mảng giá trị, không phải khoá); 5 hàm lưu
+  cấu hình quy trình cốt lõi (`module-itsupport-tier.js`) chuyển sang
+  `await` + rollback thay vì "bắn và quên"; 2 route `orgChart` (áp dụng
+  phiên bản cây / đồng bộ quản lý trực tiếp) nay ghi Nhật Ký khi đổi
+  `managerUsername` hàng loạt.
+- **Thấp**: 2 chỗ trong `deploy/Huong-dan-nghiep-vu.md` cập nhật đúng luật
+  Thùng Rác từ v23.67 và bỏ "Ngân Sách" khỏi danh sách dùng `WF_MODULE_CONFIG`
+  chung (đã đổi hẳn từ v23.0); dọn 1 dòng khai trùng + sửa comment sai ở
+  `catalogRename.js`.
+- **Gộp thêm** (từ cụm Vận Hành, cùng cơ chế cascade): `budgetLines` (Ngân
+  Sách 2.0) bổ sung vào danh sách cascade đổi tên (cả 2 field `dept` VÀ
+  `location`).
+
+### Cụm Hành Chính (Phòng Họp/Xe/VPP/Đồng Phục/Checklist) — 9/11 (1 bỏ qua có lý do, 1 chỉ sửa tài liệu)
+- **Cao**: sửa lỗi chấm điểm Checklist **`computeDeductionScoring()` nuốt
+  trọn điểm trừ** khi hạng mục con không đặt trần riêng (trước ra 100% dù
+  vi phạm tối đa — lỗi ảnh hưởng trực tiếp kết quả kiểm tra siêu thị); đổi
+  tên/xoá phòng trong Danh Mục Phòng Họp nay **cascade vào `meetings.room`**
+  (trước làm "biến mất" lịch cũ + có thể duyệt trùng phòng); phiếu xe Đội
+  Nhà kẹt vĩnh viễn ở "Chờ Đánh Giá" khi người đăng ký nghỉ việc nay cho
+  phép Điều Hành Xe/admin đánh giá hộ.
+- **Trung bình**: "🗓️ Lịch Xe" nay đọc lịch bận **toàn công ty** qua route
+  mới `GET /api/records/carRegs/busy-slots` (trước chỉ thấy lịch trong
+  phạm vi xem của mình, hiện trống giả); "Điều Chuyển Kho" (Đồng Phục) nay
+  đối chiếu Danh Mục Siêu Thị ở server; câu hỏi trắc nghiệm nhiều lựa chọn
+  (MULTIPLE_CHOICE) trong Checklist không còn vượt quá điểm tối đa của câu;
+  `storeCode` khi nộp Checklist nay đối chiếu danh mục ở MỌI nhánh (kể cả
+  phạm vi rộng/admin).
+- **Thấp**: phản hồi chính thức của siêu thị (Checklist) nay lưu lại lịch
+  sử bản cũ trước khi ghi đè; 4 route Biên Bản Họp/Công Việc bổ sung kiểm
+  quyền sở hữu tệp (phòng thủ chiều sâu); sửa câu tài liệu về quyền xem/tải
+  Phiếu Phê Duyệt Xe cho đúng thực tế (**vẫn chỉ chặn ở giao diện, CHƯA có
+  ở server** — xem mục "Cần làm thêm").
+- **Bỏ qua có lý do**: biên bản họp so khớp người tham dự không có tài
+  khoản theo TÊN HIỂN THỊ (rủi ro trùng tên) — không tìm được mốc lịch sử
+  chính xác để đặt ngưỡng tương thích ngược an toàn, để nguyên hành vi cũ.
+
+### Cụm Vận Hành / Hỗ Trợ IT / Mua Hàng BAS / Ngân Sách — 14/14 (không tính mục cascade budgetLines đã gộp)
+- **Cao**: route sửa đơn hàng Vận Hành bổ sung kiểm quyền sở hữu tệp (đúng
+  lớp lỗi v23.67 đã vá cho module khác, sót ở đây); người duyệt theo
+  "🏬 Quy Trình Đặt Hàng Siêu Thị" (dòng ngoại lệ/JOBTITLE) nay được nạp
+  đúng vào Hộp Thư Duyệt (trước bị bỏ sót khỏi bộ lọc tải trước, đơn treo
+  vô thời hạn); **Mua Hàng BAS**: form Điều Khoản Chiết Khấu **chặn** (làm
+  mờ) 2 lựa chọn "Giá Trị Bán Ra"/"Chiết Khấu Tăng Trưởng" vì hệ thống chưa
+  có nguồn dữ liệu/công thức xác nhận cho 2 lựa chọn này (trước tính âm
+  thầm sai) — xem mục "Cần làm thêm"; "Xuất File → sửa → Nhập File" không
+  còn nhân đôi giao dịch nguồn DSMART (luôn xuất đúng nguồn MANUAL).
+- **Trung bình**: khoá "kích hoạt điều khoản" đổi theo cặp NCC+Mã Điều
+  Khoản (trước khoá sai phạm vi, vẫn có thể trùng); Nhập File thủ công nay
+  dùng chung khoá chống chạy chồng với Đồng Bộ; đồng bộ DSmart nay cô lập
+  lỗi theo TỪNG DÒNG (trước 1 dòng lỗi làm hỏng cả lô); log lỗi đồng bộ nay
+  chỉ hiện chi tiết kỹ thuật (hostname/IP nội bộ) cho người có quyền quản
+  lý điều khoản; cảnh báo "chưa có người duyệt" mở rộng cho đơn HO + gửi
+  lại sau khi sửa (trước chỉ đơn Siêu Thị lúc tạo); xoá đơn hàng đã đồng bộ
+  DSmart nay ghi log cảnh báo; đường Duyệt/Từ chối (`routes/workflow.js`)
+  + vài route hành động Vận Hành/Ngân Sách nay có gate `moduleAccess`.
+- **Thấp**: sửa công thức cảnh báo lệch Margin/Chiết Khấu IT Price (đổi từ
+  trung bình cộng dễ "giấu" dòng lệch sang đếm dòng sai phía) + sửa parse
+  số dạng "1.234,5"; kiểm trùng Mã Số Thuế NCC nay trong khoá ghi; job nhắc
+  hạn duyệt IT không còn đánh dấu "đã nhắc" khi chưa gửi được cho ai.
+
+### Cụm Truyền Thông Nội Bộ / Đào Tạo / Tuyển Dụng — 12/14 (2 mục gộp sang cụm Hệ Thống/Admin)
+- **Cao**: lớp Đào Tạo ONLINE nay chặn nộp bài test trước giờ kết thúc
+  (server tự kiểm, trước chỉ UI); không đăng ký được vào lớp đã kết thúc.
+- **Trung bình**: gán bài test cho lớp SAU khi đã chấm tay không còn "hợp
+  thức hoá" kết quả Đạt giả (đánh dấu `gradedManually`); xoá Lớp Học/Tài
+  Liệu Đào Tạo nay kiểm tham chiếu trước khi xoá; "phải xem hết Video/PDF
+  mới thi" nay tin vào `durationSeconds`/`pageCount` THẬT (PDF: server tự
+  đọc; Video: chuyển sang `trainingManage`/admin nhập tay 1 lần lúc thêm
+  tài liệu, không còn để người xem tự khai); Giới Thiệu Ứng Viên nay chống
+  trùng theo SĐT/email trong cùng vị trí tuyển; bình luận/bài đăng Truyền
+  Thông Nội Bộ nay giới hạn độ dài + bắt buộc tiêu đề/nội dung.
+- **Thấp**: sửa lỗi `classId` không ép kiểu (lách được luật 1 đăng ký/lớp);
+  thêm nút "📌 Gỡ Ghim" bài trang chủ; thêm route xoá bài đăng Truyền Thông
+  Nội Bộ (trước không có); sửa bài đăng nay kiểm lại quyền đăng theo loại
+  bài trước khi công khai; mã bài đăng nay do SERVER sinh (đúng khuôn các
+  collection khác từ v23.68).
+
+### Cụm Văn Bản Trình / Hợp Đồng / Giấy Phép / Thanh Toán / Tài Liệu — 8/9 (1 gộp sang cụm Hệ Thống/Admin)
+- **Cao**: `propose-file-replacement` (đề xuất thay thế tệp) nay xác minh
+  quyền sở hữu tệp (đường ghi fileUrl duy nhất còn thiếu lớp này trong
+  toàn cụm); `paymentRequests/from-source` (kế toán tự tạo đề nghị có
+  nguồn) tương tự; Giấy Phép — chỉ chủ sở hữu/admin mới tạo được "phiên bản
+  mới" cho family giấy phép (trước ai có `licenseCreate` cũng tạo được cho
+  người khác, làm tắt nhắc hạn thật + chủ sở hữu không sửa được).
+- **Trung bình**: approver chế độ "Theo người" (PEOPLE) bị khoá tài khoản
+  nay bị loại khỏi bước duyệt ngay tại `applyWorkflowAction()` (không đụng
+  `resolveStepApproverUsernames()` vì hàm đó còn được Hộp Thư Duyệt dùng để
+  CỐ Ý cảnh báo admin về người đã khoá — sửa đúng phạm vi hơn đề xuất gốc).
+- **Thấp**: `dept` của Đề Nghị Thanh Toán nay đối chiếu danh mục cả lúc TẠO
+  (trước chỉ lúc sửa); `cat`/`type` (Tài Liệu/Hợp Đồng) nay đối chiếu danh
+  mục + tự sinh lại mã khi đổi giữa chừng; đổi tên "Loại Pháp Lý HĐ" nay
+  cascade đúng (thêm nút Sửa + route rename-cascade, trước chỉ sửa được
+  qua Biểu Mẫu — ghi đè thô không cascade); admin nay mở được lối thoát sửa
+  hồ sơ NHÁP/BỊ TỪ CHỐI dù không phải người tạo (kẹt khi người tạo nghỉ
+  việc); sửa 2 câu tài liệu mô tả sai hành vi tự duyệt/trạng thái khởi tạo.
+
+### Module 📘 Hướng Dẫn (`module-nghiepvu.js`) — 18/18, thuần tài liệu
+Viết lại `hrPayroll` cho đúng hành vi giữ điều chỉnh tay khi tính lại +
+thêm giải thích thuế TNCN tự tính lại; bổ sung đầy đủ luồng "Huỷ Đăng Ký →
+Duyệt Huỷ" còn thiếu ở Đào Tạo; viết lại hoàn toàn entry `vanHanh` (mô hình
+"mốc tiến độ theo mẫu" không có thật — đúng ra là cây công việc đa cấp +
+nghiệm thu từng công việc); đồng bộ icon 6 entry lệch giữa doc/nav; bổ sung
+2 mục cấu hình tệp còn thiếu ở `sysFiles`; bổ sung nút Xóa Log/Xuất Excel ở
+`sysLog`; bổ sung mục Phím Tắt PWA; bổ sung đầy đủ ràng buộc cứng về admin
+gốc/mật khẩu ở `sysPermissions`/`sysUsers`; bổ sung vế khôi phục Phân Ca ở
+footer Huỷ đơn (Công & Phép); sửa 8 đường dẫn sidebar thiếu cấp dropdown;
+sửa 2 nhãn nút không có thật ở Cơ Cấu Tổ Chức; thêm pill Dashboard + sửa 4
+icon lệch ở Đào Tạo; cập nhật 2 con số thống kê lạc hậu (nhóm Biểu Mẫu, số
+loại hồ sơ Thùng Rác); sửa 2 nhãn nút nhỏ khác.
+
+### ⚠️ Cần làm thêm / cần người dùng xác nhận (KHÔNG tự ý triển khai đợt này)
+1. **Mua Hàng BAS — 2 lựa chọn Điều Khoản Chiết Khấu bị chặn**: "Giá Trị
+   Bán Ra" (`calcBasis=SELL_OUT_VALUE`) và "Chiết Khấu Tăng Trưởng"
+   (`termType=GROWTH_REBATE`) nay bị làm mờ trên form vì hệ thống KHÔNG có
+   nguồn dữ liệu "Giá Trị Bán Ra" (chỉ có dữ liệu Mua Hàng) và công thức
+   tăng trưởng chưa được xác nhận (so % hay tuyệt đối, kỳ liền kề hay cùng
+   kỳ năm ngoái). Nếu cần dùng 2 lựa chọn này, cần xác nhận nguồn dữ liệu/
+   công thức rồi làm tiếp (đã ghi chú vị trí gỡ chặn ngay trong code,
+   `lib/vendorRebate.js`: `UNSUPPORTED_CALC_BASIS`/`UNSUPPORTED_TERM_TYPES`).
+2. **`hrViewAll` (Nhân Sự)** đã tách quyền ghi mới `hrProcessManage` — các
+   tài khoản đang có `hrViewAll` GIỜ CHỈ CÒN QUYỀN XEM Onboarding/Offboarding,
+   KHÔNG còn tự động hoàn thành/bỏ qua task được nữa. Nếu có người thực sự
+   cần thao tác (không chỉ theo dõi), admin cần chủ động cấp thêm quyền
+   `hrProcessManage` cho họ sau khi deploy.
+3. **Phiếu Phê Duyệt Xe — quyền xem/tải chỉ chính chủ**: vẫn CHỈ chặn ở
+   giao diện (client), CHƯA có ở server (đã nêu từ v23.68, chưa xử lý —
+   tài liệu đã sửa lại câu chữ cho đúng thực tế, không còn khẳng định nhầm
+   là đã siết ở server).
+
+### Test
+Mỗi cụm đều có test mới cho từng phát hiện + chạy targeted regression cho
+mọi module đã đụng, tất cả PASS trước khi gộp. Sau khi gộp cả 7 cụm vào
+main: `node --check` toàn bộ file JS server-side (không lỗi cú pháp) + chạy
+lại full regression suite ~258 file trong `server/tests/`.
+
+### Deploy-impact
+Không đổi `server/sql/schema.sql`, không thêm biến `.env`, không thêm/đổi
+`dependencies` trong `package.json` — chỉ copy code + `pm2 restart`, không
+cần thao tác thủ công nào khác.
 
 ## v23.69 (2026-09-20): Áp Dụng Nhanh gán theo Chức Danh + tự chọn/khoá Phòng Ban theo người dùng + sửa Hướng Dẫn QLDA
 
