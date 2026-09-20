@@ -130,6 +130,10 @@ function validateRebateTermPayload(body) {
   if (!termName) return 'Vui lòng nhập Tên Điều Khoản';
   if (!VALID_TERM_TYPES.includes(body?.termType)) return `Loại điều khoản "${body?.termType}" không hợp lệ`;
   if (!VALID_CALC_BASIS.includes(body?.calcBasis)) return `Căn cứ tính "${body?.calcBasis}" không hợp lệ`;
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3): chặn NGAY tại validate chung (áp
+  // dụng CẢ tạo mới lẫn sửa) — xem chú thích đầy đủ ở assertCalcBasisAndTermTypeSupported() phía dưới.
+  const unsupportedErr = assertCalcBasisAndTermTypeSupported(body?.calcBasis, body?.termType);
+  if (unsupportedErr) return unsupportedErr;
   if (!VALID_TIER_MODES.includes(body?.tierMode)) return `Chế độ bậc thang "${body?.tierMode}" không hợp lệ`;
   if (!VALID_PERIOD_TYPES.includes(body?.periodType)) return `Kỳ tính "${body?.periodType}" không hợp lệ`;
   if (!body?.effectiveFrom) return 'Vui lòng chọn Ngày Hiệu Lực Từ';
@@ -215,11 +219,77 @@ function computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart
   return { basisAmount, aggregateDetail: detail, rebateAmount, breakdown };
 }
 
+// ===================== LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3) =====================
+// computeRebateEstimate() TRƯỚC ĐÂY luôn gộp từ dbo.VendorPurchaseTransactions (dữ liệu MUA HÀNG) rồi áp
+// bậc thang PHẲNG, bất kể calcBasis/termType/periodType/isRetroactive:
+//   - calcBasis='SELL_OUT_VALUE' (Giá Trị Bán Ra): KHÔNG nơi nào trong hệ thống có nguồn dữ liệu "doanh
+//     số bán ra" (đã grep toàn bộ lib/routes, chỉ có VendorPurchaseTransactions = dữ liệu MUA HÀNG từ
+//     DSmart/nhập tay) — chọn calcBasis này rồi tính vẫn ÂM THẦM dùng dữ liệu MUA HÀNG, ra số SAI hẳn ý
+//     nghĩa nghiệp vụ mà không ai biết. QUYẾT ĐỊNH: CHẶN chọn calcBasis='SELL_OUT_VALUE' ở validate (tạo/
+//     sửa điều khoản) — an toàn hơn tính sai âm thầm; khi hệ thống có nguồn dữ liệu Giá Trị Bán Ra thật,
+//     gỡ chặn ở đây + bổ sung aggregator riêng cho SELL_OUT_VALUE.
+//   - termType='GROWTH_REBATE' (Chiết Khấu Theo Tăng Trưởng): công thức đúng cần SO SÁNH VỚI KỲ TRƯỚC
+//     (basisAmount kỳ này so với kỳ liền trước cùng độ dài) nhưng computeRebateEstimate() tính Y HỆT
+//     VOLUME_REBATE (bỏ qua hoàn toàn việc so kỳ trước) — ngữ nghĩa CHÍNH XÁC của "tăng trưởng" (so % hay
+//     so số tuyệt đối, "kỳ trước" là kỳ liền kề hay cùng kỳ năm trước) chưa được xác nhận rõ với người
+//     dùng, và tự suy đoán rồi cài đặt có thể SAI theo hướng khác — an toàn hơn là CHẶN tương tự
+//     SELL_OUT_VALUE cho tới khi xác nhận đúng công thức nghiệp vụ, tránh 1 lựa chọn âm thầm tính sai.
+//   - periodType (MONTHLY/QUARTERLY/YEARLY/ONE_TIME): TRƯỚC ĐÂY hoàn toàn không đối chiếu với khoảng
+//     periodStart/periodEnd người dùng chọn lúc "Tính Ước Tính" — chọn periodType=MONTHLY nhưng tính cho
+//     nguyên 1 năm vẫn chạy bình thường không cảnh báo. Đây là phần DỄ SỬA ĐÚNG nhất (không cần thêm
+//     nguồn dữ liệu/công thức mới, chỉ đối chiếu độ dài kỳ) — validatePeriodMatchesPeriodType() bên dưới,
+//     gọi từ POST /terms/:id/calculate (routes/purchasing.js).
+const UNSUPPORTED_CALC_BASIS = new Set(['SELL_OUT_VALUE']);
+const UNSUPPORTED_TERM_TYPES = new Set(['GROWTH_REBATE']);
+function assertCalcBasisAndTermTypeSupported(calcBasis, termType) {
+  if (UNSUPPORTED_CALC_BASIS.has(calcBasis)) {
+    return `Căn cứ tính "Giá Trị Bán Ra" (SELL_OUT_VALUE) CHƯA được hệ thống hỗ trợ tính tự động (chưa có nguồn dữ liệu doanh số bán ra) — vui lòng chọn "Giá Trị Mua Hàng" (PURCHASE_VALUE), hoặc đối soát thủ công ngoài hệ thống cho tới khi được bổ sung.`;
+  }
+  if (UNSUPPORTED_TERM_TYPES.has(termType)) {
+    return `Loại điều khoản "Chiết Khấu Theo Tăng Trưởng" (GROWTH_REBATE) CHƯA được hệ thống hỗ trợ tính tự động (cần so sánh với kỳ trước, chưa xác nhận đúng công thức nghiệp vụ) — vui lòng chọn loại điều khoản khác, hoặc đối soát thủ công ngoài hệ thống cho tới khi được bổ sung.`;
+  }
+  return null;
+}
+
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3, phần periodType): đối chiếu ĐỘ DÀI kỳ
+// tính (periodStart/periodEnd người dùng chọn lúc "Tính Ước Tính") với periodType đã khai báo trên điều
+// khoản — chặn nếu kỳ tính không khớp đúng 1 tháng/1 quý/1 năm dương lịch tương ứng. ONE_TIME không ràng
+// buộc gì (đúng bản chất "1 lần", độ dài tuỳ ý theo thoả thuận).
+function validatePeriodMatchesPeriodType(periodType, periodStart, periodEnd) {
+  if (periodType === 'ONE_TIME') return null;
+  const start = new Date(`${periodStart}T00:00:00Z`);
+  const end = new Date(`${periodEnd}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null; // đã ép định dạng ở tầng route, không lặp lại validate ở đây
+  const sy = start.getUTCFullYear(), sm = start.getUTCMonth();
+  const ey = end.getUTCFullYear(), em = end.getUTCMonth();
+  if (periodType === 'MONTHLY') {
+    if (sy !== ey || sm !== em) {
+      return `Điều khoản có Kỳ Tính "Hàng Tháng" — periodStart/periodEnd (${periodStart} → ${periodEnd}) phải nằm trong CÙNG 1 tháng dương lịch`;
+    }
+    return null;
+  }
+  if (periodType === 'QUARTERLY') {
+    const sq = Math.floor(sm / 3), eq = Math.floor(em / 3);
+    if (sy !== ey || sq !== eq) {
+      return `Điều khoản có Kỳ Tính "Hàng Quý" — periodStart/periodEnd (${periodStart} → ${periodEnd}) phải nằm trong CÙNG 1 quý dương lịch`;
+    }
+    return null;
+  }
+  if (periodType === 'YEARLY') {
+    if (sy !== ey) {
+      return `Điều khoản có Kỳ Tính "Hàng Năm" — periodStart/periodEnd (${periodStart} → ${periodEnd}) phải nằm trong CÙNG 1 năm dương lịch`;
+    }
+    return null;
+  }
+  return null;
+}
+
 module.exports = {
   VALID_TERM_TYPES, VALID_CALC_BASIS, VALID_TIER_MODES, VALID_PERIOD_TYPES, VALID_SCOPE_TYPES, VALID_TERM_STATUSES,
   canManageVendors, canManageTerms, canActivateTerm, canViewReport, canReconcile, canApprove,
   defaultVendor, validateVendorPayload,
   defaultRebateTerm, validateTiers, validateScopes, validateRebateTermPayload, checkDuplicateTermCode,
   assertValidTermTransition, cloneTermAsDraft,
-  computeRebateEstimate
+  computeRebateEstimate,
+  UNSUPPORTED_CALC_BASIS, UNSUPPORTED_TERM_TYPES, assertCalcBasisAndTermTypeSupported, validatePeriodMatchesPeriodType
 };

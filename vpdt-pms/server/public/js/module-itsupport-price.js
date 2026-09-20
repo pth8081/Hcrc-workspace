@@ -101,13 +101,46 @@ async function parseItPriceFileForPreview(file) {
   }
 }
 
-// Đọc 1 giá trị Margin/Chiết Khấu dạng chuỗi từ file (VD "12%", "12", "12,5%", "-3") -> số thực (%) hoặc
-// null nếu không đọc được thành số.
+// Đọc 1 giá trị Margin/Chiết Khấu dạng chuỗi từ file (VD "12%", "12", "12,5%", "-3", "1.234,5") -> số
+// thực (%) hoặc null nếu không đọc được thành số.
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): .replace(',', '.') cũ chỉ thay
+// đúng dấu phẩy ĐẦU TIÊN — số dạng "1.234,5" (dấu chấm phân cách nghìn, dấu phẩy thập phân) ra "1.234.5"
+// rồi Number() = NaN, âm thầm bị lọc khỏi mọi tính toán (nums.filter(n => n !== null)) như thể dòng đó
+// không hề có margin. Dùng lại ĐÚNG thuật toán tách dấu phân cách nghìn/thập phân đã kiểm thử ở
+// parseAmount() (lib/purchasingManualImport.js): dấu THẬP PHÂN là dấu xuất hiện SAU CÙNG trong chuỗi khi
+// có cả 2 loại dấu, dấu còn lại là phân cách nghìn (bỏ hẳn).
 function parseItPriceMarginNumber(raw) {
-  const s = String(raw || '').replace('%', '').replace(',', '.').trim();
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  let s = String(raw).replace(/[^\d.,-]/g, '').trim();
   if (!s) return null;
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  if (lastDot !== -1 && lastComma !== -1) {
+    const decimalSep = lastDot > lastComma ? '.' : ',';
+    const thousandSep = decimalSep === '.' ? ',' : '.';
+    s = s.split(thousandSep).join('');
+    if (decimalSep === ',') s = s.replace(',', '.');
+  } else if (lastDot !== -1 || lastComma !== -1) {
+    const sep = lastDot !== -1 ? '.' : ',';
+    const parts = s.split(sep);
+    const isThousandsGrouping = parts.length > 2 || (parts.length === 2 && parts[1].length === 3);
+    s = isThousandsGrouping ? parts.join('') : parts.join('.');
+  }
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+// Đếm số dòng "SAI PHÍA" so với mức đã chọn (mốc 5%) — dùng cho cảnh báo ở checkItPriceMarginConsistency()
+// bên dưới. TRƯỚC ĐÂY chỉ so trung bình cộng cả file với mốc 5%, có thể bị vài dòng margin cao che mất
+// khi trung bình hoá cùng nhiều dòng thấp (dòng đó đáng ra phải đi quy trình duyệt MARGIN_GTE5 khác) —
+// nay đếm TỪNG dòng riêng, cảnh báo nếu BẤT KỲ dòng nào sai phía, không chỉ khi trung bình sai.
+function itPriceTierWrongSideCount(tier, nums) {
+  if (tier === 'MARGIN_LT5') return nums.filter(n => n >= 5).length;
+  if (tier === 'MARGIN_GTE5') return nums.filter(n => n < 5).length;
+  if (tier === 'DISCOUNT_LTE5') return nums.filter(n => n > 5).length;
+  if (tier === 'DISCOUNT_GT5') return nums.filter(n => n <= 5).length;
+  return 0;
 }
 
 // Đối chiếu mức Margin/Chiết Khấu người đề xuất TỰ CHỌN (#itPriceTier) với số liệu THẬT trong file bảng
@@ -131,14 +164,17 @@ function checkItPriceMarginConsistency() {
   if (!items || !items.length) return hide();
   const nums = items.map(it => parseItPriceMarginNumber(it.values?.[list.marginColumnKey])).filter(n => n !== null);
   if (!nums.length) return hide();
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): TRƯỚC ĐÂY chỉ so TRUNG BÌNH
+  // CỘNG cả file với mốc 5% — vài dòng margin cao (đáng ra đi quy trình duyệt khác, MARGIN_GTE5) có thể
+  // bị trung bình hoá che mất nếu đa số dòng khác thấp. Đếm SỐ DÒNG sai phía qua itPriceTierWrongSideCount()
+  // ở trên, cảnh báo nếu BẤT KỲ dòng nào vượt mốc, không chỉ khi trung bình vượt (quyết định KHÔNG đổi:
+  // vẫn chỉ cảnh báo, không chặn gửi, không ràng buộc người duyệt).
+  const wrongCount = itPriceTierWrongSideCount(tier, nums);
+  if (!wrongCount) return hide();
   const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-  const isMarginTier = tier.startsWith('MARGIN_');
-  const matches = isMarginTier
-    ? (tier === 'MARGIN_LT5' ? avg < 5 : avg >= 5)
-    : (tier === 'DISCOUNT_LTE5' ? avg <= 5 : avg > 5);
-  if (matches) return hide();
+  const min = Math.min(...nums), max = Math.max(...nums);
   const colLabel = list.columns.find(c => c.key === list.marginColumnKey)?.label || 'Margin/Chiết Khấu';
-  warnText.innerText = `Số liệu cột "${colLabel}" trong file (trung bình ${avg.toFixed(1)}%) có vẻ KHÔNG khớp với mức "${itPriceTierLabel(tier)}" đã chọn — vui lòng kiểm tra lại trước khi gửi (chỉ để bạn lưu ý, không bắt buộc phải sửa).`;
+  warnText.innerText = `Số liệu cột "${colLabel}" trong file: ${wrongCount}/${nums.length} dòng (nhỏ nhất ${min.toFixed(1)}%, lớn nhất ${max.toFixed(1)}%, trung bình ${avg.toFixed(1)}%) có vẻ KHÔNG khớp với mức "${itPriceTierLabel(tier)}" đã chọn — vui lòng kiểm tra lại trước khi gửi (chỉ để bạn lưu ý, không bắt buộc phải sửa).`;
   warnWrap.classList.remove('hidden');
 }
 

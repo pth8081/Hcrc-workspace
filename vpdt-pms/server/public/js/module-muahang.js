@@ -405,7 +405,15 @@ async function triggerDSmartSync() {
   btn.disabled = true; btn.textContent = '⏳ Đang đồng bộ...';
   try {
     const result = await mhApi('/api/purchasing/sync', 'POST', {});
-    alert(`✅ Đồng bộ xong: ${result.rowsFetched} dòng lấy về, ${result.rowsInserted} dòng mới, ${result.rowsSkippedDuplicate} dòng trùng bỏ qua.`);
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #7): server nay tự cô lập từng
+    // dòng lỗi (thiếu vendorCode/storeCode/purchaseDate/amount không hợp lệ) thay vì làm hỏng cả lượt —
+    // hiện rõ cho người bấm biết có dòng nào bị bỏ qua, cùng khuôn cảnh báo rowErrors của Nhập File thủ công.
+    let msg = `✅ Đồng bộ xong: ${result.rowsFetched} dòng lấy về, ${result.rowsInserted} dòng mới, ${result.rowsSkippedDuplicate} dòng trùng bỏ qua.`;
+    if (result.rowErrors && result.rowErrors.length) {
+      msg += `\n⚠️ ${result.rowErrors.length} dòng lỗi từ DSmart (đã bỏ qua, các dòng khác vẫn được nạp bình thường):\n` + result.rowErrors.slice(0, 10).map(e => e.message).join('\n');
+      if (result.rowErrors.length > 10) msg += `\n... và ${result.rowErrors.length - 10} dòng lỗi khác.`;
+    }
+    alert(msg);
     const syncRes = await mhApi('/api/purchasing/sync-logs');
     mhSyncLogs = syncRes.items || [];
     renderMhSyncLogList();
@@ -458,11 +466,21 @@ async function onMhManualImportFileChange(event) {
   }
 }
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #4): TRƯỚC ĐÂY gọi GET
+// /api/purchasing/manual-import-export KHÔNG kèm sourceSystem -> route mặc định xuất MỌI nguồn (cả
+// 🔄 DSmart lẫn 📤 Thủ công). Nút "📊 Xuất File" ở đây CHỈ phục vụ ĐÚNG 1 mục đích: "xuất để sửa/bổ sung
+// rồi tải lên lại qua Nhập File" — mà Nhập File LUÔN ghi dữ liệu tải lên với sourceSystem='MANUAL' (xem
+// onMhManualImportFileChange() + parsePurchaseTransactionImportXlsx(), lib/purchasingManualImport.js).
+// Nếu file xuất ra có LẪN dòng DSmart rồi tải ngược lại, dòng đó biến thành 1 bản ghi 'MANUAL' MỚI hoàn
+// toàn (khoá dedup khác hẳn dòng DSmart gốc — buildManualSourceRefId() không liên quan gì tới sourceRefId
+// gốc của DSmart) -> NHÂN ĐÔI giao dịch, tính chiết khấu gấp đôi. Luôn ép sourceSystem=MANUAL ở đây — nếu
+// sau này cần 1 nút "Xuất TOÀN BỘ để xem/báo cáo" riêng (không dùng để nhập lại), phải thêm 1 nút/luồng
+// MỚI tách biệt, không dùng chung nút này.
 async function exportMhManualData() {
   const from = document.getElementById('mhExportFrom').value;
   const to = document.getElementById('mhExportTo').value;
   if (!from || !to) { alert('⛔ Chọn khoảng Từ Ngày / Đến Ngày trước khi xuất file'); return; }
-  window.open(`/api/purchasing/manual-import-export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, '_blank');
+  window.open(`/api/purchasing/manual-import-export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sourceSystem=MANUAL`, '_blank');
 }
 
 // ===================== Báo Cáo tab (nội bộ Mua Hàng) =====================

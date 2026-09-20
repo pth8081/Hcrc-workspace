@@ -307,13 +307,21 @@ router.post('/:module', async (req, res) => {
     // HIỆN TẠI (record.currentStep — luôn = 1 lúc vừa tạo), nên 1 quy trình 2-3 bước mà admin quên cấu
     // hình người duyệt cho bước 2/3 vẫn im lặng như cũ: đơn chạy bình thường qua bước 1 rồi mới treo ở
     // bước sau, lúc đó người tạo đã quên hẳn đơn này. Nay quét TẤT CẢ các bước của quy trình áp dụng.
+    //
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #9): bản vá trên CHỈ kiểm đơn
+    // STORE (record.orderLocationType === 'STORE') — đơn HO (thuần theo tier giá trị, KHÔNG có mixed
+    // rules) với tier đã chọn mẫu nhưng approvers[step] rỗng vẫn treo vĩnh viễn không hề cảnh báo, vì
+    // resolveOperationOrderWorkflow() (lib/workflowEngine.js) xử lý được cả 2 loại như nhau — không có lý
+    // do gì để giới hạn cảnh báo chỉ cho STORE. Bỏ điều kiện orderLocationType, áp dụng cho CẢ HO lẫn STORE.
     let warning = null;
-    if (moduleKey === 'operationOrders' && record.orderLocationType === 'STORE') {
+    if (moduleKey === 'operationOrders') {
       const resolved = WORKFLOW_MODULE_CONFIGS.operationOrders.resolveWfConfig(record, appData);
       const emptySteps = (resolved?.steps || []).filter(s => !((resolved?.approvers?.[s.order]) || []).length);
       if (emptySteps.length) {
         const stepsLabel = emptySteps.map(s => `Bước ${s.order}${s.name ? ` (${s.name})` : ''}`).join(', ');
-        warning = `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepsLabel} của mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
+        warning = record.orderLocationType === 'STORE'
+          ? `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepsLabel} của mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`
+          : `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào được cấu hình ở ${stepsLabel} của mức giá trị hiện tại (Đặt Hàng Tại HO) — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
         await insertSystemLog({
           username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
           module: 'OPERATION_ORDER', actionType: 'CREATE_NO_APPROVER_WARNING',

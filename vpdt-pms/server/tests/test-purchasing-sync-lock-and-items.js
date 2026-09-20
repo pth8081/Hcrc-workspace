@@ -110,7 +110,10 @@ async function main() {
     await new Promise(r => setTimeout(r, 250)); // giả lập API ngoài chậm — cửa sổ đua thật
     currentSyncs--;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ items: [{ refId: 'R1', vendorCode: 'NCC01', purchaseDate: '2026-09-01', amount: 1000 }], hasMore: false }));
+    // storeCode/purchaseDate/amount đủ hợp lệ (từ bản vá #7, đợt audit chuyên sâu 12 cụm — items.map() nay
+    // validate từng dòng TRƯỚC khi insert, xem tests/test-purchasing-sync-row-validation.js cho test
+    // riêng phần đó) — file này CHỈ test hành vi KHOÁ, không phải row validation, nên fixture phải hợp lệ.
+    res.end(JSON.stringify({ items: [{ refId: 'R1', vendorCode: 'NCC01', storeCode: 'ST01', purchaseDate: '2026-09-01', amount: 1000 }], hasMore: false }));
   });
   process.env.DSMART_API_BASE_URL = `http://127.0.0.1:${dsmart.address().port}`;
   process.env.DSMART_API_KEY = 'test-key';

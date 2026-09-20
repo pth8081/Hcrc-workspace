@@ -1556,7 +1556,13 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     cảnh báo này kiểm TẤT CẢ các bước của quy trình**, không chỉ Bước 1 — quy
     trình 2-3 bước mà quên cấu hình người duyệt cho bước sau trước đây vẫn tạo
     đơn im lặng rồi mới treo giữa chừng; nay thông báo nêu rõ đang thiếu người
-    duyệt ở BƯỚC NÀO.
+    duyệt ở BƯỚC NÀO. **Từ đợt rà soát 2 (10/2026)**: cảnh báo này nay áp dụng
+    CẢ cho đơn "Đặt Hàng Tại HO" (trước đây chỉ kiểm đơn Siêu Thị) — quy trình
+    HO cũng có thể rơi vào 1 mức giá trị chưa cấu hình đủ người duyệt; và kiểm
+    lại LẦN NỮA khi người tạo "Gửi Lại" đơn sau khi bị "Yêu Cầu Bổ Sung" (nếu
+    sửa số tiền làm đơn đổi sang mức giá trị khác chưa cấu hình đủ người
+    duyệt, sẽ cảnh báo lại ngay lúc gửi lại, không đợi tới lúc treo mới phát
+    hiện).
   - **Người duyệt đã nghỉ việc/bị khoá tài khoản KHÔNG còn được tính** (rà soát
     9/2026): dòng cấu hình (cả kiểu "Chức danh" lẫn "Người cụ thể") trỏ tới tài
     khoản đã ngừng hoạt động sẽ được bỏ qua — trước đây người đã nghỉ vẫn nằm
@@ -1652,6 +1658,12 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   ghi cũ đã lỗi thời. Nay hệ thống lưu lại nội dung của lần gửi thành công
   gần nhất, tự so sánh mỗi lượt quét và gửi lại khi phát hiện khác — y hệt
   thì bỏ qua, không gửi thừa.
+  **Cảnh báo khi XOÁ đơn đã đồng bộ (10/2026)**: hệ thống dsmart16 hiện CHƯA
+  có API huỷ/xoá để job tự gọi khi 1 đơn đã đồng bộ (`dsmart16Synced=true`)
+  bị Quản Trị Viên xoá bên hệ thống này — xoá vẫn thực hiện bình thường
+  (KHÔNG bị chặn), nhưng hệ thống ghi ngay 1 dòng Nhật Ký Hệ Thống mức Cảnh
+  Báo kèm Số Đơn NCC để Quản Trị Viên biết cần vào hệ thống dsmart16 xử lý
+  thủ công (đơn đó sẽ là bản ghi "mồ côi" phía dsmart16 nếu không xử lý).
   **Sửa cấu hình giữa lúc job đang chạy (từ đợt rà soát cụm Hệ Thống/Admin/Cấu
   Hình)** — trước đây job ghi lại trạng thái đồng bộ bằng bản cấu hình đọc từ
   ĐẦU lượt chạy, nên nếu admin đổi Base URL/chu kỳ/tắt đồng bộ trong lúc job
@@ -2754,11 +2766,27 @@ bộ mô tả bên dưới.
 - **Điều Khoản Chiết Khấu (RebateTerms)** — nhiều điều khoản độc lập/1 NCC,
   mỗi điều khoản tự mang:
   - **Loại** (`termType`): Chiết Khấu Theo Doanh Số (VOLUME_REBATE), Chiết
-    Khấu Tăng Trưởng (GROWTH_REBATE), Trade Spend, Phí Niêm Yết (LISTING_FEE),
-    Thanh Toán Sớm (EARLY_PAYMENT), Bồi Thường Hư Hỏng (DAMAGE_ALLOWANCE), Hỗ
-    Trợ Mở Siêu Thị Mới (NEW_STORE_SUPPORT).
+    Khấu Tăng Trưởng (GROWTH_REBATE — **CHƯA hỗ trợ tính tự động**, xem ghi
+    chú dưới), Trade Spend, Phí Niêm Yết (LISTING_FEE), Thanh Toán Sớm
+    (EARLY_PAYMENT), Bồi Thường Hư Hỏng (DAMAGE_ALLOWANCE), Hỗ Trợ Mở Siêu
+    Thị Mới (NEW_STORE_SUPPORT).
   - **Cơ sở tính** (`calcBasis`): trên Giá Trị Mua Hàng (PURCHASE_VALUE) hoặc
-    Giá Trị Bán Ra (SELL_OUT_VALUE).
+    Giá Trị Bán Ra (SELL_OUT_VALUE — **CHƯA hỗ trợ tính tự động**, xem ghi
+    chú dưới).
+  - **Giới hạn CHƯA hỗ trợ (10/2026, đợt audit chuyên sâu)**: `calcBasis`
+    Giá Trị Bán Ra (SELL_OUT_VALUE) và `termType` Chiết Khấu Tăng Trưởng
+    (GROWTH_REBATE) hiện **ĐÃ BỊ CHẶN** ở cả form Tạo/Sửa (2 lựa chọn hiện mờ
+    "chưa hỗ trợ tính tự động" trong dropdown, không chọn được) lẫn ở server
+    (`validateRebateTermPayload()`, `lib/vendorRebate.js`) — lý do: hệ thống
+    hiện **chưa có nguồn dữ liệu "Giá Trị Bán Ra"** (chỉ có dữ liệu MUA HÀNG
+    từ DSmart/nhập tay), và GROWTH_REBATE cần công thức so sánh với "kỳ
+    trước" chưa được xác nhận rõ ràng với người dùng — trước đây 2 lựa chọn
+    này ÂM THẦM tính giống hệt VOLUME_REBATE/PURCHASE_VALUE (SAI hẳn ý nghĩa
+    nghiệp vụ) mà không cảnh báo gì. Điều khoản cũ đã lỡ tạo/kích hoạt với 1
+    trong 2 giá trị này (trước bản vá) vẫn xem/nhân bản được nhưng **không
+    kích hoạt lại được nữa** và **không "Tính Ước Tính" được nữa** (lỗi 409
+    rõ ràng) — cần đối soát thủ công ngoài hệ thống cho tới khi được bổ sung
+    đúng nguồn dữ liệu/công thức.
   - **Bậc thang (Tiers[], tối đa 20 bậc/điều khoản)** theo 2 chế độ hay bị
     nhầm lẫn trong thực tế hợp đồng NCC — **`tierMode`**:
     - **GRADUATED (lũy tiến từng phần)** — mỗi bậc chỉ tính % trên PHẦN doanh
@@ -2769,7 +2797,13 @@ bộ mô tả bên dưới.
   - **Phạm vi (Scopes[])**: giới hạn theo Định Dạng Siêu Thị (STORE_FORMAT —
     MART/MINIMART), 1 Siêu Thị cụ thể (STORE), hoặc Ngành Hàng (CATEGORY) —
     để trống Scopes = áp dụng toàn bộ giao dịch của NCC đó.
-  - **Kỳ tính** (`periodType`): Tháng/Quý/Năm/1 Lần.
+  - **Kỳ tính** (`periodType`): Tháng/Quý/Năm/1 Lần. **Đối chiếu độ dài kỳ
+    tính (10/2026)**: khi "Tính Ước Tính", khoảng Từ ngày–Đến ngày chọn phải
+    khớp ĐÚNG 1 tháng/1 quý/1 năm dương lịch tương ứng với `periodType` đã
+    khai (VD điều khoản Kỳ Tính "Hàng Tháng" nhưng chọn khoảng ngày trải dài
+    3 tháng sẽ bị chặn, 400) — Kỳ Tính "1 Lần" (ONE_TIME) không ràng buộc độ
+    dài (đúng bản chất "1 lần theo thoả thuận"). Trước đây `periodType` chỉ
+    là 1 nhãn mô tả, không hề được đối chiếu với khoảng ngày thực tế chọn.
   - **Ngày Hiệu Lực Từ/Đến bắt buộc đúng khuôn `YYYY-MM-DD`** (rà soát 9/2026):
     nhập sai khuôn (VD `1/3/2026`, `2026-3-1`, chữ tự do) hoặc ngày không có
     thật (`2026-02-30`) bị chặn ngay khi Tạo/Sửa — vì mọi phép đối chiếu kỳ
@@ -2787,7 +2821,12 @@ bộ mô tả bên dưới.
     bản Nhân Bản (DRAFT) sẽ tự chuyển mọi bản ACTIVE khác cùng NCC+Mã Điều
     Khoản sang Lưu Trữ (ARCHIVED) TRƯỚC — trước đây có thể tồn tại 2 bản
     cùng ACTIVE song song, "Tính Ước Tính" có thể vô tình chọn nhầm bản CŨ
-    đã lỗi thời; nay luôn chỉ đúng 1 bản ACTIVE cho mỗi NCC+Mã Điều Khoản.
+    đã lỗi thời; nay luôn chỉ đúng 1 bản ACTIVE cho mỗi NCC+Mã Điều Khoản
+    (bất biến này được khoá GHI THẬT theo đúng cặp NCC+Mã Điều Khoản, 10/2026
+    — 2 lượt Kích Hoạt gần như đồng thời cho 2 bản Nhân Bản KHÁC nhau nhưng
+    CÙNG NCC+Mã Điều Khoản nay luôn chạy tuần tự, không thể lọt cùng lúc ra
+    2 bản ACTIVE song song; tạo mới Điều Khoản cũng được khoá theo cặp NCC+
+    Mã Điều Khoản để chặn 2 request tạo trùng mã gần như đồng thời).
   - **Tách biệt nhiệm vụ (mục 8 tài liệu gốc)**: người TẠO/sửa điều khoản
     (`rebateTermManage`) KHÔNG tự động có quyền KÍCH HOẠT (`rebateTermActivate`,
     quyền riêng) — vì liên quan trực tiếp số tiền lớn, tách 2 vai trò cố ý.
@@ -2812,6 +2851,22 @@ bộ mô tả bên dưới.
   đã đồng bộ lần đầu sẽ không bao giờ cập nhật, làm sai lệch vĩnh viễn kết
   quả Tính Ước Tính. Mỗi lượt đồng bộ ghi 1 dòng vào **Nhật Ký Đồng Bộ**
   (`PurchaseDataSyncLog` — thời điểm, số dòng lấy/nạp, người bấm, lỗi nếu có).
+  **Cô lập lỗi từng dòng (10/2026)**: DSmart có thể trả về 1 vài dòng thiếu
+  Mã NCC/Mã Siêu Thị/Ngày Mua/Số Tiền hợp lệ (dữ liệu ngoài không đảm bảo
+  sạch tuyệt đối) — nay các dòng lỗi này bị BỎ QUA riêng lẻ (liệt kê rõ trong
+  kết quả trả về + Nhật Ký Đồng Bộ ghi trạng thái "Một phần"), các dòng hợp
+  lệ khác vẫn nạp bình thường, thay vì làm lỗi cả lô/cả lượt đồng bộ như
+  trước. **Xem chi tiết lỗi đồng bộ (10/2026)**: nội dung lỗi chi tiết (có
+  thể chứa địa chỉ/thông điệp kỹ thuật của hệ thống dsmart16) trong Nhật Ký
+  Đồng Bộ chỉ hiện cho người CÓ quyền đồng bộ thật (`rebateTermManage`/
+  admin) — người chỉ có `rebateViewReport`/`rebateReconcile`/`rebateApprove`
+  vẫn xem được bảng Nhật Ký (biết lượt nào thất bại) nhưng chỉ thấy thông báo
+  chung chung, không thấy chi tiết kỹ thuật.
+  **Chống chạy chồng với Nhập File Thủ Công (10/2026)**: "🔄 Đồng Bộ Ngay" và
+  "📤 Nhập File" (mục dưới) dùng CHUNG 1 khoá — 1 lượt Đồng Bộ DSmart và 1
+  lượt Nhập File thủ công chạy gần như cùng lúc (hoặc 2 lượt Nhập File cùng
+  lúc) sẽ tuần tự hoá đúng như 2 lượt Đồng Bộ DSmart, không còn đâm nhau ở
+  dữ liệu.
 - **Nhập/Xuất Dữ Liệu Thủ Công** (9/2026) — phương án THAY THẾ khi DSmart tạm
   không sẵn sàng hoặc cần bổ sung tay 1 vài giao dịch lẻ, đặt ngay cạnh "Đồng
   Bộ Ngay" (cùng quyền `rebateTermManage`):
@@ -2826,8 +2881,17 @@ bộ mô tả bên dưới.
     danh sách lỗi hiện ngay trong thông báo kết quả. Cũng ghi 1 dòng vào
     **Nhật Ký Đồng Bộ** (cột "Nguồn" phân biệt 🔄 DSmart / 📤 Thủ công).
   - **📊 Xuất File** — xuất lại dữ liệu đang có trong khoảng Từ Ngày/Đến Ngày
-    chọn (mọi nguồn, tối đa 5000 dòng/lần) ra đúng khuôn cột file mẫu, để
-    chỉnh sửa/bổ sung rồi tải lên lại qua Nhập File.
+    chọn ra đúng khuôn cột file mẫu, để chỉnh sửa/bổ sung rồi tải lên lại qua
+    Nhập File. **QUAN TRỌNG (10/2026, đã vá lỗi nhân đôi giao dịch)**: nút
+    này CHỈ xuất dữ liệu nguồn **📤 Thủ công** (`SourceSystem='MANUAL'`),
+    KHÔNG xuất kèm dữ liệu 🔄 Đồng Bộ DSmart — vì vòng "Xuất File → sửa →
+    Nhập File" ghi dữ liệu tải lên LUÔN với `SourceSystem='MANUAL'`, nếu xuất
+    kèm cả dòng DSmart rồi tải ngược lại sẽ tạo ra 1 dòng 'MANUAL' MỚI hoàn
+    toàn tách biệt (khác khoá dedup) cho CÙNG 1 giao dịch DSmart gốc — nhân
+    đôi giao dịch, tính chiết khấu gấp đôi. Muốn xem/báo cáo TOÀN BỘ dữ liệu
+    (cả DSmart lẫn Thủ công) thì dùng bảng **Nhật Ký Đồng Bộ** hoặc màn
+    **📊 Báo Cáo** — KHÔNG dùng nút "📊 Xuất File" này cho mục đích xem/báo
+    cáo, chỉ dùng đúng cho luồng "sửa & nhập lại" dữ liệu Thủ công.
 - **Tính Ước Tính Chiết Khấu** — chọn 1 điều khoản ACTIVE + khoảng ngày, hệ
   thống tự lọc đúng giao dịch khớp Scopes của điều khoản đó
   (`purchaseBasisAggregator.js`) rồi áp bậc thang (`tieredCalculator.js`) ra

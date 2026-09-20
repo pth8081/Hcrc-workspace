@@ -11,8 +11,32 @@ const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
 const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
+
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #14): đường DUYỆT (route generic
+// bên dưới, dùng chung cho MỌI module trong MODULE_CONFIGS) TRƯỚC ĐÂY hoàn toàn không kiểm
+// hasModuleAccessServer() ("Khối 0", user.perms.moduleAccess) — nguyên tắc "Khối 0 chặn trước tiên" đã áp
+// dụng cho TẠO/ĐỌC (xem routes/create.js/routes/data.js) nhưng bị bỏ sót ở đường Duyệt/Từ chối/Yêu cầu bổ
+// sung: admin tắt hẳn 1 module cho 1 tài khoản cụ thể (VD tạm khoá "Vận Hành" cho người vừa đổi vai trò)
+// chỉ ẩn được tab ở giao diện — nếu người đó VẪN còn nằm trong danh sách approver của 1 bước duyệt (cấu
+// hình dept-workflow chưa kịp gỡ), gọi thẳng API vẫn duyệt được bình thường. Map CỤC BỘ ở đây (KHÔNG thêm
+// vào MODULE_ACCESS_GATED_COLLECTIONS dùng chung ở GET /api/data — phát hiện này chỉ về đường GHI/hành
+// động, không đổi phạm vi lọc ĐỌC dữ liệu) từ dbKey của MODULE_CONFIGS sang đúng khoá moduleAccess tương
+// ứng (BUSINESS_MODULES, public/js/core.js).
+const WORKFLOW_MODULE_ACCESS_KEYS = {
+  docs: 'doc', submissions: 'submission', carRegs: 'car', officeReqs: 'office',
+  vppRegistrations: 'vpp', contracts: 'contract', contractsSignedFile: 'contract',
+  itPriceApprovals: 'itSupport', budgetEntries: 'budget', operationOrders: 'vanHanh',
+  paymentRequests: 'office'
+};
+function assertWorkflowModuleAccess(user, moduleKey) {
+  const accessKey = WORKFLOW_MODULE_ACCESS_KEYS[moduleKey];
+  if (accessKey && !hasModuleAccessServer(user, accessKey)) {
+    throw new WorkflowError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
+  }
+}
 
 // 'propose-file-replacement'/'resolve-file-proposal' — CHỈ Văn Bản Trình, lớp Bộ phận Trợ Lý/Thư Ký
 // (TRO_LY_THU_KY, luôn ngay trước TGD) đề xuất thay thế toàn bộ tệp tờ trình thay vì REQUEST_CHANGES
@@ -51,6 +75,7 @@ router.post('/submissions/:id/give-opinion', async (req, res) => {
 
   try {
     const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, 'submissions');
 
     const resultItem = await withLockedRecordForCollection('submissions', itemId, (sub) => {
       const requestees = sub.opinionRequestees || [];
@@ -106,6 +131,7 @@ router.post('/:module/:id/:action', async (req, res) => {
     // tại từ DB (kể cả trạng thái active) và gắn sẵn vào req.freshUser, không cần đọc lại lần nữa.
     const appData = await getAllAppData();
     const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
 
     // Trước đây "xác thực lại mật khẩu/OTP/PIN trước khi Duyệt" (withApprovalAuth() ở index.html) chỉ
     // là lớp UI thuần JS — xác thực xong rồi mới GỌI HÀM duyệt thật ở trình duyệt, nhưng route này

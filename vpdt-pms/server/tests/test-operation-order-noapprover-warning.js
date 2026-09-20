@@ -12,6 +12,13 @@
 // dùng khi duyệt, không viết lại luật riêng) — nếu rỗng thì trả kèm `warning` cho client + ghi 1 dòng
 // Nhật Ký Hệ Thống mức WARNING, KHÔNG chặn việc tạo đơn.
 //
+// PHÁT HIỆN BỔ SUNG (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #9): bản vá trên TRƯỚC ĐÂY
+// chỉ áp dụng cho đơn STORE (record.orderLocationType === 'STORE') — đơn HO (thuần theo tier giá trị,
+// KHÔNG có mixed rules) với tier đã chọn mẫu nhưng approvers[step] rỗng vẫn treo vĩnh viễn không hề cảnh
+// báo. Đã vá: bỏ điều kiện STORE, áp dụng cho CẢ HO (Kịch bản 3 bên dưới đã cập nhật theo hành vi MỚI).
+// Đồng thời: đường "Gửi lại" sau "Yêu Cầu Bổ Sung" (POST /api/records/operationOrders/:id/submit, có thể
+// đổi amount -> đổi tier) nay CŨNG kiểm lại cảnh báo này (xem tests/test-operation-order-noapprover-warning-resubmit.js).
+//
 // Test này gọi thẳng router THẬT (routes/create.js) với lib/appData/lib/recordStore/lib/systemLogStore
 // đều giả lập tối thiểu.
 //
@@ -158,13 +165,23 @@ async function main() {
       r2.status === 200 && (r2.body?.warning === null || r2.body?.warning === undefined), r2.body);
     check('KHÔNG ghi Nhật Ký Hệ Thống nào khi approver hợp lệ', systemLogEntries.length === 0, systemLogEntries);
 
-    // ===== Kịch bản 3: đơn HO (không áp dụng filter theo siêu thị) -> KHÔNG bao giờ warning, kể cả khi
-    // approver không có dept khớp gì (HO vốn không có khái niệm "siêu thị"). =====
+    // ===== Kịch bản 3 (ĐÃ CẬP NHẬT, phát hiện #9): đơn HO — operationOrderHOTierWorkflows rỗng (chưa
+    // cấu hình workflowId nào cho tier LT100M) -> approvers[] rỗng -> PHẢI cảnh báo (KHÁC hành vi CŨ
+    // "HO không bao giờ warning"). =====
     resetRecords();
     systemLogEntries.length = 0;
     const r3 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ orderLocationType: 'HO' }), CREATOR_B);
-    check('Đơn HO -> KHÔNG bao giờ có warning (filter chỉ áp dụng cho STORE)',
-      r3.status === 200 && (r3.body?.warning === null || r3.body?.warning === undefined), r3.body);
+    check('LỖI ĐÃ VÁ: đơn HO thiếu người duyệt (tier chưa cấu hình workflowId) -> PHẢI có warning (KHÔNG còn miễn trừ HO)',
+      r3.status === 200 && typeof r3.body?.warning === 'string' && /chưa có người duyệt/i.test(r3.body.warning) && /HO/.test(r3.body.warning), r3.body);
+    check('Vẫn ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING cho đơn HO', systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING', systemLogEntries);
+
+    // ===== Kịch bản 3b: đơn HO ĐÃ cấu hình đủ người duyệt -> KHÔNG cảnh báo (tránh cảnh báo oan). =====
+    resetRecords();
+    systemLogEntries.length = 0;
+    APP_DATA.operationOrderHOTierWorkflows.LT100M = { workflowId: 'WF_1STEP', approvers: { 1: [GD_A.username] } };
+    const r3b = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ orderLocationType: 'HO' }), CREATOR_B);
+    check('Đơn HO đã cấu hình đủ người duyệt -> KHÔNG cảnh báo oan',
+      r3b.status === 200 && (r3b.body?.warning === null || r3b.body?.warning === undefined), r3b.body);
 
     // ===== Kịch bản 4 (BỔ SUNG, đợt audit chuyên sâu 12 cụm — mức Trung bình): quy trình NHIỀU BƯỚC,
     // bước 1 có người duyệt đầy đủ nhưng BƯỚC 2 chưa ai khớp. Bản vá đầu chỉ kiểm record.currentStep

@@ -19,6 +19,10 @@ const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
 const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
+// MODULE_CONFIGS.operationOrders.resolveWfConfig: dùng LẠI đúng hàm resolveOperationOrderWorkflow() mà
+// routes/create.js đã dùng để cảnh báo "chưa có người duyệt" lúc TẠO — xem chú thích đầy đủ ở route
+// /operationOrders/:id/submit bên dưới (PHÁT HIỆN #9, đợt audit chuyên sâu 12 cụm).
+const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS } = require('../lib/workflowEngine');
 router.use(requireAuth, blockIfMustChangePassword);
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026, "dữ liệu nhạy cảm nhân sự"): Hợp Đồng Lao Động trước đây
@@ -1114,7 +1118,38 @@ router.post('/budgetTemplates/:id/delete', async (req, res) => {
 });
 
 // ===================== VẬN HÀNH (operationOrders / operationStoreOpenings / operationRepairs) =====================
-router.post('/operationOrders/:id/delete', (req, res) => deleteAdminOnly(req, res, 'operationOrders'));
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #10): Không dùng deleteAdminOnly()
+// thẳng nữa — jobs/operationOrderApiSync.js CHỈ có đường GỬI/CẬP NHẬT đơn hàng ra hệ thống ngoài
+// "dsmart16" (POST baseUrl do admin cấu hình, không theo quy ước REST cố định — không có endpoint HỦY/
+// XOÁ nào được cấu hình sẵn để job tự gọi an toàn, xem chú thích đầu jobs/operationOrderApiSync.js), nên
+// xoá 1 đơn đã dsmart16Synced=true để lại bản ghi MỒ CÔI phía dsmart16 (hệ thống ngoài vẫn giữ nguyên đơn
+// đó, không hề biết đã bị xoá bên này) mà không có cảnh báo gì. Giải pháp AN TOÀN không phá vỡ nếu API
+// ngoài chưa có cơ chế huỷ: đọc lại hồ sơ TRƯỚC khi xoá, nếu đã dsmart16Synced=true thì ghi 1 dòng Nhật
+// Ký Hệ Thống mức WARNING rõ ràng (kèm poNumber) để admin biết cần xử lý thủ công bên hệ thống dsmart16,
+// KHÔNG chặn việc xoá (đơn vẫn xoá bình thường như trước, chỉ thêm cảnh báo).
+router.post('/operationOrders/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const all = await getAllForCollection('operationOrders');
+    const target = all.find(o => o.id === itemId);
+    if (target?.dsmart16Synced === true) {
+      await insertSystemLog({
+        username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
+        module: 'OPERATION_ORDER', actionType: 'DELETE_SYNCED_ORPHAN_WARNING',
+        targetObject: target.code || target.poNumber || String(target.id),
+        description: `Đã xoá đơn hàng "${target.title || target.code || itemId}" (PO: ${target.poNumber || 'chưa có'}) ĐÃ từng đồng bộ ra hệ thống ngoài dsmart16 — hệ thống dsmart16 KHÔNG tự động biết đơn này đã bị xoá (chưa có API huỷ), cần xử lý thủ công bên đó.`,
+        status: 'WARNING'
+      });
+    }
+    await deleteRecordForCollection('operationOrders', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `operationOrders/${req.params.id}/delete`, err);
+  }
+});
 // "Hồ sơ Mở Mới/Sửa Chữa Siêu Thị sau khi lập xong KHÔNG được xoá" — yêu cầu người dùng, đợt "Danh Mục
 // Đầu Tư + bỏ Tạo Kỳ". TRƯỚC ĐÂY route này cho admin xoá CASCADE (kèm operationExecutionPeriods + cây
 // dbo.OperationWorkItems) — nay chặn HẲN, không còn ngoại lệ nào (kể cả admin), khác mọi collection khác
@@ -2343,6 +2378,20 @@ router.post('/budgetEntries/:id/manager-edit', async (req, res) => {
 });
 
 // ===================== NGÂN SÁCH 2.0 (budgetLines — v23.0) =====
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #14): toàn bộ 11 route hành động
+// budgetLines/* bên dưới (sửa/xoá/duyệt/từ chối Đề Xuất+Phê Duyệt, sửa/xoá dòng cha+con Sử Dụng) TRƯỚC
+// ĐÂY không gác hasModuleAccessServer() ("Khối 0") — admin tắt hẳn module "Ngân Sách" cho 1 tài khoản chỉ
+// ẩn được tab ở giao diện, gọi thẳng API vẫn thao tác được bình thường nếu tài khoản đó vẫn còn quyền chi
+// tiết liên quan (budgetCreate/budgetManage/budgetAggregate). Mirror ĐÚNG cách routes/workflow.js vừa vá
+// (assertWorkflowModuleAccess) — 1 middleware DUY NHẤT chặn TRƯỚC TIÊN cho cả khối, khớp path
+// "/budgetLines/..." (mọi route bên dưới đều nằm trong khối liền mạch này, không route budgetLines nào
+// khác nằm ngoài).
+router.use('/budgetLines', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'budget')) {
+    return res.status(403).json({ error: 'Module Ngân Sách đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 // POST /api/records/budgetLines/:id/update — sửa Đề Xuất/Phê Duyệt khi còn SUBMITTED.
 router.post('/budgetLines/:id/update', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -2552,7 +2601,18 @@ router.post('/operationOrders/:id/update', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.editOperationOrderDraft(freshUser, item, req.body));
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao): route này TRƯỚC ĐÂY chỉ có assertUploadedFileUrl()
+    // (khuôn URL) trong editOperationOrderDraft(), thiếu assertPayloadFileUrlsOwnedByUser() như 13 route sửa
+    // khác cùng lớp (xem lib/uploadedFiles.js) — đơn bị "Yêu Cầu Bổ Sung" (status DRAFT) cho phép người tạo
+    // POST fileUrl trỏ tới file THẬT của người khác (HĐLĐ/phiếu lương/chứng từ thanh toán/CV...) rồi tự đọc
+    // được trọn vẹn vì operationOrders đứng trước các checker đó trong findOwningRecord() (lib/fileAuthz.js).
+    // exemptFileUrls giữ nguyên tệp ĐANG CÓ trước khi sửa.
+    const result = await withLockedRecordForCollection('operationOrders', itemId, async (item) => {
+      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+      const updated = recordActions.editOperationOrderDraft(freshUser, item, req.body);
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationOrders/${req.params.id}/update`, err); }
 });
@@ -2561,8 +2621,29 @@ router.post('/operationOrders/:id/submit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.submitOperationOrderDraft(freshUser, item));
-    res.json({ ok: true, item: result });
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #9): cảnh báo "chưa có người
+    // duyệt" (xem routes/create.js, nhánh moduleKey === 'operationOrders') TRƯỚC ĐÂY chỉ chạy lúc TẠO —
+    // gửi lại sau "Yêu Cầu Bổ Sung" có thể đổi amount (đổi tier) mà không hề kiểm lại, đơn rơi vào 1 tier
+    // KHÔNG có người duyệt vẫn im lặng như cũ. Kiểm lại ĐÚNG khuôn resolveOperationOrderWorkflow() ngay
+    // sau khi resubmit thành công (item.amount/dept lúc này đã là giá trị MỚI NHẤT sau khi sửa).
+    let warning = null;
+    const resolved = WORKFLOW_MODULE_CONFIGS.operationOrders.resolveWfConfig(result, appData);
+    const emptySteps = (resolved?.steps || []).filter(s => !((resolved?.approvers?.[s.order]) || []).length);
+    if (emptySteps.length) {
+      const stepsLabel = emptySteps.map(s => `Bước ${s.order}${s.name ? ` (${s.name})` : ''}`).join(', ');
+      warning = result.orderLocationType === 'STORE'
+        ? `Đơn hàng "${result.title}" đã gửi lại thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${result.dept}" ở ${stepsLabel} của mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`
+        : `Đơn hàng "${result.title}" đã gửi lại thành công nhưng CHƯA có người duyệt nào được cấu hình ở ${stepsLabel} của mức giá trị hiện tại (Đặt Hàng Tại HO) — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
+      await insertSystemLog({
+        username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
+        module: 'OPERATION_ORDER', actionType: 'RESUBMIT_NO_APPROVER_WARNING',
+        targetObject: result.code || String(result.id),
+        description: warning, status: 'WARNING'
+      });
+    }
+    res.json({ ok: true, item: result, warning });
   } catch (err) { handleError(res, `operationOrders/${req.params.id}/submit`, err); }
 });
 // "Nhập Hàng"/"Hủy Nhập" (đợt "Báo Cáo + Nhập Hàng") — CHỈ nhận từ AWAITING_RECEIPT (giai đoạn
@@ -2570,11 +2651,15 @@ router.post('/operationOrders/:id/submit', async (req, res) => {
 // toàn TÁCH RIÊNG khỏi route generic POST /api/workflow/operationOrders/:id/:action (route đó chỉ nhận
 // PENDING, xem đầu applyWorkflowAction()) — không đụng gì tới quy trình duyệt phòng ban cũ. appData cần
 // cho recordActions.isApproverForOperationOrderReceipt() tra lại đúng dept-workflow của hồ sơ.
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #14): cả 2 route "Nhập Hàng"/"Hủy
+// Nhập" bên dưới TRƯỚC ĐÂY không gác hasModuleAccessServer() ("Khối 0") — mirror ĐÚNG cách vừa vá ở
+// routes/workflow.js (module "vanHanh").
 router.post('/operationOrders/:id/receive-goods', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    if (!hasModuleAccessServer(freshUser, 'vanHanh')) throw new HttpError(403, 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
     const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.receiveOperationOrderGoods(freshUser, item, appData));
     res.json({ ok: true, item: result });
@@ -2585,6 +2670,7 @@ router.post('/operationOrders/:id/cancel-receipt', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    if (!hasModuleAccessServer(freshUser, 'vanHanh')) throw new HttpError(403, 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
     const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.cancelOperationOrderReceipt(freshUser, item, req.body, appData));
     res.json({ ok: true, item: result });
