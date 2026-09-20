@@ -605,6 +605,10 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   mọi yêu cầu Xin Gia Hạn/Xin Huỷ còn đang treo của người nhận CŨ — trước đó
   các yêu cầu này vẫn tồn tại sau khi đổi người, khiến người nhận MỚI bị
   chặn "Hoàn thành" vô cớ vì 1 yêu cầu không còn liên quan gì tới mình nữa.
+  **Từ 10/2026**: việc dọn yêu cầu treo này áp dụng cho **MỌI trạng thái** khi
+  đổi người thực hiện, không chỉ lúc đang "Đang thực hiện" — người nhận việc
+  gửi được Xin Gia Hạn/Xin Huỷ ngay khi việc còn "Cần làm", nên bản vá cũ (chỉ
+  phủ nhánh Đang thực hiện) vẫn để lọt đúng bế tắc đó cho việc chưa nhận.
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
   tự điền thông tin cơ bản. **Xem/Tải/In khớp nội dung (từ 9/2026)** — trước
   đây màn "Xem" và file Tải/khung In dựng HTML riêng biệt, lệch cả nội dung
@@ -619,7 +623,12 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   tham dự" không hợp lệ/đã khoá) thì không có cách nào giao lại nữa. Nay sửa
   đúng lại thông tin người thực hiện rồi bấm "Giao việc" lần nữa: hệ thống
   chỉ giao lại đúng (các) đầu việc còn thiếu, không tạo trùng các đầu việc đã
-  giao thành công trước đó.
+  giao thành công trước đó. **Trạng thái "đã giao việc" do hệ thống tự quản (từ
+  10/2026)** — cờ khoá biên bản ("đã giao việc", khoá sửa/xoá với mọi người trừ
+  Admin) và cờ "dòng chỉ đạo này đã sinh Công Việc" chỉ được bật bởi CHÍNH thao
+  tác "📌 Giao việc"; biên bản vừa lập luôn ở trạng thái chưa giao việc bất kể
+  dữ liệu gửi lên — trước đây có thể tạo ra biên bản tự khoá ngay từ đầu, không
+  ai (kể cả Admin) sửa/xoá được nữa.
 - **Truyền Thông Nội Bộ** — 5 sub-tab dùng chung 1 collection bài đăng, phân
   biệt bằng loại: 📰 Nhịp Sống HCRC (tin tức công ty), 🎓 Đào Tạo (thông báo
   lớp học, liên kết LMS bên dưới), 💼 Tuyển Dụng (đăng tin + nhân viên giới
@@ -761,6 +770,33 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   cả tài xế đã gán** (trước đây chỉ dọn BKS, để sót tài xế cũ treo lại dù xe
   giờ là taxi thuê ngoài, không còn tài xế công ty đi kèm) — ô "Lái xe được
   phân công" tự khoá/xoá trắng ngay khi chọn Taxi.
+  **Phiếu đi TAXI nay hoàn thành được (từ 10/2026)** — xe Taxi theo thiết kế
+  KHÔNG có tài xế hệ thống nào (chọn "Là Xe Taxi" tự xoá tài xế đã gán, xem
+  trên), trong khi 3 mốc sau duyệt (Xác Nhận Đăng Ký / Kết Thúc Chuyến / Đánh
+  Giá) đều đòi đúng tài xế được phân công — nên phiếu Taxi trước đây dừng hẳn ở
+  "Đã Phê Duyệt", không bao giờ tới được "Hoàn Thành" và không bao giờ có số km
+  thực tế cho báo cáo. Nay với **phiếu Taxi**: **người đăng ký phiếu** hoặc
+  **Người Điều Hành Xe/Admin** tự bấm **"🏁 Kết Thúc Chuyến (Taxi)"** ngay trên
+  dòng danh sách (nhập số km thực tế) rồi **"⭐ Đánh Giá"** như thường — bỏ qua
+  bước "Xác Nhận Đăng Ký" (không có ai để xác nhận). Phiếu dùng **xe đội nhà
+  giữ NGUYÊN luật cũ**: chỉ tài xế được phân công mới kết thúc chuyến, chỉ
+  người đăng ký mới đánh giá. Cùng đợt: đổi "Loại xe cụ thể" sang Taxi khi
+  chuyến **đang thực hiện** nay cũng tự đưa trạng thái về "Đã Phê Duyệt" (trước
+  đây phiếu kẹt vĩnh viễn, giống hệt lỗi đổi tài xế đã vá trước đó).
+  **Đối chiếu danh mục khi phân công xe (từ 10/2026)** — "Loại xe cụ thể" và
+  "Hãng Taxi" lưu vào phiếu nay bắt buộc phải khớp đúng 1 mục trong danh mục
+  tương ứng (`carVehicleTypes`/`carTaxiCompanies`), cả lúc Duyệt lẫn ở "🔁 Đổi
+  Tài Xế-Xe"; giá trị lạ/sai chính tả bị từ chối ngay thay vì được lưu (giá trị
+  lệch danh mục làm hỏng logic tự dọn BKS/Hãng Taxi khi chuyển Taxi).
+  **Tab "📊 Báo Cáo" đọc KM THỰC TẾ + nêu rõ phạm vi (từ 10/2026)** — mọi con số
+  KM ở tab này (thẻ "Tổng Số KM", thanh theo Lái Xe, bảng xu hướng theo kỳ) nay
+  cộng **số km thực tế** (lái xe báo lúc Kết Thúc Chuyến, người đăng ký có thể
+  chỉnh lúc Đánh Giá), chỉ dùng KM dự kiến cho chuyến CHƯA kết thúc — trước đây
+  cộng KM dự kiến nên mâu thuẫn với bảng "Lịch Sử Đánh Giá Chuyến" ngay bên
+  dưới. Ngoài ra, người xem **không có quyền xem xe toàn công ty** sẽ thấy dòng
+  chú thích "số liệu theo PHẠM VI XEM của bạn" kèm tên phòng ban trong phạm vi —
+  số liệu vốn đã được lọc theo quyền, trước đây trình bày như số liệu toàn công
+  ty nên dễ hiểu nhầm là thiếu dữ liệu.
   **Quyền Xem/Tải Phiếu Phê Duyệt siết hẹp hơn (từ 9/2026)** — trước đây bất kỳ
   ai xem được dòng đăng ký (kể cả chỉ có quyền xem theo phòng ban, không liên
   quan trực tiếp tới chuyến) đều xem/tải được Phiếu Phê Duyệt chính thức; nay
@@ -790,6 +826,18 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đang xem (1 ngày/1 tuần/1 tháng), nút "Hôm nay" đưa về ngày hệ thống hiện tại
   ngay lập tức — giúp lướt xem trước phòng nào còn trống trong cả tuần/tháng
   tới trước khi quyết định đặt ngày nào, thay vì phải dò từng ngày một.
+  **Lịch Họp hiện phòng bận của TOÀN CÔNG TY (từ 10/2026)** — quyền "Xem lịch
+  họp" (`meetingView`) mặc định chỉ thấy lịch của phòng ban mình, nên lưới Lịch
+  Họp trước đây hiện "Trống" ở đúng những khung giờ phòng ban KHÁC đã đặt:
+  người dùng chọn khung giờ đó, bấm Gửi và bị báo trùng lịch mà không hiểu vì
+  sao. Nay lưới Lịch Họp (cả 3 chế độ) và bước kiểm tra trùng giờ lúc Gửi đọc
+  thêm dữ liệu **chiếm chỗ toàn công ty** — ô bận hiện ĐỎ cho mọi người, nhưng
+  **chỉ hiện "Phòng đang bận (lịch của đơn vị khác)"**: tiêu đề/nội dung/người
+  đặt của cuộc họp đơn vị khác KHÔNG bị lộ, danh sách "Lịch Họp" ở tab Đăng Ký
+  vẫn lọc theo đúng phạm vi xem như cũ.
+  **Trạng thái lịch mới luôn là "Chờ duyệt"** — lịch vừa đặt luôn do server gán
+  trạng thái chờ duyệt và xoá mọi thông tin "người duyệt" gửi kèm; chỉ nút
+  "Duyệt" (quyền `meetingApprove`) mới ghi được người duyệt/thời điểm duyệt.
 - **Văn Phòng Phẩm (VPP)** — theo **kỳ đăng ký**: admin tạo kỳ + danh mục mặt
   hàng có đơn giá, mỗi phòng ban có **ngân sách phòng ban** = số nhân sự đang
   hoạt động của phòng (admin có thể sửa tay lại số nhân sự gợi ý này) ×
@@ -822,6 +870,13 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đã giữ chỗ cho người khác trong phòng dùng tiếp. Màn "Báo Cáo Tổng Hợp" (chỉ
   vppManage/admin) hiện cột "Còn Lại (Sau Chờ Duyệt)" đúng bằng số hệ thống
   dùng để chặn (trừ cả Chờ Duyệt, không chỉ Đã Duyệt).
+  **Kiểm lại điều kiện đăng ký ở CẢ 3 mốc (từ 10/2026)** — 2 điều kiện "được
+  đăng ký VPP" (có quyền **Người đăng ký VPP** `vppRegisterCreate` + chức danh
+  KHÔNG nằm trong "Nhóm Không Cấp Văn Phòng Phẩm") trước đây chỉ kiểm lúc **tạo
+  nháp**; nay kiểm lại cả lúc **Gửi phê duyệt** và **Sửa nháp**. Hệ quả thực tế:
+  admin rút quyền đăng ký của ai đó, hoặc đưa chức danh của họ vào "Nhóm Không
+  Cấp VPP", thì các bản nháp họ tạo trước đó KHÔNG còn gửi/sửa tiếp được nữa
+  (trước đây vẫn lọt qua).
   **"🚫 Hủy Đăng Ký" khi chưa ai duyệt (từ 9/2026)** — cùng cơ chế "Hủy Đăng
   Ký" đã có ở Đăng Ký Xe (xem mục trên): đăng ký đang Chờ Duyệt mà CHƯA ai xử
   lý gì cả (còn đúng bước duyệt đầu tiên) thì người tạo (hoặc admin) tự hủy
@@ -875,7 +930,12 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   bấm nút "✅ Xác nhận hộ (đã nghỉ việc)" hiện ngay tại bảng "Lịch Sử Cấp
   Phát" cho đúng phiếu đó (nút CHỈ hiện khi tài khoản nhân viên đã inactive —
   còn hoạt động vẫn bắt buộc tự nhân viên xác nhận), ghi rõ "(xác nhận hộ,
-  nhân viên đã nghỉ việc)" trong lịch sử.
+  nhân viên đã nghỉ việc)" trong lịch sử. **Từ 10/2026**: Giám Đốc Siêu Thị chỉ
+  xác nhận hộ được phiếu của **CHÍNH siêu thị mình** (khớp đúng 2 thao tác chị
+  em cùng module: xác nhận phân bổ theo kỳ, cấp phát cho nhân viên) — trước đây
+  quản lý kho siêu thị A xác nhận hộ được cả phiếu của siêu thị B. Riêng Admin
+  vẫn xác nhận hộ xuyên siêu thị được (lối thoát cuối khi cả nhân viên lẫn quản
+  lý kho của siêu thị đó đều không còn tài khoản hoạt động).
   **Báo cáo Đồng Phục theo siêu thị**: bộ lọc siêu thị của riêng báo cáo Đồng
   Phục là **chọn nhiều** (tick chọn một nhóm siêu thị bất kỳ, có nút "Chọn Tất
   Cả"/"Bỏ Chọn Hết") — báo cáo hiện dòng "Tổng Cộng (N siêu thị đã chọn)" cộng
@@ -2206,7 +2266,9 @@ Báo Cáo tổng hợp không lặp lại phần này.
 
 **Vòng đời mẫu — Nháp → Đang dùng → Lưu trữ, đủ nút theo trạng thái + quyền
 (từ v23.4-v23.5)**: bảng "🛠️ Cấu Hình" hiện nút khác nhau tuỳ trạng thái:
-- **Nháp**: Sửa (trực tiếp) / Kích Hoạt / Xoá (chỉ Admin).
+- **Nháp**: Sửa (trực tiếp) / Kích Hoạt / Xoá (chỉ Admin). **KHÔNG** có "Nhân
+  Bản" (từ 10/2026) — mẫu Nháp vốn sửa thẳng được nên server luôn từ chối nhân
+  bản bản Nháp; trước đây nút vẫn hiện, bấm vào chỉ nhận thông báo lỗi.
 - **Đang dùng**: Xem / ✏️ Sửa / ⏸️ Dừng / 🗑️ Xoá (chỉ Admin, khoá nếu đã có
   bài nộp) / Nhân Bản.
 - **Lưu trữ**: Xem / ✏️ Sửa / 🔄 Kích Hoạt Lại / 🗑️ Xoá (chỉ Admin, khoá nếu
@@ -2221,7 +2283,11 @@ gộp sẵn 2 bước cũ thành 1 lần bấm: tự **Nhân Bản** (tạo 1 b�
 Nháp đó — sửa xong bấm **"Kích Hoạt"** để đưa bản mới lên Đang dùng (tự
 chuyển bản Đang dùng cũ sang Lưu Trữ cùng `templateCode`). Muốn sửa nội dung
 mà KHÔNG cần tạo phiên bản mới → chỉ sửa trực tiếp được khi mẫu còn ở trạng
-thái Nháp.
+thái Nháp. **Số phiên bản khi Nhân Bản (từ 10/2026)**: luôn lấy **version lớn
+nhất đang tồn tại của cùng `templateCode` + 1**, không phải version của bản
+nguồn + 1 — trước đây nhân bản từ 1 bản **Lưu Trữ** cũ (VD v1, trong khi đã có
+v2 Đang dùng) tạo ra thêm 1 "v2" thứ hai trùng số phiên bản, không phân biệt
+được ở danh sách/báo cáo.
 
 **⏸️ Dừng / 🔄 Kích Hoạt Lại (từ v23.4/v23.5)**: "⏸️ Dừng" chuyển 1 mẫu Đang
 dùng sang Lưu Trữ thủ công mà KHÔNG cần kích hoạt bản thay thế ngay (VD
@@ -2287,7 +2353,12 @@ LIÊN TỤC xuyên suốt toàn bộ mẫu chứ không reset theo từng câu, 
 lựa chọn của bất kỳ câu nào trước đó, không chỉ câu liền trước). Câu/lựa
 chọn đánh dấu **"Bắt buộc"** hoặc **"Lỗi nghiêm trọng" (Critical Fail)** thì
 khi chọn lựa chọn Critical Fail bắt buộc phải đính kèm ảnh minh chứng mới
-hoàn tất được bài đánh giá.
+hoàn tất được bài đánh giá. **Ảnh minh chứng chỉ nhận TỆP ẢNH (từ 10/2026)** —
+kiểm tra lại đúng tại bước gắn ảnh vào bài làm (`.jpg/.jpeg/.png/.webp`, hoặc
+đúng danh sách admin cấu hình riêng cho mục "Ảnh minh chứng Checklist" ở **Hệ
+Thống → Quản Lý Tệp File**), không còn phụ thuộc vào thông tin "thuộc mục nào"
+do trình duyệt khai lúc tải tệp lên — trước đây có thể lách để đính kèm tệp
+.pdf/.docx làm "ảnh" minh chứng.
 
 **Chấm điểm & kết luận** — khi hoàn tất (Kết Thúc & Nộp), hệ thống tự tính
 `scorePercent` (tỉ lệ lựa chọn `isPassing`/tổng số câu bắt buộc) và

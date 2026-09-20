@@ -21,6 +21,33 @@ const ACTIONS = {
   cancel: { perm: 'meetingCancel', status: 'CANCELLED' }
 };
 
+// GET /api/meetings/busy-slots — LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao): lưới "Lịch Họp"
+// (renderMeetingCalendarDayView()/computeMeetingDaySummary()/findMeetingConflict() ở
+// public/js/module-phonghop.js) đọc THẲNG DB.meetings — vốn đã bị GET /api/data lọc theo phạm vi xem
+// (filterMeetingsForUser()/canViewMeeting(), lib/recordViewScope.js: meetingView mặc định hẹp theo
+// phòng ban). Nhưng lưới này tồn tại ĐÚNG để trả lời câu hỏi "phòng nào còn trống" TOÀN CÔNG TY, nên
+// với người dùng thường nó hiện "Trống" giả ở đúng những khung giờ phòng ban khác đã đặt: người dùng
+// chọn khung giờ đó, bấm gửi, rồi bị server trả 409 "đã có lịch trùng khung giờ" mà trên màn hình
+// không có gì giải thích.
+// Route này trả về CHỈ dữ liệu CHIẾM CHỖ (id/room/startTime/endTime/status) của MỌI lịch chưa huỷ cho
+// MỌI người đã đăng nhập — KHÔNG kèm title/agenda/người đặt/phòng ban (nội dung cuộc họp của phòng ban
+// khác vẫn phải đi qua GET /api/data với đúng phạm vi cũ, không nới thêm gì). `id` có trong kết quả chỉ
+// để client ghép lại với chính những lịch mình ĐÃ được phép xem (hiện chi tiết đầy đủ), không lộ gì
+// thêm. ĐẶT TRƯỚC route POST /:id/:action bên dưới — khác method nên không thể trùng khớp, nhưng giữ
+// đúng thứ tự "route tĩnh trước route động" cho dễ đọc.
+router.get('/busy-slots', async (req, res) => {
+  try {
+    const all = await getAllForCollection('meetings');
+    const items = (all || [])
+      .filter(m => m && m.status !== 'CANCELLED' && m.room)
+      .map(m => ({ id: m.id, room: m.room, startTime: m.startTime, endTime: m.endTime, status: m.status }));
+    res.json({ ok: true, items });
+  } catch (err) {
+    console.error('GET /api/meetings/busy-slots lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tải dữ liệu phòng trống/bận' });
+  }
+});
+
 // POST /api/meetings/:id/approve|cancel
 router.post('/:id/:action', async (req, res) => {
   const { id, action } = req.params;

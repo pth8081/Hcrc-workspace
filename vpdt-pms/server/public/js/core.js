@@ -3735,6 +3735,21 @@ async function callCreateAction(moduleKey, payload) {
   return body; // { ok, item }
 }
 
+// GET /api/meetings/busy-slots — danh sách khung giờ ĐANG CHIẾM CHỖ của MỌI phòng họp toàn công ty
+// (chỉ {id, room, startTime, endTime, status}, KHÔNG có tiêu đề/người đặt — xem routes/meetingActions.js).
+// Dùng riêng cho lưới "Lịch Họp"/kiểm tra trùng giờ lúc đăng ký, vì DB.meetings đã bị lọc theo phạm vi
+// xem nên KHÔNG phản ánh đúng phòng nào thật sự còn trống (LỖI ĐÃ VÁ 10/2026).
+async function fetchMeetingBusySlots() {
+  const res = await fetch('/api/meetings/busy-slots');
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return Array.isArray(body.items) ? body.items : [];
+}
+
 async function callMeetingAction(id, action) {
   const res = await fetch(`/api/meetings/${id}/${action}`, { method: 'POST' });
   if (res.status === 401) {
@@ -7897,6 +7912,17 @@ function isCarRegPostApproval(c) {
 // quan trực tiếp tới chuyến này) và HẸP HƠN canDownloadFile() dùng chung cho MỌI module (vốn có
 // fallback ngầm "cùng phòng ban" mặc định) — CHỈ riêng Phiếu Đăng Ký Xe áp dụng giới hạn chặt hơn này
 // theo đúng yêu cầu người dùng, không đổi hành vi canDownloadFile() cho các module khác.
+// GIỚI HẠN ĐÃ BIẾT (ghi nhận ở đợt rà soát chuyên sâu 10/2026, mức Thấp — CHƯA vá, cần thiết kế lại):
+// hàm này thuần là lớp GIAO DIỆN. Phiếu Phê Duyệt được dựng HOÀN TOÀN Ở CLIENT từ chính bản ghi carReg
+// đã có sẵn trong DB.carRegs, mà GET /api/data vẫn trả bản ghi đó cho mọi người trong phạm vi
+// canViewCarReg() (lib/recordViewScope.js — gồm cả đồng nghiệp cùng phòng ban có quyền carView). Nghĩa
+// là đồng nghiệp cùng phòng KHÔNG thấy nút Xem/Tải nhưng vẫn đọc được đúng những dữ liệu in trên phiếu
+// (mã, lộ trình, giờ, người đăng ký, lịch sử duyệt) qua API.
+// Muốn siết thật thì phải đổi ở TẦNG SERVER, và đó là 1 thay đổi thiết kế có rủi ro nghiệp vụ: hoặc
+// tách riêng 1 route "dựng phiếu" gác theo đúng danh sách hẹp này, hoặc cắt bớt field khi trả
+// GET /api/data cho người ngoài nhóm — cả 2 đều đụng luồng "cùng phòng ban xem được phiếu đăng ký xe"
+// vốn CÓ Ý NGHĨA NGHIỆP VỤ riêng (danh sách/dashboard/Lịch Xe/Báo Cáo đều đọc chung mảng này). KHÔNG tự
+// ý đổi trong 1 lượt vá lẻ — cần người dùng xác nhận phạm vi mong muốn trước.
 function canAccessCarApprovalSlip(user, c) {
   if (!user || !c) return false;
   if (user.perms?.admin) return true;

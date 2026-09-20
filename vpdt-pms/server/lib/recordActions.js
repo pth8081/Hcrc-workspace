@@ -2249,6 +2249,11 @@ function canDeleteMinutes(user) {
 }
 
 const MINUTES_EDITABLE_FIELDS = ['linkedMeetingId', 'title', 'time', 'location', 'chair', 'secretary', 'attendees', 'content', 'directives', 'customData'];
+// Field được phép nhận TỪ CLIENT lúc TẠO MỚI (createMinutes() cuối file này) = đúng các field người lập
+// biên bản nhập ở form (submitMeetingMinutes(), public/js/module-bienbanhop.js) + `code`/`createdAt`.
+// MỌI field khác (nhất là tasksAssigned/directives[].taskCreated — 2 cờ KHOÁ vòng đời biên bản) do
+// server tự gán, xem chú thích tại createMinutes().
+const MINUTES_CREATE_ALLOWED_FIELDS = ['code', 'createdAt', ...MINUTES_EDITABLE_FIELDS];
 
 function editMinutes(payload, user, minutes) {
   if (!canEditMinutes(user, minutes)) {
@@ -2260,6 +2265,10 @@ function editMinutes(payload, user, minutes) {
     throw new HttpError(403, 'Biên bản này đã giao việc nên bị khoá, không thể sửa (chỉ Admin được sửa trong trường hợp khẩn cấp)');
   }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  // Ảnh chụp danh sách chỉ đạo TRƯỚC khi ghi đè (vòng lặp MINUTES_EDITABLE_FIELDS bên dưới thay cả mảng)
+  // — dùng để TỰ TÍNH LẠI cờ taskCreated ở cuối hàm, xem chú thích ở đó.
+  const originalDirectives = Array.isArray(minutes.directives) ? minutes.directives : [];
 
   // Dòng chỉ đạo đã "Giao việc" (taskCreated=true) đã sinh ra 1 Công Việc THẬT (buildTasksFromDirectives()
   // ở trên) — hệ thống KHÔNG có cơ chế đồng bộ lại Công Việc khi biên bản đổi sau đó, nên PHẢI giữ
@@ -2307,6 +2316,19 @@ function editMinutes(payload, user, minutes) {
   for (const field of MINUTES_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) minutes[field] = payload[field];
   }
+  // taskCreated là cờ do SERVER sinh ra ở bước "Giao việc" (assignMinutesTasks()) — KHÔNG nhận từ
+  // payload (cùng lớp lỗi đã vá ở createMinutes(): client tự đặt taskCreated=true cho 1 dòng chỉ đạo
+  // CHƯA từng sinh Công Việc nào sẽ khoá vĩnh viễn dòng đó — không giao việc được nữa vì
+  // buildTasksFromDirectives() bỏ qua dòng đã taskCreated, mà cũng không sửa/xoá được vì chính guard
+  // phía trên chặn). Tính LẠI từ bản ghi cũ (client vẫn gửi kèm cờ này, chỉ là không còn được tin).
+  if (payload.directives !== undefined) {
+    const oldDirectivesById = new Map(originalDirectives.filter(d => d && d.id != null).map(d => [d.id, d]));
+    minutes.directives = (Array.isArray(minutes.directives) ? minutes.directives : []).map((d, idx) => {
+      const row = (d && typeof d === 'object') ? d : {};
+      const old = (row.id != null) ? oldDirectivesById.get(row.id) : originalDirectives[idx];
+      return { ...row, taskCreated: !!(old && old.taskCreated) };
+    });
+  }
   minutes.lastEditedBy = user.username;
   minutes.lastEditedAt = nowVN();
   // "directiveIdMigrations" chỉ để route đọc và đồng bộ Task ngay sau khi lưu — KHÔNG thuộc bản ghi
@@ -2348,9 +2370,27 @@ function createMinutes(payload, user, existingCollection, formTemplates) {
     if (dup) throw new HttpError(409, `Mã "${payload.code}" đã tồn tại`);
   }
 
-  const record = { ...payload, id: Date.now() };
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Trung bình): hàm này trước đây trải NGUYÊN payload client
+  // (`{ ...payload }`) rồi chỉ ghi đè creator/creatorName — người có quyền minutesCreate tự soạn 1
+  // request kèm `tasksAssigned: true` là tạo ra ngay 1 biên bản KHÔNG AI sửa/xoá được nữa (kể cả Admin:
+  // editMinutes() chặn sửa khi tasksAssigned, assertCanDeleteMinutes() chặn xoá HẲN với mọi người), và
+  // `directives[].taskCreated: true` khiến chính những dòng chỉ đạo đó vĩnh viễn không "Giao việc" được
+  // (buildTasksFromDirectives() bỏ qua dòng đã taskCreated) trong khi editMinutes() lại khoá cứng không
+  // cho sửa/xoá chúng. Whitelist đúng các field thuộc về NGƯỜI LẬP biên bản + gán cứng server-side mọi
+  // field TRẠNG THÁI/vòng đời — cùng khuôn createTask() ngay dưới (status/sourceType/history...).
+  const record = {};
+  for (const field of MINUTES_CREATE_ALLOWED_FIELDS) {
+    if (payload[field] !== undefined) record[field] = payload[field];
+  }
+  record.id = Date.now();
   record.creator = user.username;
   record.creatorName = user.name;
+  // Biên bản mới LUÔN ở trạng thái "chưa giao việc" — chỉ assignMinutesTasks() (nút "Giao việc" thủ
+  // công, sau khi đã tạo Task thật) mới được bật 2 cờ này.
+  record.tasksAssigned = false;
+  record.directives = (Array.isArray(record.directives) ? record.directives : [])
+    .map(d => ({ ...(d && typeof d === 'object' ? d : {}), taskCreated: false }));
+  record.attendees = Array.isArray(record.attendees) ? record.attendees : [];
   return record;
 }
 
@@ -3020,7 +3060,8 @@ function editTask(payload, user, task, usersList) {
   // nhận lúc đang DOING nay bắt buộc reset về TODO (yêu cầu người mới tự "Nhận việc" lại từ đầu) và
   // xoá subtask cũ (đã gắn tiến độ/ngữ cảnh của người cũ, không còn ý nghĩa với người mới) — ghi rõ vào
   // lịch sử để không mất dấu vết.
-  const reassignedWhileDoing = task.assignedTo && task.assignedTo !== payload.assignedTo && task.status === 'DOING';
+  const reassignedToSomeoneElse = !!(task.assignedTo && task.assignedTo !== payload.assignedTo);
+  const reassignedWhileDoing = reassignedToSomeoneElse && task.status === 'DOING';
   task.title = payload.title;
   task.description = payload.description || '';
   task.deadline = newDeadline;
@@ -3056,6 +3097,25 @@ function editTask(payload, user, task, usersList) {
       note: `Đổi người nhận từ ${previousAssignedTo} sang ${payload.assignedTo} lúc đang Đang thực hiện — tự đưa về Chưa nhận việc, xoá ${droppedSubtaskCount} công việc nhỏ cũ (thuộc về người nhận trước)`
         + (droppedPendingNote.length ? `, tự huỷ ${droppedPendingNote.join(' và ')} còn treo của người nhận trước` : '')
     });
+  } else if (reassignedToSomeoneElse) {
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Trung bình): bản vá ngay phía trên CHỈ phủ nhánh DOING
+    // — nhưng requestExtension()/cancelOrRequestCancelTask() (lib/recordActions.js) chỉ chặn khi việc đã
+    // DONE/CANCELLED, nghĩa là người nhận việc gửi được "Xin gia hạn"/"Xin huỷ" NGAY KHI việc còn TODO
+    // (chưa bấm Nhận việc). Đổi người nhận lúc đó để lại y nguyên object treo của người CŨ: người MỚI
+    // không thể bấm "Hoàn thành" (updateTaskStatusAction() chặn 409 "còn yêu cầu chờ duyệt") và cũng
+    // không gửi được yêu cầu của chính mình (requestExtension() chặn 409 "đang có 1 yêu cầu chờ duyệt")
+    // — hệt bế tắc đã vá cho nhánh DOING. Dọn sạch cho MỌI trạng thái khi đổi người nhận.
+    const droppedPendingNote = [];
+    if (task.pendingExtension) droppedPendingNote.push('yêu cầu xin gia hạn');
+    if (task.pendingCancellation) droppedPendingNote.push('yêu cầu xin huỷ');
+    if (droppedPendingNote.length) {
+      task.pendingExtension = null;
+      task.pendingCancellation = null;
+      task.history.push({
+        action: 'REASSIGNED_RESET', by: user.username, byName: user.name, time: nowVN(),
+        note: `Đổi người nhận từ ${previousAssignedTo} sang ${payload.assignedTo} — tự huỷ ${droppedPendingNote.join(' và ')} còn treo của người nhận trước`
+      });
+    }
   }
   return task;
 }
@@ -3457,8 +3517,27 @@ function closeVppPeriod(user, period) {
 // (status PENDING hoặc APPROVED — REJECTED/DRAFT không tính, xem CALLER routes/records.js) — CALLER tự
 // đọc lại NGAY TRONG khoá vpp_dept_budget:<periodId>:<dept> (withAppLock) trước khi gọi hàm này, để
 // không đọc thấy số liệu cũ nếu có request khác đang xử lý song song cùng phòng/cùng kỳ.
-function submitVppRegistration(user, item, period, siblingRegs) {
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Trung bình): 2 điều kiện "ai được đăng ký Văn Phòng Phẩm"
+// (có quyền vppRegisterCreate + chức danh KHÔNG nằm trong "Nhóm Không Cấp VPP") trước đây CHỈ được kiểm
+// ở đúng lúc TẠO NHÁP (CREATE_MODULE_CONFIGS.vppRegistrations.extraValidate, lib/createValidation.js) —
+// nháp tạo hợp lệ hôm trước vẫn "Gửi"/"Sửa" được bình thường sau khi admin đã RÚT quyền đăng ký hoặc đã
+// thêm chức danh của người đó vào Nhóm Không Cấp VPP (2 thao tác quản trị có hiệu lực ngay ở mọi nơi
+// khác). Kiểm lại ở CẢ 2 mốc còn lại bằng đúng 1 hàm dùng chung dưới đây.
+// excludedJobTitles: CALLER (routes/records.js) đọc appData.vppExcludedJobTitles rồi truyền vào — hàm
+// thuần, không tự đọc DB (cùng khuôn `period`/`siblingRegs`).
+function assertCanStillRegisterVpp(user, excludedJobTitles) {
+  if (!user?.perms?.admin && !user?.perms?.vppRegisterCreate) {
+    throw new HttpError(403, 'Bạn không có quyền đăng ký Văn Phòng Phẩm — liên hệ người được uỷ quyền đăng ký của phòng mình');
+  }
+  const excluded = Array.isArray(excludedJobTitles) ? excludedJobTitles : [];
+  if (user.jobTitle && excluded.includes(user.jobTitle)) {
+    throw new HttpError(403, 'Bạn không thuộc diện được đăng ký Văn phòng phẩm');
+  }
+}
+
+function submitVppRegistration(user, item, period, siblingRegs, excludedJobTitles) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được gửi hồ sơ này');
+  assertCanStillRegisterVpp(user, excludedJobTitles);
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp (có thể đã gửi hoặc đã bị xử lý)');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -3534,8 +3613,10 @@ function cancelVppRegistration(user, item, payload) {
 
 // period: bản ghi kỳ đăng ký tương ứng item.periodId — CALLER (routes/records.js) tự đọc trước rồi
 // truyền vào (hàm này không tự đọc DB, giữ đúng nguyên tắc chung — xem đầu file lib/createValidation.js).
-function updateVppRegistrationDraft(user, item, payload, period) {
+function updateVppRegistrationDraft(user, item, payload, period, excludedJobTitles) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được sửa hồ sơ này');
+  // Cùng 2 điều kiện với lúc TẠO/GỬI — xem assertCanStillRegisterVpp() ở trên (LỖI ĐÃ VÁ 10/2026).
+  assertCanStillRegisterVpp(user, excludedJobTitles);
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp, không thể sửa');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -6045,6 +6126,15 @@ function acknowledgeUniformIssuance(user, item, usersList) {
     throw new HttpError(403, 'Bạn chỉ xác nhận được phiếu cấp phát của chính mình');
   }
   if (!isOwner && isStoreManager) {
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Thấp): nhánh "xác nhận hộ" này KHÔNG hề đối chiếu siêu
+    // thị — quản lý kho của siêu thị A xác nhận hộ được phiếu cấp phát của siêu thị B (chỉ cần biết id
+    // phiếu), khác hẳn 2 hàm chị em cùng module vốn luôn khoá theo user.dept
+    // (confirmUniformAllocation(): `alloc.dept !== user.dept`; buildUniformIssuance():
+    // `employee.dept !== user.dept`). Admin vẫn đi xuyên siêu thị được — đây là lối thoát cuối cùng cho
+    // phiếu treo khi cả nhân viên LẪN quản lý kho của siêu thị đó đều không còn tài khoản hoạt động.
+    if (!user.perms?.admin && item.dept !== user.dept) {
+      throw new HttpError(403, 'Bạn chỉ xác nhận hộ được phiếu cấp phát của siêu thị mình');
+    }
     const employee = (usersList || []).find(u => u.username === item.employeeUsername);
     if (employee && employee.active !== false) {
       throw new HttpError(403, 'Nhân viên nhận phiếu này vẫn đang hoạt động — chỉ chính nhân viên mới tự xác nhận được');
@@ -6753,19 +6843,55 @@ function confirmCarDriverAssignment(user, carReg) {
 // (evaluateCarTrip) -> bắt buộc, cho phép chỉnh lại KM lái xe nhập, chuyển COMPLETED. driverReportedKm
 // giữ NGUYÊN giá trị lái xe nhập ban đầu (audit trail, không bị ghi đè) trong khi actualKm là giá trị
 // "hiện hành" (= driverReportedKm lúc mới kết thúc chuyến, có thể bị người đánh giá sửa lại).
-function canEndCarTrip(user, carReg) {
-  return !!(carReg?.assignedDriverUsername && user?.username === carReg.assignedDriverUsername);
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao — "phiếu Taxi không bao giờ tới được COMPLETED"):
+// phiếu được phân công đi TAXI (Loại xe cụ thể có cờ isTaxi, xem danh mục carVehicleTypes) theo THIẾT
+// KẾ không có tài xế hệ thống nào (applyWorkflowAction()/reassignCarDispatch() còn XOÁ hẳn tài xế khi
+// chuyển sang Taxi) — nhưng cả 3 mốc sau duyệt (Xác Nhận Đăng Ký/Kết Thúc Chuyến/Đánh Giá) trước đây
+// đều bắt buộc khớp assignedDriverUsername hoặc đòi status IN_PROGRESS (chỉ đạt được qua bước Xác Nhận
+// của tài xế), nên APPROVED là NGÕ CỤT: không ai kết thúc/đánh giá được, phiếu Taxi mãi không hoàn
+// thành và không bao giờ có actualKm để báo cáo. Nay với phiếu Taxi: người đăng ký (creator) HOẶC
+// Người Điều Hành Xe (carDispatch)/admin tự thực hiện "Kết Thúc Chuyến" + "Đánh Giá" — bỏ qua yêu cầu
+// khớp tài xế/driverConfirmed, giữ NGUYÊN mọi ràng buộc cũ cho phiếu xe đội nhà (có tài xế).
+// carVehicleTypes: CALLER (routes/records.js) đọc danh mục rồi truyền vào — hàm thuần, không tự đọc DB
+// (cùng khuôn reassignCarDispatch()). Thiếu tham số này (chỗ gọi cũ/test cũ) thì coi như không phải
+// Taxi -> hành vi y hệt trước khi vá.
+function isTaxiCarReg(carReg, carVehicleTypes) {
+  if (!carReg?.assignedVehicleType) return false;
+  const matched = (carVehicleTypes || []).find(t => t.name === carReg.assignedVehicleType);
+  return !!matched?.isTaxi;
 }
 
-function endCarTrip(user, carReg, payload) {
-  if (!canEndCarTrip(user, carReg)) {
-    throw new HttpError(403, 'Bạn không phải là lái xe được phân công cho phiếu đăng ký này');
+function canManageTaxiCarTrip(user, carReg) {
+  if (!user || !carReg) return false;
+  return !!(carReg.creator === user.username || user.perms?.admin || user.perms?.carDispatch);
+}
+
+function canEndCarTrip(user, carReg, carVehicleTypes) {
+  if (carReg?.assignedDriverUsername && user?.username === carReg.assignedDriverUsername) return true;
+  if (isTaxiCarReg(carReg, carVehicleTypes)) return canManageTaxiCarTrip(user, carReg);
+  return false;
+}
+
+function endCarTrip(user, carReg, payload, carVehicleTypes) {
+  const isTaxi = isTaxiCarReg(carReg, carVehicleTypes);
+  if (!canEndCarTrip(user, carReg, carVehicleTypes)) {
+    throw new HttpError(403, isTaxi
+      ? 'Chỉ người đăng ký phiếu hoặc Người Điều Hành Xe mới kết thúc được chuyến Taxi này'
+      : 'Bạn không phải là lái xe được phân công cho phiếu đăng ký này');
   }
-  if (carReg.status !== 'IN_PROGRESS') {
-    throw new HttpError(409, 'Chỉ kết thúc chuyến được khi đã xác nhận nhận chuyến (đang thực hiện)');
-  }
-  if (!carReg.driverConfirmed) {
-    throw new HttpError(409, 'Bạn cần xác nhận nhận chuyến trước khi kết thúc chuyến');
+  // Phiếu Taxi không có bước "Xác Nhận Đăng Ký" nên đứng ở APPROVED — vẫn chấp nhận IN_PROGRESS cho hồ
+  // sơ cũ đã lỡ chuyển trạng thái trước khi có bản vá này (không để sót phiếu nào không xử lý tiếp được).
+  if (isTaxi) {
+    if (carReg.status !== 'APPROVED' && carReg.status !== 'IN_PROGRESS') {
+      throw new HttpError(409, 'Chỉ kết thúc chuyến được khi phiếu đã được phê duyệt xong toàn bộ');
+    }
+  } else {
+    if (carReg.status !== 'IN_PROGRESS') {
+      throw new HttpError(409, 'Chỉ kết thúc chuyến được khi đã xác nhận nhận chuyến (đang thực hiện)');
+    }
+    if (!carReg.driverConfirmed) {
+      throw new HttpError(409, 'Bạn cần xác nhận nhận chuyến trước khi kết thúc chuyến');
+    }
   }
   if (carReg.tripEndedAt) {
     throw new HttpError(409, 'Chuyến này đã được kết thúc trước đó');
@@ -6781,12 +6907,18 @@ function endCarTrip(user, carReg, payload) {
   return carReg;
 }
 
-function canEvaluateCarTrip(user, carReg) {
-  return !!(carReg && user?.username === carReg.creator);
+// Phiếu Taxi (xem isTaxiCarReg() ở trên): ngoài creator, cho phép Người Điều Hành Xe (carDispatch)/
+// admin đánh giá hộ — không có tài xế hệ thống nào chịu trách nhiệm chuyến này, và nếu người đăng ký
+// nghỉ việc/khoá tài khoản thì phiếu Taxi sẽ treo mãi ở AWAITING_EVALUATION như lỗi vừa vá ở trên.
+function canEvaluateCarTrip(user, carReg, carVehicleTypes) {
+  if (!carReg || !user) return false;
+  if (user.username === carReg.creator) return true;
+  if (isTaxiCarReg(carReg, carVehicleTypes)) return canManageTaxiCarTrip(user, carReg);
+  return false;
 }
 
-function evaluateCarTrip(user, carReg, payload) {
-  if (!canEvaluateCarTrip(user, carReg)) {
+function evaluateCarTrip(user, carReg, payload, carVehicleTypes) {
+  if (!canEvaluateCarTrip(user, carReg, carVehicleTypes)) {
     throw new HttpError(403, 'Chỉ người đăng ký phiếu này mới được đánh giá chuyến đi');
   }
   if (carReg.status !== 'AWAITING_EVALUATION') {
@@ -6862,16 +6994,19 @@ function cancelCarReg(user, item, payload) {
 // xong toàn bộ quy trình — đây là hàm RIÊNG, cùng logic gán/kiểm tra trùng biển số/reset xác nhận lái
 // xe cũ (mirror ĐÚNG đoạn extraFields ở applyWorkflowAction(), không viết lại cách kiểm tra), chỉ khác
 // điều kiện trạng thái đầu vào.
-function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVehicleTypes) {
+function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVehicleTypes, carTaxiCompanies) {
   if (!(user?.perms?.admin || user?.perms?.carDispatch)) {
     throw new HttpError(403, 'Bạn không có quyền phân công lại xe/lái xe (cần quyền Người Điều Hành Xe)');
   }
   if (item.status !== 'APPROVED' && item.status !== 'IN_PROGRESS') {
     throw new HttpError(409, 'Chỉ đổi tài xế/xe được cho chuyến đã phê duyệt xong (có thể đã hủy/xử lý ở nơi khác)');
   }
-  const { findCarPlateConflict, findCarDriverConflict } = require('./workflowEngine'); // require trễ
+  const { findCarPlateConflict, findCarDriverConflict, assertValidCarAssignmentCatalogs } = require('./workflowEngine'); // require trễ
   // (bên trong hàm) — tránh vòng lặp require ở mức module (workflowEngine.js không require lại
   // recordActions.js nên an toàn).
+  // Đối chiếu danh mục "Loại Xe Cụ Thể"/"Hãng Taxi" — CÙNG hàm applyWorkflowAction() đang dùng cho
+  // nhánh DUYỆT (xem assertValidCarAssignmentCatalogs() ở lib/workflowEngine.js, LỖI ĐÃ VÁ 10/2026).
+  assertValidCarAssignmentCatalogs(payload, carVehicleTypes, carTaxiCompanies, HttpError);
   const newPlate = String(payload?.assignedPlate || '').trim();
   if (newPlate && newPlate !== item.assignedPlate) {
     const conflict = findCarPlateConflict(existingCarRegs, item.id, newPlate, item.startTime, item.endTime);
@@ -6930,6 +7065,15 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
           item.driverConfirmed = false;
           item.driverConfirmedAt = null;
         }
+      }
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao): nhánh CHUYỂN SANG TAXI này xoá tài xế + reset
+      // driverConfirmed nhưng KHÔNG đưa status về APPROVED khi phiếu đang IN_PROGRESS — đúng lỗi "phiếu
+      // kẹt vĩnh viễn" đã vá cho nhánh ĐỔI TÀI XẾ ngay phía trên nhưng bỏ sót ở đây (endCarTrip() đòi
+      // driverConfirmed===true, confirmCarDriverAssignment() đòi status==='APPROVED' — sau khi reset
+      // không điều kiện nào còn đúng). Với Taxi thì phiếu đứng ở APPROVED chờ creator/carDispatch tự
+      // "Kết Thúc Chuyến" (xem canEndCarTrip()/isTaxiCarReg() ở trên).
+      if (item.status === 'IN_PROGRESS') {
+        item.status = 'APPROVED';
       }
     } else {
       item.assignedTaxiCompany = '';
@@ -7191,7 +7335,7 @@ module.exports = {
   recomputeBudgetLineUsageStatus, assertCanDeleteBudgetLineUsedParent, assertCanDeleteBudgetLineChild,
   reopenBudgetLineAfterUsedParentDeleted,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
-  canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip,
+  canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip, isTaxiCarReg,
   canCancelCarReg, cancelCarReg, reassignCarDispatch,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canCancelLicense, cancelLicense,

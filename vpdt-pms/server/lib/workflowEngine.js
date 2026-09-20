@@ -82,6 +82,34 @@ function findCarDriverConflict(existingCarRegs, itemId, driverUsername, startTim
   });
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Trung bình): đối chiếu 2 field phân công xe do "Phần Dành
+// Cho Phòng Hành Chính" gửi lên với ĐÚNG danh mục quản trị của chúng — assignedVehicleType phải là 1
+// mục trong DB.carVehicleTypes (client chỉ có <select> đổ từ danh mục này, xem
+// populateCarAssignedVehicleTypeSelect() ở public/js/core.js), assignedTaxiCompany phải nằm trong
+// DB.carTaxiCompanies. Trước đây cả 2 được ghi nguyên chuỗi client gửi: tên lệch/bịa khiến logic "dọn
+// field đối lập khi chuyển Taxi" (applyWorkflowAction()/reassignCarDispatch()) tra không ra mục danh
+// mục nào và xử lý NHẦM sang nhánh xe đội nhà. Dùng CHUNG cho cả 2 đường ghi (duyệt + đổi tài xế-xe
+// sau duyệt) nên đặt ở đây và export — ErrorClass truyền vào để mỗi bên ném đúng loại lỗi của mình
+// (WorkflowError vs HttpError), vì 2 lớp lỗi này không dùng chung được.
+// Giá trị RỖNG/không gửi = "không đổi field này" -> bỏ qua, không phải lỗi (giữ nguyên hành vi cũ của
+// vòng lặp config.extraFields, vốn chỉ ghi khi giá trị truthy).
+function assertValidCarAssignmentCatalogs(extraFields, carVehicleTypes, carTaxiCompanies, ErrorClass) {
+  const vehicleType = String(extraFields?.assignedVehicleType || '').trim();
+  if (vehicleType) {
+    const list = Array.isArray(carVehicleTypes) ? carVehicleTypes : [];
+    if (!list.some(t => t && t.name === vehicleType)) {
+      throw new ErrorClass(400, `Loại xe cụ thể "${vehicleType}" không có trong danh mục — vui lòng chọn lại`);
+    }
+  }
+  const taxiCompany = String(extraFields?.assignedTaxiCompany || '').trim();
+  if (taxiCompany) {
+    const list = Array.isArray(carTaxiCompanies) ? carTaxiCompanies : [];
+    if (!list.includes(taxiCompany)) {
+      throw new ErrorClass(400, `Hãng taxi "${taxiCompany}" không có trong danh mục — vui lòng chọn lại`);
+    }
+  }
+}
+
 // ===== Văn Bản Trình: quy trình theo loại + lớp phê duyệt bổ sung (khớp index.html) =====
 const SUBMISSION_TYPES = [
   { key: 'CHU_TRUONG', label: 'Tờ trình xin chủ trương' },
@@ -838,6 +866,18 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     // Mục 3 (yêu cầu nghiệp vụ 9/2026): chuyển sang Taxi thì xe không còn thuộc đội xe công ty nữa —
     // XOÁ LUÔN tài xế đã gán (trước đây chỉ dọn biển số, để sót tài xế cũ treo lại dù xe giờ là taxi
     // ngoài — mirror ĐÚNG lỗ hổng vừa vá ở reassignCarDispatch()/lib/recordActions.js).
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Trung bình): 2 field assignedVehicleType/
+    // assignedTaxiCompany trước đây chỉ đi qua vòng lặp config.extraFields phía dưới (ghi NGUYÊN chuỗi
+    // client gửi, không đối chiếu danh mục nào) — 1 request tự soạn gán được "Loại xe cụ thể" bịa/lệch
+    // tên (VD "Xe Taxi " thừa dấu cách) khiến matchedType tra ra undefined: nhánh dọn field Taxi bên
+    // dưới hiểu nhầm là xe đội nhà -> xoá mất assignedTaxiCompany, giữ nguyên biển số/tài xế cho 1 phiếu
+    // đang mang tên loại xe không có thật; "Hãng Taxi" bịa thì hiển thị/in phiếu ra tên hãng không tồn
+    // tại. Đối chiếu CẢ 2 với danh mục ngay tại đây (mirror đúng khuôn validate room theo
+    // DB.meetingRooms ở lib/createValidation.js) — cùng kiểm tra này được lặp lại ở
+    // reassignCarDispatch() (lib/recordActions.js) cho nhánh "Đổi tài xế-xe" sau duyệt.
+    if (moduleKey === 'carRegs') {
+      assertValidCarAssignmentCatalogs(extraFields, appData?.carVehicleTypes, appData?.carTaxiCompanies, WorkflowError);
+    }
     if (moduleKey === 'carRegs' && extraFields?.assignedVehicleType && extraFields.assignedVehicleType !== item.assignedVehicleType) {
       const vehicleTypeList = Array.isArray(appData?.carVehicleTypes) ? appData.carVehicleTypes : [];
       const matchedType = vehicleTypeList.find(t => t.name === extraFields.assignedVehicleType);
@@ -983,6 +1023,7 @@ module.exports = {
   resolveOperationOrderStoreMixedApprovers,
   findCarPlateConflict,
   findCarDriverConflict,
+  assertValidCarAssignmentCatalogs,
   computeOperationOrderAmount,
   computeOperationOrderTier,
   OPERATION_ORDER_STORE_TIERS,

@@ -14,10 +14,38 @@ const { sendCatchError } = require('../lib/errorResponse');
 const { getAllForCollection, insertRecord, withLockedRecordForCollection, withAppLock, deleteRecordForCollection } = require('../lib/recordStore');
 const { assertUploadedFileUrl } = require('../lib/createValidation');
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
+const { getAppDataValueCached } = require('../lib/appData');
 const checklist = require('../lib/checklist');
 const { buildQaReportWorkbook, buildDeductionReportWorkbook } = require('../lib/checklistReportExport');
 
 router.use(requireAuth, blockIfMustChangePassword);
+
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Thấp — "moduleKey do client tự khai"): ràng buộc "ảnh minh
+// chứng CHỈ nhận ảnh" của Checklist trước đây nằm HOÀN TOÀN ở POST /api/upload, và quyết định theo đúng
+// field text `module` mà CHÍNH CLIENT gửi kèm (routes/upload.js, MODULE_DEFAULT_ALLOWED_EXT
+// ['checklistAnswerPhoto']) — 1 request tự soạn chỉ cần khai module='doc' (hoặc bỏ trống) là tải lên
+// được .pdf/.docx/.xlsx rồi gắn thẳng vào ảnh minh chứng qua route .../attachments bên dưới, vì route
+// đó chỉ kiểm hình dạng URL + quyền sở hữu tệp. Server KHÔNG lưu lại moduleKey đã khai nên không truy
+// ngược được — thay vào đó kiểm tra lại ĐUÔI TỆP tại đúng nơi tệp được dùng làm ảnh minh chứng (đuôi
+// trong /uploads/... là đuôi THẬT đã qua verifyFileSignature() đối chiếu chữ ký nhị phân ở bước upload,
+// không giả được bằng cách đổi tên).
+// Danh sách cho phép: đọc đúng cấu hình admin cho 'checklistAnswerPhoto' ("Quản Lý Tệp File") nếu có,
+// không thì rơi về mặc định ảnh — mirror ĐÚNG thứ tự ưu tiên ở routes/upload.js để 2 nơi không lệch nhau.
+const CHECKLIST_PHOTO_DEFAULT_EXT = ['.jpg', '.jpeg', '.png', '.webp'];
+async function assertChecklistPhotoFileUrl(fileUrl) {
+  let allowed = CHECKLIST_PHOTO_DEFAULT_EXT;
+  try {
+    const config = await getAppDataValueCached('uploadFileTypeConfig');
+    const configured = config && config.checklistAnswerPhoto;
+    if (Array.isArray(configured) && configured.length) allowed = configured;
+  } catch (e) {
+    // Lỗi tra cứu cấu hình -> giữ danh sách mặc định (siết chặt), không fail-open.
+  }
+  const ext = String(fileUrl).slice(String(fileUrl).lastIndexOf('.')).toLowerCase();
+  if (!allowed.includes(ext)) {
+    throw new HttpError(400, `Ảnh minh chứng chỉ nhận tệp ảnh (${allowed.join(', ')}) — tệp này là "${ext || 'không rõ'}"`);
+  }
+}
 
 function requireManage(req, res, next) {
   if (!checklist.canManageChecklistTemplates(req.freshUser)) {
@@ -75,10 +103,18 @@ router.post('/templates/:id/clone', requireManage, async (req, res) => {
     // bản Nháp sửa tiếp, đúng yêu cầu người dùng "checklist Lưu Trữ cũng sửa/nhân bản được".
     if (source.status === 'DRAFT') return res.status(409).json({ error: 'Checklist Nháp đã sửa trực tiếp được — không cần nhân bản' });
     const templateKind = source.templateKind || 'QA';
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Thấp): version trước đây luôn = version CỦA BẢN NGUỒN
+    // + 1 — nhân bản từ 1 bản ARCHIVED (được phép từ v23.4) tạo ra version đã TỒN TẠI (VD v1 ARCHIVED +
+    // v2 ACTIVE: nhân bản v1 ra thêm 1 "v2" thứ hai cùng templateCode). 2 dòng cùng mã + cùng số phiên
+    // bản không phân biệt được ở danh sách/báo cáo (UNIQUE INDEX thật chỉ chặn 2 bản CÙNG ACTIVE, xem
+    // route activate bên dưới) nên vẫn lưu được. Lấy version LỚN NHẤT đang có của đúng templateCode + 1.
+    const maxVersionOfCode = templates
+      .filter(t => t.templateCode === source.templateCode)
+      .reduce((max, t) => Math.max(max, Number(t.version) || 1), 0);
     const clone = {
       id: Date.now(),
       templateCode: source.templateCode, templateName: source.templateName, templateType: source.templateType,
-      version: (source.version || 1) + 1, status: 'DRAFT',
+      version: Math.max(maxVersionOfCode, Number(source.version) || 1) + 1, status: 'DRAFT',
       clonedFromTemplateId: source.id, templateKind,
       scoringMode: templateKind === 'DEDUCTION' ? null : (source.scoringMode || 'SCORED'), passThreshold: source.passThreshold,
       questions: templateKind === 'DEDUCTION' ? undefined : source.questions,
@@ -242,6 +278,9 @@ router.post('/submissions/:id/attachments', async (req, res) => {
     const fileUrl = String(req.body?.fileUrl || '').trim();
     assertUploadedFileUrl(fileUrl, 'Ảnh minh chứng');
     if (!fileUrl) return res.status(400).json({ error: 'Thiếu tệp ảnh' });
+    // Chỉ nhận ảnh THẬT, không phụ thuộc moduleKey client đã khai lúc tải lên — xem
+    // assertChecklistPhotoFileUrl() ở đầu file (LỖI ĐÃ VÁ 10/2026).
+    await assertChecklistPhotoFileUrl(fileUrl);
     // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): trước đây route
     // này chỉ xác minh ĐÚNG KHUÔN "/uploads/<tên-file>" (assertUploadedFileUrl ở trên), KHÔNG xác minh
     // người gọi có thật sự là người vừa tải ảnh này lên hay không — cho phép tự đặt fileUrl = đường dẫn

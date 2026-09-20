@@ -504,9 +504,12 @@ function endCarTripAction(carId) {
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const idx = DB.carRegs.findIndex(x => x.id === carId);
       if (idx !== -1) DB.carRegs[idx] = result.item;
-      logSystemAction('CAR', 'END_TRIP', `Lái xe kết thúc chuyến [${result.item.code}] — ${km}km`, 'SUCCESS', result.item.code);
+      logSystemAction('CAR', 'END_TRIP', `Kết thúc chuyến đăng ký xe [${result.item.code}] — ${km}km`, 'SUCCESS', result.item.code);
       alert('✅ Đã kết thúc chuyến! Chờ người đăng ký Đánh Giá để phiếu hoàn thành.');
+      // Gọi được từ CẢ sub-tab "Lái Xe" (tài xế đội nhà) LẪN dòng danh sách (phiếu Taxi — LỖI ĐÃ VÁ
+      // 10/2026, xem runCarAction case 'endTrip') nên vẽ lại cả 2 chỗ, chỗ nào không mở thì tự no-op.
       renderCarDriverTab();
+      renderCarRegs();
     }
   });
 }
@@ -520,6 +523,18 @@ function canCancelCarRegClient(c) {
 }
 function canDispatchCarClient() {
   return !!(currentUser?.perms?.admin || currentUser?.perms?.carDispatch);
+}
+
+// Phiếu được phân công đi TAXI (Loại xe cụ thể có cờ isTaxi trong DB.carVehicleTypes) — mirror ĐÚNG
+// isTaxiCarReg()/canEndCarTrip() ở lib/recordActions.js (server LUÔN tự kiểm tra lại, 2 hàm này chỉ để
+// ẩn/hiện nút). Taxi không có tài khoản lái xe nào nên 2 mốc "Kết Thúc Chuyến"/"Đánh Giá" do người đăng
+// ký hoặc Người Điều Hành Xe tự thực hiện (LỖI ĐÃ VÁ 10/2026 — trước đây phiếu taxi kẹt ở APPROVED).
+function isTaxiCarRegClient(c) {
+  if (!c?.assignedVehicleType) return false;
+  return !!(DB.carVehicleTypes || []).find(t => t.name === c.assignedVehicleType)?.isTaxi;
+}
+function canManageTaxiTripClient(c) {
+  return !!(c && (c.creator === currentUser?.username || canDispatchCarClient()));
 }
 
 // Dùng chung cho cả nút ở dòng danh sách (secondaryOptions) LẪN nút bên trong modal xử lý
@@ -831,9 +846,18 @@ function renderCarRegs() {
             if (c.status === 'PENDING' && (c.currentStep || 1) <= 1 && canCancelCarRegClient(c)) {
               secondaryOptions.push({ value: 'cancelTrip', label: '🚫 Hủy Đăng Ký' });
             }
-            // "Đánh Giá" — CHỈ người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành, xem
-            // canEvaluateCarTrip()/evaluateCarTrip() ở lib/recordActions.js.
-            if (c.status === 'AWAITING_EVALUATION' && c.creator === currentUser.username) {
+            // "Kết Thúc Chuyến" cho phiếu đi TAXI (LỖI ĐÃ VÁ 10/2026): taxi không có tài xế hệ thống
+            // nên sub-tab "Lái Xe" (renderCarDriverTab()) không bao giờ hiện phiếu này — trước đây
+            // APPROVED là NGÕ CỤT, phiếu taxi không bao giờ hoàn thành được. Người đăng ký/Người Điều
+            // Hành Xe tự kết thúc, mirror ĐÚNG canEndCarTrip() ở lib/recordActions.js.
+            if (isTaxiCarRegClient(c) && (c.status === 'APPROVED' || c.status === 'IN_PROGRESS')
+                && canManageTaxiTripClient(c)) {
+              secondaryOptions.push({ value: 'endTrip', label: '🏁 Kết Thúc Chuyến (Taxi)' });
+            }
+            // "Đánh Giá" — người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành; riêng phiếu
+            // Taxi thêm Người Điều Hành Xe/admin, xem canEvaluateCarTrip() ở lib/recordActions.js.
+            if (c.status === 'AWAITING_EVALUATION'
+                && (c.creator === currentUser.username || (isTaxiCarRegClient(c) && canManageTaxiTripClient(c)))) {
               secondaryOptions.push({ value: 'evaluate', label: '⭐ Đánh Giá (bắt buộc)' });
             }
             // "Sửa & Gửi Lại" — chỉ chính người tạo phiếu, chỉ khi đang cần bổ sung (NHÁP do
@@ -862,6 +886,7 @@ function runCarAction(id, action) {
     // secondaryOptions ở trên), KHÔNG bắt buộc phải mở modal "Xử lý/Duyệt" trước.
     case 'reassign': openCarProcessModal(id); break;
     case 'cancelTrip': openCancelCarRegModal(id); break;
+    case 'endTrip': endCarTripAction(id); break;
     case 'evaluate': openEvaluateCarTripModal(id); break;
   }
 }
@@ -1193,6 +1218,18 @@ function isoWeekOf(d) {
   return { year: date.getUTCFullYear(), week };
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Thấp): mọi con số KM ở tab Báo Cáo trước đây cộng dồn
+// `c.km` — số KM DỰ KIẾN người đăng ký TỰ KHAI lúc tạo phiếu, không phải quãng đường thật — trong khi
+// bảng "Lịch Sử Đánh Giá Chuyến" ngay bên dưới CÙNG MÀN lại hiện actualKm (số lái xe nhập lúc Kết Thúc
+// Chuyến, người đăng ký có thể chỉnh lại lúc Đánh Giá, xem endCarTrip()/evaluateCarTrip() ở
+// lib/recordActions.js). 2 khối số liệu cùng 1 màn mâu thuẫn nhau. Ưu tiên KM THỰC TẾ, chỉ rơi về KM dự
+// kiến cho chuyến CHƯA kết thúc (chưa có actualKm) để không tụt về 0 giữa kỳ báo cáo.
+function carRegReportKm(c) {
+  const actual = Number(c?.actualKm);
+  if (Number.isFinite(actual) && c.actualKm !== null && c.actualKm !== '') return actual;
+  return Number(c?.km) || 0;
+}
+
 // Nhóm theo kỳ (Ngày/Tuần/Tháng/Quý/Năm) từ startTime (thời điểm ĐI thật, không phải lúc tạo phiếu) —
 // thay thế groupCarRegsByMonth() cũ (chỉ nhóm theo tháng) — v23.4, yêu cầu người dùng "biểu đồ đăng ký
 // xe theo tháng/tuần/quý/năm (lựa chọn filter)". Chỉ nhận danh sách ĐÃ LỌC SẴN theo trạng thái Đã Duyệt.
@@ -1222,7 +1259,7 @@ function groupCarRegsByPeriod(approvedList, granularity) {
     }
     if (!buckets[key]) buckets[key] = { key, label, count: 0, km: 0 };
     buckets[key].count++;
-    buckets[key].km += Number(c.km) || 0;
+    buckets[key].km += carRegReportKm(c);
   });
   return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -1274,14 +1311,30 @@ function renderCarReportTab() {
   const approved = filtered.filter(c => c.status === 'APPROVED' || c.status === 'IN_PROGRESS' || c.status === 'AWAITING_EVALUATION' || c.status === 'COMPLETED');
   const pending = filtered.filter(c => c.status === 'PENDING');
   const rejected = filtered.filter(c => c.status === 'REJECTED');
-  const totalKm = Math.round(approved.reduce((sum, c) => sum + (Number(c.km) || 0), 0) * 10) / 10;
+  const totalKm = Math.round(approved.reduce((sum, c) => sum + carRegReportKm(c), 0) * 10) / 10;
+
+  // Chú thích phạm vi (LỖI ĐÃ VÁ 10/2026, mức Thấp): DB.carRegs đã được server lọc theo phạm vi xem của
+  // chính người đang đăng nhập (filterCarRegsForUser()/canViewCarReg(), lib/recordViewScope.js) — người
+  // chỉ duyệt/xem 1 vài phòng ban thấy số liệu THIẾU so với toàn công ty nhưng màn hình trước đây trình
+  // bày y như số liệu tổng, không có dấu hiệu nào. Nêu rõ thay vì để hiểu nhầm.
+  const seesAllCarRegs = !!(currentUser?.perms?.admin || currentUser?.perms?.carView?.all);
+  const scopeNoteEl = document.getElementById('carReportScopeNote');
+  if (scopeNoteEl) {
+    scopeNoteEl.classList.toggle('hidden', seesAllCarRegs);
+    if (!seesAllCarRegs) {
+      const scopeDepts = (currentUser?.perms?.carView?.depts || []).join(', ');
+      scopeNoteEl.textContent = 'ℹ️ Số liệu dưới đây tính theo PHẠM VI XEM của bạn'
+        + (scopeDepts ? ` (${scopeDepts})` : '')
+        + ', không phải toàn công ty — các phiếu ngoài phạm vi không được tính.';
+    }
+  }
 
   summaryEl.innerHTML = [
     { label: 'Tổng Số Phiếu', value: filtered.length, colorClass: 'text-blue-700' },
     { label: 'Đã Duyệt', value: approved.length, colorClass: 'text-green-700' },
     { label: 'Đang Chờ Duyệt', value: pending.length, colorClass: 'text-yellow-700' },
     { label: 'Bị Từ Chối', value: rejected.length, colorClass: 'text-red-700' },
-    { label: 'Tổng Số KM (đã duyệt)', value: totalKm, colorClass: 'text-emerald-700' }
+    { label: 'Tổng Số KM (thực tế, đã duyệt)', value: totalKm, colorClass: 'text-emerald-700' }
   ].map(c => `
     <div class="border rounded-lg p-2 text-center bg-white">
       <div class="text-[11px] text-gray-500 font-semibold">${escapeHtml(c.label)}</div>
@@ -1307,7 +1360,7 @@ function renderCarReportTab() {
   const drivers = DB.users.filter(u => u.active !== false && u.isDriver);
   const byDriver = drivers.map(d => {
     const trips = approved.filter(c => c.assignedDriverUsername === d.username);
-    return { name: d.name, count: trips.length, km: Math.round(trips.reduce((s, c) => s + (Number(c.km) || 0), 0) * 10) / 10 };
+    return { name: d.name, count: trips.length, km: Math.round(trips.reduce((s, c) => s + carRegReportKm(c), 0) * 10) / 10 };
   }).sort((a, b) => b.count - a.count);
   const maxDriverCount = Math.max(1, ...byDriver.map(d => d.count));
   const driverBarsEl = document.getElementById('carReportDriverBars');

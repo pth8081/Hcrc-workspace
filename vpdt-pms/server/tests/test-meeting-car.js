@@ -92,7 +92,14 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const collection = moduleKey === 'meetings' ? store.meetings : store.carRegs;
     try {
-      const item = validateAndPrepareCreate(moduleKey, body, activeServerUser, collection, {});
+      // appData PHẢI có meetingRooms thật: từ đợt rà soát 4 (9/2026) CREATE_MODULE_CONFIGS.meetings
+      // đối chiếu payload.room với DB.meetingRooms, truyền `{}` như trước thì MỌI lượt đặt phòng trong
+      // bài test này đều bị chặn "phòng không có trong danh mục" (mock lệch với routes/create.js thật,
+      // vốn luôn đọc appData đầy đủ). Chỉ truyền đúng các danh mục cần, KHÔNG truyền cả seedDB để không
+      // vô tình kéo theo formTemplates (làm đổi hành vi validateRequiredCustomData của bài test).
+      const item = validateAndPrepareCreate(moduleKey, body, activeServerUser, collection, {
+        meetingRooms: seedDB.meetingRooms
+      });
       collection.push(item);
       return sendJson(res, 200, { ok: true, item });
     } catch (err) {
@@ -144,7 +151,15 @@ const server = http.createServer(async (req, res) => {
         // Dùng ĐÚNG carDeptWorkflows đã seed (không hardcode {} như trước) — cần thiết để test được các
         // approver KHÔNG PHẢI admin (canApproveStep chỉ cho qua nếu username có trong approvers[bước],
         // admin luôn bypass nên trước đây hardcode {} vẫn "vô tình" work cho mọi test dùng adminUser).
-        appData: { carDeptWorkflows: store.carDeptWorkflows || {}, workflows: store.workflows || [] },
+        // carVehicleTypes/carTaxiCompanies: từ đợt rà soát 10/2026, applyWorkflowAction() đối chiếu
+        // assignedVehicleType/assignedTaxiCompany với 2 danh mục này (xem
+        // assertValidCarAssignmentCatalogs(), lib/workflowEngine.js) — route thật luôn truyền appData
+        // đầy đủ (getAllAppData()), mock phải theo cho khớp, không thì mọi lượt duyệt có gán xe đều bị
+        // chặn "không có trong danh mục".
+        appData: {
+          carDeptWorkflows: store.carDeptWorkflows || {}, workflows: store.workflows || [],
+          carVehicleTypes: seedDB.carVehicleTypes, carTaxiCompanies: seedDB.carTaxiCompanies
+        },
         existingCollection: store.carRegs, users: store.users
       });
       return sendJson(res, 200, { ok: true, item: outcome.item, transition: outcome.transition });
@@ -224,7 +239,7 @@ const server = http.createServer(async (req, res) => {
     try {
       // carVehicleTypes SỐNG ở seedDB (không phải store) — cùng khuôn appData.carVehicleTypes thật ở
       // routes/records.js (đọc từ getAppDataValue('carVehicleTypes'), KHÔNG PHẢI 1 collection carRegs).
-      const result = recordActions.reassignCarDispatch(activeServerUser, item, body, store.carRegs, store.users, seedDB.carVehicleTypes);
+      const result = recordActions.reassignCarDispatch(activeServerUser, item, body, store.carRegs, store.users, seedDB.carVehicleTypes, seedDB.carTaxiCompanies);
       return sendJson(res, 200, { ok: true, item: result });
     } catch (err) {
       return sendJson(res, err.status || 500, { error: err.message });
@@ -314,7 +329,12 @@ const seedDB = {
   carVehicleTypes: [
     { id: 1, name: 'Xe 5 chỗ', bienSo: '30G-012.82', isTaxi: false },
     { id: 2, name: 'Xe 7 chỗ', bienSo: '30G-468.62', isTaxi: false },
-    { id: 3, name: 'Xe Taxi', bienSo: '', isTaxi: true }
+    { id: 3, name: 'Xe Taxi', bienSo: '', isTaxi: true },
+    // 'Xe 16 chỗ' — dùng ở F7b ("Đổi tài xế-xe" đổi sang loại xe khác). Từ đợt rà soát 10/2026,
+    // assignedVehicleType/assignedTaxiCompany được ĐỐI CHIẾU DANH MỤC ở server
+    // (assertValidCarAssignmentCatalogs(), lib/workflowEngine.js) nên mọi tên loại xe test gửi lên phải
+    // có thật trong danh mục này, không còn gõ tự do được.
+    { id: 4, name: 'Xe 16 chỗ', bienSo: '', isTaxi: false }
   ],
   carTaxiCompanies: ['Mai Linh', 'Vinasun'],
   // carPurposes/meetingRooms: đợt audit "form-fields-6" chuyển 2 danh sách này từ hằng số/hardcode
