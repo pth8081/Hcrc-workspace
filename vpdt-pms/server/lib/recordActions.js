@@ -6444,12 +6444,22 @@ function canConfirmUniformTransferReceipt(user, transfer) {
 
 // allPeriods/allIssuancesOfSourceStore/allAdjustmentsOfSourceStore/allApprovedTransfers: CỦA ĐÚNG siêu
 // thị NGUỒN (= user.dept, caller tự lọc trước khi gọi, giống mọi hàm build...() khác của module này).
-function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceStore, allAdjustmentsOfSourceStore, allApprovedTransfers, formTemplates) {
+// allStores: Danh Mục Siêu Thị THẬT (DB.stores/appData.stores, caller truyền vào) — LỖI ĐÃ VÁ (rà soát
+// chuyên sâu 2, cụm "Hành Chính", mức Trung bình): targetDept TRƯỚC ĐÂY chỉ được gác ở CLIENT
+// (module-dongphuc.js), server không hề đối chiếu lại với Danh Mục Siêu Thị — 1 request tự soạn gửi bất
+// kỳ chuỗi nào làm targetDept vẫn tạo được yêu cầu điều chuyển (Giám Đốc Siêu Thị ĐÍCH không có thật
+// không bao giờ xác nhận nhận hàng được, hàng "kẹt" ở trạng thái APPROVED vĩnh viễn sau khi Hành Chính
+// duyệt). Đối chiếu THẬT ở đây, đúng khuôn meetings.room/carRegs.assignedVehicleType/assignedTaxiCompany
+// (xem lib/createValidation.js).
+function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceStore, allAdjustmentsOfSourceStore, allApprovedTransfers, formTemplates, allStores) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu điều chuyển kho');
   const sourceDept = user.dept; // luôn = siêu thị của người yêu cầu, không cho tự chọn siêu thị khác làm nguồn
   const targetDept = String(payload?.targetDept || '').trim();
   if (!targetDept) throw new HttpError(400, 'Vui lòng chọn siêu thị nhận điều chuyển');
   if (targetDept === sourceDept) throw new HttpError(400, 'Siêu thị nhận phải khác siêu thị nguồn');
+  if (!(Array.isArray(allStores) ? allStores : []).includes(targetDept)) {
+    throw new HttpError(400, `Siêu thị "${targetDept}" không có trong Danh Mục Siêu Thị — vui lòng chọn lại`);
+  }
 
   const itemName = String(payload?.itemName || '').trim().slice(0, 200);
   const size = String(payload?.size || '').trim().slice(0, 30);
@@ -7113,16 +7123,28 @@ function endCarTrip(user, carReg, payload, carVehicleTypes) {
 // Phiếu Taxi (xem isTaxiCarReg() ở trên): ngoài creator, cho phép Người Điều Hành Xe (carDispatch)/
 // admin đánh giá hộ — không có tài xế hệ thống nào chịu trách nhiệm chuyến này, và nếu người đăng ký
 // nghỉ việc/khoá tài khoản thì phiếu Taxi sẽ treo mãi ở AWAITING_EVALUATION như lỗi vừa vá ở trên.
-function canEvaluateCarTrip(user, carReg, carVehicleTypes) {
+//
+// allUsers: DANH SÁCH TOÀN BỘ user (caller truyền vào, xem routes/records.js getFreshUser() -> req.allUsers)
+// — LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Cao): phiếu ĐỘI NHÀ (không phải Taxi) TRƯỚC
+// ĐÂY chỉ `creator` đánh giá được, kể cả admin/carDispatch không được — người đăng ký nghỉ việc/bị khoá
+// tài khoản SAU KHI phiếu đã chuyển AWAITING_EVALUATION làm phiếu kẹt VĨNH VIỄN ở trạng thái này, không
+// ai đóng chuyến được. Mở thêm lối thoát: admin/carDispatch cũng đánh giá được phiếu ĐỘI NHÀ khi
+// `creator.active === false` (đã nghỉ việc/khoá tài khoản) — chọn phương án mở rộng NGƯỜI ĐƯỢC PHÉP đánh
+// giá (thay vì bỏ qua bước đánh giá) để giữ được đầy đủ dữ liệu đánh giá nếu Hành Chính vẫn muốn nhập.
+function canEvaluateCarTrip(user, carReg, carVehicleTypes, allUsers) {
   if (!carReg || !user) return false;
   if (user.username === carReg.creator) return true;
   if (isTaxiCarReg(carReg, carVehicleTypes)) return canManageTaxiCarTrip(user, carReg);
+  if (user.perms?.admin || user.perms?.carDispatch) {
+    const creator = (allUsers || []).find(u => u.username === carReg.creator);
+    if (creator && creator.active === false) return true;
+  }
   return false;
 }
 
-function evaluateCarTrip(user, carReg, payload, carVehicleTypes) {
-  if (!canEvaluateCarTrip(user, carReg, carVehicleTypes)) {
-    throw new HttpError(403, 'Chỉ người đăng ký phiếu này mới được đánh giá chuyến đi');
+function evaluateCarTrip(user, carReg, payload, carVehicleTypes, allUsers) {
+  if (!canEvaluateCarTrip(user, carReg, carVehicleTypes, allUsers)) {
+    throw new HttpError(403, 'Chỉ người đăng ký phiếu này mới được đánh giá chuyến đi (trừ khi người đó đã nghỉ việc/khoá tài khoản — khi đó admin/Người Điều Hành Xe đánh giá hộ được)');
   }
   if (carReg.status !== 'AWAITING_EVALUATION') {
     throw new HttpError(409, 'Chỉ đánh giá được khi lái xe đã kết thúc chuyến, đang chờ đánh giá');

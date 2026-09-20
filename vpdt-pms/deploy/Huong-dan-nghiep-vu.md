@@ -932,13 +932,36 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   chú thích "số liệu theo PHẠM VI XEM của bạn" kèm tên phòng ban trong phạm vi —
   số liệu vốn đã được lọc theo quyền, trước đây trình bày như số liệu toàn công
   ty nên dễ hiểu nhầm là thiếu dữ liệu.
-  **Quyền Xem/Tải Phiếu Phê Duyệt siết hẹp hơn (từ 9/2026)** — trước đây bất kỳ
+  **Nút Xem/Tải Phiếu Phê Duyệt bị ẩn hẹp hơn ở GIAO DIỆN (từ 9/2026, CHƯA
+  chặn ở server)** — trước đây nút "Xem"/"Tải" Phiếu Phê Duyệt hiện cho bất kỳ
   ai xem được dòng đăng ký (kể cả chỉ có quyền xem theo phòng ban, không liên
-  quan trực tiếp tới chuyến) đều xem/tải được Phiếu Phê Duyệt chính thức; nay
-  **chỉ người đăng ký, tài xế được gán, người đã/đang duyệt hồ sơ đó, hoặc
-  admin** mới xem/tải được — bỏ hẳn fallback "cùng phòng ban" mặc định (CHỈ áp
-  dụng riêng cho Phiếu Đăng Ký Xe, không đổi hành vi tải file chung của các
-  module khác).
+  quan trực tiếp tới chuyến); nay `canAccessCarApprovalSlip()` (`public/js/core.js`)
+  chỉ HIỆN nút đó cho **người đăng ký, tài xế được gán, người đã/đang duyệt hồ
+  sơ đó, hoặc admin** — bỏ hẳn fallback "cùng phòng ban" mặc định (CHỈ áp dụng
+  riêng cho Phiếu Đăng Ký Xe, không đổi hành vi tải file chung của các module
+  khác). **Lưu ý quan trọng**: đây MỚI CHỈ là chặn ở lớp giao diện (ẩn nút,
+  chưa có route/kiểm tra riêng nào ở server đối chiếu lại quyền này khi phục
+  vụ nội dung Phiếu Phê Duyệt) — một request tự soạn (bỏ qua giao diện, gọi
+  thẳng API) hiện KHÔNG bị chặn thêm gì so với quyền xem dòng đăng ký thông
+  thường. Việc siết chặt tương ứng ở tầng server là quyết định sản phẩm CHƯA
+  được triển khai, cần xác nhận thiết kế lại trước khi làm.
+  **Lịch Xe hiện lái xe bận của TOÀN CÔNG TY (từ đợt rà soát chuyên sâu 2,
+  9/2026)** — cùng lỗi/cùng cách vá đã áp dụng cho Lịch Họp ở trên: quyền
+  "Xem xe" (`carView`) mặc định chỉ thấy phiếu của phòng ban mình, nên lưới
+  "🗓️ Lịch Xe" (cả 3 chế độ Ngày/Tuần/Tháng) trước đây hiện lái xe "Trống" giả
+  ở đúng những khung giờ phòng ban KHÁC đã đăng ký. Nay lưới đọc thêm dữ liệu
+  **chiếm chỗ toàn công ty** (chỉ lái xe/khung giờ/trạng thái, KHÔNG kèm điểm
+  đến/mã phiếu/phòng ban) — ô bận hiện ĐỎ cho mọi người, chỉ hiện nhãn trung
+  tính "Lái xe đang bận (chuyến của đơn vị khác)" nếu bấm vào ô không thuộc
+  phạm vi xem của mình, không lộ nội dung chuyến.
+  **Đánh giá hộ phiếu ĐỘI NHÀ khi người đăng ký đã nghỉ việc (từ đợt rà soát
+  chuyên sâu 2, 9/2026)** — trước đây phiếu xe đội nhà (không phải Taxi) CHỈ
+  đúng người đăng ký mới đánh giá được (kể cả admin cũng không), nên nếu người
+  đăng ký nghỉ việc/bị khoá tài khoản SAU KHI phiếu đã chuyển "⏳ Chờ Đánh
+  Giá" thì phiếu kẹt vĩnh viễn, không ai đóng được. Nay nếu tài khoản người
+  đăng ký ĐÃ BỊ KHOÁ (`active:false`), **admin/Người Điều Hành Xe** cũng thấy
+  nút "⭐ Đánh Giá (bắt buộc)" và đánh giá hộ được — người đăng ký còn hoạt
+  động bình thường thì hành vi giữ NGUYÊN như cũ (chỉ chính họ mới đánh giá).
 - **Đặt Phòng Họp** — tự chặn trùng lịch ngay từ lúc đăng ký (kiểm tra cả lịch
   đang chờ duyệt lẫn đã duyệt là đang "chiếm chỗ" cùng phòng/khung giờ giao
   nhau) — không để dồn nhiều yêu cầu trùng giờ về người phê duyệt rồi mới phát
@@ -946,6 +969,19 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   Họp) admin tự thêm/sửa/xoá tại **Hệ Thống → Quản Trị → Quản Lý Danh Mục →
   "🗂️ Danh Mục Phòng Họp"** (từ v22.2 — trước đó nằm ngay trong tab "📝 Đăng
   Ký" của module, nay gom về cùng chỗ với mọi danh mục quản trị khác).
+  **Đổi tên phòng họp giờ cascade sang lịch cũ (từ đợt rà soát chuyên sâu 2,
+  9/2026)** — trước đây "✏️ Sửa" 1 phòng trong Danh Mục chỉ đổi TÊN trong
+  chính danh mục, không cập nhật các lịch ĐÃ ĐẶT trước đó vẫn mang tên cũ (dữ
+  liệu `meetings.room` lưu nguyên chuỗi tên, so trùng theo đúng chuỗi) — hậu
+  quả là lịch cũ "biến mất" khỏi lưới Lịch Họp (không khớp cột dựng theo tên
+  MỚI) và 2 cuộc họp có thể vô tình được duyệt trùng phòng cùng giờ vì hệ
+  thống không còn coi đó là cùng 1 phòng. Nay đổi tên phòng tự động dời TÊN
+  trong TẤT CẢ lịch (cả quá khứ lẫn tương lai) đang mang tên cũ sang tên mới,
+  giữ nguyên tính nhất quán lịch sử — cùng cơ chế cascade đã áp dụng cho đổi
+  tên Phòng Ban/Siêu Thị. Xoá 1 phòng khỏi Danh Mục vẫn giữ nguyên hành vi cũ
+  (KHÔNG huỷ lịch đã đặt), nhưng hộp thoại xác nhận xoá nay nêu rõ số lịch
+  SẮP TỚI (chưa huỷ) đang còn dùng phòng đó, nếu có, để tránh xoá nhầm phòng
+  đang được đặt cho những ngày sắp tới.
   **Sub-tab "📊 Báo Cáo" (từ v22.2)** — chỉ hiện cho người có quyền duyệt
   lịch họp (`meetingApprove`/admin): lọc theo khoảng ngày SỬ DỤNG (không
   phải ngày tạo phiếu), xem tổng số/đã duyệt/đang chờ/đã hủy + tổng giờ đã
@@ -1051,6 +1087,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   sang `RECEIVED` và tồn kho B mới cộng thêm (server tự xác thực lại quyền
   theo `user.dept === transfer.targetDept`, không ai xác nhận thay siêu thị
   khác được).
+  **Siêu thị nhận điều chuyển giờ đối chiếu Danh Mục ngay ở SERVER (từ đợt rà
+  soát chuyên sâu 2, 9/2026)**: trước đây chỉ giao diện chặn siêu thị nhận
+  phải nằm trong Danh Mục Siêu Thị — 1 request tự soạn (bỏ qua giao diện) có
+  thể gửi bất kỳ chuỗi nào làm "siêu thị nhận" và vẫn tạo được yêu cầu, khiến
+  hàng "kẹt" vĩnh viễn ở trạng thái đã duyệt vì không có Giám Đốc Siêu Thị nào
+  ứng với tên bịa để xác nhận nhận. Nay server tự đối chiếu lại với Danh Mục
+  Siêu Thị thật, từ chối ngay (400) nếu siêu thị nhận không tồn tại trong
+  danh mục — cùng khuôn đã áp dụng cho Phòng Họp/Loại Xe Cụ Thể/Hãng Taxi.
   **"🚫 Hủy Điều Chuyển" khi đang "vận chuyển" (từ 9/2026)**: lỡ duyệt nhầm
   1 yêu cầu điều chuyển mà siêu thị đích CHƯA xác nhận nhận, người có quyền
   duyệt (Hành Chính/`uniformManage`) bấm "🚫 Hủy Điều Chuyển" ở mục "🚚 Đang
@@ -2552,7 +2596,12 @@ bản mới tự động lưu trữ bản cũ):
 - **CONTROL_AUDIT** (Kiểm soát viên đánh giá) — chỉ người có
   `checklistAuditScope` phù hợp mới thực hiện được, phải chọn đúng 1 siêu thị
   nằm trong phạm vi được phân công (server validate lại, không chỉ ẩn/hiện ở
-  giao diện).
+  giao diện). **Từ đợt rà soát chuyên sâu 2 (9/2026)**: siêu thị chọn còn
+  phải khớp đúng 1 mục THẬT trong Danh Mục Siêu Thị — trước đây chỉ kiểm tra
+  ĐÚNG PHẠM VI quyền (`checklistAuditScope`), chưa đối chiếu chuỗi đó có tồn
+  tại trong danh mục hay không (kể cả phạm vi "Toàn công ty"/admin), nên 1
+  request tự soạn có thể gửi bất kỳ chuỗi nào làm siêu thị đánh giá, tạo ra
+  bài nộp mang tên siêu thị không có thật, gây nhiễu báo cáo/thống kê.
 
 **Admin test Tự Đánh Giá (từ v17.1)**: tài khoản `admin` thường KHÔNG gắn Vị
 Trí Siêu Thị (`posType` khác `STORE`) nên mặc định không thực hiện được
@@ -2582,12 +2631,23 @@ do trình duyệt khai lúc tải tệp lên — trước đây có thể lách 
 `scorePercent` (tỉ lệ lựa chọn `isPassing`/tổng số câu bắt buộc) và
 `isPassed`: **hễ có ÍT NHẤT 1 lựa chọn Critical Fail được chọn thì
 `isPassed` LUÔN là `false` bất kể điểm số bao nhiêu** (lỗi nghiêm trọng phủ
-quyết điểm số). Sau khi nộp, siêu thị liên quan xem được kết quả + phản hồi
+quyết điểm số). **Câu hỏi "Nhiều lựa chọn" tự chặn trần điểm của CHÍNH câu đó
+(từ đợt rà soát chuyên sâu 2, 9/2026)** — câu hỏi cho phép tick chọn NHIỀU
+lựa chọn cùng lúc cộng dồn `scoreValue` của mọi lựa chọn đã chọn, nhưng LUÔN
+bị chặn ở đúng "Điểm Tối Đa" đã cấu hình cho câu đó (không cộng vượt quá dù
+chọn hết mọi lựa chọn) — trước đây không hề bị chặn trần riêng, nên 1 câu
+"Nhiều lựa chọn" chọn đủ hết các lựa chọn dương điểm có thể khiến tổng điểm/%
+của cả bài vượt hẳn 100%, luôn hiện "Đạt" bất kể ngưỡng đặt bao nhiêu. Sau khi nộp, siêu thị liên quan xem được kết quả + phản hồi
 lại (tab Kết Quả & Phản Hồi) — chỉ đúng siêu thị bị đánh giá mới phản hồi
 được, không ai khác. **Sửa lại phản hồi/giải trình (9/2026)**: siêu thị gõ
 nhầm hoặc muốn bổ sung phản hồi đã gửi thì bấm "✏️ Sửa" ngay cạnh phản hồi cũ
-trước khi có kết quả duyệt — nội dung mới GHI ĐÈ nội dung cũ, không lưu lịch
-sử các lần sửa trước.
+trước khi có kết quả duyệt — nội dung mới GHI ĐÈ nội dung cũ ở ô hiển thị
+chính. **Từ đợt rà soát chuyên sâu 2 (9/2026)**: mỗi lần ghi đè, bản CŨ được
+tự động lưu vào lịch sử nội bộ (`storeResponseHistory`) trước khi bị thay —
+KHÔNG mất dữ liệu dù bất kỳ nhân viên nào của siêu thị (không riêng quản lý)
+gửi/sửa nhiều lần liên tiếp. Màn hình hiện tại vẫn chỉ hiện bản MỚI NHẤT
+(chưa có UI xem lại lịch sử — dữ liệu vẫn được giữ đầy đủ ở tầng lưu trữ nếu
+cần tra cứu sau này).
 
 **Tab Báo Cáo** (module-local, quyền `checklistReportView`) — lọc theo mẫu/
 khoảng ngày, hiện thẻ thống kê (tổng số bài, điểm trung bình, tỉ lệ đạt, số
@@ -2663,15 +2723,31 @@ lỗi nghiêm trọng ở QA bắt buộc phải có ảnh mới nộp bài đư
 `DEDUCTION` cho nộp bài dù không đính kèm ảnh nào, khớp đúng file gốc không
 có ràng buộc này).
 
-**Chấm điểm loại `DEDUCTION`** — với mỗi Hạng Mục Con: điểm = tối đa(0, trần
-hiệu lực − tổng điểm đã trừ trong hạng mục con đó); "trần hiệu lực" là điểm
-tối đa riêng của hạng mục con nếu có đặt, ngược lại dùng TRỌN VẸN trần của
-Hạng Mục Lớn (không chia đều cho nhiều hạng mục con). Điểm Hạng Mục Lớn =
-tổng điểm các hạng mục con của nó, nhưng **luôn bị chặn thêm 1 lớp trần ở
-đúng điểm tối đa của Hạng Mục Lớn** (phòng trường hợp lỡ cấu hình tổng trần
-các hạng mục con vượt quá trần hạng mục lớn). Tổng điểm bài làm = tổng điểm
-mọi Hạng Mục Lớn. Không có khái niệm "lỗi nghiêm trọng"/"câu bắt buộc" như
-QA — luôn ra 1 điểm số cụ thể (không có chế độ "Chỉ Đạt/Chưa đạt").
+**Chấm điểm loại `DEDUCTION`** (công thức đã SỬA LẠI ở đợt rà soát chuyên sâu
+2, 9/2026 — xem "Lỗi thật đã vá" ngay dưới) — với mỗi Hạng Mục Lớn: cộng dồn
+**điểm trừ ĐÃ DÙNG** của TẤT CẢ Hạng Mục Con thuộc nó (Hạng Mục Con có đặt
+trần riêng thì điểm trừ của nó bị chặn ở đúng trần riêng đó trước khi cộng
+vào tổng; Hạng Mục Con KHÔNG đặt trần riêng thì cộng NGUYÊN VẸN tổng điểm trừ
+các tiêu chí của nó, không quy đổi qua trần nào — các hạng mục con không đặt
+trần riêng CÙNG CHIA SẺ 1 trần chung của Hạng Mục Lớn, không phải mỗi hạng
+mục con được cấp riêng 1 bản sao đầy đủ của trần đó). Điểm Hạng Mục Lớn = tối
+đa(0, điểm tối đa Hạng Mục Lớn − tổng điểm trừ đã dùng vừa cộng ở trên). Tổng
+điểm bài làm = tổng điểm mọi Hạng Mục Lớn. Không có khái niệm "lỗi nghiêm
+trọng"/"câu bắt buộc" như QA — luôn ra 1 điểm số cụ thể (không có chế độ "Chỉ
+Đạt/Chưa đạt").
+
+**Lỗi thật đã vá (rà soát chuyên sâu 2, 9/2026, mức Cao — "nuốt trọn điểm
+trừ")**: công thức CŨ tính điểm CÒN LẠI riêng cho TỪNG Hạng Mục Con (Hạng Mục
+Con không đặt trần riêng được cấp NGUYÊN VẸN 1 bản sao đầy đủ trần của Hạng
+Mục Lớn), rồi mới cộng dồn các điểm còn lại đó và chặn trần 1 lần ở Hạng Mục
+Lớn. Hậu quả: 1 Hạng Mục Con KHÔNG bị trừ điểm gì vẫn đóng góp nguyên trần
+Hạng Mục Lớn vào tổng, "nuốt trọn" mất phần điểm trừ đã nhập ở các Hạng Mục
+Con khác — VD trần Hạng Mục Lớn 10đ, 2 Hạng Mục Con không đặt trần riêng, dù
+trừ hết sạch 10/10 ở 1 hạng mục con thì điểm cuối vẫn ra 10/10 (100%) vì hạng
+mục con còn lại không bị trừ gì vẫn "gánh" đủ điểm. Đã sửa đúng công thức ở
+trên (cộng dồn điểm TRỪ trước, trừ 1 lần duy nhất khỏi trần) — nếu đã dùng
+loại mẫu `DEDUCTION` với Hạng Mục Con để trống trần riêng TRƯỚC bản vá này,
+nên kiểm tra lại các báo cáo cũ vì điểm số có thể đã bị tính cao hơn thực tế.
 
 **2 lần kiểm tra (Lần 1/Lần 2) trong cùng 1 đợt** — file Excel gốc theo dõi
 song song 2 lần kiểm tra trên cùng 1 sheet; hệ thống **KHÔNG** gộp 2 lần vào
