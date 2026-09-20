@@ -232,11 +232,17 @@ function renderMhTermList() {
     </tbody></table></div>`;
 }
 
+// LỖI ĐÃ VÁ (người dùng phản ánh, 9/2026): ô "Từ số tiền" thiếu class "money-input" — không tự chèn dấu
+// chấm phân cách hàng nghìn khi gõ như MỌI ô nhập tiền khác trong hệ thống (VD unitPrice/amount ở Vận
+// Hành, voDiscountAmount...), gõ số lớn (VD 500000000) rất khó đọc/dễ gõ nhầm số 0. Nay dùng đúng
+// formatMoneyDisplay() (core.js) khi render + class "money-input" (tự format khi gõ qua listener chung
+// document 'input', xem core.js) — value hiển thị có dấu chấm ngay từ lúc mở form Sửa, không chỉ sau khi
+// gõ thêm ký tự.
 function mhRenderTierRows() {
   document.getElementById('mhTierRowsWrap').innerHTML = mhTierRows.map((r, idx) => `
     <div class="flex items-center gap-2">
       <span class="text-[11px] text-gray-500 w-6">#${idx + 1}</span>
-      <input type="text" inputmode="numeric" placeholder="Từ số tiền (VNĐ)" value="${escapeHtml(r.fromAmount ?? '')}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="fromAmount" data-arg-value="2" class="flex-1 border rounded px-2 py-1 text-xs">
+      <input type="text" inputmode="numeric" placeholder="Từ số tiền (VNĐ)" value="${escapeHtml(formatMoneyDisplay(r.fromAmount ?? ''))}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="fromAmount" data-arg-value="2" class="flex-1 border rounded px-2 py-1 text-xs money-input">
       <input type="text" inputmode="decimal" placeholder="Tỷ lệ %" value="${escapeHtml(r.ratePct ?? '')}" data-op-input="mhUpdateTierField" data-arg0="${idx}" data-arg1="ratePct" data-arg-value="2" class="w-24 border rounded px-2 py-1 text-xs">
       <button type="button" data-op="mhRemoveTierRow" data-arg0="${idx}" class="text-red-500 text-xs">✕</button>
     </div>`).join('') || '<div class="text-[11px] text-gray-400 italic">Chưa có bậc nào — bấm "+ Thêm Bậc".</div>';
@@ -244,7 +250,12 @@ function mhRenderTierRows() {
 function mhAddTierRow() { mhTierRows.push({ fromAmount: '', ratePct: '' }); mhRenderTierRows(); }
 function mhRemoveTierRow(idx) { mhTierRows.splice(Number(idx), 1); mhRenderTierRows(); }
 function mhUpdateTierField(idx, field, value) {
-  if (mhTierRows[idx]) mhTierRows[idx][field] = value;
+  if (!mhTierRows[idx]) return;
+  // fromAmount lưu số THẬT ngay lúc gõ (mirror updateOperationOrderItemField() ở module-vanhanh.js) —
+  // value đến đây có thể đã lẫn dấu chấm hiển thị (formatMoneyDisplay chạy sau trong cùng sự kiện
+  // 'input'), replace(/\D/g, '') bóc sạch mọi ký tự không phải số trước khi lưu.
+  if (field === 'fromAmount') mhTierRows[idx].fromAmount = Number(String(value || '').replace(/\D/g, '')) || 0;
+  else mhTierRows[idx][field] = value;
 }
 
 function mhRenderScopeRows() {
