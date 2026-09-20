@@ -175,7 +175,12 @@ async function main() {
     { label: 'Hệ Thống > Biểu Mẫu', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(FORM)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Quy Trình & Phê Duyệt', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(WORKFLOW)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Quản Lý Tệp File', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(UPLOAD)"]', section: 'systemSection' },
-    { label: 'Hệ Thống > Log', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(LOG)"]', section: 'systemSection' }
+    { label: 'Hệ Thống > Log', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(LOG)"]', section: 'systemSection' },
+    // 🔀 Quy Trình Nâng Cao (từ v23.65) — mirror đúng 4 điểm đã thêm ở test-lazy-load-all-tabs.js.
+    { label: 'Hệ Thống > Quy Trình Nâng Cao (Áp Dụng Nhanh)', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setAdvWorkflowSubTab(QUICKAPPLY)"]', section: 'systemSection' },
+    { label: 'Hệ Thống > Quy Trình Nâng Cao (Quy Trình Hỗn Hợp)', click: '#btnSystemSubAdvWorkflow', section: 'systemSection' },
+    { label: 'Hệ Thống > Quy Trình Nâng Cao (Nhóm Phê Duyệt Trình/HĐ)', click: '#btnAdvWorkflowSubGroups', section: 'systemSection' },
+    { label: 'Hệ Thống > Quy Trình Nâng Cao (Nhóm Quyền Đặc Biệt)', click: '#btnAdvWorkflowSubSpecialPerm', section: 'systemSection' }
   ];
 
   for (const point of NAV_POINTS) {

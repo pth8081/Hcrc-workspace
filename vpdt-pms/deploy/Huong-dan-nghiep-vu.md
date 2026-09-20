@@ -310,10 +310,13 @@ quyền này thì vẫn không duyệt được gì — đây là lỗi cấu h�
 "đã chọn đúng vị trí ở Quy Trình & Phê Duyệt nhưng người đó vẫn không thấy nút
 Duyệt" → kiểm tra lại quyền "Người duyệt" của người đó trước.
 
-### 3.3. Danh mục "Nhóm Quyền Đặc Biệt" (mục 17 cây phân quyền)
+### 3.3. Danh mục "Nhóm Quyền Đặc Biệt"
 
-Tại **Hệ Thống → Quản Trị → Phân Quyền → khối 17 "Nhóm Quyền Đặc Biệt"** có 3
-danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá được ngay trong ô):
+Tại **Hệ Thống → 🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt** (từ v23.65 —
+trước đó là khối 17 trong cây phân quyền của form Sửa Người Dùng, đã dời ra
+vì đây là cấu hình CHUNG toàn hệ thống, không gắn với riêng tài khoản nào) có
+3 danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá được ngay
+trong ô):
 
 1. **Đơn vị tham gia quy trình** (`workflowParticipatingDepts`) — lọc bớt danh
    sách phòng ban hiển thị ở màn Quy Trình & Phê Duyệt (để trống = hiện đầy đủ
@@ -376,7 +379,7 @@ Ban chính, cùng khối với ô "Là tài xế"):
 
 - Chọn nhiều từ danh mục **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`,
   mục 3.3) — ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá được), giống hệt
-  thao tác ở khối 17.
+  thao tác ở "Nhóm Quyền Đặc Biệt".
 - Mỗi vị trí kiêm nhiệm chọn thêm sẽ được cộng vào tập (chức danh, phòng ban)
   dùng để khớp bước duyệt **"Theo vị trí"** (3.1) cho người đó — **CHỈ** ảnh
   hưởng bước duyệt "Theo vị trí" ở các module khác (Ngân Sách, Hỗ Trợ IT...).
@@ -393,7 +396,7 @@ Ban chính, cùng khối với ô "Là tài xế"):
 còn kiêm phụ trách duyệt hồ sơ Ngân Sách với vai trò "Trưởng phòng — Phòng Kế
 Toán" (không đổi chức danh/phòng ban chính thức của chị A). Vào Sửa Người
 Dùng của chị A, thêm "Trưởng phòng — Phòng Kế Toán" vào ô "Vị Trí Kiêm Nhiệm"
-(danh mục này phải có sẵn cặp đó ở khối 17 trước) → chị A sẽ được tính là
+(danh mục này phải có sẵn cặp đó ở "Nhóm Quyền Đặc Biệt" trước) → chị A sẽ được tính là
 người duyệt ở bất kỳ bước "Theo vị trí" nào cấu hình đúng cặp đó, miễn là chị
 A đã có quyền "Người duyệt".
 
@@ -419,8 +422,8 @@ chối khẩn cấp" của 2 module này.
 
 **Yêu cầu**: "Trưởng phòng Pháp Chế duyệt bước 2 của quy trình Hợp Đồng."
 
-1. Vào **Hệ Thống → Quản Trị → Phân Quyền → khối 17 → 🧭 Vị Trí Tham Gia Quy
-   Trình** — gõ tìm "Trưởng phòng — Pháp Chế" (chức danh × phòng ban), nếu
+1. Vào **Hệ Thống → 🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt → 🧭 Vị Trí
+   Tham Gia Quy Trình** — gõ tìm "Trưởng phòng — Pháp Chế" (chức danh × phòng ban), nếu
    chưa có thì thêm chức danh "Trưởng phòng" (nếu phòng "Pháp Chế" và chức danh
    "Trưởng phòng" đã tồn tại trong danh mục chung), bấm chọn, bấm **Lưu**.
 2. Vào **Hệ Thống → 🔄 Quy Trình & Phê Duyệt → Hợp đồng - Phê duyệt**, tìm
@@ -439,11 +442,12 @@ giữ đúng vị trí đó chưa (form Sửa Người Dùng có ô Chức danh 
 có người giữ vị trí: người đó đã có quyền "Người duyệt" chưa (3.2) → nếu Theo
 phòng ban: có ai trong phòng đó có quyền "Người duyệt" chưa.
 
-### 3.6. "⚡ Áp Dụng Nhanh" (sub-tab riêng, cạnh "Quy Trình & Phê Duyệt")
+### 3.6. "⚡ Áp Dụng Nhanh" (sub-tab của "🔀 Quy Trình Nâng Cao")
 
-**Hệ Thống → ⚡ Áp Dụng Nhanh** là 1 sub-tab RIÊNG (ngang hàng với "🔄 Quy
-Trình & Phê Duyệt", không nằm lồng bên trong nữa từ v22.3) — tiện ích để set
-NHANH **số bước** (chọn 1 mẫu quy trình đã định nghĩa sẵn ở khối "🛠️ Định
+**Hệ Thống → 🔀 Quy Trình Nâng Cao → ⚡ Áp Dụng Nhanh** (từ v23.65 — trước đó
+là 1 tab CẤP CAO NHẤT riêng ngang hàng "🔄 Quy Trình & Phê Duyệt", nay gộp
+vào umbrella "Quy Trình Nâng Cao" cùng 3 mục cấu hình nâng cao khác) — tiện
+ích để set NHANH **số bước** (chọn 1 mẫu quy trình đã định nghĩa sẵn ở khối "🛠️ Định
 Nghĩa Các Mẫu Bước Phê Duyệt" bên tab "Quy Trình & Phê Duyệt") cho những
 phòng ban/mức đang thiếu cấu hình, thay vì phải vào từng thẻ phòng ban của
 từng module một để chọn số bước tay.
@@ -545,8 +549,9 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
   (Bình thường/Gấp/Thượng khẩn) ở màn Biểu Mẫu (mục 7.3). Có bản xem trước quy
   trình duyệt ngay trước khi gửi.
-  - **Đề xuất thay thế file** (nhóm bật cờ "Đề xuất thay thế file?" ở mục 11
-    — mặc định chỉ "Bộ Phận Trợ Lý/Thư Ký", ngay trước TGĐ khi chọn Cấp Phê
+  - **Đề xuất thay thế file** (nhóm bật cờ "Đề xuất thay thế file?" ở
+    "🖋️ Nhóm Phê Duyệt Trình/HĐ" — Hệ Thống → 🔀 Quy Trình Nâng Cao — mặc định
+    chỉ "Bộ Phận Trợ Lý/Thư Ký", ngay trước TGĐ khi chọn Cấp Phê
     Duyệt Cuối Cùng = TGĐ, nhưng admin gán được cho nhóm bất kỳ) — thay vì chỉ
     duyệt/từ chối, người duyệt ở bước của nhóm này có thể **đề xuất thay thế
     hẳn file tờ trình** (tải file mới kèm ghi chú) — hồ sơ "treo" lại (khoá
@@ -561,7 +566,9 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     kèm lý do) — tuỳ người duyệt chọn khi hồ sơ đã tới đúng bước cuối cùng
     của quy trình đã chọn.
   - **Nhóm Phê Duyệt Trình & Cấp Phê Duyệt Cuối Cùng tự cấu hình** (10/2026) —
-    ở **Hệ Thống → Quản Trị → mục 11 "Nhóm Phê Duyệt Trình"**, admin tự
+    ở **Hệ Thống → 🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê Duyệt Trình/HĐ** (từ
+    v23.65 — trước đó là mục 11 trong cây phân quyền của form Sửa Người Dùng),
+    admin tự
     **đổi tên/thêm/xoá** các nhóm phê duyệt bổ sung (trước đây cố định 7 nhóm
     Đồng trình/Đồng cấp/Xin ý kiến/Giám Đốc-Phó Giám Đốc/Phó Tổng Giám Đốc/Bộ
     Phận Trợ Lý-Thư Ký/Tổng Giám Đốc, giờ tuỳ ý) — tên nhóm ở đây chính là
@@ -586,7 +593,8 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     khi tick lớp đó, hiện thêm 1 hộp chọn (dropdown) bắt buộc chọn **đúng 1
     người cụ thể** trong nhóm làm người duyệt bước đó (không phải cả nhóm
     cùng duyệt 1 bước). Nhóm chưa gán ai (0 người) thì không gửi được tờ
-    trình cho tới khi admin gán thành viên (gán ở đúng dòng nhóm đó, mục 11).
+    trình cho tới khi admin gán thành viên (gán ở đúng dòng nhóm đó, "🖋️ Nhóm
+    Phê Duyệt Trình/HĐ" — Hệ Thống → 🔀 Quy Trình Nâng Cao).
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
   **Đổi người thực hiện khi đang "Đang thực hiện" (từ 9/2026)**: sửa lại
@@ -1004,7 +1012,9 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
   - **Nhóm Phê Duyệt HĐ & Cấp Phê Duyệt Cuối Cùng tự cấu hình** (10/2026, sub-tab
     **Phê Duyệt**) — cùng khuôn với Văn Bản Trình (mục 4.1), ở **Hệ Thống →
-    Quản Trị → mục 14 "Nhóm Phê Duyệt HĐ"** admin tự **đổi tên/thêm/xoá** các
+    🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê Duyệt Trình/HĐ** (từ v23.65 — trước đó
+    là mục 14 trong cây phân quyền của form Sửa Người Dùng) admin tự **đổi
+    tên/thêm/xoá** các
     nhóm phê duyệt bổ sung (trước đây cố định 4 nhóm Giám Đốc-Phó Giám Đốc/
     Phó Tổng Giám Đốc/Bộ Phận Trợ Lý-Thư Ký/Tổng Giám Đốc, giờ tuỳ ý — Hợp
     Đồng không có khái niệm nhóm "không chặn quy trình" như Văn Bản Trình, mọi
@@ -1238,8 +1248,10 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") giờ **CHỈ còn quyết
     định SỐ BƯỚC** (theo mức giá trị 3 tier ở trên) — **NGƯỜI DUYỆT từng bước
     chuyển hẳn sang cấu hình ở sub-tab riêng "⚙️ Quy Trình Hỗn Hợp"** (Hệ Thống
-    → cạnh "🔄 Quy Trình & Phê Duyệt"/"⚡ Áp Dụng Nhanh"). Màn này là **1 bảng
-    duy nhất**, mỗi dòng gồm:
+    → 🔀 Quy Trình Nâng Cao — từ v23.65 gộp chung với "⚡ Áp Dụng Nhanh"/"🖋️
+    Nhóm Phê Duyệt Trình/HĐ"/"🧩 Nhóm Quyền Đặc Biệt" thành 4 sub-tab của 1 tab
+    lớn; trước đó "⚙️ Quy Trình Hỗn Hợp" là tab ngang hàng cạnh "🔄 Quy Trình &
+    Phê Duyệt"). Màn này là **1 bảng duy nhất**, mỗi dòng gồm:
     - **Bước**: 1/2/3... (khớp đúng số bước của tier đơn hàng rơi vào — 1 bước
       cho ≤ 10 triệu, 2 bước cho mức giữa, 3 bước cho > 100 triệu). Có thể
       thêm nhiều dòng cho CÙNG 1 bước.
@@ -1268,15 +1280,18 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     lệ "Phó Giám Đốc siêu thị" cho riêng vài siêu thị → những siêu thị đó có
     CẢ 2 chức danh cùng duyệt được Bước 1). Được liệt kê ở màn này (theo tên
     NGƯỜI hoặc CHỨC DANH) là **ĐỦ điều kiện duyệt ngay** — KHÔNG cần bật thêm
-    quyền "Người duyệt" (`canBeApprover`, khối 17 "Quyền Đặc Biệt") như cơ chế
+    quyền "Người duyệt" (`canBeApprover`, "🧩 Nhóm Quyền Đặc Biệt" — Hệ Thống
+    → 🔀 Quy Trình Nâng Cao) như cơ chế
     "Theo vị trí" của các quy trình theo phòng ban khác (Văn Phòng Phẩm/Thanh
     Toán/Xe/Giá IT/Hợp Đồng...). Quy tắc này CHỈ áp dụng cho **Đặt Hàng Tại
     Siêu Thị** — **Đặt Hàng Tại HO** không có khái niệm "siêu thị" nên giữ
     nguyên cơ chế cũ (cấu hình người duyệt thẳng theo mức giá trị ở màn "🔄
-    Quy Trình & Phê Duyệt", không qua Quy Trình Hỗn Hợp). Thiết kế mang tính
-    tổng quát để về sau có thể mở rộng dùng chung cho Hợp Đồng/Văn Bản Trình
-    (ô "Áp dụng cho" ở đầu màn hiện chỉ có "🏬 Đặt Hàng Tại Siêu Thị" hoạt động
-    được, 2 module kia hiện "sắp có"). Khi tạo/sửa User chọn Vị Trí = Siêu
+    Quy Trình & Phê Duyệt", không qua Quy Trình Hỗn Hợp). Thiết kế phần lõi
+    (server) mang tính tổng quát để về sau có thể mở rộng dùng chung cho Hợp
+    Đồng/Văn Bản Trình, nhưng ở màn admin hiện tại ô "Áp dụng cho" CHỈ hiện
+    đúng 1 lựa chọn "🏬 Đặt Hàng Tại Siêu Thị" (không còn hiện Hợp Đồng/Văn
+    Bản Trình dạng disabled "sắp có" nữa, tránh gây hiểu nhầm 2 module đó
+    đang ngang hàng/sắp triển khai). Khi tạo/sửa User chọn Vị Trí = Siêu
     Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
     cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
     Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
@@ -2671,19 +2686,26 @@ X/Y" ngay trên tiêu đề):
 ```
 0. Quyền Truy Cập Module        12. Văn Phòng Phẩm
 1. Hệ Thống & Chung              13. Báo Cáo Định Kỳ
-2. Tài Liệu                      14. Nhóm Phê Duyệt HĐ (Hợp Đồng)
-3. Văn Bản Trình                 15. Hỗ Trợ IT
-4. Hợp Đồng & Giấy Phép          16. Đồng Phục
-5. Phòng Họp                     17. Nhóm Quyền Đặc Biệt (mục 3.3)
-6. Đăng Ký Xe                    18. Ngân Sách
-7. Văn Phòng (Mua/Sửa)           19. Đào Tạo
-8. Truyền Thông Nội Bộ           20. Giấy Phép
-9. Biên Bản Họp & Công Việc      21. Nhân Sự
-10. Thanh Toán                   22. Vận Hành
-11. Nhóm Phê Duyệt Trình         23. Checklist Đánh Giá Siêu Thị
-    (Văn Bản Trình)               24. Nghiệp Vụ & Báo Cáo
+2. Tài Liệu                      15. Hỗ Trợ IT
+3. Văn Bản Trình                 16. Đồng Phục
+4. Hợp Đồng & Giấy Phép          18. Ngân Sách
+5. Phòng Họp                     19. Đào Tạo
+6. Đăng Ký Xe                    20. Giấy Phép
+7. Văn Phòng (Mua/Sửa)           21. Nhân Sự
+8. Truyền Thông Nội Bộ           22. Vận Hành
+9. Biên Bản Họp & Công Việc      23. Checklist Đánh Giá Siêu Thị
+10. Thanh Toán                   24. Nghiệp Vụ & Báo Cáo
                                   25. Mua Hàng
 ```
+
+**Số thứ tự 11/14/17 KHÔNG còn trong cây phân quyền** (từ v23.65) — đây là 3
+cấu hình CHUNG toàn hệ thống (không phải quyền theo từng người) nên đã dời
+hẳn sang **Hệ Thống → 🔀 Quy Trình Nâng Cao**, mất số thứ tự cũ, còn giữ đúng
+tên/nội dung: **🖋️ Nhóm Phê Duyệt Trình/HĐ** (gộp chung 2 khối cũ 11 "Nhóm Phê
+Duyệt Trình" + 14 "Nhóm Phê Duyệt HĐ") và **🧩 Nhóm Quyền Đặc Biệt** (khối cũ
+17, xem mục 3.3). Cây phân quyền (còn 23 khối, đánh số giữ nguyên có khoảng
+trống ở 11/14/17) từ nay CHỈ còn quyền cấp riêng theo từng người/nhóm phân
+quyền, không lẫn cấu hình chung nữa.
 
 Mỗi checkbox 1 quyền cụ thể (đọc/tạo/sửa/duyệt/quản lý theo module) — nhiều
 quyền còn có thêm phạm vi **theo phòng ban** (tick "Tất cả" hoặc chỉ chọn vài

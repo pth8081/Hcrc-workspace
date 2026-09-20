@@ -142,13 +142,15 @@ async function main() {
     finishLogin(adminUser);
   });
 
-  // Điều hướng THẬT vào Hệ Thống > Áp Dụng Nhanh (trigger loadModuleGroup() nạp module-workflow.js/
-  // module-itsupport-tier.js/module-ngansach.js — cùng khuôn test-lazy-load-all-tabs.js).
+  // Điều hướng THẬT vào Hệ Thống > 🔀 Quy Trình Nâng Cao > Áp Dụng Nhanh (trigger loadModuleGroup() nạp
+  // module-workflow.js/module-itsupport-tier.js/module-ngansach.js — cùng khuôn test-lazy-load-all-tabs.js).
+  // Từ v23.65, "Áp Dụng Nhanh" dời vào sub-tab của "🔀 Quy Trình Nâng Cao" (setAdvWorkflowSubTab), không
+  // còn là tab cấp cao nhất riêng — xem sidebar link đã đổi ở index.html.
   await page.evaluate(() => document.querySelector('[data-op="switchTab"][data-arg0="system"]')?.click());
   await page.waitForTimeout(150);
   await page.evaluate(() => document.querySelector('#btnSystemTab')?.click());
   await page.waitForTimeout(150);
-  await page.evaluate(() => document.querySelector('button[data-op-seq*="setSystemSubTab(QUICKAPPLY)"]')?.click());
+  await page.evaluate(() => document.querySelector('button[data-op-seq*="setAdvWorkflowSubTab(QUICKAPPLY)"]')?.click());
   await page.waitForTimeout(200);
 
   const ready = await page.evaluate(() => typeof collectQuickApplyUnconfiguredTargets === 'function' && typeof saveQuickApplyConfig === 'function' && typeof applyQuickApplyConfig === 'function');

@@ -474,6 +474,8 @@ let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
 let activeSystemSubTab = 'ADMIN';
 let activeAdminSubTab = 'PERMS';
+// Sub-tab của "🔀 Quy Trình Nâng Cao" (từ v23.65, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js).
+let activeAdvWorkflowSubTab = 'MIXED';
 let activeVppSubTab = 'REGISTER';
 let currentProcessingVppRegId = null;
 // Id hồ sơ NHÁP đang được sửa trong form đăng ký ở trên (null = form đang tạo mới, chưa lưu lần nào).

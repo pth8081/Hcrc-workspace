@@ -111,17 +111,11 @@ async function bootstrapClient(page) {
   }, ['workflowParticipatingDepts', 'vppExcludedJobTitles', 'workflowParticipatingPositions']);
 }
 
+// Từ v23.65: "Nhóm Quyền Đặc Biệt" (khối 17 cũ) dời sang "🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc
+// Biệt" (setAdvWorkflowSubTab('SPECIALPERM')) — không còn nằm trong <details> đóng mặc định bên trong
+// Phân Quyền, chỉ cần điều hướng đúng tab/sub-tab là hiện ra ngay, không cần mở accordion nữa.
 async function gotoAdminSpecialPerms(page) {
-  await page.evaluate(async () => { await switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('PERMS'); });
-  // Chờ phần tử có mặt trong DOM trước (state:'attached') — KHÔNG chờ "visible" mặc định, vì khối 17
-  // nằm trong 1 <details> (perm-tree-node) ĐÓNG mặc định: trình duyệt coi nội dung bên trong 1 <details>
-  // chưa mở là KHÔNG hiển thị (như display:none), nên waitForSelector() mặc định sẽ treo mãi cho tới khi
-  // hết hạn nếu chờ "visible" trước khi kịp mở <details> ra.
-  await page.waitForSelector('#workflowParticipatingDeptsMultiSelect', { state: 'attached' });
-  // Mở <details> khối 17 ra rồi mới thật sự chờ "visible" — để chụp được toàn bộ nội dung.
-  await page.evaluate(() => {
-    document.getElementById('permTreeBadge_specialGroups')?.closest('details')?.setAttribute('open', '');
-  });
+  await page.evaluate(async () => { await switchTab('system'); setSystemSubTab('ADVWORKFLOW'); setAdvWorkflowSubTab('SPECIALPERM'); });
   await page.waitForSelector('#workflowParticipatingDeptsMultiSelect', { state: 'visible' });
   await page.waitForTimeout(50);
 }
@@ -157,7 +151,7 @@ async function main() {
 
     // ===== 1) Khối 17 lúc mới — cả 3 danh mục RỖNG, đã lên widget "chọn nhiều thật" mới =====
     await gotoAdminSpecialPerms(page);
-    const block17 = page.locator('#permTreeBadge_specialGroups').locator('xpath=ancestor::details[1]');
+    const block17 = page.locator('#advWorkflowSubSpecialPerm');
     await block17.screenshot({ path: path.join(OUT_DIR, '01-khoi17-ban-dau-rong-widget-moi.png') });
     console.log('✅ 01: đã chụp khối 17 lúc mới — cả 3 danh mục (Đơn Vị/Chức Danh/Vị Trí Tham Gia Quy Trình) đều dùng widget chọn-nhiều-thật mới, đang rỗng.');
 
@@ -215,7 +209,7 @@ async function main() {
     if (afterReload.depts.length !== 2 || afterReload.titles.length !== 1 || afterReload.positions.length !== 2) {
       throw new Error('LỖI DEMO: sau khi tải lại trang thật, 1 trong 3 danh mục KHÔNG còn đủ số mục đã lưu! ' + JSON.stringify(afterReload));
     }
-    const block17AfterReload = page.locator('#permTreeBadge_specialGroups').locator('xpath=ancestor::details[1]');
+    const block17AfterReload = page.locator('#advWorkflowSubSpecialPerm');
     await block17AfterReload.screenshot({ path: path.join(OUT_DIR, '04-sau-khi-tai-lai-trang-that-van-con-luu.png') });
     console.log('✅ 05: đã RELOAD TRANG THẬT rồi vào lại khối 17 — cả 3 danh mục vẫn còn đủ (2 đơn vị + 1 chức danh + 2 vị trí), xác nhận đã lưu thật ở "server".');
 

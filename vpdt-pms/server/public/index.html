@@ -319,7 +319,9 @@
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(ADMIN)" class="sidebar-subitem">⚙️ Quản Trị</button>
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(FORM)" class="sidebar-subitem">📋 Biểu Mẫu</button>
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(WORKFLOW)" class="sidebar-subitem">🔄 Quy Trình & Phê Duyệt</button>
-          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(QUICKAPPLY)" class="sidebar-subitem">⚡ Áp Dụng Nhanh</button>
+          <!-- v23.65: "⚡ Áp Dụng Nhanh" dời vào bên trong tab "🔀 Quy Trình Nâng Cao" (setAdvWorkflowSubTab
+               nhánh QUICKAPPLY, module-hethong-tabs.js) — thêm 1 op vào chuỗi để nhảy thẳng đúng sub-tab. -->
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(ADVWORKFLOW)|setAdvWorkflowSubTab(QUICKAPPLY)" class="sidebar-subitem">⚡ Áp Dụng Nhanh</button>
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(UPLOAD)" class="sidebar-subitem">📎 Quản Lý Tệp File</button>
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(LOG)" class="sidebar-subitem">📊 Log</button>
         </div>
