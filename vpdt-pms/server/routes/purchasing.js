@@ -237,6 +237,14 @@ router.post('/terms/:id/calculate', requireManageTerms, async (req, res) => {
   if (!Number.isFinite(termId)) return res.status(400).json({ error: 'id không hợp lệ' });
   const { periodStart, periodEnd } = req.body || {};
   if (!periodStart || !periodEnd) return res.status(400).json({ error: 'Thiếu kỳ tính (periodStart/periodEnd)' });
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây không ép định dạng periodStart/periodEnd —
+  // client cũ dùng prompt() tự do nên chuỗi ngày sai định dạng (VD "20/9/2026", chữ tuỳ ý...) vẫn lọt qua
+  // rồi mới vỡ khó hiểu ở tầng SQL (new Date(...) parse sai/Invalid Date). Ép đúng YYYY-MM-DD như mọi nơi
+  // khác trong hệ thống, báo lỗi rõ ràng ngay tại đây.
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (!DATE_RE.test(periodStart) || !DATE_RE.test(periodEnd)) {
+    return res.status(400).json({ error: 'periodStart/periodEnd phải đúng định dạng YYYY-MM-DD' });
+  }
   if (new Date(periodEnd) < new Date(periodStart)) return res.status(400).json({ error: 'periodEnd không được trước periodStart' });
   try {
     const [terms, vendors] = await Promise.all([getAllForCollection('rebateTerms'), getAllForCollection('vendors')]);

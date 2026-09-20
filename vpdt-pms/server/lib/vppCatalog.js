@@ -205,11 +205,21 @@ function calcItemsTotal(items) {
 // nhập ở đầu form) — vừa để tương thích ngược với các kỳ đăng ký cũ (tạo TRƯỚC khi có deptBudgetRates,
 // chỉ có perPersonBudget phẳng), vừa cho phép admin chỉ cần sửa riêng vài phòng "đặc biệt", còn lại
 // dùng chung 1 mức mặc định mà không phải gõ tay từng dòng.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): "rate=0/null = không giới hạn" (cố ý, xem comment
+// perPersonBudget ở createValidation.js) chỉ đúng khi phòng ban đó THẬT SỰ không cấu hình mức/người
+// nào — trước đây totalBudget = rate * headcount CŨNG bị tính ra 0 khi rate > 0 (admin CÓ cấu hình
+// mức/người, kỳ vọng chặn thật) nhưng headcount = 0/thiếu (quên nhập số nhân sự phòng đó, hoặc phòng
+// không có trong deptHeadcounts — bị lọc khỏi payload khi n<=0, xem CREATE_MODULE_CONFIGS.vppRegistrationPeriods),
+// khiến submitVppRegistration() (lib/recordActions.js, `if (totalBudget > 0)`) HIỂU NHẦM thành "không
+// giới hạn" và bỏ qua hẳn việc chặn ngân sách — phòng ban đó đăng ký bao nhiêu cũng được duyệt, ngược
+// hẳn ý định của admin đã cấu hình mức/người cho phòng này. Trả thêm `rateConfiguredButNoHeadcount` để
+// caller phân biệt 2 trường hợp: rate=0 thật (cố ý không giới hạn) khác với rate>0 nhưng headcount lỗi
+// dữ liệu (phải CHẶN, không được coi là không giới hạn).
 function resolveVppDeptBudget(period, dept) {
   const rateOverride = period?.deptBudgetRates?.[dept];
   const rate = (typeof rateOverride === 'number' && rateOverride > 0) ? rateOverride : (Number(period?.perPersonBudget) || 0);
   const headcount = Number(period?.deptHeadcounts?.[dept]) || 0;
-  return { rate, headcount, totalBudget: rate * headcount };
+  return { rate, headcount, totalBudget: rate * headcount, rateConfiguredButNoHeadcount: rate > 0 && headcount <= 0 };
 }
 
 module.exports = { parseCatalogFile, validateRegistrationItems, calcItemsTotal, resolveVppDeptBudget };

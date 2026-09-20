@@ -145,6 +145,9 @@ function hrpPeriodActionButtons(p) {
   const canApprove = !!currentUser?.perms?.hrPayrollApprove;
   const btns = [`<button type="button" data-op="openHrpPeriodDetailModal" data-arg0="${p.id}" class="bg-blue-600 text-white px-2 py-1 rounded text-[11px] hover:bg-blue-700">Chi Tiết</button>`];
   if (canManage && p.status === 'DRAFT') btns.push(`<button type="button" data-op="hrpCalculate" data-arg0="${p.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] hover:bg-emerald-700">Tính Lương</button>`);
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): kỳ tạo nhầm (sai tháng/năm/tên) trước đây không có
+  // cách nào xoá — CHỈ hiện khi còn Nháp và CHƯA từng tính lương (khớp assertCanDeletePeriod() server).
+  if (canManage && p.status === 'DRAFT' && !p.employeeCount) btns.push(`<button type="button" data-op="hrpDeletePeriod" data-arg0="${p.id}" class="bg-red-100 text-red-700 px-2 py-1 rounded text-[11px] font-bold hover:bg-red-200">🗑️ Xoá</button>`);
   if (canManage && p.status === 'DRAFT' && p.employeeCount > 0) btns.push(`<button type="button" data-op="hrpSubmit" data-arg0="${p.id}" class="bg-indigo-600 text-white px-2 py-1 rounded text-[11px] hover:bg-indigo-700">Gửi Duyệt</button>`);
   if (canApprove && p.status === 'PENDING_APPROVAL') btns.push(`<button type="button" data-op="hrpApprove" data-arg0="${p.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-[11px] hover:bg-emerald-700">Duyệt</button>`);
   if (canApprove && p.status === 'PENDING_APPROVAL') btns.push(`<button type="button" data-op="hrpReject" data-arg0="${p.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] hover:bg-red-700">Từ Chối</button>`);
@@ -205,6 +208,16 @@ async function hrpCalculate(id) {
     let msg = `✅ Đã tính lương cho ${result.item.employeeCount} nhân viên.`;
     if (result.skipped?.length) msg += `\n⚠️ Bỏ qua ${result.skipped.length} người:\n` + result.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
     alert(msg);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+async function hrpDeletePeriod(id) {
+  const period = (DB.payrollPeriods || []).find(p => p.id === Number(id));
+  if (!confirm(`Xoá hẳn kỳ lương "${period?.periodName || ''}"? Không thể hoàn tác.`)) return;
+  try {
+    await hrpApiCall('POST', `/api/payroll/periods/${id}/delete`);
+    DB.payrollPeriods = (DB.payrollPeriods || []).filter(p => p.id !== Number(id));
+    renderHrpPeriodsTable();
   } catch (err) { alert('⛔ ' + err.message); }
 }
 

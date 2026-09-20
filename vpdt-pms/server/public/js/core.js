@@ -8146,17 +8146,34 @@ function bindCspDelegation(rootId) {
     if (!el || !root.contains(el)) return;
     cspDispatchOp(el, e, 'data-op-input');
   });
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): khoá chống double-submit runCspOp() đã có từ trước (xem
+  // chú thích ở runCspOp() phía trên) CHỈ áp dụng cho data-op/data-op-input/data-op-change — nhánh
+  // data-op-submit (form) trước đây gọi thẳng fn(e), KHÔNG hề khoá gì. Người dùng bấm Enter 2 lần liên
+  // tiếp hoặc double-click nút "Gửi" trong lúc hàm submit đang chờ (VD submitOperationOrder() còn đang
+  // await uploadFileToServer()/callCreateAction() — có thể mất vài giây) vẫn gửi được request thứ 2 trước
+  // khi request đầu xong, tạo trùng bản ghi. Dùng lại ĐÚNG runCspOp() (khoá theo chính phần tử <form>, tự
+  // mở lại khi promise resolve/reject) thay vì gọi fn(e) trực tiếp — cùng khuôn với 3 nhánh data-op* kia.
+  //
+  // LỖI THÊM tự phát hiện lúc viết test cho bản vá trên: trước đây preventDefault() CHỈ gọi khi có cờ
+  // data-op-prevent-default="1" (chỉ 2/72 form dùng cờ này — #hrpCreatePeriodForm, form đăng nhập) — 70
+  // form data-op-submit còn lại (kể cả operationOrderForm) DỰA VÀO chính fn(e) tự gọi e.preventDefault()
+  // làm dòng ĐẦU TIÊN. Nhưng khi form đang bị khoá opInFlight, handler return SỚM TRƯỚC khi gọi fn() ở
+  // trên — preventDefault() không bao giờ được gọi cho lượt submit thứ 2 -> trình duyệt SUBMIT/NAVIGATE
+  // THẬT (chính xác là hành vi cần chặn, giờ lại xảy ra do thêm khoá). Mọi form data-op-submit ĐỀU LÀ
+  // form AJAX theo đúng quy ước (không form nào được phép submit gốc), nên preventDefault() UNCONDITIONAL
+  // ngay từ đầu — không còn phụ thuộc cờ data-op-prevent-default hay có bị khoá hay không.
   root.addEventListener('submit', (e) => {
     const el = e.target.closest('[data-op-submit]');
     if (!el || !root.contains(el)) return;
-    if (el.dataset.opPreventDefault === '1') e.preventDefault();
+    e.preventDefault();
+    if (el.dataset.opInFlight === '1') return;
     const fnName = el.getAttribute('data-op-submit');
     const fn = window[fnName];
-    if (typeof fn === 'function') { fn(e); return; }
+    if (typeof fn === 'function') { runCspOp(el, fn, [e]); return; }
     // Nhanh hiem: ham chua nap (cum module-*.js chua tung mo trong phien) — nap xong roi goi lai.
     ensureFnReady(fnName).then(() => {
       const fn2 = window[fnName];
-      if (typeof fn2 === 'function') fn2(e);
+      if (typeof fn2 === 'function') runCspOp(el, fn2, [e]);
     }).catch(err => reportCspDispatchFailure('CSP dispatch (submit): không tải được mô-đun cho hàm', fnName, err));
   });
 }

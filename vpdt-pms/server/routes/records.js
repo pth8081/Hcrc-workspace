@@ -634,6 +634,26 @@ router.post('/internalPosts/:id/comment/:commentId/delete-comment', (req, res) =
   withInternalPostAction(req, res, 'comment-delete', (payload, user, item) =>
     recordActions.deleteInternalPostComment(user, item, Number(req.params.commentId))));
 
+// POST /api/records/internalPosts/:id/comment/:commentId/edit — tác giả tự sửa nội dung bình luận của
+// CHÍNH MÌNH (recordActions.editInternalPostComment() tự kiểm tra comment.username === user.username).
+// Cần đọc thêm sensitiveKeywords để quét lại nội dung mới — cùng lý do route .../comment không dùng
+// withInternalPostAction() chung ở trên.
+router.post('/internalPosts/:id/comment/:commentId/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const sensitiveKeywords = (await getAppDataValue('sensitiveKeywords')) || [];
+    const result = await withLockedRecordForCollection('internalPosts', itemId, (item) => {
+      assertCanViewInternalPost(freshUser, item);
+      return recordActions.editInternalPostComment(req.body, freshUser, item, Number(req.params.commentId), sensitiveKeywords);
+    });
+    res.json({ ok: true, item: sanitizeInternalPostCommentsForUser(result, freshUser) });
+  } catch (err) {
+    handleError(res, `internalPosts/${req.params.id}/comment/${req.params.commentId}/edit`, err);
+  }
+});
+
 // POST /api/records/internalPosts/:id/comment/:commentId/like — reaction cấp bình luận (Đợt 1 Nhịp
 // Sống HCRC, dùng để xếp hạng "3-5 bình luận nổi bật" ở client), mở cho mọi người đã đăng nhập như
 // like cấp bài viết ở trên.
@@ -2993,6 +3013,21 @@ router.post('/hrFeedback/:id/respond', async (req, res) => {
   }
 });
 
+// Người hỏi tự rút lại câu hỏi của chính mình khi Nhân Sự CHƯA trả lời (canWithdrawHrFeedback() ở
+// lib/recordActions.js) — mirror khuôn "Hủy khi PENDING" của officeReqs/carRegs/vppRegistrations/licenses.
+router.post('/hrFeedback/:id/withdraw', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('hrFeedback', itemId, (item) =>
+      recordActions.withdrawHrFeedback(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `hrFeedback/${req.params.id}/withdraw`, err);
+  }
+});
+
 router.post('/hrFeedback/:id/mark-read', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -3475,9 +3510,11 @@ router.post('/uniformIssuances/:id/acknowledge', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
+    // users: cần cho acknowledgeUniformIssuance() tra active của nhân viên nhận phiếu khi người gọi là
+    // canManageUniformStore xác nhận HỘ (nhân viên đã nghỉ việc/khoá tài khoản) — xem chú thích ở đó.
+    const { freshUser, users } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('uniformIssuances', itemId, (item) =>
-      recordActions.acknowledgeUniformIssuance(freshUser, item));
+      recordActions.acknowledgeUniformIssuance(freshUser, item, users));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `uniformIssuances/${req.params.id}/acknowledge`, err);
@@ -3673,6 +3710,21 @@ router.post('/licenses/:id/reject', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `licenses/${req.params.id}/reject`, err);
+  }
+});
+
+// Người tải lên tự Hủy giấy phép lỡ gửi nhầm khi CÒN ĐANG chờ duyệt — mirror đúng khuôn
+// officeReqs/carRegs/vppRegistrations/:id/cancel (canCancelLicense() ở lib/recordActions.js).
+router.post('/licenses/:id/cancel', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('licenses', itemId, (item) =>
+      recordActions.cancelLicense(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `licenses/${req.params.id}/cancel`, err);
   }
 });
 
@@ -3948,6 +4000,17 @@ router.post('/leaveRequests/:id/approve', async (req, res) => {
       if (affectedRosterIds.length) {
         await withLockedRecordForCollection('leaveRequests', itemId, (item) => { item.affectedRosterIds = affectedRosterIds; return item; });
         result.affectedRosterIds = affectedRosterIds;
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây CHỈ lưu affectedRosterIds để tham
+        // khảo — các dòng phân ca trùng khoảng nghỉ vẫn đứng nguyên SCHEDULED, không phản ánh đơn nghỉ
+        // đã duyệt. Tự huỷ NGAY các dòng đó (cùng khuôn cancelFutureRosterAfterOffboarding() ở trên —
+        // per-item lock, chỉ ghi lại dòng THẬT SỰ đổi trạng thái).
+        const updatedRoster = attendance.cancelRosterForApprovedLeave(rosterList, result.employeeCode, result.fromDate, result.toDate, result.code);
+        for (const r of updatedRoster) {
+          const before = rosterList.find(x => x.id === r.id);
+          if (before && before.status !== r.status) {
+            await withLockedRecordForCollection('shiftRoster', r.id, () => r);
+          }
+        }
       }
     }
     // Trừ LeaveBalance (chỉ ANNUAL) + ghi AttendanceRecords LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho từng

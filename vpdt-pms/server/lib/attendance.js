@@ -539,6 +539,22 @@ function applyApproveShiftSwap(swapRequest, targetRoster, rosterList, actorUsern
   return { updatedSwap, updatedRoster };
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): duyệt đơn nghỉ phép SHIFT_BASED trước đây CHỈ lưu lại
+// affectedRosterIds (danh sách dòng phân ca trùng khoảng nghỉ) để THAM KHẢO — không hề tự động huỷ hay
+// cảnh báo gì thêm, các dòng phân ca đó vẫn đứng nguyên "SCHEDULED" như chưa từng có đơn nghỉ nào được
+// duyệt. Nhân viên vẫn hiện trong lịch phân ca những ngày đã được duyệt nghỉ, quản lý ca dễ tưởng nhân
+// viên đó vẫn phải đi làm. Nay tự động huỷ (CANCELLED) đúng các dòng phân ca trùng khoảng nghỉ ngay khi
+// duyệt — mirror đúng khuôn cancelFutureRosterAfterOffboarding() ở trên (map thuần, không đụng dòng
+// KHÔNG khớp/ĐÃ huỷ trước đó).
+function cancelRosterForApprovedLeave(rosterList, employeeCode, fromDate, toDate, leaveRequestCode) {
+  const note = `Tự huỷ do đơn nghỉ phép${leaveRequestCode ? ` [${leaveRequestCode}]` : ''} đã được duyệt trùng ngày này`;
+  return (rosterList || []).map(r => {
+    if (r.employeeCode !== employeeCode || r.status === 'CANCELLED') return r;
+    if (r.workDate < fromDate || r.workDate > toDate) return r;
+    return Object.assign({}, r, { status: 'CANCELLED', updatedAt: nowVN(), note });
+  });
+}
+
 function applyRejectShiftSwap(swapRequest, actorUsername, actorName) {
   if (swapRequest.status !== 'PENDING') throw new HttpError(400, 'Yêu cầu đổi ca không còn ở trạng thái chờ duyệt');
   return Object.assign({}, swapRequest, { status: 'REJECTED', approverUsername: actorUsername, approverName: actorName, decidedAt: nowVN(), updatedAt: nowVN() });
@@ -569,5 +585,5 @@ module.exports = {
   refundLeaveBalance, buildLeaveAttendanceRecords, buildLeaveCancelAttendanceReverts, listDatesInRange,
   assertValidShiftTemplate, assertValidRosterAssignment, defaultShiftRoster, assertNoRosterConflict, applyCancelRoster,
   defaultShiftSwapRequest, applyApproveShiftSwap, applyRejectShiftSwap,
-  cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding
+  cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding, cancelRosterForApprovedLeave
 };

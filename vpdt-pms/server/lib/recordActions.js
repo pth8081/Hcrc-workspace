@@ -2450,7 +2450,16 @@ function assignMinutesTasks(user, minutes, usersList) {
   if (!canEditMinutes(user, minutes)) {
     throw new HttpError(403, 'Bạn không có quyền giao việc cho biên bản họp này');
   }
-  if (minutes.tasksAssigned) {
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây tasksAssigned=true chặn CỨNG lần gọi thứ 2,
+  // kể cả khi vẫn còn dòng chỉ đạo đã gán người thực hiện nhưng CHƯA sinh được việc (tài khoản khai
+  // trong Thành phần tham dự lúc "Giao việc" lần đầu không hợp lệ/đã khoá — xem resolveDirectiveAttendeeServer()
+  // ở trên) — Admin sửa lại đúng tài khoản trong Thành phần tham dự xong (editMinutes() vẫn cho phép
+  // Admin sửa khi khẩn cấp) thì KHÔNG CÒN CÁCH NÀO giao lại việc cho riêng (các) dòng còn thiếu đó nữa,
+  // dòng chỉ đạo coi như bị bỏ rơi vĩnh viễn dù biên bản trên giấy tờ đã "Giao việc". Nay chỉ chặn khi
+  // KHÔNG còn dòng chỉ đạo nào đang treo (đã gán người nhưng chưa taskCreated) — buildTasksFromDirectives()
+  // tự bỏ qua các dòng đã taskCreated=true nên không tạo trùng việc cũ.
+  const hasPendingDirective = (minutes.directives || []).some(d => d.assignedToAttendeeId && !d.taskCreated);
+  if (minutes.tasksAssigned && !hasPendingDirective) {
     throw new HttpError(409, 'Biên bản này đã được giao việc rồi');
   }
   const created = buildTasksFromDirectives(minutes, user, usersList);
@@ -2468,10 +2477,14 @@ function assignMinutesTasks(user, minutes, usersList) {
     }
     throw new HttpError(400, 'Không có chỉ đạo nào đã gán người thực hiện để giao việc');
   }
-  minutes.tasksAssigned = true;
-  minutes.tasksAssignedBy = user.username;
-  minutes.tasksAssignedByName = user.name;
-  minutes.tasksAssignedAt = nowVN();
+  // Lần "Giao việc" ĐẦU TIÊN mới ghi nhận mốc tasksAssignedBy/At — lần giao lại (retry) cho dòng còn
+  // thiếu ở trên giữ NGUYÊN mốc ban đầu, không ghi đè lịch sử ai đã khoá biên bản lúc nào.
+  if (!minutes.tasksAssigned) {
+    minutes.tasksAssigned = true;
+    minutes.tasksAssignedBy = user.username;
+    minutes.tasksAssignedByName = user.name;
+    minutes.tasksAssignedAt = nowVN();
+  }
   return created;
 }
 
@@ -2628,11 +2641,52 @@ function dismissInternalCommentFlag(user, post, commentId) {
 // Xoá hẳn 1 bình luận (người kiểm duyệt xử lý bình luận vi phạm) — cho phép xoá bất kỳ bình luận nào,
 // không chỉ bình luận đang bị đánh dấu (khớp quyền hạn chung canApproveInternalPost, tương tự admin
 // xoá được mọi bình luận chứ không riêng bình luận do hệ thống tự phát hiện).
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây CHỈ người kiểm duyệt (canApproveInternalPost)
+// xoá được bình luận — tác giả gõ nhầm/muốn rút lại chính bình luận của mình không có cách nào tự xử
+// lý, phải nhờ người kiểm duyệt xoá hộ. Nay cho phép tác giả tự xoá bình luận CỦA CHÍNH MÌNH, TRỪ khi
+// đang pendingModeration (đã bị hệ thống gắn cờ, chờ xử lý) — tự xoá lúc đó coi như "phi tang" trước
+// khi người kiểm duyệt kịp xem, nên vẫn phải chờ dismiss-flag/delete-comment của người kiểm duyệt.
 function deleteInternalPostComment(user, post, commentId) {
-  if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền xoá bình luận này');
-  const idx = (post.comments || []).findIndex(c => c.id === commentId);
-  if (idx === -1) throw new HttpError(404, 'Không tìm thấy bình luận');
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) throw new HttpError(404, 'Không tìm thấy bình luận');
+  const isModerator = canApproveInternalPost(user);
+  const isAuthor = comment.username === user.username;
+  if (!isModerator && !isAuthor) {
+    throw new HttpError(403, 'Bạn không có quyền xoá bình luận này');
+  }
+  if (!isModerator && comment.pendingModeration) {
+    throw new HttpError(409, 'Bình luận đang chờ kiểm duyệt — chỉ người kiểm duyệt mới xử lý được lúc này');
+  }
+  const idx = post.comments.findIndex(c => c.id === commentId);
   post.comments.splice(idx, 1);
+  return post;
+}
+
+// Tác giả tự SỬA nội dung bình luận của chính mình — cùng ràng buộc pendingModeration như xoá ở trên.
+// Nội dung mới vẫn được quét lại từ khoá nhạy cảm (khớp addInternalPostComment()) — sửa bình luận sạch
+// thành nội dung vi phạm cũng phải bị đưa vào hàng chờ kiểm duyệt như bình luận mới, không có "đường
+// tắt" né kiểm duyệt bằng cách sửa sau khi đăng.
+function editInternalPostComment(payload, user, post, commentId, sensitiveKeywords) {
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) throw new HttpError(404, 'Không tìm thấy bình luận');
+  if (comment.username !== user.username) {
+    throw new HttpError(403, 'Bạn chỉ có thể sửa bình luận của chính mình');
+  }
+  if (comment.pendingModeration) {
+    throw new HttpError(409, 'Bình luận đang chờ kiểm duyệt — chưa thể tự sửa lúc này');
+  }
+  const content = (payload?.content || '').trim();
+  if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
+  comment.content = content;
+  comment.editedAt = nowVN();
+  const hits = scanCommentForSensitiveContent(content, sensitiveKeywords);
+  if (hits.length) {
+    comment.flagged = true;
+    comment.flagCategories = [...new Set(hits.map(h => h.category))];
+    comment.flagTerms = [...new Set(hits.map(h => h.term))];
+    comment.pendingModeration = true;
+  }
   return post;
 }
 
@@ -3023,6 +3077,13 @@ function createTask(payload, user, usersList, formTemplates) {
     throw new HttpError(400, 'Thiếu tiêu đề công việc');
   }
   if (!payload.assignedTo) throw new HttpError(400, 'Thiếu người nhận việc');
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): assignTask()/editTask() đều assertActiveAssignee()
+  // cho assignedTo + từng collaborator, nhưng createTask() (tạo việc THỦ CÔNG lần đầu) lại thiếu — có
+  // thể tạo việc giao cho tài khoản không tồn tại/đã khoá ngay từ đầu, không hiện tên (assignedToName
+  // rỗng) và không ai thực sự nhận được việc.
+  assertActiveAssignee(usersList, payload.assignedTo);
+  const collaboratorList = Array.isArray(payload.collaborators) ? payload.collaborators : [];
+  collaboratorList.forEach((u) => assertActiveAssignee(usersList, u));
 
   const record = { ...payload, id: Date.now() };
   record.assignedToName = resolveAssigneeName(usersList, payload.assignedTo);
@@ -3413,7 +3474,15 @@ function submitVppRegistration(user, item, period, siblingRegs) {
   // "Đã dùng" = tổng các đăng ký KHÁC cùng phòng+cùng kỳ đang PENDING hoặc APPROVED (siblingRegs, CALLER
   // đã lọc sẵn) — DRAFT của người khác chưa gửi thì chưa giữ chỗ gì, REJECTED coi như đã nhả chỗ lại.
   // Không giới hạn riêng số tiền của 1 người — 1 người có thể đăng ký nhiều, miễn quỹ phòng còn đủ.
-  const { totalBudget } = resolveVppDeptBudget(period, item.dept);
+  const { totalBudget, rateConfiguredButNoHeadcount } = resolveVppDeptBudget(period, item.dept);
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): rate>0 (admin ĐÃ cấu hình mức/người cho phòng này)
+  // nhưng headcount=0/thiếu khiến totalBudget tính ra 0 — trước đây rơi thẳng vào nhánh "totalBudget=0
+  // -> không giới hạn" bên dưới, để phòng ban này đăng ký không giới hạn dù rõ ràng admin muốn chặn.
+  // Chặn hẳn (409, không phải lỗi 400 dữ liệu người dùng) và nêu rõ nguyên nhân để người quản lý VPP
+  // vào sửa lại số nhân sự phòng ban của kỳ này — không tự "đoán" cho qua theo hướng nào.
+  if (rateConfiguredButNoHeadcount) {
+    throw new HttpError(409, `Kỳ đăng ký chưa cấu hình số nhân sự cho phòng "${item.dept}" (đã có mức/người nhưng chưa có số nhân sự) — vui lòng liên hệ người quản lý Văn phòng phẩm cập nhật lại số nhân sự phòng ban trước khi gửi đăng ký.`);
+  }
   if (totalBudget > 0) {
     const used = (siblingRegs || []).reduce((sum, r) => sum + calcVppItemsTotal(r.items), 0);
     const total = calcVppItemsTotal(item.items);
@@ -4954,7 +5023,10 @@ function requestPriceInfoFromIt(user, item, payload) {
     id: Date.now(), step: null,
     requestedBy: user.username, requestedByName: user.name,
     reason, requestedAt: nowVN(), response: null, respondedAt: null,
-    byRole: 'it' // phân biệt với 'approver' (yêu cầu bổ sung từ người duyệt phòng ban, xem workflowEngine.js)
+    byRole: 'it', // phân biệt với 'approver' (yêu cầu bổ sung từ người duyệt phòng ban, xem workflowEngine.js)
+    // reminderSent (mới, rà soát chuyên sâu đợt 4, 9/2026): dùng cho jobs/itApprovalDeadlineReminder.js —
+    // xem chú thích escalatedAt ở escalateItTicket().
+    reminderSent: false
   });
   return item;
 }
@@ -5015,6 +5087,8 @@ function requestItPriceEmergencyReject(user, item, payload) {
   item.emergencyRejectDecidedByName = null;
   item.emergencyRejectDecidedAt = null;
   item.emergencyRejectDecisionComment = null;
+  // reminderSent (mới, rà soát chuyên sâu đợt 4, 9/2026) — xem chú thích escalatedAt ở escalateItTicket().
+  item.emergencyRejectReminderSent = false;
   item.history = item.history || [];
   item.history.push({
     step: item.currentStep, approver: user.name, username: user.username,
@@ -5213,6 +5287,11 @@ function escalateItTicket(user, ticket, payload, usersList) {
   ticket.approvalApproverName = approver.name;
   ticket.approvalReason = reason;
   ticket.approvalComment = '';
+  // escalatedAt (mới, rà soát chuyên sâu đợt 4, 9/2026): mốc thời gian gửi yêu cầu — dùng cho
+  // jobs/itApprovalDeadlineReminder.js tính "đã treo bao lâu" để chủ động nhắc người phê duyệt, thay vì
+  // chỉ hiện badge chờ trên giao diện như trước (không job nào nhắc chủ động).
+  ticket.escalatedAt = nowVN();
+  ticket.approvalReminderSent = false;
   ticket.comments = ticket.comments || [];
   ticket.comments.push({ id: Date.now(), username: user.username, name: user.name, content: `🔔 Đã gửi yêu cầu phê duyệt tới ${approver.name}: ${reason}`, time: nowVN() });
   return ticket;
@@ -5274,6 +5353,10 @@ function canManageHrFeedback(user) {
 function respondToHrFeedback(user, item, payload) {
   if (!canManageHrFeedback(user)) throw new HttpError(403, 'Bạn không có quyền phản hồi ý kiến ở đây');
   if (item.status === 'ANSWERED') throw new HttpError(409, 'Câu hỏi này đã được phản hồi');
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): thêm withdrawHrFeedback() (WITHDRAWN, xem dưới) mà
+  // guard cũ chỉ chặn đúng ANSWERED — Nhân Sự vẫn trả lời được 1 câu hỏi người gửi ĐÃ TỰ RÚT LẠI, tạo
+  // phản hồi cho 1 yêu cầu không còn tồn tại theo ý người hỏi.
+  if (item.status === 'WITHDRAWN') throw new HttpError(409, 'Câu hỏi này đã bị người gửi rút lại');
   const response = (payload?.response || '').trim();
   if (!response) throw new HttpError(400, 'Vui lòng nhập nội dung phản hồi');
   item.response = response.slice(0, 5000);
@@ -5282,6 +5365,27 @@ function respondToHrFeedback(user, item, payload) {
   item.respondedAt = nowVN();
   item.status = 'ANSWERED';
   item.employeeUnread = true;
+  return item;
+}
+
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây câu hỏi gửi nhầm/muốn rút lại khi CÒN ĐANG
+// PENDING (Nhân Sự chưa trả lời) không có cách nào tự rút — chỉ Admin xoá được (deleteAdminOnly, xoá
+// HẲN không giữ dấu vết), trong khi người hỏi chỉ muốn rút lại câu hỏi của CHÍNH MÌNH, không cần Admin
+// can thiệp. Mirror khuôn "Hủy khi PENDING" đã dùng cho officeReqs/carRegs/vppRegistrations/licenses —
+// chuyển WITHDRAWN (giữ lịch sử), KHÔNG xoá bản ghi.
+function canWithdrawHrFeedback(user, item) {
+  return !!(item && item.creator === user.username);
+}
+
+function withdrawHrFeedback(user, item) {
+  if (!canWithdrawHrFeedback(user, item)) {
+    throw new HttpError(403, 'Bạn chỉ có thể rút lại câu hỏi của chính mình');
+  }
+  if (item.status !== 'PENDING') {
+    throw new HttpError(409, 'Chỉ rút lại được câu hỏi đang chờ phản hồi — có thể Nhân Sự đã trả lời');
+  }
+  item.status = 'WITHDRAWN';
+  item.withdrawnAt = nowVN();
   return item;
 }
 
@@ -5928,16 +6032,30 @@ function buildUniformIssuance(user, payload, allPeriods, allIssuancesOfStore, al
 // client, mirror style acceptTask() ~2545): chỉ đúng employeeUsername mới gọi được (403 nếu không phải
 // mình), chặn nếu đã ACKNOWLEDGED rồi (409). Không đổi gì khác của phiếu (items/tồn kho không phụ thuộc
 // bước này).
-function acknowledgeUniformIssuance(user, item) {
-  if (!item || item.employeeUsername !== user.username) {
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây CHỈ đúng employeeUsername mới xác nhận được —
+// nhân viên đã nghỉ việc/tài khoản bị khoá (active:false) TRƯỚC KHI kịp bấm "Xác nhận đã nhận" thì
+// phiếu treo vĩnh viễn ở PENDING_ACK, không ai xử lý được nữa (kể cả admin quản lý kho). Nay cho phép
+// canManageUniformStore(user) xác nhận HỘ, NHƯNG chỉ khi nhân viên đó đã inactive (usersList do CALLER
+// truyền vào để tra — active vẫn còn thì bắt buộc đúng tự nhân viên bấm, giữ nguyên hành vi cũ).
+function acknowledgeUniformIssuance(user, item, usersList) {
+  const isOwner = item && item.employeeUsername === user.username;
+  const isStoreManager = canManageUniformStore(user);
+  if (!isOwner && !isStoreManager) {
     throw new HttpError(403, 'Bạn chỉ xác nhận được phiếu cấp phát của chính mình');
+  }
+  if (!isOwner && isStoreManager) {
+    const employee = (usersList || []).find(u => u.username === item.employeeUsername);
+    if (employee && employee.active !== false) {
+      throw new HttpError(403, 'Nhân viên nhận phiếu này vẫn đang hoạt động — chỉ chính nhân viên mới tự xác nhận được');
+    }
   }
   if (item.ackStatus === 'ACKNOWLEDGED') {
     throw new HttpError(409, 'Phiếu này đã được xác nhận trước đó');
   }
   item.ackStatus = 'ACKNOWLEDGED';
   item.ackAt = nowVN();
-  item.ackByName = user.name;
+  item.ackByName = isOwner ? user.name : `${user.name} (xác nhận hộ, nhân viên đã nghỉ việc)`;
   return item;
 }
 
@@ -6903,6 +7021,34 @@ function unrevokeLicense(user, item) {
   return item;
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): giống hệt lỗ hổng nghiệp vụ đã vá cho officeReqs/
+// carRegs/vppRegistrations/uniformTransfers (xem cancelVppRegistration() ở trên) — người tải lên giấy
+// phép lỡ gửi nhầm (sai tệp/thông tin) trong khi CÒN ĐANG PENDING (chưa ai duyệt) không có cách nào rút
+// lại, phải chờ người duyệt Từ Chối hộ dù họ chưa hề xem xét gì. Mirror ĐÚNG khuôn "PENDING + creator/
+// admin" đã dùng cho các module trên — KHÔNG áp dụng khi đã APPROVED/REJECTED (đã có kết quả xử lý).
+function canCancelLicense(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(item && item.creator === user.username);
+}
+
+function cancelLicense(user, item, payload) {
+  if (!canCancelLicense(user, item)) {
+    throw new HttpError(403, 'Bạn không có quyền hủy giấy phép này');
+  }
+  if (item.status !== 'PENDING') {
+    throw new HttpError(409, 'Chỉ hủy được giấy phép đang chờ duyệt — có thể đã được duyệt/từ chối/xử lý ở nơi khác');
+  }
+  const reason = String(payload?.reason || '').trim();
+  item.status = 'CANCELLED';
+  item.cancelledAt = nowVN();
+  item.cancelledBy = user.username;
+  item.cancelledByName = user.name;
+  item.history = item.history || [];
+  item.history.push({ action: 'CANCELLED', by: user.username, byName: user.name, time: nowVN(), comment: reason });
+  return item;
+}
+
 // ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itServiceRenewalManage, 10/2026
 // tách khỏi itManage thành quyền riêng) =====================
 // Công cụ NỘI BỘ đội IT tự theo dõi ngày hết hạn dịch vụ/hợp đồng CNTT (phần mềm, đường truyền, tên
@@ -6998,7 +7144,7 @@ module.exports = {
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
   markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,
-  scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment,
+  scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment, editInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canApproveInternalPost, approveInternalPost, rejectInternalPost,
   requestInternalPostInfo, hideInternalPost, unhideInternalPost, editInternalPost,
@@ -7024,7 +7170,7 @@ module.exports = {
   resolveApprovedFileId, resolveApprovedFileUrl,
   claimItTicket, updateItTicketStatus, addItTicketComment, cancelItTicket,
   escalateItTicket, approveItTicketEscalation, denyItTicketEscalation,
-  canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead,
+  canManageHrFeedback, respondToHrFeedback, markHrFeedbackRead, canWithdrawHrFeedback, withdrawHrFeedback,
   canActOnHrTask, canCreateHrProcess, canManageHrProcess, computeHrProcessProgress,
   completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment, assignHrSuccessor,
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
@@ -7048,6 +7194,7 @@ module.exports = {
   canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip,
   canCancelCarReg, cancelCarReg, reassignCarDispatch,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
+  canCancelLicense, cancelLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,
   // Vận Hành — operationOrders GIỮ NGUYÊN quy trình duyệt cũ (routes/records.js gọi tới update/submit
   // "Bổ sung"). editOperationStoreOpeningDraft/submitOperationStoreOpeningDraft/editOperationRepairDraft/

@@ -73,9 +73,33 @@ function findLatestContractForProcess(list, hrProcessId) {
 
 // Mã hợp đồng tự sinh — KHÔNG trùng với generateContractCode()/contractTypeAbbrs của module "Hợp Đồng"
 // (mua bán/nhà cung cấp) ở public/js/module-hopdong.js, đây là hàm RIÊNG, độc lập hoàn toàn.
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây tính seq = SỐ LƯỢNG hợp đồng hiện có + 1 —
+// nếu 1 hợp đồng GIỮA dãy của nhân viên đó từng bị xoá (chỉ Admin xoá được, nhưng vẫn có thể xảy ra),
+// "số lượng còn lại" tụt xuống trong khi mã lớn nhất TỪNG DÙNG không đổi, khiến hợp đồng mới sinh ra
+// TRÙNG mã 1 hợp đồng còn tồn tại (VD nhân viên có HDLD-NV001-1/2/3, xoá #2 -> length=2 -> seq mới=3,
+// trùng thẳng HDLD-NV001-3 đang có). Nay tính seq từ HẬU TỐ LỚN NHẤT từng dùng (mirror đúng
+// computeNextEmployeeCodeSeq() ở lib/employeeProfile.js), rồi nhảy tiếp nếu vẫn trùng (phòng hờ dữ liệu
+// cũ có mã không theo đúng tuần tự).
 function generateContractCode(list, employeeCode) {
-  const seq = findContractsByEmployeeCode(list, employeeCode).length + 1;
-  return `HDLD-${employeeCode}-${seq}`;
+  const family = findContractsByEmployeeCode(list, employeeCode);
+  const codeRe = /-(\d+)$/;
+  let maxSeq = 0;
+  for (const c of family) {
+    const m = codeRe.exec(String(c?.code || ''));
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  }
+  const existingCodes = new Set(family.map(c => c.code));
+  let seq = maxSeq + 1;
+  let code = `HDLD-${employeeCode}-${seq}`;
+  while (existingCodes.has(code)) {
+    seq++;
+    code = `HDLD-${employeeCode}-${seq}`;
+  }
+  return code;
 }
 
 function defaultContract(overrides) {

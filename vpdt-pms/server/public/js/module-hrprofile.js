@@ -349,6 +349,7 @@ async function openHrpfDetailModal(employeeCode, readOnlyArg) {
   // không mọi so sánh === với p.employeeCode (chuỗi thật) ở các hàm dưới sẽ SAI dù nhìn qua tưởng đúng.
   employeeCode = String(employeeCode);
   _hrpfManageDetailCode = employeeCode;
+  _hrpfShowRelinkInput = false;
   // readOnlyArg đến từ data-arg1="true"/"false" (chuỗi, KHÔNG phải boolean thật — cspCoerceArg() chỉ tự
   // ép kiểu Number cho chuỗi toàn số, giữ nguyên "true"/"false" dạng string) — so cả 2 dạng để không lặp
   // lại đúng lớp lỗi setAllPermTreeNodes() từng gặp (so sánh === true với 1 string luôn false).
@@ -411,6 +412,37 @@ async function confirmHrpfLinkAccount() {
   try {
     const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/link-account`, { username });
     alert('✅ Đã liên kết tài khoản VPDT với hồ sơ này.');
+    document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    loadHrProfileManageList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): hồ sơ ĐÃ liên kết tài khoản trước đây không có cách nào
+// đổi lại — cần khi nhân viên tái tuyển (mục "🔍 Kiểm Tra Nhân Sự Cũ" bên dưới) với 1 tài khoản VPDT
+// MỚI (tài khoản cũ đã khoá/xoá khi nghỉ việc). Nút "🔁 Đổi tài khoản liên kết" mở ẩn ô nhập (thu gọn
+// mặc định để không làm rối giao diện — phần lớn hồ sơ không cần thao tác này).
+let _hrpfShowRelinkInput = false;
+function toggleHrpfRelinkAccountInput() {
+  _hrpfShowRelinkInput = !_hrpfShowRelinkInput;
+  const row = _hrpfManageList.find(p => p.employeeCode === _hrpfManageDetailCode);
+  if (row) document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(row, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+}
+function resolveHrpfRelinkAccountInput(rawValue) {
+  const m = (rawValue || '').match(/^(.*) — .*\(([^()]+)\)$/);
+  const username = m ? m[2].trim() : '';
+  document.getElementById('hrpfRelinkAccountUsername').value = username;
+}
+async function confirmHrpfRelinkAccount() {
+  if (!_hrpfManageDetailCode) return;
+  const username = document.getElementById('hrpfRelinkAccountUsername')?.value || '';
+  if (!username) return alert('⛔ Vui lòng gõ và chọn đúng 1 tài khoản VPDT từ gợi ý.');
+  if (!confirm(`Đổi tài khoản liên kết của hồ sơ này sang "${username}"? Tài khoản cũ sẽ KHÔNG còn xem/sửa được hồ sơ này nữa.`)) return;
+  try {
+    const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/relink-account`, { username });
+    alert('✅ Đã đổi tài khoản liên kết.');
+    _hrpfShowRelinkInput = false;
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     loadHrProfileManageList();
   } catch (err) {
@@ -806,7 +838,14 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     <button type="button" data-op="toggleHrpfManualStatus" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">
       ${profile.status === 'ON_LEAVE' ? '↩️ Chuyển về Đang làm việc' : '🌙 Chuyển sang Nghỉ dài hạn'}
     </button>
-    ${profile.username ? '' : `<div class="flex items-center gap-1">
+    ${profile.username ? `<div class="flex items-center gap-1">
+      ${!_hrpfShowRelinkInput
+        ? `<button type="button" data-op="toggleHrpfRelinkAccountInput" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🔁 Đổi tài khoản liên kết</button>`
+        : `<input id="hrpfRelinkAccountInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfRelinkAccountInput" data-arg-value="0" placeholder="Gõ tên/tài khoản VPDT mới..." class="border p-1.5 rounded text-xs w-64">
+      <input type="hidden" id="hrpfRelinkAccountUsername">
+      <button type="button" data-op="confirmHrpfRelinkAccount" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">🔁 Xác Nhận Đổi</button>
+      <button type="button" data-op="toggleHrpfRelinkAccountInput" class="px-2 py-1.5 rounded text-xs font-bold bg-gray-100 text-gray-600 hover:bg-gray-200">Huỷ</button>`}
+    </div>` : `<div class="flex items-center gap-1">
       <input id="hrpfLinkAccountInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfLinkAccountInput" data-arg-value="0" placeholder="Gõ tên/tài khoản VPDT để liên kết..." class="border p-1.5 rounded text-xs w-64">
       <input type="hidden" id="hrpfLinkAccountUsername">
       <button type="button" data-op="confirmHrpfLinkAccount" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">🔗 Liên Kết Tài Khoản VPDT</button>

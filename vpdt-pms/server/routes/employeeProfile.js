@@ -501,6 +501,35 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/link-account`); }
 });
 
+// POST /api/hr-profile/by-code/:employeeCode/relink-account — LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4,
+// 9/2026): linkAccount() ở trên chặn hẳn khi hồ sơ ĐÃ có username — không có đường nào đổi lại khi 1
+// nhân viên tái tuyển (reactivateForRehire()) với 1 tài khoản VPDT MỚI (tài khoản cũ đã khoá/xoá khi
+// nghỉ việc). Route RIÊNG này (không tái dùng link-account) cho phép ĐỔI tài khoản liên kết của hồ sơ
+// ĐÃ có username sẵn — mirror đầy đủ luồng đồng bộ dept/jobTitle/posType xuống tài khoản mới như route
+// link-account ở trên.
+router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
+  try {
+    if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới đổi tài khoản VPDT liên kết' });
+    const username = String(req.body?.username || '').trim();
+    if (!username) return res.status(400).json({ error: 'Vui lòng chọn tài khoản VPDT mới cần liên kết' });
+    const appData = await getAllAppData();
+    const account = (appData.users || []).find(u => u.username === username && u.active !== false);
+    if (!account) return res.status(400).json({ error: 'Không tìm thấy tài khoản VPDT này (hoặc đã bị khoá)' });
+    let updated;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      updated = employeeProfile.relinkAccount(list, req.params.employeeCode, username, req.freshUser.username, req.freshUser.name);
+      return list;
+    });
+    if (updated.positionKey) {
+      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+        u.username === username ? { ...u, jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : u
+      ));
+    }
+    logHrProfileAction(req, 'RELINK_ACCOUNT', req.params.employeeCode, `Đổi tài khoản liên kết hồ sơ [${req.params.employeeCode}] sang "${username}"`);
+    res.json({ ok: true, profile: updated });
+  } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/relink-account`); }
+});
+
 // POST /api/hr-profile — HR/admin tạo tay 1 hồ sơ MỚI (nhân viên cũ đã đang làm việc, chưa từng qua
 // Onboarding nên chưa có hồ sơ) — xem lib/employeeProfile.js::createManualProfile(). payload.positionKey
 // (tuỳ chọn) — chức vụ BAN ĐẦU chọn ngay từ Cơ Cấu Tổ Chức lúc tạo, áp dụng NGAY trong cùng giao dịch

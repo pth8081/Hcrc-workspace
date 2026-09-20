@@ -346,6 +346,20 @@ function cloneVersion(list, sourceVersionId, versionName, actingUsername) {
   };
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây KHÔNG có cách nào xoá hẳn 1 bản nháp (DRAFT)
+// không dùng nữa (tạo thử/nhân bản nhầm) — chỉ có thể bỏ mặc nó nằm lại vĩnh viễn trong danh sách
+// phiên bản, gây nhiễu khi chọn version để Nhân Bản/xem lại. Chỉ cho xoá DRAFT — APPLIED/ARCHIVED đã
+// từng có hiệu lực thật (managerUsername của user đã tính theo đó, kpiFlow đã seed theo đó) nên PHẢI
+// giữ lại làm lịch sử, không bao giờ xoá được (khác driều kiện requireDraft() dùng cho SỬA node/kpiFlow
+// — ở đây chặt hơn 1 bậc vì xoá không thể hoàn tác như sửa).
+function deleteVersion(list, versionId) {
+  const version = requireVersion(list, versionId);
+  if (version.status !== 'DRAFT') {
+    throw new HttpError(400, 'Chỉ xoá được bản nháp (DRAFT) — bản đã áp dụng/lưu trữ phải giữ lại làm lịch sử');
+  }
+  return (list || []).filter(v => v.id !== versionId);
+}
+
 // Áp dụng 1 version DRAFT: validate lại LẦN CUỐI (phòng thủ — client đã gọi /validate trước, nhưng dữ
 // liệu users/version có thể đã đổi giữa 2 lượt gọi), lưu trữ version đang APPLIED (nếu có) -> ARCHIVED,
 // version này -> APPLIED, seed kpiFlow còn thiếu. KHÔNG tính lại managerUsername ở đây (cần khoá riêng
@@ -501,7 +515,7 @@ module.exports = {
   buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, findPositionNodeForUser,
   addNode, editNode, deleteNodeCascade,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
-  bootstrapFirstVersion, cloneVersion, applyVersionInPlace,
+  bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
   addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions,
   renameDepartmentRefInAllVersions, renameJobTitleInAllVersions

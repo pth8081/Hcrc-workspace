@@ -829,7 +829,9 @@ function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChi
     ? `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt</span>`
     : item.status === 'REJECTED'
       ? `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`
-      : `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Chờ duyệt</span>`;
+      : item.status === 'CANCELLED'
+        ? `<span class="px-2 py-1 bg-gray-200 text-gray-600 rounded font-bold text-xs">🚫 Đã hủy</span>`
+        : `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Chờ duyệt</span>`;
 
   const lifecycleKey = computeLicenseLifecycleState(item);
   const lifecycleBadge = lifecycleKey
@@ -868,6 +870,12 @@ function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChi
           } else {
             primaryBtnHTML = `<button data-op="runLicenseAction" data-arg0="${item.id}" data-arg1="view" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
           }
+          // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): người tải lên lỡ gửi nhầm giấy phép trong khi
+          // CÒN ĐANG chờ duyệt trước đây không có cách nào rút lại — mirror đúng khuôn Hủy của
+          // officeReqs/carRegs/vppRegistrations (chỉ hiện khi chính người tạo + còn PENDING).
+          if (item.status === 'PENDING' && item.creator === currentUser.username) {
+            secondaryOptions.push({ value: 'cancel', label: '🚫 Hủy' });
+          }
           if (canApprove && item.status === 'APPROVED') {
             if (item.lifecycleStatus !== 'REVOKED') {
               secondaryOptions.push(item.lifecycleStatus === 'RENEWING'
@@ -900,7 +908,31 @@ function runLicenseAction(id, action) {
     case 'unrevoke': unrevokeLicenseAction(id); break;
     case 'download': downloadLicenseFile(id); break;
     case 'delete': deleteLicenseAction(id); break;
+    case 'cancel': cancelLicenseAction(id); break;
   }
+}
+
+function cancelLicenseAction(id) {
+  const item = DB.licenses.find(l => l.id === id);
+  if (!item) return;
+  const reason = prompt('Lý do hủy (không bắt buộc):') || '';
+  showConfirmModal({
+    title: 'Hủy giấy phép',
+    bodyHTML: `Bạn có chắc chắn muốn hủy giấy phép "<b>${escapeHtml(item.licenseType)}</b>" (${escapeHtml(item.displayCode || item.code)})? Không thể hoàn tác.`,
+    confirmLabel: 'Hủy Giấy Phép',
+    onConfirm: async () => {
+      let updated;
+      try {
+        updated = (await callRecordAction('licenses', id, 'cancel', { reason: reason.trim() })).item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.licenses.findIndex(x => x.id === id);
+      if (idx !== -1) DB.licenses[idx] = updated;
+      logSystemAction('LICENSE', 'CANCEL_LICENSE', `Hủy giấy phép [${updated.code}]`, 'SUCCESS', updated.code);
+      renderLicenses();
+    }
+  });
 }
 
 function approveLicenseAction(id) {

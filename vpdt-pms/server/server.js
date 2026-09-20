@@ -62,6 +62,7 @@ const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync'
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
 const { checkPaymentDeadlineReminders } = require('./jobs/paymentDeadlineReminder');
+const { checkItApprovalDeadlineReminders } = require('./jobs/itApprovalDeadlineReminder');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -422,6 +423,11 @@ async function start() {
       // — xem jobs/paymentDeadlineReminder.js.
       checkPaymentDeadlineReminders();
       setInterval(checkPaymentDeadlineReminders, 24 * 60 * 60 * 1000);
+      // Nhắc hạn leo thang phê duyệt IT Hỗ Trợ + yêu cầu bổ sung/từ chối khẩn cấp Phê Duyệt Giá treo quá
+      // lâu chưa ai xử lý (vá lỗ hổng thật — trước đây chỉ có badge chờ trên giao diện, không job nào
+      // chủ động nhắc) — xem jobs/itApprovalDeadlineReminder.js.
+      checkItApprovalDeadlineReminders();
+      setInterval(checkItApprovalDeadlineReminders, 24 * 60 * 60 * 1000);
       // Giám sát ổ đĩa: chạy dày hơn 3 job nhắc hạn ở trên (mỗi giờ thay vì mỗi 24h) vì dung lượng đĩa
       // có thể tăng nhanh bất thường (VD bị lạm dụng tải file dồn dập) — bản thân job có cơ chế
       // cooldown riêng (24h) để không dội email liên tục, xem jobs/diskSpaceMonitor.js.

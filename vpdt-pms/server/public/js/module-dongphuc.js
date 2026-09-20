@@ -660,10 +660,21 @@ function renderUniformIssuancesTable() {
         ${uniformAckBadgeHTML(r)}
         ${(currentUser.username === r.employeeUsername && r.ackStatus !== 'ACKNOWLEDGED')
           ? `<button type="button" data-op="acknowledgeUniformIssuanceAction" data-arg0="${r.id}" class="block mx-auto mt-1 bg-teal-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-teal-700">✅ Xác nhận đã nhận</button>`
-          : ''}
+          : uniformAckOnBehalfButtonHTML(r)}
       </td>
     </tr>
   `).join('');
+}
+
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): nhân viên nghỉ việc/khoá tài khoản TRƯỚC KHI kịp bấm
+// "Xác nhận đã nhận" thì phiếu treo vĩnh viễn ở PENDING_ACK — server (acknowledgeUniformIssuance(),
+// lib/recordActions.js) đã cho phép canManageUniformStore xác nhận HỘ khi nhân viên đó active:false;
+// nút này chỉ hiện đúng lúc đó (còn hoạt động thì vẫn phải tự nhân viên bấm, không đổi hành vi cũ).
+function uniformAckOnBehalfButtonHTML(r) {
+  if (r.ackStatus === 'ACKNOWLEDGED' || !canManageUniformStore(currentUser)) return '';
+  const employee = (DB.users || []).find(u => u.username === r.employeeUsername);
+  if (!employee || employee.active !== false) return '';
+  return `<button type="button" data-op="acknowledgeUniformIssuanceAction" data-arg0="${r.id}" class="block mx-auto mt-1 bg-gray-500 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-gray-600">✅ Xác nhận hộ (đã nghỉ việc)</button>`;
 }
 
 // "Đồng Phục Của Tôi" (Hồ Sơ Cá Nhân, #pfUniformSection, xem core.js setProfileSubTab('UNIFORM')) —

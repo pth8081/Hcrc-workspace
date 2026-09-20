@@ -297,7 +297,14 @@ function closeMhTermForm() {
 }
 async function submitMhTermForm(e) {
   e.preventDefault();
-  const tiers = mhTierRows.map(r => ({ fromAmount: Number(String(r.fromAmount).replace(/\D/g, '')), ratePct: Number(r.ratePct) }));
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây dùng Number(r.ratePct) thẳng — gõ kiểu Việt
+  // "12,5" (dấu phẩy thập phân) ra NaN -> JSON.stringify() thành null -> server Number(null)=0 (hữu hạn,
+  // qua được validateTiers() vì 0 nằm trong 0-100) -> ÂM THẦM lưu Tỷ Lệ % = 0% thay vì 12.5% người dùng
+  // định nhập, không có cảnh báo gì. Nay chuẩn hoá dấu phẩy->chấm như các nơi khác (module-itsupport-price.js,
+  // module-hopdong.js...) VÀ chặn ngay ở client nếu vẫn không phải số hợp lệ, không để lọt xuống server.
+  const tiers = mhTierRows.map(r => ({ fromAmount: Number(String(r.fromAmount).replace(/\D/g, '')), ratePct: parseFloat(String(r.ratePct).replace(',', '.')) }));
+  const invalidTier = tiers.find(t => !Number.isFinite(t.ratePct) || t.ratePct < 0 || t.ratePct > 100);
+  if (invalidTier) return alert('⛔ Tỷ lệ % mỗi bậc phải là số hợp lệ trong khoảng 0-100 (dùng dấu , hoặc . cho phần thập phân).');
   const scopes = mhScopeRows.filter(r => r.scopeValue && r.scopeValue.trim()).map(r => ({ scopeType: r.scopeType, scopeValue: r.scopeValue.trim() }));
   const payload = {
     vendorId: Number(document.getElementById('mhTermVendorId').value),
@@ -349,11 +356,31 @@ async function cloneMhTerm(id) {
   try { mhApplyTermUpdate((await mhApi(`/api/purchasing/terms/${id}/clone`, 'POST', {})).item); alert('✅ Đã nhân bản — sửa trên bản Nháp mới.'); }
   catch (err) { alert('⛔ ' + err.message); }
 }
-async function calculateMhTerm(id) {
-  const periodStart = prompt('Từ ngày (YYYY-MM-DD):');
-  if (!periodStart) return;
-  const periodEnd = prompt('Đến ngày (YYYY-MM-DD):');
-  if (!periodEnd) return;
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây dùng prompt() nhập tay periodStart/periodEnd —
+// không có picker, dễ gõ sai định dạng (chỉ phát hiện khi server trả lỗi khó hiểu). Nay dùng
+// showConfirmModal() có sẵn với 2 input type="date" (trình duyệt tự ép đúng YYYY-MM-DD).
+function calculateMhTerm(id) {
+  showConfirmModal({
+    title: '📊 Tính Ước Tính Chiết Khấu',
+    bodyHTML: `
+      <div class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Từ ngày</label>
+          <input type="date" id="mhCalcPeriodStart" class="border rounded p-2 w-full">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Đến ngày</label>
+          <input type="date" id="mhCalcPeriodEnd" class="border rounded p-2 w-full">
+        </div>
+      </div>`,
+    confirmLabel: 'Tính Ước Tính',
+    onConfirm: () => submitMhCalcTerm(id)
+  });
+}
+async function submitMhCalcTerm(id) {
+  const periodStart = document.getElementById('mhCalcPeriodStart')?.value || '';
+  const periodEnd = document.getElementById('mhCalcPeriodEnd')?.value || '';
+  if (!periodStart || !periodEnd) return alert('⛔ Vui lòng chọn đủ Từ ngày và Đến ngày.');
   try {
     const result = await mhApi(`/api/purchasing/terms/${id}/calculate`, 'POST', { periodStart, periodEnd });
     mhCalculations.unshift(result.item);
