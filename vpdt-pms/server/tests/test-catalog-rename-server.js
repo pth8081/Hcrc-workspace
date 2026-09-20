@@ -49,6 +49,10 @@ function resetState() {
     carTaxiCompanies: ['Mai Linh', 'Vinasun'],
     priceZones: ['Miền Bắc', 'Miền Nam'],
     trainingCategories: ['Kỹ năng mềm', 'Nghiệp vụ'],
+    // contractTypes — THÊM ở đợt rà soát chuyên sâu vòng 2 (mức Thấp — "đổi tên Loại Pháp Lý HĐ không
+    // cascade contractTypeAbbrs/contracts.type"), cùng khuôn cats/docCatAbbrs ở trên.
+    contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động'],
+    contractTypeAbbrs: { 'Hợp đồng kinh tế': 'HDKT' },
     stores: ['Siêu Thị A'],
     jobTitles: ['Trưởng phòng'],
     storeJobTitles: [{ label: 'Giám Đốc Siêu Thị' }],
@@ -74,7 +78,14 @@ function resetState() {
   RECORDS = {
     docs: [{ id: 1, dept: 'Phòng IT', cat: 'Nội bộ' }],
     submissions: [{ id: 1, dept: 'Phòng IT' }],
-    carRegs: [{ id: 1, dept: 'Phòng IT', assignedTaxiCompany: 'Mai Linh' }]
+    carRegs: [{ id: 1, dept: 'Phòng IT', assignedTaxiCompany: 'Mai Linh' }],
+    // contracts — gồm cả hợp đồng GỐC lẫn 1 PHỤ LỤC (isAddendum) cùng mang type 'Hợp đồng kinh tế', xác
+    // nhận cascadeContractTypeRename() đổi field .type của CẢ HAI (cùng field, không phân biệt isAddendum).
+    contracts: [
+      { id: 1, dept: 'Phòng IT', type: 'Hợp đồng kinh tế', isAddendum: false },
+      { id: 2, dept: 'Phòng IT', type: 'Hợp đồng kinh tế', isAddendum: true, rootContractId: 1 },
+      { id: 3, dept: 'Phòng IT', type: 'Hợp đồng lao động', isAddendum: false }
+    ]
   };
   renameFieldCalls = [];
 }
@@ -198,6 +209,35 @@ async function run(name, fn) {
     assert.strictEqual(APP_DATA.docCatAbbrs['Nội bộ'], undefined);
     assert.strictEqual(APP_DATA.users[0].dept, 'Phòng IT', 'cats rename KHÔNG được đụng tới users.dept');
     assert.deepStrictEqual(APP_DATA.depts, ['Phòng IT', 'Phòng Nhân Sự'], 'cats rename KHÔNG được đụng tới depts');
+  });
+
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "đổi tên Loại Pháp Lý HĐ không cascade
+  // contractTypeAbbrs/contracts.type"): trước đây 'contractTypes' KHÔNG có mặt trong CATALOG_HANDLERS
+  // (renameCatalogEntry() ném 400 "Danh mục không hợp lệ") — nay CÓ cascade riêng, cùng khuôn cats.
+  await run('contractTypes: đổi tên -> cập nhật mảng contractTypes + cascade contracts.type (CẢ hợp đồng gốc LẪN phụ lục) + dời key contractTypeAbbrs', async () => {
+    resetState();
+    const res = await renameApi('contractTypes', 'Hợp đồng kinh tế', 'Hợp đồng kinh tế (sửa)');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(res.body.catalog.sort(), ['Hợp đồng kinh tế (sửa)', 'Hợp đồng lao động'].sort());
+    assert.strictEqual(RECORDS.contracts[0].type, 'Hợp đồng kinh tế (sửa)', 'hợp đồng GỐC phải cascade');
+    assert.strictEqual(RECORDS.contracts[1].type, 'Hợp đồng kinh tế (sửa)', 'PHỤ LỤC cùng type cũng phải cascade (cùng field .type)');
+    assert.strictEqual(RECORDS.contracts[2].type, 'Hợp đồng lao động', 'hợp đồng KHÔNG mang type cũ không bị đụng tới');
+    assert.strictEqual(APP_DATA.contractTypeAbbrs['Hợp đồng kinh tế (sửa)'], 'HDKT', 'viết tắt phải dời sang key mới');
+    assert.strictEqual(APP_DATA.contractTypeAbbrs['Hợp đồng kinh tế'], undefined, 'key cũ phải bị xoá, không để mồ côi');
+  });
+
+  await run('contractTypes: tên mới trùng -> 400, không đổi gì', async () => {
+    resetState();
+    const res = await renameApi('contractTypes', 'Hợp đồng kinh tế', 'Hợp đồng lao động');
+    assert.strictEqual(res.status, 400);
+    assert.deepStrictEqual(APP_DATA.contractTypes, ['Hợp đồng kinh tế', 'Hợp đồng lao động']);
+    assert.strictEqual(RECORDS.contracts[0].type, 'Hợp đồng kinh tế', 'KHÔNG cascade khi bị chặn');
+  });
+
+  await run('contractTypes: tên cũ không tồn tại -> 404', async () => {
+    resetState();
+    const res = await renameApi('contractTypes', 'Loại Không Tồn Tại', 'X');
+    assert.strictEqual(res.status, 404);
   });
 
   for (const [key, oldValue, newValue, otherExisting, label] of [

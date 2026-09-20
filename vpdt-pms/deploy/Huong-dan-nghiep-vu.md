@@ -1210,8 +1210,10 @@ Nhóm module người TẠO hồ sơ (thường là phòng chuyên môn) và ng�
 khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính riêng.
 
 - **Hợp Đồng** — 2 sub-tab: **Phê Duyệt** (tạo mới hồ sơ gốc HOẶC phụ lục, cả
-  hai đều qua hàng chờ duyệt trừ khi người tạo có quyền tự duyệt) và **Quản Lý
-  Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
+  hai đều LUÔN vào hàng chờ duyệt (trạng thái `PENDING`) — server đã bỏ hẳn
+  short-circuit tự duyệt, kể cả người tạo có quyền admin/duyệt hợp đồng vẫn
+  phải đi qua đúng quy trình Phê Duyệt đã cấu hình cho phòng ban đó) và **Quản
+  Lý Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
   tự động ở trạng thái đã duyệt ngay, không qua hàng chờ). Có thể khai Đợt
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
   - **⚠️ Quyền RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (9/2026)**: vì hồ sơ
@@ -1287,9 +1289,12 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     thủ công. **3 sub-tab**:
     - **"➕ Tạo Mới"** — tạo thủ công/có nguồn.
     - **"🗂️ Quản Lý Thanh Toán"** — nơi lập/sửa các **đợt thanh toán** của đề
-      nghị đang **NHÁP** (`DRAFT`, chỉ phát sinh từ nút "🧾 Lập Thanh Toán" ở
-      Hợp Đồng — đề nghị tạo thủ công/CÓ NGUỒN đi thẳng "Chờ duyệt" như
-      trước). Khi còn NHÁP, **số tiền từng đợt KHÔNG bắt buộc** — có thể bấm
+      nghị đang **NHÁP** (`DRAFT`) — CẢ 3 đường tạo đề nghị (tạo thủ công,
+      tự sinh có nguồn từ Hợp Đồng/Mua Bán/Sửa Chữa, HOẶC kế toán tự khởi
+      tạo có nguồn ngay tại tab "➕ Tạo Mới") đều LUÔN tạo NHÁP giống nhau,
+      KHÔNG có đường nào đi thẳng "Chờ duyệt" nữa — phải đính kèm "Hồ Sơ Đề
+      Nghị Thanh Toán" rồi tự bấm "📨 Chuyển Xác Nhận Thanh Toán" ở đây mới
+      chuyển sang Chờ duyệt. Khi còn NHÁP, **số tiền từng đợt KHÔNG bắt buộc** — có thể bấm
       **"💾 Lưu"** để giữ nguyên NHÁP, chỉnh sửa dần. Chỉ khi bấm **"📨 Chuyển
       Xác Nhận Thanh Toán"** (NHÁP → Chờ duyệt) thì **MỌI đợt mới bắt buộc
       phải có số tiền > 0** — thiếu đợt nào bị chặn ngay, cả ở giao diện lẫn
