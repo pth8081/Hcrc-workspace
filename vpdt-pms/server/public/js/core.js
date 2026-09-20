@@ -2380,7 +2380,13 @@ function operationOrderTierLabel(locationType, tier) {
 function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept) {
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
-  if (rule.mode === 'PERSON') return rule.username ? [rule.username] : [];
+  // Mirror ĐÚNG bản vá ở resolveOperationOrderStoreMixedApprovalRuleUsernames() (lib/workflowEngine.js):
+  // tài khoản đã bị khoá/không còn tồn tại KHÔNG được tính là người duyệt (xem chú thích đầy đủ ở đó).
+  if (rule.mode === 'PERSON') {
+    if (!rule.username) return [];
+    const person = (DB.users || []).find(u => u.username === rule.username);
+    return person && person.active !== false ? [rule.username] : [];
+  }
   return (DB.users || [])
     .filter(u => u.jobTitle === rule.jobTitle)
     .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
@@ -3202,6 +3208,19 @@ function mergeGroupsBasePerms(groupsPerms) {
         (APPROVER_AUTH_LEVEL_RANK[v] || 0) > (APPROVER_AUTH_LEVEL_RANK[best] || 0) ? v : best, 'NONE');
       return;
     }
+    // PQ-02b: mirror ĐÚNG bản sửa ở mergeGroupsBasePermsServer() (routes/data.js) — moduleAccess là
+    // object lồng {moduleKey: boolean}, phải OR TỪNG KEY con thay vì lấy nguyên object của nhóm cuối
+    // (xem chú thích đầy đủ ở đó).
+    if (key === 'moduleAccess') {
+      const subKeys = new Set();
+      values.forEach(v => { if (v && typeof v === 'object') Object.keys(v).forEach(k => subKeys.add(k)); });
+      const merged = {};
+      subKeys.forEach(k => {
+        merged[k] = values.some(v => (v && typeof v === 'object') ? v[k] !== false : true);
+      });
+      result[key] = merged;
+      return;
+    }
     const sample = values.find(v => v !== undefined && v !== null);
     if (typeof sample === 'boolean') {
       result[key] = values.some(v => v === true);
@@ -3998,6 +4017,13 @@ async function syncStorageOnce(key, silent, usersBaseline) {
     // kèm version MỚI của "users" sau khi đồng bộ, cập nhật ngay để lượt lưu "users" kế tiếp không bị
     // 409 giả do chính lượt lưu permGroups này gây ra (chứ không phải ai khác thực sự đổi "users").
     if (body.usersVersion) DB._versions.users = body.usersVersion;
+    // syncedVersions: {key: version} — các collection KHÁC bị server sửa như TÁC DỤNG PHỤ của lượt ghi
+    // này (hiện tại: "Cấp Phê Duyệt Cuối Cùng" tự dọn id nhóm vừa bị xoá, xem
+    // syncApprovalLevelsWithGroupsChange() ở routes/data.js) — cùng lý do usersVersion ngay trên: nếu
+    // không cập nhật, lượt lưu kế tiếp của đúng key đó trong CÙNG phiên luôn bị 409 giả.
+    if (body.syncedVersions) {
+      Object.entries(body.syncedVersions).forEach(([k, v]) => { if (v) DB._versions[k] = v; });
+    }
     return true;
   } catch (e) {
     console.error(`Lỗi khi lưu "${key}" lên máy chủ:`, e);

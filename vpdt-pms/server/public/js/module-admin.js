@@ -1,6 +1,28 @@
 // ==========================================
 // 10. ADMIN MANAGEMENT (USER, DEPT, CAT)
 // ==========================================
+// ===== Cảnh báo TRƯỚC KHI xoá 1 giá trị danh mục dùng chung (Quản Lý Danh Mục) =====
+// PHÁT HIỆN (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Trung bình): xoá 1 giá trị danh
+// mục (Phòng Ban/Siêu Thị/Chức Danh/Loại Tài Liệu/Loại Đào Tạo...) KHÔNG kiểm tra tham chiếu ở bất kỳ
+// đâu — hồ sơ cũ, cấu hình quy trình theo phòng ban, phạm vi quyền theo phòng ban, tài khoản người
+// dùng... đều lưu giá trị này dưới dạng CHUỖI, nên sau khi xoá vẫn còn nguyên tham chiếu treo; và nếu
+// sau này tạo lại đúng tên cũ thì toàn bộ cấu hình cũ "sống lại" âm thầm (có thể mở lại quyền/quy
+// trình cho một tên trùng lặp mà admin không hề chủ ý). Kiểm tra tham chiếu triệt để cho MỌI danh mục
+// là việc lớn, nằm ngoài phạm vi bản vá này — ở đây đưa ra CẢNH BÁO RÕ RÀNG (thay cho hộp thoại
+// "Xóa X?" cụt lủn trước đây) để admin biết đúng hệ quả trước khi xác nhận, và nhắc dùng nút "✏️ Sửa"
+// (đổi tên CÓ CASCADE qua routes/adminCatalog.js) khi chỉ muốn sửa tên gõ sai.
+function confirmCatalogValueDeletion(kindLabel, value, extraNote) {
+  return confirm(
+    `Xoá ${kindLabel} "${value}"?\n\n` +
+    `⚠️ Hệ thống KHÔNG kiểm tra được hết nơi đang dùng giá trị này: hồ sơ đã tạo, cấu hình quy trình/` +
+    `phạm vi quyền theo phòng ban, tài khoản người dùng... vẫn giữ nguyên chuỗi "${value}" và sẽ thành ` +
+    `tham chiếu treo (không còn chọn lại được trên dropdown). Nếu sau này tạo lại đúng tên cũ, các cấu ` +
+    `hình cũ đó sẽ tự động có hiệu lực trở lại.\n\n` +
+    `👉 Nếu chỉ muốn ĐỔI TÊN, hãy dùng nút "✏️ Sửa" (đổi tên có cập nhật dây chuyền toàn hệ thống) thay ` +
+    `vì xoá rồi tạo lại.${extraNote ? `\n\n${extraNote}` : ''}\n\nVẫn tiếp tục xoá?`
+  );
+}
+
 function saveDept(e) {
   e.preventDefault();
   const name = document.getElementById('txtDeptName').value.trim();
@@ -14,7 +36,7 @@ function saveDept(e) {
 }
 
 function deleteDept(name) {
-  if (!confirm(`Xóa phòng ban ${name}?`)) return;
+  if (!confirmCatalogValueDeletion('phòng ban', name, 'Viết tắt phòng ban (dùng sinh Mã Tài Liệu) của phòng này cũng bị xoá theo.')) return;
   DB.depts = DB.depts.filter(d => d !== name);
   delete DB.deptAbbrs[name];
   syncStorage('depts');
@@ -97,7 +119,7 @@ function promptAddStoreInline() {
 }
 
 function deleteStore(name) {
-  if (!confirm(`Xóa siêu thị ${name}?`)) return;
+  if (!confirmCatalogValueDeletion('siêu thị', name)) return;
   DB.stores = DB.stores.filter(s => s !== name);
   syncStorage('stores');
   logSystemAction('USER_MGM', 'DELETE_STORE', `Xóa siêu thị [${name}]`, 'SUCCESS', name);
@@ -241,7 +263,7 @@ function saveJobTitle(e) {
 }
 
 function deleteJobTitle(name) {
-  if (!confirm(`Xóa chức danh ${name}?`)) return;
+  if (!confirmCatalogValueDeletion('chức danh', name, 'Chức danh này có thể đang được dùng ở bước duyệt "Theo vị trí"/"Quy Trình Đặt Hàng Siêu Thị" và ở chính hồ sơ tài khoản người dùng.')) return;
   DB.jobTitles = DB.jobTitles.filter(t => t !== name);
   syncStorage('jobTitles');
   logSystemAction('USER_MGM', 'DELETE_JOB_TITLE', `Xóa chức danh [${name}]`, 'SUCCESS', name);
@@ -285,7 +307,7 @@ function saveStoreJobTitle(e) {
 }
 
 function deleteStoreJobTitle(label) {
-  if (!confirm(`Xóa chức danh siêu thị "${label}"?`)) return;
+  if (!confirmCatalogValueDeletion('chức danh siêu thị', label, 'Chức danh này có thể đang được dùng ở bước duyệt "Theo vị trí"/"Quy Trình Đặt Hàng Siêu Thị" và ở chính hồ sơ tài khoản người dùng.')) return;
   DB.storeJobTitles = DB.storeJobTitles.filter(t => t.label !== label);
   syncStorage('storeJobTitles');
   logSystemAction('USER_MGM', 'DELETE_STORE_JOB_TITLE', `Xóa chức danh siêu thị [${label}]`, 'SUCCESS', label);
@@ -339,7 +361,7 @@ function saveTrainingCategory(e) {
 }
 
 function deleteTrainingCategory(name) {
-  if (!confirm(`Xóa loại đào tạo ${name}?`)) return;
+  if (!confirmCatalogValueDeletion('loại đào tạo', name)) return;
   DB.trainingCategories = DB.trainingCategories.filter(t => t !== name);
   syncStorage('trainingCategories');
   logSystemAction('USER_MGM', 'DELETE_TRAINING_CATEGORY', `Xóa loại đào tạo [${name}]`, 'SUCCESS', name);
@@ -451,7 +473,7 @@ function saveCat(e) {
 }
 
 function deleteCat(name) {
-  if (!confirm(`Xóa loại tài liệu ${name}?`)) return;
+  if (!confirmCatalogValueDeletion('loại tài liệu', name, 'Viết tắt loại tài liệu (dùng sinh Mã Tài Liệu) của loại này cũng bị xoá theo.')) return;
   DB.cats = DB.cats.filter(c => c !== name);
   delete DB.docCatAbbrs[name];
   syncStorage('cats');

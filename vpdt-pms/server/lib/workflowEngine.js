@@ -261,7 +261,17 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // áp dụng đúng những siêu thị liệt kê. Cả 2 loại có thể cùng khớp 1 (bước, siêu thị) — không loại trừ
   // nhau, HỢP (UNION) lại ở resolveOperationOrderStoreMixedApprovers() bên dưới (phương án B, đã chốt).
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
-  if (rule.mode === 'PERSON') return rule.username ? [rule.username] : [];
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Trung bình): mode PERSON trước
+  // đây trả THẲNG rule.username mà KHÔNG hề tra lại DB.users — 1 người đã nghỉ việc (active:false) hay
+  // tài khoản đã bị xoá vẫn được tính là người duyệt hợp lệ của bước đó, trong khi họ không đăng nhập
+  // được nữa (lib/auth.js chặn cứng active===false): đơn hàng kẹt VĨNH VIỄN ở bước đó. Chỉ tính những
+  // tài khoản CÒN TỒN TẠI + CÒN HOẠT ĐỘNG (cùng điều kiện lib/positionApprovers.js vốn đã áp cho bước
+  // "Theo vị trí"); màn cấu hình cũng cảnh báo rõ dòng không còn tác dụng (module-workflow.js).
+  if (rule.mode === 'PERSON') {
+    if (!rule.username) return [];
+    const person = (users || []).find(u => u.username === rule.username);
+    return person && person.active !== false ? [rule.username] : [];
+  }
   // mode 'JOBTITLE': dòng MẶC ĐỊNH (không khai siêu thị) tự khớp theo dept CHÍNH/"Vị Trí Kiêm Nhiệm" của
   // từng người giữ đúng chức danh với ĐÚNG siêu thị trên đơn — giữ nguyên đúng tiện lợi "GĐST tự khớp
   // đúng siêu thị mình", không cần liệt kê tay hàng chục siêu thị, đồng thời AN TOÀN (GĐST siêu thị A

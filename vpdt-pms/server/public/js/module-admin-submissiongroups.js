@@ -33,6 +33,32 @@ function approvalGroupsGenId(prefix) {
   return `${prefix}_${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`;
 }
 
+// ===== Lưu CÓ CHỜ XÁC NHẬN + PHỤC HỒI (rollback) cho toàn bộ CRUD Nhóm/Cấp Phê Duyệt =====
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): mọi hàm CRUD ở màn này
+// trước đây gọi syncStorage() theo kiểu "bắn và quên" (không await, không kiểm kết quả) rồi báo
+// "✅ Đã lưu..." + ghi log SUCCESS + vẽ lại bảng NGAY LẬP TỨC — nếu server từ chối sau đó (409 xung
+// đột phiên bản, 400 do validate, 403 hết phiên) thì admin đã thấy thông báo thành công, nhật ký đã có
+// dòng SUCCESS giả, và DB.* trong bộ nhớ trình duyệt vẫn giữ thay đổi CHƯA BAO GIỜ được lưu (hiển thị
+// sai cho tới lần tải lại trang). Khuôn đúng đã có sẵn ở saveUser() (module này) và
+// saveWorkflowParticipatingPositions() (module-admin-specialperm.js): chụp state -> sửa -> await ->
+// phục hồi nếu thất bại -> CHỈ khi thành công mới alert/ghi log.
+function snapshotApprovalAdminState(cfg) {
+  return JSON.parse(JSON.stringify({
+    [cfg.groupsKey]: DB[cfg.groupsKey] || [],
+    [cfg.levelsKey]: DB[cfg.levelsKey] || []
+  }));
+}
+
+async function syncApprovalAdminKey(moduleKind, key, snapshot) {
+  const saved = await syncStorage(key);
+  if (!saved) {
+    Object.entries(snapshot).forEach(([k, v]) => { DB[k] = v; });
+    renderApprovalGroupsTable(moduleKind);
+    renderApprovalLevelsTable(moduleKind);
+  }
+  return saved;
+}
+
 // Ô chọn ĐÚNG 1 người — dùng cho nhóm bật cờ "Chỉ 1 người" (singleApprover). 1 <select> đơn, KHÁC
 // renderPeopleMultiSelect() (cho phép nhiều người). Vẫn hiện đúng người ĐÃ GÁN dù tài khoản đó vừa bị
 // khoá (active:false) — cùng tinh thần renderPeopleMultiSelect() ("thành viên đã gán từ trước không bị
@@ -130,20 +156,21 @@ function renderApprovalGroupsTable(moduleKind) {
   });
 }
 
-function renameApprovalGroup(moduleKind, groupId, newLabel) {
+async function renameApprovalGroup(moduleKind, groupId, newLabel) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
   if (!group) return;
   const trimmed = String(newLabel || '').trim();
   if (!trimmed) { alert('Tên nhóm không được để trống!'); renderApprovalGroupsTable(moduleKind); return; }
+  const snapshot = snapshotApprovalAdminState(cfg);
   group.label = trimmed;
-  syncStorage(cfg.groupsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'RENAME_APPROVAL_GROUP', `Đổi tên nhóm phê duyệt [${groupId}] -> "${trimmed}"`, 'SUCCESS', groupId);
 }
 
 // el = chính checkbox vừa đổi (data-arg-el) — đọc el.checked thay vì el.value (checkbox không dùng
 // data-arg-value vì el.value luôn là "on", không phản ánh trạng thái tick).
-function toggleApprovalGroupFlag(moduleKind, groupId, flagName, el) {
+async function toggleApprovalGroupFlag(moduleKind, groupId, flagName, el) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
   if (!group) return;
@@ -155,14 +182,15 @@ function toggleApprovalGroupFlag(moduleKind, groupId, flagName, el) {
     el.checked = false;
     return;
   }
+  const snapshot = snapshotApprovalAdminState(cfg);
   group[flagName] = el.checked;
-  syncStorage(cfg.groupsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'UPDATE_APPROVAL_GROUP_FLAG', `Đổi cờ "${flagName}" nhóm [${group.label}] = ${el.checked}`, 'SUCCESS', groupId);
   // Vẽ lại cả bảng — đổi "Chỉ 1 người" cần đổi LOẠI widget cột Thành Viên (select đơn <-> chọn nhiều).
   renderApprovalGroupsTable(moduleKind);
 }
 
-function saveApprovalGroupMembers(moduleKind, groupId) {
+async function saveApprovalGroupMembers(moduleKind, groupId) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
   if (!group) return;
@@ -176,24 +204,50 @@ function saveApprovalGroupMembers(moduleKind, groupId) {
     // trình/hợp đồng như trước) — querySelectorAll trong ĐÚNG picker này là đủ, không cần scope thêm.
     members = [...document.querySelectorAll(`#${pickerId} input[type="checkbox"]`)].map(cb => cb.value);
   }
+  const snapshot = snapshotApprovalAdminState(cfg);
   group.members = members;
-  syncStorage(cfg.groupsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'SAVE_APPROVAL_GROUP', `Cập nhật thành viên nhóm [${group.label}]: ${members.length} người`, 'SUCCESS', groupId);
   alert(`✅ Đã lưu thành viên nhóm "${group.label}"!`);
 }
 
-function deleteApprovalGroup(moduleKind, groupId) {
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): xoá 1 nhóm trước đây KHÔNG
+// dọn id nhóm đó khỏi visibleGroupIds/lockedGroupIds của các "Cấp Phê Duyệt Cuối Cùng" — nếu nhóm vừa
+// xoá đang được đặt BẮT BUỘC (locked) ở 1 cấp thì MỌI hồ sơ chọn cấp đó bị server từ chối VĨNH VIỄN
+// ("Thiếu nhóm phê duyệt bắt buộc...", xem buildEffectiveSubmissionWorkflowServer() ở
+// lib/createValidation.js) trong khi form tạo hồ sơ không còn render nổi checkbox của nhóm đã xoá để
+// tick lại -> khoá cứng việc tạo hồ sơ ở cấp đó, không có đường lùi qua giao diện. Hộp thoại xác nhận
+// cũ còn khẳng định SAI rằng "cấp đó sẽ tự bỏ qua nhóm này" (không hề có cơ chế nào làm việc đó). Nay
+// dọn ngay ở client, nêu rõ ảnh hưởng trong hộp thoại xác nhận, và server cũng TỰ dọn lại trong cùng
+// request ghi nhóm (xem syncApprovalLevelsWithGroupsChange() ở routes/data.js) để 1 request tự soạn
+// cũng không tạo ra được tham chiếu treo.
+async function deleteApprovalGroup(moduleKind, groupId) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
   if (!group) return;
-  if (!confirm(`Xoá nhóm "${group.label}"? Hồ sơ ĐÃ TẠO trước đó không bị ảnh hưởng (quy trình của hồ sơ cũ đã chốt cố định lúc tạo, không đổi theo cấu hình sau này) — chỉ ảnh hưởng lựa chọn cho hồ sơ MỚI từ giờ trở đi. Nếu nhóm này đang được đặt "bắt buộc"/"hiển thị" ở 1 Cấp Phê Duyệt Cuối Cùng nào đó, cấp đó sẽ tự bỏ qua nhóm này.`)) return;
+  const affectedLevels = (DB[cfg.levelsKey] || []).filter(lv =>
+    (Array.isArray(lv.visibleGroupIds) && lv.visibleGroupIds.includes(groupId)) || (lv.lockedGroupIds || []).includes(groupId));
+  const affectedNote = affectedLevels.length
+    ? `\n\n⚠️ Nhóm này đang được cấu hình ở ${affectedLevels.length} Cấp Phê Duyệt Cuối Cùng (${affectedLevels.map(lv => lv.label || lv.id).join(', ')}) — sẽ được TỰ ĐỘNG gỡ khỏi danh sách nhóm hiển thị/bắt buộc của các cấp đó.`
+    : '';
+  if (!confirm(`Xoá nhóm "${group.label}"? Hồ sơ ĐÃ TẠO trước đó không bị ảnh hưởng (quy trình của hồ sơ cũ đã chốt cố định lúc tạo, không đổi theo cấu hình sau này) — chỉ ảnh hưởng lựa chọn cho hồ sơ MỚI từ giờ trở đi.${affectedNote}`)) return;
+  const snapshot = snapshotApprovalAdminState(cfg);
   DB[cfg.groupsKey] = (DB[cfg.groupsKey] || []).filter(g => g.id !== groupId);
-  syncStorage(cfg.groupsKey);
-  logSystemAction(cfg.logTag, 'DELETE_APPROVAL_GROUP', `Xoá nhóm phê duyệt [${group.label}]`, 'SUCCESS', groupId);
+  DB[cfg.levelsKey] = (DB[cfg.levelsKey] || []).map(lv => ({
+    ...lv,
+    ...(Array.isArray(lv.visibleGroupIds) && { visibleGroupIds: lv.visibleGroupIds.filter(id => id !== groupId) }),
+    ...(Array.isArray(lv.lockedGroupIds) && { lockedGroupIds: lv.lockedGroupIds.filter(id => id !== groupId) })
+  }));
+  // CHỈ cần ghi collection NHÓM — server tự dọn lại "Cấp" trong CÙNG request đó (nguyên tử hơn 2 lượt
+  // ghi rời) và trả kèm version mới của "Cấp" (syncedVersions, xem syncStorageOnce() ở core.js) để lượt
+  // "💾 Lưu Phạm Vi" kế tiếp không bị 409 giả do chính lượt xoá này gây ra.
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
+  logSystemAction(cfg.logTag, 'DELETE_APPROVAL_GROUP', `Xoá nhóm phê duyệt [${group.label}]${affectedLevels.length ? ` (gỡ khỏi ${affectedLevels.length} cấp phê duyệt)` : ''}`, 'SUCCESS', groupId);
   renderApprovalGroupsTable(moduleKind);
+  renderApprovalLevelsTable(moduleKind);
 }
 
-function addApprovalGroup(moduleKind) {
+async function addApprovalGroup(moduleKind) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const label = String(prompt('Tên nhóm phê duyệt mới:') || '').trim();
   if (!label) return;
@@ -202,22 +256,24 @@ function addApprovalGroup(moduleKind) {
   const newGroup = { id: approvalGroupsGenId(cfg.groupIdPrefix), label, order, singleApprover: false, members: [] };
   if (cfg.hasBlocking) newGroup.blocking = true;
   if (cfg.hasFileReplacement) newGroup.allowFileReplacementProposal = false;
+  const snapshot = snapshotApprovalAdminState(cfg);
   groups.push(newGroup);
-  syncStorage(cfg.groupsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'ADD_APPROVAL_GROUP', `Thêm nhóm phê duyệt mới [${label}]`, 'SUCCESS', newGroup.id);
   renderApprovalGroupsTable(moduleKind);
 }
 
-function moveApprovalGroup(moduleKind, groupId, direction) {
+async function moveApprovalGroup(moduleKind, groupId, direction) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const groups = (DB[cfg.groupsKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const idx = groups.findIndex(g => g.id === groupId);
   const swapIdx = idx + direction;
   if (idx === -1 || swapIdx < 0 || swapIdx >= groups.length) return;
+  const snapshot = snapshotApprovalAdminState(cfg);
   [groups[idx], groups[swapIdx]] = [groups[swapIdx], groups[idx]];
   groups.forEach((g, i) => { g.order = i; });
   DB[cfg.groupsKey] = groups;
-  syncStorage(cfg.groupsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
   renderApprovalGroupsTable(moduleKind);
 }
 
@@ -302,14 +358,15 @@ function renderApprovalLevelsTable(moduleKind) {
   });
 }
 
-function renameApprovalLevel(moduleKind, levelId, newLabel) {
+async function renameApprovalLevel(moduleKind, levelId, newLabel) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const level = (DB[cfg.levelsKey] || []).find(l => l.id === levelId);
   if (!level) return;
   const trimmed = String(newLabel || '').trim();
   if (!trimmed) { alert('Tên cấp không được để trống!'); renderApprovalLevelsTable(moduleKind); return; }
+  const snapshot = snapshotApprovalAdminState(cfg);
   level.label = trimmed;
-  syncStorage(cfg.levelsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.levelsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'RENAME_APPROVAL_LEVEL', `Đổi tên cấp phê duyệt [${levelId}] -> "${trimmed}"`, 'SUCCESS', levelId);
 }
 
@@ -320,7 +377,7 @@ function onLevelVisibleAllToggle(moduleKind, levelId, el) {
   if (wrap) wrap.classList.toggle('hidden', el.checked);
 }
 
-function saveApprovalLevelGroups(moduleKind, levelId) {
+async function saveApprovalLevelGroups(moduleKind, levelId) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const level = (DB[cfg.levelsKey] || []).find(l => l.id === levelId);
   if (!level) return;
@@ -338,48 +395,52 @@ function saveApprovalLevelGroups(moduleKind, levelId) {
       return alert(`⛔ Nhóm bắt buộc "${names}" phải nằm trong danh sách "Nhóm Được Chọn (hiển thị)" — hoặc bật "Tất cả nhóm".`);
     }
   }
+  const snapshot = snapshotApprovalAdminState(cfg);
   level.visibleGroupIds = visibleGroupIds;
   level.lockedGroupIds = lockedGroupIds;
-  syncStorage(cfg.levelsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.levelsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'SAVE_APPROVAL_LEVEL_SCOPE', `Cập nhật phạm vi cấp phê duyệt [${level.label}]`, 'SUCCESS', levelId);
   alert(`✅ Đã lưu phạm vi cấp "${level.label}"!`);
 }
 
-function deleteApprovalLevel(moduleKind, levelId) {
+async function deleteApprovalLevel(moduleKind, levelId) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const level = (DB[cfg.levelsKey] || []).find(l => l.id === levelId);
   if (!level) return;
   if (level.isSystemDefault) return alert('Đây là cấp mặc định hệ thống — không xoá được (đảm bảo luôn có 1 cấp dự phòng), chỉ đổi tên được.');
   if (!confirm(`Xoá cấp "${level.label}"? Hồ sơ ĐÃ TẠO trước đó không bị ảnh hưởng (quy trình của hồ sơ cũ đã chốt cố định lúc tạo, không đổi theo cấu hình sau này) — chỉ ảnh hưởng lựa chọn cho hồ sơ MỚI từ giờ trở đi.`)) return;
+  const snapshot = snapshotApprovalAdminState(cfg);
   DB[cfg.levelsKey] = (DB[cfg.levelsKey] || []).filter(l => l.id !== levelId);
-  syncStorage(cfg.levelsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.levelsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'DELETE_APPROVAL_LEVEL', `Xoá cấp phê duyệt [${level.label}]`, 'SUCCESS', levelId);
   renderApprovalLevelsTable(moduleKind);
 }
 
-function addApprovalLevel(moduleKind) {
+async function addApprovalLevel(moduleKind) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const label = String(prompt('Tên cấp phê duyệt cuối cùng mới:') || '').trim();
   if (!label) return;
   const levels = DB[cfg.levelsKey] || (DB[cfg.levelsKey] = []);
   const order = Math.max(-1, ...levels.map(l => l.order ?? 0)) + 1;
   const newLevel = { id: approvalGroupsGenId(cfg.levelIdPrefix), label, order, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: false };
+  const snapshot = snapshotApprovalAdminState(cfg);
   levels.push(newLevel);
-  syncStorage(cfg.levelsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.levelsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'ADD_APPROVAL_LEVEL', `Thêm cấp phê duyệt mới [${label}]`, 'SUCCESS', newLevel.id);
   renderApprovalLevelsTable(moduleKind);
 }
 
-function moveApprovalLevel(moduleKind, levelId, direction) {
+async function moveApprovalLevel(moduleKind, levelId, direction) {
   const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
   const levels = (DB[cfg.levelsKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const idx = levels.findIndex(l => l.id === levelId);
   const swapIdx = idx + direction;
   if (idx === -1 || swapIdx < 0 || swapIdx >= levels.length) return;
+  const snapshot = snapshotApprovalAdminState(cfg);
   [levels[idx], levels[swapIdx]] = [levels[swapIdx], levels[idx]];
   levels.forEach((l, i) => { l.order = i; });
   DB[cfg.levelsKey] = levels;
-  syncStorage(cfg.levelsKey);
+  if (!await syncApprovalAdminKey(moduleKind, cfg.levelsKey, snapshot)) return;
   renderApprovalLevelsTable(moduleKind);
 }
 
@@ -490,7 +551,15 @@ async function saveUser(e) {
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
     if (user) {
-      user.username = username;
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): 3 dòng ép quyền bên
+      // dưới trước đây so theo `username` — tức tên MỚI vừa gõ trong form — nên chỉ cần đổi tên tài
+      // khoản admin gốc ngay trong CÙNG lượt lưu là bỏ qua được hoàn toàn lớp khoá này (và ngược lại,
+      // ai tự đổi tên mình thành "admin" sẽ tự được phong toàn quyền). Phải xét theo bản ghi ĐANG LƯU
+      // trong DB (user.username, đọc TRƯỚC khi gán tên mới), khớp đúng cách server chốt chặn thật theo
+      // prior.username (routes/data.js prepareUsersForSave()) — server cũng khoá luôn việc đổi tên tài
+      // khoản gốc, nên ở đây giữ nguyên username cũ để giao diện không hiển thị lệch với dữ liệu thật.
+      const isProtectedAdminAccount = user.username === 'admin';
+      user.username = isProtectedAdminAccount ? 'admin' : username;
       // Để trống ô mật khẩu/PIN khi sửa = giữ nguyên giá trị hiện tại (server không bao giờ gửi mật
       // khẩu/PIN thật về trình duyệt để hiển thị lại, nên chỉ gửi khi admin thực sự nhập giá trị mới).
       if (pass) user.pass = pass;
@@ -510,9 +579,9 @@ async function saveUser(e) {
       // editUser() khi mở form sửa đúng tài khoản này) — ép lại đây phòng trường hợp form vẫn đọc được
       // giá trị khác đi (vd DevTools bỏ qua thuộc tính disabled); server cũng ép lại lần nữa khi ghi
       // (routes/data.js) nên đây chỉ là lớp phòng vệ bổ sung, không phải chốt chặn duy nhất.
-      user.perms = username === 'admin' ? { admin: true } : perms;
-      user.groupIds = username === 'admin' ? [] : groupIds;
-      user.permOverrides = username === 'admin' ? null : permOverrides;
+      user.perms = isProtectedAdminAccount ? { admin: true } : perms;
+      user.groupIds = isProtectedAdminAccount ? [] : groupIds;
+      user.permOverrides = isProtectedAdminAccount ? null : permOverrides;
     }
   } else {
     // Tạo mới ngay lập tức, lưu 1 người — nếu muốn gộp nhiều người rồi lưu 1 lần, dùng "+ Thêm Vào

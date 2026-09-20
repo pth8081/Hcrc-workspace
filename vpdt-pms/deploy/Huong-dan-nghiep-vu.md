@@ -273,6 +273,16 @@ thêm:
 chỉ đổi CHỮ hiển thị trên nút/chân ký, mọi logic phân quyền/chuyển bước giữ
 nguyên 100%.
 
+**Xoá 1 mẫu quy trình — chặn đầy đủ hơn (từ đợt rà soát cụm Hệ Thống/Admin/Cấu
+Hình)**: hệ thống vốn đã chặn xoá 1 mẫu đang được gán ở đâu đó, nhưng vòng
+kiểm tra cũ chỉ đọc được các cấu hình "phẳng" (theo phòng ban hoặc theo mức giá
+trị) và **bỏ sót các cấu hình LỒNG**: Văn Bản Trình (theo *loại tờ trình* ×
+phòng ban), Hỗ Trợ IT > Phê Duyệt Giá (theo *phòng ban* × loại giá) và cấu hình
+chung cũ của Văn Bản Trình. Xoá mẫu đang được các nơi đó dùng vẫn "thành công"
+và quy trình N bước của những phòng ban/loại ấy **âm thầm co về 1 bước mặc
+định**. Nay vòng kiểm tra quét đệ quy đủ các dạng cấu hình, liệt kê chính xác
+nơi đang dùng và từ chối xoá cho tới khi admin đổi các nơi đó sang mẫu khác.
+
 **Nút "🖨️ In" khớp đúng format "👁️ Xem Phiếu" (từ 9/2026)** — trước đây nút In
 ngay trong màn Xem (dùng chung cho mọi module, kể cả Phiếu Phê Duyệt) in ra
 HOÀN TOÀN không có định dạng (chữ dồn 1 khối, mất hết bảng/khung/chân ký) do
@@ -486,6 +496,13 @@ Nguyên tắc quan trọng cần biết trước khi dùng (không đổi so v�
 - **2 module Vận Hành > Mở Mới/Sửa Chữa Siêu Thị không nằm trong phạm vi** —
   2 module này không còn bước phê duyệt nào cả (xem mục 4.4), nên không
   xuất hiện trong danh sách module để chọn khi tạo cấu hình.
+- **Báo cáo kết quả trung thực (từ đợt rà soát cụm Hệ Thống/Admin/Cấu Hình)** —
+  1 lượt "⚡ Áp Dụng" ghi vào nhiều nhóm cấu hình khác nhau (mỗi module 1 nơi
+  lưu riêng). Trước đây dù 1 phần lưu thất bại (mất mạng/phiên hết hạn/người
+  khác vừa sửa cùng chỗ) màn hình vẫn luôn báo "✅ Đã áp dụng cho N mục". Nay
+  hệ thống chờ xác nhận từng nhóm, **hoàn tác đúng nhóm lưu hỏng** và báo rõ
+  "⚠️ Áp dụng KHÔNG trọn vẹn: đã lưu X/N mục" kèm tên nhóm cần thử lại (Nhật
+  Ký Hệ Thống ghi mức WARNING thay vì SUCCESS cho lượt đó).
 
 **Dùng khi nào**: hữu ích nhất lúc mới triển khai hệ thống (đồng bộ nhanh
 số bước chuẩn cho từng nhóm module trước khi đi gán người duyệt từng nơi),
@@ -587,6 +604,15 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     thống, không xoá được, vẫn đổi tên được) để luôn có ít nhất 1 cấp dự
     phòng. Đổi tên/thêm nhóm-cấp KHÔNG ảnh hưởng hồ sơ đã tạo trước đó (quy
     trình mỗi hồ sơ đã chốt cố định lúc tạo).
+    **Xoá 1 nhóm giờ tự dọn cấu hình Cấp (từ đợt rà soát cụm Hệ Thống/Admin/
+    Cấu Hình)** — trước đây xoá 1 nhóm đang được đặt "Nhóm Bắt Buộc" ở 1 Cấp
+    sẽ KHOÁ CỨNG việc tạo hồ sơ ở cấp đó (server luôn báo "thiếu nhóm phê
+    duyệt bắt buộc" trong khi form không còn ô nào để tick lại). Nay id nhóm
+    bị xoá được gỡ tự động khỏi cả "Nhóm Được Chọn" lẫn "Nhóm Bắt Buộc" của
+    MỌI cấp (cả ở giao diện lẫn ở server, kể cả khi gọi thẳng API), hộp thoại
+    xác nhận cũng liệt kê đúng những cấp sẽ bị ảnh hưởng. Ngoài ra ràng buộc
+    "Nhóm Bắt Buộc phải nằm trong Nhóm Được Chọn" nay **được kiểm tra lại ở
+    server**, không chỉ ở giao diện.
   - **Chọn người phê duyệt cụ thể khi nhóm có nhiều người** — nhóm chỉ **đúng
     1 người** → hệ thống tự dùng người đó, KHÔNG hiện hộp chọn. Nhóm có
     **nhiều hơn 1 người** (VD 2 Phó Giám Đốc, nhóm không bật "Chỉ 1 người") →
@@ -1282,7 +1308,13 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     KHÔNG loại trừ nhau (VD 1 dòng Mặc định "Giám Đốc siêu thị" + 1 dòng Ngoại
     lệ "Phó Giám Đốc siêu thị" cho riêng vài siêu thị → những siêu thị đó có
     CẢ 2 chức danh cùng duyệt được Bước 1). Được liệt kê ở màn này (theo tên
-    NGƯỜI hoặc CHỨC DANH) là **ĐỦ điều kiện duyệt ngay** — KHÔNG cần bật thêm
+    NGƯỜI hoặc CHỨC DANH) là **ĐỦ điều kiện duyệt ngay** — nhưng **tài khoản
+    phải còn tồn tại và còn hoạt động**: từ đợt rà soát cụm Hệ Thống/Admin/Cấu
+    Hình, 1 dòng "Người cụ thể" trỏ tới tài khoản đã bị khoá (nghỉ việc) hoặc
+    đã xoá KHÔNG còn được tính là người duyệt (trước đây vẫn tính, khiến đơn
+    kẹt vĩnh viễn ở bước đó) và hiện cảnh báo đỏ ngay trên bảng cấu hình
+    ("⛔ Tài khoản đã bị khoá/không còn tồn tại — dòng này KHÔNG có tác dụng")
+    để admin gán lại người khác. KHÔNG cần bật thêm
     quyền "Người duyệt" (`canBeApprover`, "🧩 Nhóm Quyền Đặc Biệt" — Hệ Thống
     → 🔀 Quy Trình Nâng Cao) như cơ chế
     "Theo vị trí" của các quy trình theo phòng ban khác (Văn Phòng Phẩm/Thanh
@@ -1383,6 +1415,15 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   ghi cũ đã lỗi thời. Nay hệ thống lưu lại nội dung của lần gửi thành công
   gần nhất, tự so sánh mỗi lượt quét và gửi lại khi phát hiện khác — y hệt
   thì bỏ qua, không gửi thừa.
+  **Sửa cấu hình giữa lúc job đang chạy (từ đợt rà soát cụm Hệ Thống/Admin/Cấu
+  Hình)** — trước đây job ghi lại trạng thái đồng bộ bằng bản cấu hình đọc từ
+  ĐẦU lượt chạy, nên nếu admin đổi Base URL/chu kỳ/tắt đồng bộ trong lúc job
+  đang gửi (có thể mất nhiều phút) thì thay đổi đó bị ghi đè lại về giá trị cũ
+  mà không báo gì. Nay job đọc lại cấu hình mới nhất ngay trước khi ghi và chỉ
+  cập nhật đúng 3 trường trạng thái của lượt chạy (thời điểm/kết quả/thông báo).
+  **Chỉ admin đọc được cấu hình này** — trước đây Base URL + tên header xác
+  thực trả về cho MỌI tài khoản đã đăng nhập qua API tải dữ liệu chung (giá trị
+  header thì chưa bao giờ trả ra); nay ẩn hoàn toàn với người không phải admin.
 - **Mở Mới / Sửa Chữa Siêu Thị** — pipeline 4 giai đoạn **Dự toán → Thực hiện
   → Nghiệm thu → Báo cáo**:
   - **Hồ sơ Mở Mới/Sửa Chữa (bản thân bản ghi)** — đi thẳng trạng thái đã
@@ -2724,6 +2765,15 @@ bộ quyền cố định, rồi gán nhiều người dùng vào nhóm đó —
 sửa 1 nhóm là cập nhật quyền cho toàn bộ thành viên nhóm đó cùng lúc, tiện khi
 quản lý nhiều người cùng vai trò.
 
+**Gộp nhiều nhóm — khối "0. Quyền Truy Cập Module" (sửa từ đợt rà soát cụm Hệ
+Thống/Admin/Cấu Hình)**: 1 người thuộc NHIỀU nhóm thì quyền của các nhóm được
+HỢP lại theo từng loại dữ liệu (cờ bật/tắt lấy "có ở bất kỳ nhóm nào là có",
+phạm vi phòng ban lấy hợp, mức xác thực người duyệt lấy mức cao nhất) — nhưng
+riêng khối 0 trước đây bị lấy **nguyên trạng của nhóm được tick sau cùng**,
+nên cùng 1 người có thể mất/được quyền vào module chỉ vì thứ tự tick nhóm khác
+đi. Nay khối 0 cũng hợp theo **từng module một**: chỉ cần **một** nhóm mở
+module đó là người này vào được; module chỉ bị chặn khi **mọi** nhóm đều chặn.
+
 **Cấp quyền cho 1 nhân viên mới** (quy trình thường dùng):
 
 1. Tạo tài khoản ở **Hệ Thống → Quản Trị → Người Dùng** (điền phòng ban, chức
@@ -2767,6 +2817,18 @@ từ bản này. Nếu cần người thật sự quản lý các module này, h
 khoản KHÁC (username khác `"admin"`) và cấp đúng quyền cụ thể ở trên —
 kể cả tài khoản đó có tick thêm `perms.admin` (VD 1 "admin phụ") vẫn cấp
 được bình thường vì không bị khoá cứng như tài khoản `admin` gốc.
+
+**Từ đợt rà soát cụm Hệ Thống/Admin/Cấu Hình**: khoá này nay xét theo **bản
+ghi đang lưu trong CSDL** chứ không theo tên đăng nhập client vừa gửi lên —
+trước đây chỉ cần đổi `username` của chính tài khoản gốc (VD `admin` →
+`quantri`) **trong cùng 1 lượt lưu** kèm quyền rỗng là gỡ được khoá hoàn toàn;
+và ngược lại, sau khi tài khoản gốc đổi tên thì bất kỳ ai tự đổi tên mình
+thành `admin` cũng được tự động phong toàn quyền. Hệ quả cho người dùng:
+**không đổi được tên đăng nhập của tài khoản `admin` gốc nữa** (server tự giữ
+lại tên `admin`) — muốn 1 tài khoản quản trị mang tên khác thì tạo tài khoản
+riêng và cấp `perms.admin` như trên. Ngoài ra `id` của tài khoản cũng được
+kiểm tra **duy nhất** ở server (trước đây chỉ kiểm tra trùng tên đăng nhập),
+chặn trường hợp hiếm 2 tài khoản trùng id làm hợp nhất/xoá nhầm lẫn nhau.
 
 **Nhật ký hệ thống (audit log)**: mọi thao tác THAY ĐỔI (không phải xem) ở 3
 khu vực trên đều được ghi vào **Hệ Thống → Nhật Ký Hệ Thống** để đối chiếu —
@@ -2823,6 +2885,15 @@ tên):
   sửa qua nhiều hộp thoại nhập liên tiếp (tên rồi tới field tiếp theo) thay
   vì 1 hộp duy nhất, vì mỗi mục ở đây có hơn 1 thông tin cần sửa.
 
+**Xoá (🗑) một giá trị danh mục — cảnh báo tham chiếu treo (từ đợt rà soát cụm
+Hệ Thống/Admin/Cấu Hình)**: hệ thống KHÔNG kiểm tra được hết nơi đang dùng 1
+giá trị danh mục (hồ sơ đã tạo, cấu hình quy trình/phạm vi quyền theo phòng
+ban, tài khoản người dùng... đều lưu dưới dạng chuỗi). Xoá xong, các nơi đó
+vẫn giữ nguyên tên cũ thành **tham chiếu treo** (không chọn lại được trên
+dropdown), và nếu sau này tạo lại **đúng tên cũ** thì các cấu hình đó tự động
+có hiệu lực trở lại. Hộp thoại xác nhận khi xoá nay nêu rõ điều này và nhắc
+dùng nút **✏️ Sửa** (đổi tên có cascade) nếu chỉ muốn sửa tên gõ sai.
+
 ### 7.3. Biểu Mẫu
 
 **📋 Biểu Mẫu** — vai trò: cho phép admin tự tuỳ biến field của gần như mọi
@@ -2861,6 +2932,12 @@ hình của admin đó) khi chắc chắn không cần nữa. Hồ sơ trong Th�
 tự động dọn theo thời gian** — nằm mãi ở đây cho tới khi có người chủ động
 khôi phục hoặc xoá vĩnh viễn.
 
+**Khôi phục có để lại dấu vết (từ đợt rà soát cụm Hệ Thống/Admin/Cấu Hình)**:
+mỗi lượt **Khôi phục** giờ tự sinh 1 dòng trong Nhật Ký Hệ Thống (mục 7.6) ghi
+rõ ai khôi phục, hồ sơ nào (loại hồ sơ + mã), có kèm bao nhiêu bản ghi cùng
+"họ" (phiên bản/phụ lục) — trước đây hồ sơ đã xoá có thể xuất hiện trở lại mà
+không ai truy được người thực hiện.
+
 ### 7.6. Nhật Ký Hệ Thống (Log)
 
 **📊 Log** — ghi lại mọi thao tác quan trọng (đăng nhập, tạo/sửa/xoá/duyệt hồ
@@ -2871,6 +2948,20 @@ Trạng thái, và ô tìm nhanh theo từ khoá (khớp cả tên đăng nhập
 thao tác/mô tả). Hệ thống tự động **chỉ giữ lại 5.000 dòng gần nhất** — nhật
 ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay; mỗi lượt tải cũng chỉ trả
 tối đa 1.000 dòng/lần (dùng bộ lọc để thu hẹp thay vì tải hết).
+
+**Nhật ký do SERVER tự ghi cho thao tác quản trị (từ đợt rà soát cụm Hệ Thống/
+Admin/Cấu Hình)**: trước đây toàn bộ dòng nhật ký đều do trình duyệt tự gửi
+lên sau khi lưu — nghĩa là thao tác gọi thẳng API (bỏ qua giao diện) không để
+lại dấu vết nào, và ngược lại trình duyệt vẫn ghi được dòng "SUCCESS" cho 1
+thao tác mà server đã từ chối. Nay **mỗi lượt ghi đè các collection quản trị
+nhạy cảm** (người dùng & nhóm quyền, nhóm/cấp phê duyệt, mọi cấu hình quy
+trình duyệt, cấu hình Email/API dsmart16/API key, nhóm quyền đặc biệt, cấu
+hình tệp tải lên/biểu thuế lương/từ khoá nhạy cảm) đều sinh thêm 1 dòng
+`CONFIG / ADMIN_DATA_WRITE` **ngay tại server**, chỉ khi ghi THÀNH CÔNG. Vì
+vậy 1 thao tác qua giao diện có thể xuất hiện 2 dòng (1 của giao diện mô tả
+nghiệp vụ chi tiết, 1 của server làm bằng chứng) — đây là hành vi có chủ đích.
+Thao tác **Xoá toàn bộ nhật ký** cũng tự ghi lại 1 dòng "bia mộ"
+(`SYSTEM / CLEAR_SYSTEM_LOGS`) làm dòng đầu tiên của nhật ký mới.
 
 ### 7.7. Người Dùng — tạo hàng loạt
 

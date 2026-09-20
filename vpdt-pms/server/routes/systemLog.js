@@ -119,6 +119,18 @@ router.delete('/', async (req, res) => {
   }
   try {
     await clearAllSystemLogs();
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao — phần "không đánh dấu"):
+    // xoá sạch nhật ký trước đây không để lại dòng nào, nên sau thao tác này bảng log TRỐNG TRƠN và
+    // không ai biết ai/lúc nào đã xoá. Ghi ngay 1 dòng "bia mộ" (dòng ĐẦU TIÊN của nhật ký mới) — không
+    // khôi phục được dữ liệu đã xoá nhưng luôn còn dấu vết của chính hành động xoá.
+    await insertSystemLog({
+      username: req.freshUser?.username || req.user?.username,
+      fullName: req.freshUser?.name || req.user?.username,
+      ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'CLEAR_SYSTEM_LOGS', targetObject: 'systemLogs',
+      description: 'Xoá TOÀN BỘ nhật ký hệ thống (mọi dòng trước thời điểm này đã bị xoá vĩnh viễn)',
+      status: 'WARNING'
+    }).catch(e => console.error('Lỗi ghi dấu vết xoá nhật ký hệ thống:', e.message));
     res.json({ ok: true });
   } catch (err) {
     console.error('DELETE /api/log lỗi:', err.message);
