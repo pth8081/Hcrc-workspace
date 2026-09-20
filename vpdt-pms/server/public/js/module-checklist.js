@@ -1000,14 +1000,31 @@ function renderChecklistResultTab() {
           ${s.scorePercent != null ? s.scorePercent.toFixed(1) + '% · ' : ''}${s.hasCriticalFail ? 'Lỗi nghiêm trọng' : (s.isPassed === false ? 'Không đạt' : (s.isPassed === true ? 'Đạt' : '—'))}
         </span>
       </div>
-      ${s.storeResponseText ? `<div class="text-xs text-gray-600 bg-gray-50 rounded p-2">💬 Phản hồi siêu thị: ${escapeHtml(s.storeResponseText)}</div>`
-        : (s.templateType === 'CONTROL_AUDIT' && s.storeCode === user.dept && user.posType === 'STORE'
-          ? `<div class="flex items-center gap-2">
-              <input id="checklistStoreResponseInput_${s.id}" placeholder="Nhập phản hồi/giải trình..." class="flex-1 border p-1.5 rounded text-[11px]">
-              <button type="button" data-op="submitChecklistStoreResponse" data-arg0="${s.id}" class="px-3 py-1.5 bg-teal-600 text-white rounded text-[11px] font-bold hover:bg-teal-700">Gửi Phản Hồi</button>
-            </div>` : '')}
+      ${(() => {
+        const canRespond = s.templateType === 'CONTROL_AUDIT' && s.storeCode === user.dept && user.posType === 'STORE';
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): route store-response ở server (routes/checklist.js)
+        // KHÔNG hề chặn gửi lại (chỉ đòi status==='SUBMITTED') — nhưng client trước đây ẨN VĨNH VIỄN ô
+        // nhập ngay khi đã có storeResponseText, khiến siêu thị không có cách nào sửa/nộp lại phản hồi
+        // nếu gõ nhầm/muốn bổ sung, dù server thực ra cho phép.
+        if (s.storeResponseText && !expandedChecklistResponseEdits.has(s.id)) {
+          return `<div class="text-xs text-gray-600 bg-gray-50 rounded p-2 flex items-start justify-between gap-2">
+              <span>💬 Phản hồi siêu thị: ${escapeHtml(s.storeResponseText)}</span>
+              ${canRespond ? `<button type="button" data-op="toggleChecklistStoreResponseEdit" data-arg0="${s.id}" class="flex-shrink-0 text-teal-700 font-bold hover:underline">✏️ Sửa</button>` : ''}
+            </div>`;
+        }
+        if (!canRespond) return '';
+        return `<div class="flex items-center gap-2">
+              <input id="checklistStoreResponseInput_${s.id}" placeholder="Nhập phản hồi/giải trình..." value="${escapeHtml(s.storeResponseText || '')}" class="flex-1 border p-1.5 rounded text-[11px]">
+              <button type="button" data-op="submitChecklistStoreResponse" data-arg0="${s.id}" class="px-3 py-1.5 bg-teal-600 text-white rounded text-[11px] font-bold hover:bg-teal-700">${s.storeResponseText ? 'Nộp Lại' : 'Gửi Phản Hồi'}</button>
+            </div>`;
+      })()}
     </div>
   `).join('');
+}
+const expandedChecklistResponseEdits = new Set();
+function toggleChecklistStoreResponseEdit(submissionId) {
+  expandedChecklistResponseEdits.add(submissionId);
+  renderChecklistResultTab();
 }
 async function submitChecklistStoreResponse(submissionId) {
   const input = document.getElementById(`checklistStoreResponseInput_${submissionId}`);
@@ -1016,6 +1033,7 @@ async function submitChecklistStoreResponse(submissionId) {
   try {
     const result = await callWorkflowStyleAction(`/api/checklist/submissions/${submissionId}/store-response`, { responseText });
     checklistApplySubmissionUpdate(result.item);
+    expandedChecklistResponseEdits.delete(submissionId);
     renderChecklistResultTab();
   } catch (err) { alert('⛔ ' + err.message); }
 }

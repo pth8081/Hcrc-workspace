@@ -49,14 +49,27 @@ async function requestWithRetry(fullUrl, headers, maxRetries = 3) {
   throw lastError;
 }
 
-// Hàm chính: tự động lặp qua toàn bộ trang cho tới khi hasMore=false
-async function fetchAllPurchases({ baseUrl, apiKey, pageSize = 100, sinceDate = null }) {
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): vòng lặp phân trang gốc `while (true)` không có trần
+// nào — nếu DSmart API có lỗi (VD luôn trả hasMore:true dù đã hết trang thật, hoặc lặp lại đúng 1 trang
+// do bug phía DSmart) thì job Đồng Bộ (routes/purchasing.js) sẽ TREO VÔ THỜI HẠN, allItems phình vô hạn
+// trong bộ nhớ cho tới khi tiến trình Node hết RAM. Thêm trần MAX_PAGES (dừng + báo lỗi RÕ RÀNG thay vì
+// âm thầm cắt bớt dữ liệu) — KHÔNG đụng gì tới logic tính trang/retry gốc theo tài liệu người dùng cung
+// cấp, chỉ thêm 1 lớp an toàn bọc ngoài vòng lặp.
+const MAX_PAGES = 1000;
+
+// Hàm chính: tự động lặp qua toàn bộ trang cho tới khi hasMore=false (hoặc chạm maxPages)
+// maxPages: tuỳ chọn, mặc định MAX_PAGES ở trên — cho phép test hồi quy đặt trần thấp để không phải
+// giả lập hàng nghìn lượt gọi HTTP thật, KHÔNG dùng để nới trần ở môi trường thật (đổi hằng số nếu cần).
+async function fetchAllPurchases({ baseUrl, apiKey, pageSize = 100, sinceDate = null, maxPages = MAX_PAGES }) {
   const headers = { 'X-API-Key': apiKey };
   let page = 1;
   let allItems = [];
   let pagesFetched = 0;
 
   while (true) {
+    if (pagesFetched >= maxPages) {
+      throw new Error(`DSmart API: đã lấy tới ${maxPages} trang (pageSize=${pageSize}) mà vẫn còn hasMore=true — dừng lại để tránh treo vô thời hạn, kiểm tra lại phía DSmart (có thể lỗi trả sai hasMore) hoặc tăng MAX_PAGES nếu dữ liệu thật sự lớn tới mức này.`);
+    }
     const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (sinceDate) query.set('sinceDate', sinceDate);
     const fullUrl = `${baseUrl}/api/purchases?${query.toString()}`;
@@ -71,4 +84,4 @@ async function fetchAllPurchases({ baseUrl, apiKey, pageSize = 100, sinceDate = 
   return { items: allItems, pagesFetched };
 }
 
-module.exports = { fetchAllPurchases };
+module.exports = { fetchAllPurchases, MAX_PAGES };

@@ -93,6 +93,19 @@ router.post('/versions/:id/clone', async (req, res) => {
   }
 });
 
+// POST /api/org-chart/versions/:id/delete — xoá hẳn 1 bản nháp (DRAFT) không dùng nữa (tạo thử/nhân
+// bản nhầm) — chỉ DRAFT, orgChart.deleteVersion() tự chặn APPLIED/ARCHIVED (phải giữ lại làm lịch sử).
+router.post('/versions/:id/delete', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    await withLockedAppDataValue('orgChartVersions', (list) => orgChart.deleteVersion(list, Number(req.params.id)));
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/delete', 'Không thể xoá phiên bản');
+  }
+});
+
 // PATCH /api/org-chart/versions/:id — đổi tên version (chỉ DRAFT).
 router.patch('/versions/:id', async (req, res) => {
   if (!requireManageTree(req, res)) return;

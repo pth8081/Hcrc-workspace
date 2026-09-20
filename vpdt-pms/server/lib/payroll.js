@@ -365,6 +365,17 @@ function pushHistory(period, action, actorUsername, actorName, detail) {
   period.updatedAt = nowVN(); period.updatedBy = actorUsername;
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây KHÔNG có cách nào xoá 1 kỳ lương tạo nhầm
+// (sai tháng/năm/tên) — chỉ có thể bỏ mặc nó nằm lại vĩnh viễn trong danh sách kỳ. CHỈ cho xoá khi CÒN
+// DRAFT VÀ chưa từng tính lương (employeeCount===0) — kỳ đã tính (dù còn DRAFT, employeeCount>0 nghĩa
+// là đã "Tính Lương Tự Động" ít nhất 1 lần) hoặc đã qua bất kỳ bước duyệt/chốt/công bố nào đều phải giữ
+// lại làm lịch sử/bằng chứng, không xoá được.
+function assertCanDeletePeriod(period) {
+  if (period.status !== 'DRAFT' || period.employeeCount > 0) {
+    throw new HttpError(409, 'Chỉ xoá được kỳ lương còn Nháp và CHƯA từng tính lương — kỳ đã có dữ liệu phải giữ lại làm lịch sử');
+  }
+}
+
 // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): trước đây netPay ÂM (VD kế toán lỡ nhập khấu trừ tạm
 // ứng/phạt nhập tay lớn hơn cả lương gộp) vẫn đi xuyên suốt được cả luồng Gửi Duyệt -> Duyệt -> Chốt ->
 // Công Bố mà không ai cảnh báo gì — công ty không thể "trả lương âm" cho nhân viên, đây luôn là dấu hiệu
@@ -474,7 +485,7 @@ module.exports = {
   PERIOD_STATUSES, PAYROLL_COMPONENTS, MANUAL_COMPONENT_CODES,
   defaultRateConfig, canManagePayroll, canApprovePayroll, canViewAllPayroll,
   computeTaxFromBrackets, periodDateRange, computeEmployeePayslip, defaultPayslip,
-  assertValidNewPeriod, defaultPeriod,
+  assertValidNewPeriod, defaultPeriod, assertCanDeletePeriod,
   applySubmitForApproval, applyApprove, applyReject, applyFinalize, applyPublish, applyReopen,
   assertValidDetailAdjustment, applyAdjustPayslipDetail, mergeManualAdjustmentsIntoPayslip
 };

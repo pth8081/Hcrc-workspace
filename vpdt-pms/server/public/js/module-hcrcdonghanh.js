@@ -31,7 +31,8 @@ function getHrFeedbackCategoryLabel(key) {
 }
 const HR_FEEDBACK_STATUS_BADGES = {
   PENDING: '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🕒 Chờ phản hồi</span>',
-  ANSWERED: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phản hồi</span>'
+  ANSWERED: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phản hồi</span>',
+  WITHDRAWN: '<span class="px-2 py-0.5 bg-gray-200 text-gray-600 rounded font-bold text-xs">🚫 Đã rút lại</span>'
 };
 
 // ----- Phía NHÂN VIÊN (tab HCRC Đồng Hành trong Truyền Thông) -----
@@ -100,6 +101,12 @@ function renderHrFeedbackInbox() {
         <div class="text-[11px] font-bold text-teal-800">💬 Phản hồi từ ${escapeHtml(q.respondedByName || 'Nhân Sự')} — ${escapeHtml(q.respondedAt || '')}</div>
         <div class="text-xs text-gray-800 whitespace-pre-wrap mt-1">${escapeHtml(q.response || '')}</div>
       </div>` : '';
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): câu hỏi gửi nhầm/muốn rút lại khi CÒN CHỜ phản hồi
+    // trước đây không có cách nào tự rút — chỉ hiện khi status còn PENDING (khớp withdrawHrFeedback()
+    // ở server, chặn khi Nhân Sự đã trả lời).
+    const withdrawBtn = q.status === 'PENDING'
+      ? `<button type="button" data-op="withdrawHrFeedbackAction" data-arg0="${q.id}" data-arg-event="1" class="ml-auto px-2 py-0.5 bg-red-100 text-red-700 rounded font-bold text-[11px] hover:bg-red-200">🚫 Rút lại</button>`
+      : '';
     return `
       <div id="hrFeedbackInboxItem_${q.id}" data-op="openHrFeedbackAnswer" data-arg0="${q.id}" class="bg-white rounded border p-3 ${unread ? 'border-teal-500 ring-1 ring-teal-300 cursor-pointer' : ''}">
         <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
@@ -107,11 +114,25 @@ function renderHrFeedbackInbox() {
           <span>${escapeHtml(getHrFeedbackCategoryLabel(q.category))}</span>
           <span>${escapeHtml(q.createdAt || '')}</span>
           ${unread ? '<span class="px-2 py-0.5 bg-teal-600 text-white rounded font-bold">🔔 Phản hồi mới — bấm để xem</span>' : ''}
+          ${withdrawBtn}
         </div>
         <div class="text-sm text-gray-800 whitespace-pre-wrap mt-1">${escapeHtml(q.question)}</div>
         ${answerBlock}
       </div>`;
   }).join('');
+}
+
+async function withdrawHrFeedbackAction(id, e) {
+  if (e) e.stopPropagation();
+  if (!confirm('Rút lại câu hỏi này? Không thể hoàn tác.')) return;
+  try {
+    const result = await callRecordAction('hrFeedback', id, 'withdraw', {});
+    const idx = DB.hrFeedback.findIndex(x => x.id === id);
+    if (idx !== -1) DB.hrFeedback[idx] = result.item;
+    renderHrFeedbackInbox();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
 }
 
 // Bấm vào 1 câu đã trả lời còn chưa đọc -> tắt cờ + cập nhật badge. Không làm gì nếu câu chưa được
@@ -187,11 +208,17 @@ function renderHrFeedbackManage() {
   }
 
   container.innerHTML = visible.map(q => {
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): thêm trạng thái WITHDRAWN (người gửi tự rút lại,
+    // xem withdrawHrFeedbackAction() ở trên) mà khối này trước đây chỉ phân biệt ANSWERED/còn-lại —
+    // câu đã bị rút lại vẫn hiện ô nhập + nút "Gửi Phản Hồi" như đang chờ xử lý bình thường (server đã
+    // chặn 409 nếu bấm gửi, nhưng giao diện phải phản ánh đúng ngay từ đầu, không để Nhân Sự tưởng
+    // nhầm còn cần xử lý).
     const answerBlock = q.status === 'ANSWERED' ? `
       <div class="mt-2 pt-2 border-t bg-teal-50 -mx-3 -mb-3 p-3 rounded-b">
         <div class="text-[11px] font-bold text-teal-800">💬 Đã phản hồi bởi ${escapeHtml(q.respondedByName || '')} — ${escapeHtml(q.respondedAt || '')}</div>
         <div class="text-xs text-gray-800 whitespace-pre-wrap mt-1">${escapeHtml(q.response || '')}</div>
-      </div>` : `
+      </div>` : q.status === 'WITHDRAWN' ? `
+      <div class="mt-2 pt-2 border-t text-xs text-gray-500 italic">Người gửi đã rút lại câu hỏi này — không cần phản hồi.</div>` : `
       <div class="mt-2 pt-2 border-t space-y-2">
         <textarea id="hrFeedbackResponseInput_${q.id}" class="w-full border p-1.5 rounded text-xs h-20" placeholder="Nhập nội dung phản hồi..."></textarea>
         <div class="flex justify-end">

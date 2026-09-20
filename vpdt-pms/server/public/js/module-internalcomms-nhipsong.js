@@ -909,6 +909,50 @@ function internalCommentLikeButtonHTML(postId, c) {
   return `<button data-op="toggleInternalCommentLike" data-arg0="${postId}" data-arg1="${c.id}" class="text-[11px] font-bold ${liked ? 'text-fuchsia-700' : 'text-gray-400 hover:text-gray-600'}">${liked ? '❤️' : '🤍'}${likes.length ? ' ' + likes.length : ''}</button>`;
 }
 
+// Tác giả tự sửa/xoá ĐÚNG bình luận của chính mình (editInternalPostComment()/deleteInternalPostComment()
+// ở lib/recordActions.js — server tự kiểm tra lại comment.username === user.username, đây chỉ là điều
+// kiện hiện nút, không phải hàng rào bảo mật thật) — chỉ hiện khi KHÔNG phải bình luận của người khác.
+function internalCommentOwnActionsHTML(postId, c) {
+  if (c.username !== currentUser.username) return '';
+  return `<button data-op="editOwnInternalComment" data-arg0="${postId}" data-arg1="${c.id}" class="text-[11px] font-bold text-gray-400 hover:text-gray-600">Sửa</button>` +
+    `<button data-op="deleteOwnInternalComment" data-arg0="${postId}" data-arg1="${c.id}" class="text-[11px] font-bold text-gray-400 hover:text-red-600">Xoá</button>`;
+}
+
+async function editOwnInternalComment(postId, commentId) {
+  const p = DB.internalPosts.find(x => x.id === postId);
+  const c = (p?.comments || []).find(x => x.id === commentId);
+  if (!c) return;
+  const content = prompt('Sửa bình luận:', c.content);
+  if (content === null) return;
+  if (!content.trim()) return alert('⛔ Nội dung bình luận không được để trống');
+  let updated;
+  try {
+    const result = await callRecordAction('internalPosts', postId, `comment/${commentId}/edit`, { content: content.trim() });
+    updated = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const idx = DB.internalPosts.findIndex(x => x.id === postId);
+  if (idx !== -1) DB.internalPosts[idx] = updated;
+  renderInternalPosts();
+}
+
+function deleteOwnInternalComment(postId, commentId) {
+  if (!confirm('Xoá bình luận này của bạn? Không thể hoàn tác.')) return;
+  (async () => {
+    let updated;
+    try {
+      const result = await callRecordAction('internalPosts', postId, `comment/${commentId}/delete-comment`, {});
+      updated = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.internalPosts.findIndex(x => x.id === postId);
+    if (idx !== -1) DB.internalPosts[idx] = updated;
+    renderInternalPosts();
+  })();
+}
+
 // "3-5 bình luận nổi bật": tối đa 2 bình luận MỚI NHẤT (theo id, id = Date.now() lúc gửi) + tối đa 3
 // bình luận NHIỀU LƯỢT THÍCH NHẤT (likes.length) — gộp lại, khử trùng (1 bình luận vừa mới vừa nhiều
 // thích chỉ tính 1 lần, tổng tự nhiên tối đa 5), rồi giữ lại ĐÚNG THỨ TỰ THỜI GIAN gốc của mảng
@@ -1146,8 +1190,8 @@ function renderInternalNewsCard(p) {
           <div class="w-7 h-7 rounded-full bg-fuchsia-200 text-fuchsia-800 flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>
           <div class="bg-gray-100 rounded-2xl px-3 py-1.5 flex-1">
             <div class="font-bold text-xs text-gray-800">${escapeHtml(c.name || '')}</div>
-            <div class="text-gray-700">${escapeHtml(c.content)}</div>
-            <div class="mt-0.5">${internalCommentLikeButtonHTML(p.id, c)}</div>
+            <div class="text-gray-700">${escapeHtml(c.content)}${c.editedAt ? ' <span class="text-gray-400 italic">(đã sửa)</span>' : ''}</div>
+            <div class="mt-0.5 flex gap-2 items-center">${internalCommentLikeButtonHTML(p.id, c)}${internalCommentOwnActionsHTML(p.id, c)}</div>
           </div>
         </div>`).join('')
     : `<div class="text-xs text-gray-400 italic">Chưa có bình luận nào — hãy là người đầu tiên!</div>`;
@@ -1329,8 +1373,8 @@ function viewInternalPostDetail(id) {
     ? shownComments.map(c => `
         <div class="bg-gray-50 border rounded p-2 text-xs">
           <div class="font-bold text-gray-700">${escapeHtml(c.name)} <span class="text-gray-400 font-normal">${escapeHtml(c.time)}</span></div>
-          <div class="text-gray-800 mt-0.5">${escapeHtml(c.content)}</div>
-          <div class="mt-1">${internalCommentLikeButtonHTML(p.id, c)}</div>
+          <div class="text-gray-800 mt-0.5">${escapeHtml(c.content)}${c.editedAt ? ' <span class="text-gray-400 italic">(đã sửa)</span>' : ''}</div>
+          <div class="mt-1 flex gap-2 items-center">${internalCommentLikeButtonHTML(p.id, c)}${internalCommentOwnActionsHTML(p.id, c)}</div>
         </div>
       `).join('')
     : '<div class="text-gray-400 italic text-xs">Chưa có bình luận nào.</div>';

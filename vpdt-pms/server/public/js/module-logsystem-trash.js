@@ -70,7 +70,13 @@ const TRASH_COLLECTION_LABELS = {
   uniformPeriods: 'Đồng Phục - Kỳ Cấp Phát', uniformIssuances: 'Đồng Phục - Cấp Phát',
   uniformStockAdjustments: 'Đồng Phục - Điều Chỉnh Kho', uniformTransfers: 'Đồng Phục - Điều Chuyển Kho',
   budgetTemplates: 'Ngân Sách - Mẫu', budgetPeriods: 'Ngân Sách - Kỳ Ngân Sách', budgetEntries: 'Ngân Sách - Hồ Sơ Ngân Sách',
-  licenses: 'Giấy Phép'
+  licenses: 'Giấy Phép',
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): operationOrders (Vận Hành - Đơn Hàng, xoá qua
+  // deleteAdminOnly() -> deleteRecordForCollection(), xem routes/records.js POST /operationOrders/:id/delete)
+  // xoá được từ lâu nhưng CHƯA BAO GIỜ có mặt trong map này -> trashCollectionLabel() rơi về fallback trả
+  // thẳng key kỹ thuật "operationOrders" (không dấu, đọc lạ) thay vì tên tiếng Việt như MỌI collection
+  // khác trong Thùng Rác.
+  operationOrders: 'Vận Hành - Đơn Hàng'
 };
 function trashCollectionLabel(collection) { return TRASH_COLLECTION_LABELS[collection] || collection; }
 

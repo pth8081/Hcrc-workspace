@@ -12,7 +12,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
-const { getAllForCollection, insertRecord, deleteRecordById, withLockedRecordForCollection, withLockedRecordById } = require('../lib/recordStore');
+const { getAllForCollection, insertRecord, deleteRecordById, deleteRecordForCollection, withLockedRecordForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const { notifyUsers } = require('../lib/notifications');
 const payroll = require('../lib/payroll');
@@ -90,6 +90,21 @@ router.put('/rate-config', requireManage, async (req, res) => {
 // ===== Tính lương tự động cho toàn bộ nhân viên ACTIVE trong kỳ — GHI ĐÈ mọi payslip cũ của kỳ này
 // (chỉ cho phép khi kỳ đang DRAFT — xem payroll.assertTransition), CẢNH BÁO client trước khi gọi nếu đã
 // có điều chỉnh tay (client tự kiểm tra period.employeeCount > 0 trước khi hỏi lại người dùng). =====
+// Xoá kỳ lương tạo nhầm (sai tháng/năm/tên) — CHỈ khi còn DRAFT và chưa từng tính lương (assertCanDeletePeriod()
+// ở lib/payroll.js). Kỳ đã tính/qua bất kỳ bước duyệt nào phải giữ lại làm lịch sử, không xoá được.
+router.post('/periods/:id/delete', requireManage, async (req, res) => {
+  const periodId = Number(req.params.id);
+  if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const periods = await getAllForCollection('payrollPeriods');
+    const period = periods.find(p => p.id === periodId);
+    if (!period) return res.status(404).json({ error: 'Không tìm thấy kỳ lương' });
+    await deleteRecordForCollection('payrollPeriods', periodId, (item) => payroll.assertCanDeletePeriod(item), { username: req.freshUser.username, name: req.freshUser.name });
+    logPayrollAction(req, 'PERIOD_DELETE', period.periodName, `Xoá kỳ lương [${period.periodName}] (còn Nháp, chưa từng tính lương)`);
+    res.json({ ok: true });
+  } catch (err) { sendCatchError(res, err, `POST /api/payroll/periods/${req.params.id}/delete`); }
+});
+
 router.post('/periods/:id/calculate', requireManage, async (req, res) => {
   const periodId = Number(req.params.id);
   if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'id không hợp lệ' });

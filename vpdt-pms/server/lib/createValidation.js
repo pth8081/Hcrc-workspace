@@ -635,6 +635,16 @@ const CREATE_MODULE_CONFIGS = {
     // kết luận "không trùng" cho MỌI trường hợp giờ lỗi định dạng — vượt qua luôn cơ chế khoá-theo-phòng.
     extraValidate: (payload, collection, user, appData) => {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'MEETING_ROOM');
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): payload.room trước đây KHÔNG được đối chiếu với
+      // danh mục DB.meetingRooms — client chỉ có 1 <select> chọn từ danh mục, nhưng 1 request tự soạn có
+      // thể gửi bất kỳ chuỗi nào làm "phòng". findMeetingConflict() (dưới) so trùng theo ĐÚNG chuỗi
+      // room, nên 1 phòng bịa không bao giờ trùng lịch với phòng thật nào — hồ sơ vẫn tạo được, hiện
+      // trong danh sách/báo cáo với tên phòng không có thật, gây nhiễu dữ liệu và né được cơ chế khoá
+      // trùng-khung-giờ của phòng thật (đổi payload.room khác đi mỗi lần coi như không giới hạn).
+      const validRoomNames = (appData?.meetingRooms || []).map((r) => r.name);
+      if (!validRoomNames.includes(payload.room)) {
+        throw new CreateError(400, `Phòng họp "${payload.room}" không có trong danh mục — vui lòng chọn lại`);
+      }
       const newStart = new Date(payload.startTime).getTime();
       const newEnd = new Date(payload.endTime).getTime();
       if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {

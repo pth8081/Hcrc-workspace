@@ -116,6 +116,9 @@ async function loadOrgChartCurrentVersion(id) {
   document.getElementById('btnOrgChartRenameVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartValidateVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartApplyVersion').classList.toggle('hidden', !(isDraft && canManageTree));
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây không có cách nào xoá bản nháp không dùng
+  // nữa — chỉ hiện với DRAFT (khớp deleteVersion() ở lib/orgChart.js, APPLIED/ARCHIVED phải giữ lịch sử).
+  document.getElementById('btnOrgChartDeleteVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartCompareVersion').classList.toggle('hidden', !(isArchived && _ocAppliedVersion));
   // Đợt 4 (vá gap #2 Phần A/B) — chỉ hiện khi đang xem ĐÚNG version APPLIED (nút thao tác trên chính
   // version đang xem, cùng logic isDraft/isArchived ở trên).
@@ -231,6 +234,17 @@ async function cloneOrgChartVersionClick() {
   await renderOrgChartModule();
   document.getElementById('orgChartVersionSelect').value = String(result.version.id);
   await onOrgChartVersionSelectChange();
+}
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): xoá hẳn 1 bản nháp (DRAFT) không dùng nữa (tạo thử/
+// nhân bản nhầm) — server (deleteVersion(), lib/orgChart.js) tự chặn xoá APPLIED/ARCHIVED.
+async function deleteOrgChartVersionClick() {
+  if (!_ocCurrentVersion) return;
+  if (!confirm(`Xoá hẳn bản nháp "${_ocCurrentVersion.versionName}"? Không thể hoàn tác.`)) return;
+  try {
+    await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/delete`, {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  document.getElementById('orgChartVersionSelect').value = '';
+  await renderOrgChartModule();
 }
 async function renameOrgChartVersionClick() {
   if (!_ocCurrentVersion) return;

@@ -96,7 +96,14 @@ function validateTiers(tiers) {
   const seen = new Set();
   for (const t of tiers) {
     const from = Number(t?.fromAmount);
-    const rate = Number(t?.ratePct);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): Number(null)/Number(undefined) trả về 0 (hữu hạn, hợp
+    // lệ trong khoảng 0-100) — nếu client gửi lên ratePct thiếu/null (VD do JSON.stringify(NaN)=>null khi
+    // gõ sai định dạng có dấu phẩy thập phân) thì guard cũ ÂM THẦM chấp nhận thành 0% thay vì báo lỗi rõ
+    // ràng. Chặn rõ giá trị null/undefined/rỗng TRƯỚC khi ép kiểu số, không để lẫn với "cố ý nhập 0%" hợp lệ.
+    if (t?.ratePct === null || t?.ratePct === undefined || t?.ratePct === '') {
+      return 'Vui lòng nhập Tỷ lệ % cho mỗi bậc thang';
+    }
+    const rate = Number(t.ratePct);
     if (!Number.isFinite(from) || from < 0) return 'Mốc "Từ số tiền" của mỗi bậc phải là số >= 0';
     if (!Number.isFinite(rate) || rate < 0 || rate > 100) return 'Tỷ lệ % mỗi bậc phải trong khoảng 0-100';
     if (seen.has(from)) return `Trùng mốc "Từ số tiền" = ${from} giữa 2 bậc — mỗi bậc phải có mốc bắt đầu khác nhau`;

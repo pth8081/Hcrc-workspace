@@ -374,6 +374,7 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Quyền tạo', text: 'chỉ người được cấp quyền tạo biên bản họp mới thấy được form tạo — người khác chỉ xem nội dung.' },
       { label: 'Đừng quên bấm "Giao việc" (9/2026)', text: 'lưu biên bản KHÔNG tự sinh Công Việc — Ý Kiến Chỉ Đạo dù đã gán "Người thực hiện" vẫn chỉ nằm trong nội dung biên bản tới khi có người chủ động bấm "Giao việc" trên màn Xem; quên bước này thì đầu việc không có gì để theo dõi tiến độ/nhắc hạn.' },
+      { label: 'Giao việc lại cho đầu việc bị lỗi (9/2026)', text: 'nếu 1 đầu việc không sinh được Công Việc (tài khoản khai ở "Thành phần tham dự" không hợp lệ/đã khoá), Admin sửa lại đúng tài khoản rồi bấm "Giao việc" lại — hệ thống chỉ giao lại đúng (các) đầu việc còn thiếu, không tạo trùng các đầu việc đã giao thành công trước đó.' },
     ], right: [
       { label: 'Mẫu điểm danh', text: 'có thể lưu sẵn danh sách người tham dự thường xuyên thành 1 mẫu, để không phải chọn lại từ đầu mỗi lần họp định kỳ.' },
       { label: 'Xem/Tải/In khớp nội dung (9/2026)', text: 'màn Xem và file Tải/khung In nay dùng chung 1 bộ nội dung (kể cả chân ký Thư Ký/Chủ Trì), chỉ khác bản Xem có thêm nút "Giao việc" theo từng đầu việc.' },
@@ -526,6 +527,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Kho tính động, không lưu số liệu riêng', text: 'tồn kho mỗi siêu thị = tổng đã xác nhận nhận trừ đi đã cấp phát cho nhân viên — không có bảng tồn kho lưu sẵn, luôn tính lại theo dữ liệu thật.' },
       { label: 'Mã SKU tự sinh lần đầu', text: 'mỗi cặp (mặt hàng, size) chỉ sinh mã 1 LẦN đầu tiên khi được bất kỳ siêu thị nào xác nhận nhận, dùng lại mãi về sau — không sinh lại mỗi kỳ.' },
       { label: 'Điều Chuyển Kho Giữa Các Siêu Thị (Phase 2)', text: 'Giám Đốc Siêu Thị tự yêu cầu chuyển hàng sang siêu thị khác (đủ tồn kho mới gửi được) → Hành Chính/người có quyền duyệt (uniformApprove/uniformManage) Duyệt hoặc Từ Chối → duyệt xong hàng coi như "đang vận chuyển" (tồn kho NGUỒN giảm ngay) → siêu thị ĐÍCH tự "Xác Nhận Đã Nhận" thì tồn kho đích mới thật sự tăng. Lỡ duyệt nhầm mà siêu thị đích CHƯA xác nhận nhận thì người có quyền duyệt bấm <b>"🚫 Hủy Điều Chuyển"</b> (từ 9/2026) ngay ở mục "🚚 Đang Vận Chuyển — Hủy Nếu Cần" — tồn kho siêu thị nguồn tự nhả lại ngay, không cần thao tác gì thêm.' },
+      { label: 'Xác nhận hộ khi nhân viên đã nghỉ việc (9/2026)', text: 'phiếu cấp phát ở trạng thái "⏳ Chờ xác nhận" mà nhân viên đã nghỉ việc/khoá tài khoản (không tự bấm được nữa) — Giám Đốc Siêu Thị (uniformStoreManage) bấm nút <b>"✅ Xác nhận hộ (đã nghỉ việc)"</b> hiện ngay tại bảng "Lịch Sử Cấp Phát" cho đúng phiếu đó; nút này CHỈ hiện khi tài khoản nhân viên đã inactive — còn hoạt động vẫn bắt buộc tự nhân viên xác nhận.' },
     ] },
   },
   license: {
@@ -545,6 +547,7 @@ const NGHIEP_VU_DOCS = {
     ],
     footer: { left: [
       { label: 'Cập nhật = thêm phiên bản mới', text: 'chọn "Cập nhật" để thêm 1 phiên bản mới cho giấy phép đã có (mã tự sinh dạng <mã gốc>-V<số thứ tự>) — chỉ thực hiện được khi phiên bản mới nhất KHÔNG đang chờ duyệt.' },
+      { label: 'Hủy khi còn chờ duyệt (9/2026)', text: 'gửi nhầm tệp/thông tin trong khi CÒN ĐANG chờ duyệt (chưa ai xử lý) thì tự bấm "🚫 Hủy" ngay tại bảng danh sách (chỉ hiện với chính người tạo) — không cần chờ người duyệt Từ Chối hộ. Đã duyệt/từ chối rồi thì không hủy được nữa.' },
       { label: 'Hiệu lực tách biệt với duyệt', text: '"Đang gia hạn"/"Đã thu hồi" là trạng thái RIÊNG, chỉ đánh dấu được cho giấy phép ĐÃ duyệt và chưa bị thu hồi — không đụng tới lịch sử duyệt.' },
     ], right: [
       { label: 'Tự tính hiệu lực', text: 'Còn hiệu lực / Sắp hết hạn (≤30 ngày) / Hết hạn tự tính theo Ngày hết hạn, có nhắc tự động trước khi hết hạn — job nhắc hạn (9/2026) chỉ xét ĐÚNG phiên bản MỚI NHẤT của mỗi giấy phép, tự bỏ qua các phiên bản CŨ đã bị thay thế (trước đây gia hạn sớm vẫn khiến bản cũ tiếp tục gửi nhắc hạn trùng lặp).' },
@@ -653,6 +656,7 @@ const NGHIEP_VU_DOCS = {
       { label: '⏸️ Dừng (Đang dùng → Lưu trữ)', text: 'dừng thủ công 1 mẫu Đang dùng mà không cần kích hoạt bản thay thế ngay. Muốn dùng lại đúng mẫu vừa Dừng thì bấm "🔄 Kích Hoạt Lại" ngay trên mẫu Lưu trữ đó — không cần Nhân Bản/Sửa gì cả, không tạo phiên bản mới.' },
       { label: '✏️ Sửa (Đang dùng/Lưu trữ)', text: 'không sửa trực tiếp được, để giữ nguyên dữ liệu các bài đã nộp trước đó — bấm "Sửa" sẽ tự nhân bản thành 1 bản Nháp mới rồi mở thẳng form sửa, gộp 2 bước cũ thành 1 lần bấm.' },
       { label: '🗑️ Xoá — chỉ Quản Trị Viên', text: 'nút Xoá chỉ Quản Trị Viên (quyền cao nhất) mới thấy được, ở mọi trạng thái — nếu mẫu đã có người nộp bài thì nút này sẽ bị khoá kèm gợi ý dùng "⏸️ Dừng" thay thế, để không làm mất dữ liệu báo cáo cũ.' },
+      { label: 'Sửa lại phản hồi/giải trình (9/2026)', text: 'siêu thị (checklist Kiểm Soát) gõ nhầm hoặc muốn bổ sung phản hồi đã gửi thì bấm "✏️ Sửa" ngay cạnh phản hồi cũ ở tab "📣 Kết Quả & Phản Hồi" — nội dung mới GHI ĐÈ nội dung cũ, không lưu lịch sử các lần sửa trước.' },
     ] },
   },
   orgChart: {
@@ -674,6 +678,7 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Không sửa phiên bản cũ', text: 'sửa node (thêm/sửa/xoá vị trí) là sửa TRỰC TIẾP trên bản Nháp hiện có, không tự tạo phiên bản mới mỗi lần sửa — chỉ khi bấm "Sao Chép" mới sinh phiên bản mới; phiên bản Đã áp dụng/Lưu trữ chỉ xem, không sửa lại được.' },
       { label: 'Áp Dụng = có hiệu lực ngay, không có bước duyệt thứ 2', text: '1 người có quyền bấm "Áp Dụng" là xong — bản đang áp dụng cũ tự động chuyển sang Lưu Trữ. Có thể chạy "Kiểm Tra Hợp Lệ" trước (tuỳ chọn, chỉ cảnh báo lỗi, không bắt buộc phải chạy).' },
+      { label: 'Xoá bản nháp không dùng nữa (9/2026)', text: 'tạo thử/nhân bản nhầm 1 bản Nháp muốn dọn đi: chọn đúng bản đó ở dropdown Phiên bản → bấm <b>"🗑️ Xoá Bản Nháp Này"</b>. CHỈ xoá được bản đang ở trạng thái Nháp — bản Đã áp dụng/Lưu trữ không xoá được (phải giữ lại làm lịch sử).' },
     ], right: [
       { label: 'Người giữ vị trí được tra động, không lưu cố định', text: 'hệ thống KHÔNG lưu "ai giữ chức gì" trong phiên bản — mà lọc động theo đúng phòng ban/chức danh đang có trên hồ sơ user. Cây chỉ PHẢN ÁNH hồ sơ, không ghi ngược — TRỪ field "Quản Lý Trực Tiếp" được tự động cập nhật khi Áp Dụng (hoặc bấm "Đồng Bộ Lại" riêng khi chỉ vừa đổi phòng ban/chức danh 1-2 người).' },
       { label: 'So sánh phiên bản', text: 'xem được bảng so sánh (Thêm mới/Đã xoá/Đổi tên-chuyển cấp) giữa 1 phiên bản Lưu Trữ và phiên bản đang Áp Dụng, chỉ để đối chiếu, không sửa được từ màn so sánh.' },
@@ -721,6 +726,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Không hiện ở Báo Cáo chung', text: 'đây là nhóm dữ liệu cực kỳ nhạy cảm nên không đưa vào các báo cáo tổng hợp dùng chung — thay vào đó có module con "📊 Báo Cáo" RIÊNG cấp Nhân Sự (vào làm/nghỉ việc/tăng lương/hợp đồng mới-gia hạn-sắp hết hạn/thăng chức, lọc theo thời gian), gác quyền chặt như Lịch Sử Nhân Sự.' },
       { label: 'Tái Tuyển', text: 'nút "Kiểm Tra Nhân Sự Cũ" (khi tạo hồ sơ mới hoặc mở Onboarding) tra theo CCCD+ngày sinh — nhân viên cũ quay lại giữ NGUYÊN Mã Nhân Viên cũ, chỉ ghi thêm 1 dòng lịch sử tái tuyển.' },
       { label: 'Liên Kết Tài Khoản VPDT', text: 'hồ sơ tạo tay có thể chưa có tài khoản VPDT ngay (tick "Liên Kết Tài Khoản" ở màn hồ sơ khi tài khoản đã có sau) — nếu hồ sơ ĐÃ được gán Chức Vụ TRƯỚC lúc liên kết, hệ thống tự đồng bộ NGAY Phòng Ban/Chức Danh/Vị Trí xuống tài khoản vừa liên kết (từ 9/2026, cùng cơ chế đồng bộ khi gán Chức Vụ cho hồ sơ ĐÃ có tài khoản) — không cần vào gán lại Chức Vụ 1 lần nữa chỉ để kích hoạt đồng bộ.' },
+      { label: 'Đổi tài khoản liên kết khi tái tuyển (9/2026)', text: 'hồ sơ ĐÃ có tài khoản liên kết (VD tài khoản cũ đã bị khoá/xoá khi nghỉ việc) muốn đổi sang tài khoản VPDT MỚI khi tái tuyển: bấm "🔁 Đổi tài khoản liên kết" ngay tại màn Quản Lý Hồ Sơ → gõ chọn tài khoản mới → Xác Nhận Đổi. Tài khoản cũ mất quyền xem/sửa hồ sơ ngay, lịch sử đổi được lưu lại để tra soát — khác "Liên Kết Tài Khoản VPDT" (chỉ dùng cho hồ sơ CHƯA từng liên kết lần nào).' },
       { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
       { label: 'Cấu hình trường xem (opt-in)', text: '2 nút "⚙️" riêng trong Quản Lý Hồ Sơ, cùng nguyên tắc: MẶC ĐỊNH KHÔNG trường nhạy cảm nào hiển thị (đủ 15 field: ngày sinh, giới tính, email cá nhân, liên hệ khẩn cấp, CCCD, địa chỉ, ngân hàng, BHXH, mã số thuế, người phụ thuộc, học vấn) tới khi admin chủ động mở — "Trường Xem Của Quản Lý Trực Tiếp" áp dụng khi quản lý xem hồ sơ cấp dưới, "Trường Xem Của Tôi" áp dụng khi chính nhân viên tự xem/sửa hồ sơ mình — 2 cấu hình độc lập, mở ở màn này không tự mở cho màn kia.' },
     ], right: [
@@ -785,6 +791,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu chấm công/phép không đưa vào báo cáo tổng hợp dùng chung, như các dữ liệu nhạy cảm khác của Nhân Sự.' },
       { label: '5 loại phép, chỉ Phép Năm trừ quỹ', text: 'Phép năm / Nghỉ không lương / Nghỉ ốm / Nghỉ việc riêng / Nghỉ theo giờ (nghỉ 1 phần ngày, tự quy đổi ra ngày lẻ theo giờ hành chính) — CHỈ Phép Năm trừ vào quỹ phép còn lại, các loại còn lại chỉ ghi nhận chấm công.' },
       { label: 'Huỷ đơn — tự hoàn quỹ + dọn chấm công (từ 9/2026)', text: 'nhân viên tự huỷ đơn của mình khi đang Chờ duyệt, hoặc đã Duyệt nhưng NGÀY BẮT ĐẦU CÒN Ở TƯƠNG LAI. Huỷ đơn Phép Năm đã duyệt (đã trừ quỹ) tự CỘNG LẠI đúng số ngày vào quỹ phép năm, đồng thời dọn lại các bản ghi chấm công những ngày đó về "chưa chấm công" (không còn ghi "nghỉ phép có lương" nữa) — không cần Nhân Sự vào sửa tay. Trước đây phải tự vào "Quản Lý & Cấu Hình" cộng lại tay nếu cần.' },
+      { label: 'Duyệt phép tự huỷ ca đã phân trùng ngày (mô hình theo ca, từ 9/2026)', text: 'nhân viên chấm công theo ca (SHIFT_BASED) — duyệt đơn phép của họ TỰ ĐỘNG huỷ (chuyển "Đã huỷ") mọi dòng phân ca ở tab "📅 Phân Ca Siêu Thị" trùng đúng khoảng ngày nghỉ, không cần quản lý ca vào huỷ tay từng dòng; trước đây chỉ ghi nhận "có ảnh hưởng" mà không tự xử lý gì.' },
     ], right: [
       { label: 'Ai duyệt được', text: 'quản lý trực tiếp HOẶC bất kỳ cấp quản lý nào cao hơn theo Cơ Cấu Tổ Chức (đệ quy, không chỉ đúng 1 cấp) đều duyệt được, hoặc Nhân Sự (duyệt được toàn công ty, chỉ chặn tự duyệt đơn của chính mình) — không phải cấu hình luồng nhiều bước như các module khác.' },
       { label: 'Quỹ phép năm', text: '12 ngày cơ bản + 1 ngày cho mỗi 5 năm thâm niên (tính theo ngày hợp đồng lao động CŨ NHẤT của nhân viên = ngày vào làm thật). Tạo lần đầu khi Onboarding hoàn tất; từ 9/2026, hệ thống còn tự quét lại mỗi ngày (job nền) để tự tạo bù quỹ phép năm hiện tại cho MỌI nhân viên đang hoạt động chưa có — không cần Nhân Sự nhớ tạo tay mỗi khi sang năm mới nữa. Khi hoàn tất nghỉ việc, hệ thống tự huỷ mọi đơn còn Chờ duyệt của người đó.' },
@@ -811,6 +818,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu lương cực kỳ nhạy cảm nên không đưa vào báo cáo tổng hợp dùng chung theo cách thông thường.' },
       { label: '5 trạng thái kỳ lương', text: 'Nháp → Chờ Duyệt → Đã Duyệt → Đã Chốt → Đã Công Bố. Còn có "Mở Lại" (từ Đã Chốt/Đã Công Bố, bắt buộc nhập lý do) khi cần sửa lại kỳ đã khoá — Mở Lại 1 kỳ ĐÃ CÔNG BỐ (từ 9/2026) còn tự xoá cờ "đã xem" trên mọi phiếu lương của kỳ đó, để nhân viên thấy lại đúng trạng thái "chưa xem" khi kế toán sửa xong và Công Bố lại.' },
       { label: 'Tính lại sẽ GHI ĐÈ', text: 'bấm "Tính Lương" lại khi kỳ còn Nháp sẽ ghi đè TOÀN BỘ, kể cả các dòng đã điều chỉnh tay trước đó — hệ thống cảnh báo rõ trước khi tính lại. Sau khi Gửi Duyệt thì không điều chỉnh tay được nữa (trừ khi bị Từ chối về Nháp).' },
+      { label: 'Xoá kỳ tạo nhầm (9/2026)', text: 'kỳ lương tạo nhầm (sai tháng/năm/tên) hiện nút "🗑️ Xoá" ngay tại danh sách — CHỈ khi còn Nháp và CHƯA từng bấm "Tính Lương" lần nào (employeeCount=0); kỳ đã có dữ liệu tính lương hoặc đã qua bất kỳ bước duyệt nào phải giữ lại làm lịch sử, không xoá được.' },
     ], right: [
       { label: 'Các khoản phải nhập tay', text: 'phụ cấp ăn trưa/điện thoại/chức vụ/ca đêm/ngày lễ, KPI, thưởng khác, khấu trừ tạm ứng/phạt đều KHÔNG tự tính (hệ thống chưa có nguồn dữ liệu cho các khoản này) — kế toán tự thêm qua "Điều Chỉnh", chỉ làm được khi kỳ còn Nháp.' },
       { label: 'Xem của mình', text: 'mọi nhân viên có hồ sơ nhân sự tự xem phiếu lương của mình (tab "Của Tôi") không cần quyền gì thêm, và tự xuất PDF phiếu lương; xem TOÀN BỘ kỳ lương của mọi người cần quyền quản lý hoặc duyệt lương.' },
@@ -834,6 +842,7 @@ const NGHIEP_VU_DOCS = {
     ],
     footer: { left: [
       { label: 'Không ẩn danh, không mở lại', text: 'mỗi câu hỏi gắn sẵn người gửi (hệ thống tự gán, không chọn ẩn danh được); mô hình 1 hỏi-1 đáp rồi kết thúc — sau khi Nhân Sự trả lời thì không sửa/trả lời tiếp được ở đúng câu đó, muốn hỏi thêm phải gửi câu mới. Không có bước đánh giá mức độ hài lòng.' },
+      { label: 'Rút lại khi còn chờ phản hồi (9/2026)', text: 'gửi nhầm/muốn rút lại câu hỏi trong khi Nhân Sự CHƯA trả lời: bấm "🚫 Rút lại" ngay tại mục "📨 Câu Hỏi Của Tôi" — chuyển sang "Đã rút lại", không xoá hẳn (giữ lịch sử). Nhân Sự đã trả lời rồi thì không rút lại được nữa.' },
       { label: '4 danh mục', text: 'Chế độ/Phúc lợi, Chính sách/Quy định, Lương/Thưởng, Khác.' },
     ], right: [
       { label: 'Riêng tư 1-1', text: 'chỉ người gửi và Nhân Sự thấy được nội dung — người khác (kể cả người khác cũng có quyền Nhân Sự) không thấy câu hỏi lẫn vào hộp thư cá nhân của người đó.' },
@@ -858,6 +867,7 @@ const NGHIEP_VU_DOCS = {
     footer: { left: [
       { label: 'Leo thang phê duyệt là tuỳ chọn', text: 'phần lớn ticket không cần bước này — đội IT chỉ gửi khi cần 1 người cụ thể (không nhất thiết có quyền itManage) duyệt trước khi tiếp tục xử lý, VD xin phê duyệt chi phí phát sinh ngoài luồng Phê Duyệt Giá Bán.' },
       { label: 'Không có "Từ chối khẩn cấp" cho ticket (9/2026, sửa lại tài liệu)', text: 'người được xin ý kiến leo thang chỉ Duyệt hoặc Từ chối NGAY LÚC ĐƯỢC HỎI (sơ đồ trên) — sau khi đã bấm Duyệt thì KHÔNG có cách nào đổi ý/chặn khẩn cấp lại giữa chừng nữa (khác hẳn "Phê Duyệt Giá Bán" — mục riêng bên dưới — CÓ cơ chế Từ Chối Khẩn Cấp thật sự, vì rủi ro tài chính lớn hơn); tài liệu bản trước ghi nhầm ticket cũng có tính năng này, đã sửa lại cho đúng thực tế.' },
+      { label: 'Nhắc hạn tự động khi leo thang treo lâu (9/2026)', text: 'yêu cầu leo thang phê duyệt còn chờ xử lý quá 2 ngày sẽ tự động gửi email nhắc người được xin ý kiến (job chạy mỗi 24h) — không còn phải tự nhớ vào xem badge chờ trên giao diện.' },
     ], right: [
       { label: 'Chống trùng mã', text: 'nếu 2 người cùng tạo phiếu cùng lúc và mã bị trùng, hệ thống tự đổi sang mã kế tiếp — người dùng không thấy lỗi gì cả.' },
     ] },
@@ -892,6 +902,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Mẫu Giá (khuôn cột)', text: 'nếu hệ thống đã có ít nhất 1 Mẫu Giá thì bắt buộc chọn đúng mẫu khớp cột với tệp đang nộp — chỉ dùng để đối chiếu tên cột, không còn đối chiếu giá trị/tự động duyệt.' },
       { label: 'Yêu Cầu Bổ Sung', text: 'người duyệt hoặc đội IT có thể yêu cầu bổ sung tệp trước khi áp giá — hồ sơ bị khoá áp giá/duyệt tới khi có tệp bổ sung mới (không ghi đè, chỉ nối thêm). Nếu yêu cầu đến từ người duyệt GIỮA CHỪNG (không phải bước cuối) và hồ sơ đã có bước nào đó DUYỆT XONG trước đó, nộp tệp bổ sung sẽ VÔ HIỆU HOÁ các bước đã duyệt cũ và đưa quy trình về lại Bước 1 để duyệt lại từ đầu với tệp mới (9/2026) — tránh tình huống các bước trước duyệt dựa trên số liệu giá đã lỗi thời. Yêu cầu bổ sung đến từ đội IT SAU KHI đã duyệt xong (trước khi áp giá) thì KHÔNG áp dụng luật này — đó chỉ là hoàn thiện tệp trước khi áp giá, không phải duyệt lại.' },
       { label: 'Cây phân quyền (10/2026)', text: 'trước đây 3 quyền gộp — nay tách 7 quyền riêng: Đề xuất Bán Buôn/Bán Lẻ tách 2 cờ (itPriceProposeCreateWholesale/Retail — ai chỉ phụ trách 1 loại chỉ đề xuất đúng loại đó); "Đội Hỗ Trợ IT" (itManage) giờ CHỈ còn xử lý ticket "Hỗ Trợ Yêu Cầu", KHÔNG còn tự động áp giá/xem hết Phê Duyệt Giá; áp giá sau khi duyệt + xem toàn bộ hồ sơ Phê Duyệt Giá chuyển sang quyền riêng itPriceSupport (vẫn gộp chung Bán Buôn/Bán Lẻ); Gia Hạn Dịch Vụ CNTT chuyển sang quyền riêng itServiceRenewalManage; Từ chối khẩn cấp tách 2 cờ theo đúng loại giá (itPriceEmergencyRejectApproveWholesale/Retail). Việc DUYỆT thật sự (bước "Duyệt" ở sơ đồ trên) không đổi — vẫn theo cấu hình phòng ban/mức Margin-Chiết Khấu ở "Hệ Thống → Quy Trình & Phê Duyệt".' },
+      { label: 'Nhắc hạn tự động khi treo lâu (9/2026)', text: 'Yêu Cầu Bổ Sung chưa được người đề xuất phản hồi, hoặc Từ Chối Khẩn Cấp chưa được người có quyền xử lý — treo quá 2 ngày sẽ tự động gửi email nhắc (job chạy mỗi 24h), mỗi yêu cầu chỉ nhắc đúng 1 lần.' },
     ] },
   },
   muaHang: {

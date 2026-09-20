@@ -1,8 +1,98 @@
 # Phiên bản hiện tại
 
-**23.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.59 (2026-09-20): Rà soát chuyên sâu đợt 4 (4 agent song song) — vá 20 khoảng trống/lỗi mức thấp hơn (Công Việc/Biên Bản Họp/Đặt Phòng Họp/Truyền Thông Nội Bộ/VPP/Đồng Phục/Giấy Phép/Hỗ Trợ IT/Checklist/Cơ Cấu Tổ Chức/HĐLĐ/Công&Phép/Lương/Tái Tuyển/Phản Hồi Ý Kiến/Mua Hàng BAS/Vận Hành/Hệ Thống)
+
+Tiếp nối v23.58 (đợt 3), chạy thêm 1 đợt audit 4 agent song song tìm gap ở
+mức thấp hơn (không còn gap Cao/Trung bình-Cao nào), vá cả 20 gap phát hiện
+được — mỗi gap đều có test hồi quy riêng chứng minh lỗi trước/sau khi vá.
+
+1. Công Việc: `createTask()` chưa kiểm tra người được giao/cộng tác có đang
+   hoạt động (`active !== false`) — có thể giao việc cho nhân viên đã nghỉ.
+   Nay dùng lại `assertActiveAssignee()` (đã có sẵn ở luồng khác) ngay lúc tạo.
+2. Biên Bản Họp: giao việc từ chỉ thị (`assignMinutesTasks()`) chỉ cho phép
+   gọi ĐÚNG 1 LẦN cho cả biên bản — nếu 1 vài chỉ thị tạo việc lỗi giữa
+   chừng (VD người được giao đã nghỉ) thì không có cách nào giao lại riêng
+   các chỉ thị lỗi đó nữa (cờ `tasksAssigned` đã khoá cứng). Nay cho phép
+   gọi lại khi còn chỉ thị chưa tạo việc thành công (`taskCreated` rỗng),
+   không ghi đè mốc thời gian/người giao của lần đầu.
+3. Đặt Phòng Họp: `payload.room` khi tạo lịch không đối chiếu với danh mục
+   `DB.meetingRooms` thật — gõ tự do tên phòng không tồn tại vẫn tạo được.
+   Nay validate phòng phải khớp danh mục đã cấu hình.
+4. Truyền Thông Nội Bộ: tác giả 1 bình luận không tự sửa/xoá được bình luận
+   của chính mình (trước đây chỉ có Admin ẩn). Nay thêm sửa/xoá cho tác giả
+   (bình luận sửa vẫn bị quét lại từ khoá nhạy cảm, không né được kiểm duyệt).
+5. VPP: khi phòng ban có cấu hình mức chi (`rate`) nhưng `headcount = 0`
+   (dữ liệu nhân sự thiếu/lỗi đồng bộ), hệ thống ÂM THẦM bỏ qua luôn việc
+   kiểm tra ngân sách (`totalBudget = 0` không chặn gì) thay vì báo lỗi rõ.
+   Nay chặn 409 yêu cầu xử lý đúng dữ liệu headcount trước.
+6. Đồng Phục: người đã nghỉ việc không tự xác nhận nhận đồng phục được, và
+   trước đây không ai xác nhận HỘ được — phiếu cấp phát kẹt vĩnh viễn ở
+   trạng thái chưa xác nhận. Nay cho phép người có quyền quản lý kho Đồng
+   Phục xác nhận hộ (ghi rõ "xác nhận hộ, nhân viên đã nghỉ việc" trong lịch sử).
+7. Giấy Phép: hồ sơ đang `PENDING` (gửi nhầm/muốn rút) không có cách huỷ,
+   chỉ chờ người duyệt xử lý. Nay thêm "Hủy" cho người tạo khi còn `PENDING`.
+8. Hỗ Trợ IT: 3 luồng chờ xử lý (phê duyệt escalate, yêu cầu báo giá, từ
+   chối khẩn cấp) không có nhắc hạn — có thể treo vô thời hạn không ai để ý.
+   Nay thêm job nhắc qua email sau 2 ngày chưa xử lý (`jobs/itApprovalDeadlineReminder.js`).
+9. Checklist: sau khi siêu thị đã nộp phản hồi 1 lần, không sửa/nộp lại
+   được nữa dù còn trong hạn — gõ nhầm phải chờ người duyệt xử lý thủ công.
+   Nay cho phép sửa & nộp lại trước khi có kết quả duyệt.
+10. Cơ Cấu Tổ Chức: phiên bản `DRAFT` tạo nhầm/muốn bỏ không xoá được, tồn
+    tại mãi trong danh sách. Nay thêm xoá cho phiên bản còn `DRAFT` (qua
+    Thùng Rác, khôi phục được như quy ước chung).
+11. Hợp Đồng Lao Động: `generateContractCode()` tính số thứ tự tiếp theo
+    theo SỐ LƯỢNG hợp đồng còn lại (`length + 1`) — xoá 1 hợp đồng ở giữa
+    dãy rồi tạo mới sẽ trùng mã với hợp đồng còn lại. Nay tính theo SỐ LỚN
+    NHẤT đã dùng (không phụ thuộc còn bao nhiêu bản ghi).
+12. Công & Phép: duyệt đơn nghỉ loại `SHIFT_BASED` (nghỉ theo ca đã phân)
+    không tự huỷ các dòng phân ca (`shiftRoster`) trùng ngày nghỉ — ca trực
+    vẫn hiện như chưa nghỉ. Nay tự huỷ đúng các dòng phân ca trùng khi duyệt.
+13. Lương: kỳ lương tạo nhầm còn `DRAFT` và chưa có nhân sự nào (`employeeCount = 0`)
+    không xoá được. Nay thêm xoá cho kỳ còn Nháp & rỗng (qua Thùng Rác).
+14. Tái Tuyển: hồ sơ đã liên kết tài khoản (có `username`) không đổi sang
+    tài khoản khác được nếu liên kết nhầm — chỉ có thể liên kết lần đầu.
+    Nay thêm "Đổi Tài Khoản Liên Kết" cho HR (lưu lịch sử đổi).
+15. Phản Hồi Ý Kiến (HCRC Đồng Hành): câu hỏi gửi nhầm/muốn rút khi còn
+    `PENDING` không có cách tự rút, chỉ Admin xoá hẳn được (mất dấu vết).
+    Nay cho người gửi tự rút (chuyển `WITHDRAWN`, giữ lịch sử) — đồng thời
+    vá luôn 1 lỗi liên quan phát hiện khi làm gap này: Nhân Sự trước đây vẫn
+    trả lời được cho câu ĐÃ BỊ RÚT (guard cũ chỉ chặn `ANSWERED`, bỏ sót
+    `WITHDRAWN`), nay chặn rõ + hiện thông báo thay cho form trả lời.
+16. Mua Hàng BAS: `fetchAllPurchases()` (đồng bộ DSmart) phân trang bằng
+    `while(true)` không trần — DSmart lỗi trả `hasMore:true` mãi sẽ khiến
+    job treo vô thời hạn, bộ nhớ phình vô hạn. Nay thêm trần `MAX_PAGES=1000`,
+    dừng + báo lỗi rõ thay vì treo.
+17. Mua Hàng BAS: `calculateMhTerm()` dùng `prompt()` nhập tay ngày kỳ tính
+    — dễ gõ sai định dạng, không có picker. Nay dùng `<input type="date">`
+    qua `showConfirmModal()` (định dạng luôn đúng), đồng thời ép định dạng
+    `YYYY-MM-DD` ở server (`POST /terms/:id/calculate`) thay vì chỉ dựa
+    `new Date(...)` parse tự do.
+18. Mua Hàng BAS: `submitMhTermForm()` ép `ratePct` qua `Number()` thẳng —
+    gõ kiểu Việt "12,5" (phẩy thập phân) ra `NaN` → gửi lên thành `null` →
+    server `Number(null)=0` (hợp lệ, 0-100) → ÂM THẦM lưu Tỷ Lệ % = 0% thay
+    vì giá trị định nhập, không cảnh báo gì. Nay chuẩn hoá phẩy→chấm + chặn
+    rõ ở cả client và server (`validateTiers()` chặn rõ null/undefined/rỗng,
+    không còn bị `Number()` ngầm coi là 0%).
+19. Vận Hành: form `data-op-submit` (áp dụng cho cả 72 form toàn hệ thống,
+    không riêng Đơn Hàng) chưa có khoá chống double-submit — bấm Enter 2 lần/
+    double-click trong lúc đang xử lý (VD còn đang tải file lên) gửi được 2
+    request trước khi request đầu xong, tạo trùng bản ghi. Nay dùng lại khoá
+    `runCspOp()` đã có cho các thao tác khác. Tự phát hiện thêm 1 lỗi liên
+    quan lúc viết test cho bản vá này: khi bị khoá, handler cũ trả về sớm
+    TRƯỚC KHI gọi `preventDefault()` — trình duyệt submit/điều hướng THẬT ở
+    lượt bấm bị khoá, đúng hành vi cần chặn lại xảy ra theo đường khác. Nay
+    `preventDefault()` luôn được gọi ngay từ đầu, không phụ thuộc có bị khoá
+    hay không.
+20. Hệ Thống: Thùng Rác thiếu nhãn tiếng Việt cho `operationOrders` (Vận
+    Hành - Đơn Hàng) dù collection này xoá được (khôi phục qua Thùng Rác)
+    từ lâu — hiện ra đúng key kỹ thuật "operationOrders" thay vì tên dễ đọc.
+
+Không phát sinh thay đổi `sql/schema.sql`/biến môi trường mới — toàn bộ 20
+gap đều xử lý trong logic nghiệp vụ (JSON-blob Payload) + JS client hiện có.
 
 ## v23.58 (2026-09-19): Rà soát chuyên sâu đợt 3 (4 agent song song) — vá 16 khoảng trống nghiệp vụ (Đăng Ký Xe/Nhân Sự/Hồ Sơ/Đào Tạo/Hợp Đồng/Ngân Sách/Mua Hàng/Văn Bản/Công Việc/Văn Phòng/Đồng Phục/Thanh Toán/Cơ Cấu Tổ Chức/Lương/Vận Hành)
 

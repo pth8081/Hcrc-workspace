@@ -212,6 +212,31 @@ function linkAccount(list, employeeCode, username, actorUsername) {
   return profile;
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): linkAccount() ở trên hard-chặn khi profile.username ĐÃ
+// có giá trị — đúng cho lần liên kết ĐẦU TIÊN, nhưng KHÔNG có đường nào đổi lại khi 1 nhân viên nghỉ
+// việc (bị khoá tài khoản VPDT cũ hoặc IT xoá luôn tài khoản cũ) rồi được tái tuyển (reactivateForRehire()
+// ở trên) với 1 tài khoản VPDT MỚI hoàn toàn — hồ sơ vẫn còn trỏ về username CŨ đã chết, không đăng nhập
+// xem hồ sơ được, cũng không xét được "quản lý trực tiếp" đúng theo cây tổ chức hiện tại. Hàm RIÊNG này
+// (không tái dùng linkAccount()) để bắt buộc phân biệt rõ 2 tình huống nghiệp vụ khác nhau — "liên kết
+// lần đầu" vs "đổi tài khoản đã liên kết" — và lưu lại lịch sử đổi (accountRelinkHistory) để tra soát.
+function relinkAccount(list, employeeCode, newUsername, actorUsername, actorName) {
+  const arr = list || [];
+  const profile = findProfile(arr, employeeCode);
+  if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ nhân sự ứng với Mã Nhân Viên này');
+  if (!profile.username) throw new HttpError(400, 'Hồ sơ này chưa liên kết tài khoản nào — dùng "Liên kết tài khoản" thay vì "Đổi tài khoản"');
+  if (profile.username === newUsername) throw new HttpError(400, 'Tài khoản mới phải khác tài khoản đang liên kết hiện tại');
+  if (findProfileByUsername(arr, newUsername)) throw new HttpError(400, 'Tài khoản VPDT này đã được liên kết với 1 hồ sơ nhân sự khác');
+  const oldUsername = profile.username;
+  profile.username = newUsername;
+  profile.accountRelinkHistory = profile.accountRelinkHistory || [];
+  profile.accountRelinkHistory.push({
+    id: randomUUID(), oldUsername, newUsername,
+    relinkedAt: nowVN(), relinkedBy: actorUsername || 'system', relinkedByName: actorName || actorUsername || 'system'
+  });
+  profile.updatedAt = nowVN(); profile.updatedBy = actorUsername || 'system';
+  return profile;
+}
+
 // Gọi khi 1 quy trình ONBOARDING/OFFBOARDING tự động COMPLETED (xem computeHrProcessProgress() ở
 // lib/recordActions.js) — chuyển đúng trạng thái hồ sơ, không đụng tới các trường dữ liệu khác.
 // hrProcessItem: bản ghi hrProcesses đã COMPLETED — ONBOARDING tra theo employeeCode, OFFBOARDING tra
@@ -710,7 +735,7 @@ module.exports = {
   STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
-  findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,

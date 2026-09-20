@@ -501,6 +501,26 @@ async function main() {
       assertEqual(correctStore.body.item.storeResponseText, 'Đã khắc phục', 'Nội dung phản hồi phải được lưu đúng');
     });
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): route store-response chưa từng chặn gửi lại (chỉ đòi
+    // status==='SUBMITTED') nhưng client (module-checklist.js) ẨN VĨNH VIỄN ô nhập sau khi đã có
+    // storeResponseText — siêu thị không có cách nào sửa/nộp lại phản hồi gõ nhầm. Đã thêm nút "✏️ Sửa
+    // phản hồi" ở client (không đổi gì phía server, route này vốn đã cho phép) — test này khoá lại đúng
+    // hành vi server đã đúng từ trước để không bị vô tình thắt chặt thêm sau này.
+    await run.run('LỖI ĐÃ VÁ: store-response gọi LẦN 2 (nộp lại/sửa) với nội dung mới -> vẫn 200, ghi đè đúng nội dung mới', async () => {
+      resetRecords();
+      const t = seedTemplate({ templateType: 'CONTROL_AUDIT' }); t.status = 'ACTIVE';
+      const passOption = t.questions[0].options.find(o => o.isPassing);
+      const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị A' }, AUDITOR);
+      const subId = start.body.item.id;
+      await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [passOption.id] }] }, AUDITOR);
+      await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, AUDITOR);
+
+      await api('POST', `/api/checklist/submissions/${subId}/store-response`, { responseText: 'Phản hồi lần 1 (gõ nhầm)' }, STORE_A_EMP);
+      const second = await api('POST', `/api/checklist/submissions/${subId}/store-response`, { responseText: 'Phản hồi lần 2 (đã sửa đúng)' }, STORE_A_EMP);
+      assertEqual(second.status, 200, 'Gửi lại lần 2 phải thành công, không bị chặn');
+      assertEqual(second.body.item.storeResponseText, 'Phản hồi lần 2 (đã sửa đúng)', 'Nội dung phải được ghi đè thành nội dung mới nhất');
+    });
+
     // ===== CL-06: template không còn ACTIVE (đã bị thay bằng bản clone/kích hoạt khác) vẫn phải xem
     // được nếu user có bài nộp tham chiếu đúng template đó — nếu không, người từng làm bài mất khả năng
     // tra cứu lại câu hỏi/đáp án gốc ngay khi có ai kích hoạt bản mới thay thế (xem lib/recordViewScope.js).
