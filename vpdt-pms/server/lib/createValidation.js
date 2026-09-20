@@ -14,6 +14,10 @@ const { HttpError: CreateError } = require('./httpErrors');
 // TRƯỚC CẢ khi tới insertRecord(), nên phải tự sửa ở đây thì retry mới thực sự có tác dụng cho các
 // module tạo qua routes/create.js). Không có vòng require ngược: recordStore.js không require file này.
 const { CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix } = require('./recordStore');
+// recordCodeGen — SINH LẠI mã hồ sơ ở SERVER cho docs/submissions/contracts/licenses (xem `generateCode`
+// ở CREATE_MODULE_CONFIGS bên dưới + chú thích đầy đủ ở lib/recordCodeGen.js). File đó thuần hàm, không
+// require ngược file này nên không có vòng phụ thuộc.
+const recordCodeGen = require('./recordCodeGen');
 // vppCatalog.js là tiện ích THUẦN (không đọc DB, giống httpErrors.js) — an toàn require thẳng ở đây.
 const { validateRegistrationItems: validateVppRegItems } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
@@ -158,6 +162,45 @@ const SUBMISSION_TYPES_FALLBACK = [
 // xoá nhóm hoặc cấp tự do ở màn "Quản Lý Nhóm Phê Duyệt Trình" (mục 11), KHÔNG cần sửa code — hàm dưới
 // đây là điểm DUY NHẤT thật sự áp luật này lúc tạo hồ sơ (không tin approvalLevel/selectedApprovalLayers
 // client gửi lên).
+// ——— Chuẩn hoá + XÁC MINH 4 field nội dung cốt lõi của tờ trình (type/priority/title/content) ———
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/…", mức Cao + Thấp):
+//  - `type` (Loại Tờ Trình) TRƯỚC ĐÂY không hề được xác minh ở server. buildEffectiveSubmissionWorkflowServer()
+//    dưới đây tra `submissionTypes.find(t => t.label === type)` và im lặng rơi về typeKey='KHAC' khi
+//    không khớp — 1 request tự soạn gửi label lệch (VD thừa/thiếu 1 khoảng trắng so với nhãn thật) vẫn
+//    tạo được tờ trình HIỂN THỊ đúng tên loại "Tờ trình duyệt kinh phí" trên phiếu, nhưng đi theo quy
+//    trình của 'KHAC' (thường ÍT BƯỚC DUYỆT HƠN hẳn loại thật). Nay bắt buộc khớp ĐÚNG 1 label.
+//  - `priority` (Độ Khẩn) cũng không đối chiếu appData.submissionPriorities và không giới hạn độ dài.
+//  - `title`/`content` không có .slice() như các module khác (so licenses.extraValidate) — gửi chuỗi
+//    khổng lồ làm phình bản ghi/phá bố cục danh sách.
+// Dùng CHUNG cho cả TẠO (submissions.extraValidate) lẫn SỬA NHÁP (editSubmissionDraft(), lib/recordActions.js)
+// để 2 luồng không lệch luật nhau. Bỏ trống priority (field không bắt buộc) -> giữ nguyên hành vi cũ.
+const SUBMISSION_TITLE_MAX = 300;
+const SUBMISSION_CONTENT_MAX = 20000;
+// opts.validateType / opts.validatePriority (mặc định true — nhánh TẠO): nhánh SỬA NHÁP truyền false khi
+// người dùng KHÔNG gửi lại field đó, để 1 hồ sơ cũ mang giá trị không còn trong danh mục (admin đã
+// xoá/đổi tên Loại Tờ Trình sau khi hồ sơ được tạo) KHÔNG bị chặn cứng mỗi lần sửa — đúng cùng loại
+// deadlock đã vá cho approvalLevel ở editSubmissionDraft(). Giá trị người dùng THẬT SỰ gửi lên thì luôn
+// bị xác minh, nên lỗ hổng "gửi type lệch label để đi ít bước duyệt hơn" vẫn đóng ở cả 2 luồng.
+function normalizeSubmissionCoreFields(payload, appData, opts) {
+  const { validateType = true, validatePriority = true } = opts || {};
+  const types = (appData?.submissionTypes && appData.submissionTypes.length) ? appData.submissionTypes : SUBMISSION_TYPES_FALLBACK;
+  const rawType = String(payload.type || '').trim();
+  if (validateType && !types.some(t => t.label === rawType)) {
+    throw new CreateError(400, `Loại tờ trình không hợp lệ: ${rawType || '(để trống)'}`);
+  }
+  payload.type = rawType;
+
+  const priorities = appData?.submissionPriorities || [];
+  const rawPriority = payload.priority === undefined || payload.priority === null ? '' : String(payload.priority).trim();
+  if (validatePriority && rawPriority && priorities.length && !priorities.some(p => p.key === rawPriority)) {
+    throw new CreateError(400, `Độ khẩn không hợp lệ: ${rawPriority}`);
+  }
+  payload.priority = rawPriority.slice(0, 100);
+
+  if (payload.title !== undefined) payload.title = String(payload.title || '').trim().slice(0, SUBMISSION_TITLE_MAX);
+  if (payload.content !== undefined) payload.content = String(payload.content || '').slice(0, SUBMISSION_CONTENT_MAX);
+}
+
 function resolveApprovalLevelRule(levels, levelId, groups) {
   const level = (levels || []).find(l => l.id === levelId);
   if (!level) return null;
@@ -445,6 +488,10 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'submissions',
     getScope: (user) => user.perms?.submissionCreate,
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // Mã tờ trình = HCRC-<mã phòng>-VBT-<số 3 chữ số>, SINH LẠI Ở SERVER (không tin client) — xem
+    // lib/recordCodeGen.js. dept đã được validateAndPrepareCreate() xác minh scope ngay trước đó.
+    generateCode: (payload, collection, user, appData) =>
+      recordCodeGen.generateHcrcCode(collection, appData, payload.dept, 'VBT'),
     // Ghi đè effectiveSteps/effectiveApprovers/selectedApprovalLayers/selectedLayerMembers bằng bản
     // server tự dựng lại + xác minh (xem buildEffectiveSubmissionWorkflowServer) — payload là cùng 1
     // object được validateAndPrepareCreate() dùng để tạo record ngay sau đó, nên sửa tại chỗ ở đây là đủ.
@@ -457,6 +504,9 @@ const CREATE_MODULE_CONFIGS = {
       // xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp tờ trình');
       assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung theo tờ trình');
+      // type/priority/title/content — xem normalizeSubmissionCoreFields() ở đầu file. PHẢI chạy TRƯỚC
+      // buildEffectiveSubmissionWorkflowServer() vì hàm đó tra quy trình theo ĐÚNG payload.type.
+      normalizeSubmissionCoreFields(payload, appData || {});
       const effectiveWf = buildEffectiveSubmissionWorkflowServer(
         payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
       );
@@ -488,6 +538,18 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'contracts',
     getScope: (user) => user.perms?.contractCreate,
     creatorField: 'creator', creatorNameField: null, // Hợp đồng KHÔNG có field creatorName (khớp index.html)
+    // Mã hợp đồng GỐC = HCRC-<mã phòng>-<viết tắt Loại Pháp Lý>-<số 3 chữ số>; mã PHỤ LỤC = <mã gốc>-
+    // PLHD<số 2 chữ số> (đánh số riêng theo từng hợp đồng gốc) — SINH LẠI Ở SERVER, xem
+    // lib/recordCodeGen.js. Phụ lục kế thừa `type` của hợp đồng gốc (extraValidate ép lại ngay sau đó)
+    // nên mã gốc đã mang đúng viết tắt loại rồi, không cần tính lại ở đây. Hợp đồng gốc chưa tồn tại ->
+    // trả null, để extraValidate ném đúng lỗi "Hợp đồng gốc không tồn tại" như cũ.
+    generateCode: (payload, collection, user, appData) => {
+      if (payload.isAddendum) {
+        const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
+        return root ? recordCodeGen.generateAddendumCode(collection, root) : null;
+      }
+      return recordCodeGen.generateContractCode(collection, appData, payload.dept, payload.type);
+    },
     // 2 luồng tạo hồ sơ hợp đồng/phụ lục (status GÁN Ở SERVER theo ĐÚNG luồng, không tin approvalStatus
     // client gửi — khớp internalPosts SHARE ở trên):
     // 1) isSignedImport=true ("Nhập Hợp Đồng/Phụ Lục Đã Ký" — tab Quản Lý HĐ, index.html
@@ -504,6 +566,7 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload, collection, user, appData) => {
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
+
 
       // Tệp hợp đồng + Tài liệu ký — kiểm TRƯỚC nhánh isSignedImport bên dưới (nhánh đó gán
       // signedFileUrl = fileUrl nên phải chắc chắn cả 2 đều hợp lệ trước khi sao chép), xem
@@ -560,6 +623,18 @@ const CREATE_MODULE_CONFIGS = {
         if (payload.custodianDept !== root.custodianDept) {
           throw new CreateError(400, 'Đơn vị tiếp nhận theo dõi & thanh toán của phụ lục phải khớp với hợp đồng gốc');
         }
+      }
+
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "…/Hợp Đồng", mức Trung bình): nhánh isSignedImport tạo hồ
+      // sơ APPROVED NGAY (bỏ qua TOÀN BỘ quy trình Phê Duyệt HĐ) nhưng cờ này do CLIENT gửi và chỉ được
+      // gác bằng CHÍNH quyền contractCreate dùng cho hồ sơ thường — nghĩa là BẤT KỲ ai tạo được hợp đồng
+      // cũng tạo được luôn hợp đồng "đã ký" không cần ai duyệt. Việc nhập lại hợp đồng ký sẵn ngoài đời
+      // là nghiệp vụ THẬT (HR/kế toán) nên KHÔNG chặn hẳn, mà tách thành 1 quyền riêng
+      // `contractImportSigned` (cùng khuôn các quyền phẳng khác: licenseCreate/licenseApprove...) — admin
+      // cấp riêng cho đúng người được phép. Client cũng đã ẩn hẳn form này khi thiếu quyền (xem
+      // setContractSubTab() ở public/js/module-hopdong.js) — đây là điểm gác THẬT.
+      if (isSignedImport && !user.perms?.admin && !user.perms?.contractImportSigned) {
+        throw new CreateError(403, 'Bạn không có quyền "Nhập Hợp Đồng/Phụ Lục Đã Ký" (hồ sơ nhập theo cách này được duyệt ngay, không qua quy trình Phê Duyệt) — vui lòng liên hệ Quản Trị Viên');
       }
 
       if (isSignedImport) {
@@ -1052,6 +1127,11 @@ const CREATE_MODULE_CONFIGS = {
     dbKey: 'docs',
     getScope: (user) => ({ all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }),
     creatorField: 'uploader', creatorNameField: 'uploaderName',
+    // Mã tài liệu GỐC = <viết tắt Phân loại>-<viết tắt Phòng ban>-<số 3 chữ số>, SINH LẠI Ở SERVER —
+    // xem lib/recordCodeGen.js. PHIÊN BẢN mới (rootDocId != null) trả null: mã suy từ bản gốc
+    // (<displayCode>-V<n>) đã được extraValidate bên dưới tự tính từ trước, không đụng tới.
+    generateCode: (payload, collection, user, appData) =>
+      payload.rootDocId != null ? null : recordCodeGen.generateDocCode(collection, appData, payload.cat, payload.dept),
     // Khớp uploadDoc()/getDocFamily()/getDocFamilyLatest() ở index.html — nhánh "Cập nhật" (rootDocId
     // khác null) để CLIENT tự tính cat/displayCode/versionNumber/code rồi gửi nguyên payload lên, server
     // TRƯỚC ĐÂY (module docs không có extraValidate nào) không xác minh lại gì cả: 1 request tự soạn có
@@ -1095,6 +1175,10 @@ const CREATE_MODULE_CONFIGS = {
       } else {
         payload.versionNumber = 1;
         payload.rootDocId = null;
+        // displayCode của bản GỐC LUÔN = chính code của nó (khớp uploadDoc() ở module-tailieu.js) —
+        // trước đây tin nguyên giá trị client gửi; nay code do server sinh (generateCode ở trên) nên
+        // displayCode cũng phải bám theo, không thì 2 field lệch nhau.
+        payload.displayCode = payload.code;
       }
       // status/currentStep/history PHẢI gán cứng ở server (khớp uploadDoc() ở index.html, dùng đúng
       // thông tin XÁC THỰC của người gọi thay vì tin currentUser.name/username client tự gửi) — trước
@@ -2658,6 +2742,12 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // Mã giấy phép GỐC = HCRC-<mã phòng người tạo>-GP-<số 3 chữ số>, SINH LẠI Ở SERVER (forceOwnDept ->
+    // luôn theo user.dept, khớp generateHcrcCode(DB.licenses, getDeptAbbr(currentUser.dept), 'GP') ở
+    // module-tailieu.js). PHIÊN BẢN mới (rootLicenseId != null) trả null — mã suy từ bản gốc, xem
+    // extraValidate bên dưới.
+    generateCode: (payload, collection, user, appData) =>
+      payload.rootLicenseId != null ? null : recordCodeGen.generateHcrcCode(collection, appData, user.dept, 'GP'),
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.licenseCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo/tải lên giấy phép');
@@ -3391,6 +3481,16 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
     throw new CreateError(403, 'Bạn không có quyền tạo hồ sơ cho phòng ban này');
   }
 
+  // SINH LẠI mã ở SERVER cho các module có `generateCode` (docs/submissions/contracts/licenses — xem
+  // lib/recordCodeGen.js): BỎ QUA hẳn giá trị `code` client gửi thay vì chỉ dup-check như trước. Phải
+  // chạy TRƯỚC khối dup-check ngay dưới đây để mã server vừa dựng cũng đi qua đúng cơ chế tự tăng số
+  // khi trùng (kể cả trùng với hồ sơ đã nằm trong Thùng Rác). Trả về null/'' = "module này tự lo mã ở
+  // extraValidate" (VD phiên bản mới của docs/licenses, mã suy từ bản gốc) -> giữ nguyên hành vi cũ.
+  if (config.generateCode) {
+    const generated = config.generateCode(payload, existingCollection, user, appData);
+    if (generated) payload.code = generated;
+  }
+
   if (payload.code) {
     const isDup = (code) => (existingCollection || []).some(item => item.code === code)
       || (trashedItems || []).some(t => t.code === code);
@@ -3636,6 +3736,9 @@ module.exports = {
   // export sẵn phòng khi module khác cần tra lại luật visible/locked của 1 cấp mà không muốn tự dựng cả
   // effective workflow.
   buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule,
+  // Export cho editSubmissionDraft() (lib/recordActions.js) — nhánh SỬA NHÁP phải áp ĐÚNG luật
+  // type/priority/title/content như nhánh TẠO, xem normalizeSubmissionCoreFields() ở đầu file.
+  normalizeSubmissionCoreFields, SUBMISSION_TITLE_MAX, SUBMISSION_CONTENT_MAX,
   // Export cho routes/data.js POST /api/data/:key — chặn TGĐ >1 người khi admin lưu mục 11/14.
   assertApprovalGroupsSingleApproverCaps,
   sanitizeUniformItems,

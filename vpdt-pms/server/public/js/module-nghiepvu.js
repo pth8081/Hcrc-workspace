@@ -382,6 +382,8 @@ const NGHIEP_VU_DOCS = {
       { label: 'Nhóm "Xin Ý Kiến" (không chặn)', text: 'riêng Văn Bản Trình có loại nhóm đánh dấu "không chặn quy trình" — chỉ là kênh tham khảo song song (opinionRequestees), không phải bước duyệt thật, không cần chờ mới đi tiếp; nhóm này có thể được bật thêm quyền "Đề Xuất Thay File" — người trong nhóm được đề xuất thay thế toàn bộ file tờ trình ngay trong bước xử lý của mình.' },
     ], right: [
       { label: 'Không tự duyệt', text: 'người tạo tờ trình không được nằm trong danh sách duyệt của chính tờ trình đó.' },
+      { label: 'Huỷ đề xuất thay thế đang treo (9/2026)', text: 'tờ trình đang chờ người trình xác nhận 1 đề xuất thay thế file thì bị khoá mọi thao tác khác — nếu người trình không còn xử lý được (nghỉ việc/khoá tài khoản/đi vắng), Quản Trị Viên HOẶC chính người đã đề xuất bấm "🚫 Huỷ Đề Xuất Thay Thế" trong modal Bút Phê để gỡ, hồ sơ quay lại xử lý bình thường ở ĐÚNG bước hiện tại.' },
+      { label: 'Loại tờ trình / Độ khẩn xác minh ở server (9/2026)', text: 'phải khớp đúng danh mục admin cấu hình — giá trị lệch trước đây âm thầm rơi về loại "Khác" (ít bước duyệt hơn) dù phiếu vẫn hiện đúng tên loại. Tiêu đề/Nội dung cũng có giới hạn độ dài (300 / 20.000 ký tự). Nếu "Cấp Phê Duyệt Cuối Cùng" của 1 tờ trình NHÁP bị admin xoá khỏi danh mục, hệ thống tự chuyển về cấp mặc định hợp lệ và báo rõ khi "Sửa & Gửi Lại" thay vì báo lỗi cứng.' },
     ] },
   },
   contract: {
@@ -403,6 +405,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Cảnh báo hết hạn', text: 'hợp đồng đang hiệu lực mà gần tới ngày hết hạn sẽ được nhắc trước, để chủ động gia hạn hoặc thanh lý thay vì để hết hạn lúc nào không hay.' },
       { label: 'Nhóm Phê Duyệt bổ sung (10/2026)', text: 'cùng cơ chế với Văn Bản Trình — chọn 1 "Cấp Phê Duyệt Cuối Cùng" để xác định "Nhóm Phê Duyệt" nào bắt buộc/tuỳ chọn thêm, mỗi nhóm chọn nối thêm 1 bước duyệt vào CUỐI quy trình gốc theo phòng ban (không thay thế). KHÁC Văn Bản Trình: Hợp Đồng KHÔNG có loại nhóm "không chặn/Xin Ý Kiến" — mọi nhóm được chọn thêm đều là bước duyệt thật, không có kênh tham khảo song song.' },
     ], right: [
+      { label: 'Nhập Hợp Đồng/Phụ Lục ĐÃ KÝ cần quyền RIÊNG (9/2026)', text: 'hồ sơ nhập ở tab "📄 Quản Lý Hợp Đồng &amp; Giấy Phép" được đánh dấu ĐÃ DUYỆT ngay (bỏ qua toàn bộ quy trình Phê Duyệt) nên không còn dùng chung quyền "Tạo hồ sơ hợp đồng" — cần quyền "📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ" cấp riêng trong cây phân quyền. Người không có quyền này vào tab đó sẽ không thấy form nhập. Đổi "Phòng ban" khi SỬA hợp đồng cũng phải nằm trong đúng phạm vi quyền tạo hợp đồng của người sửa.' },
       { label: 'Thanh Toán liên kết', text: 'chi phí thực tế phát sinh từ hợp đồng được ghi nhận qua mục Thanh Toán (Tổng Hợp), liên kết ngược về đúng hợp đồng gốc — cần tải "Tài liệu ký" và tài liệu đó được duyệt xong mới lập được đề nghị thanh toán từ hợp đồng. **Khoá chéo với Đổi Hình Thức Thanh Toán (từ 9/2026)**: không "Lập Thanh Toán" được trong lúc hợp đồng đang có 1 yêu cầu Đổi Hình Thức Thanh Toán treo chờ duyệt — tránh tạo đề nghị theo hình thức CŨ ngay trước khi hình thức đó bị đổi.' },
     ] },
   },
@@ -603,6 +606,8 @@ const NGHIEP_VU_DOCS = {
     ], right: [
       { label: 'Tự tính hiệu lực', text: 'Còn hiệu lực / Sắp hết hạn (≤30 ngày) / Hết hạn tự tính theo Ngày hết hạn, có nhắc tự động trước khi hết hạn — job nhắc hạn (9/2026) chỉ xét ĐÚNG phiên bản MỚI NHẤT của mỗi giấy phép, tự bỏ qua các phiên bản CŨ đã bị thay thế (trước đây gia hạn sớm vẫn khiến bản cũ tiếp tục gửi nhắc hạn trùng lặp).' },
       { label: 'Thu hồi', text: 'bắt buộc nhập lý do; sau khi thu hồi không đánh dấu "Đang gia hạn" được nữa — huỷ đánh dấu thu hồi được nếu thao tác nhầm.' },
+      { label: 'Không tự duyệt hồ sơ của chính mình (9/2026)', text: 'người vừa tải giấy phép lên không Duyệt/Từ chối/đánh dấu Gia hạn/Thu hồi chính hồ sơ đó được, kể cả khi có quyền "Duyệt Giấy Phép" — cần 1 người duyệt KHÁC (Quản Trị Viên vẫn giữ đặc quyền vượt cấu hình). Nút tương ứng cũng được ẩn sẵn.' },
+      { label: 'Xoá bản gốc xoá luôn cả "họ" (9/2026)', text: 'xoá 1 giấy phép GỐC nay xoá kèm toàn bộ phiên bản gia hạn của nó — trước đây để lại các phiên bản con mồ côi, hiện lẫn trong danh sách và không cập nhật tiếp được. Xoá 1 phiên bản con vẫn chỉ xoá đúng phiên bản đó.' },
     ] },
   },
   office: {

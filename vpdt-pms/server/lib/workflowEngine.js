@@ -629,6 +629,29 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     throw new WorkflowError(409, 'Tờ trình đang chờ người trình xác nhận đề xuất thay thế nội dung, chưa thể xử lý.');
   }
 
+  // CANCEL_FILE_PROPOSAL — LỐI THOÁT cho hồ sơ bị KHOÁ CỨNG bởi 1 đề xuất thay thế tệp treo mãi (LỖI ĐÃ
+  // VÁ, đợt audit chuyên sâu cụm "Văn Bản Trình/..."): khối chặn ngay phía trên khoá mọi hành động xử lý
+  // khi có pendingFileProposal, mà đường GỠ duy nhất (RESOLVE_FILE_PROPOSAL bên dưới) lại CHỈ mở cho
+  // ĐÚNG item.creator — người trình nghỉ việc/bị khoá tài khoản/đi vắng dài ngày là tờ trình kẹt vĩnh
+  // viễn, admin cũng không gỡ được (nhánh 403 đó KHÔNG có ngoại lệ admin như mọi nhánh khác trong file).
+  // Cho phép admin HOẶC chính người đã đề xuất (proposedBy — tự rút lại đề xuất của mình) huỷ đề xuất:
+  // hồ sơ trở về đúng trạng thái TRƯỚC khi có đề xuất (vẫn PENDING ở bước cũ, KHÔNG đụng currentStep/
+  // lịch sử duyệt — khác hẳn RESOLVE_FILE_PROPOSAL vốn là 1 quyết định nghiệp vụ thật của người trình).
+  if (action === 'CANCEL_FILE_PROPOSAL') {
+    if (moduleKey !== 'submissions') throw new WorkflowError(400, 'Chỉ áp dụng cho Văn Bản Trình');
+    const proposal = item.pendingFileProposal;
+    if (!proposal) throw new WorkflowError(409, 'Tờ trình này không có đề xuất thay thế nào đang chờ xác nhận');
+    if (!user?.perms?.admin && proposal.proposedBy !== user.username) {
+      throw new WorkflowError(403, 'Chỉ Quản Trị Viên hoặc chính người đã đề xuất mới được huỷ đề xuất thay thế tờ trình này');
+    }
+    item[historyField].push({
+      step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_CANCELLED',
+      comment: comment || '', time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl
+    });
+    item.pendingFileProposal = null;
+    return { item, transition: { type: 'CANCEL_FILE_PROPOSAL' } };
+  }
+
   if (action === 'REQUEST_INFO') {
     if (!config.supportsRequestInfo) throw new WorkflowError(400, 'Module này không hỗ trợ yêu cầu bổ sung');
     if (!comment) throw new WorkflowError(400, 'Vui lòng nhập nội dung cần bổ sung');
@@ -965,8 +988,20 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   return { item, transition: { type: 'COMPLETED' } };
 }
 
+// Danh sách người duyệt THẬT đã resolve của ĐÚNG 1 bước, theo cùng cấu hình mà applyWorkflowAction()
+// dùng (config.resolveWfConfig của module đó) — dùng để kiểm TRƯỚC "bước này có ai duyệt được không"
+// mà không phải thực hiện hành động nào. Hiện dùng ở submitPaymentRequest() (lib/recordActions.js) để
+// chặn gửi đề nghị vào ngõ cụt khi paymentDeptWorkflows của phòng ban chưa được admin cấu hình.
+function resolveWorkflowStepApprovers(moduleKey, item, appData, step) {
+  const config = MODULE_CONFIGS[moduleKey];
+  if (!config) return [];
+  const { approvers } = config.resolveWfConfig(item, appData || {});
+  return approvers?.[step] || [];
+}
+
 module.exports = {
   MODULE_CONFIGS,
+  resolveWorkflowStepApprovers,
   WorkflowError,
   applyWorkflowAction,
   assertNotSelfDecidingWorkflowItem,

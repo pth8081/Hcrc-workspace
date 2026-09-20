@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, buildEffectiveSubmissionWorkflowServer, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -73,6 +73,21 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   // kiểm tra lại gì cả (createValidation.js chỉ áp dụng lúc TẠO, không áp dụng lúc SỬA phụ lục).
   if (contract.isAddendum && rootDept !== undefined && payload.dept !== undefined && payload.dept !== rootDept) {
     throw new HttpError(409, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
+  }
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/Hợp Đồng/...", mức Cao): 'dept' nằm trong
+  // CONTRACT_EDITABLE_FIELDS và được gán THẲNG vào hồ sơ (rồi dựng lại effectiveSteps/effectiveApprovers
+  // theo phòng ban MỚI) mà KHÔNG hề kiểm phạm vi tạo hồ sơ của người sửa — khác hẳn 4 hàm sửa-nháp
+  // tương đương (editDocDraft/editSubmissionDraft/editCarRegDraft/editOfficeReqDraft đều gọi
+  // assertDeptScopeAllowed()). Hệ quả: người tạo tự chuyển hợp đồng của mình sang 1 phòng ban KHÔNG
+  // thuộc scope contractCreate của họ (việc mà nhánh TẠO đã chặn kỹ ở validateAndPrepareCreate) và kéo
+  // theo cả quy trình duyệt sang phòng ban đó — né người duyệt lẽ ra phải xem xét hồ sơ này. Kèm đối
+  // chiếu danh mục phòng ban/siêu thị thật, cùng khuôn custodianDept ngay bên dưới.
+  if (payload.dept !== undefined && payload.dept !== contract.dept) {
+    assertDeptScopeAllowed(user, user.perms?.contractCreate, payload.dept);
+    const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+    if (validDepts.size && !validDepts.has(payload.dept)) {
+      throw new HttpError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
+    }
   }
 
   // custodianDept — cùng ràng buộc "1 đơn vị custodian xuyên suốt gốc + phụ lục" như dept ở trên (xem
@@ -1558,6 +1573,13 @@ function editSubmissionDraft(payload, user, item, appData) {
   for (const f of SUBMISSION_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
   }
+  // type/priority/title/content — áp ĐÚNG luật của nhánh TẠO (xem normalizeSubmissionCoreFields() ở
+  // lib/createValidation.js): trước đây nhánh SỬA nhận nguyên giá trị client gửi, nên toàn bộ lỗ hổng
+  // "gửi type lệch label -> rơi về KHAC -> ít bước duyệt hơn" vẫn khai thác được qua vòng "Bổ Sung".
+  normalizeSubmissionCoreFields(item, appData || {}, {
+    validateType: payload.type !== undefined,
+    validatePriority: payload.priority !== undefined
+  });
   if (!String(item.title || '').trim()) throw new HttpError(400, 'Thiếu tiêu đề tờ trình');
   // Tệp chính: cho phép thay thế hẳn (khác itPriceApprovals). Tài liệu bổ sung (extraFiles[]) cho phép
   // gửi lại NGUYÊN danh sách mới (thêm/bớt tự do) — đây là tờ trình đang NHÁP để sửa lại, không phải
@@ -1570,8 +1592,34 @@ function editSubmissionDraft(payload, user, item, appData) {
   if (payload.extraFiles !== undefined) {
     item.extraFiles = Array.isArray(payload.extraFiles) ? payload.extraFiles : [];
   }
-  const approvalLevel = payload.approvalLevel !== undefined ? payload.approvalLevel : item.approvalLevel;
-  const selectedLayerKeys = payload.selectedApprovalLayers !== undefined ? payload.selectedApprovalLayers : item.selectedApprovalLayers;
+  let approvalLevel = payload.approvalLevel !== undefined ? payload.approvalLevel : item.approvalLevel;
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/…", mức Trung bình — tờ trình NHÁP bị kẹt):
+  // "Cấp Phê Duyệt Cuối Cùng" là dữ liệu admin tự cấu hình (appData.submissionApprovalLevels) và XOÁ
+  // ĐƯỢC. Khi 1 cấp bị xoá/đổi id, mọi tờ trình NHÁP còn giữ approvalLevel cũ sẽ ném cứng 400 "Cấp phê
+  // duyệt cuối cùng không hợp lệ" tại buildEffectiveSubmissionWorkflowServer() bên dưới — mà form "Bổ
+  // Sung" dùng chung KHÔNG có ô chọn lại approvalLevel, nên người trình không có cách nào tự sửa: hồ sơ
+  // kẹt NHÁP vĩnh viễn. Tự rơi về 1 cấp MẶC ĐỊNH hợp lệ (isSystemDefault) thay vì throw, và báo lại cho
+  // caller qua item.approvalLevelFallbackFrom để client thông báo rõ đã đổi cấp nào.
+  const levels = appData?.submissionApprovalLevels || [];
+  item.approvalLevelFallbackFrom = null;
+  if (levels.length && !levels.some(l => l.id === approvalLevel)) {
+    const fallback = levels.find(l => l.isSystemDefault) || levels[0];
+    if (fallback) {
+      item.approvalLevelFallbackFrom = approvalLevel || '';
+      approvalLevel = fallback.id;
+    }
+  }
+  let selectedLayerKeys = payload.selectedApprovalLayers !== undefined ? payload.selectedApprovalLayers : item.selectedApprovalLayers;
+  // Cấp vừa fallback có luật visible/locked KHÁC cấp cũ — giữ nguyên danh sách nhóm cũ sẽ lại throw
+  // ("Nhóm phê duyệt không thuộc phạm vi cấp ..."/"Thiếu nhóm phê duyệt bắt buộc"), tức là vẫn kẹt.
+  // Ép lại đúng luật cấp mới: giữ các nhóm cũ CÒN hợp lệ + bổ sung đủ nhóm bắt buộc.
+  if (item.approvalLevelFallbackFrom !== null) {
+    const rule = resolveApprovalLevelRule(levels, approvalLevel, appData?.submissionApprovalGroups || []);
+    if (rule) {
+      const kept = (Array.isArray(selectedLayerKeys) ? selectedLayerKeys : []).filter(k => rule.visible.includes(k));
+      selectedLayerKeys = [...new Set([...kept, ...rule.locked])];
+    }
+  }
   const selectedLayerMembers = payload.selectedLayerMembers !== undefined ? payload.selectedLayerMembers : item.selectedLayerMembers;
   // buildEffectiveSubmissionWorkflowServer() tự xác minh approvalLevel khớp 1 id trong
   // appData.submissionApprovalLevels (ném HttpError 400 nếu không hợp lệ — xem resolveApprovalLevelRule()
@@ -1947,7 +1995,9 @@ function canEditPaymentRequest(user, pr) {
   return canManagePaymentRequests(user) || pr.createdBy === user.username;
 }
 
-function editPaymentRequest(payload, user, pr) {
+// appData (tuỳ chọn, caller tự đọc sẵn — xem routes/records.js POST /paymentRequests/:id/edit): CHỈ dùng
+// để đối chiếu 'dept' MỚI với danh mục phòng ban/siêu thị thật, cùng khuôn custodianDept ở editContract().
+function editPaymentRequest(payload, user, pr, appData) {
   const isDraft = pr.status === 'DRAFT';
   if (!(isDraft ? canEditPaymentRequest(user, pr) : canManagePaymentRequests(user))) {
     throw new HttpError(403, 'Bạn không có quyền sửa đề nghị thanh toán');
@@ -1973,6 +2023,20 @@ function editPaymentRequest(payload, user, pr) {
     // ghi = 1 đợt" mà isCycleGroupFullyResolved() và toàn bộ luồng xác nhận riêng dựa vào.
     if (pr.cycleGroupId && installments.length !== 1) {
       throw new HttpError(400, 'Đề nghị thanh toán theo đợt (đã tách riêng) chỉ có đúng 1 đợt thanh toán, không thể thêm/bớt đợt ở đây');
+    }
+  }
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/.../Thanh Toán", mức Cao): 'dept' quyết định
+  // TOÀN BỘ quy trình duyệt của đề nghị (paymentDeptWorkflows — tra ĐỘNG mỗi lượt duyệt, KHÔNG snapshot,
+  // xem MODULE_CONFIGS.paymentRequests ở lib/workflowEngine.js) nhưng trước đây (a) không hề được đối
+  // chiếu với danh mục phòng ban thật (cả lúc TẠO lẫn lúc SỬA), (b) đổi được GIỮA CHỪNG quy trình duyệt
+  // mà KHÔNG invalidate lịch sử/reset bước — chỉ nhánh payload.installments mới làm việc đó. Hệ quả: hồ
+  // sơ đã qua bước 1-2 của phòng ban A bị chuyển sang phòng ban B rồi được duyệt tiếp từ ĐÚNG bước đang
+  // dở dang, tức là hoàn tất chuỗi duyệt của B mà người duyệt bước đầu của B chưa từng thấy hồ sơ.
+  const deptChanged = payload.dept !== undefined && payload.dept !== pr.dept;
+  if (deptChanged) {
+    const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+    if (validDepts.size && !validDepts.has(payload.dept)) {
+      throw new HttpError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
     }
   }
   for (const field of PAYMENT_EDITABLE_FIELDS) {
@@ -2022,7 +2086,9 @@ function editPaymentRequest(payload, user, pr) {
   // chưa từng được đúng người duyệt bước đầu xác nhận. Khớp đúng khuôn REQUEST_CHANGES/RESOLVE_FILE_PROPOSAL/
   // requestPaymentInfo() (nhánh APPROVED) — chỉ cần khi THẬT SỰ có sửa đợt thanh toán (payload.installments),
   // không đụng khi chỉ sửa title/dept (không ảnh hưởng số tiền đang chờ duyệt).
-  if (!isDraft && payload.installments !== undefined) {
+  // deptChanged (xem chú thích ở trên) kéo theo ĐỔI HẲN bộ người duyệt -> phải reset y hệt nhánh
+  // installments, không chỉ khi số tiền đổi.
+  if (!isDraft && (payload.installments !== undefined || deptChanged)) {
     (pr.history || []).forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
     pr.currentStep = 1;
   }
@@ -2037,7 +2103,10 @@ function editPaymentRequest(payload, user, pr) {
 // currentStep/history để đề nghị đi vào ĐÚNG quy trình duyệt theo bước/phòng ban (paymentDeptWorkflows,
 // xem lib/workflowEngine.js MODULE_CONFIGS.paymentRequests) — không snapshot trước, luôn tra cấu hình
 // admin MỚI NHẤT mỗi lần duyệt (cùng khuôn contractsSignedFile/Xe/Mua Bán/VPP).
-function submitPaymentRequest(user, pr) {
+// appData (tuỳ chọn, caller tự đọc sẵn — xem routes/records.js POST /paymentRequests/:id/submit): dùng
+// để tra TRƯỚC quy trình duyệt của phòng ban (paymentDeptWorkflows) và CHẶN gửi khi bước 1 không resolve
+// ra người duyệt nào — xem khối kiểm tra ở cuối hàm.
+function submitPaymentRequest(user, pr, appData) {
   if (!canEditPaymentRequest(user, pr)) throw new HttpError(403, 'Bạn không có quyền gửi duyệt đề nghị thanh toán này');
   if (pr.status !== 'DRAFT') throw new HttpError(409, 'Đề nghị thanh toán không ở trạng thái nháp, không thể chuyển xác nhận thanh toán');
   if (!String(pr.title || '').trim()) throw new HttpError(400, 'Vui lòng nhập tiêu đề đề nghị thanh toán');
@@ -2055,6 +2124,19 @@ function submitPaymentRequest(user, pr) {
   const requestFiles = Array.isArray(pr.requestFiles) ? pr.requestFiles : [];
   if (!requestFiles.length) {
     throw new HttpError(400, 'Vui lòng đính kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" (có thể chọn nhiều tệp) trước khi chuyển xác nhận thanh toán');
+  }
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "…/Thanh Toán", mức Trung bình — "gửi vào ngõ cụt"):
+  // appData.paymentDeptWorkflows mặc định RỖNG ({} ở defaults.js) và module này khai disallowReject:true
+  // (không Từ chối được qua engine), xoá thì chỉ admin — nên 1 đề nghị gửi đi khi phòng ban CHƯA được
+  // admin cấu hình quy trình duyệt sẽ kẹt PENDING VĨNH VIỄN, không ai duyệt/từ chối/rút lại được. Client
+  // chỉ cảnh báo MỀM ở màn Xem Trước, không chặn lúc gửi. Chặn ngay tại đây (điểm gác THẬT) với thông
+  // điệp nói rõ phải làm gì, thay vì để hồ sơ rơi vào ngõ cụt.
+  if (appData) {
+    const { resolveWorkflowStepApprovers } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+    const step1Approvers = resolveWorkflowStepApprovers('paymentRequests', pr, appData, 1);
+    if (!step1Approvers.length) {
+      throw new HttpError(409, `Phòng ban "${pr.dept}" chưa được cấu hình quy trình duyệt Đề Nghị Thanh Toán (hoặc bước 1 không có người duyệt nào) — đề nghị gửi đi sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi gửi.`);
+    }
   }
   pr.status = 'PENDING';
   pr.currentStep = 1;
@@ -6953,8 +7035,23 @@ function canApproveLicense(user) {
   return !!(user?.perms?.admin || user?.perms?.licenseApprove);
 }
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "…/Giấy Phép", mức Trung bình): module này KHÔNG đi qua
+// lib/workflowEngine.js nên cũng không có assertNotSelfDecidingWorkflowItem() — 1 người được cấp CẢ
+// licenseCreate lẫn licenseApprove (rất phổ biến: cùng 1 bộ phận Hành Chính tải lên + duyệt) tự duyệt
+// được chính giấy phép mình vừa tải lên, vô hiệu hoá hoàn toàn bước duyệt của module. Mirror ĐÚNG tinh
+// thần assertNotSelfDecidingWorkflowItem(): admin KHÔNG bị chặn (giữ nguyên đặc quyền vượt cấu hình,
+// nhất quán với toàn hệ thống), áp cho MỌI quyết định trên hồ sơ (duyệt/từ chối/gia hạn/thu hồi/khôi
+// phục), không chỉ APPROVE.
+function assertNotSelfDecidingLicense(user, item) {
+  if (user?.perms?.admin) return;
+  if (item && item.creator === user?.username) {
+    throw new HttpError(403, 'Bạn không thể tự xử lý (duyệt/từ chối/gia hạn/thu hồi) giấy phép do chính mình tải lên');
+  }
+}
+
 function approveLicense(user, item) {
   if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt giấy phép');
+  assertNotSelfDecidingLicense(user, item);
   if (item.status !== 'PENDING') throw new HttpError(409, 'Giấy phép không ở trạng thái chờ duyệt');
   item.status = 'APPROVED';
   item.history = item.history || [];
@@ -6964,6 +7061,7 @@ function approveLicense(user, item) {
 
 function rejectLicense(user, item, payload) {
   if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền từ chối giấy phép');
+  assertNotSelfDecidingLicense(user, item);
   if (item.status !== 'PENDING') throw new HttpError(409, 'Giấy phép không ở trạng thái chờ duyệt');
   const reason = (payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
@@ -6979,6 +7077,7 @@ function rejectLicense(user, item, payload) {
 // phải hồ sơ còn đang chờ duyệt lần đầu/đã bị từ chối) và CHƯA bị thu hồi.
 function setLicenseRenewing(user, item, payload) {
   if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền cập nhật trạng thái gia hạn');
+  assertNotSelfDecidingLicense(user, item);
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ đánh dấu "Đang gia hạn" cho giấy phép đã được phê duyệt');
   if (item.lifecycleStatus === 'REVOKED') throw new HttpError(409, 'Giấy phép đã bị thu hồi, không thể đánh dấu gia hạn');
   const renewing = !!payload?.renewing;
@@ -6996,6 +7095,7 @@ function setLicenseRenewing(user, item, payload) {
 // trạng thái vô nghĩa và làm sai thống kê giấy phép).
 function revokeLicense(user, item, payload) {
   if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền thu hồi giấy phép');
+  assertNotSelfDecidingLicense(user, item);
   if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ thu hồi được giấy phép đã được phê duyệt');
   if (item.lifecycleStatus === 'REVOKED') throw new HttpError(409, 'Giấy phép này đã bị thu hồi trước đó');
   const reason = (payload?.reason || '').trim();
@@ -7014,6 +7114,7 @@ function revokeLicense(user, item, payload) {
 // "Đang gia hạn" trước đó (nếu có) để tránh trạng thái mập mờ, người dùng tự đánh dấu lại nếu cần.
 function unrevokeLicense(user, item) {
   if (!canApproveLicense(user)) throw new HttpError(403, 'Bạn không có quyền khôi phục giấy phép đã thu hồi');
+  assertNotSelfDecidingLicense(user, item);
   if (item.lifecycleStatus !== 'REVOKED') throw new HttpError(409, 'Giấy phép này chưa bị thu hồi');
   item.lifecycleStatus = null;
   item.history = item.history || [];

@@ -544,6 +544,15 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     tồn tại" bắt người dùng tự bấm lại — áp dụng cho MỌI module có mã tự sinh,
     kể cả khi 2 người tạo hồ sơ gần như cùng lúc. Riêng **Ngân Sách (v23.0)**
     KHÔNG có mã tự sinh — mỗi dòng chỉ định danh bằng `id` nội bộ.
+    **Mã do SERVER chốt (9/2026)** — với **Tài Liệu / Văn Bản Trình / Hợp Đồng
+    (gồm cả phụ lục) / Giấy Phép**, mã hiển thị trên form chỉ là **bản xem
+    trước**: server tự dựng lại mã từ đúng (Phòng ban, Phân loại/Loại pháp lý)
+    của hồ sơ rồi **bỏ qua giá trị trình duyệt gửi lên** (trước đây chỉ kiểm
+    TRÙNG chứ không kiểm ĐÚNG KHUÔN, nên một request tự soạn đặt được mã tuỳ ý
+    — kể cả mã của phòng ban khác hoặc mã trông giống hệt 1 hồ sơ quan trọng
+    — khiến mọi chỗ tra cứu chéo theo mã đọc nhầm hồ sơ). Thuật toán giữ y hệt
+    bản trình duyệt đang dùng nên mã thực tế khớp bản xem trước trong mọi
+    trường hợp bình thường.
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
@@ -558,6 +567,24 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     mọi thao tác khác) cho tới khi người tạo tờ trình **Đồng ý** (file mới
     được áp dụng, gửi duyệt lại từ bước 1) hoặc **Không đồng ý** (huỷ đề
     xuất, hồ sơ về NHÁP như bị "Yêu cầu bổ sung" thường).
+    **Huỷ đề xuất đang treo (9/2026)**: trước đây chỉ CHÍNH người trình mới gỡ
+    được đề xuất, nên người trình nghỉ việc/khoá tài khoản/đi vắng dài ngày là
+    tờ trình kẹt vĩnh viễn (mọi thao tác khác đều bị khoá). Nay **Quản Trị Viên
+    hoặc chính người đã đề xuất** bấm được nút **"🚫 Huỷ Đề Xuất Thay Thế"**
+    ngay trong modal Bút Phê — đề xuất bị gỡ, hồ sơ quay lại xử lý bình thường
+    **ở đúng bước duyệt hiện tại** (không reset bước, không đổi trạng thái).
+    Người đề xuất cũng **được báo email khi đề xuất bị TỪ CHỐI** (trước đây chỉ
+    có email cho nhánh "Đồng ý"), và email báo đề xuất mới ghi **đúng tên người
+    đề xuất thật** thay vì luôn ghi "Bộ phận Trợ Lý/Thư Ký".
+  - **Xác minh nội dung ở server (9/2026)**: "Loại Tờ Trình" và "Độ Khẩn" gửi
+    lên phải khớp ĐÚNG danh mục admin cấu hình (mục 7.3) — trước đây giá trị
+    lệch sẽ âm thầm rơi về loại "Khác" (thường ÍT bước duyệt hơn) dù phiếu vẫn
+    hiện đúng tên loại. Tiêu đề/Nội dung cũng bị giới hạn độ dài (300/20.000 ký
+    tự). Hồ sơ CŨ mang loại đã bị admin xoá khỏi danh mục vẫn sửa được bình
+    thường nếu người dùng không đổi loại. Tương tự, nếu **"Cấp Phê Duyệt Cuối
+    Cùng"** của 1 tờ trình NHÁP bị admin xoá khỏi danh mục, hệ thống **tự
+    chuyển hồ sơ về cấp mặc định hợp lệ** và báo rõ cho người trình khi bấm
+    "Sửa & Gửi Lại" — thay vì báo lỗi cứng khiến hồ sơ kẹt NHÁP vĩnh viễn.
   - **Ở bước phê duyệt CUỐI CÙNG** (bước có `currentStep === steps.length` —
     có thể là TGĐ, hoặc bước cuối của cấp GD_PGD/PTGD/Khác nếu tờ trình không
     đi qua lớp Trợ Lý/Thư Ký), người duyệt cũng có lựa chọn tương tự: **"Đề
@@ -893,6 +920,15 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   CÒN ĐANG chờ duyệt (chưa ai xử lý) thì người tạo (hoặc admin) tự bấm "🚫
   Hủy" ngay tại bảng danh sách — không cần chờ người duyệt Từ Chối hộ. Đã
   duyệt/từ chối rồi thì không hủy được nữa.
+  **Không tự duyệt hồ sơ của chính mình (9/2026)**: người vừa tải giấy phép lên
+  không được Duyệt/Từ chối/đánh dấu Gia hạn/Thu hồi chính hồ sơ đó, kể cả khi
+  họ có quyền "Duyệt Giấy Phép" — cần 1 người duyệt KHÁC (Quản Trị Viên vẫn giữ
+  đặc quyền vượt cấu hình như mọi module khác). Nút tương ứng cũng được ẩn sẵn
+  trên màn hình.
+  **Xoá hồ sơ gốc xoá luôn cả "họ" (9/2026)**: xoá 1 giấy phép GỐC nay xoá kèm
+  toàn bộ phiên bản gia hạn của nó (trước đây để lại các phiên bản con mồ côi,
+  hiện lẫn trong danh sách và không cập nhật tiếp được). Xoá 1 phiên bản con
+  vẫn chỉ xoá đúng phiên bản đó.
 - **Hỗ Trợ IT** — module 3 sub-tab, mỗi tab phục vụ 1 nhóm người khác nhau
   dù cùng nằm 1 chỗ:
   - **🏷️ Phê Duyệt Giá** — dành cho người tạo/duyệt giá bán mặt hàng siêu thị
@@ -1010,6 +1046,19 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
   Hợp Đồng & Giấy Phép** (nhập tay hồ sơ đã có chữ ký thật ký ngoài hệ thống,
   tự động ở trạng thái đã duyệt ngay, không qua hàng chờ). Có thể khai Đợt
   Thanh Toán ngay khi tạo hồ sơ (liên kết sang module Thanh Toán).
+  - **⚠️ Quyền RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (9/2026)**: vì hồ sơ
+    nhập theo cách này được đánh dấu **ĐÃ DUYỆT ngay, bỏ qua toàn bộ quy trình
+    Phê Duyệt**, nút này không còn dùng chung quyền "Tạo hồ sơ hợp đồng"
+    (`contractCreate`) nữa mà cần 1 quyền riêng **"📥 Nhập Hợp Đồng / Phụ Lục
+    ĐÃ KÝ"** (`contractImportSigned`, tick trong cây phân quyền của form Sửa
+    Người Dùng, ngay dưới "Duyệt hợp đồng"). Người không có quyền này vào
+    sub-tab "Quản Lý HĐ" sẽ **không thấy form nhập** (vẫn xem/theo dõi danh
+    sách hợp đồng bình thường). **Sau khi cập nhật code, admin phải tự cấp
+    quyền này cho đúng người (HR/kế toán) — không ai được cấp mặc định.**
+  - **Sửa hồ sơ**: đổi "Phòng ban" khi sửa hợp đồng nay phải nằm trong đúng
+    phạm vi quyền tạo hợp đồng của người sửa và khớp danh mục phòng ban/siêu
+    thị thật (trước đây không kiểm gì, có thể đẩy hồ sơ sang phòng ban ngoài
+    quyền mình rồi kéo theo cả quy trình duyệt sang đó).
   - **Nhóm Phê Duyệt HĐ & Cấp Phê Duyệt Cuối Cùng tự cấu hình** (10/2026, sub-tab
     **Phê Duyệt**) — cùng khuôn với Văn Bản Trình (mục 4.1), ở **Hệ Thống →
     🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê Duyệt Trình/HĐ** (từ v23.65 — trước đó
@@ -1113,6 +1162,19 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       lý Thanh Toán (`paymentManage`) — trước đây chỉ có badge cảnh báo trên
       giao diện, không ai chủ động được nhắc. Mỗi đợt chỉ nhắc 1 lần cho mỗi
       ngưỡng đã vượt qua; đợt đã xác nhận thanh toán thì không còn bị nhắc.
+      **Chặn gửi vào ngõ cụt (9/2026)**: "💰 QT Thanh Toán" mặc định RỖNG (chưa
+      cấu hình phòng ban nào) — trước đây vẫn bấm "📨 Chuyển Xác Nhận Thanh
+      Toán" được và đề nghị kẹt "Chờ duyệt" vĩnh viễn (module này không có nút
+      Từ Chối, xoá thì chỉ Quản Trị Viên). Nay nếu bước 1 của phòng ban đó
+      **không resolve ra người duyệt nào**, hệ thống chặn ngay lúc gửi kèm
+      thông điệp chỉ rõ phải nhờ Quản Trị Viên cấu hình quy trình trước.
+      **Sửa "Phòng ban" giữa chừng quy trình duyệt (9/2026)**: phòng ban quyết
+      định TOÀN BỘ danh sách người duyệt, nên đổi phòng ban của 1 đề nghị đang
+      duyệt dở nay **vô hiệu hoá mọi lượt duyệt cũ và đưa hồ sơ về bước 1** (y
+      hệt khi sửa lại các đợt thanh toán) — trước đây giữ nguyên bước đang dở,
+      tức là hoàn tất chuỗi duyệt của phòng ban MỚI mà người duyệt bước đầu của
+      phòng ban đó chưa từng thấy hồ sơ. Phòng ban mới cũng phải khớp danh mục
+      phòng ban/siêu thị thật (cả lúc tạo lẫn lúc sửa).
     - **"✅ Xác Nhận Đề Nghị Thanh Toán"** — chỉ còn hiện đề nghị đã duyệt
       XONG bước/phòng ban ở trên (hiển thị **"⏳ Đang chờ thanh toán"** thay vì
       nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
@@ -2850,6 +2912,14 @@ Truyền Thông Nội Bộ; riêng ảnh minh hoạ câu hỏi Đào Tạo chỉ
 SIẾT chặt hơn, không vượt quá giới hạn chung toàn hệ thống `UPLOAD_MAX_MB`
 (mặc định 20MB, cấu hình ở `.env`, xem `Huong-dan-trien-khai-PM2.md`/
 `Huong-dan-trien-khai-PM2-Nginx.md`).
+
+**Giới hạn tần suất TẢI tệp (9/2026)** — nút "Tải" của mọi module đi qua chung
+1 route đóng dấu watermark cho tệp PDF (tốn CPU/RAM hơn hẳn thao tác thường),
+nên route này có giới hạn riêng **60 lượt tải/phút cho mỗi tài khoản** (trước
+đây chỉ có giới hạn chung 600 request/phút cho toàn bộ API, thực tế không bao
+giờ chạm tới). Ngưỡng này dư cho thao tác tải thật kể cả nút "Tải tất cả tệp";
+nếu ai đó vượt quá sẽ nhận thông báo "Bạn đang tải tệp quá nhiều, vui lòng thử
+lại sau ít phút" — không cần cấu hình gì thêm.
 
 ### 7.5. Thùng Rác
 

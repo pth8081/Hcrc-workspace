@@ -19,7 +19,10 @@ router.use(requireAuth, blockIfMustChangePassword);
 // thường, người trình xác nhận đồng ý/không đồng ý — xem applyWorkflowAction() ở lib/workflowEngine.js.
 const ACTION_MAP = {
   approve: 'APPROVE', reject: 'REJECT', 'request-info': 'REQUEST_INFO', 'request-changes': 'REQUEST_CHANGES',
-  'propose-file-replacement': 'PROPOSE_FILE_REPLACEMENT', 'resolve-file-proposal': 'RESOLVE_FILE_PROPOSAL'
+  'propose-file-replacement': 'PROPOSE_FILE_REPLACEMENT', 'resolve-file-proposal': 'RESOLVE_FILE_PROPOSAL',
+  // 'cancel-file-proposal' — lối thoát cho tờ trình bị khoá cứng bởi 1 đề xuất thay thế treo mãi (admin
+  // hoặc chính người đã đề xuất tự rút lại), xem CANCEL_FILE_PROPOSAL ở lib/workflowEngine.js.
+  'cancel-file-proposal': 'CANCEL_FILE_PROPOSAL'
 };
 
 // Xác thực bổ sung khi Duyệt (mật khẩu/OTP/PIN, perms.approverAuthLevel) — áp dụng cho MỌI module dùng

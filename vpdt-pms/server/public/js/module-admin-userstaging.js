@@ -226,6 +226,7 @@ function resetUserForm() {
   document.getElementById('pOnboardingEvaluate').checked = !!defaults.onboardingEvaluate;
   document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
   document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
+  document.getElementById('pContractImportSigned').checked = !!defaults.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
   document.getElementById('pVppManage').checked = !!defaults.vppManage;
   document.getElementById('pVppRegisterCreate').checked = !!defaults.vppRegisterCreate;

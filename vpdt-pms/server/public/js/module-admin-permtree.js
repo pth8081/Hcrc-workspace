@@ -134,6 +134,9 @@ function collectPermsFromForm() {
     contractCreate: scopeFromForm('pContractCreateAll', 'pContractCreateDept'),
     contractDownload: scopeFromForm('pContractDownloadAll', 'pContractDownloadDept'),
     contractApprove: document.getElementById('pContractApprove').checked,
+    // contractImportSigned — quyền RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (tạo hồ sơ APPROVED ngay,
+    // bỏ qua quy trình Phê Duyệt). Tách khỏi contractCreate, xem contracts.extraValidate ở lib/createValidation.js.
+    contractImportSigned: document.getElementById('pContractImportSigned').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
     vppManage: document.getElementById('pVppManage').checked,
     vppRegisterCreate: document.getElementById('pVppRegisterCreate').checked,
@@ -345,6 +348,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractCreateAll').checked = !!perms.contractCreate?.all;
   document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
   document.getElementById('pContractApprove').checked = !!perms.contractApprove;
+  document.getElementById('pContractImportSigned').checked = !!perms.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
   document.getElementById('pVppManage').checked = !!perms.vppManage;
   document.getElementById('pVppRegisterCreate').checked = !!perms.vppRegisterCreate;
