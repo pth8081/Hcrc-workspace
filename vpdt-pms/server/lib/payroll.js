@@ -69,6 +69,38 @@ function parseVNDateTime(str) {
 
 const PERIOD_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'FINALIZED', 'PUBLISHED'];
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): kỳ lương đã Chốt/Công bố TRƯỚC ĐÂY
+// chỉ được kiểm ở ĐÚNG 1 đường ghi attendanceRecords — API máy chấm công vật lý (routes/attendanceClockPunch.js,
+// hàm findLockedPayrollPeriodForDate() cũ trùng lặp y hệt ở đó) — 3 đường ghi/sửa attendanceRecords KHÁC
+// trong chính app (duyệt đơn nghỉ ghi LEAVE_*/tạo công tay/sửa tay 1 bản ghi — xem routes/records.js +
+// lib/createValidation.js) hoàn toàn KHÔNG kiểm, vẫn sửa được dữ liệu công của kỳ lương đã khoá dù payslip
+// đã chốt/công bố không tự tính lại theo dữ liệu mới. Factor ra hàm DÙNG CHUNG duy nhất ở đây — mọi nơi
+// ghi/sửa attendanceRecords đều phải gọi hàm này trước khi ghi.
+const LOCKED_PAYROLL_STATUSES = new Set(['FINALIZED', 'PUBLISHED']);
+function findLockedPayrollPeriodForDate(periods, workDate) {
+  const [y, m] = String(workDate || '').split('-').map(Number);
+  if (!y || !m) return null;
+  return (periods || []).find(p => Number(p.periodYear) === y && Number(p.periodMonth) === m && LOCKED_PAYROLL_STATUSES.has(p.status)) || null;
+}
+// Biến thể cho 1 KHOẢNG ngày (VD toàn bộ khoảng fromDate–toDate của 1 đơn nghỉ phép, có thể vắt qua nhiều
+// tháng) — trả về kỳ lương đã khoá ĐẦU TIÊN gặp phải (đủ để chặn — nơi gọi không cần biết ĐỦ danh sách).
+function findLockedPayrollPeriodInRange(periods, fromDate, toDate) {
+  const from = String(fromDate || '').slice(0, 10);
+  const to = String(toDate || fromDate || '').slice(0, 10);
+  if (!from) return null;
+  let [y, m] = from.split('-').map(Number);
+  const [toY, toM] = to.split('-').map(Number);
+  if (!y || !m) return null;
+  // Duyệt theo THÁNG (không theo từng ngày) — đủ và rẻ hơn nhiều so với listDatesInRange() cho khoảng dài.
+  for (let guard = 0; guard < 36; guard++) { // chặn vòng lặp vô hạn nếu dữ liệu lỗi — 1 đơn tối đa 90 ngày, không thể vắt quá vài tháng
+    const found = (periods || []).find(p => Number(p.periodYear) === y && Number(p.periodMonth) === m && LOCKED_PAYROLL_STATUSES.has(p.status));
+    if (found) return found;
+    if (y > toY || (y === toY && m >= toM)) break;
+    m += 1; if (m > 12) { m = 1; y += 1; }
+  }
+  return null;
+}
+
 // Danh mục tham khảo Mục 4 tài liệu gốc — xem điều chỉnh #2/#3 đầu file. INCOME/DEDUCTION quyết định
 // dấu khi cộng vào grossIncome/totalDeduction; autoCalculated=false -> KHÔNG bao giờ do hệ thống tự sinh,
 // chỉ kế toán thêm tay qua adjustPayslipDetail() lúc rà soát (payload.componentCode phải nằm trong
@@ -263,6 +295,18 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   const workDays = records.filter(r => ['WORK', 'LEAVE_PAID', 'SICK_LEAVE', 'BUSINESS_TRIP'].includes(r.recordType)).length;
   const unpaidDays = records.filter(r => ['LEAVE_UNPAID', 'LEAVE_PERSONAL'].includes(r.recordType)).length;
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #8): hợp đồng ACTIVE đã qua
+  // endDate (hết hạn Xác định thời hạn/Thử việc) KHÔNG có cơ chế tự chuyển EXPIRED (jobs/laborContractExpiryReminder.js
+  // chỉ NHẮC qua email, không tự đổi status) — payroll vẫn tính lương ĐỦ như bình thường mà KHÔNG cảnh báo
+  // gì, kế toán không biết để xử lý (gia hạn/ký mới/Offboarding). QUYẾT ĐỊNH PHẠM VI (đã trao đổi, giữ
+  // đúng nguyên tắc "không tự bịa side-effect ngoài phạm vi xác nhận" nêu ở đầu file): CHỈ thêm cảnh báo
+  // vào payslip, KHÔNG tự động đổi status hợp đồng (tránh side-effect ngoài phạm vi đợt vá lỗi bảo mật —
+  // đổi status hợp đồng là 1 quyết định nghiệp vụ cần xác nhận riêng, không phải thuần vá lỗi). Ưu tiên
+  // THẤP NHẤT trong 4 nhánh cảnh báo BASIC_SALARY (chỉ hiện khi không rơi vào 3 tình huống cụ thể hơn ở
+  // trên) vì đây là cảnh báo "còn treo", không phải biến động NGAY TRONG kỳ đang tính.
+  const contractExpiredInPeriod = contract.status === 'ACTIVE' && contract.contractType !== 'INDEFINITE'
+    && contract.endDate && contract.endDate < periodEnd;
+
   const details = [];
   addDetail(details, 'BASIC_SALARY', baseSalary,
     offboardingLastWorkingDate
@@ -271,7 +315,9 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
         ? `Theo hợp đồng lao động — vào làm ngày ${hireDateInPeriod} giữa kỳ, CHƯA trừ tương ứng số ngày chưa vào làm trước đó, kế toán cần rà soát + Điều chỉnh dòng lương`
         : baseSalaryChangedDateInPeriod
           ? `Theo hợp đồng lao động — lương cơ bản được cập nhật ngày ${baseSalaryChangedDateInPeriod} giữa kỳ (mức ${baseSalary.toLocaleString('vi-VN')}đ hiện tại là mức SAU khi đổi), CHƯA chia tỷ lệ theo ngày hiệu lực thật, kế toán cần rà soát + Điều chỉnh dòng lương`
-          : 'Theo hợp đồng lao động đang hiệu lực',
+          : contractExpiredInPeriod
+            ? `Theo hợp đồng lao động — CẢNH BÁO: hợp đồng đã hết hạn ngày ${contract.endDate} nhưng vẫn đang ở trạng thái "Đang hiệu lực" (hệ thống KHÔNG tự chuyển "Hết hạn"), vẫn tính đủ lương theo hợp đồng này — HR/kế toán cần rà soát: gia hạn hợp đồng, ký hợp đồng mới, hoặc khởi tạo Offboarding nếu nhân viên đã thực sự nghỉ việc`
+            : 'Theo hợp đồng lao động đang hiệu lực',
     false);
 
   let ot150 = 0, ot200 = 0, ot300 = 0;
@@ -395,8 +441,21 @@ function applySubmitForApproval(period, actorUsername, actorName, payslips) {
   pushHistory(period, 'SUBMITTED', actorUsername, actorName, 'Gửi duyệt kỳ lương');
   return period;
 }
-function applyApprove(period, actorUsername, actorName) {
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #14): applyApprove() TRƯỚC ĐÂY không hề
+// so `period.creator` với actorUsername — 1 tài khoản vừa có hrPayrollManage (tạo/gửi duyệt) VỪA có
+// hrPayrollApprove (duyệt) tự tạo kỳ lương -> tự gửi duyệt -> tự duyệt luôn, mất hẳn ý nghĩa "phân tách
+// nhiệm vụ" (segregation of duties) mà route đã cố tình tách 2 quyền hrPayrollManage/hrPayrollApprove để
+// đảm bảo. CỐ Ý KHÔNG có ngoại lệ admin ở đây (khác assertNotSelfDecidingWorkflowItem() ở
+// lib/workflowEngine.js, nơi admin luôn bypass) — nhất quán với chính thiết kế của module Lương ngay phía
+// trên (canManagePayroll()/canApprovePayroll(): admin KHÔNG tự động có quyền quản lý/duyệt Lương, phải
+// được cấp RIÊNG như tài khoản thường, vì đây là 1 trong 3 mảng dữ liệu nhạy cảm nhất đã chốt với người
+// dùng — xem chú thích ngay tại canManagePayroll()). actorUser giữ lại làm tham số (không dùng để bypass)
+// để dành sẵn nếu sau này module đổi ý.
+function applyApprove(period, actorUsername, actorName, actorUser) {
   assertTransition(period, ['PENDING_APPROVAL'], 'Duyệt');
+  if (period.creator && period.creator === actorUsername) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt kỳ lương do chính mình tạo — cần một người khác có quyền duyệt (hrPayrollApprove) xác nhận độc lập');
+  }
   period.status = 'APPROVED'; period.approvedBy = actorUsername; period.approvedByName = actorName; period.approvedAt = nowVN();
   pushHistory(period, 'APPROVED', actorUsername, actorName, 'Duyệt kỳ lương');
   return period;
@@ -538,7 +597,7 @@ function mergeManualAdjustmentsIntoPayslip(record, manualDetails, taxContext) {
 }
 
 module.exports = {
-  PERIOD_STATUSES, PAYROLL_COMPONENTS, MANUAL_COMPONENT_CODES,
+  PERIOD_STATUSES, PAYROLL_COMPONENTS, MANUAL_COMPONENT_CODES, findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange,
   defaultRateConfig, canManagePayroll, canApprovePayroll, canViewAllPayroll,
   computeTaxFromBrackets, periodDateRange, computeEmployeePayslip, defaultPayslip,
   assertValidNewPeriod, defaultPeriod, assertCanDeletePeriod,

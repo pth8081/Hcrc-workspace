@@ -21,6 +21,7 @@ const { extractBearerToken, verifyApiKey, isIpAllowed } = require('../lib/extern
 const attendance = require('../lib/attendance');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { sendServerError } = require('../lib/errorResponse');
+const { findLockedPayrollPeriodForDate } = require('../lib/payroll');
 
 // Cùng khuôn externalApiRateLimiter (routes/externalAuthVerify.js) — caller dự kiến là số lượng hữu hạn
 // máy chấm công vật lý, không phải cả công ty. Ngưỡng CAO HƠN verify-credentials (mỗi máy có thể đẩy
@@ -92,12 +93,10 @@ router.use(requireAttendanceClockApiKey);
 const CLOCK_PUNCH_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 // Kỳ lương đã "khoá" — FINALIZED (Chốt) và PUBLISHED (Công bố); DRAFT/PENDING_APPROVAL/APPROVED vẫn còn
 // tính lại được nên không chặn (kế toán chủ động bấm Tính Lương lại).
-const LOCKED_PAYROLL_STATUSES = new Set(['FINALIZED', 'PUBLISHED']);
-function findLockedPayrollPeriodForDate(periods, workDate) {
-  const [y, m] = String(workDate || '').split('-').map(Number);
-  if (!y || !m) return null;
-  return (periods || []).find(p => Number(p.periodYear) === y && Number(p.periodMonth) === m && LOCKED_PAYROLL_STATUSES.has(p.status)) || null;
-}
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): findLockedPayrollPeriodForDate() cũ
+// (định nghĩa RIÊNG ở đây) đã chuyển thành hàm DÙNG CHUNG ở lib/payroll.js (xem require ở đầu file) —
+// routes/records.js (duyệt đơn nghỉ/sửa tay công) và lib/createValidation.js (tạo công tay) giờ cũng gọi
+// ĐÚNG hàm này, tránh chỉ riêng API máy chấm công vật lý được kiểm.
 
 router.post('/clock-punch', async (req, res) => {
   const employeeCode = String(req.body?.employeeCode || '').trim();
@@ -121,7 +120,12 @@ router.post('/clock-punch', async (req, res) => {
       return res.status(400).json({ error: 'Không tìm thấy nhân viên hoặc chưa xác định được mô hình chấm công (hồ sơ chưa liên kết tài khoản)' });
     }
 
-    const workDate = new Date(timestamp).toISOString().slice(0, 10);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): workDate TRƯỚC ĐÂY lấy qua
+    // new Date(timestamp).toISOString().slice(0,10) (luôn UTC) — máy chủ chạy giờ VN (UTC+7) nên MỌI
+    // lượt quẹt từ 00:00-06:59 giờ VN bị gán nhầm sang workDate của NGÀY HÔM TRƯỚC. Dùng
+    // attendance.localDateStr() (giờ LOCAL của máy chủ, cùng hàm applyClockPunch() dùng bên dưới) để
+    // đồng nhất — tránh 2 nơi tính workDate khác công thức nhau cho CÙNG 1 lượt quẹt.
+    const workDate = attendance.localDateStr(new Date(timestamp));
     // Kỳ lương của tháng chứa ngày công này đã Chốt/Công bố -> từ chối (xem chú thích ở trên).
     const lockedPeriod = findLockedPayrollPeriodForDate(await getAllForCollection('payrollPeriods'), workDate);
     if (lockedPeriod) {

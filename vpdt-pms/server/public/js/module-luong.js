@@ -205,7 +205,11 @@ async function submitHrpCreatePeriod(e) {
 
 async function hrpCalculate(id) {
   const period = (DB.payrollPeriods || []).find(p => p.id === Number(id));
-  if (period?.employeeCount > 0 && !confirm('Kỳ lương này đã có dữ liệu tính lương trước đó — tính lại sẽ GHI ĐÈ toàn bộ (kể cả các dòng đã điều chỉnh tay). Tiếp tục?')) return;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #11): câu cảnh báo cũ ("GHI ĐÈ toàn
+  // bộ, kể cả các dòng đã điều chỉnh tay") mô tả SAI hành vi server hiện tại — server đã giữ lại các
+  // dòng isManualAdjustment (gộp lại vào payslip mới qua mergeManualAdjustmentsIntoPayslip(), xem
+  // routes/payroll.js) từ đợt vá lỗi trước, chỉ dựng lại các dòng TỰ ĐỘNG tính (lương cơ bản/OT/BH/thuế).
+  if (period?.employeeCount > 0 && !confirm('Kỳ lương này đã có dữ liệu tính lương trước đó — tính lại sẽ dựng lại các dòng TỰ ĐỘNG tính (lương cơ bản/OT/bảo hiểm/thuế); các dòng "Điều Chỉnh" nhập tay (phụ cấp/thưởng/tạm ứng/phạt) được GIỮ NGUYÊN và gộp lại vào phiếu mới. Tiếp tục?')) return;
   try {
     const result = await hrpApiCall('POST', `/api/payroll/periods/${id}/calculate`);
     hrpApplyPeriodUpdate(result.item);

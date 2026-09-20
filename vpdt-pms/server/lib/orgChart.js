@@ -108,12 +108,23 @@ function buildNodeDisplayName(version, node) {
 // "Ai hiện đang giữ vị trí này" — so khớp ĐỘNG user.dept (qua departmentRef của phòng ban chứa node,
 // nếu node.requiresDept) + user.jobTitle (đúng chuỗi jobTitle của node), đang active. Vị trí không
 // requiresDept (VD TGĐ) chỉ so khớp jobTitle, không so dept.
-function resolvePositionOccupants(version, node, users) {
+// employeeProfiles (tham số MỚI, optional — LỖI ĐÃ VÁ rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung
+// bình — #9): TRƯỚC ĐÂY chỉ loại theo u.active===false (tài khoản VPDT bị khoá) — nhưng 1 nhân viên có
+// thể ĐÃ hoàn tất Offboarding (hồ sơ Hồ Sơ Nhân Sự chuyển INACTIVE) trong khi tài khoản VPDT vẫn
+// active=true (IT chưa kịp khoá, hoặc cố ý giữ để tra cứu lịch sử) — hệ thống vẫn tưởng người đó ĐANG
+// giữ vị trí, dẫn tới gán nhầm managerUsername cho đồng nghiệp hoặc chặn nhầm việc xoá vị trí dù người
+// giữ đã nghỉ hẳn. Optional để KHÔNG phá vỡ caller cũ chưa kịp truyền vào (hành vi giữ nguyên nếu bỏ
+// qua tham số này).
+function resolvePositionOccupants(version, node, users, employeeProfiles) {
   if (!node || node.nodeType !== 'POSITION') return [];
   const deptNode = node.requiresDept !== false ? findNearestDeptAncestor(version, node) : null;
   const deptRef = deptNode?.departmentRef || null;
+  const inactiveProfileUsernames = employeeProfiles
+    ? new Set((employeeProfiles || []).filter(p => p?.status === 'INACTIVE' && p.username).map(p => p.username))
+    : null;
   return (users || []).filter(u => {
     if (u.active === false) return false;
+    if (inactiveProfileUsernames && inactiveProfileUsernames.has(u.username)) return false;
     if (u.jobTitle !== node.jobTitle) return false;
     if (node.requiresDept !== false && deptRef && u.dept !== deptRef) return false;
     return true;
@@ -216,7 +227,7 @@ function editNode(version, nodeId, patch) {
 // Xoá node + TOÀN BỘ nhánh con (cascade) — chặn nếu bất kỳ node POSITION nào trong nhánh đang có người
 // giữ (resolvePositionOccupants), đúng luật tài liệu gốc mục 6 (DELETE /api/org/nodes/:id). Dọn luôn
 // mọi dòng kpiFlow tham chiếu tới các nodeId bị xoá (evaluator hoặc evaluatee).
-function deleteNodeCascade(version, nodeId, users) {
+function deleteNodeCascade(version, nodeId, users, employeeProfiles) {
   requireDraft(version);
   const byId = new Map((version.nodes || []).map(n => [n.nodeId, n]));
   if (!byId.has(nodeId)) throw new HttpError(404, 'Không tìm thấy node');
@@ -235,7 +246,7 @@ function deleteNodeCascade(version, nodeId, users) {
   for (const id of toDelete) {
     const n = byId.get(id);
     if (n?.nodeType === 'POSITION') {
-      const occ = resolvePositionOccupants(version, n, users);
+      const occ = resolvePositionOccupants(version, n, users, employeeProfiles);
       if (occ.length) heldPositions.push({ node: n, occupants: occ });
     }
   }
@@ -250,7 +261,7 @@ function deleteNodeCascade(version, nodeId, users) {
 
 // ===== Validate trước khi áp dụng =====
 
-function computeValidationIssues(candidate, appliedVersion, users) {
+function computeValidationIssues(candidate, appliedVersion, users, employeeProfiles) {
   const issues = [];
   const byId = new Map((candidate.nodes || []).map(n => [n.nodeId, n]));
   // 1) Node mồ côi (parentNodeId trỏ tới node không tồn tại).
@@ -264,7 +275,7 @@ function computeValidationIssues(candidate, appliedVersion, users) {
     const candidateKeys = new Set((candidate.nodes || []).filter(n => n.nodeType === 'POSITION').map(n => n.positionKey));
     for (const n of appliedVersion.nodes || []) {
       if (n.nodeType !== 'POSITION' || candidateKeys.has(n.positionKey)) continue;
-      const occ = resolvePositionOccupants(appliedVersion, n, users);
+      const occ = resolvePositionOccupants(appliedVersion, n, users, employeeProfiles);
       if (occ.length) {
         issues.push(`Vị trí "${buildNodeDisplayName(appliedVersion, n)}" bị xoá khỏi bản nháp nhưng vẫn có người giữ: ${occ.map(o => o.name).join(', ')}`);
       }
@@ -282,7 +293,7 @@ function computeValidationIssues(candidate, appliedVersion, users) {
   }
   for (const [, nodesOfDept] of byDept) {
     if (nodesOfDept.length <= 1) continue;
-    const withOccupant = nodesOfDept.filter(n => resolvePositionOccupants(candidate, n, users).length > 0);
+    const withOccupant = nodesOfDept.filter(n => resolvePositionOccupants(candidate, n, users, employeeProfiles).length > 0);
     if (withOccupant.length > 1) {
       const deptNode = findNearestDeptAncestor(candidate, nodesOfDept[0]);
       issues.push(`Phòng "${deptNode?.nodeName || ''}" có nhiều hơn 1 "Trưởng phòng" đang có người giữ — kiểm tra lại cây`);
@@ -381,11 +392,11 @@ function deleteVersion(list, versionId) {
 // liệu users/version có thể đã đổi giữa 2 lượt gọi), lưu trữ version đang APPLIED (nếu có) -> ARCHIVED,
 // version này -> APPLIED, seed kpiFlow còn thiếu. KHÔNG tính lại managerUsername ở đây (cần khoá riêng
 // bảng "users" — xem computeManagerUsernameUpdates() + route gọi 2 bước ở routes/orgChart.js).
-function applyVersionInPlace(list, versionId, users, actingUsername) {
+function applyVersionInPlace(list, versionId, users, actingUsername, employeeProfiles) {
   const version = requireVersion(list, versionId);
   requireDraft(version);
   const applied = getAppliedVersion(list);
-  const issues = computeValidationIssues(version, applied, users);
+  const issues = computeValidationIssues(version, applied, users, employeeProfiles);
   if (issues.length) throw new HttpError(400, `Không thể áp dụng — còn lỗi cần xử lý: ${issues.join(' | ')}`);
   if (applied) applied.status = 'ARCHIVED';
   version.status = 'APPLIED';
@@ -400,17 +411,24 @@ function applyVersionInPlace(list, versionId, users, actingUsername) {
 // trong `appliedVersion`. Trả { changes: [{username, managerUsername}], unresolved: [{username,name,reason}] }
 // — "unresolved" là các trường hợp KHÔNG tự tin gán được (0 hoặc >1 người giữ đúng vị trí cha), giữ
 // nguyên managerUsername hiện tại của họ, KHÔNG suy đoán bừa.
-function computeManagerUsernameUpdates(appliedVersion, users) {
+// employeeProfiles (tham số MỚI, optional — LỖI ĐÃ VÁ #9, xem chú thích đầy đủ tại resolvePositionOccupants()):
+// truyền xuống để KHÔNG gán managerUsername = 1 người đã hoàn tất Offboarding (hồ sơ INACTIVE) dù tài
+// khoản VPDT của họ vẫn active=true.
+function computeManagerUsernameUpdates(appliedVersion, users, employeeProfiles) {
   const byId = new Map((appliedVersion.nodes || []).map(n => [n.nodeId, n]));
   const changes = [];
   const unresolved = [];
+  const inactiveProfileUsernames = employeeProfiles
+    ? new Set((employeeProfiles || []).filter(p => p?.status === 'INACTIVE' && p.username).map(p => p.username))
+    : null;
   for (const u of users || []) {
     if (u.active === false) continue;
+    if (inactiveProfileUsernames && inactiveProfileUsernames.has(u.username)) continue; // đã offboard xong -> không cần tính managerUsername cho họ nữa
     const node = findPositionNodeForUser(appliedVersion, u);
     if (!node || node.parentNodeId == null) continue; // không khớp vị trí nào trong cây, hoặc là gốc -> bỏ qua, giữ nguyên
     const parent = byId.get(node.parentNodeId);
     if (!parent || parent.nodeType !== 'POSITION') continue; // cha không phải 1 vị trí (VD phòng ban gộp) -> không suy ra được người cụ thể
-    const occupants = resolvePositionOccupants(appliedVersion, parent, users).filter(o => o.username !== u.username);
+    const occupants = resolvePositionOccupants(appliedVersion, parent, users, employeeProfiles).filter(o => o.username !== u.username);
     if (occupants.length !== 1) {
       unresolved.push({ username: u.username, name: u.name, reason: occupants.length === 0 ? 'Chưa có ai giữ vị trí quản lý cấp trên' : 'Có nhiều hơn 1 người cùng giữ vị trí quản lý cấp trên' });
       continue;
@@ -458,7 +476,7 @@ function removeKpiFlowRow(appliedVersion, flowRowId) {
 // Tra cứu ĐẦY ĐỦ "ai hiện đánh giá KPI cho user này" theo version đang APPLIED — thay resolveKpiEvaluatorForUser()
 // bản cũ (dept×jobTitle map phẳng): giờ tra theo ĐÚNG node vị trí + kpiFlow (hỗ trợ ma trận nhiều người
 // đánh giá 1 vị trí, và các quan hệ thủ công không theo cây báo cáo hành chính).
-function resolveKpiEvaluatorsForUser(appliedVersion, user, users) {
+function resolveKpiEvaluatorsForUser(appliedVersion, user, users, employeeProfiles) {
   if (!appliedVersion) return null;
   const node = findPositionNodeForUser(appliedVersion, user);
   if (!node) return null;
@@ -469,7 +487,7 @@ function resolveKpiEvaluatorsForUser(appliedVersion, user, users) {
     return {
       positionName: evalNode ? buildNodeDisplayName(appliedVersion, evalNode) : '',
       isAutoFromHierarchy: row.isAutoFromHierarchy,
-      evaluators: evalNode ? resolvePositionOccupants(appliedVersion, evalNode, users) : []
+      evaluators: evalNode ? resolvePositionOccupants(appliedVersion, evalNode, users, employeeProfiles) : []
     };
   });
   return { positionName: buildNodeDisplayName(appliedVersion, node), evaluatorGroups };

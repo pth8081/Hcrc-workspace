@@ -27,8 +27,14 @@ const PORT = 8987;
 const HR1 = { username: 'hr1', name: 'Chuyên Viên Nhân Sự', dept: 'Phòng Nhân Sự', perms: { hrOnboardingManage: true, hrOffboardingManage: true }, active: true };
 // Cùng phòng Nhân Sự nhưng KHÔNG có quyền quản lý -> dùng để kiểm tra gác quyền phía SERVER (không chỉ ẩn ở UI).
 const HR_NOPERM = { username: 'hr2', name: 'Nhân Viên Nhân Sự Khác', dept: 'Phòng Nhân Sự', perms: {}, active: true };
-// hrViewAll: true — chỉ được XEM toàn bộ quy trình để theo dõi tiến độ, KHÔNG được thao tác task/huỷ quy trình.
+// hrViewAll: true — chỉ được XEM toàn bộ quy trình để theo dõi tiến độ, KHÔNG được thao tác task/huỷ quy
+// trình (LỖI ĐÃ VÁ, rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao: TRƯỚC ĐÂY hrViewAll bypass CẢ thao
+// tác ghi y hệt admin — đã tách ra hrProcessManage riêng, xem HR_PROCESS_MANAGER bên dưới).
 const HR_VIEWER = { username: 'hr.viewer', name: 'Trưởng Phòng Nhân Sự (chỉ xem)', dept: 'Phòng Nhân Sự', perms: { hrViewAll: true }, active: true };
+// hrProcessManage: true — Toàn Quyền Thao Tác Mọi Quy Trình (quyền GHI mới, tách ra khỏi hrViewAll ở
+// đợt vá lỗi trên) — hoàn thành/bỏ qua BẤT KỲ task nào + huỷ/giao lại/chỉ định người kế nhiệm của MỌI
+// quy trình, không cần đúng hrOnboardingManage/hrOffboardingManage theo processType.
+const HR_PROCESS_MANAGER = { username: 'hr.procmgr', name: 'Điều Phối Toàn Quyền Quy Trình', dept: 'Phòng Nhân Sự', perms: { hrProcessManage: true }, active: true };
 // hrTaskTemplateManage: true — chỉ được sửa danh mục checklist chuẩn, KHÔNG được tạo/quản lý quy trình.
 const HR_TEMPLATE_ADMIN = { username: 'hr.tpl', name: 'Quản Lý Checklist Mẫu', dept: 'Phòng Nhân Sự', perms: { hrTaskTemplateManage: true }, active: true };
 const IT1 = { username: 'it1', name: 'Nhân Viên IT', dept: 'Phòng CNTT', perms: { itManage: true }, active: true };
@@ -69,7 +75,7 @@ const state = createMockState({
   stores: ['Siêu Thị A'],
   jobTitles: ['Nhân viên', 'Chuyên viên'],
   storeJobTitles: [{ label: 'Nhân viên bán hàng' }],
-  users: [HR1, HR_NOPERM, HR_VIEWER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
+  users: [HR1, HR_NOPERM, HR_VIEWER, HR_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
   hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES]
 });
 
@@ -227,6 +233,41 @@ async function main() {
       const skipped = result.item.tasks.find(t => t.taskId === itTask2.taskId);
       assertEqual(skipped.status, 'SKIPPED', 'admin bypass cả canManageHrProcess lẫn canActOnHrTask -> phải bỏ qua được');
       assertEqual(skipped.note, 'Đã có sẵn máy từ đợt trước', 'note phải khớp đúng lý do bỏ qua vừa nhập');
+      await loginAs(page, HR1);
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): hrViewAll TRƯỚC ĐÂY bypass canActOnHrTask()/
+    // canManageHrProcess() y hệt admin dù nhãn UI chỉ nói "xem" — tách ra hrProcessManage RIÊNG (quyền GHI
+    // thật). 2 test dưới đây xác nhận: hrViewAll (chỉ xem) KHÔNG còn bỏ qua được task bắt buộc nhãn IT dù
+    // không có itManage; hrProcessManage (quyền GHI mới) bỏ qua được y hệt admin dù không có itManage/
+    // hrOnboardingManage nào khác.
+    await run.run('hrViewAll (chỉ xem, KHÔNG có hrProcessManage) KHÔNG bỏ qua được task bắt buộc nhãn IT — ĐÂY CHÍNH LÀ LỖI VỪA VÁ (trước đây bypass được y hệt admin)', async () => {
+      const itemViewer = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item,
+        onboardHoPayload({ employeeCode: 'NV0002B', fullName: 'Ngô Thị Xem' }));
+      const itTaskViewer = itemViewer.tasks.find(t => t.taskName === 'Chuẩn bị máy tính');
+      await loginAs(page, HR_VIEWER);
+      const err = await page.evaluate(async (args) => {
+        try { await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Test hrViewAll' }); return null; }
+        catch (e) { return e.message; }
+      }, { id: itemViewer.id, taskId: itTaskViewer.taskId });
+      // Task này isRequired:true -> applySkipHrTask() kiểm canManageHrProcess() TRƯỚC (thông báo riêng),
+      // chưa tới lượt canActOnHrTask() — hrViewAll giờ KHÔNG còn bypass canManageHrProcess() nữa nên rơi
+      // đúng vào nhánh lỗi này (khác message so với "không có quyền bỏ qua việc này" của canActOnHrTask()).
+      assertIncludes(err, 'Chỉ người quản lý quy trình', 'hrViewAll (chỉ xem) không được tự ý bỏ qua task bắt buộc — không còn bypass canManageHrProcess() nữa');
+      await loginAs(page, HR1);
+    });
+
+    await run.run('hrProcessManage bỏ qua được task bắt buộc nhãn IT dù KHÔNG có itManage/hrOnboardingManage (quyền GHI mới, thay cho hành vi cũ của hrViewAll)', async () => {
+      // HR1 (có hrOnboardingManage) tạo quy trình — canCreateHrProcess() KHÔNG đổi (vẫn đòi đúng
+      // hrOnboardingManage/hrOffboardingManage, hrProcessManage KHÔNG cấp thêm quyền TẠO mới, chỉ cấp
+      // quyền THAO TÁC quy trình/task đã có — xem chú thích tại canCreateHrProcess()).
+      const itemMgr = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item,
+        onboardHoPayload({ employeeCode: 'NV0002C', fullName: 'Bùi Văn Toàn Quyền' }));
+      const itTaskMgr = itemMgr.tasks.find(t => t.taskName === 'Chuẩn bị máy tính');
+      await loginAs(page, HR_PROCESS_MANAGER);
+      const result = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Test hrProcessManage' }), { id: itemMgr.id, taskId: itTaskMgr.taskId });
+      const skipped = result.item.tasks.find(t => t.taskId === itTaskMgr.taskId);
+      assertEqual(skipped.status, 'SKIPPED', 'hrProcessManage phải bypass cả canManageHrProcess() lẫn canActOnHrTask(), y hệt admin, dù không có itManage/hrOnboardingManage');
       await loginAs(page, HR1);
     });
 
@@ -413,16 +454,21 @@ async function main() {
       assertEqual(item.pendingSuccessor, true, 'pendingSuccessor phải true — đây chính là lý do duy nhất còn chặn Hoàn Tất');
     });
 
-    await run.run('Chỉ định người kế nhiệm: người KHÔNG quản lý quy trình (không phải creator/hrOffboardingManage/admin/hrViewAll) -> 403', async () => {
-      // canManageHrProcess() coi hrViewAll ngang admin (bypass toàn bộ, xem chú thích ngay tại hàm đó) —
-      // HR_VIEWER KHÔNG dùng được để test 403 ở đây (sẽ thao tác được thật) -> dùng HR_NOPERM (perms
-      // rỗng, không phải creator của supOffboardId) để đúng nghĩa "không quản lý quy trình".
+    await run.run('Chỉ định người kế nhiệm: người KHÔNG quản lý quy trình (không phải creator/hrOffboardingManage/admin/hrProcessManage) -> 403; hrViewAll (chỉ xem) CŨNG bị chặn (LỖI ĐÃ VÁ)', async () => {
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): canManageHrProcess() TRƯỚC ĐÂY coi
+      // hrViewAll ngang admin (bypass toàn bộ) — nay hrViewAll CHỈ còn xem, phải bị chặn y hệt HR_NOPERM.
       await loginAs(page, HR_NOPERM);
       const err = await page.evaluate(async (id) => {
         try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.kenhiem' }); return null; }
         catch (e) { return e.message; }
       }, supOffboardId);
-      assertIncludes(err, 'không có quyền chỉ định người kế nhiệm', 'Người không quản lý quy trình này (không phải creator/hrOffboardingManage/admin/hrViewAll) phải bị chặn');
+      assertIncludes(err, 'không có quyền chỉ định người kế nhiệm', 'Người không quản lý quy trình này (không phải creator/hrOffboardingManage/admin/hrProcessManage) phải bị chặn');
+      await loginAs(page, HR_VIEWER);
+      const errViewer = await page.evaluate(async (id) => {
+        try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.kenhiem' }); return null; }
+        catch (e) { return e.message; }
+      }, supOffboardId);
+      assertIncludes(errViewer, 'không có quyền chỉ định người kế nhiệm', 'hrViewAll (chỉ xem, KHÔNG có hrProcessManage) phải bị chặn — trước đây bypass được y hệt admin, đây chính là lỗi vừa vá');
       await loginAs(page, HR1);
     });
 

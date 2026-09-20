@@ -12,14 +12,26 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
-const { getAllForCollection, insertRecord, deleteRecordById, deleteRecordForCollection, replaceRecordsInCollection, withLockedRecordForCollection, withLockedRecordById } = require('../lib/recordStore');
+const { getAllForCollection, insertRecord, deleteRecordById, deleteRecordForCollection, replaceRecordsInCollection, withLockedRecordForCollection, withLockedRecordById, withAppLock } = require('../lib/recordStore');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const { notifyUsers } = require('../lib/notifications');
 const payroll = require('../lib/payroll');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
-router.use(requireAuth, blockIfMustChangePassword);
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): router này TRƯỚC ĐÂY chỉ gác
+// requireAuth/blockIfMustChangePassword, KHÔNG kiểm moduleAccess.hrPayroll (Khối 0) — tắt module "Lương"
+// cho 1 tài khoản ở màn Phân Quyền KHÔNG cản được họ gọi thẳng API nếu còn quyền dữ liệu chi tiết
+// (hrPayrollManage/hrPayrollApprove...), khác hẳn Hồ Sơ Nhân Sự đã gác đúng ở vòng 1 (xem
+// requireHrProfileModuleAccess() ở routes/employeeProfile.js). hasModuleAccessServer() đã sẵn có đúng
+// entry 'hrPayroll' (MODULE_ACCESS_PARENTS, lib/recordViewScope.js) — chỉ thiếu chỗ gọi.
+function requireHrPayrollModuleAccess(req, res, next) {
+  if (!hasModuleAccessServer(req.freshUser, 'hrPayroll')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+  }
+  next();
+}
+router.use(requireAuth, blockIfMustChangePassword, requireHrPayrollModuleAccess);
 
 function requireManage(req, res, next) {
   if (!payroll.canManagePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền quản lý Lương' });
@@ -123,76 +135,89 @@ router.post('/periods/:id/delete', requireManage, async (req, res) => {
   } catch (err) { sendCatchError(res, err, `POST /api/payroll/periods/${req.params.id}/delete`); }
 });
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): route này TRƯỚC ĐÂY đọc
+// period.status/existingPayslips NGOÀI mọi khoá — 2 lượt bấm "Tính Lương Tự Động" gần như đồng thời
+// (double-click, hoặc 2 kế toán cùng bấm) đều đọc existingPayslips=[cũ] TRƯỚC KHI lượt kia kịp ghi xong,
+// nên cả 2 đều gọi replaceRecordsInCollection() với cùng danh sách id cần xoá — lượt sau KHÔNG xoá được
+// payslip lượt trước vừa ghi (đã đổi id khác), kết quả NHÂN ĐÔI toàn bộ phiếu lương của kỳ. Bọc TOÀN BỘ
+// route trong withAppLock() (cùng khuôn checklistTemplates/:id/activate ở routes/checklist.js) để 2 lượt
+// gọi đồng thời tự xếp hàng tuần tự — đọc lại period.status/existingPayslips ĐÚNG BÊN TRONG khoá này.
+// record.id = Date.now() + idSeq: khoá đã đủ chặn 2 lượt TÍNH chạy chồng nhau nên không còn rủi ro trùng
+// id giữa 2 lượt gọi lệch nhau vài mili-giây (mỗi lượt luôn thấy Date.now() mới nhất của chính nó, không
+// còn interleave với lượt khác) — giữ nguyên công thức cũ.
 router.post('/periods/:id/calculate', requireManage, async (req, res) => {
   const periodId = Number(req.params.id);
   if (!Number.isFinite(periodId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const periods = await getAllForCollection('payrollPeriods');
-    const period = periods.find(p => p.id === periodId);
-    if (!period) return res.status(404).json({ error: 'Không tìm thấy kỳ lương' });
-    if (period.status !== 'DRAFT') return res.status(409).json({ error: 'Chỉ tính lương được khi kỳ đang ở trạng thái Nháp' });
+    const { updated, skipped, computedCount } = await withAppLock(`payroll_calculate:${periodId}`, async () => {
+      const periods = await getAllForCollection('payrollPeriods');
+      const period = periods.find(p => p.id === periodId);
+      if (!period) throw new HttpError(404, 'Không tìm thấy kỳ lương');
+      if (period.status !== 'DRAFT') throw new HttpError(409, 'Chỉ tính lương được khi kỳ đang ở trạng thái Nháp');
 
-    const { appData, rateConfig } = await buildComputationAppData(req);
-    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: chỉ lọc status==='ACTIVE' bỏ sót HOÀN TOÀN nhân viên vừa
-    // hoàn tất Offboarding NGAY TRONG kỳ lương (nghỉ giữa tháng, status đã chuyển INACTIVE trước khi HR
-    // bấm "Tính Lương") — không có payslip nào cho những ngày đã làm việc trước khi nghỉ. Bổ sung nhánh
-    // INACTIVE có Offboarding COMPLETED với lastWorkingDate rơi trong kỳ (computeEmployeePayslip() tự xử
-    // lý nhánh này, xem lib/payroll.js) — LƯU Ý: hệ thống KHÔNG tự bịa công thức trừ lương tương ứng
-    // những ngày sau lastWorkingDate, payslip sinh ra sẽ có ghi chú để kế toán tự rà soát/điều chỉnh.
-    const { start: periodStart, end: periodEnd } = payroll.periodDateRange(period);
-    const activeProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'ACTIVE');
-    const offboardedMidPeriodProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'INACTIVE' &&
-      (appData.hrProcesses || []).some(h => h.processType === 'OFFBOARDING' && h.status === 'COMPLETED' &&
-        h.employeeUsername === p.username && h.lastWorkingDate >= periodStart && h.lastWorkingDate <= periodEnd));
-    const skipped = [];
-    const computedList = [];
-    for (const profile of [...activeProfiles, ...offboardedMidPeriodProfiles]) {
-      const result = payroll.computeEmployeePayslip(profile.employeeCode, period, appData, rateConfig);
-      if (result.skipped) { skipped.push({ employeeCode: profile.employeeCode, reason: result.reason }); continue; }
-      computedList.push(result);
-    }
+      const { appData, rateConfig } = await buildComputationAppData(req);
+      // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: chỉ lọc status==='ACTIVE' bỏ sót HOÀN TOÀN nhân viên vừa
+      // hoàn tất Offboarding NGAY TRONG kỳ lương (nghỉ giữa tháng, status đã chuyển INACTIVE trước khi HR
+      // bấm "Tính Lương") — không có payslip nào cho những ngày đã làm việc trước khi nghỉ. Bổ sung nhánh
+      // INACTIVE có Offboarding COMPLETED với lastWorkingDate rơi trong kỳ (computeEmployeePayslip() tự xử
+      // lý nhánh này, xem lib/payroll.js) — LƯU Ý: hệ thống KHÔNG tự bịa công thức trừ lương tương ứng
+      // những ngày sau lastWorkingDate, payslip sinh ra sẽ có ghi chú để kế toán tự rà soát/điều chỉnh.
+      const { start: periodStart, end: periodEnd } = payroll.periodDateRange(period);
+      const activeProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'ACTIVE');
+      const offboardedMidPeriodProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'INACTIVE' &&
+        (appData.hrProcesses || []).some(h => h.processType === 'OFFBOARDING' && h.status === 'COMPLETED' &&
+          h.employeeUsername === p.username && h.lastWorkingDate >= periodStart && h.lastWorkingDate <= periodEnd));
+      const skippedList = [];
+      const computedList = [];
+      for (const profile of [...activeProfiles, ...offboardedMidPeriodProfiles]) {
+        const result = payroll.computeEmployeePayslip(profile.employeeCode, period, appData, rateConfig);
+        if (result.skipped) { skippedList.push({ employeeCode: profile.employeeCode, reason: result.reason }); continue; }
+        computedList.push(result);
+      }
 
-    const existingPayslips = (await getAllForCollection('payslips')).filter(p => p.periodId === periodId);
-    // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: tính lại CẢ KỲ (VD chỉ để sửa/thêm 1 người) trước đây xoá
-    // trắng LUÔN mọi dòng "Điều chỉnh dòng lương" (phụ cấp/thưởng/tạm ứng/phạt nhập tay, isManualAdjustment)
-    // đã chốt cho MỌI nhân viên KHÁC trong kỳ — giữ lại bằng cách gom trước rồi gộp lại vào payslip mới
-    // (xem mergeManualAdjustmentsIntoPayslip() ở lib/payroll.js).
-    const manualAdjustmentsByEmployee = new Map();
-    for (const old of existingPayslips) {
-      const manualLines = (old.details || []).filter(d => d.isManualAdjustment);
-      if (manualLines.length) manualAdjustmentsByEmployee.set(old.employeeCode, manualLines);
-    }
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): trước đây xoá từng
-    // payslip cũ rồi insert từng phiếu mới bằng N lệnh RIÊNG LẺ, KHÔNG atomic — lỗi ở giữa chừng làm
-    // MẤT TRẮNG phần dữ liệu lương chưa kịp ghi lại (payslips xoá KHÔNG qua Thùng Rác). Nay gom cả
-    // "xoá cũ + ghi mới" vào ĐÚNG 1 giao dịch SQL, rollback toàn bộ nếu lỗi — xem
-    // lib/recordStore.js::replaceRecordsInCollection().
-    let idSeq = 0;
-    const newPayslips = computedList.map((computed) => {
-      const record = payroll.defaultPayslip(period, computed);
-      payroll.mergeManualAdjustmentsIntoPayslip(record, manualAdjustmentsByEmployee.get(computed.employeeCode), {
-        rateConfig,
-        dependentCount: ((appData.employeeProfiles || []).find(p => p.employeeCode === computed.employeeCode)?.dependents || []).length
+      const existingPayslips = (await getAllForCollection('payslips')).filter(p => p.periodId === periodId);
+      // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: tính lại CẢ KỲ (VD chỉ để sửa/thêm 1 người) trước đây xoá
+      // trắng LUÔN mọi dòng "Điều chỉnh dòng lương" (phụ cấp/thưởng/tạm ứng/phạt nhập tay, isManualAdjustment)
+      // đã chốt cho MỌI nhân viên KHÁC trong kỳ — giữ lại bằng cách gom trước rồi gộp lại vào payslip mới
+      // (xem mergeManualAdjustmentsIntoPayslip() ở lib/payroll.js).
+      const manualAdjustmentsByEmployee = new Map();
+      for (const old of existingPayslips) {
+        const manualLines = (old.details || []).filter(d => d.isManualAdjustment);
+        if (manualLines.length) manualAdjustmentsByEmployee.set(old.employeeCode, manualLines);
+      }
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): trước đây xoá từng
+      // payslip cũ rồi insert từng phiếu mới bằng N lệnh RIÊNG LẺ, KHÔNG atomic — lỗi ở giữa chừng làm
+      // MẤT TRẮNG phần dữ liệu lương chưa kịp ghi lại (payslips xoá KHÔNG qua Thùng Rác). Nay gom cả
+      // "xoá cũ + ghi mới" vào ĐÚNG 1 giao dịch SQL, rollback toàn bộ nếu lỗi — xem
+      // lib/recordStore.js::replaceRecordsInCollection().
+      let idSeq = 0;
+      const newPayslips = computedList.map((computed) => {
+        const record = payroll.defaultPayslip(period, computed);
+        payroll.mergeManualAdjustmentsIntoPayslip(record, manualAdjustmentsByEmployee.get(computed.employeeCode), {
+          rateConfig,
+          dependentCount: ((appData.employeeProfiles || []).find(p => p.employeeCode === computed.employeeCode)?.dependents || []).length
+        });
+        record.id = Date.now() + (idSeq++);
+        return record;
       });
-      record.id = Date.now() + (idSeq++);
-      return record;
-    });
-    await replaceRecordsInCollection('payslips', existingPayslips.map(p => p.id), newPayslips);
+      await replaceRecordsInCollection('payslips', existingPayslips.map(p => p.id), newPayslips);
 
-    const totalGross = computedList.reduce((s, c) => s + c.grossIncome, 0);
-    const totalNet = computedList.reduce((s, c) => s + c.netPay, 0);
-    const updated = await withLockedRecordForCollection('payrollPeriods', periodId, (p) => {
-      if (p.status !== 'DRAFT') throw new HttpError(409, 'Kỳ lương không còn ở trạng thái Nháp — có thể vừa được người khác thao tác');
-      p.employeeCount = computedList.length; p.skippedCount = skipped.length;
-      p.totalGross = Math.round(totalGross); p.totalNet = Math.round(totalNet);
-      p.history = [...(p.history || []), {
-        action: 'CALCULATED', by: req.freshUser.username, byName: req.freshUser.name, time: new Date().toLocaleString('vi-VN'),
-        detail: `Tính lương tự động: ${computedList.length} nhân viên${skipped.length ? `, bỏ qua ${skipped.length} người (xem chi tiết)` : ''}`
-      }];
-      p.updatedAt = new Date().toLocaleString('vi-VN'); p.updatedBy = req.freshUser.username;
-      return p;
+      const totalGross = computedList.reduce((s, c) => s + c.grossIncome, 0);
+      const totalNet = computedList.reduce((s, c) => s + c.netPay, 0);
+      const updatedPeriod = await withLockedRecordForCollection('payrollPeriods', periodId, (p) => {
+        if (p.status !== 'DRAFT') throw new HttpError(409, 'Kỳ lương không còn ở trạng thái Nháp — có thể vừa được người khác thao tác');
+        p.employeeCount = computedList.length; p.skippedCount = skippedList.length;
+        p.totalGross = Math.round(totalGross); p.totalNet = Math.round(totalNet);
+        p.history = [...(p.history || []), {
+          action: 'CALCULATED', by: req.freshUser.username, byName: req.freshUser.name, time: new Date().toLocaleString('vi-VN'),
+          detail: `Tính lương tự động: ${computedList.length} nhân viên${skippedList.length ? `, bỏ qua ${skippedList.length} người (xem chi tiết)` : ''}`
+        }];
+        p.updatedAt = new Date().toLocaleString('vi-VN'); p.updatedBy = req.freshUser.username;
+        return p;
+      });
+      return { updated: updatedPeriod, skipped: skippedList, computedCount: computedList.length };
     });
-    logPayrollAction(req, 'CALCULATE', String(periodId), `Tính lương tự động kỳ #${periodId}: ${computedList.length} nhân viên${skipped.length ? `, bỏ qua ${skipped.length} người` : ''}`);
+    logPayrollAction(req, 'CALCULATE', String(periodId), `Tính lương tự động kỳ #${periodId}: ${computedCount} nhân viên${skipped.length ? `, bỏ qua ${skipped.length} người` : ''}`);
     res.json({ ok: true, item: updated, skipped });
   } catch (err) { sendCatchError(res, err, `payroll/periods/${req.params.id}/calculate`); }
 });
@@ -237,8 +262,10 @@ function periodTransitionRoute(path, guard, applyFn, historyNoteRequired, action
       return res.status(400).json({ error: 'Vui lòng nhập lý do' });
     }
     try {
+      // req.freshUser (5º tham số, LỖI ĐÃ VÁ #14) — thêm để applyApprove() biết actor có phải admin
+      // không (bypass tự duyệt) mà không đổi chữ ký các applyFn khác đang chỉ dùng 4 tham số đầu.
       const updated = await withLockedRecordForCollection('payrollPeriods', periodId, (period) =>
-        applyFn(period, req.freshUser.username, req.freshUser.name, req.body?.reason)
+        applyFn(period, req.freshUser.username, req.freshUser.name, req.body?.reason, req.freshUser)
       );
       logPayrollAction(req, actionType, String(periodId), `${actionType} kỳ lương #${periodId}${req.body?.reason ? ` — Lý do: ${req.body.reason}` : ''}`);
       res.json({ ok: true, item: updated });
@@ -252,7 +279,7 @@ periodTransitionRoute('/periods/:id/submit', requireManage, async (p, u, n) => {
 periodTransitionRoute('/periods/:id/approve', (req, res, next) => {
   if (!payroll.canApprovePayroll(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền duyệt kỳ lương' });
   next();
-}, (p, u, n) => payroll.applyApprove(p, u, n), false, 'APPROVE');
+}, (p, u, n, reason, actorUser) => payroll.applyApprove(p, u, n, actorUser), false, 'APPROVE');
 // PHÁT HIỆN (đợt rà soát theo kịch bản test chuyên sâu, LUONG-04): route này TRƯỚC ĐÂY thiếu tham số
 // `historyNoteRequired=true` (khác /reopen ngay dưới) — periodTransitionRoute() chỉ bắt buộc `reason`
 // khi cờ này bật, nên Từ Chối một kỳ lương KHÔNG cần nhập lý do gì cả, dù applyReject() (lib/payroll.js)

@@ -119,7 +119,22 @@ stubModule('lib/recordStore', {
     const updated = await mutatorFn(list[idx]);
     list[idx] = updated;
     return updated;
-  }
+  },
+  // withAppLock() (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #7): "Tính Lương Tự Động" nay
+  // bọc toàn bộ trong khoá để chặn 2 lượt gọi đồng thời nhân đôi payslip. Bản giả lập XẾP HÀNG THẬT theo
+  // từng lockKey (không chỉ gọi fn() ngay) — mô phỏng đúng ngữ nghĩa loại trừ lẫn nhau của sp_getapplock
+  // thật (lib/recordStore.js), để test "2 lượt gọi đồng thời" bên dưới thực sự có ý nghĩa (nếu ai đó lỡ
+  // gỡ withAppLock() khỏi route, test này phải FAIL vì payslip bị nhân đôi).
+  withAppLock: (() => {
+    const chains = new Map();
+    return async (lockKeyOrKeys, fn) => {
+      const key = (Array.isArray(lockKeyOrKeys) ? [...lockKeyOrKeys].sort() : [lockKeyOrKeys]).join('|');
+      const prev = chains.get(key) || Promise.resolve();
+      const run = prev.then(fn, fn); // chạy fn() sau khi lượt trước xong, dù lượt trước lỗi hay không
+      chains.set(key, run.catch(() => {}));
+      return run;
+    };
+  })()
 });
 
 stubModule('lib/auth', {
@@ -214,6 +229,27 @@ async function main() {
       await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
       const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
       assertEqual(payslips.body.payslips.length, 1, 'Tính lại không được tạo trùng payslip');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #7): 2 LƯỢT "Tính Lương Tự Động"
+    // GỌI GẦN NHƯ ĐỒNG THỜI (double-click, hoặc 2 kế toán cùng bấm) TRƯỚC ĐÂY đều đọc existingPayslips
+    // TRƯỚC KHI lượt kia kịp ghi xong -> cả 2 đều insert payslip mới, KHÔNG lượt nào xoá được payslip của
+    // lượt kia -> NHÂN ĐÔI toàn bộ phiếu lương của kỳ. Nay bọc trong withAppLock() để 2 lượt tự xếp hàng —
+    // bản giả lập withAppLock ở trên XẾP HÀNG THẬT (không chỉ gọi fn() ngay) nên test này phản ánh đúng
+    // hành vi khi 2 request THẬT chạm route gần như đồng thời.
+    await run.run('LỖI ĐÃ VÁ (#7): 2 lượt "Tính Lương Tự Động" gọi ĐỒNG THỜI (Promise.all) không nhân đôi payslip', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      const [r1, r2] = await Promise.all([
+        api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR),
+        api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR)
+      ]);
+      // Cả 2 request đều hợp lệ về quyền/trạng thái nên cả 2 nên trả 200 (lượt sau tính lại đè lên lượt
+      // trước, xếp hàng nhờ withAppLock — không phải 1 request thắng/1 request bị 409 vì race).
+      assertEqual(r1.status, 200, JSON.stringify(r1.body));
+      assertEqual(r2.status, 200, JSON.stringify(r2.body));
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      assertEqual(payslips.body.payslips.length, 1, '2 lượt tính đồng thời KHÔNG được nhân đôi payslip — đây chính là lỗi vừa vá (#7)');
     });
 
     // LUONG-09 (regression quan trọng nhất module Lương — bug đã từng gây MẤT DỮ LIỆU lương thật đã nhập
@@ -331,6 +367,41 @@ async function main() {
       assertEqual(basic.amount, 9500000, 'Vẫn phải lấy đúng baseSalary của hợp đồng ACTIVE hiện tại');
     });
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #8): hợp đồng ACTIVE đã qua
+    // endDate không có cơ chế tự chuyển EXPIRED — payroll vẫn tính đủ lương nhưng TRƯỚC ĐÂY không cảnh
+    // báo gì để kế toán/HR biết mà xử lý (gia hạn/ký mới/Offboarding).
+    await run.run('LỖI ĐÃ VÁ (#8): hợp đồng ACTIVE đã qua endDate (hết hạn) vẫn tính đủ lương NHƯNG có ghi chú cảnh báo rõ ràng', async () => {
+      resetAppData();
+      const period = seedDraftPeriod(); // Tháng 01/2025 -> periodEnd = 2025-01-31
+      USERS.push({ username: 'emp7', name: 'Nhân Viên Bảy', dept: 'Phòng Kinh Doanh', posType: 'OFFICE', perms: {}, active: true });
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV007', username: 'emp7', status: 'ACTIVE', dependents: [] });
+      // Hợp đồng Xác định thời hạn hết hạn 2025-01-15 (GIỮA kỳ đang tính) nhưng CHƯA có ai đổi status
+      // (đúng hiện trạng thật — không có job tự động chuyển EXPIRED).
+      RECORDS.laborContracts.push({ id: 8, employeeCode: 'NV007', status: 'ACTIVE', contractType: 'FIXED_TERM', startDate: '2024-01-15', endDate: '2025-01-15', baseSalary: 10000000, dept: 'Phòng Kinh Doanh' });
+
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV007');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.amount, 10000000, 'Vẫn tính ĐỦ lương theo hợp đồng (không tự trừ/không tự đổi status) — đúng phạm vi vá đã chốt');
+      assertIncludes(basic.note, 'hết hạn ngày 2025-01-15', 'Ghi chú phải nêu rõ ngày hết hạn thật của hợp đồng');
+      assertIncludes(basic.note, 'CẢNH BÁO', 'Ghi chú phải cảnh báo rõ ràng cho kế toán/HR biết mà rà soát');
+    });
+
+    await run.run('LỖI ĐÃ VÁ (#8): hợp đồng Vô thời hạn (INDEFINITE) KHÔNG bao giờ bị coi là "hết hạn" dù không có endDate', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      USERS.push({ username: 'emp8', name: 'Nhân Viên Tám', dept: 'Phòng Kinh Doanh', posType: 'OFFICE', perms: {}, active: true });
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV008', username: 'emp8', status: 'ACTIVE', dependents: [] });
+      RECORDS.laborContracts.push({ id: 9, employeeCode: 'NV008', status: 'ACTIVE', contractType: 'INDEFINITE', startDate: '2020-01-01', endDate: null, baseSalary: 11000000, dept: 'Phòng Kinh Doanh' });
+
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV008');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.note, 'Theo hợp đồng lao động đang hiệu lực', 'Vô thời hạn không có khái niệm hết hạn -> không được cảnh báo nhầm');
+    });
+
     await run.run('Điều chỉnh dòng tay: chặn mã thành phần không thuộc danh mục nhập tay', async () => {
       resetAppData();
       const period = seedDraftPeriod();
@@ -407,6 +478,49 @@ async function main() {
       await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, HR_MGR);
       const res = await api('POST', `/api/payroll/periods/${period.id}/approve`, {}, HR_MGR);
       assertEqual(res.status, 403, 'Người CHỈ có hrPayrollManage (không có hrPayrollApprove) phải bị chặn duyệt');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #14): kỳ lương TRƯỚC ĐÂY có thể tự
+    // tạo — tự gửi duyệt — tự duyệt nếu 1 tài khoản có ĐỦ CẢ 2 quyền hrPayrollManage + hrPayrollApprove
+    // (applyApprove() không hề so period.creator với actor). Segregation-of-duties test ở trên chỉ xác
+    // nhận thiếu hrPayrollApprove thì bị chặn — KHÔNG bao phủ đúng trường hợp có đủ cả 2 quyền.
+    await run.run('LỖI ĐÃ VÁ (#14): người TẠO kỳ lương (dù có đủ hrPayrollApprove) vẫn KHÔNG tự duyệt được kỳ do chính mình tạo — cần người KHÁC duyệt', async () => {
+      resetAppData();
+      const DUAL_ROLE = { username: 'ketoan_dual', name: 'Kế Toán (có đủ 2 quyền)', dept: 'Phòng Kế Toán', perms: { hrPayrollManage: true, hrPayrollApprove: true }, active: true };
+      USERS.push(DUAL_ROLE);
+      const valid = payroll.assertValidNewPeriod({ periodMonth: 1, periodYear: 2025 }, RECORDS.payrollPeriods);
+      const period = Object.assign(payroll.defaultPeriod(valid, DUAL_ROLE.username, DUAL_ROLE.name), { id: idSeq++ });
+      RECORDS.payrollPeriods.push(period);
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, DUAL_ROLE);
+      await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, DUAL_ROLE);
+      const selfApprove = await api('POST', `/api/payroll/periods/${period.id}/approve`, {}, DUAL_ROLE);
+      assertEqual(selfApprove.status, 403, JSON.stringify(selfApprove.body));
+      assertIncludes(selfApprove.body.error, 'không thể tự duyệt', 'Thông báo lỗi phải nói rõ lý do là tự duyệt hồ sơ do chính mình tạo');
+      // Người KHÁC có hrPayrollApprove vẫn duyệt được bình thường — chỉ chặn đúng CHÍNH người tạo.
+      const otherApprove = await api('POST', `/api/payroll/periods/${period.id}/approve`, {}, APPROVER);
+      assertEqual(otherApprove.status, 200, JSON.stringify(otherApprove.body));
+      assertEqual(otherApprove.body.item.status, 'APPROVED');
+    });
+
+    // LƯU Ý THIẾT KẾ (khác lib/workflowEngine.js::assertNotSelfDecidingWorkflowItem()): applyApprove() CỐ
+    // Ý KHÔNG có ngoại lệ admin — nhất quán với chính module Lương (canManagePayroll()/canApprovePayroll()
+    // đã KHÔNG cho admin tự động quản lý/duyệt từ trước, phải cấp quyền RIÊNG, xem chú thích tại đó) nên
+    // dù ADMIN.perms.admin=true, ADMIN vẫn bị chặn ở NGAY guard canApprovePayroll() (chưa tới lượt kiểm
+    // tự duyệt) nếu không có hrPayrollApprove — test dưới đây xác nhận admin CÓ hrPayrollApprove vẫn bị
+    // chặn TỰ duyệt kỳ do chính mình tạo, giống hệt tài khoản thường.
+    await run.run('LỖI ĐÃ VÁ (#14): admin (dù có hrPayrollApprove) cũng KHÔNG tự duyệt được kỳ do chính mình tạo — module Lương cố ý không có ngoại lệ admin', async () => {
+      resetAppData();
+      const ADMIN_WITH_APPROVE = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true, hrPayrollManage: true, hrPayrollApprove: true }, active: true };
+      USERS = USERS.map(u => u.username === 'admin' ? ADMIN_WITH_APPROVE : u);
+      const valid = payroll.assertValidNewPeriod({ periodMonth: 1, periodYear: 2025 }, RECORDS.payrollPeriods);
+      const period = Object.assign(payroll.defaultPeriod(valid, ADMIN_WITH_APPROVE.username, ADMIN_WITH_APPROVE.name), { id: idSeq++ });
+      RECORDS.payrollPeriods.push(period);
+      await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, ADMIN_WITH_APPROVE);
+      await api('POST', `/api/payroll/periods/${period.id}/submit`, {}, ADMIN_WITH_APPROVE);
+      const res = await api('POST', `/api/payroll/periods/${period.id}/approve`, {}, ADMIN_WITH_APPROVE);
+      assertEqual(res.status, 403, JSON.stringify(res.body));
+      // Khôi phục lại ADMIN gốc (không có hrPayrollApprove) cho các test PHÍA SAU (nếu còn) không bị ảnh hưởng.
+      USERS = USERS.map(u => u.username === 'admin' ? ADMIN : u);
     });
 
     await run.run('Luồng đầy đủ: submit -> reject (về DRAFT) -> submit -> approve -> finalize -> publish -> tạo Notifications', async () => {

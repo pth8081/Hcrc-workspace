@@ -1587,7 +1587,7 @@
             <span id="permTreeBadge_hr" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến; "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức v2 (sửa cây/áp dụng phiên bản); "Cấu Hình Luồng Đánh Giá KPI" tách riêng cho việc tinh chỉnh luồng đánh giá (Tab "Cấu Hình Đánh Giá KPI") — có thể giao cho vai trò khác không cần đụng tới cây tổ chức; 4 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding/Offboarding" để tạo/quản lý đúng loại quy trình, "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Xem Toàn Bộ" để xem mọi quy trình dù không quản lý — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến; "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức v2 (sửa cây/áp dụng phiên bản); "Cấu Hình Luồng Đánh Giá KPI" tách riêng cho việc tinh chỉnh luồng đánh giá (Tab "Cấu Hình Đánh Giá KPI") — có thể giao cho vai trò khác không cần đụng tới cây tổ chức; 5 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding/Offboarding" để tạo/quản lý đúng loại quy trình, "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Toàn Quyền Thao Tác Mọi Quy Trình" để hoàn thành/bỏ qua BẤT KỲ task nào + huỷ/giao lại quy trình của người khác (kể cả task quyết định thử việc/chấm dứt hợp đồng — cấp thận trọng, khác hẳn "Xem Toàn Bộ" chỉ xem), "Xem Toàn Bộ" CHỈ xem tiến độ mọi quy trình để theo dõi, KHÔNG thao tác được gì — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pNhanSuManage"> 🤝 Quản lý Nhân Sự (quản lý &amp; phản hồi ý kiến)
             </label>
@@ -1606,8 +1606,15 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrTaskTemplateManage"> 📋 Quản Lý Checklist Mẫu (Onboarding/Offboarding)
             </label>
+            <!-- LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): "Xem Toàn Bộ" (hrViewAll)
+                 TRƯỚC ĐÂY thực chất là quyền GHI đầy đủ (bypass canActOnHrTask()/canManageHrProcess() ở
+                 lib/recordActions.js) dù nhãn UI chỉ nói "xem" — tách quyền GHI ra hrProcessManage riêng,
+                 hrViewAll giờ CHỈ còn đúng nghĩa xem như nhãn đã nói. -->
+            <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrProcessManage"> ✅ Toàn Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding (hoàn thành/bỏ qua task, huỷ/giao lại quy trình của người khác — kể cả task quyết định thử việc/chấm dứt hợp đồng)
+            </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pHrViewAll"> 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding
+              <input type="checkbox" id="pHrViewAll"> 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding (CHỈ xem tiến độ, KHÔNG thao tác được task/quy trình — cần thêm "Toàn Quyền Thao Tác" ở trên nếu muốn ghi)
             </label>
             <p class="text-[11px] text-gray-500 italic pt-1 border-t">2 quyền dưới đây cho module con "Hồ Sơ Nhân Sự" — mọi tài khoản mặc định tự xem được hồ sơ CHÍNH MÌNH; "Xem Hồ Sơ Cấp Dưới" chỉ mở thêm chế độ xem GIỚI HẠN (không thấy CCCD/tài khoản ngân hàng/BHXH/mã số thuế/người phụ thuộc) cho quản lý trực tiếp; "Quản Lý Hồ Sơ Nhân Sự" (HR) mới xem/sửa được ĐẦY ĐỦ hồ sơ bất kỳ ai + liên kết tài khoản VPDT + đổi trạng thái Nghỉ dài hạn.</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">

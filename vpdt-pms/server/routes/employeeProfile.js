@@ -597,10 +597,21 @@ router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
 // Onboarding nên chưa có hồ sơ) — xem lib/employeeProfile.js::createManualProfile(). payload.positionKey
 // (tuỳ chọn) — chức vụ BAN ĐẦU chọn ngay từ Cơ Cấu Tổ Chức lúc tạo, áp dụng NGAY trong cùng giao dịch
 // (chính là lần đầu tiên của positionHistory[], không cần thao tác riêng "gán chức vụ" ngay sau đó).
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): route này trước đây chỉ gác
+// requireProfileCreate (hrProfileCreate) nhưng khi có positionKey + username đã liên kết, tự đồng bộ GHI
+// ĐÈ users.jobTitle/dept/posType của TÀI KHOẢN NGƯỜI KHÁC (:616-620 cũ) — đường tương đương POST
+// .../set-position lại đòi đúng canEditProfiles(). Nay: đòi thêm canEditProfiles() trước khi cho phép
+// applyPositionAssignment() ghi đè users.*, để tài khoản chỉ có hrProfileCreate (không có hrProfileEdit)
+// vẫn tạo được hồ sơ mới nhưng KHÔNG tự gán chức vụ/ghi đè tài khoản người khác ngay lúc tạo — phải nhờ
+// người có quyền Sửa gán chức vụ ở bước riêng ngay sau đó (POST .../set-position).
 router.post('/', requireProfileCreate, async (req, res) => {
   try {
     const username = req.body?.username ? String(req.body.username).trim() : null;
     const positionKey = req.body?.positionKey ? String(req.body.positionKey).trim() : null;
+    if (positionKey && !employeeProfile.canEditProfiles(req.freshUser)) {
+      return res.status(403).json({ error: 'Bạn có quyền tạo hồ sơ nhưng không có quyền gán chức vụ (cần quyền "Sửa Hồ Sơ Nhân Sự") — vui lòng tạo hồ sơ trước không chọn chức vụ, rồi nhờ HR/Admin gán chức vụ ở bước riêng' });
+    }
     const appData = await getAllAppData();
     assertActiveAccountIfGiven(username, appData.users || []);
     const applied = positionKey ? orgChart.getAppliedVersion((await getAppDataValue('orgChartVersions')) || []) : null;
@@ -710,6 +721,18 @@ router.post('/parse-import', uploadRateLimiter, requireProfileCreate, (req, res)
 // transaction (không tin cờ "valid"/"duplicateExisting" của bước xem trước, dữ liệu có thể đã đổi từ lúc
 // đó). row.action (đợt 10/2026, chống trùng lặp): 'overwrite' -> ghi đè hồ sơ đã có (chỉ các field import
 // thu thập được, xem updateProfileFromImport()); còn lại (kể cả thiếu/rỗng) -> tạo hồ sơ MỚI như trước.
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): route này trước đây chỉ gác
+// requireProfileCreate (hrProfileCreate) nhưng nhánh row.action==='overwrite' gọi thẳng
+// updateProfileFromImport() -> applyProfileEdit() với ĐỦ SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS
+// (CCCD/BHXH/MST/tài khoản ngân hàng...) của 1 hồ sơ ĐÃ CÓ SẴN — tức 1 tài khoản chỉ có quyền "Tạo" (không
+// có quyền "Sửa") vẫn ghi đè được dữ liệu nhạy cảm của bất kỳ hồ sơ nào qua đường Excel, đi vòng hoàn toàn
+// lớp quyền hrProfileEdit mà PATCH .../by-code/:code (route sửa tương đương) đã gác đúng
+// (employeeProfile.canEditProfiles(), xem requireProfileEdit ở trên). Nay: chỉ cho phép action='overwrite'
+// khi actor có canEditProfiles() thật sự — thiếu quyền thì BỎ QUA dòng đó (đưa vào results.skipped kèm lý
+// do rõ ràng) thay vì âm thầm ghi đè hoặc chặn đứng cả lô (các dòng 'create' khác trong cùng file vẫn hợp
+// lệ với quyền hrProfileCreate). Đồng thời route này trước đây KHÔNG ghi Nhật Ký Hệ Thống (khác các route
+// ghi khác của module) — nay ghi 1 dòng tổng hợp sau khi xử lý xong (không ghi từng dòng để tránh spam log
+// với file 500 dòng).
 router.post('/bulk-import', requireProfileCreate, async (req, res) => {
   try {
     const rows = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -718,11 +741,19 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
     const appData = await getAllAppData();
     for (const row of rows) assertActiveAccountIfGiven(row?.username ? String(row.username).trim() : null, appData.users || []);
 
+    const canOverwrite = employeeProfile.canEditProfiles(req.freshUser);
     const results = { created: [], updated: [], skipped: [] };
     await withLockedAppDataValue('employeeProfiles', (list) => {
       for (const row of rows) {
         try {
           if (row?.action === 'overwrite') {
+            if (!canOverwrite) {
+              results.skipped.push({
+                employeeCode: row?.employeeCode || '(thiếu Mã NV)',
+                reason: 'Không có quyền "Sửa Hồ Sơ Nhân Sự" (hrProfileEdit) để ghi đè hồ sơ đã có — chỉ được tạo hồ sơ mới'
+              });
+              continue;
+            }
             const updated = employeeProfile.updateProfileFromImport(list, row.employeeCode, row, req.freshUser.username, req.freshUser.name);
             results.updated.push(updated.employeeCode);
           } else {
@@ -735,6 +766,9 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
       }
       return list;
     });
+    if (results.created.length || results.updated.length) {
+      logHrProfileAction(req, 'BULK_IMPORT', '', `Nhập Excel Hồ Sơ Nhân Sự: tạo mới ${results.created.length}, ghi đè ${results.updated.length}, bỏ qua ${results.skipped.length} hồ sơ`);
+    }
     res.json({ ok: true, ...results });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile/bulk-import'); }
 });

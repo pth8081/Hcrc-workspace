@@ -5690,7 +5690,7 @@ function markHrFeedbackRead(user, item) {
 //
 // "Department" của từng task (HR/IT/ADMIN/FINANCE/MANAGER) là nhãn TRÁCH NHIỆM cố định, KHÔNG phải
 // phòng ban thật — canActOnHrTask() dưới đây là điểm tra cứu DUY NHẤT "ai được thao tác task này":
-// - Task đã GIAO RIÊNG (assignedToUsername khác null) -> CHỈ đúng người đó (hoặc hrViewAll/admin).
+// - Task đã GIAO RIÊNG (assignedToUsername khác null) -> CHỈ đúng người đó (hoặc hrProcessManage/admin).
 // - HR/ADMIN (chưa giao riêng) -> hrOnboardingManage (nếu ONBOARDING) / hrOffboardingManage (nếu
 //   OFFBOARDING) — ADMIN dùng chung quyền với HR vì hệ thống này không có 1 quyền "hành chính" tổng quát
 //   riêng biệt để tách 2 nhãn này.
@@ -5698,11 +5698,22 @@ function markHrFeedbackRead(user, item) {
 //   trách nhiệm nhãn IT trong checklist).
 // - FINANCE (chưa giao riêng) -> paymentManage (đúng quyền đã dùng cho toàn bộ luồng Thanh Toán).
 // - MANAGER (chưa giao riêng) -> đúng username đã chọn làm "Quản lý trực tiếp" (directManagerUsername)
-//   lúc tạo quy trình — nếu không chọn ai, chỉ hrOnboardingManage/hrOffboardingManage/hrViewAll/admin
-//   thao tác được (không để task MANAGER kẹt vĩnh viễn không ai làm được).
+//   lúc tạo quy trình — nếu không chọn ai, chỉ hrOnboardingManage/hrOffboardingManage/hrProcessManage/
+//   admin thao tác được (không để task MANAGER kẹt vĩnh viễn không ai làm được).
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): hrViewAll TRƯỚC ĐÂY bypass CẢ 2 hàm dưới
+// đây (canActOnHrTask()/canManageHrProcess()) y hệt admin, dù nhãn UI ("👁️ Xem Toàn Bộ Quy Trình
+// Onboarding/Offboarding") chỉ nói "xem" — 1 tài khoản chỉ được cấp quyền XEM (VD để theo dõi tiến độ)
+// vẫn hoàn thành/bỏ qua được MỌI task của MỌI quy trình, kể cả task quyết định thử việc -> chấm dứt/ký
+// chính thức hợp đồng của người khác. Tách quyền GHI ra hrProcessManage RIÊNG (mới, đúng chức năng cũ của
+// hrViewAll) — hrViewAll giờ CHỈ còn tác dụng ở lib/recordViewScope.js (quyết định "thấy quy trình nào
+// trong danh sách"), không còn tự động cho thao tác gì. Tài khoản đang có hrViewAll giữ nguyên khả năng
+// XEM (đúng nhãn cũ) nhưng KHÔNG còn tự động ghi được nữa — admin cấp thêm hrProcessManage riêng nếu thật
+// sự cần 1 tài khoản cụ thể vẫn thao tác được thay Nhân Sự (cố ý KHÔNG tự migrate cấp hrProcessManage cho
+// user đang có hrViewAll — an toàn hơn theo đúng nhãn "chỉ xem" hiện tại).
 function canActOnHrTask(user, item, task) {
   if (!user || !task) return false;
-  if (user.perms?.admin || user.perms?.hrViewAll) return true;
+  if (user.perms?.admin || user.perms?.hrProcessManage) return true;
   if (task.assignedToUsername) return task.assignedToUsername === user.username;
   switch (task.department) {
     case 'HR':
@@ -5717,7 +5728,8 @@ function canActOnHrTask(user, item, task) {
 
 // Quyền cấp QUY TRÌNH (không phải từng task riêng): tạo, huỷ, giao lại task, đính kèm file, tạo ticket
 // IT cho task — người tạo quy trình, hoặc hrOnboardingManage/hrOffboardingManage đúng processType, hoặc
-// hrViewAll/admin.
+// hrProcessManage/admin (xem chú thích LỖI ĐÃ VÁ ở canActOnHrTask() ngay trên — hrViewAll KHÔNG còn bypass
+// hàm này nữa).
 function canCreateHrProcess(user, processType) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -5725,7 +5737,7 @@ function canCreateHrProcess(user, processType) {
 }
 function canManageHrProcess(user, item) {
   if (!user || !item) return false;
-  if (user.perms?.admin || user.perms?.hrViewAll) return true;
+  if (user.perms?.admin || user.perms?.hrProcessManage) return true;
   if (item.creator === user.username) return true;
   return !!(item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
 }

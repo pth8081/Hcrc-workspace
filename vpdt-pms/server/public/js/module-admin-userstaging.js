@@ -276,6 +276,7 @@ function resetUserForm() {
   document.getElementById('pHrOnboardingManage').checked = !!defaults.hrOnboardingManage;
   document.getElementById('pHrOffboardingManage').checked = !!defaults.hrOffboardingManage;
   document.getElementById('pHrTaskTemplateManage').checked = !!defaults.hrTaskTemplateManage;
+  document.getElementById('pHrProcessManage').checked = !!defaults.hrProcessManage;
   document.getElementById('pHrViewAll').checked = !!defaults.hrViewAll;
   document.getElementById('pHrProfileView').checked = !!defaults.hrProfileView;
   document.getElementById('pHrProfileManage').checked = !!defaults.hrProfileManage;

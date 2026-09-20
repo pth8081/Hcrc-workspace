@@ -1905,12 +1905,20 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn. Đổi
   danh mục **không ảnh hưởng ngược** các quy trình đã tạo trước đó (checklist
   đã snapshot vào từng quy trình lúc tạo).
-- **Phân quyền** (khối 21 cây phân quyền) — 4 cờ phẳng: **"🆕 Quản Lý
+- **Phân quyền** (khối 21 cây phân quyền) — 5 cờ phẳng: **"🆕 Quản Lý
   Onboarding"**/**"🚪 Quản Lý Offboarding"** (tạo + quản lý quy trình đúng
   loại), **"📋 Quản Lý Checklist Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự động
-  có quyền tạo/quản lý quy trình), **"👁️ Xem Toàn Bộ Quy Trình"** (chỉ xem,
-  KHÔNG thao tác được). Người tạo/quản lý trực tiếp/được giao riêng 1 việc
-  luôn xem được đúng quy trình liên quan dù không có cờ nào ở trên.
+  có quyền tạo/quản lý quy trình), **"✅ Toàn Quyền Thao Tác Mọi Quy Trình"**
+  (10/2026, rà soát chuyên sâu — quyền GHI mới: hoàn thành/bỏ qua BẤT KỲ task
+  nào + huỷ/giao lại/chỉ định người kế nhiệm của MỌI quy trình, kể cả task
+  quyết định thử việc/chấm dứt hợp đồng — cấp thận trọng), **"👁️ Xem Toàn Bộ
+  Quy Trình"** (chỉ xem, KHÔNG thao tác được — **LỖI ĐÃ VÁ 10/2026**: trước
+  đây quyền này thực chất bypass được CẢ thao tác ghi y hệt admin dù nhãn chỉ
+  nói "xem"; nay đã tách đúng quyền ghi ra "Toàn Quyền Thao Tác" ở trên, tài
+  khoản chỉ có "Xem Toàn Bộ" không còn tự động ghi được nữa — cần admin cấp
+  thêm "Toàn Quyền Thao Tác" nếu thực sự cần ghi thay Nhân Sự). Người tạo/
+  quản lý trực tiếp/được giao riêng 1 việc luôn xem được đúng quy trình liên
+  quan dù không có cờ nào ở trên.
 
 #### 4.5.3. Hồ Sơ Nhân Sự
 
@@ -2220,11 +2228,19 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
 - **Đơn nghỉ phép** (Phép năm / Nghỉ không lương / Nghỉ ốm / **Nghỉ theo giờ**
   / **Việc riêng**) — nhân viên tự nộp cho CHÍNH MÌNH (chọn loại, từ ngày, đến
   ngày, lý do), nghỉ phép năm bị chặn ngay lúc nộp nếu vượt quá số ngày còn
-  lại. **Nghỉ theo giờ** dùng form riêng (chọn đúng 1 ngày + giờ bắt đầu/kết
-  thúc thay vì khoảng Từ ngày–Đến ngày) — không trừ vào phép năm, không sinh
-  bản ghi chấm công nguyên ngày (chỉ ghi nhận khoảng giờ nghỉ). **Việc riêng**
-  dùng chung khuôn Từ ngày–Đến ngày như Nghỉ không lương/Nghỉ ốm, cũng không
-  trừ phép năm. Quản lý trực tiếp (cần thêm quyền
+  lại. **Số ngày trừ CHỈ tính ngày làm việc thật (10/2026, rà soát chuyên
+  sâu)**: với **Phép năm** và **Nghỉ không lương**, số ngày trừ vào quỹ
+  phép/lương KHÔNG còn đếm cả ngày lịch — tự động **loại Thứ 7/Chủ Nhật và
+  ngày lễ đã cấu hình** ở Danh Mục, chỉ đếm đúng số ngày làm việc thật trong
+  khoảng nghỉ (VD đơn nộp từ Thứ Sáu đến Thứ Hai tuần sau chỉ trừ 2 ngày, không
+  phải 4 ngày lịch) — trước đây trừ cả 2 ngày cuối tuần dù nhân viên vốn không
+  phải đi làm những ngày đó, vừa trừ sai quỹ phép năm vừa trừ sai lương (đơn
+  Nghỉ không lương). **Nghỉ ốm/Việc riêng** vẫn giữ nguyên đếm theo ngày lịch
+  như trước (chưa đổi ở đợt này). **Nghỉ theo giờ** dùng form riêng (chọn đúng
+  1 ngày + giờ bắt đầu/kết thúc thay vì khoảng Từ ngày–Đến ngày) — không trừ
+  vào phép năm, không sinh bản ghi chấm công nguyên ngày (chỉ ghi nhận khoảng
+  giờ nghỉ). **Việc riêng** dùng chung khuôn Từ ngày–Đến ngày như Nghỉ không
+  lương/Nghỉ ốm, cũng không trừ phép năm. Quản lý trực tiếp (cần thêm quyền
   **"✅ Duyệt Nghỉ Phép"**, không tự động có chỉ vì là quản lý) hoặc HR duyệt/
   từ chối; đơn được duyệt **tự động trừ phép năm** (chỉ loại Phép năm) và
   **tự sinh bản ghi chấm công loại nghỉ phép** cho từng ngày trong khoảng nghỉ
@@ -2324,7 +2340,14 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   (kế toán/HR — tạo kỳ, tính lương tự động, điều chỉnh tay từng dòng, gửi
   duyệt), **"✅ Duyệt Lương"** (thường là Giám Đốc/Kế Toán Trưởng cấp cao hơn
   — duyệt/từ chối/chốt kỳ/công bố), và quyền xem-của-mình mặc định BẬT cho
-  mọi tài khoản không tắt được.
+  mọi tài khoản không tắt được. **Chặn tự duyệt kỳ do chính mình tạo**
+  (10/2026, rà soát chuyên sâu): trước đây 1 tài khoản có ĐỦ CẢ 2 quyền (VD
+  admin được cấp thêm cả Lập/Tính lẫn Duyệt) vẫn tự tạo — tự gửi duyệt — tự
+  duyệt được đúng kỳ do chính mình tạo, mất hẳn ý nghĩa "phân tách nhiệm vụ".
+  Từ nay bấm "Duyệt" bị chặn (kèm thông báo rõ) nếu người bấm chính là người
+  đã tạo kỳ lương đó — **kể cả admin** (module Lương không có ngoại lệ admin,
+  xem đầu mục 4.5.8), phải nhờ 1 người khác có quyền Duyệt Lương xác nhận độc
+  lập.
 - **Vòng đời 1 kỳ lương**: **Nháp** (mới tạo, kế toán bấm "Tính Lương" để hệ
   thống tự tính hàng loạt cho toàn bộ nhân viên đang hoạt động, rà soát/điều
   chỉnh tay từng dòng nếu cần — VD thêm phụ cấp/thưởng/tạm ứng/phạt) →
@@ -2388,6 +2411,16 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   trước đây không có cảnh báo nào, phiếu lương vẫn tính đủ tháng theo mức
   MỚI dù đổi giữa kỳ. Hệ thống vẫn KHÔNG tự chia tỷ lệ — kế toán tự "Điều
   chỉnh dòng lương" nếu cần bù/trừ đúng phần chênh lệch.
+- **Hợp đồng ACTIVE đã quá hạn (endDate) nhưng chưa ai chuyển "Hết Hạn"**
+  (10/2026, rà soát chuyên sâu): hệ thống **KHÔNG có job tự động chuyển trạng
+  thái hợp đồng ACTIVE → EXPIRED** khi qua ngày hết hạn (chỉ có job nhắc email
+  60/45/30 ngày, xem mục 4.5.4) — nếu kế toán bấm "Tính Lương" cho 1 kỳ mà
+  nhân viên vẫn còn hợp đồng ACTIVE nhưng endDate đã qua so với kỳ đang tính,
+  dòng Lương cơ bản vẫn tính **ĐỦ lương như bình thường** (hệ thống không tự
+  ý cắt lương/đổi trạng thái hợp đồng) nhưng ghi chú **CẢNH BÁO** rõ ngày hết
+  hạn thật — kế toán/HR cần rà soát: gia hạn hợp đồng, ký hợp đồng mới, hoặc
+  khởi tạo Offboarding nếu nhân viên đã thực sự nghỉ việc. Hợp đồng **Vô thời
+  hạn** không bao giờ bị coi là "hết hạn" (không có endDate).
 - **Chặn Gửi Duyệt nếu có phiếu lương "Thực nhận" ÂM** (9/2026): thường do
   khấu trừ tạm ứng/phạt nhập tay ở "Điều chỉnh dòng lương" lớn hơn cả lương
   gộp — trước đây lọt qua được toàn bộ luồng Gửi Duyệt → Duyệt → Chốt → Công
@@ -2963,6 +2996,14 @@ trùng (tô màu vàng nhạt) kèm 1 trong 2 kiểu điều khiển:
   địa chỉ/SĐT khẩn cấp/ngân hàng..., KHÔNG BAO GIỜ đụng Mã Nhân Viên/Tài
   khoản VPDT/trạng thái; Người Dùng: chỉ họ tên/email/SĐT/phòng ban/chức
   danh, KHÔNG BAO GIỜ đụng username/mật khẩu/quyền hạn) — mặc định "Bỏ qua".
+  **LỖI ĐÃ VÁ (10/2026, rà soát chuyên sâu)**: chọn "Ghi đè thông tin" ở Hồ Sơ
+  Nhân Sự nay đòi đúng quyền **"✏️ Sửa Hồ Sơ Nhân Sự"** (`hrProfileEdit`) —
+  trước đây chỉ cần quyền **"➕ Tạo Hồ Sơ Nhân Sự"** (`hrProfileCreate`) là ghi
+  đè được CCCD/BHXH/MST/tài khoản ngân hàng của bất kỳ hồ sơ nào qua đường
+  Excel, dù đường "Sửa" trực tiếp (Chi tiết → Lưu) đã đòi đúng quyền Sửa từ
+  trước. Tài khoản chỉ có quyền Tạo (không có quyền Sửa) giờ vẫn nhập được
+  hồ sơ MỚI bình thường qua Excel, nhưng dòng nào chọn "Ghi đè" sẽ bị bỏ qua
+  (liệt kê rõ lý do trong kết quả nhập) thay vì âm thầm ghi đè.
 
 Khoá so trùng theo từng module (đều chuẩn hoá bỏ dấu-hoa/thường-khoảng trắng
 thừa qua `normalizeDedupKey()`):
@@ -3033,6 +3074,11 @@ làm được nay bị chặn:
   vốn đã có). Dòng phân ca bị huỷ vì lý do khác (huỷ tay, nghỉ việc) giữ nguyên.
 - **API máy chấm công** (`POST /api/attendance/clock-punch`) từ chối mốc giờ ở
   tương lai (dung sai 5 phút) và mốc giờ rơi vào **kỳ lương đã Chốt/Công Bố**.
+  **10/2026 (rà soát chuyên sâu)**: khoá này nay áp dụng ĐỒNG BỘ cho CẢ 3 nơi
+  khác cũng ghi/sửa dữ liệu chấm công trong chính app (trước đây chỉ API máy
+  chấm công vật lý được kiểm) — **duyệt đơn nghỉ phép**, **HR sửa tay 1 bản
+  ghi công**, và **HR bổ sung công tay** đều bị chặn (409, nêu rõ tên kỳ
+  lương) nếu ngày/khoảng ngày liên quan rơi vào kỳ lương đã Chốt/Công Bố.
 
 **Lương**
 - **Thuế TNCN được tính lại** mỗi khi kế toán "Điều Chỉnh dòng lương" làm đổi

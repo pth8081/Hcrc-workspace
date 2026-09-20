@@ -329,6 +329,58 @@ async function main() {
     assertIncludes(issues[0], 'vẫn có người giữ');
   });
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #9): resolvePositionOccupants()
+  // TRƯỚC ĐÂY chỉ loại theo u.active===false — 1 nhân viên ĐÃ hoàn tất Offboarding (hồ sơ Hồ Sơ Nhân Sự
+  // status='INACTIVE') nhưng tài khoản VPDT vẫn active=true (IT chưa kịp khoá) vẫn bị coi là ĐANG giữ vị
+  // trí, dẫn tới gán nhầm managerUsername/chặn nhầm xoá vị trí dù người đó đã nghỉ hẳn.
+  await run.run('LỖI ĐÃ VÁ (#9): resolvePositionOccupants() loại thêm người có hồ sơ employeeProfiles.status=INACTIVE dù tài khoản VPDT vẫn active=true', () => {
+    const version = { nodes: [
+      { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty' },
+      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng KD', departmentRef: 'Phòng KD' },
+      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Nhân viên bán hàng', requiresDept: true }
+    ], kpiFlow: [] };
+    const node = version.nodes[2];
+    const users = [
+      { username: 'nv1', name: 'Nhân Viên Còn Làm', dept: 'Phòng KD', jobTitle: 'Nhân viên bán hàng', active: true },
+      // nv2: tài khoản VPDT vẫn active=true (IT chưa khoá) NHƯNG hồ sơ Hồ Sơ Nhân Sự đã INACTIVE (đã offboard xong).
+      { username: 'nv2', name: 'Nhân Viên Đã Nghỉ (tài khoản chưa khoá)', dept: 'Phòng KD', jobTitle: 'Nhân viên bán hàng', active: true }
+    ];
+    const employeeProfiles = [
+      { employeeCode: 'NV001', username: 'nv1', status: 'ACTIVE' },
+      { employeeCode: 'NV002', username: 'nv2', status: 'INACTIVE' }
+    ];
+    const withoutFilter = orgChart.resolvePositionOccupants(version, node, users);
+    assertEqual(withoutFilter.length, 2, 'Không truyền employeeProfiles -> giữ hành vi cũ (không lọc), backward-compat');
+    const withFilter = orgChart.resolvePositionOccupants(version, node, users, employeeProfiles);
+    assertEqual(withFilter.length, 1, 'Truyền employeeProfiles -> phải loại nv2 (hồ sơ INACTIVE) khỏi danh sách occupant');
+    assertEqual(withFilter[0].username, 'nv1');
+  });
+
+  await run.run('LỖI ĐÃ VÁ (#9): computeManagerUsernameUpdates() không gán managerUsername = người đã hoàn tất Offboarding (hồ sơ INACTIVE)', () => {
+    const appliedVersion = { nodes: [
+      { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty' },
+      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Phòng KD', departmentRef: 'Phòng KD' },
+      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Trưởng phòng', requiresDept: true },
+      { nodeId: 4, parentNodeId: 3, nodeType: 'POSITION', jobTitle: 'Nhân viên bán hàng', requiresDept: true }
+    ], kpiFlow: [] };
+    const users = [
+      // mgr: tài khoản vẫn active=true nhưng hồ sơ ĐÃ INACTIVE — đã hoàn tất Offboarding, không còn là
+      // quản lý thật của ai nữa dù cây tổ chức chưa kịp cập nhật (chờ HR sửa lại vị trí sau).
+      { username: 'mgr_old', name: 'Trưởng Phòng Cũ (đã nghỉ)', dept: 'Phòng KD', jobTitle: 'Trưởng phòng', active: true, managerUsername: null },
+      { username: 'nv1', name: 'Nhân Viên', dept: 'Phòng KD', jobTitle: 'Nhân viên bán hàng', active: true, managerUsername: null }
+    ];
+    const employeeProfiles = [
+      { employeeCode: 'NV000', username: 'mgr_old', status: 'INACTIVE' },
+      { employeeCode: 'NV001', username: 'nv1', status: 'ACTIVE' }
+    ];
+    const withoutFilter = orgChart.computeManagerUsernameUpdates(appliedVersion, users);
+    assertEqual(withoutFilter.changes.find(c => c.username === 'nv1')?.managerUsername, 'mgr_old', 'Không truyền employeeProfiles -> vẫn gán theo hành vi cũ (backward-compat)');
+    const withFilter = orgChart.computeManagerUsernameUpdates(appliedVersion, users, employeeProfiles);
+    assertEqual(withFilter.changes.find(c => c.username === 'nv1'), undefined, 'Truyền employeeProfiles -> KHÔNG được gán nv1.managerUsername = mgr_old (đã offboard)');
+    const unresolvedNv1 = withFilter.unresolved.find(u => u.username === 'nv1');
+    assertEqual(unresolvedNv1?.reason, 'Chưa có ai giữ vị trí quản lý cấp trên', 'Phải rơi vào unresolved đúng lý do (occupant thật = 0 sau khi lọc INACTIVE)');
+  });
+
   await run.run('computeValidationIssues(): phát hiện 2 node "Trưởng phòng" CÙNG phòng ban đều có người giữ', () => {
     const version = { nodes: [
       { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty' },

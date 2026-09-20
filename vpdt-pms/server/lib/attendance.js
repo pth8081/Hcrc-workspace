@@ -45,16 +45,29 @@ const { isManagerOf } = require('./recordViewScope');
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
 }
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — cùng gốc lỗi với applyClockPunch() bên
+// dưới): lấy "ngày" (YYYY-MM-DD) từ 1 Date PHẢI dùng giờ LOCAL của máy chủ (getFullYear/getMonth/getDate)
+// — `toISOString()` luôn trả UTC, trên máy chủ chạy giờ VN (UTC+7) sẽ lệch ngày với MỌI mốc giờ trước
+// 07:00 sáng (VD 0h-6h59 VN bị tính là "hôm qua"). Dùng hàm DUY NHẤT này cho mọi chỗ cần "ngày local"
+// trong file (todayStr()/listDatesInRange()/applyClockPunch()) — KHÔNG dùng toISOString().slice(0,10) ở
+// bất kỳ chỗ nào khác trong file này nữa.
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
 }
 
 const WORK_MODELS = new Set(['OFFICE_HOURS', 'SHIFT_BASED']);
 // v15.9 — thêm LEAVE_PERSONAL (đơn nghỉ việc riêng, TÁCH khỏi LEAVE_UNPAID để phân biệt lý do trên báo
 // cáo dù cùng KHÔNG tính công) — HOURLY (nghỉ theo giờ) KHÔNG sinh bản ghi chấm công riêng (xem
-// buildLeaveAttendanceRecords() bên dưới — mô hình chấm công hiện tại chỉ có độ chi tiết theo NGÀY, nghỉ
-// vài giờ trong 1 ngày vẫn cần bản ghi WORK bình thường của ngày đó, chỉ trừ vào công theo giờ qua
-// daysCount phân số, không đổi recordType).
+// buildLeaveAttendanceRecords() bên dưới, trả về [] ngay cho HOURLY — mô hình chấm công hiện tại chỉ có
+// độ chi tiết theo NGÀY, không có khái niệm "nửa ngày"/"vài giờ"). CHÚ THÍCH ĐÃ SỬA (rà soát chuyên sâu
+// cụm Nhân Sự vòng 2, mức Thấp — #13, đúng khuôn phần này khớp Huong-dan-nghiep-vu.md dòng ~2184-2190):
+// câu cũ ("chỉ trừ vào công theo giờ qua daysCount phân số") SAI — HOURLY không hề trừ vào công/phép/
+// lương ở bất kỳ đâu (daysCount phân số chỉ hiển thị tham khảo trên chính đơn, KHÔNG có đường nào đọc lại
+// giá trị đó để trừ gì cả — bản ghi WORK của ngày đó, nếu có, vẫn nguyên vẹn không đổi). Đây CHỈ là lỗi
+// chú thích code, hành vi thật KHÔNG đổi (đã khớp đúng tài liệu nghiệp vụ từ trước).
 const ATTENDANCE_RECORD_TYPES = new Set(['WORK', 'LEAVE_PAID', 'LEAVE_UNPAID', 'LEAVE_PERSONAL', 'BUSINESS_TRIP', 'OVERTIME', 'SICK_LEAVE']);
 const LEAVE_TYPES = new Set(['ANNUAL', 'UNPAID', 'SICK', 'HOURLY', 'PERSONAL']);
 const LEAVE_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']);
@@ -141,7 +154,12 @@ function defaultAttendanceRecord(employeeCode, workDate, workModel) {
 function applyClockPunch(existingList, employeeCode, timestampISO, workModelInfo, appData) {
   const ts = new Date(timestampISO);
   if (Number.isNaN(ts.getTime())) throw new HttpError(400, 'Thời gian chấm công không hợp lệ');
-  const workDate = ts.toISOString().slice(0, 10);
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): workDate TRƯỚC ĐÂY lấy qua
+  // ts.toISOString().slice(0,10) (LUÔN theo giờ UTC) — máy chủ chạy giờ VN (UTC+7) nên MỌI lượt quẹt từ
+  // 00:00 đến 06:59 giờ VN bị gán nhầm sang workDate của NGÀY HÔM TRƯỚC (VD quẹt 06:30 sáng thứ Hai ghi
+  // nhận công cho Chủ Nhật). minutesOfDay() ở trên vẫn luôn dùng giờ LOCAL đúng — dùng thống nhất
+  // localDateStr() (giờ LOCAL của máy chủ) cho workDate, khớp đúng cách minutesOfDay() đã làm.
+  const workDate = localDateStr(ts);
   const { workModel, dept } = workModelInfo;
 
   const existing = (existingList || []).find(r => r.employeeCode === employeeCode && r.workDate === workDate);
@@ -303,17 +321,44 @@ function assertValidLeaveRequest(payload, appData) {
   if (!fromDate || Number.isNaN(new Date(fromDate).getTime())) throw new HttpError(400, 'Ngày bắt đầu nghỉ không hợp lệ');
   if (!toDate || Number.isNaN(new Date(toDate).getTime())) throw new HttpError(400, 'Ngày kết thúc nghỉ không hợp lệ');
   if (new Date(toDate) < new Date(fromDate)) throw new HttpError(400, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
-  const daysCount = Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1;
-  if (daysCount > 90) throw new HttpError(400, 'Không thể nộp 1 đơn nghỉ quá 90 ngày liên tục');
+  const calendarDaysCount = Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1;
+  if (calendarDaysCount > 90) throw new HttpError(400, 'Không thể nộp 1 đơn nghỉ quá 90 ngày liên tục');
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): daysCount TRƯỚC ĐÂY luôn = số ngày LỊCH
+  // (kể cả Thứ 7/CN/ngày lễ) cho MỌI loại nghỉ theo ngày — 1 đơn nộp Thứ Sáu→Thứ Hai bị tính đủ 4 ngày
+  // thay vì đúng 2 ngày làm việc, khiến ANNUAL trừ sai quỹ phép năm (deductLeaveBalance()) VÀ UNPAID trừ
+  // sai lương (qua số bản ghi LEAVE_UNPAID sinh ra ở buildLeaveAttendanceRecords() — xem chú thích tại
+  // đó). CHỈ áp dụng cho ANNUAL/UNPAID (2 loại thực sự dùng daysCount để trừ quỹ/trừ lương theo NGÀY) —
+  // SICK/PERSONAL giữ NGUYÊN đếm theo ngày lịch như trước (ngoài phạm vi đợt vá này, không có yêu cầu xác
+  // nhận từ người dùng để đổi). LƯU Ý PHẠM VI: loại Thứ 7/CN áp dụng chung cho cả 2 mô hình chấm công —
+  // nhân viên SHIFT_BASED (siêu thị) có thể có lịch nghỉ khác Thứ 7/CN thật (quản lý riêng qua
+  // shiftRoster), nhưng hệ thống hiện CHƯA tra được lịch phân ca tương lai ngay lúc tạo đơn nghỉ; giữ theo
+  // đúng yêu cầu rà soát, có thể tinh chỉnh riêng cho SHIFT_BASED ở đợt sau nếu phát sinh vướng mắc thực tế.
+  const daysCount = (leaveType === 'ANNUAL' || leaveType === 'UNPAID')
+    ? countLeaveDaysExcludingRestDays(fromDate, toDate, appData?.publicHolidays)
+    : calendarDaysCount;
+  if (daysCount <= 0) throw new HttpError(400, 'Khoảng nghỉ này không có ngày làm việc nào (toàn bộ rơi vào Thứ 7/Chủ Nhật/ngày lễ) — vui lòng kiểm tra lại');
   return { leaveType, fromDate, toDate, daysCount, reason };
 }
 
+// Đếm số ngày làm việc THẬT trong khoảng [fromDate, toDate] (cả 2 đầu mút) — loại trừ Thứ 7/Chủ Nhật
+// (isWeekendDate()) và ngày lễ đã cấu hình (isHolidayDate()). Dùng cho ANNUAL/UNPAID — xem chú thích tại
+// assertValidLeaveRequest()/buildLeaveAttendanceRecords().
+function countLeaveDaysExcludingRestDays(fromDate, toDate, publicHolidays) {
+  return listDatesInRange(fromDate, toDate).filter(d => !isWeekendDate(d) && !isHolidayDate(d, publicHolidays)).length;
+}
+
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — phát hiện thêm khi vá #3/#5 ở trên, CÙNG
+// GỐC LỖI toISOString()): trước đây dùng cur.toISOString().slice(0,10) — trên máy chủ chạy giờ VN
+// (UTC+7), `cur`/`end` là mốc "00:00:00 giờ LOCAL" nên toISOString() (luôn UTC) trả về NGÀY HÔM TRƯỚC cho
+// MỌI phần tử (VD range 02/03→03/03 bị liệt kê thành 01/03→02/03) — làm sai lệch TOÀN BỘ ngày sinh bản
+// ghi nghỉ phép/chấm công qua hàm này (buildLeaveAttendanceRecords()/buildLeaveCancelAttendanceReverts()/
+// countLeaveDaysExcludingRestDays() ở trên). Dùng localDateStr() (giờ LOCAL, không quy đổi UTC).
 function listDatesInRange(fromDate, toDate) {
   const dates = [];
   let cur = new Date(fromDate + 'T00:00:00');
   const end = new Date(toDate + 'T00:00:00');
   while (cur <= end) {
-    dates.push(cur.toISOString().slice(0, 10));
+    dates.push(localDateStr(cur));
     cur = new Date(cur.getTime() + 86400000);
   }
   return dates;
@@ -408,14 +453,23 @@ function refundLeaveBalance(balance, daysCount) {
 // Sinh các dòng AttendanceRecords loại LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho từng ngày trong khoảng
 // nghỉ đã duyệt — GHI ĐÈ bản ghi WORK (nếu máy chấm công đã lỡ ghi ngày đó) vì đơn đã duyệt là nguồn sự
 // thật cao hơn; KHÔNG ghi đè nếu ngày đó đã có bản ghi nghỉ phép khác (tránh đơn chồng đơn).
-function buildLeaveAttendanceRecords(request, existingList) {
+// publicHolidays (LỖI ĐÃ VÁ, rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — tham số MỚI, optional để
+// không phá vỡ lời gọi cũ/test cũ): với ANNUAL/UNPAID, KHÔNG sinh bản ghi cho Thứ 7/CN/ngày lễ — payroll
+// (lib/payroll.js) đếm THẲNG số bản ghi LEAVE_UNPAID để trừ lương (`unpaidDays = records.filter(...).length`),
+// nên sinh dư bản ghi cho ngày vốn không phải đi làm sẽ trừ lương sai (trừ luôn cả ngày nghỉ cuối tuần).
+// SICK/PERSONAL giữ nguyên sinh đủ theo ngày lịch (ngoài phạm vi đợt vá này, xem chú thích ở
+// assertValidLeaveRequest()).
+function buildLeaveAttendanceRecords(request, existingList, publicHolidays) {
   // HOURLY (nghỉ theo giờ) không sinh bản ghi chấm công riêng — xem ghi chú tại ATTENDANCE_RECORD_TYPES.
   if (request.leaveType === 'HOURLY') return [];
   const recordType = request.leaveType === 'UNPAID' ? 'LEAVE_UNPAID'
     : request.leaveType === 'SICK' ? 'SICK_LEAVE'
     : request.leaveType === 'PERSONAL' ? 'LEAVE_PERSONAL'
     : 'LEAVE_PAID';
-  const dates = listDatesInRange(request.fromDate, request.toDate);
+  let dates = listDatesInRange(request.fromDate, request.toDate);
+  if (request.leaveType === 'ANNUAL' || request.leaveType === 'UNPAID') {
+    dates = dates.filter(d => !isWeekendDate(d) && !isHolidayDate(d, publicHolidays));
+  }
   const results = [];
   for (const workDate of dates) {
     const existing = (existingList || []).find(r => r.employeeCode === request.employeeCode && r.workDate === workDate);
@@ -615,10 +669,10 @@ function cancelPendingLeaveRequestsAfterOffboarding(leaveRequestList, employeeCo
 
 module.exports = {
   WORK_MODELS, ATTENDANCE_RECORD_TYPES, LEAVE_TYPES, LEAVE_STATUSES, ROSTER_STATUSES, SWAP_STATUSES,
-  resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile, isHolidayDate, isWeekendDate,
+  resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile, isHolidayDate, isWeekendDate, localDateStr, timeStrToMinutes,
   defaultAttendanceRecord, applyClockPunch, assertValidManualAttendanceEdit, applyManualAttendanceEdit,
   computeAnnualLeaveDays, defaultLeaveBalance, ensureLeaveBalanceForYear, computeLeavePayoutInfo,
-  assertValidLeaveRequest, defaultLeaveRequest, canApproveLeaveRequest,
+  assertValidLeaveRequest, countLeaveDaysExcludingRestDays, defaultLeaveRequest, canApproveLeaveRequest,
   applyApproveLeaveRequest, applyRejectLeaveRequest, applyCancelLeaveRequest, deductLeaveBalance,
   refundLeaveBalance, buildLeaveAttendanceRecords, buildLeaveCancelAttendanceReverts, listDatesInRange,
   assertValidShiftTemplate, assertValidRosterAssignment, defaultShiftRoster, assertNoRosterConflict, applyCancelRoster,
