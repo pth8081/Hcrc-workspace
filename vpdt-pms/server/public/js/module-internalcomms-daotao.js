@@ -540,6 +540,11 @@ function renderTrainingClasses() {
       actionHTML = `<span class="text-xs font-bold ${cls}">📌 ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span>`;
     } else if (!isInvited) {
       actionHTML = `<span class="text-xs text-gray-400 italic">Lớp này giới hạn theo danh sách mời.</span>`;
+    } else if (getTrainingClassSessionState(c) === 'ENDED') {
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #2): đồng bộ với gate server mới thêm ở
+      // trainingRegistrations.extraValidate — lớp đã kết thúc (buổi học OFFLINE đã Kết Thúc Lớp, hoặc
+      // ONLINE đã qua endTime) thì không cho đăng ký nữa dù còn OPEN/còn chỗ.
+      actionHTML = `<span class="text-xs text-gray-400">Lớp học đã kết thúc</span>`;
     } else if (c.status !== 'OPEN' || isFull || isPastDeadline) {
       actionHTML = `<span class="text-xs text-gray-400">${c.status !== 'OPEN' ? 'Đã đóng' : isFull ? 'Đã đủ số lượng' : 'Hết hạn đăng ký'}</span>`;
     } else {
@@ -2797,13 +2802,16 @@ function onTrainingDocTypeChange() {
   const type = document.getElementById('tdDocType').value;
   const fileField = document.getElementById('tdFileField');
   const videoField = document.getElementById('tdVideoField');
+  const videoDurationField = document.getElementById('tdVideoDurationField');
   const fileInput = document.getElementById('tdFile');
   const videoInput = document.getElementById('tdVideoUrl');
+  const videoDurationInput = document.getElementById('tdVideoDuration');
   const fileLabel = document.getElementById('tdFileLabel');
   if (type === 'VIDEO') {
-    fileField.classList.add('hidden'); videoField.classList.remove('hidden');
-    fileInput.required = false; videoInput.required = true;
+    fileField.classList.add('hidden'); videoField.classList.remove('hidden'); videoDurationField.classList.remove('hidden');
+    fileInput.required = false; videoInput.required = true; videoDurationInput.required = true;
   } else {
+    videoDurationField.classList.add('hidden'); videoDurationInput.required = false;
     fileField.classList.remove('hidden'); videoField.classList.add('hidden');
     fileInput.required = true; videoInput.required = false;
     fileInput.accept = type === 'IMAGE' ? '.jpg,.jpeg,.png,.webp' : '.pdf,.docx,.xlsx';
@@ -2839,6 +2847,11 @@ async function submitTrainingDocument(e) {
     const videoUrl = document.getElementById('tdVideoUrl').value.trim();
     if (!videoUrl) return alert('Vui lòng nhập link video Youtube!');
     payload.videoUrl = videoUrl;
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, #7) — thời lượng THẬT do người quản lý đào tạo nhập
+    // tay (không phải máy đo), lưu server làm mẫu số chuẩn cho track-progress, xem createValidation.js.
+    const durationSeconds = Number(document.getElementById('tdVideoDuration').value);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return alert('Vui lòng nhập thời lượng video (giây) hợp lệ!');
+    payload.durationSeconds = Math.floor(durationSeconds);
   } else {
     const file = document.getElementById('tdFile').files[0];
     if (!file) return alert(docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên!' : 'Vui lòng chọn tệp tài liệu!');

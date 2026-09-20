@@ -19,11 +19,15 @@ function check(name, fn) {
 
 const admin = { username: 'admin1', perms: { admin: true } };
 const author = { username: 'gv1', perms: { trainingManage: true } };
+// LỖI ĐÃ VÁ (phát hiện #13, rà soát chuyên sâu vòng 2, 9/2026): editInternalPost() nay gọi lại
+// canCreateInternalPostType() theo ĐÚNG type trước khi APPROVED — checks NEWS bên dưới cần tác giả có
+// internalNewsCreate (không dùng chung `author`/trainingManage của các checks TRAINING ở trên nữa).
+const newsAuthor = { username: 'gv1', perms: { internalNewsCreate: true } };
 
 // ---- 1. Training registeredUsers không bị xoá ----
 check('Sửa bài Đào Tạo KHÔNG gửi kèm registeredUsers -> giữ nguyên danh sách cũ', () => {
   const post = {
-    id: 1, type: 'TRAINING', author: 'gv1', status: 'DRAFT',
+    id: 1, type: 'TRAINING', author: 'gv1', status: 'DRAFT', title: 'Buổi đào tạo', content: 'Nội dung',
     training: { date: '2026-01-01', location: 'HO', capacity: 20, registeredUsers: ['nv1', 'nv2'] }
   };
   const payload = { training: { date: '2026-02-01', location: 'HO2', capacity: 30 } };
@@ -34,7 +38,7 @@ check('Sửa bài Đào Tạo KHÔNG gửi kèm registeredUsers -> giữ nguyên
 
 check('Sửa bài Đào Tạo CÓ gửi kèm registeredUsers mới -> dùng danh sách client gửi (không ép giữ cũ)', () => {
   const post = {
-    id: 2, type: 'TRAINING', author: 'gv1', status: 'DRAFT',
+    id: 2, type: 'TRAINING', author: 'gv1', status: 'DRAFT', title: 'Buổi đào tạo', content: 'Nội dung',
     training: { date: '2026-01-01', location: 'HO', capacity: 20, registeredUsers: ['nv1'] }
   };
   const payload = { training: { date: '2026-01-01', location: 'HO', capacity: 20, registeredUsers: ['nv1', 'nv3'] } };
@@ -43,7 +47,7 @@ check('Sửa bài Đào Tạo CÓ gửi kèm registeredUsers mới -> dùng danh
 });
 
 check('Tạo mới (post.training chưa có sẵn registeredUsers) vẫn hoạt động bình thường', () => {
-  const post = { id: 3, type: 'TRAINING', author: 'gv1', status: 'DRAFT', training: {} };
+  const post = { id: 3, type: 'TRAINING', author: 'gv1', status: 'DRAFT', title: 'Buổi đào tạo', content: 'Nội dung', training: {} };
   const payload = { training: { date: '2026-03-01', location: 'HO', capacity: 10 } };
   const result = editInternalPost(payload, author, post, {});
   assert.deepStrictEqual(result.training.registeredUsers, []);
@@ -57,30 +61,30 @@ const appData = {
 };
 
 check('Sửa bài NEWS với postCategory rác (không nằm trong danh mục) -> bị chặn', () => {
-  const post = { id: 4, type: 'NEWS', author: 'gv1', status: 'DRAFT', postCategory: 'TIN_TUC', customData: { 'Ghi chú': 'x' } };
+  const post = { id: 4, type: 'NEWS', author: 'gv1', status: 'DRAFT', title: 'Tin', content: 'Nội dung', postCategory: 'TIN_TUC', customData: { 'Ghi chú': 'x' } };
   const payload = { postCategory: 'RAC_KHONG_TON_TAI' };
   let threw = false;
-  try { editInternalPost(payload, author, post, appData); } catch (e) { threw = true; assert.strictEqual(e.status, 400); }
+  try { editInternalPost(payload, newsAuthor, post, appData); } catch (e) { threw = true; assert.strictEqual(e.status, 400); }
   assert.strictEqual(threw, true);
 });
 
 check('Sửa bài NEWS bỏ trống customData bắt buộc -> bị chặn', () => {
-  const post = { id: 5, type: 'NEWS', author: 'gv1', status: 'DRAFT', postCategory: 'TIN_TUC', customData: { 'Ghi chú': 'x' } };
+  const post = { id: 5, type: 'NEWS', author: 'gv1', status: 'DRAFT', title: 'Tin', content: 'Nội dung', postCategory: 'TIN_TUC', customData: { 'Ghi chú': 'x' } };
   const payload = { customData: {} };
   let threw = false;
-  try { editInternalPost(payload, author, post, appData); } catch (e) { threw = true; assert.strictEqual(e.status, 400); }
+  try { editInternalPost(payload, newsAuthor, post, appData); } catch (e) { threw = true; assert.strictEqual(e.status, 400); }
   assert.strictEqual(threw, true);
 });
 
 check('Sửa bài NEWS hợp lệ (postCategory + customData đều đúng) -> thành công', () => {
-  const post = { id: 6, type: 'NEWS', author: 'gv1', status: 'DRAFT', postCategory: 'TIN_TUC', customData: { 'Ghi chú': 'x' } };
+  const post = { id: 6, type: 'NEWS', author: 'gv1', status: 'DRAFT', title: 'Tin', content: 'Nội dung', postCategory: 'TIN_TUC', customData: { 'Ghi chú': 'x' } };
   const payload = { title: 'Tiêu đề mới' };
-  const result = editInternalPost(payload, author, post, appData);
+  const result = editInternalPost(payload, newsAuthor, post, appData);
   assert.strictEqual(result.title, 'Tiêu đề mới');
 });
 
 check('Sửa bài TRAINING/REWARD không bị áp luật postCategory/customData của NEWS/SHARE', () => {
-  const post = { id: 7, type: 'TRAINING', author: 'gv1', status: 'DRAFT', training: { registeredUsers: [] } };
+  const post = { id: 7, type: 'TRAINING', author: 'gv1', status: 'DRAFT', content: 'Nội dung', training: { registeredUsers: [] } };
   const result = editInternalPost({ title: 'Đào tạo mới' }, author, post, appData);
   assert.strictEqual(result.title, 'Đào tạo mới');
 });

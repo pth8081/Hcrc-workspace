@@ -149,10 +149,14 @@ function resetRecords() {
     { id: 7003, code: 'GP-003', title: 'Giấy phép đã duyệt', status: 'APPROVED', lifecycleStatus: null, history: [] }
   ];
 
-  // ĐÀO TẠO — lớp ONLINE đã kết thúc, có bài test 2 câu, 60s/câu (ngân sách 120s).
+  // ĐÀO TẠO — lớp ONLINE đã kết thúc, có bài test 2 câu, 60s/câu (ngân sách 120s). endTime QUÁ KHỨ
+  // (LỖI ĐÃ VÁ — rà soát chuyên sâu vòng 2, 9/2026, phát hiện #1 cụm Truyền Thông Nội Bộ/Đào Tạo: trước
+  // đây submit-test của lớp ONLINE không hề kiểm endTime, nên seed thiếu field này vẫn "nộp bài được"
+  // do không có gì chặn — nay route thật đòi hỏi endTime đã qua, seed phải phản ánh đúng ý định ban đầu
+  // của comment "đã kết thúc").
   RECORDS.trainingClasses = [
     {
-      id: 4001, code: 'LOP-001', title: 'Lớp Kỹ Năng Bán Hàng', mode: 'ONLINE',
+      id: 4001, code: 'LOP-001', title: 'Lớp Kỹ Năng Bán Hàng', mode: 'ONLINE', endTime: '2020-01-01T10:00',
       testId: 3001, passScore: 50, testSecondsPerQuestion: 60, documentIds: [],
       creator: APPROVER.username, status: 'OPEN'
     }

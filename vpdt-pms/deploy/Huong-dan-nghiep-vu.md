@@ -739,6 +739,19 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   nhiều lượt; danh sách "Chủ Đề" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu).
   Bình luận/thả tim/ghi nhận đã xem mở cho mọi người; chỉ việc **đăng bài**
   mới cần quyền riêng theo từng loại.
+  - **Bắt buộc tiêu đề/nội dung + trần độ dài (rà soát chuyên sâu vòng 2,
+    9/2026)** — bài đăng nay bắt buộc có tiêu đề (tối đa 300 ký tự) và nội
+    dung (tối đa 20.000 ký tự) ở CẢ lúc tạo lẫn lúc sửa (không còn tạo/sửa
+    được bài trống nếu bỏ qua giao diện). Bình luận (thêm/sửa) giới hạn 5.000
+    ký tự/bình luận, cùng mức trần đã áp cho câu hỏi/trả lời HCRC Đồng Hành.
+  - **📌 Gỡ Ghim (từ 9/2026)** — bài NEWS/TRAINING/REWARD đang ghim lên trang
+    chủ nay gỡ ghim được ngay (nút "📌 Gỡ Ghim" cạnh nút Ẩn, cùng quyền người
+    tạo ghim từ đầu — internalPostApprove/Admin) mà không cần Ẩn cả bài; trước
+    đây chỉ hết hạn ghim tự động hoặc Ẩn hẳn (mất luôn hiển thị bình thường)
+    mới gỡ được vị trí ghim.
+  - **Xoá bài (Admin, từ 9/2026)** — nút "Xóa" (Admin-only) dọn được bài
+    Nháp/Đã từ chối/spam vào Thùng Rác (khôi phục được); trước đây các trạng
+    thái này không có cách xoá nào (Ẩn chỉ áp dụng bài đã đăng — APPROVED).
   - **Đào Tạo (LMS)** — Lớp Học (tạo/danh sách/ghi kết quả) + Đăng Ký Của Tôi +
     Kho Tài Liệu + Lộ Trình Thăng Tiến (danh sách lớp bắt buộc, chỉ xác nhận
     hoàn thành khi đã Đạt hết) + Ngân Hàng Câu Hỏi. 2 mức quyền: quản lý toàn
@@ -821,7 +834,45 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       Tiến đã có mốc xác nhận của nhân viên nay bị **chặn kèm thông báo nêu
       rõ nơi đang dùng**, thay vì xoá được vô điều kiện rồi khoá cứng luồng
       thi/xác nhận đang chạy. Gỡ tham chiếu xong xoá lại bình thường (quyền
-      xoá vẫn chỉ Quản Trị Viên như trước).
+      xoá vẫn chỉ Quản Trị Viên như trước). **Mở rộng thêm Lớp Học/Tài Liệu
+      Đào Tạo (rà soát chuyên sâu vòng 2, 9/2026)**: xoá 1 **Lớp Học** còn
+      **bất kỳ Đăng Ký nào** (mọi trạng thái, kể cả đã huỷ/đã có kết quả) bị
+      chặn — trước đây xoá được dù đã có học viên Đạt/Không Đạt, làm mất điều
+      kiện Đạt đã thi thật không đường khôi phục ngoài Thùng Rác của chính
+      lớp đó. Xoá 1 **Tài Liệu Đào Tạo** đang nằm trong giáo trình bắt buộc
+      của bất kỳ **lớp ONLINE nào chưa kết thúc** cũng bị chặn (liệt kê rõ
+      tên lớp đang dùng) — tài liệu chỉ xoá được khi không còn lớp ONLINE
+      nào (chưa kết thúc) cần tới nó.
+    - **"Học xong mới thi" gác đủ CẢ 2 chiều — đăng ký lẫn nộp bài (rà soát
+      chuyên sâu vòng 2, 9/2026)** — trước đây chỉ chặn NỘP BÀI của lớp
+      OFFLINE (đợi giảng viên "Kết Thúc Lớp") và lớp ONLINE chỉ kiểm tài
+      liệu bắt buộc, chưa kiểm **giờ kết thúc lớp**: đăng ký 1 lớp ONLINE
+      trong tương lai (không gắn giáo trình bắt buộc) rồi gọi thẳng nộp bài
+      là được chấm ngay dù lớp chưa hề diễn ra. Nay nộp bài lớp ONLINE bắt
+      buộc **phải qua giờ kết thúc lớp** (giống hệt điều kiện hiện nút "Vào
+      Làm Bài Test" ở giao diện) mới được server chấp nhận. Đồng thời **đăng
+      ký** cũng không còn vào được 1 lớp **đã kết thúc** nữa (OFFLINE: giảng
+      viên đã bấm "Kết Thúc Lớp"; ONLINE: đã qua giờ kết thúc) — nút "Đăng
+      Ký" tự ẩn, hiện "Lớp học đã kết thúc" thay vào đó.
+    - **Gán bài test SAU KHI đã chấm tay bị chặn (rà soát chuyên sâu vòng 2,
+      9/2026)** — 1 lớp CHƯA gán bài test được chấm tay (Đạt/Không Đạt) bình
+      thường; nếu sau đó người quản lý đào tạo sửa lớp để **gán bài test
+      mới**, hệ thống nay kiểm tra: nếu lớp đã có đăng ký được chấm TAY từ
+      trước, thao tác gán test bị **chặn kèm cảnh báo rõ** (thay vì âm thầm
+      hợp thức hoá 1 kết quả "Đạt" chưa từng thi thật) — cần xử lý lại các
+      đăng ký chấm tay đó trước (huỷ hoặc giữ nguyên không gán test).
+    - **"Bắt Buộc Hoàn Thành" video/PDF không còn tin số liệu người xem tự
+      khai (rà soát chuyên sâu vòng 2, 9/2026)** — trước đây thời lượng
+      video/số trang PDF (mẫu số để tính "đã xem đủ") lấy nguyên từ mỗi lượt
+      báo cáo tiến độ của NGƯỜI XEM, có thể giả mạo để hoàn tất ngay không
+      cần xem gì. Nay: **Video** — người quản lý đào tạo/giảng viên phải nhập
+      tay "Thời Lượng Video (giây)" THẬT khi thêm tài liệu (trường bắt buộc
+      mới ở form "➕ Thêm Tài Liệu Vào Kho"), server dùng ĐÚNG giá trị này làm
+      mẫu số cho mọi học viên, không còn tin số giây người xem gửi lên. **PDF**
+      — số trang THẬT được server tự tính từ chính tệp vừa tải lên (đọc file
+      PDF thật), không tin số trang client khai. Người xem chỉ còn ảnh hưởng
+      tới TIẾN ĐỘ (đã xem tới giây/trang nào), không còn ảnh hưởng gì tới
+      MẪU SỐ hoàn thành.
     - **Danh Sách Được Mời không còn công khai (từ 9/2026)** — danh sách
       username được mời vào 1 lớp giới hạn nay chỉ trả đầy đủ cho quản lý đào
       tạo/Admin/giảng viên phụ trách lớp đó; người khác vẫn biết "lớp này
@@ -833,6 +884,16 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       đăng ký, chương trình, tài liệu, bài test, bài làm, kế hoạch, 2 loại lộ
       trình, hội nhập tân binh, HCRC Đồng Hành...) ở tầng API, không chỉ ẩn
       tab ở giao diện — trước đây chỉ bài đăng bị chặn thật.
+  - **💼 Tuyển Dụng** — đăng tin (cần quyền `internalRecruitmentCreate`) +
+    nhân viên bất kỳ tự giới thiệu ứng viên (kèm CV) cho 1 tin còn mở.
+    - **Chống trùng giới thiệu (rà soát chuyên sâu vòng 2, 9/2026)** — giới
+      thiệu 1 ứng viên (trùng Số Điện Thoại HOẶC Email, không phân biệt hoa/
+      thường/khoảng trắng thừa) cho **CÙNG 1 tin tuyển dụng** nay bị **chặn**
+      (báo rõ "ứng viên này đã được giới thiệu cho vị trí này"), kể cả khi 2
+      người giới thiệu KHÁC NHAU cùng giới thiệu 1 ứng viên — trước đây không
+      chống trùng, hàng chờ xét của bộ phận tuyển dụng dễ bị loãng bởi các
+      lượt giới thiệu lặp. Giới thiệu ứng viên đó cho 1 vị trí KHÁC vẫn bình
+      thường (chỉ so trong cùng 1 tin).
 
 ### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
 

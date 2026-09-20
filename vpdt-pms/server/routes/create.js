@@ -14,6 +14,15 @@ const { insertSystemLog } = require('../lib/systemLogStore');
 // assertPayloadFileUrlsOwnedByUser() — vá lỗ hổng giả mạo quyền sở hữu file (rà soát bảo mật 9/2026,
 // mức Cao): xem chú thích đầy đủ ở lib/uploadedFiles.js + sql/schema.sql (bảng UploadedFiles).
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
+// pdf-lib/path/fs — CHỈ dùng để tính pageCount THẬT của tài liệu PDF trainingDocuments ngay khi tạo
+// (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7 cụm Truyền Thông Nội Bộ/Đào Tạo — "phải xem hết
+// video/PDF mới được thi" trước đây tin hoàn toàn pageCount do NGƯỜI XEM tự khai lúc gửi tiến độ). Cùng
+// thư viện routes/download.js/lib/reportPdfMerge.js đã dùng, không thêm dependency mới.
+const { PDFDocument } = require('pdf-lib');
+const path = require('path');
+const fs = require('fs');
+const { parseUploadsFileUrl } = require('../lib/fileAuthz');
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 // Đảo ngược MODULE_ACCESS_GATED_COLLECTIONS (moduleKey -> [collection,...]) thành collection -> moduleKey
 // để tra cứu 1 chiều tại đây — PQ-01 (đợt test chuyên sâu 9/2026) phát hiện Khối 0 (moduleAccess) TRƯỚC
@@ -190,6 +199,27 @@ router.post('/:module', async (req, res) => {
     const builderFn = async (list) => {
       const record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData, trashedItems);
       await assertPayloadFileUrlsOwnedByUser(record, freshUser);
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7 cụm Truyền Thông Nội Bộ/Đào Tạo):
+      // pageCount THẬT của tài liệu PDF (mẫu số "phải xem hết mọi trang mới được thi") tính lại ở SERVER
+      // ngay từ chính tệp vừa tải lên (đọc bằng pdf-lib), KHÔNG tin payload.pageCount người xem tự khai
+      // mỗi lần gửi tiến độ nữa (xem POST trainingDocuments/:id/track-progress ở routes/records.js — đọc
+      // lại đúng field này từ bản ghi thay vì payload của người xem). trainingDocuments.extraValidate
+      // (lib/createValidation.js) đã đặt payload.pageCount=null cho MỌI docType — chỉ tính lại ở đây khi
+      // là PDF THẬT sự (docType DOCUMENT + đuôi .pdf, cùng điều kiện isPdfTrainingDoc() ở client). Thất
+      // bại đọc/parse file (hiếm — file lỗi) thì để pageCount=null (an toàn: track-progress không bao
+      // giờ tự động hoàn thành khi chưa biết tổng số trang thật).
+      if (moduleKey === 'trainingDocuments' && record.docType === 'DOCUMENT' && /\.pdf$/i.test(record.fileName || '')) {
+        try {
+          const fname = parseUploadsFileUrl(record.fileUrl);
+          if (fname) {
+            const bytes = fs.readFileSync(path.join(UPLOAD_DIR, fname));
+            const pdfDoc = await PDFDocument.load(bytes);
+            record.pageCount = pdfDoc.getPageCount();
+          }
+        } catch (err) {
+          console.warn(`[trainingDocuments] Không đọc được số trang PDF thật (pageCount giữ null): ${err.message}`);
+        }
+      }
       return record;
     };
     // docs (version mới)/contracts (phụ lục mới): khoá theo ID GỐC của cả "họ" — cùng khoá mà

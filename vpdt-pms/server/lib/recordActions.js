@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -2738,7 +2738,10 @@ function scanCommentForSensitiveContent(content, sensitiveKeywords) {
 // lib/createValidation.js). Không truyền (undefined) thì bỏ qua bước quét, không gắn cờ gì (an toàn
 // khi có nơi gọi cũ chưa kịp cập nhật).
 function addInternalPostComment(payload, user, post, sensitiveKeywords) {
-  const content = (payload?.content || '').trim();
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #9 cụm Truyền Thông Nội Bộ/Đào Tạo): trước
+  // đây không có trần độ dài — cắt ở 5000 ký tự, cùng khuôn hrFeedback.question/response đã cắt trong
+  // cùng cụm (xem createValidation.js hrFeedback.extraValidate/recordActions.js respondHrFeedback()).
+  const content = (payload?.content || '').trim().slice(0, 5000);
   if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
   if (!Array.isArray(post.comments)) post.comments = [];
   const comment = { id: Date.now(), username: user.username, name: user.name, content, time: nowVN() };
@@ -2810,7 +2813,8 @@ function editInternalPostComment(payload, user, post, commentId, sensitiveKeywor
   if (comment.pendingModeration) {
     throw new HttpError(409, 'Bình luận đang chờ kiểm duyệt — chưa thể tự sửa lúc này');
   }
-  const content = (payload?.content || '').trim();
+  // LỖI ĐÃ VÁ (phát hiện #9, cùng khuôn với addInternalPostComment() ở trên) — cắt ở 5000 ký tự.
+  const content = (payload?.content || '').trim().slice(0, 5000);
   if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
   comment.content = content;
   comment.editedAt = nowVN();
@@ -2918,6 +2922,21 @@ function unhideInternalPost(user, post) {
   return post;
 }
 
+// Gỡ Ghim (BỔ SUNG 9/2026, rà soát chuyên sâu vòng 2, phát hiện #11 cụm Truyền Thông Nội Bộ/Đào Tạo):
+// pinned/pinExpiresAt/pinnedBy (xem createValidation.js internalPosts.extraValidate) trước đây CHỈ đặt
+// được lúc TẠO — không có đường gỡ ghim NGOÀI việc chờ hết hạn (pinExpiresAt) hoặc Ẩn hẳn cả bài (mất
+// luôn cả khả năng hiển thị thường, không chỉ mất vị trí ghim). Cùng quyền với người tạo bài ghim từ đầu
+// (internalPostApprove/admin) — kiểm tra lại ĐÚNG quyền đó, không phải quyền tác giả bài viết.
+function unpinInternalPost(user, post) {
+  if (!user.perms?.admin && !user.perms?.internalPostApprove) {
+    throw new HttpError(403, 'Bạn không có quyền gỡ ghim bài đăng');
+  }
+  if (!post.pinned) throw new HttpError(409, 'Bài đăng này hiện không được ghim');
+  post.pinned = false;
+  post.pinExpiresAt = null;
+  return post;
+}
+
 // Sửa bài Nháp/bài bị "Yêu cầu bổ sung" (NEED_INFO) — chỉ tác giả (hoặc admin) sửa được, chỉ 2 trạng
 // thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
 // luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
@@ -2946,6 +2965,14 @@ function editInternalPost(payload, user, post, appData) {
   for (const field of INTERNAL_POST_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) post[field] = payload[field];
   }
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #9): title/content đi thẳng từ payload ở
+  // vòng lặp trên KHÔNG được validate gì — cùng luật bắt buộc + trần độ dài với lúc TẠO (xem
+  // createValidation.js internalPosts.extraValidate), tránh đường SỬA xoá trắng/nhồi quá dài mà đường
+  // TẠO đã chặn.
+  post.title = String(post.title || '').trim().slice(0, 300);
+  if (!post.title) throw new HttpError(400, 'Vui lòng nhập tiêu đề bài viết');
+  post.content = String(post.content || '').trim().slice(0, 20000);
+  if (!post.content) throw new HttpError(400, 'Vui lòng nhập nội dung bài viết');
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: sửa bài NEWS/SHARE trước đây không đối chiếu lại postCategory
   // theo danh mục hiện có hay validate lại customData bắt buộc — khác đường TẠO (createValidation.js
   // internalPosts.extraValidate làm cả 2 việc này), khiến 1 request sửa thẳng có thể đặt postCategory
@@ -2969,6 +2996,14 @@ function editInternalPost(payload, user, post, appData) {
   if (payload.draft === true) {
     post.status = 'DRAFT';
   } else {
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #13): gọi lại ĐÚNG luật quyền theo type
+    // (canCreateInternalPostType(), lib/createValidation.js — cùng hàm nhánh TẠO dùng) TRƯỚC khi tự động
+    // APPROVED — nếu người sửa hiện KHÔNG còn đủ quyền loại bài này (VD quyền trainingManage đã bị thu
+    // hồi sau khi lưu Nháp), chặn publish, giữ nguyên NEED_INFO (không tự rơi về DRAFT — tác giả không
+    // chủ động chọn Lưu Nháp) để họ biết cần liên hệ người có quyền xử lý tiếp thay vì mất dấu bài viết.
+    if (!canCreateInternalPostType(user, post.type)) {
+      throw new HttpError(403, 'Bạn không còn đủ quyền đăng bài ở phân hệ này — không thể gửi lại. Vui lòng liên hệ người quản trị.');
+    }
     post.status = (post.type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)
       ? 'PENDING' : 'APPROVED';
     post.infoRequestComment = null;
@@ -4443,7 +4478,13 @@ function computeTrainingDocumentProgressUpdate(existing, payload) {
   const nowCompleted = kind === 'VIDEO'
     ? isTrainingVideoProgressComplete(fields.furthestSeconds, fields.durationSeconds)
     : isTrainingPdfProgressComplete(fields.viewedPages, fields.pageCount);
-  fields.completedAt = nowCompleted ? (existing?.completedAt || new Date().toLocaleString('vi-VN')) : null;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7): completedAt KHÔNG BAO GIỜ bị xoá về
+  // null 1 khi đã từng hoàn thành (wasCompleted) — cùng tinh thần "chống thụt lùi" của furthestSeconds/
+  // viewedPages ở trên. Cần thiết từ khi durationSeconds/pageCount có thể được server ÉP LẠI về giá trị
+  // THẬT (xem routes/records.js track-progress) khác với giá trị ĐÃ dùng lúc chấm hoàn thành trước đó —
+  // không có bảo vệ này, 1 tài liệu cũ (trước khi có pageCount/durationSeconds THẬT, nay = null) sẽ bị
+  // "un-complete" oan ngay lượt báo tiến độ TIẾP THEO của người đã hoàn thành thật từ trước.
+  fields.completedAt = (nowCompleted || wasCompleted) ? (existing?.completedAt || new Date().toLocaleString('vi-VN')) : null;
   return { fields, completedNow: nowCompleted && !wasCompleted };
 }
 
@@ -4477,6 +4518,11 @@ function setTrainingRegistrationResult(payload, user, reg, cls) {
   reg.resultBy = user.username;
   reg.resultByName = user.name;
   reg.resultAt = nowVN();
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #3 cụm Truyền Thông Nội Bộ/Đào Tạo): đánh
+  // dấu rõ kết quả này đến từ CHẤM TAY (chỉ có thể xảy ra khi cls.testId đang null, xem chặn ở trên) —
+  // dùng ở editTrainingClass() để chặn gán bài test MỚI cho lớp đã có đăng ký chấm tay kiểu này, tránh
+  // hợp thức hoá kết quả "Đạt" chưa từng thi thật.
+  reg.gradedManually = true;
   // Đã có kết quả -> yêu cầu huỷ còn treo (nếu có) KHÔNG còn ý nghĩa nữa: tự dọn ngay tại đây thay vì để
   // nó nằm lại trong hàng chờ duyệt của Nhân Sự (duyệt nhầm sẽ xoá trắng kết quả vừa ghi — xem
   // approveCancelTrainingRegistration()).
@@ -4543,11 +4589,28 @@ const TRAINING_CLASS_EDITABLE_FIELDS = [
   'title', 'category', 'description', 'startTime', 'endTime', 'location',
   'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId'
 ];
-function editTrainingClass(payload, user, cls, tests, users, courses) {
+function editTrainingClass(payload, user, cls, tests, users, courses, existingRegs) {
   if (!canManageTrainingClass(user, cls)) {
     throw new HttpError(403, 'Bạn không có quyền sửa lớp học này');
   }
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #3 cụm Truyền Thông Nội Bộ/Đào Tạo): chặn
+  // GÁN MỚI testId (từ null -> có giá trị) cho 1 lớp đã có đăng ký được chấm TAY (reg.gradedManually,
+  // chỉ có thể tồn tại khi cls.testId ĐANG null — xem setTrainingRegistrationResult()) — nếu không chặn,
+  // sửa lớp để gán test SAU khi đã chấm tay "Đạt" sẽ hợp thức hoá kết quả chưa từng thi thật (client vẫn
+  // hiển thị "Đạt" như thi thật, không có đường phân biệt). Chỉ áp dụng khi thật sự ĐỔI từ null sang có
+  // giá trị — sửa từ 1 testId sang testId khác không thuộc diện này (lớp đã có test thì
+  // setTrainingRegistrationResult() luôn chặn chấm tay suốt thời gian đó).
+  if (payload.testId !== undefined && cls.testId == null) {
+    const newTestId = payload.testId === '' || payload.testId == null ? null : Number(payload.testId);
+    if (newTestId != null) {
+      const manuallyGraded = (existingRegs || []).filter(r => r.classId === cls.id && r.gradedManually === true);
+      if (manuallyGraded.length) {
+        throw new HttpError(409, `Lớp học này đã có ${manuallyGraded.length} đăng ký được chấm tay (chưa từng làm bài test) — không thể gán bài test mới vì sẽ hợp thức hoá kết quả chưa thi thật. Cần xử lý lại các kết quả chấm tay đó trước (huỷ đăng ký hoặc giữ nguyên không gán test).`);
+      }
+    }
+  }
 
   for (const field of TRAINING_CLASS_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) cls[field] = payload[field];
@@ -4797,6 +4860,9 @@ function applyAutoGradedTestResult(reg, graded, opts) {
   reg.resultBy = grader ? grader.username : null;
   reg.resultByName = grader ? `${grader.name} (đã chấm phần nghị luận)` : 'Hệ thống (tự động chấm bài test)';
   reg.resultAt = nowVN();
+  // Kết quả đến từ bài test thật (tự động chấm, kể cả phần nghị luận chấm tay bổ sung) — KHÔNG phải
+  // chấm tay thay thế hoàn toàn như setTrainingRegistrationResult(), xem giải thích field này ở đó.
+  reg.gradedManually = false;
   // Cùng lý do với setTrainingRegistrationResult(): đã chấm xong thì yêu cầu xin huỷ còn treo không còn ý
   // nghĩa — dọn luôn để Nhân Sự không duyệt nhầm và xoá trắng kết quả vừa chấm (xem
   // approveCancelTrainingRegistration()).
@@ -7535,7 +7601,7 @@ module.exports = {
   scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment, editInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,
   canApproveInternalPost, approveInternalPost, rejectInternalPost,
-  requestInternalPostInfo, hideInternalPost, unhideInternalPost, editInternalPost,
+  requestInternalPostInfo, hideInternalPost, unhideInternalPost, unpinInternalPost, editInternalPost,
   canManageTasks, canDeleteTaskPerm, canAssignSpecificTask, assignTask, editTask, assertCanDeleteTask,
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,

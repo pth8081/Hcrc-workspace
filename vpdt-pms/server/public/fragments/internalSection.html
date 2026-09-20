@@ -368,9 +368,17 @@
               <input id="tdFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="tdFileChip" class="w-full border p-1.5 rounded bg-white" required>
               <div id="tdFileChip" class="mt-1"></div>
             </div>
-            <div class="md:col-span-3 hidden" id="tdVideoField">
+            <div class="md:col-span-2 hidden" id="tdVideoField">
               <label class="block font-semibold text-gray-600 mb-1">Link Video Youtube</label>
               <input id="tdVideoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..." class="w-full border p-1.5 rounded">
+            </div>
+            <!-- LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7): thời lượng video PHẢI do
+                 người quản lý đào tạo (trainingManage/admin) nhập THẬT lúc thêm tài liệu, làm mẫu số
+                 CHUẨN lưu ở server (trainingDocuments.durationSeconds) — track-progress không còn tin
+                 durationSeconds do NGƯỜI XEM (bất kỳ nhân viên nào) tự khai mỗi lần gửi tiến độ nữa. -->
+            <div class="hidden" id="tdVideoDurationField">
+              <label class="block font-semibold text-gray-600 mb-1">Thời Lượng Video (giây)</label>
+              <input id="tdVideoDuration" type="number" min="1" step="1" placeholder="VD 600" class="w-full border p-1.5 rounded">
             </div>
             <div class="md:col-span-3">
               <label class="block font-semibold text-gray-600 mb-1">Mô Tả (tuỳ chọn)</label>

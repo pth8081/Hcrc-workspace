@@ -26,8 +26,13 @@ function __mockErrRes(status, message) {
 }
 
 // ===================== internalPosts — mirrors lib/createValidation.js CREATE_MODULE_CONFIGS.internalPosts =====================
+// code (phát hiện #14, rà soát chuyên sâu vòng 2, 9/2026): mirrors internalPosts.generateCode() ở
+// lib/createValidation.js — SERVER sinh lại theo type, client (module-internalcomms-nhipsong.js) không
+// còn tự tính code nữa.
+const __MOCK_INTERNAL_TYPE_PREFIX = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' };
 function __mockValidateInternalPostCreate(payload, user) {
   const type = payload.type;
+  payload.code = `${__MOCK_INTERNAL_TYPE_PREFIX[type] || 'BD'}-${Date.now()}`;
   const allowed = !!(
     user.perms?.admin || type === 'SHARE' ||
     (type === 'NEWS' && user.perms?.internalNewsCreate) ||
@@ -352,9 +357,17 @@ function __mockValidateTrainingDocumentCreate(payload, user) {
     if (!/youtube\.com|youtu\.be/i.test(videoUrl)) throw __mockHttpError(400, 'Link video phải là link Youtube hợp lệ (chứa youtube.com hoặc youtu.be)');
     payload.videoUrl = videoUrl;
     payload.fileUrl = null; payload.fileName = ''; payload.fileType = '';
+    // mirrors createValidation.js trainingDocuments.extraValidate (phát hiện #7, rà soát chuyên sâu
+    // vòng 2, 9/2026) — thời lượng THẬT nay bắt buộc nhập tay, làm mẫu số cho track-progress.
+    const durationSeconds = Number(payload.durationSeconds);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw __mockHttpError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
+    payload.durationSeconds = Math.floor(durationSeconds);
+    payload.pageCount = null;
   } else {
     if (!payload.fileUrl) throw __mockHttpError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
     payload.videoUrl = '';
+    payload.durationSeconds = null;
+    payload.pageCount = null;
   }
 
   payload.mandatory = payload.mandatory === true || payload.mandatory === 'true';

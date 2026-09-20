@@ -710,6 +710,12 @@ router.post('/internalPosts/:id/hide', (req, res) =>
 router.post('/internalPosts/:id/unhide', (req, res) =>
   withInternalPostAction(req, res, 'unhide', (payload, user, item) => recordActions.unhideInternalPost(user, item)));
 
+// POST /api/records/internalPosts/:id/unpin — Gỡ Ghim (phát hiện #11, rà soát chuyên sâu vòng 2, 9/2026):
+// trước đây chỉ có đường ghim lúc TẠO (pinDurationDays), không có đường gỡ ghim mà không phải Ẩn hẳn cả
+// bài. Cùng quyền internalPostApprove/admin, kiểm tra lại ở lib/recordActions.js.
+router.post('/internalPosts/:id/unpin', (req, res) =>
+  withInternalPostAction(req, res, 'unpin', (payload, user, item) => recordActions.unpinInternalPost(user, item)));
+
 // POST /api/records/internalPosts/:id/edit — sửa bài Nháp/bài "Yêu cầu bổ sung" (NEED_INFO) rồi tự gửi
 // lại theo đúng luật gán status lúc tạo (chỉ tác giả/admin, kiểm tra ở lib/recordActions.js).
 // appData: đối chiếu lại postCategory theo danh mục + customData bắt buộc, cùng khuôn /docs/:id/update —
@@ -738,6 +744,14 @@ router.post('/internalPosts/:id/edit', async (req, res) => {
     handleError(res, `internalPosts/${req.params.id}/edit`, err);
   }
 });
+
+// POST /api/records/internalPosts/:id/delete (BỔ SUNG — phát hiện #12, rà soát chuyên sâu vòng 2,
+// 9/2026): trước đây internalPosts hoàn toàn KHÔNG có route xoá nào — hideInternalPost() chỉ nhận
+// status==='APPROVED' nên bài NHÁP/ĐÃ TỪ CHỐI/spam (PENDING/REJECTED/NEED_INFO/DRAFT) không có cách nào
+// dọn khỏi hệ thống ngoài để mãi. Cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection khác
+// (deleteAdminOnly() — vào Thùng Rác, khôi phục được), không giới hạn theo status (Admin được xoá bất kỳ
+// bài nào, kể cả APPROVED, nếu cần — cùng quyền admin đã có ở hideInternalPost()/canApproveInternalPost()).
+router.post('/internalPosts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'internalPosts'));
 
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại
@@ -1187,8 +1201,57 @@ router.post('/operationStoreOpenings/:id/delete', rejectOperationDelete);
 router.post('/operationRepairs/:id/delete', rejectOperationDelete);
 
 // ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
-router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
-router.post('/trainingClasses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingClasses'));
+// LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #6 cụm Truyền Thông Nội Bộ/Đào Tạo): 2 route
+// dưới đây trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ ĐIỀU KIỆN — đúng khuôn đã vá vòng 1
+// cho trainingTests/trainingCourses/careerPaths ở trên (kiểm tham chiếu TRƯỚC khi xoá, báo lỗi rõ số
+// lượng). trainingClasses: chặn xoá nếu còn BẤT KỲ trainingRegistrations nào (mọi trạng thái, không chỉ
+// PASSED — an toàn hơn, vì xoá lớp đã có đăng ký PASSED làm nhân viên mất điều kiện "Đạt" đã thi thật mà
+// không có đường khôi phục ngoài Thùng Rác của CHÍNH lớp đó, còn đăng ký REGISTERED/CANCELLED cũng mồ
+// côi luôn nếu xoá). trainingDocuments: chặn xoá nếu còn nằm trong documentIds của bất kỳ lớp ONLINE nào
+// CHƯA kết thúc (dùng đúng cách tính getTrainingClassSessionState() đã mirror ở createValidation.js
+// trainingRegistrations.extraValidate) — lớp ONLINE đã kết thúc thì tài liệu không còn khoá được ai nữa
+// nên không cần chặn.
+router.post('/trainingDocuments/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const classes = await getAllForCollection('trainingClasses');
+    const referencing = classes.filter(c => {
+      if (c.mode !== 'ONLINE') return false;
+      const docIds = Array.isArray(c.documentIds) ? c.documentIds : [];
+      if (!docIds.includes(itemId)) return false;
+      const ended = !!(c.endTime && new Date() > new Date(c.endTime));
+      return !ended;
+    });
+    if (referencing.length) {
+      const names = referencing.map(c => c.title || c.code || `#${c.id}`).join(', ');
+      throw new HttpError(409, `Không thể xóa tài liệu này vì còn nằm trong giáo trình bắt buộc của ${referencing.length} lớp ONLINE chưa kết thúc (${names}). Vui lòng gỡ tài liệu khỏi các lớp đó trước.`);
+    }
+    await deleteRecordForCollection('trainingDocuments', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `trainingDocuments/${req.params.id}/delete`, err);
+  }
+});
+router.post('/trainingClasses/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const regs = await getAllForCollection('trainingRegistrations');
+    const referencing = regs.filter(r => r.classId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa lớp học này vì còn ${referencing.length} đăng ký gắn với nó (kể cả đã huỷ/đã có kết quả). Vui lòng xử lý/xoá các đăng ký đó trước.`);
+    }
+    await deleteRecordForCollection('trainingClasses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/delete`, err);
+  }
+});
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Trung bình — cụm Đào Tạo): 3 route xoá DANH MỤC dưới đây
 // (Lộ Trình Thăng Tiến / Ngân Hàng Câu Hỏi / Chương Trình Đào Tạo) trước đây dùng thẳng deleteAdminOnly()
 // nên xoá được VÔ ĐIỀU KIỆN dù đang có hồ sơ khác trỏ tới — hậu quả không phải chỉ "mất dữ liệu hiển
@@ -1476,7 +1539,15 @@ router.post('/trainingDocuments/:id/track-progress', async (req, res) => {
 
       const progressList = await getAllForCollection('trainingDocumentProgress');
       const existing = progressList.find(p => p.docId === docId && p.username === freshUser.username);
-      const { fields, completedNow } = recordActions.computeTrainingDocumentProgressUpdate(existing, { ...req.body, kind });
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7 cụm Truyền Thông Nội Bộ/Đào Tạo):
+      // trước đây durationSeconds/pageCount (MẪU SỐ hoàn thành) lấy nguyên từ req.body — request giả
+      // {furthestSeconds:1, durationSeconds:1} hoàn tất ngay. Ép LUÔN 2 field này về đúng giá trị THẬT đã
+      // chốt sẵn trên bản ghi trainingDocuments (durationSeconds: trainingManage/admin nhập tay lúc thêm
+      // VIDEO; pageCount: server tự tính bằng pdf-lib lúc tải PDF lên, xem createValidation.js/
+      // routes/create.js) — payload người xem CHỈ còn được dùng làm TIẾN ĐỘ (furthestSeconds/viewedPages),
+      // không còn ảnh hưởng gì tới mẫu số nữa.
+      const trustedPayload = { ...req.body, kind, durationSeconds: doc.durationSeconds, pageCount: doc.pageCount };
+      const { fields, completedNow } = recordActions.computeTrainingDocumentProgressUpdate(existing, trustedPayload);
 
       const progressRow = existing
         ? await withLockedRecordForCollection('trainingDocumentProgress', existing.id, (item) => Object.assign(item, fields))
@@ -1584,8 +1655,9 @@ router.post('/trainingClasses/:id/edit', async (req, res) => {
     const { freshUser, users } = await getFreshUser(req);
     const tests = await getAllForCollection('trainingTests');
     const courses = await getAllForCollection('trainingCourses');
+    const existingRegs = await getAllForCollection('trainingRegistrations');
     const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
-      recordActions.editTrainingClass(req.body, freshUser, item, tests, users, courses));
+      recordActions.editTrainingClass(req.body, freshUser, item, tests, users, courses, existingRegs));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/edit`, err);
@@ -1718,6 +1790,18 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
           throw new HttpError(409, 'Buổi học chưa kết thúc — giảng viên cần bấm "Kết Thúc Lớp" trước khi học viên làm bài test');
         }
       } else {
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #1 cụm Truyền Thông Nội Bộ/Đào Tạo):
+        // trước đây nhánh ONLINE chỉ kiểm documentIds, KHÔNG kiểm cls.endTime — client chỉ hiện nút thi
+        // khi now >= cls.endTime (xem module-internalcomms-daotao.js), nhưng gọi thẳng route này (VD lớp
+        // ONLINE tương lai không gán giáo trình bắt buộc) vẫn được chấm ngay. Đồng bộ đúng điều kiện
+        // client: cần có cls.endTime VÀ đã qua endTime mới cho nộp bài, y hệt gate sessionState ENDED
+        // của nhánh OFFLINE ngay trên.
+        if (!cls.endTime) {
+          throw new HttpError(409, 'Lớp học chưa có giờ kết thúc — chưa thể làm bài test');
+        }
+        if (new Date() < new Date(cls.endTime)) {
+          throw new HttpError(409, 'Lớp học chưa kết thúc — cần đợi đến giờ kết thúc lớp mới được làm bài test');
+        }
         const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
         const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
         if (requiredDocIds.length && !requiredDocIds.every(id => viewedIds.includes(id))) {

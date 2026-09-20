@@ -655,6 +655,10 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('tdTitle').value = 'Video Hướng Dẫn Nội Quy';
         document.getElementById('tdVideoUrl').value = 'https://www.youtube.com/watch?v=abc123XYZ';
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7): thời lượng video nay BẮT BUỘC
+        // (nhập tay, dùng làm mẫu số THẬT cho track-progress thay vì tin payload người xem) — xem
+        // onTrainingDocTypeChange()/submitTrainingDocument() ở module-internalcomms-daotao.js.
+        document.getElementById('tdVideoDuration').value = '600';
       });
       await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
       const doc = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Video Hướng Dẫn Nội Quy'));
@@ -664,6 +668,7 @@ async function main() {
       assertEqual(doc.videoUrl, 'https://www.youtube.com/watch?v=abc123XYZ', 'videoUrl mismatch');
       assert(doc.fileUrl == null, 'a VIDEO document should not have a fileUrl');
       assertEqual(doc.mandatory, false, 'mandatory should default to false when the checkbox is left unchecked');
+      assertEqual(doc.durationSeconds, 600, 'durationSeconds should round-trip from the required "Thời Lượng Video" field (phát hiện #7)');
 
       const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
       // Đợt (video 0.5x-1.5x + chặn tua vượt điểm đã xem xa nhất): VIDEO không còn nhúng <iframe> trực

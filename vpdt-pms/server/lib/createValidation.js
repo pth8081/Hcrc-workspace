@@ -483,6 +483,24 @@ const HR_OFFBOARDING_STAGES = ['NOTICE', 'HANDOVER', 'ASSET_REVOKE', 'SETTLEMENT
 // KHÔNG phải phòng ban thật trong DB.depts, xem canActOnHrTask() ở lib/recordActions.js.
 const HR_TASK_DEPARTMENTS = ['HR', 'IT', 'ADMIN', 'FINANCE', 'MANAGER'];
 
+// Quyền ĐĂNG bài internalPosts theo TỪNG type — tách hàm riêng (trước đây là biến `allowed` nội tuyến
+// ngay trong internalPosts.extraValidate) để dùng lại được ở editInternalPost() (lib/recordActions.js,
+// xem export cuối file) — LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #13 cụm Truyền Thông
+// Nội Bộ/Đào Tạo): trước đây SỬA bài NEWS/TRAINING/REWARD (nhánh không-nháp) gán thẳng status='APPROVED'
+// mà không gọi lại luật quyền này — 1 người từng có quyền lúc TẠO (VD trainingManage) nhưng bị THU HỒI
+// quyền đó sau đó vẫn tự publish lại được bài NHÁP/NEED_INFO cũ của mình (SỬA + gửi lại) như chưa từng
+// bị thu hồi quyền, vì editInternalPost() chỉ kiểm tác giả/trạng thái, không kiểm lại loại bài. SHARE
+// luôn true (ai cũng đăng được, chỉ cần qua duyệt PENDING) — khớp canCreateInternalPost() ở client.
+function canCreateInternalPostType(user, type) {
+  return !!(
+    user.perms?.admin ||
+    type === 'SHARE' ||
+    (type === 'NEWS' && user.perms?.internalNewsCreate) ||
+    (type === 'TRAINING' && user.perms?.trainingManage) ||
+    (type === 'REWARD' && user.perms?.internalRewardCreate)
+  );
+}
+
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
 // field ghi người tạo, và kiểm tra bổ sung riêng (nếu có) — phần logic chung (xác minh dept, chặn mã
 // trùng, gán người tạo) nằm ở validateAndPrepareCreate() bên dưới, dùng chung cho mọi module.
@@ -1232,16 +1250,32 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'author', creatorNameField: 'authorName',
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #14 cụm Truyền Thông Nội Bộ/Đào Tạo):
+    // trước đây code = `${PREFIX}-${Date.now()}` tính HOÀN TOÀN Ở CLIENT (INTERNAL_TYPE_PREFIX, core.js)
+    // — 1 request tự soạn gửi thẳng code tuỳ ý, không theo đúng khuôn PREFIX-theo-TYPE (VD gắn code "TN-"
+    // (Tin Tức) cho 1 bài REWARD). SINH LẠI ở đây — PHẢI GIỮ KHỚP 100% với INTERNAL_TYPE_PREFIX ở
+    // public/js/core.js (mirror đúng nguyên tắc lib/recordCodeGen.js đã áp cho docs/submissions/
+    // contracts/licenses). Dạng PREFIX-<timestamp> vẫn khớp CODE_SEQ_SUFFIX_RE nên cơ chế tự thử lại khi
+    // trùng (validateAndPrepareCreate() ở trên) vẫn hoạt động bình thường nếu hiếm khi đụng độ.
+    generateCode: (payload) => {
+      const prefix = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' }[payload.type] || 'BD';
+      return `${prefix}-${Date.now()}`;
+    },
     extraValidate: (payload, collection, user, appData) => {
       const type = payload.type;
-      const allowed = !!(
-        user.perms?.admin ||
-        type === 'SHARE' ||
-        (type === 'NEWS' && user.perms?.internalNewsCreate) ||
-        (type === 'TRAINING' && user.perms?.trainingManage) ||
-        (type === 'REWARD' && user.perms?.internalRewardCreate)
-      );
-      if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+      if (!canCreateInternalPostType(user, type)) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #9 cụm Truyền Thông Nội Bộ/Đào Tạo):
+      // title/content trước đây KHÔNG được validate gì ở server (chỉ bắt buộc ở client qua thuộc tính
+      // `required` của form, bỏ qua được bằng 1 request tự soạn) — bài trống/toàn khoảng trắng vẫn tạo
+      // được. content cũng không có trần độ dài như comment (đã cắt 5000 ký tự, xem
+      // addInternalPostComment() ở lib/recordActions.js) — cắt cùng mức ở đây cho nhất quán.
+      const title = String(payload.title || '').trim();
+      if (!title) throw new CreateError(400, 'Vui lòng nhập tiêu đề bài viết');
+      payload.title = title.slice(0, 300);
+      const content = String(payload.content || '').trim();
+      if (!content) throw new CreateError(400, 'Vui lòng nhập nội dung bài viết');
+      payload.content = content.slice(0, 20000);
 
       // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Cao — cụm Truyền Thông Nội Bộ): 4 field "tương tác"
       // dưới đây trước đây đi thẳng từ payload client vào bản ghi (validateAndPrepareCreate() spread
@@ -1905,6 +1939,19 @@ const CREATE_MODULE_CONFIGS = {
         }
         payload.videoUrl = videoUrl;
         payload.fileUrl = null; payload.fileName = ''; payload.fileType = '';
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7 cụm Truyền Thông Nội Bộ/Đào Tạo):
+        // trước đây "Bắt Buộc Hoàn Thành" video hoàn toàn tin durationSeconds do NGƯỜI XEM tự khai mỗi
+        // lần gửi tiến độ (POST .../track-progress) — request giả {furthestSeconds:1, durationSeconds:1}
+        // hoàn tất ngay. Từ nay thời lượng THẬT phải do trainingManage/admin (người đã qua kiểm tra
+        // quyền ở trên, KHÔNG phải người xem thường) nhập tay LÚC THÊM tài liệu, lưu cố định ở đây làm
+        // mẫu số CHUẨN — track-progress (routes/records.js) đọc lại đúng field này từ bản ghi
+        // trainingDocuments, không còn tin payload.durationSeconds của người xem nữa.
+        const durationSeconds = Number(payload.durationSeconds);
+        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+          throw new CreateError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
+        }
+        payload.durationSeconds = Math.floor(durationSeconds);
+        payload.pageCount = null;
       } else {
         if (!payload.fileUrl) {
           throw new CreateError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
@@ -1914,6 +1961,11 @@ const CREATE_MODULE_CONFIGS = {
         // route tạo có thể gài fileUrl bất kỳ, hiển thị lại thành link/nút tải ở màn Tài Liệu đào tạo.
         assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu đào tạo');
         payload.videoUrl = '';
+        payload.durationSeconds = null;
+        // pageCount THẬT (chỉ áp dụng PDF) được tính lại ở SERVER từ chính tệp vừa tải lên (đọc bằng
+        // pdf-lib ngay sau validateAndPrepareCreate(), xem routes/create.js builderFn) — để null ở đây,
+        // KHÔNG tin payload.pageCount client tự gửi kèm (cùng lý do durationSeconds ở nhánh VIDEO).
+        payload.pageCount = null;
       }
 
       // Bắt Buộc Hoàn Thành (mandatory, Đợt 4) — CHỈ là cờ hiển thị (badge) ở phase này, KHÔNG có logic
@@ -2375,10 +2427,24 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload, collection, user, appData) => {
       const classId = Number(payload.classId);
       if (!Number.isFinite(classId)) throw new CreateError(400, 'Thiếu lớp học');
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #10): classId ĐÃ ép kiểu ở trên chỉ dùng
+      // để TRA lớp, payload.classId gốc (có thể là chuỗi) chưa từng được gán lại — cùng khuôn
+      // payload.jobId = jobId (recruitmentReferrals)/payload.pathId = pathId (onboardingProgress) đã áp
+      // dụng ở các extraValidate khác.
+      payload.classId = classId;
       const classes = appData?.trainingClasses || [];
       const cls = classes.find(c => c.id === classId);
       if (!cls) throw new CreateError(404, 'Không tìm thấy lớp học');
       if (cls.status !== 'OPEN') throw new CreateError(409, 'Lớp học này đã đóng đăng ký');
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #2 cụm Truyền Thông Nội Bộ/Đào Tạo):
+      // trước đây chỉ kiểm status OPEN + sĩ số + danh sách mời — không so với vòng đời BUỔI HỌC, nên đăng
+      // ký được vào lớp ĐÃ kết thúc rồi thi ngay mà không cần dự học. Mirror ĐÚNG cách tính
+      // getTrainingClassSessionState() ở module-internalcomms-daotao.js: OFFLINE đọc thẳng
+      // cls.sessionState (chuyển tay qua nút Kết Thúc Lớp), ONLINE tính sống theo cls.endTime.
+      const classEnded = cls.mode === 'OFFLINE'
+        ? cls.sessionState === 'ENDED'
+        : !!(cls.endTime && new Date() > new Date(cls.endTime));
+      if (classEnded) throw new CreateError(409, 'Lớp học này đã kết thúc, không thể đăng ký');
       const todayStr = new Date().toISOString().slice(0, 10);
       if (cls.registerDeadline && todayStr > cls.registerDeadline) {
         throw new CreateError(409, 'Đã hết hạn đăng ký lớp học này');
@@ -2531,6 +2597,12 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'referrerUsername', creatorNameField: 'referrerName',
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #8 cụm Truyền Thông Nội Bộ/Đào Tạo): khoá
+    // theo ĐÚNG jobId (không phải theo cặp job+người, vì mỗi người khác nhau CÓ THỂ vô tình giới thiệu
+    // trùng 1 ứng viên cho cùng vị trí) — chặn race 2 request giới thiệu gần như đồng thời cùng 1 ứng
+    // viên cho cùng job đều đọc collection TRƯỚC khi bên nào kịp ghi, cả 2 đều lọt qua kiểm trùng bên
+    // dưới. Cùng khuôn training_registration:<classId> ở trainingRegistrations phía trên.
+    getLockKey: (payload) => `recruitment_referral:${payload.jobId}`,
     extraValidate: (payload, collection, user, appData) => {
       const jobId = Number(payload.jobId);
       if (!Number.isFinite(jobId)) throw new CreateError(400, 'Thiếu tin tuyển dụng');
@@ -2553,6 +2625,22 @@ const CREATE_MODULE_CONFIGS = {
       // CV là tệp mà bộ phận tuyển dụng BẮT BUỘC phải bấm mở để xét — cùng lỗ hổng scheme "javascript:"
       // như attachment/bannerUrl ở trên, xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.cvFileUrl, 'Tệp CV ứng viên');
+
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #8): trước đây không chống trùng, không
+      // trần số lượng — cùng 1 ứng viên (trùng SĐT hoặc email, chuẩn hoá trim/lowercase trước khi so, để
+      // không lọt qua chỉ vì gõ khác hoa-thường/khoảng trắng) bị giới thiệu nhiều lần cho ĐÚNG 1 vị trí
+      // (kể cả bởi những người giới thiệu KHÁC NHAU) làm loãng hàng chờ xét của bộ phận tuyển dụng, có
+      // thể còn liên quan tới chính sách thưởng giới thiệu (ai giới thiệu trước mới tính). Chỉ so trong
+      // CÙNG jobId — 1 ứng viên vẫn được giới thiệu cho NHIỀU vị trí khác nhau bình thường.
+      const normalizedPhone = candidatePhone.replace(/\s+/g, '');
+      const normalizedEmail = payload.candidateEmail ? String(payload.candidateEmail).trim().toLowerCase() : '';
+      const dup = (collection || []).find(r => {
+        if (r.jobId !== jobId) return false;
+        if (normalizedPhone && String(r.candidatePhone || '').replace(/\s+/g, '') === normalizedPhone) return true;
+        if (normalizedEmail && String(r.candidateEmail || '').trim().toLowerCase() === normalizedEmail) return true;
+        return false;
+      });
+      if (dup) throw new CreateError(409, `Ứng viên "${candidateName}" đã được giới thiệu cho vị trí này rồi (trùng số điện thoại hoặc email)`);
 
       payload.jobId = jobId;
       payload.jobTitle = job.title;
@@ -3830,6 +3918,9 @@ module.exports = {
   // Export cho lib/recordActions.js editInternalPost() — sửa bài cũng nhận lại attachment từ client nên
   // phải kiểm tra ĐÚNG luật như lúc tạo, nếu không lỗ hổng scheme "javascript:" chỉ bị vá 1 nửa.
   UPLOADED_FILE_URL_RE, UPLOADED_FILE_URL_MAX_LEN, assertUploadedFileUrl, assertUploadedFileUrlList,
+  // Export cho lib/recordActions.js editInternalPost() — kiểm lại quyền đăng theo TỪNG type khi sửa bài
+  // chuyển sang APPROVED, xem giải thích ở phát hiện #13 ngay phía trên hàm này.
+  canCreateInternalPostType,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   buildEffectiveContractApprovalWorkflowServer,
   // Export thêm cho lib/recordActions.js editSubmissionDraft() (nút "Bổ Sung" -> sửa lại + gửi lại tờ
