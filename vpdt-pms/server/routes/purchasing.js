@@ -321,26 +321,42 @@ router.post('/sync', requireManageTerms, syncRateLimiter, async (req, res) => {
   }
   const startedAt = new Date();
   try {
-    const lastSuccess = await getLastSuccessfulSyncStart('DSMART');
-    // Lùi lại 1 ngày so với lần thành công gần nhất làm biên an toàn (dữ liệu DSmart có thể vào muộn) —
-    // bulkInsertPurchaseTransactions() tự dedup theo SourceRefId nên chồng lấn không tạo trùng.
-    const sinceDate = lastSuccess ? new Date(new Date(lastSuccess).getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10) : null;
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao): route này TRƯỚC ĐÂY chỉ có rate-limit THEO
+    // USERNAME (syncRateLimiter ở trên) — hoàn toàn không có gì ngăn 2 lượt đồng bộ CHẠY CHỒNG lên nhau
+    // (2 người có quyền cùng bấm, hoặc 1 người mở 2 tab, hoặc bấm lại khi lượt trước còn đang chạy vài
+    // phút). Cả 2 lượt cùng tính sinceDate từ CÙNG lần thành công gần nhất, cùng kéo về CÙNG tập dòng
+    // rồi cùng ghi -> đâm nhau ở UNIQUE index (SourceSystem, SourceRefId) của bảng giao dịch mua hàng,
+    // lượt thua báo lỗi 502 khó hiểu và ghi 1 dòng nhật ký FAILED dù dữ liệu không hề sai. Khoá đúng
+    // khuôn jobs/operationOrderApiSync.js ('dsmart16_sync'): withAppLock() dùng sp_getapplock nên hiệu
+    // lực CROSS-PROCESS thật (production chạy PM2 cluster, cờ in-memory không đủ) — lượt thứ 2 chờ tối
+    // đa 15s rồi nhận 409 rõ ràng thay vì chạy song song.
+    return await withAppLock('purchasing_dsmart_sync', async () => {
+      const lastSuccess = await getLastSuccessfulSyncStart('DSMART');
+      // Lùi lại 1 ngày so với lần thành công gần nhất làm biên an toàn (dữ liệu DSmart có thể vào muộn) —
+      // bulkInsertPurchaseTransactions() tự dedup theo SourceRefId nên chồng lấn không tạo trùng.
+      const sinceDate = lastSuccess ? new Date(new Date(lastSuccess).getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10) : null;
 
-    const { items, pagesFetched } = await fetchAllPurchases({ baseUrl, apiKey, sinceDate });
-    const rows = items.map(it => ({
-      vendorCode: it.vendorCode, storeCode: it.storeCode, storeFormat: it.storeFormat, categoryCode: it.categoryCode,
-      purchaseDate: it.purchaseDate, amount: it.amount, isReturn: !!it.isReturn,
-      sourceSystem: 'DSMART', sourceRefId: it.refId || it.id || null, dataConfidence: 'PROVISIONAL'
-    }));
-    const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
+      const { items, pagesFetched } = await fetchAllPurchases({ baseUrl, apiKey, sinceDate });
+      const rows = items.map(it => ({
+        vendorCode: it.vendorCode, storeCode: it.storeCode, storeFormat: it.storeFormat, categoryCode: it.categoryCode,
+        purchaseDate: it.purchaseDate, amount: it.amount, isReturn: !!it.isReturn,
+        sourceSystem: 'DSMART', sourceRefId: it.refId || it.id || null, dataConfidence: 'PROVISIONAL'
+      }));
+      const { rowsInserted, rowsUpdated, rowsSkippedDuplicate } = await bulkInsertPurchaseTransactions(rows);
 
-    await insertPurchaseSyncLog({
-      startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: 'SUCCESS',
-      rowsFetched: items.length, rowsInserted, pagesFetched, triggeredBy: req.freshUser.username
+      await insertPurchaseSyncLog({
+        startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: 'SUCCESS',
+        rowsFetched: items.length, rowsInserted, pagesFetched, triggeredBy: req.freshUser.username
+      });
+      logPurchasing(req, 'SYNC_DSMART', 'DSMART', `Đồng bộ DSmart: ${items.length} dòng lấy về, ${rowsInserted} dòng mới, ${rowsUpdated} dòng cập nhật lại (DSmart sửa dữ liệu cũ), ${rowsSkippedDuplicate} trùng bỏ qua`);
+      res.json({ ok: true, rowsFetched: items.length, rowsInserted, rowsUpdated, rowsSkippedDuplicate, pagesFetched });
     });
-    logPurchasing(req, 'SYNC_DSMART', 'DSMART', `Đồng bộ DSmart: ${items.length} dòng lấy về, ${rowsInserted} dòng mới, ${rowsUpdated} dòng cập nhật lại (DSmart sửa dữ liệu cũ), ${rowsSkippedDuplicate} trùng bỏ qua`);
-    res.json({ ok: true, rowsFetched: items.length, rowsInserted, rowsUpdated, rowsSkippedDuplicate, pagesFetched });
   } catch (err) {
+    // Không lấy được khoá (đang có lượt đồng bộ khác chạy) -> KHÔNG ghi nhật ký FAILED (lượt này chưa
+    // hề bắt đầu đồng bộ gì), chỉ báo 409 rõ ràng cho người bấm.
+    if (err instanceof HttpError && err.status === 409) {
+      return res.status(409).json({ error: 'Một lượt đồng bộ dữ liệu mua hàng khác đang chạy — vui lòng đợi lượt đó xong rồi thử lại.' });
+    }
     await insertPurchaseSyncLog({
       startedAt, finishedAt: new Date(), sourceSystem: 'DSMART', status: 'FAILED',
       triggeredBy: req.freshUser.username, errorMessage: err.message

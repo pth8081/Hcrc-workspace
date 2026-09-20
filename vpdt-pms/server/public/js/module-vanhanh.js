@@ -1127,8 +1127,12 @@ function buildOperationRowHTML(kind, o) {
   // (chỉ để tính đúng canApprove cho admin, không đổi hành vi) khiến admin không hề biết đây là 1 hồ sơ
   // "mồ côi" quy trình — hiện y hệt 1 hồ sơ đang chờ duyệt bình thường. Giữ nguyên rawWfConfig để phân
   // biệt, chỉ fallback SAU khi đã ghi nhận cờ cảnh báo.
+  // tierConfigMissing: đơn "Đặt Hàng Tại Siêu Thị" ở 1 MỨC chưa được cấu hình mẫu quy trình — từ đợt
+  // audit chuyên sâu 12 cụm, resolveOperationOrderWorkflowConfigForItemClient() (core.js) KHÔNG còn trả
+  // null cho trường hợp này (phải mirror đúng WF mặc định 1 bước của server, nếu không người duyệt hợp
+  // lệ theo Quy Trình Đặt Hàng Siêu Thị sẽ không thấy nút Duyệt) — cờ này giữ nguyên cảnh báo cho admin.
   const rawWfConfig = OPERATION_KIND_META[kind].resolveWfConfigForItem(o);
-  const wfConfigMissing = !rawWfConfig && o.status === 'PENDING';
+  const wfConfigMissing = (!rawWfConfig || rawWfConfig.tierConfigMissing === true) && o.status === 'PENDING';
   const wfConfig = rawWfConfig || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep, operationOrderStoreApproverFilterFor(o));
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);

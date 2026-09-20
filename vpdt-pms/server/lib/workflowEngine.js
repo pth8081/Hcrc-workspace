@@ -261,7 +261,15 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // áp dụng đúng những siêu thị liệt kê. Cả 2 loại có thể cùng khớp 1 (bước, siêu thị) — không loại trừ
   // nhau, HỢP (UNION) lại ở resolveOperationOrderStoreMixedApprovers() bên dưới (phương án B, đã chốt).
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
-  if (rule.mode === 'PERSON') return rule.username ? [rule.username] : [];
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao): trước đây KHÔNG lọc tài khoản đã bị khoá/nghỉ việc
+  // (u.active === false) ở CẢ 2 nhánh — khác hẳn resolvePositionApprovers() (lib/positionApprovers.js,
+  // đã lọc `u.active !== false` từ đầu). Hậu quả: 1 approver nghỉ việc vẫn nằm trong danh sách
+  // approvers[] của bước -> isStepApprovalComplete() (đồng phê duyệt: TẤT CẢ phải duyệt) không bao giờ
+  // đủ điều kiện, bước treo VĨNH VIỄN (chỉ admin bypass được). Lọc ngay tại đây (điểm tra cứu DUY NHẤT
+  // của cả 2 mode) — mirror đúng bản client resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()
+  // ở public/js/core.js, sửa 1 bên PHẢI sửa cả 2 bên.
+  const isActiveUsername = (username) => (users || []).some(u => u && u.username === username && u.active !== false);
+  if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
   // mode 'JOBTITLE': dòng MẶC ĐỊNH (không khai siêu thị) tự khớp theo dept CHÍNH/"Vị Trí Kiêm Nhiệm" của
   // từng người giữ đúng chức danh với ĐÚNG siêu thị trên đơn — giữ nguyên đúng tiện lợi "GĐST tự khớp
   // đúng siêu thị mình", không cần liệt kê tay hàng chục siêu thị, đồng thời AN TOÀN (GĐST siêu thị A
@@ -269,6 +277,7 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // trách nhiều siêu thị không thuộc đúng 1 dept cố định nào) thì KHÔNG so dept — bản thân danh sách
   // "Siêu Thị Phụ Trách" của dòng đã là căn cứ duy nhất, không thể tự động khớp dept được.
   return (users || [])
+    .filter(u => u && u.active !== false)
     .filter(u => u.jobTitle === rule.jobTitle)
     .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
     .map(u => u.username);

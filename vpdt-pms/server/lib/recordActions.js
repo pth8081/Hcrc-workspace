@@ -577,7 +577,19 @@ function editOperationOrderDraft(user, item, payload) {
       const qty = Number(it?.qty) || 0;
       const unitPrice = Number(it?.unitPrice) || 0;
       if (qty < 0 || unitPrice < 0) throw new HttpError(400, `Hạng mục "${name}": Số lượng/Đơn giá không được là số âm`);
-      return { name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim() };
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Thấp): hàm này dựng LẠI object hạng mục từ đầu
+      // nhưng CHỈ liệt kê 6 field cũ — 3 field đọc từ phiếu đặt hàng NCC (productCode/barcode/
+      // qtyReceived, đợt "Đọc PDF Đơn Hàng tự động điền form", xem operationOrders.extraValidate ở
+      // lib/createValidation.js) bị RƠI MẤT sau mỗi lần "Yêu Cầu Bổ Sung" -> sửa lại -> gửi lại, dù
+      // form client vẫn gửi đủ (bảng hạng mục render lại từ item.items). Xử lý y hệt nhánh TẠO MỚI:
+      // chuỗi trim, qtyReceived giữ null nếu chưa nhập ("chưa nhận" khác "nhận 0 cái").
+      const qtyReceivedRaw = it?.qtyReceived;
+      const hasQtyReceived = qtyReceivedRaw !== undefined && qtyReceivedRaw !== null && qtyReceivedRaw !== '';
+      const qtyReceived = hasQtyReceived ? Math.max(0, Number(qtyReceivedRaw) || 0) : null;
+      return {
+        name, unit: String(it?.unit || '').trim(), qty, unitPrice, amount: qty * unitPrice, note: String(it?.note || '').trim(),
+        productCode: String(it?.productCode || '').trim(), barcode: String(it?.barcode || '').trim(), qtyReceived
+      };
     }).filter((it) => it.name && it.qty > 0);
     if (!validItems.length) throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ (Tên hàng + Số lượng > 0)');
     item.items = validItems;

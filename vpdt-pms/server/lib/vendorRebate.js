@@ -133,7 +133,26 @@ function validateRebateTermPayload(body) {
   if (!VALID_TIER_MODES.includes(body?.tierMode)) return `Chế độ bậc thang "${body?.tierMode}" không hợp lệ`;
   if (!VALID_PERIOD_TYPES.includes(body?.periodType)) return `Kỳ tính "${body?.periodType}" không hợp lệ`;
   if (!body?.effectiveFrom) return 'Vui lòng chọn Ngày Hiệu Lực Từ';
-  if (body?.effectiveTo && new Date(body.effectiveTo) < new Date(body.effectiveFrom)) {
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình): 2 field này TRƯỚC ĐÂY không hề ép định
+  // dạng — nhưng mọi nơi TIÊU THỤ chúng lại so sánh bằng CHUỖI lexicographic (POST /terms/:id/calculate
+  // ở routes/purchasing.js: `periodStart < term.effectiveFrom`/`periodEnd > term.effectiveTo`), vốn chỉ
+  // đúng thứ tự thời gian khi CẢ 2 vế cùng khuôn YYYY-MM-DD. Một điều khoản lỡ lưu "1/3/2026" hay
+  // "2026-3-1" sẽ làm phép so sánh ra kết quả SAI ÂM THẦM (VD "2026-03-01" > "1/3/2026" luôn đúng ->
+  // chặn/mở sai kỳ tính). Ép đúng YYYY-MM-DD ngay tại điểm validate chung của CẢ tạo mới (createValidation.js
+  // rebateTerms.extraValidate) lẫn sửa (POST /terms/:id/edit) — cùng khuôn DATE_RE đã dùng cho
+  // periodStart/periodEnd ở routes/purchasing.js.
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const isRealDate = (s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  };
+  if (!ISO_DATE_RE.test(String(body.effectiveFrom)) || !isRealDate(String(body.effectiveFrom))) {
+    return 'Ngày Hiệu Lực Từ phải đúng định dạng YYYY-MM-DD (VD 2026-03-01)';
+  }
+  if (body?.effectiveTo && (!ISO_DATE_RE.test(String(body.effectiveTo)) || !isRealDate(String(body.effectiveTo)))) {
+    return 'Ngày Hiệu Lực Đến phải đúng định dạng YYYY-MM-DD (VD 2026-12-31)';
+  }
+  if (body?.effectiveTo && String(body.effectiveTo) < String(body.effectiveFrom)) {
     return 'Ngày Hiệu Lực Đến không được trước Ngày Hiệu Lực Từ';
   }
   const tierErr = validateTiers(body?.tiers);

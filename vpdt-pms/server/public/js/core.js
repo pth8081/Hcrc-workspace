@@ -2380,8 +2380,13 @@ function operationOrderTierLabel(locationType, tier) {
 function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept) {
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
-  if (rule.mode === 'PERSON') return rule.username ? [rule.username] : [];
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao): bỏ sót lọc tài khoản đã khoá/nghỉ việc
+  // (u.active === false) ở cả 2 mode — mirror đúng bản vá phía server
+  // resolveOperationOrderStoreMixedApprovalRuleUsernames() (lib/workflowEngine.js).
+  const isActiveUsername = (username) => (DB.users || []).some(u => u && u.username === username && u.active !== false);
+  if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
   return (DB.users || [])
+    .filter(u => u && u.active !== false)
     .filter(u => u.jobTitle === rule.jobTitle)
     .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
     .map(u => u.username);
@@ -2409,10 +2414,24 @@ function resolveOperationOrderWorkflowConfigForItemClient(o) {
   const tierMap = locationType === 'STORE' ? DB.operationOrderStoreTierWorkflows : DB.operationOrderHOTierWorkflows;
   const tier = computeOperationOrderTierClient(locationType, computeOperationOrderAmountClient(o));
   const tierCfg = (tierMap || {})[tier] || null;
-  if (!tierCfg) return null;
+  // HO: giữ nguyên `null` khi mức chưa cấu hình — server dựng WF mặc định 1 bước nhưng approvers[1] luôn
+  // RỖNG (không có nguồn người duyệt nào khác cho HO), nên phía client null hay "1 bước không ai duyệt"
+  // cho ra CÙNG kết quả quyền, mà null còn giữ được cảnh báo "⚠️ Chưa cấu hình duyệt" (buildOperationRowHTML(),
+  // module-vanhanh.js) + thông điệp "Mức ... chưa được cấu hình" ở modal Xem Trước.
   if (locationType !== 'STORE') return tierCfg;
-  const baseWf = DB.workflows.find(w => w.id === tierCfg.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
-  return { workflowId: tierCfg.workflowId, approvers: computeOperationOrderStoreMixedApproversClient(o.dept, baseWf.steps.map(s => s.order)) };
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình): STORE trước đây cũng `return null` khi mức
+  // chưa cấu hình — LỆCH HẲN với server: flatWorkflowConfigToSteps(null) (lib/workflowEngine.js) dựng WF
+  // MẶC ĐỊNH 1 bước "Duyệt" rồi resolveOperationOrderWorkflow() vẫn tra người duyệt bước 1 từ Quy Trình
+  // Đặt Hàng Siêu Thị. Tức server CHẤP NHẬN lượt duyệt của người khớp dòng cấu hình, còn client thì ẩn
+  // hẳn nút "Xử lý / Duyệt" + không đưa đơn vào Approval Hub (wfConfig null) -> đơn "tàng hình" với đúng
+  // người được quyền duyệt nó. Nay mirror y hệt server: WF mặc định 1 bước + approvers tra như thường,
+  // kèm cờ tierConfigMissing để vẫn giữ được cảnh báo "⚠️ Chưa cấu hình duyệt" ở danh sách.
+  const baseWf = (tierCfg ? (DB.workflows || []).find(w => w.id === tierCfg.workflowId) : null) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  return {
+    workflowId: tierCfg ? tierCfg.workflowId : null,
+    tierConfigMissing: !tierCfg,
+    approvers: computeOperationOrderStoreMixedApproversClient(o.dept, baseWf.steps.map(s => s.order))
+  };
 }
 // operationOrderStoreApproverFilterFor() — TRƯỚC ĐÂY lọc lại approvers theo dept của đơn (mirror
 // filterOperationOrderStoreApprovers() cũ). ĐỢT "Quy Trình Hỗn Hợp": việc lọc theo siêu thị giờ nằm
