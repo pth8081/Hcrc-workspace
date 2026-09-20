@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**23.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.60 (2026-09-20): Mua Hàng BAS — ô "Từ số tiền" thiếu định dạng dấu chấm phân cách hàng nghìn
+
+Người dùng phản ánh: ô "Từ số tiền" của bậc thang điều khoản chiết khấu (Mua
+Hàng > BAS > Điều Khoản) cho gõ số tự do nhưng KHÔNG tự chèn dấu chấm phân
+cách hàng nghìn như mọi ô nhập tiền khác trong hệ thống — gõ số lớn (VD
+500000000) rất khó đọc/dễ gõ nhầm số 0. Nguyên nhân: ô này thiếu class
+`money-input` (cơ chế tự format dùng chung toàn hệ thống, xem `formatMoneyDisplay()`/
+`getMoneyValue()` ở `core.js`) — chỉ mỗi ô này trong toàn bộ module bị bỏ sót
+lúc viết ban đầu. Đã thêm class `money-input` + hiển thị đúng định dạng ngay
+từ lúc mở form Sửa (`formatMoneyDisplay()`), đồng thời lưu giá trị SỐ THẬT
+(không lẫn dấu chấm hiển thị) ngay lúc gõ, mirror đúng cách `updateOperationOrderItemField()`
+(Vận Hành) đang làm. Không đổi hành vi tính toán/lưu ở server (giá trị gửi
+lên vẫn là số nguyên VNĐ như trước).
 
 ## v23.59 (2026-09-20): Rà soát chuyên sâu đợt 4 (4 agent song song) — vá 20 khoảng trống/lỗi mức thấp hơn (Công Việc/Biên Bản Họp/Đặt Phòng Họp/Truyền Thông Nội Bộ/VPP/Đồng Phục/Giấy Phép/Hỗ Trợ IT/Checklist/Cơ Cấu Tổ Chức/HĐLĐ/Công&Phép/Lương/Tái Tuyển/Phản Hồi Ý Kiến/Mua Hàng BAS/Vận Hành/Hệ Thống)
 
