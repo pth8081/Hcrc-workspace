@@ -139,42 +139,43 @@ vào 1 trong tối đa **4 module** — admin chọn đúng 4 module nào hiện
 (giới hạn của Apple). Cũng cần HTTPS thật để hoạt động đúng chuẩn trên điện
 thoại thật.
 
-### 2.5. 📘 Nghiệp Vụ (tài liệu quy trình trực quan — từ v23.1)
+### 2.5. 📘 Hướng Dẫn (tài liệu quy trình trực quan — từ v23.1, đổi tên + chia 2 tab từ v23.63)
 
-Nút sidebar **"📘 Nghiệp vụ"** (đặt ngay trước "📊 Báo Cáo") — **vai trò**:
-màn tra cứu nhanh "chức năng này hoạt động thế nào" bằng sơ đồ quy trình +
-diễn giải ngắn, thay vì phải đọc hết tài liệu này. Mở được (vào được cả màn)
-cho **mọi tài khoản đã đăng nhập**, nhưng từ **v23.28** mỗi MỤC bên trong chỉ
-hiện cho người ĐÃ có đúng quyền vào module THẬT tương ứng (VD chỉ thấy mục
-"Lương" nếu có quyền vào module Lương thật — xem `canViewNVItem()`/
-`NV_KEY_ACCESS_FN` ở `module-nghiepvu.js`, tái dùng thẳng các hàm
-`canAccessXModule()` đã có, không tạo lớp quyền song song). 2 cách mở rộng
-thêm (cây phân quyền, khối "24. Nghiệp Vụ & Báo Cáo"):
-- **"👁️ Xem Toàn Bộ Mục Nghiệp Vụ"** (`perms.nghiepVuViewAll`) — bỏ qua giới
-  hạn trên, xem được TẤT CẢ mục dù không có quyền module tương ứng.
-- **"📘 Mở Thêm Mục Nghiệp Vụ"** (`user.nghiepVuExtraKeys`, ở màn Sửa Người
-  Dùng, KHÔNG gán qua Nhóm Phân Quyền được vì là field riêng của từng
-  người) — mở thêm TỪNG mục cụ thể mà không cần bật cả quyền module thật.
+Nút sidebar **"📘 Hướng Dẫn"** (tên cũ **"Nghiệp vụ"**, đặt ngay trước "📊 Báo
+Cáo") — **vai trò**: màn tra cứu nhanh "chức năng này hoạt động thế nào" bằng
+sơ đồ quy trình + diễn giải ngắn, thay vì phải đọc hết tài liệu này. Mở được
+(vào được cả màn) cho **mọi tài khoản đã đăng nhập**. Từ **v23.63**, bên
+trong chia **2 tab** (`.nv-section-tabs`, `setNVActiveSection()` ở
+`module-nghiepvu.js`):
 
-**Ngoại lệ CHỈ ADMIN xem được, bỏ qua CẢ 2 quyền mở rộng trên (10/2026)**:
-mục **"🗺️ Sơ Đồ Kiến Trúc Hệ Thống"** (nhóm mới **"Hệ Thống"**, cuối danh
-sách) lộ ra chi tiết hạ tầng (Server/SQL Server/ổ đĩa lưu file/hệ thống
-ngoài đang tích hợp) nên KHÔNG dùng cơ chế `NV_KEY_ACCESS_FN`/
-`nghiepVuViewAll`/`nghiepVuExtraKeys` như mọi mục khác — chỉ
-`user.perms.admin === true` mới xem được (`NV_ADMIN_ONLY_KEYS` ở
-`module-nghiepvu.js`, kiểm tra TRƯỚC cả 2 cơ chế mở rộng nên dù admin cấp
-"Xem Toàn Bộ"/"Mở Thêm Mục" cho 1 tài khoản thường, mục này vẫn ẩn). Nội
-dung: sơ đồ Trình Duyệt (SPA) ↔ Server Node.js/Express (PM2 cluster) ↔ SQL
-Server + ổ đĩa cục bộ (file đính kèm), cùng 2 điểm tích hợp hệ thống ngoài
-đang có thật — Máy Chủ SMTP (gửi email/OTP) và **2 luồng DSmart tách biệt**:
-DSmart API (module Mua Hàng, BAS — chỉ KÉO dữ liệu Chiết Khấu/Thưởng NCC
-vào, cấu hình qua `.env`) và dsmart16 (module Vận Hành — chỉ ĐẨY dữ liệu Đơn
-Hàng đã tạo ra ngoài, cấu hình qua màn Admin, có chống SSRF).
+- **📘 Nghiệp Vụ** — nội dung nghiệp vụ như trước đây, KHÔNG đổi gì. Từ
+  **v23.28** mỗi MỤC bên trong chỉ hiện cho người ĐÃ có đúng quyền vào
+  module THẬT tương ứng (VD chỉ thấy mục "Lương" nếu có quyền vào module
+  Lương thật — xem `canViewNVItem()`/`NV_KEY_ACCESS_FN`, tái dùng thẳng các
+  hàm `canAccessXModule()` đã có, không tạo lớp quyền song song). 2 cách mở
+  rộng thêm (cây phân quyền, khối "24. Nghiệp Vụ & Báo Cáo"):
+  - **"👁️ Xem Toàn Bộ Mục Nghiệp Vụ"** (`perms.nghiepVuViewAll`) — bỏ qua
+    giới hạn trên, xem được TẤT CẢ mục dù không có quyền module tương ứng.
+  - **"📘 Mở Thêm Mục Nghiệp Vụ"** (`user.nghiepVuExtraKeys`, ở màn Sửa
+    Người Dùng, KHÔNG gán qua Nhóm Phân Quyền được vì là field riêng của
+    từng người) — mở thêm TỪNG mục cụ thể mà không cần bật cả quyền module thật.
+- **⚙️ Hệ Thống** (mới từ v23.63, xem mục 7 bên dưới) — 11 mục cấu hình/quản
+  trị (Phân Quyền, Người Dùng, Quy Trình & Phê Duyệt, Quản Lý Danh Mục, Biểu
+  Mẫu, Quản Lý Tệp File, Thùng Rác, Nhật Ký Hệ Thống, Cấu Hình Email, API Đối
+  Tác Ngoài, Sơ Đồ Kiến Trúc Hệ Thống). **CHỈ hiện tab này khi
+  `user.perms.admin === true`** (`nvCanSeeSystemSection()`) — KHÔNG bypass
+  được qua `nghiepVuViewAll`/`nghiepVuExtraKeys` như tab Nghiệp Vụ (2 cơ chế
+  đó chỉ áp dụng cho tab Nghiệp Vụ), và server không liên quan gì (đây thuần
+  là màn tài liệu tham khảo, không có API riêng) — tab bar hoàn toàn không
+  render nếu không phải admin, không phải chỉ ẩn bằng CSS.
 
-Nav trái nhóm theo 10 nhóm đúng cách người dùng vận hành thực tế (Văn Bản &
-Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính / Tổng Hợp / Vận
-Hành / Nhân Sự / Hỗ Trợ IT / Mua Hàng / Hệ Thống) — khác thứ tự phẳng phân
-quyền nội bộ, chỉ là cách trình bày cho người đọc. Mỗi mục hiện: mô tả ngắn, 1 sơ đồ quy trình
+Nav trái của tab Nghiệp Vụ nhóm theo 10 nhóm đúng cách người dùng vận hành
+thực tế (Văn Bản & Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính
+/ Tổng Hợp / Vận Hành / Nhân Sự / Hỗ Trợ IT / Mua Hàng) — khác thứ tự phẳng
+phân quyền nội bộ, chỉ là cách trình bày cho người đọc; tab Hệ Thống có nav
+trái riêng (`SYSTEM_NAV`), 6 nhóm (Phân Quyền & Tài Khoản / Cấu Hình Quy
+Trình / Danh Mục & Biểu Mẫu / Vận Hành Hệ Thống / Tích Hợp & Thông Báo /
+Kiến Trúc). Mỗi mục hiện: mô tả ngắn, 1 sơ đồ quy trình
 (node bo góc + mũi tên có hướng; nhánh quyết định viền xanh rẽ 2 màu xanh
 "duyệt"/đỏ "từ chối"; khung tham chiếu danh mục nét đứt nếu có; mũi tên vòng
 lặp cong khi bị từ chối/làm lại), và khối **"Điểm Chặn Quan Trọng"/"Cơ Chế
@@ -2755,6 +2756,9 @@ chốt-mở lại kỳ/công bố).
 
 Nhóm màn cấu hình **chỉ admin dùng** — không phải "module nghiệp vụ" theo
 nghĩa có luồng tạo/duyệt hồ sơ riêng, mà là nơi cấu hình mọi module ở mục 4-6.
+Từ v23.63, mỗi mục ở đây đều có thêm bản tóm tắt trực quan (sơ đồ quy trình +
+hướng dẫn click-by-click) ở tab **⚙️ Hệ Thống** trong **📘 Hướng Dẫn** (xem mục
+2.5) — mục dưới đây vẫn là nguồn tham khảo đầy đủ và chi tiết nhất.
 
 ### 7.1. Quy Trình & Phê Duyệt
 

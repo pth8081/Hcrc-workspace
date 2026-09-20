@@ -37,25 +37,44 @@ trong CÙNG đợt merge tạo module đó (không để dành "làm sau"):
   để admin tự đổi nhãn/bắt buộc không cần sửa code. `applyAllCoreFieldCustomizations()`
   đã tự chạy 1 lần lúc đăng nhập — thêm entry vào 3 mảng trên là ĐỦ, không
   cần gọi thêm hàm nào khác.
-- **📘 Nghiệp Vụ** (`public/js/module-nghiepvu.js`, `NGHIEP_VU_NAV` +
-  `NGHIEP_VU_DOCS`, từ v23.1) — module tài liệu tham khảo trực quan (sơ đồ
-  quy trình + diễn giải) cho toàn bộ nghiệp vụ hệ thống. **Bất kỳ module/tính
-  năng nghiệp vụ MỚI nào** (kể cả không tạo collection riêng, VD 1 luồng phê
-  duyệt mới trong module đã có) phải thêm/cập nhật 1 entry `NGHIEP_VU_DOCS`
-  tương ứng (icon, mô tả ngắn, `flow` dùng `renderNVFlow()` có sẵn — xem entry
-  `budget`/`license` làm mẫu cho luồng có nhánh quyết định/khung tham chiếu)
-  NGAY trong cùng đợt merge — mục nào thiếu entry sẽ tự hiện cảnh báo "⚠️ Chưa
-  có tài liệu nghiệp vụ" ngay trên màn thật, đừng để cảnh báo đó lộ ra production.
-  Module con thuộc nhóm nào (Văn Bản & Tác Nghiệp/Truyền Thông Nội Bộ/Điều
-  Hành/Hành Chính/Tổng Hợp/Vận Hành/Nhân Sự/Hỗ Trợ IT) thì thêm vào đúng
-  `group` đó trong `NGHIEP_VU_NAV`; nhóm hoàn toàn mới thì thêm 1 group mới
-  vào cuối mảng. **Từ v23.55**: entry còn phải có thêm field `steps` (mảng
-  `{role?, text}`, hiển thị qua `renderNVSteps()`) — hướng dẫn CLICK-BY-CLICK
-  thật (bấm nút gì, tab nào, đúng field id/nhãn nút hiện có, không đoán tay),
-  khác hẳn `flow`/`footer` vốn giải thích nghiệp vụ/quy tắc chứ không nói thao
-  tác cụ thể. Xem bất kỳ entry nào trong `NGHIEP_VU_DOCS`/`NGHIEP_VU_DAOTAO_CONTENT`
-  làm mẫu — chỉ bỏ qua `steps` cho mục THUẦN xem/sơ đồ tham khảo không có thao
-  tác thật (VD `systemArchitecture`, `overview` của Đào Tạo).
+- **📘 Hướng Dẫn** (tên cũ "Nghiệp Vụ", `public/js/module-nghiepvu.js`, từ
+  v23.1, chia 2 tab từ v23.63) — module tài liệu tham khảo trực quan (sơ đồ
+  quy trình + diễn giải) cho toàn bộ nghiệp vụ + cấu hình hệ thống. **2 tab
+  dùng 2 cặp mảng/object RIÊNG, đừng nhầm lẫn khi thêm entry**:
+  - Tab **📘 Nghiệp Vụ** (`NGHIEP_VU_NAV` + `NGHIEP_VU_DOCS`, mở cho MỌI tài
+    khoản đã đăng nhập, gác theo `canViewNVItem()`/`NV_KEY_ACCESS_FN`) —
+    dùng cho **module/tính năng NGHIỆP VỤ** (có luồng tạo/duyệt hồ sơ, hoặc
+    thao tác của người dùng thường).
+  - Tab **⚙️ Hệ Thống** (`SYSTEM_NAV` + `SYSTEM_DOCS`, CHỈ admin —
+    `nvCanSeeSystemSection()`, KHÔNG bypass được qua
+    `nghiepVuViewAll`/`nghiepVuExtraKeys`) — dùng cho **màn CẤU HÌNH/QUẢN
+    TRỊ** (VD thêm 1 màn admin mới kiểu Quản Lý Danh Mục/Biểu Mẫu/Cấu Hình
+    Email...), không phải nghiệp vụ người dùng thường thao tác.
+
+  **Bất kỳ module/tính năng nghiệp vụ MỚI nào** (kể cả không tạo collection
+  riêng, VD 1 luồng phê duyệt mới trong module đã có) phải thêm/cập nhật 1
+  entry `NGHIEP_VU_DOCS` tương ứng (icon, mô tả ngắn, `flow` dùng
+  `renderNVFlow()` có sẵn — xem entry `budget`/`license` làm mẫu cho luồng có
+  nhánh quyết định/khung tham chiếu) NGAY trong cùng đợt merge — mục nào
+  thiếu entry sẽ tự hiện cảnh báo "⚠️ Chưa có tài liệu nghiệp vụ" ngay trên
+  màn thật, đừng để cảnh báo đó lộ ra production. Module con thuộc nhóm nào
+  (Văn Bản & Tác Nghiệp/Truyền Thông Nội Bộ/Điều Hành/Hành Chính/Tổng Hợp/Vận
+  Hành/Nhân Sự/Hỗ Trợ IT/Mua Hàng) thì thêm vào đúng `group` đó trong
+  `NGHIEP_VU_NAV`; nhóm hoàn toàn mới thì thêm 1 group mới vào cuối mảng.
+  **Tương tự, bất kỳ màn admin/cấu hình hệ thống MỚI nào** phải thêm entry
+  vào `SYSTEM_DOCS` + `SYSTEM_NAV` (đúng khuôn dữ liệu như `NGHIEP_VU_DOCS`,
+  xem entry `sysPermissions`/`sysCatalog` làm mẫu) — KHÔNG cần gọi thêm hàm
+  quyền riêng như `NV_KEY_ACCESS_FN` (cả tab Hệ Thống gác chung 1 lớp qua
+  `nvCanSeeSystemSection()`, không có khái niệm "xem theo quyền module con").
+
+  **Từ v23.55**: entry còn phải có thêm field `steps` (mảng `{role?, text}`,
+  hiển thị qua `renderNVSteps()`) — hướng dẫn CLICK-BY-CLICK thật (bấm nút
+  gì, tab nào, đúng field id/nhãn nút hiện có, không đoán tay), khác hẳn
+  `flow`/`footer` vốn giải thích nghiệp vụ/quy tắc chứ không nói thao tác cụ
+  thể. Xem bất kỳ entry nào trong `NGHIEP_VU_DOCS`/`SYSTEM_DOCS`/
+  `NGHIEP_VU_DAOTAO_CONTENT` làm mẫu — chỉ bỏ qua `steps` cho mục THUẦN xem/
+  sơ đồ tham khảo không có thao tác thật (VD `systemArchitecture`, `overview`
+  của Đào Tạo).
 
 Không bỏ qua bước này chỉ vì module mới nhỏ — cả 2 màn trên đều tồn tại lâu
 dài, việc bổ sung càng chậm càng dễ bị quên/tích tụ thành nợ kỹ thuật lớn

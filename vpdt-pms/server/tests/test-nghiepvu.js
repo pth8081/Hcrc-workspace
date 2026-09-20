@@ -1,19 +1,31 @@
 'use strict';
-// Regression test cho module mới "📘 Nghiệp Vụ" (public/js/module-nghiepvu.js) — màn tài liệu tham
-// khảo trực quan (sơ đồ quy trình + diễn giải), KHÔNG tạo/lưu hồ sơ riêng, mở cho MỌI tài khoản đã đăng
-// nhập (xem canAccessNghiepVuModule() ở core.js). Mirror khuôn test-forms-nav-groups.js (Playwright +
-// static server tối thiểu, lặp trực tiếp qua NGHIEP_VU_NAV/NGHIEP_VU_DOCS đọc từ trang thật thay vì
-// hard-code danh sách key, để test luôn khớp dữ liệu hiện tại khi thêm module mới sau này).
+// Regression test cho module "📘 Hướng Dẫn" (tên cũ: Nghiệp Vụ, public/js/module-nghiepvu.js) — màn tài
+// liệu tham khảo trực quan (sơ đồ quy trình + diễn giải), KHÔNG tạo/lưu hồ sơ riêng, mở cho MỌI tài
+// khoản đã đăng nhập (xem canAccessNghiepVuModule() ở core.js). Từ v23.63, chia 2 tab: "Nghiệp Vụ"
+// (NGHIEP_VU_NAV/NGHIEP_VU_DOCS, mọi tài khoản, gác theo canViewNVItem() như cũ) và "Hệ Thống"
+// (SYSTEM_NAV/SYSTEM_DOCS, CHỈ admin — nvCanSeeSystemSection(), không bypass được qua
+// nghiepVuViewAll/nghiepVuExtraKeys). Mirror khuôn test-forms-nav-groups.js (Playwright + static server
+// tối thiểu, lặp trực tiếp qua dữ liệu đọc từ trang thật thay vì hard-code danh sách key).
 //
-// Kịch bản:
+// Kịch bản (tab Nghiệp Vụ, giữ nguyên như trước khi tách):
 //   1. canAccessNghiepVuModule(): mở cho user thường lẫn admin, đóng khi không có currentUser.
 //   2. switchTab('nghiepVu') hiện đúng #nghiepVuSection, ẩn các section khác, render nav + nội dung.
-//   3. Toàn vẹn dữ liệu: mọi item trong NGHIEP_VU_NAV (trừ 'daotao') phải có entry trong NGHIEP_VU_DOCS
-//      — không mục nào bị bỏ sót âm thầm (đúng tinh thần "auto cập nhật" đã thống nhất với người dùng).
+//   3. Toàn vẹn dữ liệu: mọi item trong NGHIEP_VU_NAV (trừ 'daotao') phải có entry trong NGHIEP_VU_DOCS.
 //   4. Lặp qua TOÀN BỘ item thật: setNVActiveKey(key) render tiêu đề + sơ đồ SVG không lỗi.
 //   5. Đào Tạo: lặp qua toàn bộ 6 khu vực (NGHIEP_VU_DAOTAO_AREAS), mỗi khu vực render sơ đồ riêng.
 //   6. Cơ chế cảnh báo thiếu tài liệu: xoá tạm 1 entry khỏi NGHIEP_VU_DOCS -> phải hiện đúng cảnh báo
 //      "⚠️ Chưa có tài liệu nghiệp vụ" thay vì lỗi trắng trang hoặc im lặng thiếu sót.
+//
+// Kịch bản (tab Hệ Thống, mới từ v23.63):
+//   7. nvCanSeeSystemSection()/setNVActiveSection(): CHỈ admin true, non-admin false kể cả có
+//      nghiepVuViewAll/nghiepVuExtraKeys — ép setNVActiveSection('system') vẫn giữ nguyên 'business'.
+//   8. Toàn vẹn dữ liệu: mọi item trong SYSTEM_NAV đều có entry SYSTEM_DOCS tương ứng.
+//   9. Lặp qua TOÀN BỘ item Hệ Thống: setNVActiveKey(key) ở section 'system' render tiêu đề + SVG.
+//   10. Tab bar .nv-section-tabs CHỈ render cho admin (nvCanSeeSystemSection() true).
+//
+// Kịch bản khác (không đổi khi tách section):
+//   11. muaHang (Mua Hàng > BAS): canViewNVItem() đúng theo quyền Mua Hàng thật.
+//   12. Fallback fail-closed: key không có trong NV_KEY_ACCESS_FN -> canViewNVItem() = false.
 //
 // Run: node server/tests/test-nghiepvu.js
 
@@ -148,42 +160,68 @@ async function main() {
       check('Phục hồi entry -> render lại bình thường (không còn cảnh báo)',
         !!mainRestored && !mainRestored.innerHTML.includes('Chưa có tài liệu nghiệp vụ') && mainRestored.querySelector('svg') !== null);
 
-      // ---------- 7) "Sơ Đồ Kiến Trúc Hệ Thống" (systemArchitecture) — CHỈ admin xem được, kể cả khi
-      // non-admin có nghiepVuViewAll/nghiepVuExtraKeys (khác mọi mục khác, xem NV_ADMIN_ONLY_KEYS) ----------
-      check('canViewNVItem: admin xem được systemArchitecture',
-        (() => { currentUser = adminUser; return canViewNVItem('systemArchitecture'); })());
+      // ---------- 7) nvCanSeeSystemSection()/setNVActiveSection(): CHỈ admin, không bypass qua
+      // nghiepVuViewAll/nghiepVuExtraKeys (khu Hệ Thống không dùng 2 cơ chế mở rộng của bên Nghiệp Vụ) ----------
+      currentUser = adminUser;
+      check('nvCanSeeSystemSection(): admin -> true', nvCanSeeSystemSection() === true);
       const nonAdminNoGrant = { username: 'nv2', name: 'Nhân Viên 2', dept: 'Phòng Hành Chính', perms: {} };
       currentUser = nonAdminNoGrant;
-      check('canViewNVItem: non-admin KHÔNG có quyền mở rộng -> KHÔNG xem được systemArchitecture',
-        canViewNVItem('systemArchitecture') === false);
+      check('nvCanSeeSystemSection(): non-admin không có quyền mở rộng -> false', nvCanSeeSystemSection() === false);
       const nonAdminViewAll = { username: 'nv3', name: 'Nhân Viên 3', dept: 'Phòng Hành Chính', perms: { nghiepVuViewAll: true } };
       currentUser = nonAdminViewAll;
-      check('canViewNVItem: non-admin dù có "Xem Toàn Bộ Mục Nghiệp Vụ" (nghiepVuViewAll) vẫn KHÔNG xem được systemArchitecture',
-        canViewNVItem('systemArchitecture') === false);
-      check('canViewNVItem: non-admin có nghiepVuViewAll vẫn xem được mục thường khác (VD "doc")',
-        canViewNVItem('doc') === true);
+      check('nvCanSeeSystemSection(): non-admin dù có "Xem Toàn Bộ Mục Nghiệp Vụ" (nghiepVuViewAll) vẫn false',
+        nvCanSeeSystemSection() === false);
       const nonAdminExtraKey = { username: 'nv4', name: 'Nhân Viên 4', dept: 'Phòng Hành Chính', perms: {}, nghiepVuExtraKeys: ['systemArchitecture'] };
       currentUser = nonAdminExtraKey;
-      check('canViewNVItem: non-admin dù được mở riêng qua nghiepVuExtraKeys vẫn KHÔNG xem được systemArchitecture',
-        canViewNVItem('systemArchitecture') === false);
+      check('nvCanSeeSystemSection(): non-admin dù được mở riêng qua nghiepVuExtraKeys vẫn false',
+        nvCanSeeSystemSection() === false);
 
-      // Nav trái: non-admin không thấy nhóm "Hệ Thống"/mục "Sơ Đồ Kiến Trúc Hệ Thống" trong danh sách hiện ra.
       currentUser = nonAdminNoGrant;
-      const visibleForNonAdmin = visibleNVGroups();
-      check('visibleNVGroups(): non-admin KHÔNG thấy nhóm "Hệ Thống" trong nav',
-        !visibleForNonAdmin.some(g => g.items.some(it => it.key === 'systemArchitecture')));
-
-      // Ngay cả khi cố tình gọi setNVActiveKey('systemArchitecture') trực tiếp (bỏ qua nav), render
-      // lại tự rơi về mục đầu tiên NGƯỜI ĐÓ được xem (cùng cơ chế bảo vệ renderNghiepVuModule() đã áp
-      // dụng cho mọi mục bị gác quyền khác, không phải cơ chế riêng mới cho mục này).
       await switchTab('nghiepVu');
-      setNVActiveKey('systemArchitecture');
-      const mainAfterForcedKey = document.getElementById('nghiepVuMain');
-      check('setNVActiveKey("systemArchitecture") bởi non-admin -> KHÔNG render nội dung kiến trúc hệ thống',
-        !!mainAfterForcedKey && !mainAfterForcedKey.textContent.includes('Sơ Đồ Kiến Trúc Hệ Thống'),
-        mainAfterForcedKey ? mainAfterForcedKey.textContent.slice(0, 150) : 'NO MAIN');
+      setNVActiveSection('system');
+      check('setNVActiveSection("system") bởi non-admin bị CHẶN -> nvActiveSection vẫn là "business"',
+        nvActiveSection === 'business');
+      check('visibleSystemGroups(): non-admin -> mảng rỗng', visibleSystemGroups().length === 0);
+      check('nv-section-tabs KHÔNG render cho non-admin',
+        !document.querySelector('#nghiepVuRoot .nv-section-tabs'));
 
-      // ---------- 8) LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): mục "muaHang" (Mua
+      currentUser = adminUser;
+      await switchTab('nghiepVu');
+      setNVActiveSection('system');
+      check('setNVActiveSection("system") bởi admin -> nvActiveSection đổi thành "system"',
+        nvActiveSection === 'system');
+      check('nv-section-tabs render cho admin (2 nút)',
+        document.querySelectorAll('#nghiepVuRoot .nv-section-tab').length === 2);
+
+      // ---------- 8) Toàn vẹn dữ liệu: mọi item trong SYSTEM_NAV đều có entry SYSTEM_DOCS ----------
+      const allSystemItems = SYSTEM_NAV.flatMap(g => g.items);
+      const missingSystemDocs = allSystemItems.filter(it => !SYSTEM_DOCS[it.key]).map(it => it.key);
+      check('Mọi item trong SYSTEM_NAV đều có entry SYSTEM_DOCS tương ứng',
+        missingSystemDocs.length === 0, JSON.stringify(missingSystemDocs));
+      check('visibleSystemGroups(): admin thấy đủ số mục như SYSTEM_NAV',
+        visibleSystemGroups().reduce((s, g) => s + g.items.length, 0) === allSystemItems.length);
+
+      // ---------- 9) Lặp toàn bộ item Hệ Thống: render tiêu đề + sơ đồ SVG không lỗi ----------
+      for (const it of allSystemItems) {
+        setNVActiveKey(it.key);
+        const main = document.getElementById('nghiepVuMain');
+        const hasSvg = !!main && main.querySelector('svg') !== null;
+        check(`[system/${it.key}] render sơ đồ SVG không lỗi`, hasSvg, main ? main.innerHTML.slice(0, 150) : 'NO MAIN');
+        const doc = SYSTEM_DOCS[it.key];
+        const titleOk = !!main && main.textContent.includes(doc.title);
+        check(`[system/${it.key}] tiêu đề hiển thị đúng ("${doc.title}")`, titleOk);
+        const badgeOk = !!main && main.textContent.includes('Chỉ Quản Trị Viên');
+        check(`[system/${it.key}] có badge "Chỉ Quản Trị Viên"`, badgeOk);
+      }
+
+      // ---------- 10) Quay lại tab Nghiệp Vụ vẫn hoạt động bình thường sau khi đã mở tab Hệ Thống ----------
+      setNVActiveSection('business');
+      check('setNVActiveSection("business"): quay lại tab Nghiệp Vụ thành công', nvActiveSection === 'business');
+      const mainAfterBack = document.getElementById('nghiepVuMain');
+      check('Tab Nghiệp Vụ sau khi quay lại vẫn render nội dung (có SVG)',
+        !!mainAfterBack && mainAfterBack.querySelector('svg') !== null);
+
+      // ---------- 11) LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): mục "muaHang" (Mua
       // Hàng > BAS) thiếu hẳn entry trong NV_KEY_ACCESS_FN — canViewNVItem() cũ fallback về `true`
       // (hiện MẶC ĐỊNH cho mọi người) khi không tìm thấy hàm tương ứng, nên ai cũng xem được tài liệu
       // nghiệp vụ BAS dù không có bất kỳ quyền Mua Hàng nào. Đã nối muaHang -> canAccessPurchasingModule
@@ -201,9 +239,9 @@ async function main() {
       check('canViewNVItem("muaHang") = true cho user có rebateViewReport (1 trong 5 quyền Mua Hàng)',
         canViewNVItem('muaHang') === true);
 
-      // ---------- 9) Cứng hoá fallback: key KHÔNG có trong NV_KEY_ACCESS_FN phải fail-CLOSED (false),
+      // ---------- 12) Cứng hoá fallback: key KHÔNG có trong NV_KEY_ACCESS_FN phải fail-CLOSED (false),
       // không fail-open (true) — lớp phòng thủ chung cho MỌI module mới sau này lỡ quên nối quyền, không
-      // chỉ riêng "muaHang" ở mục 8. ----------
+      // chỉ riêng "muaHang" ở mục 11. ----------
       currentUser = { username: 'nv7', name: 'Nhân Viên 7', dept: 'Phòng Hành Chính', perms: { admin: false } };
       check('LỖI ĐÃ VÁ: key HOÀN TOÀN không có trong NV_KEY_ACCESS_FN -> canViewNVItem() fail-CLOSED (false), không fail-open',
         canViewNVItem('__khongTonTaiKeyNao__') === false);

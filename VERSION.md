@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**23.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.63 (2026-09-20): Tách module "Nghiệp Vụ" thành "📘 Hướng Dẫn" (2 tab Nghiệp Vụ/Hệ Thống)
+
+Theo yêu cầu người dùng, tách module tài liệu tham khảo "📘 Nghiệp Vụ" thành 2
+khu vực điều hướng dạng tab bên trong 1 module cha đổi tên thành **"📘 Hướng
+Dẫn"** (`public/js/module-nghiepvu.js`, `index.html`):
+
+- **📘 Nghiệp Vụ** — giữ NGUYÊN 100% nội dung/hành vi cũ (`NGHIEP_VU_NAV` +
+  `NGHIEP_VU_DOCS`, gác theo `canViewNVItem()`/`NV_KEY_ACCESS_FN`, mở cho mọi
+  tài khoản đã đăng nhập theo đúng quyền module con).
+- **⚙️ Hệ Thống** (mới) — 11 mục cấu hình/quản trị mới soạn đầy đủ (sơ đồ quy
+  trình + hướng dẫn click-by-click, cùng khuôn Nghiệp Vụ): Phân Quyền, Người
+  Dùng, Quy Trình & Phê Duyệt, Quản Lý Danh Mục, Biểu Mẫu, Quản Lý Tệp File,
+  Thùng Rác, Nhật Ký Hệ Thống, Cấu Hình Email, API Đối Tác Ngoài, và "Sơ Đồ
+  Kiến Trúc Hệ Thống" (dời nguyên từ vị trí cũ trong Nghiệp Vụ). **CHỈ hiện
+  cho `perms.admin === true`** (`nvCanSeeSystemSection()`) — tab bar hoàn
+  toàn không render nếu không phải admin, và **KHÔNG bypass được** qua
+  `nghiepVuViewAll`/`nghiepVuExtraKeys` (2 cơ chế mở rộng đó chỉ áp dụng cho
+  tab Nghiệp Vụ) — thay thế cơ chế `NV_ADMIN_ONLY_KEYS` cũ (trước đây chỉ gác
+  riêng lẻ 1 key "systemArchitecture", nay cả khu Hệ Thống đảm nhiệm vai trò
+  đó ở mức section).
+
+Đã demo cấu trúc (Playwright chụp ảnh trên server thật có CSP đầy đủ) và
+được người dùng duyệt trước khi viết đủ nội dung 11 mục + merge, theo đúng
+yêu cầu "demo trước khi thực hiện" cho riêng đợt việc này.
+
+**Không đổi**: mọi id/`data-op`/tên hàm nội bộ liên quan (`nghiepVu`/
+`NghiepVu`, `#nghiepVuSection`/`#nghiepVuRoot`/`#nghiepVuMain`) — chỉ đổi
+nhãn hiển thị sidebar "Nghiệp vụ" → "Hướng Dẫn" (icon 📘 giữ nguyên) và thêm
+lớp điều hướng tab mới ở trên cùng khung `.nv-app` sẵn có.
+
+Cập nhật regression: viết mới `test-nghiepvu.js` mục 7-10 (nvCanSeeSystemSection/
+setNVActiveSection/toàn vẹn dữ liệu SYSTEM_NAV↔SYSTEM_DOCS/render từng mục Hệ
+Thống), thêm 1 kịch bản CLICK DOM THẬT cho tab bar vào `test-nghiepvu-click.js`
+— toàn bộ 3 file test-nghiepvu*.js (142 kịch bản: 127+6+9) PASS.
 
 ## v23.62 (2026-09-20): Lỗ hổng phân quyền — mục "Mua Hàng" trong Nghiệp Vụ hiện cho MỌI người bất kể quyền
 
