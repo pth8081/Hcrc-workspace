@@ -51,7 +51,19 @@ const DEPT_FIELD_COLLECTIONS = [
   { collection: 'operationOrders', fields: ['dept'] },
   { collection: 'operationStoreOpenings', fields: ['dept'] },
   { collection: 'operationRepairs', fields: ['dept'] },
-  { collection: 'operationExecutionPeriods', fields: ['dept'] }
+  { collection: 'operationExecutionPeriods', fields: ['dept'] },
+  // budgetLines (Ngân Sách 2.0, v23.0 — thay thế budgetEntries cho MỌI màn nhập liệu mới): PHÁT HIỆN
+  // THIẾU ở đợt audit chuyên sâu 9/2026 (gộp từ cụm Vận Hành, cùng lúc cụm Hệ Thống/Admin/Cấu Hình) —
+  // budgetEntries (module CŨ) đã có mặt ở trên nhưng budgetLines (module MỚI) thì KHÔNG. Collection này
+  // lưu CẢ 2 field cần cascade: "dept" (Khối Phòng Ban) VÀ "location" ("Vị trí" — 'HO' hoặc TÊN 1 siêu
+  // thị, xem lib/createValidation.js budgetLines.extraValidate — dept = location khi Vị trí khác 'HO').
+  // Không cascade: canViewBudgetLine() (lib/recordViewScope.js) so item.dept === user.dept -> nhân viên
+  // mất quyền xem dòng ngân sách cũ của chính mình sau khi đổi tên; addBudgetLineChild()/
+  // updateBudgetLineUsedParent() (lib/recordActions.js) đòi khớp parent.dept/location -> không ghi Sử
+  // Dụng được, hoặc bị từ chối vì location không còn khớp DB.stores. Cơ chế `fields` (mảng) ở đây VỐN ĐÃ
+  // hỗ trợ nhiều field/collection (xem contracts ở trên: ['dept','custodianDept']) nên chỉ cần khai thêm
+  // đúng 1 dòng, không cần sửa renameSimpleFields()/renameFieldValueInCollection().
+  { collection: 'budgetLines', fields: ['dept', 'location'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
@@ -81,16 +93,85 @@ const DEPT_WORKFLOW_MAP_KEYS = [
   'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows'
 ];
 
+// Đổi tên đúng 1 KEY tầng ngoài cùng của 1 map AppData dạng {[dept]: <bất kỳ giá trị gì>} — tách riêng
+// khỏi cascadeDeptWorkflowMaps() để dùng lại được cho cả map KHÔNG phải cấu hình duyệt (VD
+// contractExpiryDeptContacts bên dưới, xem DEPT_KEYED_APPDATA_MAP_KEYS).
+async function renameTopLevelDeptKey(mapKey, oldValue, newValue) {
+  await withLockedAppDataValue(mapKey, (map) => {
+    if (!map || typeof map !== 'object' || !(oldValue in map)) return map;
+    const next = { ...map };
+    next[newValue] = next[oldValue];
+    delete next[oldValue];
+    return next;
+  });
+}
+
 async function cascadeDeptWorkflowMaps(oldValue, newValue) {
   for (const mapKey of DEPT_WORKFLOW_MAP_KEYS) {
-    await withLockedAppDataValue(mapKey, (map) => {
-      if (!map || typeof map !== 'object' || !(oldValue in map)) return map;
-      const next = { ...map };
-      next[newValue] = next[oldValue];
-      delete next[oldValue];
-      return next;
+    await renameTopLevelDeptKey(mapKey, oldValue, newValue);
+  }
+}
+
+// contractExpiryDeptContacts: {[dept]: [{name,email}]} — người phụ trách phòng ban NHẬN EMAIL nhắc hạn
+// hợp đồng (xem jobs/contractExpiryReminder.js) — CÙNG hình dạng {dept: value} như *DeptWorkflows ở trên
+// (chỉ khác value là mảng liên hệ, không phải cấu hình duyệt) nên tái dùng ĐÚNG renameTopLevelDeptKey().
+// PHÁT HIỆN THIẾU ở đợt audit chuyên sâu 9/2026 (cụm Hệ Thống/Admin/Cấu Hình): đổi tên 1 phòng ban KHÔNG
+// cascade map này — người phụ trách phòng đó ÂM THẦM ngừng nhận email nhắc hạn hợp đồng (không có lỗi/
+// cảnh báo nào hiện ra). Tách RIÊNG khỏi DEPT_WORKFLOW_MAP_KEYS (không phải map "duyệt" thật, không cần
+// bị cuốn theo cascadePositionPairs() quét approversByPosition bên trong — value ở đây chỉ là
+// {name,email}, không có field đó).
+const DEPT_KEYED_APPDATA_MAP_KEYS = ['contractExpiryDeptContacts'];
+
+async function cascadeDeptKeyedAppDataMaps(oldValue, newValue) {
+  for (const mapKey of DEPT_KEYED_APPDATA_MAP_KEYS) {
+    await renameTopLevelDeptKey(mapKey, oldValue, newValue);
+  }
+}
+
+// submissionTypeDeptWorkflows: {typeKey: {dept: cfg}} — LỒNG SÂU HƠN 1 CẤP so với mọi map trong
+// DEPT_WORKFLOW_MAP_KEYS (key TẦNG NGOÀI CÙNG là typeKey — loại tờ trình — KHÔNG phải dept, nên
+// renameTopLevelDeptKey()/cascadeDeptWorkflowMaps() không đổi được key `dept` nằm ở TẦNG 2). PHÁT HIỆN
+// mức Cao ở đợt audit chuyên sâu 9/2026 (cụm Hệ Thống/Admin/Cấu Hình): map này CÓ mặt trong
+// POSITION_PAIR_CONFIG_MAP_KEYS (cascade cặp jobTitle/dept BÊN TRONG approversByPosition của mỗi cfg,
+// xem cascadePositionPairs() bên dưới) nhưng KHÔNG có trong DEPT_WORKFLOW_MAP_KEYS — khoá `dept` tầng 2
+// (typeMap[dept] = cfg, xem lib/workflowEngine.js getSubmissionDeptWorkflowConfig()) không được dời khi
+// đổi tên phòng ban, dù chính cfg BÊN TRONG đã được cascade đúng approversByPosition. Hậu quả: sau khi
+// đổi tên 1 phòng ban, cấu hình quy trình RIÊNG theo loại tờ trình (nếu có) của phòng đó vẫn nằm dưới
+// TÊN CŨ -> tờ trình mới (mang tên MỚI) rơi về fallback submissionDeptWorkflows/mặc định, bỏ qua cấu
+// hình riêng theo loại đã đặt tay.
+const NESTED_DEPT_WORKFLOW_MAP_KEYS = ['submissionTypeDeptWorkflows'];
+
+async function cascadeNestedDeptWorkflowMaps(oldValue, newValue) {
+  for (const mapKey of NESTED_DEPT_WORKFLOW_MAP_KEYS) {
+    await withLockedAppDataValue(mapKey, (outer) => {
+      if (!outer || typeof outer !== 'object') return outer;
+      let changed = false;
+      const next = {};
+      for (const [typeKey, inner] of Object.entries(outer)) {
+        if (inner && typeof inner === 'object' && !Array.isArray(inner) && (oldValue in inner)) {
+          const nextInner = { ...inner };
+          nextInner[newValue] = nextInner[oldValue];
+          delete nextInner[oldValue];
+          next[typeKey] = nextInner;
+          changed = true;
+        } else {
+          next[typeKey] = inner;
+        }
+      }
+      return changed ? next : outer;
     });
   }
+}
+
+// workflowParticipatingDepts: MẢNG chuỗi tên phòng ban (KHÔNG phải map {dept: value} như các danh mục ở
+// trên) — dùng để LỌC BỚT danh sách phòng ban hiện ở màn "🔄 Quy Trình & Phê Duyệt" (khối 17 "Nhóm
+// Quyền Đặc Biệt", xem getWorkflowParticipatingDepts() ở module-admin-specialperm.js). PHÁT HIỆN THIẾU
+// ở đợt audit chuyên sâu 9/2026 (cụm Hệ Thống/Admin/Cấu Hình): đổi tên 1 phòng ban không cập nhật GIÁ
+// TRỊ trong mảng này — phòng ban đó biến mất khỏi màn cấu hình (mảng vẫn giữ TÊN CŨ, không còn khớp
+// DB.depts/DB.stores nào) dù cấu hình duyệt bên trong (*DeptWorkflows) đã được cascade đúng tên MỚI.
+async function cascadeWorkflowParticipatingDepts(oldValue, newValue) {
+  await withLockedAppDataValue('workflowParticipatingDepts', (list) =>
+    (Array.isArray(list) ? list.map(d => (d === oldValue ? newValue : d)) : list));
 }
 
 // ===== CẶP (jobTitle, dept) LỒNG BÊN TRONG cấu hình quy trình — "Theo vị trí" (POSITION mode) =====
@@ -108,12 +189,14 @@ async function cascadeDeptWorkflowMaps(oldValue, newValue) {
 // Cấu trúc BÊN TRONG mỗi map KHÁC NHAU tuỳ module (dept -> cfg; dept -> {RETAIL,WHOLESALE} -> cfg;
 // typeKey -> dept -> cfg; tierKey -> cfg) nên KHÔNG hardcode đường đi — quét ĐỆ QUY, đổi tên trong MỌI
 // map `approversByPosition` tìm thấy ở bất kỳ độ sâu nào (tự đúng luôn cho cấu trúc mới thêm sau này).
+// GHI CHÚ SỬA (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Thấp — vô hại về hành vi):
+// trước đây khai LẶP LẠI 'deptWorkflows' ở đây kèm chú thích SAI ("deptWorkflows KHÔNG có trong
+// DEPT_WORKFLOW_MAP_KEYS") — 'deptWorkflows' THỰC RA đã có mặt ở đúng phần tử ĐẦU TIÊN của
+// DEPT_WORKFLOW_MAP_KEYS (xem khai báo ở trên) nên đã được `...DEPT_WORKFLOW_MAP_KEYS` mang vào đây
+// rồi, dòng lặp chỉ dư thừa (JS tự loại trùng khi lặp Array, cascadePositionPairs() bên dưới chỉ chạy
+// withLockedAppDataValue('deptWorkflows', ...) 2 lần liên tiếp vô hại, không sai kết quả) — xoá dòng dư.
 const POSITION_PAIR_CONFIG_MAP_KEYS = [
   ...DEPT_WORKFLOW_MAP_KEYS,
-  // deptWorkflows (Tài Liệu) KHÔNG có trong DEPT_WORKFLOW_MAP_KEYS (khoảng trống RIÊNG, nằm ngoài phạm
-  // vi đợt vá này — đổi tên phòng ban hiện vẫn không DỜI KEY của map này; đã nêu trong báo cáo audit)
-  // nhưng cặp "Theo vị trí" bên trong nó vẫn phải được đổi tên như mọi module khác.
-  'deptWorkflows',
   'submissionTypeDeptWorkflows',        // {typeKey: {dept: cfg}} — lồng SÂU hơn 1 cấp so với các map trên
   'itPriceTierWorkflows',               // {tierKey: cfg} — Hỗ Trợ IT > Bán Buôn (4 mức Margin/Chiết Khấu)
   'operationOrderStoreTierWorkflows',   // {tierKey: cfg} — Vận Hành > Đặt Hàng Tại Siêu Thị
@@ -292,6 +375,9 @@ async function cascadeStoreRename(oldValue, newValue) {
   await cascadeEmployeeProfilesDept(oldValue, newValue);
   await cascadeUserPermsDepts(oldValue, newValue);
   await cascadeDeptWorkflowMaps(oldValue, newValue);
+  await cascadeNestedDeptWorkflowMaps(oldValue, newValue);
+  await cascadeDeptKeyedAppDataMaps(oldValue, newValue);
+  await cascadeWorkflowParticipatingDepts(oldValue, newValue);
   await cascadePositionPairs('dept', oldValue, newValue);
   for (const { collection, fields } of DEPT_FIELD_COLLECTIONS) {
     await renameFieldValueInCollection(collection, (item) => renameSimpleFields(item, fields, oldValue, newValue));

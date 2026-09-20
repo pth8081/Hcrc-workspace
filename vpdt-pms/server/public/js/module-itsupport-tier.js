@@ -161,19 +161,31 @@ function collectItPriceTierWorkflowConfig(tierKey) {
 
   const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
   const { approverMode, approversByPosition } = collectWfStepModesAndPositions(selectedWf, step => `${tierKey}_${step.order}`);
-  // "Chưa có người duyệt" CHỈ cảnh báo cho bước PEOPLE — bước "Theo vị trí" có thể hợp lệ dù
-  // approversObj rỗng (không dùng field đó ở bước này) và dù approversByPosition rỗng NGAY LÚC LƯU
-  // (admin có thể cấu hình vị trí trước khi có ai giữ đúng vị trí đó — cùng triết lý
-  // renderWfPositionPreviewHTML() phân biệt "chưa cấu hình" với "đã cấu hình nhưng chưa ai giữ").
+  // "Chưa có người duyệt" — LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức
+  // Trung bình): trước đây CHỈ cảnh báo cho bước PEOPLE, bỏ hẳn bước "Theo vị trí" ra khỏi vòng kiểm tra
+  // (approverMode[s.order] !== 'POSITION' lọc bỏ luôn) — dù approversByPosition[order] RỖNG hoàn toàn
+  // hoặc cặp (jobTitle,dept) đã chọn KHÔNG khớp ai (previewWfPositionApprovers() trả CONFIGURED_EMPTY,
+  // xem module-admin-specialperm.js), admin vẫn lưu êm ru không 1 dòng cảnh báo, y hệt lỗ hổng đã vá cho
+  // "🏬 Quy Trình Đặt Hàng Siêu Thị" (mixedApprovalRuleMatchCount(), module-workflow.js). Dùng lại ĐÚNG
+  // previewWfPositionApprovers() (module-admin-specialperm.js, cross-module — đã dùng sẵn ở nơi khác
+  // trong chính file này để vẽ preview) để coi bước POSITION là "trống" khi state khác CONFIGURED_RESOLVED.
   const emptySteps = selectedWf
-    ? selectedWf.steps.filter(s => approverMode[s.order] !== 'POSITION' && !(approversObj[s.order] && approversObj[s.order].length > 0))
+    ? selectedWf.steps.filter(s => (approverMode[s.order] === 'POSITION')
+        ? previewWfPositionApprovers(approversByPosition[s.order]).state !== 'CONFIGURED_RESOLVED'
+        : !(approversObj[s.order] && approversObj[s.order].length > 0))
     : [];
   return { config: { workflowId: selectedWfId, approvers: approversObj, approverMode, approversByPosition }, emptySteps };
 }
 
 // Lưu cấu hình quy trình cho 1 tier — mirror saveDeptWorkflowConfig(). KHÔNG cần "Lưu Cấu Hình Tất Cả"
 // riêng (chỉ 4 thẻ cố định, nút lưu từng thẻ là đủ).
-function saveItPriceTierWorkflowConfig(tierKey) {
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Trung bình — 1 trong 5 hàm
+// lưu cấu hình quy trình cốt lõi): trước đây ghi thẳng vào DB rồi bắn syncStorage() KHÔNG await/KHÔNG
+// rollback, luôn alert thành công + log SUCCESS vô điều kiện — nếu server từ chối (409 xung đột, 403 hết
+// phiên, mất mạng), client vẫn coi như đã lưu. Nay await + snapshot/rollback, CHỈ alert/log SUCCESS SAU
+// KHI xác nhận server đã lưu — cùng khuôn saveQuickApplyConfig()/addMixedApprovalRule() (module-workflow.js,
+// đã vá ở vòng 1 cho Nhóm/Cấp/MIXED/QUICKAPPLY).
+async function saveItPriceTierWorkflowConfig(tierKey) {
   const result = collectItPriceTierWorkflowConfig(tierKey);
   if (!result) return;
 
@@ -186,8 +198,13 @@ function saveItPriceTierWorkflowConfig(tierKey) {
   const modConfig = WF_MODULE_CONFIG[activeWfMod];
   const tierDbKey = modConfig.tierDbKeyForWholesale;
   if (!DB[tierDbKey]) DB[tierDbKey] = {};
+  const snapshot = JSON.parse(JSON.stringify(DB[tierDbKey]));
   DB[tierDbKey][tierKey] = result.config;
-  syncStorage(tierDbKey);
+  if (!await syncStorage(tierDbKey)) {
+    DB[tierDbKey] = snapshot;
+    renderWorkflowTab();
+    return;
+  }
 
   delete pendingWfTemplate[`TIER_${tierKey}`];
   // modConfig.label thay vì chuỗi cứng "Hỗ Trợ IT - Duyệt giá Bán Buôn" — hàm này giờ dùng chung cho cả
@@ -217,9 +234,12 @@ function collectDeptWorkflowConfig(dept) {
 
   const selectedWf = DB.workflows.find(w => w.id === selectedWfId);
   const { approverMode, approversByPosition } = collectWfStepModesAndPositions(selectedWf, step => `${deptKey}_${step.order}`);
-  // "Chưa có người duyệt" CHỈ cảnh báo cho bước PEOPLE — xem chú thích đầy đủ ở collectItPriceTierWorkflowConfig().
+  // "Chưa có người duyệt" — nay CŨNG kiểm bước "Theo vị trí", xem chú thích đầy đủ ở
+  // collectItPriceTierWorkflowConfig().
   const emptySteps = selectedWf
-    ? selectedWf.steps.filter(s => approverMode[s.order] !== 'POSITION' && !(approversObj[s.order] && approversObj[s.order].length > 0))
+    ? selectedWf.steps.filter(s => (approverMode[s.order] === 'POSITION')
+        ? previewWfPositionApprovers(approversByPosition[s.order]).state !== 'CONFIGURED_RESOLVED'
+        : !(approversObj[s.order] && approversObj[s.order].length > 0))
     : [];
   return { config: { workflowId: selectedWfId, approvers: approversObj, approverMode, approversByPosition }, emptySteps };
 }
@@ -247,7 +267,9 @@ function writeDeptWorkflowConfig(dbKey, dept, newConfig) {
   }
 }
 
-function saveDeptWorkflowConfig(dept) {
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Trung bình — xem chú thích
+// đầy đủ ở saveItPriceTierWorkflowConfig()): await + snapshot/rollback thay vì "bắn và quên".
+async function saveDeptWorkflowConfig(dept) {
   const result = collectDeptWorkflowConfig(dept);
   if (!result) return;
 
@@ -260,8 +282,13 @@ function saveDeptWorkflowConfig(dept) {
   }
 
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
+  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   writeDeptWorkflowConfig(dbKey, dept, result.config);
-  syncStorage(dbKey);
+  if (!await syncStorage(dbKey)) {
+    DB[dbKey] = snapshot;
+    renderWorkflowTab();
+    return;
+  }
 
   delete pendingWfTemplate[dept];
   logSystemAction('CONFIG', 'UPDATE_DEPT_WORKFLOW', `Cập nhật cấu hình quy trình phòng ban [${dept}]`, 'SUCCESS', dept);
@@ -275,7 +302,8 @@ function saveDeptWorkflowConfig(dept) {
 // cả DB[dbKey]), nên các nút "Lưu Cấu Hình [Phòng ban]" riêng lẻ thực ra cũng đã gửi đủ dữ liệu mọi
 // phòng ban mỗi lần bấm — nút này chỉ gom việc đọc DOM của TẤT CẢ thẻ + 1 lần gọi syncStorage() thay vì
 // phải bấm lại nhiều lần. Nút lưu riêng từng phòng ban vẫn giữ nguyên song song, không thay thế.
-function saveAllDeptWorkflowConfigs() {
+// LỖI ĐÃ VÁ — cùng phát hiện/lý do với saveDeptWorkflowConfig() ở trên (await + snapshot/rollback).
+async function saveAllDeptWorkflowConfigs() {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const collected = getWorkflowParticipatingDepts().map(dept => ({ dept, ...collectDeptWorkflowConfig(dept) })).filter(r => r.config);
   if (!collected.length) return;
@@ -287,8 +315,13 @@ function saveAllDeptWorkflowConfigs() {
     if (!proceed) return;
   }
 
+  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   collected.forEach(r => writeDeptWorkflowConfig(dbKey, r.dept, r.config));
-  syncStorage(dbKey);
+  if (!await syncStorage(dbKey)) {
+    DB[dbKey] = snapshot;
+    renderWorkflowTab();
+    return;
+  }
 
   pendingWfTemplate = {};
   const deptNames = collected.map(r => r.dept).join(', ');
@@ -360,7 +393,14 @@ function resetWorkflowForm() {
   addStepRow('Phê duyệt cấp 1');
 }
 
-function saveWorkflowTemplate(e) {
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Cao + Trung bình — gộp 2 phát
+// hiện): (1) đổi SỐ BƯỚC của 1 mẫu đang được gán cho >=1 phòng ban/mức trước đây lưu thẳng KHÔNG cảnh
+// báo — hồ sơ đang ở 1 bước bị BỚT đi sẽ treo (không ai duyệt được nữa) hoặc mất cấu hình người duyệt/
+// "Theo vị trí" của các bước dư ra; (2) syncStorage() KHÔNG await/KHÔNG rollback, luôn alert thành công +
+// log SUCCESS vô điều kiện. Quét usage TƯƠNG TỰ deleteWorkflowTemplate() (dùng chung
+// collectWorkflowTemplateUsages() bên dưới) rồi cảnh báo trước khi lưu nếu số bước đổi; await +
+// snapshot/rollback cho lượt lưu thật.
+async function saveWorkflowTemplate(e) {
   e.preventDefault();
   const editingCode = document.getElementById('editingWfCode').value;
   const code = document.getElementById('wfCode').value.trim();
@@ -375,9 +415,18 @@ function saveWorkflowTemplate(e) {
     actionLabel: row.querySelector('.step-actionlabel-input').value.trim() || null
   }));
 
+  const snapshot = JSON.parse(JSON.stringify(DB.workflows));
+
   if (editingCode) {
     const wf = DB.workflows.find(w => w.id === editingCode);
     if (wf) {
+      if (wf.steps.length !== steps.length) {
+        const usages = collectWorkflowTemplateUsages(editingCode);
+        if (usages.length > 0) {
+          const proceed = confirm(`⚠️ Mẫu quy trình này đang dùng ở ${usages.length} nơi:\n- ${usages.join('\n- ')}\n\nSửa số bước có thể làm hồ sơ treo ở bước không có người duyệt hoặc mất cấu hình người duyệt bước bị bớt. Tiếp tục?`);
+          if (!proceed) return;
+        }
+      }
       wf.name = name;
       wf.steps = steps;
     }
@@ -386,7 +435,10 @@ function saveWorkflowTemplate(e) {
     DB.workflows.push({ id: code, name: name, steps: steps });
   }
 
-  syncStorage('workflows');
+  if (!await syncStorage('workflows')) {
+    DB.workflows = snapshot;
+    return;
+  }
   logSystemAction('CONFIG', 'SAVE_WORKFLOW_TEMPLATE', `Lưu mẫu quy trình [${code} - ${name}]`, 'SUCCESS', code);
   alert('✅ Đã lưu mẫu quy trình thành công!');
   resetWorkflowForm();
@@ -431,31 +483,41 @@ function collectWorkflowUsagesInConfigMap(map, code, labelPrefix, usages, maxDep
   });
 }
 
-function deleteWorkflowTemplate(code) {
-  // CẬP NHẬT: chặn xoá nếu mẫu quy trình đang được gán cho phòng ban nào đó ở BẤT KỲ module nào —
-  // trước đây xoá vô điều kiện, để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo).
-  // Khi đó hệ thống âm thầm rơi về 1 quy trình giả 1 bước không có người duyệt thật lúc xử lý hồ sơ.
-  //
-  // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): vòng quét cũ chỉ đọc ĐÚNG
-  // 1 tầng (map[dept]?.workflowId) nên BỎ SÓT hoàn toàn 2 dạng cấu hình LỒNG đang dùng thật —
-  // SUBMISSION (hasTypes: {loại: {phòng ban: config}}) và ITPRICE (priceTypeNested: {phòng ban: {loại
-  // giá: config}}) — lẫn legacyDbKey (submissionDeptWorkflows, cấu hình chung cũ vẫn có hiệu lực qua
-  // fallback). Xoá 1 mẫu đang được các cấu hình đó dùng vẫn "thành công": quy trình N bước của những
-  // phòng ban/loại ấy ÂM THẦM co về 1 bước giả "Sếp duyệt" với người duyệt mặc định (xem
-  // flatWorkflowConfigToSteps() ở lib/workflowEngine.js) — bỏ qua toàn bộ các cấp duyệt đã cấu hình.
+// Quét TOÀN BỘ WF_MODULE_CONFIG tìm mọi nơi đang gán mẫu quy trình `code` — TÁCH RIÊNG khỏi
+// deleteWorkflowTemplate() (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Cao) để dùng
+// lại được cho saveWorkflowTemplate() (cảnh báo trước khi ĐỔI SỐ BƯỚC, không chỉ trước khi XOÁ — xem
+// chú thích đầy đủ ở saveWorkflowTemplate()), tránh viết trùng cùng 1 logic 2 nơi.
+//
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): vòng quét cũ chỉ đọc ĐÚNG
+// 1 tầng (map[dept]?.workflowId) nên BỎ SÓT hoàn toàn 2 dạng cấu hình LỒNG đang dùng thật —
+// SUBMISSION (hasTypes: {loại: {phòng ban: config}}) và ITPRICE (priceTypeNested: {phòng ban: {loại
+// giá: config}}) — lẫn legacyDbKey (submissionDeptWorkflows, cấu hình chung cũ vẫn có hiệu lực qua
+// fallback). Xoá 1 mẫu đang được các cấu hình đó dùng vẫn "thành công": quy trình N bước của những
+// phòng ban/loại ấy ÂM THẦM co về 1 bước giả "Sếp duyệt" với người duyệt mặc định (xem
+// flatWorkflowConfigToSteps() ở lib/workflowEngine.js) — bỏ qua toàn bộ các cấp duyệt đã cấu hình.
+function collectWorkflowTemplateUsages(code) {
   const usages = [];
   Object.values(WF_MODULE_CONFIG).forEach(cfg => {
     // maxDepth=1: đủ cho 2 tầng lồng (hasTypes/priceTypeNested); map phẳng tự dừng ngay ở tầng đầu.
     if (cfg.dbKey) collectWorkflowUsagesInConfigMap(DB[cfg.dbKey], code, cfg.label, usages, 1);
     // legacyDbKey: cấu hình chung cũ (chỉ theo phòng ban) vẫn được dùng làm fallback khi loại đang chọn
-    // chưa cấu hình riêng — xoá mẫu nó đang trỏ tới cũng làm hỏng quy trình thật.
+    // chưa cấu hình riêng — xoá/sửa mẫu nó đang trỏ tới cũng làm hỏng quy trình thật.
     if (cfg.legacyDbKey) collectWorkflowUsagesInConfigMap(DB[cfg.legacyDbKey], code, `${cfg.label} (cấu hình chung cũ)`, usages, 1);
     // Module theo TIER (fixedTiers/tierDbKeyForWholesale, vd ITPRICE Bán Buôn + 2 module MỚI Vận Hành >
     // Đặt Hàng Tại Siêu Thị/HO) lưu cấu hình ở collection RIÊNG (cfg.dbKey ở trên KHÔNG trỏ tới đây) —
-    // trước đây bị bỏ sót khỏi vòng quét này, khiến xoá 1 mẫu quy trình đang được gán cho 1 mức tier vẫn
-    // "thành công", để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo).
+    // trước đây bị bỏ sót khỏi vòng quét này.
     if (cfg.tierDbKeyForWholesale) collectWorkflowUsagesInConfigMap(DB[cfg.tierDbKeyForWholesale], code, cfg.label, usages, 1);
   });
+  return usages;
+}
+
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Trung bình — xem chú thích
+// đầy đủ ở saveItPriceTierWorkflowConfig()): await + snapshot/rollback thay vì "bắn và quên".
+async function deleteWorkflowTemplate(code) {
+  // Chặn xoá nếu mẫu quy trình đang được gán cho phòng ban/mức nào đó ở BẤT KỲ module nào — xoá vô
+  // điều kiện sẽ để lại workflowId trỏ tới mẫu không còn tồn tại (tham chiếu treo), hệ thống âm thầm
+  // rơi về 1 quy trình giả 1 bước không có người duyệt thật lúc xử lý hồ sơ.
+  const usages = collectWorkflowTemplateUsages(code);
 
   if (usages.length > 0) {
     alert(`⛔ Không thể xoá — mẫu quy trình này đang được sử dụng ở:\n- ${usages.join('\n- ')}\n\nHãy đổi các phòng ban trên sang mẫu quy trình khác trước khi xoá.`);
@@ -463,8 +525,13 @@ function deleteWorkflowTemplate(code) {
   }
 
   if (!confirm('Bạn có chắc chắn muốn xóa mẫu quy trình này?')) return;
+  const snapshot = JSON.parse(JSON.stringify(DB.workflows));
   DB.workflows = DB.workflows.filter(w => w.id !== code);
-  syncStorage('workflows');
+  if (!await syncStorage('workflows')) {
+    DB.workflows = snapshot;
+    renderWorkflowTab();
+    return;
+  }
   logSystemAction('CONFIG', 'DELETE_WORKFLOW_TEMPLATE', `Xóa mẫu quy trình [${code}]`, 'SUCCESS', code);
   renderWorkflowTab();
   renderQuickApplySection();
