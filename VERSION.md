@@ -1,8 +1,24 @@
 # Phiên bản hiện tại
 
-**23.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.64 (2026-09-20): Đổi icon sidebar "Nhân Sự" từ 🤝 sang 💼 (chuyên nghiệp hơn)
+
+Theo yêu cầu người dùng, đổi icon nút sidebar cấp cao nhất "Nhân Sự"
+(`#btnHrTab`, `public/index.html`) từ 🤝 (bắt tay) sang 💼 (cặp táp) — nhìn
+chuyên nghiệp hơn và không trùng icon với bất kỳ mục sidebar nào khác. Đã
+demo 3 phương án (💼/👥/👔) cho người dùng chọn trước khi áp dụng. Chỉ đổi
+đúng icon của nút cấp cao nhất — các icon 🤝 khác trong hệ thống (mục "HCRC
+Đồng Hành"/"Quản Lý & Phản Hồi Ý Kiến", thuộc Truyền Thông Nội Bộ, không
+phải Nhân Sự) giữ nguyên vì thuộc tính năng khác.
+
+Xác nhận lại không có vi phạm CSP nào (`test-csp-full-audit.js`, 38 điểm
+điều hướng, 0 violation) và toàn bộ điều hướng vẫn hoạt động đúng
+(`test-lazy-load-all-tabs.js`, 42/42 PASS) trên code hiện tại — bản v23.46
+người dùng chụp ảnh gửi kèm câu hỏi là bản cache cũ trên điện thoại (cũ hơn
+17 bậc so với bản đang chạy trên repo), không phải lỗi CSP thật của bản mới.
 
 ## v23.63 (2026-09-20): Tách module "Nghiệp Vụ" thành "📘 Hướng Dẫn" (2 tab Nghiệp Vụ/Hệ Thống)
 
