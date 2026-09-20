@@ -140,6 +140,8 @@ async function main() {
         document.getElementById('tdDocType').value = 'VIDEO';
         onTrainingDocTypeChange();
         document.getElementById('tdVideoUrl').value = 'https://www.youtube.com/watch?v=safety123';
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7): thời lượng video nay BẮT BUỘC.
+        document.getElementById('tdVideoDuration').value = '300';
         document.getElementById('tdMandatory').checked = true;
         document.getElementById('tdCourseId').value = String(cid);
       }, courseId);

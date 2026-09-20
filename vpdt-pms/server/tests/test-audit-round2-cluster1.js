@@ -234,9 +234,11 @@ function expectThrows(fn, message) {
   throw new Error(message || 'Đáng lẽ phải ném lỗi nhưng không ném');
 }
 
-// Payload tài liệu đào tạo dạng VIDEO — chỉ đổi videoUrl giữa các kịch bản.
+// Payload tài liệu đào tạo dạng VIDEO — chỉ đổi videoUrl giữa các kịch bản. durationSeconds (LỖI ĐÃ VÁ,
+// rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7) nay bắt buộc — kèm sẵn 1 giá trị hợp lệ mặc định để
+// không ảnh hưởng tới các kịch bản của bài test này (chỉ nhắm vào videoUrl).
 function videoDocPayload(videoUrl) {
-  return { category: 'An toàn lao động', title: 'Video hướng dẫn', docType: 'VIDEO', videoUrl };
+  return { category: 'An toàn lao động', title: 'Video hướng dẫn', docType: 'VIDEO', videoUrl, durationSeconds: 300 };
 }
 
 async function main() {

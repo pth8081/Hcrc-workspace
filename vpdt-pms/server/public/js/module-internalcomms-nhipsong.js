@@ -218,7 +218,8 @@ async function submitInternalPost(e) {
 
   const postPayload = {
     type,
-    code: `${INTERNAL_TYPE_PREFIX[type]}-${Date.now()}`,
+    // code (BỎ, phát hiện #14, rà soát chuyên sâu vòng 2, 9/2026): SERVER tự sinh theo TYPE
+    // (createValidation.js internalPosts.generateCode) — không còn tin code client tự tính nữa.
     title, content,
     attachment,
     training,
@@ -386,6 +387,48 @@ function unhideInternalPostAction(id) {
       const idx = DB.internalPosts.findIndex(x => x.id === id);
       if (idx !== -1) DB.internalPosts[idx] = updated;
       logSystemAction('INTERNAL', 'UNHIDE_INTERNAL_POST', `Hiện lại bài [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
+      closeInternalArticleModal();
+      renderInternalPosts();
+    }
+  });
+}
+
+// Xoá bài đăng (BỔ SUNG — phát hiện #12, rà soát chuyên sâu vòng 2, 9/2026) — CHỈ Admin (khớp
+// deleteAdminOnly() ở routes/records.js), dọn bài Nháp/Đã từ chối/spam vào Thùng Rác (khôi phục được).
+// Cùng khuôn deleteTrainingClass() (module-internalcomms-daotao.js).
+function deleteInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Xóa hẳn bài đăng "${p.title}"? Bài sẽ chuyển vào Thùng Rác (khôi phục được).`)) return;
+  callRecordAction('internalPosts', id, 'delete', {}).then(() => {
+    DB.internalPosts = DB.internalPosts.filter(x => x.id !== id);
+    logSystemAction('INTERNAL', 'DELETE_INTERNAL_POST', `Xóa bài đăng [${p.code || ''} - ${p.title}]`, 'SUCCESS', p.code);
+    closeInternalArticleModal();
+    renderInternalPosts();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+// Gỡ Ghim (BỔ SUNG — phát hiện #11, rà soát chuyên sâu vòng 2, 9/2026) — cùng khuôn hideInternalPostAction()
+// ở trên nhưng CHỈ đổi pinned/pinExpiresAt, KHÔNG đụng tới status (bài vẫn hiển thị bình thường, chỉ mất
+// vị trí ghim ở trang chủ), khớp unpinInternalPost() ở lib/recordActions.js.
+function unpinInternalPostAction(id) {
+  const p = DB.internalPosts.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Gỡ ghim bài đăng',
+    bodyHTML: `Bạn có chắc chắn muốn gỡ ghim bài "<b>${escapeHtml(p.title)}</b>" khỏi trang chủ?`,
+    confirmLabel: 'Gỡ Ghim',
+    onConfirm: async () => {
+      let updated;
+      try {
+        const result = await callRecordAction('internalPosts', id, 'unpin', {});
+        updated = result.item;
+      } catch (err) {
+        return alert(`⛔ ${err.message}`);
+      }
+      const idx = DB.internalPosts.findIndex(x => x.id === id);
+      if (idx !== -1) DB.internalPosts[idx] = updated;
+      logSystemAction('INTERNAL', 'UNPIN_INTERNAL_POST', `Gỡ ghim bài [${updated.code} - ${updated.title}]`, 'SUCCESS', updated.code);
       closeInternalArticleModal();
       renderInternalPosts();
     }
@@ -861,6 +904,20 @@ function internalPostHideActionHTML(p) {
   return '';
 }
 
+// Gỡ Ghim (phát hiện #11) — chỉ hiện khi bài ĐANG ghim còn hạn (cùng điều kiện pinBadgeHTML ở
+// renderInternalPosts()), cùng quyền canApproveInternalPost như internalPostHideActionHTML() ở trên.
+function internalPostUnpinActionHTML(p) {
+  if (!canApproveInternalPost(currentUser)) return '';
+  if (!(p.pinned && p.pinExpiresAt && new Date(p.pinExpiresAt).getTime() > Date.now())) return '';
+  return `<button data-op="unpinInternalPostAction" data-arg0="${p.id}" class="bg-amber-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-amber-700">📌 Gỡ Ghim</button>`;
+}
+
+// Xoá bài (phát hiện #12) — CHỈ Admin, khớp POST internalPosts/:id/delete (admin-only) ở routes/records.js.
+function internalPostDeleteActionHTML(p) {
+  if (!currentUser.perms?.admin) return '';
+  return `<button data-op="deleteInternalPostAction" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline text-xs px-1">Xóa</button>`;
+}
+
 // "Yêu Cầu Bổ Sung" (chỉ Góc chia sẻ, PENDING, canApprove) — hiện cạnh Duyệt/Từ chối hiện có.
 function internalPostRequestInfoActionHTML(p) {
   if (p.type !== 'SHARE' || p.status !== 'PENDING' || !canApproveInternalPost(currentUser)) return '';
@@ -1098,9 +1155,11 @@ function renderInternalPosts() {
             </div>
             <div class="flex gap-2 flex-wrap">
               ${approveActionsHTML}
+              ${internalPostUnpinActionHTML(p)}
               ${internalPostHideActionHTML(p)}
               ${internalPostEditButtonHTML(p)}
               <button data-op="viewInternalPostDetail" data-arg0="${p.id}" class="bg-fuchsia-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-fuchsia-700">📄 Chi tiết</button>
+              ${internalPostDeleteActionHTML(p)}
             </div>
           </div>
         </div>
@@ -1199,8 +1258,8 @@ function renderInternalNewsCard(p) {
     ? `<button data-op="toggleInternalCommentsExpanded" data-arg0="${p.id}" class="text-xs text-fuchsia-700 font-bold hover:underline mb-2">Xem tất cả ${comments.length} bình luận →</button>`
     : (expanded && comments.length > 5 ? `<button data-op="toggleInternalCommentsExpanded" data-arg0="${p.id}" class="text-xs text-gray-500 hover:underline mb-2">Thu gọn bình luận</button>` : '');
   const statusBadgeHTML = internalPostStatusBadgeHTML(p);
-  const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p))
-    ? `<div class="flex gap-2 flex-wrap mb-2">${internalPostEditButtonHTML(p)}${internalPostHideActionHTML(p)}</div>`
+  const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p) || internalPostUnpinActionHTML(p) || internalPostDeleteActionHTML(p))
+    ? `<div class="flex gap-2 flex-wrap mb-2">${internalPostEditButtonHTML(p)}${internalPostUnpinActionHTML(p)}${internalPostHideActionHTML(p)}${internalPostDeleteActionHTML(p)}</div>`
     : '';
 
   return `
@@ -1324,8 +1383,8 @@ function viewInternalPostDetail(id) {
     ? `<div class="bg-red-50 border border-red-200 rounded p-3 mb-3 text-xs text-red-800"><b>Lý do từ chối:</b> ${escapeHtml(p.rejectReason)}</div>`
     : '';
   const infoRequestBannerHTML = internalPostInfoRequestBannerHTML(p);
-  const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p))
-    ? `<div class="flex gap-2 flex-wrap mb-3">${internalPostEditButtonHTML(p)}${internalPostHideActionHTML(p)}</div>`
+  const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p) || internalPostUnpinActionHTML(p) || internalPostDeleteActionHTML(p))
+    ? `<div class="flex gap-2 flex-wrap mb-3">${internalPostEditButtonHTML(p)}${internalPostUnpinActionHTML(p)}${internalPostHideActionHTML(p)}${internalPostDeleteActionHTML(p)}</div>`
     : '';
 
   let typeInfoHTML = '';
