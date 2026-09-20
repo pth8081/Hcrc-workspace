@@ -13,6 +13,7 @@ const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { HttpError } = require('../lib/httpErrors');
 const { sendServerError, sendCatchError } = require('../lib/errorResponse');
 const orgChart = require('../lib/orgChart');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -210,16 +211,33 @@ router.post('/versions/:id/apply', async (req, res) => {
     return sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/apply', 'Không thể áp dụng phiên bản');
   }
   let unresolved = [];
+  let changedCount = 0;
   try {
     await withLockedAppDataValue('users', (currentUsers) => {
       const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(appliedVersion, currentUsers);
       unresolved = u;
+      changedCount = changes.length;
       return orgChart.applyManagerUsernameUpdates(currentUsers, changes);
     });
   } catch (err) {
     console.error('⛔ Áp dụng cơ cấu tổ chức thành công nhưng lỗi khi tự cập nhật Quản Lý Trực Tiếp:', err.message);
     unresolved = [{ username: '', name: '', reason: 'Lỗi hệ thống khi tự cập nhật Quản Lý Trực Tiếp — vui lòng kiểm tra thủ công' }];
   }
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Trung bình): route này ghi
+  // THẲNG vào collection "users" (admin-sensitive, nằm trong ADMIN_SENSITIVE_KEYS — xem
+  // logAdminSensitiveDataWrite() ở routes/data.js) qua withLockedAppDataValue() thay vì POST
+  // /api/data/users, nên bỏ qua HOÀN TOÀN lớp audit ADMIN_DATA_WRITE đã dựng ở vòng 1 — 1 lượt "Áp dụng"
+  // cây tổ chức có thể đổi managerUsername của HÀNG CHỤC user cùng lúc mà không để lại dấu vết Nhật Ký
+  // Hệ Thống nào. Ghi log SERVER-SIDE riêng tại đây (fire-and-forget, không làm hỏng response đã tính
+  // xong), nêu rõ số user bị đổi managerUsername + ai thực hiện.
+  insertSystemLog({
+    username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+    module: 'SYSTEM', actionType: 'ORGCHART_APPLY_VERSION',
+    targetObject: `orgChartVersions#${appliedVersion?.id ?? req.params.id}`,
+    description: `Áp dụng phiên bản Cơ Cấu Tổ Chức [${appliedVersion?.id ?? req.params.id}] — tự cập nhật Quản Lý Trực Tiếp cho ${changedCount} user`
+      + (unresolved.length ? ` (${unresolved.length} user KHÔNG suy ra được, cần kiểm tra thủ công)` : ''),
+    status: unresolved.length ? 'WARNING' : 'SUCCESS'
+  }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (áp dụng Cơ Cấu Tổ Chức):', e.message));
   res.json({ ok: true, version: appliedVersion, unresolvedManagerUsers: unresolved });
 });
 
@@ -237,11 +255,23 @@ router.post('/recompute-manager-usernames', async (req, res) => {
     const applied = orgChart.getAppliedVersion(list);
     if (!applied) return res.status(400).json({ error: 'Chưa có phiên bản Cơ Cấu Tổ Chức nào đang áp dụng' });
     let unresolved = [];
+    let changedCount = 0;
     await withLockedAppDataValue('users', (currentUsers) => {
       const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(applied, currentUsers);
       unresolved = u;
+      changedCount = changes.length;
       return orgChart.applyManagerUsernameUpdates(currentUsers, changes);
     });
+    // LỖI ĐÃ VÁ — cùng phát hiện/lý do với POST /versions/:id/apply ở trên (ghi thẳng "users" qua
+    // withLockedAppDataValue(), bỏ qua lớp audit ADMIN_DATA_WRITE).
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'ORGCHART_RECOMPUTE_MANAGERS',
+      targetObject: `orgChartVersions#${applied.id}`,
+      description: `Đồng bộ lại Quản Lý Trực Tiếp theo Cơ Cấu Tổ Chức [${applied.id}] đang áp dụng — cập nhật ${changedCount} user`
+        + (unresolved.length ? ` (${unresolved.length} user KHÔNG suy ra được, cần kiểm tra thủ công)` : ''),
+      status: unresolved.length ? 'WARNING' : 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (đồng bộ Quản Lý Trực Tiếp):', e.message));
     res.json({ ok: true, unresolvedManagerUsers: unresolved });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });

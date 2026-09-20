@@ -545,6 +545,23 @@ function filterBudgetLinesForUser(items, user) {
   return (items || []).filter(i => canViewBudgetLine(user, i));
 }
 
+// budgetPeriods (module Ngân Sách CŨ — budgetEntries — vẫn GIỮ NGUYÊN, không xoá, để không mất lịch sử,
+// xem chú thích ở sql/schema.sql) — "kỳ ngân sách" định nghĩa phạm vi/hạn chót, có cột Dept (phòng ban
+// mở kỳ) nhưng KHÔNG có approvers riêng (không tra qua lib/workflowEngine.js) nên đơn giản hơn hẳn
+// canViewBudgetEntry() — PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình):
+// routes/reports.js trước đây khai REPORT_QUERY_CONFIGS.budgetPeriods.filterFn = null (không qua BẤT KỲ
+// hàm quyền nào) — mọi tài khoản ĐÃ ĐĂNG NHẬP gọi GET /api/reports/budgetPeriods đọc được TOÀN BỘ kỳ
+// ngân sách của MỌI phòng ban. Dùng đúng logic quyền tương đương budgetEntries/budgetLines ở trên:
+// admin/budgetManage/budgetAggregate xem hết, còn lại chỉ xem kỳ của ĐÚNG phòng ban mình.
+function canViewBudgetPeriod(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate) return true;
+  return item.dept === user.dept;
+}
+function filterBudgetPeriodsForUser(items, user) {
+  return (items || []).filter(p => canViewBudgetPeriod(user, p));
+}
+
 // Vận Hành — 3 luồng độc lập, cùng khuôn canViewBudgetEntry() ở trên (hồ sơ của ĐƠN VỊ, cùng phòng ban
 // xem được kể cả bản NHÁP, admin/approver-ngoài-phòng xem được) — KHÔNG có quyền "xem mọi phòng ban"
 // riêng (không cần thiết cho module mới, giữ đơn giản).
@@ -1186,6 +1203,25 @@ function hasModuleAccessServer(user, moduleKey) {
   return ma[moduleKey] !== false;
 }
 
+// hrFeedback dùng CHUNG 2 module: tab GỬI câu hỏi "HCRC Đồng Hành" (module 'internal', mở cho MỌI nhân
+// viên) VÀ màn "🤝 Quản Lý & Phản Hồi Ý Kiến" (module 'hr' — canAccessHrModule() ở public/js/core.js đòi
+// hasModuleAccess(user,'hr') + perms.nhanSuManage). MIRROR ĐÚNG canAccessHrModule() phía server (hàm đó
+// chỉ tồn tại ở client, dùng thẳng DB toàn cục — không gọi được từ đây) để làm gate OR dùng CHUNG cho cả
+// GET /api/data VÀ GET /api/reports/hrFeedback.
+// PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, gộp thêm từ cụm Vận
+// Hành): MODULE_ACCESS_GATED_COLLECTIONS.internal liệt kê hrFeedback (ĐÚNG cho khâu TẠO — hỏi câu hỏi
+// vẫn phải qua module 'internal', xem routes/create.js) nhưng vòng lặp zero-out ở GET /api/data
+// (routes/data.js) lại dùng CHUNG đúng 1 điều kiện đó để ẨN LUÔN dữ liệu XEM — tắt moduleAccess.internal
+// cho 1 tài khoản Nhân Sự (có đủ moduleAccess.hr + nhanSuManage) làm chết hẳn màn "Quản Lý & Phản Hồi Ý
+// Kiến" (badge luôn 0, không thấy câu hỏi nào, không có lỗi hiển thị nào báo cho admin biết). Hàm này
+// KHÔNG thay hrFeedback ra khỏi MODULE_ACCESS_GATED_COLLECTIONS.internal (khâu TẠO giữ nguyên) — chỉ
+// dùng để nới lỏng ĐÚNG bước zero-out lúc XEM ở routes/data.js/routes/reports.js.
+function canAccessHrFeedbackModuleServer(user) {
+  if (!user) return false;
+  if (hasModuleAccessServer(user, 'internal')) return true;
+  return hasModuleAccessServer(user, 'hr') && !!user.perms?.nhanSuManage;
+}
+
 module.exports = {
   isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
@@ -1212,6 +1248,7 @@ module.exports = {
   canViewUniformTransfer, filterUniformTransfersForUser,
   canViewBudgetEntry, filterBudgetEntriesForUser,
   canViewBudgetLine, filterBudgetLinesForUser,
+  canViewBudgetPeriod, filterBudgetPeriodsForUser,
   canViewOperationOrder, filterOperationOrdersForUser,
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
@@ -1239,5 +1276,5 @@ module.exports = {
   filterRebateCalculationsForReportView,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile,
-  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
 };

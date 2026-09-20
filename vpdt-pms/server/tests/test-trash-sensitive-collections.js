@@ -55,13 +55,20 @@ stubModule('lib/recordStore', {
     const [removed] = TRASH.splice(idx, 1);
     return { collection: removed.collection, item: removed.item, restoredFamilyMembers: [], familyRestoreErrors: [] };
   },
+  // Chữ ký trả về ĐÃ ĐỔI (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình): trước đây không trả
+  // gì (chỉ xoá) — nay trả {collection, originalId, code, title} để routes/trash.js ghi được Nhật Ký Hệ
+  // Thống có mô tả rõ ràng (xem test-audit-hethong-round2-server.js cho test riêng của phần log đó).
   permanentlyDeleteTrashItem: async (trashId) => {
     const idx = TRASH.findIndex(t => t.trashId === trashId);
     if (idx === -1) { const { HttpError } = require('../lib/httpErrors'); throw new HttpError(404, 'Không tìm thấy'); }
-    TRASH.splice(idx, 1);
+    const [removed] = TRASH.splice(idx, 1);
+    return { collection: removed.collection, originalId: removed.originalId, code: removed.code || null, title: removed.item?.title || null };
   }
 });
 stubModule('lib/approvalAuth', { consumeApprovalGrant: async () => true });
+// insertSystemLog() (Nhật Ký Hệ Thống server-side, ghi khi xoá vĩnh viễn — đợt vá audit vòng 2) — stub
+// tránh đụng DB thật, không thuộc phạm vi test này (đã có test riêng ở test-audit-hethong-round2-server.js).
+stubModule('lib/systemLogStore', { insertSystemLog: async () => {} });
 
 // ADMIN_PLAIN: chỉ cờ admin, KHÔNG có quyền HR chuyên biệt nào — đúng kịch bản lỗ hổng.
 const ADMIN_PLAIN = { username: 'adminPlain', perms: { admin: true } };

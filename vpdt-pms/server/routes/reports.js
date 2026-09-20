@@ -28,9 +28,26 @@ const {
   filterMeetingsForUser, filterMeetingMinutesForUser, filterInternalPostsForUser,
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
   filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
-  filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser,
-  filterChecklistSubmissionsForReportCrossView, filterRebateCalculationsForReportView
+  filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
+  filterChecklistSubmissionsForReportCrossView, filterRebateCalculationsForReportView,
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
 } = require('../lib/recordViewScope');
+
+// PQ-01 mirror cho Báo Cáo — PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu
+// Hình): GET /api/reports/:collection TRƯỚC ĐÂY hoàn toàn KHÔNG gọi hasModuleAccessServer() — trong khi
+// GET /api/data (routes/data.js) đã mirror gate "Khối 0" (moduleAccess) cho đúng nhóm module "mở sẵn cho
+// mọi nhân viên" (doc/submission/task/internal/contract/itSupport/hrAttendance, xem
+// MODULE_ACCESS_GATED_COLLECTIONS ở lib/recordViewScope.js). Admin tắt moduleAccess.internal cho 1 tài
+// khoản chỉ ẩn được tab ở giao diện/GET /api/data — gọi thẳng GET /api/reports/internalPosts (hoặc
+// docs/submissions/tasks/contracts/itSupportTickets/hrFeedback) vẫn trả nguyên dữ liệu. Đảo ngược
+// MODULE_ACCESS_GATED_COLLECTIONS thành collection -> moduleKey, ĐÚNG khuôn COLLECTION_TO_MODULE_ACCESS_KEY
+// ở routes/create.js (không viết lại logic).
+const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLECTIONS).reduce(
+  (acc, [moduleKey, collections]) => {
+    collections.forEach((c) => { acc[c] = moduleKey; });
+    return acc;
+  }, {}
+);
 
 router.use(requireAuth, blockIfMustChangePassword);
 // Rà soát bảo mật trước golive (9/2026, mức Trung bình): truy vấn báo cáo tốn tài nguyên SQL hơn hẳn
@@ -95,10 +112,12 @@ const REPORT_QUERY_CONFIGS = {
   hrFeedback: { filterFn: filterHrFeedbackForUser, needsAppData: false },
   hrProcesses: { filterFn: filterHrProcessesForUser, needsAppData: false },
   reportPeriods: { filterFn: sanitizeReportPeriodsForUser, needsAppData: false },
-  // Kỳ ngân sách (định nghĩa kỳ, không chứa số tiền/dept nhạy cảm như budgetEntries) chưa có
-  // filter*ForUser() riêng nào ở lib/recordViewScope.js (routes/data.js cũng trả nguyên, không lọc) —
-  // filterFn: null nghĩa là chỉ thu hẹp theo dept/ngày ở SQL, không áp thêm bước lọc quyền nào khác.
-  budgetPeriods: { filterFn: null, needsAppData: false },
+  // Kỳ ngân sách — PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026): trước đây filterFn: null nghĩa là
+  // chỉ thu hẹp theo dept/ngày ở SQL, KHÔNG áp thêm bước lọc quyền nào khác — mọi tài khoản đã đăng nhập
+  // đọc được toàn bộ kỳ ngân sách của MỌI phòng ban qua route Báo Cáo. Dùng filterBudgetPeriodsForUser()
+  // (lib/recordViewScope.js, logic quyền tương đương budgetEntries/budgetLines: admin/budgetManage/
+  // budgetAggregate xem hết, còn lại chỉ xem kỳ của đúng phòng ban mình).
+  budgetPeriods: { filterFn: filterBudgetPeriodsForUser, needsAppData: false },
   // budgetLines (Ngân Sách 2.0, v23.0) — canViewBudgetLine() không cần appData (chỉ 1 cấp gác permission
   // phẳng, không có approver theo phòng ban), xem lib/recordViewScope.js.
   budgetLines: { filterFn: filterBudgetLinesForUser, needsAppData: false },
@@ -132,6 +151,22 @@ router.get('/:collection', async (req, res) => {
     if (!config) {
       return res.status(400).json({ error: `Báo Cáo chưa hỗ trợ lọc SQL cho collection "${collection}"` });
     }
+
+    // Khối 0 (moduleAccess) — xem chú thích COLLECTION_TO_MODULE_ACCESS_KEY ở đầu file. hrFeedback dùng
+    // gate OR RIÊNG (canAccessHrFeedbackModuleServer, xem lib/recordViewScope.js) — KHÔNG áp gate
+    // 'internal' đơn thuần như phần còn lại của bảng tra cứu, tránh chặn nhầm Nhân Sự (nhanSuManage) khi
+    // module Truyền Thông Nội Bộ bị tắt cho tài khoản đó.
+    if (collection === 'hrFeedback') {
+      if (!canAccessHrFeedbackModuleServer(req.freshUser)) {
+        return res.status(403).json({ error: 'Bạn không có quyền truy cập dữ liệu báo cáo này' });
+      }
+    } else {
+      const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[collection];
+      if (moduleAccessKey && !hasModuleAccessServer(req.freshUser, moduleAccessKey)) {
+        return res.status(403).json({ error: 'Bạn không có quyền truy cập dữ liệu báo cáo này' });
+      }
+    }
+
     const cfg = DEDICATED_TABLES[collection]; // undefined cho "tasks" (bảng riêng, xem chú thích ở trên)
 
     const { dept, from, to } = req.query;

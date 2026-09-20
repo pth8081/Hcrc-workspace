@@ -1326,26 +1326,36 @@ async function sweepOrphanedUploads({ graceHours = 48 } = {}) {
 // FAIL-OPEN: ai còn giữ URL cũ (lịch sử duyệt web, chat, log proxy) vẫn tải lại được nguyên vẹn nội
 // dung "đã bị xoá vĩnh viễn". Lấy luôn Payload qua OUTPUT DELETED (cùng 1 câu lệnh, không có khe hở
 // giữa đọc và xoá) để biết chính xác file nào thuộc bản ghi vừa mất.
+// Trả về {collection, originalId, code} của mục vừa xoá vĩnh viễn — PHÁT HIỆN mức Cao (đợt audit chuyên
+// sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình): trước đây hàm này không trả gì (chỉ dọn file), khiến
+// routes/trash.js DELETE /:id không có dữ liệu để ghi Nhật Ký Hệ Thống (mô tả log chỉ còn cách ghi
+// "id=<trashId>" trơ trụi, không rõ collection/mã hồ sơ nào vừa bị xoá VĨNH VIỄN — hành động không có
+// đường lùi lại là hành động ÍT truy vết nhất). Thêm OUTPUT DELETED.Collection/OriginalId/Code (đã có
+// sẵn ở schema, cùng cột getTrashItemCollection() dùng) — KHÔNG đổi hành vi dọn file bên dưới.
 async function permanentlyDeleteTrashItem(trashId) {
   const pool = await getPool();
   const result = await pool.request()
     .input('trashId', sql.BigInt, trashId)
-    .query('DELETE FROM dbo.TrashBin OUTPUT DELETED.Id, DELETED.Payload WHERE Id = @trashId');
+    .query('DELETE FROM dbo.TrashBin OUTPUT DELETED.Id, DELETED.Collection, DELETED.OriginalId, DELETED.Code, DELETED.Payload WHERE Id = @trashId');
   if (result.recordset.length === 0) {
     throw new HttpError(404, 'Không tìm thấy mục này trong thùng rác');
   }
   invalidateTrashCache();
 
+  const row = result.recordset[0];
+  const summary = { collection: row.Collection, originalId: row.OriginalId, code: row.Code || null };
+
   let payload = null;
   try {
-    payload = JSON.parse(result.recordset[0].Payload);
+    payload = JSON.parse(row.Payload);
   } catch (err) {
     console.error('⛔ Payload thùng rác hỏng, bỏ qua bước dọn file:', err.message);
-    return;
+    return summary;
   }
   // Chỉ xoá file KHÔNG còn ai tham chiếu tới (xem isFileUrlStillReferenced) — bản ghi khác cùng trỏ tới
   // đúng file đó (dây chuyền phiên bản, hồ sơ chép lại...) vẫn phải đọc được file của mình.
   await unlinkUnreferencedUploads(collectRecordFileUrls(payload));
+  return { ...summary, title: payload?.title || payload?.name || null };
 }
 
 // ===== Dispatch: 1 điểm gọi cho routes/create.js, routes/workflow.js, routes/data.js — không cần biết

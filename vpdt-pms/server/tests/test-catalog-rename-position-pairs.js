@@ -195,8 +195,14 @@ async function run(name, fn) {
     assert.strictEqual(APP_DATA.deptWorkflows['Phòng IT'], undefined, 'Key CŨ phải biến mất, không để lại rác');
     assert.strictEqual(pairsOf(APP_DATA.itPriceTierWorkflows.MARGIN_LT5)[0].dept, 'Phòng Công Nghệ Thông Tin', 'Map theo TIER không có key phòng ban -> chỉ cặp bên trong mới cascade được');
     assert.strictEqual(pairsOf(APP_DATA.operationOrderHOTierWorkflows.LT100M)[0].dept, 'Phòng Công Nghệ Thông Tin');
-    assert.strictEqual(pairsOf(APP_DATA.submissionTypeDeptWorkflows.CHU_TRUONG['Phòng IT'])[0].dept, 'Phòng Công Nghệ Thông Tin',
-      'submissionTypeDeptWorkflows lồng 2 cấp: cặp bên trong vẫn phải đổi (key cấp 2 nằm ngoài phạm vi cascadeDeptWorkflowMaps cũ)');
+    // submissionTypeDeptWorkflows lồng 2 cấp {typeKey: {dept: cfg}} — đợt vá cụm Hệ Thống/Admin/Cấu Hình
+    // (round 2) đã thêm cascadeNestedDeptWorkflowMaps() nên KEY cấp 2 (dept) nay CŨNG dời sang tên mới
+    // (trước đó chỉ có cặp jobTitle/dept BÊN TRONG approversByPosition được đổi, còn key cấp 2 vẫn giữ
+    // tên CŨ — khoảng trống đã đóng, xem lib/catalogRename.js).
+    assert.strictEqual(APP_DATA.submissionTypeDeptWorkflows.CHU_TRUONG['Phòng IT'], undefined,
+      'Key cấp 2 (dept) của submissionTypeDeptWorkflows phải dời hẳn sang tên mới, không còn ở tên CŨ');
+    assert.strictEqual(pairsOf(APP_DATA.submissionTypeDeptWorkflows.CHU_TRUONG['Phòng Công Nghệ Thông Tin'])[0].dept, 'Phòng Công Nghệ Thông Tin',
+      'submissionTypeDeptWorkflows lồng 2 cấp: cặp bên trong vẫn phải đổi, dưới ĐÚNG key cấp 2 đã dời tên');
     assert.strictEqual(APP_DATA.workflowParticipatingPositions[0].dept, 'Phòng Công Nghệ Thông Tin');
     assert.strictEqual(APP_DATA.workflowParticipatingPositions[2].dept, '', 'Cặp chỉ-chức-danh (dept rỗng) không bị gán tên mới oan');
   });

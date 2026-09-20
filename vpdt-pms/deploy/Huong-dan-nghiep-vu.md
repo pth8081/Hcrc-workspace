@@ -242,13 +242,24 @@ chung 1 khuôn quy trình phê duyệt theo phòng ban/tier (`WF_MODULE_CONFIG` 
 Liệu, Văn Bản Trình (theo từng loại tờ trình), Đăng Ký Xe, Mua Sắm/Sửa Chữa Văn
 Phòng, Văn Phòng Phẩm, Hợp Đồng (2 quy trình tách riêng: Phê Duyệt gốc và Quản
 Lý HĐ/tài liệu ký), Hỗ Trợ IT (Phê Duyệt Giá bán lẻ theo phòng ban + bán buôn
-theo 4 mức Margin/Chiết khấu cố định), Ngân Sách, **Thanh Toán** ("Chuyển Xác
-Nhận Thanh Toán"), và Vận Hành > Đặt Hàng (theo mức giá trị đơn hàng, tách
-riêng Siêu Thị/HO). Mở Mới/Sửa Chữa Siêu Thị (xem mục 4.4) **không** dùng
-quy trình này nữa — không có bước phê duyệt nào cả, kể cả giai đoạn Dự toán.
-Riêng Thanh Toán
-**không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì dùng
-"Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
+theo 4 mức Margin/Chiết khấu cố định), **Thanh Toán** ("Chuyển Xác Nhận Thanh
+Toán"), và Vận Hành > Đặt Hàng (theo mức giá trị đơn hàng, tách riêng Siêu
+Thị/HO). Mở Mới/Sửa Chữa Siêu Thị (xem mục 4.4) **không** dùng quy trình này
+nữa — không có bước phê duyệt nào cả, kể cả giai đoạn Dự toán. Riêng Thanh
+Toán **không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì
+dùng "Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
+
+**Ngân Sách KHÔNG còn ở đây từ v23.0** — `WF_MODULE_CONFIG` đã bỏ hẳn entry
+BUDGET khi thiết kế lại module thành "Ngân Sách 2.0" (xem mục 6, `module-
+ngansach.js`): `budgetLines` (collection MỚI, dùng cho **mọi** màn nhập liệu
+hiện tại — Đề Xuất/Phê Duyệt/Sử Dụng) không đi qua `lib/workflowEngine.js`
+nữa, chỉ còn đúng 1 cấp gác quyền PHẲNG (`budgetCreate` tạo Đề Xuất,
+`budgetManage` nhập thẳng Phê Duyệt + quản lý toàn bộ) — **không còn màn cấu
+hình quy trình theo phòng ban nào trong "🔄 Quy Trình & Phê Duyệt" (mục 7.1)
+cho Ngân Sách nữa**. `budgetDeptWorkflows`/`budgetPeriods` (module CŨ, dựa
+trên `budgetEntries`) vẫn còn trong AppData/schema để **không mất dữ liệu ngân
+sách lịch sử** — nhưng chỉ còn hiệu lực cho dữ liệu `budgetEntries` kiểu cũ
+đã tạo trước v23.0, không còn màn nhập liệu mới nào ghi vào 2 bảng đó nữa.
 
 Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 Quy Trình & Phê
 Duyệt** (mục 7) — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier
@@ -288,8 +299,9 @@ thêm:
   Phòng) — đổi "✅ ĐÃ PHÊ DUYỆT" thành "✅ ĐÃ &lt;NHÃN&gt;" (VD "✅ ĐÃ XÁC NHẬN").
 - **Nút bấm + hộp thoại xác nhận** khi người duyệt xử lý hồ sơ — áp dụng cho
   toàn bộ module dùng chung engine phê duyệt theo bước ở mục 3 (Đăng Ký Xe,
-  Văn Bản Trình, VPP, Văn Phòng, Ngân Sách, Vận Hành, Hợp Đồng — cả 2 luồng
-  Phê Duyệt/Quản Lý HĐ, Hỗ Trợ IT > Phê Duyệt Giá, Tài Liệu, Thanh Toán).
+  Văn Bản Trình, VPP, Văn Phòng, Vận Hành, Hợp Đồng — cả 2 luồng Phê Duyệt/
+  Quản Lý HĐ, Hỗ Trợ IT > Phê Duyệt Giá, Tài Liệu, Thanh Toán — **không còn
+  Ngân Sách** từ v23.0, xem mục 3).
 
 Đổi nhãn hành động **không** ảnh hưởng tới ai được duyệt hay thứ tự bước —
 chỉ đổi CHỮ hiển thị trên nút/chân ký, mọi logic phân quyền/chuyển bước giữ
@@ -3365,11 +3377,36 @@ hình của admin đó) khi chắc chắn không cần nữa. Hồ sơ trong Th�
 tự động dọn theo thời gian** — nằm mãi ở đây cho tới khi có người chủ động
 khôi phục hoặc xoá vĩnh viễn.
 
-**Khôi phục có để lại dấu vết (từ đợt rà soát cụm Hệ Thống/Admin/Cấu Hình)**:
-mỗi lượt **Khôi phục** giờ tự sinh 1 dòng trong Nhật Ký Hệ Thống (mục 7.6) ghi
-rõ ai khôi phục, hồ sơ nào (loại hồ sơ + mã), có kèm bao nhiêu bản ghi cùng
-"họ" (phiên bản/phụ lục) — trước đây hồ sơ đã xoá có thể xuất hiện trở lại mà
-không ai truy được người thực hiện.
+**Từ v23.67 — 4 loại hồ sơ Nhân Sự cực nhạy cảm cần THÊM quyền chuyên biệt
+(không chỉ `admin`)**: cờ `admin` một mình vẫn là điều kiện **cần** để mở
+được Thùng Rác, nhưng với đúng 4 collection **Hợp Đồng Lao Động**, **Hồ Sơ
+Nhân Sự**, **Phiếu Lương**, **Kỳ Lương** — xem/khôi phục/xoá vĩnh viễn còn đòi
+thêm **đúng quyền chuyên biệt tương ứng của module đó** (`hrContractManage`
+cho Hợp Đồng Lao Động; 1 trong `hrProfileManage`/`hrProfileFullView`/
+`hrProfileEdit` cho Hồ Sơ Nhân Sự; `hrPayrollManage`/`hrPayrollApprove` cho
+Phiếu Lương và Kỳ Lương) — khớp đúng luật đã áp dụng cho dữ liệu **đang hoạt
+động** của 4 module này từ v23.28 (`admin` không còn tự bypass được nữa, xem
+mục 6 Nhân Sự). Tài khoản chỉ có `admin` mà không có 1 trong các quyền trên
+sẽ **không thấy** 4 loại hồ sơ này trong danh sách Thùng Rác chung, và bị từ
+chối (403) nếu cố khôi phục/xoá vĩnh viễn qua đúng ID.
+
+  ⚠️ **Lưu ý nghiệp vụ quan trọng**: nếu tổ chức **không có ít nhất 1 "admin
+  phụ"** (tài khoản vừa có `admin` vừa được cấp thêm 1 trong các quyền HR
+  chuyên biệt kể trên) thì hồ sơ đã xoá của 4 collection này sẽ **không ai
+  khôi phục/xoá vĩnh viễn được** — vì tài khoản `admin` gốc (nếu chỉ có đúng
+  cờ `admin`, không có quyền HR nào khác) không bao giờ tự động có các quyền
+  đó. Nên chủ động cấp thêm đúng 1 quyền HR chuyên biệt phù hợp cho ít nhất 1
+  tài khoản quản trị, hoặc chấp nhận hồ sơ đã xoá của 4 loại này nằm vĩnh viễn
+  trong Thùng Rác không xử lý được.
+
+**Khôi phục/Xoá vĩnh viễn đều để lại dấu vết (từ đợt rà soát cụm Hệ Thống/
+Admin/Cấu Hình)**: mỗi lượt **Khôi phục** tự sinh 1 dòng trong Nhật Ký Hệ
+Thống (mục 7.6) ghi rõ ai khôi phục, hồ sơ nào (loại hồ sơ + mã), có kèm bao
+nhiêu bản ghi cùng "họ" (phiên bản/phụ lục) — trước đây hồ sơ đã xoá có thể
+xuất hiện trở lại mà không ai truy được người thực hiện. **Xoá vĩnh viễn**
+(hành động không có đường lùi) nay cũng tự sinh 1 dòng Nhật Ký Hệ Thống tương
+tự, nêu rõ loại hồ sơ + mã hồ sơ vừa bị xoá hẳn + ai thực hiện — trước đây chỉ
+có log phía giao diện (dễ bỏ qua, không đáng tin bằng log server).
 
 ### 7.6. Nhật Ký Hệ Thống (Log)
 

@@ -37,7 +37,7 @@ const {
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
   filterPayrollPeriodsForUser, filterPayslipsForUser,
   filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
-  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
 } = require('../lib/recordViewScope');
 const { filterNotificationsForUser } = require('../lib/notifications');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -1506,6 +1506,13 @@ router.get('/', async (req, res) => {
     for (const [moduleKey, collections] of Object.entries(MODULE_ACCESS_GATED_COLLECTIONS)) {
       if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
       for (const col of collections) {
+        // hrFeedback: PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026, gộp từ cụm Vận Hành) — collection
+        // này dùng CHUNG module 'internal' (gửi câu hỏi) VÀ module 'hr' (nhanSuManage xem/phản hồi qua
+        // màn "🤝 Quản Lý & Phản Hồi Ý Kiến"). Zero cứng theo ĐÚNG 1 điều kiện 'internal' như mọi
+        // collection khác trong vòng lặp này sẽ làm chết hẳn màn Nhân Sự khi tắt module Truyền Thông Nội
+        // Bộ cho 1 tài khoản dù họ có đủ moduleAccess.hr + nhanSuManage — dùng gate OR riêng (xem
+        // canAccessHrFeedbackModuleServer()) thay vì zero vô điều kiện.
+        if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
         if (data[col]) data[col] = [];
       }
     }

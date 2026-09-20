@@ -132,7 +132,20 @@ router.delete('/:id', async (req, res) => {
     if (level !== 'NONE' && !(await consumeApprovalGrant(req.freshUser.username))) {
       return res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN/vân tay) trước khi xóa vĩnh viễn' });
     }
-    await permanentlyDeleteTrashItem(trashId);
+    const deleted = await permanentlyDeleteTrashItem(trashId);
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Cao): xoá VĨNH VIỄN
+    // (không có đường lùi, khác restore ở trên đã có log từ trước) TRƯỚC ĐÂY không ghi Nhật Ký Hệ Thống
+    // ở server — chỉ có log phía CLIENT (dễ bỏ qua/không đáng tin, và chỉ ghi "id=<trashId>" trơ trụi,
+    // không rõ collection/mã hồ sơ). Ghi log SERVER-SIDE ngay tại đây, mô tả bao gồm collection + mã hồ
+    // sơ (deleted.code/originalId, từ permanentlyDeleteTrashItem() trả về) — cùng khuôn TRASH_RESTORE ở
+    // trên (fire-and-forget, không làm hỏng lượt xoá đã thành công nếu ghi log lỗi).
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'TRASH_PERMANENT_DELETE',
+      targetObject: `${deleted.collection}#${deleted.originalId}`,
+      description: `Xoá VĨNH VIỄN khỏi Thùng Rác: ${deleted.collection} [${deleted.code || deleted.title || deleted.originalId}] (trashId=${trashId})`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (xoá vĩnh viễn Thùng Rác):', e.message));
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `${trashId}/delete`, err);
