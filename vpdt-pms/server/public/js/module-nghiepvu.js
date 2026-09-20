@@ -53,7 +53,37 @@ const NGHIEP_VU_NAV = [
   { group: 'Mua Hàng', items: [
     { key: 'muaHang', icon: '🛒', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
   ]},
-  { group: 'Hệ Thống', items: [
+];
+
+// ===================== Hệ Thống (DEMO — chờ người dùng duyệt cấu trúc trước khi viết đủ nội dung) =====
+// Tách RIÊNG khỏi NGHIEP_VU_NAV (không dùng chung canViewNVItem()/NV_KEY_ACCESS_FN của bên Nghiệp Vụ) —
+// CẢ danh mục này chỉ dành cho quản trị viên (nvCanSeeSystemSection()), không có khái niệm "xem theo
+// quyền module con" như bên Nghiệp Vụ (1 tài khoản có quyền admin thì thấy TẤT CẢ mục Hệ Thống). Mục
+// "Sơ Đồ Kiến Trúc Hệ Thống" dời nguyên từ NGHIEP_VU_NAV/NGHIEP_VU_DOCS sang đây (trước đây là mục DUY
+// NHẤT trong nhóm "Hệ Thống" bên Nghiệp Vụ, gác cứng qua NV_ADMIN_ONLY_KEYS — nay cả khu Hệ Thống mới
+// đảm nhiệm đúng vai trò đó, không cần cơ chế gác riêng lẻ theo key nữa).
+const SYSTEM_NAV = [
+  { group: 'Phân Quyền & Tài Khoản', items: [
+    { key: 'sysPermissions', icon: '🔑', label: 'Phân Quyền' },
+    { key: 'sysUsers', icon: '👥', label: 'Người Dùng' },
+  ]},
+  { group: 'Cấu Hình Quy Trình', items: [
+    { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
+  ]},
+  { group: 'Danh Mục & Biểu Mẫu', items: [
+    { key: 'sysCatalog', icon: '🗂️', label: 'Quản Lý Danh Mục' },
+    { key: 'sysFormBuilder', icon: '📋', label: 'Biểu Mẫu' },
+  ]},
+  { group: 'Vận Hành Hệ Thống', items: [
+    { key: 'sysFiles', icon: '📁', label: 'Quản Lý Tệp File' },
+    { key: 'sysTrash', icon: '🗑️', label: 'Thùng Rác' },
+    { key: 'sysLog', icon: '📜', label: 'Nhật Ký Hệ Thống' },
+  ]},
+  { group: 'Tích Hợp & Thông Báo', items: [
+    { key: 'sysEmail', icon: '📧', label: 'Cấu Hình Email' },
+    { key: 'sysExtAuth', icon: '🔌', label: 'API Đối Tác Ngoài' },
+  ]},
+  { group: 'Kiến Trúc', items: [
     { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
   ]},
 ];
@@ -934,8 +964,56 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đối chiếu/Phê duyệt Sổ Cái — chưa triển khai', text: '2 quyền Đối Chiếu/Phê Duyệt đã khai báo sẵn trong cây phân quyền cho Giai đoạn 2-3 (Sổ Cái ACCRUED→CONFIRMED→SETTLED, đối chiếu với NCC) — hiện chưa có luồng nghiệp vụ nào dùng tới.' },
     ] },
   },
+};
+
+// ===================== Hệ Thống (DEMO) — chỉ 3/10 mục có nội dung đầy đủ để demo cấu trúc/văn phong,
+// 7 mục còn lại (sysUsers/sysWorkflow/sysFormBuilder/sysFiles/sysTrash/sysLog/sysEmail/sysExtAuth) CHỦ
+// Ý chưa viết — hiện đúng cảnh báo "⚠️ Chưa có tài liệu nghiệp vụ" (cơ chế có sẵn) để demo luôn cấu trúc
+// nav đầy đủ, sẽ viết nốt sau khi người dùng duyệt cách trình bày. =====================
+const SYSTEM_DOCS = {
+  sysPermissions: {
+    icon: '🔑', title: 'Phân Quyền', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cây quyền chi tiết theo từng khối chức năng (không phải vai trò cố định kiểu "Nhân viên/Quản lý") — mỗi tài khoản được tick từng quyền riêng lẻ, kết hợp tự do. Từ v23.28, 3 nhóm dữ liệu nhạy cảm Nhân Sự (Hồ Sơ/Hợp Đồng/Lương) KHÔNG còn tự động mở cho admin — phải tick quyền tương ứng như tài khoản thường.',
+    flow: { ariaLabel: 'Quy trình cấp quyền cho 1 tài khoản', chain: [
+      { label: 'Mở Sửa Người Dùng', sub: 'Hệ Thống → Người Dùng' },
+      { label: 'Tick quyền theo khối', sub: 'Từng khối chức năng riêng' },
+      { label: 'Lưu lại', sub: 'Áp dụng ngay lần đăng nhập sau', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 👥 Người Dùng</b> → tìm đúng tài khoản → bấm <b>"Sửa"</b>.' },
+      { role: 'Quản trị viên', text: 'kéo xuống khối <b>"Phân Quyền"</b> — cây quyền chia theo từng module (Văn Bản, Tài Chính, Nhân Sự, Vận Hành, Hệ Thống...), mỗi khối là 1 nhóm checkbox riêng, tick đúng quyền cần cấp.' },
+      { role: 'Quản trị viên', text: '3 khối nhạy cảm Nhân Sự (Hồ Sơ/Hợp Đồng/Lương) hiện RIÊNG với ghi chú "không tự động mở cho admin" — phải tick tường minh dù tài khoản đã có quyền admin chung.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — quyền mới có hiệu lực ngay từ lượt tải lại trang / đăng nhập sau của tài khoản đó (không cần đăng xuất-vào lại ngay lập tức nếu đang F5 lại trang).' },
+    ],
+    footer: { left: [
+      { label: 'Không có "vai trò" cố định', text: 'hệ thống không gán sẵn gói quyền theo chức danh — mỗi tài khoản là 1 tổ hợp quyền độc lập, linh hoạt nhưng đòi hỏi quản trị viên tick đúng/đủ khi tạo tài khoản mới.' },
+      { label: 'admin KHÔNG còn "toàn quyền tuyệt đối"', text: 'từ v23.28, `perms.admin=true` không tự mở 3 khối Hồ Sơ/Hợp Đồng/Lương Nhân Sự nữa — hạn chế rủi ro 1 tài khoản admin kỹ thuật vô tình xem được dữ liệu nhạy cảm không thuộc phạm vi công việc.' },
+    ], right: [
+      { label: 'Nhóm Quyền Đặc Biệt', text: 'danh mục riêng (mục 3.3 tài liệu nghiệp vụ) gom nhiều quyền phê duyệt lại thành 1 "vai trò ảo" để gán nhanh cho người mới — không thay thế cây quyền chi tiết, chỉ là lối tắt khi cấp hàng loạt.' },
+      { label: '"Xem Toàn Bộ Mục Nghiệp Vụ"', text: 'quyền admin-grant riêng (`nghiepVuViewAll`) cho phép 1 tài khoản đọc hết tài liệu Nghiệp Vụ mà không cần cấp quyền module thật — dùng cho đào tạo/kiểm toán nội bộ. KHÔNG áp dụng cho khu Hệ Thống (khu vực này luôn đòi `perms.admin` thật, không bypass được).' },
+    ] },
+  },
+  sysCatalog: {
+    icon: '🗂️', title: 'Quản Lý Danh Mục', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Nơi tập trung mọi danh mục dùng chung toàn hệ thống (Phòng Ban, Chức Danh, Siêu Thị, Loại Hợp Đồng, Loại Xe, Vùng Giá Áp Dụng, Phòng Họp...) — sửa 1 danh mục ở đây áp dụng ngay cho MỌI form có dùng tới, không cần sửa từng nơi.',
+    flow: { ariaLabel: 'Quy trình thêm/sửa 1 danh mục', chain: [
+      { label: 'Chọn đúng danh mục', sub: 'VD Phòng Ban, Chức Danh...' },
+      { label: 'Thêm / Sửa / Xoá', sub: 'Xoá bị chặn nếu đang được dùng', kind: 'decision' },
+      { label: 'Áp dụng ngay', sub: 'Mọi form liên quan cập nhật', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Không ai đang dùng', rejectLabel: 'Đang có dữ liệu tham chiếu', rejectBox: { label: 'Chặn xoá', sub: 'Báo rõ đang dùng ở đâu' }, loopBackToIndex: 1, loopBackLabel: 'Xử lý dữ liệu tham chiếu trước' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🗂️ Quản Lý Danh Mục</b> → chọn đúng tab danh mục cần sửa (Phòng Ban/Chức Danh/Siêu Thị/Loại Hợp Đồng...).' },
+      { role: 'Quản trị viên', text: 'bấm <b>"+ Thêm"</b> để tạo mới, hoặc <b>"✏️ Sửa"</b>/<b>"🗑️ Xoá"</b> ngay tại dòng danh mục đã có.' },
+      { role: 'Quản trị viên', text: 'nếu xoá 1 giá trị ĐANG được dùng ở hồ sơ/form khác, hệ thống chặn lại và báo rõ lý do — phải xử lý xong dữ liệu đang tham chiếu (đổi sang giá trị khác) trước khi xoá được.' },
+    ],
+    footer: { left: [
+      { label: 'Dùng chung TOÀN HỆ THỐNG', text: 'không có khái niệm danh mục "riêng cho 1 module" — Phòng Ban ở đây là ĐÚNG Phòng Ban hiện trên mọi form/báo cáo khác, sửa 1 chỗ đủ.' },
+    ], right: [
+      { label: 'Tự học danh mục con', text: 'một số danh mục nhỏ (VD Loại Dịch Vụ CNTT, Chủ Đề HCRC Đồng Hành) KHÔNG có màn quản lý riêng — tự "học" thêm giá trị mới ngay khi có người gõ giá trị mới lúc tạo hồ sơ, không cần vào Quản Lý Danh Mục trước.' },
+    ] },
+  },
   systemArchitecture: {
-    icon: '🗺️', title: 'Sơ Đồ Kiến Trúc Hệ Thống', badge: 'Chỉ Quản Trị Viên (Admin)',
+    icon: '🗺️', title: 'Sơ Đồ Kiến Trúc Hệ Thống', badge: 'Chỉ Quản Trị Viên',
     isCustomFlow: true, customFlowRenderer: 'renderNVSystemArchitectureOverview', diagramTitle: 'Sơ đồ kiến trúc & liên kết ngoài',
     desc: 'Toàn cảnh kiến trúc ứng dụng — Trình duyệt (SPA, thuần HTML/JS, không có app di động riêng) gọi API tới 1 Server Node.js/Express duy nhất (chạy PM2 cluster mode), server đọc/ghi toàn bộ dữ liệu ở SQL Server + lưu file đính kèm trên ổ đĩa cục bộ, cùng 2 điểm tích hợp hệ thống ngoài đang có thật.',
     footer: { left: [
@@ -1089,6 +1167,28 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
 
 let nvActiveKey = 'doc';
 let nvActiveDaotaoArea = 'overview';
+// 'business' = tab Nghiệp Vụ (NGHIEP_VU_NAV/NGHIEP_VU_DOCS, mọi tài khoản đã đăng nhập, gác theo
+// canViewNVItem() như cũ); 'system' = tab Hệ Thống (SYSTEM_NAV/SYSTEM_DOCS, CHỈ admin — xem
+// nvCanSeeSystemSection()). Theo yêu cầu người dùng (9/2026): tách module "Nghiệp Vụ" cũ thành 2 khu
+// vực điều hướng dạng tab, đổi tên module cha thành "Hướng Dẫn" (index.html), giữ NGUYÊN mọi id/
+// data-op/tên hàm nội bộ liên quan tới "nghiepVu"/"NghiepVu" để giảm rủi ro/diff.
+let nvActiveSection = 'business';
+
+// Khu Hệ Thống lộ chi tiết cấu hình/hạ tầng (phân quyền, danh mục, quy trình, tệp, log, email, API đối
+// tác ngoài...) — CHỈ admin xem được, KHÔNG áp dụng 2 cơ chế mở rộng nghiepVuViewAll/nghiepVuExtraKeys
+// (kế thừa đúng nguyên tắc trước đây của NV_ADMIN_ONLY_KEYS cho riêng "systemArchitecture", nay áp dụng
+// cho CẢ khu vực mới thay vì gác từng key lẻ).
+function nvCanSeeSystemSection() {
+  return !!(currentUser && currentUser.perms?.admin);
+}
+
+function setNVActiveSection(section) {
+  if (section === 'system' && !nvCanSeeSystemSection()) return;
+  if (section !== 'business' && section !== 'system') return;
+  nvActiveSection = section;
+  nvActiveKey = null;
+  renderNghiepVuModule();
+}
 
 function setNVActiveKey(key) {
   nvActiveKey = key;
@@ -1125,20 +1225,11 @@ const NV_KEY_ACCESS_FN = {
   muaHang: 'canAccessPurchasingModule',
 };
 
-// Mục Nghiệp Vụ CHỈ Quản Trị Viên (perms.admin) xem được, BỎ QUA CẢ 2 cơ chế mở rộng thông thường của
-// canViewNVItem() bên dưới (nghiepVuViewAll — "Xem Toàn Bộ Mục Nghiệp Vụ", và nghiepVuExtraKeys — mở
-// riêng từng mục) — nội dung lộ ra chi tiết hạ tầng/kết nối hệ thống ngoài (DB, thư mục lưu file, SMTP,
-// API bên thứ 3...), không phải nội dung nghiệp vụ business thông thường nên không nên mở rộng qua 2
-// cơ chế đó như các mục khác. Dùng cho "Sơ Đồ Kiến Trúc Hệ Thống" (theo yêu cầu người dùng "chỉ admin
-// xem được") — thêm key khác vào đây nếu sau này có thêm nội dung hạ tầng tương tự.
-const NV_ADMIN_ONLY_KEYS = new Set(['systemArchitecture']);
-
 // Quyền admin-grant riêng (checkbox "Xem Toàn Bộ Mục Nghiệp Vụ", xem systemSection.html mục 24) bỏ qua
 // toàn bộ giới hạn dưới đây; user.nghiepVuExtraKeys (mảng key, sanitize ở routes/data.js) mở thêm TỪNG
 // mục cụ thể ngoài phạm vi quyền module hiện có, không cần bật cả quyền module thật tương ứng.
 function canViewNVItem(key) {
   if (!currentUser) return false;
-  if (NV_ADMIN_ONLY_KEYS.has(key)) return !!currentUser.perms?.admin;
   if (currentUser.perms?.nghiepVuViewAll) return true;
   if ((currentUser.nghiepVuExtraKeys || []).includes(key)) return true;
   // LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): trước đây fallback về `true` (hiện
@@ -1158,8 +1249,17 @@ function visibleNVGroups() {
     .filter(g => g.items.length > 0);
 }
 
+// Khu Hệ Thống không có cơ chế gác từng key riêng (khác NGHIEP_VU_NAV) — cả khu đã bị chặn ở mức
+// section bởi nvCanSeeSystemSection() (renderNghiepVuModule()/setNVActiveSection()), nên hễ qua được
+// bước đó thì hiện toàn bộ SYSTEM_NAV.
+function visibleSystemGroups() {
+  if (!nvCanSeeSystemSection()) return [];
+  return SYSTEM_NAV.filter(g => g.items.length > 0);
+}
+
 function nvFindItem(key) {
-  for (const g of NGHIEP_VU_NAV) {
+  const nav = nvActiveSection === 'system' ? SYSTEM_NAV : NGHIEP_VU_NAV;
+  for (const g of nav) {
     const it = g.items.find(i => i.key === key);
     if (it) return { group: g.group, item: it };
   }
@@ -1170,7 +1270,11 @@ function renderNghiepVuModule() {
   const root = document.getElementById('nghiepVuRoot');
   if (!root) return;
 
-  const groups = visibleNVGroups();
+  // Không còn quyền admin (VD chuyển tài khoản ngay trong phiên) mà đang đứng ở tab Hệ Thống thì trả
+  // về tab Nghiệp Vụ — tránh kẹt ở tab đã mất quyền xem.
+  if (nvActiveSection === 'system' && !nvCanSeeSystemSection()) nvActiveSection = 'business';
+
+  const groups = nvActiveSection === 'system' ? visibleSystemGroups() : visibleNVGroups();
   if (!groups.some(g => g.items.some(it => it.key === nvActiveKey))) {
     nvActiveKey = groups[0]?.items[0]?.key || null;
   }
@@ -1182,7 +1286,17 @@ function renderNghiepVuModule() {
     `).join('')}
   `).join('');
 
+  // Tab bar Nghiệp Vụ/Hệ Thống chỉ hiện cho admin — non-admin không có gì để chuyển sang nên giữ
+  // nguyên giao diện gốc (chỉ sidebar + nội dung), tránh 1 tab bar thừa chỉ có 1 lựa chọn.
+  const tabsHtml = nvCanSeeSystemSection() ? `
+    <div class="nv-section-tabs">
+      <button type="button" class="nv-section-tab${nvActiveSection === 'business' ? ' active' : ''}" data-op="setNVActiveSection" data-arg0="business">📘 Nghiệp Vụ</button>
+      <button type="button" class="nv-section-tab${nvActiveSection === 'system' ? ' active' : ''}" data-op="setNVActiveSection" data-arg0="system">⚙️ Hệ Thống</button>
+    </div>
+  ` : '';
+
   root.innerHTML = `
+    ${tabsHtml}
     <div class="nv-app">
       <div class="nv-sidebar">${navHtml}</div>
       <div class="nv-main" id="nghiepVuMain"></div>
@@ -1194,23 +1308,25 @@ function renderNghiepVuModule() {
 function renderNghiepVuContent() {
   const main = document.getElementById('nghiepVuMain');
   if (!main) return;
+  const sectionLabel = nvActiveSection === 'system' ? 'Hệ Thống' : 'Nghiệp Vụ';
   if (!nvActiveKey) {
-    main.innerHTML = `<div class="p-4 bg-gray-50 border rounded text-gray-500 text-sm">Bạn chưa có quyền xem mục nào trong Nghiệp Vụ.</div>`;
+    main.innerHTML = `<div class="p-4 bg-gray-50 border rounded text-gray-500 text-sm">Bạn chưa có quyền xem mục nào trong ${escapeHtml(sectionLabel)}.</div>`;
     return;
   }
   const found = nvFindItem(nvActiveKey);
   if (!found) { main.innerHTML = ''; return; }
   const { group, item } = found;
 
-  if (item.key === 'daotao') {
+  if (nvActiveSection === 'business' && item.key === 'daotao') {
     main.innerHTML = renderNghiepVuDaotao(group);
     return;
   }
 
-  const doc = NGHIEP_VU_DOCS[item.key];
+  const docs = nvActiveSection === 'system' ? SYSTEM_DOCS : NGHIEP_VU_DOCS;
+  const doc = docs[item.key];
   if (!doc) {
     main.innerHTML = `
-      <div class="text-xs text-gray-400 mb-1">Nghiệp Vụ / ${escapeHtml(group)}</div>
+      <div class="text-xs text-gray-400 mb-1">${escapeHtml(sectionLabel)} / ${escapeHtml(group)}</div>
       <h2 class="text-xl font-bold mb-3">${item.icon} ${escapeHtml(item.label)}</h2>
       <div class="p-4 bg-amber-50 border border-amber-300 rounded text-amber-800 text-sm font-bold">⚠️ Chưa có tài liệu nghiệp vụ cho mục này.</div>
     `;
@@ -1218,7 +1334,7 @@ function renderNghiepVuContent() {
   }
 
   main.innerHTML = `
-    <div class="text-xs text-gray-400 mb-1">Nghiệp Vụ / ${escapeHtml(group)}</div>
+    <div class="text-xs text-gray-400 mb-1">${escapeHtml(sectionLabel)} / ${escapeHtml(group)}</div>
     <div class="flex items-center gap-2 mb-1 flex-wrap">
       <h2 class="text-xl font-bold">${doc.icon} ${escapeHtml(doc.title)}</h2>
       ${doc.badge ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">${escapeHtml(doc.badge)}</span>` : ''}
