@@ -82,6 +82,21 @@ stubModule('lib/appData', {
   withLockedAppDataValue: async (key, fn) => { APP_DATA[key] = await fn(APP_DATA[key]); return APP_DATA[key]; }
 });
 
+// Stub tầng lưu trữ dbo.Records — routes/employeeProfile.js đọc laborContracts ở GET .../history,
+// GET /reports và (từ đợt rà soát chuyên sâu cụm Nhân Sự 10/2026) đồng bộ employeeUsername xuống hợp
+// đồng khi liên kết/đổi tài khoản VPDT. Không stub thì mọi lượt gọi đó cố kết nối SQL Server thật.
+const LABOR_CONTRACTS = [];
+stubModule('lib/recordStore', {
+  getAllForCollection: async (collection) => (collection === 'laborContracts' ? LABOR_CONTRACTS.slice() : []),
+  withLockedRecordForCollection: async (collection, id, mutatorFn) => {
+    const list = collection === 'laborContracts' ? LABOR_CONTRACTS : [];
+    const idx = list.findIndex(x => x.id === Number(id));
+    if (idx === -1) throw new Error('Không tìm thấy bản ghi');
+    list[idx] = await mutatorFn(list[idx]);
+    return list[idx];
+  }
+});
+
 stubModule('lib/auth', {
   requireAuth: (req, res, next) => {
     const fresh = USERS.find(u => u.username === CURRENT_USERNAME);

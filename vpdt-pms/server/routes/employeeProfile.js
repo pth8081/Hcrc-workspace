@@ -11,7 +11,7 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { getAppDataValue, getAllAppData, withLockedAppDataValue } = require('../lib/appData');
-const { getAllForCollection } = require('../lib/recordStore');
+const { getAllForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { verifyFileSignature } = require('../lib/fileSignature');
@@ -37,7 +37,28 @@ function logHrProfileAction(req, actionType, targetObject, description) {
 }
 
 const router = express.Router();
-router.use(requireAuth, blockIfMustChangePassword);
+
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): Khối 0 (moduleAccess.hrProfile)
+// TRƯỚC ĐÂY chỉ được kiểm ở đúng 2 route tự phục vụ GET/PATCH /me — toàn bộ các route còn lại (danh
+// sách, chi tiết theo mã/username, sửa, đổi trạng thái, liên kết tài khoản, gán chức vụ, tái tuyển,
+// import/export...) không hề kiểm, nên tắt module "Hồ Sơ Nhân Sự" cho 1 tài khoản vẫn KHÔNG cản được họ
+// gọi thẳng API nếu còn quyền dữ liệu (hrProfileManage/hrProfileEdit...) — đúng lớp lỗi đã vá cho khâu
+// TẠO ở routes/create.js. Gác 1 điểm DUY NHẤT tại đây (mọi route của router này đều đi qua) thay vì rải
+// rác từng route.
+//
+// NGOẠI LỆ /employee-directory: đây là picker "chọn nhân viên theo Hồ Sơ" dùng bởi module KHÁC (Hợp Đồng
+// Lao Động — xem chú thích tại chính route đó), người chỉ có hrContractManage có thể đang bị tắt hẳn
+// module hrProfile mà vẫn cần tra mã nhân viên hợp lệ; route đó tự gác quyền riêng và chỉ trả mã + tên
+// (không field nhạy cảm nào).
+const HR_PROFILE_MODULE_EXEMPT_PATHS = new Set(['/employee-directory']);
+function requireHrProfileModuleAccess(req, res, next) {
+  if (HR_PROFILE_MODULE_EXEMPT_PATHS.has(req.path)) return next();
+  if (!hasModuleAccessServer(req.freshUser, 'hrProfile')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+  }
+  next();
+}
+router.use(requireAuth, blockIfMustChangePassword, requireHrProfileModuleAccess);
 
 // nowVN()/toLocaleString('vi-VN') sinh chuỗi "HH:mm:ss d/M/yyyy" — KHÔNG sort được bằng so sánh chuỗi
 // (localeCompare/</>). 2 helper dưới đây dùng CHUNG cho GET .../history (gộp "Lịch Sử Nhân Sự") để vừa
@@ -80,6 +101,31 @@ function requireProfileCreateOrEdit(req, res, next) {
     return res.status(403).json({ error: 'Bạn không có quyền tạo hoặc sửa Hồ Sơ Nhân Sự' });
   }
   next();
+}
+
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): laborContracts.employeeUsername là
+// field DUY NHẤT quyết định "nhân viên tự xem được hợp đồng lao động của chính mình" (xem
+// canViewLaborContract() ở lib/recordViewScope.js) nhưng TRƯỚC ĐÂY không hề được gán ở BẤT KỲ điểm tạo
+// hợp đồng nào (luôn null theo defaultContract()) — tính năng tự xem chết hoàn toàn, mọi nhân viên luôn
+// thấy danh sách hợp đồng rỗng. Nay gán tự động tại 3 điểm: (1) tạo tay qua
+// lib/createValidation.js::laborContracts, (2) tạo tự động theo hook Onboarding (routes/records.js), và
+// (3) ở ĐÂY — mỗi khi hồ sơ được liên kết/đổi tài khoản VPDT (hợp đồng có thể đã được tạo TRƯỚC khi IT
+// kịp cấp tài khoản, đúng trình tự Onboarding chuẩn). Ghi có tác dụng phụ CHÉO COLLECTION
+// (employeeProfiles -> laborContracts, 2 khoá khác nhau, không atomic với nhau) — cùng tinh thần
+// syncEmployeeProfileOnHrCompletion() ở routes/records.js: lỗi ở bước phụ này KHÔNG được làm hỏng thao
+// tác chính đã ghi xong, chỉ log lại để tra cứu.
+async function syncLaborContractsEmployeeUsername(employeeCode, username, routeLabel) {
+  try {
+    const contracts = (await getAllForCollection('laborContracts'))
+      .filter(c => c.employeeCode === employeeCode && c.employeeUsername !== username);
+    for (const c of contracts) {
+      await withLockedRecordForCollection('laborContracts', c.id, (item) => { item.employeeUsername = username; return item; });
+    }
+    return contracts.length;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi đồng bộ employeeUsername xuống Hợp Đồng Lao Động:`, err.message);
+    return 0;
+  }
 }
 
 // Xác nhận username (nếu có) khớp ĐÚNG 1 tài khoản VPDT đang hoạt động — dùng chung cho tạo tay + import
@@ -181,9 +227,15 @@ router.get('/', async (req, res) => {
 // thêm cả hrContractManage vì 2 quyền này có thể gán cho người KHÁC nhau, người chỉ quản lý Hợp Đồng
 // Lao Động vẫn cần tra được mã nhân viên hợp lệ dù không có hrProfileManage. Loại "Đã nghỉ việc"
 // (INACTIVE) — tạo hợp đồng lao động mới cho người đã nghỉ là vô lý.
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): danh sách quyền ở đây bỏ sót 2
+// trong 3 quyền chi tiết ra đời sau (hrProfileFullView/hrProfileEdit — xem canFullViewProfiles()) dù cả
+// 2 đều xem được TOÀN BỘ hồ sơ ở GET / với nhiều thông tin hơn hẳn route này — người được giao đúng 2
+// quyền đó lại không dùng được picker chọn nhân viên, phải xin thêm hrProfileManage (quyền rộng hơn
+// nhiều) chỉ để gõ chọn 1 mã nhân viên.
 router.get('/employee-directory', async (req, res) => {
   try {
-    if (!employeeProfile.canManageProfiles(req.freshUser) && !canManageContracts(req.freshUser)) {
+    if (!employeeProfile.canFullViewProfiles(req.freshUser) && !canManageContracts(req.freshUser)) {
       return res.status(403).json({ error: 'Bạn không có quyền tra cứu danh sách nhân viên từ Hồ Sơ Nhân Sự' });
     }
     const appData = await getAllAppData();
@@ -198,7 +250,10 @@ router.get('/employee-directory', async (req, res) => {
 
 // GET /api/hr-profile/position-options — danh sách phẳng mọi vị trí (node POSITION) của bản Cơ Cấu Tổ
 // Chức ĐANG ÁP DỤNG — dùng cho ô tìm-kiếm-gõ-chọn "Chức Vụ" ở Hồ Sơ Nhân Sự (module-hrprofile.js). Chỉ
-// HR/admin (canManageProfiles) — trùng quyền được phép gán chức vụ (POST .../set-position bên dưới).
+// người có quyền SỬA hồ sơ (requireProfileEdit = hrProfileManage HOẶC hrProfileEdit, xem
+// canEditProfiles()) — TRÙNG ĐÚNG quyền được phép gán chức vụ ở POST .../set-position bên dưới. (Chú
+// thích cũ ghi "HR/admin (canManageProfiles)" KHÔNG khớp code thật — sửa lại ở đợt rà soát chuyên sâu
+// cụm Nhân Sự 10/2026, CHỈ sửa chú thích, không đổi logic.)
 router.get('/position-options', requireProfileEdit, async (req, res) => {
   try {
     const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
@@ -438,6 +493,12 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): đường sửa này đi vòng hoàn
+      // toàn lớp chặn trùng CCCD/CMND vốn chỉ có ở lối TẠO (createManualProfile()) — xem
+      // lib/employeeProfile.js::assertNationalIdNotDuplicated().
+      if (req.body && 'nationalId' in req.body) {
+        employeeProfile.assertNationalIdNotDuplicated(list, req.body.nationalId, profile.employeeCode);
+      }
       const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
       employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name);
       updated = profile;
@@ -496,6 +557,7 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
         u.username === username ? { ...u, jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : u
       ));
     }
+    await syncLaborContractsEmployeeUsername(updated.employeeCode, username, `POST /api/hr-profile/by-code/${req.params.employeeCode}/link-account`);
     logHrProfileAction(req, 'LINK_ACCOUNT', req.params.employeeCode, `Liên kết hồ sơ [${req.params.employeeCode}] với tài khoản "${username}"`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/link-account`); }
@@ -525,6 +587,7 @@ router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
         u.username === username ? { ...u, jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : u
       ));
     }
+    await syncLaborContractsEmployeeUsername(updated.employeeCode, username, `POST /api/hr-profile/by-code/${req.params.employeeCode}/relink-account`);
     logHrProfileAction(req, 'RELINK_ACCOUNT', req.params.employeeCode, `Đổi tài khoản liên kết hồ sơ [${req.params.employeeCode}] sang "${username}"`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/relink-account`); }
@@ -677,10 +740,27 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
 });
 
 // GET /api/hr-profile/export-xlsx — HR/admin xuất toàn bộ danh sách hồ sơ hiện có ra Excel.
-router.get('/export-xlsx', requireProfileFullView, async (req, res) => {
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): đây là route lộ NHIỀU dữ liệu
+// nhạy cảm nhất trong cả module (CCCD/số BHXH/mã số thuế/tài khoản ngân hàng của TOÀN BỘ nhân viên, 1
+// file duy nhất mang đi được) nhưng lại là route DUY NHẤT không ghi Nhật Ký Hệ Thống và không có
+// rate-limit — khác hẳn GET .../history và GET .../reports (2 route "xem" khác đều đã có cả 2). Không
+// có dấu vết nào để đối chiếu "ai đã tải toàn bộ hồ sơ nhân sự lúc nào", và 1 tài khoản bị chiếm quyền
+// có thể tải liên tục không giới hạn. Nay: ghi log TRUY CẬP (cùng khuôn VIEW_HISTORY/VIEW_REPORT) +
+// rate-limit riêng, siết CHẶT HƠN báo cáo (xuất cả kho dữ liệu nặng, không ai cần xuất 20 lần/5 phút).
+const hrExportRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn đang xuất file Hồ Sơ Nhân Sự quá nhiều lần, vui lòng thử lại sau ít phút.' },
+  keyGenerator: (req) => req.freshUser?.username || ipKeyGenerator(req.ip)
+});
+router.get('/export-xlsx', hrExportRateLimiter, requireProfileFullView, async (req, res) => {
   try {
     const appData = await getAllAppData();
     const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || []);
+    logHrProfileAction(req, 'EXPORT_XLSX', '', `Xuất Excel toàn bộ Hồ Sơ Nhân Sự (${(appData.employeeProfiles || []).length} hồ sơ, gồm CCCD/BHXH/MST/tài khoản ngân hàng)`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Ho_So_Nhan_Su.xlsx"');
     await wb.xlsx.write(res);

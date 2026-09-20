@@ -264,6 +264,22 @@ function applyProcessCompletion(list, hrProcessItem) {
 // đúng, không trùng khi 2 request/2 dòng import hàng loạt chạm cùng lúc). Vẫn cho phép gõ tay 1 mã khác
 // (VD nhân viên cũ đã có mã theo hệ thống HR khác từ trước, hoặc luồng Tái Tuyển muốn GIỮ NGUYÊN đúng mã
 // cũ — xem reactivateForRehire() bên dưới).
+
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): việc chặn trùng CCCD/CMND trước đây
+// chỉ nằm NỘI TUYẾN trong createManualProfile() — 2 đường GHI còn lại của hồ sơ đi vòng hoàn toàn:
+// PATCH /api/hr-profile/by-code/:code (HR sửa hồ sơ đã có) và dòng import Excel chọn "Ghi đè thông tin"
+// (updateProfileFromImport()). Chỉ cần tạo hồ sơ với CCCD trống rồi PATCH lại đúng CCCD của người khác
+// là có ngay 2 hồ sơ (kể cả 2 hồ sơ ACTIVE) cùng 1 CCCD — đúng tình huống mà bản vá lúc TẠO định chặn.
+// Tách thành hàm dùng chung, gọi ở CẢ 3 điểm ghi. exceptEmployeeCode: mã hồ sơ ĐANG được sửa (loại trừ
+// chính nó khỏi phép so trùng — sửa hồ sơ mà giữ nguyên CCCD cũ không phải là trùng).
+function assertNationalIdNotDuplicated(list, rawNationalId, exceptEmployeeCode) {
+  const nationalId = String(rawNationalId || '').trim();
+  if (!nationalId) return;
+  const dup = (list || []).find(p => p.nationalId === nationalId && p.employeeCode !== exceptEmployeeCode);
+  if (!dup) return;
+  throw new HttpError(409, `CCCD/CMND "${nationalId}" đã có hồ sơ [${dup.employeeCode}]${dup.status === 'INACTIVE' ? ' (ĐÃ NGHỈ VIỆC — dùng chức năng "Kiểm Tra Nhân Sự Cũ"/Tái Tuyển thay vì tạo mới)' : ''} — vui lòng kiểm tra lại, mỗi người chỉ được có 1 hồ sơ nhân sự duy nhất`);
+}
+
 function createManualProfile(list, payload, actorUsername, actorName) {
   const arr = list || [];
   const rawEmployeeCode = String(payload?.employeeCode || '').trim();
@@ -284,13 +300,7 @@ function createManualProfile(list, payload, actorUsername, actorName) {
   // hết lịch sử. Chặn CỨNG ở đây (áp dụng cho CẢ 2 lối tạo — form tay lẫn Excel import hàng loạt, vì cả
   // 2 đều gọi chung hàm này) khi CCCD/CMND đã có ở BẤT KỲ hồ sơ nào khác (ACTIVE lẫn INACTIVE — hồ sơ
   // INACTIVE trùng CCCD nghĩa là phải Tái Tuyển, không phải tạo mới).
-  const nationalId = String(payload?.nationalId || '').trim();
-  if (nationalId) {
-    const dup = arr.find(p => p.nationalId === nationalId);
-    if (dup) {
-      throw new HttpError(409, `CCCD/CMND "${nationalId}" đã có hồ sơ [${dup.employeeCode}]${dup.status === 'INACTIVE' ? ' (ĐÃ NGHỈ VIỆC — dùng chức năng "Kiểm Tra Nhân Sự Cũ"/Tái Tuyển thay vì tạo mới)' : ''} — vui lòng kiểm tra lại trước khi tạo hồ sơ mới`);
-    }
-  }
+  assertNationalIdNotDuplicated(arr, payload?.nationalId, null);
   const profile = defaultProfile(employeeCode);
   profile.status = 'ACTIVE';
   profile.username = username;
@@ -320,6 +330,9 @@ function updateProfileFromImport(list, employeeCode, payload, actorUsername, act
   const arr = list || [];
   const profile = findProfile(arr, String(employeeCode || '').trim());
   if (!profile) throw new HttpError(404, `Không tìm thấy hồ sơ ứng với Mã Nhân Viên "${employeeCode}" để ghi đè`);
+  // Chặn trùng CCCD/CMND y hệt lối tạo mới (loại trừ chính hồ sơ đang ghi đè) — xem
+  // assertNationalIdNotDuplicated() ở trên.
+  if (payload && 'nationalId' in payload) assertNationalIdNotDuplicated(arr, payload.nationalId, profile.employeeCode);
   applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, {});
   return profile;
 }
@@ -520,15 +533,37 @@ const PROFILE_FIELD_LABELS = {
   nationalId: 'CCCD/CMND', socialInsuranceNo: 'Số BHXH', taxCode: 'Mã số thuế'
 };
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): 2 hàm dưới đây trước đây CHỈ kiểm
+// các trường chuỗi bắt buộc — dateOfBirth của người phụ thuộc và graduationYear của học vấn đi thẳng vào
+// hồ sơ KHÔNG qua bất kỳ validate nào ("ngày" là chuỗi bất kỳ, "năm tốt nghiệp" là số bất kỳ kể cả 99999
+// hay năm ở tương lai xa). Dữ liệu này đi vào giảm trừ gia cảnh (số người phụ thuộc, lib/payroll.js) và
+// báo cáo nhân sự nên phải sạch ngay từ điểm ghi.
+const MIN_VALID_YEAR = 1900;
 function assertValidDependent(dep, idx) {
   if (!dep || typeof dep !== 'object') throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1} không hợp lệ`);
   if (!dep.fullName || !String(dep.fullName).trim()) throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: thiếu Họ tên`);
   if (!dep.relationship || !String(dep.relationship).trim()) throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: thiếu Quan hệ`);
+  if (dep.dateOfBirth != null && String(dep.dateOfBirth).trim() !== '') {
+    const dob = new Date(dep.dateOfBirth);
+    if (Number.isNaN(dob.getTime())) throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: Ngày sinh không hợp lệ`);
+    const year = dob.getFullYear();
+    if (year < MIN_VALID_YEAR || dob.getTime() > Date.now()) {
+      throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: Ngày sinh phải từ năm ${MIN_VALID_YEAR} trở đi và không ở tương lai`);
+    }
+  }
 }
 function assertValidEducation(edu, idx) {
   if (!edu || typeof edu !== 'object') throw new HttpError(400, `Học vấn dòng ${idx + 1} không hợp lệ`);
   if (!edu.degree || !String(edu.degree).trim()) throw new HttpError(400, `Học vấn dòng ${idx + 1}: thiếu Bằng cấp`);
   if (!edu.school || !String(edu.school).trim()) throw new HttpError(400, `Học vấn dòng ${idx + 1}: thiếu Trường`);
+  if (edu.graduationYear != null && String(edu.graduationYear).trim() !== '') {
+    const year = Number(edu.graduationYear);
+    // Cho phép NĂM TỐT NGHIỆP DỰ KIẾN tối đa 10 năm tới (sinh viên đang học) — xa hơn là gõ nhầm.
+    const maxYear = new Date().getFullYear() + 10;
+    if (!Number.isInteger(year) || year < MIN_VALID_YEAR || year > maxYear) {
+      throw new HttpError(400, `Học vấn dòng ${idx + 1}: Năm tốt nghiệp không hợp lệ (chỉ nhận số nguyên từ ${MIN_VALID_YEAR} đến ${maxYear})`);
+    }
+  }
 }
 
 // Áp dụng payload sửa lên profile TẠI CHỖ (mutate) — chỉ nhận field nằm trong allowedFields, validate
@@ -736,6 +771,7 @@ module.exports = {
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  assertNationalIdNotDuplicated,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,

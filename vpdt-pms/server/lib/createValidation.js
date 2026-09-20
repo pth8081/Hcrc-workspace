@@ -3012,10 +3012,21 @@ const CREATE_MODULE_CONFIGS = {
       // hệ thống, xem chú thích useExternalCode ở module-hopdonglaodong.js). Field này chỉ điều khiển
       // validate, KHÔNG lưu vào bản ghi.
       const useExternalCode = payload.useExternalCode === true || payload.useExternalCode === 'true';
-      if (!useExternalCode && !findProfile(appData?.employeeProfiles, payload.employeeCode)) {
+      const linkedProfile = findProfile(appData?.employeeProfiles, payload.employeeCode);
+      if (!useExternalCode && !linkedProfile) {
         throw new CreateError(400, 'Mã Nhân Viên không có trong Hồ Sơ Nhân Sự — tick "Không lấy từ hồ sơ (nhập mã ngoài hệ thống)" nếu muốn nhập mã không có trong hệ thống');
       }
       delete payload.useExternalCode;
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): employeeUsername là field DUY
+      // NHẤT quyết định "nhân viên tự xem được hợp đồng của chính mình" (canViewLaborContract() ở
+      // lib/recordViewScope.js) nhưng TRƯỚC ĐÂY không điểm tạo nào gán cả (luôn null theo
+      // defaultContract()) — tính năng tự xem chết hoàn toàn từ lúc ra đời. Tra thẳng từ Hồ Sơ Nhân Sự
+      // theo employeeCode (KHÔNG nhận từ client — tránh gán bừa để xem hợp đồng người khác). Hợp đồng
+      // "ngoài hệ thống" (useExternalCode) không có hồ sơ -> giữ null, đúng thiết kế (người đó không có
+      // tài khoản nào để tự xem). Hồ sơ chưa liên kết tài khoản tại thời điểm tạo cũng ra null — được
+      // gán bù ngay khi HR liên kết/đổi tài khoản, xem syncLaborContractsEmployeeUsername() ở
+      // routes/employeeProfile.js.
+      payload.employeeUsername = linkedProfile?.username || null;
       if (!CONTRACT_TYPES.has(payload.contractType)) throw new CreateError(400, 'Vui lòng chọn Loại hợp đồng hợp lệ');
       if (!payload.startDate || Number.isNaN(new Date(payload.startDate).getTime())) throw new CreateError(400, 'Vui lòng nhập Ngày hiệu lực hợp lệ');
       payload.startDate = String(payload.startDate).trim();
@@ -3153,9 +3164,20 @@ const CREATE_MODULE_CONFIGS = {
           throw new CreateError(400, `Số ngày phép năm ${year} còn lại (${remaining}) không đủ cho đơn ${valid.daysCount} ngày này`);
         }
       }
-      const pendingOverlap = (collection || []).some(r => r.employeeCode === profile.employeeCode && r.status === 'PENDING'
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): trước đây CHỈ xét đơn đang
+      // PENDING — nộp lại đúng khoảng ngày của 1 đơn ĐÃ DUYỆT vẫn qua được, và khi đơn thứ 2 được duyệt
+      // thì quỹ phép năm bị trừ 2 LẦN cho cùng 1 khoảng nghỉ (deductLeaveBalance() chạy lại đầy đủ, xem
+      // POST /leaveRequests/:id/approve) + AttendanceRecords bị ghi đè lặp. Xét CẢ APPROVED (đơn đã bị
+      // huỷ/từ chối thì không tính — khoảng ngày đó thực sự trống trở lại).
+      const BLOCKING_OVERLAP_STATUSES = ['PENDING', 'APPROVED'];
+      const overlapped = (collection || []).find(r => r.employeeCode === profile.employeeCode
+        && BLOCKING_OVERLAP_STATUSES.includes(r.status)
         && !(valid.toDate < r.fromDate || valid.fromDate > r.toDate));
-      if (pendingOverlap) throw new CreateError(409, 'Bạn đã có 1 đơn nghỉ phép khác đang chờ duyệt trùng khoảng ngày này');
+      if (overlapped) {
+        throw new CreateError(409, overlapped.status === 'APPROVED'
+          ? `Bạn đã có 1 đơn nghỉ phép ĐÃ ĐƯỢC DUYỆT (${overlapped.fromDate} → ${overlapped.toDate}) trùng khoảng ngày này — huỷ đơn cũ trước nếu muốn nộp lại`
+          : 'Bạn đã có 1 đơn nghỉ phép khác đang chờ duyệt trùng khoảng ngày này');
+      }
       payload.employeeCode = profile.employeeCode;
       payload.leaveType = valid.leaveType; payload.fromDate = valid.fromDate; payload.toDate = valid.toDate;
       payload.daysCount = valid.daysCount; payload.reason = valid.reason; payload.workModel = info.workModel;

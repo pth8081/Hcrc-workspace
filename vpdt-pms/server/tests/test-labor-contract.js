@@ -104,8 +104,10 @@ async function partA() {
     assert.strictEqual(contract.status, 'ACTIVE');
   });
 
+  // CẬP NHẬT (đợt rà soát chuyên sâu cụm Nhân Sự 10/2026): addAmendment() nay CHỈ nhận hợp đồng đang
+  // ACTIVE (xem chú thích tại hàm đó) — các contract giả lập ở 2 test dưới phải có status: 'ACTIVE'.
   await test('addAmendment() thêm đúng 1 phần tử, validate thiếu trường bắt buộc', () => {
-    const contract = { amendments: [], history: [] };
+    const contract = { status: 'ACTIVE', amendments: [], history: [] };
     assert.throws(() => laborContract.addAmendment(contract, {}, 'hr1', 'HR One'), /Loại thay đổi/);
     laborContract.addAmendment(contract, { amendmentType: 'Tăng lương', effectiveDate: '2026-02-01', oldValue: '10tr', newValue: '12tr' }, 'hr1', 'HR One');
     assert.strictEqual(contract.amendments.length, 1);
@@ -117,7 +119,7 @@ async function partA() {
   // yêu cầu người dùng (2 mốc thời gian riêng: quyết định áp dụng từ ngày nào vs. thay đổi thật sự có
   // hiệu lực từ ngày nào).
   await test('addAmendment() lưu đúng applyDate khi có gửi kèm, chặn applyDate không hợp lệ', () => {
-    const contract = { amendments: [], history: [] };
+    const contract = { status: 'ACTIVE', amendments: [], history: [] };
     laborContract.addAmendment(contract, { amendmentType: 'Tăng lương', effectiveDate: '2026-02-01', applyDate: '2026-01-15', oldValue: '10.000.000', newValue: '12.000.000' }, 'hr1', 'HR One');
     assert.strictEqual(contract.amendments[0].applyDate, '2026-01-15');
     assert.throws(() => laborContract.addAmendment(contract, { amendmentType: 'X', effectiveDate: '2026-02-01', applyDate: 'không-phải-ngày' }, 'hr1', 'HR One'), /Ngày áp dụng/);

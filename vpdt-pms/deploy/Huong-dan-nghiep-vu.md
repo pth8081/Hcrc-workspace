@@ -2726,6 +2726,75 @@ TRONG file đang đọc (tên cột trùng lặp) — không có khái niệm "�
 
 ---
 
+## 5c. Siết luật nghiệp vụ cụm Nhân Sự (đợt rà soát chuyên sâu 10/2026)
+
+Các quy tắc dưới đây được BỔ SUNG/SIẾT LẠI sau đợt rà soát chuyên sâu cụm
+"Nhân Sự" — không thêm màn hình/quyền mới nào, chỉ chặt chẽ hơn ở đúng các
+điểm ghi dữ liệu. Nêu ở đây để người dùng biết vì sao 1 thao tác trước đây
+làm được nay bị chặn:
+
+**Onboarding & Hồ Sơ Nhân Sự**
+- Tạo quy trình **Onboarding** mà tự gõ "Mã Nhân Viên": mã đó BẮT BUỘC phải
+  là hồ sơ **đã nghỉ việc** (luồng Tái Tuyển, chọn qua "🔍 Kiểm Tra Nhân Sự
+  Cũ") — gõ mã của người đang làm việc bị chặn (409), gõ mã không có trong hệ
+  thống bị chặn (400). Nhân viên MỚI: để TRỐNG ô Mã Nhân Viên như hướng dẫn
+  (hệ thống tự sinh "BL....").
+- **Huỷ/Xoá** 1 quy trình Onboarding: hồ sơ nhân sự còn ở trạng thái **Nháp**
+  đã được đặt chỗ lúc tạo sẽ được **xoá theo** (ghi 1 dòng Nhật Ký Hệ Thống),
+  giải phóng Mã Nhân Viên để dùng lại — trước đây mã đó bị khoá vĩnh viễn.
+  Hồ sơ đã "Đang làm việc"/"Nghỉ dài hạn"/"Đã nghỉ việc" KHÔNG bao giờ bị đụng.
+- **CCCD/CMND không được trùng** trên toàn bộ Hồ Sơ Nhân Sự — nay áp dụng cho
+  CẢ 3 đường ghi: tạo mới, **sửa hồ sơ** (Chi tiết → Lưu) và **Nhập Excel chọn
+  "Ghi đè thông tin"** (trước đây chỉ chặn lúc tạo). Trùng CCCD nghĩa là phải
+  dùng Tái Tuyển thay vì lập hồ sơ thứ 2.
+- **Người phụ thuộc / Học vấn**: Ngày sinh phải là ngày thật, không ở tương
+  lai; Năm tốt nghiệp là số nguyên trong khoảng 1900 → (năm hiện tại + 10).
+- **Xuất Excel Hồ Sơ Nhân Sự** nay ghi Nhật Ký Hệ Thống (ai xuất, lúc nào) và
+  giới hạn 20 lần/5 phút cho mỗi tài khoản.
+- Tắt module "Hồ Sơ Nhân Sự" (Khối 0 — Quyền Truy Cập Module) nay chặn THẬT
+  toàn bộ API hồ sơ, không chỉ ẩn giao diện. Ngoại lệ duy nhất: danh sách
+  chọn nhân viên dùng cho module Hợp Đồng Lao Động.
+
+**Hợp Đồng Lao Động**
+- Chỉ thêm được **Phụ lục** cho hợp đồng **đang hiệu lực**. Hợp đồng còn Nháp
+  thì sửa trực tiếp nội dung rồi kích hoạt; hợp đồng đã chấm dứt/hết hạn/bị
+  thay thế không sửa đổi được nữa.
+- **Ngày chấm dứt** khi đóng hợp đồng tay: phải hợp lệ, không trước Ngày hiệu
+  lực hợp đồng và không quá 1 năm kể từ hôm nay.
+- **Nhân viên tự xem hợp đồng của mình**: hệ thống nay tự gắn tài khoản VPDT
+  vào hợp đồng (lúc tạo, lúc sinh tự động theo Onboarding, và lúc HR liên
+  kết/đổi tài khoản cho hồ sơ) — trước đây tính năng này không chạy vì liên
+  kết chưa bao giờ được ghi.
+
+**Công & Phép**
+- Không nộp được đơn nghỉ phép **trùng khoảng ngày với đơn ĐÃ DUYỆT** (trước
+  đây chỉ chặn trùng với đơn đang chờ duyệt — nguồn gốc lỗi trừ quỹ phép 2
+  lần). Đơn đã huỷ/từ chối không tính là trùng.
+- **Huỷ 1 đơn nghỉ phép đã duyệt** nay khôi phục lại các dòng **Lịch Phân Ca**
+  mà lượt duyệt đã tự huỷ (song song với việc hoàn quỹ phép + dọn chấm công
+  vốn đã có). Dòng phân ca bị huỷ vì lý do khác (huỷ tay, nghỉ việc) giữ nguyên.
+- **API máy chấm công** (`POST /api/attendance/clock-punch`) từ chối mốc giờ ở
+  tương lai (dung sai 5 phút) và mốc giờ rơi vào **kỳ lương đã Chốt/Công Bố**.
+
+**Lương**
+- **Thuế TNCN được tính lại** mỗi khi kế toán "Điều Chỉnh dòng lương" làm đổi
+  thu nhập chịu thuế (thưởng/phụ cấp nhập tay) và mỗi khi "Tính Lương" lại cả
+  kỳ — trước đây phần thu nhập nhập tay thoát thuế hoàn toàn. Dòng khấu trừ
+  nhập tay (tạm ứng/phạt) KHÔNG làm giảm thu nhập chịu thuế.
+- **Cấu Hình Lương**: Ngày công chuẩn (HO/Siêu Thị) và Số giờ công chuẩn/ngày
+  bắt buộc > 0 (là mẫu số khi tính lương ngày/giờ); % BHXH/BHYT/BHTN phải nằm
+  trong 0–100%.
+- **Tính Lương Tự Động** nay xoá phiếu cũ + ghi phiếu mới trong ĐÚNG 1 giao
+  dịch — lỗi giữa chừng không còn làm mất dữ liệu phiếu lương của kỳ.
+- **Phiếu lương nhân viên tự xem** hiển thị kèm **ghi chú** của từng dòng điều
+  chỉnh tay (giống màn kế toán) — nhân viên biết rõ lý do khoản cộng/trừ.
+
+**Đào Tạo Tân Binh**
+- Không xoá được **Lộ Trình** còn hồ sơ tiến độ đang tham chiếu (409, nêu rõ
+  số hồ sơ) — xoá đi sẽ khiến các hồ sơ đó không xác nhận tiếp giai đoạn được.
+
+---
+
 ## 6. Phân quyền (permission model)
 
 **Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**

@@ -89,13 +89,18 @@ async function openHrpPayslipViewModal(periodId) {
     document.getElementById('hrpPvTitle').textContent = `Phiếu Lương — ${period.periodName}`;
     const incomeRows = (payslip.details || []).filter(d => d.componentCode && !['SOCIAL_INSURANCE', 'HEALTH_INSURANCE', 'UNEMPLOYMENT_INSURANCE', 'PERSONAL_INCOME_TAX', 'ADVANCE_DEDUCT', 'PENALTY_DEDUCT', 'UNPAID_LEAVE_DEDUCT'].includes(d.componentCode));
     const deductionRows = (payslip.details || []).filter(d => ['SOCIAL_INSURANCE', 'HEALTH_INSURANCE', 'UNEMPLOYMENT_INSURANCE', 'PERSONAL_INCOME_TAX', 'ADVANCE_DEDUCT', 'PENALTY_DEDUCT', 'UNPAID_LEAVE_DEDUCT'].includes(d.componentCode));
-    const rowHtml = (label, amount) => `<div class="flex justify-between py-1 border-b text-xs"><span>${escapeHtml(label)}</span><span>${fmtMoney(amount)}</span></div>`;
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): màn nhân viên TỰ XEM
+    // trước đây chỉ hiện Nhãn + Số tiền, BỎ HẲN `note` của dòng điều chỉnh tay — trong khi màn kế toán
+    // (openHrpAdjustDetailModal() bên dưới) vẫn hiện đủ "Nhãn — ghi chú". Nhân viên bị trừ tiền (khấu
+    // trừ tạm ứng/phạt) hoặc được cộng thưởng mà KHÔNG thấy lý do kế toán đã ghi rõ ngay trên chính dòng
+    // đó. Hiển thị đúng khuôn màn kế toán (escapeHtml() cho cả 2 phần).
+    const rowHtml = (label, amount, note) => `<div class="flex justify-between py-1 border-b text-xs"><span>${escapeHtml(label)}${note ? ' — ' + escapeHtml(note) : ''}</span><span>${fmtMoney(amount)}</span></div>`;
     document.getElementById('hrpPvContent').innerHTML = `
       <div class="text-xs text-gray-500 mb-2">Ngày công thực tế: ${payslip.workDays}/${payslip.standardDays}</div>
       <div class="font-bold text-xs text-gray-700 mt-2 mb-1">Thu Nhập</div>
-      ${incomeRows.map(d => rowHtml(HRP_COMPONENT_LABELS[d.componentCode] || d.componentCode, d.amount)).join('') || '<p class="text-[11px] text-gray-400">Không có dòng thu nhập.</p>'}
+      ${incomeRows.map(d => rowHtml(HRP_COMPONENT_LABELS[d.componentCode] || d.componentCode, d.amount, d.note)).join('') || '<p class="text-[11px] text-gray-400">Không có dòng thu nhập.</p>'}
       <div class="font-bold text-xs text-gray-700 mt-3 mb-1">Khấu Trừ</div>
-      ${deductionRows.map(d => rowHtml(HRP_COMPONENT_LABELS[d.componentCode] || d.componentCode, d.amount)).join('') || '<p class="text-[11px] text-gray-400">Không có dòng khấu trừ.</p>'}
+      ${deductionRows.map(d => rowHtml(HRP_COMPONENT_LABELS[d.componentCode] || d.componentCode, d.amount, d.note)).join('') || '<p class="text-[11px] text-gray-400">Không có dòng khấu trừ.</p>'}
       <div class="flex justify-between py-2 mt-2 border-t-2 border-gray-800 font-bold text-sm"><span>Thực Lĩnh</span><span>${fmtMoney(payslip.netPay)}</span></div>
     `;
     document.getElementById('hrpPayslipViewModal').classList.remove('hidden');

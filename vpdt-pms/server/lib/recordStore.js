@@ -936,6 +936,51 @@ async function deleteRecordById(collection, id, checkFn) {
   return deleteDedicatedRecordById(collection, id, checkFn);
 }
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): "Tính Lương Tự Động"
+// (POST /api/payroll/periods/:id/calculate) xoá TOÀN BỘ payslip cũ của kỳ rồi insert lại từng phiếu mới
+// bằng N lệnh RIÊNG LẺ — 1 lỗi bất kỳ ở giữa (mất kết nối, trùng Id, hết bộ nhớ...) để lại kỳ lương mất
+// trắng phần chưa kịp insert, KHÔNG có đường quay lui, trong khi dữ liệu vừa xoá đi thẳng (payslips xoá
+// KHÔNG qua Thùng Rác, xem deleteDedicatedRecordById()). Hàm này gom "xoá cũ + ghi mới" vào ĐÚNG 1
+// giao dịch SQL (cùng khuôn moveDedicatedRecordToTrash()/restoreTrashItem()): commit hết hoặc rollback
+// hết, không bao giờ có trạng thái nửa vời. KHÔNG có retry sinh Id/Code mới như insertDedicatedRecord()
+// — caller phải tự bảo đảm Id/Code duy nhất trước khi gọi (kỳ lương: Id sinh tuần tự, Code =
+// "PL-<periodId>-<employeeCode>" vốn đã duy nhất theo thiết kế).
+async function replaceRecordsInCollection(collection, idsToDelete, newRecords) {
+  const cfg = DEDICATED_TABLES[collection];
+  if (!cfg) throw new Error(`replaceRecordsInCollection(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js).`);
+  const table = dedicatedTableName(collection);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    for (const id of idsToDelete || []) {
+      const delReq = new sql.Request(tx);
+      await delReq.input('id', sql.BigInt, id).query(`DELETE FROM ${table} WHERE Id = @id`);
+    }
+    for (const record of newRecords || []) {
+      const req = new sql.Request(tx);
+      req.input('id', sql.BigInt, record.id);
+      req.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+      const colNames = ['Id', 'Payload'];
+      const colParams = ['@id', '@payload'];
+      if (cfg.hasCode) {
+        req.input('code', sql.NVarChar(100), record.code || null);
+        colNames.push('Code'); colParams.push('@code');
+      }
+      for (const { col, param } of bindExtractedColumns(req, cfg, record)) {
+        colNames.push(col); colParams.push('@' + param);
+      }
+      await req.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+    }
+    await tx.commit();
+    invalidateCollectionCache(collection);
+    return (newRecords || []).length;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 // ===== Thùng Rác (Trash Bin) — xem sql/schema.sql dbo.TrashBin + routes/trash.js. =====
 //
 // Trước đây "Xóa" ở mọi module (qua deleteRecordForCollection() bên dưới) là XÓA THẬT ngay lập tức
@@ -1587,7 +1632,7 @@ async function deleteRecordForCollection(collection, id, checkFn, actor) {
 module.exports = {
   MIGRATED_COLLECTIONS,
   CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix,
-  getAllRecords, insertRecord, withLockedRecordById, deleteRecordById,
+  getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, replaceRecordsInCollection,
   getAllForCollection, getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,
   moveRecordToTrash, getTrashItems, getTrashItemCollection, getAllTrashItemsCached, restoreTrashItem, restoreTrashItemWithFamily, familyRootId, permanentlyDeleteTrashItem,
