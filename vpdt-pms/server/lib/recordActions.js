@@ -14,6 +14,10 @@ const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, b
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
+// recordCodeGen — dùng lại ĐÚNG hàm sinh mã ở SERVER (lib/recordCodeGen.js, xem chú thích đầu file đó)
+// để SINH LẠI code/displayCode khi editDocDraft()/editContract() cho đổi cat/dept/type của hồ sơ GỐC
+// (khớp phân loại/phòng ban MỚI, không để mã cũ lạc khỏi hồ sơ) — xem chú thích ở 2 hàm đó.
+const recordCodeGen = require('./recordCodeGen');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
@@ -28,10 +32,19 @@ const CONTRACT_EDITABLE_FIELDS = ['dept', 'custodianDept', 'type', 'title', 'par
 // nào kế thừa dept của nó hay chưa — file này không tự đọc DB (giữ đúng nguyên tắc cũ, xem đầu file).
 // appData: caller tự đọc sẵn (workflows/contractApprovalDeptWorkflows/contractApprovalGroups) để dựng
 // lại effectiveSteps/effectiveApprovers khi đổi dept — xem giải thích ở khối kiểm tra deptChanged bên dưới.
-function editContract(payload, user, contract, hasAddenda, rootDept, appData, rootCustodianDept) {
-  // Khớp đúng luật cũ ở client (openEditContract/updateContractReq): CHỈ người tạo mới sửa được, kể
-  // cả admin cũng không có ngoại lệ — không mở rộng quyền so với hành vi trước Bước 2b.
-  if (contract.creator !== user.username) {
+// existingCollection (tuỳ chọn, caller tự đọc sẵn getAllForCollection('contracts')) — CHỈ dùng để sinh
+// lại code khi dept/type của hợp đồng GỐC thực sự đổi giá trị (xem khối regenerateCode bên dưới).
+function editContract(payload, user, contract, hasAddenda, rootDept, appData, rootCustodianDept, existingCollection) {
+  // Khớp đúng luật cũ ở client (openEditContract/updateContractReq): CHỈ người tạo mới sửa được.
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "hồ sơ NHÁP/BỊ TỪ CHỐI chỉ đúng người tạo sửa
+  // được, admin cũng không → kẹt khi người tạo nghỉ việc"): trước đây admin KHÔNG có ngoại lệ nào — hợp
+  // đồng NHÁP/BỊ TỪ CHỐI của 1 người đã nghỉ việc/bị khoá tài khoản kẹt vĩnh viễn, không ai sửa lại được
+  // để gửi tiếp. Mở lối thoát CHỈ cho ADMIN (không mở rộng cho người khác), CHỈ áp dụng đúng 2 trạng
+  // thái NHÁP/BỊ TỪ CHỐI (không phải PENDING — hồ sơ đang dở dang thật trong quy trình duyệt, ngoài
+  // phạm vi lỗi này, vẫn giữ nguyên luật cũ "chỉ người tạo") — cùng khuôn lối thoát đã mở cho
+  // CANCEL_FILE_PROPOSAL (lib/workflowEngine.js).
+  const isAdminEscapeStatus = contract.approvalStatus === 'DRAFT' || contract.approvalStatus === 'REJECTED';
+  if (contract.creator !== user.username && !(user.perms?.admin && isAdminEscapeStatus)) {
     throw new HttpError(403, 'Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
   }
   // Trước đây editContract() chỉ xét người tạo, không xét approvalStatus — hợp đồng đã qua đủ các
@@ -68,6 +81,14 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   if (!contract.isAddendum && hasAddenda && payload.dept !== undefined && payload.dept !== contract.dept) {
     throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi phòng ban');
   }
+  // Cùng lý do — phụ lục kế thừa 'type' của hợp đồng gốc lúc tạo (payload.type = root.type,
+  // createValidation.js contracts.extraValidate) và mã phụ lục (<mã gốc>-PLHD<n>) bám theo mã gốc; đổi
+  // 'type' của gốc SAU KHI đã có phụ lục sẽ sinh lại mã gốc mới (xem regenerateContractCode bên dưới)
+  // trong khi phụ lục vẫn mang type/tiền tố mã CŨ — 2 hồ sơ cùng 1 "gia đình" hợp đồng lệch hẳn phân
+  // loại/mã hiển thị với nhau. Chặn ngay tại đây, cùng khuôn với chặn đổi dept ở trên.
+  if (!contract.isAddendum && hasAddenda && payload.type !== undefined && payload.type !== contract.type) {
+    throw new HttpError(409, 'Hợp đồng gốc đã có phụ lục — không thể đổi loại pháp lý');
+  }
   // Ngược lại, SỬA ngay chính phụ lục (không phải hợp đồng gốc) mà đổi dept lệch khỏi gốc cũng phá vỡ
   // đúng ràng buộc đó — trước đây chỉ chặn chiều sửa hợp đồng gốc, còn sửa thẳng phụ lục thì không ai
   // kiểm tra lại gì cả (createValidation.js chỉ áp dụng lúc TẠO, không áp dụng lúc SỬA phụ lục).
@@ -88,6 +109,25 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
     if (validDepts.size && !validDepts.has(payload.dept)) {
       throw new HttpError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
     }
+  }
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "'type' không đối chiếu danh mục" + "đổi dept/
+  // type lúc SỬA không sinh lại code"): mã hợp đồng GỐC (HCRC-<viết tắt dept>-<viết tắt Loại Pháp Lý>-
+  // <số 3 chữ số>, generateContractCode()/lib/recordCodeGen.js) được sinh 1 LẦN lúc TẠO theo ĐÚNG dept+
+  // type lúc đó. CONTRACT_EDITABLE_FIELDS cho phép đổi cả 2 field này (dept chỉ khi CHƯA có phụ lục, xem
+  // khối hasAddenda ở trên) mà trước đây (a) 'type' không hề đối chiếu danh mục thật (appData.contractTypes)
+  // như 'dept' vừa làm ở trên, (b) không hồ sơ nào sinh lại mã, để lại hợp đồng mang mã không còn khớp
+  // dept/loại pháp lý thật của chính nó. CHỈ áp dụng cho hợp đồng GỐC (!isAddendum) — phụ lục không đổi
+  // dept được (đã chặn ở trên) và mã phụ lục (<mã gốc>-PLHD<n>) không phụ thuộc trực tiếp vào type.
+  let regenerateContractCode = false;
+  if (!contract.isAddendum) {
+    if (payload.type !== undefined && payload.type !== contract.type) {
+      const validContractTypes = new Set(appData?.contractTypes || []);
+      if (validContractTypes.size && !validContractTypes.has(payload.type)) {
+        throw new HttpError(400, `Loại pháp lý hợp đồng không hợp lệ: ${payload.type}`);
+      }
+      regenerateContractCode = true;
+    }
+    if (payload.dept !== undefined && payload.dept !== contract.dept) regenerateContractCode = true;
   }
 
   // custodianDept — cùng ràng buộc "1 đơn vị custodian xuyên suốt gốc + phụ lục" như dept ở trên (xem
@@ -172,6 +212,9 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   const deptChanged = !contract.isAddendum && payload.dept !== undefined && payload.dept !== contract.dept;
   for (const field of CONTRACT_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) contract[field] = payload[field];
+  }
+  if (regenerateContractCode) {
+    contract.code = recordCodeGen.generateContractCode(existingCollection, appData, contract.dept, contract.type);
   }
   if (deptChanged && appData) {
     const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
@@ -383,8 +426,18 @@ const DOC_DRAFT_EDITABLE_FIELDS = ['dept', 'cat', 'title', 'ver', 'summary', 'cu
 
 // appData (tuỳ chọn, caller tự đọc sẵn — xem routes/records.js POST /docs/:id/update): CHỈ dùng để đối
 // chiếu lại trường bắt buộc của Biểu Mẫu như lúc TẠO. Xem ghi chú chung ở editContract().
-function editDocDraft(payload, user, item, appData) {
-  if (item.uploader !== user.username) throw new HttpError(403, 'Chỉ người tải lên mới được sửa tài liệu này');
+// existingCollection (tuỳ chọn, caller tự đọc sẵn getAllForCollection('docs')) — CHỈ dùng để sinh lại
+// code/displayCode khi cat/dept của tài liệu GỐC thực sự đổi giá trị (xem khối regenerateCode bên dưới).
+function editDocDraft(payload, user, item, appData, existingCollection) {
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "hồ sơ NHÁP chỉ đúng người tạo sửa được, admin
+  // cũng không → kẹt khi người tạo nghỉ việc"): mở lối thoát CHỈ cho ADMIN (không mở rộng cho người
+  // khác) sửa tài liệu NHÁP dù không phải người tải lên — theo đúng khuôn lối thoát đã mở cho
+  // CANCEL_FILE_PROPOSAL (lib/workflowEngine.js, "!user?.perms?.admin && ... -> 403"). Dòng kiểm tra
+  // status === 'DRAFT' ngay bên dưới đã tự giới hạn phạm vi hàm này đúng "NHÁP" (tài liệu BỊ TỪ CHỐI ở
+  // module này không có đường "Sửa & Gửi Lại" riêng, khác submissions/contracts).
+  if (item.uploader !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người tải lên (hoặc admin) mới được sửa tài liệu này');
+  }
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Tài liệu này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
   if (payload.customData !== undefined) {
@@ -412,8 +465,34 @@ function editDocDraft(payload, user, item, appData) {
   } else if (payload.dept !== undefined && payload.dept !== item.dept) {
     assertDeptScopeAllowed(user, { all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }, payload.dept);
   }
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "cat không đối chiếu danh mục" + "đổi cat/dept
+  // lúc SỬA không sinh lại code/displayCode"): code/displayCode của tài liệu GỐC (rootDocId == null —
+  // phiên bản đã bị chặn đổi cat/dept ở nhánh if phía trên) được sinh 1 LẦN lúc TẠO theo ĐÚNG cat+dept
+  // lúc đó (generateDocCode(), lib/recordCodeGen.js — mã theo khuôn <viết tắt Phân loại>-<viết tắt Phòng
+  // ban>-<số 3 chữ số>). Trước đây editDocDraft() cho đổi tự do cả 2 field này (DOC_DRAFT_EDITABLE_FIELDS)
+  // mà không sinh lại mã, để lại tài liệu mang mã không còn khớp phân loại/phòng ban thật của chính nó —
+  // mọi nơi tra cứu/hiển thị theo code đọc sai phân loại. Đối chiếu cat với danh mục thật TRƯỚC (cùng
+  // khuôn createValidation.js docs.extraValidate — trước đây nhánh SỬA hoàn toàn không kiểm), rồi mới
+  // sinh lại mã nếu 1 trong 2 field thực sự đổi giá trị (so LUÔN với item hiện tại, không phải giá trị
+  // đã gán — regenerateCode được chốt TRƯỚC vòng lặp gán field bên dưới).
+  let regenerateCode = false;
+  if (item.rootDocId == null) {
+    if (payload.cat !== undefined && payload.cat !== item.cat) {
+      const validCats = new Set(appData?.cats || []);
+      if (validCats.size && !validCats.has(payload.cat)) {
+        throw new HttpError(400, `Phân loại tài liệu không hợp lệ: ${payload.cat}`);
+      }
+      regenerateCode = true;
+    }
+    if (payload.dept !== undefined && payload.dept !== item.dept) regenerateCode = true;
+  }
   for (const f of DOC_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
+  }
+  if (regenerateCode) {
+    const newCode = recordCodeGen.generateDocCode(existingCollection, appData, item.cat, item.dept);
+    item.code = newCode;
+    item.displayCode = newCode;
   }
   if (!String(item.title || '').trim()) throw new HttpError(400, 'Thiếu tiêu đề tài liệu');
   // Cho phép thay thế hẳn tệp đính kèm (khác itPriceApprovals — CHỈ module đó bị khoá append-only theo
@@ -431,7 +510,11 @@ function editDocDraft(payload, user, item, appData) {
 }
 
 function submitDocDraft(user, item) {
-  if (item.uploader !== user.username) throw new HttpError(403, 'Chỉ người tải lên mới được gửi lại tài liệu này');
+  // Cùng lối thoát admin như editDocDraft() ngay phía trên — sửa được NHÁP mà không gửi lại được thì
+  // vẫn kẹt y hệt, không giải quyết đúng vấn đề "người tạo nghỉ việc".
+  if (item.uploader !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người tải lên (hoặc admin) mới được gửi lại tài liệu này');
+  }
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Tài liệu này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
   item.history = item.history || [];
   item.history.push({ step: 0, stepName: 'Gửi lại sau bổ sung', approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
@@ -1570,7 +1653,12 @@ function computeOperationRecordStageStatus(record, items) {
 const SUBMISSION_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'priority', 'content', 'customData'];
 
 function editSubmissionDraft(payload, user, item, appData) {
-  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người trình mới được sửa tờ trình này');
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "hồ sơ NHÁP chỉ đúng người tạo sửa được, admin
+  // cũng không → kẹt khi người tạo nghỉ việc"): mở lối thoát CHỈ cho ADMIN (không mở rộng cho người
+  // khác), cùng khuôn CANCEL_FILE_PROPOSAL (lib/workflowEngine.js).
+  if (item.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người trình (hoặc admin) mới được sửa tờ trình này');
+  }
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Tờ trình này không ở trạng thái cần bổ sung, không thể sửa');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
   if (payload.customData !== undefined) {
@@ -1653,7 +1741,10 @@ function editSubmissionDraft(payload, user, item, appData) {
 }
 
 function submitSubmissionDraft(user, item) {
-  if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người trình mới được gửi lại tờ trình này');
+  // Cùng lối thoát admin như editSubmissionDraft() ngay phía trên.
+  if (item.creator !== user.username && !user.perms?.admin) {
+    throw new HttpError(403, 'Chỉ người trình (hoặc admin) mới được gửi lại tờ trình này');
+  }
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Tờ trình này không ở trạng thái cần bổ sung (có thể đã gửi lại rồi)');
   item.history = item.history || [];
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: 'Đã sửa lại và trình lại sau khi được yêu cầu bổ sung', time: nowVN() });

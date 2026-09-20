@@ -11,6 +11,17 @@ const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
 const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Cao — "propose-file-replacement không xác minh quyền
+// sở hữu tệp"): PROPOSE_FILE_REPLACEMENT (lib/workflowEngine.js) trước đây chỉ kiểm ĐÚNG KHUÔN URL
+// (assertUploadedFileUrl) cho extraFields.fileUrl, không xác minh approver ở bước hiện tại có thật sự
+// là người vừa tải tệp đó lên hay không — cho phép trỏ fileUrl sang tệp nhạy cảm của hồ sơ BẤT KỲ khác
+// rồi findOwningRecord() (lib/fileAuthz.js) quy nhầm tệp đó về tờ trình đang xử lý, lộ cho approver và
+// (nếu người trình bấm Đồng ý) ghi thẳng vào item.fileUrl khiến cả phòng ban đọc được vĩnh viễn. Đây là
+// đường ghi fileUrl DUY NHẤT trong route generic này (route riêng khác của module này không có), và
+// applyWorkflowAction() là hàm ĐỒNG BỘ (dùng chung cho mọi module/hành động) nên không thể gọi thẳng
+// hàm kiểm DB bất đồng bộ này từ bên trong nó — kiểm NGAY TẠI ROUTE, trước khi vào lock/ghi, đúng khuôn
+// 14 route sửa/tạo khác đã áp dụng (xem routes/create.js:192, routes/records.js).
+const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -118,6 +129,13 @@ router.post('/:module/:id/:action', async (req, res) => {
       if (level !== 'NONE' && !(await consumeApprovalGrant(freshUser.username))) {
         return res.status(403).json({ error: 'Cần xác thực lại (mật khẩu/OTP/PIN) trước khi duyệt' });
       }
+    }
+
+    // Xác minh quyền sở hữu tệp thay thế NGAY tại đây (trước khi vào lock/ghi) — xem chú thích đầy đủ ở
+    // import assertPayloadFileUrlsOwnedByUser phía trên. Không cần exemptFileUrls: đây luôn là 1 tệp MỚI
+    // được đề xuất (không phải giữ nguyên tệp cũ của chính hồ sơ), nên không có URL nào cần miễn kiểm.
+    if (action === 'PROPOSE_FILE_REPLACEMENT') {
+      await assertPayloadFileUrlsOwnedByUser({ fileUrl: extraFields?.fileUrl }, freshUser);
     }
 
     let transition = null;

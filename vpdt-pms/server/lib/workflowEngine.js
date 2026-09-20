@@ -652,7 +652,34 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
 
   const { steps, approvers } = config.resolveWfConfig(item, appData);
   const currentStep = item[currentStepField];
-  const currentStepApprovers = approvers?.[currentStep] || [];
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Trung bình — "approver PEOPLE-mode bị khoá tài khoản
+  // vẫn nằm trong approvers[] -> bước duyệt treo vĩnh viễn"): approvers[currentStep] (PEOPLE mode, tra
+  // qua resolveStepApproverUsernames()/lib/positionApprovers.js) trước đây KHÔNG lọc user đã bị khoá tài
+  // khoản (active === false) — isStepApprovalComplete() (đồng phê duyệt: TẤT CẢ username trong danh sách
+  // phải đã duyệt) không bao giờ đủ điều kiện nếu 1 trong số đó bị khoá, chặn các approver ĐANG HOẠT
+  // ĐỘNG khác hoàn tất bước dù đã duyệt đủ phần của mình — chỉ admin mới có lối thoát (xem chú thích
+  // isAdminOverride bên dưới, "cố ý, dùng làm lối thoát khi 1 approver bị khoá tài khoản giữa chừng" —
+  // lối thoát đó VẪN GIỮ NGUYÊN cho các trường hợp khác, lọc ở đây chỉ giúp approver active không phải
+  // chờ admin can thiệp mỗi khi có người bị khoá).
+  //
+  // CỐ Ý lọc CHỈ Ở ĐÂY (điểm canApproveStep()/isStepApprovalComplete() dùng để GÁC hành động THẬT),
+  // KHÔNG sửa thẳng resolveStepApproverUsernames() (lib/positionApprovers.js, "ĐIỂM TRA CỨU DUY NHẤT")
+  // — hàm đó còn được dùng bởi những nơi CỐ Ý cần thấy DANH SÁCH THÔ (kể cả người đã khoá), ví dụ công
+  // cụ cảnh báo admin trước khi khoá 1 tài khoản (findPendingApprovalsForUsername(), public/js/core-
+  // approvalhub.js) — mục đích CHÍNH của công cụ đó là PHÁT HIỆN đúng tình huống "người này đang là
+  // approver của hồ sơ PENDING nào" để admin biết mà xử lý, kể cả khi người đó đã bị khoá; lọc ngay tại
+  // nguồn sẽ khiến công cụ đó không còn thấy được các hồ sơ đang mắc kẹt. `users` (tham số hàm này) LUÔN
+  // là toàn bộ danh sách người dùng mới nhất (req.allUsers, gán bởi requireAuth — xem lib/auth.js), nên
+  // an toàn để lọc thẳng tại đây mà không cần lo dữ liệu users thiếu/không đầy đủ như 1 số nơi gọi
+  // resolveStepApproverUsernames() khác (VD test fixture/appData snapshot cũ) — coi username KHÔNG tìm
+  // thấy record nào là "chưa rõ, vẫn giữ" (an toàn hơn, khớp tinh thần "chỉ chặn khi có bằng chứng rõ
+  // ràng" đã dùng cho assertPayloadFileUrlsOwnedByUser()).
+  const rawCurrentStepApprovers = approvers?.[currentStep] || [];
+  const activeUserByUsername = new Map((users || []).filter(u => u && u.username).map(u => [u.username, u]));
+  const currentStepApprovers = rawCurrentStepApprovers.filter(username => {
+    const u = activeUserByUsername.get(username);
+    return !u || u.active !== false;
+  });
   const stepName = steps[currentStep - 1]?.name || `Bước ${currentStep}`;
 
   if (!item[historyField]) item[historyField] = [];

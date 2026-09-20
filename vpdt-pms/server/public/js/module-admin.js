@@ -514,14 +514,27 @@ async function renameCat(name) {
 }
 
 // Viết tắt Loại Pháp Lý hợp đồng (dùng sinh Mã Hợp Đồng, xem generateContractCode()) — tự suy ra mặc
-// định nếu admin chưa từng sửa, áp dụng ngay không cần duyệt. Danh sách DB.contractTypes tự thêm/bớt
-// ở màn Biểu Mẫu (không có nút Thêm/Xóa riêng ở đây, chỉ chỉnh viết tắt).
+// định nếu admin chưa từng sửa, áp dụng ngay không cần duyệt. Danh sách DB.contractTypes tự THÊM/BỚT
+// ở màn Biểu Mẫu (không có nút Thêm/Xóa riêng ở đây) — nhưng ĐỔI TÊN 1 lựa chọn ĐÃ CÓ thì PHẢI qua nút
+// "✏️ Sửa" ngay dưới đây (renameContractType()), KHÔNG sửa trực tiếp trong danh sách lựa chọn ở Biểu
+// Mẫu (saveCoreFieldOptionsList() ở core.js chỉ ghi đè thẳng mảng, không cascade contractTypeAbbrs/
+// contracts.type — xem cascadeContractTypeRename() ở lib/catalogRename.js).
 function updateContractTypeAbbr(name, value) {
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.contractTypeAbbrs[name];
   else DB.contractTypeAbbrs[name] = abbr;
   syncStorage('contractTypeAbbrs');
   logSystemAction('USER_MGM', 'UPDATE_CONTRACT_TYPE_ABBR', `Cập nhật viết tắt loại hợp đồng [${name}] = "${abbr}"`, 'SUCCESS', name);
+}
+
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "đổi tên Loại Pháp Lý HĐ không cascade
+// contractTypeAbbrs/contracts.type"): cùng lý do renameCat()/renameDept() ở trên — dùng route có cascade
+// riêng (cascadeContractTypeRename() dời key contractTypeAbbrs + cập nhật contracts.type của mọi hợp
+// đồng đang mang tên cũ, xem lib/catalogRename.js) thay vì để admin tự sửa trực tiếp trong danh sách lựa
+// chọn ở Biểu Mẫu (ghi đè thẳng, không cascade).
+async function renameContractType(name) {
+  const ok = await renameCatalogEntryClient('contractTypes', name, 'Loại Pháp Lý HĐ');
+  if (ok) { renderContractTypeAbbrList(); populateDropdowns(); }
 }
 
 function renderContractTypeAbbrList() {
@@ -531,6 +544,7 @@ function renderContractTypeAbbrList() {
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t)}</span>
       <input value="${escapeHtml(getContractTypeAbbr(t))}" data-op-change="updateContractTypeAbbr" data-arg0="${escapeHtml(t)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Hợp Đồng)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="renameContractType" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
     </li>
   `).join('');
 }

@@ -485,6 +485,25 @@ async function cascadeCatRename(oldValue, newValue) {
   await renameAbbrMapKey('docCatAbbrs', oldValue, newValue);
 }
 
+// PHÁT HIỆN ở đợt rà soát chuyên sâu vòng 2 (cụm "Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài
+// Liệu"): "Loại Pháp Lý HĐ" (DB.contractTypes) trước đây KHÔNG có handler cascade nào — CATALOG_HANDLERS
+// chưa từng khai key 'contractTypes' (chỉ khai contractTypeAbbrs riêng, xem updateContractTypeAbbr() ở
+// public/js/module-admin.js, và danh sách contractTypes tự thêm/bớt qua "Biểu Mẫu" — saveCoreFieldOptionsList()
+// ở core.js — ghi đè THẲNG cả mảng, không cascade gì). Đổi tên 1 Loại Pháp Lý qua đường ghi đè đó để lại
+// contractTypeAbbrs mang KEY CŨ (viết tắt "mồ côi", không còn áp dụng cho tên mới -> generateContractCode()
+// tự suy viết tắt khác) + mọi contracts.type của hợp đồng ĐÃ TẠO vẫn giữ tên CŨ (không còn khớp danh mục
+// mới -> lọc/thống kê theo loại pháp lý bỏ sót các hồ sơ này). Cùng khuôn cascadeCatRename() ngay ở
+// trên: đổi contracts.type của MỌI hợp đồng (gồm cả phụ lục — addendum kế thừa type của gốc lúc tạo,
+// contracts.extraValidate — nên cùng field, cascade chung không cần phân biệt isAddendum) + dời key
+// contractTypeAbbrs. Route rename có cascade thật (POST /api/admin/renameCatalogEntry) — xem thêm
+// VALID_CATALOG_KEYS (routes/adminCatalog.js) + renameContractType()/renderContractTypeAbbrList()
+// (public/js/module-admin.js, nút "✏️ Sửa" mới, mirror renameCat()) để UI thật sự gọi qua đường này thay
+// vì ghi đè thẳng qua Biểu Mẫu khi đây là RENAME (thêm/bớt hẳn 1 lựa chọn mới vẫn qua Biểu Mẫu như cũ).
+async function cascadeContractTypeRename(oldValue, newValue) {
+  await renameFieldValueInCollection('contracts', (item) => renameSimpleFields(item, ['type'], oldValue, newValue));
+  await renameAbbrMapKey('contractTypeAbbrs', oldValue, newValue);
+}
+
 // Factory cho các danh mục CHUỖI PHẲNG đơn giản KHÔNG cần cascade — giá trị hiển thị (KHÔNG phải khoá
 // định danh/FK bắt buộc khớp) có thể được tham chiếu bởi 1-2 collection khác (VD carRegs.assignedTaxiCompany,
 // itPriceApprovals.priceZone) nhưng hồ sơ ĐÃ TẠO trước đó chỉ đơn giản giữ nguyên chuỗi cũ làm nhãn hiển
@@ -566,6 +585,19 @@ const CATALOG_HANDLERS = {
       });
     },
     cascade: cascadeStoreJobTitleRename
+  },
+  // contractTypes: mảng chuỗi phẳng — cùng khuôn cats/depts (dùng renameInCatalog kiểm trùng/tồn tại
+  // trực tiếp, không qua simpleArrayCatalogHandler() vì CẦN cascade, khác 4 danh mục dùng factory đó).
+  contractTypes: {
+    async renameInCatalog(oldValue, newValue) {
+      return withLockedAppDataValue('contractTypes', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        if (!arr.includes(oldValue)) throw new HttpError(404, `Không tìm thấy "${oldValue}" trong Loại Pháp Lý HĐ`);
+        if (arr.includes(newValue)) throw new HttpError(400, `"${newValue}" đã có trong Loại Pháp Lý HĐ`);
+        return arr.map(t => (t === oldValue ? newValue : t));
+      });
+    },
+    cascade: cascadeContractTypeRename
   }
 };
 

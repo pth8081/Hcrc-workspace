@@ -67,7 +67,7 @@ router.post('/contracts/:id/edit', async (req, res) => {
       // trước đây route này chỉ xác minh ĐÚNG KHUÔN URL (assertUploadedFileUrl trong editContract()),
       // không xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới lên hay không.
       const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
-      const updated = recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept);
+      const updated = recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept, allContracts);
       await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
       return updated;
     });
@@ -314,14 +314,26 @@ router.post('/paymentRequests/from-source', async (req, res) => {
     const paymentRequests = await withAppLock(lockKey, async () => {
       const allPaymentRequests = await getAllForCollection('paymentRequests');
       let draft = null;
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Cao — "from-source ghi requestFiles/
+      // installments[].files client gửi mà không kiểm quyền sở hữu tệp"): route này là đường DUY NHẤT
+      // tạo đề nghị thanh toán có nguồn còn hở lớp kiểm sở hữu tệp (POST /api/create/paymentRequests đã
+      // qua routes/create.js:192) — 1 tài khoản paymentManage bất kỳ có thể gửi requestFiles/
+      // installments[].files trỏ tới tệp nhạy cảm của hồ sơ BẤT KỲ khác, đề nghị vừa tạo sẽ trở thành
+      // "hồ sơ sở hữu" tệp đó (findOwningRecord(), lib/fileAuthz.js), bypass luật "kế toán không tự động
+      // xem dữ liệu HR nhạy cảm". Quét thẳng toàn bộ `draft` (object ONE_TIME hoặc mảng nhiều bản ghi/đợt
+      // PERIODIC — xem splitPaymentDraftsByInstallment()) thay vì liệt kê tay từng field, vì
+      // collectFileUrlsDeep() tự đệ quy qua cả mảng lẫn object lồng nhau. Không cần exemptFileUrls: đây
+      // luôn là (các) bản ghi MỚI, chưa có tệp cũ nào cần giữ nguyên.
       if (sourceModule === 'CONTRACT') {
-        result = await withLockedRecordForCollection('contracts', sourceId, (item) => {
+        result = await withLockedRecordForCollection('contracts', sourceId, async (item) => {
           draft = recordActions.startContractPayment(freshUser, item, overrides, allPaymentRequests);
+          await assertPayloadFileUrlsOwnedByUser(draft, freshUser);
           return item;
         });
       } else {
-        result = await withLockedRecordForCollection('officeReqs', sourceId, (item) => {
+        result = await withLockedRecordForCollection('officeReqs', sourceId, async (item) => {
           draft = recordActions.startOfficePayment(freshUser, item, overrides, allPaymentRequests);
+          await assertPayloadFileUrlsOwnedByUser(draft, freshUser);
           return item;
         });
       }
@@ -2030,9 +2042,12 @@ router.post('/docs/:id/update', async (req, res) => {
     // xem lib/recordActions.js editDocDraft(). Đọc TRƯỚC khi khoá bản ghi (cùng khuôn route
     // /submissions/:id/update bên dưới, không giữ khoá trong lúc chờ I/O khác).
     const appData = await getAllAppData();
+    // allDocs — CHỈ dùng để sinh lại code/displayCode khi cat/dept của tài liệu GỐC đổi giá trị (xem
+    // chú thích regenerateCode ở editDocDraft(), lib/recordActions.js).
+    const allDocs = await getAllForCollection('docs');
     const result = await withLockedRecordForCollection('docs', itemId, async (item) => {
       const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
-      const updated = recordActions.editDocDraft(req.body, freshUser, item, appData);
+      const updated = recordActions.editDocDraft(req.body, freshUser, item, appData, allDocs);
       await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
       return updated;
     });

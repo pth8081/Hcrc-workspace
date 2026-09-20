@@ -15,8 +15,11 @@ router.use(requireAuth, blockIfMustChangePassword);
 // đều phải sửa được thay vì phải xóa tạo lại như bây giờ"): mở rộng từ 3 lên 7 khoá — 2 khoá mới CÓ
 // cascade riêng (depts/cats, xem lib/catalogRename.js CATALOG_HANDLERS) + 4 khoá mới KHÔNG cần cascade
 // (licenseTypes/carTaxiCompanies/priceZones/trainingCategories — dùng simpleArrayCatalogHandler()).
+// 'contractTypes' — THÊM ở đợt rà soát chuyên sâu vòng 2 (cụm "…/Hợp Đồng/…", mức Thấp — "đổi tên Loại
+// Pháp Lý HĐ không cascade contractTypeAbbrs/contracts.type"): CÓ cascade riêng (cascadeContractTypeRename(),
+// xem lib/catalogRename.js), cùng khuôn depts/cats.
 const VALID_CATALOG_KEYS = new Set([
-  'stores', 'jobTitles', 'storeJobTitles', 'depts', 'cats',
+  'stores', 'jobTitles', 'storeJobTitles', 'depts', 'cats', 'contractTypes',
   'licenseTypes', 'carTaxiCompanies', 'priceZones', 'trainingCategories'
 ]);
 

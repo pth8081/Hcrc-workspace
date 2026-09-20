@@ -632,6 +632,20 @@ const CREATE_MODULE_CONFIGS = {
         }
       }
 
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "'type' không đối chiếu danh mục"): mã hợp
+      // đồng GỐC (generateCode ở trên -> generateContractCode()/lib/recordCodeGen.js) suy trực tiếp viết
+      // tắt từ CHÍNH payload.type này (qua getContractTypeAbbr(), tự rơi về deriveAbbr() nếu type không
+      // khớp cấu hình admin — KHÔNG throw), nên trước đây 1 hợp đồng GỐC có thể mang 'type' bịa/không
+      // tồn tại trong danh mục (appData.contractTypes) mà vẫn tạo được, sinh ra mã tra cứu sai loại pháp
+      // lý. Chỉ áp dụng cho hợp đồng GỐC — phụ lục kế thừa type của root (payload.type = root.type, ngay
+      // dưới đây) nên luôn hợp lệ sẵn.
+      if (!payload.isAddendum) {
+        const validContractTypes = new Set(appData?.contractTypes || []);
+        if (validContractTypes.size && !validContractTypes.has(payload.type)) {
+          throw new CreateError(400, `Loại pháp lý hợp đồng không hợp lệ: ${payload.type}`);
+        }
+      }
+
       if (payload.isAddendum) {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
         if (!root) throw new CreateError(400, 'Hợp đồng gốc không tồn tại');
@@ -1217,6 +1231,17 @@ const CREATE_MODULE_CONFIGS = {
           throw new CreateError(409, `Mã "${payload.code}" đã từng được dùng cho 1 phiên bản đã xoá — vui lòng thử lại`);
         }
       } else {
+        // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "'cat' không đối chiếu danh mục"): mã hồ
+        // sơ GỐC (generateCode ở trên -> generateDocCode()/lib/recordCodeGen.js) suy trực tiếp viết tắt
+        // từ CHÍNH payload.cat này (qua getDocCatAbbr(), tự rơi về deriveAbbr() nếu cat không khớp cấu
+        // hình admin — KHÔNG throw), nên trước đây 1 tài liệu GỐC có thể mang 'cat' bịa/không tồn tại
+        // trong danh mục (appData.cats) mà vẫn tạo được, sinh ra mã tra cứu sai phân loại. Chỉ áp dụng
+        // cho bản GỐC — phiên bản mới kế thừa cat của root (payload.cat = root.cat, nhánh trên) nên luôn
+        // hợp lệ sẵn.
+        const validCats = new Set(appData?.cats || []);
+        if (validCats.size && !validCats.has(payload.cat)) {
+          throw new CreateError(400, `Phân loại tài liệu không hợp lệ: ${payload.cat}`);
+        }
         payload.versionNumber = 1;
         payload.rootDocId = null;
         // displayCode của bản GỐC LUÔN = chính code của nó (khớp uploadDoc() ở module-tailieu.js) —
@@ -1385,6 +1410,19 @@ const CREATE_MODULE_CONFIGS = {
       // để lại 1 hồ sơ trống trong danh sách chờ duyệt, khó nhận diện.
       payload.title = String(payload.title || '').trim();
       if (!payload.title) throw new CreateError(400, 'Vui lòng nhập tiêu đề đề nghị thanh toán');
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "dept chỉ được đối chiếu danh mục lúc SỬA,
+      // KHÔNG lúc TẠO"): 'dept' quyết định TOÀN BỘ quy trình duyệt (paymentDeptWorkflows, tra ĐỘNG mỗi
+      // lượt duyệt — xem MODULE_CONFIGS.paymentRequests ở lib/workflowEngine.js). getScope trả {all:true}
+      // nên scopeAllows() luôn qua với BẤT KỲ chuỗi dept nào — trước đây chỉ editPaymentRequest() (sửa,
+      // xem lib/recordActions.js) đối chiếu danh mục thật, nhánh TẠO ở đây thì không, cho phép 1 đề nghị
+      // mang dept bịa/không tồn tại lọt qua toàn bộ engine duyệt phòng ban (không khớp cấu hình nào ->
+      // rơi vào workflow mặc định). Đối chiếu ngay tại đây, khớp đúng luật editPaymentRequest() đã có.
+      payload.dept = String(payload.dept || '').trim();
+      if (!payload.dept) throw new CreateError(400, 'Vui lòng chọn Phòng Ban');
+      const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+      if (validDepts.size && !validDepts.has(payload.dept)) {
+        throw new CreateError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
+      }
       payload.sourceModule = 'MANUAL';
       payload.sourceId = null;
       payload.sourceCode = null;
@@ -2942,6 +2980,17 @@ const CREATE_MODULE_CONFIGS = {
         const rootId = Number(payload.rootLicenseId);
         const root = (collection || []).find(l => l.id === rootId && l.rootLicenseId == null);
         if (!root) throw new CreateError(400, 'Giấy phép gốc không tồn tại');
+        // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Cao — "ai có licenseCreate cũng tạo được phiên
+        // bản mới cho giấy phép của NGƯỜI KHÁC"): trước đây nhánh này chỉ kiểm "bản gốc tồn tại" + "bản
+        // mới nhất không PENDING", KHÔNG kiểm creator/quyền — client (populateLicenseUpdateTargets() ở
+        // public/js/module-tailieu.js) chặn đúng bằng root.creator === currentUser.username, nhưng server
+        // (forceOwnDept + getScope rỗng khiến scopeAllows() luôn qua) lại không hề kiểm lại. Hậu quả:
+        // phiên bản giả trở thành "bản mới nhất" của family, chi phối badge hiệu lực + tắt hẳn email
+        // nhắc hết hạn của cả family + chủ sở hữu thật không cập nhật được giấy phép của mình. Khớp
+        // ĐÚNG luật client đã có: chỉ root.creator hoặc admin mới được tạo phiên bản mới.
+        if (!user.perms?.admin && root.creator !== user.username) {
+          throw new CreateError(403, 'Chỉ người tạo giấy phép gốc (hoặc admin) mới được cập nhật phiên bản mới');
+        }
         const family = (collection || []).filter(l => l.id === rootId || l.rootLicenseId === rootId)
           .sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1));
         const latest = family[family.length - 1];
