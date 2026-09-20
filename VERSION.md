@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**23.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.66 (2026-09-20): Đổi tên "⚙️ Quy Trình Hỗn Hợp" thành "🏬 Quy Trình Đặt Hàng Siêu Thị"
+
+Theo yêu cầu người dùng: sub-tab "⚙️ Quy Trình Hỗn Hợp" (trong "🔀 Quy Trình
+Nâng Cao") thực chất CHỈ cấu hình người duyệt cho đúng 1 module — "Đặt Hàng
+Tại Siêu Thị" (đặc biệt rõ hơn sau khi bỏ placeholder "sắp có" cho Hợp Đồng/
+Văn Bản Trình ở bản trước) — nên đổi tên hiển thị thành **"🏬 Quy Trình Đặt
+Hàng Siêu Thị"** cho đúng phạm vi thật.
+
+Chỉ đổi NHÃN HIỂN THỊ (button, tiêu đề, banner cảnh báo ở "Chọn mẫu quy
+trình", nhãn trong sơ đồ 📘 Hướng Dẫn, dòng ghi Nhật Ký Hệ Thống khi thêm/
+xoá dòng cấu hình, và toàn bộ mô tả liên quan trong
+`deploy/Huong-dan-nghiep-vu.md`) — GIỮ NGUYÊN 100% id/key nội bộ
+(`mixedApprovalSection`, sub-tab key `MIXED`, `renderMixedApprovalSection()`,
+`resolveOperationOrderStoreMixedApprovers()`, action code
+`ADD_MIXED_APPROVAL_RULE`/`DELETE_MIXED_APPROVAL_RULE`,
+`operationOrderStoreMixedApprovalRules`...) để không phải sửa/di trú dữ liệu
+và giảm rủi ro regression — xác nhận qua rà soát toàn bộ ~19 file có nhắc
+tới cụm "Quy Trình Hỗn Hợp": phần lớn là comment code nội bộ mô tả "đợt
+10/2026" (giữ nguyên, không ảnh hưởng người dùng), chỉ phần thực sự hiển thị
+ra UI mới cần đổi.
+
+Regression đầy đủ sau đổi tên vẫn xanh: `test-lazy-load-all-tabs.js` (46/46),
+`test-csp-full-audit.js` (3/3, 0 vi phạm CSP), `test-mixed-approval-jobtitle-mix.js`
+(16/16), `test-quick-apply-workflow-steps.js` (34/34), 4 bài test cơ chế
+approver Đặt Hàng Siêu Thị (`test-operation-order-store-approver-scope.js`,
+`test-operation-order-noapprover-warning.js`,
+`test-operation-order-location-tiers.js`, `test-operation-orders-dept-scope.js`),
+và 3 bài test module 📘 Hướng Dẫn (`test-nghiepvu.js`/`-csp.js`/`-click.js`).
 
 ## v23.65 (2026-09-20): Gộp 4 màn cấu hình quy trình vào 1 tab "🔀 Quy Trình Nâng Cao"
 

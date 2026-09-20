@@ -1243,15 +1243,18 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
   `MAX(amount, "Tổng Giá Trị Thanh Toán (VNĐ)")` — số lớn hơn giữa tổng hạng
   mục hệ thống tự tính và số người dùng tự gõ/đọc từ PDF phiếu đặt hàng NCC,
   để field tự gõ không thể khai thấp hơn nhằm né bớt lớp duyệt.
-  - **"⚙️ Quy Trình Hỗn Hợp" — người duyệt Đặt Hàng Tại Siêu Thị (10/2026, thay
-    hẳn cơ chế "tự khớp đúng siêu thị" trước đó)**: màn "🔄 Quy Trình & Phê
+  - **"🏬 Quy Trình Đặt Hàng Siêu Thị" — người duyệt Đặt Hàng Tại Siêu Thị
+    (10/2026, thay hẳn cơ chế "tự khớp đúng siêu thị" trước đó; đổi tên từ
+    "⚙️ Quy Trình Hỗn Hợp" ở v23.66 cho đúng phạm vi thật — id/key nội bộ vẫn
+    "mixed"/"MIXED", KHÔNG đổi hành vi/dữ liệu)**: màn "🔄 Quy Trình & Phê
     Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") giờ **CHỈ còn quyết
     định SỐ BƯỚC** (theo mức giá trị 3 tier ở trên) — **NGƯỜI DUYỆT từng bước
-    chuyển hẳn sang cấu hình ở sub-tab riêng "⚙️ Quy Trình Hỗn Hợp"** (Hệ Thống
-    → 🔀 Quy Trình Nâng Cao — từ v23.65 gộp chung với "⚡ Áp Dụng Nhanh"/"🖋️
-    Nhóm Phê Duyệt Trình/HĐ"/"🧩 Nhóm Quyền Đặc Biệt" thành 4 sub-tab của 1 tab
-    lớn; trước đó "⚙️ Quy Trình Hỗn Hợp" là tab ngang hàng cạnh "🔄 Quy Trình &
-    Phê Duyệt"). Màn này là **1 bảng duy nhất**, mỗi dòng gồm:
+    chuyển hẳn sang cấu hình ở sub-tab riêng "🏬 Quy Trình Đặt Hàng Siêu Thị"**
+    (Hệ Thống → 🔀 Quy Trình Nâng Cao — từ v23.65 gộp chung với "⚡ Áp Dụng
+    Nhanh"/"🖋️ Nhóm Phê Duyệt Trình/HĐ"/"🧩 Nhóm Quyền Đặc Biệt" thành 4
+    sub-tab của 1 tab lớn; trước đó "⚙️ Quy Trình Hỗn Hợp" (tên cũ) là tab
+    ngang hàng cạnh "🔄 Quy Trình & Phê Duyệt"). Màn này là **1 bảng duy
+    nhất**, mỗi dòng gồm:
     - **Bước**: 1/2/3... (khớp đúng số bước của tier đơn hàng rơi vào — 1 bước
       cho ≤ 10 triệu, 2 bước cho mức giữa, 3 bước cho > 100 triệu). Có thể
       thêm nhiều dòng cho CÙNG 1 bước.
@@ -1286,7 +1289,7 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Toán/Xe/Giá IT/Hợp Đồng...). Quy tắc này CHỈ áp dụng cho **Đặt Hàng Tại
     Siêu Thị** — **Đặt Hàng Tại HO** không có khái niệm "siêu thị" nên giữ
     nguyên cơ chế cũ (cấu hình người duyệt thẳng theo mức giá trị ở màn "🔄
-    Quy Trình & Phê Duyệt", không qua Quy Trình Hỗn Hợp). Thiết kế phần lõi
+    Quy Trình & Phê Duyệt", không qua Quy Trình Đặt Hàng Siêu Thị). Thiết kế phần lõi
     (server) mang tính tổng quát để về sau có thể mở rộng dùng chung cho Hợp
     Đồng/Văn Bản Trình, nhưng ở màn admin hiện tại ô "Áp dụng cho" CHỈ hiện
     đúng 1 lựa chọn "🏬 Đặt Hàng Tại Siêu Thị" (không còn hiện Hợp Đồng/Văn
@@ -1313,7 +1316,7 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     đồng thời ghi 1 dòng Nhật Ký Hệ Thống mức Cảnh Báo để Quản Trị Viên tra
     cứu được kể cả khi bỏ lỡ thông báo lúc tạo — đơn vẫn tạo được bình thường,
     chỉ Quản Trị Viên duyệt được cho tới khi bổ sung đúng dòng cấu hình còn
-    thiếu ở "⚙️ Quy Trình Hỗn Hợp".
+    thiếu ở "🏬 Quy Trình Đặt Hàng Siêu Thị".
   - **Đọc PDF phiếu đặt hàng NCC tự động điền form** — chọn file PDF ở "File
     Đơn Hàng" tự đọc và điền Số Đơn/Ngày Đặt/Ngày Giao/Người Đặt/Tại Trạm/Mã
     NCC/MST NCC/Nơi Nhận/Địa Chỉ Giao/các khoản tiền + toàn bộ bảng hạng mục

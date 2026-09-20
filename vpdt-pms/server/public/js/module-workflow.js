@@ -359,7 +359,8 @@ function deleteQuickApplyConfig(configId) {
   renderQuickApplyConfigList();
 }
 
-// ===== "⚙️ Quy Trình Hỗn Hợp" (10/2026) — sub-tab riêng của Hệ Thống, THAY THẾ HẲN cách xác định NGƯỜI
+// ===== "🏬 Quy Trình Đặt Hàng Siêu Thị" (10/2026, đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66 — id/key
+// nội bộ "mixed"/"MIXED" giữ nguyên) — sub-tab riêng của Hệ Thống, THAY THẾ HẲN cách xác định NGƯỜI
 // DUYỆT của đơn "Đặt Hàng Tại Siêu Thị" (trước đây tự khớp dept qua filterOperationOrderStoreApprovers(),
 // đã xoá — xem chú thích đầy đủ ở lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers()/
 // defaults.js operationOrderStoreMixedApprovalRules). SỐ BƯỚC vẫn lấy nguyên từ màn "🔄 Quy Trình & Phê
@@ -499,7 +500,7 @@ function addMixedApprovalRule() {
   syncStorage('operationOrderStoreMixedApprovalRules');
   logSystemAction(
     'CONFIG', 'ADD_MIXED_APPROVAL_RULE',
-    `Thêm dòng Quy Trình Hỗn Hợp [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    `Thêm dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
     'SUCCESS', String(id)
   );
 
@@ -514,7 +515,7 @@ function deleteMixedApprovalRule(id) {
   if (!confirm(`Xoá dòng cấu hình Bước ${rule.step} này?`)) return;
   DB.operationOrderStoreMixedApprovalRules = (DB.operationOrderStoreMixedApprovalRules || []).filter(r => r.id !== id);
   syncStorage('operationOrderStoreMixedApprovalRules');
-  logSystemAction('CONFIG', 'DELETE_MIXED_APPROVAL_RULE', `Xoá dòng Quy Trình Hỗn Hợp [${id}]`, 'SUCCESS', String(id));
+  logSystemAction('CONFIG', 'DELETE_MIXED_APPROVAL_RULE', `Xoá dòng Quy Trình Đặt Hàng Siêu Thị [${id}]`, 'SUCCESS', String(id));
   renderMixedApprovalSection();
 }
 

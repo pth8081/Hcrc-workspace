@@ -69,7 +69,8 @@ function setSystemSubTab(subTab) {
   if (subTab === 'TRASH') { loadTrashItems(); }
 }
 
-// 4 sub-tab của "🔀 Quy Trình Nâng Cao" (mục Hệ Thống, từ v23.65) — MIXED (Quy Trình Hỗn Hợp) + QUICKAPPLY
+// 4 sub-tab của "🔀 Quy Trình Nâng Cao" (mục Hệ Thống, từ v23.65) — MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị,
+// đổi tên từ "Quy Trình Hỗn Hợp" ở v23.66, id/key nội bộ "mixed"/"MIXED" giữ nguyên) + QUICKAPPLY
 // (Áp Dụng Nhanh) trước đây là 2 tab CẤP CAO NHẤT riêng; GROUPS (Nhóm Phê Duyệt Trình/HĐ) + SPECIALPERM
 // (Nhóm Quyền Đặc Biệt) trước đây là khối 11/14/17 GIẤU trong form Sửa Người Dùng ở Phân Quyền dù là cấu
 // hình CHUNG toàn hệ thống, không gắn user nào — gom lại 1 chỗ dễ tìm theo yêu cầu người dùng (9/2026).
@@ -87,7 +88,7 @@ function setAdvWorkflowSubTab(subTab) {
   document.getElementById('btnAdvWorkflowSubGroups').className = subTab === 'GROUPS' ? activeCls : inactiveCls;
   document.getElementById('btnAdvWorkflowSubSpecialPerm').className = subTab === 'SPECIALPERM' ? activeCls : inactiveCls;
 
-  // MIXED: "⚙️ Quy Trình Hỗn Hợp" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu Thị" (xem
+  // MIXED: "🏬 Quy Trình Đặt Hàng Siêu Thị" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu Thị" (xem
   // module-workflow.js renderMixedApprovalSection()), thay hẳn cơ chế tự khớp dept cũ.
   if (subTab === 'MIXED') { renderMixedApprovalSection(); }
   // QUICKAPPLY: tiện ích set NHANH số bước (xem module-workflow.js renderQuickApplySection()) — nhiều

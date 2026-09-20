@@ -15,10 +15,12 @@
       <button type="button" data-op="setSystemSubTab" data-arg0="FORM" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="WORKFLOW" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
       <!-- 🔀 Quy Trình Nâng Cao (từ v23.65) — umbrella gộp 4 mục vốn nằm rải rác: "⚡ Áp Dụng Nhanh" +
-           "⚙️ Quy Trình Hỗn Hợp" (trước đây là 2 tab CẤP CAO NHẤT riêng, ngang hàng tab này) + "🖋️ Nhóm
-           Phê Duyệt Trình/HĐ" + "🧩 Nhóm Quyền Đặc Biệt" (trước đây là khối 11/14/17 GIẤU bên trong form
-           "Sửa Người Dùng" ở Phân Quyền, dù CẢ 3 đều là cấu hình CHUNG toàn hệ thống không gắn user nào —
-           theo yêu cầu người dùng, gom lại 1 chỗ dễ tìm, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js). -->
+           "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66 cho đúng phạm vi
+           thật — chỉ áp dụng Đặt Hàng Tại Siêu Thị, KHÔNG đổi id/key nội bộ "mixed"/"MIXED"; trước đây là
+           2 tab CẤP CAO NHẤT riêng, ngang hàng tab này) + "🖋️ Nhóm Phê Duyệt Trình/HĐ" + "🧩 Nhóm Quyền
+           Đặc Biệt" (trước đây là khối 11/14/17 GIẤU bên trong form "Sửa Người Dùng" ở Phân Quyền, dù CẢ 3
+           đều là cấu hình CHUNG toàn hệ thống không gắn user nào — theo yêu cầu người dùng, gom lại 1 chỗ
+           dễ tìm, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js). -->
       <button type="button" data-op="setSystemSubTab" data-arg0="ADVWORKFLOW" id="btnSystemSubAdvWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔀 Quy Trình Nâng Cao</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="UPLOAD" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="LOG" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
@@ -184,7 +186,8 @@
   </div>
 
   <!-- 🔀 Quy Trình Nâng Cao (từ v23.65) — xem chú thích đầy đủ ở nút tab #btnSystemSubAdvWorkflow phía
-       trên. 4 sub-tab bên trong: MIXED (Quy Trình Hỗn Hợp, nội dung y hệt cũ) | QUICKAPPLY (Áp Dụng
+       trên. 4 sub-tab bên trong: MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị, đổi tên từ "Quy Trình Hỗn Hợp"
+       ở v23.66 — nội dung/id nội bộ y hệt cũ) | QUICKAPPLY (Áp Dụng
        Nhanh, nội dung y hệt cũ) | GROUPS (Nhóm Phê Duyệt Trình/HĐ, dời từ khối 11+14 Phân Quyền) |
        SPECIALPERM (Nhóm Quyền Đặc Biệt, dời từ khối 17 Phân Quyền) — xem setAdvWorkflowSubTab()
        (module-hethong-tabs.js). MỌI id bên trong 4 khối con GIỮ NGUYÊN 100% so với vị trí cũ (chỉ đổi
@@ -194,20 +197,22 @@
        đó — xác nhận qua module-admin-submissiongroups.js/module-admin-specialperm.js trước khi dời. -->
   <div id="advWorkflowSection" class="hidden space-y-6">
     <div id="advWorkflowSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
-      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="MIXED" id="btnAdvWorkflowSubMixed" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">⚙️ Quy Trình Hỗn Hợp</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="MIXED" id="btnAdvWorkflowSubMixed" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🏬 Quy Trình Đặt Hàng Siêu Thị</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="QUICKAPPLY" id="btnAdvWorkflowSubQuickApply" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚡ Áp Dụng Nhanh</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="GROUPS" id="btnAdvWorkflowSubGroups" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖋️ Nhóm Phê Duyệt Trình/HĐ</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="SPECIALPERM" id="btnAdvWorkflowSubSpecialPerm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Nhóm Quyền Đặc Biệt</button>
     </div>
 
-  <!-- Màn hình 3c: "⚙️ Quy Trình Hỗn Hợp" — sub-tab riêng cấu hình NGƯỜI DUYỆT theo BƯỚC cho đơn "Đặt
+  <!-- Màn hình 3c: "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/data-op
+       nội bộ vẫn giữ "mixed"/"MIXED"/mixedApprovalSection — chỉ đổi nhãn hiển thị cho đúng phạm vi thật,
+       KHÔNG đổi hành vi/dữ liệu) — sub-tab riêng cấu hình NGƯỜI DUYỆT theo BƯỚC cho đơn "Đặt
        Hàng Tại Siêu Thị" (10/2026, thay hẳn cơ chế tự khớp dept cũ — xem module-workflow.js
        renderMixedApprovalSection()/lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers()). SỐ
        BƯỚC vẫn cấu hình ở "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") như
        cũ — màn này CHỈ chọn AI duyệt từng bước đó. -->
   <div id="mixedApprovalSection" class="hidden space-y-4">
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-2">
-      <div class="font-bold text-indigo-900 text-sm flex items-center gap-2">⚙️ Quy Trình Hỗn Hợp — Cấu Hình Người Duyệt Đơn Hàng Siêu Thị</div>
+      <div class="font-bold text-indigo-900 text-sm flex items-center gap-2">🏬 Quy Trình Đặt Hàng Siêu Thị — Cấu Hình Người Duyệt Theo Bước</div>
       <p class="text-xs text-indigo-900">Mỗi dòng bên dưới <b>CẤP QUYỀN LUÔN</b> cho đúng người/chức danh đó duyệt đúng Bước đã chọn (không cần bật thêm gì ở "🧩 Nhóm Quyền Đặc Biệt"). Để trống "Siêu Thị Phụ Trách" = <b>Mặc định</b> (áp dụng MỌI siêu thị); chọn 1 hoặc nhiều siêu thị = <b>Ngoại lệ</b> (chỉ áp dụng đúng các siêu thị đó) — cả 2 loại có thể cùng khớp 1 siêu thị, người duyệt sẽ HỢP LẠI với nhau (không loại trừ nhau). Số bước vẫn lấy từ "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") theo mức giá trị đơn hàng — màn này chỉ cấu hình AI duyệt.</p>
       <div class="flex items-center gap-2 pt-1 flex-wrap">
         <label class="text-xs font-bold text-indigo-900">Áp dụng cho:</label>
@@ -1672,7 +1677,7 @@
                  con); "Quyền Phê Duyệt Đặt Hàng Siêu Thị" giữ nguyên khuôn {all,depts[]} cũ
                  (operationOrderReceiptManageStore, xem renderOperationOrderReceiptScopeCheckboxes()/
                  module-admin.js) nhưng KHÔNG còn mục 'HO' lẫn trong danh sách siêu thị nữa. -->
-            <p class="text-[11px] text-gray-500 italic pt-1 border-t">🧾 Duyệt Nhập/Hủy Đơn Hàng (sub-tab riêng trong tab 📦 Đơn Hàng) — quyền RIÊNG, KHÔNG dùng chung quần thể duyệt/từ chối đơn hàng ở trên. 2 quyền ĐỘC LẬP: "Quyền Phê Duyệt Đặt Hàng HO" quản lý mọi đơn Đặt Hàng Tại HO; "Quyền Phê Duyệt Đặt Hàng Siêu Thị" (ALL hoặc tick riêng từng siêu thị) CHỈ quản lý đơn của đúng siêu thị được tick. <b class="text-amber-700">⚠️ Quyền này CHỈ để xác nhận NHẬN HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong hết — KHÔNG liên quan gì tới việc phê duyệt chi tiêu đơn hàng (xem "⚙️ Quy Trình Hỗn Hợp" cho việc đó).</b></p>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">🧾 Duyệt Nhập/Hủy Đơn Hàng (sub-tab riêng trong tab 📦 Đơn Hàng) — quyền RIÊNG, KHÔNG dùng chung quần thể duyệt/từ chối đơn hàng ở trên. 2 quyền ĐỘC LẬP: "Quyền Phê Duyệt Đặt Hàng HO" quản lý mọi đơn Đặt Hàng Tại HO; "Quyền Phê Duyệt Đặt Hàng Siêu Thị" (ALL hoặc tick riêng từng siêu thị) CHỈ quản lý đơn của đúng siêu thị được tick. <b class="text-amber-700">⚠️ Quyền này CHỈ để xác nhận NHẬN HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong hết — KHÔNG liên quan gì tới việc phê duyệt chi tiêu đơn hàng (xem "🏬 Quy Trình Đặt Hàng Siêu Thị" cho việc đó).</b></p>
             <div>
               <label class="flex items-center gap-2 text-cyan-700 font-semibold cursor-pointer text-[11px]">
                 <input type="checkbox" id="pOperationOrderReceiptHO"><span>🏢 Quyền Phê Duyệt Đặt Hàng HO</span>

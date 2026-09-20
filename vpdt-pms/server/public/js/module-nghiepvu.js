@@ -298,7 +298,7 @@ function renderNVSysAdvWorkflowOverview() {
   const W = 900, H = 320;
   const N = {
     hub:    { x: 360, y: 128, w: 180, h: 64, label: '🔀 Quy Trình Nâng Cao', sub: '4 sub-tab độc lập', kind: 'hub' },
-    mixed:  { x: 20,  y: 16,  w: 210, h: 64, label: '⚙️ Quy Trình Hỗn Hợp', sub: 'Ai duyệt Đặt Hàng Siêu Thị' },
+    mixed:  { x: 20,  y: 16,  w: 210, h: 64, label: '🏬 Quy Trình Đặt Hàng Siêu Thị', sub: 'Người duyệt theo bước' },
     quick:  { x: 20,  y: 240, w: 210, h: 64, label: '⚡ Áp Dụng Nhanh', sub: 'Set nhanh số bước' },
     groups: { x: 670, y: 16,  w: 210, h: 64, label: '🖋️ Nhóm Phê Duyệt Trình/HĐ', sub: 'Văn Bản Trình + Hợp Đồng' },
     special:{ x: 670, y: 240, w: 210, h: 64, label: '🧩 Nhóm Quyền Đặc Biệt', sub: '3 cấu hình toàn hệ thống' },
@@ -1058,10 +1058,10 @@ const SYSTEM_DOCS = {
   },
   sysAdvWorkflow: {
     icon: '🔀', title: 'Quy Trình Nâng Cao', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Từ v23.65 — 4 mục cấu hình quy trình/duyệt "nâng cao" gom về 1 chỗ (trước đây rải rác: Áp Dụng Nhanh/Quy Trình Hỗn Hợp là 2 tab cấp cao nhất riêng; Nhóm Phê Duyệt Trình-HĐ/Nhóm Quyền Đặc Biệt bị giấu bên trong form Sửa 1 tài khoản ở Phân Quyền dù là cấu hình CHUNG toàn hệ thống, không gắn user nào). Không đổi hành vi lưu của bất kỳ mục nào — chỉ đổi vị trí điều hướng cho dễ tìm.',
+    desc: 'Từ v23.65 — 4 mục cấu hình quy trình/duyệt "nâng cao" gom về 1 chỗ (trước đây rải rác: Áp Dụng Nhanh/Quy Trình Hỗn Hợp — nay đổi tên "Quy Trình Đặt Hàng Siêu Thị" từ v23.66 — là 2 tab cấp cao nhất riêng; Nhóm Phê Duyệt Trình-HĐ/Nhóm Quyền Đặc Biệt bị giấu bên trong form Sửa 1 tài khoản ở Phân Quyền dù là cấu hình CHUNG toàn hệ thống, không gắn user nào). Không đổi hành vi lưu của bất kỳ mục nào — chỉ đổi vị trí điều hướng cho dễ tìm.',
     isCustomFlow: true, customFlowRenderer: 'renderNVSysAdvWorkflowOverview', diagramTitle: 'Sơ đồ 4 mục con',
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔀 Quy Trình Nâng Cao</b> → chọn 1 trong 4 sub-tab: <b>⚙️ Quy Trình Hỗn Hợp</b> (ai duyệt từng bước đơn "Đặt Hàng Tại Siêu Thị", số bước vẫn cấu hình ở "Quy Trình & Phê Duyệt"), <b>⚡ Áp Dụng Nhanh</b> (set nhanh số bước cho nhiều module cùng lúc), <b>🖋️ Nhóm Phê Duyệt Trình/HĐ</b> (nhóm phê duyệt tuỳ chọn cho Văn Bản Trình + Hợp Đồng), hoặc <b>🧩 Nhóm Quyền Đặc Biệt</b> (Đơn Vị Tham Gia Quy Trình/Nhóm Không Cấp VPP/Vị Trí Tham Gia Quy Trình).' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔀 Quy Trình Nâng Cao</b> → chọn 1 trong 4 sub-tab: <b>🏬 Quy Trình Đặt Hàng Siêu Thị</b> (ai duyệt từng bước đơn "Đặt Hàng Tại Siêu Thị", số bước vẫn cấu hình ở "Quy Trình & Phê Duyệt"), <b>⚡ Áp Dụng Nhanh</b> (set nhanh số bước cho nhiều module cùng lúc), <b>🖋️ Nhóm Phê Duyệt Trình/HĐ</b> (nhóm phê duyệt tuỳ chọn cho Văn Bản Trình + Hợp Đồng), hoặc <b>🧩 Nhóm Quyền Đặc Biệt</b> (Đơn Vị Tham Gia Quy Trình/Nhóm Không Cấp VPP/Vị Trí Tham Gia Quy Trình).' },
       { role: 'Quản trị viên', text: 'mỗi sub-tab có nút <b>"💾 Lưu"</b> RIÊNG cho đúng phần đang sửa — không có nút Lưu chung cho cả 4 mục, đổi 1 mục không ảnh hưởng 3 mục còn lại.' },
     ],
     footer: { left: [
