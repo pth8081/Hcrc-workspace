@@ -773,7 +773,17 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       dừng sớm — muốn chặn chỉ còn cách sửa hạn đăng ký/sĩ số. **Khác hoàn
       toàn** "▶️ Bắt Đầu Lớp / ⏹️ Kết Thúc Lớp" (vòng đời BUỔI HỌC của lớp
       Offline) — 2 khái niệm độc lập, không ảnh hưởng nhau.
-    - **Duyệt yêu cầu huỷ đăng ký khi học viên ĐÃ có kết quả (từ 9/2026)** —
+    - **Huỷ Đăng Ký → Duyệt Huỷ** — học viên (không phải Admin) bấm nút "Huỷ
+      Đăng Ký" ở tab "📝 Đăng Ký Của Tôi" (chỉ hiện khi đăng ký đang "Đã đăng
+      ký", chưa có kết quả) KHÔNG có hiệu lực ngay — chỉ tạo 1 yêu cầu huỷ
+      đang chờ duyệt (`pendingCancellation`, chỉ gửi được 1 yêu cầu/lượt).
+      Nhân Sự phụ trách đào tạo (quyền quản lý đào tạo) hoặc Admin xử lý ở
+      khối "⏳ Yêu Cầu Huỷ Đăng Ký Đang Chờ Duyệt" (đầu tab "🏫 Lớp Học") —
+      nút "Duyệt Huỷ" CHỈ dành cho quyền quản lý đào tạo/Admin, giảng viên
+      phụ trách lớp KHÔNG bấm được dù đang quản lý đúng lớp đó. Admin tự huỷ
+      đăng ký (hộ ai đó hoặc của chính mình) thì có hiệu lực NGAY, không qua
+      bước duyệt này.
+    - **Duyệt yêu cầu huỷ đăng ký khi học viên ĐÃ có kết quả (v23.68)** —
       học viên xin huỷ đăng ký rồi vẫn kịp thi và có kết quả Đạt/Không Đạt
       trước khi Nhân Sự bấm duyệt: hệ thống nay **chặn lượt duyệt huỷ đó**
       (báo rõ lý do) thay vì âm thầm chuyển đăng ký sang "Đã huỷ" và **xoá
