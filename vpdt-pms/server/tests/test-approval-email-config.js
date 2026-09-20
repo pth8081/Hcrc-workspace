@@ -86,6 +86,13 @@ async function scenario(name, fn) {
 
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
 
+  // LỖI ĐÃ VÁ (đợt audit cụm Văn Bản Trình, mức thấp — "HTML gọn"): #approvalEmailModuleTableBody/
+  // #approvalEmailSpecialList (renderApprovalEmailConfigForm()) nay sống trong fragment lazy-load
+  // fragments/systemSection.html thay vì nhúng cứng trong index.html — phải nạp fragment 'system' trước
+  // khi gọi renderApprovalEmailConfigForm(), nếu không #approvalEmailModuleTableBody không tồn tại,
+  // hàm no-op và mọi id "apel_*" đều null.
+  await page.evaluate(() => loadTabSectionHtml('system'));
+
   await page.evaluate(() => {
     window.__alerts = [];
     window.alert = (m) => { window.__alerts.push(String(m)); };

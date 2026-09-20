@@ -68,6 +68,12 @@ async function main() {
       DB.users = [];
       DB.operationOrderStoreMixedApprovalRules = [];
 
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): addMixedApprovalRule()/
+      // deleteMixedApprovalRule() nay là async, await syncStorage() thật + rollback nếu server từ chối
+      // (trước đây "bắn và quên", không await) — cần stub fetch trả 200 để lượt lưu coi như thành công,
+      // nếu không rollback sẽ xoá dòng vừa thêm trước khi các assertion dưới chạy tới.
+      window.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) });
+
       // ---------- mixedApprovalJobTitleOptions(): gộp đủ cả 2 danh mục, gắn đúng hậu tố nguồn ----------
       const opts = mixedApprovalJobTitleOptions();
       check('mixedApprovalJobTitleOptions(): có đủ 3 mục HO (hậu tố " — HO")',
@@ -102,7 +108,7 @@ async function main() {
       document.getElementById('maNewMode').value = 'JOBTITLE';
       onMixedApprovalNewModeChange();
       document.getElementById('maNewJobTitleInput').value = 'Phó Tổng Giám Đốc — HO';
-      addMixedApprovalRule();
+      await addMixedApprovalRule();
       const rules = DB.operationOrderStoreMixedApprovalRules || [];
       check('addMixedApprovalRule(): thêm được dòng Bước 3, chức danh HO "Phó Tổng Giám Đốc" (KHÔNG còn hậu tố "— HO")',
         rules.length === 1 && rules[0].step === 3 && rules[0].mode === 'JOBTITLE' && rules[0].jobTitle === 'Phó Tổng Giám Đốc',
@@ -118,7 +124,7 @@ async function main() {
       const origAlert = window.alert;
       window.alert = (msg) => { alertMsg = msg; };
       document.getElementById('maNewJobTitleInput').value = 'Chức Danh Bịa Đặt';
-      addMixedApprovalRule();
+      await addMixedApprovalRule();
       window.alert = origAlert;
       check('addMixedApprovalRule(): gõ tự do không khớp gợi ý -> bị chặn (alert), KHÔNG thêm dòng mới',
         !!alertMsg && (DB.operationOrderStoreMixedApprovalRules || []).length === 1, alertMsg);

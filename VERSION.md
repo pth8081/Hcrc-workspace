@@ -1,8 +1,113 @@
 # Phiên bản hiện tại
 
-**23.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.68 (2026-09-20): Vá 110 phát hiện còn lại (31 Cao / 45 Trung bình / 34 Thấp) từ đợt audit chuyên sâu 12 cụm module
+
+Tiếp theo v23.67 (đã vá 4 phát hiện Nghiêm trọng), đợt này xử lý TOÀN BỘ 110
+phát hiện còn lại của đợt rà soát chuyên sâu 9-10/2026 — 7 agent chạy song
+song, mỗi agent 1 worktree riêng theo đúng 7 cụm module, merge tuần tự vào
+`main` (6 xung đột merge thật, chủ yếu ở `core.js`/`workflowEngine.js`/
+`module-workflow.js`/`routes/data.js` do 2 cụm cùng vá 1 điểm — đã gộp cả 2
+phần vá thay vì chọn 1 bên, không mất phát hiện nào).
+
+**Cụm 1 — Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu (16/16 vá)**:
+2 lỗ hổng lộ file FAIL-OPEN (đề xuất thay thế tờ trình, `installments[].files[]`
+của Thanh Toán — mọi tài khoản đăng nhập đọc được), sửa `dept` hợp đồng/thanh
+toán không kiểm scope, `type`/`priority` tờ trình nay bắt buộc khớp danh mục ở
+server (chặn "gửi label lệch để đi ít bước duyệt hơn"), xoá Giấy Phép cascade cả
+họ + khoá chống trùng, chặn tự duyệt Giấy Phép, **`code`/`displayCode` nay SINH
+LẠI Ở SERVER** cho docs/submissions/contracts/licenses (bỏ qua giá trị client
+gửi), tách quyền riêng **`contractImportSigned`** cho "Nhập Hợp Đồng/Phụ Lục Đã
+Ký" (trước dùng chung `contractCreate`), thêm rate-limit 60 lượt/phút cho tải
+file (đóng watermark tốn tài nguyên). Kèm 1 fix phát sinh: thiếu `deptWorkflows`
+trong `DEPT_WORKFLOW_MAP_KEYS` (cascade đổi tên phòng ban bỏ sót cấu hình duyệt
+Tài Liệu).
+
+**Cụm 2 — Nhân Sự (21/21 vá)**: chặn chiếm hồ sơ ACTIVE người khác qua
+Onboarding, `laborContracts.employeeUsername` nay gán tự động ở cả 3 điểm
+(trước đây tính năng "tự xem HĐLĐ của mình" chết hoàn toàn), khôi phục
+`shiftRoster` khi huỷ đơn nghỉ đã duyệt, chặn trùng CCCD ở cả PATCH lẫn import,
+kiểm chồng lấn nghỉ phép xét cả đơn APPROVED, **thuế TNCN được TÍNH LẠI thật sau
+điều chỉnh tay** (ảnh hưởng `netPay` phiếu lương — xem lưu ý triển khai bên
+dưới), tính lương tự động ghi trong đúng 1 giao dịch SQL.
+
+**Cụm 3 — Vận Hành/Hỗ Trợ IT/Mua Hàng BAS/Ngân Sách (13/15 vá, 2 xác nhận
+thiết kế cố ý)**: lost-update ở job nhắc hạn duyệt giá IT, resolver "Quy Trình
+Đặt Hàng Siêu Thị" lọc tài khoản `active:false` (cả server lẫn client mirror),
+`catalogRename.js` cascade đệ quy đủ mọi map cấu hình lồng, **`POST
+/api/purchasing/sync` nay khoá `withAppLock` chống chạy chồng** (giữ 1 kết nối
+DB trong suốt thời gian đồng bộ). 2 mục KHÔNG sửa (đã xác nhận thiết kế cố ý,
+khoá lại bằng test): ngoại lệ mode JOBTITLE không so `dept`, cảnh báo lệch
+Margin/Chiết Khấu thuần client (quyết định nghiệp vụ 9/2026).
+
+**Cụm 4 — Hành Chính: Họp/Biên Bản/Công Việc/Xe/VPP/Đồng Phục/Checklist (14/15
+vá, 1 ghi nhận chờ quyết định)**: Phòng Họp tạo lịch không còn tự duyệt được +
+thêm `GET /api/meetings/busy-slots` (lịch trống thấy đúng toàn công ty), **Taxi
+đổi loại xe khi IN_PROGRESS nay về APPROVED + phiếu Taxi tới được COMPLETED**
+(người đăng ký/carDispatch/admin tự "Kết Thúc Chuyến" — trước đây kẹt vĩnh
+viễn, phạm vi thẩm quyền hoàn tất chuyến được nới rộng), Biên Bản Họp whitelist
+field lúc tạo. Ghi nhận chưa vá: "Chỉ chính chủ xem/tải Phiếu Phê Duyệt" (Đăng
+Ký Xe) vẫn thuần lớp UI — đụng luồng "cùng phòng ban xem carReg" đang có ý
+nghĩa nghiệp vụ, cần thiết kế lại ở tầng server, chờ người dùng xác nhận trước
+khi sửa.
+
+**Cụm 5 — Truyền Thông Nội Bộ/Đào Tạo (10/10 vá)**: `internalPosts` chặn giả
+mạo bình luận/lượt thích lúc tạo (whitelist field), duyệt huỷ đăng ký đào tạo
+không còn xoá trắng kết quả ĐẠT đã thi, **gate `moduleAccess.internal` mở rộng
+từ 1 lên đủ 16 collection** của module, thêm hành động Đóng/Mở Lại Đăng Ký lớp
+học và đánh giá lại Giai đoạn 3 Hội Nhập (trước là ngõ cụt vĩnh viễn).
+
+**Cụm 6 — Hệ Thống/Admin/Cấu Hình (15/15 vá)**: khoá "admin không tự sửa được
+quyền của mình" bị vô hiệu chỉ bằng đổi username trong 1 request — nay xét theo
+bản ghi CŨ và **khoá cứng việc đổi tên tài khoản admin gốc**, thêm audit trail
+server-side cho thao tác quản trị, `moduleAccess` lồng nay OR từng key con thay
+vì "nhóm cuối thắng", xoá 1 Nhóm Phê Duyệt đang khoá cứng 1 Cấp tự gỡ tham
+chiếu, toàn bộ CRUD Nhóm/Cấp/MIXED/QUICKAPPLY nay `await syncStorage()` +
+snapshot/rollback khi server từ chối (trước "bắn và quên").
+
+**Cụm 7 — 📘 Hướng Dẫn (18 phát hiện chất lượng tài liệu)**: thuần nội dung/văn
+bản trong `module-nghiepvu.js`, không đổi logic — bổ sung 5 entry còn thiếu hẳn
+(Phê Duyệt Hub/Báo Cáo/Nhịp Sống HCRC & Góc Chia Sẻ/Tuyển Dụng/Cấu Hình API
+đồng bộ dsmart16/Hồ Sơ Cá Nhân), sửa icon/tên tab/đường dẫn menu lệch UI thật.
+
+### ⚠️ Lưu ý triển khai (breaking behavior — không phải lỗi, là hành vi MỚI cố ý)
+- Mã hồ sơ (`code`/`displayCode`) của docs/submissions/contracts/licenses nay
+  do SERVER sinh, bỏ qua giá trị client gửi — không ảnh hưởng người dùng bình
+  thường (form không cho nhập tay), nhưng bất kỳ tích hợp ngoài nào tự soạn
+  request sẽ thấy mã trả về khác mã đã gửi.
+- "Nhập Hợp Đồng/Phụ Lục Đã Ký" nay cần quyền riêng `contractImportSigned` —
+  tài khoản chỉ có `contractCreate` (không có quyền mới) sẽ MẤT nút này; cần
+  admin cấp lại quyền cho đúng người đang dùng tính năng.
+- Thuế TNCN được tính lại thật (không còn giữ nguyên số cũ) sau mỗi lần điều
+  chỉnh tay/tính lại cả kỳ — `netPay` phiếu lương có thể đổi so với trước;
+  thiếu cấu hình bậc thuế sẽ gắn cờ `taxRecalcPending` thay vì âm thầm bỏ qua.
+- Taxi: thẩm quyền "Kết Thúc Chuyến" nay mở thêm cho người đăng ký (trước chỉ
+  carDispatch/admin) cho phiếu KHÔNG có tài xế hệ thống.
+- `POST /api/purchasing/sync` giữ 1 kết nối DB trong suốt thời gian đồng bộ
+  (khoá `withAppLock`) — lượt gọi trùng nhận 409 rõ ràng thay vì chạy chồng.
+
+Không đổi `server/sql/schema.sql`, không thêm biến môi trường mới, không
+thêm/đổi `dependencies`.
+
+### Vá lỗi test fixture phát sinh SAU khi merge (không phải lỗi nghiệp vụ)
+Sau khi merge cả 7 cụm, full regression (236 file `test-*.js`) phát hiện 5 file
+test cũ có giả định trở nên lỗi thời do đúng các hành vi MỚI (cố ý) ở trên —
+đã sửa lại kỳ vọng của test cho khớp hành vi đúng, không sửa code nghiệp vụ:
+`test-catalog-rename-position-pairs.js` (khớp fix `deptWorkflows` ở trên),
+`test-mixed-approval-jobtitle-mix.js` + `test-locked-approval-layers.js`
+(khớp `addMixedApprovalRule()` async/rollback và validate `type` chặt hơn —
+cả 2 đều là fix của cụm 6/1), `test-approval-email-config.js` (container HTML
+dời sang fragment lazy-load — quy ước "HTML gọn" CLAUDE.md, không phải lỗi),
+`test-audit-round2-cluster6.js` (khớp 2 field `duplicateInFile`/
+`duplicateExisting` từ tính năng chống trùng Excel import — merge trước đợt
+này, không liên quan). Full regression sau cùng: 234/236 xanh, 2 fail còn lại
+là pre-existing/environment-only không liên quan tới bất kỳ đợt vá nào
+(`test-uploads-file-authz.js` — 1 kịch bản đã đỏ từ trước v23.67, xem ghi chú
+ở đó; `test-operation-order-multifile-batch.js` — thiếu file fixture từ máy
+phiên làm việc khác, không phải lỗi code).
 
 ## v23.67 (2026-09-20): Vá 4 lỗi Nghiêm trọng từ đợt audit chuyên sâu 12 cụm module
 

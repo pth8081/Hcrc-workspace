@@ -517,9 +517,14 @@ async function main() {
     ]);
     const rows = await parseUsersImportXlsx(buf);
     assert.strictEqual(rows.length, 2, 'dòng thiếu username phải bị bỏ qua');
+    // LỖI ĐÃ VÁ (tiền-batch, không liên quan đợt audit hiện tại): parseUsersImportXlsx() nay chạy qua
+    // markDuplicateItems() (lib/importDedup.js, đợt "Chống trùng lặp dữ liệu Excel import" 888f4db) nên
+    // mỗi dòng có thêm 2 cờ duplicateInFile/duplicateExisting — cả 2 đều false ở đây (username duy nhất
+    // trong file, existing truyền [] rỗng từ parseUsersImportXlsx()).
     assert.deepStrictEqual(rows[0], {
       username: 'nv01', pass: 'Matkhau@123', name: 'Nguyễn Văn A', email: 'a@cty.vn',
-      phone: '0900000001', dept: DEPT_A, jobTitle: 'Nhân viên'
+      phone: '0900000001', dept: DEPT_A, jobTitle: 'Nhân viên',
+      duplicateInFile: false, duplicateExisting: false
     });
     assert.strictEqual(rows[1].username, 'nv02');
     assert.strictEqual(rows[1].jobTitle, null, 'jobTitle trống phải là null như trước');

@@ -188,10 +188,11 @@ async function run(name, fn) {
     assert.strictEqual(pairsOf(APP_DATA.budgetDeptWorkflows['Phòng Công Nghệ Thông Tin'])[0].dept, 'Phòng Công Nghệ Thông Tin',
       'Key ngoài cùng ĐÃ dời đúng từ trước (cascadeDeptWorkflowMaps), cặp BÊN TRONG nay cũng phải đổi theo');
     assert.strictEqual(pairsOf(APP_DATA.budgetDeptWorkflows['Phòng Công Nghệ Thông Tin'])[0].jobTitle, 'Trưởng phòng', 'jobTitle không được đụng khi đổi tên phòng ban');
-    // deptWorkflows (Tài Liệu): map này KHÔNG nằm trong DEPT_WORKFLOW_MAP_KEYS nên KEY ngoài cùng vẫn
-    // giữ tên CŨ (khoảng trống riêng, ngoài phạm vi đợt vá này — xem chú thích ở lib/catalogRename.js);
-    // cặp "Theo vị trí" bên trong vẫn PHẢI được cascade.
-    assert.strictEqual(pairsOf(APP_DATA.deptWorkflows['Phòng IT'])[0].dept, 'Phòng Công Nghệ Thông Tin');
+    // deptWorkflows (Tài Liệu): đợt vá cụm Văn Bản Trình (commit 89a78f5) đã thêm 'deptWorkflows' vào
+    // DEPT_WORKFLOW_MAP_KEYS — KEY ngoài cùng nay ĐÃ dời đúng như mọi map khác (khoảng trống cũ đã đóng),
+    // cặp "Theo vị trí" bên trong tiếp tục cascade như trước.
+    assert.strictEqual(pairsOf(APP_DATA.deptWorkflows['Phòng Công Nghệ Thông Tin'])[0].dept, 'Phòng Công Nghệ Thông Tin');
+    assert.strictEqual(APP_DATA.deptWorkflows['Phòng IT'], undefined, 'Key CŨ phải biến mất, không để lại rác');
     assert.strictEqual(pairsOf(APP_DATA.itPriceTierWorkflows.MARGIN_LT5)[0].dept, 'Phòng Công Nghệ Thông Tin', 'Map theo TIER không có key phòng ban -> chỉ cặp bên trong mới cascade được');
     assert.strictEqual(pairsOf(APP_DATA.operationOrderHOTierWorkflows.LT100M)[0].dept, 'Phòng Công Nghệ Thông Tin');
     assert.strictEqual(pairsOf(APP_DATA.submissionTypeDeptWorkflows.CHU_TRUONG['Phòng IT'])[0].dept, 'Phòng Công Nghệ Thông Tin',

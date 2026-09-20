@@ -173,7 +173,10 @@ function submissionPayload(overrides) {
   return Object.assign({
     dept: 'Phòng Kinh Doanh',
     code: `TT-${seq++}`,
-    type: 'Khác',
+    // LỖI ĐÃ VÁ (đợt audit cụm Văn Bản Trình, mức Cao): normalizeSubmissionCoreFields() nay đối chiếu
+    // ĐÚNG 1 label trong appData.submissionTypes (fallback SUBMISSION_TYPES_FALLBACK khi rỗng, xem
+    // createValidation.js) thay vì chấp nhận mọi chuỗi — 'Khác' không khớp label thật 'Tờ trình khác'.
+    type: 'Tờ trình khác',
     title: 'Tờ trình test',
     approvalLevel: 'GD_PGD',
     selectedApprovalLayers: ['GD_PGD'],
