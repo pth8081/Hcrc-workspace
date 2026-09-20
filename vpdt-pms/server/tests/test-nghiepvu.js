@@ -183,6 +183,31 @@ async function main() {
         !!mainAfterForcedKey && !mainAfterForcedKey.textContent.includes('Sơ Đồ Kiến Trúc Hệ Thống'),
         mainAfterForcedKey ? mainAfterForcedKey.textContent.slice(0, 150) : 'NO MAIN');
 
+      // ---------- 8) LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): mục "muaHang" (Mua
+      // Hàng > BAS) thiếu hẳn entry trong NV_KEY_ACCESS_FN — canViewNVItem() cũ fallback về `true`
+      // (hiện MẶC ĐỊNH cho mọi người) khi không tìm thấy hàm tương ứng, nên ai cũng xem được tài liệu
+      // nghiệp vụ BAS dù không có bất kỳ quyền Mua Hàng nào. Đã nối muaHang -> canAccessPurchasingModule
+      // (core.js, đã có sẵn logic gộp cả 5 quyền rebate*). ----------
+      const noPurchasingPermUser = { username: 'nv5', name: 'Nhân Viên 5', dept: 'Phòng Hành Chính', perms: {} };
+      currentUser = noPurchasingPermUser;
+      check('LỖI ĐÃ VÁ: canViewNVItem("muaHang") = false cho user KHÔNG có bất kỳ quyền Mua Hàng nào',
+        canViewNVItem('muaHang') === false);
+      const visibleForNoPurchasing = visibleNVGroups();
+      check('LỖI ĐÃ VÁ: visibleNVGroups() KHÔNG hiện nhóm "Mua Hàng" cho user không có quyền',
+        !visibleForNoPurchasing.some(g => g.items.some(it => it.key === 'muaHang')));
+
+      const purchasingReportUser = { username: 'nv6', name: 'Nhân Viên 6', dept: 'Phòng Mua Hàng', perms: { rebateViewReport: true } };
+      currentUser = purchasingReportUser;
+      check('canViewNVItem("muaHang") = true cho user có rebateViewReport (1 trong 5 quyền Mua Hàng)',
+        canViewNVItem('muaHang') === true);
+
+      // ---------- 9) Cứng hoá fallback: key KHÔNG có trong NV_KEY_ACCESS_FN phải fail-CLOSED (false),
+      // không fail-open (true) — lớp phòng thủ chung cho MỌI module mới sau này lỡ quên nối quyền, không
+      // chỉ riêng "muaHang" ở mục 8. ----------
+      currentUser = { username: 'nv7', name: 'Nhân Viên 7', dept: 'Phòng Hành Chính', perms: { admin: false } };
+      check('LỖI ĐÃ VÁ: key HOÀN TOÀN không có trong NV_KEY_ACCESS_FN -> canViewNVItem() fail-CLOSED (false), không fail-open',
+        canViewNVItem('__khongTonTaiKeyNao__') === false);
+
       currentUser = adminUser;
 
       return results;
