@@ -285,6 +285,26 @@ function filterTrainingRegistrationsForUser(registrations, user, appData) {
     || canManageTrainingClass(user, classes.find(c => c.id === r.classId)));
 }
 
+// trainingClasses.inviteList ("Danh Sách Được Mời" — danh sách username được phép tự đăng ký 1 lớp giới
+// hạn): trước đợt audit chuyên sâu 9/2026 (mức Thấp) field này trả NGUYÊN VẸN qua GET /api/data cho MỌI
+// tài khoản đã đăng nhập — không phải dữ liệu nhạy cảm nghiêm trọng (chỉ là username), nhưng vẫn lộ
+// "ai được mời dự lớp nào" (VD lớp đào tạo cán bộ nguồn/quy hoạch) cho toàn công ty mà không có lý do
+// nghiệp vụ nào. Client chỉ cần đúng 2 thông tin từ field này khi KHÔNG phải người quản lý lớp:
+// (1) lớp có giới hạn theo danh sách mời hay không (inviteList.length), (2) CHÍNH MÌNH có trong danh
+// sách hay không (includes(username)) — xem renderTrainingClasses() ở module-internalcomms-daotao.js.
+// Nên thay vì lọc bỏ hẳn field (sẽ làm mọi lớp giới hạn trông như lớp mở tự do ở giao diện), rút gọn về
+// đúng 2 thông tin đó: người được mời thấy [chính mình], người ngoài thấy 1 phần tử ẩn danh. Danh sách
+// THẬT vẫn trả đủ cho trainingManage/admin và giảng viên phụ trách chính lớp đó (họ cần nó để sửa lớp).
+const HIDDEN_INVITE_PLACEHOLDER = '__HIDDEN__';
+function sanitizeTrainingClassesForUser(classes, user) {
+  if (canManageTraining(user)) return classes || [];
+  return (classes || []).map(c => {
+    const inviteList = Array.isArray(c.inviteList) ? c.inviteList : [];
+    if (!inviteList.length || canManageTrainingClass(user, c)) return c;
+    return { ...c, inviteList: inviteList.includes(user?.username) ? [user.username] : [HIDDEN_INVITE_PLACEHOLDER] };
+  });
+}
+
 // Ảnh minh hoạ câu hỏi (trainingTests.questions[].imageUrl, mục "Ngân Hàng Câu Hỏi hỗ trợ ảnh") — dùng ở
 // lib/fileAuthz.js (cả mode 'view' lẫn 'download') để chặn đúng lỗ hổng đã vá cho các module khác (đọc
 // chú thích đầu file đó): file KHÔNG được để bất kỳ ai đã đăng nhập cũng xem được chỉ vì biết/đoán đúng
@@ -1118,8 +1138,27 @@ function filterRebateCalculationsForReportView(items, user) {
 // AI ĐƯỢC TẠO/DUYỆT) thì tắt moduleAccess ở giao diện xong vẫn gọi thẳng GET /api/data là thấy nguyên
 // dữ liệu. Chỉ mirror ĐÚNG các module này (không mirror toàn bộ 25 module — phần còn lại không cần vì
 // đã có gate riêng, mirror thêm chỉ tạo thêm 1 nguồn có thể lệch dữ liệu về sau).
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Trung bình — cụm Truyền Thông Nội Bộ/Đào Tạo): gate
+// "internal" trước đây CHỈ phủ internalPosts, bỏ sót 15 collection còn lại của CÙNG module đó (5 sub-tab
+// của dropdown "📣 Truyền thông": Nhịp Sống HCRC/Đào Tạo/Tuyển Dụng/Góc Chia Sẻ/HCRC Đồng Hành — xem
+// #truyenThongNavWrap ở public/index.html). Tắt moduleAccess.internal cho 1 tài khoản chỉ ẩn được tab ở
+// giao diện, còn gọi thẳng GET /api/data vẫn thấy nguyên lớp học/kế hoạch đào tạo/lộ trình/tin tuyển
+// dụng... Các collection có dữ liệu RIÊNG TƯ theo từng người (trainingRegistrations/
+// trainingTestSubmissions/trainingDocumentProgress/recruitmentReferrals/hrFeedback/onboardingProgress/
+// careerPathConfirmations) đã có bộ lọc quyền xem riêng ở routes/data.js — vẫn liệt kê ở đây vì gate
+// module là lớp chặn ĐỘC LẬP (admin tắt hẳn module cho 1 người thì họ không được thấy gì của module đó,
+// kể cả dữ liệu của chính họ), đúng đúng tinh thần của hrAttendance bên dưới.
 const MODULE_ACCESS_GATED_COLLECTIONS = {
-  doc: ['docs'], submission: ['submissions'], task: ['tasks'], internal: ['internalPosts'],
+  doc: ['docs'], submission: ['submissions'], task: ['tasks'],
+  internal: [
+    'internalPosts',
+    'recruitmentJobs', 'recruitmentReferrals',
+    'trainingClasses', 'trainingRegistrations', 'trainingCourses', 'trainingDocuments',
+    'trainingDocumentProgress', 'trainingTests', 'trainingTestSubmissions', 'trainingPlans',
+    'careerPaths', 'careerPathConfirmations',
+    'onboardingPaths', 'onboardingProgress',
+    'hrFeedback'
+  ],
   contract: ['contracts'], itSupport: ['itSupportTickets', 'itPriceApprovals'],
   // Đợt test chuyên sâu 9/2026 (PQ, mục Phân Quyền): hrProfile/hrPayroll KHÔNG có mặt ở GET /api/data
   // chung (employeeProfiles/payslips đi qua route riêng, xem routes/employeeProfile.js/routes/payroll.js
@@ -1153,6 +1192,7 @@ module.exports = {
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
   sanitizeTrainingTestsForUser, filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,
+  sanitizeTrainingClassesForUser,
   canViewTrainingTestQuestionImage, filterTrainingDocumentProgressForUser,
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, sanitizePermGroupsForViewer,
   filterRecruitmentReferralsForUser,

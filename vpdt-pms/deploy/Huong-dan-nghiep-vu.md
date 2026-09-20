@@ -667,6 +667,52 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       luật loại tài khoản khoá dùng chung toàn hệ thống). Tính năng thuần
       phía giao diện — chỉ tính từ dữ liệu Lớp Học/Đăng Ký đã tải sẵn, không
       thêm route/quyền mới.
+    - **🔒 Đóng / 🔓 Mở Lại Đăng Ký 1 lớp học (từ 9/2026)** — nút ngay trên
+      dòng lớp ở danh sách Lớp Học, dành cho người quản lý đào tạo hoặc giảng
+      viên được gán đúng lớp đó. Đóng đăng ký = **dừng nhận học viên tự đăng
+      ký** (nhân sự/giảng viên vẫn "➕ Thêm Học Viên" tay được), mở lại bất cứ
+      lúc nào. Trước đây trạng thái lớp luôn là "đang mở" và không có cách
+      dừng sớm — muốn chặn chỉ còn cách sửa hạn đăng ký/sĩ số. **Khác hoàn
+      toàn** "▶️ Bắt Đầu Lớp / ⏹️ Kết Thúc Lớp" (vòng đời BUỔI HỌC của lớp
+      Offline) — 2 khái niệm độc lập, không ảnh hưởng nhau.
+    - **Duyệt yêu cầu huỷ đăng ký khi học viên ĐÃ có kết quả (từ 9/2026)** —
+      học viên xin huỷ đăng ký rồi vẫn kịp thi và có kết quả Đạt/Không Đạt
+      trước khi Nhân Sự bấm duyệt: hệ thống nay **chặn lượt duyệt huỷ đó**
+      (báo rõ lý do) thay vì âm thầm chuyển đăng ký sang "Đã huỷ" và **xoá
+      trắng kết quả đã thi** (không có đường khôi phục, kéo theo mất điều
+      kiện Đạt của Lộ Trình Thăng Tiến/Tân Binh). Người duyệt dùng nút "Từ
+      chối" để gỡ yêu cầu huỷ đang treo. Ngoài ra mọi lượt ghi kết quả (chấm
+      tay lẫn tự động chấm) đều tự dọn yêu cầu huỷ còn treo.
+    - **↩️ Thu Hồi Xác Nhận (Lộ Trình Thăng Tiến, từ 9/2026)** — quản lý đào
+      tạo xác nhận nhầm người/nhầm cấp nay thu hồi lại được: gõ username vào
+      ô tra cứu của lộ trình → nút "↩️ Thu Hồi Xác Nhận Cấp N". Chỉ thu hồi
+      được **mốc cao nhất** đã xác nhận (muốn thu hồi cấp dưới thì thu hồi
+      cấp trên trước, giữ chuỗi bậc liền mạch); mốc bị thu hồi vào Thùng Rác
+      (khôi phục được), sau đó xác nhận lại bình thường.
+    - **🔄 Đánh Giá Lại Giai Đoạn 3 (Lộ Trình Tân Binh, từ 9/2026)** — hồ sơ
+      đã chấm "Không đạt" trước đây là ngõ cụt vĩnh viễn (không cấp được
+      chứng chỉ, cũng không đánh giá lại được). Nay khối "Đánh Giá Giai Đoạn
+      3" hiện lại các hồ sơ Không Đạt kèm 2 nút "🔄 Đánh Giá Lại" — **bắt
+      buộc nhập lý do**, kết quả cũ lưu vào lịch sử đánh giá của hồ sơ. Không
+      áp dụng cho hồ sơ đang Đạt hoặc đã cấp chứng chỉ.
+    - **Chặn xoá danh mục còn đang được tham chiếu (từ 9/2026)** — xoá Bài
+      Test còn gán cho lớp / Chương Trình còn được lớp học, kế hoạch đào tạo,
+      lộ trình thăng tiến hoặc lộ trình tân binh sử dụng / Lộ Trình Thăng
+      Tiến đã có mốc xác nhận của nhân viên nay bị **chặn kèm thông báo nêu
+      rõ nơi đang dùng**, thay vì xoá được vô điều kiện rồi khoá cứng luồng
+      thi/xác nhận đang chạy. Gỡ tham chiếu xong xoá lại bình thường (quyền
+      xoá vẫn chỉ Quản Trị Viên như trước).
+    - **Danh Sách Được Mời không còn công khai (từ 9/2026)** — danh sách
+      username được mời vào 1 lớp giới hạn nay chỉ trả đầy đủ cho quản lý đào
+      tạo/Admin/giảng viên phụ trách lớp đó; người khác vẫn biết "lớp này
+      giới hạn theo danh sách mời" và biết mình có được mời hay không, nhưng
+      không đọc được ai khác trong danh sách.
+    - **Gate module ở server (từ 9/2026)** — tắt module "Truyền Thông Nội Bộ"
+      cho 1 tài khoản (mục 0 "Khối Truy Cập" của màn Phân Quyền) nay chặn
+      **toàn bộ 16 loại dữ liệu** của module (bài đăng, tuyển dụng, lớp học,
+      đăng ký, chương trình, tài liệu, bài test, bài làm, kế hoạch, 2 loại lộ
+      trình, hội nhập tân binh, HCRC Đồng Hành...) ở tầng API, không chỉ ẩn
+      tab ở giao diện — trước đây chỉ bài đăng bị chặn thật.
 
 ### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
 
@@ -2672,7 +2718,7 @@ thừa qua `normalizeDedupKey()`):
 | Ngân Hàng Câu Hỏi Đào Tạo | Nội dung câu hỏi | Danh sách câu hỏi đang soạn dở trên màn (client tự so) |
 | Vận Hành — Danh Mục Đầu Tư | Nội dung hạng mục | Bảng hạng mục đang sửa của ĐÚNG hồ sơ (client tự so — route đọc file không biết đang sửa hồ sơ nào) |
 | Vận Hành — Danh Sách Công Việc | Tên công việc | Danh sách công việc GỐC đang có của ĐÚNG hồ sơ (client tự so) |
-| Kế Hoạch Đào Tạo (theo tháng) | Tháng+Chương Trình+Đơn Vị | Toàn bộ `trainingPlans` đã có (server tự so, route đã sẵn dữ liệu) |
+| Kế Hoạch Đào Tạo (theo tháng) | Tháng+Chương Trình+Đơn Vị | Toàn bộ `trainingPlans` đã có (server tự so, route đã sẵn dữ liệu). **Từ 9/2026 đường NHẬP TAY cũng so trùng theo đúng khoá này** — khác đường nhập file ở chỗ nhập tay bị **CHẶN HẲN** (báo lỗi, không cho lưu) thay vì chỉ cảnh báo để người dùng tự quyết, vì mỗi lượt nhập tay là 1 dòng chủ động chứ không phải khối hàng trăm dòng cần xem trước |
 
 Cột "Ghi Chú"/dòng "Mẫu Ngân Sách" (khai cột tuỳ biến) chỉ so trùng NGAY
 TRONG file đang đọc (tên cột trùng lặp) — không có khái niệm "đã có sẵn" vì

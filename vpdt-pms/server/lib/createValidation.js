@@ -31,6 +31,9 @@ const { resolveStepApproverUsernames } = require('./positionApprovers');
 // dùng ở routes/checklist.js.
 const { canManageChecklistTemplates, validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields } = require('./checklist');
 const { canManageVendors, canManageTerms, validateVendorPayload, defaultVendor, validateRebateTermPayload, checkDuplicateTermCode, defaultRebateTerm } = require('./vendorRebate');
+// normalizeDedupKey: dùng CHUNG công thức khoá so trùng với các route nhập Excel/CSV (lib/importDedup.js)
+// — xem trainingPlanDedupKey() bên dưới (Kế Hoạch Đào Tạo nhập tay).
+const { normalizeDedupKey } = require('./importDedup');
 
 function scopeAllows(user, scope, dept) {
   if (!user) return false;
@@ -1133,6 +1136,19 @@ const CREATE_MODULE_CONFIGS = {
       );
       if (!allowed) throw new CreateError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
 
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Cao — cụm Truyền Thông Nội Bộ): 4 field "tương tác"
+      // dưới đây trước đây đi thẳng từ payload client vào bản ghi (validateAndPrepareCreate() spread
+      // NGUYÊN payload ở cuối file), nên 1 request tự soạn gửi kèm
+      // comments:[{username:'giamdoc', content:'...'}] lúc TẠO là dựng được nguyên 1 luồng bình luận
+      // GIẢ MẠO lãnh đạo/lượt thích khống ngay trên bảng tin công khai. Đường SỬA đã an toàn từ trước
+      // (editInternalPost() whitelist field, lib/recordActions.js) — đây là lỗ hổng RIÊNG của đường TẠO.
+      // Mọi field này chỉ được ghi qua đúng action riêng của chúng ở lib/recordActions.js
+      // (addInternalPostComment()/toggleInternalPostLike()/markInternalPostRead()).
+      payload.comments = [];
+      payload.likes = [];
+      payload.readBy = [user.username]; // tác giả tính là đã đọc bài của chính mình (khớp client cũ)
+      payload.createdAt = new Date().toLocaleString('vi-VN'); // mốc tạo chốt Ở SERVER, không tin client
+
       // Tệp đính kèm (tuỳ chọn) — chặn scheme "javascript:" trước khi lưu, xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
 
@@ -2134,6 +2150,18 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
       }
       normalizeTrainingPlanFields(payload, appData);
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Thấp — cụm Đào Tạo): đường NHẬP TAY trước đây hoàn
+      // toàn không so trùng, trong khi đường nhập từ Excel/CSV đã cảnh báo trùng theo đúng khoá
+      // Tháng+Chương Trình+Đơn Vị từ lâu (xem planItemDedupKey(), lib/trainingPlanImport.js) — 2 đường
+      // vào CÙNG 1 collection lệch luật nhau, dashboard % hoàn thành đếm trùng số kế hoạch. Dùng CHUNG
+      // đúng công thức khoá đó (normalizeDedupKey — cắt khoảng trắng/hạ chữ thường) nhưng so theo
+      // courseId (nhập tay luôn CHỌN chương trình từ danh mục, không gõ tên tự do) và CHẶN HẲN 409 thay
+      // vì chỉ cảnh báo: 1 lượt tạo tay là hành động chủ động từng dòng, không phải nhập khối hàng trăm
+      // dòng cần xem trước rồi tự quyết như đường Excel.
+      const dupKey = trainingPlanDedupKey(payload);
+      if (dupKey && (collection || []).some(p => trainingPlanDedupKey(p) === dupKey)) {
+        throw new CreateError(409, 'Đã có dòng kế hoạch đào tạo cho đúng Tháng + Chương Trình + Đơn Vị này rồi — vui lòng sửa dòng đã có thay vì tạo trùng.');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_PLAN');
     }
   },
@@ -2268,6 +2296,15 @@ const CREATE_MODULE_CONFIGS = {
       // viên tự đánh dấu đã xem từng cái qua markTrainingDocumentViewed() — bắt buộc xem hết mới được thi.
       payload.pendingCancellation = null;
       payload.viewedDocumentIds = [];
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Trung bình — cụm Đào Tạo): testStartedAt/
+      // testStartedAtVN (mốc bắt đầu làm bài, xem startTrainingTestAttempt() ở lib/recordActions.js) đi
+      // thẳng từ payload client vào bản ghi lúc ĐĂNG KÝ, nên chỉ cần gửi kèm 1 mốc quá khứ/tương lai là
+      // vô hiệu hoá hẳn việc đối chiếu thời gian làm bài (evaluateTrainingTestTiming()): startTrainingTestAttempt()
+      // CỐ Ý chỉ ghi mốc LẦN ĐẦU nên mốc giả do client tự cấy sẽ không bao giờ bị ghi đè nữa. 2 field này
+      // chỉ được đặt DUY NHẤT ở server, đúng lúc học viên bấm "Bắt đầu làm bài"
+      // (POST /api/records/trainingClasses/:id/start-test).
+      payload.testStartedAt = null;
+      payload.testStartedAtVN = null;
     }
   },
   // Lộ trình thăng tiến (Đợt 7) — GỒM NHIỀU CẤP BẬC TUẦN TỰ (payload.stages, thứ tự trong mảng CHÍNH LÀ
@@ -3545,6 +3582,16 @@ function normalizeTrainingPlanFields(payload, appData) {
   payload.plannedClasses = toNonNegInt(payload.plannedClasses);
   payload.plannedTrainees = toNonNegInt(payload.plannedTrainees);
   payload.plannedHours = toNonNegNum(payload.plannedHours);
+}
+
+// Khoá so trùng 1 dòng Kế Hoạch Đào Tạo = Tháng + Chương Trình + Đơn Vị — CÙNG ý nghĩa nghiệp vụ với
+// planItemDedupKey() ở lib/trainingPlanImport.js (đường nhập Excel/CSV), chỉ khác ở chỗ so theo courseId
+// thay vì tên chương trình dạng chữ (nhập tay luôn chọn từ danh mục nên có id chính xác, không cần khớp
+// mờ theo tên). Trả null khi thiếu dữ liệu để so (không có courseId) -> KHÔNG đánh dấu trùng, đúng tinh
+// thần "thiếu dữ liệu thì bỏ qua" của existingPlanKeys() bên đường Excel.
+function trainingPlanDedupKey(plan) {
+  if (!plan || plan.courseId == null) return null;
+  return normalizeDedupKey(plan.month, `#${plan.courseId}`, plan.targetDept);
 }
 
 // Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths) — dùng CHUNG cho cả
