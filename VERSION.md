@@ -163,24 +163,37 @@ sửa 2 nhãn nút không có thật ở Cơ Cấu Tổ Chức; thêm pill Dashb
 icon lệch ở Đào Tạo; cập nhật 2 con số thống kê lạc hậu (nhóm Biểu Mẫu, số
 loại hồ sơ Thùng Rác); sửa 2 nhãn nút nhỏ khác.
 
-### ⚠️ Cần làm thêm / cần người dùng xác nhận (KHÔNG tự ý triển khai đợt này)
-1. **Mua Hàng BAS — 2 lựa chọn Điều Khoản Chiết Khấu bị chặn**: "Giá Trị
-   Bán Ra" (`calcBasis=SELL_OUT_VALUE`) và "Chiết Khấu Tăng Trưởng"
-   (`termType=GROWTH_REBATE`) nay bị làm mờ trên form vì hệ thống KHÔNG có
-   nguồn dữ liệu "Giá Trị Bán Ra" (chỉ có dữ liệu Mua Hàng) và công thức
-   tăng trưởng chưa được xác nhận (so % hay tuyệt đối, kỳ liền kề hay cùng
-   kỳ năm ngoái). Nếu cần dùng 2 lựa chọn này, cần xác nhận nguồn dữ liệu/
-   công thức rồi làm tiếp (đã ghi chú vị trí gỡ chặn ngay trong code,
+### ⚠️ 3 điểm đã trao đổi với người dùng sau khi merge — quyết định + việc cần làm
+1. **Mua Hàng BAS — 2 lựa chọn Điều Khoản Chiết Khấu bị chặn** ("Giá Trị
+   Bán Ra"/`calcBasis=SELL_OUT_VALUE` và "Chiết Khấu Tăng Trưởng"/
+   `termType=GROWTH_REBATE`, thiếu nguồn dữ liệu/công thức xác nhận).
+   **Quyết định: GIỮ NGUYÊN chặn**, không cần dùng 2 lựa chọn này. Không
+   có việc gì thêm (vị trí gỡ chặn nếu sau này cần vẫn ghi rõ trong code,
    `lib/vendorRebate.js`: `UNSUPPORTED_CALC_BASIS`/`UNSUPPORTED_TERM_TYPES`).
-2. **`hrViewAll` (Nhân Sự)** đã tách quyền ghi mới `hrProcessManage` — các
-   tài khoản đang có `hrViewAll` GIỜ CHỈ CÒN QUYỀN XEM Onboarding/Offboarding,
-   KHÔNG còn tự động hoàn thành/bỏ qua task được nữa. Nếu có người thực sự
-   cần thao tác (không chỉ theo dõi), admin cần chủ động cấp thêm quyền
-   `hrProcessManage` cho họ sau khi deploy.
-3. **Phiếu Phê Duyệt Xe — quyền xem/tải chỉ chính chủ**: vẫn CHỈ chặn ở
-   giao diện (client), CHƯA có ở server (đã nêu từ v23.68, chưa xử lý —
-   tài liệu đã sửa lại câu chữ cho đúng thực tế, không còn khẳng định nhầm
-   là đã siết ở server).
+2. **`hrViewAll` (Nhân Sự) đã tách quyền ghi mới `hrProcessManage`** — tài
+   khoản đang có `hrViewAll` mất khả năng thao tác Onboarding/Offboarding
+   nếu không được cấp thêm. **Quyết định: TỰ ĐỘNG cấp `hrProcessManage`
+   cho mọi tài khoản đang có `hrViewAll`**, giữ nguyên khả năng thao tác
+   như trước khi vá. Đã viết script migrate 1 lần —
+   **`server/scripts/migrate-hrviewall-to-hrprocessmanage.js`**
+   (idempotent, có dry-run mặc định, chỉ thêm không xoá/đổi quyền khác, xử
+   lý đúng cả trường hợp user thuộc Nhóm Phân Quyền — set thêm
+   `permOverrides` để không bị "quyền nhóm tính lại" nuốt mất ở lần sửa
+   users/permGroups kế tiếp). **BẮT BUỘC CHẠY 1 LẦN sau khi deploy code
+   v23.70** (sau khi copy code + trước hoặc ngay sau `pm2 restart` đều
+   được, không phụ thuộc code đang chạy phiên bản nào):
+   ```
+   cd server
+   node scripts/migrate-hrviewall-to-hrprocessmanage.js            # xem trước (dry-run)
+   node scripts/migrate-hrviewall-to-hrprocessmanage.js --confirm  # ghi thật
+   ```
+   Khuyến nghị sao lưu CSDL trước khi chạy `--confirm` (theo đúng khuyến
+   nghị chung mọi script migrate 1 lần trong repo).
+3. **Phiếu Phê Duyệt Xe — quyền xem/tải chỉ chính chủ vẫn CHỈ chặn ở giao
+   diện, CHƯA có ở server**. **Quyết định: CHƯA làm**, để sau (mức rủi ro
+   thấp — cần biết URL/API cụ thể + có tài khoản hợp lệ; sẽ xung đột với
+   luật hiện tại "cùng phòng ban được xem carReg" nên cần thiết kế lại kỹ
+   trước khi làm, không phải việc nhỏ).
 
 ### Test
 Mỗi cụm đều có test mới cho từng phát hiện + chạy targeted regression cho
