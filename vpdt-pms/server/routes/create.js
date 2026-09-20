@@ -216,8 +216,36 @@ router.post('/:module', async (req, res) => {
     // NGOẠI LỆ — luồng Tái Tuyển (task Kiểm Tra Nhân Sự Cũ, routes/employeeProfile.js reactivateForRehire()):
     // client CHỦ ĐỘNG gửi kèm employeeCode = mã CŨ của hồ sơ vừa được tái kích hoạt (đã tồn tại sẵn,
     // KHÔNG phải mã mới) — KHÔNG được tự sinh/đặt chỗ đè lên trong trường hợp này, giữ nguyên client gửi.
+    //
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): nhánh "client chủ động gửi
+    // employeeCode" ở trên TRƯỚC ĐÂY nhận NGUYÊN chuỗi client gửi, KHÔNG kiểm tra gì — trong khi người
+    // tạo Onboarding chỉ cần quyền hrOnboardingManage (KHÔNG cần bất kỳ quyền Hồ Sơ Nhân Sự nào). Hệ quả:
+    //   (a) gửi đúng mã của 1 hồ sơ ACTIVE người khác -> quy trình Onboarding mới bám thẳng vào hồ sơ
+    //       đang sống đó (hook sau khi tạo GHI ĐÈ processId, và khi quy trình này hoàn tất
+    //       applyProcessCompletion() ghi đè cả status hồ sơ) — chiếm/phá hồ sơ người khác mà không có
+    //       quyền Hồ Sơ Nhân Sự nào;
+    //   (b) gửi 1 mã KHÔNG tồn tại -> quy trình "mồ côi" không hồ sơ nào đi kèm, mọi hook hồ sơ/phép
+    //       năm/hợp đồng sau đó im lặng không làm gì.
+    // Luồng nghiệp vụ THẬT chỉ có ĐÚNG 2 trường hợp (xem hrLifecycleSection.html + module-hrlifecycle.js):
+    //   1. Nhân viên MỚI hoàn toàn -> để TRỐNG, server tự sinh mã + đặt chỗ hồ sơ DRAFT (nhánh dưới);
+    //   2. Tái Tuyển -> chọn từ "🔍 Kiểm Tra Nhân Sự Cũ" (GET /api/hr-profile/search-inactive) vốn CHỈ
+    //      trả về hồ sơ INACTIVE.
+    // Nên mã client gửi lên BẮT BUỘC phải trỏ đúng 1 hồ sơ INACTIVE (tái tuyển), hoặc 1 hồ sơ DRAFT chưa
+    // gắn quy trình nào (processId=null — hồ sơ đặt chỗ mồ côi do lượt tạo trước lỗi giữa chừng, xem chú
+    // thích ngay trên; cho dùng lại đúng mã đó thay vì bỏ phí).
     const isOnboarding = moduleKey === 'hrProcesses' && req.body?.processType === 'ONBOARDING';
     const clientProvidedEmployeeCode = isOnboarding && req.body?.employeeCode ? String(req.body.employeeCode).trim() : '';
+    if (isOnboarding && clientProvidedEmployeeCode) {
+      // appData đã đọc sẵn ở đầu handler (getAllAppData()) — employeeProfiles là key AppData thường.
+      const existing = (appData.employeeProfiles || []).find(p => p.employeeCode === clientProvidedEmployeeCode);
+      if (!existing) {
+        return res.status(400).json({ error: `Mã Nhân Viên "${clientProvidedEmployeeCode}" không có trong Hồ Sơ Nhân Sự — để TRỐNG ô Mã Nhân Viên nếu đây là nhân viên mới (hệ thống tự sinh mã), hoặc chọn lại đúng hồ sơ cũ qua "🔍 Kiểm Tra Nhân Sự Cũ"` });
+      }
+      const reusableDraft = existing.status === 'DRAFT' && existing.processId == null;
+      if (existing.status !== 'INACTIVE' && !reusableDraft) {
+        return res.status(409).json({ error: `Mã Nhân Viên "${clientProvidedEmployeeCode}" đang gắn với 1 hồ sơ nhân sự khác đang hoạt động — chỉ tạo Onboarding theo mã cũ cho hồ sơ ĐÃ NGHỈ VIỆC (Tái Tuyển). Để trống ô Mã Nhân Viên nếu đây là nhân viên mới.` });
+      }
+    }
     if (isOnboarding && !clientProvidedEmployeeCode) {
       await withLockedAppDataValue('employeeProfiles', (list) => {
         const arr = Array.isArray(list) ? list : [];

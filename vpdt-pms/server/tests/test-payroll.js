@@ -104,6 +104,14 @@ stubModule('lib/recordStore', {
     list[idx] = updated;
     return updated;
   },
+  // replaceRecordsInCollection(): đợt rà soát chuyên sâu cụm Nhân Sự 10/2026 — "Tính Lương Tự Động" nay
+  // xoá payslip cũ + ghi payslip mới trong ĐÚNG 1 giao dịch SQL (xem lib/recordStore.js). Bản giả lập
+  // này mô phỏng đúng ngữ nghĩa "all-or-nothing" trên mảng in-memory.
+  replaceRecordsInCollection: async (collection, idsToDelete, newRecords) => {
+    const keep = (RECORDS[collection] || []).filter(r => !(idsToDelete || []).includes(r.id));
+    RECORDS[collection] = [...keep, ...(newRecords || [])];
+    return (newRecords || []).length;
+  },
   withLockedRecordById: async (collection, id, mutatorFn) => {
     const list = RECORDS[collection] || [];
     const idx = list.findIndex(r => r.id === id);

@@ -1162,11 +1162,32 @@ router.post('/onboardingPaths/:id/edit', async (req, res) => {
     handleError(res, `onboardingPaths/${req.params.id}/edit`, err);
   }
 });
-// Xoá Lộ Trình — cùng khuôn "xóa = quyền tối cao, chỉ Admin" như mọi catalog Đào Tạo khác ở trên (KHÔNG
-// xoá kèm theo các onboardingProgress đã phân công theo lộ trình này — những hồ sơ đó giữ nguyên
-// pathName đã snapshot, chỉ mất khả năng tra cứu lại stage{1,2}RequiredCourseIds/stage3Criteria gốc;
-// chấp nhận đánh đổi này, cùng tinh thần trainingCourses/trainingPlans xoá không dọn dẹp dữ liệu đã phát sinh).
-router.post('/onboardingPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'onboardingPaths'));
+// Xoá Lộ Trình — "xóa = quyền tối cao, chỉ Admin" như mọi catalog Đào Tạo khác ở trên.
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): trước đây xoá được VÔ ĐIỀU
+// KIỆN, chỉ chấp nhận "đánh đổi" là các onboardingProgress đang theo lộ trình đó mất tham chiếu gốc.
+// Thực tế nặng hơn thế: confirm-stage (xác nhận hoàn thành Giai đoạn 1/2) đọc SỐNG
+// stage{1,2}RequiredCourseIds từ chính bản ghi onboardingPaths để đối chiếu "đã Đạt đủ chương trình bắt
+// buộc chưa" — lộ trình bị xoá thì MỌI hồ sơ tân binh đang dở dang theo lộ trình đó KẸT VĨNH VIỄN, không
+// xác nhận tiếp giai đoạn nào được nữa (không có đường sửa/chuyển lộ trình khác). Chặn xoá khi còn hồ sơ
+// tham chiếu, đúng khuôn budgetTemplates ở trên (409 kèm số lượng, để admin tự xử lý các hồ sơ đó trước).
+router.post('/onboardingPaths/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const progressList = await getAllForCollection('onboardingProgress');
+    const referencing = progressList.filter(p => Number(p.pathId) === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xoá lộ trình này vì còn ${referencing.length} hồ sơ Đào Tạo Tân Binh đang theo lộ trình (xoá đi sẽ khiến các hồ sơ đó không xác nhận tiếp giai đoạn nào được nữa). Vui lòng xử lý/xoá các hồ sơ liên quan trước.`);
+    }
+    await deleteRecordForCollection('onboardingPaths', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `onboardingPaths/${req.params.id}/delete`, err);
+  }
+});
 
 // POST /api/records/onboardingProgress/:id/confirm-stage — Nhân Sự (trainingManage/admin) xác nhận nhân
 // viên đã hoàn thành Giai đoạn 1/2 (Đợt 8 — cùng khuôn /careerPaths/:id/confirm ở dưới: đọc kèm
@@ -3089,7 +3110,11 @@ async function syncLaborContractOnHrTaskEvent(hrProcessItem, taskId, actorUser, 
   try {
     if (task.templateId === 1) {
       const list = await getAllForCollection('laborContracts');
-      const draft = laborContract.buildProbationDraftPayload(hrProcessItem, list);
+      // employeeUsername: tra từ Hồ Sơ Nhân Sự theo employeeCode (hồ sơ có thể đã được liên kết tài
+      // khoản trước mốc này nếu IT cấp tài khoản sớm) — xem chú thích buildProbationDraftPayload().
+      const profileList = (await getAppDataValue('employeeProfiles')) || [];
+      const linkedProfile = employeeProfile.findProfile(profileList, hrProcessItem.employeeCode);
+      const draft = laborContract.buildProbationDraftPayload(hrProcessItem, list, linkedProfile?.username || null);
       if (draft) await createForCollection('laborContracts', () => draft);
     } else if (task.templateId === 7) {
       const list = await getAllForCollection('laborContracts');
@@ -3302,7 +3327,60 @@ router.post('/hrProcesses/:id/assign-successor', async (req, res) => {
   }
 });
 
-router.post('/hrProcesses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrProcesses'));
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): tạo 1 quy trình ONBOARDING
+// luôn ĐẶT CHỖ trước 1 hồ sơ nhân sự DRAFT rỗng mang Mã NV tự sinh (routes/create.js) — nhưng khi quy
+// trình đó bị HUỶ (ứng viên không tới nhận việc — rất phổ biến) hoặc bị XOÁ, hồ sơ DRAFT đó ở lại VĨNH
+// VIỄN: không hiện ở màn nào có ý nghĩa, không đổi trạng thái tay được (assertValidManualStatusTransition()
+// chặn hẳn DRAFT), không xoá được (employeeProfiles không có route xoá nào) — mã BLxxxx bị khoá cứng và
+// tạo Onboarding lại cho đúng ứng viên đó cũng không dùng lại được mã. Dọn luôn hồ sơ DRAFT gắn với quy
+// trình vừa đóng — CHỈ khi hồ sơ còn đúng trạng thái DRAFT (chưa từng hoàn tất Onboarding) VÀ processId
+// trỏ đúng quy trình này (hoặc chưa gắn) — hồ sơ ACTIVE/ON_LEAVE/INACTIVE (VD luồng Tái Tuyển dùng lại
+// mã cũ) TUYỆT ĐỐI không đụng tới. Ghi 1 dòng Nhật Ký Hệ Thống để luôn tra lại được (employeeProfiles là
+// AppData, không đi qua Thùng Rác như các collection dbo.Records). Cùng tinh thần các hook chéo
+// collection khác trong file này: lỗi ở bước phụ này không được làm hỏng thao tác chính đã ghi xong.
+async function cleanupDraftProfileOnOnboardingClosed(hrProcessItem, actorUser, req, routeLabel) {
+  if (!hrProcessItem || hrProcessItem.processType !== 'ONBOARDING' || !hrProcessItem.employeeCode) return false;
+  try {
+    let removed = null;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      const idx = arr.findIndex(p => p.employeeCode === hrProcessItem.employeeCode);
+      if (idx === -1) return arr;
+      const profile = arr[idx];
+      if (profile.status !== 'DRAFT') return arr;
+      if (profile.processId != null && profile.processId !== hrProcessItem.id) return arr;
+      removed = profile;
+      return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
+    });
+    if (removed) {
+      insertSystemLog({
+        username: actorUser?.username || 'system', fullName: actorUser?.name || 'system', ipAddress: req?.ip || '',
+        module: 'HR', actionType: 'DELETE_DRAFT_PROFILE', targetObject: removed.employeeCode,
+        description: `Xoá hồ sơ nhân sự còn ở trạng thái Nháp [${removed.employeeCode}] khi quy trình Onboarding #${hrProcessItem.id} (${hrProcessItem.fullName || ''}) bị huỷ/xoá — giải phóng Mã Nhân Viên để dùng lại`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (xoá hồ sơ DRAFT):', e.message));
+    }
+    return !!removed;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi dọn hồ sơ nhân sự Nháp khi đóng quy trình Onboarding:`, err.message);
+    return false;
+  }
+}
+
+router.post('/hrProcesses/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const preList = await getAllForCollection('hrProcesses');
+    const preItem = preList.find(p => p.id === itemId);
+    await deleteRecordForCollection('hrProcesses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await cleanupDraftProfileOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `hrProcesses/${req.params.id}/delete`, err);
+  }
+});
 
 router.post('/hrProcesses/:id/complete-task', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -3363,7 +3441,10 @@ router.post('/hrProcesses/:id/cancel', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('hrProcesses', itemId, (item) =>
       recordActions.cancelHrProcess(freshUser, item, req.body));
-    res.json({ ok: true, item: result });
+    // Dọn hồ sơ nhân sự còn ở trạng thái Nháp đã đặt chỗ lúc tạo quy trình — xem
+    // cleanupDraftProfileOnOnboardingClosed() ở trên.
+    const draftProfileRemoved = await cleanupDraftProfileOnOnboardingClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);
+    res.json({ ok: true, item: result, draftProfileRemoved });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/cancel`, err);
   }
@@ -3903,6 +3984,11 @@ router.post('/laborContracts/:id/status', async (req, res) => {
     assertContractManage(freshUser);
     const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
       laborContract.assertValidManualStatusTransition(item.status, req.body?.status);
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): terminationDate trước đây
+      // nhận NGUYÊN chuỗi client gửi, không validate gì — lưu được "abc"/"9999-12-31"/ngày TRƯỚC cả
+      // ngày hiệu lực hợp đồng, làm hỏng mọi thống kê nghỉ việc/thâm niên đọc field này. Kiểm TRƯỚC KHI
+      // chạm vào bản ghi (mọi assert phải chạy xong trước bước mutate đầu tiên).
+      if (req.body?.status === 'TERMINATED') laborContract.assertValidTerminationDate(req.body?.terminationDate, item.startDate);
       item.status = req.body.status;
       if (req.body.status === 'TERMINATED') {
         item.terminationDate = req.body.terminationDate || new Date().toISOString().slice(0, 10);
@@ -3958,6 +4044,20 @@ router.post('/leaveRequests/:id/cancel', async (req, res) => {
       const toRevert = attendance.buildLeaveCancelAttendanceReverts(result, attendanceList);
       for (const record of toRevert) {
         await withLockedRecordForCollection('attendanceRecords', record.id, () => record);
+      }
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): 2 bước đối xứng ở trên (hoàn
+      // quỹ phép + dọn chấm công) đã có, nhưng bước thứ 3 mà lượt DUYỆT đã làm — tự huỷ các dòng Lịch
+      // Phân Ca trùng khoảng nghỉ (cancelRosterForApprovedLeave()) — chưa bao giờ được đảo ngược, nên
+      // shiftRoster lệch VĨNH VIỄN so với leaveRequests: nhân viên đi làm lại đúng ca cũ nhưng lịch
+      // trống, quản lý ca không biết để phân lại. Khôi phục ĐÚNG các dòng do chính đơn này huỷ — xem
+      // attendance.restoreRosterForCancelledLeave().
+      const rosterList = await getAllForCollection('shiftRoster');
+      const restoredRoster = attendance.restoreRosterForCancelledLeave(rosterList, result);
+      for (const r of restoredRoster) {
+        const before = rosterList.find(x => x.id === r.id);
+        if (before && before.status !== r.status) {
+          await withLockedRecordForCollection('shiftRoster', r.id, () => r);
+        }
       }
     }
     res.json({ ok: true, item: result });

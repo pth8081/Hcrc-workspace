@@ -120,11 +120,18 @@ function defaultContract(overrides) {
 // templateId=1 "Gửi thư mời nhận việc & hợp đồng lao động" hoàn thành -> tạo bản nháp hợp đồng thử
 // việc. Idempotent: nếu quy trình này đã có hợp đồng nào rồi (VD hoàn thành lại task do sửa sai) thì
 // KHÔNG tạo trùng — trả về null để caller biết không cần insert gì.
-function buildProbationDraftPayload(hrProcessItem, existingList) {
+// employeeUsername (tham số MỚI — đợt rà soát chuyên sâu cụm Nhân Sự 10/2026, mức Cao): tài khoản VPDT
+// đã liên kết với hồ sơ của employeeCode này, do CALLER tra sẵn từ employeeProfiles rồi truyền vào (file
+// này không tự đọc DB) — field DUY NHẤT quyết định "nhân viên tự xem được hợp đồng của chính mình"
+// (canViewLaborContract(), lib/recordViewScope.js) nhưng TRƯỚC ĐÂY không điểm tạo nào gán cả. Thường là
+// null ở mốc này (PRE_BOARDING — IT chưa cấp tài khoản), được gán bù ngay khi HR liên kết tài khoản
+// (syncLaborContractsEmployeeUsername() ở routes/employeeProfile.js).
+function buildProbationDraftPayload(hrProcessItem, existingList, employeeUsername) {
   if (findLatestContractForProcess(existingList, hrProcessItem.id)) return null;
   return defaultContract({
     code: generateContractCode(existingList, hrProcessItem.employeeCode),
     employeeCode: hrProcessItem.employeeCode,
+    employeeUsername: employeeUsername || null,
     hrProcessId: hrProcessItem.id,
     contractType: 'PROBATION', renewalIndex: 0,
     startDate: hrProcessItem.startDate || null,
@@ -197,6 +204,8 @@ function applyPostProbationDecision(contract, decision, existingList, actorUsern
   const nextContractPayload = defaultContract({
     code: generateContractCode(existingList, contract.employeeCode),
     employeeCode: contract.employeeCode,
+    // Kế thừa đúng tài khoản đã liên kết của hợp đồng vừa đóng — xem buildProbationDraftPayload().
+    employeeUsername: contract.employeeUsername || null,
     hrProcessId: contract.hrProcessId,
     contractType, renewalIndex,
     startDate: todayISO(), endDate: null, // HR điền cụ thể sau ở màn Hợp Đồng Lao Động (đã xác nhận với người dùng)
@@ -317,7 +326,20 @@ function assertValidAmendment(payload) {
 // bản quyết định gắn kèm để tra soát lịch sử sau này, cùng khuôn "Quyết định" ở
 // lib/employeeProfile.js::applyPositionAssignment(). TUỲ CHỌN (không bắt buộc — nhiều loại thay đổi nhỏ
 // có thể không cần quyết định riêng).
+//
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): hàm này TRƯỚC ĐÂY không hề
+// kiểm trạng thái hợp đồng — thêm được phụ lục (VD "Tăng lương") vào hợp đồng còn DRAFT (chưa ký/chưa
+// kích hoạt), đã TERMINATED (chấm dứt), EXPIRED (hết hạn) hay SUPERSEDED (đã bị hợp đồng sau thay thế).
+// Phụ lục là văn bản sửa đổi 1 hợp đồng ĐANG CÓ HIỆU LỰC — gắn vào hợp đồng không hiệu lực là sai
+// nghiệp vụ, mà vẫn được computeHrReportSummary() (lib/employeeProfile.js) tính thẳng vào mục "tăng
+// lương" của Báo Cáo Nhân Sự nên còn làm sai cả số liệu báo cáo. Hợp đồng còn DRAFT muốn sửa lương/ngày
+// thì dùng applyManualEdit() (đúng công cụ cho giai đoạn đó, xem chú thích ở trên).
 function addAmendment(contract, payload, actorUsername, actorName) {
+  if (contract.status !== 'ACTIVE') {
+    throw new HttpError(409, contract.status === 'DRAFT'
+      ? 'Hợp đồng còn ở trạng thái Nháp — sửa trực tiếp nội dung hợp đồng (Cập nhật) rồi kích hoạt, chỉ hợp đồng ĐANG HIỆU LỰC mới bổ sung phụ lục được'
+      : 'Chỉ bổ sung phụ lục được cho hợp đồng ĐANG HIỆU LỰC (hợp đồng đã chấm dứt/hết hạn/bị thay thế không sửa đổi được nữa)');
+  }
   assertValidAmendment(payload);
   const { assertUploadedFileUrl } = require('./createValidation'); // require trễ — tránh vòng lặp require
   assertUploadedFileUrl(payload.fileUrl, 'Tệp quyết định');
@@ -339,6 +361,27 @@ function addAmendment(contract, payload, actorUsername, actorName) {
   return amendment;
 }
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): "Ngày chấm dứt" gửi kèm khi HR đóng
+// tay 1 hợp đồng (POST /api/records/laborContracts/:id/status) trước đây KHÔNG được validate gì cả. Luật
+// áp dụng ở đây: phải là ngày hợp lệ, KHÔNG trước Ngày hiệu lực hợp đồng, và không ở tương lai quá xa
+// (tối đa 1 năm tới — chấm dứt có báo trước xa nhất theo Bộ luật Lao động cũng chỉ 45-120 ngày, xa hơn
+// chắc chắn là gõ nhầm năm). Bỏ trống vẫn hợp lệ (caller tự mặc định = hôm nay).
+const TERMINATION_MAX_FUTURE_DAYS = 365;
+function assertValidTerminationDate(rawDate, contractStartDate) {
+  const value = String(rawDate || '').trim();
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new HttpError(400, 'Ngày chấm dứt không hợp lệ');
+  if (contractStartDate && value < String(contractStartDate)) {
+    throw new HttpError(400, `Ngày chấm dứt (${value}) không được trước Ngày hiệu lực hợp đồng (${contractStartDate})`);
+  }
+  const maxDate = new Date(Date.now() + TERMINATION_MAX_FUTURE_DAYS * 86400000).toISOString().slice(0, 10);
+  if (value > maxDate) {
+    throw new HttpError(400, `Ngày chấm dứt quá xa trong tương lai (tối đa tới ${maxDate}) — vui lòng kiểm tra lại`);
+  }
+  return value;
+}
+
 function assertValidManualStatusTransition(currentStatus, nextStatus) {
   if (!STATUSES.has(nextStatus)) throw new HttpError(400, 'Trạng thái không hợp lệ');
   if (!['TERMINATED', 'EXPIRED'].includes(nextStatus)) {
@@ -352,5 +395,5 @@ module.exports = {
   canManageContracts, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
   generateContractCode, defaultContract,
   buildProbationDraftPayload, applyActivateProbation, applyPostProbationDecision, applyOffboardingTermination,
-  applyManualEdit, applyActivateManual, addAmendment, assertValidManualStatusTransition
+  applyManualEdit, applyActivateManual, addAmendment, assertValidManualStatusTransition, assertValidTerminationDate
 };

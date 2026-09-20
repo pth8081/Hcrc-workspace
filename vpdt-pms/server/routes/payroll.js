@@ -12,7 +12,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { getAllAppData, withLockedAppDataValue } = require('../lib/appData');
-const { getAllForCollection, insertRecord, deleteRecordById, deleteRecordForCollection, withLockedRecordForCollection, withLockedRecordById } = require('../lib/recordStore');
+const { getAllForCollection, insertRecord, deleteRecordById, deleteRecordForCollection, replaceRecordsInCollection, withLockedRecordForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { findProfileByUsername } = require('../lib/employeeProfile');
 const { notifyUsers } = require('../lib/notifications');
 const payroll = require('../lib/payroll');
@@ -76,6 +76,24 @@ router.put('/rate-config', requireManage, async (req, res) => {
     for (const [k, v] of Object.entries(next)) {
       if (['taxBrackets', 'updatedAt', 'updatedBy'].includes(k)) continue;
       if (!Number.isFinite(v) || v < 0) return res.status(400).json({ error: `Giá trị "${k}" không hợp lệ` });
+    }
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): vòng kiểm ở trên chỉ chặn
+    // số âm/không phải số — CHO QUA số 0 cho các hằng số dùng làm MẪU SỐ khi tính lương
+    // (standardWorkDaysHo/Store, standardHoursPerDay: dailyRate = baseSalary / standardDays, hourlyRate =
+    // dailyRate / standardHoursPerDay — xem computeEmployeePayslip()). Đặt 0 làm mọi phiếu lương của kỳ
+    // ra Infinity/NaN (lương làm thêm giờ, trừ nghỉ không lương...) mà không có cảnh báo nào. Cũng không
+    // có TRẦN cho % BHXH/BHYT/BHTN — gõ nhầm 800 thay vì 8 thì trừ gấp 100 lần lương bảo hiểm.
+    const POSITIVE_ONLY_KEYS = {
+      standardWorkDaysHo: 'Ngày công chuẩn (Khối Văn Phòng)',
+      standardWorkDaysStore: 'Ngày công chuẩn (Siêu Thị)',
+      standardHoursPerDay: 'Số giờ công chuẩn/ngày'
+    };
+    for (const [k, label] of Object.entries(POSITIVE_ONLY_KEYS)) {
+      if (!(next[k] > 0)) return res.status(400).json({ error: `"${label}" phải lớn hơn 0 (giá trị này được dùng làm mẫu số khi tính lương ngày/giờ)` });
+    }
+    const PERCENT_KEYS = { bhxhPercent: 'BHXH', bhytPercent: 'BHYT', bhtnPercent: 'BHTN' };
+    for (const [k, label] of Object.entries(PERCENT_KEYS)) {
+      if (next[k] > 100) return res.status(400).json({ error: `Tỷ lệ ${label} phải nằm trong khoảng 0-100%` });
     }
     for (const b of next.taxBrackets) {
       if (!Number.isFinite(b.rate) || b.rate < 0 || b.rate > 100) return res.status(400).json({ error: 'Bậc thuế TNCN không hợp lệ' });
@@ -144,14 +162,22 @@ router.post('/periods/:id/calculate', requireManage, async (req, res) => {
       const manualLines = (old.details || []).filter(d => d.isManualAdjustment);
       if (manualLines.length) manualAdjustmentsByEmployee.set(old.employeeCode, manualLines);
     }
-    for (const old of existingPayslips) await deleteRecordById('payslips', old.id);
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): trước đây xoá từng
+    // payslip cũ rồi insert từng phiếu mới bằng N lệnh RIÊNG LẺ, KHÔNG atomic — lỗi ở giữa chừng làm
+    // MẤT TRẮNG phần dữ liệu lương chưa kịp ghi lại (payslips xoá KHÔNG qua Thùng Rác). Nay gom cả
+    // "xoá cũ + ghi mới" vào ĐÚNG 1 giao dịch SQL, rollback toàn bộ nếu lỗi — xem
+    // lib/recordStore.js::replaceRecordsInCollection().
     let idSeq = 0;
-    for (const computed of computedList) {
+    const newPayslips = computedList.map((computed) => {
       const record = payroll.defaultPayslip(period, computed);
-      payroll.mergeManualAdjustmentsIntoPayslip(record, manualAdjustmentsByEmployee.get(computed.employeeCode));
+      payroll.mergeManualAdjustmentsIntoPayslip(record, manualAdjustmentsByEmployee.get(computed.employeeCode), {
+        rateConfig,
+        dependentCount: ((appData.employeeProfiles || []).find(p => p.employeeCode === computed.employeeCode)?.dependents || []).length
+      });
       record.id = Date.now() + (idSeq++);
-      await insertRecord('payslips', record);
-    }
+      return record;
+    });
+    await replaceRecordsInCollection('payslips', existingPayslips.map(p => p.id), newPayslips);
 
     const totalGross = computedList.reduce((s, c) => s + c.grossIncome, 0);
     const totalNet = computedList.reduce((s, c) => s + c.netPay, 0);
@@ -178,10 +204,16 @@ router.patch('/payslips/:id/details', requireManage, async (req, res) => {
   if (!Number.isFinite(payslipId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const periods = await getAllForCollection('payrollPeriods');
+    // taxContext — cấu hình thuế/giảm trừ + số người phụ thuộc của ĐÚNG nhân viên này, để tính LẠI thuế
+    // TNCN ngay sau khi điều chỉnh làm đổi thu nhập chịu thuế (xem recomputePersonalIncomeTax() ở
+    // lib/payroll.js — trước đây thu nhập nhập tay thoát thuế hoàn toàn).
+    const appData = await getAllAppData();
+    const rateConfig = Object.assign(payroll.defaultRateConfig(), appData.payrollRateConfig || {});
     const result = await withLockedRecordById('payslips', payslipId, (payslip) => {
       const period = periods.find(p => p.id === payslip.periodId);
       if (!period || period.status !== 'DRAFT') throw new HttpError(409, 'Chỉ điều chỉnh được khi kỳ lương đang ở trạng thái Nháp');
-      return payroll.applyAdjustPayslipDetail(payslip, req.body || {}, req.freshUser.username);
+      const dependentCount = ((appData.employeeProfiles || []).find(p => p.employeeCode === payslip.employeeCode)?.dependents || []).length;
+      return payroll.applyAdjustPayslipDetail(payslip, req.body || {}, req.freshUser.username, { rateConfig, dependentCount });
     });
     logPayrollAction(req, 'ADJUST_PAYSLIP', String(payslipId), 'Điều chỉnh dòng lương nhập tay của phiếu lương');
     res.json({ ok: true, item: result });

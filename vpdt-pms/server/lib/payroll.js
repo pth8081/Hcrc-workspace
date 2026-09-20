@@ -454,15 +454,70 @@ function assertValidDetailAdjustment(payload) {
 // Áp 1 dòng điều chỉnh tay lên payslip (mutate tại chỗ) — nếu componentCode đã có dòng tay trước đó thì
 // THAY THẾ (amount=0 hoặc rỗng -> caller tự lọc bỏ dòng, xem routes/payroll.js), không cộng dồn nhiều lần
 // bấm lưu cùng 1 mã (tránh kế toán bấm lưu 2 lần = cộng đôi tiền).
-function applyAdjustPayslipDetail(payslip, payload, actorUsername) {
+function applyAdjustPayslipDetail(payslip, payload, actorUsername, taxContext) {
   const { componentCode, amount, note } = assertValidDetailAdjustment(payload);
   const details = (payslip.details || []).filter(d => !(d.componentCode === componentCode && d.isManualAdjustment));
   if (amount !== 0) details.push({ componentCode, amount, note, isManualAdjustment: true, createdAt: nowVN(), createdBy: actorUsername });
   payslip.details = details;
+  recomputePersonalIncomeTax(payslip, taxContext);
+  recomputePayslipTotals(payslip);
+  payslip.updatedAt = nowVN();
+  return payslip;
+}
+
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): thuế TNCN chỉ được tính ĐÚNG 1 LẦN
+// bên trong computeEmployeePayslip() (lúc "Tính Lương Tự Động") — MỌI dòng thu nhập kế toán nhập tay sau
+// đó (thưởng KPI, thưởng khác, phụ cấp ăn trưa/điện thoại/chức vụ/ca đêm/ngày lễ) qua
+// applyAdjustPayslipDetail()/mergeManualAdjustmentsIntoPayslip() chỉ cộng thẳng vào grossIncome/netPay
+// mà KHÔNG hề tính lại thuế — toàn bộ phần thu nhập nhập tay THOÁT THUẾ hoàn toàn, im lặng, không cảnh
+// báo gì (rủi ro quyết toán thuế cuối năm lệch với cơ quan thuế).
+//
+// Tính lại bằng ĐÚNG công thức gốc ở computeEmployeePayslip() — thu nhập chịu thuế = TỔNG dòng INCOME
+// (nay gồm cả dòng nhập tay) trừ BHXH/BHYT/BHTN + trừ nghỉ không lương + giảm trừ bản thân + giảm trừ
+// người phụ thuộc — rồi thay thế dòng PERSONAL_INCOME_TAX tự tính cũ. Các dòng KHẤU TRỪ nhập tay (tạm
+// ứng/phạt) CỐ Ý không làm giảm thu nhập chịu thuế (đúng bản chất: đó là khoản thu hồi/kỷ luật, không
+// phải khoản miễn trừ thuế) — khớp đúng công thức gốc vốn chỉ trừ BH + nghỉ không lương.
+//
+// taxContext = { rateConfig, dependentCount } do CALLER (routes/payroll.js) đọc sẵn và truyền vào — file
+// này không tự đọc DB. THIẾU taxContext (lượt gọi cũ/không có cấu hình) -> KHÔNG tự bịa số, chỉ gắn cờ
+// cảnh báo taxRecalcPending=true lên phiếu để kế toán biết thuế chưa phản ánh phần nhập tay.
+function recomputePersonalIncomeTax(payslip, taxContext) {
+  const details = payslip.details || [];
+  const hasManualIncome = details.some(d => d.isManualAdjustment && PAYROLL_COMPONENTS[d.componentCode]?.type === 'INCOME');
+  const rateConfig = taxContext?.rateConfig;
+  if (!rateConfig) {
+    if (hasManualIncome) payslip.taxRecalcPending = true;
+    return payslip;
+  }
+  const insuranceAmount = details
+    .filter(d => ['SOCIAL_INSURANCE', 'HEALTH_INSURANCE', 'UNEMPLOYMENT_INSURANCE'].includes(d.componentCode))
+    .reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const unpaidLeaveAmount = details
+    .filter(d => d.componentCode === 'UNPAID_LEAVE_DEDUCT')
+    .reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const dependentCount = Number(taxContext?.dependentCount) || 0;
+  const grossIncome = sumDetails(details, 'INCOME');
+  const taxableBase = grossIncome - insuranceAmount - unpaidLeaveAmount
+    - (Number(rateConfig.personalDeduction) || 0) - dependentCount * (Number(rateConfig.dependentDeduction) || 0);
+  const tax = computeTaxFromBrackets(taxableBase, rateConfig.taxBrackets);
+  const rest = details.filter(d => d.componentCode !== 'PERSONAL_INCOME_TAX');
+  if (tax !== 0) {
+    rest.push({
+      componentCode: 'PERSONAL_INCOME_TAX', amount: tax,
+      note: `Thu nhập chịu thuế ${Math.max(0, Math.round(taxableBase)).toLocaleString('vi-VN')}đ (${dependentCount} người phụ thuộc)${hasManualIncome ? ' — đã tính lại sau điều chỉnh tay' : ''}`,
+      isManualAdjustment: false, createdAt: nowVN()
+    });
+  }
+  payslip.details = rest;
+  payslip.taxRecalcPending = false;
+  return payslip;
+}
+
+function recomputePayslipTotals(payslip) {
+  const details = payslip.details || [];
   payslip.grossIncome = Math.round(sumDetails(details, 'INCOME'));
   payslip.totalDeduction = Math.round(sumDetails(details, 'DEDUCTION'));
   payslip.netPay = payslip.grossIncome - payslip.totalDeduction;
-  payslip.updatedAt = nowVN();
   return payslip;
 }
 
@@ -472,13 +527,14 @@ function applyAdjustPayslipDetail(payslip, payload, actorUsername) {
 // (chỉ có các dòng TỰ ĐỘNG isManualAdjustment=false) — kế toán cần tính lại CHỈ 1 người (VD thêm nhân
 // viên mới sót/sửa lỗi chấm công) buộc phải chạy lại CẢ KỲ, xoá sạch luôn phụ cấp/thưởng/tạm ứng/phạt đã
 // nhập tay cho MỌI nhân viên KHÁC trong kỳ đó — mất dữ liệu tài chính đã chốt mà không hề cảnh báo.
-function mergeManualAdjustmentsIntoPayslip(record, manualDetails) {
+// taxContext (bổ sung 10/2026): xem recomputePersonalIncomeTax() — gộp lại dòng thu nhập nhập tay cũng
+// phải tính lại thuế TNCN y như lúc kế toán vừa nhập dòng đó, nếu không mỗi lần "Tính Lương" lại cho cả
+// kỳ sẽ khôi phục đúng lỗ hổng "thu nhập nhập tay thoát thuế".
+function mergeManualAdjustmentsIntoPayslip(record, manualDetails, taxContext) {
   if (!manualDetails || !manualDetails.length) return record;
   record.details = [...record.details, ...manualDetails];
-  record.grossIncome = Math.round(sumDetails(record.details, 'INCOME'));
-  record.totalDeduction = Math.round(sumDetails(record.details, 'DEDUCTION'));
-  record.netPay = record.grossIncome - record.totalDeduction;
-  return record;
+  recomputePersonalIncomeTax(record, taxContext);
+  return recomputePayslipTotals(record);
 }
 
 module.exports = {
@@ -487,5 +543,6 @@ module.exports = {
   computeTaxFromBrackets, periodDateRange, computeEmployeePayslip, defaultPayslip,
   assertValidNewPeriod, defaultPeriod, assertCanDeletePeriod,
   applySubmitForApproval, applyApprove, applyReject, applyFinalize, applyPublish, applyReopen,
-  assertValidDetailAdjustment, applyAdjustPayslipDetail, mergeManualAdjustmentsIntoPayslip
+  assertValidDetailAdjustment, applyAdjustPayslipDetail, mergeManualAdjustmentsIntoPayslip,
+  recomputePersonalIncomeTax, recomputePayslipTotals
 };

@@ -466,7 +466,11 @@ async function partB() {
     });
 
     await test('POST /api/records/leaveRequests/:id/cancel — không được huỷ đơn của người khác', async () => {
-      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'UNPAID', fromDate: '2026-06-01', toDate: '2026-06-01', reason: 'x' });
+      // Ngày 2026-08-01: CỐ Ý không trùng đơn 1 (2026-06-01→06) đã được duyệt ở trên — từ đợt rà soát
+      // chuyên sâu cụm Nhân Sự 10/2026, kiểm tra chồng lấn khi nộp đơn xét CẢ đơn ĐÃ DUYỆT (trước đây
+      // chỉ xét PENDING), nên ngày cũ (2026-06-01) nay bị chặn 409 đúng như thiết kế.
+      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'UNPAID', fromDate: '2026-08-01', toDate: '2026-08-01', reason: 'x' });
+      assert.strictEqual(create.status, 200, JSON.stringify(create.json));
       const r = await call('mgr1', 'POST', `/api/records/leaveRequests/${create.json.item.id}/cancel`, {});
       assert.strictEqual(r.status, 403);
     });

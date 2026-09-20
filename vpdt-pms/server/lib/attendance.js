@@ -546,12 +546,50 @@ function applyApproveShiftSwap(swapRequest, targetRoster, rosterList, actorUsern
 // viên đó vẫn phải đi làm. Nay tự động huỷ (CANCELLED) đúng các dòng phân ca trùng khoảng nghỉ ngay khi
 // duyệt — mirror đúng khuôn cancelFutureRosterAfterOffboarding() ở trên (map thuần, không đụng dòng
 // KHÔNG khớp/ĐÃ huỷ trước đó).
+//
+// CẬP NHẬT (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao — xem restoreRosterForCancelledLeave()
+// ngay dưới): mỗi dòng bị huỷ nay GHI NHỚ trạng thái/ghi chú TRƯỚC KHI huỷ + mã đơn nghỉ đã gây ra việc
+// huỷ (cancelledByLeaveCode), để khi nhân viên HUỶ chính đơn nghỉ đó thì khôi phục lại được ĐÚNG những
+// dòng này (và CHỈ những dòng này — không đụng dòng bị huỷ vì lý do khác như Offboarding/huỷ tay).
 function cancelRosterForApprovedLeave(rosterList, employeeCode, fromDate, toDate, leaveRequestCode) {
   const note = `Tự huỷ do đơn nghỉ phép${leaveRequestCode ? ` [${leaveRequestCode}]` : ''} đã được duyệt trùng ngày này`;
   return (rosterList || []).map(r => {
     if (r.employeeCode !== employeeCode || r.status === 'CANCELLED') return r;
     if (r.workDate < fromDate || r.workDate > toDate) return r;
-    return Object.assign({}, r, { status: 'CANCELLED', updatedAt: nowVN(), note });
+    return Object.assign({}, r, {
+      status: 'CANCELLED', updatedAt: nowVN(), note,
+      statusBeforeLeaveCancel: r.status, noteBeforeLeaveCancel: r.note || null,
+      cancelledByLeaveCode: leaveRequestCode || null
+    });
+  });
+}
+
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): huỷ 1 đơn nghỉ phép ĐÃ DUYỆT
+// (POST /api/records/leaveRequests/:id/cancel — chỉ huỷ được khi ngày nghỉ CHƯA TỚI) đã hoàn quỹ phép +
+// dọn AttendanceRecords, nhưng KHÔNG khôi phục các dòng shiftRoster mà chính lượt DUYỆT đã tự huỷ
+// (cancelRosterForApprovedLeave() ở trên) — nhân viên quay lại đi làm đúng ca cũ nhưng Lịch Phân Ca vĩnh
+// viễn trống ngày đó, Quản Lý Siêu Thị phải tự nhớ mà phân ca lại bằng tay (thường không ai biết).
+// Khôi phục đúng trạng thái/ghi chú trước khi huỷ. Chỉ chạm dòng do CHÍNH đơn này huỷ: ưu tiên dấu vết
+// cancelledByLeaveCode (bản ghi huỷ từ sau bản vá này), dự phòng cho dữ liệu CŨ (chưa có dấu vết) bằng
+// affectedRosterIds đã lưu sẵn trên đơn + ghi chú tự huỷ có kèm mã đơn.
+function restoreRosterForCancelledLeave(rosterList, leaveRequest) {
+  const code = leaveRequest?.code || null;
+  const affectedIds = new Set((leaveRequest?.affectedRosterIds || []).map(Number));
+  return (rosterList || []).map(r => {
+    if (r.employeeCode !== leaveRequest?.employeeCode || r.status !== 'CANCELLED') return r;
+    const markedByThisLeave = r.cancelledByLeaveCode != null
+      ? r.cancelledByLeaveCode === code
+      : (affectedIds.has(Number(r.id)) && typeof r.note === 'string' && r.note.includes('đơn nghỉ phép') && (!code || r.note.includes(code)));
+    if (!markedByThisLeave) return r;
+    const restored = Object.assign({}, r, {
+      status: r.statusBeforeLeaveCancel || 'SCHEDULED',
+      note: r.noteBeforeLeaveCancel || null,
+      updatedAt: nowVN()
+    });
+    delete restored.statusBeforeLeaveCancel;
+    delete restored.noteBeforeLeaveCancel;
+    delete restored.cancelledByLeaveCode;
+    return restored;
   });
 }
 
@@ -585,5 +623,6 @@ module.exports = {
   refundLeaveBalance, buildLeaveAttendanceRecords, buildLeaveCancelAttendanceReverts, listDatesInRange,
   assertValidShiftTemplate, assertValidRosterAssignment, defaultShiftRoster, assertNoRosterConflict, applyCancelRoster,
   defaultShiftSwapRequest, applyApproveShiftSwap, applyRejectShiftSwap,
-  cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding, cancelRosterForApprovedLeave
+  cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding, cancelRosterForApprovedLeave,
+  restoreRosterForCancelledLeave
 };

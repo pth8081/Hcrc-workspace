@@ -6968,9 +6968,17 @@ function canAccessHrLifecycleModule(user) {
 // khoản chưa liên kết hồ sơ nào (xem routes/employeeProfile.js). Màn "Quản Lý Hồ Sơ" (xem toàn bộ nhân
 // viên) mới thật sự cần hrProfileManage — đã enforce server-side (canManageProfiles() trong
 // lib/employeeProfile.js), ở đây chỉ dùng để ẩn/hiện nút chuyển màn cho gọn UI.
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): 3 hàm canAccessHrProfileModule()/
+// canAccessHrAttendanceModule()/canAccessHrPayrollModule() vẫn còn nhánh `if (user.perms?.admin) return
+// true;` từ trước v23.28 — lệch tinh thần "admin KHÔNG còn toàn quyền tuyệt đối với 3 khối dữ liệu Nhân
+// Sự nhạy cảm": 1 admin bị TẮT hẳn moduleAccess của module con vẫn thấy nav và bấm vào 1 màn rỗng (mọi
+// route dữ liệu bên trong đều đã chặn đúng ở server). Bỏ nhánh này -> 3 module con đi đúng theo
+// hasModuleAccess() như mọi module khác. CỐ Ý KHÔNG siết thêm thành "phải có quyền chuyên biệt": cả 3
+// module con này theo thiết kế là TỰ PHỤC VỤ, mở cho MỌI nhân viên đã đăng nhập (tự xem hồ sơ/chấm
+// công/phiếu lương CỦA CHÍNH MÌNH) — siết thêm sẽ chặn nhầm nhân viên thường, không phải nội dung phát
+// hiện này.
 function canAccessHrProfileModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   return hasModuleAccess(user, 'hrProfile');
 }
 
@@ -7001,7 +7009,6 @@ function hrpfCanViewReports() { return !!(currentUser.perms?.hrProfileManage && 
 // chấm công/phép năm/nộp đơn của chính mình; các khối quản lý bên trong tự ẩn theo quyền riêng.
 function canAccessHrAttendanceModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   return hasModuleAccess(user, 'hrAttendance');
 }
 
@@ -7012,7 +7019,6 @@ function canAccessHrAttendanceModule(user) {
 // client có lỡ hiện nhầm.
 function canAccessHrPayrollModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   return hasModuleAccess(user, 'hrPayroll');
 }
 

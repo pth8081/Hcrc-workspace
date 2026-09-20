@@ -83,11 +83,32 @@ async function requireAttendanceClockApiKey(req, res, next) {
 }
 router.use(requireAttendanceClockApiKey);
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): timestamp trước đây chỉ được
+// kiểm "có parse ra ngày được không" — 1 máy chấm công lỗi giờ (hoặc ai đó cầm được API key) đẩy được
+// mốc giờ ở TƯƠNG LAI bất kỳ (tạo sẵn công cho cả tháng sau), hoặc mốc giờ rơi vào kỳ lương ĐÃ CHỐT/ĐÃ
+// CÔNG BỐ — ghi đè lặng lẽ dữ liệu công của kỳ lương đã khoá, làm số liệu chấm công không còn khớp với
+// phiếu lương đã phát cho nhân viên (mà payslip thì không tự tính lại).
+// Dung sai 5 phút cho lệch giờ máy chấm công (chuyện bình thường với thiết bị không đồng bộ NTP).
+const CLOCK_PUNCH_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+// Kỳ lương đã "khoá" — FINALIZED (Chốt) và PUBLISHED (Công bố); DRAFT/PENDING_APPROVAL/APPROVED vẫn còn
+// tính lại được nên không chặn (kế toán chủ động bấm Tính Lương lại).
+const LOCKED_PAYROLL_STATUSES = new Set(['FINALIZED', 'PUBLISHED']);
+function findLockedPayrollPeriodForDate(periods, workDate) {
+  const [y, m] = String(workDate || '').split('-').map(Number);
+  if (!y || !m) return null;
+  return (periods || []).find(p => Number(p.periodYear) === y && Number(p.periodMonth) === m && LOCKED_PAYROLL_STATUSES.has(p.status)) || null;
+}
+
 router.post('/clock-punch', async (req, res) => {
   const employeeCode = String(req.body?.employeeCode || '').trim();
   const timestamp = req.body?.timestamp ? String(req.body.timestamp).trim() : new Date().toISOString();
   if (!employeeCode) return res.status(400).json({ error: 'Thiếu employeeCode' });
-  if (Number.isNaN(new Date(timestamp).getTime())) return res.status(400).json({ error: 'timestamp không hợp lệ' });
+  const punchMs = new Date(timestamp).getTime();
+  if (Number.isNaN(punchMs)) return res.status(400).json({ error: 'timestamp không hợp lệ' });
+  if (punchMs > Date.now() + CLOCK_PUNCH_FUTURE_TOLERANCE_MS) {
+    logClockAuth(req, { apiKeyName: req.attendanceClockApiKey?.name, employeeCode, actionType: 'CLOCK_PUNCH_FUTURE_TIMESTAMP', description: `Từ chối chấm công có mốc giờ ở tương lai: ${timestamp}`, status: 'FAILURE' });
+    return res.status(400).json({ error: 'timestamp nằm ở tương lai — không ghi nhận chấm công cho thời điểm chưa tới' });
+  }
 
   try {
     const [employeeProfiles, users, hrProcesses, attendanceHoConfig, publicHolidays] = await Promise.all([
@@ -101,6 +122,12 @@ router.post('/clock-punch', async (req, res) => {
     }
 
     const workDate = new Date(timestamp).toISOString().slice(0, 10);
+    // Kỳ lương của tháng chứa ngày công này đã Chốt/Công bố -> từ chối (xem chú thích ở trên).
+    const lockedPeriod = findLockedPayrollPeriodForDate(await getAllForCollection('payrollPeriods'), workDate);
+    if (lockedPeriod) {
+      logClockAuth(req, { apiKeyName: req.attendanceClockApiKey.name, employeeCode, actionType: 'CLOCK_PUNCH_LOCKED_PERIOD', description: `Từ chối chấm công ngày ${workDate} — kỳ lương "${lockedPeriod.periodName}" đã ${lockedPeriod.status === 'PUBLISHED' ? 'công bố' : 'chốt'}`, status: 'FAILURE' });
+      return res.status(409).json({ error: `Ngày ${workDate} thuộc kỳ lương "${lockedPeriod.periodName}" đã ${lockedPeriod.status === 'PUBLISHED' ? 'CÔNG BỐ' : 'CHỐT'} — không ghi nhận thêm dữ liệu chấm công cho kỳ đã khoá (liên hệ Nhân Sự nếu cần bổ sung)` });
+    }
     const lockKey = `attendanceRecords:${employeeCode}:${workDate}`;
     const savedRecord = await withAppLock(lockKey, async () => {
       const shiftRoster = workModelInfo.workModel === 'SHIFT_BASED' ? await getAllForCollection('shiftRoster') : [];

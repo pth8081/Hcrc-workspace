@@ -44,6 +44,23 @@ const { assertNoManagerCycle } = require('./recordViewScope');
 const NODE_TYPES = new Set(['COMPANY', 'DEPARTMENT', 'POSITION']);
 const POS_TYPES = new Set(['HO', 'STORE']);
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): id của version cây tổ chức và
+// của từng dòng KPI Flow trước đây đều là Date.now() thuần — 2 thao tác rơi vào CÙNG 1 mili-giây (bấm 2
+// lần liên tiếp, 2 người thao tác đồng thời, và nhất là seedKpiFlowGaps() sinh HÀNG LOẠT dòng trong cùng
+// 1 lượt gọi) sinh ra id TRÙNG NHAU; removeKpiFlowRow()/deleteVersion() lọc theo id nên xoá 1 dòng là
+// mất luôn cả 2, còn findVersion() luôn trả về đúng bản ghi đầu tiên (bản còn lại thành "bóng ma" không
+// thao tác được. Nay sinh theo "lớn nhất đang có + 1" — cùng khuôn computeNextEmployeeCodeSeq()
+// (lib/employeeProfile.js)/generateContractCode() (lib/laborContract.js): đơn điệu tăng, không bao giờ
+// trùng trong cùng 1 mảng, giữ nguyên các id Date.now() cũ đang tồn tại (không cần migrate dữ liệu).
+function nextIdFor(items) {
+  let maxId = 0;
+  for (const it of items || []) {
+    const n = Number(it?.id);
+    if (Number.isFinite(n) && n > maxId) maxId = n;
+  }
+  return maxId + 1;
+}
+
 function findVersion(list, versionId) {
   return (list || []).find(v => v.id === versionId) || null;
 }
@@ -314,7 +331,7 @@ function seedKpiFlowGaps(version) {
     const key = `${parent.nodeId}:${n.nodeId}`;
     if (existing.has(key)) continue;
     version.kpiFlow.push({
-      id: Date.now() + added, evaluatorNodeId: parent.nodeId, evaluateeNodeId: n.nodeId,
+      id: nextIdFor(version.kpiFlow), evaluatorNodeId: parent.nodeId, evaluateeNodeId: n.nodeId,
       isAutoFromHierarchy: true, createdBy: 'SYSTEM', createdAt: new Date().toISOString()
     });
     existing.add(key);
@@ -328,7 +345,7 @@ function seedKpiFlowGaps(version) {
 function bootstrapFirstVersion(list, versionName, actingUsername) {
   if ((list || []).length) throw new HttpError(400, 'Đã có phiên bản cơ cấu tổ chức — dùng chức năng "Tạo bản nháp mới" thay vì khởi tạo lại');
   const version = {
-    id: Date.now(), versionName: versionName || 'Cơ cấu tổ chức', status: 'DRAFT',
+    id: nextIdFor(list), versionName: versionName || 'Cơ cấu tổ chức', status: 'DRAFT',
     effectiveDate: null, clonedFromVersionId: null,
     nodes: [{ nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty', departmentRef: null, jobTitle: null, requiresDept: null, posType: null, positionKey: null, displayOrder: 0 }],
     kpiFlow: [], createdBy: actingUsername, createdAt: new Date().toISOString(), appliedBy: null, appliedAt: null
@@ -339,7 +356,7 @@ function bootstrapFirstVersion(list, versionName, actingUsername) {
 function cloneVersion(list, sourceVersionId, versionName, actingUsername) {
   const source = requireVersion(list, sourceVersionId);
   return {
-    id: Date.now(), versionName: versionName || `${source.versionName} (bản sao)`, status: 'DRAFT',
+    id: nextIdFor(list), versionName: versionName || `${source.versionName} (bản sao)`, status: 'DRAFT',
     effectiveDate: null, clonedFromVersionId: source.id,
     nodes: deepClone(source.nodes || []), kpiFlow: deepClone(source.kpiFlow || []),
     createdBy: actingUsername, createdAt: new Date().toISOString(), appliedBy: null, appliedAt: null
@@ -427,7 +444,7 @@ function addKpiFlowRow(appliedVersion, evaluatorNodeId, evaluateeNodeId, actingU
   if (appliedVersion.kpiFlow.some(f => f.evaluatorNodeId === evaluatorNodeId && f.evaluateeNodeId === evaluateeNodeId)) {
     throw new HttpError(400, 'Quan hệ đánh giá này đã tồn tại');
   }
-  const row = { id: Date.now(), evaluatorNodeId, evaluateeNodeId, isAutoFromHierarchy: false, createdBy: actingUsername, createdAt: new Date().toISOString() };
+  const row = { id: nextIdFor(appliedVersion.kpiFlow), evaluatorNodeId, evaluateeNodeId, isAutoFromHierarchy: false, createdBy: actingUsername, createdAt: new Date().toISOString() };
   appliedVersion.kpiFlow.push(row);
   return row;
 }
