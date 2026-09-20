@@ -4154,6 +4154,18 @@ function approveCancelTrainingRegistration(payload, user, reg) {
     throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu huỷ đăng ký lớp học');
   }
   if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Cao — cụm Đào Tạo): trước đây hàm này KHÔNG kiểm lại
+  // reg.result (khác hẳn cancelTrainingRegistration() ngay trên đã có check 409 tương tự), nên 1 yêu cầu
+  // huỷ gửi lúc còn REGISTERED mà tới khi duyệt học viên ĐÃ thi xong (PASSED/FAILED, có thể do tự động
+  // chấm ngay sau đó) vẫn bị đè thẳng thành CANCELLED — xoá trắng kết quả ĐẠT đã thi thật, kéo theo mất
+  // điều kiện "Đạt" của Lộ Trình Thăng Tiến/Tân Binh (đều đếm theo trainingRegistrations PASSED), KHÔNG
+  // có đường quay lại (không có action nào đưa CANCELLED về lại PASSED). Chặn hẳn ở đây: có kết quả rồi
+  // thì không duyệt huỷ nữa, người duyệt dùng "Từ chối" (rejectCancelTrainingRegistration()) để gỡ yêu
+  // cầu treo. Các luồng ghi kết quả (setTrainingRegistrationResult()/applyAutoGradedTestResult()) cũng
+  // đã tự dọn pendingCancellation nên trường hợp này chỉ còn xảy ra với dữ liệu cũ.
+  if (reg.result !== 'REGISTERED') {
+    throw new HttpError(409, 'Học viên đã có kết quả học tập (Đạt/Không đạt) cho lớp này nên không thể duyệt huỷ đăng ký nữa — duyệt huỷ sẽ xoá mất kết quả đã thi. Vui lòng bấm "Từ chối" để gỡ yêu cầu huỷ đang treo.');
+  }
   reg.result = 'CANCELLED';
   reg.resultBy = user.username;
   reg.resultByName = user.name;
@@ -4290,6 +4302,10 @@ function setTrainingRegistrationResult(payload, user, reg, cls) {
   reg.resultBy = user.username;
   reg.resultByName = user.name;
   reg.resultAt = nowVN();
+  // Đã có kết quả -> yêu cầu huỷ còn treo (nếu có) KHÔNG còn ý nghĩa nữa: tự dọn ngay tại đây thay vì để
+  // nó nằm lại trong hàng chờ duyệt của Nhân Sự (duyệt nhầm sẽ xoá trắng kết quả vừa ghi — xem
+  // approveCancelTrainingRegistration()).
+  reg.pendingCancellation = null;
   return reg;
 }
 
@@ -4438,6 +4454,32 @@ function startOfflineTrainingClass(user, cls) {
   cls.sessionState = 'ONGOING';
   return cls;
 }
+// "Đóng/Mở lại đăng ký" 1 lớp học (cls.status: OPEN <-> CLOSED) — BỔ SUNG 9/2026 sau đợt audit chuyên
+// sâu (mức Trung bình, cụm Đào Tạo): trước đây status được gán cứng 'OPEN' lúc tạo lớp
+// (lib/createValidation.js) và KHÔNG có action nào đổi được nữa, nên 2 nhánh chặn "Lớp học này đã đóng
+// đăng ký" (trainingRegistrations.extraValidate ở createValidation.js + bulkRegisterTrainingClass() bên
+// trên) là code chết — người quản lý muốn dừng nhận đăng ký sớm chỉ còn cách sửa hạn đăng ký/sĩ số.
+// KHÁC hẳn sessionState (SCHEDULED/ONGOING/ENDED — vòng đời BUỔI HỌC của lớp OFFLINE): 2 khái niệm trực
+// giao, đóng đăng ký không đụng gì tới buổi học và ngược lại. Gác quyền bằng canManageTrainingClass()
+// giống mọi hành động theo-từng-lớp khác (trainingManage mọi lớp, trainingInstruct đúng lớp mình dạy).
+function closeTrainingClassRegistration(user, cls) {
+  if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền đóng đăng ký lớp học này');
+  if (cls.status === 'CLOSED') throw new HttpError(409, 'Lớp học này đã đóng đăng ký từ trước rồi');
+  cls.status = 'CLOSED';
+  cls.registrationClosedBy = user.username;
+  cls.registrationClosedByName = user.name;
+  cls.registrationClosedAt = nowVN();
+  return cls;
+}
+function reopenTrainingClassRegistration(user, cls) {
+  if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền mở lại đăng ký lớp học này');
+  if (cls.status !== 'CLOSED') throw new HttpError(409, 'Lớp học này đang mở đăng ký, không cần mở lại');
+  cls.status = 'OPEN';
+  cls.registrationClosedBy = null;
+  cls.registrationClosedByName = null;
+  cls.registrationClosedAt = null;
+  return cls;
+}
 function endOfflineTrainingClass(user, cls) {
   if (!canManageTrainingClass(user, cls)) throw new HttpError(403, 'Bạn không có quyền kết thúc lớp học này');
   if (cls.mode !== 'OFFLINE') throw new HttpError(409, 'Chỉ lớp học Offline mới cần kết thúc buổi học thủ công');
@@ -4580,6 +4622,10 @@ function applyAutoGradedTestResult(reg, graded, opts) {
   reg.resultBy = grader ? grader.username : null;
   reg.resultByName = grader ? `${grader.name} (đã chấm phần nghị luận)` : 'Hệ thống (tự động chấm bài test)';
   reg.resultAt = nowVN();
+  // Cùng lý do với setTrainingRegistrationResult(): đã chấm xong thì yêu cầu xin huỷ còn treo không còn ý
+  // nghĩa — dọn luôn để Nhân Sự không duyệt nhầm và xoá trắng kết quả vừa chấm (xem
+  // approveCancelTrainingRegistration()).
+  reg.pendingCancellation = null;
   return reg;
 }
 
@@ -4706,6 +4752,28 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
   };
 }
 
+// "Thu hồi xác nhận" 1 mốc Lộ Trình Thăng Tiến đã xác nhận (BỔ SUNG 9/2026, vá đợt audit chuyên sâu —
+// mức Thấp): confirmCareerPathForEmployee() ở trên chỉ có đường ĐI (tạo 1 bản ghi careerPathConfirmations
+// mới) và chặn cứng xác nhận lại cùng cấp bậc, nên 1 lần bấm nhầm người/nhầm cấp là vĩnh viễn — không
+// sửa, không xoá, còn chặn luôn việc xác nhận lại cho ĐÚNG người sau này.
+// Quyền: cùng mức với người xác nhận (trainingManage/admin — canManageTraining), vì đây là thao tác sửa
+// sai của CHÍNH nghiệp vụ đó, không phải quyết định của phòng ban nào khác.
+// Gác TUẦN TỰ ngược: không thu hồi được cấp N khi cấp N+1 của cùng người/cùng lộ trình vẫn còn xác nhận
+// (nếu không sẽ để lại chuỗi cấp bậc thủng ở giữa, trong khi confirmCareerPathForEmployee() luôn giả
+// định cấp trước đó đã xác nhận). Hàm này chỉ XÁC THỰC — route gọi deleteRecordForCollection() để bản
+// ghi đi vào Thùng Rác (khôi phục được, có dấu vết người xoá), xem routes/records.js.
+function assertCanRevokeCareerPathConfirmation(user, confirmation, allConfirmations) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền thu hồi xác nhận lộ trình thăng tiến');
+  if (!confirmation) throw new HttpError(404, 'Không tìm thấy mốc xác nhận này');
+  const nextStage = (allConfirmations || []).find(c =>
+    c.pathId === confirmation.pathId && c.username === confirmation.username &&
+    Number(c.stageIndex) === Number(confirmation.stageIndex) + 1);
+  if (nextStage) {
+    throw new HttpError(409, `Không thể thu hồi Cấp ${Number(confirmation.stageIndex) + 1} vì nhân viên này đã được xác nhận Cấp ${Number(confirmation.stageIndex) + 2} của cùng lộ trình. Vui lòng thu hồi cấp cao hơn trước.`);
+  }
+  return true;
+}
+
 // ===== ĐÀO TẠO TÂN BINH (Đợt 6, module con "Đào Tạo") =====
 // onboardingPaths ("Lộ Trình") quản lý (tạo/sửa/xoá) CHỈ trainingManage — dùng lại đúng canManageTraining()
 // ở trên. onboardingProgress ("Phân Công") có 3 nhóm hành động riêng biệt hoàn toàn khác gác quyền nhau:
@@ -4791,6 +4859,47 @@ function evaluateOnboardingStage3(payload, user, progress, users) {
   progress.stage3EvaluatedByName = user.name;
   progress.stage3EvaluatedAt = nowVN();
   progress.stage3Note = (payload?.note || '').trim().slice(0, 3000);
+  return progress;
+}
+
+// ĐÁNH GIÁ LẠI Giai đoạn 3 sau khi đã "Không đạt" (BỔ SUNG 9/2026, vá đợt audit chuyên sâu — mức Trung
+// bình): trước đây evaluateOnboardingStage3() ở trên chặn cứng mọi lần đánh giá thứ 2
+// (stage3Evaluation != null), nên 1 hồ sơ bị chấm FAILED (dù do bấm nhầm hay do nhân viên thật sự chưa
+// đạt và sau đó đã cải thiện) là NGÕ CỤT vĩnh viễn: không cấp được chứng chỉ (issueOnboardingCertificate()
+// đòi stage3Evaluation === 'PASSED'), cũng không có action nào đưa về lại null để đánh giá lại.
+// Khuôn y hệt hàm trên, chỉ nới ĐÚNG điều kiện trạng thái đầu vào (bắt buộc đang là 'FAILED') và ghi
+// thêm dấu vết lần đánh giá trước vào stage3EvaluationHistory để không mất lịch sử. CỐ Ý không cho đánh
+// giá lại 1 hồ sơ đang 'PASSED' (đó là đường "hạ kết quả đã đạt" — quyết định nghiệp vụ khác hẳn, chưa
+// được yêu cầu) và bắt buộc nhập lý do đánh giá lại.
+function reevaluateOnboardingStage3(payload, user, progress, users) {
+  const traineeUser = (users || []).find(u => u.username === progress.employeeUsername);
+  if (!canEvaluateOnboardingStage3(user, traineeUser)) {
+    throw new HttpError(403, 'Bạn không có quyền đánh giá Giai đoạn 3 cho nhân viên này (khác phòng ban/siêu thị hoặc không có quyền)');
+  }
+  if (progress.stage3Evaluation !== 'FAILED') {
+    throw new HttpError(409, progress.stage3Evaluation === 'PASSED'
+      ? 'Giai đoạn 3 của nhân viên này đã ĐẠT — không có gì để đánh giá lại'
+      : 'Giai đoạn 3 của nhân viên này chưa từng được đánh giá — hãy dùng chức năng đánh giá thông thường');
+  }
+  if (progress.certificateIssued) throw new HttpError(409, 'Hồ sơ này đã được cấp chứng chỉ hoàn thành, không đánh giá lại được');
+  const evaluation = payload?.evaluation === 'PASSED' || payload?.evaluation === 'FAILED' ? payload.evaluation : null;
+  if (!evaluation) throw new HttpError(400, 'Kết quả đánh giá không hợp lệ (chỉ nhận Đạt/Không đạt)');
+  const note = (payload?.note || '').trim().slice(0, 3000);
+  if (!note) throw new HttpError(400, 'Vui lòng nhập lý do/nhận xét cho lần đánh giá lại');
+  progress.stage3EvaluationHistory = Array.isArray(progress.stage3EvaluationHistory) ? progress.stage3EvaluationHistory : [];
+  progress.stage3EvaluationHistory.push({
+    evaluation: progress.stage3Evaluation,
+    evaluatedBy: progress.stage3EvaluatedBy || null,
+    evaluatedByName: progress.stage3EvaluatedByName || null,
+    evaluatedAt: progress.stage3EvaluatedAt || null,
+    note: progress.stage3Note || '',
+    replacedBy: user.username, replacedByName: user.name, replacedAt: nowVN()
+  });
+  progress.stage3Evaluation = evaluation;
+  progress.stage3EvaluatedBy = user.username;
+  progress.stage3EvaluatedByName = user.name;
+  progress.stage3EvaluatedAt = nowVN();
+  progress.stage3Note = note;
   return progress;
 }
 
@@ -7159,11 +7268,14 @@ module.exports = {
   mergeReportPeriodPdf, publishReportPeriodPdf, unpublishReportPeriodPdf,
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, approveCancelTrainingRegistration,
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
+  assertCanRevokeCareerPathConfirmation,
   isTrainingVideoProgressComplete, isTrainingPdfProgressComplete, computeTrainingDocumentProgressUpdate,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
+  closeTrainingClassRegistration, reopenTrainingClassRegistration,
   gradeTrainingTestSubmission, applyAutoGradedTestResult, gradeTrainingTestEssayAnswers,
   startTrainingTestAttempt, evaluateTrainingTestTiming,
-  editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3, issueOnboardingCertificate,
+  editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3,
+  reevaluateOnboardingStage3, issueOnboardingCertificate,
   canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, canSupportItPrice, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,

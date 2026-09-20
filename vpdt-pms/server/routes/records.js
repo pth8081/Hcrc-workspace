@@ -1116,10 +1116,86 @@ router.post('/operationRepairs/:id/delete', rejectOperationDelete);
 // ===================== ĐÀO TẠO (module con "Truyền Thông Nội Bộ" > Đào tạo) — tạm thời, MVP =====================
 router.post('/trainingDocuments/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingDocuments'));
 router.post('/trainingClasses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingClasses'));
-router.post('/careerPaths/:id/delete', (req, res) => deleteAdminOnly(req, res, 'careerPaths'));
-router.post('/trainingTests/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingTests'));
-// Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo khác ở trên.
-router.post('/trainingCourses/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingCourses'));
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Trung bình — cụm Đào Tạo): 3 route xoá DANH MỤC dưới đây
+// (Lộ Trình Thăng Tiến / Ngân Hàng Câu Hỏi / Chương Trình Đào Tạo) trước đây dùng thẳng deleteAdminOnly()
+// nên xoá được VÔ ĐIỀU KIỆN dù đang có hồ sơ khác trỏ tới — hậu quả không phải chỉ "mất dữ liệu hiển
+// thị" mà là KHOÁ CỨNG luồng nghiệp vụ đang chạy:
+//   - xoá 1 bài test đang gán cho lớp (cls.testId) -> route submit-test không tìm thấy đề, học viên
+//     không nộp được bài, mà setTrainingRegistrationResult() cũng chặn chấm tay vì cls.testId != null;
+//   - xoá 1 chương trình đang là điều kiện bắt buộc của careerPaths/onboardingPaths (requiredCourseIds)
+//     -> confirmCareerPathForEmployee()/confirmOnboardingStage() không bao giờ đủ điều kiện xác nhận nữa;
+//   - xoá 1 lộ trình thăng tiến đã có mốc xác nhận (careerPathConfirmations.pathId) -> mốc mồ côi.
+// Khuôn chặn 409 copy đúng từ /budgetTemplates/:id/delete ở trên (kiểm tham chiếu TRƯỚC khi xoá, thông
+// báo nêu rõ số lượng + cách xử lý).
+router.post('/careerPaths/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const confirmations = await getAllForCollection('careerPathConfirmations');
+    const referencing = confirmations.filter(c => c.pathId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa lộ trình thăng tiến này vì đã có ${referencing.length} mốc xác nhận hoàn thành của nhân viên gắn với nó. Vui lòng thu hồi các mốc xác nhận đó trước.`);
+    }
+    await deleteRecordForCollection('careerPaths', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `careerPaths/${req.params.id}/delete`, err);
+  }
+});
+router.post('/trainingTests/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const classes = await getAllForCollection('trainingClasses');
+    const referencing = classes.filter(c => c.testId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa bài test này vì còn ${referencing.length} lớp học đang gán nó. Vui lòng gỡ bài test khỏi các lớp đó trước (sửa lớp).`);
+    }
+    await deleteRecordForCollection('trainingTests', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `trainingTests/${req.params.id}/delete`, err);
+  }
+});
+// Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo
+// khác ở trên, BỔ SUNG kiểm tham chiếu (lớp học/kế hoạch đào tạo/lộ trình thăng tiến/lộ trình tân binh).
+router.post('/trainingCourses/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const [classes, plans, careerPaths, onboardingPaths] = await Promise.all([
+      getAllForCollection('trainingClasses'),
+      getAllForCollection('trainingPlans'),
+      getAllForCollection('careerPaths'),
+      getAllForCollection('onboardingPaths')
+    ]);
+    const refs = [];
+    const classCount = classes.filter(c => c.courseId === itemId).length;
+    if (classCount) refs.push(`${classCount} lớp học`);
+    const planCount = plans.filter(p => p.courseId === itemId).length;
+    if (planCount) refs.push(`${planCount} dòng kế hoạch đào tạo`);
+    const careerCount = careerPaths.filter(p => (Array.isArray(p.stages) ? p.stages : [])
+      .some(s => (Array.isArray(s?.requiredCourseIds) ? s.requiredCourseIds : []).includes(itemId))).length;
+    if (careerCount) refs.push(`${careerCount} lộ trình thăng tiến`);
+    const onboardingCount = onboardingPaths.filter(p =>
+      (Array.isArray(p.stage1RequiredCourseIds) ? p.stage1RequiredCourseIds : []).includes(itemId) ||
+      (Array.isArray(p.stage2RequiredCourseIds) ? p.stage2RequiredCourseIds : []).includes(itemId)).length;
+    if (onboardingCount) refs.push(`${onboardingCount} lộ trình đào tạo tân binh`);
+    if (refs.length) {
+      throw new HttpError(409, `Không thể xóa chương trình đào tạo này vì đang được ${refs.join(', ')} sử dụng. Vui lòng gỡ/đổi chương trình ở các hồ sơ đó trước.`);
+    }
+    await deleteRecordForCollection('trainingCourses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `trainingCourses/${req.params.id}/delete`, err);
+  }
+});
 
 // POST /api/records/trainingPlans/:id/edit (Đợt 5: Kế Hoạch Đào Tạo) — sửa 1 dòng kế hoạch đã lập. Đọc
 // kèm appData (depts/stores có sẵn, dùng để kiểm tra targetDept) + trainingCourses (kiểm tra courseId
@@ -1205,6 +1281,22 @@ router.post('/onboardingProgress/:id/evaluate-stage3', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `onboardingProgress/${req.params.id}/evaluate-stage3`, err);
+  }
+});
+// POST /api/records/onboardingProgress/:id/reevaluate-stage3 (9/2026, vá đợt audit chuyên sâu) — đánh
+// giá LẠI 1 Giai đoạn 3 đã "Không đạt" (ngõ cụt vĩnh viễn trước đây: không cấp được chứng chỉ, cũng
+// không có đường đánh giá lại). Cùng gác quyền + cùng tham số với route evaluate-stage3 ngay trên, chỉ
+// khác mutator (xem reevaluateOnboardingStage3(), lib/recordActions.js).
+router.post('/onboardingProgress/:id/reevaluate-stage3', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('onboardingProgress', itemId, (item) =>
+      recordActions.reevaluateOnboardingStage3(req.body, freshUser, item, users));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `onboardingProgress/${req.params.id}/reevaluate-stage3`, err);
   }
 });
 // POST /api/records/onboardingProgress/:id/issue-certificate — trainingManage/admin cấp Chứng Chỉ Hoàn
@@ -1431,6 +1523,37 @@ router.post('/trainingClasses/:id/end-session', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `trainingClasses/${req.params.id}/end-session`, err);
+  }
+});
+
+// POST /api/records/trainingClasses/:id/close-registration và .../reopen-registration (9/2026, vá đợt
+// audit chuyên sâu) — đổi cls.status OPEN <-> CLOSED ("còn nhận đăng ký hay không"), KHÁC hẳn 2 route
+// start-session/end-session ngay trên (vòng đời BUỔI HỌC của lớp OFFLINE). Trước đây status gán cứng
+// 'OPEN' lúc tạo và không có đường đổi, khiến 2 nhánh chặn "Lớp học này đã đóng đăng ký" trong
+// createValidation.js/bulkRegisterTrainingClass() là code chết. Gác quyền ngay trong mutator
+// (canManageTrainingClass) nên dùng chung khuôn withLockedRecordForCollection như 2 route kia.
+router.post('/trainingClasses/:id/close-registration', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.closeTrainingClassRegistration(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/close-registration`, err);
+  }
+});
+router.post('/trainingClasses/:id/reopen-registration', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('trainingClasses', itemId, (item) =>
+      recordActions.reopenTrainingClassRegistration(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingClasses/${req.params.id}/reopen-registration`, err);
   }
 });
 
@@ -1677,6 +1800,26 @@ router.post('/careerPaths/:id/confirm', async (req, res) => {
     res.json({ ok: true, item: result, confirmation });
   } catch (err) {
     handleError(res, `careerPaths/${req.params.id}/confirm`, err);
+  }
+});
+
+// POST /api/records/careerPathConfirmations/:id/revoke (9/2026, vá đợt audit chuyên sâu) — "Thu hồi xác
+// nhận" 1 mốc Lộ Trình Thăng Tiến đã bấm nhầm (trước đây không có đường lùi nào: không sửa, không xoá,
+// và còn chặn luôn việc xác nhận lại đúng người sau đó). Bản ghi đi vào Thùng Rác qua
+// deleteRecordForCollection() (khôi phục được + ghi dấu người thu hồi) thay vì xoá hẳn — luật nghiệp vụ
+// nằm ở assertCanRevokeCareerPathConfirmation() (lib/recordActions.js).
+router.post('/careerPathConfirmations/:id/revoke', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const allConfirmations = await getAllForCollection('careerPathConfirmations');
+    await deleteRecordForCollection('careerPathConfirmations', itemId,
+      (item) => recordActions.assertCanRevokeCareerPathConfirmation(freshUser, item, allConfirmations),
+      { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `careerPathConfirmations/${req.params.id}/revoke`, err);
   }
 });
 

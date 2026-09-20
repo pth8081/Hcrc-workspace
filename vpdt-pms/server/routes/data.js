@@ -23,6 +23,7 @@ const {
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterTasksForUser, sanitizeTrainingTestsForUser,
   filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser, filterTrainingDocumentProgressForUser,
+  sanitizeTrainingClassesForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
   filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser, filterBudgetLinesForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
@@ -1159,6 +1160,10 @@ router.get('/', async (req, res) => {
     // nhập — xem lib/recordViewScope.js filterTrainingTestSubmissionsForUser()/
     // filterTrainingRegistrationsForUser(). trainingClasses/trainingCourses/trainingDocuments vẫn CỐ Ý
     // công khai toàn công ty như trước (danh mục, không phải bài làm cá nhân), không đụng tới.
+    // trainingClasses: bản thân danh mục lớp vẫn CỐ Ý công khai toàn công ty (ai cũng phải thấy để tự
+    // đăng ký), chỉ rút gọn riêng field inviteList ("ai được mời") cho người không quản lý lớp — xem
+    // sanitizeTrainingClassesForUser() ở lib/recordViewScope.js.
+    if (data.trainingClasses) data.trainingClasses = sanitizeTrainingClassesForUser(data.trainingClasses, req.freshUser);
     if (data.trainingTestSubmissions) data.trainingTestSubmissions = filterTrainingTestSubmissionsForUser(data.trainingTestSubmissions, req.freshUser, data);
     if (data.trainingRegistrations) data.trainingRegistrations = filterTrainingRegistrationsForUser(data.trainingRegistrations, req.freshUser, data);
     // trainingDocumentProgress (video/PDF phải xem hết mới tính hoàn thành): giây/trang đã xem của TỪNG
@@ -1313,6 +1318,9 @@ router.get('/', async (req, res) => {
     // internal/contract/itSupport, xem MODULE_ACCESS_GATED_COLLECTIONS ở lib/recordViewScope.js), admin
     // tắt moduleAccess cho 1 user cụ thể vẫn không chặn được GET /api/data gọi thẳng — bổ sung mirror
     // gate ở đây, CHỈ cho đúng 6 module này (phần còn lại đã có quyền chi tiết riêng chặn rồi).
+    // 9/2026: danh sách collection của module "internal" đã được mở rộng đủ 16 collection của CẢ 5 sub-tab
+    // (Nhịp Sống HCRC/Đào Tạo/Tuyển Dụng/Góc Chia Sẻ/HCRC Đồng Hành) — xem chú thích tại
+    // MODULE_ACCESS_GATED_COLLECTIONS. Vòng lặp bên dưới không đổi.
     for (const [moduleKey, collections] of Object.entries(MODULE_ACCESS_GATED_COLLECTIONS)) {
       if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
       for (const col of collections) {

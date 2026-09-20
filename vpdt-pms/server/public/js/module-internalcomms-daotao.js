@@ -558,7 +558,15 @@ function renderTrainingClasses() {
     }
     const editHTML = canManageThis
       ? `<button data-op="openEditTrainingClassModal" data-arg0="${c.id}" class="bg-gray-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-gray-600 ml-1">✏️ Sửa</button>` : '';
-    const manageHTML = canManageThis ? `<button data-op="openTrainingResultsModal" data-arg0="${c.id}" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button data-op="openTrainingRosterModal" data-arg0="${c.id}" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>${qrHTML}${sessionBtnHTML}${editHTML}` : '';
+    // Đóng/Mở lại ĐĂNG KÝ (9/2026) — đổi c.status OPEN <-> CLOSED, KHÁC hẳn 2 nút Bắt Đầu/Kết Thúc Lớp ở
+    // trên (vòng đời BUỔI HỌC của lớp OFFLINE). Trước đây status không có đường đổi nào nên lớp luôn mở
+    // đăng ký tới khi hết hạn/đủ sĩ số.
+    const closeRegHTML = canManageThis
+      ? (c.status === 'CLOSED'
+        ? `<button data-op="reopenTrainingClassRegistrationAction" data-arg0="${c.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 ml-1">🔓 Mở Lại Đăng Ký</button>`
+        : `<button data-op="closeTrainingClassRegistrationAction" data-arg0="${c.id}" class="bg-slate-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-slate-700 ml-1">🔒 Đóng Đăng Ký</button>`)
+      : '';
+    const manageHTML = canManageThis ? `<button data-op="openTrainingResultsModal" data-arg0="${c.id}" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 ml-1">👥 Kết Quả (${regs.length})</button><button data-op="openTrainingRosterModal" data-arg0="${c.id}" class="bg-teal-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-teal-700 ml-1">➕ Thêm Học Viên</button>${qrHTML}${sessionBtnHTML}${closeRegHTML}${editHTML}` : '';
     const delHTML = currentUser.perms?.admin ? `<button data-op="deleteTrainingClass" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     const sessionState = getTrainingClassSessionState(c);
     const sessionBadgeCls = sessionState === 'ONGOING' ? 'bg-emerald-100 text-emerald-700' : sessionState === 'ENDED' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700';
@@ -596,6 +604,31 @@ async function endOfflineTrainingClassAction(classId) {
   const idx = DB.trainingClasses.findIndex(x => x.id === classId);
   if (idx !== -1) DB.trainingClasses[idx] = updated;
   logSystemAction('INTERNAL', 'END_TRAINING_CLASS_SESSION', `Kết thúc buổi học [${updated.code}]`, 'SUCCESS', updated.code);
+  renderTrainingClasses();
+}
+
+// Đóng/Mở lại ĐĂNG KÝ 1 lớp học (9/2026) — cùng khuôn 2 hàm session ngay trên, chỉ khác route + log.
+async function closeTrainingClassRegistrationAction(classId) {
+  if (!confirm('Đóng đăng ký lớp học này?\n\nHọc viên sẽ KHÔNG tự đăng ký thêm được nữa (Nhân Sự/giảng viên vẫn thêm học viên tay được nếu cần). Có thể mở lại sau.')) return;
+  let updated;
+  try {
+    const res = await callRecordAction('trainingClasses', classId, 'close-registration', {});
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingClasses.findIndex(x => x.id === classId);
+  if (idx !== -1) DB.trainingClasses[idx] = updated;
+  logSystemAction('INTERNAL', 'CLOSE_TRAINING_CLASS_REGISTRATION', `Đóng đăng ký lớp học [${updated.code}]`, 'SUCCESS', updated.code);
+  renderTrainingClasses();
+}
+async function reopenTrainingClassRegistrationAction(classId) {
+  let updated;
+  try {
+    const res = await callRecordAction('trainingClasses', classId, 'reopen-registration', {});
+    updated = res.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.trainingClasses.findIndex(x => x.id === classId);
+  if (idx !== -1) DB.trainingClasses[idx] = updated;
+  logSystemAction('INTERNAL', 'REOPEN_TRAINING_CLASS_REGISTRATION', `Mở lại đăng ký lớp học [${updated.code}]`, 'SUCCESS', updated.code);
   renderTrainingClasses();
 }
 
@@ -3262,8 +3295,23 @@ function renderCpEmployeeStageLookup(pathId) {
   const employee = DB.users.find(u => u.username === username);
   if (!employee) { box.innerHTML = `<div class="text-red-500 italic">Không tìm thấy nhân viên "${escapeHtml(username)}"</div>`; return; }
   const stage = findCareerPathCurrentStage(path, username);
+  // "Thu hồi xác nhận" (9/2026) — chỉ cho mốc CAO NHẤT đã xác nhận của đúng người/đúng lộ trình này
+  // (mirror luật gác tuần tự ngược ở server, xem assertCanRevokeCareerPathConfirmation()). Trước đây
+  // bấm nhầm người/nhầm cấp là không có đường lùi nào.
+  const confirmedStatuses = computeCareerPathStageStatuses(path, username).filter(s => s.confirmed);
+  const lastConfirmed = confirmedStatuses.length ? confirmedStatuses[confirmedStatuses.length - 1] : null;
+  const lastConfirmedRecord = lastConfirmed
+    ? DB.careerPathConfirmations.find(c => c.pathId === path.id && c.username === username && c.stageIndex === lastConfirmed.index)
+    : null;
+  const revokeHTML = lastConfirmedRecord
+    ? `<button data-op="revokeCareerPathConfirmationAction" data-arg0="${lastConfirmedRecord.id}" data-arg1="${pathId}" class="bg-amber-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-amber-700 whitespace-nowrap">↩️ Thu Hồi Xác Nhận Cấp ${lastConfirmed.index + 1}</button>`
+    : '';
   if (!stage) {
-    box.innerHTML = `<div class="text-emerald-700 font-bold">✅ ${escapeHtml(employee.name)} đã được xác nhận hoàn thành toàn bộ lộ trình này.</div>`;
+    box.innerHTML = `
+      <div class="bg-emerald-50 border border-emerald-200 rounded p-2 flex items-center gap-2 flex-wrap">
+        <div class="flex-1 min-w-[160px] text-emerald-700 font-bold">✅ ${escapeHtml(employee.name)} đã được xác nhận hoàn thành toàn bộ lộ trình này.</div>
+        ${revokeHTML}
+      </div>`;
     return;
   }
   const suggest = stage.total > 0 && stage.done >= stage.total
@@ -3272,8 +3320,23 @@ function renderCpEmployeeStageLookup(pathId) {
   box.innerHTML = `
     <div class="bg-emerald-50 border border-emerald-200 rounded p-2 flex items-center gap-2 flex-wrap">
       <div class="flex-1 min-w-[160px]">${escapeHtml(employee.name)} — Cấp ${stage.index + 1}: ${escapeHtml(stage.name)}${suggest}</div>
+      ${revokeHTML}
       <button data-op="confirmCareerPathAction" data-arg0="${pathId}" data-arg1="${stage.index}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">Xác Nhận Cấp ${stage.index + 1}</button>
     </div>`;
+}
+
+// Thu hồi 1 mốc xác nhận lộ trình thăng tiến đã bấm nhầm (9/2026) — bản ghi vào Thùng Rác ở server, ở
+// client chỉ cần gỡ khỏi DB.careerPathConfirmations rồi vẽ lại đúng khối tra cứu của lộ trình đó.
+async function revokeCareerPathConfirmationAction(confirmationId, pathId) {
+  if (!confirm('Thu hồi mốc xác nhận này?\n\nNhân viên sẽ quay lại trạng thái CHƯA được xác nhận cấp bậc đó (có thể xác nhận lại sau).')) return;
+  try {
+    await callRecordAction('careerPathConfirmations', confirmationId, 'revoke', {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.careerPathConfirmations = DB.careerPathConfirmations.filter(c => c.id !== confirmationId);
+  logSystemAction('INTERNAL', 'REVOKE_CAREER_PATH_CONFIRM', `Thu hồi mốc xác nhận lộ trình thăng tiến [id ${confirmationId}]`, 'SUCCESS');
+  alert('✅ Đã thu hồi mốc xác nhận!');
+  renderCareerPaths();
+  renderCpEmployeeStageLookup(pathId);
 }
 
 async function confirmCareerPathAction(pathId, stageIndex) {
@@ -3675,8 +3738,30 @@ function renderOnboardingStage3Queue() {
     const traineeUser = DB.users.find(u => u.username === p.employeeUsername);
     return canEvaluateOnboardingStage3Local(currentUser, traineeUser);
   });
+  // Danh sách "đánh giá LẠI" (9/2026) — hồ sơ đã bị chấm Không Đạt trước đây: trước khi có
+  // reevaluateOnboardingStage3() (lib/recordActions.js) đây là ngõ cụt vĩnh viễn (không cấp được chứng
+  // chỉ, cũng không đánh giá lại được). Chỉ hiện khi CHƯA cấp chứng chỉ, cùng phạm vi quyền với hàng chờ
+  // đánh giá lần đầu ở trên.
+  const failedQueue = DB.onboardingProgress.filter(p => {
+    if (p.stage3Evaluation !== 'FAILED' || p.certificateIssued) return false;
+    const traineeUser = DB.users.find(u => u.username === p.employeeUsername);
+    return canEvaluateOnboardingStage3Local(currentUser, traineeUser);
+  });
   const container = document.getElementById('onboardingStage3QueueContainer');
-  if (!queue.length) { container.innerHTML = `<div class="text-xs text-gray-500 italic bg-white rounded border p-3">Không có nhân viên nào đang chờ bạn đánh giá Giai đoạn 3.</div>`; return; }
+  if (!queue.length && !failedQueue.length) { container.innerHTML = `<div class="text-xs text-gray-500 italic bg-white rounded border p-3">Không có nhân viên nào đang chờ bạn đánh giá Giai đoạn 3.</div>`; return; }
+  const failedHTML = failedQueue.map(p => {
+    const path = DB.onboardingPaths.find(x => x.id === p.pathId);
+    return `<div class="bg-white rounded border border-red-200 p-3 space-y-2">
+      <div class="font-bold text-gray-800">${escapeHtml(p.employeeName)} <span class="text-gray-400 font-normal">(${escapeHtml(p.employeeUsername)})</span> — ${escapeHtml(p.pathName)} <span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">❌ Đã đánh giá Không Đạt</span></div>
+      <div class="text-xs text-gray-600"><b>Tiêu chí đánh giá:</b> ${escapeHtml(path?.stage3Criteria || '(chưa nhập)')}</div>
+      ${p.stage3Note ? `<div class="text-xs text-gray-600 italic">Nhận xét lần trước: "${escapeHtml(p.stage3Note)}"</div>` : ''}
+      <textarea id="os3ReNote_${p.id}" placeholder="Lý do/nhận xét cho lần đánh giá lại (bắt buộc)..." class="w-full border p-1.5 rounded text-xs h-16"></textarea>
+      <div class="flex gap-2">
+        <button data-op="submitOnboardingStage3Reevaluation" data-arg0="${p.id}" data-arg1="PASSED" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🔄 Đánh Giá Lại: Đạt</button>
+        <button data-op="submitOnboardingStage3Reevaluation" data-arg0="${p.id}" data-arg1="FAILED" class="bg-red-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-600">🔄 Đánh Giá Lại: Không Đạt</button>
+      </div>
+    </div>`;
+  }).join('');
   container.innerHTML = queue.map(p => {
     const path = DB.onboardingPaths.find(x => x.id === p.pathId);
     return `<div class="bg-white rounded border p-3 space-y-2">
@@ -3688,7 +3773,7 @@ function renderOnboardingStage3Queue() {
         <button data-op="submitOnboardingStage3Evaluation" data-arg0="${p.id}" data-arg1="FAILED" class="bg-red-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-600">❌ Không Đạt</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + failedHTML;
 }
 
 async function submitOnboardingStage3Evaluation(progressId, evaluation) {
@@ -3703,6 +3788,24 @@ async function submitOnboardingStage3Evaluation(progressId, evaluation) {
   if (idx !== -1) DB.onboardingProgress[idx] = updated;
   logSystemAction('INTERNAL', 'EVALUATE_ONBOARDING_STAGE3', `Đánh giá Giai đoạn 3 đào tạo tân binh [${updated.employeeUsername}]: ${evaluation}`, 'SUCCESS');
   alert('✅ Đã ghi nhận đánh giá Giai đoạn 3!');
+  renderOnboardingLms();
+}
+
+// Đánh giá LẠI 1 Giai đoạn 3 đã "Không đạt" (9/2026) — cùng khuôn hàm ngay trên, khác route + bắt buộc
+// nhập lý do (server cũng chặn lại nếu để trống, xem reevaluateOnboardingStage3()).
+async function submitOnboardingStage3Reevaluation(progressId, evaluation) {
+  const note = document.getElementById(`os3ReNote_${progressId}`)?.value.trim() || '';
+  if (!note) return alert('⛔ Vui lòng nhập lý do/nhận xét cho lần đánh giá lại.');
+  if (!confirm(`Đánh giá LẠI Giai đoạn 3 cho nhân viên này: ${evaluation === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}?\n\nKết quả cũ sẽ được lưu lại trong lịch sử đánh giá.`)) return;
+  let updated;
+  try {
+    const result = await callRecordAction('onboardingProgress', progressId, 'reevaluate-stage3', { evaluation, note });
+    updated = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  const idx = DB.onboardingProgress.findIndex(p => p.id === progressId);
+  if (idx !== -1) DB.onboardingProgress[idx] = updated;
+  logSystemAction('INTERNAL', 'REEVALUATE_ONBOARDING_STAGE3', `Đánh giá lại Giai đoạn 3 đào tạo tân binh [${updated.employeeUsername}]: ${evaluation}`, 'SUCCESS');
+  alert('✅ Đã ghi nhận kết quả đánh giá lại Giai đoạn 3!');
   renderOnboardingLms();
 }
 

@@ -1261,6 +1261,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { role: 'Học viên', text: 'lớp Online có tài liệu bắt buộc: bấm <b>"📚 Vào Lớp Học"</b> → xem hết từng tài liệu bắt buộc (video/PDF) — xem đủ hệ thống tự hiện nút "📝 Vào Làm Bài Test". Lớp Offline thì phải chờ giảng viên/quản lý đào tạo bấm <b>"⏹️ Kết Thúc Lớp"</b> mới hiện nút làm bài test.' },
       { role: 'Học viên', text: 'bấm <b>"📝 Vào Làm Bài Test"</b> → trả lời từng câu → nộp bài → có kết quả/điểm ngay (riêng câu Nghị Luận thì chờ giảng viên chấm tay, điểm cuối chốt sau khi chấm xong).' },
       { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận: vào tab Ngân Hàng Câu Hỏi, mục <b>"📝 Cần Chấm Nghị Luận"</b> → chấm điểm từng câu — chấm xong hệ thống tự cộng dồn và chốt Đạt/Không Đạt theo đúng Điểm Đạt Yêu Cầu TẠI THỜI ĐIỂM học viên nộp bài (từ 9/2026, không bị ảnh hưởng nếu quản lý đào tạo lỡ sửa Điểm Đạt của lớp trong lúc bài đang chờ chấm).' },
+      { role: 'Quản lý đào tạo/Giảng viên', text: 'muốn DỪNG nhận đăng ký sớm (chưa tới hạn, chưa đủ sĩ số): bấm <b>"🔒 Đóng Đăng Ký"</b> ngay trên dòng lớp — học viên không tự đăng ký được nữa (Nhân Sự/giảng viên vẫn "➕ Thêm Học Viên" tay được), bấm <b>"🔓 Mở Lại Đăng Ký"</b> để mở lại.' },
       { role: 'Quản lý đào tạo/Giảng viên', text: 'muốn thêm học viên thủ công sau khi lớp đã mở: bấm <b>"➕ Thêm Học Viên"</b> ngay trên danh sách lớp — nếu lớp có gắn Chương Trình trùng với lớp trước đó, khối gợi ý màu vàng tự hiện học viên chưa hoàn thành để thêm nhanh, bấm từng người hoặc "+ Thêm tất cả" rồi "✅ Xác Nhận Thêm Vào Lớp".' },
     ],
     footer: { left: [
@@ -1337,6 +1338,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { role: 'Quản lý đào tạo', text: 'khối "📋 Phân Công Lộ Trình Cho Nhân Viên Mới" → gõ tìm Nhân Viên, chọn Lộ Trình → bấm <b>"Phân Công"</b>.' },
       { role: 'Nhân viên mới', text: 'tự đăng ký + học các lớp thuộc đúng Chương Trình được chọn (ở tab Lớp Học, lớp PHẢI gán bài test) — % hoàn thành Giai đoạn 1/2 tự động cập nhật theo kết quả làm bài.' },
       { role: 'Nhân Sự', text: 'bấm <b>"Xác Nhận"</b> từng giai đoạn khi đã đủ điều kiện — Giai đoạn 3 do quản lý trực tiếp đánh giá theo tiêu chí đã khai, không có bài test.' },
+      { role: 'Quản lý trực tiếp', text: 'nếu Giai đoạn 3 đã chấm <b>Không Đạt</b> mà nhân viên sau đó đã cải thiện (hoặc chấm nhầm): khối "Đánh Giá Giai Đoạn 3" hiện lại hồ sơ đó với 2 nút <b>"🔄 Đánh Giá Lại: Đạt / Không Đạt"</b> — bắt buộc nhập lý do, kết quả cũ được lưu vào lịch sử đánh giá. Hồ sơ đã cấp chứng chỉ thì không đánh giá lại được nữa.' },
     ],
     footer: { left: [
       { label: 'Khác Onboarding của Nhân Sự', text: 'đây là lộ trình HỌC (nội dung/Chương Trình), khác Onboarding/Offboarding (Nhân Sự) vốn là các việc hành chính theo mốc thời gian — 2 quy trình độc lập, không tự động liên kết với nhau.' },
@@ -1354,6 +1356,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     steps: [
       { role: 'Quản lý đào tạo', text: 'vào tab <b>🪜 Lộ Trình Thăng Tiến</b> → bấm "+ Thêm Cấp Bậc" cho từng bậc theo đúng thứ tự thăng tiến, mỗi bậc chọn ít nhất 1 Chương Trình bắt buộc (giữ Ctrl/Cmd để chọn nhiều) → điền Tên Lộ Trình, Chức Danh Mục Tiêu (tuỳ chọn) → bấm <b>"Tạo Lộ Trình"</b>.' },
       { text: 'Nhân viên học và hoàn thành các lớp thuộc Chương Trình của từng bậc — chỉ xác nhận được bậc sau khi bậc liền trước đã được xác nhận Đạt, không nhảy cóc bậc.' },
+      { role: 'Quản lý đào tạo', text: 'xác nhận nhầm người/nhầm cấp: gõ lại username đó vào ô tra cứu ngay trên lộ trình → bấm <b>"↩️ Thu Hồi Xác Nhận Cấp N"</b> (chỉ thu hồi được mốc CAO NHẤT đã xác nhận — muốn thu hồi cấp dưới thì thu hồi cấp trên trước). Sau khi thu hồi có thể xác nhận lại bình thường.' },
     ],
     footer: { left: [
       { label: 'Khoá tuần tự', text: 'mỗi bậc chỉ mở khi bậc liền trước đã đạt — không thể đăng ký thẳng lên bậc cao hơn để "đi tắt".' },
