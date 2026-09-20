@@ -322,9 +322,13 @@ function closeHrpAdjustDetailModal() { document.getElementById('hrpAdjustDetailM
 async function submitHrpAdjustDetail() {
   try {
     const componentCode = document.getElementById('hrpAdjComponent').value;
-    const amount = Number(document.getElementById('hrpAdjAmount').value);
+    // LỖI ĐÃ VÁ (người dùng phản ánh, 9/2026): ô "Số Tiền" trước đây dùng type="number" thẳng —
+    // KHÔNG tự chèn dấu chấm hàng nghìn khi gõ như mọi ô nhập tiền khác trong hệ thống. Đổi sang đúng
+    // pattern money-input (core.js) + getMoneyValue() — an toàn vì amount ở đây LUÔN là số dương (kể cả
+    // ADVANCE_DEDUCT/PENALTY_DEDUCT: dấu trừ được xác định qua PAYROLL_COMPONENTS[...].type ='DEDUCTION'
+    // ở server, không phải qua dấu "-" người dùng gõ tay — xem sumDetails()/netPay ở lib/payroll.js).
+    const amount = getMoneyValue(document.getElementById('hrpAdjAmount'));
     const note = document.getElementById('hrpAdjNote').value.trim();
-    if (!Number.isFinite(amount)) return alert('⛔ Số tiền không hợp lệ');
     await hrpApiCall('PATCH', `/api/payroll/payslips/${hrpAdjustTargetPayslipId}/details`, { componentCode, amount, note });
     closeHrpAdjustDetailModal();
     await hrpRenderPeriodDetailTable();
@@ -340,9 +344,13 @@ async function openHrpRateConfigModal() {
     document.getElementById('hrpRcBhxhPercent').value = c.bhxhPercent;
     document.getElementById('hrpRcBhytPercent').value = c.bhytPercent;
     document.getElementById('hrpRcBhtnPercent').value = c.bhtnPercent;
-    document.getElementById('hrpRcBhxhCap').value = c.bhxhCap;
-    document.getElementById('hrpRcPersonalDeduction').value = c.personalDeduction;
-    document.getElementById('hrpRcDependentDeduction').value = c.dependentDeduction;
+    // LỖI ĐÃ VÁ (người dùng phản ánh, 9/2026): 3 ô này là số tiền VNĐ (trần BHXH/giảm trừ) — trước đây
+    // dùng type="number" thẳng, không tự chèn dấu chấm hàng nghìn như mọi ô nhập tiền khác. Đổi sang
+    // money-input (core.js), điền giá trị qua formatMoneyDisplay() để hiện đúng định dạng ngay lúc mở
+    // modal (không phải gõ thêm ký tự mới format lại).
+    document.getElementById('hrpRcBhxhCap').value = formatMoneyDisplay(c.bhxhCap);
+    document.getElementById('hrpRcPersonalDeduction').value = formatMoneyDisplay(c.personalDeduction);
+    document.getElementById('hrpRcDependentDeduction').value = formatMoneyDisplay(c.dependentDeduction);
     document.getElementById('hrpRcStandardWorkDaysHo').value = c.standardWorkDaysHo;
     document.getElementById('hrpRcStandardWorkDaysStore').value = c.standardWorkDaysStore;
     document.getElementById('hrpRcStandardHoursPerDay').value = c.standardHoursPerDay;
@@ -360,9 +368,9 @@ async function submitHrpRateConfig() {
       bhxhPercent: Number(document.getElementById('hrpRcBhxhPercent').value),
       bhytPercent: Number(document.getElementById('hrpRcBhytPercent').value),
       bhtnPercent: Number(document.getElementById('hrpRcBhtnPercent').value),
-      bhxhCap: Number(document.getElementById('hrpRcBhxhCap').value),
-      personalDeduction: Number(document.getElementById('hrpRcPersonalDeduction').value),
-      dependentDeduction: Number(document.getElementById('hrpRcDependentDeduction').value),
+      bhxhCap: getMoneyValue(document.getElementById('hrpRcBhxhCap')),
+      personalDeduction: getMoneyValue(document.getElementById('hrpRcPersonalDeduction')),
+      dependentDeduction: getMoneyValue(document.getElementById('hrpRcDependentDeduction')),
       standardWorkDaysHo: Number(document.getElementById('hrpRcStandardWorkDaysHo').value),
       standardWorkDaysStore: Number(document.getElementById('hrpRcStandardWorkDaysStore').value),
       standardHoursPerDay: Number(document.getElementById('hrpRcStandardHoursPerDay').value),

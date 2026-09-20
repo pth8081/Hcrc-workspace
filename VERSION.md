@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**23.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.61 (2026-09-20): Rà soát toàn hệ thống ô nhập tiền thiếu "money-input" — vá thêm 4 ô ở Lương
+
+Theo yêu cầu người dùng, rà soát lại TOÀN BỘ hệ thống tìm các ô nhập tiền
+khác cũng thiếu cơ chế `money-input` (tự chèn dấu chấm hàng nghìn) như ô "Từ
+số tiền" ở BAS (v23.60). Cách rà soát: (1) đối chiếu mọi lệnh gọi
+`getMoneyValue()` với input tương ứng — không phát hiện thiếu sót nào (toàn
+bộ 12 ô tĩnh + 6 nhóm ô động đã đúng); (2) quét toàn bộ `inputmode="numeric"`
+không có class `money-input` — chỉ toàn ô mã PIN/OTP/CAPTCHA, không phải
+tiền; (3) quét toàn bộ `type="number"` đối chiếu nhãn/id — phát hiện 4 ô
+tiền VNĐ còn dùng `type="number"` thẳng, không tự format:
+
+- **Lương → "Điều Chỉnh" (phiếu lương)**: ô "Số Tiền" (`#hrpAdjAmount`,
+  phụ cấp/thưởng/tạm ứng/phạt nhập tay) — xác nhận an toàn khi đổi: khoản
+  khấu trừ (tạm ứng/phạt) LUÔN nhập số DƯƠNG, dấu trừ do server tự xác định
+  qua `PAYROLL_COMPONENTS[...].type === 'DEDUCTION'` (không phải qua dấu "-"
+  người dùng gõ), nên đổi sang money-input (chỉ giữ chữ số) không mất khả
+  năng nhập khấu trừ.
+- **Lương → "⚠️ Cấu Hình Tỷ Lệ"**: 3 ô tiền VNĐ "Trần đóng BHXH"/"Giảm trừ
+  bản thân"/"Giảm trừ/người phụ thuộc" (`#hrpRcBhxhCap`/`#hrpRcPersonalDeduction`/
+  `#hrpRcDependentDeduction`) — 9 ô còn lại trong cùng modal (% BHXH/BHYT/BHTN,
+  ngày công chuẩn, giờ chuẩn, hệ số OT) CỐ Ý giữ nguyên `type="number"` vì là
+  phần trăm/số ngày/hệ số thập phân, không phải tiền.
+
+Cả 4 ô đổi sang `type="text" inputmode="numeric"` + class `money-input`,
+đọc/điền qua `getMoneyValue()`/`formatMoneyDisplay()` (core.js) đúng chuẩn
+dùng chung toàn hệ thống. Không đổi hành vi tính toán/lưu ở server.
 
 ## v23.60 (2026-09-20): Mua Hàng BAS — ô "Từ số tiền" thiếu định dạng dấu chấm phân cách hàng nghìn
 
