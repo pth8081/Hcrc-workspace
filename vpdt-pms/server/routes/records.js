@@ -9,6 +9,7 @@ const recordActions = require('../lib/recordActions');
 const employeeProfile = require('../lib/employeeProfile');
 const laborContract = require('../lib/laborContract');
 const attendance = require('../lib/attendance');
+const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
@@ -4533,6 +4534,17 @@ router.post('/leaveRequests/:id/approve', async (req, res) => {
         .find(b => b.employeeCode === pendingItem.employeeCode && b.year === year);
       if (balancePre) attendance.deductLeaveBalance(Object.assign({}, balancePre), pendingItem.daysCount);
     }
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): duyệt đơn nghỉ ghi LEAVE_PAID/
+    // LEAVE_UNPAID/SICK_LEAVE vào attendanceRecords cho từng ngày trong khoảng nghỉ (xem
+    // buildLeaveAttendanceRecords() bên dưới) — TRƯỚC ĐÂY không hề kiểm kỳ lương đã Chốt/Công bố, khác
+    // hẳn API máy chấm công vật lý đã kiểm đúng việc này. Chặn SỚM (trước khi chuyển đơn sang APPROVED)
+    // nếu BẤT KỲ ngày nào trong khoảng nghỉ rơi vào kỳ lương đã khoá.
+    if (pendingItem && pendingItem.leaveType !== 'HOURLY') {
+      const lockedForLeave = findLockedPayrollPeriodInRange(await getAllForCollection('payrollPeriods'), pendingItem.fromDate, pendingItem.toDate);
+      if (lockedForLeave) {
+        throw new HttpError(409, `Khoảng nghỉ (${pendingItem.fromDate} → ${pendingItem.toDate}) rơi vào kỳ lương "${lockedForLeave.periodName}" đã ${lockedForLeave.status === 'PUBLISHED' ? 'CÔNG BỐ' : 'CHỐT'} — không thể duyệt đơn ghi thêm dữ liệu chấm công cho kỳ đã khoá (liên hệ Kế Toán nếu cần mở lại kỳ lương)`);
+      }
+    }
 
     let affectedRosterIds = [];
     const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
@@ -4581,7 +4593,8 @@ router.post('/leaveRequests/:id/approve', async (req, res) => {
       }
     }
     const attendanceList = await getAllForCollection('attendanceRecords');
-    const toApply = attendance.buildLeaveAttendanceRecords(result, attendanceList);
+    const publicHolidays = (await getAppDataValue('publicHolidays')) || [];
+    const toApply = attendance.buildLeaveAttendanceRecords(result, attendanceList, publicHolidays);
     for (const { record, isNew } of toApply) {
       if (isNew) await createForCollection('attendanceRecords', () => record);
       else await withLockedRecordForCollection('attendanceRecords', record.id, () => record);
@@ -4616,6 +4629,17 @@ router.post('/attendanceRecords/:id/edit', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     if (!freshUser.perms?.admin && !freshUser.perms?.hrAttendanceManage) throw new HttpError(403, 'Bạn không có quyền sửa bản ghi chấm công');
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): TRƯỚC ĐÂY route này KHÔNG kiểm
+    // kỳ lương đã Chốt/Công bố — HR vẫn sửa được giờ vào/ra/loại bản ghi của 1 ngày đã tính lương xong.
+    // applyManualAttendanceEdit() KHÔNG cho đổi workDate (chỉ recordType/checkInTime/checkOutTime/note)
+    // nên đọc workDate TRƯỚC khi vào khoá là an toàn (không có race đổi ngày công giữa lúc đọc và lúc ghi).
+    const existingRecord = (await getAllForCollection('attendanceRecords')).find(r => r.id === itemId);
+    if (existingRecord) {
+      const lockedPeriod = findLockedPayrollPeriodForDate(await getAllForCollection('payrollPeriods'), existingRecord.workDate);
+      if (lockedPeriod) {
+        throw new HttpError(409, `Ngày ${existingRecord.workDate} thuộc kỳ lương "${lockedPeriod.periodName}" đã ${lockedPeriod.status === 'PUBLISHED' ? 'CÔNG BỐ' : 'CHỐT'} — không thể sửa dữ liệu chấm công cho kỳ đã khoá (liên hệ Kế Toán nếu cần mở lại kỳ lương)`);
+      }
+    }
     const result = await withLockedRecordForCollection('attendanceRecords', itemId, (item) =>
       attendance.applyManualAttendanceEdit(item, req.body, freshUser.username));
     res.json({ ok: true, item: result });

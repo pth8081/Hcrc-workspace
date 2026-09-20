@@ -81,6 +81,40 @@ async function partA() {
     assert(record.note.includes('quẹt máy chấm công'));
   });
 
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — #5): workDate TRƯỚC ĐÂY lấy qua
+  // ts.toISOString().slice(0,10) (LUÔN UTC) — trên máy chủ chạy giờ VN (UTC+7), mọi lượt quẹt từ
+  // 00:00-06:59 giờ VN bị gán nhầm sang workDate của NGÀY HÔM TRƯỚC. Ép process.env.TZ='Asia/Ho_Chi_Minh'
+  // để mô phỏng đúng máy chủ thật (môi trường chạy test mặc định là UTC nên không tự lộ lỗi này) — Node
+  // đọc lại TZ cho mỗi Date mới tạo nên đổi giữa chừng vẫn có tác dụng ngay (đã xác nhận thực nghiệm).
+  await test('LỖI ĐÃ VÁ (#5): applyClockPunch() quẹt 06:30 giờ VN (local) cho workDate ĐÚNG NGÀY ĐÓ, không rơi sang hôm trước', () => {
+    const originalTZ = process.env.TZ;
+    process.env.TZ = 'Asia/Ho_Chi_Minh';
+    try {
+      const workModelInfo = { workModel: 'OFFICE_HOURS' };
+      const appData = { attendanceHoConfig: { startTime: '08:00', endTime: '17:00', lateGraceMinutes: 0 }, publicHolidays: [] };
+      // 2026-03-02T06:30:00+07:00 = giờ VN 06:30 sáng Thứ 2 (2026-03-02) — quy đổi UTC là 2026-03-01T23:30:00Z
+      // (dùng offset tường minh +07:00 trong chuỗi ISO thay vì phụ thuộc TZ để dựng đúng input, TZ chỉ chi
+      // phối cách applyClockPunch() ĐỌC LẠI "ngày local" từ mốc thời gian tuyệt đối này).
+      const { record } = attendance.applyClockPunch([], 'NV1', '2026-03-02T06:30:00+07:00', workModelInfo, appData);
+      assert.strictEqual(record.workDate, '2026-03-02', 'Quẹt 06:30 giờ VN phải tính công cho ĐÚNG ngày 02/03, không phải 01/03 (lỗi UTC cũ)');
+    } finally {
+      process.env.TZ = originalTZ;
+    }
+  });
+
+  await test('LỖI ĐÃ VÁ (#5): localDateStr()/listDatesInRange() dùng giờ LOCAL, không lệch ngày khi máy chủ chạy giờ VN', () => {
+    const originalTZ = process.env.TZ;
+    process.env.TZ = 'Asia/Ho_Chi_Minh';
+    try {
+      const d = new Date('2026-03-02T00:30:00+07:00'); // 00:30 sáng giờ VN — vẫn ngày 02/03 theo giờ VN
+      assert.strictEqual(attendance.localDateStr(d), '2026-03-02');
+      const dates = attendance.listDatesInRange('2026-03-02', '2026-03-03');
+      assert.deepStrictEqual(dates, ['2026-03-02', '2026-03-03'], 'Không được lệch lùi 1 ngày (lỗi toISOString() cũ)');
+    } finally {
+      process.env.TZ = originalTZ;
+    }
+  });
+
   await test('computeAnnualLeaveDays() đủ 12 ngày (+thâm niên) nếu vào làm từ đầu năm trở về trước', () => {
     const days = attendance.computeAnnualLeaveDays('2020-01-01', 2026);
     assert(days >= 12, `Kỳ vọng >= 12, được ${days}`);
@@ -111,7 +145,36 @@ async function partA() {
 
   await test('assertValidLeaveRequest() tính đúng daysCount bao gồm cả 2 đầu mút', () => {
     const v = attendance.assertValidLeaveRequest({ leaveType: 'SICK', fromDate: '2026-03-02', toDate: '2026-03-04' });
-    assert.strictEqual(v.daysCount, 3);
+    assert.strictEqual(v.daysCount, 3, 'SICK vẫn đếm theo ngày lịch (ngoài phạm vi LỖI ĐÃ VÁ #3, xem chú thích tại countLeaveDaysExcludingRestDays())');
+  });
+
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — #3): daysCount của ANNUAL/UNPAID TRƯỚC
+  // ĐÂY đếm cả Thứ 7/CN/ngày lễ — đơn Thứ Sáu (06/03) -> Thứ Hai (09/03, 4 ngày LỊCH) bị trừ đủ 4 ngày dù
+  // chỉ có 2 ngày làm việc thật (06/03 T6 + 09/03 T2, loại 07-08/03 T7-CN).
+  await test('LỖI ĐÃ VÁ (#3): ANNUAL Thứ Sáu->Thứ Hai chỉ trừ 2 ngày làm việc (không phải 4 ngày lịch)', () => {
+    const v = attendance.assertValidLeaveRequest({ leaveType: 'ANNUAL', fromDate: '2026-03-06', toDate: '2026-03-09' });
+    assert.strictEqual(v.daysCount, 2, 'Phải loại đúng Thứ 7 (07/03) + Chủ Nhật (08/03), chỉ còn 06/03 (T6) + 09/03 (T2)');
+  });
+
+  await test('LỖI ĐÃ VÁ (#3): UNPAID cũng loại Thứ 7/CN giống ANNUAL; SICK/PERSONAL giữ nguyên đếm theo ngày lịch (ngoài phạm vi vá)', () => {
+    const vUnpaid = attendance.assertValidLeaveRequest({ leaveType: 'UNPAID', fromDate: '2026-03-06', toDate: '2026-03-09' });
+    assert.strictEqual(vUnpaid.daysCount, 2, 'UNPAID cùng công thức loại Thứ 7/CN như ANNUAL');
+    const vPersonal = attendance.assertValidLeaveRequest({ leaveType: 'PERSONAL', fromDate: '2026-03-06', toDate: '2026-03-09' });
+    assert.strictEqual(vPersonal.daysCount, 4, 'PERSONAL KHÔNG nằm trong phạm vi vá #3 — vẫn đếm theo ngày lịch như trước');
+  });
+
+  await test('LỖI ĐÃ VÁ (#3): ANNUAL/UNPAID loại thêm publicHolidays đã cấu hình, không chỉ Thứ 7/CN', () => {
+    const holidays = [{ date: '2026-03-09', name: 'Nghỉ lễ test' }]; // 09/03 vốn là Thứ 2 (ngày làm việc) -> nếu là ngày lễ thì cũng phải loại
+    const v = attendance.assertValidLeaveRequest({ leaveType: 'ANNUAL', fromDate: '2026-03-06', toDate: '2026-03-09' }, { publicHolidays: holidays });
+    assert.strictEqual(v.daysCount, 1, 'Loại cả Thứ 7 (07/03) + CN (08/03) + ngày lễ cấu hình (09/03) -> chỉ còn 06/03');
+  });
+
+  await test('LỖI ĐÃ VÁ (#3): buildLeaveAttendanceRecords() KHÔNG sinh bản ghi LEAVE_UNPAID/LEAVE_PAID cho Thứ 7/CN (payroll đếm thẳng số bản ghi để trừ lương)', () => {
+    const request = { employeeCode: 'NV1', leaveType: 'UNPAID', fromDate: '2026-03-06', toDate: '2026-03-09', workModel: 'OFFICE_HOURS' };
+    const results = attendance.buildLeaveAttendanceRecords(request, []);
+    assert.strictEqual(results.length, 2, 'Chỉ sinh 2 bản ghi (06/03 + 09/03), KHÔNG sinh cho 07-08/03 (T7-CN)');
+    assert.deepStrictEqual(results.map(r => r.record.workDate).sort(), ['2026-03-06', '2026-03-09']);
+    assert.ok(results.every(r => r.record.recordType === 'LEAVE_UNPAID'));
   });
 
   await test('canApproveLeaveRequest() admin/hrAttendanceManage luôn true, không cần isManagerOf', () => {
@@ -252,7 +315,11 @@ async function partB() {
   const express = require('express');
   const http = require('http');
 
-  const STORE = { attendanceRecords: [], leaveBalances: [], leaveRequests: [], shiftRoster: [], shiftSwapRequests: [], hrProcesses: [] };
+  // payrollPeriods (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #6): 3 đường ghi
+  // attendanceRecords ở routes/records.js/lib/createValidation.js giờ đều gọi
+  // findLockedPayrollPeriodForDate()/findLockedPayrollPeriodInRange() (lib/payroll.js), cần đọc
+  // collection payrollPeriods — thêm vào STORE để mock getAllForCollection('payrollPeriods') không vỡ.
+  const STORE = { attendanceRecords: [], leaveBalances: [], leaveRequests: [], shiftRoster: [], shiftSwapRequests: [], hrProcesses: [], payrollPeriods: [] };
   let nextId = 1;
   function stubModule(relPath, exportsObj) {
     const full = require.resolve(path.join(__dirname, '..', relPath));
@@ -389,6 +456,22 @@ async function partB() {
       assert.strictEqual(r.status, 400);
     });
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #15): đơn vắt qua năm dương lịch bị
+    // chặn 400 vì toàn bộ số ngày trừ vào quỹ phép năm của fromDate — không có bảng phép năm 2098 nào
+    // được tạo (remaining=0) nên chắc chắn bị chặn dù không liên quan tới quỹ phép NĂM SAU (2099).
+    await test('LỖI ĐÃ VÁ (#15): đơn ANNUAL vắt qua năm dương lịch bị chặn 400 (không đủ quỹ) -> thông báo lỗi gợi ý tách đơn theo năm', async () => {
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2098-12-29', toDate: '2099-01-02', reason: 'x' });
+      assert.strictEqual(r.status, 400, JSON.stringify(r.json));
+      assert(r.json.error.includes('VẮT QUA NĂM DƯƠNG LỊCH'), `Thông báo lỗi phải nêu rõ đơn vắt qua năm, thực tế: ${r.json.error}`);
+      assert(r.json.error.includes('tách thành 2 đơn'), `Thông báo lỗi phải gợi ý tách đơn theo năm, thực tế: ${r.json.error}`);
+    });
+
+    await test('LỖI ĐÃ VÁ (#15): đơn ANNUAL KHÔNG vắt qua năm (cùng năm) bị chặn 400 vẫn giữ thông báo CŨ, không có gợi ý tách đơn thừa', async () => {
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2098-03-02', toDate: '2098-03-03', reason: 'x' });
+      assert.strictEqual(r.status, 400, JSON.stringify(r.json));
+      assert(!r.json.error.includes('VẮT QUA NĂM DƯƠNG LỊCH'), `Đơn cùng năm không được chèn nhầm gợi ý tách năm, thực tế: ${r.json.error}`);
+    });
+
     await test('POST /api/create/leaveRequests — trùng khoảng ngày với đơn PENDING khác bị chặn 409', async () => {
       const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'SICK', fromDate: '2026-03-03', toDate: '2026-03-03', reason: 'x' });
       assert.strictEqual(r.status, 409);
@@ -406,6 +489,21 @@ async function partB() {
     await test('POST /api/create/leaveRequests — HOURLY quá số giờ chuẩn/ngày bị chặn 400', async () => {
       const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'HOURLY', fromDate: '2026-03-11', startTime: '08:00', endTime: '18:00', reason: 'x' });
       assert.strictEqual(r.status, 400);
+    });
+
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #13): so trùng khoảng nghỉ TRƯỚC ĐÂY
+    // chỉ so fromDate/toDate — 2 đơn HOURLY CÙNG 1 NGÀY (2026-03-10, đã có đơn sáng 08:00-10:00 ở test
+    // phía trên) nhưng khung giờ KHÔNG chồng lấn thật (chiều 14:00-16:00) vẫn bị chặn nhầm 409.
+    await test('LỖI ĐÃ VÁ (#13): 2 đơn HOURLY CÙNG 1 ngày nhưng khung giờ KHÔNG chồng lấn (sáng/chiều) -> KHÔNG bị chặn nhầm', async () => {
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'HOURLY', fromDate: '2026-03-10', startTime: '14:00', endTime: '16:00', reason: 'Việc riêng buổi chiều' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    });
+
+    await test('LỖI ĐÃ VÁ (#13): 2 đơn HOURLY CÙNG 1 ngày với khung giờ THẬT SỰ chồng lấn vẫn bị chặn 409 (không nới lỏng quá tay)', async () => {
+      // Đơn sáng 08:00-10:00 đã có sẵn ở test trên (cùng ngày 2026-03-10) — nộp thêm 09:00-11:00 (chồng
+      // lấn 09:00-10:00) phải vẫn bị chặn.
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'HOURLY', fromDate: '2026-03-10', startTime: '09:00', endTime: '11:00', reason: 'x' });
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
     });
 
     await test('POST /api/create/leaveRequests — PERSONAL (nghỉ việc riêng) tạo được, KHÔNG bị tính vào phép năm', async () => {
@@ -434,12 +532,19 @@ async function partB() {
     // lệ RIÊNG LẺ lúc tạo (usedDays=2/12 tại thời điểm tạo cả 2), nhưng duyệt CẢ 2 thì vượt quỹ phép
     // (2+6+6=14 > 12) — TRƯỚC ĐÂY không hề bị chặn ở bước duyệt thứ 2, âm thầm ghi usedDays=14.
     let overQuotaLeaveId1, overQuotaLeaveId2;
-    await test('POST /api/create/leaveRequests — 2 đơn 6 ngày không trùng ngày, đều hợp lệ RIÊNG LẺ lúc tạo (còn 10/12 ngày)', async () => {
-      const r1 = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-06-01', toDate: '2026-06-06', reason: 'Đơn 1' });
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): daysCount của ANNUAL/UNPAID giờ loại
+    // trừ Thứ 7/CN (xem countLeaveDaysExcludingRestDays() ở lib/attendance.js) — 2 khoảng ngày dưới đây
+    // ĐÃ ĐỔI từ 06-01→06-06/07-01→07-06 (6 ngày LỊCH, có dính Thứ 7) sang 06-01→06-08/07-01→07-08 (6 ngày
+    // LÀM VIỆC thật — Mon-Fri + Mon tuần sau, tính bằng node script) để giữ nguyên đúng "6 ngày" như thiết
+    // kế test gốc, không đổi ý nghĩa của kịch bản vượt quỹ phép bên dưới.
+    await test('POST /api/create/leaveRequests — 2 đơn 6 ngày làm việc không trùng ngày, đều hợp lệ RIÊNG LẺ lúc tạo (còn 10/12 ngày)', async () => {
+      const r1 = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-06-01', toDate: '2026-06-08', reason: 'Đơn 1' });
       assert.strictEqual(r1.status, 200, JSON.stringify(r1.json));
+      assert.strictEqual(r1.json.item.daysCount, 6, 'Loại 2 ngày cuối tuần (06-06/06-07) khỏi 8 ngày lịch -> đúng 6 ngày làm việc');
       overQuotaLeaveId1 = r1.json.item.id;
-      const r2 = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-07-01', toDate: '2026-07-06', reason: 'Đơn 2' });
+      const r2 = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-07-01', toDate: '2026-07-08', reason: 'Đơn 2' });
       assert.strictEqual(r2.status, 200, JSON.stringify(r2.json));
+      assert.strictEqual(r2.json.item.daysCount, 6, 'Loại 2 ngày cuối tuần (07-04/07-05) khỏi 8 ngày lịch -> đúng 6 ngày làm việc');
       overQuotaLeaveId2 = r2.json.item.id;
     });
     await test('POST /api/records/leaveRequests/:id/approve — duyệt đơn 1 (6 ngày) thành công, usedDays 2 -> 8', async () => {
@@ -466,10 +571,11 @@ async function partB() {
     });
 
     await test('POST /api/records/leaveRequests/:id/cancel — không được huỷ đơn của người khác', async () => {
-      // Ngày 2026-08-01: CỐ Ý không trùng đơn 1 (2026-06-01→06) đã được duyệt ở trên — từ đợt rà soát
+      // Ngày 2026-08-03 (Thứ 2 — dùng ngày làm việc thật, tránh daysCount=0 sau lỗi đã vá #3 ở
+      // lib/attendance.js): CỐ Ý không trùng đơn 1 (2026-06-01→08) đã được duyệt ở trên — từ đợt rà soát
       // chuyên sâu cụm Nhân Sự 10/2026, kiểm tra chồng lấn khi nộp đơn xét CẢ đơn ĐÃ DUYỆT (trước đây
       // chỉ xét PENDING), nên ngày cũ (2026-06-01) nay bị chặn 409 đúng như thiết kế.
-      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'UNPAID', fromDate: '2026-08-01', toDate: '2026-08-01', reason: 'x' });
+      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'UNPAID', fromDate: '2026-08-03', toDate: '2026-08-03', reason: 'x' });
       assert.strictEqual(create.status, 200, JSON.stringify(create.json));
       const r = await call('mgr1', 'POST', `/api/records/leaveRequests/${create.json.item.id}/cancel`, {});
       assert.strictEqual(r.status, 403);
@@ -478,7 +584,9 @@ async function partB() {
     // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 3, 9/2026): huỷ 1 đơn ANNUAL ĐÃ DUYỆT (ngày nghỉ chưa tới) trước
     // đây chỉ đổi status='CANCELLED', không hoàn quỹ phép/dọn AttendanceRecords LEAVE_PAID đã sinh — NV
     // mất vĩnh viễn 2 ngày phép "xin rồi huỷ" dù chưa hề nghỉ. Dùng năm 2099 (bảng phép năm riêng) để
-    // chắc chắn ngày nghỉ "chưa tới" bất kể thời điểm CHẠY test là khi nào.
+    // chắc chắn ngày nghỉ "chưa tới" bất kể thời điểm CHẠY test là khi nào. 12/13-01-2099 CỐ Ý là Thứ 2/Thứ
+    // 3 (2 ngày LÀM VIỆC liên tiếp) — sau LỖI ĐÃ VÁ #3 (daysCount loại Thứ 7/CN), dùng ngày cuối tuần ở đây
+    // sẽ làm daysCount=0 và bị chặn tạo đơn.
     let approvedThenCancelledLeaveId, futureBalanceId;
     await test('POST /api/create/leaveBalances — HR tạo bảng phép năm 2099 cho NV1 (để test huỷ đơn đã duyệt)', async () => {
       const r = await call('hr1', 'POST', '/api/create/leaveBalances', { employeeCode: 'NV1', year: 2099, totalDays: 12 });
@@ -486,13 +594,13 @@ async function partB() {
       futureBalanceId = r.json.item.id;
     });
     await test('POST /api/create/leaveRequests + approve — đơn ANNUAL 2 ngày trong tương lai xa (2099)', async () => {
-      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2099-01-10', toDate: '2099-01-11', reason: 'Test huỷ sau duyệt' });
+      const create = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2099-01-12', toDate: '2099-01-13', reason: 'Test huỷ sau duyệt' });
       assert.strictEqual(create.status, 200, JSON.stringify(create.json));
       approvedThenCancelledLeaveId = create.json.item.id;
       const approve = await call('mgr1', 'POST', `/api/records/leaveRequests/${approvedThenCancelledLeaveId}/approve`, {});
       assert.strictEqual(approve.status, 200, JSON.stringify(approve.json));
       assert.strictEqual(STORE.leaveBalances.find(b => b.id === futureBalanceId).usedDays, 2);
-      const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.workDate >= '2099-01-10' && r.workDate <= '2099-01-11');
+      const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.workDate >= '2099-01-12' && r.workDate <= '2099-01-13');
       assert.strictEqual(attRecords.length, 2);
       assert.ok(attRecords.every(r => r.recordType === 'LEAVE_PAID'));
     });
@@ -501,7 +609,7 @@ async function partB() {
       assert.strictEqual(cancel.status, 200, JSON.stringify(cancel.json));
       assert.strictEqual(cancel.json.item.status, 'CANCELLED');
       assert.strictEqual(STORE.leaveBalances.find(b => b.id === futureBalanceId).usedDays, 0, 'Phải hoàn lại đúng 2 ngày (2 -> 0)');
-      const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.workDate >= '2099-01-10' && r.workDate <= '2099-01-11');
+      const attRecords = STORE.attendanceRecords.filter(r => r.employeeCode === 'NV1' && r.workDate >= '2099-01-12' && r.workDate <= '2099-01-13');
       assert.strictEqual(attRecords.length, 2);
       assert.ok(attRecords.every(r => r.recordType === 'WORK' && r.checkInTime === null), 'Phải dọn về WORK rỗng, không còn ghi "nghỉ phép có lương"');
     });
@@ -557,6 +665,39 @@ async function partB() {
       assert.strictEqual(r1.status, 403, 'HR (không phải admin) không được xoá');
       const r2 = await call('admin', 'POST', `/api/records/attendanceRecords/${attendanceRecordId}/delete`, {});
       assert.strictEqual(r2.status, 200, JSON.stringify(r2.json));
+    });
+
+    // ===================== LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình — #6) =====
+    // Kỳ lương đã Chốt/Công bố TRƯỚC ĐÂY chỉ chặn được ở API máy chấm công vật lý (routes/attendanceClockPunch.js)
+    // — 3 đường ghi attendanceRecords khác trong CHÍNH APP (tạo công tay/duyệt đơn nghỉ/sửa tay) hoàn
+    // toàn không kiểm. Khoá Tháng 02/2026 (FINALIZED) rồi xác nhận CẢ 3 đường đều bị chặn 409.
+    await test('LỖI ĐÃ VÁ (#6): tạo công tay cho ngày thuộc kỳ lương đã CHỐT bị chặn 409', async () => {
+      const r = await call('hr1', 'POST', '/api/create/attendanceRecords', { employeeCode: 'NV1', workDate: '2026-02-11', recordTypeInput: 'WORK' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json), 'Trước khi khoá kỳ lương, tạo công tay bình thường phải thành công');
+      STORE.payrollPeriods.push({ id: 9001, periodYear: 2026, periodMonth: 2, periodName: 'Lương Tháng 02/2026', status: 'FINALIZED' });
+      const r2 = await call('hr1', 'POST', '/api/create/attendanceRecords', { employeeCode: 'NV1', workDate: '2026-02-12', recordTypeInput: 'WORK' });
+      assert.strictEqual(r2.status, 409, JSON.stringify(r2.json));
+      assert(/CHỐT|khoá/.test(r2.json.error), `Thông báo lỗi phải nói rõ kỳ lương đã khoá, thực tế: ${r2.json.error}`);
+    });
+
+    await test('LỖI ĐÃ VÁ (#6): sửa tay 1 bản ghi công thuộc kỳ lương đã CHỐT bị chặn 409 (dùng lại bản ghi 2026-02-11 vừa tạo TRƯỚC khi khoá)', async () => {
+      const lockedMonthRecordId = STORE.attendanceRecords.find(r => r.employeeCode === 'NV1' && r.workDate === '2026-02-11').id;
+      const r = await call('hr1', 'POST', `/api/records/attendanceRecords/${lockedMonthRecordId}/edit`, { note: 'Thử sửa sau khi khoá' });
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+    });
+
+    let lockedLeaveRequestId;
+    await test('Chuẩn bị dữ liệu: nộp đơn ANNUAL cho khoảng ngày thuộc kỳ lương SẼ khoá (nộp đơn KHÔNG bị chặn — chỉ chặn lúc DUYỆT)', async () => {
+      const r = await call('staff1', 'POST', '/api/create/leaveRequests', { leaveType: 'ANNUAL', fromDate: '2026-02-16', toDate: '2026-02-17', reason: 'Test kỳ lương khoá' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      lockedLeaveRequestId = r.json.item.id;
+    });
+
+    await test('LỖI ĐÃ VÁ (#6): duyệt đơn nghỉ rơi vào kỳ lương đã CHỐT bị chặn 409, KHÔNG chuyển APPROVED', async () => {
+      const r = await call('mgr1', 'POST', `/api/records/leaveRequests/${lockedLeaveRequestId}/approve`, {});
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+      const req = STORE.leaveRequests.find(x => x.id === lockedLeaveRequestId);
+      assert.strictEqual(req.status, 'PENDING', 'Đơn phải giữ nguyên PENDING, không được chuyển APPROVED khi bị chặn vì kỳ lương khoá');
     });
   } finally {
     server.close();

@@ -177,6 +177,10 @@ router.post('/:module', async (req, res) => {
     if (moduleKey === 'attendanceRecords' || moduleKey === 'leaveRequests') {
       appData.hrProcesses = await getAllForCollection('hrProcesses');
     }
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): attendanceRecords.extraValidate
+    // (tạo công tay) cần payrollPeriods để chặn tạo công cho ngày rơi vào kỳ lương đã Chốt/Công bố (cùng
+    // kiểm tra đã có ở API máy chấm công vật lý — xem findLockedPayrollPeriodForDate() ở lib/payroll.js).
+    if (moduleKey === 'attendanceRecords') appData.payrollPeriods = await getAllForCollection('payrollPeriods');
     if (moduleKey === 'leaveRequests') appData.leaveBalances = await getAllForCollection('leaveBalances');
     if (moduleKey === 'shiftSwapRequests') appData.shiftRoster = await getAllForCollection('shiftRoster');
     // rebateTerms (Mua Hàng > BAS): cần danh sách NCC để kiểm vendorId có thật + còn ACTIVE không (xem
@@ -282,7 +286,16 @@ router.post('/:module', async (req, res) => {
       }
       const reusableDraft = existing.status === 'DRAFT' && existing.processId == null;
       if (existing.status !== 'INACTIVE' && !reusableDraft) {
-        return res.status(409).json({ error: `Mã Nhân Viên "${clientProvidedEmployeeCode}" đang gắn với 1 hồ sơ nhân sự khác đang hoạt động — chỉ tạo Onboarding theo mã cũ cho hồ sơ ĐÃ NGHỈ VIỆC (Tái Tuyển). Để trống ô Mã Nhân Viên nếu đây là nhân viên mới.` });
+        // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #12): 2 đường "Tái Tuyển" xung đột
+        // nhau (route ở Hồ Sơ Nhân Sự — POST .../by-code/:code/rehire — đặt hồ sơ ACTIVE NGAY; đường
+        // Onboarding này lại đòi hồ sơ đang INACTIVE) — nếu HR lỡ dùng Tái Tuyển ở Hồ Sơ Nhân Sự TRƯỚC,
+        // hồ sơ đã chuyển ACTIVE nên quay lại đây tạo Onboarding sẽ rơi đúng vào nhánh lỗi này mà không
+        // biết vì sao/phải làm gì tiếp — thêm hướng dẫn cụ thể cho ĐÚNG trường hợp ACTIVE (khả năng cao
+        // nhất là đã lỡ tái tuyển sai chỗ) thay vì câu chung chung.
+        const guidance = existing.status === 'ACTIVE'
+          ? `Có thể hồ sơ này đã được Tái Tuyển qua màn Hồ Sơ Nhân Sự trước đó — vui lòng dùng chức năng "🔍 Kiểm Tra Nhân Sự Cũ" NGAY TRONG form Onboarding này để tái tuyển (giữ đúng quy trình checklist), thay vì bấm Tái Tuyển ở Hồ Sơ Nhân Sự trước rồi mới quay lại đây.`
+          : 'Để trống ô Mã Nhân Viên nếu đây là nhân viên mới.';
+        return res.status(409).json({ error: `Mã Nhân Viên "${clientProvidedEmployeeCode}" đang gắn với 1 hồ sơ nhân sự khác đang hoạt động — chỉ tạo Onboarding theo mã cũ cho hồ sơ ĐÃ NGHỈ VIỆC (Tái Tuyển). ${guidance}` });
       }
     }
     if (isOnboarding && !clientProvidedEmployeeCode) {

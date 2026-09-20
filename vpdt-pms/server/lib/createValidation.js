@@ -3197,7 +3197,8 @@ const CREATE_MODULE_CONFIGS = {
 
       // Quản lý trực tiếp (tuỳ chọn cả 2 loại) — chủ nhân của các task nhãn "MANAGER" (xem canActOnHrTask()
       // ở lib/recordActions.js). Không bắt buộc: nếu để trống, task MANAGER chỉ hrOnboardingManage/
-      // hrOffboardingManage/hrViewAll/admin mới thao tác được.
+      // hrOffboardingManage/hrProcessManage/admin mới thao tác được (hrViewAll KHÔNG còn bypass — xem
+      // chú thích LỖI ĐÃ VÁ tại canActOnHrTask()).
       const directManagerUsername = String(payload.directManagerUsername || '').trim();
       if (directManagerUsername) {
         const mgr = (appData?.users || []).find(u => u.username === directManagerUsername && u.active !== false);
@@ -3378,6 +3379,15 @@ const CREATE_MODULE_CONFIGS = {
       }
       const base = attendance.defaultAttendanceRecord(employeeCode, String(payload.workDate || '').trim(), info.workModel);
       if (Number.isNaN(new Date(base.workDate).getTime())) throw new CreateError(400, 'Ngày làm việc không hợp lệ');
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): tạo công tay TRƯỚC ĐÂY không
+      // hề kiểm kỳ lương đã Chốt/Công bố — HR vẫn bổ sung được công cho ngày đã tính lương xong, khác hẳn
+      // API máy chấm công vật lý đã kiểm đúng việc này (xem findLockedPayrollPeriodForDate() ở
+      // lib/payroll.js, dùng chung — appData.payrollPeriods do routes/create.js đọc sẵn truyền vào).
+      const { findLockedPayrollPeriodForDate } = require('./payroll');
+      const lockedPeriod = findLockedPayrollPeriodForDate(appData?.payrollPeriods, base.workDate);
+      if (lockedPeriod) {
+        throw new CreateError(409, `Ngày ${base.workDate} thuộc kỳ lương "${lockedPeriod.periodName}" đã ${lockedPeriod.status === 'PUBLISHED' ? 'CÔNG BỐ' : 'CHỐT'} — không thể bổ sung công tay cho kỳ đã khoá (liên hệ Kế Toán nếu cần mở lại kỳ lương)`);
+      }
       Object.assign(payload, base);
       const patch = attendance.assertValidManualAttendanceEdit({ recordType: payload.recordTypeInput, checkInTime: payload.checkInTimeInput, checkOutTime: payload.checkOutTimeInput, note: payload.noteInput });
       Object.assign(payload, patch);
@@ -3431,7 +3441,18 @@ const CREATE_MODULE_CONFIGS = {
         const balance = (appData.leaveBalances || []).find(b => b.employeeCode === profile.employeeCode && b.year === year);
         const remaining = balance ? (balance.totalDays - balance.usedDays) : 0;
         if (remaining < valid.daysCount) {
-          throw new CreateError(400, `Số ngày phép năm ${year} còn lại (${remaining}) không đủ cho đơn ${valid.daysCount} ngày này`);
+          // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #15): đơn nghỉ VẮT QUA NĂM DƯƠNG
+          // LỊCH (VD 28/12 -> 03/01 năm sau) trước đây trừ TOÀN BỘ số ngày vào quỹ phép của năm fromDate
+          // (`year` ở trên luôn lấy theo fromDate) — có thể bị chặn 409 dù quỹ phép năm SAU vẫn còn đủ cho
+          // phần ngày rơi vào năm đó. QUYẾT ĐỊNH PHẠM VI (mức Thấp, sửa tối thiểu — KHÔNG tự làm phức tạp
+          // hoá logic phân bổ trừ theo từng năm, tránh rủi ro ngoài phạm vi xác nhận): khi bị chặn ĐÚNG vì
+          // lý do này (đơn vắt qua năm), thêm hướng dẫn rõ ràng gợi ý tách đơn theo năm dương lịch thay vì
+          // chỉ báo "không đủ ngày" chung chung khiến nhân viên không hiểu vì sao dù quỹ phép có vẻ còn đủ.
+          const crossesYear = valid.toDate && new Date(valid.toDate).getFullYear() !== year;
+          const guidance = crossesYear
+            ? ` — đơn này VẮT QUA NĂM DƯƠNG LỊCH (${year} → ${new Date(valid.toDate).getFullYear()}), toàn bộ số ngày đang bị trừ vào quỹ phép năm ${year} dù 1 phần ngày rơi vào năm sau; vui lòng tách thành 2 đơn riêng theo từng năm dương lịch (VD 1 đơn tới hết 31/12/${year}, 1 đơn từ 01/01/${new Date(valid.toDate).getFullYear()}) để mỗi đơn trừ đúng vào quỹ phép của năm tương ứng`
+            : '';
+          throw new CreateError(400, `Số ngày phép năm ${year} còn lại (${remaining}) không đủ cho đơn ${valid.daysCount} ngày này${guidance}`);
         }
       }
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): trước đây CHỈ xét đơn đang
@@ -3440,9 +3461,25 @@ const CREATE_MODULE_CONFIGS = {
       // POST /leaveRequests/:id/approve) + AttendanceRecords bị ghi đè lặp. Xét CẢ APPROVED (đơn đã bị
       // huỷ/từ chối thì không tính — khoảng ngày đó thực sự trống trở lại).
       const BLOCKING_OVERLAP_STATUSES = ['PENDING', 'APPROVED'];
-      const overlapped = (collection || []).find(r => r.employeeCode === profile.employeeCode
-        && BLOCKING_OVERLAP_STATUSES.includes(r.status)
-        && !(valid.toDate < r.fromDate || valid.fromDate > r.toDate));
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #13): so trùng TRƯỚC ĐÂY chỉ so
+      // fromDate/toDate (cả 2 ngày, không có khái niệm giờ) — 2 đơn "Nghỉ theo giờ" (HOURLY) TRONG CÙNG 1
+      // NGÀY nhưng khác khung giờ thật (VD sáng 08:00-10:00 và chiều 14:00-16:00) vẫn bị chặn nhầm 409 vì
+      // cùng fromDate=toDate=ngày đó. Khi CẢ 2 bên đều là HOURLY và cùng 1 ngày, so thêm theo khung giờ cụ
+      // thể (startTime/endTime) — chỉ coi là trùng nếu 2 khung giờ THẬT SỰ chồng lấn nhau; mọi trường hợp
+      // khác (ít nhất 1 bên là đơn theo NGÀY, hoặc khác ngày) giữ nguyên hành vi so theo fromDate/toDate cũ.
+      const overlapped = (collection || []).find(r => {
+        if (r.employeeCode !== profile.employeeCode || !BLOCKING_OVERLAP_STATUSES.includes(r.status)) return false;
+        const dateOverlap = !(valid.toDate < r.fromDate || valid.fromDate > r.toDate);
+        if (!dateOverlap) return false;
+        if (valid.leaveType === 'HOURLY' && r.leaveType === 'HOURLY' && valid.fromDate === r.fromDate) {
+          const newStart = attendance.timeStrToMinutes(valid.startTime), newEnd = attendance.timeStrToMinutes(valid.endTime);
+          const oldStart = attendance.timeStrToMinutes(r.startTime), oldEnd = attendance.timeStrToMinutes(r.endTime);
+          if (newStart != null && newEnd != null && oldStart != null && oldEnd != null) {
+            return !(newEnd <= oldStart || newStart >= oldEnd);
+          }
+        }
+        return true;
+      });
       if (overlapped) {
         throw new CreateError(409, overlapped.status === 'APPROVED'
           ? `Bạn đã có 1 đơn nghỉ phép ĐÃ ĐƯỢC DUYỆT (${overlapped.fromDate} → ${overlapped.toDate}) trùng khoảng ngày này — huỷ đơn cũ trước nếu muốn nộp lại`

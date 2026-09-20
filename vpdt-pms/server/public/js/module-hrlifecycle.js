@@ -27,9 +27,11 @@ const HR_PROCESS_STATUS_BADGES = {
   CANCELLED: '<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã huỷ</span>'
 };
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): hrViewAll KHÔNG còn bypass thao tác ghi —
+// tách ra hrProcessManage riêng, khớp đúng canManageHrProcess()/canActOnHrTask() ở lib/recordActions.js.
 function canManageHrLifecycleClient(processType) {
   if (!currentUser) return false;
-  if (currentUser.perms?.admin || currentUser.perms?.hrViewAll) return true;
+  if (currentUser.perms?.admin || currentUser.perms?.hrProcessManage) return true;
   return !!(processType === 'ONBOARDING' ? currentUser.perms?.hrOnboardingManage : currentUser.perms?.hrOffboardingManage);
 }
 
@@ -369,7 +371,7 @@ function renderHrProcessDetailBody(item) {
 
   const taskRows = (item.tasks || []).map(t => {
     const overdue = t.status === 'PENDING' && t.dueDate < today;
-    const canActThis = !!currentUser && (currentUser.perms?.admin || currentUser.perms?.hrViewAll ||
+    const canActThis = !!currentUser && (currentUser.perms?.admin || currentUser.perms?.hrProcessManage ||
       t.assignedToUsername === currentUser.username ||
       (!t.assignedToUsername && (
         ((t.department === 'HR' || t.department === 'ADMIN') && canManageHrLifecycleClient(item.processType)) ||

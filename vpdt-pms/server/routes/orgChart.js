@@ -166,10 +166,13 @@ router.delete('/versions/:id/nodes/:nodeId', async (req, res) => {
   if (!requireManageTree(req, res)) return;
   try {
     const users = (await getAppDataValue('users')) || [];
+    // employeeProfiles (LỖI ĐÃ VÁ #9, xem chú thích tại resolvePositionOccupants() ở lib/orgChart.js) —
+    // không chặn xoá vị trí nhầm vì "người giữ" thật ra đã hoàn tất Offboarding.
+    const employeeProfiles = (await getAppDataValue('employeeProfiles')) || [];
     let deletedIds;
     await withLockedAppDataValue('orgChartVersions', (list) => {
       const version = orgChart.requireVersion(list, Number(req.params.id));
-      deletedIds = orgChart.deleteNodeCascade(version, Number(req.params.nodeId), users);
+      deletedIds = orgChart.deleteNodeCascade(version, Number(req.params.nodeId), users, employeeProfiles);
       return list;
     });
     res.json({ ok: true, deletedNodeIds: deletedIds });
@@ -187,7 +190,8 @@ router.post('/versions/:id/validate', async (req, res) => {
     const version = orgChart.requireVersion(list, Number(req.params.id));
     const applied = orgChart.getAppliedVersion(list);
     const users = (await getAppDataValue('users')) || [];
-    const issues = orgChart.computeValidationIssues(version, applied, users);
+    const employeeProfiles = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
+    const issues = orgChart.computeValidationIssues(version, applied, users, employeeProfiles);
     res.json({ valid: issues.length === 0, issues });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -202,8 +206,9 @@ router.post('/versions/:id/apply', async (req, res) => {
   let appliedVersion;
   try {
     const usersSnapshot = (await getAppDataValue('users')) || []; // chỉ để validate — bước ghi managerUsername thật ở dưới tự đọc lại bản mới nhất trong khoá riêng
+    const employeeProfilesSnapshot = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
     await withLockedAppDataValue('orgChartVersions', (list) => {
-      appliedVersion = orgChart.applyVersionInPlace(list, Number(req.params.id), usersSnapshot, req.freshUser.username);
+      appliedVersion = orgChart.applyVersionInPlace(list, Number(req.params.id), usersSnapshot, req.freshUser.username, employeeProfilesSnapshot);
       return list;
     });
   } catch (err) {
@@ -213,8 +218,9 @@ router.post('/versions/:id/apply', async (req, res) => {
   let unresolved = [];
   let changedCount = 0;
   try {
+    const employeeProfiles = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
     await withLockedAppDataValue('users', (currentUsers) => {
-      const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(appliedVersion, currentUsers);
+      const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(appliedVersion, currentUsers, employeeProfiles);
       unresolved = u;
       changedCount = changes.length;
       return orgChart.applyManagerUsernameUpdates(currentUsers, changes);
@@ -254,10 +260,11 @@ router.post('/recompute-manager-usernames', async (req, res) => {
     const list = (await getAppDataValue('orgChartVersions')) || [];
     const applied = orgChart.getAppliedVersion(list);
     if (!applied) return res.status(400).json({ error: 'Chưa có phiên bản Cơ Cấu Tổ Chức nào đang áp dụng' });
+    const employeeProfiles = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
     let unresolved = [];
     let changedCount = 0;
     await withLockedAppDataValue('users', (currentUsers) => {
-      const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(applied, currentUsers);
+      const { changes, unresolved: u } = orgChart.computeManagerUsernameUpdates(applied, currentUsers, employeeProfiles);
       unresolved = u;
       changedCount = changes.length;
       return orgChart.applyManagerUsernameUpdates(currentUsers, changes);
@@ -288,6 +295,7 @@ router.get('/kpi-flow', async (req, res) => {
     const applied = orgChart.getAppliedVersion(list);
     if (!applied) return res.json({ version: null, rows: [] });
     const users = (await getAppDataValue('users')) || [];
+    const employeeProfiles = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
     const byId = new Map((applied.nodes || []).map(n => [n.nodeId, n]));
     const rows = (applied.kpiFlow || []).map(f => {
       const evaluator = byId.get(f.evaluatorNodeId);
@@ -297,8 +305,8 @@ router.get('/kpi-flow', async (req, res) => {
         evaluatorNodeId: f.evaluatorNodeId, evaluateeNodeId: f.evaluateeNodeId,
         evaluatorName: evaluator ? orgChart.buildNodeDisplayName(applied, evaluator) : '',
         evaluateeName: evaluatee ? orgChart.buildNodeDisplayName(applied, evaluatee) : '',
-        evaluatorOccupants: evaluator ? orgChart.resolvePositionOccupants(applied, evaluator, users) : [],
-        evaluateeOccupants: evaluatee ? orgChart.resolvePositionOccupants(applied, evaluatee, users) : []
+        evaluatorOccupants: evaluator ? orgChart.resolvePositionOccupants(applied, evaluator, users, employeeProfiles) : [],
+        evaluateeOccupants: evaluatee ? orgChart.resolvePositionOccupants(applied, evaluatee, users, employeeProfiles) : []
       };
     });
     res.json({ version: stripHeavy(applied), rows });
@@ -348,9 +356,10 @@ router.get('/kpi-evaluators/:username', async (req, res) => {
     const list = (await getAppDataValue('orgChartVersions')) || [];
     const applied = orgChart.getAppliedVersion(list);
     const users = (await getAppDataValue('users')) || [];
+    const employeeProfiles = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
     const user = users.find(u => u.username === req.params.username);
     if (!user) return res.status(404).json({ error: 'Không tìm thấy nhân viên' });
-    const result = orgChart.resolveKpiEvaluatorsForUser(applied, user, users);
+    const result = orgChart.resolveKpiEvaluatorsForUser(applied, user, users, employeeProfiles);
     res.json({ result });
   } catch (err) { sendCatchError(res, err, 'GET /api/org-chart/kpi-evaluators/:username'); }
 });
