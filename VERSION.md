@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**23.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.62 (2026-09-20): Lỗ hổng phân quyền — mục "Mua Hàng" trong Nghiệp Vụ hiện cho MỌI người bất kể quyền
+
+Theo yêu cầu người dùng, rà soát tiếp cơ chế phân quyền theo mục của module
+📘 Nghiệp Vụ (`canViewNVItem()`/`NV_KEY_ACCESS_FN`, `module-nghiepvu.js`) —
+đối chiếu ĐỦ 28 key trong `NGHIEP_VU_NAV` với `NV_KEY_ACCESS_FN` để tìm key
+nào lọt lưới. Phát hiện: mục **"muaHang"** (Mua Hàng > BAS — Cơ Sở Tính
+Chiết Khấu/Thưởng NCC) **thiếu hẳn entry** trong `NV_KEY_ACCESS_FN`.
+
+Nguyên nhân: `canViewNVItem()` cũ, khi không tìm thấy hàm kiểm tra quyền cho
+1 key, **fallback về `true`** (hiện mặc định cho MỌI người) thay vì chặn lại
+— nghĩa là bất kỳ ai có quyền vào Nghiệp Vụ (gần như mọi tài khoản, vì mở
+mặc định) đều xem được tài liệu nghiệp vụ Mua Hàng BAS dù **không có bất kỳ
+quyền Mua Hàng nào** (`rebateTermManage`/`rebateTermActivate`/`rebateViewReport`/
+`rebateReconcile`/`rebateApprove` đều false). 25/26 key khác đã map đúng,
+đối chiếu lại toàn bộ tên hàm cũng không có lỗi gõ nhầm nào khác.
+
+**Đã vá 2 lớp**:
+1. Nối `muaHang: 'canAccessPurchasingModule'` (hàm đã có sẵn ở `core.js`,
+   gộp đúng 5 quyền rebate* + admin).
+2. **Cứng hoá phòng thủ chung**: đổi fallback của `canViewNVItem()` từ
+   `true` sang `false` (fail-CLOSED) khi 1 key hoàn toàn không có trong
+   `NV_KEY_ACCESS_FN` — xác nhận an toàn vì cả 26/26 hàm kiểm tra quyền đều
+   định nghĩa ở `core.js` (luôn nạp sẵn, không lazy-load), không có key nào
+   hợp lệ đang dựa vào fallback `true`. Từ nay, module mới thêm vào
+   `NGHIEP_VU_NAV` mà LỠ QUÊN nối `NV_KEY_ACCESS_FN` sẽ bị ẨN (an toàn, dễ
+   phát hiện ngay khi kiểm thử) thay vì ÂM THẦM lộ cho mọi người như lần này.
+
+Không đổi hành vi module Mua Hàng thật (dữ liệu/API không hề bị ảnh hưởng —
+đây thuần là màn tài liệu tham khảo, không phải dữ liệu nghiệp vụ thật).
 
 ## v23.61 (2026-09-20): Rà soát toàn hệ thống ô nhập tiền thiếu "money-input" — vá thêm 4 ô ở Lương
 

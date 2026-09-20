@@ -1117,6 +1117,12 @@ const NV_KEY_ACCESS_FN = {
   hrContract: 'canAccessHrContractModule', hrReport: 'hrpfCanViewReports', hrAttendance: 'canAccessHrAttendanceModule',
   hrPayroll: 'canAccessHrPayrollModule', hr: 'canAccessHrModule',
   itSupport: 'canAccessItSupportModule', itPriceApproval: 'canAccessItSupportModule',
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): mục "muaHang" (Mua Hàng > BAS) thiếu
+  // hẳn entry ở đây — canViewNVItem() bên dưới fallback về `true` (hiện MẶC ĐỊNH cho MỌI người) khi
+  // không tìm thấy hàm tương ứng, nên ai cũng xem được tài liệu nghiệp vụ BAS dù không có bất kỳ quyền
+  // Mua Hàng nào (rebateTermManage/rebateTermActivate/rebateViewReport/rebateReconcile/rebateApprove).
+  // canAccessPurchasingModule() (core.js) đã có sẵn đúng logic gộp cả 5 quyền đó, chỉ cần nối vào.
+  muaHang: 'canAccessPurchasingModule',
 };
 
 // Mục Nghiệp Vụ CHỈ Quản Trị Viên (perms.admin) xem được, BỎ QUA CẢ 2 cơ chế mở rộng thông thường của
@@ -1135,8 +1141,15 @@ function canViewNVItem(key) {
   if (NV_ADMIN_ONLY_KEYS.has(key)) return !!currentUser.perms?.admin;
   if (currentUser.perms?.nghiepVuViewAll) return true;
   if ((currentUser.nghiepVuExtraKeys || []).includes(key)) return true;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): trước đây fallback về `true` (hiện
+  // MẶC ĐỊNH cho mọi người) khi key KHÔNG có trong NV_KEY_ACCESS_FN — đúng nguyên nhân khiến mục
+  // "muaHang" (Mua Hàng > BAS) lọt qua mọi giới hạn quyền suốt từ lúc thêm module. Tất cả 26/26 hàm
+  // trong NV_KEY_ACCESS_FN đều định nghĩa ở core.js (luôn nạp sẵn, không lazy-load) nên không có lý do
+  // hợp lệ nào để 1 key thiếu ánh xạ vẫn hiện được — đổi fallback về `false` (fail-closed): thêm module
+  // mới vào NGHIEP_VU_NAV mà QUÊN nối NV_KEY_ACCESS_FN giờ sẽ ẨN mục đó (an toàn, dễ phát hiện ngay khi
+  // test) thay vì ÂM THẦM lộ cho mọi người (nguy hiểm, khó phát hiện).
   const fn = window[NV_KEY_ACCESS_FN[key]];
-  return typeof fn === 'function' ? !!fn(currentUser) : true;
+  return typeof fn === 'function' ? !!fn(currentUser) : false;
 }
 
 function visibleNVGroups() {
