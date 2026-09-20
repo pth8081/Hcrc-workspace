@@ -14,11 +14,22 @@
 // ĐỢT "Quy Trình Hỗn Hợp" (10/2026): filterOperationOrdersForUser() (lớp chắn thứ 2,
 // canViewOperationOrder() -> resolveWfConfig() = resolveOperationOrderWorkflow() nay tra người duyệt
 // STORE từ operationOrderStoreMixedApprovalRules, xem lib/workflowEngine.js) CHỐT LẠI đúng phạm vi thật
-// sau khi tải company-wide — gd1 (dept "Siêu Thị A") vẫn được TẢI company-wide (tối ưu, không đổi) và
-// vẫn CHỈ THẤY đơn của đúng siêu thị mình sau lọc, KHÔNG thấy đơn Siêu Thị B, nhưng ở test NÀY là nhờ
-// nhánh `item.dept === user.dept` của canViewOperationOrder() (gd1 cùng dept với item 1/3), KHÔNG phải
-// nhờ được liệt kê approver tier — cơ chế approver theo Quy Trình Hỗn Hợp có test RIÊNG (dept/siêu thị
-// không khớp nhau vẫn có thể là approver) ở test-operation-order-store-approver-scope.js.
+// sau khi tải. gd1 (dept "Siêu Thị A") CHỈ THẤY đơn của đúng siêu thị mình, KHÔNG thấy đơn Siêu Thị B,
+// nhờ nhánh `item.dept === user.dept` của canViewOperationOrder() (gd1 cùng dept với item 1/3), KHÔNG
+// phải nhờ được liệt kê approver tier — cơ chế approver theo Quy Trình Hỗn Hợp có test RIÊNG (dept/siêu
+// thị không khớp nhau vẫn có thể là approver) ở test-operation-order-store-approver-scope.js.
+//
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao, vòng 2 — xem chú thích đầy đủ tại
+// isApproverForAnyOperationOrderTier() ở routes/data.js): hàm này TRƯỚC ĐÂY không đọc
+// operationOrderStoreMixedApprovalRules nên bỏ sót approver dòng NGOẠI LỆ/JOBTITLE — không liên quan gì
+// tới operationOrderStoreTierWorkflows (field đó với STORE chỉ còn tác dụng tham khảo, KHÔNG được đọc ở
+// bất kỳ đâu từ đợt "Quy Trình Hỗn Hợp" 10/2026, kể cả TRƯỚC bản vá này). Vì vậy gd1 trong kịch bản dưới
+// đây (chỉ được liệt kê ở operationOrderStoreTierWorkflows.LT10M, KHÔNG có trong
+// operationOrderStoreMixedApprovalRules) KHÔNG PHẢI là approver thật của đơn STORE nào — preload gate
+// đúng ra phải cho gd1 đi qua nhánh where.Dept (như 1 nhân viên thường), KHÔNG phải company-wide. Danh
+// sách hồ sơ NHÌN THẤY cuối cùng không đổi (vẫn '1,3', đúng qua nhánh item.dept === user.dept) — chỉ
+// đường tải SQL đổi (hẹp hơn, tối ưu hơn, không phải lỗi bảo mật). Cơ chế preload cho approver MIXED
+// rules THẬT có test riêng, đầy đủ hơn ở test-operation-order-mixed-approver-preload.js.
 //
 // Chạy: node server/tests/test-operation-orders-dept-scope.js
 'use strict';
@@ -36,8 +47,10 @@ function stubModule(relPath, exportsObj) {
 
 const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Siêu Thị A', perms: {}, active: true };
 const REGULAR_B = { username: 'ntb', name: 'Nhân Viên B', dept: 'Siêu Thị B', perms: {}, active: true };
-// gd1 là người duyệt tier "LT10M" (STORE) trong cấu hình bên dưới — KHÔNG có quyền admin/perm đặc biệt nào,
-// chỉ được liệt kê tên trong operationOrderStoreTierWorkflows.
+// gd1 chỉ được liệt kê tên trong operationOrderStoreTierWorkflows (cấu hình CŨ, tier "LT10M" STORE) —
+// field này không còn được isApproverForAnyOperationOrderTier()/canViewOperationOrder() đọc cho STORE
+// từ đợt "Quy Trình Hỗn Hợp" (xem chú thích đầy đủ ở trên), nên gd1 KHÔNG PHẢI approver thật của bất kỳ
+// đơn STORE nào — chỉ là 1 nhân viên thường cùng dept "Siêu Thị A" với item 1/3.
 const TIER_APPROVER = { username: 'gd1', name: 'Giám Đốc Vùng', dept: 'Siêu Thị A', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 const USERS = [REGULAR_A, REGULAR_B, TIER_APPROVER, ADMIN];
@@ -146,13 +159,13 @@ async function main() {
       assert(byDeptCallCount >= 1, 'phải đi qua nhánh tải theo-phòng-ban');
     });
 
-    await run.run('Người duyệt tier LT10M (gd1, dept "Siêu Thị A", KHÔNG phải admin): vẫn được TẢI company-wide (tối ưu, tránh lỗi "người duyệt không thấy hồ sơ cần duyệt" ở lớp SQL) nhưng CHỈ CÒN THẤY đơn của ĐÚNG siêu thị mình sau lọc — "siêu thị nào tự duyệt siêu thị đó" (không thấy đơn Siêu Thị B dù được liệt kê approver ở tier đó)', async () => {
+    await run.run('gd1 (chỉ liệt kê ở operationOrderStoreTierWorkflows CŨ, KHÔNG có trong operationOrderStoreMixedApprovalRules): KHÔNG PHẢI approver thật -> đi qua nhánh theo-phòng-ban như nhân viên thường, chỉ thấy đúng đơn của Siêu Thị A', async () => {
       resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
       const res = await api('GET', '/api/data', undefined, TIER_APPROVER);
       const ids = (res.body.operationOrders || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,3', 'gd1 (dept Siêu Thị A) chỉ còn thấy 2 đơn hàng của Siêu Thị A, không còn thấy đơn Siêu Thị B (id 2) dù cùng tier approver');
-      assertEqual(byDeptCallCount, 0, 'người duyệt tier KHÔNG được đi qua nhánh theo-phòng-ban ở tầng SQL (vẫn phải tải company-wide rồi lọc ở tầng ứng dụng, tránh thiếu dữ liệu nếu sau này có thêm siêu thị khác trong secondaryPositions)');
-      assert(fullLoadCallCount >= 1, 'người duyệt tier phải tải theo nhánh company-wide (tối ưu tải, lọc đúng phạm vi ở bước sau)');
+      assertEqual(ids.join(','), '1,3', 'gd1 (dept Siêu Thị A) chỉ thấy 2 đơn hàng của Siêu Thị A, không thấy đơn Siêu Thị B (id 2) — cấu hình tier CŨ không còn tác dụng cho STORE');
+      assert(byDeptCallCount >= 1, 'gd1 không còn được nhận diện là approver STORE qua cấu hình tier CŨ -> phải đi qua nhánh theo-phòng-ban ở tầng SQL (hẹp hơn, tối ưu hơn)');
+      assertEqual(fullLoadCallCount, 0, 'KHÔNG được tải company-wide vì gd1 không nằm trong operationOrderStoreMixedApprovalRules (cơ chế approver STORE thật — xem test-operation-order-mixed-approver-preload.js)');
     });
 
     await run.run('admin: vẫn nhận ĐỦ toàn công ty', async () => {
