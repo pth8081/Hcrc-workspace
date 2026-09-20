@@ -55,6 +55,14 @@ function resetState() {
     users: [{ username: 'u1', dept: 'Phòng IT', jobTitle: 'Trưởng phòng', posType: 'HO', perms: {} }],
     vppExcludedJobTitles: [],
     orgChartVersions: [],
+    // *DeptWorkflows + deptWorkflows — các map cấu hình duyệt khoá theo ĐÚNG TÊN phòng ban
+    // (DEPT_WORKFLOW_MAP_KEYS ở lib/catalogRename.js). 'deptWorkflows' (duyệt TÀI LIỆU) là map DUY
+    // NHẤT không mang hậu tố "<module>DeptWorkflows" nên BỊ SÓT khỏi danh sách đó cho tới đợt audit
+    // chuyên sâu cụm "Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu" — đổi tên 1 phòng ban xong
+    // là cấu hình duyệt Tài Liệu của phòng đó kẹt dưới TÊN CŨ, tài liệu mới không ai duyệt được.
+    deptWorkflows: { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['u1'] } } },
+    submissionDeptWorkflows: { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['u1'] } } },
+    paymentDeptWorkflows: { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['u1'] } } },
     // "🏬 Quy Trình Đặt Hàng Siêu Thị" — PHÁT HIỆN NGHIÊM TRỌNG đợt audit chuyên sâu 12 cụm: đổi tên chức
     // danh/siêu thị trước đây KHÔNG cascade vào đây (xem lib/catalogRename.js cascadeMixedApprovalRule*()).
     operationOrderStoreMixedApprovalRules: [
@@ -151,6 +159,20 @@ async function run(name, fn) {
     assert.strictEqual(APP_DATA.deptAbbrs['Phòng IT'], undefined, 'Key cũ phải biến mất, không để lại rác');
     assert.ok(renameFieldCalls.includes('docs'), 'Phải cascade cả DEPT_FIELD_COLLECTIONS (docs.dept)');
     assert.strictEqual(RECORDS.docs[0].dept, 'Phòng Công Nghệ Thông Tin');
+  });
+
+  await run('depts: đổi tên -> DỜI KEY của MỌI map cấu hình duyệt theo phòng ban, gồm cả `deptWorkflows` (Tài Liệu) vốn bị sót', async () => {
+    resetState();
+    const res = await renameApi('depts', 'Phòng IT', 'Phòng Công Nghệ Thông Tin');
+    assert.strictEqual(res.status, 200);
+    for (const mapKey of ['deptWorkflows', 'submissionDeptWorkflows', 'paymentDeptWorkflows']) {
+      assert.ok(APP_DATA[mapKey]['Phòng Công Nghệ Thông Tin'],
+        `${mapKey}: cấu hình duyệt phải dời sang TÊN MỚI (nếu không, phòng đó mất sạch cấu hình duyệt sau khi đổi tên)`);
+      assert.strictEqual(APP_DATA[mapKey]['Phòng IT'], undefined,
+        `${mapKey}: key cũ phải biến mất, không để lại rác`);
+      assert.deepStrictEqual(APP_DATA[mapKey]['Phòng Công Nghệ Thông Tin'].approvers[1], ['u1'],
+        `${mapKey}: nội dung cấu hình bên trong giữ nguyên, chỉ đổi tên key`);
+    }
   });
 
   await run('depts: tên mới trùng -> 400, không đổi gì', async () => {

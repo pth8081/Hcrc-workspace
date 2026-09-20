@@ -66,7 +66,16 @@ const DEPT_FIELD_COLLECTIONS = [
 // cả 2 giai đoạn Dự toán lẫn hồ sơ chính) không còn bước phê duyệt nào cả, các map cấu hình đó không còn
 // tồn tại trong defaults.js nữa (xem lib/workflowEngine.js MODULE_CONFIGS + WF_MODULE_CONFIG ở
 // module-workflow.js) — không còn màn cấu hình nào đọc lại dữ liệu này để cần cascade đổi tên nữa.
+// 'deptWorkflows' (map duyệt TÀI LIỆU theo phòng ban — xem MODULE_CONFIGS.docs.resolveWfConfig ở
+// lib/workflowEngine.js, `appData.deptWorkflows?.[item.dept]`): BỊ SÓT khỏi danh sách này cho tới đợt
+// audit chuyên sâu cụm "Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu" — đây là map DUY NHẤT
+// không mang hậu tố "<module>DeptWorkflows" nên dễ bị bỏ quên khi rà theo tên. Hậu quả y hệt 10 map
+// còn lại: đổi tên 1 phòng ban xong, cấu hình duyệt Tài Liệu của phòng đó vẫn nằm dưới TÊN CŨ ->
+// tài liệu mới (mang tên MỚI) rơi về cấu hình mặc định, không ai duyệt được cho tới khi admin tự cấu
+// hình lại từ đầu. Hàm cascadeDeptWorkflowMaps() bên dưới vốn đã tổng quát (chỉ đổi tên KEY tầng ngoài
+// cùng), nên chỉ cần khai thêm đúng 1 khoá ở đây.
 const DEPT_WORKFLOW_MAP_KEYS = [
+  'deptWorkflows',
   'submissionDeptWorkflows', 'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows'

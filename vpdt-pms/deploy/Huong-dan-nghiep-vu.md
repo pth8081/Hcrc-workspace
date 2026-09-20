@@ -2877,6 +2877,13 @@ tên):
   được server tự cập nhật sang tên mới (cùng cơ chế đã có sẵn cho Siêu
   Thị/Chức Danh). Sau khi đổi, **tải lại trang** để thấy tên mới hiển thị
   đầy đủ ở mọi màn hình khác đang mở sẵn trong phiên.
+  **Sửa lỗi 9/2026**: cascade này trước đây **bỏ sót cấu hình duyệt TÀI LIỆU**
+  (map `deptWorkflows` — map duy nhất không mang hậu tố `<module>DeptWorkflows`
+  nên bị lọt khi rà theo tên), khiến đổi tên 1 phòng ban xong là cấu hình duyệt
+  Tài Liệu của phòng đó kẹt lại dưới tên CŨ: tài liệu mới tải lên (mang tên
+  MỚI) rơi về quy trình mặc định, không ai duyệt được cho tới khi admin tự cấu
+  hình lại từ đầu. Nay đã cascade đủ **11/11** map cấu hình duyệt theo phòng
+  ban.
 - **Các Loại Giấy Phép/Hãng Taxi/Vùng Giá Áp Dụng/Loại Đào Tạo**: đổi trực
   tiếp, KHÔNG cascade sang hồ sơ đã tạo trước đó (hồ sơ cũ giữ nguyên tên cũ
   làm nhãn hiển thị) — phù hợp vì đây là giá trị hiển thị tự do, không phải
