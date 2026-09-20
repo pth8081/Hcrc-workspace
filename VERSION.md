@@ -1,8 +1,72 @@
 # Phiên bản hiện tại
 
-**23.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.66 (2026-09-20): Đổi tên "⚙️ Quy Trình Hỗn Hợp" thành "🏬 Quy Trình Đặt Hàng Siêu Thị"
+
+Theo yêu cầu người dùng: sub-tab "⚙️ Quy Trình Hỗn Hợp" (trong "🔀 Quy Trình
+Nâng Cao") thực chất CHỈ cấu hình người duyệt cho đúng 1 module — "Đặt Hàng
+Tại Siêu Thị" (đặc biệt rõ hơn sau khi bỏ placeholder "sắp có" cho Hợp Đồng/
+Văn Bản Trình ở bản trước) — nên đổi tên hiển thị thành **"🏬 Quy Trình Đặt
+Hàng Siêu Thị"** cho đúng phạm vi thật.
+
+Chỉ đổi NHÃN HIỂN THỊ (button, tiêu đề, banner cảnh báo ở "Chọn mẫu quy
+trình", nhãn trong sơ đồ 📘 Hướng Dẫn, dòng ghi Nhật Ký Hệ Thống khi thêm/
+xoá dòng cấu hình, và toàn bộ mô tả liên quan trong
+`deploy/Huong-dan-nghiep-vu.md`) — GIỮ NGUYÊN 100% id/key nội bộ
+(`mixedApprovalSection`, sub-tab key `MIXED`, `renderMixedApprovalSection()`,
+`resolveOperationOrderStoreMixedApprovers()`, action code
+`ADD_MIXED_APPROVAL_RULE`/`DELETE_MIXED_APPROVAL_RULE`,
+`operationOrderStoreMixedApprovalRules`...) để không phải sửa/di trú dữ liệu
+và giảm rủi ro regression — xác nhận qua rà soát toàn bộ ~19 file có nhắc
+tới cụm "Quy Trình Hỗn Hợp": phần lớn là comment code nội bộ mô tả "đợt
+10/2026" (giữ nguyên, không ảnh hưởng người dùng), chỉ phần thực sự hiển thị
+ra UI mới cần đổi.
+
+Regression đầy đủ sau đổi tên vẫn xanh: `test-lazy-load-all-tabs.js` (46/46),
+`test-csp-full-audit.js` (3/3, 0 vi phạm CSP), `test-mixed-approval-jobtitle-mix.js`
+(16/16), `test-quick-apply-workflow-steps.js` (34/34), 4 bài test cơ chế
+approver Đặt Hàng Siêu Thị (`test-operation-order-store-approver-scope.js`,
+`test-operation-order-noapprover-warning.js`,
+`test-operation-order-location-tiers.js`, `test-operation-orders-dept-scope.js`),
+và 3 bài test module 📘 Hướng Dẫn (`test-nghiepvu.js`/`-csp.js`/`-click.js`).
+
+## v23.65 (2026-09-20): Gộp 4 màn cấu hình quy trình vào 1 tab "🔀 Quy Trình Nâng Cao"
+
+Theo yêu cầu người dùng, dời 3 khối cấu hình CHUNG toàn hệ thống — vốn bị
+kẹt lẫn trong cây phân quyền cá nhân của form Sửa Người Dùng (Hệ Thống →
+Quản Trị → Phân Quyền) dù không phải quyền theo từng người — ra khỏi đó và
+gộp chung với "⚡ Áp Dụng Nhanh"/"⚙️ Quy Trình Hỗn Hợp" thành **1 tab lớn
+mới "🔀 Quy Trình Nâng Cao"** (`public/fragments/systemSection.html`,
+`public/js/module-hethong-tabs.js`) với 4 sub-tab: **⚙️ Quy Trình Hỗn Hợp** |
+**⚡ Áp Dụng Nhanh** | **🖋️ Nhóm Phê Duyệt Trình/HĐ** (gộp 2 khối cũ 11+14) |
+**🧩 Nhóm Quyền Đặc Biệt** (khối cũ 17). Xác nhận qua đọc code: cả 3 khối này
+lưu qua `syncStorage()` độc lập (AppData toàn hệ thống), KHÔNG đi qua
+`saveUser()` của form Sửa Người Dùng, nên dời vị trí không ảnh hưởng dữ liệu
+hay nghiệp vụ đang đọc từ đó — đồng thời "ăn theo" sửa được 1 lỗi có sẵn
+(`setAdminAccountPermsLocked()` từng vô tình khoá luôn 3 khối này khi sửa
+tài khoản "admin", nay đã tách khỏi `#permFieldsContainer` nên không còn bị
+khoá nhầm nữa). Cây phân quyền còn lại 23 khối (đánh số giữ nguyên, có
+khoảng trống ở 11/14/17).
+
+Theo phản hồi người dùng khi xem demo: bỏ dòng chú thích "📄 Hợp Đồng / 📝
+Văn Bản Trình — sắp có" cạnh ô "Áp dụng cho" ở "⚙️ Quy Trình Hỗn Hợp" — dòng
+đó khiến 2 module chưa triển khai trông như đang ngang hàng/sắp ra mắt cùng
+"🏬 Đặt Hàng Tại Siêu Thị", trong khi thực tế chưa có kế hoạch cụ thể; phần
+lõi server vẫn giữ thiết kế tổng quát để tái dùng sau này, chỉ bỏ phần hiển
+thị gây hiểu nhầm.
+
+Đã cập nhật đầy đủ: thêm entry "🔀 Quy Trình Nâng Cao" vào 📘 Hướng Dẫn → ⚙️
+Hệ Thống (sơ đồ dạng hub, `SYSTEM_NAV`/`SYSTEM_DOCS` trong
+`module-nghiepvu.js`), sửa lại toàn bộ đường dẫn liên quan trong
+`deploy/Huong-dan-nghiep-vu.md` (mục 3.3/3.5/3.6, phần Văn Bản Trình/Hợp
+Đồng, bảng khối cây phân quyền ở mục 6), và toàn bộ test bộ/link điều
+hướng liên quan (`test-lazy-load-all-tabs.js` 46/46, `test-csp-full-audit.js`
+3/3 — 42 điểm điều hướng, `test-quick-apply-workflow-steps.js` 34/34,
+`test-nghiepvu.js`/`test-nghiepvu-csp.js`/`test-nghiepvu-click.js` đều
+PASS).
 
 ## v23.64 (2026-09-20): Đổi icon sidebar "Nhân Sự" từ 🤝 sang 💼 (chuyên nghiệp hơn)
 

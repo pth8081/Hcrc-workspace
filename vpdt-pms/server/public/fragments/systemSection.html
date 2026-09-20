@@ -14,8 +14,14 @@
       <button type="button" data-op="setSystemSubTab" data-arg0="ADMIN" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="FORM" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="WORKFLOW" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
-      <button type="button" data-op="setSystemSubTab" data-arg0="QUICKAPPLY" id="btnSystemSubQuickApply" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚡ Áp Dụng Nhanh</button>
-      <button type="button" data-op="setSystemSubTab" data-arg0="MIXEDAPPROVAL" id="btnSystemSubMixedApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚙️ Quy Trình Hỗn Hợp</button>
+      <!-- 🔀 Quy Trình Nâng Cao (từ v23.65) — umbrella gộp 4 mục vốn nằm rải rác: "⚡ Áp Dụng Nhanh" +
+           "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66 cho đúng phạm vi
+           thật — chỉ áp dụng Đặt Hàng Tại Siêu Thị, KHÔNG đổi id/key nội bộ "mixed"/"MIXED"; trước đây là
+           2 tab CẤP CAO NHẤT riêng, ngang hàng tab này) + "🖋️ Nhóm Phê Duyệt Trình/HĐ" + "🧩 Nhóm Quyền
+           Đặc Biệt" (trước đây là khối 11/14/17 GIẤU bên trong form "Sửa Người Dùng" ở Phân Quyền, dù CẢ 3
+           đều là cấu hình CHUNG toàn hệ thống không gắn user nào — theo yêu cầu người dùng, gom lại 1 chỗ
+           dễ tìm, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js). -->
+      <button type="button" data-op="setSystemSubTab" data-arg0="ADVWORKFLOW" id="btnSystemSubAdvWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔀 Quy Trình Nâng Cao</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="UPLOAD" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="LOG" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="TRASH" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
@@ -179,53 +185,40 @@
     </div>
   </div>
 
-  <!-- Màn hình 3b: "⚡ Áp Dụng Nhanh" — tách RIÊNG khỏi #workflowSection thành sub-tab của chính nó
-       (trước đây là 1 khối nằm ngay trong màn Quy Trình & Phê Duyệt) — cho phép tạo NHIỀU cấu hình độc
-       lập, mỗi cấu hình gắn 1 mẫu quy trình (số bước) vào ĐÚNG các module admin chọn, thay vì chỉ có 1
-       lượt chọn 1 mẫu áp cho TOÀN BỘ quy trình như thiết kế cũ. Xem module-workflow.js
-       (renderQuickApplySection()/saveQuickApplyConfig()/applyQuickApplyConfig()). -->
-  <div id="quickApplySection" class="hidden space-y-4">
-    <div class="bg-amber-50 p-3 rounded border border-amber-200">
-      <div class="font-bold text-amber-900 text-sm">⚡ Áp Dụng Nhanh Số Bước Cho Quy Trình</div>
-      <div class="text-xs text-amber-900 mt-1">Mỗi cấu hình bên dưới chỉ set SỐ BƯỚC (mẫu quy trình) cho những phòng ban/mức <b>CHƯA từng cấu hình</b>, trong PHẠM VI CÁC MODULE bạn chọn riêng cho cấu hình đó — KHÔNG đụng module ngoài phạm vi, KHÔNG tự gán người duyệt, KHÔNG đụng tới mục đã có cấu hình sẵn. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt/sửa lại sau khi áp dụng.</div>
+  <!-- 🔀 Quy Trình Nâng Cao (từ v23.65) — xem chú thích đầy đủ ở nút tab #btnSystemSubAdvWorkflow phía
+       trên. 4 sub-tab bên trong: MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị, đổi tên từ "Quy Trình Hỗn Hợp"
+       ở v23.66 — nội dung/id nội bộ y hệt cũ) | QUICKAPPLY (Áp Dụng
+       Nhanh, nội dung y hệt cũ) | GROUPS (Nhóm Phê Duyệt Trình/HĐ, dời từ khối 11+14 Phân Quyền) |
+       SPECIALPERM (Nhóm Quyền Đặc Biệt, dời từ khối 17 Phân Quyền) — xem setAdvWorkflowSubTab()
+       (module-hethong-tabs.js). MỌI id bên trong 4 khối con GIỮ NGUYÊN 100% so với vị trí cũ (chỉ đổi
+       toggle từ setSystemSubTab()/setAdminSubTab() sang setAdvWorkflowSubTab() mới) — không đổi hành vi
+       lưu: mọi nút Lưu ở đây từ trước tới giờ đã luôn gọi thẳng syncStorage() độc lập theo đúng key
+       AppData của nó, KHÔNG phụ thuộc form data-op-submit="saveUser" dù trước đây nằm lồng bên trong form
+       đó — xác nhận qua module-admin-submissiongroups.js/module-admin-specialperm.js trước khi dời. -->
+  <div id="advWorkflowSection" class="hidden space-y-6">
+    <div id="advWorkflowSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="MIXED" id="btnAdvWorkflowSubMixed" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🏬 Quy Trình Đặt Hàng Siêu Thị</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="QUICKAPPLY" id="btnAdvWorkflowSubQuickApply" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚡ Áp Dụng Nhanh</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="GROUPS" id="btnAdvWorkflowSubGroups" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖋️ Nhóm Phê Duyệt Trình/HĐ</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="SPECIALPERM" id="btnAdvWorkflowSubSpecialPerm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Nhóm Quyền Đặc Biệt</button>
     </div>
 
-    <div id="quickApplyConfigList" class="space-y-3"></div>
-
-    <div id="quickApplyAddForm" class="bg-white p-4 rounded border space-y-3">
-      <h3 class="font-bold text-gray-800 text-sm">➕ Thêm / Sửa Cấu Hình Áp Dụng Nhanh</h3>
-      <form data-op-submit="saveQuickApplyConfig" class="space-y-3">
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">1. Chọn mẫu quy trình muốn gắn</label>
-          <select id="qaTplSelect" class="w-full md:w-96 border p-1.5 rounded text-xs bg-white font-bold"></select>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">2. Chọn các module muốn gắn mẫu này (chọn nhiều được, không bắt buộc chọn hết)</label>
-          <div id="qaModuleGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button id="btnCancelQaConfig" type="button" data-op="resetQuickApplyConfigForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy Sửa</button>
-          <button id="btnSaveQaConfig" type="submit" class="bg-amber-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-amber-700">💾 Lưu Cấu Hình</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Màn hình 3c: "⚙️ Quy Trình Hỗn Hợp" — sub-tab riêng cấu hình NGƯỜI DUYỆT theo BƯỚC cho đơn "Đặt
+  <!-- Màn hình 3c: "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/data-op
+       nội bộ vẫn giữ "mixed"/"MIXED"/mixedApprovalSection — chỉ đổi nhãn hiển thị cho đúng phạm vi thật,
+       KHÔNG đổi hành vi/dữ liệu) — sub-tab riêng cấu hình NGƯỜI DUYỆT theo BƯỚC cho đơn "Đặt
        Hàng Tại Siêu Thị" (10/2026, thay hẳn cơ chế tự khớp dept cũ — xem module-workflow.js
        renderMixedApprovalSection()/lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers()). SỐ
        BƯỚC vẫn cấu hình ở "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") như
        cũ — màn này CHỈ chọn AI duyệt từng bước đó. -->
   <div id="mixedApprovalSection" class="hidden space-y-4">
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-2">
-      <div class="font-bold text-indigo-900 text-sm flex items-center gap-2">⚙️ Quy Trình Hỗn Hợp — Cấu Hình Người Duyệt Đơn Hàng Siêu Thị</div>
-      <p class="text-xs text-indigo-900">Mỗi dòng bên dưới <b>CẤP QUYỀN LUÔN</b> cho đúng người/chức danh đó duyệt đúng Bước đã chọn (không cần bật thêm gì ở "17. Quyền Đặc Biệt"). Để trống "Siêu Thị Phụ Trách" = <b>Mặc định</b> (áp dụng MỌI siêu thị); chọn 1 hoặc nhiều siêu thị = <b>Ngoại lệ</b> (chỉ áp dụng đúng các siêu thị đó) — cả 2 loại có thể cùng khớp 1 siêu thị, người duyệt sẽ HỢP LẠI với nhau (không loại trừ nhau). Số bước vẫn lấy từ "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") theo mức giá trị đơn hàng — màn này chỉ cấu hình AI duyệt.</p>
+      <div class="font-bold text-indigo-900 text-sm flex items-center gap-2">🏬 Quy Trình Đặt Hàng Siêu Thị — Cấu Hình Người Duyệt Theo Bước</div>
+      <p class="text-xs text-indigo-900">Mỗi dòng bên dưới <b>CẤP QUYỀN LUÔN</b> cho đúng người/chức danh đó duyệt đúng Bước đã chọn (không cần bật thêm gì ở "🧩 Nhóm Quyền Đặc Biệt"). Để trống "Siêu Thị Phụ Trách" = <b>Mặc định</b> (áp dụng MỌI siêu thị); chọn 1 hoặc nhiều siêu thị = <b>Ngoại lệ</b> (chỉ áp dụng đúng các siêu thị đó) — cả 2 loại có thể cùng khớp 1 siêu thị, người duyệt sẽ HỢP LẠI với nhau (không loại trừ nhau). Số bước vẫn lấy từ "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") theo mức giá trị đơn hàng — màn này chỉ cấu hình AI duyệt.</p>
       <div class="flex items-center gap-2 pt-1 flex-wrap">
         <label class="text-xs font-bold text-indigo-900">Áp dụng cho:</label>
         <select class="border rounded px-2 py-1 text-xs bg-white font-semibold" disabled>
           <option>🏬 Đặt Hàng Tại Siêu Thị</option>
         </select>
-        <span class="text-[11px] text-indigo-700 italic">📄 Hợp Đồng / 📝 Văn Bản Trình — sắp có</span>
       </div>
     </div>
 
@@ -266,6 +259,102 @@
         </tfoot>
       </table>
     </div>
+  </div>
+
+  <!-- Màn hình 3b: "⚡ Áp Dụng Nhanh" — tách RIÊNG khỏi #workflowSection thành sub-tab của chính nó
+       (trước đây là 1 khối nằm ngay trong màn Quy Trình & Phê Duyệt) — cho phép tạo NHIỀU cấu hình độc
+       lập, mỗi cấu hình gắn 1 mẫu quy trình (số bước) vào ĐÚNG các module admin chọn, thay vì chỉ có 1
+       lượt chọn 1 mẫu áp cho TOÀN BỘ quy trình như thiết kế cũ. Xem module-workflow.js
+       (renderQuickApplySection()/saveQuickApplyConfig()/applyQuickApplyConfig()). -->
+  <div id="quickApplySection" class="hidden space-y-4">
+    <div class="bg-amber-50 p-3 rounded border border-amber-200">
+      <div class="font-bold text-amber-900 text-sm">⚡ Áp Dụng Nhanh Số Bước Cho Quy Trình</div>
+      <div class="text-xs text-amber-900 mt-1">Mỗi cấu hình bên dưới chỉ set SỐ BƯỚC (mẫu quy trình) cho những phòng ban/mức <b>CHƯA từng cấu hình</b>, trong PHẠM VI CÁC MODULE bạn chọn riêng cho cấu hình đó — KHÔNG đụng module ngoài phạm vi, KHÔNG tự gán người duyệt, KHÔNG đụng tới mục đã có cấu hình sẵn. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt/sửa lại sau khi áp dụng.</div>
+    </div>
+
+    <div id="quickApplyConfigList" class="space-y-3"></div>
+
+    <div id="quickApplyAddForm" class="bg-white p-4 rounded border space-y-3">
+      <h3 class="font-bold text-gray-800 text-sm">➕ Thêm / Sửa Cấu Hình Áp Dụng Nhanh</h3>
+      <form data-op-submit="saveQuickApplyConfig" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">1. Chọn mẫu quy trình muốn gắn</label>
+          <select id="qaTplSelect" class="w-full md:w-96 border p-1.5 rounded text-xs bg-white font-bold"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">2. Chọn các module muốn gắn mẫu này (chọn nhiều được, không bắt buộc chọn hết)</label>
+          <div id="qaModuleGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="btnCancelQaConfig" type="button" data-op="resetQuickApplyConfigForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy Sửa</button>
+          <button id="btnSaveQaConfig" type="submit" class="bg-amber-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-amber-700">💾 Lưu Cấu Hình</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 🖋️ Nhóm Phê Duyệt Trình/HĐ — dời từ khối 11 (Nhóm Phê Duyệt Trình, Văn Bản Trình) + khối 14 (Nhóm
+       Phê Duyệt HĐ, Hợp Đồng) trong Phân Quyền. Nội dung + toàn bộ id GIỮ NGUYÊN, chỉ bỏ khung
+       <details>/<summary> accordion (không cần thu gọn nữa vì đây giờ là sub-tab riêng, không còn nằm
+       giữa hàng chục khối quyền khác) — thay bằng 2 thẻ card đơn giản. Cả 2 đều dùng chung 1 engine
+       (module-admin-submissiongroups.js, APPROVAL_GROUPS_ADMIN_CONFIG) nên gộp 1 sub-tab hợp lý. -->
+  <div id="advWorkflowSubGroups" class="hidden space-y-4">
+    <div class="bg-white p-4 rounded border space-y-4">
+      <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">🖋️ Nhóm Phê Duyệt Trình (Văn Bản Trình)</h3>
+      <p class="text-[11px] text-gray-500 italic">Nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình, mỗi nhóm chặn quy trình cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; nhóm KHÔNG chặn quy trình (VD "Xin ý kiến") chỉ là kênh tham khảo song song. Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo tờ trình. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người trình phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
+      <div id="submissionApprovalGroupsAdminWrap"></div>
+      <div class="border-t pt-3">
+        <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Văn Bản Trình)</p>
+        <p class="text-[11px] text-gray-500 italic mb-2">Người trình chọn 1 trong các cấp dưới đây khi tạo tờ trình — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn. Đổi tên/thêm/xoá cấp tự do; cấp có khoá 🔒 là mặc định hệ thống, không xoá được (đảm bảo luôn có 1 cấp dự phòng) nhưng vẫn đổi tên được.</p>
+        <div id="submissionApprovalLevelsAdminWrap"></div>
+      </div>
+    </div>
+    <div class="bg-white p-4 rounded border space-y-4">
+      <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">📄 Nhóm Phê Duyệt HĐ (Hợp Đồng)</h3>
+      <p class="text-[11px] text-gray-500 italic">Nhóm RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở trên) — người tạo hợp đồng chọn khi tạo, mỗi nhóm cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"). Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo hợp đồng. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người tạo hợp đồng phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
+      <div id="contractApprovalGroupsAdminWrap"></div>
+      <div class="border-t pt-3">
+        <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Hợp Đồng)</p>
+        <p class="text-[11px] text-gray-500 italic mb-2">Người tạo hợp đồng chọn 1 trong các cấp dưới đây khi tạo hồ sơ — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn. Đổi tên/thêm/xoá cấp tự do; cấp có khoá 🔒 là mặc định hệ thống, không xoá được (đảm bảo luôn có 1 cấp dự phòng) nhưng vẫn đổi tên được.</p>
+        <div id="contractApprovalLevelsAdminWrap"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🧩 Nhóm Quyền Đặc Biệt — dời từ khối 17 Phân Quyền. 3 cấu hình tách biệt hoàn toàn (xem
+       module-admin-specialperm.js), cùng đặt chung vì đều là "1 CÀI ĐẶT CHUNG toàn hệ thống, không gắn
+       user nào" — đúng lý do ban đầu gom vào Phân Quyền, nay càng đúng hơn khi dời hẳn ra khỏi form Sửa
+       Người Dùng (trước đây bị khoá NHẦM theo cùng cơ chế "khoá cây quyền khi sửa tài khoản admin", dù
+       không liên quan gì tới tài khoản đang sửa — dời ra ngoài permFieldsContainer cũng tự sửa luôn lỗi
+       khoá nhầm này). -->
+  <div id="advWorkflowSubSpecialPerm" class="hidden space-y-4">
+    <div class="bg-white p-4 rounded border space-y-4">
+      <div class="border-b pb-3">
+        <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
+        <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban ngay trong ô bên dưới để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Chọn xong thì bấm "Lưu" 1 lần.</p>
+        <div id="workflowParticipatingDeptsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+        <div class="flex justify-end mt-2">
+          <button type="button" data-op="saveWorkflowParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
+        </div>
+      </div>
+      <div class="border-b pb-3">
+        <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
+        <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều chức danh ngay trong ô bên dưới để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Chọn xong thì bấm "Lưu" 1 lần.</p>
+        <div id="vppExcludedJobTitlesMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+        <div class="flex justify-end mt-2">
+          <button type="button" data-op="saveVppExcludedJobTitles" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Chức Danh</button>
+        </div>
+      </div>
+      <div>
+        <h5 class="font-bold text-gray-700 text-xs mb-1">🧭 Vị Trí Tham Gia Quy Trình</h5>
+        <p class="text-[11px] text-gray-500 italic mb-2">Chọn/nhập "Chức danh" (bắt buộc) và tuỳ chọn ghép thêm "Phòng ban" (để trống nếu chức danh này áp dụng cho MỌI phòng ban/đơn vị, VD "Tổng Giám Đốc") rồi bấm "➕ Thêm" để đưa 1 vị trí vào danh sách bên dưới — đây là danh mục CẶP (chức danh, phòng ban tuỳ chọn) độc lập, dùng làm nguồn chọn cho bước duyệt "Theo vị trí" ở màn "Hệ Thống → Quy Trình & Phê Duyệt" (thay vì chọn tay từng người cụ thể, hệ thống tự tra ai hiện đang giữ đúng vị trí này VÀ có quyền "Người duyệt" mỗi khi cần duyệt). Có thể cấu hình trước cả khi chưa có ai giữ đúng vị trí đó. Thêm xong thì bấm "Lưu" 1 lần.</p>
+        <div id="workflowParticipatingPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+        <div class="flex justify-end mt-2">
+          <button type="button" data-op="saveWorkflowParticipatingPositions" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Vị Trí Tham Gia Quy Trình</button>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
 
   <div id="adminSection" class="hidden space-y-6">
@@ -1314,20 +1403,9 @@
           </div>
         </details>
 
-        <details class="perm-tree-node bg-white rounded border text-xs">
-          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
-            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🖋️ 11. Nhóm Phê Duyệt Trình (Văn Bản Trình)</span></span>
-          </summary>
-          <div class="p-3 pt-0 space-y-4">
-            <p class="text-[11px] text-gray-500 italic">Nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình, mỗi nhóm chặn quy trình cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; nhóm KHÔNG chặn quy trình (VD "Xin ý kiến") chỉ là kênh tham khảo song song. Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo tờ trình. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người trình phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
-            <div id="submissionApprovalGroupsAdminWrap"></div>
-            <div class="border-t pt-3">
-              <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Văn Bản Trình)</p>
-              <p class="text-[11px] text-gray-500 italic mb-2">Người trình chọn 1 trong các cấp dưới đây khi tạo tờ trình — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn. Đổi tên/thêm/xoá cấp tự do; cấp có khoá 🔒 là mặc định hệ thống, không xoá được (đảm bảo luôn có 1 cấp dự phòng) nhưng vẫn đổi tên được.</p>
-              <div id="submissionApprovalLevelsAdminWrap"></div>
-            </div>
-          </div>
-        </details>
+        <!-- 11. Nhóm Phê Duyệt Trình (Văn Bản Trình) — dời sang "🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê
+             Duyệt Trình/HĐ" (v23.65, xem #advWorkflowSubGroups) — cấu hình chung toàn hệ thống, không
+             gắn user nào, không còn hợp lý để trong form Sửa 1 tài khoản cụ thể. -->
 
         <details class="perm-tree-node bg-white rounded border text-xs">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
@@ -1368,20 +1446,8 @@
           </div>
         </details>
 
-        <details class="perm-tree-node bg-white rounded border text-xs">
-          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
-            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 14. Nhóm Phê Duyệt HĐ (Hợp Đồng)</span></span>
-          </summary>
-          <div class="p-3 pt-0 space-y-4">
-            <p class="text-[11px] text-gray-500 italic">Nhóm RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở mục 11) — người tạo hợp đồng chọn khi tạo, mỗi nhóm cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"). Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo hợp đồng. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người tạo hợp đồng phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
-            <div id="contractApprovalGroupsAdminWrap"></div>
-            <div class="border-t pt-3">
-              <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Hợp Đồng)</p>
-              <p class="text-[11px] text-gray-500 italic mb-2">Người tạo hợp đồng chọn 1 trong các cấp dưới đây khi tạo hồ sơ — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn. Đổi tên/thêm/xoá cấp tự do; cấp có khoá 🔒 là mặc định hệ thống, không xoá được (đảm bảo luôn có 1 cấp dự phòng) nhưng vẫn đổi tên được.</p>
-              <div id="contractApprovalLevelsAdminWrap"></div>
-            </div>
-          </div>
-        </details>
+        <!-- 14. Nhóm Phê Duyệt HĐ (Hợp Đồng) — dời sang "🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê Duyệt
+             Trình/HĐ" (v23.65, xem #advWorkflowSubGroups) — cùng lý do khối 11 ở trên. -->
 
         <details class="perm-tree-node bg-white rounded border text-xs">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
@@ -1437,38 +1503,12 @@
           </div>
         </details>
 
-        <details class="perm-tree-node bg-white rounded border text-xs">
-          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
-            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🧩 17. Nhóm Quyền Đặc Biệt</span></span>
-            <span id="permTreeBadge_specialGroups" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
-          </summary>
-          <div class="p-3 pt-0 space-y-4">
-            <div class="border-b pb-3">
-              <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban ngay trong ô bên dưới để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Chọn xong thì bấm "Lưu" 1 lần.</p>
-              <div id="workflowParticipatingDeptsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
-              <div class="flex justify-end mt-2">
-                <button type="button" data-op="saveWorkflowParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
-              </div>
-            </div>
-            <div class="border-b pb-3">
-              <h5 class="font-bold text-gray-700 text-xs mb-1">🚫 Nhóm Không Cấp Văn Phòng Phẩm</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều chức danh ngay trong ô bên dưới để đưa vào danh sách chức danh không được cấp Văn Phòng Phẩm. Người dùng có chức danh HIỆN TẠI nằm trong danh sách này sẽ: (1) không đăng ký được Văn Phòng Phẩm ở bất kỳ kỳ nào, kể cả đã thuộc phòng ban còn hạn đăng ký; (2) không tính vào số nhân sự gợi ý khi Hành Chính tạo kỳ (vẫn sửa tay được số này như bình thường). Chọn xong thì bấm "Lưu" 1 lần.</p>
-              <div id="vppExcludedJobTitlesMultiSelect" class="border rounded p-2 bg-gray-50"></div>
-              <div class="flex justify-end mt-2">
-                <button type="button" data-op="saveVppExcludedJobTitles" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Danh Sách Chức Danh</button>
-              </div>
-            </div>
-            <div>
-              <h5 class="font-bold text-gray-700 text-xs mb-1">🧭 Vị Trí Tham Gia Quy Trình</h5>
-              <p class="text-[11px] text-gray-500 italic mb-2">Chọn/nhập "Chức danh" (bắt buộc) và tuỳ chọn ghép thêm "Phòng ban" (để trống nếu chức danh này áp dụng cho MỌI phòng ban/đơn vị, VD "Tổng Giám Đốc") rồi bấm "➕ Thêm" để đưa 1 vị trí vào danh sách bên dưới — đây là danh mục CẶP (chức danh, phòng ban tuỳ chọn) độc lập, dùng làm nguồn chọn cho bước duyệt "Theo vị trí" ở màn "Hệ Thống → Quy Trình & Phê Duyệt" (thay vì chọn tay từng người cụ thể, hệ thống tự tra ai hiện đang giữ đúng vị trí này VÀ có quyền "Người duyệt" mỗi khi cần duyệt). Có thể cấu hình trước cả khi chưa có ai giữ đúng vị trí đó. Thêm xong thì bấm "Lưu" 1 lần.</p>
-              <div id="workflowParticipatingPositionsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
-              <div class="flex justify-end mt-2">
-                <button type="button" data-op="saveWorkflowParticipatingPositions" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Vị Trí Tham Gia Quy Trình</button>
-              </div>
-            </div>
-          </div>
-        </details>
+        <!-- 17. Nhóm Quyền Đặc Biệt — dời sang "🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt" (v23.65,
+             xem #advWorkflowSubSpecialPerm) — 3 cấu hình chung toàn hệ thống, không gắn user nào (đúng
+             ghi chú gốc ở module-admin-specialperm.js), không còn hợp lý để trong form Sửa 1 tài khoản
+             cụ thể. Badge "0/0" cũ (permTreeBadge_specialGroups) vốn LUÔN hiện 0/0 dù đã cấu hình gì
+             (computePermTreeNodeCount() chỉ đếm input[type=checkbox]/select, khối này không có loại nào
+             trong 2 loại đó) — không mất chức năng thật nào khi bỏ badge cùng lúc dời khối. -->
 
         <details class="perm-tree-node bg-white rounded border text-xs">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
@@ -1637,7 +1677,7 @@
                  con); "Quyền Phê Duyệt Đặt Hàng Siêu Thị" giữ nguyên khuôn {all,depts[]} cũ
                  (operationOrderReceiptManageStore, xem renderOperationOrderReceiptScopeCheckboxes()/
                  module-admin.js) nhưng KHÔNG còn mục 'HO' lẫn trong danh sách siêu thị nữa. -->
-            <p class="text-[11px] text-gray-500 italic pt-1 border-t">🧾 Duyệt Nhập/Hủy Đơn Hàng (sub-tab riêng trong tab 📦 Đơn Hàng) — quyền RIÊNG, KHÔNG dùng chung quần thể duyệt/từ chối đơn hàng ở trên. 2 quyền ĐỘC LẬP: "Quyền Phê Duyệt Đặt Hàng HO" quản lý mọi đơn Đặt Hàng Tại HO; "Quyền Phê Duyệt Đặt Hàng Siêu Thị" (ALL hoặc tick riêng từng siêu thị) CHỈ quản lý đơn của đúng siêu thị được tick. <b class="text-amber-700">⚠️ Quyền này CHỈ để xác nhận NHẬN HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong hết — KHÔNG liên quan gì tới việc phê duyệt chi tiêu đơn hàng (xem "⚙️ Quy Trình Hỗn Hợp" cho việc đó).</b></p>
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">🧾 Duyệt Nhập/Hủy Đơn Hàng (sub-tab riêng trong tab 📦 Đơn Hàng) — quyền RIÊNG, KHÔNG dùng chung quần thể duyệt/từ chối đơn hàng ở trên. 2 quyền ĐỘC LẬP: "Quyền Phê Duyệt Đặt Hàng HO" quản lý mọi đơn Đặt Hàng Tại HO; "Quyền Phê Duyệt Đặt Hàng Siêu Thị" (ALL hoặc tick riêng từng siêu thị) CHỈ quản lý đơn của đúng siêu thị được tick. <b class="text-amber-700">⚠️ Quyền này CHỈ để xác nhận NHẬN HÀNG/HỦY ĐƠN sau khi đơn đã duyệt xong hết — KHÔNG liên quan gì tới việc phê duyệt chi tiêu đơn hàng (xem "🏬 Quy Trình Đặt Hàng Siêu Thị" cho việc đó).</b></p>
             <div>
               <label class="flex items-center gap-2 text-cyan-700 font-semibold cursor-pointer text-[11px]">
                 <input type="checkbox" id="pOperationOrderReceiptHO"><span>🏢 Quyền Phê Duyệt Đặt Hàng HO</span>

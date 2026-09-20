@@ -34,8 +34,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('formSection').classList.toggle('hidden', subTab !== 'FORM');
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
-  document.getElementById('quickApplySection').classList.toggle('hidden', subTab !== 'QUICKAPPLY');
-  document.getElementById('mixedApprovalSection').classList.toggle('hidden', subTab !== 'MIXEDAPPROVAL');
+  document.getElementById('advWorkflowSection').classList.toggle('hidden', subTab !== 'ADVWORKFLOW');
   document.getElementById('uploadTypeSection').classList.toggle('hidden', subTab !== 'UPLOAD');
   document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
   document.getElementById('trashSection').classList.toggle('hidden', subTab !== 'TRASH');
@@ -45,14 +44,13 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubAdmin').className = subTab === 'ADMIN' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
-  document.getElementById('btnSystemSubQuickApply').className = subTab === 'QUICKAPPLY' ? activeCls : inactiveCls;
-  document.getElementById('btnSystemSubMixedApproval').className = subTab === 'MIXEDAPPROVAL' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubAdvWorkflow').className = subTab === 'ADVWORKFLOW' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubUpload').className = subTab === 'UPLOAD' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderSubmissionApprovalGroups(); renderContractApprovalGroups(); renderWorkflowParticipatingDeptsWidget(); renderVppExcludedJobTitlesWidget(); renderWorkflowParticipatingPositionsWidget(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderPriceZoneList(); renderMeetingRoomCatalogList();
+    renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderPriceZoneList(); renderMeetingRoomCatalogList();
     setAdminSubTab(activeAdminSubTab);
     positionAdminSubTabBar();
   }
@@ -64,15 +62,43 @@ function setSystemSubTab(subTab) {
     // chuyển qua lại giữa các tab con của Hệ Thống.
     if (!document.getElementById('wfCode').value) document.getElementById('wfCode').value = generateWfCode();
   }
-  // QUICKAPPLY: sub-tab riêng tách từ khối "⚡ Áp Dụng Nhanh" cũ trong WORKFLOW ra (xem module-workflow.js) —
-  // nhiều cấu hình độc lập (mẫu quy trình + danh sách module) thay vì 1 mẫu áp cho toàn bộ.
-  if (subTab === 'QUICKAPPLY') { renderQuickApplySection(); }
-  // MIXEDAPPROVAL: "⚙️ Quy Trình Hỗn Hợp" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu
-  // Thị" (xem module-workflow.js renderMixedApprovalSection()), thay hẳn cơ chế tự khớp dept cũ.
-  if (subTab === 'MIXEDAPPROVAL') { renderMixedApprovalSection(); }
+  // ADVWORKFLOW: "🔀 Quy Trình Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
+  if (subTab === 'ADVWORKFLOW') { setAdvWorkflowSubTab(activeAdvWorkflowSubTab); }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
   if (subTab === 'TRASH') { loadTrashItems(); }
+}
+
+// 4 sub-tab của "🔀 Quy Trình Nâng Cao" (mục Hệ Thống, từ v23.65) — MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị,
+// đổi tên từ "Quy Trình Hỗn Hợp" ở v23.66, id/key nội bộ "mixed"/"MIXED" giữ nguyên) + QUICKAPPLY
+// (Áp Dụng Nhanh) trước đây là 2 tab CẤP CAO NHẤT riêng; GROUPS (Nhóm Phê Duyệt Trình/HĐ) + SPECIALPERM
+// (Nhóm Quyền Đặc Biệt) trước đây là khối 11/14/17 GIẤU trong form Sửa Người Dùng ở Phân Quyền dù là cấu
+// hình CHUNG toàn hệ thống, không gắn user nào — gom lại 1 chỗ dễ tìm theo yêu cầu người dùng (9/2026).
+function setAdvWorkflowSubTab(subTab) {
+  activeAdvWorkflowSubTab = subTab;
+  document.getElementById('mixedApprovalSection').classList.toggle('hidden', subTab !== 'MIXED');
+  document.getElementById('quickApplySection').classList.toggle('hidden', subTab !== 'QUICKAPPLY');
+  document.getElementById('advWorkflowSubGroups').classList.toggle('hidden', subTab !== 'GROUPS');
+  document.getElementById('advWorkflowSubSpecialPerm').classList.toggle('hidden', subTab !== 'SPECIALPERM');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnAdvWorkflowSubMixed').className = subTab === 'MIXED' ? activeCls : inactiveCls;
+  document.getElementById('btnAdvWorkflowSubQuickApply').className = subTab === 'QUICKAPPLY' ? activeCls : inactiveCls;
+  document.getElementById('btnAdvWorkflowSubGroups').className = subTab === 'GROUPS' ? activeCls : inactiveCls;
+  document.getElementById('btnAdvWorkflowSubSpecialPerm').className = subTab === 'SPECIALPERM' ? activeCls : inactiveCls;
+
+  // MIXED: "🏬 Quy Trình Đặt Hàng Siêu Thị" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu Thị" (xem
+  // module-workflow.js renderMixedApprovalSection()), thay hẳn cơ chế tự khớp dept cũ.
+  if (subTab === 'MIXED') { renderMixedApprovalSection(); }
+  // QUICKAPPLY: tiện ích set NHANH số bước (xem module-workflow.js renderQuickApplySection()) — nhiều
+  // cấu hình độc lập (mẫu quy trình + danh sách module) thay vì 1 mẫu áp cho toàn bộ.
+  if (subTab === 'QUICKAPPLY') { renderQuickApplySection(); }
+  // GROUPS: renderSubmissionApprovalGroups()/renderContractApprovalGroups() (module-admin-submissiongroups.js)
+  // vẽ CẢ bảng Nhóm lẫn bảng Cấp của đúng module đó (Văn Bản Trình + Hợp Đồng, dùng chung 1 engine).
+  if (subTab === 'GROUPS') { renderSubmissionApprovalGroups(); renderContractApprovalGroups(); }
+  // SPECIALPERM: 3 widget module-admin-specialperm.js — cấu hình CHUNG toàn hệ thống, không gắn user nào.
+  if (subTab === 'SPECIALPERM') { renderWorkflowParticipatingDeptsWidget(); renderVppExcludedJobTitlesWidget(); renderWorkflowParticipatingPositionsWidget(); }
 }
 
 // 3 module con của "⚙️ Quản Trị" (mục Hệ Thống): Cấu Hình Email / Quản Lý Danh Mục / Phân Quyền
