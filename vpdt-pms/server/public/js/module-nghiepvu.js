@@ -14,7 +14,9 @@ const NGHIEP_VU_NAV = [
     { key: 'contract', icon: '📁', label: 'Hợp Đồng' },
   ]},
   { group: 'Truyền Thông Nội Bộ', items: [
+    { key: 'internalPosts', icon: '📰', label: 'Nhịp Sống HCRC / Góc Chia Sẻ' },
     { key: 'daotao', icon: '🎓', label: 'Đào Tạo' },
+    { key: 'recruitment', icon: '💼', label: 'Tuyển Dụng' },
   ]},
   { group: 'Điều Hành', items: [
     { key: 'minutes', icon: '📝', label: 'Biên Bản Họp' },
@@ -32,18 +34,22 @@ const NGHIEP_VU_NAV = [
     { key: 'office', icon: '🛒', label: 'Mua Bán / Sửa Chữa / Thanh Toán' },
     { key: 'budget', icon: '💰', label: 'Ngân Sách 2.0' },
   ]},
+  // Icon từng mục dưới đây bám ĐÚNG icon thật trên sidebar index.html (đợt rà soát 10/2026 phát hiện
+  // hàng loạt icon lệch: Vận Hành 📦→⚙️, Cơ Cấu Tổ Chức 🗂️→🌳, Onboarding 🆕→🧑‍💼, HĐLĐ 📄→📝,
+  // Công/Phép 🕒→⏱️, Lương 💴→💰, Mua Hàng 🛒→🔗) — người đọc tài liệu dò theo icon để tìm đúng nút
+  // trên sidebar, lệch icon là lệch hướng dẫn.
   { group: 'Vận Hành', items: [
-    { key: 'vanHanh', icon: '📦', label: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị' },
+    { key: 'vanHanh', icon: '⚙️', label: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị' },
     { key: 'checklist', icon: '✅', label: 'Checklist Đánh Giá Siêu Thị' },
   ]},
   { group: 'Nhân Sự', items: [
-    { key: 'orgChart', icon: '🗂️', label: 'Cơ Cấu Tổ Chức' },
-    { key: 'hrLifecycle', icon: '🆕', label: 'Onboarding / Offboarding' },
+    { key: 'orgChart', icon: '🌳', label: 'Cơ Cấu Tổ Chức' },
+    { key: 'hrLifecycle', icon: '🧑‍💼', label: 'Onboarding / Offboarding' },
     { key: 'hrProfile', icon: '👤', label: 'Hồ Sơ Nhân Sự' },
-    { key: 'hrContract', icon: '📄', label: 'Hợp Đồng Lao Động' },
+    { key: 'hrContract', icon: '📝', label: 'Hợp Đồng Lao Động' },
     { key: 'hrReport', icon: '📊', label: 'Báo Cáo' },
-    { key: 'hrAttendance', icon: '🕒', label: 'Công / Phép' },
-    { key: 'hrPayroll', icon: '💴', label: 'Lương' },
+    { key: 'hrAttendance', icon: '⏱️', label: 'Công / Phép' },
+    { key: 'hrPayroll', icon: '💰', label: 'Lương' },
     { key: 'hr', icon: '🤝', label: 'Phản Hồi Ý Kiến (HCRC Đồng Hành)' },
   ]},
   { group: 'Hỗ Trợ IT', items: [
@@ -51,7 +57,19 @@ const NGHIEP_VU_NAV = [
     { key: 'itPriceApproval', icon: '🏷️', label: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)' },
   ]},
   { group: 'Mua Hàng', items: [
-    { key: 'muaHang', icon: '🛒', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
+    { key: 'muaHang', icon: '🔗', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
+  ]},
+  // 2 nhóm cuối (10/2026, đợt rà soát đối chiếu tài liệu với UI thật): 3 màn DÙNG CHUNG cho mọi module
+  // trước đây thiếu hẳn entry dù đã có nút sidebar thật — "✅ Phê Duyệt" (core-approvalhub.js, 17 entry
+  // khác đang hướng dẫn "vào mục ✅ Phê Duyệt" mà không có mục nào mô tả chính màn đó), "📊 Báo Cáo"
+  // (module-baocaoquantri.js) và màn cài đặt cá nhân (modal #profileModal, mở từ khối tên người dùng ở
+  // đáy sidebar — không phải 1 tab nên trước đây bị bỏ sót).
+  { group: 'Phê Duyệt & Tra Cứu Chung', items: [
+    { key: 'approvalHub', icon: '✅', label: 'Phê Duyệt (Hộp Thư Duyệt Tổng Hợp)' },
+    { key: 'reports', icon: '📊', label: 'Báo Cáo (Tổng Hợp Toàn Hệ Thống)' },
+  ]},
+  { group: 'Tài Khoản Cá Nhân', items: [
+    { key: 'profile', icon: '⚙️', label: 'Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản' },
   ]},
 ];
 
@@ -80,9 +98,13 @@ const SYSTEM_NAV = [
     { key: 'sysTrash', icon: '🗑️', label: 'Thùng Rác' },
     { key: 'sysLog', icon: '📜', label: 'Nhật Ký Hệ Thống' },
   ]},
+  // 2 màn API là 2 thứ TÁCH BIỆT hoàn toàn, đừng gộp nhầm: "🔑 API Xác Thực Ngoài" (tab con của ⚙️ Quản
+  // Trị, cấp API key cho ứng dụng NGOÀI gọi VÀO hệ thống) và "🔌 Cấu Hình API" (tab con khác, đẩy Đơn
+  // Hàng RA dsmart16). Nhãn/icon lấy ĐÚNG theo nút thật ở fragments/systemSection.html #adminSubTabBar.
   { group: 'Tích Hợp & Thông Báo', items: [
     { key: 'sysEmail', icon: '📧', label: 'Cấu Hình Email' },
-    { key: 'sysExtAuth', icon: '🔌', label: 'API Đối Tác Ngoài' },
+    { key: 'sysExtAuth', icon: '🔑', label: 'API Xác Thực Ngoài' },
+    { key: 'sysOpApi', icon: '🔌', label: 'Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16' },
   ]},
   { group: 'Kiến Trúc', items: [
     { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
@@ -406,6 +428,60 @@ const NGHIEP_VU_DOCS = {
       { label: 'Thanh Toán liên kết', text: 'chi phí thực tế phát sinh từ hợp đồng được ghi nhận qua mục Thanh Toán (Tổng Hợp), liên kết ngược về đúng hợp đồng gốc — cần tải "Tài liệu ký" và tài liệu đó được duyệt xong mới lập được đề nghị thanh toán từ hợp đồng. **Khoá chéo với Đổi Hình Thức Thanh Toán (từ 9/2026)**: không "Lập Thanh Toán" được trong lúc hợp đồng đang có 1 yêu cầu Đổi Hình Thức Thanh Toán treo chờ duyệt — tránh tạo đề nghị theo hình thức CŨ ngay trước khi hình thức đó bị đổi.' },
     ] },
   },
+  // internalPosts + recruitment (10/2026, đợt rà soát đối chiếu tài liệu với UI thật): nhóm "Truyền
+  // Thông Nội Bộ" trước đây CHỈ có Đào Tạo, thiếu hẳn 3/4 nội dung thật của module "internal" (📰 Nhịp
+  // Sống HCRC, 💬 Góc Chia Sẻ — dùng chung DB.internalPosts phân biệt bằng field `type`; 💼 Tuyển Dụng —
+  // dữ liệu RIÊNG recruitmentJobs/recruitmentReferrals, không phải bài đăng). Tách 2 entry theo đúng
+  // ranh giới dữ liệu thật thay vì gộp 1 entry "3-4 loại bài" (Tuyển Dụng không phải 1 loại bài đăng).
+  // "🤝 HCRC Đồng Hành" (sub-tab thứ 5 của cùng module) đã có entry riêng ở nhóm Nhân Sự (key 'hr').
+  internalPosts: {
+    icon: '📰', title: 'Nhịp Sống HCRC / Góc Chia Sẻ', badge: 'Mở cho mọi nhân viên',
+    desc: 'Bảng tin nội bộ toàn công ty — 2 loại bài dùng chung 1 kho dữ liệu nhưng KHÁC HẲN nhau về quyền đăng: "📰 Nhịp Sống HCRC" chỉ người được cấp quyền đăng tin (hoặc admin) mới đăng được và công khai NGAY; "💬 Góc Chia Sẻ" ai cũng đăng được nhưng phải qua người duyệt mới hiện cho cả công ty. XEM và tương tác (❤️ Thích / 💬 Bình luận / ghi nhận đã xem) mở cho MỌI tài khoản, không lọc theo phòng ban.',
+    flow: { ariaLabel: 'Quy trình đăng bài Truyền Thông Nội Bộ', chain: [
+      { label: 'Soạn bài', sub: 'Tiêu đề + Chuyên đề + Nội dung' },
+      { label: 'Chờ duyệt?', sub: 'CHỈ Góc Chia Sẻ mới qua bước này', kind: 'decision' },
+      { label: 'Công khai', sub: 'Cả công ty đọc, thích, bình luận', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Duyệt / Nhịp Sống HCRC đăng thẳng', rejectLabel: 'Từ chối / Yêu cầu bổ sung', rejectBox: { label: 'Về tay tác giả', sub: 'Sửa lại rồi gửi duyệt lại' }, loopBackToIndex: 0 } },
+    steps: [
+      { role: 'Người có quyền đăng tin', text: 'vào <b>📣 Truyền thông</b> (sidebar) → <b>📰 Nhịp Sống HCRC</b> → điền form "📝 Đăng Nhịp Sống HCRC Mới": Tiêu Đề, Chuyên Đề Nhịp Sống HCRC, Lịch Đăng (để trống = đăng ngay), Nội Dung, Tệp Đính Kèm (tuỳ chọn) → bấm <b>"📝 Lưu Nháp"</b> để để dành, hoặc <b>"Đăng Ngay"</b> để phát hành.' },
+      { role: 'Người có quyền duyệt bài', text: 'muốn bài nổi lên Trang chủ: tick <b>"📌 Ghim bài này lên trang chủ (Dashboard)"</b> ngay trên form rồi chọn số ngày ghim — ô này CHỈ hiện với người có quyền duyệt bài và KHÔNG áp dụng cho Góc Chia Sẻ.' },
+      { role: 'Mọi nhân viên', text: 'vào <b>📣 Truyền thông → 💬 Góc Chia Sẻ</b> → điền Tiêu Đề, Chuyên Đề Góc Chia Sẻ, Nội Dung → bấm <b>"Gửi Duyệt"</b> (nút này tự đổi nhãn thành "Đăng Ngay" nếu chính bạn có quyền duyệt bài) — bài đang chờ duyệt chỉ tác giả và người duyệt nhìn thấy.' },
+      { role: 'Người duyệt bài', text: 'vào mục <b>✅ Phê Duyệt</b> (sidebar) → lọc loại <b>"💬 Góc chia sẻ"</b> → Duyệt hoặc Từ chối ngay tại danh sách (mở bài ra còn có thêm Yêu Cầu Bổ Sung — bài quay về cho tác giả sửa rồi gửi lại).' },
+      { role: 'Người đọc', text: 'bấm vào 1 bài trong "📰 Danh Sách Nhịp Sống HCRC" → bấm <b>"❤️ Thích"</b>, gõ bình luận vào ô "Viết bình luận..." rồi bấm <b>"Gửi"</b> — riêng "👁️ N người đã xem" hệ thống TỰ ghi nhận ngay khi bạn mở bài, không cần bấm gì.' },
+      { text: 'Tìm lại bài cũ: khối <b>"🔍 Tìm Kiếm & Lọc"</b> ngay dưới form (Từ Ngày Đăng / Đến Ngày Đăng / Từ Khóa) — riêng Góc Chia Sẻ có thêm ô "Lọc Theo Trạng Thái" (Chờ duyệt / Đã duyệt / Từ chối).' },
+    ],
+    footer: { left: [
+      { label: 'Quyền ĐĂNG khác nhau theo từng loại bài', text: '"Góc Chia Sẻ" ai cũng đăng được (nhưng phải qua duyệt); "Nhịp Sống HCRC" cần quyền đăng tin riêng; "Đào Tạo" cần quyền quản lý đào tạo (xem mục 🎓 Đào Tạo); "Tuyển Dụng" cần quyền đăng tin tuyển dụng (mục 💼 Tuyển Dụng). Quyền XEM thì chung cho cả module, không tách theo loại bài.' },
+      { label: 'Lịch đăng — chỉ Nhịp Sống HCRC', text: 'đặt "Lịch Đăng" ở tương lai thì bài ở trạng thái chờ đăng, tới giờ tự hiện — hệ thống tính LIVE theo thời điểm người xem mở trang, không có job nền nào phải chờ.' },
+    ], right: [
+      { label: 'Bình luận nhạy cảm tự vào hàng chờ', text: 'bình luận bị hệ thống đánh dấu nhạy cảm sẽ hiện ở mục ✅ Phê Duyệt với nhãn "⚠️/🚨 Bình luận nhạy cảm" để người có quyền duyệt bài xử lý, thay vì công khai ngay.' },
+      { label: 'Nháp và sửa lại', text: 'bài Nháp (chưa gửi) hoặc bài bị "Yêu cầu bổ sung" mở lại được bằng nút Sửa trên chính bài đó — form quay về chế độ sửa, bấm "Hủy Sửa" để thoát; không chọn tệp mới thì đính kèm cũ được giữ nguyên, không bị xoá.' },
+    ] },
+  },
+  recruitment: {
+    icon: '💼', title: 'Tuyển Dụng', badge: 'Truyền Thông Nội Bộ',
+    desc: 'Bản tin tuyển dụng nội bộ + kênh nhân viên giới thiệu ứng viên: bộ phận nhân sự đăng tin theo đợt (tháng), mọi nhân viên xem tin và giới thiệu ứng viên kèm CV, nhân sự theo dõi/cập nhật trạng thái từng ứng viên trong 1 bảng chung. Dữ liệu RIÊNG (tin tuyển dụng + hồ sơ giới thiệu), không phải bài đăng như Nhịp Sống HCRC/Góc Chia Sẻ.',
+    flow: { ariaLabel: 'Quy trình Tuyển Dụng nội bộ', chain: [
+      { label: 'Đăng tin tuyển dụng', sub: 'Theo đợt (tháng) + đơn vị' },
+      { label: 'Nhân viên giới thiệu', sub: 'Kèm CV bắt buộc' },
+      { label: 'Nhân sự xử lý ứng viên', sub: 'Mới → Đã liên hệ → Đã tuyển/Từ chối', kind: 'decision' },
+      { label: 'Đóng tin / Đã tuyển đủ', sub: 'Ngừng nhận giới thiệu mới', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Đã tuyển', rejectLabel: 'Từ chối', rejectBox: { label: 'Từ chối ứng viên', sub: 'Ghi chú lý do, tin vẫn mở' }, loopBackToIndex: 1, loopBackLabel: 'Nhận giới thiệu tiếp' } },
+    steps: [
+      { role: 'Nhân sự (quyền đăng tin tuyển dụng)', text: 'vào <b>📣 Truyền thông</b> (sidebar) → <b>💼 Tuyển Dụng</b> → tab <b>"📋 Tin Tuyển Dụng"</b> → điền form "➕ Đăng Tin Tuyển Dụng Mới": Tên Vị Trí, Số Lượng Cần Tuyển (để trống = không giới hạn), Đợt Tuyển (Tháng), Đơn Vị/Siêu Thị Đăng Tuyển, Địa Điểm Làm Việc, Hạn Nhận Hồ Sơ, Thông Tin Liên Hệ, Ảnh/Banner (tuỳ chọn), Mô Tả Công Việc, Yêu Cầu Ứng Viên → bấm <b>"Đăng Tin"</b>.' },
+      { role: 'Mọi nhân viên', text: 'ở danh sách "📋 Danh Sách Tin Tuyển Dụng" (lọc nhanh theo Đợt (Tháng) / Đơn Vị-Siêu Thị / Từ Khoá) → bấm <b>"🙋 Giới Thiệu Ứng Viên"</b> trên đúng tin → điền Họ Tên Ứng Viên, Số Điện Thoại, Email (tuỳ chọn), tải <b>CV Ứng Viên</b> (bắt buộc, .pdf/.docx), Ghi Chú Thêm → bấm <b>"Gửi Giới Thiệu"</b>.' },
+      { role: 'Người giới thiệu', text: 'theo dõi kết quả ở tab <b>"🙋 Ứng Viên Tôi Giới Thiệu"</b> — mỗi người chỉ thấy ứng viên của chính mình (server tự lọc, không phải chỉ ẩn trên giao diện).' },
+      { role: 'Nhân sự', text: 'tab <b>"🗂 Quản Lý Ứng Viên"</b> (chỉ người có quyền mới thấy nút tab này) → lọc theo tin tuyển dụng → bấm "📄 Xem CV", rồi đổi ô trạng thái ở cột Thao Tác (Mới / Đã liên hệ / Đã tuyển / Từ chối) — hệ thống hỏi thêm 1 ghi chú tuỳ chọn cho mỗi lần đổi.' },
+      { role: 'Nhân sự', text: 'tuyển xong: bấm <b>"✅ Xác Nhận Đã Tuyển Đủ"</b> hoặc <b>"Đóng Tin"</b> ngay trên thẻ tin — tin đã đóng/đã tuyển đủ không còn nút "🙋 Giới Thiệu Ứng Viên" nữa.' },
+    ],
+    footer: { left: [
+      { label: '1 quyền duy nhất cho cả đăng tin lẫn quản lý ứng viên', text: 'người có quyền đăng tin tuyển dụng đồng thời quản lý TOÀN BỘ ứng viên được giới thiệu (coi như hộp thư chung của bộ phận nhân sự), không giới hạn theo người đăng tin cụ thể; người không có quyền vẫn xem được mọi tin và giới thiệu ứng viên bình thường.' },
+      { label: 'CV là bắt buộc', text: 'không tải CV thì không gửi được giới thiệu — tránh hồ sơ trống không xử lý tiếp được. Người giới thiệu luôn được ghi nhận tự động theo tài khoản đăng nhập, không chọn tay/không ẩn danh.' },
+    ], right: [
+      { label: '4 trạng thái của TIN, khác 4 trạng thái của ỨNG VIÊN', text: 'tin: Đang tuyển / "⏳ Sắp hết hạn" (còn ≤7 ngày tới Hạn Nhận Hồ Sơ, tự tính khi xem, không cần job nền) / Đã tuyển đủ / Đã đóng tuyển dụng. Ứng viên: Mới / Đã liên hệ / Đã tuyển / Từ chối — 2 bộ trạng thái độc lập nhau.' },
+      { label: 'Gợi ý "đã tuyển đủ" chỉ là gợi ý', text: 'khi số ứng viên "Đã tuyển" đạt Số Lượng Cần Tuyển, hệ thống hiện banner nhắc — nhưng nút "✅ Xác Nhận Đã Tuyển Đủ" LUÔN bấm được bất kể con số này (nhân sự có thể đã tuyển qua kênh ngoài hệ thống).' },
+    ] },
+  },
   minutes: {
     icon: '📝', title: 'Biên Bản Họp', badge: 'Điều Hành',
     desc: 'Ghi nhận nội dung và điểm danh cuộc họp, có thể liên kết tới 1 lịch đặt phòng (nếu có) — Công Việc CHỈ sinh ra khi người lập biên bản chủ động bấm "Giao việc", không tự động khi lưu.',
@@ -487,7 +563,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đã duyệt', sub: 'Sử dụng đúng lịch đã đặt', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Huỷ', sub: 'Người đặt tự huỷ, hoặc người quản lý phòng họp/admin huỷ bất kỳ lịch nào' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Người đặt lịch', text: 'vào mục 📅 Đặt Phòng Họp (sidebar) → tab <b>"📝 Đăng Ký"</b> → điền form: Phòng Ban Đặt Lịch, Chọn Phòng Họp, Chủ Đề, Số Lượng Người Tham Dự, Thời Gian Bắt Đầu/Kết Thúc, Thiết Bị Hỗ Trợ Yêu Cầu, Nội Dung/Agenda → bấm <b>"Gửi phê duyệt"</b> (hệ thống tự chặn nếu trùng phòng + khung giờ với lịch đang chờ/đã duyệt khác).' },
+      { role: 'Người đặt lịch', text: 'vào <b>🏢 Hành Chính → 📅 Phòng họp</b> (sidebar) → tab <b>"📝 Đăng Ký"</b> → điền form: Phòng Ban Đặt Lịch, Chọn Phòng Họp, Chủ Đề, Số Lượng Người Tham Dự, Thời Gian Bắt Đầu/Kết Thúc, Thiết Bị Hỗ Trợ Yêu Cầu, Nội Dung/Agenda → bấm <b>"Gửi phê duyệt"</b> (hệ thống tự chặn nếu trùng phòng + khung giờ với lịch đang chờ/đã duyệt khác).' },
       { role: 'Người quản lý phòng họp', text: 'vẫn ở tab 📝 Đăng Ký, tìm phiếu đang chờ duyệt trong danh sách → bấm Duyệt hoặc Huỷ (quyền này duyệt được mọi phòng/phòng ban, không cần đúng phòng ban mình).' },
       { text: 'Xem lịch trống/bận trực quan trước khi đặt: tab <b>"🗓️ Lịch Họp"</b>.' },
       { text: 'Đặt sai giờ/phòng: không sửa được, phải Huỷ lịch đó rồi đăng ký lại từ đầu.' },
@@ -670,7 +746,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Hoàn tất', sub: 'Đủ mốc bắt buộc' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: '' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Người đề xuất', text: 'vào mục 📦 Vận Hành (sidebar) → tab <b>"🏬 QLDA"</b> → chọn "🏬 Mở mới" hoặc "🔧 Sửa chữa" → điền form đề xuất dự án → gửi phê duyệt.' },
+      { role: 'Người đề xuất', text: 'vào mục <b>⚙️ Vận Hành</b> (sidebar) → tab <b>"🏬 QLDA"</b> → chọn "🏬 Mở mới" hoặc "🔧 Sửa chữa" → điền form đề xuất dự án → gửi phê duyệt.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ đang chờ → bấm Duyệt hoặc Từ chối.' },
       { role: 'Người thực hiện dự án', text: 'sau khi duyệt, vào tab "📁 Danh mục đầu tư" xem các mốc tiến độ theo mẫu đã cấu hình → tab "🛠️ Thực hiện" cập nhật tiến độ từng mốc (kèm tệp đính kèm riêng, không ghi đè lịch sử).' },
       { role: 'Người nghiệm thu', text: 'tab "✅ Nghiệm thu" → xác nhận hoàn tất từng mốc bắt buộc — đủ mốc thì dự án coi là hoàn tất.' },
@@ -695,7 +771,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Nộp & tổng hợp', sub: 'Tự tính điểm/xếp loại' },
     ] },
     steps: [
-      { role: 'Quản trị', text: 'vào mục ✅ Checklist Đánh Giá Siêu Thị (sidebar) → tab <b>"🛠️ Cấu Hình"</b> → "🛠️ Tạo Mẫu Checklist Mới" → chọn Loại Mẫu, thêm hạng mục/câu hỏi/điểm → lưu ở trạng thái Nháp, rồi kích hoạt để chuyển thành "Đang dùng" (chỉ 1 mẫu đang dùng mỗi lúc).' },
+      { role: 'Quản trị', text: 'vào <b>⚙️ Vận Hành → ✅ Checklist Đánh Giá</b> (sidebar) → tab <b>"🛠️ Cấu Hình"</b> → "🛠️ Tạo Mẫu Checklist Mới" → chọn Loại Mẫu, thêm hạng mục/câu hỏi/điểm → lưu ở trạng thái Nháp, rồi kích hoạt để chuyển thành "Đang dùng" (chỉ 1 mẫu đang dùng mỗi lúc).' },
       { role: 'Người đánh giá', text: 'tab <b>"✅ Thực Hiện"</b> → chọn siêu thị cần đánh giá → trả lời từng mục theo đúng mẫu đang dùng → nộp bài (hệ thống tự tính điểm/xếp loại). Bài chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
       { text: 'Xem kết quả và phản hồi: tab "📣 Kết Quả & Phản Hồi"; xem tổng hợp nhiều đợt: tab "📊 Báo Cáo".' },
       { role: 'Quản trị', text: 'muốn đổi mẫu đang dùng: bấm "⏸️ Dừng" trên mẫu hiện tại (chuyển sang Lưu trữ) rồi kích hoạt mẫu khác; muốn sửa nội dung mẫu Đang dùng/Lưu trữ thì bấm "✏️ Sửa" (tự nhân bản thành 1 bản Nháp mới, không sửa trực tiếp để giữ nguyên dữ liệu bài đã nộp).' },
@@ -719,7 +795,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Áp Dụng', sub: 'Có hiệu lực NGAY, không qua ai duyệt lần 2', kind: 'approved' },
     ] },
     steps: [
-      { text: 'Lần đầu chưa có sơ đồ nào: vào mục 🗂️ Cơ Cấu Tổ Chức (sidebar) → bấm <b>"Khởi Tạo"</b> ở khung "🌱 Khởi Tạo Cơ Cấu Tổ Chức".' },
+      { text: 'Lần đầu chưa có sơ đồ nào: vào <b>💼 Nhân Sự → 🌳 Cơ Cấu Tổ Chức</b> (sidebar) → bấm <b>"Khởi Tạo"</b> ở khung "🌱 Khởi Tạo Cơ Cấu Tổ Chức".' },
       { text: 'Sửa tiếp: bấm <b>"+ Tạo Bản Nháp Mới"</b> (luôn sao chép từ bản đang áp dụng) → sửa cây ngay trên tab "🌳 Sơ Đồ Tổ Chức" (thêm/sửa/xoá vị trí, gắn phòng ban).' },
       { text: 'Trước khi áp dụng, có thể bấm "🔍 Kiểm Tra Hợp Lệ" (tuỳ chọn, chỉ cảnh báo lỗi) hoặc "🔀 So Sánh Với Bản Đang Áp Dụng" để đối chiếu.' },
       { text: 'Bấm <b>"✅ Áp Dụng Phiên Bản Này"</b> để có hiệu lực ngay — bản đang áp dụng cũ tự chuyển sang Lưu trữ, không cần ai duyệt lần 2.' },
@@ -746,7 +822,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Kết thúc thử việc', sub: '', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Nhân Sự', text: 'vào mục 🆕 Onboarding / Offboarding (sidebar) → bấm <b>"+ Tạo Onboarding"</b> (nhân viên mới) hoặc <b>"+ Tạo Offboarding"</b> (nhân viên nghỉ việc) → điền thông tin → bấm <b>"📨 Tạo Quy Trình"</b> — hệ thống tự sinh danh sách việc cần làm theo mẫu, gán đúng bộ phận phụ trách từng việc.' },
+      { role: 'Nhân Sự', text: 'vào <b>💼 Nhân Sự → 🧑‍💼 Onboarding / Offboarding</b> (sidebar) → bấm <b>"+ Tạo Onboarding"</b> (nhân viên mới) hoặc <b>"+ Tạo Offboarding"</b> (nhân viên nghỉ việc) → điền thông tin → bấm <b>"📨 Tạo Quy Trình"</b> — hệ thống tự sinh danh sách việc cần làm theo mẫu, gán đúng bộ phận phụ trách từng việc.' },
       { role: 'Người phụ trách từng việc', text: 'vào tab <b>"✅ Việc Của Tôi"</b> để xem đúng việc được gán cho mình (theo bộ phận Nhân Sự/IT/Hành Chính/Kế Toán/Quản Lý trực tiếp) → đánh dấu hoàn tất từng việc.' },
       { text: 'Theo dõi toàn bộ tiến độ: tab <b>"📋 Danh Sách Quy Trình"</b> — quy trình tự chuyển trạng thái hoàn tất khi đã xong hết việc bắt buộc (riêng Offboarding còn chờ chỉ định người kế nhiệm nếu người nghỉ đang quản lý trực tiếp ai đó).' },
       { role: 'Quản trị', text: 'chuẩn bị sẵn danh sách việc theo mốc thời gian: tab "🗂️ Checklist Mẫu".' },
@@ -794,8 +870,8 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đã kết thúc', sub: 'Tự động khi nghỉ việc xong' },
     ], decision: { atIndex: 1, approveLabel: 'Ký', rejectLabel: 'Không đạt/gia hạn thêm', rejectBox: { label: 'Gia hạn thử việc', sub: 'Kéo dài thời gian thử việc' }, loopBackToIndex: 0 } },
     steps: [
-      { text: 'Hợp đồng thử việc TỰ SINH ngay khi tạo Onboarding cho nhân viên mới (mục 🆕 Onboarding/Offboarding) — không cần tạo tay ở đây.' },
-      { role: 'Người quản lý hợp đồng', text: 'vào mục 📄 Hợp Đồng Lao Động (sidebar) → bấm <b>"➕ Tạo Hợp Đồng Mới"</b> nếu cần tạo tay (VD hợp đồng không qua Onboarding).' },
+      { text: 'Hợp đồng thử việc TỰ SINH ngay khi tạo Onboarding cho nhân viên mới (mục 🧑‍💼 Onboarding / Offboarding) — không cần tạo tay ở đây.' },
+      { role: 'Người quản lý hợp đồng', text: 'vào <b>💼 Nhân Sự → 📝 Hợp Đồng Lao Động</b> (sidebar) → bấm <b>"➕ Tạo Hợp Đồng Mới"</b> nếu cần tạo tay (VD hợp đồng không qua Onboarding).' },
       { text: 'Tăng lương THẬT (đổi số dùng để tính Lương hàng tháng): mở hợp đồng ACTIVE của nhân viên → khối "💰 Cập Nhật Lương Cơ Bản" → nhập Lương cơ bản mới → bấm "💾 Lưu Lương Cơ Bản".' },
       { text: 'Ghi nhận thay đổi khác chỉ để LƯU LỊCH SỬ (đổi chức danh, gia hạn, quyết định kèm theo...): thêm 1 dòng phụ lục mới, điền "Ngày áp dụng" (tuỳ chọn)/"Ngày hiệu lực" (bắt buộc) + Giá trị cũ/mới (bật checkbox "💰 Giá trị tiền" nếu là số tiền để tự định dạng) — phần này KHÔNG tự cập nhật Lương cơ bản, chỉ để tra cứu.' },
       { text: 'Hợp đồng tự chuyển "Đã kết thúc" khi hoàn tất thủ tục nghỉ việc ở Onboarding/Offboarding — không cần đóng tay.' },
@@ -833,7 +909,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Trừ quỹ phép', sub: 'CHỈ Phép Năm mới trừ quỹ, lúc DUYỆT chứ không phải lúc nộp', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: 'Không trừ quỹ (chưa từng trừ)' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Nhân viên', text: 'vào mục 🕒 Công / Phép (sidebar) → tab <b>"🙋 Của Tôi"</b> → bấm <b>"📝 Nộp Đơn Nghỉ Phép"</b> → chọn loại phép + số ngày/giờ → gửi.' },
+      { role: 'Nhân viên', text: 'vào <b>💼 Nhân Sự → ⏱️ Công &amp; Phép</b> (sidebar) → tab <b>"🙋 Của Tôi"</b> → bấm <b>"📝 Nộp Đơn Nghỉ Phép"</b> → chọn loại phép + số ngày/giờ → gửi.' },
       { role: 'Quản lý trực tiếp / Nhân Sự', text: 'tab <b>"✅ Duyệt Nghỉ Phép"</b> → tìm đơn đang chờ (của nhân viên thuộc quyền quản lý, đệ quy mọi cấp dưới) → Duyệt hoặc Từ chối — Duyệt Phép Năm mới trừ quỹ phép, các loại phép khác chỉ ghi nhận chấm công.' },
       { role: 'Quản lý siêu thị', text: 'phân ca cho nhân viên: tab <b>"📅 Phân Ca Siêu Thị"</b> → bấm <b>"➕ Phân Ca Mới"</b>.' },
       { role: 'Nhân Sự', text: 'tab <b>"🛠️ Quản Lý & Cấu Hình"</b> để: bổ sung bản ghi công thủ công ("➕ Bổ Sung Bản Ghi Công"), tạo/sửa phép năm từng người ("➕ Tạo/Sửa Phép Năm"), cấu hình giờ hành chính, ngày lễ, mẫu ca làm việc, hoặc tạo API Key cho máy chấm công.' },
@@ -858,7 +934,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Công Bố', sub: 'Thông báo trong app cho từng nhân viên', kind: 'approved' },
     ], decision: { atIndex: 1, rejectBox: { label: 'Từ chối', sub: 'Quay về Nháp để sửa lại' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Nhân viên', text: 'vào mục 💴 Lương (sidebar) → tab <b>"🙋 Phiếu Lương Của Tôi"</b> để xem phiếu lương từng kỳ.' },
+      { role: 'Nhân viên', text: 'vào <b>💼 Nhân Sự → 💰 Lương</b> (sidebar) → tab <b>"🙋 Phiếu Lương Của Tôi"</b> để xem phiếu lương từng kỳ.' },
       { role: 'Kế toán/Nhân Sự', text: 'tab <b>"🛠️ Quản Lý Kỳ Lương"</b> → bấm <b>"+ Tạo Kỳ Lương"</b> → hệ thống tự tính lương (Nháp) từ Hợp Đồng Lao Động + Công/Phép; có thể bấm "Tính Lương" lại nhiều lần khi còn Nháp (mỗi lần tính lại GHI ĐÈ toàn bộ, kể cả điều chỉnh tay trước đó).' },
       { text: 'Thêm phụ cấp/KPI/thưởng/khấu trừ (không tự tính được): bấm "Điều Chỉnh" trên từng dòng — chỉ làm được khi kỳ còn Nháp.' },
       { text: 'Bấm "Gửi Duyệt" → người duyệt Duyệt (chuyển "Đã Duyệt" rồi "Đã Chốt", khoá sửa hoàn toàn) hoặc Từ chối (quay về Nháp để sửa lại).' },
@@ -887,7 +963,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Kết thúc', sub: '1 hỏi – 1 đáp, không mở lại/hỏi tiếp được' },
     ] },
     steps: [
-      { role: 'Nhân viên', text: 'vào 🚀 Truyền thông → tab <b>"🤝 HCRC Đồng Hành"</b> → điền form "🤝 Gửi Câu Hỏi Tới Nhân Sự": chọn Chủ Đề (tuỳ chọn) + Nội Dung Câu Hỏi → bấm <b>"Gửi Câu Hỏi"</b>.' },
+      { role: 'Nhân viên', text: 'vào <b>📣 Truyền thông → 🤝 HCRC Đồng Hành</b> (sidebar) → điền form "🤝 Gửi Câu Hỏi Tới Nhân Sự": chọn Chủ Đề (tuỳ chọn) + Nội Dung Câu Hỏi → bấm <b>"Gửi Câu Hỏi"</b>.' },
       { text: 'Xem lại câu hỏi và câu trả lời của mình: mục "📨 Câu Hỏi Của Tôi" ngay bên dưới form.' },
       { role: 'Nhân Sự', text: 'vào mục 🤝 Quản Lý & Phản Hồi Ý Kiến (sidebar, dưới Nhân Sự) → xem toàn bộ câu hỏi của công ty → trả lời từng câu — trả lời xong câu đó KHÔNG sửa/trả lời thêm được nữa, nhân viên phải gửi câu mới nếu cần hỏi tiếp.' },
     ],
@@ -910,7 +986,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Hoàn tất', sub: '', kind: 'approved' },
     ], decision: { atIndex: 2, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Gửi lại yêu cầu' }, loopBackToIndex: 1 } },
     steps: [
-      { role: 'Nhân viên', text: 'vào mục 🎫 Hỗ Trợ IT (sidebar) → tab <b>"🎫 Hỗ Trợ Yêu Cầu"</b> → điền form "🎫 Gửi Yêu Cầu Hỗ Trợ IT" → bấm <b>"Gửi yêu cầu"</b> (mã ticket tự sinh, tự đổi mã kế tiếp nếu trùng).' },
+      { role: 'Nhân viên', text: 'vào mục <b>🖥️ Hỗ Trợ IT</b> (sidebar) → tab <b>"🎫 Hỗ Trợ Yêu Cầu"</b> → điền form "🎫 Gửi Yêu Cầu Hỗ Trợ IT" → bấm <b>"Gửi yêu cầu"</b> (mã ticket tự sinh, tự đổi mã kế tiếp nếu trùng).' },
       { role: 'Đội Hỗ Trợ IT', text: 'mở đúng ticket trong danh sách → bấm nhận xử lý (chuyển "Tôi đang xử lý") → xử lý xong đánh dấu hoàn tất.' },
       { text: 'Cần 1 người cụ thể duyệt trước khi tiếp tục xử lý (VD chi phí phát sinh ngoài luồng Phê Duyệt Giá Bán): gửi yêu cầu leo thang phê duyệt ngay trên ticket — bước này tuỳ chọn, phần lớn ticket không cần.' },
       { text: 'Theo dõi dịch vụ CNTT sắp hết hạn: tab "🔔 Gia Hạn Dịch Vụ".' },
@@ -941,7 +1017,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Hoàn tất', sub: '' },
     ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Người đề xuất', text: 'vào mục 🏷️ Phê Duyệt Giá (sidebar) → chọn tab <b>"🏷️ Bán Lẻ"</b> hoặc <b>"🏪 Bán Buôn"</b> (2 quy trình khác nhau thật sự) → tải lên tệp bảng giá (.xlsx, khớp đúng Mẫu Giá nếu hệ thống đã có mẫu) + Lý do → Bán Buôn phải chọn thêm Mức Margin/Chiết Khấu, Đơn Vị Áp Dụng, ít nhất 1 siêu thị/cửa hàng đề xuất, Ngày Áp Dụng → bấm <b>"Gửi phê duyệt"</b>.' },
+      { role: 'Người đề xuất', text: 'vào <b>🖥️ Hỗ Trợ IT → 🏷️ Phê Duyệt Giá</b> (sidebar) → chọn tab <b>"🏷️ Bán Lẻ"</b> hoặc <b>"🏪 Bán Buôn"</b> (2 quy trình khác nhau thật sự) → tải lên tệp bảng giá (.xlsx, khớp đúng Mẫu Giá nếu hệ thống đã có mẫu) + Lý do → Bán Buôn phải chọn thêm Mức Margin/Chiết Khấu, Đơn Vị Áp Dụng, ít nhất 1 siêu thị/cửa hàng đề xuất, Ngày Áp Dụng → bấm <b>"Gửi phê duyệt"</b>.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ đang chờ (Bán Lẻ duyệt theo phòng ban, Bán Buôn duyệt theo đúng mức Margin/Chiết Khấu đã chọn — không duyệt lẫn được) → bấm Duyệt, Từ chối, hoặc Yêu Cầu Bổ Sung (khoá áp giá tới khi có tệp bổ sung mới).' },
       { role: 'Đội Hỗ Trợ IT (quyền itPriceSupport)', text: 'sau khi duyệt, mở hồ sơ → áp giá thật vào hệ thống → đánh dấu hoàn tất.' },
     ],
@@ -957,7 +1033,7 @@ const NGHIEP_VU_DOCS = {
     ] },
   },
   muaHang: {
-    icon: '🛒', title: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC', badge: 'Mua Hàng, Giai đoạn 1',
+    icon: '🔗', title: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC', badge: 'Mua Hàng, Giai đoạn 1',
     desc: 'Quản lý Nhà Cung Cấp + Điều Khoản Chiết Khấu/Thưởng (mỗi điều khoản tự mang bậc thang % + phạm vi áp dụng riêng), đồng bộ dữ liệu mua hàng thực tế từ hệ thống DSmart, rồi tính ƯỚC TÍNH số tiền chiết khấu theo đúng bậc thang đã cấu hình. Giai đoạn 1 dừng ở mức ƯỚC TÍNH — chưa có Sổ Cái đối chiếu/phê duyệt chính thức với NCC (Giai đoạn 2-3, chưa triển khai).',
     flow: { ariaLabel: 'Quy trình BAS: Điều Khoản → Kích Hoạt → Đồng Bộ → Tính Ước Tính', chain: [
       { label: 'Tạo Điều Khoản', sub: 'Bậc thang % + phạm vi áp dụng, trạng thái Nháp' },
@@ -966,16 +1042,18 @@ const NGHIEP_VU_DOCS = {
       { label: 'Tính Ước Tính', sub: 'Theo đúng bậc thang tại thời điểm tính' },
     ], decision: { atIndex: 1, approveLabel: 'Kích hoạt', rejectLabel: 'Lưu trữ', rejectBox: { label: 'Lưu Trữ', sub: 'Ngừng áp dụng' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Người quản lý', text: 'vào mục 🛒 Mua Hàng (sidebar) → tab <b>"🧮 BAS"</b> → tab con <b>"🏢 Nhà Cung Cấp"</b> → bấm <b>"+ Thêm NCC"</b> nếu chưa có nhà cung cấp cần dùng.' },
+      { role: 'Người quản lý', text: 'vào mục <b>🔗 Mua Hàng</b> (sidebar) → tab <b>"🧮 BAS"</b> → tab con <b>"🏢 Nhà Cung Cấp"</b> → bấm <b>"+ Thêm NCC"</b> nếu chưa có nhà cung cấp cần dùng.' },
       { role: 'Người quản lý', text: 'tab con <b>"📜 Điều Khoản Chiết Khấu / Thưởng NCC"</b> → bấm <b>"+ Tạo Điều Khoản"</b> → bấm "+ Thêm Bậc" để khai bậc thang %, "+ Thêm Phạm Vi" để khai phạm vi áp dụng → bấm <b>"💾 Lưu Điều Khoản"</b> (trạng thái Nháp).' },
       { role: 'Người có quyền kích hoạt', text: 'mở đúng điều khoản Nháp → bấm Kích Hoạt để chuyển sang Đang Hoạt Động — quyền này TÁCH RIÊNG khỏi quyền tạo/sửa (tách biệt nhiệm vụ).' },
       { role: 'Người quản lý', text: 'tab con <b>"🔄 Đồng Bộ DSmart"</b> → bấm <b>"🔄 Đồng Bộ Ngay"</b> để kéo dữ liệu mua hàng thực tế (tự chống trùng theo mã tham chiếu gốc), sau đó bấm Tính Ước Tính trên điều khoản đang Hoạt Động để ra số tiền chiết khấu ước tính.' },
+      { text: 'Chưa/không đồng bộ được DSmart: vẫn ở tab con "🔄 Đồng Bộ DSmart", kéo xuống khối <b>"📤 Nhập/Xuất Dữ Liệu Thủ Công"</b> → bấm <b>"📥 Tải File Mẫu"</b>, điền tay rồi bấm <b>"📤 Nhập File"</b> (.xlsx) để nạp lên; hoặc chọn Từ Ngày/Đến Ngày rồi bấm <b>"📊 Xuất File"</b> để lấy lại dữ liệu đang có mà chỉnh sửa/bổ sung.' },
       { text: 'Sửa điều khoản đã Kích Hoạt: không sửa trực tiếp được — bấm "Nhân Bản" thành 1 bản Nháp mới (version+1) rồi sửa/kích hoạt lại.' },
       { text: 'Xem số liệu đã tính: tab "📊 Báo Cáo" (chỉ cần quyền xem báo cáo, không cần quyền quản lý/kích hoạt).' },
     ],
     footer: { left: [
       { label: 'Tách biệt nhiệm vụ (mục 8 tài liệu)', text: 'người TẠO/SỬA điều khoản (quyền Quản Lý) KHÔNG tự động KÍCH HOẠT được — phải người khác có quyền Kích Hoạt riêng mới bật điều khoản sang Đang Hoạt Động, vì liên quan trực tiếp số tiền chiết khấu lớn với NCC.' },
       { label: 'Không sửa trực tiếp điều khoản đã Kích Hoạt', text: 'phải "Nhân Bản" thành bản Nháp mới (version+1) rồi sửa/kích hoạt lại — giữ nguyên bản cũ để không làm sai lệch các lần Tính Ước Tính đã thực hiện trước đó (mỗi lần tính LUÔN lưu lại đúng bậc thang tại thời điểm tính, không tham chiếu ngược điều khoản hiện tại). **Kích hoạt bản Nhân Bản tự Lưu Trữ bản cũ (từ 9/2026)**: bấm Kích Hoạt cho bản Nháp mới sẽ tự chuyển bản ACTIVE CŨ cùng Nhà Cung Cấp + Mã Điều Khoản sang "🗄️ Lưu Trữ" ngay lập tức — không còn 2 bản cùng Hoạt Động song song để chọn nhầm bản cũ (bậc thang lỗi thời) khi Tính Ước Tính.' },
+      { label: 'Nhập/Xuất Dữ Liệu Thủ Công — phương án thay thế DSmart', text: 'khối "📤 Nhập/Xuất Dữ Liệu Thủ Công" (tab con 🔄 Đồng Bộ DSmart) dùng khi DSmart tạm không sẵn sàng hoặc cần bổ sung tay vài giao dịch lẻ — dữ liệu nhập tay ghi vào CÙNG 1 chỗ với dữ liệu DSmart (chỉ khác cột "Nguồn": DSMART/MANUAL) nên Tính Ước Tính dùng chung, và cũng tự chống trùng y như đồng bộ tự động.' },
       { label: 'Đồng bộ DSmart tự chống trùng VÀ tự cập nhật (9/2026)', text: 'mỗi lần Đồng Bộ đối chiếu theo mã tham chiếu gốc — dòng CHƯA có thì thêm mới, dòng ĐÃ có nhưng DSmart sửa lại nội dung (VD sửa số tiền/ngày mua) thì CẬP NHẬT LẠI ngay tại dòng cũ, dòng y hệt lần trước thì bỏ qua (không ghi thừa); kết quả mỗi lần đồng bộ hiện đủ 3 số "dòng mới / dòng cập nhật lại / trùng bỏ qua". Trước đây dòng đã có luôn bị bỏ qua vô điều kiện — số liệu DSmart sửa lại sau khi đã đồng bộ lần đầu sẽ không bao giờ cập nhật, làm sai lệch vĩnh viễn kết quả Tính Ước Tính.' },
       { label: 'Tính Ước Tính phải nằm trong hiệu lực điều khoản (9/2026)', text: 'kỳ tính (Từ ngày–Đến ngày) chọn ra ngoài Ngày Hiệu Lực Từ/Đến của điều khoản sẽ bị từ chối — tránh gộp nhầm doanh số của các tháng KHÔNG thuộc phạm vi thoả thuận vào số ước tính. Điều khoản hết hiệu lực (qua Ngày Hiệu Lực Đến) KHÔNG tự chuyển sang "Hết Hạn" — vẫn phải người quản lý tự bấm "⏳ Hết Hạn"; guard kỳ tính ở trên hoạt động độc lập, không phụ thuộc việc đã đánh dấu hết hạn hay chưa.' },
     ], right: [
@@ -985,26 +1063,105 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đối chiếu/Phê duyệt Sổ Cái — chưa triển khai', text: '2 quyền Đối Chiếu/Phê Duyệt đã khai báo sẵn trong cây phân quyền cho Giai đoạn 2-3 (Sổ Cái ACCRUED→CONFIRMED→SETTLED, đối chiếu với NCC) — hiện chưa có luồng nghiệp vụ nào dùng tới.' },
     ] },
   },
+  // ===== 3 màn DÙNG CHUNG (10/2026) — xem chú thích ở 2 nhóm cuối NGHIEP_VU_NAV =====
+  approvalHub: {
+    icon: '✅', title: 'Phê Duyệt (Hộp Thư Duyệt Tổng Hợp)', badge: 'Dùng chung mọi module',
+    desc: 'Một chỗ DUY NHẤT gom toàn bộ hồ sơ đang chờ ĐÚNG bạn duyệt ngay bây giờ, từ mọi module có luồng duyệt (Tài liệu, Văn bản trình, Hợp đồng + Tài liệu ký, Đăng ký xe, Mua Bán/Sửa Chữa, Thanh Toán, Văn phòng phẩm, Ngân Sách, Phòng họp, Giấy phép, Góc chia sẻ, Phê Duyệt Giá Bán Lẻ/Bán Buôn, Đơn Hàng/QLDA của Vận Hành...) — bấm Duyệt/Từ chối ngay tại đây, KHÔNG cần mở từng module. Đổi bộ lọc "Trạng Thái" để tra lại hồ sơ mình ĐÃ duyệt/đã từ chối trước đây.',
+    flow: { ariaLabel: 'Cách hoạt động của Hộp Thư Duyệt Tổng Hợp', chain: [
+      { label: 'Hồ sơ chờ ở module gốc', sub: 'Bất kỳ module nào có bước duyệt' },
+      { label: 'Hub gom về 1 danh sách', sub: 'Chỉ hồ sơ ĐÚNG bạn duyệt được lúc này', kind: 'decision' },
+      { label: 'Về lại module gốc', sub: 'Chuyển bước/gửi email y hệt duyệt tại module', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Theo đúng luật của module gốc' }, loopBackToIndex: 0, loopBackLabel: 'Hồ sơ quay về module gốc' } },
+    steps: [
+      { role: 'Người duyệt', text: 'vào mục <b>✅ Phê Duyệt</b> (sidebar, ngay dưới 🏠 Trang chủ) — con số trên nhãn nút chính là số hồ sơ đang chờ bạn xử lý.' },
+      { text: 'Thu hẹp danh sách bằng 4 bộ lọc trên đầu: <b>Trạng Thái</b> (⏳ Đang chờ duyệt / ✅ Đã duyệt / ❌ Đã từ chối), <b>Khoảng Thời Gian</b> (chỉ hiện khi xem lại hồ sơ đã xử lý: 30 ngày / 90 ngày / Tất cả thời gian), <b>Lọc Theo Loại</b>, và ô <b>"Tìm Theo Mã / Trích Yếu"</b>.' },
+      { role: 'Người duyệt', text: 'trong bảng (Loại / Mã / Trích Yếu / Phòng Ban / Bước Hiện Tại / Trạng Thái / Ngày Tạo / Thao Tác), bấm nút ở cột <b>Thao Tác</b>: <b>"✅ Duyệt"</b> hoặc <b>"❌ Từ chối"</b> với hồ sơ duyệt được 1 chạm; hồ sơ cần nhập thêm thông tin thì nút là <b>"✍️ Xử lý / Duyệt"</b> — bấm vào sẽ mở đúng màn xử lý đầy đủ của module gốc (VD Văn Bản Trình, Đăng Ký Xe).' },
+      { text: 'Cột "Bước Hiện Tại" cho biết hồ sơ đang ở bước mấy trên tổng số bước (VD "Bước 2/3: Trưởng phòng") — duyệt xong, hồ sơ tự rời danh sách và đi tiếp sang người duyệt bước sau.' },
+      { text: 'Xem lại việc đã làm: đổi Trạng Thái sang "✅ Đã duyệt" hoặc "❌ Đã từ chối" — cột ngày tự đổi nhãn thành "Ngày Xử Lý" và hiện thêm ô Khoảng Thời Gian. Không còn gì chờ thì màn hiện "🎉 Hiện không có hồ sơ nào chờ bạn duyệt."' },
+    ],
+    footer: { left: [
+      { label: 'Chỉ hiện hồ sơ ĐÚNG bạn duyệt được NGAY BÂY GIỜ', text: 'điều kiện lọc từng hồ sơ ở đây COPY y hệt điều kiện duyệt của chính module gốc — hồ sơ đang ở bước của người khác, hoặc bạn đã duyệt ở bước trước rồi, đều không hiện. Không thấy hồ sơ mình tưởng phải duyệt thì kiểm tra lại cấu hình bước duyệt (Hệ Thống → 🔄 Quy Trình & Phê Duyệt) chứ không phải lỗi hiển thị của Hub.' },
+      { label: 'Ai thấy được mục này', text: 'mọi tài khoản đang thực sự nằm trong ít nhất 1 luồng duyệt (được gán làm người duyệt ở 1 bước quy trình phòng ban/mức nào đó), hoặc có 1 trong các quyền duyệt phẳng (duyệt Hợp Đồng / Phòng Họp / Góc Chia Sẻ / Thanh Toán / Giấy Phép), hoặc admin — KHÔNG cần admin cấp thêm quyền riêng nào cho Hub.' },
+    ], right: [
+      { label: 'Hub không phải module lưu hồ sơ riêng', text: 'đây thuần là 1 lớp giao diện tổng hợp — không có kho hồ sơ/quy trình riêng, nút Duyệt/Từ chối gọi THẲNG đúng hàm xử lý của module gốc nên mọi hệ quả (gửi email, chuyển bước, tự sinh Công Việc từ Văn Bản Trình...) y hệt như duyệt tại module đó.' },
+      { label: 'Nhãn trạng thái phụ', text: 'đa số dòng hiện "⏳ Đang Chờ Duyệt"; riêng vài loại có trạng thái con hữu ích hơn sẽ hiện "🟠 Chờ Bổ Sung" (VD Phê Duyệt Giá đang chờ người đề xuất nộp tệp bổ sung) để biết ngay là chưa tới lượt mình bấm duyệt.' },
+      { label: 'Vẫn duyệt tại module gốc được', text: 'Hub không thay thế màn duyệt của từng module — cần xem thật kỹ hồ sơ/tệp đính kèm trước khi quyết định thì cứ mở module gốc như trước, kết quả không khác gì.' },
+    ] },
+  },
+  reports: {
+    icon: '📊', title: 'Báo Cáo (Tổng Hợp Toàn Hệ Thống)', badge: 'Chỉ đọc, không tạo hồ sơ',
+    desc: 'Màn tổng hợp SỐ LIỆU đọc từ các module khác — không có luồng nghiệp vụ riêng, không tạo/sửa hồ sơ nào. Điều hướng 2 cấp: chọn 1 nhánh ở hàng nút trên (Tổng Hợp đa chiều, hoặc từng module), nhánh nào có module con thì hiện thêm hàng "Chọn màn báo cáo:" cấp 2. Cùng 1 bộ lọc thời gian/phòng ban áp dụng cho mọi nhánh, xuất được ra Excel.',
+    flow: { ariaLabel: 'Quy trình xem Báo Cáo tổng hợp', chain: [
+      { label: 'Chọn nhánh báo cáo', sub: 'Hàng nút cấp 1' },
+      { label: 'Chọn màn báo cáo', sub: 'Hàng cấp 2 (nếu nhánh có module con)' },
+      { label: 'Lọc thời gian / phòng ban', sub: 'Dùng chung cho mọi nhánh' },
+      { label: 'Xem & Xuất Excel', sub: 'Chỉ đọc, không sửa được gì', kind: 'approved' },
+    ] },
+    steps: [
+      { text: 'Vào mục <b>📊 Báo cáo</b> (sidebar, ngay dưới 📘 Hướng Dẫn).' },
+      { text: 'Chọn nhánh ở hàng nút cấp 1: <b>📊 Tổng Hợp</b> (đa chiều toàn hệ thống), 📂 Tài Liệu, 📜 Văn Bản Trình, ✅ Công Việc, 📄 Hợp Đồng, 📝 Biên Bản Họp, 🖥️ Hỗ Trợ IT, 📅 Báo Cáo Định Kỳ, 📣 Truyền Thông Nội Bộ, 🏢 Hành Chính, 🛒 Tổng Hợp, 👤 Nhân Sự, 🛠️ Vận Hành, 🛒 Mua Hàng (BAS).' },
+      { text: 'Nhánh có module con (🏢 Hành Chính, 🛒 Tổng Hợp, 👤 Nhân Sự, 🛠️ Vận Hành) hiện thêm dòng <b>"Chọn màn báo cáo:"</b> — bấm đúng module con cần xem (VD Hành Chính → 📅 Phòng Họp / 🚗 Đăng Ký Xe / 🖇️ Văn Phòng Phẩm / 👕 Đồng Phục / 🪪 Giấy Phép). Nhánh không có module con thì vào thẳng màn báo cáo.' },
+      { text: 'Lọc số liệu bằng khối trắng bên dưới: <b>Từ Ngày (theo ngày tạo hồ sơ)</b>, <b>Đến Ngày</b>, <b>Phòng Ban</b> → bấm <b>"Đặt Lại Bộ Lọc"</b> để xoá hết. Riêng màn Đồng Phục, ô Phòng Ban tự đổi thành khối <b>"Nhóm Siêu Thị"</b> tick chọn nhiều siêu thị (mặc định chọn hết, có "Chọn Tất Cả"/"Bỏ Chọn Hết").' },
+      { text: 'Bấm <b>"📥 Xuất Báo Cáo Excel"</b> (góc trên bên phải) để tải số liệu đang xem ra file.' },
+      { role: 'Quản trị viên', text: 'mở thêm 1 tab báo cáo cho người CHƯA có quyền module tương ứng: vào <b>Hệ Thống → ⚙️ Quản Trị → 🔐 Phân Quyền</b> → bấm "Sửa" đúng tài khoản → chọn ở ô <b>"📊 Mở Thêm Tab Báo Cáo (tuỳ chọn)"</b> (mở từng tab cụ thể), hoặc tick <b>"👁️ Xem Toàn Bộ Tab Báo Cáo"</b> trong cây quyền để mở hết mọi tab → bấm "Lưu Người Dùng &amp; Phân Quyền".' },
+    ],
+    footer: { left: [
+      { label: 'Khác "📅 Báo Cáo Định Kỳ"', text: 'Báo Cáo Định Kỳ (nhóm Điều Hành) là 1 QUY TRÌNH chủ động — từng phòng ban nhập, nộp, tổng hợp theo kỳ. Mục này chỉ ĐỌC lại số liệu đã có từ các module, không có thao tác nghiệp vụ nào.' },
+      { label: 'Dữ liệu Nhân Sự cực nhạy cảm KHÔNG có ở đây', text: 'Hồ Sơ Nhân Sự / Hợp Đồng Lao Động / Lương / Chấm công không đưa vào báo cáo dùng chung — muốn xem số liệu tổng hợp nhóm này phải dùng module con "📊 Báo Cáo" RIÊNG cấp Nhân Sự (gác đúng quyền của module Nhân Sự). Nhánh 👤 Nhân Sự ở đây chỉ gồm HCRC Đồng Hành và Onboarding/Offboarding.' },
+    ], right: [
+      { label: '"Mở Thêm Tab" chỉ mở TAB, không mở dữ liệu', text: 'cơ chế Mở Thêm Tab Báo Cáo / Xem Toàn Bộ Tab Báo Cáo chỉ quyết định tab nào HIỆN trên hàng nút — số liệu thật vẫn luôn lọc theo đúng phạm vi phòng ban/quyền sở hữu bản ghi của từng module. Ngoại lệ duy nhất là Checklist Đánh Giá Siêu Thị (module đó phân quyền phẳng theo "có tham gia hay không" nên xem chéo đúng nghĩa là thấy toàn bộ bài nộp).' },
+      { label: 'Module mới phải được thêm vào đây', text: 'mỗi module có tạo hồ sơ riêng đều phải bổ sung 1 nhánh trong cây báo cáo này ngay khi ra mắt — thiếu thì số liệu module đó không bao giờ xuất hiện ở màn tổng hợp dù dữ liệu vẫn có.' },
+    ] },
+  },
+  profile: {
+    icon: '⚙️', title: 'Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản', badge: 'Mở cho mọi tài khoản',
+    desc: 'Màn cài đặt của riêng bạn — mở bằng cách bấm vào KHỐI TÊN của mình ở đáy sidebar (không phải 1 tab trong menu). Gồm 6 tab: cập nhật thông tin liên hệ, đổi mật khẩu, đổi mã PIN duyệt, đăng ký vân tay/Face ID, quản lý xác thực 2 lớp (TOTP, chỉ quản trị viên), xác nhận đồng phục đã nhận — kèm khối cài ứng dụng lên màn hình chính (PWA).',
+    flow: { ariaLabel: 'Các nhóm thiết lập trong Hồ Sơ Cá Nhân', chain: [
+      { label: 'Mở Hồ Sơ Cá Nhân', sub: 'Bấm tên mình ở đáy sidebar' },
+      { label: 'Chọn tab cần thiết lập', sub: '6 tab, mỗi tab tự lưu riêng', kind: 'decision' },
+      { label: 'Lưu từng tab', sub: 'Có hiệu lực ngay', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Lưu tab đang mở', rejectLabel: 'Sai mật khẩu/PIN hiện tại', rejectBox: { label: 'Báo lỗi, không lưu', sub: 'Nhập lại giá trị hiện tại cho đúng' }, loopBackToIndex: 1, loopBackLabel: 'Thử lại' } },
+    steps: [
+      { role: 'Mọi nhân viên', text: 'bấm vào <b>khối tên tài khoản của bạn ở ĐÁY sidebar</b> (ngay trên nút Đăng xuất) để mở hộp thoại <b>"⚙️ Cá Nhân Hóa &amp; Cập Nhật Thông Tin"</b>.' },
+      { text: 'Tab <b>"👤 Thông Tin"</b>: sửa Họ và Tên, Email Nhận Thông Báo, Số Điện Thoại (Tên đăng nhập khoá cứng, chỉ quản trị viên đổi được) → bấm <b>"Lưu Thay Đổi"</b>.' },
+      { text: 'Tab <b>"🔒 Đổi Mật Khẩu"</b>: nhập Mật khẩu hiện tại, Mật khẩu mới, Xác nhận mật khẩu mới → bấm <b>"Đổi Mật Khẩu"</b>.' },
+      { role: 'Người duyệt dùng mã PIN', text: 'tab <b>"🔑 Đổi Mã PIN"</b> (chỉ hiện với tài khoản được cấu hình xác thực lại bằng PIN khi Duyệt): nhập Mã PIN hiện tại, Mã PIN mới (số, tối thiểu 4 chữ số), Xác nhận → bấm <b>"🔑 Cập Nhật Mã PIN"</b>.' },
+      { text: 'Tab <b>"🖐️ Vân Tay/Face ID"</b> (chỉ hiện khi trình duyệt/thiết bị hỗ trợ): gõ tên thiết bị vào ô "Tên thiết bị (VD: iPhone của tôi)" → bấm <b>"➕ Đăng Ký Thiết Bị Này"</b> → làm theo hướng dẫn của máy. Sau đó đăng nhập hoặc xác thực lại khi Duyệt bằng vân tay/Face ID thay vì gõ mật khẩu.' },
+      { role: 'Quản trị viên', text: 'tab <b>"🔐 Xác Thực 2 Lớp"</b> (chỉ tài khoản quản trị, luôn BẮT BUỘC bật): thêm máy thứ 2 bằng cách nhập mật khẩu rồi bấm <b>"Hiện Mã QR"</b> để quét lại đúng mã đang dùng (không làm mất hiệu lực máy cũ); đổi điện thoại/thiết lập lại từ đầu thì nhập mật khẩu rồi bấm <b>"🗑️ Gỡ Xác Thực 2 Lớp"</b> — lần đăng nhập kế tiếp hệ thống tự đưa tới màn thiết lập TOTP mới.' },
+      { text: 'Tab <b>"👕 Đồng Phục Của Tôi"</b>: xem các phiếu đồng phục đã cấp cho bạn và bấm "Xác nhận đã nhận" sau khi thực nhận đủ (đây chính là bước cuối của quy trình Đồng Phục).' },
+      { text: 'Khối <b>"📲 Cài Đặt Ứng Dụng"</b> ở cuối hộp thoại: trên Android/Chrome bấm <b>"⬇️ Cài Đặt Ngay"</b>; trên iPhone/iPad phải dùng Safari → nút Chia sẻ → "Thêm vào MH chính" → "Thêm" (Chrome/Cốc Cốc trên iOS không cài được).' },
+    ],
+    footer: { left: [
+      { label: 'Mỗi tab lưu riêng', text: '6 tab hoàn toàn độc lập, mỗi tab có nút lưu của chính nó — đổi mật khẩu không cần đụng tới thông tin liên hệ và ngược lại; đóng hộp thoại giữa chừng chỉ mất phần đang gõ dở ở tab đó.' },
+      { label: 'Mã PIN khác mật khẩu', text: 'mã PIN chỉ dùng để XÁC THỰC LẠI lúc bấm Duyệt (hoặc xoá vĩnh viễn hồ sơ trong Thùng Rác) với tài khoản được admin cấu hình mức xác thực đó — không dùng để đăng nhập, đổi PIN đi qua đường riêng nên phải nhập PIN cũ chứ không phải mật khẩu.' },
+    ], right: [
+      { label: 'Vân tay/Face ID là tiện ích chung', text: 'đăng ký thiết bị không phụ thuộc mức xác thực admin đặt cho bạn — ai có máy hỗ trợ cũng đăng ký được để đăng nhập nhanh; thiết bị đã đăng ký liệt kê ngay trong tab đó để gỡ khi đổi máy.' },
+      { label: 'Xác thực 2 lớp không tắt được', text: 'tài khoản quản trị viên BẮT BUỘC bật TOTP, không có nút "tắt hẳn" — chỉ có "gỡ để thiết lập lại", và đăng nhập lần sau sẽ bị đưa thẳng vào màn thiết lập lại trước khi vào được hệ thống.' },
+    ] },
+  },
 };
 
-// ===================== Hệ Thống (DEMO) — chỉ 3/10 mục có nội dung đầy đủ để demo cấu trúc/văn phong,
-// 7 mục còn lại (sysUsers/sysWorkflow/sysFormBuilder/sysFiles/sysTrash/sysLog/sysEmail/sysExtAuth) CHỦ
-// Ý chưa viết — hiện đúng cảnh báo "⚠️ Chưa có tài liệu nghiệp vụ" (cơ chế có sẵn) để demo luôn cấu trúc
-// nav đầy đủ, sẽ viết nốt sau khi người dùng duyệt cách trình bày. =====================
+// ===================== Hệ Thống — MỌI mục trong SYSTEM_NAV đều đã có entry đầy đủ ở đây (chú thích cũ
+// "chỉ 3/10 mục có nội dung để demo" đã lạc hậu, gỡ bỏ 10/2026). Thêm màn admin mới thì thêm ĐỒNG THỜI
+// 1 key vào SYSTEM_NAV và 1 entry tại đây — thiếu 1 trong 2 sẽ hiện cảnh báo "⚠️ Chưa có tài liệu nghiệp
+// vụ" ngay trên màn thật. ĐƯỜNG DẪN ghi trong `steps` phải đủ CẢ cấp tab con: 6 màn Cấu Hình Email/
+// Thông Báo Email Phê Duyệt/Quản Lý Danh Mục/Phân Quyền/API Xác Thực Ngoài/Cấu Hình API đều là tab CẤP 2
+// nằm BÊN TRONG "⚙️ Quản Trị" (xem #adminSubTabBar ở fragments/systemSection.html), không phải mục cấp 1
+// trên sidebar Hệ Thống. =====================
 const SYSTEM_DOCS = {
   sysPermissions: {
     icon: '🔑', title: 'Phân Quyền', badge: 'Chỉ Quản Trị Viên',
     desc: 'Cây quyền chi tiết theo từng khối chức năng (không phải vai trò cố định kiểu "Nhân viên/Quản lý") — mỗi tài khoản được tick từng quyền riêng lẻ, kết hợp tự do. Từ v23.28, 3 nhóm dữ liệu nhạy cảm Nhân Sự (Hồ Sơ/Hợp Đồng/Lương) KHÔNG còn tự động mở cho admin — phải tick quyền tương ứng như tài khoản thường.',
     flow: { ariaLabel: 'Quy trình cấp quyền cho 1 tài khoản', chain: [
-      { label: 'Mở Sửa Người Dùng', sub: 'Hệ Thống → Người Dùng' },
+      { label: 'Mở Sửa Người Dùng', sub: 'Quản Trị → Phân Quyền' },
       { label: 'Tick quyền theo khối', sub: 'Từng khối chức năng riêng' },
       { label: 'Lưu lại', sub: 'Áp dụng ngay lần đăng nhập sau', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 👥 Người Dùng</b> → tìm đúng tài khoản → bấm <b>"Sửa"</b>.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔐 Phân Quyền</b> → kéo xuống bảng danh sách tài khoản, tìm đúng tài khoản → bấm <b>"Sửa"</b> (form tạo/sửa tài khoản nằm ngay đầu chính tab này — hệ thống KHÔNG có màn "Người Dùng" riêng trên sidebar).' },
       { role: 'Quản trị viên', text: 'kéo xuống khối <b>"Phân Quyền"</b> — cây quyền chia theo từng module (Văn Bản, Tài Chính, Nhân Sự, Vận Hành, Hệ Thống...), mỗi khối là 1 nhóm checkbox riêng, tick đúng quyền cần cấp.' },
       { role: 'Quản trị viên', text: '3 khối nhạy cảm Nhân Sự (Hồ Sơ/Hợp Đồng/Lương) hiện RIÊNG với ghi chú "không tự động mở cho admin" — phải tick tường minh dù tài khoản đã có quyền admin chung.' },
-      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — quyền mới có hiệu lực ngay từ lượt tải lại trang / đăng nhập sau của tài khoản đó (không cần đăng xuất-vào lại ngay lập tức nếu đang F5 lại trang).' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu Người Dùng &amp; Phân Quyền"</b> — quyền mới có hiệu lực ngay từ lượt tải lại trang / đăng nhập sau của tài khoản đó (không cần đăng xuất-vào lại ngay lập tức nếu đang F5 lại trang).' },
     ],
     footer: { left: [
       { label: 'Không có "vai trò" cố định', text: 'hệ thống không gán sẵn gói quyền theo chức danh — mỗi tài khoản là 1 tổ hợp quyền độc lập, linh hoạt nhưng đòi hỏi quản trị viên tick đúng/đủ khi tạo tài khoản mới.' },
@@ -1024,10 +1181,11 @@ const SYSTEM_DOCS = {
       { label: 'Lưu Tất Cả Danh Sách', sub: 'Tạo cùng lúc toàn bộ', kind: 'approved' },
     ], decision: { atIndex: 2, approveLabel: 'Không trùng', rejectLabel: 'Trùng tên đăng nhập', rejectBox: { label: 'Báo lỗi trùng', sub: 'Chỉ rõ dòng nào trùng' }, loopBackToIndex: 0, loopBackLabel: 'Sửa lại tên đăng nhập' } },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 👥 Người Dùng</b> → bấm <b>"+ Thêm"</b> → điền Tên đăng nhập/Mật khẩu/Họ tên/Phòng ban/Chức danh.' },
-      { role: 'Quản trị viên', text: 'tạo hàng loạt: điền xong 1 người → bấm <b>"Thêm Vào Danh Sách"</b> (chưa gửi lên server) thay vì lưu ngay, lặp lại cho từng người tiếp theo.' },
-      { role: 'Quản trị viên', text: 'điền xong hết danh sách tạm → bấm <b>"Lưu Tất Cả Danh Sách"</b> — hệ thống tự kiểm tra trùng tên đăng nhập (cả trong danh sách tạm lẫn với tài khoản đã có) trước khi tạo, báo rõ dòng nào trùng nếu có.' },
-      { role: 'Quản trị viên', text: 'tài khoản mới chỉ có quyền tối thiểu — vào lại <b>"Sửa"</b> tài khoản đó để tick quyền (xem mục Phân Quyền).' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔐 Phân Quyền</b> — form tạo/sửa tài khoản LUÔN hiện sẵn ngay đầu tab (không có nút "+ Thêm" riêng, cũng không có màn "Người Dùng" tách riêng trên sidebar) → điền Vị Trí (HO/Siêu Thị), Tên đăng nhập, Mật khẩu, Họ và Tên, Email, Số điện thoại, Phòng Ban (hoặc Siêu Thị), Chức Danh.' },
+      { role: 'Quản trị viên', text: 'tạo hàng loạt: điền xong 1 người → bấm <b>"➕ Thêm Vào Danh Sách"</b> (chưa gửi lên server) thay vì lưu ngay, lặp lại cho từng người tiếp theo — danh sách tạm hiện ở khối "📋 Danh Sách Người Dùng Chờ Lưu".' },
+      { role: 'Quản trị viên', text: 'điền xong hết danh sách tạm → bấm <b>"💾 Lưu Tất Cả Danh Sách"</b> — hệ thống tự kiểm tra trùng tên đăng nhập (cả trong danh sách tạm lẫn với tài khoản đã có) trước khi tạo, báo rõ dòng nào trùng nếu có.' },
+      { role: 'Quản trị viên', text: 'tạo 1 người lẻ thì bấm thẳng <b>"Lưu Người Dùng &amp; Phân Quyền"</b> (nút tím ngoài cùng bên phải) thay vì đưa vào danh sách chờ.' },
+      { role: 'Quản trị viên', text: 'tài khoản mới chỉ có quyền tối thiểu — bấm <b>"Sửa"</b> lại đúng tài khoản đó trong bảng danh sách bên dưới để tick quyền (xem mục 🔑 Phân Quyền).' },
     ],
     footer: { left: [
       { label: 'Liên kết Phân Quyền', text: 'tạo tài khoản xong chưa có quyền gì đáng kể — luôn phải sang màn Phân Quyền tick đúng/đủ quyền cho tài khoản vừa tạo.' },
@@ -1079,7 +1237,7 @@ const SYSTEM_DOCS = {
       { label: 'Áp dụng ngay', sub: 'Mọi form liên quan cập nhật', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Không ai đang dùng', rejectLabel: 'Đang có dữ liệu tham chiếu', rejectBox: { label: 'Chặn xoá', sub: 'Báo rõ đang dùng ở đâu' }, loopBackToIndex: 1, loopBackLabel: 'Xử lý dữ liệu tham chiếu trước' } },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🗂️ Quản Lý Danh Mục</b> → chọn đúng tab danh mục cần sửa (Phòng Ban/Chức Danh/Siêu Thị/Loại Hợp Đồng...).' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🗂️ Quản Lý Danh Mục</b> (tab con, cùng hàng với Cấu Hình Email/Phân Quyền) → tìm đúng khối danh mục cần sửa (Phòng Ban/Siêu Thị/Chức Danh/Loại Hợp Đồng...).' },
       { role: 'Quản trị viên', text: 'bấm <b>"+ Thêm"</b> để tạo mới, hoặc <b>"✏️ Sửa"</b>/<b>"🗑️ Xoá"</b> ngay tại dòng danh mục đã có.' },
       { role: 'Quản trị viên', text: 'nếu xoá 1 giá trị ĐANG được dùng ở hồ sơ/form khác, hệ thống chặn lại và báo rõ lý do — phải xử lý xong dữ liệu đang tham chiếu (đổi sang giá trị khác) trước khi xoá được.' },
     ],
@@ -1098,10 +1256,10 @@ const SYSTEM_DOCS = {
       { label: 'Lưu', sub: 'Áp dụng cho hồ sơ tạo TIẾP THEO', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📋 Biểu Mẫu</b> → chọn đúng module/form cần tuỳ biến.' },
-      { role: 'Quản trị viên', text: 'với field có sẵn: đổi <b>Nhãn hiển thị</b>, tick/bỏ <b>Bắt buộc</b>, sửa <b>danh sách lựa chọn</b> (nếu field kiểu dropdown).' },
-      { role: 'Quản trị viên', text: 'thêm field mới: bấm <b>"+ Thêm Field"</b> → chọn kiểu field, nhập nhãn, chọn bắt buộc hay không → lưu — field mới hiện ngay dưới các field mặc định của đúng form đó.' },
-      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — áp dụng ngay từ lượt TẠO hồ sơ tiếp theo, KHÔNG ảnh hưởng hồ sơ đã tạo trước khi thêm/sửa field.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📋 Biểu Mẫu</b> → chọn đúng nhóm module ở hàng nút bên phải tiêu đề; nhóm nào có nhiều form thật thì hiện thêm 1 hàng nút cấp 2 để chọn đúng form (tên form đang sửa hiện màu hồng ngay trên form nhập).' },
+      { role: 'Quản trị viên', text: 'với field có sẵn: ở bảng "Cấu Trúc Tất Cả Các Trường Đang Áp Dụng" bấm <b>"Sửa"</b> ngay dòng field đó để đổi <b>Nhãn hiển thị</b>, tick/bỏ <b>Bắt buộc nhập</b>, sửa <b>danh sách lựa chọn</b> (với vài field kiểu dropdown) — field mặc định không xoá được, chỉ field bổ sung mới sửa/xoá/sắp xếp tự do.' },
+      { role: 'Quản trị viên', text: 'thêm field mới: form <b>"➕ Thêm Trường Dữ Liệu Bổ Sung Cho: ..."</b> luôn hiện sẵn ở đầu màn (KHÔNG có nút "+ Thêm Field" phải bấm trước) → điền Tên Trường (Label), chọn Kiểu Dữ Liệu (Text/Number/Date/DateTime/Dropdown/Multi-select/Textarea/File/Multi-file), điền "CÁC TÙY CHỌN" nếu là dropdown, tick "Bắt buộc nhập" nếu cần → bấm <b>"Thêm Trường Vào Biểu Mẫu"</b>.' },
+      { role: 'Quản trị viên', text: 'field mới hiện ngay dưới các field mặc định của đúng form đó, áp dụng từ lượt TẠO hồ sơ tiếp theo — KHÔNG ảnh hưởng hồ sơ đã tạo trước đó. Đang sửa dở 1 field mà muốn thoát: bấm <b>"Hủy Sửa"</b>.' },
     ],
     footer: { left: [
       { label: 'Khác Quản Lý Danh Mục', text: 'đây là tuỳ biến RIÊNG của từng form (field/nhãn/bắt buộc); Quản Lý Danh Mục là danh mục LÕI dùng chéo nhiều module (Phòng Ban, Chức Danh...) — 2 màn có vai trò khác nhau.' },
@@ -1138,8 +1296,8 @@ const SYSTEM_DOCS = {
     ], decision: { atIndex: 1, approveLabel: 'Khôi phục', rejectLabel: 'Xoá vĩnh viễn', rejectBox: { label: 'Xác thực lại', sub: 'Mật khẩu/OTP/vân tay rồi mới xoá hẳn' }, loopBackToIndex: 1, loopBackLabel: 'Không thể hoàn tác sau bước này' } },
     steps: [
       { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🗑️ Thùng Rác</b> → lọc theo loại hồ sơ/phòng ban để tìm đúng hồ sơ cần xử lý.' },
-      { role: 'Quản trị viên', text: 'khôi phục: bấm <b>"♻️ Khôi Phục"</b> ngay dòng hồ sơ — hồ sơ trở lại nguyên vẹn ở đúng module gốc.' },
-      { role: 'Quản trị viên', text: 'xoá vĩnh viễn: bấm <b>"🗑️ Xoá Vĩnh Viễn"</b> → hệ thống yêu cầu xác thực lại (mật khẩu/OTP/vân tay tuỳ mức cấu hình bảo mật của tài khoản đó) → xác nhận — KHÔNG khôi phục lại được sau bước này.' },
+      { role: 'Quản trị viên', text: 'khôi phục: bấm <b>"♻️ Khôi phục"</b> ngay dòng hồ sơ → xác nhận — hồ sơ trở lại nguyên vẹn ở đúng module gốc.' },
+      { role: 'Quản trị viên', text: 'xoá vĩnh viễn: bấm <b>"🗑️ Xóa vĩnh viễn"</b> → hệ thống yêu cầu xác thực lại (mật khẩu/OTP/vân tay tuỳ mức cấu hình bảo mật của tài khoản đó) → xác nhận — KHÔNG khôi phục lại được sau bước này.' },
     ],
     footer: { left: [
       { label: 'Không tự dọn theo thời gian', text: 'hồ sơ nằm mãi trong Thùng Rác cho tới khi có người chủ động khôi phục hoặc xoá vĩnh viễn — không có cơ chế tự xoá sau X ngày.' },
@@ -1168,44 +1326,76 @@ const SYSTEM_DOCS = {
   },
   sysEmail: {
     icon: '📧', title: 'Cấu Hình Email', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Cấu hình SMTP toàn bộ trên web (Host/Port/Kiểu mã hoá/Email người gửi/Tài khoản đăng nhập), không cần sửa `.env` hay khởi động lại server. Kèm bật/tắt riêng từng loại email thông báo phê duyệt theo từng module.',
+    desc: 'Cấu hình SMTP toàn bộ trên web (Host/Port/Kiểu mã hoá/Email người gửi/Tài khoản đăng nhập), không cần sửa `.env` hay khởi động lại server. Việc bật/tắt riêng từng loại email thông báo phê duyệt theo từng module nằm ở TAB CON RIÊNG "🔔 Thông Báo Email Phê Duyệt" ngay cạnh (cùng trong ⚙️ Quản Trị), không phải trong màn SMTP này.',
     flow: { ariaLabel: 'Quy trình cấu hình SMTP', chain: [
       { label: 'Nhập cấu hình SMTP', sub: 'Host/Port/Kiểu mã hoá' },
       { label: 'Gửi Thử', sub: 'Xác minh trước khi lưu', kind: 'decision' },
       { label: 'Lưu', sub: 'Có hiệu lực ngay, không restart', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Gửi thử thành công', rejectLabel: 'Gửi thử lỗi', rejectBox: { label: 'Sửa lại cấu hình', sub: 'Kiểm tra Host/Port/tài khoản' }, loopBackToIndex: 0, loopBackLabel: 'Nhập lại thông số' } },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ✉️ Cấu Hình Email</b> → điền Host/Port/Email người gửi/Tài khoản đăng nhập SMTP.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 📧 Cấu Hình Email</b> (tab con) → điền Host/Port/Email người gửi/Tài khoản đăng nhập SMTP.' },
       { role: 'Quản trị viên', text: 'bấm 1 trong 3 nút chọn nhanh kiểu mã hoá (<b>Không mã hoá/TLS/SSL</b>) — Port tự đổi sang giá trị chuẩn tương ứng (25/587/465).' },
       { role: 'Quản trị viên', text: 'bấm <b>"Gửi Thử"</b> để xác minh cấu hình đúng trước khi lưu chính thức.' },
       { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — có hiệu lực ngay, không cần khởi động lại server.' },
-      { role: 'Quản trị viên', text: 'muốn giảm email trùng lặp: kéo xuống khối <b>"🔔 Thông Báo Email Phê Duyệt"</b> → tắt riêng từng module ở nhóm "Cần phê duyệt" (gửi người duyệt) hoặc "Kết quả duyệt" (gửi người trình) theo nhu cầu.' },
+      { role: 'Quản trị viên', text: 'muốn giảm email trùng lặp: <b>chuyển sang tab "🔔 Thông Báo Email Phê Duyệt"</b> (tab con RIÊNG ngay cạnh "📧 Cấu Hình Email", KHÔNG phải 1 khối kéo xuống bên trong màn này) → trong bảng "Phân Hệ", tick/bỏ tick từng module ở cột <b>"Cần Phê Duyệt"</b> (email gửi người duyệt) hoặc <b>"Kết Quả Duyệt"</b> (email gửi người trình) → bấm <b>"Lưu Cấu Hình"</b>.' },
+      { role: 'Quản trị viên', text: 'các sự kiện email không thuộc 2 nhóm trên (VD Văn Bản Trình xin ý kiến, Hỗ Trợ IT huỷ khẩn cấp/ticket) nằm ở khối <b>"🧩 Sự Kiện Đặc Thù Riêng Từng Phân Hệ"</b> cuối chính tab đó — mặc định giữ nguyên hành vi cũ (BẬT).' },
     ],
     footer: { left: [
       { label: 'Mặc định chỉ mô phỏng', text: 'chưa nhập SMTP Server ở màn này thì hệ thống chỉ MÔ PHỎNG gửi email (ghi Nhật Ký Hệ Thống, không gửi thật).' },
+      { label: '2 tab riêng, đừng tìm nhầm chỗ', text: '"📧 Cấu Hình Email" (máy chủ SMTP) và "🔔 Thông Báo Email Phê Duyệt" (bật/tắt từng loại email theo phân hệ) là 2 TAB CON tách biệt trong "⚙️ Quản Trị", mỗi tab có nút Lưu riêng — lưu tab này không đụng gì tới tab kia.' },
     ], right: [
-      { label: 'Fail-open khi chưa cấu hình', text: 'nếu admin chưa từng lưu khối "Thông Báo Email Phê Duyệt", email vẫn gửi như hành vi gốc — chỉ khi admin chủ động lưu giá trị TẮT thì email đó mới thực sự bị chặn.' },
+      { label: 'Fail-open khi chưa cấu hình', text: 'nếu admin chưa từng lưu tab "Thông Báo Email Phê Duyệt", email vẫn gửi như hành vi gốc — chỉ khi admin chủ động lưu giá trị TẮT thì email đó mới thực sự bị chặn. Riêng nhóm "Cần Phê Duyệt" mặc định TẮT (đã có Hub Phê Duyệt nên email này thường trùng lặp), nhóm "Kết Quả Duyệt" mặc định BẬT.' },
+      { label: 'Tắt email KHÔNG mất dấu vết', text: 'tắt 1 ô chỉ chặn email thật đi ra — Nhật Ký Hệ Thống vẫn ghi đầy đủ sự kiện như cũ.' },
     ] },
   },
   sysExtAuth: {
-    icon: '🔌', title: 'API Đối Tác Ngoài', badge: 'Chỉ Quản Trị Viên',
+    icon: '🔑', title: 'API Xác Thực Ngoài', badge: 'Chỉ Quản Trị Viên',
     desc: 'Cấp/thu hồi API key cho phép 1 ứng dụng NGOÀI hệ thống xác thực tài khoản HCRC Workspace hoặc đồng bộ danh bạ nhân sự cơ bản, mà không cần tự lưu mật khẩu người dùng.',
     flow: { ariaLabel: 'Vòng đời 1 API key', chain: [
-      { label: 'Tạo Key Mới', sub: 'Sinh chuỗi hcrc_ + 64 ký tự hex' },
+      { label: 'Tạo API Key', sub: 'Sinh chuỗi hcrc_ + 64 ký tự hex' },
       { label: 'Giao Cho Bên Tích Hợp', sub: 'Copy ngay, chỉ hiện đúng 1 lần' },
       { label: 'Đang Hoạt Động', sub: 'Bên ngoài gọi API xác thực', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔌 API Đối Tác Ngoài</b> → bấm <b>"+ Tạo Key Mới"</b> → tuỳ chọn khai báo <b>Danh Sách IP/CIDR Được Phép Gọi</b> (để trống = không giới hạn IP).' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔑 API Xác Thực Ngoài</b> (tab con) → điền <b>"Tên / Mô tả ứng dụng dùng key này"</b>, tuỳ chọn khai thêm ô <b>"IP cho phép (lớp bảo mật thứ 2 — để trống = mọi IP)"</b> (nhiều IP/dải CIDR cách nhau bằng dấu phẩy hoặc xuống dòng) → bấm <b>"➕ Tạo API Key"</b>.' },
       { role: 'Quản trị viên', text: 'copy ngay chuỗi key hiện ra (nút <b>"📋 Sao chép"</b>) — hệ thống CHỈ hiển thị đúng 1 lần lúc tạo, DB chỉ lưu bcrypt hash nên không đọc lại được key thật về sau kể cả có toàn quyền truy cập DB.' },
       { role: 'Quản trị viên', text: 'giao key cho bên tích hợp dùng gọi <code>POST /api/external/verify-credentials</code> (xác thực tài khoản/mật khẩu, không cấp phiên đăng nhập) hoặc <code>GET /api/external/users</code> (đồng bộ danh bạ, không bao giờ kèm mật khẩu/PIN).' },
-      { role: 'Quản trị viên', text: 'cần xoay vòng bí mật: bấm <b>"🔄 Tạo Lại Key"</b> — key cũ ngừng hoạt động NGAY, key mới hiện ra thay thế (giữ nguyên lịch sử/allowedIps đã cấu hình), phải cập nhật lại ngay cho bên tích hợp.' },
-      { role: 'Quản trị viên', text: 'không dùng nữa: bấm <b>"Thu Hồi"</b> (dừng vĩnh viễn, không kích hoạt lại được) — chỉ SAU KHI đã thu hồi mới bấm được <b>"🗑️ Xóa"</b> để dọn khỏi danh sách hiển thị (Nhật Ký Hệ Thống vẫn giữ nguyên dấu vết).' },
+      { role: 'Quản trị viên', text: 'cần xoay vòng bí mật: bấm <b>"🔄 Tạo lại key"</b> ở cột Hành động — key cũ ngừng hoạt động NGAY, key mới hiện ra thay thế (giữ nguyên lịch sử/IP cho phép đã cấu hình), phải cập nhật lại ngay cho bên tích hợp. Đổi riêng danh sách IP thì bấm <b>"Sửa IP"</b> ngay cạnh, không cần tạo lại key.' },
+      { role: 'Quản trị viên', text: 'không dùng nữa: bấm <b>"Thu hồi"</b> (dừng vĩnh viễn, không kích hoạt lại được) — chỉ SAU KHI đã thu hồi mới bấm được <b>"🗑️ Xóa"</b> để dọn khỏi danh sách hiển thị (Nhật Ký Hệ Thống vẫn giữ nguyên dấu vết).' },
     ],
     footer: { left: [
       { label: 'Chặn theo IP tuỳ chọn', text: 'nếu đã khai báo allowedIps, request gọi từ IP ngoài danh sách bị chặn (403) dù key đúng — để trống thì key đúng gọi từ đâu cũng được.' },
     ], right: [
       { label: '2 API tách biệt vai trò', text: '`verify-credentials` KHÔNG cấp phiên đăng nhập, chỉ trả lời đúng/sai; `GET /api/external/users` chỉ trả field công khai (username/tên/điện thoại/phòng ban/chức danh), không bao giờ kèm mật khẩu/PIN dù đã hash.' },
+    ] },
+  },
+  // sysOpApi (10/2026, đợt rà soát đối chiếu tài liệu với UI thật): màn admin "🔌 Cấu Hình API — Đồng Bộ
+  // Đơn Hàng Ra dsmart16" (#adminSubOpApi, jobs/operationOrderApiSync.js) trước đây thiếu hẳn entry dù đã
+  // là 1 tab con thật trong ⚙️ Quản Trị. TÁCH BIỆT HOÀN TOÀN với "🔑 API Xác Thực Ngoài" (mục ngay trên):
+  // cái kia cho ứng dụng ngoài gọi VÀO hệ thống, cái này hệ thống tự đẩy dữ liệu RA ngoài.
+  sysOpApi: {
+    icon: '🔌', title: 'Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cấu hình để hệ thống TỰ ĐỘNG đẩy Đơn Hàng (Vận Hành → Đơn Hàng) sang hệ thống ngoài "dsmart16" theo chu kỳ — khai Base URL nhận đơn, 1 header xác thực tuỳ chỉnh (tên + giá trị, không cố định Bearer/Basic vì mỗi hệ thống ngoài yêu cầu tên header khác nhau), chu kỳ quét (phút) và Mã Khoá Đối Chiếu (mặc định `poNumber` — trường dùng để 2 hệ thống nhận ra cùng 1 đơn). Chỉ đơn ĐÃ CÓ Số Đơn NCC (poNumber) mới được gửi.',
+    flow: { ariaLabel: 'Quy trình cấu hình đồng bộ Đơn Hàng ra dsmart16', chain: [
+      { label: 'Khai Base URL + header', sub: 'Giá trị header là write-only' },
+      { label: 'Bật đồng bộ + chu kỳ', sub: 'Tối thiểu 5 phút, mặc định 60' },
+      { label: 'Job quét định kỳ', sub: 'Chỉ đơn có poNumber, nội dung đã đổi', kind: 'decision' },
+      { label: 'dsmart16 nhận đơn', sub: 'Ghi lại kết quả lần đồng bộ gần nhất', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Gửi thành công', rejectLabel: 'Lỗi / URL không an toàn', rejectBox: { label: 'Báo lỗi tại màn này', sub: 'Đơn khác vẫn gửi tiếp bình thường' }, loopBackToIndex: 0, loopBackLabel: 'Sửa lại cấu hình' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔌 Cấu Hình API</b> (tab con cuối cùng trên hàng tab của Quản Trị).' },
+      { role: 'Quản trị viên', text: 'điền hàng trên: <b>Trạng thái đồng bộ</b> (Bật/Tắt), <b>Base URL (endpoint nhận đơn hàng)</b> của dsmart16, <b>Chu kỳ tự động (phút)</b> (tối thiểu 5, để trống = 60).' },
+      { role: 'Quản trị viên', text: 'điền hàng dưới: <b>Tên Header Xác Thực</b> (VD "X-Api-Key" hoặc "Authorization" — theo yêu cầu của dsmart16), <b>Giá Trị Header</b> (write-only: nhập 1 lần, sau đó ô luôn trống — để trống khi sửa = GIỮ NGUYÊN giá trị đã lưu), <b>Mã Khoá Đối Chiếu (matchingKey)</b> (mặc định `poNumber`).' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu Cấu Hình API"</b> — dòng trạng thái ngay dưới form cho biết đã có giá trị header xác thực hay chưa ("✅ Đã cấu hình..." / "⚠️ Chưa cấu hình giá trị header xác thực.").' },
+      { role: 'Quản trị viên', text: 'không muốn chờ tới chu kỳ kế tiếp: bấm <b>"🔄 Đồng Bộ Ngay"</b> — kết quả hiện ngay ở dòng cuối màn ("✅/⚠️/⛔ Lần đồng bộ gần nhất: [thời điểm] — [thông báo]"), cùng 1 hàm xử lý với job tự động nên không có khác biệt hành vi.' },
+    ],
+    footer: { left: [
+      { label: 'Chỉ đẩy RA, không kéo VÀO', text: 'đây là luồng 1 chiều: hệ thống gửi Đơn Hàng ra dsmart16, KHÔNG nhận dữ liệu ngược lại. Đừng nhầm với "DSmart API" của module Mua Hàng (BAS) — luồng đó ngược lại (chỉ KÉO dữ liệu Chiết Khấu/Thưởng NCC vào) và cấu hình bằng biến môi trường `.env`, không phải màn này.' },
+      { label: 'Phạm vi đơn được gửi', text: 'chỉ đơn ĐÃ có "Số Đơn NCC" (poNumber) — thiếu mã này thì không có gì để 2 hệ thống đối chiếu nên bị bỏ qua. Đơn đã gửi thành công sẽ được gửi LẠI khi nội dung thay đổi (đổi trạng thái/ngày duyệt/ngày nhận/số tiền...); nội dung y hệt lần trước thì bỏ qua, không gửi thừa.' },
+    ], right: [
+      { label: 'Chặn SSRF cho Base URL', text: 'Base URL do admin tự nhập được kiểm tra trước mỗi lần gọi: chỉ cho http/https, chặn mọi địa chỉ nội bộ/loopback/link-local (kể cả tên miền trỏ ngược về IP nội bộ sau khi phân giải DNS) và có timeout 15 giây — 1 endpoint treo không làm kẹt cả job đồng bộ.' },
+      { label: 'Lỗi 1 đơn không chặn các đơn còn lại', text: 'job cô lập lỗi theo TỪNG đơn — 1 đơn gửi lỗi vẫn ghi nhận rồi đi tiếp, kết quả tổng kết ghi rõ SUCCESS/PARTIAL/FAILED ở dòng "Lần đồng bộ gần nhất" và trong Nhật Ký Hệ Thống.' },
+      { label: 'Giá trị header mã hoá khi lưu', text: 'giá trị header xác thực được mã hoá trong cơ sở dữ liệu và KHÔNG bao giờ trả ngược về giao diện (cùng quy ước write-only với mật khẩu SMTP ở Cấu Hình Email) — mất thì nhập lại giá trị mới, không xem lại được.' },
     ] },
   },
   systemArchitecture: {
@@ -1231,7 +1421,10 @@ const NGHIEP_VU_DAOTAO_AREAS = [
   { key: 'plans', label: 'Kế Hoạch Đào Tạo', icon: '🗓️' },
   { key: 'docs', label: 'Kho Tài Liệu', icon: '📦' },
   { key: 'bank', label: 'Ngân Hàng Câu Hỏi', icon: '❓' },
-  { key: 'newhire', label: 'Lộ Trình Tân Binh', icon: '🆕' },
+  // Nhãn pill bám ĐÚNG tên tab thật trong LMS Đào Tạo (fragments/internalSection.html) — tab đó tên
+  // "🆕 Đào Tạo Tân Binh", trước đây tài liệu ghi "Lộ Trình Tân Binh" (tên khái niệm bên trong tab,
+  // không phải tên nút) làm người đọc dò không ra nút nào trên UI.
+  { key: 'newhire', label: 'Đào Tạo Tân Binh', icon: '🆕' },
   { key: 'career', label: 'Lộ Trình Thăng Tiến', icon: '🪜' },
 ];
 
@@ -1255,7 +1448,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Hoàn thành lớp', sub: 'Đạt điểm yêu cầu', kind: 'approved' },
     ], decision: { atIndex: 2, approveLabel: 'Tự động', rejectLabel: 'Có câu tự luận', rejectBox: { label: 'Giảng viên chấm', sub: 'Chấm tay câu tự luận' }, loopBackToIndex: 2, loopBackLabel: 'Chấm xong → cộng điểm' } },
     steps: [
-      { role: 'Quản lý đào tạo', text: 'vào tab <b>🔥 Lớp Học</b> → điền form "➕ Tạo Lớp Học Mới": Loại Đào Tạo, Tên Lớp Học, Chương Trình (tuỳ chọn — để trống nếu lớp không thuộc chương trình nào), Kiểu Lớp Học (Online/Offline), Thời Gian Bắt Đầu/Kết Thúc, Bài Test Gán Cho Lớp (tuỳ chọn, phải tạo sẵn ở tab Ngân Hàng Câu Hỏi), Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều) → bấm nút Tạo.' },
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🏫 Lớp Học</b> → điền form "➕ Tạo Lớp Học Mới": Loại Đào Tạo, Tên Lớp Học, Chương Trình (tuỳ chọn — để trống nếu lớp không thuộc chương trình nào), Kiểu Lớp Học (Online/Offline), Thời Gian Bắt Đầu/Kết Thúc, Bài Test Gán Cho Lớp (tuỳ chọn, phải tạo sẵn ở tab Ngân Hàng Câu Hỏi), Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều) → bấm nút Tạo.' },
       { role: 'Quản lý đào tạo', text: 'muốn giới hạn ai được đăng ký: điền ô "Danh Sách Được Mời" ngay trên form tạo lớp (gõ tên/tài khoản từng người, hoặc tải mẫu Excel điền rồi upload lại) — để trống thì mọi người tự đăng ký được.' },
       { role: 'Học viên', text: 'vào tab <b>📝 Đăng Ký Của Tôi</b>, tìm đúng lớp cần học → bấm <b>"Đăng Ký"</b>.' },
       { role: 'Học viên', text: 'lớp Online có tài liệu bắt buộc: bấm <b>"📚 Vào Lớp Học"</b> → xem hết từng tài liệu bắt buộc (video/PDF) — xem đủ hệ thống tự hiện nút "📝 Vào Làm Bài Test". Lớp Offline thì phải chờ giảng viên/quản lý đào tạo bấm <b>"⏹️ Kết Thúc Lớp"</b> mới hiện nút làm bài test.' },
@@ -1404,7 +1597,9 @@ function setNVDaotaoArea(areaKey) {
 // vì tham chiếu thẳng để không phụ thuộc thứ tự nạp file core.js/module-nghiepvu.js.
 const NV_KEY_ACCESS_FN = {
   doc: 'canAccessDocModule', submission: 'canAccessSubmissionModule', contract: 'canAccessContractModule',
-  daotao: 'canAccessInternalModule',
+  // 3 mục con của module "internal" dùng CHUNG 1 điều kiện quyền xem (canAccessInternalModule) — quyền
+  // ĐĂNG bài/đăng tin mới khác nhau theo từng loại, nhưng đó không phải điều kiện đọc tài liệu.
+  daotao: 'canAccessInternalModule', internalPosts: 'canAccessInternalModule', recruitment: 'canAccessInternalModule',
   minutes: 'canAccessMeetingMinutesModule', task: 'canAccessTaskModule', periodicReport: 'canAccessPeriodicReportModule',
   meeting: 'canAccessMeetingModule', car: 'canAccessCarModule', vpp: 'canAccessVppModule', uniform: 'canAccessUniformModule', license: 'canAccessLicenseModule',
   office: 'canAccessOfficeModule', budget: 'canAccessBudgetModule',
@@ -1419,6 +1614,12 @@ const NV_KEY_ACCESS_FN = {
   // Mua Hàng nào (rebateTermManage/rebateTermActivate/rebateViewReport/rebateReconcile/rebateApprove).
   // canAccessPurchasingModule() (core.js) đã có sẵn đúng logic gộp cả 5 quyền đó, chỉ cần nối vào.
   muaHang: 'canAccessPurchasingModule',
+  // 3 màn dùng chung (10/2026): nối ĐÚNG hàm quyền thật đang gác chính màn đó — "approvalHub" dùng
+  // canAccessApprovalHub() (KHÔNG có hậu tố "Module" như các hàm khác, đừng gõ nhầm), "reports" dùng
+  // canAccessReportsModule(). Riêng "profile" (Hồ Sơ Cá Nhân) mở cho MỌI tài khoản đăng nhập, không có
+  // hàm quyền riêng nào — mượn canAccessNghiepVuModule() (điều kiện vào chính màn 📘 Hướng Dẫn này) thay
+  // vì để trống, vì canViewNVItem() fail-CLOSED sẽ ẩn hẳn mục nếu không có ánh xạ.
+  approvalHub: 'canAccessApprovalHub', reports: 'canAccessReportsModule', profile: 'canAccessNghiepVuModule',
 };
 
 // Quyền admin-grant riêng (checkbox "Xem Toàn Bộ Mục Nghiệp Vụ", xem systemSection.html mục 24) bỏ qua
