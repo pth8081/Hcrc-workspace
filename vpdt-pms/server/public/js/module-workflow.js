@@ -116,7 +116,11 @@ const WF_MODULE_CONFIG = {
 function collectQuickApplyUnconfiguredTargets(moduleKeys) {
   const targets = [];
   const depts = getWorkflowParticipatingDepts();
-  const emptyConfig = (workflowId) => ({ workflowId, approvers: {}, approverMode: {}, approversByPosition: {} });
+  // approverMode/approversByPosition (tuỳ chọn, xem qaEditingApproverMode ở trên): khi 1 cấu hình Áp
+  // Dụng Nhanh có gán "Theo Chức Danh" cho 1/nhiều bước, mọi mục ĐANG THIẾU cấu hình được set NGAY người
+  // duyệt theo đúng chức danh đó (không còn approvers rỗng như trước) — bước KHÔNG bật "Theo Chức Danh"
+  // vẫn giữ nguyên approvers rỗng như hành vi cũ.
+  const emptyConfig = (workflowId, approverMode, approversByPosition) => ({ workflowId, approvers: {}, approverMode: approverMode || {}, approversByPosition: approversByPosition || {} });
   const scopeKeys = (moduleKeys && moduleKeys.length) ? new Set(moduleKeys) : null;
 
   Object.entries(WF_MODULE_CONFIG).forEach(([modKey, cfg]) => {
@@ -129,7 +133,7 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
         if (tierMap[tier.key]) return;
         targets.push({
           label: `${cfg.label} — ${tier.label}`, dbKey: cfg.tierDbKeyForWholesale,
-          apply: (workflowId) => { tierMap[tier.key] = emptyConfig(workflowId); }
+          apply: (workflowId, approverMode, approversByPosition) => { tierMap[tier.key] = emptyConfig(workflowId, approverMode, approversByPosition); }
         });
       });
       return;
@@ -146,9 +150,9 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
         if (resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL')) return;
         targets.push({
           label: `${cfg.label} (Bán Lẻ) — ${dept}`, dbKey: cfg.dbKey,
-          apply: (workflowId) => {
+          apply: (workflowId, approverMode, approversByPosition) => {
             if (!deptMap[dept] || typeof deptMap[dept] !== 'object') deptMap[dept] = {};
-            deptMap[dept].RETAIL = emptyConfig(workflowId);
+            deptMap[dept].RETAIL = emptyConfig(workflowId, approverMode, approversByPosition);
           }
         });
       });
@@ -157,7 +161,7 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
         if (tierMap[tier.key]) return;
         targets.push({
           label: `${cfg.label} (Bán Buôn) — ${tier.label}`, dbKey: cfg.tierDbKeyForWholesale,
-          apply: (workflowId) => { tierMap[tier.key] = emptyConfig(workflowId); }
+          apply: (workflowId, approverMode, approversByPosition) => { tierMap[tier.key] = emptyConfig(workflowId, approverMode, approversByPosition); }
         });
       });
       return;
@@ -177,9 +181,9 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
           if ((typeMap[type.key] && typeMap[type.key][dept]) || legacyMap[dept]) return;
           targets.push({
             label: `${cfg.label} (${type.label}) — ${dept}`, dbKey: cfg.dbKey,
-            apply: (workflowId) => {
+            apply: (workflowId, approverMode, approversByPosition) => {
               if (!typeMap[type.key]) typeMap[type.key] = {};
-              typeMap[type.key][dept] = emptyConfig(workflowId);
+              typeMap[type.key][dept] = emptyConfig(workflowId, approverMode, approversByPosition);
             }
           });
         });
@@ -194,7 +198,7 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
       if (deptMap[dept]) return;
       targets.push({
         label: `${cfg.label} — ${dept}`, dbKey: cfg.dbKey,
-        apply: (workflowId) => { deptMap[dept] = emptyConfig(workflowId); }
+        apply: (workflowId, approverMode, approversByPosition) => { deptMap[dept] = emptyConfig(workflowId, approverMode, approversByPosition); }
       });
     });
   });
@@ -205,6 +209,17 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
 // editingQuickApplyConfigId: id cấu hình Áp Dụng Nhanh đang Sửa (null = form "+ Thêm Cấu Hình Mới" đang
 // ở chế độ TẠO MỚI) — mirror đúng khuôn editingWfCode (module-itsupport-tier.js) cho form template.
 let editingQuickApplyConfigId = null;
+
+// qaEditingApproverMode/qaEditingApproversByPosition: state đang sửa của khối "3. (Tuỳ chọn) Gán người
+// duyệt theo Chức Danh cho từng bước" — CÙNG shape với approverMode/approversByPosition của 1 config
+// dept thường ({stepOrder: 'POSITION'} / {stepOrder: [{jobTitle,dept}]}), nhưng ở đây là 1 bộ DUY NHẤT
+// dùng CHUNG cho TOÀN BỘ mục sẽ được "⚡ Áp Dụng" (không phải theo từng dept riêng) — đúng nhu cầu
+// người dùng: 1 chức danh (VD "Trưởng Phòng IT") duyệt bước 2 của NHIỀU quy trình/phòng ban khác nhau
+// cùng lúc, không cần vào từng màn "Quy Trình & Phê Duyệt" gán tay từng cái. Bỏ dept ở cặp
+// {jobTitle,dept} (dept rỗng) = khớp CHỨC DANH đó bất kể đang ở phòng ban/siêu thị nào — resolveStepApproverUsernames()
+// (lib/positionApprovers.js) đã hỗ trợ sẵn dept rỗng từ trước, không cần sửa gì ở resolver.
+let qaEditingApproverMode = {};
+let qaEditingApproversByPosition = {};
 
 // Gọi mỗi lần vào sub-tab "⚡ Áp Dụng Nhanh" (setSystemSubTab() nhánh QUICKAPPLY) VÀ mỗi lần danh sách
 // DB.workflows đổi (renderWorkflowTemplatesTable() gọi lại) để luôn khớp mẫu mới nhất, tránh chọn nhầm
@@ -228,7 +243,80 @@ function renderQuickApplySection() {
         </label>
       `).join('');
   }
+  renderQuickApplyPositionSteps();
   renderQuickApplyConfigList();
+}
+
+// "3. (Tuỳ chọn) Gán người duyệt theo Chức Danh cho từng bước" — vẽ lại mỗi khi đổi mẫu quy trình
+// (data-op-change trên #qaTplSelect) hoặc mở form Sửa 1 cấu hình có sẵn. Cùng widget/khuôn HTML với
+// từng bước ở renderWorkflowTab()/renderItPriceTierWorkflowTab() (2 màn cấu hình theo dept/tier), CHỈ
+// khác là ở đây KHÔNG có khối "PEOPLE" (chọn tay từng người) — Áp Dụng Nhanh vốn không có khái niệm
+// "1 người cụ thể" áp cho nhiều phòng ban cùng lúc, chỉ có 2 lựa chọn mỗi bước: để trống (giữ nguyên
+// hành vi cũ, admin tự gán tay sau) hoặc bật "🧭 Gán theo Chức Danh".
+function renderQuickApplyPositionSteps() {
+  const wrap = document.getElementById('qaPositionStepsWrap');
+  if (!wrap) return;
+  const wf = DB.workflows.find(w => w.id === document.getElementById('qaTplSelect')?.value);
+  if (!wf) { wrap.innerHTML = ''; return; }
+
+  const positionPickersToRender = [];
+  wrap.innerHTML = wf.steps.map(step => {
+    const stepKey = `qa_${step.order}`;
+    const isPositionMode = qaEditingApproverMode[step.order] === 'POSITION';
+    const currentPositions = qaEditingApproversByPosition[step.order] || [];
+    const positionPickerId = `qaPositionPicker_${stepKey}`;
+    const positionPreviewId = `qaPositionPreview_${stepKey}`;
+    positionPickersToRender.push({ positionPickerId, positionPreviewId, currentPositions });
+    return `
+      <div class="bg-gray-100 p-2 rounded text-xs space-y-1.5 border">
+        <div class="flex items-center justify-between gap-2">
+          <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
+          <label class="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 cursor-pointer whitespace-nowrap" title="Bật để MỌI mục thiếu cấu hình trong phạm vi module đã chọn được gán NGAY người duyệt bước này theo đúng chức danh (+ phòng ban, tuỳ chọn) — không cần vào từng màn Quy Trình & Phê Duyệt gán tay">
+            <input type="checkbox" id="qaPosModeToggle_${stepKey}" data-op-change="onQaStepPositionToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPositionMode ? 'checked' : ''}>
+            🧭 Gán theo Chức Danh
+          </label>
+        </div>
+        <div id="qaPositionBlock_${stepKey}" class="${isPositionMode ? '' : 'hidden'} space-y-1">
+          <div id="${positionPickerId}"></div>
+          <div id="${positionPreviewId}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Container chỉ có mặt trong DOM SAU dòng gán innerHTML ở trên — cùng lý do renderWorkflowTab().
+  positionPickersToRender.forEach(({ positionPickerId, positionPreviewId, currentPositions }) => {
+    renderMultiSelectDropdown(positionPickerId, wfPositionPairPickerItems(), currentPositions.map(encodeWfPositionPair), {
+      placeholder: '🔍 Tìm "Chức danh — Phòng ban"... (bỏ trống Phòng ban trong danh mục = áp dụng mọi phòng ban/siêu thị)',
+      emptyText: 'Chưa chọn chức danh nào cho bước này — bước này sẽ để trống người duyệt như trước, vào "🔄 Quy Trình & Phê Duyệt" gán tay sau khi Áp Dụng.',
+      resolveMissingLabel: (value) => { const p = decodeWfPositionPair(value); return p ? wfPositionPairLabel(p) : value; },
+      onChange: (values) => {
+        const previewEl = document.getElementById(positionPreviewId);
+        if (previewEl) previewEl.innerHTML = renderWfPositionPreviewHTML(values.map(decodeWfPositionPair).filter(Boolean));
+      }
+    });
+  });
+}
+
+function onQaStepPositionToggle(stepKey, checkboxEl) {
+  document.getElementById(`qaPositionBlock_${stepKey}`)?.classList.toggle('hidden', !checkboxEl.checked);
+}
+
+// Đọc lại toàn bộ toggle/picker vừa vẽ ở renderQuickApplyPositionSteps() thành đúng shape
+// approverMode/approversByPosition — gọi lúc saveQuickApplyConfig(), cùng khuôn
+// collectWfStepModesAndPositions() (module-itsupport-tier.js) nhưng không có nhánh PEOPLE.
+function collectQaStepModesAndPositions(wf) {
+  const approverMode = {};
+  const approversByPosition = {};
+  wf.steps.forEach(step => {
+    const stepKey = `qa_${step.order}`;
+    const toggle = document.getElementById(`qaPosModeToggle_${stepKey}`);
+    if (toggle && toggle.checked) {
+      approverMode[step.order] = 'POSITION';
+      approversByPosition[step.order] = getMultiSelectValues(`qaPositionPicker_${stepKey}`).map(decodeWfPositionPair).filter(Boolean);
+    }
+  });
+  return { approverMode, approversByPosition };
 }
 
 function renderQuickApplyConfigList() {
@@ -242,6 +330,7 @@ function renderQuickApplyConfigList() {
   wrap.innerHTML = configs.map(cfg => {
     const wf = DB.workflows.find(w => w.id === cfg.workflowId);
     const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k);
+    const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION').length;
     return `
       <div class="bg-gray-50 border rounded-lg p-3 space-y-2">
         <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -249,6 +338,7 @@ function renderQuickApplyConfigList() {
             ${wf
               ? `<span class="bg-blue-50 border border-blue-200 text-blue-700 font-bold px-2 py-1 rounded-full">${escapeHtml(wf.name)}</span>`
               : `<span class="bg-red-50 border border-red-200 text-red-700 font-bold px-2 py-1 rounded-full">⚠️ Mẫu quy trình đã bị xoá</span>`}
+            ${positionStepCount ? `<span class="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-full">🧭 ${positionStepCount} bước theo Chức Danh</span>` : ''}
             <span class="text-gray-400">→ gắn cho:</span>
             ${modLabels.map(l => `<span class="bg-white border rounded-full px-2 py-0.5">${escapeHtml(l)}</span>`).join('')}
           </div>
@@ -297,15 +387,19 @@ async function applyQuickApplyConfig(configId) {
   if (!targets.length) return alert('✅ Không có phòng ban/mức nào đang thiếu cấu hình trong phạm vi các module đã chọn — không có gì để áp dụng.');
 
   const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k).join(', ');
+  const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION').length;
+  const positionNote = positionStepCount
+    ? `Lưu ý: ${positionStepCount} bước đã gán "Theo Chức Danh" sẽ có người duyệt NGAY theo đúng chức danh đó — các bước còn lại vẫn để trống, bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán tay.`
+    : `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước sau khi áp dụng.`;
   const proceed = confirm(
     `Sẽ áp dụng mẫu "${wf.name}" (${wf.steps.length} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình, trong phạm vi module: ${modLabels} — KHÔNG đụng tới module ngoài phạm vi này, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.\n\n` +
-    `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước sau khi áp dụng.\n\nTiếp tục?`
+    `${positionNote}\n\nTiếp tục?`
   );
   if (!proceed) return;
 
   const dirtyKeys = [...new Set(targets.map(t => t.dbKey))];
   const snapshot = JSON.parse(JSON.stringify(Object.fromEntries(dirtyKeys.map(k => [k, DB[k] || {}]))));
-  targets.forEach(t => t.apply(cfg.workflowId));
+  targets.forEach(t => t.apply(cfg.workflowId, cfg.approverMode, cfg.approversByPosition));
 
   const savedKeys = [];
   const failedKeys = [];
@@ -328,6 +422,8 @@ async function applyQuickApplyConfig(configId) {
   );
   if (failedCount) {
     alert(`⚠️ Áp dụng KHÔNG trọn vẹn: đã lưu ${appliedCount}/${targets.length} mục.\n\nCác nhóm cấu hình lưu THẤT BẠI (đã hoàn tác trên màn hình, KHÔNG có gì được ghi): ${failedKeys.join(', ')}.\n\nVui lòng tải lại trang rồi bấm "⚡ Áp Dụng" lại cho phần còn thiếu.`);
+  } else if (positionStepCount) {
+    alert(`✅ Đã áp dụng cho ${appliedCount} mục, kèm người duyệt theo Chức Danh cho ${positionStepCount} bước. Các bước còn lại (nếu có) vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán tay.`);
   } else {
     alert(`✅ Đã áp dụng cho ${appliedCount} mục. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước.`);
   }
@@ -340,6 +436,8 @@ async function saveQuickApplyConfig(e) {
   if (!workflowId) return alert('Chưa có mẫu quy trình nào — vào "🔄 Quy Trình & Phê Duyệt" để tạo mẫu trước (khối "Định Nghĩa Các Mẫu Bước Phê Duyệt").');
   const modules = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
   if (!modules.length) return alert('Chọn ít nhất 1 module để gắn cấu hình này.');
+  const wf = DB.workflows.find(w => w.id === workflowId);
+  const { approverMode, approversByPosition } = wf ? collectQaStepModesAndPositions(wf) : { approverMode: {}, approversByPosition: {} };
 
   // Chụp lại TRƯỚC khi sửa DB — phục hồi nếu server từ chối (xem khuôn saveUser() ở
   // module-admin-submissiongroups.js), không báo thành công/ghi log khi chưa chắc đã lưu.
@@ -347,10 +445,10 @@ async function saveQuickApplyConfig(e) {
   let configId = editingQuickApplyConfigId;
   if (configId) {
     const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
-    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; }
+    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; cfg.approverMode = approverMode; cfg.approversByPosition = approversByPosition; }
   } else {
     configId = Math.max(0, ...(DB.quickApplyConfigs || []).map(c => c.id)) + 1;
-    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules }];
+    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules, approverMode, approversByPosition }];
   }
   if (!await syncStorage('quickApplyConfigs')) {
     DB.quickApplyConfigs = snapshot;
@@ -369,6 +467,9 @@ function editQuickApplyConfig(configId) {
   const sel = document.getElementById('qaTplSelect');
   if (sel) sel.value = cfg.workflowId;
   document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = (cfg.modules || []).includes(el.value); });
+  qaEditingApproverMode = JSON.parse(JSON.stringify(cfg.approverMode || {}));
+  qaEditingApproversByPosition = JSON.parse(JSON.stringify(cfg.approversByPosition || {}));
+  renderQuickApplyPositionSteps();
   const btnSave = document.getElementById('btnSaveQaConfig');
   if (btnSave) btnSave.textContent = '💾 Lưu Thay Đổi';
   document.getElementById('btnCancelQaConfig')?.classList.remove('hidden');
@@ -378,6 +479,9 @@ function editQuickApplyConfig(configId) {
 function resetQuickApplyConfigForm() {
   editingQuickApplyConfigId = null;
   document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = false; });
+  qaEditingApproverMode = {};
+  qaEditingApproversByPosition = {};
+  renderQuickApplyPositionSteps();
   const btnSave = document.getElementById('btnSaveQaConfig');
   if (btnSave) btnSave.textContent = '💾 Lưu Cấu Hình';
   document.getElementById('btnCancelQaConfig')?.classList.add('hidden');

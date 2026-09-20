@@ -89,12 +89,12 @@ function onContractOpModeChange() {
   else if (mode === 'IMPORT_CONTRACT') fileLabel = 'Hợp Đồng Đã Ký (bản scan)';
   else if (mode === 'IMPORT_ADDENDUM') fileLabel = 'Phụ Lục Hợp Đồng Đã Ký (bản scan)';
   document.getElementById('contractFileLabel').innerText = fileLabel;
-  document.getElementById('contractDept').disabled = isAddendumMode;
   document.getElementById('contractCustodianDept').disabled = isAddendumMode;
   document.getElementById('contractType').disabled = isAddendumMode;
   document.getElementById('contractPartner').readOnly = isAddendumMode;
 
   if (isAddendumMode) {
+    document.getElementById('contractDept').disabled = true;
     populateContractAddendumTargets();
     document.getElementById('contractAddendumTarget').value = '';
     document.getElementById('contractAddendumTargetInput').value = '';
@@ -109,6 +109,10 @@ function onContractOpModeChange() {
     document.getElementById('contractTitle').value = '';
     document.getElementById('contractPartner').value = '';
     renderContractInstallmentsList([]);
+    // Chế độ "Tạo Mới"/"Nhập Hợp Đồng Đã Ký" — tự chọn sẵn + khoá lại đúng phòng ban của người dùng
+    // (nếu chỉ có 1 lựa chọn thật sự), thay vì luôn mở khoá vô điều kiện như trước — xem
+    // applyOwnDeptAutoSelect() ở core.js.
+    applyOwnDeptAutoSelect(document.getElementById('contractDept'), getScopedDepts(currentUser, currentUser.perms?.contractCreate));
     refreshContractCodePreview();
   }
 }
@@ -722,7 +726,7 @@ function cancelEditContract() {
   // (KHAC) rồi — vẫn đặt lại tường minh ở đây cho chắc (cùng lý do contractOpMode ở dưới cần gán tay).
   document.getElementById('contractAddendumTarget').value = '';
   document.getElementById('contractApprovalLevel').value = 'KHAC';
-  document.getElementById('contractDept').disabled = false;
+  applyOwnDeptAutoSelect(document.getElementById('contractDept'), getScopedDepts(currentUser, currentUser.perms?.contractCreate));
   document.getElementById('contractCustodianDept').disabled = false;
   document.getElementById('contractType').disabled = false;
   document.getElementById('contractFile').required = true;

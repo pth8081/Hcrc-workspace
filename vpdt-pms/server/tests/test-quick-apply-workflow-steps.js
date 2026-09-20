@@ -27,6 +27,12 @@
 //   E. Sửa Cấu Hình A (đổi mẫu + đổi phạm vi module) qua editQuickApplyConfig()+saveQuickApplyConfig() —
 //      cập nhật ĐÚNG bản ghi cũ (không tạo thêm bản ghi mới, id giữ nguyên).
 //   F. Xoá Cấu Hình B — DB.quickApplyConfigs mất đúng 1 phần tử, danh sách hiển thị lại đúng.
+//   G. "3. (Tuỳ chọn) Gán người duyệt theo Chức Danh cho từng bước" (renderQuickApplyPositionSteps()/
+//      onQaStepPositionToggle()/collectQaStepModesAndPositions()) — bật "Theo Chức Danh" cho 1 bước,
+//      chọn 1 cặp {jobTitle,dept} rồi lưu+áp dụng: bước đó được set NGAY approverMode='POSITION' +
+//      approversByPosition đúng chức danh cho MỌI mục thiếu cấu hình trong phạm vi, bước KHÔNG bật vẫn
+//      giữ approvers rỗng như hành vi cũ; editQuickApplyConfig()/resetQuickApplyConfigForm() nạp lại/
+//      dọn sạch đúng state này.
 //
 // Chạy: node server/tests/test-quick-apply-workflow-steps.js
 'use strict';
@@ -262,6 +268,59 @@ async function main() {
 
   const listHtmlHasB = await page.evaluate((id) => document.getElementById('quickApplyConfigList').innerHTML.includes(`data-arg0="${id}"`), configBId);
   record('Xoá Cấu Hình B: danh sách hiển thị (#quickApplyConfigList) không còn thẻ của cấu hình đã xoá', !listHtmlHasB);
+
+  // ===== G: "3. (Tuỳ chọn) Gán người duyệt theo Chức Danh cho từng bước" — mẫu WF_2STEP, phạm vi module
+  // OFFICE_FIX (hoàn toàn trống, chưa đụng tới ở A-E) — bật "Theo Chức Danh" cho ĐÚNG bước 1, để trống
+  // bước 2 (giữ hành vi cũ) =====
+  await page.evaluate(() => {
+    document.getElementById('qaTplSelect').value = 'WF_2STEP';
+    renderQuickApplyPositionSteps(); // mô phỏng đúng data-op-change="renderQuickApplyPositionSteps" khi đổi mẫu
+    document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = (el.value === 'OFFICE_FIX'); });
+    const toggle = document.getElementById('qaPosModeToggle_qa_1');
+    toggle.checked = true;
+    onQaStepPositionToggle('qa_1', toggle);
+    gmsAdd('qaPositionPicker_qa_1', encodeWfPositionPair({ jobTitle: 'Trưởng Phòng IT', dept: '' }));
+  });
+  const positionStepsRendered = await page.evaluate(() => ({
+    stepCount: document.querySelectorAll('#qaPositionStepsWrap > div').length,
+    step2Hidden: document.getElementById('qaPositionBlock_qa_2')?.classList.contains('hidden')
+  }));
+  record('renderQuickApplyPositionSteps(): vẽ đúng 2 khối (khớp 2 bước của WF_2STEP), bước 2 mặc định ẩn khối vị trí', positionStepsRendered.stepCount === 2 && positionStepsRendered.step2Hidden === true);
+
+  await page.evaluate(() => saveQuickApplyConfig({ preventDefault() {} }));
+  const afterCreateG = await page.evaluate(() => DB.quickApplyConfigs);
+  const configGId = afterCreateG[afterCreateG.length - 1]?.id;
+  const cfgG = afterCreateG.find(c => c.id === configGId);
+  record('Cấu Hình G: lưu ĐÚNG approverMode bước 1 = POSITION, bước 2 KHÔNG có (giữ trống như cũ)',
+    cfgG?.approverMode?.[1] === 'POSITION' && cfgG?.approverMode?.[2] === undefined);
+  record('Cấu Hình G: lưu ĐÚNG approversByPosition bước 1 = [{jobTitle:"Trưởng Phòng IT", dept:""}]',
+    JSON.stringify(cfgG?.approversByPosition?.[1]) === JSON.stringify([{ jobTitle: 'Trưởng Phòng IT', dept: '' }]));
+
+  await page.evaluate((id) => applyQuickApplyConfig(id), configGId);
+  await page.waitForTimeout(50);
+  const afterApplyG = await page.evaluate(() => ({ a: DB.officeFixDeptWorkflows['Phòng A'], b: DB.officeFixDeptWorkflows['Phòng B'] }));
+  record('Áp dụng Cấu Hình G: OFFICE_FIX Phòng A được điền workflowId đúng + approverMode/approversByPosition bước 1 đúng chức danh',
+    afterApplyG.a?.workflowId === 'WF_2STEP' && afterApplyG.a?.approverMode?.[1] === 'POSITION' &&
+    JSON.stringify(afterApplyG.a?.approversByPosition?.[1]) === JSON.stringify([{ jobTitle: 'Trưởng Phòng IT', dept: '' }]));
+  record('Áp dụng Cấu Hình G: OFFICE_FIX Phòng A bước 2 (KHÔNG bật Theo Chức Danh) vẫn approvers RỖNG như hành vi cũ',
+    afterApplyG.a?.approverMode?.[2] === undefined && JSON.stringify(afterApplyG.a?.approvers) === JSON.stringify({}));
+  record('Áp dụng Cấu Hình G: OFFICE_FIX Phòng B cũng được điền (cả 2 phòng đều thiếu cấu hình trước đó)', afterApplyG.b?.workflowId === 'WF_2STEP');
+
+  // editQuickApplyConfig() phải nạp lại ĐÚNG state đã lưu (toggle bật + chip hiện đúng chức danh).
+  await page.evaluate((id) => editQuickApplyConfig(id), configGId);
+  const editFormStateG = await page.evaluate(() => ({
+    toggleChecked: document.getElementById('qaPosModeToggle_qa_1')?.checked,
+    blockHidden: document.getElementById('qaPositionBlock_qa_1')?.classList.contains('hidden'),
+    chipText: document.getElementById('qaPositionPicker_qa_1')?.textContent || ''
+  }));
+  record('editQuickApplyConfig(): nạp lại ĐÚNG toggle "Theo Chức Danh" bước 1 (checked, khối hiện)', editFormStateG.toggleChecked === true && editFormStateG.blockHidden === false);
+  record('editQuickApplyConfig(): chip hiển thị đúng nhãn chức danh đã lưu', editFormStateG.chipText.includes('Trưởng Phòng IT'));
+
+  await page.evaluate(() => resetQuickApplyConfigForm());
+  const afterResetG = await page.evaluate(() => document.querySelectorAll('#qaPositionStepsWrap > div').length);
+  record('resetQuickApplyConfigForm(): #qaPositionStepsWrap vẫn vẽ đúng 2 bước (mẫu giữ nguyên), state POSITION đã dọn sạch cho lượt tạo mới', afterResetG === 2);
+  const resetToggleChecked = await page.evaluate(() => document.getElementById('qaPosModeToggle_qa_1')?.checked);
+  record('resetQuickApplyConfigForm(): toggle "Theo Chức Danh" bước 1 trở về KHÔNG tick (không rò state từ cấu hình vừa Sửa)', resetToggleChecked === false);
 
   record('Không có lỗi JS chưa bắt (pageerror) nào phát sinh trong suốt bài test', pageErrors.length === 0, JSON.stringify(pageErrors));
 

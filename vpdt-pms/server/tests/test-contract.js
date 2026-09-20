@@ -51,7 +51,14 @@ async function run() {
     // ============ Kịch bản 1: Mã Hợp Đồng tự sinh theo Phòng ban + Loại Pháp Lý ============
     await loginAs('kd1');
     await goToContractApproval();
-    await page.selectOption('#contractDept', 'Phòng Kinh Doanh');
+    // kd1 chỉ có contractCreate cho ĐÚNG 1 phòng ban (Phòng Kinh Doanh, = phòng ban của chính kd1) ->
+    // applyOwnDeptAutoSelect() (core.js) tự chọn sẵn VÀ khoá (disabled) luôn #contractDept, không cần
+    // (và không còn selectOption() được nữa, vì Playwright chặn thao tác trên select đã disabled).
+    const contractDeptState = await page.evaluate(() => {
+      const el = document.getElementById('contractDept');
+      return { value: el.value, disabled: el.disabled };
+    });
+    check('#contractDept tự chọn sẵn ĐÚNG phòng ban của kd1 và bị khoá (chỉ 1 lựa chọn thật sự)', contractDeptState.value === 'Phòng Kinh Doanh' && contractDeptState.disabled === true, contractDeptState);
     await page.selectOption('#contractType', 'Hợp đồng kinh tế');
     const code1 = await page.locator('#contractCode').inputValue();
     check('Mã Hợp Đồng tự sinh đúng công thức HCRC-<PhòngBan>-<LoạiPhápLý>-<STT> (HCRC-KD-KTE-001)', code1 === 'HCRC-KD-KTE-001', code1);
@@ -122,7 +129,7 @@ async function run() {
     // ============ Kịch bản 4: Validation — Tổng các đợt thanh toán KHÔNG khớp giá trị hợp đồng bị
     // SERVER (lib/createValidation.js contracts.extraValidate) từ chối ============
     await goToContractApproval();
-    await page.selectOption('#contractDept', 'Phòng Kinh Doanh');
+    // #contractDept đã tự chọn sẵn "Phòng Kinh Doanh" (đúng phòng ban kd1) + bị khoá — xem kịch bản 1.
     await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
     await page.fill('#contractTitle', 'Hợp đồng test tổng đợt lệch');
     await page.fill('#contractPartner', 'Đối tác test đợt lệch');
@@ -178,7 +185,7 @@ async function run() {
     // ============ Kịch bản 6: Từ chối hợp đồng (Cấp Phê Duyệt "Phê duyệt khác" -> chỉ 1 bước) ============
     await loginAs('kd1');
     await goToContractApproval();
-    await page.selectOption('#contractDept', 'Phòng Kinh Doanh');
+    // #contractDept đã tự chọn sẵn "Phòng Kinh Doanh" (đúng phòng ban kd1) + bị khoá — xem kịch bản 1.
     await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
     await page.fill('#contractTitle', 'Hợp đồng thử từ chối');
     await page.fill('#contractPartner', 'Đối tác Reject Test');
@@ -361,7 +368,7 @@ async function run() {
     // được duyệt lại bình thường ============
     await loginAs('kd1');
     await goToContractApproval();
-    await page.selectOption('#contractDept', 'Phòng Kinh Doanh');
+    // #contractDept đã tự chọn sẵn "Phòng Kinh Doanh" (đúng phòng ban kd1) + bị khoá — xem kịch bản 1.
     await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
     await page.fill('#contractTitle', 'Hợp đồng thử Bổ Sung');
     await page.fill('#contractPartner', 'Đối tác Bổ Sung Test');

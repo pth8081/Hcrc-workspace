@@ -258,12 +258,12 @@ async function main() {
 
     // ================= 2) Hợp Đồng =================
     await check(
-      // contractDept/contractType KHÔNG có option rỗng đặt trước (khác selDept của Tài Liệu) — chọn 1
-      // dept/type KHÁC option đầu tiên để form.reset() có gì đó "khác biệt" mà quan sát được: reset() sẽ
-      // đưa 2 select này về lại đúng OPTION ĐẦU TIÊN (Phòng Kinh Doanh/Hợp đồng kinh tế, theo đúng thứ
-      // tự DB.depts/DB.contractTypes ở tests/_seed.js) — không phải về rỗng như 2 module Tài Liệu/Giấy
-      // Phép (những form đó có option rỗng "-- Chọn... --" đặt đầu).
-      'Hợp Đồng: chip file, "Làm Mới" trắng form (2 select không có option rỗng -> reset về ĐÚNG option đầu) + trắng Đợt Thanh Toán về 0 dòng + mã hợp đồng sinh lại đúng theo option đầu',
+      // contractType KHÔNG có option rỗng đặt trước — reset() đưa nó về lại đúng OPTION ĐẦU TIÊN (Hợp
+      // đồng kinh tế, theo đúng thứ tự DB.contractTypes ở tests/_seed.js). contractDept thì KHÔNG còn về
+      // "option đầu" nữa (hành vi CŨ) — applyOwnDeptAutoSelect() (core.js, đợt "tự chọn sẵn + khoá phòng
+      // ban của chính người dùng") nay tự chọn lại ĐÚNG phòng ban của người đăng nhập (admin ở đây =
+      // "Ban Giám Đốc", KHÁC "Phòng Kinh Doanh" là option đầu) mỗi lần reset về chế độ Tạo Mới.
+      'Hợp Đồng: chip file, "Làm Mới" trắng form (contractDept tự chọn lại ĐÚNG phòng ban người dùng, contractType không có option rỗng -> reset về option đầu) + trắng Đợt Thanh Toán về 0 dòng + mã hợp đồng sinh lại đúng',
       async () => {
         await page.evaluate(() => switchTab('contract'));
         await page.selectOption('#contractDept', 'Phòng Kế Toán');
@@ -299,11 +299,12 @@ async function main() {
           confirmCalls: window.__confirmCalls.length
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
-        assertTrue(state.contractDept === 'Phòng Kinh Doanh', `contractDept phải về ĐÚNG option đầu (Phòng Kinh Doanh, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.contractDept}"`);
+        assertTrue(state.contractDept === 'Ban Giám Đốc', `contractDept phải tự chọn lại ĐÚNG phòng ban người dùng (Ban Giám Đốc, KHÁC "Phòng Kế Toán" vừa chọn), thực tế "${state.contractDept}"`);
         assertTrue(state.contractTitle === '', 'contractTitle phải về rỗng');
-        // dept/type đã reset về option đầu (Phòng Kinh Doanh/Hợp đồng kinh tế) -> mã tự sinh lại theo
-        // ĐÚNG 2 giá trị đó (viết tắt KD/KTE, xem tests/_seed.js deptAbbrs/contractTypeAbbrs).
-        assertTrue(/^HCRC-KD-KTE-/.test(state.contractCode), `contractCode phải sinh lại đúng theo option đầu (HCRC-KD-KTE-...), thực tế "${state.contractCode}"`);
+        // dept tự chọn lại đúng phòng ban người dùng (Ban Giám Đốc), type reset về option đầu (Hợp đồng
+        // kinh tế) -> mã tự sinh lại theo ĐÚNG 2 giá trị đó (viết tắt BGD/KTE, xem tests/_seed.js
+        // deptAbbrs/contractTypeAbbrs).
+        assertTrue(/^HCRC-BGD-KTE-/.test(state.contractCode), `contractCode phải sinh lại đúng theo phòng ban người dùng + option đầu của Loại (HCRC-BGD-KTE-...), thực tế "${state.contractCode}"`);
         assertTrue(state.contractFileValue === '', 'contractFile input phải về rỗng');
         assertTrue(state.contractFileChip === '', 'Chip contractFile phải biến mất sau Làm Mới');
         assertTrue(state.installmentRows === 0, `Đợt Thanh Toán phải về 0 dòng sau Làm Mới, thực tế ${state.installmentRows}`);
@@ -312,7 +313,10 @@ async function main() {
 
     // ================= 3) Tài Liệu =================
     await check(
-      'Tài Liệu: chip file, "Làm Mới" trắng form + đưa toggle Nhập Mới/Cập Nhật về lại "Nhập Mới" + mã về rỗng',
+      // selDept KHÔNG còn về rỗng nữa (hành vi CŨ) sau khi applyOwnDeptAutoSelect() (core.js) được thêm
+      // vào nhánh "Nhập Mới" của onDocOpModeChange() — tự chọn lại ĐÚNG phòng ban người dùng (admin =
+      // "Ban Giám Đốc"), selCat vẫn về rỗng như cũ (không đụng tới) nên docCode vẫn về rỗng bình thường.
+      'Tài Liệu: chip file, "Làm Mới" trắng form (selDept tự chọn lại ĐÚNG phòng ban người dùng) + đưa toggle Nhập Mới/Cập Nhật về lại "Nhập Mới" + mã về rỗng (chưa chọn lại Phân Loại)',
       async () => {
         await page.evaluate(() => switchTab('doc'));
         await page.selectOption('#selDept', 'Phòng Kinh Doanh');
@@ -342,7 +346,7 @@ async function main() {
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
         assertTrue(state.docOpMode === 'NEW', `docOpMode phải về "NEW" sau Làm Mới, thực tế "${state.docOpMode}"`);
-        assertTrue(state.selDept === '', `selDept phải về rỗng, thực tế "${state.selDept}"`);
+        assertTrue(state.selDept === 'Ban Giám Đốc', `selDept phải tự chọn lại ĐÚNG phòng ban người dùng (Ban Giám Đốc), thực tế "${state.selDept}"`);
         assertTrue(state.docTitle === '', 'docTitle phải về rỗng');
         assertTrue(state.docCode === '', `docCode phải về rỗng (chưa chọn lại Phòng Ban/Phân Loại), thực tế "${state.docCode}"`);
         assertTrue(state.docFileValue === '', 'docFile input phải về rỗng');

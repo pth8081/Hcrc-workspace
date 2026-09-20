@@ -194,7 +194,6 @@ function onDocOpModeChange() {
   const mode = document.getElementById('docOpMode').value;
   const isUpdate = mode === 'UPDATE';
   document.getElementById('docUpdateTargetWrap').classList.toggle('hidden', !isUpdate);
-  document.getElementById('selDept').disabled = isUpdate;
   document.getElementById('selCat').disabled = isUpdate;
 
   const verInput = document.getElementById('docVer');
@@ -202,6 +201,7 @@ function onDocOpModeChange() {
   verInput.classList.toggle('bg-gray-100', !isUpdate);
 
   if (isUpdate) {
+    document.getElementById('selDept').disabled = true;
     populateDocUpdateTargets();
     document.getElementById('docUpdateTarget').value = '';
     document.getElementById('docCode').value = '';
@@ -212,6 +212,10 @@ function onDocOpModeChange() {
   } else {
     document.getElementById('docTitle').value = '';
     verInput.value = 'v1.0';
+    // Chế độ "Nhập mới" — tự chọn sẵn + khoá lại đúng phòng ban của người dùng (nếu chỉ có 1 lựa chọn
+    // thật sự), thay vì luôn mở khoá vô điều kiện như trước — xem applyOwnDeptAutoSelect() ở core.js.
+    const docCreateScope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
+    applyOwnDeptAutoSelect(document.getElementById('selDept'), getScopedDepts(currentUser, docCreateScope));
     refreshDocCodePreview();
   }
 }

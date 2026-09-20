@@ -2198,6 +2198,24 @@ function getScopedDepts(user, scope) {
   return Array.from(allowed);
 }
 
+// Tự chọn sẵn phòng ban CỦA CHÍNH người dùng cho ô <select> "Phòng Ban Trình/Tạo" ngay sau khi đổ xong
+// options (getScopedDepts() ở trên) — gọi TRỰC TIẾP SAU dòng gán innerHTML của từng ô, KHÔNG tách lịch
+// riêng qua setTimeout/microtask nào (tránh đúng lớp bug thứ tự DOM). KHOÁ (disabled) ô đó khi phạm vi
+// chỉ vỏn vẹn ĐÚNG 1 phòng ban (scopedDepts.length === 1 — tức người dùng không có quyền tạo "thay mặt"
+// phòng ban khác, ví dụ uploadDepts/submissionCreate/contractCreate/carCreate/officeCreate/
+// meetingBookScope KHÔNG mở rộng ngoài phòng ban chính mình) để tránh chọn nhầm phòng ban ở đúng nhóm
+// người dùng phổ biến nhất (chỉ có 1 lựa chọn thật sự). Người có phạm vi RỘNG hơn (uploadAll/scope.depts
+// nhiều phòng/admin) vẫn được TIỀN ĐIỀN sẵn đúng phòng ban của mình cho tiện — KHÔNG bị khoá, vẫn chọn
+// tay phòng ban khác bình thường như trước. Không đụng gì tới các <select> phòng ban KHÔNG mang ý nghĩa
+// "tạo hồ sơ thay mặt phòng ban nào" (paymentDept/contractCustodianDept/rjDept — xem chú thích tại chỗ
+// gọi các hàm đó) và không ghi đè lựa chọn khi đang ở chế độ khác (VD "Cập Nhật"/"Bổ Sung Phụ Lục" tự
+// khoá + gán theo hồ sơ gốc — xem onDocOpModeChange()/onContractOpModeChange()).
+function applyOwnDeptAutoSelect(selectEl, scopedDepts) {
+  if (!selectEl) return;
+  if (currentUser?.dept && scopedDepts.includes(currentUser.dept)) selectEl.value = currentUser.dept;
+  selectEl.disabled = scopedDepts.length === 1;
+}
+
 // ===== "Theo vị trí" (POSITION mode, đợt workflowParticipatingPositions) — MIRROR ĐÚNG
 // lib/positionApprovers.js (server) — sửa 1 bên PHẢI sửa cả 2 bên. Đây là bản CLIENT của điểm tra cứu
 // approvers[stepOrder] tập trung — CHỈ dùng để quyết định hiện/ẩn nút Duyệt (UX), server LUÔN tự xác
@@ -7573,8 +7591,10 @@ function populateDropdowns() {
     // getScopedDepts()/scopeAllows() như 5 module Trình/Hợp đồng/Họp/Xe/Văn phòng — khớp với server
     // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.docs.getScope).
     const docCreateScope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
+    const docScopedDepts = getScopedDepts(currentUser, docCreateScope);
     selDept.innerHTML = '<option value="">-- Chọn Phòng Ban Trình --</option>' +
-      getScopedDepts(currentUser, docCreateScope).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      docScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    applyOwnDeptAutoSelect(selDept, docScopedDepts);
   }
 
   const filterDept = document.getElementById('filterDept');
@@ -7601,12 +7621,16 @@ function populateDropdowns() {
   // ban khác) — dùng getScopedDepts() dựa trên perms.<module>Create tương ứng.
   const subDept = document.getElementById('subDept');
   if (subDept) {
-    subDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.submissionCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    const subScopedDepts = getScopedDepts(currentUser, currentUser.perms?.submissionCreate);
+    subDept.innerHTML = subScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    applyOwnDeptAutoSelect(subDept, subScopedDepts);
   }
 
   const contractDept = document.getElementById('contractDept');
   if (contractDept) {
-    contractDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.contractCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    const contractScopedDepts = getScopedDepts(currentUser, currentUser.perms?.contractCreate);
+    contractDept.innerHTML = contractScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    applyOwnDeptAutoSelect(contractDept, contractScopedDepts);
   }
 
   // Đơn Vị Tiếp Nhận Theo Dõi & Thanh Toán (custodianDept) — KHÔNG lọc theo scope contractCreate như
@@ -7621,7 +7645,9 @@ function populateDropdowns() {
 
   const meetingDept = document.getElementById('meetingDept');
   if (meetingDept) {
-    meetingDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.meetingBookScope).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    const meetingScopedDepts = getScopedDepts(currentUser, currentUser.perms?.meetingBookScope);
+    meetingDept.innerHTML = meetingScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    applyOwnDeptAutoSelect(meetingDept, meetingScopedDepts);
   }
 
   // Đơn Vị/Siêu Thị Đăng Tuyển (recruitmentJobs.dept, Đợt 2 Bản Tin Tuyển Dụng) — cùng khuôn paymentDept/
@@ -7652,12 +7678,16 @@ function populateDropdowns() {
 
   const carDept = document.getElementById('carDept');
   if (carDept) {
-    carDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.carCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    const carScopedDepts = getScopedDepts(currentUser, currentUser.perms?.carCreate);
+    carDept.innerHTML = carScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    applyOwnDeptAutoSelect(carDept, carScopedDepts);
   }
 
   const offDept = document.getElementById('offDept');
   if (offDept) {
-    offDept.innerHTML = getScopedDepts(currentUser, currentUser.perms?.officeCreate).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    const offScopedDepts = getScopedDepts(currentUser, currentUser.perms?.officeCreate);
+    offDept.innerHTML = offScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    applyOwnDeptAutoSelect(offDept, offScopedDepts);
   }
   // paymentManage là quyền toàn công ty (không theo phòng ban) — dropdown Phòng Ban ở form tạo đề
   // nghị thanh toán thủ công liệt kê TOÀN BỘ DB.depts, không lọc theo scope như các module khác.

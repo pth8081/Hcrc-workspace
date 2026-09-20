@@ -210,6 +210,28 @@ tạo module đó — mục nào thiếu entry sẽ tự hiện cảnh báo "⚠
 nghiệp vụ" ngay trên màn thật, dùng chính cảnh báo đó làm tín hiệu chưa cập
 nhật thay vì phải nhớ tay.
 
+### 2.5. Ô "Phòng Ban" khi tạo hồ sơ mới — tự chọn sẵn + khoá theo đúng người dùng
+
+Áp dụng cho 6 form tạo hồ sơ có ô chọn phòng ban: Tài Liệu, Văn Bản Trình,
+Hợp Đồng, Đặt Phòng Họp, Đăng Ký Xe, Tổng Hợp (Mua Bán/Sửa Chữa VP). Mỗi lần
+mở form tạo mới (hoặc bấm "↺ Làm Mới"), ô "Phòng Ban" tự chọn sẵn ĐÚNG phòng
+ban của người đang đăng nhập:
+
+- **Người chỉ được tạo hồ sơ cho ĐÚNG phòng ban của mình** (đa số nhân viên —
+  không có quyền "thay mặt" phòng ban khác) — ô này còn bị **khoá cứng**
+  (không bấm chọn được sang phòng ban khác), tránh chọn nhầm phòng ban vì
+  đằng nào cũng chỉ có đúng 1 lựa chọn hợp lệ.
+- **Người có quyền tạo hồ sơ cho nhiều phòng ban** (VD `uploadAll`/
+  `uploadDepts` nhiều phòng, admin...) — ô vẫn tự điền sẵn phòng ban của
+  chính họ cho tiện, nhưng KHÔNG bị khoá, vẫn chọn tay sang phòng ban khác
+  bình thường như trước.
+
+Không áp dụng cho ô "Đơn Vị Tiếp Nhận Theo Dõi & Thanh Toán" (Hợp Đồng)/
+"Phòng Ban" của Đề Nghị Thanh Toán tạo thủ công/"Đơn Vị/Siêu Thị Đăng Tuyển"
+(Tuyển Dụng nội bộ) — 3 ô này mang ý nghĩa "giao việc/đăng tin CHO đơn vị
+nào" chứ không phải "tạo hồ sơ thay mặt phòng ban nào", nên vẫn liệt kê đầy
+đủ mọi phòng ban như cũ, không tự chọn/khoá.
+
 ---
 
 ## 3. Mô hình quy trình phê duyệt chung
@@ -474,13 +496,27 @@ phòng ban/mức sẽ bị điền, chỉ trong phạm vi module của cấu hì
 tạo), **"🗑️ Xoá"** (chỉ xoá cấu hình, không ảnh hưởng gì tới các mục ĐÃ
 được áp dụng từ trước).
 
-Nguyên tắc quan trọng cần biết trước khi dùng (không đổi so với trước):
+Nguyên tắc quan trọng cần biết trước khi dùng:
 
-- **Chỉ set số bước, KHÔNG tự gán người duyệt** — sau khi áp dụng, mọi bước
-  vừa được điền đều CHƯA có người duyệt nào, admin vẫn phải vào từng module
-  (Đăng Ký Xe/VPP/Hợp Đồng/...) gán người duyệt cho từng bước như bình
-  thường. Đây thuần là đường tắt chọn nhanh SỐ BƯỚC ban đầu, không thay thế
-  bước cấu hình người duyệt.
+- **Mặc định chỉ set số bước, KHÔNG tự gán người duyệt** — sau khi áp dụng,
+  mọi bước KHÔNG bật "Gán theo Chức Danh" (mục dưới) đều CHƯA có người duyệt
+  nào, admin vẫn phải vào từng module (Đăng Ký Xe/VPP/Hợp Đồng/...) gán người
+  duyệt cho từng bước như bình thường. Đây thuần là đường tắt chọn nhanh SỐ
+  BƯỚC ban đầu, không thay thế bước cấu hình người duyệt.
+- **"3. (Tuỳ chọn) Gán người duyệt theo Chức Danh cho từng bước" (mới)** — mỗi
+  cấu hình Áp Dụng Nhanh giờ có thêm khối này ngay dưới ô chọn module: với
+  mỗi bước của mẫu quy trình đã chọn, bật "🧭 Gán theo Chức Danh" rồi gõ tìm
+  chọn 1 hoặc nhiều cặp "Chức danh — Phòng ban" (bỏ trống Phòng ban trong
+  danh mục gợi ý = khớp CHỨC DANH đó bất kể đang ở phòng ban/siêu thị nào,
+  VD "Trưởng Phòng IT" duyệt được cho mọi phòng ban). Lúc bấm "⚡ Áp Dụng",
+  MỌI phòng ban/mức đang thiếu cấu hình trong phạm vi module đã chọn được
+  gán NGAY người duyệt bước đó theo đúng chức danh — tiện cho tình huống
+  nhiều quy trình/phòng ban khác nhau cùng dùng chung 1 chức danh phê duyệt,
+  khỏi phải vào từng màn "🔄 Quy Trình & Phê Duyệt" bật "Theo vị trí" tay cho
+  từng nơi. Bước KHÔNG bật mục này vẫn để trống người duyệt như hành vi cũ.
+  Cơ chế "Theo vị trí" bên dưới hoạt động y hệt khi cấu hình tay ở từng module
+  (chỉ người ĐANG giữ đúng chức danh/phòng ban VÀ đã được cấp quyền "Người
+  duyệt" mới thật sự duyệt được — xem mục 3.2/3.5).
 - **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình, trong ĐÚNG phạm
   vi module của cấu hình đó** — bất kỳ phòng ban/mức nào ĐÃ được admin cấu
   hình từ trước (kể cả chỉ mới chọn số bước mà chưa gán người duyệt) đều

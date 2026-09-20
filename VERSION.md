@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**23.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.69 (2026-09-20): Áp Dụng Nhanh gán theo Chức Danh + tự chọn/khoá Phòng Ban theo người dùng + sửa Hướng Dẫn QLDA
+
+Theo yêu cầu người dùng (3 việc, kèm demo trước khi xác nhận triển khai):
+
+1. **⚡ Áp Dụng Nhanh — thêm "3. (Tuỳ chọn) Gán người duyệt theo Chức Danh
+   cho từng bước"**: mỗi cấu hình giờ có thể bật "🧭 Gán theo Chức Danh" cho
+   1/nhiều bước của mẫu quy trình đã chọn, gõ tìm chọn cặp "Chức danh —
+   Phòng ban" (bỏ trống Phòng ban = khớp chức danh đó bất kể phòng ban/siêu
+   thị nào — cơ chế "Theo vị trí" `resolveStepApproverUsernames()`/
+   `lib/positionApprovers.js` vốn đã có sẵn, chỉ chưa lộ ra ở màn Áp Dụng
+   Nhanh). Lúc "⚡ Áp Dụng", MỌI phòng ban/mức đang thiếu cấu hình trong
+   phạm vi module đã chọn được gán NGAY người duyệt bước đó theo đúng chức
+   danh — tiện khi nhiều quy trình/phòng ban dùng chung 1 chức danh phê
+   duyệt, khỏi vào từng màn cấu hình tay. Bước không bật vẫn để trống người
+   duyệt như hành vi cũ (`public/js/module-workflow.js`, thêm
+   `renderQuickApplyPositionSteps()`/`collectQaStepModesAndPositions()`, mở
+   rộng `DB.quickApplyConfigs[].approverMode`/`approversByPosition`).
+2. **Tự chọn sẵn + khoá ô "Phòng Ban" theo đúng người dùng** khi tạo hồ sơ
+   mới — áp dụng cho 6 form: Tài Liệu, Văn Bản Trình, Hợp Đồng, Đặt Phòng
+   Họp, Đăng Ký Xe, Tổng Hợp (Mua Bán/Sửa Chữa VP). Người chỉ được tạo cho
+   ĐÚNG 1 phòng ban của mình (đa số nhân viên) — ô này tự chọn sẵn VÀ bị
+   khoá cứng, không chọn nhầm sang phòng ban khác được. Người có quyền tạo
+   cho nhiều phòng ban (uploadAll/scope rộng/admin) — vẫn tự điền sẵn phòng
+   ban của họ cho tiện, KHÔNG bị khoá (`applyOwnDeptAutoSelect()` mới ở
+   `public/js/core.js`, gọi từ `populateDropdowns()` + 2 điểm đổi chế độ
+   form có logic khoá riêng từ trước — `onDocOpModeChange()`/
+   `onContractOpModeChange()`/`cancelEditContract()`).
+3. **📘 Hướng Dẫn > Vận Hành — sửa mô tả sai lệch "QLDA có bước Duyệt"**:
+   entry `vanHanh` (`NGHIEP_VU_DOCS`) từ lâu vẫn mô tả 1 bước "Duyệt" +
+   "các mốc tiến độ theo mẫu đã cấu hình" không có thật — 2 luồng Mở Mới/
+   Sửa Chữa Siêu Thị (QLDA) thực tế **không có bước phê duyệt nào**, hiệu
+   lực ngay lúc tạo (xác nhận lại đúng comment có sẵn trong code, "Mục H").
+   Viết lại toàn bộ sơ đồ/steps/footer cho khớp luồng thật (Tạo hồ sơ →
+   Danh mục đầu tư đối chiếu Ngân Sách → Thực hiện cây công việc nhiều cấp
+   → Nghiệm thu), thêm cảnh báo nổi bật "QLDA KHÔNG có bước phê duyệt".
+
+Test mới: 10 kịch bản bổ sung vào `test-quick-apply-workflow-steps.js` (44/44
+tổng). Sửa 2 file test cũ theo đúng hành vi mới (không phải lỗi — hành vi
+CŨ đã lỗi thời): `test-contract.js` (3 điểm `selectOption('#contractDept',
+...)` dư thừa vì field nay tự chọn sẵn+khoá), `test-form-reset-file-remove.js`
+(2 kịch bản "Làm Mới" cập nhật kỳ vọng contractDept/selDept — nay tự chọn về
+ĐÚNG phòng ban người dùng thay vì "option đầu tiên"/rỗng như trước).
+`test-nghiepvu.js` (143/143) vẫn xanh sau khi sửa entry `vanHanh`.
+
+**Deploy impact:** không đổi `server/sql/schema.sql`, không thêm biến môi
+trường, không thêm dependency mới — chỉ copy code + `pm2 restart`. Cập nhật
+`deploy/Huong-dan-nghiep-vu.md` (mục 2.5 mới + mục 3.6).
 
 ## v23.68 (2026-09-20): Vá 110 phát hiện còn lại (31 Cao / 45 Trung bình / 34 Thấp) từ đợt audit chuyên sâu 12 cụm module
 
