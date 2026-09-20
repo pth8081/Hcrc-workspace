@@ -604,7 +604,13 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   trạng thái/nút "📌 Giao việc" (không có ý nghĩa trên bản chính thức nên bản
   Tải/In bỏ cột này), cả 2 đều có khối chân ký "Thư Ký"/"Chủ Trì" xếp ngang
   hàng, căn giữa cân đối (cùng kiểu bố cục với Phiếu Phê Duyệt của Đăng Ký
-  Xe/Văn Bản Trình/Văn Phòng).
+  Xe/Văn Bản Trình/Văn Phòng). **Giao việc lại cho đầu việc bị lỗi (9/2026)**:
+  bấm "Giao việc" trước đây chỉ chạy được ĐÚNG 1 LẦN cho cả biên bản — nếu 1
+  vài Ý Kiến Chỉ Đạo không sinh được Công Việc (tài khoản khai ở "Thành phần
+  tham dự" không hợp lệ/đã khoá) thì không có cách nào giao lại nữa. Nay sửa
+  đúng lại thông tin người thực hiện rồi bấm "Giao việc" lần nữa: hệ thống
+  chỉ giao lại đúng (các) đầu việc còn thiếu, không tạo trùng các đầu việc đã
+  giao thành công trước đó.
 - **Truyền Thông Nội Bộ** — 5 sub-tab dùng chung 1 collection bài đăng, phân
   biệt bằng loại: 📰 Nhịp Sống HCRC (tin tức công ty), 🎓 Đào Tạo (thông báo
   lớp học, liên kết LMS bên dưới), 💼 Tuyển Dụng (đăng tin + nhân viên giới
@@ -854,6 +860,13 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   nguồn bị "giam" vĩnh viễn cho tới khi (lỡ tay) có ai đó xác nhận nhận.
   Chỉ hủy được TRƯỚC KHI siêu thị đích xác nhận nhận — sau đó hàng coi như
   đã thật sự chuyển, không "hủy ngược" được nữa.
+  **Xác nhận hộ khi nhân viên đã nghỉ việc (9/2026)**: phiếu cấp phát còn "⏳
+  Chờ xác nhận" mà nhân viên đã nghỉ việc/khoá tài khoản (không tự bấm được
+  nữa) khiến phiếu kẹt vĩnh viễn — nay Giám Đốc Siêu Thị (`uniformStoreManage`)
+  bấm nút "✅ Xác nhận hộ (đã nghỉ việc)" hiện ngay tại bảng "Lịch Sử Cấp
+  Phát" cho đúng phiếu đó (nút CHỈ hiện khi tài khoản nhân viên đã inactive —
+  còn hoạt động vẫn bắt buộc tự nhân viên xác nhận), ghi rõ "(xác nhận hộ,
+  nhân viên đã nghỉ việc)" trong lịch sử.
   **Báo cáo Đồng Phục theo siêu thị**: bộ lọc siêu thị của riêng báo cáo Đồng
   Phục là **chọn nhiều** (tick chọn một nhóm siêu thị bất kỳ, có nút "Chọn Tất
   Cả"/"Bỏ Chọn Hết") — báo cáo hiện dòng "Tổng Cộng (N siêu thị đã chọn)" cộng
@@ -867,6 +880,10 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   không còn khiến bản CŨ tiếp tục kích hoạt nhắc hạn riêng của nó song song.
   Danh sách các phiên bản gia hạn của cùng 1 giấy phép (cả ở bảng con khi mở
   rộng 1 hồ sơ lẫn màn "Chi Tiết Giấy Phép") hiện **mới nhất lên trước**.
+  **Hủy khi còn chờ duyệt (9/2026)**: gửi nhầm tệp/thông tin trong khi hồ sơ
+  CÒN ĐANG chờ duyệt (chưa ai xử lý) thì người tạo (hoặc admin) tự bấm "🚫
+  Hủy" ngay tại bảng danh sách — không cần chờ người duyệt Từ Chối hộ. Đã
+  duyệt/từ chối rồi thì không hủy được nữa.
 - **Hỗ Trợ IT** — module 3 sub-tab, mỗi tab phục vụ 1 nhóm người khác nhau
   dù cùng nằm 1 chỗ:
   - **🏷️ Phê Duyệt Giá** — dành cho người tạo/duyệt giá bán mặt hàng siêu thị
@@ -929,7 +946,10 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     TODO/DOING của ticket KHÔNG đổi khi gửi phê duyệt). **Trong lúc chờ hoặc
     bị từ chối, server CHẶN CỨNG (lỗi 409) cả "🎯 Nhận Xử Lý" lẫn "Cập nhật
     tiến độ"/đóng ticket** — đội IT chỉ nhận việc/tiếp tục xử lý được sau khi
-    quản lý đã Duyệt.
+    quản lý đã Duyệt. **Nhắc hạn tự động khi treo lâu (9/2026)**: yêu cầu xin
+    ý kiến còn chờ xử lý quá 2 ngày sẽ tự động gửi email nhắc người được xin
+    ý kiến (job chạy mỗi 24h) — không còn phải tự nhớ vào xem badge chờ trên
+    giao diện.
   - **🔔 Gia Hạn Dịch Vụ CNTT** — chỉ đội IT thấy được, quản lý nội bộ danh
     mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
     phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng
@@ -959,7 +979,10 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     và quy trình quay lại Bước 1 để duyệt lại toàn bộ với tệp mới — tránh
     tình huống các bước trước duyệt dựa trên số liệu giá đã lỗi thời. Yêu cầu
     bổ sung từ đội Hỗ Trợ IT (sau khi đã duyệt xong, trước khi áp giá) không
-    áp dụng luật này. Có migrate 1 lần khi khởi động server (server-side, không mất
+    áp dụng luật này. **Nhắc hạn tự động khi treo lâu (9/2026)**: Yêu Cầu Bổ
+    Sung chưa được người đề xuất phản hồi, hoặc Từ Chối Khẩn Cấp chưa được
+    người có quyền xử lý — treo quá 2 ngày sẽ tự động gửi email nhắc (job
+    chạy mỗi 24h), mỗi yêu cầu chỉ nhắc đúng 1 lần. Có migrate 1 lần khi khởi động server (server-side, không mất
     quyền tài khoản cũ): ai đang có `itPriceProposeCreate` được cấp sẵn CẢ 2
     quyền đề xuất mới; ai đang có `itManage` được cấp sẵn thêm `itPriceSupport`
     + `itServiceRenewalManage`; ai đang có `itPriceEmergencyRejectApprove`
@@ -1467,7 +1490,11 @@ theo đúng vị trí trong cây**.
   nhất tại một thời điểm, bấm "Áp dụng" sẽ tự chuyển bản đang áp dụng trước đó
   (nếu có) sang → **Lưu trữ (ARCHIVED)** — chỉ xem, so sánh, không sửa được
   nữa. Muốn sửa tiếp cây đang chạy → bấm "Tạo bản nháp mới" (nhân bản từ bản
-  đang áp dụng), sửa xong thì "Kiểm tra hợp lệ" rồi "Áp dụng".
+  đang áp dụng), sửa xong thì "Kiểm tra hợp lệ" rồi "Áp dụng". **Xoá bản nháp
+  không dùng nữa (9/2026)**: tạo thử/nhân bản nhầm 1 bản Nháp muốn dọn đi thì
+  chọn đúng bản đó ở dropdown Phiên bản → bấm "🗑️ Xoá Bản Nháp Này" — CHỈ
+  xoá được bản đang ở trạng thái Nháp (khôi phục được qua Thùng Rác nếu cần),
+  bản Đã áp dụng/Lưu trữ không xoá được.
 - **Cây gồm 3 loại node**: **Công ty** (gốc, duy nhất), **Phòng Ban** (tên tự
   gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
   làm căn cứ so khớp — không bắt buộc), **Vị Trí** (chức danh — tên hiển thị
@@ -1655,6 +1682,13 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   thâm niên/thời hạn đề xuất tăng lương tính theo **Ngày hiệu lực hợp đồng lao
   động MỚI** sẽ tạo, không phải field riêng này), hồ sơ chuyển thẳng lại Đang
   làm việc.
+  - **Đổi tài khoản liên kết khi tái tuyển (9/2026)**: hồ sơ ĐÃ có tài khoản
+    liên kết (VD tài khoản cũ đã bị khoá/xoá khi nghỉ việc) muốn đổi sang tài
+    khoản VPDT MỚI khi tái tuyển — bấm "🔁 Đổi tài khoản liên kết" ngay tại
+    màn Quản Lý Hồ Sơ → gõ chọn tài khoản mới → Xác Nhận Đổi. Tài khoản cũ
+    mất quyền xem/sửa hồ sơ ngay, lịch sử đổi được lưu lại để tra soát — khác
+    "Liên Kết Tài Khoản VPDT" bên dưới (chỉ dùng cho hồ sơ CHƯA từng liên kết
+    lần nào).
   - **Chặn CỨNG trùng CCCD/CMND khi tạo hồ sơ mới (10/2026, đợt rà soát chuyên
     sâu)**: trước đây "Kiểm Tra Nhân Sự Cũ" chỉ là GỢI Ý — bỏ qua bước tra cứu
     (vô ý hoặc cố ý) vẫn tạo được hồ sơ mới trùng CCCD/CMND với 1 hồ sơ khác.
@@ -1903,7 +1937,11 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
   đã trừ vào quỹ phép năm VÀ tự dọn lại các bản ghi chấm công đã sinh theo
   đơn đó về trạng thái trống — trước đây huỷ chỉ đổi trạng thái đơn, số ngày
   phép đã trừ và bản ghi chấm công vẫn còn nguyên, nhân viên mất oan ngày
-  phép dù chưa hề nghỉ.
+  phép dù chưa hề nghỉ. **Duyệt phép tự huỷ ca đã phân trùng ngày (mô hình
+  theo ca, 9/2026)**: nhân viên chấm công Theo Ca (SHIFT_BASED) — duyệt đơn
+  phép của họ tự động huỷ (chuyển "Đã huỷ") mọi dòng phân ca ở "📅 Phân Ca
+  Siêu Thị" trùng đúng khoảng ngày nghỉ, không cần quản lý ca vào huỷ tay
+  từng dòng; trước đây ca trực vẫn hiện như chưa nghỉ.
 - **Phép năm** — số ngày chuẩn 12 ngày/năm (+ 1 ngày mỗi 5 năm thâm niên),
   tính theo tỷ lệ số tháng còn lại nếu vào làm giữa năm; HR **tạo/điều chỉnh
   tay** ở "Quản Lý & Cấu Hình" (carry-over, quyết định riêng của công ty).
@@ -1968,6 +2006,13 @@ qua **cờ chưa đọc** ngay trong giao diện (không gửi email) — thiế
 đích vì đây là kênh nội bộ tần suất thấp, không cần thêm 1 lớp email dễ bị bỏ
 quên/spam như các luồng phê duyệt khác.
 
+- **Rút lại khi còn chờ phản hồi (9/2026)**: gửi nhầm/muốn rút lại câu hỏi
+  trong khi Nhân Sự CHƯA trả lời thì nhân viên tự bấm "🚫 Rút lại" ngay tại
+  mục "📨 Câu Hỏi Của Tôi" — chuyển sang "Đã rút lại", không xoá hẳn (giữ lịch
+  sử). Nhân Sự đã trả lời rồi thì không rút lại được nữa, và ngược lại — câu
+  hỏi ĐÃ RÚT thì Nhân Sự cũng không còn trả lời được nữa (tránh trả lời nhầm
+  vào câu hỏi người gửi đã tự huỷ ý định hỏi).
+
 #### 4.5.8. Lương
 
 **Nhân Sự → Lương** — **vai trò**: lập/tính/duyệt/công bố phiếu lương hàng
@@ -1992,7 +2037,11 @@ Lương" (lập/tính/duyệt) tự ẩn/hiện theo đúng quyền.
   xem được phiếu lương của mình + nhận **thông báo trong app**, xem chuông 🔔
   ở góc màn hình — module dùng chung cho mọi thông báo hệ thống từ nay về
   sau, không qua email). Có nút **"Mở Lại"** (bắt buộc nhập lý do) đưa kỳ đã
-  Chốt/Công Bố về Nháp để sửa sai sót phát hiện muộn.
+  Chốt/Công Bố về Nháp để sửa sai sót phát hiện muộn. **Xoá kỳ tạo nhầm
+  (9/2026)**: kỳ lương tạo nhầm (sai tháng/năm/tên) hiện nút "🗑️ Xoá" ngay
+  tại danh sách — CHỈ khi còn Nháp và CHƯA từng bấm "Tính Lương" lần nào; kỳ
+  đã có dữ liệu tính lương hoặc đã qua bất kỳ bước duyệt nào phải giữ lại làm
+  lịch sử, không xoá được.
 - **Các dòng tự động tính** (có dữ liệu nguồn thật trong hệ thống): Lương cơ
   bản (theo Hợp Đồng Lao Động đang hiệu lực), Làm thêm giờ 150%/200%/300%
   (theo bản ghi chấm công loại Tăng ca ngày thường/cuối tuần/lễ tết), Trừ
@@ -2227,7 +2276,10 @@ hoàn tất được bài đánh giá.
 `isPassed` LUÔN là `false` bất kể điểm số bao nhiêu** (lỗi nghiêm trọng phủ
 quyết điểm số). Sau khi nộp, siêu thị liên quan xem được kết quả + phản hồi
 lại (tab Kết Quả & Phản Hồi) — chỉ đúng siêu thị bị đánh giá mới phản hồi
-được, không ai khác.
+được, không ai khác. **Sửa lại phản hồi/giải trình (9/2026)**: siêu thị gõ
+nhầm hoặc muốn bổ sung phản hồi đã gửi thì bấm "✏️ Sửa" ngay cạnh phản hồi cũ
+trước khi có kết quả duyệt — nội dung mới GHI ĐÈ nội dung cũ, không lưu lịch
+sử các lần sửa trước.
 
 **Tab Báo Cáo** (module-local, quyền `checklistReportView`) — lọc theo mẫu/
 khoảng ngày, hiện thẻ thống kê (tổng số bài, điểm trung bình, tỉ lệ đạt, số
