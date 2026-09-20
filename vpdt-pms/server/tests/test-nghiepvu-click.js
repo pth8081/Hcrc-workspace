@@ -88,6 +88,28 @@ async function main() {
     record('[mobile 412px] Bấm "Hồ Sơ Nhân Sự" trong nav -> nội dung PHẢI đổi đúng mục vừa bấm', mobileTitle.includes('Hồ Sơ Nhân Sự'), `title sau khi bấm: "${mobileTitle}"`);
   });
 
+  // ===== Tab bar Nghiệp Vụ/Hệ Thống (từ v23.63) — CLICK DOM THẬT vào nút setNVActiveSection, đúng lớp
+  // lỗi mà bài test này ra đời để bắt (data-op chưa được bindCspDelegation() đăng ký) =====
+  await withPage({ width: 1440, height: 900 }, async (page) => {
+    const hasTabsBefore = await page.evaluate(() => !!document.querySelector('#nghiepVuRoot .nv-section-tabs'));
+    record('[desktop] Admin (nghiepVuViewAll+admin) thấy tab bar Nghiệp Vụ/Hệ Thống', hasTabsBefore);
+
+    await page.click('#nghiepVuRoot .nv-section-tab[data-arg0="system"]');
+    await page.waitForTimeout(150);
+    const activeTabText = await page.evaluate(() => document.querySelector('#nghiepVuRoot .nv-section-tab.active')?.textContent || '');
+    record('[desktop] Bấm tab "Hệ Thống" (CLICK DOM THẬT) -> tab active đổi đúng', activeTabText.includes('Hệ Thống'), `tab active: "${activeTabText}"`);
+
+    await page.click('#nghiepVuRoot .nv-item[data-arg0="sysCatalog"]');
+    await page.waitForTimeout(150);
+    const sysTitle = await page.evaluate(() => document.querySelector('#nghiepVuMain h2')?.textContent?.trim() || '');
+    record('[desktop] Bấm "Quản Lý Danh Mục" trong tab Hệ Thống -> nội dung đổi đúng mục', sysTitle.includes('Quản Lý Danh Mục'), `title: "${sysTitle}"`);
+
+    await page.click('#nghiepVuRoot .nv-section-tab[data-arg0="business"]');
+    await page.waitForTimeout(150);
+    const backTitle = await page.evaluate(() => document.querySelector('#nghiepVuMain h2')?.textContent?.trim() || '');
+    record('[desktop] Bấm lại tab "Nghiệp Vụ" -> quay về nội dung nghiệp vụ bình thường', !backTitle.includes('Quản Lý Danh Mục'), `title: "${backTitle}"`);
+  });
+
   await browser.close();
   server.close();
   finish();

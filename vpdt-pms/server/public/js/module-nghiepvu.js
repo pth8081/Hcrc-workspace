@@ -53,7 +53,37 @@ const NGHIEP_VU_NAV = [
   { group: 'Mua Hàng', items: [
     { key: 'muaHang', icon: '🛒', label: 'BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC' },
   ]},
-  { group: 'Hệ Thống', items: [
+];
+
+// ===================== Hệ Thống (từ v23.63 — tách khỏi Nghiệp Vụ theo yêu cầu người dùng) =====
+// Tách RIÊNG khỏi NGHIEP_VU_NAV (không dùng chung canViewNVItem()/NV_KEY_ACCESS_FN của bên Nghiệp Vụ) —
+// CẢ danh mục này chỉ dành cho quản trị viên (nvCanSeeSystemSection()), không có khái niệm "xem theo
+// quyền module con" như bên Nghiệp Vụ (1 tài khoản có quyền admin thì thấy TẤT CẢ mục Hệ Thống). Mục
+// "Sơ Đồ Kiến Trúc Hệ Thống" dời nguyên từ NGHIEP_VU_NAV/NGHIEP_VU_DOCS sang đây (trước đây là mục DUY
+// NHẤT trong nhóm "Hệ Thống" bên Nghiệp Vụ, gác cứng qua NV_ADMIN_ONLY_KEYS — nay cả khu Hệ Thống mới
+// đảm nhiệm đúng vai trò đó, không cần cơ chế gác riêng lẻ theo key nữa).
+const SYSTEM_NAV = [
+  { group: 'Phân Quyền & Tài Khoản', items: [
+    { key: 'sysPermissions', icon: '🔑', label: 'Phân Quyền' },
+    { key: 'sysUsers', icon: '👥', label: 'Người Dùng' },
+  ]},
+  { group: 'Cấu Hình Quy Trình', items: [
+    { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
+  ]},
+  { group: 'Danh Mục & Biểu Mẫu', items: [
+    { key: 'sysCatalog', icon: '🗂️', label: 'Quản Lý Danh Mục' },
+    { key: 'sysFormBuilder', icon: '📋', label: 'Biểu Mẫu' },
+  ]},
+  { group: 'Vận Hành Hệ Thống', items: [
+    { key: 'sysFiles', icon: '📁', label: 'Quản Lý Tệp File' },
+    { key: 'sysTrash', icon: '🗑️', label: 'Thùng Rác' },
+    { key: 'sysLog', icon: '📜', label: 'Nhật Ký Hệ Thống' },
+  ]},
+  { group: 'Tích Hợp & Thông Báo', items: [
+    { key: 'sysEmail', icon: '📧', label: 'Cấu Hình Email' },
+    { key: 'sysExtAuth', icon: '🔌', label: 'API Đối Tác Ngoài' },
+  ]},
+  { group: 'Kiến Trúc', items: [
     { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
   ]},
 ];
@@ -934,8 +964,217 @@ const NGHIEP_VU_DOCS = {
       { label: 'Đối chiếu/Phê duyệt Sổ Cái — chưa triển khai', text: '2 quyền Đối Chiếu/Phê Duyệt đã khai báo sẵn trong cây phân quyền cho Giai đoạn 2-3 (Sổ Cái ACCRUED→CONFIRMED→SETTLED, đối chiếu với NCC) — hiện chưa có luồng nghiệp vụ nào dùng tới.' },
     ] },
   },
+};
+
+// ===================== Hệ Thống (DEMO) — chỉ 3/10 mục có nội dung đầy đủ để demo cấu trúc/văn phong,
+// 7 mục còn lại (sysUsers/sysWorkflow/sysFormBuilder/sysFiles/sysTrash/sysLog/sysEmail/sysExtAuth) CHỦ
+// Ý chưa viết — hiện đúng cảnh báo "⚠️ Chưa có tài liệu nghiệp vụ" (cơ chế có sẵn) để demo luôn cấu trúc
+// nav đầy đủ, sẽ viết nốt sau khi người dùng duyệt cách trình bày. =====================
+const SYSTEM_DOCS = {
+  sysPermissions: {
+    icon: '🔑', title: 'Phân Quyền', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cây quyền chi tiết theo từng khối chức năng (không phải vai trò cố định kiểu "Nhân viên/Quản lý") — mỗi tài khoản được tick từng quyền riêng lẻ, kết hợp tự do. Từ v23.28, 3 nhóm dữ liệu nhạy cảm Nhân Sự (Hồ Sơ/Hợp Đồng/Lương) KHÔNG còn tự động mở cho admin — phải tick quyền tương ứng như tài khoản thường.',
+    flow: { ariaLabel: 'Quy trình cấp quyền cho 1 tài khoản', chain: [
+      { label: 'Mở Sửa Người Dùng', sub: 'Hệ Thống → Người Dùng' },
+      { label: 'Tick quyền theo khối', sub: 'Từng khối chức năng riêng' },
+      { label: 'Lưu lại', sub: 'Áp dụng ngay lần đăng nhập sau', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 👥 Người Dùng</b> → tìm đúng tài khoản → bấm <b>"Sửa"</b>.' },
+      { role: 'Quản trị viên', text: 'kéo xuống khối <b>"Phân Quyền"</b> — cây quyền chia theo từng module (Văn Bản, Tài Chính, Nhân Sự, Vận Hành, Hệ Thống...), mỗi khối là 1 nhóm checkbox riêng, tick đúng quyền cần cấp.' },
+      { role: 'Quản trị viên', text: '3 khối nhạy cảm Nhân Sự (Hồ Sơ/Hợp Đồng/Lương) hiện RIÊNG với ghi chú "không tự động mở cho admin" — phải tick tường minh dù tài khoản đã có quyền admin chung.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — quyền mới có hiệu lực ngay từ lượt tải lại trang / đăng nhập sau của tài khoản đó (không cần đăng xuất-vào lại ngay lập tức nếu đang F5 lại trang).' },
+    ],
+    footer: { left: [
+      { label: 'Không có "vai trò" cố định', text: 'hệ thống không gán sẵn gói quyền theo chức danh — mỗi tài khoản là 1 tổ hợp quyền độc lập, linh hoạt nhưng đòi hỏi quản trị viên tick đúng/đủ khi tạo tài khoản mới.' },
+      { label: 'admin KHÔNG còn "toàn quyền tuyệt đối"', text: 'từ v23.28, `perms.admin=true` không tự mở 3 khối Hồ Sơ/Hợp Đồng/Lương Nhân Sự nữa — hạn chế rủi ro 1 tài khoản admin kỹ thuật vô tình xem được dữ liệu nhạy cảm không thuộc phạm vi công việc.' },
+    ], right: [
+      { label: 'Nhóm Quyền Đặc Biệt', text: 'danh mục riêng (mục 3.3 tài liệu nghiệp vụ) gom nhiều quyền phê duyệt lại thành 1 "vai trò ảo" để gán nhanh cho người mới — không thay thế cây quyền chi tiết, chỉ là lối tắt khi cấp hàng loạt.' },
+      { label: '"Xem Toàn Bộ Mục Nghiệp Vụ"', text: 'quyền admin-grant riêng (`nghiepVuViewAll`) cho phép 1 tài khoản đọc hết tài liệu Nghiệp Vụ mà không cần cấp quyền module thật — dùng cho đào tạo/kiểm toán nội bộ. KHÔNG áp dụng cho khu Hệ Thống (khu vực này luôn đòi `perms.admin` thật, không bypass được).' },
+    ] },
+  },
+  sysUsers: {
+    icon: '👥', title: 'Người Dùng', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Tạo/sửa/khoá tài khoản đăng nhập — hỗ trợ tạo hàng loạt (điền nhiều người vào 1 danh sách tạm rồi lưu 1 lần) tiện khi nhận nhiều nhân viên mới cùng đợt.',
+    flow: { ariaLabel: 'Quy trình tạo tài khoản hàng loạt', chain: [
+      { label: 'Điền form 1 người', sub: 'Thêm vào danh sách tạm' },
+      { label: 'Lặp lại nhiều người', sub: 'Chưa gửi lên server' },
+      { label: 'Kiểm tra trùng tên', sub: 'Cả danh sách tạm lẫn tài khoản cũ', kind: 'decision' },
+      { label: 'Lưu Tất Cả Danh Sách', sub: 'Tạo cùng lúc toàn bộ', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Không trùng', rejectLabel: 'Trùng tên đăng nhập', rejectBox: { label: 'Báo lỗi trùng', sub: 'Chỉ rõ dòng nào trùng' }, loopBackToIndex: 0, loopBackLabel: 'Sửa lại tên đăng nhập' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 👥 Người Dùng</b> → bấm <b>"+ Thêm"</b> → điền Tên đăng nhập/Mật khẩu/Họ tên/Phòng ban/Chức danh.' },
+      { role: 'Quản trị viên', text: 'tạo hàng loạt: điền xong 1 người → bấm <b>"Thêm Vào Danh Sách"</b> (chưa gửi lên server) thay vì lưu ngay, lặp lại cho từng người tiếp theo.' },
+      { role: 'Quản trị viên', text: 'điền xong hết danh sách tạm → bấm <b>"Lưu Tất Cả Danh Sách"</b> — hệ thống tự kiểm tra trùng tên đăng nhập (cả trong danh sách tạm lẫn với tài khoản đã có) trước khi tạo, báo rõ dòng nào trùng nếu có.' },
+      { role: 'Quản trị viên', text: 'tài khoản mới chỉ có quyền tối thiểu — vào lại <b>"Sửa"</b> tài khoản đó để tick quyền (xem mục Phân Quyền).' },
+    ],
+    footer: { left: [
+      { label: 'Liên kết Phân Quyền', text: 'tạo tài khoản xong chưa có quyền gì đáng kể — luôn phải sang màn Phân Quyền tick đúng/đủ quyền cho tài khoản vừa tạo.' },
+    ], right: [
+      { label: '🏷️ Vị Trí Kiêm Nhiệm', text: 'trường tuỳ chọn ở form Sửa Người Dùng — gán thêm 1-2 vị trí (chức danh+phòng ban) phụ để người đó được tính là người duyệt "Theo vị trí" ở module khác, KHÔNG đổi chức danh/phòng ban chính thức, không ảnh hưởng Quản Lý Trực Tiếp/KPI.' },
+    ] },
+  },
+  sysWorkflow: {
+    icon: '🔀', title: 'Quy Trình & Phê Duyệt', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cấu hình người duyệt cho từng bước của hơn 15 module dùng chung 1 engine phê duyệt (Tài Liệu, Văn Bản Trình, Đăng Ký Xe, Hợp Đồng, Hỗ Trợ IT, Ngân Sách, Thanh Toán, Vận Hành - Đặt Hàng...) — mỗi bước của mỗi phòng ban/tier cấu hình độc lập.',
+    flow: { ariaLabel: 'Quy trình cấu hình 1 bước duyệt', chain: [
+      { label: 'Chọn module + bước', sub: 'Mỗi phòng ban/tier riêng' },
+      { label: 'Chọn cách gán người duyệt', sub: 'Theo người / phòng ban / vị trí' },
+      { label: 'Lưu', sub: 'Có hiệu lực ngay cho hồ sơ mới', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔄 Quy Trình & Phê Duyệt</b> → chọn đúng module (VD "Hợp đồng - Phê duyệt") → chọn đúng phòng ban/mức cần cấu hình.' },
+      { role: 'Quản trị viên', text: 'với từng bước, chọn 1 trong 3 chế độ: <b>Theo người</b> (chọn tay 1-nhiều người cụ thể), <b>Theo phòng ban</b> (toàn bộ người có quyền "Người duyệt" thuộc phòng ban đó), hoặc bật toggle <b>"🧭 Theo vị trí"</b> rồi chọn 1-nhiều vị trí (cặp chức danh+phòng ban, khai báo sẵn ở khối "Nhóm Quyền Đặc Biệt" bên Phân Quyền).' },
+      { role: 'Quản trị viên', text: 'tuỳ chọn: đặt <b>"Nhãn hành động"</b> riêng cho bước (VD "Xác Nhận"/"Thẩm Định" thay vì mặc định "Phê Duyệt") tại khối <b>"🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt"</b> — nhãn tự áp dụng cả ở nút bấm lẫn chân ký in, không đổi logic phân quyền/chuyển bước.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — xác nhận người thật đang giữ đúng vị trí/thuộc phòng ban đó đã có quyền "Người duyệt" (tick ở Phân Quyền), nếu chưa thì khớp vị trí vẫn không duyệt được.' },
+      { role: 'Quản trị viên', text: 'cần set nhanh số bước cho nhiều module cùng lúc: dùng sub-tab <b>"⚡ Áp Dụng Nhanh"</b> ngay cạnh — chọn 1 mẫu quy trình có sẵn, bấm "🔍 Xem Trước" rồi "⚡ Áp Dụng" (chỉ điền phòng ban/mức đang THIẾU cấu hình, không tự gán người duyệt).' },
+    ],
+    footer: { left: [
+      { label: 'Điểm bảo mật cốt lõi', text: 'khớp đúng vị trí/phòng ban chỉ là điều kiện LỌC BỚT — người đó vẫn phải có quyền "Người duyệt" (canBeApprover) riêng mới thực sự duyệt được, kể cả khi tên/vị trí đã đúng như cấu hình.' },
+    ], right: [
+      { label: 'Áp Dụng Nhanh không ghi đè', text: 'phòng ban/mức nào ĐÃ được cấu hình từ trước (kể cả chỉ mới chọn số bước) luôn được giữ nguyên — Áp Dụng Nhanh chỉ điền vào chỗ đang trống, không đụng cấu hình đã có.' },
+    ] },
+  },
+  sysCatalog: {
+    icon: '🗂️', title: 'Quản Lý Danh Mục', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Nơi tập trung mọi danh mục dùng chung toàn hệ thống (Phòng Ban, Chức Danh, Siêu Thị, Loại Hợp Đồng, Loại Xe, Vùng Giá Áp Dụng, Phòng Họp...) — sửa 1 danh mục ở đây áp dụng ngay cho MỌI form có dùng tới, không cần sửa từng nơi.',
+    flow: { ariaLabel: 'Quy trình thêm/sửa 1 danh mục', chain: [
+      { label: 'Chọn đúng danh mục', sub: 'VD Phòng Ban, Chức Danh...' },
+      { label: 'Thêm / Sửa / Xoá', sub: 'Xoá bị chặn nếu đang được dùng', kind: 'decision' },
+      { label: 'Áp dụng ngay', sub: 'Mọi form liên quan cập nhật', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Không ai đang dùng', rejectLabel: 'Đang có dữ liệu tham chiếu', rejectBox: { label: 'Chặn xoá', sub: 'Báo rõ đang dùng ở đâu' }, loopBackToIndex: 1, loopBackLabel: 'Xử lý dữ liệu tham chiếu trước' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🗂️ Quản Lý Danh Mục</b> → chọn đúng tab danh mục cần sửa (Phòng Ban/Chức Danh/Siêu Thị/Loại Hợp Đồng...).' },
+      { role: 'Quản trị viên', text: 'bấm <b>"+ Thêm"</b> để tạo mới, hoặc <b>"✏️ Sửa"</b>/<b>"🗑️ Xoá"</b> ngay tại dòng danh mục đã có.' },
+      { role: 'Quản trị viên', text: 'nếu xoá 1 giá trị ĐANG được dùng ở hồ sơ/form khác, hệ thống chặn lại và báo rõ lý do — phải xử lý xong dữ liệu đang tham chiếu (đổi sang giá trị khác) trước khi xoá được.' },
+    ],
+    footer: { left: [
+      { label: 'Dùng chung TOÀN HỆ THỐNG', text: 'không có khái niệm danh mục "riêng cho 1 module" — Phòng Ban ở đây là ĐÚNG Phòng Ban hiện trên mọi form/báo cáo khác, sửa 1 chỗ đủ.' },
+    ], right: [
+      { label: 'Tự học danh mục con', text: 'một số danh mục nhỏ (VD Loại Dịch Vụ CNTT, Chủ Đề HCRC Đồng Hành) KHÔNG có màn quản lý riêng — tự "học" thêm giá trị mới ngay khi có người gõ giá trị mới lúc tạo hồ sơ, không cần vào Quản Lý Danh Mục trước.' },
+    ] },
+  },
+  sysFormBuilder: {
+    icon: '📋', title: 'Biểu Mẫu', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Tuỳ biến field của gần như mọi form tạo hồ sơ trong hệ thống MÀ KHÔNG CẦN sửa code — đổi nhãn hiển thị, đổi field nào bắt buộc, sửa danh sách lựa chọn (dropdown), và thêm hẳn field mới. Bao phủ 23 nhóm module.',
+    flow: { ariaLabel: 'Quy trình tuỳ biến 1 form', chain: [
+      { label: 'Chọn module + form', sub: 'VD Văn Bản Trình, Hợp Đồng...' },
+      { label: 'Sửa field / Thêm field mới', sub: 'Nhãn, bắt buộc, dropdown' },
+      { label: 'Lưu', sub: 'Áp dụng cho hồ sơ tạo TIẾP THEO', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📋 Biểu Mẫu</b> → chọn đúng module/form cần tuỳ biến.' },
+      { role: 'Quản trị viên', text: 'với field có sẵn: đổi <b>Nhãn hiển thị</b>, tick/bỏ <b>Bắt buộc</b>, sửa <b>danh sách lựa chọn</b> (nếu field kiểu dropdown).' },
+      { role: 'Quản trị viên', text: 'thêm field mới: bấm <b>"+ Thêm Field"</b> → chọn kiểu field, nhập nhãn, chọn bắt buộc hay không → lưu — field mới hiện ngay dưới các field mặc định của đúng form đó.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — áp dụng ngay từ lượt TẠO hồ sơ tiếp theo, KHÔNG ảnh hưởng hồ sơ đã tạo trước khi thêm/sửa field.' },
+    ],
+    footer: { left: [
+      { label: 'Khác Quản Lý Danh Mục', text: 'đây là tuỳ biến RIÊNG của từng form (field/nhãn/bắt buộc); Quản Lý Danh Mục là danh mục LÕI dùng chéo nhiều module (Phòng Ban, Chức Danh...) — 2 màn có vai trò khác nhau.' },
+    ], right: [
+      { label: 'Ngoại lệ 3 form đặc biệt', text: 'Ngân Hàng Câu Hỏi Đào Tạo/Checklist Đánh Giá Siêu Thị/Career Path chỉ tuỳ biến được field CẤP MẪU (VD Mã/Tên/Loại) — phần câu hỏi/hạng mục tự thêm-bớt BÊN TRONG mỗi mẫu KHÔNG tuỳ biến được ở đây.' },
+    ] },
+  },
+  sysFiles: {
+    icon: '📁', title: 'Quản Lý Tệp File', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cấu hình loại tệp được phép upload và giới hạn dung lượng tối đa (MB) riêng cho TỪNG module có đính kèm file.',
+    flow: { ariaLabel: 'Quy trình cấu hình tệp cho 1 module', chain: [
+      { label: 'Chọn module', sub: 'VD Tài Liệu, Hợp Đồng...' },
+      { label: 'Cấu hình loại tệp + dung lượng', sub: 'Chỉ được SIẾT chặt hơn mức chung', kind: 'decision' },
+      { label: 'Lưu', sub: 'Áp dụng cho lượt tải lên tiếp theo', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Trong giới hạn chung', rejectLabel: 'Vượt UPLOAD_MAX_MB', rejectBox: { label: 'Chặn lưu', sub: 'Không vượt được mức chung .env' }, loopBackToIndex: 1, loopBackLabel: 'Giảm lại mức MB' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📎 Quản Lý Tệp File</b> → chọn đúng module (Tài Liệu/Văn Bản Trình/Hợp Đồng/Đăng Ký Xe/Đặt Phòng Họp/Biên Bản Họp/Tổng Hợp/Truyền Thông Nội Bộ).' },
+      { role: 'Quản trị viên', text: 'sửa danh sách <b>loại tệp được phép</b> (VD .pdf/.docx/.xlsx, mặc định 3 loại này cho 8 module) và <b>Giới Hạn Dung Lượng Tối Đa (MB)</b> riêng cho module đó.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — mức riêng chỉ được SIẾT chặt hơn, không vượt quá giới hạn chung toàn hệ thống (`UPLOAD_MAX_MB`, cấu hình ở `.env`, mặc định 20MB).' },
+    ],
+    footer: { left: [
+      { label: 'Chỉ siết, không nới', text: 'dù đặt dung lượng riêng cao hơn `UPLOAD_MAX_MB` ở đây, server vẫn chặn ở đúng mức chung — mức riêng chỉ có tác dụng SIẾT chặt hơn.' },
+    ], right: [
+      { label: 'Ảnh Đào Tạo là ngoại lệ', text: 'ảnh minh hoạ câu hỏi Đào Tạo chỉ nhận định dạng ảnh (không theo danh sách .pdf/.docx/.xlsx như các module còn lại).' },
+    ] },
+  },
+  sysTrash: {
+    icon: '🗑️', title: 'Thùng Rác', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Gom hồ sơ đã xoá từ khoảng 30 loại hồ sơ khác nhau về 1 nơi để khôi phục nếu xoá nhầm, hoặc xoá vĩnh viễn khi chắc chắn không cần nữa.',
+    flow: { ariaLabel: 'Quy trình xử lý hồ sơ trong Thùng Rác', chain: [
+      { label: 'Hồ sơ bị xoá', sub: 'Từ bất kỳ module nào' },
+      { label: 'Khôi phục hay xoá hẳn?', sub: '', kind: 'decision' },
+      { label: 'Về lại module gốc', sub: 'Nguyên vẹn như trước khi xoá', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Khôi phục', rejectLabel: 'Xoá vĩnh viễn', rejectBox: { label: 'Xác thực lại', sub: 'Mật khẩu/OTP/vân tay rồi mới xoá hẳn' }, loopBackToIndex: 1, loopBackLabel: 'Không thể hoàn tác sau bước này' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🗑️ Thùng Rác</b> → lọc theo loại hồ sơ/phòng ban để tìm đúng hồ sơ cần xử lý.' },
+      { role: 'Quản trị viên', text: 'khôi phục: bấm <b>"♻️ Khôi Phục"</b> ngay dòng hồ sơ — hồ sơ trở lại nguyên vẹn ở đúng module gốc.' },
+      { role: 'Quản trị viên', text: 'xoá vĩnh viễn: bấm <b>"🗑️ Xoá Vĩnh Viễn"</b> → hệ thống yêu cầu xác thực lại (mật khẩu/OTP/vân tay tuỳ mức cấu hình bảo mật của tài khoản đó) → xác nhận — KHÔNG khôi phục lại được sau bước này.' },
+    ],
+    footer: { left: [
+      { label: 'Không tự dọn theo thời gian', text: 'hồ sơ nằm mãi trong Thùng Rác cho tới khi có người chủ động khôi phục hoặc xoá vĩnh viễn — không có cơ chế tự xoá sau X ngày.' },
+    ], right: [
+      { label: 'Gác quyền cả 2 lớp', text: 'CHỈ admin vào được, và được kiểm tra lại THẬT ở server (không chỉ ẩn nút giao diện) — gọi thẳng API cũng không xem/khôi phục được nếu không phải admin.' },
+    ] },
+  },
+  sysLog: {
+    icon: '📜', title: 'Nhật Ký Hệ Thống', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Ghi lại mọi thao tác quan trọng (đăng nhập, tạo/sửa/xoá/duyệt hồ sơ...) kèm người thực hiện, thời gian, module, kết quả — chỉ admin xem được, không giới hạn theo phòng ban.',
+    flow: { ariaLabel: 'Quy trình tra cứu Nhật Ký Hệ Thống', chain: [
+      { label: 'Thao tác xảy ra', sub: 'Ở bất kỳ module nào' },
+      { label: 'Tự ghi 1 dòng log', sub: 'Người/thời gian/kết quả' },
+      { label: 'Tra cứu qua bộ lọc', sub: 'Tối đa 1.000 dòng/lượt tải', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📊 Log</b>.' },
+      { role: 'Quản trị viên', text: 'lọc theo <b>Phân Hệ</b> (module), <b>Sự Kiện</b> (loại thao tác), <b>Trạng thái</b>, hoặc gõ từ khoá vào ô tìm nhanh (khớp tên đăng nhập/địa chỉ IP/loại thao tác/mô tả).' },
+      { role: 'Quản trị viên', text: 'mỗi lượt tải chỉ trả tối đa 1.000 dòng — thu hẹp bằng bộ lọc thay vì cố tải hết nếu cần tra dữ liệu cũ hơn.' },
+    ],
+    footer: { left: [
+      { label: 'Tự dọn sau 5.000 dòng', text: 'hệ thống chỉ giữ lại 5.000 dòng gần nhất — nhật ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay.' },
+    ], right: [
+      { label: 'Xem TOÀN công ty', text: 'admin xem được nhật ký của mọi phòng ban, không chỉ giới hạn trong phòng ban của tài khoản admin đó.' },
+    ] },
+  },
+  sysEmail: {
+    icon: '📧', title: 'Cấu Hình Email', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cấu hình SMTP toàn bộ trên web (Host/Port/Kiểu mã hoá/Email người gửi/Tài khoản đăng nhập), không cần sửa `.env` hay khởi động lại server. Kèm bật/tắt riêng từng loại email thông báo phê duyệt theo từng module.',
+    flow: { ariaLabel: 'Quy trình cấu hình SMTP', chain: [
+      { label: 'Nhập cấu hình SMTP', sub: 'Host/Port/Kiểu mã hoá' },
+      { label: 'Gửi Thử', sub: 'Xác minh trước khi lưu', kind: 'decision' },
+      { label: 'Lưu', sub: 'Có hiệu lực ngay, không restart', kind: 'approved' },
+    ], decision: { atIndex: 1, approveLabel: 'Gửi thử thành công', rejectLabel: 'Gửi thử lỗi', rejectBox: { label: 'Sửa lại cấu hình', sub: 'Kiểm tra Host/Port/tài khoản' }, loopBackToIndex: 0, loopBackLabel: 'Nhập lại thông số' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ✉️ Cấu Hình Email</b> → điền Host/Port/Email người gửi/Tài khoản đăng nhập SMTP.' },
+      { role: 'Quản trị viên', text: 'bấm 1 trong 3 nút chọn nhanh kiểu mã hoá (<b>Không mã hoá/TLS/SSL</b>) — Port tự đổi sang giá trị chuẩn tương ứng (25/587/465).' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Gửi Thử"</b> để xác minh cấu hình đúng trước khi lưu chính thức.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — có hiệu lực ngay, không cần khởi động lại server.' },
+      { role: 'Quản trị viên', text: 'muốn giảm email trùng lặp: kéo xuống khối <b>"🔔 Thông Báo Email Phê Duyệt"</b> → tắt riêng từng module ở nhóm "Cần phê duyệt" (gửi người duyệt) hoặc "Kết quả duyệt" (gửi người trình) theo nhu cầu.' },
+    ],
+    footer: { left: [
+      { label: 'Mặc định chỉ mô phỏng', text: 'chưa nhập SMTP Server ở màn này thì hệ thống chỉ MÔ PHỎNG gửi email (ghi Nhật Ký Hệ Thống, không gửi thật).' },
+    ], right: [
+      { label: 'Fail-open khi chưa cấu hình', text: 'nếu admin chưa từng lưu khối "Thông Báo Email Phê Duyệt", email vẫn gửi như hành vi gốc — chỉ khi admin chủ động lưu giá trị TẮT thì email đó mới thực sự bị chặn.' },
+    ] },
+  },
+  sysExtAuth: {
+    icon: '🔌', title: 'API Đối Tác Ngoài', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cấp/thu hồi API key cho phép 1 ứng dụng NGOÀI hệ thống xác thực tài khoản HCRC Workspace hoặc đồng bộ danh bạ nhân sự cơ bản, mà không cần tự lưu mật khẩu người dùng.',
+    flow: { ariaLabel: 'Vòng đời 1 API key', chain: [
+      { label: 'Tạo Key Mới', sub: 'Sinh chuỗi hcrc_ + 64 ký tự hex' },
+      { label: 'Giao Cho Bên Tích Hợp', sub: 'Copy ngay, chỉ hiện đúng 1 lần' },
+      { label: 'Đang Hoạt Động', sub: 'Bên ngoài gọi API xác thực', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔌 API Đối Tác Ngoài</b> → bấm <b>"+ Tạo Key Mới"</b> → tuỳ chọn khai báo <b>Danh Sách IP/CIDR Được Phép Gọi</b> (để trống = không giới hạn IP).' },
+      { role: 'Quản trị viên', text: 'copy ngay chuỗi key hiện ra (nút <b>"📋 Sao chép"</b>) — hệ thống CHỈ hiển thị đúng 1 lần lúc tạo, DB chỉ lưu bcrypt hash nên không đọc lại được key thật về sau kể cả có toàn quyền truy cập DB.' },
+      { role: 'Quản trị viên', text: 'giao key cho bên tích hợp dùng gọi <code>POST /api/external/verify-credentials</code> (xác thực tài khoản/mật khẩu, không cấp phiên đăng nhập) hoặc <code>GET /api/external/users</code> (đồng bộ danh bạ, không bao giờ kèm mật khẩu/PIN).' },
+      { role: 'Quản trị viên', text: 'cần xoay vòng bí mật: bấm <b>"🔄 Tạo Lại Key"</b> — key cũ ngừng hoạt động NGAY, key mới hiện ra thay thế (giữ nguyên lịch sử/allowedIps đã cấu hình), phải cập nhật lại ngay cho bên tích hợp.' },
+      { role: 'Quản trị viên', text: 'không dùng nữa: bấm <b>"Thu Hồi"</b> (dừng vĩnh viễn, không kích hoạt lại được) — chỉ SAU KHI đã thu hồi mới bấm được <b>"🗑️ Xóa"</b> để dọn khỏi danh sách hiển thị (Nhật Ký Hệ Thống vẫn giữ nguyên dấu vết).' },
+    ],
+    footer: { left: [
+      { label: 'Chặn theo IP tuỳ chọn', text: 'nếu đã khai báo allowedIps, request gọi từ IP ngoài danh sách bị chặn (403) dù key đúng — để trống thì key đúng gọi từ đâu cũng được.' },
+    ], right: [
+      { label: '2 API tách biệt vai trò', text: '`verify-credentials` KHÔNG cấp phiên đăng nhập, chỉ trả lời đúng/sai; `GET /api/external/users` chỉ trả field công khai (username/tên/điện thoại/phòng ban/chức danh), không bao giờ kèm mật khẩu/PIN dù đã hash.' },
+    ] },
+  },
   systemArchitecture: {
-    icon: '🗺️', title: 'Sơ Đồ Kiến Trúc Hệ Thống', badge: 'Chỉ Quản Trị Viên (Admin)',
+    icon: '🗺️', title: 'Sơ Đồ Kiến Trúc Hệ Thống', badge: 'Chỉ Quản Trị Viên',
     isCustomFlow: true, customFlowRenderer: 'renderNVSystemArchitectureOverview', diagramTitle: 'Sơ đồ kiến trúc & liên kết ngoài',
     desc: 'Toàn cảnh kiến trúc ứng dụng — Trình duyệt (SPA, thuần HTML/JS, không có app di động riêng) gọi API tới 1 Server Node.js/Express duy nhất (chạy PM2 cluster mode), server đọc/ghi toàn bộ dữ liệu ở SQL Server + lưu file đính kèm trên ổ đĩa cục bộ, cùng 2 điểm tích hợp hệ thống ngoài đang có thật.',
     footer: { left: [
@@ -1089,6 +1328,28 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
 
 let nvActiveKey = 'doc';
 let nvActiveDaotaoArea = 'overview';
+// 'business' = tab Nghiệp Vụ (NGHIEP_VU_NAV/NGHIEP_VU_DOCS, mọi tài khoản đã đăng nhập, gác theo
+// canViewNVItem() như cũ); 'system' = tab Hệ Thống (SYSTEM_NAV/SYSTEM_DOCS, CHỈ admin — xem
+// nvCanSeeSystemSection()). Theo yêu cầu người dùng (9/2026): tách module "Nghiệp Vụ" cũ thành 2 khu
+// vực điều hướng dạng tab, đổi tên module cha thành "Hướng Dẫn" (index.html), giữ NGUYÊN mọi id/
+// data-op/tên hàm nội bộ liên quan tới "nghiepVu"/"NghiepVu" để giảm rủi ro/diff.
+let nvActiveSection = 'business';
+
+// Khu Hệ Thống lộ chi tiết cấu hình/hạ tầng (phân quyền, danh mục, quy trình, tệp, log, email, API đối
+// tác ngoài...) — CHỈ admin xem được, KHÔNG áp dụng 2 cơ chế mở rộng nghiepVuViewAll/nghiepVuExtraKeys
+// (kế thừa đúng nguyên tắc trước đây của NV_ADMIN_ONLY_KEYS cho riêng "systemArchitecture", nay áp dụng
+// cho CẢ khu vực mới thay vì gác từng key lẻ).
+function nvCanSeeSystemSection() {
+  return !!(currentUser && currentUser.perms?.admin);
+}
+
+function setNVActiveSection(section) {
+  if (section === 'system' && !nvCanSeeSystemSection()) return;
+  if (section !== 'business' && section !== 'system') return;
+  nvActiveSection = section;
+  nvActiveKey = null;
+  renderNghiepVuModule();
+}
 
 function setNVActiveKey(key) {
   nvActiveKey = key;
@@ -1125,20 +1386,11 @@ const NV_KEY_ACCESS_FN = {
   muaHang: 'canAccessPurchasingModule',
 };
 
-// Mục Nghiệp Vụ CHỈ Quản Trị Viên (perms.admin) xem được, BỎ QUA CẢ 2 cơ chế mở rộng thông thường của
-// canViewNVItem() bên dưới (nghiepVuViewAll — "Xem Toàn Bộ Mục Nghiệp Vụ", và nghiepVuExtraKeys — mở
-// riêng từng mục) — nội dung lộ ra chi tiết hạ tầng/kết nối hệ thống ngoài (DB, thư mục lưu file, SMTP,
-// API bên thứ 3...), không phải nội dung nghiệp vụ business thông thường nên không nên mở rộng qua 2
-// cơ chế đó như các mục khác. Dùng cho "Sơ Đồ Kiến Trúc Hệ Thống" (theo yêu cầu người dùng "chỉ admin
-// xem được") — thêm key khác vào đây nếu sau này có thêm nội dung hạ tầng tương tự.
-const NV_ADMIN_ONLY_KEYS = new Set(['systemArchitecture']);
-
 // Quyền admin-grant riêng (checkbox "Xem Toàn Bộ Mục Nghiệp Vụ", xem systemSection.html mục 24) bỏ qua
 // toàn bộ giới hạn dưới đây; user.nghiepVuExtraKeys (mảng key, sanitize ở routes/data.js) mở thêm TỪNG
 // mục cụ thể ngoài phạm vi quyền module hiện có, không cần bật cả quyền module thật tương ứng.
 function canViewNVItem(key) {
   if (!currentUser) return false;
-  if (NV_ADMIN_ONLY_KEYS.has(key)) return !!currentUser.perms?.admin;
   if (currentUser.perms?.nghiepVuViewAll) return true;
   if ((currentUser.nghiepVuExtraKeys || []).includes(key)) return true;
   // LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): trước đây fallback về `true` (hiện
@@ -1158,8 +1410,17 @@ function visibleNVGroups() {
     .filter(g => g.items.length > 0);
 }
 
+// Khu Hệ Thống không có cơ chế gác từng key riêng (khác NGHIEP_VU_NAV) — cả khu đã bị chặn ở mức
+// section bởi nvCanSeeSystemSection() (renderNghiepVuModule()/setNVActiveSection()), nên hễ qua được
+// bước đó thì hiện toàn bộ SYSTEM_NAV.
+function visibleSystemGroups() {
+  if (!nvCanSeeSystemSection()) return [];
+  return SYSTEM_NAV.filter(g => g.items.length > 0);
+}
+
 function nvFindItem(key) {
-  for (const g of NGHIEP_VU_NAV) {
+  const nav = nvActiveSection === 'system' ? SYSTEM_NAV : NGHIEP_VU_NAV;
+  for (const g of nav) {
     const it = g.items.find(i => i.key === key);
     if (it) return { group: g.group, item: it };
   }
@@ -1170,7 +1431,11 @@ function renderNghiepVuModule() {
   const root = document.getElementById('nghiepVuRoot');
   if (!root) return;
 
-  const groups = visibleNVGroups();
+  // Không còn quyền admin (VD chuyển tài khoản ngay trong phiên) mà đang đứng ở tab Hệ Thống thì trả
+  // về tab Nghiệp Vụ — tránh kẹt ở tab đã mất quyền xem.
+  if (nvActiveSection === 'system' && !nvCanSeeSystemSection()) nvActiveSection = 'business';
+
+  const groups = nvActiveSection === 'system' ? visibleSystemGroups() : visibleNVGroups();
   if (!groups.some(g => g.items.some(it => it.key === nvActiveKey))) {
     nvActiveKey = groups[0]?.items[0]?.key || null;
   }
@@ -1182,7 +1447,17 @@ function renderNghiepVuModule() {
     `).join('')}
   `).join('');
 
+  // Tab bar Nghiệp Vụ/Hệ Thống chỉ hiện cho admin — non-admin không có gì để chuyển sang nên giữ
+  // nguyên giao diện gốc (chỉ sidebar + nội dung), tránh 1 tab bar thừa chỉ có 1 lựa chọn.
+  const tabsHtml = nvCanSeeSystemSection() ? `
+    <div class="nv-section-tabs">
+      <button type="button" class="nv-section-tab${nvActiveSection === 'business' ? ' active' : ''}" data-op="setNVActiveSection" data-arg0="business">📘 Nghiệp Vụ</button>
+      <button type="button" class="nv-section-tab${nvActiveSection === 'system' ? ' active' : ''}" data-op="setNVActiveSection" data-arg0="system">⚙️ Hệ Thống</button>
+    </div>
+  ` : '';
+
   root.innerHTML = `
+    ${tabsHtml}
     <div class="nv-app">
       <div class="nv-sidebar">${navHtml}</div>
       <div class="nv-main" id="nghiepVuMain"></div>
@@ -1194,23 +1469,25 @@ function renderNghiepVuModule() {
 function renderNghiepVuContent() {
   const main = document.getElementById('nghiepVuMain');
   if (!main) return;
+  const sectionLabel = nvActiveSection === 'system' ? 'Hệ Thống' : 'Nghiệp Vụ';
   if (!nvActiveKey) {
-    main.innerHTML = `<div class="p-4 bg-gray-50 border rounded text-gray-500 text-sm">Bạn chưa có quyền xem mục nào trong Nghiệp Vụ.</div>`;
+    main.innerHTML = `<div class="p-4 bg-gray-50 border rounded text-gray-500 text-sm">Bạn chưa có quyền xem mục nào trong ${escapeHtml(sectionLabel)}.</div>`;
     return;
   }
   const found = nvFindItem(nvActiveKey);
   if (!found) { main.innerHTML = ''; return; }
   const { group, item } = found;
 
-  if (item.key === 'daotao') {
+  if (nvActiveSection === 'business' && item.key === 'daotao') {
     main.innerHTML = renderNghiepVuDaotao(group);
     return;
   }
 
-  const doc = NGHIEP_VU_DOCS[item.key];
+  const docs = nvActiveSection === 'system' ? SYSTEM_DOCS : NGHIEP_VU_DOCS;
+  const doc = docs[item.key];
   if (!doc) {
     main.innerHTML = `
-      <div class="text-xs text-gray-400 mb-1">Nghiệp Vụ / ${escapeHtml(group)}</div>
+      <div class="text-xs text-gray-400 mb-1">${escapeHtml(sectionLabel)} / ${escapeHtml(group)}</div>
       <h2 class="text-xl font-bold mb-3">${item.icon} ${escapeHtml(item.label)}</h2>
       <div class="p-4 bg-amber-50 border border-amber-300 rounded text-amber-800 text-sm font-bold">⚠️ Chưa có tài liệu nghiệp vụ cho mục này.</div>
     `;
@@ -1218,7 +1495,7 @@ function renderNghiepVuContent() {
   }
 
   main.innerHTML = `
-    <div class="text-xs text-gray-400 mb-1">Nghiệp Vụ / ${escapeHtml(group)}</div>
+    <div class="text-xs text-gray-400 mb-1">${escapeHtml(sectionLabel)} / ${escapeHtml(group)}</div>
     <div class="flex items-center gap-2 mb-1 flex-wrap">
       <h2 class="text-xl font-bold">${doc.icon} ${escapeHtml(doc.title)}</h2>
       ${doc.badge ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">${escapeHtml(doc.badge)}</span>` : ''}

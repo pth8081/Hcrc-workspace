@@ -290,11 +290,14 @@
           <button id="btnItSupportNavRenewal" data-op-seq="closeItSupportDropdown()|switchTab(itSupport)|setItSupportSubTab(RENEWAL)" class="hidden sidebar-subitem">🔔 Gia Hạn Dịch Vụ</button>
         </div>
       </div>
-      <!-- Nghiệp Vụ — màn tài liệu tham khảo (sơ đồ quy trình + diễn giải), mở cho mọi tài khoản đã đăng
-           nhập (giống Tài Liệu/Công Việc), xem canAccessNghiepVuModule() (core.js). Đặt ngay trước Báo Cáo
-           — cùng nhóm màn tra cứu/tổng hợp, không phải luồng tác nghiệp chủ động. -->
+      <!-- Hướng Dẫn (tên cũ: Nghiệp Vụ, đổi từ v23.63 theo yêu cầu người dùng) — màn tài liệu tham khảo
+           (sơ đồ quy trình + diễn giải), mở cho mọi tài khoản đã đăng nhập (giống Tài Liệu/Công Việc),
+           xem canAccessNghiepVuModule() (core.js). Đặt ngay trước Báo Cáo — cùng nhóm màn tra cứu/tổng
+           hợp, không phải luồng tác nghiệp chủ động. Bên trong chia 2 tab Nghiệp Vụ/Hệ Thống (tab Hệ
+           Thống chỉ admin thấy, xem nvCanSeeSystemSection() ở module-nghiepvu.js) — giữ NGUYÊN mọi id/
+           data-op ở đây (nghiepVu/NghiepVu) để giảm rủi ro/diff, chỉ đổi nhãn hiển thị. -->
       <button id="btnNghiepVuTab" data-op="switchTab" data-arg0="nghiepVu" class="hidden sidebar-item">
-        <span class="sidebar-icon">📘</span><span class="sidebar-label">Nghiệp vụ</span>
+        <span class="sidebar-icon">📘</span><span class="sidebar-label">Hướng Dẫn</span>
       </button>
       <!-- Báo Cáo — CHUYỂN xuống cạnh Hệ Thống (trước đây nằm ngay sau Vận Hành, phía trên Nhân Sự): cả
            2 đều là công cụ đọc/giám sát tổng quan toàn hệ thống, khác nhóm module tác nghiệp hàng ngày
