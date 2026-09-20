@@ -41,6 +41,7 @@ const {
 } = require('../lib/recordViewScope');
 const { filterNotificationsForUser } = require('../lib/notifications');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -1592,6 +1593,17 @@ router.post('/:key', async (req, res) => {
       }
     }
 
+    // meetingRooms: LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính") — đổi tên 1 phòng họp ở đây
+    // (editMeetingRoomCatalogItem(), module-phonghop.js) trước đây KHÔNG cascade sang meetings.room (lưu
+    // nguyên TÊN phòng, so trùng bằng so chuỗi) — xem chú thích đầy đủ tại cascadeMeetingRoomRename()
+    // (lib/catalogRename.js). Đối chiếu mảng CŨ/MỚI theo id NGAY TRƯỚC khi ghi (route generic này chỉ
+    // nhận nguyên mảng thay thế, không có khái niệm "sửa 1 dòng") để tìm ra (các) cặp tên đã đổi, cascade
+    // SAU KHI ghi 'meetingRooms' thành công bên dưới (renamedMeetingRoomPairs được dùng ở đó).
+    let renamedMeetingRoomPairs = [];
+    if (key === 'meetingRooms' && Array.isArray(value)) {
+      const oldRooms = (await getAppDataValue('meetingRooms')) || [];
+      renamedMeetingRoomPairs = diffMeetingRoomRenames(oldRooms, value);
+    }
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
@@ -1648,6 +1660,13 @@ router.post('/:key', async (req, res) => {
       const levelsKey = APPROVAL_GROUPS_TO_LEVELS_KEY[key];
       await syncApprovalLevelsWithGroupsChange(key, value);
       syncedVersions = { [levelsKey]: (await getAppDataValueWithVersion(levelsKey)).version };
+    }
+
+    // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
+    // 'meetingRooms' đã chắc chắn thành công (khớp nguyên tắc permGroups/APPROVAL_GROUPS_TO_LEVELS_KEY
+    // ngay trên — không cascade dữ liệu khác dựa trên 1 thao tác ghi CHƯA xác nhận lưu được).
+    for (const { oldValue, newValue } of renamedMeetingRoomPairs) {
+      await cascadeMeetingRoomRename(oldValue, newValue);
     }
 
     // Nhật ký hệ thống SERVER-SIDE cho các key QUẢN TRỊ NHẠY CẢM — xem ADMIN_SENSITIVE_KEYS ở đầu file.

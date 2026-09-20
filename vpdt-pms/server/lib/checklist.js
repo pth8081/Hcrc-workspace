@@ -260,21 +260,38 @@ function assertTemplateCoreFields(payload) {
 // Xác định storeCode khi BẮT ĐẦU 1 submission — logic PHẢI nằm ở server, không tin bất kỳ giá trị nào
 // client tự gửi cho STORE_SELF (mới đúng tinh thần "TUYỆT ĐỐI không dùng requestedStoreCode từ client"
 // của tài liệu gốc).
-function resolveStoreCodeForSubmission(template, user, requestedStoreCode) {
+//
+// validStoreCodes: mảng TÊN siêu thị thật lấy từ DB.stores (Danh Mục Siêu Thị, xem lib/appData.js
+// getAppDataValueCached('stores') ở nơi gọi) — LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức
+// Trung bình): TRƯỚC ĐÂY hàm này không đối chiếu storeCode với danh mục thật ở BẤT KỲ nhánh nào (kể cả
+// nhánh scope.all/admin — canAuditStore() chỉ kiểm tra PHẠM VI quyền, không kiểm tra CHUỖI đó có tồn tại
+// trong danh mục hay không), nên 1 request tự soạn với `checklistAuditScope: {all:true}` (hoặc tài khoản
+// admin) gửi BẤT KỲ chuỗi nào làm storeCode vẫn tạo được submission — hồ sơ mang tên siêu thị không có
+// thật, gây nhiễu báo cáo/thống kê. Đối chiếu THẬT ở MỌI nhánh (kể cả admin/scope.all) trước khi trả về.
+function resolveStoreCodeForSubmission(template, user, requestedStoreCode, validStoreCodes) {
+  const knownStores = new Set(Array.isArray(validStoreCodes) ? validStoreCodes : []);
+  const assertKnownStore = (code) => {
+    if (!knownStores.has(code)) {
+      throw new HttpError(400, `Siêu thị "${code}" không có trong Danh Mục Siêu Thị — vui lòng chọn lại`);
+    }
+  };
   if (template.templateType === 'STORE_SELF') {
     // Admin: cho phép TỰ CHỌN siêu thị để test mẫu Tự Đánh Giá (tài khoản admin thường không gắn Vị Trí
     // Siêu Thị cụ thể nào nên isEligibleForStoreSelf() luôn false với admin) — vẫn giữ NGUYÊN bất biến
     // bảo mật cho người dùng thường bên dưới (storeCode LUÔN suy từ user.dept, KHÔNG tin client). Admin
-    // vốn đã bỏ qua mọi kiểm tra quyền khác trong toàn hệ thống nên nới ở đây không phát sinh rủi ro mới.
+    // vốn đã bỏ qua mọi kiểm tra quyền khác trong toàn hệ thống nên nới ở đây không phát sinh rủi ro mới
+    // — nhưng vẫn phải là 1 siêu thị CÓ THẬT trong danh mục (không phải bất kỳ chuỗi nào).
     if (user?.perms?.admin) {
       const adminStoreCode = String(requestedStoreCode || '').trim();
-      if (adminStoreCode) return adminStoreCode;
+      if (adminStoreCode) { assertKnownStore(adminStoreCode); return adminStoreCode; }
       if (isEligibleForStoreSelf(user)) return user.dept;
       throw new HttpError(400, 'Vui lòng chọn siêu thị để test (tài khoản admin không gắn Vị Trí Siêu Thị cụ thể)');
     }
     if (!isEligibleForStoreSelf(user)) {
       throw new HttpError(400, 'Vị trí hiện tại của bạn không gắn với siêu thị nào — liên hệ HR để kiểm tra Cơ Cấu Tổ Chức (Vị Trí Làm Việc)');
     }
+    // user.dept của người dùng THẬT (không phải admin test) luôn tin được — không đối chiếu lại danh mục
+    // ở đây (đúng khuôn mọi nơi khác trong hệ thống tin user.dept đã gắn qua Cơ Cấu Tổ Chức).
     return user.dept;
   }
   // CONTROL_AUDIT
@@ -283,6 +300,7 @@ function resolveStoreCodeForSubmission(template, user, requestedStoreCode) {
   if (!canAuditStore(user, storeCode)) {
     throw new HttpError(403, 'Bạn không có phạm vi Kiểm Soát cho siêu thị này');
   }
+  assertKnownStore(storeCode);
   return storeCode;
 }
 
@@ -370,7 +388,17 @@ function computeChecklistScoring(template, answers) {
     const ans = answersByQ.get(q.id);
     if (!ans) continue;
     const selectedOptions = q.options.filter(o => (ans.optionIds || []).includes(o.id));
-    totalScore += selectedOptions.reduce((sum, o) => sum + o.scoreValue, 0);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Trung bình): câu MULTIPLE_CHOICE cộng dồn
+    // scoreValue của TẤT CẢ lựa chọn đã chọn — trước đây không hề bị chặn trần q.maxScore của CHÍNH câu
+    // đó (chỉ có sàn 0 ở CUỐI hàm cho TOÀN BỘ bài, xem `totalScore = Math.max(0, totalScore)` bên dưới),
+    // nên 1 câu có nhiều lựa chọn cùng mang điểm dương (VD 3 lựa chọn value=10, maxScore=10) chọn hết cả
+    // 3 sẽ cộng ra 30 dù bản thân câu đó chỉ đáng tối đa 10 -> scorePercent có thể vượt hẳn 100% (SINGLE_
+    // CHOICE không bị lỗi này vì sanitizeChecklistAnswers() ở trên đã ép optionIds.length=1). Chặn trần
+    // NGAY TẠI ĐÂY (Math.min theo đúng q.maxScore của câu, không đụng tới sàn 0 patchĐã có) để không câu
+    // nào vượt quá điểm tối đa của chính nó, dù vẫn cho phép sàn ÂM đi qua (1 số lựa chọn scoreValue âm
+    // dùng để trừ điểm "yêu cầu vàng" — chỉ chặn TRẦN, không chặn sàn ở đây).
+    const rawQuestionScore = selectedOptions.reduce((sum, o) => sum + o.scoreValue, 0);
+    totalScore += q.type === 'MULTIPLE_CHOICE' ? Math.min(rawQuestionScore, q.maxScore) : rawQuestionScore;
     // CL-09 (đợt test chuyên sâu 9/2026): isPassing/isCriticalFail là 2 cờ ĐỘC LẬP trên 1 lựa chọn,
     // không có ràng buộc nào ở validateChecklistQuestions() bắt "Lỗi nghiêm trọng" phải kèm "Không đạt"
     // — người tạo mẫu lỡ để cả 2 cờ cùng true (builder mặc định isPassing:true khi thêm lựa chọn mới,
@@ -405,26 +433,38 @@ function computeChecklistScoring(template, answers) {
 }
 
 // ===================== Chấm điểm khi Finalize — LOẠI 2: DEDUCTION (v21.0) =====================
-// Điểm hạng mục con = max(0, trần hạng mục con − tổng điểm trừ các tiêu chí của nó) — mirror ĐÚNG công
-// thức Excel gốc (VD "=IF(SUM(G14:G17)>10,0,D14-SUM(G14:G17))"). Hạng mục con KHÔNG đặt trần riêng (null)
-// thì dùng chung TRỌN VẸN trần hạng mục lớn (không chia đều) — khớp cách file gốc để trống cột "Điểm trừ
-// tối đa" ở 1 số hạng mục con (VD "1.2 Hạn sử dụng"). Điểm hạng mục lớn = tổng điểm các hạng mục con,
-// CHẶN THÊM 1 lớp sàn ở trần hạng mục lớn (đề phòng cấu hình trần các hạng mục con cộng lại vượt trần
-// hạng mục lớn). Không có khái niệm "câu bắt buộc"/"ảnh minh chứng bắt buộc"/hasCriticalFail/scoringMode
-// ở loại mẫu này (xem chú thích TEMPLATE_KINDS) — missingRequired/answersNeedingPhoto LUÔN rỗng để dùng
-// chung được assertReadyToFinalize() với loại mẫu QA mà không cần viết thêm hàm riêng.
+// Điểm hạng mục lớn = max(0, trần hạng mục lớn − TỔNG điểm trừ đã dùng của mọi hạng mục con của nó) —
+// mirror ĐÚNG công thức Excel gốc (VD "=IF(SUM(G14:G17)>10,0,D14-SUM(G14:G17))"), áp dụng Ở CẤP HẠNG MỤC
+// LỚN (không phải cộng dồn "điểm còn lại" tính riêng của TỪNG hạng mục con — xem LỖI ĐÃ VÁ bên dưới).
+// Điểm trừ đã dùng của 1 hạng mục con:
+//   - CÓ đặt trần riêng (sub.maxDeduction != null): min(tổng điểm trừ các tiêu chí của nó, trần riêng đó)
+//     — hạng mục con này KHÔNG thể "ăn lẹm" quá trần riêng vào phần chung của hạng mục lớn.
+//   - KHÔNG đặt trần riêng (null): TOÀN BỘ tổng điểm trừ các tiêu chí của nó, KHÔNG quy đổi/quy tròn qua
+//     bất kỳ trần nào riêng — khớp cách file gốc để trống cột "Điểm trừ tối đa" ở 1 số hạng mục con (VD
+//     "1.2 Hạn sử dụng": dùng CHUNG trần của hạng mục lớn với các hạng mục con khác cũng để trống, không
+//     phải mỗi hạng mục con được cấp NGUYÊN VẸN 1 bản sao trần của hạng mục lớn).
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Cao — "NUỐT TRỌN điểm trừ"): code CŨ tính điểm
+// CÒN LẠI riêng cho TỪNG hạng mục con (`effectiveMax − subDeducted`, hạng mục con không có trần riêng
+// dùng effectiveMax = TRỌN VẸN trần hạng mục lớn) rồi CỘNG DỒN các điểm còn lại đó, cuối cùng mới
+// Math.min ở cấp hạng mục lớn. Hậu quả: 1 hạng mục con KHÔNG bị trừ điểm vẫn đóng góp NGUYÊN VẸN trần
+// hạng mục lớn vào tổng, "nuốt trọn" phần điểm trừ đã nhập ở (các) hạng mục con khác — VD trần lớn 10, 2
+// hạng mục con không trần riêng, 1 hạng mục con bị trừ 10 (còn lại 0) + hạng mục con kia không bị trừ gì
+// (còn lại 10) → tổng cộng dồn = 10 → Math.min(10,10) = 10 = 100%, dù đã trừ tối đa. Sửa: cộng dồn TRỰC
+// TIẾP điểm TRỪ đã dùng (không phải điểm còn lại) của mọi hạng mục con trong CÙNG 1 hạng mục lớn trước,
+// rồi mới trừ 1 LẦN DUY NHẤT ra khỏi trần hạng mục lớn — không hạng mục con nào còn "chiếm giữ" riêng 1
+// phần trần độc lập của hạng mục lớn nữa.
 function computeDeductionScoring(template, deductions) {
   const deductionsByC = new Map((deductions || []).map(d => [d.criteriaId, d]));
   let totalScore = 0, maxPossibleScore = 0;
   for (const cat of (template.categories || [])) {
     maxPossibleScore += cat.maxDeduction;
-    let categoryScore = 0;
+    let categoryDeductionUsed = 0;
     for (const sub of (cat.subItems || [])) {
       const subDeducted = (sub.criteria || []).reduce((sum, c) => sum + (deductionsByC.get(c.id)?.deductedPoints || 0), 0);
-      const effectiveMax = sub.maxDeduction != null ? sub.maxDeduction : cat.maxDeduction;
-      categoryScore += Math.max(0, effectiveMax - subDeducted);
+      categoryDeductionUsed += sub.maxDeduction != null ? Math.min(subDeducted, sub.maxDeduction) : subDeducted;
     }
-    totalScore += Math.min(categoryScore, cat.maxDeduction);
+    totalScore += Math.max(0, cat.maxDeduction - categoryDeductionUsed);
   }
   const scorePercent = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : null;
   const isPassed = template.passThreshold != null && scorePercent != null ? scorePercent >= template.passThreshold : null;

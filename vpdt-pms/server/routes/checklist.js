@@ -216,7 +216,10 @@ router.post('/submissions/start', async (req, res) => {
     const template = templates.find(t => t.id === templateId && t.status === 'ACTIVE');
     if (!template) return res.status(404).json({ error: 'Không tìm thấy checklist đang hoạt động' });
 
-    const storeCode = checklist.resolveStoreCodeForSubmission(template, user, req.body?.storeCode);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính"): đối chiếu storeCode với Danh Mục Siêu Thị THẬT
+    // ở MỌI nhánh (kể cả admin/scope.all) — xem chú thích đầy đủ tại resolveStoreCodeForSubmission().
+    const validStoreCodes = (await getAppDataValueCached('stores')) || [];
+    const storeCode = checklist.resolveStoreCodeForSubmission(template, user, req.body?.storeCode, validStoreCodes);
 
     // Resumable draft — nếu người này ĐANG có 1 bài DRAFT chưa nộp của ĐÚNG checklist + siêu thị này,
     // trả lại bài đó thay vì tạo bài mới (tránh sinh vô số bài dở dang mỗi lần bấm lại "Bắt đầu").
@@ -233,7 +236,8 @@ router.post('/submissions/start', async (req, res) => {
       status: 'DRAFT', answers: [], deductions: [], // deductions[] chỉ có ý nghĩa với templateKind DEDUCTION (v21.0) — luôn khởi tạo cả 2 field cho đơn giản, field không dùng tới thì mãi mãi rỗng.
       totalScore: null, maxPossibleScore: null, scorePercent: null, hasCriticalFail: null, isPassed: null,
       startedAt: checklist.nowVN(), submittedAt: null,
-      storeResponseText: null, storeRespondedAt: null, storeRespondedByUsername: null, storeRespondedByName: null
+      storeResponseText: null, storeRespondedAt: null, storeRespondedByUsername: null, storeRespondedByName: null,
+      storeResponseHistory: [] // bản cũ trước mỗi lần ghi đè store-response (xem POST .../store-response)
     };
     const inserted = await insertRecord('checklistSubmissions', submission);
     res.json({ ok: true, item: inserted });
@@ -374,7 +378,25 @@ router.post('/submissions/:id/store-response', async (req, res) => {
       if (sub.storeCode !== user.dept || user.posType !== 'STORE') {
         throw new HttpError(403, 'Bạn chỉ có thể phản hồi kết quả đánh giá của đúng siêu thị mình');
       }
-      return { ...sub, storeResponseText: responseText, storeRespondedAt: checklist.nowVN(), storeRespondedByUsername: user.username, storeRespondedByName: user.name };
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Trung bình): route này TRƯỚC ĐÂY ghi đè
+      // TRỰC TIẾP storeResponseText mà không lưu vết bản cũ — BẤT KỲ nhân viên nào của siêu thị (không
+      // riêng quản lý, route chỉ đòi storeCode===user.dept && posType==='STORE') gửi được, ghi đè VĨNH
+      // VIỄN phản hồi trước đó, không giới hạn số lần, không có lịch sử để đối chiếu lại "ai đã nói gì
+      // lúc nào". Vá TỐI THIỂU chống MẤT DỮ LIỆU (chưa giới hạn vai trò gửi — nằm ngoài phạm vi đợt vá
+      // này): nếu ĐÃ có phản hồi cũ, đẩy nguyên bản cũ vào storeResponseHistory[] TRƯỚC KHI ghi đè, giữ
+      // mảng cũ có sẵn (nếu có) + append — không bao giờ xoá lịch sử đã có ở lượt trước.
+      const priorHistory = Array.isArray(sub.storeResponseHistory) ? sub.storeResponseHistory : [];
+      const storeResponseHistory = sub.storeResponseText
+        ? [...priorHistory, {
+            text: sub.storeResponseText, respondedAt: sub.storeRespondedAt,
+            respondedByUsername: sub.storeRespondedByUsername, respondedByName: sub.storeRespondedByName
+          }]
+        : priorHistory;
+      return {
+        ...sub, storeResponseHistory,
+        storeResponseText: responseText, storeRespondedAt: checklist.nowVN(),
+        storeRespondedByUsername: user.username, storeRespondedByName: user.name
+      };
     });
     res.json({ ok: true, item: updated });
   } catch (err) { sendCatchError(res, err, `checklistSubmissions/${req.params.id}/store-response`); }

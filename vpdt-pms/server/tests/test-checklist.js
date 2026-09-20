@@ -44,8 +44,12 @@ let PORT = 0;
 let CURRENT_USERNAME = ADMIN.username;
 let idSeq = 1000;
 
+// STORES: đúng danh mục thật cần cho resolveStoreCodeForSubmission() đối chiếu (LỖI ĐÃ VÁ, rà soát
+// chuyên sâu 2 — storeCode giờ phải khớp Danh Mục Siêu Thị thật, xem lib/checklist.js).
+const STORES = ['Siêu thị A', 'Siêu thị B'];
 stubModule('lib/appData', {
   getAppDataValue: async () => null,
+  getAppDataValueCached: async (key) => (key === 'stores' ? STORES : null),
   getAllAppData: async () => ({}),
   withLockedAppDataValue: async (key, fn) => fn(null)
 });
@@ -519,6 +523,15 @@ async function main() {
       const second = await api('POST', `/api/checklist/submissions/${subId}/store-response`, { responseText: 'Phản hồi lần 2 (đã sửa đúng)' }, STORE_A_EMP);
       assertEqual(second.status, 200, 'Gửi lại lần 2 phải thành công, không bị chặn');
       assertEqual(second.body.item.storeResponseText, 'Phản hồi lần 2 (đã sửa đúng)', 'Nội dung phải được ghi đè thành nội dung mới nhất');
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, mức Trung bình — "ghi đè không giới hạn, không lưu vết bản cũ"):
+      // bản CŨ (lần 1) phải được lưu vào storeResponseHistory[] TRƯỚC KHI bị ghi đè, không mất dữ liệu.
+      assertEqual(Array.isArray(second.body.item.storeResponseHistory) && second.body.item.storeResponseHistory.length === 1, true,
+        'Phải có đúng 1 bản trong lịch sử (bản lần 1)', second.body.item.storeResponseHistory);
+      assertEqual(second.body.item.storeResponseHistory[0].text, 'Phản hồi lần 1 (gõ nhầm)', 'Lịch sử phải giữ ĐÚNG nội dung bản lần 1');
+
+      const third = await api('POST', `/api/checklist/submissions/${subId}/store-response`, { responseText: 'Phản hồi lần 3' }, STORE_A_EMP);
+      assertEqual(third.body.item.storeResponseHistory.length, 2, 'Lần ghi đè thứ 2 phải APPEND thêm 1 bản nữa vào lịch sử (không xoá bản cũ)');
+      assertEqual(third.body.item.storeResponseHistory[1].text, 'Phản hồi lần 2 (đã sửa đúng)', 'Bản thứ 2 trong lịch sử phải đúng nội dung lần 2');
     });
 
     // ===== CL-06: template không còn ACTIVE (đã bị thay bằng bản clone/kích hoạt khác) vẫn phải xem
@@ -550,6 +563,36 @@ async function main() {
         ]
       }], 'SCORED');
       assertEqual(questions[0].options[1].scoreValue, -20, 'scoreValue âm phải được giữ nguyên, không bị ép về 0/dương');
+    });
+
+    await run.run('LỖI ĐÃ VÁ (rà soát chuyên sâu 2, mức Trung bình): câu MULTIPLE_CHOICE chọn nhiều lựa chọn cùng lúc không được vượt trần maxScore của CHÍNH câu đó', () => {
+      const questions = checklist.validateChecklistQuestions([{
+        type: 'MULTIPLE_CHOICE', text: 'Các hạng mục đạt (chọn nhiều)?', isRequired: true, maxScore: 10,
+        options: [
+          { text: 'Hạng mục 1', scoreValue: 10, isPassing: true },
+          { text: 'Hạng mục 2', scoreValue: 10, isPassing: true },
+          { text: 'Hạng mục 3', scoreValue: 10, isPassing: true }
+        ]
+      }], 'SCORED');
+      const template = { scoringMode: 'SCORED', passThreshold: null, questions };
+      // Chọn cả 3 lựa chọn (mỗi lựa chọn 10đ, cộng dồn thô = 30) -> TRƯỚC KHI VÁ: totalScore=30 dù
+      // q.maxScore chỉ là 10 (scorePercent vượt hẳn 100%, luôn "Đạt" bất kể ngưỡng bao nhiêu).
+      const scoringAll3 = checklist.computeChecklistScoring(template, [
+        { questionId: questions[0].id, optionIds: questions[0].options.map(o => o.id) }
+      ]);
+      assertEqual(scoringAll3.totalScore, 10, 'Chọn cả 3 lựa chọn (30đ thô) phải bị CHẶN TRẦN về đúng maxScore=10 của câu, không phải 30');
+      assertEqual(scoringAll3.maxPossibleScore, 10, 'maxPossibleScore = maxScore của câu (chỉ có 1 câu)');
+      assertEqual(scoringAll3.scorePercent, 100, 'scorePercent phải đúng 100% (không vượt), không phải 300%');
+      // Chọn 2/3 lựa chọn (20đ thô) vẫn phải bị chặn về 10 (vẫn vượt trần).
+      const scoringAll2 = checklist.computeChecklistScoring(template, [
+        { questionId: questions[0].id, optionIds: [questions[0].options[0].id, questions[0].options[1].id] }
+      ]);
+      assertEqual(scoringAll2.totalScore, 10, 'Chọn 2/3 lựa chọn (20đ thô) vẫn phải bị chặn về đúng maxScore=10');
+      // Chỉ chọn 1 lựa chọn (10đ, đúng bằng trần) -> KHÔNG đổi hành vi cũ, vẫn ra đúng 10.
+      const scoringOne = checklist.computeChecklistScoring(template, [
+        { questionId: questions[0].id, optionIds: [questions[0].options[0].id] }
+      ]);
+      assertEqual(scoringOne.totalScore, 10, 'Chọn đúng 1 lựa chọn (10đ, bằng trần) vẫn phải ra đúng 10 như trước');
     });
 
     await run.run('Finalize: chọn đáp án âm điểm ở 1 đợt, đợt khác vẫn dương -> tổng điểm/% CHẶN SÀN ở 0 (không hiển thị số âm)', async () => {
@@ -706,6 +749,44 @@ async function main() {
       assertEqual(scoring.totalScore, 30, 'Tổng điểm hạng mục A phải chặn ở đúng trần 30 dù 2 hạng mục con cộng lại ra 50');
     });
 
+    await run.run('LỖI ĐÃ VÁ (rà soát chuyên sâu 2, mức Cao): 2 hạng mục con KHÔNG trần riêng trong CÙNG 1 hạng mục lớn không được "nuốt trọn" điểm trừ của nhau', () => {
+      const t = { categories: checklist.validateChecklistCategories([
+        { name: 'A', maxDeduction: 10, subItems: [
+          { name: 'A1', maxDeduction: null, criteria: [{ description: 'c1' }] },
+          { name: 'A2', maxDeduction: null, criteria: [{ description: 'c2' }] }
+        ] }
+      ]), passThreshold: null };
+      // Trước khi vá: A1 bị trừ hết (còn lại 0) nhưng A2 KHÔNG bị trừ gì vẫn "chiếm" nguyên 1 bản trần 10
+      // riêng -> cộng dồn 0+10=10 -> Math.min(10,10)=10 -> scorePercent=100% dù ĐÃ trừ tối đa ở A1.
+      const scoringDeduct10 = checklist.computeDeductionScoring(t, [{ criteriaId: 1, deductedPoints: 10 }]);
+      assertEqual(scoringDeduct10.totalScore, 0, 'Trừ tối đa 10/10 ở A1 -> totalScore phải về 0, KHÔNG được ra 10 (100%)');
+      assertEqual(scoringDeduct10.scorePercent, 0, 'scorePercent phải về 0%, không phải 100%');
+      // Trừ 5/10 (thay vì 10) -> đúng tỷ lệ 5/10 = 50%, không phải 100%.
+      const scoringDeduct5 = checklist.computeDeductionScoring(t, [{ criteriaId: 1, deductedPoints: 5 }]);
+      assertEqual(scoringDeduct5.totalScore, 5, 'Trừ 5/10 -> totalScore phải đúng 5 (còn lại đúng theo tỷ lệ), không được ra 10 (100%)');
+      assertEqual(scoringDeduct5.scorePercent, 50, 'scorePercent phải đúng 50%');
+      // 2 hạng mục con CÙNG bị trừ -> điểm trừ phải CỘNG DỒN (không phải mỗi dòng tính riêng rồi cộng phần còn lại).
+      const scoringBoth = checklist.computeDeductionScoring(t, [
+        { criteriaId: 1, deductedPoints: 5 }, { criteriaId: 2, deductedPoints: 5 }
+      ]);
+      assertEqual(scoringBoth.totalScore, 0, 'A1 trừ 5 + A2 trừ 5 = 10 (đúng bằng trần) -> totalScore phải về 0');
+    });
+
+    await run.run('computeDeductionScoring(): hạng mục con CÓ trần riêng vẫn bị chặn ĐÚNG trần riêng đó trước khi cộng vào hạng mục lớn (không đổi hành vi cũ)', () => {
+      const t = { categories: checklist.validateChecklistCategories([
+        { name: 'A', maxDeduction: 10, subItems: [
+          { name: 'A1', maxDeduction: 6, criteria: [{ description: 'c1' }] }, // có trần riêng
+          { name: 'A2', maxDeduction: null, criteria: [{ description: 'c2' }] } // không trần riêng
+        ] }
+      ]), passThreshold: null };
+      // A1 (trần riêng 6) bị trừ 8 (VƯỢT trần riêng) -> chỉ tính 6 vào tổng điểm trừ dùng của hạng mục lớn
+      // (không tính nguyên 8). A2 (không trần riêng) trừ 3 -> tính nguyên 3. Tổng dùng = 6+3=9 -> 10-9=1.
+      const scoring = checklist.computeDeductionScoring(t, [
+        { criteriaId: 1, deductedPoints: 8 }, { criteriaId: 2, deductedPoints: 3 }
+      ]);
+      assertEqual(scoring.totalScore, 1, 'A1 chặn ở trần riêng 6 (không phải 8) + A2 trừ 3 -> 10-(6+3)=1');
+    });
+
     await run.run('Template: templateKind BẤT BIẾN — sửa (edit) cố đổi từ DEDUCTION sang QA (hoặc ngược lại) phải bị chặn 400', async () => {
       resetRecords();
       const t = seedDeductionTemplate();
@@ -739,10 +820,15 @@ async function main() {
       ] }, AUDITOR);
       const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, AUDITOR);
       assertEqual(res.status, 200, 'Nộp bài KHÔNG cần ảnh minh chứng phải thành công (khác QA)');
-      // cat A (max 30): A1 dùng trọn trần 30, trừ 4 -> 26. A2 (không đặt trần riêng) CŨNG dùng trọn trần 30, trừ 8 -> 22.
-      // categoryScore = 26+22=48, chặn ở trần cat A =30 -> totalScore=30. cat NHÂN VIÊN (max 5) không trừ gì -> 5.
-      // maxPossibleScore = 30+5=35. totalScore=30+5=35.
-      assertEqual(res.body.item.totalScore, 35, 'Tổng điểm phải đúng (cat A chặn ở trần 30 + cat NHÂN VIÊN nguyên vẹn 5)');
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, mức Cao — "NUỐT TRỌN điểm trừ", xem computeDeductionScoring()):
+      // giá trị mong đợi Ở ĐÂY đã sửa lại theo ĐÚNG công thức — TRƯỚC ĐÂY test này (sai) kỳ vọng totalScore
+      // = 35 = maxPossibleScore (100%) dù ĐÃ trừ điểm, vì code cũ cho A2 (không trần riêng) "chiếm" nguyên
+      // 1 bản trần 30 riêng độc lập với A1, rồi Math.min ở cấp hạng mục lớn xoá mất phần trừ thật.
+      // Cách tính ĐÚNG: c1 (A1, có trần riêng=30) trừ 4 -> dùng 4 (dưới trần riêng, không bị cắt bớt).
+      // c2 (A2, KHÔNG trần riêng) trừ 8 -> dùng TOÀN BỘ 8 (không quy đổi qua effectiveMax của dòng).
+      // categoryDeductionUsed (cat A) = 4+8=12 -> categoryScore = max(0, 30-12) = 18.
+      // cat NHÂN VIÊN (max 5) không trừ gì -> 5. totalScore = 18+5 = 23. maxPossibleScore = 30+5=35.
+      assertEqual(res.body.item.totalScore, 23, 'Tổng điểm phải đúng (cat A = 30 - (4+8) = 18, cộng cat NHÂN VIÊN nguyên vẹn 5)');
       assertEqual(res.body.item.maxPossibleScore, 35, 'maxPossibleScore = tổng trần các hạng mục lớn (30+5)');
       assertEqual(res.body.item.hasCriticalFail, false, 'DEDUCTION không có khái niệm Lỗi nghiêm trọng — luôn false');
       assertEqual(Array.isArray(res.body.item.deductions) && res.body.item.deductions.length === 2, true, 'deductions phải được lưu lại đầy đủ', res.body.item.deductions);

@@ -157,6 +157,36 @@ test('Mục 4 — KHÔNG đổi hành vi cũ với phiếu xe đội nhà: chỉ
     'Xe đội nhà: chỉ người đăng ký mới đánh giá, carDispatch không đánh giá hộ');
 });
 
+// ===== LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Cao): phiếu ĐỘI NHÀ kẹt vĩnh viễn ở
+// AWAITING_EVALUATION khi người đăng ký nghỉ việc/bị khoá tài khoản — admin/carDispatch giờ đánh giá hộ
+// được, NHƯNG CHỈ khi creator.active === false (không mở rộng hơn) =====
+test('LỖI ĐÃ VÁ: xe đội nhà, creator ĐÃ NGHỈ VIỆC (active:false) -> carDispatch đánh giá hộ được', () => {
+  const item = makeInProgressCarReg();
+  const ended = endCarTrip(DRIVER, item, { km: 20 }, VEHICLE_TYPES);
+  const allUsersWithInactiveCreator = [DRIVER, { username: CREATOR.username, name: CREATOR.name, active: false, perms: {} }];
+  assert.ok(canEvaluateCarTrip(DISPATCHER, ended, VEHICLE_TYPES, allUsersWithInactiveCreator),
+    'carDispatch phải đánh giá hộ được khi creator.active===false');
+  const done = evaluateCarTrip(DISPATCHER, ended, { comment: 'Đánh giá hộ vì NV đã nghỉ việc' }, VEHICLE_TYPES, allUsersWithInactiveCreator);
+  assert.strictEqual(done.status, 'COMPLETED', 'Phiếu phải hoàn thành được, không kẹt vĩnh viễn ở AWAITING_EVALUATION');
+  assert.strictEqual(done.evaluatedBy, DISPATCHER.username);
+});
+
+test('LỖI ĐÃ VÁ: xe đội nhà, creator ĐÃ NGHỈ VIỆC nhưng người gọi KHÔNG có admin/carDispatch -> vẫn 403', () => {
+  const item = makeInProgressCarReg();
+  const ended = endCarTrip(DRIVER, item, { km: 20 }, VEHICLE_TYPES);
+  const allUsersWithInactiveCreator = [DRIVER, { username: CREATOR.username, name: CREATOR.name, active: false, perms: {} }];
+  assert.throws(() => evaluateCarTrip(OTHER, ended, {}, VEHICLE_TYPES, allUsersWithInactiveCreator), (e) => e.status === 403,
+    'Người ngoài cuộc, dù creator đã nghỉ việc, vẫn không được tự ý đánh giá hộ');
+});
+
+test('Đối chứng: xe đội nhà, creator VẪN CÒN active -> carDispatch KHÔNG được đánh giá hộ (không nới quá phạm vi)', () => {
+  const item = makeInProgressCarReg();
+  const ended = endCarTrip(DRIVER, item, { km: 20 }, VEHICLE_TYPES);
+  const allUsersWithActiveCreator = [DRIVER, { username: CREATOR.username, name: CREATOR.name, active: true, perms: {} }];
+  assert.strictEqual(canEvaluateCarTrip(DISPATCHER, ended, VEHICLE_TYPES, allUsersWithActiveCreator), false);
+  assert.throws(() => evaluateCarTrip(DISPATCHER, ended, {}, VEHICLE_TYPES, allUsersWithActiveCreator), (e) => e.status === 403);
+});
+
 test('Mục 4 — phiếu xe đội nhà còn APPROVED (chưa xác nhận nhận chuyến) vẫn bị chặn 409 như cũ', () => {
   const item = { ...makeInProgressCarReg(), status: 'APPROVED', driverConfirmed: false, driverConfirmedAt: null };
   assert.throws(() => endCarTrip(DRIVER, item, { km: 20 }, VEHICLE_TYPES), (e) => e.status === 409);

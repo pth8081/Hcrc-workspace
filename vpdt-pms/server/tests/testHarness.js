@@ -471,7 +471,7 @@ function createDispatcher(state) {
         const storeIssuances = state.uniformIssuances.filter(x => x.dept === freshUser.dept);
         const storeAdjustments = state.uniformStockAdjustments.filter(x => x.dept === freshUser.dept);
         const approvedTransfers = state.uniformTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
-        const record = recordActions.buildUniformTransfer(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, approvedTransfers);
+        const record = recordActions.buildUniformTransfer(freshUser, body, state.uniformPeriods, storeIssuances, storeAdjustments, approvedTransfers, state.formTemplates, state.stores);
         state.uniformTransfers.push(record);
         return { status: 200, body: { ok: true, item: record } };
       }

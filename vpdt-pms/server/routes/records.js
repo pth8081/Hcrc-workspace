@@ -13,7 +13,7 @@ const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDire
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
+const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
@@ -489,9 +489,15 @@ router.post('/minutes', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const { formTemplates } = await getAllAppData();
-    const minutesItem = await createForCollection('meetingMinutes', (list) =>
-      recordActions.createMinutes(req.body, freshUser, list, formTemplates)
-    );
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Thấp — phòng thủ chiều sâu): trường "Tải
+    // tệp" (customData, Biểu Mẫu > Biên Bản Họp) trước đây CHƯA đối chiếu quyền sở hữu file — mirror
+    // ĐÚNG khuôn 14 route khác đã có assertPayloadFileUrlsOwnedByUser() (VD contracts/:id/edit ở trên).
+    // Bản ghi mới nên KHÔNG có exemptFileUrls nào (chưa có tệp cũ để giữ nguyên).
+    const minutesItem = await createForCollection('meetingMinutes', async (list) => {
+      const record = recordActions.createMinutes(req.body, freshUser, list, formTemplates);
+      await assertPayloadFileUrlsOwnedByUser({ customData: record.customData }, freshUser);
+      return record;
+    });
     res.json({ ok: true, item: minutesItem });
   } catch (err) {
     handleError(res, 'minutes (tạo mới)', err);
@@ -509,9 +515,15 @@ router.post('/minutes/:id/edit', async (req, res) => {
     // chiếu theo vị trí — tách field này ra trước khi coi phần còn lại là bản ghi cần lưu, rồi đồng bộ
     // lại Task NGAY SAU khi lưu biên bản thành công (2 bảng khác nhau nên không chung 1 giao dịch được).
     let directiveIdMigrations = [];
-    const result = await withLockedRecordForCollection('meetingMinutes', itemId, (item) => {
+    const result = await withLockedRecordForCollection('meetingMinutes', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, mức Thấp — phòng thủ chiều sâu): xem chú thích ở POST /minutes
+      // ngay trên — exemptFileUrls = tệp ĐÃ có sẵn trên customData TRƯỚC khi sửa (giữ nguyên không đổi
+      // thì không cần soát lại quyền sở hữu).
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(item.customData, exemptFileUrls);
       const { directiveIdMigrations: migrations, ...updated } = recordActions.editMinutes(req.body, freshUser, item);
       directiveIdMigrations = migrations;
+      await assertPayloadFileUrlsOwnedByUser({ customData: updated.customData }, freshUser, { exemptFileUrls });
       return updated;
     });
     if (directiveIdMigrations.length) {
@@ -755,6 +767,11 @@ router.post('/tasks', async (req, res) => {
     }
     const formTemplates = await getAppDataValue('formTemplates');
     const result = recordActions.createTask(req.body, freshUser, users, formTemplates);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Thấp — phòng thủ chiều sâu): trường "Tải
+    // tệp" (customData, Biểu Mẫu > Công Việc) trước đây CHƯA đối chiếu quyền sở hữu file — mirror ĐÚNG
+    // khuôn 14 route khác đã có assertPayloadFileUrlsOwnedByUser(). Bản ghi mới nên KHÔNG có
+    // exemptFileUrls nào.
+    await assertPayloadFileUrlsOwnedByUser({ customData: result.customData }, freshUser);
     await insertTask(result);
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -786,8 +803,27 @@ router.post('/tasks/:id/assign', async (req, res) => {
   }
 });
 
-// POST /api/records/tasks/:id/edit
-router.post('/tasks/:id/edit', (req, res) => withTaskAction(req, res, 'edit', recordActions.editTask));
+// POST /api/records/tasks/:id/edit — KHÔNG dùng withTaskAction() chung ở trên nữa (LỖI ĐÃ VÁ, rà soát
+// chuyên sâu 2, cụm "Hành Chính", mức Thấp — phòng thủ chiều sâu): cần thêm bước
+// assertPayloadFileUrlsOwnedByUser() cho trường "Tải tệp" (customData, Biểu Mẫu > Công Việc), mirror
+// ĐÚNG khuôn POST /minutes/:id/edit ở trên — exemptFileUrls = tệp ĐÃ có sẵn TRƯỚC khi sửa.
+router.post('/tasks/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser, users } = await getFreshUser(req);
+    const result = await withLockedTaskById(itemId, async (task) => {
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(task.customData, exemptFileUrls);
+      const updated = recordActions.editTask(req.body, freshUser, task, users);
+      await assertPayloadFileUrlsOwnedByUser({ customData: updated.customData }, freshUser, { exemptFileUrls });
+      return updated;
+    });
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `tasks/${req.params.id}/edit`, err);
+  }
+});
 
 // POST /api/records/tasks/:id/accept — gộp acceptTask + acceptTaskOnBehalf (payload.onBehalf)
 router.post('/tasks/:id/accept', (req, res) => withTaskAction(req, res, 'accept', recordActions.acceptTask));
@@ -969,6 +1005,28 @@ router.post('/officeReqs/:id/delete', async (req, res) => {
     handleError(res, `officeReqs/${req.params.id}/delete`, err);
   }
 });
+// GET /api/records/carRegs/busy-slots — LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Trung
+// bình): lưới "Lịch Xe" (computeCarDaySummary()/renderCarScheduleCalendarDayView() ở
+// public/js/module-dangkyxe.js, cả view Ngày/Tuần/Tháng) trước đây đọc THẲNG DB.carRegs — vốn đã bị GET
+// /api/data lọc theo carView (mặc định hẹp theo phòng ban). Người dùng phạm vi hẹp vì thế thấy lái xe
+// "Trống" giả ở đúng những khung giờ phòng ban khác đã đăng ký — mirror ĐÚNG lý do/khuôn GET
+// /api/meetings/busy-slots (routes/meetingActions.js) đã vá cho Phòng Họp ở đợt trước, module Xe khi đó
+// bị bỏ sót. Trả về CHỈ dữ liệu CHIẾM CHỖ (id/lái xe được phân công/khung giờ/trạng thái) của MỌI phiếu
+// carRegs chưa bị từ chối/huỷ, KHÔNG kèm điểm đến/mã phiếu/phòng ban/người đăng ký (chi tiết chuyến đi
+// của phòng ban khác vẫn phải đi qua GET /api/data với đúng phạm vi carView cũ, không nới thêm gì) —
+// `id` chỉ để client ghép lại với chính những phiếu mình ĐÃ được phép xem (hiện chi tiết đầy đủ).
+router.get('/carRegs/busy-slots', async (req, res) => {
+  try {
+    const all = await getAllForCollection('carRegs');
+    const items = (all || [])
+      .filter(c => c && c.status !== 'REJECTED' && c.status !== 'CANCELLED' && c.assignedDriverUsername)
+      .map(c => ({ id: c.id, assignedDriverUsername: c.assignedDriverUsername, startTime: c.startTime, endTime: c.endTime, status: c.status }));
+    res.json({ ok: true, items });
+  } catch (err) {
+    handleError(res, 'carRegs/busy-slots', err);
+  }
+});
+
 router.post('/carRegs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'carRegs'));
 
 // Lái xe được phân công (assignedDriverUsername, gán lúc duyệt — xem routes/workflow.js) tự xác nhận
@@ -1012,10 +1070,12 @@ router.post('/carRegs/:id/evaluate', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const { freshUser } = await getFreshUser(req);
+    const { freshUser, users } = await getFreshUser(req);
     const carVehicleTypes = await getAppDataValue('carVehicleTypes');
+    // users: LỖI ĐÃ VÁ (rà soát chuyên sâu 2) — cần để evaluateCarTrip() tra creator.active, mở lối thoát
+    // cho admin/carDispatch đánh giá hộ phiếu ĐỘI NHÀ khi người đăng ký đã nghỉ việc/khoá tài khoản.
     const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
-      recordActions.evaluateCarTrip(freshUser, item, req.body || {}, carVehicleTypes));
+      recordActions.evaluateCarTrip(freshUser, item, req.body || {}, carVehicleTypes, users));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/evaluate`, err);
@@ -3814,17 +3874,18 @@ router.post('/uniformTransfers/create', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền yêu cầu điều chuyển kho' });
     }
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
-      const [allPeriods, allIssuances, allAdjustments, allTransfers, formTemplates] = await Promise.all([
+      const [allPeriods, allIssuances, allAdjustments, allTransfers, formTemplates, stores] = await Promise.all([
         getAllForCollection('uniformPeriods'),
         getAllForCollection('uniformIssuances'),
         getAllForCollection('uniformStockAdjustments'),
         getAllForCollection('uniformTransfers'),
-        getAppDataValue('formTemplates')
+        getAppDataValue('formTemplates'),
+        getAppDataValue('stores')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
-      const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers, formTemplates);
+      const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers, formTemplates, stores);
       return insertRecord('uniformTransfers', record);
     });
     res.json({ ok: true, item: result });

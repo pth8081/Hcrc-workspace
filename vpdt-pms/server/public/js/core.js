@@ -3803,6 +3803,21 @@ async function fetchMeetingBusySlots() {
   return Array.isArray(body.items) ? body.items : [];
 }
 
+// GET /api/records/carRegs/busy-slots — LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính"): mirror ĐÚNG
+// fetchMeetingBusySlots() ở trên nhưng cho lưới "Lịch Xe" (module-dangkyxe.js) — trả về {id,
+// assignedDriverUsername, startTime, endTime, status} của MỌI phiếu carRegs chưa từ chối/huỷ TOÀN CÔNG
+// TY (KHÔNG lọc theo carView của người gọi, KHÔNG kèm điểm đến/mã phiếu/phòng ban — xem routes/records.js).
+async function fetchCarBusySlots() {
+  const res = await fetch('/api/records/carRegs/busy-slots');
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return Array.isArray(body.items) ? body.items : [];
+}
+
 async function callMeetingAction(id, action) {
   const res = await fetch(`/api/meetings/${id}/${action}`, { method: 'POST' });
   if (res.status === 401) {

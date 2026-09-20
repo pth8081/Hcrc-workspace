@@ -172,7 +172,10 @@ function setCarSubTab(subTab) {
     document.getElementById('carCode').value = generateCarCode();
     if (!carRoutePoints.length) resetCarRoutePoints(); else renderCarRoutePoints();
   }
-  if (subTab === 'CALENDAR') renderCarScheduleCalendar();
+  if (subTab === 'CALENDAR') {
+    renderCarScheduleCalendar();      // vẽ ngay bằng dữ liệu đang có (không để màn trắng khi chờ mạng)
+    refreshCarBusySlots(true);        // rồi nạp lại lái xe bận TOÀN CÔNG TY và vẽ lại (LỖI ĐÃ VÁ, rà soát chuyên sâu 2)
+  }
   if (subTab === 'DRIVER') renderCarDriverTab();
   if (subTab === 'REPORT') renderCarReportTab();
 }
@@ -253,13 +256,61 @@ function isCarRegOccupying(c) {
   return c.status !== 'REJECTED' && c.status !== 'CANCELLED';
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Trung bình): TOÀN BỘ lưới "Lịch Xe"
+// (computeCarDaySummary()/renderCarScheduleCalendarDayView() bên dưới, cả view Ngày/Tuần/Tháng) trước
+// đây đọc THẲNG DB.carRegs — mảng này ĐÃ bị server lọc theo carView (mặc định hẹp theo phòng ban, xem
+// lib/recordViewScope.js). Người dùng phạm vi hẹp vì thế thấy lái xe "Trống" giả ở đúng những khung giờ
+// phòng ban khác đã đăng ký. carBusySlots = dữ liệu CHIẾM CHỖ toàn công ty lấy từ GET
+// /api/records/carRegs/busy-slots (chỉ id/lái xe/giờ/trạng thái, KHÔNG có điểm đến/mã phiếu/phòng ban của
+// phiếu phòng ban khác — xem routes/records.js). Mirror ĐÚNG khuôn meetingBusySlots/
+// refreshMeetingBusySlots()/getMeetingOccupancyList() (module-phonghop.js) đã vá cho Phòng Họp.
+let carBusySlots = [];
+let carBusySlotsPromise = null; // lượt nạp ĐANG CHẠY (nếu có) — xem refreshCarBusySlots()
+
+async function refreshCarBusySlots(rerender) {
+  if (!carBusySlotsPromise) {
+    carBusySlotsPromise = (async () => {
+      try {
+        carBusySlots = await fetchCarBusySlots();
+      } catch (err) {
+        console.warn('Không tải được dữ liệu lái xe trống/bận:', err.message);
+      } finally {
+        carBusySlotsPromise = null;
+      }
+    })();
+  }
+  await carBusySlotsPromise;
+  if (rerender) renderCarScheduleCalendar();
+}
+
+// Danh sách "đang chiếm chỗ" DÙNG CHUNG cho lưới Lịch Xe. Ghép carBusySlots (toàn công ty, không có chi
+// tiết) với DB.carRegs (chỉ những phiếu mình được phép xem, có đủ điểm đến/mã phiếu) theo id — phiếu của
+// chính phòng mình vẫn hiện đầy đủ chi tiết như trước, phiếu phòng ban khác chỉ hiện "đang bận". Chưa nạp
+// được busy-slots thì rơi về đúng DB.carRegs như hành vi cũ.
+function getCarOccupancyList() {
+  const visibleById = new Map(DB.carRegs.map(c => [c.id, c]));
+  if (!carBusySlots.length) return [...visibleById.values()].filter(isCarRegOccupying);
+  const merged = [];
+  carBusySlots.forEach(s => {
+    const local = visibleById.get(s.id);
+    // Phiếu vừa bị huỷ/từ chối ngay trong phiên này (DB.carRegs đã cập nhật, busy-slots còn là ảnh cũ)
+    // -> nhả chỗ.
+    if (local && !isCarRegOccupying(local)) return;
+    merged.push(local || s);
+  });
+  // Phiếu mình vừa tạo/duyệt ở phiên này nhưng busy-slots chưa kịp nạp lại -> vẫn phải tính là đang chiếm
+  // chỗ.
+  const busyIds = new Set(carBusySlots.map(s => s.id));
+  visibleById.forEach((c, id) => { if (!busyIds.has(id) && isCarRegOccupying(c)) merged.push(c); });
+  return merged;
+}
+
 // Tổng hợp số chuyến (đang chiếm chỗ) theo từng lái xe cho 1 NGÀY cụ thể — dùng chung cho ô ngày ở cả
 // chế độ Tuần lẫn Tháng, cùng khuôn computeMeetingDaySummary() (module-phonghop.js).
 function computeCarDaySummary(dateStr, drivers) {
   const dayStart = new Date(`${dateStr}T00:00:00`);
   const dayEnd = new Date(`${dateStr}T23:59:59.999`);
-  const dayTrips = DB.carRegs.filter(c => {
-    if (!isCarRegOccupying(c)) return false;
+  const dayTrips = getCarOccupancyList().filter(c => {
     const cStart = new Date(c.startTime), cEnd = new Date(c.endTime);
     return cStart <= dayEnd && cEnd >= dayStart;
   });
@@ -299,6 +350,7 @@ function renderCarScheduleCalendarDayView(dateStr) {
   if (!drivers.length) {
     html += `<tr><td colspan="${1 + drivers.length}" class="border p-3 text-center text-gray-500 italic">Chưa có lái xe nào được đánh dấu "Lái xe" trong Quản Lý Người Dùng.</td></tr>`;
   } else {
+    const occupancy = getCarOccupancyList();
     slots.forEach(slot => {
       const slotStart = new Date(`${dateStr}T${slot}:00`);
       const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
@@ -306,15 +358,17 @@ function renderCarScheduleCalendarDayView(dateStr) {
       drivers.forEach(d => {
         // So sánh bằng Date đầy đủ (không chỉ giờ trong ngày) nên chuyến nhiều ngày tự động hiện đỏ ở
         // MỌI ngày nằm trong khoảng startTime-endTime, không chỉ ngày bắt đầu.
-        const booking = DB.carRegs.find(c => {
-          if (!isCarRegOccupying(c)) return false;
+        const booking = occupancy.find(c => {
           if (c.assignedDriverUsername !== d.username) return false;
           const cStart = new Date(c.startTime);
           const cEnd = new Date(c.endTime);
           return slotStart < cEnd && cStart < slotEnd;
         });
         if (booking) {
-          html += `<td class="car-cal-cell border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" data-car-id="${booking.id}" title="${escapeHtml(booking.destination || booking.code || '')} — bấm để xem"></td>`;
+          // booking.destination/code chỉ có với phiếu mình được phép xem — phiếu phòng ban khác (chỉ có
+          // khung giờ, xem getCarOccupancyList()) hiện nhãn trung tính, KHÔNG lộ nội dung chuyến của họ.
+          const bookingLabel = (booking.destination || booking.code) ? `${booking.destination || booking.code} — bấm để xem` : 'Lái xe đang bận (chuyến của đơn vị khác)';
+          html += `<td class="car-cal-cell border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" data-car-id="${booking.id}" title="${escapeHtml(bookingLabel)}"></td>`;
         } else {
           html += `<td class="border p-1 h-6 text-center bg-white hover:bg-emerald-50"></td>`;
         }
@@ -428,7 +482,10 @@ function wireCarCalendarClick(grid) {
 
 function showCarScheduleSlotInfo(id) {
   const c = DB.carRegs.find(x => x.id === id);
-  if (!c) return;
+  // Ô đỏ này có thể là phiếu phòng ban KHÁC (chỉ có trong carBusySlots, không có trong DB.carRegs đã lọc
+  // theo carView của mình) — không lộ chi tiết, chỉ báo đang bận (mirror handleMeetingSingleSlotClick()
+  // ở module-phonghop.js với lịch phòng ban khác).
+  if (!c) return alert('🚗 Lái xe đang bận (chuyến của đơn vị khác — bạn không có quyền xem chi tiết).');
   const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', IN_PROGRESS: 'Đang thực hiện', DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy chuyến', REJECTED: 'Từ chối' }[c.status] || c.status;
   alert(`🚗 ${c.code}\nLái xe: ${c.assignedDriver || ''}\nBiển số: ${c.assignedPlate || '(chưa gán)'}\nĐiểm đến: ${c.destination || ''}\nThời gian: ${c.startTime} ➔ ${c.endTime}\nTrạng thái: ${statusLabel}`);
 }
@@ -855,10 +912,19 @@ function renderCarRegs() {
               secondaryOptions.push({ value: 'endTrip', label: '🏁 Kết Thúc Chuyến (Taxi)' });
             }
             // "Đánh Giá" — người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành; riêng phiếu
-            // Taxi thêm Người Điều Hành Xe/admin, xem canEvaluateCarTrip() ở lib/recordActions.js.
-            if (c.status === 'AWAITING_EVALUATION'
-                && (c.creator === currentUser.username || (isTaxiCarRegClient(c) && canManageTaxiTripClient(c)))) {
-              secondaryOptions.push({ value: 'evaluate', label: '⭐ Đánh Giá (bắt buộc)' });
+            // Taxi thêm Người Điều Hành Xe/admin. LỖI ĐÃ VÁ (rà soát chuyên sâu 2, mức Cao): phiếu ĐỘI
+            // NHÀ (không phải Taxi) giờ cũng cho admin/Người Điều Hành Xe đánh giá hộ NẾU người đăng ký
+            // đã nghỉ việc/khoá tài khoản (creator.active===false) — tránh phiếu kẹt vĩnh viễn ở "Chờ
+            // Đánh Giá". Mirror ĐÚNG canEvaluateCarTrip() ở lib/recordActions.js (server LUÔN tự kiểm
+            // tra lại, đây chỉ ẩn/hiện nút).
+            {
+              const creatorInactive = DB.users.find(u => u.username === c.creator)?.active === false;
+              const canEvaluateThis = c.creator === currentUser.username
+                || (isTaxiCarRegClient(c) && canManageTaxiTripClient(c))
+                || (creatorInactive && canDispatchCarClient());
+              if (c.status === 'AWAITING_EVALUATION' && canEvaluateThis) {
+                secondaryOptions.push({ value: 'evaluate', label: '⭐ Đánh Giá (bắt buộc)' });
+              }
             }
             // "Sửa & Gửi Lại" — chỉ chính người tạo phiếu, chỉ khi đang cần bổ sung (NHÁP do
             // REQUEST_CHANGES, xem confirmProcessCarReg('REQUEST_CHANGES')/openBosungEditModal()).

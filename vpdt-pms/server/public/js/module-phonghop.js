@@ -197,10 +197,32 @@ async function editMeetingRoomCatalogItem(id) {
   populateDropdowns();
 }
 
-function deleteMeetingRoomCatalogItem(id) {
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính"): xoá 1 phòng họp còn đang được lịch TƯƠNG LAI sử
+// dụng trước đây chỉ hiện đúng 1 câu cảnh báo chung chung, không cho admin biết CÓ hay KHÔNG lịch sắp
+// tới còn dùng phòng này — dễ xoá nhầm phòng đang được đặt cho tuần sau. Vẫn giữ NGUYÊN hành vi cũ
+// (KHÔNG cascade xoá/huỷ lịch — hồ sơ cũ giữ nguyên dữ liệu, chỉ không còn chọn được phòng này cho lịch
+// MỚI), chỉ thêm bước dò GET /api/meetings/busy-slots (dữ liệu CHIẾM CHỖ toàn công ty, KHÔNG lọc theo
+// phòng ban — cùng route dùng cho lưới "Lịch Họp", xem chú thích đầu file) NGAY LÚC XOÁ (tự fetch mới,
+// không dựa vào biến module-level meetingBusySlots — màn Quản Trị này có thể mở mà chưa từng qua tab
+// "Lịch Họp" nên biến đó có thể đang rỗng) để đếm đúng số lịch CHƯA HUỶ, còn thời điểm bắt đầu ở TƯƠNG
+// LAI, đang dùng phòng này, rồi nêu rõ số đó ngay trong hộp thoại xác nhận. Lỗi mạng lúc dò -> vẫn cho
+// xoá tiếp với cảnh báo chung (không chặn hẳn thao tác chỉ vì không tải được số liệu tham khảo).
+async function deleteMeetingRoomCatalogItem(id) {
   const item = (DB.meetingRooms || []).find(r => r.id === id);
   if (!item) return;
-  if (!confirm(`Xóa phòng họp "${item.name}" khỏi Danh Mục Phòng Họp? Các lịch đã đặt trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được phòng này cho lịch mới.`)) return;
+  let warning = '';
+  try {
+    const slots = await fetchMeetingBusySlots();
+    const now = Date.now();
+    const upcomingCount = slots.filter(s => s.room === item.name && s.status !== 'CANCELLED'
+      && new Date(s.startTime).getTime() > now).length;
+    if (upcomingCount > 0) {
+      warning = `⚠️ CÒN ${upcomingCount} lịch họp SẮP TỚI đang dùng phòng "${item.name}" (chưa bị huỷ)! Xoá khỏi danh mục sẽ không huỷ các lịch đó, nhưng người đặt lịch mới sẽ không còn chọn được phòng này nữa.\n\n`;
+    }
+  } catch (err) {
+    console.warn('Không dò được lịch sắp tới của phòng họp trước khi xoá:', err.message);
+  }
+  if (!confirm(`${warning}Xóa phòng họp "${item.name}" khỏi Danh Mục Phòng Họp? Các lịch đã đặt trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được phòng này cho lịch mới.`)) return;
   DB.meetingRooms = (DB.meetingRooms || []).filter(r => r.id !== id);
   syncStorage('meetingRooms');
   logSystemAction('MEETING', 'DELETE_MEETING_ROOM', `Xóa phòng họp khỏi Danh Mục Phòng Họp [${item.name}]`, 'SUCCESS', item.name);

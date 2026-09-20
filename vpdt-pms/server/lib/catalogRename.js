@@ -284,6 +284,33 @@ async function cascadeMixedApprovalRuleJobTitle(oldValue, newValue) {
     (list || []).map(r => renameMixedApprovalRuleJobTitle(r, oldValue, newValue)));
 }
 
+// meetingRooms (Danh Mục Phòng Họp, module Phòng Họp): LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành
+// Chính") — khác stores/depts (mảng chuỗi phẳng), meetingRooms là mảng OBJECT {id, name, short}, và
+// đổi tên đi qua route generic POST /api/data/meetingRooms (routes/data.js, admin-only) chứ KHÔNG qua
+// POST /api/admin/renameCatalogEntry — nên KHÔNG dùng chung CATALOG_HANDLERS bên dưới. meetings.room
+// lưu nguyên TÊN phòng (không tham chiếu theo id) và so trùng bằng so chuỗi tuyệt đối (cả lưới lịch lẫn
+// findMeetingConflict() chống trùng lịch, xem module-phonghop.js) — đổi tên phòng mà không cascade làm
+// lịch CŨ "biến mất" khỏi lưới (không khớp cột dựng từ DB.meetingRooms mới) VÀ làm 2 cuộc họp có thể bị
+// duyệt trùng phòng cùng giờ vì tên khác nhau không còn bị coi là cùng 1 phòng. Cascade CẢ lịch tương
+// lai lẫn quá khứ (giữ tính nhất quán lịch sử — cùng đánh đổi stores/depts ở trên), gọi từ routes/data.js
+// SAU KHI ghi thành công key 'meetingRooms' (route đó tự so sánh mảng cũ/mới theo id để tìm ra (các) cặp
+// tên đã đổi rồi gọi hàm này cho từng cặp).
+async function cascadeMeetingRoomRename(oldValue, newValue) {
+  await renameFieldValueInCollection('meetings', (item) => renameSimpleFields(item, ['room'], oldValue, newValue));
+}
+
+// So sánh mảng meetingRooms CŨ/MỚI theo `id` để tìm ra (các) cặp (tên cũ -> tên mới) — TÁCH RIÊNG thành
+// hàm THUẦN (không side-effect) để test được độc lập, không cần boot cả routes/data.js. oldRooms/newRooms:
+// mảng {id, name, short} (giữ nguyên NGAY CẢ KHI không hợp lệ — phần tử null/thiếu id đều bị bỏ qua an
+// toàn, không throw). Chỉ những dòng CÙNG id nhưng KHÁC name mới được coi là "đổi tên" (dòng MỚI THÊM —
+// id không có trong oldRooms — hoặc dòng bị XOÁ hẳn không nằm trong phạm vi hàm này).
+function diffMeetingRoomRenames(oldRooms, newRooms) {
+  const oldById = new Map((Array.isArray(oldRooms) ? oldRooms : []).filter(r => r && r.id != null).map(r => [r.id, r]));
+  return (Array.isArray(newRooms) ? newRooms : [])
+    .filter(r => r && oldById.has(r.id) && oldById.get(r.id).name !== r.name)
+    .map(r => ({ oldValue: oldById.get(r.id).name, newValue: r.name }));
+}
+
 async function cascadeStoreRename(oldValue, newValue) {
   // user.dept dùng CHUNG 1 field cho cả tên phòng ban (HO) lẫn tên siêu thị (phân biệt bằng posType) —
   // so trực tiếp giá trị, không cần lọc posType (1 dept/store name không thể vừa là tên phòng ban vừa
@@ -465,4 +492,4 @@ async function renameCatalogEntry(catalogKey, oldValue, newValue) {
   return updatedCatalog;
 }
 
-module.exports = { renameCatalogEntry };
+module.exports = { renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames };
