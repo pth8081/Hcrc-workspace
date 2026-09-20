@@ -987,30 +987,35 @@ router.post('/carRegs/:id/confirm-driver', async (req, res) => {
   }
 });
 
-// "Kết Thúc Chuyến" — CHỈ lái xe được phân công (đã "Xác Nhận Đăng Ký" trước đó), nhập số km đã đi ->
-// chuyển AWAITING_EVALUATION, xem endCarTrip() ở lib/recordActions.js.
+// "Kết Thúc Chuyến" — lái xe được phân công (đã "Xác Nhận Đăng Ký" trước đó), HOẶC với phiếu đi Taxi
+// (không có tài xế hệ thống) là người đăng ký/Người Điều Hành Xe — nhập số km đã đi -> chuyển
+// AWAITING_EVALUATION, xem endCarTrip()/isTaxiCarReg() ở lib/recordActions.js. carVehicleTypes đọc ở
+// đây (danh mục "Loại Xe Cụ Thể", cờ isTaxi) rồi truyền xuống, cùng khuôn route .../reassign bên dưới.
 router.post('/carRegs/:id/end-trip', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const carVehicleTypes = await getAppDataValue('carVehicleTypes');
     const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
-      recordActions.endCarTrip(freshUser, item, req.body || {}));
+      recordActions.endCarTrip(freshUser, item, req.body || {}, carVehicleTypes));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/end-trip`, err);
   }
 });
 
-// "Đánh Giá" — CHỈ người đăng ký phiếu (creator), bắt buộc để phiếu hoàn thành, cho phép chỉnh lại
-// km lái xe đã nhập -> chuyển COMPLETED, xem evaluateCarTrip() ở lib/recordActions.js.
+// "Đánh Giá" — người đăng ký phiếu (creator; riêng phiếu Taxi thêm Người Điều Hành Xe/admin, xem
+// canEvaluateCarTrip()), bắt buộc để phiếu hoàn thành, cho phép chỉnh lại km đã nhập -> chuyển
+// COMPLETED, xem evaluateCarTrip() ở lib/recordActions.js.
 router.post('/carRegs/:id/evaluate', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const carVehicleTypes = await getAppDataValue('carVehicleTypes');
     const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
-      recordActions.evaluateCarTrip(freshUser, item, req.body || {}));
+      recordActions.evaluateCarTrip(freshUser, item, req.body || {}, carVehicleTypes));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/evaluate`, err);
@@ -1067,9 +1072,11 @@ router.post('/carRegs/:id/reassign', async (req, res) => {
     if (newDriverUsername) lockKeys.push(`car_driver:${newDriverUsername}`);
     const runReassign = async () => {
       const existingCarRegs = await getAllForCollection('carRegs');
-      const carVehicleTypes = await getAppDataValue('carVehicleTypes');
+      const [carVehicleTypes, carTaxiCompanies] = await Promise.all([
+        getAppDataValue('carVehicleTypes'), getAppDataValue('carTaxiCompanies')
+      ]);
       return withLockedRecordForCollection('carRegs', itemId, (item) =>
-        recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users, carVehicleTypes));
+        recordActions.reassignCarDispatch(freshUser, item, req.body || {}, existingCarRegs, users, carVehicleTypes, carTaxiCompanies));
     };
     const result = lockKeys.length ? await withAppLock(lockKeys, runReassign) : await runReassign();
     res.json({ ok: true, item: result });
@@ -1999,6 +2006,9 @@ router.post('/vppRegistrations/:id/submit', async (req, res) => {
     const peek = peekAll.find(r => r.id === itemId);
     if (!peek) return res.status(404).json({ error: 'Không tìm thấy đăng ký này' });
 
+    // vppExcludedJobTitles ("Nhóm Không Cấp VPP") — kiểm lại NGAY LÚC GỬI, không chỉ lúc tạo nháp
+    // (LỖI ĐÃ VÁ 10/2026, xem assertCanStillRegisterVpp() ở lib/recordActions.js).
+    const excludedJobTitles = await getAppDataValue('vppExcludedJobTitles');
     const result = await withAppLock(`vpp_dept_budget:${peek.periodId}:${peek.dept}`, () =>
       withLockedRecordForCollection('vppRegistrations', itemId, async (item) => {
         const periods = await getAllForCollection('vppPeriods');
@@ -2007,7 +2017,7 @@ router.post('/vppRegistrations/:id/submit', async (req, res) => {
         const siblingRegs = freshRegs.filter(r =>
           r.id !== item.id && r.periodId === item.periodId && r.dept === item.dept &&
           (r.status === 'PENDING' || r.status === 'APPROVED'));
-        return recordActions.submitVppRegistration(freshUser, item, period, siblingRegs);
+        return recordActions.submitVppRegistration(freshUser, item, period, siblingRegs, excludedJobTitles);
       })
     );
     res.json({ ok: true, item: result });
@@ -2026,9 +2036,12 @@ router.post('/vppRegistrations/:id/update', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const periods = await getAllForCollection('vppPeriods');
+    // vppExcludedJobTitles: kiểm lại quyền đăng ký + "Nhóm Không Cấp VPP" ngay lúc SỬA nháp (LỖI ĐÃ VÁ
+    // 10/2026) — mirror route .../submit ở trên.
+    const excludedJobTitles = await getAppDataValue('vppExcludedJobTitles');
     const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) => {
       const period = periods.find(p => p.id === item.periodId);
-      return recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period);
+      return recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period, excludedJobTitles);
     });
     res.json({ ok: true, item: result });
   } catch (err) {

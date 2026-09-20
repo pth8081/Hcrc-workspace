@@ -135,7 +135,11 @@ async function main() {
   // Hoạt Lại" cho ARCHIVED (KHÔNG hiện cho ACTIVE, vốn đã đang dùng rồi).
   record('ARCHIVED (401): CÓ nút "🔄 Kích Hoạt Lại" (activateChecklistTemplate) — v23.5', hasOp(htmlAdmin, 'activateChecklistTemplate', 401));
   record('ACTIVE (302): KHÔNG có nút Kích Hoạt Lại (đang dùng rồi, không cần)', !hasOp(htmlAdmin, 'activateChecklistTemplate', 302));
-  record('Mọi trạng thái đều còn nút "Nhân Bản" chung (cloneChecklistTemplate)', hasOp(htmlAdmin, 'cloneChecklistTemplate', 201) && hasOp(htmlAdmin, 'cloneChecklistTemplate', 302) && hasOp(htmlAdmin, 'cloneChecklistTemplate', 401));
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Thấp): trước đây nút "Nhân Bản" hiện cho MỌI trạng thái
+  // kể cả NHÁP, trong khi server LUÔN từ chối nhân bản bản NHÁP (409, routes/checklist.js
+  // POST /templates/:id/clone) — bấm vào chỉ nhận lỗi. Nay chỉ ACTIVE/ARCHIVED mới có nút này.
+  record('ACTIVE/ARCHIVED có nút "Nhân Bản" (cloneChecklistTemplate)', hasOp(htmlAdmin, 'cloneChecklistTemplate', 302) && hasOp(htmlAdmin, 'cloneChecklistTemplate', 401));
+  record('DRAFT (201): KHÔNG còn nút "Nhân Bản" (server luôn từ chối 409 — LỖI ĐÃ VÁ 10/2026)', !hasOp(htmlAdmin, 'cloneChecklistTemplate', 201));
 
   // ===== 2. Ma trận nút — MANAGER (checklistTemplateManage, KHÔNG phải admin) =====
   await page.evaluate(() => { finishLogin(DB.users.find(u => u.username === 'qltc1')); switchTab('checklist'); setChecklistSubTab('CONFIG'); renderChecklistConfigTab(); });

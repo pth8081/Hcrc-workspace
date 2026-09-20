@@ -86,6 +86,10 @@ function renderChecklistConfigTab() {
     const countLabel = isDeduction
       ? `${(t.categories || []).length} hạng mục lớn`
       : `${(t.questions || []).length} câu hỏi`;
+    // Nút "Nhân Bản" (dưới) chỉ hiện cho ACTIVE/ARCHIVED — LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức
+    // Thấp): trước đây nút này hiện cho CẢ mẫu NHÁP trong khi server LUÔN từ chối (409 "Checklist Nháp
+    // đã sửa trực tiếp được — không cần nhân bản", xem routes/checklist.js POST templates/:id/clone),
+    // bấm vào chỉ nhận thông báo lỗi. Mẫu Nháp đã có sẵn nút "Sửa" mở thẳng builder.
     // Nút "Xoá" cho ACTIVE/ARCHIVED: CHỈ admin thấy nút, và khoá mờ (disabled) nếu đã có ai nộp bài —
     // xoá lúc đó sẽ làm mồ côi dữ liệu báo cáo cũ (server chặn lại y hệt, xem routes/checklist.js
     // templates/:id/delete — đây chỉ là UI phản ánh trước để người dùng khỏi bấm rồi mới biết bị chặn).
@@ -110,7 +114,7 @@ function renderChecklistConfigTab() {
           <button type="button" data-op="activateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700">Kích Hoạt</button>
           ${isAdmin ? `<button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">Xoá</button>` : ''}`
           : nonDraftActionsHTML}
-        <button type="button" data-op="cloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-gray-500 text-white rounded text-[11px] font-bold hover:bg-gray-600">Nhân Bản</button>
+        ${t.status === 'DRAFT' ? '' : `<button type="button" data-op="cloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-gray-500 text-white rounded text-[11px] font-bold hover:bg-gray-600">Nhân Bản</button>`}
       </div>
     </div>
   `;

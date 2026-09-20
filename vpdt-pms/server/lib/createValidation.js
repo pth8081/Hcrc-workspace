@@ -742,6 +742,19 @@ const CREATE_MODULE_CONFIGS = {
       if (conflict) {
         throw new CreateError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
       }
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao): meetings là module DUY NHẤT trong
+      // CREATE_MODULE_CONFIGS KHÔNG gán cứng trạng thái ở server (carRegs/officeReqs/docs/submissions/
+      // vppRegistrations... đều có) — validateAndPrepareCreate() trải NGUYÊN payload client vào bản ghi,
+      // nên 1 request tự soạn của bất kỳ ai có meetingBookScope chỉ cần gửi kèm
+      // {status:'APPROVED', approvedBy:'tgd', approvedByName:'Tổng Giám Đốc'} là có ngay 1 lịch họp
+      // "đã được duyệt" bởi người mình tự khai, bỏ qua hoàn toàn quyền meetingApprove
+      // (routes/meetingActions.js). 3 field approvedBy/approvedByName/approvedAt CHỈ được ghi ở đúng
+      // nhánh duyệt thật (routes/meetingActions.js, lấy từ phiên đăng nhập) — xoá hẳn khỏi payload lúc
+      // tạo, cùng khuôn "status/currentStep/history gán cứng" ở carRegs ngay dưới.
+      payload.status = 'PENDING';
+      delete payload.approvedBy;
+      delete payload.approvedByName;
+      delete payload.approvedAt;
     }
   },
   carRegs: {

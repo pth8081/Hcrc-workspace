@@ -191,6 +191,11 @@
           <input id="carReportToDate" type="date" data-op-change="onCarReportFilterChange" class="border p-1.5 rounded">
         </div>
       </div>
+      <!-- Chú thích phạm vi số liệu — hiện/ẩn theo quyền xem của người đang đăng nhập, xem
+           renderCarReportTab() (module-dangkyxe.js): người chỉ duyệt/xem 1 vài phòng ban nhận được số
+           liệu ĐÃ LỌC theo phạm vi của họ (GET /api/data lọc sẵn bằng filterCarRegsForUser()), nên phải
+           nói rõ đây KHÔNG phải số liệu toàn công ty. -->
+      <div id="carReportScopeNote" class="hidden text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2"></div>
       <div id="carReportSummaryCards" class="grid grid-cols-2 md:grid-cols-5 gap-2"></div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-white p-3 rounded border space-y-2">

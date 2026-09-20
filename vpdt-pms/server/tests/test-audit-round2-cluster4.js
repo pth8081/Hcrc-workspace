@@ -706,7 +706,13 @@ async function main() {
       const outcome = applyWorkflowAction({
         moduleKey: 'carRegs', item: second, action: 'APPROVE', user: DISPATCHER, comment: 'Duyệt',
         extraFields: { assignedPlate: '51A-12345', assignedVehicleType: 'Xe 7 chỗ', assignedDriverUsername: WORKER.username },
-        appData: { carDeptWorkflows: APP_DATA.carDeptWorkflows, workflows: APP_DATA.workflows },
+        // carVehicleTypes: từ đợt rà soát 10/2026, applyWorkflowAction() đối chiếu assignedVehicleType
+        // với danh mục "Loại Xe Cụ Thể" (assertValidCarAssignmentCatalogs(), lib/workflowEngine.js) —
+        // route thật luôn truyền appData đầy đủ, test phải khai danh mục cho khớp.
+        appData: {
+          carDeptWorkflows: APP_DATA.carDeptWorkflows, workflows: APP_DATA.workflows,
+          carVehicleTypes: [{ id: 1, name: 'Xe 7 chỗ', bienSo: '', isTaxi: false }], carTaxiCompanies: []
+        },
         existingCollection: [draftReg, second], users: USERS
       });
       assertEqual(outcome.item.assignedPlate, '51A-12345', 'Phiếu mới PHẢI gán được biển số vừa được giải phóng');

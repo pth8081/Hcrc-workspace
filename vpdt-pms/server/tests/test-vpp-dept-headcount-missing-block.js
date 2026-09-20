@@ -21,7 +21,10 @@ function test(name, fn) {
   catch (err) { console.log(`FAIL: ${name}\n  -> ${err.message}`); failed++; }
 }
 
-const CREATOR = { username: 'nv1', name: 'Nhân Viên 1' };
+// perms.vppRegisterCreate: từ đợt rà soát 10/2026, submitVppRegistration() kiểm LẠI quyền đăng ký +
+// "Nhóm Không Cấp VPP" ngay lúc Gửi (trước đây chỉ kiểm lúc tạo nháp — xem assertCanStillRegisterVpp()
+// ở lib/recordActions.js). Người tạo nháp thật LUÔN có quyền này, fixture phải phản ánh đúng.
+const CREATOR = { username: 'nv1', name: 'Nhân Viên 1', jobTitle: 'Nhân viên', perms: { vppRegisterCreate: true } };
 
 function makeItem(overrides) {
   return Object.assign({

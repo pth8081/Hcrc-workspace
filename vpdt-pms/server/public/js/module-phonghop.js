@@ -2,13 +2,66 @@
 // 5. MODULE PHÒNG HỌP (MEETING MODULE)
 // ==========================================
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao): TOÀN BỘ màn "Lịch Họp" (lưới phòng trống/bận + kiểm
+// tra trùng giờ lúc đăng ký) trước đây đọc thẳng DB.meetings — mảng này ĐÃ bị server lọc theo phạm vi
+// xem của từng người (filterMeetingsForUser()/canViewMeeting(), lib/recordViewScope.js: meetingView mặc
+// định chỉ thấy lịch phòng ban mình). Người dùng thường vì thế thấy "Trống" giả ở đúng những khung giờ
+// phòng ban KHÁC đã đặt, chọn vào rồi bị server trả 409 lúc gửi mà màn hình không giải thích được gì.
+// meetingBusySlots = dữ liệu CHIẾM CHỖ toàn công ty lấy từ GET /api/meetings/busy-slots (chỉ room/giờ/
+// trạng thái, KHÔNG có nội dung cuộc họp phòng ban khác — xem routes/meetingActions.js).
+let meetingBusySlots = [];
+let meetingBusySlotsPromise = null; // lượt nạp ĐANG CHẠY (nếu có) — xem refreshMeetingBusySlots()
+
+// Nạp lại meetingBusySlots rồi vẽ lại lưới (nếu đang mở). Gọi khi mở tab "Lịch Họp" và ngay trước khi
+// gửi đăng ký (kiểm tra trùng giờ). Lỗi mạng -> giữ nguyên dữ liệu cũ, lưới vẫn vẽ được (fallback về
+// đúng những lịch mình xem được, tức hành vi CŨ — không làm hỏng màn hình).
+// 2 lượt gọi gần như đồng thời (mở tab + bấm Gửi ngay sau đó) DÙNG CHUNG đúng 1 request: người gọi sau
+// chờ CHÍNH lượt đang chạy rồi mới tiếp tục — không bỏ ngang (return sớm) để tránh chạy tiếp bằng dữ
+// liệu cũ/rỗng ngay trước khi lượt kia kịp về.
+async function refreshMeetingBusySlots(rerender) {
+  if (!meetingBusySlotsPromise) {
+    meetingBusySlotsPromise = (async () => {
+      try {
+        meetingBusySlots = await fetchMeetingBusySlots();
+      } catch (err) {
+        console.warn('Không tải được dữ liệu phòng trống/bận:', err.message);
+      } finally {
+        meetingBusySlotsPromise = null;
+      }
+    })();
+  }
+  await meetingBusySlotsPromise;
+  if (rerender) renderMeetingCalendar();
+}
+
+// Danh sách "đang chiếm chỗ" DÙNG CHUNG cho mọi chỗ cần biết phòng bận hay trống. Ghép meetingBusySlots
+// (toàn công ty, không có nội dung) với DB.meetings (chỉ những lịch mình được phép xem, có đủ tiêu đề/
+// người đặt) theo id — lịch của chính phòng mình vẫn hiện đầy đủ chi tiết như trước, lịch phòng ban
+// khác chỉ hiện "đang bận". Chưa nạp được busy-slots thì rơi về đúng DB.meetings như hành vi cũ.
+function getMeetingOccupancyList() {
+  const visibleById = new Map((DB.meetings || []).map(m => [m.id, m]));
+  const isOccupying = m => m && m.status !== 'CANCELLED';
+  if (!meetingBusySlots.length) return [...visibleById.values()].filter(isOccupying);
+  const merged = [];
+  meetingBusySlots.forEach(s => {
+    const local = visibleById.get(s.id);
+    // Lịch vừa bị huỷ ngay trong phiên này (DB.meetings đã cập nhật, busy-slots còn là ảnh cũ) -> nhả chỗ.
+    if (local && !isOccupying(local)) return;
+    merged.push(local || s);
+  });
+  // Lịch mình vừa tạo ở phiên này nhưng busy-slots chưa kịp nạp lại -> vẫn phải tính là đang chiếm chỗ.
+  const busyIds = new Set(meetingBusySlots.map(s => s.id));
+  visibleById.forEach((m, id) => { if (!busyIds.has(id) && isOccupying(m)) merged.push(m); });
+  return merged;
+}
+
 // Tìm 1 lịch đã có (chưa Hủy) cùng phòng có khung giờ giao nhau với [startTime, endTime) — tính cả
 // lịch Đang chờ duyệt lẫn Đã duyệt là đang "chiếm chỗ", để chặn ngay từ lúc đăng ký thay vì để dồn
 // nhiều yêu cầu trùng giờ về cho người phê duyệt. excludeId dùng khi kiểm tra lại 1 lịch đang sửa.
 function findMeetingConflict(room, startTime, endTime, excludeId) {
   const newStart = new Date(startTime).getTime();
   const newEnd = new Date(endTime).getTime();
-  return DB.meetings.find(m => {
+  return getMeetingOccupancyList().find(m => {
     if (excludeId && m.id === excludeId) return false;
     if (m.status === 'CANCELLED') return false;
     if (m.room !== room) return false;
@@ -57,7 +110,10 @@ function setMeetingSubTab(subTab) {
   document.getElementById('meetingRegisterTabContent').classList.toggle('hidden', subTab !== 'REGISTER');
   document.getElementById('meetingCalendarTabContent').classList.toggle('hidden', subTab !== 'CALENDAR');
   document.getElementById('meetingReportTabContent').classList.toggle('hidden', subTab !== 'REPORT');
-  if (subTab === 'CALENDAR') renderMeetingCalendar();
+  if (subTab === 'CALENDAR') {
+    renderMeetingCalendar();            // vẽ ngay bằng dữ liệu đang có (không để màn trắng khi chờ mạng)
+    refreshMeetingBusySlots(true);      // rồi nạp lại phòng bận TOÀN CÔNG TY và vẽ lại (LỖI ĐÃ VÁ 10/2026)
+  }
   if (subTab === 'REPORT') renderMeetingReportTab();
 }
 
@@ -333,7 +389,9 @@ function jumpMeetingCalToDay(dateStr) {
 function computeMeetingDaySummary(dateStr) {
   const dayStart = new Date(`${dateStr}T00:00:00`);
   const dayEnd = new Date(`${dateStr}T23:59:59.999`);
-  const dayMeetings = (DB.meetings || []).filter(m => {
+  // getMeetingOccupancyList() (không phải DB.meetings) — xem chú thích đầu file: lưới Lịch Họp phải
+  // phản ánh phòng bận của TOÀN CÔNG TY, không chỉ phòng ban mình.
+  const dayMeetings = getMeetingOccupancyList().filter(m => {
     if (m.status === 'CANCELLED') return false;
     const mStart = new Date(m.startTime), mEnd = new Date(m.endTime);
     return mStart <= dayEnd && mEnd >= dayStart;
@@ -375,12 +433,13 @@ function renderMeetingCalendarDayView(dateStr) {
   html += '<thead><tr class="bg-gray-100"><th class="border p-2 w-16">Giờ</th>' +
     (DB.meetingRooms || []).map(r => `<th class="border p-2">${escapeHtml(r.short)}</th>`).join('') + '</tr></thead><tbody>';
 
+  const occupancy = getMeetingOccupancyList();
   slots.forEach((slot, rowIdx) => {
     const slotStart = new Date(`${dateStr}T${slot}:00`);
     const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
     html += `<tr><td class="border p-1 text-center text-gray-500 font-mono">${slot}</td>`;
     (DB.meetingRooms || []).forEach((r, ridx) => {
-      const booking = DB.meetings.find(m => {
+      const booking = occupancy.find(m => {
         if (m.status === 'CANCELLED') return false;
         if (m.room !== r.name) return false;
         const mStart = new Date(m.startTime);
@@ -388,7 +447,10 @@ function renderMeetingCalendarDayView(dateStr) {
         return slotStart < mEnd && mStart < slotEnd;
       });
       if (booking) {
-        html += `<td class="meeting-cell border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" data-room-idx="${ridx}" data-row-idx="${rowIdx}" data-booking-id="${booking.id}" title="${escapeHtml(booking.title)} — bấm để xem, kéo/Shift+bấm để chọn khoảng"></td>`;
+        // booking.title chỉ có với lịch mình được phép xem — lịch phòng ban khác (chỉ có khung giờ, xem
+        // getMeetingOccupancyList()) hiện nhãn trung tính, KHÔNG lộ nội dung cuộc họp của họ.
+        const bookingLabel = booking.title ? `${booking.title} — bấm để xem` : 'Phòng đang bận (lịch của đơn vị khác)';
+        html += `<td class="meeting-cell border p-1 h-6 text-center bg-red-500 hover:bg-red-600 cursor-pointer" data-room-idx="${ridx}" data-row-idx="${rowIdx}" data-booking-id="${booking.id}" title="${escapeHtml(bookingLabel)}, kéo/Shift+bấm để chọn khoảng"></td>`;
       } else {
         html += `<td class="meeting-cell border p-1 h-6 text-center bg-white hover:bg-emerald-50 cursor-pointer" data-room-idx="${ridx}" data-row-idx="${rowIdx}" title="Còn trống — bấm để đặt, kéo hoặc giữ Shift+bấm để chọn nhiều khung giờ liên tiếp"></td>`;
       }
@@ -566,7 +628,13 @@ function handleMeetingSingleSlotClick(roomIdx, rowIdx) {
 
 function showMeetingSlotInfo(id) {
   const m = DB.meetings.find(x => x.id === id);
-  if (!m) return;
+  // Ô đỏ của lịch KHÔNG thuộc phạm vi xem của mình (chỉ biết phòng đó đang bận, xem
+  // getMeetingOccupancyList()) — nói rõ là bận, không hiện chi tiết gì.
+  if (!m) {
+    const slot = meetingBusySlots.find(x => x.id === id);
+    if (slot) alert(`⛔ Phòng "${slot.room}" đang có lịch trong khung giờ này (${slot.startTime} ➔ ${slot.endTime}).\nChi tiết cuộc họp thuộc đơn vị khác nên không hiển thị.`);
+    return;
+  }
   const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã duyệt', CANCELLED: 'Đã hủy' }[m.status] || m.status;
   alert(`📅 ${m.title}\nMã: ${m.code}\nPhòng: ${m.room}\nNgười đặt: ${m.creatorName} (${m.dept})\nThời gian: ${m.startTime} ➔ ${m.endTime}\nTrạng thái: ${statusLabel}`);
 }
@@ -624,10 +692,16 @@ async function submitMeetingReq(e) {
     return alert('⛔ Thời gian bắt đầu phải trước thời gian kết thúc!');
   }
 
+  // Nạp lại phòng bận TOÀN CÔNG TY ngay trước khi kiểm tra trùng giờ — trước đây chỉ so với DB.meetings
+  // (đã lọc theo phạm vi xem) nên người dùng thường luôn "không thấy trùng" với lịch phòng ban khác và
+  // chỉ biết khi server trả 409 (LỖI ĐÃ VÁ 10/2026, xem getMeetingOccupancyList()).
+  await refreshMeetingBusySlots(false);
   const conflict = findMeetingConflict(room, startTime, endTime, null);
   if (conflict) {
     const conflictStatusLabel = conflict.status === 'APPROVED' ? 'Đã duyệt' : 'Đang chờ duyệt';
-    return alert(`⛔ Phòng "${room}" đã có lịch trùng khung giờ này!\n\nLịch trùng: ${conflict.code} - ${conflict.title}\nThời gian: ${conflict.startTime} ➔ ${conflict.endTime}\nTrạng thái: ${conflictStatusLabel}\n\nVui lòng chọn phòng khác hoặc đổi khung giờ.`);
+    // conflict.code/title chỉ có với lịch trong phạm vi xem của mình — lịch đơn vị khác chỉ nêu khung giờ.
+    const conflictLabel = conflict.code ? `${conflict.code} - ${conflict.title}` : '(lịch của đơn vị khác)';
+    return alert(`⛔ Phòng "${room}" đã có lịch trùng khung giờ này!\n\nLịch trùng: ${conflictLabel}\nThời gian: ${conflict.startTime} ➔ ${conflict.endTime}\nTrạng thái: ${conflictStatusLabel}\n\nVui lòng chọn phòng khác hoặc đổi khung giờ.`);
   }
 
   let customData;
