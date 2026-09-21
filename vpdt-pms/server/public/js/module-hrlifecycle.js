@@ -57,6 +57,12 @@ function showHrCreateForm(type) {
   document.getElementById('hrpCreateOnboardWrap').classList.toggle('hidden', type !== 'ONBOARDING');
   document.getElementById('hrpCreateOffboardWrap').classList.toggle('hidden', type !== 'OFFBOARDING');
   if (type === 'ONBOARDING') {
+    // LỖI ĐÃ VÁ (báo cáo người dùng 10/2026): ô "Quản Lý Trực Tiếp" (hrpOnbDirectManagerInput) dùng
+    // chung #systemUsersDatalist, nhưng nhánh ONBOARDING trước đây KHÔNG gọi populateSystemUsersDatalist()
+    // (chỉ nhánh OFFBOARDING bên dưới có) — nếu đây là lần đầu tiên trong phiên mở #systemUsersDatalist
+    // (chưa module nào khác nạp trước), ô tìm kiếm hiện trống ngay lần bấm đầu, chỉ hiện đúng tên sau khi
+    // có thao tác KHÁC (mở form Offboarding, hoặc module khác dùng chung datalist này) tình cờ nạp nó.
+    populateSystemUsersDatalist();
     populateHrpOnboardingDeptDropdowns();
     document.getElementById('hrpOnbPosType').value = 'HO';
     onHrpOnboardingPosTypeChange();

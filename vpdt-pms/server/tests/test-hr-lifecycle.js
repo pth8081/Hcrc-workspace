@@ -104,6 +104,23 @@ async function main() {
   let onboardId = null, offboardId = null, itTaskId = null, itTicketId = null;
 
   try {
+    // ===================== LỖI ĐÃ VÁ (báo cáo người dùng 10/2026): ô "Quản Lý Trực Tiếp" (Onboarding)
+    // trống ở lần bấm ĐẦU TIÊN trong phiên =====================
+    // showHrCreateForm('OFFBOARDING') gọi populateSystemUsersDatalist() nhưng nhánh 'ONBOARDING' trước
+    // đây thì KHÔNG — vì #systemUsersDatalist dùng CHUNG cho toàn hệ thống (nhiều module khác cũng tự
+    // nạp), lỗi chỉ lộ ra đúng khi đây là module ĐẦU TIÊN trong phiên chạm tới nó — mirror đúng tình
+    // huống đó: đăng nhập XONG là mở ngay "+ Tạo Onboarding" (không qua bất kỳ màn nào khác trước).
+    await run.run('Mở "+ Tạo Onboarding" NGAY sau đăng nhập -> ô "Quản Lý Trực Tiếp" phải có sẵn gợi ý (không cần thao tác gì khác trước)', async () => {
+      await loginAs(page, HR1);
+      await page.evaluate(() => { switchTab('hrLifecycle'); });
+      const itemCount = await page.evaluate(() => {
+        showHrCreateForm('ONBOARDING');
+        return (document.getElementById('systemUsersDatalist')._sddItems || []).length;
+      });
+      const expected = state.users.filter(u => u.active !== false).length;
+      assertEqual(itemCount, expected, `#systemUsersDatalist phải có đủ ${expected} người dùng ngay lần đầu mở form Onboarding, không cần thao tác nào khác trước`);
+    });
+
     // ===================== TẠO QUY TRÌNH — ONBOARDING =====================
 
     await run.run('Không có hrOnboardingManage -> tạo quy trình Onboarding bị chặn ở SERVER (403)', async () => {

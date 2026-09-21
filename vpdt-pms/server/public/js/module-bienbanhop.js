@@ -398,15 +398,9 @@ function resolveAttendeeAccountInput(idx, rawValue) {
   renderMinutesDirectivesTable();
 }
 
-// Dùng chung bởi bảng Thành phần tham dự (form Biên bản họp thật) VÀ bảng soạn Mẫu độc lập trong
-// modal Quản Lý Mẫu (xem renderTplEditRowsTable()) — cả 2 trỏ vào cùng 1 <datalist id="systemUsersDatalist">.
-function populateSystemUsersDatalist() {
-  const datalist = document.getElementById('systemUsersDatalist');
-  if (!datalist) return;
-  // Tài khoản đã khoá (active === false) không còn chọn MỚI được nữa — chỉ ẩn khỏi nguồn gợi ý tìm-để-
-  // thêm-mới này, KHÔNG đụng gì tới dữ liệu đã lưu trước đó (xem chú thích đầu file phần "Yêu cầu 1").
-  sddSetOptions('systemUsersDatalist', DB.users.filter(u => u.active !== false).map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
-}
+// populateSystemUsersDatalist() ĐÃ DỜI sang core.js (rà soát chuyên sâu 10/2026 — hàm này cần LUÔN sẵn
+// sàng ngay từ lúc đăng nhập cho finishLogin() gọi làm lưới an toàn chung, nhưng module-bienbanhop.js
+// chỉ nạp LƯỜI theo tab) — xem chú thích đầy đủ tại định nghĩa mới, ngay trước sddSetOptions() (core.js).
 
 // Picker "Lái xe được phân công" (Đăng Ký Xe > Xử lý duyệt) trước đây dùng chung systemUsersDatalist,
 // tìm ra TOÀN BỘ nhân viên công ty thay vì đúng nhóm tài xế thực tế — vì hệ thống chưa có khái niệm

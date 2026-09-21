@@ -42,6 +42,11 @@ async function orgChartApiCall(method, path, body) {
 // _dispatchTabRender()) — luôn tải LẠI danh sách version mới nhất từ server (không cache lâu dài, dữ
 // liệu do nhiều admin cùng sửa). =====
 async function renderOrgChartModule() {
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, cùng lỗi vừa phát hiện ở Onboarding — module-hrlifecycle.js):
+  // ô "🔍 Tra Cứu Người Đánh Giá Theo Nhân Viên" (orgChartKpiLookupInput) dùng chung #systemUsersDatalist
+  // nhưng module này CHƯA TỪNG gọi populateSystemUsersDatalist() ở đâu cả — nếu Cơ Cấu Tổ Chức là module
+  // ĐẦU TIÊN trong phiên chạm tới datalist dùng chung này, ô tìm kiếm trống ngay lần bấm đầu.
+  populateSystemUsersDatalist();
   let data;
   try {
     data = await orgChartApiCall('GET', '/api/org-chart/versions');

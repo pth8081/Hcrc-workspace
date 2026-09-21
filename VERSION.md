@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**23.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.87 (2026-09-21): rà soát chuyên sâu toàn hệ thống ô tìm-kiếm-gõ-chọn (sdd*) dùng chung — vá 2 lỗi còn sót + lưới an toàn chung chặn tái diễn
+
+Theo báo cáo người dùng ("ấn tìm kiếm quản lý trực lúc đầu ko hiện ra, và
+phải ấn lại mới hiện ra tên") + yêu cầu rà soát chuyên sâu toàn hệ thống vì
+"thỉnh thoảng lên bản mới lại lỗi".
+
+### 1) Nguyên nhân gốc
+
+`#systemUsersDatalist` (ô tìm-kiếm-gõ-chọn tài khoản hệ thống) dùng CHUNG
+cho ~20 ô ở ~10 module khác nhau, nhưng hàm nạp dữ liệu cho nó
+(`populateSystemUsersDatalist()`) trước đây sống trong
+`module-bienbanhop.js` (nạp LƯỜI theo tab) — mỗi module MỚI thêm 1 ô dùng
+datalist này phải TỰ NHỚ gọi lại đúng hàm này trên ĐÚNG đường dẫn hiện ô đó.
+Rà soát lại toàn bộ ~20 điểm dùng `#systemUsersDatalist` (và 3 datalist dùng
+chung khác: `carDriversDatalist`, `uniformStoreEmployeesDatalist`,
+`hrpfPositionDatalist`) phát hiện đúng lỗi này đã xảy ra ít nhất 4 lần qua
+các đợt trước (Công Việc — đã vá riêng #181, Đào Tạo — đã vá riêng, Vận
+Hành — đã vá riêng "Mục C") và còn sót lại đúng 2 chỗ:
+
+- **Onboarding** (`module-hrlifecycle.js`, `showHrCreateForm()`) — nhánh
+  `ONBOARDING` quên gọi `populateSystemUsersDatalist()` (nhánh `OFFBOARDING`
+  bên cạnh có) — ô "Quản Lý Trực Tiếp" trống nếu đây là module ĐẦU TIÊN
+  trong phiên chạm tới datalist dùng chung này.
+- **Cơ Cấu Tổ Chức** (`module-orgchart.js`, `renderOrgChartModule()`) —
+  CHƯA TỪNG gọi hàm này ở đâu cả — ô "🔍 Tra Cứu Người Đánh Giá Theo Nhân
+  Viên" cùng lỗi y hệt.
+
+### 2) Lưới an toàn chung — chặn tái diễn cho module mới sau này
+
+Thay vì chỉ vá 2 điểm trên, dời hẳn `populateSystemUsersDatalist()` sang
+`core.js` (luôn nạp sẵn từ đầu, không lười) và gọi 1 lần vô điều kiện ngay
+trong `finishLogin()` (cùng khuôn `applyUploadAcceptAttrs()` ngay cạnh —
+"chạy đúng 1 lần ngay sau đăng nhập, trước khi mở bất kỳ tab nào"). Module
+mới thêm ô dùng `#systemUsersDatalist` sau này KHÔNG còn cần tự nhớ gọi lại
+hàm này nữa (vẫn giữ nguyên toàn bộ lệnh gọi rải rác ở các module khác —
+vô hại/idempotent, đảm bảo dữ liệu luôn mới nếu danh sách tài khoản đổi
+giữa phiên). 3 datalist dùng chung còn lại (`carDriversDatalist`/
+`uniformStoreEmployeesDatalist`/`hrpfPositionDatalist`) đã rà soát kỹ và
+xác nhận đúng — không cần đổi gì.
+
+Thêm 1 scenario hồi quy trong `tests/test-hr-lifecycle.js` mô phỏng đúng
+tình huống lỗi Onboarding (đăng nhập xong mở ngay "+ Tạo Onboarding",
+không qua màn nào khác trước) — xác nhận lỗi tái hiện được khi bỏ dòng vá
+và đã hết khi có fix.
+
+Không có thay đổi schema/API/quyền nào — chỉ JS phía client, không cần
+thao tác gì thêm khi deploy ngoài copy code + `pm2 restart`.
 
 ## v23.86 (2026-09-21): rà soát toàn hệ thống nút "Sửa" còn thiếu + đăng nhập 1 tài khoản = 1 phiên
 

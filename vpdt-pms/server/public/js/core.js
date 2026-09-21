@@ -6342,6 +6342,11 @@ function finishLogin(user) {
   document.getElementById('btnApprovalHubTab').classList.toggle('hidden', !canAccessApprovalHub(user));
   updateApprovalHubBadge();
   applyUploadAcceptAttrs();
+  // Lưới an toàn chung cho toàn hệ thống (rà soát chuyên sâu 10/2026) — xem chú thích đầy đủ tại định
+  // nghĩa populateSystemUsersDatalist() (ngay trước sddSetOptions(), cùng file): nạp ngay #systemUsersDatalist
+  // đúng 1 lần sau đăng nhập, trước khi mở bất kỳ tab nào — module mới thêm ô tìm-kiếm-gõ-chọn dùng
+  // chung datalist này không còn cần tự nhớ gọi lại hàm này nữa.
+  populateSystemUsersDatalist();
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
 
   document.getElementById('btnSubmissionTab').classList.toggle('hidden', !canAccessSubmissionModule(user));
@@ -9158,6 +9163,26 @@ bindCspDelegation('contractPaymentTypeChangeModal');
 // xu ly rieng.
 function stripVnDiacritics(str) {
   return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+}
+
+// populateSystemUsersDatalist() — DỜI về core.js (rà soát chuyên sâu 10/2026, phát hiện từ báo cáo
+// người dùng "ô Quản Lý Trực Tiếp trống lúc đầu, ấn lại mới hiện tên"): #systemUsersDatalist dùng chung
+// cho ~20 ô tìm-kiếm-gõ-chọn ở ~10 module KHÁC NHAU, nhưng hàm này trước đây định nghĩa trong
+// module-bienbanhop.js (nạp LƯỜI theo tab, xem MODULE_LOAD_GROUPS) — mỗi module mới thêm 1 ô dùng
+// datalist này phải TỰ NHỚ gọi lại đúng hàm này trên đúng đường dẫn hiện ô, và đã QUÊN ít nhất 4 lần
+// khác nhau qua các đợt (module-hrlifecycle.js Onboarding, module-orgchart.js, module-congviec.js —
+// đã vá riêng đợt #181, module-internalcomms-daotao.js Đào Tạo — đã vá riêng) — đúng loại lỗi "thỉnh
+// thoảng lên bản mới lại lỗi" người dùng phản ánh. DỜI hẳn về đây (core.js LUÔN nạp sẵn từ đầu, không
+// lười) + gọi 1 LẦN DUY NHẤT, VÔ ĐIỀU KIỆN ngay trong finishLogin() (xem applyUploadAcceptAttrs() ngay
+// cạnh đó, cùng khuôn "chạy đúng 1 lần ngay sau đăng nhập, trước khi mở bất kỳ tab nào") — làm LƯỚI AN
+// TOÀN chung cho toàn hệ thống, module MỚI thêm sau này không còn cần tự nhớ gọi lại hàm này nữa (vẫn
+// giữ nguyên các lệnh gọi rải rác ở module-*.js khác — vô hại/idempotent, không cần dọn).
+function populateSystemUsersDatalist() {
+  const datalist = document.getElementById('systemUsersDatalist');
+  if (!datalist) return;
+  // Tài khoản đã khoá (active === false) không còn chọn MỚI được nữa — chỉ ẩn khỏi nguồn gợi ý tìm-để-
+  // thêm-mới này, KHÔNG đụng gì tới dữ liệu đã lưu trước đó.
+  sddSetOptions('systemUsersDatalist', (DB.users || []).filter(u => u.active !== false).map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
 }
 
 function sddSetOptions(dropdownId, items) {
