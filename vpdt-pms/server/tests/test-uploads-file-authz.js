@@ -239,13 +239,18 @@ async function main() {
   });
 
   // ===== 4c) laborContracts/paymentRequests/hrProcesses/checklistSubmissions (đợt audit chuyên sâu) =====
-  await run('laborContracts: hrContractManage/admin xem toàn bộ — CÙNG PHÒNG BAN (không phải chính chủ) KHÔNG đủ để xem', async () => {
+  await run('laborContracts: hrContractManage xem toàn bộ — CÙNG PHÒNG BAN (không phải chính chủ) KHÔNG đủ để xem — admin THUẦN (không có hrContractManage) cũng KHÔNG được bypass', async () => {
     // OWNER_ITP cùng DEPT_A với LABOR_CONTRACT nhưng không có hrContractManage VÀ không phải chính chủ
     // (employeeUsername khác) -> canViewLaborContract() bỏ qua dept hoàn toàn, phải bị chặn (khác các
     // module "theo phòng ban" khác).
     assert.strictEqual(await authorizeFileAccess(OWNER_ITP, LABOR_CONTRACT.fileUrl, 'view'), false);
     assert.strictEqual(await authorizeFileAccess({ username: 'hr1', dept: DEPT_A, perms: { hrContractManage: true } }, LABOR_CONTRACT.fileUrl, 'view'), true);
-    assert.strictEqual(await authorizeFileAccess(ADMIN, LABOR_CONTRACT.fileUrl, 'download'), true);
+    // ADMIN (test-uploads-file-authz.js dòng 97) CHỈ có perms.admin, KHÔNG có hrContractManage — theo
+    // đúng chủ đích bảo mật đã ghi ở lib/recordViewScope.js::canViewLaborContract() (10/2026, "admin
+    // KHÔNG còn tự động xem được TOÀN BỘ chỉ vì có cờ admin"), admin THUẦN phải bị chặn giống mọi người
+    // ngoài — CHỈ tài khoản có cờ hrContractManage (dù có thêm admin hay không) mới xem/tải được toàn bộ.
+    assert.strictEqual(await authorizeFileAccess(ADMIN, LABOR_CONTRACT.fileUrl, 'download'), false);
+    assert.strictEqual(await authorizeFileAccess({ username: 'admin_hr', dept: 'Ban Giám Đốc', perms: { admin: true, hrContractManage: true } }, LABOR_CONTRACT.fileUrl, 'download'), true);
   });
 
   await run('laborContracts: CHÍNH CHỦ (employeeUsername khớp) tự xem/tải được hợp đồng của mình (9/2026, task #82)', async () => {

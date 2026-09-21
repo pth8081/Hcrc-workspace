@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**23.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.77 (2026-09-21): Sửa test cũ sai (không phải lỗi sản phẩm) — laborContracts admin-bypass
+
+Rà lại 5 file "FAIL" còn sót trong đợt full regression của v23.76 (task #177,
+đã pending từ trước): 3 file thực ra PASS 100% (script chạy regression tự
+viết chỉ grep thô cụm "Error"/"FAILED" trong CHÍNH log mô tả PASS của bài
+test — VD dòng "...HttpError rõ ràng..." hay "...học viên FAILED của lớp
+cũ..." — khớp nhầm dù không hề có lỗi thật, không phải vấn đề của code/test);
+1 file (`test-operation-order-multifile-batch.js`) thiếu file PDF mẫu do môi
+trường sandbox (file tạm người dùng từng đính kèm ở phiên chat trước đã bị
+dọn khi container khởi động lại) — môi trường, không phải lỗi code, không
+thể tự tạo lại 1 PDF đơn hàng thật để thay thế đúng nghĩa.
+
+File còn lại — `test-uploads-file-authz.js` (laborContracts) — là **lỗi
+TEST cũ**, không phải lỗi sản phẩm: bài test dùng tài khoản `ADMIN` (chỉ có
+cờ `perms.admin`, không có `hrContractManage`) và kỳ vọng tải được Hợp Đồng
+Lao Động, nhưng `canViewLaborContract()` (lib/recordViewScope.js) đã chủ đích
+KHÔNG cho admin thuần bypass dữ liệu HR nhạy cảm từ đợt siết quyền 10/2026
+(task #103) — test chưa được cập nhật theo đúng hành vi mới đó. Đã sửa lại
+assertion cho khớp đúng thiết kế bảo mật hiện tại: admin thuần (không
+`hrContractManage`) phải bị CHẶN, chỉ tài khoản có `hrContractManage` (có
+hay không kèm `admin`) mới xem/tải được toàn bộ — thêm luôn assertion dương
+tính xác nhận rõ hành vi chặn này để không lặp lại nhầm lẫn.
+
+**Deploy-impact: KHÔNG có thay đổi hành vi sản phẩm nào** — chỉ sửa 1 file
+test (`tests/test-uploads-file-authz.js`) cho khớp lại đúng luật đã có sẵn từ
+lâu. Không cần copy code lên server thật (test không chạy trên production),
+nhưng để nhất quán version vẫn bump theo quy ước.
 
 ## v23.76 (2026-09-21): Rà soát lỗ hổng nghiệp vụ v23.71 → v23.75 — vá 3 lỗi phát hiện được
 
