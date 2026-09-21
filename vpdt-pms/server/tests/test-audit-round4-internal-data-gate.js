@@ -210,41 +210,63 @@ async function main() {
     // ===================================================================================
     // Fix 1 — moduleAccess.internal phải phủ ĐỦ 16 collection của module
     // ===================================================================================
+    // Lớp 3a (task #188): 15/16 collection của module "internal" (tất cả trừ internalPosts) đã chuyển
+    // sang GET /api/data/lazy/internalHub (+ /lazy/hrFeedback riêng cho hrFeedback) — gate
+    // MODULE_ACCESS_GATED_COLLECTIONS.internal vẫn áp dụng HỆT như cũ, chỉ khác route trả về. Cả 2 nhóm
+    // dùng chung 1 vòng lặp zero-out (xem router.get('/lazy/:groupKey') ở routes/data.js) nên test dưới
+    // đây gọi cả 3 route (chính + 2 lazy) để phủ đủ 16 collection.
     await run.run('Fix 1 — tài khoản BẬT module "Truyền Thông Nội Bộ" vẫn nhận đủ dữ liệu (không chặn nhầm)', async () => {
       resetRecords();
-      const res = await api('GET', '/api/data', undefined, NV_CO_MODULE);
-      assertEqual(res.status, 200, 'GET /api/data phải trả 200');
+      const resMain = await api('GET', '/api/data', undefined, NV_CO_MODULE);
+      assertEqual(resMain.status, 200, 'GET /api/data phải trả 200');
+      assert((resMain.body.internalPosts || []).length > 0, '"internalPosts" phải còn dữ liệu cho tài khoản đang BẬT module');
+
+      const resHub = await api('GET', '/api/data/lazy/internalHub', undefined, NV_CO_MODULE);
+      assertEqual(resHub.status, 200, 'GET /api/data/lazy/internalHub phải trả 200');
       // Chọn các collection KHÔNG bị bộ lọc quyền xem chi tiết nào cắt bớt với người dùng thường.
-      for (const key of ['internalPosts', 'recruitmentJobs', 'trainingClasses', 'trainingCourses', 'trainingDocuments', 'trainingTests', 'trainingPlans', 'careerPaths', 'onboardingPaths']) {
-        assert((res.body[key] || []).length > 0, `"${key}" phải còn dữ liệu cho tài khoản đang BẬT module`);
+      for (const key of ['recruitmentJobs', 'trainingClasses', 'trainingCourses', 'trainingDocuments', 'trainingTests', 'trainingPlans', 'careerPaths', 'onboardingPaths']) {
+        assert((resHub.body[key] || []).length > 0, `"${key}" phải còn dữ liệu cho tài khoản đang BẬT module`);
       }
       // Các collection riêng tư theo người: người này KHÔNG phải chủ sở hữu nên vốn đã rỗng — không dùng
       // để kiểm ở đây (đã có bài test riêng cho từng bộ lọc).
     });
 
-    await run.run('Fix 1 — TẮT module -> TẤT CẢ 16 collection của module về rỗng qua GET /api/data', async () => {
+    await run.run('Fix 1 — TẮT module -> TẤT CẢ 16 collection của module về rỗng', async () => {
       resetRecords();
-      const res = await api('GET', '/api/data', undefined, NV_TAT_MODULE);
-      assertEqual(res.status, 200, 'GET /api/data phải trả 200 (chỉ rỗng dữ liệu, không lỗi)');
-      for (const key of INTERNAL_COLLECTIONS) {
-        assertEqual((res.body[key] || []).length, 0,
+      const resMain = await api('GET', '/api/data', undefined, NV_TAT_MODULE);
+      assertEqual(resMain.status, 200, 'GET /api/data phải trả 200 (chỉ rỗng dữ liệu, không lỗi)');
+      assertEqual((resMain.body.internalPosts || []).length, 0, '"internalPosts" phải RỖNG khi moduleAccess.internal = false');
+
+      const resHub = await api('GET', '/api/data/lazy/internalHub', undefined, NV_TAT_MODULE);
+      assertEqual(resHub.status, 200, 'GET /api/data/lazy/internalHub phải trả 200 (chỉ rỗng dữ liệu, không lỗi)');
+      for (const key of INTERNAL_COLLECTIONS.filter(k => k !== 'internalPosts' && k !== 'hrFeedback')) {
+        assertEqual((resHub.body[key] || []).length, 0,
           `"${key}" phải RỖNG khi moduleAccess.internal = false — trước bản vá chỉ internalPosts bị chặn`);
       }
+
+      const resFeedback = await api('GET', '/api/data/lazy/hrFeedback', undefined, NV_TAT_MODULE);
+      assertEqual((resFeedback.body.hrFeedback || []).length, 0, '"hrFeedback" phải RỖNG khi moduleAccess.internal = false');
     });
 
     await run.run('Fix 1 — dữ liệu RIÊNG TƯ của chính người bị tắt module cũng không trả về (gate module là lớp chặn độc lập)', async () => {
       resetRecords();
-      const res = await api('GET', '/api/data', undefined, NV_TAT_MODULE);
+      const resMain = await api('GET', '/api/data', undefined, NV_TAT_MODULE);
+      assertEqual((resMain.body.trainingDocumentProgress || []).length, 0, '"trainingDocumentProgress" của chính người dùng vẫn phải bị gate module chặn');
+
+      const resHub = await api('GET', '/api/data/lazy/internalHub', undefined, NV_TAT_MODULE);
       // 5 collection dưới đây vốn CÓ bản ghi của chính nv2 (bộ lọc quyền xem sẽ cho qua) — chỉ gate
       // module mới là thứ chặn được chúng.
-      for (const key of ['trainingRegistrations', 'trainingTestSubmissions', 'trainingDocumentProgress', 'careerPathConfirmations', 'hrFeedback', 'onboardingProgress', 'recruitmentReferrals']) {
-        assertEqual((res.body[key] || []).length, 0, `"${key}" của chính người dùng vẫn phải bị gate module chặn`);
+      for (const key of ['trainingRegistrations', 'trainingTestSubmissions', 'careerPathConfirmations', 'onboardingProgress', 'recruitmentReferrals']) {
+        assertEqual((resHub.body[key] || []).length, 0, `"${key}" của chính người dùng vẫn phải bị gate module chặn`);
       }
+
+      const resFeedback = await api('GET', '/api/data/lazy/hrFeedback', undefined, NV_TAT_MODULE);
+      assertEqual((resFeedback.body.hrFeedback || []).length, 0, '"hrFeedback" của chính người dùng vẫn phải bị gate module chặn');
     });
 
     await run.run('Fix 1 — Admin KHÔNG bị gate chặn (hasModuleAccessServer trả true cho admin)', async () => {
       resetRecords();
-      const res = await api('GET', '/api/data', undefined, ADMIN);
+      const res = await api('GET', '/api/data/lazy/internalHub', undefined, ADMIN);
       assert((res.body.trainingClasses || []).length > 0, 'Admin phải thấy đủ dữ liệu module');
     });
 

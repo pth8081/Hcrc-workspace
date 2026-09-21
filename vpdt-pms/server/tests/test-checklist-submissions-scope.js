@@ -1,7 +1,8 @@
 // server/tests/test-checklist-submissions-scope.js
 //
-// Regression test cho GET /api/data (routes/data.js) sau Bước 8d: checklistSubmissions tách riêng khỏi
-// vòng lặp tải chung qua loadChecklistSubmissionsScoped() — canViewChecklistSubmission()
+// Regression test cho GET /api/data/lazy/checklist (routes/data.js) — checklistSubmissions chuyển từ
+// GET /api/data sang nhóm tải lười này ở Lớp 3a (task #188), vẫn qua đúng loadChecklistSubmissionsScoped()
+// — canViewChecklistSubmission()
 // (lib/recordViewScope.js) có 3 nhánh (admin/checklistTemplateManage/checklistReportView xem HẾT; chính
 // người nộp xem bài của mình; người posType STORE xem bài CHƯA NHÁP của ĐÚNG siêu thị mình) nên phải tải
 // 2 lượt (SubmittedByUsername, StoreCode) rồi gộp+khử trùng ở Node — khác paymentRequests/
@@ -119,7 +120,7 @@ async function main() {
   try {
     await run.run('GD Siêu Thị A: thấy bài của MÌNH (kể cả DRAFT) + bài CHƯA NHÁP của người khác nộp cho SIÊU THỊ A, không thấy của B', async () => {
       resetData(); byColumnCalls = []; fullLoadCallCount = 0;
-      const res = await api('GET', '/api/data', undefined, STORE_MGR_A);
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, STORE_MGR_A);
       assertEqual(res.status, 200, 'phải trả 200');
       const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
       // id1 (nvvp nộp cho A, SUBMITTED) + id2 (DRAFT của chính gdA) + id3 (SUBMITTED của chính gdA) — id4 (của B) KHÔNG được lộ.
@@ -131,14 +132,14 @@ async function main() {
 
     await run.run('GD Siêu Thị B: chỉ thấy bài liên quan Siêu Thị B, không lộ chéo sang A', async () => {
       resetData();
-      const res = await api('GET', '/api/data', undefined, STORE_MGR_B);
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, STORE_MGR_B);
       const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '4', 'B chỉ thấy đúng bài của Siêu Thị B');
     });
 
     await run.run('Nhân viên văn phòng (posType OFFICE, không quyền quản lý): CHỈ thấy bài do CHÍNH MÌNH nộp, không tự động thấy theo dept/siêu thị nào', async () => {
       resetData(); byColumnCalls = [];
-      const res = await api('GET', '/api/data', undefined, OFFICE_USER);
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, OFFICE_USER);
       const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1', 'nvvp chỉ thấy đúng bài do mình nộp (id1), không có nhánh StoreCode vì không phải posType STORE');
       assert(!byColumnCalls.some(c => c.startsWith('StoreCode=')), 'người không phải posType STORE KHÔNG được có lượt tải theo StoreCode');
@@ -146,7 +147,7 @@ async function main() {
 
     await run.run('checklistReportView: nhận ĐỦ toàn bộ bài nộp (mọi siêu thị, kể cả DRAFT)', async () => {
       resetData(); fullLoadCallCount = 0;
-      const res = await api('GET', '/api/data', undefined, AUDITOR);
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, AUDITOR);
       const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'checklistReportView phải thấy đủ cả 4 bài, mọi siêu thị, kể cả DRAFT');
       assert(fullLoadCallCount >= 1, 'checklistReportView phải tải theo nhánh company-wide như cũ');
@@ -154,7 +155,7 @@ async function main() {
 
     await run.run('admin: nhận ĐỦ toàn bộ bài nộp', async () => {
       resetData();
-      const res = await api('GET', '/api/data', undefined, ADMIN);
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, ADMIN);
       const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 bài');
     });
@@ -184,7 +185,7 @@ async function main() {
       });
       const port2 = server2.address().port;
       CURRENT_USERNAME = STORE_MGR_A.username;
-      const res = await fetch(`http://127.0.0.1:${port2}/api/data`);
+      const res = await fetch(`http://127.0.0.1:${port2}/api/data/lazy/checklist`);
       const body = await res.json();
       server2.close();
       const ids = (body.checklistSubmissions || []).map(r => r.id).sort();

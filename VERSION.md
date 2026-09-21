@@ -1,8 +1,86 @@
 # Phiên bản hiện tại
 
-**23.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.74 (2026-09-21): Lớp 3a — bỏ `notifications` thừa + tải lười 33 collection theo tab (tiếp Lớp 1/Lớp 2 tối ưu tốc độ sau đăng nhập, task #133)
+
+Tiếp nối Lớp 1 (client cache-first render) và Lớp 2 (SQL-filter thu hẹp truy
+vấn), cả 2 đã xong ở v23.71 — Lớp 3a tách nốt phần **payload** của
+`GET /api/data`: bỏ hẳn 1 field thừa 100% + dời 33 collection "an toàn"
+(không đụng Dashboard/Approval Hub) sang tải LƯỜI đúng lúc mở tab, thay vì
+LUÔN tải hết ngay sau đăng nhập dù phiên đó không hề mở tới.
+
+### Việc 1 — bỏ hẳn `notifications` khỏi `GET /api/data`
+
+Rà soát lại phát hiện field này **hoàn toàn thừa**: client không hề đọc
+`DB.notifications` ở bất kỳ đâu (chuông thông báo header luôn dùng route
+riêng `GET /api/notifications`, đã SQL-filter từ Lớp 2) — chỉ tốn đúng 1
+lượt truy vấn SQL mỗi lần gọi `GET /api/data` mà không phục vụ gì. Bỏ hẳn
+nhánh fetch/gán/lọc riêng cho `notifications` ở `routes/data.js`.
+
+### Việc 2 — tải lười 33 collection theo tab (`GET /api/data/lazy/:groupKey`)
+
+- **Nghiên cứu trước khi làm** (2 agent Explore độc lập): xác định chính xác
+  tập collection nào KHÔNG bị `buildDashboardCards()`/`getMyPendingApprovals()`/
+  `updateApprovalHubBadge()` (3 hàm chạy VÔ ĐIỀU KIỆN ngay sau đăng nhập) đọc
+  tới, rồi rà tiếp cross-module để loại bỏ những collection có nhánh đọc
+  ẩn khác (VD `operationWorkItems`/`hrProcesses` được đọc ngay lúc
+  `finishLogin()` để quyết định hiện/ẩn nút điều hướng; `budgetEntries`/
+  `operationStoreOpenings`/`operationRepairs` dùng ở tab "Đã xử lý" của
+  Approval Hub + màn khoá tài khoản admin) — **loại các collection này khỏi
+  phạm vi, GIỮ NGUYÊN trong `GET /api/data` chính** để không rủi ro phá vỡ
+  hành vi hiện có, dù về lý thuyết cũng có thể tải lười được.
+- **9 nhóm, 33 collection** chuyển sang tải lười (`LAZY_DATA_GROUPS` ở
+  `routes/data.js`), kích hoạt đúng lúc tab tương ứng mở lần đầu trong phiên
+  (`TAB_DATA_GROUPS` ở `core.js`):
+  - `internalHub` (tab Truyền Thông Nội Bộ): `trainingDocuments/Classes/
+    Registrations/Tests/TestSubmissions/Courses/Plans`, `careerPaths`,
+    `careerPathConfirmations`, `recruitmentJobs/Referrals`,
+    `onboardingPaths/Progress`.
+  - `hrFeedback` (dùng chung 2 tab Truyền Thông Nội Bộ + Nhân Sự): `hrFeedback`.
+  - `uniform` (Đồng Phục): `uniformPeriods/Issuances/StockAdjustments/Transfers`.
+  - `budget` (Ngân Sách): `budgetTemplates/Periods/Lines`.
+  - `itSupport` (Hỗ Trợ IT): `itServiceRenewals`, `itSupportTickets`.
+  - `laborContract` (HĐLĐ): `laborContracts`.
+  - `attendance` (Công & Phép): `attendanceRecords/leaveBalances/leaveRequests/
+    shiftRoster/shiftSwapRequests`.
+  - `payroll` (Lương): `payrollPeriods`, `payslips`.
+  - `checklist` (Checklist Đánh Giá Siêu Thị): `checklistTemplates`,
+    `checklistSubmissions`.
+- Route mới `GET /api/data/lazy/:groupKey` (`routes/data.js`) tái dùng
+  NGUYÊN VẸN các hàm `filter*ForUser()`/scoped-loader đã có (không đổi hành
+  vi lọc quyền xem nào, chỉ đổi thời điểm tải) + áp lại đúng vòng lặp
+  zero-out `MODULE_ACCESS_GATED_COLLECTIONS` (Khối 0) như `GET /api/data`
+  chính.
+- Client: `TAB_DATA_GROUPS`/`loadDataGroup()`/`loadTabData()` (`core.js`)
+  mirror đúng hạ tầng `TAB_MODULE_GROUPS`/`loadModuleGroup()` đã có từ đợt
+  tách module lazy-load (nạp 1 lần/nhóm, cache theo Promise, idempotent) —
+  gắn vào `switchTab()` cùng chokepoint với `loadTabModuleGroups()`/
+  `loadTabSectionHtml()`. `initDatabase()` KHÔNG cần sửa gì (đã có fallback
+  `|| []` sẵn cho từng field) — 33 `DB.<collection>` chỉ đơn giản khởi tạo
+  RỖNG ngay sau đăng nhập, có dữ liệu thật khi tab mở.
+- Tác dụng phụ tình cờ: phát hiện `DB.payrollPeriods` trước giờ CHƯA TỪNG
+  được `initDatabase()` gán từ response server (dù server luôn trả về và
+  `module-luong.js` đọc `DB.payrollPeriods` bình thường) — lỗi tồn tại từ
+  trước, không liên quan Lớp 3a, nay được sửa tự nhiên vì `loadDataGroup()`
+  gán thẳng field này lần đầu khi mở tab Lương.
+- `tests/_harness.js` (hạ tầng dùng chung nhiều bài test Playwright): thêm
+  bước nạp trước TOÀN BỘ `TAB_DATA_GROUPS` (mirror 2 bước nạp trước
+  module-group/section-HTML đã có), giữ đúng bất biến "gọi `switchTab(x)`
+  rồi đọc DOM ngay sau đó không cần `await`" mà nhiều bài test cũ dựa vào.
+- Test mới `test-lazy-data-groups.js` (9 kịch bản, điều hướng click DOM
+  thật): đúng 1 lượt gọi lazy/group khi vào tab lần đầu, không gọi lại lần
+  2 (idempotent), nhóm dùng chung 2 tab không gọi lại chéo, tab không có
+  `TAB_DATA_GROUPS` không phát sinh lượt gọi nào. `test-notifications-data-route-scope.js`
+  viết lại theo hành vi mới (xác nhận response KHÔNG còn field
+  `notifications`). `test-attendance-records-scope.js`/
+  `test-checklist-submissions-scope.js`/2 kịch bản ở `test-audit-fixes-batch1.js`/
+  `test-audit-round4-internal-data-gate.js` cập nhật trỏ đúng route mới.
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới —
+chỉ cần copy code + `pm2 restart`.**
 
 ## v23.73 (2026-09-21): Nhãn Phê Duyệt cho Nhóm Phê Duyệt Trình/HĐ + gọn sidebar Quy Trình Nâng Cao + vá thiếu tài liệu Hướng Dẫn
 

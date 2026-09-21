@@ -1,10 +1,10 @@
 // server/tests/test-attendance-records-scope.js
 //
-// Regression test cho GET /api/data (routes/data.js) sau Bước 8m: attendanceRecords tách riêng khỏi
-// vòng lặp tải chung qua loadAttendanceRecordsScoped(). canViewEmployeeAttendanceRecord() (lib/
-// recordViewScope.js) 3 nhánh — (1) admin/hrAttendanceManage xem HẾT, (2) chính chủ (employeeCode ->
-// username qua employeeProfiles), (3) quản lý TRỰC TIẾP/GIÁN TIẾP của chủ bản ghi (isManagerOf(), đi
-// ngược cây Cơ Cấu Tổ Chức không giới hạn số cấp).
+// Regression test cho GET /api/data/lazy/attendance (routes/data.js) — attendanceRecords chuyển từ GET
+// /api/data sang nhóm tải lười này ở Lớp 3a (task #188), vẫn qua đúng loadAttendanceRecordsScoped() rồi
+// filterAttendanceRecordsForUser() (canViewEmployeeAttendanceRecord() ở lib/recordViewScope.js, 3 nhánh:
+// (1) admin/hrAttendanceManage xem HẾT, (2) chính chủ (employeeCode -> username qua employeeProfiles),
+// (3) quản lý TRỰC TIẾP/GIÁN TIẾP của chủ bản ghi (isManagerOf(), đi ngược cây không giới hạn số cấp).
 //
 // AttendanceRecords KHÔNG có cột Dept/Username/ManagerUsername nào — loadAttendanceRecordsScoped() tự
 // tính tập employeeCode cần tải (self + TOÀN BỘ cấp dưới, qua computeSubordinateUsernames() ở
@@ -138,7 +138,7 @@ async function main() {
   try {
     await run.run('Nhân viên lá (nv1, không quản lý ai): chỉ thấy bản ghi CHÍNH MÌNH', async () => {
       resetData(); resetRecords(); fullLoadCallCount = 0; byColumnCalls = [];
-      const res = await api('GET', '/api/data', undefined, NV1);
+      const res = await api('GET', '/api/data/lazy/attendance', undefined, NV1);
       assertEqual(res.status, 200, 'phải trả 200');
       const ids = (res.body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);
       assertEqual(ids.join(','), '3', 'nv1 chỉ thấy đúng bản ghi của chính mình (NV-01)');
@@ -147,21 +147,21 @@ async function main() {
 
     await run.run('Trưởng phòng (tp, quản lý TRỰC TIẾP nv1+nv2): thấy CHÍNH MÌNH + 2 cấp dưới, KHÔNG thấy nv3 (không liên quan) hay gd (cấp trên)', async () => {
       resetData(); resetRecords();
-      const res = await api('GET', '/api/data', undefined, TP);
+      const res = await api('GET', '/api/data/lazy/attendance', undefined, TP);
       const ids = (res.body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);
       assertEqual(ids.join(','), '2,3,4', 'tp phải thấy id2 (chính mình) + id3 (nv1) + id4 (nv2) — KHÔNG thấy id1 (gd, cấp trên) hay id5 (nv3, không liên quan)');
     });
 
     await run.run('Giám đốc (gd, quản lý GIÁN TIẾP nv1+nv2 qua tp): thấy CHÍNH MÌNH + tp + nv1 + nv2 (đệ quy 2 cấp), KHÔNG thấy nv3', async () => {
       resetData(); resetRecords();
-      const res = await api('GET', '/api/data', undefined, GD);
+      const res = await api('GET', '/api/data/lazy/attendance', undefined, GD);
       const ids = (res.body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);
       assertEqual(ids.join(','), '1,2,3,4', 'gd phải thấy id1 (chính mình) + id2 (tp) + id3 (nv1) + id4 (nv2) qua đệ quy 2 cấp — KHÔNG thấy id5 (nv3)');
     });
 
     await run.run('hrAttendanceManage: nhận ĐỦ toàn công ty (tải company-wide)', async () => {
       resetData(); resetRecords(); fullLoadCallCount = 0;
-      const res = await api('GET', '/api/data', undefined, HR_MANAGE);
+      const res = await api('GET', '/api/data/lazy/attendance', undefined, HR_MANAGE);
       const ids = (res.body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);
       assertEqual(ids.join(','), '1,2,3,4,5', 'hrAttendanceManage phải thấy đủ cả 5 bản ghi');
       assert(fullLoadCallCount >= 1, 'hrAttendanceManage phải tải theo nhánh company-wide');
@@ -169,7 +169,7 @@ async function main() {
 
     await run.run('admin: nhận ĐỦ toàn công ty', async () => {
       resetData(); resetRecords();
-      const res = await api('GET', '/api/data', undefined, ADMIN);
+      const res = await api('GET', '/api/data/lazy/attendance', undefined, ADMIN);
       const ids = (res.body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);
       assertEqual(ids.join(','), '1,2,3,4,5', 'admin phải thấy đủ cả 5 bản ghi');
     });
@@ -199,7 +199,7 @@ async function main() {
       });
       const port2 = server2.address().port;
       CURRENT_USERNAME = NV1.username;
-      const res = await fetch(`http://127.0.0.1:${port2}/api/data`);
+      const res = await fetch(`http://127.0.0.1:${port2}/api/data/lazy/attendance`);
       const body = await res.json();
       server2.close();
       const ids = (body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);

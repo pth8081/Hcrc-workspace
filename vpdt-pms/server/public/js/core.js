@@ -127,6 +127,61 @@ function loadTabModuleGroups(tabName) {
   return Promise.all(keys.map(loadModuleGroup)).then(() => {});
 }
 
+// TAB_DATA_GROUPS (Lớp 3a, task #188/189 — tiếp theo Lớp 1/Lớp 2 ở task #133): mirror ĐÚNG cơ chế
+// TAB_MODULE_GROUPS ở trên nhưng cho DỮ LIỆU thay vì file .js — tabName -> mảng groupKey (khớp
+// LAZY_DATA_GROUPS ở routes/data.js) cần tải qua GET /api/data/lazy/:groupKey khi vào tab đó LẦN ĐẦU
+// trong phiên. GET /api/data (initDatabase()) không còn trả các collection thuộc nhóm này nữa — mọi
+// DB.<collection> tương ứng khởi tạo RỖNG qua fallback `|| []` sẵn có ở initDatabase(), chỉ có dữ liệu
+// thật sau khi loadTabData() chạy xong. Tab không có mặt ở đây (VD dashboard/doc/task/contract...) nghĩa
+// là mọi collection nó cần vẫn nằm trong GET /api/data như trước, không đổi gì.
+const TAB_DATA_GROUPS = {
+  internal: ['internalHub', 'hrFeedback'],
+  hr: ['hrFeedback'],
+  uniform: ['uniform'],
+  budget: ['budget'],
+  itSupport: ['itSupport'],
+  hrContract: ['laborContract'],
+  hrAttendance: ['attendance'],
+  hrPayroll: ['payroll'],
+  checklist: ['checklist']
+};
+
+const _loadedDataGroups = {}; // groupKey -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
+const _settledDataGroups = new Set(); // groupKey da tai XONG THUC SU (Promise da resolve) - cung khuon _settledModuleGroups
+
+// Nap 1 nhom du lieu lazy (LAZY_DATA_GROUPS ben server) qua GET /api/data/lazy/:groupKey, gan thang tung
+// field vao DB.* (ghi ĐÈ, khong merge - server da tra dung snapshot moi nhat cho dung phan quyen xem cua
+// nguoi dang dang nhap). Loi mang/404 xoa cache de lan sau co the thu lai (dong bo _loadModuleScriptTag()).
+function loadDataGroup(groupKey) {
+  if (_loadedDataGroups[groupKey]) return _loadedDataGroups[groupKey];
+  const p = fetch('/api/data/lazy/' + encodeURIComponent(groupKey))
+    .then(res => {
+      if (res.status === 401) { handleSessionExpired(); throw new Error('401'); }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(data => {
+      Object.keys(data).forEach(key => { DB[key] = data[key] || []; });
+      _settledDataGroups.add(groupKey);
+    });
+  _loadedDataGroups[groupKey] = p;
+  p.catch(() => { delete _loadedDataGroups[groupKey]; });
+  return p;
+}
+
+// true neu TAT CA nhom du lieu can cho tabName da tai XONG THUC SU - cung khuon isTabModuleGroupsSettled().
+function isTabDataGroupsSettled(tabName) {
+  const keys = TAB_DATA_GROUPS[tabName];
+  return !keys || keys.every(k => _settledDataGroups.has(k));
+}
+
+// Nap tat ca nhom du lieu can cho 1 tabName (TAB_DATA_GROUPS[tabName], neu co) - dung o switchTab().
+function loadTabData(tabName) {
+  const keys = TAB_DATA_GROUPS[tabName];
+  if (!keys || !keys.length) return Promise.resolve();
+  return Promise.all(keys.map(loadDataGroup)).then(() => {});
+}
+
 // Ha tang: nap lười KHUNG HTML theo tab (v23.10) — mirror đúng cơ chế nap cum module-*.js ở TREN (cùng
 // lý do, cùng bảo đảm: idempotent, cache theo Promise, phân biệt "đã bắt đầu nạp" vs "đã nạp XONG thực
 // sự" để switchTab() biết khi nào được đi đường đồng bộ). Khác biệt: đây là NỘI DUNG HTML (form/bảng của
@@ -6979,12 +7034,17 @@ async function switchTab(tabName) {
   // TAB_SECTION_FRAGMENT) còn có KHUNG HTML tách riêng chưa nạp (khác file module-*.js, đây là chính nội
   // dung <div id="xxxSection">), cũng phải nạp xong TRƯỚC _dispatchTabRender() vì hàm render/setXSubTab
   // bên dưới truy vấn DOM bên trong section đó ngay — nếu section HTML rỗng (chưa fetch) render sẽ lỗi.
-  if (isTabModuleGroupsSettled(tabName) && isSectionHtmlSettled(tabName)) {
+  //
+  // isTabDataGroupsSettled()/loadTabData() (Lớp 3a, task #189): CÙNG CHOKEPOINT — 1 số tab (xem
+  // TAB_DATA_GROUPS đầu file) còn có DỮ LIỆU (không phải file .js hay khung HTML) tải lười riêng qua GET
+  // /api/data/lazy/:groupKey, cũng phải nạp xong TRƯỚC _dispatchTabRender() vì hàm render bên dưới đọc
+  // DB.<collection> tương ứng ngay (rỗng nếu chưa tải xong).
+  if (isTabModuleGroupsSettled(tabName) && isSectionHtmlSettled(tabName) && isTabDataGroupsSettled(tabName)) {
     _dispatchTabRender(tabName);
     return;
   }
   try {
-    await Promise.all([loadTabModuleGroups(tabName), loadTabSectionHtml(tabName)]);
+    await Promise.all([loadTabModuleGroups(tabName), loadTabSectionHtml(tabName), loadTabData(tabName)]);
   } catch (err) {
     console.error('switchTab: không tải được mô-đun cho tab', tabName, err);
     alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');

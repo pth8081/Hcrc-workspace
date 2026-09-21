@@ -39,7 +39,6 @@ const {
   filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
 } = require('../lib/recordViewScope');
-const { filterNotificationsForUser } = require('../lib/notifications');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { cascadeMeetingRoomRename, diffMeetingRoomRenames } = require('../lib/catalogRename');
 
@@ -1296,27 +1295,20 @@ router.get('/', async (req, res) => {
     // chiết khấu/số tiền thật với NCC, đúng tinh thần "dữ liệu nhạy cảm" đã áp dụng cho payslips/
     // employeeProfiles). Phục vụ riêng qua routes/purchasing.js, gác đúng canManageVendors/
     // canManageTerms/canViewReport (lib/vendorRebate.js) thay vì để lọt company-wide qua đường này.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations' && c !== 'notifications');
+    // LAZY_DATA_GROUP_COLLECTION_KEYS (Lớp 3a, task #188, định nghĩa cùng LAZY_DATA_GROUPS phía dưới
+    // trong file — tham chiếu được ở đây vì hàm này chỉ THỰC THI lúc có request, lúc đó cả module đã nạp
+    // xong): 33 collection giờ tải LƯỜI qua GET /api/data/lazy/:groupKey (xem TAB_DATA_GROUPS ở
+    // public/js/core.js), không còn đi qua vòng tải chung ở đây nữa.
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => !LAZY_DATA_GROUP_COLLECTION_KEYS.has(c) && c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'docs' && c !== 'submissions' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations' && c !== 'notifications');
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, notificationsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, budgetLinesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, docsResult, submissionsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
-      // LỚP 2 (task #133 — tối ưu tốc độ sau đăng nhập, đợt rà soát chuyên sâu vòng 2): notifications
-      // trước đây nằm trong migratedList chung -> tải TOÀN CÔNG TY (mọi thông báo của MỌI người dùng)
-      // rồi mới lọc còn đúng của mình ở filterNotificationsForUser() bên dưới — nặng nhất trong các
-      // collection chung vì tăng theo MỌI sự kiện của MỌI người (không giới hạn theo dept như các
-      // collection khác). canViewNotification() (lib/notifications.js) chỉ có ĐÚNG 1 điều kiện phẳng
-      // "item.username === user.username" — KHÔNG có nhánh admin/quản lý xem hết nào (khác hẳn
-      // trainingDocumentProgress/checklistSubmissions...) — nên MỌI người dùng, kể cả admin, đều tải
-      // qua where.Username ở SQL (bảng dbo.Notifications đã có sẵn cột Username + index, xem
-      // sql/schema.sql), không cần nhánh "tải company-wide" nào cả.
-      getForCollectionByUsernameCached('notifications', req.freshUser?.username),
       loadPaymentRequestsScoped(req.freshUser, data),
       canManageTrainingFlat
         ? getAllForCollectionCached('trainingDocumentProgress')
         : getForCollectionByUsernameCached('trainingDocumentProgress', req.freshUser?.username),
-      loadChecklistSubmissionsScoped(req.freshUser),
       canSeeAllOperationOrders
         ? getAllForCollectionCached('operationOrders')
         : getForCollectionByDeptCached('operationOrders', req.freshUser?.dept),
@@ -1325,10 +1317,8 @@ router.get('/', async (req, res) => {
       loadItPriceApprovalsScoped(req.freshUser, data),
       loadVppRegistrationsScoped(req.freshUser, data),
       loadBudgetEntriesScoped(req.freshUser, data),
-      loadBudgetLinesScoped(req.freshUser),
       loadDocsScoped(req.freshUser, data),
       loadSubmissionsScoped(req.freshUser, data),
-      loadAttendanceRecordsScoped(req.freshUser, data),
       ...migratedList.map(collection => getAllForCollectionCached(collection))
     ]);
     const __t2 = Date.now();
@@ -1337,20 +1327,18 @@ router.get('/', async (req, res) => {
     // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
     // dbo.AppData, không có _versions.operationWorkItems tương ứng).
     data.operationWorkItems = workItemsResult;
-    data.notifications = notificationsResult;
     data.paymentRequests = paymentRequestsResult;
     data.trainingDocumentProgress = trainingDocumentProgressResult;
-    data.checklistSubmissions = checklistSubmissionsResult;
     data.operationOrders = operationOrdersResult;
     data.carRegs = carRegsResult;
     data.officeReqs = officeReqsResult;
     data.itPriceApprovals = itPriceApprovalsResult;
     data.vppRegistrations = vppRegistrationsResult;
     data.budgetEntries = budgetEntriesResult;
-    data.budgetLines = budgetLinesResult;
     data.docs = docsResult;
     data.submissions = submissionsResult;
-    data.attendanceRecords = attendanceRecordsResult;
+    // checklistSubmissions/budgetLines/attendanceRecords: chuyển sang GET /api/data/lazy/:groupKey (Lớp
+    // 3a, task #188) — KHÔNG còn tải ở đây nữa, xem LAZY_DATA_GROUPS phía dưới trong file.
     migratedList.forEach((collection, i) => { data[collection] = collectionResults[i]; });
 
     // Lọc lại quyền XEM phía server cho các collection trước đây chỉ ẩn ở giao diện (xem
@@ -1360,26 +1348,14 @@ router.get('/', async (req, res) => {
     if (data.submissions) data.submissions = filterSubmissionsForUser(data.submissions, req.freshUser, data);
     if (data.internalPosts) data.internalPosts = filterInternalPostsForUser(data.internalPosts, req.freshUser);
     if (data.reportPeriods) data.reportPeriods = sanitizeReportPeriodsForUser(data.reportPeriods, req.freshUser);
-    // trainingTests: đáp án đúng (correctOptionIds) chỉ để người quản lý đào tạo thấy — xem lý do đầy
-    // đủ ở lib/recordViewScope.js sanitizeTrainingTestsForUser().
-    if (data.trainingTests) data.trainingTests = sanitizeTrainingTestsForUser(data.trainingTests, req.freshUser);
-    // trainingTestSubmissions/trainingRegistrations: khác trainingTests ở trên (chỉ ẩn đáp án ĐÚNG của
-    // đề) — đây là chính BÀI LÀM/kết quả của TỪNG học viên, trước đây lộ nguyên cho MỌI người đã đăng
-    // nhập — xem lib/recordViewScope.js filterTrainingTestSubmissionsForUser()/
-    // filterTrainingRegistrationsForUser(). trainingClasses/trainingCourses/trainingDocuments vẫn CỐ Ý
-    // công khai toàn công ty như trước (danh mục, không phải bài làm cá nhân), không đụng tới.
-    // trainingClasses: bản thân danh mục lớp vẫn CỐ Ý công khai toàn công ty (ai cũng phải thấy để tự
-    // đăng ký), chỉ rút gọn riêng field inviteList ("ai được mời") cho người không quản lý lớp — xem
-    // sanitizeTrainingClassesForUser() ở lib/recordViewScope.js.
-    if (data.trainingClasses) data.trainingClasses = sanitizeTrainingClassesForUser(data.trainingClasses, req.freshUser);
-    if (data.trainingTestSubmissions) data.trainingTestSubmissions = filterTrainingTestSubmissionsForUser(data.trainingTestSubmissions, req.freshUser, data);
-    if (data.trainingRegistrations) data.trainingRegistrations = filterTrainingRegistrationsForUser(data.trainingRegistrations, req.freshUser, data);
+    // trainingTests/trainingTestSubmissions/trainingRegistrations/trainingClasses/careerPathConfirmations/
+    // recruitmentReferrals/hrFeedback/onboardingProgress: chuyển sang GET /api/data/lazy/internalHub
+    // (+/lazy/hrFeedback riêng) — Lớp 3a, task #188. Lọc quyền xem HỆT như trước (chỉ đổi thời điểm),
+    // xem LAZY_DATA_GROUPS phía dưới trong file.
     // trainingDocumentProgress (video/PDF phải xem hết mới tính hoàn thành): giây/trang đã xem của TỪNG
-    // người — dữ liệu theo dõi riêng tư, cùng tinh thần trainingRegistrations ở trên.
+    // người — dữ liệu theo dõi riêng tư, GIỮ NGUYÊN ở đây (đã tải SQL-scoped riêng ở trên, không thuộc
+    // Lớp 3a).
     if (data.trainingDocumentProgress) data.trainingDocumentProgress = filterTrainingDocumentProgressForUser(data.trainingDocumentProgress, req.freshUser);
-    // recruitmentReferrals: thông tin liên hệ ứng viên chỉ lộ cho người giới thiệu + bộ phận tuyển dụng
-    // — xem lý do đầy đủ ở lib/recordViewScope.js filterRecruitmentReferralsForUser().
-    if (data.recruitmentReferrals) data.recruitmentReferrals = filterRecruitmentReferralsForUser(data.recruitmentReferrals, req.freshUser);
     // reportEntries: cùng dạng lỗ hổng như docs/submissions ở trên — GET /api/data trước đây trả nguyên
     // báo cáo (kể cả bản NHÁP đang soạn dở) của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập,
     // trong khi renderPrEntryTable() (index.html) chỉ ẩn ở giao diện theo đúng logic canViewReportEntry().
@@ -1395,28 +1371,17 @@ router.get('/', async (req, res) => {
     if (data.officeReqs) data.officeReqs = filterOfficeReqsForUser(data.officeReqs, req.freshUser, data);
     if (data.meetings) data.meetings = filterMeetingsForUser(data.meetings, req.freshUser);
     if (data.meetingMinutes) data.meetingMinutes = filterMeetingMinutesForUser(data.meetingMinutes, req.freshUser);
-    // itPriceApprovals/itSupportTickets: cùng dạng lỗ hổng như 9 collection ở trên — itPriceApprovals
-    // theo đúng khuôn carRegs/officeReqs (dept-workflow), riêng itSupportTickets hẹp hơn hẳn (chỉ đội Hỗ
-    // Trợ IT + chính người tạo, có thể chứa thông tin tài khoản/sự cố cá nhân) — xem
-    // lib/recordViewScope.js canViewItPriceApproval()/canViewItSupportTicket().
+    // itPriceApprovals: cùng dạng lỗ hổng như 9 collection ở trên — theo đúng khuôn carRegs/officeReqs
+    // (dept-workflow) — xem lib/recordViewScope.js canViewItPriceApproval(). itSupportTickets chuyển
+    // sang GET /api/data/lazy/itSupport (Lớp 3a, task #188).
     if (data.itPriceApprovals) data.itPriceApprovals = filterItPriceApprovalsForUser(data.itPriceApprovals, req.freshUser, data);
-    if (data.itSupportTickets) data.itSupportTickets = filterItSupportTicketsForUser(data.itSupportTickets, req.freshUser);
-    // uniformPeriods/uniformIssuances: cùng dạng lỗ hổng như 11 collection ở trên — xem
-    // lib/recordViewScope.js canViewUniformPeriod()/canViewUniformIssuance() để biết lý do
-    // uniformPeriods còn phải lọc bớt TỪNG PHẦN TỬ allocations[] (không chỉ ẩn nguyên cả kỳ).
-    if (data.uniformPeriods) data.uniformPeriods = filterUniformPeriodsForUser(data.uniformPeriods, req.freshUser);
-    if (data.uniformIssuances) data.uniformIssuances = filterUniformIssuancesForUser(data.uniformIssuances, req.freshUser);
-    if (data.uniformStockAdjustments) data.uniformStockAdjustments = filterUniformStockAdjustmentsForUser(data.uniformStockAdjustments, req.freshUser);
-    // uniformTransfers (Phase 2 — điều chuyển kho giữa các siêu thị): cùng dạng lỗ hổng như 2 collection
-    // Đồng Phục ở trên, xem lib/recordViewScope.js canViewUniformTransfer().
-    if (data.uniformTransfers) data.uniformTransfers = filterUniformTransfersForUser(data.uniformTransfers, req.freshUser);
+    // uniformPeriods/uniformIssuances/uniformStockAdjustments/uniformTransfers: chuyển sang GET
+    // /api/data/lazy/uniform (Lớp 3a, task #188).
     // budgetEntries: cùng dạng lỗ hổng như itPriceApprovals ở trên — hồ sơ ngân sách của ĐƠN VỊ (kể cả
     // bản NHÁP đang soạn dở) chỉ nên lộ cho đúng phòng ban mình + người có budgetManage/budgetAggregate/
-    // admin — xem lib/recordViewScope.js canViewBudgetEntry().
+    // admin — xem lib/recordViewScope.js canViewBudgetEntry(). budgetLines chuyển sang GET
+    // /api/data/lazy/budget (Lớp 3a, task #188).
     if (data.budgetEntries) data.budgetEntries = filterBudgetEntriesForUser(data.budgetEntries, req.freshUser, data);
-    // budgetLines (Ngân Sách 2.0): loadBudgetLinesScoped() ở trên đã thu hẹp qua SQL, filter lại đây theo
-    // đúng quy ước phòng thủ 2 lớp xuyên suốt file này (SQL chỉ thu hẹp, không phải chốt quyền xem).
-    if (data.budgetLines) data.budgetLines = filterBudgetLinesForUser(data.budgetLines, req.freshUser);
     // Vận Hành (operationOrders/operationStoreOpenings/operationRepairs) — cùng khuôn budgetEntries ở
     // trên, xem lib/recordViewScope.js canViewOperationOrder()/canViewOperationStoreOpening()/
     // canViewOperationRepair().
@@ -1447,57 +1412,27 @@ router.get('/', async (req, res) => {
     // licenses (Hành Chính — Giấy Phép): quyền phẳng riêng module (licenseCreate/licenseApprove/
     // licenseView), KHÔNG theo phòng ban — xem lib/recordViewScope.js canViewLicense().
     if (data.licenses) data.licenses = filterLicensesForUser(data.licenses, req.freshUser);
-    // itServiceRenewals (Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT): quyền PHẲNG itServiceRenewalManage (10/2026
-    // tách khỏi itManage), cùng khuôn licenses ở trên — hàm lọc đã có sẵn ở lib/recordViewScope.js từ đầu
-    // nhưng CHƯA TỪNG được gọi ở đây (cũng chưa được export, xem chú thích ở khối module.exports của file
-    // đó), nên toàn bộ danh mục dịch vụ CNTT (nhà cung cấp, chi phí, ngày hết hạn) vẫn lộ nguyên cho mọi
-    // tài khoản đã đăng nhập.
-    if (data.itServiceRenewals) data.itServiceRenewals = filterItServiceRenewalsForUser(data.itServiceRenewals, req.freshUser);
+    // itServiceRenewals chuyển sang GET /api/data/lazy/itSupport (Lớp 3a, task #188).
     // paymentRequests (Tổng Hợp — Thanh Toán): collection TÀI CHÍNH duy nhất còn lại chưa lọc lại ở
     // server — xem lib/recordViewScope.js canViewPaymentRequest().
     if (data.paymentRequests) data.paymentRequests = filterPaymentRequestsForUser(data.paymentRequests, req.freshUser, data);
-    // hrFeedback (Nhân Sự — "HCRC Đồng Hành"): RIÊNG TƯ hơn MỌI collection ở trên — chỉ chính người
-    // hỏi + bộ phận Nhân Sự đọc được, không có nhánh phòng ban nào. Lọc ngay tại đây là chỗ DUY NHẤT
-    // đảm bảo yêu cầu riêng tư cốt lõi này (giao diện chỉ lọc thêm 1 lần nữa cho đúng inbox cá nhân)
-    // — xem lib/recordViewScope.js canViewHrFeedback().
-    if (data.hrFeedback) data.hrFeedback = filterHrFeedbackForUser(data.hrFeedback, req.freshUser);
+    // hrFeedback chuyển sang GET /api/data/lazy/hrFeedback (Lớp 3a, task #188).
     // hrProcesses (Nhân Sự > Onboarding/Offboarding v2 — checklist theo giai đoạn): nhiều bên liên quan
     // cùng theo dõi (HR, IT, Tài chính, Quản lý trực tiếp, người được giao việc riêng) — xem
-    // lib/recordViewScope.js canViewHrProcess().
+    // lib/recordViewScope.js canViewHrProcess(). GIỮ NGUYÊN ở đây (KHÔNG chuyển sang lazy — đọc chéo lúc
+    // finishLogin() để quyết định hiện/ẩn nút điều hướng Nhân Sự Onboarding/Offboarding, xem
+    // canAccessHrLifecycleModule() ở core.js).
     if (data.hrProcesses) data.hrProcesses = filterHrProcessesForUser(data.hrProcesses, req.freshUser);
-    // careerPathConfirmations (Đào Tạo — mốc "Xác nhận hoàn thành cấp bậc" Lộ Trình Thăng Tiến): trước
-    // đây KHÔNG lọc lại ở server, lộ mốc thăng tiến (username/dept/thời điểm) của MỌI nhân viên cho bất
-    // kỳ ai gọi thẳng GET /api/data — audit Đợt 5, Giai đoạn 4 (Thấp, không có điểm số/câu trả lời).
-    if (data.careerPathConfirmations) data.careerPathConfirmations = filterCareerPathConfirmationsForUser(data.careerPathConfirmations, req.freshUser);
-    // laborContracts (Nhân Sự > Hợp Đồng Lao Động, Đợt 2/4): PHÁT HIỆN khi làm Đợt 3 (Công & Phép) —
-    // collection này CHƯA TỪNG được lọc lại ở đây, lộ lương cơ bản/loại hợp đồng/ngày hết hạn của MỌI
-    // nhân viên cho bất kỳ ai gọi thẳng GET /api/data dù giao diện chỉ mở module cho hrContractManage/
-    // admin — xem lib/recordViewScope.js canViewLaborContract().
-    if (data.laborContracts) data.laborContracts = filterLaborContractsForUser(data.laborContracts, req.freshUser);
-    // Nhân Sự > Công & Phép (Đợt 3/4, Phần E — xem lib/attendance.js): attendanceRecords/leaveBalances/
-    // leaveRequests là dữ liệu cá nhân (giờ chấm công, số ngày phép, lý do nghỉ) — lọc NGAY từ đầu, không
-    // để lộ theo kiểu 15 collection ở trên từng bị bỏ sót. shiftRoster/shiftSwapRequests theo phạm vi
-    // Siêu Thị — xem lib/recordViewScope.js.
-    if (data.attendanceRecords) data.attendanceRecords = filterAttendanceRecordsForUser(data.attendanceRecords, req.freshUser, data);
-    if (data.leaveBalances) data.leaveBalances = filterLeaveBalancesForUser(data.leaveBalances, req.freshUser, data);
-    if (data.leaveRequests) data.leaveRequests = filterLeaveRequestsForUser(data.leaveRequests, req.freshUser, data);
-    if (data.shiftRoster) data.shiftRoster = filterShiftRosterForUser(data.shiftRoster, req.freshUser, data);
-    if (data.shiftSwapRequests) data.shiftSwapRequests = filterShiftSwapRequestsForUser(data.shiftSwapRequests, req.freshUser, data);
-    // Nhân Sự > Lương (xem lib/payroll.js) — payslips ẨN HOÀN TOÀN qua GET /api/data với người không có
-    // hrPayrollManage/hrPayrollApprove/admin (kể cả chính chủ — họ dùng route riêng IDOR-safe
-    // /api/payroll/my-payslips*, xem routes/payroll.js), vì đây là dữ liệu nhạy cảm nhất hệ thống.
-    if (data.payrollPeriods) data.payrollPeriods = filterPayrollPeriodsForUser(data.payrollPeriods, req.freshUser);
-    if (data.payslips) data.payslips = filterPayslipsForUser(data.payslips, req.freshUser);
-    // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — người quản lý/xem báo
-    // cáo thấy hết; người khác chỉ thấy template ACTIVE đúng loại họ đủ điều kiện + bài của chính mình/
-    // bài SUBMITTED làm tại đúng siêu thị mình (xem lib/recordViewScope.js).
-    if (data.checklistTemplates) data.checklistTemplates = filterChecklistTemplatesForUser(data.checklistTemplates, req.freshUser, data);
-    if (data.checklistSubmissions) data.checklistSubmissions = filterChecklistSubmissionsForUser(data.checklistSubmissions, req.freshUser);
-    // notifications (thông báo trong app, dùng chung — xem lib/notifications.js): PHẢI lọc ngay từ khi
-    // thêm vào MIGRATED_COLLECTIONS, nếu không GET /api/data trả THẲNG thông báo của MỌI người dùng cho
-    // bất kỳ ai gọi (route chính thức để đọc thông báo là GET /api/notifications riêng — chuông ở
-    // header KHÔNG đọc DB.notifications qua đây, chỉ khai báo ở đây phòng nơi khác lỡ đọc nhầm).
-    if (data.notifications) data.notifications = filterNotificationsForUser(data.notifications, req.freshUser);
+    // careerPathConfirmations/laborContracts/attendanceRecords/leaveBalances/leaveRequests/shiftRoster/
+    // shiftSwapRequests/payrollPeriods/payslips: chuyển sang GET /api/data/lazy/internalHub|laborContract|
+    // attendance|payroll tương ứng (Lớp 3a, task #188). Lọc quyền xem HỆT như trước.
+    // checklistTemplates/checklistSubmissions (Checklist Đánh Giá Siêu Thị): chuyển sang GET
+    // /api/data/lazy/checklist (Lớp 3a, task #188). Lọc quyền xem HỆT như trước.
+    // notifications: KHÔNG còn trả qua GET /api/data (Lớp 3a, task #187) — client không hề đọc
+    // DB.notifications (chuông header luôn dùng GET /api/notifications riêng, xem routes/notifications.js),
+    // field này hoàn toàn thừa từ khi migrate sang MIGRATED_COLLECTIONS, chỉ tốn 1 round-trip SQL mỗi lần
+    // gọi. Vẫn nằm trong MIGRATED_COLLECTIONS (lib/recordStore.js) và vẫn bị loại khỏi migratedList ở trên
+    // (không đi qua vòng lặp chung) — chỉ là không còn nhánh fetch/gán/lọc riêng nào ở đây nữa.
     // employeeProfiles: PHÁT HIỆN khi làm Công & Phép (Đợt 3/4) — collection này CHƯA TỪNG được lọc/ẩn ở
     // đây, lộ NGUYÊN VẸN hồ sơ nhân sự đầy đủ (có thể gồm CCCD/người phụ thuộc/học vấn, xem
     // lib/employeeProfile.js) của MỌI nhân viên cho bất kỳ ai gọi thẳng GET /api/data — dù màn "Hồ Sơ
@@ -1553,6 +1488,155 @@ router.get('/', async (req, res) => {
     res.json(data);
   } catch (err) {
     sendServerError(res, 500, err, 'GET /api/data', 'Không thể tải dữ liệu từ SQL Server');
+  }
+});
+
+// LAZY_DATA_GROUPS (Lớp 3a, task #188 — tiếp theo Lớp 1/Lớp 2 ở task #133): các collection đã xác
+// nhận AN TOÀN để tải LƯỜI theo tab (không đọc bởi buildDashboardCards()/getMyPendingApprovals()/
+// updateApprovalHubBadge() — 3 hàm chạy VÔ ĐIỀU KIỆN ngay sau đăng nhập, xem core-dashboard.js/
+// core-approvalhub.js — cũng không bị đọc ở bất kỳ chỗ nào khác chạy vô điều kiện lúc đăng nhập hay
+// chéo module ngoài đúng tab của nó, rà soát riêng bằng Explore agent trước khi đưa vào đây).
+//
+// CỐ Ý KHÔNG đưa vào đây dù cùng dạng MIGRATED_COLLECTIONS (giữ nguyên trong GET /api/data chính):
+// operationOrders/operationStoreOpenings/operationRepairs/operationExecutionPeriods/operationWorkItems
+// (canAccessOperationModule()/canAccessOperationSubTab() đọc operationWorkItems NGAY trong finishLogin()
+// để quyết định hiện/ẩn nút điều hướng Vận Hành — TRƯỚC KHI mở bất kỳ tab nào; getMyProcessedApprovals()
+// ở core-approvalhub.js cũng đọc operationStoreOpenings/operationRepairs), hrProcesses
+// (canAccessHrLifecycleModule() cùng lý do đọc lúc finishLogin(); module-hrprofile.js đọc chéo lúc mở
+// Hồ Sơ Nhân Sự, không phải tab Nhân Sự Onboarding riêng), budgetEntries (getMyProcessedApprovals() +
+// findPendingApprovalsForUsername() dùng ở màn khoá tài khoản admin), meetingMinutes + reportPeriods
+// (có nhánh đọc chéo module chưa chắc đã nạp trước, giữ nguyên cho an toàn ở đợt đầu này).
+//
+// Mỗi entry: `loader` (mặc định getAllForCollectionCached(key), có thể thay bằng scoped loader sẵn có
+// để giữ nguyên lợi ích SQL-scope của Lớp 2) + `filter` (hàm lọc quyền xem hiện có ở lib/recordViewScope.js
+// — HỆT những gì GET /api/data chính đang gọi, KHÔNG đổi hành vi lọc nào, chỉ đổi THỜI ĐIỂM tải; bỏ
+// trống nếu collection đó vốn CỐ Ý công khai toàn công ty như hiện tại) + `needsAppData` (true nếu hàm
+// lọc cần appData làm tham số thứ 3 — dùng "groupAppData" = appData gốc + các collection RAW vừa tải
+// trong CÙNG nhóm, để các hàm lọc cần tra cứu chéo trong nhóm — VD checklistTemplates cần
+// appData.checklistSubmissions, shiftSwapRequests cần appData.shiftRoster — vẫn thấy đúng dữ liệu).
+const LAZY_DATA_GROUPS = {
+  internalHub: {
+    collections: [
+      { key: 'trainingDocuments' },
+      { key: 'trainingClasses', filter: sanitizeTrainingClassesForUser },
+      { key: 'trainingRegistrations', filter: filterTrainingRegistrationsForUser, needsAppData: true },
+      { key: 'trainingTests', filter: sanitizeTrainingTestsForUser },
+      { key: 'trainingTestSubmissions', filter: filterTrainingTestSubmissionsForUser, needsAppData: true },
+      { key: 'trainingCourses' },
+      { key: 'trainingPlans' },
+      { key: 'careerPaths' },
+      { key: 'careerPathConfirmations', filter: filterCareerPathConfirmationsForUser },
+      { key: 'recruitmentJobs' },
+      { key: 'recruitmentReferrals', filter: filterRecruitmentReferralsForUser },
+      { key: 'onboardingPaths' },
+      { key: 'onboardingProgress', filter: filterOnboardingProgressForUser, needsAppData: true }
+    ]
+  },
+  hrFeedback: {
+    // hrFeedback dùng CHUNG module 'internal' (gửi câu hỏi) VÀ module 'hr' (nhanSuManage xem/phản hồi) —
+    // xem canAccessHrFeedbackModuleServer() — nên tách riêng nhóm nhỏ này, gán cho CẢ 2 tab ở client
+    // (TAB_DATA_GROUPS), tránh phải tải nguyên nhóm internalHub (13 collection Đào Tạo/Tuyển Dụng) chỉ để
+    // lấy đúng hrFeedback khi mở tab Nhân Sự > Quản Lý & Phản Hồi Ý Kiến.
+    collections: [{ key: 'hrFeedback', filter: filterHrFeedbackForUser }]
+  },
+  uniform: {
+    collections: [
+      { key: 'uniformPeriods', filter: filterUniformPeriodsForUser },
+      { key: 'uniformIssuances', filter: filterUniformIssuancesForUser },
+      { key: 'uniformStockAdjustments', filter: filterUniformStockAdjustmentsForUser },
+      { key: 'uniformTransfers', filter: filterUniformTransfersForUser }
+    ]
+  },
+  budget: {
+    // budgetPeriods/budgetTemplates: CỐ Ý không lọc, giống hệt hành vi hiện tại ở GET /api/data chính
+    // (danh mục chung, không nhạy cảm theo phòng ban) — filterBudgetPeriodsForUser() có tồn tại (dùng ở
+    // routes/reports.js) nhưng CHƯA từng được áp cho GET /api/data, giữ nguyên đúng hành vi đó ở đây.
+    collections: [
+      { key: 'budgetTemplates' },
+      { key: 'budgetPeriods' },
+      { key: 'budgetLines', loader: (user) => loadBudgetLinesScoped(user), filter: filterBudgetLinesForUser }
+    ]
+  },
+  itSupport: {
+    collections: [
+      { key: 'itServiceRenewals', filter: filterItServiceRenewalsForUser },
+      { key: 'itSupportTickets', filter: filterItSupportTicketsForUser }
+    ]
+  },
+  laborContract: {
+    collections: [{ key: 'laborContracts', filter: filterLaborContractsForUser }]
+  },
+  attendance: {
+    collections: [
+      { key: 'attendanceRecords', loader: (user, appData) => loadAttendanceRecordsScoped(user, appData), filter: filterAttendanceRecordsForUser, needsAppData: true },
+      { key: 'shiftRoster', filter: filterShiftRosterForUser, needsAppData: true },
+      { key: 'shiftSwapRequests', filter: filterShiftSwapRequestsForUser, needsAppData: true },
+      { key: 'leaveBalances', filter: filterLeaveBalancesForUser, needsAppData: true },
+      { key: 'leaveRequests', filter: filterLeaveRequestsForUser, needsAppData: true }
+    ]
+  },
+  payroll: {
+    collections: [
+      { key: 'payrollPeriods', filter: filterPayrollPeriodsForUser },
+      { key: 'payslips', filter: filterPayslipsForUser }
+    ]
+  },
+  checklist: {
+    collections: [
+      { key: 'checklistTemplates', filter: filterChecklistTemplatesForUser, needsAppData: true },
+      { key: 'checklistSubmissions', loader: (user) => loadChecklistSubmissionsScoped(user), filter: filterChecklistSubmissionsForUser }
+    ]
+  }
+};
+// Tập hợp phẳng mọi collection thuộc LAZY_DATA_GROUPS — nguồn DUY NHẤT dùng để loại các collection này
+// khỏi vòng tải chung của GET /api/data (xem migratedList ở router.get('/') phía trên — tham chiếu được
+// dù LAZY_DATA_GROUPS khai ở DƯỚI trong file, vì handler đó chỉ THỰC THI lúc có request, lúc đó cả file
+// đã nạp xong), tránh phải liệt kê tay 2 nơi dễ lệch nhau khi thêm/bớt nhóm sau này.
+const LAZY_DATA_GROUP_COLLECTION_KEYS = new Set(
+  Object.values(LAZY_DATA_GROUPS).flatMap(g => g.collections.map(c => c.key))
+);
+
+// GET /api/data/lazy/:groupKey → trả về ĐÚNG các collection của 1 nhóm LAZY_DATA_GROUPS ở trên, lọc
+// quyền xem HỆT như GET /api/data chính (tái dùng nguyên hàm filter*ForUser() + vòng lặp zero-out
+// MODULE_ACCESS_GATED_COLLECTIONS bên dưới) — chỉ khác THỜI ĐIỂM gọi (do client quyết định, xem
+// loadTabData()/TAB_DATA_GROUPS ở public/js/core.js, gọi đúng 1 lần khi tab tương ứng mở lần đầu trong
+// phiên thay vì luôn tải mọi thứ ngay sau đăng nhập).
+router.get('/lazy/:groupKey', async (req, res) => {
+  const { groupKey } = req.params;
+  const group = LAZY_DATA_GROUPS[groupKey];
+  if (!group) return res.status(400).json({ error: `Nhóm dữ liệu lười không hợp lệ: ${groupKey}` });
+
+  try {
+    const { data: baseAppData } = await getAllAppDataWithVersionsCached();
+    const rawResults = await Promise.all(group.collections.map(entry =>
+      (entry.loader ? entry.loader(req.freshUser, baseAppData) : getAllForCollectionCached(entry.key))
+    ));
+    const groupAppData = { ...baseAppData };
+    group.collections.forEach((entry, i) => { groupAppData[entry.key] = rawResults[i]; });
+
+    const result = {};
+    group.collections.forEach((entry, i) => {
+      const raw = rawResults[i];
+      result[entry.key] = entry.filter
+        ? (entry.needsAppData ? entry.filter(raw, req.freshUser, groupAppData) : entry.filter(raw, req.freshUser))
+        : raw;
+    });
+
+    // Mirror ĐÚNG vòng lặp zero-out PQ-01 ở GET /api/data chính (moduleAccess tắt module 'internal'/
+    // 'hrAttendance'/'itSupport'... vẫn phải chặn được collection tương ứng dù gọi qua route lười này) —
+    // chỉ tác động collection thật sự có mặt trong `result` (guard `if (result[col])`), an toàn gọi cho
+    // MỌI nhóm mà không cần biết trước nhóm này có thuộc phạm vi gate nào không.
+    for (const [moduleKey, collections] of Object.entries(MODULE_ACCESS_GATED_COLLECTIONS)) {
+      if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
+      for (const col of collections) {
+        if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
+        if (result[col]) result[col] = [];
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    sendServerError(res, 500, err, `GET /api/data/lazy/${groupKey}`, 'Không thể tải dữ liệu từ SQL Server');
   }
 });
 

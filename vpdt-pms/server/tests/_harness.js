@@ -82,6 +82,15 @@ async function launchPage(port) {
   // as a real <script> tag so its top-level `function` declarations land in the SAME global scope as
   // the app's own inline script (needed so bare references like `_pendingConfirmAction` resolve).
   await page.addScriptTag({ path: path.join(__dirname, '_mock-backend.js') });
+  // Ha tang: nap lười DỮ LIỆU theo tab (Lớp 3a, task #189, core.js::TAB_DATA_GROUPS/loadDataGroup) —
+  // CÙNG lý do như 2 bước preload ở trên, PHẢI chạy SAU addScriptTag(_mock-backend.js) (khác 2 bước kia)
+  // vì loadDataGroup() gọi fetch('/api/data/lazy/...') — 1 lượt gọi /api/*, chỉ được mock backend ở trên
+  // xử lý (rơi vào nhánh "Anything else -> harmless no-op" nếu test không tự stub riêng), KHÔNG phải
+  // static file như module-*.js/fragments/*.html nạp ở 2 bước trước (đi fetch THẬT, không cần chờ mock).
+  await page.evaluate(() => {
+    const keys = typeof TAB_DATA_GROUPS !== 'undefined' ? [...new Set(Object.values(TAB_DATA_GROUPS).flat())] : [];
+    return Promise.all(keys.map(k => loadDataGroup(k)));
+  });
   return { browser, page, pageErrors };
 }
 

@@ -323,16 +323,18 @@ async function main() {
       assertEqual(recordViewScope.canViewItServiceRenewal(PLAIN_KD), false, 'Người không có itServiceRenewalManage KHÔNG được xem');
     });
 
-    await run.run('Fix 3b — GET /api/data: người KHÔNG có itManage không còn nhận được itServiceRenewals nào', async () => {
-      const asPlain = await api('GET', '/api/data', undefined, PLAIN_KD);
-      assertEqual(asPlain.status, 200, 'GET /api/data phải trả 200 (không còn 500)');
+    await run.run('Fix 3b — GET /api/data/lazy/itSupport: người KHÔNG có itManage không còn nhận được itServiceRenewals nào', async () => {
+      // itServiceRenewals chuyển sang GET /api/data/lazy/itSupport ở Lớp 3a (task #188) — lọc quyền xem
+      // HỆT như trước (chỉ đổi thời điểm tải), xem LAZY_DATA_GROUPS ở routes/data.js.
+      const asPlain = await api('GET', '/api/data/lazy/itSupport', undefined, PLAIN_KD);
+      assertEqual(asPlain.status, 200, 'GET /api/data/lazy/itSupport phải trả 200 (không còn 500)');
       assertEqual(asPlain.body.itServiceRenewals.length, 0,
         'Người không có itServiceRenewalManage phải nhận mảng RỖNG — trước đây nhận nguyên danh mục (nhà cung cấp/chi phí/ngày hết hạn)');
 
-      const asIt = await api('GET', '/api/data', undefined, IT1);
+      const asIt = await api('GET', '/api/data/lazy/itSupport', undefined, IT1);
       assertEqual(asIt.body.itServiceRenewals.length, 2, 'Đội Hỗ Trợ IT vẫn phải thấy đủ 2 mục (không chặn nhầm người có quyền)');
 
-      const asAdmin = await api('GET', '/api/data', undefined, ADMIN);
+      const asAdmin = await api('GET', '/api/data/lazy/itSupport', undefined, ADMIN);
       assertEqual(asAdmin.body.itServiceRenewals.length, 2, 'Admin vẫn phải thấy đủ 2 mục');
     });
 

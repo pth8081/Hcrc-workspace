@@ -393,6 +393,18 @@ function createDispatcher(state) {
       if (method === 'GET' && pathName === '/api/data') {
         return { status: 200, body: buildDataPayload(username) };
       }
+      // GET /api/data/lazy/:groupKey (Lớp 3a, task #188/191) — core.js loadDataGroup() gọi endpoint này
+      // khi mở tab có TAB_DATA_GROUPS (uniform/budget/checklist/hrAttendance/hrPayroll/hrContract/
+      // itSupport/internal/hr...) lần đầu trong phiên. Mock KHÔNG cần tách đúng field theo từng nhóm
+      // như route thật (đã có test riêng cho việc đó, xem test-lazy-data-groups.js) — trả NGUYÊN
+      // buildDataPayload(username) cho MỌI groupKey là đủ (đã lọc quyền xem đúng theo viewer ở trên),
+      // vì loadDataGroup() chỉ gán field theo tên key sẵn có, dư field không liên quan không gây hại.
+      // Thiếu handler này khiến MỌI switchTab() tới tab có TAB_DATA_GROUPS rơi vào nhánh lỗi 404 (bắt ở
+      // core.js) → alert + dừng render, hỏng hàng loạt bài test dùng chung harness này (test-hr-feedback.js/
+      // test-training-*.js...).
+      if (method === 'GET' && pathName.startsWith('/api/data/lazy/')) {
+        return { status: 200, body: buildDataPayload(username) };
+      }
       if (method === 'GET' && pathName === '/api/auth/me') {
         return { status: 200, body: { ok: true } };
       }
