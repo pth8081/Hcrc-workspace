@@ -618,6 +618,15 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     — khiến mọi chỗ tra cứu chéo theo mã đọc nhầm hồ sơ). Thuật toán giữ y hệt
     bản trình duyệt đang dùng nên mã thực tế khớp bản xem trước trong mọi
     trường hợp bình thường.
+  - **Quản lý tự thấy tài liệu của nhân viên mình (10/2026)** — ngoài người
+    tải lên/người duyệt/admin, bất kỳ ai đứng trên người tải lên theo **Cơ
+    Cấu Tổ Chức** (quản lý trực tiếp, hoặc cấp cao hơn — đệ quy mọi cấp,
+    KHÔNG liên quan Phân Quyền vì Phân Quyền không định nghĩa "ai quản lý
+    ai") cũng tự xem được tài liệu, không cần cấp quyền gì thêm. Áp dụng
+    cùng cơ chế cho **Hợp Đồng** (mục 4.3) và **Thanh Toán** (mục 4.3, trong
+    "Tổng Hợp") — cả 3 module dùng chung field `user.managerUsername`, field
+    này được tính lại NGAY khi admin Áp Dụng 1 phiên bản Cơ Cấu Tổ Chức mới
+    (không có độ trễ, xem mục 4.4/`orgChart`).
 - **Văn Bản Trình / Tờ Trình** — trình văn bản lên cấp trên duyệt; quy trình
   duyệt cấu hình **riêng theo từng loại tờ trình** (không chỉ theo phòng ban
   chung một khuôn) — admin tự thêm/bớt loại tờ trình VÀ danh sách "Độ Khẩn"
@@ -1306,6 +1315,16 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     ý kiến còn chờ xử lý quá 2 ngày sẽ tự động gửi email nhắc người được xin
     ý kiến (job chạy mỗi 24h) — không còn phải tự nhớ vào xem badge chờ trên
     giao diện.
+  - **📐 Mẫu Giá tách riêng theo kênh (10/2026)** — mỗi Mẫu Giá (Hệ Thống →
+    Hỗ Trợ IT → "📐 Mẫu Giá", khuôn cột đối chiếu tên cột với file bảng giá
+    nộp lên) giờ gắn cố định với ĐÚNG 1 kênh (Bán Lẻ hoặc Bán Buôn) — màn
+    quản trị Mẫu Giá và ô chọn mẫu lúc nộp đề xuất chỉ liệt kê đúng mẫu của
+    kênh đang mở, **xoá 1 mẫu ở kênh này không còn ảnh hưởng gì tới mẫu của
+    kênh kia** (trước đây dùng chung 1 danh sách — xoá nhầm mẫu bên này làm
+    mất luôn đối chiếu cột của bên kia, đúng lỗi dữ liệu người dùng phản
+    ánh). Mẫu tạo TRƯỚC đợt này (chưa gắn kênh) vẫn hiện ở cả 2 kênh như cũ,
+    không mất dữ liệu — chỉ mẫu tạo MỚI từ nay mới bắt buộc gắn đúng kênh
+    đang thao tác.
   - **🔔 Gia Hạn Dịch Vụ CNTT** — chỉ đội IT thấy được, quản lý nội bộ danh
     mục dịch vụ/hợp đồng CNTT của chính đội IT (tên miền, hosting, license
     phần mềm...), không qua bước duyệt nào, có nhắc hết hạn qua email cùng
@@ -1420,6 +1439,25 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     (409) cho tới khi yêu cầu đó được xử lý xong — trước đây vẫn lập được
     đề nghị thanh toán theo hình thức CŨ trong lúc yêu cầu đổi đang treo,
     có thể tạo đề nghị sai hình thức nếu yêu cầu đổi được duyệt ngay sau đó.
+  - **"Bị Từ Chối"/"Cần Bổ Sung" phải nhìn thấy được (10/2026)** — trước đây
+    2 trạng thái này gần như biến mất khỏi tầm nhìn (không hiện ở
+    Dashboard/Tab Phê Duyệt mặc định, chỉ tra được bằng lọc tay đúng trạng
+    thái) — rủi ro thật: người tạo/người duyệt không biết hồ sơ đang bị kẹt.
+    Sub-tab "⏳ Phê Duyệt" nay có thêm 2 thẻ Dashboard **"❌ Bị Từ Chối"**/
+    **"✏️ Cần Bổ Sung"** (bấm lọc thẳng), bộ lọc "Loại Hợp Đồng" thêm 2 option
+    tương ứng. "Cần Bổ Sung" giờ là trạng thái **RIÊNG** (`NEEDS_SUPPLEMENT`,
+    tách khỏi "Nháp" cũ) — người tạo sửa lại rồi gửi lại như cũ, không đổi
+    thao tác. Mặc định (không bấm lọc gì) Tab Phê Duyệt **vẫn chỉ hiện
+    PENDING như trước** — 2 trạng thái mới chỉ lộ diện qua thẻ riêng, không
+    làm lệch số đếm hồ sơ hiện có. Hub ✅ Phê Duyệt: nút "Xem" trên thông báo
+    hồ sơ bị từ chối nay dẫn đúng vào thẻ "❌ Bị Từ Chối" (trước dẫn
+    sai/không lọc gì).
+  - **Quản lý tự thấy hồ sơ của nhân viên mình (10/2026)** — ngoài người
+    tạo/người duyệt, bất kỳ ai đứng trên người tạo hợp đồng theo **Cơ Cấu Tổ
+    Chức** (quản lý trực tiếp, hoặc cấp cao hơn — đệ quy mọi cấp, KHÔNG liên
+    quan Phân Quyền) cũng tự xem được hồ sơ, không cần cấp quyền gì thêm —
+    cùng cơ chế áp dụng cho **Tài Liệu** (mục 4.1) và **Thanh Toán** ngay
+    dưới đây.
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
   **"🚫 Hủy Đề Xuất" khi chưa ai duyệt (từ 9/2026)** — cùng cơ chế đã có ở
@@ -1900,6 +1938,14 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     tự thêm danh mục lớn mới, **KHÔNG** tự đổi lại danh sách người phụ trách
     (server bỏ qua thay đổi field này nếu người gửi không phải người quản lý
     hồ sơ toàn quyền).
+  - **Tải Mẫu/Nhập Excel Danh Mục Đầu Tư có cột Người Phụ Trách (10/2026)**:
+    "📥 Tải File Mẫu" ở tab Danh Mục Đầu Tư ra tệp Excel có sẵn cột "Người
+    Phụ Trách (username, cách nhau dấu phẩy)" — điền 1 hoặc nhiều username
+    (ngăn cách dấu phẩy) rồi "📤 Nhập File" để gộp thẳng vào bảng, người phụ
+    trách hiện ngay đúng ô như gán tay qua ô tìm-kiếm-gõ-chọn ở trên, không
+    cần gán lại thủ công từng dòng sau khi nhập. Username không tồn tại
+    hoặc đã nghỉ việc tự bị bỏ qua kèm cảnh báo rõ tên username bị bỏ qua —
+    KHÔNG chặn cả dòng khỏi được nhập (các cột khác vẫn nhập bình thường).
   - **"Tệp Đính Kèm" danh mục lớn**: mỗi danh mục LỚN (không áp dụng danh mục
     con — giống hệt "Người Phụ Trách" ở trên) có cột **"Tệp Đính Kèm"** riêng
     trong bảng Danh Mục Đầu Tư, cho phép tải lên **nhiều** tệp dạng **PDF/
@@ -3412,6 +3458,16 @@ quyền còn có thêm phạm vi **theo phòng ban** (tick "Tất cả" hoặc c
 phòng cụ thể). Khối "0. Quyền Truy Cập Module" quyết định người dùng có **vào
 được module** hay không trước tiên — không có quyền vào module thì các quyền
 chi tiết bên trong module đó (khối 2-22 tương ứng) vô nghĩa.
+
+**Chọn siêu thị đổi sang ô tìm-kiếm-gõ-chọn (10/2026)** — riêng 2 khối "22.
+Vận Hành" (mục "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị") và "23. Checklist Đánh
+Giá Siêu Thị" (mục "Phạm Vi Kiểm Soát"), phạm vi trước đây là lưới checkbox
+2-3 cột khiến tên siêu thị dài bị cắt ngắn/không nhìn thấy hết (phản hồi
+người dùng thật kèm ảnh chụp màn hình) — nay đổi sang ô gõ để tìm rồi bấm
+chọn (cùng widget dùng cho "🧩 Nhóm Quyền Đặc Biệt"), mỗi siêu thị đã chọn
+hiện thành 1 thẻ (chip) có nút ✕ để bỏ chọn nhanh, thay vì tick/bỏ tick từng
+ô nhỏ trong lưới. Vẫn giữ nguyên checkbox "ALL" riêng ngay cạnh — tick ALL
+thì ô chọn siêu thị tự mờ đi và khoá tương tác (không cần chọn từng cái).
 
 **Nhóm quyền (`permGroups`)** — thay vì tick tay từng quyền cho từng người,
 admin có thể tạo 1 "nhóm phân quyền" mẫu (VD "Nhân viên phòng Kế Toán") gồm 1

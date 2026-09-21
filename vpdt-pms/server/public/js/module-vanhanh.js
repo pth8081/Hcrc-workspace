@@ -2059,6 +2059,7 @@ async function onOperationEstimateImportFileChange(event) {
         <td class="p-1">${escapeHtml(it.content)}</td>
         <td class="p-1">${escapeHtml(it.description || '')}</td>
         <td class="p-1 text-right">${Number(it.amount || 0).toLocaleString('vi-VN')}</td>
+        <td class="p-1">${escapeHtml((it.assignedTo || []).join(', '))}</td>
         <td class="p-1 text-amber-700">${escapeHtml([it.note, dupNote].filter(Boolean).join(' — '))}</td>
       </tr>`;
     }).join('');
@@ -2084,15 +2085,28 @@ function toggleOperationEstimateImportRow(idxStr) {
 function confirmOperationEstimateImport() {
   const selected = operationEstimateImportPreviewItems.filter(it => it.include);
   if (!selected.length) return alert('Chưa có hạng mục nào được chọn để gộp.');
+  const activeUsers = (typeof DB !== 'undefined' ? (DB.users || []) : []).filter(u => u.active !== false);
+  let unknownUsernames = [];
   operationEstimateItems = operationEstimateItems.filter(it => (it.content || '').trim());
-  operationEstimateItems.push(...selected.map(it => ({
-    content: it.content, description: it.description, amount: it.amount, note: it.note,
-    id: nextEstimateTempId(), parentId: null
-  })));
+  operationEstimateItems.push(...selected.map(it => {
+    // Người Phụ Trách (mục 4 kế hoạch 10/2026) — đối chiếu lại DB.users NGAY tại đây (không tin nguyên
+    // văn username từ file) để pre-check đúng ô renderPeopleMultiSelect() (đọc assignedToUsernames, xem
+    // openOperationEstimateModal()) — username lạ/đã nghỉ việc bị BỎ QUA (không chặn cả dòng), gom lại
+    // để báo cho người dùng biết mà tự chọn tay lại.
+    const matched = (it.assignedTo || []).filter(u => activeUsers.some(usr => usr.username === u));
+    const skipped = (it.assignedTo || []).filter(u => !matched.includes(u));
+    if (skipped.length) unknownUsernames.push(...skipped);
+    return {
+      content: it.content, description: it.description, amount: it.amount, note: it.note,
+      id: nextEstimateTempId(), parentId: null,
+      assignedToUsernames: matched, assignedToNames: matched.map(u => activeUsers.find(usr => usr.username === u)?.name || u)
+    };
+  }));
   renderOperationEstimateItemsTable(true);
   document.getElementById('operationEstimateImportPreviewWrap').classList.add('hidden');
   document.getElementById('operationEstimateImportConfirmBtn').classList.add('hidden');
-  document.getElementById('operationEstimateImportStatus').innerText = `✅ Đã gộp ${selected.length} hạng mục — kiểm tra lại rồi bấm Lưu Danh Mục Đầu Tư.`;
+  document.getElementById('operationEstimateImportStatus').innerText = `✅ Đã gộp ${selected.length} hạng mục — kiểm tra lại rồi bấm Lưu Danh Mục Đầu Tư.`
+    + (unknownUsernames.length ? ` ⚠️ ${[...new Set(unknownUsernames)].length} username Người Phụ Trách không tồn tại/đã nghỉ việc (đã bỏ qua, tự chọn lại tay nếu cần): ${[...new Set(unknownUsernames)].join(', ')}.` : '');
   operationEstimateImportPreviewItems = [];
 }
 

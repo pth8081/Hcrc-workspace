@@ -31,10 +31,15 @@ function normalizeHeader(s) {
 }
 
 // ================= Danh Mục Đầu Tư (estimateItems[]) =================
+// assignedTo (mục 4 kế hoạch 10/2026): trước đây cột "Người Phụ Trách" chỉ có ở nút "📤 Xuất Excel"
+// (xuất dữ liệu hiện có, không dùng để nhập lại) — cặp Tải Mẫu/Nhập THẬT dùng để nhập hàng loạt lại
+// hoàn toàn chưa có cột này. Theo đúng khuôn assignedTo ở WORKITEM_COLUMNS bên dưới (username, cách
+// nhau dấu phẩy — ứng với multi-select renderPeopleMultiSelect() ở form nhập tay).
 const ESTIMATE_COLUMNS = [
   { key: 'content', header: 'Nội Dung', hints: ['noi dung', 'ten hang muc', 'hang muc'] },
   { key: 'description', header: 'Mô Tả', hints: ['mo ta'] },
   { key: 'amount', header: 'Chi Phí (VNĐ)', hints: ['chi phi', 'so tien', 'thanh tien'] },
+  { key: 'assignedTo', header: 'Người Phụ Trách (username, cách nhau dấu phẩy)', hints: ['nguoi phu trach', 'phu trach'] },
   { key: 'note', header: 'Lưu Ý', hints: ['luu y', 'ghi chu'] }
 ];
 
@@ -43,7 +48,7 @@ async function buildOperationEstimateTemplateWorkbook() {
   const sheet = wb.addWorksheet('Danh Mục Đầu Tư');
   sheet.columns = ESTIMATE_COLUMNS.map(c => ({ header: c.header, key: c.key, width: c.key === 'content' ? 30 : 22 }));
   styleHeaderRow(sheet.getRow(1));
-  sheet.addRow({ content: 'Kệ trưng bày (VD, xoá dòng này trước khi nộp)', description: 'Kệ inox 2 tầng', amount: 20000000, note: '' });
+  sheet.addRow({ content: 'Kệ trưng bày (VD, xoá dòng này trước khi nộp)', description: 'Kệ inox 2 tầng', amount: 20000000, assignedTo: 'username1,username2', note: '' });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   return wb;
 }
@@ -114,13 +119,16 @@ async function parseOperationEstimateImportXlsx(buffer) {
       headerSeen = true;
       colMap = detectColumnMap(cells, ESTIMATE_COLUMNS);
       if (colMap) return true; // dòng đầu là tiêu đề -> bỏ qua, không phải dữ liệu
-      colMap = { content: 0, description: 1, amount: 2, note: 3 }; // không dò được header -> theo vị trí cột của file mẫu
+      colMap = { content: 0, description: 1, amount: 2, assignedTo: 3, note: 4 }; // không dò được header -> theo vị trí cột của file mẫu
     }
     const content = String(cells[colMap.content] ?? '').trim();
     if (content) {
+      const assignedRaw = String(cells[colMap.assignedTo] ?? '').trim();
       rows.push({
         content, description: String(cells[colMap.description] ?? '').trim(),
-        amount: parseAmount(cells[colMap.amount]), note: String(cells[colMap.note] ?? '').trim()
+        amount: parseAmount(cells[colMap.amount]),
+        assignedTo: assignedRaw ? assignedRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+        note: String(cells[colMap.note] ?? '').trim()
       });
     }
     if (rows.length > MAX_ESTIMATE_IMPORT_ROWS) { overLimit = true; return false; }

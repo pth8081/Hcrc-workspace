@@ -272,7 +272,10 @@ function confirmColRoleModal() {
 function renderItPriceMasterListAdmin() {
   const tbody = document.getElementById('itPriceMasterListTableBody');
   if (!tbody) return;
-  const lists = DB.itPriceMasterLists || [];
+  // Lọc theo đúng kênh đang mở (Bán Lẻ/Bán Buôn, mục 1 kế hoạch tách Mẫu Giá) — mẫu CŨ chưa gắn
+  // priceType (tạo trước khi tách kênh) vẫn hiện ở CẢ 2 kênh (không xác định được thuộc kênh nào,
+  // an toàn hơn là ẩn hẳn khỏi 1 bên khiến mẫu đang dùng dở "biến mất").
+  const lists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === activeItPriceSubTab);
   if (!lists.length) {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
@@ -363,6 +366,9 @@ async function addItPriceMasterList() {
   const entry = {
     id: Date.now(), name: name.trim(),
     fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey,
+    // Gắn đúng kênh đang mở lúc tạo (mục 1 kế hoạch) — trước đây KHÔNG có field này nên 1 mẫu bị dùng
+    // chung/xoá nhầm giữa Bán Lẻ và Bán Buôn.
+    priceType: activeItPriceSubTab,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
     uploadedAt: new Date().toLocaleString('vi-VN')
   };
@@ -429,7 +435,9 @@ function renderItPriceMasterListSelect() {
   const wrap = document.getElementById('itPriceMasterListSelectWrap');
   const select = document.getElementById('itPriceMasterListSelect');
   if (!wrap || !select) return;
-  const lists = DB.itPriceMasterLists || [];
+  // Mirror đúng bộ lọc priceType ở renderItPriceMasterListAdmin() — người đề xuất chỉ chọn được mẫu
+  // đúng kênh mình đang nộp (hoặc mẫu cũ chưa gắn kênh).
+  const lists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === activeItPriceSubTab);
   wrap.classList.toggle('hidden', lists.length === 0);
   if (!lists.length) return;
   const prevValue = select.value;
@@ -729,6 +737,10 @@ function setItPriceSubTab(subTab) {
   document.getElementById('itPriceNoCreatePermNote').classList.toggle('hidden', canCreateSub);
   resetListPage('itPrice');
   renderItPriceApprovals();
+  // Mẫu Giá giờ lọc theo priceType (mục 1 kế hoạch) -> phải vẽ lại panel quản trị + dropdown chọn mẫu
+  // mỗi lần đổi kênh, không chỉ 1 lần lúc vào tab PRICE như trước.
+  if (currentUser.perms?.admin) renderItPriceMasterListAdmin();
+  renderItPriceMasterListSelect();
 }
 
 // "File đã phê duyệt" — MIRROR ĐÚNG resolveApprovedFileId()/resolveApprovedFileUrl() ở

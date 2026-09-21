@@ -33,7 +33,13 @@ function computePermTreeNodeCount(bodyEl) {
     total++;
     if (cb.id.endsWith('All')) {
       const deptContainer = document.getElementById(cb.id.slice(0, -3) + 'DeptContainer');
-      const anyDeptChecked = deptContainer ? deptContainer.querySelector('input[type="checkbox"]:checked') !== null : false;
+      // deptContainer có thể là lưới checkbox THẬT (đa số) HOẶC widget renderMultiSelectDropdown() (VD
+      // pOperationOrderReceiptDeptContainer/pChecklistAuditScopeDeptContainer, chọn siêu thị — xem
+      // module-admin.js) — widget này không có checkbox nào trong DOM, trạng thái đã chọn nằm ở
+      // deptContainer._gmsSelected (Set, gán bởi renderMultiSelectDropdown() ở core.js).
+      const anyDeptChecked = deptContainer
+        ? (deptContainer.querySelector('input[type="checkbox"]:checked') !== null || (deptContainer._gmsSelected && deptContainer._gmsSelected.size > 0))
+        : false;
       if (cb.checked || anyDeptChecked) granted++;
     } else if (cb.checked) {
       granted++;
@@ -90,8 +96,23 @@ function clearPermTreeDirtyMarks() {
 
 // Event delegation (1 listener duy nhất, không cần gắn riêng cho từng checkbox kể cả các checkbox
 // phòng ban render động sau này) — cập nhật badge ngay khi admin tick/bỏ tick bất kỳ ô nào trong cây.
-document.getElementById('permFieldsContainer')?.addEventListener('change', refreshPermTreeBadges);
-document.getElementById('permFieldsContainer')?.addEventListener('change', markPermTreeDirty);
+//
+// BUG THẬT đã vá (rà soát khi thêm test cho widget siêu thị mới, 10/2026): #permFieldsContainer sống
+// TRONG fragment systemSection.html (lazy-load qua loadTabSectionHtml()), KHÔNG phải div rỗng đặt sẵn
+// trong index.html — nhưng module-admin-permtree.js (cụm "admin-permtree") và fragment HTML lại được
+// tải SONG SONG qua Promise.all() ở switchTab() (xem loadTabModuleGroups()/loadTabSectionHtml() ở
+// core.js), không đảm bảo thứ tự. Nếu file JS này chạy TRƯỚC khi fragment kịp bơm vào DOM,
+// document.getElementById('permFieldsContainer') trả về null, 2 dòng addEventListener() cũ ÂM THẦM
+// không gắn được gì cho suốt phiên — khiến toàn bộ tính năng badge "đã cấp X/Y" tự cập nhật + viền cam
+// "chưa lưu" im lặng KHÔNG hoạt động (không phải lỗi riêng của widget siêu thị mới, xảy ra với MỌI
+// checkbox/select trong cây quyền). Sửa tận gốc: delegate thẳng trên `document` (luôn có sẵn ngay từ
+// đầu, không phụ thuộc thứ tự tải fragment) thay vì gắn vào chính phần tử #permFieldsContainer — cùng
+// tinh thần bindCspDelegation() dùng chung trong toàn hệ thống.
+document.addEventListener('change', (ev) => {
+  if (!ev.target.closest('#permFieldsContainer')) return;
+  refreshPermTreeBadges();
+  markPermTreeDirty(ev);
+});
 
 // Ô nhập mã PIN chỉ hiện khi đang chọn mức xác thực PIN — tránh admin tưởng nhầm phải nhập PIN cho
 // mọi user (mặc định NONE không cần gì thêm, khớp đúng hành vi PASSWORD/OTP_EMAIL đã có từ trước).
@@ -220,13 +241,16 @@ function collectPermsFromForm() {
     // UI này sẽ tự "dọn sạch" khỏi field cũ (server vẫn đọc field cũ cho user CHƯA re-save, xem
     // lib/recordActions.js isApproverForOperationOrderReceipt()).
     operationOrderReceiptManageHO: document.getElementById('pOperationOrderReceiptHO').checked,
-    operationOrderReceiptManageStore: scopeFromForm('pOperationOrderReceiptAll', 'pOperationOrderReceiptDept'),
-    // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — checklistAuditScope dùng scopeFromForm() như
-    // các scope {all,depts} khác, chỉ khác nguồn checkbox là DB.stores (siêu thị) thay vì DB.depts, xem
-    // renderChecklistAuditScopeCheckboxes() ở module-admin.js.
+    // Đổi sang widget tìm-kiếm-gõ-chọn (renderMultiSelectDropdown()) từ đợt 10/2026 — danh sách siêu thị
+    // thật dài/tên dài khiến lưới checkbox 2-3 cột bị ngắn tên, không nhìn thấy hết (phản hồi người dùng).
+    // scopeFromMultiSelectDropdown() (core.js) đọc lại từ getMultiSelectValues() thay vì query checkbox.
+    operationOrderReceiptManageStore: scopeFromMultiSelectDropdown('pOperationOrderReceiptAll', 'pOperationOrderReceiptDeptContainer'),
+    // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — checklistAuditScope CÙNG lý do đổi sang widget
+    // ở trên, nguồn siêu thị là DB.stores thay vì DB.depts, xem renderChecklistAuditScopeCheckboxes() ở
+    // module-admin.js.
     checklistTemplateManage: document.getElementById('pChecklistTemplateManage').checked,
     checklistReportView: document.getElementById('pChecklistReportView').checked,
-    checklistAuditScope: scopeFromForm('pChecklistAuditScopeAll', 'pChecklistAuditScopeStore'),
+    checklistAuditScope: scopeFromMultiSelectDropdown('pChecklistAuditScopeAll', 'pChecklistAuditScopeDeptContainer'),
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.

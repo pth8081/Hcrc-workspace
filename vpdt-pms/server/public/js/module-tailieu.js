@@ -303,6 +303,9 @@ function renderDocs() {
       : (currentUser.perms.viewDraftAll || (currentUser.perms.viewDraftDepts || []).includes(doc.dept))
     ) ||
     (doc.uploader === currentUser.username) ||
+    // Quản lý (trực tiếp/gián tiếp, theo Cơ Cấu Tổ Chức) của người tải lên — mục 3 kế hoạch 10/2026,
+    // mirror ĐÚNG canViewDoc() server (lib/recordViewScope.js).
+    isManagerOf(currentUser.username, doc.uploader, DB.users) ||
     isApproverForDeptWorkflow(DB.deptWorkflows[doc.dept], currentUser.username);
 
   // Thẻ dashboard — đếm khớp CHÍNH XÁC những gì sẽ hiện ra khi bấm từng thẻ (xem filterDocByCard()).

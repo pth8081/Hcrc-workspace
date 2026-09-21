@@ -413,10 +413,15 @@ const MODULE_CONFIGS = {
     dbKey: 'contracts',
     statusField: 'approvalStatus',
     resolveWfConfig: (item, appData) => resolveContractApprovalWorkflow(item, appData),
-    // editContract() (lib/recordActions.js) ĐÃ sẵn sàng cho nhánh này từ trước (tự đưa DRAFT/REJECTED
-    // về PENDING/bước 1 khi người tạo sửa xong) — chỉ còn thiếu đúng 1 hành động REQUEST_CHANGES để
-    // người duyệt chủ động trả hồ sơ về NHÁP (khác hẳn Từ chối hẳn/REJECTED).
-    supportsRequestChanges: true
+    // editContract() (lib/recordActions.js) ĐÃ sẵn sàng cho nhánh này từ trước (tự đưa DRAFT/REJECTED/
+    // NEEDS_SUPPLEMENT về PENDING/bước 1 khi người tạo sửa xong) — chỉ còn thiếu đúng 1 hành động
+    // REQUEST_CHANGES để người duyệt chủ động trả hồ sơ về trạng thái này (khác hẳn Từ chối hẳn/REJECTED).
+    supportsRequestChanges: true,
+    // Mục 2 kế hoạch 10/2026: "Bị từ chối" và "Bổ sung" trước đây biến mất khỏi Tab Phê Duyệt/Dashboard
+    // vì "Bổ sung" dùng CHUNG trạng thái DRAFT với 1 bản nháp mới chưa từng gửi — không phân biệt được.
+    // requestChangesStatus (mặc định 'DRAFT' cho MỌI module khác, xem applyWorkflowAction() bên dưới)
+    // CHỈ contracts đổi thành trạng thái riêng NEEDS_SUPPLEMENT để client lọc/hiển thị đúng.
+    requestChangesStatus: 'NEEDS_SUPPLEMENT'
   },
   contractsSignedFile: {
     dbKey: 'contracts',
@@ -754,7 +759,9 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     // vòng cũ bị chặn "đã xử lý bước này rồi" khi thử duyệt lại nội dung đã sửa, kẹt hồ sơ vĩnh viễn.
     item[historyField].forEach(h => { if (h.action === 'APPROVED') h.invalidated = true; });
     item[historyField].push({ step: currentStep, approver: user.name, username: user.username, action: 'REQUEST_CHANGES', comment, time: nowVN() });
-    item[statusField] = 'DRAFT';
+    // requestChangesStatus: mặc định 'DRAFT' (mọi module khác) — chỉ contracts đổi riêng thành
+    // NEEDS_SUPPLEMENT (xem chú thích ở MODULE_CONFIGS.contracts) để phân biệt với nháp mới chưa gửi.
+    item[statusField] = config.requestChangesStatus || 'DRAFT';
     item[currentStepField] = 0;
     // carRegs RIÊNG: "Phần Dành Cho Phòng Hành Chính" (xe/biển số/lái xe) chỉ được gán trong lúc DUYỆT
     // (xem extraFields ở applyWorkflowAction bên dưới). Đưa phiếu về NHÁP mà GIỮ NGUYÊN phần phân công

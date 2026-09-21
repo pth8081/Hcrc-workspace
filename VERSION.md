@@ -1,8 +1,120 @@
 # Phiên bản hiện tại
 
-**23.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.85 (2026-09-21): 5 yêu cầu người dùng — tách Mẫu Giá theo kênh, hiện Hợp Đồng Bị Từ Chối/Cần Bổ Sung, quản lý xem hồ sơ cấp dưới, Người Phụ Trách trong nhập Excel Danh Mục Đầu Tư, ô chọn siêu thị gõ-tìm
+
+Theo 5 yêu cầu người dùng gửi trong cùng 1 đợt (đã nghiên cứu + đưa phương
+án xác nhận trước khi code, theo đúng quy trình chuẩn ở `CLAUDE.md`):
+
+### 1) Mẫu Giá (Phê Duyệt Giá Bán): tách riêng theo kênh Bán Lẻ/Bán Buôn
+
+Trước đây `itPriceMasterLists` dùng CHUNG 1 danh sách cho cả 2 kênh — xoá 1
+mẫu ở kênh này vô tình mất luôn đối chiếu cột của kênh kia (đúng lỗi người
+dùng phản ánh: "xoá giá mẫu là xoá hết"). Thêm field `priceType`
+(RETAIL/WHOLESALE) vào mỗi mẫu; mẫu MỚI tạo tự gắn đúng kênh đang thao tác,
+2 màn quản trị + màn chọn mẫu lúc đề xuất chỉ lọc đúng mẫu của kênh đang
+xem. Mẫu cũ (tạo trước đợt này, chưa có `priceType`) vẫn hiện ở CẢ 2 kênh
+như cũ — không mất dữ liệu, chỉ áp dụng ràng buộc mới cho mẫu tạo từ nay.
+`itPriceApprovals.extraValidate` (`lib/createValidation.js`) cũng lọc đúng
+theo kênh khi đối chiếu mẫu đã chọn lúc submit. Test mới
+`test-itprice-mastertlist-channel-split.js` (12/12).
+
+### 2) Hợp Đồng: trạng thái "Cần Bổ Sung" tách riêng + hiện đủ ở Tab Phê Duyệt/Dashboard/Hub
+
+Rủi ro thật: hợp đồng bị Từ Chối/Yêu Cầu Bổ Sung trước đây gần như "biến
+mất" khỏi tầm nhìn người tạo/người duyệt — Tab Phê Duyệt/Dashboard mặc định
+không hiện, chỉ tra được bằng lọc tay đúng trạng thái.
+
+- Thêm trạng thái `NEEDS_SUPPLEMENT` (tách khỏi `DRAFT` cũ) —
+  `MODULE_CONFIGS.contracts.requestChangesStatus` (field mới, optional, mặc
+  định `'DRAFT'` cho các module khác) đọc trong `applyWorkflowAction()`
+  (`lib/workflowEngine.js`), không đổi hành vi 7+ module khác đang dùng
+  chung nhánh REQUEST_CHANGES.
+- Tab "⏳ Phê Duyệt" (module Hợp Đồng) thêm 2 thẻ Dashboard "❌ Bị Từ Chối"/
+  "✏️ Cần Bổ Sung" (bấm lọc thẳng); bộ lọc Loại Hợp Đồng thêm 2 option
+  tương ứng. Mặc định (không bấm lọc gì) vẫn CHỈ hiện PENDING như cũ — giữ
+  nguyên số đếm thẻ hiện có, 2 trạng thái mới chỉ lộ diện qua thẻ riêng.
+  Áp dụng tương tự cho luồng "Tài Liệu Ký" (`signedFileStatus`, thẻ "Bị Từ
+  Chối Tài Liệu Ký" ở tab Quản Lý).
+- Hub ✅ Phê Duyệt: sửa link "Xem" trên thông báo hồ sơ Hợp Đồng bị từ chối
+  — trước dẫn sai/không lọc gì, nay dẫn đúng vào thẻ "❌ Bị Từ Chối".
+- Test cập nhật: `test-contract.js` (3 assertion DRAFT→NEEDS_SUPPLEMENT +
+  thêm "Kịch bản 12" — 11 kiểm tra Tab Phê Duyệt/Dashboard/Hub), 65/65.
+
+### 3) Quản lý tự thấy hồ sơ cấp dưới ở Tài Liệu/Thanh Toán/Hợp Đồng
+
+Câu hỏi làm rõ trước khi code: phân cấp quản lý lấy từ Phân Quyền hay Cơ
+Cấu Tổ Chức? Trả lời — LUÔN theo Cơ Cấu Tổ Chức (`user.managerUsername`,
+field phẳng derive 100% từ Cơ Cấu Tổ Chức qua
+`applyManagerUsernameUpdates()`, `lib/orgChart.js`, tính lại NGAY khi admin
+bấm Áp Dụng 1 phiên bản mới — cấu hình lúc nào áp dụng lúc đó, không có độ
+trễ); Phân Quyền không có khái niệm "ai là cấp trên của ai" nên KHÔNG dùng
+được cho việc này.
+
+`isManagerOf(managerUsername, targetUsername, allUsers)` (đã có sẵn ở
+`lib/recordViewScope.js`, đệ quy tối đa 50 cấp) được thêm vào cả 3 hàm
+`canViewDoc()`/`canViewContract()`/`canViewPaymentRequest()` — quản lý
+trực tiếp HOẶC bất kỳ cấp cao hơn (đệ quy) của người tạo hồ sơ tự xem
+được, không cần cấp quyền module gì thêm. Client mirror ở
+`module-tailieu.js`/`module-hopdong.js` (module-thanhtoan.js không có bộ
+lọc client riêng — đã tin tưởng hoàn toàn mảng server trả về, không cần
+sửa). Test mới `test-manager-subordinate-view-scope.js` (13/13, cây tổ
+chức 4 cấp).
+
+### 4) Danh Mục Đầu Tư (Vận Hành): thêm cột "Người Phụ Trách" vào Tải Mẫu/Nhập
+
+File mẫu Excel + màn nhập của "Danh Mục Đầu Tư" (Mở Mới/Sửa Chữa Siêu Thị)
+trước đây thiếu hẳn cột Người Phụ Trách — nhập xong phải tự gán tay từng
+dòng. `lib/operationImport.js` thêm cột "Người Phụ Trách (username, cách
+nhau dấu phẩy)" vào cả tải mẫu lẫn đọc file (giữ tương thích ngược file cũ
+4 cột không có cột này); `confirmOperationEstimateImport()`
+(`module-vanhanh.js`) map đúng vào field `assignedToUsernames` (KHÔNG phải
+`assignedTo` — field sai tên sẽ khiến người phụ trách "biến mất" khỏi ô
+chọn `renderPeopleMultiSelect()` dù đã gộp "thành công"), lọc bỏ username
+không active/không tồn tại kèm cảnh báo rõ (không chặn cả dòng). Test:
+`test-operation-danhmuc-dautu-units.js` (mở rộng, 47/47) +
+`test-operation-estimate-import-assignee.js` (mới, 5/5).
+
+### 5) Phân Quyền: ô chọn siêu thị đổi sang widget tìm-kiếm-gõ-chọn
+
+2 khối "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị" và "Phạm Vi Kiểm Soát"
+(Checklist Đánh Giá Siêu Thị) dùng lưới checkbox 2-3 cột khiến tên siêu thị
+dài bị cắt ngắn, không nhìn/tìm được (ảnh chụp màn hình người dùng gửi kèm
+yêu cầu). Đổi sang `renderMultiSelectDropdown()`/`getMultiSelectValues()`
+(core.js, cùng widget chip+tìm-kiếm đã dùng cho "🧩 Nhóm Quyền Đặc Biệt"),
+giữ nguyên checkbox "ALL" riêng (tick ALL thì widget tự mờ + khoá tương
+tác). Thêm `scopeFromMultiSelectDropdown()` (core.js) thay `scopeFromForm()`
+cho đúng 2 khối này. Container Checklist đổi tên
+`pChecklistAuditScopeStoreContainer` → `pChecklistAuditScopeDeptContainer`
+để khớp đúng quy ước `<ALL id không 'All'>DeptContainer` mà
+`computePermTreeNodeCount()` tự suy ra.
+
+**Bug thật phát hiện + vá kèm khi viết test cho mục 5**: `markPermTreeDirty`/
+`refreshPermTreeBadges` (viền cam "chưa lưu" + badge "đã cấp X/Y" của TOÀN
+BỘ cây phân quyền, không riêng gì widget mới) gắn thẳng vào
+`#permFieldsContainer` — phần tử này sống TRONG fragment `systemSection.html`
+(lazy-load), trong khi module JS và fragment HTML tải SONG SONG qua
+`Promise.all()` ở `switchTab()`. Nếu JS chạy trước khi fragment kịp bơm vào
+DOM, `getElementById()` trả về `null`, 2 listener cũ ÂM THẦM không gắn được
+gì cho suốt phiên — tính năng viền cam/badge coi như random tắt hẳn tuỳ
+tốc độ tải. Sửa tận gốc: delegate trên `document` (luôn có sẵn, không phụ
+thuộc thứ tự tải fragment) thay vì gắn thẳng vào phần tử — cùng tinh thần
+`bindCspDelegation()` dùng chung toàn hệ thống.
+
+Test mới `test-perm-tree-store-scope-widget.js` (9/9, Playwright thật —
+render/set/đọc/toggle/badge/dirty-mark, cả gọi hàm trực tiếp lẫn thao tác
+UI thật qua `data-op="gmsAdd"/"gmsRemove"`).
+
+### Docs + regression
+
+Cập nhật `Huong-dan-nghiep-vu.md` + 5 entry `NGHIEP_VU_DOCS`/`SYSTEM_DOCS`
+(`module-nghiepvu.js`: `itPriceApproval`, `contract`, `doc`, `office`,
+`vanHanh`, `sysPermissions`) cho cả 5 việc trên. Không đổi `schema.sql`,
+không thêm biến môi trường mới, không thêm gói npm mới — chỉ cần copy code
++ `pm2 restart`.
 
 ## v23.84 (2026-09-21): 3 yêu cầu người dùng — nhãn LX xác nhận chuyến, Sửa Phòng Họp, Áp Dụng Nhanh tự khớp phòng ban
 

@@ -128,6 +128,10 @@ function canViewDoc(user, doc, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (doc.uploader === user.username) return true;
+  // Quản lý (trực tiếp/gián tiếp, theo Cơ Cấu Tổ Chức) của người tải lên luôn xem được — mục 3 kế
+  // hoạch 10/2026 "đảm bảo quản lý nhìn thấy hết tài liệu... của nhân viên mình" — cùng khuôn đã áp
+  // dụng cho Công Việc/Vận Hành từ trước (xem isManagerOf() ở đầu file).
+  if (isManagerOf(user.username, doc.uploader, appData?.users)) return true;
   if (doc.status === 'APPROVED') {
     if (user.perms?.viewApprovedAll || (user.perms?.viewApprovedDepts || []).includes(doc.dept)) return true;
   } else if (user.perms?.viewDraftAll || (user.perms?.viewDraftDepts || []).includes(doc.dept)) {
@@ -431,6 +435,8 @@ function canViewContract(user, contract, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (contract.creator === user.username) return true;
+  // Quản lý (trực tiếp/gián tiếp) của người tạo — mục 3 kế hoạch 10/2026, cùng khuôn canViewDoc() ở trên.
+  if (isManagerOf(user.username, contract.creator, appData?.users)) return true;
   if (scopeAllows(user, user.perms?.contractView, contract.dept)) return true;
   // Đơn vị tiếp nhận theo dõi & thanh toán (custodianDept) được XEM hợp đồng/phụ lục ngay từ lúc tạo
   // (không đợi approvalStatus === 'APPROVED') — khớp yêu cầu "đơn vị chọn có thể cùng xem hợp đồng và
@@ -965,6 +971,9 @@ function canViewPaymentRequest(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.paymentManage) return true;
   if (item.dept && item.dept === user.dept) return true;
+  // Quản lý (trực tiếp/gián tiếp) của người tạo đề nghị — mục 3 kế hoạch 10/2026, cùng khuôn
+  // canViewDoc()/canViewContract() ở trên (item.createdBy — xem creatorField ở lib/createValidation.js).
+  if (isManagerOf(user.username, item.createdBy, appData?.users)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.paymentRequests.resolveWfConfig(item, appData).approvers, user.username);
 }
 

@@ -1771,13 +1771,18 @@ const CREATE_MODULE_CONFIGS = {
       // — dùng để dò/hiển thị đúng tên cột lúc nộp (xem routes/priceFile.js), KHÔNG còn dùng để đối
       // chiếu giá trị/tự động bỏ qua duyệt phòng ban nữa. Mọi đề xuất từ nay LUÔN đi qua đúng quy trình
       // duyệt theo phòng ban (itPriceDeptWorkflows), không còn nhánh autoApproved.
+      // Mẫu Giá giờ tách riêng theo priceType (mục 1 kế hoạch 10/2026) — mẫu KHÔNG gắn priceType (tạo
+      // trước khi tách kênh) vẫn coi là hợp lệ cho CẢ 2 kênh (mirror đúng bộ lọc client). "Bắt buộc chọn
+      // mẫu" chỉ tính trên các mẫu THUỘC ĐÚNG kênh đang nộp — nếu kênh này chưa có mẫu nào (dù kênh kia
+      // đã có) thì KHÔNG được ép chọn 1 mẫu của kênh khác.
       const masterLists = appData?.itPriceMasterLists || [];
+      const masterListsForChannel = masterLists.filter(m => !m.priceType || m.priceType === priceType);
       const masterListId = payload.masterListId ? Number(payload.masterListId) : null;
-      const masterList = masterListId ? masterLists.find(m => m.id === masterListId) : null;
-      // Đã có ít nhất 1 Mẫu Giá trong hệ thống thì BẮT BUỘC người đề xuất phải chọn đúng 1 mẫu (không
-      // còn tuỳ chọn "Không đối chiếu") — tự soạn request bỏ qua field này hoặc trỏ tới id không tồn tại
-      // đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
-      if (masterLists.length > 0 && !masterList) {
+      const masterList = masterListId ? masterListsForChannel.find(m => m.id === masterListId) : null;
+      // Đã có ít nhất 1 Mẫu Giá của ĐÚNG kênh này thì BẮT BUỘC người đề xuất phải chọn đúng 1 mẫu (không
+      // còn tuỳ chọn "Không đối chiếu") — tự soạn request bỏ qua field này, trỏ tới id không tồn tại,
+      // hoặc trỏ tới mẫu của KÊNH KHÁC đều bị chặn ngay tại đây, không để lọt vào state máy tiếp theo.
+      if (masterListsForChannel.length > 0 && !masterList) {
         throw new CreateError(400, 'Vui lòng chọn đúng Mẫu Giá Phê Duyệt trước khi gửi đề xuất');
       }
       payload.masterListId = masterList ? masterList.id : null;

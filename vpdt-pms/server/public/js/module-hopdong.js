@@ -838,8 +838,11 @@ function filterContractByCard(key) {
     '': { filterContractType: '', filterSignedStatusContract: '' },
     NEW: { filterContractType: 'NEW', filterSignedStatusContract: '' },
     ADDENDUM: { filterContractType: 'ADDENDUM', filterSignedStatusContract: '' },
+    REJECTED: { filterContractType: 'REJECTED', filterSignedStatusContract: '' },
+    NEEDS_SUPPLEMENT: { filterContractType: 'NEEDS_SUPPLEMENT', filterSignedStatusContract: '' },
     SIGNED_PENDING: { filterContractType: '', filterSignedStatusContract: 'PENDING' },
-    SIGNED_APPROVED: { filterContractType: '', filterSignedStatusContract: 'APPROVED' }
+    SIGNED_APPROVED: { filterContractType: '', filterSignedStatusContract: 'APPROVED' },
+    SIGNED_REJECTED: { filterContractType: '', filterSignedStatusContract: 'REJECTED' }
   };
   const box = document.querySelector('#contractSection .filter-box-details');
   if (box) box.open = true;
@@ -880,6 +883,9 @@ function renderContracts() {
   const canViewContractRec = c => scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) ||
     scopeAllows(currentUser, currentUser.perms?.contractView, c.custodianDept) ||
     c.creator === currentUser.username ||
+    // Quản lý (trực tiếp/gián tiếp) của người tạo — mục 3 kế hoạch 10/2026, mirror ĐÚNG canViewContract()
+    // server (lib/recordViewScope.js).
+    isManagerOf(currentUser.username, c.creator, DB.users) ||
     isApproverForDeptWorkflow(resolveContractApprovalWorkflow(c), currentUser.username) ||
     isApproverForDeptWorkflow(resolveContractManageWorkflow(c), currentUser.username);
 
@@ -891,10 +897,17 @@ function renderContracts() {
   if (activeContractSubTab === 'APPROVAL') {
     const pendingRoots = scopedContracts.filter(c => !c.isAddendum && c.approvalStatus === 'PENDING');
     const pendingAddenda = scopedContracts.filter(c => c.isAddendum && c.approvalStatus !== 'APPROVED');
+    // Bị Từ Chối/Cần Bổ Sung (mục 2 kế hoạch 10/2026): trước đây 2 trạng thái này biến mất khỏi cả Tab
+    // Phê Duyệt lẫn Dashboard sau khi người duyệt bấm Từ Chối/Yêu Cầu Bổ Sung — người tạo lẫn người
+    // duyệt không còn cách nào thấy lại hồ sơ. DRAFT: coi tương đương NEEDS_SUPPLEMENT (xem statusBadge).
+    const rejectedRoots = scopedContracts.filter(c => !c.isAddendum && c.approvalStatus === 'REJECTED');
+    const needsSupplementRoots = scopedContracts.filter(c => !c.isAddendum && (c.approvalStatus === 'DRAFT' || c.approvalStatus === 'NEEDS_SUPPLEMENT'));
     contractDashCards = [
       { key: '', label: 'Tổng Chờ Duyệt', count: pendingRoots.length + pendingAddenda.length, colorClass: 'border-l-blue-500' },
       { key: 'NEW', label: 'Hợp Đồng Mới Chờ Duyệt', count: pendingRoots.length, colorClass: 'border-l-yellow-500' },
-      { key: 'ADDENDUM', label: 'Phụ Lục Chờ Duyệt', count: pendingAddenda.length, colorClass: 'border-l-indigo-500' }
+      { key: 'ADDENDUM', label: 'Phụ Lục Chờ Duyệt', count: pendingAddenda.length, colorClass: 'border-l-indigo-500' },
+      { key: 'REJECTED', label: 'Bị Từ Chối', count: rejectedRoots.length, colorClass: 'border-l-red-500' },
+      { key: 'NEEDS_SUPPLEMENT', label: 'Cần Bổ Sung', count: needsSupplementRoots.length, colorClass: 'border-l-orange-500' }
     ];
   } else {
     const approvedRoots = scopedContracts.filter(c => !c.isAddendum && c.approvalStatus === 'APPROVED');
@@ -903,10 +916,11 @@ function renderContracts() {
       { key: '', label: 'Tổng Hợp Đồng Đang Quản Lý', count: approvedRoots.length, colorClass: 'border-l-blue-500' },
       { key: 'ADDENDUM', label: 'Phụ Lục Đã Duyệt', count: approvedAddenda.length, colorClass: 'border-l-indigo-500' },
       { key: 'SIGNED_PENDING', label: 'Chờ Duyệt Tài Liệu Ký', count: approvedRoots.filter(c => c.signedFileStatus === 'PENDING').length, colorClass: 'border-l-yellow-500' },
-      { key: 'SIGNED_APPROVED', label: 'Đã Duyệt Tài Liệu Ký', count: approvedRoots.filter(c => c.signedFileStatus === 'APPROVED').length, colorClass: 'border-l-green-500' }
+      { key: 'SIGNED_APPROVED', label: 'Đã Duyệt Tài Liệu Ký', count: approvedRoots.filter(c => c.signedFileStatus === 'APPROVED').length, colorClass: 'border-l-green-500' },
+      { key: 'SIGNED_REJECTED', label: 'Bị Từ Chối Tài Liệu Ký', count: approvedRoots.filter(c => c.signedFileStatus === 'REJECTED').length, colorClass: 'border-l-red-500' }
     ];
   }
-  const activeContractCardKey = signedStatusFilter === 'PENDING' ? 'SIGNED_PENDING' : signedStatusFilter === 'APPROVED' ? 'SIGNED_APPROVED' : typeFilter;
+  const activeContractCardKey = signedStatusFilter === 'PENDING' ? 'SIGNED_PENDING' : signedStatusFilter === 'APPROVED' ? 'SIGNED_APPROVED' : signedStatusFilter === 'REJECTED' ? 'SIGNED_REJECTED' : typeFilter;
   document.getElementById('contractDashboardCards').innerHTML = buildDashboardCardsHTML(contractDashCards, activeContractCardKey, 'filterContractByCard');
 
   // Hợp đồng GỐC ĐÃ APPROVED hiện ở cấp cao nhất tại tab Quản Lý HĐ (phụ lục ĐÃ APPROVED chỉ hiện khi
@@ -924,7 +938,22 @@ function renderContracts() {
       if (activeContractSubTab !== 'APPROVAL') return false;
       if (typeFilter === 'NEW') return false;
     } else {
-      if (activeContractSubTab === 'APPROVAL' && c.approvalStatus !== 'PENDING') return false;
+      // LỖI ĐÃ VÁ (mục 2 kế hoạch 10/2026): Tab Phê Duyệt trước đây CHỈ hiện PENDING — hồ sơ vừa bị Từ
+      // Chối hoặc Yêu Cầu Bổ Sung (REJECTED/DRAFT/NEEDS_SUPPLEMENT) biến mất khỏi cả 2 tab, kể cả với
+      // chính người tạo (nút Sửa không bấm được vì dòng không còn hiển thị ở đâu cả). Mặc định (chưa
+      // bấm thẻ nào) vẫn CHỈ hiện PENDING như cũ (đúng số đếm thẻ "Tổng Chờ Duyệt") — 2 trạng thái mới
+      // giờ tìm được qua đúng 2 thẻ Dashboard riêng "Bị Từ Chối"/"Cần Bổ Sung" thay vì biến mất hẳn.
+      // Người duyệt xem được hồ sơ nhưng KHÔNG có nút Duyệt/Từ chối cho tới khi được gửi lại — xem điều
+      // kiện `c.approvalStatus === 'PENDING'` ở nút Duyệt/Từ chối bên dưới.
+      if (activeContractSubTab === 'APPROVAL') {
+        if (typeFilter === 'REJECTED') {
+          if (c.approvalStatus !== 'REJECTED') return false;
+        } else if (typeFilter === 'NEEDS_SUPPLEMENT') {
+          if (c.approvalStatus !== 'DRAFT' && c.approvalStatus !== 'NEEDS_SUPPLEMENT') return false;
+        } else if (c.approvalStatus !== 'PENDING') {
+          return false;
+        }
+      }
       if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
       if (typeFilter === 'ADDENDUM') return false;
     }
@@ -979,11 +1008,14 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     else warningBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-semibold text-xs">✅ Còn hiệu lực</span>`;
   }
 
+  // DRAFT: trạng thái CŨ trước khi có NEEDS_SUPPLEMENT riêng (mục 2 kế hoạch 10/2026) — hồ sơ nào đã bị
+  // đưa về DRAFT từ trước đợt vá này (chưa được sửa lại) vẫn hiển thị đúng ở đây, coi 2 giá trị tương
+  // đương nhau ở MỌI chỗ hiển thị/lọc trong file này.
   const statusBadge = c.approvalStatus === 'PENDING'
     ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs ml-1">⏳ Chờ duyệt</span>`
     : c.approvalStatus === 'REJECTED'
       ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs ml-1">❌ Bị từ chối</span>`
-      : c.approvalStatus === 'DRAFT'
+      : (c.approvalStatus === 'DRAFT' || c.approvalStatus === 'NEEDS_SUPPLEMENT')
         ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs ml-1">✏️ Cần bổ sung — chờ sửa lại</span>`
         : '';
 
@@ -1311,12 +1343,12 @@ function rejectContractSignedFileAction(id) {
 function requestContractChangesAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
-  const reason = prompt('Nhập lý do cần bổ sung — hợp đồng sẽ được trả về NHÁP để người tạo sửa lại:');
+  const reason = prompt('Nhập lý do cần bổ sung — hợp đồng sẽ chuyển sang trạng thái "Cần bổ sung" để người tạo sửa lại:');
   if (reason === null) return;
   if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do cần bổ sung!');
   showConfirmModal({
     title: '🔄 Yêu Cầu Bổ Sung',
-    bodyHTML: `<p>Trả hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) về NHÁP để người tạo sửa lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
+    bodyHTML: `<p>Chuyển hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)}) sang trạng thái "Cần bổ sung" để người tạo sửa lại?</p><p class="mt-2 italic text-gray-600">Lý do: "${escapeHtml(reason.trim())}"</p>`,
     confirmLabel: 'Yêu Cầu Bổ Sung',
     onConfirm: async () => {
       let result;

@@ -592,8 +592,18 @@ async function gotoApprovalHubOrigin(type) {
       case 'vpp': await switchTab('vpp'); setVppSubTab('REGISTER'); break;
       case 'itPrice': await switchTab('itSupport'); setItSupportSubTab('PRICE'); setStatus('filterStatusItPrice', onItPriceFilterChange); break;
       case 'budget': await switchTab('budget'); break;
-      case 'contract': await switchTab('contract'); setContractSubTab('APPROVAL'); break;
-      case 'contractSigned': await switchTab('contract'); setContractSubTab('MANAGE'); break;
+      // LỖI ĐÃ VÁ (mục 2 kế hoạch 10/2026): trước đây Tab Phê Duyệt chỉ hiện PENDING nên "🔍 Xem" ở đây
+      // trỏ về 1 tab KHÔNG hiện hồ sơ REJECTED — link chết. Nay Tab Phê Duyệt đã hiện được REJECTED
+      // (xem renderContracts() ở module-hopdong.js) nhưng vẫn cần tự set đúng bộ lọc "Bị Từ Chối" để hồ
+      // sơ hiện NGAY, không bắt người dùng tự bấm thêm thẻ Dashboard.
+      case 'contract':
+        await switchTab('contract'); setContractSubTab('APPROVAL');
+        if (status === 'REJECTED') setStatus('filterContractType', onContractFilterChange);
+        break;
+      case 'contractSigned':
+        await switchTab('contract'); setContractSubTab('MANAGE');
+        if (status === 'REJECTED') setStatus('filterSignedStatusContract', onContractFilterChange);
+        break;
       case 'meeting': await switchTab('meeting'); setStatus('filterStatusMeeting', onMeetingFilterChange); break;
       case 'internalShare': await switchTab('internal'); setInternalSubTab('SHARE'); break;
       case 'payment': await switchTab('office'); setOfficeSubTab('PAYMENT'); break;

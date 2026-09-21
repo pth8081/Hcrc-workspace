@@ -675,65 +675,65 @@ function toggleScopeGroup(allCheckId, deptCheckPrefix) {
 // "🧾 Duyệt Nhập/Hủy Đơn Hàng" — quyền RIÊNG, TÁCH thành 2 quyền độc lập từ đợt "Tách quyền Duyệt
 // Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026): "HO" giờ là 1 checkbox đơn (pOperationOrderReceiptHO, xem
 // systemSection.html) KHÔNG còn render động ở đây — hàm này giờ CHỈ liệt kê DB.stores (siêu thị) cho
-// quyền operationOrderReceiptManageStore, không chèn mục 'HO' đặc biệt nữa. KHÔNG dùng chung
-// renderDeptCheckboxes()/toggleScopeGroup() ở trên (chỉ liệt kê thẳng DB.stores theo INDEX) — 2 hàm riêng
-// dưới đây tự quản lý theo VALUE thay vì index để không phải đổi setGroupCheckboxes()/scopeFromForm() dùng
-// chung (scopeFromForm() đọc theo cb.value nên đã tự hoạt động đúng không cần sửa gì).
+// quyền operationOrderReceiptManageStore, không chèn mục 'HO' đặc biệt nữa.
 // BUG THẬT đã sửa (rà soát theo yêu cầu người dùng 9/2026): trước đây đọc nhầm DB.depts (danh mục
 // Phòng/Ban khối văn phòng) thay vì DB.stores (danh mục Siêu Thị thật) — đơn "Đặt Hàng Tại Siêu Thị" luôn
 // gắn `dept` = TÊN SIÊU THỊ (xem forceOwnDept ở lib/createValidation.js), nên tick chọn tên phòng ban ở
 // đây KHÔNG BAO GIỜ khớp được với đơn hàng thật — quyền giới hạn theo từng siêu thị coi như luôn vô hiệu.
-// Mirror ĐÚNG renderChecklistAuditScopeCheckboxes() (cũng dùng DB.stores) ngay bên dưới.
+//
+// ĐỔI SANG WIDGET TÌM-KIẾM-GÕ-CHỌN (10/2026, rà soát tiếp theo): lưới checkbox 2-3 cột cũ khiến tên siêu
+// thị dài bị "truncate" mất chữ, không nhìn/tìm được siêu thị cần chọn khi danh sách dài (phản hồi người
+// dùng) — thay bằng renderMultiSelectDropdown()/getMultiSelectValues() (core.js, khuôn chip + tìm kiếm đã
+// dùng cho itPriceStoreScopeStoresMultiSelect/Áp Dụng Nhanh...). Mirror ĐÚNG renderChecklistAuditScopeCheckboxes()
+// (cũng dùng DB.stores) ngay bên dưới. Container giữ NGUYÊN id cũ (pOperationOrderReceiptDeptContainer) để
+// computePermTreeNodeCount()/module-admin-permtree.js tra đúng theo quy ước "<ALL checkbox id không có
+// 'All'>DeptContainer" sẵn có, không cần đổi gì thêm ở đó ngoài cách đọc _gmsSelected thay vì checkbox.
 function renderOperationOrderReceiptScopeCheckboxes() {
-  const el = document.getElementById('pOperationOrderReceiptDeptContainer');
-  if (!el) return;
-  const items = (DB.stores || []).map(d => ({ value: d, label: d }));
-  el.innerHTML = items.map((it, idx) => `
-    <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
-      <input type="checkbox" id="pOperationOrderReceiptDept_${idx}" value="${escapeHtml(it.value)}">
-      <span class="truncate">${escapeHtml(it.label)}</span>
-    </label>
-  `).join('');
+  renderMultiSelectDropdown('pOperationOrderReceiptDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu áp dụng mọi siêu thị).'
+  });
 }
 function toggleOperationOrderReceiptScopeGroup() {
   const isAll = document.getElementById('pOperationOrderReceiptAll').checked;
-  document.querySelectorAll('[id^="pOperationOrderReceiptDept_"]').forEach(cb => { cb.disabled = isAll; });
+  document.getElementById('pOperationOrderReceiptDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pOperationOrderReceiptDeptContainer')?.classList.toggle('pointer-events-none', isAll);
 }
-// setGroupCheckboxes() (module-admin-permtree.js) tra theo DB.depts.indexOf(d) nên KHÔNG tìm ra được
-// mục 'HO' (không nằm trong DB.depts) — bản riêng này tra theo value thật trên chính checkbox.
+// Render lại widget với đúng danh sách siêu thị ĐÃ CHỌN từ dữ liệu quyền đã lưu (gọi SAU
+// renderOperationOrderReceiptScopeCheckboxes() rỗng ở renderDeptCheckboxes(), xem populatePermsForm()) —
+// tên hàm giữ nguyên "setXxxCheckboxes" dù giờ không còn checkbox nào, tránh phải sửa lại mọi nơi gọi.
 function setOperationOrderReceiptScopeCheckboxes(scopeKeyList) {
-  if (!Array.isArray(scopeKeyList)) return;
-  const boxes = document.querySelectorAll('[id^="pOperationOrderReceiptDept_"]');
-  scopeKeyList.forEach(key => {
-    const cb = [...boxes].find(b => b.value === key);
-    if (cb) cb.checked = true;
+  renderMultiSelectDropdown('pOperationOrderReceiptDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu áp dụng mọi siêu thị).'
   });
 }
 
 // checklistAuditScope (Checklist Đánh Giá Siêu Thị — phạm vi siêu thị của kiểm soát viên CONTROL_AUDIT,
 // xem lib/checklist.js) — mirror ĐÚNG khuôn renderOperationOrderReceiptScopeCheckboxes()/
 // toggleOperationOrderReceiptScopeGroup()/setOperationOrderReceiptScopeCheckboxes() ở trên, nhưng nguồn
-// DB.stores (không có mục 'HO' đặc biệt — checklist Kiểm Soát chỉ áp dụng cho siêu thị).
+// DB.stores (không có mục 'HO' đặc biệt — checklist Kiểm Soát chỉ áp dụng cho siêu thị). Container ĐỔI
+// TÊN từ pChecklistAuditScopeStoreContainer -> pChecklistAuditScopeDeptContainer (10/2026, cùng đợt đổi
+// sang widget) để khớp đúng quy ước "<ALL id không có 'All'>DeptContainer" mà computePermTreeNodeCount()
+// tự suy ra — trước đây LỆCH tên (bug âm thầm cũ: badge "đã cấp X/Y" không đếm được phạm vi Kiểm Soát đã
+// chọn, dù dữ liệu lưu/đọc vẫn đúng qua scopeFromForm() theo prefix riêng) — tiện sửa luôn.
 function renderChecklistAuditScopeCheckboxes() {
-  const el = document.getElementById('pChecklistAuditScopeStoreContainer');
-  if (!el) return;
-  el.innerHTML = (DB.stores || []).map((s, idx) => `
-    <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
-      <input type="checkbox" id="pChecklistAuditScopeStore_${idx}" value="${escapeHtml(s)}">
-      <span class="truncate">${escapeHtml(s)}</span>
-    </label>
-  `).join('');
+  renderMultiSelectDropdown('pChecklistAuditScopeDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi kiểm soát...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu kiểm soát mọi siêu thị).',
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+  });
 }
 function toggleChecklistAuditScopeGroup() {
   const isAll = document.getElementById('pChecklistAuditScopeAll').checked;
-  document.querySelectorAll('[id^="pChecklistAuditScopeStore_"]').forEach(cb => { cb.disabled = isAll; });
+  document.getElementById('pChecklistAuditScopeDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pChecklistAuditScopeDeptContainer')?.classList.toggle('pointer-events-none', isAll);
 }
 function setChecklistAuditScopeCheckboxes(scopeKeyList) {
-  if (!Array.isArray(scopeKeyList)) return;
-  const boxes = document.querySelectorAll('[id^="pChecklistAuditScopeStore_"]');
-  scopeKeyList.forEach(key => {
-    const cb = [...boxes].find(b => b.value === key);
-    if (cb) cb.checked = true;
+  renderMultiSelectDropdown('pChecklistAuditScopeDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi kiểm soát...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu kiểm soát mọi siêu thị).',
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
   });
 }
 

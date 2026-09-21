@@ -3893,6 +3893,16 @@ function scopeFromForm(allId, deptPrefix) {
     depts: Array.from(document.querySelectorAll(`[id^="${deptPrefix}_"]:checked`)).map(cb => cb.value)
   };
 }
+// Bản tương đương scopeFromForm() ở trên nhưng đọc từ widget renderMultiSelectDropdown() (chip + tìm
+// kiếm-gõ-chọn) thay vì lưới checkbox — dùng cho các phạm vi siêu thị đổi sang widget này (Duyệt Nhập/Hủy
+// Đơn Hàng Siêu Thị, Checklist Đánh Giá Siêu Thị — xem module-admin.js) vì danh sách siêu thị thật có thể
+// dài, tên dài, lưới checkbox 2-3 cột làm ngắn tên/khó tìm.
+function scopeFromMultiSelectDropdown(allId, containerId) {
+  return {
+    all: document.getElementById(allId).checked,
+    depts: getMultiSelectValues(containerId)
+  };
+}
 
 // Gọi API xử lý quy trình duyệt THẬT ở server (Bước 1 — xem routes/workflow.js/lib/workflowEngine.js)
 // — trước đây "duyệt hồ sơ" chỉ là client tự tính toán đúng/sai bước rồi POST đè nguyên collection,
@@ -9399,6 +9409,13 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
     }).join('') || `<span class="text-gray-400 italic text-[11px]">${escapeHtml(emptyText)}</span>`;
     if (hiddenEl) hiddenEl.innerHTML = '';
     if (opts.onChange) opts.onChange([...selected]);
+    // Bắn 1 sự kiện 'change' nổi bọt (bubbles) từ chính container — để những khối lắng nghe 'change' kiểu
+    // delegation cấp cha (VD cây Phân Quyền, xem #permFieldsContainer ở module-admin-permtree.js) tự cập
+    // nhật badge/đánh dấu "chưa lưu" giống hệt checkbox thường, KHÔNG cần từng nơi dùng widget này phải tự
+    // gọi tay. An toàn gọi cả lúc SETUP lần đầu (initialSelected có sẵn) lẫn lúc add/remove thật — nơi nào
+    // cần phân biệt "chỉ đổ dữ liệu gốc, chưa phải thao tác người dùng" thì tự dọn dấu "chưa lưu" sau khi
+    // đổ xong (xem clearPermTreeDirtyMarks() gọi cuối populatePermsForm()), không cần chặn từ gốc ở đây.
+    container.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function renderDropdown(query) {

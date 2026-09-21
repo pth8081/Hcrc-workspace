@@ -362,10 +362,11 @@ async function run() {
     const hd05ModalHidden = await page.evaluate(() => document.getElementById('contractPaymentTypeChangeModal').classList.contains('hidden'));
     check('HD-05: mở modal Đổi HTTT bị chặn khi hợp đồng đã có đề nghị thanh toán (kể cả đã PAID)', hd05Alerts.some((a) => /đã có đề nghị thanh toán/.test(a)) && hd05ModalHidden, { hd05Alerts, hd05ModalHidden });
 
-    // ============ Kịch bản 10: "Bổ Sung" (REQUEST_CHANGES) hợp đồng — người duyệt trả về NHÁP (khác
-    // Từ Chối hẳn), người tạo SỬA (editContract() ở lib/recordActions.js đã tự đưa DRAFT về PENDING/
-    // bước 1 khi lưu — xem requestContractChangesAction()/openEditContract() ở public/index.html), rồi
-    // được duyệt lại bình thường ============
+    // ============ Kịch bản 10: "Bổ Sung" (REQUEST_CHANGES) hợp đồng — người duyệt trả về trạng thái
+    // NEEDS_SUPPLEMENT (mục 2 kế hoạch 10/2026, tách khỏi DRAFT — khác Từ Chối hẳn), người tạo SỬA
+    // (editContract() ở lib/recordActions.js đã tự đưa NEEDS_SUPPLEMENT/DRAFT về PENDING/bước 1 khi lưu
+    // — xem requestContractChangesAction()/openEditContract() ở public/index.html), rồi được duyệt lại
+    // bình thường ============
     await loginAs('kd1');
     await goToContractApproval();
     // #contractDept đã tự chọn sẵn "Phòng Kinh Doanh" (đúng phòng ban kd1) + bị khoá — xem kịch bản 1.
@@ -397,7 +398,7 @@ async function run() {
       const c = DB.contracts.find((x) => x.id === id);
       return { approvalStatus: c.approvalStatus, currentStep: c.currentStep, history: c.history };
     }, contract3.id);
-    check('"Bổ Sung" hợp đồng -> approvalStatus chuyển DRAFT, currentStep reset về 0', contract3AfterChanges.approvalStatus === 'DRAFT' && contract3AfterChanges.currentStep === 0, contract3AfterChanges);
+    check('"Bổ Sung" hợp đồng -> approvalStatus chuyển NEEDS_SUPPLEMENT (mục 2 kế hoạch 10/2026, tách khỏi DRAFT), currentStep reset về 0', contract3AfterChanges.approvalStatus === 'NEEDS_SUPPLEMENT' && contract3AfterChanges.currentStep === 0, contract3AfterChanges);
     check('Lịch sử ghi nhận đúng hành động REQUEST_CHANGES kèm lý do', (contract3AfterChanges.history || []).some((h) => h.action === 'REQUEST_CHANGES' && h.comment.includes('phụ lục báo giá')), contract3AfterChanges.history);
 
     await loginAs('kd1');
@@ -406,7 +407,7 @@ async function run() {
       const c = DB.contracts.find((x) => x.id === id);
       return c.approvalStatus;
     }, contract3.id);
-    check('Hồ sơ đang DRAFT vẫn hiện được nút "✏️ Sửa" cho chính người tạo (approvalStatus !== APPROVED)', editOptionsBeforeFix === 'DRAFT', editOptionsBeforeFix);
+    check('Hồ sơ đang NEEDS_SUPPLEMENT vẫn hiện được nút "✏️ Sửa" cho chính người tạo (approvalStatus !== APPROVED)', editOptionsBeforeFix === 'NEEDS_SUPPLEMENT', editOptionsBeforeFix);
     await page.evaluate((id) => openEditContract(id), contract3.id);
     await page.fill('#contractTitle', 'Hợp đồng thử Bổ Sung (đã sửa theo yêu cầu)');
     await clearAlerts();
@@ -416,7 +417,7 @@ async function run() {
       const c = DB.contracts.find((x) => x.id === id);
       return { title: c.title, approvalStatus: c.approvalStatus, currentStep: c.currentStep };
     }, contract3.id);
-    check('Sửa xong hồ sơ đang DRAFT -> tự động coi như gửi lại: PENDING, bước 1, nội dung đã cập nhật', contract3AfterEdit.title.includes('đã sửa theo yêu cầu') && contract3AfterEdit.approvalStatus === 'PENDING' && contract3AfterEdit.currentStep === 1, contract3AfterEdit);
+    check('Sửa xong hồ sơ đang NEEDS_SUPPLEMENT -> tự động coi như gửi lại: PENDING, bước 1, nội dung đã cập nhật', contract3AfterEdit.title.includes('đã sửa theo yêu cầu') && contract3AfterEdit.approvalStatus === 'PENDING' && contract3AfterEdit.currentStep === 1, contract3AfterEdit);
 
     await approveAs('tp_kd', contract3.id);
     const contract3Final = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, contract3.id);
@@ -454,6 +455,99 @@ async function run() {
     await confirmPending();
     const signedState8 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).signedFileStatus, contract3.id);
     check('Duyệt lại Tài liệu ký sau bổ sung -> APPROVED', signedState8 === 'APPROVED', signedState8);
+
+    // ============ Kịch bản 12 (mục 2 kế hoạch 10/2026): Tab Phê Duyệt/Dashboard phải hiện lại được hồ
+    // sơ Bị Từ Chối/Cần Bổ Sung thay vì biến mất hoàn toàn — dùng lại contract2 (REJECTED từ kịch bản 5)
+    // + tạo mới contract4 rồi Yêu Cầu Bổ Sung, KHÔNG sửa lại (giữ nguyên NEEDS_SUPPLEMENT để kiểm tra
+    // hiển thị, khác contract3 đã được sửa+gửi lại xong ở kịch bản 10) ============
+    await loginAs('kd1');
+    await goToContractApproval();
+    await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
+    await page.fill('#contractTitle', 'Hợp đồng thử Hiển Thị Cần Bổ Sung');
+    await page.fill('#contractPartner', 'Đối tác Hiển Thị');
+    await page.fill('#contractAmount', '50000000');
+    await page.fill('#contractStartDate', '2026-05-01');
+    await page.fill('#contractEndDate', '2026-11-30');
+    await page.fill('#contractContent', 'Nội dung hợp đồng dùng để kiểm thử hiển thị Tab Phê Duyệt.');
+    await page.setInputFiles('#contractFile', contractFile);
+    await clearAlerts();
+    await page.click('#contractSubmitBtn');
+    await page.waitForTimeout(300);
+    const contract4 = await readContractByTitle('Hợp đồng thử Hiển Thị Cần Bổ Sung');
+    check('Kịch bản 12: tạo hợp đồng cho kiểm thử hiển thị thành công, PENDING', !!contract4 && contract4.approvalStatus === 'PENDING', contract4);
+
+    await loginAs('tp_kd');
+    await queuePrompt('Thiếu bảng báo giá chi tiết, đề nghị bổ sung.');
+    await page.evaluate((id) => requestContractChangesAction(id), contract4.id);
+    await confirmPending();
+    const contract4Status = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).approvalStatus, contract4.id);
+    check('Kịch bản 12: Yêu Cầu Bổ Sung -> contract4 chuyển NEEDS_SUPPLEMENT', contract4Status === 'NEEDS_SUPPLEMENT', contract4Status);
+
+    // Người tạo (kd1) quay lại Tab Phê Duyệt — MẶC ĐỊNH (chưa bấm thẻ nào) vẫn CHỈ hiện PENDING như
+    // trước đây (đúng số đếm thẻ "Tổng Chờ Duyệt", không đổi hành vi mặc định).
+    await loginAs('kd1');
+    await goToContractApproval();
+    let tbodyDefault = await page.evaluate(() => document.getElementById('contractTableBody').innerHTML);
+    check('Kịch bản 12: mặc định (chưa bấm thẻ) — Tab Phê Duyệt KHÔNG hiện hồ sơ REJECTED (contract2)', !tbodyDefault.includes(contract2.code), null);
+    check('Kịch bản 12: mặc định (chưa bấm thẻ) — Tab Phê Duyệt KHÔNG hiện hồ sơ NEEDS_SUPPLEMENT (contract4)', !tbodyDefault.includes(contract4.code), null);
+
+    // Thẻ Dashboard "Bị Từ Chối"/"Cần Bổ Sung" phải đếm đúng (LỖI ĐÃ VÁ: trước đây không tồn tại thẻ
+    // nào cho 2 trạng thái này, hồ sơ coi như không nơi nào biết mà xử lý).
+    const dashCards = await page.evaluate(() => document.getElementById('contractDashboardCards').innerText);
+    check('Kịch bản 12: Dashboard có thẻ "Bị Từ Chối" đếm >= 1', /Bị Từ Chối[\s\S]*?\d+/.test(dashCards) && dashCards.includes('Bị Từ Chối'), dashCards);
+    check('Kịch bản 12: Dashboard có thẻ "Cần Bổ Sung" đếm >= 1', dashCards.includes('Cần Bổ Sung'), dashCards);
+
+    // Bấm thẻ "Bị Từ Chối" -> contract2 (REJECTED) hiện ra, có nút "✏️ Sửa" cho chính người tạo (kd1),
+    // KHÔNG có nút Duyệt/Từ chối (đã bị từ chối, không còn PENDING).
+    await page.evaluate(() => filterContractByCard('REJECTED'));
+    await page.waitForTimeout(100);
+    const rejectedRowHTML = await page.evaluate((code) => {
+      const rows = Array.from(document.querySelectorAll('#contractTableBody tr'));
+      const row = rows.find((r) => r.textContent.includes(code));
+      return row ? row.innerHTML : null;
+    }, contract2.code);
+    check('Kịch bản 12: bấm thẻ "Bị Từ Chối" -> contract2 (REJECTED) hiện ra trong Tab Phê Duyệt', !!rejectedRowHTML, rejectedRowHTML);
+    check('Kịch bản 12: dòng REJECTED có nút "✏️ Sửa" cho người tạo', rejectedRowHTML && rejectedRowHTML.includes('value="edit"'), rejectedRowHTML);
+    check('Kịch bản 12: dòng REJECTED KHÔNG có nút "Duyệt"/"Từ chối" (không còn PENDING)', rejectedRowHTML && !rejectedRowHTML.includes('value="approve"') && !rejectedRowHTML.includes('value="reject"'), rejectedRowHTML);
+
+    // Bấm thẻ "Cần Bổ Sung" -> contract4 (NEEDS_SUPPLEMENT) hiện ra.
+    await page.evaluate(() => filterContractByCard('NEEDS_SUPPLEMENT'));
+    await page.waitForTimeout(100);
+    const suppRowHTML = await page.evaluate((code) => {
+      const rows = Array.from(document.querySelectorAll('#contractTableBody tr'));
+      const row = rows.find((r) => r.textContent.includes(code));
+      return row ? row.innerHTML : null;
+    }, contract4.code);
+    check('Kịch bản 12: bấm thẻ "Cần Bổ Sung" -> contract4 (NEEDS_SUPPLEMENT) hiện ra trong Tab Phê Duyệt', !!suppRowHTML, suppRowHTML);
+    check('Kịch bản 12: dòng NEEDS_SUPPLEMENT hiện đúng badge "Cần bổ sung"', suppRowHTML && suppRowHTML.includes('Cần bổ sung'), suppRowHTML);
+
+    // Người duyệt (tp_kd) cũng thấy được cả 2 hồ sơ qua đúng 2 thẻ trên — nhưng không có nút hành động.
+    await loginAs('tp_kd');
+    await goToContractApproval();
+    await page.evaluate(() => filterContractByCard('NEEDS_SUPPLEMENT'));
+    await page.waitForTimeout(100);
+    const approverSuppRowHTML = await page.evaluate((code) => {
+      const rows = Array.from(document.querySelectorAll('#contractTableBody tr'));
+      const row = rows.find((r) => r.textContent.includes(code));
+      return row ? row.innerHTML : null;
+    }, contract4.code);
+    check('Kịch bản 12: người duyệt (tp_kd) cũng thấy contract4 qua thẻ "Cần Bổ Sung"', !!approverSuppRowHTML, approverSuppRowHTML);
+    check('Kịch bản 12: người duyệt KHÔNG có nút Duyệt/Từ chối trên dòng NEEDS_SUPPLEMENT', approverSuppRowHTML && !approverSuppRowHTML.includes('value="approve"') && !approverSuppRowHTML.includes('value="reject"'), approverSuppRowHTML);
+
+    // Hub "✅ Phê Duyệt" > "Hồ Sơ Đã Xử Lý" > lọc "❌ Đã từ chối" > bấm "🔍 Xem" (gotoApprovalHubOrigin)
+    // phải trỏ ĐÚNG về dòng contract2 đã hiện được (trước đây link chết vì Tab Phê Duyệt không hiện
+    // REJECTED) — mô phỏng đúng thao tác đó: set select trạng thái Hub rồi gọi thẳng hàm điều hướng.
+    await page.evaluate(() => { document.getElementById('approvalHubFilterStatus').value = 'REJECTED'; });
+    await page.evaluate(() => gotoApprovalHubOrigin('contract'));
+    await page.waitForTimeout(200);
+    const hubNavState = await page.evaluate(() => ({
+      activeSubTab: activeContractSubTab,
+      typeFilterValue: document.getElementById('filterContractType').value,
+      tbodyHTML: document.getElementById('contractTableBody').innerHTML
+    }));
+    check('Kịch bản 12: Hub "🔍 Xem" (REJECTED) -> nhảy đúng Tab Phê Duyệt', hubNavState.activeSubTab === 'APPROVAL', hubNavState.activeSubTab);
+    check('Kịch bản 12: Hub "🔍 Xem" (REJECTED) -> tự set đúng bộ lọc "Bị Từ Chối"', hubNavState.typeFilterValue === 'REJECTED', hubNavState.typeFilterValue);
+    check('Kịch bản 12: Hub "🔍 Xem" (REJECTED) -> contract2 hiện ra ngay, không còn link chết', hubNavState.tbodyHTML.includes(contract2.code), null);
 
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {

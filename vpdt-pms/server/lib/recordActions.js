@@ -43,7 +43,9 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   // thái NHÁP/BỊ TỪ CHỐI (không phải PENDING — hồ sơ đang dở dang thật trong quy trình duyệt, ngoài
   // phạm vi lỗi này, vẫn giữ nguyên luật cũ "chỉ người tạo") — cùng khuôn lối thoát đã mở cho
   // CANCEL_FILE_PROPOSAL (lib/workflowEngine.js).
-  const isAdminEscapeStatus = contract.approvalStatus === 'DRAFT' || contract.approvalStatus === 'REJECTED';
+  // NEEDS_SUPPLEMENT (mục 2 kế hoạch 10/2026 — tách khỏi DRAFT để phân biệt "bị trả về bổ sung" với
+  // "nháp mới chưa từng gửi") — cùng lối thoát admin như DRAFT/REJECTED.
+  const isAdminEscapeStatus = contract.approvalStatus === 'DRAFT' || contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'NEEDS_SUPPLEMENT';
   if (contract.creator !== user.username && !(user.perms?.admin && isAdminEscapeStatus)) {
     throw new HttpError(403, 'Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
   }
@@ -254,7 +256,7 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   // currentStep=1 + invalidate lịch sử APPROVED y hệt REJECTED/DRAFT buộc quy trình duyệt lại từ đầu
   // với đúng nội dung mới; cũng tránh hồ sơ bị kẹt nếu đổi dept làm effectiveSteps mới có số bước khác
   // (currentStep cũ có thể trỏ ra ngoài effectiveApprovers mới).
-  if (contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'DRAFT' || contract.approvalStatus === 'PENDING') {
+  if (contract.approvalStatus === 'REJECTED' || contract.approvalStatus === 'DRAFT' || contract.approvalStatus === 'PENDING' || contract.approvalStatus === 'NEEDS_SUPPLEMENT') {
     // Mọi lượt "APPROVED" đã ghi ở vòng nộp TRƯỚC (VD bước 1 có 2 đồng duyệt, 1 người đã duyệt trước
     // khi người kia từ chối) không còn giá trị cho vòng MỚI vì nội dung đã sửa — đánh dấu invalidated
     // giống hệt cách REQUEST_CHANGES đã làm cho vpp/submissions (xem workflowEngine.js) để

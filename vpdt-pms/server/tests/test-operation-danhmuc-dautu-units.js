@@ -364,6 +364,54 @@ async function main() {
     assert.strictEqual(items.length, 1);
     assert(items[0].content.includes('Kệ trưng bày'));
     assert.strictEqual(items[0].amount, 20000000);
+    // LỖI ĐÃ VÁ (mục 4 kế hoạch 10/2026): cặp Tải Mẫu/Nhập THẬT trước đây thiếu trắng cột "Người Phụ
+    // Trách" (cột này trước đó chỉ có ở nút riêng "Xuất Excel", không dùng để nhập lại) — nay mẫu Tải
+    // Mẫu sinh ra phải có sẵn ví dụ, và đọc lại đúng thành mảng username.
+    assert.deepStrictEqual(items[0].assignedTo, ['username1', 'username2'], 'File mẫu phải có sẵn ví dụ cột Người Phụ Trách và đọc lại đúng');
+  });
+
+  await testAsync('operationImport: Danh Mục Đầu Tư — đọc đúng cột "Người Phụ Trách" dò theo tiêu đề (không dấu/khác hoa-thường), nhiều username cách nhau dấu phẩy + khoảng trắng thừa', async () => {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Sheet1');
+    sheet.addRow(['Noi Dung', 'Mo Ta', 'Chi Phi (VND)', 'nguoi PHU trach', 'Luu Y']);
+    sheet.addRow(['Kệ inox', '', 1000000, ' nv_a , nv_b ,,', '']);
+    sheet.addRow(['Sơn tường', '', 500000, '', '']);
+    const buf = await bufferOf(wb);
+    const items = await parseOperationEstimateImportXlsx(buf);
+    assert.strictEqual(items.length, 2);
+    assert.deepStrictEqual(items[0].assignedTo, ['nv_a', 'nv_b'], 'Phải tách đúng theo dấu phẩy, trim khoảng trắng, bỏ phần tử rỗng');
+    assert.deepStrictEqual(items[1].assignedTo, [], 'Không điền Người Phụ Trách -> mảng rỗng, không lỗi');
+  });
+
+  await testAsync('operationImport: Danh Mục Đầu Tư — file KHÔNG dò được tiêu đề (rơi về vị trí cột mặc định) vẫn đọc đúng cột Người Phụ Trách ở vị trí thứ 4', async () => {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Sheet1');
+    sheet.addRow(['???', '???', '???', '???', '???']); // tiêu đề không khớp hint nào -> colMap rơi về mặc định theo vị trí
+    sheet.addRow(['Kệ inox', 'Mô tả', 1000000, 'nv_a,nv_b', 'Ghi chú']);
+    const buf = await bufferOf(wb);
+    const items = await parseOperationEstimateImportXlsx(buf);
+    // Hành vi CŨ đã có từ trước (không phải lỗi mới): không dò được header thì dòng ĐẦU cũng bị đọc
+    // nhầm thành 1 dòng dữ liệu (content="???") — giữ nguyên hành vi cũ, chỉ kiểm tra đúng dòng THẬT
+    // (dòng thứ 2) đọc đúng cột Người Phụ Trách ở đúng vị trí mới (không bị lệch bởi cột vừa chèn giữa).
+    assert.strictEqual(items.length, 2);
+    assert.deepStrictEqual(items[1].assignedTo, ['nv_a', 'nv_b']);
+    assert.strictEqual(items[1].note, 'Ghi chú', 'Cột Lưu Ý phải dịch đúng sang vị trí thứ 5 (không bị lệch bởi cột mới chèn giữa)');
+  });
+
+  await testAsync('operationImport: Danh Mục Đầu Tư — file CŨ (4 cột, chưa có "Người Phụ Trách") vẫn đọc được bình thường, assignedTo rỗng (tương thích ngược)', async () => {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Sheet1');
+    sheet.addRow(['Nội Dung', 'Mô Tả', 'Chi Phí (VNĐ)', 'Lưu Ý']);
+    sheet.addRow(['Kệ inox', 'Loại 2 tầng', 1000000, 'Ghi chú cũ']);
+    const buf = await bufferOf(wb);
+    const items = await parseOperationEstimateImportXlsx(buf);
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].amount, 1000000);
+    assert.deepStrictEqual(items[0].assignedTo, [], 'File cũ chưa có cột này -> không lỗi, chỉ rỗng');
+    assert.strictEqual(items[0].note, 'Ghi chú cũ', 'Cột Lưu Ý (dò theo tiêu đề) vẫn khớp đúng dù thiếu hẳn cột Người Phụ Trách');
   });
 
   await testAsync('operationImport: đọc file Danh Mục Đầu Tư tự soạn, tiêu đề không dấu/khác hoa-thường vẫn dò đúng cột', async () => {
