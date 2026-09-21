@@ -464,6 +464,113 @@ async function main() {
       assert(result.createFormHidden, 'Approver KHÔNG có uniformManage thì không được thấy form "Tạo Kỳ Cấp Phát"');
       assertEqual(result.storeSubTab, 'STORE', 'Approver phải tới được tab Xác Nhận/Cấp Phát (để duyệt/từ chối điều chuyển kho)');
     });
+
+    // ===== 18) Danh Mục Đồng Phục — nút "✏️ Sửa" (10/2026, trước đây chỉ có Xoá, gõ sai tên/size phải
+    // xoá tạo lại từ đầu và MẤT LUÔN Mã SKU đã sinh cho từng size) =====
+    await run.run('Danh Mục: nút "✏️ Sửa" populate đúng dữ liệu lên form + đổi nút thành "Cập Nhật"', async () => {
+      await loginAs(page, HC);
+      const result = await page.evaluate(() => {
+        switchTab('uniform');
+        setUniformSubTab('PERIODS');
+        const id = DB.uniformCatalog.find(c => c.name === 'Áo đồng phục nam').id;
+        editUniformCatalogItem(id);
+        return {
+          name: document.getElementById('uniformCatalogName').value,
+          sizes: document.getElementById('uniformCatalogSizes').value,
+          btnText: document.getElementById('uniformCatalogSubmitBtn').textContent,
+          cancelHidden: document.getElementById('uniformCatalogCancelEditBtn').classList.contains('hidden')
+        };
+      });
+      assertEqual(result.name, 'Áo đồng phục nam', 'Form phải populate đúng tên mặt hàng đang sửa');
+      assertEqual(result.sizes, 'L, XL', 'Form phải populate đúng danh sách size hiện có');
+      assertEqual(result.btnText, '💾 Cập Nhật', 'Nút submit phải đổi thành "Cập Nhật" khi đang sửa');
+      assert(!result.cancelHidden, 'Nút "Huỷ Sửa" phải hiện khi đang sửa');
+    });
+
+    await run.run('Danh Mục: Cập Nhật tại chỗ - KHÔNG tạo dòng mới, GIỮ mã SKU cho size vẫn còn sau khi sửa', async () => {
+      const result = await page.evaluate(async () => {
+        const before = DB.uniformCatalog.length;
+        const codeL = DB.uniformCatalog.find(c => c.name === 'Áo đồng phục nam').codesBySize.L;
+        document.getElementById('uniformCatalogName').value = 'Áo đồng phục nam (Cotton)';
+        document.getElementById('uniformCatalogSizes').value = 'L, XL, M';
+        saveUniformCatalogItem();
+        // syncStorage() fire-and-forget — đợi 1 tick để request mock kịp xử lý xong.
+        await new Promise(r => setTimeout(r, 50));
+        const item = DB.uniformCatalog.find(c => c.id === 1);
+        return {
+          before, after: DB.uniformCatalog.length,
+          name: item?.name, sizes: item?.sizes,
+          codeLKept: item?.codesBySize?.L === codeL,
+          submitBtnText: document.getElementById('uniformCatalogSubmitBtn').textContent
+        };
+      });
+      assertEqual(result.after, result.before, 'Cập Nhật KHÔNG được tạo thêm dòng mới trong danh mục');
+      assertEqual(result.name, 'Áo đồng phục nam (Cotton)', 'Tên phải được cập nhật tại đúng dòng cũ');
+      assertEqual(JSON.stringify(result.sizes), JSON.stringify(['L', 'XL', 'M']), 'Danh sách size phải cập nhật đúng (thêm M, vẫn giữ L/XL)');
+      assert(result.codeLKept, 'Mã SKU của size L (vẫn còn sau khi sửa) phải được GIỮ NGUYÊN, không sinh lại');
+      assertEqual(result.submitBtnText, '+ Thêm', 'Sau khi Cập Nhật thành công, form phải tự quay lại chế độ Thêm Mới');
+    });
+
+    await run.run('Danh Mục: sửa bỏ size L ra khỏi mặt hàng -> MẤT mã SKU đã gắn cho size đó (không còn size nào để gắn)', async () => {
+      const result = await page.evaluate(async () => {
+        editUniformCatalogItem(1);
+        document.getElementById('uniformCatalogSizes').value = 'XL, M';
+        saveUniformCatalogItem();
+        await new Promise(r => setTimeout(r, 50));
+        const item = DB.uniformCatalog.find(c => c.id === 1);
+        return { codesBySize: item?.codesBySize, sizes: item?.sizes };
+      });
+      assert(!result.codesBySize?.L, 'Bỏ size L khỏi danh sách thì mã SKU gắn với size đó phải mất theo, không còn giữ vô nghĩa');
+      assertEqual(JSON.stringify(result.sizes), JSON.stringify(['XL', 'M']), 'Danh sách size sau khi sửa phải đúng (đã bỏ L)');
+    });
+
+    await run.run('Danh Mục: Huỷ Sửa không lưu thay đổi, form reset về chế độ Thêm Mới, dữ liệu gốc giữ nguyên', async () => {
+      const result = await page.evaluate(() => {
+        const before = JSON.parse(JSON.stringify(DB.uniformCatalog.find(c => c.name === 'Quần đồng phục')));
+        editUniformCatalogItem(before.id);
+        document.getElementById('uniformCatalogName').value = 'Tên bị đổi nhưng không lưu';
+        document.getElementById('uniformCatalogSizes').value = '99';
+        cancelEditUniformCatalogItem();
+        const after = DB.uniformCatalog.find(c => c.id === before.id);
+        return {
+          nameField: document.getElementById('uniformCatalogName').value,
+          sizesField: document.getElementById('uniformCatalogSizes').value,
+          submitBtnText: document.getElementById('uniformCatalogSubmitBtn').textContent,
+          cancelHidden: document.getElementById('uniformCatalogCancelEditBtn').classList.contains('hidden'),
+          unchanged: JSON.stringify(after) === JSON.stringify(before)
+        };
+      });
+      assertEqual(result.nameField, '', 'Huỷ Sửa phải xoá trắng ô tên trên form');
+      assertEqual(result.sizesField, '', 'Huỷ Sửa phải xoá trắng ô size trên form');
+      assertEqual(result.submitBtnText, '+ Thêm', 'Huỷ Sửa phải đưa nút submit về "+ Thêm"');
+      assert(result.cancelHidden, 'Huỷ Sửa phải ẩn lại nút "Huỷ Sửa"');
+      assert(result.unchanged, 'Huỷ Sửa KHÔNG được thay đổi dữ liệu gốc của mặt hàng trong danh mục');
+    });
+
+    await run.run('Danh Mục: mặt hàng đang sửa bị xoá ở nơi khác trước khi bấm Cập Nhật -> báo lỗi rõ ràng, không tạo hồ sơ rác, form tự reset', async () => {
+      const result = await page.evaluate(async () => {
+        window.__alerts = [];
+        const mu = DB.uniformCatalog.find(c => c.name === 'Mũ đồng phục');
+        editUniformCatalogItem(mu.id);
+        deleteUniformCatalogItem(mu.id); // mô phỏng bị xoá "ở nơi khác" trong lúc form vẫn đang mở để sửa
+        await new Promise(r => setTimeout(r, 50));
+        const beforeCount = DB.uniformCatalog.length;
+        saveUniformCatalogItem(); // bấm "Cập Nhật" sau khi mặt hàng đã bị xoá
+        await new Promise(r => setTimeout(r, 50));
+        return {
+          alerts: window.__alerts.slice(),
+          countUnchanged: DB.uniformCatalog.length === beforeCount,
+          nameField: document.getElementById('uniformCatalogName').value,
+          submitBtnText: document.getElementById('uniformCatalogSubmitBtn').textContent,
+          cancelHidden: document.getElementById('uniformCatalogCancelEditBtn').classList.contains('hidden')
+        };
+      });
+      assert(result.alerts.some(a => a.includes('không còn tồn tại')), 'Phải cảnh báo rõ ràng mặt hàng đang sửa không còn tồn tại');
+      assert(result.countUnchanged, 'KHÔNG được vô tình thêm mới/tạo lại mặt hàng vào danh mục sau lỗi này');
+      assertEqual(result.nameField, '', 'Form phải tự xoá trắng, không giữ lại dữ liệu của mặt hàng đã bị xoá');
+      assertEqual(result.submitBtnText, '+ Thêm', 'Phải tự động huỷ chế độ sửa, quay lại "+ Thêm"');
+      assert(result.cancelHidden, 'Nút "Huỷ Sửa" phải tự ẩn lại vì không còn đang sửa gì nữa');
+    });
   } finally {
     await browser.close();
     server.close();

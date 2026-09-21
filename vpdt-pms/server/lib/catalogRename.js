@@ -563,6 +563,12 @@ const CATALOG_HANDLERS = {
   carTaxiCompanies: simpleArrayCatalogHandler('carTaxiCompanies', 'Danh Mục Hãng Taxi'),
   priceZones: simpleArrayCatalogHandler('priceZones', 'Danh Mục Vùng Giá Áp Dụng'),
   trainingCategories: simpleArrayCatalogHandler('trainingCategories', 'Danh Mục Loại Đào Tạo'),
+  // itRenewalCategories ("Loại Dịch Vụ" — Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT, module-itsupport-renewal.js):
+  // cùng khuôn licenseTypes/carTaxiCompanies/priceZones/trainingCategories ở trên (mảng chuỗi phẳng,
+  // itServiceRenewals.category chỉ dùng làm NHÃN hiển thị/lọc, không có logic quyền/bảo mật nào so khớp
+  // ngược lại danh mục) — 10/2026, thêm nút "✏️ Sửa" (trước đây chỉ Xoá, gõ sai tên phải xoá tạo lại,
+  // MẤT liên kết với các bản ghi Gia Hạn CNTT đã gán loại dịch vụ đó).
+  itRenewalCategories: simpleArrayCatalogHandler('itRenewalCategories', 'Danh Mục Loại Dịch Vụ Gia Hạn CNTT'),
   jobTitles: {
     async renameInCatalog(oldValue, newValue) {
       return withLockedAppDataValue('jobTitles', (list) => {

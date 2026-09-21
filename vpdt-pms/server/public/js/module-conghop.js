@@ -674,38 +674,86 @@ async function submitHacHoConfig(e) {
 }
 
 function renderHacHolidayTable() {
+  // Sắp xếp theo ngày để hiển thị (KHÔNG phải thứ tự lưu thật trong DB.publicHolidays) — vì vậy nút
+  // Sửa/Xoá phải định danh theo h.date (ngày là khoá duy nhất, đã chặn trùng khi thêm/sửa ở
+  // submitHacHoliday()), TUYỆT ĐỐI không dùng index của mảng đã sort này để filter/tìm trong
+  // DB.publicHolidays gốc (đã có lỗi index-lệch-thứ-tự trước khi sửa, xoá/sửa nhầm ngày lễ khác khi các
+  // ngày lễ được thêm không theo đúng thứ tự thời gian).
   const list = [...(DB.publicHolidays || [])].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const body = document.getElementById('hacHolidayBody');
   document.getElementById('hacHolidayEmpty').classList.toggle('hidden', list.length > 0);
-  body.innerHTML = list.map((h, idx) => `
+  body.innerHTML = list.map(h => `
     <tr class="border-b hover:bg-gray-50">
       <td class="p-2">${escapeHtml(h.date)}</td>
       <td class="p-2">${escapeHtml(h.name)}</td>
-      <td class="p-2"><button type="button" data-op="deleteHacHoliday" data-arg0="${idx}" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-300">Xoá</button></td>
+      <td class="p-2 whitespace-nowrap">
+        <button type="button" data-op="editHacHoliday" data-arg0="${escapeHtml(h.date)}" class="text-indigo-600 hover:text-indigo-800 text-[11px] font-bold mr-2">✏️ Sửa</button>
+        <button type="button" data-op="deleteHacHoliday" data-arg0="${escapeHtml(h.date)}" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-300">Xoá</button>
+      </td>
     </tr>
   `).join('');
 }
 
+// editingHacHolidayDate — ngày (khoá duy nhất) của ngày lễ đang SỬA qua modal dùng chung với "Thêm"
+// (10/2026, thêm nút "✏️ Sửa" — trước đây chỉ có Xoá, gõ sai tên/ngày phải xoá tạo lại từ đầu).
+// null = đang ở chế độ THÊM MỚI (như cũ).
+let editingHacHolidayDate = null;
+
 function openHacHolidayModal() {
+  editingHacHolidayDate = null;
   document.getElementById('hacHolidayForm').reset();
+  document.getElementById('hacHolidayModalTitle').textContent = '📅 Thêm Ngày Lễ';
   document.getElementById('hacHolidayModal').classList.remove('hidden');
 }
-function closeHacHolidayModal() { document.getElementById('hacHolidayModal').classList.add('hidden'); }
+
+function editHacHoliday(date) {
+  const h = (DB.publicHolidays || []).find(x => x.date === date);
+  if (!h) return;
+  editingHacHolidayDate = date;
+  document.getElementById('hacHolidayDate').value = h.date;
+  document.getElementById('hacHolidayName').value = h.name;
+  document.getElementById('hacHolidayModalTitle').textContent = '✏️ Sửa Ngày Lễ';
+  document.getElementById('hacHolidayModal').classList.remove('hidden');
+}
+
+function closeHacHolidayModal() {
+  editingHacHolidayDate = null;
+  document.getElementById('hacHolidayModal').classList.add('hidden');
+}
 
 async function submitHacHoliday(e) {
   e.preventDefault();
   const date = document.getElementById('hacHolidayDate').value;
   const name = document.getElementById('hacHolidayName').value.trim();
   if (!date || !name) return alert('⛔ Vui lòng nhập đủ Ngày và Tên ngày lễ.');
-  if ((DB.publicHolidays || []).some(h => h.date === date)) return alert('⛔ Ngày này đã có trong danh mục.');
-  DB.publicHolidays = [...(DB.publicHolidays || []), { date, name }];
+  const isEdit = editingHacHolidayDate != null;
+  // Trùng ngày: chặn khi trùng với ngày lễ KHÁC — riêng đang sửa thì giữ nguyên đúng ngày cũ của chính
+  // nó không tính là trùng (mới cho phép chỉ sửa lại tên mà không phải đổi ngày khác đi).
+  if ((DB.publicHolidays || []).some(h => h.date === date && h.date !== editingHacHolidayDate)) {
+    return alert('⛔ Ngày này đã có trong danh mục.');
+  }
+  if (isEdit) {
+    const idx = (DB.publicHolidays || []).findIndex(h => h.date === editingHacHolidayDate);
+    if (idx === -1) {
+      alert('⚠️ Ngày lễ đang sửa không còn tồn tại (có thể vừa bị xoá) — huỷ sửa, vui lòng thêm lại nếu cần.');
+      editingHacHolidayDate = null;
+      closeHacHolidayModal();
+      renderHacHolidayTable();
+      return;
+    }
+    const next = [...DB.publicHolidays];
+    next[idx] = { date, name };
+    DB.publicHolidays = next;
+  } else {
+    DB.publicHolidays = [...(DB.publicHolidays || []), { date, name }];
+  }
   const ok = await syncStorage('publicHolidays');
-  if (ok) { closeHacHolidayModal(); renderHacHolidayTable(); }
+  if (ok) { editingHacHolidayDate = null; closeHacHolidayModal(); renderHacHolidayTable(); }
 }
 
-async function deleteHacHoliday(idx) {
+async function deleteHacHoliday(date) {
   if (!confirm('Xoá ngày lễ này?')) return;
-  DB.publicHolidays = (DB.publicHolidays || []).filter((_, i) => i !== Number(idx));
+  DB.publicHolidays = (DB.publicHolidays || []).filter(h => h.date !== date);
   const ok = await syncStorage('publicHolidays');
   if (ok) renderHacHolidayTable();
 }

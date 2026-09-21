@@ -1259,6 +1259,24 @@ router.post('/operationRepairs/:id/delete', rejectOperationDelete);
 // CHƯA kết thúc (dùng đúng cách tính getTrainingClassSessionState() đã mirror ở createValidation.js
 // trainingRegistrations.extraValidate) — lớp ONLINE đã kết thúc thì tài liệu không còn khoá được ai nữa
 // nên không cần chặn.
+// POST /api/records/trainingDocuments/:id/edit (10/2026 — thêm nút "✏️ Sửa", trước đây chỉ có Xoá) — sửa
+// PHẦN METADATA (tên/loại đào tạo/Bắt Buộc Hoàn Thành/Chương Trình gắn kèm + link+thời lượng nếu là
+// VIDEO), CỐ Ý KHÔNG cho đổi docType/fileUrl (xem chú thích đầy đủ tại editTrainingDocument(),
+// lib/recordActions.js). Đọc kèm trainingCourses (kiểm tra courseId mới nếu có đổi).
+router.post('/trainingDocuments/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    appData.trainingCourses = await getAllForCollection('trainingCourses');
+    const result = await withLockedRecordForCollection('trainingDocuments', itemId, (item) =>
+      recordActions.editTrainingDocument(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingDocuments/${req.params.id}/edit`, err);
+  }
+});
 router.post('/trainingDocuments/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -1328,6 +1346,23 @@ router.post('/careerPaths/:id/delete', async (req, res) => {
     handleError(res, `careerPaths/${req.params.id}/delete`, err);
   }
 });
+// POST /api/records/trainingTests/:id/edit (10/2026 — thêm nút "✏️ Sửa", trước đây chỉ có Xoá — sửa 1
+// câu hỏi/đáp án sai phải xoá tạo lại TOÀN BỘ bài test, mất luôn liên kết trainingClasses.testId đang
+// trỏ vào bài test đó) — tái dùng ĐÚNG 1 luật chuẩn hoá/kiểm tra dùng chung với lúc TẠO
+// (normalizeTrainingTestFields(), lib/createValidation.js), KHÔNG đổi id (giữ nguyên liên kết).
+router.post('/trainingTests/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('trainingTests', itemId, (item) =>
+      recordActions.editTrainingTest(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingTests/${req.params.id}/edit`, err);
+  }
+});
 router.post('/trainingTests/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -1343,6 +1378,23 @@ router.post('/trainingTests/:id/delete', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `trainingTests/${req.params.id}/delete`, err);
+  }
+});
+// POST /api/records/trainingCourses/:id/edit (10/2026 — thêm nút "✏️ Sửa", trước đây chỉ có Xoá) — sửa
+// tên/loại đào tạo/mô tả 1 Chương Trình đã tạo, KHÔNG đổi id (giữ nguyên liên kết trainingClasses/
+// trainingDocuments/trainingPlans.courseId đang trỏ tới), cùng khuôn trainingPlans/:id/edit ở dưới xa
+// hơn trong file này.
+router.post('/trainingCourses/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('trainingCourses', itemId, (item) =>
+      recordActions.editTrainingCourse(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `trainingCourses/${req.params.id}/edit`, err);
   }
 });
 // Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo

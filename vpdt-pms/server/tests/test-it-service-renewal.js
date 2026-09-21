@@ -228,6 +228,40 @@ async function main() {
       assert(result.html.includes(String(result.total)), 'Thẻ phải hiển thị đúng số lượng hiện có');
     });
 
+    // ===== 10) Danh Mục "Loại Dịch Vụ" — nút "✏️ Sửa" mới (10/2026, trước đây chỉ có Xoá, gõ sai tên
+    // phải xoá tạo lại từ đầu, mất liên kết với các bản ghi Gia Hạn CNTT đã gán loại dịch vụ đó). Đi qua
+    // đúng route rename-with-cascade dùng chung (POST /api/admin/renameCatalogEntry, xem
+    // lib/catalogRename.js CATALOG_HANDLERS.itRenewalCategories + test-catalog-rename-server.js cho phần
+    // server-side/cascade) — ở đây chỉ xác nhận đúng WIRING phía client (nút render đúng data-arg0, box
+    // vẫn admin-only như trước, không đổi hành vi hiện có).
+    await run.run('Danh Mục Loại Dịch Vụ: admin thấy nút "✏️ Sửa" đúng data-arg0 cho từng mặt hàng', async () => {
+      await loginAs(page, ADMIN);
+      const result = await page.evaluate(() => {
+        DB.itRenewalCategories = ['Phần mềm/Bản quyền', 'Tên miền'];
+        switchTab('itSupport');
+        setItSupportSubTab('RENEWAL');
+        const btn = document.querySelector('#itRenewalCategoryList button[data-op="renameItRenewalCategory"]');
+        return {
+          boxHidden: document.getElementById('itRenewalCategoryAdminBox').classList.contains('hidden'),
+          btnArg0: btn?.getAttribute('data-arg0'),
+          hasRenameFn: typeof window.renameItRenewalCategory === 'function'
+        };
+      });
+      assert(!result.boxHidden, 'Admin phải thấy khối quản lý Danh Mục Loại Dịch Vụ');
+      assertEqual(result.btnArg0, 'Phần mềm/Bản quyền', 'Nút "✏️ Sửa" đầu tiên phải mang đúng data-arg0 của mặt hàng tương ứng');
+      assert(result.hasRenameFn, 'renameItRenewalCategory() phải được định nghĩa (module đã nạp)');
+    });
+
+    await run.run('Danh Mục Loại Dịch Vụ: itServiceRenewalManage (KHÔNG phải admin) không thấy khối quản lý danh mục này', async () => {
+      await loginAs(page, IT_STAFF);
+      const boxHidden = await page.evaluate(() => {
+        switchTab('itSupport');
+        setItSupportSubTab('RENEWAL');
+        return document.getElementById('itRenewalCategoryAdminBox').classList.contains('hidden');
+      });
+      assert(boxHidden, 'Chỉ Admin mới được sửa/xoá Danh Mục Loại Dịch Vụ, itServiceRenewalManage thường không thấy khối này (giữ nguyên hành vi cũ)');
+    });
+
   } finally {
     run.summary();
     await browser.close();

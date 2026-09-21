@@ -20,7 +20,8 @@ router.use(requireAuth, blockIfMustChangePassword);
 // xem lib/catalogRename.js), cùng khuôn depts/cats.
 const VALID_CATALOG_KEYS = new Set([
   'stores', 'jobTitles', 'storeJobTitles', 'depts', 'cats', 'contractTypes',
-  'licenseTypes', 'carTaxiCompanies', 'priceZones', 'trainingCategories'
+  'licenseTypes', 'carTaxiCompanies', 'priceZones', 'trainingCategories',
+  'itRenewalCategories'
 ]);
 
 // POST /api/admin/renameCatalogEntry — body { catalogKey, oldValue, newValue }. Chỉ Quản Trị Viên (khớp

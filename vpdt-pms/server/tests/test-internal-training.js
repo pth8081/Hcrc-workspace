@@ -1007,6 +1007,107 @@ async function main() {
       assertEqual(reg.result, 'PASSED', `expected nv1 to PASS once the OFFLINE session has ended, got ${reg.result}`);
     });
 
+    // ===== 10/2026 — nút "✏️ Sửa" mới cho Chương Trình/Ngân Hàng Câu Hỏi/Kho Tài Liệu (trước đây chỉ có
+    // Xoá, gõ sai phải xoá tạo lại từ đầu, MẤT liên kết trainingClasses/trainingDocuments/trainingPlans
+    // đang trỏ vào id cũ vì xoá-tạo-lại luôn đổi id mới). =====
+    let editCourseId = null;
+    await run('Chương Trình: trainer sửa được tên/loại đào tạo, KHÔNG tạo dòng mới (giữ nguyên id)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => {
+        switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('COURSES');
+        document.getElementById('tccName').value = 'Chương Trình Test Sửa';
+        document.getElementById('tccCategory').value = 'Nghiệp vụ';
+      });
+      await page.evaluate(() => submitTrainingCourse({ preventDefault() {}, target: { reset() {} } }));
+      const before = await page.evaluate(() => DB.trainingCourses.length);
+      editCourseId = await page.evaluate(() => DB.trainingCourses.find((c) => c.name === 'Chương Trình Test Sửa').id);
+
+      await page.evaluate((id) => editTrainingCourse(id), editCourseId);
+      const populated = await page.evaluate(() => ({ name: document.getElementById('tccName').value, category: document.getElementById('tccCategory').value }));
+      assertEqual(populated.name, 'Chương Trình Test Sửa', 'form phải populate đúng tên đang sửa');
+
+      await page.evaluate(() => { document.getElementById('tccName').value = 'Chương Trình Test Sửa (đã đổi)'; });
+      await page.evaluate(() => submitTrainingCourse({ preventDefault() {}, target: { reset() {} } }));
+      const after = await page.evaluate(() => DB.trainingCourses.length);
+      const course = await page.evaluate((id) => DB.trainingCourses.find((c) => c.id === id), editCourseId);
+      assertEqual(after, before, 'sửa KHÔNG được tạo thêm dòng mới');
+      assertEqual(course.name, 'Chương Trình Test Sửa (đã đổi)', 'tên phải được cập nhật đúng dòng cũ (giữ nguyên id)');
+    });
+
+    await run('Chương Trình: người không có trainingManage/admin bị chặn sửa (403), dữ liệu không đổi', async () => {
+      await page.evaluate((u) => { currentUser = u; }, nv1);
+      let errMsg = '';
+      await page.evaluate(async (id) => {
+        try { await callRecordAction('trainingCourses', id, 'edit', { name: 'Bị Hack', category: 'Nghiệp vụ' }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, editCourseId);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('không có quyền'), `expected a permission error, got: ${errMsg}`);
+      const course = await page.evaluate((id) => DB.trainingCourses.find((c) => c.id === id), editCourseId);
+      assertEqual(course.name, 'Chương Trình Test Sửa (đã đổi)', 'không được đổi gì khi bị chặn quyền');
+    });
+
+    let editDocId = null;
+    await run('Kho Tài Liệu: trainer sửa được tên/loại đào tạo/Bắt Buộc, KHÔNG đổi được docType/fileUrl', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => {
+        switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('DOCS');
+        document.getElementById('tdCategory').value = 'Nghiệp vụ';
+        document.getElementById('tdTitle').value = 'Tài Liệu Test Sửa';
+        document.getElementById('tdDocType').value = 'DOCUMENT';
+        onTrainingDocTypeChange();
+      });
+      const fs = require('fs');
+      const os = require('os');
+      const tmpPdfPath = require('path').join(os.tmpdir(), 'training-doc-edit-test.pdf');
+      fs.writeFileSync(tmpPdfPath, Buffer.from('%PDF-1.4 fake'));
+      await page.setInputFiles('#tdFile', tmpPdfPath);
+      const beforeCount = await page.evaluate(() => DB.trainingDocuments.length);
+      await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
+      const afterCreateCount = await page.evaluate(() => DB.trainingDocuments.length);
+      assertEqual(afterCreateCount, beforeCount + 1, 'phải tạo được tài liệu mới (chuẩn bị dữ liệu cho kịch bản Sửa)');
+      editDocId = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Tài Liệu Test Sửa').id);
+      const originalFileUrl = await page.evaluate((id) => DB.trainingDocuments.find((d) => d.id === id).fileUrl, editDocId);
+
+      await page.evaluate((id) => editTrainingDocument(id), editDocId);
+      const docTypeDisabled = await page.evaluate(() => document.getElementById('tdDocType').disabled);
+      assert(docTypeDisabled, 'ô Loại Tài Liệu phải bị khoá khi đang sửa (không cho đổi docType)');
+      await page.evaluate(() => { document.getElementById('tdTitle').value = 'Tài Liệu Test Sửa (đã đổi)'; document.getElementById('tdMandatory').checked = true; });
+      await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
+      const afterEditCount = await page.evaluate(() => DB.trainingDocuments.length);
+      const doc = await page.evaluate((id) => DB.trainingDocuments.find((d) => d.id === id), editDocId);
+      assertEqual(afterEditCount, afterCreateCount, 'sửa KHÔNG được tạo thêm dòng mới');
+      assertEqual(doc.title, 'Tài Liệu Test Sửa (đã đổi)', 'tên phải được cập nhật');
+      assertEqual(doc.mandatory, true, '"Bắt Buộc Hoàn Thành" phải được cập nhật');
+      assertEqual(doc.fileUrl, originalFileUrl, 'fileUrl KHÔNG được đổi khi sửa (chỉ sửa metadata)');
+    });
+
+    await run('Ngân Hàng Câu Hỏi: trainer sửa được câu hỏi/đáp án của bài test đã tạo, giữ nguyên id (không phá liên kết testId của lớp)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, trainer);
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('TESTS'); });
+      const beforeCount = await page.evaluate(() => DB.trainingTests.length);
+
+      await page.evaluate((id) => editTrainingTest(id), testId);
+      const populatedTitle = await page.evaluate(() => document.getElementById('ttTitle').value);
+      assertEqual(populatedTitle, 'Bài Test Nội Quy Công Ty', 'form phải populate đúng tên bài test đang sửa');
+      const populatedQCount = await page.evaluate(() => tbQuestions.length);
+      assertEqual(populatedQCount, 2, 'Test Builder phải populate đúng số câu hỏi đã có (đảo ngược đúng khuôn dữ liệu server)');
+
+      await page.evaluate(() => {
+        document.getElementById('ttTitle').value = 'Bài Test Nội Quy Công Ty (đã sửa)';
+        tbQuestions.push({ text: 'Câu hỏi mới thêm khi sửa', type: 'SINGLE', points: 1, imageUrl: '', options: [{ text: 'Đúng', correct: true, imageUrl: '' }, { text: 'Sai', correct: false, imageUrl: '' }] });
+      });
+      await page.evaluate(() => submitTrainingTest({ preventDefault() {} }));
+      const afterCount = await page.evaluate(() => DB.trainingTests.length);
+      const test = await page.evaluate((id) => DB.trainingTests.find((t) => t.id === id), testId);
+      assertEqual(afterCount, beforeCount, 'sửa KHÔNG được tạo thêm dòng mới');
+      assertEqual(test.id, testId, 'id bài test phải giữ nguyên (không phá liên kết trainingClasses.testId)');
+      assertEqual(test.title, 'Bài Test Nội Quy Công Ty (đã sửa)', 'tên phải được cập nhật');
+      assertEqual(test.questions.length, 3, 'phải thêm được câu hỏi mới vào bài test đã có khi sửa');
+      const clsAfter = await page.evaluate((id) => DB.trainingClasses.find((c) => c.testId === id), testId);
+      assert(clsAfter, 'lớp học đã gán bài test này TRƯỚC ĐÓ vẫn phải còn trỏ đúng testId sau khi sửa (liên kết không bị phá)');
+    });
+
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
   } finally {
     await teardown({ server, browser });

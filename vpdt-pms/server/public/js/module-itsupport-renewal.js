@@ -63,9 +63,19 @@ function renderItRenewalCategoryList() {
   ul.innerHTML = (DB.itRenewalCategories || []).map(c => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(c)}</span>
+      <button data-op="renameItRenewalCategory" data-arg0="${escapeHtml(c)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteItRenewalCategory" data-arg0="${escapeHtml(c)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+// renameItRenewalCategory — 10/2026, thêm nút "✏️ Sửa" (trước đây chỉ Xoá, gõ sai tên phải xoá tạo
+// lại từ đầu, mất liên kết với các bản ghi Gia Hạn CNTT đã gán loại dịch vụ đó). Đi qua đúng route
+// rename-with-cascade dùng chung (POST /api/admin/renameCatalogEntry, xem lib/catalogRename.js
+// CATALOG_HANDLERS.itRenewalCategories) thay vì tự ghi đè mảng qua POST /api/data/itRenewalCategories
+// — cùng khuôn renameLicenseType()/renameCarTaxiCompany() (module-tailieu.js/module-dangkyxe.js).
+async function renameItRenewalCategory(name) {
+  const ok = await renameCatalogEntryClient('itRenewalCategories', name, 'Danh Mục Loại Dịch Vụ Gia Hạn CNTT');
+  if (ok) renderItServiceRenewals();
 }
 function saveItRenewalCategory(e) {
   e.preventDefault();

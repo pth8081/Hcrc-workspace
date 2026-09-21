@@ -122,9 +122,39 @@ function renderUniformCatalogList() {
           ${(c.sizes || []).map(s => `<span class="inline-block mr-2">${escapeHtml(s)}${c.codesBySize?.[s] ? ` <span class="text-cyan-700 font-mono">(${escapeHtml(c.codesBySize[s])})</span>` : ' <span class="italic">(chưa có mã)</span>'}</span>`).join('') || 'Không có size'}
         </div>
       </div>
-      ${canEdit ? `<button type="button" data-op="deleteUniformCatalogItem" data-arg0="${c.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
+      ${canEdit ? `<div class="whitespace-nowrap">
+        <button type="button" data-op="editUniformCatalogItem" data-arg0="${c.id}" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold mr-2">✏️ Sửa</button>
+        <button type="button" data-op="deleteUniformCatalogItem" data-arg0="${c.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>
+      </div>` : ''}
     </div>
   `).join('');
+}
+
+// editingUniformCatalogId — id mặt hàng đang SỬA qua form phía trên (10/2026, thêm nút "✏️ Sửa" — trước
+// đây chỉ Xoá, gõ sai tên/size phải xoá tạo lại từ đầu, MẤT LUÔN Mã SKU đã sinh cho từng size vì
+// deleteUniformCatalogItem() xoá hẳn cả object kèm codesBySize). null = đang ở chế độ THÊM MỚI (như cũ).
+let editingUniformCatalogId = null;
+
+function editUniformCatalogItem(id) {
+  const item = (DB.uniformCatalog || []).find(c => c.id === id);
+  if (!item) return;
+  editingUniformCatalogId = id;
+  document.getElementById('uniformCatalogName').value = item.name;
+  document.getElementById('uniformCatalogSizes').value = (item.sizes || []).join(', ');
+  updateUniformCatalogFormSubmitUI();
+}
+
+function cancelEditUniformCatalogItem() {
+  editingUniformCatalogId = null;
+  document.getElementById('uniformCatalogName').value = '';
+  document.getElementById('uniformCatalogSizes').value = '';
+  updateUniformCatalogFormSubmitUI();
+}
+
+function updateUniformCatalogFormSubmitUI() {
+  const btn = document.getElementById('uniformCatalogSubmitBtn');
+  if (btn) btn.textContent = editingUniformCatalogId != null ? '💾 Cập Nhật' : '+ Thêm';
+  document.getElementById('uniformCatalogCancelEditBtn')?.classList.toggle('hidden', editingUniformCatalogId == null);
 }
 
 function saveUniformCatalogItem() {
@@ -133,13 +163,43 @@ function saveUniformCatalogItem() {
   if (!name) return alert('Vui lòng nhập tên đồng phục!');
   const sizes = sizesRaw.split(',').map(s => s.trim()).filter(Boolean);
   if (!sizes.length) return alert('Vui lòng nhập ít nhất 1 size (cách nhau bằng dấu phẩy)!');
-  if ((DB.uniformCatalog || []).some(c => c.name === name)) return alert('Mặt hàng này đã có trong danh mục!');
-  const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
-  DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes, codesBySize: {} }];
-  syncStorage('uniformCatalog');
-  logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
+  const isEdit = editingUniformCatalogId != null;
+  // Trùng tên: chặn khi trùng với mặt hàng KHÁC — riêng đang sửa thì tên GIỮ NGUYÊN của chính nó không
+  // tính là trùng (mới cho phép chỉ sửa lại size mà không phải đổi tên khác đi).
+  if ((DB.uniformCatalog || []).some(c => c.name === name && c.id !== editingUniformCatalogId)) {
+    return alert('Mặt hàng này đã có trong danh mục!');
+  }
+  if (isEdit) {
+    const item = (DB.uniformCatalog || []).find(c => c.id === editingUniformCatalogId);
+    if (!item) {
+      alert('⚠️ Mặt hàng đang sửa không còn tồn tại (có thể vừa bị xoá) — huỷ sửa, vui lòng thêm lại nếu cần.');
+      editingUniformCatalogId = null;
+      document.getElementById('uniformCatalogName').value = '';
+      document.getElementById('uniformCatalogSizes').value = '';
+      updateUniformCatalogFormSubmitUI();
+      renderUniformCatalogList();
+      return;
+    }
+    // Giữ lại Mã SKU (codesBySize) của những size VẪN CÒN sau khi sửa — chỉ size bị BỎ khỏi danh sách
+    // mới mất mã đi kèm (mã đó không còn gắn với size nào của mặt hàng nữa nên không có gì để giữ).
+    const keptCodes = {};
+    for (const s of sizes) if (item.codesBySize?.[s]) keptCodes[s] = item.codesBySize[s];
+    item.name = name;
+    item.sizes = sizes;
+    item.codesBySize = keptCodes;
+    DB.uniformCatalog = [...DB.uniformCatalog];
+    syncStorage('uniformCatalog');
+    logSystemAction('UNIFORM', 'UPDATE_UNIFORM_CATALOG', `Cập nhật mặt hàng Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
+    editingUniformCatalogId = null;
+  } else {
+    const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
+    DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes, codesBySize: {} }];
+    syncStorage('uniformCatalog');
+    logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
+  }
   document.getElementById('uniformCatalogName').value = '';
   document.getElementById('uniformCatalogSizes').value = '';
+  updateUniformCatalogFormSubmitUI();
   renderUniformCatalogList();
 }
 

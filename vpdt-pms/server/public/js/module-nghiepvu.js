@@ -1526,6 +1526,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
     steps: [
       { role: 'Quản lý đào tạo', text: 'vào tab <b>🎓 Chương Trình</b> → điền Tên Chương Trình + mục tiêu/nội dung khung → lưu.' },
+      { text: 'Gõ sai tên/loại đào tạo? Bấm <b>"Sửa"</b> ngay trên dòng chương trình đó (10/2026) — sửa tại chỗ, KHÔNG cần xoá tạo lại (xoá-tạo-lại sẽ đổi id, phá liên kết với mọi Lớp Học/Tài Liệu/Kế Hoạch đã gắn chương trình này).' },
       { text: 'Gắn tài liệu và câu hỏi có sẵn vào Chương Trình khi tạo Tài Liệu (tab Kho Tài Liệu) hoặc tạo Lớp Học (tab Lớp Học) — chọn đúng Chương Trình này ở ô "Chương Trình".' },
       { text: 'Mở nhiều lớp tái sử dụng cùng 1 Chương Trình: tạo Lớp Học mới, chọn lại đúng Chương Trình đã có ở ô "Chương Trình" thay vì để trống.' },
     ],
@@ -1552,6 +1553,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
     steps: [
       { role: 'Quản lý đào tạo', text: 'vào tab <b>📁 Kho Tài Liệu</b> → điền Tên Tài Liệu, chọn Loại Tài Liệu (VIDEO/IMAGE/PDF/DOCUMENT), tick "Bắt buộc xem" nếu cần, chọn Chương Trình (tuỳ chọn) → tải file hoặc dán link → lưu.' },
+      { text: 'Gõ sai tên/loại đào tạo? Bấm <b>"Sửa"</b> ngay trên dòng tài liệu đó (10/2026) để sửa metadata (tên/loại đào tạo/Bắt Buộc/Chương Trình + link-thời lượng nếu là Video) — KHÔNG đổi được loại tài liệu/tệp đã tải (muốn thay tệp/video khác hẳn vẫn phải Xoá rồi Thêm lại).' },
       { text: 'Gắn tài liệu này vào 1 lớp cụ thể: khi tạo/sửa Lớp Học, chọn tài liệu ở ô "Giáo Trình Đọc Bắt Buộc" (giữ Ctrl/Cmd để chọn nhiều).' },
       { role: 'Học viên', text: 'mở lớp qua "📚 Vào Lớp Học" → xem từng tài liệu bắt buộc — hệ thống tự theo dõi tiến độ đọc/xem (video/PDF theo % đã xem).' },
     ],
@@ -1565,6 +1567,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
     steps: [
       { role: 'Quản lý đào tạo', text: 'vào tab <b>🧪 Ngân Hàng Câu Hỏi</b> → điền Tiêu Đề bài test, Điểm Đạt Yêu Cầu → thêm từng câu hỏi (SINGLE/MULTI/ESSAY/IMAGE_DRAG_DROP) kèm đáp án đúng → lưu. Có thể tải file mẫu để nhập hàng loạt câu hỏi SINGLE/MULTI thay vì tạo tay từng câu (ESSAY/IMAGE_DRAG_DROP chỉ tạo được qua giao diện).' },
+      { text: 'Sửa 1 câu hỏi/đáp án sai sau khi đã lưu? Bấm <b>"Sửa"</b> ngay trên dòng bài test đó (10/2026) — Test Builder tự nạp lại đúng toàn bộ câu hỏi hiện có để sửa tại chỗ, KHÔNG cần xoá tạo lại cả bài (xoá-tạo-lại sẽ đổi id, phá liên kết trainingClasses đang gán bài test này).' },
       { text: 'Gắn bài test vào 1 lớp cụ thể: khi tạo/sửa Lớp Học, chọn bài test ở ô "Bài Test Gán Cho Lớp".' },
       { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận, vào mục "📝 Cần Chấm Nghị Luận" ngay trong tab này để chấm tay sau khi học viên nộp bài.' },
     ],

@@ -895,29 +895,40 @@ async function submitTrainingCourse(e) {
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
+  const isEdit = editingTrainingCourseId != null;
   const payload = {
-    code: `CT-${Date.now()}`,
     name: document.getElementById('tccName').value.trim(),
     category,
     description: document.getElementById('tccDescription').value.trim(),
     customData
   };
-  let newCourse;
+  if (!isEdit) payload.code = `CT-${Date.now()}`; // code chỉ sinh lúc TẠO, giữ nguyên khi sửa.
+  let savedCourse;
   try {
-    const result = await callCreateAction('trainingCourses', payload);
-    newCourse = result.item;
+    if (isEdit) {
+      const result = await callRecordAction('trainingCourses', editingTrainingCourseId, 'edit', payload);
+      savedCourse = result.item;
+    } else {
+      const result = await callCreateAction('trainingCourses', payload);
+      savedCourse = result.item;
+    }
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  DB.trainingCourses.unshift(newCourse);
-  logSystemAction('INTERNAL', 'CREATE_TRAINING_COURSE', `Tạo chương trình đào tạo [${newCourse.name}]`, 'SUCCESS', newCourse.code);
-  alert('✅ Đã tạo chương trình thành công!');
+  const idx = DB.trainingCourses.findIndex(c => c.id === savedCourse.id);
+  if (idx !== -1) DB.trainingCourses[idx] = savedCourse; else DB.trainingCourses.unshift(savedCourse);
+  logSystemAction('INTERNAL', isEdit ? 'EDIT_TRAINING_COURSE' : 'CREATE_TRAINING_COURSE', `${isEdit ? 'Sửa' : 'Tạo'} chương trình đào tạo [${savedCourse.name}]`, 'SUCCESS', savedCourse.code);
+  alert(isEdit ? '✅ Đã cập nhật chương trình thành công!' : '✅ Đã tạo chương trình thành công!');
+  editingTrainingCourseId = null;
   resetTrainingCourseForm();
   renderTrainingLms();
 }
-// resetTrainingCourseForm() — nút "↺ Làm Mới" + luồng tạo chương trình thành công ở trên. Form đơn giản
-// nhất đợt này: không có trạng thái JS nào khác ngoài chính form.reset().
+// resetTrainingCourseForm() — nút "↺ Làm Mới" + luồng tạo/sửa chương trình thành công ở trên. Cũng huỷ
+// dở dang chế độ SỬA nếu đang mở (10/2026 — bấm "Làm Mới" khi đang sửa dở coi như huỷ sửa, quay về form
+// trắng chế độ Thêm Mới, đúng kỳ vọng người dùng khi bấm nút này).
 function resetTrainingCourseForm() {
+  editingTrainingCourseId = null;
   const formEl = document.getElementById('trainingCourseForm');
   if (formEl) formEl.reset();
+  updateTrainingCourseFormSubmitUI();
 }
 
 function renderTrainingCourses() {
@@ -929,13 +940,43 @@ function renderTrainingCourses() {
   const pageItems = paginateList('trainingCourses', list, 'renderTrainingCourses', 'chương trình');
 
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có chương trình nào.</td></tr>`; return; }
+  const canManage = canManageTrainingLocal(currentUser);
   tbody.innerHTML = pageItems.map(c => `
     <tr class="hover:bg-gray-50">
       <td class="border p-2 font-bold text-gray-800">${escapeHtml(c.name)}</td>
       <td class="border p-2">${escapeHtml(c.category)}</td>
       <td class="border p-2 text-gray-600">${escapeHtml(c.description || '')}</td>
-      <td class="border p-2 text-center">${currentUser.perms?.admin ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}</td>
+      <td class="border p-2 text-center whitespace-nowrap">
+        ${canManage ? `<button data-op="editTrainingCourse" data-arg0="${c.id}" class="text-indigo-600 font-bold hover:underline text-xs mr-2">Sửa</button>` : ''}
+        ${currentUser.perms?.admin ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
+      </td>
     </tr>`).join('');
+}
+
+// editingTrainingCourseId — id chương trình đang SỬA qua form phía trên (10/2026, thêm nút "✏️ Sửa" —
+// trước đây chỉ Xoá, gõ sai tên/loại đào tạo phải xoá tạo lại từ đầu, MẤT liên kết với mọi
+// trainingClasses/trainingDocuments/trainingPlans đã gắn courseId đó vì xoá-tạo-lại luôn đổi id mới).
+// null = đang ở chế độ THÊM MỚI (như cũ).
+let editingTrainingCourseId = null;
+function editTrainingCourse(id) {
+  const c = DB.trainingCourses.find(x => x.id === id);
+  if (!c) return;
+  editingTrainingCourseId = id;
+  document.getElementById('tccName').value = c.name;
+  document.getElementById('tccCategory').value = c.category;
+  document.getElementById('tccDescription').value = c.description || '';
+  updateTrainingCourseFormSubmitUI();
+}
+function cancelEditTrainingCourse() {
+  resetTrainingCourseForm();
+}
+function updateTrainingCourseFormSubmitUI() {
+  const isEdit = editingTrainingCourseId != null;
+  const btn = document.getElementById('tccSubmitBtn');
+  if (btn) btn.textContent = isEdit ? '💾 Cập Nhật' : 'Tạo Chương Trình';
+  document.getElementById('tccCancelEditBtn')?.classList.toggle('hidden', !isEdit);
+  const title = document.getElementById('trainingCourseFormTitle');
+  if (title) title.textContent = isEdit ? '✏️ Sửa Chương Trình' : '➕ Tạo Chương Trình Mới';
 }
 
 function deleteTrainingCourse(id) {
@@ -1962,17 +2003,56 @@ async function submitTrainingTest(e) {
       };
     })
   };
-  let newTest;
+  const isEdit = editingTrainingTestId != null;
+  let savedTest;
   try {
-    const result = await callCreateAction('trainingTests', payload);
-    newTest = result.item;
+    if (isEdit) {
+      const result = await callRecordAction('trainingTests', editingTrainingTestId, 'edit', payload);
+      savedTest = result.item;
+    } else {
+      const result = await callCreateAction('trainingTests', payload);
+      savedTest = result.item;
+    }
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  DB.trainingTests.unshift(newTest);
-  logSystemAction('INTERNAL', 'CREATE_TRAINING_TEST', `Tạo bài test đào tạo [${newTest.title}]`, 'SUCCESS');
-  alert('✅ Đã tạo bài test thành công!');
+  const idx = DB.trainingTests.findIndex(t => t.id === savedTest.id);
+  if (idx !== -1) DB.trainingTests[idx] = savedTest; else DB.trainingTests.unshift(savedTest);
+  logSystemAction('INTERNAL', isEdit ? 'EDIT_TRAINING_TEST' : 'CREATE_TRAINING_TEST', `${isEdit ? 'Sửa' : 'Tạo'} bài test đào tạo [${savedTest.title}]`, 'SUCCESS');
+  alert(isEdit ? '✅ Đã cập nhật bài test thành công!' : '✅ Đã tạo bài test thành công!');
   resetTrainingTestForm();
   renderTrainingTests();
   populateTrainingClassMultiSelects();
+}
+
+// editingTrainingTestId — id bài test đang SỬA qua Test Builder phía trên (10/2026, thêm nút "✏️ Sửa" —
+// trước đây chỉ Xoá, sửa 1 câu hỏi/đáp án sai phải xoá tạo lại TOÀN BỘ bài test từ đầu, mất luôn liên kết
+// trainingClasses.testId đang trỏ vào bài test đó). null = chế độ TẠO MỚI (như cũ).
+let editingTrainingTestId = null;
+function editTrainingTest(id) {
+  const t = DB.trainingTests.find(x => x.id === id);
+  if (!t) return;
+  editingTrainingTestId = id;
+  document.getElementById('ttTitle').value = t.title;
+  document.getElementById('ttCategory').value = t.category || '';
+  document.getElementById('ttPassScore').value = t.passScore != null ? t.passScore : '';
+  // Đảo NGƯỢC đúng khuôn dữ liệu server (options[].id + correctOptionIds[]) về khuôn Test Builder
+  // (options[].correct boolean) — xem tbQuestions ở trên cho hình dạng đích.
+  tbQuestions = (t.questions || []).map(q => ({
+    text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl || '',
+    options: (q.options || []).map(o => ({ text: o.text || '', imageUrl: o.imageUrl || '', correct: (q.correctOptionIds || []).includes(o.id) }))
+  }));
+  renderTestBuilderQuestions();
+  updateTrainingTestFormSubmitUI();
+}
+function cancelEditTrainingTest() {
+  resetTrainingTestForm();
+}
+function updateTrainingTestFormSubmitUI() {
+  const isEdit = editingTrainingTestId != null;
+  const btn = document.getElementById('ttSubmitBtn');
+  if (btn) btn.textContent = isEdit ? '💾 Cập Nhật' : 'Tạo Bài Test';
+  document.getElementById('ttCancelEditBtn')?.classList.toggle('hidden', !isEdit);
+  const title = document.getElementById('trainingTestFormTitle');
+  if (title) title.textContent = isEdit ? '✏️ Sửa Bài Test' : '➕ Tạo Bài Test Mới';
 }
 
 // resetTrainingTestForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
@@ -1988,10 +2068,12 @@ async function submitTrainingTest(e) {
 // dùng cho các form khác, nên KHÔNG áp khuôn chip đó vào đây được — xoá câu hỏi khỏi tbQuestions ở trên đã
 // tự dọn sạch mọi ảnh đã gắn của câu hỏi đó).
 function resetTrainingTestForm() {
+  editingTrainingTestId = null;
   tbQuestions = [];
   renderTestBuilderQuestions();
   const formEl = document.getElementById('trainingTestForm');
   if (formEl) formEl.reset();
+  updateTrainingTestFormSubmitUI();
 }
 
 function renderTrainingTests() {
@@ -2006,6 +2088,7 @@ function renderTrainingTests() {
   const canManage = canManageTrainingLocal(currentUser);
   container.innerHTML = pageItems.map(t => {
     const totalPoints = t.questions.reduce((s, q) => s + q.points, 0);
+    const editHTML = canManage ? `<button data-op="editTrainingTest" data-arg0="${t.id}" class="text-indigo-600 font-bold hover:underline text-xs ml-2">Sửa</button>` : '';
     const delHTML = currentUser.perms?.admin ? `<button data-op="deleteTrainingTest" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline text-xs ml-2">Xóa</button>` : '';
     // Xuất Excel (mirror khuôn cột của template Nhập Từ Excel — xem exportTrainingTestQuestionsExcel())
     // — CHỈ trainingManage/admin (đáp án đúng chỉ họ thấy, xem sanitizeTrainingTestsForUser() server).
@@ -2021,7 +2104,7 @@ function renderTrainingTests() {
           <div class="text-gray-500 mt-0.5">${t.questions.length} câu hỏi · ${totalPoints} điểm${t.category ? ' · ' + escapeHtml(t.category) : ''}${t.passScore != null ? ` · Gợi ý đạt ${t.passScore}%` : ''}</div>
           ${essayBadgeHTML}
         </div>
-        <div class="flex-shrink-0 text-right">${exportHTML}${delHTML}</div>
+        <div class="flex-shrink-0 text-right">${exportHTML}${editHTML}${delHTML}</div>
       </div>
     </div>`;
   }).join('');
@@ -2831,19 +2914,19 @@ async function submitTrainingDocument(e) {
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
+  const isEdit = editingTrainingDocumentId != null;
   const payload = {
-    code: `TL-DT-${Date.now()}`,
     category,
     title: document.getElementById('tdTitle').value.trim(),
     description: document.getElementById('tdDescription').value.trim(),
-    docType,
     mandatory: document.getElementById('tdMandatory').checked,
     courseId: document.getElementById('tdCourseId').value,
-    createdAt: new Date().toLocaleString('vi-VN'),
     customData
   };
+  if (!isEdit) { payload.code = `TL-DT-${Date.now()}`; payload.docType = docType; payload.createdAt = new Date().toLocaleString('vi-VN'); }
   if (docType === 'VIDEO') {
-    // VIDEO (Đợt 4) — nhúng Youtube qua link thay vì tải file, không gọi /api/upload.
+    // VIDEO (Đợt 4) — nhúng Youtube qua link thay vì tải file, không gọi /api/upload. Link+thời lượng
+    // VẪN sửa được khi Sửa (khác fileUrl/docType, xem editTrainingDocument() ở lib/recordActions.js).
     const videoUrl = document.getElementById('tdVideoUrl').value.trim();
     if (!videoUrl) return alert('Vui lòng nhập link video Youtube!');
     payload.videoUrl = videoUrl;
@@ -2852,7 +2935,9 @@ async function submitTrainingDocument(e) {
     const durationSeconds = Number(document.getElementById('tdVideoDuration').value);
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return alert('Vui lòng nhập thời lượng video (giây) hợp lệ!');
     payload.durationSeconds = Math.floor(durationSeconds);
-  } else {
+  } else if (!isEdit) {
+    // Tệp (DOCUMENT/IMAGE) CHỈ tải lên lúc TẠO MỚI — khi Sửa, ô Tệp bị ẩn hẳn (xem editTrainingDocument()),
+    // fileUrl/fileName/fileType giữ nguyên, KHÔNG gửi lại trong payload edit.
     const file = document.getElementById('tdFile').files[0];
     if (!file) return alert(docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên!' : 'Vui lòng chọn tệp tài liệu!');
     let uploaded;
@@ -2863,26 +2948,38 @@ async function submitTrainingDocument(e) {
     } catch (err) { return alert(`⛔ Tải tệp thất bại: ${err.message}`); }
     payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
   }
-  let newDoc;
+  let savedDoc;
   try {
-    const result = await callCreateAction('trainingDocuments', payload);
-    newDoc = result.item;
+    if (isEdit) {
+      const result = await callRecordAction('trainingDocuments', editingTrainingDocumentId, 'edit', payload);
+      savedDoc = result.item;
+    } else {
+      const result = await callCreateAction('trainingDocuments', payload);
+      savedDoc = result.item;
+    }
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  DB.trainingDocuments.unshift(newDoc);
-  logSystemAction('INTERNAL', 'CREATE_TRAINING_DOC', `Thêm tài liệu đào tạo [${newDoc.title}]`, 'SUCCESS', newDoc.code);
-  alert('✅ Đã thêm tài liệu vào kho thành công!');
+  const idx = DB.trainingDocuments.findIndex(d => d.id === savedDoc.id);
+  if (idx !== -1) DB.trainingDocuments[idx] = savedDoc; else DB.trainingDocuments.unshift(savedDoc);
+  logSystemAction('INTERNAL', isEdit ? 'EDIT_TRAINING_DOC' : 'CREATE_TRAINING_DOC', `${isEdit ? 'Sửa' : 'Thêm'} tài liệu đào tạo [${savedDoc.title}]`, 'SUCCESS', savedDoc.code);
+  alert(isEdit ? '✅ Đã cập nhật tài liệu thành công!' : '✅ Đã thêm tài liệu vào kho thành công!');
   resetTrainingDocForm();
   renderTrainingLms();
 }
-// resetTrainingDocForm() — nút "↺ Làm Mới" + luồng thêm tài liệu thành công ở trên. onTrainingDocTypeChange()
-// đồng bộ lại ẩn/hiện+required của ô Tệp/Video theo ĐÚNG #tdDocType sau khi form.reset() đưa select này về
-// lại lựa chọn mặc định (DOCUMENT); clearSingleFileInput() xoá chip "📎 tên file" đang hiện (nếu có, form.reset()
-// không tự bắn 'change' nên chip cũ không tự xoá — xem core.js).
+// resetTrainingDocForm() — nút "↺ Làm Mới" + luồng thêm/sửa tài liệu thành công ở trên. Cũng huỷ dở dang
+// chế độ SỬA nếu đang mở (10/2026) + mở khoá lại #tdDocType (bị khoá khi Sửa) + ẩn lại ghi chú "không
+// đổi được tệp". onTrainingDocTypeChange() đồng bộ lại ẩn/hiện+required của ô Tệp/Video theo ĐÚNG
+// #tdDocType sau khi form.reset() đưa select này về lại lựa chọn mặc định (DOCUMENT); clearSingleFileInput()
+// xoá chip "📎 tên file" đang hiện (nếu có, form.reset() không tự bắn 'change' nên chip cũ không tự xoá —
+// xem core.js).
 function resetTrainingDocForm() {
+  editingTrainingDocumentId = null;
   const formEl = document.getElementById('trainingDocForm');
   if (formEl) formEl.reset();
+  document.getElementById('tdDocType').disabled = false;
+  document.getElementById('tdFileLockedNote')?.classList.add('hidden');
   onTrainingDocTypeChange();
   clearSingleFileInput('tdFile', 'tdFileChip');
+  updateTrainingDocFormSubmitUI();
 }
 
 // Youtube embed URL (Đợt 4) — chấp nhận cả 2 dạng phổ biến (youtube.com/watch?v=... và youtu.be/...),
@@ -3151,10 +3248,52 @@ function renderTrainingDocuments() {
       </div>
       <div class="flex flex-col gap-1 flex-shrink-0 items-end">
         ${actionHTML}
+        ${canManageTrainingLocal(currentUser) ? `<button data-op="editTrainingDocument" data-arg0="${d.id}" class="text-indigo-600 font-bold hover:underline text-xs">Sửa</button>` : ''}
         ${currentUser.perms?.admin ? `<button data-op="deleteTrainingDocument" data-arg0="${d.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
       </div>
     </div>`;
   }).join('');
+}
+
+// editingTrainingDocumentId — id tài liệu đang SỬA qua form phía trên (10/2026, thêm nút "✏️ Sửa" —
+// trước đây chỉ Xoá, gõ sai tên/loại đào tạo phải xoá tạo lại từ đầu, MẤT liên kết trainingDocumentProgress
+// của người đã xem trước đó, vì xoá-tạo-lại luôn đổi id mới). CHỈ sửa được METADATA (tên/loại đào tạo/
+// mô tả/Bắt Buộc/Chương Trình + link+thời lượng nếu VIDEO) — xem editTrainingDocument() ở
+// lib/recordActions.js cho lý do CỐ Ý không cho đổi docType/tệp/video đã tải. null = chế độ THÊM MỚI.
+let editingTrainingDocumentId = null;
+function editTrainingDocument(id) {
+  const d = DB.trainingDocuments.find(x => x.id === id);
+  if (!d) return;
+  editingTrainingDocumentId = id;
+  document.getElementById('tdCategory').value = d.category;
+  document.getElementById('tdTitle').value = d.title;
+  document.getElementById('tdDescription').value = d.description || '';
+  document.getElementById('tdMandatory').checked = !!d.mandatory;
+  document.getElementById('tdCourseId').value = d.courseId != null ? String(d.courseId) : '';
+  const typeSelect = document.getElementById('tdDocType');
+  typeSelect.value = d.docType || 'DOCUMENT';
+  typeSelect.disabled = true; // KHÔNG cho đổi loại tài liệu khi sửa
+  onTrainingDocTypeChange();
+  const isFileType = (d.docType || 'DOCUMENT') !== 'VIDEO';
+  document.getElementById('tdFileField').classList.toggle('hidden', isFileType);
+  document.getElementById('tdFile').required = false;
+  document.getElementById('tdFileLockedNote').classList.toggle('hidden', !isFileType);
+  if (d.docType === 'VIDEO') {
+    document.getElementById('tdVideoUrl').value = d.videoUrl || '';
+    document.getElementById('tdVideoDuration').value = d.durationSeconds || '';
+  }
+  updateTrainingDocFormSubmitUI();
+}
+function cancelEditTrainingDocument() {
+  resetTrainingDocForm();
+}
+function updateTrainingDocFormSubmitUI() {
+  const isEdit = editingTrainingDocumentId != null;
+  const btn = document.getElementById('tdSubmitBtn');
+  if (btn) btn.textContent = isEdit ? '💾 Cập Nhật' : 'Thêm Vào Kho';
+  document.getElementById('tdCancelEditBtn')?.classList.toggle('hidden', !isEdit);
+  const title = document.getElementById('trainingDocFormTitle');
+  if (title) title.textContent = isEdit ? '✏️ Sửa Tài Liệu' : '➕ Thêm Tài Liệu Vào Kho';
 }
 
 function deleteTrainingDocument(id) {

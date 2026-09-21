@@ -2136,82 +2136,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo bài test');
       }
-      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên bài test');
-      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_TEST');
-      const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
-      if (!rawQuestions.length) throw new CreateError(400, 'Bài test cần ít nhất 1 câu hỏi');
-      if (rawQuestions.length > 100) throw new CreateError(400, 'Bài test tối đa 100 câu hỏi');
-      // 4 loại câu hỏi (Đợt 10 — "Nghị Luận"/"Kéo Thả Hình"): SINGLE (1 đáp án đúng)/MULTI (nhiều đáp án
-      // đúng) GIỮ NGUYÊN VẸN logic gốc bên dưới, không đổi gì. ESSAY (nghị luận, tự viết, chấm tay — xem
-      // gradeTrainingTestEssayAnswers()/gradingStatus ở lib/recordActions.js) và IMAGE_DRAG_DROP (kéo thả
-      // hình, mỗi đáp án là 1 ẢNH thay vì chỉ text, chấm tự động y hệt MULTI) là 2 NHÁNH RIÊNG, tách hẳn
-      // khỏi nhánh SINGLE/MULTI để không ảnh hưởng hành vi cũ.
-      const questions = rawQuestions.map((q, i) => {
-        const text = String(q?.text || '').trim();
-        if (!text) throw new CreateError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
-        const type = ['MULTI', 'ESSAY', 'IMAGE_DRAG_DROP'].includes(q?.type) ? q.type : 'SINGLE';
-        const points = Number(q?.points) > 0 ? Number(q.points) : 1;
-        // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi — VD hình sơ đồ/biểu mẫu cần nhận diện) — CÙNG lỗ hổng
-        // stored-XSS scheme "javascript:" như mọi field URL tệp khác trong file này nếu KHÔNG xác minh:
-        // trainingManage tự soạn payload gọi thẳng route tạo có thể gài imageUrl bất kỳ, hiển thị lại
-        // thành <img src="..."> ở màn Test Builder/lúc học viên làm bài (ttTakeRenderQuestion(), client).
-        // assertUploadedFileUrl() chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh
-        // ra, KHÔNG chấp nhận URL ngoài hệ thống hay scheme javascript:/data: — mirror y hệt cách mọi
-        // field file khác (fileUrl của trainingDocuments, licenses...) đã được vá ở đầu file này.
-        const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
-        assertUploadedFileUrl(imageUrl, `Ảnh câu hỏi số ${i + 1}`);
-
-        // ESSAY (nghị luận) — người trả lời tự viết câu trả lời (essayText, lưu ở trainingTestSubmissions
-        // lúc nộp, KHÔNG lưu ở đây), không có "đáp án đúng" máy chấm được nên KHÔNG có options/
-        // correctOptionIds — bỏ qua HẲN 2 ràng buộc "≥2 đáp án"/"phải chọn đáp án đúng" của nhánh dưới.
-        if (type === 'ESSAY') {
-          return { id: i + 1, text, type, options: [], correctOptionIds: [], points, imageUrl };
-        }
-
-        // IMAGE_DRAG_DROP (kéo thả hình) — mỗi đáp án BẮT BUỘC có ảnh riêng (options[].imageUrl, khác hẳn
-        // imageUrl ở trên chỉ là ảnh minh hoạ ĐỀ BÀI), text chỉ còn là chú thích tuỳ chọn. Ngữ nghĩa chấm
-        // điểm giống HỆT MULTI (khớp CHÍNH XÁC tập hợp, cho phép 1+ đáp án đúng) —
-        // gradeTrainingTestSubmission() không cần đổi gì cho loại này (chỉ so id, không quan tâm option là
-        // text hay ảnh).
-        if (type === 'IMAGE_DRAG_DROP') {
-          const optionsRaw = Array.isArray(q?.options) ? q.options : [];
-          const dragOptions = optionsRaw
-            .map(o => ({ text: String(o?.text || '').trim(), imageUrl: String(o?.imageUrl || '').trim() }))
-            .filter(o => o.imageUrl);
-          if (dragOptions.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án (ảnh)`);
-          if (dragOptions.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
-          dragOptions.forEach((o, oi) => assertUploadedFileUrl(o.imageUrl, `Ảnh đáp án số ${oi + 1} của câu hỏi số ${i + 1}`));
-          const options = dragOptions.map((o, oi) => ({ id: oi + 1, text: o.text, imageUrl: o.imageUrl }));
-          const correctOptionIds = Array.isArray(q?.correctOptionIds)
-            ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
-            : [];
-          if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
-          return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
-        }
-
-        // SINGLE/MULTI — GIỮ NGUYÊN VẸN logic gốc (không đổi 1 dòng nào so với trước Đợt 10).
-        const optionTexts = Array.isArray(q?.options) ? q.options.map(o => String(o?.text ?? o ?? '').trim()).filter(Boolean) : [];
-        if (optionTexts.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án`);
-        if (optionTexts.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
-        const options = optionTexts.map((t, oi) => ({ id: oi + 1, text: t }));
-        const correctOptionIds = Array.isArray(q?.correctOptionIds)
-          ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
-          : [];
-        if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
-        if (type === 'SINGLE' && correctOptionIds.length > 1) {
-          throw new CreateError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
-        }
-        return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
-      });
-      payload.title = String(payload.title).trim();
-      payload.category = payload.category ? String(payload.category).trim() : '';
-      payload.questions = questions;
-      // passScore ở đây CHỈ là gợi ý (autofill) cho ô Điểm Đạt Yêu Cầu khi chọn bài test lúc tạo/sửa
-      // lớp học (xem applyTrainingClassTestDefaultPassScore() ở client) — KHÔNG được đọc khi chấm điểm,
-      // trainingClasses.passScore vẫn là nguồn quyết định DUY NHẤT (xem gradeTrainingTestSubmission()).
-      const suggestedPassScore = Number(payload.passScore);
-      payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100
-        ? suggestedPassScore : null;
+      normalizeTrainingTestFields(payload, appData);
     }
   },
   // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js đầu file cho toàn bộ thiết
@@ -2343,12 +2268,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo chương trình đào tạo');
       }
-      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên chương trình');
-      if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
-      payload.name = String(payload.name).trim();
-      payload.category = String(payload.category).trim();
-      payload.description = payload.description ? String(payload.description).trim() : '';
-      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_COURSE');
+      normalizeTrainingCourseFields(payload, appData);
     }
   },
   // Kế Hoạch Đào Tạo (trainingPlans, Đợt 5) — hồ sơ "Tháng X dự kiến mở bao nhiêu lớp/học viên/giờ" do
@@ -3896,6 +3816,104 @@ function normalizeInviteList(rawList) {
 // courseId không khớp chương trình có thật, targetDept không khớp danh mục phòng ban/siêu thị) — số
 // lượng (plannedClasses/plannedTrainees/plannedHours) KHÔNG chặn cứng (âm/chữ/để trống đều rơi về 0)
 // vì đây chỉ là số KẾ HOẠCH, sai lệch không gây hỏng dữ liệu liên kết như courseId/targetDept.
+// normalizeTrainingCourseFields() — TÁCH RIÊNG từ MODULE_CONFIGS.trainingCourses.extraValidate (10/2026,
+// thêm nút "✏️ Sửa" cho Chương Trình — trước đây chỉ có Xoá, gõ sai tên/loại đào tạo phải xoá tạo lại từ
+// đầu, MẤT liên kết với mọi trainingClasses/trainingDocuments/trainingPlans đã gắn courseId đó) để dùng
+// lại được cho cả CREATE (ở trên) lẫn EDIT (editTrainingCourse(), lib/recordActions.js) — cùng khuôn
+// normalizeTrainingPlanFields() ngay bên dưới.
+function normalizeTrainingCourseFields(payload, appData) {
+  if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên chương trình');
+  if (!payload.category || !String(payload.category).trim()) throw new CreateError(400, 'Thiếu loại đào tạo');
+  payload.name = String(payload.name).trim();
+  payload.category = String(payload.category).trim();
+  payload.description = payload.description ? String(payload.description).trim() : '';
+  validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_COURSE');
+}
+
+// normalizeTrainingTestFields() — TÁCH RIÊNG từ MODULE_CONFIGS.trainingTests.extraValidate (10/2026, thêm
+// nút "✏️ Sửa" cho Bài Test — trước đây chỉ có Xoá, sửa 1 câu hỏi/đáp án sai phải xoá tạo lại TOÀN BỘ bài
+// test từ đầu, mất luôn liên kết trainingClasses.testId đang trỏ vào bài test đó) để dùng lại được cho cả
+// CREATE (ở trên) lẫn EDIT (editTrainingTest(), lib/recordActions.js) — GIỮ NGUYÊN VẸN toàn bộ logic gốc,
+// không đổi 1 dòng nào, chỉ tách ra khỏi extraValidate() thành hàm riêng.
+function normalizeTrainingTestFields(payload, appData) {
+  if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên bài test');
+  validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_TEST');
+  const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+  if (!rawQuestions.length) throw new CreateError(400, 'Bài test cần ít nhất 1 câu hỏi');
+  if (rawQuestions.length > 100) throw new CreateError(400, 'Bài test tối đa 100 câu hỏi');
+  // 4 loại câu hỏi (Đợt 10 — "Nghị Luận"/"Kéo Thả Hình"): SINGLE (1 đáp án đúng)/MULTI (nhiều đáp án
+  // đúng) GIỮ NGUYÊN VẸN logic gốc bên dưới, không đổi gì. ESSAY (nghị luận, tự viết, chấm tay — xem
+  // gradeTrainingTestEssayAnswers()/gradingStatus ở lib/recordActions.js) và IMAGE_DRAG_DROP (kéo thả
+  // hình, mỗi đáp án là 1 ẢNH thay vì chỉ text, chấm tự động y hệt MULTI) là 2 NHÁNH RIÊNG, tách hẳn
+  // khỏi nhánh SINGLE/MULTI để không ảnh hưởng hành vi cũ.
+  const questions = rawQuestions.map((q, i) => {
+    const text = String(q?.text || '').trim();
+    if (!text) throw new CreateError(400, `Câu hỏi số ${i + 1} thiếu nội dung`);
+    const type = ['MULTI', 'ESSAY', 'IMAGE_DRAG_DROP'].includes(q?.type) ? q.type : 'SINGLE';
+    const points = Number(q?.points) > 0 ? Number(q.points) : 1;
+    // imageUrl (tuỳ chọn, ảnh minh hoạ câu hỏi — VD hình sơ đồ/biểu mẫu cần nhận diện) — CÙNG lỗ hổng
+    // stored-XSS scheme "javascript:" như mọi field URL tệp khác trong file này nếu KHÔNG xác minh:
+    // trainingManage tự soạn payload gọi thẳng route tạo có thể gài imageUrl bất kỳ, hiển thị lại
+    // thành <img src="..."> ở màn Test Builder/lúc học viên làm bài (ttTakeRenderQuestion(), client).
+    // assertUploadedFileUrl() chỉ chấp nhận đúng khuôn "/uploads/<tên-file>" do routes/upload.js sinh
+    // ra, KHÔNG chấp nhận URL ngoài hệ thống hay scheme javascript:/data: — mirror y hệt cách mọi
+    // field file khác (fileUrl của trainingDocuments, licenses...) đã được vá ở đầu file này.
+    const imageUrl = q?.imageUrl ? String(q.imageUrl).trim() : '';
+    assertUploadedFileUrl(imageUrl, `Ảnh câu hỏi số ${i + 1}`);
+
+    // ESSAY (nghị luận) — người trả lời tự viết câu trả lời (essayText, lưu ở trainingTestSubmissions
+    // lúc nộp, KHÔNG lưu ở đây), không có "đáp án đúng" máy chấm được nên KHÔNG có options/
+    // correctOptionIds — bỏ qua HẲN 2 ràng buộc "≥2 đáp án"/"phải chọn đáp án đúng" của nhánh dưới.
+    if (type === 'ESSAY') {
+      return { id: i + 1, text, type, options: [], correctOptionIds: [], points, imageUrl };
+    }
+
+    // IMAGE_DRAG_DROP (kéo thả hình) — mỗi đáp án BẮT BUỘC có ảnh riêng (options[].imageUrl, khác hẳn
+    // imageUrl ở trên chỉ là ảnh minh hoạ ĐỀ BÀI), text chỉ còn là chú thích tuỳ chọn. Ngữ nghĩa chấm
+    // điểm giống HỆT MULTI (khớp CHÍNH XÁC tập hợp, cho phép 1+ đáp án đúng) —
+    // gradeTrainingTestSubmission() không cần đổi gì cho loại này (chỉ so id, không quan tâm option là
+    // text hay ảnh).
+    if (type === 'IMAGE_DRAG_DROP') {
+      const optionsRaw = Array.isArray(q?.options) ? q.options : [];
+      const dragOptions = optionsRaw
+        .map(o => ({ text: String(o?.text || '').trim(), imageUrl: String(o?.imageUrl || '').trim() }))
+        .filter(o => o.imageUrl);
+      if (dragOptions.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án (ảnh)`);
+      if (dragOptions.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
+      dragOptions.forEach((o, oi) => assertUploadedFileUrl(o.imageUrl, `Ảnh đáp án số ${oi + 1} của câu hỏi số ${i + 1}`));
+      const options = dragOptions.map((o, oi) => ({ id: oi + 1, text: o.text, imageUrl: o.imageUrl }));
+      const correctOptionIds = Array.isArray(q?.correctOptionIds)
+        ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
+        : [];
+      if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
+      return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
+    }
+
+    // SINGLE/MULTI — GIỮ NGUYÊN VẸN logic gốc (không đổi 1 dòng nào so với trước Đợt 10).
+    const optionTexts = Array.isArray(q?.options) ? q.options.map(o => String(o?.text ?? o ?? '').trim()).filter(Boolean) : [];
+    if (optionTexts.length < 2) throw new CreateError(400, `Câu hỏi số ${i + 1} cần ít nhất 2 đáp án`);
+    if (optionTexts.length > 10) throw new CreateError(400, `Câu hỏi số ${i + 1} tối đa 10 đáp án`);
+    const options = optionTexts.map((t, oi) => ({ id: oi + 1, text: t }));
+    const correctOptionIds = Array.isArray(q?.correctOptionIds)
+      ? [...new Set(q.correctOptionIds.map(Number))].filter(id => options.some(o => o.id === id))
+      : [];
+    if (!correctOptionIds.length) throw new CreateError(400, `Câu hỏi số ${i + 1} chưa chọn đáp án đúng`);
+    if (type === 'SINGLE' && correctOptionIds.length > 1) {
+      throw new CreateError(400, `Câu hỏi số ${i + 1} là loại 1 đáp án đúng nhưng lại chọn nhiều hơn 1`);
+    }
+    return { id: i + 1, text, type, options, correctOptionIds, points, imageUrl };
+  });
+  payload.title = String(payload.title).trim();
+  payload.category = payload.category ? String(payload.category).trim() : '';
+  payload.questions = questions;
+  // passScore ở đây CHỈ là gợi ý (autofill) cho ô Điểm Đạt Yêu Cầu khi chọn bài test lúc tạo/sửa
+  // lớp học (xem applyTrainingClassTestDefaultPassScore() ở client) — KHÔNG được đọc khi chấm điểm,
+  // trainingClasses.passScore vẫn là nguồn quyết định DUY NHẤT (xem gradeTrainingTestSubmission()).
+  const suggestedPassScore = Number(payload.passScore);
+  payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100
+    ? suggestedPassScore : null;
+}
+
 function normalizeTrainingPlanFields(payload, appData) {
   const month = String(payload.month || '').trim();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -4040,8 +4058,11 @@ module.exports = {
   resolveTrainingInstructorUsername, normalizeInviteList,
   resolveOperationPersonInChargeUsername,
   canManageOperationRecord,
+  normalizeTrainingCourseFields,
+  normalizeTrainingTestFields,
   normalizeTrainingPlanFields,
   normalizeOnboardingPathFields,
+  isValidYoutubeUrl,
   HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, HR_TASK_DEPARTMENTS,
   BUDGET_LINE_ITEM_CATEGORIES, normalizeBudgetLineCoreFields
 };

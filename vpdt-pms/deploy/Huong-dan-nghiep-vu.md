@@ -52,6 +52,19 @@ chạy PM2 **cluster mode** (nhiều tiến trình Node tận dụng hết CPU m
 ứng dụng thiết kế stateless giữa các request nên chạy nhiều tiến trình song
 song an toàn.
 
+**1 tài khoản = 1 phiên đăng nhập (10/2026)**: mỗi lần đăng nhập thành công
+(đăng nhập thường, hoặc hoàn tất bước xác thực 2 lớp/vân tay-Face ID) server
+tăng thêm 1 số đếm phiên (`sessionVersion`) lưu kèm tài khoản đó và ký số này
+vào token JWT vừa cấp. Mọi token cũ (phiên đăng nhập trước đó, trên máy/trình
+duyệt khác) mang số đếm cũ hơn sẽ bị server từ chối ở request tiếp theo (đẩy về
+màn đăng nhập) — nói cách khác, đăng nhập lần MỚI NHẤT sẽ tự động "đá" các
+phiên đăng nhập CŨ HƠN của cùng tài khoản đó, không giới hạn số thiết bị đăng
+nhập CÙNG LÚC theo kiểu chặn cứng mà theo kiểu "chỉ phiên gần nhất còn hiệu
+lực". Riêng bước 1 của xác thực 2 lớp (gõ đúng mật khẩu nhưng CHƯA hoàn tất
+mã OTP) không tính là "đăng nhập thành công" nên KHÔNG đá phiên khác — tránh
+tình huống ai đó gõ đúng mật khẩu ở máy khác rồi bỏ dở (quên/sai OTP) lại vô
+tình đăng xuất phiên đang dùng thật.
+
 ```
 [Nhân viên / Quản lý / Admin — trình duyệt]
         │  HTTPS (JWT cookie httpOnly)

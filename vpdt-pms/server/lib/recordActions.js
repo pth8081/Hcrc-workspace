@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingPlanFields, normalizeOnboardingPathFields, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -4792,6 +4792,83 @@ function editTrainingClass(payload, user, cls, tests, users, courses, existingRe
   return cls;
 }
 
+// Sửa 1 Chương Trình đào tạo (trainingCourses) — 10/2026, thêm nút "✏️ Sửa" (trước đây chỉ Xoá, gõ sai
+// tên/loại đào tạo phải xoá tạo lại từ đầu, MẤT liên kết với mọi trainingClasses/trainingDocuments/
+// trainingPlans đã gắn courseId đó — khác hẳn Đồng Phục/Ngày Lễ..., đây là 1 catalog CÓ tham chiếu thật
+// từ nhiều collection khác nên xoá-tạo-lại luôn đổi cả id, phá liên kết). Tái dùng ĐÚNG 1 luật chuẩn hoá/
+// kiểm tra dùng chung với lúc TẠO (normalizeTrainingCourseFields(), lib/createValidation.js).
+const TRAINING_COURSE_EDITABLE_FIELDS = ['name', 'category', 'description', 'customData'];
+function editTrainingCourse(payload, user, course, appData) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) throw new HttpError(403, 'Bạn không có quyền sửa chương trình đào tạo');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of TRAINING_COURSE_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) course[field] = payload[field];
+  }
+  normalizeTrainingCourseFields(course, appData);
+  return course;
+}
+
+// Sửa 1 Tài Liệu đào tạo (trainingDocuments) — 10/2026, thêm nút "✏️ Sửa" cho phần METADATA (tên/loại
+// đào tạo/Bắt Buộc Hoàn Thành/Chương Trình gắn kèm + link+thời lượng nếu là VIDEO) — CỐ Ý KHÔNG cho đổi
+// docType/fileUrl (đổi hẳn loại tài liệu hoặc thay tệp/video khác là thay đổi lớn hơn nhiều so với sửa lỗi
+// gõ sai tên, giữ nguyên đường "xoá tạo lại" cho trường hợp đó, cùng tinh thần thận trọng với file đã có
+// người xem/theo dõi tiến độ dở dang — trainingDocumentProgress vẫn trỏ theo đúng docId, không muốn đổi
+// nghĩa "đã xem" của tiến độ cũ sang 1 tệp/video hoàn toàn khác).
+const TRAINING_DOCUMENT_EDITABLE_FIELDS = ['title', 'category', 'description', 'mandatory', 'courseId', 'videoUrl', 'durationSeconds'];
+function editTrainingDocument(payload, user, doc, appData) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) throw new HttpError(403, 'Bạn không có quyền sửa tài liệu đào tạo');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of TRAINING_DOCUMENT_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) doc[field] = payload[field];
+  }
+  if (!doc.category || !String(doc.category).trim()) throw new HttpError(400, 'Thiếu loại đào tạo');
+  if (!doc.title || !String(doc.title).trim()) throw new HttpError(400, 'Thiếu tên tài liệu');
+  doc.category = String(doc.category).trim();
+  doc.title = String(doc.title).trim();
+  doc.description = doc.description ? String(doc.description).trim() : '';
+  doc.mandatory = doc.mandatory === true || doc.mandatory === 'true';
+  if (doc.docType === 'VIDEO') {
+    const videoUrl = String(doc.videoUrl || '').trim();
+    if (!videoUrl) throw new HttpError(400, 'Vui lòng nhập link video Youtube');
+    if (!isValidYoutubeUrl(videoUrl)) {
+      throw new HttpError(400, 'Link video phải là link Youtube hợp lệ (bắt đầu bằng https:// và thuộc youtube.com hoặc youtu.be)');
+    }
+    doc.videoUrl = videoUrl;
+    const durationSeconds = Number(doc.durationSeconds);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      throw new HttpError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
+    }
+    doc.durationSeconds = Math.floor(durationSeconds);
+  }
+  const courseId = (doc.courseId === '' || doc.courseId == null) ? null : Number(doc.courseId);
+  if (courseId != null) {
+    const courses = appData?.trainingCourses || [];
+    if (!Number.isFinite(courseId) || !courses.some(c => c.id === courseId)) throw new HttpError(400, 'Chương trình được chọn không hợp lệ');
+  }
+  doc.courseId = courseId;
+  return doc;
+}
+
+// Sửa 1 Bài Test (trainingTests) — 10/2026, thêm nút "✏️ Sửa" (trước đây chỉ Xoá, sửa 1 câu hỏi/đáp án
+// sai phải xoá tạo lại TOÀN BỘ bài test từ đầu, mất luôn liên kết trainingClasses.testId đang trỏ vào
+// bài test đó). Tái dùng ĐÚNG 1 luật chuẩn hoá/kiểm tra dùng chung với lúc TẠO
+// (normalizeTrainingTestFields(), lib/createValidation.js) — ghi đè NGUYÊN title/category/passScore/
+// questions/customData vào bản ghi cũ (KHÔNG whitelist từng field như các editXxx() khác trong file này,
+// vì cả khối câu hỏi luôn được gửi lại TOÀN BỘ từ Test Builder ở client, không có khái niệm "sửa từng
+// field riêng lẻ" cho 1 bài test — payload thiếu field nào thì normalizeTrainingTestFields() tự báo lỗi
+// rõ ràng, không âm thầm giữ giá trị cũ).
+function editTrainingTest(payload, user, test, appData) {
+  if (!user.perms?.admin && !user.perms?.trainingManage) throw new HttpError(403, 'Bạn không có quyền sửa bài test');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  test.title = payload.title;
+  test.category = payload.category;
+  test.passScore = payload.passScore;
+  test.questions = payload.questions;
+  test.customData = payload.customData;
+  normalizeTrainingTestFields(test, appData);
+  return test;
+}
+
 // Sửa 1 dòng Kế Hoạch Đào Tạo đã lập (trainingPlans, Đợt 5) — cùng khuôn editTrainingClass() ở trên
 // (whitelist field rồi chạy lại ĐÚNG 1 luật chuẩn hoá/kiểm tra dùng chung với lúc TẠO, xem
 // normalizeTrainingPlanFields() ở lib/createValidation.js) nhưng gác quyền đơn giản hơn — không có khái
@@ -7759,6 +7836,7 @@ module.exports = {
   assertCanRevokeCareerPathConfirmation,
   isTrainingVideoProgressComplete, isTrainingPdfProgressComplete, computeTrainingDocumentProgressUpdate,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
+  editTrainingCourse, editTrainingDocument, editTrainingTest,
   closeTrainingClassRegistration, reopenTrainingClassRegistration,
   gradeTrainingTestSubmission, applyAutoGradedTestResult, gradeTrainingTestEssayAnswers,
   startTrainingTestAttempt, evaluateTrainingTestTiming,

@@ -692,7 +692,10 @@ function renderMixedApprovalSection() {
             : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
           <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}${matchBadge}</td>
           <td class="p-2 border text-xs">${storesLabel}</td>
-          <td class="p-2 border text-center"><button type="button" data-op="deleteMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button></td>
+          <td class="p-2 border text-center whitespace-nowrap">
+            <button type="button" data-op="editMixedApprovalRule" data-arg0="${row.id}" class="text-indigo-600 text-[11px] font-bold hover:underline mr-2">✏️ Sửa</button>
+            <button type="button" data-op="deleteMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button>
+          </td>
         </tr>
       `;
     }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
@@ -716,12 +719,18 @@ function renderMixedApprovalSection() {
   sddSetOptions('maNewJobTitleDatalist', mixedApprovalJobTitleOptions());
   sddSetOptions('maNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
 
-  renderMultiSelectDropdown('maNewStoresPicker', DB.stores || [], [], {
+  // Đang SỬA dở 1 dòng (bấm "✏️ Sửa" nhưng chưa bấm Cập Nhật/Huỷ) thì giữ nguyên siêu thị đã chọn của
+  // dòng đó thay vì reset về rỗng — renderMixedApprovalSection() còn được gọi lại từ NHIỀU nơi khác
+  // (VD xoá 1 dòng KHÁC) trong lúc form đang mở dở, reset nhầm sẽ làm mất lựa chọn đang sửa mà
+  // editingMixedApprovalRuleId vẫn còn trỏ đúng id đó — nộp nhầm sẽ ghi đè sai dữ liệu.
+  const editingRule = editingMixedApprovalRuleId != null ? rules.find(r => r.id === editingMixedApprovalRuleId) : null;
+  renderMultiSelectDropdown('maNewStoresPicker', DB.stores || [], editingRule ? (editingRule.stores || []) : [], {
     placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
     emptyText: 'Mặc định — mọi siêu thị.'
   });
 
   onMixedApprovalNewModeChange();
+  updateMixedApprovalFormSubmitUI();
 }
 
 // Bật/tắt khối "Chức danh"/"Người cụ thể" của dòng THÊM MỚI — cùng cơ chế onWfStepApproverModeToggle()
@@ -730,6 +739,61 @@ function onMixedApprovalNewModeChange() {
   const mode = document.getElementById('maNewMode')?.value || 'JOBTITLE';
   document.getElementById('maNewJobTitleWrap')?.classList.toggle('hidden', mode !== 'JOBTITLE');
   document.getElementById('maNewPersonWrap')?.classList.toggle('hidden', mode !== 'PERSON');
+}
+
+// editingMixedApprovalRuleId — id dòng đang SỬA qua form "+ Thêm Dòng" bên dưới bảng (10/2026, thêm nút
+// "✏️ Sửa" — trước đây chỉ Xoá, sửa nhầm phải xoá rồi tạo lại từ đầu). null = đang ở chế độ THÊM MỚI
+// (như cũ). addMixedApprovalRule() dùng CHUNG 1 form cho cả thêm/sửa (đọc y hệt các field maNewXxx), chỉ
+// khác ở bước ghi: thêm mới thì push dòng mới, đang sửa thì thay ĐÚNG dòng có id đó (giữ nguyên id).
+let editingMixedApprovalRuleId = null;
+
+function editMixedApprovalRule(id) {
+  const rule = (DB.operationOrderStoreMixedApprovalRules || []).find(r => r.id === id);
+  if (!rule) return;
+  editingMixedApprovalRuleId = id;
+  const stepSel = document.getElementById('maNewStep');
+  if (stepSel) stepSel.value = String(rule.step);
+  const modeSel = document.getElementById('maNewMode');
+  if (modeSel) modeSel.value = rule.mode;
+  onMixedApprovalNewModeChange();
+  if (rule.mode === 'JOBTITLE') {
+    // Ô gõ-tìm cần đúng nhãn có hậu tố " — HO"/" — Siêu Thị" (xem mixedApprovalJobTitleOptions()) — suy
+    // ngược nguồn giống hệt mixedApprovalJobTitleSourceBadgeHTML() (badge nguồn hiện ở mỗi dòng).
+    const isStore = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
+    const jt = document.getElementById('maNewJobTitleInput');
+    if (jt) jt.value = `${rule.jobTitle} — ${isStore ? 'Siêu Thị' : 'HO'}`;
+    const pn = document.getElementById('maNewPersonInput'); if (pn) pn.value = '';
+  } else {
+    const person = (DB.users || []).find(u => u.username === rule.username);
+    const pn = document.getElementById('maNewPersonInput');
+    if (pn) pn.value = person ? mixedApprovalPersonLabel(person) : rule.username;
+    const jt = document.getElementById('maNewJobTitleInput'); if (jt) jt.value = '';
+  }
+  renderMultiSelectDropdown('maNewStoresPicker', DB.stores || [], rule.stores || [], {
+    placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
+    emptyText: 'Mặc định — mọi siêu thị.'
+  });
+  updateMixedApprovalFormSubmitUI();
+  document.getElementById('mixedApprovalSection')?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+// Thoát chế độ Sửa mà KHÔNG lưu — về lại form Thêm Mới rỗng, không đụng gì tới dòng đang sửa dở.
+function cancelEditMixedApprovalRule() {
+  editingMixedApprovalRuleId = null;
+  const jt = document.getElementById('maNewJobTitleInput'); if (jt) jt.value = '';
+  const pn = document.getElementById('maNewPersonInput'); if (pn) pn.value = '';
+  renderMultiSelectDropdown('maNewStoresPicker', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
+    emptyText: 'Mặc định — mọi siêu thị.'
+  });
+  updateMixedApprovalFormSubmitUI();
+}
+
+// Đổi nhãn nút Thêm/Cập nhật + hiện/ẩn nút "Huỷ Sửa" theo đúng editingMixedApprovalRuleId hiện tại.
+function updateMixedApprovalFormSubmitUI() {
+  const btn = document.getElementById('maSubmitBtn');
+  if (btn) btn.textContent = editingMixedApprovalRuleId != null ? '💾 Cập Nhật Dòng' : '+ Thêm Dòng';
+  document.getElementById('maCancelEditBtn')?.classList.toggle('hidden', editingMixedApprovalRuleId == null);
 }
 
 async function addMixedApprovalRule() {
@@ -752,20 +816,34 @@ async function addMixedApprovalRule() {
     username = u.username;
   }
 
-  const id = Math.max(0, ...(DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id)) + 1;
+  const isEdit = editingMixedApprovalRuleId != null;
+  // Phòng trường hợp hiếm: đang sửa dở 1 dòng thì dòng đó bị XOÁ ở thao tác khác (VD 2 tab cùng mở, hoặc
+  // chính admin bấm nhầm "🗑 Xoá" ngay dòng đang sửa) — dòng không còn tồn tại nữa thì KHÔNG âm thầm coi
+  // như "cập nhật thành công" (map() không khớp id nào sẽ không đổi gì nhưng vẫn báo SUCCESS, đánh lừa
+  // admin) — báo rõ và tự thoát về chế độ Thêm Mới.
+  if (isEdit && !(DB.operationOrderStoreMixedApprovalRules || []).some(r => r.id === editingMixedApprovalRuleId)) {
+    alert('⚠️ Dòng đang sửa không còn tồn tại (có thể vừa bị xoá) — huỷ sửa, vui lòng thêm lại nếu cần.');
+    editingMixedApprovalRuleId = null;
+    renderMixedApprovalSection();
+    return;
+  }
+  const id = isEdit ? editingMixedApprovalRuleId : (Math.max(0, ...(DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id)) + 1);
   const snapshot = JSON.parse(JSON.stringify(DB.operationOrderStoreMixedApprovalRules || []));
-  DB.operationOrderStoreMixedApprovalRules = [...(DB.operationOrderStoreMixedApprovalRules || []), { id, step, mode, jobTitle, username, stores }];
+  DB.operationOrderStoreMixedApprovalRules = isEdit
+    ? (DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id === id ? { id, step, mode, jobTitle, username, stores } : r)
+    : [...(DB.operationOrderStoreMixedApprovalRules || []), { id, step, mode, jobTitle, username, stores }];
   if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
     DB.operationOrderStoreMixedApprovalRules = snapshot;
     renderMixedApprovalSection();
     return;
   }
   logSystemAction(
-    'CONFIG', 'ADD_MIXED_APPROVAL_RULE',
-    `Thêm dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    'CONFIG', isEdit ? 'UPDATE_MIXED_APPROVAL_RULE' : 'ADD_MIXED_APPROVAL_RULE',
+    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
     'SUCCESS', String(id)
   );
 
+  editingMixedApprovalRuleId = null;
   const jt = document.getElementById('maNewJobTitleInput'); if (jt) jt.value = '';
   const pn = document.getElementById('maNewPersonInput'); if (pn) pn.value = '';
   renderMixedApprovalSection();

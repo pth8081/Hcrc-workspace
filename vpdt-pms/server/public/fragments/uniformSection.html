@@ -24,7 +24,10 @@
             <label class="block font-semibold text-gray-600 mb-1 text-xs">Các Size (cách nhau bằng dấu phẩy)</label>
             <input id="uniformCatalogSizes" placeholder="VD: S, M, L, XL" class="w-full border p-1.5 rounded text-xs">
           </div>
-          <button type="button" data-op="saveUniformCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+          <div>
+            <button type="button" id="uniformCatalogSubmitBtn" data-op="saveUniformCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+            <button type="button" id="uniformCatalogCancelEditBtn" data-op="cancelEditUniformCatalogItem" class="hidden ml-2 text-gray-600 text-xs font-bold hover:underline">✕ Huỷ Sửa</button>
+          </div>
         </div>
         <div id="uniformCatalogListWrap" class="space-y-1.5"></div>
       </div>

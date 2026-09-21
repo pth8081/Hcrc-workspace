@@ -1,8 +1,60 @@
 # Phiên bản hiện tại
 
-**23.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.86 (2026-09-21): rà soát toàn hệ thống nút "Sửa" còn thiếu + đăng nhập 1 tài khoản = 1 phiên
+
+Theo yêu cầu người dùng (đã phân tích + đưa phương án xác nhận trước khi
+code, theo đúng quy trình chuẩn ở `CLAUDE.md`):
+
+### 1) Rà soát + bổ sung nút "✏️ Sửa" còn thiếu ở 6 màn (trước đây chỉ có Xoá)
+
+Rà soát toàn hệ thống các danh mục/hồ sơ mà thao tác duy nhất là Xoá (gõ sai
+phải xoá tạo lại từ đầu, có nơi còn phá cả liên kết vì xoá-tạo-lại đổi id
+mới) — bổ sung Sửa tại chỗ cho cả 6 chỗ phát hiện được:
+
+- **Quy Trình Đặt Hàng Siêu Thị** (`module-workflow.js`, Nghiệp Vụ Nâng Cao)
+  — nút Sửa cho từng dòng ngoại lệ (`operationOrderStoreMixedApprovalRules`).
+- **Danh Mục Đồng Phục** (`module-dongphuc.js`) — sửa tên/size mặt hàng,
+  GIỮ NGUYÊN Mã SKU đã sinh cho size vẫn còn sau khi sửa.
+- **Ngày Lễ** (`module-conghop.js`, Công & Phép) — nhân tiện vá luôn 1 lỗi
+  tiềm ẩn: nút Xoá trước đây định danh theo INDEX của danh sách đã sort để
+  hiển thị chứ không phải mảng gốc — thêm ngày lễ không theo đúng thứ tự
+  thời gian có thể khiến Xoá NHẦM đúng ngày lễ khác với ngày đang hiện trên
+  màn hình. Cả Sửa/Xoá nay định danh theo `date` (khoá duy nhất).
+- **Danh Mục Loại Dịch Vụ** (`module-itsupport-renewal.js`, Gia Hạn CNTT) —
+  gắn vào đúng hạ tầng rename-with-cascade dùng chung
+  (`POST /api/admin/renameCatalogEntry`, `lib/catalogRename.js`) thay vì tự
+  ghi đè cả mảng.
+- **Chương Trình/Ngân Hàng Câu Hỏi/Kho Tài Liệu** (`module-internalcomms-daotao.js`,
+  Đào Tạo) — cả 3 collection này CÓ tham chiếu thật từ nhiều nơi khác
+  (`trainingClasses`/`trainingPlans`/`onboardingPaths`...) nên trước đây
+  hoàn toàn KHÔNG có route sửa nào ở server (chỉ có route xoá) — bổ sung
+  route `POST /api/records/<collection>/:id/edit` mới cho cả 3 + validate
+  dùng lại ĐÚNG 1 luật với lúc tạo (`normalizeTrainingCourseFields()`/
+  `normalizeTrainingTestFields()`, tách ra từ `extraValidate` cũ, không đổi
+  hành vi tạo mới). Kho Tài Liệu chỉ sửa được METADATA (tên/loại đào tạo/
+  Bắt Buộc/Chương Trình + link-thời lượng nếu Video) — CỐ Ý không cho đổi
+  loại tài liệu/tệp đã tải (đổi tệp thật sự vẫn phải Xoá rồi Thêm lại).
+
+### 2) Đăng nhập: 1 tài khoản = 1 phiên, đăng nhập mới nhất tự "đá" phiên cũ hơn
+
+Mỗi lần đăng nhập thành công (thường, hoặc hoàn tất 2 lớp/vân tay-Face ID)
+server tăng `sessionVersion` của tài khoản và ký số này vào token — token
+CŨ hơn (phiên trước, máy/trình duyệt khác) bị từ chối ở request tiếp theo,
+tự động đẩy về màn đăng nhập. Bước 1 của 2 lớp (gõ đúng mật khẩu nhưng
+CHƯA hoàn tất OTP) KHÔNG tính là đăng nhập thành công nên không đá phiên
+khác — tránh gõ đúng mật khẩu ở máy khác rồi bỏ dở OTP vô tình đăng xuất
+phiên đang dùng thật (`routes/auth.js`, cả 3 lối cấp phiên: `/login`,
+`/verify-totp-login`, `/webauthn/login-verify`).
+
+Test mới: `test-conghop-holiday-edit-ui.js` (7/7), `test-auth-single-session.js`
+(5/5), mở rộng `test-uniform-phase2.js` (+5 kịch bản), `test-mixed-approval-edit-ui.js`
+(21/21, mới), `test-catalog-rename-server.js` (+2 kịch bản itRenewalCategories),
+`test-it-service-renewal.js` (+2 kịch bản), `test-internal-training.js`
+(+4 kịch bản 3 collection Đào Tạo).
 
 ## v23.85 (2026-09-21): 5 yêu cầu người dùng — tách Mẫu Giá theo kênh, hiện Hợp Đồng Bị Từ Chối/Cần Bổ Sung, quản lý xem hồ sơ cấp dưới, Người Phụ Trách trong nhập Excel Danh Mục Đầu Tư, ô chọn siêu thị gõ-tìm
 

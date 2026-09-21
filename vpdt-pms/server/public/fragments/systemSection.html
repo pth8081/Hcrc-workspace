@@ -254,7 +254,10 @@
               </div>
             </td>
             <td class="p-2 border align-top"><div id="maNewStoresPicker" class="min-w-[220px]"></div></td>
-            <td class="p-2 border align-top text-center"><button type="button" data-op="addMixedApprovalRule" class="bg-indigo-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Dòng</button></td>
+            <td class="p-2 border align-top text-center whitespace-nowrap">
+              <button type="button" id="maSubmitBtn" data-op="addMixedApprovalRule" class="bg-indigo-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Dòng</button>
+              <button type="button" id="maCancelEditBtn" data-op="cancelEditMixedApprovalRule" class="hidden mt-1 text-gray-600 text-[11px] font-bold hover:underline">✕ Huỷ Sửa</button>
+            </td>
           </tr>
         </tfoot>
       </table>

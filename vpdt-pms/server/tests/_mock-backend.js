@@ -253,13 +253,25 @@ function __mockCanManageTrainingClass(user, cls) {
 
 // Đợt 4: trainingCourses — mirrors CREATE_MODULE_CONFIGS.trainingCourses ở lib/createValidation.js
 // (trainingManage-only, name+category bắt buộc, description tuỳ chọn).
-function __mockValidateTrainingCourseCreate(payload, user) {
-  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo chương trình đào tạo');
+// Tách riêng khỏi __mockValidateTrainingCourseCreate() (10/2026, thêm nút "✏️ Sửa" cho Chương Trình) để
+// dùng lại được cho cả TẠO lẫn SỬA (__mockEditTrainingCourse() bên dưới) — mirrors normalizeTrainingCourseFields()
+// ở lib/createValidation.js.
+function __mockNormalizeTrainingCourseFields(payload) {
   if (!payload.name || !String(payload.name).trim()) throw __mockHttpError(400, 'Thiếu tên chương trình');
   if (!payload.category || !String(payload.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
   payload.name = String(payload.name).trim();
   payload.category = String(payload.category).trim();
   payload.description = payload.description ? String(payload.description).trim() : '';
+}
+function __mockValidateTrainingCourseCreate(payload, user) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo chương trình đào tạo');
+  __mockNormalizeTrainingCourseFields(payload);
+}
+function __mockEditTrainingCourse(payload, user, course) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa chương trình đào tạo');
+  ['name', 'category', 'description'].forEach((f) => { if (payload[f] !== undefined) course[f] = payload[f]; });
+  __mockNormalizeTrainingCourseFields(course);
+  return course;
 }
 
 // Đợt 4: courseId (tuỳ chọn) dùng chung cho trainingClasses/trainingDocuments — mirrors validate block
@@ -374,6 +386,33 @@ function __mockValidateTrainingDocumentCreate(payload, user) {
   __mockValidateCourseId(payload);
 }
 
+// __mockEditTrainingDocument() — 10/2026, thêm nút "✏️ Sửa" cho Kho Tài Liệu. CHỈ sửa được METADATA
+// (title/category/description/mandatory/courseId + videoUrl/durationSeconds nếu VIDEO) — CỐ Ý KHÔNG cho
+// đổi docType/fileUrl, mirrors editTrainingDocument() ở lib/recordActions.js (xem chú thích đầy đủ ở đó).
+function __mockEditTrainingDocument(payload, user, doc) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa tài liệu đào tạo');
+  ['title', 'category', 'description', 'mandatory', 'courseId', 'videoUrl', 'durationSeconds'].forEach((f) => {
+    if (payload[f] !== undefined) doc[f] = payload[f];
+  });
+  if (!doc.category || !String(doc.category).trim()) throw __mockHttpError(400, 'Thiếu loại đào tạo');
+  if (!doc.title || !String(doc.title).trim()) throw __mockHttpError(400, 'Thiếu tên tài liệu');
+  doc.category = String(doc.category).trim();
+  doc.title = String(doc.title).trim();
+  doc.description = doc.description ? String(doc.description).trim() : '';
+  doc.mandatory = doc.mandatory === true || doc.mandatory === 'true';
+  if (doc.docType === 'VIDEO') {
+    const videoUrl = String(doc.videoUrl || '').trim();
+    if (!videoUrl) throw __mockHttpError(400, 'Vui lòng nhập link video Youtube');
+    if (!/youtube\.com|youtu\.be/i.test(videoUrl)) throw __mockHttpError(400, 'Link video phải là link Youtube hợp lệ (chứa youtube.com hoặc youtu.be)');
+    doc.videoUrl = videoUrl;
+    const durationSeconds = Number(doc.durationSeconds);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw __mockHttpError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
+    doc.durationSeconds = Math.floor(durationSeconds);
+  }
+  __mockValidateCourseId(doc);
+  return doc;
+}
+
 // Đợt 3 — sửa lớp học đã tạo (editTrainingClass() ở lib/recordActions.js). Whitelist field, cùng luật
 // chuẩn hoá với lúc tạo lớp ở trên.
 const __MOCK_TRAINING_CLASS_EDITABLE_FIELDS = [
@@ -434,6 +473,12 @@ function __mockEndOfflineTrainingClass(user, cls) {
 
 function __mockValidateTrainingTestCreate(payload, user) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo bài test');
+  __mockNormalizeTrainingTestFields(payload);
+}
+// Tách riêng khỏi __mockValidateTrainingTestCreate() (10/2026, thêm nút "✏️ Sửa" cho Bài Test) để dùng
+// lại được cho cả TẠO lẫn SỬA (__mockEditTrainingTest() bên dưới) — mirrors normalizeTrainingTestFields()
+// ở lib/createValidation.js, GIỮ NGUYÊN VẸN toàn bộ logic gốc.
+function __mockNormalizeTrainingTestFields(payload) {
   if (!payload.title || !String(payload.title).trim()) throw __mockHttpError(400, 'Thiếu tên bài test');
   const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
   if (!rawQuestions.length) throw __mockHttpError(400, 'Bài test cần ít nhất 1 câu hỏi');
@@ -481,6 +526,18 @@ function __mockValidateTrainingTestCreate(payload, user) {
   // vẫn là nguồn quyết định duy nhất khi chấm điểm (mirrors createValidation.js).
   const suggestedPassScore = Number(payload.passScore);
   payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100 ? suggestedPassScore : null;
+}
+// __mockEditTrainingTest() — 10/2026, thêm nút "✏️ Sửa" cho Ngân Hàng Câu Hỏi. Ghi đè NGUYÊN title/
+// category/passScore/questions vào bản ghi cũ rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO
+// (mirrors editTrainingTest() ở lib/recordActions.js).
+function __mockEditTrainingTest(payload, user, test) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa bài test');
+  test.title = payload.title;
+  test.category = payload.category;
+  test.passScore = payload.passScore;
+  test.questions = payload.questions;
+  __mockNormalizeTrainingTestFields(test);
+  return test;
 }
 
 function __mockValidateTrainingRegistrationCreate(payload, user) {
@@ -1116,6 +1173,18 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     const doc = DB.trainingDocuments.find((d) => d.id === id);
     if (!doc) throw __mockHttpError(404, 'Không tìm thấy tài liệu');
     if (action === 'track-progress') return __mockTrackDocumentProgress(payload, user, doc);
+    // 'delete' — GỘP vào đây từ 1 khối `if (moduleKey === 'trainingDocuments')` TRÙNG TÊN nằm phía dưới
+    // xa (phát hiện khi thêm 'edit' — tự chết vì khối NÀY (chạy trước) luôn throw cho mọi action khác
+    // 'track-progress', không bao giờ chạm tới khối kia — deleteTrainingDocument() qua mock này trước đó
+    // luôn 400, không liên quan gì tới đợt "thêm nút Sửa" này nhưng sửa liền vì đụng đúng chỗ).
+    if (action === 'delete') return { __deleted: true };
+    // 'edit' — 10/2026, thêm nút "✏️ Sửa" cho Kho Tài Liệu (CHỈ metadata, xem __mockEditTrainingDocument()).
+    if (action === 'edit') {
+      const clone = JSON.parse(JSON.stringify(doc));
+      const r = __mockEditTrainingDocument(payload, user, clone);
+      Object.assign(doc, r);
+      return doc;
+    }
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingRegistrations') {
@@ -1139,10 +1208,28 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
   }
   if (moduleKey === 'trainingTests') {
     if (action === 'delete') return { __deleted: true };
+    if (action === 'edit') {
+      const id = Number(idStr);
+      const test = DB.trainingTests.find((t) => t.id === id);
+      if (!test) throw __mockHttpError(404, 'Không tìm thấy bài test');
+      const clone = JSON.parse(JSON.stringify(test));
+      const r = __mockEditTrainingTest(payload, user, clone);
+      Object.assign(test, r);
+      return test;
+    }
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingCourses') {
     if (action === 'delete') return { __deleted: true };
+    if (action === 'edit') {
+      const id = Number(idStr);
+      const course = DB.trainingCourses.find((c) => c.id === id);
+      if (!course) throw __mockHttpError(404, 'Không tìm thấy chương trình đào tạo');
+      const clone = JSON.parse(JSON.stringify(course));
+      const r = __mockEditTrainingCourse(payload, user, clone);
+      Object.assign(course, r);
+      return course;
+    }
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'trainingPlans') {
@@ -1156,10 +1243,6 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
       Object.assign(plan, r);
       return plan;
     }
-    throw __mockHttpError(400, 'Hành động không hợp lệ');
-  }
-  if (moduleKey === 'trainingDocuments') {
-    if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }
   if (moduleKey === 'careerPaths') {

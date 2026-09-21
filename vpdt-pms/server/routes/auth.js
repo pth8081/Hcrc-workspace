@@ -190,15 +190,39 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     // Admin CHƯA bật TOTP (lần đầu, hoặc vừa được cấp quyền admin) và tài khoản thường: đăng nhập bình
     // thường như trước — blockIfMustChangePassword (lib/auth.js) sẽ tự chặn admin chưa bật TOTP ở mọi
     // route nghiệp vụ ngay sau khi vào được, bắt thiết lập trước khi dùng tiếp.
+    //
+    // KHÔNG tăng sessionVersion ở NHÁNH này (chỉ mật khẩu đúng, chưa xong bước 2/2) — cố ý: nếu người
+    // dùng gõ đúng mật khẩu rồi BỎ DỞ/gõ sai mã TOTP, phiên đang mở hợp lệ ở thiết bị khác không được
+    // phép mất — chỉ đá phiên cũ khi phiên MỚI thật sự được cấp (xem bump ở POST /verify-totp-login).
     if (user.perms?.admin && user.totpEnabled) {
       await totp.issuePendingTotpLogin(user.username);
       return res.json({ totpRequired: true, username: user.username });
     }
 
-    const token = signToken(user);
+    // Cấp phiên thật (mật khẩu là ĐỦ, không cần bước 2) -> tăng sessionVersion (10/2026, yêu cầu "1 tài
+    // khoản chỉ 1 kết nối tại 1 thời điểm — đăng nhập mới đá phiên cũ"): tận dụng ĐÚNG cơ chế
+    // sessionVersion có sẵn (trước đây chỉ tăng khi đổi mật khẩu/PIN/gỡ TOTP để vô hiệu hoá các phiên cũ,
+    // xem lib/auth.js requireAuth() so payload.sv với DB) — giờ tăng ở MỌI lượt CẤP PHIÊN THÀNH CÔNG, không
+    // chỉ lúc đổi mật khẩu. Token vừa ký bên dưới dùng ĐÚNG giá trị sv MỚI này (không phải `user` gốc đã
+    // đọc trước đó ở đầu route) nên tự nó vẫn hợp lệ; mọi token khác đã ký trước đó (ở thiết bị/trình
+    // duyệt khác) sẽ có sv CŨ, lập tức bị requireAuth() từ chối (401 "Mật khẩu/PIN vừa được thay đổi...")
+    // ngay ở request kế tiếp của họ — không cần đợi hết hạn JWT (tối đa 1h, có thể lâu hơn do trượt hạn
+    // theo hoạt động).
+    let sessionUser = user;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === username);
+      if (idx !== -1) {
+        list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1;
+        sessionUser = { ...list[idx] };
+      }
+      return list;
+    });
+
+    const token = signToken(sessionUser);
     setAuthCookie(res, token);
     warnIfCookieLikelyNotPersisted(req);
-    res.json(toSafeUser(user));
+    res.json(toSafeUser(sessionUser));
   } catch (err) {
     console.error('POST /api/auth/login lỗi:', err.message);
     res.status(500).json({ error: 'Không thể đăng nhập, vui lòng thử lại' });
@@ -278,6 +302,10 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
         updatedUser.totpBackupCodeHashes = hashes;
       }
       resetLoginAttempts(updatedUser);
+      // Phiên THẬT được cấp ngay sau đây (đã qua đủ 2/2 bước) -> tăng sessionVersion, đá mọi phiên cũ ở
+      // thiết bị khác — cùng lý do/cơ chế đã áp dụng cho nhánh đăng nhập không cần TOTP ở POST /login (xem
+      // chú thích đầy đủ ở đó, mục "1 tài khoản chỉ 1 kết nối tại 1 thời điểm", 10/2026).
+      updatedUser.sessionVersion = (updatedUser.sessionVersion || 0) + 1;
       list[idx] = updatedUser;
       return list;
     });
@@ -1186,6 +1214,10 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
       );
       updatedUser = { ...list[idx], webauthnCredentials: creds };
       resetLoginAttempts(updatedUser);
+      // Phiên THẬT được cấp ngay sau đây -> tăng sessionVersion, đá mọi phiên cũ ở thiết bị khác — cùng
+      // lý do/cơ chế đã áp dụng cho POST /login/verify-totp-login (xem chú thích đầy đủ ở POST /login,
+      // mục "1 tài khoản chỉ 1 kết nối tại 1 thời điểm", 10/2026).
+      updatedUser.sessionVersion = (updatedUser.sessionVersion || 0) + 1;
       list[idx] = updatedUser;
       return list;
     });

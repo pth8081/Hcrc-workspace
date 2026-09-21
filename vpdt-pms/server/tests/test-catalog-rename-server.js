@@ -49,6 +49,9 @@ function resetState() {
     carTaxiCompanies: ['Mai Linh', 'Vinasun'],
     priceZones: ['Miền Bắc', 'Miền Nam'],
     trainingCategories: ['Kỹ năng mềm', 'Nghiệp vụ'],
+    // itRenewalCategories — THÊM ở đợt "rà soát nút Sửa còn thiếu" (10/2026), cùng khuôn 4 danh mục
+    // simpleArrayCatalogHandler ở trên (KHÔNG cascade, xem lib/catalogRename.js).
+    itRenewalCategories: ['Bản quyền phần mềm', 'Tên miền'],
     // contractTypes — THÊM ở đợt rà soát chuyên sâu vòng 2 (mức Thấp — "đổi tên Loại Pháp Lý HĐ không
     // cascade contractTypeAbbrs/contracts.type"), cùng khuôn cats/docCatAbbrs ở trên.
     contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động'],
@@ -244,7 +247,8 @@ async function run(name, fn) {
     ['licenseTypes', 'Giấy phép A', 'Giấy phép A (sửa)', 'Giấy phép B', 'Các Loại Giấy Phép'],
     ['carTaxiCompanies', 'Mai Linh', 'Mai Linh Taxi', 'Vinasun', 'Danh Mục Hãng Taxi'],
     ['priceZones', 'Miền Bắc', 'Miền Bắc (mới)', 'Miền Nam', 'Danh Mục Vùng Giá Áp Dụng'],
-    ['trainingCategories', 'Kỹ năng mềm', 'Kỹ năng mềm nâng cao', 'Nghiệp vụ', 'Danh Mục Loại Đào Tạo']
+    ['trainingCategories', 'Kỹ năng mềm', 'Kỹ năng mềm nâng cao', 'Nghiệp vụ', 'Danh Mục Loại Đào Tạo'],
+    ['itRenewalCategories', 'Bản quyền phần mềm', 'Bản quyền phần mềm (sửa)', 'Tên miền', 'Danh Mục Loại Dịch Vụ Gia Hạn CNTT']
   ]) {
     await run(`${key}: đổi tên -> cập nhật đúng mảng, KHÔNG cascade sang collection nào khác (simpleArrayCatalogHandler)`, async () => {
       resetState();
