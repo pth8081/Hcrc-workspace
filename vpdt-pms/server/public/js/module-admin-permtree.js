@@ -210,6 +210,9 @@ function collectPermsFromForm() {
     // operationRecordManageAll (mọi hồ sơ, không phân biệt người tạo) — xem lib/createValidation.js
     // canManageOperationRecord().
     operationRecordManageAll: document.getElementById('pOperationRecordManageAll').checked,
+    // operationRecordViewAll — quyền RIÊNG, chỉ xem/tải (không sửa) MỌI hồ sơ, xem chú thích đầy đủ ở
+    // core.js hasAnyOperationRecordManagePermClient()/lib/recordViewScope.js.
+    operationRecordViewAll: document.getElementById('pOperationRecordViewAll').checked,
     // operationOrderReceiptManageHO/operationOrderReceiptManageStore — quyền RIÊNG cho "🧾 Duyệt Nhập/Hủy
     // Đơn Hàng" (tách khỏi quần thể duyệt/từ chối đơn hàng nội bộ), TÁCH thành 2 quyền độc lập từ đợt
     // "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026) — HO là 1 checkbox đơn (không còn field
@@ -313,6 +316,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
+  document.getElementById('pOperationRecordViewAll').checked = !!perms.operationRecordViewAll;
   // Tương thích ngược: user chưa được re-save qua UI mới vẫn còn field operationOrderReceiptManage cũ
   // (gộp chung HO + siêu thị trong 1 danh sách depts[]) — tự tách ra để hiện đúng, admin bấm Lưu là dọn
   // sạch về 2 field mới (xem chú thích đầy đủ ở lib/recordActions.js isApproverForOperationOrderReceipt()).

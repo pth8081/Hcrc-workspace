@@ -85,7 +85,7 @@ const CHECKLIST_SUBMISSION = {
 // .attachments[]), tính năng mới theo yêu cầu người dùng. "Nội thất" (id 1, danh mục lớn, phụ trách
 // own_op, có 1 tệp) có 1 con "Kệ" (id 2, không có tệp — cột Tệp Đính Kèm chỉ ở danh mục lớn).
 const OP_STORE = {
-  id: 'op-1', dept: DEPT_A, creator: 'mgr_op',
+  id: 'op-1', dept: DEPT_A, creator: 'mgr_op', fileUrl: '/uploads/op-store-main.pdf', fileName: 'de-xuat-mo-moi.pdf',
   estimateItems: [
     { id: 1, parentId: null, content: 'Nội thất', assignedToUsernames: ['own_op'], attachments: [{ fileUrl: '/uploads/estimate-attach-1.pdf', fileName: 'bao-gia.pdf' }] },
     { id: 2, parentId: 1, content: 'Kệ trưng bày', attachments: [] }
@@ -295,6 +295,25 @@ async function main() {
     // mgr_op là creator NHƯNG không có operationStoreOpenCreate/operationRecordManageAll -> vẫn bị chặn,
     // đúng canManageOperationRecord() (lib/createValidation.js).
     assert.strictEqual(await authorizeFileAccess({ username: 'mgr_op', perms: {} }, url, 'view'), false);
+  });
+  // operationRecordViewAll (yêu cầu người dùng 9/2026): quyền RIÊNG, CHỈ XEM/TẢI (không sửa) — xem/tải
+  // được tệp đính kèm danh mục lớn BẤT KỲ, kể cả không phải người phụ trách, KHÔNG cần canManageOperationRecord.
+  await run('operationEstimateAttachment: operationRecordViewAll xem/tải được tệp đính kèm danh mục lớn bất kỳ, dù không phụ trách và không toàn quyền hồ sơ', async () => {
+    const url = OP_STORE.estimateItems[0].attachments[0].fileUrl;
+    const viewer = { username: 'view_all_op', perms: { operationRecordViewAll: true } };
+    assert.strictEqual(await authorizeFileAccess(viewer, url, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(viewer, url, 'download'), true);
+  });
+  // Tệp CHÍNH của hồ sơ Mở Mới (o.fileUrl, KHÁC tệp đính kèm Danh Mục Đầu Tư ở trên) — checker
+  // 'operationStoreOpening' dùng thẳng canViewOperationStoreOpening() (lib/recordViewScope.js) cho cả 2
+  // mode view/download, nên chỉ cần thêm quyền ở đó là đủ, không cần sửa gì thêm ở fileAuthz.js.
+  await run('operationStoreOpening (tệp chính hồ sơ): operationRecordViewAll xem/tải được dù khác phòng ban, không phải người tạo', async () => {
+    const viewer = { username: 'view_all_op2', dept: DEPT_B, perms: { operationRecordViewAll: true } };
+    assert.strictEqual(await authorizeFileAccess(viewer, OP_STORE.fileUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(viewer, OP_STORE.fileUrl, 'download'), true);
+  });
+  await run('operationStoreOpening (tệp chính hồ sơ): người NGOÀI phạm vi (không có operationRecordViewAll/operationRecordManageAll, khác phòng ban) vẫn bị chặn', async () => {
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, OP_STORE.fileUrl, 'view'), false);
   });
 
   await run('paymentRequests: đúng phòng ban xem được, phòng ban khác bị chặn, paymentManage luôn qua', async () => {

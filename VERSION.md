@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**23.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.80 (2026-09-21): Vận Hành — quyền mới "Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị" (operationRecordViewAll)
+
+Theo yêu cầu người dùng: *"quyền xem danh mục đầu tư toàn bộ các hồ sơ và
+download được file đính kèm danh mục đầu tư và hồ sơ mở mới, sửa chữa"*.
+Trước bản này, chỉ có `operationRecordManageAll` (toàn quyền — vừa xem vừa
+SỬA mọi hồ sơ) đáp ứng được phạm vi "toàn bộ hồ sơ, không phân biệt phòng
+ban" — không có lựa chọn nào chỉ cấp XEM+TẢI mà không kèm quyền sửa.
+
+Thêm quyền RIÊNG, ĐỘC LẬP **"👁️ Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị (Không
+Phân Biệt Phòng Ban, KHÔNG có quyền sửa)"** (`operationRecordViewAll`, cây
+phân quyền, khối 22 "Vận Hành", ngay dưới `operationRecordManageAll`):
+- Xem được MỌI hồ sơ Mở Mới/Sửa Chữa (không phân biệt phòng ban/người tạo) —
+  `canViewOperationStoreOpening()`/`canViewOperationRepair()`
+  (`lib/recordViewScope.js`).
+- Xem ĐẦY ĐỦ (không bị cắt bớt) Danh Mục Đầu Tư của mọi hồ sơ — thêm vào
+  danh sách bypass của `redactOperationEstimateItemsToOwnedScope()` (cùng
+  khuôn admin/`operationRecordManageAll`/cùng phòng ban).
+- Tải được tệp đính kèm CHÍNH của hồ sơ (dùng chung `canViewOperationStoreOpening`/
+  `canViewOperationRepair` ở trên — không cần sửa gì thêm ở `lib/fileAuthz.js`
+  cho phần này) VÀ tệp đính kèm Danh Mục Đầu Tư (`lib/fileAuthz.js`, checker
+  `operationEstimateAttachment`, thêm nhánh riêng — KHÔNG gọi qua
+  `canManageOperationRecord()` nên không vô tình cấp quyền sửa).
+- **KHÔNG** được cấp thêm ở `canManageOperationRecord()` (`lib/createValidation.js`)
+  hay `canManageOperationRecordClient()` (`module-vanhanh.js`) — do đó KHÔNG
+  sửa/xoá/thêm được gì (không thêm đầu mục, không upload/xoá tệp, không đổi
+  Người Phụ Trách...): `submitOperationEstimate()` vẫn từ chối 403 nếu người
+  giữ quyền này cố gọi. Tab "🏬 Siêu Thị" tự hiện ra cho họ
+  (`hasAnyOperationRecordManagePermClient()`/`canAccessOperationModule()`,
+  core.js) nhưng mọi nút sửa/xoá/thêm vẫn ẩn đúng (gate riêng theo từng hồ
+  sơ) — modal Danh Mục Đầu Tư tự vào chế độ chỉ xem (không phải toàn quyền,
+  không phụ trách danh mục nào -> `editable=false`) mà KHÔNG bị lọc bớt danh
+  mục như người chỉ phụ trách 1 phần (`isOwnerScoped=false` vì không phụ
+  trách gì) — thấy đủ mọi danh mục lớn/con.
+- Checkbox mới `pOperationRecordViewAll` ở cây phân quyền (Hệ Thống → Quyền
+  Đặc Biệt, khối 22 "Vận Hành", `public/fragments/systemSection.html`) —
+  đồng bộ đủ 3 nơi: `module-admin-permtree.js` (lưu/nạp),
+  `module-admin-userstaging.js` (nạp mặc định cho tài khoản mới).
+
+**Test mới**: 3 kịch bản trong `test-operation-estimate-owner-scope.js`
+(xem hồ sơ khác phòng, KHÔNG bị redact Danh Mục Đầu Tư, vẫn bị chặn khi cố
+sửa) + 3 kịch bản trong `test-uploads-file-authz.js` (tệp đính kèm Danh Mục
+Đầu Tư, tệp chính hồ sơ Mở Mới, người ngoài phạm vi vẫn bị chặn). Nhân tiện
+phát hiện + vá `redactOperationEstimateItemsToOwnedScope()` bị bỏ sót khỏi
+`module.exports` của `lib/recordViewScope.js` (không ảnh hưởng production —
+chỉ dùng nội bộ qua `filterOperationStoreOpeningsForUser`/
+`filterOperationRepairsForUser`, đã export sẵn — nhưng chặn test gọi thẳng
+hàm này). Full regression: sạch.
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— chỉ copy code + `pm2 restart`. Quyền mới mặc định TẮT cho mọi tài khoản
+hiện có — admin cần vào Hệ Thống → Quyền Đặc Biệt tick thủ công cho từng
+người cần.
 
 ## v23.79 (2026-09-21): Đăng Ký Xe — lái xe xem thông tin người đặt + phiếu duyệt; sửa lại quyền upload tệp Danh Mục Đầu Tư
 

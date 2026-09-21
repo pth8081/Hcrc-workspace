@@ -365,6 +365,10 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.operationRepair) return canViewOperationRepair(user, owning.item, await getAllAppData());
   if (owning.operationEstimateAttachment) {
     if (canManageOperationRecord(user, owning.item, owning.sourceType)) return true;
+    // operationRecordViewAll (yêu cầu người dùng 9/2026): quyền CHỈ XEM/TẢI (không sửa) Danh Mục Đầu Tư
+    // của MỌI hồ sơ — mirror canViewOperationStoreOpening()/canViewOperationRepair() (lib/recordViewScope.js),
+    // KHÔNG gọi canManageOperationRecord() nên không vô tình cấp quyền sửa/xoá tệp.
+    if (user?.perms?.operationRecordViewAll) return true;
     const topItem = (owning.item.estimateItems || []).find(it => it.parentId == null && (it.attachments || []).some(a => a.fileUrl === fileUrl));
     return !!(topItem && user?.username && Array.isArray(topItem.assignedToUsernames) && topItem.assignedToUsernames.includes(user.username));
   }

@@ -3221,6 +3221,9 @@ function defaultNewUserPerms() {
     hrAttendanceManage: false, hrLeaveApprove: false, hrShiftRosterManage: false, hrShiftSwapApprove: false,
     operationOrderCreate: false, operationStoreOpenCreate: false, operationRepairCreate: false,
     operationRecordManageAll: false,
+    // operationRecordViewAll — quyền CHỈ XEM/TẢI (không sửa) MỌI hồ sơ Mở Mới/Sửa Chữa + Danh Mục Đầu Tư,
+    // không phân biệt phòng ban — xem chú thích đầy đủ ở lib/recordViewScope.js canViewOperationStoreOpening().
+    operationRecordViewAll: false,
     // Nhân Sự > Lương (Module Lương, xem lib/payroll.js) — hrPayrollView MẶC ĐỊNH TRUE (mọi nhân viên
     // đều tự xem được phiếu lương CỦA CHÍNH MÌNH khi đã công bố, qua route riêng IDOR-safe, KHÔNG phải
     // quyền xem người khác) — TÁCH BIỆT hrPayrollManage (lập/tính/điều chỉnh) và hrPayrollApprove (duyệt
@@ -7473,8 +7476,13 @@ function isWorkItemAssignee(w, username) {
 // chính xác theo TỪNG hồ sơ/creator). Định nghĩa ở ĐÂY (core.js), KHÔNG ở module-vanhanh.js, vì
 // canAccessOperationSubTab() gọi hàm này ngay lúc đăng nhập — TRƯỚC KHI module-vanhanh.js (nạp lười khi
 // vào tab) kịp tải, xem chú thích activeOperationStoreSubTab bên dưới.
+// operationRecordViewAll (yêu cầu người dùng 9/2026) — quyền CHỈ XEM (không sửa/xoá/quản lý) hồ sơ +
+// Danh Mục Đầu Tư ở MỌI hồ sơ, không phân biệt phòng ban. Thêm vào ĐÂY (gate cấp TAB, đúng ý nghĩa hàm
+// "giữ bất kỳ quyền nào liên quan Siêu Thị") nhưng KHÔNG thêm vào canManageOperationRecordClient()
+// (module-vanhanh.js) — nhờ vậy tab hiện ra nhưng mọi nút sửa/xoá/thêm vẫn ẩn đúng (gate riêng theo từng
+// hồ sơ), estimateIsFullManager vẫn false nên chỉ xem, không sửa được Danh Mục Đầu Tư.
 function hasAnyOperationRecordManagePermClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.operationRecordManageAll || user?.perms?.operationStoreOpenCreate || user?.perms?.operationRepairCreate);
+  return !!(user?.perms?.admin || user?.perms?.operationRecordManageAll || user?.perms?.operationRecordViewAll || user?.perms?.operationStoreOpenCreate || user?.perms?.operationRepairCreate);
 }
 // Checklist Đánh Giá Siêu Thị — mirror ĐÚNG lib/checklist.js phía server (canManageChecklistTemplates/
 // canViewChecklistReports/hasChecklistAuditScope/isEligibleForStoreSelf/canAccessChecklistModule) — sửa
@@ -7515,7 +7523,7 @@ function canAccessOperationModule(user) {
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'vanHanh')) return false;
   if (user.perms?.operationOrderCreate || user.perms?.operationStoreOpenCreate || user.perms?.operationRepairCreate
-    || user.perms?.operationRecordManageAll) return true;
+    || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ

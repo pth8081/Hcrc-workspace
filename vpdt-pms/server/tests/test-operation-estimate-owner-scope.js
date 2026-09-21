@@ -12,7 +12,7 @@
 // Chạy: node server/tests/test-operation-estimate-owner-scope.js
 const assert = require('assert');
 const recordActions = require('../lib/recordActions');
-const { canViewOperationStoreOpening } = require('../lib/recordViewScope');
+const { canViewOperationStoreOpening, redactOperationEstimateItemsToOwnedScope } = require('../lib/recordViewScope');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -227,6 +227,32 @@ test('STRANGER (không phụ trách gì trong hồ sơ) gọi submitOperationEst
   const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
   assert.throws(
     () => recordActions.submitOperationEstimate(STRANGER, item, { items: [{ content: 'X', amount: 0 }] }, 'OPERATION_STORE_OPENING', USERS),
+    /không có quyền/
+  );
+});
+
+// ===== operationRecordViewAll (yêu cầu người dùng 9/2026): quyền CHỈ XEM (không sửa) MỌI hồ sơ =====
+const VIEW_ALL = { username: 'view_all', name: 'Người Xem Toàn Bộ', perms: { operationRecordViewAll: true } };
+
+test('operationRecordViewAll: xem được hồ sơ dù khác phòng ban, không phải approver, không phụ trách danh mục nào', () => {
+  const result = buildFixture();
+  const record = { id: 1, dept: 'Phòng Khác', creator: 'someone-else', estimateItems: result.estimateItems };
+  assert.strictEqual(canViewOperationStoreOpening(VIEW_ALL, record, {}), true);
+});
+
+test('operationRecordViewAll: KHÔNG bị redact — thấy ĐỦ mọi danh mục lớn (kể cả danh mục không phụ trách)', () => {
+  const result = buildFixture();
+  const record = { id: 1, dept: 'Phòng Khác', creator: 'someone-else', estimateItems: result.estimateItems };
+  const redacted = redactOperationEstimateItemsToOwnedScope(VIEW_ALL, 'OPERATION_STORE_OPENING', record, {});
+  assert.strictEqual(redacted.estimateItems.length, record.estimateItems.length, 'Không được cắt bớt danh mục nào');
+  assert.ok(redacted.estimateItems.some((it) => it.content === 'Sơn tường'), 'Phải thấy cả danh mục "Sơn tường" (không phụ trách)');
+});
+
+test('operationRecordViewAll: gọi submitOperationEstimate (thao tác sửa) vẫn bị 403 — quyền CHỈ XEM, không được cấp quyền sửa', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  assert.throws(
+    () => recordActions.submitOperationEstimate(VIEW_ALL, item, { items: [{ content: 'X', amount: 0 }] }, 'OPERATION_STORE_OPENING', USERS),
     /không có quyền/
   );
 });

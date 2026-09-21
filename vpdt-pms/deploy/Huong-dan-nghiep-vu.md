@@ -1858,7 +1858,17 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     trên nhưng trên **MỌI** hồ sơ. Người thực hiện (được gán "Người Phụ Trách"
     của TỪNG công việc) vẫn tự cập nhật tiến độ đúng việc của mình; người
     nghiệm thu được CHỈ ĐỊNH riêng cho từng việc vẫn tự nghiệm thu đúng việc
-    đó — không cần bất kỳ quyền quản lý nào ở trên.
+    đó — không cần bất kỳ quyền quản lý nào ở trên. Quyền RIÊNG
+    **"👁️ Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị (Không Phân Biệt Phòng Ban,
+    KHÔNG có quyền sửa)"** (`operationRecordViewAll`, cây phân quyền, cùng
+    khối 22 "Vận Hành", theo yêu cầu người dùng 9/2026) dành cho vai trò cần
+    **XEM/kiểm soát/tổng hợp** nhưng KHÔNG cần thao tác: được xem MỌI hồ sơ Mở
+    Mới/Sửa Chữa (không phân biệt phòng ban/người tạo), xem ĐẦY ĐỦ (không bị
+    ẩn bớt) Danh Mục Đầu Tư của mọi hồ sơ, tải được tệp đính kèm chính của hồ
+    sơ VÀ tệp đính kèm Danh Mục Đầu Tư — nhưng **KHÔNG** sửa/xoá/thêm được bất
+    kỳ gì (không thêm đầu mục, không upload/xoá tệp, không đổi Người Phụ
+    Trách...). 2 quyền `operationRecordManageAll`/`operationRecordViewAll`
+    ĐỘC LẬP, có thể cấp riêng từng cái.
   - **Danh Mục Đầu Tư 2 cấp**: bảng hạng mục Danh Mục Đầu Tư (giai đoạn Dự
     toán) hỗ trợ **đúng 2 cấp** — 1 "danh mục lớn" có thể chứa nhiều "danh mục
     con" bên trong (KHÔNG lồng sâu hơn 2 cấp). Mỗi dòng có cột **"Cha"** riêng
@@ -1885,8 +1895,9 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     trong bảng Danh Mục Đầu Tư, cho phép tải lên **nhiều** tệp dạng **PDF/
     Word (.docx)/Excel (.xlsx)** (admin đổi được ở Hệ Thống → Quản Lý Tệp File
     → mục "Vận Hành — Danh Mục Đầu Tư"). **Xem/tải**: người quản lý hồ sơ
-    toàn quyền VÀ ĐÚNG người phụ trách danh mục lớn đó (người khác, kể cả
-    admin không có quyền quản lý hồ sơ, bị chặn). **Thêm/sửa/xoá (upload
+    toàn quyền, người có quyền `operationRecordViewAll` (xem toàn bộ, xem ở
+    trên), VÀ ĐÚNG người phụ trách danh mục lớn đó (người khác, kể cả admin
+    không có quyền quản lý hồ sơ, bị chặn). **Thêm/sửa/xoá (upload
     lại)**: CHỈ **người quản lý hồ sơ toàn quyền** — người chỉ phụ trách 1
     phần (danh mục lớn) **KHÔNG** tự thêm/xoá được tệp, chỉ xem/tải (đã xác
     nhận lại với người dùng: "người phụ trách công việc không tự upload tài

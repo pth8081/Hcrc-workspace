@@ -611,7 +611,11 @@ function canViewOperationStoreOpening(user, item, appData) {
   // trước đây CHỈ check admin, khiến người chỉ có operationRecordManageAll (không phải admin) quản lý/sửa/
   // xoá được hồ sơ khác phòng ban qua gọi action thẳng nhưng GET /api/data lại không liệt kê hồ sơ đó cho
   // họ (quyền "mù" — có nhưng không thấy trên UI bình thường, phải biết trước id).
-  if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
+  // operationRecordViewAll (yêu cầu người dùng 9/2026): quyền CHỈ XEM (không sửa/xoá/quản lý) MỌI hồ sơ
+  // Mở Mới/Sửa Chữa bất kể phòng ban — KHÁC operationRecordManageAll (toàn quyền, gồm cả sửa). Chỉ thêm ở
+  // đây (view scope) + redactOperationEstimateItemsToOwnedScope() bên dưới, KHÔNG thêm vào
+  // canManageOperationRecord()/canManageOperationRecordClient() để không vô tình cấp quyền sửa.
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
   // KHÔNG còn nhánh "đang là approver" nào (hồ sơ chính lẫn Dự toán) — chủ ứng dụng xác nhận Vận Hành >
@@ -634,7 +638,9 @@ function canViewOperationStoreOpening(user, item, appData) {
 // tại cũng không thu hẹp cho trường hợp đó).
 function redactOperationEstimateItemsToOwnedScope(user, sourceType, item, appData) {
   if (!user) return item;
-  if (user.perms?.admin || user.perms?.operationRecordManageAll || item.dept === user.dept) return item;
+  // operationRecordViewAll: xem đầy đủ (không redact) — cùng khuôn admin/operationRecordManageAll, xem
+  // chú thích ở canViewOperationStoreOpening()/canViewOperationRepair() ngay trên.
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || item.dept === user.dept) return item;
   if (hasOwnWorkItemInSource(user, sourceType, item.id, appData)) return item;
   if (!hasOwnEstimateCategoryInSource(user, item)) return item;
   const ownedTopIds = new Set((item.estimateItems || [])
@@ -653,7 +659,8 @@ function filterOperationStoreOpeningsForUser(items, user, appData) {
 function canViewOperationRepair(user, item, appData) {
   if (!user) return false;
   // Audit nghiệp vụ (đợt 4) — cùng lý do đã thêm ở canViewOperationStoreOpening() ngay trên.
-  if (user.perms?.admin || user.perms?.operationRecordManageAll) return true;
+  // operationRecordViewAll — xem chú thích đầy đủ ở canViewOperationStoreOpening() ngay trên.
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
   // Cùng lý do ở canViewOperationStoreOpening() bên trên — KHÔNG còn nhánh "đang là approver" nào (hồ sơ
@@ -1256,6 +1263,7 @@ module.exports = {
   canViewOperationOrder, filterOperationOrdersForUser,
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
+  redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser,
   canViewOnboardingProgress, filterOnboardingProgressForUser,
   canViewLicense, filterLicensesForUser,
