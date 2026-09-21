@@ -42,7 +42,11 @@ const MODULE_DEFAULT_ALLOWED_EXT = {
   // UPLOAD_EXT_UNIVERSE ở module-tailieu.js) — nếu admin cấu hình đúng như nhãn "Truyền Thông Nội Bộ"
   // gợi ý (chỉ văn bản), mọi banner/ảnh tài liệu bị chặn tải lên dù đây là tính năng hợp lệ, KHÔNG hề
   // liên quan tới cấu hình loại tệp văn bản admin vừa chỉnh. Tách hẳn moduleKey riêng cho nhánh ảnh.
-  internalImage: ['.jpg', '.jpeg', '.png', '.webp']
+  internalImage: ['.jpg', '.jpeg', '.png', '.webp'],
+  // operationEstimate (tệp đính kèm "danh mục lớn" của Danh Mục Đầu Tư, Vận Hành > QLDA) — theo đúng
+  // yêu cầu người dùng "cho phép upload file dạng PDF, docx, xlsx" — CHỈ 3 định dạng này mặc định (admin
+  // vẫn tự mở rộng được qua "Quản Lý Tệp File" nếu cần).
+  operationEstimate: ['.pdf', '.docx', '.xlsx']
 };
 const MODULE_DEFAULT_MAX_MB = {
   trainingTestImage: 5,

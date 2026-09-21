@@ -28,6 +28,9 @@
 const { getAllForCollection, getAllForCollectionCached, getAllTrashItemsCached } = require('./recordStore');
 const { getAllAppData, getAppDataValue, getAppDataValueCached } = require('./appData');
 const { canViewFullProfile } = require('./employeeProfile');
+// canManageOperationRecord() — dùng cho tệp đính kèm "danh mục lớn" của Danh Mục Đầu Tư (estimateItems),
+// xem chú thích đầy đủ ở checker operationEstimateAttachment bên dưới.
+const { canManageOperationRecord } = require('./createValidation');
 const {
   canDownloadRecordFile, canViewInternalPost,
   canViewItPriceApproval, canViewReportEntry, canSeeReportCompilation, canSeeReportPdfCompilation, filterRecruitmentReferralsForUser,
@@ -190,6 +193,16 @@ async function findOwningRecord(fileUrl) {
     { records: operationOrders, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationOrder: true, item: o }) },
     { records: operationStoreOpenings, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationStoreOpening: true, item: o }) },
     { records: operationRepairs, fixed: o => o.fileUrl === fileUrl, build: o => ({ operationRepair: true, item: o }) },
+    // Danh Mục Đầu Tư — tệp đính kèm ở "danh mục lớn" (estimateItems[parentId==null].attachments[],
+    // xem submitOperationEstimate() ở lib/recordActions.js) — KHÁC hẳn o.fileUrl ở trên (đó là tệp CỦA
+    // CHÍNH hồ sơ, không phải của 1 danh mục đầu tư con bên trong). Quyền hẹp hơn canViewOperationStore*:
+    // chỉ toàn quyền hồ sơ (canManageOperationRecord) HOẶC ĐÚNG người phụ trách danh mục lớn đó mới xem/
+    // tải được — mirror ĐÚNG phạm vi canEditOperationEstimateClient() phía client (chỉ 2 nhóm này mới
+    // từng thấy dữ liệu estimateItems trong trình duyệt, xem openOperationEstimateModal()).
+    { records: operationStoreOpenings, fixed: o => (o.estimateItems || []).some(it => it.parentId == null && (it.attachments || []).some(a => a.fileUrl === fileUrl)),
+      build: o => ({ operationEstimateAttachment: true, item: o, sourceType: 'OPERATION_STORE_OPENING' }) },
+    { records: operationRepairs, fixed: o => (o.estimateItems || []).some(it => it.parentId == null && (it.attachments || []).some(a => a.fileUrl === fileUrl)),
+      build: o => ({ operationEstimateAttachment: true, item: o, sourceType: 'OPERATION_REPAIR' }) },
     // trainingTests: tra theo ĐÚNG câu hỏi chứa fileUrl (1 bài test có thể có nhiều ảnh câu hỏi khác
     // nhau) — không có customData, chỉ tham gia lượt 1 (fixed). Đợt 10 — loại IMAGE_DRAG_DROP (kéo thả
     // hình) thêm 1 nguồn ảnh MỚI: q.options[].imageUrl (ảnh của TỪNG đáp án).
@@ -350,6 +363,11 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.operationOrder) return canViewOperationOrder(user, owning.item, await getAllAppData());
   if (owning.operationStoreOpening) return canViewOperationStoreOpening(user, owning.item, await getAllAppData());
   if (owning.operationRepair) return canViewOperationRepair(user, owning.item, await getAllAppData());
+  if (owning.operationEstimateAttachment) {
+    if (canManageOperationRecord(user, owning.item, owning.sourceType)) return true;
+    const topItem = (owning.item.estimateItems || []).find(it => it.parentId == null && (it.attachments || []).some(a => a.fileUrl === fileUrl));
+    return !!(topItem && user?.username && Array.isArray(topItem.assignedToUsernames) && topItem.assignedToUsernames.includes(user.username));
+  }
   // trainingTestQuestion (ảnh minh hoạ câu hỏi Ngân Hàng Câu Hỏi) — canViewTrainingTestQuestionImage()
   // cần đọc kèm trainingClasses/trainingRegistrations (KHÔNG có trong getAllAppData(), 2 collection này
   // đã chuyển sang dbo.Records — xem lib/recordStore.js MIGRATED_COLLECTIONS) để xét "đang có đăng ký/là

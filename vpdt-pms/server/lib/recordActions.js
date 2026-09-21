@@ -833,6 +833,30 @@ function cancelOperationOrderReceipt(user, item, payload, appData) {
 // bộ con của chúng, GIỮ NGUYÊN 100% không đụng) + (kết quả xử lý payload — CHỈ chấp nhận dòng nằm trong
 // phạm vi, ném 403 rõ ràng nếu payload cố đụng dòng ngoài phạm vi — không âm thầm bỏ qua, cùng triết lý
 // "không tin dữ liệu client" xuyên suốt file này).
+// Sanitize attachments[] của 1 danh mục LỚN — KHÔNG tin dữ liệu client gửi lên (cùng triết lý toàn file
+// này): chỉ nhận object có fileUrl dạng chuỗi bắt đầu "/uploads/" (chặn URL ngoài/tự chế), cắt bớt độ
+// dài các field text, giới hạn tối đa 10 tệp/danh mục (chống phình dữ liệu). uploadedAt/uploadedByName
+// giữ NGUYÊN giá trị cũ nếu tệp đã tồn tại từ lần lưu trước (đối chiếu qua fileUrl, vốn random theo lượt
+// /api/upload nên không trùng giữa các lần) — tránh bị "làm mới" thời gian mỗi lần lưu KHÔNG liên quan
+// (VD chỉ sửa Ghi Chú) khiến lịch sử tải lên sai lệch.
+function sanitizeOperationEstimateAttachments(raw, existingAttachments, user) {
+  if (!Array.isArray(raw)) return [];
+  const existingByUrl = new Map((Array.isArray(existingAttachments) ? existingAttachments : []).map((a) => [a.fileUrl, a]));
+  return raw
+    .filter((a) => a && typeof a.fileUrl === 'string' && a.fileUrl.startsWith('/uploads/'))
+    .slice(0, 10)
+    .map((a) => {
+      const prev = existingByUrl.get(a.fileUrl);
+      return {
+        fileUrl: a.fileUrl,
+        fileName: String(prev?.fileName || a.fileName || '').trim().slice(0, 255) || 'Tệp đính kèm',
+        fileType: String(prev?.fileType || a.fileType || '').trim().slice(0, 100),
+        uploadedByName: prev?.uploadedByName || String(user?.name || '').trim().slice(0, 200),
+        uploadedAt: prev?.uploadedAt || nowVN()
+      };
+    });
+}
+
 function submitOperationEstimate(user, item, payload, sourceType, users) {
   const isFullManager = canManageOperationRecord(user, item, sourceType);
   const existingItems = item.estimateItems || [];
@@ -870,7 +894,7 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
     const rawId = Number(it?.id);
     const id = (Number.isFinite(rawId) && existingIds.has(rawId)) ? rawId : genId();
     if (Number.isFinite(rawId)) idMap.set(rawId, id);
-    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim(), rawParentId: it?.parentId, rawAssignedTo: it?.assignedTo };
+    return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim(), rawParentId: it?.parentId, rawAssignedTo: it?.assignedTo, rawAttachments: it?.attachments };
   }).filter(Boolean);
 
   // Bước 2: đối chiếu parentId qua idMap. Cha KHÔNG còn tồn tại trong lần lưu này (bị xoá nội dung/xoá
@@ -885,7 +909,7 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
       if (Number.isFinite(rawParentNum) && idMap.has(rawParentNum)) parentId = idMap.get(rawParentNum);
       else orphaned = true;
     }
-    return { id: it.id, content: it.content, description: it.description, amount: it.amount, note: it.note, parentId, orphaned, rawAssignedTo: it.rawAssignedTo };
+    return { id: it.id, content: it.content, description: it.description, amount: it.amount, note: it.note, parentId, orphaned, rawAssignedTo: it.rawAssignedTo, rawAttachments: it.rawAttachments };
   });
   resolved = resolved.filter((it) => !it.orphaned).map(({ orphaned, ...rest }) => rest);
 
@@ -950,8 +974,15 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
       it.assignedToUsernames = usernames;
       it.assignedToNames = names;
     }
+    // Tệp đính kèm "danh mục lớn" (yêu cầu người dùng: "danh mục lớn cho phép upload file dạng PDF,
+    // docx, xlsx") — CHỈ danh mục LỚN mới có, giống assignedToUsernames/Names ở trên. KHÁC assignedTo
+    // (chỉ toàn quyền hồ sơ mới đổi được): attachments cho phép CẢ người chỉ phụ trách 1 phần tự thêm/xoá
+    // TRÊN ĐÚNG danh mục họ phụ trách (đã qua kiểm tra ownerTopIds ở nhánh phía trên — mọi dòng lọt tới
+    // đây đều nằm trong phạm vi được phép sửa), khớp đúng yêu cầu "người phụ trách cũng xem và tải được
+    // file" (ngụ ý họ cũng là người upload thực tế, không chỉ xem file người khác đưa lên).
+    it.attachments = sanitizeOperationEstimateAttachments(it.rawAttachments, existingById.get(it.id)?.attachments, user);
   });
-  resolved.forEach((it) => { delete it.rawAssignedTo; });
+  resolved.forEach((it) => { delete it.rawAssignedTo; delete it.rawAttachments; });
 
   // Roll-up: danh mục lớn (parentId rỗng) có >=1 con -> amount tự tính = tổng amount các con, GHI ĐÈ giá
   // trị client gửi cho chính nó (không cho nhập tay khi đã có con — xem renderOperationEstimateItemsTable()

@@ -1387,7 +1387,11 @@ const UPLOAD_MODULE_LIST = [
   // internalImage ở routes/upload.js): banner tin tuyển dụng (rjBannerFile) + ảnh tài liệu Truyền Thông
   // Nội Bộ (tdFile khi docType==='IMAGE') — mục cấu hình riêng để đổi loại tệp 'internal' (văn bản)
   // không còn vô tình chặn nhầm 2 nhánh ảnh này.
-  { key: 'internalImage', label: '📣 Truyền Thông Nội Bộ (Ảnh/Banner)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE }
+  { key: 'internalImage', label: '📣 Truyền Thông Nội Bộ (Ảnh/Banner)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE },
+  // operationEstimate (Danh Mục Đầu Tư — tệp đính kèm "danh mục lớn", Vận Hành > QLDA) — mặc định CHỈ
+  // .pdf/.docx/.xlsx (xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js), dùng đúng extUniverse chung
+  // (UPLOAD_EXT_UNIVERSE, không phải ảnh) vì đây là tệp văn bản/hồ sơ.
+  { key: 'operationEstimate', label: '📁 Vận Hành — Danh Mục Đầu Tư (Tệp Đính Kèm)' }
 ];
 
 function renderUploadTypeConfig() {

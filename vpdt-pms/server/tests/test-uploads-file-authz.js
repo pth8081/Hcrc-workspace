@@ -81,6 +81,17 @@ const CHECKLIST_SUBMISSION = {
   deductions: [{ criteriaId: 1, deductedPoints: 5, attachments: [{ fileUrl: '/uploads/checklist-deduction-proof.jpg' }] }]
 };
 
+// Danh Mục Đầu Tư (Vận Hành > QLDA) — tệp đính kèm ở "danh mục lớn" (estimateItems[parentId==null]
+// .attachments[]), tính năng mới theo yêu cầu người dùng. "Nội thất" (id 1, danh mục lớn, phụ trách
+// own_op, có 1 tệp) có 1 con "Kệ" (id 2, không có tệp — cột Tệp Đính Kèm chỉ ở danh mục lớn).
+const OP_STORE = {
+  id: 'op-1', dept: DEPT_A, creator: 'mgr_op',
+  estimateItems: [
+    { id: 1, parentId: null, content: 'Nội thất', assignedToUsernames: ['own_op'], attachments: [{ fileUrl: '/uploads/estimate-attach-1.pdf', fileName: 'bao-gia.pdf' }] },
+    { id: 2, parentId: 1, content: 'Kệ trưng bày', attachments: [] }
+  ]
+};
+
 const COLLECTIONS = {
   docs: [DOC],
   internalPosts: [POST_PENDING],
@@ -90,7 +101,9 @@ const COLLECTIONS = {
   laborContracts: [LABOR_CONTRACT],
   paymentRequests: [PAYMENT_REQUEST],
   hrProcesses: [HR_PROCESS],
-  checklistSubmissions: [CHECKLIST_SUBMISSION]
+  checklistSubmissions: [CHECKLIST_SUBMISSION],
+  operationStoreOpenings: [OP_STORE],
+  operationRepairs: []
 };
 
 // ===================== Người dùng =====================
@@ -259,6 +272,29 @@ async function main() {
     assert.strictEqual(await authorizeFileAccess(self, LABOR_CONTRACT.fileUrl, 'download'), true);
     // Cùng tên đăng nhập nhưng KHÔNG phải bản ghi của mình (username khác nhau dù cùng phòng) vẫn bị chặn.
     assert.strictEqual(await authorizeFileAccess({ username: 'nv_khac', dept: DEPT_A, perms: {} }, LABOR_CONTRACT.fileUrl, 'view'), false);
+  });
+
+  // Danh Mục Đầu Tư (Vận Hành > QLDA) — tệp đính kèm "danh mục lớn" (tính năng mới, theo yêu cầu người
+  // dùng "danh mục lớn cho phép upload file... người phụ trách cũng xem và tải được file"). Quyền hẹp
+  // hơn canViewOperationStoreOpening (chỉ toàn quyền hồ sơ HOẶC đúng người phụ trách đúng danh mục lớn
+  // đó) — xem chú thích đầy đủ ở checker operationEstimateAttachment (lib/fileAuthz.js).
+  await run('operationEstimateAttachment: toàn quyền hồ sơ (operationRecordManageAll) xem/tải được tệp đính kèm danh mục lớn bất kỳ, kể cả không phải người phụ trách', async () => {
+    const url = OP_STORE.estimateItems[0].attachments[0].fileUrl;
+    const manager = { username: 'other_mgr', perms: { operationRecordManageAll: true } };
+    assert.strictEqual(await authorizeFileAccess(manager, url, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(manager, url, 'download'), true);
+  });
+  await run('operationEstimateAttachment: ĐÚNG người phụ trách danh mục lớn đó (assignedToUsernames) xem/tải được', async () => {
+    const url = OP_STORE.estimateItems[0].attachments[0].fileUrl;
+    assert.strictEqual(await authorizeFileAccess({ username: 'own_op', perms: {} }, url, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess({ username: 'own_op', perms: {} }, url, 'download'), true);
+  });
+  await run('operationEstimateAttachment: người NGOÀI phạm vi (không phụ trách danh mục này, không toàn quyền hồ sơ) KHÔNG xem/tải được — kể cả người tạo hồ sơ nếu không có quyền quản lý', async () => {
+    const url = OP_STORE.estimateItems[0].attachments[0].fileUrl;
+    assert.strictEqual(await authorizeFileAccess({ username: 'stranger_op', perms: {} }, url, 'view'), false);
+    // mgr_op là creator NHƯNG không có operationStoreOpenCreate/operationRecordManageAll -> vẫn bị chặn,
+    // đúng canManageOperationRecord() (lib/createValidation.js).
+    assert.strictEqual(await authorizeFileAccess({ username: 'mgr_op', perms: {} }, url, 'view'), false);
   });
 
   await run('paymentRequests: đúng phòng ban xem được, phòng ban khác bị chặn, paymentManage luôn qua', async () => {

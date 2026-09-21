@@ -844,6 +844,10 @@
                 <!-- "Người Phụ Trách" — CHỈ có ở danh mục LỚN (depth 0), xem canOwnEstimateCategoryClient()
                      ở module-vanhanh.js — người được gán vào đây xem/sửa được đúng phạm vi danh mục này. -->
                 <th class="border p-1.5 w-40">Người Phụ Trách</th>
+                <!-- "Tệp Đính Kèm" — CHỈ có ở danh mục LỚN (depth 0, giống cột "Người Phụ Trách" ngay trên),
+                     theo yêu cầu người dùng (upload PDF/docx/xlsx, người phụ trách xem/tải được) — xem
+                     renderOperationEstimateItemRow()/onOperationEstimateAttachmentFileChange() ở module-vanhanh.js. -->
+                <th class="border p-1.5 w-32">Tệp Đính Kèm</th>
                 <th class="border p-1.5 w-8"></th>
               </tr>
             </thead>

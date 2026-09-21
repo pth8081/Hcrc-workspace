@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**23.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.78 (2026-09-21): Danh Mục Đầu Tư — Tệp Đính Kèm + cột Người Phụ Trách ở Excel + lọc Báo Cáo QLDA theo Hồ Sơ
+
+Theo yêu cầu người dùng, 3 việc trong Vận Hành > QLDA (Danh Mục Đầu Tư/Báo Cáo):
+
+### 1) "Tệp Đính Kèm" cho danh mục lớn (Danh Mục Đầu Tư)
+
+Mỗi danh mục LỚN (không áp dụng danh mục con, cùng phạm vi "Người Phụ Trách"
+đã có) giờ có cột **Tệp Đính Kèm** riêng — tải lên được nhiều tệp **PDF/
+Word (.docx)/Excel (.xlsx)** (moduleKey `operationEstimate` mới ở "Quản Lý
+Tệp File", admin đổi được loại tệp/dung lượng như mọi module khác). Quyền
+xem/tải: **người quản lý hồ sơ toàn quyền** HOẶC **ĐÚNG người phụ trách**
+danh mục lớn đó (`lib/fileAuthz.js`, checker `operationEstimateAttachment`
+mới) — người ngoài phạm vi (kể cả admin không có quyền quản lý hồ sơ Vận
+Hành) bị chặn cả xem lẫn tải, đúng yêu cầu "người phụ trách cũng xem và tải
+được file". Người phụ trách 1 phần (không toàn quyền hồ sơ) cũng tự
+thêm/xoá được tệp trên ĐÚNG danh mục mình phụ trách — không chỉ xem tệp
+người khác tải lên. Tệp chỉ thật sự lưu vào hồ sơ sau khi bấm "💾 Lưu Danh
+Mục Đầu Tư" như mọi trường khác của dòng.
+
+### 2) Cột "Người Phụ Trách" ở file Excel xuất Danh Mục Đầu Tư
+
+`exportOperationEstimateItems()` thêm cột **Người Phụ Trách** (chỉ có ở
+dòng danh mục lớn) — tham khảo, cùng khuôn cột "Danh Mục Cha" đã có (import
+KHÔNG đọc lại 2 cột này, mọi dòng nhập từ Excel luôn vào làm danh mục lớn
+mới/chưa gán ai — người toàn quyền hồ sơ tự gán lại qua ô chọn người sau khi
+gộp).
+
+### 3) Báo Cáo QLDA: lọc theo Hồ Sơ
+
+Khối "🔍 Lọc Báo Cáo" (tab Báo Cáo, Vận Hành > QLDA) thêm dropdown **Hồ Sơ**
+— chọn ĐÚNG 1 hồ sơ để xem riêng toàn bộ báo cáo (bảng rollup cấp hồ sơ LẪN
+khối "Tổng Quan Toàn Bộ Công Việc"), khác "Từ Khóa" (chỉ tìm gần đúng, có
+thể khớp nhiều hồ sơ). Danh sách tự thu hẹp theo "Loại Hồ Sơ" đang chọn.
+
+**Test mới**: `test-operation-estimate-attachments.js` (sanitize/quyền
+thêm tệp), `test-operation-store-report-record-filter.js` (lọc theo hồ
+sơ), + 3 kịch bản `operationEstimateAttachment` bổ sung vào
+`test-uploads-file-authz.js` (đúng người phụ trách xem được, toàn quyền hồ
+sơ xem được, người ngoài phạm vi/creator không có quyền quản lý bị chặn).
+Full regression 262 file: sạch (4 lỗi flag còn lại đều là môi trường
+sandbox/false-positive có sẵn từ trước, không liên quan đợt này).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— `estimateItems[].attachments` là field JSON mới trong payload đã có sẵn
+(`operationStoreOpenings`/`operationRepairs`), không cần chạy lại
+`schema.sql`. Chỉ cần copy code + `pm2 restart`.
 
 ## v23.77 (2026-09-21): Sửa test cũ sai (không phải lỗi sản phẩm) — laborContracts admin-bypass
 

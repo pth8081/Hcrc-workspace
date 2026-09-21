@@ -1320,6 +1320,45 @@ function viewOperationAttachment(kind, id) {
   });
 }
 
+// Tệp đính kèm "danh mục lớn" của Danh Mục Đầu Tư (estimateItems[idx].attachments[]) — 3 hàm dùng chung
+// cho CẢ toàn quyền hồ sơ lẫn người chỉ phụ trách 1 phần (editable đã tự giới hạn đúng phạm vi ở
+// renderOperationEstimateItemRow()). Thao tác CHỈ trên bộ nhớ operationEstimateItems đang sửa — lưu thật
+// vẫn phải bấm "💾 Lưu Danh Mục Đầu Tư" như mọi field khác của dòng (xem submitOperationEstimateForApproval()).
+async function onOperationEstimateAttachmentFileChange(inputEl, idx) {
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = '';
+  if (!file) return;
+  const it = operationEstimateItems[idx];
+  if (!it) return;
+  try {
+    const data = await uploadFileToServer(file, 'operationEstimate');
+    it.attachments = it.attachments || [];
+    it.attachments.push({
+      fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
+      uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
+    });
+    renderOperationEstimateItemsTable(true);
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
+}
+function removeOperationEstimateAttachment(idx, attIdx) {
+  const it = operationEstimateItems[idx];
+  if (!it || !Array.isArray(it.attachments)) return;
+  it.attachments.splice(attIdx, 1);
+  renderOperationEstimateItemsTable(true);
+}
+function viewOperationEstimateAttachment(idx, attIdx) {
+  const it = operationEstimateItems[idx];
+  const att = it && it.attachments && it.attachments[attIdx];
+  if (!att) return;
+  openFileProtectedView({
+    title: `📎 Tệp Đính Kèm — ${it.content}`,
+    sub: '', footerInfo: '',
+    fileSrc: att.fileUrl, fileType: att.fileType, fileName: att.fileName
+  });
+}
+
 function openOperationProcessModal(kind, id) {
   currentProcessingOperationKind = kind;
   currentProcessingOperationId = id;
@@ -1554,7 +1593,7 @@ let estimateTempIdCounter = -1;
 function nextEstimateTempId() { return estimateTempIdCounter--; }
 
 function addOperationEstimateItemRow(parentId) {
-  operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: parentId || null });
+  operationEstimateItems.push({ id: nextEstimateTempId(), content: '', description: '', amount: 0, note: '', parentId: parentId || null, attachments: [] });
   renderOperationEstimateItemsTable(true);
 }
 // "Thêm Danh Mục Con" — phản hồi người dùng (lần 3): mirror ĐÚNG nút "➕ Con" của cây Công việc Thực hiện
@@ -1736,7 +1775,25 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
     : (editable && estimateIsFullManager
       ? `<td class="border p-1"><div id="estimateAssigneePicker_${idx}" class="text-[10px]"></div></td>`
       : `<td class="border p-1 text-[10px] text-gray-600">${(it.assignedToNames || []).map(escapeHtml).join(', ') || '<span class="text-gray-400 italic">Chưa gán</span>'}</td>`);
-  return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${assigneeCell}${actionCell}</tr>`;
+  // "Tệp Đính Kèm" — CHỈ có ở danh mục LỚN (depth 0), theo yêu cầu người dùng ("danh mục lớn cho phép
+  // upload file dạng PDF, docx, xlsx, người phụ trách cũng xem và tải được file"). Cho phép cả toàn
+  // quyền hồ sơ LẪN người chỉ phụ trách 1 phần tự thêm/xoá tệp trên ĐÚNG danh mục họ phụ trách (editable
+  // đã phản ánh đúng phạm vi này, xem openOperationEstimateModal()) — khác cột "Người Phụ Trách" ở trên
+  // (CHỈ toàn quyền hồ sơ mới sửa được). moduleKey 'operationEstimate' ở uploadFileToServer() (mặc định
+  // .pdf/.docx/.xlsx, xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js) — file chỉ THẬT SỰ lưu vào hồ sơ
+  // sau khi bấm "💾 Lưu Danh Mục Đầu Tư" (giống mọi field khác của dòng, xem submitOperationEstimateForApproval()).
+  const attachmentsListHTML = (it.attachments || []).map((a, aIdx) => `
+      <div class="flex items-center gap-1">
+        <a href="#" data-op="viewOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-blue-600 underline truncate max-w-[100px]" title="${escapeHtml(a.fileName || '')}">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a>
+        ${editable ? `<button type="button" data-op="removeOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-red-500 font-bold" title="Xoá tệp">✕</button>` : ''}
+      </div>`).join('');
+  const attachCell = depth !== 0
+    ? `<td class="border p-1"></td>`
+    : `<td class="border p-1 text-[10px] space-y-0.5">
+        ${attachmentsListHTML || (!editable ? '<span class="text-gray-400 italic">Chưa có tệp</span>' : '')}
+        ${editable ? `<label class="text-cyan-700 font-bold cursor-pointer hover:underline block">+ Thêm tệp<input type="file" accept=".pdf,.docx,.xlsx" data-op-change="onOperationEstimateAttachmentFileChange" data-idx="${idx}" class="hidden"></label>` : ''}
+      </td>`;
+  return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${assigneeCell}${attachCell}${actionCell}</tr>`;
 }
 function renderOperationEstimateItemsTable(editable) {
   const tbody = document.getElementById('operationEstimateItemsTableBody');
@@ -1751,7 +1808,7 @@ function renderOperationEstimateItemsTable(editable) {
       rowsHtml.push(renderOperationEstimateItemRow(child, childIdx, 1, editable, null));
     });
   });
-  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="8" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
+  tbody.innerHTML = rowsHtml.join('') || `<tr><td colspan="9" class="text-center p-4 text-gray-400 italic">Chưa có hạng mục nào.</td></tr>`;
   // Populate ô chọn nhiều người "Người Phụ Trách" của MỖI danh mục lớn — SAU khi tbody.innerHTML đã gán
   // xong (renderPeopleMultiSelect() cần container đã có mặt trong DOM, xem chú thích ở
   // renderOperationEstimateItemRow() ngay trên). CHỈ chạy khi toàn quyền hồ sơ + đang sửa — người chỉ
@@ -1791,7 +1848,7 @@ function openOperationEstimateModal(kind, id) {
   // phạm vi 1 lần sửa/lưu (xem nextEstimateTempId()).
   estimateTempIdCounter = -1;
   operationEstimateItems = (o.estimateItems && o.estimateItems.length)
-    ? o.estimateItems.map(it => ({ id: it.id != null ? it.id : nextEstimateTempId(), content: it.content ?? it.name ?? '', description: it.description || '', amount: it.amount || 0, note: it.note || '', parentId: it.parentId ?? null, assignedToUsernames: it.assignedToUsernames || [], assignedToNames: it.assignedToNames || [] }))
+    ? o.estimateItems.map(it => ({ id: it.id != null ? it.id : nextEstimateTempId(), content: it.content ?? it.name ?? '', description: it.description || '', amount: it.amount || 0, note: it.note || '', parentId: it.parentId ?? null, assignedToUsernames: it.assignedToUsernames || [], assignedToNames: it.assignedToNames || [], attachments: it.attachments || [] }))
     : [];
   // Mục "Người Phụ Trách danh mục lớn" — toàn quyền hồ sơ (canCreateOperationEstimateClient) mới thấy/sửa
   // TOÀN BỘ estimateItems; người CHỈ phụ trách 1 phần (canOwnEstimateCategoryClient, KHÔNG toàn quyền)
@@ -1901,11 +1958,17 @@ async function exportOperationEstimateItems() {
   const columns = [
     { header: 'Nội Dung', key: 'content', width: 30 }, { header: 'Danh Mục Cha', key: 'parentLabel', width: 22 },
     { header: 'Mô Tả', key: 'description', width: 26 },
-    { header: 'Chi Phí (VNĐ)', key: 'amount', width: 18 }, { header: 'Lưu Ý', key: 'note', width: 22 }
+    { header: 'Chi Phí (VNĐ)', key: 'amount', width: 18 }, { header: 'Lưu Ý', key: 'note', width: 22 },
+    // "Người Phụ Trách" — theo yêu cầu người dùng ("mẫu file dạng mục đầu tư thêm cột người phụ trách để
+    // upload cho khớp"). CHỈ có ý nghĩa ở danh mục LỚN (parentId rỗng, rỗng ở dòng con) — CHỈ để tham
+    // khảo, giống hệt cột "Danh Mục Cha" ở trên: import KHÔNG đọc lại cột này (mọi dòng nhập từ Excel
+    // luôn vào làm danh mục lớn MỚI/chưa gán ai, xem confirmOperationEstimateImport()) — người toàn quyền
+    // hồ sơ vẫn phải tự gán lại qua ô chọn người sau khi gộp, không tự động khớp theo tên trong cột này.
+    { header: 'Người Phụ Trách', key: 'assignedToLabel', width: 26 }
   ];
   const rows = validItems.map(it => {
     const parent = it.parentId != null ? operationEstimateItems.find(p => p.id === it.parentId) : null;
-    return { content: it.content, parentLabel: parent ? parent.content : '', description: it.description || '', amount: operationEstimateEffectiveAmount(it), note: it.note || '' };
+    return { content: it.content, parentLabel: parent ? parent.content : '', description: it.description || '', amount: operationEstimateEffectiveAmount(it), note: it.note || '', assignedToLabel: it.parentId == null ? (it.assignedToNames || []).join(', ') : '' };
   });
   await downloadXlsxFromServer('Danh_Muc_Dau_Tu.xlsx', 'Danh Mục Đầu Tư', columns, rows);
 }
@@ -3300,8 +3363,30 @@ function renderOperationOrderReport() {
 // bảng "📋 Tổng Quan Toàn Bộ Công Việc" mới + xuất Excel của bảng đó (buildOperationStoreReportOverviewRows()
 // ngay dưới) — ĐÚNG 1 nguồn sự thật cho "tập hồ sơ đang xem", tránh lệch nhau giữa các khối trong cùng 1
 // tab Báo Cáo.
+// "Hồ Sơ" — chọn ĐÚNG 1 hồ sơ để xem riêng toàn bộ báo cáo (theo yêu cầu người dùng "bổ sung lọc theo hồ
+// sơ") — khác hẳn "Từ Khóa" (chỉ tìm GẦN ĐÚNG theo mã/tên, có thể khớp nhiều hồ sơ cùng lúc). Value dạng
+// "<kind>::<id>" (id đơn lẻ không đủ phân biệt operationStoreOpenings/operationRepairs). Gọi lại mỗi lần
+// renderOperationStoreReport() chạy (đổi Loại Hồ Sơ/mở tab Báo Cáo) để danh sách luôn khớp hồ sơ hiện có
+// — giữ nguyên lựa chọn đang chọn nếu vẫn còn hợp lệ sau khi đổi Loại Hồ Sơ.
+function populateOpReportFilterRecordOptions() {
+  const sel = document.getElementById('opReportFilterRecord');
+  if (!sel) return;
+  const filterKind = document.getElementById('opReportFilterKind')?.value || '';
+  const current = sel.value;
+  let list = [];
+  if (!filterKind || filterKind === 'operationStoreOpenings') list.push(...(DB.operationStoreOpenings || []).map(o => ({ kind: 'operationStoreOpenings', item: o })));
+  if (!filterKind || filterKind === 'operationRepairs') list.push(...(DB.operationRepairs || []).map(o => ({ kind: 'operationRepairs', item: o })));
+  const optionsHTML = list.map(r => {
+    const value = `${r.kind}::${r.item.id}`;
+    const label = `${r.item.code} — ${OPERATION_KIND_META[r.kind].titleField(r.item)}`;
+    return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+  }).join('');
+  sel.innerHTML = `<option value="">-- Tất cả hồ sơ --</option>${optionsHTML}`;
+  if (list.some(r => `${r.kind}::${r.item.id}` === current)) sel.value = current;
+}
 function buildOperationStoreReportComputed() {
   const filterKind = document.getElementById('opReportFilterKind')?.value || '';
+  const filterRecord = document.getElementById('opReportFilterRecord')?.value || '';
   const filterProgress = document.getElementById('opReportFilterProgress')?.value || '';
   const keyword = (document.getElementById('opReportFilterKeyword')?.value || '').trim().toLowerCase();
 
@@ -3310,6 +3395,7 @@ function buildOperationStoreReportComputed() {
     ...(DB.operationRepairs || []).map(o => ({ kind: 'operationRepairs', item: o }))
   ];
   if (filterKind) rows = rows.filter(r => r.kind === filterKind);
+  if (filterRecord) rows = rows.filter(r => `${r.kind}::${r.item.id}` === filterRecord);
   if (keyword) rows = rows.filter(({ kind, item: o }) => matchesKeywordFields([o.code, OPERATION_KIND_META[kind].titleField(o)], keyword));
 
   return rows.map(({ kind, item: o }) => {
@@ -3374,6 +3460,7 @@ function closeOperationWorkItemQuickViewModal() {
 function renderOperationStoreReport() {
   const tbody = document.getElementById('operationStoreReportTableBody');
   if (!tbody) return;
+  populateOpReportFilterRecordOptions();
   const computed = buildOperationStoreReportComputed();
 
   // VHST-6: thống kê + cảnh báo CẤP CÔNG VIỆC (item-level), TÁCH RIÊNG "quá hạn chưa bắt đầu" khỏi "quá
@@ -3680,7 +3767,10 @@ const OP_CLICK_ACTIONS = {
   // Chống trùng lặp Excel import (đợt 10/2026) — nút "Gộp"/"Tạo" ở bảng xem trước Danh Mục Đầu Tư/Danh
   // Sách Công Việc, cùng khuôn confirmOperationEstimateImport()/confirmOperationWorkItemImport() ở trên.
   confirmOperationEstimateImport: () => confirmOperationEstimateImport(),
-  confirmOperationWorkItemImport: () => confirmOperationWorkItemImport()
+  confirmOperationWorkItemImport: () => confirmOperationWorkItemImport(),
+  // Tệp đính kèm "danh mục lớn" (Danh Mục Đầu Tư) — xem 3 hàm ngay dưới viewOperationAttachment().
+  viewOperationEstimateAttachment: (el, e) => { e.preventDefault(); viewOperationEstimateAttachment(Number(el.dataset.idx), Number(el.dataset.attIdx)); },
+  removeOperationEstimateAttachment: el => removeOperationEstimateAttachment(Number(el.dataset.idx), Number(el.dataset.attIdx))
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -3722,7 +3812,10 @@ const OP_CHANGE_ACTIONS = {
   // Cột "Cha" ở MỖI dòng bảng Danh Mục Đầu Tư (đợt sửa lỗi lần 2 — xem chú thích đầy đủ ở
   // changeOperationEstimateItemParent()) — cho phép gán/đổi cha CHO DÒNG ĐÃ CÓ SẴN, không bắt buộc phải
   // chọn cha TRƯỚC lúc thêm dòng mới như cơ chế cũ (selEstimateNewItemParent) vẫn còn giữ song song.
-  changeOperationEstimateItemParent: el => changeOperationEstimateItemParent(Number(el.dataset.idx), el.value)
+  changeOperationEstimateItemParent: el => changeOperationEstimateItemParent(Number(el.dataset.idx), el.value),
+  // Input file "+ Thêm tệp" của cột Tệp Đính Kèm (danh mục lớn) — el CHÍNH LÀ input file đã đổi (mirror
+  // onSingleFileChosen ngay trên, không cần data-arg-el).
+  onOperationEstimateAttachmentFileChange: el => onOperationEstimateAttachmentFileChange(el, Number(el.dataset.idx))
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),

@@ -1874,6 +1874,17 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     tự thêm danh mục lớn mới, **KHÔNG** tự đổi lại danh sách người phụ trách
     (server bỏ qua thay đổi field này nếu người gửi không phải người quản lý
     hồ sơ toàn quyền).
+  - **"Tệp Đính Kèm" danh mục lớn**: mỗi danh mục LỚN (không áp dụng danh mục
+    con — giống hệt "Người Phụ Trách" ở trên) có cột **"Tệp Đính Kèm"** riêng
+    trong bảng Danh Mục Đầu Tư, cho phép tải lên **nhiều** tệp dạng **PDF/
+    Word (.docx)/Excel (.xlsx)** (admin đổi được ở Hệ Thống → Quản Lý Tệp File
+    → mục "Vận Hành — Danh Mục Đầu Tư"). Người được xem/tải: **người quản lý
+    hồ sơ toàn quyền** VÀ **ĐÚNG người phụ trách** danh mục lớn đó (người khác,
+    kể cả admin không có quyền quản lý hồ sơ, bị chặn) — cùng phạm vi với ai
+    được sửa nội dung/chi phí danh mục đó, nên người phụ trách vừa xem được
+    tệp người khác tải lên vừa tự tải tệp của mình lên được. Tệp chỉ thật sự
+    lưu vào hồ sơ sau khi bấm "💾 Lưu Danh Mục Đầu Tư" như mọi trường khác của
+    dòng — thêm/xoá tệp trước đó chỉ thay đổi trên màn hình đang sửa.
   - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập
     nhật**: form Thêm/Sửa công việc (cây Thực Hiện) có 2 ô tuỳ chọn — **"Ngày
     Bắt Đầu"** và **"Tần Suất Cập Nhật Tiến Độ (số ngày)"** — CHỈ áp dụng công
@@ -1903,6 +1914,11 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Nghiệm Thu, Trạng Thái Công Việc, Trạng Thái Hạn, Ngày Bắt Đầu/Hạn Chót/
     Ngày Nghiệm Thu — có 2 filter riêng (Trạng Thái Công Việc/Trạng Thái Hạn)
     và nút **"📥 Xuất Excel"** xuất đúng bảng đang xem (áp dụng mọi filter).
+  - **Lọc theo "Hồ Sơ"**: khối "🔍 Lọc Báo Cáo" ở tab Báo Cáo có thêm dropdown
+    **"Hồ Sơ"** — chọn ĐÚNG 1 hồ sơ (Mở mới hoặc Sửa chữa) để xem riêng toàn
+    bộ báo cáo của hồ sơ đó (cả bảng rollup cấp hồ sơ lẫn khối "Tổng Quan
+    Toàn Bộ Công Việc"), khác "Từ Khóa" (chỉ tìm gần đúng theo mã/tên, có thể
+    khớp nhiều hồ sơ). Danh sách tự thu hẹp theo "Loại Hồ Sơ" đang chọn.
   - **"👁️ Xem Nhanh" theo số liệu (9/2026)**: bảng rollup cấp hồ sơ ở tab
     "📊 Báo Cáo" (cột Tổng CV/Đã Nghiệm Thu/Đang Thực Hiện/Chưa Bắt Đầu) giờ
     **bấm được trực tiếp vào từng số liệu** — mở modal liệt kê ĐÚNG các công
