@@ -111,7 +111,7 @@ async function bootstrapClient(page) {
   }, ['workflowParticipatingDepts', 'vppExcludedJobTitles', 'workflowParticipatingPositions']);
 }
 
-// Từ v23.65: "Nhóm Quyền Đặc Biệt" (khối 17 cũ) dời sang "🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc
+// Từ v23.65: "Nhóm Quyền Đặc Biệt" (khối 17 cũ) dời sang "🔀 Nghiệp Vụ Nâng Cao → 🧩 Nhóm Quyền Đặc
 // Biệt" (setAdvWorkflowSubTab('SPECIALPERM')) — không còn nằm trong <details> đóng mặc định bên trong
 // Phân Quyền, chỉ cần điều hướng đúng tab/sub-tab là hiện ra ngay, không cần mở accordion nữa.
 async function gotoAdminSpecialPerms(page) {

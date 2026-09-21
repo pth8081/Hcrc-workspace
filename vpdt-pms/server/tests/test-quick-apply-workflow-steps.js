@@ -148,12 +148,12 @@ async function main() {
     finishLogin(adminUser);
   });
 
-  // Điều hướng THẬT vào Hệ Thống > 🔀 Quy Trình Nâng Cao > Áp Dụng Nhanh (trigger loadModuleGroup() nạp
+  // Điều hướng THẬT vào Hệ Thống > 🔀 Nghiệp Vụ Nâng Cao > Áp Dụng Nhanh (trigger loadModuleGroup() nạp
   // module-workflow.js/module-itsupport-tier.js/module-ngansach.js — cùng khuôn test-lazy-load-all-tabs.js).
-  // Từ v23.65, "Áp Dụng Nhanh" dời vào sub-tab của "🔀 Quy Trình Nâng Cao" (setAdvWorkflowSubTab), không
-  // còn là tab cấp cao nhất riêng. Từ v23.73, sidebar chỉ còn 1 lối vào thẳng "🔀 Quy Trình Nâng Cao"
+  // Từ v23.65, "Áp Dụng Nhanh" dời vào sub-tab của "🔀 Nghiệp Vụ Nâng Cao" (setAdvWorkflowSubTab), không
+  // còn là tab cấp cao nhất riêng. Từ v23.73, sidebar chỉ còn 1 lối vào thẳng "🔀 Nghiệp Vụ Nâng Cao"
   // (mục Áp Dụng Nhanh riêng đã bỏ, dư thừa) — click sidebar rồi bấm ĐÚNG tab con "⚡ Áp Dụng Nhanh"
-  // (#btnAdvWorkflowSubQuickApply) trong thanh sub-tab của Quy Trình Nâng Cao thay vì trông chờ
+  // (#btnAdvWorkflowSubQuickApply) trong thanh sub-tab của Nghiệp Vụ Nâng Cao thay vì trông chờ
   // data-op-seq sidebar tự nhảy thẳng sub-tab như trước.
   await page.evaluate(() => document.querySelector('[data-op="switchTab"][data-arg0="system"]')?.click());
   await page.waitForTimeout(150);

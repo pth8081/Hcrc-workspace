@@ -87,7 +87,7 @@ const SYSTEM_NAV = [
   ]},
   { group: 'Cấu Hình Quy Trình', items: [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
-    { key: 'sysAdvWorkflow', icon: '🔀', label: 'Quy Trình Nâng Cao' },
+    { key: 'sysAdvWorkflow', icon: '🔀', label: 'Nghiệp Vụ Nâng Cao' },
   ]},
   { group: 'Danh Mục & Biểu Mẫu', items: [
     { key: 'sysCatalog', icon: '🗂️', label: 'Quản Lý Danh Mục' },
@@ -314,12 +314,12 @@ function renderNVSystemArchitectureOverview() {
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ kiến trúc tổng thể hệ thống và liên kết bên ngoài" class="nv-flow-svg">${svg}</svg>`;
 }
 
-// Sơ đồ hub cho "🔀 Quy Trình Nâng Cao" (SYSTEM_DOCS.sysAdvWorkflow, từ v23.65) — 4 sub-tab đứng quanh
+// Sơ đồ hub cho "🔀 Nghiệp Vụ Nâng Cao" (SYSTEM_DOCS.sysAdvWorkflow, từ v23.65) — 4 sub-tab đứng quanh
 // hub trung tâm, KHÔNG có mũi tên nối lẫn nhau (4 mục độc lập hoàn toàn về dữ liệu, chỉ gom chung tab).
 function renderNVSysAdvWorkflowOverview() {
   const W = 900, H = 320;
   const N = {
-    hub:    { x: 360, y: 128, w: 180, h: 64, label: '🔀 Quy Trình Nâng Cao', sub: '4 sub-tab độc lập', kind: 'hub' },
+    hub:    { x: 360, y: 128, w: 180, h: 64, label: '🔀 Nghiệp Vụ Nâng Cao', sub: '4 sub-tab độc lập', kind: 'hub' },
     mixed:  { x: 20,  y: 16,  w: 210, h: 64, label: '🏬 Quy Trình Đặt Hàng Siêu Thị', sub: 'Người duyệt theo bước' },
     quick:  { x: 20,  y: 240, w: 210, h: 64, label: '⚡ Áp Dụng Nhanh', sub: 'Set nhanh số bước' },
     groups: { x: 670, y: 16,  w: 210, h: 64, label: '🖋️ Nhóm Phê Duyệt Trình/HĐ', sub: 'Văn Bản Trình + Hợp Đồng' },
@@ -331,7 +331,7 @@ function renderNVSysAdvWorkflowOverview() {
     svg += `<line x1="${cx('hub')}" y1="${cy('hub')}" x2="${cx(k)}" y2="${cy(k)}" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="4,4"/>`;
   });
   Object.values(N).forEach(n => { svg += nvRoundedNode(n.x, n.y, n.w, n.h, { label: n.label, sub: n.sub, kind: n.kind }); });
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ 4 sub-tab độc lập của Quy Trình Nâng Cao" class="nv-flow-svg">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ 4 sub-tab độc lập của Nghiệp Vụ Nâng Cao" class="nv-flow-svg">${svg}</svg>`;
 }
 
 function nvFooterCol(title, items) {
@@ -1176,7 +1176,7 @@ const SYSTEM_DOCS = {
       { label: 'Tài khoản "admin" gốc luôn bị ÉP toàn quyền, không sửa/khoá được', text: 'bất kỳ ai sửa bản ghi tài khoản có username gốc là "admin" (kể cả chính admin tự sửa) đều bị server ÉP LẠI `perms:{admin:true}`, `groupIds:[]`, `permOverrides:null` ngay tại điểm lưu — không thể gỡ quyền/gán vào nhóm phân quyền cho tài khoản này. Cũng KHÔNG đổi được tên đăng nhập của tài khoản này (v23.68) — hệ thống luôn giữ đúng bất biến "luôn có 1 tài khoản tên admin toàn quyền", kể cả khi đổi tên thử trong cùng 1 lượt lưu.' },
       { label: 'Không tự khoá được chính mình, không được làm hệ thống hết Admin', text: 'server chặn cứng 2 tình huống: (1) tự đặt "active: false" cho chính tài khoản đang đăng nhập — kể cả gọi thẳng API cũng bị từ chối; (2) lưu 1 lượt khiến KHÔNG còn tài khoản nào giữ quyền Admin và đang hoạt động (`active` khác false) — báo lỗi ngay, không cho lưu.' },
     ], right: [
-      { label: 'Nhóm Phân Quyền', text: 'mẫu quyền dựng sẵn (ô "Nhóm Phân Quyền" ngay trong form Sửa Người Dùng) gom nhiều quyền phê duyệt lại thành 1 "vai trò ảo" để gán nhanh cho người mới — không thay thế cây quyền chi tiết, chỉ là lối tắt khi cấp hàng loạt. Khác "🧩 Nhóm Quyền Đặc Biệt" (nay ở tab "🔀 Quy Trình Nâng Cao") — đó là 3 cấu hình chung toàn hệ thống, không phải mẫu quyền theo người.' },
+      { label: 'Nhóm Phân Quyền', text: 'mẫu quyền dựng sẵn (ô "Nhóm Phân Quyền" ngay trong form Sửa Người Dùng) gom nhiều quyền phê duyệt lại thành 1 "vai trò ảo" để gán nhanh cho người mới — không thay thế cây quyền chi tiết, chỉ là lối tắt khi cấp hàng loạt. Khác "🧩 Nhóm Quyền Đặc Biệt" (nay ở tab "🔀 Nghiệp Vụ Nâng Cao") — đó là 3 cấu hình chung toàn hệ thống, không phải mẫu quyền theo người.' },
       { label: '"Xem Toàn Bộ Mục Nghiệp Vụ"', text: 'quyền admin-grant riêng (`nghiepVuViewAll`) cho phép 1 tài khoản đọc hết tài liệu Nghiệp Vụ mà không cần cấp quyền module thật — dùng cho đào tạo/kiểm toán nội bộ. KHÔNG áp dụng cho khu Hệ Thống (khu vực này luôn đòi `perms.admin` thật, không bypass được).' },
     ] },
   },
@@ -1215,10 +1215,10 @@ const SYSTEM_DOCS = {
     ] },
     steps: [
       { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔄 Quy Trình & Phê Duyệt</b> → chọn đúng module (VD "Hợp đồng - Phê duyệt") → chọn đúng phòng ban/mức cần cấu hình.' },
-      { role: 'Quản trị viên', text: 'với từng bước, chọn 1 trong 3 chế độ: <b>Theo người</b> (chọn tay 1-nhiều người cụ thể), <b>Theo phòng ban</b> (toàn bộ người có quyền "Người duyệt" thuộc phòng ban đó), hoặc bật toggle <b>"🧭 Theo vị trí"</b> rồi chọn 1-nhiều vị trí (cặp chức danh+phòng ban, khai báo sẵn ở <b>Hệ Thống → 🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt</b>).' },
+      { role: 'Quản trị viên', text: 'với từng bước, chọn 1 trong 3 chế độ: <b>Theo người</b> (chọn tay 1-nhiều người cụ thể), <b>Theo phòng ban</b> (toàn bộ người có quyền "Người duyệt" thuộc phòng ban đó), hoặc bật toggle <b>"🧭 Theo vị trí"</b> rồi chọn 1-nhiều vị trí (cặp chức danh+phòng ban, khai báo sẵn ở <b>Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt</b>).' },
       { role: 'Quản trị viên', text: 'tuỳ chọn: đặt <b>"Nhãn hành động"</b> riêng cho bước (VD "Xác Nhận"/"Thẩm Định" thay vì mặc định "Phê Duyệt") tại khối <b>"🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt"</b> — nhãn tự áp dụng cả ở nút bấm lẫn chân ký in, không đổi logic phân quyền/chuyển bước.' },
       { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — xác nhận người thật đang giữ đúng vị trí/thuộc phòng ban đó đã có quyền "Người duyệt" (tick ở Phân Quyền), nếu chưa thì khớp vị trí vẫn không duyệt được.' },
-      { role: 'Quản trị viên', text: 'cần set nhanh số bước cho nhiều module cùng lúc: vào <b>Hệ Thống → 🔀 Quy Trình Nâng Cao → ⚡ Áp Dụng Nhanh</b> — chọn 1 mẫu quy trình có sẵn, bấm "🔍 Xem Trước" rồi "⚡ Áp Dụng" (chỉ điền phòng ban/mức đang THIẾU cấu hình, không tự gán người duyệt).' },
+      { role: 'Quản trị viên', text: 'cần set nhanh số bước cho nhiều module cùng lúc: vào <b>Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → ⚡ Áp Dụng Nhanh</b> — chọn 1 mẫu quy trình có sẵn, bấm "🔍 Xem Trước" rồi "⚡ Áp Dụng" (chỉ điền phòng ban/mức đang THIẾU cấu hình, không tự gán người duyệt).' },
     ],
     footer: { left: [
       { label: 'Điểm bảo mật cốt lõi', text: 'khớp đúng vị trí/phòng ban chỉ là điều kiện LỌC BỚT — người đó vẫn phải có quyền "Người duyệt" (canBeApprover) riêng mới thực sự duyệt được, kể cả khi tên/vị trí đã đúng như cấu hình.' },
@@ -1227,11 +1227,11 @@ const SYSTEM_DOCS = {
     ] },
   },
   sysAdvWorkflow: {
-    icon: '🔀', title: 'Quy Trình Nâng Cao', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Từ v23.65 — 4 mục cấu hình quy trình/duyệt "nâng cao" gom về 1 chỗ (trước đây rải rác: Áp Dụng Nhanh/Quy Trình Hỗn Hợp — nay đổi tên "Quy Trình Đặt Hàng Siêu Thị" từ v23.66 — là 2 tab cấp cao nhất riêng; Nhóm Phê Duyệt Trình-HĐ/Nhóm Quyền Đặc Biệt bị giấu bên trong form Sửa 1 tài khoản ở Phân Quyền dù là cấu hình CHUNG toàn hệ thống, không gắn user nào). Từ v23.73, sidebar cũng bỏ luôn mục "⚡ Áp Dụng Nhanh" RIÊNG (dư thừa, đã nằm sẵn bên trong) — thay bằng đúng 1 lối vào thẳng "🔀 Quy Trình Nâng Cao". Không đổi hành vi lưu của bất kỳ mục nào — chỉ đổi vị trí điều hướng cho dễ tìm.',
+    icon: '🔀', title: 'Nghiệp Vụ Nâng Cao', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Từ v23.65 — 4 mục cấu hình quy trình/duyệt "nâng cao" gom về 1 chỗ (trước đây rải rác: Áp Dụng Nhanh/Quy Trình Hỗn Hợp — nay đổi tên "Quy Trình Đặt Hàng Siêu Thị" từ v23.66 — là 2 tab cấp cao nhất riêng; Nhóm Phê Duyệt Trình-HĐ/Nhóm Quyền Đặc Biệt bị giấu bên trong form Sửa 1 tài khoản ở Phân Quyền dù là cấu hình CHUNG toàn hệ thống, không gắn user nào). Từ v23.73, sidebar cũng bỏ luôn mục "⚡ Áp Dụng Nhanh" RIÊNG (dư thừa, đã nằm sẵn bên trong) — thay bằng đúng 1 lối vào thẳng "🔀 Nghiệp Vụ Nâng Cao". Không đổi hành vi lưu của bất kỳ mục nào — chỉ đổi vị trí điều hướng cho dễ tìm.',
     isCustomFlow: true, customFlowRenderer: 'renderNVSysAdvWorkflowOverview', diagramTitle: 'Sơ đồ 4 mục con',
     steps: [
-      { role: 'Quản trị viên', text: 'trên sidebar, "🔀 Quy Trình Nâng Cao" là 1 trong 5 mục ở dropdown "🛠️ Hệ Thống ▾" (⚙️ Quản Trị/📋 Biểu Mẫu/🔄 Quy Trình & Phê Duyệt/🔀 Quy Trình Nâng Cao/📎 Quản Lý Tệp File/📊 Log) — bấm thẳng mục đó để vào ĐÚNG màn Hệ Thống, đã mở sẵn tab "🔀 Quy Trình Nâng Cao" (giữ nguyên sub-tab đang mở dở lần gần nhất trong phiên, mặc định "🏬 Quy Trình Đặt Hàng Siêu Thị" nếu chưa từng mở).' },
+      { role: 'Quản trị viên', text: 'trên sidebar, "🔀 Nghiệp Vụ Nâng Cao" là 1 trong 5 mục ở dropdown "🛠️ Hệ Thống ▾" (⚙️ Quản Trị/📋 Biểu Mẫu/🔄 Quy Trình & Phê Duyệt/🔀 Nghiệp Vụ Nâng Cao/📎 Quản Lý Tệp File/📊 Log) — bấm thẳng mục đó để vào ĐÚNG màn Hệ Thống, đã mở sẵn tab "🔀 Nghiệp Vụ Nâng Cao" (giữ nguyên sub-tab đang mở dở lần gần nhất trong phiên, mặc định "🏬 Quy Trình Đặt Hàng Siêu Thị" nếu chưa từng mở).' },
       { role: 'Quản trị viên', text: 'ở THANH TAB TRÊN CÙNG (dính khi cuộn) ngay bên trong màn Hệ Thống, chọn 1 trong 4 sub-tab: <b>🏬 Quy Trình Đặt Hàng Siêu Thị</b> (ai duyệt từng bước đơn "Đặt Hàng Tại Siêu Thị", số bước vẫn cấu hình ở "Quy Trình & Phê Duyệt"), <b>⚡ Áp Dụng Nhanh</b> (set nhanh số bước cho nhiều module cùng lúc), <b>🖋️ Nhóm Phê Duyệt Trình/HĐ</b> (nhóm phê duyệt tuỳ chọn cho Văn Bản Trình + Hợp Đồng), hoặc <b>🧩 Nhóm Quyền Đặc Biệt</b> (Đơn Vị Tham Gia Quy Trình/Nhóm Không Cấp VPP/Vị Trí Tham Gia Quy Trình).' },
       { role: 'Quản trị viên', text: 'mỗi sub-tab có nút <b>"💾 Lưu"</b> RIÊNG cho đúng phần đang sửa — không có nút Lưu chung cho cả 4 mục, đổi 1 mục không ảnh hưởng 3 mục còn lại.' },
     ],

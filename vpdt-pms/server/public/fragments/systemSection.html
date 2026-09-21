@@ -14,14 +14,14 @@
       <button type="button" data-op="setSystemSubTab" data-arg0="ADMIN" id="btnSystemSubAdmin" class="px-3 py-1.5 rounded text-xs font-bold bg-purple-700 text-white">⚙️ Quản Trị</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="FORM" id="btnSystemSubForm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Biểu Mẫu</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="WORKFLOW" id="btnSystemSubWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔄 Quy Trình & Phê Duyệt</button>
-      <!-- 🔀 Quy Trình Nâng Cao (từ v23.65) — umbrella gộp 4 mục vốn nằm rải rác: "⚡ Áp Dụng Nhanh" +
+      <!-- 🔀 Nghiệp Vụ Nâng Cao (từ v23.65) — umbrella gộp 4 mục vốn nằm rải rác: "⚡ Áp Dụng Nhanh" +
            "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66 cho đúng phạm vi
            thật — chỉ áp dụng Đặt Hàng Tại Siêu Thị, KHÔNG đổi id/key nội bộ "mixed"/"MIXED"; trước đây là
            2 tab CẤP CAO NHẤT riêng, ngang hàng tab này) + "🖋️ Nhóm Phê Duyệt Trình/HĐ" + "🧩 Nhóm Quyền
            Đặc Biệt" (trước đây là khối 11/14/17 GIẤU bên trong form "Sửa Người Dùng" ở Phân Quyền, dù CẢ 3
            đều là cấu hình CHUNG toàn hệ thống không gắn user nào — theo yêu cầu người dùng, gom lại 1 chỗ
            dễ tìm, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js). -->
-      <button type="button" data-op="setSystemSubTab" data-arg0="ADVWORKFLOW" id="btnSystemSubAdvWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔀 Quy Trình Nâng Cao</button>
+      <button type="button" data-op="setSystemSubTab" data-arg0="ADVWORKFLOW" id="btnSystemSubAdvWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔀 Nghiệp Vụ Nâng Cao</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="UPLOAD" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="LOG" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="TRASH" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
@@ -185,7 +185,7 @@
     </div>
   </div>
 
-  <!-- 🔀 Quy Trình Nâng Cao (từ v23.65) — xem chú thích đầy đủ ở nút tab #btnSystemSubAdvWorkflow phía
+  <!-- 🔀 Nghiệp Vụ Nâng Cao (từ v23.65) — xem chú thích đầy đủ ở nút tab #btnSystemSubAdvWorkflow phía
        trên. 4 sub-tab bên trong: MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị, đổi tên từ "Quy Trình Hỗn Hợp"
        ở v23.66 — nội dung/id nội bộ y hệt cũ) | QUICKAPPLY (Áp Dụng
        Nhanh, nội dung y hệt cũ) | GROUPS (Nhóm Phê Duyệt Trình/HĐ, dời từ khối 11+14 Phân Quyền) |
@@ -1411,7 +1411,7 @@
           </div>
         </details>
 
-        <!-- 11. Nhóm Phê Duyệt Trình (Văn Bản Trình) — dời sang "🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê
+        <!-- 11. Nhóm Phê Duyệt Trình (Văn Bản Trình) — dời sang "🔀 Nghiệp Vụ Nâng Cao → 🖋️ Nhóm Phê
              Duyệt Trình/HĐ" (v23.65, xem #advWorkflowSubGroups) — cấu hình chung toàn hệ thống, không
              gắn user nào, không còn hợp lý để trong form Sửa 1 tài khoản cụ thể. -->
 
@@ -1454,7 +1454,7 @@
           </div>
         </details>
 
-        <!-- 14. Nhóm Phê Duyệt HĐ (Hợp Đồng) — dời sang "🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê Duyệt
+        <!-- 14. Nhóm Phê Duyệt HĐ (Hợp Đồng) — dời sang "🔀 Nghiệp Vụ Nâng Cao → 🖋️ Nhóm Phê Duyệt
              Trình/HĐ" (v23.65, xem #advWorkflowSubGroups) — cùng lý do khối 11 ở trên. -->
 
         <details class="perm-tree-node bg-white rounded border text-xs">
@@ -1511,7 +1511,7 @@
           </div>
         </details>
 
-        <!-- 17. Nhóm Quyền Đặc Biệt — dời sang "🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt" (v23.65,
+        <!-- 17. Nhóm Quyền Đặc Biệt — dời sang "🔀 Nghiệp Vụ Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt" (v23.65,
              xem #advWorkflowSubSpecialPerm) — 3 cấu hình chung toàn hệ thống, không gắn user nào (đúng
              ghi chú gốc ở module-admin-specialperm.js), không còn hợp lý để trong form Sửa 1 tài khoản
              cụ thể. Badge "0/0" cũ (permTreeBadge_specialGroups) vốn LUÔN hiện 0/0 dù đã cấu hình gì

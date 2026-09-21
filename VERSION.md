@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**23.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.75 (2026-09-21): Đổi tên sidebar "Quy Trình Nâng Cao" → "Nghiệp Vụ Nâng Cao"
+
+Theo yêu cầu người dùng — đổi tên nhãn hiển thị cho khối 4 sub-tab cấu hình
+"nâng cao" ở Hệ Thống (🏬 Quy Trình Đặt Hàng Siêu Thị / ⚡ Áp Dụng Nhanh /
+🖋️ Nhóm Phê Duyệt Trình-HĐ / 🧩 Nhóm Quyền Đặc Biệt, từ v23.65). KHÔNG đổi
+hành vi điều hướng/lưu trữ nào — chỉ đổi đúng chuỗi hiển thị "Quy Trình Nâng
+Cao" → "Nghiệp Vụ Nâng Cao" ở mọi nơi (nút sidebar, nút tab con trong màn Hệ
+Thống, tài liệu Hướng Dẫn → Hệ Thống, comment code) — 22 chỗ trên 5 file
+(`index.html`, `fragments/systemSection.html`, `core.js`,
+`module-hethong-tabs.js`, `module-nghiepvu.js`) + 6 file test cập nhật theo
+(label mô tả kịch bản, không phải selector — không đổi hành vi test).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới —
+chỉ cần copy code + `pm2 restart`.**
 
 ## v23.74 (2026-09-21): Lớp 3a — bỏ `notifications` thừa + tải lười 33 collection theo tab (tiếp Lớp 1/Lớp 2 tối ưu tốc độ sau đăng nhập, task #133)
 

@@ -147,7 +147,7 @@ async function main() {
     finishLogin(adminUser);
   });
 
-  // Điều hướng THẬT vào Hệ Thống > 🔄 Quy Trình & Phê Duyệt (KHÔNG phải "🔀 Quy Trình Nâng Cao") — trigger
+  // Điều hướng THẬT vào Hệ Thống > 🔄 Quy Trình & Phê Duyệt (KHÔNG phải "🔀 Nghiệp Vụ Nâng Cao") — trigger
   // loadModuleGroup() nạp module-ngansach.js/module-itsupport-tier.js/module-admin-specialperm.js.
   await page.evaluate(() => document.querySelector('[data-op="switchTab"][data-arg0="system"]')?.click());
   await page.waitForTimeout(150);

@@ -176,15 +176,15 @@ async function main() {
     { label: 'Hệ Thống > Quy Trình & Phê Duyệt', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(WORKFLOW)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Quản Lý Tệp File', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(UPLOAD)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Log', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(LOG)"]', section: 'systemSection' },
-    // 🔀 Quy Trình Nâng Cao (từ v23.65) — mirror đúng 4 điểm đã thêm ở test-lazy-load-all-tabs.js. Từ
+    // 🔀 Nghiệp Vụ Nâng Cao (từ v23.65) — mirror đúng 4 điểm đã thêm ở test-lazy-load-all-tabs.js. Từ
     // v23.73: sidebar không còn link tắt riêng thẳng tới QUICKAPPLY (mục "⚡ Áp Dụng Nhanh" trong sidebar
-    // đã bỏ hẳn, thay bằng lối vào chung "🔀 Quy Trình Nâng Cao") — điểm đầu tiên nay chỉ còn kiểm tra
+    // đã bỏ hẳn, thay bằng lối vào chung "🔀 Nghiệp Vụ Nâng Cao") — điểm đầu tiên nay chỉ còn kiểm tra
     // đúng lối vào MẶC ĐỊNH qua sidebar mới; việc bấm sâu vào từng sub-tab (kể cả QUICKAPPLY) đã có
     // test-adv-workflow-tab-deep.js/test-quick-apply-workflow-steps.js phủ kỹ hơn nhiều.
-    { label: 'Hệ Thống > Quy Trình Nâng Cao (mặc định)', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(ADVWORKFLOW)"]', section: 'systemSection' },
-    { label: 'Hệ Thống > Quy Trình Nâng Cao (Quy Trình Đặt Hàng Siêu Thị)', click: '#btnSystemSubAdvWorkflow', section: 'systemSection' },
-    { label: 'Hệ Thống > Quy Trình Nâng Cao (Nhóm Phê Duyệt Trình/HĐ)', click: '#btnAdvWorkflowSubGroups', section: 'systemSection' },
-    { label: 'Hệ Thống > Quy Trình Nâng Cao (Nhóm Quyền Đặc Biệt)', click: '#btnAdvWorkflowSubSpecialPerm', section: 'systemSection' }
+    { label: 'Hệ Thống > Nghiệp Vụ Nâng Cao (mặc định)', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(ADVWORKFLOW)"]', section: 'systemSection' },
+    { label: 'Hệ Thống > Nghiệp Vụ Nâng Cao (Quy Trình Đặt Hàng Siêu Thị)', click: '#btnSystemSubAdvWorkflow', section: 'systemSection' },
+    { label: 'Hệ Thống > Nghiệp Vụ Nâng Cao (Nhóm Phê Duyệt Trình/HĐ)', click: '#btnAdvWorkflowSubGroups', section: 'systemSection' },
+    { label: 'Hệ Thống > Nghiệp Vụ Nâng Cao (Nhóm Quyền Đặc Biệt)', click: '#btnAdvWorkflowSubSpecialPerm', section: 'systemSection' }
   ];
 
   for (const point of NAV_POINTS) {

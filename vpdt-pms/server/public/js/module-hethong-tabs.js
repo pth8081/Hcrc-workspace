@@ -62,14 +62,14 @@ function setSystemSubTab(subTab) {
     // chuyển qua lại giữa các tab con của Hệ Thống.
     if (!document.getElementById('wfCode').value) document.getElementById('wfCode').value = generateWfCode();
   }
-  // ADVWORKFLOW: "🔀 Quy Trình Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
+  // ADVWORKFLOW: "🔀 Nghiệp Vụ Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
   if (subTab === 'ADVWORKFLOW') { setAdvWorkflowSubTab(activeAdvWorkflowSubTab); }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { loadSystemLogs(); }
   if (subTab === 'TRASH') { loadTrashItems(); }
 }
 
-// 4 sub-tab của "🔀 Quy Trình Nâng Cao" (mục Hệ Thống, từ v23.65) — MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị,
+// 4 sub-tab của "🔀 Nghiệp Vụ Nâng Cao" (mục Hệ Thống, từ v23.65) — MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị,
 // đổi tên từ "Quy Trình Hỗn Hợp" ở v23.66, id/key nội bộ "mixed"/"MIXED" giữ nguyên) + QUICKAPPLY
 // (Áp Dụng Nhanh) trước đây là 2 tab CẤP CAO NHẤT riêng; GROUPS (Nhóm Phê Duyệt Trình/HĐ) + SPECIALPERM
 // (Nhóm Quyền Đặc Biệt) trước đây là khối 11/14/17 GIẤU trong form Sửa Người Dùng ở Phân Quyền dù là cấu

@@ -529,7 +529,7 @@ let pendingWfTemplate = {};
 let activeOfficeSubTab = 'MUA_BAN';
 let activeSystemSubTab = 'ADMIN';
 let activeAdminSubTab = 'PERMS';
-// Sub-tab của "🔀 Quy Trình Nâng Cao" (từ v23.65, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js).
+// Sub-tab của "🔀 Nghiệp Vụ Nâng Cao" (từ v23.65, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js).
 let activeAdvWorkflowSubTab = 'MIXED';
 let activeVppSubTab = 'REGISTER';
 let currentProcessingVppRegId = null;
