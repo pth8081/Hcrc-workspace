@@ -582,10 +582,11 @@ function endCarTripAction(carId) {
 }
 
 // ============ "Hủy chuyến" / "Đổi tài xế-xe" SAU KHI ĐÃ DUYỆT (Fix 4, đợt rà soát nghiệp vụ) ============
-// Mirror ĐÚNG canCancelCarReg()/quyền carDispatch ở lib/recordActions.js — chỉ dùng để ẩn/hiện nút,
-// server LUÔN tự kiểm tra lại (không tin riêng lớp UI này).
+// Mirror ĐÚNG canCancelCarReg() ở lib/recordActions.js — chỉ dùng để ẩn/hiện nút, server LUÔN tự kiểm
+// tra lại (không tin riêng lớp UI này). SỬA (theo yêu cầu người dùng 9/2026): bỏ carDispatch (Người
+// Điều Hành Xe) khỏi quyền huỷ — chỉ admin/chính người đăng ký, xem chú thích đầy đủ ở canCancelCarReg().
 function canCancelCarRegClient(c) {
-  if (currentUser?.perms?.admin || currentUser?.perms?.carDispatch) return true;
+  if (currentUser?.perms?.admin) return true;
   return !!(c && c.creator === currentUser?.username);
 }
 function canDispatchCarClient() {
@@ -1119,8 +1120,9 @@ function openCarProcessModal(carId) {
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
   const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);
   // Mục 1 (yêu cầu nghiệp vụ 9/2026): người đăng ký được rút lại phiếu của CHÍNH MÌNH khi chưa ai duyệt
-  // gì cả (còn ở đúng bước 1) — mirror canCancelCarReg() ở server (creator/admin/carDispatch), nhưng
-  // GIỚI HẠN thêm điều kiện currentStep<=1 chỉ ở lớp hiển thị này (server là nơi chặn thật).
+  // gì cả (còn ở đúng bước 1) — mirror canCancelCarReg() ở server (creator/admin, ĐÃ bỏ carDispatch theo
+  // yêu cầu người dùng đợt sau), nhưng GIỚI HẠN thêm điều kiện currentStep<=1 chỉ ở lớp hiển thị này
+  // (server là nơi chặn thật).
   const canCancelAtStep1 = c.status === 'PENDING' && (c.currentStep || 1) <= 1 && canCancelCarRegClient(c);
 
   const actionBtns = document.getElementById('carModalActionBtns');
@@ -1138,9 +1140,10 @@ function openCarProcessModal(carId) {
   } else if ((c.status === 'APPROVED' || c.status === 'IN_PROGRESS') && (canDispatchCar || canCancelCarRegClient(c))) {
     // Fix 4 — phiếu đã APPROVED/IN_PROGRESS KHÔNG còn nút Duyệt/Từ chối nào (quy trình đã xong), nhưng
     // vẫn có thể "Đổi Tài Xế-Xe" (canDispatchCar — TÁI DÙNG nguyên carDispatchSection ở trên, không dựng
-    // form riêng) và/hoặc "Hủy Chuyến" (chính người tạo HOẶC canDispatchCar, mirror canCancelCarReg() ở
-    // server) thay vì chỉ hiện dòng "chỉ có quyền xem" như trước đây. IN_PROGRESS (mục 2) mirror đúng
-    // điều kiện đã nới ở reassignCarDispatch()/cancelCarReg().
+    // form riêng) và/hoặc "Hủy Chuyến" (CHỈ chính người tạo hoặc admin, mirror canCancelCarReg() ở
+    // server — ĐÃ bỏ carDispatch theo yêu cầu người dùng đợt sau, Người Điều Hành Xe vẫn đổi được tài
+    // xế-xe nhưng không tự huỷ chuyến được nữa) thay vì chỉ hiện dòng "chỉ có quyền xem" như trước đây.
+    // IN_PROGRESS (mục 2) mirror đúng điều kiện đã nới ở reassignCarDispatch()/cancelCarReg().
     const btns = [];
     if (canDispatchCar) btns.push(`<button data-op="confirmCarReassign" class="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold hover:bg-indigo-700 text-xs">🔁 Đổi Tài Xế-Xe</button>`);
     if (canCancelCarRegClient(c)) btns.push(`<button data-op="openCancelCarRegModal" data-arg0="${c.id}" class="bg-red-600 text-white px-4 py-1.5 rounded font-bold hover:bg-red-700 text-xs">🚫 Hủy Chuyến</button>`);

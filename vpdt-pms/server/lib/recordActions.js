@@ -7378,9 +7378,13 @@ function evaluateCarTrip(user, carReg, payload, carVehicleTypes, allUsers) {
 // dùng cho phân công xe/lái xe lúc duyệt, xem applyWorkflowAction() ở lib/workflowEngine.js)/admin huỷ
 // được BẤT KỲ chuyến nào của ai (đổi vai "Người quản lý phòng họp" -> "Người Điều Hành Xe", cùng tinh
 // thần "ai quản lý tài nguyên chung thì huỷ được hộ người khác").
+// SỬA (theo yêu cầu người dùng 9/2026): TRƯỚC ĐÂY carDispatch (Người Điều Hành Xe) cũng huỷ được —
+// gây hiểu nhầm khi nút "Hủy" hiện chung khung với Từ Chối/Bổ Sung/Duyệt lúc phiếu còn PENDING bước 1.
+// Nay CHỈ admin/chính người đăng ký (creator) mới huỷ được — Người Điều Hành Xe/người duyệt muốn chặn 1
+// phiếu đang chờ duyệt thì dùng nút "❌ Từ Chối" sẵn có (đạt hiệu quả tương đương, không cần "Hủy" riêng).
 function canCancelCarReg(user, carReg) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.carDispatch) return true;
+  if (user.perms?.admin) return true;
   return !!(carReg && carReg.creator === user.username);
 }
 

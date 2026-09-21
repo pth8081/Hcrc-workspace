@@ -1432,13 +1432,16 @@ async function main() {
   }, carF1.id);
   record('Fix 4: hủy lại 1 chuyến ĐÃ CANCELLED trước đó bị chặn (409)', !f3.ok, JSON.stringify(f3));
 
-  // F4 — carDispatch hủy được chuyến của NGƯỜI KHÁC (không phải chủ hồ sơ), khác self-cancel ở F2.
+  // F4 — SỬA (theo yêu cầu người dùng 9/2026, đảo ngược hành vi cũ ở đây): carDispatch KHÔNG còn hủy
+  // được chuyến của NGƯỜI KHÁC nữa — nút "Hủy" chỉ hiện chung khung với Từ Chối/Duyệt lúc phiếu PENDING
+  // gây hiểu nhầm, nay Người Điều Hành Xe dùng "Từ Chối" cho trường hợp PENDING, còn chuyến ĐÃ DUYỆT thì
+  // chỉ admin/chính chủ mới hủy được (xem canCancelCarReg(), lib/recordActions.js).
   await loginAs(page, dispatchApproverUser);
   const f4 = await page.evaluate(async (carId) => {
-    const result = await callRecordAction('carRegs', carId, 'cancel', { reason: 'Điều phối lại chuyến' });
-    return result.item;
+    try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'Điều phối lại chuyến' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
   }, carF4.id);
-  record('Fix 4: carDispatch (Người Điều Hành Xe) HỦY được BẤT KỲ chuyến nào, không chỉ của chính mình', f4.status === 'CANCELLED', JSON.stringify(f4));
+  record('SỬA (9/2026): carDispatch (Người Điều Hành Xe) KHÔNG còn hủy được chuyến của người khác nữa (403) — chỉ admin/chính chủ', !f4.ok, JSON.stringify(f4));
 
   // F5 — chuyến PENDING đã qua ít nhất 1 bước duyệt (currentStep>1) không hủy được qua kênh "Hủy
   // chuyến" này nữa (dùng Từ chối ở bước duyệt hiện tại, hoặc admin xóa cứng) — mục 1 (9/2026) chỉ mở
@@ -1459,8 +1462,8 @@ async function main() {
   record('Mục 1: người tạo tự hủy được phiếu đang PENDING bước 1 (chưa ai duyệt)', f10.status === 'CANCELLED', JSON.stringify(f10));
 
   // F11 — người KHÔNG phải chủ chuyến và KHÔNG có carDispatch KHÔNG hủy được 1 phiếu PENDING bước 1
-  // của người khác (mirror ĐÚNG quyền F1, chỉ khác trạng thái nguồn) — dùng phiếu carF4 (status
-  // APPROVED) đã CANCELLED ở F4 phía trên nên tạo phiếu PENDING bước 1 riêng cho test này.
+  // của người khác (mirror ĐÚNG quyền F1, chỉ khác trạng thái nguồn) — tạo phiếu PENDING bước 1 riêng
+  // cho test này (carF1/carF2/carF4 đều đã ở trạng thái khác PENDING bước 1 sau các kịch bản trên).
   const carF11PendingStep1 = {
     id: 900411, code: 'HCRC-DPH-F11', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
     startTime: '2026-09-26T08:00', endTime: '2026-09-26T12:00', destination: 'HCM', reason: 'Fix 4 step1 guard-others',
@@ -1540,9 +1543,10 @@ async function main() {
   }, carF1.id);
   record('Fix 4: "Đổi tài xế-xe" bị chặn trên chuyến KHÔNG còn APPROVED (vd đã CANCELLED) (409)', !f8.ok, JSON.stringify(f8));
 
-  // F9 — UI gating: dòng danh sách + modal xử lý hiện ĐÚNG 2 nút cho carDispatch (Đổi Tài Xế-Xe + Hủy
-  // Chuyến), CHỈ 1 nút Hủy Chuyến cho chính người tạo (không có carDispatch), và KHÔNG nút nào cho
-  // canCancelCarRegClient()/canDispatchCarClient() trả false (mirror chính xác gate server ở trên).
+  // F9 — SỬA (theo yêu cầu người dùng 9/2026): UI gating — carDispatch giờ CHỈ thấy "Đổi Tài Xế-Xe"
+  // (KHÔNG còn "Hủy Chuyến" nữa), chính người tạo (không carDispatch) chỉ thấy "Hủy Chuyến" (không đổi
+  // được tài xế-xe), và KHÔNG nút nào cho canCancelCarRegClient()/canDispatchCarClient() trả false
+  // (mirror chính xác gate server ở trên).
   const f9dispatch = await (async () => {
     await loginAs(page, dispatchApproverUser);
     return page.evaluate(({ carId }) => {
@@ -1561,13 +1565,13 @@ async function main() {
     }, { carId: carF9.id });
   })();
   record(
-    'Fix 4 UI: carDispatch thấy CẢ 2 lựa chọn "Đổi Tài Xế-Xe"(reassign)/"Hủy Chuyến"(cancelTrip) ở dòng danh sách',
-    f9dispatch.rowHtml && f9dispatch.rowHtml.includes('value="reassign"') && f9dispatch.rowHtml.includes('value="cancelTrip"'),
+    'SỬA (9/2026): carDispatch CHỈ thấy "Đổi Tài Xế-Xe"(reassign), KHÔNG còn "Hủy Chuyến"(cancelTrip) ở dòng danh sách',
+    f9dispatch.rowHtml && f9dispatch.rowHtml.includes('value="reassign"') && !f9dispatch.rowHtml.includes('value="cancelTrip"'),
     JSON.stringify(f9dispatch.rowHtml)
   );
   record(
-    'Fix 4 UI: carDispatch thấy CẢ 2 nút trong modal xử lý (confirmCarReassign + openCancelCarRegModal)',
-    f9dispatch.modalBtnsHtml.includes('confirmCarReassign') && f9dispatch.modalBtnsHtml.includes('openCancelCarRegModal'),
+    'SỬA (9/2026): carDispatch CHỈ thấy nút Đổi Tài Xế-Xe trong modal xử lý, KHÔNG còn nút Hủy Chuyến',
+    f9dispatch.modalBtnsHtml.includes('confirmCarReassign') && !f9dispatch.modalBtnsHtml.includes('openCancelCarRegModal'),
     JSON.stringify(f9dispatch.modalBtnsHtml)
   );
 
@@ -1602,6 +1606,38 @@ async function main() {
     f9outsider.canCancel === false && f9outsider.canDispatch === false,
     JSON.stringify(f9outsider)
   );
+
+  // F12 — SỬA MỚI (theo yêu cầu người dùng 9/2026, đúng kịch bản trong ảnh chụp màn hình người dùng gửi):
+  // phiếu PENDING bước 1, người duyệt bước 1 CÓ carDispatch (qlxe_dp, KHÔNG phải chủ phiếu) mở modal xử
+  // lý — trước đây khung "Từ Chối/Bổ Sung/Phê Duyệt & Chuyển Bước" hiện KÈM nút "🚫 Hủy Đăng Ký" (dễ
+  // hiểu nhầm là người duyệt được hủy thay người đặt); nay nút Hủy KHÔNG còn xuất hiện nữa — người duyệt
+  // muốn chặn phiếu thì dùng "❌ Từ Chối" (đạt hiệu quả tương đương).
+  const carF12PendingStep1 = {
+    id: 900412, code: 'HCRC-DPH-F12', dept: 'Ban Giám Đốc', status: 'PENDING', currentStep: 1, history: [],
+    type: 'Xe 4 chỗ', km: '10', passengers: '01', purpose: 'Công tác',
+    startTime: '2026-09-27T08:00', endTime: '2026-09-27T12:00', destination: 'HN', reason: 'Fix 4b — approver carDispatch không còn thấy nút Hủy',
+    creator: bookerUser.username, creatorName: bookerUser.name
+  };
+  store.carRegs.push(carF12PendingStep1);
+  await page.evaluate((c) => { DB.carRegs.push(c); }, carF12PendingStep1);
+  await loginAs(page, dispatchApproverUser);
+  const f12 = await page.evaluate(({ carId }) => {
+    openCarProcessModal(carId);
+    const modalBtnsHtml = document.getElementById('carModalActionBtns').innerHTML;
+    closeCarProcessModal();
+    return { modalBtnsHtml };
+  }, { carId: carF12PendingStep1.id });
+  record(
+    'SỬA (9/2026): người duyệt bước 1 CÓ carDispatch (không phải chủ phiếu) — khung xử lý vẫn có Từ Chối/Bổ Sung/Duyệt nhưng KHÔNG còn nút "Hủy Đăng Ký"',
+    f12.modalBtnsHtml.includes('confirmProcessCarReg') && f12.modalBtnsHtml.includes('REJECT') && !f12.modalBtnsHtml.includes('openCancelCarRegModal'),
+    JSON.stringify(f12.modalBtnsHtml)
+  );
+  // Server cũng phải chặn thật (không chỉ ẩn UI) nếu carDispatch cố gọi thẳng action "cancel".
+  const f12server = await page.evaluate(async (carId) => {
+    try { await callRecordAction('carRegs', carId, 'cancel', { reason: 'carDispatch cố hủy hộ' }); return { ok: true }; }
+    catch (err) { return { ok: false, message: err.message }; }
+  }, carF12PendingStep1.id);
+  record('SỬA (9/2026): server cũng chặn carDispatch cố gọi thẳng action cancel trên phiếu PENDING bước 1 của người khác (403)', !f12server.ok, JSON.stringify(f12server));
 
   // ===================== "Lịch Xe" READ-ONLY CALENDAR (renderCarScheduleCalendar(), sub-tab CALENDAR,
   // xem module-dangkyxe.js) — mirror khuôn Lịch Họp (renderMeetingCalendar()) nhưng KHÔNG có tương tác

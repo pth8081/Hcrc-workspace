@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**23.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.82 (2026-09-21): Đăng Ký Xe — bỏ quyền Hủy của Người Điều Hành Xe
+
+Theo yêu cầu người dùng (kèm ảnh chụp màn hình): nút "🚫 Hủy" hiện chung khung
+với Từ Chối/Bổ Sung/Phê Duyệt & Chuyển Bước lúc người duyệt bước 1 xử lý
+phiếu, gây hiểu nhầm là Người Điều Hành Xe (`carDispatch`) có quyền hủy thay
+người đặt xe. Xác nhận: **"Nút hủy chỉ có ở người đặt xe, người điều hành và
+phê duyệt chỉ cần nút từ chối là cũng hủy được"**.
+
+- `lib/recordActions.js` `canCancelCarReg()`: bỏ `user.perms?.carDispatch`
+  khỏi điều kiện — nay CHỈ admin hoặc chính `creator` (người đặt xe) mới hủy
+  được. Áp dụng cho CẢ 2 thời điểm dùng chung hàm này: "🚫 Hủy Đăng Ký" (phiếu
+  còn PENDING bước 1, chưa ai duyệt) VÀ "🚫 Hủy Chuyến" (phiếu đã APPROVED/
+  IN_PROGRESS). Người Điều Hành Xe muốn chặn 1 phiếu đang PENDING thì dùng
+  "❌ Từ Chối" sẵn có (đạt hiệu quả tương đương).
+- `public/js/module-dangkyxe.js` `canCancelCarRegClient()`: mirror đúng thay
+  đổi trên (chỉ ẩn/hiện nút, server luôn tự kiểm tra lại). "🔁 Đổi Tài Xế-Xe"
+  KHÔNG đổi — Người Điều Hành Xe vẫn đổi tài xế/xe bình thường trên phiếu đã
+  duyệt, chỉ mất quyền tự huỷ.
+- Test: sửa lại 3 kịch bản trong `test-meeting-car.js` (F4, F9 UI) đảo ngược
+  đúng hành vi cũ (carDispatch KHÔNG còn hủy được chuyến của người khác/KHÔNG
+  còn thấy nút Hủy Chuyến); thêm mới kịch bản F12 (đúng tình huống ảnh chụp
+  người dùng gửi: người duyệt bước 1 CÓ carDispatch không phải chủ phiếu —
+  khung xử lý còn Từ Chối/Bổ Sung/Duyệt nhưng KHÔNG còn nút "Hủy Đăng Ký",
+  server cũng chặn thật nếu cố gọi thẳng action cancel). Full regression 267
+  file: sạch.
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— chỉ copy code + `pm2 restart`.
 
 ## v23.81 (2026-09-21): Danh Mục Đầu Tư — multi-file thật; bổ sung 11 module vào Quản Lý Tệp File
 

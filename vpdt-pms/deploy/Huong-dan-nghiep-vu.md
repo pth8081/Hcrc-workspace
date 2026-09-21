@@ -971,8 +971,9 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   hay chưa nếu không mở chi tiết. Nay "Xác Nhận Đăng Ký" chuyển hẳn trạng thái
   sang **"🚗 Đang Thực Hiện"** (nằm giữa "Đã Phê Duyệt" và "Chờ Đánh Giá" trong
   luồng), có thẻ riêng ở "📊 Báo Cáo" và filter riêng ở danh sách. "🔁 Đổi Tài
-  Xế-Xe"/"🚫 Hủy Chuyến" vẫn dùng được bình thường ở cả 2 trạng thái Đã Phê
-  Duyệt lẫn Đang Thực Hiện. **Từ 9/2026**: đổi tài xế cho 1 chuyến ĐANG THỰC
+  Xế-Xe" (CHỈ Người Điều Hành Xe/admin) và "🚫 Hủy Chuyến" (CHỈ chính người
+  đăng ký/admin, xem sửa quyền bên dưới) vẫn dùng được bình thường ở cả 2
+  trạng thái Đã Phê Duyệt lẫn Đang Thực Hiện. **Từ 9/2026**: đổi tài xế cho 1 chuyến ĐANG THỰC
   HIỆN nay tự đưa trạng thái QUAY LẠI "Đã Phê Duyệt" (để tài xế mới xác nhận
   lại được từ đầu) — trước đây phiếu vẫn giữ nguyên "Đang Thực Hiện" dù chưa
   ai xác nhận, kẹt vĩnh viễn (tài xế mới không xác nhận được, tài xế cũ cũng
@@ -988,6 +989,15 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   duyệt, đã duyệt xong, hoặc lái xe đã xác nhận nhưng chưa kết thúc chuyến) —
   chỉ không hủy được khi đang dở dang giữa các bước duyệt, hoặc chuyến đã thực
   sự kết thúc (đang/đã Đánh Giá).
+  **SỬA quyền (theo yêu cầu người dùng, đợt sau 9/2026)** — cả "🚫 Hủy Đăng
+  Ký" (PENDING bước 1) lẫn "🚫 Hủy Chuyến" (đã duyệt/đang thực hiện) TRƯỚC ĐÂY
+  Người Điều Hành Xe (`carDispatch`) cũng hủy được, gây hiểu nhầm khi nút Hủy
+  hiện chung khung với Từ Chối/Bổ Sung/Duyệt lúc người duyệt bước 1 xử lý
+  phiếu. Nay **CHỈ chính người đăng ký hoặc admin** mới hủy được (cả 2 chỗ) —
+  Người Điều Hành Xe không còn thấy/dùng được nút Hủy nữa (server cũng chặn
+  thật, không chỉ ẩn nút), muốn chặn 1 phiếu đang PENDING thì dùng "❌ Từ
+  Chối" sẵn có (đạt hiệu quả tương đương). "🔁 Đổi Tài Xế-Xe" KHÔNG đổi —
+  Người Điều Hành Xe vẫn đổi tài xế/xe bình thường trên phiếu đã duyệt.
   **Chuyển sang Taxi tự xoá tài xế đã gán (từ 9/2026)** — ở "Phần Dành Cho
   Phòng Hành Chính", khi đổi "Loại xe cụ thể" sang 1 mục đánh dấu "Là Xe Taxi"
   (dù lúc duyệt hay ở "🔁 Đổi Tài Xế-Xe" sau này), hệ thống nay **tự xoá luôn
