@@ -230,6 +230,24 @@ async function main() {
         (collaborators || []).forEach(u => pmsAdd('taskCollaboratorsPicker', u));
       }
 
+      // Regression cho lỗi "Người Nhận không lọc được" — modal Giao Việc trước đây KHÔNG tự nạp
+      // #systemUsersDatalist (populateSystemUsersDatalist()) khi mở, nên ô tìm-gõ-chọn sdd* "Người
+      // Nhận" hiện đúng widget nhưng danh sách gợi ý luôn RỖNG nếu đây là màn sdd* đầu tiên người
+      // dùng mở trong phiên (khác hẳn "Người Phối Hợp", dùng renderPeopleMultiSelect() tự đổ dữ liệu
+      // ngay lúc render, không phụ thuộc màn khác nạp hộ). Đây chính là màn sdd* ĐẦU TIÊN được mở
+      // trong test này (chưa qua module nào khác) — đúng kịch bản tái hiện lỗi thật.
+      {
+        openCreateTaskModal({ sourceType: 'MANUAL', sourceCode: '' });
+        const dd = document.getElementById('systemUsersDatalist');
+        const items = (dd && dd._sddItems) || [];
+        check(
+          'task: mở modal Giao Việc tự nạp gợi ý "Người Nhận" (systemUsersDatalist) — không còn rỗng',
+          items.length === 3 && items.some(it => it.label.includes('(bob)')) && items.some(it => it.label.includes('(carol)')),
+          `items=${JSON.stringify(items.map(it => it.label))}`
+        );
+        closeCreateTaskModal();
+      }
+
       // ================= Scenario 1: happy path — manual task creation with a collaborator ===========
       let task1Id = null;
       {

@@ -1,8 +1,81 @@
 # Phiên bản hiện tại
 
-**23.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.72 (2026-09-21): Fix "Người Nhận" Giao Việc không lọc + thêm nút "Xem Quy Trình" cho 4 module chỉ có 1 bước duyệt
+
+Theo 5 yêu cầu người dùng gửi kèm 2 ảnh chụp màn hình. Việc 1 xử lý ngay theo
+yêu cầu; việc 2/3/4 phân tích trước, người dùng xác nhận phạm vi rồi mới làm
+(việc 4 người dùng xác nhận đó là hiểu nhầm — tính năng đã có sẵn — nên hoãn).
+
+### Việc 1 — "Người Nhận" trong modal Giao Việc thủ công không lọc được (`public/js/module-congviec.js`)
+
+Root cause: `openCreateTaskModal()`/`openEditTaskModal()` chưa từng gọi
+`populateSystemUsersDatalist()` để nạp gợi ý cho ô sdd* `#taskAssigneeInput`
+(dùng chung dropdown `#systemUsersDatalist` với nhiều module khác) — field
+hiện đúng widget tìm-gõ-chọn nhưng danh sách gợi ý RỖNG nếu modal Giao Việc
+là màn sdd* đầu tiên người dùng mở trong phiên (khác "Người Phối Hợp", dùng
+`renderPeopleMultiSelect()` tự đổ dữ liệu ngay lúc render, không phụ thuộc
+màn khác nạp hộ). Vá bằng cách gọi `populateSystemUsersDatalist()` trước khi
+đổ giá trị ở cả 2 hàm trên. Test: thêm 1 scenario mới trong `test-task.js`
+xác nhận `#systemUsersDatalist._sddItems` không còn rỗng ngay khi mở modal.
+
+### Việc 2 — nút "Xem Quy Trình" cho 4 module thiếu (Đặt Phòng Họp/Đồng Phục/Công&Phép nghỉ phép+đổi ca)
+
+Rà soát toàn hệ thống: 10+ module có dept-workflow nhiều bước đã có sẵn nút
+"Xem Quy Trình" (`openGenericWorkflowPreviewModal()`), nhưng 4 module chỉ có
+ĐÚNG 1 bước duyệt qua cờ quyền phẳng toàn công ty (không cấu hình theo
+phòng ban) thì chưa từng có — Đặt Phòng Họp (`meetingApprove`), Đồng Phục
+(`uniformApprove`/`uniformManage`), Công&Phép nghỉ phép (`hrLeaveApprove`/
+`hrAttendanceManage`) và đổi ca (`hrShiftSwapApprove`/`hrAttendanceManage`).
+Ngân Sách 2.0 được loại khỏi phạm vi này sau khi xác minh kỹ: không có bước
+"chờ duyệt" nào để xem trước — tab "✅ Phê Duyệt" là nhập liệu trực tiếp
+(chỉ `budgetManage`), không phải hành động duyệt 1 dòng đã đề xuất.
+
+- `lib/recordViewScope.js`: mở rộng `APPROVER_FLAG_KEYS` thêm 5 cờ
+  (`uniformApprove`, `uniformManage`, `hrLeaveApprove`, `hrShiftSwapApprove`,
+  `hrAttendanceManage`) để `computeModuleApproverUsernames()`/
+  `DB.moduleApproverUsernames` phục vụ được cả 4 module này (an toàn để lộ
+  cho mọi người — chỉ là danh sách username giữ 1 cờ đã biết trước tên).
+- `public/js/core.js`: thêm `getFlatApproverUsernames(flags)` (gộp/dedupe
+  nhiều cờ) + `openSimpleApproverPreviewModal()`/`buildSimpleApproverPreviewHTML()`
+  (modal 1 khối "Người duyệt", dùng chung `#viewDocModal` với
+  `openGenericWorkflowPreviewModal()`, không có khái niệm "Bước").
+- 4 hàm wrapper mới: `previewMeetingWorkflow()` (module-phonghop.js),
+  `previewUniformApprovalWorkflow()` (module-dongphuc.js, dùng chung cho cả
+  "Tạo Kỳ Cấp Phát" lẫn "Gửi Yêu Cầu Điều Chuyển"), `previewHacLeaveWorkflow()`/
+  `previewHacSwapWorkflow()` (module-conghop.js) — thêm nút "🔍 Xem Quy Trình"
+  cạnh nút Gửi ở `meetingSection.html`, `uniformSection.html` (2 chỗ), và 2
+  modal "Nộp Đơn Nghỉ Phép"/"Xin Đổi Ca" trong `index.html`.
+- Test mới: `tests/test-simple-approver-preview.js` (5 kịch bản, cả 4 hàm +
+  trường hợp chưa cấu hình ai duyệt); mở rộng `tests/test-audit-dot5-phase1.js`
+  cho 5 cờ mới ở `computeModuleApproverUsernames()`.
+
+### Việc 3 — kiểm tra lại: Đặt Hàng Siêu Thị đã tự khoá đúng siêu thị người đặt chưa?
+
+Đã ĐÚNG từ trước, còn chặt hơn mẫu 6 form dùng `applyOwnDeptAutoSelect()`
+(v23.69): đơn "Đặt Hàng Tại Siêu Thị" không hề có dropdown chọn siêu thị nào
+cả — `dept` gán CỨNG bằng `currentUser.dept` ngay ở client
+(`previewOperationOrderWorkflow()`/luồng gửi đơn, `module-vanhanh.js`) và
+server ép lại y hệt qua `forceOwnDept: true`
+(`lib/createValidation.js`, `operationOrders`). Không cần sửa gì.
+
+### Việc 4 — gán nhãn hành động trong "Quyền Đặc Biệt" (hoãn)
+
+Rà soát phát hiện tính năng "nhãn hành động mỗi bước" (Phê Duyệt/Xác Nhận/
+Thẩm Định, task #47) đã hoạt động sẵn cho hầu hết module có quy trình,
+nhưng cấu hình ở màn "🔄 Quy Trình & Phê Duyệt → 🛠️ Định Nghĩa Các Mẫu Bước
+Phê Duyệt" (đặt tên bước + nhãn hành động cho MẪU quy trình dùng chung),
+không phải trong "🧩 Nhóm Quyền Đặc Biệt" như người dùng nghĩ. Người dùng
+xác nhận đây là hiểu nhầm, hoãn việc này sang đợt sau.
+
+### Deploy-impact
+
+Không có thay đổi `schema.sql`/biến môi trường/dependency mới — chỉ code
+client (`public/js/*.js`, fragments, `index.html`) + 1 mảng hằng số phía
+server (`lib/recordViewScope.js`). Chỉ cần copy code + `pm2 restart`.
 
 ## v23.71 (2026-09-21): Tối ưu tốc độ tải sau đăng nhập — Lớp 1 (cache-first render) + Lớp 2 (SQL-filter notifications)
 

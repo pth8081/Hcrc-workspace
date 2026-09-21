@@ -40,6 +40,20 @@ function canManageHacAttendance(user) { return !!(user?.perms?.admin || user?.pe
 function canApproveHacLeave(user) { return !!(user?.perms?.admin || user?.perms?.hrAttendanceManage || user?.perms?.hrLeaveApprove); }
 function canManageHacRoster(user) { return !!(user?.perms?.admin || user?.perms?.hrAttendanceManage || user?.perms?.hrShiftRosterManage); }
 function canApproveHacSwap(user) { return !!(user?.perms?.admin || user?.perms?.hrAttendanceManage || user?.perms?.hrShiftSwapApprove); }
+
+// "Xem Quy Trình" cho 2 modal tự phục vụ (Nộp Đơn Nghỉ Phép/Xin Đổi Ca) — Công&Phép KHÔNG có dept-
+// workflow nhiều bước, mỗi loại chỉ 1 cờ quyền phẳng toàn công ty (+ hrAttendanceManage luôn duyệt
+// được cả 2), dùng openSimpleApproverPreviewModal() thay vì openGenericWorkflowPreviewModal().
+function previewHacLeaveWorkflow() {
+  openSimpleApproverPreviewModal('🔍 Người Duyệt Nghỉ Phép', 'Áp dụng chung toàn công ty (không theo phòng ban)',
+    getFlatApproverUsernames(['hrLeaveApprove', 'hrAttendanceManage']),
+    'Chưa có ai được cấp quyền duyệt nghỉ phép (hrLeaveApprove) — liên hệ Quản trị viên.');
+}
+function previewHacSwapWorkflow() {
+  openSimpleApproverPreviewModal('🔍 Người Duyệt Đổi Ca', 'Áp dụng chung toàn công ty (không theo phòng ban)',
+    getFlatApproverUsernames(['hrShiftSwapApprove', 'hrAttendanceManage']),
+    'Chưa có ai được cấp quyền duyệt đổi ca (hrShiftSwapApprove) — liên hệ Quản trị viên.');
+}
 // SHIFT_BASED cho CHÍNH người xem — dùng luôn currentUser.posType (đúng ĐÚNG khuôn
 // resolveWorkModelForEmployeeCode() phía server áp dụng cho tài khoản đã liên kết, xem lib/attendance.js).
 function hacMyWorkModel() { return currentUser?.posType === 'STORE' ? 'SHIFT_BASED' : 'OFFICE_HOURS'; }

@@ -77,6 +77,24 @@ await run.run('computeModuleApproverUsernames(): gộp đúng admin + cờ quy�
   assert(!result.internalPostApprove.includes('nv1'), 'nv1 không có cờ internalPostApprove, không được lọt vào danh sách');
 });
 
+await run.run('computeModuleApproverUsernames(): 5 cờ mới cho "Xem Quy Trình" (Đặt Phòng Họp/Đồng Phục/Công&Phép, đợt vá thiếu nút) gộp đúng admin + cờ cụ thể', () => {
+  const USERS2 = [
+    { username: 'admin1', name: 'Admin', perms: { admin: true } },
+    { username: 'hc1', name: 'Hành Chính', perms: { uniformManage: true } },
+    { username: 'hc2', name: 'Hành Chính 2', perms: { uniformApprove: true } },
+    { username: 'hr1', name: 'HR', perms: { hrAttendanceManage: true } },
+    { username: 'hr2', name: 'HR 2', perms: { hrLeaveApprove: true } },
+    { username: 'hr3', name: 'HR 3', perms: { hrShiftSwapApprove: true } },
+  ];
+  const result = computeModuleApproverUsernames(USERS2);
+  assert(result.uniformManage.includes('admin1') && result.uniformManage.includes('hc1'), 'uniformManage phải gồm admin + hc1');
+  assert(result.uniformApprove.includes('admin1') && result.uniformApprove.includes('hc2'), 'uniformApprove phải gồm admin + hc2');
+  assert(!result.uniformApprove.includes('hc1'), 'hc1 chỉ có uniformManage, không được lọt vào danh sách uniformApprove');
+  assert(result.hrAttendanceManage.includes('hr1'), 'hrAttendanceManage phải gồm hr1');
+  assert(result.hrLeaveApprove.includes('hr2') && !result.hrLeaveApprove.includes('hr1'), 'hrLeaveApprove chỉ gồm đúng hr2 (hr1 có cờ khác, client tự OR lại)');
+  assert(result.hrShiftSwapApprove.includes('hr3') && !result.hrShiftSwapApprove.includes('hr1'), 'hrShiftSwapApprove chỉ gồm đúng hr3');
+});
+
 await run.run('computeModuleApproverUsernames(): input rỗng -> mỗi cờ trả mảng rỗng, không throw', () => {
   const result = computeModuleApproverUsernames([]);
   assertEqual(result.meetingApprove.length, 0);

@@ -76,6 +76,15 @@ function toDatetimeLocalValue(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// "Xem Quy Trình" cho Đặt Phòng Họp — KHÔNG có dept-workflow nhiều bước như 10+ module khác (xem
+// canApproveMeeting()/getMeetingApproverUsernames() ở core.js), chỉ 1 cờ quyền phẳng meetingApprove
+// toàn công ty — dùng openSimpleApproverPreviewModal() (core.js) thay vì openGenericWorkflowPreviewModal().
+function previewMeetingWorkflow() {
+  openSimpleApproverPreviewModal('🔍 Người Duyệt Đặt Phòng Họp', 'Áp dụng chung toàn công ty (không theo phòng ban)',
+    getFlatApproverUsernames(['meetingApprove']),
+    'Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) — liên hệ Quản trị viên.');
+}
+
 // Khung giờ 07:00 - 19:00, mỗi ô 30 phút, dùng cho lưới Lịch Họp.
 function generateMeetingTimeSlots() {
   const slots = [];

@@ -24,6 +24,15 @@ function canApproveUniformClient(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
 }
 
+// "Xem Quy Trình" — dùng chung cho cả "Tạo Kỳ Cấp Phát" lẫn "Gửi Yêu Cầu Điều Chuyển" (cùng 1 tập
+// người duyệt, xem canApproveUniformClient() ở trên/canApproveUniform() server) — Đồng Phục KHÔNG có
+// dept-workflow nhiều bước, chỉ 1 cờ quyền phẳng toàn công ty, dùng openSimpleApproverPreviewModal().
+function previewUniformApprovalWorkflow() {
+  openSimpleApproverPreviewModal('🔍 Người Duyệt Đồng Phục', 'Áp dụng chung toàn công ty (kỳ cấp phát lẫn điều chuyển kho)',
+    getFlatApproverUsernames(['uniformApprove', 'uniformManage']),
+    'Chưa có ai được cấp quyền duyệt Đồng Phục — liên hệ Quản trị viên.');
+}
+
 function setUniformSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const canHc = canManageUniform(currentUser);

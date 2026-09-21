@@ -344,7 +344,11 @@ function filterTrainingDocumentProgressForUser(list, user) {
 // username đang giữ 1 cờ đã biết trước tên, không phải toàn bộ ma trận quyền), thay thế hẳn việc client
 // tự quét DB.users[].perms của người khác (đường duy nhất trước đây khiến "users" không thể ẩn bớt
 // perms cho non-admin — xem sanitizeUsersPermsForViewer()).
-const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove'];
+// ĐỢT "Xem Quy Trình" cho 3 module chỉ có 1 người duyệt qua cờ phẳng (không có dept-workflow nhiều
+// bước): Đặt Phòng Họp (đã có sẵn meetingApprove), Đồng Phục (uniformApprove + uniformManage — cùng
+// canApproveUniformClient() client), Công & Phép nghỉ phép/đổi ca (hrLeaveApprove/hrShiftSwapApprove +
+// hrAttendanceManage — cùng canApproveHacLeave()/canApproveHacSwap() client, xem module-conghop.js).
+const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage'];
 function computeModuleApproverUsernames(users) {
   const result = {};
   APPROVER_FLAG_KEYS.forEach(flag => {

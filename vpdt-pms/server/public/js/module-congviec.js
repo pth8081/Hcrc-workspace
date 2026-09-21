@@ -53,6 +53,10 @@ function openCreateTaskModal(opts) {
   document.getElementById('taskDescInput').value = opts.description || '';
   document.getElementById('taskDeadlineInput').value = opts.deadline || '';
 
+  // Nạp lại #systemUsersDatalist (dùng chung sdd*) trước khi đổ giá trị — thiếu bước này khiến ô
+  // "Người Nhận" hiện đúng widget nhưng KHÔNG có gợi ý nào để lọc nếu modal Giao Việc là màn sdd* đầu
+  // tiên người dùng mở trong phiên (các module khác populate hộ tình cờ mới hoạt động đúng).
+  populateSystemUsersDatalist();
   setTaskAssigneeMode(false);
   setTaskAssigneeSingle(opts.assignedTo || '');
   populateTaskCollaboratorsSelect(opts.collaborators);
@@ -117,6 +121,8 @@ function openEditTaskModal(taskId) {
   document.getElementById('taskDescInput').value = t.description || '';
   document.getElementById('taskDeadlineInput').value = t.deadline || '';
 
+  // Xem chú thích tương ứng ở openCreateTaskModal() — cùng lý do cần nạp lại trước khi đổ giá trị.
+  populateSystemUsersDatalist();
   setTaskAssigneeMode(false);
   setTaskAssigneeSingle(t.assignedTo || '');
   populateTaskCollaboratorsSelect(t.collaborators);

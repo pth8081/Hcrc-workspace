@@ -47,7 +47,10 @@
         <div id="dynamicFieldsContainer_UNIFORM_PERIOD" class="contents"></div>
         <div class="flex justify-between items-center">
           <button type="button" data-op="addUniformAllocationBlock" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Siêu Thị</button>
-          <button type="button" data-op="submitUniformPeriod" class="bg-teal-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-teal-700">Tạo Kỳ Cấp Phát</button>
+          <div class="flex gap-2">
+            <button type="button" data-op="previewUniformApprovalWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-xs font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+            <button type="button" data-op="submitUniformPeriod" class="bg-teal-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-teal-700">Tạo Kỳ Cấp Phát</button>
+          </div>
         </div>
       </div>
 
@@ -261,7 +264,8 @@
           </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_UNIFORM_TRANSFER" class="contents"></div>
-          <div class="flex justify-end">
+          <div class="flex justify-end gap-2">
+            <button type="button" data-op="previewUniformApprovalWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-xs font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="button" data-op="submitUniformTransfer" class="bg-cyan-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-cyan-700">Gửi Yêu Cầu Điều Chuyển</button>
           </div>
         </div>
