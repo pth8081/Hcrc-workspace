@@ -95,8 +95,12 @@
           <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
           <select id="filterStatusCar" data-op-change="onCarFilterChange" class="w-full border p-2 rounded text-sm bg-white">
             <option value="">-- Tất cả trạng thái --</option>
-            <option value="APPROVED">Đã Phê Duyệt</option>
             <option value="PENDING">Đang Chờ Duyệt</option>
+            <option value="APPROVED">Đã Phê Duyệt</option>
+            <option value="IN_PROGRESS">Đang Thực Hiện</option>
+            <option value="AWAITING_EVALUATION">Chờ Đánh Giá</option>
+            <option value="COMPLETED">Hoàn Thành</option>
+            <option value="CANCELLED">Đã Hủy Chuyến</option>
             <option value="REJECTED">Bị Từ Chối</option>
           </select>
         </div>

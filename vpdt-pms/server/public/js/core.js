@@ -9160,7 +9160,13 @@ function sddHandleTrigger(ev) {
   if (!listId) return;
   const dd = document.getElementById(listId);
   if (!dd || !dd._sddItems) return;
-  sddRenderRows(dd, input.value);
+  // Lúc mới focus/click vào ô (chưa gõ gì thêm ở lượt này): luôn hiện TOÀN BỘ danh sách, KHÔNG lọc
+  // theo giá trị ĐANG CÓ SẴN trong ô — nếu lọc theo chính giá trị hiện tại (ô đã điền sẵn 1 lựa chọn
+  // cũ, VD đổi tài xế/người phụ trách đã gán), các mục KHÁC gần như luôn bị lọc mất hết (không khớp
+  // chuỗi dài đang có), khiến người dùng không thể đổi sang lựa chọn khác nếu không tự xoá trắng ô
+  // trước (lỗi thật phát hiện ở ô "Lái xe được phân công" khi đổi tài xế, 9/2026). Khi đang GÕ ('input')
+  // vẫn lọc theo đúng input.value như cũ.
+  sddRenderRows(dd, ev.type === 'focusin' ? '' : input.value);
   sddPositionAndShow(dd, input);
 }
 document.addEventListener('input', sddHandleTrigger);

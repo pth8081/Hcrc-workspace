@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**23.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.83 (2026-09-21): Vá 2 lỗi Đăng Ký Xe — đổi tài xế không chọn được + Dashboard không lọc
+
+Theo phản hồi người dùng (kèm ảnh chụp màn hình modal "Xử Lý Đăng Ký Xe"):
+**"tôi đã chọn đổi tài xế nhưng không chọn"** + **"Dashboard hủy chuyến và
+chờ đánh giá đang không lọc, không có phản ứng"**.
+
+### 1) Lỗi HỆ THỐNG ở widget tìm-kiếm-gõ-chọn (sdd*, dùng chung 19+ điểm)
+
+`sddHandleTrigger()` (`public/js/core.js`) gắn CHUNG 1 hàm xử lý cho cả sự
+kiện `'input'` (đang gõ) lẫn `'focusin'` (mới bấm/click vào ô) — khi bấm vào
+1 ô ĐÃ điền sẵn giá trị (VD ô "Lái xe được phân công" khi đổi tài xế cho
+phiếu đã có tài xế), hàm lọc gợi ý theo CHÍNH giá trị đầy đủ đang có trong ô,
+mà giá trị đó gần như luôn chỉ khớp CHÍNH nó — mọi lựa chọn KHÁC bị lọc mất
+hết khỏi danh sách gợi ý, người dùng phải tự xoá trắng ô trước mới chọn được
+lựa chọn khác (không rõ ràng/không khám phá được).
+
+- Sửa: khi sự kiện là `'focusin'` (mới bấm/click vào ô), luôn hiện TOÀN BỘ
+  danh sách gợi ý (lọc theo chuỗi rỗng) thay vì lọc theo giá trị đang có sẵn.
+  Khi sự kiện là `'input'` (đang gõ tay), vẫn lọc đúng theo `input.value` như
+  cũ — không đổi hành vi tìm-kiếm khi gõ.
+- Đây là lỗi ở chính widget dùng CHUNG toàn hệ thống (không riêng ô lái xe) —
+  bản vá áp dụng ngay cho mọi ô tìm-kiếm-gõ-chọn đã điền sẵn giá trị trong
+  toàn bộ ứng dụng.
+
+### 2) Dashboard Đăng Ký Xe — thẻ "Đã Hủy Chuyến"/"Chờ Đánh Giá" không lọc
+
+`#filterStatusCar` (`public/fragments/carSection.html`) trước đây chỉ có
+4/7 `<option>` (rỗng/APPROVED/PENDING/REJECTED) — thiếu hẳn `IN_PROGRESS`/
+`CANCELLED`/`AWAITING_EVALUATION`/`COMPLETED`, đúng 4 trạng thái mà
+`carDashCards` (`module-dangkyxe.js`) có thẻ Dashboard riêng. Vì
+`applyDashboardCardFilter()` gán filter bằng cách set thẳng `select.value =
+status`, trình duyệt ÂM THẦM bỏ qua việc gán khi không có `<option>` khớp
+(không báo lỗi gì) — bấm thẻ tưởng như không có phản ứng. Vá: bổ sung đủ 7
+`<option>` (thêm `IN_PROGRESS`/`AWAITING_EVALUATION`/`COMPLETED`/`CANCELLED`).
+
+### Test
+
+Test mới: `test-sdd-prefilled-focus-fix.js` (4 kịch bản — nạp đủ danh sách,
+bấm vào ô đã điền sẵn phải thấy đủ lựa chọn, chọn lựa chọn khác đúng, gõ tay
+vẫn lọc đúng như cũ) + `test-car-dashboard-status-filter.js` (6 kịch bản —
+đủ 7 option, bấm từng thẻ CANCELLED/AWAITING_EVALUATION/IN_PROGRESS/
+COMPLETED lọc đúng, bỏ lọc về lại đủ danh sách). Full regression 269 file:
+253 pass, 16 fail (đúng 16 lỗi đã biết từ trước, không liên quan đợt vá này).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— chỉ copy code + `pm2 restart`.
 
 ## v23.82 (2026-09-21): Đăng Ký Xe — bỏ quyền Hủy của Người Điều Hành Xe
 
