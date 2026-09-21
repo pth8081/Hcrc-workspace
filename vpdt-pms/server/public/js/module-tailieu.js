@@ -1370,6 +1370,12 @@ const UPLOAD_EXT_UNIVERSE = ['.pdf', '.docx', '.xlsx'];
 // Ảnh minh hoạ câu hỏi (Ngân Hàng Câu Hỏi, Đào Tạo) — universe RIÊNG (chỉ ảnh), khác 8 module tài liệu
 // văn phòng ở trên dùng chung UPLOAD_EXT_UNIVERSE — xem extUniverse per-module bên dưới.
 const UPLOAD_EXT_UNIVERSE_IMAGE = ['.jpg', '.jpeg', '.png', '.webp'];
+// Rà soát chuyên sâu (9/2026, theo yêu cầu người dùng): dùng cho module hiện KHÔNG có giới hạn phần mở
+// rộng riêng nào (client không có "accept", server không có MODULE_DEFAULT_ALLOWED_EXT) — tức đang chấp
+// nhận NGUYÊN VẸN danh sách an toàn CHUNG toàn hệ thống (ALLOWED_EXT, routes/upload.js). Khai đúng universe
+// này (thay vì UPLOAD_EXT_UNIVERSE 3-định-dạng) để lần đầu hiện ra màn cấu hình KHÔNG bị hiểu nhầm là
+// đang bị giới hạn hẹp hơn thực tế — admin tự siết bớt nếu muốn, không bị mất khả năng nào đang có sẵn.
+const UPLOAD_EXT_UNIVERSE_ALL = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
 const UPLOAD_MODULE_LIST = [
   { key: 'doc', label: '📂 Tài Liệu' },
   { key: 'submission', label: '📜 Văn Bản Trình' },
@@ -1391,7 +1397,31 @@ const UPLOAD_MODULE_LIST = [
   // operationEstimate (Danh Mục Đầu Tư — tệp đính kèm "danh mục lớn", Vận Hành > QLDA) — mặc định CHỈ
   // .pdf/.docx/.xlsx (xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js), dùng đúng extUniverse chung
   // (UPLOAD_EXT_UNIVERSE, không phải ảnh) vì đây là tệp văn bản/hồ sơ.
-  { key: 'operationEstimate', label: '📁 Vận Hành — Danh Mục Đầu Tư (Tệp Đính Kèm)' }
+  { key: 'operationEstimate', label: '📁 Vận Hành — Danh Mục Đầu Tư (Tệp Đính Kèm)' },
+  // ĐỢT BỔ SUNG (rà soát chuyên sâu 9/2026, theo yêu cầu người dùng): 11 module THỰC SỰ có tải file lên
+  // (/api/upload) nhưng trước đây CHƯA từng có mặt ở màn cấu hình này — admin không có cách nào đổi loại
+  // tệp/giới hạn dung lượng cho các module dưới đây, hoàn toàn chạy theo mặc định cứng trong code. Mỗi
+  // extUniverse khai ĐÚNG bằng tập phần mở rộng client thật đang cho chọn (accept="..." ở input tương
+  // ứng) — không tự ý siết hẹp hơn hiện trạng.
+  { key: 'checklistAnswerPhoto', label: '✅ Checklist Đánh Giá Siêu Thị (Ảnh Minh Chứng)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE },
+  { key: 'hrContract', label: '📄 Hợp Đồng Lao Động (Tệp Đính Kèm)' },
+  // hrProfile: form thật (#hrpfAssignPositionFile) nhận CẢ văn bản lẫn ảnh (Quyết định đính kèm có thể
+  // là ảnh chụp) — universe RIÊNG gộp cả 2 nhóm, không dùng chung UPLOAD_EXT_UNIVERSE/_IMAGE.
+  { key: 'hrProfile', label: '👤 Hồ Sơ Nhân Sự (Quyết Định Đính Kèm)', extUniverse: ['.pdf', '.docx', '.jpg', '.jpeg', '.png'] },
+  // hrLifecycle/itPrice: input thật KHÔNG có "accept" (chưa từng giới hạn), dùng UPLOAD_EXT_UNIVERSE_ALL
+  // (xem chú thích khai báo hằng số ở trên) để không âm thầm siết hẹp hơn hiện trạng.
+  { key: 'hrLifecycle', label: '🚀 Nhân Sự — Onboarding/Offboarding (Tệp Đính Kèm)', extUniverse: UPLOAD_EXT_UNIVERSE_ALL },
+  { key: 'itPrice', label: '💲 Hỗ Trợ IT — Phê Duyệt Giá (Tài Liệu Bổ Sung)', extUniverse: UPLOAD_EXT_UNIVERSE_ALL },
+  { key: 'itServiceRenewal', label: '🔄 Hỗ Trợ IT — Gia Hạn Dịch Vụ CNTT (Tệp Đính Kèm)' },
+  { key: 'license', label: '📜 Giấy Phép (Tệp Đính Kèm)' },
+  // operationOrder/periodicReport: chỉ nhận PDF (đơn hàng đọc số liệu tự động từ PDF; Báo Cáo Định Kỳ đã
+  // bỏ hẳn PowerPoint, chỉ còn PDF — xem chú thích UPLOAD_EXT_UNIVERSE ở trên).
+  { key: 'operationOrder', label: '📦 Vận Hành — Đơn Hàng (Phiếu PDF)', extUniverse: ['.pdf'] },
+  // operationRepair: form thật (#vrFile) nhận cả văn bản lẫn ảnh hiện trạng — universe riêng, cùng lý do
+  // hrProfile ở trên. operationStoreOpening (#vsoFile) chỉ văn bản, dùng mặc định UPLOAD_EXT_UNIVERSE.
+  { key: 'operationRepair', label: '🔧 Vận Hành — Sửa Chữa (Tài Liệu Đính Kèm)', extUniverse: ['.pdf', '.docx', '.xlsx', '.jpg', '.jpeg', '.png'] },
+  { key: 'operationStoreOpening', label: '🏬 Vận Hành — Mở Mới (Tài Liệu Đính Kèm)' },
+  { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ (Tệp PDF)', extUniverse: ['.pdf'] }
 ];
 
 function renderUploadTypeConfig() {

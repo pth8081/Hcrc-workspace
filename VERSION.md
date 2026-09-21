@@ -1,8 +1,63 @@
 # Phiên bản hiện tại
 
-**23.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.81 (2026-09-21): Danh Mục Đầu Tư — multi-file thật; bổ sung 11 module vào Quản Lý Tệp File
+
+Theo yêu cầu người dùng, 2 việc rà soát chuyên sâu:
+
+### 1) Danh Mục Đầu Tư (Vận Hành > QLDA): multi-file upload THẬT
+
+Trước đây nút "+ Thêm tệp" chỉ nhận **1 file/lần bấm** dù nghiệp vụ cho phép
+nhiều tệp/danh mục lớn — phải bấm lặp lại cho từng file. Đã sửa:
+- `public/fragments`/`module-vanhanh.js`: input thêm thuộc tính `multiple`.
+- `onOperationEstimateAttachmentFileChange()` viết lại xử lý HÀNG LOẠT — chọn
+  nhiều file 1 lần, tải TUẦN TỰ, gộp báo lỗi/bỏ qua sau khi xong cả đợt (mirror
+  đúng khuôn `handleOperationOrderMultiFilePdfUpload()` đã có sẵn cho Đơn
+  Hàng). 1 file lỗi KHÔNG chặn các file còn lại. Cap 10 tệp/danh mục lớn giữ
+  nguyên (khớp `sanitizeOperationEstimateAttachments()`, `lib/recordActions.js`)
+  — kiểm trước ở client để không tốn công tải lên rồi bị cắt bỏ, chọn dư thì
+  phần dư bị bỏ qua kèm cảnh báo rõ ràng. Thêm chống double-submit (1 danh mục
+  chỉ chạy 1 lượt tải hàng loạt tại 1 thời điểm).
+- Test mới: `test-operation-estimate-attachments-multifile.js` (6 kịch bản —
+  thuộc tính multiple, tải hàng loạt thành công, vượt cap, đã đủ cap, 1 file
+  lỗi giữa chừng không chặn file khác, không lỗi JS).
+
+### 2) Bổ sung 11 module còn thiếu vào "Hệ Thống → 📎 Quản Lý Tệp File"
+
+Rà soát toàn bộ code phát hiện 19 moduleKey THỰC SỰ đang tải file lên
+(`/api/upload`) nhưng màn cấu hình (`UPLOAD_MODULE_LIST`, `module-tailieu.js`)
+trước đây chỉ liệt kê 12 mục — 11 module hoàn toàn KHÔNG có mặt, admin không
+có cách nào đổi loại tệp/giới hạn dung lượng, chạy hoàn toàn theo mặc định
+cứng trong code. Đã bổ sung đủ (nay 23 mục): `checklistAnswerPhoto`,
+`hrContract`, `hrProfile` (universe riêng .pdf/.docx/.jpg/.jpeg/.png, khớp
+input thật nhận cả văn bản lẫn ảnh), `hrLifecycle`/`itPrice` (universe ĐẦY ĐỦ
+12 định dạng chung — input thật chưa từng giới hạn, không âm thầm siết hẹp
+hơn hiện trạng), `itServiceRenewal`, `license`, `operationOrder`/`periodicReport`
+(chỉ `.pdf`, khớp accept thật), `operationRepair` (universe riêng gồm cả ảnh),
+`operationStoreOpening`. Mỗi `extUniverse` khai ĐÚNG bằng tập phần mở rộng
+input thật đang cho chọn — không tự ý siết hẹp hơn hiện trạng.
+
+**Sửa lại nhận định ban đầu (quan trọng)**: lúc đầu tưởng nhầm 3 mục cũ
+`car`/`meeting`/`minutes` là "mục chết" (không literal-string nào gọi
+`uploadFileToServer(file, 'car')`) — rà kỹ lại phát hiện chúng được dùng qua
+`UPLOAD_MODULE_KEY_MAP`/`mapFormModKeyToUploadModule()` cho trường tệp TUỲ
+CHỈNH thêm qua Biểu Mẫu (`module-formbuilder-nav.js`) — **giữ nguyên, không
+xoá gì cả**, chỉ THÊM 11 mục mới.
+
+Test mới: `test-upload-type-config-modules.js` (17 kịch bản — đủ 11 mục mới
+hiện đúng nhãn, 3 mục cũ car/meeting/minutes vẫn còn, universe đúng cho vài
+mục "khác thường" ảnh/PDF-only/mixed, `operationEstimate` cũ không bị đụng).
+
+**Test mới/cập nhật khác**: cả 2 file test mới đều Playwright thật
+(testHarness.js). Full regression 267 file: sạch (16 cờ đỏ còn lại đều đã
+soát tay xác nhận false-positive/lỗi fixture sandbox có sẵn từ trước, không
+liên quan đợt này).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— chỉ copy code + `pm2 restart`.
 
 ## v23.80 (2026-09-21): Vận Hành — quyền mới "Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị" (operationRecordViewAll)
 

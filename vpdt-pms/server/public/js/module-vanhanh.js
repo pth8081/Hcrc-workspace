@@ -1324,23 +1324,54 @@ function viewOperationAttachment(kind, id) {
 // cho CẢ toàn quyền hồ sơ lẫn người chỉ phụ trách 1 phần (editable đã tự giới hạn đúng phạm vi ở
 // renderOperationEstimateItemRow()). Thao tác CHỈ trên bộ nhớ operationEstimateItems đang sửa — lưu thật
 // vẫn phải bấm "💾 Lưu Danh Mục Đầu Tư" như mọi field khác của dòng (xem submitOperationEstimateForApproval()).
+// Multi-file thật (đợt sửa theo yêu cầu người dùng, 9/2026) — input đã có thuộc tính "multiple"
+// (renderOperationEstimateItemRow()), chọn NHIỀU file 1 lần thay vì phải lặp lại "+ Thêm tệp" cho từng
+// file — tải TUẦN TỰ (không Promise.all, tránh cùng lúc nhiều request lớn) và gộp báo lỗi/bỏ qua sau khi
+// xong CẢ đợt, mirror đúng khuôn handleOperationOrderMultiFilePdfUpload() (tạo hàng loạt đơn hàng từ
+// nhiều PDF) — 1 file lỗi/vượt hạn mức KHÔNG chặn các file còn lại. Cap 10 tệp/danh mục lớn giữ nguyên
+// (khớp sanitizeOperationEstimateAttachments(), lib/recordActions.js — server luôn cắt về đúng 10 dù
+// client có lỡ gửi thừa) — kiểm tra trước ở đây để không tốn công tải lên rồi bị cắt bỏ.
 async function onOperationEstimateAttachmentFileChange(inputEl, idx) {
-  const file = inputEl.files && inputEl.files[0];
+  const files = Array.from(inputEl.files || []);
   inputEl.value = '';
-  if (!file) return;
+  if (!files.length) return;
+  // Chống double-submit: 1 dòng chỉ chạy 1 lượt tải hàng loạt tại 1 thời điểm.
+  if (operationEstimateAttachmentUploadingIdx.has(idx)) {
+    return alert('⏳ Đang tải tệp cho danh mục này, vui lòng đợi tải xong rồi thử lại.');
+  }
   const it = operationEstimateItems[idx];
   if (!it) return;
-  try {
-    const data = await uploadFileToServer(file, 'operationEstimate');
-    it.attachments = it.attachments || [];
-    it.attachments.push({
-      fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
-      uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
-    });
-    renderOperationEstimateItemsTable(true);
-  } catch (err) {
-    alert(`⛔ ${err.message}`);
+  it.attachments = it.attachments || [];
+  const remaining = 10 - it.attachments.length;
+  if (remaining <= 0) {
+    return alert('⛔ Danh mục này đã đủ tối đa 10 tệp đính kèm — xoá bớt tệp cũ trước khi thêm mới.');
   }
+  const toUpload = files.slice(0, remaining);
+  const overflowCount = files.length - toUpload.length;
+
+  operationEstimateAttachmentUploadingIdx.add(idx);
+  const failed = [];
+  try {
+    for (const file of toUpload) {
+      try {
+        const data = await uploadFileToServer(file, 'operationEstimate');
+        it.attachments.push({
+          fileUrl: data.fileUrl, fileName: data.fileName || file.name, fileType: data.fileType || file.type,
+          uploadedByName: currentUser?.name || '', uploadedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        failed.push(`${file.name}: ${err.message}`);
+      }
+    }
+  } finally {
+    operationEstimateAttachmentUploadingIdx.delete(idx);
+  }
+  renderOperationEstimateItemsTable(true);
+
+  const notices = [];
+  if (failed.length) notices.push(`⛔ ${failed.length} tệp tải lỗi:\n${failed.join('\n')}`);
+  if (overflowCount > 0) notices.push(`⚠️ Bỏ qua ${overflowCount} tệp — danh mục chỉ nhận tối đa 10 tệp đính kèm.`);
+  if (notices.length) alert(notices.join('\n\n'));
 }
 function removeOperationEstimateAttachment(idx, attIdx) {
   const it = operationEstimateItems[idx];
@@ -1583,6 +1614,11 @@ let currentEstimateRecordId = null;
 // hoặc chỉ xem. Đặt lại mỗi lần openOperationEstimateModal(), đọc ở renderOperationEstimateItemRow() để
 // quyết định hiện ô chọn "Người Phụ Trách" dạng sửa được (multi-select) hay chỉ đọc (badge tên).
 let estimateIsFullManager = false;
+// Chống double-submit khi đang tải hàng loạt tệp đính kèm (đợt "multi-file thật" — chọn nhiều file 1
+// lần thay vì lặp lại từng file) — Set các idx (chỉ số dòng trong operationEstimateItems) đang có 1 lượt
+// tải chạy dở, chặn bấm chọn file mới cho ĐÚNG dòng đó cho tới khi lượt trước xong (cùng khuôn "chặn
+// double-submit khi đang upload" đã áp dụng nơi khác, xem CLAUDE.md/task #131).
+const operationEstimateAttachmentUploadingIdx = new Set();
 let currentEstimateBudget = 0;
 // null = hồ sơ CŨ chưa có approvedBudget (xem openOperationEstimateModal()) — recalcOperationEstimateItemsTotal()
 // hiện "(chưa nhập)" thay vì 0/NaN cho trường hợp này.
@@ -1794,7 +1830,7 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
     ? `<td class="border p-1"></td>`
     : `<td class="border p-1 text-[10px] space-y-0.5">
         ${attachmentsListHTML || (!canEditAttachments ? '<span class="text-gray-400 italic">Chưa có tệp</span>' : '')}
-        ${canEditAttachments ? `<label class="text-cyan-700 font-bold cursor-pointer hover:underline block">+ Thêm tệp<input type="file" accept=".pdf,.docx,.xlsx" data-op-change="onOperationEstimateAttachmentFileChange" data-idx="${idx}" class="hidden"></label>` : ''}
+        ${canEditAttachments ? `<label class="text-cyan-700 font-bold cursor-pointer hover:underline block">+ Thêm tệp<input type="file" accept=".pdf,.docx,.xlsx" multiple data-op-change="onOperationEstimateAttachmentFileChange" data-idx="${idx}" class="hidden"></label>` : ''}
       </td>`;
   return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${assigneeCell}${attachCell}${actionCell}</tr>`;
 }

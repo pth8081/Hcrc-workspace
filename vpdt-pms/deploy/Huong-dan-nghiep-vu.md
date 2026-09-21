@@ -1894,7 +1894,11 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     con — giống hệt "Người Phụ Trách" ở trên) có cột **"Tệp Đính Kèm"** riêng
     trong bảng Danh Mục Đầu Tư, cho phép tải lên **nhiều** tệp dạng **PDF/
     Word (.docx)/Excel (.xlsx)** (admin đổi được ở Hệ Thống → Quản Lý Tệp File
-    → mục "Vận Hành — Danh Mục Đầu Tư"). **Xem/tải**: người quản lý hồ sơ
+    → mục "Vận Hành — Danh Mục Đầu Tư"). **Multi-file thật (9/2026)**: nút "+
+    Thêm tệp" chọn được **NHIỀU file cùng lúc trong 1 hộp thoại** (không cần
+    lặp lại từng file) — tải tuần tự, 1 file lỗi không chặn các file còn lại
+    (gộp báo lỗi sau khi xong cả đợt); tối đa **10 tệp/danh mục lớn**, chọn dư
+    thì phần dư bị bỏ qua kèm cảnh báo rõ ràng. **Xem/tải**: người quản lý hồ sơ
     toàn quyền, người có quyền `operationRecordViewAll` (xem toàn bộ, xem ở
     trên), VÀ ĐÚNG người phụ trách danh mục lớn đó (người khác, kể cả admin
     không có quyền quản lý hồ sơ, bị chặn). **Thêm/sửa/xoá (upload
@@ -3563,13 +3567,23 @@ sơ cũ đã tạo trước khi thêm field.
 ### 7.4. Quản Lý Tệp File
 
 **📎 Quản Lý Tệp File** — cấu hình 2 việc riêng theo TỪNG module có upload tệp:
-**loại tệp được phép** (mặc định `.pdf/.docx/.xlsx` cho 8 module — Tài Liệu,
-Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Đặt Phòng Họp, Biên Bản Họp, Tổng Hợp,
-Truyền Thông Nội Bộ; riêng ảnh minh hoạ câu hỏi Đào Tạo chỉ nhận định dạng
-ảnh) và **giới hạn dung lượng tối đa (MB)** riêng cho module đó — chỉ được
-SIẾT chặt hơn, không vượt quá giới hạn chung toàn hệ thống `UPLOAD_MAX_MB`
-(mặc định 20MB, cấu hình ở `.env`, xem `Huong-dan-trien-khai-PM2.md`/
-`Huong-dan-trien-khai-PM2-Nginx.md`).
+**loại tệp được phép** (mặc định `.pdf/.docx/.xlsx` cho phần lớn module văn
+bản/hồ sơ — Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Đặt Phòng Họp,
+Biên Bản Họp, Tổng Hợp, Truyền Thông Nội Bộ, Thanh Toán, Danh Mục Đầu Tư,
+Hợp Đồng Lao Động, Gia Hạn Dịch Vụ CNTT, Giấy Phép, Mở Mới Siêu Thị, Báo Cáo
+Định Kỳ/Đơn Hàng chỉ nhận .pdf; ảnh minh hoạ câu hỏi Đào Tạo/Truyền Thông Nội
+Bộ Banner/Checklist Đánh Giá Siêu Thị chỉ nhận định dạng ảnh; Hồ Sơ Nhân Sự/
+Sửa Chữa Siêu Thị nhận cả văn bản lẫn ảnh; Onboarding-Offboarding/Phê Duyệt
+Giá IT chưa từng giới hạn nên hiện đủ 12 định dạng chung) và **giới hạn dung
+lượng tối đa (MB)** riêng cho module đó — chỉ được SIẾT chặt hơn, không vượt
+quá giới hạn chung toàn hệ thống `UPLOAD_MAX_MB` (mặc định 20MB, cấu hình ở
+`.env`, xem `Huong-dan-trien-khai-PM2.md`/`Huong-dan-trien-khai-PM2-Nginx.md`).
+**Rà soát chuyên sâu (9/2026, theo yêu cầu người dùng)**: bổ sung 11 module
+trước đây có tải file lên nhưng chưa từng có mặt ở màn này (admin không có
+cách nào đổi loại tệp/giới hạn dung lượng) — nay đủ **23 mục**: 12 mục cũ +
+Checklist Đánh Giá Siêu Thị (Ảnh Minh Chứng), Hợp Đồng Lao Động, Hồ Sơ Nhân
+Sự, Onboarding/Offboarding, Hỗ Trợ IT (Phê Duyệt Giá/Gia Hạn Dịch Vụ CNTT),
+Giấy Phép, Vận Hành (Đơn Hàng/Sửa Chữa/Mở Mới), Báo Cáo Định Kỳ.
 
 **Giới hạn tần suất TẢI tệp (9/2026)** — nút "Tải" của mọi module đi qua chung
 1 route đóng dấu watermark cho tệp PDF (tốn CPU/RAM hơn hẳn thao tác thường),

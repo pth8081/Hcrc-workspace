@@ -1291,14 +1291,14 @@ const SYSTEM_DOCS = {
       { label: 'Lưu', sub: 'Áp dụng cho lượt tải lên tiếp theo', kind: 'approved' },
     ], decision: { atIndex: 1, approveLabel: 'Trong giới hạn chung', rejectLabel: 'Vượt UPLOAD_MAX_MB', rejectBox: { label: 'Chặn lưu', sub: 'Không vượt được mức chung .env' }, loopBackToIndex: 1, loopBackLabel: 'Giảm lại mức MB' } },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📎 Quản Lý Tệp File</b> → chọn đúng module trong 11 mục: 📂 Tài Liệu/📜 Văn Bản Trình/📄 Hợp Đồng/🚗 Đăng Ký Xe/🏢 Phòng Họp/📝 Biên Bản Họp/🛒 Văn Phòng Tổng Hợp/📣 Truyền Thông Nội Bộ/💳 Thanh Toán (Tệp đề nghị đã phê duyệt) — 9 mục này dùng chung .pdf/.docx/.xlsx; cộng 2 mục CHỈ nhận ẢNH: 🧪 Ngân Hàng Câu Hỏi (Ảnh Minh Hoạ) và 📣 Truyền Thông Nội Bộ (Ảnh/Banner).' },
-      { role: 'Quản trị viên', text: 'sửa danh sách <b>loại tệp được phép</b> (VD .pdf/.docx/.xlsx cho 9 module văn bản, hoặc .jpg/.jpeg/.png/.webp cho 2 mục ảnh) và <b>Giới Hạn Dung Lượng Tối Đa (MB)</b> riêng cho module đó.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📎 Quản Lý Tệp File</b> → chọn đúng module trong 23 mục (rà soát chuyên sâu 9/2026 bổ sung 11 mục trước đây thiếu): 📂 Tài Liệu/📜 Văn Bản Trình/📄 Hợp Đồng/🚗 Đăng Ký Xe/🏢 Phòng Họp/📝 Biên Bản Họp/🛒 Văn Phòng Tổng Hợp/📣 Truyền Thông Nội Bộ/💳 Thanh Toán/📁 Danh Mục Đầu Tư/📄 Hợp Đồng Lao Động/🔄 Gia Hạn Dịch Vụ CNTT/📜 Giấy Phép — dùng chung .pdf/.docx/.xlsx; 📦 Đơn Hàng/📅 Báo Cáo Định Kỳ chỉ nhận .pdf; 🧪 Ngân Hàng Câu Hỏi/📣 Ảnh-Banner/✅ Checklist Đánh Giá Siêu Thị chỉ nhận ẢNH; 👤 Hồ Sơ Nhân Sự/🔧 Sửa Chữa nhận cả văn bản lẫn ảnh; 🚀 Onboarding/Offboarding và 💲 Phê Duyệt Giá IT chưa từng giới hạn nên hiện đủ 12 định dạng chung; 🏬 Mở Mới dùng mặc định văn bản.' },
+      { role: 'Quản trị viên', text: 'sửa danh sách <b>loại tệp được phép</b> (chỉ tick trong đúng tập định dạng module đó đang thật sự cho chọn) và <b>Giới Hạn Dung Lượng Tối Đa (MB)</b> riêng cho module đó.' },
       { role: 'Quản trị viên', text: 'bấm <b>"Lưu"</b> — mức riêng chỉ được SIẾT chặt hơn, không vượt quá giới hạn chung toàn hệ thống (`UPLOAD_MAX_MB`, cấu hình ở `.env`, mặc định 20MB).' },
     ],
     footer: { left: [
       { label: 'Chỉ siết, không nới', text: 'dù đặt dung lượng riêng cao hơn `UPLOAD_MAX_MB` ở đây, server vẫn chặn ở đúng mức chung — mức riêng chỉ có tác dụng SIẾT chặt hơn.' },
     ], right: [
-      { label: '2 mục ảnh là ngoại lệ', text: '🧪 Ngân Hàng Câu Hỏi (Ảnh Minh Hoạ, câu hỏi Đào Tạo) và 📣 Truyền Thông Nội Bộ (Ảnh/Banner — banner tin tuyển dụng + ảnh tài liệu Truyền Thông Nội Bộ, khoá riêng "internalImage") chỉ nhận định dạng ảnh (.jpg/.jpeg/.png/.webp), tách biệt hoàn toàn khỏi khoá "internal" (văn bản .pdf/.docx/.xlsx) — đổi loại tệp của 1 khoá không ảnh hưởng khoá kia.' },
+      { label: 'Mục ảnh là ngoại lệ', text: '🧪 Ngân Hàng Câu Hỏi, 📣 Truyền Thông Nội Bộ (Ảnh/Banner) và ✅ Checklist Đánh Giá Siêu Thị (Ảnh Minh Chứng) chỉ nhận định dạng ảnh (.jpg/.jpeg/.png/.webp), tách biệt hoàn toàn khỏi các khoá văn bản (.pdf/.docx/.xlsx) — đổi loại tệp của 1 khoá không ảnh hưởng khoá kia.' },
     ] },
   },
   sysTrash: {
