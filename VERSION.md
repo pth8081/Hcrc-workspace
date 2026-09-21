@@ -1,8 +1,87 @@
 # Phiên bản hiện tại
 
-**23.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.71 (2026-09-21): Tối ưu tốc độ tải sau đăng nhập — Lớp 1 (cache-first render) + Lớp 2 (SQL-filter notifications)
+
+Theo yêu cầu người dùng: đăng nhập xong vào giao diện NGAY LẬP TỨC, dữ liệu tự
+tải ngầm phía sau, hoàn toàn không ảnh hưởng trải nghiệm (tiếp nối task #133,
+đợt đo hiệu năng ở v23.45 phát hiện `GET /api/data` là API nặng nhất, tải
+~137 collection cùng lúc, p95 27s ở 500 người dùng đồng thời lúc tải cao).
+Đã phân tích 3 phương án (Lớp 1/2/3), người dùng xác nhận làm Lớp 1+2 trước.
+
+### Lớp 1 — Cache-first render (`public/js/core.js`, `public/index.html`)
+- Sau mỗi lần `initDatabase()` tải THẬT thành công, lưu lại 1 snapshot toàn
+  bộ `DB.*` (đã gán/di trú xong, không phải payload thô) vào `localStorage`
+  theo TỪNG username, kèm mốc thời gian + đúng bản JS đang chạy
+  (`window.__ASSET_VERSION__`) — hàm mới `saveDbSnapshotToCache()`/
+  `loadDbSnapshotFromCache()`.
+- `proceedAfterAuth()`: nếu máy còn cache hợp lệ (đúng tài khoản, đúng bản
+  code, chưa quá 7 ngày) của tài khoản đang đăng nhập → hiện giao diện
+  NGAY bằng dữ liệu cache đó (`Object.assign(DB, cachedDb)`), KHÔNG đợi
+  mạng, rồi gọi `loadFreshDataInBackground()` tải dữ liệu THẬT ở nền. Lần
+  đăng nhập ĐẦU TIÊN trên máy (hoặc cache khác bản/quá hạn/khác tài khoản)
+  vẫn chờ như cũ — không có gì để hiện tạm.
+- `loadFreshDataInBackground()`: tải xong thì cập nhật `DB.*`, làm mới AN
+  TOÀN đúng những gì đang hiển thị — luôn cập nhật badge thông báo, và vẽ
+  lại Dashboard (tab mặc định sau đăng nhập, thuần đọc — không có ô nhập
+  nào) NẾU người dùng vẫn đang đứng đúng đó; các tab khác chỉ cần `DB.*`
+  đã mới sẵn cho lần điều hướng/thao tác kế tiếp, KHÔNG tự ý vẽ lại đè lên
+  màn người dùng đang thao tác dở (tránh mất dữ liệu đang nhập).
+- Chỉ báo nhỏ không chặn `#dataSyncIndicator` (góc dưới phải màn hình) hiện
+  "🔄 Đang đồng bộ dữ liệu mới nhất…" trong lúc tải ngầm, tự ẩn khi xong.
+- `initDatabase(user, opts)` thêm `opts.silent` — gọi ngầm (poll phê duyệt,
+  tải nền sau cache) không còn `alert()` chặn màn hình khi lỗi mạng thoáng
+  qua, chỉ log + ném lại lỗi cho nơi gọi tự xử lý. **Sửa kèm 1 lỗi có sẵn**:
+  `runApprovalPollTick()` (poll phê duyệt mỗi 20s) trước đây có khối
+  try/catch nhưng KHÔNG BAO GIỜ thực sự bắt được lỗi (vì `initDatabase()`
+  cũ luôn tự `alert()` thay vì ném lỗi) — nay dùng `{silent:true}`, catch
+  hoạt động đúng như comment đã mô tả từ đầu.
+- Mọi thao tác GHI (Lưu/Gửi) vẫn luôn đọc `DB.*` tại đúng thời điểm bấm —
+  không chặn thêm gì, vì nền tải xong trong vài giây (nhanh hơn nhiều thời
+  gian người dùng điền form), và cơ chế phát hiện xung đột (409 If-Match)
+  đã có sẵn cho trường hợp hiếm gặp ghi đúng lúc dữ liệu còn là bản cache.
+
+### Lớp 2 — Lọc `notifications` ở tầng SQL (`routes/data.js`)
+- `notifications` trước đây nằm trong vòng lặp tải chung
+  (`getAllForCollectionCached`) — tải TOÀN CÔNG TY (mọi thông báo của MỌI
+  người dùng) rồi mới lọc còn đúng của mình ở `filterNotificationsForUser()`
+  — nặng nhất trong các collection dùng chung vì tăng theo MỌI sự kiện của
+  MỌI người, không giới hạn theo phòng ban như phần lớn collection khác.
+- `canViewNotification()` (`lib/notifications.js`) chỉ có ĐÚNG 1 điều kiện
+  phẳng `item.username === user.username` — KHÔNG có nhánh admin/quản lý
+  xem hết nào — nên MỌI người dùng, kể cả admin, nay tải qua `where.Username`
+  NGAY Ở SQL (`getForCollectionByUsernameCached()`, hàm đã có sẵn, dùng
+  chung khuôn `trainingDocumentProgress`), không cần nhánh "tải company-wide"
+  nào cả. Giữ nguyên `filterNotificationsForUser()` làm lớp chắn thứ 2
+  (phòng thủ chiều sâu, gần như miễn phí vì danh sách đã hẹp sẵn).
+
+### Chưa làm ở đợt này (Lớp 3 — chờ quyết định thêm)
+Tách toàn bộ `GET /api/data` thành phần "core" tải ngay + phần còn lại tải
+theo từng nhóm tab khi mở tới (giống cơ chế `MODULE_LOAD_GROUPS` đã có cho
+CODE, áp dụng cho DATA) — việc lớn, cần audit lại nhiều module đang giả
+định `DB.*` có sẵn đầy đủ, để sau khi đánh giá Lớp 1+2 có đủ hay chưa.
+Poll phê duyệt (20s/lần) vẫn tải lại toàn bộ `DB.*` khi có thay đổi (không
+tách route nhẹ riêng — phạm vi dữ liệu Hộp Thư Phê Duyệt trải khắp gần hết
+schema, tách nhỏ không chắc nhẹ hơn nhiều, cần thiết kế riêng nếu cần).
+
+### Test
+`tests/test-login-cache-first-render.js` (mới, 5/5 — Playwright, chặn
+`window.fetch` cho `/api/data` bằng độ trễ có chủ đích để phân biệt rõ
+"vào giao diện trước khi mạng trả lời"): lần đầu vẫn chờ tải, lần 2 vào
+ngay từ cache rồi tự cập nhật khi tải ngầm xong, cache sai bản code/quá
+hạn/khác tài khoản đều bị bỏ qua đúng. `tests/test-notifications-data-route-scope.js`
+(mới, 4/4): xác nhận tải qua `where.Username`, không tải company-wide kể cả
+admin, và lớp chắn thứ 2 vẫn đúng khi tầng tải trả thừa. Toàn bộ regression
+suite hiện có (~260 file) chạy lại sạch sau khi gộp.
+
+### Deploy-impact
+Không đổi `schema.sql`, không thêm biến `.env`, không thêm/đổi dependency —
+chỉ copy code + `pm2 restart`. Người dùng cũ trên máy CHƯA có cache (lần
+đăng nhập đầu sau khi deploy bản này) vẫn tải như cũ; cache tự hình thành
+từ lần đăng nhập kế tiếp trở đi, không cần thao tác gì thêm.
 
 ## v23.70 (2026-09-20): Vá 96 phát hiện đợt rà soát chuyên sâu vòng 2 (7 cụm module, 7 agent song song)
 

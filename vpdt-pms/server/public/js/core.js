@@ -3375,7 +3375,52 @@ function migrateLegacyPerms(perms) {
 // Toàn bộ dữ liệu mặc định (depts, cats, workflows, users...) giờ được khởi tạo (seed)
 // một lần duy nhất ở phía Server (xem file server/seedDefaults.js), không còn seed ở Client.
 // ==========================================
-async function initDatabase(loggingInUser) {
+// LỚP 1 — Tối ưu tốc độ tải sau đăng nhập (task #133, tiếp nối đợt đo ở trên): cache lại SNAPSHOT của
+// DB.* (đã tải + đã "gán/di trú" xong, không phải payload thô từ server) vào localStorage theo TỪNG
+// username, kèm mốc thời gian lưu + đúng bản JS đang chạy (window.__ASSET_VERSION__, gắn bởi server.js
+// lúc render index.html) — đổi bản code là tự bỏ cache cũ, tránh sai lệch cấu trúc dữ liệu giữa các bản.
+// CHỈ dùng để RENDER TẠM giao diện ngay lập tức ở lượt đăng nhập kế tiếp (xem proceedAfterAuth()) trong
+// lúc dữ liệu THẬT đang tải ngầm phía sau — không phải nguồn dữ liệu chính thức, mọi thao tác ghi vẫn
+// luôn dùng DB.* tại thời điểm bấm (tự động là bản mới nhất ngay khi tải ngầm xong).
+const DB_CACHE_KEY_PREFIX = 'vpdt_db_cache_';
+const DB_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 ngày — chỉ để hiện TẠM, không cần khắt khe
+
+function saveDbSnapshotToCache(username) {
+  if (!username) return;
+  try {
+    localStorage.setItem(DB_CACHE_KEY_PREFIX + username, JSON.stringify({
+      savedAt: Date.now(),
+      assetVersion: window.__ASSET_VERSION__ || '',
+      db: DB
+    }));
+  } catch (e) {
+    // Quota đầy / chế độ riêng tư chặn localStorage — bỏ qua, không ảnh hưởng luồng tải dữ liệu chính.
+    console.warn('Không lưu được cache dữ liệu (localStorage):', e.message);
+  }
+}
+
+function loadDbSnapshotFromCache(username) {
+  if (!username) return null;
+  try {
+    const raw = localStorage.getItem(DB_CACHE_KEY_PREFIX + username);
+    if (!raw) return null;
+    const snapshot = JSON.parse(raw);
+    if (!snapshot || typeof snapshot !== 'object' || !snapshot.db) return null;
+    if (snapshot.assetVersion !== (window.__ASSET_VERSION__ || '')) return null; // đổi bản code -> bỏ cache cũ
+    if (!snapshot.savedAt || Date.now() - snapshot.savedAt > DB_CACHE_MAX_AGE_MS) return null;
+    return snapshot.db;
+  } catch (e) {
+    return null; // cache hỏng/không parse được -> coi như không có, rơi về luồng tải bình thường
+  }
+}
+
+// opts.silent (LỚP 1): dùng khi gọi NGẦM phía sau (đã có giao diện dùng được từ cache, hoặc poll định
+// kỳ) — lỗi mạng/server KHÔNG được hiện alert() chặn màn hình (người dùng không hề biết có lượt tải
+// ngầm nào đang chạy), chỉ log ra console + NÉM LẠI lỗi cho nơi gọi tự quyết định (giữ nguyên dữ liệu cũ,
+// thử lại ở lượt sau) — khác hẳn lượt tải CHÍNH lúc đăng nhập (không có cache), vẫn cần alert rõ ràng vì
+// đó là lần DUY NHẤT người dùng biết được vì sao mãi chưa vào được giao diện.
+async function initDatabase(loggingInUser, opts) {
+  const silent = !!(opts && opts.silent);
   // Đo tốc độ tải (task #133, điều tra "màn hình load có vẻ lâu sau đăng nhập") — TẠM THỜI, chỉ log ra
   // console (không hiện gì cho người dùng, không đổi hành vi) để xác định đúng phần nào chiếm nhiều thời
   // gian nhất trước khi quyết định hướng tối ưu tiếp theo (tách initDatabase() thành 2 lượt tải chỉ thật
@@ -3680,8 +3725,12 @@ async function initDatabase(loggingInUser) {
       `applyAllCoreFieldCustomizations=${(__tCustom - __tAssign).toFixed(0)}ms, TỔNG=${(__tCustom - __t0).toFixed(0)}ms ` +
       `(kích thước phản hồi: ${res.headers?.get?.('content-length') ? (Number(res.headers.get('content-length')) / 1024).toFixed(0) + 'KB' : 'không rõ (đã nén/chunked)'})`
     );
+    // LỚP 1: lưu lại snapshot DB.* vừa tải xong (đã "gán/di trú" đầy đủ) để lượt đăng nhập KẾ TIẾP của
+    // đúng tài khoản này có thể hiện giao diện ngay từ cache trong lúc chờ tải bản mới nhất ở nền.
+    if (loggingInUser?.username) saveDbSnapshotToCache(loggingInUser.username);
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
+    if (silent) throw e; // gọi ngầm phía sau -> để nơi gọi tự xử lý (giữ dữ liệu cũ, thử lại sau), không alert
     alert('⛔ Lỗi kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại, hoặc liên hệ Quản trị viên nếu vẫn không được.\n\nChi tiết lỗi: ' + e.message);
   }
 }
@@ -4124,6 +4173,11 @@ function syncStorage(key, opts) {
 }
 
 let dataReady = false;
+// LỚP 1 — true CHỈ KHI dữ liệu đang có trong DB.* là bản THẬT vừa tải từ server (không phải bản cache
+// tạm hiển thị lúc chờ) — xem proceedAfterAuth()/loadFreshDataInBackground(). Hiện chỉ dùng để hiện/ẩn
+// chỉ báo "đang đồng bộ" (#dataSyncIndicator), KHÔNG chặn bất kỳ thao tác ghi nào (form vẫn đọc DB.*
+// hiện có tại thời điểm bấm — cache chỉ tồn tại vài giây trước khi được thay bằng dữ liệu thật).
+let dataFresh = false;
 
 // Ẩn màn chờ #bootSplash đi — xem chú thích đầy đủ tại chỗ khai báo #bootSplash (đầu <body>). Gọi từ
 // CẢ 2 nhánh thoát của tryRestoreSession() (không còn phiên hợp lệ → lộ màn Đăng Nhập thật) VÀ
@@ -5963,6 +6017,22 @@ async function proceedAfterAuth(user) {
     openTotpSetupWall(user);
     return;
   }
+  // LỚP 1 (task #133 — tối ưu tốc độ sau đăng nhập): nếu MÁY này còn cache DB.* gần nhất của ĐÚNG tài
+  // khoản đang đăng nhập (cùng bản code đang chạy, chưa quá cũ — xem loadDbSnapshotFromCache()), hiện
+  // giao diện NGAY bằng dữ liệu cache đó (không đợi mạng) rồi tải dữ liệu THẬT ngầm phía sau — hoàn toàn
+  // không chặn trải nghiệm. Chỉ lượt đăng nhập ĐẦU TIÊN trên máy này (hoặc cache đã hết hạn/khác bản) mới
+  // còn phải chờ như cũ (không có gì để hiện tạm).
+  const cachedDb = loadDbSnapshotFromCache(user.username);
+  if (cachedDb) {
+    Object.assign(DB, cachedDb);
+    dataReady = true;
+    dataFresh = false;
+    hideBootSplash();
+    finishLogin(user);
+    loadFreshDataInBackground(user);
+    return;
+  }
+
   // #bootSplash (hoặc form Đăng Nhập, nếu là lượt đăng nhập thủ công) vẫn hiện NGUYÊN suốt lúc
   // initDatabase() tải dữ liệu — chỉ ẩn đi NGAY TRƯỚC khi finishLogin() thật sự lộ giao diện chính, để
   // không có khoảng trống trắng màn hình giữa 2 lượt ẩn/hiện. Xem chú thích đầy đủ tại hideBootSplash().
@@ -5974,8 +6044,38 @@ async function proceedAfterAuth(user) {
   // đăng nhập vừa hiện, phủ nhận hoàn toàn logout() vừa xảy ra.
   if (!currentUser) return;
   dataReady = true;
+  dataFresh = true;
   hideBootSplash();
   finishLogin(user);
+}
+
+// LỚP 1: tải dữ liệu THẬT trong nền sau khi đã hiện giao diện tạm bằng cache — cập nhật DB.* rồi làm
+// mới nhẹ nhàng đúng những gì AN TOÀN để vẽ lại (không đụng form đang nhập dở ở tab khác): số badge
+// thông báo luôn, và Dashboard (tab mặc định sau đăng nhập, THUẦN đọc — không có ô nhập nào) NẾU người
+// dùng vẫn đang đứng đúng đó. Mọi tab khác chỉ cần DB.* đã mới sẵn cho lần điều hướng/thao tác kế tiếp,
+// không tự ý vẽ lại đè lên màn người dùng đang thao tác.
+async function loadFreshDataInBackground(user) {
+  showDataSyncIndicator();
+  try {
+    await initDatabase(user, { silent: true });
+  } catch (e) {
+    console.error('loadFreshDataInBackground: tải dữ liệu mới nhất ở nền thất bại, vẫn giữ dữ liệu cache cũ:', e.message);
+    hideDataSyncIndicator();
+    return;
+  }
+  hideDataSyncIndicator();
+  // Đã đăng xuất/đăng nhập tài khoản khác giữa chừng lúc đang tải ngầm -> bỏ qua, không vẽ lại gì cả.
+  if (!currentUser || currentUser.username !== user.username) return;
+  dataFresh = true;
+  if (!document.getElementById('dashboardSection').classList.contains('hidden')) switchTab('dashboard');
+  refreshNotifBadge();
+}
+
+function showDataSyncIndicator() {
+  document.getElementById('dataSyncIndicator')?.classList.remove('hidden');
+}
+function hideDataSyncIndicator() {
+  document.getElementById('dataSyncIndicator')?.classList.add('hidden');
 }
 
 function closeMustChangePasswordModal() {
@@ -6295,7 +6395,11 @@ async function runApprovalPollTick() {
   // hơn lợi ích so với phạm vi người dùng đã nêu rõ (Hộp Thư Phê Duyệt + số đếm nav) — để lại làm đợt
   // sau nếu người dùng cần thêm.
   try {
-    await initDatabase(currentUser);
+    // silent:true (LỚP 1, task #133) — đây là 1 lượt tải NGẦM định kỳ, lỗi mạng/server thoáng qua
+    // KHÔNG được hiện alert() chặn màn hình người dùng (trước đây initDatabase() luôn tự alert dù gọi
+    // từ đâu, khiến catch bên dưới trên thực tế không bao giờ nhận được lỗi để xử lý đúng ý đồ comment
+    // đã ghi — nay initDatabase() ném lại lỗi khi silent thay vì tự alert, catch này mới thật sự chạy).
+    await initDatabase(currentUser, { silent: true });
   } catch (e) {
     console.error('runApprovalPollTick: initDatabase() thất bại, giữ nguyên dữ liệu cũ tới lượt poll kế tiếp', e);
     return; // KHÔNG cập nhật lastAppliedApprovalSignature — lượt poll kế tiếp sẽ tự thử lại.
@@ -6313,6 +6417,7 @@ function logout() {
   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   currentUser = null;
   dataReady = false;
+  dataFresh = false;
   document.getElementById('mustChangePasswordModal').classList.add('hidden');
   document.getElementById('loginSection').classList.remove('hidden');
   // Trả nút "Đăng Nhập"/"Đăng nhập bằng vân tay" về trạng thái dùng được bình thường — kể từ khi login()/

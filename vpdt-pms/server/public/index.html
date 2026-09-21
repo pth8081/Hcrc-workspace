@@ -73,6 +73,11 @@
      sau khi deploy (đè code + npm install + pm2 restart) đã áp dụng đúng bản mới hay chưa. -->
 <div id="appVersionBadge" class="fixed bottom-1 right-2 text-[10px] text-gray-400 select-none z-10"></div>
 
+<!-- LỚP 1 (task #133 — tối ưu tốc độ sau đăng nhập): hiện TẠM khi giao diện đang dùng dữ liệu cache cũ
+     và dữ liệu THẬT đang tải ngầm phía sau (xem loadFreshDataInBackground()/showDataSyncIndicator() ở
+     core.js) — hoàn toàn không chặn thao tác gì, chỉ là dấu hiệu nhỏ cho người dùng biết. -->
+<div id="dataSyncIndicator" class="hidden fixed bottom-1 right-2 mb-4 text-[10px] text-indigo-500 select-none z-10">🔄 Đang đồng bộ dữ liệu mới nhất…</div>
+
 <!-- Ghi chú bản quyền — hiện cố định ở mọi màn hình (kể cả trước khi đăng nhập), năm lấy động bằng JS
      ngay dưới đây để không cần sửa code mỗi năm. -->
 <div id="appCopyright" class="fixed bottom-1 left-2 text-[10px] text-gray-400 select-none z-10">© <span id="copyrightYear"></span> Công ty HCRC. Bảo lưu mọi quyền.</div>

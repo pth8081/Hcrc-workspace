@@ -1296,12 +1296,22 @@ router.get('/', async (req, res) => {
     // chiết khấu/số tiền thật với NCC, đúng tinh thần "dữ liệu nhạy cảm" đã áp dụng cho payslips/
     // employeeProfiles). Phục vụ riêng qua routes/purchasing.js, gác đúng canManageVendors/
     // canManageTerms/canViewReport (lib/vendorRebate.js) thay vì để lọt company-wide qua đường này.
-    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations');
+    const migratedList = [...MIGRATED_COLLECTIONS].filter(c => c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'checklistSubmissions' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'budgetLines' && c !== 'docs' && c !== 'submissions' && c !== 'attendanceRecords' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations' && c !== 'notifications');
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
-    const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, budgetLinesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
+    const [tasksResult, workItemsResult, notificationsResult, paymentRequestsResult, trainingDocumentProgressResult, checklistSubmissionsResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, budgetLinesResult, docsResult, submissionsResult, attendanceRecordsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
+      // LỚP 2 (task #133 — tối ưu tốc độ sau đăng nhập, đợt rà soát chuyên sâu vòng 2): notifications
+      // trước đây nằm trong migratedList chung -> tải TOÀN CÔNG TY (mọi thông báo của MỌI người dùng)
+      // rồi mới lọc còn đúng của mình ở filterNotificationsForUser() bên dưới — nặng nhất trong các
+      // collection chung vì tăng theo MỌI sự kiện của MỌI người (không giới hạn theo dept như các
+      // collection khác). canViewNotification() (lib/notifications.js) chỉ có ĐÚNG 1 điều kiện phẳng
+      // "item.username === user.username" — KHÔNG có nhánh admin/quản lý xem hết nào (khác hẳn
+      // trainingDocumentProgress/checklistSubmissions...) — nên MỌI người dùng, kể cả admin, đều tải
+      // qua where.Username ở SQL (bảng dbo.Notifications đã có sẵn cột Username + index, xem
+      // sql/schema.sql), không cần nhánh "tải company-wide" nào cả.
+      getForCollectionByUsernameCached('notifications', req.freshUser?.username),
       loadPaymentRequestsScoped(req.freshUser, data),
       canManageTrainingFlat
         ? getAllForCollectionCached('trainingDocumentProgress')
@@ -1327,6 +1337,7 @@ router.get('/', async (req, res) => {
     // dbo.OperationWorkItems (lib/operationWorkItemStore.js), cùng khuôn tasks ở trên (không nằm trong
     // dbo.AppData, không có _versions.operationWorkItems tương ứng).
     data.operationWorkItems = workItemsResult;
+    data.notifications = notificationsResult;
     data.paymentRequests = paymentRequestsResult;
     data.trainingDocumentProgress = trainingDocumentProgressResult;
     data.checklistSubmissions = checklistSubmissionsResult;
