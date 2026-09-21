@@ -969,18 +969,21 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
       const existing = existingById.get(it.id);
       it.assignedToUsernames = existing ? (existing.assignedToUsernames || []) : [];
       it.assignedToNames = existing ? (existing.assignedToNames || []) : [];
+      // Tệp đính kèm "danh mục lớn" — SỬA LẠI theo yêu cầu người dùng ("người phụ trách công việc không
+      // tự upload tài liệu, CHỈ XEM thôi, người phụ trách hồ sơ mới làm được"): người chỉ phụ trách 1
+      // phần (ownerTopIds != null) KHÔNG được tự thêm/xoá attachments nữa — cùng khuôn
+      // assignedToUsernames/Names ở trên, LUÔN ghi đè lại bằng giá trị hiện có, bỏ qua hoàn toàn giá trị
+      // payload gửi lên (không tin client). Họ vẫn XEM/TẢI được tệp bình thường qua fileAuthz.js (quyền
+      // đó không đổi) — chỉ mất quyền tự thêm/xoá.
+      it.attachments = existing ? (existing.attachments || []) : [];
     } else {
       const { usernames, names } = resolveOperationAssignedTo(it.rawAssignedTo, users);
       it.assignedToUsernames = usernames;
       it.assignedToNames = names;
+      // CHỈ toàn quyền hồ sơ ("người phụ trách hồ sơ") mới thêm/xoá được tệp đính kèm — xem sanitizer
+      // ở trên hàm này.
+      it.attachments = sanitizeOperationEstimateAttachments(it.rawAttachments, existingById.get(it.id)?.attachments, user);
     }
-    // Tệp đính kèm "danh mục lớn" (yêu cầu người dùng: "danh mục lớn cho phép upload file dạng PDF,
-    // docx, xlsx") — CHỈ danh mục LỚN mới có, giống assignedToUsernames/Names ở trên. KHÁC assignedTo
-    // (chỉ toàn quyền hồ sơ mới đổi được): attachments cho phép CẢ người chỉ phụ trách 1 phần tự thêm/xoá
-    // TRÊN ĐÚNG danh mục họ phụ trách (đã qua kiểm tra ownerTopIds ở nhánh phía trên — mọi dòng lọt tới
-    // đây đều nằm trong phạm vi được phép sửa), khớp đúng yêu cầu "người phụ trách cũng xem và tải được
-    // file" (ngụ ý họ cũng là người upload thực tế, không chỉ xem file người khác đưa lên).
-    it.attachments = sanitizeOperationEstimateAttachments(it.rawAttachments, existingById.get(it.id)?.attachments, user);
   });
   resolved.forEach((it) => { delete it.rawAssignedTo; delete it.rawAttachments; });
 

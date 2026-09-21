@@ -912,7 +912,13 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đã có theo từng lái xe, bấm 1 ô ngày nhảy thẳng về chế độ Ngày của đúng ngày
   đó) — **không** đặt/kéo-chọn lịch trực tiếp ở bất kỳ chế độ nào, biển số/lái
   xe cụ thể vẫn do Phòng Hành Chính phân công khi xử lý duyệt), **🧑‍✈️ Lái Xe**
-  (lái xe tự xác nhận chuyến được phân công), **📊 Báo Cáo** (từ v22.6, CHỈ
+  (lái xe tự xác nhận chuyến được phân công — mỗi thẻ chuyến hiện thẳng **"Người
+  đặt xe"** + nút **"👁️ Xem Phiếu"** mở ngay Phiếu Phê Duyệt đầy đủ — người đăng
+  ký/người sử dụng trực tiếp + SĐT, lộ trình di chuyển đầy đủ điểm đón-điểm đến,
+  mục đích/nội dung — theo phản hồi người dùng "lái xe chưa nhìn thấy thông tin
+  người đặt xe và điểm đón điểm đi"; quyền xem/tải Phiếu của đúng tài xế được
+  gán đã có sẵn từ trước — v9/2026 task #145 — bản vá này chỉ thêm LỐI VÀO ngay
+  tại tab Lái Xe, không đổi phạm vi quyền), **📊 Báo Cáo** (từ v22.6, CHỈ
   người quản lý thấy — admin/quyền xem xe toàn công ty/người duyệt ở bất kỳ
   phòng ban nào — thẻ tổng hợp số phiếu/đã duyệt/đang chờ/bị từ chối/tổng KM,
   thanh tỷ lệ theo Phòng Ban và theo Lái Xe, lọc theo khoảng ngày đi). Từ
@@ -1878,13 +1884,16 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     con — giống hệt "Người Phụ Trách" ở trên) có cột **"Tệp Đính Kèm"** riêng
     trong bảng Danh Mục Đầu Tư, cho phép tải lên **nhiều** tệp dạng **PDF/
     Word (.docx)/Excel (.xlsx)** (admin đổi được ở Hệ Thống → Quản Lý Tệp File
-    → mục "Vận Hành — Danh Mục Đầu Tư"). Người được xem/tải: **người quản lý
-    hồ sơ toàn quyền** VÀ **ĐÚNG người phụ trách** danh mục lớn đó (người khác,
-    kể cả admin không có quyền quản lý hồ sơ, bị chặn) — cùng phạm vi với ai
-    được sửa nội dung/chi phí danh mục đó, nên người phụ trách vừa xem được
-    tệp người khác tải lên vừa tự tải tệp của mình lên được. Tệp chỉ thật sự
-    lưu vào hồ sơ sau khi bấm "💾 Lưu Danh Mục Đầu Tư" như mọi trường khác của
-    dòng — thêm/xoá tệp trước đó chỉ thay đổi trên màn hình đang sửa.
+    → mục "Vận Hành — Danh Mục Đầu Tư"). **Xem/tải**: người quản lý hồ sơ
+    toàn quyền VÀ ĐÚNG người phụ trách danh mục lớn đó (người khác, kể cả
+    admin không có quyền quản lý hồ sơ, bị chặn). **Thêm/sửa/xoá (upload
+    lại)**: CHỈ **người quản lý hồ sơ toàn quyền** — người chỉ phụ trách 1
+    phần (danh mục lớn) **KHÔNG** tự thêm/xoá được tệp, chỉ xem/tải (đã xác
+    nhận lại với người dùng: "người phụ trách công việc không tự upload tài
+    liệu, chỉ xem thôi, người phụ trách hồ sơ mới làm được" — khác đợt đầu
+    tiên cho phép cả 2 nhóm cùng thêm/xoá). Tệp chỉ thật sự lưu vào hồ sơ sau
+    khi bấm "💾 Lưu Danh Mục Đầu Tư" như mọi trường khác của dòng — thêm/xoá/
+    thay thế (upload lại) tệp trước đó chỉ thay đổi trên màn hình đang sửa.
   - **"Ngày Bắt Đầu" + "Tần Suất Cập Nhật Tiến Độ" — cảnh báo quá hạn cập
     nhật**: form Thêm/Sửa công việc (cây Thực Hiện) có 2 ô tuỳ chọn — **"Ngày
     Bắt Đầu"** và **"Tần Suất Cập Nhật Tiến Độ (số ngày)"** — CHỈ áp dụng công

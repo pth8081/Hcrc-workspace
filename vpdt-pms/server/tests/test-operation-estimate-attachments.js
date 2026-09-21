@@ -78,21 +78,41 @@ test('Lưu lại lần 2 (sửa Ghi Chú, KHÔNG đụng tệp) -> uploadedAt/up
   assert.strictEqual(noiThat2.attachments[0].uploadedAt, originalUploadedAt, 'uploadedAt KHÔNG được đổi khi tệp không hề bị sửa');
 });
 
-test('OWNER_A (chỉ phụ trách 1 phần, không toàn quyền hồ sơ) tự thêm được tệp đính kèm cho ĐÚNG danh mục mình phụ trách', () => {
+// SỬA LẠI (phản hồi người dùng, sau đợt đầu tiên): "người phụ trách công việc không tự upload tài liệu
+// trong danh mục đầu tư, CHỈ XEM thôi, người phụ trách hồ sơ mới làm được" — đảo NGƯỢC hành vi ban đầu
+// (OWNER_A trước đây được tự thêm/xoá tệp trên danh mục mình phụ trách, giờ KHÔNG còn nữa, cùng khuôn
+// assignedToUsernames: server LUÔN ghi đè lại bằng giá trị hiện có, bỏ qua hoàn toàn payload gửi lên).
+test('OWNER_A (chỉ phụ trách 1 phần, không toàn quyền hồ sơ) KHÔNG tự thêm được tệp đính kèm — server bỏ qua payload, giữ nguyên giá trị cũ', () => {
   const item1 = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
   const first = recordActions.submitOperationEstimate(MANAGER, item1, {
-    items: [{ id: -1, content: 'Nội thất', amount: 0, assignedTo: ['ownA'] }]
+    items: [{ id: -1, content: 'Nội thất', amount: 0, assignedTo: ['ownA'], attachments: [{ fileUrl: '/uploads/bao-gia-goc.pdf', fileName: 'bao-gia-goc.pdf' }] }]
+  }, 'OPERATION_STORE_OPENING', USERS);
+  const noiThat1 = first.estimateItems.find((it) => it.content === 'Nội thất');
+  assert.strictEqual(noiThat1.attachments.length, 1, 'MANAGER thêm tệp gốc trước — làm nền cho kịch bản dưới');
+
+  const item2 = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const second = recordActions.submitOperationEstimate(OWNER_A, item2, {
+    items: [{ id: noiThat1.id, content: 'Nội thất', amount: 0, attachments: [{ fileUrl: '/uploads/own-upload-trai-phep.pdf', fileName: 'ho-so-cua-toi.pdf' }] }]
+  }, 'OPERATION_STORE_OPENING', USERS);
+  const noiThat2 = second.estimateItems.find((it) => it.id === noiThat1.id);
+  assert.strictEqual(noiThat2.attachments.length, 1, 'Vẫn giữ nguyên đúng 1 tệp cũ, KHÔNG thêm tệp OWNER_A vừa gửi');
+  assert.strictEqual(noiThat2.attachments[0].fileUrl, '/uploads/bao-gia-goc.pdf', 'Tệp cũ (do MANAGER thêm) phải còn nguyên, không bị thay bằng tệp OWNER_A gửi lên');
+});
+
+test('MANAGER (toàn quyền hồ sơ) vẫn xoá/thêm lại được tệp bình thường (không bị ảnh hưởng bởi bản sửa)', () => {
+  const item1 = { estimateStatus: 'DRAFT', estimateItems: [], estimateHistory: [] };
+  const first = recordActions.submitOperationEstimate(MANAGER, item1, {
+    items: [{ id: -1, content: 'Nội thất', amount: 0, attachments: [{ fileUrl: '/uploads/bao-gia-1.pdf', fileName: 'bao-gia-1.pdf' }] }]
   }, 'OPERATION_STORE_OPENING', USERS);
   const noiThat1 = first.estimateItems.find((it) => it.content === 'Nội thất');
 
   const item2 = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
-  const second = recordActions.submitOperationEstimate(OWNER_A, item2, {
-    items: [{ id: noiThat1.id, content: 'Nội thất', amount: 0, attachments: [{ fileUrl: '/uploads/own-upload.pdf', fileName: 'ho-so-cua-toi.pdf' }] }]
+  const second = recordActions.submitOperationEstimate(MANAGER, item2, {
+    items: [{ id: noiThat1.id, content: 'Nội thất', amount: 0, attachments: [{ fileUrl: '/uploads/bao-gia-2-thay-the.pdf', fileName: 'bao-gia-2-thay-the.pdf' }] }]
   }, 'OPERATION_STORE_OPENING', USERS);
   const noiThat2 = second.estimateItems.find((it) => it.id === noiThat1.id);
   assert.strictEqual(noiThat2.attachments.length, 1);
-  assert.strictEqual(noiThat2.attachments[0].fileUrl, '/uploads/own-upload.pdf');
-  assert.strictEqual(noiThat2.attachments[0].uploadedByName, 'Người Phụ Trách A');
+  assert.strictEqual(noiThat2.attachments[0].fileUrl, '/uploads/bao-gia-2-thay-the.pdf', 'MANAGER xoá tệp cũ + thêm tệp mới (=sửa/up lại) phải thành công bình thường');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

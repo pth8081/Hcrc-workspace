@@ -1775,23 +1775,26 @@ function renderOperationEstimateItemRow(it, idx, depth, editable, sttNo) {
     : (editable && estimateIsFullManager
       ? `<td class="border p-1"><div id="estimateAssigneePicker_${idx}" class="text-[10px]"></div></td>`
       : `<td class="border p-1 text-[10px] text-gray-600">${(it.assignedToNames || []).map(escapeHtml).join(', ') || '<span class="text-gray-400 italic">Chưa gán</span>'}</td>`);
-  // "Tệp Đính Kèm" — CHỈ có ở danh mục LỚN (depth 0), theo yêu cầu người dùng ("danh mục lớn cho phép
-  // upload file dạng PDF, docx, xlsx, người phụ trách cũng xem và tải được file"). Cho phép cả toàn
-  // quyền hồ sơ LẪN người chỉ phụ trách 1 phần tự thêm/xoá tệp trên ĐÚNG danh mục họ phụ trách (editable
-  // đã phản ánh đúng phạm vi này, xem openOperationEstimateModal()) — khác cột "Người Phụ Trách" ở trên
-  // (CHỈ toàn quyền hồ sơ mới sửa được). moduleKey 'operationEstimate' ở uploadFileToServer() (mặc định
-  // .pdf/.docx/.xlsx, xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js) — file chỉ THẬT SỰ lưu vào hồ sơ
-  // sau khi bấm "💾 Lưu Danh Mục Đầu Tư" (giống mọi field khác của dòng, xem submitOperationEstimateForApproval()).
+  // "Tệp Đính Kèm" — CHỈ có ở danh mục LỚN (depth 0). SỬA LẠI theo yêu cầu người dùng ("người phụ trách
+  // công việc không tự upload tài liệu, CHỈ XEM thôi, người phụ trách hồ sơ mới làm được"): CHỈ toàn
+  // quyền hồ sơ (estimateIsFullManager) mới thêm/xoá được tệp — cùng phạm vi với cột "Người Phụ Trách" ở
+  // trên, KHÔNG còn dùng `editable` chung nữa (khác đợt đầu tiên). Người chỉ phụ trách 1 phần vẫn XEM/
+  // TẢI được tệp bình thường (quyền đó không đổi, xem checker operationEstimateAttachment ở
+  // lib/fileAuthz.js) — chỉ mất quyền tự thêm/xoá (server cũng chặn tường minh, xem submitOperationEstimate()
+  // ở lib/recordActions.js — không chỉ ẩn UI). moduleKey 'operationEstimate' ở uploadFileToServer() (mặc
+  // định .pdf/.docx/.xlsx, xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js) — file chỉ THẬT SỰ lưu vào
+  // hồ sơ sau khi bấm "💾 Lưu Danh Mục Đầu Tư" (giống mọi field khác của dòng).
+  const canEditAttachments = editable && estimateIsFullManager;
   const attachmentsListHTML = (it.attachments || []).map((a, aIdx) => `
       <div class="flex items-center gap-1">
         <a href="#" data-op="viewOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-blue-600 underline truncate max-w-[100px]" title="${escapeHtml(a.fileName || '')}">📎 ${escapeHtml(a.fileName || 'Tệp đính kèm')}</a>
-        ${editable ? `<button type="button" data-op="removeOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-red-500 font-bold" title="Xoá tệp">✕</button>` : ''}
+        ${canEditAttachments ? `<button type="button" data-op="removeOperationEstimateAttachment" data-idx="${idx}" data-att-idx="${aIdx}" class="text-red-500 font-bold" title="Xoá tệp">✕</button>` : ''}
       </div>`).join('');
   const attachCell = depth !== 0
     ? `<td class="border p-1"></td>`
     : `<td class="border p-1 text-[10px] space-y-0.5">
-        ${attachmentsListHTML || (!editable ? '<span class="text-gray-400 italic">Chưa có tệp</span>' : '')}
-        ${editable ? `<label class="text-cyan-700 font-bold cursor-pointer hover:underline block">+ Thêm tệp<input type="file" accept=".pdf,.docx,.xlsx" data-op-change="onOperationEstimateAttachmentFileChange" data-idx="${idx}" class="hidden"></label>` : ''}
+        ${attachmentsListHTML || (!canEditAttachments ? '<span class="text-gray-400 italic">Chưa có tệp</span>' : '')}
+        ${canEditAttachments ? `<label class="text-cyan-700 font-bold cursor-pointer hover:underline block">+ Thêm tệp<input type="file" accept=".pdf,.docx,.xlsx" data-op-change="onOperationEstimateAttachmentFileChange" data-idx="${idx}" class="hidden"></label>` : ''}
       </td>`;
   return `<tr>${sttCell}${parentCell}${contentCell}${descCell}${amountCell}${noteCell}${assigneeCell}${attachCell}${actionCell}</tr>`;
 }

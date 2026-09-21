@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**23.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.79 (2026-09-21): Đăng Ký Xe — lái xe xem thông tin người đặt + phiếu duyệt; sửa lại quyền upload tệp Danh Mục Đầu Tư
+
+Theo yêu cầu người dùng, 3 việc:
+
+### 1) Đăng Ký Xe: lái xe xem được người đặt xe + phiếu duyệt chuyến
+
+Tab **🧑‍✈️ Lái Xe** trước đây chỉ hiện Mã/Phòng ban/Lộ trình/Thời gian/Xe —
+KHÔNG hiện người đặt xe, và không có lối vào Phiếu Phê Duyệt đầy đủ (dù
+`canAccessCarApprovalSlip()`/`viewCarApprovalSlip()` — core.js — đã cho
+phép ĐÚNG tài xế được gán xem/tải từ trước, task #145 — chỉ là nút "👁️ Xem
+Phiếu" trước đây CHỈ nằm ở bảng danh sách chung "🚗 Đăng Ký Xe", không phải
+tab lái xe thường mở). Đã thêm: dòng **"Người đặt xe"** thẳng trên mỗi thẻ +
+nút **"👁️ Xem Phiếu"** mở ngay Phiếu Phê Duyệt đầy đủ (người đăng ký/người
+sử dụng trực tiếp + SĐT, lộ trình di chuyển đầy đủ điểm đón-điểm đến, mục
+đích/nội dung) — `renderCarDriverTab()` (module-dangkyxe.js). Không đổi
+phạm vi quyền, chỉ thêm lối vào.
+
+**Xác nhận thêm 2 việc đã hỏi, KHÔNG cần code mới**:
+- **"Đổi Tài Xế-Xe"**: đã có sẵn đầy đủ từ trước (`reassignCarDispatch()`,
+  nút "🔁 Đổi Tài Xế-Xe", quyền Người Điều Hành Xe/admin) — có test riêng
+  `test-carreg-reassign-inprogress.js`.
+- **QLDA — sửa/upload lại tệp Danh Mục Đầu Tư của người quản lý hồ sơ**: đã
+  có sẵn từ v23.78 (toàn quyền hồ sơ luôn thêm/xoá/thay thế tệp được).
+
+### 2) Sửa lại quyền upload tệp Danh Mục Đầu Tư (đảo ngược 1 phần v23.78)
+
+Theo phản hồi người dùng ngay sau khi xem demo v23.78: **"người phụ trách
+công việc không tự upload tài liệu trong danh mục đầu tư, CHỈ XEM thôi,
+người phụ trách hồ sơ mới làm được"** — đảo ngược đúng phần này (v23.78 cho
+phép cả 2 nhóm cùng thêm/xoá). Nay: **CHỈ người quản lý hồ sơ toàn quyền**
+mới thêm/sửa/xoá (upload lại) được tệp đính kèm danh mục lớn — người chỉ
+phụ trách 1 phần (danh mục lớn) vẫn **XEM/TẢI** được bình thường (quyền đó
+không đổi, `lib/fileAuthz.js` không đụng tới) nhưng **KHÔNG** còn tự thêm/
+xoá — chặn ở CẢ 2 lớp: UI (`module-vanhanh.js`, nút "+ Thêm tệp"/"✕ Xoá"
+chỉ hiện cho toàn quyền hồ sơ) VÀ server (`submitOperationEstimate()`,
+lib/recordActions.js — bỏ qua hoàn toàn payload attachments nếu người gửi
+không phải toàn quyền hồ sơ, giữ nguyên giá trị cũ, không chỉ ẩn UI).
+
+**Test mới/cập nhật**: `test-carreg-driver-view-info.js` (mới); sửa lại 2
+kịch bản trong `test-operation-estimate-attachments.js` cho khớp quyền mới
+(1 kịch bản đảo ngược hoàn toàn — owner KHÔNG còn thêm được tệp — + 1 kịch
+bản mới xác nhận manager vẫn sửa/thay thế tệp bình thường). Full regression
+264 file: sạch (4 lỗi flag còn lại đều môi trường sandbox/false-positive có
+sẵn từ trước, không liên quan đợt này).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— chỉ copy code + `pm2 restart`.
 
 ## v23.78 (2026-09-21): Danh Mục Đầu Tư — Tệp Đính Kèm + cột Người Phụ Trách ở Excel + lọc Báo Cáo QLDA theo Hồ Sơ
 

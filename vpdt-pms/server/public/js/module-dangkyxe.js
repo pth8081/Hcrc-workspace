@@ -500,21 +500,31 @@ function renderCarDriverTab() {
   // vụ 9/2026: xác nhận nhận chuyến giờ chuyển status sang IN_PROGRESS thay vì giữ nguyên APPROVED).
   const myTrips = DB.carRegs.filter(c => c.assignedDriverUsername === currentUser.username && (c.status === 'APPROVED' || c.status === 'IN_PROGRESS'));
   noneNote.classList.toggle('hidden', myTrips.length > 0);
+  // PHÁT HIỆN (theo phản hồi người dùng): lái xe trước đây chỉ thấy Mã/Phòng ban/Lộ trình/Thời gian/Xe
+  // ở tab này — KHÔNG thấy "Người đặt xe" (người đăng ký chuyến) và không có lối nào mở được "Phiếu Phê
+  // Duyệt" đầy đủ (vốn ĐÃ có sẵn — canAccessCarApprovalSlip()/viewCarApprovalSlip() ở core.js đã cho
+  // phép ĐÚNG tài xế được gán xem/tải từ lâu, chỉ là nút "👁️ Xem Phiếu"/"⬇️ Tải" trước đây CHỈ nằm ở
+  // dropdown "⋮ Khác" của bảng danh sách "🚗 Đăng Ký Xe" chung — tab lái xe thường không tự nghĩ tới mở
+  // — nên dù CÓ quyền vẫn không biết/không tới được). Thêm thẳng "Người đặt xe" vào thân thẻ (xem nhanh,
+  // không cần mở gì) + nút "👁️ Xem Phiếu" mở đúng Phiếu Phê Duyệt đầy đủ (có Người đăng ký/Người sử dụng
+  // trực tiếp + SĐT/Lộ trình di chuyển đầy đủ/Mục đích/Nội dung chi tiết, xem buildCarApprovalSlipHTML()).
   wrap.innerHTML = myTrips.map(c => `
     <div class="bg-white p-3 rounded border space-y-1">
       <div class="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <div class="font-bold text-indigo-800 text-sm">${escapeHtml(c.code)} — ${escapeHtml(c.dept)}</div>
+          <div class="text-xs text-gray-600">Người đặt xe: ${escapeHtml(c.creatorName || '')}</div>
           <div class="text-xs text-gray-600">${escapeHtml(c.destination)}</div>
           <div class="text-xs text-gray-500">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)} | Xe: ${escapeHtml(c.type)}${c.assignedPlate ? ` (${escapeHtml(c.assignedPlate)})` : ''}</div>
         </div>
-        ${c.driverConfirmed
-          ? `<div class="flex items-center gap-2 flex-wrap">
-               <span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>
-               <button type="button" data-op="endCarTripAction" data-arg0="${c.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🏁 Kết Thúc Chuyến</button>
-             </div>`
-          : `<button type="button" data-op="confirmCarDriverAssignmentAction" data-arg0="${c.id}" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
-        }
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" data-op="viewCarApprovalSlip" data-arg0="${c.id}" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">👁️ Xem Phiếu</button>
+          ${c.driverConfirmed
+            ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-[11px]">✅ Đã xác nhận lúc ${escapeHtml(c.driverConfirmedAt || '')}</span>
+               <button type="button" data-op="endCarTripAction" data-arg0="${c.id}" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">🏁 Kết Thúc Chuyến</button>`
+            : `<button type="button" data-op="confirmCarDriverAssignmentAction" data-arg0="${c.id}" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Đăng Ký</button>`
+          }
+        </div>
       </div>
     </div>
   `).join('');
