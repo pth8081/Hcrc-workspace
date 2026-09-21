@@ -199,11 +199,13 @@ async function main() {
     { label: 'Hệ Thống > Quy Trình & Phê Duyệt', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(WORKFLOW)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Quản Lý Tệp File', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(UPLOAD)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Log', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(LOG)"]', section: 'systemSection' },
-    // 🔀 Quy Trình Nâng Cao (từ v23.65) — chỉ "Áp Dụng Nhanh" có sẵn link tắt ở sidebar (3-op chain);
-    // 3 sub-tab còn lại (Quy Trình Đặt Hàng Siêu Thị/Nhóm Phê Duyệt Trình-HĐ/Nhóm Quyền Đặc Biệt) click thẳng nút
+    // 🔀 Quy Trình Nâng Cao (từ v23.65). Từ v23.73: sidebar không còn link tắt riêng thẳng tới
+    // QUICKAPPLY (mục "⚡ Áp Dụng Nhanh" trong sidebar đã bỏ hẳn, thay bằng lối vào chung "🔀 Quy Trình
+    // Nâng Cao") — điểm đầu tiên nay chỉ còn kiểm tra đúng lối vào MẶC ĐỊNH qua sidebar mới; 3 sub-tab
+    // còn lại (Quy Trình Đặt Hàng Siêu Thị/Nhóm Phê Duyệt Trình-HĐ/Nhóm Quyền Đặc Biệt) click thẳng nút
     // tab con trong trang (không qua sidebar) — chạy SAU 1 điểm "Hệ Thống" bất kỳ ở trên nên fragment
     // systemSection.html đã chắc chắn tải xong, không cần toggle lại.
-    { label: 'Hệ Thống > Quy Trình Nâng Cao (Áp Dụng Nhanh)', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setAdvWorkflowSubTab(QUICKAPPLY)"]', section: 'systemSection' },
+    { label: 'Hệ Thống > Quy Trình Nâng Cao (mặc định)', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(ADVWORKFLOW)"]', section: 'systemSection' },
     { label: 'Hệ Thống > Quy Trình Nâng Cao (Quy Trình Đặt Hàng Siêu Thị)', click: '#btnSystemSubAdvWorkflow', section: 'systemSection' },
     { label: 'Hệ Thống > Quy Trình Nâng Cao (Nhóm Phê Duyệt Trình/HĐ)', click: '#btnAdvWorkflowSubGroups', section: 'systemSection' },
     { label: 'Hệ Thống > Quy Trình Nâng Cao (Nhóm Quyền Đặc Biệt)', click: '#btnAdvWorkflowSubSpecialPerm', section: 'systemSection' }

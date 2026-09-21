@@ -351,6 +351,36 @@ async function main() {
   record('C3. GROUPS: gán thành viên "tp.cntt" cho nhóm qua UI + bấm Lưu -> DB.members đúng',
     JSON.stringify(subGroupsAfterC3[0].members) === JSON.stringify(['tp.cntt']), JSON.stringify(subGroupsAfterC3));
 
+  // C3.5: gán "Nhãn Phê Duyệt" riêng cho nhóm qua ô input mới thêm trên bảng — lan toả tới nút bấm
+  // Duyệt/chân ký in của tờ trình MỚI tick nhóm này (task #47 mở rộng sang Nhóm Phê Duyệt Trình/HĐ,
+  // trước đây chỉ có ở "🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt").
+  const actionLabelInput = page.locator(`input[data-op-change="updateApprovalGroupActionLabel"][data-arg1="${subGroupId}"]`);
+  await actionLabelInput.fill('Xác Nhận');
+  await actionLabelInput.dispatchEvent('change');
+  await page.waitForTimeout(60);
+  const subGroupsAfterC3_5 = await page.evaluate(() => DB.submissionApprovalGroups);
+  record('C3.5. GROUPS: gán "Nhãn Phê Duyệt" = "Xác Nhận" qua ô input mới -> DB.actionLabel cập nhật đúng',
+    subGroupsAfterC3_5[0].actionLabel === 'Xác Nhận', JSON.stringify(subGroupsAfterC3_5));
+
+  const layerActionLabelCheck = await page.evaluate(() => {
+    const layers = getSubmissionApprovalLayers();
+    const layer = layers.find(l => l.key === DB.submissionApprovalGroups[0].id);
+    return layer && layer.actionLabel;
+  });
+  record('C3.5b. GROUPS business logic: getSubmissionApprovalLayers() phản ánh ĐÚNG actionLabel vừa gán',
+    layerActionLabelCheck === 'Xác Nhận', String(layerActionLabelCheck));
+
+  // Xác nhận end-to-end: buildEffectiveSubmissionWorkflow() (dựng quy trình hiệu lực lúc TẠO tờ trình
+  // mới) phải gắn ĐÚNG actionLabel này vào bước do nhóm sinh ra — đây chính là dữ liệu resolveStepActionLabel()
+  // đọc để quyết định nhãn nút bấm/chân ký in.
+  const effectiveWfCheck = await page.evaluate((groupId) => {
+    const wf = buildEffectiveSubmissionWorkflow('Đề Xuất Mua Sắm', 'Phòng CNTT', [groupId], {}, null);
+    const step = wf.steps.find(s => s.layerKey === groupId);
+    return step && step.actionLabel;
+  }, subGroupId);
+  record('C3.5c. GROUPS business logic: buildEffectiveSubmissionWorkflow() gắn actionLabel vào ĐÚNG bước sinh ra từ nhóm',
+    effectiveWfCheck === 'Xác Nhận', String(effectiveWfCheck));
+
   // C4: business logic THẬT — getSubmissionApprovalLayers() (core.js, nguồn trực tiếp cho ô "Phê duyệt"
   // ở form tạo Văn Bản Trình — trả shape {key,label,blocking,...}, key = alias của id) phải phản ánh ĐÚNG
   // tên nhóm vừa đổi qua UI; members KHÔNG nằm trong shape này (chỉ dùng nội bộ form admin) nên xác nhận

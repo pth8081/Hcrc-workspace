@@ -3,7 +3,7 @@
 // cấu hình" (10/2026): TRƯỚC ĐÂY mỗi bên là 7/4 nhóm CỐ ĐỊNH trong code (SUBMISSION_APPROVAL_LAYERS/
 // CONTRACT_APPROVAL_LAYERS), admin chỉ gán được thành viên, không đổi tên/thêm/xoá nhóm được. NAY dữ
 // liệu nhóm (DB.submissionApprovalGroups/DB.contractApprovalGroups, mảng {id,label,order,blocking?,
-// singleApprover,allowFileReplacementProposal?,members}) VÀ "Cấp Phê Duyệt Cuối Cùng" (DB.
+// singleApprover,allowFileReplacementProposal?,members,actionLabel?}) VÀ "Cấp Phê Duyệt Cuối Cùng" (DB.
 // submissionApprovalLevels/DB.contractApprovalLevels, mảng {id,label,order,visibleGroupIds,
 // lockedGroupIds,isSystemDefault?}) đều nằm trong AppData — admin tự đổi tên/thêm/xoá cả 2 ở đây, và
 // đây chính là NGUỒN DỮ LIỆU trực tiếp cho trường "Phê duyệt"/"Cấp Phê Duyệt Cuối Cùng" ở form tạo Văn
@@ -99,6 +99,9 @@ function renderApprovalGroupsTable(moduleKind) {
         <td class="p-1.5 border min-w-[140px]">
           <input type="text" value="${escapeHtml(g.label || '')}" data-op-change="renameApprovalGroup" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg-value="2" class="w-full border p-1 rounded text-[11px] font-semibold">
         </td>
+        <td class="p-1.5 border min-w-[120px]">
+          <input type="text" value="${escapeHtml(g.actionLabel || '')}" placeholder="Phê Duyệt" title="Chữ hiện trên nút bấm + chân ký khi hoàn tất bước này — VD: Xác Nhận, Thẩm Định, Kiểm Duyệt... Để trống = mặc định &quot;Phê Duyệt&quot;." data-op-change="updateApprovalGroupActionLabel" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg-value="2" class="w-full border p-1 rounded text-[11px]">
+        </td>
         ${cfg.hasBlocking ? `
         <td class="p-1.5 border text-center">
           <input type="checkbox" ${g.blocking !== false ? 'checked' : ''} data-op-change="toggleApprovalGroupFlag" data-arg0="${moduleKind}" data-arg1="${escapeHtml(g.id)}" data-arg2="blocking" data-arg-el="3">
@@ -121,7 +124,7 @@ function renderApprovalGroupsTable(moduleKind) {
     `;
   }).join('');
 
-  const colCount = 4 + (cfg.hasBlocking ? 1 : 0) + (cfg.hasFileReplacement ? 1 : 0);
+  const colCount = 5 + (cfg.hasBlocking ? 1 : 0) + (cfg.hasFileReplacement ? 1 : 0);
   wrap.innerHTML = `
     <div class="overflow-x-auto">
       <table class="w-full text-[11px] border-collapse">
@@ -129,6 +132,7 @@ function renderApprovalGroupsTable(moduleKind) {
           <tr class="bg-slate-100 text-gray-600">
             <th class="p-1.5 border">Thứ Tự</th>
             <th class="p-1.5 border text-left">Tên Nhóm</th>
+            <th class="p-1.5 border text-left" title="Chữ hiện trên nút bấm + chân ký khi hoàn tất bước của nhóm này (VD Xác Nhận/Thẩm Định), thay cho mặc định &quot;Phê Duyệt&quot; — cùng cơ chế nhãn hành động ở mục &quot;Quy Trình &amp; Phê Duyệt&quot;">Nhãn Phê Duyệt</th>
             ${cfg.hasBlocking ? '<th class="p-1.5 border" title="Nhóm KHÔNG chặn quy trình chỉ là kênh tham khảo song song (VD Xin ý kiến), không cộng thêm bước duyệt nào">Chặn Quy Trình?</th>' : ''}
             <th class="p-1.5 border" title="Nhóm chỉ được gán tối đa 1 thành viên">Chỉ 1 Người?</th>
             ${cfg.hasFileReplacement ? '<th class="p-1.5 border" title="Người duyệt ở bước của nhóm này có thêm lựa chọn đề xuất thay thế toàn bộ tệp tờ trình">Đề Xuất Thay File?</th>' : ''}
@@ -166,6 +170,24 @@ async function renameApprovalGroup(moduleKind, groupId, newLabel) {
   group.label = trimmed;
   if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
   logSystemAction(cfg.logTag, 'RENAME_APPROVAL_GROUP', `Đổi tên nhóm phê duyệt [${groupId}] -> "${trimmed}"`, 'SUCCESS', groupId);
+}
+
+// Nhãn hành động RIÊNG cho bước do nhóm này sinh ra (VD "Xác Nhận"/"Thẩm Định") — cùng cơ chế/quy ước
+// step.actionLabel đã dùng cho "🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt" (module-itsupport-tier.js): để
+// trống = mặc định "Phê Duyệt" (resolveStepActionLabel(), core.js). Lan toả tự động tới nút bấm
+// Duyệt/chân ký in của MỌI tờ trình/hợp đồng MỚI tạo từ nay có tick nhóm này (xem getSubmissionApprovalLayers()/
+// getContractApprovalLayers() + buildEffectiveSubmissionWorkflow()/buildEffectiveContractApprovalWorkflow()
+// ở core.js/module-vanbantrinh.js, và bản snapshot server ở lib/createValidation.js) — hồ sơ ĐÃ TẠO
+// trước đó không đổi (effectiveSteps là snapshot bất biến, cùng khuôn đổi tên nhóm ở renameApprovalGroup()).
+async function updateApprovalGroupActionLabel(moduleKind, groupId, newLabel) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[moduleKind];
+  const group = (DB[cfg.groupsKey] || []).find(g => g.id === groupId);
+  if (!group) return;
+  const trimmed = String(newLabel || '').trim();
+  const snapshot = snapshotApprovalAdminState(cfg);
+  group.actionLabel = trimmed || null;
+  if (!await syncApprovalAdminKey(moduleKind, cfg.groupsKey, snapshot)) return;
+  logSystemAction(cfg.logTag, 'UPDATE_APPROVAL_GROUP_ACTION_LABEL', `Đổi nhãn phê duyệt nhóm [${group.label}] -> "${trimmed || 'Phê Duyệt (mặc định)'}"`, 'SUCCESS', groupId);
 }
 
 // el = chính checkbox vừa đổi (data-arg-el) — đọc el.checked thay vì el.value (checkbox không dùng

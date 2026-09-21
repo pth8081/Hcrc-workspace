@@ -2081,7 +2081,7 @@ function jumpToPermField(badgeKey) {
 function getSubmissionApprovalLayers() {
   return [...(DB.submissionApprovalGroups || [])]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map(g => ({ key: g.id, label: g.label, blocking: g.blocking !== false, singleApprover: !!g.singleApprover, allowFileReplacementProposal: !!g.allowFileReplacementProposal }));
+    .map(g => ({ key: g.id, label: g.label, blocking: g.blocking !== false, singleApprover: !!g.singleApprover, allowFileReplacementProposal: !!g.allowFileReplacementProposal, actionLabel: g.actionLabel || null }));
 }
 
 function getSubmissionApprovalLevels() {
@@ -2121,7 +2121,7 @@ function getSubmissionApprovalLevelRule(levelKey) {
 function getContractApprovalLayers() {
   return [...(DB.contractApprovalGroups || [])]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map(g => ({ key: g.id, label: g.label, singleApprover: !!g.singleApprover }));
+    .map(g => ({ key: g.id, label: g.label, singleApprover: !!g.singleApprover, actionLabel: g.actionLabel || null }));
 }
 function getContractApprovalLevels() {
   return [...(DB.contractApprovalLevels || [])]
@@ -2630,7 +2630,7 @@ function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selecte
       ? [...groupMembers]
       : [...(selectedLayerMembers?.[layerKey] || [])];
     const stepOrder = steps.length + 1;
-    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key, actionLabel: layer.actionLabel || null });
     approvers[stepOrder] = chosen;
   });
 

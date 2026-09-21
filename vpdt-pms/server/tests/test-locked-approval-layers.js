@@ -65,7 +65,7 @@ function baseAppData() {
       { id: 'DONG_TRINH', label: 'Đồng trình', order: 1, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
       { id: 'DONG_CAP', label: 'Phê duyệt đồng cấp', order: 2, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: [] },
       { id: 'XIN_Y_KIEN', label: 'Xin ý kiến', order: 3, blocking: false, singleApprover: false, allowFileReplacementProposal: false, members: [] },
-      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 4, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: ['gd1'] }, // đúng 1 người -> tự chọn
+      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 4, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: ['gd1'], actionLabel: 'Xác Nhận Đại Diện' }, // đúng 1 người -> tự chọn; actionLabel: đợt "Nhãn Phê Duyệt" cho Nhóm Phê Duyệt Trình/HĐ
       { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 5, blocking: true, singleApprover: false, allowFileReplacementProposal: false, members: ['ptgd1', 'ptgd2'] }, // nhiều người -> phải chọn đúng 1
       { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 6, blocking: true, singleApprover: false, allowFileReplacementProposal: true, members: [] }, // 0 người -> chặn
       { id: 'TGD', label: 'Tổng Giám Đốc', order: 7, blocking: true, singleApprover: true, allowFileReplacementProposal: false, members: ['tgd1'] }
@@ -77,7 +77,7 @@ function baseAppData() {
       { id: 'KHAC', label: 'Phê duyệt khác', order: 4, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }
     ],
     contractApprovalGroups: [
-      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 1, singleApprover: false, members: ['gd1'] },
+      { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 1, singleApprover: false, members: ['gd1'], actionLabel: 'Xác Nhận Đại Diện' },
       { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 2, singleApprover: false, members: ['ptgd1', 'ptgd2'] },
       { id: 'TRO_LY_THU_KY', label: 'Bộ Phận Trợ Lý/Thư Ký', order: 3, singleApprover: false, members: [] },
       { id: 'TGD', label: 'Tổng Giám Đốc', order: 4, singleApprover: true, members: ['tgd1'] }
@@ -207,6 +207,7 @@ async function main() {
     assertEqual(res.status, 200, `Tạo tờ trình phải thành công: ${JSON.stringify(res.body)}`);
     const step = res.body.item.effectiveSteps.find(s => s.layerKey === 'GD_PGD');
     assertEqual(JSON.stringify(res.body.item.effectiveApprovers[step.order]), JSON.stringify(['gd1']), 'Phải tự gán đúng người duy nhất trong nhóm');
+    assertEqual(step.actionLabel, 'Xác Nhận Đại Diện', 'effectiveSteps phải mang theo ĐÚNG actionLabel gán ở nhóm (mục "Nhãn Phê Duyệt") — đây là dữ liệu resolveStepActionLabel() đọc để hiện nút bấm/chân ký');
   });
 
   await runner.run('Submissions: lớp locked nhóm NHIỀU người (PTGD) nhưng KHÔNG chọn ai -> 400', async () => {
@@ -262,6 +263,7 @@ async function main() {
     assertEqual(res.status, 200, `Tạo hợp đồng phải thành công: ${JSON.stringify(res.body)}`);
     const step = res.body.item.effectiveSteps.find(s => s.layerKey === 'GD_PGD');
     assertEqual(JSON.stringify(res.body.item.effectiveApprovers[step.order]), JSON.stringify(['gd1']), 'Phải tự gán đúng người duy nhất trong nhóm');
+    assertEqual(step.actionLabel, 'Xác Nhận Đại Diện', 'effectiveSteps (Hợp Đồng) phải mang theo ĐÚNG actionLabel gán ở nhóm');
   });
 
   await runner.run('Contracts: lớp locked nhóm NHIỀU người (PTGD) nhưng KHÔNG chọn ai -> 400', async () => {

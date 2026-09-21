@@ -1347,7 +1347,7 @@ function buildEffectiveSubmissionWorkflow(type, dept, selectedLayerKeys, selecte
       const stepOrder = steps.length + 1;
       // layerKey: ghi lại lớp gốc sinh ra bước này — dùng để biết bước này có nằm SAU "Xin ý kiến"
       // trong thứ tự chuẩn hay không (xem isSubmissionLayerAfterOpinion() + openProcessSubmissionModal()).
-      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key });
+      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.key, actionLabel: layer.actionLabel || null });
       approvers[stepOrder] = chosen;
     } else {
       // XIN_Y_KIEN: không phải bước duyệt — chỉ cosmetic ở client, giá trị THẬT do server tự dựng lại

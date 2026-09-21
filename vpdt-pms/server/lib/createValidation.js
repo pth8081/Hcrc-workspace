@@ -306,7 +306,7 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
       const stepOrder = steps.length + 1;
       // layerKey: khớp đúng core.js buildEffectiveSubmissionWorkflow() — dùng ở client để hiện cảnh báo
       // "còn người chưa cho ý kiến" cho các bước nằm sau nhóm không-chặn (VD "Xin ý kiến").
-      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id });
+      steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id, actionLabel: layer.actionLabel || null });
       approvers[stepOrder] = chosen;
     } else {
       // Nhóm blocking:false (VD "Xin ý kiến"): KHÔNG trở thành bước duyệt — chỉ ghi nhận danh sách
@@ -402,7 +402,7 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
     }
 
     const stepOrder = steps.length + 1;
-    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id });
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id, actionLabel: layer.actionLabel || null });
     approvers[stepOrder] = chosen;
   });
 

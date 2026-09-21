@@ -1,8 +1,80 @@
 # Phiên bản hiện tại
 
-**23.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.73 (2026-09-21): Nhãn Phê Duyệt cho Nhóm Phê Duyệt Trình/HĐ + gọn sidebar Quy Trình Nâng Cao + vá thiếu tài liệu Hướng Dẫn
+
+Theo 2 yêu cầu người dùng (kèm 2 ảnh chụp màn hình), cộng 1 yêu cầu phát sinh
+giữa chừng (bổ sung tài liệu Hướng Dẫn cho các cờ quyền phẳng đã dùng ở
+v23.72 mà lần đó bỏ sót, đúng quy tắc CLAUDE.md mọi tính năng nghiệp vụ mới
+phải có tài liệu đi kèm).
+
+### Việc 1 — cột "Nhãn Phê Duyệt" cho từng nhóm ở "Nhóm Phê Duyệt Trình/HĐ"
+
+Trước đây admin chỉ gán được nhãn hành động (VD "Xác Nhận"/"Thẩm Định" thay
+"Phê Duyệt" mặc định) cho các bước gốc theo phòng ban (ở "🔄 Quy Trình & Phê
+Duyệt → 🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt") — các bước SINH THÊM từ
+"🖋️ Nhóm Phê Duyệt Trình/HĐ" (Văn Bản Trình + Hợp Đồng, `submissionApprovalGroups`/
+`contractApprovalGroups`) luôn cố định "Phê Duyệt", không có cách nào đổi.
+
+- `module-admin-submissiongroups.js`: thêm cột "Nhãn Phê Duyệt" (ô nhập text,
+  để trống = mặc định) ngay trong bảng nhóm, dùng chung cho cả 2 module (Văn
+  Bản Trình + Hợp Đồng) — hàm mới `updateApprovalGroupActionLabel()`.
+- Lan truyền `actionLabel` qua toàn bộ đường build bước hiệu lực (đã có sẵn
+  cơ chế `resolveStepActionLabel()`/`step.actionLabel` dùng chung toàn hệ
+  thống, chỉ thiếu đúng 1 chặng này): `getSubmissionApprovalLayers()`/
+  `getContractApprovalLayers()` (core.js), `buildEffectiveSubmissionWorkflow()`
+  (module-vanbantrinh.js), `buildEffectiveContractApprovalWorkflow()` (core.js),
+  và 2 bản snapshot phía server `buildEffectiveSubmissionWorkflowServer()`/
+  `buildEffectiveContractApprovalWorkflowServer()` (lib/createValidation.js) —
+  nhãn tự hiện đúng ở cả nút bấm Duyệt lẫn chân ký in, không cần sửa gì thêm
+  ở phía hiển thị.
+- Test: mở rộng `tests/test-adv-workflow-tab-deep.js` (gán nhãn qua UI →
+  DB → `getSubmissionApprovalLayers()` → `buildEffectiveSubmissionWorkflow()`
+  end-to-end) và `tests/test-locked-approval-layers.js` (snapshot server thật
+  qua `POST /api/create/submissions|contracts`).
+
+### Việc 2 — bỏ mục "⚡ Áp Dụng Nhanh" riêng ở sidebar, thay bằng "🔀 Quy Trình Nâng Cao"
+
+"Áp Dụng Nhanh" đã dời vào làm 1 sub-tab của "🔀 Quy Trình Nâng Cao" từ
+v23.65 — mục sidebar riêng trỏ thẳng vào đó (dropdown "🛠️ Hệ Thống ▾") giờ
+dư thừa. Đổi thành lối vào thẳng "🔀 Quy Trình Nâng Cao" (tự nhớ đúng
+sub-tab đang mở dở lần gần nhất trong phiên).
+
+- `public/index.html`: đổi label + `data-op-seq` của mục sidebar tương ứng.
+- Cập nhật 4 test dùng đúng selector sidebar cũ để điều hướng
+  (`test-quick-apply-workflow-steps.js`, `test-lazy-load-all-tabs.js`,
+  `test-csp-full-audit.js`) — đổi sang điều hướng 2 bước (sidebar → tab con
+  trong trang) khớp hành vi mới; `test-adv-workflow-tab-deep.js` không bị
+  ảnh hưởng (vốn đã điều hướng bằng `setSystemSubTab()`/click tab con trực
+  tiếp, không qua sidebar).
+
+### Việc phát sinh — vá thiếu tài liệu Hướng Dẫn cho v23.72
+
+Rà lại theo yêu cầu người dùng, phát hiện đúng: tính năng "🔍 Xem Quy Trình"
+mới thêm ở v23.72 (Đặt Phòng Họp/Đồng Phục/Công&Phép) chưa được ghi vào
+Hướng Dẫn — bỏ sót bước bắt buộc theo CLAUDE.md. Đã vá:
+
+- **Đặt Phòng Họp**: nêu tên cờ `meetingApprove` (duyệt, tách biệt
+  `meetingCancel` hủy) + nhắc nút "🔍 Xem Quy Trình" mới.
+- **Đồng Phục**: đã có sẵn tên cờ `uniformManage`/`uniformStoreManage`/
+  `uniformApprove` từ trước — chỉ bổ sung nhắc nút mới.
+- **Công & Phép**: nêu tên cờ `hrLeaveApprove`/`hrShiftSwapApprove`/
+  `hrAttendanceManage` + lưu ý quan trọng: nút "Xem Quy Trình" CHỈ liệt kê
+  được người giữ cờ, KHÔNG liệt kê được "quản lý trực tiếp" (phụ thuộc từng
+  nhân viên nộp đơn theo Cơ Cấu Tổ Chức) — tránh hiểu lầm khi dùng thử.
+- Tiện thể phát hiện + vá luôn: entry `sysAdvWorkflow` (tài liệu tab ⚙️ Hệ
+  Thống) mô tả sidebar CŨ (6 mục, có "⚡ Áp Dụng Nhanh") — lỗi thời ngay sau
+  Việc 2 ở trên, đã cập nhật khớp thực tế mới (5 mục).
+
+### Deploy-impact
+
+Không có thay đổi `schema.sql`/biến môi trường/dependency mới — chỉ code
+client (`public/js/*.js`, `index.html`) + 2 hàm server (`lib/createValidation.js`,
+thuần thêm field vào object trả về, không đổi chữ ký/hành vi cũ). Chỉ cần
+copy code + `pm2 restart`.
 
 ## v23.72 (2026-09-21): Fix "Người Nhận" Giao Việc không lọc + thêm nút "Xem Quy Trình" cho 4 module chỉ có 1 bước duyệt
 
