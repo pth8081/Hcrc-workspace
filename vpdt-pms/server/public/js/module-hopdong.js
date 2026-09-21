@@ -1163,9 +1163,11 @@ function approveContractAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
   const approveLabel = resolveStepActionLabel(resolveContractApprovalWorkflow(c), c.currentStep);
+  // escapeHtml(approveLabel) trong bodyHTML — actionLabel admin tự gõ, bodyHTML gán qua .innerHTML
+  // (showConfirmModal()); title dùng approveLabel gốc là AN TOÀN vì đi qua .innerText.
   showConfirmModal({
     title: `${approveLabel} hợp đồng`,
-    bodyHTML: `Bạn có chắc chắn muốn ${approveLabel.toLowerCase()} hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    bodyHTML: `Bạn có chắc chắn muốn ${escapeHtml(approveLabel.toLowerCase())} hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: approveLabel,
     // Xác thực lại (mật khẩu/OTP/PIN) trước khi Duyệt — khớp đúng cách approveDoc() ở trên, mở rộng
     // withApprovalAuth() ra cả 7 module dùng chung engine phê duyệt (trước đây Hợp Đồng không có).
@@ -1243,9 +1245,11 @@ function approveContractSignedFileAction(id) {
   const c = DB.contracts.find(x => x.id === id);
   if (!c) return;
   const approveLabel = resolveStepActionLabel(resolveContractManageWorkflow(c), c.signedFileCurrentStep);
+  // escapeHtml(approveLabel) trong bodyHTML — actionLabel admin tự gõ, bodyHTML gán qua .innerHTML
+  // (showConfirmModal()); title dùng approveLabel gốc là AN TOÀN vì đi qua .innerText.
   showConfirmModal({
     title: `${approveLabel} tài liệu ký`,
-    bodyHTML: `Bạn có chắc chắn muốn ${approveLabel.toLowerCase()} tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
+    bodyHTML: `Bạn có chắc chắn muốn ${escapeHtml(approveLabel.toLowerCase())} tài liệu ký của hợp đồng "<b>${escapeHtml(c.title)}</b>" (${escapeHtml(c.code)})?`,
     confirmLabel: approveLabel,
     onConfirm: () => withApprovalAuth(async () => {
       let result;

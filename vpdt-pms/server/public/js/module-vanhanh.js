@@ -1382,7 +1382,8 @@ function confirmProcessOperation(actionType) {
   const approveLabel = itemForLabel ? resolveStepActionLabel(wfForLabel, itemForLabel.currentStep) : 'Phê Duyệt';
   const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
   const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: approveLabel.toLowerCase(), REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa hồ sơ về nháp để người tạo sửa lại)' };
+  // escapeHtml(approveLabel) — actionLabel admin tự gõ, bodyHTML gán qua .innerHTML (showConfirmModal()).
+  const actionTextMap = { APPROVE: escapeHtml(approveLabel.toLowerCase()), REJECT: 'từ chối', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa hồ sơ về nháp để người tạo sửa lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> hồ sơ này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ghi chú: "${escapeHtml(comment)}"</p>` : ''}`,

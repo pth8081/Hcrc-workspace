@@ -145,6 +145,32 @@ async function main() {
       assertEqual(state.depts.join(','), 'Phòng Sau Khi Cache Hết Hạn', 'phải là dữ liệu MỚI tải, không lẫn cache đã hết hạn');
     });
 
+    await run.run('Cùng tài khoản nhưng PHẠM VI QUYỀN đã đổi (admin thu hồi/cấp quyền, đổi phòng ban) giữa 2 lượt lưu cache -> cache BỊ BỎ QUA (vá lỗ hổng thấy dữ liệu phạm vi quyền CŨ)', async () => {
+      await page.evaluate(() => { logout(); });
+      // BUG THẬT đã vá (rà soát chuyên sâu sau Lớp 1): trước bản vá, loadDbSnapshotFromCache() chỉ kiểm
+      // assetVersion + tuổi cache, KHÔNG kiểm phạm vi quyền — nếu admin thu hồi cờ admin/đổi phòng ban/
+      // đổi nhóm quyền của user này GIỮA 2 lượt đăng nhập trên CÙNG máy, cache cũ (lưu lúc còn quyền
+      // RỘNG hơn) vẫn được dùng để hiện giao diện NGAY, lộ dữ liệu ngoài phạm vi quyền HIỆN TẠI cho tới
+      // khi tải ngầm xong. Cache hiện có của `user` (u.cache) đang ứng với perms={} (mặc định) — mô
+      // phỏng "vừa được cấp thêm quyền admin" bằng cách đổi user.perms rồi đăng nhập lại NGAY (cache
+      // trên localStorage vẫn còn nguyên, chỉ object `user` truyền vào đổi).
+      // Đổi dept (không đổi perms.admin) để tránh nhánh openTotpSetupWall() (proceedAfterAuth() bắt buộc
+      // TOTP setup cho admin chưa bật totpEnabled) — chỉ cần MỘT trong 4 field permsFingerprintFor() theo
+      // dõi (perms/dept/groupIds/permOverrides) đổi là đủ để kiểm đúng cơ chế phát hiện.
+      const upgradedUser = { ...user, dept: 'Phòng Khác (đã chuyển)' };
+      const seed6 = { ...baseCatalogSeed(), depts: ['Phòng Sau Khi Đổi Quyền'] };
+      await routeApiDataOnce(page, { delayMs: 200, body: seed6 });
+
+      await page.evaluate((u) => { window.__pa6 = proceedAfterAuth(u); }, upgradedUser);
+      await page.waitForTimeout(30);
+      const readyBeforeFetch = await page.evaluate(() => dataReady);
+      assert(readyBeforeFetch === false, 'phạm vi quyền đã đổi -> cache phải bị coi như KHÔNG hợp lệ, không được vào giao diện sớm bằng dữ liệu cũ');
+      await page.evaluate(() => window.__pa6);
+      const state = await page.evaluate(() => ({ dataReady, depts: DB.depts.slice() }));
+      assert(state.dataReady === true, 'sau khi chờ xong vẫn phải vào được giao diện bình thường');
+      assertEqual(state.depts.join(','), 'Phòng Sau Khi Đổi Quyền', 'phải là dữ liệu MỚI tải đúng phạm vi quyền hiện tại, không lẫn cache của phạm vi quyền cũ');
+    });
+
     await run.run('Tài khoản KHÁC (chưa từng có cache): vẫn phải chờ tải bình thường dù máy đã có cache của tài khoản khác', async () => {
       await page.evaluate(() => { logout(); });
       const otherUser = makeUser({ username: 'u.other', name: 'Người Khác' });

@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**23.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.76 (2026-09-21): Rà soát lỗ hổng nghiệp vụ v23.71 → v23.75 — vá 3 lỗi phát hiện được
+
+Theo yêu cầu người dùng ("test lỗ hổng nghiệp vụ từ version 23.71 đến bản cập
+nhật cuối cùng và báo cáo nếu có lỗi để xử lý luôn") — chạy 3 agent audit song
+song, mỗi agent rà soát 1 phần thay đổi từ v23.71 (Lớp 1/2 tối ưu tốc độ +
+Nhóm Phê Duyệt "Nhãn Phê Duyệt") tới v23.75 (Lớp 3a tải lười + đổi tên sidebar).
+Mọi phát hiện CONFIRMED đều được tự kiểm chứng lại bằng cách đọc trực tiếp code
+(không tin thẳng báo cáo của agent) trước khi vá. Phát hiện + vá 3 lỗi:
+
+### 1) Stored XSS — nhãn hành động (`actionLabel`) tự gõ chèn thẳng vào `bodyHTML` không escape (Cao)
+
+`resolveStepActionLabel()`/`approveLabel` (đọc từ `step.actionLabel`, admin tự
+gõ tự do ở "🖋️ Nhóm Phê Duyệt Trình/HĐ" hoặc "🛠️ Định Nghĩa Các Mẫu Bước Phê
+Duyệt" — tính năng "Nhãn Phê Duyệt" mới ở v23.73) được ghép thẳng KHÔNG
+`escapeHtml()` vào `bodyHTML` của `showConfirmModal()` (gán qua `.innerHTML`)
+tại **8 chỗ trên 7 module**: `module-vanbantrinh.js`, `module-hopdong.js`
+(2 chỗ — duyệt hợp đồng + duyệt tài liệu ký), `module-dangkyxe.js`,
+`module-office.js`, `module-vanhanh.js`, `module-vpp.js`,
+`module-thanhtoan.js`. Nếu admin (hoặc ai chiếm được quyền ghi actionLabel)
+đặt nhãn dạng `<img src=x onerror=...>`, BẤT KỲ người duyệt nào mở modal xác
+nhận Duyệt cho bước đó đều bị chạy script trong phiên của họ — XSS vượt ranh
+giới quyền (admin cấu hình, người duyệt thường trúng đòn). Đã vá
+`escapeHtml()` đúng tại điểm ghép vào `bodyHTML` ở cả 8 chỗ (field
+`title`/`confirmLabel` của modal này vốn đã an toàn vì gán qua `.innerText`,
+không cần sửa). Test mới: `tests/test-actionlabel-xss.js` (3 kịch bản đại
+diện: Văn Bản Trình, Hợp Đồng, Đăng Ký Xe).
+
+### 2) Cache "Lớp 1" sau đăng nhập không kiểm tra lại phạm vi quyền (Trung bình)
+
+Cache-first render (`proceedAfterAuth()`, thêm ở v23.71) trước đây chỉ kiểm
+tra `assetVersion` + tuổi cache (7 ngày) trước khi hiển thị NGAY dữ liệu cũ
+từ `localStorage` — KHÔNG kiểm tra phòng ban/quyền/nhóm của người dùng có
+thay đổi từ lần lưu cache trước không. Nếu quyền/phòng ban 1 tài khoản bị
+đổi (VD chuyển phòng, bị thu hồi quyền) mà họ đăng nhập lại trước khi cache 7
+ngày hết hạn, màn hình có thể thoáng hiện dữ liệu theo PHẠM VI QUYỀN CŨ trong
+lúc chờ dữ liệu mới tải xong. Đã vá: thêm `permsFingerprintFor(user)` (băm
+`perms`/`dept`/`groupIds`/`permOverrides`) vào điều kiện chấp nhận cache —
+lệch fingerprint thì bỏ qua cache, tải mới hoàn toàn như tài khoản khác. Test
+mới: thêm kịch bản thứ 6 vào `tests/test-login-cache-first-render.js`.
+
+### 3) Báo Cáo > Đồng Phục mở trước khi vào tab Đồng Phục → hiện sai số liệu (0) (Trung bình, fail-closed)
+
+Lớp 3a (v23.74) chuyển `DB.uniformPeriods`/... sang tải lười theo tab, nhưng
+`renderUniformReportExtra()`/`computeUniformStockClient()` (dùng ở tab Báo
+Cáo) đọc thẳng `DB.uniformPeriods` không có fallback gọi API khi rỗng — nếu
+người dùng mở tab Báo Cáo TRƯỚC KHI từng mở tab Đồng Phục trong phiên đó,
+phần mở rộng "Đồng Phục" trong Báo Cáo hiện sai số liệu (0/rỗng) thay vì dữ
+liệu thật. Không phải lỗ hổng lộ dữ liệu (fail-closed, không fail-open) nhưng
+sai nghiệp vụ. Đã vá: thêm `reports: ['uniform']` vào `TAB_DATA_GROUPS` để
+mở tab Báo Cáo cũng tự tải nhóm dữ liệu Đồng Phục.
+
+**Đã chạy full regression 262 file test sau khi vá** — sạch, không lỗi liên
+quan tới 3 fix trên hay bất kỳ tính năng nào khác (2 lỗi môi trường có sẵn từ
+trước — thiếu file PDF mẫu trong sandbox + 1 test luồng xem HĐLĐ theo phòng
+ban vốn đã flaky từ trước — không liên quan đợt vá này).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới —
+chỉ cần copy code + `pm2 restart`.**
 
 ## v23.75 (2026-09-21): Đổi tên sidebar "Quy Trình Nâng Cao" → "Nghiệp Vụ Nâng Cao"
 

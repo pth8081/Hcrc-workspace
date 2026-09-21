@@ -134,6 +134,14 @@ function loadTabModuleGroups(tabName) {
 // DB.<collection> tương ứng khởi tạo RỖNG qua fallback `|| []` sẵn có ở initDatabase(), chỉ có dữ liệu
 // thật sau khi loadTabData() chạy xong. Tab không có mặt ở đây (VD dashboard/doc/task/contract...) nghĩa
 // là mọi collection nó cần vẫn nằm trong GET /api/data như trước, không đổi gì.
+// reports: ['uniform'] — BUG THẬT đã vá (rà soát chuyên sâu sau Lớp 3a): renderUniformReportExtra()/
+// computeUniformStockClient() (module-baocaoquantri-preview.js/module-dongphuc.js) đọc THẲNG
+// DB.uniformPeriods/uniformIssuances/uniformStockAdjustments/uniformTransfers để tính bảng tồn kho/cấp
+// phát ở tab "📊 Báo Cáo → Đồng Phục", KHÔNG qua fetchReportRecords() như phần "danh sách bản ghi" cùng
+// tab (không có nhánh dự phòng gọi API) — nếu người dùng mở "Báo Cáo" TRƯỚC KHI từng mở tab "Đồng Phục"
+// thật trong phiên, 4 mảng này vẫn rỗng (initDatabase() fallback `|| []`) và bảng tồn kho/cấp phát âm
+// thầm hiện toàn số 0 thay vì báo lỗi rõ ràng — không phải lộ dữ liệu (fail-closed/rỗng), nhưng là số
+// liệu SAI. Thêm nhóm 'uniform' vào đây đảm bảo mở tab Báo Cáo cũng tự tải kèm dữ liệu Đồng Phục.
 const TAB_DATA_GROUPS = {
   internal: ['internalHub', 'hrFeedback'],
   hr: ['hrFeedback'],
@@ -143,7 +151,8 @@ const TAB_DATA_GROUPS = {
   hrContract: ['laborContract'],
   hrAttendance: ['attendance'],
   hrPayroll: ['payroll'],
-  checklist: ['checklist']
+  checklist: ['checklist'],
+  reports: ['uniform']
 };
 
 const _loadedDataGroups = {}; // groupKey -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
@@ -3440,12 +3449,27 @@ function migrateLegacyPerms(perms) {
 const DB_CACHE_KEY_PREFIX = 'vpdt_db_cache_';
 const DB_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 ngày — chỉ để hiện TẠM, không cần khắt khe
 
-function saveDbSnapshotToCache(username) {
-  if (!username) return;
+// permsFingerprintFor(): chuỗi đại diện cho "phạm vi quyền xem" của 1 user tại 1 thời điểm (perms/dept/
+// groupIds/permOverrides — đúng những field mọi filter*ForUser()/sanitizeUsersPermsForViewer() trong hệ
+// thống dùng để quyết định phạm vi dữ liệu) — dùng để phát hiện cache DB.* cũ đã được lưu dưới MỘT
+// phạm vi quyền KHÁC với phạm vi hiện tại (VD admin vừa bị thu hồi cờ admin/đổi phòng ban/đổi nhóm
+// quyền giữa 2 lượt đăng nhập trên CÙNG máy) — BUG THẬT đã vá (đợt rà soát chuyên sâu sau Lớp 1, task
+// #133): trước đây loadDbSnapshotFromCache() chỉ kiểm assetVersion + tuổi cache, KHÔNG kiểm phạm vi
+// quyền, nên hiện NGAY (Object.assign(DB, cachedDb) + finishLogin()) dữ liệu company-wide/phạm vi RỘNG
+// hơn của phiên đăng nhập TRƯỚC đó cho tới khi loadFreshDataInBackground() tải xong đè lại — người dùng
+// có thể điều hướng bất kỳ tab nào (switchTab() không hề kiểm biến `dataFresh`) và thấy dữ liệu ngoài
+// phạm vi quyền HIỆN TẠI của chính mình trong khoảng chờ đó.
+function permsFingerprintFor(user) {
+  return JSON.stringify({ perms: user?.perms || {}, dept: user?.dept || null, groupIds: user?.groupIds || [], permOverrides: user?.permOverrides || null });
+}
+
+function saveDbSnapshotToCache(user) {
+  if (!user?.username) return;
   try {
-    localStorage.setItem(DB_CACHE_KEY_PREFIX + username, JSON.stringify({
+    localStorage.setItem(DB_CACHE_KEY_PREFIX + user.username, JSON.stringify({
       savedAt: Date.now(),
       assetVersion: window.__ASSET_VERSION__ || '',
+      permsFingerprint: permsFingerprintFor(user),
       db: DB
     }));
   } catch (e) {
@@ -3454,15 +3478,20 @@ function saveDbSnapshotToCache(username) {
   }
 }
 
-function loadDbSnapshotFromCache(username) {
-  if (!username) return null;
+function loadDbSnapshotFromCache(user) {
+  if (!user?.username) return null;
   try {
-    const raw = localStorage.getItem(DB_CACHE_KEY_PREFIX + username);
+    const raw = localStorage.getItem(DB_CACHE_KEY_PREFIX + user.username);
     if (!raw) return null;
     const snapshot = JSON.parse(raw);
     if (!snapshot || typeof snapshot !== 'object' || !snapshot.db) return null;
     if (snapshot.assetVersion !== (window.__ASSET_VERSION__ || '')) return null; // đổi bản code -> bỏ cache cũ
     if (!snapshot.savedAt || Date.now() - snapshot.savedAt > DB_CACHE_MAX_AGE_MS) return null;
+    // Phạm vi quyền đã đổi kể từ lượt lưu cache trước (admin thu hồi cờ/đổi phòng ban/đổi nhóm quyền
+    // giữa 2 lượt đăng nhập) -> KHÔNG dùng cache này, rơi về await initDatabase() bình thường (chậm hơn
+    // nhưng luôn đúng phạm vi quyền hiện tại — đây chính là dữ liệu server vừa xác thực ở `user`, đáng
+    // tin cậy tuyệt đối, khác hẳn snapshot cũ có thể thuộc phạm vi quyền đã lỗi thời).
+    if (snapshot.permsFingerprint !== permsFingerprintFor(user)) return null;
     return snapshot.db;
   } catch (e) {
     return null; // cache hỏng/không parse được -> coi như không có, rơi về luồng tải bình thường
@@ -3782,7 +3811,7 @@ async function initDatabase(loggingInUser, opts) {
     );
     // LỚP 1: lưu lại snapshot DB.* vừa tải xong (đã "gán/di trú" đầy đủ) để lượt đăng nhập KẾ TIẾP của
     // đúng tài khoản này có thể hiện giao diện ngay từ cache trong lúc chờ tải bản mới nhất ở nền.
-    if (loggingInUser?.username) saveDbSnapshotToCache(loggingInUser.username);
+    if (loggingInUser?.username) saveDbSnapshotToCache(loggingInUser);
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
     if (silent) throw e; // gọi ngầm phía sau -> để nơi gọi tự xử lý (giữ dữ liệu cũ, thử lại sau), không alert
@@ -6112,7 +6141,7 @@ async function proceedAfterAuth(user) {
   // giao diện NGAY bằng dữ liệu cache đó (không đợi mạng) rồi tải dữ liệu THẬT ngầm phía sau — hoàn toàn
   // không chặn trải nghiệm. Chỉ lượt đăng nhập ĐẦU TIÊN trên máy này (hoặc cache đã hết hạn/khác bản) mới
   // còn phải chờ như cũ (không có gì để hiện tạm).
-  const cachedDb = loadDbSnapshotFromCache(user.username);
+  const cachedDb = loadDbSnapshotFromCache(user);
   if (cachedDb) {
     Object.assign(DB, cachedDb);
     dataReady = true;

@@ -1003,7 +1003,10 @@ function confirmProcessSubmission(actionType) {
   const approveLabel = sub ? resolveStepActionLabel(resolveSubmissionWorkflow(sub), sub.currentStep) : 'Phê Duyệt';
   const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối / Trả Về', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
   const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
-  const actionTextMap = { APPROVE: `${approveLabel.toLowerCase()} và chuyển bước`, REJECT: 'từ chối / trả về', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa tờ trình về nháp để người trình sửa lại toàn bộ nội dung + tệp rồi trình lại)' };
+  // escapeHtml(approveLabel) — approveLabel đọc từ actionLabel admin tự gõ (Nhãn Phê Duyệt, có thể chứa
+  // ký tự HTML) — bodyHTML bên dưới gán qua .innerHTML (showConfirmModal()), PHẢI escape trước khi chèn
+  // (title/confirmLabel dùng approveLabel gốc là AN TOÀN vì đi qua .innerText, không escape ở đó).
+  const actionTextMap = { APPROVE: `${escapeHtml(approveLabel.toLowerCase())} và chuyển bước`, REJECT: 'từ chối / trả về', REQUEST_CHANGES: 'yêu cầu bổ sung (đưa tờ trình về nháp để người trình sửa lại toàn bộ nội dung + tệp rồi trình lại)' };
   showConfirmModal({
     title: titleMap[actionType],
     bodyHTML: `<p>Bạn có chắc chắn muốn <b>${actionTextMap[actionType]}</b> tờ trình này?</p>${comment ? `<p class="mt-2 italic text-gray-600">Ý kiến chỉ đạo: "${escapeHtml(comment)}"</p>` : ''}`,

@@ -845,9 +845,11 @@ function approvePaymentRequestAction(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
   const approveLabel = resolveStepActionLabel(resolvePaymentApprovalWorkflow(pr), pr.currentStep);
+  // escapeHtml(approveLabel) trong bodyHTML — actionLabel admin tự gõ, bodyHTML gán qua .innerHTML
+  // (showConfirmModal()); title dùng approveLabel gốc là AN TOÀN vì đi qua .innerText.
   showConfirmModal({
     title: `${approveLabel} đề nghị thanh toán`,
-    bodyHTML: `${approveLabel} đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
+    bodyHTML: `${escapeHtml(approveLabel)} đề nghị thanh toán "<b>${escapeHtml(pr.title)}</b>"?`,
     confirmLabel: approveLabel,
     onConfirm: () => withApprovalAuth(async () => {
       let result;
