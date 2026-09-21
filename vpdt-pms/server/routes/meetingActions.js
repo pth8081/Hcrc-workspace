@@ -12,7 +12,8 @@ const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
-const { findMeetingConflict } = require('../lib/createValidation');
+const { findMeetingConflict, validateRequiredCustomData, scopeAllows } = require('../lib/createValidation');
+const { getAllAppData } = require('../lib/appData');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -120,6 +121,118 @@ router.post('/:id/:action', async (req, res) => {
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error(`POST /api/meetings/${id}/${action} lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
+// PUT /api/meetings/:id — Sửa lịch đã đặt + gửi phê duyệt lại, THAY vì Hủy + tạo mới (theo yêu cầu
+// người dùng: "cho phép người đăng ký và người quản lý phòng họp có thể sửa phòng họp và gửi phê duyệt
+// lại thay vì hủy và tạo đăng ký phòng họp lại"). Trước đây module này KHÔNG có route sửa nào cả — chỉ
+// approve/cancel — nên đây là toàn bộ luồng mới, không phải mở rộng route có sẵn.
+//
+// Ai được sửa: CHÍNH người tạo (creator) HOẶC người có quyền meetingCancel ("Người quản lý phòng họp",
+// xem chú thích đầu file)/admin — MIRROR đúng nhóm quyền của "Hủy" (canCancelMeeting() client), vì route
+// này thực chất thay thế đúng luồng Hủy+Tạo-lại thủ công mà 2 nhóm người này đang phải làm.
+//
+// Sửa được khi PENDING hoặc APPROVED — KHÔNG sửa được khi đã CANCELLED (không có ý nghĩa "sửa 1 lịch đã
+// huỷ"). Check trùng lịch (findMeetingConflict, loại trừ CHÍNH bản ghi đang sửa qua .filter(id!==itemId)
+// — cùng cách routes/meetingActions.js:approve đã làm, KHÔNG cần thêm tham số excludeId vào chính hàm
+// dùng chung) chạy 2 LẦN, khớp đúng yêu cầu "check trùng tại thời điểm tạo và thời điểm ấn gửi phê
+// duyệt": 1 lần NGAY TRƯỚC khi lấy khoá (early-fail rẻ, dữ liệu gần mới) và 1 lần NỮA BÊN TRONG khoá theo
+// phòng (dữ liệu MỚI NHẤT tại thời điểm ghi thật, chặn race y hệt nhánh "approve" ở trên — 2 người sửa/
+// duyệt cùng lúc trùng phòng vẫn bị chặn đúng). Nếu đang APPROVED, sửa xong tự quay về PENDING (gửi phê
+// duyệt lại đúng yêu cầu) — nếu đang PENDING thì giữ nguyên PENDING. Khoá CẢ phòng CŨ lẫn phòng MỚI (nếu
+// đổi phòng) — withAppLock() nhận mảng khoá, tự sort+dedupe nội bộ nên không lo deadlock giữa 2 request
+// đổi phòng ngược chiều nhau.
+router.put('/:id', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  const payload = req.body || {};
+
+  try {
+    const freshUser = req.freshUser;
+    const allMeetings = await getAllForCollection('meetings');
+    const existing = allMeetings.find((m) => m.id === itemId);
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy lịch họp' });
+
+    const canManage = !!(freshUser.perms?.admin || freshUser.perms?.meetingCancel);
+    if (existing.creator !== freshUser.username && !canManage) {
+      return res.status(403).json({ error: 'Bạn không có quyền sửa lịch họp này' });
+    }
+    if (existing.status === 'CANCELLED') {
+      return res.status(409).json({ error: 'Lịch đã bị huỷ, không thể sửa' });
+    }
+
+    // Đối chiếu ĐÚNG các luật như lúc TẠO (createValidation.js meetings.extraValidate) — dept đổi được
+    // (cùng field chọn tự do trong phạm vi meetingBookScope như form Đăng Ký) vẫn phải re-check scope,
+    // phòng phải có trong danh mục thật, giờ phải hợp lệ.
+    if (!scopeAllows(freshUser, freshUser.perms?.meetingBookScope, payload.dept)) {
+      return res.status(403).json({ error: 'Bạn không có quyền đặt lịch cho phòng ban này' });
+    }
+    const appData = await getAllAppData();
+    const validRoomNames = (appData.meetingRooms || []).map((r) => r.name);
+    if (!validRoomNames.includes(payload.room)) {
+      return res.status(400).json({ error: `Phòng họp "${payload.room}" không có trong danh mục — vui lòng chọn lại` });
+    }
+    const newStart = new Date(payload.startTime).getTime();
+    const newEnd = new Date(payload.endTime).getTime();
+    if (!Number.isFinite(newStart) || !Number.isFinite(newEnd)) {
+      return res.status(400).json({ error: 'Thời gian bắt đầu/kết thúc không hợp lệ' });
+    }
+    if (newStart >= newEnd) {
+      return res.status(400).json({ error: 'Thời gian kết thúc phải sau thời gian bắt đầu' });
+    }
+    try {
+      validateRequiredCustomData(payload.customData, appData.formTemplates, 'MEETING_ROOM');
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
+    }
+
+    const earlyConflict = findMeetingConflict(allMeetings.filter((m) => m.id !== itemId), payload.room, payload.startTime, payload.endTime);
+    if (earlyConflict) {
+      return res.status(409).json({ error: `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${earlyConflict.code})` });
+    }
+
+    const attendeesNum = Number(payload.attendees);
+    const normalizedAttendees = Number.isFinite(attendeesNum) && attendeesNum >= 1 ? Math.floor(attendeesNum) : 1;
+
+    const doAction = () => withLockedRecordForCollection('meetings', itemId, async (item) => {
+      if (item.status === 'CANCELLED') throw new HttpError(409, 'Lịch đã bị huỷ, không thể sửa');
+      if (item.creator !== freshUser.username && !canManage) {
+        throw new HttpError(403, 'Bạn không có quyền sửa lịch họp này');
+      }
+      const freshMeetings = await getAllForCollection('meetings');
+      const conflict = findMeetingConflict(freshMeetings.filter((m) => m.id !== itemId), payload.room, payload.startTime, payload.endTime);
+      if (conflict) {
+        throw new HttpError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
+      }
+      item.dept = payload.dept;
+      item.room = payload.room;
+      item.title = String(payload.title || '').trim();
+      item.attendees = normalizedAttendees;
+      item.startTime = payload.startTime;
+      item.endTime = payload.endTime;
+      item.equipment = String(payload.equipment || '').trim();
+      item.agenda = String(payload.agenda || '').trim();
+      item.customData = payload.customData;
+      // Đang PENDING (chưa ai duyệt) -> giữ nguyên PENDING. Đang APPROVED -> quay lại PENDING (gửi phê
+      // duyệt lại, đúng yêu cầu người dùng) — xoá luôn dấu vết duyệt cũ (đã không còn đúng nữa vì nội
+      // dung/giờ giấc đã đổi, khớp nguyên tắc "duyệt lại từ đầu" mirror reassignCarDispatch() (carRegs)).
+      if (item.status === 'APPROVED') {
+        item.status = 'PENDING';
+        item.approvedBy = null;
+        item.approvedByName = null;
+        item.approvedAt = null;
+      }
+      return item;
+    });
+
+    const lockKeys = [...new Set([existing.room, payload.room].filter(Boolean))].map((r) => `meeting_room:${r}`);
+    const resultItem = await withAppLock(lockKeys, doAction);
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error(`PUT /api/meetings/${req.params.id} lỗi:`, err.message);
     res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
   }
 });

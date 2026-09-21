@@ -2929,6 +2929,16 @@ function canCancelMeeting(user, meeting) {
   return !!(meeting && meeting.creator === user.username);
 }
 
+// canEditMeeting() — Sửa + Gửi Phê Duyệt Lại (thay cho Hủy + Tạo mới), theo yêu cầu người dùng.
+// MIRROR ĐÚNG canCancelMeeting() ở trên (cùng nhóm quyền: chính người tạo, hoặc "Người quản lý phòng
+// họp"/admin) — route này thực chất thay thế đúng luồng Hủy+Tạo-lại thủ công mà 2 nhóm người đó đang
+// phải làm. Nơi gọi TỰ kiểm tra thêm meeting.status !== 'CANCELLED' (không sửa được lịch đã huỷ) — không
+// gộp vào đây để hàm này giữ đúng nghĩa "có phải người được sửa hay không", tách bạch điều kiện trạng
+// thái, khớp cách canCancelMeeting() cũng để nơi gọi tự thêm `m.status !== 'CANCELLED'`.
+function canEditMeeting(user, meeting) {
+  return canCancelMeeting(user, meeting);
+}
+
 function canAccessMeetingModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -3956,6 +3966,23 @@ async function fetchCarBusySlots() {
 
 async function callMeetingAction(id, action) {
   const res = await fetch(`/api/meetings/${id}/${action}`, { method: 'POST' });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error('Phiên đăng nhập đã hết hạn');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+  return body; // { ok, item }
+}
+
+// PUT /api/meetings/:id — Sửa lịch đã đặt + gửi phê duyệt lại (routes/meetingActions.js) — dùng bởi
+// submitMeetingReq() (module-phonghop.js) khi editingMeetingId đang được set (đang ở chế độ Sửa).
+async function callMeetingUpdate(id, payload) {
+  const res = await fetch(`/api/meetings/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
   if (res.status === 401) {
     handleSessionExpired();
     throw new Error('Phiên đăng nhập đã hết hạn');

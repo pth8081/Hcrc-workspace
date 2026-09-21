@@ -486,7 +486,7 @@ function showCarScheduleSlotInfo(id) {
   // theo carView của mình) — không lộ chi tiết, chỉ báo đang bận (mirror handleMeetingSingleSlotClick()
   // ở module-phonghop.js với lịch phòng ban khác).
   if (!c) return alert('🚗 Lái xe đang bận (chuyến của đơn vị khác — bạn không có quyền xem chi tiết).');
-  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', IN_PROGRESS: 'Đang thực hiện', DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy chuyến', REJECTED: 'Từ chối' }[c.status] || c.status;
+  const statusLabel = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', IN_PROGRESS: 'LX Đã Xác Nhận Chuyến', DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy chuyến', REJECTED: 'Từ chối' }[c.status] || c.status;
   alert(`🚗 ${c.code}\nLái xe: ${c.assignedDriver || ''}\nBiển số: ${c.assignedPlate || '(chưa gán)'}\nĐiểm đến: ${c.destination || ''}\nThời gian: ${c.startTime} ➔ ${c.endTime}\nTrạng thái: ${statusLabel}`);
 }
 
@@ -816,7 +816,7 @@ function renderCarRegs() {
     { key: 'APPROVED', label: 'Đã Phê Duyệt', count: scopedCarRegs.filter(c => c.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
     // IN_PROGRESS — trạng thái TRUNG GIAN mới (mục 2, yêu cầu nghiệp vụ 9/2026): lái xe đã xác nhận
     // nhận chuyến nhưng chưa kết thúc, xem confirmCarDriverAssignment()/endCarTrip() ở lib/recordActions.js.
-    { key: 'IN_PROGRESS', label: '🚗 Đang Thực Hiện', count: scopedCarRegs.filter(c => c.status === 'IN_PROGRESS').length, colorClass: 'border-l-indigo-500' },
+    { key: 'IN_PROGRESS', label: '🚗 LX Đã Xác Nhận Chuyến', count: scopedCarRegs.filter(c => c.status === 'IN_PROGRESS').length, colorClass: 'border-l-indigo-500' },
     { key: 'REJECTED', label: 'Bị Từ Chối', count: scopedCarRegs.filter(c => c.status === 'REJECTED').length, colorClass: 'border-l-red-500' },
     // CANCELLED — trạng thái KẾT THÚC mới (Fix 4, đợt rà soát nghiệp vụ: "Hủy chuyến" sau khi đã duyệt,
     // xem canCancelCarReg()/cancelCarReg() ở lib/recordActions.js).
@@ -856,7 +856,7 @@ function renderCarRegs() {
 
     let statusBadge = '';
     if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
-    else if (c.status === 'IN_PROGRESS') statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">🚗 Đang thực hiện</span>`;
+    else if (c.status === 'IN_PROGRESS') statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">🚗 LX Đã Xác Nhận Chuyến</span>`;
     else if (c.status === 'AWAITING_EVALUATION') statusBadge = `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ đánh giá (${c.driverReportedKm ?? c.actualKm ?? 0} KM)</span>`;
     else if (c.status === 'COMPLETED') statusBadge = `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Hoàn thành (${c.actualKm ?? 0} KM)</span>`;
     else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;

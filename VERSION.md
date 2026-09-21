@@ -1,8 +1,85 @@
 # Phiên bản hiện tại
 
-**23.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.84 (2026-09-21): 3 yêu cầu người dùng — nhãn LX xác nhận chuyến, Sửa Phòng Họp, Áp Dụng Nhanh tự khớp phòng ban
+
+Theo 3 yêu cầu người dùng gửi cùng lúc (đã nghiên cứu + đưa phương án xác
+nhận trước khi code, theo đúng quy trình chuẩn ở `CLAUDE.md`):
+
+### 1) Đăng Ký Xe: đổi nhãn trạng thái "Đang thực hiện" → "LX Đã Xác Nhận Chuyến"
+
+Đổi đúng 4 điểm hiển thị nhãn IN_PROGRESS trong `module-dangkyxe.js`/
+`carSection.html` (thẻ Dashboard, option lọc, badge dòng bảng, alert xem
+lịch) — KHÔNG tìm-thay-tất-cả theo chuỗi vì `"Đang thực hiện"` còn dùng cho
+≥5 status enum khác không liên quan (Công Việc DOING, Vận Hành
+DANG_THUC_HIEN, HR Lifecycle `IN_PROGRESS` — cùng key nhưng khác collection
+hẳn). Cập nhật kèm đoạn mô tả liên quan trong Hướng Dẫn
+(`module-nghiepvu.js`) + test `test-car-dashboard-status-filter.js`.
+
+### 2) Đặt Phòng Họp: Sửa + Gửi Phê Duyệt Lại (thay vì Hủy + Tạo mới)
+
+Module này trước đây KHÔNG có tính năng Sửa nào cả (chỉ Duyệt/Hủy) — đây là
+route/luồng MỚI HOÀN TOÀN, không phải mở rộng cái có sẵn.
+
+- **Server** (`routes/meetingActions.js`): route mới `PUT /api/meetings/:id`.
+  Ai được sửa: chính người tạo (creator), hoặc người có quyền `meetingCancel`
+  ("Người Quản Lý Phòng Họp")/admin — mirror đúng nhóm quyền của "Hủy". Sửa
+  được khi PENDING hoặc APPROVED, KHÔNG sửa được khi đã CANCELLED. Check
+  trùng lịch (`findMeetingConflict`, loại trừ chính bản ghi đang sửa) chạy 2
+  lần — ngay trước khi lấy khoá (early-fail) và lại 1 lần bên trong khoá
+  theo phòng (dữ liệu mới nhất tại thời điểm ghi thật), đúng yêu cầu "check
+  trùng tại thời điểm tạo và thời điểm ấn gửi phê duyệt". Nếu đang APPROVED,
+  Lưu xong tự quay về PENDING (gửi phê duyệt lại) + xoá dấu vết duyệt cũ —
+  PENDING thì giữ nguyên PENDING. Khoá cả phòng cũ lẫn phòng mới nếu đổi
+  phòng (`withAppLock` nhận mảng khoá).
+- **Client** (`module-phonghop.js`): `editMeeting(id)` mở lại chính form
+  Đăng Ký, đổ sẵn dữ liệu cũ (kể cả trường bổ sung tuỳ chỉnh qua
+  `prefillDynamicFieldsData`), hiện banner "Đang sửa" + nút "✕ Hủy Sửa".
+  `submitMeetingReq()` khi đang ở chế độ Sửa gọi `callMeetingUpdate()` (PUT)
+  thay vì tạo mới; `findMeetingConflict()` phía client giờ truyền đúng
+  `excludeId`. Dòng bảng thêm tuỳ chọn "✏️ Sửa" trong dropdown "Khác ▾"
+  (gộp cùng "Hủy" thay vì nút Hủy hiện trực tiếp như trước, đồng bộ khuôn
+  các module khác).
+- Test mới: `test-meeting-edit-route.js` (10 kịch bản server — quyền,
+  APPROVED→PENDING, check trùng loại trừ chính nó, chặn sửa lịch đã huỷ,
+  đổi sang giờ/phòng bị chiếm) + `test-meeting-edit-ui.js` (7 kịch bản
+  client — mở Sửa/đổ dữ liệu/gọi đúng PUT/Hủy Sửa/ẩn-hiện nút theo quyền).
+
+### 3) Áp Dụng Nhanh: "Tự động khớp đúng phòng ban của từng mục" (chỉ Bước 1)
+
+Phát hiện lỗi thiết kế thật khi phân tích yêu cầu: "🧭 Gán theo Chức Danh" ở
+Áp Dụng Nhanh trước đây copy Y HỆT 1 danh sách cặp {Chức danh, Phòng ban}
+vào MỌI phòng ban/mức trong phạm vi module đã chọn — để trống Phòng ban thì
+khớp chức danh đó CẢ CÔNG TY (Trưởng Phòng A duyệt được cả hồ sơ Phòng B),
+điền cụ thể cũng bị copy chéo sang phòng ban khác nếu thêm nhiều cặp để cố
+phủ nhiều phòng ban cùng lúc — không có cách nào "1 lần bấm, mỗi phòng ban
+tự ra đúng Trưởng Phòng của mình".
+
+- `module-workflow.js`: thêm chế độ `POSITION_AUTO_DEPT` — CHỈ chọn được ở
+  Bước 1. Admin chọn chức danh THUẦN (không ghép phòng ban); lúc bấm "⚡ Áp
+  Dụng", `collectQuickApplyUnconfiguredTargets()` tự thay dept rỗng của mỗi
+  pair bằng dept THẬT của TỪNG target trước khi ghi, rồi hạ approverMode về
+  `POSITION` bình thường — `lib/positionApprovers.js` (resolver dùng chung
+  client/server) hoàn toàn KHÔNG cần sửa gì, vì sau bước thay thế này dữ
+  liệu ghi xuống chỉ là 1 cấu hình POSITION thủ công bình thường.
+- Test mới: `test-quick-apply-auto-dept-position.js` (15 kịch bản — checkbox
+  chỉ hiện ở Bước 1, lưu đúng approverMode, Áp Dụng ra đúng dept của từng
+  phòng ban, và **chứng minh hết lỗi lộ chéo bằng chính `resolvePositionApprovers()`
+  dùng chung** — cấu hình Phòng A chỉ resolve ra Trưởng Phòng A, không có
+  Trưởng Phòng B).
+
+### Test + Regression
+
+Full regression 273 file: 256 pass, 16 fail (đúng 16 lỗi đã biết từ trước,
+không liên quan đợt này — không có test cũ nào bị ảnh hưởng bởi 3 thay đổi
+trên, xác nhận riêng các bộ test Đăng Ký Xe/Phòng Họp/Áp Dụng Nhanh/Nghiệp
+Vụ hiện có vẫn xanh 100%).
+
+**Deploy-impact: không có thay đổi schema/biến môi trường/dependency mới**
+— chỉ copy code + `pm2 restart`.
 
 ## v23.83 (2026-09-21): Vá 2 lỗi Đăng Ký Xe — đổi tài xế không chọn được + Dashboard không lọc
 

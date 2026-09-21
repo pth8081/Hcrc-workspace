@@ -60,7 +60,7 @@ async function main() {
     const scenarios = [
       { key: 'CANCELLED', code: CAR_CANCELLED.code, label: 'Đã Hủy Chuyến' },
       { key: 'AWAITING_EVALUATION', code: CAR_AWAITING_EVAL.code, label: 'Chờ Đánh Giá' },
-      { key: 'IN_PROGRESS', code: CAR_IN_PROGRESS.code, label: 'Đang Thực Hiện' },
+      { key: 'IN_PROGRESS', code: CAR_IN_PROGRESS.code, label: 'LX Đã Xác Nhận Chuyến' },
       { key: 'COMPLETED', code: CAR_COMPLETED.code, label: 'Hoàn Thành' }
     ];
 

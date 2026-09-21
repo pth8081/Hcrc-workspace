@@ -12,6 +12,12 @@
 let meetingBusySlots = [];
 let meetingBusySlotsPromise = null; // lượt nạp ĐANG CHẠY (nếu có) — xem refreshMeetingBusySlots()
 
+// editingMeetingId — id lịch họp ĐANG SỬA (null = form đang ở chế độ Tạo Mới bình thường). Cùng khuôn
+// editingQuickApplyConfigId (module-workflow.js)/editingWfCode: mở lại CHÍNH form Đăng Ký (không tạo
+// form riêng), đổ sẵn dữ liệu cũ, đổi hành vi submitMeetingReq() sang gọi callMeetingUpdate() thay vì
+// callCreateAction() — xem editMeeting()/cancelEditMeeting() bên dưới.
+let editingMeetingId = null;
+
 // Nạp lại meetingBusySlots rồi vẽ lại lưới (nếu đang mở). Gọi khi mở tab "Lịch Họp" và ngay trước khi
 // gửi đăng ký (kiểm tra trùng giờ). Lỗi mạng -> giữ nguyên dữ liệu cũ, lưới vẫn vẽ được (fallback về
 // đúng những lịch mình xem được, tức hành vi CŨ — không làm hỏng màn hình).
@@ -705,6 +711,7 @@ function finalizeMeetingSlotSelection(roomIdx, rowA, rowB) {
 
 async function submitMeetingReq(e) {
   e.preventDefault();
+  const isEditing = editingMeetingId !== null;
   const code = document.getElementById('meetingCode').value.trim();
   const dept = document.getElementById('meetingDept').value;
   const room = document.getElementById('meetingRoom').value;
@@ -715,7 +722,9 @@ async function submitMeetingReq(e) {
   const equipment = document.getElementById('meetingEquipment').value.trim();
   const agenda = document.getElementById('meetingAgenda').value.trim();
 
-  if (DB.meetings.some(m => m.code === code)) {
+  // Trùng mã chỉ cần kiểm khi TẠO MỚI — đang Sửa thì đây chính là mã của bản ghi đang sửa, dĩ nhiên
+  // "trùng" với chính nó.
+  if (!isEditing && DB.meetings.some(m => m.code === code)) {
     return alert('Mã phiếu đặt phòng họp đã tồn tại!');
   }
 
@@ -725,9 +734,10 @@ async function submitMeetingReq(e) {
 
   // Nạp lại phòng bận TOÀN CÔNG TY ngay trước khi kiểm tra trùng giờ — trước đây chỉ so với DB.meetings
   // (đã lọc theo phạm vi xem) nên người dùng thường luôn "không thấy trùng" với lịch phòng ban khác và
-  // chỉ biết khi server trả 409 (LỖI ĐÃ VÁ 10/2026, xem getMeetingOccupancyList()).
+  // chỉ biết khi server trả 409 (LỖI ĐÃ VÁ 10/2026, xem getMeetingOccupancyList()). Đang Sửa thì loại
+  // trừ CHÍNH bản ghi đang sửa (excludeId) — không tự báo trùng với chính nó.
   await refreshMeetingBusySlots(false);
-  const conflict = findMeetingConflict(room, startTime, endTime, null);
+  const conflict = findMeetingConflict(room, startTime, endTime, isEditing ? editingMeetingId : null);
   if (conflict) {
     const conflictStatusLabel = conflict.status === 'APPROVED' ? 'Đã duyệt' : 'Đang chờ duyệt';
     // conflict.code/title chỉ có với lịch trong phạm vi xem của mình — lịch đơn vị khác chỉ nêu khung giờ.
@@ -740,6 +750,36 @@ async function submitMeetingReq(e) {
     customData = await collectDynamicFieldsData('MEETING_ROOM');
   } catch (err) {
     return alert(`⛔ ${err.message}`);
+  }
+
+  if (isEditing) {
+    const updatePayload = { dept, room, title, attendees, startTime, endTime, equipment, agenda, customData };
+    let updated;
+    try {
+      const result = await callMeetingUpdate(editingMeetingId, updatePayload);
+      updated = result.item;
+    } catch (err) {
+      return alert(`⛔ ${err.message}`);
+    }
+    const idx = DB.meetings.findIndex(m => m.id === editingMeetingId);
+    if (idx !== -1) DB.meetings[idx] = updated;
+    logSystemAction('MEETING', 'EDIT_MEETING', `Sửa lịch phòng họp [${updated.code} - ${room}]${updated.status === 'PENDING' ? ' — gửi phê duyệt lại' : ''}`, 'SUCCESS', updated.code);
+
+    // Vừa sửa xong quay về PENDING (kể cả đã từng APPROVED) -> cần báo lại người duyệt, đúng ý "gửi phê
+    // duyệt lại" — mirror thông báo lúc tạo mới.
+    if (updated.status === 'PENDING') {
+      const meetingApprovers = getMeetingApproverUsernames();
+      if (meetingApprovers.length) {
+        notifyUsersByEmail('MEETING', 'NOTIFY_APPROVAL_NEEDED', updated.code, meetingApprovers,
+          `[VPDT] Lịch phòng họp ${updated.code} cần bạn phê duyệt lại`,
+          `Lịch đặt phòng "${room}" (${updated.code}) do ${currentUser.name} vừa sửa lại đang chờ bạn phê duyệt.`);
+      }
+    }
+
+    alert(updated.status === 'PENDING' ? '✅ Đã lưu thay đổi và gửi phê duyệt lại!' : '✅ Đã lưu thay đổi!');
+    resetMeetingReqForm();
+    renderMeetings();
+    return;
   }
 
   const meetingPayload = {
@@ -780,6 +820,45 @@ async function submitMeetingReq(e) {
   renderMeetings();
 }
 
+// editMeeting() — mở lại CHÍNH form Đăng Ký (không tạo form riêng), đổ sẵn dữ liệu cũ, chuyển sang chế
+// độ Sửa (editingMeetingId != null -> submitMeetingReq() gọi callMeetingUpdate() thay vì
+// callCreateAction() khi Lưu). Kiểm tra quyền phía client CHỈ để ẩn/hiện nút (UX) — server luôn tự kiểm
+// tra lại đúng luật này (canEditMeeting() mirror) ở PUT /api/meetings/:id.
+function editMeeting(id) {
+  const m = DB.meetings.find(x => x.id === id);
+  if (!m) return;
+  if (!canEditMeeting(currentUser, m) || m.status === 'CANCELLED') {
+    return alert('⛔ Bạn không có quyền sửa lịch họp này.');
+  }
+  editingMeetingId = id;
+  setMeetingSubTab('REGISTER');
+
+  document.getElementById('meetingCode').value = m.code;
+  document.getElementById('meetingDept').value = m.dept;
+  document.getElementById('meetingRoom').value = m.room;
+  document.getElementById('meetingTitle').value = m.title || '';
+  document.getElementById('meetingAttendees').value = m.attendees || 1;
+  document.getElementById('meetingStartTime').value = m.startTime;
+  document.getElementById('meetingEndTime').value = m.endTime;
+  document.getElementById('meetingEquipment').value = m.equipment || '';
+  document.getElementById('meetingAgenda').value = m.agenda || '';
+  prefillDynamicFieldsData('dynamicFieldsContainer_MEETING_ROOM', m.customData);
+
+  document.getElementById('meetingEditingBanner')?.classList.remove('hidden');
+  const codeEl = document.getElementById('meetingEditingCode');
+  if (codeEl) codeEl.textContent = m.code;
+  const submitBtn = document.getElementById('meetingSubmitBtn');
+  if (submitBtn) submitBtn.textContent = m.status === 'APPROVED' ? '💾 Lưu & Gửi Phê Duyệt Lại' : '💾 Lưu Thay Đổi';
+
+  document.querySelector('#meetingRegisterTabContent form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// cancelEditMeeting() — nút "✕ Hủy Sửa" trên banner — thoát chế độ Sửa, KHÔNG lưu gì, form về lại trạng
+// thái Tạo Mới trống (cùng resetMeetingReqForm() đang dùng cho nút "↺ Làm Mới").
+function cancelEditMeeting() {
+  resetMeetingReqForm();
+}
+
 // resetMeetingReqForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1="resetMeetingReqForm",
 // xem core.js) VÀ luồng gửi đăng ký thành công ở trên (trước đây 2 dòng reset viết thẳng tại chỗ gọi,
 // factor ra đây tránh 2 nơi lệch nhau). form.reset() gốc không tự sinh lại mã — phải gọi
@@ -788,6 +867,12 @@ function resetMeetingReqForm() {
   const formEl = document.getElementById('meetingForm');
   if (formEl) formEl.reset();
   document.getElementById('meetingCode').value = generateMeetingCode();
+  // Luôn thoát chế độ Sửa (nếu đang có) khi form bị reset — "↺ Làm Mới"/"✕ Hủy Sửa" đều dùng chung hàm
+  // này, tránh trạng thái dở dang (form trống nhưng vẫn gọi callMeetingUpdate() cho id cũ).
+  editingMeetingId = null;
+  document.getElementById('meetingEditingBanner')?.classList.add('hidden');
+  const submitBtn = document.getElementById('meetingSubmitBtn');
+  if (submitBtn) submitBtn.textContent = 'Gửi phê duyệt';
 }
 
 function onMeetingFilterChange() {
@@ -864,14 +949,14 @@ function renderMeetings() {
           ${(() => {
             const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
             const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
-            if (canApprove) {
-              const primaryBtnHTML = `<button data-op="approveMeeting" data-arg0="${m.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`;
-              return buildActionCell(m.id, primaryBtnHTML, canCancel ? [{ value: 'cancel', label: 'Hủy' }] : [], 'runMeetingAction');
-            }
-            if (canCancel) {
-              return `<button data-op="runMeetingAction" data-arg0="${m.id}" data-arg1="cancel" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 font-bold">Hủy</button>`;
-            }
-            return '';
+            const canEdit = canEditMeeting(currentUser, m) && m.status !== 'CANCELLED';
+            const secondaryOptions = [];
+            if (canEdit) secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
+            if (canCancel) secondaryOptions.push({ value: 'cancel', label: 'Hủy' });
+            const primaryBtnHTML = canApprove
+              ? `<button data-op="approveMeeting" data-arg0="${m.id}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700 font-bold">Duyệt</button>`
+              : '';
+            return buildActionCell(m.id, primaryBtnHTML, secondaryOptions, 'runMeetingAction');
           })()}
         </td>
       </tr>
@@ -884,6 +969,7 @@ function runMeetingAction(id, action) {
   switch (action) {
     case 'approve': approveMeeting(id); break;
     case 'cancel': cancelMeeting(id); break;
+    case 'edit': editMeeting(id); break;
   }
 }
 
