@@ -3844,7 +3844,17 @@ async function initDatabase(loggingInUser, opts) {
   } catch (e) {
     console.error('Lỗi khi tải dữ liệu từ máy chủ (API /api/data):', e);
     if (silent) throw e; // gọi ngầm phía sau -> để nơi gọi tự xử lý (giữ dữ liệu cũ, thử lại sau), không alert
-    alert('⛔ Lỗi kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại, hoặc liên hệ Quản trị viên nếu vẫn không được.\n\nChi tiết lỗi: ' + e.message);
+    // Chỉ hiện MÃ LỖI thật khi server thực sự trả về HTTP lỗi (throw new Error('HTTP '+res.status) ở
+    // trên) — mọi trường hợp khác (mất mạng, timeout, hoặc lỗi JS bất ngờ khi xử lý dữ liệu) đều là lỗi
+    // kỹ thuật khó hiểu với người dùng thường nếu hiện nguyên văn e.message (VD "Cannot read properties
+    // of null..."), nên gộp chung về 1 thông báo ngắn gọn — chi tiết đầy đủ vẫn đã ghi ra console.error()
+    // ở trên cho việc debug.
+    const httpErrorMatch = /^HTTP (\d+)$/.exec(e.message || '');
+    if (httpErrorMatch) {
+      alert('⛔ Lỗi máy chủ (mã lỗi HTTP ' + httpErrorMatch[1] + '). Vui lòng thử lại hoặc liên hệ Quản trị viên.');
+    } else {
+      alert('⛔ Mất kết nối tới máy chủ. Vui lòng tải lại trang và thử lại, hoặc liên hệ Quản trị viên nếu vẫn không được.');
+    }
   }
 }
 

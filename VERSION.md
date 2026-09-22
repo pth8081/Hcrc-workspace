@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**23.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.92 (2026-09-22): Thông báo lỗi tải dữ liệu sau đăng nhập — ngắn gọn hơn, chỉ hiện mã lỗi khi thật sự là lỗi server
+
+Theo phản hồi người dùng (ảnh chụp màn hình thực tế trên điện thoại): thông
+báo `initDatabase()` (core.js, tải `/api/data` lúc đăng nhập/làm mới dữ
+liệu) khi gặp lỗi TRƯỚC ĐÂY luôn hiện 1 câu chung "Lỗi kết nối đến máy chủ"
+rồi dán thêm nguyên văn `e.message` kỹ thuật (VD "Cannot read properties of
+null (reading 'classList')") — gây hoang mang vì nhìn giống báo lỗi hệ
+thống dù bản chất chỉ là mất kết nối/lỗi JS bất ngờ, không phải lỗi server
+thật.
+
+- Tách 2 nhánh trong catch của `initDatabase()`:
+  - Server THẬT SỰ trả về mã lỗi HTTP (nhánh `if (!res.ok) throw new
+    Error('HTTP ' + res.status)`) → vẫn hiện đúng mã lỗi: "⛔ Lỗi máy chủ
+    (mã lỗi HTTP 500). Vui lòng thử lại hoặc liên hệ Quản trị viên."
+  - MỌI trường hợp còn lại (mất mạng, timeout, hay lỗi JS bất ngờ khi xử lý
+    dữ liệu) → gộp về 1 câu ngắn gọn, không còn dòng "Chi tiết lỗi:..." kỹ
+    thuật: "⛔ Mất kết nối tới máy chủ. Vui lòng tải lại trang và thử lại,
+    hoặc liên hệ Quản trị viên nếu vẫn không được." Chi tiết đầy đủ vẫn được
+    ghi vào `console.error()` (đã có sẵn từ trước) để tra cứu qua DevTools
+    khi cần debug.
+- Không đổi hành vi rẽ nhánh 401 (`handleSessionExpired()`) đã có từ trước —
+  chỉ đổi 2 nhánh còn lại trong catch chung.
+- Test: chạy lại `test-bugfix-batch-nav-ui.js` (15/15 pass, bao gồm 2 kịch
+  bản đã xác nhận từ trước cho nhánh 401) + full regression 281 file: chỉ 1
+  lỗi cũ đã biết trước (thiếu file PDF fixture, không liên quan).
+- Không đổi schema SQL/biến môi trường/dependency — chỉ đổi 1 đoạn JS hiển
+  thị thông báo, không đổi logic tải/ghi dữ liệu nào.
 
 ## v23.91 (2026-09-22): Ma Trận Phân Quyền — đổi tên cột Excel sang tiếng Việt
 
