@@ -34,7 +34,7 @@ const OUT_DIR = process.env.CHECKLIST_DEMO_OUT_DIR || path.join(__dirname, '..',
 // nhánh admin-only đó.
 const DEMO_USER = {
   username: 'demo_qltc', name: 'Trần Thị Quản Lý Checklist', dept: 'Siêu thị A', posType: 'STORE',
-  perms: { checklistTemplateManage: true, checklistReportView: true, checklistAuditScope: { all: true, depts: [] } },
+  perms: { checklistTemplateManage: true, checklistReportView: true, checklistAuditScope: { all: true, depts: [] }, checklistStoreSelfExecute: true },
   active: true
 };
 

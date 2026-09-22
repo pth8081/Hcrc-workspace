@@ -257,6 +257,7 @@ function collectPermsFromForm() {
     // module-admin.js.
     checklistTemplateManage: document.getElementById('pChecklistTemplateManage').checked,
     checklistReportView: document.getElementById('pChecklistReportView').checked,
+    checklistStoreSelfExecute: document.getElementById('pChecklistStoreSelfExecute').checked,
     checklistAuditScope: scopeFromMultiSelectDropdown('pChecklistAuditScopeAll', 'pChecklistAuditScopeDeptContainer'),
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
@@ -363,6 +364,7 @@ function populatePermsForm(permsInput) {
   setOperationOrderReceiptScopeCheckboxes(receiptStore?.depts);
   document.getElementById('pChecklistTemplateManage').checked = !!perms.checklistTemplateManage;
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
+  document.getElementById('pChecklistStoreSelfExecute').checked = !!perms.checklistStoreSelfExecute;
   document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;
   setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;

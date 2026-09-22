@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**23.102** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.103** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.103 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "✅ Đánh Giá Checklist (Tự Đánh Giá)"
+
+Theo yêu cầu người dùng: "quyền Đánh giá checklist để tôi gán cho ai thì người
+đó vào được đánh giá và chỉ sử dụng được checklist câu hỏi, loại trừ ai không
+có quyền thì không vào được tab checklist, không cần phân theo từng checklist".
+Thêm quyền phẳng mới `checklistStoreSelfExecute` gác hẳn việc LÀM checklist
+"Tự Đánh Giá" (STORE_SELF, dạng câu hỏi) — TRƯỚC ĐÂY tự động cho phép MỌI tài
+khoản ở Vị Trí Siêu Thị (`posType==='STORE'`), giờ admin PHẢI tự cấp cho
+từng người.
+
+- **`server/lib/checklist.js`**: `isEligibleForStoreSelf(user)` thêm điều
+  kiện `user.perms?.checklistStoreSelfExecute` (bên cạnh `posType==='STORE'`
+  + có `dept` như cũ) — điểm chặn THẬT, `canAccessChecklistModule()` và
+  `resolveStoreCodeForSubmission()` đều tự động ăn theo logic mới không cần
+  sửa thêm. Thông báo lỗi ở `resolveStoreCodeForSubmission()` được tách rõ
+  2 trường hợp: chưa gắn Vị Trí Siêu Thị (400) vs có Vị Trí nhưng chưa được
+  cấp quyền (403, thông báo mới "liên hệ admin để được cấp quyền").
+- **`server/public/js/core.js`**: default perms thêm
+  `checklistStoreSelfExecute: false`; `canAccessChecklistModule()` (gác nút
+  sidebar) mirror đúng điều kiện mới.
+- **`server/public/js/module-checklist.js`**: `isEligibleForStoreSelfClient()`
+  mirror đúng (gác sub-tab "Thực Hiện" trong module).
+- **`server/public/fragments/systemSection.html`** + **`module-admin-permtree.js`**
+  + **`module-admin-permgroups.js`**: checkbox mới "✅ Đánh Giá Checklist (Tự
+  Đánh Giá — chỉ dạng câu hỏi, đúng siêu thị đang gán)" ở khối cây phân quyền
+  23 "Checklist Đánh Giá Siêu Thị".
+- **Test mới**: `server/tests/test-checklist.js` thêm 2 kịch bản (có Vị Trí
+  Siêu Thị hợp lệ nhưng chưa được cấp quyền -> 403; `canAccessChecklistModule()`
+  ẩn hẳn tab khi thiếu quyền) + sửa 3 fixture user (`STORE_A_EMP`/`STORE_B_EMP`
+  thêm quyền, `STORE_A_EMP_NO_PERM` mới cho kịch bản âm) +
+  `demo-checklist-full-module.js`. Demo mới:
+  `server/tests/demo-checklist-storeself-execute-perm.js`. Toàn bộ 23 file
+  test Checklist/Phân Quyền chạy lại sạch.
+- **Deploy-impact quan trọng**: quyền mới mặc định `false` cho MỌI tài khoản
+  hiện có (an toàn — không đổi hành vi bất ngờ) — nhưng nghĩa là **sau khi
+  deploy, toàn bộ nhân viên siêu thị đang tự đánh giá hàng ngày sẽ MẤT quyền
+  vào tab Checklist cho tới khi admin cấp lại quyền này** (từng người ở màn
+  Phân Quyền, hoặc gán hàng loạt qua Nhóm Phân Quyền). Không có thay đổi
+  `schema.sql`/biến môi trường mới — chỉ cần copy code + `pm2 restart`, VÀ
+  admin chủ động cấp quyền cho đúng người trước khi nhân viên cần dùng lại.
 
 ## v23.102 (2026-09-22): Checklist Đánh Giá Siêu Thị — thu hồi quyền "🔒 Khoá đúng siêu thị được gán" (v23.101), giữ nguyên logic chọn/ALL cũ
 

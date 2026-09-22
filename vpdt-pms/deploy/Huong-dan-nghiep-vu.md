@@ -2805,11 +2805,24 @@ phòng ban để giữ nguyên. Báo cáo VSATTP chi tiết (cây hạng mục/�
 CHỈ có ở tab Báo Cáo nội bộ (`checklistReportView` thật) — bản tóm tắt ở màn
 Báo Cáo tổng hợp không lặp lại phần này.
 
-**3 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
+**4 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
 - `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist
   (tab Cấu Hình).
 - `checklistReportView` — xem tab Báo Cáo (thống kê + xuất Excel) của module
   này.
+- **`checklistStoreSelfExecute`** (9/2026, theo yêu cầu người dùng) — gác việc
+  **LÀM** checklist "Tự Đánh Giá" (STORE_SELF, dạng câu hỏi). TRƯỚC ĐÂY tự
+  động cho phép MỌI tài khoản đang ở Vị Trí Siêu Thị (posType='STORE'); từ
+  giờ admin PHẢI tự tick quyền này cho từng người (VD chỉ GĐST/CHT, không
+  phải mọi nhân viên tại siêu thị) — ai KHÔNG có quyền thì nút "✅ Checklist"
+  biến mất hẳn khỏi sidebar, không vào được tab module này (nếu không có
+  quyền checklist nào khác). Vẫn cần posType='STORE' + có Vị Trí Siêu Thị
+  hợp lệ mới đủ điều kiện (quyền này là điều kiện THÊM VÀO, không thay thế
+  yêu cầu về Vị Trí) — storeCode vẫn LUÔN suy từ `user.dept`, không đổi.
+  **Deploy-impact quan trọng**: quyền mới mặc định `false` cho MỌI tài khoản
+  hiện có — sau khi deploy, toàn bộ nhân viên siêu thị đang tự đánh giá hàng
+  ngày sẽ MẤT quyền vào tab cho tới khi admin cấp lại quyền này (từng người
+  hoặc qua Nhóm Phân Quyền).
 - `checklistAuditScope` — phạm vi **siêu thị được phân công kiểm soát**
   (dạng `{all, depts}` — field tên là `depts` dù chứa danh sách SIÊU THỊ,
   không phải phòng ban, để tái dùng cơ chế merge phẳng theo nhóm quyền có sẵn

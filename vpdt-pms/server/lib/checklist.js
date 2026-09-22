@@ -79,11 +79,14 @@ function canAuditStore(user, storeCode) {
   if (scope.all) return true;
   return (scope.depts || []).includes(storeCode);
 }
-// STORE_SELF — bất kỳ ai đang ở vị trí Siêu Thị (posType='STORE', xem v16.7) đều tự đánh giá được đúng
-// siêu thị hiện tại của mình, không cần cờ quyền riêng (khớp đúng tinh thần tài liệu gốc: "tự động cho
-// phép nếu vị trí có gắn siêu thị").
+// checklistStoreSelfExecute (9/2026, yêu cầu người dùng): quyền PHẲNG mới — gác hẳn việc LÀM checklist
+// "Tự Đánh Giá" (STORE_SELF, dạng câu hỏi) đằng sau 1 cờ quyền tường minh do admin tự gán, THAY vì tự
+// động cho phép mọi tài khoản đang ở Vị Trí Siêu Thị (posType='STORE') như trước — admin giờ tự chọn
+// đúng người (VD chỉ GĐST/CHT, không phải mọi nhân viên tại siêu thị) được vào tab này. Vẫn giữ điều
+// kiện posType==='STORE' + có dept (để biết ĐÚNG siêu thị nào — không đổi cách suy ra storeCode, xem
+// resolveStoreCodeForSubmission()) — cờ quyền mới là ĐIỀU KIỆN THÊM VÀO, không thay thế điều kiện cũ.
 function isEligibleForStoreSelf(user) {
-  return !!(user && user.posType === 'STORE' && user.dept);
+  return !!(user && user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
 }
 function canAccessChecklistModule(user) {
   if (!user) return false;
@@ -291,6 +294,11 @@ function resolveStoreCodeForSubmission(template, user, requestedStoreCode, valid
       throw new HttpError(400, 'Vui lòng chọn siêu thị để test (tài khoản admin không gắn Vị Trí Siêu Thị cụ thể)');
     }
     if (!isEligibleForStoreSelf(user)) {
+      // Phân biệt rõ 2 lý do khác nhau (checklistStoreSelfExecute mới thêm 9/2026) — tránh thông báo sai
+      // "chưa gắn siêu thị" cho người ĐÃ có Vị Trí Siêu Thị nhưng đơn giản là chưa được admin cấp quyền.
+      if (user?.posType === 'STORE' && user?.dept) {
+        throw new HttpError(403, 'Bạn chưa được cấp quyền "Đánh Giá Checklist" — liên hệ admin để được cấp quyền tự đánh giá checklist siêu thị.');
+      }
       throw new HttpError(400, 'Vị trí hiện tại của bạn không gắn với siêu thị nào — liên hệ HR để kiểm tra Cơ Cấu Tổ Chức (Vị Trí Làm Việc)');
     }
     // user.dept của người dùng THẬT (không phải admin test) luôn tin được — không đối chiếu lại danh mục

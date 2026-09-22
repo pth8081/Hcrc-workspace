@@ -3246,6 +3246,10 @@ function defaultNewUserPerms() {
     // soát cho loại CONTROL_AUDIT — dùng TÊN 'depts' dù chứa mã siêu thị, để mergeGroupsBasePerms() tự
     // union đúng theo cơ chế field-name 'depts' đã có sẵn, xem mergeGroupsBasePerms() bên dưới).
     checklistTemplateManage: false, checklistReportView: false, checklistAuditScope: emptyScope(),
+    // checklistStoreSelfExecute (9/2026, yêu cầu người dùng): gác việc LÀM checklist "Tự Đánh Giá"
+    // (STORE_SELF, dạng câu hỏi) — admin phải tự cấp cho từng người (VD chỉ GĐST/CHT), không còn tự động
+    // cho MỌI người ở Vị Trí Siêu Thị như trước — xem isEligibleForStoreSelf() ở lib/checklist.js.
+    checklistStoreSelfExecute: false,
     // Mua Hàng > BAS (module TOP-LEVEL mới, v23.30, xem lib/vendorRebate.js) — phân quyền PHẲNG, TÁCH
     // BIỆT NHIỆM VỤ rõ ràng (mục 8 tài liệu): người tạo/sửa Điều Khoản (rebateTermManage) KHÔNG tự động
     // kích hoạt được (rebateTermActivate riêng) — liên quan trực tiếp số tiền chiết khấu lớn với NCC.
@@ -7611,7 +7615,7 @@ function canAccessChecklistModule(user) {
   if (!hasModuleAccess(user, 'checklist')) return false;
   if (canManageChecklistTemplatesClient(user) || canViewChecklistReportsClient(user)) return true;
   if (hasChecklistAuditScopeClient(user)) return true;
-  return !!(user.posType === 'STORE' && user.dept);
+  return !!(user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
 }
 // Mua Hàng > BAS (v23.30) — mirror ĐÚNG lib/vendorRebate.js phía server (canManageVendors/
 // canManageTerms/canActivateTerm/canViewReport/canReconcile/canApprove) — sửa 1 bên PHẢI sửa cả 2 bên.

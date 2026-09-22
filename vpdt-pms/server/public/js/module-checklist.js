@@ -67,7 +67,7 @@ function updateChecklistSubTabVisibility() {
   }
 }
 function isEligibleForStoreSelfClient(user) {
-  return !!(user && user.posType === 'STORE' && user.dept);
+  return !!(user && user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
 }
 
 // ===================== Sub-tab: Cấu Hình (checklistTemplateManage) =====================

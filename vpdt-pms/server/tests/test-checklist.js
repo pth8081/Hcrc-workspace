@@ -30,9 +30,12 @@ const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám 
 const MANAGER = { username: 'qltc1', name: 'Quản Lý Checklist', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistTemplateManage: true }, active: true };
 const REPORTER = { username: 'bc1', name: 'Người Xem Báo Cáo', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistReportView: true }, active: true };
 const AUDITOR = { username: 'ks1', name: 'Kiểm Soát Viên', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistAuditScope: { all: false, depts: ['Siêu thị A'] } }, active: true };
-const STORE_A_EMP = { username: 'nva', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu thị A', posType: 'STORE', perms: {}, active: true };
-const STORE_B_EMP = { username: 'nvb', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu thị B', posType: 'STORE', perms: {}, active: true };
-let USERS = [ADMIN, MANAGER, REPORTER, AUDITOR, STORE_A_EMP, STORE_B_EMP];
+const STORE_A_EMP = { username: 'nva', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu thị A', posType: 'STORE', perms: { checklistStoreSelfExecute: true }, active: true };
+const STORE_B_EMP = { username: 'nvb', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu thị B', posType: 'STORE', perms: { checklistStoreSelfExecute: true }, active: true };
+// STORE_A_EMP_NO_PERM: cùng Vị Trí Siêu Thị hợp lệ như STORE_A_EMP nhưng KHÔNG có checklistStoreSelfExecute
+// — dùng riêng cho test "có Vị Trí Siêu Thị nhưng chưa được admin cấp quyền vẫn phải bị chặn" (9/2026).
+const STORE_A_EMP_NO_PERM = { username: 'nva_noperm', name: 'Nhân Viên Siêu Thị A (chưa cấp quyền)', dept: 'Siêu thị A', posType: 'STORE', perms: {}, active: true };
+let USERS = [ADMIN, MANAGER, REPORTER, AUDITOR, STORE_A_EMP, STORE_B_EMP, STORE_A_EMP_NO_PERM];
 
 let RECORDS;
 function resetRecords() {
@@ -334,6 +337,21 @@ async function main() {
       const t = seedTemplate(); t.status = 'ACTIVE';
       const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, MANAGER);
       assertEqual(res.status, 400, 'posType không phải STORE thì không tự đánh giá được');
+    });
+
+    // checklistStoreSelfExecute (9/2026, yêu cầu người dùng): quyền mới gác việc LÀM checklist Tự Đánh
+    // Giá — người ở Vị Trí Siêu Thị nhưng CHƯA được admin cấp quyền này vẫn phải bị chặn dù posType/dept
+    // đều hợp lệ (khác nhánh test ở trên — nhánh đó test thiếu posType, nhánh này test thiếu QUYỀN).
+    await run.run('STORE_SELF: có Vị Trí Siêu Thị hợp lệ nhưng CHƯA được cấp quyền checklistStoreSelfExecute -> vẫn bị chặn 403', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP_NO_PERM);
+      assertEqual(res.status, 403, 'Chưa được cấp quyền Đánh Giá Checklist thì dù có Vị Trí Siêu Thị vẫn không tự đánh giá được');
+    });
+
+    await run.run('canAccessChecklistModule(): người ở Vị Trí Siêu Thị nhưng chưa được cấp checklistStoreSelfExecute + không có quyền checklist nào khác -> KHÔNG thấy tab module', () => {
+      assertEqual(checklist.canAccessChecklistModule(STORE_A_EMP_NO_PERM), false, 'Chưa được cấp quyền nào ở module Checklist thì tab phải bị ẩn hẳn');
+      assertEqual(checklist.canAccessChecklistModule(STORE_A_EMP), true, 'Đối chứng: có checklistStoreSelfExecute thì vẫn thấy tab như cũ');
     });
 
     await run.run('STORE_SELF: admin không gắn Vị Trí Siêu Thị vẫn test được nếu tự chọn siêu thị (storeCode do admin gửi lên được tin, khác hẳn user thường)', async () => {
