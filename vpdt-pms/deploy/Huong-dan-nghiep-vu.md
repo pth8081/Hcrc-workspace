@@ -3055,6 +3055,21 @@ Nháp này), chỉnh sửa nếu cần rồi bấm **"Kích Hoạt"** khi sẵn 
 Việc dựng sẵn này chạy ĐÚNG 1 LẦN (idempotent theo mã `CL_VSATTP` — không
 tạo trùng nếu server khởi động lại nhiều lần).
 
+**Mẫu "Checklist Hàng Ngày GĐST/CHT" dựng sẵn (seed tự động, 9/2026)** — cùng
+cơ chế mẫu VSATTP ở trên, ngay lần khởi động server đầu tiên sau khi cập
+nhật lên bản này, hệ thống tự động tạo sẵn 1 mẫu loại **Tự Đánh Giá**
+(`STORE_SELF`) đúng nội dung sheet "10.6" file Excel người dùng gửi (mã
+`CL_STCH_DAILY`, tên "Checklist Hàng Ngày GĐST/CHT (Tự Đánh Giá)", loại
+**Câu Hỏi & Đáp Án** (`QA`), chế độ **Chỉ Đạt/Chưa đạt** (`PASS_FAIL_ONLY`
+— sheet gốc không có điểm số), 12 Nhóm/Hạng mục ("1. Kiểm soát cảnh quan
+chung"..."12. Thực hiện các công việc khác"), 49 câu hỏi (mỗi câu 2 lựa
+chọn Đạt/Chưa đạt) — ở trạng thái **Nháp**, KHÔNG tự kích hoạt. Sheet gốc có
+thêm 2 cột trống "Vấn đề cần xử lý"/"Thời gian hoàn thành" để điền tay khi
+in giấy (không phải dữ liệu) — hệ thống thay bằng cơ chế **bắt buộc ảnh
+minh chứng** có sẵn khi chọn "Chưa đạt" (xem "Kết Thúc & Nộp" ở trên) thay
+vì 2 cột đó. Vào tab Cấu Hình, xem lại nội dung, chỉnh sửa nếu cần rồi bấm
+"Kích Hoạt" khi sẵn sàng dùng thật — idempotent theo mã `CL_STCH_DAILY`.
+
 **Nhóm/Hạng mục cho câu hỏi loại QA (v21.1, tuỳ chọn)** — khi soạn câu hỏi
 loại **Câu Hỏi & Đáp Án**, có thêm 1 ô **"Nhóm/Hạng mục"** không bắt buộc
 (để trống = câu hỏi đứng độc lập, không thuộc nhóm nào — mọi mẫu tạo trước

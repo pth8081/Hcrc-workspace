@@ -11,8 +11,9 @@ const { getAllRecords, withLockedRecordById, getAllForCollection, insertRecord }
 const { assertSourceIdColumnIsBigInt } = require('./lib/operationWorkItemStore');
 const { HttpError } = require('./lib/httpErrors');
 const { parseVNDateTime } = require('./lib/recordActions');
-const { validateChecklistCategories } = require('./lib/checklist');
+const { validateChecklistCategories, validateChecklistQuestions } = require('./lib/checklist');
 const { VSATTP_CHECKLIST_TEMPLATE } = require('./seedVsattpChecklist');
+const { STORE_SELF_DAILY_CHECKLIST_TEMPLATE } = require('./seedChecklistStoreSelfDaily');
 
 // Mật khẩu mặc định của các tài khoản seed lúc khởi tạo hệ thống lần đầu (defaults.js) — dùng để dò
 // tài khoản NÀO CÒN đang dùng đúng mật khẩu này (xem flagKnownDefaultPasswords() bên dưới), bất kể
@@ -49,6 +50,7 @@ async function seedDefaults() {
   await migratePaymentRequestsMissingCurrentStep();
   await migrateApprovalGroupsToConfigurable();
   await seedVsattpChecklistTemplateIfMissing();
+  await seedStoreSelfDailyChecklistTemplateIfMissing();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
 }
 
@@ -493,6 +495,29 @@ async function seedVsattpChecklistTemplateIfMissing() {
   console.log(`   ↳ Đã dựng sẵn mẫu checklist "${VSATTP_CHECKLIST_TEMPLATE.templateName}" (${VSATTP_CHECKLIST_TEMPLATE.templateCode}, DRAFT — vào Checklist Đánh Giá Siêu Thị > Cấu Hình để xem lại và Kích Hoạt khi sẵn sàng dùng).`);
 }
 
+// 9/2026 — Dựng sẵn 1 mẫu checklist "Câu hỏi & đáp án" (templateKind QA) TỰ ĐÁNH GIÁ HÀNG NGÀY cho
+// GĐST/CHT, theo ĐÚNG nội dung sheet "10.6" người dùng gửi (12 hạng mục, 49 mục kiểm tra,
+// seedChecklistStoreSelfDaily.js) — cùng khuôn seedVsattpChecklistTemplateIfMissing() ở trên: kiểm tra
+// theo templateCode 'CL_STCH_DAILY' (idempotent, chạy lại không tạo trùng), tạo DRAFT (KHÔNG tự
+// ACTIVATE) — admin xem lại nội dung rồi tự bấm "Kích Hoạt" khi sẵn sàng dùng thật. scoringMode
+// PASS_FAIL_ONLY (sheet gốc không có điểm số, chỉ Đạt/Chưa đạt từng mục) — mỗi câu 2 lựa chọn "Đạt"/
+// "Chưa đạt"; chọn "Chưa đạt" tự kích hoạt cơ chế bắt buộc ảnh minh chứng có sẵn của hệ thống (thay cho
+// 2 cột "Vấn đề cần xử lý"/"Thời gian hoàn thành" vốn chỉ là cột trống để điền tay ở bản giấy gốc).
+async function seedStoreSelfDailyChecklistTemplateIfMissing() {
+  const templates = await getAllForCollection('checklistTemplates');
+  if (templates.some(t => t.templateCode === STORE_SELF_DAILY_CHECKLIST_TEMPLATE.templateCode)) return;
+  const questions = validateChecklistQuestions(STORE_SELF_DAILY_CHECKLIST_TEMPLATE.questions, 'PASS_FAIL_ONLY');
+  await insertRecord('checklistTemplates', {
+    id: Date.now(),
+    templateCode: STORE_SELF_DAILY_CHECKLIST_TEMPLATE.templateCode, templateName: STORE_SELF_DAILY_CHECKLIST_TEMPLATE.templateName,
+    templateType: 'STORE_SELF', templateKind: 'QA', scoringMode: 'PASS_FAIL_ONLY', passThreshold: null,
+    status: 'DRAFT', version: 1, clonedFromTemplateId: null, activatedAt: null,
+    questions,
+    creator: 'system', creatorName: 'Hệ thống (dựng sẵn)'
+  });
+  console.log(`   ↳ Đã dựng sẵn mẫu checklist "${STORE_SELF_DAILY_CHECKLIST_TEMPLATE.templateName}" (${STORE_SELF_DAILY_CHECKLIST_TEMPLATE.templateCode}, DRAFT — vào Checklist Đánh Giá Siêu Thị > Cấu Hình để xem lại và Kích Hoạt khi sẵn sàng dùng).`);
+}
+
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
 // nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
 function nowVNForMigration() {
@@ -508,5 +533,6 @@ module.exports = {
   seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
   migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep,
   migrateApprovalGroupsToConfigurable,
-  seedVsattpChecklistTemplateIfMissing
+  seedVsattpChecklistTemplateIfMissing,
+  seedStoreSelfDailyChecklistTemplateIfMissing
 };

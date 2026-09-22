@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**23.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.100** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.100 (2026-09-22): Checklist Đánh Giá Siêu Thị — mẫu dựng sẵn "Checklist Hàng Ngày GĐST/CHT (Tự Đánh Giá)"
+
+Theo yêu cầu người dùng (gửi kèm file Excel "Copy_of_Form_checklist_daily_G_
+ST.CHT.xlsx", sheet "10.6" — "BÁO CÁO CHECKLIST HÀNG NGÀY GĐST/CHT"): dựng
+sẵn 1 mẫu Checklist Đánh Giá Siêu Thị loại **Tự Đánh Giá** (STORE_SELF) đúng
+nội dung sheet đó, cùng cơ chế "dựng sẵn khi khởi động" đã có với mẫu
+VSATTP (v21.0).
+
+- **`server/seedChecklistStoreSelfDaily.js`** (mới): nội dung mẫu trích xuất
+  nguyên vẹn từ sheet 10.6 — 12 Nhóm/Hạng mục ("1. Kiểm soát cảnh quan
+  chung"..."12. Thực hiện các công việc khác"), 49 câu hỏi (loại QA,
+  SINGLE_CHOICE, 2 lựa chọn "Đạt"/"Chưa đạt" mỗi câu). 2 cột "Vấn đề cần xử
+  lý"/"Thời gian hoàn thành" ở sheet gốc là cột TRỐNG để điền tay khi in
+  giấy (không phải dữ liệu) — không đưa vào mẫu, thay bằng cơ chế bắt buộc
+  ảnh minh chứng có sẵn của hệ thống khi chọn "Chưa đạt".
+- **`server/seedDefaults.js`**: hàm mới `seedStoreSelfDailyChecklistTemplateIfMissing()`
+  (gọi trong `seedDefaults()`, cùng vị trí `seedVsattpChecklistTemplateIfMissing()`)
+  — tạo 1 bản ghi `checklistTemplates` DRAFT (mã `CL_STCH_DAILY`, tên
+  "Checklist Hàng Ngày GĐST/CHT (Tự Đánh Giá)", `templateType: STORE_SELF`,
+  `templateKind: QA`, `scoringMode: PASS_FAIL_ONLY`) ngay lần khởi động đầu
+  tiên sau khi deploy — idempotent (kiểm tra theo `templateCode`, không tạo
+  trùng nếu chạy lại). KHÔNG tự Kích Hoạt — admin vào Checklist Đánh Giá
+  Siêu Thị > Cấu Hình xem lại/sửa rồi tự bấm "Kích Hoạt" khi sẵn sàng.
+- **Test mới**: `server/tests/test-checklist-storeself-daily-seed.js` (12
+  kịch bản — tạo đúng 1 template DRAFT lần đầu, đúng loại/chế độ chấm điểm,
+  49 câu × 12 hạng mục, mỗi câu đúng 2 lựa chọn Đạt/Chưa đạt, điểm số ép về
+  0 đúng PASS_FAIL_ONLY, optionId đánh số toàn cục không trùng, idempotent
+  khi chạy lại) — 12/12 pass, không ảnh hưởng test VSATTP hiện có.
+- **Deploy**: không có thay đổi `schema.sql`/biến môi trường mới — chỉ cần
+  copy code + `pm2 restart`; mẫu tự xuất hiện ở tab Cấu Hình ngay sau khi
+  server khởi động lại.
 
 ## v23.99 (2026-09-22): Đăng Ký Xe — "⭐ Đánh Giá" thêm mức 1-5 sao + câu hỏi "Điều gì cần thay đổi?" (danh mục admin tự sửa)
 
