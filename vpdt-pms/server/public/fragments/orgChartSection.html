@@ -31,12 +31,30 @@
          trên version đang APPLIED). -->
     <div id="orgChartSubTabsWrap" class="hidden flex flex-wrap items-center gap-2">
       <button type="button" id="btnOrgChartSubTree" data-op="setOrgChartSubTab" data-arg0="TREE" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🌳 Sơ Đồ Tổ Chức</button>
+      <button type="button" id="btnOrgChartSubDiagram" data-op="setOrgChartSubTab" data-arg0="DIAGRAM" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🖼️ Sơ Đồ Trực Quan</button>
       <button type="button" id="btnOrgChartSubKpi" data-op="setOrgChartSubTab" data-arg0="KPI" class="px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🎯 Cấu Hình Đánh Giá KPI</button>
     </div>
 
     <div id="orgChartTreeView" class="hidden space-y-2">
       <p class="text-[11px] text-gray-500 italic">Mỗi node "Vị Trí" là tổ hợp Chức Danh + Phòng Ban chứa nó (VD "Trưởng phòng CNTT" khác "Trưởng phòng Kế Toán" dù cùng chức danh). "Ai đang giữ vị trí này" tự tra theo đúng Phòng Ban + Chức Danh hiện tại của từng tài khoản — không cần gán tay. Chỉ sửa được cây khi đang xem 1 bản NHÁP.</p>
       <div id="orgChartTreeContainer" class="bg-white border rounded p-3 space-y-1 text-sm"></div>
+    </div>
+
+    <!-- "Sơ Đồ Trực Quan" (yêu cầu người dùng 10/2026): tự vẽ theo ĐÚNG version đang xem ở dropdown
+         (giống tab Cây, không giới hạn chỉ version APPLIED), CHỈ tới cấp Phòng Ban (không đưa Vị Trí vào
+         hình — xem đầy đủ Vị Trí ở tab 🌳 Sơ Đồ Tổ Chức) — xem renderOrgChartDiagramTab()/
+         ocBuildDepartmentTree() ở module-orgchart.js. Bấm "✅ Áp Dụng Phiên Bản Này" ở thanh version phía
+         trên tự chuyển sang đúng sub-tab này (activeOrgChartSubTab = 'DIAGRAM' trong applyOrgChartVersionClick()). -->
+    <div id="orgChartDiagramView" class="hidden space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-[11px] text-gray-500 italic flex-1 min-w-[220px]">Sơ đồ chỉ vẽ tới cấp Phòng Ban (không hiện Vị Trí) — xem đầy đủ Vị Trí ở tab 🌳 Sơ Đồ Tổ Chức.</p>
+        <button type="button" id="btnOrgChartDiagramPng" data-op="downloadOrgChartDiagramPng" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">🖼️ Tải Ảnh (PNG)</button>
+        <button type="button" id="btnOrgChartDiagramSvg" data-op="downloadOrgChartDiagramSvg" class="bg-white border border-teal-700 text-teal-800 px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-50">⬇️ Tải SVG (Vector)</button>
+      </div>
+      <p id="orgChartDiagramStatus" class="text-[11px] text-gray-500 min-h-[14px]"></p>
+      <div class="bg-white border rounded overflow-x-auto p-4">
+        <div id="orgChartDiagramContainer"></div>
+      </div>
     </div>
 
     <div id="orgChartKpiView" class="hidden space-y-4">

@@ -140,16 +140,19 @@ async function loadOrgChartCurrentVersion(id) {
   badge.innerText = BADGE_TXT[_ocCurrentVersion.status] || _ocCurrentVersion.status;
 }
 
-// ===== Sub-tab TREE / KPI =====
+// ===== Sub-tab TREE / DIAGRAM / KPI =====
 function setOrgChartSubTab(subTab) {
   activeOrgChartSubTab = subTab;
   document.getElementById('orgChartTreeView').classList.toggle('hidden', subTab !== 'TREE');
+  document.getElementById('orgChartDiagramView').classList.toggle('hidden', subTab !== 'DIAGRAM');
   document.getElementById('orgChartKpiView').classList.toggle('hidden', subTab !== 'KPI');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
   document.getElementById('btnOrgChartSubTree').className = subTab === 'TREE' ? activeCls : inactiveCls;
+  document.getElementById('btnOrgChartSubDiagram').className = subTab === 'DIAGRAM' ? activeCls : inactiveCls;
   document.getElementById('btnOrgChartSubKpi').className = subTab === 'KPI' ? activeCls : inactiveCls;
   if (subTab === 'TREE') renderOrgChartTree();
+  else if (subTab === 'DIAGRAM') renderOrgChartDiagramTab();
   else renderOrgChartKpiFlowTab();
 }
 
@@ -218,6 +221,183 @@ function ocBuildTreeNodeHtml(nodes, node, depth, canEdit, version) {
   return html;
 }
 
+// ===== "🖼️ Sơ Đồ Trực Quan" (yêu cầu nghiệp vụ 10/2026) — vẽ sơ đồ hình ảnh CHỈ tới cấp Phòng Ban
+// (không đưa Vị Trí vào hình, theo đúng yêu cầu người dùng — Vị Trí vẫn xem đủ ở tab Cây), xem/tải về
+// PNG-SVG. Dùng ĐÚNG version đang xem ở dropdown (_ocCurrentVersion), giống tab Cây — không giới hạn
+// chỉ version APPLIED. SVG dựng bằng CHUỖI HTML nội suy (mirror renderNVFlow()/nvRoundedNode() ở
+// module-nghiepvu.js — màu tô qua thuộc tính fill/stroke trực tiếp trên thẻ SVG, KHÔNG phải style="..."
+// nên không vướng CSP style-src) thay vì createElementNS(), khớp đúng quy ước SVG duy nhất đã có sẵn
+// trong toàn bộ client.
+function ocBuildDepartmentTree(nodes) {
+  const list = nodes || [];
+  const byId = new Map(list.map(n => [n.nodeId, n]));
+  const root = list.find(n => n.nodeType === 'COMPANY') || list.find(n => n.parentNodeId == null);
+  if (!root) return null;
+  // Tìm tổ tiên gần nhất là DEPARTMENT/COMPANY, BỎ QUA mọi node POSITION nằm giữa (VD "Tổng Giám Đốc"
+  // là POSITION đứng giữa Công Ty và các Phòng Ban) — mirror ý tưởng ocFindNearestDeptAncestor() ở trên,
+  // chỉ khác là áp dụng đệ quy cho MỌI Phòng Ban thay vì chỉ tìm 1 lần cho 1 node.
+  function nearestDeptOrCompanyAncestorId(node) {
+    let cur = byId.get(node.parentNodeId);
+    let steps = 0;
+    while (cur && steps < 100) {
+      if (cur.nodeType === 'DEPARTMENT' || cur.nodeType === 'COMPANY') return cur.nodeId;
+      cur = byId.get(cur.parentNodeId);
+      steps++;
+    }
+    return null;
+  }
+  const treeRoot = { id: root.nodeId, type: 'COMPANY', name: root.nodeName, children: [] };
+  const byTreeId = new Map([[root.nodeId, treeRoot]]);
+  const depts = list.filter(n => n.nodeType === 'DEPARTMENT');
+  depts.forEach(n => byTreeId.set(n.nodeId, { id: n.nodeId, type: 'DEPARTMENT', name: n.nodeName, children: [] }));
+  depts.forEach(n => {
+    const parentId = nearestDeptOrCompanyAncestorId(n);
+    const parentTreeNode = (parentId != null && byTreeId.get(parentId)) || treeRoot;
+    parentTreeNode.children.push(byTreeId.get(n.nodeId));
+  });
+  return treeRoot;
+}
+
+const OC_DIAGRAM_SLOT_W = 196, OC_DIAGRAM_LEVEL_H = 118, OC_DIAGRAM_MARGIN = 40;
+const OC_DIAGRAM_BOX_W = { COMPANY: 240, DEPARTMENT: 178 };
+const OC_DIAGRAM_BOX_H = { COMPANY: 62, DEPARTMENT: 50 };
+const OC_DIAGRAM_FONT = "Arial, 'Helvetica Neue', Helvetica, sans-serif"; // KHÔNG dùng web font — canvas
+// rasterize SVG lúc xuất PNG không chắc tải được font ngoài (xem downloadOrgChartDiagramPng()).
+
+function ocDiagramAssignXY(node, depth, cursorRef) {
+  node._depth = depth;
+  node._y = OC_DIAGRAM_MARGIN + depth * OC_DIAGRAM_LEVEL_H;
+  if (!node.children.length) {
+    node._x = cursorRef.x + OC_DIAGRAM_SLOT_W / 2;
+    cursorRef.x += OC_DIAGRAM_SLOT_W;
+    return;
+  }
+  node.children.forEach(c => ocDiagramAssignXY(c, depth + 1, cursorRef));
+  const first = node.children[0], last = node.children[node.children.length - 1];
+  node._x = (first._x + last._x) / 2;
+}
+
+function ocRenderDepartmentDiagram(root) {
+  ocDiagramAssignXY(root, 0, { x: OC_DIAGRAM_MARGIN });
+  let maxDepth = 0, maxX = 0;
+  (function scan(n) {
+    maxDepth = Math.max(maxDepth, n._depth);
+    maxX = Math.max(maxX, n._x + OC_DIAGRAM_BOX_W[n.type] / 2);
+    n.children.forEach(scan);
+  })(root);
+  const width = Math.round(maxX + OC_DIAGRAM_MARGIN);
+  const height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * OC_DIAGRAM_LEVEL_H + 16);
+
+  let linesSvg = '', nodesSvg = '';
+  function drawConnectors(node) {
+    if (!node.children.length) return;
+    const pBottom = node._y + OC_DIAGRAM_BOX_H[node.type] / 2;
+    const busY = pBottom + (OC_DIAGRAM_LEVEL_H - OC_DIAGRAM_BOX_H[node.type] / 2 - OC_DIAGRAM_BOX_H[node.children[0].type] / 2) / 2;
+    linesSvg += `<line x1="${node._x}" y1="${pBottom}" x2="${node._x}" y2="${busY}" stroke="#9fb8b5" stroke-width="1.5"/>`;
+    if (node.children.length > 1) {
+      const firstX = node.children[0]._x, lastX = node.children[node.children.length - 1]._x;
+      linesSvg += `<line x1="${firstX}" y1="${busY}" x2="${lastX}" y2="${busY}" stroke="#9fb8b5" stroke-width="1.5"/>`;
+    }
+    node.children.forEach(c => {
+      const cTop = c._y - OC_DIAGRAM_BOX_H[c.type] / 2;
+      linesSvg += `<line x1="${c._x}" y1="${busY}" x2="${c._x}" y2="${cTop}" stroke="#9fb8b5" stroke-width="1.5"/>`;
+      drawConnectors(c);
+    });
+  }
+  drawConnectors(root);
+
+  function drawNode(node) {
+    const w = OC_DIAGRAM_BOX_W[node.type], h = OC_DIAGRAM_BOX_H[node.type];
+    const x = node._x - w / 2, y = node._y - h / 2;
+    if (node.type === 'COMPANY') {
+      nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="#0d3b3a"/>`;
+      nodesSvg += `<text x="${node._x}" y="${node._y - 4}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="15" font-weight="700" fill="#f2fbf9">🏢 ${escapeHtml(node.name)}</text>`;
+      nodesSvg += `<text x="${node._x}" y="${node._y + 15}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="10.5" fill="#a9d6cd">Trụ sở chính</text>`;
+    } else {
+      nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#e3f4f1" stroke="#0f766e" stroke-width="1.5"/>`;
+      nodesSvg += `<text x="${node._x}" y="${node._y + 5}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">📁 ${escapeHtml(node.name)}</text>`;
+    }
+    node.children.forEach(drawNode);
+  }
+  drawNode(root);
+
+  const svgHTML = `<svg id="orgChartDiagramSvg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Sơ đồ tổ chức theo cấp Phòng Ban">${linesSvg}${nodesSvg}</svg>`;
+  return { svgHTML, width, height };
+}
+
+function renderOrgChartDiagramTab() {
+  const container = document.getElementById('orgChartDiagramContainer');
+  const version = _ocCurrentVersion;
+  if (!version) { container.innerHTML = ''; return; }
+  const root = ocBuildDepartmentTree(version.nodes || []);
+  if (!root) { container.innerHTML = '<p class="text-xs text-gray-400 italic">Không tìm thấy node gốc Công Ty.</p>'; return; }
+  container.innerHTML = ocRenderDepartmentDiagram(root).svgHTML;
+}
+
+// Tên file gợi ý từ tên phiên bản (bỏ dấu, chỉ chữ-số-gạch ngang) — mirror pattern slugify đã dùng ở
+// nhiều nơi khác trong hệ thống (VD slugifyKey() ở routes/positionTypes.js).
+function ocDiagramFilenameBase() {
+  const name = (_ocCurrentVersion?.versionName || 'so-do-to-chuc').trim();
+  const slug = name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return slug || 'so-do-to-chuc';
+}
+
+function ocSerializeDiagramSvgWithBackground() {
+  const svgEl = document.getElementById('orgChartDiagramSvg');
+  if (!svgEl) return null;
+  const w = parseFloat(svgEl.getAttribute('width'));
+  const h = parseFloat(svgEl.getAttribute('height'));
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('x', '0'); bg.setAttribute('y', '0'); bg.setAttribute('width', String(w)); bg.setAttribute('height', String(h)); bg.setAttribute('fill', '#ffffff');
+  clone.insertBefore(bg, clone.firstChild);
+  return { xml: '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone), w, h };
+}
+
+function downloadOrgChartDiagramSvg() {
+  const data = ocSerializeDiagramSvgWithBackground();
+  if (!data) return alert('⛔ Chưa có sơ đồ để tải — hãy chờ sơ đồ hiện ra trước.');
+  const blob = new Blob([data.xml], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `SoDoToChuc_${ocDiagramFilenameBase()}.svg`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadOrgChartDiagramPng() {
+  const data = ocSerializeDiagramSvgWithBackground();
+  if (!data) return alert('⛔ Chưa có sơ đồ để tải — hãy chờ sơ đồ hiện ra trước.');
+  const statusEl = document.getElementById('orgChartDiagramStatus');
+  if (statusEl) statusEl.innerText = 'Đang dựng ảnh…';
+  try {
+    const svgBlob = new Blob([data.xml], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    const scale = 2; // xuất ảnh @2x cho nét khi in/phóng to
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url; });
+    const canvas = document.createElement('canvas');
+    canvas.width = data.w * scale;
+    canvas.height = data.h * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, data.w, data.h);
+    URL.revokeObjectURL(url);
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `SoDoToChuc_${ocDiagramFilenameBase()}.png`;
+    link.click();
+    if (statusEl) statusEl.innerText = '';
+  } catch (err) {
+    if (statusEl) statusEl.innerText = '';
+    alert(`⛔ Không dựng được ảnh: ${err.message}`);
+  }
+}
+
 // ===== Bootstrap / Clone / Rename / Validate / Apply =====
 async function bootstrapOrgChartClick() {
   const name = document.getElementById('orgChartBootstrapNameInput').value.trim() || 'Cơ cấu tổ chức';
@@ -276,6 +456,10 @@ async function applyOrgChartVersionClick() {
   try {
     result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, {});
   } catch (err) { return alert(`⛔ ${err.message}`); }
+  // Yêu cầu nghiệp vụ (10/2026): Áp Dụng xong tự chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" để thấy ngay
+  // sơ đồ cấp Phòng Ban vừa cập nhật, không phải tự bấm qua — đặt TRƯỚC renderOrgChartModule() vì hàm đó
+  // tự gọi setOrgChartSubTab(activeOrgChartSubTab) ở bước cuối.
+  activeOrgChartSubTab = 'DIAGRAM';
   await renderOrgChartModule();
   openOrgChartApplyResultModal(result);
 }

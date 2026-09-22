@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**23.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.98 (2026-09-22): Cơ Cấu Tổ Chức — sub-tab "🖼️ Sơ Đồ Trực Quan" (sơ đồ khối cấp Phòng Ban, xem + tải PNG/SVG)
+
+Theo yêu cầu người dùng: sau khi dựng Cơ Cấu Tổ Chức và bấm "Áp Dụng", cây tổ
+chức theo Phòng Ban nay tự vẽ thành sơ đồ khối trực quan ở 1 sub-tab riêng,
+xem trực tiếp và tải về dạng ảnh — trước đây chỉ có dạng cây thụt lề chữ.
+Đã demo trước bằng Artifact (mockup HTML tương tác) để chốt thiết kế trước
+khi triển khai thật, theo đúng yêu cầu người dùng.
+
+- **`server/public/fragments/orgChartSection.html`**: sub-tab mới
+  "🖼️ Sơ Đồ Trực Quan" (nút `btnOrgChartSubDiagram`) nằm giữa "🌳 Sơ Đồ Tổ
+  Chức" và "🎯 Cấu Hình Đánh Giá KPI"; view mới `#orgChartDiagramView` gồm 2
+  nút "🖼️ Tải Ảnh (PNG)"/"⬇️ Tải SVG (Vector)" + khung chứa SVG cuộn ngang
+  được khi cây rộng.
+- **`server/public/js/module-orgchart.js`**:
+  - `ocBuildDepartmentTree()` — dựng cây CHỈ gồm node COMPANY+DEPARTMENT từ
+    danh sách node phẳng của version đang xem, bỏ qua mọi node POSITION nằm
+    giữa (VD "Tổng Giám Đốc") và tự gắn Phòng Ban vào đúng Phòng Ban/Công Ty
+    tổ tiên gần nhất — theo đúng yêu cầu "chỉ cần cấp phòng, không đưa vị
+    trí vào sơ đồ" (Vị Trí vẫn xem đủ ở tab Cây cũ).
+  - `ocRenderDepartmentDiagram()` — thuật toán layout cây phả hệ đơn giản +
+    dựng SVG bằng chuỗi HTML nội suy (mirror đúng quy ước `renderNVFlow()`/
+    `nvRoundedNode()` ở `module-nghiepvu.js` — tô màu qua thuộc tính
+    `fill`/`stroke` trực tiếp, không dùng `style="..."` nên không vướng CSP).
+  - `downloadOrgChartDiagramSvg()`/`downloadOrgChartDiagramPng()` — xuất file
+    thuần phía trình duyệt (Blob + canvas, không qua server): SVG tải thẳng,
+    PNG rasterize @2x qua canvas (chữ dùng font hệ thống, không phụ thuộc
+    web font, để xuất ảnh luôn ổn định).
+  - `applyOrgChartVersionClick()` — Áp Dụng xong tự chuyển
+    `activeOrgChartSubTab = 'DIAGRAM'` trước khi gọi lại
+    `renderOrgChartModule()`, đúng yêu cầu "áp dụng xong tự đẩy sang sub-tab
+    sơ đồ".
+- **Test mới**: `server/tests/test-orgchart-diagram-tab.js` (Playwright thật,
+  17 kịch bản — dựng cây bỏ Vị Trí đúng, UI hiện/ẩn đúng, SVG chỉ chứa tên
+  Phòng Ban không chứa Chức Danh, tự chuyển sub-tab sau khi Áp Dụng). Full
+  bộ test Cơ Cấu Tổ Chức hiện có (`test-orgchart-v2.js`,
+  `test-orgchart-kpiflow-prune.js`, `test-orgchart-delete-draft-version.js`)
+  chạy lại không lỗi.
+- **Docs**: `deploy/Huong-dan-nghiep-vu.md` (mục 4.5.1) + `module-nghiepvu.js`
+  (`NGHIEP_VU_DOCS.orgChart`) đều đã cập nhật.
+- **Deploy-impact**: KHÔNG đổi `schema.sql` (module Cơ Cấu Tổ Chức đã có sẵn
+  hạ tầng lưu trữ, tính năng này THUẦN client-side, không thêm route/API
+  nào), KHÔNG thêm biến môi trường, KHÔNG thêm npm dependency — chỉ copy
+  code + `pm2 restart`.
 
 ## v23.97 (2026-09-22): Đăng Ký Xe — thêm "🔄 Đổi Lộ Trình" (sửa lộ trình/ngày sau khi đăng ký, tự quay lại duyệt từ bước 1)
 

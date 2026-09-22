@@ -2071,6 +2071,17 @@ theo đúng vị trí trong cây**.
   **Vị Trí** còn có thể gắn thêm **"Vị Trí Làm Việc"** (🏢 Văn phòng / 🏪 Siêu
   Thị, tuỳ chọn) — dùng để tự đồng bộ mô hình chấm công (module Công & Phép)
   xuống tài khoản khi HR gán chức vụ này cho ai đó ở Hồ Sơ Nhân Sự (mục 4.5.3).
+- **Sub-tab "🖼️ Sơ Đồ Trực Quan" (từ 10/2026, theo yêu cầu người dùng)** — bên
+  cạnh tab "🌳 Sơ Đồ Tổ Chức" (cây thụt lề, đủ cả Vị Trí), tab này TỰ VẼ sơ đồ
+  khối (Công ty → Phòng Ban → Phòng Ban con) theo ĐÚNG phiên bản đang chọn ở
+  dropdown phía trên (không giới hạn chỉ bản Đang áp dụng) — **CHỈ tới cấp
+  Phòng Ban**, không đưa Vị Trí vào hình (bỏ qua mọi node Vị Trí nằm giữa, kể
+  cả khi 1 Phòng Ban là "con" của 1 Vị Trí như Tổng Giám Đốc — tự gắn vào
+  Phòng Ban/Công Ty tổ tiên gần nhất). Xem trực tiếp ngay trên màn, bấm
+  **"🖼️ Tải Ảnh (PNG)"** hoặc **"⬇️ Tải SVG (Vector)"** để tải về máy (vẽ
+  bằng SVG thuần phía trình duyệt, không qua server, không sinh file trung
+  gian nào). Bấm **"✅ Áp Dụng Phiên Bản Này"** xong tự chuyển sang ĐÚNG
+  sub-tab này để thấy ngay sơ đồ vừa cập nhật, không phải tự bấm qua.
 - **"Ai đang giữ 1 vị trí" được suy ra ĐỘNG, không lưu riêng** — khớp đúng
   Phòng Ban + Chức Danh hiện tại của từng nhân viên (2 trường đã có sẵn trên
   hồ sơ Người Dùng) với vị trí đó trong cây đang áp dụng. Đổi phòng ban/chức

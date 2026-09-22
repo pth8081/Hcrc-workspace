@@ -801,7 +801,7 @@ const NGHIEP_VU_DOCS = {
   },
   orgChart: {
     icon: '🌳', title: 'Cơ Cấu Tổ Chức', badge: 'Nhân Sự',
-    desc: 'Sơ đồ tổ chức theo từng phiên bản (dạng cây thụt lề, chưa có sơ đồ khối trực quan) — mỗi phiên bản mới LUÔN sao chép từ phiên bản đang áp dụng rồi sửa tiếp, "Áp Dụng" có hiệu lực ngay không qua ai duyệt lần 2.',
+    desc: 'Sơ đồ tổ chức theo từng phiên bản — tab "🌳 Sơ Đồ Tổ Chức" xem/sửa dạng cây thụt lề (đủ cả Vị Trí), tab "🖼️ Sơ Đồ Trực Quan" tự vẽ sơ đồ khối CHỈ tới cấp Phòng Ban, xem trực tiếp và tải về PNG/SVG — mỗi phiên bản mới LUÔN sao chép từ phiên bản đang áp dụng rồi sửa tiếp, "Áp Dụng" có hiệu lực ngay không qua ai duyệt lần 2.',
     flow: { ariaLabel: 'Quy trình Cơ Cấu Tổ Chức', chain: [
       { label: '+ Tạo Bản Nháp Mới', sub: 'Luôn clone từ bản đang áp dụng, không có "tạo bản trắng"' },
       { label: 'Sửa cây (bản Nháp)', sub: 'Thêm/sửa/xoá vị trí, gắn phòng ban' },
@@ -811,7 +811,7 @@ const NGHIEP_VU_DOCS = {
       { text: 'Lần đầu chưa có sơ đồ nào: vào <b>💼 Nhân Sự → 🌳 Cơ Cấu Tổ Chức</b> (sidebar) → bấm <b>"Khởi Tạo"</b> ở khung "🌱 Khởi Tạo Cơ Cấu Tổ Chức".' },
       { text: 'Sửa tiếp: bấm <b>"+ Tạo Bản Nháp Mới"</b> (luôn sao chép từ bản đang áp dụng) → sửa cây ngay trên tab "🌳 Sơ Đồ Tổ Chức" (thêm/sửa/xoá vị trí, gắn phòng ban).' },
       { text: 'Trước khi áp dụng, có thể bấm "🔍 Kiểm Tra Hợp Lệ" (tuỳ chọn, chỉ cảnh báo lỗi) hoặc "🔀 So Sánh Với Bản Đang Áp Dụng" để đối chiếu.' },
-      { text: 'Bấm <b>"✅ Áp Dụng Phiên Bản Này"</b> để có hiệu lực ngay — bản đang áp dụng cũ tự chuyển sang Lưu trữ, không cần ai duyệt lần 2.' },
+      { text: 'Bấm <b>"✅ Áp Dụng Phiên Bản Này"</b> để có hiệu lực ngay — bản đang áp dụng cũ tự chuyển sang Lưu trữ, không cần ai duyệt lần 2. Sau khi Áp Dụng xong, hệ thống TỰ chuyển sang tab "🖼️ Sơ Đồ Trực Quan" để xem ngay sơ đồ khối cấp Phòng Ban vừa cập nhật — bấm <b>"🖼️ Tải Ảnh (PNG)"</b> hoặc <b>"⬇️ Tải SVG (Vector)"</b> để tải về.' },
       { text: 'Chỉ vừa đổi phòng ban/chức danh 1-2 người mà chưa muốn áp dụng cả phiên bản mới: bấm riêng "🔄 Đồng Bộ Quản Lý Trực Tiếp" để cập nhật ngay field này.' },
       { text: 'Cấu hình luồng KPI theo cấp bậc: tab "🎯 Cấu Hình Đánh Giá KPI" → bấm "Thêm Quan Hệ".' },
     ],
@@ -822,6 +822,7 @@ const NGHIEP_VU_DOCS = {
     ], right: [
       { label: 'Người giữ vị trí được tra động, không lưu cố định', text: 'hệ thống KHÔNG lưu "ai giữ chức gì" trong phiên bản — mà lọc động theo đúng phòng ban/chức danh đang có trên hồ sơ user. Cây chỉ PHẢN ÁNH hồ sơ, không ghi ngược — TRỪ field "Quản Lý Trực Tiếp" được tự động cập nhật khi Áp Dụng (hoặc bấm nút <b>"🔄 Đồng Bộ Quản Lý Trực Tiếp"</b> riêng khi chỉ vừa đổi phòng ban/chức danh 1-2 người).' },
       { label: 'So sánh phiên bản', text: 'xem được bảng so sánh (Thêm mới/Đã xoá/Đổi tên-chuyển cấp) giữa 1 phiên bản Lưu Trữ và phiên bản đang Áp Dụng, chỉ để đối chiếu, không sửa được từ màn so sánh.' },
+      { label: '🖼️ Sơ Đồ Trực Quan — CHỈ cấp Phòng Ban (10/2026)', text: 'theo yêu cầu người dùng: sơ đồ khối chỉ vẽ tới cấp Phòng Ban (bỏ qua mọi Vị Trí nằm giữa, kể cả khi 1 Phòng Ban là "con" của 1 Vị Trí như Tổng Giám Đốc — tự gắn vào Phòng Ban/Công Ty tổ tiên gần nhất), giữ nguyên cấu trúc Phòng Ban lồng Phòng Ban con. Muốn xem đủ Vị Trí bên trong từng phòng thì quay lại tab "🌳 Sơ Đồ Tổ Chức". Vẽ theo ĐÚNG phiên bản đang chọn ở dropdown phía trên (không giới hạn chỉ bản Đang áp dụng).' },
       { label: 'Luồng KPI tự sinh theo cấp bậc tự "dọn dẹp" khi đổi cha (từ 9/2026)', text: 'mỗi lần Áp Dụng, hệ thống KHÔNG chỉ tự thêm quan hệ đánh giá còn thiếu theo cây mới (cấp trên trực tiếp đánh giá cấp dưới) mà còn tự XOÁ quan hệ tự sinh đã lỗi thời khi 1 vị trí bị đổi sang cấp trên khác giữa 2 lần Áp Dụng — tránh cả quản lý CŨ lẫn quản lý MỚI cùng có quyền đánh giá 1 người ("2 người cùng chấm 1 nhân viên"). Quan hệ tự thêm TAY qua "Thêm Quan Hệ" (không theo cây) không bao giờ bị đụng vào dù cây đổi thế nào.' },
     ] },
   },
