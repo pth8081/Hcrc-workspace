@@ -1181,7 +1181,8 @@ function renderInternalPosts() {
       <div class="bg-white rounded border hover:shadow overflow-hidden flex flex-col sm:flex-row">
         ${coverThumbHTML}
         <div class="p-4 flex-1 flex flex-col">
-          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">${escapeHtml(p.title)}${statusBadgeHTML}${pinBadgeHTML}</div>
+          <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">${escapeHtml(p.title)}</div>
+          <div class="mt-1">${statusBadgeHTML}${pinBadgeHTML}</div>
           <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
           ${internalPostInfoRequestBannerHTML(p)}
           <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>

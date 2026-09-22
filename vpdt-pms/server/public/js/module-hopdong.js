@@ -1011,13 +1011,20 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   // DRAFT: trạng thái CŨ trước khi có NEEDS_SUPPLEMENT riêng (mục 2 kế hoạch 10/2026) — hồ sơ nào đã bị
   // đưa về DRAFT từ trước đợt vá này (chưa được sửa lại) vẫn hiển thị đúng ở đây, coi 2 giá trị tương
   // đương nhau ở MỌI chỗ hiển thị/lọc trong file này.
+  // LỖI ĐÃ VÁ (phản hồi người dùng thật kèm ảnh chụp màn hình, 10/2026): statusBadge trước đây gắn kèm
+  // ngay sau tên hợp đồng ở cột "Tên & Đối Tác" (cột 2) — trên màn hình hẹp (điện thoại), cột này thường
+  // bị cuộn khuất khỏi tầm nhìn cùng cột "Mã & Loại", khiến người dùng tưởng KHÔNG có trạng thái phê
+  // duyệt nào hiển thị (chỉ thấy "Trạng Thái & Cảnh Báo Hết Hạn" — cột đó vốn CHỈ hiện cảnh báo hết hạn,
+  // không hề có trạng thái phê duyệt). Đồng thời APPROVED trước đây không có badge nào (rỗng), không rõ
+  // ràng bằng 3 trạng thái còn lại. Nay chuyển hẳn statusBadge sang cột "Trạng Thái..." (đứng cùng cảnh
+  // báo hết hạn, luôn hiện ngay không cần cuộn ngang) + bổ sung badge rõ ràng cho APPROVED.
   const statusBadge = c.approvalStatus === 'PENDING'
-    ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs ml-1">⏳ Chờ duyệt</span>`
+    ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`
     : c.approvalStatus === 'REJECTED'
-      ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs ml-1">❌ Bị từ chối</span>`
+      ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối</span>`
       : (c.approvalStatus === 'DRAFT' || c.approvalStatus === 'NEEDS_SUPPLEMENT')
-        ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs ml-1">✏️ Cần bổ sung — chờ sửa lại</span>`
-        : '';
+        ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`
+        : `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã duyệt</span>`;
 
   const expandToggleHTML = addendumCount > 0
     ? `<button data-op="toggleContractFamily" data-arg0="${c.id}" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
@@ -1125,7 +1132,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
     <tr class="hover:bg-gray-50 border-b ${isChild ? 'bg-cyan-50/30' : ''}">
       ${codeCell}
       <td class="border p-2">
-        <div class="font-bold text-gray-800">${escapeHtml(c.title)}${statusBadge}</div>
+        <div class="font-bold text-gray-800">${escapeHtml(c.title)}</div>
         <div class="text-xs text-gray-500">Bên ký kết: ${escapeHtml(c.partner)}</div>
         ${rootRefNote}
       </td>
@@ -1134,7 +1141,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
         <div class="text-xs text-gray-500">${escapeHtml(c.startDate || '')} ➔ ${escapeHtml(c.endDate || '')}</div>
       </td>
       <td class="border p-2">${escapeHtml(c.dept)}${(c.custodianDept && c.custodianDept !== c.dept) ? `<div class="text-[10px] text-cyan-700 mt-0.5">📌 Theo dõi &amp; TT: ${escapeHtml(c.custodianDept)}</div>` : ''}</td>
-      <td class="border p-2">${warningBadge}</td>
+      <td class="border p-2 space-y-1"><div>${statusBadge}</div>${warningBadge ? `<div>${warningBadge}</div>` : ''}</td>
       ${paymentCell}
       <td class="border p-2 text-center space-x-1">
         ${buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runContractAction')}

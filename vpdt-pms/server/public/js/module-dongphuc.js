@@ -403,8 +403,9 @@ function renderUniformPeriodsList() {
     <div class="bg-white rounded border overflow-hidden">
       <div class="flex items-center justify-between gap-2 p-3 bg-gray-50 border-b flex-wrap">
         <div>
-          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)} ${uniformPeriodApprovalBadge(p)}</div>
-          <div class="text-[11px] text-gray-500">Tạo bởi ${escapeHtml(p.creatorName || p.creator || '')} lúc ${escapeHtml(p.createdAt || '')}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</div>
+          <div class="font-bold text-teal-800 text-sm">${escapeHtml(p.name)}</div>
+          <div class="mt-0.5">${uniformPeriodApprovalBadge(p)}</div>
+          <div class="text-[11px] text-gray-500 mt-0.5">Tạo bởi ${escapeHtml(p.creatorName || p.creator || '')} lúc ${escapeHtml(p.createdAt || '')}${p.note ? ` — ${escapeHtml(p.note)}` : ''}</div>
           ${p.approvalStatus === 'REJECTED' && p.rejectReason ? `<div class="text-[11px] text-red-600 mt-0.5">Lý do từ chối: ${escapeHtml(p.rejectReason)}</div>` : ''}
           ${p.approvalStatus === 'APPROVED' ? `<div class="text-[11px] text-green-700 mt-0.5">Duyệt bởi ${escapeHtml(p.approvedByName || '')} lúc ${escapeHtml(p.approvedAt || '')}</div>` : ''}
         </div>

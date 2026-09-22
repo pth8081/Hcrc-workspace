@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**23.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.90 (2026-09-22): rà soát toàn hệ thống cột "Trạng Thái Phê Duyệt" bị thiếu/giấu kín
+
+Theo phản hồi người dùng (kèm ảnh chụp màn hình): màn Hợp Đồng (cả tab Phê
+Duyệt lẫn Quản Lý HĐ) không thấy trạng thái phê duyệt ở đâu. Rà soát lại phát
+hiện: trạng thái phê duyệt VẪN được tính (`statusBadge`) nhưng bị gắn kèm
+ngay sau tên hợp đồng ở cột "Tên & Đối Tác" — trên màn hình hẹp, cột đó
+thường bị cuộn khuất, khiến trạng thái trông như "biến mất". Cột
+"Trạng Thái & Cảnh Báo Hết Hạn" hoá ra CHỈ hiện cảnh báo hết hạn, chưa từng
+hiện trạng thái phê duyệt — càng gây hiểu nhầm. Sau đó rà soát toàn hệ thống
+(dùng Explore agent, kiểm tra 20+ module) để tìm mọi chỗ tương tự.
+
+- **Hợp Đồng** (`module-hopdong.js`) — chuyển `statusBadge` (⏳ Chờ duyệt/❌
+  Bị từ chối/✏️ Cần bổ sung) từ cột tên sang cột "Trạng Thái Phê Duyệt &
+  Cảnh Báo Hết Hạn" (đổi tên từ "Trạng Thái & Cảnh Báo Hết Hạn"); bổ sung
+  badge "✅ Đã duyệt" rõ ràng cho hồ sơ APPROVED (trước đây để trống, không
+  phân biệt được với hồ sơ chưa có trạng thái nào).
+- **Hỗ Trợ IT — Yêu Cầu Hỗ Trợ** (`module-itsupport-price.js`) — phát hiện
+  lỗ hổng NẶNG HƠN: trạng thái leo thang phê duyệt (`t.approvalStatus` —
+  chờ/đã duyệt/từ chối cấp quản lý) trước đây KHÔNG hiện ở đâu trong danh
+  sách cả (chỉ thấy khi mở modal chi tiết từng dòng) — khác `t.status`
+  (chưa xử lý/đang xử lý/hoàn thành) đã có cột riêng đúng. Nay thêm badge
+  phê duyệt vào cùng cột (đổi tên "Trạng Thái" → "Trạng Thái & Phê Duyệt").
+- **Đồng Phục** (Kỳ Cấp Phát) và **Nhịp Sống HCRC** (Góc Chia Sẻ) — 2 phát
+  hiện phụ, mức độ nhẹ hơn (badge gắn liền với tiêu đề trong danh sách dạng
+  thẻ, không phải bảng nên không bị cuộn khuất, nhưng vẫn dễ nhầm là 1 phần
+  của tiêu đề) — tách badge ra dòng riêng cho rõ ràng.
+- Đã rà soát 20+ module còn lại (Văn Bản Trình, Đăng Ký Xe, Văn Phòng,
+  Thanh Toán, Ngân Sách, VPP, Vận Hành, HĐLĐ, Lương, Công & Phép, Công Việc,
+  Tài Liệu/Giấy Phép, Phòng Họp, Tuyển Dụng, Đào Tạo, Onboarding/Offboarding...)
+  — tất cả đã có cột trạng thái phê duyệt riêng, đúng nhãn, không cần sửa.
+
+Không đổi schema SQL/biến môi trường/dependency — chỉ đổi HTML/JS hiển thị,
+không đổi logic nghiệp vụ/quyền nào.
 
 ## v23.89 (2026-09-22): Ma Trận Phân Quyền — xuất/nhập Excel hàng loạt + Nhóm Phân Quyền mở thêm Báo Cáo
 

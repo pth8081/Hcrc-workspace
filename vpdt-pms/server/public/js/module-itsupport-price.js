@@ -1757,7 +1757,10 @@ function renderItTickets() {
       <td class="border p-2">${escapeHtml(t.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(t.creatorName)}</span></td>
       <td class="border p-2">${escapeHtml(t.title)}</td>
       <td class="border p-2 text-xs">${escapeHtml(getItTicketCategoryLabel(t.category))}</td>
-      <td class="border p-2">${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</td>
+      <td class="border p-2 space-y-1">
+        <div>${IT_TICKET_STATUS_BADGES[t.status] || escapeHtml(t.status)}</div>
+        ${t.approvalStatus ? `<div>${IT_TICKET_APPROVAL_BADGES[t.approvalStatus] ? IT_TICKET_APPROVAL_BADGES[t.approvalStatus](t) : escapeHtml(t.approvalStatus)}</div>` : ''}
+      </td>
       <td class="border p-2 text-xs">${t.assigneeName ? escapeHtml(t.assigneeName) : '<span class="text-gray-400 italic">Chưa nhận</span>'}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
