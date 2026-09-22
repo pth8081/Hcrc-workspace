@@ -218,6 +218,14 @@ function wfPositionPairCatalogItems() {
   (DB.storeJobTitles || []).forEach(t => {
     (DB.stores || []).forEach(s => pairs.push({ jobTitle: t.label, dept: s }));
   });
+  // Vị Trí Làm Việc TỰ THÊM (10/2026, VD "Kho") — cùng ranh giới như HO/Siêu Thị ở trên: chỉ ghép chức
+  // danh RIÊNG của Vị Trí đó với địa điểm RIÊNG của chính Vị Trí đó (xem getPosTypeJobTitles()/
+  // getPosTypeLocations() ở core.js), không lai chéo sang HO/Siêu Thị/Vị Trí khác.
+  (DB.positionTypes || []).filter(t => !t.builtin).forEach(t => {
+    getPosTypeJobTitles(t.key).forEach(jt => {
+      getPosTypeLocations(t.key).forEach(d => pairs.push({ jobTitle: jt, dept: d }));
+    });
+  });
   return pairs.map(pair => ({ value: encodeWfPositionPair(pair), label: wfPositionPairLabel(pair) }));
 }
 
@@ -243,10 +251,12 @@ function wfPositionPairPickerItems() {
 // ban nào (khác wfPositionPairCatalogItems() ở trên — hàm ĐÓ tích chéo có kiểm soát ranh giới 2 nhóm cho
 // mục đích khác, ô chọn "Theo vị trí" khi danh mục này còn rỗng).
 function wfPosBuilderJobTitleOptions() {
-  return [...new Set([...(DB.jobTitles || []), ...(DB.storeJobTitles || []).map(t => t.label)])];
+  const customJobTitles = (DB.positionTypes || []).filter(t => !t.builtin).flatMap(t => getPosTypeJobTitles(t.key));
+  return [...new Set([...(DB.jobTitles || []), ...(DB.storeJobTitles || []).map(t => t.label), ...customJobTitles])];
 }
 function wfPosBuilderDeptOptions() {
-  return [...new Set([...(DB.depts || []), ...(DB.stores || [])])];
+  const customLocations = (DB.positionTypes || []).filter(t => !t.builtin).flatMap(t => getPosTypeLocations(t.key));
+  return [...new Set([...(DB.depts || []), ...(DB.stores || []), ...customLocations])];
 }
 
 function renderWfPositionBuilderChips() {

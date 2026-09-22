@@ -454,6 +454,20 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
   });
 }
 
+// Chức Danh của 1 Vị Trí Làm Việc TỰ THÊM (khác HO/Siêu Thị builtin, xem defaults.js positionTypes) —
+// cascade users[].jobTitle CHỈ cho đúng posType === posTypeKey (so CHÍNH XÁC, không suy luận "khác
+// STORE" như cascadeJobTitleRename() vì HO không còn là nhánh else duy nhất nữa). PHẠM VI GIAI ĐOẠN 1
+// (đã xác nhận với người dùng): CHỈ cascade users[].jobTitle + cặp "Vị Trí Kiêm Nhiệm"/"Vị Trí Tham Gia
+// Quy Trình" (cascadePositionPairs, vốn đã posType-agnostic) — KHÔNG cascade employeeProfiles/quy trình
+// duyệt hỗn hợp Vận Hành/Cơ Cấu Tổ Chức (những tính năng đó hiện CHỈ nhận biết HO/STORE, ngoài phạm vi
+// Giai Đoạn 1, xem VERSION.md đợt merge này).
+async function cascadeCustomPosTypeJobTitleRename(posTypeKey, oldValue, newValue) {
+  await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+    (u.jobTitle === oldValue && u.posType === posTypeKey) ? { ...u, jobTitle: newValue } : u
+  ));
+  await cascadePositionPairs('jobTitle', oldValue, newValue);
+}
+
 // deptAbbrs/docCatAbbrs: 2 map {tên -> viết tắt} khoá theo ĐÚNG tên phòng ban/loại tài liệu (xem
 // getDeptAbbr()/getDocCatAbbr() ở core.js) — đổi tên mà không dời KEY của map này sẽ làm viết tắt "rơi
 // mất" (vẫn còn dữ liệu dưới tên CŨ, tra theo tên MỚI ra rỗng, generateDocCode()/generateMaDoc() tự lùi
@@ -616,4 +630,9 @@ async function renameCatalogEntry(catalogKey, oldValue, newValue) {
   return updatedCatalog;
 }
 
-module.exports = { renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames };
+// cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
+// routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
+// THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
+// không đi qua CATALOG_HANDLERS/renameCatalogEntry() ở trên được (route riêng tự cập nhật mảng lồng
+// trong positionTypes[].locations/jobTitles, chỉ cần chạy PHẦN CASCADE ở đây).
+module.exports = { renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename };

@@ -777,6 +777,21 @@
         </div>
       </div>
 
+      <!-- Vị Trí Làm Việc (10/2026) — danh mục MỞ thay 2 giá trị cứng HO/Siêu Thị (xem defaults.js
+           positionTypes). 2 mục mặc định (HO/Siêu Thị) không xoá/đổi định danh được, tiếp tục dùng đúng
+           2 khối "Phòng Ban"/"Siêu Thị"/"Chức Danh"/"Chức Danh (Siêu Thị)" ở trên — khối này chỉ quản lý
+           Vị Trí Làm Việc TỰ THÊM (VD "Kho"), mỗi Vị Trí mang theo 1 cặp danh mục con RIÊNG (Địa Điểm +
+           Chức Danh). span rộng cả 3 cột (xl:col-span-3) vì nội dung lồng nhau, cần nhiều chỗ hơn 1 ô. -->
+      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3 md:col-span-2 xl:col-span-3">
+        <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧭 Quản Lý Vị Trí Làm Việc</h3>
+        <p class="text-[11px] text-violet-700">Vị Trí Làm Việc quyết định người dùng chọn "Phòng Ban" hay "Siêu Thị" (hoặc danh sách riêng của Vị Trí tự thêm) khi tạo tài khoản — xem ô "Vị Trí Làm Việc" ở mục Cấu Hình Quyền Hạn bên dưới. 2 mục HO/Siêu Thị luôn có sẵn, không xoá/đổi định danh được (đổi tên hiển thị vẫn được).</p>
+        <form data-op-submit="createPositionType" class="flex gap-2">
+          <input id="txtPositionTypeName" placeholder="Tên Vị Trí Làm Việc mới (VD: Kho)..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">Thêm</button>
+        </form>
+        <div id="positionTypeList" class="space-y-2"></div>
+      </div>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🎓 Quản Lý Loại Đào Tạo</h3>
         <p class="text-[11px] text-emerald-700">Dùng để phân loại Kho Tài Liệu và Lớp Học ở màn Truyền Thông Nội Bộ &gt; Đào tạo.</p>
@@ -858,11 +873,10 @@
 
         <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3 bg-white p-3 rounded border">
           <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
-            <select id="uPosType" data-op-change="onUserPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white">
-              <option value="HO">HO (Văn phòng)</option>
-              <option value="STORE">Siêu Thị</option>
-            </select>
+            <!-- Vị Trí Làm Việc (10/2026) — danh mục MỞ (Quản Lý Danh Mục), nạp ĐỘNG từ DB.positionTypes
+                 qua populateUserPosTypeOptions() (core.js), không còn 2 <option> cố định HO/Siêu Thị. -->
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí Làm Việc</label>
+            <select id="uPosType" data-op-change="onUserPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white"></select>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
@@ -894,6 +908,12 @@
               <select id="uStore" class="flex-1 min-w-0 border p-1.5 rounded text-xs"></select>
               <button type="button" data-op="promptAddStoreInline" title="Thêm siêu thị mới vào Danh Mục" class="shrink-0 bg-gray-100 border px-2 rounded text-xs font-bold hover:bg-gray-200">+</button>
             </div>
+          </div>
+          <!-- Địa Điểm — chỉ hiện khi chọn 1 Vị Trí Làm Việc TỰ THÊM (không phải HO/Siêu Thị builtin),
+               nguồn options = locations[] riêng của Vị Trí đó (xem onUserPosTypeChange()). -->
+          <div id="uCustomLocationFieldWrap" class="hidden">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Địa Điểm</label>
+            <select id="uCustomLocation" class="w-full border p-1.5 rounded text-xs"></select>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>
@@ -1836,7 +1856,7 @@
               <th class="p-1.5">Username</th>
               <th class="p-1.5">Họ Tên</th>
               <th class="p-1.5">Phòng Ban</th>
-              <th class="p-1.5">Vị Trí</th>
+              <th class="p-1.5">Vị Trí Làm Việc</th>
               <th class="p-1.5">Ghi chú</th>
             </tr></thead>
             <tbody id="uImportPreviewBody"></tbody>

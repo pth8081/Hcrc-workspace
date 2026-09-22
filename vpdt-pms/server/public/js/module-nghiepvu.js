@@ -1293,12 +1293,15 @@ const SYSTEM_DOCS = {
       { role: 'Quản trị viên', text: 'bấm <b>"+ Thêm"</b> để tạo mới, hoặc <b>"✏️ Sửa"</b>/<b>"🗑️ Xoá"</b> ngay tại dòng danh mục đã có.' },
       { role: 'Quản trị viên', text: 'nếu xoá 1 giá trị ĐANG được dùng ở hồ sơ/form khác, hệ thống chặn lại và báo rõ lý do — phải xử lý xong dữ liệu đang tham chiếu (đổi sang giá trị khác) trước khi xoá được.' },
       { role: 'Quản trị viên', text: 'cấu hình <b>"📲 Phím Tắt PWA (Android/Chrome)"</b> (cùng màn Quản Lý Danh Mục): tick tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính Android/Chrome → bấm <b>"💾 Lưu Phím Tắt PWA"</b> — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. KHÔNG hỗ trợ iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).' },
+      { role: 'Quản trị viên', text: 'quản lý <b>"🧭 Quản Lý Vị Trí Làm Việc"</b> (10/2026, cùng màn): danh mục MỞ thay cho 2 giá trị cứng HO/Siêu Thị trước đây — bấm <b>"Thêm"</b> để tạo 1 Vị Trí Làm Việc mới (VD "Kho"), mỗi Vị Trí mang theo 1 cặp danh mục con RIÊNG (📍 Địa Điểm + 🎖️ Chức Danh, giống hệt khuôn Siêu Thị). 2 mục HO/Siêu Thị luôn có sẵn (chỉ đổi được tên hiển thị, không xoá/đổi định danh) — quản lý địa điểm/chức danh của 2 mục này vẫn ở đúng 2 khối Phòng Ban/Siêu Thị/Chức Danh phía trên, không phải ở đây.' },
     ],
     footer: { left: [
       { label: 'Dùng chung TOÀN HỆ THỐNG', text: 'không có khái niệm danh mục "riêng cho 1 module" — Phòng Ban ở đây là ĐÚNG Phòng Ban hiện trên mọi form/báo cáo khác, sửa 1 chỗ đủ.' },
+      { label: 'Vị Trí Làm Việc — phạm vi hiện tại', text: 'Vị Trí Làm Việc TỰ THÊM (khác HO/Siêu Thị) hiện áp dụng cho form Người Dùng/Import Excel/cascading Phòng Ban-Chức Danh/Vị Trí Kiêm Nhiệm. Các tính năng nghiệp vụ khác đang CHỈ hiểu HO/Siêu Thị (Checklist tự đánh giá Siêu Thị, mô hình ca kíp Công&Phép/Lương, validate bắt buộc ở HR Onboarding, bộ duyệt hỗn hợp Vận Hành-Đặt Hàng, Cơ Cấu Tổ Chức) TẠM giữ nguyên hành vi cũ — nhân sự gán 1 Vị Trí Làm Việc mới sẽ KHÔNG tự động có các tính năng đó.' },
     ], right: [
       { label: 'Tự học danh mục con', text: 'một số danh mục nhỏ (VD Loại Dịch Vụ CNTT, Chủ Đề HCRC Đồng Hành) KHÔNG có màn quản lý riêng — tự "học" thêm giá trị mới ngay khi có người gõ giá trị mới lúc tạo hồ sơ, không cần vào Quản Lý Danh Mục trước.' },
       { label: 'Phím Tắt PWA tối đa 4 module', text: 'hầu hết launcher Android chỉ hiện được tối đa 4 phím tắt dù khai nhiều hơn — chọn quá 4 sẽ bị cắt bớt (kể cả khi ai đó ghi thẳng qua API). Không liên quan tới danh mục dùng chung ở trên — đây là cấu hình RIÊNG cho trải nghiệm cài đặt PWA.' },
+      { label: 'Xoá 1 Vị Trí Làm Việc bị chặn nếu còn tài khoản đang dùng', text: 'khác các danh mục phẳng khác (chỉ CẢNH BÁO trước khi xoá) — xoá hẳn 1 Vị Trí kéo theo mất luôn nhánh Địa Điểm/Chức Danh con của nó nên bị CHẶN CỨNG (server từ chối) nếu đang có ít nhất 1 tài khoản gán Vị Trí đó, phải đổi Vị Trí của họ trước.' },
     ] },
   },
   sysFormBuilder: {

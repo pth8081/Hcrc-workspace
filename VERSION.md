@@ -1,8 +1,64 @@
 # Phiên bản hiện tại
 
-**23.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.96 (2026-09-22): Vị Trí Làm Việc — danh mục MỞ thay cho 2 giá trị cứng HO/Siêu Thị (Giai Đoạn 1)
+
+Theo yêu cầu người dùng: ô "Vị Trí" ở form Người Dùng trước đây chỉ có đúng
+2 giá trị cứng ("HO"/"STORE") — nay đổi thành danh mục MỞ do admin tự thêm/
+sửa/xoá (VD "Kho", "Đại Lý"...), đặt tên "**Vị Trí Làm Việc**" (theo đúng chỉ
+đạo người dùng, phân biệt rõ với "Chức Danh", khớp thuật ngữ đã dùng ở Cơ
+Cấu Tổ Chức). Mỗi Vị Trí Làm Việc TỰ THÊM mang theo 1 cặp danh mục con RIÊNG
+(📍 Địa Điểm + 🎖️ Chức Danh), giống hệt khuôn Siêu Thị hiện có (theo lựa
+chọn người dùng ở bước xác nhận phương án).
+
+- **`server/defaults.js`**: thêm key mới `positionTypes` (mảng
+  `{key,label,builtin,locations[],jobTitles[]}`, seed sẵn 2 mục builtin HO/
+  STORE) — AppData store linh hoạt sẵn có, không cần đổi schema SQL.
+- **`server/routes/positionTypes.js`** (route mới, `/api/admin/position-
+  types`, admin-only): CRUD Vị Trí Làm Việc (key sinh tự động từ label, bỏ
+  dấu+viết hoa, không trùng HO/STORE); CRUD từng Địa Điểm/Chức Danh con
+  (thêm/xoá/đổi tên); đổi tên Địa Điểm tái dùng `cascadeStoreRename()` sẵn có
+  (field `dept` dùng CHUNG mọi Vị Trí, không cần cascade riêng); đổi tên Chức
+  Danh dùng hàm cascade mới `cascadeCustomPosTypeJobTitleRename()` (lọc đúng
+  posType, không đụng chức danh trùng tên ở Vị Trí khác). Xoá 1 Vị Trí builtin
+  luôn bị chặn; xoá Vị Trí tự thêm bị **CHẶN CỨNG** nếu còn tài khoản đang gán
+  (khác các danh mục phẳng khác chỉ cảnh báo mềm — xoá cả nhánh Địa Điểm/Chức
+  Danh con là thao tác rủi ro cao hơn).
+- **`server/public/js/core.js`**: 4 hàm helper mới
+  (`getPosTypeLocations/JobTitles/Label/CatalogEntry`) là lớp trung gian cho
+  MỌI nơi cần tra Địa Điểm/Chức Danh theo posType — HO/STORE vẫn đọc từ
+  `DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles` cũ (không đổi hạ tầng),
+  Vị Trí tự thêm đọc từ `DB.positionTypes`. `populateUserPosTypeOptions()`
+  nạp `<select id="uPosType">` từ danh mục thật thay vì 2 `<option>` cứng.
+- **Form Người Dùng + Import Excel + Vị Trí Kiêm Nhiệm**: cascading Địa
+  Điểm/Chức Danh theo Vị Trí Làm Việc chọn được mở rộng dùng đúng 4 hàm
+  helper trên (`module-admin-submissiongroups.js`, `module-admin-
+  userstaging.js`, `module-admin-specialperm.js`) — validate import Excel
+  nay đối chiếu đúng danh mục Vị Trí Làm Việc thật (không còn hard-code HO/
+  STORE), form thêm 1 field "Địa Điểm" riêng khi chọn Vị Trí tự thêm.
+- **`module-admin.js` + `systemSection.html`**: thêm màn quản trị "🧭 Quản Lý
+  Vị Trí Làm Việc" trong Quản Lý Danh Mục — thêm/đổi tên/xoá Vị Trí, cùng 2
+  danh mục con Địa Điểm/Chức Danh của từng Vị Trí tự thêm.
+- **Phạm vi Giai Đoạn 1 (đã xác nhận với người dùng)**: Vị Trí Làm Việc tự
+  thêm CHỈ áp dụng cho form Người Dùng/Import Excel/cascading Phòng Ban-Chức
+  Danh/Vị Trí Kiêm Nhiệm. Các tính năng nghiệp vụ khác — Checklist tự đánh
+  giá Siêu Thị, mô hình ca kíp Công&Phép/Lương, validate bắt buộc HR
+  Onboarding, bộ duyệt hỗn hợp Vận Hành, Cơ Cấu Tổ Chức, Ngân Sách
+  (`budgetLines.location`), Vận Hành (`operationOrders.orderLocationType`) —
+  **VẪN CHỈ nhận HO/Siêu Thị**, chưa mở rộng theo Vị Trí tự thêm (để dành
+  Giai Đoạn 2 nếu người dùng yêu cầu).
+- **Test mới**: `server/tests/test-position-types.js` (10 kịch bản, route
+  CRUD + cascade Địa Điểm/Chức Danh, xác minh cascade Chức Danh đúng lọc
+  posType). Cập nhật `test-admin-users-permgroups.js` (seed `DB.positionTypes`
+  cho các kịch bản gọi lại `initDatabase()`/reseed danh mục).
+- **Docs**: `deploy/Huong-dan-nghiep-vu.md` (mục 7.2) + `module-nghiepvu.js`
+  (`sysCatalog`) đều đã cập nhật.
+- **Deploy-impact**: KHÔNG đổi `schema.sql` (AppData key mới, không cần bảng/
+  cột SQL mới), KHÔNG thêm biến môi trường, KHÔNG thêm npm dependency — chỉ
+  copy code + `pm2 restart`.
 
 ## v23.95 (2026-09-22): Import Excel Người Dùng đồng nhất với form tạo tay + chặn cứng dữ liệu sai danh mục + vá cảnh báo xung đột giả
 

@@ -332,6 +332,176 @@ function renderStoreJobTitleList() {
   `).join('');
 }
 
+// ===== Vị Trí Làm Việc (DB.positionTypes, 10/2026) — danh mục MỞ thay 2 giá trị cứng HO/STORE, xem
+// defaults.js + routes/positionTypes.js. Khác 2 khối trên (mảng chuỗi/{label} phẳng, ghi qua
+// syncStorage() thường + rename qua /api/admin/renameCatalogEntry): mỗi phần tử ở đây là 1 OBJECT
+// {key,label,builtin,locations[],jobTitles[]} — CRUD (tạo/đổi tên nhãn/xoá 1 Vị Trí, thêm/xoá/đổi tên 1
+// địa điểm hay chức danh CON của Vị Trí đó) đều đi qua route riêng /api/admin/position-types/* (đổi
+// tên CÓ cascade, tạo/xoá server tự kiểm tra ràng buộc — không dùng syncStorage('positionTypes') trực
+// tiếp như stores/depts, xem routes/positionTypes.js). =====
+async function createPositionType(e) {
+  e.preventDefault();
+  const label = document.getElementById('txtPositionTypeName').value.trim();
+  if (!label) return;
+  try {
+    const res = await fetch('/api/admin/position-types', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    DB.positionTypes = body.positionTypes;
+    logSystemAction('USER_MGM', 'ADD_POSITION_TYPE', `Thêm Vị Trí Làm Việc mới [${label}]`, 'SUCCESS', label);
+    document.getElementById('txtPositionTypeName').value = '';
+    renderPositionTypeList();
+    populateUserPosTypeOptions();
+  } catch (err) {
+    alert(`⛔ Không thể thêm Vị Trí Làm Việc: ${err.message}`);
+  }
+}
+
+async function renamePositionTypeLabel(key, currentLabel) {
+  const newLabel = String(prompt(`Nhập tên hiển thị mới cho "${currentLabel}":`, currentLabel) || '').trim();
+  if (!newLabel || newLabel === currentLabel) return;
+  try {
+    const res = await fetch(`/api/admin/position-types/${encodeURIComponent(key)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: newLabel })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    DB.positionTypes = body.positionTypes;
+    logSystemAction('USER_MGM', 'RENAME_POSITION_TYPE', `Đổi tên hiển thị Vị Trí Làm Việc [${currentLabel}] → [${newLabel}]`, 'SUCCESS', newLabel);
+    renderPositionTypeList();
+    populateUserPosTypeOptions();
+  } catch (err) {
+    alert(`⛔ Lỗi đổi tên: ${err.message}`);
+  }
+}
+
+async function deletePositionType(key, label) {
+  if (!confirm(`Xoá hẳn Vị Trí Làm Việc "${label}" (kèm toàn bộ danh sách Địa Điểm/Chức Danh riêng của Vị Trí này)?\n\nBị chặn nếu đang có tài khoản gán Vị Trí này.`)) return;
+  try {
+    const res = await fetch(`/api/admin/position-types/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    DB.positionTypes = body.positionTypes;
+    logSystemAction('USER_MGM', 'DELETE_POSITION_TYPE', `Xóa Vị Trí Làm Việc [${label}]`, 'SUCCESS', label);
+    renderPositionTypeList();
+    populateUserPosTypeOptions();
+  } catch (err) {
+    alert(`⛔ Không thể xoá: ${err.message}`);
+  }
+}
+
+// Thêm/xoá 1 địa điểm hoặc chức danh con — KHÔNG cascade (thêm/xoá không đụng dữ liệu đã có ở nơi khác,
+// cùng khuôn addStoreToCatalog()/deleteStore()) nên ghi thẳng qua syncStorage('positionTypes') như mọi
+// danh mục mảng phẳng đơn giản khác, không cần route riêng.
+// data-op-submit LUÔN gọi fn(e) — KHÔNG đọc data-arg0/arg1 như data-op/data-op-change (xem
+// cspDispatchOp() ở core.js) — đọc trực tiếp qua e.target.dataset (thuộc tính data-* chuẩn HTML5) thay
+// vì tham số vị trí.
+function addPositionTypeEntry(e) {
+  const key = e.target.dataset.arg0;
+  const field = e.target.dataset.arg1;
+  const inputId = field === 'locations' ? `txtPositionTypeLocation_${key}` : `txtPositionTypeJobTitle_${key}`;
+  const input = document.getElementById(inputId);
+  const value = (input?.value || '').trim();
+  if (!value) return;
+  const t = DB.positionTypes.find(x => x.key === key);
+  if (!t) return;
+  const list = t[field] || (t[field] = []);
+  if (list.includes(value)) return alert('Giá trị đã tồn tại!');
+  list.push(value);
+  syncStorage('positionTypes');
+  logSystemAction('USER_MGM', 'ADD_POSITION_TYPE_ENTRY', `Thêm ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${value}] vào Vị Trí Làm Việc [${t.label}]`, 'SUCCESS', value);
+  input.value = '';
+  renderPositionTypeList();
+  populateDropdowns();
+}
+function deletePositionTypeEntry(key, field, value) {
+  if (!confirmCatalogValueDeletion(field === 'locations' ? 'địa điểm' : 'chức danh', value, 'Tài khoản/hồ sơ đang dùng giá trị này (nếu có) sẽ thành tham chiếu treo.')) return;
+  const t = DB.positionTypes.find(x => x.key === key);
+  if (!t) return;
+  t[field] = (t[field] || []).filter(v => v !== value);
+  syncStorage('positionTypes');
+  logSystemAction('USER_MGM', 'DELETE_POSITION_TYPE_ENTRY', `Xóa ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${value}] khỏi Vị Trí Làm Việc [${t.label}]`, 'SUCCESS', value);
+  renderPositionTypeList();
+  populateDropdowns();
+}
+// Đổi tên 1 địa điểm/chức danh con — CÓ cascade (route riêng, xem routes/positionTypes.js).
+async function renamePositionTypeEntry(key, field, oldValue) {
+  const t = DB.positionTypes.find(x => x.key === key);
+  const newValue = String(prompt(`Nhập tên mới cho "${oldValue}":`, oldValue) || '').trim();
+  if (!newValue || newValue === oldValue) return;
+  const endpoint = field === 'locations' ? 'locations' : 'job-titles';
+  try {
+    const res = await fetch(`/api/admin/position-types/${encodeURIComponent(key)}/${endpoint}/rename`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldValue, newValue })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    DB.positionTypes = body.positionTypes;
+    logSystemAction('USER_MGM', 'RENAME_POSITION_TYPE_ENTRY', `Đổi tên ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${oldValue}] → [${newValue}] (Vị Trí Làm Việc [${t?.label || key}])`, 'SUCCESS', newValue);
+    renderPositionTypeList();
+    populateDropdowns();
+    alert(`✅ Đã đổi tên "${oldValue}" thành "${newValue}" (đã cập nhật mọi hồ sơ/tài khoản liên quan ở máy chủ).\n\nVui lòng TẢI LẠI TRANG để thấy tên mới hiển thị ở toàn bộ màn hình.`);
+  } catch (err) {
+    alert(`⛔ Lỗi đổi tên: ${err.message}`);
+  }
+}
+
+function renderPositionTypeList() {
+  const wrap = document.getElementById('positionTypeList');
+  if (!wrap) return;
+  wrap.innerHTML = (DB.positionTypes || []).map(t => {
+    if (t.builtin) {
+      return `
+      <div class="bg-white rounded border p-2 flex items-center justify-between gap-2">
+        <span class="font-semibold text-xs">${escapeHtml(t.label)} <span class="ml-1 inline-block bg-gray-200 text-gray-600 text-[10px] px-1.5 py-0.5 rounded">Mặc định — quản lý ở khối Phòng Ban/Siêu Thị/Chức Danh phía trên</span></span>
+        <button data-op="renamePositionTypeLabel" data-arg0="${escapeHtml(t.key)}" data-arg1="${escapeHtml(t.label)}" class="text-blue-600 font-bold hover:underline text-xs whitespace-nowrap">✏️ Đổi tên hiển thị</button>
+      </div>`;
+    }
+    const locRows = (t.locations || []).map(l => `
+      <li class="p-1.5 flex justify-between items-center gap-2 hover:bg-gray-50">
+        <span class="flex-1">${escapeHtml(l)}</span>
+        <button data-op="renamePositionTypeEntry" data-arg0="${escapeHtml(t.key)}" data-arg1="locations" data-arg2="${escapeHtml(l)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️</button>
+        <button data-op="deletePositionTypeEntry" data-arg0="${escapeHtml(t.key)}" data-arg1="locations" data-arg2="${escapeHtml(l)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      </li>`).join('');
+    const jobRows = (t.jobTitles || []).map(j => `
+      <li class="p-1.5 flex justify-between items-center gap-2 hover:bg-gray-50">
+        <span class="flex-1">${escapeHtml(j)}</span>
+        <button data-op="renamePositionTypeEntry" data-arg0="${escapeHtml(t.key)}" data-arg1="jobTitles" data-arg2="${escapeHtml(j)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️</button>
+        <button data-op="deletePositionTypeEntry" data-arg0="${escapeHtml(t.key)}" data-arg1="jobTitles" data-arg2="${escapeHtml(j)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      </li>`).join('');
+    return `
+    <div class="bg-white rounded border p-2 space-y-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-semibold text-xs">${escapeHtml(t.label)}</span>
+        <div class="flex gap-2 text-xs">
+          <button data-op="renamePositionTypeLabel" data-arg0="${escapeHtml(t.key)}" data-arg1="${escapeHtml(t.label)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Đổi tên</button>
+          <button data-op="deletePositionType" data-arg0="${escapeHtml(t.key)}" data-arg1="${escapeHtml(t.label)}" class="text-red-500 font-bold hover:underline">Xóa Vị Trí</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div>
+          <div class="text-[11px] font-semibold text-gray-500 mb-1">📍 Địa Điểm</div>
+          <form data-op-submit="addPositionTypeEntry" data-arg0="${escapeHtml(t.key)}" data-arg1="locations" class="flex gap-1 mb-1">
+            <input id="txtPositionTypeLocation_${escapeHtml(t.key)}" placeholder="Tên địa điểm mới..." class="border rounded px-1.5 py-1 text-[11px] flex-1">
+            <button type="submit" class="bg-violet-600 text-white px-2 rounded text-[11px] font-bold hover:bg-violet-700">Thêm</button>
+          </form>
+          <ul class="divide-y text-[11px] max-h-28 overflow-y-auto border rounded">${locRows || '<li class="p-1.5 text-gray-400 italic">Chưa có địa điểm nào</li>'}</ul>
+        </div>
+        <div>
+          <div class="text-[11px] font-semibold text-gray-500 mb-1">🎖️ Chức Danh</div>
+          <form data-op-submit="addPositionTypeEntry" data-arg0="${escapeHtml(t.key)}" data-arg1="jobTitles" class="flex gap-1 mb-1">
+            <input id="txtPositionTypeJobTitle_${escapeHtml(t.key)}" placeholder="Tên chức danh mới..." class="border rounded px-1.5 py-1 text-[11px] flex-1">
+            <button type="submit" class="bg-violet-600 text-white px-2 rounded text-[11px] font-bold hover:bg-violet-700">Thêm</button>
+          </form>
+          <ul class="divide-y text-[11px] max-h-28 overflow-y-auto border rounded">${jobRows || '<li class="p-1.5 text-gray-400 italic">Chưa có chức danh nào</li>'}</ul>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // Cập nhật lại các dropdown chọn "Loại đào tạo" bên module Đào Tạo (module-internalcomms-daotao.js,
 // cụm lazy-load RIÊNG, KHÔNG còn gộp chung cụm với admin.js — xem chú thích Hạ tầng: nạp module theo
 // cụm ở core.js) sau khi thêm/xoá danh mục ở màn "Quản Trị > Quản Lý Danh Mục" này. Màn hình NÀY (nút

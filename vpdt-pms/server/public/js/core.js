@@ -3562,6 +3562,9 @@ async function initDatabase(loggingInUser, opts) {
     DB.contractTypeAbbrs = data.contractTypeAbbrs || {};
     DB.jobTitles = data.jobTitles || [];
     DB.storeJobTitles = data.storeJobTitles || [];
+    // positionTypes ("Vị Trí Làm Việc", 10/2026) — xem getPosType*()/populateUserPosTypeOptions() ở
+    // đây (core.js) + routes/positionTypes.js.
+    DB.positionTypes = data.positionTypes || [];
     DB.submissionTypes = data.submissionTypes || [];
     DB.contractTypes = data.contractTypes || [];
     DB.carTypes = data.carTypes || [];
@@ -7762,16 +7765,58 @@ function setOfficeSubTab(subTab) {
 // hợp lệ (cùng khuôn subTypeSel ở populateDropdowns()). Gọi lại mỗi khi DB.internalNewsCategories/
 // internalShareCategories đổi (populateDropdowns() sau initDatabase()/sau khi admin lưu danh sách ở màn
 // Biểu Mẫu) — KHÔNG phụ thuộc activeInternalSubTab, setInternalSubTab() chỉ lo ẩn/hiện wrapper.
-// Chức Danh (uJobTitle) phụ thuộc Vị Trí (uPosType, mục 4a) — HO dùng DB.jobTitles (Khối Văn Phòng),
-// Siêu Thị dùng DB.storeJobTitles (mảng {label}). Tách khỏi populateDropdowns() (logic tĩnh cũ) để gọi
-// lại được riêng mỗi khi đổi Vị Trí, không cần render lại toàn bộ dropdown khác của trang. CHUYỂN từ
-// module-admin-submissiongroups.js sang đây (Hạ tầng: nạp module theo cụm, đợt 7) — populateDropdowns()
-// gọi thẳng hàm này ở MỌI switchTab(), không riêng gì tab Hệ Thống/Admin.
+// Vị Trí Làm Việc (posType, 10/2026 — danh mục MỞ thay 2 giá trị cứng HO/STORE, xem defaults.js
+// positionTypes) — 4 hàm dưới đây là ĐIỂM TRUY VẤN DUY NHẤT cho "Vị Trí X dùng danh mục địa
+// điểm/chức danh nào" — MỌI nơi cần biết điều này (form Người Dùng, Import Excel, Vị Trí Kiêm Nhiệm...)
+// phải gọi qua đây thay vì tự viết lại ternary posType==='STORE'. HO/STORE (builtin, xem
+// routes/positionTypes.js) tiếp tục dùng NGUYÊN hạ tầng cũ (DB.depts/DB.jobTitles,
+// DB.stores/DB.storeJobTitles) — không đổi hành vi, không migrate dữ liệu. Vị Trí Làm Việc TỰ THÊM
+// (builtin:false) mang theo ĐÚNG 1 cặp danh mục con riêng LỒNG trong chính entry của nó
+// (positionTypes[].locations[]/jobTitles[], chuỗi phẳng).
+function getPosTypeCatalogEntry(posType) {
+  return (DB.positionTypes || []).find(t => t.key === posType) || null;
+}
+function getPosTypeLocations(posType) {
+  if (posType === 'HO') return DB.depts || [];
+  if (posType === 'STORE') return DB.stores || [];
+  return getPosTypeCatalogEntry(posType)?.locations || [];
+}
+function getPosTypeJobTitles(posType) {
+  if (posType === 'HO') return DB.jobTitles || [];
+  if (posType === 'STORE') return (DB.storeJobTitles || []).map(t => t.label);
+  return getPosTypeCatalogEntry(posType)?.jobTitles || [];
+}
+function getPosTypeLabel(posType) {
+  if (posType === 'HO') return 'HO (Văn phòng)';
+  if (posType === 'STORE') return 'Siêu Thị';
+  return getPosTypeCatalogEntry(posType)?.label || posType || '';
+}
+
+// #uPosType (Vị Trí Làm Việc, form Người Dùng) — nạp ĐỘNG từ DB.positionTypes thay vì 2 <option> cố
+// định trong HTML trước đây (xem systemSection.html) — gọi ở populateDropdowns() (mọi switchTab(), như
+// populateUserJobTitleOptions() dưới đây) VÀ ngay sau khi admin thêm/xoá 1 Vị Trí Làm Việc ở Quản Lý
+// Danh Mục. DB.positionTypes rỗng/chưa tải (hiếm, chỉ lúc mới vào) -> fallback 2 giá trị HO/STORE để
+// form Người Dùng không bao giờ hiện dropdown trống hẳn.
+function populateUserPosTypeOptions() {
+  const sel = document.getElementById('uPosType');
+  if (!sel) return;
+  const current = sel.value;
+  const types = (DB.positionTypes && DB.positionTypes.length) ? DB.positionTypes
+    : [{ key: 'HO', label: 'HO (Văn phòng)' }, { key: 'STORE', label: 'Siêu Thị' }];
+  sel.innerHTML = types.map(t => `<option value="${escapeHtml(t.key)}">${escapeHtml(t.label)}</option>`).join('');
+  if (types.some(t => t.key === current)) sel.value = current;
+}
+
+// Chức Danh (uJobTitle) phụ thuộc Vị Trí Làm Việc (uPosType, mục 4a) — xem getPosTypeJobTitles() ở
+// trên. Tách khỏi populateDropdowns() (logic tĩnh cũ) để gọi lại được riêng mỗi khi đổi Vị Trí, không
+// cần render lại toàn bộ dropdown khác của trang. CHUYỂN từ module-admin-submissiongroups.js sang đây
+// (Hạ tầng: nạp module theo cụm, đợt 7) — populateDropdowns() gọi thẳng hàm này ở MỌI switchTab(),
+// không riêng gì tab Hệ Thống/Admin.
 function populateUserJobTitleOptions(posType) {
   const uJobTitle = document.getElementById('uJobTitle');
   if (!uJobTitle) return;
   const current = uJobTitle.value;
-  const options = posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+  const options = getPosTypeJobTitles(posType);
   uJobTitle.innerHTML = '<option value="">-- Chưa gán --</option>' + options.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   if (options.includes(current)) uJobTitle.value = current;
 }
@@ -8054,7 +8099,9 @@ function populateDropdowns() {
     uStore.innerHTML = DB.stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   }
 
-  // uJobTitle phụ thuộc uPosType (mục 4a) — xem populateUserJobTitleOptions()/onUserPosTypeChange().
+  // uPosType nạp ĐỘNG từ DB.positionTypes (xem populateUserPosTypeOptions() ở trên) — PHẢI chạy TRƯỚC
+  // uJobTitle (phụ thuộc uPosType, mục 4a — xem populateUserJobTitleOptions()/onUserPosTypeChange()).
+  populateUserPosTypeOptions();
   populateUserJobTitleOptions(document.getElementById('uPosType')?.value || 'HO');
 
   // Loại Tờ Trình / Loại Pháp Lý (Hợp đồng) / Loại Xe — TRƯỚC ĐÂY <option> gõ cứng, giờ đổ động từ

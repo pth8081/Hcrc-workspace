@@ -486,14 +486,29 @@ function cancelPermFormEdit() {
 // Đọc + xác thực phần DỮ LIỆU CHUNG của form Người dùng (dùng cho cả sửa người có sẵn, lưu ngay 1
 // người mới, và thêm 1 người mới vào danh sách chờ — xem saveUser()/addUserToStagingList()). Trả về
 // null (đã tự alert lý do) nếu có lỗi.
-// Vị Trí (HO/Siêu Thị) — chọn HO hiện select Phòng Ban (nguồn DB.depts) + ẩn Siêu Thị, chọn Siêu Thị
-// thì ngược lại. Dù chọn nguồn nào, chỉ 1 giá trị chuỗi duy nhất được ghi vào user.dept khi lưu (xem
-// readUserFormState()) — mọi workflow/quyền scope hiện có dùng user.dept làm khoá tra cứu không cần
-// biết/quan tâm giá trị đó đến từ danh mục nào.
+// Vị Trí Làm Việc (10/2026 — danh mục MỞ, xem defaults.js positionTypes/getPosType*() ở core.js) — chọn
+// HO hiện select Phòng Ban (nguồn DB.depts) + ẩn 2 ô còn lại, chọn Siêu Thị thì hiện ô Siêu Thị
+// (DB.stores), chọn 1 Vị Trí Làm Việc TỰ THÊM (VD "Kho") thì hiện ô "Địa Điểm" dùng ĐÚNG danh sách
+// locations[] riêng của Vị Trí đó (uCustomLocationFieldWrap, xem systemSection.html). Dù chọn nguồn
+// nào, chỉ 1 giá trị chuỗi duy nhất được ghi vào user.dept khi lưu (xem readUserFormState()) — mọi
+// workflow/quyền scope hiện có dùng user.dept làm khoá tra cứu không cần biết/quan tâm giá trị đó đến
+// từ danh mục nào.
 function onUserPosTypeChange() {
   const posType = document.getElementById('uPosType').value;
   document.getElementById('uDeptFieldWrap').classList.toggle('hidden', posType !== 'HO');
   document.getElementById('uStoreFieldWrap').classList.toggle('hidden', posType !== 'STORE');
+  const customWrap = document.getElementById('uCustomLocationFieldWrap');
+  const isCustom = posType !== 'HO' && posType !== 'STORE';
+  if (customWrap) {
+    customWrap.classList.toggle('hidden', !isCustom);
+    if (isCustom) {
+      const sel = document.getElementById('uCustomLocation');
+      const current = sel.value;
+      const locations = getPosTypeLocations(posType);
+      sel.innerHTML = locations.map(l => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+      if (locations.includes(current)) sel.value = current;
+    }
+  }
   populateUserJobTitleOptions(posType);
 }
 
@@ -509,8 +524,14 @@ function readUserFormState() {
   const email = document.getElementById('uEmail').value.trim();
   const phone = document.getElementById('uPhone').value.trim();
   const posType = document.getElementById('uPosType').value;
-  const dept = posType === 'STORE' ? document.getElementById('uStore').value : document.getElementById('uDept').value;
-  if (!dept) { alert(posType === 'STORE' ? 'Vui lòng chọn Siêu Thị!' : 'Vui lòng chọn Phòng Ban!'); return null; }
+  const dept = posType === 'STORE' ? document.getElementById('uStore').value
+    : posType === 'HO' ? document.getElementById('uDept').value
+    : document.getElementById('uCustomLocation')?.value || '';
+  if (!dept) {
+    const label = posType === 'STORE' ? 'Siêu Thị' : posType === 'HO' ? 'Phòng Ban' : `Địa Điểm (${getPosTypeLabel(posType)})`;
+    alert(`Vui lòng chọn ${label}!`);
+    return null;
+  }
   const jobTitle = document.getElementById('uJobTitle').value || null;
   const secondaryPositions = getMultiSelectValues('uSecondaryPositionsMultiSelect').map(decodeWfPositionPair).filter(Boolean);
   const nghiepVuExtraKeys = getMultiSelectValues('uNghiepVuExtraKeysMultiSelect');

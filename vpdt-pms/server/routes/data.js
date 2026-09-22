@@ -207,6 +207,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // mục (learnLicenseType(), routes/create.js) — không dựng lại được khả năng ghi đè/xoá trắng cả
   // danh mục. Admin vẫn thêm/bớt/dọn danh mục ở màn Quản Lý Danh Mục qua đúng route này như trước.
   'depts', 'cats', 'licenseTypes', 'trainingCategories', 'contractTypeAbbrs',
+  // positionTypes ("Vị Trí Làm Việc", 10/2026 — danh mục MỞ thay cho 2 giá trị cứng HO/STORE, xem
+  // defaults.js) — cùng lý do stores/jobTitles ở trên, panel CRUD chỉ hiện cho admin (Quản Lý Danh Mục).
+  'positionTypes',
   // externalApiKeys: API key cấp cho ứng dụng ngoài xác thực tài khoản HCRC (xem lib/externalAuth.js) —
   // quản lý qua routes/externalAuthAdmin.js (tạo/thu hồi có audit, sinh key/hash server-side), route
   // này chỉ còn là đường lùi ghi thô admin-only (khớp tiền lệ itPriceMasterLists/emailConfig). READ qua

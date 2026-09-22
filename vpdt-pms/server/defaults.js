@@ -76,6 +76,23 @@ const DEFAULTS = {
   // Dạng {label}[] (khác jobTitles là mảng chuỗi phẳng) — trước đây còn cờ restrictedFromSelfService
   // (dùng riêng cho sub-tab "Quản Lý Nhân Viên Siêu Thị" ở Đồng Phục, đã gỡ hẳn cùng sub-tab đó).
   storeJobTitles: [],
+  // Vị Trí Làm Việc (10/2026, yêu cầu trực tiếp người dùng — TÁCH khỏi khái niệm "Chức Danh", đặt tên
+  // "Vị Trí Làm Việc" khớp thuật ngữ Cơ Cấu Tổ Chức đã dùng sẵn cho posType, xem
+  // orgChartNodePosTypeSelect ở index.html): danh mục MỞ liệt kê mọi giá trị posType hợp lệ, thay cho 2
+  // giá trị cứng "HO"/"STORE" trước đây. 2 mục "HO"/"STORE" (builtin:true, KHÔNG được đổi/xoá key — xem
+  // routes/positionTypes.js) tiếp tục dùng NGUYÊN hạ tầng cũ (DB.depts/DB.jobTitles cho HO,
+  // DB.stores/DB.storeJobTitles cho STORE — không đổi gì, không migrate dữ liệu). Vị Trí Làm Việc MỚI
+  // admin tự thêm (VD "Kho") mang theo ĐÚNG 1 cặp danh mục con RIÊNG (locations[]/jobTitles[], dạng chuỗi
+  // phẳng) — không dùng chung DB.depts/DB.stores, khớp yêu cầu "mỗi Vị Trí có danh sách địa điểm + Chức
+  // Danh riêng, giống khuôn Siêu Thị". PHẠM VI GIAI ĐOẠN 1 (đã xác nhận với người dùng): chỉ áp dụng ở
+  // form Người Dùng/Import Excel/Phòng Ban-Chức Danh cascading/Vị Trí Kiêm Nhiệm — các tính năng nghiệp
+  // vụ khác hiện CHỈ nhận biết HO/STORE (Checklist tự đánh giá Siêu Thị, mô hình ca kíp Công&Phép/Lương,
+  // validate bắt buộc HR Onboarding, bộ duyệt hỗn hợp Vận Hành...) TẠM giữ nguyên hành vi cũ, không tự
+  // động áp dụng cho Vị Trí Làm Việc mới — xem ghi chú trong VERSION.md đợt merge này.
+  positionTypes: [
+    { key: 'HO', label: 'HO (Văn phòng)', builtin: true },
+    { key: 'STORE', label: 'Siêu Thị', builtin: true }
+  ],
   // Loại đào tạo (module con "Truyền Thông Nội Bộ" > Đào tạo, tạm thời) — phân loại Kho Tài Liệu và Lớp
   // Học, cùng cơ chế mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, không có tra cứu phụ thuộc).
   trainingCategories: [],

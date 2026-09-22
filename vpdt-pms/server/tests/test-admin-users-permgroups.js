@@ -149,6 +149,10 @@ async function scenario(name, fn) {
     // ---- Seed DB collections read by populateDropdowns()/finishLogin()/the admin user form ----
     DB.depts = ['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc'];
     DB.stores = ['Siêu Thị Quận 1', 'Siêu Thị Quận 3'];
+    // positionTypes ("Vị Trí Làm Việc", 10/2026) — seed khớp ĐÚNG 2 mục builtin thật (xem defaults.js),
+    // scenario (m) ở dưới gọi initDatabase() với response /api/data tối giản (chỉ "users") có thể xoá
+    // mất field này giữa chừng — các scenario sau (k)(l)(m2) tự re-seed lại nếu cần.
+    DB.positionTypes = [{ key: 'HO', label: 'HO (Văn phòng)', builtin: true }, { key: 'STORE', label: 'Siêu Thị', builtin: true }];
     DB.deptAbbrs = {};
     DB.cats = [];
     DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
@@ -949,6 +953,7 @@ async function scenario(name, fn) {
       DB.stores = ['Siêu Thị Quận 1', 'Siêu Thị Quận 3'];
       DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
       DB.storeJobTitles = [{ label: 'Nhân viên bán hàng' }];
+      DB.positionTypes = [{ key: 'HO', label: 'HO (Văn phòng)', builtin: true }, { key: 'STORE', label: 'Siêu Thị', builtin: true }];
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         if (url === '/api/admin/users/import-xlsx') {
@@ -980,6 +985,7 @@ async function scenario(name, fn) {
       DB.depts = ['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc'];
       DB.stores = ['Siêu Thị Quận 1', 'Siêu Thị Quận 3'];
       DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
+      DB.positionTypes = [{ key: 'HO', label: 'HO (Văn phòng)', builtin: true }, { key: 'STORE', label: 'Siêu Thị', builtin: true }];
       const savedFetch = window.fetch;
       window.fetch = async (url, opts) => {
         if (url === '/api/admin/users/import-xlsx') {

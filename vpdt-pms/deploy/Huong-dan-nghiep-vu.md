@@ -3709,6 +3709,30 @@ dropdown), và nếu sau này tạo lại **đúng tên cũ** thì các cấu h�
 có hiệu lực trở lại. Hộp thoại xác nhận khi xoá nay nêu rõ điều này và nhắc
 dùng nút **✏️ Sửa** (đổi tên có cascade) nếu chỉ muốn sửa tên gõ sai.
 
+**🧭 Vị Trí Làm Việc (10/2026)** — danh mục MỞ thay cho 2 giá trị cứng
+"HO"/"Siêu Thị" trước đây quyết định ô "Vị Trí Làm Việc" ở form tạo/sửa
+Người Dùng (xem mục 7.7). Bấm **"Thêm"** để tạo 1 Vị Trí Làm Việc mới (VD
+"Kho") — mỗi Vị Trí mang theo **1 cặp danh mục con RIÊNG** (📍 Địa Điểm +
+🎖️ Chức Danh, chuỗi phẳng), giống hệt khuôn Siêu Thị hiện có. 2 mục HO/Siêu
+Thị luôn có sẵn, không xoá/đổi định danh được (chỉ đổi tên hiển thị) — quản
+lý địa điểm/chức danh của 2 mục này vẫn ở đúng 2 khối Phòng Ban/Siêu
+Thị/Chức Danh phía trên, không phải ở khối này.
+
+- **Đổi tên (✏️) 1 địa điểm/chức danh con** — CÓ cascade: cập nhật ngay mọi
+  tài khoản/hồ sơ đang mang tên cũ (địa điểm dùng chung hạ tầng cascade với
+  Phòng Ban/Siêu Thị, xem giải thích ở mục 7.2 trên).
+- **Xoá hẳn 1 Vị Trí Làm Việc** — khác các danh mục phẳng khác (chỉ cảnh
+  báo trước khi xoá), bị **CHẶN CỨNG** nếu đang có ít nhất 1 tài khoản gán
+  Vị Trí đó (xoá kéo theo mất luôn nhánh Địa Điểm/Chức Danh con) — phải đổi
+  Vị Trí Làm Việc của họ trước.
+- **Phạm vi hiện tại**: Vị Trí Làm Việc TỰ THÊM (khác HO/Siêu Thị) áp dụng
+  cho form Người Dùng, Import Excel Người Dùng, cascading Phòng Ban-Chức
+  Danh, và Vị Trí Kiêm Nhiệm (mục 7.6). Các tính năng nghiệp vụ khác hiện
+  **CHỈ nhận biết HO/Siêu Thị** (Checklist tự đánh giá Siêu Thị, mô hình ca
+  kíp Công&Phép/Lương, validate bắt buộc ở HR Onboarding, bộ duyệt hỗn hợp
+  Vận Hành-Đặt Hàng, Cơ Cấu Tổ Chức) — nhân sự gán 1 Vị Trí Làm Việc mới sẽ
+  **KHÔNG** tự động có các tính năng này.
+
 ### 7.3. Biểu Mẫu
 
 **📋 Biểu Mẫu** — vai trò: cho phép admin tự tuỳ biến field của gần như mọi

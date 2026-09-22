@@ -600,33 +600,38 @@ function exportUsersExcel() {
 // mới thật sự ghi sau khi người dùng xác nhận từng dòng.
 let usersImportPreviewItems = [];
 
-// Đối chiếu NGHIÊM NGẶT 4 trường Vị Trí/Phòng Ban/Chức Danh/Ngày Vào Làm Việc của 1 dòng import với
-// đúng danh mục đang áp dụng cho form tạo tay (yêu cầu trực tiếp người dùng 10/2026: "khi import mà các
-// trường như chức danh, phòng ban, vị trí, ngày vào vừa khớp format chưa khớp với khai báo thì phải yêu
-// cầu điền thông tin đúng, chặn lại ngay") — KHÔNG tự suy đoán/mặc định giá trị nào, sai bất kỳ trường
-// nào cũng trả về lỗi để renderUsersImportPreview() chặn cứng cả dòng (không có checkbox), khác hẳn cách
-// dept ở form tay luôn có sẵn giá trị hợp lệ do chọn từ dropdown. server (parseUsersImportXlsx) chỉ đọc
-// thô/không có logic nghiệp vụ gì — toàn bộ validate danh mục nằm ở đây vì chỉ client mới có sẵn
-// DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles.
+// Đối chiếu NGHIÊM NGẶT 4 trường Vị Trí Làm Việc/Phòng Ban/Chức Danh/Ngày Vào Làm Việc của 1 dòng import
+// với đúng danh mục đang áp dụng cho form tạo tay (yêu cầu trực tiếp người dùng 10/2026: "khi import mà
+// các trường như chức danh, phòng ban, vị trí, ngày vào vừa khớp format chưa khớp với khai báo thì phải
+// yêu cầu điền thông tin đúng, chặn lại ngay") — KHÔNG tự suy đoán/mặc định giá trị nào, sai bất kỳ
+// trường nào cũng trả về lỗi để renderUsersImportPreview() chặn cứng cả dòng (không có checkbox), khác
+// hẳn cách dept ở form tay luôn có sẵn giá trị hợp lệ do chọn từ dropdown. server (parseUsersImportXlsx)
+// chỉ đọc thô/không có logic nghiệp vụ gì — toàn bộ validate danh mục nằm ở đây vì chỉ client mới có sẵn
+// DB.positionTypes/DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles.
+// Vị Trí Làm Việc (10/2026) — danh mục MỞ, không còn giới hạn cứng HO/STORE: bất kỳ key nào đang có
+// trong DB.positionTypes đều hợp lệ (xem getPosType*() ở core.js), so KHÔNG phân biệt hoa/thường.
 function validateImportedUserRow(r) {
   const errors = [];
   const normalized = {};
 
   const posTypeRaw = String(r.posType || '').trim().toUpperCase();
-  if (posTypeRaw === 'HO' || posTypeRaw === 'STORE') {
-    normalized.posType = posTypeRaw;
+  const posTypeEntry = (DB.positionTypes || []).find(t => t.key.toUpperCase() === posTypeRaw);
+  if (posTypeEntry) {
+    normalized.posType = posTypeEntry.key;
   } else {
-    errors.push(`Vị Trí "${r.posType || ''}" không hợp lệ — phải là HO hoặc STORE`);
+    const validKeys = (DB.positionTypes || []).map(t => t.key).join('/') || 'HO/STORE';
+    errors.push(`Vị Trí Làm Việc "${r.posType || ''}" không hợp lệ — phải là ${validKeys}`);
   }
 
   const deptRaw = String(r.dept || '').trim();
+  const deptLabel = normalized.posType ? getPosTypeLabel(normalized.posType) : '';
   if (!deptRaw) {
-    errors.push('Thiếu Phòng Ban/Siêu Thị');
+    errors.push('Thiếu Phòng Ban/Siêu Thị/Địa Điểm');
   } else if (normalized.posType) {
-    const catalog = normalized.posType === 'STORE' ? (DB.stores || []) : (DB.depts || []);
+    const catalog = getPosTypeLocations(normalized.posType);
     const match = catalog.find(d => String(d).trim().toLowerCase() === deptRaw.toLowerCase());
     if (match) normalized.dept = match;
-    else errors.push(`${normalized.posType === 'STORE' ? 'Siêu Thị' : 'Phòng Ban'} "${deptRaw}" không có trong danh mục`);
+    else errors.push(`Phòng Ban/Địa Điểm "${deptRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
   }
 
   // Chức Danh — TUỲ CHỌN (khớp uJobTitle luôn có sẵn "-- Chưa gán --" ở form tay), chỉ chặn khi CÓ điền
@@ -635,10 +640,10 @@ function validateImportedUserRow(r) {
   if (!jobTitleRaw) {
     normalized.jobTitle = '';
   } else if (normalized.posType) {
-    const catalog = normalized.posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+    const catalog = getPosTypeJobTitles(normalized.posType);
     const match = catalog.find(t => String(t).trim().toLowerCase() === jobTitleRaw.toLowerCase());
     if (match) normalized.jobTitle = match;
-    else errors.push(`Chức Danh "${jobTitleRaw}" không có trong danh mục`);
+    else errors.push(`Chức Danh "${jobTitleRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
   }
 
   // Ngày Vào Làm Việc — TUỲ CHỌN (khớp uStartDate "Để trống hợp lệ" ở form tay), chỉ chặn khi CÓ điền mà
@@ -722,7 +727,7 @@ function renderUsersImportPreview() {
     } else {
       actionControl = `<input type="checkbox" data-op-change="onUsersImportRowToggle" data-arg0="${it._idx}" ${it.action === 'add' ? 'checked' : ''}>`;
     }
-    const posTypeLabel = it.normalized.posType === 'STORE' ? 'Siêu Thị' : (it.normalized.posType === 'HO' ? 'HO' : (it.posType || ''));
+    const posTypeLabel = it.normalized.posType ? getPosTypeLabel(it.normalized.posType) : (it.posType || '');
     return `<tr class="border-t${hasError ? ' bg-red-50 text-gray-500' : (note ? ' bg-amber-50' : '')}">
       <td class="p-1.5">${actionControl}</td>
       <td class="p-1.5">${escapeHtml(it.username || '')}</td>
