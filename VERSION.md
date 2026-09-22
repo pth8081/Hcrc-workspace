@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**23.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.91 (2026-09-22): Ma Trận Phân Quyền — đổi tên cột Excel sang tiếng Việt
+
+Theo yêu cầu người dùng: đổi tên cột trong file Excel Ma Trận Phân Quyền
+(`module-admin-permgroups.js`) từ dạng kỹ thuật `Q_<tên quyền>` (VD
+`Q_admin`, `Q_moduleAccess.hanhchinh.car`) sang đúng nhãn tiếng Việt như
+checkbox thật hiển thị ở cây phân quyền (VD "Hệ Thống & Chung — Quyền Admin
+(Trang quản trị)", "Quyền Vào Module — Hành Chính &gt; Đăng Ký Xe").
+
+- `PERM_KEY_VN_LABELS` (131 entry, `module-admin-permgroups.js`) — bảng ánh
+  xạ khoá quyền → nhãn tiếng Việt, TRÍCH XUẤT BẰNG SCRIPT (không gõ tay) từ
+  chính nhãn checkbox thật trong `fragments/systemSection.html` (ghép "Tên
+  khối — Nhãn checkbox") + `BUSINESS_MODULES` (`core.js`, cho cột
+  `moduleAccess.*`, có phân cấp "Cha &gt; Con" để tránh trùng nhãn, VD phân
+  biệt "Báo Cáo" cấp cao nhất với "Nhân Sự &gt; Báo Cáo") — đảm bảo khớp Y HỆT
+  những gì admin thấy khi tick tay ở màn Sửa Người Dùng/Sửa Nhóm Phân Quyền,
+  đã xác minh không có nhãn nào trùng nhau (import không thể bị lẫn cột).
+- `permMatrixColumnHeader(key)`/`resolvePermMatrixColumnKey(header)` — cặp
+  hàm xuôi/ngược: xuất Excel dùng nhãn tiếng Việt khi có, fallback về đúng
+  dạng `Q_<khoá>` cũ cho quyền hiếm/đã lỗi thời chưa có nhãn (không mất cột,
+  chỉ không có tên đẹp); nhập lại đọc được CẢ 2 dạng tên cột — file Excel đã
+  xuất từ các bản trước (header `Q_...` thô) vẫn nhập lại bình thường,
+  không cần xuất lại file mới.
+- Khoá `key` nội bộ dùng để ghi/đọc ô Excel (ExcelJS `column.key`) VẪN giữ
+  nguyên `Q_<khoá>` như cũ — chỉ đổi `header` (tên cột người dùng nhìn
+  thấy), không đổi logic đọc/ghi dữ liệu ô nào khác.
+- Test mới: 8 kịch bản bổ sung vào `tests/test-perm-matrix-client.js` (khoá
+  có nhãn ra header tiếng Việt + round-trip đúng khoá gốc; khoá không có
+  nhãn fallback đúng `Q_<khoá>`; tương thích ngược đọc được header `Q_...`
+  thô của bản cũ; cột không phải quyền như "Username" không bị hiểu nhầm;
+  `downloadPermMatrixUsers()` xuất đúng header tiếng Việt thật) — tổng
+  29/29 kịch bản `test-perm-matrix-client.js` pass, cộng 7/7
+  `test-perm-matrix-parse.js`. Full regression 281 file: chỉ 1 lỗi cũ đã
+  biết trước (thiếu file PDF fixture, không liên quan).
+- Cập nhật `Huong-dan-nghiep-vu.md` (mục 6.2) + Hướng Dẫn → Hệ Thống trong
+  app cho khớp cách hiển thị mới.
+
+Không đổi schema SQL/biến môi trường/dependency — chỉ đổi tên cột hiển thị,
+không đổi logic ghi/đọc dữ liệu nào.
 
 ## v23.90 (2026-09-22): rà soát toàn hệ thống cột "Trạng Thái Phê Duyệt" bị thiếu/giấu kín
 

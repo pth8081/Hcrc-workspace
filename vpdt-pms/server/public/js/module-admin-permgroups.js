@@ -288,6 +288,162 @@ async function deletePermGroup(id) {
 const PERM_MATRIX_MULTI_SEP = ';'; // phân cách nhiều giá trị trong 1 ô (Nhóm Phân Quyền/Báo Cáo - Mục Bổ Sung)
 const PERM_MATRIX_COL_PREFIX = 'Q_';
 
+// Nhãn tiếng Việt cho cột Ma Trận Phân Quyền (theo yêu cầu người dùng 10/2026: "đổi tên cột thành tiếng
+// Việt ứng với hệ thống đang hiển thị") — trích XUẤT MÁY (không gõ tay) từ đúng nhãn checkbox thật ở cây
+// phân quyền (fragments/systemSection.html, ghép "Tên khối — Nhãn checkbox") + BUSINESS_MODULES
+// (core.js, cho các cột moduleAccess.*), đảm bảo khớp Y HỆT những gì admin thấy khi tick tay ở màn Sửa
+// Người Dùng/Sửa Nhóm Phân Quyền. LƯU Ý: đây là 1 BẢN CHỤP tĩnh — nếu sau này thêm quyền mới hoặc đổi
+// nhãn checkbox trong systemSection.html, khoá đó tạm thời xuất ra dạng "Q_<khoá>" cũ (vẫn hoạt động
+// bình thường, chỉ không có nhãn tiếng Việt) cho tới khi có người bổ sung 1 dòng tương ứng vào đây.
+const PERM_KEY_VN_LABELS = {
+  "admin": "Hệ Thống & Chung — Quyền Admin (Trang quản trị)",
+  "approverAuthLevel": "Hệ Thống & Chung — 🔐 Xác thực bổ sung khi bấm Duyệt",
+  "budgetAggregate": "Ngân Sách — 📊 Tổng hợp (xem Tổng Hợp Theo Phòng, mọi phòng ban)",
+  "budgetCreate": "Ngân Sách — 📝 Xem, tạo ngân sách (xem/nhập/sửa Phê Duyệt & Thực Hiện + Tổng Hợp — đúng phòng ban mình)",
+  "budgetManage": "Ngân Sách — 📅 Quản lý (xem MỌI phòng ban + Tổng Hợp Toàn Công Ty, không sửa được ngân sách phòng khác; tạo/đóng/mở kỳ, quản lý mẫu)",
+  "canBeApprover": "Hệ Thống & Chung — ✅ Có thể được chọn làm người duyệt",
+  "canViewReports": "Hệ Thống & Chung — 📊 Được xem Báo cáo quản trị",
+  "carCreate.all": "Đăng Ký Xe — Tạo mới",
+  "carDispatch": "Đăng Ký Xe — 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục \"Phần Dành Cho Phòng Hành Chính\" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)",
+  "carDownload.all": "Đăng Ký Xe — Tải xuống",
+  "carView.all": "Đăng Ký Xe — Xem",
+  "checklistAuditScope.all": "Checklist Đánh Giá Siêu Thị — Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)",
+  "checklistReportView": "Checklist Đánh Giá Siêu Thị — 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)",
+  "checklistTemplateManage": "Checklist Đánh Giá Siêu Thị — 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)",
+  "contractApprove": "Hợp Đồng & Giấy Phép — ✅ Duyệt hợp đồng (toàn công ty, sub-tab \"Phê Duyệt\")",
+  "contractCreate.all": "Hợp Đồng & Giấy Phép — Tạo mới",
+  "contractDownload.all": "Hợp Đồng & Giấy Phép — Tải xuống",
+  "contractImportSigned": "Hợp Đồng & Giấy Phép — 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab \"Quản Lý HĐ\")",
+  "contractView.all": "Hợp Đồng & Giấy Phép — Xem",
+  "docDownload.all": "Tài Liệu — Tải Xuống",
+  "hrAttendanceManage": "Nhân Sự — ⏱️ Quản Lý Chấm Công & Phép Năm (HR)",
+  "hrContractManage": "Nhân Sự — 📝 Quản Lý Hợp Đồng Lao Động (HR)",
+  "hrLeaveApprove": "Nhân Sự — ✅ Duyệt Đơn Nghỉ Phép (quản lý trực tiếp)",
+  "hrOffboardingManage": "Nhân Sự — 🚪 Quản Lý Offboarding",
+  "hrOnboardingManage": "Nhân Sự — 🆕 Quản Lý Onboarding",
+  "hrPayrollApprove": "Nhân Sự — ✅ Duyệt Lương (tách biệt Lập/Tính)",
+  "hrPayrollManage": "Nhân Sự — 💰 Lập/Tính Lương (Kế Toán/HR)",
+  "hrProcessManage": "Nhân Sự — ✅ Toàn Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding (hoàn thành/bỏ qua task, huỷ/giao lại quy trình của người khác — kể cả task quyết định thử việc/chấm dứt hợp đồng)",
+  "hrProfileCreate": "Nhân Sự — ➕ Tạo Mới Hồ Sơ Nhân Sự (tay + Excel hàng loạt)",
+  "hrProfileEdit": "Nhân Sự — ✏️ Sửa Hồ Sơ Nhân Sự (đã có sẵn — không tự tạo hồ sơ mới nếu chưa tick \"Tạo Mới\")",
+  "hrProfileFullView": "Nhân Sự — 👁️ Xem Toàn Bộ Hồ Sơ Nhân Sự (không giới hạn như quản lý trực tiếp, không sửa được)",
+  "hrProfileManage": "Nhân Sự — 🗂️ Quản Lý Hồ Sơ Nhân Sự (HR — xem/sửa đầy đủ, liên kết tài khoản)",
+  "hrProfileView": "Nhân Sự — 👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới (quản lý trực tiếp)",
+  "hrShiftRosterManage": "Nhân Sự — 📅 Lập Lịch Phân Ca (Quản Lý Siêu Thị)",
+  "hrShiftSwapApprove": "Nhân Sự — 🔁 Duyệt Đổi Ca (Quản Lý Siêu Thị)",
+  "hrTaskTemplateManage": "Nhân Sự — 📋 Quản Lý Checklist Mẫu (Onboarding/Offboarding)",
+  "hrViewAll": "Nhân Sự — 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding (CHỈ xem tiến độ, KHÔNG thao tác được task/quy trình — cần thêm \"Toàn Quyền Thao Tác\" ở trên nếu muốn ghi)",
+  "internalNewsCreate": "Truyền Thông Nội Bộ — 📰 Đăng Nhịp Sống HCRC",
+  "internalPostApprove": "Truyền Thông Nội Bộ — ✅ Duyệt bài \"Góc chia sẻ\" (toàn công ty)",
+  "internalRecruitmentCreate": "Truyền Thông Nội Bộ — 💼 Đăng Tuyển dụng",
+  "itManage": "Hỗ Trợ IT — 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket Hỗ Trợ Yêu Cầu)",
+  "itPriceEmergencyRejectApproveRetail": "Hỗ Trợ IT — 🚨 Phê duyệt từ chối khẩn cấp Bán Lẻ",
+  "itPriceEmergencyRejectApproveWholesale": "Hỗ Trợ IT — 🚨 Phê duyệt từ chối khẩn cấp Bán Buôn",
+  "itPriceProposeCreateRetail": "Hỗ Trợ IT — 🏷️ Đề xuất duyệt giá Bán Lẻ",
+  "itPriceProposeCreateWholesale": "Hỗ Trợ IT — 🏷️ Đề xuất duyệt giá Bán Buôn",
+  "itPriceSupport": "Hỗ Trợ IT — 💲 Hỗ trợ giá Bán Buôn/Bán Lẻ (áp giá sau khi duyệt, xem toàn bộ Phê Duyệt Giá)",
+  "itServiceRenewalManage": "Hỗ Trợ IT — 🔔 Sử dụng Gia Hạn Dịch Vụ",
+  "kpiFlowConfigManage": "Nhân Sự — 🎯 Cấu Hình Luồng Đánh Giá KPI",
+  "licenseApprove": "Giấy Phép — ✔️ Duyệt Giấy Phép (kể cả Gia Hạn/Thu Hồi)",
+  "licenseCreate": "Giấy Phép — 📤 Tạo / Tải Lên Giấy Phép",
+  "licenseView": "Giấy Phép — 👁️ Xem / Tải Giấy Phép",
+  "meetingApprove": "Phòng Họp — ✅ Phê duyệt phòng họp (toàn công ty)",
+  "meetingBookScope.all": "Phòng Họp — Đăng ký (book)",
+  "meetingCancel": "Phòng Họp — ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)",
+  "meetingView.all": "Phòng Họp — Xem",
+  "minutesCreate": "Biên Bản Họp & 📋 Công Việc — ✅ Tạo mới (lập) biên bản",
+  "minutesDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải tất cả biên bản",
+  "minutesEdit": "Biên Bản Họp & 📋 Công Việc — ✏️ Sửa tất cả biên bản",
+  "minutesView": "Biên Bản Họp & 📋 Công Việc — 👁️ Xem tất cả biên bản",
+  "moduleAccess.budget": "Quyền Vào Module — Tổng Hợp > Ngân Sách",
+  "moduleAccess.car": "Quyền Vào Module — Hành Chính > Đăng Ký Xe",
+  "moduleAccess.checklist": "Quyền Vào Module — Checklist Đánh Giá Siêu Thị",
+  "moduleAccess.contract": "Quyền Vào Module — Hợp Đồng",
+  "moduleAccess.doc": "Quyền Vào Module — Tài Liệu",
+  "moduleAccess.hanhchinh": "Quyền Vào Module — Hành Chính",
+  "moduleAccess.hr": "Quyền Vào Module — Nhân Sự",
+  "moduleAccess.hrAttendance": "Quyền Vào Module — Nhân Sự > Công & Phép",
+  "moduleAccess.hrContract": "Quyền Vào Module — Nhân Sự > Hợp Đồng Lao Động",
+  "moduleAccess.hrLifecycle": "Quyền Vào Module — Nhân Sự > Onboarding / Offboarding",
+  "moduleAccess.hrPayroll": "Quyền Vào Module — Nhân Sự > Lương",
+  "moduleAccess.hrProfile": "Quyền Vào Module — Nhân Sự > Hồ Sơ Nhân Sự",
+  "moduleAccess.hrReport": "Quyền Vào Module — Nhân Sự > Báo Cáo",
+  "moduleAccess.internal": "Quyền Vào Module — Truyền Thông Nội Bộ",
+  "moduleAccess.itSupport": "Quyền Vào Module — Hỗ Trợ IT",
+  "moduleAccess.license": "Quyền Vào Module — Hành Chính > Giấy Phép",
+  "moduleAccess.meeting": "Quyền Vào Module — Hành Chính > Đặt Phòng Họp",
+  "moduleAccess.minutes": "Quyền Vào Module — Biên Bản Họp",
+  "moduleAccess.muaHang": "Quyền Vào Module — Mua Hàng",
+  "moduleAccess.nghiepVu": "Quyền Vào Module — Nghiệp Vụ",
+  "moduleAccess.office": "Quyền Vào Module — Tổng Hợp",
+  "moduleAccess.orgChart": "Quyền Vào Module — Nhân Sự > Cơ Cấu Tổ Chức",
+  "moduleAccess.periodicReport": "Quyền Vào Module — Báo Cáo Định Kỳ",
+  "moduleAccess.reports": "Quyền Vào Module — Báo Cáo",
+  "moduleAccess.submission": "Quyền Vào Module — Văn Bản Trình / Tờ Trình",
+  "moduleAccess.task": "Quyền Vào Module — Công Việc",
+  "moduleAccess.uniform": "Quyền Vào Module — Hành Chính > Đồng Phục",
+  "moduleAccess.vanHanh": "Quyền Vào Module — Vận Hành",
+  "moduleAccess.vpp": "Quyền Vào Module — Hành Chính > Văn Phòng Phẩm",
+  "nghiepVuViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Mục Nghiệp Vụ (bỏ qua giới hạn theo quyền module)",
+  "nhanSuManage": "Nhân Sự — 🤝 Quản lý Nhân Sự (quản lý & phản hồi ý kiến)",
+  "officeBuy": "Văn Phòng (Mua/Sửa) — 🛒 Mua Bán",
+  "officeCreate.all": "Văn Phòng (Mua/Sửa) — Tạo mới",
+  "officeDownload.all": "Văn Phòng (Mua/Sửa) — Tải xuống",
+  "officeFix": "Văn Phòng (Mua/Sửa) — 🔧 Sửa Chữa",
+  "officeView.all": "Văn Phòng (Mua/Sửa) — Xem",
+  "onboardingEvaluate": "Đào Tạo — 🆕 Đánh Giá Tân Binh (Giai đoạn 3, theo đơn vị)",
+  "operationOrderCreate": "Vận Hành — 📦 Tạo/Gửi Đơn Hàng",
+  "operationOrderReceiptManageHO": "Vận Hành — 🏢 Quyền Phê Duyệt Đặt Hàng HO",
+  "operationOrderReceiptManageStore.all": "Vận Hành — Quyền Phê Duyệt Đặt Hàng Siêu Thị",
+  "operationRecordManageAll": "Vận Hành — 🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt Người Tạo)",
+  "operationRecordViewAll": "Vận Hành — 👁️ Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị (Không Phân Biệt Phòng Ban, KHÔNG có quyền sửa)",
+  "operationRepairCreate": "Vận Hành — 🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)",
+  "operationStoreOpenCreate": "Vận Hành — 🏬 Tạo Đề Xuất Mở Mới Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)",
+  "orgChartManage": "Nhân Sự — 🌳 Quản Lý Cơ Cấu Tổ Chức",
+  "paymentManage": "Thanh Toán — 💰 Quản lý Thanh Toán (toàn công ty)",
+  "rebateApprove": "Mua Hàng > BAS — ✅ Phê Duyệt (dự phòng Giai đoạn 2 — Sổ Cái)",
+  "rebateReconcile": "Mua Hàng > BAS — 🔄 Đối Chiếu (dự phòng Giai đoạn 2 — Sổ Cái)",
+  "rebateTermActivate": "Mua Hàng > BAS — ▶️ Kích Hoạt Điều Khoản (tách biệt khỏi Quản Lý)",
+  "rebateTermManage": "Mua Hàng > BAS — 🛠️ Quản Lý NCC & Điều Khoản (tạo/sửa/nhân bản/lưu trữ/đồng bộ DSmart/tính ước tính)",
+  "rebateViewReport": "Mua Hàng > BAS — 📊 Xem Báo Cáo Mua Hàng (tab Báo Cáo trong module này — cũng là điều kiện đủ để vào được module)",
+  "reportAggregate": "Báo Cáo Định Kỳ — ✅ Tổng hợp báo cáo (chọn, merge, sửa, phát hành)",
+  "reportEntryCreate": "Báo Cáo Định Kỳ — ✅ Nộp báo cáo (đúng phòng ban mình)",
+  "reportManage": "Báo Cáo Định Kỳ — ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)",
+  "reportViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Tab Báo Cáo (bỏ qua giới hạn theo quyền module)",
+  "submissionCreate.all": "Văn Bản Trình — Tạo mới",
+  "submissionDownload.all": "Văn Bản Trình — Tải xuống",
+  "submissionView.all": "Văn Bản Trình — Xem",
+  "taskDelete": "Biên Bản Họp & 📋 Công Việc — 🗑️ Xóa tất cả công việc",
+  "taskDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải phiếu giao việc",
+  "taskEdit": "Biên Bản Họp & 📋 Công Việc — ✏️ Tạo mới & Sửa tất cả công việc",
+  "taskView": "Biên Bản Họp & 📋 Công Việc — 👁️ Xem tất cả công việc",
+  "trainingInstruct": "Đào Tạo — 👨‍🏫 Giảng viên (theo lớp được gán)",
+  "trainingManage": "Đào Tạo — 🎓 Quản lý Đào Tạo (toàn quyền)",
+  "uniformApprove": "Đồng Phục — ✔️ Duyệt Kỳ Cấp Phát / Điều Chuyển Kho",
+  "uniformManage": "Đồng Phục — 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)",
+  "uniformStoreManage": "Đồng Phục — ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)",
+  "uploadAll": "Tài Liệu — Tải lên",
+  "viewApprovedAll": "Tài Liệu — Xem Đã Duyệt",
+  "viewDraftAll": "Tài Liệu — Xem Bản Nháp",
+  "vppManage": "Văn Phòng Phẩm — ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)",
+  "vppRegisterCreate": "Văn Phòng Phẩm — 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)"
+};
+// Chiều ngược lại (nhãn -> khoá) để đọc lại đúng cột khi import — cùng 1 bảng tĩnh ở trên nên LUÔN khớp
+// chính xác với bất kỳ nhãn nào ma trận từng xuất ra (không cần dò mờ/so khớp gần đúng).
+const PERM_VN_LABEL_TO_KEY = Object.fromEntries(Object.entries(PERM_KEY_VN_LABELS).map(([k, v]) => [v, k]));
+// Tên cột hiện ra cho 1 khoá quyền khi xuất Excel — có nhãn tiếng Việt thì dùng nhãn đó, không có (quyền
+// hiếm/đã lỗi thời, xem chú thích PERM_KEY_VN_LABELS) thì vẫn dùng dạng "Q_<khoá>" cũ, không mất cột.
+function permMatrixColumnHeader(key) {
+  return PERM_KEY_VN_LABELS[key] || (PERM_MATRIX_COL_PREFIX + key);
+}
+// Ngược lại — từ 1 tên cột Excel (nhãn tiếng Việt HOẶC dạng "Q_<khoá>" cũ, để đọc được cả file xuất từ
+// bản trước) suy ra đúng khoá quyền dot-path; trả về null nếu không phải cột quyền (VD Username/HoTen).
+function resolvePermMatrixColumnKey(header) {
+  if (Object.prototype.hasOwnProperty.call(PERM_VN_LABEL_TO_KEY, header)) return PERM_VN_LABEL_TO_KEY[header];
+  if (header.startsWith(PERM_MATRIX_COL_PREFIX)) return header.slice(PERM_MATRIX_COL_PREFIX.length);
+  return null;
+}
+
 function flattenPermsForMatrixInto(obj, prefix, out) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) { if (prefix) out[prefix] = obj; return; }
   Object.keys(obj).forEach(k => {
@@ -340,7 +496,7 @@ function downloadPermMatrixUsers() {
     { header: 'PhongBan', key: 'PhongBan', width: 20 },
     { header: 'NhomPhanQuyen', key: 'NhomPhanQuyen', width: 26 },
     { header: 'BaoCao_MucBoSung', key: 'BaoCao_MucBoSung', width: 26 },
-    ...cols.map(c => ({ header: PERM_MATRIX_COL_PREFIX + c, key: PERM_MATRIX_COL_PREFIX + c, width: 14 }))
+    ...cols.map(c => ({ header: permMatrixColumnHeader(c), key: PERM_MATRIX_COL_PREFIX + c, width: 24 }))
   ];
   const rows = DB.users.map(u => {
     const flat = flattenPermsForMatrix(u.perms || {});
@@ -363,7 +519,7 @@ function downloadPermMatrixGroups() {
     { header: 'TenNhom', key: 'TenNhom', width: 22 },
     { header: 'MoTa', key: 'MoTa', width: 26 },
     { header: 'BaoCao_MucBoSung', key: 'BaoCao_MucBoSung', width: 26 },
-    ...cols.map(c => ({ header: PERM_MATRIX_COL_PREFIX + c, key: PERM_MATRIX_COL_PREFIX + c, width: 14 }))
+    ...cols.map(c => ({ header: permMatrixColumnHeader(c), key: PERM_MATRIX_COL_PREFIX + c, width: 24 }))
   ];
   const rows = DB.permGroups.map(g => {
     const flat = flattenPermsForMatrix(g.perms || {});
@@ -405,8 +561,8 @@ function buildPermMatrixRowChanges(kind, target, row) {
   // các trường KHÔNG có trong ma trận như approverAuthLevel/docDownload.depts giữ nguyên).
   const formPerms = JSON.parse(JSON.stringify(target.perms || {}));
   Object.keys(row).forEach(header => {
-    if (!header.startsWith(PERM_MATRIX_COL_PREFIX)) return;
-    const path = header.slice(PERM_MATRIX_COL_PREFIX.length);
+    const path = resolvePermMatrixColumnKey(header);
+    if (path == null) return;
     const newVal = String(row[header] || '').trim().toUpperCase() === 'TRUE';
     setPermMatrixDeep(formPerms, path, newVal);
   });
@@ -422,11 +578,11 @@ function buildPermMatrixRowChanges(kind, target, row) {
 
   const flatNew = flattenPermsForMatrix(newPerms);
   Object.keys(row).forEach(header => {
-    if (!header.startsWith(PERM_MATRIX_COL_PREFIX)) return;
-    const path = header.slice(PERM_MATRIX_COL_PREFIX.length);
+    const path = resolvePermMatrixColumnKey(header);
+    if (path == null) return;
     const oldVal = flatOld[path] === true;
     const finalVal = flatNew[path] === true;
-    if (finalVal !== oldVal) changes.push({ label: `Quyền: ${path}`, oldValue: oldVal ? 'TRUE' : 'FALSE', newValue: finalVal ? 'TRUE' : 'FALSE' });
+    if (finalVal !== oldVal) changes.push({ label: `Quyền: ${PERM_KEY_VN_LABELS[path] || path}`, oldValue: oldVal ? 'TRUE' : 'FALSE', newValue: finalVal ? 'TRUE' : 'FALSE' });
   });
 
   let newReportExtraKeys = target.reportExtraKeys || [];

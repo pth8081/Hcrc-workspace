@@ -3567,20 +3567,28 @@ chốt-mở lại kỳ/công bố).
 **Hệ Thống → Quản Trị → Phân Quyền**, khối **🧮 Ma Trận Phân Quyền** (ngay
 dưới khối Import Excel Người Dùng) — thay vì tick tay từng quyền cho từng
 người/nhóm ở cây phân quyền, admin xuất ra 1 file Excel liệt kê **toàn bộ
-quyền dạng Có/Không hiện có** thành các cột `Q_<tên quyền>` (VD `Q_admin`,
-`Q_moduleAccess.hanhchinh.car`), sửa hàng loạt trên Excel rồi nhập lại để áp
-dụng cùng lúc cho nhiều người/nhóm — 1 lần thao tác thay vì mở sửa từng
-người.
+quyền dạng Có/Không hiện có** thành các cột đặt tên **tiếng Việt đúng như
+nhãn checkbox thật** ở cây phân quyền (VD "Hệ Thống & Chung — Quyền Admin
+(Trang quản trị)", "Hành Chính > Đăng Ký Xe" cho quyền vào module...), sửa
+hàng loạt trên Excel rồi nhập lại để áp dụng cùng lúc cho nhiều người/nhóm —
+1 lần thao tác thay vì mở sửa từng người. Quyền nào chưa có nhãn tiếng Việt
+tương ứng (quyền hiếm/đã lỗi thời không còn checkbox trong cây quyền) vẫn
+xuất được, chỉ hiện dạng kỹ thuật cũ `Q_<tên quyền>` (VD `Q_operationEstimateCreate`)
+— import vẫn đọc được cả 2 dạng tên cột (tiếng Việt lẫn `Q_<tên quyền>` kỹ
+thuật của các bản cũ hơn), không cần lo file cũ đã tải trước đây không nhập
+lại được.
 
 - **Cột ma trận sinh ĐỘNG theo dữ liệu thật** (không phải danh sách quyền
   hard-code) — quyền mới thêm vào hệ thống sau này tự động xuất hiện thành
-  cột mới ở lần xuất kế tiếp, không cần cập nhật gì thêm. Chỉ quyền dạng
-  boolean (bật/tắt) mới thành cột; quyền theo **phạm vi phòng ban cụ thể**
-  (VD danh sách phòng ban của `docDownload`) hoặc **không phải boolean** (VD
-  `approverAuthLevel` là mức xác thực NONE/PASSWORD/PIN/WEBAUTHN) **không**
-  vào ma trận — vẫn phải sửa tay ở cây phân quyền như trước; riêng phần
-  "Toàn Bộ Phòng Ban" (`all`) của quyền phạm vi vẫn xuất được (cột
-  `Q_<tên>.all`).
+  cột mới ở lần xuất kế tiếp, không cần cập nhật gì thêm ở PHẦN CỘT NÀO ĐƯỢC
+  XUẤT (chỉ riêng NHÃN TIẾNG VIỆT của quyền mới cần bổ sung thủ công 1 dòng
+  vào bảng ánh xạ tĩnh trong code — không có thì tạm hiện dạng `Q_<tên>` như
+  trên, không mất chức năng). Chỉ quyền dạng boolean (bật/tắt) mới thành
+  cột; quyền theo **phạm vi phòng ban cụ thể** (VD danh sách phòng ban của
+  `docDownload`) hoặc **không phải boolean** (VD `approverAuthLevel` là mức
+  xác thực NONE/PASSWORD/PIN/WEBAUTHN) **không** vào ma trận — vẫn phải sửa
+  tay ở cây phân quyền như trước; riêng phần "Toàn Bộ Phòng Ban" (`all`) của
+  quyền phạm vi vẫn xuất được (VD cột "Đăng Ký Xe — Xem" ứng với `carView.all`).
 - **2 file Excel RIÊNG** — "Xuất Excel Người Dùng" (1 dòng = 1 tài khoản) và
   "Xuất Excel Nhóm Phân Quyền" (1 dòng = 1 nhóm) — vì máy chủ chỉ đọc được
   sheet ĐẦU TIÊN của file tải lên (giới hạn an toàn dùng chung mọi luồng

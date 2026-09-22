@@ -300,6 +300,67 @@ async function scenario(name, fn) {
     record('(e) kết quả = A,B,C,D (gộp, khử trùng)', JSON.stringify(r) === JSON.stringify(['A', 'B', 'C', 'D']), JSON.stringify(r));
   });
 
+  // ==========================================================================
+  // (f) Nhãn tiếng Việt cho cột ma trận (10/2026, theo yêu cầu người dùng "đổi tên cột thành tiếng
+  //     Việt ứng với hệ thống đang hiển thị") — permMatrixColumnHeader()/resolvePermMatrixColumnKey()
+  //     phải là NGHỊCH ĐẢO của nhau cho khoá CÓ nhãn lẫn khoá KHÔNG có nhãn (quyền cũ/hiếm), và
+  //     downloadPermMatrixUsers() phải xuất đúng header tiếng Việt thay vì "Q_<khoá>" thô.
+  // ==========================================================================
+  await scenario('(f) permMatrixColumnHeader()/resolvePermMatrixColumnKey() là nghịch đảo của nhau', async () => {
+    const r = await page.evaluate(() => {
+      const mappedKey = 'admin'; // chắc chắn có trong PERM_KEY_VN_LABELS
+      const mappedHeader = permMatrixColumnHeader(mappedKey);
+      const unmappedKey = 'khoaQuyenBiaDatKhongTonTai123';
+      const unmappedHeader = permMatrixColumnHeader(unmappedKey);
+      return {
+        mappedHeader,
+        mappedHeaderIsVietnamese: mappedHeader !== 'Q_admin' && !mappedHeader.startsWith('Q_'),
+        mappedRoundTrip: resolvePermMatrixColumnKey(mappedHeader),
+        unmappedHeader,
+        unmappedHeaderIsRawFallback: unmappedHeader === 'Q_' + unmappedKey,
+        unmappedRoundTrip: resolvePermMatrixColumnKey(unmappedHeader),
+        legacyRawHeaderStillResolves: resolvePermMatrixColumnKey('Q_contractApprove'),
+        nonPermColumnResolvesToNull: resolvePermMatrixColumnKey('Username'),
+      };
+    });
+    record('(f) khoá có nhãn -> header là văn bản tiếng Việt thật (không phải "Q_admin" thô)',
+      r.mappedHeaderIsVietnamese, JSON.stringify(r));
+    record('(f) khoá có nhãn: permMatrixColumnHeader() rồi resolvePermMatrixColumnKey() quay lại đúng khoá gốc',
+      r.mappedRoundTrip === 'admin', JSON.stringify(r));
+    record('(f) khoá KHÔNG có nhãn (quyền lạ/cũ) -> vẫn fallback về đúng dạng "Q_<khoá>" cũ',
+      r.unmappedHeaderIsRawFallback, JSON.stringify(r));
+    record('(f) khoá không có nhãn vẫn round-trip đúng qua nhánh fallback "Q_"',
+      r.unmappedRoundTrip === 'khoaQuyenBiaDatKhongTonTai123', JSON.stringify(r));
+    record('(f) tương thích ngược: file cũ còn header "Q_<khoá>" thô (bản trước khi có nhãn) vẫn đọc được',
+      r.legacyRawHeaderStillResolves === 'contractApprove', JSON.stringify(r));
+    record('(f) cột không phải quyền (VD "Username") -> trả về null, không bị hiểu nhầm thành 1 khoá quyền',
+      r.nonPermColumnResolvesToNull === null, JSON.stringify(r));
+  });
+
+  await scenario('(f2) downloadPermMatrixUsers() xuất Excel với header cột quyền là tiếng Việt thật', async () => {
+    const r = await page.evaluate(async () => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'admin', name: 'Admin', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 2, username: 'nv.b', name: 'Nhân Viên B', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      let captured = null;
+      const orig = window.downloadXlsxFromServer;
+      window.downloadXlsxFromServer = (fileName, sheetName, columns) => { captured = { fileName, sheetName, columns }; };
+      try { downloadPermMatrixUsers(); } finally { window.downloadXlsxFromServer = orig; }
+      const adminCol = captured.columns.find(c => c.key === 'Q_admin');
+      const contractApproveCol = captured.columns.find(c => c.key === 'Q_contractApprove');
+      return {
+        adminHeader: adminCol && adminCol.header,
+        contractApproveHeader: contractApproveCol && contractApproveCol.header,
+      };
+    });
+    record('(f2) cột Q_admin xuất ra header tiếng Việt đúng nhãn tĩnh (permMatrixColumnHeader("admin"))',
+      r.adminHeader && r.adminHeader !== 'Q_admin', JSON.stringify(r));
+    record('(f2) cột Q_contractApprove xuất ra header tiếng Việt (chứa "Duyệt hợp đồng")',
+      r.contractApproveHeader && r.contractApproveHeader.includes('Duyệt hợp đồng'), JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 
