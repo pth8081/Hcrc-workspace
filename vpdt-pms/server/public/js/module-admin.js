@@ -899,6 +899,14 @@ function toggleChecklistAuditScopeGroup() {
   document.getElementById('pChecklistAuditScopeDeptContainer')?.classList.toggle('opacity-40', isAll);
   document.getElementById('pChecklistAuditScopeDeptContainer')?.classList.toggle('pointer-events-none', isAll);
 }
+// checklistAuditLockOwnStore (9/2026) — bật cờ này thì "Phạm Vi Kiểm Soát" (ALL + widget chọn siêu thị)
+// không còn tác dụng (server BỎ QUA hẳn, xem getChecklistAuditStores() ở lib/checklist.js) — làm mờ +
+// khoá thao tác cả khối đó để không gây hiểu nhầm "vẫn cấu hình được".
+function toggleChecklistAuditLockOwnStoreGroup() {
+  const isLocked = document.getElementById('pChecklistAuditLockOwnStore').checked;
+  document.getElementById('pChecklistAuditScopeWrap')?.classList.toggle('opacity-40', isLocked);
+  document.getElementById('pChecklistAuditScopeWrap')?.classList.toggle('pointer-events-none', isLocked);
+}
 function setChecklistAuditScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pChecklistAuditScopeDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi kiểm soát...',

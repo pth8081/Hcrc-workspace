@@ -62,8 +62,15 @@ function canManageChecklistTemplates(user) {
 function canViewChecklistReports(user) {
   return !!(user?.perms?.admin || user?.perms?.checklistReportView);
 }
+// checklistAuditLockOwnStore (9/2026, yêu cầu người dùng): BỎ QUA hẳn checklistAuditScope khi bật —
+// kiểm soát viên chỉ Kiểm Soát được ĐÚNG 1 siêu thị = user.dept đang gán cho chính tài khoản đó (Hồ Sơ/
+// Cơ Cấu Tổ Chức), không tự chọn được siêu thị khác — khoá cứng ở đây (điểm chặn THẬT, không tin client),
+// cùng tinh thần isEligibleForStoreSelf() đã áp dụng cho STORE_SELF. Đặt SAU nhánh admin (admin luôn bỏ
+// qua mọi giới hạn phạm vi như mọi nơi khác trong hệ thống) nhưng TRƯỚC checklistAuditScope thường —
+// người có cờ này KHÔNG còn ý nghĩa cấu hình checklistAuditScope nữa (client cũng ẩn/khoá ô chọn đó).
 function getChecklistAuditStores(user) {
   if (user?.perms?.admin) return { all: true, depts: [] };
+  if (user?.perms?.checklistAuditLockOwnStore) return { all: false, depts: user?.dept ? [user.dept] : [] };
   return user?.perms?.checklistAuditScope || { all: false, depts: [] };
 }
 function hasChecklistAuditScope(user) {

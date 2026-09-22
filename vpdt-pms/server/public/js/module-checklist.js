@@ -701,9 +701,13 @@ function renderChecklistExecuteTab() {
   const activeTemplates = (DB.checklistTemplates || []).filter(t => t.status === 'ACTIVE');
   const storeSelfTemplatesAll = activeTemplates.filter(t => t.templateType === 'STORE_SELF');
   const storeSelfTemplates = isEligibleForStoreSelfClient(user) ? storeSelfTemplatesAll : [];
-  const auditScope = hasChecklistAuditScopeClient(user) ? user?.perms?.checklistAuditScope || { all: true, depts: [] } : null;
+  const auditScope = hasChecklistAuditScopeClient(user) ? getChecklistAuditStoresClient(user) : null;
   const auditTemplates = auditScope ? activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT') : [];
   const auditStores = auditScope ? (auditScope.all ? (DB.stores || []) : (auditScope.depts || [])) : [];
+  // checklistAuditLockOwnStore (9/2026): kiểm soát viên khoá cứng đúng 1 siêu thị = user.dept — ẩn hẳn ô
+  // chọn (dropdown), thay bằng nhãn cố định, không cho chọn siêu thị khác — xem getChecklistAuditStores()
+  // ở lib/checklist.js (điểm chặn THẬT phía server, đây chỉ là lớp hiển thị đúng theo khoá đó).
+  const auditLockedToOwnStore = !isAdmin && !!user?.perms?.checklistAuditLockOwnStore;
   // Admin: tài khoản admin thường KHÔNG gắn Vị Trí Siêu Thị cụ thể (posType khác 'STORE') nên không lọt
   // vào storeSelfTemplates ở trên dù mẫu đang ACTIVE — thêm khối riêng cho phép admin chọn TÙY Ý 1 siêu
   // thị để test mẫu Tự Đánh Giá (server đã nới ở resolveStoreCodeForSubmission()), phục vụ nhu cầu kiểm
@@ -732,11 +736,18 @@ function renderChecklistExecuteTab() {
     </div>`;
   }
   if (auditTemplates.length) {
+    // auditLockedToOwnStore: ô chọn siêu thị thay bằng nhãn cố định + <input type="hidden"> giữ NGUYÊN
+    // id "checklistAuditStoreSelect" để startChecklistAuditSubmission() đọc value() không cần sửa gì
+    // thêm — server vẫn là điểm chặn THẬT (canAuditStore(), lib/checklist.js) nên dù ai đó can thiệp DOM
+    // tự đổi value của input ẩn này, request vẫn bị từ chối nếu không đúng đúng siêu thị được gán.
+    const storeFieldHTML = auditLockedToOwnStore
+      ? `<span class="px-2 py-1.5 bg-white border rounded text-xs font-semibold text-rose-700">🔒 ${escapeHtml(user.dept || '')}</span><input type="hidden" id="checklistAuditStoreSelect" value="${escapeHtml(user.dept || '')}">`
+      : `<select id="checklistAuditStoreSelect" class="border p-1.5 rounded text-xs">${auditStores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>`;
     html += `<div class="bg-rose-50 p-3 rounded border border-rose-200 space-y-2">
       <h4 class="font-bold text-rose-800 text-xs">🔎 Kiểm Soát Siêu Thị</h4>
       <div class="flex items-center gap-2 flex-wrap">
         <select id="checklistAuditTemplateSelect" class="border p-1.5 rounded text-xs">${auditTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('')}</select>
-        <select id="checklistAuditStoreSelect" class="border p-1.5 rounded text-xs">${auditStores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        ${storeFieldHTML}
         <button type="button" data-op="startChecklistAuditSubmission" class="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700">Bắt Đầu Đánh Giá</button>
       </div>
     </div>`;

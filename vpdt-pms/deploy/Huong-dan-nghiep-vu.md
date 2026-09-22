@@ -2805,7 +2805,7 @@ phòng ban để giữ nguyên. Báo cáo VSATTP chi tiết (cây hạng mục/�
 CHỈ có ở tab Báo Cáo nội bộ (`checklistReportView` thật) — bản tóm tắt ở màn
 Báo Cáo tổng hợp không lặp lại phần này.
 
-**3 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
+**4 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
 - `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist
   (tab Cấu Hình).
 - `checklistReportView` — xem tab Báo Cáo (thống kê + xuất Excel) của module
@@ -2814,7 +2814,20 @@ Báo Cáo tổng hợp không lặp lại phần này.
   (dạng `{all, depts}` — field tên là `depts` dù chứa danh sách SIÊU THỊ,
   không phải phòng ban, để tái dùng cơ chế merge phẳng theo nhóm quyền có sẵn
   cho mọi field tên `depts`) — quyết định auditor được tạo/xem loại checklist
-  **Kiểm Soát Viên** cho những siêu thị nào.
+  **Kiểm Soát Viên** cho những siêu thị nào. Admin tự cấu hình danh sách siêu
+  thị (hoặc tick "ALL") ở màn Phân Quyền.
+- **`checklistAuditLockOwnStore`** (9/2026, theo yêu cầu người dùng) — **khoá
+  cứng** kiểm soát viên vào ĐÚNG 1 siêu thị = siêu thị (`dept`) đang gán cho
+  chính tài khoản đó ở Hồ Sơ/Vị Trí, **BỎ QUA HẲN** `checklistAuditScope` ở
+  trên (dù `checklistAuditScope` vẫn còn lưu trong dữ liệu, không bị xoá —
+  chỉ không còn tác dụng khi cờ này bật). Khi bật, ô chọn siêu thị lúc bắt
+  đầu làm bài Kiểm Soát (tab Thực Hiện) **ẩn hẳn dropdown**, thay bằng nhãn
+  cố định "🔒 &lt;tên siêu thị&gt;" — không tự chọn siêu thị khác được nữa,
+  kể cả can thiệp trực tiếp (server luôn tự đối chiếu lại, không tin dữ liệu
+  client gửi lên). Đổi Vị Trí/Phòng Ban của tài khoản đó ở Hồ Sơ thì siêu thị
+  bị khoá cũng tự đổi theo ngay (không cần cấu hình lại quyền). Ở màn Phân
+  Quyền, bật cờ này thì khối "Phạm Vi Kiểm Soát" (checklistAuditScope) bị mờ
+  đi + khoá thao tác để không gây hiểu nhầm "vẫn cấu hình được".
 
 **Vòng đời mẫu — Nháp → Đang dùng → Lưu trữ, đủ nút theo trạng thái + quyền
 (từ v23.4-v23.5)**: bảng "🛠️ Cấu Hình" hiện nút khác nhau tuỳ trạng thái:

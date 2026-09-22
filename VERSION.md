@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**23.100** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.101** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.101 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "🔒 Khoá đúng siêu thị được gán" (Kiểm Soát)
+
+Theo yêu cầu người dùng: kiểm soát viên (checklist loại Kiểm Soát/CONTROL_AUDIT)
+khi được cấp quyền mới sẽ bị khoá cứng vào ĐÚNG 1 siêu thị = siêu thị (`dept`)
+đang gán cho chính tài khoản đó ở Hồ Sơ/Vị Trí — không tự chọn được siêu thị
+khác nữa, bỏ qua hẳn cấu hình phạm vi cũ (`checklistAuditScope`).
+
+- **`server/lib/checklist.js`**: `getChecklistAuditStores()` thêm nhánh mới —
+  khi `user.perms.checklistAuditLockOwnStore === true`, LUÔN trả về
+  `{all:false, depts:[user.dept]}`, bỏ qua hẳn `checklistAuditScope` (đặt sau
+  nhánh admin, trước nhánh checklistAuditScope thường). Đây là điểm chặn
+  THẬT — `hasChecklistAuditScope()`/`canAuditStore()`/
+  `resolveStoreCodeForSubmission()` đều tự động ăn theo đúng logic mới, không
+  cần sửa thêm gì (không tin storeCode client tự gửi lên ở CONTROL_AUDIT).
+- **`server/public/js/core.js`**: default perms thêm
+  `checklistAuditLockOwnStore: false`; `hasChecklistAuditScopeClient()` +
+  hàm mới `getChecklistAuditStoresClient()` mirror đúng logic server.
+- **`server/public/js/module-checklist.js`**: `renderChecklistExecuteTab()`
+  — khi bật cờ này, ô chọn siêu thị lúc bắt đầu làm bài Kiểm Soát (tab Thực
+  Hiện) đổi từ `<select>` sang nhãn cố định "🔒 &lt;tên siêu thị&gt;" (kèm
+  `<input type="hidden">` giữ nguyên giá trị, không đổi logic gửi request).
+- **`server/public/fragments/systemSection.html`** + **`module-admin-permtree.js`**
+  + **`module-admin.js`**: checkbox mới "🔒 Khoá đúng siêu thị được gán" ở
+  khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị" (Phân Quyền) — bật cờ
+  này thì khối "Phạm Vi Kiểm Soát" (checklistAuditScope) bị mờ + khoá thao
+  tác (dữ liệu vẫn giữ nguyên, chỉ tạm không có tác dụng).
+- **`server/public/js/module-admin-permgroups.js`**: thêm nhãn cho quyền
+  mới vào bảng tra cứu dùng ở "Ma Trận Phân Quyền" (import/export Excel).
+- **Test mới**: `server/tests/test-checklist-audit-lock-own-store.js` (10
+  kịch bản — khoá đúng dept, bỏ qua checklistAuditScope cũ, admin luôn full
+  quyền, không có dept thì không audit được gì, `resolveStoreCodeForSubmission()`
+  từ chối storeCode khác dept dù client tự gửi). Toàn bộ test Checklist hiện
+  có (13 file) chạy lại không phát sinh lỗi mới.
+- **Deploy**: không có thay đổi `schema.sql`/biến môi trường mới — chỉ cần
+  copy code + `pm2 restart`. Quyền mới mặc định `false` cho MỌI tài khoản
+  hiện có (an toàn — giữ nguyên hành vi cũ), admin tự bật cho từng người ở
+  màn Phân Quyền khi cần.
 
 ## v23.100 (2026-09-22): Checklist Đánh Giá Siêu Thị — mẫu dựng sẵn "Checklist Hàng Ngày GĐST/CHT (Tự Đánh Giá)"
 

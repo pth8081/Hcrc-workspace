@@ -1765,7 +1765,11 @@
                 <input type="checkbox" id="pChecklistReportView"> 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)
               </label>
             </div>
-            <div>
+            <label class="flex items-start gap-2 text-rose-700 font-semibold cursor-pointer bg-rose-50 border border-rose-200 rounded p-2">
+              <input type="checkbox" id="pChecklistAuditLockOwnStore" data-op-change="toggleChecklistAuditLockOwnStoreGroup" class="mt-0.5">
+              <span>🔒 Khoá đúng siêu thị được gán (Kiểm Soát) — chỉ Kiểm Soát được ĐÚNG siêu thị hiện đang gán cho tài khoản này (Hồ Sơ/Vị Trí), không tự chọn siêu thị khác được nữa. Bật cờ này thì "Phạm Vi Kiểm Soát" bên dưới không còn tác dụng (bỏ qua hẳn).</span>
+            </label>
+            <div id="pChecklistAuditScopeWrap">
               <div class="flex justify-between items-center mb-1">
                 <span class="font-semibold text-gray-600 text-[11px]">Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)</span>
                 <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
