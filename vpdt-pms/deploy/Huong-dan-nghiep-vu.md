@@ -1020,6 +1020,24 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   thật, không chỉ ẩn nút), muốn chặn 1 phiếu đang PENDING thì dùng "❌ Từ
   Chối" sẵn có (đạt hiệu quả tương đương). "🔁 Đổi Tài Xế-Xe" KHÔNG đổi —
   Người Điều Hành Xe vẫn đổi tài xế/xe bình thường trên phiếu đã duyệt.
+  **"🔄 Đổi Lộ Trình" (từ 10/2026)** — theo yêu cầu người dùng: trước đây lỡ
+  đăng ký sai/cần đổi lộ trình (điểm xuất phát/điểm đến/thêm điểm) hay ngày
+  giờ sau khi đã gửi thì không có cách sửa, chỉ có thể Hủy rồi đăng ký lại từ
+  đầu. Nay **CHÍNH người đăng ký hoặc admin** (không phải người duyệt, khác cơ
+  chế "Yêu Cầu Bổ Sung" vốn do người duyệt chủ động) bấm **"🔄 Đổi Lộ Trình"**
+  ở danh sách phiếu, áp dụng được ở PENDING (bất kỳ bước nào)/Đã duyệt/LX Đã
+  Xác Nhận Chuyến — sửa Lộ Trình Di Chuyển + Ngày Kết Thúc; **Ngày/Giờ Xuất
+  Phát cũng sửa được nhưng CHỈ khi chuyến CHƯA bắt đầu** (PENDING/Đã duyệt) —
+  khi tài xế đã "Xác Nhận Đăng Ký" (LX Đã Xác Nhận Chuyến, coi như chuyến đã
+  bắt đầu) thì Ngày/Giờ Xuất Phát bị khoá lại (server tự chặn nếu client cố
+  gửi giá trị khác, không chỉ ẩn ô ở giao diện). Nút **không hiện nữa** khi
+  tài xế đã báo kết thúc chuyến (Chờ đánh giá/Hoàn thành) — lộ trình một
+  chuyến đã đi xong không còn ý nghĩa để đổi. Sau khi lưu, phiếu **tự quay lại
+  bước 1 và phải được duyệt lại từ đầu** (tái dùng đúng cơ chế reset đã có ở
+  luồng "Bổ Sung" — mọi lượt Duyệt cũ trong lịch sử bị đánh dấu vô hiệu, không
+  tính nhầm cho vòng duyệt mới); nếu phiếu đã có xe/tài xế gán sẵn (Đã duyệt/
+  LX Đã Xác Nhận Chuyến) thì phần phân công đó **bị xoá sạch**, Người Điều
+  Hành Xe phải gán lại từ đầu sau khi duyệt xong vòng mới.
   **Chuyển sang Taxi tự xoá tài xế đã gán (từ 9/2026)** — ở "Phần Dành Cho
   Phòng Hành Chính", khi đổi "Loại xe cụ thể" sang 1 mục đánh dấu "Là Xe Taxi"
   (dù lúc duyệt hay ở "🔁 Đổi Tài Xế-Xe" sau này), hệ thống nay **tự xoá luôn

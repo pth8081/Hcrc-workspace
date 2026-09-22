@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**23.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.97 (2026-09-22): Đăng Ký Xe — thêm "🔄 Đổi Lộ Trình" (sửa lộ trình/ngày sau khi đăng ký, tự quay lại duyệt từ bước 1)
+
+Theo yêu cầu người dùng: trước đây lỡ cần đổi lộ trình (điểm xuất phát/điểm
+đến/thêm điểm) hay ngày giờ sau khi đã gửi phiếu đăng ký xe thì không có
+cách sửa — chỉ có thể Hủy rồi đăng ký lại từ đầu. Nay CHÍNH người đăng ký
+hoặc admin chủ động đổi được, áp dụng cả TRƯỚC lẫn SAU khi đã phê duyệt.
+
+- **`server/lib/recordActions.js`**: hàm mới `canChangeCarRegRoute()`/
+  `changeCarRegRoute()` — CHỈ creator/admin, áp dụng ở PENDING (bất kỳ
+  bước)/APPROVED/IN_PROGRESS. Sửa được Lộ Trình + Ngày Kết Thúc; Ngày/Giờ
+  Xuất Phát CŨNG sửa được nhưng CHỈ khi chuyến CHƯA bắt đầu (PENDING/
+  APPROVED) — khoá lại khi IN_PROGRESS (tài xế đã xác nhận nhận chuyến).
+  `applyWorkflowAction()` (lib/workflowEngine.js) khoá cứng "chỉ chạy khi
+  PENDING" nên không tái dùng được cho phiếu đã duyệt — viết hàm riêng,
+  tái dùng `resetForResubmit()` sẵn có để reset về bước 1 (mọi lượt
+  APPROVED cũ trong history bị đánh dấu invalidated). Nếu phiếu đã có
+  phân công xe/lái xe (APPROVED/IN_PROGRESS) thì phần phân công đó bị xoá
+  để Phòng Hành Chính phân công lại.
+- **`server/routes/records.js`**: route mới
+  `POST /api/records/carRegs/:id/change-route`.
+- **`server/public/js/module-dangkyxe.js`**: nút "🔄 Đổi Lộ Trình" ở dòng
+  danh sách phiếu (PENDING/APPROVED/IN_PROGRESS + đúng creator/admin —
+  KHÔNG hiện khi tài xế đã kết thúc chuyến), modal sửa lộ trình nhiều điểm
+  (tái dùng UI multi-stop có sẵn, biến trạng thái riêng tránh xung đột với
+  form Tạo) + Ngày Kết Thúc + Ngày/Giờ Xuất Phát (chỉ hiện ô sửa được khi
+  chuyến chưa bắt đầu), badge "🔄 Vừa đổi lộ trình" khi phiếu PENDING sau
+  khi vừa đổi.
+- **Test mới**: `server/tests/test-carreg-change-route.js` (13 kịch bản:
+  quyền, trạng thái cho phép, validate, reset về bước 1, xoá phân công cũ,
+  invalidate history, ràng buộc sửa Ngày Xuất Phát theo trạng thái). Full
+  regression 286/286 file chạy, chỉ 1 lỗi pre-existing không liên quan.
+- **Docs**: `deploy/Huong-dan-nghiep-vu.md` (mục Đăng Ký Xe) +
+  `module-nghiepvu.js` (`NGHIEP_VU_DOCS.car`, cả `steps` lẫn `footer`) đều
+  đã cập nhật.
+- **Deploy-impact**: KHÔNG đổi `schema.sql` (dùng lại field JSON payload
+  sẵn có của `carRegs`, không cần cột SQL mới), KHÔNG thêm biến môi
+  trường, KHÔNG thêm npm dependency — chỉ copy code + `pm2 restart`.
 
 ## v23.96 (2026-09-22): Vị Trí Làm Việc — danh mục MỞ thay cho 2 giá trị cứng HO/Siêu Thị (Giai Đoạn 1)
 
