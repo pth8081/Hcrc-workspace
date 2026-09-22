@@ -593,6 +593,13 @@ function canDispatchCarClient() {
   return !!(currentUser?.perms?.admin || currentUser?.perms?.carDispatch);
 }
 
+// Mirror ĐÚNG canChangeCarRegRoute() ở lib/recordActions.js — chỉ dùng để ẩn/hiện nút, server LUÔN tự
+// kiểm tra lại. Cùng nhóm quyền với canCancelCarRegClient() (chỉ admin/chính người đăng ký).
+function canChangeCarRegRouteClient(c) {
+  if (currentUser?.perms?.admin) return true;
+  return !!(c && c.creator === currentUser?.username);
+}
+
 // Phiếu được phân công đi TAXI (Loại xe cụ thể có cờ isTaxi trong DB.carVehicleTypes) — mirror ĐÚNG
 // isTaxiCarReg()/canEndCarTrip() ở lib/recordActions.js (server LUÔN tự kiểm tra lại, 2 hàm này chỉ để
 // ẩn/hiện nút). Taxi không có tài khoản lái xe nào nên 2 mốc "Kết Thúc Chuyến"/"Đánh Giá" do người đăng
@@ -863,6 +870,12 @@ function renderCarRegs() {
     else if (c.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy chuyến</span>`;
     else if (c.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
     else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
+    // Vừa "Đổi Lộ Trình" (hành động cuối cùng trong lịch sử là ROUTE_CHANGED, chưa ai duyệt lại vòng
+    // mới) — thêm nhãn phụ để người duyệt/người đăng ký phân biệt với 1 phiếu PENDING bình thường,
+    // tránh nhầm là hồ sơ mới chưa từng đổi gì. Xem changeCarRegRoute() ở lib/recordActions.js.
+    if (c.status === 'PENDING' && (c.history || []).length && c.history[c.history.length - 1].action === 'ROUTE_CHANGED') {
+      statusBadge += ` <span class="px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded font-bold text-xs">🔄 Vừa đổi lộ trình</span>`;
+    }
 
     // assignedPlate/assignedDriver: do Phòng Hành Chính điền lúc xử lý duyệt (xem processCarReg()).
     // Fallback plate/driver: giữ tương thích bản ghi cũ trước khi tách 2 trường này ra khỏi form đăng ký.
@@ -913,6 +926,13 @@ function renderCarRegs() {
             // duyệt gì cả (còn ở đúng bước 1), mirror ĐÚNG điều kiện ở openCarProcessModal().
             if (c.status === 'PENDING' && (c.currentStep || 1) <= 1 && canCancelCarRegClient(c)) {
               secondaryOptions.push({ value: 'cancelTrip', label: '🚫 Hủy Đăng Ký' });
+            }
+            // "Đổi Lộ Trình" (yêu cầu nghiệp vụ 10/2026) — CHÍNH người đăng ký/admin đổi Lộ Trình + Ngày
+            // Kết Thúc, áp dụng CẢ TRƯỚC lẫn SAU khi đã duyệt (PENDING bất kỳ bước nào/APPROVED/
+            // IN_PROGRESS — khác nút "Hủy Đăng Ký" ngay trên chỉ cho đúng bước 1). Sau khi lưu, hồ sơ tự
+            // quay lại bước 1 duyệt lại từ đầu, xem changeCarRegRoute() ở lib/recordActions.js.
+            if ((c.status === 'PENDING' || c.status === 'APPROVED' || c.status === 'IN_PROGRESS') && canChangeCarRegRouteClient(c)) {
+              secondaryOptions.push({ value: 'changeRoute', label: '🔄 Đổi Lộ Trình' });
             }
             // "Kết Thúc Chuyến" cho phiếu đi TAXI (LỖI ĐÃ VÁ 10/2026): taxi không có tài xế hệ thống
             // nên sub-tab "Lái Xe" (renderCarDriverTab()) không bao giờ hiện phiếu này — trước đây
@@ -965,7 +985,106 @@ function runCarAction(id, action) {
     case 'cancelTrip': openCancelCarRegModal(id); break;
     case 'endTrip': endCarTripAction(id); break;
     case 'evaluate': openEvaluateCarTripModal(id); break;
+    case 'changeRoute': openChangeCarRouteModal(id); break;
   }
+}
+
+// ============ "Đổi Lộ Trình" (yêu cầu nghiệp vụ 10/2026) — CHÍNH người đăng ký/admin chủ động đổi Lộ
+// Trình (điểm xuất phát/điểm đến/thêm điểm) + Ngày Kết Thúc (+ Ngày/Giờ Xuất Phát NẾU chuyến chưa thực
+// hiện — xem canEditStartTime ở openChangeCarRouteModal()) của 1 phiếu, kể cả TRƯỚC hay SAU khi đã phê
+// duyệt. Sau khi lưu, hồ sơ tự quay lại bước 1 duyệt lại từ đầu (giống "Bổ Sung"), xem
+// changeCarRegRoute() ở lib/recordActions.js. Dùng biến/hàm render RIÊNG (carRouteChangePoints/
+// #carRouteChangeWrap) cho lộ trình mới thay vì tái dùng carRoutePoints/#carRoutePointsWrap của form
+// Tạo — tránh xung đột trạng thái nếu cả 2 UI vô tình cùng mở. ============
+let carRouteChangePoints = ['', ''];
+
+function addCarRouteChangePoint() {
+  carRouteChangePoints.push('');
+  renderCarRouteChangePoints();
+}
+
+function removeCarRouteChangePoint(idx) {
+  if (carRouteChangePoints.length <= 2) return; // luôn giữ tối thiểu Điểm xuất phát + 1 điểm đến
+  carRouteChangePoints.splice(idx, 1);
+  renderCarRouteChangePoints();
+}
+
+function updateCarRouteChangePoint(idx, value) {
+  carRouteChangePoints[idx] = value;
+}
+
+function renderCarRouteChangePoints() {
+  const wrap = document.getElementById('carRouteChangeWrap');
+  if (!wrap) return;
+  wrap.innerHTML = carRouteChangePoints.map((p, idx) => `
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-gray-500 w-24 shrink-0">${idx === 0 ? 'Điểm xuất phát' : `Điểm ${idx}`}</span>
+      <input value="${escapeHtml(p)}" data-op-input="updateCarRouteChangePoint" data-arg0="${idx}" data-arg-value="1" placeholder="${idx === 0 ? 'VD: Hội An' : 'VD: Đà Nẵng'}" class="flex-1 border p-1.5 rounded text-xs">
+      ${carRouteChangePoints.length > 2 ? `<button type="button" data-op="removeCarRouteChangePoint" data-arg0="${idx}" class="text-red-500 hover:text-red-700 text-xs font-bold">✕</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function openChangeCarRouteModal(id) {
+  const c = DB.carRegs.find(x => x.id === id);
+  if (!c) return;
+  carRouteChangePoints = (Array.isArray(c.routePoints) && c.routePoints.length >= 2) ? c.routePoints.slice() : ['', ''];
+  const willLoseAssignment = c.status === 'APPROVED' || c.status === 'IN_PROGRESS';
+  // Ngày/Giờ Xuất Phát chỉ sửa được khi chuyến CHƯA THỰC HIỆN (PENDING/APPROVED — tài xế chưa xác nhận
+  // nhận chuyến); IN_PROGRESS nghĩa là đã "đang thực hiện", giữ nguyên (server tự chặn lại nếu client cố
+  // gửi giá trị khác — không tin riêng lớp UI này, xem changeCarRegRoute() ở lib/recordActions.js).
+  const canEditStartTime = c.status === 'PENDING' || c.status === 'APPROVED';
+  showConfirmModal({
+    title: '🔄 Đổi Lộ Trình',
+    bodyHTML: `
+      <p class="text-xs text-gray-500 mb-2">Phiếu <b>${escapeHtml(c.code)}</b> — sau khi lưu, hồ sơ sẽ quay lại <b>bước 1</b> và phải được duyệt lại từ đầu${willLoseAssignment ? ' (phần xe/lái xe đã phân công sẽ bị xoá, Phòng Hành Chính cần phân công lại)' : ''}.</p>
+      <div class="mb-2">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Lộ Trình Di Chuyển</label>
+        <div id="carRouteChangeWrap" class="space-y-1.5"></div>
+        <button type="button" data-op="addCarRouteChangePoint" class="mt-1 text-xs text-indigo-600 hover:underline">+ Thêm điểm</button>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mb-2">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Ngày/Giờ Xuất Phát${canEditStartTime ? '' : ' (đã bắt đầu)'}</label>
+          ${canEditStartTime
+            ? `<input type="datetime-local" id="ccrStartTime" value="${escapeHtml(c.startTime || '')}" class="w-full border p-2 rounded text-sm">`
+            : `<input type="datetime-local" value="${escapeHtml(c.startTime || '')}" class="w-full border p-2 rounded text-sm bg-gray-100 text-gray-500" disabled>`}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Ngày Kết Thúc mới</label>
+          <input type="datetime-local" id="ccrEndTime" value="${escapeHtml(c.endTime || '')}" class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Lý do đổi lộ trình (không bắt buộc)</label>
+        <input id="ccrComment" class="w-full border p-2 rounded text-sm" placeholder="VD: khách hàng đổi điểm hẹn...">
+      </div>
+    `,
+    confirmLabel: 'Lưu & Gửi Duyệt Lại',
+    onConfirm: async () => {
+      const routePoints = carRouteChangePoints.map(p => p.trim()).filter(Boolean);
+      if (routePoints.length < 2) return alert('⛔ Vui lòng nhập ít nhất Điểm xuất phát và 1 điểm đến!');
+      const endTime = document.getElementById('ccrEndTime').value;
+      if (!endTime) return alert('⛔ Vui lòng nhập Ngày Kết Thúc mới!');
+      const payload = { routePoints, endTime, comment: document.getElementById('ccrComment').value.trim() };
+      if (canEditStartTime) {
+        const startTime = document.getElementById('ccrStartTime').value;
+        if (!startTime) return alert('⛔ Vui lòng nhập Ngày/Giờ Xuất Phát!');
+        payload.startTime = startTime;
+      }
+      let result;
+      try {
+        result = await callRecordAction('carRegs', id, 'change-route', payload);
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.carRegs.findIndex(x => x.id === id);
+      if (idx !== -1) DB.carRegs[idx] = result.item;
+      logSystemAction('CAR', 'CHANGE_CAR_ROUTE', `Đổi lộ trình phiếu [${c.code}] — vào lại hàng chờ duyệt từ bước 1`, 'SUCCESS', c.code);
+      alert('✅ Đã lưu lộ trình mới — hồ sơ đã vào lại hàng chờ duyệt từ bước 1!');
+      renderCarRegs();
+      refreshApprovalSurfaces();
+    }
+  });
+  renderCarRouteChangePoints();
 }
 
 // ============ "Đánh Giá" (người đăng ký phiếu) — bắt buộc để phiếu hoàn thành sau khi lái xe Kết

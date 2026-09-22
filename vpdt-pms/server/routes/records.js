@@ -1176,6 +1176,23 @@ router.post('/carRegs/:id/reassign', async (req, res) => {
     handleError(res, `carRegs/${req.params.id}/reassign`, err);
   }
 });
+
+// "Đổi Lộ Trình" — CHÍNH người đăng ký (creator)/admin, hồ sơ đang PENDING/APPROVED/IN_PROGRESS — mirror
+// khuôn route /cancel ngay trên (không cần đọc thêm existingCarRegs/users như /reassign vì hàm này chỉ
+// XOÁ phần phân công xe/lái xe cũ chứ không gán mới, nên không cần tái kiểm tra trùng biển số/tài xế —
+// xem changeCarRegRoute() ở lib/recordActions.js).
+router.post('/carRegs/:id/change-route', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
+      recordActions.changeCarRegRoute(freshUser, item, req.body || {}));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `carRegs/${req.params.id}/change-route`, err);
+  }
+});
 router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));

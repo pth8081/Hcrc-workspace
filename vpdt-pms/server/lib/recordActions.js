@@ -7672,6 +7672,86 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
   return item;
 }
 
+// "Đổi Lộ Trình" (yêu cầu nghiệp vụ 10/2026): CHÍNH người đăng ký (creator) hoặc admin chủ động đổi Lộ
+// Trình (điểm xuất phát/điểm đến/thêm điểm) + Ngày Kết Thúc của 1 phiếu, áp dụng được CẢ TRƯỚC lẫn SAU
+// khi đã phê duyệt (PENDING/APPROVED/IN_PROGRESS) — khác REQUEST_CHANGES (lib/workflowEngine.js): đó là
+// người DUYỆT bước hiện tại trigger, chỉ hoạt động lúc còn PENDING, đưa hồ sơ về NHÁP chờ người tạo sửa
+// rồi tự gửi lại (2 bước). Ở đây là 1 HÀNH ĐỘNG ĐƠN của người tạo/admin — sửa xong là vào lại hàng chờ
+// duyệt từ bước 1 NGAY, không qua bước NHÁP trung gian. applyWorkflowAction() khoá cứng "chỉ chạy khi
+// status==='PENDING'" nên không tái dùng được cho phiếu đã APPROVED/IN_PROGRESS — viết hàm riêng, mirror
+// điều kiện quyền của canCancelCarReg() + cách reset về bước 1 của resetForResubmit() (đã dùng cho luồng
+// "Bổ Sung" carRegs ở trên) thay vì viết lại logic invalidate từ đầu.
+// Ngày/Giờ XUẤT PHÁT (startTime): CÓ cho sửa, nhưng CHỈ khi chuyến CHƯA THỰC HIỆN — status PENDING
+// (chưa ai duyệt xong) hoặc APPROVED (đã duyệt nhưng tài xế CHƯA xác nhận nhận chuyến). Khi đã
+// IN_PROGRESS (tài xế đã "Xác Nhận Đăng Ký" — xem confirmCarDriverAssignment() ở trên), chuyến coi như
+// đã bắt đầu, KHÔNG cho đổi giờ xuất phát nữa (chỉ còn Lộ Trình + Ngày Kết Thúc) — cần đổi cả ngày xuất
+// phát lúc đó thì dùng Hủy Chuyến rồi đăng ký lại. Nút "Đổi Lộ Trình" ở client (module-dangkyxe.js) đã tự
+// ẩn ô Ngày Xuất Phát lúc IN_PROGRESS, nhưng server LUÔN tự chặn lại ở đây (không tin riêng lớp UI).
+function canChangeCarRegRoute(user, carReg) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!(carReg && carReg.creator === user.username);
+}
+
+function changeCarRegRoute(user, item, payload) {
+  if (!canChangeCarRegRoute(user, item)) {
+    throw new HttpError(403, 'Bạn không có quyền đổi lộ trình phiếu đăng ký xe này');
+  }
+  if (!['PENDING', 'APPROVED', 'IN_PROGRESS'].includes(item.status)) {
+    throw new HttpError(409, 'Chỉ đổi lộ trình được khi phiếu đang chờ duyệt hoặc đã phê duyệt xong (có thể đã hủy/kết thúc chuyến/xử lý ở nơi khác)');
+  }
+  const points = (Array.isArray(payload?.routePoints) ? payload.routePoints : []).map(p => String(p || '').trim()).filter(Boolean);
+  if (points.length < 2) throw new HttpError(400, 'Vui lòng nhập ít nhất Điểm xuất phát và 1 điểm đến');
+  const newEndTime = String(payload?.endTime || '').trim();
+  if (!newEndTime) throw new HttpError(400, 'Vui lòng nhập Ngày Kết Thúc mới');
+  const rawNewStartTime = payload?.startTime !== undefined ? String(payload.startTime || '').trim() : '';
+  let newStartTime = item.startTime;
+  if (rawNewStartTime && rawNewStartTime !== item.startTime) {
+    if (item.status === 'IN_PROGRESS') {
+      throw new HttpError(400, 'Chuyến đã bắt đầu (tài xế đã xác nhận nhận chuyến) — không thể đổi Ngày/Giờ Xuất Phát nữa');
+    }
+    newStartTime = rawNewStartTime;
+  }
+  const startMs = new Date(newStartTime).getTime();
+  const endMs = new Date(newEndTime).getTime();
+  if (!Number.isFinite(startMs)) throw new HttpError(400, 'Ngày/Giờ Xuất Phát không hợp lệ');
+  if (!Number.isFinite(endMs)) throw new HttpError(400, 'Ngày Kết Thúc không hợp lệ');
+  if (startMs >= endMs) throw new HttpError(400, 'Ngày Kết Thúc phải sau Ngày/Giờ Xuất Phát');
+  const newDestination = points.join(' → ');
+  const oldDestination = item.destination;
+  const oldStartTime = item.startTime;
+  const oldEndTime = item.endTime;
+  // Phần phân công xe/lái xe (nếu đã có, tức phiếu đã qua duyệt) không còn ý nghĩa với lộ trình MỚI —
+  // xoá để Phòng Hành Chính phân công lại từ đầu ở vòng duyệt sau, TRƯỚC khi resetForResubmit() đổi lại
+  // status (cần biết trạng thái GỐC để quyết định có xoá hay không).
+  const hadAssignment = item.status === 'APPROVED' || item.status === 'IN_PROGRESS';
+  item.routePoints = points;
+  item.destination = newDestination;
+  item.startTime = newStartTime;
+  item.endTime = newEndTime;
+  const comment = String(payload?.comment || '').trim();
+  item.history = item.history || [];
+  item.history.push({
+    step: item.currentStep || 0, approver: user.name, username: user.username, action: 'ROUTE_CHANGED', comment, time: nowVN(),
+    fromDestination: oldDestination, toDestination: newDestination,
+    fromStartTime: oldStartTime, toStartTime: newStartTime, fromEndTime: oldEndTime, toEndTime: newEndTime
+  });
+  resetForResubmit(item, {});
+  if (hadAssignment) {
+    item.assignedPlate = '';
+    item.assignedVehicleType = '';
+    item.assignedTaxiCompany = '';
+    item.assignedDriverUsername = '';
+    item.assignedDriver = '';
+    item.driverConfirmed = false;
+    item.driverConfirmedAt = null;
+  }
+  item.routeChangedAt = nowVN();
+  item.routeChangedBy = user.username;
+  item.routeChangedByName = user.name;
+  return item;
+}
+
 // ===================== GIẤY PHÉP (module con của Hành Chính) =====================
 // Duyệt bằng 2 quyền PHẲNG (licenseCreate/licenseApprove), KHÔNG đi qua lib/workflowEngine.js — cùng
 // khuôn approveInternalPost()/rejectInternalPost() ở trên (Góc Chia Sẻ). lifecycleStatus (RENEWING/
@@ -7943,7 +8023,7 @@ module.exports = {
   reopenBudgetLineAfterUsedParentDeleted,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,
   canEndCarTrip, endCarTrip, canEvaluateCarTrip, evaluateCarTrip, isTaxiCarReg,
-  canCancelCarReg, cancelCarReg, reassignCarDispatch,
+  canCancelCarReg, cancelCarReg, reassignCarDispatch, canChangeCarRegRoute, changeCarRegRoute,
   canApproveLicense, approveLicense, rejectLicense, setLicenseRenewing, revokeLicense, unrevokeLicense,
   canCancelLicense, cancelLicense,
   canManageItServiceRenewal, editItServiceRenewal, renewItServiceRenewal,
