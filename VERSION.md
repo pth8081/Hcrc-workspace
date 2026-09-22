@@ -1,8 +1,59 @@
 # Phiên bản hiện tại
 
-**23.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.89 (2026-09-22): Ma Trận Phân Quyền — xuất/nhập Excel hàng loạt + Nhóm Phân Quyền mở thêm Báo Cáo
+
+Theo yêu cầu người dùng: rà soát mọi module có Báo Cáo để cấp quyền phân biệt
+theo từng module con, và bổ sung khả năng gán quyền hàng loạt cho nhiều
+người/nhóm cùng lúc qua Excel (nghiên cứu cách làm bảng ma trận phân quyền +
+file mẫu/import/export).
+
+- **Nhóm Phân Quyền (`permGroups`) giờ mang thêm được `reportExtraKeys`** —
+  mở thêm tab Báo Cáo cho MỌI thành viên nhóm cùng lúc (trước đây chỉ gán
+  được từng người một qua `user.reportExtraKeys`). Quyền xem Báo Cáo hiệu
+  lực của 1 người = hợp của `reportExtraKeys` cá nhân **và** của mọi nhóm họ
+  thuộc (`getEffectiveReportExtraKeys()`, `core.js`) — `isReportKeyVisible()`
+  (`module-baocaoquantri.js`) đổi sang gọi hàm này thay vì đọc thẳng
+  `user.reportExtraKeys`. Đáp ứng yêu cầu tách quyền xem Báo Cáo theo TỪNG
+  module con (mỗi tab trong `REPORT_NAV_TREE` vẫn là 1 khoá riêng biệt như
+  cũ — không phải khái niệm mới, chỉ mở rộng đơn vị gán từ người sang cả
+  nhóm).
+- **🧮 Ma Trận Phân Quyền** (khối mới trong Hệ Thống → Quản Trị → Phân
+  Quyền) — xuất/nhập Excel hàng loạt cho CẢ Người Dùng lẫn Nhóm Phân Quyền:
+  - `lib/permMatrixExcel.js` (mới) — đọc file Excel theo header ĐỘNG (dòng 1
+    = tên cột, không hard-code danh sách quyền), cùng hạ tầng an toàn với
+    các luồng import Excel khác (`xlsxSafeRead.js` chống zip-bomb, chỉ đọc
+    sheet đầu tiên, `importDedup.js` chống trùng lặp trong file).
+  - `routes/adminExport.js` — route mới `POST /api/admin/perm-matrix/
+    import-xlsx` (chỉ Quản Trị Viên, dùng chung rate-limiter/multer/kiểm
+    chữ ký file với 2 route Excel admin sẵn có).
+  - `module-admin-permgroups.js` — toàn bộ logic client: cột ma trận SINH
+    ĐỘNG theo dữ liệu perms thật đang có (chỉ lấy khoá boolean-only, loại
+    quyền phạm vi phòng ban/enum), xuất 2 file riêng (Người Dùng/Nhóm Phân
+    Quyền — vì server chỉ đọc sheet đầu), xem trước rồi mới ghi thật khi
+    xác nhận (2 pha, cùng khuôn import Excel Người Dùng sẵn có). Đổi
+    `NhomPhanQuyen` (gán nhóm) qua ma trận tự động hợp nhất đúng quyền nền
+    nhóm mới (`mergeGroupsBasePerms()`/`diffPerms()`, cùng công thức
+    `saveUser()` dùng) thay vì chỉ áp thẳng các cột cũ trong file. Sửa quyền
+    1 Nhóm Phân Quyền qua ma trận cascade ngay cho mọi thành viên hiện có.
+    Tài khoản `admin` gốc luôn bị bỏ qua khi áp dụng (báo rõ ở bảng xem
+    trước, không chỉ âm thầm bỏ qua lúc xác nhận).
+  - `systemSection.html` — thêm khối UI (nút xuất/nhập 2 loại file + bảng
+    xem trước có thể tick/bỏ từng dòng).
+  - `module-nghiepvu.js` — thêm mục **🧮 Ma Trận Phân Quyền** vào tab
+    Hướng Dẫn → Hệ Thống (hướng dẫn click-by-click).
+- Test mới: `tests/test-perm-matrix-parse.js` (7 kịch bản server-side —
+  header động, dòng thiếu khoá, cột thừa, trùng lặp trong file, sheet rỗng,
+  vượt trần dòng, chỉ đọc sheet đầu) + `tests/test-perm-matrix-client.js`
+  (21 kịch bản client — cột sinh động, flatten dot-path, diff quyền/nhóm/
+  báo cáo bổ sung, import Người Dùng end-to-end (bỏ qua admin, cascade
+  nhóm), import Nhóm Phân Quyền cascade thành viên, `getEffectiveReportExtraKeys()`).
+
+**Không có thay đổi schema SQL/biến môi trường mới/dependency mới** — chỉ
+thêm code JS client+server, cập nhật `pm2 restart` là đủ.
 
 ## v23.88 (2026-09-22): rà soát tiếp nút "Sửa" còn thiếu — bổ sung 4 màn còn sót lại
 

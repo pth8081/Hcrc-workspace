@@ -15,6 +15,7 @@ const multer = require('multer');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildGenericWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
+const { parseGenericMatrixXlsx } = require('../lib/permMatrixExcel');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -93,6 +94,37 @@ router.post('/users/import-xlsx', (req, res) => {
       res.json({ rows });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/admin/users/import-xlsx');
+    }
+  });
+});
+
+// POST /api/admin/perm-matrix/import-xlsx — Ma Trận Phân Quyền (10/2026): đọc file Excel admin tải lên
+// (Người Dùng hoặc Nhóm Phân Quyền, xem module-admin-permgroups.js) CHỈ đọc/trả về JSON theo header
+// động, KHÔNG tự ghi gì vào CSDL — client tự đối chiếu với DB.users/DB.permGroups đã có sẵn, dựng bảng
+// xem trước, rồi mới thật sự ghi qua syncStorage('users'/'permGroups') sau khi admin bấm xác nhận,
+// cùng 2 pha "đọc trước - ghi sau" như POST /api/admin/users/import-xlsx ở trên. Chỉ Quản Trị Viên —
+// đọc/ghi hàng loạt QUYỀN của người khác là thao tác nhạy cảm nhất trong toàn hệ thống, không mở cho
+// bất kỳ quyền admin-grant nào khác (kể cả reportViewAll/nghiepVuViewAll).
+router.post('/perm-matrix/import-xlsx', (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được import Ma Trận Phân Quyền' });
+  }
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/admin/perm-matrix/import-xlsx');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
+
+    try {
+      const check = await verifyFileSignature(req.file.buffer, '.xlsx');
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const rows = await parseGenericMatrixXlsx(req.file.buffer);
+      res.json({ rows });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/admin/perm-matrix/import-xlsx');
     }
   });
 });

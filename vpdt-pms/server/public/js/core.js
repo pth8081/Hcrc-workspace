@@ -3347,6 +3347,22 @@ function mergeGroupsBasePerms(groupsPerms) {
   return result;
 }
 
+// Ma Trận Phân Quyền (10/2026) — Nhóm Phân Quyền (DB.permGroups) giờ CŨNG có thể mang
+// reportExtraKeys riêng (mở thêm tab Báo Cáo cho MỌI thành viên nhóm, xem
+// module-admin-permgroups.js), không còn CHỈ gán được từng người một qua uReportExtraKeysMultiSelect.
+// Hàm này gộp reportExtraKeys của CHÍNH người dùng với reportExtraKeys của TẤT CẢ nhóm họ thuộc
+// (u.groupIds) — dùng ở isReportKeyVisible() (module-baocaoquantri.js) thay vì đọc thẳng
+// user.reportExtraKeys, KHÔNG đổi ý nghĩa reportViewAll/REPORT_KEY_ACCESS_FN đã có.
+function getEffectiveReportExtraKeys(user) {
+  const own = (user?.reportExtraKeys || []);
+  const groupIds = user?.groupIds || [];
+  const fromGroups = groupIds.flatMap(gid => {
+    const g = (DB.permGroups || []).find(x => x.id === gid);
+    return g?.reportExtraKeys || [];
+  });
+  return [...new Set([...own, ...fromGroups])];
+}
+
 // Chuyển đổi perms kiểu CŨ (cờ bật/tắt toàn công ty: submissionModule, contractModule, carModule,
 // meetingBook dạng boolean) sang mô hình MỚI theo phòng ban ({all, depts}) — không âm thầm bớt
 // quyền của user đang có: nếu cờ cũ = true thì phạm vi mới quy đổi thành "Tất cả phòng ban" (all:

@@ -84,6 +84,7 @@ const SYSTEM_NAV = [
   { group: 'Phân Quyền & Tài Khoản', items: [
     { key: 'sysPermissions', icon: '🔑', label: 'Phân Quyền' },
     { key: 'sysUsers', icon: '👥', label: 'Người Dùng' },
+    { key: 'sysPermMatrix', icon: '🧮', label: 'Ma Trận Phân Quyền' },
   ]},
   { group: 'Cấu Hình Quy Trình', items: [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
@@ -1184,6 +1185,31 @@ const SYSTEM_DOCS = {
       { label: 'Nhóm Phân Quyền', text: 'mẫu quyền dựng sẵn (ô "Nhóm Phân Quyền" ngay trong form Sửa Người Dùng) gom nhiều quyền phê duyệt lại thành 1 "vai trò ảo" để gán nhanh cho người mới — không thay thế cây quyền chi tiết, chỉ là lối tắt khi cấp hàng loạt. Khác "🧩 Nhóm Quyền Đặc Biệt" (nay ở tab "🔀 Nghiệp Vụ Nâng Cao") — đó là 3 cấu hình chung toàn hệ thống, không phải mẫu quyền theo người.' },
       { label: '"Xem Toàn Bộ Mục Nghiệp Vụ"', text: 'quyền admin-grant riêng (`nghiepVuViewAll`) cho phép 1 tài khoản đọc hết tài liệu Nghiệp Vụ mà không cần cấp quyền module thật — dùng cho đào tạo/kiểm toán nội bộ. KHÔNG áp dụng cho khu Hệ Thống (khu vực này luôn đòi `perms.admin` thật, không bypass được).' },
       { label: 'Chọn siêu thị đổi sang ô tìm-kiếm-gõ-chọn (10/2026)', text: '2 khối "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị" (mục 22. Vận Hành) và "Phạm Vi Kiểm Soát" (mục 23. Checklist Đánh Giá Siêu Thị) trước đây là lưới checkbox 2-3 cột khiến tên siêu thị dài bị cắt ngắn/không nhìn thấy hết — nay đổi sang ô gõ để tìm rồi bấm chọn (giống ô chọn Đơn Vị/Chức Danh ở "🧩 Nhóm Quyền Đặc Biệt"), mỗi siêu thị đã chọn hiện thành 1 thẻ (chip) có nút ✕ để bỏ chọn nhanh. Vẫn giữ nguyên checkbox "ALL" riêng — tick ALL thì ô chọn siêu thị tự mờ đi (không cần chọn từng cái).' },
+    ] },
+  },
+  sysPermMatrix: {
+    icon: '🧮', title: 'Ma Trận Phân Quyền', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Từ 10/2026 — xuất/nhập hàng loạt qua Excel toàn bộ quyền dạng Có/Không (bật/tắt) của Người Dùng hoặc Nhóm Phân Quyền, thay vì phải tick tay từng ô cho từng người. Cột của file Excel tự sinh động theo đúng quyền đang có trong hệ thống (không lệch với cây quyền ở mục 🔑 Phân Quyền khi có quyền mới về sau).',
+    flow: { ariaLabel: 'Quy trình xuất-sửa-nhập Ma Trận Phân Quyền', chain: [
+      { label: 'Xuất Excel', sub: 'Người Dùng hoặc Nhóm Phân Quyền' },
+      { label: 'Sửa hàng loạt trên Excel', sub: 'Đổi TRUE/FALSE ở cột Q_...' },
+      { label: 'Nhập lại + xem trước', sub: 'Đối chiếu, chỉ áp dụng dòng có thay đổi', kind: 'decision' },
+      { label: 'Xác Nhận Áp Dụng', sub: 'Ghi trực tiếp vào hệ thống', kind: 'approved' },
+    ], decision: { atIndex: 2, approveLabel: 'Bấm Xác Nhận', rejectLabel: 'Bấm Hủy', rejectBox: { label: 'Không thay đổi gì', sub: 'Huỷ bỏ toàn bộ file vừa đọc' }, loopBackToIndex: 0, loopBackLabel: 'Sửa lại file rồi nhập lại' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔐 Phân Quyền</b> → kéo xuống khối <b>"🧮 Ma Trận Phân Quyền"</b> (nằm ngay dưới khối Import Excel Người Dùng).' },
+      { role: 'Quản trị viên', text: 'bấm <b>"📤 Xuất Excel Người Dùng"</b> (1 dòng = 1 tài khoản) hoặc <b>"📤 Xuất Excel Nhóm Phân Quyền"</b> (1 dòng = 1 nhóm) — mỗi loại là 1 file .xlsx RIÊNG, không gộp chung.' },
+      { role: 'Quản trị viên', text: 'mở file Excel vừa tải: mỗi cột bắt đầu bằng <b>"Q_"</b> là 1 quyền, gõ <b>TRUE</b>/<b>FALSE</b> để bật/tắt; cột "NhomPhanQuyen" (sheet Người Dùng) và "BaoCao_MucBoSung" (cả 2 sheet) nhận nhiều giá trị cách nhau bằng dấu <b>;</b>. KHÔNG đổi cột đầu tiên (Username/TenNhom) — đó là khoá để hệ thống nhận diện đúng ai/nhóm nào.' },
+      { role: 'Quản trị viên', text: 'sửa xong, bấm <b>"📥 Import Người Dùng"</b> hoặc <b>"📥 Import Nhóm Phân Quyền"</b> tương ứng đúng file vừa sửa → hệ thống hiện bảng xem trước, chỉ liệt kê dòng THỰC SỰ có thay đổi so với dữ liệu hiện tại, dòng nào không tìm thấy/trùng trong file sẽ báo rõ và không cho tick.' },
+      { role: 'Quản trị viên', text: 'bỏ tick dòng nào không muốn áp dụng, rồi bấm <b>"✅ Xác Nhận Áp Dụng"</b> — quyền mới có hiệu lực ngay từ lượt tải lại trang / đăng nhập sau của người đó.' },
+    ],
+    footer: { left: [
+      { label: 'Chỉ áp dụng quyền dạng Có/Không', text: 'quyền theo PHẠM VI (VD chỉ cho xem 1 số phòng ban/siêu thị cụ thể, không phải toàn bộ) và các trường không phải Có/Không (mức phê duyệt IT, danh sách phòng ban upload...) KHÔNG có trong ma trận — vẫn phải vào form Sửa Người Dùng/Sửa Nhóm ở mục 🔑 Phân Quyền để chỉnh tay phần này.' },
+      { label: 'Nhập theo Nhóm sẽ cập nhật NGAY cho mọi thành viên', text: 'sửa quyền 1 Nhóm Phân Quyền qua ma trận cũng áp dụng ngay cho TẤT CẢ người đang thuộc nhóm đó (giống hệt khi sửa tay ở khối "🗂️ Nhóm Phân Quyền"), không phải chỉ ảnh hưởng riêng bản ghi nhóm.' },
+      { label: 'Tài khoản "admin" gốc không đổi được qua đây', text: 'dòng Username="admin" trong file Người Dùng bị bỏ qua khi áp dụng — tài khoản này luôn bị hệ thống ép giữ toàn quyền, xem thêm mục 🔑 Phân Quyền.' },
+    ], right: [
+      { label: 'Vì sao xuất 2 file riêng, không gộp 1 file 2 sheet', text: 'máy chủ chỉ đọc được sheet ĐẦU TIÊN của mọi file Excel tải lên (giới hạn an toàn dùng chung cho mọi luồng import Excel trong hệ thống, chống file có nhiều sheet ẩn/dữ liệu giả) — tách 2 file cũng rõ ràng hơn vì "1 dòng = 1 người" và "1 dòng = 1 nhóm" là 2 khái niệm khác hẳn nhau.' },
+      { label: 'Cột "BaoCao_MucBoSung"', text: 'ứng với các tab Báo Cáo được mở THÊM ngoài quyền vận hành thông thường (VD người không có quyền Vận Hành nhưng vẫn cần xem tab Báo Cáo Vận Hành) — gõ đúng danh sách tab cách nhau bằng dấu ";", để trống nghĩa là không mở thêm tab nào.' },
     ] },
   },
   sysUsers: {

@@ -167,7 +167,7 @@ const REPORT_NAV_TREE = [
 const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient', muaHang: 'canViewPurchasingReportClient' };
 function isReportKeyVisible(key) {
   if (currentUser?.perms?.reportViewAll) return true;
-  if ((currentUser?.reportExtraKeys || []).includes(key)) return true;
+  if (getEffectiveReportExtraKeys(currentUser).includes(key)) return true;
   const fnName = REPORT_KEY_ACCESS_FN[key];
   if (fnName) { const fn = window[fnName]; return typeof fn === 'function' ? !!fn(currentUser) : false; }
   return hasModuleAccess(currentUser, key);

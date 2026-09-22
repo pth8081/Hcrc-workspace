@@ -3562,6 +3562,60 @@ cập lịch sử/báo cáo), Hợp Đồng Lao Động (sửa/kích hoạt/bổ
 thái), Lương (cấu hình tỷ lệ/tính lương/điều chỉnh phiếu/nộp-duyệt-từ chối-
 chốt-mở lại kỳ/công bố).
 
+### 6.2. Ma Trận Phân Quyền — xuất/nhập Excel hàng loạt (10/2026)
+
+**Hệ Thống → Quản Trị → Phân Quyền**, khối **🧮 Ma Trận Phân Quyền** (ngay
+dưới khối Import Excel Người Dùng) — thay vì tick tay từng quyền cho từng
+người/nhóm ở cây phân quyền, admin xuất ra 1 file Excel liệt kê **toàn bộ
+quyền dạng Có/Không hiện có** thành các cột `Q_<tên quyền>` (VD `Q_admin`,
+`Q_moduleAccess.hanhchinh.car`), sửa hàng loạt trên Excel rồi nhập lại để áp
+dụng cùng lúc cho nhiều người/nhóm — 1 lần thao tác thay vì mở sửa từng
+người.
+
+- **Cột ma trận sinh ĐỘNG theo dữ liệu thật** (không phải danh sách quyền
+  hard-code) — quyền mới thêm vào hệ thống sau này tự động xuất hiện thành
+  cột mới ở lần xuất kế tiếp, không cần cập nhật gì thêm. Chỉ quyền dạng
+  boolean (bật/tắt) mới thành cột; quyền theo **phạm vi phòng ban cụ thể**
+  (VD danh sách phòng ban của `docDownload`) hoặc **không phải boolean** (VD
+  `approverAuthLevel` là mức xác thực NONE/PASSWORD/PIN/WEBAUTHN) **không**
+  vào ma trận — vẫn phải sửa tay ở cây phân quyền như trước; riêng phần
+  "Toàn Bộ Phòng Ban" (`all`) của quyền phạm vi vẫn xuất được (cột
+  `Q_<tên>.all`).
+- **2 file Excel RIÊNG** — "Xuất Excel Người Dùng" (1 dòng = 1 tài khoản) và
+  "Xuất Excel Nhóm Phân Quyền" (1 dòng = 1 nhóm) — vì máy chủ chỉ đọc được
+  sheet ĐẦU TIÊN của file tải lên (giới hạn an toàn dùng chung mọi luồng
+  import Excel), không gộp 2 khái niệm khác nhau vào 1 file.
+- **Cột `NhomPhanQuyen`** (chỉ ở file Người Dùng) — đổi danh sách nhóm phân
+  quyền của 1 người (nhiều nhóm cách nhau bằng dấu `;`); đổi nhóm qua cột
+  này sẽ **tự động kéo theo đúng quyền nền của nhóm mới** (hợp nhất theo
+  đúng công thức `mergeGroupsBasePerms()` đang dùng ở màn Sửa Người Dùng),
+  không chỉ áp thẳng các cột `Q_` cũ trong file — tránh trường hợp gán nhóm
+  mới qua Excel nhưng quên tick đủ mọi quyền nhóm đó cấp.
+- **Cột `BaoCao_MucBoSung`** (cả 2 file) — danh sách các tab Báo Cáo được mở
+  THÊM ngoài quyền vận hành thông thường (`reportExtraKeys`), cách nhau bằng
+  dấu `;`. Từ đợt này, **Nhóm Phân Quyền cũng mang được `reportExtraKeys`
+  riêng** (mở thêm tab Báo Cáo cho MỌI thành viên nhóm cùng lúc, không chỉ
+  gán được từng người một như trước) — quyền xem Báo Cáo hiệu lực của 1
+  người = hợp của `reportExtraKeys` cá nhân **và** `reportExtraKeys` của mọi
+  nhóm họ thuộc (`getEffectiveReportExtraKeys()`), đúng yêu cầu tách quyền
+  xem Báo Cáo theo TỪNG module con (mỗi tab trong `REPORT_NAV_TREE` là 1
+  khoá riêng biệt, xem mục 5).
+- **Nhập lại**: chọn đúng file (Người Dùng/Nhóm Phân Quyền tương ứng nút đã
+  bấm), hệ thống hiện bảng xem trước — chỉ liệt kê dòng THỰC SỰ có thay đổi
+  so với dữ liệu hiện tại; dòng không tìm thấy username/tên nhóm hoặc trùng
+  lặp trong file bị báo rõ và không tick được. Bỏ tick dòng nào không muốn
+  áp dụng, bấm **"✅ Xác Nhận Áp Dụng"** — quyền có hiệu lực ngay từ lượt
+  tải lại trang/đăng nhập sau của người đó.
+- **Sửa quyền 1 Nhóm Phân Quyền qua ma trận cũng cascade ngay** cho mọi
+  thành viên hiện có của nhóm đó (giống hệt khi sửa tay ở khối "🗂️ Nhóm
+  Phân Quyền"), giữ nguyên phần quyền tuỳ chỉnh riêng từng người.
+- **Tài khoản `admin` gốc luôn bị bỏ qua** khi áp dụng ma trận Người Dùng —
+  không ai đổi được quyền tài khoản này qua đường này (khớp quy tắc khoá
+  cứng ở mục 6.1).
+
+Không cần chuẩn bị file mẫu riêng — luôn **xuất trước rồi sửa trên chính
+file vừa xuất** (đã có sẵn đúng cột/định dạng hệ thống nhận diện được).
+
 ---
 
 ## 7. Hệ Thống / Quản Trị
