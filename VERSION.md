@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**23.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.93 (2026-09-22): Phân Quyền — bảng "1 dòng = 1 phòng ban" thay lưới checkbox cắt tên
+
+Theo phản hồi người dùng (ảnh chụp màn hình thực tế): 6 khối phạm vi theo
+phòng ban trong cây Phân Quyền (2. Tài Liệu, 3. Văn Bản Trình, 4. Hợp Đồng &
+Giấy Phép, 5. Phòng Họp, 6. Đăng Ký Xe, 7. Văn Phòng) trước đây mỗi loại
+quyền (Xem/Tạo mới/Tải Xuống...) là 1 cột hẹp riêng, LẶP LẠI toàn bộ danh
+sách phòng ban trong cột đó — tên phòng ban dài bị "truncate" cắt mất chữ
+(cùng lỗi hiển thị đã sửa cho danh sách Siêu Thị ở task trước, "Phân Quyền:
+đổi danh sách siêu thị sang widget tìm-kiếm-gõ-chọn").
+
+- Đổi bố cục sang 1 bảng/khối theo đúng ý tưởng người dùng đề xuất trực tiếp
+  ("theo chiều ngang từng dòng"): mỗi DÒNG là 1 phòng ban (tên chỉ hiện 1
+  lần, đủ rộng không bị cắt), mỗi CỘT là 1 loại quyền, checkbox nằm ở ô giao
+  nhau. Checkbox "ALL" của từng cột dời lên đầu cột (trong `<thead>`,
+  `sticky top-0` để vẫn thấy khi cuộn dọc bảng dài).
+- `systemSection.html`: viết lại HTML 6 khối trên thành `<table>` (giữ
+  nguyên mọi id checkbox "ALL" cũ — `pUploadAll`, `pContractCreateAll`...).
+- `module-admin.js`: viết lại `renderDeptCheckboxes()` — render N `<tr>`
+  (1/phòng ban) vào `<tbody>` của mỗi bảng thay vì N `<label>` riêng lẻ vào
+  N container cột cũ. Id checkbox từng dòng GIỮ NGUYÊN định dạng cũ
+  (`${prefix}Dept_${idx}`, VD `pUploadDept_0`) — không đổi gì ở
+  `collectPermsFromForm()`/`populatePermsForm()`/`toggleScopeGroup()` (vốn
+  tra theo id pattern, không phụ thuộc cấu trúc DOM cha-con) — chỉ thêm
+  `data-scope-group="<prefix>"` để hỗ trợ đếm badge (mục dưới).
+- `module-admin-permtree.js`: `computePermTreeNodeCount()` (đếm badge "đã
+  cấp X/Y") trước đây tra checkbox phòng ban đã tick qua 1 container DOM
+  riêng bọc đúng 1 cột (`id="...DeptContainer"`) — không còn khả thi vì các
+  cột giờ nằm CHUNG 1 hàng `<tr>`. Thêm nhánh dự phòng qua
+  `data-scope-group`, GIỮ NGUYÊN hành vi cũ cho mọi khối khác chưa đổi (VD
+  widget Siêu Thị vẫn dùng container + `_gmsSelected`).
+- Test mới `tests/test-perm-tree-dept-table.js` (6 kịch bản: render đúng
+  bảng không còn cắt tên, id checkbox đúng khuôn cũ, round-trip
+  collectPermsFromForm() qua thao tác tick thật, populatePermsForm() đổ
+  đúng dữ liệu cũ lên bảng mới, toggleScopeGroup() khoá đúng, badge đếm
+  đúng qua data-scope-group) — 6/6 pass. 2 test cũ liên quan
+  (`test-perm-tree-store-scope-widget.js` 9/9,
+  `test-perm-tree-expand-collapse.js` 6/6) chạy lại xác nhận không hồi quy.
+  Full regression 282 file (281 cũ + 1 mới): chỉ 1 lỗi cũ đã biết trước
+  (thiếu file PDF fixture, không liên quan).
+- Cập nhật `Huong-dan-nghiep-vu.md` (mục cây phân quyền, ngay sau đoạn nói
+  về widget Siêu Thị).
+- Không đổi ý nghĩa/hành vi của BẤT KỲ quyền nào (chỉ đổi cách trình bày) —
+  không đổi schema SQL/biến môi trường/dependency.
 
 ## v23.92 (2026-09-22): Thông báo lỗi tải dữ liệu sau đăng nhập — ngắn gọn hơn, chỉ hiện mã lỗi khi thật sự là lỗi server
 

@@ -1093,43 +1093,39 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📂 2. Tài Liệu</span></span>
             <span id="permTreeBadge_doc" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tải lên</span>
-                <label class="flex items-center gap-1 font-bold text-blue-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pUploadAll" data-op-change="toggleScopeGroup" data-arg0="pUploadAll" data-arg1="pUploadDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pUploadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Xem Bản Nháp</span>
-                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pViewDraftAll" data-op-change="toggleScopeGroup" data-arg0="pViewDraftAll" data-arg1="pViewDraftDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pViewDraftDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Xem Đã Duyệt</span>
-                <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pViewApprovedAll" data-op-change="toggleScopeGroup" data-arg0="pViewApprovedAll" data-arg1="pViewApprovedDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pViewApprovedDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tải Xuống</span>
-                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pDocDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pDocDownloadAll" data-arg1="pDocDownloadDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pDocDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
+          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <table class="w-full text-[11px] border-collapse">
+              <thead class="sticky top-0 bg-white z-10">
+                <tr class="border-b">
+                  <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
+                  <th class="text-center font-bold text-blue-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tải Lên</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pUploadAll" data-op-change="toggleScopeGroup" data-arg0="pUploadAll" data-arg1="pUploadDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Xem Bản Nháp</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pViewDraftAll" data-op-change="toggleScopeGroup" data-arg0="pViewDraftAll" data-arg1="pViewDraftDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-emerald-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Xem Đã Duyệt</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pViewApprovedAll" data-op-change="toggleScopeGroup" data-arg0="pViewApprovedAll" data-arg1="pViewApprovedDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-rose-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tải Xuống</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pDocDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pDocDownloadAll" data-arg1="pDocDownloadDept"><span>ALL</span>
+                    </label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="pDocDeptTableBody"></tbody>
+            </table>
           </div>
         </details>
 
@@ -1138,34 +1134,33 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📜 3. Văn Bản Trình</span></span>
             <span id="permTreeBadge_sub" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pSubViewAll" data-op-change="toggleScopeGroup" data-arg0="pSubViewAll" data-arg1="pSubViewDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pSubViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pSubCreateAll" data-op-change="toggleScopeGroup" data-arg0="pSubCreateAll" data-arg1="pSubCreateDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pSubCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                <label class="flex items-center gap-1 font-bold text-amber-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pSubDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pSubDownloadAll" data-arg1="pSubDownloadDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pSubDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
+          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <table class="w-full text-[11px] border-collapse">
+              <thead class="sticky top-0 bg-white z-10">
+                <tr class="border-b">
+                  <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
+                  <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Xem</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pSubViewAll" data-op-change="toggleScopeGroup" data-arg0="pSubViewAll" data-arg1="pSubViewDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tạo mới</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pSubCreateAll" data-op-change="toggleScopeGroup" data-arg0="pSubCreateAll" data-arg1="pSubCreateDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tải xuống</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pSubDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pSubDownloadAll" data-arg1="pSubDownloadDept"><span>ALL</span>
+                    </label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="pSubDeptTableBody"></tbody>
+            </table>
           </div>
         </details>
 
@@ -1174,34 +1169,33 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 4. Hợp Đồng & Giấy Phép</span></span>
             <span id="permTreeBadge_contract" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pContractViewAll" data-op-change="toggleScopeGroup" data-arg0="pContractViewAll" data-arg1="pContractViewDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pContractViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pContractCreateAll" data-op-change="toggleScopeGroup" data-arg0="pContractCreateAll" data-arg1="pContractCreateDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pContractCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                <label class="flex items-center gap-1 font-bold text-cyan-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pContractDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pContractDownloadAll" data-arg1="pContractDownloadDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pContractDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
+          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <table class="w-full text-[11px] border-collapse">
+              <thead class="sticky top-0 bg-white z-10">
+                <tr class="border-b">
+                  <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
+                  <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Xem</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pContractViewAll" data-op-change="toggleScopeGroup" data-arg0="pContractViewAll" data-arg1="pContractViewDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tạo mới</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pContractCreateAll" data-op-change="toggleScopeGroup" data-arg0="pContractCreateAll" data-arg1="pContractCreateDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tải xuống</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pContractDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pContractDownloadAll" data-arg1="pContractDownloadDept"><span>ALL</span>
+                    </label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="pContractDeptTableBody"></tbody>
+            </table>
           </div>
           <div class="px-3 pb-3 space-y-1">
             <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
@@ -1229,25 +1223,27 @@
                 <input type="checkbox" id="pMeetingCancel"> ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)
               </label>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pMeetingViewAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingViewAll" data-arg1="pMeetingViewDept"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pMeetingViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Đăng ký (book)</span>
-                  <label class="flex items-center gap-1 font-bold text-emerald-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pMeetingBookAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingBookAll" data-arg1="pMeetingBookDept"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pMeetingBookDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
+            <div class="max-h-64 overflow-y-auto overflow-x-auto">
+              <table class="w-full text-[11px] border-collapse">
+                <thead class="sticky top-0 bg-white z-10">
+                  <tr class="border-b">
+                    <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
+                    <th class="text-center font-bold text-emerald-700 pb-1 px-1 align-bottom">
+                      <span class="block mb-0.5">Xem</span>
+                      <label class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="pMeetingViewAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingViewAll" data-arg1="pMeetingViewDept"><span>ALL</span>
+                      </label>
+                    </th>
+                    <th class="text-center font-bold text-emerald-700 pb-1 px-1 align-bottom">
+                      <span class="block mb-0.5">Đăng ký (book)</span>
+                      <label class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="pMeetingBookAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingBookAll" data-arg1="pMeetingBookDept"><span>ALL</span>
+                      </label>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="pMeetingDeptTableBody"></tbody>
+              </table>
             </div>
           </div>
         </details>
@@ -1257,34 +1253,33 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚗 6. Đăng Ký Xe</span></span>
             <span id="permTreeBadge_car" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 grid grid-cols-3 gap-3">
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pCarViewAll" data-op-change="toggleScopeGroup" data-arg0="pCarViewAll" data-arg1="pCarViewDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pCarViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pCarCreateAll" data-op-change="toggleScopeGroup" data-arg0="pCarCreateAll" data-arg1="pCarCreateDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pCarCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                <label class="flex items-center gap-1 font-bold text-indigo-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pCarDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pCarDownloadAll" data-arg1="pCarDownloadDept"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pCarDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-            </div>
+          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <table class="w-full text-[11px] border-collapse">
+              <thead class="sticky top-0 bg-white z-10">
+                <tr class="border-b">
+                  <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
+                  <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Xem</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pCarViewAll" data-op-change="toggleScopeGroup" data-arg0="pCarViewAll" data-arg1="pCarViewDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tạo mới</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pCarCreateAll" data-op-change="toggleScopeGroup" data-arg0="pCarCreateAll" data-arg1="pCarCreateDept"><span>ALL</span>
+                    </label>
+                  </th>
+                  <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
+                    <span class="block mb-0.5">Tải xuống</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" id="pCarDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pCarDownloadAll" data-arg1="pCarDownloadDept"><span>ALL</span>
+                    </label>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="pCarDeptTableBody"></tbody>
+            </table>
           </div>
           <div class="px-3 pb-3">
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
@@ -1308,34 +1303,33 @@
                 <input type="checkbox" id="pOfficeFix"> 🔧 Sửa Chữa
               </label>
             </div>
-            <div class="grid grid-cols-3 gap-3">
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Xem</span>
-                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pOfficeViewAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeViewAll" data-arg1="pOfficeViewDept"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pOfficeViewDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tạo mới</span>
-                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pOfficeCreateAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeCreateAll" data-arg1="pOfficeCreateDept"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pOfficeCreateDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
-              <div>
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-semibold text-gray-600 text-[11px]">Tải xuống</span>
-                  <label class="flex items-center gap-1 font-bold text-teal-700 cursor-pointer text-[11px]">
-                    <input type="checkbox" id="pOfficeDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeDownloadAll" data-arg1="pOfficeDownloadDept"><span>ALL</span>
-                  </label>
-                </div>
-                <div id="pOfficeDownloadDeptContainer" class="space-y-1 pl-1 max-h-32 overflow-y-auto"></div>
-              </div>
+            <div class="max-h-64 overflow-y-auto overflow-x-auto">
+              <table class="w-full text-[11px] border-collapse">
+                <thead class="sticky top-0 bg-white z-10">
+                  <tr class="border-b">
+                    <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
+                    <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">
+                      <span class="block mb-0.5">Xem</span>
+                      <label class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="pOfficeViewAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeViewAll" data-arg1="pOfficeViewDept"><span>ALL</span>
+                      </label>
+                    </th>
+                    <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">
+                      <span class="block mb-0.5">Tạo mới</span>
+                      <label class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="pOfficeCreateAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeCreateAll" data-arg1="pOfficeCreateDept"><span>ALL</span>
+                      </label>
+                    </th>
+                    <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">
+                      <span class="block mb-0.5">Tải xuống</span>
+                      <label class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="pOfficeDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeDownloadAll" data-arg1="pOfficeDownloadDept"><span>ALL</span>
+                      </label>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="pOfficeDeptTableBody"></tbody>
+              </table>
             </div>
           </div>
         </details>

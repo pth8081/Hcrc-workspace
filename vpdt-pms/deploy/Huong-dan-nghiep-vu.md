@@ -3482,6 +3482,18 @@ hiện thành 1 thẻ (chip) có nút ✕ để bỏ chọn nhanh, thay vì tick
 ô nhỏ trong lưới. Vẫn giữ nguyên checkbox "ALL" riêng ngay cạnh — tick ALL
 thì ô chọn siêu thị tự mờ đi và khoá tương tác (không cần chọn từng cái).
 
+**Phạm vi theo phòng ban đổi sang bảng "1 dòng = 1 phòng ban" (10/2026)** —
+6 khối có phạm vi Xem/Tạo mới/Tải Xuống theo phòng ban (2. Tài Liệu, 3. Văn
+Bản Trình, 4. Hợp Đồng & Giấy Phép, 5. Phòng Họp, 6. Đăng Ký Xe, 7. Văn Phòng)
+trước đây mỗi loại quyền là 1 cột hẹp riêng, LẶP LẠI toàn bộ danh sách phòng
+ban trong cột đó khiến tên phòng ban dài bị cắt ngắn (cùng lỗi hiển thị đã
+sửa cho danh sách siêu thị ở trên) — nay đổi thành 1 bảng/khối, mỗi DÒNG là 1
+phòng ban (tên chỉ hiện 1 lần, đủ rộng không bị cắt), mỗi CỘT là 1 loại quyền
+(Xem/Tạo mới/Tải Xuống...), tick ở đúng ô giao nhau. Checkbox "ALL" của từng
+cột nằm ngay trên đầu cột đó (trong tiêu đề bảng) — tick ALL vẫn khoá hết các
+ô phòng ban trong cột tương ứng như trước, không đổi ý nghĩa/hành vi của bất
+kỳ quyền nào, chỉ đổi cách trình bày.
+
 **Nhóm quyền (`permGroups`)** — thay vì tick tay từng quyền cho từng người,
 admin có thể tạo 1 "nhóm phân quyền" mẫu (VD "Nhân viên phòng Kế Toán") gồm 1
 bộ quyền cố định, rồi gán nhiều người dùng vào nhóm đó — nhóm đóng vai trò

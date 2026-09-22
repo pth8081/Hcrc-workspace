@@ -622,39 +622,39 @@ function populateModuleAccessForm(moduleAccess, prefix = 'pModuleAccess') {
   });
 }
 
-function renderDeptCheckboxes() {
-  const groups = [
-    { container: 'pUploadDeptContainer', prefix: 'pUploadDept' },
-    { container: 'pViewDraftDeptContainer', prefix: 'pViewDraftDept' },
-    { container: 'pViewApprovedDeptContainer', prefix: 'pViewApprovedDept' },
-    { container: 'pDocDownloadDeptContainer', prefix: 'pDocDownloadDept' },
-    { container: 'pSubViewDeptContainer', prefix: 'pSubViewDept' },
-    { container: 'pSubCreateDeptContainer', prefix: 'pSubCreateDept' },
-    { container: 'pSubDownloadDeptContainer', prefix: 'pSubDownloadDept' },
-    { container: 'pContractViewDeptContainer', prefix: 'pContractViewDept' },
-    { container: 'pContractCreateDeptContainer', prefix: 'pContractCreateDept' },
-    { container: 'pContractDownloadDeptContainer', prefix: 'pContractDownloadDept' },
-    { container: 'pMeetingViewDeptContainer', prefix: 'pMeetingViewDept' },
-    { container: 'pMeetingBookDeptContainer', prefix: 'pMeetingBookDept' },
-    { container: 'pCarViewDeptContainer', prefix: 'pCarViewDept' },
-    { container: 'pCarCreateDeptContainer', prefix: 'pCarCreateDept' },
-    { container: 'pCarDownloadDeptContainer', prefix: 'pCarDownloadDept' },
-    { container: 'pOfficeViewDeptContainer', prefix: 'pOfficeViewDept' },
-    { container: 'pOfficeCreateDeptContainer', prefix: 'pOfficeCreateDept' },
-    { container: 'pOfficeDownloadDeptContainer', prefix: 'pOfficeDownloadDept' }
-  ];
+// Bảng phòng ban theo module (thay lưới checkbox 2-4 cột cũ) — TRƯỚC ĐÂY mỗi loại quyền (Xem/Tạo mới/
+// Tải Xuống...) là 1 cột hẹp riêng, LẶP LẠI toàn bộ danh sách phòng ban trong cột đó nên tên phòng ban
+// dài bị "truncate" mất chữ (phản hồi người dùng 9/2026, cùng khuôn bug đã sửa cho danh sách Siêu Thị ở
+// task "Phân Quyền: đổi danh sách siêu thị sang widget tìm-kiếm-gõ-chọn"). Giờ đổi bố cục: MỖI DÒNG là 1
+// phòng ban (tên chỉ hiện ĐÚNG 1 LẦN, đủ rộng không bị cắt), MỖI CỘT là 1 loại quyền, checkbox nằm ở ô
+// giao nhau — khớp <thead> tĩnh đã có sẵn trong systemSection.html (cột "ALL" nằm ngay trên tiêu đề
+// cột). `cols` là "prefix ALL" (KHÔNG có hậu tố "Dept") — id checkbox từng dòng vẫn dựng đúng dạng
+// `${prefix}Dept_${idx}` như trước (KHÔNG đổi định dạng, vẫn khớp `[id^="pUploadDept_"]` ở
+// collectPermsFromForm()/setGroupCheckboxes() trong module-admin-permtree.js, chỉ đổi vị trí hiển thị
+// trên DOM) — thêm data-scope-group="<prefix>" để computePermTreeNodeCount() (badge "đã cấp X/Y") tra
+// được nhóm KHÔNG cần 1 container DOM riêng bọc đúng 1 cột (không còn khả thi vì các cột giờ nằm CHUNG 1
+// hàng <tr>, xem chú thích tại đó).
+const PERM_DEPT_TABLES = [
+  { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pViewDraft', 'pViewApproved', 'pDocDownload'] },
+  { tbody: 'pSubDeptTableBody', cols: ['pSubView', 'pSubCreate', 'pSubDownload'] },
+  { tbody: 'pContractDeptTableBody', cols: ['pContractView', 'pContractCreate', 'pContractDownload'] },
+  { tbody: 'pMeetingDeptTableBody', cols: ['pMeetingView', 'pMeetingBook'] },
+  { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarCreate', 'pCarDownload'] },
+  { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },
+];
 
-  groups.forEach(g => {
-    const el = document.getElementById(g.container);
+function renderDeptCheckboxes() {
+  PERM_DEPT_TABLES.forEach(t => {
+    const el = document.getElementById(t.tbody);
     if (!el) return;
     el.innerHTML = DB.depts.map((d, idx) => `
-      <label class="flex items-center gap-1 text-gray-700 cursor-pointer">
-        <input type="checkbox" id="${g.prefix}_${idx}" value="${escapeHtml(d)}">
-        <span class="truncate">${escapeHtml(d)}</span>
-      </label>
+      <tr class="border-b border-gray-100 last:border-0">
+        <td class="py-1 pr-2 text-gray-700 whitespace-nowrap">${escapeHtml(d)}</td>
+        ${t.cols.map(prefix => `<td class="text-center px-1"><input type="checkbox" id="${prefix}Dept_${idx}" data-scope-group="${prefix}" value="${escapeHtml(d)}"></td>`).join('')}
+      </tr>
     `).join('');
   });
-  // operationOrderReceiptManage — KHÔNG nằm trong `groups` ở trên (cần chèn thêm mục 'HO' đặc biệt,
+  // operationOrderReceiptManage — KHÔNG nằm trong `PERM_DEPT_TABLES` ở trên (cần chèn thêm mục 'HO' đặc biệt,
   // xem renderOperationOrderReceiptScopeCheckboxes()) nhưng vẫn phải tự render lại mỗi lần renderDeptCheckboxes()
   // chạy (DB.depts đổi thì danh sách siêu thị/phòng ban ở đây cũng phải đổi theo) — gọi kèm luôn tại đây
   // thay vì rải thêm lời gọi riêng ở từng nơi renderDeptCheckboxes() đang được gọi.

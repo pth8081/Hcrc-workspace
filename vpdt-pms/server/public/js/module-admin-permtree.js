@@ -26,20 +26,27 @@ function setAllPermTreeNodes(open) {
 // định là option đầu tiên, vd pApproverAuthLevel option đầu là "NONE").
 function computePermTreeNodeCount(bodyEl) {
   let granted = 0, total = 0;
+  // checkbox từng phòng ban chỉ tính gộp vào ALL, không đếm riêng lẻ — 2 khuôn: (a) nằm trong 1
+  // container id="...DeptContainer" (đa số khối, lưới checkbox cũ HOẶC widget tìm-kiếm-gõ-chọn), HOẶC
+  // (b) mang data-scope-group="<prefix>" (bảng "1 dòng = 1 phòng ban" mới — xem renderDeptCheckboxes()
+  // ở module-admin.js, không còn 1 container DOM riêng bọc đúng 1 cột vì checkbox của các cột khác nhau
+  // giờ nằm CHUNG 1 hàng <tr>, không thể lồng theo cột như div cũ).
   const checkboxes = [...bodyEl.querySelectorAll('input[type="checkbox"]')]
-    .filter(cb => !cb.closest('[id$="DeptContainer"]')); // checkbox từng phòng ban chỉ tính gộp vào ALL, không đếm riêng lẻ
+    .filter(cb => !cb.closest('[id$="DeptContainer"]') && !cb.hasAttribute('data-scope-group'));
 
   checkboxes.forEach(cb => {
     total++;
     if (cb.id.endsWith('All')) {
-      const deptContainer = document.getElementById(cb.id.slice(0, -3) + 'DeptContainer');
+      const groupPrefix = cb.id.slice(0, -3);
+      const deptContainer = document.getElementById(groupPrefix + 'DeptContainer');
       // deptContainer có thể là lưới checkbox THẬT (đa số) HOẶC widget renderMultiSelectDropdown() (VD
       // pOperationOrderReceiptDeptContainer/pChecklistAuditScopeDeptContainer, chọn siêu thị — xem
       // module-admin.js) — widget này không có checkbox nào trong DOM, trạng thái đã chọn nằm ở
-      // deptContainer._gmsSelected (Set, gán bởi renderMultiSelectDropdown() ở core.js).
+      // deptContainer._gmsSelected (Set, gán bởi renderMultiSelectDropdown() ở core.js). Khi KHÔNG có
+      // container (khuôn bảng mới), tra theo data-scope-group="<groupPrefix>" thay thế.
       const anyDeptChecked = deptContainer
         ? (deptContainer.querySelector('input[type="checkbox"]:checked') !== null || (deptContainer._gmsSelected && deptContainer._gmsSelected.size > 0))
-        : false;
+        : bodyEl.querySelector(`[data-scope-group="${groupPrefix}"]:checked`) !== null;
       if (cb.checked || anyDeptChecked) granted++;
     } else if (cb.checked) {
       granted++;
