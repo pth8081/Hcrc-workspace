@@ -118,7 +118,7 @@ test('Mục 4 — LỖI ĐÃ VÁ: phiếu TAXI (APPROVED, không tài xế) -> n
   const ended = endCarTrip(CREATOR, taxi, { km: 42 }, VEHICLE_TYPES);
   assert.strictEqual(ended.status, 'AWAITING_EVALUATION');
   assert.strictEqual(ended.actualKm, 42);
-  const done = evaluateCarTrip(CREATOR, ended, { km: 45, comment: 'Taxi đi đúng lộ trình' }, VEHICLE_TYPES);
+  const done = evaluateCarTrip(CREATOR, ended, { km: 45, comment: 'Taxi đi đúng lộ trình', rating: 5 }, VEHICLE_TYPES);
   assert.strictEqual(done.status, 'COMPLETED', 'Phiếu Taxi PHẢI tới được COMPLETED');
   assert.strictEqual(done.actualKm, 45);
 });
@@ -133,7 +133,7 @@ test('Mục 4 — Người Điều Hành Xe cũng Kết Thúc/Đánh Giá hộ �
   const ended = endCarTrip(DISPATCHER, taxi, { km: 10 }, VEHICLE_TYPES);
   assert.strictEqual(ended.status, 'AWAITING_EVALUATION');
   assert.ok(canEvaluateCarTrip(DISPATCHER, ended, VEHICLE_TYPES));
-  assert.strictEqual(evaluateCarTrip(DISPATCHER, ended, {}, VEHICLE_TYPES).status, 'COMPLETED');
+  assert.strictEqual(evaluateCarTrip(DISPATCHER, ended, { rating: 5 }, VEHICLE_TYPES).status, 'COMPLETED');
 });
 
 test('Mục 4 — người NGOÀI cuộc vẫn không kết thúc/đánh giá được phiếu Taxi (403)', () => {
@@ -166,7 +166,7 @@ test('LỖI ĐÃ VÁ: xe đội nhà, creator ĐÃ NGHỈ VIỆC (active:false) 
   const allUsersWithInactiveCreator = [DRIVER, { username: CREATOR.username, name: CREATOR.name, active: false, perms: {} }];
   assert.ok(canEvaluateCarTrip(DISPATCHER, ended, VEHICLE_TYPES, allUsersWithInactiveCreator),
     'carDispatch phải đánh giá hộ được khi creator.active===false');
-  const done = evaluateCarTrip(DISPATCHER, ended, { comment: 'Đánh giá hộ vì NV đã nghỉ việc' }, VEHICLE_TYPES, allUsersWithInactiveCreator);
+  const done = evaluateCarTrip(DISPATCHER, ended, { comment: 'Đánh giá hộ vì NV đã nghỉ việc', rating: 5 }, VEHICLE_TYPES, allUsersWithInactiveCreator);
   assert.strictEqual(done.status, 'COMPLETED', 'Phiếu phải hoàn thành được, không kẹt vĩnh viễn ở AWAITING_EVALUATION');
   assert.strictEqual(done.evaluatedBy, DISPATCHER.username);
 });

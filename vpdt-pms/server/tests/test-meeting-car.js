@@ -1025,7 +1025,7 @@ async function main() {
   // giữ nguyên làm audit trail (Q3: cho phép chỉnh KM + nhận xét không bắt buộc).
   await loginAs(page, bookerUser);
   const cEval2 = await page.evaluate(async (carId) => {
-    const result = await callRecordAction('carRegs', carId, 'evaluate', { km: 128, comment: 'Chuyến đi đúng giờ, an toàn.' });
+    const result = await callRecordAction('carRegs', carId, 'evaluate', { km: 128, comment: 'Chuyến đi đúng giờ, an toàn.', rating: 5 });
     const idx = DB.carRegs.findIndex((c) => c.id === carId);
     if (idx !== -1) DB.carRegs[idx] = result.item;
     return {
@@ -1042,7 +1042,7 @@ async function main() {
 
   // Đánh giá lần 2 (đã COMPLETED) -> 409.
   const cEval3 = await page.evaluate(async (carId) => {
-    try { await callRecordAction('carRegs', carId, 'evaluate', { km: 999 }); return { ok: true }; }
+    try { await callRecordAction('carRegs', carId, 'evaluate', { km: 999, rating: 5 }); return { ok: true }; }
     catch (err) { return { ok: false, message: err.message }; }
   }, c7.saved.id);
   record(
