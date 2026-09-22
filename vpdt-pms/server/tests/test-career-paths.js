@@ -181,6 +181,64 @@ async function main() {
       assertEqual(rowCount, 1, 'stage builder should reset back to exactly 1 empty row');
     });
 
+    // ===================== Nút "✏️ Sửa" mới (10/2026) — sửa tên/mô tả + stages[] qua ĐÚNG form thật =====
+    await run('trainingManage edits the careerPath (name + stage 0 renamed) via openEditCareerPath/submitCareerPath', async () => {
+      await page.evaluate((pid) => { openEditCareerPath(pid); }, pathId);
+      const submitLabel = await page.evaluate(() => document.getElementById('cpSubmitBtn').innerText);
+      const cancelHidden = await page.evaluate(() => document.getElementById('cpCancelEditBtn').classList.contains('hidden'));
+      const prefilled = await page.evaluate(() => ({
+        name: document.getElementById('cpName').value,
+        rows: [...document.querySelectorAll('#cpStageBuilderContainer .cp-stage-row')].map((r) => r.querySelector('.cp-stage-name-input').value)
+      }));
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        document.getElementById('cpName').value = 'Lộ Trình Vận Hành (đã sửa)';
+        document.querySelectorAll('#cpStageBuilderContainer .cp-stage-row')[0].querySelector('.cp-stage-name-input').value = 'Trưởng Nhóm (đã sửa)';
+      });
+      await page.evaluate(() => submitCareerPath({ preventDefault() {}, target: { reset() {} } }));
+      const paths = await page.evaluate(() => DB.careerPaths);
+      const path = paths.find((p) => p.id === pathId);
+      assertEqual(paths.length, 1, 'editing must not create a 2nd careerPath record');
+      assertEqual(submitLabel, 'Lưu Thay Đổi', 'submit button must switch label while editing');
+      assert(!cancelHidden, 'cancel-edit button must be visible while editing');
+      assertEqual(prefilled.name, 'Lộ Trình Vận Hành', 'openEditCareerPath must pre-fill the current name');
+      assertEqual(prefilled.rows.length, 2, 'openEditCareerPath must rebuild exactly 2 stage rows from path.stages');
+      assertEqual(prefilled.rows[0], 'Trưởng Nhóm', 'openEditCareerPath must pre-fill stage 0 name');
+      assertEqual(path.name, 'Lộ Trình Vận Hành (đã sửa)', 'name should be updated');
+      assertEqual(path.stages[0].name, 'Trưởng Nhóm (đã sửa)', 'stage 0 name should be updated');
+      assertEqual(path.stages[1].name, 'Trưởng Phòng', 'stage 1 (untouched) must survive the edit unchanged');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('Đã cập nhật lộ trình thăng tiến')), `expected update-success alert, got ${JSON.stringify(alerts)}`);
+      const cancelHiddenAfter = await page.evaluate(() => document.getElementById('cpCancelEditBtn').classList.contains('hidden'));
+      assert(cancelHiddenAfter, 'cancel-edit button must hide again after a successful save');
+      const rowCountAfter = await page.evaluate(() => document.querySelectorAll('#cpStageBuilderContainer .cp-stage-row').length);
+      assertEqual(rowCountAfter, 1, 'form should reset back to exactly 1 empty row after a successful edit save');
+      // Trả lại đúng tên lộ trình + tên Cấp 1 như cũ ngay sau khi kiểm chứng — hàng loạt kịch bản PHÍA SAU
+      // trong cùng file test này (gác tuần tự/điều kiện Đạt/render...) đọc ĐÚNG chữ "Trưởng Nhóm"/"Lộ
+      // Trình Vận Hành", đổi tên vĩnh viễn ở đây sẽ làm hỏng dây chuyền toàn bộ phần còn lại.
+      await page.evaluate((pid) => { openEditCareerPath(pid); }, pathId);
+      await page.evaluate(() => {
+        document.getElementById('cpName').value = 'Lộ Trình Vận Hành';
+        document.querySelectorAll('#cpStageBuilderContainer .cp-stage-row')[0].querySelector('.cp-stage-name-input').value = 'Trưởng Nhóm';
+      });
+      await page.evaluate(() => submitCareerPath({ preventDefault() {}, target: { reset() {} } }));
+      const restoredPath = await page.evaluate((pid) => DB.careerPaths.find((p) => p.id === pid), pathId);
+      assertEqual(restoredPath.name, 'Lộ Trình Vận Hành', 'name must be restored for the rest of the suite');
+      assertEqual(restoredPath.stages[0].name, 'Trưởng Nhóm', 'stage 0 name must be restored for the rest of the suite');
+    });
+
+    await run('a non-trainingManage user cannot edit a careerPath (server-side reject)', async () => {
+      await page.evaluate((u) => { currentUser = u; }, peerIt);
+      let errMsg = null;
+      await page.evaluate(async (pid) => {
+        try { await callRecordAction('careerPaths', pid, 'edit', { name: 'Chiếm quyền sửa' }); }
+        catch (err) { window.__lastCreateErr = err.message; }
+      }, pathId);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('không có quyền sửa lộ trình'), `expected a permission error, got: ${errMsg}`);
+      await page.evaluate((u) => { currentUser = u; }, hr);
+    });
+
     // ===================== Gác tuần tự + điều kiện Đạt theo TỪNG cấp =====================
 
     await run('confirming stage 1 (index 1) BEFORE stage 0 is confirmed is rejected regardless of course completion (sequential gate)', async () => {

@@ -113,6 +113,13 @@ async function main() {
           rec.subtasks = (rec.subtasks || []).filter(s => s.id !== body.subtaskId);
           return rec;
         }
+        if (action === 'edit-subtask') {
+          const sub = (rec.subtasks || []).find(s => s.id === body.subtaskId);
+          if (!sub) throw new Error('Không tìm thấy công việc nhỏ');
+          sub.title = body.title;
+          sub.dueDate = body.dueDate;
+          return rec;
+        }
         if (action === 'request-extension') {
           rec.pendingExtension = { requestedBy: currentUser.username, requestedByName: currentUser.name, requestedAt: nowVN(), newDeadline: body.newDeadline, reason: body.reason };
           return rec;
@@ -346,6 +353,25 @@ async function main() {
         const subtaskId = afterAdd.subtasks[0] && afterAdd.subtasks[0].id;
         await toggleSubtaskAction(subtaskId);
         const afterToggle = JSON.parse(JSON.stringify(DB.tasks.find(t => t.id === task1Id)));
+
+        // Sửa lại đúng công việc nhỏ vừa thêm (nút "✏️ Sửa" mới, đợt 10/2026) — openEditSubtask() populate
+        // lại 2 ô input + đổi nút "+ Thêm" thành "Lưu", addSubtaskAction() phải gọi 'edit-subtask' (không
+        // phải 'add-subtask' tạo trùng) khi editingSubtaskId đang set.
+        openEditSubtask(subtaskId);
+        const editModeButtonLabel = document.getElementById('newSubtaskAddBtn').innerText;
+        document.getElementById('newSubtaskTitle').value = 'Xin báo giá nhà cung cấp (đã cập nhật)';
+        document.getElementById('newSubtaskDueDate').value = '2026-09-06';
+        await addSubtaskAction();
+        const afterEdit = JSON.parse(JSON.stringify(DB.tasks.find(t => t.id === task1Id)));
+        check(
+          'task: a subtask can be edited in place via the new "✏️ Sửa" button (title+dueDate updated, no duplicate row, done stays true)',
+          editModeButtonLabel === 'Lưu' && afterEdit.subtasks.length === 1 &&
+          afterEdit.subtasks[0].id === subtaskId &&
+          afterEdit.subtasks[0].title === 'Xin báo giá nhà cung cấp (đã cập nhật)' &&
+          afterEdit.subtasks[0].dueDate === '2026-09-06' &&
+          afterEdit.subtasks[0].done === true,
+          `editModeButtonLabel=${editModeButtonLabel} afterEdit=${JSON.stringify(afterEdit.subtasks)}`
+        );
 
         // Now close out the task: DOING -> DONE via the progress modal's own dropdown.
         openTaskProgressModal(task1Id); // re-open to rebuild #progressNewStatus options for the current status

@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -3552,6 +3552,34 @@ function toggleSubtask(payload, user, task) {
   return task;
 }
 
+// Sửa 1 công việc nhỏ đã tạo (subtask, 10/2026 — trước đây chỉ thêm/tick xong/xoá, gõ sai tên hoặc hạn
+// phải xoá tạo lại, mất luôn trạng thái đã tick xong) — cùng ràng buộc dueDate không vượt quá hạn việc
+// chính như addSubtask().
+function editSubtask(payload, user, task) {
+  if (!canManageSubtasks(user, task)) {
+    throw new HttpError(403, 'Chỉ người nhận việc mới có thể sửa công việc nhỏ');
+  }
+  if (task.status !== 'DOING') {
+    throw new HttpError(409, 'Chỉ sửa được công việc nhỏ khi việc chính đang thực hiện');
+  }
+  const subtaskId = Number(payload?.subtaskId);
+  const sub = (task.subtasks || []).find(s => s.id === subtaskId);
+  if (!sub) throw new HttpError(404, 'Không tìm thấy công việc nhỏ');
+  const title = (payload?.title || '').trim();
+  const dueDate = (payload?.dueDate || '').trim();
+  if (!title) throw new HttpError(400, 'Thiếu tên công việc nhỏ');
+  if (!dueDate) throw new HttpError(400, 'Thiếu hạn hoàn thành công việc nhỏ');
+  if (task.deadline && dueDate > task.deadline) {
+    throw new HttpError(400, `Hạn công việc nhỏ không được vượt quá hạn hoàn thành của việc chính (${task.deadline})`);
+  }
+  const oldTitle = sub.title;
+  sub.title = title;
+  sub.dueDate = dueDate;
+  task.history = Array.isArray(task.history) ? task.history : [];
+  task.history.push({ action: 'SUBTASK_EDITED', by: user.username, byName: user.name, time: nowVN(), note: `Sửa công việc nhỏ "${oldTitle}" → "${title}" (hạn ${dueDate})` });
+  return task;
+}
+
 function deleteSubtask(payload, user, task) {
   if (!canManageSubtasks(user, task)) {
     throw new HttpError(403, 'Chỉ người nhận việc mới có thể xoá công việc nhỏ');
@@ -5141,6 +5169,22 @@ function gradeTrainingTestEssayAnswers(user, sub, test, cls, rawEssayGrades) {
   return sub;
 }
 
+// Sửa 1 Lộ Trình Thăng Tiến đã tạo (careerPaths, 10/2026 — trước đây màn này CHỈ có Xoá, gõ sai tên/
+// cấp bậc/chương trình bắt buộc phải xoá tạo lại từ đầu, mất luôn xác nhận tiến độ nhân viên đã có ở
+// careerPathConfirmations vì xoá-tạo-lại luôn đổi id mới) — cùng khuôn editOnboardingPath() (whitelist
+// field rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO, xem normalizeCareerPathFields() ở
+// lib/createValidation.js). Cùng quyền canManageTraining() như lúc tạo.
+const CAREER_PATH_EDITABLE_FIELDS = ['name', 'stages'];
+function editCareerPath(payload, user, path, appData) {
+  if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình thăng tiến');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of CAREER_PATH_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) path[field] = payload[field];
+  }
+  normalizeCareerPathFields(path, appData);
+  return path;
+}
+
 // Xác nhận 1 nhân viên đã hoàn thành 1 CẤP BẬC của lộ trình thăng tiến (Đợt 7 — path.stages, thứ tự
 // mảng = thứ tự cấp bậc) — CHỈ cho xác nhận khi:
 //   1) cấp bậc TRƯỚC ĐÓ (stageIndex - 1) đã được xác nhận cho ĐÚNG người này ở ĐÚNG lộ trình này (gác
@@ -5373,6 +5417,22 @@ function issueOnboardingCertificate(user, progress) {
 // người trong bộ phận nhân sự đăng nhưng ai trong đội cũng cần xử lý được ứng viên của nhau.
 function canManageRecruitment(user) {
   return !!(user.perms?.admin || user.perms?.internalRecruitmentCreate);
+}
+
+// Sửa nội dung 1 tin tuyển dụng đã đăng (recruitmentJobs, 10/2026 — trước đây tin đã đăng KHÔNG sửa
+// được, gõ sai phải xoá đăng lại, mất hết lượt giới thiệu ứng viên đã có ở recruitmentReferrals vì
+// xoá-tạo-lại đổi id mới) — chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO (xem
+// normalizeRecruitmentJobFields(), lib/createValidation.js), CỐ Ý không đụng status/filledBy/
+// filledByName/filledAt (đổi qua closeRecruitmentJob()/confirmRecruitmentJobFilled() riêng).
+const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'customData'];
+function editRecruitmentJob(payload, user, job, appData) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  for (const field of RECRUITMENT_JOB_EDITABLE_FIELDS) {
+    if (payload[field] !== undefined) job[field] = payload[field];
+  }
+  normalizeRecruitmentJobFields(job, appData);
+  return job;
 }
 
 // Đợt 2: cho đóng tin từ CẢ OPEN lẫn FILLED (trước đây chỉ từ OPEN) — HR cần đóng hẳn 1 tin sau khi đã
@@ -6456,6 +6516,19 @@ function computeAllEmployeeUniformHoldings(allIssuancesOfStore, allAdjustmentsOf
 // chỉ cần duyệt mà không cần tạo/quản lý kỳ).
 function canApproveUniform(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
+}
+
+// Sửa tên/ghi chú 1 kỳ cấp phát đồng phục đã tạo (uniformPeriods, 10/2026 — trước đây chỉ Admin xoá
+// được, không sửa được tên kỳ/ghi chú sau khi tạo). CỐ Ý CHỈ cho sửa 2 field mô tả này — KHÔNG đụng
+// allocations[] (đã có confirmUniformAllocation() riêng theo từng siêu thị, sửa lại phân bổ sau khi 1
+// số siêu thị đã bắt đầu xác nhận sẽ phá vỡ state machine PENDING_CONFIRM/CONFIRMED của từng dòng).
+function editUniformPeriod(user, period, payload) {
+  if (!canManageUniform(user)) throw new HttpError(403, 'Bạn không có quyền sửa kỳ cấp phát đồng phục');
+  if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  if (!payload.name || !String(payload.name).trim()) throw new HttpError(400, 'Thiếu tên kỳ cấp phát');
+  period.name = String(payload.name).trim().slice(0, 200);
+  period.note = (payload.note || '').trim().slice(0, 1000);
+  return period;
 }
 
 function approveUniformPeriod(user, period) {
@@ -7826,14 +7899,14 @@ module.exports = {
   createTask,
   acceptTask, confirmCollaboratorParticipation, updateTaskStatusAction, requestExtension,
   cancelOrRequestCancelTask, resolvePendingTaskAction,
-  addSubtask, toggleSubtask, deleteSubtask,
+  addSubtask, toggleSubtask, deleteSubtask, editSubtask,
   closeVppPeriod, submitVppRegistration, updateVppRegistrationDraft, canCancelVppRegistration, cancelVppRegistration,
   closeReportPeriod, submitReportEntry, updateReportEntryDraft,
   mergeReportPeriod, mergeReportPeriodByTasks, updateReportCompilation, publishReportPeriod, unpublishReportPeriod,
   mergeReportPeriodPdf, publishReportPeriodPdf, unpublishReportPeriodPdf,
   canManageTraining, canManageTrainingClass, cancelTrainingRegistration, approveCancelTrainingRegistration,
   rejectCancelTrainingRegistration, markTrainingDocumentViewed, setTrainingRegistrationResult, confirmCareerPathForEmployee,
-  assertCanRevokeCareerPathConfirmation,
+  assertCanRevokeCareerPathConfirmation, editCareerPath,
   isTrainingVideoProgressComplete, isTrainingPdfProgressComplete, computeTrainingDocumentProgressUpdate,
   bulkRegisterTrainingClass, editTrainingClass, startOfflineTrainingClass, endOfflineTrainingClass, editTrainingPlan,
   editTrainingCourse, editTrainingDocument, editTrainingTest,
@@ -7842,7 +7915,7 @@ module.exports = {
   startTrainingTestAttempt, evaluateTrainingTestTiming,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3,
   reevaluateOnboardingStage3, issueOnboardingCertificate,
-  canManageRecruitment, closeRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
+  canManageRecruitment, closeRecruitmentJob, editRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
   canManageItSupport, canSupportItPrice, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   resolveApprovedFileId, resolveApprovedFileUrl,
@@ -7854,7 +7927,7 @@ module.exports = {
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
-  canApproveUniform, approveUniformPeriod, rejectUniformPeriod,
+  canApproveUniform, approveUniformPeriod, rejectUniformPeriod, editUniformPeriod,
   stripVietnameseDiacritics, abbreviateUniformItemName, computeNextUniformSkuSeq, generateUniformSkuCode, backfillUniformSkuCodes,
   requestContractPaymentTypeChange, approveContractPaymentTypeChange, rejectContractPaymentTypeChange,
   confirmUniformAllocation, buildUniformIssuance, acknowledgeUniformIssuance, buildUniformStockAdjustment,

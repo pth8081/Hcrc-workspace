@@ -413,6 +413,7 @@ function renderUniformPeriodsList() {
             <button type="button" data-op="approveUniformPeriodAction" data-arg0="${p.id}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✔️ Duyệt</button>
             <button type="button" data-op="rejectUniformPeriodAction" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">✕ Từ Chối</button>
           ` : ''}
+          ${canManageUniform(currentUser) ? `<button type="button" data-op="openEditUniformPeriod" data-arg0="${p.id}" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded text-xs font-bold">✏️ Sửa</button>` : ''}
           ${currentUser.perms?.admin ? `<button type="button" data-op="deleteUniformPeriodAction" data-arg0="${p.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>` : ''}
         </div>
       </div>
@@ -482,6 +483,44 @@ function rejectUniformPeriodAction(periodId) {
       if (idx !== -1) DB.uniformPeriods[idx] = result.item;
       logSystemAction('UNIFORM', 'REJECT_UNIFORM_PERIOD', `Từ chối kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
       alert('✅ Đã từ chối kỳ cấp phát!');
+      renderUniformPeriodsList();
+    }
+  });
+}
+
+// Sửa tên/ghi chú 1 kỳ cấp phát đã tạo — CỐ Ý CHỈ cho sửa 2 field mô tả này qua modal nhỏ dùng
+// showConfirmModal() có sẵn (không dựng lại toàn bộ form phân bổ phức tạp), KHÔNG đụng allocations[]
+// (xem editUniformPeriod() ở lib/recordActions.js — lý do không cho sửa phân bổ sau khi tạo).
+function openEditUniformPeriod(id) {
+  const p = DB.uniformPeriods.find(x => x.id === id);
+  if (!p) return;
+  showConfirmModal({
+    title: 'Sửa Kỳ Cấp Phát',
+    bodyHTML: `
+      <div class="space-y-2">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Kỳ Cấp Phát</label>
+          <input id="uniformPeriodEditName" value="${escapeHtml(p.name)}" class="w-full border p-1.5 rounded text-xs">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1 text-xs">Ghi Chú</label>
+          <input id="uniformPeriodEditNote" value="${escapeHtml(p.note || '')}" class="w-full border p-1.5 rounded text-xs">
+        </div>
+      </div>
+    `,
+    confirmLabel: 'Lưu Thay Đổi',
+    onConfirm: async () => {
+      const name = document.getElementById('uniformPeriodEditName').value.trim();
+      const note = document.getElementById('uniformPeriodEditNote').value.trim();
+      if (!name) return alert('Vui lòng nhập tên kỳ cấp phát!');
+      let result;
+      try {
+        result = await callRecordAction('uniformPeriods', id, 'edit', { name, note });
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.uniformPeriods.findIndex(x => x.id === id);
+      if (idx !== -1) DB.uniformPeriods[idx] = result.item;
+      logSystemAction('UNIFORM', 'EDIT_UNIFORM_PERIOD', `Sửa kỳ cấp phát đồng phục [${result.item.name}]`, 'SUCCESS', result.item.name);
+      alert('✅ Đã cập nhật kỳ cấp phát!');
       renderUniformPeriodsList();
     }
   });

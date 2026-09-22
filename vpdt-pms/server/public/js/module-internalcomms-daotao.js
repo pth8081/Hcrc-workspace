@@ -196,12 +196,19 @@ function populateCareerPathStageBuilder() {
   if (!container.children.length) addCpStageRow();
 }
 
+// resetCareerPathForm() — nút "↺ Làm Mới" VÀ luồng tạo lộ trình thành công ở dưới. Hành vi cần GIỐNG HỆT
+// cancelEditCareerPath() (thoát Sửa dở dang nếu có + trắng form), cùng khuôn resetOnboardingPathForm().
 function resetCareerPathForm() {
+  editingCareerPathId = null;
   const form = document.getElementById('careerPathForm');
   if (form) form.reset();
   const container = document.getElementById('cpStageBuilderContainer');
   if (container) container.innerHTML = '';
   addCpStageRow();
+  const submitBtn = document.getElementById('cpSubmitBtn');
+  if (submitBtn) submitBtn.innerText = 'Tạo Lộ Trình';
+  const cancelBtn = document.getElementById('cpCancelEditBtn');
+  if (cancelBtn) cancelBtn.classList.add('hidden');
 }
 
 function renderTrainingLms() {
@@ -3307,6 +3314,7 @@ function deleteTrainingDocument(id) {
 }
 
 // ---------- LỘ TRÌNH THĂNG TIẾN (Đợt 7 — nhiều CẤP BẬC tuần tự) ----------
+let editingCareerPathId = null;
 async function submitCareerPath(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo lộ trình thăng tiến!');
@@ -3327,23 +3335,52 @@ async function submitCareerPath(e) {
     return alert(`⛔ ${err.message}`);
   }
   const payload = {
-    code: `LT-${Date.now()}`,
     name: document.getElementById('cpName').value.trim(),
     targetTitle: document.getElementById('cpTargetTitle').value.trim(),
     stages,
     description: document.getElementById('cpDescription').value.trim(),
     customData
   };
-  let newPath;
   try {
-    const result = await callCreateAction('careerPaths', payload);
-    newPath = result.item;
+    if (editingCareerPathId) {
+      const result = await callRecordAction('careerPaths', editingCareerPathId, 'edit', payload);
+      const idx = DB.careerPaths.findIndex(p => p.id === editingCareerPathId);
+      if (idx !== -1) DB.careerPaths[idx] = result.item;
+      logSystemAction('INTERNAL', 'EDIT_CAREER_PATH', `Sửa lộ trình thăng tiến [${result.item.name}]`, 'SUCCESS');
+      alert('✅ Đã cập nhật lộ trình thăng tiến!');
+      cancelEditCareerPath();
+    } else {
+      payload.code = `LT-${Date.now()}`;
+      const result = await callCreateAction('careerPaths', payload);
+      DB.careerPaths.unshift(result.item);
+      logSystemAction('INTERNAL', 'CREATE_CAREER_PATH', `Tạo lộ trình thăng tiến [${result.item.name}] (${result.item.stages.length} cấp bậc)`, 'SUCCESS', result.item.code);
+      alert('✅ Đã tạo lộ trình thăng tiến thành công!');
+      resetCareerPathForm();
+    }
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  DB.careerPaths.unshift(newPath);
-  logSystemAction('INTERNAL', 'CREATE_CAREER_PATH', `Tạo lộ trình thăng tiến [${newPath.name}] (${newPath.stages.length} cấp bậc)`, 'SUCCESS', newPath.code);
-  alert('✅ Đã tạo lộ trình thăng tiến thành công!');
-  resetCareerPathForm();
   renderCareerPaths();
+}
+
+function openEditCareerPath(id) {
+  const path = DB.careerPaths.find(p => p.id === id);
+  if (!path) return;
+  editingCareerPathId = id;
+  document.getElementById('cpName').value = path.name;
+  document.getElementById('cpTargetTitle').value = path.targetTitle || '';
+  document.getElementById('cpDescription').value = path.description || '';
+  const container = document.getElementById('cpStageBuilderContainer');
+  container.innerHTML = '';
+  (Array.isArray(path.stages) ? path.stages : []).forEach(s => addCpStageRow(s.name, s.requiredCourseIds || []));
+  if (!container.children.length) addCpStageRow();
+  document.getElementById('cpSubmitBtn').innerText = 'Lưu Thay Đổi';
+  document.getElementById('cpCancelEditBtn').classList.remove('hidden');
+  document.getElementById('careerPathForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function cancelEditCareerPath() {
+  editingCareerPathId = null;
+  resetCareerPathForm();
+  document.getElementById('cpSubmitBtn').innerText = 'Tạo Lộ Trình';
+  document.getElementById('cpCancelEditBtn').classList.add('hidden');
 }
 
 // Trạng thái TỪNG cấp bậc của 1 người (username) trên 1 lộ trình — tính SỐNG từ
@@ -3418,6 +3455,7 @@ function renderCareerPaths() {
       <div class="mt-2 pt-2 border-t space-y-2">
         <div class="flex gap-2 items-center flex-wrap">
           <input id="cpConfirmUsername_${p.id}" placeholder="Nhập username nhân viên cần xác nhận..." class="border rounded p-1 text-xs flex-1 min-w-[160px]" data-op-input="renderCpEmployeeStageLookup" data-arg0="${p.id}">
+          <button data-op="openEditCareerPath" data-arg0="${p.id}" class="text-blue-600 font-bold hover:underline text-xs">✏️ Sửa</button>
           <button data-op="deleteCareerPath" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa Lộ Trình</button>
         </div>
         <div id="cpEmployeeStageBox_${p.id}"></div>

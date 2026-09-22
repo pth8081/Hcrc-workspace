@@ -888,6 +888,7 @@ router.post('/tasks/:id/reject-cancellation', (req, res) =>
 router.post('/tasks/:id/add-subtask', (req, res) => withTaskAction(req, res, 'add-subtask', recordActions.addSubtask));
 router.post('/tasks/:id/toggle-subtask', (req, res) => withTaskAction(req, res, 'toggle-subtask', recordActions.toggleSubtask));
 router.post('/tasks/:id/delete-subtask', (req, res) => withTaskAction(req, res, 'delete-subtask', recordActions.deleteSubtask));
+router.post('/tasks/:id/edit-subtask', (req, res) => withTaskAction(req, res, 'edit-subtask', recordActions.editSubtask));
 
 // POST /api/records/tasks/:id/delete
 router.post('/tasks/:id/delete', async (req, res) => {
@@ -1329,6 +1330,22 @@ router.post('/trainingClasses/:id/delete', async (req, res) => {
 //   - xoá 1 lộ trình thăng tiến đã có mốc xác nhận (careerPathConfirmations.pathId) -> mốc mồ côi.
 // Khuôn chặn 409 copy đúng từ /budgetTemplates/:id/delete ở trên (kiểm tham chiếu TRƯỚC khi xoá, thông
 // báo nêu rõ số lượng + cách xử lý).
+// POST /api/records/careerPaths/:id/edit — sửa 1 Lộ Trình Thăng Tiến đã tạo (tên + stages[]), cùng
+// khuôn onboardingPaths/:id/edit ở trên. getAllAppData() đọc sẵn trainingCourses để đối chiếu lại
+// requiredCourseIds của stages nếu có đổi (normalizeCareerPathFields()).
+router.post('/careerPaths/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('careerPaths', itemId, (item) =>
+      recordActions.editCareerPath(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `careerPaths/${req.params.id}/edit`, err);
+  }
+});
 router.post('/careerPaths/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2014,6 +2031,23 @@ router.post('/trainingClasses/:classId/submissions/:submissionId/grade-essay', a
 
 // ===================== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ) =====================
 router.post('/recruitmentJobs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'recruitmentJobs'));
+
+// POST /api/records/recruitmentJobs/:id/edit — sửa nội dung 1 tin tuyển dụng đã đăng (tiêu đề, mô tả,
+// yêu cầu, số lượng, hạn nộp...), KHÔNG đụng status/filledBy (giữ nguyên vòng đời OPEN/FILLED/CLOSED
+// hiện có — xem editRecruitmentJob() ở recordActions.js).
+router.post('/recruitmentJobs/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.editRecruitmentJob(req.body, freshUser, item, appData));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/edit`, err);
+  }
+});
 
 router.post('/recruitmentJobs/:id/close', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -3950,6 +3984,21 @@ router.post('/hrProcesses/:id/create-it-ticket', async (req, res) => {
 
 // ===================== ĐỒNG PHỤC =====================
 router.post('/uniformPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformPeriods'));
+
+// POST /api/records/uniformPeriods/:id/edit — sửa tên/ghi chú 1 kỳ cấp phát đã tạo. CỐ Ý CHỈ cho sửa
+// name/note, KHÔNG đụng allocations[] (xem editUniformPeriod() ở recordActions.js).
+router.post('/uniformPeriods/:id/edit', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('uniformPeriods', itemId, (item) =>
+      recordActions.editUniformPeriod(freshUser, item, req.body));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `uniformPeriods/${req.params.id}/edit`, err);
+  }
+});
 
 // Duyệt/Từ chối cả kỳ (Phase 2, uniformApprove/admin) — PHẢI chạy TRƯỚC khi Giám Đốc Siêu Thị xác nhận
 // được bất kỳ phần phân bổ nào (xem canApproveUniform()/approveUniformPeriod()/rejectUniformPeriod() ở

@@ -533,15 +533,19 @@ function renderRecruitment() {
   else if (activeRecruitmentTab === 'MANAGE') renderRecruitmentManage();
 }
 
+let editingRecruitmentJobId = null;
 async function submitRecruitmentJob(e) {
   e.preventDefault();
   if (!canManageRecruitmentLocal(currentUser)) return alert('⛔ Bạn không có quyền đăng tin tuyển dụng!');
+  const editingJob = editingRecruitmentJobId ? DB.recruitmentJobs.find(j => j.id === editingRecruitmentJobId) : null;
   // Banner (tuỳ chọn) — đi qua uploadFileToServer(), KHÔNG dựng đường upload riêng. moduleKey
   // 'internalImage' (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu upload 10/2026 — trước đây dùng chung 'internal'
   // với CV giới thiệu ứng viên/tệp văn bản khác, đụng độ với cấu hình "Loại Tệp Cho Phép" của admin cho
   // 'internal' — xem MODULE_DEFAULT_ALLOWED_EXT.internalImage ở routes/upload.js).
   const bannerFile = document.getElementById('rjBannerFile').files[0];
-  let bannerUrl = '', bannerFileName = '';
+  // Đang sửa mà không chọn banner mới -> giữ nguyên banner cũ của tin (KHÔNG xoá).
+  let bannerUrl = editingJob ? (editingJob.bannerUrl || '') : '';
+  let bannerFileName = editingJob ? (editingJob.bannerFileName || '') : '';
   if (bannerFile) {
     try {
       const uploadedBanner = await uploadFileToServer(bannerFile, 'internalImage');
@@ -572,24 +576,58 @@ async function submitRecruitmentJob(e) {
     bannerUrl, bannerFileName,
     customData
   };
-  let newJob;
   try {
-    const result = await callCreateAction('recruitmentJobs', payload);
-    newJob = result.item;
+    if (editingRecruitmentJobId) {
+      const result = await callRecordAction('recruitmentJobs', editingRecruitmentJobId, 'edit', payload);
+      const idx = DB.recruitmentJobs.findIndex(j => j.id === editingRecruitmentJobId);
+      if (idx !== -1) DB.recruitmentJobs[idx] = result.item;
+      logSystemAction('INTERNAL', 'EDIT_RECRUITMENT_JOB', `Sửa tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
+      alert('✅ Đã cập nhật tin tuyển dụng!');
+      cancelEditRecruitmentJob();
+    } else {
+      const result = await callCreateAction('recruitmentJobs', payload);
+      DB.recruitmentJobs.unshift(result.item);
+      logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_JOB', `Đăng tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
+      alert('✅ Đã đăng tin tuyển dụng thành công!');
+      resetRecruitmentJobForm();
+      resetListPage('recruitmentJobs');
+    }
   } catch (err) { return alert(`⛔ ${err.message}`); }
-  DB.recruitmentJobs.unshift(newJob);
-  logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_JOB', `Đăng tin tuyển dụng [${newJob.title}]`, 'SUCCESS');
-  alert('✅ Đã đăng tin tuyển dụng thành công!');
-  resetRecruitmentJobForm();
-  resetListPage('recruitmentJobs');
   renderRecruitmentJobs();
 }
 // resetRecruitmentJobForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
-// "resetRecruitmentJobForm", xem core.js) VÀ luồng đăng tin thành công ở trên.
+// "resetRecruitmentJobForm", xem core.js) VÀ luồng đăng tin thành công ở trên. Hành vi cần GIỐNG HỆT
+// cancelEditRecruitmentJob() (thoát Sửa dở dang nếu có + trắng form), cùng khuôn resetCareerPathForm().
 function resetRecruitmentJobForm() {
+  editingRecruitmentJobId = null;
   const formEl = document.getElementById('recruitmentJobForm');
   if (formEl) formEl.reset();
   clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
+  const submitBtn = document.getElementById('rjSubmitBtn');
+  if (submitBtn) submitBtn.innerText = 'Đăng Tin';
+  const cancelBtn = document.getElementById('rjCancelEditBtn');
+  if (cancelBtn) cancelBtn.classList.add('hidden');
+}
+function openEditRecruitmentJob(id) {
+  const job = DB.recruitmentJobs.find(j => j.id === id);
+  if (!job) return;
+  editingRecruitmentJobId = id;
+  document.getElementById('rjTitle').value = job.title || '';
+  document.getElementById('rjDescription').value = job.description || '';
+  document.getElementById('rjRequirements').value = job.requirements || '';
+  document.getElementById('rjLocation').value = job.location || '';
+  document.getElementById('rjSlots').value = job.slots || '';
+  document.getElementById('rjDeadline').value = job.deadline || '';
+  document.getElementById('rjMonth').value = job.month || '';
+  document.getElementById('rjDept').value = job.hiringDept || '';
+  document.getElementById('rjContactInfo').value = job.contactInfo || '';
+  clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
+  document.getElementById('rjSubmitBtn').innerText = 'Lưu Thay Đổi';
+  document.getElementById('rjCancelEditBtn').classList.remove('hidden');
+  document.getElementById('recruitmentJobForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function cancelEditRecruitmentJob() {
+  resetRecruitmentJobForm();
 }
 
 // Đợt (Tháng) không phải danh mục cố định (mỗi tin tự nhập <input type=month>, xem rjMonth) — dropdown
@@ -656,6 +694,7 @@ function renderRecruitmentJobs() {
         <div class="flex gap-2 pt-1 flex-wrap">
           ${isOpen ? `<button data-op="openRecruitmentReferModal" data-arg0="${j.id}" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
           ${canManage && isOpen ? `<button data-op="confirmRecruitmentJobFilledUi" data-arg0="${j.id}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
+          ${canManage ? `<button data-op="openEditRecruitmentJob" data-arg0="${j.id}" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded text-xs font-bold">✏️ Sửa</button>` : ''}
           ${canClose ? `<button data-op="closeRecruitmentJobUi" data-arg0="${j.id}" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
           ${currentUser.perms?.admin ? `<button data-op="deleteRecruitmentJob" data-arg0="${j.id}" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
         </div>

@@ -1,8 +1,53 @@
 # Phiên bản hiện tại
 
-**23.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.88 (2026-09-22): rà soát tiếp nút "Sửa" còn thiếu — bổ sung 4 màn còn sót lại
+
+Theo yêu cầu người dùng "Rà lại các nút Sửa còn thiếu ở màn khác chưa" — rà
+soát lại toàn bộ ~52 thao tác chỉ-có-Xoá còn lại trong hệ thống (sau đợt
+v23.86), tìm thấy đúng 4 chỗ genuine còn thiếu Sửa (đã phân tích + xác nhận
+trước khi code, theo đúng quy trình chuẩn ở `CLAUDE.md`):
+
+- **Lộ Trình Thăng Tiến** (`module-internalcomms-daotao.js`, Đào Tạo) —
+  trước đây chỉ có "Xóa Lộ Trình", không sửa được tên/mô tả/các Cấp Bậc sau
+  khi tạo (gõ sai tên 1 cấp bậc phải xoá tạo lại từ đầu, mất luôn mọi mốc
+  xác nhận `careerPathConfirmations` đã có của nhân viên gắn với lộ trình
+  đó). Route mới `POST /careerPaths/:id/edit`
+  (`editCareerPath()`/`normalizeCareerPathFields()` tách từ `extraValidate`
+  cũ, không đổi hành vi tạo mới), CHỈ `trainingManage`/admin, dùng lại ĐÚNG
+  form + stage-builder thật (`openEditCareerPath()`/`submitCareerPath()`).
+- **Tin Tuyển Dụng** (`module-internalcomms-nhipsong.js`, Truyền Thông Nội
+  Bộ > Tuyển Dụng) — trước đây chỉ "Đóng Tin"/"Xoá", không sửa được nội
+  dung tin đã đăng (mô tả/yêu cầu/số lượng/hạn nộp/banner...) nếu gõ sai
+  hoặc cần cập nhật. Route mới `POST /recruitmentJobs/:id/edit`
+  (`editRecruitmentJob()`), CỐ Ý KHÔNG đụng `status`/`filledBy` (giữ nguyên
+  vòng đời OPEN/FILLED/CLOSED hiện có) — không chọn banner mới thì giữ
+  nguyên banner cũ.
+- **Việc Con** (`module-congviec.js`, Công Việc, trong modal "Cập Nhật Tiến
+  Độ") — trước đây chỉ thêm/tích-xong/xoá, không sửa lại tên/hạn 1 việc con
+  đã tạo nếu gõ sai. Route mới `POST /tasks/:id/edit-subtask` (qua
+  `withTaskAction()` dùng chung, `editSubtask()`) — nút "✏️" trên mỗi dòng
+  chuyển ô nhập + nút "+ Thêm" sang chế độ sửa tại chỗ, không tạo dòng mới.
+- **Kỳ Cấp Phát Đồng Phục** (`module-dongphuc.js`) — trước đây chỉ Admin
+  xoá được cả kỳ, không sửa được tên kỳ/ghi chú. Route mới
+  `POST /uniformPeriods/:id/edit` (`editUniformPeriod()`), CỐ Ý CHỈ cho sửa
+  `name`/`note` qua modal nhỏ dùng `showConfirmModal()` có sẵn — KHÔNG đụng
+  `allocations[]` (đã có state machine xác nhận riêng theo từng siêu thị,
+  sửa lại phân bổ sau khi 1 số siêu thị đã xác nhận sẽ phá vỡ dữ liệu).
+
+3 màn đầu là module đã có collection riêng từ lâu — chỉ là UI-parity (thêm
+thao tác sửa cho nghiệp vụ ĐÃ tồn tại), không phải luồng nghiệp vụ mới, nên
+không cần thêm entry Báo Cáo/Biểu Mẫu/Hướng Dẫn mới (khớp tiền lệ đợt
+v23.86). Lộ Trình Thăng Tiến vốn đã là ngoại lệ Biểu Mẫu ghi rõ trong
+`CLAUDE.md` (dynamic stage-builder, không phải form nhập tay).
+
+Test mới/mở rộng: `test-career-paths.js` (+2 kịch bản, 28/28),
+`test-internal-recruitment-share.js` (+2 kịch bản, 25/25), `test-task.js`
+(+1 kịch bản trong Scenario 5, 15/15), `test-uniform.js` (+2 kịch bản,
+36/36).
 
 ## v23.87 (2026-09-21): rà soát chuyên sâu toàn hệ thống ô tìm-kiếm-gõ-chọn (sdd*) dùng chung — vá 2 lỗi còn sót + lưới an toàn chung chặn tái diễn
 

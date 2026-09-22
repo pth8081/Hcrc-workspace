@@ -2421,7 +2421,8 @@
         <div class="flex gap-1.5">
           <input id="newSubtaskTitle" placeholder="Tên công việc nhỏ..." class="flex-1 border p-1.5 rounded text-xs">
           <input id="newSubtaskDueDate" type="date" class="border p-1.5 rounded text-xs">
-          <button type="button" data-op="addSubtaskAction" class="bg-blue-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-blue-700 whitespace-nowrap">+ Thêm</button>
+          <button type="button" id="newSubtaskCancelEditBtn" data-op="cancelEditSubtask" class="hidden bg-gray-200 text-gray-700 px-2.5 py-1 rounded text-xs font-bold hover:bg-gray-300 whitespace-nowrap">Hủy</button>
+          <button type="button" id="newSubtaskAddBtn" data-op="addSubtaskAction" class="bg-blue-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-blue-700 whitespace-nowrap">+ Thêm</button>
         </div>
       </div>
     </div>

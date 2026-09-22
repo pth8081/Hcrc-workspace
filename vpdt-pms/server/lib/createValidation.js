@@ -2481,22 +2481,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo lộ trình thăng tiến');
       }
-      if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình thăng tiến');
-      payload.name = String(payload.name).trim();
-      const courses = appData?.trainingCourses || [];
-      const rawStages = Array.isArray(payload.stages) ? payload.stages : [];
-      if (!rawStages.length) throw new CreateError(400, 'Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình thăng tiến');
-      payload.stages = rawStages.map((s, i) => {
-        const name = String(s?.name || '').trim();
-        if (!name) throw new CreateError(400, `Cấp bậc thứ ${i + 1} thiếu tên`);
-        const requiredCourseIds = Array.isArray(s?.requiredCourseIds)
-          ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite) : [];
-        if (!requiredCourseIds.length) throw new CreateError(400, `Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc`);
-        const invalid = requiredCourseIds.filter(id => !courses.some(c => c.id === id));
-        if (invalid.length) throw new CreateError(400, `Cấp bậc "${name}" có chương trình được chọn không hợp lệ`);
-        return { name, requiredCourseIds };
-      });
-      delete payload.requiredClassIds; // field cũ đã bỏ hẳn, không giữ tương thích ngược
+      normalizeCareerPathFields(payload, appData);
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAREER_PATH');
     }
   },
@@ -2514,42 +2499,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.internalRecruitmentCreate) {
         throw new CreateError(403, 'Bạn không có quyền đăng tin tuyển dụng');
       }
-      if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên vị trí tuyển dụng');
-      if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả công việc');
-      // contactInfo (Đợt 2: Bản Tin Tuyển Dụng) — bắt buộc, cùng khuôn description/requirements ở trên,
-      // vì tin đăng công khai luôn cần hiển thị được đầu mối liên hệ ứng viên (không tự suy ra được từ
-      // creator, vì HR có thể muốn để SĐT/email chung của bộ phận thay vì cá nhân người đăng tin).
-      if (!payload.contactInfo || !String(payload.contactInfo).trim()) throw new CreateError(400, 'Thiếu thông tin liên hệ');
-      payload.title = String(payload.title).trim();
-      payload.description = String(payload.description).trim();
-      payload.requirements = payload.requirements ? String(payload.requirements).trim() : '';
-      payload.location = payload.location ? String(payload.location).trim() : '';
-      payload.contactInfo = String(payload.contactInfo).trim();
-      payload.slots = Number(payload.slots) > 0 ? Math.floor(Number(payload.slots)) : 0;
-      payload.deadline = payload.deadline || '';
-      // Đợt (Tháng) — chuỗi "yyyy-mm" thẳng từ <input type=month>, không có bảng danh mục riêng (giống
-      // cách hệ thống lưu các trường ngày/tháng dạng input khác, vd trainingClasses.registerDeadline).
-      payload.month = payload.month ? String(payload.month).trim() : '';
-      // Đơn vị/Siêu thị ĐĂNG TUYỂN — cố tình đặt tên KHÁC "dept" (đối chiếu DB.depts + DB.stores gộp
-      // chung 1 danh sách, cùng cách rjDept/rjFilterDept gộp ở client): field "dept" trên MỌI collection
-      // forceOwnDept:true (kể cả recruitmentJobs) luôn bị validateAndPrepareCreate() ép về ĐÚNG phòng ban
-      // của người tạo (xem cuối file: `{ ...payload, id: Date.now(), dept }`, GHI ĐÈ payload.dept bất kể
-      // extraValidate gán gì) — nếu dùng lại "dept" cho ý nghĩa "đơn vị đăng tuyển" thì giá trị người
-      // đăng chọn sẽ luôn bị mất, thay bằng phòng ban CỦA NGƯỜI ĐĂNG TIN. KHÔNG bắt buộc nếu rỗng (một số
-      // tin có thể đăng chung cho toàn công ty, không gắn 1 đơn vị cụ thể).
-      const hiringDept = payload.hiringDept ? String(payload.hiringDept).trim() : '';
-      if (hiringDept) {
-        const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
-        if (!validDepts.has(hiringDept)) throw new CreateError(400, `Đơn vị/Siêu thị không hợp lệ: ${hiringDept}`);
-      }
-      payload.hiringDept = hiringDept;
-      // Banner (tuỳ chọn) — client đã upload qua uploadFileToServer('internal') trước khi gửi payload
-      // (cùng khuôn cvFileUrl/cvFileName của recruitmentReferrals bên dưới), ở đây chỉ nhận lại URL/tên.
-      payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
-      // Banner được render ra `<img src="${escapeHtml(bannerUrl)}">` ở tin đăng công khai — cùng lỗ hổng
-      // scheme "javascript:" như attachment của internalPosts, xem assertUploadedFileUrl().
-      assertUploadedFileUrl(payload.bannerUrl, 'Ảnh banner tin tuyển dụng');
-      payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
+      normalizeRecruitmentJobFields(payload, appData);
       payload.status = 'OPEN';
       payload.filledBy = null;
       payload.filledByName = null;
@@ -3956,6 +3906,59 @@ function trainingPlanDedupKey(plan) {
   return normalizeDedupKey(plan.month, `#${plan.courseId}`, plan.targetDept);
 }
 
+// Chuẩn hoá + kiểm tra các field NỘI DUNG (tiêu đề/mô tả/yêu cầu/địa điểm/liên hệ/đơn vị/banner) của
+// 1 tin Tuyển Dụng (recruitmentJobs) — dùng CHUNG cho cả TẠO (extraValidate ở trên) LẪN SỬA
+// (editRecruitmentJob(), lib/recordActions.js, thêm 10/2026 — trước đây tin đã đăng KHÔNG sửa được nội
+// dung, gõ sai phải xoá đăng lại, mất hết lượt giới thiệu ứng viên đã có ở recruitmentReferrals vì
+// xoá-tạo-lại đổi id mới) — CỐ Ý KHÔNG đụng tới status/filledBy/filledByName/filledAt (trạng thái quy
+// trình, chỉ set lúc TẠO/qua confirmRecruitmentJobFilled(), không phải field nội dung được sửa tay).
+function normalizeRecruitmentJobFields(payload, appData) {
+  if (!payload.title || !String(payload.title).trim()) throw new CreateError(400, 'Thiếu tên vị trí tuyển dụng');
+  if (!payload.description || !String(payload.description).trim()) throw new CreateError(400, 'Thiếu mô tả công việc');
+  if (!payload.contactInfo || !String(payload.contactInfo).trim()) throw new CreateError(400, 'Thiếu thông tin liên hệ');
+  payload.title = String(payload.title).trim();
+  payload.description = String(payload.description).trim();
+  payload.requirements = payload.requirements ? String(payload.requirements).trim() : '';
+  payload.location = payload.location ? String(payload.location).trim() : '';
+  payload.contactInfo = String(payload.contactInfo).trim();
+  payload.slots = Number(payload.slots) > 0 ? Math.floor(Number(payload.slots)) : 0;
+  payload.deadline = payload.deadline || '';
+  payload.month = payload.month ? String(payload.month).trim() : '';
+  const hiringDept = payload.hiringDept ? String(payload.hiringDept).trim() : '';
+  if (hiringDept) {
+    const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
+    if (!validDepts.has(hiringDept)) throw new CreateError(400, `Đơn vị/Siêu thị không hợp lệ: ${hiringDept}`);
+  }
+  payload.hiringDept = hiringDept;
+  payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
+  assertUploadedFileUrl(payload.bannerUrl, 'Ảnh banner tin tuyển dụng');
+  payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
+}
+
+// Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Thăng Tiến (careerPaths) — dùng CHUNG cho cả TẠO
+// (extraValidate ở trên) LẪN SỬA (editCareerPath(), lib/recordActions.js, thêm 10/2026 — trước đây
+// màn này CHỈ có Xoá, gõ sai tên/cấp bậc/chương trình bắt buộc phải xoá tạo lại từ đầu, mất luôn xác
+// nhận tiến độ nhân viên đã có ở careerPathConfirmations vì xoá-tạo-lại luôn đổi id mới), cùng lý do
+// tách riêng như normalizeOnboardingPathFields ngay dưới.
+function normalizeCareerPathFields(payload, appData) {
+  if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình thăng tiến');
+  payload.name = String(payload.name).trim();
+  const courses = appData?.trainingCourses || [];
+  const rawStages = Array.isArray(payload.stages) ? payload.stages : [];
+  if (!rawStages.length) throw new CreateError(400, 'Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình thăng tiến');
+  payload.stages = rawStages.map((s, i) => {
+    const name = String(s?.name || '').trim();
+    if (!name) throw new CreateError(400, `Cấp bậc thứ ${i + 1} thiếu tên`);
+    const requiredCourseIds = Array.isArray(s?.requiredCourseIds)
+      ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite) : [];
+    if (!requiredCourseIds.length) throw new CreateError(400, `Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc`);
+    const invalid = requiredCourseIds.filter(id => !courses.some(c => c.id === id));
+    if (invalid.length) throw new CreateError(400, `Cấp bậc "${name}" có chương trình được chọn không hợp lệ`);
+    return { name, requiredCourseIds };
+  });
+  delete payload.requiredClassIds; // field cũ đã bỏ hẳn, không giữ tương thích ngược
+}
+
 // Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths) — dùng CHUNG cho cả
 // TẠO (extraValidate ở trên) LẪN SỬA (editOnboardingPath(), lib/recordActions.js), cùng lý do tách riêng
 // như normalizeTrainingPlanFields ở trên. Đợt 8 — Giai đoạn 1/2 đổi từ (tài liệu + 1 bài test rời, không
@@ -4062,6 +4065,8 @@ module.exports = {
   normalizeTrainingTestFields,
   normalizeTrainingPlanFields,
   normalizeOnboardingPathFields,
+  normalizeCareerPathFields,
+  normalizeRecruitmentJobFields,
   isValidYoutubeUrl,
   HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, HR_TASK_DEPARTMENTS,
   BUDGET_LINE_ITEM_CATEGORIES, normalizeBudgetLineCoreFields

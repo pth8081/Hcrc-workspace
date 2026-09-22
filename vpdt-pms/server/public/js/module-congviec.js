@@ -490,8 +490,7 @@ function openTaskProgressModal(taskId) {
   const canManageSub = t.assignedTo === currentUser.username && t.status === 'DOING';
   document.getElementById('progressSubtasksWrap').classList.toggle('hidden', !canManageSub);
   if (canManageSub) {
-    document.getElementById('newSubtaskTitle').value = '';
-    document.getElementById('newSubtaskDueDate').value = '';
+    cancelEditSubtask();
     document.getElementById('newSubtaskDueDate').max = t.deadline || '';
     renderProgressSubtasksList(t);
   }
@@ -499,6 +498,7 @@ function openTaskProgressModal(taskId) {
   document.getElementById('taskProgressModal').classList.remove('hidden');
 }
 
+let editingSubtaskId = null;
 function renderProgressSubtasksList(t) {
   const list = document.getElementById('progressSubtasksList');
   const subtasks = t.subtasks || [];
@@ -508,6 +508,7 @@ function renderProgressSubtasksList(t) {
           <input type="checkbox" ${s.done ? 'checked' : ''} data-op-change="toggleSubtaskAction" data-arg0="${s.id}">
           <span class="flex-1 ${s.done ? 'line-through text-gray-400' : ''}">${escapeHtml(s.title)}</span>
           <span class="text-gray-400">Hạn: ${escapeHtml(s.dueDate)}</span>
+          <button type="button" data-op="openEditSubtask" data-arg0="${s.id}" class="text-blue-600 hover:text-blue-800 font-bold" title="Sửa">✏️</button>
           <button type="button" data-op="deleteSubtaskAction" data-arg0="${s.id}" class="text-red-500 hover:text-red-700 font-bold" title="Xoá">✕</button>
         </div>
       `).join('')
@@ -523,16 +524,38 @@ async function addSubtaskAction() {
 
   let updated;
   try {
-    const result = await callRecordAction('tasks', progressingTaskId, 'add-subtask', { title, dueDate });
-    updated = result.item;
+    if (editingSubtaskId !== null) {
+      const result = await callRecordAction('tasks', progressingTaskId, 'edit-subtask', { subtaskId: editingSubtaskId, title, dueDate });
+      updated = result.item;
+    } else {
+      const result = await callRecordAction('tasks', progressingTaskId, 'add-subtask', { title, dueDate });
+      updated = result.item;
+    }
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
   const idx = DB.tasks.findIndex(x => x.id === progressingTaskId);
   if (idx !== -1) DB.tasks[idx] = updated;
+  cancelEditSubtask();
+  renderProgressSubtasksList(updated);
+}
+
+function openEditSubtask(subtaskId) {
+  const task = DB.tasks.find(x => x.id === progressingTaskId);
+  const sub = (task?.subtasks || []).find(s => s.id === subtaskId);
+  if (!sub) return;
+  editingSubtaskId = subtaskId;
+  document.getElementById('newSubtaskTitle').value = sub.title;
+  document.getElementById('newSubtaskDueDate').value = sub.dueDate;
+  document.getElementById('newSubtaskAddBtn').innerText = 'Lưu';
+  document.getElementById('newSubtaskCancelEditBtn').classList.remove('hidden');
+}
+function cancelEditSubtask() {
+  editingSubtaskId = null;
   document.getElementById('newSubtaskTitle').value = '';
   document.getElementById('newSubtaskDueDate').value = '';
-  renderProgressSubtasksList(updated);
+  document.getElementById('newSubtaskAddBtn').innerText = '+ Thêm';
+  document.getElementById('newSubtaskCancelEditBtn').classList.add('hidden');
 }
 
 async function toggleSubtaskAction(subtaskId) {
@@ -566,6 +589,7 @@ async function deleteSubtaskAction(subtaskId) {
 function closeTaskProgressModal() {
   document.getElementById('taskProgressModal').classList.add('hidden');
   progressingTaskId = null;
+  editingSubtaskId = null;
 }
 
 function confirmTaskProgress() {

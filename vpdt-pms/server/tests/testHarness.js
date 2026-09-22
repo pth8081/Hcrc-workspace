@@ -178,6 +178,7 @@ function buildActionHandlers(state) {
     // ===== ĐỒNG PHỤC =====
     'uniformPeriods:approve': (u, item) => recordActions.approveUniformPeriod(u, item),
     'uniformPeriods:reject': (u, item, body) => recordActions.rejectUniformPeriod(u, item, body),
+    'uniformPeriods:edit': (u, item, body) => recordActions.editUniformPeriod(u, item, body),
     'uniformTransfers:reject': (u, item, body) => recordActions.rejectUniformTransfer(u, item, body),
     // Nhân viên tự xác nhận đã nhận đồng phục — mirror ĐÚNG routes/records.js POST
     // /uniformIssuances/:id/acknowledge, thiếu entry này khiến mock trả 400 "Mock chưa hỗ trợ hành động"

@@ -440,8 +440,9 @@
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_CAREER_PATH" class="contents"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" id="cpCancelEditBtn" data-op="cancelEditCareerPath" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="careerPathForm" data-arg1="resetCareerPathForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
-            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button>
+            <button type="submit" id="cpSubmitBtn" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lộ Trình</button>
           </div>
         </form>
         <p id="careerPathNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền tạo lộ trình thăng tiến — chỉ có thể xem tiến độ của mình.</p>
@@ -689,8 +690,9 @@
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_RECRUITMENT_JOB" class="contents"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" id="rjCancelEditBtn" data-op="cancelEditRecruitmentJob" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="recruitmentJobForm" data-arg1="resetRecruitmentJobForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
-            <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Đăng Tin</button>
+            <button type="submit" id="rjSubmitBtn" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Đăng Tin</button>
           </div>
         </form>
         <p id="recruitmentJobNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng tin tuyển dụng — mọi người đều xem được tin và giới thiệu ứng viên bên dưới.</p>

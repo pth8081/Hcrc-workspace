@@ -862,6 +862,33 @@ function __mockValidateRecruitmentJobCreate(payload, user) {
   payload.status = 'OPEN';
   payload.filledBy = null; payload.filledByName = null; payload.filledAt = null;
 }
+// mirrors editRecruitmentJob() ở lib/recordActions.js — CÙNG khuôn validate như lúc tạo (title/
+// description/contactInfo bắt buộc), CỐ Ý KHÔNG đụng status/filledBy/filledByName/filledAt.
+function __mockEditRecruitmentJob(payload, user, job) {
+  if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
+  const EDITABLE = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName'];
+  for (const f of EDITABLE) if (payload[f] !== undefined) job[f] = payload[f];
+  if (!job.title || !String(job.title).trim()) throw __mockHttpError(400, 'Thiếu tên vị trí tuyển dụng');
+  if (!job.description || !String(job.description).trim()) throw __mockHttpError(400, 'Thiếu mô tả công việc');
+  if (!job.contactInfo || !String(job.contactInfo).trim()) throw __mockHttpError(400, 'Thiếu thông tin liên hệ');
+  job.title = String(job.title).trim();
+  job.description = String(job.description).trim();
+  job.requirements = job.requirements ? String(job.requirements).trim() : '';
+  job.location = job.location ? String(job.location).trim() : '';
+  job.contactInfo = String(job.contactInfo).trim();
+  job.slots = Number(job.slots) > 0 ? Math.floor(Number(job.slots)) : 0;
+  job.deadline = job.deadline || '';
+  job.month = job.month ? String(job.month).trim() : '';
+  const hiringDept = job.hiringDept ? String(job.hiringDept).trim() : '';
+  if (hiringDept) {
+    const validDepts = new Set([...(DB.depts || []), ...(DB.stores || [])]);
+    if (!validDepts.has(hiringDept)) throw __mockHttpError(400, `Đơn vị/Siêu thị không hợp lệ: ${hiringDept}`);
+  }
+  job.hiringDept = hiringDept;
+  job.bannerUrl = job.bannerUrl ? String(job.bannerUrl).trim() : '';
+  job.bannerFileName = job.bannerFileName ? String(job.bannerFileName).trim() : '';
+  return job;
+}
 function __mockValidateRecruitmentReferralCreate(payload, user) {
   const jobId = Number(payload.jobId);
   const job = DB.recruitmentJobs.find((j) => j.id === jobId);
@@ -1040,6 +1067,29 @@ function __mockValidateCareerPathCreate(payload, user) {
     return { name, requiredCourseIds };
   });
   delete payload.requiredClassIds;
+}
+
+// mirrors editCareerPath() ở lib/recordActions.js — CÙNG validate/normalize như lúc tạo (stages[] mỗi
+// cấp cần name + ít nhất 1 requiredCourseIds hợp lệ), chỉ khác creator/dept không bị đụng tới.
+function __mockEditCareerPath(payload, user, path) {
+  if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa lộ trình thăng tiến');
+  if (payload.name !== undefined) path.name = payload.name;
+  if (payload.stages !== undefined) path.stages = payload.stages;
+  if (!path.name || !String(path.name).trim()) throw __mockHttpError(400, 'Thiếu tên lộ trình thăng tiến');
+  path.name = String(path.name).trim();
+  const rawStages = Array.isArray(path.stages) ? path.stages : [];
+  if (!rawStages.length) throw __mockHttpError(400, 'Vui lòng thêm ít nhất 1 cấp bậc cho lộ trình thăng tiến');
+  path.stages = rawStages.map((s, i) => {
+    const name = String(s?.name || '').trim();
+    if (!name) throw __mockHttpError(400, `Cấp bậc thứ ${i + 1} thiếu tên`);
+    const requiredCourseIds = Array.isArray(s?.requiredCourseIds)
+      ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite) : [];
+    if (!requiredCourseIds.length) throw __mockHttpError(400, `Cấp bậc "${name}" cần chọn ít nhất 1 chương trình bắt buộc`);
+    const invalid = requiredCourseIds.filter((id) => !DB.trainingCourses.some((c) => c.id === id));
+    if (invalid.length) throw __mockHttpError(400, `Cấp bậc "${name}" có chương trình được chọn không hợp lệ`);
+    return { name, requiredCourseIds };
+  });
+  return path;
 }
 
 // mirrors confirmCareerPathForEmployee() ở lib/recordActions.js — gác tuần tự (cấp N chỉ xác nhận được
@@ -1247,6 +1297,15 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
   }
   if (moduleKey === 'careerPaths') {
     if (action === 'delete') return { __deleted: true };
+    if (action === 'edit') {
+      const id = Number(idStr);
+      const path = DB.careerPaths.find((p) => p.id === id);
+      if (!path) throw __mockHttpError(404, 'Không tìm thấy lộ trình thăng tiến');
+      const clone = JSON.parse(JSON.stringify(path));
+      const r = __mockEditCareerPath(payload, user, clone);
+      Object.assign(path, r);
+      return path;
+    }
     if (action === 'confirm') {
       const id = Number(idStr);
       const path = DB.careerPaths.find((p) => p.id === id);
@@ -1297,6 +1356,7 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     const clone = JSON.parse(JSON.stringify(job));
     if (action === 'close') return __mockCloseJob(user, clone);
     if (action === 'confirm-filled') return __mockConfirmJobFilled(user, clone);
+    if (action === 'edit') { const r = __mockEditRecruitmentJob(payload, user, clone); Object.assign(job, r); return job; }
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');
   }

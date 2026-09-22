@@ -143,6 +143,47 @@ async function main() {
       assertEqual(referral.statusByName, 'Phạm Thị Mai', 'statusByName should be the HR user');
     });
 
+    // ===== Nút "✏️ Sửa" mới (10/2026) — sửa nội dung tin đã đăng, KHÔNG đụng status/creator/dept =====
+    await run('HR edits the job posting content via openEditRecruitmentJob() + submitRecruitmentJob()', async () => {
+      await page.evaluate((u) => { currentUser = u; }, hr);
+      const before = await page.evaluate((id) => DB.recruitmentJobs.find((j) => j.id === id), jobId);
+      await page.evaluate((id) => { openEditRecruitmentJob(id); }, jobId);
+      const submitLabel = await page.evaluate(() => document.getElementById('rjSubmitBtn').innerText);
+      const cancelHidden = await page.evaluate(() => document.getElementById('rjCancelEditBtn').classList.contains('hidden'));
+      await page.evaluate(() => {
+        document.getElementById('rjTitle').value = 'Nhân viên Kế toán tổng hợp (đã sửa)';
+        document.getElementById('rjSlots').value = '2';
+      });
+      await page.evaluate(() => submitRecruitmentJob({ preventDefault() {}, target: { reset() {} } }));
+      const jobs = await page.evaluate(() => DB.recruitmentJobs);
+      const after = jobs.find((j) => j.id === jobId);
+      assertEqual(jobs.length, 1, 'editing must not create a 2nd job record');
+      assertEqual(submitLabel, 'Lưu Thay Đổi', 'submit button must switch label while editing');
+      assert(!cancelHidden, 'cancel-edit button must be visible while editing');
+      assertEqual(after.title, 'Nhân viên Kế toán tổng hợp (đã sửa)', 'title should be updated');
+      assertEqual(after.slots, 2, 'slots should be updated');
+      assertEqual(after.status, before.status, 'edit must NOT touch status');
+      assertEqual(after.creator, before.creator, 'edit must NOT touch creator');
+      assertEqual(after.dept, before.dept, 'edit must NOT touch dept (forceOwnDept)');
+      const alerts = await page.evaluate(() => window.__alerts.slice());
+      assert(alerts.some((a) => a.includes('Đã cập nhật tin tuyển dụng')), 'expected update-success alert');
+      const cancelHiddenAfter = await page.evaluate(() => document.getElementById('rjCancelEditBtn').classList.contains('hidden'));
+      assert(cancelHiddenAfter, 'cancel-edit button must hide again after a successful save');
+    });
+
+    await run('staff without internalRecruitmentCreate cannot edit a job posting', async () => {
+      await page.evaluate((u) => { currentUser = u; }, staff);
+      await page.evaluate(() => { window.__alerts.length = 0; });
+      let errMsg = null;
+      await page.evaluate(async (id) => {
+        try { await callRecordAction('recruitmentJobs', id, 'edit', { title: 'Chiếm quyền sửa' }); }
+        catch (err) { window.__lastEditErr = err.message; }
+      }, jobId);
+      errMsg = await page.evaluate(() => window.__lastEditErr);
+      assert(errMsg && errMsg.includes('không có quyền sửa tin tuyển dụng'), `expected a permission error, got: ${errMsg}`);
+      await page.evaluate((u) => { currentUser = u; }, hr);
+    });
+
     // ===== Đợt 2: Bản Tin Tuyển Dụng — trạng thái FILLED ("Đã tuyển đủ") =====
     let job2Id = null;
     await run('HR posts a second job to exercise the FILLED (Đã tuyển đủ) flow', async () => {

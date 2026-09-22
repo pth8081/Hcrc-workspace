@@ -186,6 +186,47 @@ async function main() {
       assertIncludes(result.errorMsg, 'Bạn không có quyền duyệt', 'Server phải chặn người không có quyền duyệt kỳ cấp phát');
     });
 
+    // ===== 3c-3) Sửa tên/ghi chú kỳ cấp phát (nút "✏️ Sửa" mới, 10/2026) — chỉ uniformManage/admin, CHỈ
+    // đổi name/note, allocations[] phải giữ nguyên (xem editUniformPeriod() ở lib/recordActions.js) =====
+    await run.run('Hành Chính (uniformManage) sửa được tên/ghi chú kỳ cấp phát, allocations giữ nguyên', async () => {
+      await loginAs(page, HC);
+      const result = await page.evaluate(async (periodId) => {
+        window.__resetCapture();
+        const before = DB.uniformPeriods.find(x => x.id === periodId);
+        const originalName = before.name;
+        const beforeAllocJSON = JSON.stringify(before.allocations);
+        const r = await callRecordAction('uniformPeriods', periodId, 'edit', { name: 'Đợt hè 2026 (đã đổi tên)', note: 'Ghi chú mới' });
+        const idx = DB.uniformPeriods.findIndex(x => x.id === periodId);
+        DB.uniformPeriods[idx] = r.item;
+        const editedName = r.item.name, editedNote = r.item.note;
+        const allocUnchanged = JSON.stringify(r.item.allocations) === beforeAllocJSON;
+        // Trả lại đúng tên cũ ngay sau khi kiểm chứng — các kịch bản PHÍA SAU trong cùng file test này vẫn
+        // tra cứu kỳ này qua .find(x => x.name === 'Đợt hè 2026'), đổi tên vĩnh viễn sẽ làm hỏng dây
+        // chuyền toàn bộ phần còn lại của file (confirm-allocation/cấp phát/kho...).
+        const r2 = await callRecordAction('uniformPeriods', periodId, 'edit', { name: originalName, note: '' });
+        DB.uniformPeriods[idx] = r2.item;
+        return { name: editedName, note: editedNote, allocUnchanged, restoredName: r2.item.name };
+      }, summerPeriodId);
+      assertEqual(result.name, 'Đợt hè 2026 (đã đổi tên)', 'Tên kỳ cấp phát phải được cập nhật');
+      assertEqual(result.note, 'Ghi chú mới', 'Ghi chú phải được cập nhật');
+      assert(result.allocUnchanged, 'allocations[] không được thay đổi khi sửa tên/ghi chú');
+      assertEqual(result.restoredName, 'Đợt hè 2026', 'Tên phải trả lại đúng như cũ để các bước sau vẫn tra cứu được');
+    });
+
+    await run.run('Người không có quyền quản lý đồng phục thì không sửa được kỳ cấp phát', async () => {
+      await loginAs(page, EMP_NOPERM);
+      const result = await page.evaluate(async (periodId) => {
+        window.__resetCapture();
+        try {
+          await callRecordAction('uniformPeriods', periodId, 'edit', { name: 'Tên bị đổi trái phép' });
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      }, summerPeriodId);
+      assertIncludes(result.errorMsg, 'Bạn không có quyền sửa', 'Server phải chặn người không có quyền sửa kỳ cấp phát');
+    });
+
     // ===== 3d) Phase 2: người có uniformApprove RIÊNG (không kèm uniformManage) vẫn duyệt được kỳ —
     // tạo thêm 1 kỳ mới (kỳ "Đợt hè 2026" ở trên đã bị HC duyệt hết ở bước 3c) =====
     await run.run('Chuẩn bị: Hành Chính tạo thêm 1 kỳ cấp phát nữa cho kịch bản APPROVER riêng', async () => {
