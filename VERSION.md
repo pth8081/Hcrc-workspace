@@ -1,10 +1,45 @@
 # Phiên bản hiện tại
 
-**23.101** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.102** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## v23.101 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "🔒 Khoá đúng siêu thị được gán" (Kiểm Soát)
+## v23.102 (2026-09-22): Checklist Đánh Giá Siêu Thị — thu hồi quyền "🔒 Khoá đúng siêu thị được gán" (v23.101), giữ nguyên logic chọn/ALL cũ
+
+Người dùng làm rõ lại yêu cầu sau khi xem demo v23.101: Kiểm Soát Viên vẫn
+cần TỰ CHỌN danh sách siêu thị mình kiểm soát (hoặc tick "ALL"), **KHÔNG**
+khoá cứng về đúng 1 siêu thị gán ở Hồ Sơ như v23.101 đã làm. Thu hồi toàn bộ
+tính năng `checklistAuditLockOwnStore` vừa thêm ở v23.101, khôi phục nguyên
+logic `checklistAuditScope` (đa chọn siêu thị/ALL) làm luồng duy nhất cho
+Kiểm Soát Viên — không ảnh hưởng luồng "Tự Đánh Giá" (STORE_SELF) của
+NV/GĐST siêu thị, vẫn tự khoá đúng siêu thị đang gán (`user.dept`) như trước
+giờ, không có gì thay đổi ở phần đó.
+
+- **`server/lib/checklist.js`**: `getChecklistAuditStores()` bỏ nhánh
+  `checklistAuditLockOwnStore`, quay lại đọc thẳng `checklistAuditScope`
+  (sau nhánh admin).
+- **`server/public/js/core.js`**: bỏ field `checklistAuditLockOwnStore` khỏi
+  default perms; `hasChecklistAuditScopeClient()`/`getChecklistAuditStoresClient()`
+  bỏ nhánh khoá, mirror lại đúng server.
+- **`server/public/js/module-checklist.js`**: `renderChecklistExecuteTab()`
+  — ô chọn siêu thị lúc bắt đầu làm bài Kiểm Soát (tab Thực Hiện) quay lại
+  luôn là `<select>` chọn tự do trong đúng phạm vi `checklistAuditScope`.
+- **`server/public/fragments/systemSection.html`** + **`module-admin-permtree.js`**
+  + **`module-admin.js`**: gỡ checkbox "🔒 Khoá đúng siêu thị được gán" +
+  hàm `toggleChecklistAuditLockOwnStoreGroup()` ở khối cây phân quyền 23.
+- **`server/public/js/module-admin-permgroups.js`**: gỡ nhãn tra cứu tương
+  ứng khỏi bảng dùng ở "Ma Trận Phân Quyền".
+- **Xoá**: `server/tests/test-checklist-audit-lock-own-store.js` +
+  `server/tests/demo-checklist-audit-lock-own-store.js` (không còn phản ánh
+  đúng nghiệp vụ). Toàn bộ 23 file test Checklist/Phân Quyền còn lại chạy
+  lại sạch, không phát sinh lỗi mới.
+- **Deploy**: không có thay đổi `schema.sql`/biến môi trường mới — chỉ cần
+  copy code + `pm2 restart`. Tài khoản nào đã lỡ bật `checklistAuditLockOwnStore`
+  ở v23.101 sẽ tự động không còn tác dụng gì sau khi cập nhật (field cũ vẫn
+  có thể còn lưu trong dữ liệu user nhưng server không đọc tới nữa) — quay
+  lại đúng cấu hình `checklistAuditScope` họ đã có từ trước.
+
+## v23.101 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "🔒 Khoá đúng siêu thị được gán" (Kiểm Soát) — ĐÃ THU HỒI ở v23.102, xem entry trên
 
 Theo yêu cầu người dùng: kiểm soát viên (checklist loại Kiểm Soát/CONTROL_AUDIT)
 khi được cấp quyền mới sẽ bị khoá cứng vào ĐÚNG 1 siêu thị = siêu thị (`dept`)

@@ -258,10 +258,6 @@ function collectPermsFromForm() {
     checklistTemplateManage: document.getElementById('pChecklistTemplateManage').checked,
     checklistReportView: document.getElementById('pChecklistReportView').checked,
     checklistAuditScope: scopeFromMultiSelectDropdown('pChecklistAuditScopeAll', 'pChecklistAuditScopeDeptContainer'),
-    // checklistAuditLockOwnStore (9/2026) — xem toggleChecklistAuditLockOwnStoreGroup()/getChecklistAuditStores()
-    // (lib/checklist.js): bật thì checklistAuditScope ở trên vẫn LƯU nguyên (không xoá) nhưng server bỏ
-    // qua hẳn khi cờ này bật, chỉ đọc user.dept.
-    checklistAuditLockOwnStore: document.getElementById('pChecklistAuditLockOwnStore').checked,
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
@@ -369,8 +365,6 @@ function populatePermsForm(permsInput) {
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
   document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;
   setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
-  document.getElementById('pChecklistAuditLockOwnStore').checked = !!perms.checklistAuditLockOwnStore;
-  toggleChecklistAuditLockOwnStoreGroup();
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
   document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;

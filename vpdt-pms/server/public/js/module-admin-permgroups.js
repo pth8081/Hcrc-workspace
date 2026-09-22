@@ -307,7 +307,6 @@ const PERM_KEY_VN_LABELS = {
   "carDispatch": "Đăng Ký Xe — 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục \"Phần Dành Cho Phòng Hành Chính\" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)",
   "carDownload.all": "Đăng Ký Xe — Tải xuống",
   "carView.all": "Đăng Ký Xe — Xem",
-  "checklistAuditLockOwnStore": "Checklist Đánh Giá Siêu Thị — 🔒 Khoá đúng siêu thị được gán (Kiểm Soát Viên chỉ Kiểm Soát được siêu thị đang gán cho mình, bỏ qua Phạm Vi Kiểm Soát)",
   "checklistAuditScope.all": "Checklist Đánh Giá Siêu Thị — Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)",
   "checklistReportView": "Checklist Đánh Giá Siêu Thị — 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)",
   "checklistTemplateManage": "Checklist Đánh Giá Siêu Thị — 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)",

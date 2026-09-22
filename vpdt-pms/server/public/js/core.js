@@ -3246,12 +3246,6 @@ function defaultNewUserPerms() {
     // soát cho loại CONTROL_AUDIT — dùng TÊN 'depts' dù chứa mã siêu thị, để mergeGroupsBasePerms() tự
     // union đúng theo cơ chế field-name 'depts' đã có sẵn, xem mergeGroupsBasePerms() bên dưới).
     checklistTemplateManage: false, checklistReportView: false, checklistAuditScope: emptyScope(),
-    // checklistAuditLockOwnStore (9/2026, yêu cầu người dùng): khi bật, BỎ QUA hẳn checklistAuditScope ở
-    // trên — kiểm soát viên chỉ Kiểm Soát được ĐÚNG 1 siêu thị = user.dept đang gán cho chính tài khoản
-    // đó (Hồ Sơ/Phân Quyền), không tự chọn được siêu thị khác nữa (khoá cứng, giống hệt cơ chế STORE_SELF
-    // đã có) — xem getChecklistAuditStores()/canAuditStore() ở lib/checklist.js. Mặc định false (giữ
-    // nguyên hành vi cũ — vẫn chọn theo checklistAuditScope).
-    checklistAuditLockOwnStore: false,
     // Mua Hàng > BAS (module TOP-LEVEL mới, v23.30, xem lib/vendorRebate.js) — phân quyền PHẲNG, TÁCH
     // BIỆT NHIỆM VỤ rõ ràng (mục 8 tài liệu): người tạo/sửa Điều Khoản (rebateTermManage) KHÔNG tự động
     // kích hoạt được (rebateTermActivate riêng) — liên quan trực tiếp số tiền chiết khấu lớn với NCC.
@@ -7601,17 +7595,14 @@ function canManageChecklistTemplatesClient(user) { return !!(user?.perms?.admin 
 function canViewChecklistReportsClient(user) { return !!(user?.perms?.admin || user?.perms?.checklistReportView); }
 function hasChecklistAuditScopeClient(user) {
   if (user?.perms?.admin) return true;
-  if (user?.perms?.checklistAuditLockOwnStore) return !!user?.dept;
   const scope = user?.perms?.checklistAuditScope;
   return !!(scope?.all || (scope?.depts || []).length);
 }
 // getChecklistAuditStoresClient() — mirror ĐÚNG getChecklistAuditStores() ở lib/checklist.js, dùng để
 // dựng đúng danh sách siêu thị hiện ra ở ô chọn "Kiểm Soát Siêu Thị" (renderChecklistExecuteTab(),
-// module-checklist.js) — checklistAuditLockOwnStore BỎ QUA hẳn checklistAuditScope, luôn khoá về đúng
-// user.dept (không phải danh sách chọn tự do nữa).
+// module-checklist.js).
 function getChecklistAuditStoresClient(user) {
   if (user?.perms?.admin) return { all: true, depts: [] };
-  if (user?.perms?.checklistAuditLockOwnStore) return { all: false, depts: user?.dept ? [user.dept] : [] };
   return user?.perms?.checklistAuditScope || { all: false, depts: [] };
 }
 function canAccessChecklistModule(user) {
