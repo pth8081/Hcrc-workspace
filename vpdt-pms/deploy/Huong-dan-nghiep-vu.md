@@ -3832,6 +3832,37 @@ thống tự kiểm tra trùng tên đăng nhập (cả trong danh sách tạm l
 khoản đã có) và báo rõ nếu có trùng; server sau đó tự băm mật khẩu và xác
 thực lại toàn bộ trước khi ghi.
 
+**Tạo hàng loạt bằng Excel** (đợt lớn hơn, VD nhận hàng chục nhân viên mới
+cùng lúc): bấm **"📄 Tải File Mẫu (.xlsx)"** — file mẫu có đủ **9 cột khớp
+ĐÚNG form tạo tay** (`username`/`pass`/`name`/`email`/`phone`/`dept`/
+`jobtitle`/`postype`/`startdate`, có 2 dòng mẫu minh hoạ cả trường hợp HO lẫn
+Siêu Thị), điền xong bấm **"📥 Import Excel"** để xem trước trước khi ghi
+(server chỉ đọc thô nội dung file, không tự ghi gì vào CSDL ở bước này).
+
+Ở bảng xem trước, dòng nào có **Vị Trí/Phòng Ban (hoặc Siêu Thị)/Chức Danh/
+Ngày Vào Làm Việc không khớp đúng danh mục hiện có** sẽ bị **chặn cứng** —
+không có ô tick, cột "Ghi chú" nêu rõ đúng lý do (VD "Vị Trí ... không hợp lệ
+— phải là HO hoặc STORE", "Phòng Ban ... không có trong danh mục"). Không có
+cách nào nhập được dòng lỗi qua — phải sửa lại đúng trong file Excel rồi tải
+lên lại. Quy tắc đối chiếu:
+
+- **Vị Trí** (`postype`) — bắt buộc, phải đúng `HO` hoặc `STORE` (không phân
+  biệt hoa/thường).
+- **Phòng Ban/Siêu Thị** (`dept`) — bắt buộc, phải khớp ĐÚNG TÊN đang có
+  trong Quản Lý Danh Mục (Phòng Ban nếu Vị Trí=HO, Siêu Thị nếu Vị Trí=STORE;
+  không phân biệt hoa/thường, tự chuẩn hoá về đúng chữ hoa/thường của danh
+  mục khi ghi).
+- **Chức Danh** (`jobtitle`) — tuỳ chọn (để trống hợp lệ, giống form tay),
+  nếu có điền phải khớp đúng danh mục Chức Danh theo ĐÚNG Vị Trí (HO dùng
+  danh mục Chức Danh Khối Văn Phòng, Siêu Thị dùng danh mục Chức Danh Siêu
+  Thị).
+- **Ngày Vào Làm Việc** (`startdate`) — tuỳ chọn, nếu có phải là ngày hợp lệ
+  (ô Excel định dạng ngày thật hoặc chuỗi `YYYY-MM-DD`).
+
+Dòng hợp lệ mới có ô tick "Nhập?" (hoặc chọn Bỏ qua/Ghi đè nếu username đã có
+tài khoản, giống hành vi trùng lặp trước đây) — bấm **"✅ Xác Nhận Import"**
+để tạo/ghi đè hàng loạt.
+
 ### 7.8. Cấu Hình Email
 
 **Hệ Thống → Quản Trị → Cấu Hình Email** — cấu hình **toàn bộ** trên web (Host/

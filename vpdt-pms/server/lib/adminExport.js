@@ -89,7 +89,10 @@ function buildMultiSheetWorkbook(sheets) {
 // index.html) — khác lib/vppCatalog.js (phải dò tiêu đề linh hoạt vì file do từng phòng ban tự làm),
 // file này luôn xuất phát từ file mẫu của hệ thống nên dò theo TÊN CỘT cố định (không phân biệt hoa
 // thường) là đủ, không cần bộ dò linh hoạt như danh mục VPP.
-const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle'];
+// postype/startdate thêm vào CUỐI mảng (10/2026, đồng nhất với form Sửa Người Dùng — trước đây import
+// hàng loạt thiếu hẳn "Vị Trí"/"Ngày Vào Làm Việc" dù form tạo tay có đủ cả) — ĐẶT Ở CUỐI để không đổi vị
+// trí cột 1-6 cũ, giữ đúng hành vi "usePositional" (dò theo vị trí khi mất dòng tiêu đề) cho file cũ.
+const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle', 'postype', 'startdate'];
 
 // Trần số dòng người dùng đọc trong 1 lần import — cùng tinh thần giới hạn 500/1000/2000 dòng của 6
 // luồng import Excel còn lại, và nay chặn NGAY TRONG LÚC đọc (xem streamFirstSheetRows) chứ không phải
@@ -120,6 +123,24 @@ async function parseUsersImportXlsx(buffer) {
     return v == null ? '' : String(v).trim();
   };
 
+  // getDate(): cột "startdate" (Ngày Vào Làm Việc, KHÔNG bắt buộc — để trống hợp lệ, khớp uStartDate ở
+  // form Sửa Người Dùng). CHỈ chuẩn hoá 2 dạng chắc chắn hợp lệ (ô kiểu ngày thật của Excel, hoặc chuỗi
+  // "YYYY-MM-DD"/"YYYY-M-D") về đúng "YYYY-MM-DD" — mọi dạng khác (gõ sai, VD "15/01/2024" hoặc chữ) GIỮ
+  // NGUYÊN VĂN thay vì tự đoán/âm thầm bỏ trống, để module-admin-userstaging.js (client) phát hiện đúng
+  // giá trị gốc và CHẶN dòng đó lại (yêu cầu người dùng sửa đúng định dạng) thay vì lặng lẽ nhập thiếu.
+  const getDate = (cells) => {
+    const idx = colIndex['startdate'];
+    if (idx === undefined) return '';
+    const raw = cells[idx];
+    if (raw == null || raw === '') return '';
+    if (raw instanceof Date && !isNaN(raw)) return raw.toISOString().slice(0, 10);
+    const s = String(raw).trim();
+    if (!s) return '';
+    const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    return s; // không nhận diện được -> trả nguyên văn để client báo lỗi rõ ràng, không tự đoán/bỏ qua
+  };
+
   const take = (cells) => {
     const username = get(cells, 'username');
     if (!username) return; // dòng trống hoặc thiếu username -> bỏ qua, không tạo user rỗng
@@ -130,10 +151,20 @@ async function parseUsersImportXlsx(buffer) {
       email: get(cells, 'email'),
       phone: get(cells, 'phone'),
       dept: get(cells, 'dept'),
-      jobTitle: get(cells, 'jobtitle') || null
+      jobTitle: get(cells, 'jobtitle') || null,
+      // posType/startDate trả NGUYÊN VĂN (chưa validate/chuẩn hoá case) — module-admin-userstaging.js tự
+      // đối chiếu với DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles (chỉ có ở client) rồi mới chuẩn
+      // hoá + chặn dòng sai, khớp triết lý "server chỉ đổi định dạng, không có logic nghiệp vụ" đã áp
+      // dụng cho Ma Trận Phân Quyền.
+      posType: get(cells, 'postype'),
+      startDate: getDate(cells)
     });
   };
 
+  // options.raw:true — GIỮ NGUYÊN kiểu gốc của từng ô (VD ô định dạng ngày thật trả về đối tượng Date
+  // thay vì bị stringify thành chuỗi kiểu "Tue Oct 22 2024...") để getDate() ở trên nhận diện đúng ô
+  // "Ngày Vào Làm Việc" định dạng ngày thật — get()/take() vẫn tự String(v).trim() cho mọi cột còn lại
+  // nên hành vi các cột cũ (username/pass/name/email/phone/dept/jobtitle) không đổi gì.
   await streamFirstSheetRows(buffer, (cells) => {
     if (!headerSeen) {
       headerSeen = true;
@@ -142,8 +173,9 @@ async function parseUsersImportXlsx(buffer) {
         if (USER_IMPORT_COLUMNS.includes(h)) colIndex[h] = i;
       });
       // Không nhận diện được tiêu đề nào khớp -> rơi về vị trí cột mặc định của file mẫu (username,
-      // pass, name, email, phone, dept, jobTitle theo đúng thứ tự 1-7), phòng trường hợp người dùng lỡ
-      // xoá dòng tiêu đề khi chỉnh sửa file — khi đó dòng 1 cũng là DỮ LIỆU THẬT, phải đọc luôn.
+      // pass, name, email, phone, dept, jobTitle, postype, startdate theo đúng thứ tự 1-9), phòng trường
+      // hợp người dùng lỡ xoá dòng tiêu đề khi chỉnh sửa file — khi đó dòng 1 cũng là DỮ LIỆU THẬT, phải
+      // đọc luôn.
       usePositional = Object.keys(colIndex).length === 0;
       if (usePositional) {
         USER_IMPORT_COLUMNS.forEach((name, i) => { colIndex[name] = i; });
@@ -154,7 +186,7 @@ async function parseUsersImportXlsx(buffer) {
     }
     if (rows.length > MAX_USER_IMPORT_ROWS) { overLimit = true; return false; }
     return true;
-  });
+  }, { raw: true });
 
   if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_USER_IMPORT_ROWS} người dùng/lần)`);
   // Chỉ đánh dấu trùng NGAY TRONG file đang đọc (2 dòng cùng username) — so trùng với tài khoản đã có

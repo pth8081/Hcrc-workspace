@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**23.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.95 (2026-09-22): Import Excel Người Dùng đồng nhất với form tạo tay + chặn cứng dữ liệu sai danh mục + vá cảnh báo xung đột giả
+
+Theo yêu cầu người dùng: file mẫu/luồng bulk-import Người Dùng trước đây chỉ
+có 6-7/9 trường của form tạo tay (thiếu hẳn Vị Trí/Ngày Vào Làm Việc, Chức
+Danh có ở parser nhưng chưa từng xuất hiện ở file mẫu) — nay đồng nhất đầy
+đủ, kèm chặn cứng dòng nào không khớp danh mục thay vì chấp nhận/mặc định
+lỏng lẻo. Đồng thời phát hiện + vá 1 bug thật gây cảnh báo xung đột giả khi
+sửa người dùng.
+
+- **`lib/adminExport.js`**: `USER_IMPORT_COLUMNS` thêm `postype`/`startdate`
+  (nối vào CUỐI mảng — giữ tương thích cơ chế đọc theo VỊ TRÍ cột khi file bị
+  xoá dòng tiêu đề). `parseUsersImportXlsx()` đọc thêm `posType`/`startDate`
+  (raw, không validate — server "chỉ đổi định dạng, không có logic nghiệp
+  vụ" như các luồng import khác); `streamFirstSheetRows()` nay gọi với
+  `{raw:true}` để nhận đúng object `Date` cho ô ngày định dạng thật thay vì
+  bị stringify trước khi đọc.
+- **`module-admin-userstaging.js`**:
+  - `downloadUserTemplate()` — file mẫu nay đủ 9 cột khớp form tạo tay, có 2
+    dòng mẫu minh hoạ cả HO lẫn Siêu Thị.
+  - `validateImportedUserRow()` (mới) — đối chiếu NGHIÊM NGẶT Vị Trí (phải
+    đúng HO/STORE) + Phòng Ban/Siêu Thị (phải khớp danh mục theo đúng Vị
+    Trí) + Chức Danh (tuỳ chọn, nếu có phải khớp danh mục theo đúng Vị Trí)
+    + Ngày Vào Làm Việc (tuỳ chọn, nếu có phải là ngày hợp lệ) — sai bất kỳ
+    trường nào cũng CHẶN CỨNG cả dòng (không có checkbox, giống pattern
+    `!it.found` đã dùng ở Ma Trận Phân Quyền), không tự đoán/mặc định.
+  - `renderUsersImportPreview()` — thêm cột "Vị Trí"; dòng lỗi tô đỏ, không
+    có checkbox/select, cột "Ghi chú" nêu rõ lý do.
+  - `confirmUsersImport()` — dùng giá trị ĐÃ CHUẨN HOÁ (`it.normalized`,
+    không phải giá trị thô của file) khi tạo/ghi đè; re-check
+    `!it.errors.length` (phòng vệ lớp 2, khớp `confirmPermMatrixImport()`)
+    phòng trường hợp `action` bị chỉnh tay qua DevTools.
+  - `systemSection.html` — thêm cột "Vị Trí" vào bảng xem trước.
+- **Vá bug thật (phát hiện khi rà soát cảnh báo xung đột giả người dùng báo
+  cáo)**: `sessionVersion` (đếm phiên đăng nhập hợp lệ, tăng ở MỌI lượt đăng
+  nhập thành công từ tính năng "1 tài khoản 1 kết nối", v23.9x) trước đây (1)
+  vẫn lộ qua `GET /api/data` nên bản chụp `DB.users` trên trình duyệt LUÔN
+  có thể lệch với CSDL chỉ vì có người đăng nhập lại — không liên quan gì
+  nội dung admin đang sửa — khiến `retryUsersSaveAfterConflict()`
+  (`core.js`) báo "⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở
+  nơi khác" MỘT CÁCH OAN UỔNG dù chỉ có đúng 1 admin thao tác; và (2)
+  `prepareUsersForSave()` (`routes/data.js`) vẫn tin nguyên `u.sessionVersion`
+  do client gửi lên khi ghi NGUYÊN MẢNG "users" — nếu client cầm bản CŨ, lượt
+  lưu 1 field bất kỳ sẽ ÂM THẦM GHI ĐÈ sessionVersion thật về giá trị CŨ, có
+  thể vô hiệu hoá NGAY phiên đăng nhập vừa cấp của người khác. Đã vá cả 2:
+  `stripPasswords()` lọc bỏ `sessionVersion` khỏi mọi response GET (cùng
+  khuôn `pass`/`pinHash`/`webauthnCredentials`...), và `prepareUsersForSave()`
+  ép `record.sessionVersion` luôn lấy từ CSDL (`prior.sessionVersion`),
+  KHÔNG BAO GIỜ nhận từ client — các luồng đích danh (login/logout/đổi mật
+  khẩu-PIN/gỡ TOTP-WebAuthn) vẫn tăng đúng như trước, không đổi hành vi.
+- **Test mới**: `test-users-session-version-strip.js` (4 kịch bản: GET lọc
+  đúng field, POST bỏ qua sessionVersion client gửi, đặt PIN mới vẫn tăng
+  đúng, user mới không nhận nhầm sessionVersion client tự gửi) + 4 kịch bản
+  `(m2)` trong `test-admin-users-permgroups.js` (import dòng đúng/dòng sai
+  danh mục + phòng vệ lớp 2 khi bị chỉnh tay qua DevTools). Cập nhật
+  `test-audit-round2-cluster6.js` theo field mới.
+
+**Không đổi schema/env/dependency** — chỉ code + docs, copy code + `pm2
+restart` là đủ.
 
 ## v23.94 (2026-09-22): Ma Trận Phân Quyền — mỗi khối quyền 1 sheet Excel riêng
 

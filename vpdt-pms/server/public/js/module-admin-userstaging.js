@@ -550,6 +550,15 @@ function renderUsers() {
 // TOÀN BỘ cụm "admin-permgroups" (315KB/82KB gzip, kéo theo luôn module Đào Tạo 205KB không liên quan
 // qua vòng phụ thuộc SCC) chỉ vì gọi thẳng hàm này không qua ensureFnReady().
 
+// File mẫu ĐỒNG NHẤT với đủ 9 trường của form tạo/sửa người dùng tay (Vị Trí/Tên đăng nhập/Mật khẩu/
+// Họ và Tên/Email/Số điện thoại/Phòng Ban/Chức Danh/Ngày Vào Làm Việc — xem #userIdentityFields ở
+// systemSection.html), thay vì chỉ 6 trường như trước (thiếu hẳn postype/startdate, jobtitle có ở
+// parser nhưng chưa từng xuất hiện trong file mẫu tải về). 2 dòng mẫu minh hoạ cả 2 trường hợp HO
+// (dept = Phòng Ban, có điền jobtitle/startdate) và Siêu Thị (dept = tên Siêu Thị, để trống 2 cột tuỳ
+// chọn) — postype/dept/jobtitle/startdate đều bị validateImportedUserRow() (bên dưới) đối chiếu NGHIÊM
+// NGẶT với danh mục thật khi nhập lại, chặn cứng dòng nào không khớp (theo yêu cầu trực tiếp người
+// dùng), nên cột thứ tự ở đây khớp đúng USER_IMPORT_COLUMNS (lib/adminExport.js) để cơ chế đọc theo VỊ
+// TRÍ vẫn đúng nếu ai đó lỡ xoá dòng tiêu đề.
 function downloadUserTemplate() {
   downloadXlsxFromServer('user_template.xlsx', 'Mẫu Người Dùng',
     [
@@ -558,9 +567,15 @@ function downloadUserTemplate() {
       { header: 'name', key: 'name', width: 22 },
       { header: 'email', key: 'email', width: 24 },
       { header: 'phone', key: 'phone', width: 14 },
-      { header: 'dept', key: 'dept', width: 20 }
+      { header: 'dept', key: 'dept', width: 20 },
+      { header: 'jobtitle', key: 'jobtitle', width: 20 },
+      { header: 'postype', key: 'postype', width: 12 },
+      { header: 'startdate', key: 'startdate', width: 14 }
     ],
-    [{ username: 'user1', pass: '123456', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su' }]
+    [
+      { username: 'user1', pass: '123456', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su', jobtitle: 'Nhan vien', postype: 'HO', startdate: '2024-01-15' },
+      { username: 'user2', pass: '123456', name: 'Tran Thi Two', email: 'user2@company.com', phone: '0909876543', dept: 'Sieu Thi Quan 1', jobtitle: '', postype: 'STORE', startdate: '' }
+    ]
   );
 }
 
@@ -584,6 +599,65 @@ function exportUsersExcel() {
 // 2 pha: onUsersImportFileChange() chỉ đọc + hiện bảng xem trước (KHÔNG ghi gì), confirmUsersImport()
 // mới thật sự ghi sau khi người dùng xác nhận từng dòng.
 let usersImportPreviewItems = [];
+
+// Đối chiếu NGHIÊM NGẶT 4 trường Vị Trí/Phòng Ban/Chức Danh/Ngày Vào Làm Việc của 1 dòng import với
+// đúng danh mục đang áp dụng cho form tạo tay (yêu cầu trực tiếp người dùng 10/2026: "khi import mà các
+// trường như chức danh, phòng ban, vị trí, ngày vào vừa khớp format chưa khớp với khai báo thì phải yêu
+// cầu điền thông tin đúng, chặn lại ngay") — KHÔNG tự suy đoán/mặc định giá trị nào, sai bất kỳ trường
+// nào cũng trả về lỗi để renderUsersImportPreview() chặn cứng cả dòng (không có checkbox), khác hẳn cách
+// dept ở form tay luôn có sẵn giá trị hợp lệ do chọn từ dropdown. server (parseUsersImportXlsx) chỉ đọc
+// thô/không có logic nghiệp vụ gì — toàn bộ validate danh mục nằm ở đây vì chỉ client mới có sẵn
+// DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles.
+function validateImportedUserRow(r) {
+  const errors = [];
+  const normalized = {};
+
+  const posTypeRaw = String(r.posType || '').trim().toUpperCase();
+  if (posTypeRaw === 'HO' || posTypeRaw === 'STORE') {
+    normalized.posType = posTypeRaw;
+  } else {
+    errors.push(`Vị Trí "${r.posType || ''}" không hợp lệ — phải là HO hoặc STORE`);
+  }
+
+  const deptRaw = String(r.dept || '').trim();
+  if (!deptRaw) {
+    errors.push('Thiếu Phòng Ban/Siêu Thị');
+  } else if (normalized.posType) {
+    const catalog = normalized.posType === 'STORE' ? (DB.stores || []) : (DB.depts || []);
+    const match = catalog.find(d => String(d).trim().toLowerCase() === deptRaw.toLowerCase());
+    if (match) normalized.dept = match;
+    else errors.push(`${normalized.posType === 'STORE' ? 'Siêu Thị' : 'Phòng Ban'} "${deptRaw}" không có trong danh mục`);
+  }
+
+  // Chức Danh — TUỲ CHỌN (khớp uJobTitle luôn có sẵn "-- Chưa gán --" ở form tay), chỉ chặn khi CÓ điền
+  // mà không khớp danh mục.
+  const jobTitleRaw = String(r.jobTitle || '').trim();
+  if (!jobTitleRaw) {
+    normalized.jobTitle = '';
+  } else if (normalized.posType) {
+    const catalog = normalized.posType === 'STORE' ? (DB.storeJobTitles || []).map(t => t.label) : (DB.jobTitles || []);
+    const match = catalog.find(t => String(t).trim().toLowerCase() === jobTitleRaw.toLowerCase());
+    if (match) normalized.jobTitle = match;
+    else errors.push(`Chức Danh "${jobTitleRaw}" không có trong danh mục`);
+  }
+
+  // Ngày Vào Làm Việc — TUỲ CHỌN (khớp uStartDate "Để trống hợp lệ" ở form tay), chỉ chặn khi CÓ điền mà
+  // không phải ngày thật hợp lệ. parseUsersImportXlsx() đã chuẩn hoá ô Excel dạng ngày thật về
+  // "YYYY-MM-DD" — giá trị không nhận diện được sẽ được trả nguyên văn để bị chặn rõ ràng ở đây thay vì
+  // âm thầm bỏ qua.
+  const startDateRaw = String(r.startDate || '').trim();
+  if (!startDateRaw) {
+    normalized.startDate = '';
+  } else {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startDateRaw);
+    const d = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
+    const isRealDate = !!(m && d && !isNaN(d) && d.getUTCFullYear() === Number(m[1]) && (d.getUTCMonth() + 1) === Number(m[2]) && d.getUTCDate() === Number(m[3]));
+    if (isRealDate) normalized.startDate = startDateRaw;
+    else errors.push(`Ngày Vào Làm Việc "${startDateRaw}" không đúng định dạng ngày hợp lệ (YYYY-MM-DD)`);
+  }
+
+  return { errors, normalized };
+}
 
 async function onUsersImportFileChange(evt) {
   const file = evt.target.files[0];
@@ -609,12 +683,13 @@ async function onUsersImportFileChange(evt) {
   // tới username/mật khẩu/quyền hạn của tài khoản đã có) thay vì chỉ bỏ qua.
   const existingByUsername = new Map(DB.users.map(u => [String(u.username).trim().toLowerCase(), u]));
   usersImportPreviewItems = rows.map((r, idx) => {
+    const { errors, normalized } = validateImportedUserRow(r);
     const existing = existingByUsername.get(String(r.username).trim().toLowerCase());
     return {
-      ...r, _idx: idx,
+      ...r, _idx: idx, errors, normalized,
       duplicateExisting: !!existing,
-      // 'add' (mặc định, không trùng gì) | 'skip' (mặc định cho dòng trùng) | 'overwrite'
-      action: (r.duplicateInFile || existing) ? 'skip' : 'add'
+      // 'add' (mặc định, không trùng/không lỗi) | 'skip' (mặc định cho dòng trùng/dòng lỗi) | 'overwrite'
+      action: (errors.length || r.duplicateInFile || existing) ? 'skip' : 'add'
     };
   });
   renderUsersImportPreview();
@@ -622,14 +697,24 @@ async function onUsersImportFileChange(evt) {
 
 function renderUsersImportPreview() {
   const items = usersImportPreviewItems;
-  const dupCount = items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
+  const errorCount = items.filter(it => it.errors.length).length;
+  const dupCount = items.filter(it => !it.errors.length && (it.duplicateInFile || it.duplicateExisting)).length;
   document.getElementById('uImportStatus').innerText = `Đọc được ${items.length} dòng`
+    + (errorCount ? `, ${errorCount} dòng LỖI (bị chặn — sửa lại file rồi tải lên lại).` : '')
     + (dupCount ? `, ${dupCount} dòng TRÙNG (đã chọn "Bỏ qua" sẵn — tự đổi nếu muốn ghi đè/vẫn thêm).` : '.');
   document.getElementById('uImportPreviewBody').innerHTML = items.map((it) => {
-    const dupNote = it.duplicateExisting ? '⚠️ Username đã có tài khoản'
-      : (it.duplicateInFile ? '⚠️ Trùng dòng khác trong file này' : '');
+    const hasError = it.errors.length > 0;
+    let note;
+    if (hasError) note = `⛔ ${it.errors.join('; ')}`;
+    else if (it.duplicateExisting) note = '⚠️ Username đã có tài khoản';
+    else if (it.duplicateInFile) note = '⚠️ Trùng dòng khác trong file này';
+    else note = '';
+    // Dòng lỗi KHÔNG có checkbox/select gì cả — chặn cứng ngay từ bảng xem trước, khớp đúng pattern
+    // "không thể tick" đã dùng cho dòng !found ở Ma Trận Phân Quyền (module-admin-permgroups.js).
     let actionControl;
-    if (it.duplicateExisting) {
+    if (hasError) {
+      actionControl = '';
+    } else if (it.duplicateExisting) {
       actionControl = `<select data-op-change="onUsersImportRowActionChange" data-arg0="${it._idx}" data-arg-value="1" class="border rounded text-xs p-0.5">
         <option value="skip" ${it.action === 'skip' ? 'selected' : ''}>Bỏ qua</option>
         <option value="overwrite" ${it.action === 'overwrite' ? 'selected' : ''}>Ghi đè thông tin</option>
@@ -637,12 +722,14 @@ function renderUsersImportPreview() {
     } else {
       actionControl = `<input type="checkbox" data-op-change="onUsersImportRowToggle" data-arg0="${it._idx}" ${it.action === 'add' ? 'checked' : ''}>`;
     }
-    return `<tr class="border-t${dupNote ? ' bg-amber-50' : ''}">
+    const posTypeLabel = it.normalized.posType === 'STORE' ? 'Siêu Thị' : (it.normalized.posType === 'HO' ? 'HO' : (it.posType || ''));
+    return `<tr class="border-t${hasError ? ' bg-red-50 text-gray-500' : (note ? ' bg-amber-50' : '')}">
       <td class="p-1.5">${actionControl}</td>
       <td class="p-1.5">${escapeHtml(it.username || '')}</td>
       <td class="p-1.5">${escapeHtml(it.name || '')}</td>
       <td class="p-1.5">${escapeHtml(it.dept || '')}</td>
-      <td class="p-1.5 text-amber-700">${dupNote}</td>
+      <td class="p-1.5">${escapeHtml(posTypeLabel)}</td>
+      <td class="p-1.5 ${hasError ? 'text-red-700 font-semibold' : 'text-amber-700'}">${escapeHtml(note)}</td>
     </tr>`;
   }).join('');
   document.getElementById('uImportPreviewWrap').classList.remove('hidden');
@@ -665,8 +752,12 @@ function cancelUsersImport() {
 
 async function confirmUsersImport() {
   const items = usersImportPreviewItems;
-  const toAdd = items.filter(it => it.action === 'add');
-  const toOverwrite = items.filter(it => it.action === 'overwrite');
+  // !it.errors.length re-check ở ĐÂY (không chỉ dựa vào renderUsersImportPreview() không vẽ checkbox
+  // cho dòng lỗi) — phòng vệ bổ sung khớp đúng khuôn confirmPermMatrixImport() (module-admin-permgroups.js,
+  // lọc lại `it.diff` thay vì tin thẳng `it.include`): dòng lỗi không có `normalized.dept`/`posType`
+  // đầy đủ, lỡ `it.action` bị chỉnh tay qua DevTools thành 'add'/'overwrite' cũng không lọt qua đây.
+  const toAdd = items.filter(it => it.action === 'add' && !it.errors.length);
+  const toOverwrite = items.filter(it => it.action === 'overwrite' && !it.errors.length);
   if (!toAdd.length && !toOverwrite.length) return alert('Chưa chọn dòng nào để nhập.');
   if (!confirm(`Xác nhận: thêm mới ${toAdd.length} tài khoản + ghi đè thông tin ${toOverwrite.length} tài khoản đã có?`)) return;
 
@@ -675,21 +766,29 @@ async function confirmUsersImport() {
   // BUG THẬT đã sửa (trước đây id = Date.now() + Math.random(), số thập phân khiến cspCoerceArg() không
   // ép được sang Number nên nút Sửa/Khoá/Xoá của user tạo qua import Excel không hoạt động) — dùng cùng
   // khuôn số NGUYÊN Date.now() + count như buildNewUserFromState().
-  toAdd.forEach(({ username, pass, name, email, phone, dept, jobTitle }) => {
+  // dept/jobTitle/posType/startDate LẤY TỪ it.normalized (đã đối chiếu danh mục ở validateImportedUserRow(),
+  // KHÔNG dùng giá trị thô của file) — mọi dòng vào tới đây (action !== 'skip') chắc chắn errors.length
+  // === 0 nên normalized luôn có đủ field hợp lệ, khớp đúng field posType/startDate mà buildNewUserFromState()
+  // gán khi tạo user qua form tay (module-admin-submissiongroups.js).
+  toAdd.forEach(({ username, pass, name, email, phone, normalized }) => {
     DB.users.push({
       id: Date.now() + addCount,
-      username, pass, name, email, phone, dept, jobTitle: jobTitle || null,
+      username, pass, name, email, phone,
+      dept: normalized.dept, jobTitle: normalized.jobTitle || null,
+      posType: normalized.posType, startDate: normalized.startDate || '',
       perms: defaultNewUserPerms()
     });
     addCount++;
   });
-  // Ghi đè: CHỈ họ tên/email/SĐT/phòng ban/chức danh — KHÔNG BAO GIỜ đụng username/pass/perms/groupIds
-  // của tài khoản đã có (tránh 1 file Excel vô tình/cố ý reset mật khẩu hay quyền hạn người khác).
-  toOverwrite.forEach(({ username, name, email, phone, dept, jobTitle }) => {
+  // Ghi đè: CHỈ họ tên/email/SĐT/phòng ban/chức danh/vị trí/ngày vào làm việc — KHÔNG BAO GIỜ đụng
+  // username/pass/perms/groupIds của tài khoản đã có (tránh 1 file Excel vô tình/cố ý reset mật khẩu
+  // hay quyền hạn người khác).
+  toOverwrite.forEach(({ username, name, email, phone, normalized }) => {
     const existing = DB.users.find(u => String(u.username).trim().toLowerCase() === String(username).trim().toLowerCase());
     if (!existing) return;
-    existing.name = name; existing.email = email; existing.phone = phone; existing.dept = dept;
-    existing.jobTitle = jobTitle || null;
+    existing.name = name; existing.email = email; existing.phone = phone;
+    existing.dept = normalized.dept; existing.jobTitle = normalized.jobTitle || null;
+    existing.posType = normalized.posType; existing.startDate = normalized.startDate || '';
     overwriteCount++;
   });
 

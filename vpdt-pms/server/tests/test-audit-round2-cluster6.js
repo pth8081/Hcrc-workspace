@@ -521,9 +521,13 @@ async function main() {
     // markDuplicateItems() (lib/importDedup.js, đợt "Chống trùng lặp dữ liệu Excel import" 888f4db) nên
     // mỗi dòng có thêm 2 cờ duplicateInFile/duplicateExisting — cả 2 đều false ở đây (username duy nhất
     // trong file, existing truyền [] rỗng từ parseUsersImportXlsx()).
+    // ĐỔI HÀNH VI CÓ CHỦ ĐÍCH (đợt "đồng nhất trường bulk-import với form tạo tay", xem
+    // module-admin-userstaging.js): thêm posType/startDate (rỗng khi file không có 2 cột này, như file
+    // mẫu cũ ở test này) — client (validateImportedUserRow()) mới là nơi chặn cứng khi 2 trường + dept/
+    // jobTitle không khớp danh mục, parser ở đây vẫn CHỈ đọc thô không có logic nghiệp vụ gì.
     assert.deepStrictEqual(rows[0], {
       username: 'nv01', pass: 'Matkhau@123', name: 'Nguyễn Văn A', email: 'a@cty.vn',
-      phone: '0900000001', dept: DEPT_A, jobTitle: 'Nhân viên',
+      phone: '0900000001', dept: DEPT_A, jobTitle: 'Nhân viên', posType: '', startDate: '',
       duplicateInFile: false, duplicateExisting: false
     });
     assert.strictEqual(rows[1].username, 'nv02');

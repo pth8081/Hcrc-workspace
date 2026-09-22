@@ -347,9 +347,14 @@ router.use(requireAuth, blockIfMustChangePassword);
 // totpSecretEnc/totpBackupCodeHashes (lib/totp.js) cùng khuôn — bí mật TOTP (dù đã mã hoá) và hash mã
 // khôi phục không có lý do gì để lộ cho MỌI người đã đăng nhập; totpEnabled (boolean, cần hiện badge
 // "Chưa thiết lập 2FA" ở màn quản lý người dùng) vẫn GIỮ LẠI vì không destructure field này ra.
+// sessionVersion (đếm phiên đăng nhập hợp lệ, lib/auth.js requireAuth so payload.sv — routes/auth.js
+// tăng ở login/logout/đổi mật khẩu-PIN/gỡ TOTP-WebAuthn, xem prepareUsersForSave() bên dưới) cùng khuôn
+// — front-end không đọc/hiển thị field này ở bất kỳ đâu, và để lộ nguyên giá trị còn khiến bản chụp
+// DB.users trên trình duyệt lệch khỏi CSDL bất cứ khi nào có người đăng nhập lại (kể cả không phải
+// admin nào can thiệp) — xem chú thích đầy đủ tại điểm ép record.sessionVersion trong prepareUsersForSave().
 function stripPasswords(users) {
   if (!Array.isArray(users)) return users;
-  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, ...rest }) => rest);
+  return users.map(({ pass, password, pinHash, failedLoginAttempts, lockedUntil, webauthnCredentials, webauthnUserId, totpSecretEnc, totpBackupCodeHashes, sessionVersion, ...rest }) => rest);
 }
 
 // Không bao giờ trả mật khẩu SMTP đã mã hoá (smtpPassEnc, xem lib/emailCrypto.js) ra ngoài — kể cả
@@ -571,6 +576,19 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
 
     let record = { ...u, ...preserved };
     delete record.pin; // KHÔNG BAO GIỜ lưu PIN dạng plaintext — chỉ lưu pinHash bên dưới.
+    // BUG THẬT đã sửa (báo cáo thực tế: chỉ 1 admin/1 màn hình đang sửa mà vẫn nhận cảnh báo "bản ghi vừa
+    // bị thay đổi ở nơi khác"): sessionVersion đã bị stripPasswords() lọc khỏi GET /api/data (xem chú
+    // thích ở đó) nhưng ĐIỂM GHI này trước đây vẫn tin "u.sessionVersion" (giá trị client gửi lên) — nếu
+    // client đang cầm bản DB.users CŨ (rất dễ xảy ra, vd Excel import xong chưa tải lại trang) sẽ ÂM
+    // THẦM GHI ĐÈ sessionVersion thật về bản CŨ. sessionVersion chỉ được phép tăng qua các luồng ĐÍCH
+    // DANH của lib/auth.js/routes/auth.js (login/logout/đổi mật khẩu-PIN/gỡ TOTP-WebAuthn...), KHÔNG BAO
+    // GIỜ qua lượt lưu NGUYÊN MẢNG "users" này (giống hệt pinHash/webauthnCredentials/totpSecretEnc ở
+    // trên) — ép về đúng giá trị đang có trong CSDL, bỏ qua hoàn toàn "u.sessionVersion". Đây cũng chính
+    // là nguyên nhân gây cảnh báo xung đột GIẢ ở retryUsersSaveAfterConflict() (public/js/core.js): bất
+    // kỳ ai đăng nhập lại trong lúc admin đang mở form sửa user cũng làm sessionVersion thật tăng lên,
+    // trong khi bản chụp trình duyệt của admin luôn cầm giá trị CŨ — nay field này không còn xuất hiện ở
+    // cả 2 phía (GET lẫn payload gửi lên) nên không còn gây lệch bản ghi giả nữa.
+    record.sessionVersion = prior ? prior.sessionVersion : undefined;
     record.secondaryPositions = sanitizeSecondaryPositions(u.secondaryPositions);
     record.nghiepVuExtraKeys = sanitizeExtraKeys(u.nghiepVuExtraKeys);
     record.reportExtraKeys = sanitizeExtraKeys(u.reportExtraKeys);

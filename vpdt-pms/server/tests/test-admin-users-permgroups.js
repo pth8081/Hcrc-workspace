@@ -860,8 +860,8 @@ async function scenario(name, fn) {
       window.fetch = async (url, opts) => {
         if (url === '/api/admin/users/import-xlsx') {
           return { ok: true, status: 200, json: async () => ({ rows: [
-            { username: 'nv.excel1', pass: 'Passw0rd!23', name: 'Excel Một', email: 'e1@hcrc.local', phone: '0966666661', dept: 'Kế Toán', jobTitle: 'Nhân viên', duplicateInFile: false },
-            { username: 'nv.excel2', pass: 'Passw0rd!23', name: 'Excel Hai', email: 'e2@hcrc.local', phone: '0966666662', dept: 'Kế Toán', jobTitle: 'Nhân viên', duplicateInFile: false },
+            { username: 'nv.excel1', pass: 'Passw0rd!23', name: 'Excel Một', email: 'e1@hcrc.local', phone: '0966666661', dept: 'Kế Toán', jobTitle: 'Nhân viên', posType: 'HO', duplicateInFile: false },
+            { username: 'nv.excel2', pass: 'Passw0rd!23', name: 'Excel Hai', email: 'e2@hcrc.local', phone: '0966666662', dept: 'Kế Toán', jobTitle: 'Nhân viên', posType: 'HO', duplicateInFile: false },
           ] }) };
         }
         return savedFetch(url, opts);
@@ -932,6 +932,117 @@ async function scenario(name, fn) {
     });
     record('(m) user có id lỗi (số thập phân) từ dữ liệu cũ được initDatabase() tự động sửa lại thành số nguyên',
       r.found && r.fixedIdIsInteger === true, JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (m2) Import Excel Người Dùng: đồng nhất trường với form tạo tay (posType/dept/jobTitle/startDate) +
+  //      CHẶN CỨNG dòng nào không khớp danh mục (yêu cầu trực tiếp người dùng 10/2026, xem
+  //      validateImportedUserRow() ở module-admin-userstaging.js) — dòng lỗi KHÔNG có checkbox và bị
+  //      loại khỏi confirmUsersImport() dù có cố tình chỉnh action qua DevTools.
+  // ==========================================================================
+  await scenario('(m2) Import Excel: dòng ĐÚNG danh mục (cả HO lẫn STORE) -> tạo user với posType/dept/jobTitle/startDate CHUẨN HOÁ đúng', async () => {
+    const r = await page.evaluate(async () => {
+      // Tái khẳng định danh mục — scenario (m) chạy TRƯỚC đã gọi initDatabase() với response /api/data
+      // giả lập CHỈ có "users" (đúng ý đồ riêng của scenario đó), nên DB.depts/DB.stores/DB.jobTitles có
+      // thể đã bị initDatabase() ghi đè về rỗng theo response đó — không phụ thuộc thứ tự chạy trước.
+      DB.depts = ['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc'];
+      DB.stores = ['Siêu Thị Quận 1', 'Siêu Thị Quận 3'];
+      DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
+      DB.storeJobTitles = [{ label: 'Nhân viên bán hàng' }];
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (url === '/api/admin/users/import-xlsx') {
+          return { ok: true, status: 200, json: async () => ({ rows: [
+            { username: 'nv.ho1', pass: 'Passw0rd!23', name: 'Văn Phòng Một', email: 'ho1@hcrc.local', phone: '0966666671', dept: 'kế toán', jobTitle: 'nhân viên', posType: 'ho', startDate: '2024-01-15', duplicateInFile: false },
+            { username: 'nv.store1', pass: 'Passw0rd!23', name: 'Siêu Thị Một', email: 'st1@hcrc.local', phone: '0966666672', dept: 'Siêu Thị Quận 1', jobTitle: 'Nhân viên bán hàng', posType: 'STORE', startDate: '', duplicateInFile: false },
+          ] }) };
+        }
+        return savedFetch(url, opts);
+      };
+      await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      window.fetch = savedFetch;
+      const preview = usersImportPreviewItems.map(it => ({ username: it.username, errors: it.errors, action: it.action }));
+      await confirmUsersImport();
+      const ho1 = DB.users.find(u => u.username === 'nv.ho1');
+      const store1 = DB.users.find(u => u.username === 'nv.store1');
+      return { preview, ho1, store1 };
+    });
+    record('(m2) cả 2 dòng hợp lệ đều KHÔNG có lỗi + action mặc định "add"',
+      r.preview.every(it => it.errors.length === 0 && it.action === 'add'), JSON.stringify(r.preview));
+    record('(m2) dòng HO: dept/jobTitle chuẩn hoá đúng CASE của danh mục (không giữ nguyên chữ thường của file), posType=HO, startDate giữ nguyên',
+      r.ho1 && r.ho1.dept === 'Kế Toán' && r.ho1.jobTitle === 'Nhân viên' && r.ho1.posType === 'HO' && r.ho1.startDate === '2024-01-15', JSON.stringify(r.ho1));
+    record('(m2) dòng STORE: dept=tên siêu thị, jobTitle theo danh mục storeJobTitles, posType=STORE, startDate rỗng hợp lệ',
+      r.store1 && r.store1.dept === 'Siêu Thị Quận 1' && r.store1.jobTitle === 'Nhân viên bán hàng' && r.store1.posType === 'STORE' && r.store1.startDate === '', JSON.stringify(r.store1));
+  });
+
+  await scenario('(m2) Import Excel: dòng SAI danh mục (posType/dept/jobTitle/startDate) -> CHẶN CỨNG, không tạo user nào, không có checkbox trong bảng xem trước', async () => {
+    const r = await page.evaluate(async () => {
+      DB.depts = ['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc'];
+      DB.stores = ['Siêu Thị Quận 1', 'Siêu Thị Quận 3'];
+      DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (url === '/api/admin/users/import-xlsx') {
+          return { ok: true, status: 200, json: async () => ({ rows: [
+            { username: 'nv.badpostype', pass: 'Passw0rd!23', name: 'Sai Vị Trí', email: 'bp@hcrc.local', phone: '0966666673', dept: 'Kế Toán', jobTitle: '', posType: 'VANPHONG', startDate: '', duplicateInFile: false },
+            { username: 'nv.baddept', pass: 'Passw0rd!23', name: 'Sai Phòng Ban', email: 'bd@hcrc.local', phone: '0966666674', dept: 'Phòng Không Tồn Tại', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false },
+            { username: 'nv.badjob', pass: 'Passw0rd!23', name: 'Sai Chức Danh', email: 'bj@hcrc.local', phone: '0966666675', dept: 'Kế Toán', jobTitle: 'Chức Danh Ma', posType: 'HO', startDate: '', duplicateInFile: false },
+            { username: 'nv.baddate', pass: 'Passw0rd!23', name: 'Sai Ngày', email: 'bt@hcrc.local', phone: '0966666676', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '31/01/2024', duplicateInFile: false },
+          ] }) };
+        }
+        return savedFetch(url, opts);
+      };
+      await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      window.fetch = savedFetch;
+      const preview = usersImportPreviewItems.map(it => ({ username: it.username, errors: it.errors, action: it.action }));
+      // Bảng xem trước KHÔNG được vẽ checkbox/select nào cho dòng lỗi (renderUsersImportPreview() đã chạy
+      // qua onUsersImportFileChange() ở trên) — kiểm tra DOM thật, không chỉ dữ liệu JS.
+      const checkboxesInDom = [...document.querySelectorAll('#uImportPreviewBody tr')].map(tr => ({
+        text: tr.textContent.trim().slice(0, 40),
+        hasControl: !!tr.querySelector('input[type=checkbox],select')
+      }));
+      const usersBefore = DB.users.length;
+      const alertsBefore = window.__alerts.length;
+      await confirmUsersImport(); // không có dòng nào action='add'/'overwrite' hợp lệ -> phải alert + không ghi gì
+      return { preview, checkboxesInDom, createdCount: DB.users.length - usersBefore, newAlert: window.__alerts.length > alertsBefore };
+    });
+    record('(m2) cả 4 dòng đều có lỗi + action mặc định "skip" (không tự thêm)',
+      r.preview.every(it => it.errors.length > 0 && it.action === 'skip'), JSON.stringify(r.preview));
+    record('(m2) đúng lỗi Vị Trí bị chặn (posType="VANPHONG" không phải HO/STORE)',
+      /Vị Trí/.test((r.preview.find(it => it.username === 'nv.badpostype') || {}).errors.join('')), JSON.stringify(r.preview));
+    record('(m2) đúng lỗi Phòng Ban bị chặn (không có trong DB.depts)',
+      /Phòng Ban/.test((r.preview.find(it => it.username === 'nv.baddept') || {}).errors.join('')), JSON.stringify(r.preview));
+    record('(m2) đúng lỗi Chức Danh bị chặn (không có trong DB.jobTitles)',
+      /Chức Danh/.test((r.preview.find(it => it.username === 'nv.badjob') || {}).errors.join('')), JSON.stringify(r.preview));
+    record('(m2) đúng lỗi Ngày Vào Làm Việc bị chặn (sai định dạng YYYY-MM-DD)',
+      /Ngày Vào Làm Việc/.test((r.preview.find(it => it.username === 'nv.baddate') || {}).errors.join('')), JSON.stringify(r.preview));
+    record('(m2) KHÔNG có checkbox/select nào trong DOM cho bất kỳ dòng lỗi nào (chặn cứng ngay từ bảng xem trước)',
+      r.checkboxesInDom.length === 4 && r.checkboxesInDom.every(row => !row.hasControl), JSON.stringify(r.checkboxesInDom));
+    record('(m2) confirmUsersImport() không tạo user nào + báo alert (không âm thầm bỏ qua)',
+      r.createdCount === 0 && r.newAlert, JSON.stringify(r));
+  });
+
+  await scenario('(m2) Import Excel: chỉnh action="add" qua DevTools cho dòng LỖI -> confirmUsersImport() vẫn từ chối (phòng vệ lớp 2, không chỉ dựa vào UI)', async () => {
+    const r = await page.evaluate(async () => {
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (url === '/api/admin/users/import-xlsx') {
+          return { ok: true, status: 200, json: async () => ({ rows: [
+            { username: 'nv.tampered', pass: 'Passw0rd!23', name: 'Bị Chỉnh Tay', email: 'tp@hcrc.local', phone: '0966666677', dept: 'Phòng Ma', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false },
+          ] }) };
+        }
+        return savedFetch(url, opts);
+      };
+      await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      window.fetch = savedFetch;
+      // Mô phỏng can thiệp DevTools: ép action='add' bất chấp errors.length > 0.
+      usersImportPreviewItems.find(it => it.username === 'nv.tampered').action = 'add';
+      const usersBefore = DB.users.length;
+      await confirmUsersImport();
+      return { createdCount: DB.users.length - usersBefore, created: DB.users.find(u => u.username === 'nv.tampered') };
+    });
+    record('(m2) confirmUsersImport() re-check !it.errors.length -> KHÔNG tạo user dù action bị ép "add" qua DevTools',
+      r.createdCount === 0 && !r.created, JSON.stringify(r));
   });
 
   // ==========================================================================
