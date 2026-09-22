@@ -3657,6 +3657,9 @@ async function initDatabase(loggingInUser, opts) {
     // laborContracts/hrTaskTemplates đã từng phát hiện ở dưới.
     DB.carVehicleTypes = data.carVehicleTypes || [];
     DB.carTaxiCompanies = data.carTaxiCompanies || [];
+    // carEvaluationIssues: "Điều gì cần thay đổi?" (Đăng Ký Xe > Đánh Giá Chuyến, chỉ hiện khi đánh giá
+    // 1-4 sao) — xem lib/recordActions.js::evaluateCarTrip().
+    DB.carEvaluationIssues = data.carEvaluationIssues || [];
     // priceZones: "Vùng Giá Áp Dụng" (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ, CORE mới — xem
     // defaults.js/lib/createValidation.js::itPriceApprovals.extraValidate).
     DB.priceZones = data.priceZones || [];

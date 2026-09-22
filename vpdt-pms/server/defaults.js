@@ -210,6 +210,17 @@ const DEFAULTS = {
   // carRegs.assignedTaxiCompany, không có gì tham chiếu tới qua key riêng).
   carTaxiCompanies: ['Mai Linh', 'Vinasun'],
 
+  // "Điều gì cần thay đổi?" (Đăng Ký Xe > Đánh Giá Chuyến, chỉ hiện khi đánh giá 1-4 sao, bắt buộc chọn
+  // ít nhất 1 mục khi đánh giá 1-2 sao) — danh sách phẳng thuần (mirror carTaxiCompanies ở trên), giá trị
+  // lưu thẳng vào carRegs.evaluationIssues (mảng string). Xem lib/recordActions.js::evaluateCarTrip().
+  carEvaluationIssues: [
+    'Thái độ và tác phong lái xe',
+    'Đúng giờ',
+    'Kỹ năng lái xe và an toàn',
+    'Vệ sinh xe',
+    'Tình trạng kỹ thuật và tiện nghi xe'
+  ],
+
   // "Vùng Giá Áp Dụng" (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ, ô #itPriceRetailZone) — danh sách
   // phẳng thuần (mirror carTaxiCompanies ở trên), giá trị lưu thẳng vào itPriceApprovals.priceZone. CHỈ
   // áp dụng cho Bán Lẻ (đối xứng wholesaleApplyUnit chỉ áp dụng cho Bán Buôn) — xem

@@ -722,6 +722,18 @@
         </div>
       </div>
 
+      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">⭐ Quản Lý Danh Mục Lý Do Đánh Giá Chuyến Xe</h3>
+        <p class="text-[11px] text-gray-500 italic">Danh mục gợi ý cho câu hỏi "Điều gì cần thay đổi?" khi người đăng ký Đánh Giá Chuyến ở mức 1-4 sao (bắt buộc chọn ít nhất 1 mục nếu đánh giá 1-2 sao).</p>
+        <form data-op-submit="saveCarEvaluationIssue" class="flex gap-2">
+          <input id="txtCarEvaluationIssueName" placeholder="Lý do mới (VD: Đúng giờ)..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="carEvaluationIssueList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
       <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
         <h3 class="font-bold text-rose-900 text-sm flex items-center gap-1">🗺️ Quản Lý Danh Mục Vùng Giá Áp Dụng</h3>
         <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Vùng Giá Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ (Hỗ Trợ IT).</p>

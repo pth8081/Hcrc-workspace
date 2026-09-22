@@ -575,6 +575,7 @@ const CATALOG_HANDLERS = {
   },
   licenseTypes: simpleArrayCatalogHandler('licenseTypes', 'Các Loại Giấy Phép'),
   carTaxiCompanies: simpleArrayCatalogHandler('carTaxiCompanies', 'Danh Mục Hãng Taxi'),
+  carEvaluationIssues: simpleArrayCatalogHandler('carEvaluationIssues', 'Danh Mục Lý Do Đánh Giá Chuyến Xe'),
   priceZones: simpleArrayCatalogHandler('priceZones', 'Danh Mục Vùng Giá Áp Dụng'),
   trainingCategories: simpleArrayCatalogHandler('trainingCategories', 'Danh Mục Loại Đào Tạo'),
   // itRenewalCategories ("Loại Dịch Vụ" — Hỗ Trợ IT > Gia Hạn Dịch Vụ CNTT, module-itsupport-renewal.js):

@@ -1104,10 +1104,11 @@ router.post('/carRegs/:id/evaluate', async (req, res) => {
   try {
     const { freshUser, users } = await getFreshUser(req);
     const carVehicleTypes = await getAppDataValue('carVehicleTypes');
+    const carEvaluationIssues = await getAppDataValue('carEvaluationIssues');
     // users: LỖI ĐÃ VÁ (rà soát chuyên sâu 2) — cần để evaluateCarTrip() tra creator.active, mở lối thoát
     // cho admin/carDispatch đánh giá hộ phiếu ĐỘI NHÀ khi người đăng ký đã nghỉ việc/khoá tài khoản.
     const result = await withLockedRecordForCollection('carRegs', itemId, (item) =>
-      recordActions.evaluateCarTrip(freshUser, item, req.body || {}, carVehicleTypes, users));
+      recordActions.evaluateCarTrip(freshUser, item, req.body || {}, carVehicleTypes, users, carEvaluationIssues));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/evaluate`, err);

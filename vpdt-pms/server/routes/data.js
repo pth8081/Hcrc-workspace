@@ -143,6 +143,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // Phòng Hành Chính) — chỉ có màn quản lý dành cho Admin (tab "🗂️ Quản Lý Danh Mục"), cùng lý do
   // stores/jobTitles ở dưới — không mở cho mọi tài khoản đã đăng nhập.
   'carVehicleTypes', 'carTaxiCompanies',
+  // carEvaluationIssues: danh mục "Điều gì cần thay đổi?" (Đăng Ký Xe > Đánh Giá Chuyến, chỉ hiện khi
+  // đánh giá 1-4 sao) — cùng lý do carVehicleTypes/carTaxiCompanies ở trên, chỉ Admin (tab "🗂️ Quản Lý
+  // Danh Mục") mới sửa được.
+  'carEvaluationIssues',
   // priceZones: danh mục "Vùng Giá Áp Dụng" (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ) — cùng lý do
   // trên, chỉ Admin (tab "🗂️ Quản Lý Danh Mục") mới sửa được.
   'priceZones',

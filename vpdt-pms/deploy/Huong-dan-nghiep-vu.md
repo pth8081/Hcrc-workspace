@@ -987,6 +987,25 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   bỏ qua bước xác nhận). Phiếu Phê Duyệt (xem/tải) vẫn dùng được bình thường ở
   cả 2 trạng thái mới này, có thêm mục "Kết Thúc Chuyến / Đánh Giá" hiện số km
   + nhận xét khi đã có.
+  **Đánh giá 1-5 sao (từ 9/2026)** — trước đây "⭐ Đánh Giá" chỉ có ô số km +
+  nhận xét tự do, không có mức đánh giá rõ ràng nào. Nay modal Đánh Giá thêm
+  widget **1-5 sao** (bấm chọn), ứng đúng 5 nhãn cố định: 1 sao = "Không hài
+  lòng", 2 = "Chưa hài lòng", 3 = "Đạt yêu cầu", 4 = "Tốt", 5 = "Rất tốt" —
+  **bắt buộc chọn 1 mức mới xác nhận đánh giá được**. Chọn **1-4 sao** hiện
+  thêm câu hỏi **"Điều gì cần thay đổi?"** (tích chọn NHIỀU lý do từ danh mục
+  quản trị — mặc định 5 lý do: Thái độ và tác phong lái xe, Đúng giờ, Kỹ năng
+  lái xe và an toàn, Vệ sinh xe, Tình trạng kỹ thuật và tiện nghi xe): **1-2
+  sao BẮT BUỘC chọn ít nhất 1 lý do** mới đánh giá được, **3-4 sao KHÔNG bắt
+  buộc**, **5 sao ẩn hẳn câu hỏi** này. Server luôn tự kiểm tra lại độc lập
+  đúng 3 quy tắc trên (không tin dữ liệu client gửi lên) — kể cả khi 5 sao mà
+  client cố tình gửi kèm danh sách lý do, server tự xoá sạch. Danh mục lý do
+  quản trị tự sửa (thêm/sửa/xoá) ở **Hệ Thống → ⚙️ Quản Trị → 🗂️ Quản Lý Danh
+  Mục → "⭐ Quản Lý Danh Mục Lý Do Đánh Giá Chuyến Xe"**, cùng khuôn các danh
+  mục phẳng khác (VD Hãng Taxi) — đổi tên 1 lý do KHÔNG cascade ngược vào các
+  phiếu ĐÃ đánh giá trước đó (giữ nguyên chuỗi cũ làm nhãn hiển thị lịch sử,
+  cùng đánh đổi đã áp dụng cho Hãng Taxi/Vùng Giá Áp Dụng). Bảng "Lịch Sử Đánh
+  Giá Chuyến" ở 📊 Báo Cáo thêm 2 cột **Mức Đánh Giá** (hiện sao ★☆ + nhãn) và
+  **Điều Cần Thay Đổi** (danh sách lý do đã chọn, nếu có).
   **Trạng thái "🚗 Đang Thực Hiện" (`IN_PROGRESS`, từ 9/2026)** — trước đây lái
   xe bấm "✅ Xác Nhận Đăng Ký" chỉ ghi nhận cờ ngầm, nhãn trạng thái ở danh sách
   vẫn hiện y hệt "Đã Phê Duyệt" nên không phân biệt được đã có ai nhận chuyến

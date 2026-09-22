@@ -7497,13 +7497,39 @@ function canEvaluateCarTrip(user, carReg, carVehicleTypes, allUsers) {
   return false;
 }
 
-function evaluateCarTrip(user, carReg, payload, carVehicleTypes, allUsers) {
+// Đánh giá chuyến bằng SAO (yêu cầu người dùng 9/2026): 1-5 sao (Không hài lòng...Rất tốt). 1-4 sao hiện
+// thêm câu hỏi "Điều gì cần thay đổi?" (chọn nhiều từ danh mục carEvaluationIssues, admin tự sửa — xem
+// defaults.js/lib/catalogRename.js). 1-2 sao BẮT BUỘC chọn ít nhất 1 lý do mới đánh giá được; 3-4 sao
+// KHÔNG bắt buộc; 5 sao LUÔN xoá sạch issues (kể cả nếu client cố tình gửi kèm — không tin dữ liệu client
+// gửi lên, tự suy lại theo đúng rating vừa nhận, cùng triết lý validate độc lập server luôn áp dụng trong
+// hệ thống này).
+function validateCarEvaluationRating(payload, carEvaluationIssues) {
+  const rating = Number(payload?.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new HttpError(400, 'Vui lòng chọn mức đánh giá từ 1 đến 5 sao');
+  }
+  const validIssues = new Set(Array.isArray(carEvaluationIssues) ? carEvaluationIssues : []);
+  const rawIssues = Array.isArray(payload?.issues) ? payload.issues : [];
+  let issues = rawIssues
+    .map((x) => String(x || '').trim())
+    .filter((x) => x && validIssues.has(x));
+  issues = [...new Set(issues)];
+  if (rating === 5) {
+    issues = [];
+  } else if (rating <= 2 && issues.length === 0) {
+    throw new HttpError(400, 'Đánh giá 1-2 sao bắt buộc chọn ít nhất 1 lý do "Điều gì cần thay đổi?"');
+  }
+  return { rating, issues };
+}
+
+function evaluateCarTrip(user, carReg, payload, carVehicleTypes, allUsers, carEvaluationIssues) {
   if (!canEvaluateCarTrip(user, carReg, carVehicleTypes, allUsers)) {
     throw new HttpError(403, 'Chỉ người đăng ký phiếu này mới được đánh giá chuyến đi (trừ khi người đó đã nghỉ việc/khoá tài khoản — khi đó admin/Người Điều Hành Xe đánh giá hộ được)');
   }
   if (carReg.status !== 'AWAITING_EVALUATION') {
     throw new HttpError(409, 'Chỉ đánh giá được khi lái xe đã kết thúc chuyến, đang chờ đánh giá');
   }
+  const { rating, issues } = validateCarEvaluationRating(payload, carEvaluationIssues);
   if (payload && payload.km !== undefined && payload.km !== null && payload.km !== '') {
     const km = Number(payload.km);
     if (!Number.isFinite(km) || km < 0) {
@@ -7513,6 +7539,8 @@ function evaluateCarTrip(user, carReg, payload, carVehicleTypes, allUsers) {
   }
   const comment = String(payload?.comment || '').trim();
   if (comment) carReg.evaluationComment = comment.slice(0, 2000);
+  carReg.evaluationRating = rating;
+  carReg.evaluationIssues = issues;
   carReg.evaluatedAt = nowVN();
   carReg.evaluatedBy = user.username;
   carReg.evaluatedByName = user.name;

@@ -792,6 +792,44 @@ async function renameCarTaxiCompany(name) {
   if (ok) { renderCarTaxiCompanyList(); populateDropdowns(); }
 }
 
+// ===== Danh Mục "Điều gì cần thay đổi?" (DB.carEvaluationIssues) — danh sách phẳng thuần, mirror
+// carTaxiCompanies ở trên (đánh giá chuyến, xem openEvaluateCarTripModal()). =====
+function saveCarEvaluationIssue(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtCarEvaluationIssueName').value.trim();
+  if (!name) return;
+  if (DB.carEvaluationIssues.includes(name)) return alert('Lý do này đã tồn tại!');
+  DB.carEvaluationIssues.push(name);
+  syncStorage('carEvaluationIssues');
+  logSystemAction('USER_MGM', 'ADD_CAR_EVALUATION_ISSUE', `Thêm lý do đánh giá chuyến mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtCarEvaluationIssueName').value = '';
+  renderCarEvaluationIssueList();
+}
+
+function deleteCarEvaluationIssue(name) {
+  if (!confirm(`Xóa lý do "${name}"?`)) return;
+  DB.carEvaluationIssues = DB.carEvaluationIssues.filter(x => x !== name);
+  syncStorage('carEvaluationIssues');
+  logSystemAction('USER_MGM', 'DELETE_CAR_EVALUATION_ISSUE', `Xóa lý do đánh giá chuyến [${name}]`, 'SUCCESS', name);
+  renderCarEvaluationIssueList();
+}
+
+function renderCarEvaluationIssueList() {
+  const ul = document.getElementById('carEvaluationIssueList');
+  if (!ul) return;
+  ul.innerHTML = (DB.carEvaluationIssues || []).map(name => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1">${escapeHtml(name)}</span>
+      <button data-op="renameCarEvaluationIssue" data-arg0="${escapeHtml(name)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteCarEvaluationIssue" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+async function renameCarEvaluationIssue(name) {
+  const ok = await renameCatalogEntryClient('carEvaluationIssues', name, 'Danh Mục Lý Do Đánh Giá Chuyến Xe');
+  if (ok) renderCarEvaluationIssueList();
+}
+
 function onCarFilterChange() {
   resetListPage('car');
   renderCarRegs();
@@ -1090,14 +1128,64 @@ function openChangeCarRouteModal(id) {
 // ============ "Đánh Giá" (người đăng ký phiếu) — bắt buộc để phiếu hoàn thành sau khi lái xe Kết
 // Thúc Chuyến. Cho phép chỉnh lại số km lái xe đã nhập (driverReportedKm giữ nguyên làm audit trail ở
 // lib/recordActions.js, chỉ actualKm bị ghi đè) + nhận xét không bắt buộc — xem evaluateCarTrip(). ============
+// Mức đánh giá (yêu cầu người dùng 9/2026): 1-5 sao ↔ nhãn cố định. 1-4 sao hiện thêm câu hỏi "Điều gì
+// cần thay đổi?" (chọn nhiều từ DB.carEvaluationIssues, danh mục admin tự sửa — xem "🗂️ Quản Lý Danh
+// Mục"); 1-2 sao BẮT BUỘC chọn ít nhất 1 lý do, 3-4 sao không bắt buộc, 5 sao ẩn hẳn câu hỏi. Server luôn
+// tự validate lại độc lập (evaluateCarTrip() ở lib/recordActions.js) — chặn client bị can thiệp gửi dữ
+// liệu sai quy tắc.
+const CAR_EVAL_RATING_LABELS = { 1: 'Không hài lòng', 2: 'Chưa hài lòng', 3: 'Đạt yêu cầu', 4: 'Tốt', 5: 'Rất tốt' };
+let carEvalSelectedRating = 0;
+
+function carEvalStarHtml() {
+  return [1, 2, 3, 4, 5].map(n => `
+    <button type="button" data-op="setCarEvalRating" data-arg0="${n}" class="text-3xl leading-none px-0.5 focus:outline-none" data-car-eval-star="${n}">☆</button>
+  `).join('');
+}
+
+function renderCarEvalStars() {
+  document.querySelectorAll('[data-car-eval-star]').forEach(btn => {
+    const n = Number(btn.getAttribute('data-car-eval-star'));
+    btn.textContent = n <= carEvalSelectedRating ? '★' : '☆';
+    btn.classList.toggle('text-amber-500', n <= carEvalSelectedRating);
+    btn.classList.toggle('text-gray-300', n > carEvalSelectedRating);
+  });
+  const labelEl = document.getElementById('carEvalRatingLabel');
+  if (labelEl) labelEl.textContent = carEvalSelectedRating ? `${carEvalSelectedRating} sao — ${CAR_EVAL_RATING_LABELS[carEvalSelectedRating]}` : 'Chưa chọn';
+  const issuesWrap = document.getElementById('carEvalIssuesWrap');
+  if (issuesWrap) issuesWrap.classList.toggle('hidden', !(carEvalSelectedRating >= 1 && carEvalSelectedRating <= 4));
+  const requiredHint = document.getElementById('carEvalIssuesRequiredHint');
+  if (requiredHint) requiredHint.classList.toggle('hidden', !(carEvalSelectedRating === 1 || carEvalSelectedRating === 2));
+}
+
+function setCarEvalRating(n) {
+  carEvalSelectedRating = Number(n);
+  renderCarEvalStars();
+}
+
 function openEvaluateCarTripModal(id) {
   const c = DB.carRegs.find(x => x.id === id);
   if (!c) return;
+  carEvalSelectedRating = 0;
+  const issuesHtml = (DB.carEvaluationIssues || []).map(issue => `
+    <label class="flex items-center gap-1.5 text-xs py-0.5">
+      <input type="checkbox" value="${escapeHtml(issue)}" data-car-eval-issue class="rounded">
+      <span>${escapeHtml(issue)}</span>
+    </label>
+  `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có danh mục lý do — liên hệ Quản Trị Viên.</p>';
   showConfirmModal({
     title: '⭐ Đánh Giá Chuyến Đăng Ký Xe',
     bodyHTML: `
       <p>Chuyến <b>${escapeHtml(c.code)}</b> — <i>${escapeHtml(c.destination)}</i> đã được lái xe kết thúc.</p>
       <p class="text-xs text-gray-500 mt-1">Số km lái xe báo cáo: <b>${c.driverReportedKm ?? c.actualKm ?? 0} km</b> (${escapeHtml(c.tripEndedAt || '')})</p>
+      <div class="mt-3">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Mức đánh giá chuyến đi <span class="text-red-500">*</span></label>
+        <div>${carEvalStarHtml()}</div>
+        <p id="carEvalRatingLabel" class="text-xs text-gray-600 font-semibold mt-0.5">Chưa chọn</p>
+      </div>
+      <div id="carEvalIssuesWrap" class="hidden mt-3 bg-amber-50 border border-amber-200 rounded p-2">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Điều gì cần thay đổi? <span id="carEvalIssuesRequiredHint" class="hidden text-red-500">(bắt buộc chọn ít nhất 1 mục)</span></label>
+        ${issuesHtml}
+      </div>
       <div class="mt-3">
         <label class="block text-xs font-semibold text-gray-700 mb-1">Số km thực tế (có thể chỉnh lại nếu cần)</label>
         <input type="number" min="0" step="0.1" id="evalCarKmInput" value="${c.actualKm ?? c.driverReportedKm ?? 0}" class="w-full border p-2 rounded text-sm">
@@ -1110,20 +1198,26 @@ function openEvaluateCarTripModal(id) {
     `,
     confirmLabel: 'Xác Nhận Đánh Giá',
     onConfirm: async () => {
+      if (!carEvalSelectedRating) return alert('⛔ Vui lòng chọn mức đánh giá (sao) trước khi xác nhận!');
+      const issues = [...document.querySelectorAll('[data-car-eval-issue]:checked')].map(el => el.value);
+      if ((carEvalSelectedRating === 1 || carEvalSelectedRating === 2) && issues.length === 0) {
+        return alert('⛔ Đánh giá 1-2 sao bắt buộc chọn ít nhất 1 lý do "Điều gì cần thay đổi?"!');
+      }
       const km = parseFloat(document.getElementById('evalCarKmInput')?.value);
       if (!Number.isFinite(km) || km < 0) return alert('⛔ Số km không hợp lệ, vui lòng thử lại!');
       const comment = (document.getElementById('evalCarCommentInput')?.value || '').trim();
       let result;
       try {
-        result = await callRecordAction('carRegs', id, 'evaluate', { km, comment });
+        result = await callRecordAction('carRegs', id, 'evaluate', { km, comment, rating: carEvalSelectedRating, issues });
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const idx = DB.carRegs.findIndex(x => x.id === id);
       if (idx !== -1) DB.carRegs[idx] = result.item;
-      logSystemAction('CAR', 'EVALUATE_TRIP', `Đánh giá chuyến đăng ký xe [${result.item.code}] — ${km}km`, 'SUCCESS', result.item.code);
+      logSystemAction('CAR', 'EVALUATE_TRIP', `Đánh giá chuyến đăng ký xe [${result.item.code}] — ${carEvalSelectedRating} sao, ${km}km`, 'SUCCESS', result.item.code);
       alert('✅ Đã đánh giá! Phiếu đăng ký xe đã hoàn thành.');
       renderCarRegs();
     }
   });
+  renderCarEvalStars();
 }
 
 function deleteCarRegAction(id) {
@@ -1595,9 +1689,11 @@ function renderCarReportTab() {
         <td class="p-1.5">${escapeHtml(c.evaluatedByName || c.evaluatedBy || '')}</td>
         <td class="p-1.5">${escapeHtml(c.evaluatedAt || '')}</td>
         <td class="p-1.5 text-right">${Number(c.actualKm ?? c.km ?? 0).toLocaleString('vi-VN')} km</td>
+        <td class="p-1.5 whitespace-nowrap">${c.evaluationRating ? `<span class="text-amber-500">${'★'.repeat(c.evaluationRating)}${'☆'.repeat(5 - c.evaluationRating)}</span> <span class="text-gray-500">(${escapeHtml(CAR_EVAL_RATING_LABELS[c.evaluationRating] || '')})</span>` : '<span class="text-gray-400 italic">—</span>'}</td>
+        <td class="p-1.5">${(c.evaluationIssues || []).length ? escapeHtml(c.evaluationIssues.join(', ')) : '<span class="text-gray-400 italic">—</span>'}</td>
         <td class="p-1.5">${c.evaluationComment ? escapeHtml(c.evaluationComment) : '<span class="text-gray-400 italic">Chưa có nhận xét</span>'}</td>
       </tr>
-    `).join('') : `<tr><td colspan="6" class="text-center p-3 text-gray-400 italic">Chưa có phiếu nào được đánh giá trong khoảng lọc này.</td></tr>`;
+    `).join('') : `<tr><td colspan="8" class="text-center p-3 text-gray-400 italic">Chưa có phiếu nào được đánh giá trong khoảng lọc này.</td></tr>`;
   }
 
   // Lịch Sử Xác Nhận Của Lái Xe — nhận chuyến (driverConfirmed/driverConfirmedAt) -> kết thúc chuyến

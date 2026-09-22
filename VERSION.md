@@ -1,8 +1,58 @@
 # Phiên bản hiện tại
 
-**23.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.99 (2026-09-22): Đăng Ký Xe — "⭐ Đánh Giá" thêm mức 1-5 sao + câu hỏi "Điều gì cần thay đổi?" (danh mục admin tự sửa)
+
+Theo yêu cầu người dùng: người đăng ký đánh giá chuyến đi bằng 1-5 sao (Không
+hài lòng/Chưa hài lòng/Đạt yêu cầu/Tốt/Rất tốt); 1-4 sao hiện thêm câu hỏi
+"Điều gì cần thay đổi?" (tích chọn nhiều lý do từ danh mục) — 1-2 sao BẮT
+BUỘC chọn ít nhất 1 lý do, 3-4 sao không bắt buộc, 5 sao ẩn câu hỏi. 5 lý do
+gợi ý ban đầu là danh mục ADMIN TỰ SỬA (không hardcode), theo xác nhận của
+người dùng.
+
+- **`server/defaults.js`**: thêm `carEvaluationIssues` (5 lý do mặc định:
+  Thái độ và tác phong lái xe, Đúng giờ, Kỹ năng lái xe và an toàn, Vệ sinh
+  xe, Tình trạng kỹ thuật và tiện nghi xe) — danh mục phẳng thuần, cùng khuôn
+  `carTaxiCompanies`.
+- **`server/lib/recordActions.js`**: `evaluateCarTrip()` nhận thêm tham số
+  `carEvaluationIssues`; hàm mới `validateCarEvaluationRating()` validate độc
+  lập `rating` (bắt buộc, số nguyên 1-5) + `issues` (lọc bỏ giá trị không có
+  trong danh mục, loại trùng, bắt buộc ≥1 khi rating≤2, LUÔN xoá sạch khi
+  rating=5 dù client gửi kèm) — lưu vào `carReg.evaluationRating`/
+  `evaluationIssues`.
+- **`server/routes/records.js`**: route `POST /carRegs/:id/evaluate` đọc
+  thêm `carEvaluationIssues` từ AppData truyền vào `evaluateCarTrip()`.
+- **Wiring danh mục admin** (cùng khuôn `carTaxiCompanies`): `carEvaluationIssues`
+  thêm vào `ADMIN_ONLY_KEYS` (`routes/data.js`), `VALID_CATALOG_KEYS`
+  (`routes/adminCatalog.js`), `CATALOG_HANDLERS` dùng
+  `simpleArrayCatalogHandler()` (`lib/catalogRename.js` — đổi tên KHÔNG
+  cascade vào phiếu đã đánh giá trước đó, giữ nguyên chuỗi cũ làm nhãn lịch
+  sử), `DB.carEvaluationIssues` (`public/js/core.js` `initDatabase()`).
+- **`server/public/js/module-dangkyxe.js`**:
+  - `openEvaluateCarTripModal()` thêm widget 1-5 sao (bấm chọn, nhãn tự đổi
+    theo mức) + checklist "Điều gì cần thay đổi?" (chỉ hiện khi 1-4 sao, có
+    dòng nhắc "bắt buộc" khi 1-2 sao) — validate lại y hệt server trước khi
+    gửi (`callRecordAction('carRegs', id, 'evaluate', {..., rating, issues})`).
+  - `saveCarEvaluationIssue()`/`deleteCarEvaluationIssue()`/
+    `renderCarEvaluationIssueList()`/`renameCarEvaluationIssue()` — quản lý
+    danh mục, mirror `carTaxiCompanies`.
+  - Bảng "Lịch Sử Đánh Giá Chuyến" (Báo Cáo) thêm 2 cột: Mức Đánh Giá (★☆ +
+    nhãn) và Điều Cần Thay Đổi.
+- **`server/public/fragments/systemSection.html`**: panel admin mới "⭐
+  Quản Lý Danh Mục Lý Do Đánh Giá Chuyến Xe" (Quản Lý Danh Mục).
+- **`server/public/js/module-hethong-tabs.js`**: thêm
+  `renderCarEvaluationIssueList()` vào dispatch của sub-tab ADMIN.
+- **Test mới**: `server/tests/test-carreg-evaluation-rating.js` (13 kịch bản
+  — rating bắt buộc, 1-2 sao bắt buộc issues, 3-4 sao không bắt buộc, 5 sao
+  luôn xoá issues, lọc issue không hợp lệ/trùng, sai trạng thái/quyền). Full
+  regression: chạy toàn bộ `server/tests/*.js`.
+- **Deploy**: không có thay đổi `schema.sql`/biến môi trường mới — chỉ cần
+  copy code + `pm2 restart`. Danh mục `carEvaluationIssues` tự seed 5 giá trị
+  mặc định lần đầu server khởi động sau khi cập nhật (cùng cơ chế `defaults.js`
+  DEFAULTS — chỉ áp dụng khi key chưa từng tồn tại).
 
 ## v23.98 (2026-09-22): Cơ Cấu Tổ Chức — sub-tab "🖼️ Sơ Đồ Trực Quan" (sơ đồ khối cấp Phòng Ban, xem + tải PNG/SVG)
 
