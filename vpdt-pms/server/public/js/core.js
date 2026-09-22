@@ -3907,6 +3907,35 @@ async function downloadXlsxFromServer(fileName, sheetName, columns, rows) {
   }
 }
 
+// Bản nhiều sheet của downloadXlsxFromServer() ở trên (10/2026, Ma Trận Phân Quyền: mỗi khối quyền 1
+// sheet thay vì 1 sheet phẳng ~130 cột — xem downloadPermMatrixUsers()/downloadPermMatrixGroups() ở
+// module-admin-permgroups.js). sheets: [{sheetName, columns, rows}, ...] — gửi thẳng lên POST
+// /api/admin/export-xlsx ở dạng {fileName, sheets} (route tự nhận diện, không đụng gì tới các màn xuất
+// Excel 1-sheet khác đang gọi downloadXlsxFromServer() ở trên).
+async function downloadMultiSheetXlsxFromServer(fileName, sheets) {
+  try {
+    const res = await fetch('/api/admin/export-xlsx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, sheets })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || 'Không thể tạo file Excel');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
+  }
+}
+
 // scopeFromForm() — Đọc 1 nhóm quyền theo phòng ban ({all, depts}) từ cặp checkbox ALL + danh sách
 // phòng ban trên form. CHUYỂN từ module-admin.js sang ĐÂY (core.js, luôn nạp EAGER) cùng đợt với
 // downloadXlsxFromServer() ở trên — cùng lý do hạ tầng nạp module theo cụm, dù bản thân hàm này không

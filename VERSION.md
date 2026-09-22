@@ -1,8 +1,58 @@
 # Phiên bản hiện tại
 
-**23.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**23.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v23.94 (2026-09-22): Ma Trận Phân Quyền — mỗi khối quyền 1 sheet Excel riêng
+
+Theo yêu cầu người dùng: file Excel Ma Trận Phân Quyền (Người Dùng/Nhóm
+Phân Quyền) trước đây dồn hết ~130 cột quyền vào 1 sheet phẳng duy nhất, khó
+đọc/khó tìm — nay tách mỗi khối quyền (Tài Liệu, Hợp Đồng & Giấy Phép, Nhân
+Sự, Đăng Ký Xe...) thành 1 sheet riêng trong CÙNG 1 file, dựa trên đúng
+tiền tố "<Tên khối> — ..." đã có sẵn trong `PERM_KEY_VN_LABELS` (không dựng
+thêm bảng ánh xạ mới). Cột Username/HoTen/PhongBan (hoặc TenNhom/MoTa) lặp
+lại ở MỌI sheet để mở riêng sheet nào cũng biết đang sửa quyền của ai.
+
+- **Hạ tầng đọc/ghi Excel nhiều sheet (dùng chung, không riêng Ma Trận)**:
+  - `lib/xlsxSafeRead.js`: thêm `streamAllSheetsRows()` (đọc HẾT mọi sheet
+    thay vì chỉ sheet đầu, cùng 2 lớp chống zip-bomb của `streamFirstSheetRows()`
+    có sẵn).
+  - `lib/adminExport.js`: thêm `buildMultiSheetWorkbook()` (dựng workbook
+    nhiều sheet, tự thay ký tự Excel cấm `\/?*[]:` + cắt 31 ký tự + thêm hậu
+    tố khi trùng tên sheet).
+  - `routes/adminExport.js` — `POST /api/admin/export-xlsx` nhận thêm dạng
+    `{fileName, sheets:[...]}` bên cạnh dạng cũ `{fileName, sheetName,
+    columns, rows}` (KHÔNG đổi hành vi dạng cũ — mọi màn xuất Excel khác
+    trong hệ thống không bị ảnh hưởng).
+- **`lib/permMatrixExcel.js`**: thêm `parseGenericMultiSheetMatrixXlsx()` —
+  đọc hết mọi sheet rồi TỰ GỘP lại thành đúng 1 object phẳng/định danh (nhờ
+  vậy toàn bộ logic diff/áp dụng phía client — `buildPermMatrixRowChanges()`
+  — không cần đổi gì). Phân biệt rõ "cùng định danh ở NHIỀU SHEET khác nhau"
+  (đúng thiết kế, không phải lỗi) với "cùng định danh lặp lại TRONG CÙNG 1
+  SHEET" (lỗi thật, VD dán nhầm trùng dòng — vẫn bị đánh dấu `duplicateInFile`
+  như trước, chặn không cho áp dụng nhầm). Tương thích ngược hoàn toàn: file
+  export từ bản CŨ (1 sheet phẳng) đọc ra kết quả giống hệt hàm cũ
+  `parseGenericMatrixXlsx()` (vẫn giữ nguyên, không xoá).
+- **`module-admin-permgroups.js`**: `downloadPermMatrixUsers()`/
+  `downloadPermMatrixGroups()` viết lại — nhóm cột theo `permMatrixColumnGroup()`
+  (tách từ `PERM_KEY_VN_LABELS`), gọi `downloadMultiSheetXlsxFromServer()`
+  (mới, `core.js`, cạnh `downloadXlsxFromServer()` cũ — không đổi ~10 màn
+  xuất Excel 1-sheet khác đang dùng hàm cũ). Import (`onPermMatrixImportFileChange()`)
+  KHÔNG cần đổi gì — server đã gộp sẵn trước khi trả JSON.
+- Test mới: `tests/test-perm-matrix-multisheet.js` (9 kịch bản server-side:
+  tương thích ngược, gộp đúng cột từ nhiều sheet, phân biệt trùng-trong-sheet
+  vs trùng-khác-sheet, trần số dòng đếm theo định danh không nhân theo số
+  sheet, sanitize tên sheet) + 8 kịch bản mới bổ sung vào
+  `tests/test-perm-matrix-client.js` (client-side, 40/40 pass, gồm sửa lại 1
+  kịch bản cũ theo hàm mới). Full regression 283 file: chỉ 1 lỗi cũ đã biết
+  trước (thiếu file PDF fixture, không liên quan).
+- Cập nhật `Huong-dan-nghiep-vu.md` (mục 6.2) + Hướng Dẫn → Hệ Thống
+  (`sysPermMatrix`, `module-nghiepvu.js`) — sửa luôn 1 câu đã LỖI THỜI ("máy
+  chủ chỉ đọc được sheet đầu tiên") giờ không còn đúng.
+- Không đổi schema SQL/biến môi trường/dependency — chỉ đổi cách xuất/nhập
+  Excel, không đổi ý nghĩa/hiệu lực của bất kỳ quyền nào.
+
 
 ## v23.93 (2026-09-22): Phân Quyền — bảng "1 dòng = 1 phòng ban" thay lưới checkbox cắt tên
 

@@ -137,4 +137,62 @@ async function streamFirstSheetRows(buffer, onRow, options = {}) {
   if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
 }
 
-module.exports = { streamFirstSheetRows, assertDecompressedSizeWithinBudget, MAX_UNCOMPRESSED_BYTES };
+// streamAllSheetsRows(buffer, onRow, options)
+//   Biến thể của streamFirstSheetRows() ở trên, đọc HẾT mọi sheet thay vì chỉ sheet đầu tiên (dùng cho
+//   Ma Trận Phân Quyền đa sheet — mỗi sheet là 1 khối quyền, xem lib/permMatrixExcel.js). Cùng 2 lớp bảo
+//   vệ chống zip bomb (assertDecompressedSizeWithinBudget ở trên, áp dụng 1 LẦN cho toàn bộ archive bất
+//   kể bao nhiêu sheet — không cần nhân thêm ngưỡng theo số sheet vì đây vẫn là tổng dung lượng giải nén
+//   thật của CẢ file) + đọc bằng streaming reader (không nạp cả sheet vào RAM).
+//   onRow(sheetName, cells, rowNumber) — gọi cho từng dòng của MỖI sheet theo đúng thứ tự sheet trong
+//     workbook rồi tới thứ tự dòng trong sheet đó; trả về `false` để DỪNG HẲN việc đọc (mọi sheet còn
+//     lại bị bỏ qua luôn, không riêng sheet hiện tại) — caller tự đếm tổng số dòng/định danh đã thấy để
+//     quyết định lúc nào dừng (xem MAX_MATRIX_IMPORT_ROWS ở lib/permMatrixExcel.js).
+//   options — giống hệt streamFirstSheetRows() (includeEmpty/raw).
+async function streamAllSheetsRows(buffer, onRow, options = {}) {
+  const includeEmpty = !!options.includeEmpty;
+  const raw = !!options.raw;
+
+  await assertDecompressedSizeWithinBudget(buffer);
+
+  const input = Readable.from([buffer]);
+  const reader = new ExcelJS.stream.xlsx.WorkbookReader(input, {
+    worksheets: 'emit',
+    sharedStrings: 'cache',
+    styles: 'cache',
+    hyperlinks: 'ignore',
+    entries: 'ignore'
+  });
+
+  let sawSheet = false;
+  let done = false;
+  try {
+    for await (const worksheet of reader) {
+      if (done) continue; // KHÔNG break — xem chú thích ở streamFirstSheetRows() (dọn file tạm exceljs)
+      sawSheet = true;
+      const sheetName = worksheet.name || `Sheet${worksheet.id || ''}`;
+      let expected = 1;
+      for await (const row of worksheet) {
+        if (includeEmpty) {
+          while (expected < row.number) {
+            if (onRow(sheetName, [], expected++) === false) { done = true; break; }
+          }
+          if (done) break;
+          expected = row.number + 1;
+        } else if (!row.hasValues) {
+          continue;
+        }
+        const cells = [];
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cells.push(cell.value == null ? '' : (raw ? cell.value : String(cell.value)));
+        });
+        if (onRow(sheetName, cells, row.number) === false) { done = true; break; }
+      }
+    }
+  } finally {
+    input.destroy();
+  }
+
+  if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
+}
+
+module.exports = { streamFirstSheetRows, streamAllSheetsRows, assertDecompressedSizeWithinBudget, MAX_UNCOMPRESSED_BYTES };

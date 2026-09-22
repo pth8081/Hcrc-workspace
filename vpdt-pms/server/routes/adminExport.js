@@ -14,8 +14,8 @@ const express = require('express');
 const multer = require('multer');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { buildGenericWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
-const { parseGenericMatrixXlsx } = require('../lib/permMatrixExcel');
+const { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
+const { parseGenericMultiSheetMatrixXlsx } = require('../lib/permMatrixExcel');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -42,15 +42,33 @@ function safeFileName(name) {
   return `${base.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 80) || 'export'}.xlsx`;
 }
 
-// POST /api/admin/export-xlsx
+// POST /api/admin/export-xlsx — nhận DẠNG CŨ {fileName, sheetName, columns, rows} (1 sheet, tuyệt đại đa
+// số màn "Xuất Excel" trong hệ thống) HOẶC DẠNG MỚI {fileName, sheets: [{sheetName, columns, rows}, ...]}
+// (nhiều sheet, hiện chỉ Ma Trận Phân Quyền dùng — mỗi khối quyền 1 sheet, xem
+// downloadPermMatrixUsers()/downloadPermMatrixGroups() ở module-admin-permgroups.js). Không đổi hành vi
+// dạng cũ — chỉ thêm nhánh mới, mọi màn xuất Excel khác (VPP/Ngân Sách/Đào Tạo/Vận Hành...) không bị ảnh
+// hưởng gì.
 router.post('/export-xlsx', async (req, res) => {
   try {
-    const { fileName, sheetName, columns, rows } = req.body || {};
-    if (!Array.isArray(columns) || !columns.length) return res.status(400).json({ error: 'Thiếu danh sách cột (columns)' });
-    if (!Array.isArray(rows)) return res.status(400).json({ error: 'Thiếu dữ liệu (rows)' });
-    if (rows.length > MAX_ROWS) return res.status(400).json({ error: `Quá nhiều dòng dữ liệu (tối đa ${MAX_ROWS})` });
+    const { fileName, sheetName, columns, rows, sheets } = req.body || {};
+    let wb;
+    if (Array.isArray(sheets)) {
+      if (!sheets.length) return res.status(400).json({ error: 'Thiếu danh sách sheet (sheets)' });
+      let totalRows = 0;
+      for (const s of sheets) {
+        if (!Array.isArray(s?.columns) || !s.columns.length) return res.status(400).json({ error: `Sheet "${s?.sheetName || ''}" thiếu danh sách cột (columns)` });
+        if (!Array.isArray(s?.rows)) return res.status(400).json({ error: `Sheet "${s?.sheetName || ''}" thiếu dữ liệu (rows)` });
+        totalRows += s.rows.length;
+      }
+      if (totalRows > MAX_ROWS) return res.status(400).json({ error: `Quá nhiều dòng dữ liệu (tối đa ${MAX_ROWS})` });
+      wb = buildMultiSheetWorkbook(sheets);
+    } else {
+      if (!Array.isArray(columns) || !columns.length) return res.status(400).json({ error: 'Thiếu danh sách cột (columns)' });
+      if (!Array.isArray(rows)) return res.status(400).json({ error: 'Thiếu dữ liệu (rows)' });
+      if (rows.length > MAX_ROWS) return res.status(400).json({ error: `Quá nhiều dòng dữ liệu (tối đa ${MAX_ROWS})` });
+      wb = buildGenericWorkbook(sheetName, columns, rows);
+    }
 
-    const wb = buildGenericWorkbook(sheetName, columns, rows);
     const outName = safeFileName(fileName);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${outName}"`);
@@ -105,6 +123,10 @@ router.post('/users/import-xlsx', (req, res) => {
 // cùng 2 pha "đọc trước - ghi sau" như POST /api/admin/users/import-xlsx ở trên. Chỉ Quản Trị Viên —
 // đọc/ghi hàng loạt QUYỀN của người khác là thao tác nhạy cảm nhất trong toàn hệ thống, không mở cho
 // bất kỳ quyền admin-grant nào khác (kể cả reportViewAll/nghiepVuViewAll).
+//
+// parseGenericMultiSheetMatrixXlsx() (thay parseGenericMatrixXlsx() sheet-đơn cũ, 10/2026) đọc HẾT mọi
+// sheet trong file (mỗi khối quyền giờ 1 sheet riêng khi xuất, xem lib/permMatrixExcel.js) rồi tự GỘP lại
+// thành đúng 1 object phẳng/người-nhóm — file cũ (1 sheet duy nhất) vẫn đọc đúng, không cần phân biệt.
 router.post('/perm-matrix/import-xlsx', (req, res) => {
   if (!req.freshUser.perms?.admin) {
     return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được import Ma Trận Phân Quyền' });
@@ -121,7 +143,7 @@ router.post('/perm-matrix/import-xlsx', (req, res) => {
       const check = await verifyFileSignature(req.file.buffer, '.xlsx');
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
-      const rows = await parseGenericMatrixXlsx(req.file.buffer);
+      const rows = await parseGenericMultiSheetMatrixXlsx(req.file.buffer);
       res.json({ rows });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/admin/perm-matrix/import-xlsx');

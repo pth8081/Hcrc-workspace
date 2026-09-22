@@ -3588,7 +3588,10 @@ tương ứng (quyền hiếm/đã lỗi thời không còn checkbox trong cây 
 xuất được, chỉ hiện dạng kỹ thuật cũ `Q_<tên quyền>` (VD `Q_operationEstimateCreate`)
 — import vẫn đọc được cả 2 dạng tên cột (tiếng Việt lẫn `Q_<tên quyền>` kỹ
 thuật của các bản cũ hơn), không cần lo file cũ đã tải trước đây không nhập
-lại được.
+lại được. **Mỗi khối quyền = 1 sheet riêng trong file** (10/2026) — thay vì
+dồn hết ~130 cột vào 1 sheet phẳng cho dễ đọc/dễ sửa (VD sheet "Tài Liệu",
+sheet "Hợp Đồng & Giấy Phép", sheet "Nhân Sự"...); quyền chưa có nhãn tiếng
+Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
 
 - **Cột ma trận sinh ĐỘNG theo dữ liệu thật** (không phải danh sách quyền
   hard-code) — quyền mới thêm vào hệ thống sau này tự động xuất hiện thành
@@ -3602,9 +3605,15 @@ lại được.
   tay ở cây phân quyền như trước; riêng phần "Toàn Bộ Phòng Ban" (`all`) của
   quyền phạm vi vẫn xuất được (VD cột "Đăng Ký Xe — Xem" ứng với `carView.all`).
 - **2 file Excel RIÊNG** — "Xuất Excel Người Dùng" (1 dòng = 1 tài khoản) và
-  "Xuất Excel Nhóm Phân Quyền" (1 dòng = 1 nhóm) — vì máy chủ chỉ đọc được
-  sheet ĐẦU TIÊN của file tải lên (giới hạn an toàn dùng chung mọi luồng
-  import Excel), không gộp 2 khái niệm khác nhau vào 1 file.
+  "Xuất Excel Nhóm Phân Quyền" (1 dòng = 1 nhóm) — 2 khái niệm khác nhau,
+  không gộp vào 1 file dù máy chủ đã đọc được nhiều sheet trong CÙNG 1 file
+  (từng chỉ đọc sheet đầu tiên, đã nâng cấp đọc hết mọi sheet để hỗ trợ tách
+  1 sheet/khối quyền ở trên). Cột Username/TenNhom lặp lại ở MỌI sheet để mở
+  riêng sheet nào cũng biết đang sửa quyền của ai — hệ thống tự GỘP lại
+  thành đúng 1 người/nhóm khi nhập lại, không cần sửa cùng lúc cả file. Chỉ
+  báo lỗi "trùng dòng" khi CÙNG 1 Username/TenNhom xuất hiện từ 2 DÒNG trở
+  lên TRONG CHÍNH 1 SHEET (VD dán nhầm trùng dòng) — xuất hiện ở nhiều sheet
+  khác nhau là bình thường, không bị coi là lỗi.
 - **Cột `NhomPhanQuyen`** (chỉ ở file Người Dùng) — đổi danh sách nhóm phân
   quyền của 1 người (nhiều nhóm cách nhau bằng dấu `;`); đổi nhóm qua cột
   này sẽ **tự động kéo theo đúng quyền nền của nhóm mới** (hợp nhất theo

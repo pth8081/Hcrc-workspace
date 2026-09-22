@@ -345,11 +345,12 @@ async function scenario(name, fn) {
         { id: 2, username: 'nv.b', name: 'Nhân Viên B', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       let captured = null;
-      const orig = window.downloadXlsxFromServer;
-      window.downloadXlsxFromServer = (fileName, sheetName, columns) => { captured = { fileName, sheetName, columns }; };
-      try { downloadPermMatrixUsers(); } finally { window.downloadXlsxFromServer = orig; }
-      const adminCol = captured.columns.find(c => c.key === 'Q_admin');
-      const contractApproveCol = captured.columns.find(c => c.key === 'Q_contractApprove');
+      const orig = window.downloadMultiSheetXlsxFromServer;
+      window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { captured = { fileName, sheets }; };
+      try { downloadPermMatrixUsers(); } finally { window.downloadMultiSheetXlsxFromServer = orig; }
+      const allColumns = captured.sheets.flatMap(s => s.columns);
+      const adminCol = allColumns.find(c => c.key === 'Q_admin');
+      const contractApproveCol = allColumns.find(c => c.key === 'Q_contractApprove');
       return {
         adminHeader: adminCol && adminCol.header,
         contractApproveHeader: contractApproveCol && contractApproveCol.header,
@@ -359,6 +360,80 @@ async function scenario(name, fn) {
       r.adminHeader && r.adminHeader !== 'Q_admin', JSON.stringify(r));
     record('(f2) cột Q_contractApprove xuất ra header tiếng Việt (chứa "Duyệt hợp đồng")',
       r.contractApproveHeader && r.contractApproveHeader.includes('Duyệt hợp đồng'), JSON.stringify(r));
+  });
+
+  // ===== (g) Ma Trận nhiều sheet (1 khối quyền = 1 sheet), đợt "mỗi module 1 sheet" 10/2026 =====
+  await scenario('(g) downloadPermMatrixUsers() tách thành nhiều sheet theo khối quyền (permMatrixColumnGroup)', async () => {
+    const r = await page.evaluate(async () => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'admin', name: 'Admin', dept: 'IT', perms: { admin: true, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.b', name: 'Nhân Viên B', dept: 'Kế Toán', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      let captured = null;
+      const orig = window.downloadMultiSheetXlsxFromServer;
+      window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { captured = { fileName, sheets }; };
+      try { downloadPermMatrixUsers(); } finally { window.downloadMultiSheetXlsxFromServer = orig; }
+      const sysSheet = captured.sheets.find(s => s.columns.some(c => c.key === 'Q_admin'));
+      const contractSheet = captured.sheets.find(s => s.columns.some(c => c.key === 'Q_contractApprove'));
+      return {
+        sheetCount: captured.sheets.length,
+        sameSheet: sysSheet === contractSheet, // admin (Hệ Thống & Chung) và contractApprove (Hợp Đồng & Giấy Phép) PHẢI khác sheet
+        sysSheetName: sysSheet && sysSheet.sheetName,
+        contractSheetName: contractSheet && contractSheet.sheetName,
+        sysSheetHasUsernameCol: sysSheet && sysSheet.columns.some(c => c.key === 'Username'),
+        contractSheetHasUsernameCol: contractSheet && contractSheet.columns.some(c => c.key === 'Username'),
+        sysSheetOnlyHasItsOwnPermCol: sysSheet && !sysSheet.columns.some(c => c.key === 'Q_contractApprove'),
+        sysSheetRowCount: sysSheet && sysSheet.rows.length,
+        sysSheetUsernames: sysSheet && sysSheet.rows.map(r => r.Username),
+      };
+    });
+    record('(g) tách ra nhiều sheet (không còn 1 sheet phẳng duy nhất)', r.sheetCount > 1, JSON.stringify(r));
+    record('(g) admin và contractApprove nằm ở 2 sheet KHÁC NHAU (đúng khối quyền riêng)', r.sysSheetName && !r.sameSheet, JSON.stringify(r));
+    record('(g) sheet "Hệ Thống & Chung" đúng tên khối lấy từ PERM_KEY_VN_LABELS', r.sysSheetName === 'Hệ Thống & Chung', JSON.stringify(r));
+    record('(g) sheet "Hợp Đồng & Giấy Phép" đúng tên khối', r.contractSheetName === 'Hợp Đồng & Giấy Phép', JSON.stringify(r));
+    record('(g) cột Username LẶP LẠI ở cả 2 sheet (theo yêu cầu người dùng)', r.sysSheetHasUsernameCol && r.contractSheetHasUsernameCol, JSON.stringify(r));
+    record('(g) sheet "Hệ Thống & Chung" KHÔNG lẫn cột quyền của khối khác (Q_contractApprove)', r.sysSheetOnlyHasItsOwnPermCol, JSON.stringify(r));
+    record('(g) mỗi sheet vẫn có đủ 2 dòng (2 user) với đúng Username', r.sysSheetRowCount === 2 && JSON.stringify(r.sysSheetUsernames) === JSON.stringify(['admin', 'nv.b']), JSON.stringify(r));
+  });
+
+  await scenario('(g2) permMatrixColumnGroup(): quyền chưa có nhãn tiếng Việt rơi vào sheet "Khác (chưa có nhãn)"', async () => {
+    const r = await page.evaluate(() => permMatrixColumnGroup('khoaQuyenBiaDatKhongTonTai123'));
+    record('(g2) khoá không có nhãn -> nhóm "Khác (chưa có nhãn)"', r === 'Khác (chưa có nhãn)', JSON.stringify(r));
+  });
+
+  // ===== (h) Import file đa sheet: server gộp lại đúng 1 dòng/định danh, client không cần đổi gì =====
+  await scenario('(h) onPermMatrixImportFileChange() nhận rows đã gộp từ nhiều sheet (server-side), vẫn build diff đúng như file 1-sheet cũ', async () => {
+    const r = await page.evaluate(async () => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'nv.c', name: 'Nhân Viên C', dept: 'IT', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      // Mô phỏng ĐÚNG những gì server (parseGenericMultiSheetMatrixXlsx) trả về sau khi gộp nhiều sheet
+      // lại: 1 object phẳng/định danh, có cả 2 cột quyền dù chúng thuộc 2 sheet khác nhau lúc xuất.
+      const mergedRowFromServer = {
+        Username: 'nv.c', HoTen: 'Nhân Viên C', PhongBan: 'IT', NhomPhanQuyen: '', BaoCao_MucBoSung: '',
+        [permMatrixColumnHeader('admin')]: 'TRUE',
+        [permMatrixColumnHeader('contractApprove')]: 'TRUE',
+        duplicateInFile: false, duplicateExisting: false,
+      };
+      const origFetch = window.fetch;
+      window.fetch = async () => ({ status: 200, ok: true, json: async () => ({ rows: [mergedRowFromServer] }) });
+      try {
+        await onPermMatrixImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } }, 'users');
+      } finally { window.fetch = origFetch; }
+      const item = permMatrixImportRows.find(it => it.identifier === 'nv.c');
+      return {
+        found: item ? item.found : null,
+        changeCount: item && item.diff ? item.diff.changes.length : null,
+        newAdmin: item && item.diff ? item.diff.newPerms.admin : null,
+        newContractApprove: item && item.diff ? item.diff.newPerms.contractApprove : null,
+      };
+    });
+    record('(h) tìm đúng user theo Username dù dữ liệu đến từ nhiều sheet gộp lại', r.found === true, JSON.stringify(r));
+    record('(h) phát hiện đủ 2 thay đổi (admin + contractApprove, dù ở 2 sheet khác nhau lúc xuất)', r.changeCount === 2, JSON.stringify(r));
+    record('(h) newPerms.admin=true, newPerms.contractApprove=true (áp đúng cả 2 cột đến từ 2 "sheet" khác nhau)',
+      r.newAdmin === true && r.newContractApprove === true, JSON.stringify(r));
   });
 
   await browser.close();

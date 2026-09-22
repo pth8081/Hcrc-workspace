@@ -50,6 +50,40 @@ function buildGenericWorkbook(sheetName, columns, rows) {
   return wb;
 }
 
+// Excel cấm 7 ký tự này trong tên sheet: \ / ? * [ ] : — VD tên khối quyền thật "Văn Phòng (Mua/Sửa)"
+// (PERM_KEY_VN_LABELS, module-admin-permgroups.js) có dấu "/" sẽ khiến addWorksheet() ném lỗi nếu không
+// thay thế trước.
+const SHEET_NAME_FORBIDDEN_CHARS_RE = /[\\/?*[\]:]/g;
+function sanitizeSheetNameBase(name) {
+  return String(name || 'Sheet1').replace(SHEET_NAME_FORBIDDEN_CHARS_RE, '-').trim() || 'Sheet1';
+}
+
+// buildMultiSheetWorkbook(sheets) — bản nhiều sheet của buildGenericWorkbook() ở trên (10/2026, Ma Trận
+// Phân Quyền: mỗi khối quyền 1 sheet thay vì 1 sheet phẳng ~130 cột — xem module-admin-permgroups.js).
+// sheets: [{sheetName, columns, rows}, ...], mỗi phần tử ĐÚNG khuôn tham số của buildGenericWorkbook().
+// Excel giới hạn tên sheet 31 ký tự, cấm 7 ký tự ở trên, VÀ không cho trùng tên trong cùng workbook —
+// thay ký tự cấm, cắt ngắn, rồi tự thêm hậu tố số nếu vẫn trùng (hiếm khi xảy ra vì tên khối quyền thật
+// đủ khác biệt, nhưng vẫn phòng hờ).
+function buildMultiSheetWorkbook(sheets) {
+  const wb = new ExcelJS.Workbook();
+  const usedNames = new Set();
+  sheets.forEach(({ sheetName, columns, rows }) => {
+    const base0 = sanitizeSheetNameBase(sheetName);
+    let name = base0.slice(0, 31);
+    let suffix = 2;
+    while (usedNames.has(name)) {
+      const base = base0.slice(0, 31 - String(suffix).length - 1);
+      name = `${base}_${suffix++}`;
+    }
+    usedNames.add(name);
+    const sheet = wb.addWorksheet(name);
+    sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18 }));
+    styleHeaderRow(sheet.getRow(1));
+    rows.forEach(r => sheet.addRow(sanitizeRowForFormulaInjection(r)));
+  });
+  return wb;
+}
+
 // ===== Import Người dùng (.xlsx) =====
 // Cột cố định theo ĐÚNG thứ tự file mẫu do chính hệ thống sinh ra (xem downloadUserTemplate() ở
 // index.html) — khác lib/vppCatalog.js (phải dò tiêu đề linh hoạt vì file do từng phòng ban tự làm),
@@ -134,4 +168,4 @@ async function parseUsersImportXlsx(buffer) {
 // trên; các hàm dựng workbook RIÊNG của module khác (lib/employeeProfileImport.js, lib/vppExport.js) tự
 // gọi sheet.addRow() trực tiếp, không đi qua buildGenericWorkbook() nên KHÔNG được bảo vệ — export ra để
 // những nơi đó gọi lại đúng 1 luật chung thay vì viết trùng.
-module.exports = { buildGenericWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection };
+module.exports = { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection };

@@ -1189,7 +1189,7 @@ const SYSTEM_DOCS = {
   },
   sysPermMatrix: {
     icon: '🧮', title: 'Ma Trận Phân Quyền', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Từ 10/2026 — xuất/nhập hàng loạt qua Excel toàn bộ quyền dạng Có/Không (bật/tắt) của Người Dùng hoặc Nhóm Phân Quyền, thay vì phải tick tay từng ô cho từng người. Cột của file Excel tự sinh động theo đúng quyền đang có trong hệ thống (không lệch với cây quyền ở mục 🔑 Phân Quyền khi có quyền mới về sau), đặt tên TIẾNG VIỆT đúng như nhãn checkbox thật cho dễ đọc.',
+    desc: 'Từ 10/2026 — xuất/nhập hàng loạt qua Excel toàn bộ quyền dạng Có/Không (bật/tắt) của Người Dùng hoặc Nhóm Phân Quyền, thay vì phải tick tay từng ô cho từng người. Cột của file Excel tự sinh động theo đúng quyền đang có trong hệ thống (không lệch với cây quyền ở mục 🔑 Phân Quyền khi có quyền mới về sau), đặt tên TIẾNG VIỆT đúng như nhãn checkbox thật cho dễ đọc. Mỗi file có NHIỀU SHEET (mỗi khối quyền — Tài Liệu, Hợp Đồng, Nhân Sự... — 1 sheet riêng, KHÔNG còn dồn hết ~130 cột vào 1 sheet phẳng), cột Username/HoTen/PhongBan (hoặc TenNhom/MoTa) lặp lại ở mọi sheet để mở riêng sheet nào cũng biết đang xem quyền của ai.',
     flow: { ariaLabel: 'Quy trình xuất-sửa-nhập Ma Trận Phân Quyền', chain: [
       { label: 'Xuất Excel', sub: 'Người Dùng hoặc Nhóm Phân Quyền' },
       { label: 'Sửa hàng loạt trên Excel', sub: 'Đổi TRUE/FALSE ở cột tiếng Việt' },
@@ -1208,7 +1208,8 @@ const SYSTEM_DOCS = {
       { label: 'Nhập theo Nhóm sẽ cập nhật NGAY cho mọi thành viên', text: 'sửa quyền 1 Nhóm Phân Quyền qua ma trận cũng áp dụng ngay cho TẤT CẢ người đang thuộc nhóm đó (giống hệt khi sửa tay ở khối "🗂️ Nhóm Phân Quyền"), không phải chỉ ảnh hưởng riêng bản ghi nhóm.' },
       { label: 'Tài khoản "admin" gốc không đổi được qua đây', text: 'dòng Username="admin" trong file Người Dùng bị bỏ qua khi áp dụng — tài khoản này luôn bị hệ thống ép giữ toàn quyền, xem thêm mục 🔑 Phân Quyền.' },
     ], right: [
-      { label: 'Vì sao xuất 2 file riêng, không gộp 1 file 2 sheet', text: 'máy chủ chỉ đọc được sheet ĐẦU TIÊN của mọi file Excel tải lên (giới hạn an toàn dùng chung cho mọi luồng import Excel trong hệ thống, chống file có nhiều sheet ẩn/dữ liệu giả) — tách 2 file cũng rõ ràng hơn vì "1 dòng = 1 người" và "1 dòng = 1 nhóm" là 2 khái niệm khác hẳn nhau.' },
+      { label: 'Vì sao Người Dùng và Nhóm Phân Quyền vẫn là 2 file riêng', text: 'dù máy chủ giờ đã đọc được nhiều sheet trong 1 file, Người Dùng và Nhóm Phân Quyền vẫn tách 2 file .xlsx riêng vì là 2 khái niệm khác hẳn nhau ("1 dòng = 1 người" và "1 dòng = 1 nhóm") — chỉ các khối quyền BÊN TRONG cùng 1 loại (Tài Liệu, Hợp Đồng, Nhân Sự...) mới gộp chung 1 file, mỗi khối 1 sheet.' },
+      { label: 'Sửa nhầm 2 sheet khác nhau cho cùng 1 người/nhóm', text: 'cột Username/TenNhom xuất hiện lại ở MỌI sheet (đúng thiết kế) — hệ thống tự gộp lại khi import, KHÔNG coi là trùng lặp lỗi. Chỉ báo lỗi trùng khi CÙNG 1 Username/TenNhom xuất hiện từ 2 DÒNG trở lên TRONG CHÍNH 1 SHEET (VD dán nhầm trùng dòng).' },
       { label: 'Cột "BaoCao_MucBoSung"', text: 'ứng với các tab Báo Cáo được mở THÊM ngoài quyền vận hành thông thường (VD người không có quyền Vận Hành nhưng vẫn cần xem tab Báo Cáo Vận Hành) — gõ đúng danh sách tab cách nhau bằng dấu ";", để trống nghĩa là không mở thêm tab nào.' },
     ] },
   },

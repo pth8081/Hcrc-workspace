@@ -488,50 +488,87 @@ function collectPermMatrixColumns(permsList) {
   return [...seenBoolean].filter(k => !seenNonBoolean.has(k)).sort();
 }
 
+// Tên sheet cho quyền chưa có nhãn tiếng Việt (vẫn hiện cột dạng Q_<khoá> cũ, xem permMatrixColumnHeader())
+// — gom hết vào 1 sheet riêng thay vì lỗi/rải rác khi không tách được theo tiền tố " — ".
+const PERM_MATRIX_UNLABELED_SHEET = 'Khác (chưa có nhãn)';
+
+// permMatrixColumnGroup(key) — suy ra tên "khối quyền" (= tên sheet khi xuất, 10/2026) từ đúng phần đầu
+// nhãn tiếng Việt (PERM_KEY_VN_LABELS, khuôn "<Tên khối> — <mô tả>" áp dụng nhất quán cho toàn bộ quyền
+// đã có nhãn) — tái dùng thẳng bảng nhãn có sẵn, KHÔNG dựng thêm 1 bảng ánh xạ khoá->khối riêng (sẽ lệch
+// dần với cây quyền thật y hệt lý do PERM_KEY_VN_LABELS được trích xuất bằng script thay vì gõ tay).
+function permMatrixColumnGroup(key) {
+  const label = PERM_KEY_VN_LABELS[key];
+  if (!label) return PERM_MATRIX_UNLABELED_SHEET;
+  const sepIdx = label.indexOf(' — ');
+  return sepIdx === -1 ? PERM_MATRIX_UNLABELED_SHEET : label.slice(0, sepIdx);
+}
+
+// buildPermMatrixSheets(cols, identityColumns, entities, identityRowFn, entityPerms) — dùng chung cho cả
+// downloadPermMatrixUsers()/downloadPermMatrixGroups(): tách `cols` (danh sách khoá quyền boolean) thành
+// nhiều sheet theo permMatrixColumnGroup(), mỗi sheet = identityColumns (LẶP LẠI ở MỌI sheet theo yêu cầu
+// người dùng — mở riêng sheet nào cũng biết đang xem quyền của ai) + đúng phần cột quyền của khối đó.
+function buildPermMatrixSheets(cols, identityColumns, entities, identityRowFn, entityPerms) {
+  const groups = new Map(); // tên khối -> mảng khoá quyền thuộc khối đó
+  cols.forEach(c => {
+    const g = permMatrixColumnGroup(c);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(c);
+  });
+  // Sắp xếp ổn định theo tên khối (bảng chữ cái), đẩy sheet "Khác (chưa có nhãn)" xuống cuối cùng.
+  const groupNames = [...groups.keys()].sort((a, b) => {
+    if (a === PERM_MATRIX_UNLABELED_SHEET) return 1;
+    if (b === PERM_MATRIX_UNLABELED_SHEET) return -1;
+    return a.localeCompare(b, 'vi');
+  });
+
+  const flatByEntity = entities.map(e => flattenPermsForMatrix(entityPerms(e) || {}));
+
+  return groupNames.map(groupName => {
+    const groupCols = groups.get(groupName);
+    const columns = [...identityColumns, ...groupCols.map(c => ({ header: permMatrixColumnHeader(c), key: PERM_MATRIX_COL_PREFIX + c, width: 24 }))];
+    const rows = entities.map((e, idx) => {
+      const row = identityRowFn(e);
+      groupCols.forEach(c => { row[PERM_MATRIX_COL_PREFIX + c] = flatByEntity[idx][c] === true ? 'TRUE' : 'FALSE'; });
+      return row;
+    });
+    return { sheetName: groupName, columns, rows };
+  });
+}
+
 function downloadPermMatrixUsers() {
   const cols = collectPermMatrixColumns(DB.users.map(u => u.perms || {}));
-  const columns = [
+  const identityColumns = [
     { header: 'Username', key: 'Username', width: 16 },
     { header: 'HoTen', key: 'HoTen', width: 22 },
     { header: 'PhongBan', key: 'PhongBan', width: 20 },
     { header: 'NhomPhanQuyen', key: 'NhomPhanQuyen', width: 26 },
-    { header: 'BaoCao_MucBoSung', key: 'BaoCao_MucBoSung', width: 26 },
-    ...cols.map(c => ({ header: permMatrixColumnHeader(c), key: PERM_MATRIX_COL_PREFIX + c, width: 24 }))
+    { header: 'BaoCao_MucBoSung', key: 'BaoCao_MucBoSung', width: 26 }
   ];
-  const rows = DB.users.map(u => {
-    const flat = flattenPermsForMatrix(u.perms || {});
-    const row = {
-      Username: u.username,
-      HoTen: u.name || '',
-      PhongBan: u.dept || '',
-      NhomPhanQuyen: (u.groupIds || []).map(gid => DB.permGroups.find(g => g.id === gid)?.name).filter(Boolean).join(PERM_MATRIX_MULTI_SEP),
-      BaoCao_MucBoSung: (u.reportExtraKeys || []).join(PERM_MATRIX_MULTI_SEP)
-    };
-    cols.forEach(c => { row[PERM_MATRIX_COL_PREFIX + c] = flat[c] === true ? 'TRUE' : 'FALSE'; });
-    return row;
+  const identityRow = (u) => ({
+    Username: u.username,
+    HoTen: u.name || '',
+    PhongBan: u.dept || '',
+    NhomPhanQuyen: (u.groupIds || []).map(gid => DB.permGroups.find(g => g.id === gid)?.name).filter(Boolean).join(PERM_MATRIX_MULTI_SEP),
+    BaoCao_MucBoSung: (u.reportExtraKeys || []).join(PERM_MATRIX_MULTI_SEP)
   });
-  downloadXlsxFromServer('ma_tran_phan_quyen_nguoi_dung.xlsx', 'Người Dùng', columns, rows);
+  const sheets = buildPermMatrixSheets(cols, identityColumns, DB.users, identityRow, u => u.perms);
+  downloadMultiSheetXlsxFromServer('ma_tran_phan_quyen_nguoi_dung.xlsx', sheets);
 }
 
 function downloadPermMatrixGroups() {
   const cols = collectPermMatrixColumns(DB.permGroups.map(g => g.perms || {}));
-  const columns = [
+  const identityColumns = [
     { header: 'TenNhom', key: 'TenNhom', width: 22 },
     { header: 'MoTa', key: 'MoTa', width: 26 },
-    { header: 'BaoCao_MucBoSung', key: 'BaoCao_MucBoSung', width: 26 },
-    ...cols.map(c => ({ header: permMatrixColumnHeader(c), key: PERM_MATRIX_COL_PREFIX + c, width: 24 }))
+    { header: 'BaoCao_MucBoSung', key: 'BaoCao_MucBoSung', width: 26 }
   ];
-  const rows = DB.permGroups.map(g => {
-    const flat = flattenPermsForMatrix(g.perms || {});
-    const row = {
-      TenNhom: g.name,
-      MoTa: g.description || '',
-      BaoCao_MucBoSung: (g.reportExtraKeys || []).join(PERM_MATRIX_MULTI_SEP)
-    };
-    cols.forEach(c => { row[PERM_MATRIX_COL_PREFIX + c] = flat[c] === true ? 'TRUE' : 'FALSE'; });
-    return row;
+  const identityRow = (g) => ({
+    TenNhom: g.name,
+    MoTa: g.description || '',
+    BaoCao_MucBoSung: (g.reportExtraKeys || []).join(PERM_MATRIX_MULTI_SEP)
   });
-  downloadXlsxFromServer('ma_tran_phan_quyen_nhom.xlsx', 'Nhóm Phân Quyền', columns, rows);
+  const sheets = buildPermMatrixSheets(cols, identityColumns, DB.permGroups, identityRow, g => g.perms);
+  downloadMultiSheetXlsxFromServer('ma_tran_phan_quyen_nhom.xlsx', sheets);
 }
 
 // So sánh 1 dòng Excel đã đọc được (row, {tênCột: chuỗi}) với perms/groupIds/reportExtraKeys HIỆN TẠI
