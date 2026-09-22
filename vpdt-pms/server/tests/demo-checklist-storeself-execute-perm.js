@@ -1,7 +1,7 @@
 // server/tests/demo-checklist-storeself-execute-perm.js
 //
 // DEMO thật (người dùng chủ động yêu cầu: "Bạn gửi ảnh demo trước khi làm nhé" / "Bạn demo lại phân
-// quyền checklist đi") cho quyền MỚI "checklistStoreSelfExecute" (v23.103, xem VERSION.md) — theo đúng
+// quyền checklist đi") cho quyền MỚI "checklistStoreSelfExecute" (v24.0, xem VERSION.md) — theo đúng
 // yêu cầu: "quyền Đánh giá checklist để tôi gán cho ai thì người đó vào được đánh giá và chỉ sử dụng
 // được checklist câu hỏi, loại trừ ai không có quyền thì không vào được tab checklist".
 //

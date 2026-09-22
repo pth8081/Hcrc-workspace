@@ -190,14 +190,20 @@ version DUY NHẤT client đọc (badge góc màn hình + `/api/health`, xem
 Nếu lỡ quên ở 1-2 lần merge trước, bump bắt kịp luôn (cộng dồn số lần đã bỏ
 lỡ) ở lần merge kế tiếp thay vì bỏ qua.
 
-**Định dạng version (từ v2.0 trở đi, KHÔNG còn semver 3 phần):** chỉ 2 số
-`MAJOR.MINOR` (VD `"2.0"`, `"2.1"`... không có số thứ 3 kiểu `.0` ở cuối).
-MINOR chỉ chạy từ 0 đến 9 — mỗi lần merge tăng MINOR lên 1 (`2.0`→`2.1`→...→
-`2.9`), và lần merge NGAY SAU khi đang ở `X.9` thì tăng MAJOR lên 1 và reset
-MINOR về 0 (`2.9`→`3.0`→`3.1`...). Không phân biệt patch/minor theo mức độ
-thay đổi nữa — mọi lần merge (dù fix nhỏ hay tính năng lớn) đều tăng đúng 1
-bậc theo quy tắc này. Version trước v2.0 (`1.75.0`...`1.102.0`, kiểu semver 3
-phần cũ) đã ngừng dùng — không lùi lại đổi các bản ghi lịch sử cũ.
+**Định dạng version (từ v2.0 trở đi, KHÔNG còn semver 3 phần):** LUÔN đúng 2
+số `MAJOR.MINOR`, MỖI số tối đa 2 CHỮ SỐ (`00`-`99`, hiển thị không có số 0
+đệm ở đầu — VD `"2.0"`, `"23.9"`, `"23.99"`). Mỗi lần merge tăng MINOR lên 1
+(`23.0`→`23.1`→...→`23.99`), và lần merge NGAY SAU khi MINOR đã ở `99` thì
+tăng MAJOR lên 1 và reset MINOR về 0 (`23.99`→`24.0`→`24.1`...) — **MINOR
+KHÔNG BAO GIỜ được sang 3 chữ số** (không có `.100`, `.101`...). Không phân
+biệt patch/minor theo mức độ thay đổi nữa — mọi lần merge (dù fix nhỏ hay
+tính năng lớn) đều tăng đúng 1 bậc theo quy tắc này. Version trước v2.0
+(`1.75.0`...`1.102.0`, kiểu semver 3 phần cũ) đã ngừng dùng — không lùi lại
+đổi các bản ghi lịch sử cũ. **Lưu ý (9/2026)**: chuỗi merge `23.90` đến
+`23.102` đã lỡ để MINOR vượt quá 99 (`.100`-`.102`) do đọc nhầm quy tắc —
+KHÔNG lùi lại đổi các bản ghi đó (đã merge/lên VERSION.md), nhưng từ lần
+merge kế tiếp PHẢI cuộn sang MAJOR mới (`24.0`) để quay lại đúng khuôn 2 chữ
+số, không tiếp tục đếm `.103`, `.104`...
 
 ## Ô tìm-kiếm-gõ-chọn (searchable picker): KHÔNG dùng `<input list>`+`<datalist>` native
 

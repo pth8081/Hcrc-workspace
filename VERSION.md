@@ -1,10 +1,20 @@
 # Phiên bản hiện tại
 
-**23.103** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## v23.103 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "✅ Đánh Giá Checklist (Tự Đánh Giá)"
+## v24.0 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "✅ Đánh Giá Checklist (Tự Đánh Giá)" + sửa lại quy tắc đánh version
+
+**Sửa quy tắc đánh version**: chuỗi merge trước (`23.90`→...→`23.102`) đã lỡ
+để MINOR vượt quá 2 chữ số (`.100`-`.102`) do đọc nhầm quy tắc — người dùng
+nhắc lại đúng quy tắc gốc: `MAJOR.MINOR`, MỖI số tối đa 2 chữ số. KHÔNG lùi
+lại đổi các bản ghi `23.100`-`23.102` đã merge/lên VERSION.md, nhưng từ đợt
+merge này cuộn sang MAJOR mới (`24.0`) để quay lại đúng khuôn, không tiếp
+tục đếm `23.103`. Đã sửa lại văn bản quy tắc trong `CLAUDE.md` cho rõ ràng
+hơn (nêu tường minh giới hạn 2 chữ số, không chỉ nói "0 đến 9" dễ hiểu nhầm).
+
+---
 
 Theo yêu cầu người dùng: "quyền Đánh giá checklist để tôi gán cho ai thì người
 đó vào được đánh giá và chỉ sử dụng được checklist câu hỏi, loại trừ ai không
