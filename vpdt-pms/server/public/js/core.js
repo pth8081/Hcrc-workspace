@@ -3531,6 +3531,33 @@ function loadDbSnapshotFromCache(user) {
   }
 }
 
+// assignLazyGroupField() — BUG THẬT đã vá (báo cáo người dùng 9/2026: "Checklist Đánh Giá Siêu Thị đang
+// không có ở Cấu Hình", "chọn 1 checklist để xem quay ra mất hết checklist, phải F5 mới hiện lại", đôi
+// khi báo "Không tìm thấy mẫu checklist"): 29 collection thuộc LAZY_DATA_GROUPS (Lớp 3a, task #188 —
+// checklistTemplates/checklistSubmissions, trainingDocuments/trainingClasses/trainingRegistrations/
+// trainingTests/trainingTestSubmissions/trainingCourses/trainingPlans/careerPaths/
+// careerPathConfirmations/recruitmentJobs/recruitmentReferrals, uniformPeriods/uniformIssuances/
+// uniformStockAdjustments/uniformTransfers, budgetTemplates/budgetPeriods/budgetLines,
+// itServiceRenewals/itSupportTickets, hrFeedback, laborContracts, attendanceRecords/leaveBalances/
+// leaveRequests/shiftRoster/shiftSwapRequests) không còn được GET /api/data (route chính, dùng ở đây)
+// trả về nữa — CHỈ có field này khi tải qua GET /api/data/lazy/:groupKey (loadDataGroup(), gọi đúng 1
+// lần khi vào tab tương ứng lần đầu trong phiên). Nhưng initDatabase() KHÔNG chỉ chạy 1 lần lúc đăng
+// nhập — runApprovalPollTick() (poll mỗi 20s, xem chú thích ở đó) tự gọi lại initDatabase() BẤT CỨ khi
+// nào có thay đổi ở danh sách hồ sơ cần MÌNH ký duyệt, hoàn toàn không liên quan gì tới Checklist/Đào
+// Tạo/Đồng Phục/... — trước đây `DB.checklistTemplates = data.checklistTemplates || []` chạy lại ở MỌI
+// lượt gọi này, mà `data.checklistTemplates` giờ LUÔN undefined (route chính không còn trả field này),
+// nên MỖI lượt poll ÂM THẦM XOÁ SẠCH dữ liệu đã tải lười trước đó về [] — dù người dùng không hề rời
+// khỏi tab hay thao tác gì. F5 tạm "sửa" được vì tải lại trang thì loadTabData() lười lại chạy lại từ
+// đầu cho tab đang mở, nhưng lượt poll kế tiếp (~20s sau) lại xoá tiếp — đúng hiện tượng "thỉnh thoảng
+// xảy ra, sau đó lại tải được" người dùng mô tả. Hàm này GIỮ NGUYÊN giá trị DB[key] hiện có khi response
+// KHÔNG có field này (route chính không trả — dù đã tải lười hay chưa), chỉ ghi đè khi response THỰC SỰ
+// có field (kể cả mảng rỗng thật từ server) — dùng cho đúng 29 field trên, KHÔNG dùng cho field nào khác
+// (mọi field còn lại vẫn luôn có mặt trong response GET /api/data như trước, giữ nguyên `data.x || []`).
+function assignLazyGroupField(key, data) {
+  if (Object.prototype.hasOwnProperty.call(data, key)) DB[key] = data[key] || [];
+  else if (!Array.isArray(DB[key])) DB[key] = [];
+}
+
 // opts.silent (LỚP 1): dùng khi gọi NGẦM phía sau (đã có giao diện dùng được từ cache, hoặc poll định
 // kỳ) — lỗi mạng/server KHÔNG được hiện alert() chặn màn hình (người dùng không hề biết có lượt tải
 // ngầm nào đang chạy), chỉ log ra console + NÉM LẠI lỗi cho nơi gọi tự quyết định (giữ nguyên dữ liệu cũ,
@@ -3574,18 +3601,10 @@ async function initDatabase(loggingInUser, opts) {
     DB.carTypes = data.carTypes || [];
     DB.itTicketCategories = data.itTicketCategories || [];
     DB.uniformCatalog = data.uniformCatalog || [];
-    // LỖ HỔNG THẬT ĐÃ VÁ (phát hiện lúc dựng demo cho module Checklist, v21.1): 2 dòng này chưa từng tồn
-    // tại — module-checklist.js đọc thẳng DB.checklistTemplates/DB.checklistSubmissions (comment đầu file
-    // đó ghi rõ "đã nạp sẵn qua GET /api/data") nhưng KHÔNG có nơi nào trong initDatabase() thực sự gán 2
-    // field này từ response server. Chỉ "vô tình" không vỡ vì mọi hàm đọc đều tự `|| []` VÀ vì
-    // checklistApplyTemplateUpdate()/checklistApplySubmissionUpdate() tự "DB.checklistTemplates =
-    // DB.checklistTemplates || []" ngay khi tạo/sửa 1 bản ghi trong CÙNG phiên trình duyệt đó — nghĩa là
-    // mọi mẫu/bài nộp đã có SẴN TỪ TRƯỚC (do người khác tạo, hoặc phiên trước của chính mình) không bao
-    // giờ hiện ra sau khi tải lại trang, cho tới khi người dùng tự tạo/sửa 1 bản ghi mới ngay trong phiên
-    // đó. Ảnh hưởng MỌI người dùng module này kể từ khi module ra đời (v16.x) — không phải lỗi riêng của
-    // đợt v21.x.
-    DB.checklistTemplates = data.checklistTemplates || [];
-    DB.checklistSubmissions = data.checklistSubmissions || [];
+    // checklistTemplates/checklistSubmissions: thuộc LAZY_DATA_GROUPS (Lớp 3a) — xem assignLazyGroupField()
+    // ngay phía trên initDatabase() cho lý do dùng hàm này thay vì gán thẳng `data.x || []`.
+    assignLazyGroupField('checklistTemplates', data);
+    assignLazyGroupField('checklistSubmissions', data);
 
     // Di trú phân quyền cũ (cờ bật/tắt toàn công ty theo module) sang mô hình mới theo phòng ban.
     // Nếu có user nào được chuyển đổi, lưu lại ngay lên server để không phải di trú lại mỗi lần tải
@@ -3743,30 +3762,39 @@ async function initDatabase(loggingInUser, opts) {
     DB.reportEntries = data.reportEntries || [];
 
     DB.trainingCategories = data.trainingCategories || [];
-    DB.trainingDocuments = data.trainingDocuments || [];
-    DB.trainingClasses = data.trainingClasses || [];
-    DB.trainingRegistrations = data.trainingRegistrations || [];
-    DB.careerPaths = data.careerPaths || [];
-    DB.careerPathConfirmations = data.careerPathConfirmations || [];
-    DB.trainingTests = data.trainingTests || [];
-    DB.trainingTestSubmissions = data.trainingTestSubmissions || [];
+    // trainingDocuments/trainingClasses/trainingRegistrations/trainingTests/trainingTestSubmissions/
+    // trainingCourses/trainingPlans/careerPaths/careerPathConfirmations/recruitmentJobs/
+    // recruitmentReferrals: thuộc nhóm lazy 'internalHub' — xem assignLazyGroupField() ngay phía trên
+    // initDatabase(). trainingDocumentProgress KHÔNG thuộc nhóm này (vẫn tải ở route chính, giữ nguyên
+    // `data.x || []` như trước).
+    assignLazyGroupField('trainingDocuments', data);
+    assignLazyGroupField('trainingClasses', data);
+    assignLazyGroupField('trainingRegistrations', data);
+    assignLazyGroupField('careerPaths', data);
+    assignLazyGroupField('careerPathConfirmations', data);
+    assignLazyGroupField('trainingTests', data);
+    assignLazyGroupField('trainingTestSubmissions', data);
     DB.trainingDocumentProgress = data.trainingDocumentProgress || [];
-    DB.trainingCourses = data.trainingCourses || [];
-    DB.trainingPlans = data.trainingPlans || [];
-    DB.recruitmentJobs = data.recruitmentJobs || [];
-    DB.recruitmentReferrals = data.recruitmentReferrals || [];
+    assignLazyGroupField('trainingCourses', data);
+    assignLazyGroupField('trainingPlans', data);
+    assignLazyGroupField('recruitmentJobs', data);
+    assignLazyGroupField('recruitmentReferrals', data);
     DB.sensitiveKeywords = data.sensitiveKeywords || [];
     DB.itPriceApprovals = data.itPriceApprovals || [];
-    DB.itSupportTickets = data.itSupportTickets || [];
-    DB.uniformPeriods = data.uniformPeriods || [];
-    DB.uniformIssuances = data.uniformIssuances || [];
-    DB.uniformStockAdjustments = data.uniformStockAdjustments || [];
-    DB.uniformTransfers = data.uniformTransfers || [];
+    // itSupportTickets: thuộc nhóm lazy 'itSupport'.
+    assignLazyGroupField('itSupportTickets', data);
+    // uniformPeriods/uniformIssuances/uniformStockAdjustments/uniformTransfers: thuộc nhóm lazy 'uniform'.
+    assignLazyGroupField('uniformPeriods', data);
+    assignLazyGroupField('uniformIssuances', data);
+    assignLazyGroupField('uniformStockAdjustments', data);
+    assignLazyGroupField('uniformTransfers', data);
     DB.budgetDeptWorkflows = data.budgetDeptWorkflows || {};
-    DB.budgetTemplates = data.budgetTemplates || [];
-    DB.budgetPeriods = data.budgetPeriods || [];
+    // budgetTemplates/budgetPeriods/budgetLines: thuộc nhóm lazy 'budget'. budgetEntries KHÔNG thuộc
+    // nhóm này (CỐ Ý giữ ở route chính, xem chú thích LAZY_DATA_GROUPS ở routes/data.js).
+    assignLazyGroupField('budgetTemplates', data);
+    assignLazyGroupField('budgetPeriods', data);
     DB.budgetEntries = data.budgetEntries || [];
-    DB.budgetLines = data.budgetLines || [];
+    assignLazyGroupField('budgetLines', data);
 
     // "operationOrderDeptWorkflows" (Đơn Hàng theo phòng ban) đã bị XOÁ HẲN — thay bằng 2 map theo MỨC
     // GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/HO (xem resolveOperationOrderWorkflowConfigForItemClient() bên dưới).
@@ -3792,14 +3820,15 @@ async function initDatabase(loggingInUser, opts) {
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];
 
-    DB.itServiceRenewals = data.itServiceRenewals || [];
+    // itServiceRenewals: thuộc nhóm lazy 'itSupport' (cùng itSupportTickets đã xử lý ở trên).
+    assignLazyGroupField('itServiceRenewals', data);
     // itRenewalCategories: "Loại Dịch Vụ" (đợt audit "form-fields-6" — TRƯỚC ĐÂY free-text + gợi ý tự
     // học cố định IT_RENEWAL_CATEGORY_SUGGESTIONS, xem module-itsupport-renewal.js).
     DB.itRenewalCategories = data.itRenewalCategories || [];
 
-    // hrFeedback (Nhân Sự — HCRC Đồng Hành): server đã lọc sẵn theo quyền xem (chính người hỏi hoặc
+    // hrFeedback: thuộc nhóm lazy 'hrFeedback' — server đã lọc sẵn theo quyền xem (chính người hỏi hoặc
     // Nhân Sự) trước khi trả về — xem filterHrFeedbackForUser() ở lib/recordViewScope.js.
-    DB.hrFeedback = data.hrFeedback || [];
+    assignLazyGroupField('hrFeedback', data);
     // hrFeedbackCategories: "Chủ Đề" (CORE_FIELD_MANIFEST.HR_FEEDBACK.hrFeedbackCategory, đợt audit
     // "form-fields-6").
     DB.hrFeedbackCategories = data.hrFeedbackCategories || [];
@@ -3813,19 +3842,18 @@ async function initDatabase(loggingInUser, opts) {
     // chiếu khác như jobTitles/carTypes).
     DB.hrTaskTemplates = data.hrTaskTemplates || [];
 
-    // laborContracts (Nhân Sự > Hợp Đồng Lao Động, Đợt 2/4): BUG THẬT vừa phát hiện lúc làm Đợt 3 (Công
-    // & Phép) — dòng gán từ `data` này CHƯA TỪNG tồn tại kể từ khi module Hợp Đồng Lao Động ra mắt, khiến
-    // DB.laborContracts luôn là `undefined` ngay sau khi tải trang (mọi nơi đọc nó đều tự `|| []` nên
-    // KHÔNG báo lỗi gì, chỉ âm thầm hiện danh sách RỖNG) — server đã lọc quyền đúng (xem
-    // filterLaborContractsForUser() vừa thêm ở routes/data.js), chỉ riêng client chưa từng đọc vào.
-    DB.laborContracts = data.laborContracts || [];
+    // laborContracts: thuộc nhóm lazy 'laborContract'.
+    assignLazyGroupField('laborContracts', data);
     // Nhân Sự > Công & Phép (Đợt 3/4, Phần E — xem lib/attendance.js): 5 collection dbo.Records (đã
     // được server lọc quyền xem ở routes/data.js) + 4 AppData thường (danh mục/cấu hình nhỏ, admin sửa).
-    DB.attendanceRecords = data.attendanceRecords || [];
-    DB.leaveBalances = data.leaveBalances || [];
-    DB.leaveRequests = data.leaveRequests || [];
-    DB.shiftRoster = data.shiftRoster || [];
-    DB.shiftSwapRequests = data.shiftSwapRequests || [];
+    // attendanceRecords/leaveBalances/leaveRequests/shiftRoster/shiftSwapRequests thuộc nhóm lazy
+    // 'attendance' — shiftTemplates/publicHolidays/attendanceHoConfig/attendanceClockApiKeys KHÔNG thuộc
+    // nhóm này (vẫn tải ở route chính, giữ nguyên `data.x || []`).
+    assignLazyGroupField('attendanceRecords', data);
+    assignLazyGroupField('leaveBalances', data);
+    assignLazyGroupField('leaveRequests', data);
+    assignLazyGroupField('shiftRoster', data);
+    assignLazyGroupField('shiftSwapRequests', data);
     DB.shiftTemplates = data.shiftTemplates || [];
     DB.publicHolidays = data.publicHolidays || [];
     DB.attendanceHoConfig = data.attendanceHoConfig || {};

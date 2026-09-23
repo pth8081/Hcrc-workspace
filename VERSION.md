@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**24.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.2 (2026-09-23): Vá lỗi thật — danh sách Checklist/Đào Tạo/Đồng Phục/Ngân Sách/... tự nhiên trống, phải F5 mới hiện lại
+
+Người dùng báo cáo (kèm ảnh demo): mở tab Checklist Đánh Giá Siêu Thị > Cấu
+Hình, chọn 1 mẫu để xem thì TOÀN BỘ danh sách mẫu biến mất ("Chưa có mẫu
+checklist nào"), phải F5 mới hiện lại, đôi khi báo "⛔ Không tìm thấy mẫu
+checklist". Điều tra xác nhận: đây là hậu quả của Lớp 3a (v23.x, tách 33
+collection sang tải LƯỜI qua `GET /api/data/lazy/:groupKey` — xem
+`TAB_DATA_GROUPS`/`LAZY_DATA_GROUPS`) — `initDatabase()` (`public/js/core.js`)
+KHÔNG chỉ chạy 1 lần lúc đăng nhập: `runApprovalPollTick()` (poll nền mỗi
+20s, hoàn toàn không liên quan Checklist) tự gọi lại `initDatabase()` mỗi
+khi có phê duyệt mới phát sinh Ở BẤT KỲ ĐÂU trong hệ thống. Trước khi vá,
+mỗi lượt gọi lại này chạy `DB.checklistTemplates = data.checklistTemplates
+|| []` — mà `data.checklistTemplates` giờ LUÔN `undefined` (route chính
+không còn trả field này nữa) — nên ÂM THẦM XOÁ SẠCH dữ liệu đã tải lười
+trước đó về `[]`, dù người dùng không hề rời tab hay thao tác gì. Đúng kịch
+bản "thỉnh thoảng xảy ra, F5 xong lại được, rồi lại mất" người dùng mô tả —
+ảnh hưởng ĐỦ 29 field lazy có dòng gán trong `initDatabase()` (checklist,
+Đào Tạo/Tuyển Dụng, Đồng Phục, Ngân Sách mẫu/kỳ/hạng mục, Hỗ Trợ IT, HĐLĐ,
+Công & Phép, HCRC Đồng Hành), không riêng Checklist.
+
+- **`server/public/js/core.js`**: thêm `assignLazyGroupField(key, data)` —
+  chỉ ghi đè `DB[key]` khi response THỰC SỰ có field đó (route chính có trả
+  hoặc route lazy vừa tải xong), GIỮ NGUYÊN giá trị hiện có nếu response
+  không có field (route chính không còn trả, dù đã tải lười hay chưa) thay
+  vì ghi đè về `[]`. Áp dụng cho đúng 29 field thuộc `LAZY_DATA_GROUPS`
+  (routes/data.js) có dòng gán trong `initDatabase()`.
+- **Không liên quan** tới thông báo "⛔ Không tải được phần chức năng cần
+  thiết" đôi khi thấy ở màn Phân Quyền (cơ chế KHÁC — tải lười file
+  `module-*.js` qua `loadModuleGroup()`/`ensureFnReady()`, không có retry
+  khi lỗi mạng thoáng qua lúc tải lần đầu; tự khỏi khi bấm lại vì cache lỗi
+  đã bị xoá) — chưa phát hiện lỗi code ở nhánh này, chỉ là đặc tính mạng.
+- **Test**: `tests/test-initdatabase-lazy-field-preserve.js` (mới) — dựng
+  mock `fetch()` tách riêng đúng route chính (KHÔNG có field lazy) và route
+  `/api/data/lazy/:groupKey` (CÓ field lazy), xác nhận `initDatabase()` gọi
+  lại lần 2 (mô phỏng `runApprovalPollTick()`) KHÔNG xoá `DB.checklistTemplates`/
+  `DB.uniformPeriods`/`DB.laborContracts` đã tải lười trước đó, đồng thời
+  field THƯỜNG (`DB.depts`) vẫn được nạp lại đúng mỗi lần (xác nhận đã
+  reproduce đúng lỗi khi tắt bản vá, rồi pass lại khi bật bản vá).
+- **Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường mới —
+  chỉ copy code + `pm2 restart`.
 
 ## v24.1 (2026-09-23): Ma Trận Phân Quyền — đổi TRUE/FALSE thành Y/N
 
