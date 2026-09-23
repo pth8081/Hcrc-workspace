@@ -554,6 +554,22 @@ Nguyên tắc quan trọng cần biết trước khi dùng:
   tab "🔄 Quy Trình & Phê Duyệt" — tính năng này không khoá hay thay đổi gì
   cách admin cấu hình chi tiết từng module như trước, chỉ là 1 bước khởi
   tạo nhanh ban đầu.
+- **"🗑️ Xoá Cấu Hình" (mới) — đưa 1 phòng ban/mức về lại "chưa cấu hình"**:
+  tại tab "🔄 Quy Trình & Phê Duyệt", màn LUÔN hiện tạm "Quy trình chung (1
+  bước)" cho phòng ban nào chưa từng cấu hình gì (chỉ để không trống trơn) —
+  nếu lỡ bấm "Lưu Cấu Hình" trong lúc màn đang hiện giá trị tạm này, nó ghi
+  THẬT xuống server và phòng ban đó từ đó bị "⚡ Áp Dụng Nhanh" coi là "đã có
+  cấu hình", không set số bước lại được nữa dù chưa hề chủ ý cấu hình gì.
+  Mỗi thẻ phòng ban/mức ĐANG có cấu hình thật giờ có thêm nút **"🗑️ Xoá Cấu
+  Hình [tên]"** cạnh nút "Lưu Cấu Hình [tên]" (chỉ hiện khi thật sự có gì để
+  xoá) — bấm vào xoá HẲN cấu hình đó (số bước + người duyệt đã gán), đưa
+  phòng ban/mức về đúng trạng thái "chưa cấu hình" để "⚡ Áp Dụng Nhanh" nhận
+  diện và điền lại được. Có thêm nút **"🗑️ Xoá Cấu Hình Tất Cả"** cạnh "💾
+  Lưu Cấu Hình Tất Cả" (đầu màn, module thường theo phòng ban) — xoá 1 lượt
+  MỌI phòng ban đang thật sự có cấu hình trong module/loại đang chọn, không
+  đụng phòng ban vốn đã "chưa cấu hình". Hành động XOÁ này không hoàn tác
+  được — chỉ dùng khi chắc chắn muốn bỏ hẳn cấu hình đã gán cho phòng ban/
+  mức đó.
 - **2 module Vận Hành > Mở Mới/Sửa Chữa Siêu Thị không nằm trong phạm vi** —
   2 module này không còn bước phê duyệt nào cả (xem mục 4.4), nên không
   xuất hiện trong danh sách module để chọn khi tạo cấu hình.

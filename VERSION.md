@@ -1,8 +1,51 @@
 # Phiên bản hiện tại
 
-**24.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.4 (2026-09-23): "🔄 Quy Trình & Phê Duyệt" — nút "🗑️ Xoá Cấu Hình" (từng phòng ban + tất cả)
+
+Người dùng báo cáo: "⚡ Áp Dụng Nhanh" không set được số bước cho MỌI phòng
+ban dù chọn đúng module — điều tra xác nhận nguyên nhân: màn "🔄 Quy Trình &
+Phê Duyệt" luôn hiện TẠM "Quy trình chung (1 bước)" cho phòng ban nào chưa
+từng cấu hình (chỉ để không trống trơn khi hiển thị — xem `savedConfig`
+fallback ở `renderWorkflowTab()`/`renderItPriceTierWorkflowTab()`); nếu admin
+lỡ bấm "Lưu Cấu Hình" trong lúc màn đang hiện giá trị tạm này, nó ghi THẬT
+xuống server, khiến phòng ban đó vĩnh viễn bị `collectQuickApplyUnconfiguredTargets()`
+coi là "đã cấu hình" — không có cách nào đưa về lại "chưa cấu hình" để Quick
+Apply nhận diện lại. Theo yêu cầu người dùng ("làm nút reset cho giống nút
+lưu, cho từng cấu hình phòng và cho all cấu hình"), thêm nút xoá tương ứng.
+
+- **`server/public/js/module-itsupport-tier.js`**: thêm `isDeptWorkflowConfigured(dept)`
+  (phân biệt "có cấu hình thật" với giá trị mặc định tạm chỉ để hiển thị),
+  `clearDeptWorkflowConfig(dbKey, dept)` (nghịch đảo `writeDeptWorkflowConfig()`,
+  xử lý đúng cả 3 dạng cấu trúc: phẳng/hasTypes/priceTypeNested),
+  `resetDeptWorkflowConfig(dept)` (xoá 1 phòng ban, mirror `saveDeptWorkflowConfig()`
+  — await + snapshot/rollback), `resetAllDeptWorkflowConfigs()` (xoá TẤT CẢ
+  phòng ban ĐANG thật sự có cấu hình trong module/loại đang chọn, mirror
+  `saveAllDeptWorkflowConfigs()`), `resetTierWorkflowConfig(tierKey)` (cùng
+  cơ chế cho màn theo TIER — Bán Buôn/Đặt Hàng Tại Siêu Thị/HO).
+- **`server/public/js/module-ngansach.js`** (`renderWorkflowTab()`) +
+  **`module-itsupport-tier.js`** (`renderItPriceTierWorkflowTab()`): thêm nút
+  **"🗑️ Xoá Cấu Hình [tên]"** cạnh nút "Lưu Cấu Hình [tên]" ở mỗi thẻ — CHỈ
+  hiện khi `isDeptWorkflowConfigured()`/`tierWfMap[tier.key]` xác nhận thật
+  sự có cấu hình (không hiện khi đang ở trạng thái mặc định tạm).
+- **`server/public/fragments/systemSection.html`**: thêm nút **"🗑️ Xoá Cấu
+  Hình Tất Cả"** cạnh "💾 Lưu Cấu Hình Tất Cả" (đầu màn, module thường theo
+  phòng ban) — không thêm cho màn theo TIER (chỉ 4 thẻ cố định, nút xoá từng
+  thẻ là đủ, cùng lý do màn đó vốn không có "Lưu Tất Cả").
+- Cả 2 nút xoá đều hỏi xác nhận trước (hành động không hoàn tác được), dùng
+  await + snapshot/rollback giống hệt các nút lưu hiện có — server từ chối
+  (409/403/mất mạng) thì phục hồi đúng dữ liệu cũ, không báo thành công sai.
+- **Test**: `tests/test-workflow-reset-dept-config.js` (mới, 12 kịch bản) —
+  xác nhận nút chỉ hiện đúng lúc, xoá xong Quick Apply nhận diện lại phòng
+  ban/mức đó, và "Xoá Tất Cả" chỉ đụng đúng những mục đang thật sự có cấu
+  hình.
+- **`deploy/Huong-dan-nghiep-vu.md`** (mục 3.6 "⚡ Áp Dụng Nhanh"): thêm đoạn
+  giải thích cơ chế + hướng dẫn dùng nút "🗑️ Xoá Cấu Hình".
+- **Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường mới —
+  chỉ copy code + `pm2 restart`.
 
 ## v24.3 (2026-09-23): Vá lỗi thật — lưu Cấu Hình "⚡ Áp Dụng Nhanh" xong, F5 lại mất
 

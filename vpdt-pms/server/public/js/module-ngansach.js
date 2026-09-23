@@ -765,6 +765,10 @@ function renderWorkflowTab() {
     }).join('');
 
     const wfOptions = DB.workflows.map(w => `<option value="${w.id}" ${w.id === effectiveWfId ? 'selected' : ''}>${escapeHtml(w.name)} (${w.steps.length} bước)</option>`).join('');
+    // hasRealConfig: phòng ban này ĐANG CÓ cấu hình THẬT (không phải giá trị mặc định tạm "Quy trình
+    // chung (1 bước)" chỉ để hiển thị, xem savedConfig ở trên) — chỉ hiện nút "🗑️ Xoá Cấu Hình" khi thật
+    // sự có gì để xoá, xem isDeptWorkflowConfigured() (module-itsupport-tier.js).
+    const hasRealConfig = isDeptWorkflowConfigured(dept);
 
     return `
       <div class="bg-white p-3 rounded border space-y-2">
@@ -779,7 +783,8 @@ function renderWorkflowTab() {
         </div>
         ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.</div>` : ''}
         <div class="space-y-2">${stepsConfigHTML}</div>
-        <div class="flex justify-end pt-1">
+        <div class="flex justify-end pt-1 gap-2">
+          ${hasRealConfig ? `<button data-op="resetDeptWorkflowConfig" data-arg0="${escapeHtml(dept)}" class="bg-white text-red-600 border border-red-300 px-3 py-1 rounded text-xs font-bold hover:bg-red-50">🗑️ Xoá Cấu Hình [${escapeHtml(dept)}]</button>` : ''}
           <button data-op="saveDeptWorkflowConfig" data-arg0="${escapeHtml(dept)}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(dept)}]</button>
         </div>
       </div>

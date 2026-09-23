@@ -91,7 +91,8 @@ function renderItPriceTierWorkflowTab(container) {
         </div>
         ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.</div>` : ''}
         <div class="space-y-2">${stepsConfigHTML}</div>
-        <div class="flex justify-end pt-1">
+        <div class="flex justify-end pt-1 gap-2">
+          ${tierWfMap[tier.key] ? `<button data-op="resetTierWorkflowConfig" data-arg0="${escapeHtml(tier.key)}" class="bg-white text-red-600 border border-red-300 px-3 py-1 rounded text-xs font-bold hover:bg-red-50">🗑️ Xoá Cấu Hình [${escapeHtml(tier.label)}]</button>` : ''}
           <button data-op="saveItPriceTierWorkflowConfig" data-arg0="${escapeHtml(tier.key)}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">Lưu Cấu Hình [${escapeHtml(tier.label)}]</button>
         </div>
       </div>
@@ -214,6 +215,29 @@ async function saveItPriceTierWorkflowConfig(tierKey) {
   renderWorkflowTab();
 }
 
+// resetTierWorkflowConfig() — mirror resetDeptWorkflowConfig() (xem chú thích đầy đủ ở đó) cho màn theo
+// TIER (Bán Buôn/Đặt Hàng Tại Siêu Thị/HO) — xoá HẲN entry khỏi tierWfMap, đưa mức đó về "chưa cấu
+// hình" để Quick Apply nhận diện lại được.
+async function resetTierWorkflowConfig(tierKey) {
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  const tierDbKey = modConfig.tierDbKeyForWholesale;
+  if (!DB[tierDbKey]?.[tierKey]) return;
+  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt đã gán) của mức [${tierKey}] — đưa về trạng thái CHƯA CẤU HÌNH?\n\nSau khi xoá, "⚡ Áp Dụng Nhanh" sẽ coi mức này là mục đang thiếu cấu hình và có thể áp dụng lại. Hành động này KHÔNG hoàn tác được.`)) return;
+
+  const snapshot = JSON.parse(JSON.stringify(DB[tierDbKey] || {}));
+  delete DB[tierDbKey][tierKey];
+  if (!await syncStorage(tierDbKey)) {
+    DB[tierDbKey] = snapshot;
+    renderWorkflowTab();
+    return;
+  }
+
+  delete pendingWfTemplate[`TIER_${tierKey}`];
+  logSystemAction('CONFIG', 'RESET_DEPT_WORKFLOW', `Xoá cấu hình quy trình mức [${tierKey}] (đưa về CHƯA CẤU HÌNH, module ${modConfig.label})`, 'SUCCESS', tierKey);
+  alert(`✅ Đã xoá cấu hình quy trình cho mức [${tierKey}].`);
+  renderWorkflowTab();
+}
+
 // Đọc mẫu quy trình + người duyệt từng bước đang chọn trên DOM cho 1 phòng ban — dùng CHUNG cho cả
 // saveDeptWorkflowConfig() (lưu riêng 1 phòng ban) lẫn saveAllDeptWorkflowConfigs() (lưu 1 lần cho mọi
 // phòng ban), tránh lặp lại cùng 1 logic đọc DOM 2 nơi. Trả về null nếu thẻ phòng ban đó không có trên
@@ -265,6 +289,98 @@ function writeDeptWorkflowConfig(dbKey, dept, newConfig) {
   } else {
     DB[dbKey][dept] = newConfig;
   }
+}
+
+// isDeptWorkflowConfigured()/clearDeptWorkflowConfig()/resetDeptWorkflowConfig()/
+// resetAllDeptWorkflowConfigs() (yêu cầu người dùng — "⚡ Áp Dụng Nhanh" vẫn không set được 3 bước cho
+// TẤT CẢ phòng ban vì màn "Quy Trình & Phê Duyệt" luôn HIỆN TẠM "Quy trình chung (1 bước)" khi phòng ban
+// CHƯA từng cấu hình gì — nếu ai đó lỡ bấm "Lưu Cấu Hình" trong lúc màn đang hiện giá trị tạm này, nó ghi
+// THẬT xuống server, khiến phòng ban đó vĩnh viễn bị Quick Apply coi là "đã cấu hình", không cách nào
+// đưa về lại "chưa cấu hình" để Quick Apply nhận diện lại): thêm nút "Xoá Cấu Hình" (xoá HẲN entry khỏi
+// DB, không phải chỉ đổi lại giá trị hiển thị) — mirror ĐÚNG khuôn saveDeptWorkflowConfig()/
+// saveAllDeptWorkflowConfigs() ở dưới (await + snapshot/rollback), chỉ khác là XOÁ thay vì GHI.
+//
+// isDeptWorkflowConfigured(dept): true nếu phòng ban này ĐANG CÓ cấu hình THẬT (không phải giá trị mặc
+// định tạm "Quy trình chung (1 bước)" chỉ để hiển thị) — dùng để CHỈ hiện nút "Xoá Cấu Hình" khi thật sự
+// có gì để xoá, và để resetAllDeptWorkflowConfigs() biết đúng danh sách phòng ban cần xoá.
+// hasTypes (Văn Bản Trình): CHỈ xét cấu hình RIÊNG của loại đang chọn (typeMap[dept]) — KHÔNG xét
+// legacyDbKey (cấu hình chung cũ, áp dụng cho MỌI loại chưa có cấu hình riêng) vì nút "Xoá Cấu Hình" ở
+// màn theo loại này chưa từng ghi được vào legacyDbKey (writeDeptWorkflowConfig() ở trên cũng KHÔNG đụng
+// legacyDbKey) — nếu 1 phòng ban vẫn bị Quick Apply coi là "đã cấu hình" chỉ vì có cấu hình chung cũ, cần
+// sửa/xoá ở màn cấu hình chung (không chọn loại tờ trình cụ thể), không phải ở đây.
+function isDeptWorkflowConfigured(dept) {
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  if (modConfig.priceTypeNested) return !!resolveItPriceDeptWorkflowConfigClient(dept, activeWfSubmissionType);
+  if (modConfig.hasTypes) return !!(DB[modConfig.dbKey]?.[activeWfSubmissionType]?.[dept]);
+  return !!(DB[modConfig.dbKey] || {})[dept];
+}
+
+// clearDeptWorkflowConfig(dbKey, dept) — nghịch đảo của writeDeptWorkflowConfig() ở trên: xoá đúng entry
+// đã ghi, theo đúng 3 dạng cấu trúc (phẳng/hasTypes/priceTypeNested). priceTypeNested: cấu trúc LỒNG
+// {RETAIL,WHOLESALE} thì chỉ xoá đúng nhánh loại giá đang chọn (giữ nguyên loại kia nếu còn), dọn luôn
+// object cha nếu rỗng hẳn; cấu trúc PHẲNG CŨ (chưa từng lồng, coi như RETAIL nguyên khối) thì xoá cả
+// entry — chỉ xoá khi đang xét đúng RETAIL (chưa từng có màn nào cho phép chọn WHOLESALE ở đây, xem
+// pureTier ở trên, nhưng giữ điều kiện tường minh cho đúng ý nghĩa thay vì ngầm định).
+function clearDeptWorkflowConfig(dbKey, dept) {
+  const modConfig = WF_MODULE_CONFIG[activeWfMod];
+  if (modConfig.priceTypeNested) {
+    const existing = DB[dbKey]?.[dept];
+    if (!existing) return;
+    if (existing.RETAIL || existing.WHOLESALE) {
+      delete existing[activeWfSubmissionType];
+      if (!existing.RETAIL && !existing.WHOLESALE) delete DB[dbKey][dept];
+    } else if (activeWfSubmissionType === 'RETAIL') {
+      delete DB[dbKey][dept];
+    }
+  } else if (modConfig.hasTypes) {
+    if (DB[dbKey]?.[activeWfSubmissionType]) delete DB[dbKey][activeWfSubmissionType][dept];
+  } else if (DB[dbKey]) {
+    delete DB[dbKey][dept];
+  }
+}
+
+async function resetDeptWorkflowConfig(dept) {
+  if (!isDeptWorkflowConfigured(dept)) return;
+  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt đã gán) của phòng ban [${dept}] — đưa về trạng thái CHƯA CẤU HÌNH?\n\nSau khi xoá, "⚡ Áp Dụng Nhanh" sẽ coi phòng ban này là mục đang thiếu cấu hình và có thể áp dụng lại. Hành động này KHÔNG hoàn tác được (trừ khi bạn tự cấu hình lại bằng tay).`)) return;
+
+  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
+  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
+  clearDeptWorkflowConfig(dbKey, dept);
+  if (!await syncStorage(dbKey)) {
+    DB[dbKey] = snapshot;
+    renderWorkflowTab();
+    return;
+  }
+
+  delete pendingWfTemplate[dept];
+  logSystemAction('CONFIG', 'RESET_DEPT_WORKFLOW', `Xoá cấu hình quy trình phòng ban [${dept}] (đưa về CHƯA CẤU HÌNH, module ${WF_MODULE_CONFIG[activeWfMod].label})`, 'SUCCESS', dept);
+  alert(`✅ Đã xoá cấu hình quy trình cho phòng ban [${dept}] — phòng ban này giờ CHƯA CẤU HÌNH, "⚡ Áp Dụng Nhanh" có thể áp dụng lại.`);
+  renderWorkflowTab();
+}
+
+// resetAllDeptWorkflowConfigs() — mirror saveAllDeptWorkflowConfigs(): xoá 1 lần cho MỌI phòng ban ĐANG
+// THẬT SỰ có cấu hình trong phạm vi module (+ loại tờ trình, nếu có) hiện đang chọn, thay vì phải bấm
+// "Xoá Cấu Hình" từng thẻ một — đúng yêu cầu người dùng "làm nút reset cho giống nút lưu, cho all cấu
+// hình". Phòng ban đang hiện giá trị mặc định tạm (chưa từng cấu hình thật) tự động bị loại khỏi danh
+// sách xoá (isDeptWorkflowConfigured() lọc), không có gì để xoá nên không hiện trong xác nhận.
+async function resetAllDeptWorkflowConfigs() {
+  const targetDepts = getWorkflowParticipatingDepts().filter(isDeptWorkflowConfigured);
+  if (!targetDepts.length) return alert('✅ Không có phòng ban nào đang có cấu hình thật trong phạm vi hiện tại để xoá.');
+  if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt) của ${targetDepts.length} phòng ban:\n- ${targetDepts.join('\n- ')}\n\nĐưa TẤT CẢ về trạng thái CHƯA CẤU HÌNH — "⚡ Áp Dụng Nhanh" sẽ có thể áp dụng lại cho các phòng ban này. Hành động này KHÔNG hoàn tác được. Tiếp tục?`)) return;
+
+  const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
+  const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
+  targetDepts.forEach(dept => clearDeptWorkflowConfig(dbKey, dept));
+  if (!await syncStorage(dbKey)) {
+    DB[dbKey] = snapshot;
+    renderWorkflowTab();
+    return;
+  }
+
+  targetDepts.forEach(dept => delete pendingWfTemplate[dept]);
+  logSystemAction('CONFIG', 'RESET_DEPT_WORKFLOW', `Xoá cấu hình quy trình TẤT CẢ phòng ban [${targetDepts.join(', ')}] (đưa về CHƯA CẤU HÌNH, module ${WF_MODULE_CONFIG[activeWfMod].label})`, 'SUCCESS', activeWfMod);
+  alert(`✅ Đã xoá cấu hình quy trình cho ${targetDepts.length} phòng ban.`);
+  renderWorkflowTab();
 }
 
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Trung bình — xem chú thích
