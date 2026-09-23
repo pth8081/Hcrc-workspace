@@ -3696,6 +3696,13 @@ async function initDatabase(loggingInUser, opts) {
     DB.paymentRequests = data.paymentRequests || [];
     DB.paymentDeptWorkflows = data.paymentDeptWorkflows || {};
     DB.workflows = data.workflows || [];
+    // quickApplyConfigs: BUG THẬT vừa phát hiện (báo cáo người dùng — lưu Cấu Hình Áp Dụng Nhanh xong,
+    // F5 lại mất, hiện lại "Chưa có cấu hình Áp Dụng Nhanh nào") — dòng gán từ `data` này CHƯA TỪNG tồn
+    // tại kể từ khi tính năng "⚡ Áp Dụng Nhanh" ra đời (module-workflow.js chỉ tự gán DB.quickApplyConfigs
+    // ngay trong phiên lúc tạo/sửa/xoá, không có nơi nào đọc lại từ response GET /api/data) — cùng khuôn
+    // bug laborContracts/carVehicleTypes/workflowParticipatingPositions đã từng phát hiện. Server đã lưu
+    // và trả về đúng (routes/data.js), chỉ riêng client chưa từng đọc vào.
+    DB.quickApplyConfigs = data.quickApplyConfigs || [];
     DB.formTemplates = migrateItPriceFormTemplatesKeys(data.formTemplates || {});
     DB.permGroups = data.permGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];

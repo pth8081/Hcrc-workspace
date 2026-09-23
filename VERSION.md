@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**24.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.3 (2026-09-23): Vá lỗi thật — lưu Cấu Hình "⚡ Áp Dụng Nhanh" xong, F5 lại mất
+
+Người dùng báo cáo (kèm ảnh): lưu 1 cấu hình "⚡ Áp Dụng Nhanh" (Hệ Thống >
+Nghiệp Vụ Nâng Cao > Áp Dụng Nhanh) xong, F5 lại trang thì cấu hình biến
+mất, hiện lại "Chưa có cấu hình Áp Dụng Nhanh nào" dù server vẫn còn lưu
+đúng. Root cause: `initDatabase()` (`public/js/core.js`) CHƯA TỪNG gán
+`DB.quickApplyConfigs` từ response `GET /api/data` — `module-workflow.js`
+chỉ tự gán field này ngay trong phiên lúc tạo/sửa/xoá (mọi hàm đọc đều tự
+`|| []` nên không lỗi JS/crash), không có dòng nào đọc lại dữ liệu ĐÃ CÓ
+SẴN TỪ TRƯỚC khi tải trang — cùng khuôn bug `laborContracts`/
+`carVehicleTypes`/`workflowParticipatingPositions` đã từng phát hiện. Server
+đã lưu và trả về đúng (`routes/data.js`), chỉ riêng client chưa từng đọc
+vào — KHÔNG liên quan gì tới bản vá Lớp 3a ở v24.2 (field này chưa bao giờ
+chuyển sang tải lười, chỉ đơn giản là thiếu 1 dòng gán từ khi tính năng ra
+đời).
+
+- **`server/public/js/core.js`**: thêm `DB.quickApplyConfigs =
+  data.quickApplyConfigs || [];` vào `initDatabase()`.
+- **Test**: `tests/test-quickapply-configs-initdatabase-load.js` (mới) —
+  seed 1 cấu hình Áp Dụng Nhanh "đã tồn tại từ trước" (không tạo qua thao
+  tác client), xác nhận `DB.quickApplyConfigs` có đúng dữ liệu ngay sau khi
+  đăng nhập MỚI và tab Áp Dụng Nhanh hiển thị đúng ngay lập tức — đã xác
+  nhận test FAIL đúng khi tắt bản vá, PASS khi bật lại.
+- **Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường mới —
+  chỉ copy code + `pm2 restart`.
 
 ## v24.2 (2026-09-23): Vá lỗi thật — danh sách Checklist/Đào Tạo/Đồng Phục/Ngân Sách/... tự nhiên trống, phải F5 mới hiện lại
 
