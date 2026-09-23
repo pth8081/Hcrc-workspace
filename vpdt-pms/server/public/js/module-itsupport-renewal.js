@@ -50,16 +50,21 @@ function onItServiceRenewalFilterChange() {
   renderItServiceRenewals();
 }
 
-// ============ Danh Mục "Loại Dịch Vụ" (chỉ Admin — đợt audit "form-fields-6") ============
+// ============ Danh Mục "Loại Dịch Vụ" ============
 // Cùng khuôn saveLicenseType()/deleteLicenseType()/renderLicenseTypeList() (module-tailieu.js): flat
 // array chuỗi phẳng, thêm/xoá tại chỗ — server tự học thêm giá trị mới mỗi khi tạo dịch vụ (xem
 // learnItRenewalCategory() ở routes/create.js), ở đây chỉ để Admin chủ động thêm trước/dọn bớt.
+// DỜI khối HTML sang "Hệ Thống → Quản Trị → 🗂️ Quản Lý Danh Mục" (yêu cầu người dùng 9/2026 — trước đó
+// nằm lẫn trong màn nghiệp vụ "Gia Hạn Dịch Vụ", không đúng chỗ vì đây là danh mục cấu hình dùng chung,
+// không phải thao tác nghiệp vụ; xem systemSection.html khối "📜 Quản Lý Danh Mục 'Loại Dịch Vụ'"). Màn
+// đó đã admin-only sẵn (setSystemSubTab() chặn non-admin ngay từ đầu) nên renderItRenewalCategoryList()
+// KHÔNG còn cần tự ẩn/hiện theo quyền admin như trước (trước đây khối này còn hiện lẫn ở màn "Gia Hạn
+// Dịch Vụ" — nơi itServiceRenewalManage KHÔNG phải admin cũng vào được — nên phải tự ẩn/hiện riêng).
+// Hàm JS vẫn giữ nguyên ở file này (không dời sang module-admin.js) — cùng cách bố trí priceZone
+// (HTML ở Quản Lý Danh Mục, hàm JS vẫn ở module-itsupport-price.js, không phải module-admin.js).
 function renderItRenewalCategoryList() {
-  const box = document.getElementById('itRenewalCategoryAdminBox');
   const ul = document.getElementById('itRenewalCategoryList');
   if (!ul) return;
-  const canEdit = !!currentUser.perms?.admin;
-  if (box) box.classList.toggle('hidden', !canEdit);
   ul.innerHTML = (DB.itRenewalCategories || []).map(c => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(c)}</span>
@@ -73,9 +78,17 @@ function renderItRenewalCategoryList() {
 // rename-with-cascade dùng chung (POST /api/admin/renameCatalogEntry, xem lib/catalogRename.js
 // CATALOG_HANDLERS.itRenewalCategories) thay vì tự ghi đè mảng qua POST /api/data/itRenewalCategories
 // — cùng khuôn renameLicenseType()/renameCarTaxiCompany() (module-tailieu.js/module-dangkyxe.js).
+//
+// Gọi renderItRenewalCategoryList() TRỰC TIẾP (không chỉ qua renderItServiceRenewals() như trước) — sau
+// khi dời khối HTML ra "Quản Lý Danh Mục", màn "Gia Hạn Dịch Vụ" (#itRenewalTableBody) có thể CHƯA
+// TỪNG mở trong phiên (fragment itSupportSection chưa tải), khi đó renderItServiceRenewals() tự return
+// sớm (guard `if (!tbody) return;`) và sẽ bỏ qua luôn renderItRenewalCategoryList() bên trong nó — danh
+// sách vừa thêm/sửa/xoá không cập nhật trên màn Quản Lý Danh Mục đang đứng cho tới khi tải lại trang.
+// Vẫn gọi thêm renderItServiceRenewals() (an toàn, tự no-op nếu tbody chưa có) để đồng bộ luôn 2
+// datalist gợi ý + dropdown lọc của màn "Gia Hạn Dịch Vụ" nếu đang mở sẵn trong phiên.
 async function renameItRenewalCategory(name) {
   const ok = await renameCatalogEntryClient('itRenewalCategories', name, 'Danh Mục Loại Dịch Vụ Gia Hạn CNTT');
-  if (ok) renderItServiceRenewals();
+  if (ok) { renderItRenewalCategoryList(); renderItServiceRenewals(); }
 }
 function saveItRenewalCategory(e) {
   e.preventDefault();
@@ -86,6 +99,7 @@ function saveItRenewalCategory(e) {
   syncStorage('itRenewalCategories');
   logSystemAction('IT_SUPPORT', 'ADD_IT_RENEWAL_CATEGORY', `Thêm loại dịch vụ Gia Hạn CNTT mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtItRenewalCategoryName').value = '';
+  renderItRenewalCategoryList();
   renderItServiceRenewals();
 }
 function deleteItRenewalCategory(name) {
@@ -93,6 +107,7 @@ function deleteItRenewalCategory(name) {
   DB.itRenewalCategories = (DB.itRenewalCategories || []).filter(c => c !== name);
   syncStorage('itRenewalCategories');
   logSystemAction('IT_SUPPORT', 'DELETE_IT_RENEWAL_CATEGORY', `Xóa loại dịch vụ Gia Hạn CNTT [${name}]`, 'SUCCESS', name);
+  renderItRenewalCategoryList();
   renderItServiceRenewals();
 }
 

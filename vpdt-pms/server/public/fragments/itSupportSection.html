@@ -383,21 +383,6 @@
         </form>
       </div>
 
-      <!-- Danh Mục "Loại Dịch Vụ" (chỉ Admin, đợt audit "form-fields-6") — cùng khuôn "Quản Lý Danh Mục
-           Các Loại Giấy Phép" (licenseTypes ở màn Quản Lý Danh Mục) — xem
-           renderItRenewalCategoryList()/saveItRenewalCategory()/deleteItRenewalCategory() bên dưới. -->
-      <div id="itRenewalCategoryAdminBox" class="hidden bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
-        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục "Loại Dịch Vụ"</h3>
-        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Loại dịch vụ" ở form thêm dịch vụ phía trên — tự học thêm khi ai gõ loại mới, ở đây chỉ để thêm/dọn/xoá bớt.</p>
-        <form data-op-submit="saveItRenewalCategory" class="flex gap-2">
-          <input id="txtItRenewalCategoryName" placeholder="Tên loại dịch vụ mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="itRenewalCategoryList" class="divide-y text-xs"></ul>
-        </div>
-      </div>
-
       <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
         <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc</span></summary>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">

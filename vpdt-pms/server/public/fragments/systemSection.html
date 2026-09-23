@@ -749,6 +749,27 @@
         </div>
       </div>
 
+      <!-- Danh Mục "Loại Dịch Vụ" (Gia Hạn CNTT) — DỜI vào đây (yêu cầu người dùng 9/2026, trước đó nằm
+           lẫn trong màn nghiệp vụ "Hỗ Trợ IT > Gia Hạn Dịch Vụ", không đúng chỗ vì đây là danh mục cấu
+           hình dùng chung, không phải thao tác nghiệp vụ) — cùng khuôn các khối danh mục phẳng khác ở
+           trên (Vùng Giá Áp Dụng/Lý Do Đánh Giá Chuyến Xe...). Tab "🗂️ Quản Lý Danh Mục" này đã nằm
+           trong "ADMIN" (chỉ admin vào được, xem setSystemSubTab() chặn ngay từ đầu) nên KHÔNG cần lớp
+           ẩn/hiện admin-only riêng như trước nữa (trước đây khối này còn hiện được ở màn "Gia Hạn Dịch
+           Vụ" — nơi itServiceRenewalManage KHÔNG phải admin cũng vào được — nên phải tự ẩn/hiện theo
+           quyền admin; giờ cả màn này đã admin-only sẵn nên bỏ hẳn lớp đó, xem renderItRenewalCategoryList()
+           ở module-itsupport-renewal.js). -->
+      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục "Loại Dịch Vụ" (Gia Hạn CNTT)</h3>
+        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Loại dịch vụ" ở form "Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn" (Hỗ Trợ IT → Gia Hạn Dịch Vụ) — tự học thêm khi ai gõ loại mới, ở đây chỉ để thêm/dọn/xoá bớt.</p>
+        <form data-op-submit="saveItRenewalCategory" class="flex gap-2">
+          <input id="txtItRenewalCategoryName" placeholder="Tên loại dịch vụ mới..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="itRenewalCategoryList" class="divide-y text-xs"></ul>
+        </div>
+      </div>
+
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
         <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
         <form data-op-submit="saveCat" class="flex gap-2">
