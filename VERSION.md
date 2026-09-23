@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**24.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.8 (2026-09-23): Vá lỗi màu chữ mờ ở 2 nút sub-tab "Nhật Ký" + lỗ hổng Tailwind content-glob
+
+Người dùng báo lỗi màu chữ mờ ở 2 nút "📋 Nhật Ký Hoạt Động"/"🖥️ Nhật Ký Lỗi
+Hệ Thống" (thêm ở v24.5) — chữ trắng trên nền trong suốt thay vì nền
+`bg-stone-700` như thiết kế. Nguyên nhân gốc **rộng hơn** phạm vi 2 nút này:
+`tailwind.config.js` chỉ quét `public/index.html` + `public/js/**/*.js` để
+build `public/tailwind.css`, KHÔNG hề quét `public/fragments/**/*.html` — nơi
+toàn bộ 27 màn HTML tải lười (checklist, ngân sách, đăng ký xe, hệ thống...)
+đang sống từ nhiều đợt trước. Bất kỳ class Tailwind nào chỉ xuất hiện trong 1
+fragment (không lặp lại ở `index.html`/1 file `.js` nào khác) sẽ bị bỏ sót
+khỏi bản build dù chạy `npm run build:css` bao nhiêu lần — đúng lớp lỗi đã
+từng gặp 1 lần (2026-09, tab "Đăng Ký Xe"/"Lái Xe", xem chú thích cũ trong
+`tailwind.config.js`) nhưng lần đó chỉ vá phần thiếu `public/js/**/*.js`, bỏ
+sót luôn phần fragment.
+
+Đã vá: thêm `'./public/fragments/**/*.html'` vào mảng `content` của
+`tailwind.config.js`, build lại `public/tailwind.css`. Xác minh triệt để (không
+chỉ 2 nút bị báo): quét toàn bộ 18.187 lượt dùng class trong cả 27 file
+fragment lẫn 6.281 lượt trong `index.html`, đối chiếu từng class với CSS đã
+build — 0 class Tailwind nào còn thiếu. Test: `test-error-log-ui.js` (9/9
+pass, không đổi hành vi JS nào, đây thuần là lỗi build CSS).
+
+**Lưu ý deploy**: đây là thay đổi CSS build-time — trên server production
+phải `npm run build:css` lại (hoặc copy đúng `public/tailwind.css` đã build
+kèm code mới) rồi mới `pm2 restart`, nếu không 2 nút vẫn hiển thị mờ như cũ dù
+đã copy code JS/HTML mới.
 
 ## v24.6-24.7 (2026-09-23): Dời Danh Mục "Loại Dịch Vụ" + Vá lỗi "Thêm Mẫu Giá" (Phê Duyệt Giá)
 
