@@ -1173,7 +1173,7 @@ function openEvaluateCarTripModal(id) {
     </label>
   `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có danh mục lý do — liên hệ Quản Trị Viên.</p>';
   showConfirmModal({
-    title: '⭐ Đánh Giá Chuyến Đăng Ký Xe',
+    title: '⭐ Đánh Giá Chất Lượng Chuyến Xe',
     bodyHTML: `
       <p>Chuyến <b>${escapeHtml(c.code)}</b> — <i>${escapeHtml(c.destination)}</i> đã được lái xe kết thúc.</p>
       <p class="text-xs text-gray-500 mt-1">Số km lái xe báo cáo: <b>${c.driverReportedKm ?? c.actualKm ?? 0} km</b> (${escapeHtml(c.tripEndedAt || '')})</p>

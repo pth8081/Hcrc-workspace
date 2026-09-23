@@ -1,8 +1,15 @@
 # Phiên bản hiện tại
 
-**24.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.10 (2026-09-23): Đổi nhãn modal đánh giá chuyến Đăng Ký Xe
+
+Người dùng yêu cầu đổi tiêu đề modal đánh giá chuyến (mở sau khi lái xe kết
+thúc chuyến) từ "⭐ Đánh Giá Chuyến Đăng Ký Xe" thành "⭐ Đánh Giá Chất Lượng
+Chuyến Xe" — đổi đúng 1 chuỗi tại `openEvaluateCarTripModal()`
+(`module-dangkyxe.js`), không đổi logic nghiệp vụ.
 
 ## v24.9 (2026-09-23): Checklist — Admin không có quyền Kiểm Soát thật thì dồn vào khối "🧪 Test"
 
