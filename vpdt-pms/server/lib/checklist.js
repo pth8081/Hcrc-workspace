@@ -495,6 +495,94 @@ function assertReadyToFinalize(scoring) {
   }
 }
 
+// ===================== Dashboard "Báo Cáo Đánh Giá VSATTP" (10/2026, yêu cầu người dùng) =====================
+// Áp dụng cho MỌI mẫu templateKind==='DEDUCTION' (không hardcode riêng tên "VSATTP" — mẫu Trừ Điểm mới
+// tạo sau này tự động có Dashboard, đúng xác nhận người dùng). Dùng CHUNG bởi:
+//   - routes/checklist.js (POST /vsattp-dashboard/export) — nguồn SỰ THẬT, server luôn tự tính lại từ
+//     DB.checklistSubmissions/DB.checklistTemplates/DB.stores.storeTypes, KHÔNG tin số liệu client gửi
+//     lên (đây là báo cáo, không phải ghi dữ liệu, nhưng vẫn giữ nguyên tắc "server tự tính" cho MỌI xuất
+//     file — tránh 1 request tự soạn xuất ra file với số liệu giả mạo).
+//   - module-checklist.js (renderChecklistVsattpDashboard(), client mirror THUẦN HIỂN THỊ cho tab web —
+//     sửa 1 bên PHẢI soát lại bên kia, cùng khuôn hasChecklistAuditScope()/hasChecklistAuditScopeClient()).
+function isDeductionTemplate(t) { return !!(t && t.templateKind === 'DEDUCTION'); }
+
+// Điểm TB/siêu thị = trung bình scorePercent (0-100) của mọi bài SUBMITTED trong kỳ — dùng % thay vì
+// totalScore thô để cộng dồn ĐÚNG dù sau này có nhiều mẫu DEDUCTION khác nhau tổng điểm khác 100.
+function computeVsattpStoreAverages(submissions) {
+  const byStore = new Map();
+  submissions.forEach((s) => {
+    if (s.scorePercent == null) return;
+    if (!byStore.has(s.storeCode)) byStore.set(s.storeCode, []);
+    byStore.get(s.storeCode).push(s.scorePercent);
+  });
+  const result = new Map();
+  byStore.forEach((scores, storeCode) => result.set(storeCode, scores.reduce((a, b) => a + b, 0) / scores.length));
+  return result;
+}
+
+// storeTypes: map { [tên]: 'ST'|'CH' } (AppData key 'storeTypes', xem defaults.js) — tên KHÔNG có trong
+// map rơi vào unclassified, KHÔNG tính vào Top 5/tỷ lệ vi phạm tách ST/CH.
+function vsattpSplitStoresByType(storeCodes, storeTypes) {
+  const st = [], ch = [], unclassified = [];
+  for (const code of storeCodes) {
+    const type = (storeTypes || {})[code];
+    if (type === 'ST') st.push(code);
+    else if (type === 'CH') ch.push(code);
+    else unclassified.push(code);
+  }
+  return { st, ch, unclassified };
+}
+
+function vsattpTopList(avgMap, storeCodes, direction, limit) {
+  const rows = storeCodes.map((code) => ({ storeCode: code, avg: avgMap.get(code) })).filter((r) => r.avg != null);
+  rows.sort((a, b) => (direction === 'high' ? b.avg - a.avg : a.avg - b.avg));
+  return rows.slice(0, limit);
+}
+
+// Tỷ lệ vi phạm theo TỪNG tiêu chí — mẫu số là số đơn vị (ST hoặc CH) PHÂN BIỆT đã có ít nhất 1 bài nộp
+// trong kỳ (không phải tổng số trong Danh Mục), khớp đúng cách file Excel gốc tính ("Tổng số ST"/"Cửa
+// hàng: N" ở đầu sheet). Key gộp theo `${templateId}:${criteriaId}` — an toàn khi Dashboard gộp NHIỀU
+// mẫu DEDUCTION khác nhau cùng lúc (id tiêu chí chỉ duy nhất TRONG 1 mẫu, không phải toàn hệ thống).
+function vsattpViolationRates(submissions, storeCodesOfType, templatesById) {
+  const storeSet = new Set(storeCodesOfType);
+  const byCriteria = new Map();
+  submissions.forEach((s) => {
+    if (!storeSet.has(s.storeCode)) return;
+    const template = templatesById.get(s.templateId);
+    if (!template) return;
+    const labelById = new Map();
+    (template.categories || []).forEach((cat) => (cat.subItems || []).forEach((sub) => (sub.criteria || []).forEach((c) => {
+      labelById.set(c.id, c.description);
+    })));
+    (s.deductions || []).forEach((d) => {
+      if (!(d.deductedPoints > 0)) return;
+      const key = `${s.templateId}:${d.criteriaId}`;
+      if (!byCriteria.has(key)) byCriteria.set(key, { label: labelById.get(d.criteriaId) || '(Tiêu chí đã bị xoá khỏi mẫu)', stores: new Set() });
+      byCriteria.get(key).stores.add(s.storeCode);
+    });
+  });
+  const denom = storeSet.size;
+  const rows = [...byCriteria.values()].map((v) => ({ label: v.label, count: v.stores.size, pct: denom > 0 ? (v.stores.size / denom) * 100 : 0 }));
+  rows.sort((a, b) => b.pct - a.pct);
+  return { rows, denom };
+}
+
+// Hàm tổng hợp DUY NHẤT — trả về đúng hình dạng Dashboard cần (Top 5 x4 + tỷ lệ vi phạm x2 + danh sách
+// mã ST/CH/chưa phân loại). submissions ĐÃ được lọc sẵn (status SUBMITTED, templateKind DEDUCTION,
+// đúng khoảng ngày/siêu thị đã chọn) TRƯỚC KHI gọi hàm này — xem getVsattpFilteredSubmissions() (mirror
+// ở cả routes/checklist.js lẫn module-checklist.js, khuôn 2 nơi giống hệt resolveStoreCodeForSubmission()).
+function computeVsattpDashboardData(submissions, templates, storeTypes) {
+  const templatesById = new Map((templates || []).map((t) => [t.id, t]));
+  const avgMap = computeVsattpStoreAverages(submissions);
+  const { st, ch, unclassified } = vsattpSplitStoresByType([...avgMap.keys()], storeTypes);
+  return {
+    topStHigh: vsattpTopList(avgMap, st, 'high', 5), topStLow: vsattpTopList(avgMap, st, 'low', 5),
+    topChHigh: vsattpTopList(avgMap, ch, 'high', 5), topChLow: vsattpTopList(avgMap, ch, 'low', 5),
+    violSt: vsattpViolationRates(submissions, st, templatesById), violCh: vsattpViolationRates(submissions, ch, templatesById),
+    stCodes: st, chCodes: ch, unclassifiedCodes: unclassified, avgMap
+  };
+}
+
 module.exports = {
   TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES, SCORING_MODES, TEMPLATE_KINDS,
   canManageChecklistTemplates, canViewChecklistReports, getChecklistAuditStores, hasChecklistAuditScope,
@@ -502,5 +590,6 @@ module.exports = {
   validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields,
   resolveStoreCodeForSubmission, sanitizeChecklistAnswers, sanitizeChecklistDeductions, computeVisibleQuestions,
   computeChecklistScoring, computeDeductionScoring, assertReadyToFinalize,
+  isDeductionTemplate, computeVsattpDashboardData,
   nowVN
 };

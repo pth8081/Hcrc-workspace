@@ -3142,6 +3142,40 @@ bảng phẳng ở trên):
 - Quyền: `checklistReportView` (đúng quyền xem tab Báo Cáo hiện có, không
   cần thêm quyền riêng).
 
+**Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng)** — tab **📊
+Báo Cáo** giờ chia **2 tab con**, cùng dùng chung đúng 1 quyền
+`checklistReportView` (KHÔNG tách quyền riêng, theo xác nhận người dùng):
+
+- **📋 Checklist Siêu Thị/Cửa Hàng** — chính là nội dung tab Báo Cáo cũ (bảng
+  phẳng mọi mẫu/mọi loại + "Xuất Theo Mẫu Gốc" mô tả ở trên), chỉ đổi tên.
+- **🥗 Đánh Giá VSATTP** — Dashboard MỚI, áp dụng cho **MỌI mẫu kiểu "Trừ
+  Điểm Theo Hạng Mục"** (không hardcode riêng 1 mẫu tên "VSATTP" — mẫu Trừ
+  Điểm tạo mới sau này tự động có Dashboard), mirror đúng bố cục sheet
+  Dashboard trong file Excel VSATTP gốc người dùng gửi:
+  - Lọc theo **khoảng ngày** + **chọn nhiều/để trống (=tất cả) Siêu Thị/Cửa
+    Hàng**.
+  - **4 khối Top 5** (Siêu Thị điểm TB cao nhất/thấp nhất, Cửa Hàng điểm TB
+    cao nhất/thấp nhất) — điểm TB/đơn vị = trung bình `scorePercent` của mọi
+    bài đã nộp trong kỳ.
+  - **2 khối tỷ lệ vi phạm** (theo Siêu Thị/theo Cửa Hàng) — % số đơn vị
+    PHÂN BIỆT (không phải tổng danh mục) đã có ít nhất 1 lần mắc đúng tiêu
+    chí đó trong kỳ, sắp giảm dần theo tỷ lệ.
+  - **Nút "📥 Xuất Excel"** tải **1 file gộp DUY NHẤT** (yêu cầu người dùng
+    "gộp chung file"): sheet `Dashboard` (đúng 4 bảng Top 5 + 2 bảng tỷ lệ vi
+    phạm ở trên, dạng bảng số liệu — KHÔNG có biểu đồ Excel, chỉ xem biểu đồ
+    trực quan ngay trên màn web) + 1 sheet chi tiết/đơn vị (cùng layout với
+    "Xuất Theo Mẫu Gốc" loại Trừ Điểm ở trên).
+  - **Bắt buộc phân loại Siêu Thị/Cửa Hàng trước khi dùng**: vào **Hệ Thống →
+    ⚙️ Quản Trị → 🗂️ Quản Lý Danh Mục → 🏬 Quản Lý Danh Mục Siêu Thị**, mỗi
+    tên có 1 dropdown **"Siêu Thị"/"Cửa Hàng"/"— Chưa phân loại —"**
+    (`storeTypes`, map RIÊNG với `stores` — không đổi hình dạng danh mục cũ).
+    Đơn vị **chưa phân loại** vẫn hoạt động bình thường ở mọi tính năng
+    khác, chỉ riêng Dashboard VSATTP loại ra khỏi Top 5/tỷ lệ vi phạm (có
+    khung cảnh báo riêng nêu rõ tên từng đơn vị chưa gán).
+  - Server luôn **tự tính lại từ đầu** khi xuất Excel (không tin số liệu
+    client gửi lên) — khớp nguyên tắc chung của mọi lượt xuất báo cáo trong
+    hệ thống.
+
 ---
 
 ### 4.8. Mua Hàng (BAS — Cơ Sở Tính Chiết Khấu/Thưởng NCC)

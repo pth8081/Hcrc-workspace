@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**24.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.11 (2026-09-23): Checklist — Dashboard "🥗 Báo Cáo Đánh Giá VSATTP"
+
+Yêu cầu người dùng: tách tab "📊 Báo Cáo" (module Checklist) thành 2 tab con
+— "📋 Checklist Siêu Thị/Cửa Hàng" (nội dung cũ, đổi tên) và "🥗 Đánh Giá
+VSATTP" (Dashboard MỚI, giống hệt sheet Dashboard trong file Excel VSATTP
+người dùng gửi kèm) — dùng CHUNG đúng 1 quyền `checklistReportView`, không
+tách quyền riêng theo xác nhận người dùng.
+
+**Dashboard VSATTP** — áp dụng cho MỌI mẫu checklist kiểu "Trừ Điểm Theo
+Hạng Mục" (`templateKind==='DEDUCTION'`, không hardcode riêng 1 mẫu tên
+"VSATTP"):
+- Lọc theo khoảng ngày + chọn nhiều/để trống (=tất cả) Siêu Thị/Cửa Hàng.
+- 4 khối Top 5 (ST/CH điểm TB cao nhất/thấp nhất) + 2 khối tỷ lệ vi phạm
+  theo từng tiêu chí (ST/CH riêng), mẫu số = số đơn vị PHÂN BIỆT đã kiểm
+  tra trong kỳ (không phải tổng danh mục) — mirror đúng cách file Excel gốc
+  tính toán.
+- Nút "📥 Xuất Excel" tải 1 file GỘP DUY NHẤT (yêu cầu người dùng "gộp
+  chung file"): sheet "Dashboard" (bảng số liệu, không có biểu đồ Excel) +
+  1 sheet chi tiết/đơn vị (tái dùng layout "Xuất Theo Mẫu Gốc" có sẵn) —
+  server luôn tự tính lại từ đầu khi xuất, không tin số liệu client gửi.
+
+**Danh mục mới — `storeTypes`**: do hệ thống trước đây KHÔNG có cách nào
+phân biệt "Siêu Thị" và "Cửa Hàng" (Danh Mục Siêu Thị chỉ là 1 mảng tên
+phẳng), thêm 1 catalog map RIÊNG `{ [tên]: 'ST'|'CH' }` (không đổi hình
+dạng `stores` cũ, tránh vỡ hàng loạt nơi đang đọc mảng chuỗi thuần) —
+admin gán qua dropdown ngay tại Hệ Thống → Quản Trị → Quản Lý Danh Mục →
+Danh Mục Siêu Thị. Đơn vị chưa phân loại vẫn hoạt động bình thường ở mọi
+tính năng khác, chỉ riêng Dashboard VSATTP loại ra (có cảnh báo riêng nêu
+tên từng đơn vị).
+
+Test: 4 file mới (`test-checklist-vsattp-dashboard-aggregation.js` 15/15 —
+Top 5/tỷ lệ vi phạm/áp dụng đa mẫu DEDUCTION không lẫn tiêu chí trùng id;
+`test-checklist-vsattp-dashboard-export.js` 4/4 — quyền + file .xlsx hợp lệ
++ loại mẫu QA; `test-checklist-vsattp-dashboard-ui.js` 12/12 — chuyển tab/
+lọc/cảnh báo chưa phân loại/gọi đúng route xuất; `test-admin-store-type-ui.js`
+10/10 — gán/xoá loại + khôi phục khi lưu thất bại) — full regression 8 file
+checklist liên quan + toàn bộ Nghiệp Vụ (148/148) vẫn xanh.
 
 ## v24.10 (2026-09-23): Đổi nhãn modal đánh giá chuyến Đăng Ký Xe
 

@@ -19,6 +19,17 @@ const DEFAULTS = {
   // (uniformPeriods) là nơi DUY NHẤT hiện đang dùng danh mục này làm nguồn chọn siêu thị.
   stores: [],
 
+  // storeTypes (10/2026, yêu cầu người dùng — Báo Cáo Đánh Giá VSATTP): PHÂN LOẠI từng tên trong
+  // DB.stores thành 'ST' (Siêu Thị) hoặc 'CH' (Cửa Hàng) — DB.stores TỰ NÓ vẫn là mảng phẳng KHÔNG đổi
+  // hình dạng (rất nhiều nơi trong hệ thống đọc DB.stores như mảng chuỗi thuần, đổi hình dạng sẽ vỡ hàng
+  // loạt chỗ) — tách riêng thành 1 catalog map độc lập { [tênSiêuThị]: 'ST'|'CH' }, tên KHÔNG có trong
+  // map coi là "Chưa phân loại" (không tính vào Dashboard VSATTP tách ST/CH, xem
+  // renderChecklistVsattpDashboard() ở module-checklist.js). Admin gán qua dropdown ngay tại màn Quản Lý
+  // Danh Mục > Danh Mục Siêu Thị (renderStoreList(), module-admin.js) — ghi qua route chung
+  // POST /api/data/storeTypes (admin-only, xem ADMIN_ONLY_KEYS ở routes/data.js), KHÔNG cascade khi đổi
+  // tên siêu thị (rename hiếm xảy ra — nếu có, admin gán lại loại, không mất dữ liệu Dashboard đã tính).
+  storeTypes: {},
+
   // Danh mục "Các Loại Giấy Phép" (module Giấy Phép, Hành Chính) — nguồn gợi ý cho ô "Tên giấy phép /
   // Loại giấy phép" (widget sdd), tự học thêm khi ai đó gõ loại mới (xem uploadLicense() ở index.html),
   // admin quản lý/dọn ở màn Quản Lý Danh Mục (saveLicenseType()/deleteLicenseType()).

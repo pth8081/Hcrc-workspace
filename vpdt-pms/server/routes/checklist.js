@@ -16,7 +16,7 @@ const { assertUploadedFileUrl } = require('../lib/createValidation');
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 const { getAppDataValueCached } = require('../lib/appData');
 const checklist = require('../lib/checklist');
-const { buildQaReportWorkbook, buildDeductionReportWorkbook } = require('../lib/checklistReportExport');
+const { buildQaReportWorkbook, buildDeductionReportWorkbook, buildVsattpDashboardWorkbook } = require('../lib/checklistReportExport');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -488,6 +488,55 @@ router.post('/export-report', requireReportView, async (req, res) => {
     await wb.xlsx.write(res);
     res.end();
   } catch (err) { sendCatchError(res, err, 'checklist/export-report'); }
+});
+
+// ===================== XUẤT DASHBOARD VSATTP (10/2026, yêu cầu người dùng "gộp chung file") =====================
+// Body: { storeCodes: string[]|null (null/rỗng = TẤT CẢ), fromDate, toDate (yyyy-mm-dd, tuỳ chọn) } —
+// server TỰ TÍNH LẠI toàn bộ (không tin số liệu client gửi lên, kể cả Top 5/tỷ lệ vi phạm — đây là báo
+// cáo xuất file, không phải chỉ hiển thị, phải đúng nguồn sự thật). Xuất ĐÚNG 1 file gộp: sheet
+// "Dashboard" (Top 5 x4 + tỷ lệ vi phạm x2) + 1 sheet chi tiết/siêu thị (dùng lại
+// buildVsattpDashboardWorkbook(), xem lib/checklistReportExport.js) — áp dụng cho MỌI mẫu
+// templateKind==='DEDUCTION' cùng lúc (không riêng mẫu tên "VSATTP").
+router.post('/vsattp-dashboard/export', requireReportView, async (req, res) => {
+  try {
+    const rawStoreCodes = Array.isArray(req.body?.storeCodes) ? req.body.storeCodes.map(s => String(s).trim()).filter(Boolean) : [];
+    const storeFilter = rawStoreCodes.length ? new Set(rawStoreCodes) : null;
+    const fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
+    const toDate = req.body?.toDate ? new Date(req.body.toDate) : null;
+
+    const [templates, allSubmissions, storeTypes] = await Promise.all([
+      getAllForCollection('checklistTemplates'),
+      getAllForCollection('checklistSubmissions'),
+      getAppDataValueCached('storeTypes')
+    ]);
+    const deductionTemplateIds = new Set(templates.filter(checklist.isDeductionTemplate).map(t => t.id));
+    const matched = allSubmissions.filter(s => {
+      if (s.status !== 'SUBMITTED' || !deductionTemplateIds.has(s.templateId)) return false;
+      if (storeFilter && !storeFilter.has(s.storeCode)) return false;
+      const submittedDate = parseSubmittedAtDate(s.submittedAt);
+      if (fromDate && submittedDate && submittedDate < fromDate) return false;
+      if (toDate && submittedDate && submittedDate > toDate) return false;
+      return true;
+    });
+    if (!matched.length) return res.status(400).json({ error: 'Không có bài Đánh Giá VSATTP nào khớp bộ lọc (khoảng ngày/siêu thị) để xuất' });
+
+    const dashboardData = checklist.computeVsattpDashboardData(matched, templates, storeTypes || {});
+    const templatesById = new Map(templates.map(t => [t.id, t]));
+    const submissionsByStore = new Map();
+    matched.forEach(s => {
+      if (!submissionsByStore.has(s.storeCode)) submissionsByStore.set(s.storeCode, []);
+      submissionsByStore.get(s.storeCode).push(s);
+    });
+    for (const list of submissionsByStore.values()) {
+      list.sort((a, b) => (parseSubmittedAtDate(a.submittedAt) || 0) - (parseSubmittedAtDate(b.submittedAt) || 0));
+    }
+
+    const wb = buildVsattpDashboardWorkbook(dashboardData, submissionsByStore, templatesById);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="bao-cao-danh-gia-vsattp.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { sendCatchError(res, err, 'checklist/vsattp-dashboard/export'); }
 });
 
 module.exports = router;

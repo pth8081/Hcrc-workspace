@@ -130,13 +130,33 @@ function deleteStore(name) {
 function renderStoreList() {
   const ul = document.getElementById('storeList');
   if (!ul) return;
+  const types = DB.storeTypes || {};
   ul.innerHTML = DB.stores.map(s => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(s)}</span>
+      <select data-op-change="setStoreType" data-arg0="${escapeHtml(s)}" data-arg-value="1" class="border rounded text-[11px] p-0.5">
+        <option value="" ${!types[s] ? 'selected' : ''}>— Chưa phân loại —</option>
+        <option value="ST" ${types[s] === 'ST' ? 'selected' : ''}>Siêu Thị</option>
+        <option value="CH" ${types[s] === 'CH' ? 'selected' : ''}>Cửa Hàng</option>
+      </select>
       <button data-op="renameStore" data-arg0="${escapeHtml(s)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteStore" data-arg0="${escapeHtml(s)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+
+// setStoreType() — gán phân loại Siêu Thị (ST)/Cửa Hàng (CH) cho 1 tên trong Danh Mục Siêu Thị (10/2026,
+// yêu cầu người dùng — phục vụ Dashboard "Báo Cáo Đánh Giá VSATTP" tách riêng Top 5/tỷ lệ vi phạm theo
+// ST/CH, xem renderChecklistVsattpDashboard() ở module-checklist.js). DB.stores TỰ NÓ không đổi hình
+// dạng — storeTypes là 1 catalog map RIÊNG { [tên]: 'ST'|'CH' }, xem chú thích đầy đủ ở defaults.js.
+async function setStoreType(name, type) {
+  const prev = { ...(DB.storeTypes || {}) };
+  const next = { ...(DB.storeTypes || {}) };
+  if (type) next[name] = type; else delete next[name];
+  DB.storeTypes = next;
+  const saved = await syncStorage('storeTypes');
+  if (!saved) { DB.storeTypes = prev; renderStoreList(); return; }
+  logSystemAction('USER_MGM', 'SET_STORE_TYPE', `Phân loại siêu thị [${name}] → [${type || 'Chưa phân loại'}]`, 'SUCCESS', name);
 }
 
 // Sửa (rename, CÓ CASCADE) 1 giá trị trong danh mục "stores"/"jobTitles"/"storeJobTitles" — gọi route

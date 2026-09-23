@@ -194,6 +194,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // POST /api/admin/renameCatalogEntry (routes/adminCatalog.js), cũng gate isCurrentlyAdmin() y hệt.
   // storeJobTitles: danh mục MỚI (mục 4a, Chức Danh Siêu Thị) — cùng lý do, panel CRUD chỉ hiện cho admin.
   'stores', 'jobTitles', 'storeJobTitles',
+  // storeTypes (10/2026): map phân loại Siêu Thị/Cửa Hàng cho từng tên trong 'stores' — panel gán ngay
+  // trong màn Quản Lý Danh Mục Siêu Thị (chỉ admin), cùng lý do khoá ghi như 'stores' ở trên.
+  'storeTypes',
   // depts/cats/licenseTypes/trainingCategories/contractTypeAbbrs: NỐT 5 danh mục còn lại của tab
   // "🗂️ Quản Lý Danh Mục" (chỉ hiện cho admin — cùng panel với stores/jobTitles/storeJobTitles vừa
   // khoá ở trên) nhưng vẫn BỊ BỎ SÓT khỏi danh sách này, nên bất kỳ tài khoản đã đăng nhập nào cũng

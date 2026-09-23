@@ -1064,6 +1064,20 @@ async function submitChecklistStoreResponse(submissionId) {
 }
 
 // ===================== Sub-tab: Báo Cáo (checklistReportView, RIÊNG cho module này) =====================
+// Từ 10/2026: chia 2 tab con "📋 Checklist Siêu Thị/Cửa Hàng" (nội dung cũ) / "🥗 Đánh Giá VSATTP"
+// (Dashboard mới) — DÙNG CHUNG đúng 1 quyền checklistReportView (yêu cầu người dùng: "để 1 quyền view là
+// xem được hết không cần tách"), không có cờ quyền riêng nào khác cho 2 khối này.
+let checklistReportActiveSubTab = 'GENERAL';
+function setChecklistReportSubTab(tab) {
+  checklistReportActiveSubTab = tab;
+  document.getElementById('checklistReportGeneralPanel').classList.toggle('hidden', tab !== 'GENERAL');
+  document.getElementById('checklistReportVsattpPanel').classList.toggle('hidden', tab !== 'VSATTP');
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnChecklistReportSubGeneral').className = tab === 'GENERAL' ? activeCls : inactiveCls;
+  document.getElementById('btnChecklistReportSubVsattp').className = tab === 'VSATTP' ? activeCls : inactiveCls;
+  if (tab === 'VSATTP') renderChecklistVsattpDashboard();
+}
 function renderChecklistReportTab() {
   const sel = document.getElementById('checklistReportTemplateFilter');
   sel.innerHTML = '<option value="">Tất cả</option>' + (DB.checklistTemplates || [])
@@ -1073,7 +1087,10 @@ function renderChecklistReportTab() {
   const storeSel = document.getElementById('checklistReportStoreFilter');
   const storeSet = new Set([...(DB.stores || []), ...(DB.checklistSubmissions || []).map(s => s.storeCode)].filter(Boolean));
   storeSel.innerHTML = [...storeSet].sort().map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  const vsattpStoreSel = document.getElementById('checklistVsattpStoreFilter');
+  vsattpStoreSel.innerHTML = [...storeSet].sort().map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   applyChecklistReportFilter();
+  setChecklistReportSubTab(checklistReportActiveSubTab);
 }
 async function exportChecklistReportByOriginalTemplate() {
   const templateId = document.getElementById('checklistReportTemplateFilter').value;
@@ -1154,4 +1171,170 @@ function exportChecklistReportExcel() {
     hasCriticalFailLabel: r.hasCriticalFail ? 'Có' : 'Không', isPassedLabel: r.isPassed === true ? 'Đạt' : (r.isPassed === false ? 'Không đạt' : '')
   }));
   downloadXlsxFromServer('bao-cao-checklist.xlsx', 'Báo Cáo Checklist', columns, rows);
+}
+
+// ===================== Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng) =====================
+// Client mirror THUẦN HIỂN THỊ cho lib/checklist.js::computeVsattpDashboardData() (server, dùng khi xuất
+// Excel — nguồn sự thật) — sửa 1 bên PHẢI soát lại bên kia, cùng khuôn hasChecklistAuditScope()/
+// hasChecklistAuditScopeClient(). Áp dụng cho MỌI mẫu templateKind==='DEDUCTION' (không hardcode riêng
+// tên "VSATTP" — xác nhận người dùng 10/2026).
+// parseSubmittedAtDate() — mirror ĐÚNG parseSubmittedAtDate() ở routes/checklist.js: submittedAt lưu
+// dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN')) — NGÀY Ở TOKEN THỨ 2 (index 1
+// sau split(' '), không phải token đầu/index 0 — token đầu là GIỜ). Cố ý viết hàm RIÊNG ở đây thay vì tái
+// dùng logic ngày-tháng của applyChecklistReportFilter() phía trên (file này) vì hàm đó đang lấy nhầm
+// token đầu (giờ) làm ngày — bug đã có từ trước, KHÔNG thuộc phạm vi sửa của tính năng này, không đụng
+// vào để tránh tác dụng phụ ngoài ý muốn.
+function parseChecklistSubmittedAtDate(submittedAt) {
+  const datePart = String(submittedAt || '').trim().split(' ')[1];
+  if (!datePart) return null;
+  const [d, m, y] = datePart.split('/').map(Number);
+  if (!d || !m || !y) return null;
+  return new Date(y, m - 1, d);
+}
+function getChecklistVsattpFilteredSubmissions(fromDate, toDate, storeCodes) {
+  const deductionTemplateIds = new Set((DB.checklistTemplates || []).filter(t => t.templateKind === 'DEDUCTION').map(t => t.id));
+  let rows = (DB.checklistSubmissions || []).filter(s => s.status === 'SUBMITTED' && deductionTemplateIds.has(s.templateId));
+  const from = fromDate ? new Date(fromDate) : null;
+  const to = toDate ? new Date(toDate) : null;
+  if (from || to) {
+    rows = rows.filter(s => {
+      const d = parseChecklistSubmittedAtDate(s.submittedAt);
+      if (!d) return true; // không parse được ngày -> không loại (an toàn, khớp hành vi applyChecklistReportFilter())
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }
+  if (storeCodes && storeCodes.length) rows = rows.filter(s => storeCodes.includes(s.storeCode));
+  return rows;
+}
+function computeChecklistVsattpStoreAverages(submissions) {
+  const byStore = new Map();
+  submissions.forEach(s => {
+    if (s.scorePercent == null) return;
+    if (!byStore.has(s.storeCode)) byStore.set(s.storeCode, []);
+    byStore.get(s.storeCode).push(s.scorePercent);
+  });
+  const result = new Map();
+  byStore.forEach((scores, storeCode) => result.set(storeCode, scores.reduce((a, b) => a + b, 0) / scores.length));
+  return result;
+}
+function splitChecklistVsattpStoresByType(storeCodes) {
+  const types = DB.storeTypes || {};
+  const st = [], ch = [], unclassified = [];
+  for (const code of storeCodes) {
+    if (types[code] === 'ST') st.push(code);
+    else if (types[code] === 'CH') ch.push(code);
+    else unclassified.push(code);
+  }
+  return { st, ch, unclassified };
+}
+function computeChecklistVsattpTopList(avgMap, storeCodes, direction, limit) {
+  const rows = storeCodes.map(code => ({ storeCode: code, avg: avgMap.get(code) })).filter(r => r.avg != null);
+  rows.sort((a, b) => direction === 'high' ? b.avg - a.avg : a.avg - b.avg);
+  return rows.slice(0, limit);
+}
+function computeChecklistVsattpViolationRates(submissions, storeCodesOfType) {
+  const storeSet = new Set(storeCodesOfType);
+  const templatesById = new Map((DB.checklistTemplates || []).map(t => [t.id, t]));
+  const byCriteria = new Map();
+  submissions.forEach(s => {
+    if (!storeSet.has(s.storeCode)) return;
+    const template = templatesById.get(s.templateId);
+    if (!template) return;
+    const labelById = new Map();
+    (template.categories || []).forEach(cat => (cat.subItems || []).forEach(sub => (sub.criteria || []).forEach(c => {
+      labelById.set(c.id, c.description);
+    })));
+    (s.deductions || []).forEach(d => {
+      if (!(d.deductedPoints > 0)) return;
+      const key = s.templateId + ':' + d.criteriaId;
+      if (!byCriteria.has(key)) byCriteria.set(key, { label: labelById.get(d.criteriaId) || '(Tiêu chí đã bị xoá khỏi mẫu)', stores: new Set() });
+      byCriteria.get(key).stores.add(s.storeCode);
+    });
+  });
+  const denom = storeSet.size;
+  const rows = [...byCriteria.values()].map(v => ({ label: v.label, count: v.stores.size, pct: denom > 0 ? (v.stores.size / denom * 100) : 0 }));
+  rows.sort((a, b) => b.pct - a.pct);
+  return { rows, denom };
+}
+
+function renderChecklistVsattpDashboard() {
+  const fromDate = document.getElementById('checklistVsattpFromDate').value;
+  const toDate = document.getElementById('checklistVsattpToDate').value;
+  const selectedStores = Array.from(document.getElementById('checklistVsattpStoreFilter').selectedOptions).map(o => o.value);
+  const subs = getChecklistVsattpFilteredSubmissions(fromDate, toDate, selectedStores);
+
+  const avgMap = computeChecklistVsattpStoreAverages(subs);
+  const { st, ch, unclassified } = splitChecklistVsattpStoresByType([...avgMap.keys()]);
+
+  const warnEl = document.getElementById('checklistVsattpUnclassifiedWarn');
+  if (unclassified.length) {
+    warnEl.classList.remove('hidden');
+    warnEl.innerText = `⚠️ ${unclassified.length} đơn vị chưa được phân loại Siêu Thị/Cửa Hàng (${unclassified.join(', ')}) — vào Hệ Thống → Quản Trị → Quản Lý Danh Mục → Danh Mục Siêu Thị để gán loại, nếu không sẽ KHÔNG được tính vào các biểu đồ tách Siêu Thị/Cửa Hàng bên dưới.`;
+  } else {
+    warnEl.classList.add('hidden');
+  }
+
+  const avgOf = (codes) => codes.length ? (codes.reduce((sum, c) => sum + avgMap.get(c), 0) / codes.length).toFixed(1) : '—';
+  document.getElementById('checklistVsattpStatsWrap').innerHTML = `
+    <div class="bg-emerald-50 p-3 rounded text-center"><div class="text-2xl font-bold text-emerald-700">${st.length}</div><div class="text-[11px] text-gray-500">Siêu Thị đã kiểm tra</div></div>
+    <div class="bg-emerald-50 p-3 rounded text-center"><div class="text-2xl font-bold text-emerald-700">${ch.length}</div><div class="text-[11px] text-gray-500">Cửa Hàng đã kiểm tra</div></div>
+    <div class="bg-sky-50 p-3 rounded text-center"><div class="text-2xl font-bold text-sky-700">${avgOf(st)}</div><div class="text-[11px] text-gray-500">Điểm TB Siêu Thị</div></div>
+    <div class="bg-sky-50 p-3 rounded text-center"><div class="text-2xl font-bold text-sky-700">${avgOf(ch)}</div><div class="text-[11px] text-gray-500">Điểm TB Cửa Hàng</div></div>
+  `;
+
+  const renderTop = (elId, list) => {
+    const el = document.getElementById(elId);
+    if (!list.length) { el.innerHTML = '<p class="text-[11px] text-gray-400 italic">Không có dữ liệu.</p>'; return; }
+    el.innerHTML = list.map(r => `
+      <div class="flex items-center gap-2 text-[11px]">
+        <span class="flex-1 truncate" title="${escapeHtml(r.storeCode)}">${escapeHtml(r.storeCode)}</span>
+        <div class="w-24 h-2.5 bg-gray-100 rounded overflow-hidden"><div class="h-full bg-emerald-500" data-style="width:${Math.min(100, r.avg).toFixed(1)}%"></div></div>
+        <span class="font-mono font-bold w-10 text-right">${r.avg.toFixed(1)}</span>
+      </div>`).join('');
+    applyDataStyles(el);
+  };
+  renderTop('checklistVsattpTopStHigh', computeChecklistVsattpTopList(avgMap, st, 'high', 5));
+  renderTop('checklistVsattpTopStLow', computeChecklistVsattpTopList(avgMap, st, 'low', 5));
+  renderTop('checklistVsattpTopChHigh', computeChecklistVsattpTopList(avgMap, ch, 'high', 5));
+  renderTop('checklistVsattpTopChLow', computeChecklistVsattpTopList(avgMap, ch, 'low', 5));
+
+  const renderViol = (elId, violResult) => {
+    const el = document.getElementById(elId);
+    if (!violResult.rows.length) { el.innerHTML = '<p class="text-[11px] text-gray-400 italic">Không có dữ liệu.</p>'; return; }
+    el.innerHTML = violResult.rows.map(r => `
+      <div class="grid grid-cols-[1fr_90px_50px] items-center gap-2 text-[11px] border-b py-1">
+        <span title="${escapeHtml(r.label)}">${escapeHtml(r.label.length > 100 ? r.label.slice(0, 100) + '…' : r.label)}</span>
+        <div class="h-2 bg-red-100 rounded overflow-hidden"><div class="h-full bg-red-500" data-style="width:${r.pct.toFixed(1)}%"></div></div>
+        <span class="font-mono font-bold text-red-600 text-right">${r.pct.toFixed(1)}%</span>
+      </div>`).join('');
+    applyDataStyles(el);
+  };
+  renderViol('checklistVsattpViolSt', computeChecklistVsattpViolationRates(subs, st));
+  renderViol('checklistVsattpViolCh', computeChecklistVsattpViolationRates(subs, ch));
+}
+function applyChecklistVsattpFilter() { renderChecklistVsattpDashboard(); }
+async function exportChecklistVsattpExcel() {
+  const fromDate = document.getElementById('checklistVsattpFromDate').value;
+  const toDate = document.getElementById('checklistVsattpToDate').value;
+  const storeCodes = Array.from(document.getElementById('checklistVsattpStoreFilter').selectedOptions).map(o => o.value);
+  try {
+    const res = await fetch('/api/checklist/vsattp-dashboard/export', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeCodes: storeCodes.length ? storeCodes : null, fromDate: fromDate || null, toDate: toDate || null })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert('⛔ ' + (body.error || 'Không thể xuất file'));
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'bao-cao-danh-gia-vsattp.xlsx';
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('⛔ Không thể kết nối tới máy chủ: ' + e.message); }
 }

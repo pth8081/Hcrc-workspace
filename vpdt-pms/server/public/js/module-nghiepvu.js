@@ -776,7 +776,7 @@ const NGHIEP_VU_DOCS = {
     ] },
   },
   checklist: {
-    icon: '✅', title: 'Checklist Đánh Giá Siêu Thị', badge: 'Cập nhật v23.4',
+    icon: '✅', title: 'Checklist Đánh Giá Siêu Thị', badge: 'Cập nhật 10/2026',
     desc: 'Bộ tiêu chí đánh giá (hạng mục/câu hỏi/điểm) do quản trị chuẩn bị sẵn thành mẫu — người đánh giá chọn siêu thị rồi chấm theo đúng bộ tiêu chí đang dùng. Mỗi mẫu trải qua 3 trạng thái: Nháp → Đang dùng → Lưu trữ, với các nút Dừng/Sửa/Xoá phù hợp theo từng trạng thái và quyền hạn.',
     flow: { ariaLabel: 'Quy trình Checklist Đánh Giá Siêu Thị', chain: [
       { label: 'Chuẩn bị mẫu', sub: 'Hạng mục, câu hỏi, điểm (quản trị)' },
@@ -787,7 +787,8 @@ const NGHIEP_VU_DOCS = {
     steps: [
       { role: 'Quản trị', text: 'vào <b>⚙️ Vận Hành → ✅ Checklist Đánh Giá</b> (sidebar) → tab <b>"🛠️ Cấu Hình"</b> → "🛠️ Tạo Mẫu Checklist Mới" → chọn Loại Mẫu, thêm hạng mục/câu hỏi/điểm → lưu ở trạng thái Nháp, rồi kích hoạt để chuyển thành "Đang dùng" (chỉ 1 mẫu đang dùng mỗi lúc).' },
       { role: 'Người đánh giá', text: 'tab <b>"✅ Thực Hiện"</b> → chọn siêu thị cần đánh giá → trả lời từng mục theo đúng mẫu đang dùng → nộp bài (hệ thống tự tính điểm/xếp loại). Bài chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
-      { text: 'Xem kết quả và phản hồi: tab "📣 Kết Quả & Phản Hồi"; xem tổng hợp nhiều đợt: tab "📊 Báo Cáo".' },
+      { text: 'Xem kết quả và phản hồi: tab "📣 Kết Quả & Phản Hồi"; xem tổng hợp nhiều đợt: tab "📊 Báo Cáo" — CHIA 2 tab con dùng chung quyền checklistReportView: "📋 Checklist Siêu Thị/Cửa Hàng" (bảng phẳng mọi loại mẫu, như trước) và "🥗 Đánh Giá VSATTP" (Dashboard riêng, xem bước dưới).' },
+      { role: 'Người xem báo cáo', text: 'tab con "🥗 Đánh Giá VSATTP" (10/2026, áp dụng cho MỌI mẫu kiểu "Trừ Điểm Theo Hạng Mục", không riêng 1 mẫu tên "VSATTP") — lọc theo khoảng ngày + chọn nhiều/để trống = tất cả Siêu Thị/Cửa Hàng → xem Top 5 điểm TB cao/thấp nhất và tỷ lệ vi phạm theo từng tiêu chí, TÁCH RIÊNG Siêu Thị/Cửa Hàng theo đúng phân loại đã gán ở Hệ Thống → Quản Trị → Quản Lý Danh Mục → Danh Mục Siêu Thị (cột "Loại") — đơn vị CHƯA phân loại sẽ có cảnh báo riêng và KHÔNG tính vào Top 5/tỷ lệ vi phạm. Bấm "📥 Xuất Excel" tải 1 file gộp: sheet "Dashboard" + 1 sheet chi tiết/đơn vị.' },
       { role: 'Quản trị', text: 'muốn đổi mẫu đang dùng: bấm "⏸️ Dừng" trên mẫu hiện tại (chuyển sang Lưu trữ) rồi kích hoạt mẫu khác; muốn sửa nội dung mẫu Đang dùng/Lưu trữ thì bấm "✏️ Sửa" (tự nhân bản thành 1 bản Nháp mới, không sửa trực tiếp để giữ nguyên dữ liệu bài đã nộp).' },
     ],
     footer: { left: [
@@ -798,6 +799,7 @@ const NGHIEP_VU_DOCS = {
       { label: '✏️ Sửa (Đang dùng/Lưu trữ)', text: 'không sửa trực tiếp được, để giữ nguyên dữ liệu các bài đã nộp trước đó — bấm "Sửa" sẽ tự nhân bản thành 1 bản Nháp mới rồi mở thẳng form sửa, gộp 2 bước cũ thành 1 lần bấm.' },
       { label: '🗑️ Xoá — chỉ Quản Trị Viên', text: 'nút Xoá chỉ Quản Trị Viên (quyền cao nhất) mới thấy được, ở mọi trạng thái — nếu mẫu đã có người nộp bài thì nút này sẽ bị khoá kèm gợi ý dùng "⏸️ Dừng" thay thế, để không làm mất dữ liệu báo cáo cũ.' },
       { label: 'Sửa lại phản hồi/giải trình (9/2026)', text: 'siêu thị (checklist Kiểm Soát) gõ nhầm hoặc muốn bổ sung phản hồi đã gửi thì bấm "✏️ Sửa" ngay cạnh phản hồi cũ ở tab "📣 Kết Quả & Phản Hồi" — nội dung mới GHI ĐÈ nội dung cũ, không lưu lịch sử các lần sửa trước.' },
+      { label: 'Dashboard VSATTP dùng chung 1 quyền (10/2026)', text: 'không tách quyền riêng cho tab "🥗 Đánh Giá VSATTP" — ai có checklistReportView (xem được tab "📊 Báo Cáo") thì xem được CẢ 2 tab con, theo đúng yêu cầu người dùng.' },
     ] },
   },
   orgChart: {
@@ -1298,6 +1300,7 @@ const SYSTEM_DOCS = {
       { role: 'Quản trị viên', text: 'nếu xoá 1 giá trị ĐANG được dùng ở hồ sơ/form khác, hệ thống chặn lại và báo rõ lý do — phải xử lý xong dữ liệu đang tham chiếu (đổi sang giá trị khác) trước khi xoá được.' },
       { role: 'Quản trị viên', text: 'cấu hình <b>"📲 Phím Tắt PWA (Android/Chrome)"</b> (cùng màn Quản Lý Danh Mục): tick tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính Android/Chrome → bấm <b>"💾 Lưu Phím Tắt PWA"</b> — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. KHÔNG hỗ trợ iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).' },
       { role: 'Quản trị viên', text: 'quản lý <b>"🧭 Quản Lý Vị Trí Làm Việc"</b> (10/2026, cùng màn): danh mục MỞ thay cho 2 giá trị cứng HO/Siêu Thị trước đây — bấm <b>"Thêm"</b> để tạo 1 Vị Trí Làm Việc mới (VD "Kho"), mỗi Vị Trí mang theo 1 cặp danh mục con RIÊNG (📍 Địa Điểm + 🎖️ Chức Danh, giống hệt khuôn Siêu Thị). 2 mục HO/Siêu Thị luôn có sẵn (chỉ đổi được tên hiển thị, không xoá/đổi định danh) — quản lý địa điểm/chức danh của 2 mục này vẫn ở đúng 2 khối Phòng Ban/Siêu Thị/Chức Danh phía trên, không phải ở đây.' },
+      { role: 'Quản trị viên', text: 'gán <b>"Loại"</b> (10/2026, ngay tại khối "🏬 Quản Lý Danh Mục Siêu Thị"): mỗi tên trong danh mục có 1 dropdown "Siêu Thị"/"Cửa Hàng"/"— Chưa phân loại —" — phục vụ RIÊNG cho Dashboard "🥗 Đánh Giá VSATTP" (module Checklist Đánh Giá Siêu Thị) tách đúng Top 5/tỷ lệ vi phạm theo Siêu Thị và Cửa Hàng. Đơn vị chưa gán "Loại" vẫn hoạt động bình thường ở mọi tính năng khác, chỉ riêng Dashboard VSATTP là loại ra (có cảnh báo riêng nhắc gán).' },
     ],
     footer: { left: [
       { label: 'Dùng chung TOÀN HỆ THỐNG', text: 'không có khái niệm danh mục "riêng cho 1 module" — Phòng Ban ở đây là ĐÚNG Phòng Ban hiện trên mọi form/báo cáo khác, sửa 1 chỗ đủ.' },

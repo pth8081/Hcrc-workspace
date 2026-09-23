@@ -142,41 +142,102 @@
     </div>
 
     <!-- Sub-tab: Báo Cáo (checklistReportView) — báo cáo RIÊNG cho module này, KHÔNG liên quan module
-         "Báo Cáo" tổng hợp. -->
+         "Báo Cáo" tổng hợp. Từ 10/2026 (yêu cầu người dùng): chia 2 tab con DÙNG CHUNG 1 quyền
+         checklistReportView (không tách quyền riêng) — "📋 Checklist Siêu Thị/Cửa Hàng" (nội dung cũ,
+         bảng phẳng mọi loại mẫu) và "🥗 Đánh Giá VSATTP" (Dashboard MỚI, riêng cho mẫu kiểu "Trừ Điểm
+         Theo Hạng Mục" — xem renderChecklistVsattpDashboard() ở module-checklist.js). -->
     <div id="checklistSubReport" class="hidden space-y-3">
-      <div class="bg-slate-50 p-4 rounded border border-slate-200 flex flex-wrap items-end gap-2">
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1 text-xs">Mẫu Checklist</label>
-          <select id="checklistReportTemplateFilter" class="border p-1.5 rounded text-xs"><option value="">Tất cả</option></select>
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1 text-xs">Từ ngày</label>
-          <input id="checklistReportFromDate" type="date" class="border p-1.5 rounded text-xs">
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1 text-xs">Đến ngày</label>
-          <input id="checklistReportToDate" type="date" class="border p-1.5 rounded text-xs">
-        </div>
-        <button type="button" data-op="applyChecklistReportFilter" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Lọc</button>
-        <button type="button" data-op="exportChecklistReportExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel (bảng phẳng)</button>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" id="btnChecklistReportSubGeneral" data-op="setChecklistReportSubTab" data-arg0="GENERAL" class="px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white">📋 Checklist Siêu Thị/Cửa Hàng</button>
+        <button type="button" id="btnChecklistReportSubVsattp" data-op="setChecklistReportSubTab" data-arg0="VSATTP" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🥗 Đánh Giá VSATTP</button>
       </div>
-      <div id="checklistReportStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
-      <div id="checklistReportTableWrap" class="space-y-2"></div>
 
-      <!-- Xuất Theo Mẫu Gốc (v21.1) — sinh file .xlsx ĐÚNG layout mẫu gốc người dùng gửi (2 sheet Chi
-           tiết/Thống kê cho loại Câu Hỏi & Đáp Án, cây Hạng Mục/Hạng Mục Con/Tiêu Chí cho loại Trừ Điểm
-           Theo Hạng Mục) — KHÁC nút "Xuất Excel (bảng phẳng)" ở trên (bảng phẳng chung mọi mẫu/mọi loại).
-           Bắt buộc chọn ĐÚNG 1 mẫu cụ thể ở bộ lọc trên (không hỗ trợ "Tất cả" vì 2 loại mẫu trình bày
-           khác hẳn nhau) — chọn 1/nhiều/để trống = TẤT CẢ siêu thị đang có bài nộp khớp bộ lọc, MỖI SIÊU
-           THỊ ra 1 sheet riêng. -->
-      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-2">
-        <h4 class="font-bold text-rose-900 text-sm">📥 Xuất Theo Mẫu Gốc (đúng layout mẫu Excel gốc)</h4>
-        <p class="text-[11px] text-gray-600">Áp dụng cho ĐÚNG 1 mẫu đã chọn ở bộ lọc "Mẫu Checklist" phía trên (không hỗ trợ "Tất cả"). Chọn 1 hoặc nhiều siêu thị bên dưới — để trống = tất cả siêu thị đang có bài nộp khớp bộ lọc ngày. Mỗi siêu thị được xuất ra thành 1 (nhóm) sheet riêng.</p>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị (để trống = tất cả)</label>
-          <select id="checklistReportStoreFilter" multiple size="6" class="border p-1.5 rounded text-xs w-full max-w-md"></select>
+      <div id="checklistReportGeneralPanel" class="space-y-3">
+        <div class="bg-slate-50 p-4 rounded border border-slate-200 flex flex-wrap items-end gap-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mẫu Checklist</label>
+            <select id="checklistReportTemplateFilter" class="border p-1.5 rounded text-xs"><option value="">Tất cả</option></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Từ ngày</label>
+            <input id="checklistReportFromDate" type="date" class="border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Đến ngày</label>
+            <input id="checklistReportToDate" type="date" class="border p-1.5 rounded text-xs">
+          </div>
+          <button type="button" data-op="applyChecklistReportFilter" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Lọc</button>
+          <button type="button" data-op="exportChecklistReportExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel (bảng phẳng)</button>
         </div>
-        <button type="button" data-op="exportChecklistReportByOriginalTemplate" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">📥 Xuất Theo Mẫu Gốc</button>
+        <div id="checklistReportStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+        <div id="checklistReportTableWrap" class="space-y-2"></div>
+
+        <!-- Xuất Theo Mẫu Gốc (v21.1) — sinh file .xlsx ĐÚNG layout mẫu gốc người dùng gửi (2 sheet Chi
+             tiết/Thống kê cho loại Câu Hỏi & Đáp Án, cây Hạng Mục/Hạng Mục Con/Tiêu Chí cho loại Trừ Điểm
+             Theo Hạng Mục) — KHÁC nút "Xuất Excel (bảng phẳng)" ở trên (bảng phẳng chung mọi mẫu/mọi loại).
+             Bắt buộc chọn ĐÚNG 1 mẫu cụ thể ở bộ lọc trên (không hỗ trợ "Tất cả" vì 2 loại mẫu trình bày
+             khác hẳn nhau) — chọn 1/nhiều/để trống = TẤT CẢ siêu thị đang có bài nộp khớp bộ lọc, MỖI SIÊU
+             THỊ ra 1 sheet riêng. -->
+        <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-2">
+          <h4 class="font-bold text-rose-900 text-sm">📥 Xuất Theo Mẫu Gốc (đúng layout mẫu Excel gốc)</h4>
+          <p class="text-[11px] text-gray-600">Áp dụng cho ĐÚNG 1 mẫu đã chọn ở bộ lọc "Mẫu Checklist" phía trên (không hỗ trợ "Tất cả"). Chọn 1 hoặc nhiều siêu thị bên dưới — để trống = tất cả siêu thị đang có bài nộp khớp bộ lọc ngày. Mỗi siêu thị được xuất ra thành 1 (nhóm) sheet riêng.</p>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị (để trống = tất cả)</label>
+            <select id="checklistReportStoreFilter" multiple size="6" class="border p-1.5 rounded text-xs w-full max-w-md"></select>
+          </div>
+          <button type="button" data-op="exportChecklistReportByOriginalTemplate" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">📥 Xuất Theo Mẫu Gốc</button>
+        </div>
+      </div>
+
+      <!-- Dashboard VSATTP (10/2026) — áp dụng cho MỌI mẫu templateKind==='DEDUCTION' (không hardcode
+           riêng tên "VSATTP"), khớp bố cục sheet Dashboard file Excel người dùng gửi: Top 5 ST/CH điểm
+           TB cao/thấp nhất + tỷ lệ ST/CH vi phạm theo từng tiêu chí. -->
+      <div id="checklistReportVsattpPanel" class="hidden space-y-3">
+        <div class="bg-red-50 p-4 rounded border border-red-200 flex flex-wrap items-end gap-2">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Từ ngày</label>
+            <input id="checklistVsattpFromDate" type="date" class="border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Đến ngày</label>
+            <input id="checklistVsattpToDate" type="date" class="border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Siêu Thị/Cửa Hàng (để trống = Tất cả)</label>
+            <select id="checklistVsattpStoreFilter" multiple size="6" class="border p-1.5 rounded text-xs w-full max-w-md"></select>
+          </div>
+          <button type="button" data-op="applyChecklistVsattpFilter" class="bg-red-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-red-700">Lọc</button>
+          <button type="button" data-op="exportChecklistVsattpExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel (Dashboard + chi tiết từng ĐVKD)</button>
+        </div>
+        <div id="checklistVsattpUnclassifiedWarn" class="hidden bg-amber-50 border border-amber-300 text-amber-800 text-[11px] rounded p-2"></div>
+        <div id="checklistVsattpStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-emerald-800 text-xs mb-2">🏆 Top 5 Siêu Thị điểm TB cao nhất</h4>
+            <div id="checklistVsattpTopStHigh" class="space-y-1.5"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-red-800 text-xs mb-2">⚠️ Top 5 Siêu Thị điểm TB thấp nhất</h4>
+            <div id="checklistVsattpTopStLow" class="space-y-1.5"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-emerald-800 text-xs mb-2">🏆 Top 5 Cửa Hàng điểm TB cao nhất</h4>
+            <div id="checklistVsattpTopChHigh" class="space-y-1.5"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-red-800 text-xs mb-2">⚠️ Top 5 Cửa Hàng điểm TB thấp nhất</h4>
+            <div id="checklistVsattpTopChLow" class="space-y-1.5"></div>
+          </div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <h4 class="font-bold text-red-800 text-xs mb-1">🚨 Tỷ lệ Siêu Thị vi phạm theo từng tiêu chí</h4>
+          <p class="text-[11px] text-gray-400 mb-2">% số Siêu Thị (trên tổng số ST đã kiểm tra trong kỳ) có ít nhất 1 lần mắc lỗi này</p>
+          <div id="checklistVsattpViolSt" class="space-y-1"></div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <h4 class="font-bold text-red-800 text-xs mb-1">🚨 Tỷ lệ Cửa Hàng vi phạm theo từng tiêu chí</h4>
+          <p class="text-[11px] text-gray-400 mb-2">% số Cửa Hàng (trên tổng số CH đã kiểm tra trong kỳ) có ít nhất 1 lần mắc lỗi này</p>
+          <div id="checklistVsattpViolCh" class="space-y-1"></div>
+        </div>
       </div>
     </div>
-  
