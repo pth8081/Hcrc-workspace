@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**24.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.1 (2026-09-23): Ma Trận Phân Quyền — đổi TRUE/FALSE thành Y/N
+
+Theo yêu cầu người dùng: đổi cách hiển thị giá trị bật/tắt trong Excel xuất/
+nhập của Ma Trận Phân Quyền từ `TRUE`/`FALSE` sang `Y`/`N` cho gọn, dễ gõ tay
+hơn khi sửa hàng loạt trên Excel.
+
+- **`server/public/js/module-admin-permgroups.js`**: `buildPermMatrixSheets()`
+  xuất `'Y'`/`'N'` thay vì `'TRUE'`/`'FALSE'`. `applyPermMatrixRowToTarget()`
+  (đọc file nhập lại) chấp nhận CẢ `'Y'` (chuẩn mới) LẪN `'TRUE'` (file cũ đã
+  tải về trước đợt này) — không phá hỏng việc nhập lại file người dùng đang
+  có sẵn. Bảng xem trước thay đổi (diff) cũng hiện `Y`/`N` thay vì `TRUE`/
+  `FALSE`.
+- **`server/public/fragments/systemSection.html`** + **`module-nghiepvu.js`**
+  (Hướng Dẫn > Hệ Thống > Ma Trận Phân Quyền): cập nhật văn bản hướng dẫn
+  theo đúng Y/N, có ghi chú file cũ (TRUE/FALSE) vẫn nhập lại được.
+- **Test**: `test-perm-matrix-client.js` thêm 1 assertion xác nhận xuất Excel
+  ra đúng `Y`/`N` (không phải TRUE/FALSE) + 1 kịch bản mới xác nhận nhập lại
+  đúng `Y`→true/`N`→false. `test-perm-matrix-multisheet.js`/`test-perm-matrix-parse.js`
+  không đổi (test tầng đọc thô, không phụ thuộc định dạng Y/N hay TRUE/FALSE).
+- **Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường mới — chỉ
+  copy code + `pm2 restart`. Các file Excel Ma Trận Phân Quyền đã tải về từ
+  trước (còn ghi TRUE/FALSE) vẫn nhập lại được bình thường nhờ lớp tương
+  thích ngược ở trên — không cần tải lại file mẫu mới ngay.
 
 ## v24.0 (2026-09-22): Checklist Đánh Giá Siêu Thị — quyền mới "✅ Đánh Giá Checklist (Tự Đánh Giá)" + sửa lại quy tắc đánh version
 

@@ -529,7 +529,7 @@ function buildPermMatrixSheets(cols, identityColumns, entities, identityRowFn, e
     const columns = [...identityColumns, ...groupCols.map(c => ({ header: permMatrixColumnHeader(c), key: PERM_MATRIX_COL_PREFIX + c, width: 24 }))];
     const rows = entities.map((e, idx) => {
       const row = identityRowFn(e);
-      groupCols.forEach(c => { row[PERM_MATRIX_COL_PREFIX + c] = flatByEntity[idx][c] === true ? 'TRUE' : 'FALSE'; });
+      groupCols.forEach(c => { row[PERM_MATRIX_COL_PREFIX + c] = flatByEntity[idx][c] === true ? 'Y' : 'N'; });
       return row;
     });
     return { sheetName: groupName, columns, rows };
@@ -601,7 +601,10 @@ function buildPermMatrixRowChanges(kind, target, row) {
   Object.keys(row).forEach(header => {
     const path = resolvePermMatrixColumnKey(header);
     if (path == null) return;
-    const newVal = String(row[header] || '').trim().toUpperCase() === 'TRUE';
+    // Chấp nhận cả 'Y' (chuẩn mới, xem buildPermMatrixSheets()) lẫn 'TRUE' (file export từ bản cũ trước
+    // khi đổi sang Y/N) để không làm hỏng việc nhập lại các file người dùng đã tải về trước đó.
+    const rawVal = String(row[header] || '').trim().toUpperCase();
+    const newVal = rawVal === 'Y' || rawVal === 'TRUE';
     setPermMatrixDeep(formPerms, path, newVal);
   });
 
@@ -620,7 +623,7 @@ function buildPermMatrixRowChanges(kind, target, row) {
     if (path == null) return;
     const oldVal = flatOld[path] === true;
     const finalVal = flatNew[path] === true;
-    if (finalVal !== oldVal) changes.push({ label: `Quyền: ${PERM_KEY_VN_LABELS[path] || path}`, oldValue: oldVal ? 'TRUE' : 'FALSE', newValue: finalVal ? 'TRUE' : 'FALSE' });
+    if (finalVal !== oldVal) changes.push({ label: `Quyền: ${PERM_KEY_VN_LABELS[path] || path}`, oldValue: oldVal ? 'Y' : 'N', newValue: finalVal ? 'Y' : 'N' });
   });
 
   let newReportExtraKeys = target.reportExtraKeys || [];

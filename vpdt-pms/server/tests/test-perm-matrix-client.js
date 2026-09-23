@@ -386,6 +386,8 @@ async function scenario(name, fn) {
         sysSheetOnlyHasItsOwnPermCol: sysSheet && !sysSheet.columns.some(c => c.key === 'Q_contractApprove'),
         sysSheetRowCount: sysSheet && sysSheet.rows.length,
         sysSheetUsernames: sysSheet && sysSheet.rows.map(r => r.Username),
+        adminRowQAdmin: sysSheet && sysSheet.rows.find(r => r.Username === 'admin')?.Q_admin,
+        nvbRowQAdmin: sysSheet && sysSheet.rows.find(r => r.Username === 'nv.b')?.Q_admin,
       };
     });
     record('(g) tách ra nhiều sheet (không còn 1 sheet phẳng duy nhất)', r.sheetCount > 1, JSON.stringify(r));
@@ -395,6 +397,7 @@ async function scenario(name, fn) {
     record('(g) cột Username LẶP LẠI ở cả 2 sheet (theo yêu cầu người dùng)', r.sysSheetHasUsernameCol && r.contractSheetHasUsernameCol, JSON.stringify(r));
     record('(g) sheet "Hệ Thống & Chung" KHÔNG lẫn cột quyền của khối khác (Q_contractApprove)', r.sysSheetOnlyHasItsOwnPermCol, JSON.stringify(r));
     record('(g) mỗi sheet vẫn có đủ 2 dòng (2 user) với đúng Username', r.sysSheetRowCount === 2 && JSON.stringify(r.sysSheetUsernames) === JSON.stringify(['admin', 'nv.b']), JSON.stringify(r));
+    record('(g) xuất Excel dùng "Y"/"N" thay vì "TRUE"/"FALSE" (yêu cầu người dùng)', r.adminRowQAdmin === 'Y' && r.nvbRowQAdmin === 'N', JSON.stringify(r));
   });
 
   await scenario('(g2) permMatrixColumnGroup(): quyền chưa có nhãn tiếng Việt rơi vào sheet "Khác (chưa có nhãn)"', async () => {
@@ -434,6 +437,34 @@ async function scenario(name, fn) {
     record('(h) phát hiện đủ 2 thay đổi (admin + contractApprove, dù ở 2 sheet khác nhau lúc xuất)', r.changeCount === 2, JSON.stringify(r));
     record('(h) newPerms.admin=true, newPerms.contractApprove=true (áp đúng cả 2 cột đến từ 2 "sheet" khác nhau)',
       r.newAdmin === true && r.newContractApprove === true, JSON.stringify(r));
+  });
+
+  // ===== (i) Import file dùng chuẩn Y/N mới (thay vì TRUE/FALSE cũ) — yêu cầu người dùng =====
+  await scenario('(i) onPermMatrixImportFileChange() đọc đúng "Y"/"N" (chuẩn mới), không chỉ "TRUE"/"FALSE" cũ', async () => {
+    const r = await page.evaluate(async () => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'nv.y', name: 'Nhân Viên Y', dept: 'IT', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      const rowFromServer = {
+        Username: 'nv.y', HoTen: 'Nhân Viên Y', PhongBan: 'IT', NhomPhanQuyen: '', BaoCao_MucBoSung: '',
+        [permMatrixColumnHeader('admin')]: 'Y',
+        [permMatrixColumnHeader('contractApprove')]: 'N',
+        duplicateInFile: false, duplicateExisting: false,
+      };
+      const origFetch = window.fetch;
+      window.fetch = async () => ({ status: 200, ok: true, json: async () => ({ rows: [rowFromServer] }) });
+      try {
+        await onPermMatrixImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } }, 'users');
+      } finally { window.fetch = origFetch; }
+      const item = permMatrixImportRows.find(it => it.identifier === 'nv.y');
+      return {
+        newAdmin: item && item.diff ? item.diff.newPerms.admin : null,
+        newContractApprove: item && item.diff ? item.diff.newPerms.contractApprove : null,
+      };
+    });
+    record('(i) "Y" -> true, "N" -> false (đúng chuẩn mới, không cần TRUE/FALSE nữa)',
+      r.newAdmin === true && r.newContractApprove === false, JSON.stringify(r));
   });
 
   await browser.close();
