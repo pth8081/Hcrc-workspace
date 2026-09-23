@@ -1947,69 +1947,128 @@
     </div>
   </div>
 
-  <!-- Màn hình 5: Tab Quản Trị Log Hệ Thống -->
+  <!-- Màn hình 5: Tab Log — 2 sub-tab: 📋 Nhật Ký Hoạt Động (nghiệp vụ/hành vi, dữ liệu cũ dbo.SystemLogs)
+       / 🖥️ Nhật Ký Lỗi Hệ Thống (MỚI 10/2026 — lỗi kỹ thuật thật, dbo.ErrorLogs, xem setLogSubTab() ở
+       module-hethong-tabs.js). Yêu cầu người dùng: cần xem được log lỗi hệ thống ngay trên giao diện,
+       không phải SSH vào máy chủ gõ `pm2 logs` mỗi lần điều tra sự cố. -->
   <div id="logSection" class="hidden space-y-6">
-    <div class="bg-stone-50 p-4 rounded border border-stone-300 space-y-3">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-        <div>
-          <h3 class="font-bold text-stone-900 text-base flex items-center gap-1">📊 Quản Trị Log Hệ Thống & Giám Sát Hành Vi</h3>
-          <p class="text-xs text-stone-800">Theo dõi toàn bộ nhật ký hệ thống: Email, cấu hình, thay đổi phân quyền và hành vi.</p>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" data-op="setLogSubTab" data-arg0="ACTIVITY" id="btnLogSubActivity" class="px-3 py-1.5 rounded text-xs font-bold bg-stone-700 text-white">📋 Nhật Ký Hoạt Động</button>
+      <button type="button" data-op="setLogSubTab" data-arg0="ERROR" id="btnLogSubError" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖥️ Nhật Ký Lỗi Hệ Thống</button>
+    </div>
+
+    <div id="logSubActivitySection" class="space-y-6">
+      <div class="bg-stone-50 p-4 rounded border border-stone-300 space-y-3">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h3 class="font-bold text-stone-900 text-base flex items-center gap-1">📋 Nhật Ký Hoạt Động & Giám Sát Hành Vi</h3>
+            <p class="text-xs text-stone-800">Theo dõi toàn bộ nhật ký nghiệp vụ: Email, cấu hình, thay đổi phân quyền và hành vi. Lỗi kỹ thuật hệ thống xem ở sub-tab "🖥️ Nhật Ký Lỗi Hệ Thống".</p>
+          </div>
+          <div class="flex gap-2">
+            <button data-op="clearSystemLogs" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
+            <button data-op="exportSystemLogsExcel" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
+          </div>
         </div>
-        <div class="flex gap-2">
-          <button data-op="clearSystemLogs" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
-          <button data-op="exportSystemLogsExcel" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
+
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-3 rounded border text-xs">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
+            <select id="filterLogModule" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <option value="">-- Tất cả --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Sự Kiện</label>
+            <select id="filterLogAction" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <option value="">-- Tất cả --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterLogStatus" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <option value="">-- Tất cả --</option>
+              <option value="SUCCESS">Thành công (SUCCESS)</option>
+              <option value="WARNING">Cảnh báo (WARNING)</option>
+              <option value="FAILED">Thất bại (FAILED)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
+            <input id="filterLogKeyword" data-op-input="onLogFilterChange" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
+          </div>
+          <div class="flex items-end">
+            <button data-op="resetLogFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
+          </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-white p-3 rounded border text-xs">
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Phân Hệ</label>
-          <select id="filterLogModule" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
-            <option value="">-- Tất cả --</option>
-          </select>
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Sự Kiện</label>
-          <select id="filterLogAction" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
-            <option value="">-- Tất cả --</option>
-          </select>
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
-          <select id="filterLogStatus" data-op-change="onLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
-            <option value="">-- Tất cả --</option>
-            <option value="SUCCESS">Thành công (SUCCESS)</option>
-            <option value="WARNING">Cảnh báo (WARNING)</option>
-            <option value="FAILED">Thất bại (FAILED)</option>
-          </select>
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
-          <input id="filterLogKeyword" data-op-input="onLogFilterChange" placeholder="Username, IP, hành động..." class="w-full border p-1.5 rounded">
-        </div>
-        <div class="flex items-end">
-          <button data-op="resetLogFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
-        </div>
+      <div class="overflow-x-auto bg-white rounded border">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Thời Gian</th>
+              <th class="border p-2">Người Thực Hiện</th>
+              <th class="border p-2">IP Thiết Bị</th>
+              <th class="border p-2">Phân Hệ</th>
+              <th class="border p-2">Hành Động</th>
+              <th class="border p-2">Mô Tả Chi Tiết</th>
+              <th class="border p-2 text-center">Trạng Thái</th>
+            </tr>
+          </thead>
+          <tbody id="systemLogTableBody"></tbody>
+        </table>
       </div>
+      <div id="paginationContainer_log"></div>
     </div>
 
-    <div class="overflow-x-auto bg-white rounded border">
-      <table class="w-full border-collapse text-xs">
-        <thead>
-          <tr class="bg-gray-100 text-left text-gray-700">
-            <th class="border p-2">Thời Gian</th>
-            <th class="border p-2">Người Thực Hiện</th>
-            <th class="border p-2">IP Thiết Bị</th>
-            <th class="border p-2">Phân Hệ</th>
-            <th class="border p-2">Hành Động</th>
-            <th class="border p-2">Mô Tả Chi Tiết</th>
-            <th class="border p-2 text-center">Trạng Thái</th>
-          </tr>
-        </thead>
-        <tbody id="systemLogTableBody"></tbody>
-      </table>
+    <div id="logSubErrorSection" class="hidden space-y-6">
+      <div class="bg-red-50 p-4 rounded border border-red-200 space-y-3">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h3 class="font-bold text-red-900 text-base flex items-center gap-1">🖥️ Nhật Ký Lỗi Hệ Thống</h3>
+            <p class="text-xs text-red-800">Toàn bộ lỗi kỹ thuật (exception/crash/lỗi kết nối...) máy chủ ghi nhận được — cùng nội dung trước đây chỉ xem qua <code class="bg-white px-1 rounded">pm2 logs</code> trên máy chủ, nay tra cứu/lọc/xuất được ngay tại đây.</p>
+          </div>
+          <div class="flex gap-2">
+            <button data-op="clearErrorLogs" class="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold hover:bg-red-700">🗑️ Xóa Log</button>
+            <button data-op="exportErrorLogsExcel" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded font-bold hover:bg-emerald-700">📥 Xuất Log Excel</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 rounded border text-xs">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lọc Theo Cấp Độ</label>
+            <select id="filterErrorLogLevel" data-op-change="onErrorLogFilterChange" class="w-full border p-1.5 rounded bg-white font-semibold">
+              <option value="">-- Tất cả --</option>
+              <option value="ERROR">Lỗi (ERROR)</option>
+              <option value="WARNING">Cảnh báo (WARNING)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Tìm Kiếm</label>
+            <input id="filterErrorLogKeyword" data-op-input="onErrorLogFilterChange" placeholder="Nội dung lỗi, nguồn, username, IP..." class="w-full border p-1.5 rounded">
+          </div>
+          <div class="flex items-end">
+            <button data-op="resetErrorLogFilters" class="w-full bg-gray-200 text-gray-700 p-1.5 rounded font-bold hover:bg-gray-300">Đặt Lại</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto bg-white rounded border">
+        <table class="w-full border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left text-gray-700">
+              <th class="border p-2">Thời Gian</th>
+              <th class="border p-2">Cấp Độ</th>
+              <th class="border p-2">Nguồn</th>
+              <th class="border p-2">Nội Dung Lỗi</th>
+              <th class="border p-2">Người Dùng / IP</th>
+            </tr>
+          </thead>
+          <tbody id="errorLogTableBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationContainer_errorLog"></div>
     </div>
-    <div id="paginationContainer_log"></div>
   </div>
 
   <!-- Màn hình 5b: Thùng Rác — mọi lượt "Xóa" ở các module nghiệp vụ (Văn Bản Trình, Tài Liệu, Hợp

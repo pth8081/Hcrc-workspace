@@ -1,5 +1,12 @@
 // server.js — Điểm khởi chạy chính của ứng dụng VPDT (Văn Phòng Điện Tử)
 require('dotenv').config();
+
+// Nhật Ký Lỗi Hệ Thống (10/2026, xem lib/errorLogCapture.js) — bọc console.error()/console.warn() toàn
+// cục + bắt uncaughtException/unhandledRejection, ghi thêm vào dbo.ErrorLogs (lib/errorLogStore.js) mà
+// KHÔNG cần sửa 175+ lời gọi console.error() rải rác khắp lib/routes/. Gọi SỚM NHẤT có thể (ngay sau
+// dotenv, trước mọi require khác) để bắt được cả lỗi phát sinh lúc khởi động (kết nối SQL Server...).
+require('./lib/errorLogCapture').installErrorLogCapture();
+
 const express = require('express');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
@@ -22,6 +29,7 @@ const createRoutes = require('./routes/create');
 const meetingActionsRoutes = require('./routes/meetingActions');
 const recordsRoutes = require('./routes/records');
 const systemLogRoutes = require('./routes/systemLog');
+const errorLogRoutes = require('./routes/errorLog');
 const uploadRoutes = require('./routes/upload');
 const emailRoutes = require('./routes/email');
 const vppCatalogRoutes = require('./routes/vppCatalog');
@@ -163,6 +171,7 @@ app.use('/api/create', createRoutes);
 app.use('/api/meetings', meetingActionsRoutes);
 app.use('/api/records', recordsRoutes);
 app.use('/api/log', systemLogRoutes);
+app.use('/api/error-log', errorLogRoutes);
 app.use('/api/upload', requireAuth, blockIfMustChangePassword, uploadRoutes);
 app.use('/api/send-email', requireAuth, blockIfMustChangePassword, emailRoutes);
 app.use('/api/vpp', vppCatalogRoutes);
@@ -382,6 +391,17 @@ app.get('/index.html', sendIndexHtml);
 // cho catch-all bên dưới gọi sendIndexHtml().
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 app.get('*', sendIndexHtml);
+
+// Middleware lỗi Express (4 tham số — Express NHẬN DIỆN bằng đúng số tham số này, PHẢI đặt SAU CÙNG,
+// sau mọi route/middleware khác) — lưới an toàn cuối cùng cho route nào LỠ QUÊN try/catch riêng, trả về
+// lỗi ném ra (throw đồng bộ, hoặc next(err) từ middleware khác) thay vì rơi vào trang lỗi mặc định của
+// Express (không ghi log gì cả) như trước đây. sendServerError() tự console.error() (đã bọc ghi vào
+// dbo.ErrorLogs ở đầu file) + ẩn chi tiết khi NODE_ENV=production, đúng khuôn mọi lỗi 500 khác trong hệ
+// thống — không cần đường xử lý riêng.
+app.use((err, req, res, next) => {
+  const { sendServerError } = require('./lib/errorResponse');
+  sendServerError(res, 500, err, `${req.method} ${req.originalUrl} (chưa route nào tự bắt lỗi)`);
+});
 
 async function start() {
   try {

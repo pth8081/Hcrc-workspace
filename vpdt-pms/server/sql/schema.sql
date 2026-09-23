@@ -116,6 +116,29 @@ BEGIN
 END
 GO
 
+/* ErrorLogs (10/2026) — Nhật ký LỖI HỆ THỐNG, cùng khuôn dbo.SystemLogs ở trên nhưng lưu LỖI KỸ THUẬT
+   (exception/crash/lỗi kết nối...) thay vì hành vi nghiệp vụ, xem lib/errorLogStore.js. Yêu cầu người
+   dùng: trước đây lỗi kỹ thuật CHỈ xem được qua `pm2 logs` trên máy chủ — nguồn ghi là server.js (bọc
+   console.error()/console.warn() toàn cục + bắt uncaughtException/unhandledRejection + middleware lỗi
+   Express cuối chuỗi), KHÔNG có route client tự ghi như dbo.SystemLogs. */
+IF OBJECT_ID('dbo.ErrorLogs', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ErrorLogs (
+        Id            BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        CreatedAt     DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+        Level         NVARCHAR(20)   NOT NULL DEFAULT 'ERROR',
+        Source        NVARCHAR(200)  NULL,
+        Message       NVARCHAR(MAX)  NOT NULL,
+        Stack         NVARCHAR(MAX)  NULL,
+        Username      NVARCHAR(100)  NULL,
+        -- 300 (không phải 100): đủ chứa giá trị đã MÃ HOÁ AES-256-GCM khi bật LOG_ENCRYPTION_KEY — cùng
+        -- lý do IpAddress ở dbo.SystemLogs, xem lib/logCrypto.js.
+        IpAddress     NVARCHAR(300)  NULL
+    );
+    CREATE INDEX IX_ErrorLogs_CreatedAt ON dbo.ErrorLogs (CreatedAt DESC, Id DESC);
+END
+GO
+
 /* CẬP NHẬT (Bước 6b — Công việc, xem lib/taskStore.js): giống hệt lý do ở systemLogs (Bước 6a) —
    trước đây MỌI thao tác (giao việc, nhận việc, cập nhật tiến độ, xin gia hạn, huỷ việc...) đều phải
    khoá + đọc/sửa/ghi lại NGUYÊN mảng "tasks" trong AppData, dù chỉ đổi ĐÚNG 1 công việc. Với nhiều

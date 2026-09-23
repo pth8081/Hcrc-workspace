@@ -65,8 +65,27 @@ function setSystemSubTab(subTab) {
   // ADVWORKFLOW: "🔀 Nghiệp Vụ Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
   if (subTab === 'ADVWORKFLOW') { setAdvWorkflowSubTab(activeAdvWorkflowSubTab); }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
-  if (subTab === 'LOG') { loadSystemLogs(); }
+  if (subTab === 'LOG') { setLogSubTab(activeLogSubTab); }
   if (subTab === 'TRASH') { loadTrashItems(); }
+}
+
+// 2 sub-tab con của màn "Log" — ACTIVITY (nhật ký hoạt động/nghiệp vụ, dữ liệu DB.systemLogs vốn có từ
+// trước) / ERROR (nhật ký LỖI HỆ THỐNG, MỚI — bảng dbo.ErrorLogs riêng, xem lib/errorLogStore.js +
+// server.js phần bọc console.error/uncaughtException/unhandledRejection + Express error middleware).
+// Yêu cầu người dùng (10/2026): "lấy tất cả các log lỗi của hệ thống đưa lên đây để tôi có thể điều tra
+// được ngay cả khi không dùng đến pm2 log" — trước đây lỗi kỹ thuật CHỈ xem được qua `pm2 logs`.
+function setLogSubTab(subTab) {
+  activeLogSubTab = subTab;
+  document.getElementById('logSubActivitySection').classList.toggle('hidden', subTab !== 'ACTIVITY');
+  document.getElementById('logSubErrorSection').classList.toggle('hidden', subTab !== 'ERROR');
+
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-stone-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnLogSubActivity').className = subTab === 'ACTIVITY' ? activeCls : inactiveCls;
+  document.getElementById('btnLogSubError').className = subTab === 'ERROR' ? activeCls : inactiveCls;
+
+  if (subTab === 'ACTIVITY') loadSystemLogs();
+  if (subTab === 'ERROR') loadErrorLogs();
 }
 
 // 4 sub-tab của "🔀 Nghiệp Vụ Nâng Cao" (mục Hệ Thống, từ v23.65) — MIXED (🏬 Quy Trình Đặt Hàng Siêu Thị,

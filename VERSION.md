@@ -1,8 +1,65 @@
 # Phiên bản hiện tại
 
-**24.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.5 (2026-09-23): "🖥️ Nhật Ký Lỗi Hệ Thống" — sub-tab MỚI trong Hệ Thống > Log
+
+Yêu cầu người dùng: "tạo một log tên Nhật ký hệ thống để lấy tất cả các log
+lỗi của hệ thống đưa lên đây để tôi có thể điều tra được ngay cả khi không
+dùng đến pm2 log" — trước đây lỗi kỹ thuật (exception/crash/lỗi kết nối CSDL...)
+CHỈ đổ ra `console.error()`/`console.warn()` rải rác ở 175+ vị trí trong
+`lib/`/`routes/`, chỉ xem được qua `pm2 logs` trên máy chủ thật, không có
+bảng lưu trữ hay giao diện tra cứu nào.
+
+Màn **"📊 Log"** (Hệ Thống) nay có **2 sub-tab riêng**, dữ liệu/bảng CSDL tách
+biệt hoàn toàn: **"📋 Nhật Ký Hoạt Động"** (đổi tên hiển thị, nội dung/hành vi
+giữ NGUYÊN — vẫn là `dbo.SystemLogs`/`GET,DELETE /api/log` cũ) và **"🖥️ Nhật
+Ký Lỗi Hệ Thống"** (MỚI, `dbo.ErrorLogs`/`GET,DELETE /api/error-log`).
+
+- **`server/lib/errorLogCapture.js`** (mới): `installErrorLogCapture()` —
+  bọc `console.error()`/`console.warn()` TOÀN CỤC (gọi 1 lần, sớm nhất có
+  thể trong `server.js`) + `process.on('uncaughtException'/'unhandledRejection')`,
+  ghi thêm vào `dbo.ErrorLogs` mà KHÔNG cần sửa 175+ lời gọi `console.error()`
+  hiện có. Chống đệ quy (chỉ dùng `originalConsoleError` gốc khi tự báo lỗi
+  của chính nó), giới hạn cứng 3s cho lượt ghi log để `uncaughtException`/
+  `unhandledRejection` luôn thoát tiến trình kịp thời (giữ nguyên hành vi
+  crash-restart mặc định của pm2 — xác nhận với người dùng khi thiết kế,
+  KHÔNG "sống tiếp" với state có thể đã hỏng).
+- **`server/lib/errorLogStore.js`** (mới, cùng khuôn `lib/systemLogStore.js`):
+  `insertErrorLog()`/`getRecentErrorLogs()`/`clearAllErrorLogs()`/
+  `pruneOldErrorLogs()` — bảng `dbo.ErrorLogs` (IDENTITY PK, index theo
+  `CreatedAt DESC`), tự dọn giữ lại 5.000 dòng gần nhất (RETENTION_KEEP),
+  IP mã hoá AES-256-GCM khi bật `LOG_ENCRYPTION_KEY` (dùng lại `lib/logCrypto.js`).
+- **`server/routes/errorLog.js`** (mới): `GET`/`DELETE /api/error-log`,
+  admin-only — KHÔNG có `POST` (khác `/api/log`, không client nào tự ghi
+  được 1 dòng ở đây, mọi dòng đến từ chính máy chủ).
+- **`server/server.js`**: gọi `installErrorLogCapture()` ngay sau
+  `dotenv.config()` (bắt được cả lỗi lúc khởi động — kết nối SQL Server...);
+  mount `app.use('/api/error-log', errorLogRoutes)`; thêm middleware lỗi
+  Express 4 tham số ở CUỐI CÙNG (sau mọi route) làm lưới an toàn cho route
+  nào lỡ quên try/catch riêng.
+- **`server/sql/schema.sql`**: bảng `dbo.ErrorLogs` mới (Id/CreatedAt/Level/
+  Source/Message/Stack/Username/IpAddress) — **PHẢI chạy lại `schema.sql`
+  trên máy chủ** (an toàn, tự bọc `IF OBJECT_ID(...) IS NULL`), không cần
+  biến môi trường mới/gói npm mới/script di trú dữ liệu nào khác.
+- **`server/public/fragments/systemSection.html`** + **`module-hethong-tabs.js`**
+  (`setLogSubTab()`) + **`module-logsystem-trash.js`** (`loadErrorLogs()`/
+  `renderErrorLogs()`/`getFilteredErrorLogs()`/`clearErrorLogs()`/
+  `exportErrorLogsExcel()`/`resetErrorLogFilters()`): sub-tab mới cùng khuôn
+  UI với Nhật Ký Hoạt Động — lọc theo Cấp Độ (ERROR/WARNING) + từ khoá, nút
+  Xuất Excel/Xoá Log riêng (chỉ tác động đúng sub-tab đang mở), dòng có stack
+  trace hiện `<details>` xem chi tiết.
+- **`server/public/js/module-nghiepvu.js`** (entry `sysLog`, tab Hệ Thống):
+  cập nhật mô tả/steps cho cả 2 sub-tab.
+- **Test**: `tests/test-error-log-capture.js` (mới, 7 kịch bản, unit test
+  thuần Node không cần DB thật — chống đệ quy, timeout 3s, exit(1) đúng lúc)
+  + `tests/test-error-log-ui.js` (mới, 9 kịch bản Playwright — chuyển
+  sub-tab, render, lọc, xoá, chặn non-admin). Chạy lại `test-lazy-load-all-tabs.js`
+  (46/46), `test-nghiepvu.js` (148/148), `test-nghiepvu-csp.js` (6/6) — không
+  có gì vỡ.
+- **`deploy/Huong-dan-nghiep-vu.md`** (mục 7.6): cập nhật mô tả 2 sub-tab.
 
 ## v24.4 (2026-09-23): "🔄 Quy Trình & Phê Duyệt" — nút "🗑️ Xoá Cấu Hình" (từng phòng ban + tất cả)
 
