@@ -328,25 +328,43 @@ async function setItPriceMasterListMarginColumn(id) {
 // Đọc + parse 1 file Excel mẫu qua route riêng (admin-only) — CHỈ trả về khuôn cột (columns), không có
 // dữ liệu — Promise<{columns,fileUrl,fileName}> hoặc null nếu người dùng bấm Hủy chọn file/có lỗi (đã
 // tự alert).
+// LỖI ĐÃ VÁ (báo cáo 10/2026 — "ấn + Thêm Mẫu Giá không có phản ứng" ở CẢ Bán Lẻ/Bán Buôn): đây là input
+// file DUY NHẤT trong toàn hệ thống KHÔNG dùng data-op-change (mọi input file khác đều bind trực tiếp
+// qua bindCspDelegation, xem itPriceFileInput/vppCatalogFileInput...) mà dựng riêng 1 Promise, chỉ
+// resolve() khi bắt được sự kiện "change" (chọn xong file). Hộp thoại chọn file của hệ điều hành KHÔNG
+// bao giờ bắn "change" nếu người dùng bấm Hủy/đóng đi — trước đây thiếu xử lý "cancel" nên Promise treo
+// VĨNH VIỄN, kéo theo el.dataset.opInFlight của nút gọi hàm này (gán trong runCspOp(), xem core.js) cũng
+// treo mãi — nút "+ Thêm Mẫu Giá"/"🔄 Thay mẫu" bị khoá cứng, bấm lại sau đó KHÔNG còn phản ứng gì (đúng
+// hiện tượng người dùng báo, dễ dính chỉ với 1 lần lỡ tay bấm Hủy hộp thoại). "cancel" là sự kiện chuẩn
+// trên input[type=file] (mọi trình duyệt hiện đại) bắn ra đúng khi đóng hộp thoại mà KHÔNG chọn file nào.
 function pickAndParseMasterListFile() {
   return new Promise((resolve) => {
     const input = document.getElementById('itPriceMasterListFileInput');
     input.value = '';
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      input.onchange = null;
+      input.oncancel = null;
+      resolve(value);
+    };
     input.onchange = async () => {
       const file = input.files[0];
-      if (!file) return resolve(null);
+      if (!file) return finish(null);
       const formData = new FormData();
       formData.append('file', file);
       try {
         const res = await fetch('/api/it-price/master-list/parse-file', { method: 'POST', body: formData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-        resolve(data);
+        finish(data);
       } catch (err) {
         alert(`⛔ ${err.message}`);
-        resolve(null);
+        finish(null);
       }
     };
+    input.oncancel = () => finish(null);
     input.click();
   });
 }
