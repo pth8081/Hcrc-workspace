@@ -397,6 +397,11 @@ async function addItPriceMasterList() {
   logSystemAction('IT_SUPPORT', 'ADD_IT_PRICE_MASTER_LIST', `Thêm Mẫu Giá "${entry.name}" (${entry.columns.length} cột)`, 'SUCCESS');
   alert(`✅ Đã thêm Mẫu Giá "${entry.name}" (${entry.columns.length} cột).`);
   renderItPriceMasterListAdmin();
+  // Dropdown "Mẫu Giá Phê Duyệt" ở form tạo đề xuất (renderItPriceMasterListSelect()) TRƯỚC ĐÂY không
+  // được vẽ lại ở đây — mẫu VỪA thêm không hiện ngay cho người đề xuất (kể cả khi họ vừa là admin), phải
+  // đổi sub-tab/tải lại trang mới thấy. deleteItPriceMasterList() bên dưới đã làm đúng (gọi cả 2 hàm),
+  // add/replace/rename lại thiếu — bổ sung cho nhất quán.
+  renderItPriceMasterListSelect();
 }
 
 async function replaceItPriceMasterListFile(id) {
@@ -419,6 +424,7 @@ async function replaceItPriceMasterListFile(id) {
   logSystemAction('IT_SUPPORT', 'REPLACE_IT_PRICE_MASTER_LIST', `Thay mẫu Mẫu Giá "${list.name}" (${parsed.columns.length} cột)`, 'SUCCESS');
   alert(`✅ Đã cập nhật "${list.name}" (${parsed.columns.length} cột).`);
   renderItPriceMasterListAdmin();
+  renderItPriceMasterListSelect(); // Xem chú thích ở addItPriceMasterList() — cùng lỗi thiếu vẽ lại dropdown.
 }
 
 async function renameItPriceMasterList(id) {
@@ -432,6 +438,7 @@ async function renameItPriceMasterList(id) {
   const saved = await syncStorage('itPriceMasterLists');
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
   renderItPriceMasterListAdmin();
+  renderItPriceMasterListSelect(); // Xem chú thích ở addItPriceMasterList() — cùng lỗi thiếu vẽ lại dropdown.
 }
 
 async function deleteItPriceMasterList(id) {

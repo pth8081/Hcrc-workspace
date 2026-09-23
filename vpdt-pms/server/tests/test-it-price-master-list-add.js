@@ -120,13 +120,21 @@ async function main() {
       await page.waitForTimeout(300);
       const result = await page.evaluate(() => ({
         lists: DB.itPriceMasterLists,
-        alerts: window.__alerts
+        alerts: window.__alerts,
+        // Dropdown "Mẫu Giá Phê Duyệt" ở form tạo đề xuất — LỖI THẬT khác đã vá cùng đợt: TRƯỚC ĐÂY
+        // addItPriceMasterList() chỉ vẽ lại bảng quản trị (renderItPriceMasterListAdmin()), không vẽ lại
+        // dropdown này (renderItPriceMasterListSelect()) nên mẫu vừa thêm không hiện ngay để chọn, phải
+        // đổi sub-tab/tải lại trang mới thấy — deleteItPriceMasterList() vốn đã làm đúng (gọi cả 2 hàm).
+        selectWrapHidden: document.getElementById('itPriceMasterListSelectWrap').classList.contains('hidden'),
+        selectOptionsText: Array.from(document.getElementById('itPriceMasterListSelect').options).map(o => o.textContent)
       }));
       assertEqual(result.lists.length, 1, 'Phải lưu đúng 1 Mẫu Giá mới');
       assertEqual(result.lists[0].name, 'Mẫu giá test Q4/2026', 'Tên Mẫu Giá phải đúng như đã nhập ở prompt');
       assertEqual(result.lists[0].priceType, 'RETAIL', 'Mẫu Giá tạo lúc đang mở sub-tab Bán Lẻ phải gắn priceType RETAIL');
       assertEqual(result.lists[0].columns.length, 2, 'Phải lưu đúng 2 cột đọc được từ file mẫu');
       assert(result.alerts.some(a => a.includes('Đã thêm Mẫu Giá')), 'Phải có thông báo thành công');
+      assert(!result.selectWrapHidden, 'LỖI THẬT (nội dung gốc người dùng báo — "không chọn được mẫu giá"): vừa thêm mẫu xong, dropdown "Mẫu Giá Phê Duyệt" phải HIỆN NGAY, không cần đổi tab/tải lại trang');
+      assert(result.selectOptionsText.some(t => t.includes('Mẫu giá test Q4/2026')), 'Mẫu vừa thêm phải xuất hiện ngay trong dropdown để người đề xuất chọn');
     });
 
     await run.run('"🔄 Thay mẫu" (replaceItPriceMasterListFile, dùng chung helper) cũng không bị khoá cứng khi Hủy hộp thoại', async () => {
