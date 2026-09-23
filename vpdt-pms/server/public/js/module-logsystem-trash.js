@@ -254,3 +254,110 @@ function resetLogFilters() {
   renderSystemLogs();
 }
 
+// ==========================================
+// 🖥️ NHẬT KÝ LỖI HỆ THỐNG (dbo.ErrorLogs, MỚI 10/2026) — yêu cầu người dùng: "lấy tất cả các log lỗi
+// của hệ thống đưa lên đây để tôi có thể điều tra được ngay cả khi không dùng đến pm2 log". Trước đây
+// lỗi kỹ thuật (exception/crash/lỗi kết nối...) CHỈ đổ ra console.error(), chỉ xem được qua `pm2 logs`
+// trên máy chủ — sub-tab này là bản "Nhật Ký Hoạt Động" (loadSystemLogs() ở trên) nhưng cho LỖI KỸ
+// THUẬT thay vì hành vi nghiệp vụ, dùng route/bảng RIÊNG (routes/errorLog.js, lib/errorLogStore.js) —
+// xem chú thích bọc console.error/uncaughtException/unhandledRejection + error middleware ở server.js
+// để biết đúng nguồn ghi vào bảng này. Cùng khuôn UI với Nhật Ký Hoạt Động cho quen thuộc.
+function onErrorLogFilterChange() {
+  resetListPage('errorLog');
+  renderErrorLogs();
+}
+
+function getFilteredErrorLogs() {
+  const levelFilter = document.getElementById('filterErrorLogLevel')?.value || '';
+  const keyword = (document.getElementById('filterErrorLogKeyword')?.value || '').toLowerCase().trim();
+  return (DB.errorLogs || []).filter(l => {
+    if (levelFilter && l.level !== levelFilter) return false;
+    if (keyword) {
+      const haystacks = [l.message, l.source, l.username, l.ipAddress];
+      if (!haystacks.some(v => (v || '').toLowerCase().includes(keyword))) return false;
+    }
+    return true;
+  });
+}
+
+// Tải nhật ký lỗi hệ thống qua GET /api/error-log (chỉ admin, xem routes/errorLog.js) — gọi đúng lúc mở
+// sub-tab "🖥️ Nhật Ký Lỗi Hệ Thống" (setLogSubTab('ERROR')), giống hệt cơ chế loadSystemLogs() ở trên.
+async function loadErrorLogs() {
+  try {
+    const res = await fetch('/api/error-log?limit=1000');
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('Không tải được nhật ký lỗi hệ thống:', body.error);
+      return;
+    }
+    DB.errorLogs = body.items || [];
+  } catch (err) {
+    console.error('Không tải được nhật ký lỗi hệ thống:', err.message);
+  }
+  renderErrorLogs();
+}
+
+function renderErrorLogs() {
+  const tbody = document.getElementById('errorLogTableBody');
+  if (!tbody) return;
+
+  let logs = getFilteredErrorLogs();
+
+  document.getElementById('paginationContainer_errorLog').innerHTML = buildPaginationBoxHTML('errorLog', 'renderErrorLogs');
+  const pageLogs = paginateList('errorLog', logs, 'renderErrorLogs', 'dòng lỗi');
+
+  if (pageLogs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">${(DB.errorLogs || []).length === 0 ? 'Chưa ghi nhận lỗi hệ thống nào — tốt!' : 'Không có dòng lỗi nào khớp bộ lọc.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageLogs.map(l => `
+    <tr class="hover:bg-gray-50 border-b align-top">
+      <td class="border p-2 text-xs font-mono text-gray-600 whitespace-nowrap">${escapeHtml(l.timestamp)}</td>
+      <td class="border p-2 text-center font-bold whitespace-nowrap ${l.level === 'WARNING' ? 'text-amber-600' : 'text-red-600'}">${escapeHtml(l.level)}</td>
+      <td class="border p-2 font-mono text-xs text-gray-600">${escapeHtml(l.source || '')}</td>
+      <td class="border p-2 text-xs whitespace-pre-wrap break-all">${escapeHtml(l.message)}${l.stack ? `<details class="mt-1"><summary class="text-sky-600 cursor-pointer select-none">Chi tiết stack trace</summary><pre class="mt-1 p-2 bg-gray-50 border rounded text-[10px] overflow-x-auto">${escapeHtml(l.stack)}</pre></details>` : ''}</td>
+      <td class="border p-2 text-xs text-gray-500 whitespace-nowrap">${escapeHtml(l.username || '')}${l.ipAddress ? `<br>${escapeHtml(l.ipAddress)}` : ''}</td>
+    </tr>
+  `).join('');
+}
+
+async function clearErrorLogs() {
+  if (!confirm('Bạn có chắc muốn xóa toàn bộ nhật ký lỗi hệ thống?')) return;
+  try {
+    const res = await fetch('/api/error-log', { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Không thể xoá nhật ký lỗi hệ thống');
+    }
+  } catch (err) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+  DB.errorLogs = [];
+  renderErrorLogs();
+}
+
+function exportErrorLogsExcel() {
+  const columns = [
+    { header: 'timestamp', key: 'timestamp', width: 20 },
+    { header: 'level', key: 'level', width: 10 },
+    { header: 'source', key: 'source', width: 24 },
+    { header: 'message', key: 'message', width: 60 },
+    { header: 'stack', key: 'stack', width: 60 },
+    { header: 'username', key: 'username', width: 16 },
+    { header: 'ipAddress', key: 'ipAddress', width: 16 }
+  ];
+  const rows = getFilteredErrorLogs().map(l => ({
+    timestamp: l.timestamp, level: l.level, source: l.source || '', message: l.message,
+    stack: l.stack || '', username: l.username || '', ipAddress: l.ipAddress || ''
+  }));
+  downloadXlsxFromServer('dms_error_logs_export.xlsx', 'Nhật Ký Lỗi Hệ Thống', columns, rows);
+}
+
+function resetErrorLogFilters() {
+  document.getElementById('filterErrorLogLevel').value = '';
+  document.getElementById('filterErrorLogKeyword').value = '';
+  renderErrorLogs();
+}
+

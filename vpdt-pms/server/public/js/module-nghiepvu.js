@@ -1368,24 +1368,26 @@ const SYSTEM_DOCS = {
   },
   sysLog: {
     icon: '📜', title: 'Nhật Ký Hệ Thống', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Ghi lại mọi thao tác quan trọng (đăng nhập, tạo/sửa/xoá/duyệt hồ sơ...) kèm người thực hiện, thời gian, module, kết quả — chỉ admin xem được, không giới hạn theo phòng ban.',
+    desc: 'Màn "Log" có 2 sub-tab RIÊNG, dữ liệu/bảng CSDL hoàn toàn tách biệt: "📋 Nhật Ký Hoạt Động" ghi lại mọi thao tác nghiệp vụ (đăng nhập, tạo/sửa/xoá/duyệt hồ sơ...) kèm người thực hiện/thời gian/module/kết quả; "🖥️ Nhật Ký Lỗi Hệ Thống" (MỚI 10/2026) ghi lại LỖI KỸ THUẬT của chính máy chủ (exception/crash/lỗi kết nối CSDL...) — trước đây loại lỗi này CHỈ xem được qua `pm2 logs` trên máy chủ thật, nay tra cứu/lọc/xuất được ngay trên giao diện. Cả 2 sub-tab đều chỉ admin xem được, không giới hạn theo phòng ban.',
     flow: { ariaLabel: 'Quy trình tra cứu Nhật Ký Hệ Thống', chain: [
-      { label: 'Thao tác xảy ra', sub: 'Ở bất kỳ module nào' },
-      { label: 'Tự ghi 1 dòng log', sub: 'Người/thời gian/kết quả' },
+      { label: 'Thao tác/lỗi xảy ra', sub: 'Nghiệp vụ HOẶC kỹ thuật' },
+      { label: 'Tự ghi 1 dòng log', sub: 'Đúng sub-tab tương ứng' },
       { label: 'Tra cứu qua bộ lọc', sub: 'Tối đa 1.000 dòng/lượt tải', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📊 Log</b>.' },
-      { role: 'Quản trị viên', text: 'lọc theo <b>Phân Hệ</b> (module), <b>Sự Kiện</b> (loại thao tác), <b>Trạng thái</b>, hoặc gõ từ khoá vào ô tìm nhanh (khớp tên đăng nhập/địa chỉ IP/loại thao tác/mô tả).' },
-      { role: 'Quản trị viên', text: 'mỗi lượt tải chỉ trả tối đa 1.000 dòng — thu hẹp bằng bộ lọc thay vì cố tải hết nếu cần tra dữ liệu cũ hơn.' },
-      { role: 'Quản trị viên', text: 'muốn tải toàn bộ log ra ngoài để lưu trữ/đối chiếu: bấm <b>"📥 Xuất Log Excel"</b> (góc trên khung Log) — xuất theo đúng bộ lọc đang áp dụng.' },
-      { role: 'Quản trị viên', text: 'muốn dọn sạch nhật ký: bấm <b>"🗑️ Xóa Log"</b> (cạnh nút Xuất Excel) → xác nhận — xoá NGAY TOÀN BỘ nhật ký hệ thống, chỉ 1 hộp thoại xác nhận, KHÔNG có bước xác thực lại nào khác. Nên bấm "Xuất Log Excel" lưu lại trước nếu còn cần tra cứu sau này.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 📊 Log</b> — mặc định mở sub-tab <b>"📋 Nhật Ký Hoạt Động"</b>.' },
+      { role: 'Quản trị viên', text: 'ở "Nhật Ký Hoạt Động": lọc theo <b>Phân Hệ</b> (module), <b>Sự Kiện</b> (loại thao tác), <b>Trạng thái</b>, hoặc gõ từ khoá vào ô tìm nhanh (khớp tên đăng nhập/địa chỉ IP/loại thao tác/mô tả).' },
+      { role: 'Quản trị viên', text: 'muốn tra lỗi KỸ THUẬT (server bị lỗi/crash, không phải ai đó thao tác gì): bấm sang sub-tab <b>"🖥️ Nhật Ký Lỗi Hệ Thống"</b> — lọc theo <b>Cấp Độ</b> (ERROR/WARNING) hoặc gõ từ khoá (khớp nội dung lỗi/nguồn/username/IP); dòng nào có sẵn stack trace thì bấm <b>"Chi tiết stack trace"</b> để xem đầy đủ.' },
+      { role: 'Quản trị viên', text: 'mỗi lượt tải chỉ trả tối đa 1.000 dòng (cả 2 sub-tab) — thu hẹp bằng bộ lọc thay vì cố tải hết nếu cần tra dữ liệu cũ hơn.' },
+      { role: 'Quản trị viên', text: 'muốn tải toàn bộ log ra ngoài để lưu trữ/đối chiếu: bấm <b>"📥 Xuất Log Excel"</b> (góc trên khung, riêng cho từng sub-tab) — xuất theo đúng bộ lọc đang áp dụng ở sub-tab đó.' },
+      { role: 'Quản trị viên', text: 'muốn dọn sạch 1 trong 2 nhật ký: bấm <b>"🗑️ Xóa Log"</b> (đúng sub-tab đang mở) → xác nhận — xoá NGAY TOÀN BỘ nhật ký của sub-tab đó, chỉ 1 hộp thoại xác nhận, KHÔNG có bước xác thực lại nào khác, KHÔNG ảnh hưởng sub-tab còn lại. Nên bấm "Xuất Log Excel" lưu lại trước nếu còn cần tra cứu sau này.' },
     ],
     footer: { left: [
-      { label: '🗑️ Xóa Log — phá huỷ, không hoàn tác', text: 'xoá TOÀN BỘ nhật ký hệ thống (`DELETE /api/log`) ngay khi xác nhận — không đưa vào Thùng Rác, không có cách nào khôi phục lại sau khi xoá. Luôn có nút "🗑️ Xóa Log" thật trên màn — mục "Tự dọn sau 5.000 dòng" ngay dưới đây chỉ nói về cơ chế tự động, KHÔNG có nghĩa là màn này không có nút xoá tay.' },
-      { label: 'Tự dọn sau 5.000 dòng', text: 'hệ thống chỉ giữ lại 5.000 dòng gần nhất — nhật ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay; muốn xoá sạch NGAY LẬP TỨC (không đợi tự dọn dần) thì dùng nút "🗑️ Xóa Log" ở trên.' },
+      { label: '🗑️ Xóa Log — phá huỷ, không hoàn tác', text: 'xoá TOÀN BỘ nhật ký của ĐÚNG sub-tab đang mở (`DELETE /api/log` cho Nhật Ký Hoạt Động, `DELETE /api/error-log` cho Nhật Ký Lỗi Hệ Thống) ngay khi xác nhận — không đưa vào Thùng Rác, không có cách nào khôi phục lại sau khi xoá, và KHÔNG đụng gì tới sub-tab còn lại.' },
+      { label: 'Tự dọn sau 5.000 dòng', text: 'CẢ 2 sub-tab đều chỉ giữ lại 5.000 dòng gần nhất (2 bảng CSDL riêng, mỗi bảng tự dọn độc lập) — nhật ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay; muốn xoá sạch NGAY LẬP TỨC (không đợi tự dọn dần) thì dùng nút "🗑️ Xóa Log" ở trên.' },
     ], right: [
       { label: 'Xem TOÀN công ty', text: 'admin xem được nhật ký của mọi phòng ban, không chỉ giới hạn trong phòng ban của tài khoản admin đó.' },
+      { label: 'Nhật Ký Lỗi Hệ Thống ghi TỰ ĐỘNG, không do ai thao tác', text: 'không có nút nào để admin/người dùng tự tạo 1 dòng ở đây — mọi dòng đến từ chính máy chủ khi gặp lỗi kỹ thuật (khác Nhật Ký Hoạt Động, vốn ghi lại hành động CỦA người dùng).' },
     ] },
   },
   sysEmail: {

@@ -3918,14 +3918,33 @@ có log phía giao diện (dễ bỏ qua, không đáng tin bằng log server).
 
 ### 7.6. Nhật Ký Hệ Thống (Log)
 
-**📊 Log** — ghi lại mọi thao tác quan trọng (đăng nhập, tạo/sửa/xoá/duyệt hồ
-sơ...) kèm người thực hiện, thời gian, module, kết quả. **Chỉ admin xem
-được** và không giới hạn theo phòng ban (admin xem được nhật ký của TOÀN công
-ty, không chỉ phòng mình). Bộ lọc: Phân Hệ (module), Sự Kiện (loại thao tác),
-Trạng thái, và ô tìm nhanh theo từ khoá (khớp cả tên đăng nhập/địa chỉ IP/loại
-thao tác/mô tả). Hệ thống tự động **chỉ giữ lại 5.000 dòng gần nhất** — nhật
-ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay; mỗi lượt tải cũng chỉ trả
-tối đa 1.000 dòng/lần (dùng bộ lọc để thu hẹp thay vì tải hết).
+**📊 Log** có **2 sub-tab riêng**, dữ liệu/bảng CSDL hoàn toàn tách biệt, hiện
+cạnh nhau ngay khi mở màn Log:
+
+**📋 Nhật Ký Hoạt Động** (mặc định mở, nội dung/hành vi giữ nguyên như trước
+— chỉ đổi tên hiển thị) — ghi lại mọi thao tác quan trọng (đăng nhập, tạo/
+sửa/xoá/duyệt hồ sơ...) kèm người thực hiện, thời gian, module, kết quả. Bộ
+lọc: Phân Hệ (module), Sự Kiện (loại thao tác), Trạng thái, và ô tìm nhanh
+theo từ khoá (khớp cả tên đăng nhập/địa chỉ IP/loại thao tác/mô tả).
+
+**🖥️ Nhật Ký Lỗi Hệ Thống** (MỚI 10/2026) — ghi lại **lỗi KỸ THUẬT** của
+chính máy chủ (exception chưa lường trước, crash, lỗi kết nối CSDL, lỗi bên
+trong bất kỳ route API nào...) — khác hẳn Nhật Ký Hoạt Động (ghi hành động
+CỦA người dùng). Trước đây loại lỗi này **chỉ xem được qua `pm2 logs` trên
+máy chủ thật**, cần SSH vào máy chủ mới điều tra được; nay tra cứu/lọc/xuất
+được ngay trên giao diện, không cần quyền truy cập máy chủ. Mỗi dòng có Cấp
+Độ (`ERROR`/`WARNING`), Nguồn (route/nơi phát sinh nếu xác định được), Nội
+Dung Lỗi, và — nếu bắt được — nút **"Chi tiết stack trace"** xem đầy đủ vị trí
+lỗi trong code. Không có nút nào để chủ động "tạo" 1 dòng ở đây — mọi dòng đến
+tự động từ chính máy chủ khi gặp lỗi kỹ thuật thật.
+
+Cả 2 sub-tab đều **chỉ admin xem được**, không giới hạn theo phòng ban (admin
+xem được nhật ký của TOÀN công ty, không chỉ phòng mình), đều tự động **chỉ
+giữ lại 5.000 dòng gần nhất** (2 bảng CSDL riêng, mỗi bảng tự dọn độc lập —
+nhật ký cũ hơn tự bị dọn dần, không cần admin tự xoá tay), và mỗi lượt tải
+cũng chỉ trả tối đa 1.000 dòng/lần (dùng bộ lọc để thu hẹp thay vì tải hết).
+Nút **"📥 Xuất Log Excel"**/**"🗑️ Xóa Log"** ở mỗi sub-tab chỉ tác động ĐÚNG
+sub-tab đang mở, không đụng tới sub-tab còn lại.
 
 **Nhật ký do SERVER tự ghi cho thao tác quản trị (từ đợt rà soát cụm Hệ Thống/
 Admin/Cấu Hình)**: trước đây toàn bộ dòng nhật ký đều do trình duyệt tự gửi
@@ -3939,7 +3958,8 @@ hình tệp tải lên/biểu thuế lương/từ khoá nhạy cảm) đều sin
 vậy 1 thao tác qua giao diện có thể xuất hiện 2 dòng (1 của giao diện mô tả
 nghiệp vụ chi tiết, 1 của server làm bằng chứng) — đây là hành vi có chủ đích.
 Thao tác **Xoá toàn bộ nhật ký** cũng tự ghi lại 1 dòng "bia mộ"
-(`SYSTEM / CLEAR_SYSTEM_LOGS`) làm dòng đầu tiên của nhật ký mới.
+(`SYSTEM / CLEAR_SYSTEM_LOGS` cho Nhật Ký Hoạt Động, mức `WARNING` cho Nhật Ký
+Lỗi Hệ Thống) làm dòng đầu tiên của nhật ký mới.
 
 ### 7.7. Người Dùng — tạo hàng loạt
 
