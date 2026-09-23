@@ -228,38 +228,81 @@ async function main() {
       assert(result.html.includes(String(result.total)), 'Thẻ phải hiển thị đúng số lượng hiện có');
     });
 
-    // ===== 10) Danh Mục "Loại Dịch Vụ" — nút "✏️ Sửa" mới (10/2026, trước đây chỉ có Xoá, gõ sai tên
-    // phải xoá tạo lại từ đầu, mất liên kết với các bản ghi Gia Hạn CNTT đã gán loại dịch vụ đó). Đi qua
-    // đúng route rename-with-cascade dùng chung (POST /api/admin/renameCatalogEntry, xem
-    // lib/catalogRename.js CATALOG_HANDLERS.itRenewalCategories + test-catalog-rename-server.js cho phần
-    // server-side/cascade) — ở đây chỉ xác nhận đúng WIRING phía client (nút render đúng data-arg0, box
-    // vẫn admin-only như trước, không đổi hành vi hiện có).
-    await run.run('Danh Mục Loại Dịch Vụ: admin thấy nút "✏️ Sửa" đúng data-arg0 cho từng mặt hàng', async () => {
+    // ===== 10) Danh Mục "Loại Dịch Vụ" — DỜI sang "Hệ Thống → Quản Trị → 🗂️ Quản Lý Danh Mục" (yêu cầu
+    // người dùng 9/2026 — trước đó nằm lẫn trong màn nghiệp vụ "Gia Hạn Dịch Vụ", không đúng chỗ vì đây
+    // là danh mục cấu hình dùng chung, không phải thao tác nghiệp vụ; xem chú thích đầy đủ ở
+    // module-itsupport-renewal.js/systemSection.html). Màn "Quản Lý Danh Mục" đã admin-only sẵn
+    // (setSystemSubTab() chặn non-admin ngay từ đầu) nên không còn lớp ẩn/hiện admin-only riêng cho
+    // đúng khối này như trước (#itRenewalCategoryAdminBox đã bỏ hẳn, không còn trong DOM ở bất kỳ đâu).
+    // Nút "✏️ Sửa" (10/2026, trước đây chỉ có Xoá, gõ sai tên phải xoá tạo lại từ đầu, mất liên kết với
+    // các bản ghi Gia Hạn CNTT đã gán loại dịch vụ đó) vẫn đi qua đúng route rename-with-cascade dùng
+    // chung (POST /api/admin/renameCatalogEntry, xem lib/catalogRename.js
+    // CATALOG_HANDLERS.itRenewalCategories + test-catalog-rename-server.js cho phần server-side/cascade)
+    // — ở đây chỉ xác nhận đúng WIRING phía client (nút render đúng data-arg0, khối chỉ vào được qua màn
+    // admin-only, không đổi hành vi phân quyền hiện có).
+    await run.run('Danh Mục Loại Dịch Vụ: admin thấy nút "✏️ Sửa" đúng data-arg0 ở màn Quản Lý Danh Mục (Hệ Thống → Quản Trị)', async () => {
       await loginAs(page, ADMIN);
       const result = await page.evaluate(() => {
         DB.itRenewalCategories = ['Phần mềm/Bản quyền', 'Tên miền'];
-        switchTab('itSupport');
-        setItSupportSubTab('RENEWAL');
+        switchTab('system');
+        document.getElementById('btnSystemSubAdmin')?.click();
+        document.getElementById('btnAdminSubCatalog')?.click();
+        renderItRenewalCategoryList();
         const btn = document.querySelector('#itRenewalCategoryList button[data-op="renameItRenewalCategory"]');
         return {
-          boxHidden: document.getElementById('itRenewalCategoryAdminBox').classList.contains('hidden'),
+          boxExistsInOldLocation: !!document.getElementById('itRenewalCategoryAdminBox'),
+          listHtml: document.getElementById('itRenewalCategoryList')?.innerHTML || '',
           btnArg0: btn?.getAttribute('data-arg0'),
           hasRenameFn: typeof window.renameItRenewalCategory === 'function'
         };
       });
-      assert(!result.boxHidden, 'Admin phải thấy khối quản lý Danh Mục Loại Dịch Vụ');
+      assert(!result.boxExistsInOldLocation, '#itRenewalCategoryAdminBox (khối bọc cũ) đã bỏ hẳn khỏi DOM — khối này không còn "ẩn/hiện", nó nằm hẳn ở màn Quản Lý Danh Mục');
+      assert(result.listHtml.includes('Phần mềm/Bản quyền') && result.listHtml.includes('Tên miền'), 'Danh sách phải hiện đủ 2 loại dịch vụ đã seed');
       assertEqual(result.btnArg0, 'Phần mềm/Bản quyền', 'Nút "✏️ Sửa" đầu tiên phải mang đúng data-arg0 của mặt hàng tương ứng');
       assert(result.hasRenameFn, 'renameItRenewalCategory() phải được định nghĩa (module đã nạp)');
     });
 
-    await run.run('Danh Mục Loại Dịch Vụ: itServiceRenewalManage (KHÔNG phải admin) không thấy khối quản lý danh mục này', async () => {
+    await run.run('Danh Mục Loại Dịch Vụ: itServiceRenewalManage (KHÔNG phải admin) không vào được màn Quản Lý Danh Mục nên không sửa/xoá được danh mục này', async () => {
       await loginAs(page, IT_STAFF);
-      const boxHidden = await page.evaluate(() => {
+      const result = await page.evaluate(() => {
+        // switchTab('system') tự nó KHÔNG chặn non-admin (không có guard riêng cho tabName==='system' như
+        // các module khác) — #systemSection vẫn hiện, nhưng nội dung THẬT (adminSection + màn Quản Lý Danh
+        // Mục bên trong) chỉ được setSystemSubTab() dựng lên, và hàm đó chặn non-admin NGAY DÒNG ĐẦU TIÊN
+        // (`if (!currentUser?.perms?.admin) return;`). Đặt activeSystemSubTab về 1 giá trị KHÁC 'ADMIN'
+        // trước để phép thử không phụ thuộc trạng thái sót lại từ phiên admin trước đó trong cùng page.
+        activeSystemSubTab = 'FORM';
+        switchTab('system');
+        setSystemSubTab('ADMIN');
+        return {
+          adminSectionHidden: document.getElementById('adminSection')?.classList.contains('hidden'),
+          activeSubTabAfter: activeSystemSubTab
+        };
+      });
+      assert(result.adminSectionHidden !== false, 'adminSection phải vẫn ẩn — setSystemSubTab("ADMIN") không được phép hiện màn Quản Lý Danh Mục cho non-admin');
+      assertEqual(result.activeSubTabAfter, 'FORM', 'setSystemSubTab("ADMIN") phải bị chặn ngay từ đầu cho itServiceRenewalManage (không phải admin) — activeSystemSubTab không được đổi thành "ADMIN", nên màn Quản Lý Danh Mục chứa khối sửa/xoá "Loại Dịch Vụ" không thể mở được — giữ nguyên đúng phạm vi quyền cũ (chỉ Admin mới sửa/xoá được danh mục này).');
+    });
+
+    // ===== 11) Danh Mục "Loại Dịch Vụ" vẫn đúng ở màn nghiệp vụ "Gia Hạn Dịch Vụ" sau khi dời khối sửa/
+    // xoá đi — itServiceRenewalManage/admin vẫn tạo được dịch vụ mới và gợi ý "Loại dịch vụ" (datalist)
+    // vẫn đúng, chỉ riêng khối THÊM/SỬA/XOÁ danh mục là không còn hiện ở đây nữa.
+    await run.run('Màn "Gia Hạn Dịch Vụ" vẫn tạo được dịch vụ mới bình thường sau khi dời khối Danh Mục Loại Dịch Vụ ra Quản Lý Danh Mục', async () => {
+      await loginAs(page, IT_STAFF);
+      const result = await page.evaluate(() => {
+        DB.itRenewalCategories = ['Phần mềm/Bản quyền', 'Tên miền'];
         switchTab('itSupport');
         setItSupportSubTab('RENEWAL');
-        return document.getElementById('itRenewalCategoryAdminBox').classList.contains('hidden');
+        // Scope truy vấn TRONG #itSupportSection — #itRenewalCategoryList vẫn tồn tại trong DOM tổng thể
+        // (đã dời sang fragment systemSection.html, được nạp lười 1 lần cho cả phiên trang), nhưng không
+        // còn nằm bên trong section "Gia Hạn Dịch Vụ" này nữa, đúng như mục tiêu của việc dời khối.
+        return {
+          boxExistsHere: !!document.querySelector('#itSupportSection #itRenewalCategoryAdminBox'),
+          catalogListExistsHere: !!document.querySelector('#itSupportSection #itRenewalCategoryList'),
+          createFormExists: !!document.getElementById('itRenewalCreateForm')
+        };
       });
-      assert(boxHidden, 'Chỉ Admin mới được sửa/xoá Danh Mục Loại Dịch Vụ, itServiceRenewalManage thường không thấy khối này (giữ nguyên hành vi cũ)');
+      assert(!result.boxExistsHere, 'Khối "Quản Lý Danh Mục Loại Dịch Vụ" không còn ở màn Gia Hạn Dịch Vụ nữa (đã dời hẳn)');
+      assert(!result.catalogListExistsHere, '#itRenewalCategoryList (danh sách sửa/xoá) không còn nằm trong fragment itSupportSection nữa');
+      assert(result.createFormExists, 'Form tạo dịch vụ mới vẫn còn nguyên, không bị ảnh hưởng bởi việc dời khối danh mục đi');
     });
 
   } finally {
