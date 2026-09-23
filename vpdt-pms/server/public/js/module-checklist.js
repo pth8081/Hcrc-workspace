@@ -69,6 +69,16 @@ function updateChecklistSubTabVisibility() {
 function isEligibleForStoreSelfClient(user) {
   return !!(user && user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
 }
+// hasExplicitChecklistAuditScopeClient() — KHÁC hasChecklistAuditScopeClient() (core.js): hàm đó tự động
+// coi admin có quyền Kiểm Soát (đúng cho việc ẩn/hiện tab "Thực Hiện" — admin luôn vào được để test mọi
+// mẫu). Hàm này CHỈ tính quyền checklistAuditScope TƯỜNG MINH (bỏ qua bypass admin) — dùng riêng để quyết
+// định hiện khối "🔎 Kiểm Soát Siêu Thị" (dữ liệu THẬT) hay dồn vào khối "🧪 Test" bên dưới
+// (renderChecklistExecuteTab()) — theo đúng yêu cầu người dùng 9/2026: "ai có quyền mới là thực hiện",
+// admin không tự nhiên được tính là người Kiểm Soát thật chỉ vì có cờ admin.
+function hasExplicitChecklistAuditScopeClient(user) {
+  const scope = user?.perms?.checklistAuditScope;
+  return !!(scope?.all || (scope?.depts || []).length);
+}
 
 // ===================== Sub-tab: Cấu Hình (checklistTemplateManage) =====================
 function renderChecklistConfigTab() {
@@ -701,14 +711,25 @@ function renderChecklistExecuteTab() {
   const activeTemplates = (DB.checklistTemplates || []).filter(t => t.status === 'ACTIVE');
   const storeSelfTemplatesAll = activeTemplates.filter(t => t.templateType === 'STORE_SELF');
   const storeSelfTemplates = isEligibleForStoreSelfClient(user) ? storeSelfTemplatesAll : [];
-  const auditScope = hasChecklistAuditScopeClient(user) ? getChecklistAuditStoresClient(user) : null;
+  // Kiểm Soát Siêu Thị (CONTROL_AUDIT, VD checklist VSATTP): khối "thật" CHỈ hiện cho user có
+  // checklistAuditScope TƯỜNG MINH — KHÔNG tự động coi admin có quyền Kiểm Soát thật chỉ vì có cờ admin
+  // (khác hasChecklistAuditScopeClient() ở core.js vốn bypass cho admin, dùng cho việc ẩn/hiện CẢ tab
+  // "Thực Hiện"). Theo đúng yêu cầu người dùng 9/2026: "ai có quyền mới là thực hiện" — admin không gắn
+  // checklistAuditScope thật thì dồn vào khối "🧪 Test" bên dưới, đối xứng với STORE_SELF.
+  const hasRealAuditScope = hasExplicitChecklistAuditScopeClient(user);
+  const auditScope = hasRealAuditScope ? getChecklistAuditStoresClient(user) : null;
   const auditTemplates = auditScope ? activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT') : [];
   const auditStores = auditScope ? (auditScope.all ? (DB.stores || []) : (auditScope.depts || [])) : [];
   // Admin: tài khoản admin thường KHÔNG gắn Vị Trí Siêu Thị cụ thể (posType khác 'STORE') nên không lọt
-  // vào storeSelfTemplates ở trên dù mẫu đang ACTIVE — thêm khối riêng cho phép admin chọn TÙY Ý 1 siêu
-  // thị để test mẫu Tự Đánh Giá (server đã nới ở resolveStoreCodeForSubmission()), phục vụ nhu cầu kiểm
-  // tra mẫu vừa tạo/kích hoạt mà không cần tài khoản STORE riêng.
-  const adminTestTemplates = (isAdmin && !isEligibleForStoreSelfClient(user)) ? storeSelfTemplatesAll : [];
+  // vào storeSelfTemplates ở trên dù mẫu đang ACTIVE, và cũng thường KHÔNG có checklistAuditScope tường
+  // minh — gộp cả 2 loại mẫu (Tự Đánh Giá + Kiểm Soát) vào CHUNG 1 khối Test bên dưới, cho phép admin
+  // chọn TÙY Ý 1 siêu thị để test mẫu (server đã nới ở resolveStoreCodeForSubmission()/canAuditStore()
+  // — admin vốn bypass mọi kiểm tra quyền khác trong hệ thống nên không phát sinh rủi ro mới), phục vụ
+  // nhu cầu kiểm tra mẫu vừa tạo/kích hoạt mà không cần tài khoản riêng có đúng quyền.
+  const adminTestTemplates = [
+    ...((isAdmin && !isEligibleForStoreSelfClient(user)) ? storeSelfTemplatesAll : []),
+    ...((isAdmin && !hasRealAuditScope) ? activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT') : [])
+  ];
 
   const myDrafts = (DB.checklistSubmissions || []).filter(s => s.submittedByUsername === user.username && s.status === 'DRAFT');
 
@@ -743,10 +764,10 @@ function renderChecklistExecuteTab() {
   }
   if (adminTestTemplates.length) {
     html += `<div class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
-      <h4 class="font-bold text-indigo-800 text-xs">🧪 Test Tự Đánh Giá (Admin — chọn siêu thị bất kỳ)</h4>
-      <p class="text-[11px] text-indigo-600">Tài khoản admin không gắn Vị Trí Siêu Thị nên chọn tạm 1 siêu thị để test mẫu — không tính là dữ liệu thật của siêu thị đó.</p>
+      <h4 class="font-bold text-indigo-800 text-xs">🧪 Test Checklist (Admin — chọn siêu thị bất kỳ)</h4>
+      <p class="text-[11px] text-indigo-600">Tài khoản admin không gắn Vị Trí Siêu Thị/chưa được cấp quyền Kiểm Soát thật nên chọn tạm 1 siêu thị để test mẫu — không tính là dữ liệu thật của siêu thị đó.</p>
       <div class="flex items-center gap-2 flex-wrap">
-        <select id="checklistAdminTestTemplateSelect" class="border p-1.5 rounded text-xs">${adminTestTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('')}</select>
+        <select id="checklistAdminTestTemplateSelect" class="border p-1.5 rounded text-xs">${adminTestTemplates.map(t => `<option value="${t.id}">${t.templateType === 'CONTROL_AUDIT' ? '[Kiểm Soát] ' : '[Tự Đánh Giá] '}${escapeHtml(t.templateName)}</option>`).join('')}</select>
         <select id="checklistAdminTestStoreSelect" class="border p-1.5 rounded text-xs">${(DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
         <button type="button" data-op="startChecklistAdminTestSubmission" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700">Bắt Đầu Test</button>
       </div>

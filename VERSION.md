@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**24.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.9 (2026-09-23): Checklist — Admin không có quyền Kiểm Soát thật thì dồn vào khối "🧪 Test"
+
+Người dùng phản ánh (kèm ảnh chụp tab "Thực Hiện" module Checklist): admin
+đăng nhập thấy khối "🔎 Kiểm Soát Siêu Thị" (VSATTP) như 1 kiểm soát viên
+THẬT (được chọn bất kỳ siêu thị nào bấm "Bắt Đầu Đánh Giá" ngay), trong khi
+khối "Tự Đánh Giá" đã có sẵn cơ chế tách riêng "🧪 Test Tự Đánh Giá (Admin —
+chọn siêu thị bất kỳ)" cho admin không gắn Vị Trí Siêu Thị. Yêu cầu: "ai có
+quyền mới là thực hiện" — đổi VSATTP giống hệt Tự Đánh Giá.
+
+Nguyên nhân: `renderChecklistExecuteTab()` (`module-checklist.js`) dùng
+`hasChecklistAuditScopeClient()` (core.js) để quyết định hiện khối Kiểm Soát
+thật — hàm này CỐ Ý bypass cho admin (đúng cho việc ẩn/hiện CẢ tab "Thực
+Hiện"), nhưng dùng sai chỗ khiến admin luôn được coi là có quyền Kiểm Soát
+THẬT dù không được gán `checklistAuditScope` tường minh nào — có thể tạo dữ
+liệu đánh giá VSATTP lẫn với dữ liệu THẬT của siêu thị, không có cảnh báo
+"đây là Test" như khối Tự Đánh Giá.
+
+Đã vá: thêm `hasExplicitChecklistAuditScopeClient()` (chỉ tính
+`checklistAuditScope` tường minh, bỏ qua bypass admin) — khối "🔎 Kiểm Soát
+Siêu Thị" thật giờ CHỈ hiện cho user có scope tường minh (kể cả admin, nếu
+lỡ được gán thêm). Admin không có scope thật thì mẫu VSATTP được GỘP CHUNG
+vào khối "🧪 Test Checklist (Admin — chọn siêu thị bất kỳ)" đã có sẵn (đổi
+tên từ "Test Tự Đánh Giá" thành tên chung, dropdown gắn nhãn "[Kiểm Soát]"/
+"[Tự Đánh Giá]" phân biệt loại mẫu) — dùng chung hàm
+`startChecklistAdminTestSubmission()` có sẵn, không cần sửa server (server
+vốn đã bypass mọi kiểm tra quyền cho admin ở mọi nơi khác trong hệ thống,
+không phát sinh rủi ro mới). Test:
+`test-checklist-execute-tab-admin-audit-test.js` mới (12 kịch bản: admin
+không có scope → dồn Test; Kiểm Soát Viên thật → vẫn thấy khối thật, đúng
+phạm vi cấp; admin lỡ được gán thêm scope thật → vẫn thấy khối thật, không
+lặp trong Test) — full regression 8 file checklist liên quan vẫn xanh.
 
 ## v24.8 (2026-09-23): Vá lỗi màu chữ mờ ở 2 nút sub-tab "Nhật Ký" + lỗ hổng Tailwind content-glob
 
