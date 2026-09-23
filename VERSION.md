@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**24.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.6-24.7 (2026-09-23): Dời Danh Mục "Loại Dịch Vụ" + Vá lỗi "Thêm Mẫu Giá" (Phê Duyệt Giá)
+
+2 việc làm trước job Nhật Ký Lỗi Hệ Thống (v24.5), theo yêu cầu người dùng
+tạm chưa đánh version/chưa merge lúc đó — nay merge + bump bắt kịp cả 2 (mỗi
+job 1 bậc, `23.90`→`24.6` rồi `24.7`, theo đúng quy tắc "cộng dồn số lần đã
+bỏ lỡ" ở `CLAUDE.md`).
+
+**v24.6 — Dời khối "Quản Lý Danh Mục Loại Dịch Vụ" (Gia Hạn CNTT) vào Hệ Thống > Quản Trị**
+
+Người dùng phát hiện khối thêm/sửa/xoá danh mục "Loại Dịch Vụ" bị đặt sai vị
+trí — nhúng ngay trong màn nghiệp vụ "Gia Hạn Dịch Vụ" (Hỗ Trợ IT) thay vì
+màn Quản Lý Danh Mục dùng chung. Dời hẳn sang **Hệ Thống → Quản Trị → 🗂️
+Quản Lý Danh Mục**, đúng khuôn các danh mục khác (priceZone, carVehicleType...):
+HTML dời sang `systemSection.html`, JS quản lý vẫn ở `module-itsupport-renewal.js`
+(module sở hữu). Màn "Gia Hạn Dịch Vụ" chỉ còn form tạo dịch vụ (vẫn gợi ý
+đúng danh mục qua datalist). Test: viết lại 2 kịch bản cũ + thêm 1 kịch bản
+mới ở `test-it-service-renewal.js` (15/15 pass).
+
+**v24.7 — Vá lỗi thật: "+ Thêm Mẫu Giá"/"🔄 Thay mẫu" (Phê Duyệt Giá) bấm không có phản ứng**
+
+Người dùng báo cáo: cả Bán Lẻ lẫn Bán Buôn đều không chọn được Mẫu Giá, bấm
+"+ Thêm Mẫu Giá" không có phản ứng gì. Nguyên nhân gốc: `itPriceMasterListFileInput`
+là input file DUY NHẤT trong hệ thống không dùng `data-op-change`, mà tự
+dựng 1 Promise chỉ `resolve()` khi bắt được sự kiện "change" — hộp thoại
+chọn file của hệ điều hành KHÔNG bao giờ bắn "change" nếu người dùng bấm
+Hủy/đóng đi, khiến Promise treo vĩnh viễn, kéo theo `data-op-in-flight`
+(chống double-submit) của nút gọi cũng treo mãi — khoá cứng nút "+ Thêm Mẫu
+Giá"/"🔄 Thay mẫu" ở CẢ 2 kênh (dùng chung 1 input), chỉ cần 1 lần lỡ tay
+bấm Hủy hộp thoại. Đã vá bằng cách thêm xử lý sự kiện "cancel" chuẩn của
+input file. Vá thêm 1 lỗi phụ phát hiện cùng đợt: sau khi thêm/thay/đổi tên
+1 Mẫu Giá, dropdown "Mẫu Giá Phê Duyệt" ở form tạo đề xuất không cập nhật
+ngay (thiếu gọi `renderItPriceMasterListSelect()`, khác `deleteItPriceMasterList()`
+vốn đã làm đúng). Test: `test-it-price-master-list-add.js` mới (4 kịch bản)
+phủ đúng lỗi thật (Hủy hộp thoại 2 lần liên tiếp, happy path, nút Thay mẫu).
 
 ## v24.5 (2026-09-23): "🖥️ Nhật Ký Lỗi Hệ Thống" — sub-tab MỚI trong Hệ Thống > Log
 
