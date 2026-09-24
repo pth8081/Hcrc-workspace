@@ -3147,11 +3147,8 @@ bảng phẳng ở trên):
   cần xử lý [Đạt/Không đạt]/Mô tả lý do chưa đạt/Thời gian hoàn thành — có
   in dòng tiêu đề nhóm nếu câu hỏi có gắn "Nhóm/Hạng mục") và `<Tên ST> -
   Thống kê` (% Đạt theo từng nhóm, gộp mọi bài nộp khớp bộ lọc của siêu thị
-  đó). Cột **"Thời gian hoàn thành" luôn để trống** — hệ thống hiện CHƯA có
-  chỗ lưu trạng thái khắc phục riêng từng câu hỏi (chỉ có 1 ô "Phản hồi"
-  chung cho cả bài ở tab Kết Quả & Phản Hồi) — quyết định đã chốt: không xây
-  thêm tính năng này trong đợt này, cột này để trống cho người dùng tự điền
-  tay sau khi xuất nếu cần theo dõi.
+  đó). **Cột "Thời gian hoàn thành" lấy từ field `deadline` mới (10/2026, xem
+  ngay dưới) — trước đó luôn để trống vì hệ thống chưa có chỗ lưu, nay đã có.**
 - **Loại Trừ Điểm Theo Hạng Mục (VSATTP)**: mỗi siêu thị ra 1 sheet, mirror
   đúng cây Hạng Mục Lớn/Hạng Mục Con/Tiêu Chí gốc + điểm tối đa hiệu lực +
   điểm trừ thực tế đã nhập + mô tả/mức độ rủi ro/thời hạn/ghi chú của từng
@@ -3160,6 +3157,59 @@ bảng phẳng ở trên):
   tóm tắt (ngày kiểm tra/người kiểm tra/tổng điểm) ngay phía trên.
 - Quyền: `checklistReportView` (đúng quyền xem tab Báo Cáo hiện có, không
   cần thêm quyền riêng).
+
+**Thời hạn hoàn thành cho câu trả lời "Không đạt" (10/2026, loại QA)** — khi
+làm bài loại **Câu Hỏi & Đáp Án** và chọn 1 đáp án KHÔNG phải "Đạt" (cờ
+`isPassing=false`) cho 1 câu hỏi, form hiện thêm 1 ô **ngày** "Thời hạn hoàn
+thành" (không bắt buộc) ngay dưới ô ghi chú/ảnh minh chứng đã có — field mới
+`deadline` lưu theo TỪNG câu trả lời (khác `note` vốn cũng theo từng câu, và
+khác thời hạn ở loại `DEDUCTION` vốn theo từng lượt trừ điểm — 2 field
+`deadline` này độc lập, không dùng chung). Để trống vẫn nộp bài được bình
+thường (tương thích ngược với mọi bài đã nộp trước đợt này — đọc lại ra
+chuỗi rỗng, không lỗi).
+
+**4 sheet MỚI khi "Xuất Theo Mẫu Gốc" loại QA (10/2026)** — theo yêu cầu đối
+chiếu với file Excel báo cáo checklist đang dùng thật ("BÁO CÁO CHECKLIST QUA
+WEB.xlsx"), lần xuất loại **Câu Hỏi & Đáp Án** giờ có thêm 4 sheet TỔNG HỢP ở
+ĐẦU file (đứng trước các cặp sheet `<Tên ST> - Chi tiết/Thống kê` theo từng
+siêu thị đã có — **không thay thế, chỉ bổ sung**, đúng theo lựa chọn xác nhận
+khi triển khai):
+- **"Dữ Liệu Chi Tiết (Gộp)"** — mirror sheet "Data thô" của file mẫu người
+  dùng gửi: TOÀN BỘ câu trả lời của MỌI siêu thị khớp bộ lọc, xếp DỌC trong
+  CÙNG 1 sheet (khác các sheet `<Tên ST> - Chi tiết` vốn tách riêng từng
+  siêu thị) — dùng khi cần lọc/PivotTable trên toàn bộ dữ liệu thay vì lật
+  từng sheet.
+- **"Recap - Cần Xử Lý"** — mirror sheet "Recap" của file mẫu — CHỈ liệt các
+  câu trả lời **Không đạt** (bỏ qua mọi câu Đạt), kèm cột Thời Hạn Hoàn Thành
+  (field `deadline` mới ở trên) — dùng để giao việc/theo dõi khắc phục, không
+  cần dò tìm giữa hàng trăm dòng Đạt.
+- **"Top Xếp Hạng"** — 2 bảng Top 5 SONG SONG (không thay thế nhau): bảng
+  cảnh báo "nhiều câu Không đạt nhất" (đếm số câu Không đạt/siêu thị) và bảng
+  vinh danh "tỷ lệ Đạt cao nhất" (%) — vì loại QA ở chế độ **Chỉ Đạt/Chưa
+  đạt** không có điểm số trung bình để xếp hạng như VSATTP, nên dùng 2 chỉ số
+  đếm/tỷ lệ Đạt riêng thay thế, KHÔNG dùng chung công thức điểm TB với
+  Dashboard VSATTP bên dưới.
+- **"Đã Làm-Chưa Làm"** — xem mục Dashboard đã làm/chưa làm chung bên dưới.
+
+**Dashboard "Đã làm/Chưa làm checklist theo ngày/tháng" (10/2026, áp dụng CẢ
+2 báo cáo Checklist ST/CH và VSATTP)** — đối chiếu TOÀN BỘ siêu thị/cửa hàng
+**đang hoạt động trong danh mục hệ thống** (Hệ Thống → Quản Lý Danh Mục →
+Quản Lý Danh Mục Siêu Thị, KHÔNG giới hạn theo phạm vi xem của người xem báo
+cáo — quyết định đã xác nhận: dashboard này phản ánh TOÀN CỤC tình hình thực
+hiện, không phải dữ liệu cá nhân hoá) với danh sách siêu thị THỰC SỰ có bài
+nộp khớp bộ lọc (mẫu/siêu thị/khoảng ngày) của lượt xem/xuất hiện tại:
+- **Trên màn hình** — tab 📊 Báo Cáo, cả 2 tab con **📋 Checklist Siêu
+  Thị/Cửa Hàng** lẫn **🥗 Đánh Giá VSATTP** đều hiện thêm khối: 2 thẻ số
+  (Đã làm/Chưa làm), danh sách tên các đơn vị CHƯA làm, và 2 bảng cuộn ngang
+  "Theo Ngày"/"Theo Tháng" (số đơn vị PHÂN BIỆT đã nộp ít nhất 1 bài trong
+  ngày/tháng đó — 1 đơn vị nộp nhiều bài cùng ngày chỉ tính 1 lần).
+- **Trong file Excel xuất** — loại QA thêm hẳn 1 sheet riêng **"Đã Làm-Chưa
+  Làm"** (không có sẵn sheet Dashboard để chèn vào như VSATTP); loại VSATTP
+  chèn thêm bảng này vào CUỐI sheet `Dashboard` sẵn có (sau 2 bảng Top vi
+  phạm mới, xem ngay dưới) — không tạo sheet riêng vì đã có sheet Dashboard
+  tổng hợp.
+- Server LUÔN tự tính lại từ dữ liệu thật khi xuất/hiển thị (không tin số
+  liệu client gửi lên), đúng nguyên tắc chung của mọi báo cáo trong hệ thống.
 
 **Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng)** — tab **📊
 Báo Cáo** giờ chia **2 tab con**, cùng dùng chung đúng 1 quyền
@@ -3179,11 +3229,22 @@ Báo Cáo** giờ chia **2 tab con**, cùng dùng chung đúng 1 quyền
   - **2 khối tỷ lệ vi phạm** (theo Siêu Thị/theo Cửa Hàng) — % số đơn vị
     PHÂN BIỆT (không phải tổng danh mục) đã có ít nhất 1 lần mắc đúng tiêu
     chí đó trong kỳ, sắp giảm dần theo tỷ lệ.
+  - **2 khối Top 5 nhiều vi phạm nhất (10/2026, MỚI, SONG SONG 4 khối điểm TB
+    ở trên — không thay thế)** — theo Siêu Thị/theo Cửa Hàng, xếp theo TỔNG
+    SỐ LẦN đơn vị bị trừ điểm (cộng dồn mọi lượt trừ điểm của mọi bài nộp
+    trong kỳ), KHÁC hẳn 2 khối tỷ lệ vi phạm ở trên (đếm số ĐƠN VỊ mắc mỗi
+    TIÊU CHÍ) và 4 khối Top điểm TB (xếp theo điểm số, không phải tần suất) —
+    1 đơn vị điểm TB không thấp nhất vẫn có thể đứng đầu Top này nếu bị trừ
+    điểm nhiều LẦN (dù mỗi lần trừ ít). Đơn vị không có lượt trừ nào không
+    xuất hiện trong bảng (không hiển thị "0 lần").
+  - **Bảng "Đã làm/Chưa làm"** — xem mục Dashboard đã làm/chưa làm chung ở
+    trên (áp dụng chung cho cả Checklist ST/CH và VSATTP).
   - **Nút "📥 Xuất Excel"** tải **1 file gộp DUY NHẤT** (yêu cầu người dùng
-    "gộp chung file"): sheet `Dashboard` (đúng 4 bảng Top 5 + 2 bảng tỷ lệ vi
-    phạm ở trên, dạng bảng số liệu — KHÔNG có biểu đồ Excel, chỉ xem biểu đồ
-    trực quan ngay trên màn web) + 1 sheet chi tiết/đơn vị (cùng layout với
-    "Xuất Theo Mẫu Gốc" loại Trừ Điểm ở trên).
+    "gộp chung file"): sheet `Dashboard` (đúng 4 bảng Top 5 điểm TB + 2 bảng
+    Top 5 vi phạm + 2 bảng tỷ lệ vi phạm + bảng đã làm/chưa làm ở trên, dạng
+    bảng số liệu — KHÔNG có biểu đồ Excel, chỉ xem biểu đồ trực quan ngay
+    trên màn web) + 1 sheet chi tiết/đơn vị (cùng layout với "Xuất Theo Mẫu
+    Gốc" loại Trừ Điểm ở trên).
   - **Bắt buộc phân loại Siêu Thị/Cửa Hàng trước khi dùng**: vào **Hệ Thống →
     ⚙️ Quản Trị → 🗂️ Quản Lý Danh Mục → 🏬 Quản Lý Danh Mục Siêu Thị**, mỗi
     tên có 1 dropdown **"Siêu Thị"/"Cửa Hàng"/"— Chưa phân loại —"**

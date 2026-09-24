@@ -483,9 +483,17 @@ router.post('/export-report', requireReportView, async (req, res) => {
       list.sort((a, b) => (parseSubmittedAtDate(a.submittedAt) || 0) - (parseSubmittedAtDate(b.submittedAt) || 0));
     }
 
+    // Coverage "đã làm/chưa làm" (10/2026) — CHỈ tính cho mẫu QA (DEDUCTION dùng sheet Dashboard riêng ở
+    // route /vsattp-dashboard/export bên dưới) — đối chiếu TOÀN BỘ AppData 'stores' hiện có với storeCode
+    // PHÂN BIỆT trong `matched` (đã lọc đúng bộ lọc siêu thị/khoảng ngày của lượt xuất này).
+    let coverage;
+    if (template.templateKind !== 'DEDUCTION') {
+      const allStores = await getAppDataValueCached('stores');
+      coverage = checklist.computeChecklistCoverage(allStores || [], matched);
+    }
     const wb = template.templateKind === 'DEDUCTION'
       ? buildDeductionReportWorkbook(template, submissionsByStore)
-      : buildQaReportWorkbook(template, submissionsByStore);
+      : buildQaReportWorkbook(template, submissionsByStore, coverage);
 
     const safeName = String(template.templateCode || 'checklist').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -509,10 +517,11 @@ router.post('/vsattp-dashboard/export', requireReportView, async (req, res) => {
     const fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
     const toDate = req.body?.toDate ? new Date(req.body.toDate) : null;
 
-    const [templates, allSubmissions, storeTypes] = await Promise.all([
+    const [templates, allSubmissions, storeTypes, allStores] = await Promise.all([
       getAllForCollection('checklistTemplates'),
       getAllForCollection('checklistSubmissions'),
-      getAppDataValueCached('storeTypes')
+      getAppDataValueCached('storeTypes'),
+      getAppDataValueCached('stores')
     ]);
     // 10/2026: checklistReportView có phạm vi theo MẪU — chỉ gộp vào Dashboard/file xuất những mẫu
     // DEDUCTION nằm trong phạm vi report-view của người gọi (scope.all hoặc có mặt trong danh sách chọn).
@@ -540,7 +549,10 @@ router.post('/vsattp-dashboard/export', requireReportView, async (req, res) => {
       list.sort((a, b) => (parseSubmittedAtDate(a.submittedAt) || 0) - (parseSubmittedAtDate(b.submittedAt) || 0));
     }
 
-    const wb = buildVsattpDashboardWorkbook(dashboardData, submissionsByStore, templatesById);
+    // Coverage "đã làm/chưa làm" (10/2026) — đối chiếu TOÀN BỘ AppData 'stores' với storeCode PHÂN BIỆT
+    // trong `matched` (đã lọc đúng phạm vi mẫu DEDUCTION/siêu thị/khoảng ngày của lượt xuất này).
+    const coverage = checklist.computeChecklistCoverage(allStores || [], matched);
+    const wb = buildVsattpDashboardWorkbook(dashboardData, submissionsByStore, templatesById, coverage);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="bao-cao-danh-gia-vsattp.xlsx"');
     await wb.xlsx.write(res);

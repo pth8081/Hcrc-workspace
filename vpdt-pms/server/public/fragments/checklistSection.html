@@ -170,6 +170,40 @@
           <button type="button" data-op="exportChecklistReportExcel" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel (bảng phẳng)</button>
         </div>
         <div id="checklistReportStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+
+        <!-- Dashboard "Đã làm/Chưa làm" + Top xếp hạng (10/2026, yêu cầu người dùng) — đối chiếu TOÀN BỘ
+             siêu thị đang hoạt động (DB.stores) với storeCode đã nộp bài trong đúng bộ lọc đang chọn ở
+             trên (KHÔNG lọc theo siêu thị vì "Xuất Theo Mẫu Gốc" bên dưới mới có bộ lọc siêu thị riêng —
+             coverage này luôn tính trên TOÀN BỘ để biết đúng ai đã/chưa làm). -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="bg-emerald-50 p-3 rounded text-center"><div id="checklistReportCoverageDoneCount" class="text-2xl font-bold text-emerald-700">0</div><div class="text-[11px] text-gray-500">Đã làm checklist</div></div>
+          <div class="bg-amber-50 p-3 rounded text-center"><div id="checklistReportCoverageNotDoneCount" class="text-2xl font-bold text-amber-700">0</div><div class="text-[11px] text-gray-500">Chưa làm checklist</div></div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <h4 class="font-bold text-amber-800 text-xs mb-1">⏳ Siêu Thị/Cửa Hàng CHƯA làm checklist (trong bộ lọc đang chọn)</h4>
+          <div id="checklistReportCoverageNotDoneList" class="text-[11px] text-gray-600"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-gray-700 text-xs mb-2">📅 Số đơn vị đã làm — Theo Ngày</h4>
+            <div id="checklistReportCoverageByDay" class="text-[11px] max-h-48 overflow-y-auto"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-gray-700 text-xs mb-2">🗓️ Số đơn vị đã làm — Theo Tháng</h4>
+            <div id="checklistReportCoverageByMonth" class="text-[11px] max-h-48 overflow-y-auto"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-red-800 text-xs mb-2">⚠️ Top 5 Siêu Thị Nhiều Không Đạt Nhất</h4>
+            <div id="checklistReportTopIssues" class="space-y-1.5"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-emerald-800 text-xs mb-2">🏆 Top 5 Siêu Thị Tỷ Lệ Đạt Cao Nhất</h4>
+            <div id="checklistReportTopHonor" class="space-y-1.5"></div>
+          </div>
+        </div>
+
         <div id="checklistReportTableWrap" class="space-y-2"></div>
 
         <!-- Xuất Theo Mẫu Gốc (v21.1) — sinh file .xlsx ĐÚNG layout mẫu gốc người dùng gửi (2 sheet Chi
@@ -211,6 +245,28 @@
         </div>
         <div id="checklistVsattpUnclassifiedWarn" class="hidden bg-amber-50 border border-amber-300 text-amber-800 text-[11px] rounded p-2"></div>
         <div id="checklistVsattpStatsWrap" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+
+        <!-- Dashboard "Đã làm/Chưa làm" (10/2026, yêu cầu người dùng) — coverage tính trên TOÀN BỘ
+             DB.stores, không lọc theo bộ lọc siêu thị/cửa hàng ở trên. -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="bg-emerald-50 p-3 rounded text-center"><div id="checklistVsattpCoverageDoneCount" class="text-2xl font-bold text-emerald-700">0</div><div class="text-[11px] text-gray-500">Đã làm VSATTP</div></div>
+          <div class="bg-amber-50 p-3 rounded text-center"><div id="checklistVsattpCoverageNotDoneCount" class="text-2xl font-bold text-amber-700">0</div><div class="text-[11px] text-gray-500">Chưa làm VSATTP</div></div>
+        </div>
+        <div class="bg-white border rounded p-3">
+          <h4 class="font-bold text-amber-800 text-xs mb-1">⏳ Siêu Thị/Cửa Hàng CHƯA làm VSATTP (trong bộ lọc đang chọn)</h4>
+          <div id="checklistVsattpCoverageNotDoneList" class="text-[11px] text-gray-600"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-gray-700 text-xs mb-2">📅 Số đơn vị đã làm — Theo Ngày</h4>
+            <div id="checklistVsattpCoverageByDay" class="text-[11px] max-h-48 overflow-y-auto"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-gray-700 text-xs mb-2">🗓️ Số đơn vị đã làm — Theo Tháng</h4>
+            <div id="checklistVsattpCoverageByMonth" class="text-[11px] max-h-48 overflow-y-auto"></div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="bg-white border rounded p-3">
             <h4 class="font-bold text-emerald-800 text-xs mb-2">🏆 Top 5 Siêu Thị điểm TB cao nhất</h4>
@@ -227,6 +283,17 @@
           <div class="bg-white border rounded p-3">
             <h4 class="font-bold text-red-800 text-xs mb-2">⚠️ Top 5 Cửa Hàng điểm TB thấp nhất</h4>
             <div id="checklistVsattpTopChLow" class="space-y-1.5"></div>
+          </div>
+        </div>
+        <!-- Top theo SỐ LẦN VI PHẠM (10/2026) — SONG SONG Top điểm TB ở trên, KHÔNG thay thế. -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-red-800 text-xs mb-2">🔁 Top 5 Siêu Thị Nhiều Vi Phạm Nhất (theo tần suất)</h4>
+            <div id="checklistVsattpTopStViolation" class="space-y-1.5"></div>
+          </div>
+          <div class="bg-white border rounded p-3">
+            <h4 class="font-bold text-red-800 text-xs mb-2">🔁 Top 5 Cửa Hàng Nhiều Vi Phạm Nhất (theo tần suất)</h4>
+            <div id="checklistVsattpTopChViolation" class="space-y-1.5"></div>
           </div>
         </div>
         <div class="bg-white border rounded p-3">

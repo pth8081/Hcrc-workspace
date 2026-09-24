@@ -38,7 +38,10 @@ let CURRENT_USERNAME = ADMIN.username;
 let idSeq = 1000;
 
 stubModule('lib/appData', {
-  getAppDataValue: async () => null, getAllAppData: async () => ({}), withLockedAppDataValue: async (key, fn) => fn(null)
+  getAppDataValue: async () => null, getAllAppData: async () => ({}), withLockedAppDataValue: async (key, fn) => fn(null),
+  // getAppDataValueCached('stores') — dùng cho coverage "đã làm/chưa làm checklist" (10/2026, đợt "xuất
+  // Excel Checklist ST/CH giống báo cáo qua web cũ") — mảng rỗng là đủ, test này không kiểm tra coverage.
+  getAppDataValueCached: async () => []
 });
 stubModule('lib/recordStore', {
   getAllForCollection: async (collection) => RECORDS[collection] || [],
@@ -215,7 +218,14 @@ async function main() {
       const res = await apiXlsx('POST', '/api/checklist/export-report', { templateId: t.id }, REPORTER);
       assertEqual(res.status, 200, 'Phải xuất thành công');
       const names = res.workbook.worksheets.map(s => s.name).sort();
-      assertEqual(JSON.stringify(names), JSON.stringify(['Siêu thị A - Chi tiết', 'Siêu thị A - Thống kê', 'Siêu thị B - Chi tiết', 'Siêu thị B - Thống kê'].sort()), 'Phải có đúng 4 sheet, đặt tên đúng quy ước');
+      // 10/2026 (đợt "xuất Excel Checklist ST/CH giống báo cáo qua web cũ"): THÊM 4 sheet gộp mới ở đầu
+      // workbook (Dữ Liệu Chi Tiết Gộp/Recap/Top Xếp Hạng/Đã Làm-Chưa Làm) — KHÔNG thay thế 4 sheet riêng
+      // từng ST cũ, chỉ cộng thêm.
+      const expected = [
+        'Siêu thị A - Chi tiết', 'Siêu thị A - Thống kê', 'Siêu thị B - Chi tiết', 'Siêu thị B - Thống kê',
+        'Dữ Liệu Chi Tiết (Gộp)', 'Recap - Cần Xử Lý', 'Top Xếp Hạng', 'Đã Làm-Chưa Làm'
+      ].sort();
+      assertEqual(JSON.stringify(names), JSON.stringify(expected), 'Phải có đúng 8 sheet (4 sheet riêng từng ST cũ + 4 sheet gộp mới), đặt tên đúng quy ước');
     });
 
     await run.run('export-report (QA): sheet Chi tiết có dòng tiêu đề nhóm (in đậm) + đúng Đạt/Không đạt + Thời gian hoàn thành ĐỂ TRỐNG', async () => {

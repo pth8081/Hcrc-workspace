@@ -836,8 +836,9 @@ function renderChecklistSubmissionForm() {
       <button type="button" data-op="closeChecklistSubmissionForm" class="text-gray-500 text-xs font-bold hover:underline">Đóng</button>
     </div>
     ${visibleQuestions.map(q => {
-      const ans = answersByQ.get(q.id) || { optionIds: [], note: '', attachments: [] };
-      const selectedFailingNoPhoto = q.options.some(o => ans.optionIds.includes(o.id) && !o.isPassing) && !(ans.attachments || []).length;
+      const ans = answersByQ.get(q.id) || { optionIds: [], note: '', deadline: '', attachments: [] };
+      const anySelectedFailing = q.options.some(o => ans.optionIds.includes(o.id) && !o.isPassing);
+      const selectedFailingNoPhoto = anySelectedFailing && !(ans.attachments || []).length;
       return `
       <div class="border rounded p-3 space-y-2 ${selectedFailingNoPhoto ? 'border-red-300 bg-red-50' : ''}">
         <div class="font-semibold text-gray-800 text-sm">${escapeHtml(q.text)} ${q.isRequired ? '<span class="text-red-500">*</span>' : ''}</div>
@@ -851,6 +852,10 @@ function renderChecklistSubmissionForm() {
           `).join('')}
         </div>
         <input value="${escapeHtml(ans.note || '')}" placeholder="Ghi chú (không bắt buộc)" data-op-input="updateChecklistAnswerNote" data-arg0="${q.id}" data-arg-value="1" class="w-full border p-1.5 rounded text-[11px]">
+        ${anySelectedFailing ? `
+        <label class="flex items-center gap-2 text-[11px] text-gray-600">Thời hạn hoàn thành xử lý:
+          <input type="date" value="${escapeHtml(ans.deadline || '')}" data-op-input="updateChecklistAnswerDeadline" data-arg0="${q.id}" data-arg-value="1" class="border p-1 rounded text-[11px]">
+        </label>` : ''}
         ${selectedFailingNoPhoto ? '<p class="text-[11px] text-red-600 font-semibold">⚠️ Cần đính kèm ảnh minh chứng cho câu trả lời bị đánh giá lỗi.</p>' : ''}
         <div class="flex items-center gap-2 flex-wrap">
           ${(ans.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
@@ -942,7 +947,7 @@ function toggleChecklistAnswerOption(questionId, optionId, isMulti) {
   const sub = checklistActiveSubmission;
   const answers = [...(sub.answers || [])];
   let idx = answers.findIndex(a => a.questionId === questionId);
-  if (idx < 0) { answers.push({ questionId, optionIds: [], note: '', attachments: [] }); idx = answers.length - 1; }
+  if (idx < 0) { answers.push({ questionId, optionIds: [], note: '', deadline: '', attachments: [] }); idx = answers.length - 1; }
   const a = { ...answers[idx] };
   if (isMulti) {
     a.optionIds = a.optionIds.includes(optionId) ? a.optionIds.filter(id => id !== optionId) : [...a.optionIds, optionId];
@@ -958,8 +963,20 @@ function updateChecklistAnswerNote(questionId, value) {
   const sub = checklistActiveSubmission;
   const answers = [...(sub.answers || [])];
   const idx = answers.findIndex(a => a.questionId === questionId);
-  if (idx < 0) { answers.push({ questionId, optionIds: [], note: value, attachments: [] }); }
+  if (idx < 0) { answers.push({ questionId, optionIds: [], note: value, deadline: '', attachments: [] }); }
   else answers[idx] = { ...answers[idx], note: value };
+  sub.answers = answers;
+}
+// deadline (10/2026, yêu cầu người dùng) — "Thời hạn hoàn thành xử lý" cho câu trả lời Chưa đạt, chỉ
+// hiện ô nhập khi câu đang chọn có ít nhất 1 lựa chọn !isPassing (xem renderChecklistSubmissionForm()) —
+// mirror ĐÚNG updateChecklistAnswerNote() ở trên, chỉ khác field ghi.
+function updateChecklistAnswerDeadline(questionId, value) {
+  questionId = Number(questionId);
+  const sub = checklistActiveSubmission;
+  const answers = [...(sub.answers || [])];
+  const idx = answers.findIndex(a => a.questionId === questionId);
+  if (idx < 0) { answers.push({ questionId, optionIds: [], note: '', deadline: value, attachments: [] }); }
+  else answers[idx] = { ...answers[idx], deadline: value };
   sub.answers = answers;
 }
 function checklistAnswersOrDeductionsPayload() {
@@ -1118,6 +1135,98 @@ async function exportChecklistReportByOriginalTemplate() {
     URL.revokeObjectURL(url);
   } catch (e) { alert('⛔ Không thể kết nối tới máy chủ: ' + e.message); }
 }
+// Nguồn SỰ THẬT client cho suy nhãn "Đạt"/"Không đạt" 1 câu trả lời QA — mirror ĐÚNG
+// computeAnswerResultLabel() (lib/checklist.js, dùng khi export Excel) — sửa 1 bên PHẢI soát lại bên kia.
+function computeChecklistAnswerResultLabel(question, answer) {
+  if (!answer || !(answer.optionIds || []).length) return null;
+  const selected = (question.options || []).filter(o => (answer.optionIds || []).includes(o.id));
+  const passing = selected.length > 0 && selected.every(o => o.isPassing && !o.isCriticalFail);
+  return passing ? 'Đạt' : 'Không đạt';
+}
+// Top ST/CH "nhiều Không đạt nhất"/"tỷ lệ Đạt cao nhất" — mirror ĐÚNG computeQaStoreStats()/
+// computeQaTopLists() (lib/checklist.js). rows: submissions QA đã lọc sẵn (SUBMITTED, đúng bộ lọc trên
+// màn hình) — mỗi bài tự tra đúng mẫu gốc qua templateId (gộp được NHIỀU mẫu QA khi bộ lọc để "Tất cả").
+function computeChecklistQaStoreStats(rows) {
+  const templatesById = new Map((DB.checklistTemplates || []).map(t => [t.id, t]));
+  const byStore = new Map();
+  rows.forEach(sub => {
+    const template = templatesById.get(sub.templateId);
+    if (!template || template.templateKind === 'DEDUCTION') return;
+    const visible = computeChecklistVisibleQuestionsClient(template, sub.answers);
+    const answersByQ = new Map((sub.answers || []).map(a => [a.questionId, a]));
+    if (!byStore.has(sub.storeCode)) byStore.set(sub.storeCode, { passed: 0, failed: 0, total: 0 });
+    const bucket = byStore.get(sub.storeCode);
+    visible.forEach(q => {
+      const result = computeChecklistAnswerResultLabel(q, answersByQ.get(q.id));
+      if (result === null) return;
+      bucket.total += 1;
+      if (result === 'Đạt') bucket.passed += 1; else bucket.failed += 1;
+    });
+  });
+  return byStore;
+}
+function computeChecklistQaTopLists(storeStats, limit) {
+  const entries = [...storeStats.entries()].map(([storeCode, s]) => ({ storeCode, ...s, passRate: s.total > 0 ? (s.passed / s.total) * 100 : null }));
+  const topIssues = entries.filter(e => e.failed > 0).sort((a, b) => b.failed - a.failed).slice(0, limit);
+  const topHonor = entries.filter(e => e.passRate != null).sort((a, b) => b.passRate - a.passRate).slice(0, limit);
+  return { topIssues, topHonor };
+}
+function renderChecklistTopList(elId, list, valueKey, valueSuffix) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!list.length) { el.innerHTML = '<p class="text-[11px] text-gray-400 italic">Không có dữ liệu.</p>'; return; }
+  const maxVal = Math.max(...list.map(r => r[valueKey]));
+  el.innerHTML = list.map(r => `
+    <div class="flex items-center gap-2 text-[11px]">
+      <span class="flex-1 truncate" title="${escapeHtml(r.storeCode)}">${escapeHtml(r.storeCode)}</span>
+      <div class="w-24 h-2.5 bg-gray-100 rounded overflow-hidden"><div class="h-full bg-rose-500" data-style="width:${maxVal > 0 ? (r[valueKey] / maxVal * 100).toFixed(1) : 0}%"></div></div>
+      <span class="font-mono font-bold w-14 text-right">${valueSuffix === '%' ? r[valueKey].toFixed(1) : r[valueKey]}${valueSuffix}</span>
+    </div>`).join('');
+  applyDataStyles(el);
+}
+// "Đã làm/Chưa làm checklist theo ngày/tháng" — mirror ĐÚNG computeChecklistCoverage() (lib/checklist.js).
+// allStoreCodes: TOÀN BỘ đơn vị đang hoạt động (DB.stores) — KHÔNG union thêm siêu thị lịch sử.
+function computeChecklistCoverageClient(allStoreCodes, rows) {
+  const doneSet = new Set(rows.map(s => s.storeCode));
+  const doneCodes = allStoreCodes.filter(c => doneSet.has(c));
+  const notDoneCodes = allStoreCodes.filter(c => !doneSet.has(c));
+  const byDay = new Map(), byMonth = new Map();
+  let dayOrder = [], monthOrder = [];
+  rows.forEach(s => {
+    const d = parseChecklistSubmittedAtDate(s.submittedAt);
+    if (!d) return;
+    const dayKey = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    const monthKey = `${d.getMonth() + 1}/${d.getFullYear()}`;
+    if (!byDay.has(dayKey)) { byDay.set(dayKey, new Set()); dayOrder.push([dayKey, d]); }
+    byDay.get(dayKey).add(s.storeCode);
+    if (!byMonth.has(monthKey)) { byMonth.set(monthKey, new Set()); monthOrder.push([monthKey, new Date(d.getFullYear(), d.getMonth(), 1)]); }
+    byMonth.get(monthKey).add(s.storeCode);
+  });
+  dayOrder.sort((a, b) => a[1] - b[1]);
+  monthOrder.sort((a, b) => a[1] - b[1]);
+  return {
+    doneCodes, notDoneCodes,
+    byDay: dayOrder.map(([date]) => ({ date, count: byDay.get(date).size })),
+    byMonth: monthOrder.map(([month]) => ({ month, count: byMonth.get(month).size }))
+  };
+}
+function renderChecklistCoverageBlock(prefix, coverage) {
+  document.getElementById(`${prefix}DoneCount`).innerText = coverage.doneCodes.length;
+  document.getElementById(`${prefix}NotDoneCount`).innerText = coverage.notDoneCodes.length;
+  const listEl = document.getElementById(`${prefix}NotDoneList`);
+  listEl.innerHTML = coverage.notDoneCodes.length
+    ? coverage.notDoneCodes.map(c => `<span class="inline-block bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mr-1 mb-1">${escapeHtml(c)}</span>`).join('')
+    : '<p class="italic text-gray-400">Tất cả đơn vị đang hoạt động đều đã làm checklist trong bộ lọc đang chọn.</p>';
+  const renderPeriodTable = (elId, list, labelKey) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.innerHTML = list.length
+      ? `<table class="w-full"><tbody>${list.map(r => `<tr class="border-b"><td class="py-0.5">${escapeHtml(r[labelKey])}</td><td class="py-0.5 text-right font-mono font-bold">${r.count}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="italic text-gray-400">Không có dữ liệu.</p>';
+  };
+  renderPeriodTable(`${prefix}ByDay`, coverage.byDay, 'date');
+  renderPeriodTable(`${prefix}ByMonth`, coverage.byMonth, 'month');
+}
 function applyChecklistReportFilter() {
   const templateId = document.getElementById('checklistReportTemplateFilter').value;
   const fromDate = document.getElementById('checklistReportFromDate').value;
@@ -1127,6 +1236,17 @@ function applyChecklistReportFilter() {
   if (fromDate) rows = rows.filter(s => !s.submittedAt || new Date(s.submittedAt.split(' ')[0].split('/').reverse().join('-')) >= new Date(fromDate));
   if (toDate) rows = rows.filter(s => !s.submittedAt || new Date(s.submittedAt.split(' ')[0].split('/').reverse().join('-')) <= new Date(toDate));
   checklistReportFilteredRows = rows;
+
+  // Top xếp hạng + Coverage (10/2026) — CHỈ áp dụng cho mẫu QA (mẫu DEDUCTION có Dashboard VSATTP riêng,
+  // xem renderChecklistVsattpDashboard() bên dưới) — lọc lại từ `rows` (đã áp fromDate/toDate/templateId).
+  const templatesById = new Map((DB.checklistTemplates || []).map(t => [t.id, t]));
+  const qaRows = rows.filter(s => templatesById.get(s.templateId)?.templateKind !== 'DEDUCTION');
+  const storeStats = computeChecklistQaStoreStats(qaRows);
+  const { topIssues, topHonor } = computeChecklistQaTopLists(storeStats, 5);
+  renderChecklistTopList('checklistReportTopIssues', topIssues, 'failed', ' câu');
+  renderChecklistTopList('checklistReportTopHonor', topHonor, 'passRate', '%');
+  const coverage = computeChecklistCoverageClient(DB.stores || [], qaRows);
+  renderChecklistCoverageBlock('checklistReportCoverage', coverage);
 
   const total = rows.length;
   const passed = rows.filter(r => r.isPassed === true).length;
@@ -1258,6 +1378,24 @@ function computeChecklistVsattpViolationRates(submissions, storeCodesOfType) {
   rows.sort((a, b) => b.pct - a.pct);
   return { rows, denom };
 }
+// Top ST/CH theo SỐ LẦN VI PHẠM (10/2026) — mirror ĐÚNG vsattpViolationCountPerStore()/
+// vsattpTopByViolationCount() (lib/checklist.js), SONG SONG Top điểm TB ở trên, KHÔNG thay thế.
+function computeChecklistVsattpViolationCountPerStore(submissions, storeCodesOfType) {
+  const storeSet = new Set(storeCodesOfType);
+  const counts = new Map();
+  submissions.forEach(s => {
+    if (!storeSet.has(s.storeCode)) return;
+    const n = (s.deductions || []).filter(d => d.deductedPoints > 0).length;
+    if (n <= 0) return;
+    counts.set(s.storeCode, (counts.get(s.storeCode) || 0) + n);
+  });
+  return counts;
+}
+function computeChecklistVsattpTopByViolationCount(countMap, storeCodes, limit) {
+  const rows = storeCodes.map(code => ({ storeCode: code, count: countMap.get(code) || 0 })).filter(r => r.count > 0);
+  rows.sort((a, b) => b.count - a.count);
+  return rows.slice(0, limit);
+}
 
 function renderChecklistVsattpDashboard() {
   const fromDate = document.getElementById('checklistVsattpFromDate').value;
@@ -1299,6 +1437,17 @@ function renderChecklistVsattpDashboard() {
   renderTop('checklistVsattpTopStLow', computeChecklistVsattpTopList(avgMap, st, 'low', 5));
   renderTop('checklistVsattpTopChHigh', computeChecklistVsattpTopList(avgMap, ch, 'high', 5));
   renderTop('checklistVsattpTopChLow', computeChecklistVsattpTopList(avgMap, ch, 'low', 5));
+
+  // Top theo SỐ LẦN VI PHẠM (10/2026) — SONG SONG Top điểm TB ở trên.
+  const violCountSt = computeChecklistVsattpViolationCountPerStore(subs, st);
+  const violCountCh = computeChecklistVsattpViolationCountPerStore(subs, ch);
+  renderChecklistTopList('checklistVsattpTopStViolation', computeChecklistVsattpTopByViolationCount(violCountSt, st, 5), 'count', ' lần');
+  renderChecklistTopList('checklistVsattpTopChViolation', computeChecklistVsattpTopByViolationCount(violCountCh, ch, 5), 'count', ' lần');
+
+  // Dashboard "Đã làm/Chưa làm checklist theo ngày/tháng" (10/2026) — coverage tính trên TOÀN BỘ
+  // DB.stores, KHÔNG lọc theo bộ lọc siêu thị đang chọn ở trên (cùng lý do panel GENERAL).
+  const coverage = computeChecklistCoverageClient(DB.stores || [], subs);
+  renderChecklistCoverageBlock('checklistVsattpCoverage', coverage);
 
   const renderViol = (elId, violResult) => {
     const el = document.getElementById(elId);

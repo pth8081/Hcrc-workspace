@@ -370,6 +370,13 @@ function sanitizeChecklistAnswers(rawAnswers, template, existingAnswers) {
         questionId,
         optionIds,
         note: a.note ? String(a.note).trim().slice(0, 500) : '',
+        // deadline (10/2026, yêu cầu người dùng — đợt "xuất Excel Checklist ST/CH giống báo cáo qua web
+        // cũ"): "Thời hạn hoàn thành xử lý" cho câu trả lời Chưa đạt — mirror ĐÚNG field cùng tên đã có
+        // sẵn ở sanitizeChecklistDeductions() (mẫu DEDUCTION) ngay dưới, cùng giới hạn độ dài. Client chỉ
+        // hiện ô nhập này khi câu trả lời đang chọn là phương án KHÔNG isPassing (xem
+        // renderChecklistAnswerRow(), module-checklist.js) — nhưng ở ĐÂY không ép buộc/xoá theo điều kiện
+        // đó, để không phá dữ liệu cũ/đơn giản hoá logic (giữ nguyên giá trị y hệt DEDUCTION).
+        deadline: a.deadline ? String(a.deadline).trim().slice(0, 20) : '',
         attachments: existingByQ.get(questionId)?.attachments || []
       };
     });
@@ -413,6 +420,95 @@ function computeVisibleQuestions(template, answers) {
   return (template.questions || [])
     .filter(q => q.showIfOptionId == null || selectedOptionIds.has(q.showIfOptionId))
     .sort((a, b) => a.displayOrder - b.displayOrder);
+}
+
+// null = câu hỏi CHƯA được trả lời (VD câu dùng làm "tiêu đề nhóm" không bắt buộc, cố tình bỏ trống).
+// Nguồn SỰ THẬT DUY NHẤT cho việc suy nhãn "Đạt"/"Không đạt" của 1 câu trả lời QA — dùng chung bởi
+// lib/checklistReportExport.js (sheet Chi tiết/Chi Tiết Gộp/Recap) VÀ computeQaStoreStats() ngay dưới
+// (Top ranking Checklist ST/CH, đợt "xuất Excel giống báo cáo qua web cũ" 10/2026).
+function computeAnswerResultLabel(question, answer) {
+  if (!answer || !(answer.optionIds || []).length) return null;
+  const selected = (question.options || []).filter(o => (answer.optionIds || []).includes(o.id));
+  const passing = selected.length > 0 && selected.every(o => o.isPassing && !o.isCriticalFail);
+  return passing ? 'Đạt' : 'Không đạt';
+}
+
+// Top ST/CH theo 2 tiêu chí SONG SONG (yêu cầu người dùng 10/2026, mirror tinh thần Top 5 điểm TB của
+// Dashboard VSATTP nhưng đếm theo SỐ CÂU thay vì % điểm, vì mẫu QA không có điểm cho mọi checklist —
+// PASS_FAIL_ONLY không có scorePercent): "nhiều Không đạt nhất" (cảnh báo) + "tỷ lệ Đạt cao nhất" (vinh
+// danh). submissions PHẢI đã lọc sẵn (status SUBMITTED, đúng siêu thị/khoảng ngày) trước khi truyền vào
+// — mirror khuôn computeVsattpDashboardData() (không tự lọc lại ở đây). getTemplateForSub(sub) — TÁCH
+// tham số này ra khỏi 1 template CỐ ĐỊNH (mirror addDeductionStoreSheet(), lib/checklistReportExport.js)
+// để dùng chung được cho export-report (LUÔN đúng 1 mẫu, route bắt buộc chọn) LẪN tab Báo Cáo Checklist
+// ST/CH trên màn hình (bộ lọc "Mẫu Checklist" có thể để "Tất cả" — gộp NHIỀU mẫu QA khác nhau cùng lúc,
+// mỗi bài tự tra đúng mẫu gốc của nó qua submission.templateId).
+function computeQaStoreStats(submissions, getTemplateForSub) {
+  const byStore = new Map(); // storeCode -> {passed, failed, total}
+  (submissions || []).forEach(sub => {
+    const template = getTemplateForSub(sub);
+    if (!template) return; // mẫu gốc đã bị xoá — bỏ qua bài này, không có cây câu hỏi để đối chiếu.
+    const visible = computeVisibleQuestions(template, sub.answers);
+    const answersByQ = new Map((sub.answers || []).map(a => [a.questionId, a]));
+    if (!byStore.has(sub.storeCode)) byStore.set(sub.storeCode, { passed: 0, failed: 0, total: 0 });
+    const bucket = byStore.get(sub.storeCode);
+    visible.forEach(q => {
+      const result = computeAnswerResultLabel(q, answersByQ.get(q.id));
+      if (result === null) return; // chưa trả lời -> không tính (không phải câu hỏi thật)
+      bucket.total += 1;
+      if (result === 'Đạt') bucket.passed += 1; else bucket.failed += 1;
+    });
+  });
+  return byStore;
+}
+function computeQaTopLists(storeStats, limit) {
+  const entries = [...storeStats.entries()].map(([storeCode, s]) => ({
+    storeCode, ...s, passRate: s.total > 0 ? (s.passed / s.total) * 100 : null
+  }));
+  const topIssues = entries.filter(e => e.failed > 0).sort((a, b) => b.failed - a.failed).slice(0, limit);
+  const topHonor = entries.filter(e => e.passRate != null).sort((a, b) => b.passRate - a.passRate).slice(0, limit);
+  return { topIssues, topHonor };
+}
+
+// ===================== Đối chiếu "đã làm/chưa làm checklist theo ngày/tháng" (10/2026, yêu cầu người
+// dùng — dùng chung cho CẢ tab Báo Cáo Checklist ST/CH LẪN Dashboard VSATTP) =====================
+// submittedAt lưu dạng nowVN() = "HH:MM:SS D/M/YYYY" — NGÀY ở TOKEN THỨ 2 sau split(' '), không phải
+// token đầu (giờ). Hàm RIÊNG ở đây (không tái dùng parseSubmittedAtDate() ở routes/checklist.js) vì hàm
+// đó nằm ở tầng route, không export cho lib dùng lại — cùng logic parse, khác vị trí khai báo.
+function parseChecklistSubmittedAtDate(submittedAt) {
+  const datePart = String(submittedAt || '').trim().split(' ')[1];
+  if (!datePart) return null;
+  const [d, m, y] = datePart.split('/').map(Number);
+  if (!d || !m || !y) return null;
+  return new Date(y, m - 1, d);
+}
+// allStoreCodes: TOÀN BỘ đơn vị đang hoạt động trong Danh Mục hệ thống (AppData 'stores', xác nhận người
+// dùng — KHÔNG union thêm siêu thị lịch sử đã ngừng hoạt động như renderChecklistReportTab() làm cho bộ
+// lọc, vì mục đích ở đây là "đơn vị nào CÒN HOẠT ĐỘNG mà chưa nộp bài", không phải liệt kê lịch sử).
+// submissions: đã lọc sẵn (status SUBMITTED, đúng phạm vi template/khoảng ngày muốn xét coverage).
+function computeChecklistCoverage(allStoreCodes, submissions) {
+  const doneSet = new Set((submissions || []).map(s => s.storeCode));
+  const doneCodes = (allStoreCodes || []).filter(c => doneSet.has(c));
+  const notDoneCodes = (allStoreCodes || []).filter(c => !doneSet.has(c));
+  const byDay = new Map(); // 'D/M/YYYY' -> Set<storeCode>
+  const byMonth = new Map(); // 'M/YYYY' -> Set<storeCode>
+  let dayOrder = [], monthOrder = [];
+  (submissions || []).forEach(s => {
+    const d = parseChecklistSubmittedAtDate(s.submittedAt);
+    if (!d) return;
+    const dayKey = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    const monthKey = `${d.getMonth() + 1}/${d.getFullYear()}`;
+    if (!byDay.has(dayKey)) { byDay.set(dayKey, new Set()); dayOrder.push([dayKey, d]); }
+    byDay.get(dayKey).add(s.storeCode);
+    if (!byMonth.has(monthKey)) { byMonth.set(monthKey, new Set()); monthOrder.push([monthKey, new Date(d.getFullYear(), d.getMonth(), 1)]); }
+    byMonth.get(monthKey).add(s.storeCode);
+  });
+  dayOrder.sort((a, b) => a[1] - b[1]);
+  monthOrder.sort((a, b) => a[1] - b[1]);
+  return {
+    doneCodes, notDoneCodes,
+    byDay: dayOrder.map(([date]) => ({ date, count: byDay.get(date).size })),
+    byMonth: monthOrder.map(([month]) => ({ month, count: byMonth.get(month).size }))
+  };
 }
 
 // ===================== Mục 6 tài liệu gốc — chấm điểm khi Finalize =====================
@@ -602,6 +698,27 @@ function vsattpViolationRates(submissions, storeCodesOfType, templatesById) {
   return { rows, denom };
 }
 
+// Top ST/CH theo SỐ LẦN VI PHẠM (10/2026, yêu cầu người dùng — SONG SONG topStHigh/topStLow theo điểm TB
+// đã có sẵn ở trên, KHÔNG thay thế): tổng số tiêu chí bị trừ điểm (deductedPoints>0) cộng dồn qua MỌI
+// bài nộp trong kỳ của đơn vị đó — khác Top điểm TB thấp (tính theo % điểm, 1 lỗi nặng có thể kéo điểm
+// xuống thấp dù chỉ 1 lần vi phạm), ở đây đếm theo TẦN SUẤT vi phạm để lộ ra đơn vị lặp lại nhiều lỗi.
+function vsattpViolationCountPerStore(submissions, storeCodesOfType) {
+  const storeSet = new Set(storeCodesOfType);
+  const counts = new Map();
+  submissions.forEach((s) => {
+    if (!storeSet.has(s.storeCode)) return;
+    const n = (s.deductions || []).filter((d) => d.deductedPoints > 0).length;
+    if (n <= 0) return;
+    counts.set(s.storeCode, (counts.get(s.storeCode) || 0) + n);
+  });
+  return counts;
+}
+function vsattpTopByViolationCount(countMap, storeCodes, limit) {
+  const rows = storeCodes.map((code) => ({ storeCode: code, count: countMap.get(code) || 0 })).filter((r) => r.count > 0);
+  rows.sort((a, b) => b.count - a.count);
+  return rows.slice(0, limit);
+}
+
 // Hàm tổng hợp DUY NHẤT — trả về đúng hình dạng Dashboard cần (Top 5 x4 + tỷ lệ vi phạm x2 + danh sách
 // mã ST/CH/chưa phân loại). submissions ĐÃ được lọc sẵn (status SUBMITTED, templateKind DEDUCTION,
 // đúng khoảng ngày/siêu thị đã chọn) TRƯỚC KHI gọi hàm này — xem getVsattpFilteredSubmissions() (mirror
@@ -610,9 +727,14 @@ function computeVsattpDashboardData(submissions, templates, storeTypes) {
   const templatesById = new Map((templates || []).map((t) => [t.id, t]));
   const avgMap = computeVsattpStoreAverages(submissions);
   const { st, ch, unclassified } = vsattpSplitStoresByType([...avgMap.keys()], storeTypes);
+  // topStViolation/topChViolation (10/2026): SONG SONG topStHigh/topStLow theo điểm TB — đếm theo TẦN
+  // SUẤT vi phạm (số tiêu chí bị trừ điểm cộng dồn), không thay thế Top điểm TB đã có.
+  const violCountSt = vsattpViolationCountPerStore(submissions, st);
+  const violCountCh = vsattpViolationCountPerStore(submissions, ch);
   return {
     topStHigh: vsattpTopList(avgMap, st, 'high', 5), topStLow: vsattpTopList(avgMap, st, 'low', 5),
     topChHigh: vsattpTopList(avgMap, ch, 'high', 5), topChLow: vsattpTopList(avgMap, ch, 'low', 5),
+    topStViolation: vsattpTopByViolationCount(violCountSt, st, 5), topChViolation: vsattpTopByViolationCount(violCountCh, ch, 5),
     violSt: vsattpViolationRates(submissions, st, templatesById), violCh: vsattpViolationRates(submissions, ch, templatesById),
     stCodes: st, chCodes: ch, unclassifiedCodes: unclassified, avgMap
   };
@@ -628,5 +750,9 @@ module.exports = {
   resolveStoreCodeForSubmission, sanitizeChecklistAnswers, sanitizeChecklistDeductions, computeVisibleQuestions,
   computeChecklistScoring, computeDeductionScoring, assertReadyToFinalize,
   isDeductionTemplate, computeVsattpDashboardData,
+  // 10/2026 (đợt "xuất Excel Checklist ST/CH giống báo cáo qua web cũ" + Dashboard đã làm/chưa làm):
+  computeAnswerResultLabel, computeQaStoreStats, computeQaTopLists,
+  parseChecklistSubmittedAtDate, computeChecklistCoverage,
+  vsattpViolationCountPerStore, vsattpTopByViolationCount,
   nowVN
 };

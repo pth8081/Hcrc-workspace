@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**24.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.15 (2026-09-24): Checklist ST/CH — xuất Excel giống báo cáo web cũ + Top xếp hạng + Dashboard đã làm/chưa làm
+
+Yêu cầu người dùng: đối chiếu file Excel báo cáo checklist đang dùng thật
+("BÁO CÁO CHECKLIST QUA WEB.xlsx") để làm file xuất khớp yêu cầu, thêm biểu
+đồ Top ST/CH tương tự VSATTP nhưng phù hợp dữ liệu QA, và thêm dashboard
+"đã làm/chưa làm checklist theo ngày/tháng" cho CẢ 2 báo cáo (Checklist
+ST/CH và VSATTP). Đã xác nhận qua 2 vòng hỏi đáp: sheet gộp mới THÊM VÀO
+(không thay sheet cũ theo từng ST), Top xếp hạng làm CẢ 2 chiều (nhiều Chưa
+đạt nhất + tỷ lệ Đạt cao nhất), coverage đối chiếu TOÀN BỘ siêu thị đang
+hoạt động (không giới hạn theo phạm vi xem báo cáo), thêm field `deadline`
+mới cho câu trả lời Chưa đạt (loại QA), dashboard hiện CẢ trên màn hình LẪN
+trong file Excel xuất.
+
+- **Field mới `deadline`** cho từng câu trả lời loại QA (`sanitizeChecklistAnswers`)
+  — chỉ có ý nghĩa khi đáp án không phải "Đạt", tương thích ngược (để trống =
+  hành vi cũ). Form làm bài hiện ô ngày khi chọn đáp án Không đạt.
+- **4 sheet MỚI khi "Xuất Theo Mẫu Gốc" loại QA** (thêm vào, KHÔNG thay các
+  sheet `<Tên ST> - Chi tiết/Thống kê` đã có): "Dữ Liệu Chi Tiết (Gộp)" (mọi
+  ST xếp dọc 1 sheet, mirror sheet "Data thô" mẫu gốc), "Recap - Cần Xử Lý"
+  (chỉ liệt câu Không đạt, có cột Thời Hạn Hoàn Thành từ field `deadline`),
+  "Top Xếp Hạng" (2 bảng song song: nhiều Không đạt nhất/tỷ lệ Đạt cao
+  nhất), "Đã Làm-Chưa Làm" (coverage, xem dưới).
+- **VSATTP: 2 bảng Top 5 nhiều vi phạm nhất MỚI** (theo Siêu Thị/Cửa Hàng,
+  xếp theo TỔNG SỐ LẦN bị trừ điểm) — SONG SONG 4 bảng Top điểm TB có sẵn
+  (không thay thế), chèn vào sheet `Dashboard` xuất Excel + màn hình.
+- **Dashboard "Đã làm/Chưa làm checklist theo ngày/tháng"** — áp dụng CẢ 2
+  báo cáo (Checklist ST/CH và VSATTP), đối chiếu AppData `stores` (toàn bộ
+  siêu thị đang hoạt động) với `storeCode` thực có bài nộp khớp bộ lọc — hiện
+  cả trên màn hình (2 tab con Báo Cáo) lẫn trong file Excel xuất (sheet riêng
+  cho QA, chèn cuối sheet `Dashboard` cho VSATTP).
+- Sửa kèm 1 lỗi phát hiện khi viết test hồi quy: `vsattpViolationCountPerStore`/
+  `vsattpTopByViolationCount` (lib/checklist.js) đã viết xong nhưng quên thêm
+  vào `module.exports` — không ảnh hưởng hành vi thật (route vẫn gọi được qua
+  closure nội bộ của `computeVsattpDashboardData`) nhưng khiến 2 hàm không
+  test/tái sử dụng độc lập được từ ngoài module.
+
+**Triển khai**: chỉ code ứng dụng + thêm field `deadline` (JSON blob, không
+đổi schema SQL) — không cần chạy lại `schema.sql`, không thêm biến `.env`,
+không thêm gói npm. Copy code + `pm2 restart` là đủ.
 
 ## v24.14 (2026-09-24): 7 quyền "Xem Báo Cáo" riêng theo module (Vận Hành/Đăng Ký Xe/Phòng Họp/Ngân Sách/VPP/Nhân Sự)
 
