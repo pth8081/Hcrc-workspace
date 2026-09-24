@@ -182,10 +182,14 @@ trong chia **2 tab** (`.nv-section-tabs`, `setNVActiveSection()` ở
   là màn tài liệu tham khảo, không có API riêng) — tab bar hoàn toàn không
   render nếu không phải admin, không phải chỉ ẩn bằng CSS.
 
-Nav trái của tab Nghiệp Vụ nhóm theo 10 nhóm đúng cách người dùng vận hành
-thực tế (Văn Bản & Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính
-/ Tổng Hợp / Vận Hành / Nhân Sự / Hỗ Trợ IT / Mua Hàng) — khác thứ tự phẳng
-phân quyền nội bộ, chỉ là cách trình bày cho người đọc; tab Hệ Thống có nav
+Nav trái của tab Nghiệp Vụ nhóm theo 11 nhóm đúng cách người dùng vận hành
+thực tế (**Bắt Đầu Sử Dụng** — mục "⚙️ Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản" đặt
+LÊN ĐẦU từ **v24.12** theo yêu cầu người dùng, gom cả cài PWA/đổi mật khẩu/
+đổi mã PIN/đăng ký vân tay-Face ID vào 1 chỗ dễ thấy ngay cho nhân viên mới —
+/ Văn Bản & Tác Nghiệp / Truyền Thông Nội Bộ / Điều Hành / Hành Chính / Tổng
+Hợp / Vận Hành / Nhân Sự / Hỗ Trợ IT / Mua Hàng / Phê Duyệt & Tra Cứu Chung)
+— khác thứ tự phẳng phân quyền nội bộ, chỉ là cách trình bày cho người đọc;
+tab Hệ Thống có nav
 trái riêng (`SYSTEM_NAV`), 6 nhóm (Phân Quyền & Tài Khoản / Cấu Hình Quy
 Trình / Danh Mục & Biểu Mẫu / Vận Hành Hệ Thống / Tích Hợp & Thông Báo /
 Kiến Trúc). Mỗi mục hiện: mô tả ngắn, 1 sơ đồ quy trình

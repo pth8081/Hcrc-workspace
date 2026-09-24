@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**24.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.12 (2026-09-24): Hướng Dẫn Nghiệp Vụ — nhóm "Bắt Đầu Sử Dụng" lên đầu
+
+Yêu cầu người dùng: thêm 1 mục HƯỚNG DẪN CÀI ĐẶT/BẢO MẬT TÀI KHOẢN (cài PWA
+lên màn hình chính iOS/Android, đổi mật khẩu, đăng ký vân tay/Face ID, cá
+nhân hoá màn hình, đổi mã phê duyệt) lên vị trí TRÊN CÙNG của 📘 Hướng Dẫn
+Nghiệp Vụ, để mọi người (đặc biệt nhân viên mới) thấy ngay.
+
+Toàn bộ 4/5 nội dung yêu cầu đã có sẵn, viết đầy đủ theo từng bước, trong
+entry `profile` (mục "⚙️ Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản") — chỉ thiếu
+thao tác đúng vị trí hiển thị: mục này trước đây nằm ở NHÓM CUỐI CÙNG
+("Tài Khoản Cá Nhân") của `NGHIEP_VU_NAV`, ít người mở ra xem. Đổi:
+
+- Chuyển nhóm này lên ĐẦU `NGHIEP_VU_NAV` (đổi tên nhóm thành "Bắt Đầu Sử
+  Dụng"), giữ nguyên `key: 'profile'` — không ảnh hưởng
+  `canViewNVItem()`/`NV_KEY_ACCESS_FN` (tra theo key, không theo vị trí).
+- Bổ sung 1 bước mô tả "🏠 Trang chủ → nút ⚙️ Tuỳ chỉnh" (ẩn/hiện thẻ thống
+  kê Dashboard) — đây chính là "cá nhân hoá màn hình" người dùng nhắc tới,
+  TÁCH BIỆT với hộp thoại "⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin" (đổi thông
+  tin/mật khẩu/PIN/vân tay) vốn đã có sẵn — 2 nút trùng tên "Cá Nhân
+  Hóa/Tuỳ chỉnh" nhưng khác chỗ nên bổ sung ghi chú phân biệt rõ ở `desc`
+  và `footer` để người đọc không nhầm.
+- KHÔNG chèn ảnh chụp hướng dẫn tạo icon iOS/Android (đã tư vấn + người
+  dùng đồng ý bỏ qua): icon ứng dụng tự động lấy từ `manifest.json`/
+  `apple-touch-icon` có sẵn, người dùng không cần tự tạo/tự chọn ảnh nào —
+  chèn ảnh thật sẽ lệch phong cách thuần văn bản+SVG hiện có của toàn bộ
+  Hướng Dẫn Nghiệp Vụ và khó bảo trì khi Apple/Google đổi giao diện Share
+  Sheet.
+
+Test: chạy lại `test-nghiepvu.js` (148/148 pass, bao gồm việc render SVG/
+tiêu đề/badge của mọi mục còn nguyên sau khi đổi vị trí nhóm).
 
 ## v24.11 (2026-09-23): Checklist — Dashboard "🥗 Báo Cáo Đánh Giá VSATTP"
 

@@ -8,6 +8,14 @@
 // "⚠️ Chưa có tài liệu nghiệp vụ" thay vì im lặng thiếu sót — xem renderNghiepVuContent().
 
 const NGHIEP_VU_NAV = [
+  // Nhóm "Bắt Đầu Sử Dụng" đặt LÊN ĐẦU (10/2026, yêu cầu người dùng) — trước đây nằm ở nhóm cuối cùng
+  // "Tài Khoản Cá Nhân" nên gần như không ai mở ra xem, dù đây đúng ra là thứ MỌI người dùng (kể cả
+  // người mới tinh chưa quen hệ thống) cần đọc TRƯỚC TIÊN: cài app lên máy, đổi mật khẩu, đăng ký vân
+  // tay/Face ID, đổi mã PIN duyệt, tuỳ chỉnh Trang chủ. Giữ nguyên key 'profile' (không đổi để không vỡ
+  // canViewNVItem()/NV_KEY_ACCESS_FN đang tra theo key này) — chỉ đổi VỊ TRÍ trong mảng.
+  { group: 'Bắt Đầu Sử Dụng', items: [
+    { key: 'profile', icon: '⚙️', label: 'Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản' },
+  ]},
   { group: 'Văn Bản & Tác Nghiệp', items: [
     { key: 'doc', icon: '📄', label: 'Tài Liệu' },
     { key: 'submission', icon: '📜', label: 'Văn Bản Trình / Tờ Trình' },
@@ -67,9 +75,6 @@ const NGHIEP_VU_NAV = [
   { group: 'Phê Duyệt & Tra Cứu Chung', items: [
     { key: 'approvalHub', icon: '✅', label: 'Phê Duyệt (Hộp Thư Duyệt Tổng Hợp)' },
     { key: 'reports', icon: '📊', label: 'Báo Cáo (Tổng Hợp Toàn Hệ Thống)' },
-  ]},
-  { group: 'Tài Khoản Cá Nhân', items: [
-    { key: 'profile', icon: '⚙️', label: 'Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản' },
   ]},
 ];
 
@@ -1134,7 +1139,7 @@ const NGHIEP_VU_DOCS = {
   },
   profile: {
     icon: '⚙️', title: 'Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản', badge: 'Mở cho mọi tài khoản',
-    desc: 'Màn cài đặt của riêng bạn — mở bằng cách bấm vào KHỐI TÊN của mình ở đáy sidebar (không phải 1 tab trong menu). Gồm 6 tab: cập nhật thông tin liên hệ, đổi mật khẩu, đổi mã PIN duyệt, đăng ký vân tay/Face ID, quản lý xác thực 2 lớp (TOTP, chỉ quản trị viên), xác nhận đồng phục đã nhận — kèm khối cài ứng dụng lên màn hình chính (PWA).',
+    desc: 'Màn cài đặt của riêng bạn — mở bằng cách bấm vào KHỐI TÊN của mình ở đáy sidebar (không phải 1 tab trong menu). Gồm 6 tab: cập nhật thông tin liên hệ, đổi mật khẩu, đổi mã PIN duyệt, đăng ký vân tay/Face ID, quản lý xác thực 2 lớp (TOTP, chỉ quản trị viên), xác nhận đồng phục đã nhận — kèm khối cài ứng dụng lên màn hình chính (PWA). Tách biệt với nút <b>"⚙️ Tuỳ chỉnh"</b> ở góc 🏠 Trang chủ (ẩn/hiện thẻ thống kê) — 2 nút CÙNG TÊN "Cá Nhân Hóa/Tuỳ chỉnh" nhưng ở 2 chỗ khác nhau, đừng nhầm.',
     flow: { ariaLabel: 'Các nhóm thiết lập trong Hồ Sơ Cá Nhân', chain: [
       { label: 'Mở Hồ Sơ Cá Nhân', sub: 'Bấm tên mình ở đáy sidebar' },
       { label: 'Chọn tab cần thiết lập', sub: '6 tab, mỗi tab tự lưu riêng', kind: 'decision' },
@@ -1148,7 +1153,8 @@ const NGHIEP_VU_DOCS = {
       { text: 'Tab <b>"🖐️ Vân Tay/Face ID"</b> (chỉ hiện khi trình duyệt/thiết bị hỗ trợ): gõ tên thiết bị vào ô "Tên thiết bị (VD: iPhone của tôi)" → bấm <b>"➕ Đăng Ký Thiết Bị Này"</b> → làm theo hướng dẫn của máy. Sau đó đăng nhập hoặc xác thực lại khi Duyệt bằng vân tay/Face ID thay vì gõ mật khẩu.' },
       { role: 'Quản trị viên', text: 'tab <b>"🔐 Xác Thực 2 Lớp"</b> (chỉ tài khoản quản trị, luôn BẮT BUỘC bật): thêm máy thứ 2 bằng cách nhập mật khẩu rồi bấm <b>"Hiện Mã QR"</b> để quét lại đúng mã đang dùng (không làm mất hiệu lực máy cũ); đổi điện thoại/thiết lập lại từ đầu thì nhập mật khẩu rồi bấm <b>"🗑️ Gỡ Xác Thực 2 Lớp"</b> — lần đăng nhập kế tiếp hệ thống tự đưa tới màn thiết lập TOTP mới.' },
       { text: 'Tab <b>"👕 Đồng Phục Của Tôi"</b>: xem các phiếu đồng phục đã cấp cho bạn và bấm "Xác nhận đã nhận" sau khi thực nhận đủ (đây chính là bước cuối của quy trình Đồng Phục).' },
-      { text: 'Khối <b>"📲 Cài Đặt Ứng Dụng"</b> ở cuối hộp thoại: trên Android/Chrome bấm <b>"⬇️ Cài Đặt Ngay"</b>; trên iPhone/iPad phải dùng Safari → nút Chia sẻ → "Thêm vào MH chính" → "Thêm" (Chrome/Cốc Cốc trên iOS không cài được).' },
+      { text: 'Khối <b>"📲 Cài Đặt Ứng Dụng"</b> ở cuối hộp thoại: trên Android/Chrome bấm <b>"⬇️ Cài Đặt Ngay"</b>; trên iPhone/iPad phải dùng Safari → nút Chia sẻ → "Thêm vào MH chính" → "Thêm" (Chrome/Cốc Cốc trên iOS không cài được). Icon ứng dụng hiện ra tự động, không cần tự tạo/tự chọn ảnh gì thêm.' },
+      { role: 'Mọi nhân viên', text: 'muốn ẩn/hiện các thẻ thống kê trên 🏠 Trang chủ (VD ẩn thẻ module mình không dùng cho gọn màn hình): đây KHÔNG nằm trong hộp thoại trên — vào thẳng <b>🏠 Trang chủ</b> → bấm nút <b>"⚙️ Tuỳ chỉnh"</b> ở góc trên bên phải → tick/bỏ tick từng thẻ cần hiện → đóng lại là lưu ngay, không có nút "Lưu" riêng.' },
     ],
     footer: { left: [
       { label: 'Mỗi tab lưu riêng', text: '6 tab hoàn toàn độc lập, mỗi tab có nút lưu của chính nó — đổi mật khẩu không cần đụng tới thông tin liên hệ và ngược lại; đóng hộp thoại giữa chừng chỉ mất phần đang gõ dở ở tab đó.' },
@@ -1156,6 +1162,7 @@ const NGHIEP_VU_DOCS = {
     ], right: [
       { label: 'Vân tay/Face ID là tiện ích chung', text: 'đăng ký thiết bị không phụ thuộc mức xác thực admin đặt cho bạn — ai có máy hỗ trợ cũng đăng ký được để đăng nhập nhanh; thiết bị đã đăng ký liệt kê ngay trong tab đó để gỡ khi đổi máy.' },
       { label: 'Xác thực 2 lớp không tắt được', text: 'tài khoản quản trị viên BẮT BUỘC bật TOTP, không có nút "tắt hẳn" — chỉ có "gỡ để thiết lập lại", và đăng nhập lần sau sẽ bị đưa thẳng vào màn thiết lập lại trước khi vào được hệ thống.' },
+      { label: '"Tuỳ chỉnh Trang chủ" lưu riêng, không chung với Hồ Sơ Cá Nhân', text: 'lựa chọn ẩn/hiện thẻ lưu theo TÀI KHOẢN (đồng bộ mọi thiết bị đăng nhập cùng người), chỉ ảnh hưởng thẻ thống kê ở 🏠 Trang chủ — không đụng tới thông tin/mật khẩu/PIN/vân tay ở hộp thoại "⚙️ Cá Nhân Hóa".' },
     ] },
   },
 };
