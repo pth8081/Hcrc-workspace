@@ -28,7 +28,7 @@ let budgetLineEditingId = { Propose: null, Approve: null };
 
 function canManageBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage); }
 function canCreateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetCreate); }
-function canAggregateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate); }
+function canAggregateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView); }
 
 // blId/blEl — khớp đúng khuôn bId/bEl của thiết kế cũ (2 form Đề Xuất/Phê Duyệt dùng CHUNG code, chỉ
 // khác hậu tố _Propose/_Approve trên id DOM).

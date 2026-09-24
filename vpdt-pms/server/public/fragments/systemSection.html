@@ -1278,6 +1278,11 @@
               <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
                 <input type="checkbox" id="pMeetingCancel"> ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)
               </label>
+              <!-- meetingReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"):
+                   quyền CHỈ XEM tab "📊 Báo Cáo", KHÔNG kèm quyền duyệt/hủy lịch ở trên. -->
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pMeetingReportView"> 📊 Xem Báo Cáo Phòng Họp (toàn công ty, không kèm quyền duyệt/hủy)
+              </label>
             </div>
             <div class="max-h-64 overflow-y-auto overflow-x-auto">
               <table class="w-full text-[11px] border-collapse">
@@ -1337,9 +1342,14 @@
               <tbody id="pCarDeptTableBody"></tbody>
             </table>
           </div>
-          <div class="px-3 pb-3">
+          <div class="px-3 pb-3 space-y-1.5">
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
               <input type="checkbox" id="pCarDispatch"> 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục "Phần Dành Cho Phòng Hành Chính" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)
+            </label>
+            <!-- carReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"): quyền
+                 CHỈ XEM tab "📊 Báo Cáo" toàn công ty, KHÔNG kèm carView.all ở bảng phía trên. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pCarReportView"> 📊 Xem Báo Cáo Đăng Ký Xe (toàn công ty, không kèm quyền Xem ở bảng trên)
             </label>
           </div>
         </details>
@@ -1487,6 +1497,11 @@
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
                 <input type="checkbox" id="pVppManage"> ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)
               </label>
+              <!-- vppReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"):
+                   quyền CHỈ XEM tab "📊 Báo Cáo", KHÔNG kèm quyền cấu hình Kỳ Đăng Ký ở "✅ Quản lý". -->
+              <label class="flex items-center gap-2 text-emerald-600 font-semibold cursor-pointer text-[11px]">
+                <input type="checkbox" id="pVppReportView"> 📊 Xem Báo Cáo (không kèm quyền cấu hình Kỳ Đăng Ký)
+              </label>
             </div>
           </div>
         </details>
@@ -1594,6 +1609,14 @@
                 <input type="checkbox" id="pBudgetAggregate"> 📊 Tổng hợp (xem Tổng Hợp Theo Phòng, mọi phòng ban)
               </label>
             </div>
+            <!-- budgetReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"):
+                 quyền THỨ 4, CHỈ XEM tab "📊 Báo Cáo", KHÔNG kèm quyền quản lý/tổng hợp/tạo ở trên — cũng
+                 tự đủ để vào được module (canAccessBudgetModule() đã cộng thêm quyền này). -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-teal-500 font-semibold cursor-pointer">
+                <input type="checkbox" id="pBudgetReportView"> 📊 Xem Báo Cáo (không kèm quyền quản lý/tổng hợp/tạo ở trên)
+              </label>
+            </div>
           </div>
         </details>
 
@@ -1695,6 +1718,13 @@
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrContractManage"> 📝 Quản Lý Hợp Đồng Lao Động (HR)
             </label>
+            <!-- hrReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"): quyền
+                 CHỈ XEM tab "📊 Báo Cáo Nhân Sự", KHÔNG kèm "Quản Lý Hồ Sơ Nhân Sự" + "Quản Lý Hợp Đồng
+                 Lao Động" ở trên (trước đây PHẢI có ĐỒNG THỜI cả 2 mới xem được, dữ liệu Nhân Sự nhạy cảm
+                 hơn hẳn module khác — quyền này KHÔNG làm YẾU đi combo đó, chỉ cộng thêm 1 lối vào riêng). -->
+            <label class="flex items-center gap-2 text-teal-600 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrReportView"> 📊 Xem Báo Cáo Nhân Sự (không kèm 2 quyền Quản Lý ở trên)
+            </label>
             <p class="text-[11px] text-gray-500 italic pt-1 border-t">4 quyền dưới đây cho module con "Công & Phép" — chấm công chỉ đến từ máy chấm công vật lý + HR sửa tay (không có nút tự bấm trong app); "Quản Lý Chấm Công (HR)" toàn quyền sửa tay chấm công/phép năm + cấu hình giờ hành chính/ngày lễ/API key máy chấm công; "Duyệt Đơn Nghỉ Phép" phải CÓ quyền này VÀ đúng là quản lý trực tiếp mới duyệt được (không tự động theo managerUsername); 2 quyền Siêu Thị theo ĐÚNG siêu thị của người đó (cùng khuôn Đồng Phục — uniformStoreManage).</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrAttendanceManage"> ⏱️ Quản Lý Chấm Công & Phép Năm (HR)
@@ -1746,6 +1776,18 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <label class="flex items-center gap-2 text-purple-500 font-semibold cursor-pointer">
                 <input type="checkbox" id="pOperationRecordViewAll"> 👁️ Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị (Không Phân Biệt Phòng Ban, KHÔNG có quyền sửa)
+              </label>
+            </div>
+            <!-- operationOrderReportView/operationStoreReportView (10/2026, đợt "checkbox phân quyền Báo
+                 Cáo theo module/tab/sub-tab"): 2 quyền CHỈ XEM riêng cho 2 tab "📊 Báo Cáo" — bypass CỘNG
+                 THÊM song song các quyền toàn quyền/xem-hết ở trên, KHÔNG thay thế. -->
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">📊 Xem Báo Cáo (tab Báo Cáo riêng trong từng tab con) — quyền CHỈ XEM, KHÔNG kèm quyền tạo/quản lý ở trên.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-cyan-600 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationOrderReportView"> 📊 Xem Báo Cáo Đơn Hàng
+              </label>
+              <label class="flex items-center gap-2 text-emerald-600 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationStoreReportView"> 📊 Xem Báo Cáo QLDA/Siêu Thị (Mở Mới + Sửa Chữa)
               </label>
             </div>
             <!-- "🧾 Duyệt Nhập/Hủy Đơn Hàng" — quyền RIÊNG, TÁCH KHỎI quần thể duyệt/từ chối đơn hàng nội

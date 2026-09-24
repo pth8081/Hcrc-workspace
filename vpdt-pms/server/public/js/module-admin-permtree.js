@@ -145,6 +145,7 @@ function collectPermsFromForm() {
     internalPostApprove: document.getElementById('pInternalPostApprove').checked,
     meetingApprove: document.getElementById('pMeetingApprove').checked,
     meetingCancel: document.getElementById('pMeetingCancel').checked,
+    meetingReportView: document.getElementById('pMeetingReportView').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
     officeFix: document.getElementById('pOfficeFix').checked,
     uploadAll: document.getElementById('pUploadAll').checked,
@@ -167,6 +168,7 @@ function collectPermsFromForm() {
     contractImportSigned: document.getElementById('pContractImportSigned').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
     vppManage: document.getElementById('pVppManage').checked,
+    vppReportView: document.getElementById('pVppReportView').checked,
     vppRegisterCreate: document.getElementById('pVppRegisterCreate').checked,
     reportManage: document.getElementById('pReportManage').checked,
     reportAggregate: document.getElementById('pReportAggregate').checked,
@@ -177,6 +179,7 @@ function collectPermsFromForm() {
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     carDispatch: document.getElementById('pCarDispatch').checked,
+    carReportView: document.getElementById('pCarReportView').checked,
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
     officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
@@ -205,6 +208,7 @@ function collectPermsFromForm() {
     budgetManage: document.getElementById('pBudgetManage').checked,
     budgetCreate: document.getElementById('pBudgetCreate').checked,
     budgetAggregate: document.getElementById('pBudgetAggregate').checked,
+    budgetReportView: document.getElementById('pBudgetReportView').checked,
     licenseCreate: document.getElementById('pLicenseCreate').checked,
     licenseApprove: document.getElementById('pLicenseApprove').checked,
     licenseView: document.getElementById('pLicenseView').checked,
@@ -222,6 +226,7 @@ function collectPermsFromForm() {
     hrProfileFullView: document.getElementById('pHrProfileFullView').checked,
     hrProfileEdit: document.getElementById('pHrProfileEdit').checked,
     hrContractManage: document.getElementById('pHrContractManage').checked,
+    hrReportView: document.getElementById('pHrReportView').checked,
     hrAttendanceManage: document.getElementById('pHrAttendanceManage').checked,
     hrLeaveApprove: document.getElementById('pHrLeaveApprove').checked,
     hrShiftRosterManage: document.getElementById('pHrShiftRosterManage').checked,
@@ -241,6 +246,10 @@ function collectPermsFromForm() {
     // operationRecordViewAll — quyền RIÊNG, chỉ xem/tải (không sửa) MỌI hồ sơ, xem chú thích đầy đủ ở
     // core.js hasAnyOperationRecordManagePermClient()/lib/recordViewScope.js.
     operationRecordViewAll: document.getElementById('pOperationRecordViewAll').checked,
+    // operationOrderReportView/operationStoreReportView (10/2026) — quyền CHỈ XEM riêng cho 2 tab
+    // "📊 Báo Cáo", xem chú thích đầy đủ ở defaultNewUserPerms() (core.js).
+    operationOrderReportView: document.getElementById('pOperationOrderReportView').checked,
+    operationStoreReportView: document.getElementById('pOperationStoreReportView').checked,
     // operationOrderReceiptManageHO/operationOrderReceiptManageStore — quyền RIÊNG cho "🧾 Duyệt Nhập/Hủy
     // Đơn Hàng" (tách khỏi quần thể duyệt/từ chối đơn hàng nội bộ), TÁCH thành 2 quyền độc lập từ đợt
     // "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026) — HO là 1 checkbox đơn (không còn field
@@ -302,6 +311,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pInternalPostApprove').checked = !!perms.internalPostApprove;
   document.getElementById('pMeetingApprove').checked = !!perms.meetingApprove;
   document.getElementById('pMeetingCancel').checked = !!perms.meetingCancel;
+  document.getElementById('pMeetingReportView').checked = !!perms.meetingReportView;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
   document.getElementById('pOfficeFix').checked = !!perms.officeFix;
   document.getElementById('pMinutesCreate').checked = !!perms.minutesCreate;
@@ -325,6 +335,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pBudgetManage').checked = !!perms.budgetManage;
   document.getElementById('pBudgetCreate').checked = !!perms.budgetCreate;
   document.getElementById('pBudgetAggregate').checked = !!perms.budgetAggregate;
+  document.getElementById('pBudgetReportView').checked = !!perms.budgetReportView;
   document.getElementById('pLicenseCreate').checked = !!perms.licenseCreate;
   document.getElementById('pLicenseApprove').checked = !!perms.licenseApprove;
   document.getElementById('pLicenseView').checked = !!perms.licenseView;
@@ -342,6 +353,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pHrProfileFullView').checked = !!perms.hrProfileFullView;
   document.getElementById('pHrProfileEdit').checked = !!perms.hrProfileEdit;
   document.getElementById('pHrContractManage').checked = !!perms.hrContractManage;
+  document.getElementById('pHrReportView').checked = !!perms.hrReportView;
   document.getElementById('pHrAttendanceManage').checked = !!perms.hrAttendanceManage;
   document.getElementById('pHrLeaveApprove').checked = !!perms.hrLeaveApprove;
   document.getElementById('pHrShiftRosterManage').checked = !!perms.hrShiftRosterManage;
@@ -353,6 +365,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
   document.getElementById('pOperationRecordViewAll').checked = !!perms.operationRecordViewAll;
+  document.getElementById('pOperationOrderReportView').checked = !!perms.operationOrderReportView;
+  document.getElementById('pOperationStoreReportView').checked = !!perms.operationStoreReportView;
   // Tương thích ngược: user chưa được re-save qua UI mới vẫn còn field operationOrderReceiptManage cũ
   // (gộp chung HO + siêu thị trong 1 danh sách depts[]) — tự tách ra để hiện đúng, admin bấm Lưu là dọn
   // sạch về 2 field mới (xem chú thích đầy đủ ở lib/recordActions.js isApproverForOperationOrderReceipt()).
@@ -406,6 +420,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractImportSigned').checked = !!perms.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
   document.getElementById('pVppManage').checked = !!perms.vppManage;
+  document.getElementById('pVppReportView').checked = !!perms.vppReportView;
   document.getElementById('pVppRegisterCreate').checked = !!perms.vppRegisterCreate;
   document.getElementById('pReportManage').checked = !!perms.reportManage;
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
@@ -416,6 +431,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
+  document.getElementById('pCarReportView').checked = !!perms.carReportView;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;

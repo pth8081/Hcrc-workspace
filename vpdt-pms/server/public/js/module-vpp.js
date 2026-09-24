@@ -210,11 +210,14 @@ function vppPeriodIsOpen(p) {
 
 function setVppSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
-  if ((subTab === 'PERIODS' || subTab === 'REPORTS') && !canManageVpp(currentUser)) subTab = 'REGISTER';
+  // "📊 Báo Cáo" giờ TÁCH RIÊNG khỏi "🗓️ Kỳ" (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/
+  // sub-tab") — canSeeReports cộng thêm vppReportView (quyền CHỈ XEM báo cáo, KHÔNG kèm cấu hình Kỳ)
+  // song song canManageVpp(), KHÔNG sửa hàm đó (dùng chung cho hành động quản lý/cấu hình thật ở nơi
+  // khác) — xem canViewVppRegistration() ở lib/recordViewScope.js cho phần bypass dữ liệu tương ứng.
+  const canSeeReports = canManageVpp(currentUser) || !!currentUser?.perms?.vppReportView;
+  if (subTab === 'PERIODS' && !canManageVpp(currentUser)) subTab = 'REGISTER';
+  if (subTab === 'REPORTS' && !canSeeReports) subTab = 'REGISTER';
   activeVppSubTab = subTab;
-
-  document.getElementById('btnVppSubPeriods').classList.toggle('hidden', !canManageVpp(currentUser));
-  document.getElementById('btnVppSubReports').classList.toggle('hidden', !canManageVpp(currentUser));
 
   document.getElementById('vppSubRegister').classList.toggle('hidden', subTab !== 'REGISTER');
   document.getElementById('vppSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
@@ -223,8 +226,11 @@ function setVppSubTab(subTab) {
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-orange-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnVppSubRegister').className = subTab === 'REGISTER' ? activeCls : inactiveCls;
-  document.getElementById('btnVppSubPeriods').className = subTab === 'PERIODS' ? activeCls : inactiveCls;
-  document.getElementById('btnVppSubReports').className = subTab === 'REPORTS' ? activeCls : inactiveCls;
+  // Gộp tô màu active/inactive + ẩn/hiện theo quyền trong ĐÚNG 1 lần gán className (KHÔNG tách riêng
+  // classList.toggle('hidden',...) rồi gán className đè lên sau — sẽ xoá mất class "hidden" vừa toggle,
+  // cùng lỗi đã bắt được ở setMeetingSubTab(), module-phonghop.js).
+  document.getElementById('btnVppSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canManageVpp(currentUser) ? '' : ' hidden');
+  document.getElementById('btnVppSubReports').className = (subTab === 'REPORTS' ? activeCls : inactiveCls) + (canSeeReports ? '' : ' hidden');
 
   if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); }
   if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); renderDynamicInputsForModule('VPP', 'dynamicFieldsContainer_VPP'); }

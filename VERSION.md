@@ -1,8 +1,59 @@
 # Phiên bản hiện tại
 
-**24.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.14 (2026-09-24): 7 quyền "Xem Báo Cáo" riêng theo module (Vận Hành/Đăng Ký Xe/Phòng Họp/Ngân Sách/VPP/Nhân Sự)
+
+Yêu cầu người dùng (tiếp nối đợt Checklist ở v24.13): rà soát toàn hệ thống
+xem module/tab/sub-tab "📊 Báo Cáo" nào chưa có checkbox phân quyền riêng. Kết
+quả rà soát: 2 tab Báo Cáo trong Vận Hành (Đơn Hàng, QLDA/Siêu Thị) hoàn toàn
+chưa có gate hiển thị nào; 5 module khác (Đăng Ký Xe, Phòng Họp, Ngân Sách,
+VPP, Nhân Sự) đang "mượn tạm" quyền quản lý/duyệt hiện có cho tab Báo Cáo,
+chưa có quyền CHỈ-XEM riêng. Người dùng xác nhận phương án đầy đủ: **"Vá 2
+module hở + tách thêm quyền riêng cho cả 5 module còn lại"**.
+
+- **7 quyền phẳng MỚI**, mỗi quyền là bypass **CỘNG THÊM** cho đúng 1 tab Báo
+  Cáo — KHÔNG thay thế/làm yếu bất kỳ quyền hiện có nào (additive-only, cùng
+  nguyên tắc `checklistReportView`/`rebateViewReport`/`operationRecordViewAll`
+  đã áp dụng):
+  - `operationOrderReportView` — Vận Hành > 📦 Đơn Hàng > Báo Cáo.
+  - `operationStoreReportView` — Vận Hành > 🏬 QLDA/Siêu Thị > Báo Cáo (dùng
+    CHUNG cho cả 2 sub-tab Mở Mới lẫn Sửa Chữa).
+  - `carReportView` — Đăng Ký Xe > 📊 Báo Cáo (toàn công ty, không kèm
+    `carView.all`).
+  - `meetingReportView` — Phòng Họp > 📊 Báo Cáo (không kèm
+    `meetingApprove`/`meetingCancel`).
+  - `budgetReportView` — Ngân Sách > 📊 Báo Cáo (không kèm
+    `budgetManage`/`budgetAggregate`/`budgetCreate` — cũng tự đủ để **vào
+    được module** vì `canAccessBudgetModule()` đã cộng thêm quyền này).
+  - `vppReportView` — Văn Phòng Phẩm > 📊 Báo Cáo (tách RIÊNG khỏi tab "🗓️ Kỳ"
+    — trước đây 2 tab dùng CHUNG 1 điều kiện `canManageVpp()`).
+  - `hrReportView` — Nhân Sự > 📊 Báo Cáo (`GET /api/hr-profile/reports`) —
+    trước đây PHẢI có ĐỒNG THỜI `hrProfileManage` VÀ `hrContractManage` mới
+    xem được, quyền mới là lối vào THỨ 2 độc lập, không làm yếu combo cũ.
+- **Sửa kèm 1 gap phát hiện khi rà soát**: 4 hàm `canAccessOperationModule()`/
+  `canAccessCarModule()`/`canAccessMeetingModule()`/`canAccessBudgetModule()`
+  (core.js) — cổng "vào được module hay không" — đều yêu cầu ÍT NHẤT 1 quyền
+  cụ thể; nếu không cộng thêm 4 quyền ReportView mới vào các điều kiện này,
+  người CHỈ được cấp đúng 1 quyền xem-báo-cáo sẽ không vào nổi module để thấy
+  tab đó — đã bổ sung cả 4 nơi.
+- **VPP có sửa kèm 1 lỗi UI thật bắt được lúc viết code**: `setVppSubTab()`
+  trước đây `classList.toggle('hidden',...)` cho nút "Kỳ"/"Báo Cáo" RỒI gán
+  đè `className = activeCls/inactiveCls` ngay sau — xoá mất class "hidden"
+  vừa toggle, khiến 2 nút này LUÔN hiện với MỌI người dùng (dù bấm vào vẫn bị
+  chặn đúng vì `setVppSubTab()` tự lùi về REGISTER) — gộp lại thành 1 lần gán
+  className duy nhất, cùng khuôn đã sửa trước đó ở `setMeetingSubTab()`.
+- UI: 7 checkbox mới trong cây Phân Quyền (khối 5/6/12/18/22/24 tương ứng) +
+  wiring `collectPermsFromForm()`/`populatePermsForm()` + 7 nhãn tiếng Việt
+  mới trong `PERM_KEY_VN_LABELS` (Ma Trận Phân Quyền Excel).
+- Test mới: `tests/test-report-permission-rollout.js` (20 kịch bản — mỗi
+  quyền xác nhận CẢ 2 chiều: người CHỈ có đúng quyền ReportView xem được dù
+  khác phòng ban/không phải người tạo/không có quyền quản lý nào khác; người
+  KHÔNG có quyền nào trong số này vẫn bị chặn như trước).
+- Không cần schema/`.env`/dependency mới — chỉ thay đổi code + dữ liệu
+  `perms` hiện có (field mới mặc định `false`, không ảnh hưởng tài khoản cũ).
 
 ## v24.13 (2026-09-24): Checklist — phạm vi THEO MẪU cho quyền Xem Báo Cáo/Tự Đánh Giá
 

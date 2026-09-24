@@ -456,7 +456,7 @@ function filterContractsForUser(contracts, user, appData) {
 // HOẶC đang là approver theo carDeptWorkflows của phòng ban hồ sơ đó.
 function canViewCarReg(user, carReg, appData) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  if (user.perms?.admin || user.perms?.carReportView) return true;
   if (carReg.creator === user.username) return true;
   // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban với
   // carView — cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).
@@ -516,7 +516,7 @@ function filterItPriceApprovalsForUser(items, user, appData) {
 // "Báo Cáo Tổng Hợp" (Kỳ Đăng Ký) chỉ hiện đúng phạm vi cho người có vppManage.
 function canViewVppRegistration(user, item, appData) {
   if (!user) return false;
-  if (canManageVpp(user)) return true;
+  if (canManageVpp(user) || user.perms?.vppReportView) return true;
   if (item.creator === user.username) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.vppRegistrations.resolveWfConfig(item, appData).approvers, user.username);
 }
@@ -532,7 +532,7 @@ function filterVppRegistrationsForUser(items, user, appData) {
 // ra nếu admin gán người duyệt không cùng phòng ban với hồ sơ).
 function canViewBudgetEntry(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate) return true;
+  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate || user.perms?.budgetReportView) return true;
   if (item.dept === user.dept) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.budgetEntries.resolveWfConfig(item, appData).approvers, user.username);
 }
@@ -548,7 +548,7 @@ function filterBudgetEntriesForUser(entries, user, appData) {
 // là hồ sơ của ĐƠN VỊ, không phải cá nhân, cùng tinh thần budgetEntries).
 function canViewBudgetLine(user, item) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate) return true;
+  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate || user.perms?.budgetReportView) return true;
   return item.dept === user.dept;
 }
 function filterBudgetLinesForUser(items, user) {
@@ -565,7 +565,7 @@ function filterBudgetLinesForUser(items, user) {
 // admin/budgetManage/budgetAggregate xem hết, còn lại chỉ xem kỳ của ĐÚNG phòng ban mình.
 function canViewBudgetPeriod(user, item) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate) return true;
+  if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate || user.perms?.budgetReportView) return true;
   return item.dept === user.dept;
 }
 function filterBudgetPeriodsForUser(items, user) {
@@ -577,7 +577,7 @@ function filterBudgetPeriodsForUser(items, user) {
 // riêng (không cần thiết cho module mới, giữ đơn giản).
 function canViewOperationOrder(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  if (user.perms?.admin || user.perms?.operationOrderReportView) return true;
   if (item.dept === user.dept) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.operationOrders.resolveWfConfig(item, appData).approvers, user.username);
 }
@@ -621,7 +621,7 @@ function canViewOperationStoreOpening(user, item, appData) {
   // Mở Mới/Sửa Chữa bất kể phòng ban — KHÁC operationRecordManageAll (toàn quyền, gồm cả sửa). Chỉ thêm ở
   // đây (view scope) + redactOperationEstimateItemsToOwnedScope() bên dưới, KHÔNG thêm vào
   // canManageOperationRecord()/canManageOperationRecordClient() để không vô tình cấp quyền sửa.
-  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll) return true;
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
   // KHÔNG còn nhánh "đang là approver" nào (hồ sơ chính lẫn Dự toán) — chủ ứng dụng xác nhận Vận Hành >
@@ -646,7 +646,7 @@ function redactOperationEstimateItemsToOwnedScope(user, sourceType, item, appDat
   if (!user) return item;
   // operationRecordViewAll: xem đầy đủ (không redact) — cùng khuôn admin/operationRecordManageAll, xem
   // chú thích ở canViewOperationStoreOpening()/canViewOperationRepair() ngay trên.
-  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || item.dept === user.dept) return item;
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView || item.dept === user.dept) return item;
   if (hasOwnWorkItemInSource(user, sourceType, item.id, appData)) return item;
   if (!hasOwnEstimateCategoryInSource(user, item)) return item;
   const ownedTopIds = new Set((item.estimateItems || [])
@@ -666,7 +666,7 @@ function canViewOperationRepair(user, item, appData) {
   if (!user) return false;
   // Audit nghiệp vụ (đợt 4) — cùng lý do đã thêm ở canViewOperationStoreOpening() ngay trên.
   // operationRecordViewAll — xem chú thích đầy đủ ở canViewOperationStoreOpening() ngay trên.
-  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll) return true;
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView) return true;
   if (item.dept === user.dept) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
   // Cùng lý do ở canViewOperationStoreOpening() bên trên — KHÔNG còn nhánh "đang là approver" nào (hồ sơ
@@ -716,7 +716,7 @@ function canViewMeeting(user, meeting) {
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
   if (scopeAllows(user, user.perms?.meetingView, meeting.dept)) return true;
-  return !!(user.perms?.meetingApprove || user.perms?.meetingCancel);
+  return !!(user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView);
 }
 
 function filterMeetingsForUser(meetings, user) {

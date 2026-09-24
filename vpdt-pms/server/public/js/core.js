@@ -2946,7 +2946,8 @@ function canAccessMeetingModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'meeting')) return false;
-  return scopeHasAny(user, user.perms?.meetingView) || canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user);
+  return scopeHasAny(user, user.perms?.meetingView) || canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user)
+    || !!user.perms?.meetingReportView;
 }
 
 function canAccessCarModule(user) {
@@ -2960,7 +2961,8 @@ function canAccessCarModule(user) {
   // module bị ẩn khỏi sidebar trước đây). Chỉ mở đúng lối vào sidebar + sub-tab đó — không mở thêm
   // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
   const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
-  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere;
+  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere
+    || !!user.perms?.carReportView;
 }
 
 // "📊 Báo Cáo" (sub-tab riêng trong module Đăng Ký Xe) — CHỈ hiện cho người quản lý: admin, người có
@@ -2970,7 +2972,7 @@ function canAccessCarModule(user) {
 // thật sự quản lý/duyệt xe" thay vì để mọi người tạo phiếu đều thấy thống kê toàn công ty.
 function canSeeCarReportClient(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  if (user.perms?.admin || user.perms?.carReportView) return true;
   if (user.perms?.carView?.all) return true;
   return isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
@@ -3207,10 +3209,24 @@ function defaultNewUserPerms() {
     contractImportSigned: false,
     paymentManage: false,
     vppManage: false, vppRegisterCreate: false,
+    // vppReportView (10/2026, đợt rà soát toàn hệ thống "checkbox phân quyền Báo Cáo theo module/tab/
+    // sub-tab"): quyền CHỈ XEM tab "📊 Báo Cáo" trong module VPP, KHÔNG kèm quyền cấu hình Kỳ Đăng Ký —
+    // bypass CỘNG THÊM song song canManageVpp() (admin/vppManage), KHÔNG thay thế — xem setVppSubTab()
+    // (module-vpp.js) + canViewVppRegistration() (lib/recordViewScope.js).
+    vppReportView: false,
     reportManage: false, reportAggregate: false, reportEntryCreate: false,
     meetingView: emptyScope(), meetingBookScope: emptyScope(),
     meetingApprove: false, meetingCancel: false,
+    // meetingReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "📊 Báo Cáo" Phòng Họp, KHÔNG kèm
+    // quyền duyệt/hủy lịch họp — bypass CỘNG THÊM song song canApproveMeeting(), KHÔNG sửa hàm đó (dùng
+    // chung cho hành động duyệt thật ở nơi khác) — xem setMeetingSubTab() (module-phonghop.js) +
+    // canViewMeeting() (lib/recordViewScope.js).
+    meetingReportView: false,
     carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(), carDispatch: false,
+    // carReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "📊 Báo Cáo" Đăng Ký Xe TOÀN CÔNG TY,
+    // KHÔNG kèm carView.all (không tự động xem được danh sách phiếu từng hồ sơ ở tab khác) — xem
+    // canSeeCarReportClient() (core.js) + canViewCarReg() (lib/recordViewScope.js).
+    carReportView: false,
     officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
     officeBuy: true, officeFix: true,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
@@ -3220,6 +3236,11 @@ function defaultNewUserPerms() {
     itPriceEmergencyRejectApproveWholesale: false, itPriceEmergencyRejectApproveRetail: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
+    // budgetReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "Báo Cáo" Ngân Sách (budgetLines),
+    // KHÔNG kèm quyền quản lý/tổng hợp — bypass CỘNG THÊM song song budgetManage/budgetAggregate — xem
+    // canAggregateBudgetLineClient() (module-ngansach.js) + canViewBudgetEntry()/canViewBudgetLine()/
+    // canViewBudgetPeriod() (lib/recordViewScope.js).
+    budgetReportView: false,
     licenseCreate: false, licenseApprove: false, licenseView: false,
     nhanSuManage: false, orgChartManage: false, kpiFlowConfigManage: false,
     // Bổ sung đủ 11 quyền Nhân Sự (Đợt 1-4: Hồ Sơ/Hợp Đồng/Công & Phép/Onboarding-Offboarding) — trước
@@ -3231,12 +3252,29 @@ function defaultNewUserPerms() {
     // đúng là nguồn "sự thật" duy nhất cho 1 user/nhóm mới hoàn toàn không có quyền gì.
     hrOnboardingManage: false, hrOffboardingManage: false, hrTaskTemplateManage: false, hrViewAll: false,
     hrProfileView: false, hrProfileManage: false, hrContractManage: false,
+    // hrReportView (10/2026, cùng đợt trên): quyền CHỈ XEM route thống kê GET /api/hr-profile/reports,
+    // KHÔNG kèm hrProfileManage/hrContractManage — bypass CỘNG THÊM song song combo AND hiện có
+    // (hrpfCanViewReports(), core.js + canFull, routes/employeeProfile.js), KHÔNG làm YẾU đi combo đó
+    // (dữ liệu Nhân Sự vốn nhạy cảm hơn các module khác — xem nguyên tắc "phải được cấp riêng qua tick
+    // tường minh" đã áp dụng cho toàn bộ module Nhân Sự).
+    hrReportView: false,
     hrAttendanceManage: false, hrLeaveApprove: false, hrShiftRosterManage: false, hrShiftSwapApprove: false,
     operationOrderCreate: false, operationStoreOpenCreate: false, operationRepairCreate: false,
     operationRecordManageAll: false,
     // operationRecordViewAll — quyền CHỈ XEM/TẢI (không sửa) MỌI hồ sơ Mở Mới/Sửa Chữa + Danh Mục Đầu Tư,
     // không phân biệt phòng ban — xem chú thích đầy đủ ở lib/recordViewScope.js canViewOperationStoreOpening().
     operationRecordViewAll: false,
+    // operationOrderReportView/operationStoreReportView (10/2026, cùng đợt "checkbox phân quyền Báo Cáo
+    // theo module/tab/sub-tab" trên): 2 quyền CHỈ XEM riêng cho 2 tab "📊 Báo Cáo" trong Vận Hành — trước
+    // đợt này 2 tab KHÔNG có gác quyền hiển thị nào (dữ liệu vẫn đã được lọc đúng phạm vi phòng ban ở
+    // server, chỉ thiếu vai trò "xem báo cáo toàn công ty" như operationRecordViewAll đã có cho Đơn/Danh
+    // Mục Đầu Tư). operationOrderReportView — tab Báo Cáo trong "📦 Đơn Hàng" (renderOperationOrderReport(),
+    // module-vanhanh.js + canViewOperationOrder(), lib/recordViewScope.js). operationStoreReportView —
+    // tab Báo Cáo trong "🏬 QLDA/Siêu Thị" (buildOperationStoreReportComputed(), module-vanhanh.js +
+    // canViewOperationStoreOpening()/canViewOperationRepair()/redactOperationEstimateItemsToOwnedScope(),
+    // lib/recordViewScope.js) — CÙNG 1 quyền cho cả Mở Mới lẫn Sửa Chữa (2 sub-tab con của cùng 1 tab
+    // Báo Cáo, không tách nhỏ hơn).
+    operationOrderReportView: false, operationStoreReportView: false,
     // Nhân Sự > Lương (Module Lương, xem lib/payroll.js) — hrPayrollView MẶC ĐỊNH TRUE (mọi nhân viên
     // đều tự xem được phiếu lương CỦA CHÍNH MÌNH khi đã công bố, qua route riêng IDOR-safe, KHÔNG phải
     // quyền xem người khác) — TÁCH BIỆT hrPayrollManage (lập/tính/điều chỉnh) và hrPayrollApprove (duyệt
@@ -7407,7 +7445,7 @@ function canAccessBudgetModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'budget')) return false;
-  return !!(user.perms?.budgetCreate || user.perms?.budgetAggregate || user.perms?.budgetManage);
+  return !!(user.perms?.budgetCreate || user.perms?.budgetAggregate || user.perms?.budgetManage || user.perms?.budgetReportView);
 }
 
 // Nhân Sự — module TOP-LEVEL (không có module cha), cùng khuôn canAccessBudgetModule() ở trên. "Cơ Cấu
@@ -7491,7 +7529,7 @@ function canAccessHrContractModule(user) {
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): Báo Cáo Nhân Sự lộ số liệu Lương/Hợp Đồng — admin KHÔNG
 // còn tự động xem được, phải có ĐỦ CẢ hrProfileManage LẪN hrContractManage (mirror đúng server, xem
 // GET /api/hr-profile/reports ở routes/employeeProfile.js).
-function hrpfCanViewReports() { return !!(currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage); }
+function hrpfCanViewReports() { return !!((currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage) || currentUser.perms?.hrReportView); }
 
 // Công & Phép — mở cho MỌI người có module cha "hr" (cùng khuôn hrProfile) vì ai cũng cần tự xem
 // chấm công/phép năm/nộp đơn của chính mình; các khối quản lý bên trong tự ẩn theo quyền riêng.
@@ -7685,7 +7723,8 @@ function canAccessOperationModule(user) {
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'vanHanh')) return false;
   if (user.perms?.operationOrderCreate || user.perms?.operationStoreOpenCreate || user.perms?.operationRepairCreate
-    || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll) return true;
+    || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll
+    || user.perms?.operationOrderReportView || user.perms?.operationStoreReportView) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ

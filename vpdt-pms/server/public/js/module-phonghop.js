@@ -104,10 +104,14 @@ function generateMeetingTimeSlots() {
 function setMeetingSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   const btnReport = document.getElementById('btnMeetingSubReport');
-  // "📊 Báo Cáo" CHỈ hiện cho người CÓ quyền duyệt lịch họp (canApproveMeeting() — admin/meetingApprove,
-  // xem chú thích đầy đủ tại renderMeetingReportTab() bên dưới) — chặn cả trường hợp subTab='REPORT'
-  // được truyền vào khi KHÔNG có quyền (URL/gọi hàm trực tiếp), lùi về REGISTER thay vì hiện trắng.
-  const canSeeReport = canApproveMeeting(currentUser);
+  // "📊 Báo Cáo" hiện cho người CÓ quyền duyệt lịch họp (canApproveMeeting() — admin/meetingApprove,
+  // xem chú thích đầy đủ tại renderMeetingReportTab() bên dưới) HOẶC người chỉ có quyền XEM báo cáo
+  // riêng meetingReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab" — KHÔNG
+  // sửa canApproveMeeting() vì hàm đó còn dùng chung cho hành động duyệt/hủy thật ở nơi khác, xem
+  // canViewMeeting() ở lib/recordViewScope.js cho phần bypass dữ liệu tương ứng) — chặn cả trường hợp
+  // subTab='REPORT' được truyền vào khi KHÔNG có quyền (URL/gọi hàm trực tiếp), lùi về REGISTER thay vì
+  // hiện trắng.
+  const canSeeReport = canApproveMeeting(currentUser) || !!currentUser?.perms?.meetingReportView;
   if (subTab === 'REPORT' && !canSeeReport) subTab = 'REGISTER';
 
   activeMeetingSubTab = subTab;

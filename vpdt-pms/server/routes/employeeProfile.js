@@ -436,8 +436,12 @@ const hrReportsRateLimiter = rateLimit({
 });
 router.get('/reports', hrReportsRateLimiter, async (req, res) => {
   try {
-    const canFull = employeeProfile.canManageProfiles(req.freshUser) && canManageContracts(req.freshUser);
-    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động để xem Báo Cáo Nhân Sự' });
+    // hrReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"): quyền CHỈ XEM
+    // route này, KHÔNG kèm hrProfileManage/hrContractManage — bypass CỘNG THÊM song song combo AND hiện
+    // có, KHÔNG làm YẾU đi combo đó (dữ liệu Nhân Sự vốn nhạy cảm hơn hẳn — nguyên tắc "phải được cấp
+    // riêng qua tick tường minh" áp dụng cho toàn bộ module Nhân Sự).
+    const canFull = (employeeProfile.canManageProfiles(req.freshUser) && canManageContracts(req.freshUser)) || !!req.freshUser?.perms?.hrReportView;
+    if (!canFull) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
     const from = req.query?.from ? String(req.query.from).trim() : '';
     const to = req.query?.to ? String(req.query.to).trim() : '';
     const contractStatus = req.query?.contractStatus ? String(req.query.contractStatus).trim() : '';

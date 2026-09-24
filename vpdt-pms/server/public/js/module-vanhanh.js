@@ -3294,7 +3294,7 @@ function renderOperationOrderReport() {
   // hồ sơ đó), KHÔNG đọc thẳng DB.operationOrders để tránh lộ số liệu của hồ sơ người dùng này vốn
   // không được xem. Báo Cáo giờ luôn hiện CẢ Siêu Thị lẫn HO (không lọc theo sub-tab đang mở của Danh
   // Sách như trước — đúng yêu cầu "Tổng Chuỗi" phải gộp cả 2 loại).
-  const canView = (o) => currentUser.perms?.admin || o.creator === currentUser.username || isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), currentUser.username, operationOrderStoreApproverFilterFor(o));
+  const canView = (o) => currentUser.perms?.admin || currentUser.perms?.operationOrderReportView || o.creator === currentUser.username || isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), currentUser.username, operationOrderStoreApproverFilterFor(o));
   const scoped = (DB.operationOrders || []).filter(canView);
   populateOperationOrderLocationOptions(scoped, 'opReportFilterLocation');
 

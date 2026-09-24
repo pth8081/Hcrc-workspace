@@ -3794,6 +3794,44 @@ Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
 Không cần chuẩn bị file mẫu riêng — luôn **xuất trước rồi sửa trên chính
 file vừa xuất** (đã có sẵn đúng cột/định dạng hệ thống nhận diện được).
 
+### 6.3. 7 quyền "Xem Báo Cáo" riêng theo module (10/2026)
+
+Theo yêu cầu người dùng, tiếp nối đợt Checklist ở mục 6.2: rà soát toàn hệ
+thống xem tab **"📊 Báo Cáo"** nào (bên trong TỪNG module, KHÁC hẳn module
+**"Báo Cáo"** tổng hợp riêng ở mục 5) chưa có checkbox phân quyền CHỈ-XEM
+riêng — phát hiện 2 tab (Vận Hành > Đơn Hàng, Vận Hành > QLDA/Siêu Thị) chưa
+có gate hiển thị nào, 5 tab khác (Đăng Ký Xe, Phòng Họp, Ngân Sách, Văn Phòng
+Phẩm, Nhân Sự) đang "mượn tạm" quyền quản lý/duyệt hiện có. Thêm **7 quyền
+phẳng mới**, mỗi quyền là bypass **CỘNG THÊM** cho ĐÚNG 1 tab Báo Cáo — KHÔNG
+thay thế/làm yếu bất kỳ quyền hiện có nào (ai đã xem được vẫn xem được y hệt
+trước, quyền mới chỉ mở thêm 1 lối vào cho người CHƯA có quyền quản lý/duyệt
+nào mà chỉ cần xem số liệu tổng hợp):
+
+- **`operationOrderReportView`** (khối 22. Vận Hành) — tab Báo Cáo trong
+  "📦 Đơn Hàng".
+- **`operationStoreReportView`** (khối 22. Vận Hành) — tab Báo Cáo trong
+  "🏬 QLDA/Siêu Thị", dùng CHUNG cho cả 2 sub-tab Mở Mới lẫn Sửa Chữa.
+- **`carReportView`** (khối 6. Đăng Ký Xe) — tab Báo Cáo toàn công ty, KHÔNG
+  kèm "Xem" (`carView.all`) ở bảng phạm vi phòng ban.
+- **`meetingReportView`** (khối 5. Phòng Họp) — tab Báo Cáo toàn công ty,
+  KHÔNG kèm quyền Phê duyệt/Hủy lịch họp.
+- **`budgetReportView`** (khối 18. Ngân Sách) — quyền THỨ 4 (cùng cấp
+  `budgetCreate`/`budgetManage`/`budgetAggregate`), CHỈ mở tab Báo Cáo, KHÔNG
+  kèm quyền quản lý/tổng hợp/tạo — cũng tự đủ để **vào được module** (không
+  cần thêm quyền nào khác trong 3 quyền cũ).
+- **`vppReportView`** (khối 12. Văn Phòng Phẩm) — tab Báo Cáo, TÁCH RIÊNG
+  khỏi tab "🗓️ Kỳ" (trước đây 2 tab dùng chung 1 điều kiện "Quản lý").
+- **`hrReportView`** (khối 21. Nhân Sự) — mục 4.5.5 Báo Cáo Nhân Sự, trước
+  đây PHẢI có ĐỒNG THỜI "Quản Lý Hồ Sơ Nhân Sự" VÀ "Quản Lý Hợp Đồng Lao
+  Động" mới xem được (mục 6.1) — quyền mới là lối vào THỨ 2 độc lập, hoàn
+  toàn không làm yếu combo cũ (dữ liệu Nhân Sự vẫn cần cấp riêng qua tick
+  tường minh, không đổi nguyên tắc ở mục 6.1).
+
+**Deploy-impact**: cả 7 quyền mặc định `false` cho MỌI tài khoản hiện có —
+không ai bị mất quyền xem báo cáo đang có (quyền quản lý/duyệt cũ vẫn hoạt
+động y hệt trước), chỉ là chưa ai TỰ ĐỘNG có quyền mới này, cần admin tick
+thêm nếu muốn giao vai trò "chỉ xem báo cáo" cho ai đó.
+
 ---
 
 ## 7. Hệ Thống / Quản Trị

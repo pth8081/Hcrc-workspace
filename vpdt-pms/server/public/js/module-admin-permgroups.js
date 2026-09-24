@@ -301,11 +301,13 @@ const PERM_KEY_VN_LABELS = {
   "budgetAggregate": "Ngân Sách — 📊 Tổng hợp (xem Tổng Hợp Theo Phòng, mọi phòng ban)",
   "budgetCreate": "Ngân Sách — 📝 Xem, tạo ngân sách (xem/nhập/sửa Phê Duyệt & Thực Hiện + Tổng Hợp — đúng phòng ban mình)",
   "budgetManage": "Ngân Sách — 📅 Quản lý (xem MỌI phòng ban + Tổng Hợp Toàn Công Ty, không sửa được ngân sách phòng khác; tạo/đóng/mở kỳ, quản lý mẫu)",
+  "budgetReportView": "Ngân Sách — 📊 Xem Báo Cáo (không kèm quyền quản lý/tổng hợp/tạo ở trên)",
   "canBeApprover": "Hệ Thống & Chung — ✅ Có thể được chọn làm người duyệt",
   "canViewReports": "Hệ Thống & Chung — 📊 Được xem Báo cáo quản trị",
   "carCreate.all": "Đăng Ký Xe — Tạo mới",
   "carDispatch": "Đăng Ký Xe — 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục \"Phần Dành Cho Phòng Hành Chính\" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)",
   "carDownload.all": "Đăng Ký Xe — Tải xuống",
+  "carReportView": "Đăng Ký Xe — 📊 Xem Báo Cáo Đăng Ký Xe (toàn công ty, không kèm quyền Xem ở bảng trên)",
   "carView.all": "Đăng Ký Xe — Xem",
   "checklistAuditScope.all": "Checklist Đánh Giá Siêu Thị — Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)",
   "checklistReportView": "Checklist Đánh Giá Siêu Thị — 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)",
@@ -332,6 +334,7 @@ const PERM_KEY_VN_LABELS = {
   "hrProfileFullView": "Nhân Sự — 👁️ Xem Toàn Bộ Hồ Sơ Nhân Sự (không giới hạn như quản lý trực tiếp, không sửa được)",
   "hrProfileManage": "Nhân Sự — 🗂️ Quản Lý Hồ Sơ Nhân Sự (HR — xem/sửa đầy đủ, liên kết tài khoản)",
   "hrProfileView": "Nhân Sự — 👁️ Xem Hồ Sơ Nhân Sự Cấp Dưới (quản lý trực tiếp)",
+  "hrReportView": "Nhân Sự — 📊 Xem Báo Cáo Nhân Sự (không kèm 2 quyền Quản Lý ở trên)",
   "hrShiftRosterManage": "Nhân Sự — 📅 Lập Lịch Phân Ca (Quản Lý Siêu Thị)",
   "hrShiftSwapApprove": "Nhân Sự — 🔁 Duyệt Đổi Ca (Quản Lý Siêu Thị)",
   "hrTaskTemplateManage": "Nhân Sự — 📋 Quản Lý Checklist Mẫu (Onboarding/Offboarding)",
@@ -353,6 +356,7 @@ const PERM_KEY_VN_LABELS = {
   "meetingApprove": "Phòng Họp — ✅ Phê duyệt phòng họp (toàn công ty)",
   "meetingBookScope.all": "Phòng Họp — Đăng ký (book)",
   "meetingCancel": "Phòng Họp — ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)",
+  "meetingReportView": "Phòng Họp — 📊 Xem Báo Cáo Phòng Họp (toàn công ty, không kèm quyền duyệt/hủy)",
   "meetingView.all": "Phòng Họp — Xem",
   "minutesCreate": "Biên Bản Họp & 📋 Công Việc — ✅ Tạo mới (lập) biên bản",
   "minutesDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải tất cả biên bản",
@@ -398,10 +402,12 @@ const PERM_KEY_VN_LABELS = {
   "operationOrderCreate": "Vận Hành — 📦 Tạo/Gửi Đơn Hàng",
   "operationOrderReceiptManageHO": "Vận Hành — 🏢 Quyền Phê Duyệt Đặt Hàng HO",
   "operationOrderReceiptManageStore.all": "Vận Hành — Quyền Phê Duyệt Đặt Hàng Siêu Thị",
+  "operationOrderReportView": "Vận Hành — 📊 Xem Báo Cáo Đơn Hàng",
   "operationRecordManageAll": "Vận Hành — 🏬 Quản Lý Hồ Sơ Siêu Thị (Toàn Quyền — Không Phân Biệt Người Tạo)",
   "operationRecordViewAll": "Vận Hành — 👁️ Xem + Tải Tệp Toàn Bộ Hồ Sơ Siêu Thị (Không Phân Biệt Phòng Ban, KHÔNG có quyền sửa)",
   "operationRepairCreate": "Vận Hành — 🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)",
   "operationStoreOpenCreate": "Vận Hành — 🏬 Tạo Đề Xuất Mở Mới Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)",
+  "operationStoreReportView": "Vận Hành — 📊 Xem Báo Cáo QLDA/Siêu Thị (Mở Mới + Sửa Chữa)",
   "orgChartManage": "Nhân Sự — 🌳 Quản Lý Cơ Cấu Tổ Chức",
   "paymentManage": "Thanh Toán — 💰 Quản lý Thanh Toán (toàn công ty)",
   "rebateApprove": "Mua Hàng > BAS — ✅ Phê Duyệt (dự phòng Giai đoạn 2 — Sổ Cái)",
@@ -429,7 +435,8 @@ const PERM_KEY_VN_LABELS = {
   "viewApprovedAll": "Tài Liệu — Xem Đã Duyệt",
   "viewDraftAll": "Tài Liệu — Xem Bản Nháp",
   "vppManage": "Văn Phòng Phẩm — ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)",
-  "vppRegisterCreate": "Văn Phòng Phẩm — 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)"
+  "vppRegisterCreate": "Văn Phòng Phẩm — 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)",
+  "vppReportView": "Văn Phòng Phẩm — 📊 Xem Báo Cáo (không kèm quyền cấu hình Kỳ Đăng Ký)"
 };
 // Chiều ngược lại (nhãn -> khoá) để đọc lại đúng cột khi import — cùng 1 bảng tĩnh ở trên nên LUÔN khớp
 // chính xác với bất kỳ nhãn nào ma trận từng xuất ra (không cần dò mờ/so khớp gần đúng).
