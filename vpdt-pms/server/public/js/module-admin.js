@@ -852,6 +852,10 @@ function renderDeptCheckboxes() {
   // checklistAuditScope (Checklist Đánh Giá Siêu Thị) — cùng lý do gọi kèm tại đây, nhưng nguồn là
   // DB.stores (siêu thị), KHÔNG phải DB.depts, và KHÔNG có mục 'HO' đặc biệt.
   renderChecklistAuditScopeCheckboxes();
+  // checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026) — cùng lý do gọi kèm tại đây,
+  // nguồn DB.checklistTemplates (mẫu checklist), không phải siêu thị/phòng ban.
+  renderChecklistReportViewScopeCheckboxes();
+  renderChecklistStoreSelfExecuteScopeCheckboxes();
 }
 
 function toggleScopeGroup(allCheckId, deptCheckPrefix) {
@@ -923,6 +927,60 @@ function setChecklistAuditScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pChecklistAuditScopeDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi kiểm soát...',
     emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu kiểm soát mọi siêu thị).',
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+  });
+}
+
+// checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026, yêu cầu người dùng): phạm vi theo
+// MẪU checklist (không phải siêu thị) cho 2 quyền "📊 Xem Báo Cáo Checklist"/"✅ Đánh Giá Checklist (Tự
+// Đánh Giá)" — mirror ĐÚNG khuôn renderChecklistAuditScopeCheckboxes() ở trên nhưng nguồn
+// DB.checklistTemplates thay vì DB.stores, value là templateId ÉP CHUỖI (xem lib/checklist.js::
+// getChecklistReportViewScope()/getChecklistStoreSelfExecuteScope() — field lưu vẫn tên 'depts' để tái
+// dùng cơ chế union theo tên field, chỉ nội dung là template id).
+// kind: 'REPORT' liệt kê MỌI mẫu (cả 2 loại QA/Trừ Điểm, mọi trạng thái — báo cáo có thể cần tra cứu cả
+// mẫu đã Lưu Trữ); kind: 'SELF' CHỈ liệt kê mẫu templateType==='STORE_SELF' (đúng phạm vi quyền này thật
+// sự dùng tới, theo xác nhận người dùng — tránh chọn nhầm mẫu Kiểm Soát không áp dụng được).
+function checklistTemplateScopeItems(kind) {
+  const kindLabel = { QA: 'QA', DEDUCTION: 'Trừ Điểm' };
+  return (DB.checklistTemplates || [])
+    .filter(t => kind !== 'SELF' || t.templateType === 'STORE_SELF')
+    .map(t => ({ value: String(t.id), label: `${t.templateName} (${kindLabel[t.templateKind] || 'QA'})` }));
+}
+function renderChecklistReportViewScopeCheckboxes() {
+  renderMultiSelectDropdown('pChecklistReportViewScopeDeptContainer', checklistTemplateScopeItems('REPORT'), [], {
+    placeholder: '🔍 Tìm mẫu checklist để thêm vào phạm vi xem báo cáo...',
+    emptyText: 'Chưa chọn mẫu nào (tick "ALL" nếu xem báo cáo mọi mẫu).',
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+  });
+}
+function toggleChecklistReportViewScopeGroup() {
+  const isAll = document.getElementById('pChecklistReportViewScopeAll').checked;
+  document.getElementById('pChecklistReportViewScopeDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pChecklistReportViewScopeDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setChecklistReportViewScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pChecklistReportViewScopeDeptContainer', checklistTemplateScopeItems('REPORT'), Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm mẫu checklist để thêm vào phạm vi xem báo cáo...',
+    emptyText: 'Chưa chọn mẫu nào (tick "ALL" nếu xem báo cáo mọi mẫu).',
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+  });
+}
+function renderChecklistStoreSelfExecuteScopeCheckboxes() {
+  renderMultiSelectDropdown('pChecklistStoreSelfExecuteScopeDeptContainer', checklistTemplateScopeItems('SELF'), [], {
+    placeholder: '🔍 Tìm mẫu checklist để giới hạn Tự Đánh Giá...',
+    emptyText: 'Chưa chọn mẫu nào (tick "ALL" nếu Tự Đánh Giá được mọi mẫu).',
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+  });
+}
+function toggleChecklistStoreSelfExecuteScopeGroup() {
+  const isAll = document.getElementById('pChecklistStoreSelfExecuteScopeAll').checked;
+  document.getElementById('pChecklistStoreSelfExecuteScopeDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pChecklistStoreSelfExecuteScopeDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setChecklistStoreSelfExecuteScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pChecklistStoreSelfExecuteScopeDeptContainer', checklistTemplateScopeItems('SELF'), Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm mẫu checklist để giới hạn Tự Đánh Giá...',
+    emptyText: 'Chưa chọn mẫu nào (tick "ALL" nếu Tự Đánh Giá được mọi mẫu).',
     chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
   });
 }

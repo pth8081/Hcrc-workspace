@@ -1,8 +1,54 @@
 # Phiên bản hiện tại
 
-**24.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.13 (2026-09-24): Checklist — phạm vi THEO MẪU cho quyền Xem Báo Cáo/Tự Đánh Giá
+
+Yêu cầu người dùng: 2 quyền phẳng "📊 Xem Báo Cáo Checklist" và "✅ Đánh Giá
+Checklist (Tự Đánh Giá)" trước đây là toàn-hoặc-không (có quyền = thấy/làm
+được MỌI mẫu checklist) — thêm 1 bộ lọc droplist + tìm-kiếm + đa lựa chọn gắn
+kèm 2 quyền này, lọc từ danh sách mẫu checklist (cả 2 loại QA/Trừ Điểm), cho
+phép admin giới hạn xuống đúng những mẫu cụ thể một người được xem báo cáo/
+được tự đánh giá.
+
+- **`checklistReportViewScope`/`checklistStoreSelfExecuteScope`** ({all,
+  depts} — TÁI DÙNG tên field `depts` dù chứa TEMPLATE ID dạng chuỗi, để
+  `mergeGroupsBasePerms()`/`mergeGroupsBasePermsServer()` tự union đúng theo
+  cơ chế field-name có sẵn, cùng lý do `checklistAuditScope` dùng tên này
+  cho danh sách siêu thị). 2 cờ phẳng cũ (`checklistReportView`/
+  `checklistStoreSelfExecute`) GIỮ NGUYÊN vai trò "công tắc chính" — Scope
+  chỉ có ý nghĩa khi công tắc chính đang bật.
+- **Không regression cho tài khoản cũ**: tài khoản/nhóm CHƯA từng được lưu
+  qua UI mới (chỉ có cờ phẳng, không có field Scope) mặc định coi là
+  `{all:true}` — hành vi giữ nguyên y hệt trước đây. UI (Sửa Người Dùng/Sửa
+  Nhóm Phân Quyền) cũng tự hiện "ALL" đã tick cho trường hợp này, để 1 lượt
+  lưu KHÔNG đụng tới 2 khối này không vô tình khoá quyền đang có.
+- Thực thi ở CẢ hiển thị (recordViewScope.js — báo cáo/danh sách mẫu Tự Đánh
+  Giá trên màn hình tự lọc đúng phạm vi qua `GET /api/data` đã lọc sẵn) LẪN
+  server-side cho mọi route liên quan: `POST /api/checklist/export-report`,
+  `POST /api/checklist/vsattp-dashboard/export` (chỉ gộp mẫu DEDUCTION
+  trong phạm vi), `POST /api/checklist/submissions/start` (chặn bắt đầu mẫu
+  STORE_SELF ngoài phạm vi Tự Đánh Giá dù đã có quyền chung), và cả khi xem
+  chéo qua "📊 Báo Cáo" tổng hợp (`filterChecklistSubmissionsForReportCrossView`)
+  — tránh lỗ hổng vòng qua Báo Cáo tổng hợp để thấy MỌI mẫu.
+- UI: 2 widget tìm-kiếm-gõ-chọn (chip + ô tìm) đặt trong khối "23. Checklist
+  Đánh Giá Siêu Thị" của cây Phân Quyền — widget "Xem Báo Cáo" liệt kê MỌI
+  mẫu (cả 2 loại), widget "Tự Đánh Giá" CHỈ liệt kê mẫu `templateType===
+  'STORE_SELF'` (theo xác nhận người dùng, tránh chọn nhầm mẫu Kiểm Soát
+  không áp dụng được). Ma Trận Phân Quyền Excel thêm 2 cột `.all` tương ứng
+  (phần chọn mẫu cụ thể vẫn phải sửa tay ở UI, cùng quy ước các trường mảng
+  khác không đưa vào Excel).
+
+Test: `test-checklist-report-selfexecute-templatescope.js` (14/14 — unit
+scope theo mẫu + route export-report/vsattp-dashboard-export/submissions-
+start chặn đúng mẫu ngoài phạm vi + legacy fallback), `test-perm-tree-
+checklist-template-scope.js` (27/27 — widget UI, round-trip populatePermsForm/
+collectPermsFromForm, mặc định "ALL" cho tài khoản cũ, badge đếm đúng). Toàn
+bộ regression Checklist/Phân Quyền/Ma Trận Phân Quyền hiện có chạy lại xanh
+(1 lỗi `test-checklist-export.js` xác nhận có từ TRƯỚC đợt này, không liên
+quan).
 
 ## v24.12 (2026-09-24): Hướng Dẫn Nghiệp Vụ — nhóm "Bắt Đầu Sử Dụng" lên đầu
 

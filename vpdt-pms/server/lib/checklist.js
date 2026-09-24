@@ -88,6 +88,36 @@ function canAuditStore(user, storeCode) {
 function isEligibleForStoreSelf(user) {
   return !!(user && user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
 }
+// ===== Phạm vi theo MẪU checklist cho 2 quyền phẳng ở trên (10/2026, yêu cầu người dùng) =====
+// checklistReportViewScope/checklistStoreSelfExecuteScope {all,depts} — TÁI DÙNG tên field 'depts' dù
+// chứa ID MẪU CHECKLIST (không phải tên phòng ban/siêu thị) để mergeGroupsBasePerms()/
+// mergeGroupsBasePermsServer() tự union đúng theo cơ chế field-name 'depts' đã có sẵn — CÙNG lý do
+// checklistAuditScope ở trên dùng tên này cho danh sách siêu thị (2 hàm đó hardcode nhận diện theo TÊN
+// field, không theo ý nghĩa). Giá trị trong depts[] là templateId ÉP CHUỖI (widget
+// renderMultiSelectDropdown() ở client luôn lưu value dạng chuỗi) — luôn so sánh qua String().
+// LEGACY: tài khoản CHƯA từng được lưu qua UI mới (chỉ có field boolean checklistReportView/
+// checklistStoreSelfExecute cũ, chưa có field Scope) mặc định coi là {all:true} — GIỮ NGUYÊN hành vi cũ
+// (thấy hết mọi mẫu), không có regression âm thầm nào. Chỉ khi admin re-save qua UI mới (luôn ghi field
+// Scope) thì mới thực sự bị giới hạn theo đúng lựa chọn.
+function getChecklistReportViewScope(user) {
+  if (user?.perms?.admin || canManageChecklistTemplates(user)) return { all: true, depts: [] };
+  if (!canViewChecklistReports(user)) return { all: false, depts: [] };
+  return user?.perms?.checklistReportViewScope || { all: true, depts: [] };
+}
+function canViewChecklistReportForTemplate(user, templateId) {
+  const scope = getChecklistReportViewScope(user);
+  if (scope.all) return true;
+  return (scope.depts || []).map(String).includes(String(templateId));
+}
+function getChecklistStoreSelfExecuteScope(user) {
+  if (!isEligibleForStoreSelf(user)) return { all: false, depts: [] };
+  return user?.perms?.checklistStoreSelfExecuteScope || { all: true, depts: [] };
+}
+function canStoreSelfExecuteTemplate(user, templateId) {
+  const scope = getChecklistStoreSelfExecuteScope(user);
+  if (scope.all) return true;
+  return (scope.depts || []).map(String).includes(String(templateId));
+}
 function canAccessChecklistModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -300,6 +330,11 @@ function resolveStoreCodeForSubmission(template, user, requestedStoreCode, valid
         throw new HttpError(403, 'Bạn chưa được cấp quyền "Đánh Giá Checklist" — liên hệ admin để được cấp quyền tự đánh giá checklist siêu thị.');
       }
       throw new HttpError(400, 'Vị trí hiện tại của bạn không gắn với siêu thị nào — liên hệ HR để kiểm tra Cơ Cấu Tổ Chức (Vị Trí Làm Việc)');
+    }
+    // 10/2026: phạm vi theo MẪU (checklistStoreSelfExecuteScope) — có quyền "Đánh Giá Checklist" nói
+    // chung KHÔNG có nghĩa được làm MỌI mẫu, nếu admin đã giới hạn xuống 1 số mẫu cụ thể.
+    if (!canStoreSelfExecuteTemplate(user, template.id)) {
+      throw new HttpError(403, 'Bạn chưa được cấp quyền tự đánh giá đúng mẫu checklist này — liên hệ admin để mở rộng phạm vi.');
     }
     // user.dept của người dùng THẬT (không phải admin test) luôn tin được — không đối chiếu lại danh mục
     // ở đây (đúng khuôn mọi nơi khác trong hệ thống tin user.dept đã gắn qua Cơ Cấu Tổ Chức).
@@ -587,6 +622,8 @@ module.exports = {
   TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES, SCORING_MODES, TEMPLATE_KINDS,
   canManageChecklistTemplates, canViewChecklistReports, getChecklistAuditStores, hasChecklistAuditScope,
   canAuditStore, isEligibleForStoreSelf, canAccessChecklistModule,
+  getChecklistReportViewScope, canViewChecklistReportForTemplate,
+  getChecklistStoreSelfExecuteScope, canStoreSelfExecuteTemplate,
   validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields,
   resolveStoreCodeForSubmission, sanitizeChecklistAnswers, sanitizeChecklistDeductions, computeVisibleQuestions,
   computeChecklistScoring, computeDeductionScoring, assertReadyToFinalize,

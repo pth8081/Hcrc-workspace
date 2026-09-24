@@ -2829,7 +2829,15 @@ Báo Cáo tổng hợp không lặp lại phần này.
 - `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist
   (tab Cấu Hình).
 - `checklistReportView` — xem tab Báo Cáo (thống kê + xuất Excel) của module
-  này.
+  này. **Từ 10/2026**: đi kèm 1 widget tìm-kiếm-gõ-chọn `checklistReportViewScope`
+  ({all, depts} — field `depts` chứa TEMPLATE ID chứ không phải tên phòng
+  ban, cùng lý do tái dùng tên field như `checklistAuditScope` bên dưới) —
+  admin có thể giới hạn xuống đúng những MẪU CHECKLIST cụ thể (cả 2 loại QA/
+  Trừ Điểm) mà người này được xem báo cáo, thay vì mặc định thấy hết mọi mẫu.
+  Không tick "ALL" và không chọn mẫu nào = không xem được báo cáo nào dù
+  `checklistReportView` vẫn bật. Áp dụng nhất quán ở cả màn hình lẫn 2 route
+  xuất Excel (`export-report`/`vsattp-dashboard/export`) và cả khi xem chéo
+  qua màn **📊 Báo Cáo** tổng hợp.
 - **`checklistStoreSelfExecute`** (9/2026, theo yêu cầu người dùng) — gác việc
   **LÀM** checklist "Tự Đánh Giá" (STORE_SELF, dạng câu hỏi). TRƯỚC ĐÂY tự
   động cho phép MỌI tài khoản đang ở Vị Trí Siêu Thị (posType='STORE'); từ
@@ -2839,10 +2847,17 @@ Báo Cáo tổng hợp không lặp lại phần này.
   quyền checklist nào khác). Vẫn cần posType='STORE' + có Vị Trí Siêu Thị
   hợp lệ mới đủ điều kiện (quyền này là điều kiện THÊM VÀO, không thay thế
   yêu cầu về Vị Trí) — storeCode vẫn LUÔN suy từ `user.dept`, không đổi.
+  **Từ 10/2026**: cùng khuôn `checklistReportViewScope` ở trên — widget
+  `checklistStoreSelfExecuteScope` CHỈ liệt kê mẫu `templateType==='STORE_SELF'`
+  (đúng loại mẫu quyền này thật sự dùng tới), cho phép giới hạn xuống đúng
+  vài mẫu Tự Đánh Giá cụ thể thay vì làm được mọi mẫu.
   **Deploy-impact quan trọng**: quyền mới mặc định `false` cho MỌI tài khoản
   hiện có — sau khi deploy, toàn bộ nhân viên siêu thị đang tự đánh giá hàng
   ngày sẽ MẤT quyền vào tab cho tới khi admin cấp lại quyền này (từng người
-  hoặc qua Nhóm Phân Quyền).
+  hoặc qua Nhóm Phân Quyền). Riêng 2 field Scope (10/2026) KHÔNG có deploy-
+  impact — tài khoản cũ chưa từng lưu qua UI mới tự động coi như "ALL" (thấy/
+  làm được mọi mẫu như hành vi trước đây), chỉ bị giới hạn thật khi admin chủ
+  động bỏ tick "ALL" và chọn mẫu cụ thể.
 - `checklistAuditScope` — phạm vi **siêu thị được phân công kiểm soát**
   (dạng `{all, depts}` — field tên là `depts` dù chứa danh sách SIÊU THỊ,
   không phải phòng ban, để tái dùng cơ chế merge phẳng theo nhóm quyền có sẵn

@@ -259,6 +259,10 @@ function collectPermsFromForm() {
     checklistReportView: document.getElementById('pChecklistReportView').checked,
     checklistStoreSelfExecute: document.getElementById('pChecklistStoreSelfExecute').checked,
     checklistAuditScope: scopeFromMultiSelectDropdown('pChecklistAuditScopeAll', 'pChecklistAuditScopeDeptContainer'),
+    // checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026) — phạm vi MẪU checklist, xem
+    // chú thích đầy đủ ở populatePermsForm()/lib/checklist.js::getChecklistReportViewScope().
+    checklistReportViewScope: scopeFromMultiSelectDropdown('pChecklistReportViewScopeAll', 'pChecklistReportViewScopeDeptContainer'),
+    checklistStoreSelfExecuteScope: scopeFromMultiSelectDropdown('pChecklistStoreSelfExecuteScopeAll', 'pChecklistStoreSelfExecuteScopeDeptContainer'),
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
@@ -367,6 +371,18 @@ function populatePermsForm(permsInput) {
   document.getElementById('pChecklistStoreSelfExecute').checked = !!perms.checklistStoreSelfExecute;
   document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;
   setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
+  // checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026) — LEGACY: tài khoản CHƯA từng
+  // được lưu qua UI mới (field Scope hoàn toàn vắng mặt) phải mặc định hiện "ALL" ĐÚNG BẰNG giá trị cờ
+  // phẳng cũ (checklistReportView/checklistStoreSelfExecute) — nếu không, admin mở form 1 user cũ rồi
+  // lưu lại (dù không đụng gì tới 2 khối này) sẽ VÔ TÌNH ghi đè thành {all:false, depts:[]} (khoá hẳn
+  // quyền đang có), vì collectPermsFromForm() bên dưới luôn xuất ra object Scope đầy đủ. Khi field Scope
+  // ĐÃ có (dù rỗng, tức đã từng lưu qua UI mới) thì dùng ĐÚNG giá trị đã lưu, không suy lại từ cờ cũ.
+  const reportScope = perms.checklistReportViewScope;
+  document.getElementById('pChecklistReportViewScopeAll').checked = reportScope ? !!reportScope.all : !!perms.checklistReportView;
+  setChecklistReportViewScopeCheckboxes(reportScope?.depts);
+  const selfScope = perms.checklistStoreSelfExecuteScope;
+  document.getElementById('pChecklistStoreSelfExecuteScopeAll').checked = selfScope ? !!selfScope.all : !!perms.checklistStoreSelfExecute;
+  setChecklistStoreSelfExecuteScopeCheckboxes(selfScope?.depts);
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
   document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;
@@ -448,6 +464,8 @@ function populatePermsForm(permsInput) {
   });
   toggleOperationOrderReceiptScopeGroup();
   toggleChecklistAuditScopeGroup();
+  toggleChecklistReportViewScopeGroup();
+  toggleChecklistStoreSelfExecuteScopeGroup();
 
   refreshPermTreeBadges();
   clearPermTreeDirtyMarks();

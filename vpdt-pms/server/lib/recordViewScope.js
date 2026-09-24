@@ -11,7 +11,7 @@
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3, workItemAssignees, isWorkItemAssignee } = require('./recordActions');
 const { HttpError } = require('./httpErrors');
-const { canManageChecklistTemplates, canViewChecklistReports, hasChecklistAuditScope, isEligibleForStoreSelf } = require('./checklist');
+const { canManageChecklistTemplates, canViewChecklistReports, canViewChecklistReportForTemplate, hasChecklistAuditScope, canStoreSelfExecuteTemplate } = require('./checklist');
 const { canManageVendors, canManageTerms, canActivateTerm, canViewReport: canViewRebateReport } = require('./vendorRebate');
 
 // Khớp canManageVpp() ở public/index.html.
@@ -1108,9 +1108,13 @@ function filterPayslipsForUser(items, user) {
 // CONTROL_AUDIT nếu có checklistAuditScope) — không thấy template đang soạn (DRAFT) hay của loại khác.
 function canViewChecklistTemplate(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return true;
+  if (user.perms?.admin || canManageChecklistTemplates(user)) return true;
+  // 10/2026: checklistReportView giờ có phạm vi theo MẪU (checklistReportViewScope) — người xem báo cáo
+  // chỉ thấy đúng những mẫu trong phạm vi được cấp, không còn mặc nhiên thấy MỌI mẫu (xem
+  // lib/checklist.js::canViewChecklistReportForTemplate()).
+  if (canViewChecklistReportForTemplate(user, item.id)) return true;
   if (item.status === 'ACTIVE') {
-    if (item.templateType === 'STORE_SELF') return isEligibleForStoreSelf(user);
+    if (item.templateType === 'STORE_SELF') return canStoreSelfExecuteTemplate(user, item.id);
     if (item.templateType === 'CONTROL_AUDIT') return hasChecklistAuditScope(user);
     return false;
   }
@@ -1130,7 +1134,8 @@ function filterChecklistTemplatesForUser(items, user, appData) {
 // CONTROL_AUDIT làm tại siêu thị họ, dù người thực hiện là kiểm soát viên khác).
 function canViewChecklistSubmission(user, item) {
   if (!user) return false;
-  if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return true;
+  if (user.perms?.admin || canManageChecklistTemplates(user)) return true;
+  if (canViewChecklistReportForTemplate(user, item.templateId)) return true;
   if (item.submittedByUsername === user.username) return true;
   return !!(item.status !== 'DRAFT' && user.posType === 'STORE' && item.storeCode === user.dept);
 }
@@ -1148,8 +1153,13 @@ function filterChecklistSubmissionsForUser(items, user) {
 // nguyên bản ở trên), nên quyền xem chéo này không rò rỉ sang bất kỳ màn nào khác ngoài Báo Cáo.
 function filterChecklistSubmissionsForReportCrossView(items, user) {
   if (!user) return [];
-  if (user.perms?.admin || canManageChecklistTemplates(user) || canViewChecklistReports(user)) return items || [];
+  if (user.perms?.admin || canManageChecklistTemplates(user)) return items || [];
   if (user.perms?.reportViewAll || (user.reportExtraKeys || []).includes('checklist')) return items || [];
+  // 10/2026: checklistReportView có phạm vi theo MẪU — áp dụng CHÍNH XÁC cùng 1 phạm vi đó khi người này
+  // xem chéo qua màn "📊 Báo Cáo" tổng hợp, tránh lỗ hổng "đủ quyền xem 2 mẫu ở module gốc nhưng lại
+  // thấy MỌI mẫu khi vào qua Báo Cáo tổng hợp" chỉ vì canViewChecklistReports(user) trước đây là bypass
+  // toàn phần không phân biệt mẫu.
+  if (canViewChecklistReports(user)) return (items || []).filter(s => canViewChecklistReportForTemplate(user, s.templateId));
   return filterChecklistSubmissionsForUser(items, user);
 }
 

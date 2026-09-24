@@ -1781,16 +1781,34 @@
           </summary>
           <div class="p-3 pt-0 space-y-2">
             <p class="text-[11px] text-gray-500 italic">Module TOP-LEVEL riêng (xem lib/checklist.js), phân quyền PHẲNG — KHÔNG theo phòng ban. Nhân viên siêu thị (posType Siêu Thị) PHẢI được tick "Đánh Giá Checklist (Tự Đánh Giá)" bên dưới mới vào được tab checklist "Tự Đánh Giá" (STORE_SELF) của đúng siêu thị mình — không tự động nữa. "Phạm Vi Kiểm Soát" bên dưới CHỈ áp dụng cho checklist "Kiểm Soát" (CONTROL_AUDIT) — kiểm soát viên/khu vực chọn siêu thị mình được phân công đi kiểm tra.</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pChecklistTemplateManage"> 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)
-              </label>
-              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pChecklistReportView"> 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)
-              </label>
-              <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pChecklistStoreSelfExecute"> ✅ Đánh Giá Checklist (Tự Đánh Giá — chỉ dạng câu hỏi, đúng siêu thị đang gán)
-              </label>
+            <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pChecklistTemplateManage"> 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)
+            </label>
+            <!-- checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026, yêu cầu người dùng):
+                 phạm vi theo MẪU checklist (cả 2 loại QA/Trừ Điểm) gắn kèm 2 quyền dưới đây — cùng khuôn
+                 widget tìm-kiếm-gõ-chọn như "Phạm Vi Kiểm Soát" bên dưới, chỉ đổi nguồn dữ liệu sang mẫu
+                 checklist (xem checklistTemplateScopeItems() ở module-admin.js). -->
+            <div class="border rounded p-2 bg-rose-50/40 space-y-1">
+              <div class="flex justify-between items-center flex-wrap gap-1">
+                <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                  <input type="checkbox" id="pChecklistReportView"> 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)
+                </label>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pChecklistReportViewScopeAll" data-op-change="toggleChecklistReportViewScopeGroup"><span>ALL (mọi mẫu)</span>
+                </label>
+              </div>
+              <div id="pChecklistReportViewScopeDeptContainer" class="pl-1"></div>
+            </div>
+            <div class="border rounded p-2 bg-rose-50/40 space-y-1">
+              <div class="flex justify-between items-center flex-wrap gap-1">
+                <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                  <input type="checkbox" id="pChecklistStoreSelfExecute"> ✅ Đánh Giá Checklist (Tự Đánh Giá — chỉ dạng câu hỏi, đúng siêu thị đang gán)
+                </label>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pChecklistStoreSelfExecuteScopeAll" data-op-change="toggleChecklistStoreSelfExecuteScopeGroup"><span>ALL (mọi mẫu)</span>
+                </label>
+              </div>
+              <div id="pChecklistStoreSelfExecuteScopeDeptContainer" class="pl-1"></div>
             </div>
             <div>
               <div class="flex justify-between items-center mb-1">

@@ -450,6 +450,11 @@ router.post('/export-report', requireReportView, async (req, res) => {
     const templates = await getAllForCollection('checklistTemplates');
     const template = templates.find(t => t.id === templateId);
     if (!template) return res.status(404).json({ error: 'Không tìm thấy checklist' });
+    // 10/2026: checklistReportView có phạm vi theo MẪU — requireReportView chỉ xác nhận CÓ quyền xem báo
+    // cáo nói chung, còn phải đối chiếu riêng mẫu này có nằm trong phạm vi hay không.
+    if (!checklist.canViewChecklistReportForTemplate(req.freshUser, templateId)) {
+      return res.status(403).json({ error: 'Bạn không có quyền xem báo cáo của đúng mẫu checklist này' });
+    }
 
     const rawStoreCodes = Array.isArray(req.body?.storeCodes) ? req.body.storeCodes.map(s => String(s).trim()).filter(Boolean) : [];
     const storeFilter = rawStoreCodes.length ? new Set(rawStoreCodes) : null; // null = không lọc siêu thị (tất cả)
@@ -509,7 +514,11 @@ router.post('/vsattp-dashboard/export', requireReportView, async (req, res) => {
       getAllForCollection('checklistSubmissions'),
       getAppDataValueCached('storeTypes')
     ]);
-    const deductionTemplateIds = new Set(templates.filter(checklist.isDeductionTemplate).map(t => t.id));
+    // 10/2026: checklistReportView có phạm vi theo MẪU — chỉ gộp vào Dashboard/file xuất những mẫu
+    // DEDUCTION nằm trong phạm vi report-view của người gọi (scope.all hoặc có mặt trong danh sách chọn).
+    const deductionTemplateIds = new Set(templates
+      .filter(t => checklist.isDeductionTemplate(t) && checklist.canViewChecklistReportForTemplate(req.freshUser, t.id))
+      .map(t => t.id));
     const matched = allSubmissions.filter(s => {
       if (s.status !== 'SUBMITTED' || !deductionTemplateIds.has(s.templateId)) return false;
       if (storeFilter && !storeFilter.has(s.storeCode)) return false;

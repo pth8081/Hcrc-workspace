@@ -3249,10 +3249,20 @@ function defaultNewUserPerms() {
     // soát cho loại CONTROL_AUDIT — dùng TÊN 'depts' dù chứa mã siêu thị, để mergeGroupsBasePerms() tự
     // union đúng theo cơ chế field-name 'depts' đã có sẵn, xem mergeGroupsBasePerms() bên dưới).
     checklistTemplateManage: false, checklistReportView: false, checklistAuditScope: emptyScope(),
+    // checklistReportViewScope {all,depts} (10/2026, yêu cầu người dùng): phạm vi MẪU checklist áp dụng
+    // cho checklistReportView ở trên — TÁI DÙNG field 'depts' (chứa TEMPLATE ID dạng chuỗi, không phải
+    // tên phòng ban) để mergeGroupsBasePerms() tự union đúng theo cơ chế field-name 'depts' đã có sẵn,
+    // CÙNG lý do checklistAuditScope dùng tên này cho danh sách siêu thị. Xem
+    // lib/checklist.js::getChecklistReportViewScope() cho phần fallback {all:true} khi tài khoản CHƯA
+    // từng được lưu qua UI mới (không có regression cho tài khoản cũ).
+    checklistReportViewScope: emptyScope(),
     // checklistStoreSelfExecute (9/2026, yêu cầu người dùng): gác việc LÀM checklist "Tự Đánh Giá"
     // (STORE_SELF, dạng câu hỏi) — admin phải tự cấp cho từng người (VD chỉ GĐST/CHT), không còn tự động
     // cho MỌI người ở Vị Trí Siêu Thị như trước — xem isEligibleForStoreSelf() ở lib/checklist.js.
     checklistStoreSelfExecute: false,
+    // checklistStoreSelfExecuteScope {all,depts} (10/2026) — CÙNG khuôn checklistReportViewScope ở trên,
+    // nhưng áp dụng cho quyền Tự Đánh Giá (chỉ hiện mẫu STORE_SELF cho phép Tự Đánh Giá ở ô chọn client).
+    checklistStoreSelfExecuteScope: emptyScope(),
     // Mua Hàng > BAS (module TOP-LEVEL mới, v23.30, xem lib/vendorRebate.js) — phân quyền PHẲNG, TÁCH
     // BIỆT NHIỆM VỤ rõ ràng (mục 8 tài liệu): người tạo/sửa Điều Khoản (rebateTermManage) KHÔNG tự động
     // kích hoạt được (rebateTermActivate riêng) — liên quan trực tiếp số tiền chiết khấu lớn với NCC.
