@@ -651,6 +651,20 @@
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <!-- Khối/Ban (10/2026, yêu cầu người dùng) — nhóm CHA của Phòng Ban, đặt NGAY TRƯỚC khối Phòng Ban
+           để phản ánh đúng quan hệ cha-con. Mỗi Khối/Ban gán 1 hoặc nhiều Phòng Ban con (xem
+           renderDeptGroupList()/saveDeptGroupChildren() ở module-admin.js) — dùng lọc ô "Phòng Ban" ở
+           form Người Dùng và ở Phân Quyền phía trên. Span 2 cột (cần chỗ cho widget gán Phòng Ban con). -->
+      <div class="bg-purple-50 p-4 rounded border border-purple-200 space-y-3 md:col-span-2">
+        <h3 class="font-bold text-purple-900 text-sm flex items-center gap-1">🗂️ Quản Lý Danh Mục Khối/Ban</h3>
+        <p class="text-[11px] text-purple-700">Mỗi Khối/Ban gán 1 hoặc nhiều Phòng Ban con (Danh Mục Phòng Ban ngay bên cạnh) — dùng để LỌC ô "Phòng Ban" khi tạo Người Dùng và khi cấu hình Phạm Vi Phòng Ban ở Phân Quyền. Không gán Khối/Ban nào vẫn hoạt động bình thường (cả 2 ô đều để trống được).</p>
+        <form data-op-submit="saveDeptGroup" class="flex gap-2">
+          <input id="txtDeptGroupName" placeholder="Tên Khối/Ban mới (VD: Khối Kinh Doanh)..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Thêm</button>
+        </form>
+        <div id="deptGroupListWrap" class="max-h-72 overflow-y-auto space-y-2"></div>
+      </div>
+
       <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
         <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
         <form data-op-submit="saveDept" class="flex gap-2">
@@ -903,7 +917,16 @@
       <div>
         <h3 class="font-bold text-base text-gray-800">Cấu hình Quyền Hạn, Email, Số Điện Thoại & Phạm Vi Truy Cập Theo Phòng Ban</h3>
       </div>
-      
+
+      <!-- Khối/Ban → lọc Phòng Ban (10/2026, yêu cầu người dùng) — DÙNG CHUNG cho cả 6 bảng chọn Phòng
+           Ban bên dưới (Tài Liệu/Trình/Hợp Đồng/Họp/Xe/Văn Phòng): chọn 1 Khối/Ban sẽ CHỈ hiện các dòng
+           Phòng Ban con đã gán ở Quản Lý Danh Mục, không đổi lựa chọn tick sẵn (chỉ ẩn/hiện dòng, xem
+           filterPermDeptTablesByKhoiBan() ở module-admin.js). Để trống = hiện lại toàn bộ như trước. -->
+      <div class="bg-white p-2.5 rounded border flex items-center gap-2 flex-wrap">
+        <label class="text-xs font-semibold text-gray-600 whitespace-nowrap">🗂️ Lọc bảng Phòng Ban bên dưới theo Khối/Ban:</label>
+        <select id="permDeptKhoiBanFilter" data-op-change="filterPermDeptTablesByKhoiBan" class="border p-1.5 rounded text-xs bg-white"></select>
+      </div>
+
       <form data-op-submit="saveUser" class="space-y-4">
         <input id="editUserId" type="hidden">
 
@@ -934,6 +957,14 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Số điện thoại</label>
             <input id="uPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
           </div>
+          <!-- Khối/Ban (10/2026, yêu cầu người dùng) — nhóm CHA của Phòng Ban, ĐẶT TRƯỚC ô Phòng Ban.
+               Chọn 1 Khối/Ban sẽ lọc ô Phòng Ban ngay cạnh chỉ còn đúng Phòng Ban con đã gán ở Quản Lý
+               Danh Mục (xem onUserKhoiBanChange()/populateUserDeptOptions() ở core.js) — CẢ 2 ô đều để
+               trống được, để trống Khối/Ban thì Phòng Ban hiện lại đầy đủ như trước. -->
+          <div id="uKhoiBanFieldWrap">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Khối/Ban</label>
+            <select id="uKhoiBan" data-op-change="onUserKhoiBanChange" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+          </div>
           <div id="uDeptFieldWrap">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
             <select id="uDept" class="w-full border p-1.5 rounded text-xs"></select>
@@ -962,6 +993,10 @@
                  binh cho nhân viên chưa có ngày này (server báo lỗi rõ ràng). -->
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
             <input id="uStartDate" type="date" class="w-full border p-1.5 rounded text-xs">
+            <!-- Gợi ý tự động từ Onboarding (10/2026) — khớp theo Email/Họ Tên đã điền ở trên, tránh gõ
+                 lại tay lần 2 nếu HR đã có sẵn ngày này ở quy trình Onboarding (DB.hrProcesses). Chỉ GỢI
+                 Ý (điền vào ô, admin vẫn tự xác nhận/sửa lại được), không tự khoá/ép giá trị. -->
+            <button type="button" data-op="suggestStartDateFromOnboarding" class="mt-1 text-[10.5px] text-blue-600 font-semibold hover:underline">📋 Lấy từ Onboarding</button>
           </div>
         </div>
 

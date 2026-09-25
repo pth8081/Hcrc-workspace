@@ -154,6 +154,12 @@ async function scenario(name, fn) {
     // mất field này giữa chừng — các scenario sau (k)(l)(m2) tự re-seed lại nếu cần.
     DB.positionTypes = [{ key: 'HO', label: 'HO (Văn phòng)', builtin: true }, { key: 'STORE', label: 'Siêu Thị', builtin: true }];
     DB.deptAbbrs = {};
+    // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, xem populateUserKhoiBanOptions()/
+    // populateUserDeptOptions() (core.js), saveDeptGroup()/renderDeptGroupList() (module-admin.js).
+    DB.deptGroups = [];
+    // hrProcesses (Onboarding) — nguồn gợi ý "Ngày Vào Làm Việc" (suggestStartDateFromOnboarding(),
+    // module-admin-submissiongroups.js), rỗng mặc định — các scenario liên quan tự seed thêm nếu cần.
+    DB.hrProcesses = [];
     DB.cats = [];
     DB.jobTitles = ['Nhân viên', 'Trưởng phòng'];
     DB.submissionTypes = []; DB.contractTypes = []; DB.carTypes = [];
@@ -328,20 +334,24 @@ async function scenario(name, fn) {
       await saveUser({ preventDefault() {} });
       const storeUser = DB.users.find(u => u.username === 'nv.store');
 
-      // Toggle back to HO and check the opposite validation message with an empty uDept.
+      // Toggle back to HO with an empty uDept — Khối/Ban (10/2026) đã nới lỏng: Phòng Ban giờ ĐƯỢC PHÉP
+      // để trống ở Vị Trí HO (xem scenario (r) — kiểm tra sâu hơn ngay dưới), khác hẳn Siêu Thị vẫn bắt
+      // buộc như cũ. uDept giờ có sẵn <option value=""> đầu tiên (populateUserDeptOptions(), core.js)
+      // nên gán '' chọn ĐÚNG option đó (không còn rơi vào selectedIndex -1 như uStore ở trên).
       resetUserForm();
       document.getElementById('uUsername').value = 'nv.ho';
       document.getElementById('uPassword').value = 'Passw0rd!23';
       document.getElementById('uFullName').value = 'Nhân Viên Văn Phòng';
       document.getElementById('uEmail').value = 'ho@hcrc.local';
       document.getElementById('uPhone').value = '0933333333';
-      document.getElementById('uDept').value = ''; // no matching <option value=""> -> selectedIndex -1
+      document.getElementById('uDept').value = '';
       window.__alerts.length = 0;
-      const usersBeforeBadHo = DB.users.length;
+      const usersBeforeEmptyHo = DB.users.length;
       await saveUser({ preventDefault() {} });
-      const badHoResult = { alerts: window.__alerts.slice(), usersUnchanged: DB.users.length === usersBeforeBadHo };
+      const emptyHoUser = DB.users.find(u => u.username === 'nv.ho');
+      const emptyHoResult = { alerts: window.__alerts.slice(), usersGrew: DB.users.length === usersBeforeEmptyHo + 1, dept: emptyHoUser ? emptyHoUser.dept : undefined };
 
-      return { defaultState, afterStoreToggle, badStoreResult, storeUser: storeUser ? { dept: storeUser.dept, posType: storeUser.posType } : null, badHoResult };
+      return { defaultState, afterStoreToggle, badStoreResult, storeUser: storeUser ? { dept: storeUser.dept, posType: storeUser.posType } : null, emptyHoResult };
     });
     record('(c) new-user form defaults to Vị Trí=HO with the Phòng Ban field shown (Siêu Thị hidden)',
       r.defaultState.posType === 'HO' && r.defaultState.deptWrapHidden === false && r.defaultState.storeWrapHidden === true,
@@ -355,9 +365,9 @@ async function scenario(name, fn) {
     record('(c) once a Siêu Thị is chosen, the user saves with dept = the selected store name',
       !!r.storeUser && r.storeUser.dept === 'Siêu Thị Quận 1' && r.storeUser.posType === 'STORE',
       JSON.stringify(r.storeUser));
-    record('(c) saving with Vị Trí=HO but no Phòng Ban chosen is rejected with the dept-specific message',
-      r.badHoResult.alerts.length === 1 && /Vui lòng chọn Phòng Ban/.test(r.badHoResult.alerts[0]) && r.badHoResult.usersUnchanged,
-      JSON.stringify(r.badHoResult));
+    record('(c) [10/2026, Khối/Ban] saving with Vị Trí=HO and NO Phòng Ban chosen now SUCCEEDS (requirement relaxed, no longer rejected)',
+      r.emptyHoResult.usersGrew && /Đã lưu/.test(r.emptyHoResult.alerts[0] || '') && r.emptyHoResult.dept === '',
+      JSON.stringify(r.emptyHoResult));
   });
 
   // ==========================================================================
@@ -1141,6 +1151,200 @@ async function scenario(name, fn) {
       r.formHighlightedOnEdit, JSON.stringify(r));
     record('(o) saveUser() cuộn tới + chớp sáng đúng dòng vừa lưu trong bảng',
       r.rowHighlightedOnSave, JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (p)-(v): Khối/Ban (10/2026, yêu cầu người dùng "thêm cột Khối/Ban trước Phòng Ban") — danh mục MỚI
+  // (DB.deptGroups) lọc ô "Phòng Ban" ở Form Người Dùng và ở Phân Quyền, cả 2 ô đều để trống được. Cùng
+  // đợt: gợi ý "Ngày Vào Làm Việc" từ hồ sơ Onboarding (suggestStartDateFromOnboarding()).
+  // ==========================================================================
+  let khoiKinhDoanhId = null;
+
+  await scenario('(p) Khối/Ban: saveDeptGroup() tạo mới + renderDeptGroupList() hiện đúng danh sách', async () => {
+    const r = await page.evaluate(() => {
+      document.getElementById('txtDeptGroupName').value = 'Khối Kinh Doanh';
+      saveDeptGroup({ preventDefault() {} });
+      document.getElementById('txtDeptGroupName').value = 'Khối Vận Hành';
+      saveDeptGroup({ preventDefault() {} });
+      return {
+        groups: DB.deptGroups.map(g => ({ id: g.id, name: g.name, depts: g.depts })),
+        listHtmlHasBoth: document.getElementById('deptGroupListWrap').textContent.includes('Khối Kinh Doanh') &&
+          document.getElementById('deptGroupListWrap').textContent.includes('Khối Vận Hành'),
+      };
+    });
+    record('(p) saveDeptGroup() thêm đúng 2 Khối/Ban mới vào DB.deptGroups (id tự sinh, depts rỗng)',
+      r.groups.length === 2 && r.groups[0].name === 'Khối Kinh Doanh' && r.groups[1].name === 'Khối Vận Hành' &&
+      r.groups.every(g => Array.isArray(g.depts) && g.depts.length === 0 && typeof g.id === 'number'), JSON.stringify(r));
+    record('(p) renderDeptGroupList() hiện đúng cả 2 Khối/Ban vừa tạo', r.listHtmlHasBoth, JSON.stringify(r));
+    khoiKinhDoanhId = r.groups[0].id;
+  });
+
+  await scenario('(p2) Khối/Ban: gán Phòng Ban con qua widget renderMultiSelectDropdown() + nút "Lưu Phòng Ban"', async () => {
+    if (khoiKinhDoanhId == null) { record('(p2) gán Phòng Ban con', false, 'skipped: (p) did not produce a group id'); return; }
+    const r = await page.evaluate((khoiId) => {
+      // gmsAdd() = hàm thật xử lý click "thêm chip" của renderMultiSelectDropdown() (core.js) — widget
+      // đã được renderDeptGroupList() (chạy trong (p)) dựng sẵn tại #deptGroupChildren_<id>.
+      gmsAdd(`deptGroupChildren_${khoiId}`, 'Kinh Doanh');
+      saveDeptGroupChildren(khoiId);
+      return { depts: DB.deptGroups.find(x => x.id === khoiId).depts };
+    }, khoiKinhDoanhId);
+    record('(p2) saveDeptGroupChildren() lưu đúng Phòng Ban con vừa gán qua widget',
+      JSON.stringify(r.depts) === JSON.stringify(['Kinh Doanh']), JSON.stringify(r));
+  });
+
+  await scenario('(q) Form Người Dùng: chọn Khối/Ban LỌC đúng Phòng Ban con; để trống hiện đầy đủ như cũ', async () => {
+    const r = await page.evaluate((khoiId) => {
+      resetUserForm();
+      const deptOptionsBeforeAny = [...document.getElementById('uDept').options].map(o => o.value);
+      document.getElementById('uKhoiBan').value = String(khoiId);
+      onUserKhoiBanChange();
+      const deptOptionsAfterKhoi = [...document.getElementById('uDept').options].map(o => o.value);
+      document.getElementById('uKhoiBan').value = '';
+      onUserKhoiBanChange();
+      const deptOptionsAfterClear = [...document.getElementById('uDept').options].map(o => o.value);
+      return { deptOptionsBeforeAny, deptOptionsAfterKhoi, deptOptionsAfterClear };
+    }, khoiKinhDoanhId);
+    record('(q) Để trống Khối/Ban ban đầu -> Phòng Ban hiện ĐẦY ĐỦ (khớp DB.depts, có option rỗng đầu)',
+      JSON.stringify(r.deptOptionsBeforeAny) === JSON.stringify(['', 'Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc']), JSON.stringify(r));
+    record('(q) Chọn "Khối Kinh Doanh" -> Phòng Ban CHỈ còn đúng Phòng Ban con đã gán ("Kinh Doanh")',
+      JSON.stringify(r.deptOptionsAfterKhoi) === JSON.stringify(['', 'Kinh Doanh']), JSON.stringify(r));
+    record('(q) Bỏ chọn Khối/Ban -> Phòng Ban hiện lại đầy đủ như trước (không đổi hành vi cũ)',
+      JSON.stringify(r.deptOptionsAfterClear) === JSON.stringify(['', 'Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc']), JSON.stringify(r));
+  });
+
+  await scenario('(r) Cả Khối/Ban và Phòng Ban đều để trống -> saveUser() (Vị Trí HO) vẫn lưu thành công', async () => {
+    const r = await page.evaluate(async () => {
+      resetUserForm();
+      document.getElementById('uUsername').value = 'nv.blankdept';
+      document.getElementById('uPassword').value = 'Passw0rd!23';
+      document.getElementById('uFullName').value = 'Nguyễn Không Phòng Ban';
+      document.getElementById('uEmail').value = 'blankdept@hcrc.local';
+      document.getElementById('uPhone').value = '0922222222';
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault() {} });
+      const created = DB.users.find(u => u.username === 'nv.blankdept');
+      return { alerts: window.__alerts.slice(), created: created ? { dept: created.dept, khoiBan: created.khoiBan } : null };
+    });
+    record('(r) saveUser() KHÔNG chặn khi Khối/Ban+Phòng Ban để trống (Vị Trí HO) — lưu thành công',
+      !!r.created && /Đã lưu/.test(r.alerts[0] || ''), JSON.stringify(r));
+    record('(r) user.dept/user.khoiBan lưu đúng chuỗi rỗng (không phải null/undefined)',
+      !!r.created && r.created.dept === '' && r.created.khoiBan === '', JSON.stringify(r));
+  });
+
+  await scenario('(r2) Regression: Vị Trí Siêu Thị vẫn BẮT BUỘC chọn Siêu Thị (không bị nới lỏng nhầm theo (r))', async () => {
+    const r = await page.evaluate(() => {
+      resetUserForm();
+      document.getElementById('uPosType').value = 'STORE';
+      onUserPosTypeChange();
+      document.getElementById('uUsername').value = 'nv.storenodept';
+      document.getElementById('uPassword').value = 'Passw0rd!23';
+      document.getElementById('uFullName').value = 'X';
+      document.getElementById('uEmail').value = 'x@hcrc.local';
+      document.getElementById('uPhone').value = '0900000001';
+      // uStore không có <option value=""> nên gán '' -> selectedIndex -1 (mirror kỹ thuật ở scenario (c)) —
+      // KHÔNG dựa vào lựa chọn mặc định (option đầu tiên tự chọn sẵn khi populateDropdowns() đổ danh sách).
+      document.getElementById('uStore').value = '';
+      window.__alerts.length = 0;
+      const state = readUserFormState();
+      return { state, alerts: window.__alerts.slice() };
+    });
+    record('(r2) readUserFormState() vẫn trả về null (chặn) khi Siêu Thị chưa chọn giá trị nào',
+      r.state === null && /Vui lòng chọn Siêu Thị/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(s) editUser(): tick đúng Khối/Ban + GIỮ ĐÚNG Phòng Ban đã lưu dù đã bị gỡ khỏi Khối (dữ liệu lệch)', async () => {
+    const r = await page.evaluate((khoiId) => {
+      const driftUser = {
+        id: 9001, username: 'nv.drift', name: 'Nguyễn Lệch Dữ Liệu', email: 'drift@hcrc.local', phone: '0900000002',
+        posType: 'HO', dept: 'Ban Giám Đốc', khoiBan: khoiId, jobTitle: null,
+        perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null
+      };
+      DB.users.push(driftUser);
+      editUser(9001);
+      return {
+        khoiBanSelected: document.getElementById('uKhoiBan').value,
+        deptSelected: document.getElementById('uDept').value,
+        deptOptions: [...document.getElementById('uDept').options].map(o => o.value),
+      };
+    }, khoiKinhDoanhId);
+    record('(s) editUser() tick đúng Khối/Ban đã lưu', r.khoiBanSelected === String(khoiKinhDoanhId), JSON.stringify(r));
+    record('(s) editUser() GIỮ ĐÚNG Phòng Ban đã lưu dù "Ban Giám Đốc" không thuộc Khối Kinh Doanh (không mất lựa chọn)',
+      r.deptSelected === 'Ban Giám Đốc' && r.deptOptions.includes('Ban Giám Đốc'), JSON.stringify(r));
+  });
+
+  await scenario('(t) Phân Quyền: filterPermDeptTablesByKhoiBan() ẩn/hiện đúng dòng theo Khối/Ban, KHÔNG đổi trạng thái tick', async () => {
+    const r = await page.evaluate((khoiId) => {
+      renderDeptCheckboxes();
+      const idxKinhDoanh = DB.depts.indexOf('Kinh Doanh');
+      const cb = document.getElementById(`pDocDownloadDept_${idxKinhDoanh}`);
+      cb.checked = true;
+      document.getElementById('permDeptKhoiBanFilter').value = String(khoiId);
+      filterPermDeptTablesByKhoiBan();
+      const rows = [...document.querySelectorAll('#pDocDeptTableBody tr')];
+      const visibleDeptNames = rows.filter(tr => !tr.classList.contains('hidden')).map(tr => tr.querySelector('td').textContent);
+      const cbStillChecked = document.getElementById(`pDocDownloadDept_${idxKinhDoanh}`).checked;
+      document.getElementById('permDeptKhoiBanFilter').value = '';
+      filterPermDeptTablesByKhoiBan();
+      const allVisibleAfterClear = [...document.querySelectorAll('#pDocDeptTableBody tr')].every(tr => !tr.classList.contains('hidden'));
+      return { visibleDeptNames, cbStillChecked, allVisibleAfterClear };
+    }, khoiKinhDoanhId);
+    record('(t) Chọn Khối/Ban -> bảng CHỈ còn hiện đúng dòng Phòng Ban con đã gán ("Kinh Doanh")',
+      JSON.stringify(r.visibleDeptNames) === JSON.stringify(['Kinh Doanh']), JSON.stringify(r));
+    record('(t) Lọc theo Khối/Ban KHÔNG đổi trạng thái tick checkbox đã chọn trước đó (chỉ ẩn/hiện dòng bằng CSS)',
+      r.cbStillChecked === true, JSON.stringify(r));
+    record('(t) Bỏ chọn bộ lọc -> hiện lại toàn bộ dòng Phòng Ban như cũ',
+      r.allVisibleAfterClear, JSON.stringify(r));
+  });
+
+  await scenario('(u) suggestStartDateFromOnboarding(): 1 kết quả khớp Email -> tự điền + báo thành công', async () => {
+    const r = await page.evaluate(() => {
+      DB.hrProcesses = [
+        { type: 'ONBOARDING', employeeCode: 'BL001', fullName: 'Nguyễn Tân Binh', email: 'tanbinh@hcrc.local', startDate: '2026-09-01' }
+      ];
+      resetUserForm();
+      document.getElementById('uEmail').value = 'tanbinh@hcrc.local';
+      window.__alerts.length = 0;
+      suggestStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u) 1 kết quả khớp theo Email -> tự điền đúng Ngày Vào Làm Việc + báo rõ nguồn (Onboarding)',
+      r.startDateValue === '2026-09-01' && /Đã điền Ngày Vào Làm Việc/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(u2) suggestStartDateFromOnboarding(): không khớp Email/Họ Tên nào -> báo rõ, KHÔNG điền bừa', async () => {
+    const r = await page.evaluate(() => {
+      resetUserForm();
+      document.getElementById('uEmail').value = 'khongkhoptenaocahet@hcrc.local';
+      window.__alerts.length = 0;
+      suggestStartDateFromOnboarding();
+      return { startDateValue: document.getElementById('uStartDate').value, alerts: window.__alerts.slice() };
+    });
+    record('(u2) Không tìm thấy hồ sơ Onboarding khớp -> ô Ngày Vào Làm Việc vẫn trống + báo rõ lý do',
+      r.startDateValue === '' && /Không tìm thấy quy trình Onboarding/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(u3) suggestStartDateFromOnboarding(): chưa nhập Email/Họ Tên -> báo yêu cầu nhập trước khi tìm', async () => {
+    const r = await page.evaluate(() => {
+      resetUserForm();
+      window.__alerts.length = 0;
+      suggestStartDateFromOnboarding();
+      return { alerts: window.__alerts.slice() };
+    });
+    record('(u3) Chưa nhập Email/Họ Tên nào -> báo yêu cầu nhập trước khi tìm (không throw)',
+      /Vui lòng nhập Email hoặc Họ và Tên/.test(r.alerts[0] || ''), JSON.stringify(r));
+  });
+
+  await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[] đang gán (không để lại "ma")', async () => {
+    if (khoiKinhDoanhId == null) { record('(v) deleteDept() cascade vào deptGroups', false, 'skipped: no group id'); return; }
+    const r = await page.evaluate((khoiId) => {
+      const before = DB.deptGroups.find(g => g.id === khoiId).depts.slice();
+      deleteDept('Kinh Doanh');
+      const after = DB.deptGroups.find(g => g.id === khoiId).depts.slice();
+      return { before, after, deptsAfter: DB.depts.slice() };
+    }, khoiKinhDoanhId);
+    record('(v) Xoá Phòng Ban "Kinh Doanh" khỏi DB.depts thành công', !r.deptsAfter.includes('Kinh Doanh'), JSON.stringify(r));
+    record('(v) Tên Phòng Ban vừa xoá cũng bị gỡ khỏi deptGroups[].depts[] tương ứng (trước có, sau không còn "ma")',
+      r.before.includes('Kinh Doanh') && !r.after.includes('Kinh Doanh'), JSON.stringify(r));
   });
 
   await browser.close();

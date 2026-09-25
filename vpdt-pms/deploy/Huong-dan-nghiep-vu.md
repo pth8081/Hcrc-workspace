@@ -3704,6 +3704,16 @@ cột nằm ngay trên đầu cột đó (trong tiêu đề bảng) — tick ALL
 ô phòng ban trong cột tương ứng như trước, không đổi ý nghĩa/hành vi của bất
 kỳ quyền nào, chỉ đổi cách trình bày.
 
+**Lọc theo Khối/Ban (10/2026)** — ngay phía trên 6 bảng "1 dòng = 1 phòng
+ban" ở trên, có 1 ô "🗂️ Lọc bảng Phòng Ban bên dưới theo Khối/Ban" DÙNG CHUNG
+cho cả 6 bảng cùng lúc (Tài Liệu/Văn Bản Trình/Hợp Đồng & Giấy Phép/Phòng
+Họp/Đăng Ký Xe/Văn Phòng): chọn 1 Khối/Ban (đã cấu hình ở Quản Lý Danh Mục,
+mục 7.2) thì CẢ 6 bảng CHỈ còn hiện đúng các dòng Phòng Ban con đã gán vào
+Khối đó, giúp tìm nhanh khi danh sách Phòng Ban dài — **chỉ ẩn/hiện dòng
+(CSS), KHÔNG đổi trạng thái tick đã chọn sẵn** của bất kỳ ô nào (ẩn đi rồi
+hiện lại vẫn giữ nguyên tick). Để trống bộ lọc = hiện lại toàn bộ như trước,
+không đổi hành vi cũ.
+
 **Nhóm quyền (`permGroups`)** — thay vì tick tay từng quyền cho từng người,
 admin có thể tạo 1 "nhóm phân quyền" mẫu (VD "Nhân viên phòng Kế Toán") gồm 1
 bộ quyền cố định, rồi gán nhiều người dùng vào nhóm đó — nhóm đóng vai trò
@@ -3981,6 +3991,29 @@ Thị/Chức Danh phía trên, không phải ở khối này.
   Vận Hành-Đặt Hàng, Cơ Cấu Tổ Chức) — nhân sự gán 1 Vị Trí Làm Việc mới sẽ
   **KHÔNG** tự động có các tính năng này.
 
+**🗂️ Khối/Ban (10/2026, yêu cầu người dùng)** — danh mục MỚI, nhóm **CHA** của
+Phòng Ban, đặt NGAY TRƯỚC khối Phòng Ban trong màn này. Mỗi Khối/Ban gán 1
+hoặc nhiều **Phòng Ban con** (qua ô tìm-kiếm-gõ-chọn nhiều-thật + nút "💾 Lưu
+Phòng Ban") — dùng để **LỌC** ô "Phòng Ban" ở form tạo/sửa Người Dùng (mục
+7.7) và ở bảng chọn Phòng Ban của Phân Quyền (mục 7.7, khối "Cấu hình Quyền
+Hạn"): chọn 1 Khối/Ban thì ô/bảng Phòng Ban tương ứng CHỈ còn hiện đúng Phòng
+Ban con đã gán, để trống Khối/Ban thì hiện lại ĐẦY ĐỦ như trước (không đổi
+hành vi cũ). Cả "Khối/Ban" lẫn "Phòng Ban" đều **không bắt buộc** — 1 tài
+khoản Vị Trí HO vẫn lưu được dù để trống cả 2 ô này.
+
+- **Lưu theo `id` bất biến** (không theo tên) — đổi tên 1 Khối/Ban chỉ sửa
+  nhãn hiển thị, KHÔNG cần cascade sang tài khoản đã gán (khác Phòng Ban/Siêu
+  Thị vốn lưu theo chuỗi tên).
+- **Xoá 1 Phòng Ban** ở khối Phòng Ban bên cạnh cũng tự động gỡ tên đó khỏi
+  mọi Khối/Ban đang gán (không để lại "Phòng Ban ma" trong danh sách con).
+- **Xoá 1 Khối/Ban**: tài khoản/bộ lọc Phân Quyền đang chọn Khối đó tự coi
+  như "để trống" (hiện lại toàn bộ Phòng Ban) — KHÔNG mất Phòng Ban con đã
+  gán (chỉ mất liên kết nhóm), KHÔNG cần xác nhận đặc biệt nào khác ngoài hộp
+  thoại xác nhận xoá thường.
+- 1 Phòng Ban nên chỉ thuộc **1 Khối/Ban** để tránh trùng lặp khi lọc — Phòng
+  Ban chưa gán Khối nào vẫn hoạt động bình thường ở mọi nơi khác, chỉ không
+  lọc được theo Khối.
+
 ### 7.3. Biểu Mẫu
 
 **📋 Biểu Mẫu** — vai trò: cho phép admin tự tuỳ biến field của gần như mọi
@@ -4114,6 +4147,29 @@ Thao tác **Xoá toàn bộ nhật ký** cũng tự ghi lại 1 dòng "bia mộ"
 Lỗi Hệ Thống) làm dòng đầu tiên của nhật ký mới.
 
 ### 7.7. Người Dùng — tạo hàng loạt
+
+**Khối/Ban → Phòng Ban (10/2026)** — ô "Khối/Ban" MỚI trên form tạo/sửa Người
+Dùng (Vị Trí = HO), đặt NGAY TRƯỚC ô "Phòng Ban". Chọn 1 Khối/Ban (đã cấu
+hình ở Quản Lý Danh Mục, mục 7.2) sẽ lọc ô "Phòng Ban" ngay cạnh chỉ còn đúng
+các Phòng Ban con đã gán — để trống Khối/Ban thì "Phòng Ban" hiện lại đầy đủ
+như trước. **Cả 2 ô đều KHÔNG bắt buộc** (khác trước đây "Phòng Ban" là bắt
+buộc) — lưu 1 tài khoản Vị Trí HO mà không chọn Khối/Ban lẫn Phòng Ban nào
+vẫn thành công (VD nhân sự chưa xếp vào phòng ban cụ thể nào, hoặc tài khoản
+dùng chung cấp công ty). Vị Trí = Siêu Thị/Vị Trí tự thêm vẫn giữ nguyên bắt
+buộc như cũ, không bị nới lỏng theo. **Riêng "Tạo hàng loạt bằng Excel" bên
+dưới KHÔNG áp dụng thay đổi này** — cột `dept` trong file Excel vẫn bắt buộc
+khớp đúng danh mục như trước (phạm vi thay đổi chỉ ở form tạo tay từng người).
+
+**Gợi ý "Ngày Vào Làm Việc" từ Onboarding (10/2026)** — nút "📋 Lấy từ
+Onboarding" ngay dưới ô Ngày Vào Làm Việc, tìm trong các quy trình Onboarding
+đã có (Nhân Sự → Onboarding/Offboarding, mục 6) theo đúng Email/Họ Tên đã
+điền ở phần trên form, rồi tự điền sẵn ngày vào làm đã ghi nhận ở đó — tránh
+phải gõ lại tay 2 lần cùng 1 thông tin khi IT tạo tài khoản đăng nhập cho 1
+nhân viên đã có hồ sơ Onboarding từ trước (2 nơi lưu "Ngày Vào Làm Việc" này
+độc lập nhau, dễ lệch nếu không đối chiếu). Chỉ là **GỢI Ý** — điền vào ô để
+admin tự xác nhận/sửa lại, không tự khoá hay ép giá trị. Nhiều hồ sơ khớp
+cùng lúc (trùng tên) sẽ hiện danh sách rút gọn để chọn đúng người; không khớp
+hồ sơ nào thì báo rõ, không điền bừa.
 
 Ở màn **Người Dùng**, ngoài tạo từng tài khoản 1, admin có thể điền xong 1
 form rồi bấm thêm vào 1 **danh sách tạm** (chưa gửi lên server), lặp lại cho

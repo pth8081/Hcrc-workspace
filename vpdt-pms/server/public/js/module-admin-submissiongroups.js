@@ -496,6 +496,9 @@ function cancelPermFormEdit() {
 function onUserPosTypeChange() {
   const posType = document.getElementById('uPosType').value;
   document.getElementById('uDeptFieldWrap').classList.toggle('hidden', posType !== 'HO');
+  // Khối/Ban (10/2026) — chỉ có ý nghĩa khi Vị Trí = HO (lọc DANH SÁCH PHÒNG BAN ngay cạnh), ẩn cùng
+  // lúc với uDeptFieldWrap.
+  document.getElementById('uKhoiBanFieldWrap')?.classList.toggle('hidden', posType !== 'HO');
   document.getElementById('uStoreFieldWrap').classList.toggle('hidden', posType !== 'STORE');
   const customWrap = document.getElementById('uCustomLocationFieldWrap');
   const isCustom = posType !== 'HO' && posType !== 'STORE';
@@ -515,6 +518,37 @@ function onUserPosTypeChange() {
 // populateUserJobTitleOptions() CHUYỂN sang core.js (Hạ tầng: nạp module theo cụm, đợt 7) —
 // populateDropdowns() gọi thẳng hàm này ở MỌI switchTab() (không riêng gì tab Hệ Thống/Admin).
 
+// Khối/Ban (10/2026) — đổi Khối/Ban thì LỌC lại "Phòng Ban" theo đúng danh sách con đã gán ở Quản Lý
+// Danh Mục (DB.deptGroups), XOÁ lựa chọn Phòng Ban cũ (có thể không còn thuộc Khối mới chọn) — để trống
+// Khối/Ban thì Phòng Ban hiện lại ĐẦY ĐỦ như hành vi cũ (xem populateUserDeptOptions() ở core.js).
+function onUserKhoiBanChange() {
+  const khoiId = document.getElementById('uKhoiBan').value;
+  populateUserDeptOptions(khoiId, '');
+}
+
+// Gợi ý "Ngày Vào Làm Việc" từ Onboarding đã có (10/2026, theo phân tích đã xác nhận với người dùng) —
+// tránh phải gõ lại tay ngày này khi IT tạo tài khoản VPDT cho 1 nhân viên đã có quy trình Onboarding
+// (DB.hrProcesses, type ONBOARDING) — 2 field "Ngày Vào Làm Việc" này TRƯỚC ĐÂY độc lập hoàn toàn, dễ
+// lệch nhau. Chỉ GỢI Ý (điền vào ô để admin tự xác nhận/sửa lại), KHÔNG tự khoá/ép giá trị — khớp theo
+// Email/Họ Tên đã điền ở phần trên form (chưa có tài khoản nào để liên kết theo username lúc này).
+function suggestStartDateFromOnboarding() {
+  const email = document.getElementById('uEmail').value.trim().toLowerCase();
+  const name = document.getElementById('uFullName').value.trim().toLowerCase();
+  if (!email && !name) return alert('Vui lòng nhập Email hoặc Họ và Tên trước để tìm đúng hồ sơ Onboarding.');
+  const candidates = (DB.hrProcesses || []).filter(p => p.type === 'ONBOARDING' && p.startDate &&
+    ((email && (p.email || '').trim().toLowerCase() === email) || (name && (p.fullName || '').trim().toLowerCase() === name)));
+  if (!candidates.length) return alert('Không tìm thấy quy trình Onboarding nào khớp Email/Họ Tên đã nhập.');
+  if (candidates.length === 1) {
+    document.getElementById('uStartDate').value = candidates[0].startDate;
+    alert(`✅ Đã điền Ngày Vào Làm Việc = ${candidates[0].startDate} (lấy từ Onboarding [${candidates[0].employeeCode}]).`);
+    return;
+  }
+  const pickList = candidates.map((p, idx) => `${idx + 1}. ${p.fullName} (${p.employeeCode}) — ${p.startDate}`).join('\n');
+  const choice = parseInt(prompt(`Có ${candidates.length} hồ sơ Onboarding khớp — nhập số thứ tự cần lấy:\n${pickList}`) || '', 10);
+  const picked = candidates[choice - 1];
+  if (picked) document.getElementById('uStartDate').value = picked.startDate;
+}
+
 function readUserFormState() {
   const editId = document.getElementById('editUserId').value;
   const username = document.getElementById('uUsername').value.trim();
@@ -527,11 +561,14 @@ function readUserFormState() {
   const dept = posType === 'STORE' ? document.getElementById('uStore').value
     : posType === 'HO' ? document.getElementById('uDept').value
     : document.getElementById('uCustomLocation')?.value || '';
-  if (!dept) {
-    const label = posType === 'STORE' ? 'Siêu Thị' : posType === 'HO' ? 'Phòng Ban' : `Địa Điểm (${getPosTypeLabel(posType)})`;
+  // Khối/Ban + Phòng Ban (10/2026, xác nhận người dùng): CẢ HAI được phép để trống ở Vị Trí HO — khác
+  // Siêu Thị/Địa Điểm (Vị Trí tự thêm) vẫn giữ nguyên bắt buộc như trước.
+  if (!dept && posType !== 'HO') {
+    const label = posType === 'STORE' ? 'Siêu Thị' : `Địa Điểm (${getPosTypeLabel(posType)})`;
     alert(`Vui lòng chọn ${label}!`);
     return null;
   }
+  const khoiBan = posType === 'HO' ? (document.getElementById('uKhoiBan')?.value || '') : '';
   const jobTitle = document.getElementById('uJobTitle').value || null;
   const secondaryPositions = getMultiSelectValues('uSecondaryPositionsMultiSelect').map(decodeWfPositionPair).filter(Boolean);
   const nghiepVuExtraKeys = getMultiSelectValues('uNghiepVuExtraKeysMultiSelect');
@@ -559,20 +596,20 @@ function readUserFormState() {
     return null;
   }
 
-  return { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides };
+  return { editId, username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides };
 }
 
 // Dựng 1 bản ghi người dùng MỚI từ state đã đọc — dùng chung cho lưu ngay (saveUser()) lẫn thêm vào
 // danh sách chờ (addUserToStagingList()). Kiểm tra trùng username với CẢ DB.users lẫn danh sách chờ
 // hiện tại (tránh 2 người trong cùng danh sách trùng tên đăng nhập nhau).
 function buildNewUserFromState(state) {
-  const { username, pass, pin, name, email, phone, posType, dept, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides } = state;
+  const { username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides } = state;
   if (!pass) { alert('Vui lòng nhập mật khẩu cho người dùng mới!'); return null; }
   if (DB.users.some(u => u.username === username)) { alert('Tên đăng nhập đã tồn tại!'); return null; }
   if (pendingNewUsers.some(u => u.username === username)) { alert('Tên đăng nhập đã có trong danh sách chờ lưu!'); return null; }
   return {
     id: Date.now() + pendingNewUsers.length,
-    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, perms, groupIds, permOverrides
+    username, pass, ...(pin && { pin }), name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, perms, groupIds, permOverrides
   };
 }
 
@@ -582,7 +619,7 @@ async function saveUser(e) {
 
   const state = readUserFormState();
   if (!state) return;
-  const { editId, username, pass, pin, name, email, phone, posType, dept, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides } = state;
+  const { editId, username, pass, pin, name, email, phone, posType, dept, khoiBan, jobTitle, secondaryPositions, nghiepVuExtraKeys, reportExtraKeys, isDriver, startDate, groupIds, perms, permOverrides } = state;
 
   // Chụp lại nguyên trạng DB.users TRƯỚC khi sửa trực tiếp trong mảng bên dưới — nếu server từ chối
   // lưu (409/400), phục hồi lại đúng bằng bản chụp này rồi render lại, tránh để "user"/DB.users bị sửa
@@ -612,6 +649,7 @@ async function saveUser(e) {
       user.phone = phone;
       user.posType = posType;
       user.dept = dept;
+      user.khoiBan = khoiBan;
       user.jobTitle = jobTitle;
       user.secondaryPositions = secondaryPositions;
       user.nghiepVuExtraKeys = nghiepVuExtraKeys;

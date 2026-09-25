@@ -134,7 +134,11 @@ function editPendingNewUser(idx) {
   document.getElementById('uPosType').value = inferredPosType;
   onUserPosTypeChange();
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = u.dept;
-  else document.getElementById('uDept').value = u.dept;
+  else if (inferredPosType === 'HO') {
+    // Khối/Ban → Phòng Ban (10/2026) — giữ đúng Phòng Ban đã lưu dù không (còn) thuộc Khối đang gán.
+    populateUserKhoiBanOptions(u.khoiBan || '');
+    populateUserDeptOptions(u.khoiBan || '', u.dept || '');
+  } else document.getElementById('uDept').value = u.dept;
   document.getElementById('uJobTitle').value = u.jobTitle || '';
   renderSecondaryPositionsWidget(u.secondaryPositions);
   renderNVReportExtraKeysWidgets(u);
@@ -194,6 +198,8 @@ function resetUserForm() {
   document.getElementById('uPhone').value = '';
   document.getElementById('uPosType').value = 'HO';
   onUserPosTypeChange();
+  populateUserKhoiBanOptions('');
+  populateUserDeptOptions('', '');
   document.getElementById('uJobTitle').value = '';
   renderSecondaryPositionsWidget([]);
   renderNVReportExtraKeysWidgets(null);
@@ -348,7 +354,11 @@ function editUser(id) {
   document.getElementById('uPosType').value = inferredPosType;
   onUserPosTypeChange();
   if (inferredPosType === 'STORE') document.getElementById('uStore').value = user.dept;
-  else document.getElementById('uDept').value = user.dept;
+  else if (inferredPosType === 'HO') {
+    // Khối/Ban → Phòng Ban (10/2026) — giữ đúng Phòng Ban đã lưu dù không (còn) thuộc Khối đang gán.
+    populateUserKhoiBanOptions(user.khoiBan || '');
+    populateUserDeptOptions(user.khoiBan || '', user.dept || '');
+  } else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
   renderSecondaryPositionsWidget(user.secondaryPositions);
   renderNVReportExtraKeysWidgets(user);

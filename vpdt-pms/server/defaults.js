@@ -10,6 +10,15 @@ const DEFAULT_MAP = {
 const DEFAULTS = {
   depts: ['Phòng Nhân Sự', 'Phòng Kế Toán', 'Phòng IT', 'Ban Giám Đốc'],
 
+  // Khối/Ban (10/2026, yêu cầu người dùng) — nhóm CHA của Phòng Ban, dùng để LỌC ô "Phòng Ban" ở form
+  // Người Dùng và ở Phân Quyền. Mảng phẳng OBJECT {id, name, depts:[]} (mirror carVehicleTypes — id tự
+  // sinh client-side, KHÔNG có route cascade rename riêng như depts/stores vì user.khoiBan lưu THEO
+  // `id` bất biến, không lưu theo `name` — đổi tên 1 Khối/Ban chỉ là sửa field `name` tại chỗ, không cần
+  // cascade sang nơi nào khác). `depts` bên trong mỗi phần tử là mảng TÊN Phòng Ban (chuỗi, đối chiếu
+  // trực tiếp với DB.depts) — CÓ cascade khi 1 tên Phòng Ban gốc đổi tên (xem cascadeDeptRename() ở
+  // lib/catalogRename.js) để không lưu tên đã lỗi thời.
+  deptGroups: [],
+
   // Danh Mục Siêu Thị — TÁCH RIÊNG khỏi depts ở trên (trước đây siêu thị bị gộp chung vào depts, dùng
   // chung 1 danh sách phẳng với phòng ban thật của khối văn phòng — xem admin UI "🏬 Quản Lý Danh Mục
   // Siêu Thị" + nút "Chuyển sang Danh Mục Siêu Thị" ở mỗi dòng Phòng Ban để di chuyển các tên đã có sẵn

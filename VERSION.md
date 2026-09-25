@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**24.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.16 (2026-09-25): Khối/Ban (nhóm cha Phòng Ban) + Form Người Dùng/Phân Quyền lọc theo Khối + gợi ý Ngày Vào Làm Việc từ Onboarding
+
+Yêu cầu người dùng: thêm cột "Khối/Ban" TRƯỚC cột "Phòng Ban" ở form Thêm
+Người Dùng, cả 2 ô đều để trống được; tạo được Khối/Ban trong Quản Lý Danh
+Mục kèm gán Phòng Ban con; chọn Khối/Ban ở Phân Quyền thì bảng chọn Phòng Ban
+chỉ hiện đúng Phòng Ban con đã gán. Kèm phân tích/xác nhận riêng: giữ field
+"Ngày Vào Làm Việc" nhưng thêm gợi ý tự động từ hồ sơ Onboarding đã có (tránh
+gõ lại 2 lần cùng 1 thông tin, hiện đang là 2 nguồn độc lập dễ lệch nhau).
+
+- **Danh mục mới "Khối/Ban"** (`DB.deptGroups`, Quản Lý Danh Mục) — mỗi Khối
+  gán 1/nhiều Phòng Ban con qua ô tìm-kiếm-gõ-chọn nhiều-thật; lưu theo `id`
+  bất biến (đổi tên không cần cascade); xoá 1 Phòng Ban tự gỡ khỏi mọi
+  Khối/Ban đang gán (không để lại "Phòng Ban ma").
+- **Form Thêm/Sửa Người Dùng**: ô "Khối/Ban" MỚI ngay trước "Phòng Ban" (Vị
+  Trí HO), chọn Khối lọc Phòng Ban cạnh đó chỉ còn Phòng Ban con; **cả 2 ô
+  đều hết bắt buộc** (trước đây Phòng Ban bắt buộc) — Siêu Thị/Vị Trí tự thêm
+  vẫn giữ nguyên bắt buộc như cũ. Tạo hàng loạt bằng Excel KHÔNG áp dụng nới
+  lỏng này (cột `dept` vẫn bắt buộc như trước).
+- **Phân Quyền**: 1 ô lọc DÙNG CHUNG cho cả 6 bảng "phạm vi theo phòng ban"
+  (Tài Liệu/Văn Bản Trình/Hợp Đồng & Giấy Phép/Phòng Họp/Đăng Ký Xe/Văn
+  Phòng) — chọn Khối/Ban chỉ hiện đúng dòng Phòng Ban con (ẩn/hiện bằng CSS,
+  không đổi trạng thái tick sẵn của checkbox nào).
+- **Gợi ý "Ngày Vào Làm Việc" từ Onboarding** — nút "📋 Lấy từ Onboarding"
+  tìm theo Email/Họ Tên đã điền, tự điền ngày đã ghi nhận ở quy trình
+  Onboarding tương ứng (chỉ gợi ý, không tự khoá/ép giá trị).
+
+**Triển khai**: chỉ code ứng dụng + 1 field mới trong JSON blob có sẵn
+(`user.khoiBan`, tương thích ngược, mặc định rỗng) — không cần chạy lại
+`schema.sql`, không thêm biến `.env`, không thêm gói npm. Copy code + `pm2
+restart` là đủ.
 
 ## v24.15 (2026-09-24): Checklist ST/CH — xuất Excel giống báo cáo web cũ + Top xếp hạng + Dashboard đã làm/chưa làm
 

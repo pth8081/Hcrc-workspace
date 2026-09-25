@@ -3640,6 +3640,8 @@ async function initDatabase(loggingInUser, opts) {
     DB.stores = data.stores || [];
     DB.cats = data.cats || [];
     DB.deptAbbrs = data.deptAbbrs || {};
+    // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, xem defaults.js.
+    DB.deptGroups = data.deptGroups || [];
     DB.docCatAbbrs = data.docCatAbbrs || {};
     DB.contractTypeAbbrs = data.contractTypeAbbrs || {};
     DB.jobTitles = data.jobTitles || [];
@@ -8191,10 +8193,13 @@ function populateDropdowns() {
     paymentDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
   }
 
-  const uDept = document.getElementById('uDept');
-  if (uDept) {
-    uDept.innerHTML = DB.depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  }
+  // Khối/Ban → Phòng Ban (10/2026, cascading — xem populateUserKhoiBanOptions()/populateUserDeptOptions()
+  // ngay dưới) — giữ lại đúng lựa chọn hiện tại (nếu có) khi populateDropdowns() chạy lại (VD sau khi
+  // admin lưu 1 danh mục khác), không reset về rỗng.
+  const uKhoiBanCurrent = document.getElementById('uKhoiBan')?.value || '';
+  const uDeptCurrent = document.getElementById('uDept')?.value || '';
+  populateUserKhoiBanOptions(uKhoiBanCurrent);
+  populateUserDeptOptions(uKhoiBanCurrent, uDeptCurrent);
   const uStore = document.getElementById('uStore');
   if (uStore) {
     uStore.innerHTML = DB.stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
@@ -8268,6 +8273,31 @@ function populateDropdowns() {
 
   // Chủ Đề (HCRC Đồng Hành) — cùng khuôn ở trên nhưng value là KEY (xem populateHrFeedbackCategorySelect()).
   populateHrFeedbackCategorySelect();
+}
+
+// Khối/Ban → Phòng Ban (10/2026, yêu cầu người dùng "thêm cột Khối/Ban trước Phòng Ban, cả 2 để trống
+// được, chọn Khối/Ban thì Phòng Ban chỉ hiện đúng phòng ban con") — 2 hàm dùng chung cho MỌI nơi đổ lại
+// 2 ô này (populateDropdowns() ở trên, onUserKhoiBanChange()/editUser()/editPendingNewUser()/
+// resetUserForm() ở module-admin-submissiongroups.js/module-admin-userstaging.js).
+function populateUserKhoiBanOptions(preserveKhoiId) {
+  const sel = document.getElementById('uKhoiBan');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Để trống —</option>' +
+    (DB.deptGroups || []).map(g => `<option value="${escapeHtml(String(g.id))}">${escapeHtml(g.name)}</option>`).join('');
+  if ((DB.deptGroups || []).some(g => String(g.id) === String(preserveKhoiId))) sel.value = String(preserveKhoiId);
+}
+// preserveDept (nếu có) LUÔN được giữ trong danh sách dù không thuộc Khối/Ban đang lọc — tránh mất lựa
+// chọn hiện tại khi mở form sửa 1 người dùng có dữ liệu cũ/lệch (VD Phòng Ban đã bị chuyển sang Khối
+// khác sau khi gán cho người này).
+function populateUserDeptOptions(khoiId, preserveDept) {
+  const uDept = document.getElementById('uDept');
+  if (!uDept) return;
+  const group = (DB.deptGroups || []).find(g => String(g.id) === String(khoiId));
+  const depts = group ? group.depts.slice() : DB.depts.slice();
+  if (preserveDept && !depts.includes(preserveDept)) depts.push(preserveDept);
+  uDept.innerHTML = '<option value="">— Để trống —</option>' +
+    depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  uDept.value = preserveDept || '';
 }
 
 function updateUploadDeptDropdown() {

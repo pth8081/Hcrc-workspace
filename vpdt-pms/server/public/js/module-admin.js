@@ -39,10 +39,18 @@ function deleteDept(name) {
   if (!confirmCatalogValueDeletion('phòng ban', name, 'Viết tắt phòng ban (dùng sinh Mã Tài Liệu) của phòng này cũng bị xoá theo.')) return;
   DB.depts = DB.depts.filter(d => d !== name);
   delete DB.deptAbbrs[name];
+  // Khối/Ban (10/2026) — dọn luôn tên Phòng Ban vừa xoá khỏi mọi deptGroups[].depts[] đang gán, tránh
+  // hiện "ma" (Phòng Ban đã xoá nhưng vẫn liệt kê là con của 1 Khối/Ban).
+  const affectedGroups = DB.deptGroups.filter(g => g.depts.includes(name));
+  if (affectedGroups.length) {
+    affectedGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
+    syncStorage('deptGroups');
+  }
   syncStorage('depts');
   syncStorage('deptAbbrs');
   logSystemAction('USER_MGM', 'DELETE_DEPT', `Xóa phòng ban [${name}]`, 'SUCCESS', name);
   renderDeptList();
+  renderDeptGroupList();
   populateDropdowns();
 }
 
@@ -78,6 +86,91 @@ function renderDeptList() {
 async function renameDept(name) {
   const ok = await renameCatalogEntryClient('depts', name, 'Danh Mục Phòng Ban');
   if (ok) { renderDeptList(); populateDropdowns(); }
+}
+
+// ===== Khối/Ban (DB.deptGroups, 10/2026 — yêu cầu người dùng "thêm cột Khối/Ban trước Phòng Ban, cho
+// tạo được Khối/Ban trong danh mục, gán Phòng Ban con") — nhóm CHA của Phòng Ban, dùng để lọc ô "Phòng
+// Ban" ở form Người Dùng (uKhoiBan/uDept, xem populateUserDeptOptions() ở core.js) và ở Phân Quyền (xem
+// renderDeptCheckboxes() bên dưới). Mảng OBJECT {id, name, depts:[]} — id tự sinh client-side (mirror
+// saveCarVehicleType() ở module-dangkyxe.js), KHÔNG có route cascade rename riêng như depts/stores vì
+// user.khoiBan lưu THEO id bất biến, không theo tên — đổi tên chỉ là sửa field `name` tại chỗ. =====
+function saveDeptGroup(e) {
+  e.preventDefault();
+  const name = document.getElementById('txtDeptGroupName').value.trim();
+  if (!name) return;
+  if (DB.deptGroups.some(g => g.name === name)) return alert('Khối/Ban đã tồn tại!');
+  const nextId = DB.deptGroups.reduce((max, g) => Math.max(max, g.id || 0), 0) + 1;
+  DB.deptGroups.push({ id: nextId, name, depts: [] });
+  syncStorage('deptGroups');
+  logSystemAction('USER_MGM', 'ADD_DEPT_GROUP', `Thêm Khối/Ban mới [${name}]`, 'SUCCESS', name);
+  document.getElementById('txtDeptGroupName').value = '';
+  renderDeptGroupList();
+  populateDropdowns();
+}
+
+function renameDeptGroup(id) {
+  const g = DB.deptGroups.find(x => x.id === id);
+  if (!g) return;
+  const newName = String(prompt(`Nhập tên mới cho Khối/Ban "${g.name}":`, g.name) || '').trim();
+  if (!newName || newName === g.name) return;
+  if (DB.deptGroups.some(x => x.id !== id && x.name === newName)) return alert('Tên Khối/Ban đã tồn tại!');
+  g.name = newName;
+  syncStorage('deptGroups');
+  logSystemAction('USER_MGM', 'RENAME_DEPT_GROUP', `Đổi tên Khối/Ban → [${newName}]`, 'SUCCESS', newName);
+  renderDeptGroupList();
+  populateDropdowns();
+}
+
+function deleteDeptGroup(id) {
+  const g = DB.deptGroups.find(x => x.id === id);
+  if (!g) return;
+  if (!confirm(`Xoá Khối/Ban "${g.name}"?\n\nNgười dùng/màn Phân Quyền đang lọc theo Khối này sẽ tự coi như "để trống" (hiện lại toàn bộ Phòng Ban) — KHÔNG xoá Phòng Ban con, chỉ mất liên kết nhóm.`)) return;
+  DB.deptGroups = DB.deptGroups.filter(x => x.id !== id);
+  syncStorage('deptGroups');
+  logSystemAction('USER_MGM', 'DELETE_DEPT_GROUP', `Xóa Khối/Ban [${g.name}]`, 'SUCCESS', g.name);
+  renderDeptGroupList();
+  populateDropdowns();
+}
+
+// Đổi danh sách Phòng Ban con của 1 Khối/Ban — đọc giá trị hiện có trong widget renderMultiSelectDropdown()
+// bằng getMultiSelectValues() khi bấm nút "💾 Lưu Phòng Ban" (KHÔNG dùng callback onChange live-save vì
+// renderMultiSelectDropdown() tự bắn onChange ngay cả lúc SETUP với initialSelected — live-save sẽ gọi
+// ngược lại renderDeptGroupList() ngay trong lúc đang dựng DOM, cùng lý do khiến khối
+// renderOperationOrderReceiptScopeCheckboxes() cũng chỉ đọc giá trị lúc submit form, không live-save).
+function saveDeptGroupChildren(id) {
+  const g = DB.deptGroups.find(x => x.id === id);
+  if (!g) return;
+  g.depts = getMultiSelectValues(`deptGroupChildren_${id}`);
+  syncStorage('deptGroups');
+  logSystemAction('USER_MGM', 'UPDATE_DEPT_GROUP_CHILDREN', `Cập nhật Phòng Ban con của Khối/Ban [${g.name}]: ${g.depts.join(', ') || '(rỗng)'}`, 'SUCCESS', g.name);
+  populateDropdowns();
+  alert(`✅ Đã lưu ${g.depts.length} Phòng Ban thuộc Khối/Ban "${g.name}".`);
+}
+
+function renderDeptGroupList() {
+  const wrap = document.getElementById('deptGroupListWrap');
+  if (!wrap) return;
+  wrap.innerHTML = (DB.deptGroups || []).map(g => `
+    <div class="bg-white rounded border p-2.5 space-y-1.5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-semibold text-xs">${escapeHtml(g.name)} <span class="text-gray-400 font-normal">(${g.depts.length} phòng ban)</span></span>
+        <div class="flex gap-2 shrink-0">
+          <button type="button" data-op="renameDeptGroup" data-arg0="${g.id}" class="text-blue-600 font-bold hover:underline text-xs whitespace-nowrap">✏️ Sửa tên</button>
+          <button type="button" data-op="deleteDeptGroup" data-arg0="${g.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>
+        </div>
+      </div>
+      <div id="deptGroupChildren_${g.id}"></div>
+      <div class="flex justify-end">
+        <button type="button" data-op="saveDeptGroupChildren" data-arg0="${g.id}" class="bg-purple-600 text-white text-[11px] font-bold px-2.5 py-1 rounded hover:bg-purple-700">💾 Lưu Phòng Ban</button>
+      </div>
+    </div>
+  `).join('') || '<p class="text-[11px] text-gray-400 italic">Chưa có Khối/Ban nào.</p>';
+  (DB.deptGroups || []).forEach(g => {
+    renderMultiSelectDropdown(`deptGroupChildren_${g.id}`, DB.depts, g.depts, {
+      placeholder: '🔍 Tìm Phòng Ban để gán vào Khối này...',
+      emptyText: 'Chưa gán Phòng Ban nào.'
+    });
+  });
 }
 
 // ===== Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), cùng khuôn CRUD
@@ -833,12 +926,19 @@ const PERM_DEPT_TABLES = [
   { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },
 ];
 
+// Khối/Ban (10/2026) — tra Khối/Ban đầu tiên (nếu có) chứa Phòng Ban này, dùng để gắn data-dept-group
+// lên từng dòng bảng checkbox Phân Quyền, phục vụ bộ lọc chung filterPermDeptTablesByKhoiBan() ngay dưới.
+function deptGroupIdOf(deptName) {
+  const g = (DB.deptGroups || []).find(x => (x.depts || []).includes(deptName));
+  return g ? g.id : '';
+}
+
 function renderDeptCheckboxes() {
   PERM_DEPT_TABLES.forEach(t => {
     const el = document.getElementById(t.tbody);
     if (!el) return;
     el.innerHTML = DB.depts.map((d, idx) => `
-      <tr class="border-b border-gray-100 last:border-0">
+      <tr class="border-b border-gray-100 last:border-0" data-dept-group="${deptGroupIdOf(d)}">
         <td class="py-1 pr-2 text-gray-700 whitespace-nowrap">${escapeHtml(d)}</td>
         ${t.cols.map(prefix => `<td class="text-center px-1"><input type="checkbox" id="${prefix}Dept_${idx}" data-scope-group="${prefix}" value="${escapeHtml(d)}"></td>`).join('')}
       </tr>
@@ -856,6 +956,37 @@ function renderDeptCheckboxes() {
   // nguồn DB.checklistTemplates (mẫu checklist), không phải siêu thị/phòng ban.
   renderChecklistReportViewScopeCheckboxes();
   renderChecklistStoreSelfExecuteScopeCheckboxes();
+  // Khối/Ban → lọc bảng checkbox Phòng Ban (10/2026) — nạp lại danh sách Khối/Ban cho ô lọc dùng CHUNG
+  // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
+  // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
+  populatePermDeptKhoiBanFilterOptions();
+  filterPermDeptTablesByKhoiBan();
+}
+
+function populatePermDeptKhoiBanFilterOptions() {
+  const sel = document.getElementById('permDeptKhoiBanFilter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Tất cả Khối/Ban —</option>' +
+    (DB.deptGroups || []).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  if ((DB.deptGroups || []).some(g => String(g.id) === current)) sel.value = current;
+}
+
+// Lọc CẢ 6 bảng checkbox Phòng Ban (PERM_DEPT_TABLES) theo Khối/Ban đang chọn — CHỈ ẩn/hiện dòng bằng
+// CSS (KHÔNG render lại <tbody>), nên KHÔNG ảnh hưởng trạng thái tick sẵn của checkbox (giữ đúng nguyên
+// tắc scopeFromForm()/setGroupCheckboxes() đọc/ghi theo id `${prefix}Dept_${idx}` cố định — xem core.js/
+// module-admin-permtree.js). Để trống bộ lọc = hiện lại toàn bộ, khớp hành vi cũ (không đổi gì).
+function filterPermDeptTablesByKhoiBan() {
+  const sel = document.getElementById('permDeptKhoiBanFilter');
+  const khoiId = sel ? sel.value : '';
+  PERM_DEPT_TABLES.forEach(t => {
+    const el = document.getElementById(t.tbody);
+    if (!el) return;
+    el.querySelectorAll('tr').forEach(tr => {
+      const rowGroup = tr.getAttribute('data-dept-group') || '';
+      tr.classList.toggle('hidden', !!khoiId && rowGroup !== khoiId);
+    });
+  });
 }
 
 function toggleScopeGroup(allCheckId, deptCheckPrefix) {

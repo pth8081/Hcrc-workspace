@@ -489,6 +489,12 @@ async function renameAbbrMapKey(appDataKey, oldValue, newValue) {
 async function cascadeDeptRename(oldValue, newValue) {
   await cascadeStoreRename(oldValue, newValue);
   await renameAbbrMapKey('deptAbbrs', oldValue, newValue);
+  // deptGroups[].depts[] (10/2026, "Khối/Ban") — tên Phòng Ban con lưu THEO CHUỖI bên trong từng nhóm,
+  // phải cascade cùng lúc để không giữ tên đã lỗi thời (khác user.khoiBan vốn lưu theo `id` bất biến,
+  // không cần cascade khi ĐỔI TÊN Khối/Ban — chỉ cascade khi đổi tên PHÒNG BAN như ở đây).
+  await withLockedAppDataValue('deptGroups', (list) => (list || []).map(g => (
+    (g.depts || []).includes(oldValue) ? { ...g, depts: g.depts.map(d => (d === oldValue ? newValue : d)) } : g
+  )));
 }
 
 // cats (Phân Loại Tài Liệu): PHẠM VI HẸP hơn nhiều so với depts/stores — chỉ 1 collection (docs.cat,
