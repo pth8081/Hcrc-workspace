@@ -97,25 +97,38 @@ async function main() {
     }
     console.log('✅ 07: chọn vị trí "Trưởng phòng — Phòng Kinh Doanh" -> preview trạng thái 3 tra ra ĐÚNG "Trần Thị Trưởng Phòng KD" (có canBeApprover), loại đúng người thiếu quyền dù cùng vị trí.');
 
-    // Lưu cấu hình — bấm ĐÚNG nút "Lưu Cấu Hình" thật (saveDeptWorkflowConfig(), ghi DB.officeBuyDeptWorkflows
-    // ở trình duyệt NGAY LẬP TỨC rồi mới "bắn và quên" gọi syncStorage()/POST /api/data/officeBuyDeptWorkflows
-    // để đồng bộ lên server — xem core.js). _mockBackend.js (harness demo này) CHỈ triển khai
-    // /api/create|workflow|records/* (đủ cho luồng tạo+duyệt hồ sơ thật bên dưới), KHÔNG có route
-    // /api/data/:key chung nào (route đó vốn không cần thiết cho các bộ test Playwright hiện có của repo —
-    // luôn seed thẳng cấu hình qua state.appData._seed.js) — nên POST đó nhận 404 rồi tự alert lỗi, một
-    // hành vi ĐÚNG của client khi gọi 1 route server thật không tồn tại trong harness giả lập này, KHÔNG
-    // phải lỗi của tính năng. Đồng bộ NGAY sau đó state.appData (phía "server" mock) khớp đúng
-    // DB.officeBuyDeptWorkflows (phía client) VỪA GHI — mirror đúng việc 1 server thật sẽ làm nếu route
-    // đó tồn tại, cùng kỹ thuật seedRecord() có sẵn của _harness-contract.js (ghi đồng thời cả 2 phía).
+    // Lưu cấu hình — bấm ĐÚNG nút "Lưu Cấu Hình" thật (saveDeptWorkflowConfig(), module-itsupport-tier.js).
+    // _mockBackend.js (harness demo này) CHỈ triển khai /api/create|workflow|records/* (đủ cho luồng tạo+
+    // duyệt hồ sơ thật bên dưới), KHÔNG có route /api/data/:key chung nào (route đó vốn không cần thiết
+    // cho các bộ test Playwright hiện có của repo — luôn seed thẳng cấu hình qua state.appData/_seed.js)
+    // — nên POST đó nhận 404, ĐÚNG hành vi của client khi gọi 1 route server thật không tồn tại trong
+    // harness giả lập này, KHÔNG phải lỗi của tính năng.
+    //
+    // BUG THẬT đã sửa (test cũ viết TRƯỚC đợt vá "await + snapshot/rollback" ở saveDeptWorkflowConfig()):
+    // hàm đó giờ AWAIT syncStorage() và TỰ ĐỘNG hoàn tác DB.officeBuyDeptWorkflows về snapshot cũ NGAY khi
+    // thất bại — RỒI GỌI LUÔN renderWorkflowTab() (đúng thiết kế bảo vệ dữ liệu, không phải bug), tức
+    // KHÔNG CHỈ DB.* bị hoàn tác mà TOÀN BỘ UI của thẻ (radio PEOPLE/POSITION, ô chọn vị trí...) cũng bị vẽ
+    // lại theo đúng cấu hình cũ đã hoàn tác — không còn đọc lại được gì (kể cả qua
+    // collectDeptWorkflowConfig()) sau khi bấm nút, vì hạ tầng test này không có server thật để lưu thành
+    // công. Phải LẤY TRƯỚC cấu hình POSITION mode NGAY SAU bước 07 (UI lúc đó còn nguyên đúng trạng thái đã
+    // chọn), rồi MỚI bấm nút (chỉ để minh hoạ đúng hành vi rollback), sau đó tự đồng bộ cấu hình đã lấy
+    // trước đó vào CẢ 2 phía (DB.*/state.appData) để luồng end-to-end (c) bên dưới vẫn chạy được — mirror
+    // đúng việc 1 server thật sẽ lưu nếu route đó tồn tại, cùng kỹ thuật seedRecord() có sẵn của
+    // _harness-contract.js (ghi đồng thời cả 2 phía).
+    const savedCfg = await page.evaluate((dept) => collectDeptWorkflowConfig(dept)?.config, 'Phòng Kinh Doanh');
+    if (savedCfg?.approverMode?.[1] !== 'POSITION' || !(savedCfg.approversByPosition?.[1] || []).some(p => p.jobTitle === 'Trưởng phòng' && p.dept === 'Phòng Kinh Doanh')) {
+      throw new Error('LỖI DEMO: collectDeptWorkflowConfig() không trả đúng cấu hình POSITION mode đã chọn ở UI (bước 07)! ' + JSON.stringify(savedCfg));
+    }
     await page.locator('[data-op="saveDeptWorkflowConfig"][data-arg0="Phòng Kinh Doanh"]').click();
     await page.waitForTimeout(150);
-    const clientSavedCfg = await page.evaluate(() => DB.officeBuyDeptWorkflows['Phòng Kinh Doanh']);
-    if (clientSavedCfg?.approverMode?.[1] !== 'POSITION' || !(clientSavedCfg.approversByPosition?.[1] || []).some(p => p.jobTitle === 'Trưởng phòng' && p.dept === 'Phòng Kinh Doanh')) {
-      throw new Error('LỖI DEMO: lưu cấu hình POSITION mode KHÔNG có hiệu lực ở CLIENT (DB.officeBuyDeptWorkflows)! ' + JSON.stringify(clientSavedCfg));
+    const revertedCfg = await page.evaluate(() => DB.officeBuyDeptWorkflows['Phòng Kinh Doanh']);
+    if (revertedCfg?.approverMode?.[1] === 'POSITION') {
+      throw new Error('LỖI DEMO: mong đợi bị rollback (mock backend không có route lưu thật /api/data/:key) nhưng DB.officeBuyDeptWorkflows vẫn giữ cấu hình POSITION mode — hành vi rollback đã đổi khác so với giả định demo này, cần rà soát lại saveDeptWorkflowConfig().');
     }
-    state.appData.officeBuyDeptWorkflows['Phòng Kinh Doanh'] = clientSavedCfg;
-    const savedCfg = state.appData.officeBuyDeptWorkflows['Phòng Kinh Doanh'];
-    console.log(`✅ Đã lưu cấu hình — client xác nhận bước 1 [Phòng Kinh Doanh] ở chế độ POSITION: ${JSON.stringify(savedCfg.approverMode)}, vị trí: ${JSON.stringify(savedCfg.approversByPosition)}`);
+    console.log('✅ Bấm "Lưu Cấu Hình" -> mock backend 404 (không có route lưu thật) -> client ĐÚNG tự rollback về cấu hình cũ + vẽ lại UI (đúng thiết kế bảo vệ dữ liệu, KHÔNG phải bug).');
+    await page.evaluate((cfg) => { DB.officeBuyDeptWorkflows['Phòng Kinh Doanh'] = cfg; }, savedCfg);
+    state.appData.officeBuyDeptWorkflows['Phòng Kinh Doanh'] = savedCfg;
+    console.log(`✅ Tự đồng bộ cấu hình POSITION mode đã lấy TRƯỚC lúc bấm (bước 07) vào CẢ 2 phía (DB.*/state.appData) để tiếp tục luồng end-to-end: ${JSON.stringify(savedCfg.approverMode)}, vị trí: ${JSON.stringify(savedCfg.approversByPosition)}`);
 
     // ===== (c) End-to-end THẬT — tạo 2 đề xuất Mua Bán rồi thử duyệt bằng 2 người khác nhau =====
     async function createOfficeBuyReq(titleSuffix) {
