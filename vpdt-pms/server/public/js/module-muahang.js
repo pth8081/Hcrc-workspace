@@ -564,6 +564,10 @@ function enterMuaHangItPriceForm() {
     renderMhItPriceMasterListSelect();
   }
   renderDynamicInputsForModule('IT_PRICE_RETAIL', 'dynamicFieldsContainer_IT_PRICE_RETAIL_MH');
+  // renderMhItPriceList() (module-itsupport-price.js) — danh sách đề xuất Bán Lẻ CỦA TÔI/tôi cần duyệt,
+  // hiện NGAY tại đây (10/2026, yêu cầu người dùng) — gọi lại mỗi lần vào tab để chắc chắn khớp dữ liệu
+  // mới nhất, dù hàm này cũng tự chạy theo mọi thay đổi itPriceApprovals (xem renderItPriceApprovals()).
+  renderMhItPriceList();
 }
 
 function renderMhItPriceMasterListSelect() {

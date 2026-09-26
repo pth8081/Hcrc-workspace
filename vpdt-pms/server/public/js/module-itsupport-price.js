@@ -739,6 +739,9 @@ function enterVanHanhItPriceForm() {
   if (codeEl) codeEl.value = generateItPriceCode();
   const deptEl = document.getElementById('itPriceDeptDisplay');
   if (deptEl) deptEl.value = currentUser.dept;
+  // renderVanHanhItPriceList() — danh sách đề xuất Bán Buôn CỦA TÔI/tôi cần duyệt, hiện NGAY tại đây
+  // (10/2026, yêu cầu người dùng) — gọi lại mỗi lần vào tab để chắc chắn khớp dữ liệu mới nhất.
+  renderVanHanhItPriceList();
 }
 
 let activeItPriceSubTab = 'RETAIL';
@@ -858,8 +861,68 @@ function itPriceAppliedBadge(p) {
   return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
 }
 
+// buildItPriceRowHtml(p) — 1 dòng <tr> dùng CHUNG cho cả 3 màn hiện danh sách Phê Duyệt Giá (Hỗ Trợ
+// IT xử lý CẢ 2 loại + Mua Hàng chỉ Bán Lẻ + Vận Hành chỉ Bán Buôn — xem renderMhItPriceList()/
+// renderVanHanhItPriceList() ngay dưới) — tách riêng khỏi renderItPriceApprovals() (10/2026, yêu cầu
+// người dùng: "đơn phê duyệt vẫn phải hiện NGAY tại 2 tab Mua Hàng/Vận Hành đã tạo ra nó, không chỉ ở
+// Hỗ Trợ IT") để 3 nơi luôn hiện ĐÚNG 1 khuôn cột/badge, sửa 1 chỗ áp dụng cả 3. Nút "Chi tiết" luôn mở
+// ĐÚNG 1 modal chung (openItPriceModal(), renderItPriceModalControls()) — ai xem cũng thấy đủ thông tin,
+// nhưng CHỈ người có quyền tương ứng (duyệt đúng bước/itPriceSupport) mới thấy nút hành động thật trong
+// modal đó, nên tái dùng an toàn ở cả màn chỉ-xem (Mua Hàng/Vận Hành) lẫn màn xử lý (Hỗ Trợ IT).
+function buildItPriceRowHtml(p) {
+  const files = p.files || [];
+  const latestFile = files[files.length - 1] || {};
+  const extraFilesNote = files.length > 1 ? `<br><span class="text-xs text-gray-500">+${files.length - 1} tệp bổ sung</span>` : '';
+  return `
+    <tr class="hover:bg-gray-50 border-b">
+      <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
+      <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
+      <td class="border p-2">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
+      <td class="border p-2">${itPriceStatusBadge(p)}</td>
+      <td class="border p-2">${itPriceAppliedBadge(p)}</td>
+      <td class="border p-2 text-center">
+        <button data-op="openItPriceModal" data-arg0="${p.id}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
+      </td>
+    </tr>
+  `;
+}
+
+// renderMhItPriceList()/renderVanHanhItPriceList() — danh sách "đơn của tôi/đơn tôi cần duyệt" đúng
+// kênh (RETAIL ở Mua Hàng, WHOLESALE ở Vận Hành), khớp phạm vi canViewItPriceApproval() y hệt Hỗ Trợ
+// IT — KHÔNG có filter bar (giữ gọn, khác Hỗ Trợ IT vốn cần lọc sâu để xử lý số lượng lớn từ CẢ 2
+// kênh); sắp mới nhất lên đầu vì đây là danh sách "theo dõi phiếu của mình", không phải hàng đợi xử lý.
+function renderMhItPriceList() {
+  const tbody = document.getElementById('mhItPriceTableBody');
+  if (!tbody) return;
+  const visible = DB.itPriceApprovals
+    .filter(p => (p.priceType || 'RETAIL') === 'RETAIL' && canViewItPriceApproval(currentUser, p))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
+  const page = paginateList('mhItPrice', visible, 'renderMhItPriceList', 'đề xuất');
+  tbody.innerHTML = page.length
+    ? page.map(buildItPriceRowHtml).join('')
+    : `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có đề xuất nào.</td></tr>`;
+}
+function renderVanHanhItPriceList() {
+  const tbody = document.getElementById('vanHanhItPriceTableBody');
+  if (!tbody) return;
+  const visible = DB.itPriceApprovals
+    .filter(p => p.priceType === 'WHOLESALE' && canViewItPriceApproval(currentUser, p))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
+  const page = paginateList('vanHanhItPrice', visible, 'renderVanHanhItPriceList', 'đề xuất');
+  tbody.innerHTML = page.length
+    ? page.map(buildItPriceRowHtml).join('')
+    : `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có đề xuất nào.</td></tr>`;
+}
+
 function renderItPriceApprovals() {
   const tbody = document.getElementById('itPriceTableBody');
+  // renderMhItPriceList()/renderVanHanhItPriceList() PHẢI luôn đồng bộ theo renderItPriceApprovals()
+  // (18 nơi gọi rải khắp file này — submit/duyệt/từ chối/áp giá/xoá...) — gọi CẢ 2 ngay tại đây thay vì
+  // sửa từng nơi gọi, 2 hàm đó tự "if (!tbody) return;" nên an toàn dù đang KHÔNG đứng ở tab tương ứng.
+  renderMhItPriceList();
+  renderVanHanhItPriceList();
   if (!tbody) return;
 
   // Đồng bộ giao diện sub-tab con (nút active/inactive, badge trên form tạo) mỗi lần render — gộp vào
@@ -907,24 +970,7 @@ function renderItPriceApprovals() {
     return;
   }
 
-  tbody.innerHTML = page.map(p => {
-    const files = p.files || [];
-    const latestFile = files[files.length - 1] || {};
-    const extraFilesNote = files.length > 1 ? `<br><span class="text-xs text-gray-500">+${files.length - 1} tệp bổ sung</span>` : '';
-
-    return `
-      <tr class="hover:bg-gray-50 border-b">
-        <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
-        <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
-        <td class="border p-2">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
-        <td class="border p-2">${itPriceStatusBadge(p)}</td>
-        <td class="border p-2">${itPriceAppliedBadge(p)}</td>
-        <td class="border p-2 text-center">
-          <button data-op="openItPriceModal" data-arg0="${p.id}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
-        </td>
-      </tr>
-    `;
-  }).join('');
+  tbody.innerHTML = page.map(buildItPriceRowHtml).join('');
 }
 
 function approveItPrice(id) {

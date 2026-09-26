@@ -3852,7 +3852,6 @@ const OP_CLICK_ACTIONS = {
   // data-op mà form (module-itsupport-price.js) dùng, nếu không toàn bộ nút trong form sẽ IM LẶNG không
   // hoạt động — đúng lớp lỗi mọi chú thích phía trên đã ghi.
   previewItPriceWorkflow: () => previewItPriceWorkflow(),
-  goToItPriceListWholesale: () => goToItPriceListWholesale(),
   removeOneFileFromMultiInput: el => removeOneFileFromMultiInput(el.dataset.arg0, el.dataset.arg1, el.dataset.arg2)
 };
 const OP_CHANGE_ACTIONS = {
@@ -3928,15 +3927,6 @@ const OP_SUBMIT_ACTIONS = {
   // "💲 Phê Duyệt Giá Bán Buôn" — cùng lý do OP_CLICK_ACTIONS ở trên.
   submitItPriceApproval: e => submitItPriceApproval(e)
 };
-// Điểm vào "📋 Xem danh sách đầy đủ" của form Phê Duyệt Giá Bán Buôn — registry riêng của Vận Hành
-// KHÔNG hỗ trợ data-op-seq (chỉ bindCspDelegation() dùng chung mới hiểu cú pháp đó), nên gom 3 lệnh gọi
-// (switchTab/setItSupportSubTab/setItPriceSubTab) vào đúng 1 hàm rồi khai data-op="goToItPriceListWholesale"
-// như bình thường.
-async function goToItPriceListWholesale() {
-  await switchTab('itSupport');
-  setItSupportSubTab('PRICE');
-  setItPriceSubTab('WHOLESALE');
-}
 function bindOperationDelegation(rootId) {
   const root = document.getElementById(rootId);
   if (!root) return;

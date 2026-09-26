@@ -693,8 +693,29 @@
           </div>
         </form>
       </div>
-      <div class="bg-gray-50 p-3 rounded border text-xs text-gray-600">
-        📋 Xem danh sách đầy đủ + trạng thái duyệt tại
-        <button type="button" data-op="goToItPriceListWholesale" class="text-sky-700 font-bold hover:underline">Hỗ Trợ IT &gt; Phê Duyệt Giá &gt; Bán Buôn</button>.
+      <!-- Danh sách đề xuất Bán Buôn CỦA TÔI/tôi cần duyệt (10/2026, yêu cầu người dùng: "đơn phê duyệt
+           vẫn phải hiện NGAY tại đây, không chỉ ở Hỗ Trợ IT") — renderVanHanhItPriceList() (module-
+           itsupport-price.js), lọc theo canViewItPriceApproval() y hệt Hỗ Trợ IT, CHỈ khác priceType cố
+           định WHOLESALE. Nút "Chi tiết" mở ĐÚNG 1 modal dùng chung (openItPriceModal()) — đội Hỗ Trợ IT
+           vẫn là nơi thực sự áp giá/xử lý (nút hành động trong modal chỉ hiện cho người có quyền tương ứng). -->
+      <div class="bg-white p-3 rounded border space-y-2">
+        <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Đề Xuất Bán Buôn</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs">
+            <thead class="bg-gray-100 text-left text-gray-700">
+              <tr>
+                <th class="border p-2">Mã Đề Xuất</th>
+                <th class="border p-2">Phòng Ban / Người Đề Xuất</th>
+                <th class="border p-2">Tệp Bảng Giá</th>
+                <th class="border p-2">Trạng Thái Duyệt</th>
+                <th class="border p-2">Áp Giá</th>
+                <th class="border p-2">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="vanHanhItPriceTableBody"></tbody>
+          </table>
+        </div>
+        <div id="paginationContainer_vanHanhItPrice"></div>
+        <p class="text-gray-400 text-[11px]">Đội Hỗ Trợ IT duyệt/áp giá tại <b>Hỗ Trợ IT &gt; Phê Duyệt Giá</b> — danh sách ở đây tự cập nhật theo đúng dữ liệu đó.</p>
       </div>
     </div>
