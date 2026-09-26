@@ -3732,6 +3732,12 @@ Khối đó, giúp tìm nhanh khi danh sách Phòng Ban dài — **chỉ ẩn/hi
 hiện lại vẫn giữ nguyên tick). Để trống bộ lọc = hiện lại toàn bộ như trước,
 không đổi hành vi cũ.
 
+Từ 10/2026 (vá lỗi): thêm/đổi tên/xoá 1 Khối/Ban, hoặc sửa danh sách Phòng
+Ban con của 1 Khối/Ban, ở khối "🗂️ Khối/Ban" (Quản Lý Danh Mục) sẽ làm mới
+NGAY dropdown lọc này + gắn lại đúng Khối/Ban cho từng dòng trong cả 6 bảng
+— không cần rời khỏi tab Phân Quyền rồi vào lại mới thấy đúng dữ liệu như
+trước.
+
 **Nhóm quyền (`permGroups`)** — thay vì tick tay từng quyền cho từng người,
 admin có thể tạo 1 "nhóm phân quyền" mẫu (VD "Nhân viên phòng Kế Toán") gồm 1
 bộ quyền cố định, rồi gán nhiều người dùng vào nhóm đó — nhóm đóng vai trò
