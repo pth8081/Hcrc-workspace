@@ -155,10 +155,14 @@ function previewOfficeWorkflow() {
   const dept = document.getElementById('offDept').value;
   if (!dept) return alert('Vui lòng chọn Phòng Ban Trình trước khi xem quy trình!');
   const subLabel = activeOfficeSubTab === 'MUA_BAN' ? 'Mua Sắm VP' : 'Sửa Chữa VP';
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng subType (MUA_BAN -> OFFICE_BUY, SUA_CHUA ->
+  // OFFICE_FIX, cùng mapping OFFICE_SUBTYPE_TO_PERM_FLAG ở lib/createValidation.js).
+  const extraModuleKey = activeOfficeSubTab === 'MUA_BAN' ? 'OFFICE_BUY' : 'OFFICE_FIX';
+  const wfConfig = appendExtraApprovalLayersForPreview((getOfficeWorkflowMap(activeOfficeSubTab) || {})[dept], extraModuleKey);
   openGenericWorkflowPreviewModal(
     `🔍 Xem Trước Quy Trình Phê Duyệt ${subLabel}`,
     `Phòng ban: ${dept}`,
-    (getOfficeWorkflowMap(activeOfficeSubTab) || {})[dept],
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt ${subLabel}.`
   );
 }

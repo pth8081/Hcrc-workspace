@@ -448,10 +448,14 @@ function previewOperationOrderWorkflow() {
   const draft = { orderLocationType: activeOperationOrderSubTab, amount, paymentTotalAmount, dept: currentUser.dept };
   const effectiveAmount = computeOperationOrderAmountClient(draft);
   const tier = computeOperationOrderTierClient(activeOperationOrderSubTab, effectiveAmount);
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng orderLocationType (STORE -> OPERATION_ORDER_STORE,
+  // HO -> OPERATION_ORDER_HO), nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
+  const extraModuleKey = activeOperationOrderSubTab === 'STORE' ? 'OPERATION_ORDER_STORE' : 'OPERATION_ORDER_HO';
+  const wfConfig = appendExtraApprovalLayersForPreview(resolveOperationOrderWorkflowConfigForItemClient(draft), extraModuleKey);
   openGenericWorkflowPreviewModal(
     `🔍 Xem Trước Quy Trình Phê Duyệt Đơn Hàng (${OPERATION_ORDER_SUBTAB_LABELS[activeOperationOrderSubTab]})`,
     `Giá trị tạm tính: ${effectiveAmount.toLocaleString('vi-VN')} VNĐ — Mức áp dụng: ${operationOrderTierLabel(activeOperationOrderSubTab, tier)}`,
-    resolveOperationOrderWorkflowConfigForItemClient(draft),
+    wfConfig,
     `Mức "${operationOrderTierLabel(activeOperationOrderSubTab, tier)}" chưa được cấu hình quy trình phê duyệt đơn hàng.`
   );
 }

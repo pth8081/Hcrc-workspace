@@ -731,10 +731,12 @@ async function submitMhItPriceApproval(e) {
 function previewMhItPriceWorkflow() {
   const dept = document.getElementById('mhItPriceDeptDisplay').value;
   if (!dept) return alert('Tài khoản của bạn chưa được gán phòng ban nên chưa xác định được quy trình phê duyệt!');
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
+  const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL'), 'ITPRICE_RETAIL');
   openGenericWorkflowPreviewModal(
     '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Lẻ',
     `Phòng ban: ${dept}`,
-    resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL'),
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt giá Bán Lẻ.`
   );
 }

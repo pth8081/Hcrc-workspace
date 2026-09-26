@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**24.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.24 (2026-09-26): Nhóm Phê Duyệt Cuối — vá 2 lỗi ở nút "🔍 Xem Quy Trình" (rà soát từng quy trình theo yêu cầu người dùng)
+
+Theo yêu cầu người dùng "test từng quy trình, đảm bảo không sót case study và
+không bị lỗi" — rà soát lại toàn bộ 10 quy trình dùng "Nhóm Phê Duyệt Cuối"
+(v24.23) và phát hiện 2 lỗi THẬT ở nút "🔍 Xem Quy Trình" (bản xem trước quy
+trình duyệt lúc đang tạo hồ sơ), cả hai đều KHÔNG ảnh hưởng hồ sơ đã tạo
+(server luôn xác thực lại đúng, xem `prepareExtraApprovalSelectionForCreate()`),
+chỉ ảnh hưởng đúng màn hình xem trước:
+
+1. **Thiếu wiring hoàn toàn**: `appendExtraApprovalLayersForPreview()` (viết
+   sẵn từ đợt merge trước) chưa từng được gọi ở CẢ 8 điểm gọi
+   `openGenericWorkflowPreviewModal()` của 7 module (Tài Liệu/Đăng Ký Xe/Mua
+   Bán VP/Sửa Chữa VP/Văn Phòng Phẩm/Thanh Toán/Phê Duyệt Giá Bán Lẻ+Bán
+   Buôn/Vận Hành Đặt Hàng ST+HO) — người tạo chọn xong Cấp/Nhóm Phê Duyệt
+   Cuối trên form nhưng bấm "Xem Quy Trình" không thấy bước mới.
+2. **Sai shape dữ liệu (lỗi sâu hơn, chỉ lộ ra khi thật sự click thử qua
+   trình duyệt)**: `buildGenericDeptWorkflowPreviewHTML()` định vị bước gốc
+   qua `DB.workflows[wfConfig.workflowId]`, không đọc `wfConfig.steps` —
+   trong khi bản vá gap #1 ban đầu trả về đúng shape `{steps,approvers}`
+   (mirror server) làm MẤT `workflowId`, khiến hàm build HTML rơi về mặc
+   định cứng "Bước 1: Duyệt" (bỏ qua hoàn toàn cả bước gốc thật lẫn bước mới
+   thêm). Sửa: `appendExtraApprovalLayersForPreview()` nay giữ nguyên
+   `workflowId`/`approvers` gốc, chỉ gắn thêm mảng `extraSteps` (tên + người
+   duyệt đã resolve sẵn); `buildGenericDeptWorkflowPreviewHTML()` nối
+   `extraSteps` vào SAU CÙNG các bước gốc.
+3. **Case study bổ sung**: lớp BẮT BUỘC (locked) chỉ có ĐÚNG 1 thành viên
+   (auto-chọn, không cần ô chọn nào trên UI) trước đây hiện "chưa có người
+   duyệt" ở bản xem trước dù thật ra tự động chọn đúng người đó — sửa
+   `readSelectedExtraApprovalLayers()` lấy thẳng từ nhóm cho case này.
+4. **Bảo vệ crash**: thêm guard `if (!resolved) return resolved;` — trước
+   đây nếu phòng ban/mức đang chọn CHƯA có quy trình gốc (`resolved`
+   `undefined`) mà đã chọn xong Cấp/Nhóm Phê Duyệt Cuối, bấm "Xem Quy Trình"
+   sẽ ném lỗi JS (`Cannot read properties of undefined`).
+
+Viết mới `tests/test-extra-approval-preview-fix.js` (24 kịch bản: rà soát
+ĐỦ cả 10 quy trình qua mount UI thật + 2 kịch bản click-through thật qua nút
+bấm thật của Tài Liệu, gồm cả case study "chưa cấu hình quy trình gốc" +
+xác nhận không có lỗi CSP/console nào phát sinh). Chạy lại
+`tests/test-preview-workflow-buttons.js` (test có sẵn, phủ 7+ module xem
+trước quy trình, KHÔNG biết gì về tính năng này) — 16/16 vẫn pass, xác nhận
+không hồi quy hành vi cũ cho module chưa cấu hình "Nhóm Phê Duyệt Cuối".
+
+Không đổi schema/route/`.env`/dependency — chỉ copy code + `pm2 restart`.
 
 ## v24.23 (2026-09-26): Nhóm Phê Duyệt Cuối — cơ chế Cấp Phê Duyệt Cuối Cùng/Nhóm Phê Duyệt cho 10 quy trình khác
 

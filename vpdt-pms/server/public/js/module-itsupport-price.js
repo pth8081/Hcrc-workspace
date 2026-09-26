@@ -628,19 +628,22 @@ function previewItPriceWorkflow() {
   if (activeItPriceSubTab === 'WHOLESALE') {
     const tier = document.getElementById('itPriceTier').value;
     if (!tier) return alert('Vui lòng chọn Mức Margin / Chiết Khấu trước khi xem quy trình!');
+    // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
+    const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceTierWorkflowConfigClient(tier), 'ITPRICE_WHOLESALE');
     return openGenericWorkflowPreviewModal(
       '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Buôn',
       `Mức áp dụng: ${itPriceTierLabel(tier)}`,
-      resolveItPriceTierWorkflowConfigClient(tier),
+      wfConfig,
       `Mức "${itPriceTierLabel(tier)}" chưa được cấu hình quy trình phê duyệt giá Bán Buôn.`
     );
   }
   const dept = document.getElementById('itPriceDeptDisplay').value;
   if (!dept) return alert('Tài khoản của bạn chưa được gán phòng ban nên chưa xác định được quy trình phê duyệt!');
+  const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL'), 'ITPRICE_RETAIL');
   openGenericWorkflowPreviewModal(
     '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Lẻ',
     `Phòng ban: ${dept}`,
-    resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL'),
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt giá Bán Lẻ.`
   );
 }

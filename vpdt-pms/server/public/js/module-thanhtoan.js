@@ -285,10 +285,13 @@ function resetPaymentCreateForm() {
 function previewPaymentWorkflow() {
   const dept = document.getElementById('paymentDept').value;
   if (!dept) return alert('Vui lòng chọn Phòng Ban trước khi xem quy trình!');
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ áp dụng cho nguồn "Thủ công" (MANUAL), xem
+  // renderExtraApprovalMount('PAYMENT', ...) — module chưa bật mount thì hàm này tự no-op an toàn.
+  const wfConfig = appendExtraApprovalLayersForPreview((DB.paymentDeptWorkflows || {})[dept], 'PAYMENT');
   openGenericWorkflowPreviewModal(
     '🔍 Xem Trước Quy Trình Phê Duyệt Thanh Toán',
     `Phòng ban: ${dept}`,
-    (DB.paymentDeptWorkflows || {})[dept],
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt thanh toán.`
   );
 }

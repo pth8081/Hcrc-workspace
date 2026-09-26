@@ -284,6 +284,64 @@ async function main() {
     assertEqual(recHO.extraApprovalLevel, undefined, 'HO (OPERATION_ORDER_HO) chưa cấu hình -> KHÔNG được gắn field này');
   });
 
+  // ===================== D) Tích hợp qua validateAndPrepareCreate() — 4 module CÒN LẠI KHÔNG tách theo
+  // field split (DOC/CAR/VPP/PAYMENT), hoàn tất đủ 10/10 quy trình được test tích hợp tạo hồ sơ thật
+  // =====================================================================================
+
+  await run.run('docs (DOC): đã cấu hình Nhóm Phê Duyệt Cuối -> tạo tài liệu kèm lựa chọn -> đông cứng đúng', async () => {
+    const appData = {
+      formTemplates: {}, cats: [],
+      extraApprovalGroups_DOC: GROUPS, extraApprovalLevels_DOC: LEVELS
+    };
+    const rec = validateAndPrepareCreate('docs',
+      { dept: 'Phòng CNTT', cat: 'Quy Trình', title: 'Tài liệu test', approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'] },
+      ADMIN_USER, [], appData);
+    assertEqual(rec.extraApprovalLevel, 'L1', 'DOC đã cấu hình -> phải đông cứng đúng level');
+    assertEqual(rec.extraApprovalLayers.length, 1, 'DOC phải có đúng 1 lớp CEO');
+  });
+
+  await run.run('carRegs (CAR): đã cấu hình Nhóm Phê Duyệt Cuối -> tạo phiếu đăng ký xe kèm lựa chọn -> đông cứng đúng', async () => {
+    const appData = {
+      formTemplates: {},
+      extraApprovalGroups_CAR: GROUPS, extraApprovalLevels_CAR: LEVELS
+    };
+    const rec = validateAndPrepareCreate('carRegs',
+      {
+        dept: 'Phòng CNTT', routePoints: ['Công ty', 'Sân bay'], startTime: '2026-10-01T08:00', endTime: '2026-10-01T10:00',
+        approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO']
+      },
+      ADMIN_USER, [], appData);
+    assertEqual(rec.extraApprovalLevel, 'L1', 'CAR đã cấu hình -> phải đông cứng đúng level');
+    assertEqual(rec.extraApprovalLayers.length, 1, 'CAR phải có đúng 1 lớp CEO');
+  });
+
+  await run.run('vppRegistrations (VPP): đã cấu hình Nhóm Phê Duyệt Cuối -> tạo đăng ký VPP kèm lựa chọn -> đông cứng đúng', async () => {
+    const appData = {
+      formTemplates: {},
+      vppPeriods: [{ id: 1, code: 'VPP-2026-01', name: 'Kỳ 1/2026', status: 'OPEN', endDate: '2099-12-31', catalogItems: [{ name: 'Bút bi', unit: 'Cái', code: 'IT01', price: 5000 }] }],
+      vppExcludedJobTitles: [],
+      extraApprovalGroups_VPP: GROUPS, extraApprovalLevels_VPP: LEVELS
+    };
+    const vppUser = { username: 'u3', name: 'NV Đăng Ký VPP', dept: 'Phòng CNTT', jobTitle: 'Nhân viên', perms: { admin: true } };
+    const rec = validateAndPrepareCreate('vppRegistrations',
+      { periodId: 1, items: [{ name: 'Bút bi', qty: 2 }], approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'] },
+      vppUser, [], appData);
+    assertEqual(rec.extraApprovalLevel, 'L1', 'VPP đã cấu hình -> phải đông cứng đúng level');
+    assertEqual(rec.extraApprovalLayers.length, 1, 'VPP phải có đúng 1 lớp CEO');
+  });
+
+  await run.run('paymentRequests (PAYMENT): đã cấu hình Nhóm Phê Duyệt Cuối -> tạo đề nghị thanh toán thủ công kèm lựa chọn -> đông cứng đúng', async () => {
+    const appData = {
+      formTemplates: {}, depts: ['Phòng CNTT'], stores: [],
+      extraApprovalGroups_PAYMENT: GROUPS, extraApprovalLevels_PAYMENT: LEVELS
+    };
+    const rec = validateAndPrepareCreate('paymentRequests',
+      { title: 'Đề nghị thanh toán test', dept: 'Phòng CNTT', installments: [{ description: 'Đợt 1', amount: 1000000 }], approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'] },
+      ADMIN_USER, [], appData);
+    assertEqual(rec.extraApprovalLevel, 'L1', 'PAYMENT đã cấu hình -> phải đông cứng đúng level');
+    assertEqual(rec.extraApprovalLayers.length, 1, 'PAYMENT phải có đúng 1 lớp CEO');
+  });
+
   run.summary();
 }
 

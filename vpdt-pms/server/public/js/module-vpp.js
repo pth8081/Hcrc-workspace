@@ -511,10 +511,12 @@ async function submitVppRegDraftAction(regId, fromForm) {
 function previewVppWorkflow() {
   const dept = currentUser?.dept;
   if (!dept) return alert('Tài khoản của bạn chưa được gán phòng ban nên chưa xác định được quy trình phê duyệt!');
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
+  const wfConfig = appendExtraApprovalLayersForPreview(DB.vppDeptWorkflows[dept], 'VPP');
   openGenericWorkflowPreviewModal(
     '🔍 Xem Trước Quy Trình Phê Duyệt Văn Phòng Phẩm',
     `Phòng ban: ${dept}`,
-    DB.vppDeptWorkflows[dept],
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt Văn phòng phẩm.`
   );
 }

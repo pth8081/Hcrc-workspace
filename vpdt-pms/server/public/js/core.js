@@ -2429,12 +2429,19 @@ function readSelectedExtraApprovalLayers(moduleKey) {
   const levelEl = document.getElementById(`extraApprovalLevel_${moduleKey}`);
   if (!levelEl) return { approvalLevel: null, selectedLayerKeys: [], selectedLayerMembers: {} };
   const selectedLayerKeys = [...document.querySelectorAll(`#extraApprovalDropdownPanel_${moduleKey} input.extra-layer-toggle_${moduleKey}:checked`)].map(cb => cb.value);
+  const groupsArr = DB[`extraApprovalGroups_${moduleKey}`] || [];
   const selectedLayerMembers = {};
   for (const layerKey of selectedLayerKeys) {
     const singleSelect = document.querySelector(`select.extra-layer-single-approver_${moduleKey}[data-layer="${layerKey}"]`);
-    selectedLayerMembers[layerKey] = singleSelect
-      ? (singleSelect.value ? [singleSelect.value] : [])
-      : [...document.querySelectorAll(`input.extra-layer-member_${moduleKey}[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+    if (singleSelect) { selectedLayerMembers[layerKey] = singleSelect.value ? [singleSelect.value] : []; continue; }
+    const checkboxMembers = [...document.querySelectorAll(`input.extra-layer-member_${moduleKey}[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+    if (checkboxMembers.length) { selectedLayerMembers[layerKey] = checkboxMembers; continue; }
+    // Lớp BẮT BUỘC (locked) với ĐÚNG 1 thành viên -> renderExtraApprovalLayerCheckboxes() KHÔNG vẽ ô
+    // chọn nào (tự động chọn đúng người đó, giống hệt luật server ở prepareExtraApprovalSelectionForCreate())
+    // — không lấy thẳng từ nhóm ở đây thì bản xem trước hiện rỗng "chưa có người duyệt" dù thật ra hồ sơ
+    // tạo ra vẫn có đúng người (server tự chọn), gây hiểu lầm khi xem trước.
+    const group = groupsArr.find(g => g.id === layerKey);
+    selectedLayerMembers[layerKey] = (group?.members?.length === 1) ? [...group.members] : [];
   }
   return { approvalLevel: levelEl.value, selectedLayerKeys, selectedLayerMembers };
 }
@@ -2462,21 +2469,31 @@ function appendExtraApprovalLayersClient(resolved, item) {
 // cùng luật hiển thị (không xác thực lại locked/visible ở đây — đây chỉ là xem trước tham khảo, server
 // luôn xác thực thật lúc submit, xem prepareExtraApprovalSelectionForCreate() ở lib/createValidation.js).
 function appendExtraApprovalLayersForPreview(resolved, moduleKey) {
+  // Bảo vệ: `resolved` (DB.deptWorkflows[dept] hay tương đương) có thể là `undefined` khi phòng ban/mức
+  // đang chọn CHƯA được cấu hình quy trình gốc (nhánh này để buildGenericDeptWorkflowPreviewHTML() tự
+  // hiện cảnh báo "chưa cấu hình", xem hàm đó) — giữ nguyên hành vi cũ (hiện cảnh báo, không cố ghép
+  // thêm bước) thay vì crash khi form đã chọn xong Cấp/Nhóm Phê Duyệt Cuối.
+  if (!resolved) return resolved;
   if (!isExtraApprovalEnabledFor(moduleKey)) return resolved;
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedExtraApprovalLayers(moduleKey);
   if (!selectedLayerKeys.length) return resolved;
   const groupsArr = DB[`extraApprovalGroups_${moduleKey}`] || [];
-  const steps = (resolved.steps || []).map(s => ({ ...s }));
-  const approvers = { ...(resolved.approvers || {}) };
   const canonicalOrder = groupsArr.map(g => g.id);
-  [...selectedLayerKeys].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b)).forEach(layerKey => {
-    const layer = groupsArr.find(g => g.id === layerKey);
-    if (!layer) return;
-    const stepOrder = steps.length + 1;
-    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id, actionLabel: layer.actionLabel || null });
-    approvers[stepOrder] = selectedLayerMembers[layerKey] || [];
-  });
-  return { steps, approvers };
+  // QUAN TRỌNG: KHÔNG dùng chung shape {steps,approvers} như appendExtraApprovalLayers() (server, lib/
+  // workflowEngine.js) — resolved ở đây là dạng PHẲNG {workflowId,approvers} mà 7 module dùng chung cho
+  // "🔍 Xem Quy Trình" (buildGenericDeptWorkflowPreviewHTML() định vị bước qua DB.workflows[workflowId],
+  // không đọc resolved.steps). Trả nguyên `resolved` (giữ workflowId/approvers gốc) + gắn thêm
+  // `extraSteps` (tên bước + approvers đã resolve sẵn) để hàm build HTML nối vào SAU CÙNG — xem
+  // buildGenericDeptWorkflowPreviewHTML() ngay phía trên.
+  const extraSteps = [...selectedLayerKeys]
+    .sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b))
+    .map(layerKey => {
+      const layer = groupsArr.find(g => g.id === layerKey);
+      return layer ? { name: layer.label, approvers: selectedLayerMembers[layerKey] || [] } : null;
+    })
+    .filter(Boolean);
+  if (!extraSteps.length) return resolved;
+  return { ...resolved, extraSteps: [...(resolved.extraSteps || []), ...extraSteps] };
 }
 
 // Di chuyển "Trường Bổ Sung"/thứ tự trường/override trường mặc định đã cấu hình dưới 1 modKey 'IT_PRICE'
@@ -3036,7 +3053,22 @@ function buildGenericDeptWorkflowPreviewHTML(wfConfig, emptyLabel) {
         <div class="text-gray-600 mt-0.5">Người duyệt: ${names}</div>
       </div>`;
   }).join('');
-  return `<div>${stepsHTML}</div>`;
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — wfConfig.extraSteps (nếu có, xem appendExtraApprovalLayersForPreview()
+  // ở core.js) là các lớp đã chọn trên form, nối THÊM sau cùng baseWf.steps. KHÔNG dùng chung shape
+  // {steps,approvers} như lib/workflowEngine.js's appendExtraApprovalLayers() (server) — hàm build HTML
+  // này vốn định vị bước theo baseWf.steps tra từ DB.workflows[wfConfig.workflowId], không đọc thẳng
+  // wfConfig.steps, nên approvers của các lớp thêm phải để SẴN dạng mảng username (đã readSelected...),
+  // không cần resolveEffectiveStepApprovers() tra theo "order" như baseWf.steps ở trên.
+  const extraStepsHTML = (wfConfig.extraSteps || []).map((es, idx) => {
+    const names = (es.approvers || []).map(userLabel).join(', ') ||
+      '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình)</span>';
+    return `
+      <div class="bg-slate-50 border rounded p-2 mb-1.5">
+        <div class="font-bold text-gray-800">Bước ${baseWf.steps.length + idx + 1}: ${escapeHtml(es.name)}</div>
+        <div class="text-gray-600 mt-0.5">Người duyệt: ${names}</div>
+      </div>`;
+  }).join('');
+  return `<div>${stepsHTML}${extraStepsHTML}</div>`;
 }
 
 // Mở modal xem trước dùng chung (#viewDocModal) cho mọi previewXxxWorkflow() của khuôn 1 tầng ở trên —

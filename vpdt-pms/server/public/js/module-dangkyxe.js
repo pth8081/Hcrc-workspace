@@ -96,10 +96,12 @@ async function submitCarReq(e) {
 function previewCarWorkflow() {
   const dept = document.getElementById('carDept').value;
   if (!dept) return alert('Vui lòng chọn Đơn Vị (Phòng/Ban/Bộ phận) trước khi xem quy trình!');
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
+  const wfConfig = appendExtraApprovalLayersForPreview(DB.carDeptWorkflows[dept], 'CAR');
   openGenericWorkflowPreviewModal(
     '🔍 Xem Trước Quy Trình Phê Duyệt Đăng Ký Xe',
     `Phòng ban: ${dept}`,
-    DB.carDeptWorkflows[dept],
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt đăng ký xe.`
   );
 }

@@ -620,10 +620,13 @@ async function uploadDoc(e) {
 function previewDocWorkflow() {
   const dept = document.getElementById('selDept').value;
   if (!dept) return alert('Vui lòng chọn Phòng Ban Trình trước khi xem quy trình!');
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước,
+  // cùng cơ chế appendExtraApprovalLayers() phía server, xem chú thích đầy đủ ở core.js.
+  const wfConfig = appendExtraApprovalLayersForPreview(DB.deptWorkflows[dept], 'DOC');
   openGenericWorkflowPreviewModal(
     '🔍 Xem Trước Quy Trình Phê Duyệt Tài Liệu',
     `Phòng ban: ${dept}`,
-    DB.deptWorkflows[dept],
+    wfConfig,
     `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt tài liệu.`
   );
 }
