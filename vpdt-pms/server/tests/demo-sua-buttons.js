@@ -173,17 +173,21 @@ async function shot(page, selector, file) {
     await page.waitForTimeout(150);
     await shot(page, '#hacViewManage', '9-ngayle-sau-khi-luu.png');
 
-    // ===== 4) Danh Mục Loại Dịch Vụ (Hỗ Trợ IT > Gia Hạn Dịch Vụ) =====
+    // ===== 4) Danh Mục Loại Dịch Vụ (9/2026: DỜI sang Hệ Thống > Quản Trị > 🗂️ Quản Lý Danh Mục — không
+    // còn nằm ở màn nghiệp vụ "Hỗ Trợ IT > Gia Hạn Dịch Vụ" nữa, xem chú thích renderItRenewalCategoryList()
+    // ở module-itsupport-renewal.js — #itRenewalCategoryAdminBox không còn tồn tại, khối HTML mới cũng
+    // không có id riêng nên chụp thẳng #itRenewalCategoryList, ul liệt kê danh mục). =====
     await page.evaluate(() => { window.__promptAnswer = 'Domain & SSL'; });
     await page.evaluate(async () => {
-      await switchTab('itSupport');
-      setItSupportSubTab('RENEWAL');
+      await switchTab('system');
+      setSystemSubTab('ADMIN');
+      setAdminSubTab('CATALOG');
     });
     await page.waitForTimeout(150);
-    await shot(page, '#itRenewalCategoryAdminBox', '10-loaidichvu-danh-sach.png');
+    await shot(page, '#itRenewalCategoryList', '10-loaidichvu-danh-sach.png');
     await page.evaluate(async () => { await renameItRenewalCategory('Domain'); });
     await page.waitForTimeout(150);
-    await shot(page, '#itRenewalCategoryAdminBox', '11-loaidichvu-sau-khi-doi-ten.png');
+    await shot(page, '#itRenewalCategoryList', '11-loaidichvu-sau-khi-doi-ten.png');
 
     // ===== 5) Đào Tạo — Chương Trình =====
     await page.evaluate(async () => {

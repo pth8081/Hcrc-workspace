@@ -146,6 +146,12 @@ function buildAppDataForCreate(moduleKey, state) {
     // Hàng"/"Hủy Nhập".
     operationOrderStoreTierWorkflows: state.operationOrderStoreTierWorkflows,
     operationOrderHOTierWorkflows: state.operationOrderHOTierWorkflows,
+    // operationOrderStoreMixedApprovalRules (Quy Trình Hỗn Hợp, commit 2b7b569) — BUG THẬT đã sửa: thiếu
+    // hẳn field này khiến resolveOperationOrderWorkflow() (lib/workflowEngine.js) luôn nhận
+    // appData.operationOrderStoreMixedApprovalRules === undefined -> approvers[] rỗng cho MỌI đơn STORE,
+    // dù test có seed đúng rule nào ở state cũng vô tác dụng (server luôn chặn 403 "Bạn không có quyền").
+    // HO không dùng field này (giữ nguyên cơ chế tier cũ, đọc thẳng operationOrderHOTierWorkflows).
+    operationOrderStoreMixedApprovalRules: state.operationOrderStoreMixedApprovalRules,
     // users — operationStoreOpenings/operationRepairs.extraValidate() cần để resolve "Người Phụ Trách"
     // qua resolveOperationPersonInChargeUsername() (Mục C); cũng chính là nguồn tra cứu
     // hrProcesses.extraValidate() dùng để xác thực employeeUsername (Nhân Sự > Offboarding v2) VÀ

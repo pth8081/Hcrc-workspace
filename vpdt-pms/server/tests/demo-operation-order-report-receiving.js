@@ -26,7 +26,11 @@ const CREATOR = { username: 'vh_demo_creator', name: 'Nhân Viên Mua Hàng (Dem
 // Trưởng phòng thường vừa tự đặt hàng vừa duyệt đơn của nhân viên, nên gán cả 2 không phi thực tế; các
 // test hồi quy (test-operation-order-report.js) đã tách riêng creator/approver/outsider để kiểm NGHIÊM
 // NGẶT từng lớp quyền — demo này chỉ cần 1 tài khoản xem được đủ mọi thứ để chụp ảnh liền mạch.
-const APPROVER = { username: 'vh_demo_tp', name: 'Trưởng Phòng Vận Hành (Demo)', dept: DEPT, perms: { operationOrderCreate: true }, active: true };
+// operationOrderReceiptManageHO (10/2026, đợt "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị") — BẮT
+// BUỘC phải có riêng để thấy đơn ở sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" (canManageOperationOrderReceiptClient()
+// ở module-vanhanh.js) — TÁCH HẲN khỏi quyền duyệt/từ chối nội bộ (operationOrderCreate + dept-workflow)
+// nên phải cấp thêm tường minh, không tự động kéo theo như trước đây.
+const APPROVER = { username: 'vh_demo_tp', name: 'Trưởng Phòng Vận Hành (Demo)', dept: DEPT, perms: { operationOrderCreate: true, operationOrderReceiptManageHO: true }, active: true };
 
 const state = createMockState({
   depts: [DEPT],
@@ -111,15 +115,23 @@ async function main() {
     await page.locator('#vanHanhOrdersWrap').screenshot({ path: path.join(OUT_DIR, '01-danh-sach-subtab-tong-quan.png') });
     console.log('Đã chụp: 01-danh-sach-subtab-tong-quan.png (sub-tab Danh Sách + Báo Cáo, badge trạng thái mới)');
 
-    // ===== Ảnh 2: Nút "📥 Nhập Hàng"/"🚫 Hủy Nhập" ở đơn C (đang AWAITING_RECEIPT) — mở dropdown "Khác ▾"
-    // rồi chọn "receive-goods" để hiện modal xác nhận thật (handleActionCellDispatch() thật, không giả lập). =====
-    const rowLocatorC = page.locator('#operationOrderTableBody tr', { hasText: c.code });
-    await rowLocatorC.scrollIntoViewIfNeeded();
-    await rowLocatorC.screenshot({ path: path.join(OUT_DIR, '02a-dong-don-cho-nhap-hang-voi-dropdown.png') });
-    await rowLocatorC.locator('select').selectOption('receive-goods');
+    // ===== Ảnh 2: Nút "📥 Nhập Hàng"/"🚫 Hủy Nhập" ở đơn C (đang AWAITING_RECEIPT) =====
+    // BUG THẬT đã sửa: 2 nút này KHÔNG còn nằm ở dropdown "Khác ▾" của dòng trong danh sách STORE/HO nữa
+    // (đã GỠ khỏi đó — xem chú thích tại buildOperationRowHTML(), module-vanhanh.js, đợt "Duyệt Nhập/Hủy
+    // Đơn Hàng tập trung") — giờ CHỈ còn ở sub-tab MỚI "🧾 Duyệt Nhập/Hủy Đơn Hàng"
+    // (renderOperationOrderReceiptApprovalTab()), gác quyền riêng operationOrderReceiptManageHO/Store (xem
+    // perms cấp cho APPROVER ở đầu file). Vẫn thao tác qua ĐÚNG modal/hàm xử lý thật
+    // (openOperationOrderReceiptActionModal()/confirmOperationOrderReceiptAction()), chỉ đổi điểm bấm từ
+    // dropdown "Khác" sang nút riêng ở sub-tab này.
+    await page.evaluate(() => setOperationOrderSubTab('RECEIPT'));
+    await page.waitForSelector('#opOrderReceiptPanel:not(.hidden)', { state: 'visible' });
+    const receiptRowC = page.locator('#opOrderReceiptTableBody tr', { hasText: c.code });
+    await receiptRowC.scrollIntoViewIfNeeded();
+    await receiptRowC.screenshot({ path: path.join(OUT_DIR, '02a-dong-don-cho-nhap-hang-voi-dropdown.png') });
+    await receiptRowC.locator('button[data-action="RECEIVE"]').click();
     await page.waitForSelector('#operationOrderReceiptModal', { state: 'visible' });
     await page.locator('#operationOrderReceiptModal > div').first().screenshot({ path: path.join(OUT_DIR, '02b-modal-xac-nhan-nhap-hang.png') });
-    console.log('Đã chụp: 02a (dòng đơn C + dropdown "Khác ▾" có Nhập Hàng/Hủy Nhập), 02b (modal xác nhận Nhập Hàng thật)');
+    console.log('Đã chụp: 02a (dòng đơn C ở sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" + nút Nhập Hàng/Hủy Nhập), 02b (modal xác nhận Nhập Hàng thật)');
     await page.evaluate(() => closeOperationOrderReceiptActionModal()); // đóng lại, KHÔNG xác nhận — giữ đơn C ở AWAITING_RECEIPT cho báo cáo
 
     // ===== Ảnh 3: Sub-tab "📊 Báo Cáo" — đếm đúng + tổng giá trị + nhóm theo tháng =====

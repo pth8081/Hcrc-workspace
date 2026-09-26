@@ -41,6 +41,18 @@ async function startLaborContractServer(seedUsers) {
       STORE[c].push(item);
       return item;
     },
+    // createForCollectionSerialized() (lib/recordStore.js) — BUG THẬT đã sửa: laborContracts.getLockKey
+    // (lib/createValidation.js, đợt vá race-condition trùng mã hợp đồng 10/2026) khiến routes/create.js
+    // giờ gọi hàm NÀY thay vì createForCollection() thường — stub cũ thiếu hẳn hàm này khiến
+    // POST /api/create/laborContracts luôn crash "createForCollectionSerialized is not a function". Test
+    // này chạy tuần tự (không có 2 request đồng thời thật) nên bỏ qua lockKey, dùng LẠI đúng logic
+    // createForCollection() ở trên.
+    createForCollectionSerialized: async (c, lockKey, builderFn) => {
+      const draft = await builderFn();
+      const item = Object.assign({ id: nextId++ }, draft);
+      STORE[c].push(item);
+      return item;
+    },
     withLockedRecordForCollection: async (c, id, mutatorFn) => {
       const idx = STORE[c].findIndex(x => x.id === Number(id));
       if (idx === -1) { const { HttpError } = require('../lib/httpErrors'); throw new HttpError(404, 'Không tìm thấy bản ghi'); }
@@ -146,9 +158,15 @@ async function main() {
   await page.waitForTimeout(200);
 
   // ===== Ảnh 1: Danh sách (rỗng) + form Tạo Hợp Đồng Mới =====
+  // BUG THẬT đã sửa: #hrcNewEmployeeCode (input tự do) không còn tồn tại — đã đổi sang ô tìm-chọn "Mã
+  // Nhân Viên" bắt buộc lấy từ Hồ Sơ Nhân Sự (xem module-hopdonglaodong.js::resolveHrcEmployeeCodeInput()),
+  // chỉ mở lại ô nhập tay khi tick "Không lấy từ hồ sơ" (#hrcNewUseExternalCode). Demo này không stub
+  // GET /api/hr-profile/employee-directory nên không có dữ liệu cho ô tìm-chọn — dùng nhánh nhập tay tự
+  // do (#hrcNewEmployeeCodeManual), đúng khuôn onHrcUseExternalCodeChange().
   await page.evaluate(() => openHrContractCreateModal());
   await page.waitForSelector('#hrContractCreateModal:not(.hidden)', { timeout: 5000 });
-  await page.fill('#hrcNewEmployeeCode', 'NV5001');
+  await page.check('#hrcNewUseExternalCode');
+  await page.fill('#hrcNewEmployeeCodeManual', 'NV5001');
   await page.selectOption('#hrcNewContractType', 'FIXED_TERM');
   await page.fill('#hrcNewStartDate', '2026-01-01');
   await page.fill('#hrcNewEndDate', '2026-12-31');
@@ -158,7 +176,11 @@ async function main() {
 
   await page.click('#hrContractCreateForm button[type="submit"]');
   await page.waitForTimeout(300);
-  await page.waitForSelector('#hrContractCreateModal.hidden', { timeout: 5000 });
+  // BUG THẬT đã sửa: state mặc định của waitForSelector() là 'visible' — element mang class Tailwind
+  // "hidden" (display:none) không BAO GIỜ thoả 'visible', chờ mãi tới hết timeout dù modal đã đóng đúng
+  // như mong đợi. Ý đồ thật ở đây chỉ là xác nhận modal ĐÃ đóng (có class "hidden" trong DOM) — dùng
+  // 'attached' (chỉ cần khớp selector, không đòi hỏi hiển thị).
+  await page.waitForSelector('#hrContractCreateModal.hidden', { state: 'attached', timeout: 5000 });
 
   // ===== Ảnh 2: Danh sách hợp đồng (sau khi tạo) =====
   await page.waitForSelector('#hrcTableBody tr', { timeout: 5000 });

@@ -133,6 +133,21 @@ async function multiSelectPick(page, containerId, query, expectedLabelSubstring)
   await page.waitForTimeout(50);
 }
 
+// BUG THẬT đã sửa: "Vị Trí Tham Gia Quy Trình" (#workflowParticipatingPositionsMultiSelect) KHÔNG dùng
+// chung widget "chọn nhiều thật" renderMultiSelectDropdown() (input[data-pms-search] + [data-pms-dropdown])
+// như 2 danh mục Đơn Vị/Chức Danh còn lại — từ commit e7e93a1 (v22.1, TRƯỚC cả demo này lần cuối được
+// sửa, xem module-admin-specialperm.js::renderWorkflowParticipatingPositionsWidget()) đã đổi hẳn sang 1
+// "builder" RIÊNG (2 ô gõ-tìm sdd* #wfPosBuilderJobTitle/#wfPosBuilderDept + nút "➕ Thêm"), vì widget cần
+// cho GHÉP TỰ DO chức danh×phòng ban (kể cả để trống phòng ban, VD "Tổng Giám Đốc") — thứ mà 1 danh sách
+// chọn-từ-catalog-có-sẵn không làm được. multiSelectPick() vì vậy KHÔNG áp dụng được cho danh mục này
+// (input[data-pms-search] không tồn tại trong container) — dùng hàm riêng dưới đây.
+async function addWfPositionPair(page, jobTitle, dept) {
+  await page.fill('#wfPosBuilderJobTitle', jobTitle);
+  await page.fill('#wfPosBuilderDept', dept || '');
+  await page.click('[data-op="addWfPositionPairFromBuilder"]');
+  await page.waitForTimeout(50);
+}
+
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const server = await startStaticServer();
@@ -174,14 +189,11 @@ async function main() {
     }
     console.log('✅ 03: đã thêm + lưu chức danh "Giám đốc" vào Nhóm Không Cấp Văn Phòng Phẩm.');
 
-    // ===== 4) Thêm 2 CẶP (chức danh, phòng ban) vào "Vị Trí Tham Gia Quy Trình" (danh mục MỚI) — gõ
-    // tìm trực tiếp "Trưởng phòng IT" ra đúng 1 dòng "Trưởng phòng — Phòng IT" để chọn, KHÔNG cần dựng
-    // 2 dropdown rời để lắp ráp từng cặp =====
-    // Query chỉ cần là 1 CHUỖI CON thật của nhãn "<chức danh> — <phòng ban>" (widget so khớp includes()
-    // trên toàn bộ nhãn, không so khớp riêng từng nửa) — gõ đúng tên phòng ban là đủ để lọc ra vài dòng
-    // (mỗi chức danh 1 dòng cho phòng đó), rồi .filter({hasText}) ở multiSelectPick() chọn đúng 1 dòng.
-    await multiSelectPick(page, 'workflowParticipatingPositionsMultiSelect', 'Phòng IT', 'Trưởng phòng — Phòng IT');
-    await multiSelectPick(page, 'workflowParticipatingPositionsMultiSelect', 'Phòng Nhân Sự', 'Trưởng phòng — Phòng Nhân Sự');
+    // ===== 4) Thêm 2 CẶP (chức danh, phòng ban) vào "Vị Trí Tham Gia Quy Trình" (danh mục MỚI) — dùng
+    // đúng builder RIÊNG của danh mục này (2 ô gõ-tìm Chức danh/Phòng ban + nút "➕ Thêm"), xem chú thích
+    // đầy đủ tại addWfPositionPair() ở trên. =====
+    await addWfPositionPair(page, 'Trưởng phòng', 'Phòng IT');
+    await addWfPositionPair(page, 'Trưởng phòng', 'Phòng Nhân Sự');
     await block17.screenshot({ path: path.join(OUT_DIR, '02-da-chon-2-vi-tri-chua-luu.png') });
     await page.click('[data-op="saveWorkflowParticipatingPositions"]');
     await page.waitForTimeout(150);
@@ -204,7 +216,9 @@ async function main() {
     const afterReload = await page.evaluate(() => ({
       depts: [...(document.querySelectorAll('#workflowParticipatingDeptsMultiSelect [data-pms-chips] span'))].map(s => s.textContent.trim()),
       titles: [...(document.querySelectorAll('#vppExcludedJobTitlesMultiSelect [data-pms-chips] span'))].map(s => s.textContent.trim()),
-      positions: [...(document.querySelectorAll('#workflowParticipatingPositionsMultiSelect [data-pms-chips] span'))].map(s => s.textContent.trim())
+      // positions dùng builder RIÊNG (data-wfpos-chips), KHÔNG phải data-pms-chips như 2 danh mục kia — xem
+      // chú thích tại addWfPositionPair() ở trên.
+      positions: [...(document.querySelectorAll('#workflowParticipatingPositionsMultiSelect [data-wfpos-chips] span'))].map(s => s.textContent.trim())
     }));
     if (afterReload.depts.length !== 2 || afterReload.titles.length !== 1 || afterReload.positions.length !== 2) {
       throw new Error('LỖI DEMO: sau khi tải lại trang thật, 1 trong 3 danh mục KHÔNG còn đủ số mục đã lưu! ' + JSON.stringify(afterReload));
@@ -213,7 +227,7 @@ async function main() {
     await block17AfterReload.screenshot({ path: path.join(OUT_DIR, '04-sau-khi-tai-lai-trang-that-van-con-luu.png') });
     console.log('✅ 05: đã RELOAD TRANG THẬT rồi vào lại khối 17 — cả 3 danh mục vẫn còn đủ (2 đơn vị + 1 chức danh + 2 vị trí), xác nhận đã lưu thật ở "server".');
 
-    console.log('\n🎉 DEMO PHẦN 1 HOÀN TẤT — cả 3 danh mục khối 17 đã lên widget "chọn nhiều thật" DUY NHẤT (renderMultiSelectDropdown), danh mục "Vị Trí Tham Gia Quy Trình" mới hoạt động đúng và sống sót qua tải lại trang.');
+    console.log('\n🎉 DEMO PHẦN 1 HOÀN TẤT — Đơn Vị/Chức Danh dùng widget "chọn nhiều thật" (renderMultiSelectDropdown), riêng "Vị Trí Tham Gia Quy Trình" dùng builder ghép tự do chức danh×phòng ban — cả 3 hoạt động đúng và sống sót qua tải lại trang.');
     console.log(`   Ảnh đã lưu tại: ${OUT_DIR}`);
   } finally {
     await browser.close();

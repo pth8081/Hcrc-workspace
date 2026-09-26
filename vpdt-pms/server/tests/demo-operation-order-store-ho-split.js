@@ -23,13 +23,18 @@ const OUT_DIR = path.join(__dirname, '..', 'demo-screenshots', 'operation-order-
 
 const DEPT = 'Phòng Vận Hành';
 const CREATOR = { username: 'vh_creator_demo', name: 'Nhân Viên Mua Hàng (Demo)', dept: DEPT, perms: { operationOrderCreate: true }, active: true };
-// 3 approver KHÁC NHAU — cố tình cấu hình mỗi người 1 mức/1 luồng RIÊNG để chứng minh 2 quy trình Siêu
-// Thị/HO tách biệt hoàn toàn VÀ 3 mức của Siêu Thị định tuyến khác nhau: STORE_LOW chỉ duyệt mức
-// "< 10 triệu", STORE_HIGH chỉ duyệt mức ">= 100 triệu" (2 mức KHÁC nhau của CÙNG luồng Siêu Thị), HO
-// chỉ duyệt luồng HO — không ai trong 3 người này duyệt được hồ sơ ngoài đúng phạm vi được cấp.
-const STORE_LOW = { username: 'vh_store_low_demo', name: 'Trưởng Ca Siêu Thị (Demo)', dept: DEPT, perms: { operationOrderCreate: true, canBeApprover: true }, active: true };
+// BUG THẬT đã sửa (demo này viết TRƯỚC đợt "Quy Trình Hỗn Hợp", commit 2b7b569 — xem
+// resolveOperationOrderWorkflowConfigForItemClient()/computeOperationOrderStoreMixedApproversClient() ở
+// core.js): approver của luồng SIÊU THỊ giờ tra HOÀN TOÀN theo BƯỚC + siêu thị qua
+// DB.operationOrderStoreMixedApprovalRules, KHÔNG còn phân biệt theo MỨC GIÁ TRỊ (tier) như trước nữa —
+// operationOrderStoreTierWorkflows[...].approvers cũ giờ CHỈ còn dùng để biết SỐ BƯỚC (workflowId), không
+// còn dùng để tra NGƯỜI duyệt. Vì vậy STORE_LOW/STORE_HIGH không còn thể tách biệt theo mức được nữa —
+// STORE_LOW giữ vai trò approver Bước 1 DUY NHẤT áp dụng cho MỌI mức Siêu Thị (mirror khuôn seed ở
+// tests/test-operation-order-location-tiers.js), STORE_HIGH giữ lại chỉ để minh hoạ "không có tên trong
+// Quy Trình Hỗn Hợp thì bị chặn hoàn toàn, bất kể mức nào". HO vẫn giữ NGUYÊN cơ chế tier cũ (không đổi).
+const STORE_LOW = { username: 'vh_store_low_demo', name: 'Trưởng Ca Siêu Thị (Demo)', dept: DEPT, perms: { operationOrderCreate: true, canBeApprover: true, operationOrderReceiptManageStore: { all: true, depts: [] } }, active: true };
 const STORE_HIGH = { username: 'vh_store_high_demo', name: 'Giám Đốc Vận Hành Siêu Thị (Demo)', dept: DEPT, perms: { operationOrderCreate: true, canBeApprover: true }, active: true };
-const HO_APPROVER = { username: 'vh_ho_demo', name: 'Trưởng Phòng Mua Hàng HO (Demo)', dept: DEPT, perms: { operationOrderCreate: true, canBeApprover: true }, active: true };
+const HO_APPROVER = { username: 'vh_ho_demo', name: 'Trưởng Phòng Mua Hàng HO (Demo)', dept: DEPT, perms: { operationOrderCreate: true, canBeApprover: true, operationOrderReceiptManageHO: true }, active: true };
 // totpEnabled:true — bắt buộc cho tài khoản admin (proceedAfterAuth() ở core.js chặn admin CHƯA bật
 // TOTP bằng 1 modal thiết lập bắt buộc, không gọi initDatabase() cho tới khi thiết lập xong; demo chỉ
 // cần login thẳng để chụp ảnh, không kiểm tra luồng TOTP).
@@ -39,6 +44,8 @@ const state = createMockState({
   depts: [DEPT],
   users: [CREATOR, STORE_LOW, STORE_HIGH, HO_APPROVER, ADMIN],
   workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+  // .approvers ở đây (STORE) giờ CHỈ còn là dữ liệu lịch sử, KHÔNG còn được đọc để tra người duyệt nữa
+  // (xem chú thích ở STORE_LOW/STORE_HIGH phía trên) — giữ lại nguyên workflowId để biết SỐ BƯỚC.
   operationOrderStoreTierWorkflows: {
     LT10M: { workflowId: 'WF_1STEP', approvers: { 1: [STORE_LOW.username] } },
     GTE100M: { workflowId: 'WF_1STEP', approvers: { 1: [STORE_HIGH.username] } }
@@ -47,7 +54,14 @@ const state = createMockState({
   },
   operationOrderHOTierWorkflows: {
     LT100M: { workflowId: 'WF_1STEP', approvers: { 1: [HO_APPROVER.username] } }
-  }
+  },
+  // Quy Trình Hỗn Hợp (đợt commit 2b7b569, sau khi demo này viết) — approver THẬT của luồng Siêu Thị,
+  // tra theo Bước + siêu thị, KHÔNG theo tier. mode PERSON + stores:[] = STORE_LOW áp dụng Bước 1 cho MỌI
+  // siêu thị/MỌI mức (mirror khuôn seed ở tests/test-operation-order-location-tiers.js). STORE_HIGH CỐ Ý
+  // không có dòng nào ở đây — minh hoạ người không có tên trong Quy Trình Hỗn Hợp bị chặn hoàn toàn.
+  operationOrderStoreMixedApprovalRules: [
+    { id: 1, step: 1, mode: 'PERSON', username: STORE_LOW.username, stores: [] }
+  ]
 });
 
 async function loginAs(page, user) {
@@ -131,48 +145,56 @@ async function main() {
     const hoOrder = await createOrder(page, { locationType: 'HO', title: 'Đặt hàng văn phòng phẩm toàn hệ thống - HO', receivingLocationName: 'Kho Tổng HO', amount: 50000000 });
     console.log(`Đã tạo 1 đơn HO: ${hoOrder.code} (50tr, tier LT100M)`);
 
-    // ===== 3) Chứng minh 2 quy trình Siêu Thị/HO TÁCH RIÊNG HOÀN TOÀN — mỗi mức chỉ đúng người được
-    // cấu hình mới duyệt được, người khác (dù cùng luồng Siêu Thị, khác mức, hoặc khác hẳn luồng HO) đều
-    // bị chặn 403 =====
+    // ===== 3) Chứng minh 2 quy trình Siêu Thị/HO TÁCH RIÊNG HOÀN TOÀN =====
+    // BUG THẬT đã sửa (demo này viết TRƯỚC đợt "Quy Trình Hỗn Hợp") — luồng Siêu Thị KHÔNG còn phân biệt
+    // theo mức giá trị nữa (xem chú thích ở khai báo STORE_LOW/STORE_HIGH đầu file): STORE_LOW giờ là
+    // approver Bước 1 DUY NHẤT áp dụng cho MỌI mức (LT10M/FROM10M_TO100M/GTE100M như nhau) — chỉ còn
+    // demo được "STORE >< HO tách biệt hoàn toàn" + "không có tên trong Quy Trình Hỗn Hợp (STORE_HIGH) thì
+    // bị chặn HOÀN TOÀN, bất kể mức nào", KHÔNG còn demo được "2 approver khác nhau cho 2 mức khác nhau"
+    // như bản gốc nữa.
+    // Chạy các phép thử "PHẢI BỊ CHẶN" TRƯỚC khi duyệt bất kỳ đơn nào (cả 4 đơn còn PENDING) — để lỗi bị
+    // chặn ĐÚNG vì THIẾU QUYỀN (403), không lẫn với lỗi "hồ sơ đã xử lý xong" (409) nếu thử SAU khi đơn đã
+    // được duyệt bởi người khác.
     await loginAs(page, STORE_LOW);
-    const storeLowApproveHighBlocked = await tryApprove(page, storeHigh.id);
-    console.log(`STORE_LOW thử duyệt đơn STORE mức CAO (150tr, tier GTE100M — không thuộc quyền của mình): ${storeLowApproveHighBlocked.ok ? 'LỖI — LẼ RA PHẢI BỊ CHẶN' : `BỊ CHẶN ĐÚNG (${storeLowApproveHighBlocked.error})`}`);
-    if (storeLowApproveHighBlocked.ok) throw new Error('LỖ HỔNG: STORE_LOW không được cấu hình cho tier GTE100M nhưng vẫn duyệt được!');
     const storeLowApproveHoBlocked = await tryApprove(page, hoOrder.id);
     console.log(`STORE_LOW thử duyệt đơn HO (không thuộc luồng Siêu Thị): ${storeLowApproveHoBlocked.ok ? 'LỖI — LẼ RA PHẢI BỊ CHẶN' : `BỊ CHẶN ĐÚNG (${storeLowApproveHoBlocked.error})`}`);
     if (storeLowApproveHoBlocked.ok) throw new Error('LỖ HỔNG: STORE_LOW duyệt được đơn HO — 2 luồng KHÔNG còn tách biệt!');
-    // STORE_LOW duyệt ĐÚNG phạm vi của mình (tier LT10M) -> AWAITING_RECEIPT.
-    const storeLowApproved = await approveOrder(page, storeLow.id);
-    console.log(`STORE_LOW duyệt đơn ĐÚNG tier của mình (${storeLow.code}, LT10M): status=${storeLowApproved.status}`);
 
     await loginAs(page, HO_APPROVER);
     const hoApproveStoreBlocked = await tryApprove(page, storeQ7.id);
     console.log(`HO_APPROVER thử duyệt đơn Siêu Thị (không thuộc luồng HO): ${hoApproveStoreBlocked.ok ? 'LỖI — LẼ RA PHẢI BỊ CHẶN' : `BỊ CHẶN ĐÚNG (${hoApproveStoreBlocked.error})`}`);
     if (hoApproveStoreBlocked.ok) throw new Error('LỖ HỔNG: HO_APPROVER duyệt được đơn Siêu Thị — 2 luồng KHÔNG còn tách biệt!');
-    const hoApproved = await approveOrder(page, hoOrder.id);
-    console.log(`HO_APPROVER duyệt đơn ĐÚNG luồng của mình (${hoOrder.code}, tier LT100M): status=${hoApproved.status}`);
 
+    // STORE_HIGH KHÔNG có dòng nào trong Quy Trình Hỗn Hợp (operationOrderStoreMixedApprovalRules) — bị
+    // chặn HOÀN TOÀN khỏi luồng Siêu Thị, bất kể mức nào (khác hẳn thiết kế CŨ trước đợt "Quy Trình Hỗn
+    // Hợp", nơi STORE_HIGH từng có quyền riêng ở tier GTE100M).
     await loginAs(page, STORE_HIGH);
-    const storeHighApproveLowBlocked = await tryApprove(page, storeQ7.id); // storeQ7 vẫn PENDING, tier LT10M — STORE_HIGH KHÔNG được cấu hình cho tier này
-    console.log(`STORE_HIGH thử duyệt đơn STORE mức THẤP (tier LT10M — không thuộc quyền của mình): ${storeHighApproveLowBlocked.ok ? 'LỖI — LẼ RA PHẢI BỊ CHẶN' : `BỊ CHẶN ĐÚNG (${storeHighApproveLowBlocked.error})`}`);
-    if (storeHighApproveLowBlocked.ok) throw new Error('LỖ HỔNG: STORE_HIGH không được cấu hình cho tier LT10M nhưng vẫn duyệt được!');
-    const storeHighApproved = await approveOrder(page, storeHigh.id);
-    console.log(`STORE_HIGH duyệt đơn ĐÚNG tier của mình (${storeHigh.code}, GTE100M): status=${storeHighApproved.status}`);
+    const storeHighBlocked = await tryApprove(page, storeQ7.id);
+    console.log(`STORE_HIGH thử duyệt đơn Siêu Thị (không có tên trong Quy Trình Hỗn Hợp): ${storeHighBlocked.ok ? 'LỖI — LẼ RA PHẢI BỊ CHẶN' : `BỊ CHẶN ĐÚNG (${storeHighBlocked.error})`}`);
+    if (storeHighBlocked.ok) throw new Error('LỖ HỔNG: STORE_HIGH không có tên trong Quy Trình Hỗn Hợp nhưng vẫn duyệt được!');
 
-    // storeQ7 (tier LT10M) vẫn cần được duyệt cho đủ dữ liệu Báo Cáo — STORE_LOW mới đúng quyền.
+    // STORE_LOW (approver Bước 1 duy nhất của Quy Trình Hỗn Hợp) duyệt được CẢ 3 đơn Siêu Thị, bất kể mức.
     await loginAs(page, STORE_LOW);
+    const storeLowApproved = await approveOrder(page, storeLow.id);
+    console.log(`STORE_LOW duyệt đơn mức THẤP (${storeLow.code}, LT10M): status=${storeLowApproved.status}`);
+    const storeHighApprovedByLow = await approveOrder(page, storeHigh.id);
+    console.log(`STORE_LOW duyệt luôn đơn mức CAO (${storeHigh.code}, GTE100M — Quy Trình Hỗn Hợp không còn phân biệt mức): status=${storeHighApprovedByLow.status}`);
     const storeQ7Approved = await approveOrder(page, storeQ7.id);
     console.log(`STORE_LOW duyệt nốt ${storeQ7.code} (Q7, tier LT10M): status=${storeQ7Approved.status}`);
 
-    // ===== 4) Ảnh minh hoạ: danh sách Siêu Thị SAU khi 3 đơn đều AWAITING_RECEIPT, 2 tier khác nhau đã
-    // được 2 approver KHÁC NHAU xử lý (STORE_LOW cho LT10M, STORE_HIGH cho GTE100M) — chụp khi đăng nhập
-    // CREATOR (người tạo cả 3 đơn, thấy được TOÀN BỘ bất kể tier/approver, khác STORE_LOW/STORE_HIGH chỉ
-    // thấy đúng phạm vi tier được cấp — đúng thiết kế canView, không phải giới hạn của demo). =====
+    await loginAs(page, HO_APPROVER);
+    const hoApproved = await approveOrder(page, hoOrder.id);
+    console.log(`HO_APPROVER duyệt đơn ĐÚNG luồng của mình (${hoOrder.code}, tier LT100M): status=${hoApproved.status}`);
+
+    // ===== 4) Ảnh minh hoạ: danh sách Siêu Thị SAU khi 3 đơn đều AWAITING_RECEIPT — CẢ 3 đều do CÙNG 1
+    // approver Quy Trình Hỗn Hợp (STORE_LOW) duyệt, bất kể mức — chụp khi đăng nhập CREATOR (người tạo cả
+    // 3 đơn, thấy được TOÀN BỘ, khác STORE_LOW chỉ thấy đúng phạm vi được cấp — đúng thiết kế canView,
+    // không phải giới hạn của demo). =====
     await loginAs(page, CREATOR);
     await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ORDERS'); setOperationOrderSubTab('STORE'); });
     await page.waitForSelector('#opOrderListPanel', { state: 'visible' });
     await page.locator('#vanHanhOrdersWrap').screenshot({ path: path.join(OUT_DIR, '03-sieu-thi-2-muc-da-duyet-boi-2-nguoi-khac-nhau.png') });
-    console.log('Đã chụp: 03 (3 đơn Siêu Thị đều AWAITING_RECEIPT — mức thấp/cao do 2 approver KHÁC NHAU duyệt, mức giữa 10-100tr vẫn hiện đúng nhãn dù chưa có đơn nào rơi vào)');
+    console.log('Đã chụp: 03 (3 đơn Siêu Thị đều AWAITING_RECEIPT — cả 3 mức đều do CÙNG 1 approver Quy Trình Hỗn Hợp duyệt, mức giữa 10-100tr vẫn hiện đúng nhãn dù chưa có đơn nào rơi vào)');
 
     // ===== 5) Luồng Nhập Hàng vẫn hoạt động bình thường SAU KHI duyệt (bất kể theo tier nào) =====
     await loginAs(page, HO_APPROVER);

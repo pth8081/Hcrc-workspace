@@ -229,8 +229,11 @@ async function main() {
       document.getElementById('mhExportFrom').value = '2026-01-01';
       document.getElementById('mhExportTo').value = '2026-09-01';
       await exportMhManualData();
+      // sourceSystem=MANUAL đã được thêm tường minh vào URL export từ commit 5851b24 (TRƯỚC cả lần demo
+      // này được sửa gần nhất) — assertion cũ thiếu tham số này đã lỗi thời, cập nhật lại cho khớp URL
+      // thật exportMhManualData() sinh ra, không bỏ tham số ở nguồn.
       check('muaHang: export opens correct URL with from/to query params',
-        openedUrl === '/api/purchasing/manual-import-export?from=2026-01-01&to=2026-09-01', String(openedUrl));
+        openedUrl === '/api/purchasing/manual-import-export?from=2026-01-01&to=2026-09-01&sourceSystem=MANUAL', String(openedUrl));
 
       // ---- Scenario 6: calculate rebate estimate ----
       alerts.length = 0;
