@@ -35,6 +35,7 @@ const INTENTIONALLY_EXEMPT = new Set([
   'hrProfileManagerVisibleFields', // trả kèm trong GET/PATCH /api/hr-profile/me, không qua DB.* blob
   'hrProfileSelfVisibleFields',
   'payrollRateConfig',          // đọc thẳng phía server trong routes/payroll.js, không qua DB.* client
+  'workflowParticipatingDeptGroupsMigrated', // cờ nội bộ 1-lần cho seedDefaults.js, không có UI client
 ]);
 
 const missing = [];

@@ -177,6 +177,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // cùng độ mở, chỉ sửa được ở màn Phân Quyền (admin).
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
   'workflowParticipatingDeptGroups',
+  // workflowParticipatingDeptGroupsMigrated: cờ nội bộ 1-lần cho migrateWorkflowParticipatingDeptGroups()
+  // (seedDefaults.js) — không có màn hình nào cần client ghi tay, cùng khuôn diskSpaceMonitorState ở dưới.
+  'workflowParticipatingDeptGroupsMigrated',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',

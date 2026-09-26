@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**24.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.21 (2026-09-26): Rà soát độc lập v24.16→v24.20 (2 agent song song: test + CSP) — vá 1 lỗi Cao
+
+Theo yêu cầu người dùng "rà soát test lại các thay đổi từ 24.16 đến 24.20 xem có lỗi gì không, và rà
+soát CSP" — chạy 2 agent độc lập song song:
+
+1. **Rà soát code-correctness** toàn bộ diff v24.16→v24.20 (73 file, đọc lại từ đầu, không dựa vào test
+   sẵn có của cùng người viết) — phát hiện **1 lỗi Cao thật**, còn lại đều đối chiếu sạch (cascade xoá
+   Khối/Ban, tách mã BB/BL/ST/HO, `retryArraySaveAfterConflict()`, registry Excel danh mục đơn giản,
+   ~25 hàm mẫu trong đợt vá await/rollback v24.18, bỏ chặn ảnh Checklist v24.19).
+2. **Rà soát CSP sống** (Express thật + `lib/securityHeaders.js` áp CSP production thật, KHÁC 2 bài test
+   CSP sẵn có chỉ click qua tab cấp 1) — thao tác sâu vào đúng 8 màn hình mới/đổi ở 24.16-24.20 (Khối/Ban
+   CRUD, nút Excel Tải Mẫu/Xuất cho 3 danh mục, bộ lọc Khối/Ban ở Phân Quyền, form Phê Duyệt Giá Bán
+   Buôn/Bán Lẻ, 2 tab Quy Trình BB/BL, Checklist VSATTP/QA, "Đơn Vị Tham Gia Quy Trình" nhiều nhóm) —
+   **không phát hiện vi phạm CSP nào**.
+
+**Lỗi Cao đã vá**: `migrateWorkflowParticipatingDeptGroups()` (`seedDefaults.js`, v24.20) suy ra "đã di
+trú chưa" từ ĐỘ DÀI `workflowParticipatingDeptGroups` — không phân biệt được "chưa từng di trú" với
+"admin đã chủ động xoá hết nhóm" (2 trạng thái nhìn giống hệt nhau: mảng rỗng), trong khi danh sách
+phẳng cũ `workflowParticipatingDepts` KHÔNG BAO GIỜ bị xoá. Hệ quả: admin xoá sạch "Đơn Vị Tham Gia Quy
+Trình" rồi mỗi lần server restart (pm2 restart/deploy/crash) lại bị ÂM THẦM tạo lại đúng nhóm mặc định
+cũ, đảo ngược quyết định của admin không 1 lời cảnh báo. Đã vá bằng cờ RIÊNG
+`workflowParticipatingDeptGroupsMigrated` (đặt `true` đúng 1 LẦN DUY NHẤT, độc lập hoàn toàn khỏi nội
+dung `workflowParticipatingDeptGroups` hiện tại — xem chú thích đầy đủ ở `defaults.js`), kèm chốt chặn
+`workflowParticipatingDeptGroups` vẫn rỗng thật sự (không bị hồi sinh) qua nhiều lượt "restart" liên
+tiếp trong `tests/test-migrate-workflow-dept-groups.js`. Gate ghi (`ADMIN_ONLY_KEYS`, `routes/data.js`)
++ danh sách exempt của `test-initdatabase-key-coverage.js` cập nhật theo (cờ nội bộ, không có UI client
+đọc/ghi, cùng khuôn `diskSpaceMonitorState`).
+
+Không đổi schema SQL/route mới nào — chỉ copy code + `pm2 restart`.
 
 ## v24.20 (2026-09-26): "Đơn Vị Tham Gia Quy Trình" — đổi từ 1 danh sách phẳng sang NHIỀU NHÓM theo quy trình
 

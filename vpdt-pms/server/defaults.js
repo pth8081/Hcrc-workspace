@@ -471,6 +471,18 @@ const DEFAULTS = {
   // migrateWorkflowParticipatingDeptGroups() ở seedDefaults.js.
   workflowParticipatingDeptGroups: [],
 
+  // LỖI ĐÃ VÁ (đợt rà soát độc lập 9/2026): migrateWorkflowParticipatingDeptGroups() ban đầu suy ra
+  // "đã di trú chưa" từ ĐỘ DÀI workflowParticipatingDeptGroups (rỗng = coi như CHƯA di trú) — không
+  // phân biệt được "chưa từng di trú" với "admin đã chủ động xoá HẾT nhóm" (2 trạng thái NHÌN GIỐNG HỆT
+  // NHAU: mảng rỗng), trong khi workflowParticipatingDepts (phẳng, cũ) KHÔNG BAO GIỜ bị xoá. Hệ quả: admin
+  // xoá sạch mọi nhóm rồi bấm Lưu -> mỗi lần server restart sau đó (pm2 restart/deploy/crash) lại ÂM THẦM
+  // tự tạo lại đúng nhóm mặc định cũ, đảo ngược quyết định của admin không 1 lời cảnh báo. Cờ RIÊNG này
+  // (KHÔNG có UI/màn hình nào đọc/ghi, cùng khuôn diskSpaceMonitorState ngay trên) đánh dấu "đã chạy di
+  // trú lần đầu hay chưa" độc lập hoàn toàn với nội dung workflowParticipatingDeptGroups hiện tại — đặt
+  // true đúng 1 LẦN DUY NHẤT (dù có tạo nhóm mặc định hay không), từ đó về sau admin xoá/thêm bao nhiêu
+  // nhóm cũng không bao giờ bị migration ghi đè lại nữa.
+  workflowParticipatingDeptGroupsMigrated: false,
+
   // "Vị Trí Tham Gia Quy Trình" (khối 17 cây phân quyền, cùng nhóm với workflowParticipatingDepts/
   // vppExcludedJobTitles ở trên) — danh mục CẶP (jobTitle, dept) admin tự dựng thủ công (ĐỘC LẬP hoàn
   // toàn khỏi dữ liệu user thật đang có, cùng tinh thần 2 danh mục kia — admin có thể cấu hình trước cả

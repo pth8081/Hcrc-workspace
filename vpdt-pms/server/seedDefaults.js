@@ -460,24 +460,37 @@ async function migrateApprovalGroupsToConfigurable() {
 // LẠI danh sách module bằng snapshot cứng (không import được WF_MODULE_CONFIG — hằng số client, không
 // phải CommonJS) — module mới thêm SAU đợt nâng cấp này tự rơi vào diện "chưa nhóm nào claim" (hiện đủ
 // DB.depts), chấp nhận được vì đó cũng chính là hành vi mặc định an toàn cho mọi module mới từ trước
-// tới nay. Idempotent — bỏ qua nếu workflowParticipatingDeptGroups đã có dữ liệu (admin đã tự cấu hình
-// nhóm mới) hoặc danh sách phẳng cũ rỗng (không có gì để di trú).
+// tới nay.
+//
+// LỖI ĐÃ VÁ (đợt rà soát độc lập 9/2026, xem chú thích đầy đủ ở workflowParticipatingDeptGroupsMigrated
+// trong defaults.js): bản ĐẦU TIÊN suy ra "đã di trú chưa" từ ĐỘ DÀI workflowParticipatingDeptGroups —
+// không phân biệt được "chưa từng di trú" với "admin đã chủ động xoá hết nhóm", khiến admin xoá sạch
+// nhóm rồi mỗi lần server restart lại bị âm thầm tạo lại đúng nhóm mặc định cũ. Idempotent ĐÚNG NGHĨA
+// giờ dựa vào cờ RIÊNG `workflowParticipatingDeptGroupsMigrated` (đặt true đúng 1 LẦN, bất kể có tạo
+// nhóm mặc định hay không) — hoàn toàn độc lập khỏi nội dung workflowParticipatingDeptGroups hiện tại.
 const WF_MODULE_KEYS_AT_DEPT_GROUPS_MIGRATION = [
   'DOC', 'SUBMISSION', 'CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'VPP', 'CONTRACT_APPROVAL', 'CONTRACT_MANAGE',
   'PAYMENT', 'ITPRICE_RETAIL', 'ITPRICE_WHOLESALE', 'OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'
 ];
 async function migrateWorkflowParticipatingDeptGroups() {
-  const groups = await getAppDataValue('workflowParticipatingDeptGroups');
-  if (Array.isArray(groups) && groups.length) return;
+  const alreadyMigrated = await getAppDataValue('workflowParticipatingDeptGroupsMigrated');
+  if (alreadyMigrated) return;
   const legacy = await getAppDataValue('workflowParticipatingDepts');
-  if (!Array.isArray(legacy) || !legacy.length) return;
-  await setAppDataValue('workflowParticipatingDeptGroups', [{
-    id: 'grp_migrated_default',
-    name: 'Nhóm Mặc Định (di trú từ cấu hình cũ)',
-    depts: [...legacy],
-    moduleKeys: [...WF_MODULE_KEYS_AT_DEPT_GROUPS_MIGRATION]
-  }]);
-  console.log('   ↳ Đã di trú "Đơn Vị Tham Gia Quy Trình" (workflowParticipatingDepts phẳng) sang 1 nhóm mặc định trong workflowParticipatingDeptGroups, áp dụng cho toàn bộ quy trình hiện có.');
+  // Kiểm tra thêm workflowParticipatingDeptGroups hiện tại (dù cờ trên mới là điều kiện CHÍNH quyết định
+  // có chạy lần này hay không) — belt-and-suspenders: nếu vì lý do gì đó cờ vừa xuất hiện lần đầu NHƯNG
+  // danh mục nhóm đã có sẵn dữ liệu thật (VD phục hồi từ backup cũ hơn bản có cờ), tuyệt đối không ghi
+  // đè mất dữ liệu admin đã cấu hình — chỉ tạo nhóm mặc định khi danh mục nhóm THẬT SỰ đang rỗng.
+  const groups = await getAppDataValue('workflowParticipatingDeptGroups');
+  if (Array.isArray(legacy) && legacy.length && (!Array.isArray(groups) || !groups.length)) {
+    await setAppDataValue('workflowParticipatingDeptGroups', [{
+      id: 'grp_migrated_default',
+      name: 'Nhóm Mặc Định (di trú từ cấu hình cũ)',
+      depts: [...legacy],
+      moduleKeys: [...WF_MODULE_KEYS_AT_DEPT_GROUPS_MIGRATION]
+    }]);
+    console.log('   ↳ Đã di trú "Đơn Vị Tham Gia Quy Trình" (workflowParticipatingDepts phẳng) sang 1 nhóm mặc định trong workflowParticipatingDeptGroups, áp dụng cho toàn bộ quy trình hiện có.');
+  }
+  await setAppDataValue('workflowParticipatingDeptGroupsMigrated', true);
 }
 
 // paymentRequests — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đổi hẳn từ quyền phẳng
