@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**24.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.18 (2026-09-26): Golive-batch2 #1 — vá toàn bộ nút "Lưu" admin thiếu await/rollback (F5 mất cấu hình)
+
+Rà soát tiếp theo yêu cầu người dùng "rà soát tất cả các cấu hình trong admin
+và yêu cầu thêm nút lưu để đảm bảo cấu hình xong được lưu vào hệ thống" — báo
+cáo thực tế "danh mục siêu thị không lưu được khi chọn siêu thị, cửa hàng".
+
+Phát hiện đây KHÔNG phải lỗi ở 1 chỗ mà là 1 LỚP LỖI lặp lại ở ~40 hàm lưu
+cấu hình rải khắp `public/js/*.js`: mutate `DB.<key>` optimistically rồi gọi
+`syncStorage(key)` **không `await`, không kiểm tra kết quả, không rollback**
+— `syncStorage()` tự alert lỗi ở nền khi lưu thất bại (409 xung đột/mất mạng/
+hết phiên), nhưng UI vẫn hiện dữ liệu như đã lưu xong; F5 sau đó mới lộ ra là
+chưa hề lưu được lên server. Đã vá đúng khuôn `setStoreType()`/
+`addStoreToCatalog()` (đã đúng từ đầu, dùng làm mẫu): `await syncStorage(key)`
+→ nếu thất bại, rollback `DB.<key>` từ snapshot chụp trước khi mutate + render
+lại — cho toàn bộ:
+
+- `module-admin.js`: Phòng Ban, Khối/Ban (Khối/Ban + Phòng Ban con), Viết Tắt
+  Phòng Ban, Chức Danh, Chức Danh (Siêu Thị), Vị Trí Làm Việc (địa điểm/chức
+  danh con), Loại Đào Tạo, Từ Khoá Nhạy Cảm, Phân Loại Tài Liệu + Viết Tắt,
+  Viết Tắt Loại Hợp Đồng — khoảng 20 hàm CRUD.
+- `core.js`: Cấu Hình Email (SMTP), Thông Báo Email Phê Duyệt, Người Phụ
+  Trách Nhận Thông Báo Hết Hạn HĐ Theo Phòng Ban, override nhãn/bắt buộc +
+  danh sách lựa chọn trường mặc định (màn Biểu Mẫu), thứ tự hiển thị trường.
+- `module-formbuilder-nav.js`: thêm/sửa/xoá/đổi thứ tự trường bổ sung (màn
+  Biểu Mẫu).
+- `module-hethong-tabs.js`: Cấu Hình API đồng bộ Đơn Hàng ra dsmart16.
+- `module-bienbanhop.js`: Mẫu Danh Sách Tham Dự (Biên Bản Họp), cả lối lưu
+  nhanh lẫn modal quản lý mẫu riêng.
+- `module-dangkyxe.js`: Loại Xe Cụ Thể, Hãng Taxi, Lý Do Đánh Giá Chuyến Xe.
+- `module-dongphuc.js`: Danh Mục Đồng Phục (thêm/sửa/xoá mặt hàng).
+- `module-itsupport-price.js`: Vùng Giá Áp Dụng.
+- `module-itsupport-renewal.js`: Loại Dịch Vụ Gia Hạn CNTT.
+- `module-phonghop.js`: Danh Mục Phòng Họp.
+- `module-tailieu.js`: Loại Giấy Phép, Giới Hạn Dung Lượng Tệp + Loại Tệp
+  Cho Phép Theo Module (Cấu Hình Tải Lên).
+
+Đã kiểm tra riêng các cơ chế lưu "quy trình siêu thị" trong tab "Quy Trình
+Nâng Cao" mà người dùng nêu tên (cấu hình quy trình theo Phòng Ban/Mức/Nhóm
+Phê Duyệt, Áp Dụng Nhanh, Quy Trình Đặt Hàng Siêu Thị) — TẤT CẢ đã được vá
+đúng khuôn này từ 1 đợt audit trước (`saveDeptWorkflowConfig()`/
+`saveItPriceTierWorkflowConfig()`/`saveQuickApplyConfig()`/
+`deleteMixedApprovalRule()`...), không phát hiện thêm lỗi mới ở nhóm này —
+giữ nguyên, chỉ xác nhận lại.
+
+6 module admin khác (`module-admin-permgroups.js`,
+`module-admin-permtree.js`, `module-admin-specialperm.js`,
+`module-admin-submissiongroups.js`, `module-admin-userstaging.js`) đã được
+audit và xác nhận đã đúng khuôn `await` + rollback từ trước, không cần sửa
+thêm.
+
+Cập nhật kèm `tests/testHarness.js` (thêm nhánh mock `POST /api/data/
+itTicketCategories`, mirror gate `ADMIN_ONLY_KEYS`) + sửa 7 test hiện có gọi
+thẳng các hàm nay đã là `async` mà không `await` (lộ ra do hành vi mới đúng
+hơn: render/DB rollback giờ xảy ra sau `await`, không còn đồng bộ ngay lập
+tức như code cũ) — không phải lỗi mới, chỉ là cập nhật test khớp API mới.
+Full regression 308 file test: xanh toàn bộ (1 lỗi tiền tồn tại không liên
+quan — thiếu file PDF fixture cục bộ của môi trường, không phải do đợt vá
+này).
 
 ## v24.17 (2026-09-26): Đợt "golive" — 6 việc: fix dữ liệu mất sau F5, tách Phê Duyệt Giá Bán Buôn/Bán Lẻ, chuẩn hoá Excel danh mục, fix import Excel User, tách mã ST/HO, mở rộng poll nhẹ
 

@@ -678,23 +678,26 @@ function resetItPriceForm() {
 // ===== Danh Mục "Vùng Giá Áp Dụng" (DB.priceZones) — Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ, ô
 // #itPriceRetailZone. Danh sách phẳng thuần, mirror DB.carTaxiCompanies/DB.stores (không cần key ổn
 // định — tên vùng chính là giá trị lưu thẳng vào itPriceApprovals.priceZone). =====
-function savePriceZone(e) {
+async function savePriceZone(e) {
   e.preventDefault();
   const name = document.getElementById('txtPriceZoneName').value.trim();
   if (!name) return;
   if (DB.priceZones.includes(name)) return alert('Vùng giá đã tồn tại!');
   DB.priceZones.push(name);
-  syncStorage('priceZones');
+  const saved = await syncStorage('priceZones');
+  if (!saved) { DB.priceZones = DB.priceZones.filter(x => x !== name); return; }
   logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtPriceZoneName').value = '';
   renderPriceZoneList();
   populateDropdowns();
 }
 
-function deletePriceZone(name) {
+async function deletePriceZone(name) {
   if (!confirm(`Xóa vùng giá "${name}"?`)) return;
+  const prevList = [...DB.priceZones];
   DB.priceZones = DB.priceZones.filter(x => x !== name);
-  syncStorage('priceZones');
+  const saved = await syncStorage('priceZones');
+  if (!saved) { DB.priceZones = prevList; renderPriceZoneList(); return; }
   logSystemAction('USER_MGM', 'DELETE_PRICE_ZONE', `Xóa vùng giá áp dụng [${name}]`, 'SUCCESS', name);
   renderPriceZoneList();
   populateDropdowns();

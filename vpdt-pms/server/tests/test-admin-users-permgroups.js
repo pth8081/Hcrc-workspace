@@ -1345,11 +1345,11 @@ async function scenario(name, fn) {
   let khoiKinhDoanhId = null;
 
   await scenario('(p) Khối/Ban: saveDeptGroup() tạo mới + renderDeptGroupList() hiện đúng danh sách', async () => {
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate(async () => {
       document.getElementById('txtDeptGroupName').value = 'Khối Kinh Doanh';
-      saveDeptGroup({ preventDefault() {} });
+      await saveDeptGroup({ preventDefault() {} });
       document.getElementById('txtDeptGroupName').value = 'Khối Vận Hành';
-      saveDeptGroup({ preventDefault() {} });
+      await saveDeptGroup({ preventDefault() {} });
       return {
         groups: DB.deptGroups.map(g => ({ id: g.id, name: g.name, depts: g.depts })),
         listHtmlHasBoth: document.getElementById('deptGroupListWrap').textContent.includes('Khối Kinh Doanh') &&

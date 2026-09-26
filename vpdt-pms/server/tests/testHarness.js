@@ -581,6 +581,17 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/itTicketCategories — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (Danh Mục
+      // của ô Yêu Cầu Hỗ Trợ IT chỉ Admin mới sửa/xoá được, xem CORE_FIELD_MANIFEST.IT_TICKET) — cùng lý
+      // do KHÔNG mô phỏng toàn bộ generic POST /api/data/:key như các nhánh ở trên.
+      if (pathName === '/api/data/itTicketCategories' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.itTicketCategories = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/workflow/:module/:id/:action — mirror routes/workflow.js's generic dept-workflow
       // approve/reject route (dùng chung lib/workflowEngine.js's MODULE_CONFIGS + applyWorkflowAction()
       // thật, KHÔNG tự đoán lại logic duyệt). Cần cho các module bỏ auto-approve (vd itPriceApprovals

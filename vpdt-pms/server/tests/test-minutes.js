@@ -303,7 +303,7 @@ async function main() {
     updateAttendeeField(0, 'name', 'Nguyễn Văn Giám Đốc');
     updateAttendeeField(1, 'name', 'Khách Mời Ngoài Công Ty');
 
-    saveMeetingAttendeeTemplate(); // lưu chính danh sách 2 người tham dự đang có trong form
+    await saveMeetingAttendeeTemplate(); // lưu chính danh sách 2 người tham dự đang có trong form
     const afterSave = DB.meetingAttendeeTemplates.length;
     const tplId = DB.meetingAttendeeTemplates[0] && DB.meetingAttendeeTemplates[0].id;
     const savedAttendeeCount = DB.meetingAttendeeTemplates[0] && DB.meetingAttendeeTemplates[0].attendees.length;
@@ -316,7 +316,7 @@ async function main() {
     const afterApplyNames = minutesAttendeesRows.map((a) => a.name).sort();
 
     document.getElementById('minutesAttendeeTemplateSelect').value = tplId;
-    deleteMeetingAttendeeTemplate();
+    await deleteMeetingAttendeeTemplate();
     const afterDeleteCount = DB.meetingAttendeeTemplates.length;
 
     return { afterSave, savedAttendeeCount, afterApplyCount, afterApplyNames, afterDeleteCount };

@@ -1297,21 +1297,25 @@ function resetLicenseForm() {
 // ============ Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) — cùng khuôn CRUD phẳng đơn giản với
 // Danh Mục Siêu Thị (DB.stores) ở trên (không kiểm tra usage trước khi xóa) — nguồn gợi ý cho ô "Tên
 // giấy phép / Loại giấy phép" (widget sdd, xem uploadLicense() tự học thêm giá trị mới gõ). ============
-function saveLicenseType(e) {
+async function saveLicenseType(e) {
   e.preventDefault();
   const name = document.getElementById('txtLicenseTypeName').value.trim();
   if (!name) return;
   if ((DB.licenseTypes || []).includes(name)) return alert('Loại giấy phép đã tồn tại!');
+  const prevList = [...(DB.licenseTypes || [])];
   DB.licenseTypes = [...(DB.licenseTypes || []), name];
-  syncStorage('licenseTypes');
+  const saved = await syncStorage('licenseTypes');
+  if (!saved) { DB.licenseTypes = prevList; return; }
   logSystemAction('LICENSE', 'ADD_LICENSE_TYPE', `Thêm loại giấy phép mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtLicenseTypeName').value = '';
   renderLicenseTypeList();
 }
-function deleteLicenseType(name) {
+async function deleteLicenseType(name) {
   if (!confirm(`Xóa loại giấy phép "${name}" khỏi danh mục?`)) return;
+  const prevList = [...(DB.licenseTypes || [])];
   DB.licenseTypes = (DB.licenseTypes || []).filter(t => t !== name);
-  syncStorage('licenseTypes');
+  const saved = await syncStorage('licenseTypes');
+  if (!saved) { DB.licenseTypes = prevList; renderLicenseTypeList(); return; }
   logSystemAction('LICENSE', 'DELETE_LICENSE_TYPE', `Xóa loại giấy phép [${name}]`, 'SUCCESS', name);
   renderLicenseTypeList();
 }
@@ -1464,26 +1468,39 @@ function renderUploadTypeConfig() {
 // Tự lưu ngay khi đổi ô giới hạn dung lượng (cùng khuôn toggleUploadTypeExt() ngay trên) — để trống
 // (hoặc xoá về 0/số âm) coi như KHÔNG giới hạn riêng, quay về đúng giới hạn CHUNG toàn hệ thống (env
 // UPLOAD_MAX_MB, xem routes/upload.js).
-function updateUploadSizeLimit(moduleKey, rawValue) {
+async function updateUploadSizeLimit(moduleKey, rawValue) {
   const value = Number(rawValue);
   if (!DB.uploadSizeLimitConfig) DB.uploadSizeLimitConfig = {};
+  const prevConfig = { ...DB.uploadSizeLimitConfig };
+  const hadKey = moduleKey in DB.uploadSizeLimitConfig;
   if (value > 0) DB.uploadSizeLimitConfig[moduleKey] = value;
   else delete DB.uploadSizeLimitConfig[moduleKey];
-  syncStorage('uploadSizeLimitConfig');
+  const saved = await syncStorage('uploadSizeLimitConfig');
+  if (!saved) {
+    if (hadKey) DB.uploadSizeLimitConfig[moduleKey] = prevConfig[moduleKey]; else delete DB.uploadSizeLimitConfig[moduleKey];
+    return;
+  }
   logSystemAction('ADMIN', 'UPDATE_UPLOAD_SIZE_LIMIT', `Cập nhật giới hạn dung lượng tệp [${moduleKey}]: ${value > 0 ? value + 'MB' : 'dùng mặc định chung'}`, 'SUCCESS');
 }
 
 // Tự lưu ngay khi tick/bỏ tick 1 định dạng (cùng khuôn updateDeptAbbr()/updateContractTypeAbbr() —
 // không cần nút Lưu riêng). Danh sách rỗng sau khi bỏ hết tick vẫn được lưu (routes/upload.js coi
 // mảng rỗng như "chưa cấu hình", tự rơi về danh sách mặc định — không khoá cứng module về 0 định dạng).
-function toggleUploadTypeExt(moduleKey, ext, checked) {
+async function toggleUploadTypeExt(moduleKey, ext, checked) {
   if (!DB.uploadFileTypeConfig) DB.uploadFileTypeConfig = {};
+  const prevConfig = { ...DB.uploadFileTypeConfig };
+  const hadKey = moduleKey in DB.uploadFileTypeConfig;
   const moduleDef = UPLOAD_MODULE_LIST.find(m => m.key === moduleKey);
   const extUniverse = moduleDef?.extUniverse || UPLOAD_EXT_UNIVERSE;
   const current = Array.isArray(DB.uploadFileTypeConfig[moduleKey]) && DB.uploadFileTypeConfig[moduleKey].length
     ? DB.uploadFileTypeConfig[moduleKey] : extUniverse.slice();
   DB.uploadFileTypeConfig[moduleKey] = checked ? [...new Set([...current, ext])] : current.filter(e => e !== ext);
-  syncStorage('uploadFileTypeConfig');
+  const saved = await syncStorage('uploadFileTypeConfig');
+  if (!saved) {
+    if (hadKey) DB.uploadFileTypeConfig[moduleKey] = prevConfig[moduleKey]; else delete DB.uploadFileTypeConfig[moduleKey];
+    renderUploadTypeConfig();
+    return;
+  }
   applyUploadAcceptAttrs();
   logSystemAction('ADMIN', 'UPDATE_UPLOAD_TYPE_CONFIG', `Cập nhật loại tệp cho phép [${moduleKey}]: ${checked ? 'thêm' : 'bỏ'} ${ext}`, 'SUCCESS');
 }

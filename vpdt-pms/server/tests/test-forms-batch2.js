@@ -134,16 +134,16 @@ async function main() {
     });
 
     // ---------- Helper: mô phỏng đúng luồng UI thật ----------
-    function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
+    async function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
       activeFormTab = tabKey;
       switchFormTab(tabKey);
       editCoreField(coreKey, fieldId);
       document.getElementById('fldLabel').value = newLabel;
-      addCustomField({ preventDefault() {} });
+      await addCustomField({ preventDefault() {} });
     }
 
     // ---------- 2) PAYMENT: sửa nhãn paymentTitle -> hiện ngay trên #paymentCreateForm ----------
-    editDefaultFieldLabel('PAYMENT', 'PAYMENT', 'paymentTitle', 'Nội Dung Thanh Toán (ĐÃ SỬA)');
+    await editDefaultFieldLabel('PAYMENT', 'PAYMENT', 'paymentTitle', 'Nội Dung Thanh Toán (ĐÃ SỬA)');
     {
       const input = document.getElementById('paymentTitle');
       const labelEl = input.closest('div')?.querySelector('label');
@@ -156,7 +156,7 @@ async function main() {
     }
 
     // ---------- 3) BUDGET_LINE_PROPOSE: sửa nhãn blProposeContent ----------
-    editDefaultFieldLabel('BUDGET_LINE_PROPOSE', 'BUDGET_LINE_PROPOSE', 'blProposeContent', 'Nội Dung Đề Xuất (ĐÃ SỬA)');
+    await editDefaultFieldLabel('BUDGET_LINE_PROPOSE', 'BUDGET_LINE_PROPOSE', 'blProposeContent', 'Nội Dung Đề Xuất (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('blProposeContent').closest('div')?.querySelector('label');
       check('BUDGET_LINE_PROPOSE: <label> thật trên form Đề Xuất Ngân Sách đã đổi đúng nhãn mới',
@@ -170,7 +170,7 @@ async function main() {
     }
 
     // ---------- 4) REPORT_PERIOD: sửa nhãn prPeriodName ----------
-    editDefaultFieldLabel('REPORT_PERIOD', 'REPORT_PERIOD', 'prPeriodName', 'Tên Kỳ BC (ĐÃ SỬA)');
+    await editDefaultFieldLabel('REPORT_PERIOD', 'REPORT_PERIOD', 'prPeriodName', 'Tên Kỳ BC (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('prPeriodName').closest('div')?.querySelector('label');
       check('REPORT_PERIOD: <label> thật trên #prSubPeriods đã đổi đúng nhãn mới',
@@ -179,7 +179,7 @@ async function main() {
     }
 
     // ---------- 5) UNIFORM_ISSUE: sửa nhãn uniformIssueEmployee, không lem sang uniformIssueCode ----------
-    editDefaultFieldLabel('UNIFORM_ISSUE', 'UNIFORM_ISSUE', 'uniformIssueEmployee', 'Nhân Viên Nhận (ĐÃ SỬA)');
+    await editDefaultFieldLabel('UNIFORM_ISSUE', 'UNIFORM_ISSUE', 'uniformIssueEmployee', 'Nhân Viên Nhận (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('uniformIssueEmployee').closest('div')?.querySelector('label');
       check('UNIFORM_ISSUE: <label> thật trên #uniformSubStore đã đổi đúng nhãn mới',
@@ -193,7 +193,7 @@ async function main() {
 
     // ---------- 6) UNIFORM_ADJUST_EMPLOYEE: sửa nhãn uniformAdjEmpReason, không lem sang
     //             uniformAdjStockReason (2 form "Lý Do" khác nhau, tránh nhầm lẫn giữa 2 coreKey) ----------
-    editDefaultFieldLabel('UNIFORM_ADJUST_EMPLOYEE', 'UNIFORM_ADJUST_EMPLOYEE', 'uniformAdjEmpReason', 'Lý Do Thu Hồi (ĐÃ SỬA)');
+    await editDefaultFieldLabel('UNIFORM_ADJUST_EMPLOYEE', 'UNIFORM_ADJUST_EMPLOYEE', 'uniformAdjEmpReason', 'Lý Do Thu Hồi (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('uniformAdjEmpReason').closest('div')?.querySelector('label');
       check('UNIFORM_ADJUST_EMPLOYEE: <label> thật trên form "Thu Hồi Từ Nhân Viên" đã đổi đúng nhãn mới',

@@ -60,7 +60,7 @@ function toggleOptionsInput() {
   document.getElementById('optionsGroup').classList.toggle('hidden', !['select', 'multiselect'].includes(type));
 }
 
-function addCustomField(e) {
+async function addCustomField(e) {
   e.preventDefault();
   const label = document.getElementById('fldLabel').value.trim();
   const required = document.getElementById('fldRequired').checked;
@@ -71,12 +71,13 @@ function addCustomField(e) {
     const { coreKey, fieldId } = editingCoreField;
     const fieldDef = (CORE_FIELD_MANIFEST[coreKey] || []).find(f => f.id === fieldId);
     if (!fieldDef) { cancelEditCustomField(); return; }
-    updateCoreFieldOverride(coreKey, fieldId, 'label', label || fieldDef.label);
-    updateCoreFieldOverride(coreKey, fieldId, 'required', required);
+    await updateCoreFieldOverride(coreKey, fieldId, 'label', label || fieldDef.label);
+    await updateCoreFieldOverride(coreKey, fieldId, 'required', required);
     if (fieldDef.optionsKey) {
       const newLabels = document.getElementById('fldOptions').value.trim().split(',').map(s => s.trim()).filter(Boolean);
       if (newLabels.length === 0) return alert('⛔ Danh sách lựa chọn không được để trống!');
-      saveCoreFieldOptionsList(fieldDef, newLabels);
+      const optsSaved = await saveCoreFieldOptionsList(fieldDef, newLabels);
+      if (!optsSaved) return;
       logSystemAction('CONFIG', 'UPDATE_CORE_FIELD_OPTIONS', `Cập nhật danh sách lựa chọn của trường mặc định [${fieldId}] (${coreKey}): ${newLabels.length} giá trị`, 'SUCCESS', fieldId);
     }
     alert('✅ Đã cập nhật trường mặc định thành công!');
@@ -90,6 +91,7 @@ function addCustomField(e) {
   const optionsArr = ['select', 'multiselect'].includes(type) ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   if (!DB.formTemplates[activeFormTab]) DB.formTemplates[activeFormTab] = [];
+  const prevList = DB.formTemplates[activeFormTab].map(f => ({ ...f }));
 
   if (editingCustomFieldId) {
     const field = DB.formTemplates[activeFormTab].find(f => f.id === editingCustomFieldId);
@@ -99,14 +101,16 @@ function addCustomField(e) {
       field.options = optionsArr;
       field.required = required;
     }
-    syncStorage('formTemplates');
+    const saved = await syncStorage('formTemplates');
+    if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
     logSystemAction('CONFIG', 'EDIT_CUSTOM_FIELD', `Sửa trường [${label}] của biểu mẫu ${activeFormTab}`, 'SUCCESS', editingCustomFieldId);
     alert('✅ Đã cập nhật trường dữ liệu thành công!');
     cancelEditCustomField();
   } else {
     const fieldId = 'f_cust_' + Date.now();
     DB.formTemplates[activeFormTab].push({ id: fieldId, label, type, options: optionsArr, required, isDefault: false });
-    syncStorage('formTemplates');
+    const saved = await syncStorage('formTemplates');
+    if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
     logSystemAction('CONFIG', 'ADD_CUSTOM_FIELD', `Thêm trường [${label}] cho biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
     alert('✅ Đã thêm trường dữ liệu bổ sung thành công!');
     e.target.reset();
@@ -174,25 +178,29 @@ function cancelEditCustomField() {
   document.getElementById('btnCancelEditField')?.classList.add('hidden');
 }
 
-function deleteCustomField(fieldId) {
+async function deleteCustomField(fieldId) {
   if (!confirm('Bạn có chắc chắn muốn xóa trường này khỏi biểu mẫu?')) return;
   if (!DB.formTemplates[activeFormTab]) return;
 
+  const prevList = DB.formTemplates[activeFormTab].map(f => ({ ...f }));
   DB.formTemplates[activeFormTab] = DB.formTemplates[activeFormTab].filter(f => f.id !== fieldId);
-  syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates');
+  if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
   logSystemAction('CONFIG', 'DELETE_CUSTOM_FIELD', `Xóa trường [${fieldId}] khỏi biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
   if (editingCustomFieldId === fieldId) cancelEditCustomField();
   renderFormFieldsTable();
 }
 
-function moveCustomField(fieldId, direction) {
+async function moveCustomField(fieldId, direction) {
   const arr = DB.formTemplates[activeFormTab];
   if (!arr) return;
   const idx = arr.findIndex(f => f.id === fieldId);
   const swapWith = idx + direction;
   if (idx < 0 || swapWith < 0 || swapWith >= arr.length) return;
+  const prevList = arr.map(f => ({ ...f }));
   [arr[idx], arr[swapWith]] = [arr[swapWith], arr[idx]];
-  syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates');
+  if (!saved) { DB.formTemplates[activeFormTab] = prevList; }
   renderFormFieldsTable();
 }
 

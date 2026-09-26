@@ -126,16 +126,16 @@ async function main() {
     });
 
     // ---------- Helper: mô phỏng đúng luồng UI thật (editCoreField -> điền form -> addCustomField) ----------
-    function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
+    async function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
       activeFormTab = tabKey;
       switchFormTab(tabKey); // cùng hàm nút tab thật gọi — reset editingCoreField, render bảng
       editCoreField(coreKey, fieldId); // cùng hàm nút "✏️ Sửa" thật gọi — điền sẵn form phía trên
       document.getElementById('fldLabel').value = newLabel;
-      addCustomField({ preventDefault() {} }); // cùng hàm submit form thật gọi
+      await addCustomField({ preventDefault() {} }); // cùng hàm submit form thật gọi
     }
 
     // ---------- 2) TASK: sửa nhãn taskTitleInput -> có mặt ngay trên form thật #createTaskModal ----------
-    editDefaultFieldLabel('TASK', 'TASK', 'taskTitleInput', 'Tiêu Đề Công Việc (ĐÃ SỬA)');
+    await editDefaultFieldLabel('TASK', 'TASK', 'taskTitleInput', 'Tiêu Đề Công Việc (ĐÃ SỬA)');
     {
       const input = document.getElementById('taskTitleInput');
       const override = getCoreFieldOverrides('TASK').taskTitleInput;
@@ -146,7 +146,7 @@ async function main() {
     }
 
     // ---------- 3) LICENSE: sửa nhãn licenseIssueDate (nhánh <label> thật, không phải placeholder) ----------
-    editDefaultFieldLabel('LICENSE', 'LICENSE', 'licenseIssueDate', 'Ngày Cấp Phép (ĐÃ SỬA)');
+    await editDefaultFieldLabel('LICENSE', 'LICENSE', 'licenseIssueDate', 'Ngày Cấp Phép (ĐÃ SỬA)');
     {
       const input = document.getElementById('licenseIssueDate');
       const labelEl = input.closest('div')?.querySelector('label');
@@ -174,7 +174,7 @@ async function main() {
       switchFormTab('LICENSE');
       editCoreField('LICENSE', 'licenseType');
       document.getElementById('fldOptions').value = 'Giấy phép kinh doanh, Giấy phép PCCC, Giấy phép ATTP mới';
-      addCustomField({ preventDefault() {} });
+      await addCustomField({ preventDefault() {} });
       check('LICENSE: saveCoreFieldOptionsList() cập nhật đúng DB.licenseTypes (thêm giá trị mới)',
         DB.licenseTypes.length === 3 && DB.licenseTypes.includes('Giấy phép ATTP mới'),
         JSON.stringify(DB.licenseTypes));
@@ -191,7 +191,7 @@ async function main() {
       editCoreField('IT_TICKET', 'itTicketCategory');
       // Giữ NGUYÊN VĂN 5 nhãn gốc (không đổi chữ nào) + thêm 1 mục MỚI ở cuối.
       document.getElementById('fldOptions').value = '🖥️ Phần cứng, 💿 Phần mềm, 🌐 Mạng / Internet, 🔑 Tài khoản / Đăng nhập, ❓ Khác, 🖨️ Máy in';
-      addCustomField({ preventDefault() {} });
+      await addCustomField({ preventDefault() {} });
       const hw = DB.itTicketCategories.find(c => c.label === '🖥️ Phần cứng');
       const newOne = DB.itTicketCategories.find(c => c.label === '🖨️ Máy in');
       check('IT_TICKET: 5 nhãn GIỮ NGUYÊN chữ vẫn giữ đúng key ổn định (HARDWARE) — không mồ côi ticket cũ',

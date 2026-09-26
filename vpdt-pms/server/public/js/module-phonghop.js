@@ -177,15 +177,17 @@ function renderMeetingRoomCatalogList() {
   `).join('');
 }
 
-function saveMeetingRoomCatalogItem() {
+async function saveMeetingRoomCatalogItem() {
   const name = document.getElementById('meetingRoomCatalogName').value.trim();
   const short = document.getElementById('meetingRoomCatalogShort').value.trim();
   if (!name) return alert('Vui lòng nhập tên phòng họp!');
   if (!short) return alert('Vui lòng nhập tên gọn (dùng làm tiêu đề cột trên Lịch Họp)!');
   if ((DB.meetingRooms || []).some(r => r.name === name)) return alert('Phòng họp này đã có trong danh mục!');
+  const prevList = (DB.meetingRooms || []).map(r => ({ ...r }));
   const nextId = (Math.max(0, ...(DB.meetingRooms || []).map(r => r.id)) || 0) + 1;
   DB.meetingRooms = [...(DB.meetingRooms || []), { id: nextId, name, short }];
-  syncStorage('meetingRooms');
+  const saved = await syncStorage('meetingRooms');
+  if (!saved) { DB.meetingRooms = prevList; return; }
   logSystemAction('MEETING', 'ADD_MEETING_ROOM', `Thêm phòng họp vào Danh Mục Phòng Họp [${name}]`, 'SUCCESS', name);
   document.getElementById('meetingRoomCatalogName').value = '';
   document.getElementById('meetingRoomCatalogShort').value = '';
@@ -242,8 +244,10 @@ async function deleteMeetingRoomCatalogItem(id) {
     console.warn('Không dò được lịch sắp tới của phòng họp trước khi xoá:', err.message);
   }
   if (!confirm(`${warning}Xóa phòng họp "${item.name}" khỏi Danh Mục Phòng Họp? Các lịch đã đặt trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được phòng này cho lịch mới.`)) return;
+  const prevList = (DB.meetingRooms || []).map(r => ({ ...r }));
   DB.meetingRooms = (DB.meetingRooms || []).filter(r => r.id !== id);
-  syncStorage('meetingRooms');
+  const saved = await syncStorage('meetingRooms');
+  if (!saved) { DB.meetingRooms = prevList; renderMeetingRoomCatalogList(); return; }
   logSystemAction('MEETING', 'DELETE_MEETING_ROOM', `Xóa phòng họp khỏi Danh Mục Phòng Họp [${item.name}]`, 'SUCCESS', item.name);
   renderMeetingRoomCatalogList();
   populateDropdowns();

@@ -157,13 +157,14 @@ function updateUniformCatalogFormSubmitUI() {
   document.getElementById('uniformCatalogCancelEditBtn')?.classList.toggle('hidden', editingUniformCatalogId == null);
 }
 
-function saveUniformCatalogItem() {
+async function saveUniformCatalogItem() {
   const name = document.getElementById('uniformCatalogName').value.trim();
   const sizesRaw = document.getElementById('uniformCatalogSizes').value.trim();
   if (!name) return alert('Vui lòng nhập tên đồng phục!');
   const sizes = sizesRaw.split(',').map(s => s.trim()).filter(Boolean);
   if (!sizes.length) return alert('Vui lòng nhập ít nhất 1 size (cách nhau bằng dấu phẩy)!');
   const isEdit = editingUniformCatalogId != null;
+  const prevCatalog = (DB.uniformCatalog || []).map(c => ({ ...c, sizes: [...(c.sizes || [])], codesBySize: { ...(c.codesBySize || {}) } }));
   // Trùng tên: chặn khi trùng với mặt hàng KHÁC — riêng đang sửa thì tên GIỮ NGUYÊN của chính nó không
   // tính là trùng (mới cho phép chỉ sửa lại size mà không phải đổi tên khác đi).
   if ((DB.uniformCatalog || []).some(c => c.name === name && c.id !== editingUniformCatalogId)) {
@@ -188,13 +189,15 @@ function saveUniformCatalogItem() {
     item.sizes = sizes;
     item.codesBySize = keptCodes;
     DB.uniformCatalog = [...DB.uniformCatalog];
-    syncStorage('uniformCatalog');
+    const saved = await syncStorage('uniformCatalog');
+    if (!saved) { DB.uniformCatalog = prevCatalog; renderUniformCatalogList(); return; }
     logSystemAction('UNIFORM', 'UPDATE_UNIFORM_CATALOG', `Cập nhật mặt hàng Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
     editingUniformCatalogId = null;
   } else {
     const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
     DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes, codesBySize: {} }];
-    syncStorage('uniformCatalog');
+    const saved = await syncStorage('uniformCatalog');
+    if (!saved) { DB.uniformCatalog = prevCatalog; renderUniformCatalogList(); return; }
     logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
   }
   document.getElementById('uniformCatalogName').value = '';
@@ -203,12 +206,14 @@ function saveUniformCatalogItem() {
   renderUniformCatalogList();
 }
 
-function deleteUniformCatalogItem(id) {
+async function deleteUniformCatalogItem(id) {
   const item = (DB.uniformCatalog || []).find(c => c.id === id);
   if (!item) return;
   if (!confirm(`Xóa mặt hàng "${item.name}" khỏi Danh Mục Đồng Phục? Các kỳ cấp phát đã tạo trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mặt hàng này cho kỳ mới.`)) return;
+  const prevCatalog = (DB.uniformCatalog || []).map(c => ({ ...c, sizes: [...(c.sizes || [])], codesBySize: { ...(c.codesBySize || {}) } }));
   DB.uniformCatalog = (DB.uniformCatalog || []).filter(c => c.id !== id);
-  syncStorage('uniformCatalog');
+  const saved = await syncStorage('uniformCatalog');
+  if (!saved) { DB.uniformCatalog = prevCatalog; renderUniformCatalogList(); return; }
   logSystemAction('UNIFORM', 'DELETE_UNIFORM_CATALOG', `Xóa mặt hàng khỏi Danh Mục Đồng Phục [${item.name}]`, 'SUCCESS', item.name);
   renderUniformCatalogList();
 }

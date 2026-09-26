@@ -919,11 +919,11 @@ async function main() {
     // dropdown cùng đồng bộ ngay sau khi lưu, không cần tải lại trang.
     await run.run('Đồng bộ dropdown: admin thêm 1 Danh Mục IT Ticket mới ở màn Biểu Mẫu -> cả form tạo LẪN dropdown Lọc Theo Danh Mục đều thấy ngay', async () => {
       await loginAs(page, ADMIN);
-      const result = await page.evaluate(() => {
+      const result = await page.evaluate(async () => {
         switchTab('itSupport'); setItSupportSubTab('TICKET');
         const fieldDef = CORE_FIELD_MANIFEST.IT_TICKET.find(f => f.id === 'itTicketCategory');
         const currentLabels = getCoreFieldOptionsList(fieldDef);
-        saveCoreFieldOptionsList(fieldDef, [...currentLabels, '🧪 Thử Nghiệm Mới']);
+        await saveCoreFieldOptionsList(fieldDef, [...currentLabels, '🧪 Thử Nghiệm Mới']);
         const createFormOptions = Array.from(document.getElementById('itTicketCategory').options).map(o => o.textContent);
         const filterOptions = Array.from(document.getElementById('filterCategoryItTicket').options).map(o => o.textContent);
         return { createFormOptions, filterOptions, dbCount: DB.itTicketCategories.length };

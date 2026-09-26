@@ -23,31 +23,43 @@ function confirmCatalogValueDeletion(kindLabel, value, extraNote) {
   );
 }
 
-function saveDept(e) {
+// LỖI ĐÃ VÁ (cùng đợt rà soát "F5 mất cấu hình danh mục"): trước đây các hàm dưới đây mutate DB.depts/
+// DB.deptAbbrs/DB.deptGroups rồi gọi syncStorage(key) KHÔNG await + KHÔNG rollback khi lưu thất bại
+// (409 xung đột/mất mạng) — UI vẫn hiện như đã lưu xong, F5 mới lộ ra chưa hề lưu được. Nay await +
+// rollback đúng khuôn addStoreToCatalog()/deleteStore() (đã vá đợt trước) cho cả nhóm depts/deptAbbrs/
+// deptGroups.
+async function saveDept(e) {
   e.preventDefault();
   const name = document.getElementById('txtDeptName').value.trim();
   if (DB.depts.includes(name)) return alert('Phòng ban đã tồn tại!');
   DB.depts.push(name);
-  syncStorage('depts');
+  const saved = await syncStorage('depts');
+  if (!saved) { DB.depts = DB.depts.filter(d => d !== name); return; }
   logSystemAction('USER_MGM', 'ADD_DEPT', `Thêm phòng ban mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtDeptName').value = '';
   renderDeptList();
   populateDropdowns();
 }
 
-function deleteDept(name) {
+async function deleteDept(name) {
   if (!confirmCatalogValueDeletion('phòng ban', name, 'Viết tắt phòng ban (dùng sinh Mã Tài Liệu) của phòng này cũng bị xoá theo.')) return;
+  const prevDepts = [...DB.depts];
+  const prevDeptAbbrs = { ...DB.deptAbbrs };
+  const prevDeptGroups = DB.deptGroups.map(g => ({ ...g, depts: [...g.depts] }));
   DB.depts = DB.depts.filter(d => d !== name);
   delete DB.deptAbbrs[name];
   // Khối/Ban (10/2026) — dọn luôn tên Phòng Ban vừa xoá khỏi mọi deptGroups[].depts[] đang gán, tránh
   // hiện "ma" (Phòng Ban đã xoá nhưng vẫn liệt kê là con của 1 Khối/Ban).
   const affectedGroups = DB.deptGroups.filter(g => g.depts.includes(name));
-  if (affectedGroups.length) {
-    affectedGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
-    syncStorage('deptGroups');
+  if (affectedGroups.length) affectedGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
+  const [savedDepts, savedAbbrs, savedGroups] = await Promise.all([
+    syncStorage('depts'), syncStorage('deptAbbrs'), affectedGroups.length ? syncStorage('deptGroups') : Promise.resolve(true)
+  ]);
+  if (!savedDepts || !savedAbbrs || !savedGroups) {
+    DB.depts = prevDepts; DB.deptAbbrs = prevDeptAbbrs; DB.deptGroups = prevDeptGroups;
+    renderDeptList(); renderDeptGroupList();
+    return;
   }
-  syncStorage('depts');
-  syncStorage('deptAbbrs');
   logSystemAction('USER_MGM', 'DELETE_DEPT', `Xóa phòng ban [${name}]`, 'SUCCESS', name);
   renderDeptList();
   renderDeptGroupList();
@@ -56,11 +68,13 @@ function deleteDept(name) {
 
 // Viết tắt Phòng ban (dùng sinh Mã Tài Liệu, xem generateDocCode()) — tự suy ra mặc định nếu admin
 // chưa từng sửa, áp dụng ngay không cần duyệt.
-function updateDeptAbbr(name, value) {
+async function updateDeptAbbr(name, value) {
+  const prevAbbrs = { ...DB.deptAbbrs };
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.deptAbbrs[name];
   else DB.deptAbbrs[name] = abbr;
-  syncStorage('deptAbbrs');
+  const saved = await syncStorage('deptAbbrs');
+  if (!saved) { DB.deptAbbrs = prevAbbrs; renderDeptList(); return; }
   logSystemAction('USER_MGM', 'UPDATE_DEPT_ABBR', `Cập nhật viết tắt phòng ban [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
 
@@ -94,39 +108,45 @@ async function renameDept(name) {
 // renderDeptCheckboxes() bên dưới). Mảng OBJECT {id, name, depts:[]} — id tự sinh client-side (mirror
 // saveCarVehicleType() ở module-dangkyxe.js), KHÔNG có route cascade rename riêng như depts/stores vì
 // user.khoiBan lưu THEO id bất biến, không theo tên — đổi tên chỉ là sửa field `name` tại chỗ. =====
-function saveDeptGroup(e) {
+async function saveDeptGroup(e) {
   e.preventDefault();
   const name = document.getElementById('txtDeptGroupName').value.trim();
   if (!name) return;
   if (DB.deptGroups.some(g => g.name === name)) return alert('Khối/Ban đã tồn tại!');
+  const prevGroups = DB.deptGroups.map(g => ({ ...g, depts: [...g.depts] }));
   const nextId = DB.deptGroups.reduce((max, g) => Math.max(max, g.id || 0), 0) + 1;
   DB.deptGroups.push({ id: nextId, name, depts: [] });
-  syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups');
+  if (!saved) { DB.deptGroups = prevGroups; return; }
   logSystemAction('USER_MGM', 'ADD_DEPT_GROUP', `Thêm Khối/Ban mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtDeptGroupName').value = '';
   renderDeptGroupList();
   populateDropdowns();
 }
 
-function renameDeptGroup(id) {
+async function renameDeptGroup(id) {
   const g = DB.deptGroups.find(x => x.id === id);
   if (!g) return;
   const newName = String(prompt(`Nhập tên mới cho Khối/Ban "${g.name}":`, g.name) || '').trim();
   if (!newName || newName === g.name) return;
   if (DB.deptGroups.some(x => x.id !== id && x.name === newName)) return alert('Tên Khối/Ban đã tồn tại!');
+  const prevName = g.name;
   g.name = newName;
-  syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups');
+  if (!saved) { g.name = prevName; renderDeptGroupList(); return; }
   logSystemAction('USER_MGM', 'RENAME_DEPT_GROUP', `Đổi tên Khối/Ban → [${newName}]`, 'SUCCESS', newName);
   renderDeptGroupList();
   populateDropdowns();
 }
 
-function deleteDeptGroup(id) {
+async function deleteDeptGroup(id) {
   const g = DB.deptGroups.find(x => x.id === id);
   if (!g) return;
   if (!confirm(`Xoá Khối/Ban "${g.name}"?\n\nNgười dùng/màn Phân Quyền đang lọc theo Khối này sẽ tự coi như "để trống" (hiện lại toàn bộ Phòng Ban) — KHÔNG xoá Phòng Ban con, chỉ mất liên kết nhóm.`)) return;
+  const prevGroups = DB.deptGroups.map(x => ({ ...x, depts: [...x.depts] }));
   DB.deptGroups = DB.deptGroups.filter(x => x.id !== id);
-  syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups');
+  if (!saved) { DB.deptGroups = prevGroups; renderDeptGroupList(); return; }
   logSystemAction('USER_MGM', 'DELETE_DEPT_GROUP', `Xóa Khối/Ban [${g.name}]`, 'SUCCESS', g.name);
   renderDeptGroupList();
   populateDropdowns();
@@ -137,11 +157,13 @@ function deleteDeptGroup(id) {
 // renderMultiSelectDropdown() tự bắn onChange ngay cả lúc SETUP với initialSelected — live-save sẽ gọi
 // ngược lại renderDeptGroupList() ngay trong lúc đang dựng DOM, cùng lý do khiến khối
 // renderOperationOrderReceiptScopeCheckboxes() cũng chỉ đọc giá trị lúc submit form, không live-save).
-function saveDeptGroupChildren(id) {
+async function saveDeptGroupChildren(id) {
   const g = DB.deptGroups.find(x => x.id === id);
   if (!g) return;
+  const prevDepts = [...g.depts];
   g.depts = getMultiSelectValues(`deptGroupChildren_${id}`);
-  syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups');
+  if (!saved) { g.depts = prevDepts; return; }
   logSystemAction('USER_MGM', 'UPDATE_DEPT_GROUP_CHILDREN', `Cập nhật Phòng Ban con của Khối/Ban [${g.name}]: ${g.depts.join(', ') || '(rỗng)'}`, 'SUCCESS', g.name);
   populateDropdowns();
   alert(`✅ Đã lưu ${g.depts.length} Phòng Ban thuộc Khối/Ban "${g.name}".`);
@@ -380,22 +402,25 @@ async function moveDeptToStore(name) {
 // admin tự thêm/xóa). Không kiểm tra ai đang dùng chức danh sắp xóa (giống hệt xóa Phòng Ban) — chân
 // ký của các hồ sơ đã tạo trước đó chỉ đơn giản không còn hiện chức danh nếu người đó bị gỡ khỏi danh
 // sách sau này, không phá vỡ dữ liệu cũ.
-function saveJobTitle(e) {
+async function saveJobTitle(e) {
   e.preventDefault();
   const name = document.getElementById('txtJobTitleName').value.trim();
   if (DB.jobTitles.includes(name)) return alert('Chức danh đã tồn tại!');
   DB.jobTitles.push(name);
-  syncStorage('jobTitles');
+  const saved = await syncStorage('jobTitles');
+  if (!saved) { DB.jobTitles = DB.jobTitles.filter(t => t !== name); return; }
   logSystemAction('USER_MGM', 'ADD_JOB_TITLE', `Thêm chức danh mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtJobTitleName').value = '';
   renderJobTitleList();
   populateDropdowns();
 }
 
-function deleteJobTitle(name) {
+async function deleteJobTitle(name) {
   if (!confirmCatalogValueDeletion('chức danh', name, 'Chức danh này có thể đang được dùng ở bước duyệt "Theo vị trí"/"Quy Trình Đặt Hàng Siêu Thị" và ở chính hồ sơ tài khoản người dùng.')) return;
+  const prevJobTitles = [...DB.jobTitles];
   DB.jobTitles = DB.jobTitles.filter(t => t !== name);
-  syncStorage('jobTitles');
+  const saved = await syncStorage('jobTitles');
+  if (!saved) { DB.jobTitles = prevJobTitles; renderJobTitleList(); return; }
   logSystemAction('USER_MGM', 'DELETE_JOB_TITLE', `Xóa chức danh [${name}]`, 'SUCCESS', name);
   renderJobTitleList();
   populateDropdowns();
@@ -423,23 +448,26 @@ async function renameJobTitle(name) {
 // Trước đây còn cờ restrictedFromSelfService (khoá 1 chức danh khỏi form rút gọn "Quản Lý Nhân Viên Siêu
 // Thị" ở Đồng Phục) — cờ này đã bị xoá cùng sub-tab đó (gỡ hẳn, xem VERSION.md); danh mục chỉ còn 1 field
 // {label}. =====
-function saveStoreJobTitle(e) {
+async function saveStoreJobTitle(e) {
   e.preventDefault();
   const label = document.getElementById('txtStoreJobTitleName').value.trim();
   if (!label) return;
   if (DB.storeJobTitles.some(t => t.label === label)) return alert('Chức danh đã tồn tại!');
   DB.storeJobTitles.push({ label });
-  syncStorage('storeJobTitles');
+  const saved = await syncStorage('storeJobTitles');
+  if (!saved) { DB.storeJobTitles = DB.storeJobTitles.filter(t => t.label !== label); return; }
   logSystemAction('USER_MGM', 'ADD_STORE_JOB_TITLE', `Thêm chức danh siêu thị mới [${label}]`, 'SUCCESS', label);
   document.getElementById('txtStoreJobTitleName').value = '';
   renderStoreJobTitleList();
   populateDropdowns();
 }
 
-function deleteStoreJobTitle(label) {
+async function deleteStoreJobTitle(label) {
   if (!confirmCatalogValueDeletion('chức danh siêu thị', label, 'Chức danh này có thể đang được dùng ở bước duyệt "Theo vị trí"/"Quy Trình Đặt Hàng Siêu Thị" và ở chính hồ sơ tài khoản người dùng.')) return;
+  const prevList = DB.storeJobTitles.map(t => ({ ...t }));
   DB.storeJobTitles = DB.storeJobTitles.filter(t => t.label !== label);
-  syncStorage('storeJobTitles');
+  const saved = await syncStorage('storeJobTitles');
+  if (!saved) { DB.storeJobTitles = prevList; renderStoreJobTitleList(); return; }
   logSystemAction('USER_MGM', 'DELETE_STORE_JOB_TITLE', `Xóa chức danh siêu thị [${label}]`, 'SUCCESS', label);
   renderStoreJobTitleList();
   populateDropdowns();
@@ -528,7 +556,7 @@ async function deletePositionType(key, label) {
 // data-op-submit LUÔN gọi fn(e) — KHÔNG đọc data-arg0/arg1 như data-op/data-op-change (xem
 // cspDispatchOp() ở core.js) — đọc trực tiếp qua e.target.dataset (thuộc tính data-* chuẩn HTML5) thay
 // vì tham số vị trí.
-function addPositionTypeEntry(e) {
+async function addPositionTypeEntry(e) {
   const key = e.target.dataset.arg0;
   const field = e.target.dataset.arg1;
   const inputId = field === 'locations' ? `txtPositionTypeLocation_${key}` : `txtPositionTypeJobTitle_${key}`;
@@ -540,18 +568,21 @@ function addPositionTypeEntry(e) {
   const list = t[field] || (t[field] = []);
   if (list.includes(value)) return alert('Giá trị đã tồn tại!');
   list.push(value);
-  syncStorage('positionTypes');
+  const saved = await syncStorage('positionTypes');
+  if (!saved) { t[field] = list.filter(v => v !== value); return; }
   logSystemAction('USER_MGM', 'ADD_POSITION_TYPE_ENTRY', `Thêm ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${value}] vào Vị Trí Làm Việc [${t.label}]`, 'SUCCESS', value);
   input.value = '';
   renderPositionTypeList();
   populateDropdowns();
 }
-function deletePositionTypeEntry(key, field, value) {
+async function deletePositionTypeEntry(key, field, value) {
   if (!confirmCatalogValueDeletion(field === 'locations' ? 'địa điểm' : 'chức danh', value, 'Tài khoản/hồ sơ đang dùng giá trị này (nếu có) sẽ thành tham chiếu treo.')) return;
   const t = DB.positionTypes.find(x => x.key === key);
   if (!t) return;
-  t[field] = (t[field] || []).filter(v => v !== value);
-  syncStorage('positionTypes');
+  const prevList = [...(t[field] || [])];
+  t[field] = prevList.filter(v => v !== value);
+  const saved = await syncStorage('positionTypes');
+  if (!saved) { t[field] = prevList; renderPositionTypeList(); return; }
   logSystemAction('USER_MGM', 'DELETE_POSITION_TYPE_ENTRY', `Xóa ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${value}] khỏi Vị Trí Làm Việc [${t.label}]`, 'SUCCESS', value);
   renderPositionTypeList();
   populateDropdowns();
@@ -648,22 +679,25 @@ function syncTrainingCategorySelectsIfLoaded() {
   }).catch(() => { /* module Đào Tạo chưa từng mở/không tải được — bỏ qua, không ảnh hưởng màn hình này */ });
 }
 
-function saveTrainingCategory(e) {
+async function saveTrainingCategory(e) {
   e.preventDefault();
   const name = document.getElementById('txtTrainingCategoryName').value.trim();
   if (DB.trainingCategories.includes(name)) return alert('Loại đào tạo đã tồn tại!');
   DB.trainingCategories.push(name);
-  syncStorage('trainingCategories');
+  const saved = await syncStorage('trainingCategories');
+  if (!saved) { DB.trainingCategories = DB.trainingCategories.filter(t => t !== name); return; }
   logSystemAction('USER_MGM', 'ADD_TRAINING_CATEGORY', `Thêm loại đào tạo mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtTrainingCategoryName').value = '';
   renderTrainingCategoryList();
   syncTrainingCategorySelectsIfLoaded();
 }
 
-function deleteTrainingCategory(name) {
+async function deleteTrainingCategory(name) {
   if (!confirmCatalogValueDeletion('loại đào tạo', name)) return;
+  const prevList = [...DB.trainingCategories];
   DB.trainingCategories = DB.trainingCategories.filter(t => t !== name);
-  syncStorage('trainingCategories');
+  const saved = await syncStorage('trainingCategories');
+  if (!saved) { DB.trainingCategories = prevList; renderTrainingCategoryList(); return; }
   logSystemAction('USER_MGM', 'DELETE_TRAINING_CATEGORY', `Xóa loại đào tạo [${name}]`, 'SUCCESS', name);
   renderTrainingCategoryList();
   syncTrainingCategorySelectsIfLoaded();
@@ -689,7 +723,7 @@ async function renameTrainingCategory(name) {
 // SENSITIVE_CATEGORY_LABELS/SENSITIVE_CATEGORY_SEVERE da chuyen sang core.js (Ha tang: nap module theo
 // cum, dot 7) - getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang 2 hang so nay.
 
-function saveSensitiveKeyword(e) {
+async function saveSensitiveKeyword(e) {
   e.preventDefault();
   const term = document.getElementById('txtSensitiveKeywordTerm').value.trim();
   const category = document.getElementById('selSensitiveKeywordCategory').value;
@@ -698,17 +732,20 @@ function saveSensitiveKeyword(e) {
   }
   const nextId = (Math.max(0, ...DB.sensitiveKeywords.map(k => k.id)) || 0) + 1;
   DB.sensitiveKeywords.push({ id: nextId, term, category });
-  syncStorage('sensitiveKeywords');
+  const saved = await syncStorage('sensitiveKeywords');
+  if (!saved) { DB.sensitiveKeywords = DB.sensitiveKeywords.filter(k => k.id !== nextId); return; }
   logSystemAction('USER_MGM', 'ADD_SENSITIVE_KEYWORD', `Thêm từ khoá nhạy cảm [${term}] (${SENSITIVE_CATEGORY_LABELS[category]})`, 'SUCCESS', term);
   document.getElementById('txtSensitiveKeywordTerm').value = '';
   renderSensitiveKeywordList();
 }
 
-function deleteSensitiveKeyword(id) {
+async function deleteSensitiveKeyword(id) {
   const kw = DB.sensitiveKeywords.find(k => k.id === id);
   if (!kw || !confirm(`Xóa từ khoá "${kw.term}"?`)) return;
+  const prevList = DB.sensitiveKeywords.map(k => ({ ...k }));
   DB.sensitiveKeywords = DB.sensitiveKeywords.filter(k => k.id !== id);
-  syncStorage('sensitiveKeywords');
+  const saved = await syncStorage('sensitiveKeywords');
+  if (!saved) { DB.sensitiveKeywords = prevList; renderSensitiveKeywordList(); return; }
   logSystemAction('USER_MGM', 'DELETE_SENSITIVE_KEYWORD', `Xóa từ khoá nhạy cảm [${kw.term}]`, 'SUCCESS', kw.term);
   renderSensitiveKeywordList();
 }
@@ -760,24 +797,31 @@ async function editSensitiveKeyword(id) {
   renderSensitiveKeywordList();
 }
 
-function saveCat(e) {
+async function saveCat(e) {
   e.preventDefault();
   const name = document.getElementById('txtCatName').value.trim();
   if (DB.cats.includes(name)) return alert('Loại tài liệu đã tồn tại!');
   DB.cats.push(name);
-  syncStorage('cats');
+  const saved = await syncStorage('cats');
+  if (!saved) { DB.cats = DB.cats.filter(c => c !== name); return; }
   logSystemAction('USER_MGM', 'ADD_CAT', `Thêm loại tài liệu mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCatName').value = '';
   renderCatList();
   populateDropdowns();
 }
 
-function deleteCat(name) {
+async function deleteCat(name) {
   if (!confirmCatalogValueDeletion('loại tài liệu', name, 'Viết tắt loại tài liệu (dùng sinh Mã Tài Liệu) của loại này cũng bị xoá theo.')) return;
+  const prevCats = [...DB.cats];
+  const prevAbbrs = { ...DB.docCatAbbrs };
   DB.cats = DB.cats.filter(c => c !== name);
   delete DB.docCatAbbrs[name];
-  syncStorage('cats');
-  syncStorage('docCatAbbrs');
+  const [savedCats, savedAbbrs] = await Promise.all([syncStorage('cats'), syncStorage('docCatAbbrs')]);
+  if (!savedCats || !savedAbbrs) {
+    DB.cats = prevCats; DB.docCatAbbrs = prevAbbrs;
+    renderCatList();
+    return;
+  }
   logSystemAction('USER_MGM', 'DELETE_CAT', `Xóa loại tài liệu [${name}]`, 'SUCCESS', name);
   renderCatList();
   populateDropdowns();
@@ -785,11 +829,13 @@ function deleteCat(name) {
 
 // Viết tắt Phân loại tài liệu (dùng sinh Mã Tài Liệu, xem generateDocCode()) — tự suy ra mặc định nếu
 // admin chưa từng sửa, áp dụng ngay không cần duyệt.
-function updateCatAbbr(name, value) {
+async function updateCatAbbr(name, value) {
+  const prevAbbrs = { ...DB.docCatAbbrs };
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.docCatAbbrs[name];
   else DB.docCatAbbrs[name] = abbr;
-  syncStorage('docCatAbbrs');
+  const saved = await syncStorage('docCatAbbrs');
+  if (!saved) { DB.docCatAbbrs = prevAbbrs; renderCatList(); return; }
   logSystemAction('USER_MGM', 'UPDATE_CAT_ABBR', `Cập nhật viết tắt phân loại tài liệu [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
 
@@ -819,11 +865,13 @@ async function renameCat(name) {
 // "✏️ Sửa" ngay dưới đây (renameContractType()), KHÔNG sửa trực tiếp trong danh sách lựa chọn ở Biểu
 // Mẫu (saveCoreFieldOptionsList() ở core.js chỉ ghi đè thẳng mảng, không cascade contractTypeAbbrs/
 // contracts.type — xem cascadeContractTypeRename() ở lib/catalogRename.js).
-function updateContractTypeAbbr(name, value) {
+async function updateContractTypeAbbr(name, value) {
+  const prevAbbrs = { ...DB.contractTypeAbbrs };
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.contractTypeAbbrs[name];
   else DB.contractTypeAbbrs[name] = abbr;
-  syncStorage('contractTypeAbbrs');
+  const saved = await syncStorage('contractTypeAbbrs');
+  if (!saved) { DB.contractTypeAbbrs = prevAbbrs; renderContractTypeAbbrList(); return; }
   logSystemAction('USER_MGM', 'UPDATE_CONTRACT_TYPE_ABBR', `Cập nhật viết tắt loại hợp đồng [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
 

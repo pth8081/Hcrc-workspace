@@ -143,16 +143,16 @@ async function main() {
     });
 
     // ---------- Helper: mô phỏng đúng luồng UI thật ----------
-    function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
+    async function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
       activeFormTab = tabKey;
       switchFormTab(tabKey);
       editCoreField(coreKey, fieldId);
       document.getElementById('fldLabel').value = newLabel;
-      addCustomField({ preventDefault() {} });
+      await addCustomField({ preventDefault() {} });
     }
 
     // ---------- 2) TRAINING_COURSE: sửa nhãn tccName, không lem sang tccDescription liền kề ----------
-    editDefaultFieldLabel('TRAINING_COURSE', 'TRAINING_COURSE', 'tccName', 'Tên Chương Trình (ĐÃ SỬA)');
+    await editDefaultFieldLabel('TRAINING_COURSE', 'TRAINING_COURSE', 'tccName', 'Tên Chương Trình (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('tccName').closest('div')?.querySelector('label');
       check('TRAINING_COURSE: <label> thật trên #trainingCourseForm đã đổi đúng nhãn mới',
@@ -168,7 +168,7 @@ async function main() {
     }
 
     // ---------- 3) TRAINING_PLAN: sửa nhãn tpAudience ----------
-    editDefaultFieldLabel('TRAINING_PLAN', 'TRAINING_PLAN', 'tpAudience', 'Đối Tượng Học (ĐÃ SỬA)');
+    await editDefaultFieldLabel('TRAINING_PLAN', 'TRAINING_PLAN', 'tpAudience', 'Đối Tượng Học (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('tpAudience').closest('div')?.querySelector('label');
       check('TRAINING_PLAN: <label> thật trên #trainingPlanForm đã đổi đúng nhãn mới',
@@ -177,7 +177,7 @@ async function main() {
     }
 
     // ---------- 4) TRAINING_DOC: sửa nhãn tdTitle, không lem sang tdCourseId liền kề ----------
-    editDefaultFieldLabel('TRAINING_DOC', 'TRAINING_DOC', 'tdTitle', 'Tên Tài Liệu Đào Tạo (ĐÃ SỬA)');
+    await editDefaultFieldLabel('TRAINING_DOC', 'TRAINING_DOC', 'tdTitle', 'Tên Tài Liệu Đào Tạo (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('tdTitle').closest('div')?.querySelector('label');
       check('TRAINING_DOC: <label> thật trên #trainingDocForm đã đổi đúng nhãn mới',
@@ -190,7 +190,7 @@ async function main() {
     }
 
     // ---------- 5) CAREER_PATH: sửa nhãn cpName ----------
-    editDefaultFieldLabel('CAREER_PATH', 'CAREER_PATH', 'cpName', 'Tên Lộ Trình Thăng Tiến (ĐÃ SỬA)');
+    await editDefaultFieldLabel('CAREER_PATH', 'CAREER_PATH', 'cpName', 'Tên Lộ Trình Thăng Tiến (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('cpName').closest('div')?.querySelector('label');
       check('CAREER_PATH: <label> thật trên #careerPathForm đã đổi đúng nhãn mới',
@@ -199,7 +199,7 @@ async function main() {
     }
 
     // ---------- 6) ONBOARDING_PATH: sửa nhãn opName ----------
-    editDefaultFieldLabel('ONBOARDING_PATH', 'ONBOARDING_PATH', 'opName', 'Tên Lộ Trình Tân Binh (ĐÃ SỬA)');
+    await editDefaultFieldLabel('ONBOARDING_PATH', 'ONBOARDING_PATH', 'opName', 'Tên Lộ Trình Tân Binh (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('opName').closest('div')?.querySelector('label');
       check('ONBOARDING_PATH: <label> thật trên #onboardingPathForm đã đổi đúng nhãn mới',
@@ -212,7 +212,7 @@ async function main() {
     check('ONBOARDING_ASSIGN: #onboardingAssignForm là <div> (không phải <form>) — xác nhận cấu trúc như phân tích',
       document.getElementById('onboardingAssignForm').tagName === 'DIV',
       document.getElementById('onboardingAssignForm').tagName);
-    editDefaultFieldLabel('ONBOARDING_ASSIGN', 'ONBOARDING_ASSIGN', 'oaEmployeeInput', 'Tìm Nhân Viên Mới (ĐÃ SỬA)');
+    await editDefaultFieldLabel('ONBOARDING_ASSIGN', 'ONBOARDING_ASSIGN', 'oaEmployeeInput', 'Tìm Nhân Viên Mới (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('oaEmployeeInput').closest('div')?.querySelector('label');
       check('ONBOARDING_ASSIGN: <label> thật trên #onboardingAssignForm (div) đã đổi đúng nhãn mới',
@@ -222,7 +222,7 @@ async function main() {
 
     // ---------- 8) TRAINING_CLASS_EDIT (gap-fill): sửa nhãn teTitle, không lem sang teCourseId liền kề;
     //             teDocumentIds ĐƯA VÀO ĐƯỢC (khác tcDocumentIds bị loại ở Đợt 3) ----------
-    editDefaultFieldLabel('TRAINING_CLASS_EDIT', 'TRAINING_CLASS_EDIT', 'teTitle', 'Tên Lớp Học (Sửa, ĐÃ SỬA)');
+    await editDefaultFieldLabel('TRAINING_CLASS_EDIT', 'TRAINING_CLASS_EDIT', 'teTitle', 'Tên Lớp Học (Sửa, ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('teTitle').closest('div')?.querySelector('label');
       check('TRAINING_CLASS_EDIT: <label> thật trên #trainingEditClassForm đã đổi đúng nhãn mới',
@@ -236,7 +236,7 @@ async function main() {
         CORE_FIELD_MANIFEST.TRAINING_CLASS_EDIT.some(f => f.id === 'teDocumentIds'),
         JSON.stringify(CORE_FIELD_MANIFEST.TRAINING_CLASS_EDIT.map(f => f.id)));
     }
-    editDefaultFieldLabel('TRAINING_CLASS_EDIT', 'TRAINING_CLASS_EDIT', 'teDocumentIds', 'Giáo Trình Lớp (ĐÃ SỬA)');
+    await editDefaultFieldLabel('TRAINING_CLASS_EDIT', 'TRAINING_CLASS_EDIT', 'teDocumentIds', 'Giáo Trình Lớp (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('teDocumentIds').closest('div')?.querySelector('label');
       check('TRAINING_CLASS_EDIT: sửa nhãn teDocumentIds hoạt động bình thường (field render tĩnh, không bị ghi đè)',

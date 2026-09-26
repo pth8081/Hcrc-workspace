@@ -679,16 +679,18 @@ function confirmCarReassign() {
 // xem defaults.js. Mỗi mục thường (isTaxi:false) gắn 1 biển số cố định (bienSo) để tự động điền BKS khi
 // chọn (xem onCarAssignedVehicleTypeChange() ở trên); mục Taxi (isTaxi:true) không có biển số cố định,
 // form đổi sang hiện ô "Hãng Taxi" (DB.carTaxiCompanies, ngay dưới đây) thay vì tự điền biển số. =====
-function saveCarVehicleType(e) {
+async function saveCarVehicleType(e) {
   e.preventDefault();
   const name = document.getElementById('txtCarVehicleTypeName').value.trim();
   const bienSo = document.getElementById('txtCarVehicleTypeBienSo').value.trim();
   const isTaxi = document.getElementById('chkCarVehicleTypeIsTaxi').checked;
   if (!name) return;
   if (DB.carVehicleTypes.some(t => t.name === name)) return alert('Loại xe đã tồn tại!');
+  const prevList = DB.carVehicleTypes.map(t => ({ ...t }));
   const nextId = DB.carVehicleTypes.reduce((max, t) => Math.max(max, t.id || 0), 0) + 1;
   DB.carVehicleTypes.push({ id: nextId, name, bienSo: isTaxi ? '' : bienSo, isTaxi });
-  syncStorage('carVehicleTypes');
+  const saved = await syncStorage('carVehicleTypes');
+  if (!saved) { DB.carVehicleTypes = prevList; return; }
   logSystemAction('USER_MGM', 'ADD_CAR_VEHICLE_TYPE', `Thêm loại xe cụ thể mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCarVehicleTypeName').value = '';
   document.getElementById('txtCarVehicleTypeBienSo').value = '';
@@ -697,12 +699,14 @@ function saveCarVehicleType(e) {
   populateDropdowns();
 }
 
-function deleteCarVehicleType(id) {
+async function deleteCarVehicleType(id) {
   const t = DB.carVehicleTypes.find(x => x.id === id);
   if (!t) return;
   if (!confirm(`Xóa loại xe "${t.name}"?`)) return;
+  const prevList = DB.carVehicleTypes.map(x => ({ ...x }));
   DB.carVehicleTypes = DB.carVehicleTypes.filter(x => x.id !== id);
-  syncStorage('carVehicleTypes');
+  const saved = await syncStorage('carVehicleTypes');
+  if (!saved) { DB.carVehicleTypes = prevList; renderCarVehicleTypeList(); return; }
   logSystemAction('USER_MGM', 'DELETE_CAR_VEHICLE_TYPE', `Xóa loại xe cụ thể [${t.name}]`, 'SUCCESS', t.name);
   renderCarVehicleTypeList();
   populateDropdowns();
@@ -754,23 +758,26 @@ async function editCarVehicleType(id) {
 
 // ===== Danh Mục "Hãng Taxi" (DB.carTaxiCompanies) — danh sách phẳng thuần, mirror DB.stores (không
 // cần key ổn định — tên hãng chính là giá trị lưu thẳng vào carRegs.assignedTaxiCompany). =====
-function saveCarTaxiCompany(e) {
+async function saveCarTaxiCompany(e) {
   e.preventDefault();
   const name = document.getElementById('txtCarTaxiCompanyName').value.trim();
   if (!name) return;
   if (DB.carTaxiCompanies.includes(name)) return alert('Hãng taxi đã tồn tại!');
   DB.carTaxiCompanies.push(name);
-  syncStorage('carTaxiCompanies');
+  const saved = await syncStorage('carTaxiCompanies');
+  if (!saved) { DB.carTaxiCompanies = DB.carTaxiCompanies.filter(x => x !== name); return; }
   logSystemAction('USER_MGM', 'ADD_CAR_TAXI_COMPANY', `Thêm hãng taxi mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCarTaxiCompanyName').value = '';
   renderCarTaxiCompanyList();
   populateDropdowns();
 }
 
-function deleteCarTaxiCompany(name) {
+async function deleteCarTaxiCompany(name) {
   if (!confirm(`Xóa hãng taxi "${name}"?`)) return;
+  const prevList = [...DB.carTaxiCompanies];
   DB.carTaxiCompanies = DB.carTaxiCompanies.filter(x => x !== name);
-  syncStorage('carTaxiCompanies');
+  const saved = await syncStorage('carTaxiCompanies');
+  if (!saved) { DB.carTaxiCompanies = prevList; renderCarTaxiCompanyList(); return; }
   logSystemAction('USER_MGM', 'DELETE_CAR_TAXI_COMPANY', `Xóa hãng taxi [${name}]`, 'SUCCESS', name);
   renderCarTaxiCompanyList();
   populateDropdowns();
@@ -794,22 +801,25 @@ async function renameCarTaxiCompany(name) {
 
 // ===== Danh Mục "Điều gì cần thay đổi?" (DB.carEvaluationIssues) — danh sách phẳng thuần, mirror
 // carTaxiCompanies ở trên (đánh giá chuyến, xem openEvaluateCarTripModal()). =====
-function saveCarEvaluationIssue(e) {
+async function saveCarEvaluationIssue(e) {
   e.preventDefault();
   const name = document.getElementById('txtCarEvaluationIssueName').value.trim();
   if (!name) return;
   if (DB.carEvaluationIssues.includes(name)) return alert('Lý do này đã tồn tại!');
   DB.carEvaluationIssues.push(name);
-  syncStorage('carEvaluationIssues');
+  const saved = await syncStorage('carEvaluationIssues');
+  if (!saved) { DB.carEvaluationIssues = DB.carEvaluationIssues.filter(x => x !== name); return; }
   logSystemAction('USER_MGM', 'ADD_CAR_EVALUATION_ISSUE', `Thêm lý do đánh giá chuyến mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCarEvaluationIssueName').value = '';
   renderCarEvaluationIssueList();
 }
 
-function deleteCarEvaluationIssue(name) {
+async function deleteCarEvaluationIssue(name) {
   if (!confirm(`Xóa lý do "${name}"?`)) return;
+  const prevList = [...DB.carEvaluationIssues];
   DB.carEvaluationIssues = DB.carEvaluationIssues.filter(x => x !== name);
-  syncStorage('carEvaluationIssues');
+  const saved = await syncStorage('carEvaluationIssues');
+  if (!saved) { DB.carEvaluationIssues = prevList; renderCarEvaluationIssueList(); return; }
   logSystemAction('USER_MGM', 'DELETE_CAR_EVALUATION_ISSUE', `Xóa lý do đánh giá chuyến [${name}]`, 'SUCCESS', name);
   renderCarEvaluationIssueList();
 }

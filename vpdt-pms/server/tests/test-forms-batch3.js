@@ -142,16 +142,16 @@ async function main() {
     });
 
     // ---------- Helper: mô phỏng đúng luồng UI thật ----------
-    function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
+    async function editDefaultFieldLabel(tabKey, coreKey, fieldId, newLabel) {
       activeFormTab = tabKey;
       switchFormTab(tabKey);
       editCoreField(coreKey, fieldId);
       document.getElementById('fldLabel').value = newLabel;
-      addCustomField({ preventDefault() {} });
+      await addCustomField({ preventDefault() {} });
     }
 
     // ---------- 2) OPERATION_ORDER: sửa nhãn voTitle -> hiện ngay trên #operationOrderForm ----------
-    editDefaultFieldLabel('OPERATION_ORDER', 'OPERATION_ORDER', 'voTitle', 'Tiêu Đề Đơn Hàng (ĐÃ SỬA)');
+    await editDefaultFieldLabel('OPERATION_ORDER', 'OPERATION_ORDER', 'voTitle', 'Tiêu Đề Đơn Hàng (ĐÃ SỬA)');
     {
       const input = document.getElementById('voTitle');
       const labelEl = input.closest('div')?.querySelector('label');
@@ -164,7 +164,7 @@ async function main() {
     }
 
     // ---------- 3) OPERATION_WORK_ITEM: sửa nhãn owiTitle, không lem sang owiDescription ----------
-    editDefaultFieldLabel('OPERATION_WORK_ITEM', 'OPERATION_WORK_ITEM', 'owiTitle', 'Tên CV Thực Hiện (ĐÃ SỬA)');
+    await editDefaultFieldLabel('OPERATION_WORK_ITEM', 'OPERATION_WORK_ITEM', 'owiTitle', 'Tên CV Thực Hiện (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('owiTitle').closest('div')?.querySelector('label');
       check('OPERATION_WORK_ITEM: <label> thật trên #operationWorkItemFormModal đã đổi đúng nhãn mới',
@@ -177,7 +177,7 @@ async function main() {
     }
 
     // ---------- 4) TRAINING_CLASS: sửa nhãn tcTitle, không lem sang tcCategory liền kề ----------
-    editDefaultFieldLabel('TRAINING_CLASS', 'TRAINING_CLASS', 'tcTitle', 'Tên Lớp (ĐÃ SỬA)');
+    await editDefaultFieldLabel('TRAINING_CLASS', 'TRAINING_CLASS', 'tcTitle', 'Tên Lớp (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('tcTitle').closest('div')?.querySelector('label');
       check('TRAINING_CLASS: <label> thật trên #trainingClassForm đã đổi đúng nhãn mới',
@@ -190,7 +190,7 @@ async function main() {
     }
 
     // ---------- 5) RECRUITMENT_JOB: sửa nhãn rjTitle ----------
-    editDefaultFieldLabel('RECRUITMENT_JOB', 'RECRUITMENT_JOB', 'rjTitle', 'Tên Vị Trí Tuyển (ĐÃ SỬA)');
+    await editDefaultFieldLabel('RECRUITMENT_JOB', 'RECRUITMENT_JOB', 'rjTitle', 'Tên Vị Trí Tuyển (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('rjTitle').closest('div')?.querySelector('label');
       check('RECRUITMENT_JOB: <label> thật trên #recruitmentJobForm đã đổi đúng nhãn mới',
@@ -199,7 +199,7 @@ async function main() {
     }
 
     // ---------- 6) RECRUITMENT_REFERRAL: sửa nhãn rrCandidateName ----------
-    editDefaultFieldLabel('RECRUITMENT_REFERRAL', 'RECRUITMENT_REFERRAL', 'rrCandidateName', 'Tên Ứng Viên (ĐÃ SỬA)');
+    await editDefaultFieldLabel('RECRUITMENT_REFERRAL', 'RECRUITMENT_REFERRAL', 'rrCandidateName', 'Tên Ứng Viên (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('rrCandidateName').closest('div')?.querySelector('label');
       check('RECRUITMENT_REFERRAL: <label> thật trên #recruitmentReferForm đã đổi đúng nhãn mới',
@@ -208,7 +208,7 @@ async function main() {
     }
 
     // ---------- 7) HR_FEEDBACK: sửa nhãn hrFeedbackQuestion ----------
-    editDefaultFieldLabel('HR_FEEDBACK', 'HR_FEEDBACK', 'hrFeedbackQuestion', 'Câu Hỏi Của Bạn (ĐÃ SỬA)');
+    await editDefaultFieldLabel('HR_FEEDBACK', 'HR_FEEDBACK', 'hrFeedbackQuestion', 'Câu Hỏi Của Bạn (ĐÃ SỬA)');
     {
       const labelEl = document.getElementById('hrFeedbackQuestion').closest('div')?.querySelector('label');
       check('HR_FEEDBACK: <label> thật trên #hrFeedbackForm đã đổi đúng nhãn mới',
@@ -218,7 +218,7 @@ async function main() {
 
     // ---------- 8) IT_RENEWAL: sửa nhãn itRenewalName (fallback placeholder), không lem sang
     //             itRenewalVendor liền kề -- xác nhận đã vá đúng lỗi div-wrapping ----------
-    editDefaultFieldLabel('IT_RENEWAL', 'IT_RENEWAL', 'itRenewalName', 'Tên Dịch Vụ CNTT (ĐÃ SỬA)');
+    await editDefaultFieldLabel('IT_RENEWAL', 'IT_RENEWAL', 'itRenewalName', 'Tên Dịch Vụ CNTT (ĐÃ SỬA)');
     {
       const ph = document.getElementById('itRenewalName').placeholder;
       check('IT_RENEWAL: placeholder thật trên #itRenewalCreateForm đã đổi đúng (không có <label> riêng)',

@@ -82,7 +82,7 @@ function applyMeetingAttendeeTemplate(templateId) {
   renderMinutesDirectivesTable();
 }
 
-function saveMeetingAttendeeTemplate() {
+async function saveMeetingAttendeeTemplate() {
   const validAttendees = minutesAttendeesRows.filter(a => (a.name || '').trim());
   if (validAttendees.length === 0) return alert('⛔ Danh sách người tham dự đang trống, chưa có gì để lưu thành mẫu!');
 
@@ -90,6 +90,7 @@ function saveMeetingAttendeeTemplate() {
   if (!name || !name.trim()) return;
   const trimmedName = name.trim();
 
+  const prevTemplates = DB.meetingAttendeeTemplates.map(t => ({ ...t, attendees: [...t.attendees] }));
   // Lưu snapshot KHÔNG kèm id (sẽ sinh id mới mỗi lần áp dụng, tránh trùng id với biên bản khác).
   const attendeesSnapshot = validAttendees.map(({ id, ...rest }) => ({ ...rest }));
   const existing = DB.meetingAttendeeTemplates.find(t => t.name.toLowerCase() === trimmedName.toLowerCase());
@@ -100,13 +101,14 @@ function saveMeetingAttendeeTemplate() {
     DB.meetingAttendeeTemplates.push({ id: 'mtpl_' + Date.now(), name: trimmedName, attendees: attendeesSnapshot });
   }
 
-  syncStorage('meetingAttendeeTemplates');
+  const saved = await syncStorage('meetingAttendeeTemplates');
+  if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', 'SAVE_ATTENDEE_TEMPLATE', `Lưu mẫu danh sách tham gia [${trimmedName}] (${attendeesSnapshot.length} người)`, 'SUCCESS', trimmedName);
   alert(`✅ Đã lưu mẫu "${trimmedName}"!`);
 }
 
-function deleteMeetingAttendeeTemplate() {
+async function deleteMeetingAttendeeTemplate() {
   const sel = document.getElementById('minutesAttendeeTemplateSelect');
   const templateId = sel ? sel.value : '';
   if (!templateId) return alert('⛔ Vui lòng chọn 1 mẫu ở danh sách để xóa!');
@@ -114,8 +116,10 @@ function deleteMeetingAttendeeTemplate() {
   if (!tpl) return;
   if (!confirm(`Bạn có chắc chắn muốn xóa mẫu "${tpl.name}"?`)) return;
 
+  const prevTemplates = DB.meetingAttendeeTemplates.map(t => ({ ...t }));
   DB.meetingAttendeeTemplates = DB.meetingAttendeeTemplates.filter(t => t.id !== templateId);
-  syncStorage('meetingAttendeeTemplates');
+  const saved = await syncStorage('meetingAttendeeTemplates');
+  if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', 'DELETE_ATTENDEE_TEMPLATE', `Xóa mẫu danh sách tham gia [${tpl.name}]`, 'SUCCESS', tpl.name);
 }
@@ -278,7 +282,7 @@ function renderTplEditRowsTable() {
   }).join('');
 }
 
-function saveAttendeeTemplateFromEditor() {
+async function saveAttendeeTemplateFromEditor() {
   const name = document.getElementById('tplEditName').value.trim();
   if (!name) return alert('⛔ Vui lòng nhập tên mẫu!');
 
@@ -290,6 +294,7 @@ function saveAttendeeTemplateFromEditor() {
   if (duplicate) return alert(`⛔ Đã có mẫu khác tên "${name}" — vui lòng đặt tên khác!`);
 
   const attendeesSnapshot = validAttendees.map(({ id, ...rest }) => ({ ...rest }));
+  const prevTemplates = DB.meetingAttendeeTemplates.map(t => ({ ...t, attendees: [...t.attendees] }));
 
   if (tplEditingId) {
     const tpl = DB.meetingAttendeeTemplates.find(t => t.id === tplEditingId);
@@ -298,7 +303,8 @@ function saveAttendeeTemplateFromEditor() {
     DB.meetingAttendeeTemplates.push({ id: 'mtpl_' + Date.now(), name, attendees: attendeesSnapshot });
   }
 
-  syncStorage('meetingAttendeeTemplates');
+  const saved = await syncStorage('meetingAttendeeTemplates');
+  if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', tplEditingId ? 'EDIT_ATTENDEE_TEMPLATE' : 'SAVE_ATTENDEE_TEMPLATE',
     `${tplEditingId ? 'Sửa' : 'Tạo'} mẫu danh sách tham gia [${name}] (${attendeesSnapshot.length} người)`, 'SUCCESS', name);
@@ -306,13 +312,15 @@ function saveAttendeeTemplateFromEditor() {
   showAttendeeTemplateListView();
 }
 
-function deleteAttendeeTemplateFromManager(templateId) {
+async function deleteAttendeeTemplateFromManager(templateId) {
   const tpl = DB.meetingAttendeeTemplates.find(t => t.id === templateId);
   if (!tpl) return;
   if (!confirm(`Bạn có chắc chắn muốn xóa mẫu "${tpl.name}"?`)) return;
 
+  const prevTemplates = DB.meetingAttendeeTemplates.map(t => ({ ...t }));
   DB.meetingAttendeeTemplates = DB.meetingAttendeeTemplates.filter(t => t.id !== templateId);
-  syncStorage('meetingAttendeeTemplates');
+  const saved = await syncStorage('meetingAttendeeTemplates');
+  if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', 'DELETE_ATTENDEE_TEMPLATE', `Xóa mẫu danh sách tham gia [${tpl.name}]`, 'SUCCESS', tpl.name);
   renderAttendeeTemplateManagerList();

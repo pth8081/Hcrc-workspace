@@ -1420,11 +1420,21 @@ function applyAllCoreFieldCustomizations() {
   Object.keys(CORE_FIELD_MANIFEST).forEach(applyCoreFieldCustomizations);
 }
 
-function updateCoreFieldOverride(coreKey, fieldId, prop, value) {
+// LỖI ĐÃ VÁ (rà soát "rà soát tất cả các cấu hình trong admin...đảm bảo lưu được"): trước đây KHÔNG
+// await syncStorage('formTemplates')/không rollback — F5 sau đó mới lộ ra chưa lưu được lên server dù
+// UI đã áp dụng ngay override (applyCoreFieldCustomizations()).
+async function updateCoreFieldOverride(coreKey, fieldId, prop, value) {
   const overrides = getCoreFieldOverrides(coreKey);
+  const prevOverride = { ...(overrides[fieldId] || {}) };
+  const hadOverride = fieldId in overrides;
   if (!overrides[fieldId]) overrides[fieldId] = {};
   overrides[fieldId][prop] = value;
-  syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates');
+  if (!saved) {
+    if (hadOverride) overrides[fieldId] = prevOverride; else delete overrides[fieldId];
+    applyCoreFieldCustomizations(coreKey);
+    return;
+  }
   applyCoreFieldCustomizations(coreKey);
   logSystemAction('CONFIG', 'UPDATE_CORE_FIELD', `Cập nhật thuộc tính "${prop}" của trường mặc định [${fieldId}] (${coreKey})`, 'SUCCESS', fieldId);
 }
@@ -1454,7 +1464,8 @@ function getCoreFieldOptionsList(fieldDef) {
 // Lưu lại danh sách lựa chọn mới cho 1 trường mặc định kiểu dropdown. Với danh sách dạng {key,label}[]
 // (optionsIsKeyLabel:true — hiện chỉ submissionTypes), GIỮ NGUYÊN key cũ cho nhãn không đổi (tránh làm
 // mồ côi submissionTypeDeptWorkflows đang tra theo key), chỉ sinh key mới cho nhãn thực sự mới.
-function saveCoreFieldOptionsList(fieldDef, newLabels) {
+async function saveCoreFieldOptionsList(fieldDef, newLabels) {
+  const prevList = (DB[fieldDef.optionsKey] || []).slice();
   if (fieldDef.optionsIsKeyLabel) {
     const existing = DB[fieldDef.optionsKey] || [];
     const usedKeys = new Set();
@@ -1472,8 +1483,10 @@ function saveCoreFieldOptionsList(fieldDef, newLabels) {
   } else {
     DB[fieldDef.optionsKey] = newLabels.slice();
   }
-  syncStorage(fieldDef.optionsKey);
+  const saved = await syncStorage(fieldDef.optionsKey);
+  if (!saved) { DB[fieldDef.optionsKey] = prevList; return false; }
   populateDropdowns();
+  return true;
 }
 
 // ==========================================
@@ -1502,18 +1515,26 @@ function getUnifiedFieldOrder(tabKey) {
   return [...validSaved, ...missing];
 }
 
-function setUnifiedFieldOrder(tabKey, orderArr) {
+async function setUnifiedFieldOrder(tabKey, orderArr) {
+  const prevOrder = DB.formTemplates['__order__' + tabKey];
   DB.formTemplates['__order__' + tabKey] = orderArr;
-  syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates');
+  if (!saved) {
+    if (prevOrder === undefined) delete DB.formTemplates['__order__' + tabKey];
+    else DB.formTemplates['__order__' + tabKey] = prevOrder;
+    return false;
+  }
+  return true;
 }
 
-function moveUnifiedField(tabKey, fieldId, direction) {
+async function moveUnifiedField(tabKey, fieldId, direction) {
   const arr = getUnifiedFieldOrder(tabKey);
   const idx = arr.indexOf(fieldId);
   const swapWith = idx + direction;
   if (idx < 0 || swapWith < 0 || swapWith >= arr.length) return;
   [arr[idx], arr[swapWith]] = [arr[swapWith], arr[idx]];
-  setUnifiedFieldOrder(tabKey, arr);
+  const saved = await setUnifiedFieldOrder(tabKey, arr);
+  if (!saved) { renderFormFieldsTable(); return; }
   logSystemAction('CONFIG', 'REORDER_FIELD', `Đổi vị trí trường [${fieldId}] trong biểu mẫu ${tabKey}`, 'SUCCESS', fieldId);
   renderFormFieldsTable();
 }
@@ -5539,7 +5560,7 @@ function parseEmailListInput(str) {
   return (str || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
-function saveEmailConfig(e) {
+async function saveEmailConfig(e) {
   e.preventDefault();
   const reminderDays = parseDaysListInput(document.getElementById('cfgContractReminderDays').value);
   if (reminderDays.length === 0) {
@@ -5558,6 +5579,7 @@ function saveEmailConfig(e) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp đồng lao động hợp lệ (vd: 60, 45, 30)!');
   }
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
+  const prevEmailConfig = { ...(DB.emailConfig || {}) };
   DB.emailConfig = {
     enabled: document.getElementById('cfgEmailEnabled').value === 'true',
     smtpHost: document.getElementById('cfgSmtpHost').value.trim(),
@@ -5580,7 +5602,8 @@ function saveEmailConfig(e) {
     diskSpaceAlertThresholdPercent: parseInt(document.getElementById('cfgDiskAlertThreshold').value, 10) || 85,
     diskSpaceAlertCcEmails: parseEmailListInput(document.getElementById('cfgDiskAlertCc').value)
   };
-  syncStorage('emailConfig');
+  const saved = await syncStorage('emailConfig');
+  if (!saved) { DB.emailConfig = prevEmailConfig; return; }
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
   logSystemAction('CONFIG', 'UPDATE_SMTP_CONFIG', 'Cập nhật SMTP server thành công.', 'SUCCESS', 'SMTP_CONFIG');
   alert('✅ Đã lưu cấu hình Email thành công!');
@@ -5699,8 +5722,9 @@ function renderApprovalEmailConfigForm() {
 // Lưu DB.approvalEmailConfig — đọc lại TOÀN BỘ checkbox đã vẽ ở renderApprovalEmailConfigForm() theo
 // đúng APPROVAL_EMAIL_EVENTS (không đọc lẻ tẻ theo id cứng, tránh sót/lệch khi thêm module mới). Family
 // KHÔNG áp dụng được (actionTypes rỗng, vd LICENSE.result) không lưu giá trị (không có ô nào để đọc).
-function saveApprovalEmailConfig(e) {
+async function saveApprovalEmailConfig(e) {
   e.preventDefault();
+  const prevConfig = DB.approvalEmailConfig;
   const next = {};
   APPROVAL_EMAIL_EVENTS.forEach(mod => {
     const modOut = {};
@@ -5712,7 +5736,8 @@ function saveApprovalEmailConfig(e) {
     next[mod.configModule] = modOut;
   });
   DB.approvalEmailConfig = next;
-  syncStorage('approvalEmailConfig');
+  const saved = await syncStorage('approvalEmailConfig');
+  if (!saved) { DB.approvalEmailConfig = prevConfig; return; }
   logSystemAction('CONFIG', 'UPDATE_APPROVAL_EMAIL_CONFIG', 'Cập nhật cấu hình bật/tắt email thông báo phê duyệt theo phân hệ.', 'SUCCESS', 'APPROVAL_EMAIL_CONFIG');
   alert('✅ Đã lưu cấu hình Thông Báo Email Phê Duyệt thành công!');
 }
@@ -5832,7 +5857,8 @@ function updateDeptContactField(dept, idx, field, value) {
   contractExpiryDeptContactsDraft[dept][idx][field] = value;
 }
 
-function saveContractExpiryDeptContacts() {
+async function saveContractExpiryDeptContacts() {
+  const prevContacts = DB.contractExpiryDeptContacts;
   // Loại dòng chưa nhập gì (cả tên lẫn email đều rỗng) và phòng ban không còn dòng nào trước khi lưu.
   const cleaned = {};
   for (const dept of Object.keys(contractExpiryDeptContactsDraft)) {
@@ -5842,8 +5868,14 @@ function saveContractExpiryDeptContacts() {
     if (rows.length) cleaned[dept] = rows;
   }
   DB.contractExpiryDeptContacts = cleaned;
+  const saved = await syncStorage('contractExpiryDeptContacts');
+  if (!saved) {
+    DB.contractExpiryDeptContacts = prevContacts;
+    contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(prevContacts || {}));
+    renderDeptContactsTable();
+    return;
+  }
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(cleaned));
-  syncStorage('contractExpiryDeptContacts');
   logSystemAction('CONFIG', 'UPDATE_CONTRACT_EXPIRY_CONTACTS', 'Cập nhật người phụ trách nhận thông báo hết hạn hợp đồng theo phòng ban.', 'SUCCESS', 'EMAIL_CONFIG');
   alert('✅ Đã lưu người phụ trách theo phòng ban!');
   renderDeptContactsTable();

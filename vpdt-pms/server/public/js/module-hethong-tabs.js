@@ -176,8 +176,12 @@ function loadOperationOrderApiConfigToForm() {
   }
 }
 
-function saveOperationOrderApiConfig(e) {
+// LỖI ĐÃ VÁ (đợt rà soát "rà soát tất cả các cấu hình trong admin...đảm bảo lưu được vào hệ thống"):
+// trước đây KHÔNG await syncStorage()/không rollback + luôn alert "Đã lưu thành công" NGAY cả khi lưu
+// thất bại (409/mất mạng) — F5 sau đó mới lộ ra cấu hình chưa hề lưu.
+async function saveOperationOrderApiConfig(e) {
   e.preventDefault();
+  const prevConfig = { ...(DB.operationOrderApiConfig || {}) };
   const matchingKey = document.getElementById('opApiMatchingKey').value.trim() || 'poNumber';
   DB.operationOrderApiConfig = {
     ...(DB.operationOrderApiConfig || {}),
@@ -191,7 +195,8 @@ function saveOperationOrderApiConfig(e) {
     headerValuePlain: document.getElementById('opApiHeaderValuePlain').value,
     matchingKey
   };
-  syncStorage('operationOrderApiConfig');
+  const saved = await syncStorage('operationOrderApiConfig');
+  if (!saved) { DB.operationOrderApiConfig = prevConfig; return; }
   document.getElementById('opApiHeaderValuePlain').value = '';
   logSystemAction('CONFIG', 'UPDATE_OPERATION_ORDER_API_CONFIG', 'Cập nhật cấu hình đồng bộ Đơn Hàng ra dsmart16.', 'SUCCESS', 'OPERATION_ORDER_API_CONFIG');
   alert('✅ Đã lưu Cấu Hình API thành công!');
