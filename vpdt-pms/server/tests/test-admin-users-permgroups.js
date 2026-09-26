@@ -1105,6 +1105,75 @@ async function scenario(name, fn) {
       r.store1 && r.store1.dept === 'Siêu Thị Quận 1' && r.store1.jobTitle === 'Nhân viên bán hàng' && r.store1.posType === 'STORE' && r.store1.startDate === '', JSON.stringify(r.store1));
   });
 
+  // LỖI ĐÃ VÁ (đợt sau, báo cáo thực tế "import Excel User xong không đăng nhập được"): bảng xem trước
+  // KHÔNG hề kiểm tra độ mạnh mật khẩu — 1 dòng mật khẩu yếu/rỗng trong file làm HỎNG CẢ BATCH lúc bấm
+  // xác nhận (server prepareUsersForSave() từ chối NGUYÊN mảng users) mà không ai biết TRƯỚC dòng nào
+  // gây ra. Nay validateImportedUserPassword() chặn NGAY ở xem trước, cùng khuôn dept/jobTitle/posType.
+  await scenario('(m2b) Import Excel: mật khẩu yếu bị chặn NGAY ở bảng xem trước (không đợi tới lúc lưu mới biết)', async () => {
+    const r = await page.evaluate(async () => {
+      DB.depts = ['Kế Toán'];
+      DB.positionTypes = [{ key: 'HO', label: 'HO (Văn phòng)', builtin: true }];
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (url === '/api/admin/users/import-xlsx') {
+          return { ok: true, status: 200, json: async () => ({ rows: [
+            { username: 'nv.weak1', pass: '1234', name: 'Yếu Một', email: 'w1@hcrc.local', phone: '0900000001', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false },
+            { username: 'nv.weak2', pass: '', name: 'Yếu Hai (rỗng)', email: 'w2@hcrc.local', phone: '0900000002', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false },
+            { username: 'nv.weak3', pass: 'matkhau123', name: 'Yếu Ba (phổ biến)', email: 'w3@hcrc.local', phone: '0900000003', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false },
+            { username: 'nv.strong1', pass: 'Passw0rd!23', name: 'Mạnh Một', email: 's1@hcrc.local', phone: '0900000004', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false }
+          ] }) };
+        }
+        return savedFetch(url, opts);
+      };
+      await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      window.fetch = savedFetch;
+      const preview = usersImportPreviewItems.map(it => ({ username: it.username, errors: it.errors, action: it.action }));
+      const usersBefore = DB.users.length;
+      await confirmUsersImport(); // 3 dòng lỗi mặc định action='skip' (không có checkbox) -> tự loại khỏi toAdd, CHỈ dòng mật khẩu hợp lệ được tạo
+      return { preview, createdCount: DB.users.length - usersBefore, strongCreated: !!DB.users.find(u => u.username === 'nv.strong1') };
+    });
+    const weak1 = r.preview.find(it => it.username === 'nv.weak1');
+    const weak2 = r.preview.find(it => it.username === 'nv.weak2');
+    const weak3 = r.preview.find(it => it.username === 'nv.weak3');
+    const strong1 = r.preview.find(it => it.username === 'nv.strong1');
+    record('(m2b) mật khẩu quá ngắn (< 8 ký tự) bị chặn lỗi rõ ràng',
+      weak1 && weak1.errors.some(e => e.includes('Mật khẩu') && e.includes('8 ký tự')), JSON.stringify(weak1));
+    record('(m2b) mật khẩu để trống bị chặn lỗi rõ ràng',
+      weak2 && weak2.errors.some(e => e.includes('Mật khẩu')), JSON.stringify(weak2));
+    record('(m2b) mật khẩu quá phổ biến/dễ đoán bị chặn lỗi rõ ràng',
+      weak3 && weak3.errors.some(e => e.includes('phổ biến') || e.includes('dễ đoán')), JSON.stringify(weak3));
+    record('(m2b) mật khẩu đủ chuẩn (chữ+số+ký tự đặc biệt, >=8 ký tự) KHÔNG bị chặn',
+      strong1 && strong1.errors.length === 0 && strong1.action === 'add', JSON.stringify(strong1));
+    record('(m2b) confirmUsersImport() CHỈ tạo đúng 1 user (mật khẩu hợp lệ) — 3 dòng mật khẩu yếu bị loại khỏi batch, không kéo theo lỗi cả file',
+      r.createdCount === 1 && r.strongCreated, JSON.stringify(r));
+  });
+
+  await scenario('(m2c) Import Excel: username toàn số -> CẢNH BÁO (không chặn) rủi ro Excel làm mất số 0 ở đầu', async () => {
+    const r = await page.evaluate(async () => {
+      DB.depts = ['Kế Toán'];
+      DB.positionTypes = [{ key: 'HO', label: 'HO (Văn phòng)', builtin: true }];
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        if (url === '/api/admin/users/import-xlsx') {
+          return { ok: true, status: 200, json: async () => ({ rows: [
+            { username: '987654321', pass: 'Passw0rd!23', name: 'SĐT Có Thể Mất Số 0', email: 'phone1@hcrc.local', phone: '0900000005', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false },
+            { username: 'nv.binhthuong', pass: 'Passw0rd!23', name: 'Username Chữ Bình Thường', email: 'normal1@hcrc.local', phone: '0900000006', dept: 'Kế Toán', jobTitle: '', posType: 'HO', startDate: '', duplicateInFile: false }
+          ] }) };
+        }
+        return savedFetch(url, opts);
+      };
+      await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
+      window.fetch = savedFetch;
+      return usersImportPreviewItems.map(it => ({ username: it.username, errors: it.errors, action: it.action, usernameLooksNumericOnly: it.usernameLooksNumericOnly }));
+    });
+    const numeric = r.find(it => it.username === '987654321');
+    const normal = r.find(it => it.username === 'nv.binhthuong');
+    record('(m2c) username toàn số được đánh dấu usernameLooksNumericOnly (cảnh báo) nhưng KHÔNG có lỗi, action vẫn "add"',
+      numeric && numeric.usernameLooksNumericOnly === true && numeric.errors.length === 0 && numeric.action === 'add', JSON.stringify(numeric));
+    record('(m2c) username chữ bình thường KHÔNG bị đánh dấu cảnh báo này',
+      normal && normal.usernameLooksNumericOnly === false, JSON.stringify(normal));
+  });
+
   await scenario('(m2) Import Excel: dòng SAI danh mục (posType/dept/jobTitle/startDate) -> CHẶN CỨNG, không tạo user nào, không có checkbox trong bảng xem trước', async () => {
     const r = await page.evaluate(async () => {
       DB.depts = ['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc'];

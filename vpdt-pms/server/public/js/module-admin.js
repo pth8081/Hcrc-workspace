@@ -181,20 +181,26 @@ function renderDeptGroupList() {
 // "Siêu Thị", xem promptAddStoreInline() — theo yêu cầu người dùng 10/2026: đang tạo/sửa 1 người Siêu
 // Thị mà siêu thị họ thuộc về CHƯA có trong Danh Mục thì không phải rời form đi thêm trước). Trả về
 // true/false (đã tự alert lý do khi false) để caller biết có nên tiếp tục chọn giá trị đó hay không.
-function addStoreToCatalog(name) {
+// LỖI ĐÃ VÁ (báo cáo thực tế "danh mục siêu thị không lưu được khi chọn siêu thị, cửa hàng"): trước đây
+// KHÔNG await syncStorage('stores') và KHÔNG rollback DB.stores khi lưu thất bại (409 xung đột/mất mạng)
+// — DB.stores/renderStoreList() vẫn hiện siêu thị vừa thêm/xoá như đã lưu xong (dù syncStorage() có tự
+// alert lỗi ở nền), khiến F5 sau đó mới lộ ra là chưa hề lưu được lên server. Nay await + rollback đúng
+// khuôn setStoreType() (đã làm đúng từ đầu) áp dụng cho cả add/xoá bên dưới.
+async function addStoreToCatalog(name) {
   if (!name) return false;
   if (DB.stores.includes(name)) { alert('Siêu thị đã tồn tại!'); return false; }
   DB.stores.push(name);
-  syncStorage('stores');
+  const saved = await syncStorage('stores');
+  if (!saved) { DB.stores = DB.stores.filter(s => s !== name); return false; }
   logSystemAction('USER_MGM', 'ADD_STORE', `Thêm siêu thị mới [${name}]`, 'SUCCESS', name);
   return true;
 }
 
-function saveStore(e) {
+async function saveStore(e) {
   e.preventDefault();
   const name = document.getElementById('txtStoreName').value.trim();
   if (!name) return;
-  if (!addStoreToCatalog(name)) return;
+  if (!(await addStoreToCatalog(name))) return;
   document.getElementById('txtStoreName').value = '';
   renderStoreList();
   populateDropdowns();
@@ -203,18 +209,20 @@ function saveStore(e) {
 // "+ Thêm siêu thị mới" ngay tại ô "Siêu Thị" của form Người Dùng — gõ tên mới, tự thêm vào Danh Mục
 // Siêu Thị (addStoreToCatalog() ở trên) + populateDropdowns() nạp lại toàn bộ dropdown (kể cả #uStore)
 // + tự CHỌN LUÔN giá trị vừa thêm, không phải rời form đi Quản Lý Danh Mục thêm trước rồi quay lại.
-function promptAddStoreInline() {
+async function promptAddStoreInline() {
   const name = String(prompt('Tên siêu thị mới:') || '').trim();
   if (!name) return;
-  if (!addStoreToCatalog(name)) return;
+  if (!(await addStoreToCatalog(name))) return;
   populateDropdowns();
   document.getElementById('uStore').value = name;
 }
 
-function deleteStore(name) {
+async function deleteStore(name) {
   if (!confirmCatalogValueDeletion('siêu thị', name)) return;
+  const prevStores = [...DB.stores];
   DB.stores = DB.stores.filter(s => s !== name);
-  syncStorage('stores');
+  const saved = await syncStorage('stores');
+  if (!saved) { DB.stores = prevStores; renderStoreList(); return; }
   logSystemAction('USER_MGM', 'DELETE_STORE', `Xóa siêu thị [${name}]`, 'SUCCESS', name);
   renderStoreList();
   populateDropdowns();
@@ -346,13 +354,22 @@ async function confirmStoreImport() {
 // tên (xóa khỏi DB.depts, thêm vào DB.stores GIỮ NGUYÊN chuỗi), KHÔNG đụng tới user.dept/item.dept của
 // bất kỳ user hay bản ghi nào đã có — mọi workflow/quyền scope dùng dept làm khoá tra cứu vẫn hoạt động
 // y hệt vì giá trị chuỗi không đổi, chỉ khác nơi hiển thị trong 2 danh mục quản lý.
-function moveDeptToStore(name) {
+async function moveDeptToStore(name) {
   if (DB.stores.includes(name)) return alert('Tên này đã có trong Danh Mục Siêu Thị!');
   if (!confirm(`Chuyển "${name}" từ Danh Mục Phòng Ban sang Danh Mục Siêu Thị?\n\nCác user/bản ghi đang thuộc phòng ban này sẽ KHÔNG bị ảnh hưởng — chỉ đổi nơi hiển thị trong danh mục quản lý.`)) return;
+  const prevDepts = [...DB.depts], prevStores = [...DB.stores];
   DB.depts = DB.depts.filter(d => d !== name);
   DB.stores.push(name);
-  syncStorage('depts');
-  syncStorage('stores');
+  // LỖI ĐÃ VÁ: 2 lượt syncStorage() độc lập trước đây không await/không rollback — nếu lượt "stores"
+  // thất bại (409/mất mạng) sau khi "depts" đã lưu thành công, tên đó BIẾN MẤT khỏi cả 2 danh mục sau
+  // F5 (đã xoá khỏi DB.depts thật, nhưng chưa hề thêm vào DB.stores thật). Await CẢ 2 + rollback ĐỦ CẢ
+  // HAI về đúng trạng thái ban đầu nếu BẤT KỲ lượt nào thất bại, không để dở dang giữa chừng.
+  const [savedDepts, savedStores] = await Promise.all([syncStorage('depts'), syncStorage('stores')]);
+  if (!savedDepts || !savedStores) {
+    DB.depts = prevDepts; DB.stores = prevStores;
+    renderDeptList(); renderStoreList();
+    return;
+  }
   logSystemAction('USER_MGM', 'MOVE_DEPT_TO_STORE', `Chuyển [${name}] từ Danh Mục Phòng Ban sang Danh Mục Siêu Thị`, 'SUCCESS', name);
   renderDeptList();
   renderStoreList();

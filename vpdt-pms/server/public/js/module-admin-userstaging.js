@@ -710,6 +710,23 @@ function validateImportedUserRow(r) {
   return { errors, normalized };
 }
 
+// Mirror CHÍNH XÁC lib/passwordPolicy.js validatePasswordStrength() — trước đây import Excel KHÔNG hề
+// kiểm tra độ mạnh mật khẩu ở bước xem trước (chỉ server prepareUsersForSave() chặn), nên 1 dòng mật
+// khẩu yếu/rỗng trong file làm HỎNG CẢ BATCH lúc bấm xác nhận (server từ chối NGUYÊN mảng users) mà
+// người dùng không biết TRƯỚC là dòng nào gây ra — nay chặn NGAY ở bảng xem trước, khớp đúng cách các
+// trường khác (dept/jobTitle/posType) đã làm.
+const USERS_IMPORT_COMMON_WEAK_PASSWORDS = new Set([
+  '12345678', '123456789', '1234567890', '11111111', '87654321',
+  'password', 'password1', 'password123', 'qwertyui', 'qwerty123',
+  'abc123456', 'matkhau123', 'admin123', 'admin1234', 'changeme', 'changeme123'
+]);
+function validateImportedUserPassword(pass) {
+  if (!pass || pass.length < 8) return 'Mật khẩu phải có ít nhất 8 ký tự';
+  if (USERS_IMPORT_COMMON_WEAK_PASSWORDS.has(pass.toLowerCase())) return 'Mật khẩu quá phổ biến/dễ đoán, vui lòng chọn mật khẩu khác';
+  if (!/[A-Za-z]/.test(pass) || !/[0-9]/.test(pass) || !/[^A-Za-z0-9]/.test(pass)) return 'Mật khẩu cần có đủ chữ, số và ký tự đặc biệt';
+  return null;
+}
+
 async function onUsersImportFileChange(evt) {
   const file = evt.target.files[0];
   if (!file) return;
@@ -736,8 +753,21 @@ async function onUsersImportFileChange(evt) {
   usersImportPreviewItems = rows.map((r, idx) => {
     const { errors, normalized } = validateImportedUserRow(r);
     const existing = existingByUsername.get(String(r.username).trim().toLowerCase());
+    // Mật khẩu CHỈ có ý nghĩa với dòng THÊM MỚI thật (existing giữ nguyên mật khẩu cũ, xem
+    // toOverwrite.forEach() — không bao giờ đụng pass) — không chặn oan dòng ghi đè chỉ vì cột pass để
+    // trống/không đạt chuẩn (người nhập file có thể không biết/không cần quan tâm mật khẩu cũ).
+    if (!existing) {
+      const passError = validateImportedUserPassword(r.pass);
+      if (passError) errors.push(`Mật khẩu: ${passError}`);
+    }
+    // Cảnh báo (KHÔNG chặn — không đủ chắc chắn để coi là lỗi) khi username đọc được là chuỗi TOÀN SỐ:
+    // rủi ro thật đã ghi ở downloadUserTemplate() — nếu file không xuất phát từ mẫu (numFmt Văn Bản) và
+    // ô đang ở định dạng "General"/"Number", Excel tự cắt mất số 0 đứng đầu (VD SĐT "0987654321" thành
+    // "987654321") NGAY TẠI EXCEL, hệ thống đọc lại đúng những gì còn sót, không có cách nào khôi phục
+    // lại số 0 đã mất — chỉ có thể cảnh báo để người nhập tự đối chiếu lại file gốc trước khi xác nhận.
+    const usernameLooksNumericOnly = /^[0-9]+$/.test(String(r.username || '').trim());
     return {
-      ...r, _idx: idx, errors, normalized,
+      ...r, _idx: idx, errors, normalized, usernameLooksNumericOnly,
       duplicateExisting: !!existing,
       // 'add' (mặc định, không trùng/không lỗi) | 'skip' (mặc định cho dòng trùng/dòng lỗi) | 'overwrite'
       action: (errors.length || r.duplicateInFile || existing) ? 'skip' : 'add'
@@ -759,6 +789,7 @@ function renderUsersImportPreview() {
     if (hasError) note = `⛔ ${it.errors.join('; ')}`;
     else if (it.duplicateExisting) note = '⚠️ Username đã có tài khoản';
     else if (it.duplicateInFile) note = '⚠️ Trùng dòng khác trong file này';
+    else if (it.usernameLooksNumericOnly) note = '👀 Username toàn số — kiểm tra lại file gốc xem Excel có làm mất số 0 ở đầu không (VD SĐT)';
     else note = '';
     // Dòng lỗi KHÔNG có checkbox/select gì cả — chặn cứng ngay từ bảng xem trước, khớp đúng pattern
     // "không thể tick" đã dùng cho dòng !found ở Ma Trận Phân Quyền (module-admin-permgroups.js).
