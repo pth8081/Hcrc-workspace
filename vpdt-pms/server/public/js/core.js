@@ -7926,8 +7926,16 @@ function canAccessPurchasingModule(user) {
   // quyền đề xuất giá bán lẻ (VD nhân viên Kinh Doanh/Marketing, KHÔNG có bất kỳ quyền BAS/rebate nào)
   // vẫn phải vào được tab này để thấy sub-tab "Phê Duyệt Giá Bán Lẻ", nếu không sẽ bị chặn hẳn ở
   // switchTab() (alert "Bạn không có quyền truy cập Module Mua Hàng!") dù có quyền đề xuất hợp lệ.
-  return !!(user.perms?.rebateTermManage || user.perms?.rebateTermActivate || user.perms?.rebateReconcile
-    || user.perms?.rebateApprove || user.perms?.rebateViewReport || user.perms?.itPriceProposeCreateRetail);
+  if (user.perms?.rebateTermManage || user.perms?.rebateTermActivate || user.perms?.rebateReconcile
+    || user.perms?.rebateApprove || user.perms?.rebateViewReport || user.perms?.itPriceProposeCreateRetail) return true;
+  // LỖI ĐÃ VÁ (10/2026, đợt "đơn phê duyệt vẫn phải hiện NGAY tại 2 tab Mua Hàng/Vận Hành"): người CHỈ
+  // là approver theo phòng ban (itPriceDeptWorkflows, không có bất kỳ quyền tạo/BAS nào — VD Trưởng
+  // Phòng chỉ duyệt, không tự đề xuất) hoặc người có quyền xét Từ Chối Khẩn Retail trước đây bị chặn
+  // HẲN khỏi tab này (switchTab() alert), nên KHÔNG BAO GIỜ vào được để thấy nút Duyệt/Từ chối/Từ Chối
+  // Khẩn dù các nút đó đã chuyển hẳn về đây (renderItPriceModalControls() context='APPROVAL') — chỉ còn
+  // thấy được qua Approval Hub (không đúng ý người dùng: phiếu phải "sống" tại đúng 2 tab này).
+  return isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)
+    || canApproveItPriceEmergencyRejectClient(user, 'RETAIL');
 }
 function canAccessOperationModule(user) {
   if (!user) return false;
@@ -7940,6 +7948,12 @@ function canAccessOperationModule(user) {
     // có quyền đề xuất giá bán buôn (VD nhân viên Marketing, KHÔNG có bất kỳ quyền Đơn Hàng/Mở Mới/Sửa
     // Chữa Siêu Thị nào) vẫn phải vào được tab để thấy sub-tab "Phê Duyệt Giá Bán Buôn".
     || user.perms?.itPriceProposeCreateWholesale) return true;
+  // LỖI ĐÃ VÁ (10/2026, đối xứng bản vá canAccessPurchasingModule() ở trên cho Bán Buôn): người CHỈ là
+  // approver theo mức Margin/Chiết Khấu (itPriceTierWorkflows) hoặc người có quyền xét Từ Chối Khẩn
+  // Wholesale, không giữ bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị nào, vẫn phải vào được tab để
+  // thấy nút Duyệt/Từ chối/Từ Chối Khẩn tại "Phê Duyệt Giá Bán Buôn" (context='APPROVAL').
+  if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)
+    || canApproveItPriceEmergencyRejectClient(user, 'WHOLESALE')) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ

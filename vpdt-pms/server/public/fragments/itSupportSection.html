@@ -69,12 +69,14 @@
       </div>
 
       <!-- Form tạo đề xuất Bán Buôn/Bán Lẻ ĐÃ CHUYỂN khỏi Hỗ Trợ IT (10/2026, yêu cầu người dùng — tách
-           Phê Duyệt Giá Bán Buôn vào Vận Hành, Bán Lẻ vào Mua Hàng). Tab này giờ CHỈ còn "xử lý hỗ trợ":
-           xem danh sách + duyệt (đúng phòng ban/mức được cấu hình) + nhận xử lý/áp giá — KHÔNG còn form
-           nhập nào ở đây nữa. Xem #vhItPriceCreateForm (module-vanhanh.js, Bán Buôn) và
-           #mhItPriceCreateForm (module-muahang.js, Bán Lẻ). Danh sách/modal chi tiết/Duyệt/Từ chối/Nhận
-           xử lý/Áp giá bên dưới GIỮ NGUYÊN 100% — Approval Hub (core-approvalhub.js) vẫn switchTab('itSupport')
-           + setItSupportSubTab('PRICE') + openItPriceModal() y hệt trước, không đổi gì. -->
+           Phê Duyệt Giá Bán Buôn vào Vận Hành, Bán Lẻ vào Mua Hàng). Đợt sau (cùng năm): Duyệt/Từ
+           chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn CŨNG chuyển hẳn theo — CHỈ thao tác được tại 2 tab Phê
+           Duyệt Giá đó (#vhItPriceCreateForm ở module-vanhanh.js, Bán Buôn; #mhItPriceCreateForm ở
+           module-muahang.js, Bán Lẻ). Tab này giờ CHỈ còn xem thông tin (context='SUPPORT', xem
+           buildItPriceRowHtml()/renderItPriceModalControls() ở module-itsupport-price.js) + nút hỗ
+           trợ/áp giá (Tôi Đang Xử Lý/Xác Nhận Đã Áp Giá/Huỷ Nhận Xử Lý/Yêu Cầu Bổ Sung của IT). Approval
+           Hub (core-approvalhub.js) đã đổi để mở modal với context='APPROVAL' (đúng vai trò xử lý/duyệt
+           của người vào từ đó), KHÔNG còn "y hệt trước" như đợt tách đầu tiên nữa. -->
       <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
         <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</h4>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">

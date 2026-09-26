@@ -138,7 +138,9 @@ function getMyPendingApprovals(user) {
     // Yêu Cầu Bổ Sung thật trong renderItPriceModalControls()) — cùng khuôn với Văn bản trình/Xe/Mua Bán-
     // Sửa Chữa/VPP/Ngân Sách. TRƯỚC ĐÂY trỏ tới hàm 'runItPriceAction' không hề tồn tại trong code, khiến
     // nút Duyệt/Từ chối ở màn Phê Duyệt tổng hợp bấm không có phản ứng gì.
-    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openItPriceModal', args: [r.id], primary: true }]
+    // args truyền context='APPROVAL' — người vào từ Hub là người CẦN DUYỆT, phải thấy đủ nút Duyệt/Từ
+    // chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn (renderItPriceModalControls() gác theo currentItPriceModalContext).
+    actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openItPriceModal', args: [r.id, 'APPROVAL'], primary: true }]
   });
 
   // Ngân Sách (budgetEntries) — mục "📊 Ngân Sách" ở Approval Hub đã BỎ (v23.0, thiết kế lại module Ngân

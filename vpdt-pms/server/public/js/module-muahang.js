@@ -539,7 +539,10 @@ function renderMhReportTab() {
 // sang Mua Hàng theo yêu cầu người dùng. Form nhỏ hơn hẳn Bán Buôn (module-vanhanh.js) — không tier/đơn
 // vị áp dụng/siêu thị đề xuất/ngày hiệu lực, tự gắn storeScope=ALL + ngày áp dụng=hôm nay + hết hiệu
 // lực=Vĩnh viễn (mirror ĐÚNG nhánh RETAIL cũ của submitItPriceApproval() ở module-itsupport-price.js).
-// Danh sách đầy đủ/Duyệt/Từ chối/Nhận xử lý/Áp giá GIỮ NGUYÊN ở Hỗ Trợ IT (không nhân bản ở đây).
+// Danh sách đầy đủ + Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn nay sống NGAY TẠI ĐÂY (yêu cầu người
+// dùng đợt sau: "phê duyệt/từ chối/bổ sung/phê duyệt khẩn cấp làm tại 2 tab phê duyệt giá") — modal
+// "Chi tiết" mở với context='APPROVAL' (xem buildItPriceRowHtml()/openItPriceModal() ở
+// module-itsupport-price.js). Hỗ Trợ IT giờ CHỈ còn hiển thị để hỗ trợ/áp giá (context='SUPPORT').
 let mhItPricePendingFile = null;
 
 // Bắt buộc set activeItPriceSubTab='RETAIL' TRƯỚC khi generateItPriceCode() (module-tailieu.js) — biến

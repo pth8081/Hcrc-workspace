@@ -800,7 +800,7 @@ async function main() {
       // + server phải chặn nếu cố gọi thẳng API.
       await loginAs(page, RETAIL_APPROVER_MKT);
       const blockedApprover = await page.evaluate(async (id) => {
-        openItPriceModal(id);
+        openItPriceModal(id, 'APPROVAL');
         const html = document.getElementById('itPriceModalControls').innerHTML;
         const hasButton = html.includes('requestItPriceEmergencyRejectAction');
         const hasLockedNote = html.includes('đang xử lý áp giá');
@@ -818,7 +818,7 @@ async function main() {
       // admin — ĐÚNG TRỌNG TÂM mục 5: không có nhánh nào cho admin bỏ qua chặn applyClaimedBy này.
       await loginAs(page, ADMIN);
       const blockedAdmin = await page.evaluate(async (id) => {
-        openItPriceModal(id);
+        openItPriceModal(id, 'APPROVAL');
         const html = document.getElementById('itPriceModalControls').innerHTML;
         const hasButton = html.includes('requestItPriceEmergencyRejectAction');
         try {
@@ -836,7 +836,7 @@ async function main() {
       await page.evaluate(async (id) => { await callRecordAction('itPriceApprovals', id, 'release-apply-claim', {}); }, mktRetailId);
       await loginAs(page, RETAIL_APPROVER_MKT);
       const unblockedAfterRelease = await page.evaluate(async (id) => {
-        openItPriceModal(id);
+        openItPriceModal(id, 'APPROVAL');
         const hasButton = document.getElementById('itPriceModalControls').innerHTML.includes('requestItPriceEmergencyRejectAction');
         return { hasButton };
       }, mktRetailId);

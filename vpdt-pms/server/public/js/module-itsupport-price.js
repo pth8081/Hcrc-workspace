@@ -869,7 +869,14 @@ function itPriceAppliedBadge(p) {
 // ĐÚNG 1 modal chung (openItPriceModal(), renderItPriceModalControls()) — ai xem cũng thấy đủ thông tin,
 // nhưng CHỈ người có quyền tương ứng (duyệt đúng bước/itPriceSupport) mới thấy nút hành động thật trong
 // modal đó, nên tái dùng an toàn ở cả màn chỉ-xem (Mua Hàng/Vận Hành) lẫn màn xử lý (Hỗ Trợ IT).
-function buildItPriceRowHtml(p) {
+//
+// context ('APPROVAL' | 'SUPPORT') — yêu cầu người dùng (đợt sau, làm rõ thêm): Duyệt/Từ chối/Yêu Cầu
+// Bổ Sung/Từ Chối Khẩn Cấp là việc của NGƯỜI DUYỆT, chỉ làm tại 2 tab Mua Hàng (Bán Lẻ)/Vận Hành (Bán
+// Buôn) — 'APPROVAL'. Hỗ Trợ IT CHỈ còn đúng vai trò hỗ trợ/áp giá (Tôi Đang Xử Lý/Xác Nhận Đã Áp Giá/
+// Huỷ Nhận Xử Lý) — 'SUPPORT'. Modal vẫn dùng CHUNG 1 cái (renderItPriceModalControls() đọc
+// currentItPriceModalContext để ẩn/hiện đúng nhóm nút theo context truyền vào lúc mở, xem
+// openItPriceModal()) — KHÔNG phải 2 modal riêng.
+function buildItPriceRowHtml(p, context) {
   const files = p.files || [];
   const latestFile = files[files.length - 1] || {};
   const extraFilesNote = files.length > 1 ? `<br><span class="text-xs text-gray-500">+${files.length - 1} tệp bổ sung</span>` : '';
@@ -881,7 +888,7 @@ function buildItPriceRowHtml(p) {
       <td class="border p-2">${itPriceStatusBadge(p)}</td>
       <td class="border p-2">${itPriceAppliedBadge(p)}</td>
       <td class="border p-2 text-center">
-        <button data-op="openItPriceModal" data-arg0="${p.id}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
+        <button data-op="openItPriceModal" data-arg0="${p.id}" data-arg1="${escapeHtml(context)}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
       </td>
     </tr>
   `;
@@ -899,8 +906,10 @@ function renderMhItPriceList() {
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
   const page = paginateList('mhItPrice', visible, 'renderMhItPriceList', 'đề xuất');
+  // context='APPROVAL' — Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn Cấp làm NGAY tại đây (Mua Hàng),
+  // KHÔNG phải ở Hỗ Trợ IT (xem renderItPriceModalControls()).
   tbody.innerHTML = page.length
-    ? page.map(buildItPriceRowHtml).join('')
+    ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
     : `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có đề xuất nào.</td></tr>`;
 }
 function renderVanHanhItPriceList() {
@@ -911,8 +920,9 @@ function renderVanHanhItPriceList() {
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
   const page = paginateList('vanHanhItPrice', visible, 'renderVanHanhItPriceList', 'đề xuất');
+  // context='APPROVAL' — cùng lý do renderMhItPriceList() ở trên, áp dụng cho Vận Hành.
   tbody.innerHTML = page.length
-    ? page.map(buildItPriceRowHtml).join('')
+    ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
     : `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có đề xuất nào.</td></tr>`;
 }
 
@@ -970,7 +980,10 @@ function renderItPriceApprovals() {
     return;
   }
 
-  tbody.innerHTML = page.map(buildItPriceRowHtml).join('');
+  // context='SUPPORT' — Hỗ Trợ IT CHỈ còn nút hỗ trợ/áp giá (Tôi Đang Xử Lý/Xác Nhận Đã Áp Giá/Huỷ Nhận
+  // Xử Lý), KHÔNG còn Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn Cấp (đã chuyển sang 2 tab Mua Hàng/Vận
+  // Hành, xem renderMhItPriceList()/renderVanHanhItPriceList()).
+  tbody.innerHTML = page.map(p => buildItPriceRowHtml(p, 'SUPPORT')).join('');
 }
 
 function approveItPrice(id) {
@@ -1199,9 +1212,16 @@ function viewItPriceExtraFile(itemId, idx) {
 }
 
 let currentItPriceModalId = null;
+// currentItPriceModalContext ('APPROVAL' | 'SUPPORT') — ghi nhớ NÚT nào mở modal (xem
+// buildItPriceRowHtml()) để renderItPriceModalControls() ẩn/hiện đúng nhóm nút: Duyệt/Từ chối/Yêu Cầu
+// Bổ Sung/Từ Chối Khẩn Cấp CHỈ hiện khi context='APPROVAL' (mở từ Mua Hàng/Vận Hành); nút hỗ trợ/áp giá
+// CHỈ hiện khi context='SUPPORT' (mở từ Hỗ Trợ IT). Mặc định 'SUPPORT' cho nơi gọi cũ không truyền
+// (an toàn — KHÔNG lộ nhầm nút Duyệt/Từ chối nếu có chỗ nào quên truyền).
+let currentItPriceModalContext = 'SUPPORT';
 
-function openItPriceModal(id) {
+function openItPriceModal(id, context) {
   currentItPriceModalId = id;
+  currentItPriceModalContext = context === 'APPROVAL' ? 'APPROVAL' : 'SUPPORT';
   renderItPriceModal();
   document.getElementById('itPriceModal').classList.remove('hidden');
 }
@@ -1470,8 +1490,14 @@ function renderItPriceModalControls(p) {
     </div>`;
   }
 
+  // Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn CHỈ thao tác được tại 2 tab Phê Duyệt Giá (Mua Hàng/Vận
+  // Hành, context='APPROVAL') — Hỗ Trợ IT (context='SUPPORT') chỉ còn xem thông tin + nút hỗ trợ/áp giá,
+  // theo đúng yêu cầu nghiệp vụ: "Phê duyệt/từ chối/bổ sung/phê duyệt khẩn cấp làm tại 2 tab phê duyệt
+  // giá. Riêng IT sẽ là các nút còn lại như hỗ trợ và áp giá thôi".
+  const isApprovalContext = currentItPriceModalContext === 'APPROVAL';
+
   // Người có quyền itPriceEmergencyRejectApprove(Wholesale/Retail) đúng priceType xét duyệt trực tiếp ngay tại đây.
-  if (emergencyPending && canApproveItPriceEmergencyRejectClient(currentUser, p.priceType)) {
+  if (isApprovalContext && emergencyPending && canApproveItPriceEmergencyRejectClient(currentUser, p.priceType)) {
     html += `<div class="flex gap-2 flex-wrap mt-2">
       <button type="button" data-op="approveItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">✅ Duyệt Huỷ Hồ Sơ</button>
       <button type="button" data-op="denyItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-gray-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-600">❌ Từ Chối Yêu Cầu Này</button>
@@ -1483,16 +1509,16 @@ function renderItPriceModalControls(p) {
   // ĐỘC LẬP với nhánh admin của isFinalStepApproverOfItPriceClient() (không đặt sau/trong nhánh đó) —
   // IT đã bấm "Tôi đang xử lý" (applyClaimedBy có giá trị) thì ẩn nút này cho MỌI người, KỂ CẢ ADMIN,
   // khớp chặn cứng phía server ở requestItPriceEmergencyReject() (lib/recordActions.js).
-  if (p.status === 'APPROVED' && !p.applied && !emergencyPending && !p.applyClaimedBy && isFinalStepApproverOfItPriceClient(currentUser, p)) {
+  if (isApprovalContext && p.status === 'APPROVED' && !p.applied && !emergencyPending && !p.applyClaimedBy && isFinalStepApproverOfItPriceClient(currentUser, p)) {
     html += `<div class="mt-2">
       <button type="button" data-op="requestItPriceEmergencyRejectAction" data-arg0="${p.id}" class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-800">🚨 Từ Chối Khẩn</button>
       <p class="text-[11px] text-gray-500 mt-1">Bạn đã duyệt hồ sơ này ở bước cuối cùng nhưng muốn dừng lại trước khi Hỗ Trợ IT áp giá thật — gửi yêu cầu cho người có quyền xét duyệt để huỷ hồ sơ.</p>
     </div>`;
-  } else if (p.status === 'APPROVED' && !p.applied && !emergencyPending && p.applyClaimedBy && isFinalStepApproverOfItPriceClient(currentUser, p)) {
+  } else if (isApprovalContext && p.status === 'APPROVED' && !p.applied && !emergencyPending && p.applyClaimedBy && isFinalStepApproverOfItPriceClient(currentUser, p)) {
     html += `<div class="mt-2 text-[11px] text-gray-500 italic">🚨 Từ Chối Khẩn tạm khoá — IT (${escapeHtml(p.applyClaimedByName || p.applyClaimedBy)}) đang xử lý áp giá, chờ huỷ nhận việc hoặc hoàn tất trước.</div>`;
   }
 
-  if (canApprove) {
+  if (isApprovalContext && canApprove) {
     if (blocked) {
       html += `<div class="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200">⏳ Đang chờ người đề xuất tải lên tệp bổ sung trước khi có thể duyệt.</div>`;
     } else {
@@ -1506,7 +1532,9 @@ function renderItPriceModalControls(p) {
     }
   }
 
-  if (canApply) {
+  // Hỗ trợ/áp giá (Tôi Đang Xử Lý/Xác Nhận Đã Áp Giá/Huỷ Nhận Xử Lý/Yêu Cầu Bổ Sung của IT) CHỈ hiện ở
+  // Hỗ Trợ IT (context='SUPPORT') — đúng "IT sẽ là các nút còn lại như hỗ trợ và áp giá thôi".
+  if (!isApprovalContext && canApply) {
     if (emergencyPending) {
       html += `<div class="bg-red-50 text-red-800 p-2 rounded border border-red-200 mt-2">🚨 Đang chờ xét duyệt yêu cầu Từ chối khẩn cấp — tạm khoá nhận xử lý/xác nhận áp giá.</div>`;
     } else if (blocked) {
