@@ -840,7 +840,7 @@ function renderChecklistSubmissionForm() {
       const anySelectedFailing = q.options.some(o => ans.optionIds.includes(o.id) && !o.isPassing);
       const selectedFailingNoPhoto = anySelectedFailing && !(ans.attachments || []).length;
       return `
-      <div class="border rounded p-3 space-y-2 ${selectedFailingNoPhoto ? 'border-red-300 bg-red-50' : ''}">
+      <div class="border rounded p-3 space-y-2 ${selectedFailingNoPhoto ? 'border-amber-300 bg-amber-50' : ''}">
         <div class="font-semibold text-gray-800 text-sm">${escapeHtml(q.text)} ${q.isRequired ? '<span class="text-red-500">*</span>' : ''}</div>
         <div class="space-y-1">
           ${q.options.map(o => `
@@ -853,13 +853,18 @@ function renderChecklistSubmissionForm() {
         </div>
         <input value="${escapeHtml(ans.note || '')}" placeholder="Ghi chú (không bắt buộc)" data-op-input="updateChecklistAnswerNote" data-arg0="${q.id}" data-arg-value="1" class="w-full border p-1.5 rounded text-[11px]">
         ${anySelectedFailing ? `
-        <label class="flex items-center gap-2 text-[11px] text-gray-600">Thời hạn hoàn thành xử lý:
+        <label class="flex items-center gap-2 text-[11px] text-gray-600">Thời hạn hoàn thành xử lý (không bắt buộc):
           <input type="date" value="${escapeHtml(ans.deadline || '')}" data-op-input="updateChecklistAnswerDeadline" data-arg0="${q.id}" data-arg-value="1" class="border p-1 rounded text-[11px]">
         </label>` : ''}
-        ${selectedFailingNoPhoto ? '<p class="text-[11px] text-red-600 font-semibold">⚠️ Cần đính kèm ảnh minh chứng cho câu trả lời bị đánh giá lỗi.</p>' : ''}
+        <!-- LỖI ĐÃ VÁ (yêu cầu người dùng 9/2026 — "bỏ bắt buộc up ảnh khi không đạt"): trước đây câu
+        chữ "⚠️ Cần đính kèm..." + viền đỏ ngụ ý BẮT BUỘC (server cũng từng chặn cứng, xem
+        assertReadyToFinalize() ở lib/checklist.js) — nay chỉ còn là gợi ý MỀM (viền/chữ màu hổ phách,
+        không phải đỏ, và câu chữ nói rõ "không bắt buộc"), không cản việc bấm "Nộp Bài". -->
+        ${selectedFailingNoPhoto ? '<p class="text-[11px] text-amber-700 font-semibold">💡 Nên đính kèm ảnh minh chứng cho câu trả lời bị đánh giá lỗi (không bắt buộc).</p>' : ''}
         <div class="flex items-center gap-2 flex-wrap">
           ${(ans.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
           <input type="file" accept="image/*" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${q.id}" data-arg-el="1" class="text-[11px]">
+          <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; có thể chụp ảnh trực tiếp hoặc chọn từ thư viện ảnh)</span>
         </div>
       </div>`;
     }).join('')}
@@ -907,7 +912,7 @@ function renderChecklistDeductionSubmissionForm() {
                       <option value="C" ${d.riskLevel === 'C' ? 'selected' : ''}>C</option>
                     </select>
                   </label>
-                  <label class="text-[11px] text-gray-600">Thời hạn hoàn thành:
+                  <label class="text-[11px] text-gray-600">Thời hạn hoàn thành (không bắt buộc):
                     <input type="date" value="${escapeHtml(d.deadline || '')}" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="deadline" data-arg-value="2" class="border p-1 rounded text-[11px]">
                   </label>
                 </div>

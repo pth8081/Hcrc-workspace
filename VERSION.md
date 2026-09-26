@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**24.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.19 (2026-09-26): Checklist — bỏ bắt buộc ngày hoàn thành (VSATTP) + bắt buộc ảnh khi Không đạt (siêu thị)
+
+Theo yêu cầu người dùng, 2 việc trong module Checklist (Vận Hành):
+
+1. **Checklist VSATTP** (`templateKind==='DEDUCTION'`) — rà soát xác nhận
+   trường "Thời hạn hoàn thành" của mỗi tiêu chí trừ điểm **chưa từng** bị
+   bắt buộc ở cả client lẫn server; chỉ thêm rõ chữ "(không bắt buộc)" cạnh
+   nhãn để không còn gây hiểu nhầm là bắt buộc.
+2. **Checklist Siêu Thị/QA** (`templateKind` khác DEDUCTION, gồm cả mẫu tự
+   đánh giá GĐST/CHT) — **bỏ hẳn chặn cứng** ở server
+   (`assertReadyToFinalize()`, `lib/checklist.js`) từng từ chối "Nộp Bài"
+   (400) khi có câu trả lời Không đạt/Lỗi nghiêm trọng mà chưa đính ảnh minh
+   chứng. Nay chỉ còn gợi ý MỀM trên UI (viền/chữ màu hổ phách thay vì đỏ,
+   câu chữ đổi thành "Nên đính kèm... (không bắt buộc)"), không cản việc nộp
+   bài. Ô chọn ảnh (`<input type="file" accept="image/*">`, không có thuộc
+   tính `capture`) đã sẵn cho phép CẢ chụp ảnh trực tiếp lẫn chọn từ thư viện
+   ảnh trên điện thoại — không cần sửa gì thêm, chỉ ghi rõ trong chú thích UI
+   cho người dùng yên tâm.
+
+Giữ nguyên quy ước: trường THẬT SỰ bắt buộc (câu hỏi `isRequired`) vẫn hiện
+dấu sao đỏ (`<span class="text-red-500">*</span>`) như từ trước — không đổi
+gì ở phần này, chỉ áp dụng khi có trường bắt buộc mới về sau.
+
+Cập nhật 2 kịch bản trong `tests/test-checklist.js` từng khẳng định hành vi
+chặn cứng (400) sang khẳng định nộp bài thành công (200) dù chưa có ảnh —
+khớp đúng hành vi mới. Full bộ test Checklist (`test-checklist*.js` +
+`demo-checklist*.js`, ~15 file) chạy lại: xanh toàn bộ.
+
+Không đổi schema/route/quyền — chỉ sửa `lib/checklist.js` +
+`public/js/module-checklist.js`, không cần thao tác gì thêm ngoài copy code
++ `pm2 restart`.
 
 ## v24.18 (2026-09-26): Golive-batch2 #1 — vá toàn bộ nút "Lưu" admin thiếu await/rollback (F5 mất cấu hình)
 

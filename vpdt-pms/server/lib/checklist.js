@@ -617,12 +617,15 @@ function computeDeductionScoring(template, deductions) {
   };
 }
 
+// LỖI ĐÃ VÁ (yêu cầu người dùng 9/2026 — "Check list siêu thị bỏ bắt buộc up ảnh khi không đạt"): trước
+// đây answersNeedingPhoto (câu trả lời Không đạt/Lỗi nghiêm trọng chưa đính ảnh) CHẶN CỨNG việc nộp bài
+// (400) — nay chỉ còn là gợi ý MỀM (client vẫn tô đỏ + nhắc "nên đính kèm ảnh", xem renderChecklistSubmissionForm()
+// ở module-checklist.js), không cản người thực hiện nộp bài nếu vì lý do gì đó không chụp được ảnh ngay
+// lúc đó. Vẫn giữ nguyên answersNeedingPhoto trong kết quả trả về (computeChecklistScoring()) để không
+// phá vỡ chỗ khác đang đọc field này, chỉ bỏ đúng đoạn throw ở đây.
 function assertReadyToFinalize(scoring) {
   if (scoring.missingRequired.length) {
     throw new HttpError(400, `Còn ${scoring.missingRequired.length} câu hỏi bắt buộc chưa trả lời`);
-  }
-  if (scoring.answersNeedingPhoto.length) {
-    throw new HttpError(400, 'Vui lòng đính kèm ảnh minh chứng cho tất cả câu trả lời bị đánh giá lỗi trước khi nộp bài');
   }
 }
 

@@ -432,26 +432,23 @@ async function main() {
       assertEqual(res.body.item.isPassed, true, 'Phải dùng đúng answers đã lưu nháp, không bị coi là rỗng');
     });
 
-    await run.run('Finalize: chọn lựa chọn lỗi nghiêm trọng ép isPassed=false bất kể %', async () => {
+    await run.run('Finalize: chọn lựa chọn lỗi nghiêm trọng ép isPassed=false bất kể % (ảnh minh chứng KHÔNG còn bắt buộc)', async () => {
       resetRecords();
       const t = seedTemplate(); t.status = 'ACTIVE';
       const failOption = t.questions[0].options.find(o => o.isCriticalFail);
       const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
       const subId = start.body.item.id;
-      // Câu trả lời lỗi nghiêm trọng — CHƯA đính ảnh minh chứng -> phải bị chặn trước (kiểm ở case sau).
+      // LỖI ĐÃ VÁ (yêu cầu người dùng 9/2026 — "Checklist siêu thị bỏ bắt buộc up ảnh khi không đạt"):
+      // trước đây câu trả lời Lỗi nghiêm trọng CHƯA đính ảnh minh chứng bị chặn cứng (400) — nay phải
+      // nộp bài được NGAY dù chưa có ảnh (assertReadyToFinalize() đã bỏ đoạn chặn này).
       await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [failOption.id], note: '' }] }, STORE_A_EMP);
-      const blocked = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
-      assertEqual(blocked.status, 400, 'Câu trả lời bị đánh giá lỗi mà chưa có ảnh minh chứng phải bị chặn nộp bài');
-
-      // Đính ảnh minh chứng thủ công (bỏ qua bước upload thật, chỉ kiểm hành vi finalize) rồi nộp lại.
-      await checklistAttachFakePhoto(subId, t.questions[0].id);
       const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
-      assertEqual(res.status, 200, 'Sau khi có ảnh minh chứng phải nộp bài được');
+      assertEqual(res.status, 200, 'Câu trả lời Lỗi nghiêm trọng CHƯA có ảnh minh chứng vẫn phải nộp bài được (không còn bắt buộc ảnh)');
       assertEqual(res.body.item.hasCriticalFail, true, 'Phải ghi nhận có lỗi nghiêm trọng');
       assertEqual(res.body.item.isPassed, false, 'Lỗi nghiêm trọng phải ép isPassed=false bất kể % điểm');
     });
 
-    await run.run('CL-09: lựa chọn Lỗi nghiêm trọng NHƯNG lỡ vẫn mang cờ isPassing=true (lỗi cấu hình mẫu) vẫn bắt buộc ảnh', async () => {
+    await run.run('CL-09: lựa chọn Lỗi nghiêm trọng NHƯNG lỡ vẫn mang cờ isPassing=true (lỗi cấu hình mẫu) — vẫn nộp được dù chưa có ảnh', async () => {
       resetRecords();
       // Mô phỏng ĐÚNG kịch bản đã tìm thấy: builder UI mặc định isPassing:true khi thêm lựa chọn mới,
       // người tạo mẫu tick thêm "Lỗi nghiêm trọng" nhưng quên bỏ tick "Đạt" — validateChecklistQuestions()
@@ -470,12 +467,8 @@ async function main() {
       const start = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP);
       const subId = start.body.item.id;
       await api('POST', `/api/checklist/submissions/${subId}/answers`, { answers: [{ questionId: t.questions[0].id, optionIds: [misconfiguredOption.id], note: '' }] }, STORE_A_EMP);
-      const blocked = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
-      assertEqual(blocked.status, 400, 'Chọn Lỗi nghiêm trọng mà chưa có ảnh minh chứng PHẢI bị chặn, bất kể isPassing đang là gì trên lựa chọn đó');
-
-      await checklistAttachFakePhoto(subId, t.questions[0].id);
       const res = await api('POST', `/api/checklist/submissions/${subId}/finalize`, {}, STORE_A_EMP);
-      assertEqual(res.status, 200, 'Sau khi có ảnh minh chứng phải nộp bài được');
+      assertEqual(res.status, 200, 'Chọn Lỗi nghiêm trọng mà chưa có ảnh minh chứng vẫn phải nộp bài được (không còn bắt buộc ảnh), bất kể isPassing đang là gì trên lựa chọn đó');
       assertEqual(res.body.item.hasCriticalFail, true, 'Vẫn phải ghi nhận có lỗi nghiêm trọng');
       assertEqual(res.body.item.isPassed, false, 'Lỗi nghiêm trọng vẫn phải ép isPassed=false dù isPassing=true trên lựa chọn đã chọn');
     });
